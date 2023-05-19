@@ -51,6 +51,12 @@ function start() {
   canvas.addEventListener("mousemove", drag);
   canvas.addEventListener("mouseup", endDrag);
   canvas.addEventListener("mouseleave", endDrag);
+
+
+  // Touch event listeners
+  canvas.addEventListener("touchstart", startDrag);
+  canvas.addEventListener("touchmove", drag);
+  canvas.addEventListener("touchend", endDrag);
   
   // Draw Box
   drawAnswerBox();
@@ -62,14 +68,22 @@ function getRandomInt(min, max) {
 }
 
 // Drag and drop functions
-function startDrag(event) {
+function startDrag(event) {  event.preventDefault(); // Prevent default touch events
+
   var rect = canvas.getBoundingClientRect();
-  var mouseX = event.clientX - rect.left;
-  var mouseY = event.clientY - rect.top;
-  
+  var mouseX, mouseY;
+
+  if (event.type === "mousedown") {
+    mouseX = event.clientX - rect.left;
+    mouseY = event.clientY - rect.top;
+  } else if (event.type === "touchstart") {
+    mouseX = event.touches[0].clientX - rect.left;
+    mouseY = event.touches[0].clientY - rect.top;
+  }
+
   var highestZIndex = -1; // Variable to track the highest z-index
   var selected = null; // Variable to store the selected image
-  
+
   for (var i = 0; i < images.length; i++) {
     var image = images[i];
 
@@ -87,7 +101,7 @@ function startDrag(event) {
       }
     }
   }
-  
+
   if (selected) {
     selectedImage = selected;
     offsetX = mouseX - selected.x;
@@ -98,10 +112,19 @@ function startDrag(event) {
 
 
 function drag(event) {
+  event.preventDefault(); // Prevent default touch events
+
   if (selectedImage) {
     var rect = canvas.getBoundingClientRect();
-    var mouseX = event.clientX - rect.left;
-    var mouseY = event.clientY - rect.top;
+    var mouseX, mouseY;
+
+    if (event.type === "mousemove") {
+      mouseX = event.clientX - rect.left;
+      mouseY = event.clientY - rect.top;
+    } else if (event.type === "touchmove") {
+      mouseX = event.touches[0].clientX - rect.left;
+      mouseY = event.touches[0].clientY - rect.top;
+    }
 
     var newImageX = mouseX - offsetX;
     var newImageY = mouseY - offsetY;
