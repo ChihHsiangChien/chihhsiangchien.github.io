@@ -2,11 +2,12 @@
 var canvas = document.getElementById("canvas");
 var ctx = canvas.getContext("2d");
 var imagesLoaded = 0;
-var imagesToLoad = 10;
+var imagesToLoad = 50;
 var images = [];
 var selectedImage = null;
 var offsetX = 0;
 var offsetY = 0;
+var imgWidth = 80;
 
 // Load images
 for (var i = 1; i <= imagesToLoad; i++) {
@@ -31,7 +32,7 @@ function imageLoaded() {
 // Start function
 function start() {
   // Resize canvas to fit window
-  canvas.width = window.innerWidth;
+  canvas.width = window.innerWidth * 4/5;
   canvas.height = window.innerHeight *4/5;
 
   // Calculate box dimensions
@@ -41,8 +42,9 @@ function start() {
   // Place images randomly
   images.forEach(function (image) {
     image.x = getRandomInt(0, canvas.width - image.element.width);
-    image.y = getRandomInt(canvas.height/3, canvas.height*2/3 - image.element.height);
-    ctx.drawImage(image.element, image.x, image.y);
+    image.y = getRandomInt(canvas.height/3, canvas.height*2/3 - imgWidth * image.element.height / image.element.width);
+    // ctx.drawImage(image.element, image.x, image.y);
+	ctx.drawImage(image.element, image.x, image.y, imgWidth, imgWidth * image.element.height / image.element.width);
   });
 
 
@@ -88,10 +90,16 @@ function startDrag(event) {  event.preventDefault(); // Prevent default touch ev
     var image = images[i];
 
     if (
+		/* 
       mouseX > image.x &&
       mouseX < image.x + image.element.width &&
       mouseY > image.y &&
       mouseY < image.y + image.element.height
+	  */
+      mouseX > image.x &&
+      mouseX < image.x + imgWidth &&
+      mouseY > image.y &&
+      mouseY < image.y + imgWidth * image.element.height / image.element.width
     ) {
       var zIndex = parseInt(image.element.style.zIndex || 0); // Get the z-index of the image
 
@@ -133,13 +141,15 @@ function drag(event) {
     if (newImageX < 0) {
       newImageX = 0;
     } else if (newImageX + selectedImage.element.width > canvas.width) {
-      newImageX = canvas.width - selectedImage.element.width;
+      // newImageX = canvas.width - selectedImage.element.width;
+	  newImageX = canvas.width - imgWidth;
+	  
     }
 
     if (newImageY < 0) {
       newImageY = 0;
-    } else if (newImageY + selectedImage.element.height > canvas.height) {
-      newImageY = canvas.height - selectedImage.element.height;
+    } else if (newImageY + imgWidth * selectedImage.element.height / selectedImage.element.width > canvas.height) {
+      newImageY = canvas.height - imgWidth * selectedImage.element.height / selectedImage.element.width;
     }
 
     selectedImage.x = newImageX;
@@ -158,7 +168,7 @@ function redrawCanvas() {
   drawAnswerBox();
   for (var i = 0; i < images.length; i++) {
     var image = images[i];
-    ctx.drawImage(image.element, image.x, image.y);
+    ctx.drawImage(image.element, image.x, image.y, imgWidth, imgWidth * image.element.height / image.element.width);
   }
 
 }
@@ -187,13 +197,13 @@ function drawAnswerBox(){
 }
 function checkPlacement() {
   var correctPlacements = [
-    [1, 2, 3, 4],   // Box 0 刺絲胞
-    [5, 6, 7],      // Box 1 扁形
-    [8, 9, 10]      // Box 2 軟體
-                    // Box 3 環節
-                    // Box 4 節肢
-                    // Box 6 棘皮
-                    // Box 7 脊索
+    [1, 2, 3, 4],                // Box 0 刺絲胞
+    [5, 6, 7],                   // Box 1 扁形
+    [8, 9, 10, 11, 12, 13],      // Box 2 軟體
+    [14, 15, 16, 17, 18, 19],                // Box 3 環節
+    [20, 21, 22, 23, 24, 25, 26],            // Box 4 節肢
+    [27, 28, 29, 30, 31, 32],                // Box 6 棘皮
+    [33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50]                // Box 7 脊索
   ];
 
   var score = 0;
@@ -206,18 +216,29 @@ function checkPlacement() {
     for (var j = 0; j < imageIndices.length; j++) {
       var imageIndex = imageIndices[j] - 1;
       var image = images[imageIndex];
-      var boxX = boxIndex * boxWidth;
-      var boxY = boxIndex >= 3 ? canvas.height * 2 / 3 : 0;
+	  // var boxX = boxIndex * boxWidth;
+
+	  var boxX = boxIndex > 3 ? (boxIndex - 4) * boxWidth : boxIndex * boxWidth ;
+      var boxY = boxIndex > 3 ? canvas.height * 2 / 3 : 0;
 
       // Calculate the allowed tolerance for placement
       var tolerance = boxWidth / 10;
-
+	  console.log(image.x);	  
+		
       // Check if the image is within the correct box area
       if (
+		/*
         image.x + tolerance >= boxX &&
         image.x + image.element.width - tolerance <= boxX + boxWidth &&
         image.y + tolerance >= boxY &&
         image.y + image.element.height - tolerance <= boxY + boxHeight
+		*/
+        image.x + tolerance >= boxX &&
+        image.x + imgWidth - tolerance <= boxX + boxWidth &&
+        image.y + tolerance >= boxY &&
+        image.y + imgWidth * image.element.height / image.element.width - tolerance <= boxY + boxHeight	
+		
+		
       ) {
         score++;
       } else {
@@ -244,8 +265,10 @@ function slideWrongImages(wrongImages) {
   // Animate the wrong images sliding to the middle
   for (var i = 0; i < wrongImages.length; i++) {
     var image = wrongImages[i];
-    var targetX = getRandomInt(0, canvas.width - image.element.width);
-    var targetY = getRandomInt(canvas.height/3, canvas.height*2/3 - image.element.height);
+    // var targetX = getRandomInt(0, canvas.width - image.element.width);
+    // var targetY = getRandomInt(canvas.height/3, canvas.height*2/3 - image.element.height);
+	var targetX = getRandomInt(0, canvas.width - imgWidth);
+	var targetY = getRandomInt(canvas.height/3, canvas.height*2/3 - imgWidth * image.element.height / image.element.width);
 
 
     // Use requestAnimationFrame for smoother animation
@@ -284,5 +307,3 @@ function easeOutQuad(t, b, c, d) {
   t /= d;
   return -c * t * (t - 2) + b;
 }
-
-
