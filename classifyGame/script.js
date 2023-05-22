@@ -46,7 +46,9 @@ function start() {
   var boxHeight = canvas.height / 3;
 
   // Place images randomly
-  var imageSpace = 0;
+  
+  // Shuffle the images array
+  shuffle(images);
   images.forEach(function (image) {
     
     // image.y = getRandomInt(canvas.height/3, canvas.height*2/3 - imgWidth * image.element.height / image.element.width);
@@ -54,7 +56,7 @@ function start() {
 	image.y = getRandomInt(canvas.height/3, canvas.height*2/3 - imgHeight);
 	// image.x = imageSpace;
 	// image.y = canvas.height/3 + imgHeight;
-	imageSpace += imgWidth/5;
+	
     // ctx.drawImage(image.element, image.x, image.y);
 	ctx.drawImage(image.element, image.x, image.y, imgWidth, imgHeight);
   });
@@ -75,6 +77,15 @@ function start() {
   // Draw Box
   drawAnswerBox();
 }
+
+// Function to shuffle an array
+function shuffle(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+}
+
 
 // Helper function to get random integer
 function getRandomInt(min, max) {
