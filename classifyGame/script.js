@@ -48,8 +48,8 @@ function start() {
   // Place images randomly
   
   // Shuffle the images array
-  shuffle(images);
-  shuffle(images);
+  //shuffle(images);
+  //shuffle(images);
   images.forEach(function (image) {
     
     // image.y = getRandomInt(canvas.height/3, canvas.height*2/3 - imgWidth * image.element.height / image.element.width);
