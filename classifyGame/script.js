@@ -55,6 +55,12 @@ var imgHeight = 80;
 var timerInterval = null;
 var timerSeconds = 0;
 
+// Calculate the number of rows and columns in the grid
+var numRows = 2;
+// var numCols = Math.ceil(imagesToLoad / numRows);
+var numCols = 10;
+
+
 /*
 // Load images
 for (var i = 1; i <= imagesToLoad; i++) {
@@ -152,11 +158,6 @@ function start() {
 
 // Function to place image in the grid form
 function placeImages(images){
-
-  // Calculate the number of rows and columns in the grid
-  var numRows = 2;
-  // var numCols = Math.ceil(imagesToLoad / numRows);
-  var numCols = 15;
 
   // Calculate the width and height of each grid cell
   var cellWidth = canvas.width / numCols;
