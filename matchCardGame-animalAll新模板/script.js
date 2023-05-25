@@ -1,11 +1,9 @@
-
-
 /**
  * 由外部的 .js 載入設檔值, 並執行 callback 的指令
  * @param {string}  要載入的 .js
  * @param {function} 載入完畢要執行的 function
  */
-var loadSettingFromExternalScript = function("cardData.js", callback)  {
+var loadSettingFromExternalScript = function(scriptSrc, callback)  {
   var nocacheVal = '?nocache=' + new Date().getTime();  //為了避免 cache 的問題,在檔名後加亂數
   var scriptToAdd = document.createElement('script');   //建立一個 scriptElement
   
@@ -36,18 +34,7 @@ var loadSettingFromExternalScript = function("cardData.js", callback)  {
 };
 
 
-
-// Variables
-var cards = [];
-var selectedCards = [];
-
-// Resize canvas to fit window
-var canvas = document.getElementById("canvas");
-canvas.width = window.innerWidth * 0.95;
-canvas.height = window.innerHeight* 0.80;
-var ctx = canvas.getContext("2d");
-
-function callback(){
+function readCardData(){
 	// 讀入CardData
 	Object.keys(cardData).forEach((cardName) => {
 		var card = {
@@ -59,32 +46,27 @@ function callback(){
 		};
 		cards.push(card);
 	});
+
+  setup();  
+  start();
 }
 
-// 用numCards根號計算每欄列擺幾張牌
-var numCards = cards.length;
-var numCols = parseInt(Math.sqrt(numCards));
-var numRows = Math.ceil(numCards/numCols);
 
-// 牌卡之間的間隔
-var hSpace = 10;
-var vSpace = 10;
-var cardWidth  = (canvas.width  - (numCols+1) * hSpace) / numCols;
-var cardHeight = (canvas.height - (numRows+1) * vSpace) / numRows;
-var fontRatio = 0.25;   // fontSize = fontRatio*cardWidth
 
-// 計時
-var timerSeconds = 0;
+function setup(){
+    // 用numCards根號計算每欄列擺幾張牌
+    numCards = cards.length;
+    numCols = parseInt(Math.sqrt(numCards));
+    numRows = Math.ceil(numCards/numCols);
 
-// 計分
-var scoresElement = document.getElementById("scores");
-var scores = 0;
-var correctScores = 100; //答對加100
-var wrongScores = 50;    //答錯扣50
+    cardWidth  = (canvas.width  - (numCols+1) * hSpace) / numCols;
+    cardHeight = (canvas.height - (numRows+1) * vSpace) / numRows;
+    // 执行回调函数
+    //if (typeof callback === 'function') {
+    //  callback();
+    //}
+}
 
-// audio
-var correctSound = new Audio('correct.mp3');
-var wrongSound = new Audio('wrong.mp3');
 
 // 發牌依照numCols 和 numRows給予cards座標
 function setCardsPos(){
@@ -98,6 +80,30 @@ function setCardsPos(){
         card.y = row * cardHeight + vSpace * (row + 1);
     });
 }
+
+
+// Start function
+function start() {
+	// Shuffle the cards array
+    shuffle(cards);
+
+	// Call the drawCards function to draw the cards on the canvas
+    setCardsPos();
+    drawCards();    
+
+    canvas.addEventListener("mousedown", click);
+    // canvas.addEventListener("mousemove", drag);
+    // canvas.addEventListener("mouseup", endClick);
+    // canvas.addEventListener("mouseleave", endClick);
+
+    // Touch event listeners
+    canvas.addEventListener("touchstart", click);
+    // canvas.addEventListener("touchmove", drag);
+    // canvas.addEventListener("touchend", click);
+
+    startTimer();  
+}
+
 
 // Drawing function
 function drawCards() {
@@ -130,27 +136,6 @@ function drawCards() {
 }
 
 
-// Start function
-function start() {
-	// Shuffle the cards array
-    shuffle(cards);
-
-	// Call the drawCards function to draw the cards on the canvas
-    setCardsPos();
-    drawCards();    
-
-    canvas.addEventListener("mousedown", click);
-    // canvas.addEventListener("mousemove", drag);
-    // canvas.addEventListener("mouseup", endClick);
-    // canvas.addEventListener("mouseleave", endClick);
-
-    // Touch event listeners
-    canvas.addEventListener("touchstart", click);
-    // canvas.addEventListener("touchmove", drag);
-    // canvas.addEventListener("touchend", click);
-
-    startTimer();  
-}
 
 //====================時間函數設定======================
 // Function to start the timer
@@ -193,7 +178,7 @@ function getRandomInt(min, max) {
 
 
 
-// 點卡片
+// 點卡片的動作
 function click(event) {
     event.preventDefault(); // Prevent default touch events
     var rect = canvas.getBoundingClientRect();
@@ -297,6 +282,43 @@ function handleMatchingCards() {
     } 
 }
 
+// Golbal variables
+// Resize canvas to fit window
+var canvas = document.getElementById("canvas");
+canvas.width = window.innerWidth * 0.95;
+canvas.height = window.innerHeight* 0.80;
+var ctx = canvas.getContext("2d");
 
-//開始放卡片
-start();
+
+//
+var cardData;     //從外部讀入cardData.js
+var cards = [];
+var selectedCards = [];
+
+
+var numCards, numCols, numRows;
+var cardWidth, cardHeight;
+
+// 牌卡之間的間隔
+var hSpace = 10;
+var vSpace = 10;
+
+// 讀cardData.js之後，用readCardData讀入cards、計算牌卡位置並放牌
+loadSettingFromExternalScript('cardData.json', readCardData);
+
+
+var fontRatio = 0.25;   // 牌卡字的尺寸fontSize = fontRatio*cardWidth
+
+// 計時
+var timerSeconds = 0;
+
+// 計分
+var scoresElement = document.getElementById("scores");
+var scores = 0;
+var correctScores = 100; //答對加100
+var wrongScores = 50;    //答錯扣50
+
+// audio
+var correctSound = new Audio('correct.mp3');
+var wrongSound = new Audio('wrong.mp3');
+
