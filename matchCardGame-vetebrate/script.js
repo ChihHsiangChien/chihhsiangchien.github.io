@@ -35,39 +35,24 @@ var cardData = {
 "無尾熊": "哺乳類",
 "虎鯨": "哺乳類",
 "人": "哺乳類",
-    
-    
-
 };
 
 // Variables
 var cards = [];
 var selectedCards = [];
 
-var canvas = document.getElementById("canvas");
 // Resize canvas to fit window
-canvas.width = window.innerWidth * 4/5;
-canvas.height = window.innerHeight* 4/5;
-
+var canvas = document.getElementById("canvas");
+canvas.width = window.innerWidth * 0.95;
+canvas.height = window.innerHeight* 0.80;
 var ctx = canvas.getContext("2d");
 
-var numCols = 6;
-var numRows = 6;
 
-var hSpace = 10;
-var vSpace = 10;
-var cardWidth  = (canvas.width  - (numCols+1) * hSpace) / numCols;
-var cardHeight = (canvas.height - (numRows+1) * vSpace) / numRows;
-
-var numClick = 0;
-var numCards;
-
-
-// Iterate over the card data
+// 讀入CardData
 Object.keys(cardData).forEach((cardName) => {
     var card = {
         name: cardName,
-        kindom: cardData[cardName],
+        category: cardData[cardName],
         faceUp: false, // Add a new property to track the card's face-up state
         x: 0,
         y: 0,
@@ -75,9 +60,32 @@ Object.keys(cardData).forEach((cardName) => {
     cards.push(card);
 });
 
-numCards = cards.length;
+// 用numCards根號計算每欄列擺幾張牌
+var numCards = cards.length;
+var numCols = parseInt(Math.sqrt(numCards));
+var numRows = Math.ceil(numCards/numCols);
 
-// 一開始發牌，依照numCols 和 numRows給予cards座標
+// 牌卡之間的間隔
+var hSpace = 10;
+var vSpace = 10;
+var cardWidth  = (canvas.width  - (numCols+1) * hSpace) / numCols;
+var cardHeight = (canvas.height - (numRows+1) * vSpace) / numRows;
+var fontRatio = 0.25;   // fontSize = fontRatio*cardWidth
+
+// 計時
+var timerSeconds = 0;
+
+// 計分
+var scoresElement = document.getElementById("scores");
+var scores = 0;
+var correctScores = 100; //答對加100
+var wrongScores = 50;    //答錯扣50
+
+// audio
+var correctSound = new Audio('correct.mp3');
+var wrongSound = new Audio('wrong.mp3');
+
+// 發牌依照numCols 和 numRows給予cards座標
 function setCardsPos(){
     cards.forEach(function (card, index) {
         // Calculate the row and column of the current image
@@ -103,7 +111,7 @@ function drawCards() {
         
         // Set the color based on whether the card is selected or not
         if (isSelected) {
-            ctx.fillStyle = "red"; // Change to the desired color for clicked cards
+            ctx.fillStyle = "red"; // 被點擊的變紅色
         } else {
             ctx.fillStyle = "green";
         }
@@ -112,9 +120,8 @@ function drawCards() {
         // Draw the text inside the box
         ctx.fillStyle = "white";
 
-        var fontSize = 5 * (cardWidth /18);
+        var fontSize = fontRatio * cardWidth;
         ctx.font = fontSize + "px Arial";
-        // ctx.fillText(card.name,   card.x + 5, card.y + 20);
         // ctx.font = "30px Arial";
         ctx.fillText(card.name,   card.x + cardWidth*0.10, card.y + cardHeight *0.80);
             
@@ -124,32 +131,49 @@ function drawCards() {
 
 // Start function
 function start() {
- 
-	// Shuffle the images array
+	// Shuffle the cards array
     shuffle(cards);
 
 	// Call the drawCards function to draw the cards on the canvas
     setCardsPos();
-	drawCards();
-    
-    // Enable dragging
+    drawCards();    
+
     canvas.addEventListener("mousedown", click);
     // canvas.addEventListener("mousemove", drag);
     // canvas.addEventListener("mouseup", endClick);
     // canvas.addEventListener("mouseleave", endClick);
-
 
     // Touch event listeners
     canvas.addEventListener("touchstart", click);
     // canvas.addEventListener("touchmove", drag);
     // canvas.addEventListener("touchend", click);
 
-    // Draw Box
-    // drawAnswerBox();
-    
-    // Start the timer
-    // startTimer();  
+    startTimer();  
 }
+
+//====================時間函數設定======================
+// Function to start the timer
+function startTimer() {
+  timerInterval = setInterval(function () {
+    timerSeconds++;
+    updateTimerDisplay();
+  }, 1000);
+}
+
+// Function to stop the timer
+function stopTimer() {
+  clearInterval(timerInterval);
+  timerInterval = null;
+}
+
+// Function to update the timer display
+function updateTimerDisplay() {
+  var timerElement = document.getElementById("timer");
+  timerElement.innerText = timerSeconds;
+}
+//====================時間函數設定結束===================
+
+
 
 // Function to shuffle an array
 function shuffle(array) {
@@ -166,21 +190,34 @@ function getRandomInt(min, max) {
 }
 
 
-//開始放卡片
-start();
 
 
-// click
+// 點卡片
 function click(event) {
     event.preventDefault(); // Prevent default touch events
     var rect = canvas.getBoundingClientRect();
     var mouseX, mouseY;
     
-    numClick ++;    
-    var clickElement = document.getElementById("click");
-    clickElement.innerText = "click: " + numClick;    
     
-    // 檢查點擊位置
+    var { mouseX, mouseY } = getMouseCoordinates(event, rect);
+    var selected = checkClickedCard(mouseX, mouseY);  // 找出點到的卡片
+    addToSelectedCards(selected, selectedCards);      // 把點到的卡片放進 selectedCards
+    handleMatchingCards();                            // 檢查是否同一個分類
+    drawCards();
+    if (cards.length == 0){
+      stopTimer();
+    }
+}
+
+function endClick() {
+  selectedCard = null;
+}
+
+
+// 獲取滑鼠/觸摸點擊位置的相對座標
+function getMouseCoordinates(event, rect) {
+    var mouseX, mouseY;
+
     if (event.type === "mousedown") {
         mouseX = event.clientX - rect.left;
         mouseY = event.clientY - rect.top;
@@ -189,9 +226,13 @@ function click(event) {
         mouseY = event.touches[0].clientY - rect.top;
     }
 
+    return { mouseX, mouseY };
+}
+
+// 檢查點擊位置是否在卡片上
+function checkClickedCard(mouseX, mouseY) {
     var selected = null;
 
-    // Iterate over the cards
     for (var i = 0; i < cards.length; i++) {
         var card = cards[i];
 
@@ -203,21 +244,33 @@ function click(event) {
         ) {
             selected = card;
             break;
-          }
+        }
     }
+    return selected;
+}
 
-    // 點到的放進selectedCards[]
-    if (selected && selectedCards.length < 2 && !selectedCards.includes(selected) ) {
+
+// 將點擊到的卡片添加到已選擇的卡片陣列
+function addToSelectedCards(selected, selectedCards) {
+    if (selected && selectedCards.length < 2 && !selectedCards.includes(selected)) {
         selectedCards.push(selected);
     }
-    
-    
+}
+
+// 處理兩張已選擇的卡片是否匹配
+function handleMatchingCards() {
     if (selectedCards.length === 2) {
         var card1 = selectedCards[0];
         var card2 = selectedCards[1];
 
-        if (card1.kindom === card2.kindom) {
+        if (card1.category === card2.category) {
+            correctSound.play();
+            
+            scores += correctScores
+            scoresElement.innerText = "scores: " + scores;
+
             setTimeout(function () {
+                
                 // Matched: Remove the cards from the array
                 var index1 = cards.indexOf(card1);
                 cards.splice(index1, 1);
@@ -229,22 +282,20 @@ function click(event) {
                 // Redraw the cards
                 drawCards();
             }, 300);
-           
-
             
         } else {
             // Not matched: Face down the cards
+            wrongSound.play();
+            scores -= wrongScores;
+            scoresElement.innerText = "scores: " + scores;
             setTimeout(function () {
                 selectedCards = [];
                 drawCards();
             }, 700);
       } 
     } 
-    
-    drawCards();
 }
 
-function endClick() {
-  selectedCard = null;
-}
 
+//開始放卡片
+start();
