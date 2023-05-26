@@ -22,7 +22,7 @@ var fontRatio = 0.25;      // 牌卡字的尺寸fontSize = fontRatio*cardWidth
 var fontHeightRatio = 3;   // 控制字在牌卡的高度位置
 
 // 牌卡底色
-normalColor = "darkgreen";
+normalColor = "#345E4F";
 clickedColor = "red";
 
 // 牌卡字色
