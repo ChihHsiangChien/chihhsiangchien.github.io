@@ -278,7 +278,7 @@ function handleMatchingCards() {
 
                 // Redraw the cards
                 drawCards();
-            }, 300);
+            }, 200);
             
         } else {
             // Not matched: Face down the cards
@@ -288,7 +288,7 @@ function handleMatchingCards() {
             setTimeout(function () {
                 selectedCards = [];
                 drawCards();
-            }, 700);
+            }, 200);
       } 
     } 
 }
