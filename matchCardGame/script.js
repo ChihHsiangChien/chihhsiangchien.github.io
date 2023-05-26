@@ -1,106 +1,32 @@
-var cardData = {
-"水母": "刺絲胞動物",
-"水螅": "刺絲胞動物",
-"珊瑚": "刺絲胞動物",
-"海葵": "刺絲胞動物",
-"絛蟲": "扁形動物",
-"吸蟲": "扁形動物",
-"肝吸蟲": "扁形動物",
-"渦蟲": "扁形動物",
-"蝸牛": "軟體動物",
-"文蛤": "軟體動物",
-"章魚": "軟體動物",
-"烏賊": "軟體動物",
-"蚯蚓": "環節動物",
-"水蛭": "環節動物",
-"螞蝗": "環節動物",
-"沙蠶": "環節動物",
-"昆蟲": "節肢動物",
-"蜘蛛": "節肢動物",
-"蝦": "節肢動物",
-"蟹": "節肢動物",
-"蟬": "節肢動物",
-"衣魚": "節肢動物",
-"頭蝨": "節肢動物",
-"螞蟻": "節肢動物",
-"蝴蝶": "節肢動物",
-"蟑螂": "節肢動物",
-"海星": "棘皮動物",
-"海膽": "棘皮動物",
-"海參": "棘皮動物",
-"派大星": "棘皮動物",
-"魟魚": "魚類",
-"鯊魚": "魚類",
-"小丑魚": "魚類",
-"海馬": "魚類",
-"吳郭魚": "魚類",
-"旗魚": "魚類",
-"蟾蜍": "兩生類",
-"山椒魚": "兩生類",
-"青蛙": "兩生類",
-"蠑螈": "兩生類",
-"箭毒蛙": "兩生類",
-"赤蛙": "兩生類",
-"南蛇": "爬蟲類",
-"攀蜥": "爬蟲類",
-"短吻鱷": "爬蟲類",
-"斑龜": "爬蟲類",
-"變色龍": "爬蟲類",
-"暴龍": "爬蟲類",
-"鱷魚": "爬蟲類",
-"海龜": "爬蟲類",
-"小白鷺": "鳥類",
-"藍鵲": "鳥類",
-"五色鳥": "鳥類",
-"企鵝": "鳥類",
-"雞": "鳥類",
-"白鷺鷥": "鳥類",
-"鴨子": "鳥類",
-"烏鴉": "鳥類",
-"象": "哺乳類",
-"蝙蝠": "哺乳類",
-"鴨嘴獸": "哺乳類",
-"針鼴": "哺乳類",
-"袋鼠": "哺乳類",
-"無尾熊": "哺乳類",
-"虎鯨": "哺乳類",
-"人": "哺乳類",
-};
+// Golbal variables
+// Resize canvas to fit window
+var canvas = document.getElementById("canvas");
+canvas.width = window.innerWidth   * 0.95;
+canvas.height = window.innerHeight * 0.80;
+var ctx = canvas.getContext("2d");
 
-// Variables
+//
+var cardData;     //從另一個js檔案讀入cardData
 var cards = [];
 var selectedCards = [];
 
-// Resize canvas to fit window
-var canvas = document.getElementById("canvas");
-canvas.width = window.innerWidth * 0.95;
-canvas.height = window.innerHeight* 0.80;
-var ctx = canvas.getContext("2d");
 
 
-// 讀入CardData
-Object.keys(cardData).forEach((cardName) => {
-    var card = {
-        name: cardName,
-        category: cardData[cardName],
-        faceUp: false, // Add a new property to track the card's face-up state
-        x: 0,
-        y: 0,
-    };
-    cards.push(card);
-});
-
-// 用numCards根號計算每欄列擺幾張牌
-var numCards = cards.length;
-var numCols = parseInt(Math.sqrt(numCards));
-var numRows = Math.ceil(numCards/numCols);
 
 // 牌卡之間的間隔
 var hSpace = 10;
 var vSpace = 10;
-var cardWidth  = (canvas.width  - (numCols+1) * hSpace) / numCols;
-var cardHeight = (canvas.height - (numRows+1) * vSpace) / numRows;
-var fontRatio = 0.25;   // fontSize = fontRatio*cardWidth
+
+// 牌卡的字型比例
+var fontRatio = 0.25;      // 牌卡字的尺寸fontSize = fontRatio*cardWidth
+var fontHeightRatio = 3;   // 控制字在牌卡的高度位置
+
+// 牌卡底色
+normalColor = "darkgreen";
+clickedColor = "red";
+
+// 牌卡字色
+fontColor = "white";
 
 // 計時
 var timerSeconds = 0;
@@ -108,12 +34,50 @@ var timerSeconds = 0;
 // 計分
 var scoresElement = document.getElementById("scores");
 var scores = 0;
-var correctScores = 100; //答對加100
-var wrongScores = 50;    //答錯扣50
+var correctScores = 100;   //答對加分
+var wrongScores   = 50;    //答錯扣分
 
 // audio
 var correctSound = new Audio('correct.mp3');
-var wrongSound = new Audio('wrong.mp3');
+var wrongSound   = new Audio('wrong.mp3');
+
+
+// 執行順序：先讀取卡片、初始化設定
+readCardData();
+
+var numCards, numCols, numRows;
+var cardWidth, cardHeight;
+setup();
+
+start();
+
+
+function readCardData(){
+	// 讀入CardData
+	Object.keys(cardData).forEach((cardName) => {
+		var card = {
+			name: cardName,
+			category: cardData[cardName],
+			faceUp: false, // Add a new property to track the card's face-up state
+			x: 0,
+			y: 0,
+		};
+		cards.push(card);
+	});
+}
+
+
+
+function setup(){
+    // 用numCards根號計算每欄列擺幾張牌
+    numCards = cards.length;
+    numCols = parseInt(Math.sqrt(numCards));
+    numRows = Math.ceil(numCards/numCols);
+
+    cardWidth  = (canvas.width  - (numCols+1) * hSpace) / numCols;
+    cardHeight = (canvas.height - (numRows+1) * vSpace) / numRows;
+}
+
 
 // 發牌依照numCols 和 numRows給予cards座標
 function setCardsPos(){
@@ -123,39 +87,9 @@ function setCardsPos(){
         var col = index % numCols;
         
         // Calculate the position of the image within the grid cell
-        card.x = col * cardWidth  +  hSpace* (col + 1);
-        card.y = row * cardHeight + vSpace * (row + 1);
+        card.x = col * cardWidth  +  hSpace * (col + 1);
+        card.y = row * cardHeight +  vSpace * (row + 1);
     });
-}
-
-// Drawing function
-function drawCards() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    // Iterate over the card data and draw the text in a box  
-    for (var i = 0; i < cards.length; i++) {
-        var card = cards[i];
-        var index = i;
-
-        // Check if the card is in the selectedCards array
-        var isSelected = selectedCards.includes(card);
-        
-        // Set the color based on whether the card is selected or not
-        if (isSelected) {
-            ctx.fillStyle = "red"; // 被點擊的變紅色
-        } else {
-            ctx.fillStyle = "green";
-        }
-        
-        ctx.fillRect(card.x, card.y, cardWidth, cardHeight);
-        // Draw the text inside the box
-        ctx.fillStyle = "white";
-
-        var fontSize = fontRatio * cardWidth;
-        ctx.font = fontSize + "px Arial";
-        // ctx.font = "30px Arial";
-        ctx.fillText(card.name,   card.x + cardWidth*0.10, card.y + cardHeight *0.80);
-            
-        }
 }
 
 
@@ -180,6 +114,39 @@ function start() {
 
     startTimer();  
 }
+
+
+// Drawing function
+function drawCards() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Iterate over the card data and draw the text in a box  
+    for (var i = 0; i < cards.length; i++) {
+        var card = cards[i];
+        var index = i;
+
+        // Check if the card is in the selectedCards array
+        var isSelected = selectedCards.includes(card);
+        
+        // Set the color based on whether the card is selected or not
+        if (isSelected) {
+            ctx.fillStyle = clickedColor; // 被點擊的顏色
+        } else {
+            ctx.fillStyle = normalColor;  // 平常的顏色
+        }
+        
+        ctx.fillRect(card.x, card.y, cardWidth, cardHeight);
+        // Draw the text inside the box
+        ctx.fillStyle = fontColor;
+
+        var fontSize = fontRatio * cardWidth;
+        ctx.font = fontSize + "px Arial";
+        // ctx.font = "30px Arial";
+        ctx.fillText(card.name,   card.x + cardWidth*0.10, card.y + cardHeight * fontRatio * fontHeightRatio);
+            
+        }
+}
+
+
 
 //====================時間函數設定======================
 // Function to start the timer
@@ -222,7 +189,7 @@ function getRandomInt(min, max) {
 
 
 
-// 點卡片
+// 點卡片的動作
 function click(event) {
     event.preventDefault(); // Prevent default touch events
     var rect = canvas.getBoundingClientRect();
@@ -325,7 +292,3 @@ function handleMatchingCards() {
       } 
     } 
 }
-
-
-//開始放卡片
-start();
