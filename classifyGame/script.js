@@ -2,20 +2,20 @@
 var canvas = document.getElementById("canvas");
 var ctx = canvas.getContext("2d");
 canvas.width = window.innerWidth   * 0.90;
-canvas.height = window.innerHeight * 0.80;
+canvas.height = window.innerHeight * 0.75;
 
 //答案框
 var boxRowsNum = categoryNames.length;
 var boxColsNum = categoryNames[0].length;  // 用第一列的數量
 var boxWidth = canvas.width / boxColsNum;
-var boxHeight = canvas.height * 0.55 / boxRowsNum; // 
+var boxHeight = canvas.height * 0.65 / boxRowsNum; // 
 
 // 卡片大小、欄數、列數、高度
 var imageFolder = "images_Animals"
 var cardWidth = 150;
 var cardHeight = 150;
-var numRows = 2;
-var numCols = 6;
+var numRows = 1;
+var numCols = 8;
 var cardsX = 10; //卡片群的最左側
 var cardsY = 20 + boxHeight*boxRowsNum; // 待答卡片的最高高度，需要與boxHeight 配
 var cardOffsetX = 2;
