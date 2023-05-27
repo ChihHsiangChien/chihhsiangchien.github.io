@@ -1,14 +1,14 @@
 // Variables
 var canvas = document.getElementById("canvas");
 var ctx = canvas.getContext("2d");
-canvas.width = window.innerWidth   * 0.95;
-canvas.height = window.innerHeight * 0.85;
+canvas.width = window.innerWidth   * 0.90;
+canvas.height = window.innerHeight * 0.80;
 
 //答案框
 var boxRowsNum = categoryNames.length;
 var boxColsNum = categoryNames[0].length;  // 用第一列的數量
 var boxWidth = canvas.width / boxColsNum;
-var boxHeight = canvas.height * 1/2 / boxRowsNum; // 
+var boxHeight = canvas.height * 0.55 / boxRowsNum; // 
 
 // 卡片大小、欄數、列數、高度
 var imageFolder = "images_Animals"
