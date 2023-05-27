@@ -10,9 +10,6 @@ var cardData;     //從另一個js檔案讀入cardData
 var cards = [];
 var selectedCards = [];
 
-
-
-
 // 牌卡之間的間隔
 var hSpace = 10;
 var vSpace = 10;

@@ -1,8 +1,23 @@
 // Variables
 var canvas = document.getElementById("canvas");
 var ctx = canvas.getContext("2d");
-canvas.width = window.innerWidth   * 0.9;
+canvas.width = window.innerWidth   * 0.95;
 canvas.height = window.innerHeight * 0.85;
+
+//答案框
+var boxRowsNum = categoryNames.length;
+var boxColsNum = categoryNames[0].length;  // 用第一列的數量
+var boxWidth = canvas.width / boxColsNum;
+var boxHeight = canvas.height * 1/2 / boxRowsNum; // 
+
+// 卡片大小、欄數、列數、高度
+var cardWidth = 160;
+var cardHeight = 160;
+var numRows = 2;
+var numCols = 8;
+var cardsY = 20 + boxHeight*boxRowsNum; // 待答卡片的最高高度，需要與boxHeight 配
+var cardOffsetX = 2;
+var cardOffsetY = 2;
 
 var cardsLoaded = 0;
 var cardsToLoad = 0;
@@ -10,51 +25,29 @@ var cards = [];
 var selectedcard = null;
 var offsetX = 0;
 var offsetY = 0;
-var cardWidth = 80;
-var cardHeight = 80;
 
 
 // 計時
 var timerInterval = null;
 var timerSeconds = 0;
 
-// Calculate the number of rows and columns in the grid
-var numRows = 2;
-// var numCols = Math.ceil(cardsToLoad / numRows);
-var numCols = 10;
+readCardData();
 
-
-/*
-// Load cards
-for (var i = 1; i <= cardsToLoad; i++) {
-  var card = new card();
-  card.addEventListener("load", cardLoaded); // Add load event listener
-  card.src = "cards/" + i + ".jpg";
-  cards.push({
-    element: card,
-    x: 0,
-    y: 0,
-    no:,
+// 放置卡片
+function readCardData(){
+  Object.keys(cardData).forEach((filename) => {
+    var image = new Image();
+    image.addEventListener("load", cardLoaded); // Add load event listener
+    image.src = "images/" + filename;
+    var no = cardData[filename];
+    cards.push({
+      element: image,
+      x: 0,
+      y: 0,
+      no: no,
+    });
   });
 }
-*/
-//
-// Iterate over the card data
-Object.keys(cardData).forEach((filename) => {
-  var image = new Image();
-  image.addEventListener("load", cardLoaded); // Add load event listener
-  image.src = "images/" + filename;
-  // Get the corresponding "no" value from the card data
-  var no = cardData[filename];
-
-  cards.push({
-    element: image,
-    x: 0,
-    y: 0,
-    no: no,
-  });
-});
-
 
 // card load callback
 function cardLoaded() {
@@ -67,33 +60,13 @@ function cardLoaded() {
 
 // Start function
 function start() {
-  // Calculate box dimensions
-  var boxWidth = canvas.width / 4;
-  var boxHeight = canvas.height / 3;
-
-  // Place cards randomly
-  
+ 
   // Shuffle the cards array
   shuffle(cards);
   shuffle(cards);
   
-  /*
-  cards.forEach(function (card) {
-    
-    // card.y = getRandomInt(canvas.height/3, canvas.height*2/3 - cardWidth * card.element.height / card.element.width);
-    card.x = getRandomInt(0, canvas.width - cardWidth);
-    card.y = getRandomInt(canvas.height/3, canvas.height*2/3 - cardHeight);
-    // card.x = cardSpace;
-    // card.y = canvas.height/3 + cardHeight;
-    
-      // ctx.drawcard(card.element, card.x, card.y);
-    ctx.drawcard(card.element, card.x, card.y, cardWidth, cardHeight);
-  });
-  */
 
   placecards(cards);
-
-
   // Enable dragging
   canvas.addEventListener("mousedown", startDrag);
   canvas.addEventListener("mousemove", drag);
@@ -123,8 +96,8 @@ function placecards(cards){
     var col = index % numCols;
 
     // Calculate the position of the card within the grid cell
-    card.x = col * cardWidth;
-    card.y = canvas.height *2/3 + row * cardHeight;
+    card.x = col * (cardWidth + cardOffsetX);
+    card.y = cardsY + row * (cardHeight + cardOffsetY);
 
     // Draw the card
     ctx.drawImage(card.element, card.x, card.y, cardWidth, cardHeight);
@@ -297,86 +270,20 @@ function redrawCanvas() {
 
 
 function drawAnswerBox(){
-  boxWidth = canvas.width / 4;
-  boxHeight = canvas.height / 3;
-  for(var i = 0; i < 4; i++){
-    ctx.beginPath();
-    ctx.rect(0 + i*boxWidth , 0, boxWidth, boxHeight);
-    ctx.stroke();
-    
-    ctx.font = "24px Arial";
-    ctx.fillText(categoryNames[i], 0 + i*boxWidth + 10 , 30);    
-  }
-
-  for(var i = 0; i < 3; i++){
-    ctx.beginPath();
-    ctx.rect(0 + i * boxWidth , canvas.height *2/3 , boxWidth, boxHeight);
-    ctx.stroke();
-    ctx.font = "24px Arial";
-    ctx.fillText(categoryNames[i+4], 0 + i*boxWidth + 10 , canvas.height *2/3 + 30);      
-  }
-}
-
-
-function checkPlacement2() {
-  var correctPlacements = [
-    [1, 2, 3, 4],                // Box 0 刺絲胞
-    [5, 6, 7],                   // Box 1 扁形
-    [8, 9, 10, 11, 12, 13],      // Box 2 軟體
-    [14, 15, 16, 17, 18, 19],                // Box 3 環節
-    [20, 21, 22, 23, 24, 25, 26],            // Box 4 節肢
-    [27, 28, 29, 30, 31, 32],                // Box 5 棘皮
-    [33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50]                // Box 7 脊索 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50]
-  ];
-
-  var score = 0;
-  var wrongcards = [];
-
-  // Check each card placement
-  for (var boxIndex = 0; boxIndex < correctPlacements.length; boxIndex++) {
-    var cardIndices = correctPlacements[boxIndex];
-
-    for (var j = 0; j < cardIndices.length; j++) {
-      var cardIndex = cardIndices[j] - 1;
-      var card = cards[cardIndex];
-	  // var boxX = boxIndex * boxWidth;
-
-	  var boxX = boxIndex > 3 ? (boxIndex - 4) * boxWidth : boxIndex * boxWidth ;
-      var boxY = boxIndex > 3 ? canvas.height * 2 / 3 : 0;
-
-      // Calculate the allowed tolerance for placement
-      var tolerance = boxWidth / 10;
-	  console.log(card.x);	  
-		
-      // Check if the card is within the correct box area
-      if (
-		/*
-        card.x + tolerance >= boxX &&
-        card.x + card.element.width - tolerance <= boxX + boxWidth &&
-        card.y + tolerance >= boxY &&
-        card.y + card.element.height - tolerance <= boxY + boxHeight
-		*/
-        card.x + tolerance >= boxX &&
-        card.x + cardWidth - tolerance <= boxX + boxWidth &&
-        card.y + tolerance >= boxY &&
-        card.y + cardHeight - tolerance <= boxY + boxHeight			
-      ) {
-        score++;
-      } else {
-        wrongcards.push(card);
-      }
+  for(var i = 0; i < boxRowsNum; i++){
+    for(var j = 0; j < categoryNames[i].length; j++){
+      ctx.beginPath();
+      ctx.rect(j * boxWidth , i * boxHeight, boxWidth, boxHeight);
+      ctx.stroke();
+      
+      ctx.font = "24px Arial";
+      ctx.fillText(categoryNames[i][j], 10 + j*boxWidth , 30 + i*boxHeight); 
     }
   }
 
-  // Show the score above the canvas
-  var scoreElement = document.getElementById("score");
-  scoreElement.innerText = "Score: " + score;
-
-  // If there are wrong cards, slide them to the middle and allow the user to place them again
-  if (wrongcards.length > 0) {
-    slideWrongcards(wrongcards);
-  }
 }
+
+
 
 function checkPlacement() {
   var score = 0;
@@ -388,26 +295,29 @@ function checkPlacement() {
     var cardNo = card.no;
     var boxIndex = cardNo - 1;
 
-    var boxX = boxIndex > 3 ? (boxIndex - 4) * boxWidth : boxIndex * boxWidth;
-    var boxY = boxIndex > 3 ? canvas.height * 2 / 3 : 0;
+    var boxX = (boxIndex % boxColsNum) * boxWidth;
+    var boxY = parseInt(boxIndex / boxColsNum) * boxHeight;
 
     // Calculate the allowed tolerance for placement
     var tolerance = boxWidth / 10;
 
     // Check if the card is within the correct box area
     if (
-      card.x + tolerance >= boxX &&
-      card.x + cardWidth - tolerance <= boxX + boxWidth &&
-      card.y + tolerance >= boxY &&
-      card.y + cardHeight - tolerance <= boxY + boxHeight
+
+        // 在正確答案的框框裡
+        card.x + tolerance >= boxX &&
+        card.x + cardWidth - tolerance <= boxX + boxWidth &&
+        card.y + tolerance >= boxY &&
+        card.y + cardHeight - tolerance <= boxY + boxHeight
     ) {
       score++;
     } else {
       if (
+        // 在待答區
         card.x + tolerance >= 0 &&
         card.x + cardWidth - tolerance <= canvas.width &&
-        card.y + tolerance >= canvas.height/3 &&
-        card.y + cardHeight - tolerance <= canvas.height*2/3
+        card.y + tolerance >= cardsY &&
+        card.y + cardHeight - tolerance <= canvas.height
       ){
         //pass;
       }
@@ -426,7 +336,7 @@ function checkPlacement() {
     slideWrongcards(wrongcards);
   }
   
-  // If the score reaches 50, stop the timer
+  // If the score reaches , stop the timer
   if (score === Object.keys(cardData).length) {
     stopTimer();
   }
@@ -436,22 +346,18 @@ function checkPlacement() {
 
 
 function slideWrongcards(wrongcards) {
-  var middleX = canvas.width / 2;
-  var middleY = canvas.height / 2;
-
   // Animate the wrong cards sliding to the middle
   for (var i = 0; i < wrongcards.length; i++) {
     var card = wrongcards[i];
-    var targetX = getRandomInt(canvas.width *3/4, canvas.width  - card.element.width);
-    var targetY = getRandomInt(canvas.height*2/3, canvas.height - card.element.height);
-	  //var targetX = getRandomInt(0, canvas.width - cardWidth);
-	  //var targetY = getRandomInt(canvas.height/3, canvas.height*2/3 - cardHeight);
 
+    // 答錯的卡片滑到最後一個位置
+    // var targetX = getRandomInt(canvas.width *0.8, canvas.width  - card.element.width);
+    //var targetY = getRandomInt(canvas.height*0.8, canvas.height - card.element.height);
+    var targetX = (numCols-1) * (cardWidth + cardOffsetX);
+    var targetY = cardsY + (numRows-1) * (cardHeight + cardOffsetY);
 
     // Use requestAnimationFrame for smoother animation
     animateSlide(card, targetX, targetY);
-
-	
   }
 }
 
@@ -497,8 +403,8 @@ function shake(){
     var cardNo = card.no;
     var boxIndex = cardNo - 1;
 
-    var boxX = (boxIndex % 4 ) * boxWidth;
-    var boxY = boxIndex > 3 ? canvas.height * 2 / 3 : 0;
+    var boxX = (boxIndex % boxColsNum) * boxWidth;
+    var boxY = parseInt(boxIndex / boxColsNum) * boxHeight;    
 
     // Calculate the allowed tolerance for placement
     var tolerance = boxWidth / 10;
