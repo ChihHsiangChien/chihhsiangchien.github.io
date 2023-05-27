@@ -17,6 +17,7 @@ var vSpace = 10;
 // 牌卡的字型比例
 var fontRatio = 0.25;      // 牌卡字的尺寸fontSize = fontRatio*cardWidth
 var fontHeightRatio = 3;   // 控制字在牌卡的高度位置
+var maxLength = 3;         // 最大允許的字元長度
 
 // 牌卡底色
 normalColor = "#345E4F";
@@ -42,9 +43,12 @@ var wrongSound   = new Audio('wrong.mp3');
 // 執行順序：先讀取卡片、初始化設定
 readCardData();
 
-var numCards, numCols, numRows;
-var cardWidth, cardHeight;
-setup();
+// 用numCards根號計算每欄列擺幾張牌
+var numCards = cards.length;
+var numCols = parseInt(Math.sqrt(numCards));
+var numRows = Math.ceil(numCards/numCols);
+var cardWidth  = (canvas.width  - (numCols+1) * hSpace) / numCols;
+var cardHeight = (canvas.height - (numRows+1) * vSpace) / numRows;
 
 start();
 
@@ -61,18 +65,6 @@ function readCardData(){
 		};
 		cards.push(card);
 	});
-}
-
-
-
-function setup(){
-    // 用numCards根號計算每欄列擺幾張牌
-    numCards = cards.length;
-    numCols = parseInt(Math.sqrt(numCards));
-    numRows = Math.ceil(numCards/numCols);
-
-    cardWidth  = (canvas.width  - (numCols+1) * hSpace) / numCols;
-    cardHeight = (canvas.height - (numRows+1) * vSpace) / numRows;
 }
 
 
@@ -134,8 +126,13 @@ function drawCards() {
         ctx.fillRect(card.x, card.y, cardWidth, cardHeight);
         // Draw the text inside the box
         ctx.fillStyle = fontColor;
-
         var fontSize = fontRatio * cardWidth;
+
+        if (card.name.length > maxLength) {
+            var ratio = maxLength / card.name.length; // 計算縮小比例
+            fontSize *= ratio; // 乘上比例以縮小字體大小
+        }
+                
         ctx.font = fontSize + "px Arial";
         // ctx.font = "30px Arial";
         ctx.fillText(card.name,   card.x + cardWidth*0.10, card.y + cardHeight * fontRatio * fontHeightRatio);
