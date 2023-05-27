@@ -8,13 +8,14 @@ canvas.height = window.innerHeight * 0.85;
 var boxRowsNum = categoryNames.length;
 var boxColsNum = categoryNames[0].length;  // 用第一列的數量
 var boxWidth = canvas.width / boxColsNum;
-var boxHeight = canvas.height * 1/2 / boxRowsNum; // 
+var boxHeight = canvas.height * 1/3 / boxRowsNum; // 
 
 // 卡片大小、欄數、列數、高度
-var cardWidth = 160;
-var cardHeight = 160;
+var cardWidth = 180;
+var cardHeight = 180;
 var numRows = 2;
-var numCols = 8;
+var numCols = 6;
+var cardsX = 10; //卡片群的最左側
 var cardsY = 20 + boxHeight*boxRowsNum; // 待答卡片的最高高度，需要與boxHeight 配
 var cardOffsetX = 2;
 var cardOffsetY = 2;
@@ -96,7 +97,7 @@ function placecards(cards){
     var col = index % numCols;
 
     // Calculate the position of the card within the grid cell
-    card.x = col * (cardWidth + cardOffsetX);
+    card.x = cardsX + col * (cardWidth + cardOffsetX);
     card.y = cardsY + row * (cardHeight + cardOffsetY);
 
     // Draw the card
@@ -314,7 +315,7 @@ function checkPlacement() {
     } else {
       if (
         // 在待答區
-        card.x + tolerance >= 0 &&
+        card.x + tolerance >= cardsX &&
         card.x + cardWidth - tolerance <= canvas.width &&
         card.y + tolerance >= cardsY &&
         card.y + cardHeight - tolerance <= canvas.height
@@ -353,7 +354,7 @@ function slideWrongcards(wrongcards) {
     // 答錯的卡片滑到最後一個位置
     // var targetX = getRandomInt(canvas.width *0.8, canvas.width  - card.element.width);
     //var targetY = getRandomInt(canvas.height*0.8, canvas.height - card.element.height);
-    var targetX = (numCols-1) * (cardWidth + cardOffsetX);
+    var targetX = cardsX + (numCols-1) * (cardWidth + cardOffsetX);
     var targetY = cardsY + (numRows-1) * (cardHeight + cardOffsetY);
 
     // Use requestAnimationFrame for smoother animation
