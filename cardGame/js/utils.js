@@ -455,7 +455,7 @@ function checkCardsPlacement() {
 
   // If there are wrong cards, slide them to the middle and allow the user to place them again
   if (wrongcards.length > 0) {
-    wrongSound.play();
+    //wrongSound.play();
     slideWrongcards(wrongcards);
 
   }else{
