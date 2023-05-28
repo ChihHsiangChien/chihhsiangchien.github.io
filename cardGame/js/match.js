@@ -28,13 +28,21 @@ readCardData();
 
 // Start function
 function start() {
-  shuffle(cards);
-  setCardsPos(cards);
-  drawCards(cards);
-  enableDragging();
-  enableTouchEvents();
-  drawAnswerBox();
-  startTimer();  
+    // 用numCards根號計算每欄列擺幾張牌
+    numCols= parseInt(Math.sqrt(cards.length));
+    numRows= Math.ceil(cards.length/numCols);
+    cardWidth = (canvas.width  - (numCols+1) * hSpace) / numCols;
+    cardHeight= (canvas.height - (numRows+1) * vSpace) / numRows;
+
+    shuffle(cards);	
+    setCardsPos(cards);
+    drawCards(cards);    
+    canvas.addEventListener("mousedown", clickIfMatch);    
+    canvas.addEventListener("touchstart", clickIfMatch);
+    startTimer();  
 }
+
+
+
 
 

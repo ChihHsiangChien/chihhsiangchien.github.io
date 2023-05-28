@@ -28,6 +28,7 @@ function readCardData(){
       element: image,
       category: cardData[i]["category"],
       targetBoxNo: getArrayIdx(cardData[i]["category"], categoryNames),
+      faceUp: false, 
       x: 0,
       y: 0,
       zIndex: 0, // Add the zIndex property for each card
@@ -53,6 +54,15 @@ function getArrayIdx(str, array){
       }
       idx ++;
     }
+  }
+}
+
+// 找到現在點選的卡片是在cards的位置
+function getCardIdx(card){
+  for (var i = 0; i < cards.length; i++) {
+      if(card == cards[i]){
+          return i;
+      }
   }
 }
 
@@ -198,6 +208,15 @@ function checkClickedCard(mouseX, mouseY) {
 
 
 
+// 將點擊到的卡片添加到已選擇的卡片陣列
+function addToSelectedCards(selected, selectedCards) {
+    if (selected && !selectedCards.includes(selected)) {
+        selectedCards.push(selected);
+    }
+}
+
+
+
 /*
 * 選出有重疊的卡片最上面那一個
 */
@@ -227,6 +246,33 @@ function checkClickedOverlapedCard(mouseX, mouseY) {
   return {selected, highestZIndex}; 
 }
 
+
+// 在配對遊戲點卡片
+function clickIfMatch(event) {
+  event.preventDefault(); // Prevent default touch events
+  var rect = canvas.getBoundingClientRect();
+  var { mouseX, mouseY } = getMouseCoordinates(event, rect);
+  var selected = checkClickedCard(mouseX, mouseY);  // 找出點到的卡片
+  if(selectedCards.length < 2){
+    addToSelectedCards(selected, selectedCards);      // 把點到的卡片放進 selectedCards
+  }    
+  handleMatchingCards();                            // 檢查是否同一個分類
+  drawCards(cards);
+}
+
+// 在順序遊戲點卡片
+function clickIfOrder(event) {
+  event.preventDefault(); // Prevent default touch events
+  var rect = canvas.getBoundingClientRect();
+  var { mouseX, mouseY } = getMouseCoordinates(event, rect);
+  var selected = checkClickedCard(mouseX, mouseY);  // 找出點到的卡片
+  addToSelectedCards(selected, selectedCards);      // 把點到的卡片放進 selectedCards  
+  preCardIdx = nowCardIdx;
+  nowCardIdx = getCardIdx(selected) % cards.length;
+  handleOrderingCards();
+  ctx.clearRect(0, 0, canvas.width, canvas.height);                            // 檢查順序
+  drawCards(cards);
+}
 
 
 // Drag and drop functions
@@ -268,6 +314,10 @@ function drag(event) {
 
 function endDrag() {
   selectedcard = null;
+}
+
+function endClick() {
+  selectedCard = null;
 }
 
 
@@ -348,7 +398,7 @@ function drawCards(cards) {
     ctx.fillRect(card.x, card.y, cardWidth, cardHeight);
 
 
-    // Draw the red border
+    // Draw the border
     ctx.strokeStyle = cardBorderColor;
     ctx.lineWidth = cardBorderWidth;
     ctx.strokeRect(card.x, card.y, cardWidth, cardHeight);
@@ -450,7 +500,7 @@ function checkCardsPlacement() {
   }
 
   // Show the score above the canvas
-  var scoreElement = document.getElementById("scores");
+  var scoreElement = document.getElementById("score");
   scoreElement.innerText = "Score: " + score;
 
   // If there are wrong cards, slide them to the middle and allow the user to place them again
@@ -458,7 +508,7 @@ function checkCardsPlacement() {
     wrongSound.play();
     slideWrongcards(wrongcards);
 
-  }else{
+  }else if(score != 0){
     correctSound.play();
   }
   
@@ -466,8 +516,88 @@ function checkCardsPlacement() {
   if (score === cards.length) {
     correctSound.play();
     stopTimer();
+
   }
 }
+
+
+// 處理兩張已選擇的卡片是否匹配
+function handleMatchingCards() {
+    if (selectedCards.length === 2) {
+        var card1 = selectedCards[0];
+        var card2 = selectedCards[1];
+
+        if (card1.category === card2.category) {
+            correctSound.play();
+            
+            score += correctScore
+            scoreElement.innerText = "score: " + score;
+
+            setTimeout(function () {
+                // Matched: Remove the cards from the array
+                var index1 = cards.indexOf(card1);
+                cards.splice(index1, 1);
+                var index2 = cards.indexOf(card2);
+                cards.splice(index2, 1);
+                // Reset the selected cards array
+                selectedCards = [];
+
+                // Redraw the cards
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                drawCards(cards);
+
+                if (cards.length == 0){
+                  youWin();                  
+                }
+
+            }, 200);
+
+            
+        } else {
+            // Not matched
+            wrongSound.play();
+            score -= wrongScore;
+            scoreElement.innerText = "score: " + score;
+            setTimeout(function () {
+                selectedCards = [];
+                drawCards(cards);
+            }, 200);
+      } 
+    } 
+}
+
+//檢查新加入的selectedCards是否按照順序
+function handleOrderingCards(){
+  if (selectedCards[selectedCards.length-1].category != correctCategory){
+    wrongSound.play();
+    score -= wrongScore;
+    scoreElement.innerText = "score: " + score;
+    setTimeout(function () {
+        selectedCards.pop();
+        nowCardIdx = preCardIdx;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawCards(cards);
+    }, 200);
+    return;
+  }
+
+  if (preCardIdx== null || nowCardIdx == (preCardIdx + 1) % cards.length){
+      correctSound.play();
+      score += correctScore
+      scoreElement.innerText = "score: " + score;
+  } else{
+      wrongSound.play();
+      score -= wrongScore;
+      scoreElement.innerText = "score: " + score;
+      setTimeout(function () {
+          selectedCards.pop();
+          nowCardIdx = preCardIdx;
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          drawCards(cards);
+      }, 200);
+  }
+}
+
 
 
 
@@ -509,7 +639,7 @@ function slideWrongcards(wrongcards) {
 
     // 答錯的卡片滑到最後一個位置
     // var targetX = getRandomInt(canvas.width *0.8, canvas.width  - card.element.width);
-    //var targetY = getRandomInt(canvas.height*0.8, canvas.height - card.element.height);
+    // var targetY = getRandomInt(canvas.height*0.8, canvas.height - card.element.height);
     var targetX = cardsX + (numCols-1) * (cardWidth + hSpace);
     var targetY = cardsY + (numRows-1) * (cardHeight + vSpace);
 
@@ -563,5 +693,16 @@ function shake(){
     //placeCards(wrongcards);
   }
   redrawCanvas();
+
+}
+
+function youWin(){
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  stopTimer();
+
+  ctx.fillStyle = "black";
+  ctx.font = "100px Arial";
+  ctx.fillText("YOU WIN", 30, canvas.height*0.5);  
 
 }

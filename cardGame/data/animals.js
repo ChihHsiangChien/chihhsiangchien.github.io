@@ -44,6 +44,7 @@ var cardData = [
 ]
 
 //================Setting===============var canvas = document.getElementById("canvas");
+var canvas = document.getElementById("canvas");
 canvas.width = window.innerWidth   * 0.90;
 canvas.height = window.innerHeight * 0.75;
 var ctx = canvas.getContext("2d");
