@@ -406,9 +406,9 @@ function redrawCanvas() {
 }
 
 /*
-與按鈕結合，按下後檢查卡片是否在
+按下按鈕檢查卡片是否在正確位置
 */ 
-function checkAnswers() {
+function checkCardsPlacement() {
   var score = 0;
   var wrongcards = [];
 
@@ -455,11 +455,16 @@ function checkAnswers() {
 
   // If there are wrong cards, slide them to the middle and allow the user to place them again
   if (wrongcards.length > 0) {
+    wrongSound.play();
     slideWrongcards(wrongcards);
+
+  }else{
+    correctSound.play();
   }
   
   // If the score reaches , stop the timer
   if (score === cards.length) {
+    correctSound.play();
     stopTimer();
   }
 }

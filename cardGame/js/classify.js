@@ -13,6 +13,11 @@ var offsetY = 0;
 // 計時
 var timerInterval = null;
 var timerSeconds = 0;
+
+// audio
+var correctSound = new Audio('sound/correct.mp3');
+var wrongSound   = new Audio('sound/wrong.mp3');
+
 readCardData();
 
 // Start function
