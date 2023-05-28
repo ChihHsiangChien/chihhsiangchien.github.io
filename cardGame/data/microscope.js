@@ -40,7 +40,7 @@ var numRows = 1;
 var numCols = 4;
 var cardsX = 10;        // 卡片群位置的最左側位置
 var cardsY = 20 + answerBoxHeight*answerBoxNumRows; // 待答卡片的最高高度，需要與answerBoxHeight 配
-var cardsArrangementType = "grid";  // 使用"row"表示卡片重疊排列成一個row，或使用"grid"表示不重疊排列成為grid。
+var cardsArrangementType = "row";  // 使用"row"表示卡片重疊排列成一個row，或使用"grid"表示不重疊排列成為grid。
 
 var cardFillColor = "#345E4F";
 var cardClickedFillColor = "red";
