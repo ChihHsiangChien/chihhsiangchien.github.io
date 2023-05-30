@@ -1,3 +1,55 @@
+// Start function
+function start() {
+  switch (gameType) {
+    case "classify":
+      {
+        shuffle(cards);
+        setCardsPos(cards);
+        drawCards(cards);
+        enableDragging();
+        enableTouchEvents();
+        drawAnswerBox();
+        startTimer();
+      }
+      break;
+    case "match":
+      {
+        // 用numCards根號計算每欄列擺幾張牌
+        numCols = parseInt(Math.sqrt(cards.length));
+        numRows = Math.ceil(cards.length / numCols);
+        cardWidth = (canvas.width - (numCols + 1) * hSpace) / numCols;
+        cardHeight = (canvas.height - (numRows + 1) * vSpace) / numRows;
+
+        shuffle(cards);
+        setCardsPos(cards);
+        drawCards(cards);
+        canvas.addEventListener("mousedown", clickIfMatch);
+        canvas.addEventListener("touchstart", clickIfMatch);
+        startTimer();
+      }
+      break;
+    case "order":
+      {
+        // 根號計算每欄列擺幾張牌
+        numCols = parseInt(Math.sqrt(cards.length));
+        numRows = Math.ceil(cards.length / numCols);
+        cardWidth = (canvas.width - (numCols + 1) * hSpace) / numCols;
+        cardHeight = (canvas.height - (numRows + 1) * vSpace) / numRows;
+
+        setCardsPos(cards);
+        shufflePos(cards);
+        drawCards(cards);
+
+        canvas.addEventListener("mousedown", clickIfOrder);
+        canvas.addEventListener("touchstart", clickIfOrder);
+        startTimer();
+      }
+      break;
+    default: {
+    }
+  }
+}
+
 // card load callback
 function cardLoaded() {
   cardsLoaded++;

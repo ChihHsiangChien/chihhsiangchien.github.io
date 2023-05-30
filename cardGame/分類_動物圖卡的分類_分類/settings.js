@@ -1,0 +1,2 @@
+gameType = "classify";
+readCardData();
