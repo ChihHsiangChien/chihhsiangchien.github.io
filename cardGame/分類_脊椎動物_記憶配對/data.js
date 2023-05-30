@@ -12,7 +12,7 @@ var cardData = [
   { name: "娃娃魚", category: "兩生類" },
   { name: "赤蛙", category: "兩生類" },
   { name: "青蛙", category: "兩生類" },
-  { name: "壁虎", category: "爬蟲類" },
+  { name: "壁虎", category: "爬蟲類" },  
   { name: "南蛇", category: "爬蟲類" },
   { name: "攀蜥", category: "爬蟲類" },
   { name: "短吻鱷", category: "爬蟲類" },

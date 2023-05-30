@@ -3,7 +3,7 @@ function start() {
   switch (gameType) {
     case "classify":
       {
-        shuffle(cards);
+        shufflePos(cards);
         setCardsPos(cards);
         drawCards(cards);
         enableDragging();
@@ -20,8 +20,8 @@ function start() {
         cardWidth = (canvas.width - (numCols + 1) * hSpace) / numCols;
         cardHeight = (canvas.height - (numRows + 1) * vSpace) / numRows;
 
-        shuffle(cards);
         setCardsPos(cards);
+        shufflePos(cards);
         drawCards(cards);
         canvas.addEventListener("mousedown", clickIfMatch);
         canvas.addEventListener("touchstart", clickIfMatch);
@@ -62,7 +62,7 @@ function cardLoaded() {
   }
 }
 
-// 放置卡片
+// 讀取卡片資料
 function readCardData() {
   for (var i = 0; i < cardData.length; i++) {
     var image = null;
@@ -82,7 +82,7 @@ function readCardData() {
       element: image,
       category: cardData[i]["category"],
       targetBoxNo: getArrayIdx(cardData[i]["category"], categoryNames),
-      faceUp: false,
+      faceUp: true,
       x: 0,
       y: 0,
       zIndex: 0, // Add the zIndex property for each card
@@ -430,8 +430,61 @@ function drawAnswerBox() {
   }
 }
 
-// Drawing function
 function drawCards(cards) {
+  //ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // Iterate over the card data and draw the text in a box
+  for (var i = 0; i < cards.length; i++) {
+    var card = cards[i];
+
+    // 被點擊的用不同底色
+    // Check if the card is in the selectedCards array
+    var isSelected = selectedCards.includes(card);
+
+    // Set the color based on whether the card is selected or not
+    if (isSelected) {
+      ctx.fillStyle = cardClickedFillColor; // 被點擊的顏色
+    } else {
+      ctx.fillStyle = cardFillColor; // 平常的顏色
+    }
+    ctx.fillRect(card.x, card.y, cardWidth, cardHeight);
+
+    // Draw the border
+    ctx.strokeStyle = cardBorderColor;
+    ctx.lineWidth = cardBorderWidth;
+    ctx.strokeRect(card.x, card.y, cardWidth, cardHeight);
+
+    // 加上圖片和文字
+    if (cardsFacing || isSelected) {
+      // 加上圖片
+      if (card.element) {
+        ctx.drawImage(card.element, card.x, card.y, cardWidth, cardHeight);
+      }
+
+      // 加上文字
+      ctx.fillStyle = cardFontColor;
+      var fontSize = fontRatio * cardWidth;
+
+      if (card.name.length > maxLength) {
+        var ratio = maxLength / card.name.length; // 計算縮小比例
+        fontSize *= ratio; // 乘上比例以縮小字體大小
+      }
+
+      ctx.font = fontSize + "px Arial";
+      ctx.fillText(
+        card.name,
+        card.x + cardWidth * 0.1,
+        card.y + cardHeight * fontRatio * fontHeightRatio
+      );
+    } else {
+      // 只繪製背面顏色
+      ctx.fillStyle = cardBackFillColor;
+      ctx.fillRect(card.x, card.y, cardWidth, cardHeight);
+    }
+  }
+}
+
+// Drawing function
+function drawCards2(cards) {
   //ctx.clearRect(0, 0, canvas.width, canvas.height);
   // Iterate over the card data and draw the text in a box
   for (var i = 0; i < cards.length; i++) {

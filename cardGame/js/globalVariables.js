@@ -27,6 +27,7 @@ var cardClickedFillColor = "red";
 var cardBorderColor = "white";
 var cardFontColor = "white";
 var cardBorderWidth = 5;
+var cardBackFillColor = "#030742";
 
 // 牌卡之間的間隔
 var hSpace = 2; // 卡片的x間隔
@@ -65,6 +66,9 @@ var wrongSound = new Audio("../sound/wrong.mp3");
 var preCardIdx;
 var nowCardIdx; // 現在選擇的cardIdx
 var correctCategory = "正確";
+
+// 記憶模式以外，所有卡片都是面朝上
+var cardsFacing = true;
 
 // gameType
 var gameType;
