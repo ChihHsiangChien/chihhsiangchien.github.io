@@ -10,7 +10,7 @@ var cardData = [
   { name: "人與共生菌", category: "互利共生" },
   { name: "海葵與寄居蟹", category: "互利共生" },
   { name: "蚜蟲與螞蟻", category: "互利共生" },
-  { name: "蚜蟲與植物", category: "掠食" },
+  { name: "蚜蟲與植物", category: "寄生" },
   { name: "鮣魚與鯊魚", category: "片利共生" },
   { name: "鳥巢蕨與樹", category: "片利共生" },
   { name: "菟絲子與樹", category: "寄生" },
