@@ -285,7 +285,7 @@ var organisms = {};
 var grids = {};
 
 createGrid("sheep");
-generateOrganisms("sheep", 3);
+generateOrganisms("sheep", 10);
 createGrid("grass");
 generateOrganisms("grass", 10);
 
