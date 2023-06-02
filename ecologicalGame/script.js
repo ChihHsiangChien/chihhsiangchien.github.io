@@ -1,13 +1,13 @@
 class Organism {
-  constructor(type, x, y, lifespan, xSpeed, ySpeed) {
+  constructor(type, x, y, xSpeed, ySpeed) {
     this.type = type; // 生物的類型
     this.x = x; // 位置的x坐标
     this.y = y; // 位置的y坐标
     this.xGridIdx = Math.floor(this.x / gridWidth);
     this.yGridIdx = Math.floor(this.y / gridHeight);
-    this.lifespan = lifespan; // 壽命
+    this.lifespan = 100; // 壽命
     this.energy = 100; // 吃飽程度
-    this.maxLifespan = lifespan; // 最大生命值
+    this.maxLifespan = 100; // 最大生命值
 
     this.xSpeed = xSpeed; // 速度
     this.ySpeed = ySpeed; // 速度
@@ -80,7 +80,6 @@ Organism.prototype.eat = function () {
   if (grids["grass"][this.yGridIdx][this.xGridIdx] === null) {
     return;
   }
-  console.log(grids["grass"][this.yGridIdx][this.xGridIdx]);
   if (grids["grass"][this.yGridIdx][this.xGridIdx].length !== 0) {
     this.energy += 10;
     var food = grids["grass"][this.yGridIdx][this.xGridIdx].pop();
@@ -132,7 +131,7 @@ Organism.prototype.born = function () {
     xSpeed = getRandomInt(-5, 5);
     ySpeed = getRandomInt(-5, 5);
   }
-  var child = new Organism(this.type, x, y, this.maxLifespan, xSpeed, ySpeed);
+  var child = new Organism(this.type, x, y, xSpeed, ySpeed);
   if (organisms.hasOwnProperty(this.type)) {
     organisms[child.type].push(child);
   } else {
@@ -177,31 +176,33 @@ function getRandomInt(min, max) {
 function generateOrganisms(type, num) {
   for (let i = 0; i < num; i++) {
     var xGridIdx, yGridIdx;
-    if (type == "grass") {
-      ({ xGridIdx, yGridIdx } = getEmptyCell(type));
-    } else {
-      xGridIdx = Math.floor((Math.random() * canvas.width) / gridWidth);
-      yGridIdx = Math.floor((Math.random() * canvas.height) / gridHeight);
+    var x, y;
+    var xSpeed, ySpeed;
+
+    switch (type) {
+      case "grass":
+        {
+          ({ xGridIdx, yGridIdx } = getEmptyCell(type));
+          xSpeed = ySpeed = 0;
+        }
+        break;
+      default: {
+        xGridIdx = Math.floor((Math.random() * canvas.width) / gridWidth);
+        yGridIdx = Math.floor((Math.random() * canvas.height) / gridHeight);
+        xSpeed = getRandomInt(-5, 5);
+        ySpeed = getRandomInt(-5, 5);
+      }
     }
 
-    var x = xGridIdx * gridWidth;
-    var y = yGridIdx * gridHeight;
-    var xSpeed = 0;
-    var ySpeed = 0;
-    if (type !== "grass") {
-      xSpeed = getRandomInt(-5, 5);
-      ySpeed = getRandomInt(-5, 5);
-    }
-    var organism = new Organism(type, x, y, 100, xSpeed, ySpeed);
+    x = xGridIdx * gridWidth;
+    y = yGridIdx * gridHeight;
+    var organism = new Organism(type, x, y, xSpeed, ySpeed);
 
     if (type in organisms) {
       organisms[type].push(organism);
     } else {
       organisms[type] = [organism];
     }
-
-    //console.log(grids[type][yGridIdx]);
-    //grids[type][yGridIdx][xGridIdx] += 1;
 
     if (!grids[type][yGridIdx][xGridIdx]) {
       grids[type][yGridIdx][xGridIdx] = [];
@@ -233,32 +234,30 @@ function animate() {
 
       // 可以生殖的時機
       switch (organism.type) {
-        case "grass":{
-          if(
-          organism.lifespan < organism.maxLifespan * 0.7 &&
-          organism.lifespan >= organism.maxLifespan * 0.3 &&
-          organism.numChildren == 0    
-          )
+        case "grass":
           {
-            organism.born();
-            organism.numChildren += 1;            
+            if (
+              organism.lifespan < organism.maxLifespan * 0.7 &&
+              organism.lifespan >= organism.maxLifespan * 0.3 &&
+              organism.numChildren == 0
+            ) {
+              organism.born();
+              organism.numChildren += 1;
+            }
           }
-
-        }
-        break;
-        default:{
+          break;
+        default: {
           if (
             organism.lifespan < organism.maxLifespan * 0.7 &&
             organism.lifespan >= organism.maxLifespan * 0.3 &&
             organism.energy > 100 &&
-            organism.numChildren == 0    
+            organism.numChildren == 0
           ) {
             organism.born();
             organism.numChildren += 1;
           }
         }
       }
-
     });
   });
 
