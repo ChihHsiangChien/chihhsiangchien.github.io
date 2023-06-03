@@ -1,16 +1,20 @@
 class Organism {
-  constructor(type, x, y, xSpeed, ySpeed) {
+  constructor(type, xGridIdx, yGridIdx, xSpeed, ySpeed, reproduceInterval) {
     this.type = type; // 生物的類型
-    this.x = x; // 位置的x坐标
-    this.y = y; // 位置的y坐标
-    this.xGridIdx = Math.floor(this.x / gridWidth);
-    this.yGridIdx = Math.floor(this.y / gridHeight);
+    this.xGridIdx = xGridIdx;
+    this.yGridIdx = yGridIdx;
+    this.x = this.xGridIdx * gridWidth + gridWidth; // 位置的x坐标
+    this.y = this.yGridIdx * gridHeight + gridHeight; // 位置的y坐标    
     this.lifespan = 100; // 壽命
     this.energy = 100; // 吃飽程度
     this.maxLifespan = 100; // 最大生命值
 
     this.xSpeed = xSpeed; // 速度
     this.ySpeed = ySpeed; // 速度
+
+    this.reproduceInterval = reproduceInterval;
+    this.reproduceTime = this.lifespan - this.reproduceInterval;
+
     this.image = new Image();
     this.image.src = this.type + ".png";
 
@@ -41,9 +45,13 @@ Organism.prototype.draw = function () {
 };
 
 Organism.prototype.move = function () {
+
+  // 草不執行move
   if (this.type === "grass") {
     return;
   }
+
+  // 把grids裡的舊位置先刪除
   const gridIndex =
     grids[this.type][this.yGridIdx][this.xGridIdx].indexOf(this);
 
@@ -56,16 +64,28 @@ Organism.prototype.move = function () {
   this.y += this.ySpeed;
 
   // 检测邊界碰撞
-  if (this.x <= gridWidth || this.x >= canvas.width) {
+  if (this.x <= gridWidth) {
     this.xSpeed *= -1; // 改變x方向速度
+    this.x = gridWidth;
   }
 
-  if (this.y <= gridHeight || this.y >= canvas.height) {
+  if (this.x >= canvas.width - gridWidth) {
+    this.xSpeed *= -1; // 改變x方向速度
+    this.x = canvas.width - gridWidth;
+  }
+
+  if (this.y <= gridHeight) {
     this.ySpeed *= -1; // 改變y方向速度
+    this.y = gridHeight;
   }
 
-  this.xGridIdx = Math.floor(this.x / gridWidth);
-  this.yGridIdx = Math.floor(this.y / gridHeight);
+  if (this.y >= canvas.height - gridHeight) {
+    this.ySpeed *= -1; // 改變y方向速度
+    this.y = canvas.height - gridHeight;
+  }
+
+  this.xGridIdx = Math.floor((this.x - gridWidth) / gridWidth);
+  this.yGridIdx = Math.floor((this.y - gridHeight) / gridHeight);
 
   if (!grids[this.type][this.yGridIdx][this.xGridIdx]) {
     grids[this.type][this.yGridIdx][this.xGridIdx] = [];
@@ -74,14 +94,21 @@ Organism.prototype.move = function () {
 };
 
 Organism.prototype.eat = function () {
+
+  //草沒有獵物
   if (this.type === "grass") {
     return;
   }
+
+  // 同一個grid cell沒有草
   if (grids["grass"][this.yGridIdx][this.xGridIdx] === null) {
     return;
   }
+
+  // 吃到草
   if (grids["grass"][this.yGridIdx][this.xGridIdx].length !== 0) {
     this.energy += 10;
+    this.lifespan += 10;
     var food = grids["grass"][this.yGridIdx][this.xGridIdx].pop();
     food.dead();
   }
@@ -109,29 +136,29 @@ function createGrid(type) {
   }
 }
 function getEmptyCell(type) {
-  var xGridIdx = Math.floor((Math.random() * canvas.width) / gridWidth);
-  var yGridIdx = Math.floor((Math.random() * canvas.height) / gridHeight);
+  var xGridIdx = Math.floor((Math.random() * (canvas.width - 2 * gridWidth)) / gridWidth);
+  var yGridIdx = Math.floor((Math.random() * (canvas.height - 2 * gridHeight)) / gridHeight);
 
   while (grids[type][yGridIdx][xGridIdx] !== null) {
-    // console.log(grids[type][x][y]);
-    xGridIdx = Math.floor((Math.random() * canvas.width) / gridWidth);
-    yGridIdx = Math.floor((Math.random() * canvas.height) / gridHeight);
+    // console.log(grids[type][x][y]) ;
+    xGridIdx = Math.floor((Math.random() * (canvas.width - 2 * gridWidth)) / gridWidth);
+    yGridIdx = Math.floor((Math.random() * (canvas.height - 2 * gridHeight)) / gridHeight);
   }
+
   return { xGridIdx, yGridIdx };
 }
 Organism.prototype.born = function () {
   var { xGridIdx, yGridIdx } = getEmptyCell(this.type);
-  var x = xGridIdx * gridWidth;
-  var y = yGridIdx * gridHeight;
+
   var xSpeed = 0;
   var ySpeed = 0;
   if (this.type !== "grass") {
-    x = this.x;
-    y = this.y;
+    xGridIdx = this.xGridIdx;
+    yGridIdx = this.yGridIdx;
     xSpeed = getRandomInt(-5, 5);
     ySpeed = getRandomInt(-5, 5);
   }
-  var child = new Organism(this.type, x, y, xSpeed, ySpeed);
+  var child = new Organism(this.type, xGridIdx, yGridIdx, xSpeed, ySpeed, this.reproduceInterval);
   if (organisms.hasOwnProperty(this.type)) {
     organisms[child.type].push(child);
   } else {
@@ -153,16 +180,17 @@ Organism.prototype.updateAgeAndLifespan = function () {
       }
       break;
     default: {
-      const timeFactor = 0.3; // 控制時間對壽命的影響程度
-      const energyFactor = 0.05;
+      const timeFactor = 0.1; // 控制時間對壽命的影響程度
+      const energyFactor = 0.0005;
 
-      // this.lifespan -= timeFactor - (this.energy * energyFactor);
-      this.lifespan -= timeFactor;
+      this.lifespan -= timeFactor - (this.energy * energyFactor);
+      this.energy -= 0.1;
+      //this.lifespan -= timeFactor;
     }
   }
 
   // 檢查是否死亡
-  if (this.lifespan <= 0) {
+  if (this.lifespan <= 0 || this.energy <= 20) {
     this.dead();
   }
 };
@@ -176,27 +204,27 @@ function getRandomInt(min, max) {
 function generateOrganisms(type, num) {
   for (let i = 0; i < num; i++) {
     var xGridIdx, yGridIdx;
-    var x, y;
     var xSpeed, ySpeed;
+    var reproduceInterval;
 
     switch (type) {
       case "grass":
         {
           ({ xGridIdx, yGridIdx } = getEmptyCell(type));
           xSpeed = ySpeed = 0;
+          reproduceInterval = 40;
         }
         break;
       default: {
-        xGridIdx = Math.floor((Math.random() * canvas.width) / gridWidth);
-        yGridIdx = Math.floor((Math.random() * canvas.height) / gridHeight);
+        xGridIdx = Math.floor((Math.random() * (canvas.width - 2 * gridWidth)) / gridWidth);
+        yGridIdx = Math.floor((Math.random() * (canvas.height - 2 * gridHeight)) / gridHeight);
         xSpeed = getRandomInt(-5, 5);
         ySpeed = getRandomInt(-5, 5);
+        reproduceInterval = 50;
       }
     }
 
-    x = xGridIdx * gridWidth;
-    y = yGridIdx * gridHeight;
-    var organism = new Organism(type, x, y, xSpeed, ySpeed);
+    var organism = new Organism(type, xGridIdx, yGridIdx, xSpeed, ySpeed, reproduceInterval);
 
     if (type in organisms) {
       organisms[type].push(organism);
@@ -232,32 +260,12 @@ function animate() {
       organism.draw();
       organism.updateAgeAndLifespan();
 
-      // 可以生殖的時機
-      switch (organism.type) {
-        case "grass":
-          {
-            if (
-              organism.lifespan < organism.maxLifespan * 0.7 &&
-              organism.lifespan >= organism.maxLifespan * 0.3 &&
-              organism.numChildren == 0
-            ) {
-              organism.born();
-              organism.numChildren += 1;
-            }
-          }
-          break;
-        default: {
-          if (
-            organism.lifespan < organism.maxLifespan * 0.7 &&
-            organism.lifespan >= organism.maxLifespan * 0.3 &&
-            organism.energy > 100 &&
-            organism.numChildren == 0
-          ) {
-            organism.born();
-            organism.numChildren += 1;
-          }
-        }
+      // 生殖的時機
+      if (Math.floor(organism.lifespan) === organism.reproduceTime) {
+        organism.born();
+        organism.reproduceTime -= organism.reproduceInterval;
       }
+
     });
   });
 
@@ -277,15 +285,16 @@ var imageHeight = 50;
 var gridWidth = imageWidth * 1.1;
 var gridHeight = imageHeight * 1.4;
 
-var numGridX = Math.floor(canvas.width / gridWidth) + 1;
-var numGridY = Math.floor(canvas.height / gridHeight) + 1;
+var numGridX = Math.floor((canvas.width - 2 * gridWidth) / gridWidth) + 1;
+var numGridY = Math.floor((canvas.height - 2 * gridHeight) / gridHeight) + 1;
+
 
 var organisms = {};
 var grids = {};
 
 createGrid("sheep");
-generateOrganisms("sheep", 10);
+generateOrganisms("sheep", 3);
 createGrid("grass");
-generateOrganisms("grass", 10);
+generateOrganisms("grass", 30);
 
 animate();
