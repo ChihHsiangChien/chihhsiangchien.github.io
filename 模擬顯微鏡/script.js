@@ -2,20 +2,25 @@ class Microscope {
   constructor(imageUrl, canvasId, zoomCanvasId, zoomFactor) {
     this.image = new Image();
     this.canvas = document.getElementById(canvasId);
-    this.canvas.width = 400;
-    this.canvas.height = 300;
     this.ctx = this.canvas.getContext("2d");
 
     this.zoomCanvas = document.getElementById(zoomCanvasId);
-    this.zoomCanvas.width = this.canvas.width;
-    this.zoomCanvas.height = this.canvas.height;
+    this.zoomCtx = this.zoomCanvas.getContext("2d");
+
 
     this.headlessCanvas = document.getElementById("headlessCanvas");
     this.headlessCtx = this.headlessCanvas.getContext("2d");
 
+    this.canvas.width = 400;
+    this.canvas.height = 300;
+
+    this.zoomCanvas.width = this.canvas.width;
+    this.zoomCanvas.height = this.canvas.height;
+
+
+
     this.zoomCanvas.width = this.canvas.width;
 
-    this.zoomCtx = this.zoomCanvas.getContext("2d");
     this.zoomFactor = zoomFactor;
     this.offsetX = 0;
     this.offsetY = 0;
@@ -83,6 +88,8 @@ Microscope.prototype.onMouseMove = function (event) {
   }
 };
 
+
+// 畫出載物台圓孔
 Microscope.prototype.drawObservationCircle = function (x, y, radius) {
   this.ctx.save();
   this.ctx.beginPath();
@@ -148,6 +155,30 @@ Microscope.prototype.drawInitialImage = function () {
   this.drawZoomImage();
 };
 
+Microscope.prototype.drawHeadlessCanvas = function (){
+
+  this.headlessCanvas.width = this.canvas.width * this.zoomFactor;
+  this.headlessCanvas.height = this.canvas.height * this.zoomFactor;
+
+  // 黑色外框與背景
+
+  this.headlessCtx.fillStyle = "white";
+  this.headlessCtx.fillRect(0, 0, this.headlessCanvas.width, this.headlessCanvas.height);
+
+  this.headlessCtx.strokeStyle = "black";
+  this.headlessCtx.strokeRect(0, 0, this.headlessCanvas.width, this.headlessCanvas.height);  
+
+
+  // 繪製載玻片
+  this.headlessCtx.fillStyle = this.slideColor;
+  this.headlessCtx.fillRect(
+    this.slideX * this.zoomFactor,
+    this.slideY * this.zoomFactor,
+    this.slideWidth * this.zoomFactor,
+    this.slideHeight * this.zoomFactor
+  );
+}
+
 Microscope.prototype.drawZoomImage = function () {
   this.zoomCtx.clearRect(0, 0, this.zoomCanvas.width, this.zoomCanvas.height);
 
@@ -158,20 +189,8 @@ Microscope.prototype.drawZoomImage = function () {
   // 創建 headless canvas
   //const headlessCanvas = document.createElement("canvas");
   //const headlessCtx = headlessCanvas.getContext("2d");
-  const imageSize =
-    Math.min(this.slideWidth, this.slideHeight) * this.zoomFactor;
 
-  this.headlessCanvas.width = imageSize;
-  this.headlessCanvas.height = imageSize;
-
-  // 繪製載玻片
-  this.headlessCtx.fillStyle = this.slideColor;
-  this.headlessCtx.fillRect(
-    this.slideX * this.zoomFactor,
-    this.slideY * this.zoomFactor,
-    this.slideWidth * this.zoomFactor,
-    this.slideHeight * this.zoomFactor
-  );
+  this.drawHeadlessCanvas();
 
   const radius = this.observationCircleRadius * this.zoomFactor;
 
@@ -179,7 +198,7 @@ Microscope.prototype.drawZoomImage = function () {
   //this.headlessCtx.save();
   this.headlessCtx.beginPath();
   this.headlessCtx.arc(
-    this. headlessCanvas.width / 2,
+    this.headlessCanvas.width / 2,
     this.headlessCanvas.height / 2,
     radius,
     0,
