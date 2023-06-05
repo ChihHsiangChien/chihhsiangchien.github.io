@@ -1,12 +1,12 @@
 class Microscope {
   constructor(imageUrl, canvasId, zoomCanvasId, zoomFactor) {
     this.image = new Image();
+
     this.canvas = document.getElementById(canvasId);
     this.ctx = this.canvas.getContext("2d");
 
     this.zoomCanvas = document.getElementById(zoomCanvasId);
     this.zoomCtx = this.zoomCanvas.getContext("2d");
-
 
     this.headlessCanvas = document.getElementById("headlessCanvas");
     this.headlessCtx = this.headlessCanvas.getContext("2d");
@@ -24,18 +24,12 @@ class Microscope {
     this.zoomFactor = zoomFactor;
     this.offsetX = 0;
     this.offsetY = 0;
-    this.slideWidth = this.canvas.width / 2;
-    this.slideHeight = this.canvas.height / 4;
-    this.slideX = (this.canvas.width - this.slideWidth) / 2;
-    this.slideY = (this.canvas.height - this.slideHeight) / 2;
 
-    // 載玻片顏色設定
-    this.slideColor = "lightgray";
-    this.borderColor = "darkgray";
+
+
+    // 載物台圓孔位置
     this.observationX = this.canvas.width / 2;
     this.observationY = this.canvas.height / 2;
-
-    // 視野大小
     this.ObservationCircleRadius = 20;
 
     // 儲存滑鼠/觸摸點擊位置的相對座標
@@ -52,6 +46,21 @@ class Microscope {
 
     this.image.onload = this.drawInitialImage.bind(this);
     this.image.src = imageUrl;
+
+
+    // 載玻片設定
+    this.borderColor = "darkgray";
+    this.slideColor = "lightgray";
+    this.slideWidth = 200;
+    this.slideHeight = 100;
+    this.slideX = (this.canvas.width - this.slideWidth) / 2;
+    this.slideY = (this.canvas.height - this.slideHeight) / 2;
+
+    this.specimenWidth = 50;
+    this.specimenHeight = 50;
+    this.specimenX = this.slideX + (this.slideWidth - this.specimenWidth) / 2;
+    this.specimenY = this.slideY + (this.slideHeight - this.specimenHeight) / 2;
+
   }
 
   onMouseDown(event) {
@@ -77,8 +86,11 @@ Microscope.prototype.onMouseMove = function (event) {
 
     this.offsetX += deltaX;
     this.offsetY += deltaY;
+
     this.slideX += deltaX;
     this.slideY += deltaY;
+    this.specimenX += deltaX;
+    this.specimenY += deltaY;
 
     this.startX = mouseX;
     this.startY = mouseY;
@@ -125,11 +137,11 @@ Microscope.prototype.drawInitialImage = function () {
   );
 
   // 計算圖像縮放後的尺寸
-  const imageSize = Math.min(this.slideWidth, this.slideHeight) * 0.6;
+  //const imageSize = Math.min(this.slideWidth, this.slideHeight) * 0.6;
 
   // 計算圖像在載玻片中心的位置
-  const imageX = this.slideX + (this.slideWidth - imageSize) / 2;
-  const imageY = this.slideY + (this.slideHeight - imageSize) / 2;
+  //const imageX = this.slideX + (this.slideWidth - imageSize) / 2;
+  //const imageY = this.slideY + (this.slideHeight - imageSize) / 2;
 
   // 繪製圖像
   this.ctx.drawImage(
@@ -138,10 +150,10 @@ Microscope.prototype.drawInitialImage = function () {
     0,
     this.image.width,
     this.image.height,
-    imageX,
-    imageY,
-    imageSize,
-    imageSize
+    this.specimenX,
+    this.specimenY,
+    this.specimenWidth,
+    this.specimenHeight
   );
 
   // 繪製圓孔
@@ -154,8 +166,47 @@ Microscope.prototype.drawInitialImage = function () {
   // 執行初始的放大影像繪製
   this.drawZoomImage();
 };
+Microscope.prototype.drawNewCanvas = function (newCanvas) {
 
-Microscope.prototype.drawHeadlessCanvas = function (){
+  newCtx = newCanvas.getContext("2d");
+  // 黑色外框與背景
+
+  newCtx.strokeStyle = "black";
+  newCtx.strokeRect(0, 0, newCanvas.width, newCanvas.height);
+  // newCtx.fillStyle = "white";
+  // newCtx.fillRect(0, 0, newCanvas.width, newCanvas.height);
+
+  const zoomedImageX = (this.specimenX - this.canvas.width * (1 - 1 / this.zoomFactor) / 2) * this.zoomFactor;
+  const zoomedImageY = (this.specimenY - this.canvas.height * (1 - 1 / this.zoomFactor) / 2) * this.zoomFactor;
+  
+
+  newCtx.drawImage(
+    this.image,
+    0,
+    0,
+    this.image.width,
+    this.image.height,
+    zoomedImageX,
+    zoomedImageY,
+    this.specimenWidth * this.zoomFactor,
+    this.specimenHeight * this.zoomFactor    
+  );
+
+  
+
+
+
+  // 在原canvas畫放大的框
+  this.ctx.strokeStyle = "grey";
+  this.ctx.strokeRect(
+    this.canvas.width * (1 - 1 / this.zoomFactor) / 2,
+    this.canvas.height * (1 - 1 / this.zoomFactor) / 2,
+    this.canvas.width / this.zoomFactor,
+    this.canvas.height / this.zoomFactor);
+}
+
+
+Microscope.prototype.drawHeadlessCanvas = function () {
 
   this.headlessCanvas.width = this.canvas.width * this.zoomFactor;
   this.headlessCanvas.height = this.canvas.height * this.zoomFactor;
@@ -166,7 +217,7 @@ Microscope.prototype.drawHeadlessCanvas = function (){
   this.headlessCtx.fillRect(0, 0, this.headlessCanvas.width, this.headlessCanvas.height);
 
   this.headlessCtx.strokeStyle = "black";
-  this.headlessCtx.strokeRect(0, 0, this.headlessCanvas.width, this.headlessCanvas.height);  
+  this.headlessCtx.strokeRect(0, 0, this.headlessCanvas.width, this.headlessCanvas.height);
 
 
   // 繪製載玻片
@@ -190,10 +241,11 @@ Microscope.prototype.drawZoomImage = function () {
   //const headlessCanvas = document.createElement("canvas");
   //const headlessCtx = headlessCanvas.getContext("2d");
 
-  this.drawHeadlessCanvas();
+  //this.drawHeadlessCanvas();
+  this.drawNewCanvas(this.zoomCanvas);
 
   const radius = this.observationCircleRadius * this.zoomFactor;
-
+  /*
   // 裁切成圓形並貼在 zoomCtx 上
   //this.headlessCtx.save();
   this.headlessCtx.beginPath();
@@ -218,6 +270,7 @@ Microscope.prototype.drawZoomImage = function () {
     //2 * radius
   );
   //this.zoomCtx.restore();
+  */
 };
 
 Microscope.prototype.drawZoomImage2 = function () {
@@ -364,7 +417,7 @@ function getMouseCoordinatesMoving(event, rect) {
 }
 
 // 创建 Microscope 实例
-const microscope = new Microscope("cell.jpg", "canvas", "zoomCanvas", 4);
+const microscope = new Microscope("cell.jpg", "canvas", "zoomCanvas", 10);
 
 /*
 
