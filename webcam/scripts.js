@@ -22,7 +22,10 @@ function gotDevices(deviceInfos) {
   for (const deviceInfo of deviceInfos) {
     const option = document.createElement("option");
     option.value = deviceInfo.deviceId;
-    option.text = deviceInfo.label || `Camera ${videoSelect.length + 1}`;
+    if (deviceInfo.kind === "videoinput") {
+      option.text = deviceInfo.label || `Camera ${videoSelect.length + 1}`;
+      videoSelect.appendChild(option);
+    }
     videoSelect.appendChild(option);
   }
 }
@@ -99,7 +102,7 @@ function paintToCanvas() {
     // 取得圖像資訊，imgData.data 會是一類陣列，imgData.data[0] => red, imgData.data[1] => green, imgData.data[2] => blue, imgData.data[3] => alpha 以此四個一組類推
     let pixels = ctx.getImageData(0, 0, width, height);
     // 加上濾鏡
-    pixels = simulateColorBlindness(pixels, 'protanopia');
+    pixels = simulateColorBlindness(pixels, "protanopia");
 
     // 輸出至 canvas
     ctx.putImageData(pixels, 0, 0);
@@ -107,29 +110,28 @@ function paintToCanvas() {
 }
 
 function simulateColorBlindness(pixels, type) {
-    const data = pixels.data;
-    const length = data.length;
-  
-    for (let i = 0; i < length; i += 4) {
-      const red = data[i];
-      const green = data[i + 1];
-      const blue = data[i + 2];
-  
-      let newRed, newGreen, newBlue;
-  
-      // Simulate protanopia (red-green color blindness)
-      if (type === 'protanopia') {
-        newRed = 0.567 * red + 0.433 * green + 0 * blue;
-        newGreen = 0.558 * red + 0.442 * green + 0 * blue;
-        newBlue = 0 * red + 0.242 * green + 0.758 * blue;
-      }
-      // Add more conditions to simulate other types of color blindness
-  
-      data[i] = newRed;
-      data[i + 1] = newGreen;
-      data[i + 2] = newBlue;
+  const data = pixels.data;
+  const length = data.length;
+
+  for (let i = 0; i < length; i += 4) {
+    const red = data[i];
+    const green = data[i + 1];
+    const blue = data[i + 2];
+
+    let newRed, newGreen, newBlue;
+
+    // Simulate protanopia (red-green color blindness)
+    if (type === "protanopia") {
+      newRed = 0.567 * red + 0.433 * green + 0 * blue;
+      newGreen = 0.558 * red + 0.442 * green + 0 * blue;
+      newBlue = 0 * red + 0.242 * green + 0.758 * blue;
     }
-  
-    return pixels;
+    // Add more conditions to simulate other types of color blindness
+
+    data[i] = newRed;
+    data[i + 1] = newGreen;
+    data[i + 2] = newBlue;
   }
-  
+
+  return pixels;
+}
