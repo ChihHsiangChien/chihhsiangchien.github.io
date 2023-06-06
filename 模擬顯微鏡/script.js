@@ -1,6 +1,8 @@
 class Microscope {
   constructor(imageUrl, canvasId, zoomCanvasId, zoomFactor) {
     this.image = new Image();
+    this.image.onload = this.drawInitialImage.bind(this);
+    this.image.src = imageUrl;
 
     this.canvas = document.getElementById(canvasId);
     this.ctx = this.canvas.getContext("2d");
@@ -17,6 +19,7 @@ class Microscope {
     this.zoomCanvas.width = this.canvas.width;
 
     this.zoomFactor = zoomFactor;
+
     this.offsetX = 0;
     this.offsetY = 0;
 
@@ -38,16 +41,17 @@ class Microscope {
     this.canvas.addEventListener("mouseup", () => this.onMouseUp());
     this.canvas.addEventListener("touchend", () => this.onMouseUp());
 
-    this.image.onload = this.drawInitialImage.bind(this);
-    this.image.src = imageUrl;
-
+    // 載玻片一開始偏離中心多遠
+    this.distanceToMiddle = 50;
     // 載玻片設定
     this.slideBorderColor = "darkgray";
     this.slideColor = "rgba(186, 217, 230, 0.1)";
     this.slideWidth = 150;
     this.slideHeight = 50;
-    this.slideX = (this.canvas.width - this.slideWidth) / 2;
-    this.slideY = (this.canvas.height - this.slideHeight) / 2;
+    this.slideX =
+      (this.canvas.width - this.slideWidth) / 2 - this.distanceToMiddle;
+    this.slideY =
+      (this.canvas.height - this.slideHeight) / 2 - this.distanceToMiddle;
 
     // 載玻片上的標本設定
     this.specimenWidth = 35;
@@ -74,9 +78,10 @@ class Microscope {
     this.startX = 0;
     this.startY = 0;
   }
+  setZoomFactor(zoomFactor) {
+    this.zoomFactor = zoomFactor;
+  }
 }
-
-
 
 Microscope.prototype.onMouseMove = function (event) {
   event.preventDefault(); // Prevent default touch events
@@ -131,7 +136,13 @@ Microscope.prototype.drawStage = function () {
   //黃色圓孔
   this.ctx.save();
   this.ctx.beginPath();
-  this.ctx.arc(this.observationX, this.observationY, this.ObservationCircleRadius/2, 0, Math.PI * 2);
+  this.ctx.arc(
+    this.observationX,
+    this.observationY,
+    this.ObservationCircleRadius / 2,
+    0,
+    Math.PI * 2
+  );
   //this.ctx.lineWidth = 2;
   //this.ctx.strokeStyle = "yellow";
   this.ctx.fillStyle = this.ObservationCircleColor;
@@ -169,7 +180,6 @@ Microscope.prototype.drawInitialImage = function () {
     this.slideHeight
   );
 
-  
   // 繪製標本小圖
   this.ctx.drawImage(
     this.image,
@@ -193,7 +203,6 @@ Microscope.prototype.drawInitialImage = function () {
     this.canvas.height / this.zoomFactor
   );
   */
-
 
   // 執行初始的放大影像繪製
   this.drawZoomImage(this.zoomCanvas);
@@ -277,10 +286,7 @@ Microscope.prototype.drawZoomImage = function (newCanvas) {
   newCtx.scale(-1, -1);
   newCtx.drawImage(newCanvas, 0, 0);
   newCtx.restore();
-
 };
-
-
 
 // 獲取滑鼠/觸摸點擊位置的相對座標
 function getMouseCoordinates(event, rect) {
@@ -312,7 +318,46 @@ function getMouseCoordinatesMoving(event, rect) {
   return { mouseX, mouseY };
 }
 
-// 创建 Microscope 实例
+// 檢查點擊位置是否在卡片上
+function checkClickedSlide(mouseX, mouseY) {
+  var selected = null;
+
+  for (var i = 0; i < cards.length; i++) {
+    var card = cards[i];
+    if (
+      mouseX > card.x &&
+      mouseX < card.x + cardWidth &&
+      mouseY > card.y &&
+      mouseY < card.y + cardHeight
+    ) {
+      selected = card;
+      break;
+    }
+  }
+  return selected;
+}
+
+function zoom(zoomFactor, sender) {
+  microscope.setZoomFactor(zoomFactor);
+  microscope.drawInitialImage();
+  console.log(sender);
+  sender.style.backgroundColor = "lightblue";
+
+  // Get the parent container
+  var container = sender.parentNode;
+
+  // Get all sibling buttons
+  var buttons = container.getElementsByClassName("large-button");
+
+  // Reset background color for sibling buttons
+  for (var i = 0; i < buttons.length; i++) {
+    if (buttons[i] !== sender) {
+      buttons[i].style.backgroundColor = ""; // Set the default color here
+    }
+  }
+}
+
+// 建 Microscope instance
 const microscope = new Microscope("cell.jpg", "canvas", "zoomCanvas", 20);
 
 /*
