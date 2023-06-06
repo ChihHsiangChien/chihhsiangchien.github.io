@@ -1,5 +1,5 @@
 class Microscope {
-  constructor(imageUrl, canvasId, zoomCanvasId, zoomFactor) {
+  constructor(imageUrl, canvasId, zoomCanvasId) {
     this.image = new Image();
     this.image.onload = this.drawInitialImage.bind(this);
     this.image.src = imageUrl;
@@ -18,7 +18,7 @@ class Microscope {
 
     this.zoomCanvas.width = this.canvas.width;
 
-    this.zoomFactor = zoomFactor;
+    this.zoomFactor = 3;  // 要跟html裡的第一個button的參數相同
 
     this.offsetX = 0;
     this.offsetY = 0;
@@ -42,7 +42,8 @@ class Microscope {
     this.canvas.addEventListener("touchend", () => this.onMouseUp());
 
     // 載玻片一開始偏離中心多遠
-    this.distanceToMiddle = 50;
+    this.distanceToMiddle = 30;
+
     // 載玻片設定
     this.slideBorderColor = "darkgray";
     this.slideColor = "rgba(186, 217, 230, 0.1)";
@@ -54,8 +55,8 @@ class Microscope {
       (this.canvas.height - this.slideHeight) / 2 - this.distanceToMiddle;
 
     // 載玻片上的標本設定
-    this.specimenWidth = 35;
-    this.specimenHeight = 35;
+    this.specimenWidth = 30;
+    this.specimenHeight = 30;
     this.specimenX = this.slideX + (this.slideWidth - this.specimenWidth) / 2;
     this.specimenY = this.slideY + (this.slideHeight - this.specimenHeight) / 2;
 
@@ -65,6 +66,14 @@ class Microscope {
     this.stageX = this.canvas.width / 2 - this.stageWidth / 2;
     this.stageY = this.canvas.height / 2 - this.stageHeight / 2;
     this.stageColor = "rgba(66, 72, 74,1)";
+
+    // 模糊程度
+    this.blurHeight = -8; // 0最清楚，越高或越低就不清楚
+    this.blurFactor = Math.abs(this.blurHeight);
+
+    // 亮度
+    this.brightnessFactor = 0.7;
+
   }
 
   onMouseDown(event) {
@@ -134,6 +143,7 @@ Microscope.prototype.drawStage = function () {
   );
 
   //黃色圓孔
+  this.ctx.filter = ` brightness(${this.brightnessFactor}%)`;
   this.ctx.save();
   this.ctx.beginPath();
   this.ctx.arc(
@@ -149,7 +159,12 @@ Microscope.prototype.drawStage = function () {
   this.ctx.fill();
   this.ctx.stroke();
   this.ctx.restore();
+
+  // 濾鏡關閉
+  this.ctx.filter = "none";
+
 };
+
 
 //畫canvas上的初始影像
 Microscope.prototype.drawInitialImage = function () {
@@ -235,6 +250,10 @@ Microscope.prototype.drawZoomImage = function (newCanvas) {
   newCtx.clip();
 
   // 在圓形視野中填色
+  // Apply brightness filter
+  newCtx.filter = ` brightness(${this.brightnessFactor}%)`;
+  
+  
   newCtx.fillStyle = this.ObservationCircleColor;
   newCtx.fillRect(0, 0, newCanvas.width, newCanvas.height);
 
@@ -250,6 +269,11 @@ Microscope.prototype.drawZoomImage = function (newCanvas) {
   const zoomedSlideY =
     (this.slideY - (this.canvas.height * (1 - 1 / this.zoomFactor)) / 2) *
     this.zoomFactor;
+
+  // 調整濾鏡
+  // 模糊程度
+  newCtx.filter = `blur(${this.blurFactor}px)`; 
+
 
   // 繪製載玻片
   newCtx.fillStyle = this.slideColor;
@@ -267,6 +291,7 @@ Microscope.prototype.drawZoomImage = function (newCanvas) {
     this.slideHeight * this.zoomFactor
   );
 
+
   // 繪製放大影像
   newCtx.drawImage(
     this.image,
@@ -280,6 +305,9 @@ Microscope.prototype.drawZoomImage = function (newCanvas) {
     this.specimenHeight * this.zoomFactor
   );
 
+  // Reset the filter
+  newCtx.filter = "none";
+
   // 上下顛倒左右相反
   newCtx.save();
   newCtx.translate(newCanvas.width, newCanvas.height);
@@ -288,6 +316,12 @@ Microscope.prototype.drawZoomImage = function (newCanvas) {
   newCtx.restore();
 };
 
+
+// 改變模糊程度
+Microscope.prototype.moveStage = function (delta) {
+  this.blurHeight += delta;
+  this.blurFactor = Math.abs(this.blurHeight);  
+}
 // 獲取滑鼠/觸摸點擊位置的相對座標
 function getMouseCoordinates(event, rect) {
   var mouseX, mouseY;
@@ -337,10 +371,21 @@ function checkClickedSlide(mouseX, mouseY) {
   return selected;
 }
 
+// 接收按鈕指令決定放大倍率
 function zoom(zoomFactor, sender) {
+  // 調高倍時，blurHeight略增
+  if(zoomFactor >microscope.zoomFactor){
+    microscope.blurHeight += 1;
+    microscope.blurFactor = Math.abs(Microscope.blurHeight);
+
+  } else if(zoomFactor < microscope.zoomFactor){
+    microscope.blurHeight -= 1;
+    microscope.blurFactor = Math.abs(Microscope.blurHeight);
+  }
+
   microscope.setZoomFactor(zoomFactor);
   microscope.drawInitialImage();
-  console.log(sender);
+
   sender.style.backgroundColor = "lightblue";
 
   // Get the parent container
@@ -357,8 +402,21 @@ function zoom(zoomFactor, sender) {
   }
 }
 
+function moveStage(delta){
+  //event.preventDefault(); // Prevent default touch events
+
+  microscope.moveStage(delta);
+
+  microscope.drawInitialImage();
+}
+
+function setBrightness(delta){
+  microscope.brightnessFactor += delta;
+  microscope.drawInitialImage();
+
+}
 // 建 Microscope instance
-const microscope = new Microscope("cell.jpg", "canvas", "zoomCanvas", 20);
+const microscope = new Microscope("cell.jpg", "canvas", "zoomCanvas");
 
 /*
 
