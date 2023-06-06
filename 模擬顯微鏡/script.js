@@ -18,7 +18,7 @@ class Microscope {
 
     this.zoomCanvas.width = this.canvas.width;
 
-    this.zoomFactor = 3;  // 要跟html裡的第一個button的參數相同
+    this.zoomFactor = 4;  // 要跟html裡的第一個button的參數相同
 
     this.offsetX = 0;
     this.offsetY = 0;
@@ -42,7 +42,7 @@ class Microscope {
     this.canvas.addEventListener("touchend", () => this.onMouseUp());
 
     // 載玻片一開始偏離中心多遠
-    this.distanceToMiddle = 30;
+    this.distanceToMiddle = 10;
 
     // 載玻片設定
     this.slideBorderColor = "darkgray";
