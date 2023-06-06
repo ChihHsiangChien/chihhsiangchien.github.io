@@ -18,7 +18,7 @@ class Microscope {
 
     this.zoomCanvas.width = this.canvas.width;
 
-    this.zoomFactor = 4;  // 要跟html裡的第一個button的參數相同
+    this.zoomFactor = 5;  // 要跟html裡的第一個button的參數相同
 
     this.offsetX = 0;
     this.offsetY = 0;
@@ -72,7 +72,7 @@ class Microscope {
     this.blurFactor = Math.abs(this.blurHeight);
 
     // 亮度
-    this.brightnessFactor = 0.7;
+    this.brightnessFactor = 10;
 
   }
 
@@ -144,7 +144,9 @@ Microscope.prototype.drawStage = function () {
 
   //黃色圓孔
   this.ctx.filter = ` brightness(${this.brightnessFactor}%)`;
+  
   this.ctx.save();
+
   this.ctx.beginPath();
   this.ctx.arc(
     this.observationX,
@@ -159,6 +161,7 @@ Microscope.prototype.drawStage = function () {
   this.ctx.fill();
   this.ctx.stroke();
   this.ctx.restore();
+  //applyBrightness(this.ctx, this.brightnessFactor);
 
   // 濾鏡關閉
   this.ctx.filter = "none";
@@ -250,10 +253,9 @@ Microscope.prototype.drawZoomImage = function (newCanvas) {
   newCtx.clip();
 
   // 在圓形視野中填色
-  // Apply brightness filter
+  // Apply brightness filter 改變亮度
   newCtx.filter = ` brightness(${this.brightnessFactor}%)`;
-  
-  
+
   newCtx.fillStyle = this.ObservationCircleColor;
   newCtx.fillRect(0, 0, newCanvas.width, newCanvas.height);
 
@@ -307,6 +309,8 @@ Microscope.prototype.drawZoomImage = function (newCanvas) {
 
   // Reset the filter
   newCtx.filter = "none";
+
+  //applyBrightness(newCtx, this.brightnessFactor);
 
   // 上下顛倒左右相反
   newCtx.save();
@@ -415,6 +419,44 @@ function setBrightness(delta){
   microscope.drawInitialImage();
 
 }
+
+function applyBlur(ctx, image, blurFactor) {
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  
+  // Calculate the scaled dimensions
+  const scaledWidth = image.width * blurFactor;
+  const scaledHeight = image.height * blurFactor;
+  
+  // Draw the scaled image on the canvas
+  ctx.drawImage(image, 0, 0, scaledWidth, scaledHeight);
+  
+  // Apply the blur effect by scaling down and up
+  ctx.drawImage(
+    ctx.canvas,
+    0,
+    0,
+    scaledWidth,
+    scaledHeight,
+    0,
+    0,
+    image.width,
+    image.height
+  );
+  
+  // Reset the image smoothing settings
+  ctx.imageSmoothingEnabled = false;
+  ctx.imageSmoothingQuality = 'default';
+}
+function applyBrightness(ctx, brightnessFactor) {
+  
+}
+
+
+
+
+
+
 // 建 Microscope instance
 const microscope = new Microscope("cell.jpg", "canvas", "zoomCanvas");
 
