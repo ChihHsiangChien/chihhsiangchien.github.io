@@ -133,7 +133,7 @@ Microscope.prototype.drawObservationCircle = function (x, y, radius) {
 
 // 畫出載物台
 Microscope.prototype.drawStage = function () {
-  //黑色平台
+  // 畫出黑色平台
   this.ctx.fillStyle = this.stageColor;
   this.ctx.fillRect(
     this.stageX,
@@ -142,11 +142,11 @@ Microscope.prototype.drawStage = function () {
     this.stageHeight
   );
 
-  //黃色圓孔
+  // 畫出光圈圓孔
+  // 增加濾鏡改變光圈亮度
   this.ctx.filter = ` brightness(${this.brightnessFactor}%)`;
   
   this.ctx.save();
-
   this.ctx.beginPath();
   this.ctx.arc(
     this.observationX,
@@ -169,18 +169,19 @@ Microscope.prototype.drawStage = function () {
 };
 
 
-//畫canvas上的初始影像
+//畫canvas上的初始影像(左圖)
 Microscope.prototype.drawInitialImage = function () {
   this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+  
   // 繪製外框
   this.ctx.strokeStyle = "black";
   this.ctx.strokeRect(0, 0, this.canvas.width, this.canvas.height);
 
-  // 繪製載物台
+  // ====繪製載物台====
   this.drawStage();
 
-  // 繪製載玻片
-  //this.ctx.save();
+  // ====繪製載玻片====
+  // 載玻片填色
   this.ctx.fillStyle = this.slideColor;
   this.ctx.fillRect(
     this.slideX,
@@ -188,8 +189,8 @@ Microscope.prototype.drawInitialImage = function () {
     this.slideWidth,
     this.slideHeight
   );
-  //this.ctx.restore;
 
+  // 載玻片畫外框
   this.ctx.strokeStyle = this.slideBorderColor;
   this.ctx.strokeRect(
     this.slideX,
@@ -231,15 +232,15 @@ Microscope.prototype.drawZoomImage = function (newCanvas) {
   newCtx = newCanvas.getContext("2d");
   newCtx.clearRect(0, 0, newCanvas.width, newCanvas.height);
 
-  // 繪製黑色外框與背景
+  // 繪製黑色與背景
   this.zoomCtx.fillStyle = "black";
   this.zoomCtx.fillRect(0, 0, this.zoomCanvas.width, this.zoomCanvas.height);
 
-  // 黑色外框與背景
+  // 繪製黑色外框
   newCtx.strokeStyle = "black";
   newCtx.strokeRect(0, 0, newCanvas.width, newCanvas.height);
 
-  // 裁切出視野的圓形
+  // 裁切出一個圓形當作視野
   const circleRadius = Math.min(newCanvas.width, newCanvas.height) / 2;
   newCtx.beginPath();
   newCtx.arc(
@@ -256,6 +257,7 @@ Microscope.prototype.drawZoomImage = function (newCanvas) {
   // Apply brightness filter 改變亮度
   newCtx.filter = ` brightness(${this.brightnessFactor}%)`;
 
+  // 填上光圈顏色
   newCtx.fillStyle = this.ObservationCircleColor;
   newCtx.fillRect(0, 0, newCanvas.width, newCanvas.height);
 
@@ -272,12 +274,11 @@ Microscope.prototype.drawZoomImage = function (newCanvas) {
     (this.slideY - (this.canvas.height * (1 - 1 / this.zoomFactor)) / 2) *
     this.zoomFactor;
 
-  // 調整濾鏡
-  // 模糊程度
+  // 調整濾鏡模糊程度
   newCtx.filter = `blur(${this.blurFactor}px)`; 
 
 
-  // 繪製載玻片
+  // 繪製載玻片填色
   newCtx.fillStyle = this.slideColor;
   newCtx.fillRect(
     zoomedSlideX,
@@ -285,6 +286,7 @@ Microscope.prototype.drawZoomImage = function (newCanvas) {
     this.slideWidth * this.zoomFactor,
     this.slideHeight * this.zoomFactor
   );
+  // 繪製載玻片外框
   newCtx.strokeStyle = this.slideBorderColor;
   newCtx.strokeRect(
     zoomedSlideX,
@@ -312,20 +314,23 @@ Microscope.prototype.drawZoomImage = function (newCanvas) {
 
   //applyBrightness(newCtx, this.brightnessFactor);
 
-  // 上下顛倒左右相反
+  // 將影像上下顛倒左右相反
+  
   newCtx.save();
   newCtx.translate(newCanvas.width, newCanvas.height);
   newCtx.scale(-1, -1);
   newCtx.drawImage(newCanvas, 0, 0);
   newCtx.restore();
+  
 };
 
 
-// 改變模糊程度
+// 調整載物台改變模糊程度
 Microscope.prototype.moveStage = function (delta) {
   this.blurHeight += delta;
   this.blurFactor = Math.abs(this.blurHeight);  
 }
+
 // 獲取滑鼠/觸摸點擊位置的相對座標
 function getMouseCoordinates(event, rect) {
   var mouseX, mouseY;
@@ -337,7 +342,6 @@ function getMouseCoordinates(event, rect) {
     mouseX = event.touches[0].clientX - rect.left;
     mouseY = event.touches[0].clientY - rect.top;
   }
-
   return { mouseX, mouseY };
 }
 
@@ -356,28 +360,10 @@ function getMouseCoordinatesMoving(event, rect) {
   return { mouseX, mouseY };
 }
 
-// 檢查點擊位置是否在卡片上
-function checkClickedSlide(mouseX, mouseY) {
-  var selected = null;
-
-  for (var i = 0; i < cards.length; i++) {
-    var card = cards[i];
-    if (
-      mouseX > card.x &&
-      mouseX < card.x + cardWidth &&
-      mouseY > card.y &&
-      mouseY < card.y + cardHeight
-    ) {
-      selected = card;
-      break;
-    }
-  }
-  return selected;
-}
-
 // 接收按鈕指令決定放大倍率
 function zoom(zoomFactor, sender) {
-  // 調高倍時，blurHeight略增
+
+  // 調高倍時，blurHeight略增，強迫使用者微調載物台高度
   if(zoomFactor >microscope.zoomFactor){
     microscope.blurHeight += 1;
     microscope.blurFactor = Math.abs(Microscope.blurHeight);
@@ -390,6 +376,7 @@ function zoom(zoomFactor, sender) {
   microscope.setZoomFactor(zoomFactor);
   microscope.drawInitialImage();
 
+  // 改變按鈕顏色
   sender.style.backgroundColor = "lightblue";
 
   // Get the parent container
@@ -398,7 +385,7 @@ function zoom(zoomFactor, sender) {
   // Get all sibling buttons
   var buttons = container.getElementsByClassName("large-button");
 
-  // Reset background color for sibling buttons
+  // 重設其他按鈕顏色
   for (var i = 0; i < buttons.length; i++) {
     if (buttons[i] !== sender) {
       buttons[i].style.backgroundColor = ""; // Set the default color here
@@ -406,20 +393,22 @@ function zoom(zoomFactor, sender) {
   }
 }
 
+// 接收按鈕指令改變載物台高度，改變模糊程度
 function moveStage(delta){
   //event.preventDefault(); // Prevent default touch events
 
   microscope.moveStage(delta);
-
   microscope.drawInitialImage();
 }
 
+// 接收按鈕指令改變亮度，模擬光圈調整大小
 function setBrightness(delta){
   microscope.brightnessFactor += delta;
   microscope.drawInitialImage();
 
 }
 
+// iOS無法用CSS的Blur濾鏡，需另外實作
 function applyBlur(ctx, image, blurFactor) {
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
@@ -459,7 +448,3 @@ function applyBrightness(ctx, brightnessFactor) {
 
 // 建 Microscope instance
 const microscope = new Microscope("cell.jpg", "canvas", "zoomCanvas");
-
-/*
-
-*/
