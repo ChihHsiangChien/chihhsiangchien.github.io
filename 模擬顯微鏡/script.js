@@ -74,6 +74,8 @@ class Microscope {
     // 亮度
     this.brightnessFactor = 10;
 
+    // bugs
+    this.bugs = [];
   }
 
   onMouseDown(event) {
@@ -112,6 +114,12 @@ Microscope.prototype.onMouseMove = function (event) {
 
     this.startX = mouseX;
     this.startY = mouseY;
+
+
+    this.bugs.forEach(function(bug) {
+      bug.x += deltaX;
+      bug.y += deltaY;
+    });
 
     this.drawInitialImage();
     this.drawZoomImage(this.zoomCanvas);
@@ -222,6 +230,12 @@ Microscope.prototype.drawInitialImage = function () {
     this.canvas.height / this.zoomFactor
   );
   */
+  //畫蟲蟲
+  this.bugs.forEach(function(bug) {
+    bug.drawOnCanvas();
+  });
+
+
 
   // 執行初始的放大影像繪製
   this.drawZoomImage(this.zoomCanvas);
@@ -309,19 +323,27 @@ Microscope.prototype.drawZoomImage = function (newCanvas) {
     this.specimenHeight * this.zoomFactor
   );
 
+  //繪製蟲
+  this.bugs.forEach(function(bug) {
+    bug.drawOnZoomCanvas();
+  });
+
   // Reset the filter
   newCtx.filter = "none";
 
   //applyBrightness(newCtx, this.brightnessFactor);
 
-  // 將影像上下顛倒左右相反
-  
+
+
+  // 將影像上下顛倒左右相反  
   newCtx.save();
   newCtx.translate(newCanvas.width, newCanvas.height);
   newCtx.scale(-1, -1);
   newCtx.drawImage(newCanvas, 0, 0);
   newCtx.restore();
   
+
+
 };
 
 
@@ -329,6 +351,15 @@ Microscope.prototype.drawZoomImage = function (newCanvas) {
 Microscope.prototype.moveStage = function (delta) {
   this.blurHeight += delta;
   this.blurFactor = Math.abs(this.blurHeight);  
+}
+
+
+// 產生蟲蟲
+Microscope.prototype.generateBugs = function(num){
+  for (var i = 0; i < num; i++) {
+    const bug = new Bug(this); 
+    this.bugs.push(bug);    
+  }
 }
 
 // 獲取滑鼠/觸摸點擊位置的相對座標
@@ -448,3 +479,13 @@ function applyBrightness(ctx, brightnessFactor) {
 
 // 建 Microscope instance
 const microscope = new Microscope("cell.jpg", "canvas", "zoomCanvas");
+
+// 產生蟲蟲
+microscope.generateBugs(10);
+
+setInterval(() => {
+  microscope.bugs.forEach(bug =>{
+    bug.move();
+    microscope.drawInitialImage();    
+  });  
+}, 16);
