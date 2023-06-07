@@ -543,3 +543,4 @@ setInterval(() => {
     microscope.drawInitialImage();
   });
 }, 16);
+
