@@ -18,7 +18,7 @@ class Microscope {
 
     this.zoomCanvas.width = this.canvas.width;
 
-    this.zoomFactor = 5;  // 要跟html裡的第一個button的參數相同
+    this.zoomFactor = 5; // 要跟html裡的第一個button的參數相同
 
     this.offsetX = 0;
     this.offsetY = 0;
@@ -115,8 +115,7 @@ Microscope.prototype.onMouseMove = function (event) {
     this.startX = mouseX;
     this.startY = mouseY;
 
-
-    this.bugs.forEach(function(bug) {
+    this.bugs.forEach(function (bug) {
       bug.x += deltaX;
       bug.y += deltaY;
     });
@@ -153,7 +152,7 @@ Microscope.prototype.drawStage = function () {
   // 畫出光圈圓孔
   // 增加濾鏡改變光圈亮度
   this.ctx.filter = ` brightness(${this.brightnessFactor}%)`;
-  
+
   this.ctx.save();
   this.ctx.beginPath();
   this.ctx.arc(
@@ -173,14 +172,12 @@ Microscope.prototype.drawStage = function () {
 
   // 濾鏡關閉
   this.ctx.filter = "none";
-
 };
-
 
 //畫canvas上的初始影像(左圖)
 Microscope.prototype.drawInitialImage = function () {
   this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-  
+
   // 繪製外框
   this.ctx.strokeStyle = "black";
   this.ctx.strokeRect(0, 0, this.canvas.width, this.canvas.height);
@@ -207,18 +204,30 @@ Microscope.prototype.drawInitialImage = function () {
     this.slideHeight
   );
 
-  // 繪製標本小圖
-  this.ctx.drawImage(
-    this.image,
-    0,
-    0,
-    this.image.width,
-    this.image.height,
-    this.specimenX,
-    this.specimenY,
-    this.specimenWidth,
-    this.specimenHeight
-  );
+  // 檢查是否在蟲蟲模式
+  if (document.getElementById("bugs").checked) {
+    // 繪製水樣
+    this.ctx.fillStyle = "rgba(193, 222, 250, 0.5)";
+    this.ctx.fillRect(
+      this.specimenX,
+      this.specimenY,
+      this.specimenWidth,
+      this.specimenHeight
+    );
+  } else {
+    // 繪製標本小圖
+    this.ctx.drawImage(
+      this.image,
+      0,
+      0,
+      this.image.width,
+      this.image.height,
+      this.specimenX,
+      this.specimenY,
+      this.specimenWidth,
+      this.specimenHeight
+    );
+  }
 
   // 在原canvas畫放大的框
   /*
@@ -231,11 +240,11 @@ Microscope.prototype.drawInitialImage = function () {
   );
   */
   //畫蟲蟲
-  this.bugs.forEach(function(bug) {
-    bug.drawOnCanvas();
-  });
-
-
+  if (document.getElementById("bugs").checked) {
+    this.bugs.forEach(function (bug) {
+      bug.drawOnCanvas();
+    });
+  }
 
   // 執行初始的放大影像繪製
   this.drawZoomImage(this.zoomCanvas);
@@ -289,8 +298,7 @@ Microscope.prototype.drawZoomImage = function (newCanvas) {
     this.zoomFactor;
 
   // 調整濾鏡模糊程度
-  newCtx.filter = `blur(${this.blurFactor}px)`; 
-
+  newCtx.filter = `blur(${this.blurFactor}px)`;
 
   // 繪製載玻片填色
   newCtx.fillStyle = this.slideColor;
@@ -309,58 +317,78 @@ Microscope.prototype.drawZoomImage = function (newCanvas) {
     this.slideHeight * this.zoomFactor
   );
 
-
-  // 繪製放大影像
-  newCtx.drawImage(
-    this.image,
-    0,
-    0,
-    this.image.width,
-    this.image.height,
-    zoomedImageX,
-    zoomedImageY,
-    this.specimenWidth * this.zoomFactor,
-    this.specimenHeight * this.zoomFactor
-  );
+  // 檢查是否在蟲蟲模式
+  if (document.getElementById("bugs").checked) {
+    // 繪製水樣
+    newCtx.fillStyle = "rgba(193, 222, 250, 0.5)";
+    newCtx.fillRect(
+      zoomedImageX,
+      zoomedImageY,
+      this.specimenWidth * this.zoomFactor,
+      this.specimenHeight * this.zoomFactor
+    );
+  } else {
+    // 繪製標本小圖
+    newCtx.drawImage(
+      this.image,
+      0,
+      0,
+      this.image.width,
+      this.image.height,
+      zoomedImageX,
+      zoomedImageY,
+      this.specimenWidth * this.zoomFactor,
+      this.specimenHeight * this.zoomFactor
+    );
+  }
 
   //繪製蟲
-  this.bugs.forEach(function(bug) {
-    bug.drawOnZoomCanvas();
-  });
-
+  if (document.getElementById("bugs").checked) {
+    this.bugs.forEach(function (bug) {
+      bug.drawOnZoomCanvas();
+    });
+  }
   // Reset the filter
   newCtx.filter = "none";
 
   //applyBrightness(newCtx, this.brightnessFactor);
 
+  // 將影像上下顛倒左右相反
+  if (document.getElementById("compound").checked) {
+    newCtx.save();
+    newCtx.translate(newCanvas.width, newCanvas.height);
+    newCtx.scale(-1, -1);
+    newCtx.drawImage(newCanvas, 0, 0);
+    newCtx.restore();
+  }
 
-
-  // 將影像上下顛倒左右相反  
-  newCtx.save();
-  newCtx.translate(newCanvas.width, newCanvas.height);
-  newCtx.scale(-1, -1);
-  newCtx.drawImage(newCanvas, 0, 0);
-  newCtx.restore();
-  
-
-
+  // 繪製十字準星
+  if (document.getElementById("bugs").checked && this.zoomFactor == 40) {
+    newCtx.strokeStyle = "red";
+    newCtx.beginPath(); // Start a new path
+    newCtx.moveTo(newCanvas.width / 2 - 10, newCanvas.height / 2);
+    newCtx.lineTo(newCanvas.width / 2 + 10, newCanvas.height / 2);
+    newCtx.stroke(); // Render the path
+    newCtx.beginPath(); // Start a new path
+    newCtx.moveTo(newCanvas.width / 2, newCanvas.height / 2 - 10);
+    newCtx.lineTo(newCanvas.width / 2, newCanvas.height / 2 + 10);
+    newCtx.stroke(); // Render the path
+  }
 };
-
 
 // 調整載物台改變模糊程度
 Microscope.prototype.moveStage = function (delta) {
   this.blurHeight += delta;
-  this.blurFactor = Math.abs(this.blurHeight);  
-}
-
+  this.blurFactor = Math.abs(this.blurHeight);
+};
 
 // 產生蟲蟲
-Microscope.prototype.generateBugs = function(num){
+Microscope.prototype.generateBugs = function (num) {
   for (var i = 0; i < num; i++) {
-    const bug = new Bug(this); 
-    this.bugs.push(bug);    
+    const bug = new Bug(this);
+    this.bugs.push(bug);
   }
-}
+};
 
 // 獲取滑鼠/觸摸點擊位置的相對座標
 function getMouseCoordinates(event, rect) {
@@ -393,13 +421,11 @@ function getMouseCoordinatesMoving(event, rect) {
 
 // 接收按鈕指令決定放大倍率
 function zoom(zoomFactor, sender) {
-
   // 調高倍時，blurHeight略增，強迫使用者微調載物台高度
-  if(zoomFactor >microscope.zoomFactor){
+  if (zoomFactor > microscope.zoomFactor) {
     microscope.blurHeight += 1;
     microscope.blurFactor = Math.abs(Microscope.blurHeight);
-
-  } else if(zoomFactor < microscope.zoomFactor){
+  } else if (zoomFactor < microscope.zoomFactor) {
     microscope.blurHeight -= 1;
     microscope.blurFactor = Math.abs(Microscope.blurHeight);
   }
@@ -425,7 +451,7 @@ function zoom(zoomFactor, sender) {
 }
 
 // 接收按鈕指令改變載物台高度，改變模糊程度
-function moveStage(delta){
+function moveStage(delta) {
   //event.preventDefault(); // Prevent default touch events
 
   microscope.moveStage(delta);
@@ -433,24 +459,23 @@ function moveStage(delta){
 }
 
 // 接收按鈕指令改變亮度，模擬光圈調整大小
-function setBrightness(delta){
+function setBrightness(delta) {
   microscope.brightnessFactor += delta;
   microscope.drawInitialImage();
-
 }
 
 // iOS無法用CSS的Blur濾鏡，需另外實作
 function applyBlur(ctx, image, blurFactor) {
   ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  
+  ctx.imageSmoothingQuality = "high";
+
   // Calculate the scaled dimensions
   const scaledWidth = image.width * blurFactor;
   const scaledHeight = image.height * blurFactor;
-  
+
   // Draw the scaled image on the canvas
   ctx.drawImage(image, 0, 0, scaledWidth, scaledHeight);
-  
+
   // Apply the blur effect by scaling down and up
   ctx.drawImage(
     ctx.canvas,
@@ -463,19 +488,12 @@ function applyBlur(ctx, image, blurFactor) {
     image.width,
     image.height
   );
-  
+
   // Reset the image smoothing settings
   ctx.imageSmoothingEnabled = false;
-  ctx.imageSmoothingQuality = 'default';
+  ctx.imageSmoothingQuality = "default";
 }
-function applyBrightness(ctx, brightnessFactor) {
-  
-}
-
-
-
-
-
+function applyBrightness(ctx, brightnessFactor) {}
 
 // 建 Microscope instance
 const microscope = new Microscope("cell.jpg", "canvas", "zoomCanvas");
@@ -484,8 +502,44 @@ const microscope = new Microscope("cell.jpg", "canvas", "zoomCanvas");
 microscope.generateBugs(10);
 
 setInterval(() => {
-  microscope.bugs.forEach(bug =>{
+  microscope.bugs.forEach((bug) => {
     bug.move();
-    microscope.drawInitialImage();    
-  });  
+
+    //檢查是否zoomfactor = 40且在準星位置，可造成傷害
+    if (microscope.zoomFactor == 40) {
+      const zoomedBugX =
+        (bug.x -
+          (microscope.canvas.width * (1 - 1 / microscope.zoomFactor)) / 2) *
+        microscope.zoomFactor;
+
+      const zoomedBugY =
+        (bug.y -
+          (microscope.canvas.height * (1 - 1 / microscope.zoomFactor)) / 2) *
+        microscope.zoomFactor;
+
+      if (
+        zoomedBugX >=
+          microscope.zoomCanvas.width / 2 - bug.width * microscope.zoomFactor &&
+        zoomedBugX <=
+          microscope.zoomCanvas.width / 2 + bug.width * microscope.zoomFactor &&
+        zoomedBugY >=
+          microscope.zoomCanvas.height / 2 -
+            bug.height * microscope.zoomFactor &&
+        zoomedBugY <=
+          microscope.zoomCanvas.height / 2 + bug.height * microscope.zoomFactor
+      ) {
+        bug.getHurt(2);
+      }
+    }
+
+    //如果沒生命
+    if (bug.life <= 0) {
+      const index = microscope.bugs.indexOf(bug);
+      if (index !== -1) {
+        microscope.bugs.splice(index, 1);
+      }
+    }
+
+    microscope.drawInitialImage();
+  });
 }, 16);
