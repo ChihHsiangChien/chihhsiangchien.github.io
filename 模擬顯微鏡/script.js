@@ -104,24 +104,26 @@ Microscope.prototype.onMouseMove = function (event) {
     const deltaX = mouseX - this.startX;
     const deltaY = mouseY - this.startY;
 
-    this.offsetX += deltaX;
-    this.offsetY += deltaY;
+    if ((deltaX * deltaX + deltaY * deltaY) > 16) {
+      this.offsetX += deltaX;
+      this.offsetY += deltaY;
 
-    this.slideX += deltaX;
-    this.slideY += deltaY;
-    this.specimenX += deltaX;
-    this.specimenY += deltaY;
+      this.slideX += deltaX;
+      this.slideY += deltaY;
+      this.specimenX += deltaX;
+      this.specimenY += deltaY;
 
-    this.startX = mouseX;
-    this.startY = mouseY;
+      this.startX = mouseX;
+      this.startY = mouseY;
 
-    this.bugs.forEach(function (bug) {
-      bug.x += deltaX;
-      bug.y += deltaY;
-    });
+      this.bugs.forEach(function (bug) {
+        bug.x += deltaX;
+        bug.y += deltaY;
+      });
 
-    this.drawInitialImage();
-    this.drawZoomImage(this.zoomCanvas);
+      this.drawInitialImage();
+      this.drawZoomImage(this.zoomCanvas);
+    }
   }
 };
 
@@ -493,7 +495,7 @@ function applyBlur(ctx, image, blurFactor) {
   ctx.imageSmoothingEnabled = false;
   ctx.imageSmoothingQuality = "default";
 }
-function applyBrightness(ctx, brightnessFactor) {}
+function applyBrightness(ctx, brightnessFactor) { }
 
 // 建 Microscope instance
 const microscope = new Microscope("cell.jpg", "canvas", "zoomCanvas");
@@ -519,14 +521,14 @@ setInterval(() => {
 
       if (
         zoomedBugX >=
-          microscope.zoomCanvas.width / 2 - bug.width * microscope.zoomFactor &&
+        microscope.zoomCanvas.width / 2 - bug.width * microscope.zoomFactor &&
         zoomedBugX <=
-          microscope.zoomCanvas.width / 2 + bug.width * microscope.zoomFactor &&
+        microscope.zoomCanvas.width / 2 + bug.width * microscope.zoomFactor &&
         zoomedBugY >=
-          microscope.zoomCanvas.height / 2 -
-            bug.height * microscope.zoomFactor &&
+        microscope.zoomCanvas.height / 2 -
+        bug.height * microscope.zoomFactor &&
         zoomedBugY <=
-          microscope.zoomCanvas.height / 2 + bug.height * microscope.zoomFactor
+        microscope.zoomCanvas.height / 2 + bug.height * microscope.zoomFactor
       ) {
         bug.getHurt(2);
       }
