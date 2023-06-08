@@ -1,11 +1,14 @@
-const width = 320;
-var height = 0;
+var videoWidth = 100;
+var videoHeight = 0;
+const canvasWidth = 600;
+const canvasHeight = 300;
+
 var streaming = false;
 
 var sensorValuesQueue = [];
 var maxValue = 0;
 var minValue = 255;
-var numQueue = 200;
+var numQueue = 300;// queue裡的數目
 
 const videoSelect = document.querySelector("select#videoSource");
 videoSelect.onchange = getStream;
@@ -73,19 +76,19 @@ function startup() {
     "canplay",
     (ev) => {
       if (!streaming) {
-        height = video.videoHeight / (video.videoWidth / width);
+        videoHeight = video.videoHeight / (video.videoWidth / videoWidth);
 
         // Firefox currently has a bug where the height can't be read from
         // the video, so we will make assumptions if this happens.
 
-        if (isNaN(height)) {
-          height = width / (4 / 3);
+        if (isNaN(videoHeight)) {
+          videoHeight = videoWidth / (4 / 3);
         }
 
-        video.setAttribute("width", width);
-        video.setAttribute("height", height);
-        canvas.setAttribute("width", width);
-        canvas.setAttribute("height", height);
+        video.setAttribute("width", videoWidth);
+        video.setAttribute("height", videoHeight);
+        canvas.setAttribute("width", canvasWidth);
+        canvas.setAttribute("height", canvasHeight);
         streaming = true;
         paintToCanvas();
       }
@@ -97,15 +100,11 @@ function startup() {
 }
 
 function paintToCanvas() {
-  const width = video.videoWidth;
-  const height = video.videoHeight;
-  canvas.width = width;
-  canvas.height = height;
 
   return setInterval(() => {
-    ctx.drawImage(video, 0, 0, width, height); // 每 16 毫秒將攝影機畫面「印」至 canvas
+    ctx.drawImage(video, 0, 0, canvasWidth, canvasHeight); // 每 16 毫秒將攝影機畫面「印」至 canvas
     // 取得圖像資訊，imgData.data 會是一類陣列，imgData.data[0] => red, imgData.data[1] => green, imgData.data[2] => blue, imgData.data[3] => alpha 以此四個一組類推
-    let pixels = ctx.getImageData(0, 0, width, height);
+    let pixels = ctx.getImageData(0, 0, canvasWidth, canvasHeight);
 
     var redValue = extractRedChannel(pixels);
     //maxValue = Math.max(maxValue, redValue);
@@ -149,7 +148,6 @@ function extractRedChannel(pixels) {
 function addToSensorValuesQueue(value) {
   sensorValuesQueue.push(value);
 
-  // 如果队列长度超过固定数目，则移除最頭的元素
   if (sensorValuesQueue.length > numQueue) {
     sensorValuesQueue.shift();
   }
@@ -167,13 +165,13 @@ function drawLineChart(queue) {
   var yAxisMax = maxValue + valueRange * 0.1;
 
   // 清空畫布
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.clearRect(0, 0, canvasWidth, canvasHeight);
 
   // 繪製座標軸
   ctx.beginPath();
-  ctx.moveTo(0, canvas.height);
-  ctx.lineTo(0, 0);
-  ctx.lineTo(canvas.width, 0);
+  ctx.moveTo(0, canvasHeight);
+  ctx.lineTo(0, canvasHeight);
+  ctx.lineTo(canvasWidth, canvasHeight);
   ctx.strokeStyle = "#000";
   ctx.stroke();
 
@@ -186,7 +184,7 @@ function drawLineChart(queue) {
 
   for (var i = 0; i < queue.length; i++) {
     var x = i * xStep;
-    var y = ((queue[i] - yAxisMin) / (yAxisMax - yAxisMin)) * canvas.height;
+    var y = ((queue[i] - yAxisMin) / (yAxisMax - yAxisMin)) * canvasHeight;
 
     if (i === 0) {
       ctx.moveTo(x, y);
