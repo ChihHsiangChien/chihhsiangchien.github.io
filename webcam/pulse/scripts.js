@@ -2,6 +2,11 @@ const width = 320;
 var height = 0;
 var streaming = false;
 
+var sensorValuesQueue = [];
+var maxValue = 0;
+var minValue = 255;
+var numQueue = 200;
+
 const videoSelect = document.querySelector("select#videoSource");
 videoSelect.onchange = getStream;
 const video = document.querySelector(".player");
@@ -101,46 +106,94 @@ function paintToCanvas() {
     ctx.drawImage(video, 0, 0, width, height); // 每 16 毫秒將攝影機畫面「印」至 canvas
     // 取得圖像資訊，imgData.data 會是一類陣列，imgData.data[0] => red, imgData.data[1] => green, imgData.data[2] => blue, imgData.data[3] => alpha 以此四個一組類推
     let pixels = ctx.getImageData(0, 0, width, height);
-    // 加上濾鏡
-    var redValues = extractRedChannel(pixels);
-    // 輸出至 graphCanvas
 
-    drawLineChart(redValues);
-  }, 16);
+    var redValue = extractRedChannel(pixels);
+    //maxValue = Math.max(maxValue, redValue);
+    //minValue = Math.min(minValue, redValue);
+    addToSensorValuesQueue(redValue);
+
+    // 輸出至 graphCanvas
+    drawLineChart(sensorValuesQueue, minValue, maxValue);
+    }, 10);
 }
-function drawLineChart(redValues) {
-  // 清空画布
+function extractRedChannel(pixels) {
+  var data = pixels.data;
+  var redValues = [];
+
+  // 计算画面中央1/3的起始和结束位置
+  var startY = Math.floor(pixels.height / 3);
+  var endY = Math.floor((pixels.height / 3) * 2);
+  var startX = Math.floor(pixels.width / 3);
+  var endX = Math.floor((pixels.width / 3) * 2);
+
+  var width = pixels.width;
+
+  // 提取中央1/3部分的红色通道值
+  for (var y = startY; y < endY; y++) {
+    for (var x = startX; x < endX; x++) {
+      var index = (y * width + x) * 4;
+      var red = data[index];
+      redValues.push(red);
+    }
+  }
+
+  // 计算红光平均值
+  var sum = redValues.reduce(function (a, b) {
+    return a + b;
+  }, 0);
+  var average = sum / redValues.length;
+
+  return average;
+}
+
+function addToSensorValuesQueue(value) {
+  sensorValuesQueue.push(value);
+
+  // 如果队列长度超过固定数目，则移除最頭的元素
+  if (sensorValuesQueue.length > numQueue) {
+    sensorValuesQueue.shift();
+  }
+
+}
+function drawLineChart(queue) {
+  var minValue = Math.min(...queue);
+  var maxValue = Math.max(...queue);
+
+  var valueRange = maxValue - minValue;
+
+
+  // 計算縱軸的最大最小值
+  var yAxisMin = minValue - valueRange * 0.1;
+  var yAxisMax = maxValue + valueRange * 0.1;
+
+  // 清空畫布
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // 设置绘制参数
-  var lineWidth = 2;
-  var graphHeight = canvas.height - 20;
-  var graphWidth = canvas.width;
+  // 繪製座標軸
+  ctx.beginPath();
+  ctx.moveTo(0, canvas.height);
+  ctx.lineTo(0, 0);
+  ctx.lineTo(canvas.width, 0);
+  ctx.strokeStyle = "#000";
+  ctx.stroke();
 
-  redValues = redValues.filter(value => typeof value === 'number');
+  // 繪製折線
+  ctx.beginPath();
+  ctx.strokeStyle = "#f00";
+  ctx.lineWidth = 2;
 
-  if (redValues.length > 0) {
-    var startIndex = Math.floor(redValues.length / 3);
-    var endIndex = Math.floor((2 * redValues.length) / 3);
-    var valuesInRange = redValues.slice(startIndex, endIndex);
-    var averageValue = valuesInRange.reduce((a, b) => a + b, 0) / valuesInRange.length;
+  var xStep = canvas.width / (queue.length - 1);
 
-    // 绘制折线图
-    ctx.beginPath();
-    ctx.lineWidth = lineWidth;
-    ctx.strokeStyle = "red";
+  for (var i = 0; i < queue.length; i++) {
+    var x = i * xStep;
+    var y = ((queue[i] - yAxisMin) / (yAxisMax - yAxisMin)) * canvas.height;
 
-    for (var i = 0; i < valuesInRange.length; i++) {
-      var x = (i / valuesInRange.length) * graphWidth;
-      var y = graphHeight - (valuesInRange[i] / averageValue) * graphHeight;
-
-      if (i === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
+    if (i === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
     }
-
-    ctx.stroke();
   }
+
+  ctx.stroke();
 }
