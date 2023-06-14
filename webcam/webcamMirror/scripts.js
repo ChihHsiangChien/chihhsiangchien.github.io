@@ -132,7 +132,7 @@ function startup() {
     "click",
     (ev) => {
       ev.preventDefault();
-      reset();
+      paintToCanvas();
     },
     false
   );
@@ -154,7 +154,7 @@ function stopTimerInterval() {
 
 
 function takePicture() {
-  photoData = tempCtx.getImageData(0, 0, width, height);
+  stopTimerInterval();
 }
 
 
