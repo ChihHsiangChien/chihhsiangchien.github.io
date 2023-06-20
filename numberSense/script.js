@@ -44,37 +44,33 @@ class Dots {
   }
 }
 
-async function startGame() {
-  await setNumbers();
-  console.log(numbers);
-
+function startGame() {
+  setNumbers();
   initNumberStats();
   drawNextQuestion();
   canvas.addEventListener("mousedown", handleAnswerClick);
   canvas.addEventListener("touchstart", handleAnswerClick);
 }
 
-async function setNumbers() {
-  return new Promise((resolve, reject) => {
-    numbers = [];
-    console.log(numbersStart, numbersEnd, diff, numbersAnswerTimes, showTime);
-
-    for (let i = numbersStart; i <= numbersEnd; i++) {
-      for (let j = 0; j < numbersAnswerTimes; j++) {
-        numbers.push(i);
-      }
+function setNumbers() {
+  numbers = [];
+  for (let i = numbersStart; i <= numbersEnd; i++) {
+    for (let j = 0; j < numbersAnswerTimes; j++) {
+      numbers.push(i);
     }
+  }
 
-    // Fisher-Yates shuffle algorithm
-    for (let i = numbers.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [numbers[i], numbers[j]] = [numbers[j], numbers[i]];
-    }
-    resolve(); // Resolve the promise to indicate completion
-  });
+  // Fisher-Yates shuffle algorithm
+  for (let i = numbers.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [numbers[i], numbers[j]] = [numbers[j], numbers[i]];
+  }
+
+  totalNumber = numbers.length;
 }
 
 function initNumberStats() {
+  numberStats ={};
   for (let i = numbersStart; i <= numbersEnd; i++) {
     numberStats[i] = {
       correct: 0,
@@ -99,7 +95,8 @@ function handleAnswerClick(event) {
   numbers.shift(); // Remove the first element
 
   drawNextQuestion();
-
+  clickedCnt += 1;
+  numClicked.textContent = clickedCnt + "/" + totalNumber;
   clickenabled = false;
 }
 
@@ -121,7 +118,7 @@ function drawBoxes() {
   const boxHeight = canvas.height - 2 * vSpace; // Subtract twice the gap from canvas height
 
   // Draw the left box
-  ctx.fillStyle = "grey";
+  ctx.fillStyle = "lightgreen";
   ctx.fillRect(hSpace, vSpace, boxWidth, boxHeight);
 
   // Draw the right box
@@ -218,8 +215,8 @@ function drawTicks(x, y, width, height) {
   const tickCountX = numberCount;
   const tickSizeX = 20;
 
-  for (let i = 0; i <= tickCountX; i++) {
-    const tickX = x + (i * width) / tickCountX;
+  for (let i = 0; i < tickCountX; i++) {
+    const tickX = x + 30 + (i * width) / tickCountX;
     const tickY = y + height;
 
     ctx.beginPath();
@@ -265,7 +262,7 @@ function drawDataPoints(x, y, width, height) {
   for (let i = 0; i < numberCount; i++) {
     const number = i + numbersStart;
     const correctRate = calculateCorrectRate(number);
-    const dataX = x + i * stepX;
+    const dataX = x + 30 + i * stepX;
     const dataY = y + height - correctRate * stepY;
 
     ctx.beginPath();
@@ -292,6 +289,7 @@ var numEndInput = document.getElementById("numEnd");
 var numDiffInput = document.getElementById("numDiff");
 var numAnswerTimesInput = document.getElementById("numAnswerTimes");
 var numShowTimeInput = document.getElementById("numShowTime");
+var numClicked = document.getElementById("clicked");
 
 var numButton = document.getElementById("numButton");
 
@@ -299,9 +297,9 @@ canvas.width = window.innerWidth * 0.8;
 canvas.height = window.innerHeight * 0.8;
 
 // 產生題目
-var numbersStart = 7;
+var numbersStart = 12;
 var numbersEnd = 13;
-var diff = 1;
+var diff = 2;
 var numbersAnswerTimes = 5;
 var showTime = 500;
 
@@ -313,33 +311,51 @@ numShowTimeInput.value = showTime;
 
 var numbers = [];
 var numberStats = {};
-const numberCount = numbersEnd - numbersStart + 1;
+var numberCount = numbersEnd - numbersStart + 1;
+var clickedCnt = 0; // 按了幾次
+var totalNumber = 0; // 應該按幾次
 var clickenabled = false;
 
 var correctSide = Math.random() < 0.5 ? "left" : "right";
-var dotsLeft, dotsRight;
-
-numButton.addEventListener("click", function (event) {
-  numbersStart = numStartInput.value;
-  numbersEnd = numEndInput.value;
-  diff = numDiffInput.value;
-  numbersAnswerTimes = numAnswerTimesInput.value;
-  showTime = numShowTimeInput.value;
-  startGame();
-});
-
-dotsLeft = new Dots(
+var dotsLeft = new Dots(
   //correctSide === "left" ? numbers[0] : numbers[0] - diff,
   1,
   canvas.width / 4,
   canvas.height / 2
 );
 
-dotsRight = new Dots(
+var dotsRight = new Dots(
   //correctSide === "left" ? numbers[0] - diff : numbers[0],
   1,
   (canvas.width * 3) / 4,
   canvas.height / 2
 );
+
+numButton.addEventListener("click", function (event) {
+  numbersStart = parseInt(numStartInput.value,10);
+  numbersEnd = parseInt(numEndInput.value,10);
+  numberCount = numbersEnd - numbersStart + 1;
+  diff = parseInt(numDiffInput.value,10);
+  numbersAnswerTimes = parseInt(numAnswerTimesInput.value,10);
+  showTime = parseInt(numShowTimeInput.value,10);
+
+  clickedCnt = 0; // 重置按過的計數
+
+  
+  if (numbersEnd < numbersStart){
+    alert("終點必須比起點大");
+    return
+  };
+ 
+  if(numbersStart - diff === 0){
+    alert("起點減去差值不可以等於0");
+    return
+  }
+  numClicked.textContent = "0/" + numberCount * numbersAnswerTimes;
+  startGame();
+});
+//setNumbers();
+
+
 
 //startGame();
