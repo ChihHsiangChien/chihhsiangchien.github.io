@@ -12,9 +12,41 @@ class Dots {
     this.distanceScaleFactor = 0.5;
     this.radiusScaleFactor = 0;
     this.startI = 12;
+    this.gridWidth = 20;
+    this.gridHeight = 20;
   }
 
   draw() {
+    //var edgeNum = Math.ceil(Math.sqrt(this.num))+1;
+    var edgeNum =10;
+    const randomPos = Array.from({ length: Math.pow(edgeNum, 2) }, (_, i) => i);
+
+    // Fisher-Yates shuffle algorithm
+    for (let i = randomPos.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [randomPos[i], randomPos[j]] = [randomPos[j], randomPos[i]];
+    }
+    //console.log(randomPos);
+
+    var gridsX = this.centerX - (edgeNum * this.gridWidth) / 2;
+    var gridsY = this.centerY - (edgeNum * this.gridHeight) / 2;
+
+    for (var i = 0; i < this.num; i++) {
+      
+      var col = randomPos[i] % edgeNum;
+      var row = Math.floor(randomPos[i] / edgeNum);
+      
+      var posx = gridsX + col * this.gridWidth;
+      var posy = gridsY + row * this.gridHeight;
+      ctx.beginPath();
+      ctx.arc(posx, posy, this.size, 0, 2 * Math.PI);
+      ctx.fillStyle = "rgba(100, 100, 100, 0.5)";
+
+      ctx.fill();
+    }
+  }
+
+  draw2() {
     //ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     for (var i = this.startI; i < this.num + this.startI; i++) {
@@ -70,7 +102,7 @@ function setNumbers() {
 }
 
 function initNumberStats() {
-  numberStats ={};
+  numberStats = {};
   for (let i = numbersStart; i <= numbersEnd; i++) {
     numberStats[i] = {
       correct: 0,
@@ -110,6 +142,27 @@ function handleWrongAnswer() {
   numberStats[currentNumber].wrong++; // Increment the wrong count for the current number
 }
 
+function drawBorders() {
+  //ctx.clearRect(0, 0, canvas.width, canvas.height);
+  let hSpace = 20;
+  let vSpace = canvas.height / 6;
+  const boxWidth = (canvas.width - 4 * hSpace) / 2; // Divide canvas width minus gaps by 2
+  const boxHeight = canvas.height - 2 * vSpace; // Subtract twice the gap from canvas height
+
+  // Draw the left border
+  ctx.lineWidth = 2;
+
+  ctx.strokeStyle = "grey";
+  ctx.strokeRect(hSpace, vSpace, boxWidth, boxHeight);
+
+  // Draw the right border
+  ctx.strokeRect(2 * hSpace + boxWidth, vSpace, boxWidth, boxHeight);
+}
+
+
+
+
+
 function drawBoxes() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   let hSpace = 20;
@@ -124,6 +177,8 @@ function drawBoxes() {
   // Draw the right box
   ctx.fillRect(2 * hSpace + boxWidth, vSpace, boxWidth, boxHeight);
 }
+
+
 
 function checkClickedSide(mouseX, mouseY) {
   if (mouseX > 0 && mouseX <= canvas.width / 2) return "left";
@@ -166,15 +221,15 @@ function drawNextQuestion() {
   dotsLeft.draw();
   dotsRight.draw();
 
+  drawBorders();
   setTimeout(function () {
     drawBoxes();
+    drawBorders();
     clickenabled = true;
   }, showTime);
 }
 
 function endGame() {
-  console.log(numberStats);
-
   canvas.removeEventListener("mousedown", handleAnswerClick);
   canvas.removeEventListener("touchstart", handleAnswerClick);
 
@@ -297,11 +352,11 @@ canvas.width = window.innerWidth * 0.8;
 canvas.height = window.innerHeight * 0.8;
 
 // 產生題目
-var numbersStart = 12;
-var numbersEnd = 13;
-var diff = 2;
-var numbersAnswerTimes = 5;
-var showTime = 500;
+var numbersStart = 5;  // 開始數字
+var numbersEnd = 13;    // 結束數字
+var diff = 1;           // 差值
+var numbersAnswerTimes = 5; //回答幾次
+var showTime = 1000;     // 蓋牌時間
 
 numStartInput.value = numbersStart;
 numEndInput.value = numbersEnd;
@@ -332,30 +387,27 @@ var dotsRight = new Dots(
 );
 
 numButton.addEventListener("click", function (event) {
-  numbersStart = parseInt(numStartInput.value,10);
-  numbersEnd = parseInt(numEndInput.value,10);
+  numbersStart = parseInt(numStartInput.value, 10);
+  numbersEnd = parseInt(numEndInput.value, 10);
   numberCount = numbersEnd - numbersStart + 1;
-  diff = parseInt(numDiffInput.value,10);
-  numbersAnswerTimes = parseInt(numAnswerTimesInput.value,10);
-  showTime = parseInt(numShowTimeInput.value,10);
+  diff = parseInt(numDiffInput.value, 10);
+  numbersAnswerTimes = parseInt(numAnswerTimesInput.value, 10);
+  showTime = parseInt(numShowTimeInput.value, 10);
 
   clickedCnt = 0; // 重置按過的計數
 
-  
-  if (numbersEnd < numbersStart){
+  if (numbersEnd < numbersStart) {
     alert("終點必須比起點大");
-    return
-  };
- 
-  if(numbersStart - diff === 0){
+    return;
+  }
+
+  if (numbersStart - diff === 0) {
     alert("起點減去差值不可以等於0");
-    return
+    return;
   }
   numClicked.textContent = "0/" + numberCount * numbersAnswerTimes;
   startGame();
 });
-//setNumbers();
 
-
-
-//startGame();
+//var dotsTemp = new Dots(20, canvas.width/2, canvas.height/2);
+//dotsTemp.draw();
