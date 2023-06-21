@@ -345,7 +345,6 @@ var numDiffInput = document.getElementById("numDiff");
 var numAnswerTimesInput = document.getElementById("numAnswerTimes");
 var numShowTimeInput = document.getElementById("numShowTime");
 var numClicked = document.getElementById("clicked");
-
 var numButton = document.getElementById("numButton");
 
 canvas.width = window.innerWidth * 0.8;
@@ -353,7 +352,7 @@ canvas.height = window.innerHeight * 0.8;
 
 // 產生題目
 var numbersStart = 5;  // 開始數字
-var numbersEnd = 13;    // 結束數字
+var numbersEnd = 10;    // 結束數字
 var diff = 1;           // 差值
 var numbersAnswerTimes = 5; //回答幾次
 var showTime = 1000;     // 蓋牌時間
@@ -408,6 +407,3 @@ numButton.addEventListener("click", function (event) {
   numClicked.textContent = "0/" + numberCount * numbersAnswerTimes;
   startGame();
 });
-
-//var dotsTemp = new Dots(20, canvas.width/2, canvas.height/2);
-//dotsTemp.draw();
