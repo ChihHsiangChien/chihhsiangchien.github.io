@@ -1,5 +1,8 @@
 // main.js
 
+const htmlMargin = 15;
+const labelWidth = 40;
+const barWidth = 300;
 document.addEventListener("DOMContentLoaded", function () {
   const mapDataUrl = "mapData.json";
 
@@ -71,9 +74,9 @@ document.addEventListener("DOMContentLoaded", function () {
         
         // Get the width of place-label
         //const labelWidth = container.querySelector(".place-label").offsetWidth;
-        const bar = renderGanttBar(container, startMinute, endMinute, openTime, closeTime);
+        const bar = renderGanttBar(container, startMinute, endMinute, openTime, closeTime, labelWidth, barWidth);
         //place-label的寬度50px, bar寬度300px
-        renderHourLines(container, 50, 300);
+        renderHourLines(container, labelWidth, barWidth);
       });
   }
 
@@ -85,7 +88,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // Render individual Gantt chart bar
-  function renderGanttBar(container, startMinute, endMinute, openTime, closeTime) {
+  function renderGanttBar(container, startMinute, endMinute, openTime, closeTime, labelWidth, barWidth) {
     const bar = document.createElement("div");
     bar.classList.add("bar");
 
@@ -96,8 +99,8 @@ document.addEventListener("DOMContentLoaded", function () {
     const marginLeftPercentage = (startMinute / totalMinutesInDay) ;
 
     //bar.style.marginLeft = `${marginLeftPercentage}%`;
-    bar.style.width = `${widthPercentage * 300}px`;
-    bar.style.marginLeft = `${50 + marginLeftPercentage * 300}px`;
+    bar.style.width = `${widthPercentage * barWidth}px`;
+    bar.style.marginLeft = `${htmlMargin + labelWidth + marginLeftPercentage * barWidth}px`;
 
     // Set position to absolute
     bar.style.position = "absolute";
@@ -125,7 +128,7 @@ document.addEventListener("DOMContentLoaded", function () {
       const positionPercentage = (minute / totalMinutesInDay) ;
 
 
-      line.style.left = `${labelWidth + positionPercentage * barWidth}px`;
+      line.style.left = `${htmlMargin + labelWidth + positionPercentage * barWidth}px`;
 
       container.appendChild(line);
     }
