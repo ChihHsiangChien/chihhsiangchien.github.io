@@ -1,8 +1,9 @@
 // main.js
 
 const htmlMargin = 15;
-const labelWidth = 40;
+const labelWidth = 100;
 const barWidth = 300;
+
 document.addEventListener("DOMContentLoaded", function () {
   const mapDataUrl = "mapData.json";
 
@@ -75,7 +76,6 @@ document.addEventListener("DOMContentLoaded", function () {
         // Get the width of place-label
         //const labelWidth = container.querySelector(".place-label").offsetWidth;
         const bar = renderGanttBar(container, startMinute, endMinute, openTime, closeTime, labelWidth, barWidth);
-        //place-label的寬度50px, bar寬度300px
         renderHourLines(container, labelWidth, barWidth);
       });
   }
@@ -100,17 +100,30 @@ document.addEventListener("DOMContentLoaded", function () {
 
     //bar.style.marginLeft = `${marginLeftPercentage}%`;
     bar.style.width = `${widthPercentage * barWidth}px`;
-    bar.style.marginLeft = `${htmlMargin + labelWidth + marginLeftPercentage * barWidth}px`;
-
-    // Set position to absolute
+    bar.style.marginLeft = `${labelWidth + marginLeftPercentage * barWidth}px`;
     bar.style.position = "absolute";
+    
 
     // Add open and close times at the starting and ending points
-    bar.innerHTML = `<div class="bar-label">${openTime} - ${closeTime}</div>`;
+    /*
+    const barLabel = document.createElement("div");
+    barLabel.classList.add("bar-label");
+    barLabel.textContent = `${openTime}-${closeTime}`;
+    barLabel.style.marginLeft = `${labelWidth + marginLeftPercentage * barWidth}px`;
 
+    // Calculate the bar's top position
+    const containerTop = container.getBoundingClientRect().top;
+    const barTop = bar.getBoundingClientRect().top;
+    const marginTop = barTop - containerTop;
 
+    barLabel.style.marginTop = `${marginTop}px`; // Set marginTop to match bar's position
+    barLabel.style.position = "absolute";
+    */
+
+    bar.innerHTML = `<div class="bar-label">${openTime}-${closeTime}</div>`;
 
     container.appendChild(bar);
+    //container.appendChild(barLabel);
     return bar; // Return the created bar element
   }
 
@@ -148,9 +161,6 @@ document.addEventListener("DOMContentLoaded", function () {
     sortedData.forEach((place, index) => {
       const chartContainer = document.createElement("div");
       chartContainer.classList.add("gantt-chart-container");
-
-
-
 
       const formattedAddress = place.places[0].formattedAddress;
       const townOrCity = extractTownOrCity(formattedAddress);
