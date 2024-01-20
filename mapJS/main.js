@@ -149,28 +149,24 @@ document.addEventListener("DOMContentLoaded", function () {
       const chartContainer = document.createElement("div");
       chartContainer.classList.add("gantt-chart-container");
 
-      // Apply flex layout to the container and align items to the end
-      //chartContainer.style.display = "flex";
-      //chartContainer.style.justifyContent = "flex-end";
 
-      const labelElement = document.createElement("div");
+
 
       const formattedAddress = place.places[0].formattedAddress;
       const townOrCity = extractTownOrCity(formattedAddress);
-      //console.log(place.places[0].displayName.text);
-      //console.log(townOrCity);
 
       // 增加超連接
       const linkElement = document.createElement("a");
-      linkElement.textContent = "[" + townOrCity + "]" + place.places[0].displayName.text;
       linkElement.href = `https://www.google.com/maps/place/?q=place_id:${place.places[0].id}`;
       linkElement.target = "_blank"; // Open the link in a new window
+      linkElement.style.textDecoration = 'none'; // Remove underline
 
-      // Append the link to the label element
-      labelElement.appendChild(linkElement);
-
+      const labelElement = document.createElement("div");
+      labelElement.textContent = "[" + townOrCity + "]" + place.places[0].displayName.text;
       labelElement.classList.add("place-label");
-      chartContainer.appendChild(labelElement);
+
+      linkElement.appendChild(labelElement);
+      chartContainer.appendChild(linkElement);
 
       //如果有營業時間，代表沒有歇業
       if (
