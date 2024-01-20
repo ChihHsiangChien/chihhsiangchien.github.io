@@ -71,7 +71,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
         const openTime = `${period.open.hour}:${period.open.minute < 10 ? '0' : ''}${period.open.minute}`;
         const closeTime = `${period.close.hour}:${period.close.minute < 10 ? '0' : ''}${period.close.minute}`;
-        
+
         // Get the width of place-label
         //const labelWidth = container.querySelector(".place-label").offsetWidth;
         const bar = renderGanttBar(container, startMinute, endMinute, openTime, closeTime, labelWidth, barWidth);
@@ -96,7 +96,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const totalMinutesInDay = 24 * 60;
     const widthPercentage =
       ((endMinute - startMinute) / totalMinutesInDay);
-    const marginLeftPercentage = (startMinute / totalMinutesInDay) ;
+    const marginLeftPercentage = (startMinute / totalMinutesInDay);
 
     //bar.style.marginLeft = `${marginLeftPercentage}%`;
     bar.style.width = `${widthPercentage * barWidth}px`;
@@ -125,7 +125,7 @@ document.addEventListener("DOMContentLoaded", function () {
       line.classList.add("hour-line");
 
       // Calculate the position of the hour line based on the percentage of the bar's width
-      const positionPercentage = (minute / totalMinutesInDay) ;
+      const positionPercentage = (minute / totalMinutesInDay);
 
 
       line.style.left = `${htmlMargin + labelWidth + positionPercentage * barWidth}px`;
@@ -154,11 +154,25 @@ document.addEventListener("DOMContentLoaded", function () {
       //chartContainer.style.justifyContent = "flex-end";
 
       const labelElement = document.createElement("div");
-      labelElement.textContent = place.places[0].displayName.text;
+
+      const formattedAddress = place.places[0].formattedAddress;
+      const townOrCity = extractTownOrCity(formattedAddress);
+      //console.log(place.places[0].displayName.text);
+      //console.log(townOrCity);
+
+      // 增加超連接
+      const linkElement = document.createElement("a");
+      linkElement.textContent = "[" + townOrCity + "]" + place.places[0].displayName.text;
+      linkElement.href = `https://www.google.com/maps/place/?q=place_id:${place.places[0].id}`;
+      linkElement.target = "_blank"; // Open the link in a new window
+
+      // Append the link to the label element
+      labelElement.appendChild(linkElement);
 
       labelElement.classList.add("place-label");
       chartContainer.appendChild(labelElement);
 
+      //如果有營業時間，代表沒有歇業
       if (
         place.places[0].regularOpeningHours &&
         place.places[0].regularOpeningHours.periods
@@ -211,3 +225,9 @@ document.addEventListener("DOMContentLoaded", function () {
     })
     .catch((error) => console.error("Error initializing Gantt chart:", error));
 });
+
+// Function to extract town or city name from formatted address
+function extractTownOrCity(address) {
+  const match = address.match(/屏東縣([^鄉鎮市]+)/);
+  return match ? match[1].trim() : ''; // Extract substring between "屏東縣" and the next occurrence of "鄉"、"鎮"、"市"
+}
