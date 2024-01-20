@@ -166,8 +166,9 @@ document.addEventListener("DOMContentLoaded", function () {
       const townOrCity = extractTownOrCity(formattedAddress);
 
       // 增加超連接
-      const linkElement = document.createElement("a");
-      linkElement.href = `https://www.google.com/maps/place/?q=place_id:${place.places[0].id}`;
+      const linkElement = document.createElement("a");      
+      //linkElement.href = `https://www.google.com/maps/place/?q=place_id:${place.places[0].id}`;
+      linkElement.href = `https://www.google.com/maps/search/?api=1&query=formattedAddress&query_place_id=${place.places[0].id}`;
       linkElement.target = "_blank"; // Open the link in a new window
       linkElement.style.textDecoration = 'none'; // Remove underline
 
