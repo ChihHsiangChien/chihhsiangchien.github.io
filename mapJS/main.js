@@ -1,8 +1,8 @@
 // main.js
 
 const htmlMargin = 15;
-const labelWidth = 100;
-const barWidth = 300;
+const labelWidth = 120;
+const barWidth = 250;
 
 document.addEventListener("DOMContentLoaded", function () {
   const mapDataUrl = "mapData.json";
