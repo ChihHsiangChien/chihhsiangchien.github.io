@@ -16,7 +16,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  function filterAndSortDataByDay(mapData, selectedDay) {
+  function filterAndSortDataByDay_temp(mapData, selectedDay) {
     return mapData
       .filter((place) => {
         // Ensure that the required properties exist before accessing them
@@ -58,6 +58,65 @@ document.addEventListener("DOMContentLoaded", function () {
         return 0;
       });
   }
+
+  // Function to filter and sort data by day and region grouping
+  function filterAndSortDataByDay(mapData, selectedDay, regionGrouping) {
+    return mapData
+      .filter((place) => {
+        // Ensure that the required properties exist before accessing them
+        return (
+          place.places &&
+          place.places[0] &&
+          place.places[0].regularOpeningHours &&
+          place.places[0].regularOpeningHours.periods &&
+          Array.isArray(place.places[0].regularOpeningHours.periods) &&
+          place.places[0].regularOpeningHours.periods.some(
+            (period) =>
+              period.open &&
+              period.open.day === selectedDay &&
+              !(period.open.day === 0 && period.open.hour === 0)
+          )
+        );
+      })
+      .sort((placeA, placeB) => {
+        const openingTimeA = placeA.places[0].regularOpeningHours.periods.find(
+          (period) =>
+            period.open &&
+            period.open.day === selectedDay &&
+            !(period.open.day === 0 && period.open.hour === 0)
+        );
+        const openingTimeB = placeB.places[0].regularOpeningHours.periods.find(
+          (period) =>
+            period.open &&
+            period.open.day === selectedDay &&
+            !(period.open.day === 0 && period.open.hour === 0)
+        );
+
+        if (openingTimeA && openingTimeB) {
+          const timeA = openingTimeA.open.minute + openingTimeA.open.hour * 60;
+          const timeB = openingTimeB.open.minute + openingTimeB.open.hour * 60;
+
+          return timeA - timeB;
+        }
+
+        return 0;
+      })
+      .sort((placeA, placeB) => {
+        // Additional sorting by 鄉鎮市 (town or city) if region grouping is enabled
+        if (regionGrouping) {
+          const townCityA = extractTownOrCity(placeA.places[0].formattedAddress);
+          const townCityB = extractTownOrCity(placeB.places[0].formattedAddress);
+          return townCityA.localeCompare(townCityB);
+        }
+
+        return 0;
+      });
+  }
+
+
+
+
+
 
   // Render Gantt chart bars for the selected day
   function renderGanttBars(container, periods, selectedDay) {
@@ -102,7 +161,7 @@ document.addEventListener("DOMContentLoaded", function () {
     bar.style.width = `${widthPercentage * barWidth}px`;
     bar.style.marginLeft = `${labelWidth + marginLeftPercentage * barWidth}px`;
     bar.style.position = "absolute";
-    
+
 
     // Add open and close times at the starting and ending points
     /*
@@ -150,12 +209,14 @@ document.addEventListener("DOMContentLoaded", function () {
   // Update Gantt chart based on selected day
   function updateGanttChart(mapData, selectedDay) {
     const ganttChart = document.getElementById("ganttChart");
+    const regionGroupingCheckbox = document.getElementById('regionGroupingCheckbox');
 
     // Clear previous content
     ganttChart.innerHTML = "";
 
     // Filter and sort places excluding 24-hour opening
-    const sortedData = filterAndSortDataByDay(mapData, selectedDay);
+    //const sortedData = filterAndSortDataByDay(mapData, selectedDay);
+    const sortedData = filterAndSortDataByDay(mapData, selectedDay, regionGroupingCheckbox.checked);
 
     // Iterate through filtered and sorted data and render Gantt chart
     sortedData.forEach((place, index) => {
@@ -166,7 +227,7 @@ document.addEventListener("DOMContentLoaded", function () {
       const townOrCity = extractTownOrCity(formattedAddress);
 
       // 增加超連接
-      const linkElement = document.createElement("a");      
+      const linkElement = document.createElement("a");
       //linkElement.href = `https://www.google.com/maps/place/?q=place_id:${place.places[0].id}`;
       linkElement.href = `https://www.google.com/maps/search/?api=1&query=formattedAddress&query_place_id=${place.places[0].id}`;
       linkElement.target = "_blank"; // Open the link in a new window
