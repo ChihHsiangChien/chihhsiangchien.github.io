@@ -296,6 +296,13 @@ document.addEventListener("DOMContentLoaded", function () {
 
 // Function to extract town or city name from formatted address
 function extractTownOrCity(address) {
-  const match = address.match(/屏東縣([^鄉鎮市]+)/);
-  return match ? match[1].trim() : ''; // Extract substring between "屏東縣" and the next occurrence of "鄉"、"鎮"、"市"
+  const match = address.match(/屏東縣([^鄉鎮市區村]+)/);
+  return match ? match[1].trim() : ''; // 分離出在地址字串中，"鄉"、"鎮"、"市"、"區"、"村"
+}
+
+// Function to extract town or city name from formatted address
+function extractTownOrCity_temp(address) {
+  // Match and capture the town or city excluding postal code and "台灣"
+  const match = address.match(/(?:\d{3}台灣)?([^鄉鎮市區村]+)/);
+  return match ? match[1].trim() : ''; // Extract town or city excluding postal code and "台灣"
 }
