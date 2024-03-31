@@ -44,7 +44,7 @@ function encrypt() {
     }
 
     const c = modInverse(a, 26);
-    const d = (26 - b) % 26;
+    const d = ((c * -b) % 26 + 26 ) % 26;
 
     encryptResultElement.innerHTML = `加密結果：${ciphertext}<br>\
                                       解密參數：<br>c=${c}, d=${d}<br>\
@@ -65,7 +65,7 @@ function decrypt() {
         const charCode = ciphertext.charCodeAt(i);
 
         if (charCode >= 65 && charCode <= 90) {
-            const decryptedCharCode = (c * ((charCode - 65) + d + 26)) % 26 + 65;
+            const decryptedCharCode = (c * (charCode - 65) + d) % 26 + 65;
             plaintext += String.fromCharCode(decryptedCharCode);
         } else {
             plaintext += ciphertext[i];
