@@ -126,6 +126,15 @@ canvas.height = window.innerHeight * 0.6;
 // 設置網子大小
 const netSize = 150;
 
+// 獲取當前日期
+const currentDate = new Date();
+const currentMonth = currentDate.getMonth() + 1; // 月份從 0 開始，所以需要加 1
+const currentDay = currentDate.getDate();
+
+// 設置蝌蚪數量
+const numberOfTadpoles = 1000;
+
+
 // 創建池塘實例
 const pond = new Pond(10, 10, canvas.width * 0.75, canvas.height * 0.75);
 
@@ -138,7 +147,6 @@ const net = new Net(pond.x + pond.width / 2 - netSize / 2, pond.y + pond.height 
 
 // 創建蝌蚪實例
 const tadpoles = [];
-const numberOfTadpoles = 50; // 蝌蚪数量
 
 for (let i = 0; i < numberOfTadpoles; i++) {
   const x = Math.random() * pond.width + pond.x;
