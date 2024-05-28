@@ -1,242 +1,275 @@
-var tadpoleBreed;
-var netBreed;
-var arrowBreed;
-var scoopBreed;
+// 定義蝌蚪類別
+class Tadpole {
+  constructor(x, y, size, speed) {
+    this.x = x;
+    this.y = y;
+    this.size = size;
+    this.speed = speed;
+    this.direction = Math.random() * Math.PI * 2; // 隨機方向
+    this.changeDirectionFrequency = 0.3; // 改變方向的頻率
+    this.marked = false; // 是否已標記
+    this.color = '#00ff00'; // 初始化顏色為綠色
 
-function startup() {
-  setup();
-}
-
-function setup() {
-  clearAll();
-  resetTicks();
-  setupPatches();
-  setupTadpoles();
-}
-
-function setupPatches() {
-  patches.forEach(function (patch) {
-    patch.setColor(cyan + 4);
-    if (patch.pycor < 35) {
-      patch.setColor(blue);
-    }
-    if (patch.pycor < 37 && patch.pxcor > 50) {
-      patch.setColor(brown - 2);
-    }
-    if (Pond_Size === "Small" && patch.pycor < 20) {
-      patch.setColor(brown - 2);
-    }
-    if (Pond_Size === "Medium" && patch.pycor < 10) {
-      patch.setColor(brown - 2);
-    }
-    if (patch.pycor >= 37 && patch.pycor < 47 && patch.pxcor > 51) {
-      patch.setColor(black);
-    }
-    if (
-      patch.pxcor > 52 &&
-      patch.pxcor < 64 &&
-      patch.pycor > 37 &&
-      patch.pycor < 47
-    ) {
-      patch.setColor(blue);
-    }
-    if (
-      patch.pxcor > 70 &&
-      patch.pxcor < 90 &&
-      patch.pycor > 37 &&
-      patch.pycor < 47
-    ) {
-      patch.setColor(blue);
-    }
-    if (
-      patch.pycor >= 37 &&
-      patch.pycor < 47 &&
-      patch.pxcor > 64 &&
-      patch.pxcor < 70
-    ) {
-      patch.setColor(cyan + 4);
-    }
-    if (patch.pycor >= 37 && patch.pycor < 47 && patch.pxcor > 90) {
-      patch.setColor(cyan + 4);
-    }
-  });
-}
-
-function setupTadpoles() {
-  if (Population_Size === "Small") {
-    createTadpole(25, function (tadpole) {
-      tadpole.setShape("tadpoleR");
-      tadpole.setYCor(25 + random(10));
-      tadpole.setXCor(3 + random(45));
-      tadpole.setSize(2);
-      tadpole.setColor(green);
-    });
   }
-  if (Population_Size === "Medium") {
-    createTadpole(100, function (tadpole) {
-      tadpole.setShape("tadpoleR");
-      tadpole.setYCor(25 + random(10));
-      tadpole.setXCor(3 + random(45));
-      tadpole.setSize(2);
-      tadpole.setColor(green);
-    });
+
+  // 更新蝌蚪位置
+  update(pond) {
+    // 隨機改變方向
+    if (Math.random() < this.changeDirectionFrequency) {
+      this.direction += (Math.random() - 0.5) * Math.PI / 4;
+    }
+
+    this.x += Math.cos(this.direction) * this.speed;
+    this.y += Math.sin(this.direction) * this.speed;
+
+    // 確保蝌蚪在池塘中
+    if (this.x < pond.x || this.x > pond.x + pond.width || this.y < pond.y || this.y > pond.y + pond.height) {
+      this.direction += Math.PI; // 超出邊界改變方向
+    }
   }
-  if (Population_Size === "Large") {
-    createTadpole(250, function (tadpole) {
-      tadpole.setShape("tadpoleR");
-      tadpole.setYCor(25 + random(10));
-      tadpole.setXCor(3 + random(45));
-      tadpole.setSize(2);
-      tadpole.setColor(green);
-    });
+
+  // 繪製蝌蚪
+  draw(ctx) {
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+    ctx.fillStyle = this.color;
+    ctx.fill();
+    ctx.closePath();
   }
-  createNet(1, function (net) {
-    net.setXCor(85);
-    net.setYCor(20);
-    net.setShape("net");
-    net.setSize(5);
-  });
-  createNet(1, function (net) {
-    net.setXCor(86);
-    net.setYCor(15);
-    net.setShape("net");
-    net.setSize(8);
-  });
-  createNet(1, function (net) {
-    net.setXCor(87);
-    net.setYCor(10);
-    net.setShape("net");
-    net.setSize(11);
-  });
-  createArrow(1, function (arrow) {
-    arrow.setSize(4);
-    arrow.setHeading(90);
-    arrow.setColor(orange);
-    arrow.setXCor(79);
-    if (net_Size === "Small") {
-      arrow.setYCor(20);
-    }
-    if (net_Size === "Medium") {
-      arrow.setYCor(15);
-    }
-    if (net_Size === "Large") {
-      arrow.setYCor(10);
-    }
-  });
+
+  // 改變蝌蚪顏色
+  changeColor() {
+    this.color = this.marked ? '#ff0000' : '#00ff00';
+  }
+
 }
 
-function go() {
-  moveTadpoles();
-  scoop.forEach(function (s) {
-    s.die();
-  });
-}
+// 定義池塘類別
+class Pond {
+  constructor(x, y, width, height) {
+    this.x = x;
+    this.y = y;
+    this.width = width;
+    this.height = height;
+  }
 
-function moveTadpoles() {
-  tadpole.forEach(function (t) {
-    var patchAheadColor = t.patchAhead(1.8).pcolor;
-    if (patchAheadColor === blue) {
-      t.fd(0.5);
-      t.setHeading(t.heading + random(20) - random(20));
-    } else {
-      t.setHeading(t.heading + 190 - random(-20));
-    }
-    if (t.heading < 180) {
-      t.setShape("tadpoleR");
-    } else {
-      t.setShape("TadpoleL");
-    }
-  });
-}
-
-function dipNet() {
-  createScoop(1, function (scoop) {
-    scoop.setXCor(25);
-    scoop.setYCor(26);
-    scoop.setShape("Net");
-    if (net_Size === "Small") {
-      scoop.setSize(5);
-      tadpole.inRadius(3, function (t) {
-        t.setXCor(57);
-        t.setYCor(42);
-      });
-    }
-    if (net_Size === "Medium") {
-      scoop.setSize(8);
-      tadpole.inRadius(6, function (t) {
-        t.setXCor(57);
-        t.setYCor(42);
-      });
-    }
-    if (net_Size === "Large") {
-      scoop.setSize(11);
-      tadpole.inRadius(9, function (t) {
-        t.setXCor(57);
-        t.setYCor(42);
-      });
-    }
-  });
-}
-
-function release() {
-  tadpole
-    .with(function (t) {
-      return t.xcor > 51 && t.xcor < 67;
-    })
-    .forEach(function (t) {
-      t.setXCor(25);
-      t.setYCor(30);
-    });
-}
-
-function hold() {
-  tadpole
-    .with(function (t) {
-      return t.xcor > 51 && t.xcor < 67;
-    })
-    .forEach(function (t) {
-      t.setXCor(80);
-      t.setYCor(42);
-    });
-}
-
-function emptyPen() {
-  tadpole
-    .with(function (t) {
-      return t.xcor > 68;
-    })
-    .forEach(function (t) {
-      t.setXCor(25);
-      t.setYCor(30);
-    });
-}
-
-function mark() {
-  var markedTadpoles = tadpole.filter(function (t) {
-    return t.xcor > 51 && t.xcor < 67 && t.color === green;
-  });
-  if (markedTadpoles.length > 0) {
-    var randomTadpole = randomOneOf(markedTadpoles);
-    randomTadpole.setColor(red);
+  // 繪製池塘
+  draw(ctx) {
+    ctx.beginPath();
+    ctx.rect(this.x, this.y, this.width, this.height);
+    ctx.strokeStyle = '#0000ff';
+    ctx.stroke();
+    ctx.closePath();
   }
 }
 
-function unmark() {
-  var unmarkedTadpoles = tadpole.filter(function (t) {
-    return t.xcor > 51 && t.xcor < 67 && t.color === red;
-  });
-  if (unmarkedTadpoles.length > 0) {
-    var randomTadpole = randomOneOf(unmarkedTadpoles);
-    randomTadpole.setColor(green);
+
+
+// 定義魚缸類別
+class Aquarium {
+  constructor(x, y, width, height) {
+    this.x = x;
+    this.y = y;
+    this.width = width;
+    this.height = height;
+  }
+
+  // 繪製魚缸
+  draw(ctx) {
+    ctx.beginPath();
+    ctx.rect(this.x, this.y, this.width, this.height);
+    ctx.strokeStyle = '#ff0000';
+    ctx.stroke();
+    ctx.closePath();
   }
 }
 
-function unmarkAll() {
-  tadpole
-    .with(function (t) {
-      return t.color === red;
-    })
-    .forEach(function (t) {
-      t.setColor(green);
+// 定義網子類別
+class Net {
+  constructor(x, y, width, height) {
+    this.x = x;
+    this.y = y;
+    this.width = width;
+    this.height = height;
+  }
+
+  // 檢查蝌蚪是否在網子範圍內
+  catch(tadpoles) {
+    return tadpoles.filter(tadpole =>
+      tadpole.x > this.x && tadpole.x < this.x + this.width &&
+      tadpole.y > this.y && tadpole.y < this.y + this.height
+    );
+  }
+
+  // 繪製網子
+  draw(ctx) {
+    ctx.beginPath();
+    ctx.rect(this.x, this.y, this.width, this.height);
+    ctx.strokeStyle = '#000000';
+    ctx.stroke();
+    ctx.closePath();
+  }
+}
+
+
+
+
+// 獲取畫布
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+// 設置畫布大小
+canvas.width = window.innerWidth * 0.6;
+canvas.height = window.innerHeight * 0.6;
+
+
+// 設置網子大小
+const netSize = 150;
+
+// 創建池塘實例
+const pond = new Pond(10, 10, canvas.width * 0.75, canvas.height * 0.75);
+
+// 創建魚缸實例
+const aquarium = new Aquarium(pond.x + pond.width + 10, pond.y, canvas.width * 0.2, canvas.width * 0.2);
+
+
+// 創建網子實例
+const net = new Net(pond.x + pond.width / 2 - netSize / 2, pond.y + pond.height / 2 - netSize / 2 , netSize , netSize );
+
+// 創建蝌蚪實例
+const tadpoles = [];
+const numberOfTadpoles = 50; // 蝌蚪数量
+
+for (let i = 0; i < numberOfTadpoles; i++) {
+  const x = Math.random() * pond.width + pond.x;
+  const y = Math.random() * pond.height + pond.y;
+  const size = 5; // 蝌蚪大小
+  const speed = Math.random() * 2 + 1; // 蝌蚪速度
+  tadpoles.push(new Tadpole(x, y, size, speed));
+}
+
+// 動畫狀態
+let isAnimating = true;
+let tadpolesInAquarium = [];
+
+
+// 動畫循環
+function animate() {
+  if (isAnimating) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // 繪製池塘
+    pond.draw(ctx);
+    aquarium.draw(ctx);
+    net.draw(ctx);
+
+
+    // 更新和繪製蝌蚪
+    tadpoles.forEach(tadpole => {
+      if (!tadpolesInAquarium.includes(tadpole)) {
+        tadpole.update(pond);
+      }
+      tadpole.draw(ctx);
     });
+
+    tadpolesInAquarium.forEach(tadpole => {
+      tadpole.update(aquarium);
+      tadpole.draw(ctx);
+    });
+  }
+  requestAnimationFrame(animate);
+}
+
+// 開始動畫
+animate();
+
+
+
+// 切換按鈕事件
+const toggleBtn = document.getElementById('toggleBtn');
+toggleBtn.addEventListener('click', () => {
+  isAnimating = !isAnimating;
+  toggleBtn.textContent = isAnimating ? '暫停' : '繼續';
+});
+
+
+// 捕捉按鈕事件
+const netBtn = document.getElementById('catchBtn');
+catchBtn.addEventListener('click', () => {
+  const caughtTadpoles = net.catch(tadpoles);
+
+  // 將捕捉到的蝌蚪移動到魚缸
+  caughtTadpoles.forEach(tadpole => {
+    if (!tadpolesInAquarium.includes(tadpole)) {
+      tadpole.x = aquarium.x + Math.random() * aquarium.width;
+      tadpole.y = aquarium.y + Math.random() * aquarium.height;
+      tadpolesInAquarium.push(tadpole);
+    }
+  });
+  // 更新並顯示訊息
+  updateInfo();
+});
+
+
+
+
+// 釋放按鈕事件
+const releaseBtn = document.getElementById('releaseBtn');
+releaseBtn.addEventListener('click', () => {
+  // 將魚缸中的所有蝌蚪釋放回池塘
+  tadpolesInAquarium.forEach(tadpole => {
+    const newX = pond.x + Math.random() * pond.width;
+    const newY = pond.y + Math.random() * pond.height;
+    tadpole.x = newX;
+    tadpole.y = newY;
+  });
+  // 清空魚缸中的蝌蚪
+  tadpolesInAquarium = [];
+
+  // 更新並顯示訊息
+  updateInfo();
+});
+
+
+// 標記按鈕事件
+const markBtn = document.getElementById('markBtn');
+markBtn.addEventListener('click', () => {
+  // 找到第一個未標記的蝌蚪，將其標記為已標記，改變顏色
+  for (let i = 0; i < tadpolesInAquarium.length; i++) {
+    if (!tadpolesInAquarium[i].marked) {
+      tadpolesInAquarium[i].marked = true;
+      tadpolesInAquarium[i].changeColor();
+      break; // 找到一個未標記的就結束循環
+    }
+  }
+  // 更新並顯示訊息
+  updateInfo();
+
+});
+
+// 全部標記按鈕事件
+const markAllBtn = document.getElementById('markAllBtn');
+markAllBtn.addEventListener('click', () => {
+  // 將所有未標記的蝌蚪標記為已標記，改變顏色
+  tadpolesInAquarium.forEach(tadpole => {
+    if (!tadpole.marked) {
+      tadpole.marked = true;
+      tadpole.changeColor();
+    }
+  });
+  // 更新並顯示訊息
+  updateInfo();
+});
+
+
+// 更新並顯示訊息
+function updateInfo() {
+  const tadpolesCountElement = document.getElementById('tadpolesCount');
+  const markedTadpolesCountElement = document.getElementById('markedTadpolesCount');
+  const markedPondTadpolesCountElement = document.getElementById('markedPondTadpolesCount');
+
+  tadpolesCountElement.textContent = tadpolesInAquarium.length;
+  markedTadpolesCountElement.textContent = tadpolesInAquarium.filter(tadpole => tadpole.marked).length;
+  //markedPondTadpolesCountElement.textContent = tadpoles.filter(tadpole => tadpole.marked && !tadpolesInAquarium.includes(tadpole)).length;
+  markedPondTadpolesCountElement.textContent = tadpoles.filter(tadpole => tadpole.marked).length;
 }
