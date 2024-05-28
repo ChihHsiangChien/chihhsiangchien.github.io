@@ -151,7 +151,7 @@ const tadpoles = [];
 for (let i = 0; i < numberOfTadpoles; i++) {
   const x = Math.random() * pond.width + pond.x;
   const y = Math.random() * pond.height + pond.y;
-  const size = 5; // 蝌蚪大小
+  const size = canvas.width / 500; // 蝌蚪大小
   const speed = Math.random() * 2 + 1; // 蝌蚪速度
   tadpoles.push(new Tadpole(x, y, size, speed));
 }
