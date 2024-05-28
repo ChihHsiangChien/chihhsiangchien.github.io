@@ -123,8 +123,6 @@ canvas.width = window.innerWidth * 0.6;
 canvas.height = window.innerHeight * 0.6;
 
 
-// 設置網子大小
-const netSize = 150;
 
 // 獲取當前日期
 const currentDate = new Date();
@@ -140,6 +138,9 @@ const pond = new Pond(10, 10, canvas.width * 0.75, canvas.height * 0.75);
 
 // 創建魚缸實例
 const aquarium = new Aquarium(pond.x + pond.width + 10, pond.y, canvas.width * 0.2, canvas.width * 0.2);
+
+// 設置網子大小
+const netSize = pond.width/4;
 
 
 // 創建網子實例
