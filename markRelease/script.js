@@ -22,9 +22,21 @@ class Tadpole {
     this.x += Math.cos(this.direction) * this.speed;
     this.y += Math.sin(this.direction) * this.speed;
 
-    // 確保蝌蚪在池塘中
-    if (this.x < pond.x || this.x > pond.x + pond.width || this.y < pond.y || this.y > pond.y + pond.height) {
-      this.direction += Math.PI; // 超出邊界改變方向
+    // 确保蝌蚪在池塘内，接近池塘時逐漸改變方向
+    if (this.x - this.size < pond.x) {
+      this.x = pond.x + this.size;
+      this.direction = Math.PI - this.direction;
+    } else if (this.x + this.size > pond.x + pond.width) {
+      this.x = pond.x + pond.width - this.size;
+      this.direction = Math.PI - this.direction;
+    }
+
+    if (this.y - this.size < pond.y) {
+      this.y = pond.y + this.size;
+      this.direction = -this.direction;
+    } else if (this.y + this.size > pond.y + pond.height) {
+      this.y = pond.y + pond.height - this.size;
+      this.direction = -this.direction;
     }
   }
 
@@ -101,6 +113,11 @@ class Net {
     );
   }
 
+  catchRandom(tadpoles) {
+    // 隨機捕捉
+    return tadpoles.filter(() => Math.random() < 0.01);
+  }
+
   // 繪製網子
   draw(ctx) {
     ctx.beginPath();
@@ -123,14 +140,10 @@ canvas.width = window.innerWidth * 0.6;
 canvas.height = window.innerHeight * 0.6;
 
 
+// 設置捕捉數量
+const maxCaughtTadpoles = 100; // 最大捕捉數量
+let caughtTadpolesCount = 0; //   已經捕獲數量
 
-// 獲取當前日期
-const currentDate = new Date();
-const currentMonth = currentDate.getMonth() + 1; // 月份從 0 開始，所以需要加 1
-const currentDay = currentDate.getDate();
-
-// 設置蝌蚪數量
-const numberOfTadpoles = 1000;
 
 
 // 創建池塘實例
@@ -140,21 +153,28 @@ const pond = new Pond(10, 10, canvas.width * 0.75, canvas.height * 0.75);
 const aquarium = new Aquarium(pond.x + pond.width + 10, pond.y, canvas.width * 0.2, canvas.width * 0.2);
 
 // 設置網子大小
-const netSize = pond.width/4;
+const netSize = pond.width / 4;
 
 
 // 創建網子實例
-const net = new Net(pond.x + pond.width / 2 - netSize / 2, pond.y + pond.height / 2 - netSize / 2 , netSize , netSize );
+const net = new Net(pond.x + pond.width / 2 - netSize / 2, pond.y + pond.height / 2 - netSize / 2, netSize, netSize);
+
+
+let tadpoles = [];
 
 // 創建蝌蚪實例
-const tadpoles = [];
+function initializeTadpoles() {
+  const numberOfTadpoles = Math.floor(Math.random() * 1001) + 1000;
+  tadpoles = [];
 
-for (let i = 0; i < numberOfTadpoles; i++) {
-  const x = Math.random() * pond.width + pond.x;
-  const y = Math.random() * pond.height + pond.y;
-  const size = canvas.width / 500; // 蝌蚪大小
-  const speed = Math.random() * 2 + 1; // 蝌蚪速度
-  tadpoles.push(new Tadpole(x, y, size, speed));
+  for (let i = 0; i < numberOfTadpoles; i++) {
+    const x = Math.random() * pond.width + pond.x;
+    const y = Math.random() * pond.height + pond.y;
+    const size = canvas.width / 500; // 蝌蚪大小
+    const speed = Math.random() * 2 + 1; // 蝌蚪速度
+    tadpoles.push(new Tadpole(x, y, size, speed));
+
+  }
 }
 
 // 動畫狀態
@@ -170,7 +190,7 @@ function animate() {
     // 繪製池塘
     pond.draw(ctx);
     aquarium.draw(ctx);
-    net.draw(ctx);
+    //net.draw(ctx);
 
 
     // 更新和繪製蝌蚪
@@ -189,7 +209,8 @@ function animate() {
   requestAnimationFrame(animate);
 }
 
-// 開始動畫
+// 初始化與開始動畫
+initializeTadpoles();
 animate();
 
 
@@ -202,17 +223,23 @@ toggleBtn.addEventListener('click', () => {
 });
 
 
-// 捕捉按鈕事件
+// 捕捉按鈕 事件
 const netBtn = document.getElementById('catchBtn');
 catchBtn.addEventListener('click', () => {
-  const caughtTadpoles = net.catch(tadpoles);
+
+  // 清空 message
+  message.innerHTML = '';
+
+  const caughtTadpoles = net.catchRandom(tadpoles);
 
   // 將捕捉到的蝌蚪移動到魚缸
   caughtTadpoles.forEach(tadpole => {
-    if (!tadpolesInAquarium.includes(tadpole)) {
+    if (caughtTadpolesCount < maxCaughtTadpoles && !tadpolesInAquarium.includes(tadpole)) {
       tadpole.x = aquarium.x + Math.random() * aquarium.width;
       tadpole.y = aquarium.y + Math.random() * aquarium.height;
       tadpolesInAquarium.push(tadpole);
+      caughtTadpolesCount++; // 更新已捕捉数量
+
     }
   });
   // 更新並顯示訊息
@@ -222,25 +249,29 @@ catchBtn.addEventListener('click', () => {
 
 
 
-// 釋放按鈕事件
+// 釋放按鈕 事件
 const releaseBtn = document.getElementById('releaseBtn');
 releaseBtn.addEventListener('click', () => {
   // 將魚缸中的所有蝌蚪釋放回池塘
   tadpolesInAquarium.forEach(tadpole => {
-    const newX = pond.x + Math.random() * pond.width;
-    const newY = pond.y + Math.random() * pond.height;
+    // const newX = pond.x + Math.random() * pond.width;
+    // const newY = pond.y + Math.random() * pond.height;
+    const newX = pond.x + 0.5 * pond.width;
+    const newY = pond.y + 0.5 * pond.height;
     tadpole.x = newX;
     tadpole.y = newY;
   });
   // 清空魚缸中的蝌蚪
   tadpolesInAquarium = [];
+  caughtTadpolesCount = 0;
+
 
   // 更新並顯示訊息
   updateInfo();
 });
 
 
-// 標記按鈕事件
+// 標記1隻按鈕 事件
 const markBtn = document.getElementById('markBtn');
 markBtn.addEventListener('click', () => {
   // 找到第一個未標記的蝌蚪，將其標記為已標記，改變顏色
@@ -253,16 +284,45 @@ markBtn.addEventListener('click', () => {
   }
   // 更新並顯示訊息
   updateInfo();
-
 });
 
-// 全部標記按鈕事件
+// 全部標記按鈕 事件
 const markAllBtn = document.getElementById('markAllBtn');
 markAllBtn.addEventListener('click', () => {
   // 將所有未標記的蝌蚪標記為已標記，改變顏色
   tadpolesInAquarium.forEach(tadpole => {
     if (!tadpole.marked) {
       tadpole.marked = true;
+      tadpole.changeColor();
+    }
+  });
+  // 更新並顯示訊息
+  updateInfo();
+});
+
+// 取消標記1隻按鈕 事件
+const unmarkBtn = document.getElementById('unmarkBtn');
+unmarkBtn.addEventListener('click', () => {
+  // 找到第一個標記的蝌蚪，將其標記為未標記，改變顏色
+  for (let i = 0; i < tadpolesInAquarium.length; i++) {
+    if (tadpolesInAquarium[i].marked) {
+      tadpolesInAquarium[i].marked = false;
+      tadpolesInAquarium[i].changeColor();
+      break; // 找到一個未標記的就結束循環
+    }
+  }
+  // 更新並顯示訊息
+  updateInfo();
+});
+
+
+// 取消全部標記按鈕 事件
+const unmarkAllBtn = document.getElementById('unmarkAllBtn');
+unmarkAllBtn.addEventListener('click', () => {
+  // 將所有已標記的蝌蚪標記為未標記，改變顏色
+  tadpolesInAquarium.forEach(tadpole => {
+    if (tadpole.marked) {
+      tadpole.marked = false;
       tadpole.changeColor();
     }
   });
@@ -282,3 +342,43 @@ function updateInfo() {
   //markedPondTadpolesCountElement.textContent = tadpoles.filter(tadpole => tadpole.marked && !tadpolesInAquarium.includes(tadpole)).length;
   markedPondTadpolesCountElement.textContent = tadpoles.filter(tadpole => tadpole.marked).length;
 }
+
+// 推測答案判斷
+const guessInput = document.getElementById('guessInput');
+const submitGuessBtn = document.getElementById('submitGuessBtn');
+const message = document.getElementById('message');
+
+// 提交答案 按鈕事件
+submitGuessBtn.addEventListener('click', () => {
+  const guess = parseInt(guessInput.value);
+  const totalTadpoles = tadpoles.length;
+  const error = Math.abs(totalTadpoles - guess);
+  const errorPercentage = (error / totalTadpoles) * 100;
+  message.innerHTML = `誤差百分比: ${errorPercentage.toFixed(2)}%<br>(實際數量: ${totalTadpoles})`;
+
+  // 清空輸入框
+  guessInput.value = '';
+
+  //重置蝌蚪
+  initializeTadpoles();
+});
+
+
+
+
+// 重置 按鈕事件
+const resetBtn = document.getElementById('resetBtn');
+resetBtn.addEventListener('click', () => {
+  // 清空輸入框
+  guessInput.value = '';
+
+  // 清空 message
+  message.innerHTML = '';
+
+  //重置蝌蚪
+  initializeTadpoles();
+
+    // 更新並顯示訊息
+    updateInfo();
+
+});
