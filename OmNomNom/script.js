@@ -1,11 +1,24 @@
-// Card data
-const cards = [
-    { type: 'mouse', value: 1 },
-    { type: 'cat', value: 2 },
-    { type: 'dog', value: 3 },
-    { type: 'cheese', value: 1 },
-    // Add more cards as needed
+const grid = [
+  ["蜘蛛", "胡蜂", "蝶蛾"],
+  ["秧雞", "赤蛙", "蚊蠅"],
+  ["斑龜", "水蠆", "蝌蚪"],
 ];
+
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+canvas.width = 700;
+canvas.height = 600;
+const gridSize = 3;
+const cellVspace = 0; // 框框的垂直間距
+const cellHspace = 15; // 框框的水平間距
+const handsVspace = 10;
+const handsHspace = 10;
+const handsWidth = 100;
+const handsHeight= canvas.height - 2 * handsVspace;
+const cellWidth =
+  (canvas.width - handsWidth - (gridSize + 1) * cellHspace) / gridSize;
+const cellHeight = (canvas.height - (gridSize + 1) * cellVspace) / gridSize;
 
 let playerHand = [];
 let computerHand = [];
@@ -13,63 +26,80 @@ let centralPile = [];
 
 // Initialize game
 function initGame() {
-    playerHand = drawCards(5);
-    computerHand = drawCards(5);
-    centralPile = [];
-    renderHands();
+  drawHands();
+  drawGrid();
+  drawText();
 }
 
-// Draw cards
-function drawCards(num) {
-    let hand = [];
-    for (let i = 0; i < num; i++) {
-        const randomIndex = Math.floor(Math.random() * cards.length);
-        hand.push(cards[randomIndex]);
+function drawHands() {
+    ctx.strokeStyle = "black";
+    ctx.lineWidth = 2;
+
+    ctx.beginPath();
+    ctx.moveTo(handsHspace, handsVspace);
+    ctx.lineTo(handsHspace + handsWidth, handsVspace);
+    ctx.lineTo(handsHspace + handsWidth, handsVspace + handsHeight);
+    ctx.lineTo(handsHspace, handsVspace + handsHeight);
+    ctx.closePath(); // 連接起始點與終點
+    ctx.stroke();
+}
+
+function drawGrid() {
+  ctx.strokeStyle = "black";
+  ctx.lineWidth = 2;
+
+  for (let col = 0; col < grid.length; col++) {
+    for (let row = 0; row < grid[col].length; row++) {
+      ctx.beginPath();
+      ctx.moveTo(
+        handsHspace + handsWidth + col * cellWidth + (col + 1) * cellHspace,
+        row * cellHeight + (row + 1) * cellVspace
+      );
+      ctx.lineTo(
+        handsHspace + handsWidth + (col + 1) * cellWidth + (col + 1) * cellHspace,
+        row * cellHeight + (row + 1) * cellVspace
+      );
+      ctx.lineTo(
+        handsHspace + handsWidth + (col + 1) * cellWidth + (col + 1) * cellHspace,
+        (row + 1) * cellHeight + (row + 1) * cellVspace
+      );
+      ctx.lineTo(
+        handsHspace + handsWidth + col * cellWidth + (col + 1) * cellHspace,
+        (row + 1) * cellHeight + (row + 1) * cellVspace
+      );
+      ctx.closePath(); // 連接起始點與終點
+
+      ctx.stroke();
     }
-    return hand;
+  }
 }
 
-// Render hands
-function renderHands() {
-    const playerHandDiv = document.getElementById('player-hand');
-    const computerHandDiv = document.getElementById('computer-hand');
+function drawText() {
+  ctx.font = "20px Arial";
+  ctx.textAlign = "start";
+  ctx.textBaseline = "top";
 
-    playerHandDiv.innerHTML = '';
-    computerHandDiv.innerHTML = '';
-
-    playerHand.forEach(card => {
-        const cardDiv = document.createElement('div');
-        cardDiv.innerHTML = `${card.type} (${card.value})`;
-        playerHandDiv.appendChild(cardDiv);
-    });
-
-    computerHand.forEach(card => {
-        const cardDiv = document.createElement('div');
-        cardDiv.innerHTML = `?`;
-        computerHandDiv.appendChild(cardDiv);
-    });
-}
-
-// Play a round
-function playRound() {
-    const playerCard = playerHand.pop();
-    const computerCard = computerHand.pop();
-
-    centralPile.push(playerCard, computerCard);
-
-    // Simple logic: highest value card wins
-    if (playerCard.value > computerCard.value) {
-        alert('Player wins the round!');
-    } else if (playerCard.value < computerCard.value) {
-        alert('Computer wins the round!');
-    } else {
-        alert('It\'s a tie!');
+  for (let col = 0; col < grid.length; col++) {
+    for (let row = 0; row < grid[col].length; row++) {
+      const text = grid[col][row];
+      const x = handsHspace + handsWidth + col * cellWidth + (col + 1) * cellHspace;
+      const y = row * cellHeight + (row + 1) * cellVspace;
+      ctx.fillText(text, x, y);
     }
-
-    renderHands();
+  }
 }
 
-document.getElementById('play-button').addEventListener('click', playRound);
+
+// 骰子按鈕 事件
+const diceBtn = document.getElementById('diceBtn');
+diceBtn.addEventListener('click', () => {
+    // 
+
+});
+
+
+
+
 
 // Start the game
 initGame();
