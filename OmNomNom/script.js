@@ -10,7 +10,7 @@ const ctx = canvas.getContext("2d");
 canvas.width = 700;
 canvas.height = 600;
 const gridSize = 3;
-const cellVspace = 0; // 框框的垂直間距
+const cellVspace = 3; // 框框的垂直間距
 const cellHspace = 15; // 框框的水平間距
 const handsVspace = 10;
 const handsHspace = 10;
@@ -84,7 +84,7 @@ function drawText() {
       const text = grid[col][row];
       const x = handsHspace + handsWidth + col * cellWidth + (col + 1) * cellHspace;
       const y = row * cellHeight + (row + 1) * cellVspace;
-      ctx.fillText(text, x, y);
+      ctx.fillText(text, x, y+4);
     }
   }
 }
