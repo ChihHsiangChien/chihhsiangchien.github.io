@@ -19,17 +19,17 @@ async function runEstimation() {
     const markedCounts = estimates.map(e => e[0]);
     const populationEstimates = estimates.map(e => e[1]);
     
-    chart1 = plotData(markedCounts, populationEstimates, 'scatterPlot1', '每次取樣計算出的估計族群大小 vs 標記數量', '標記數量', '估計值');
+    chart1 = plotData(markedCounts, populationEstimates, 'scatterPlot1', '標記數量 vs 每次取樣計算出的估計族群大小', '標記數量', '估計值');
     
     const averageEstimates = calculateAverageEstimates(estimates);
     const avgMarkedCounts = Object.keys(averageEstimates).map(Number);
     const avgPopulationEstimates = Object.values(averageEstimates);
     
-    chart2 = plotData(avgMarkedCounts, avgPopulationEstimates, 'scatterPlot2', '平均估計值 vs 標記數量', '標記數量', '平均估計值');
+    chart2 = plotData(avgMarkedCounts, avgPopulationEstimates, 'scatterPlot2', '標記數量 vs 平均估計值', '標記數量', '平均估計值');
     
     const errors = populationEstimates.map(est => calculateError(totalPopulation, est));
     
-    chart3 = plotData(markedCounts, errors, 'scatterPlot3', '誤差百分比 vs 標記數量', '標記數量', '誤差百分比');
+    chart3 = plotData(markedCounts, errors, 'scatterPlot3', '標記數量 vs 誤差百分比', '標記數量', '誤差百分比');
 }
 
 async function captureRecaptureEstimate(totalPopulation, sampleSize, numSamples, progressCallback) {
