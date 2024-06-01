@@ -20,7 +20,7 @@ async function runEstimation() {
     const populationEstimates = estimates.map(e => e[1]);
     
     chart1 = plotData(markedCounts, populationEstimates, 'scatterPlot1', '標記數量 vs 每次取樣計算出的估計族群大小', '標記數量', '估計值');
-    
+
     const averageEstimates = calculateAverageEstimates(estimates);
     const avgMarkedCounts = Object.keys(averageEstimates).map(Number);
     const avgPopulationEstimates = Object.values(averageEstimates);
@@ -28,8 +28,9 @@ async function runEstimation() {
     chart2 = plotData(avgMarkedCounts, avgPopulationEstimates, 'scatterPlot2', '標記數量 vs 平均估計值', '標記數量', '平均估計值');
     
     const errors = populationEstimates.map(est => calculateError(totalPopulation, est));
-    
-    chart3 = plotData(markedCounts, errors, 'scatterPlot3', '標記數量 vs 誤差百分比', '標記數量', '誤差百分比');
+
+    chart3 = plotData(markedCounts, errors, 'scatterPlot3', '標記數量 vs 誤差百分比(半對數圖)', '標記數量', '誤差百分比', true);
+
 }
 
 async function captureRecaptureEstimate(totalPopulation, sampleSize, numSamples, progressCallback) {
@@ -94,10 +95,12 @@ function calculateAverageEstimates(estimates) {
     return averages;
 }
 
-function plotData(xData, yData, canvasId, title, xLabel, yLabel) {
-    const ctx = document.getElementById(canvasId).getContext('2d');
+function plotData(xData, yData, canvasId, title, xLabel, yLabel, logarithmic = false) {
+    const canvas = document.getElementById(canvasId);
+    const ctx = canvas.getContext('2d');
     
-    return new Chart(ctx, {
+    
+    const options = {
         type: 'scatter',
         data: {
             datasets: [{
@@ -112,24 +115,49 @@ function plotData(xData, yData, canvasId, title, xLabel, yLabel) {
                 x: {
                     title: {
                         display: true,
-                        text: xLabel
+                        text: xLabel,
+                        font: {
+                            size: 14  // Change x-axis title font size here
+                        }
+                    },
+                    ticks: {
+                        font: {
+                            size: 12  // Change x-axis labels font size here
+                        }
                     }
                 },
                 y: {
+                    type: logarithmic ? 'logarithmic' : 'linear',
                     title: {
                         display: true,
-                        text: yLabel
+                        text: yLabel,
+                        font: {
+                            size: 14  // Change y-axis title font size here
+                        }
+                    },
+                    ticks: {
+                        font: {
+                            size: 12  // Change y-axis labels font size here
+                        },
+                        callback: function(value, index, values) {
+                            return Number(value.toString());
+                        }
                     }
                 }
             },
             plugins: {
                 title: {
                     display: true,
-                    text: title
+                    text: title,
+                    font: {
+                        size: 18  // Change chart title font size here
+                    }
                 }
             }
         }
-    });
+    };
+
+    return new Chart(ctx, options);
 }
 
 function updateProgress(currentIteration, totalIterations) {
