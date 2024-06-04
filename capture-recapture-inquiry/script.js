@@ -35,7 +35,8 @@ async function runEstimation() {
     "scatterPlot1",
     "標記數量 vs 每次取樣計算出的估計族群大小",
     "標記數量",
-    "估計值"
+    "估計值",
+    "rgba(75, 0, 192, 0.6)"
   );
 
   const averageEstimates = calculateAverageEstimates(estimates);
@@ -48,7 +49,8 @@ async function runEstimation() {
     "scatterPlot2",
     "標記數量 vs 平均數估計族群",
     "標記數量",
-    "平均值"
+    "平均值",
+    "rgba(75, 192, 192, 0.6)"
   );
 
   const avgErrors = avgMarkedCounts.map((count) => {
@@ -63,6 +65,7 @@ async function runEstimation() {
     "標記數量 vs 平均值誤差百分比(半對數圖)",
     "標記數量",
     "誤差百分比",
+    "rgba(75, 192, 192, 0.6)",
     true
   );
 
@@ -77,7 +80,8 @@ async function runEstimation() {
     "scatterPlot4",
     "標記數量 vs 用中位數估計族群",
     "標記數量",
-    "中位數"
+    "中位數",
+    "rgba(192, 75, 192, 0.6)"
   );
 
   // 用中位數計算誤差
@@ -93,6 +97,7 @@ async function runEstimation() {
     "標記數量 vs 中位數誤差百分比(半對數圖)",
     "標記數量",
     "誤差百分比",
+    "rgba(192, 75, 192, 0.6)",
     true
   );
 
@@ -212,7 +217,8 @@ function plotData(
   title,
   xLabel,
   yLabel,
-  logarithmic = false
+  color = "rgba(75, 192, 192, 0.6)", // 默认颜色
+  logarithmic = false,
 ) {
   const canvas = document.getElementById(canvasId);
   const ctx = canvas.getContext("2d");
@@ -227,12 +233,14 @@ function plotData(
         {
           label: title,
           data: xData.map((x, i) => ({ x, y: yData[i] })),
-          backgroundColor: "rgba(75, 192, 192, 0.6)",
+          backgroundColor: color,
           pointRadius: 3,
         },
       ],
     },
     options: {
+      responsive: false, // 禁用响应式，以确保图表不自动调整大小
+
       scales: {
         x: {
           title: {
@@ -290,7 +298,9 @@ function plotCombinedData(
   canvasId,
   title,
   xLabel,
-  yLabel
+  yLabel,
+  avgColor = "rgba(75, 192, 192, 0.6)",
+  medColor = "rgba(192, 75, 192, 0.6)"
 ) {
   const canvas = document.getElementById(canvasId);
   const ctx = canvas.getContext("2d");
@@ -305,13 +315,13 @@ function plotCombinedData(
         {
           label: "平均值",
           data: avgXData.map((x, i) => ({ x, y: avgYData[i] })),
-          backgroundColor: "rgba(75, 192, 192, 0.6)",
+          backgroundColor: avgColor,
           pointRadius: 3,
         },
         {
           label: "中位數",
           data: medXData.map((x, i) => ({ x, y: medYData[i] })),
-          backgroundColor: "rgba(192, 75, 192, 0.6)",
+          backgroundColor: medColor,
           pointRadius: 3,
         },
       ],
