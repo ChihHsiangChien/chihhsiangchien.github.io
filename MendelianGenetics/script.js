@@ -145,15 +145,42 @@ document.getElementById("breedButton").addEventListener("click", () => {
     // Initialize offspring chromosomes array
     const offspringChromosomes = [];
 
-    // Iterate through each chromosome pair
-    for (let i = 0; i < parent1Chromosomes.length; i++) {
-      // Randomly choose one of the parent's chromosomes
-      const randomParentIndex = Math.random() < 0.5 ? 0 : 1;
-      const selectedChromosome =
-        randomParentIndex === 0 ? parent1Chromosomes[i] : parent2Chromosomes[i];
+    // Determine the maximum number of chromosomes between both parents
+    const maxChromosomeNumber = Math.max(
+      parent1Chromosomes.length,
+      parent2Chromosomes.length
+    );
 
-      // Add to offspring chromosomes array
-      offspringChromosomes.push(selectedChromosome);
+    // Iterate through each chromosome number
+    for (
+      let chromosomeNumber = 1;
+      chromosomeNumber <= maxChromosomeNumber;
+      chromosomeNumber++
+    ) {
+      // Find all chromosomes from parent 1 with the current chromosome number
+      const parent1MatchingChromosomes = parent1Chromosomes.filter(
+        (chromosome) => chromosome.number === chromosomeNumber
+      );
+
+      // Find all chromosomes from parent 2 with the current chromosome number
+      const parent2MatchingChromosomes = parent2Chromosomes.filter(
+        (chromosome) => chromosome.number === chromosomeNumber
+      );
+
+      // Randomly select one chromosome from parent 1 if available
+      if (parent1MatchingChromosomes.length > 0) {
+        const randomIndex = Math.floor(
+          Math.random() * parent1MatchingChromosomes.length
+        );
+        offspringChromosomes.push(parent1MatchingChromosomes[randomIndex]);
+      }
+      // Randomly select one chromosome from parent 2 if available
+      if (parent2MatchingChromosomes.length > 0) {
+        const randomIndex = Math.floor(
+          Math.random() * parent2MatchingChromosomes.length
+        );
+        offspringChromosomes.push(parent2MatchingChromosomes[randomIndex]);
+      }
     }
 
     // Determine position for the offspring sprite
