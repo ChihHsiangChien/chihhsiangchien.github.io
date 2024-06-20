@@ -4,10 +4,8 @@ class Sprite {
     this.x = x;
     this.y = y;
     this.r = r;
-    //this.alleles = alleles;
     this.chromosomes = chromosomes; // An array of chromosome objects
-
-    this.color = this.determineColor();
+    //this.faceColor = this.determineFaceColor();
     this.z = 0; // Z attribute to keep track of z-order
 
     this.svgNS = "http://www.w3.org/2000/svg";
@@ -17,20 +15,6 @@ class Sprite {
   async init(translateX, translateY) {
     await this.createSprite(translateX, translateY);
     this.setDraggable();
-  }
-  /*
-  determineColor() {
-    return this.alleles.includes("A") ? "blue" : "yellow";
-  }
-  */
-
-  determineColor() {
-    // Example: Determine color based on the alleles of the first chromosome
-    if (this.chromosomes[0].alleles.includes("A")) {
-      return "blue";
-    } else {
-      return "yellow";
-    }
   }
 
   async createSprite(translateX, translateY) {
@@ -51,42 +35,33 @@ class Sprite {
       this.group.setAttribute("data-translateX", translateX); // Store translateX
       this.group.setAttribute("data-translateY", translateY); // Store translateY
 
-      const chromosomesJSON = JSON.stringify(this.chromosomes);
-      this.group.setAttribute("data-chromosomes", chromosomesJSON);
+      this.group.setAttribute(
+        "data-chromosomes",
+        JSON.stringify(this.chromosomes)
+      );
+      this.group.setAttribute(
+        "data-chromosomes",
+        JSON.stringify(this.chromosomes)
+      );
+
       //this.group.setAttribute("data-chromosomes", this.chromosomes); // Store translateY
 
-      this.group.setAttribute("transform",`translate(${translateX},${translateY})`);
-      this.group.querySelector("#face").setAttribute("fill", this.color);
+      this.group.setAttribute(
+        "transform",
+        `translate(${translateX},${translateY})`
+      );
 
-      // 解析 JSON 字串以獲取染色體陣列
-      const chromosomes = JSON.parse(chromosomesJSON);
+      // 設定表現型
+      this.group.querySelector("#face").setAttribute("fill", this.faceColor);
 
-      // 提取並組合 alleles
-      let combinedAlleles = "";
-      chromosomes.forEach((chromosome) => {
-        combinedAlleles += chromosome.alleles.join("");
-      });
+      // Set alleles text content
+      this.setAllelesText();
 
-        // Sort alleles with uppercase first
-        const sortedAlleles = combinedAlleles.split('').sort((a, b) => {
-          if (a.toUpperCase() === a && b.toUpperCase() !== b) return -1;
-          if (a.toUpperCase() !== a && b.toUpperCase() === b) return 1;
-          return a.localeCompare(b);
-      }).join('');
+      // Set face color
+      this.setFaceColor();
 
-      // 設置 #alleles-text 的內容
-      this.group.querySelector('#alleles-text').textContent = sortedAlleles;
-      //this.group.querySelector("#alleles-text").textContent = combinedAlleles;
-      
-      
-
-      /*
-      this.chromosomes.forEach((chromosome, index) => {
-        this.group
-          .querySelector("#face")
-          .setAttribute("fill", chromosome.determineColor());
-      });
-      */
+      // Set eyeball
+      this.setEyeball();
 
       // 将 g 元素添加到主 SVG
       const mainSvg = document
@@ -99,6 +74,75 @@ class Sprite {
       }
     } catch (error) {
       console.error("Error creating sprite:", error);
+    }
+  }
+
+  setAllelesText() {
+    // Group alleles by chromosome number
+    const alleleGroups = {};
+    this.chromosomes.forEach((chromosome) => {
+      const number = chromosome.number;
+      if (!alleleGroups[number]) {
+        alleleGroups[number] = [];
+      }
+      alleleGroups[number].push(...chromosome.alleles);
+    });
+
+    // Sort alleles within each chromosome group
+    Object.keys(alleleGroups).forEach((number) => {
+      alleleGroups[number].sort((a, b) =>
+        a.localeCompare(b, undefined, { caseFirst: "upper" })
+      );
+    });
+
+    // Concatenate sorted alleles by chromosome number order
+    let allelesText = "";
+    Object.keys(alleleGroups)
+      .sort((a, b) => parseInt(a) - parseInt(b))
+      .forEach((number) => {
+        allelesText += alleleGroups[number].join("");
+      });
+
+    // Update #alleles-text content
+    this.group.querySelector("#alleles-text").textContent = allelesText;
+  }
+
+  setFaceColor() {
+    const hasDominantAllele = this.chromosomes.some((chromosome) =>
+      chromosome.alleles.includes("A")
+    );
+    const faceColor = hasDominantAllele ? "blue" : "yellow";
+    this.group.querySelector("#face").setAttribute("fill", faceColor);
+  }
+
+  setEyeball() {
+    const alleles = this.chromosomes.flatMap(
+      (chromosome) => chromosome.alleles
+    );
+    const countB = alleles.filter((allele) => allele === "b").length;
+
+    if (countB === 2) {
+      // Replace left eyeball with a line
+      const leftEyeball = this.group.querySelector("#left-eyeball");
+      const leftLine = document.createElementNS(this.svgNS, "line");
+      leftLine.setAttribute("x1", "-20");
+      leftLine.setAttribute("y1", "-16");
+      leftLine.setAttribute("x2", "-10");
+      leftLine.setAttribute("y2", "-16");
+      leftLine.setAttribute("stroke", "black");
+      leftLine.setAttribute("stroke-width", "2");
+      leftEyeball.replaceWith(leftLine);
+
+      // Replace right eyeball with a line
+      const rightEyeball = this.group.querySelector("#right-eyeball");
+      const rightLine = document.createElementNS(this.svgNS, "line");
+      rightLine.setAttribute("x1", "20");
+      rightLine.setAttribute("y1", "-16");
+      rightLine.setAttribute("x2", "10");
+      rightLine.setAttribute("y2", "-16");
+      rightLine.setAttribute("stroke", "black");
+      rightLine.setAttribute("stroke-width", "2");
+      rightEyeball.replaceWith(rightLine);
     }
   }
 
