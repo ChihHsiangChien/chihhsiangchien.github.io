@@ -14,20 +14,20 @@ const breedingArea = { x: 180, y: 10, width: 100, height: 100 };
 const offspringArea = { x: 290, y: 10, width: 280, height: 380 };
 
 // Gene pool
-const genePool = ['A', 'A', 'a', 'a', 'a'];
+const genePool = ["A", "A", "a", "a", "a"];
 
 // Draw areas
 function drawArea(area, className) {
-    const rect = document.createElementNS(svgNS, "rect");
-    rect.setAttribute("x", area.x);
-    rect.setAttribute("y", area.y);
-    rect.setAttribute("width", area.width);
-    rect.setAttribute("height", area.height);
-    rect.setAttribute("fill", "white");
-    rect.setAttribute("stroke", "black");
-    rect.setAttribute("stroke-width", "2");
-    rect.setAttribute("class", className);
-    svg.appendChild(rect);
+  const rect = document.createElementNS(svgNS, "rect");
+  rect.setAttribute("x", area.x);
+  rect.setAttribute("y", area.y);
+  rect.setAttribute("width", area.width);
+  rect.setAttribute("height", area.height);
+  rect.setAttribute("fill", "white");
+  rect.setAttribute("stroke", "black");
+  rect.setAttribute("stroke-width", "2");
+  rect.setAttribute("class", className);
+  svg.appendChild(rect);
 }
 
 drawArea(defaultArea, "default-area");
@@ -36,91 +36,150 @@ drawArea(offspringArea, "offspring-area");
 
 // Function to get random allele from genePool
 function getRandomAllele() {
-    return genePool[Math.floor(Math.random() * genePool.length)];
+  return genePool[Math.floor(Math.random() * genePool.length)];
 }
 
 // Function to generate random alleles pair
 function getRandomAlleles() {
-    return `${getRandomAllele()},${getRandomAllele()}`;
+  return `${getRandomAllele()},${getRandomAllele()}`;
 }
 
 // Function to generate regular positions arranged in 2 columns
 function getRegularPosition(index, total, maxWidth, maxHeight, columns) {
-    //const columns = 2;
-    const rows = Math.ceil(total / columns);
-    const spacingX = maxWidth / (columns + 1);
-    const spacingY = maxHeight / (rows + 1);
+  //const columns = 2;
+  const rows = Math.ceil(total / columns);
+  const spacingX = maxWidth / (columns + 1);
+  const spacingY = maxHeight / (rows + 1);
 
-    const column = index % columns;
-    const row = Math.floor(index / columns);
+  const column = index % columns;
+  const row = Math.floor(index / columns);
 
-    return {
-        x: (column + 1) * spacingX,
-        y: (row + 1) * spacingY
-    };
+  return {
+    x: (column + 1) * spacingX,
+    y: (row + 1) * spacingY,
+  };
 }
 
 // Create and add 6 sprites to the SVG with random alleles
 const totalSprites = 6;
 
 for (let i = 1; i <= totalSprites; i++) {
-    const alleles = getRandomAlleles();
-    const position = getRegularPosition(i - 1, totalSprites, defaultArea.width, defaultArea.height, 2);
-    new Sprite(`sprite${i}`, defaultArea.x + position.x, defaultArea.y + position.y, 25, alleles);
+  const position = getRegularPosition(
+    i - 1,
+    totalSprites,
+    defaultArea.width,
+    defaultArea.height,
+    2
+  );
+
+  const spriteChromosomes = [
+    new Chromosome(1, [getRandomAllele()]),
+    new Chromosome(1, [getRandomAllele()]),
+  ];
+  new Sprite(
+    `sprite${i}`,
+    defaultArea.x + position.x,
+    defaultArea.y + position.y,
+    25,
+    spriteChromosomes
+  );
 }
 
 // Breeding function
 let offspringCount = 0;
 
 document.getElementById("breedButton").addEventListener("click", () => {
-    const spritesInBreedingArea = [];
-    svg.querySelectorAll(".sprite").forEach(sprite => {
-        const translateX = parseFloat(sprite.getAttribute('data-translateX'));
-        const translateY = parseFloat(sprite.getAttribute('data-translateY'));
+  const spritesInBreedingArea = [];
+  svg.querySelectorAll(".sprite").forEach((sprite) => {
+    const translateX = parseFloat(sprite.getAttribute("data-translateX"));
+    const translateY = parseFloat(sprite.getAttribute("data-translateY"));
 
-        if (!isNaN(translateX) && !isNaN(translateY)) {
-            // Check if the sprite is within the breeding area bounds
-            if (translateX > breedingArea.x && translateX < breedingArea.x + breedingArea.width &&
-                translateY > breedingArea.y && translateY < breedingArea.y + breedingArea.height) {
-                spritesInBreedingArea.push(sprite);
-            }
-        } else {
-            console.error('Invalid coordinates for sprite:', sprite);
-        }
-    });
-
-    if (spritesInBreedingArea.length == 2) {
-        const parent1Alleles = spritesInBreedingArea[0].querySelector("text").textContent.split(",");
-        const parent2Alleles = spritesInBreedingArea[1].querySelector("text").textContent.split(",");
-
-        const offspringAlleles = `${parent1Alleles[Math.floor(Math.random() * 2)]},${parent2Alleles[Math.floor(Math.random() * 2)]}`;
-        const position = getRegularPosition(offspringCount, 30, offspringArea.width, offspringArea.height, 4);
-        const sprite = new Sprite(`offspring${offspringCount + 1}`, offspringArea.x + position.x, offspringArea.y + position.y, 25, offspringAlleles);
-        offspringCount++;
+    if (!isNaN(translateX) && !isNaN(translateY)) {
+      // Check if the sprite is within the breeding area bounds
+      if (
+        translateX > breedingArea.x &&
+        translateX < breedingArea.x + breedingArea.width &&
+        translateY > breedingArea.y &&
+        translateY < breedingArea.y + breedingArea.height
+      ) {
+        spritesInBreedingArea.push(sprite);
+      }
+    } else {
+      console.error("Invalid coordinates for sprite:", sprite);
     }
+  });
+  // 繁殖區有兩個個體
+  if (spritesInBreedingArea.length === 2) {
+    const parent1ChromosomesAttr =
+      spritesInBreedingArea[0].getAttribute("data-chromosomes");
+    const parent2ChromosomesAttr =
+      spritesInBreedingArea[1].getAttribute("data-chromosomes");
+
+    // Parse JSON string to get arrays of chromosome objects
+    const parent1Chromosomes = JSON.parse(parent1ChromosomesAttr);
+    const parent2Chromosomes = JSON.parse(parent2ChromosomesAttr);
+
+    // Initialize offspring chromosomes array
+    const offspringChromosomes = [];
+
+    // Iterate through each chromosome pair
+    for (let i = 0; i < parent1Chromosomes.length; i++) {
+      // Randomly choose one of the parent's chromosomes
+      const randomParentIndex = Math.random() < 0.5 ? 0 : 1;
+      const selectedChromosome =
+        randomParentIndex === 0 ? parent1Chromosomes[i] : parent2Chromosomes[i];
+
+      // Add to offspring chromosomes array
+      offspringChromosomes.push(selectedChromosome);
+    }
+
+    // Determine position for the offspring sprite
+    const position = getRegularPosition(
+      offspringCount,
+      32,
+      offspringArea.width,
+      offspringArea.height,
+      4
+    );
+
+    // Create new offspring sprite with the generated chromosomes
+    new Sprite(
+      `offspring${offspringCount + 1}`,
+      offspringArea.x + position.x,
+      offspringArea.y + position.y,
+      25,
+      offspringChromosomes
+    );
+
+    offspringCount++;
+  }
 });
 
 document.getElementById("deleteButton").addEventListener("click", () => {
-    const spritesInOffspringArea = [];
-    svg.querySelectorAll(".sprite").forEach(sprite => {
-        const translateX = parseFloat(sprite.getAttribute('data-translateX'));
-        const translateY = parseFloat(sprite.getAttribute('data-translateY'));
+  const spritesInOffspringArea = [];
+  svg.querySelectorAll(".sprite").forEach((sprite) => {
+    const translateX = parseFloat(sprite.getAttribute("data-translateX"));
+    const translateY = parseFloat(sprite.getAttribute("data-translateY"));
 
-        if (!isNaN(translateX) && !isNaN(translateY)) {
-            // Check if the sprite is within the offspring area bounds
-            if (translateX > offspringArea.x && translateX < offspringArea.x + offspringArea.width &&
-                translateY > offspringArea.y && translateY < offspringArea.y + offspringArea.height) {
-                spritesInOffspringArea.push(sprite);
-            }
-        } else {
-            console.error('Invalid coordinates for sprite:', sprite);
-        }
-    });
+    if (!isNaN(translateX) && !isNaN(translateY)) {
+      // Check if the sprite is within the offspring area bounds
+      if (
+        translateX > offspringArea.x &&
+        translateX < offspringArea.x + offspringArea.width &&
+        translateY > offspringArea.y &&
+        translateY < offspringArea.y + offspringArea.height
+      ) {
+        spritesInOffspringArea.push(sprite);
+      }
+    } else {
+      console.error("Invalid coordinates for sprite:", sprite);
+    }
+  });
 
-    // Remove sprites found in the offspring area
-    spritesInOffspringArea.forEach(sprite => {
-        sprite.remove(); // Remove the sprite from the SVG
-        // Optionally, perform any additional cleanup or logic here
-    });
-    offspringCount = 0;
+  // Remove sprites found in the offspring area
+  spritesInOffspringArea.forEach((sprite) => {
+    sprite.remove(); // Remove the sprite from the SVG
+    // Optionally, perform any additional cleanup or logic here
+  });
+  offspringCount = 0;
 });
