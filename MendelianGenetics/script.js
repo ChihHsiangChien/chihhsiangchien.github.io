@@ -233,3 +233,19 @@ document.getElementById("deleteButton").addEventListener("click", () => {
   });
   offspringCount = 0;
 });
+
+
+// 獲取滑鼠/觸摸點擊位置的相對座標
+function getMouseCoordinatesMoving(event, rect) {
+    var mouseX, mouseY;
+  
+    if (event.type === "mousemove") {
+      mouseX = event.clientX - rect.left;
+      mouseY = event.clientY - rect.top;
+    } else if (event.type === "touchmove") {
+      mouseX = event.touches[0].clientX - rect.left;
+      mouseY = event.touches[0].clientY - rect.top;
+    }
+  
+    return { mouseX, mouseY };
+  }
