@@ -5,7 +5,7 @@ class Sprite {
     this.y = y;
     this.r = r;
     this.chromosomes = chromosomes; // An array of chromosome objects
-    //this.faceColor = this.determineFaceColor();
+
     this.z = 0; // Z attribute to keep track of z-order
 
     this.svgNS = "http://www.w3.org/2000/svg";
@@ -155,26 +155,11 @@ class Sprite {
     const onMouseMove = (e) => {
       const dx = e.clientX - offsetX;
       const dy = e.clientY - offsetY;
-      this.group.setAttribute(
-        "transform",
-        `translate(${dx}, ${dy}) ${transform}`
-      );
-      // Get the current transformation matrix
-      const transformMatrix = this.group.transform.baseVal.consolidate().matrix;
-
-      // Update data-translateX and data-translateY attributes
-      if (transformMatrix) {
-        const newX = transformMatrix.e || 0;
-        const newY = transformMatrix.f || 0;
-        this.group.setAttribute("data-translateX", newX);
-        this.group.setAttribute("data-translateY", newY);
-      }
+      this.updateTransform(dx, dy, transform);
     };
 
-    this.group.addEventListener("mousedown", (e) => {
-      const mainSvg = document
-        .getElementById("svgContainer")
-        .querySelector("svg");
+    const onMouseDown = (e) => {
+      const mainSvg = document.getElementById('svgContainer').querySelector('svg');
       if (mainSvg) {
         mainSvg.appendChild(this.group);
       }
@@ -182,22 +167,28 @@ class Sprite {
       offsetX = e.clientX;
       offsetY = e.clientY;
       const transformMatrix = this.group.getCTM();
-      transform = transformMatrix
-        ? `matrix(${transformMatrix.a}, ${transformMatrix.b}, ${transformMatrix.c}, ${transformMatrix.d}, ${transformMatrix.e}, ${transformMatrix.f})`
-        : "";
-      this.group.style.cursor = "grabbing";
+      transform = transformMatrix ? `matrix(${transformMatrix.a}, ${transformMatrix.b}, ${transformMatrix.c}, ${transformMatrix.d}, ${transformMatrix.e}, ${transformMatrix.f})` : '';
+      this.group.style.cursor = 'grabbing';
 
-      document.addEventListener("mousemove", onMouseMove);
-      document.addEventListener(
-        "mouseup",
-        () => {
-          document.removeEventListener("mousemove", onMouseMove);
-          this.group.style.cursor = "grab";
-        },
-        { once: true }
-      );
-    });
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', () => {
+        document.removeEventListener('mousemove', onMouseMove);
+        this.group.style.cursor = 'grab';
+      }, { once: true });
+    };
 
-    this.group.style.cursor = "grab";
+    this.group.addEventListener('mousedown', onMouseDown);
+    this.group.style.cursor = 'grab';
+  }
+
+  updateTransform(dx, dy, transform) {
+    this.group.setAttribute('transform', `translate(${dx}, ${dy}) ${transform}`);
+    const transformMatrix = this.group.transform.baseVal.consolidate().matrix;
+    if (transformMatrix) {
+      const newX = transformMatrix.e || 0;
+      const newY = transformMatrix.f || 0;
+      this.group.setAttribute('data-translateX', newX);
+      this.group.setAttribute('data-translateY', newY);
+    }
   }
 }
