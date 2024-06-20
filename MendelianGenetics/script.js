@@ -9,12 +9,20 @@ svg.setAttribute("viewBox", "0 0 600 400");
 document.getElementById("svgContainer").appendChild(svg);
 
 // Define areas
-const defaultArea = { x: 10, y: 10, width: 160, height: 180 };
+const defaultArea = { x: 10, y: 10, width: 160, height: 200 };
 const breedingArea = { x: 180, y: 10, width: 100, height: 100 };
 const offspringArea = { x: 290, y: 10, width: 280, height: 380 };
 
 // Gene pool
-const genePool = ["A", "A", "a", "a", "a"];
+const genePools = [
+  { chromosome: 1, alleles: ["Z", "z"] },
+  { chromosome: 1, alleles: ["A", "A", "a", "a", "a"] },
+  { chromosome: 2, alleles: ["B", "b"] },
+  { chromosome: 2, alleles: ["C", "c"] },
+  { chromosome: 3, alleles: ["D", "d"] },
+  { chromosome: 4, alleles: ["X"] },
+  { chromosome: 4, alleles: ["X", "Y"] }, // Example sex chromosomes
+];
 
 // Draw areas
 function drawArea(area, className) {
@@ -35,13 +43,18 @@ drawArea(breedingArea, "breeding-area");
 drawArea(offspringArea, "offspring-area");
 
 // Function to get random allele from genePool
-function getRandomAllele() {
-  return genePool[Math.floor(Math.random() * genePool.length)];
-}
+function getRandomAlleles(chromosomeNumber) {
+  // 找到给定染色体编号的所有基因池
+  const genePoolsForChromosome = genePools.filter(
+    (pool) => pool.chromosome === chromosomeNumber
+  );
 
-// Function to generate random alleles pair
-function getRandomAlleles() {
-  return `${getRandomAllele()},${getRandomAllele()}`;
+  // 遍历每个基因池，并从中选择一个随机等位基因
+  const alleles = genePoolsForChromosome.map((pool) => {
+    return pool.alleles[Math.floor(Math.random() * pool.alleles.length)];
+  });
+
+  return alleles;
 }
 
 // Function to generate regular positions arranged in 2 columns
@@ -61,7 +74,7 @@ function getRegularPosition(index, total, maxWidth, maxHeight, columns) {
 }
 
 // Create and add 6 sprites to the SVG with random alleles
-const totalSprites = 6;
+const totalSprites = 8;
 
 for (let i = 1; i <= totalSprites; i++) {
   const position = getRegularPosition(
@@ -71,11 +84,21 @@ for (let i = 1; i <= totalSprites; i++) {
     defaultArea.height,
     2
   );
-
+  /*
   const spriteChromosomes = [
     new Chromosome(1, [getRandomAllele()]),
     new Chromosome(1, [getRandomAllele()]),
   ];
+  */
+
+  const spriteChromosomes = [];
+  for (let j = 1; j <= 3; j++) {
+    // Add both chromosomes for each pair
+    spriteChromosomes.push(new Chromosome(j, getRandomAlleles(j)));
+    spriteChromosomes.push(new Chromosome(j, getRandomAlleles(j)));
+  }
+  spriteChromosomes.push(new Chromosome(4, getRandomAlleles(4)));
+
   new Sprite(
     `sprite${i}`,
     defaultArea.x + position.x,
