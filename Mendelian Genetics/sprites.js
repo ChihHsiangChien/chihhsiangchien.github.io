@@ -1,124 +1,118 @@
 class Sprite {
-    constructor(id, x, y, r, alleles) {
-        this.id = id;
-        this.x = 0;
-        this.y = 0;
-        this.r = r;
-        this.alleles = alleles;
+  constructor(id, x, y, r, alleles) {
+    this.id = id;
+    this.x = x;
+    this.y = y;
+    this.r = r;
+    this.alleles = alleles;
 
-        this.color = this.determineColor();
-        this.z = 0;  // Z attribute to keep track of z-order
+    this.color = this.determineColor();
+    this.z = 0; // Z attribute to keep track of z-order
 
-        this.svgNS = "http://www.w3.org/2000/svg";
-        this.createSprite(x,y);
+    this.svgNS = "http://www.w3.org/2000/svg";
+    this.init(x, y);
+  }
+
+  async init(translateX, translateY) {
+    await this.createSprite(translateX, translateY);
+    this.setDraggable();
+  }
+
+  determineColor() {
+    return this.alleles.includes("A") ? "blue" : "yellow";
+  }
+
+  async createSprite(translateX, translateY) {
+    try {
+      const response = await fetch("sprite.svg");
+      const svgText = await response.text();
+      const parser = new DOMParser();
+      const svgDoc = parser.parseFromString(svgText, "image/svg+xml");
+
+      const template = svgDoc.getElementById("sprite-template");
+      if (!template) throw new Error("Template not found in sprite.svg");
+
+      this.group = template.cloneNode(true);
+
+      this.group.setAttribute("id", this.id);
+      this.group.setAttribute("class", "sprite");
+
+      this.group.setAttribute("data-translateX", translateX); // Store translateX
+      this.group.setAttribute("data-translateY", translateY); // Store translateY
+
+      this.group.setAttribute(
+        "transform",
+        `translate(${translateX},${translateY})`
+      );
+      this.group.querySelector("#face").setAttribute("fill", this.color);
+      this.group.querySelector("#alleles-text").textContent = this.alleles;
+
+      // 将 g 元素添加到主 SVG
+      const mainSvg = document
+        .getElementById("svgContainer")
+        .querySelector("svg");
+      if (mainSvg) {
+        mainSvg.appendChild(this.group);
+      } else {
+        throw new Error("Main SVG not found");
+      }
+    } catch (error) {
+      console.error("Error creating sprite:", error);
     }
-    determineColor() {
-        return this.alleles.includes('A') ? 'blue' : 'yellow';
-    }
-    createSprite(x,y) {
-        // Create the face (circle)
-        this.face = document.createElementNS(this.svgNS, "circle");
-        this.face.setAttribute("cx", this.x);
-        this.face.setAttribute("cy", this.y);
-        this.face.setAttribute("r", this.r);
-        this.face.setAttribute("fill", this.color);
-        this.face.setAttribute("stroke", "black");
-        this.face.setAttribute("stroke-width", "2");
-        this.face.setAttribute("id", this.id);
+  }
 
-        // Create the left eye (circle)
-        this.leftEye = document.createElementNS(this.svgNS, "circle");
-        this.leftEye.setAttribute("cx", this.x - this.r * .8);
-        this.leftEye.setAttribute("cy", this.y - this.r * .8);
-        this.leftEye.setAttribute("r", "10");
-        this.leftEye.setAttribute("fill", "white");
-        this.leftEye.setAttribute("stroke", "black");
-        this.leftEye.setAttribute("stroke-width", "2");
+  getGroup() {
+    return this.group;
+  }
 
-        this.leftEyeball = document.createElementNS(this.svgNS, "circle");
-        this.leftEyeball.setAttribute("cx", this.x - this.r * .8);
-        this.leftEyeball.setAttribute("cy", this.y - this.r * .8);
-        this.leftEyeball.setAttribute("r", "5");
-        this.leftEyeball.setAttribute("fill", "black");
-        this.leftEyeball.setAttribute("stroke", "black");
-        this.leftEyeball.setAttribute("stroke-width", "2");
+  setDraggable() {
+    let offsetX, offsetY, transform;
+    const onMouseMove = (e) => {
+      const dx = e.clientX - offsetX;
+      const dy = e.clientY - offsetY;
+      this.group.setAttribute(
+        "transform",
+        `translate(${dx}, ${dy}) ${transform}`
+      );
+      // Get the current transformation matrix
+      const transformMatrix = this.group.transform.baseVal.consolidate().matrix;
 
+      // Update data-translateX and data-translateY attributes
+      if (transformMatrix) {
+        const newX = transformMatrix.e || 0;
+        const newY = transformMatrix.f || 0;
+        this.group.setAttribute("data-translateX", newX);
+        this.group.setAttribute("data-translateY", newY);
+      }
+    };
 
-        // Create the right eye (circle)
-        this.rightEye = document.createElementNS(this.svgNS, "circle");
-        this.rightEye.setAttribute("cx", this.x + this.r * .8);
-        this.rightEye.setAttribute("cy", this.y - this.r * .8);
-        this.rightEye.setAttribute("r", "10");
-        this.rightEye.setAttribute("fill", "white");
-        this.rightEye.setAttribute("stroke", "black");
-        this.rightEye.setAttribute("stroke-width", "2");
+    this.group.addEventListener("mousedown", (e) => {
+      const mainSvg = document
+        .getElementById("svgContainer")
+        .querySelector("svg");
+      if (mainSvg) {
+        mainSvg.appendChild(this.group);
+      }
 
-        this.rightEyeball = document.createElementNS(this.svgNS, "circle");
-        this.rightEyeball.setAttribute("cx", this.x + this.r * .8);
-        this.rightEyeball.setAttribute("cy", this.y - this.r * .8);
-        this.rightEyeball.setAttribute("r", "5");
-        this.rightEyeball.setAttribute("fill", "black");
-        this.rightEyeball.setAttribute("stroke", "black");
-        this.rightEyeball.setAttribute("stroke-width", "2");        
+      offsetX = e.clientX;
+      offsetY = e.clientY;
+      const transformMatrix = this.group.getCTM();
+      transform = transformMatrix
+        ? `matrix(${transformMatrix.a}, ${transformMatrix.b}, ${transformMatrix.c}, ${transformMatrix.d}, ${transformMatrix.e}, ${transformMatrix.f})`
+        : "";
+      this.group.style.cursor = "grabbing";
 
-        this.text = document.createElementNS(svgNS, "text");
-        this.text.setAttribute("x", this.x);
-        this.text.setAttribute("y", this.y);
-        this.text.setAttribute("dominant-baseline", "middle");
-        this.text.setAttribute("text-anchor", "middle");
-        this.text.textContent = this.alleles;
+      document.addEventListener("mousemove", onMouseMove);
+      document.addEventListener(
+        "mouseup",
+        () => {
+          document.removeEventListener("mousemove", onMouseMove);
+          this.group.style.cursor = "grab";
+        },
+        { once: true }
+      );
+    });
 
-
-
-
-        // Append elements to the SVG group
-        this.group = document.createElementNS(this.svgNS, "g");
-        this.group.setAttribute("class", "sprite");
-        
-        this.group.setAttribute("transform", `translate(${x},${y})`);
-
-        //this.group.setAttribute("transform", `translate(0,0)`);
-
-
-        this.group.appendChild(this.face);
-        this.group.appendChild(this.leftEye);
-        this.group.appendChild(this.leftEyeball);        
-        this.group.appendChild(this.rightEye);
-        this.group.appendChild(this.rightEyeball);     
-        this.group.appendChild(this.text);
-               
-
-    }
-
-    getGroup() {
-        return this.group;
-    }
-
-    setDraggable() {
-        let offsetX, offsetY, transform;
-        const onMouseMove = (e) => {
-            const dx = e.clientX - offsetX;
-            const dy = e.clientY - offsetY;
-            this.group.setAttribute('transform', `translate(${dx}, ${dy}) ${transform}`);
-        };
-    
-        this.group.addEventListener('mousedown', (e) => {
-            // Bring the sprite to the top by appending it to the end of the SVG
-            svg.appendChild(this.group);
-    
-            offsetX = e.clientX;
-            offsetY = e.clientY;
-            const transformMatrix = this.group.getCTM();
-            transform = transformMatrix ? `matrix(${transformMatrix.a}, ${transformMatrix.b}, ${transformMatrix.c}, ${transformMatrix.d}, ${transformMatrix.e}, ${transformMatrix.f})` : '';
-            this.group.style.cursor = 'grabbing';
-    
-            document.addEventListener('mousemove', onMouseMove);
-            document.addEventListener('mouseup', () => {
-                document.removeEventListener('mousemove', onMouseMove);
-                this.group.style.cursor = 'grab';
-            }, { once: true });
-        });
-    
-        this.group.style.cursor = 'grab';
-    }
+    this.group.style.cursor = "grab";
+  }
 }
