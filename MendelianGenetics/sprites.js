@@ -229,6 +229,7 @@ class Sprite {
     };
 
     const onTouchMove = (e) => {
+      e.preventDefault(); // Prevent default touch events
       const touch = e.touches[0];
       const dx = touch.clientX - offsetX;
       const dy = touch.clientY - offsetY;
@@ -240,6 +241,7 @@ class Sprite {
     };
 
     const onTouchStart = (e) => {
+      e.preventDefault(); // Prevent default touch events
       startDragging(e, true);
     };
 
