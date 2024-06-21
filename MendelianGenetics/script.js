@@ -84,20 +84,14 @@ for (let i = 1; i <= totalSprites; i++) {
     defaultArea.height,
     2
   );
-  /*
-  const spriteChromosomes = [
-    new Chromosome(1, [getRandomAllele()]),
-    new Chromosome(1, [getRandomAllele()]),
-  ];
-  */
 
   const spriteChromosomes = [];
-  for (let j = 1; j <= 3; j++) {
+  for (let j = 1; j <= 4; j++) {
     // Add both chromosomes for each pair
     spriteChromosomes.push(new Chromosome(j, getRandomAlleles(j)));
     spriteChromosomes.push(new Chromosome(j, getRandomAlleles(j)));
   }
-  spriteChromosomes.push(new Chromosome(4, getRandomAlleles(4)));
+  //spriteChromosomes.push(new Chromosome(4, getRandomAlleles(4)));
 
   new Sprite(
     `sprite${i}`,
@@ -131,7 +125,7 @@ document.getElementById("breedButton").addEventListener("click", () => {
       console.error("Invalid coordinates for sprite:", sprite);
     }
   });
-  // 繁殖區有兩個個體
+  // 繁殖區有兩個個體時
   if (spritesInBreedingArea.length === 2) {
     const parent1ChromosomesAttr =
       spritesInBreedingArea[0].getAttribute("data-chromosomes");
@@ -234,18 +228,23 @@ document.getElementById("deleteButton").addEventListener("click", () => {
   offspringCount = 0;
 });
 
-
 // 獲取滑鼠/觸摸點擊位置的相對座標
 function getMouseCoordinatesMoving(event, rect) {
-    var mouseX, mouseY;
-  
-    if (event.type === "mousemove") {
-      mouseX = event.clientX - rect.left;
-      mouseY = event.clientY - rect.top;
-    } else if (event.type === "touchmove") {
-      mouseX = event.touches[0].clientX - rect.left;
-      mouseY = event.touches[0].clientY - rect.top;
-    }
-  
-    return { mouseX, mouseY };
+  var mouseX, mouseY;
+
+  if (event.type === "mousedown") {
+    mouseX = event.clientX - rect.left;
+    mouseY = event.clientY - rect.top;
+  } else if (event.type === "touchstart") {
+    mouseX = event.touches[0].clientX - rect.left;
+    mouseY = event.touches[0].clientY - rect.top;
+  } else if (event.type === "mousemove") {
+    mouseX = event.clientX - rect.left;
+    mouseY = event.clientY - rect.top;
+  } else if (event.type === "touchmove") {
+    mouseX = event.touches[0].clientX - rect.left;
+    mouseY = event.touches[0].clientY - rect.top;
   }
+
+  return { mouseX, mouseY };
+}

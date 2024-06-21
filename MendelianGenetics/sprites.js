@@ -152,43 +152,78 @@ class Sprite {
 
   setDraggable() {
     let offsetX, offsetY, transform;
+
+    const getMainSvg = () =>
+      document.getElementById("svgContainer").querySelector("svg");
+
+    const startDragging = (e, isTouch = false) => {
+      const point = isTouch ? e.touches[0] : e;
+      const mainSvg = getMainSvg();
+      if (mainSvg) {
+        mainSvg.appendChild(this.group);
+      }
+
+      offsetX = point.clientX;
+      offsetY = point.clientY;
+      const transformMatrix = this.group.getCTM();
+      transform = transformMatrix
+        ? `matrix(${transformMatrix.a}, ${transformMatrix.b}, ${transformMatrix.c}, ${transformMatrix.d}, ${transformMatrix.e}, ${transformMatrix.f})`
+        : "";
+      this.group.style.cursor = "grabbing";
+
+      const moveEvent = isTouch ? "touchmove" : "mousemove";
+      const endEvent = isTouch ? "touchend" : "mouseup";
+
+      const moveHandler = isTouch ? onTouchMove : onMouseMove;
+
+      document.addEventListener(moveEvent, moveHandler);
+      document.addEventListener(
+        endEvent,
+        () => {
+          document.removeEventListener(moveEvent, moveHandler);
+          this.group.style.cursor = "grab";
+        },
+        { once: true }
+      );
+    };
+
     const onMouseMove = (e) => {
       const dx = e.clientX - offsetX;
       const dy = e.clientY - offsetY;
       this.updateTransform(dx, dy, transform);
     };
 
-    const onMouseDown = (e) => {
-      const mainSvg = document.getElementById('svgContainer').querySelector('svg');
-      if (mainSvg) {
-        mainSvg.appendChild(this.group);
-      }
-
-      offsetX = e.clientX;
-      offsetY = e.clientY;
-      const transformMatrix = this.group.getCTM();
-      transform = transformMatrix ? `matrix(${transformMatrix.a}, ${transformMatrix.b}, ${transformMatrix.c}, ${transformMatrix.d}, ${transformMatrix.e}, ${transformMatrix.f})` : '';
-      this.group.style.cursor = 'grabbing';
-
-      document.addEventListener('mousemove', onMouseMove);
-      document.addEventListener('mouseup', () => {
-        document.removeEventListener('mousemove', onMouseMove);
-        this.group.style.cursor = 'grab';
-      }, { once: true });
+    const onTouchMove = (e) => {
+      const touch = e.touches[0];
+      const dx = touch.clientX - offsetX;
+      const dy = touch.clientY - offsetY;
+      this.updateTransform(dx, dy, transform);
     };
 
-    this.group.addEventListener('mousedown', onMouseDown);
-    this.group.style.cursor = 'grab';
+    const onMouseDown = (e) => {
+      startDragging(e, false);
+    };
+
+    const onTouchStart = (e) => {
+      startDragging(e, true);
+    };
+
+    this.group.addEventListener("mousedown", onMouseDown);
+    this.group.addEventListener("touchstart", onTouchStart);
+    this.group.style.cursor = "grab";
   }
 
   updateTransform(dx, dy, transform) {
-    this.group.setAttribute('transform', `translate(${dx}, ${dy}) ${transform}`);
+    this.group.setAttribute(
+      "transform",
+      `translate(${dx}, ${dy}) ${transform}`
+    );
     const transformMatrix = this.group.transform.baseVal.consolidate().matrix;
     if (transformMatrix) {
       const newX = transformMatrix.e || 0;
       const newY = transformMatrix.f || 0;
-      this.group.setAttribute('data-translateX', newX);
-      this.group.setAttribute('data-translateY', newY);
+      this.group.setAttribute("data-translateX", newX);
+      this.group.setAttribute("data-translateY", newY);
     }
   }
 }
