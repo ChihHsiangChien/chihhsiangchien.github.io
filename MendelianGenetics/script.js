@@ -13,6 +13,8 @@ const defaultArea = { x: 10, y: 10, width: 160, height: 200 };
 const breedingArea = { x: 180, y: 10, width: 100, height: 100 };
 const offspringArea = { x: 290, y: 10, width: 280, height: 380 };
 
+const offspringAreaCountLimit = 32;
+
 // Gene pool
 const genePools = [
   { chromosome: 1, alleles: ["Z", "z"] },
@@ -179,8 +181,8 @@ document.getElementById("breedButton").addEventListener("click", () => {
 
     // Determine position for the offspring sprite
     const position = getRegularPosition(
-      offspringCount,
-      32,
+      offspringCount % offspringAreaCountLimit,
+      offspringAreaCountLimit,
       offspringArea.width,
       offspringArea.height,
       4
@@ -228,23 +230,3 @@ document.getElementById("deleteButton").addEventListener("click", () => {
   offspringCount = 0;
 });
 
-// 獲取滑鼠/觸摸點擊位置的相對座標
-function getMouseCoordinatesMoving(event, rect) {
-  var mouseX, mouseY;
-
-  if (event.type === "mousedown") {
-    mouseX = event.clientX - rect.left;
-    mouseY = event.clientY - rect.top;
-  } else if (event.type === "touchstart") {
-    mouseX = event.touches[0].clientX - rect.left;
-    mouseY = event.touches[0].clientY - rect.top;
-  } else if (event.type === "mousemove") {
-    mouseX = event.clientX - rect.left;
-    mouseY = event.clientY - rect.top;
-  } else if (event.type === "touchmove") {
-    mouseX = event.touches[0].clientX - rect.left;
-    mouseY = event.touches[0].clientY - rect.top;
-  }
-
-  return { mouseX, mouseY };
-}
