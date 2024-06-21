@@ -63,6 +63,8 @@ class Sprite {
       // Set eyeball
       this.setEyeball();
 
+      this.setTail()
+
       // 将 g 元素添加到主 SVG
       const mainSvg = document
         .getElementById("svgContainer")
@@ -108,6 +110,7 @@ class Sprite {
   }
 
   setFaceColor() {
+    // 只要有大A ~ 顯性遺傳
     const hasDominantAllele = this.chromosomes.some((chromosome) =>
       chromosome.alleles.includes("A")
     );
@@ -116,6 +119,8 @@ class Sprite {
   }
 
   setEyeball() {
+
+    // 只要是 bb ~ 隱性遺傳
     const alleles = this.chromosomes.flatMap(
       (chromosome) => chromosome.alleles
     );
@@ -143,6 +148,36 @@ class Sprite {
       rightLine.setAttribute("stroke", "black");
       rightLine.setAttribute("stroke-width", "2");
       rightEyeball.replaceWith(rightLine);
+    }
+  }
+
+  setTail() {
+    // 只要有 C ~ 顯性遺傳
+    const hasDominantAllele = this.chromosomes.some((chromosome) =>
+      chromosome.alleles.includes("C")
+    );
+  
+    if (hasDominantAllele) {
+      //const sprite = this.group.querySelectorAll('.sprite');
+      const face = this.group.querySelector('#face');     
+
+      console.log(this);
+
+  
+      if (face) {
+        const tailPath = document.createElementNS(this.svgNS, 'path');
+        tailPath.setAttribute('style', 'fill:blue;stroke:black;stroke-width:2');
+        tailPath.setAttribute('d', 'M 5.5673167,8.9411756 C 17.331503,11.46651 27.181949,7.1981385 34.595237,3.6784866 24.412928,11.621994 18.395379,14.988234 6.710685,16.313789');
+        tailPath.setAttribute('id', 'tail');
+  
+        const tailTipPath = document.createElementNS(this.svgNS, 'path');
+        tailTipPath.setAttribute('style', 'fill:blue;stroke:black;stroke-width:2');
+        tailTipPath.setAttribute('d', 'M 36.651297,4.4896989 A 3.346251,3.0420463 0 0 1 33.305046,7.5317452 3.346251,3.0420463 0 0 1 29.958795,4.4896989 3.346251,3.0420463 0 0 1 33.305046,1.4476526 3.346251,3.0420463 0 0 1 36.651297,4.4896989 Z');
+        tailTipPath.setAttribute('id', 'tailtip');
+  
+        this.group.insertBefore(tailPath, face);
+        this.group.insertBefore(tailTipPath, face);
+      }
     }
   }
 
