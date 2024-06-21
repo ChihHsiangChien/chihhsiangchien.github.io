@@ -230,3 +230,7 @@ document.getElementById("deleteButton").addEventListener("click", () => {
   offspringCount = 0;
 });
 
+document.getElementById("toggleAllelesButton").addEventListener("click", () => {
+
+});
+

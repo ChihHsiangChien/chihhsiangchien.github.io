@@ -8,6 +8,8 @@ class Sprite {
 
     this.z = 0; // Z attribute to keep track of z-order
 
+    this.isAllelesTextVisible = false;
+
     this.svgNS = "http://www.w3.org/2000/svg";
     this.init(x, y);
   }
@@ -56,6 +58,15 @@ class Sprite {
 
       // Set alleles text content
       this.setAllelesText();
+      
+      // Hide the alleles-text initially
+      this.group.querySelector("#alleles-text").style.display = "none";
+
+      document
+        .getElementById("toggleAllelesButton")
+        .addEventListener("click", () => {
+          this.toggleAllelesText();
+        });
 
       // Set face color
       this.setFaceColor();
@@ -63,7 +74,7 @@ class Sprite {
       // Set eyeball
       this.setEyeball();
 
-      this.setTail()
+      this.setTail();
 
       // 将 g 元素添加到主 SVG
       const mainSvg = document
@@ -109,6 +120,19 @@ class Sprite {
     this.group.querySelector("#alleles-text").textContent = allelesText;
   }
 
+  toggleAllelesText() {
+    // Toggle the visibility state
+    this.isAllelesTextVisible = !this.isAllelesTextVisible;
+
+    // Update the display property based on the visibility state
+    const allelesTextElement = this.group.querySelector("#alleles-text");
+    if (this.isAllelesTextVisible) {
+      allelesTextElement.style.display = "block";
+    } else {
+      allelesTextElement.style.display = "none";
+    }
+  }
+
   setFaceColor() {
     // 只要有大A ~ 顯性遺傳
     const hasDominantAllele = this.chromosomes.some((chromosome) =>
@@ -119,7 +143,6 @@ class Sprite {
   }
 
   setEyeball() {
-
     // 只要是 bb ~ 隱性遺傳
     const alleles = this.chromosomes.flatMap(
       (chromosome) => chromosome.alleles
@@ -156,27 +179,39 @@ class Sprite {
     const hasDominantAllele = this.chromosomes.some((chromosome) =>
       chromosome.alleles.includes("C")
     );
-  
+
     if (hasDominantAllele) {
       //const sprite = this.group.querySelectorAll('.sprite');
-      const face = this.group.querySelector('#face');     
+      const faceElement = this.group.querySelector("#face");
+      console.log();
+      if (faceElement) {
+        //setAttribute("fill", faceColor);
+        const faceFill = faceElement.getAttribute("fill");
 
-      console.log(this);
+        const tailPath = document.createElementNS(this.svgNS, "path");
+        tailPath.setAttribute(
+          "style",
+          `fill:${faceFill};stroke:black;stroke-width:2`
+        );
+        tailPath.setAttribute(
+          "d",
+          "M 5.5673167,8.9411756 C 17.331503,11.46651 27.181949,7.1981385 34.595237,3.6784866 24.412928,11.621994 18.395379,14.988234 6.710685,16.313789"
+        );
+        tailPath.setAttribute("id", "tail");
 
-  
-      if (face) {
-        const tailPath = document.createElementNS(this.svgNS, 'path');
-        tailPath.setAttribute('style', 'fill:blue;stroke:black;stroke-width:2');
-        tailPath.setAttribute('d', 'M 5.5673167,8.9411756 C 17.331503,11.46651 27.181949,7.1981385 34.595237,3.6784866 24.412928,11.621994 18.395379,14.988234 6.710685,16.313789');
-        tailPath.setAttribute('id', 'tail');
-  
-        const tailTipPath = document.createElementNS(this.svgNS, 'path');
-        tailTipPath.setAttribute('style', 'fill:blue;stroke:black;stroke-width:2');
-        tailTipPath.setAttribute('d', 'M 36.651297,4.4896989 A 3.346251,3.0420463 0 0 1 33.305046,7.5317452 3.346251,3.0420463 0 0 1 29.958795,4.4896989 3.346251,3.0420463 0 0 1 33.305046,1.4476526 3.346251,3.0420463 0 0 1 36.651297,4.4896989 Z');
-        tailTipPath.setAttribute('id', 'tailtip');
-  
-        this.group.insertBefore(tailPath, face);
-        this.group.insertBefore(tailTipPath, face);
+        const tailTipPath = document.createElementNS(this.svgNS, "path");
+        tailTipPath.setAttribute(
+          "style",
+          `fill:${faceFill};stroke:black;stroke-width:2`
+        );
+        tailTipPath.setAttribute(
+          "d",
+          "M 36.651297,4.4896989 A 3.346251,3.0420463 0 0 1 33.305046,7.5317452 3.346251,3.0420463 0 0 1 29.958795,4.4896989 3.346251,3.0420463 0 0 1 33.305046,1.4476526 3.346251,3.0420463 0 0 1 36.651297,4.4896989 Z"
+        );
+        tailTipPath.setAttribute("id", "tailtip");
+
+        this.group.insertBefore(tailPath, faceElement);
+        this.group.insertBefore(tailTipPath, faceElement);
       }
     }
   }
