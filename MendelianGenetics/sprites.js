@@ -90,6 +90,7 @@ class Sprite {
     }
   }
 
+  // 顯示基因型
   setAllelesText() {
     // Group alleles by chromosome number
     const alleleGroups = {};
@@ -120,6 +121,7 @@ class Sprite {
     this.group.querySelector("#alleles-text").textContent = allelesText;
   }
 
+  // toggle基因型
   toggleAllelesText() {
     // Toggle the visibility state
     this.isAllelesTextVisible = !this.isAllelesTextVisible;
@@ -227,6 +229,7 @@ class Sprite {
       document.getElementById("svgContainer").querySelector("svg");
 
     const startDragging = (e, isTouch = false) => {
+      e.preventDefault(); // Prevent default touch events testing
       const point = isTouch ? e.touches[0] : e;
       const mainSvg = getMainSvg();
       if (mainSvg) {
@@ -258,6 +261,8 @@ class Sprite {
     };
 
     const onMouseMove = (e) => {
+      e.preventDefault(); // Prevent default touch events testing
+
       const dx = e.clientX - offsetX;
       const dy = e.clientY - offsetY;
       this.updateTransform(dx, dy, transform);
