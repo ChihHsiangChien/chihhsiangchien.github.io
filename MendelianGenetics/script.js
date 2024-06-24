@@ -13,15 +13,18 @@ const defaultArea = { x: 10, y: 10, width: 160, height: 200 };
 const breedingArea = { x: 180, y: 10, width: 100, height: 100 };
 const offspringArea = { x: 290, y: 10, width: 280, height: 380 };
 
-const offspringAreaCountLimit = 32;
-
+const offspringAreaCountLimit = 32; // 子代區的子代數目
+const totalSprites = 8; // 預設區有多少子代
+const spirteSize = 25; //尺寸
 // Gene pool
 const genePools = [
   { chromosome: 1, alleles: ["Z", "z"] },
   { chromosome: 1, alleles: ["A", "A", "a", "a", "a"] },
   { chromosome: 2, alleles: ["B", "b"] },
-  { chromosome: 2, alleles: ["C", "c"] },
-  { chromosome: 3, alleles: ["D", "d"] },
+  { chromosome: 2, alleles: ["C", "c"] },    
+  { chromosome: 2, alleles: ["horn", ""] },
+  { chromosome: 2, alleles: ["horn", ""] },  
+  { chromosome: 3, alleles: ["roundEar", "roundEarLess"] },
   { chromosome: 4, alleles: ["X"] },
   { chromosome: 4, alleles: ["X", "Y"] }, // Example sex chromosomes
 ];
@@ -59,9 +62,8 @@ function getRandomAlleles(chromosomeNumber) {
   return alleles;
 }
 
-// Function to generate regular positions arranged in 2 columns
+// Function to generate regular positions arranged in columns
 function getRegularPosition(index, total, maxWidth, maxHeight, columns) {
-  //const columns = 2;
   const rows = Math.ceil(total / columns);
   const spacingX = maxWidth / (columns + 1);
   const spacingY = maxHeight / (rows + 1);
@@ -75,9 +77,9 @@ function getRegularPosition(index, total, maxWidth, maxHeight, columns) {
   };
 }
 
-// Create and add 6 sprites to the SVG with random alleles
-const totalSprites = 8;
 
+
+// 生殖
 for (let i = 1; i <= totalSprites; i++) {
   const position = getRegularPosition(
     i - 1,
@@ -99,7 +101,7 @@ for (let i = 1; i <= totalSprites; i++) {
     `sprite${i}`,
     defaultArea.x + position.x,
     defaultArea.y + position.y,
-    25,
+    spirteSize,
     spriteChromosomes
   );
 }
@@ -193,7 +195,7 @@ document.getElementById("breedButton").addEventListener("click", () => {
       `offspring${offspringCount + 1}`,
       offspringArea.x + position.x,
       offspringArea.y + position.y,
-      25,
+      spirteSize,
       offspringChromosomes
     );
 
@@ -201,6 +203,7 @@ document.getElementById("breedButton").addEventListener("click", () => {
   }
 });
 
+//按下刪除按鈕
 document.getElementById("deleteButton").addEventListener("click", () => {
   const spritesInOffspringArea = [];
   svg.querySelectorAll(".sprite").forEach((sprite) => {
@@ -230,7 +233,5 @@ document.getElementById("deleteButton").addEventListener("click", () => {
   offspringCount = 0;
 });
 
-document.getElementById("toggleAllelesButton").addEventListener("click", () => {
 
-});
 
