@@ -20,8 +20,8 @@ const spirteSize = 25; //尺寸
 const genePools = [
   { chromosome: 1, alleles: ["Z", "z"] },
   { chromosome: 1, alleles: ["A", "A", "a", "a", "a"] },
-  { chromosome: 2, alleles: ["B", "b"] },
-  { chromosome: 2, alleles: ["C", "c"] },    
+  { chromosome: 2, alleles: ["circleEye", "circleEyeLess"] },
+  { chromosome: 2, alleles: ["tail", "tailless"] },    
   { chromosome: 2, alleles: ["horn", ""] },
   { chromosome: 2, alleles: ["horn", ""] },  
   { chromosome: 3, alleles: ["roundEar", "roundEarLess"] },
