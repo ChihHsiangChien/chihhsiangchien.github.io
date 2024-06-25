@@ -65,13 +65,12 @@ class Sprite {
           this.toggleAllelesText();
         });
 
-      // ===設定表現型=====      
+      // ===設定表現型=====
       this.setFaceColor();
       this.setEyeball();
       this.setTail();
       this.setEars();
       this.setHorns();
-
 
       // 将 g 元素添加到主 SVG
       const mainSvg = document
@@ -140,19 +139,16 @@ class Sprite {
     const faceColor = hasDominantAllele ? "DarkTurquoise" : "lightblue";
     this.group.querySelector("#face").setAttribute("fill", faceColor);
 
-    //設定圓形耳的顏色
-    this.group.querySelector("#leftEar").setAttribute("fill", faceColor);
-    this.group.querySelector("#rightEar").setAttribute("fill", faceColor);
   }
 
   setEyeball() {
-    // 只要是 bb ~ 隱性遺傳
+    // 顯性是圓形眼，隱性是瞇瞇眼--只要沒有circleEye，就是瞇瞇眼
     const alleles = this.chromosomes.flatMap(
       (chromosome) => chromosome.alleles
     );
-    const countB = alleles.filter((allele) => allele === "b").length;
+    const count = alleles.filter((allele) => allele === "circleEye").length;
 
-    if (countB === 2) {
+    if (count === 0) {
       // Replace left eyeball with a line
       const leftEye = this.group.querySelector("#left-eye");
       const leftLine = document.createElementNS(this.svgNS, "line");
@@ -178,16 +174,14 @@ class Sprite {
   }
 
   setTail() {
-    // 只要有 C ~ 顯性遺傳
+    // 只要有 tail ~ 顯性遺傳
     const hasDominantAllele = this.chromosomes.some((chromosome) =>
-      chromosome.alleles.includes("C")
+      chromosome.alleles.includes("tail")
     );
 
     if (hasDominantAllele) {
-      //const sprite = this.group.querySelectorAll('.sprite');
       const faceElement = this.group.querySelector("#face");
       if (faceElement) {
-        //setAttribute("fill", faceColor);
         const faceFill = faceElement.getAttribute("fill");
 
         const tailPath = document.createElementNS(this.svgNS, "path");
@@ -219,47 +213,42 @@ class Sprite {
   }
 
   setEars() {
-    // 只要有 roundEarLess和 roundEarLess  ~ 隱性遺傳
+    // 圓形耳為顯性遺傳。只要有 roundEar 就是圓形耳，否則就是尖耳
     const alleles = this.chromosomes.flatMap(
       (chromosome) => chromosome.alleles
     );
-    const count = alleles.filter((allele) => allele === "roundEarLess").length;
+    const count = alleles.filter((allele) => allele === "roundEar").length;
+    const faceFill = this.group.querySelector("#face").getAttribute("fill");
 
-    if (count === 2) {
-      const faceElement = this.group.querySelector("#face");
+    const leftEar = document.createElementNS(this.svgNS, "path");
+    leftEar.setAttribute(
+      "style",
+      `fill:${faceFill};stroke:black;stroke-width:2`
+    )
+    leftEar.setAttribute("id", "leftEar");
 
-      if (faceElement) {
-        const faceFill = faceElement.getAttribute("fill");
-        //改左耳
-        const leftEar = this.group.querySelector("#leftEar");
-        const leftEarPath = document.createElementNS(this.svgNS, "path");
-        leftEarPath.setAttribute(
-          "style",
-          `fill:${faceFill};stroke:black;stroke-width:2`
-        );
-        leftEarPath.setAttribute("d", "M -8,-17 -21,-19 -17,-8");
-        leftEarPath.setAttribute("id", "leftEar");
-        leftEar.replaceWith(leftEarPath);
-        this.group.querySelector("#leftEarInner").remove();
+    const rightEar = document.createElementNS(this.svgNS, "path");
+    rightEar.setAttribute(
+      "style",
+      `fill:${faceFill};stroke:black;stroke-width:2`
+    )
+    rightEar.setAttribute("id", "rightEar");
 
-        //改右耳
-        const rihtEar = this.group.querySelector("#rightEar");
-        const rightEarPath = document.createElementNS(this.svgNS, "path");
-        rightEarPath.setAttribute(
-          "style",
-          `fill:${faceFill};stroke:black;stroke-width:2`
-        );
-        rightEarPath.setAttribute("d", "M 8,-17 21,-19 17,-8");
-        rightEarPath.setAttribute("id", "rightEar");
 
-        rihtEar.replaceWith(rightEarPath);
-        this.group.querySelector("#rightEarInner").remove();
-      }
+    if (count > 1) {
+      leftEar.setAttribute("d", "M -8,-18 C -20,-25 -27,-13 -18,-5");
+      rightEar.setAttribute("d", "M 8,-18 C 20,-25 27,-13 18,-5");      
     }
+    else{
+      leftEar.setAttribute("d", "M -8,-17 -21,-19 -17,-8");
+      rightEar.setAttribute("d", "M 8,-17 21,-19 17,-8");
+    }
+    this.group.appendChild(leftEar); 
+    this.group.appendChild(rightEar);    
   }
 
   setHorns() {
-    // 計算horn的數量
+    // 計算horn的數量，多基因遺傳
     const alleles = this.chromosomes.flatMap(
       (chromosome) => chromosome.alleles
     );
@@ -269,60 +258,87 @@ class Sprite {
     const faceFill = faceElement.getAttribute("fill");
 
     if (faceElement) {
-      switch(count){        
+      switch (count) {
         case 4:
           const leftHorn1 = document.createElementNS(this.svgNS, "path");
-          leftHorn1.setAttribute("style",`fill:${faceFill};stroke:black;stroke-width:2`);
+          leftHorn1.setAttribute(
+            "style",
+            `fill:${faceFill};stroke:black;stroke-width:2`
+          );
           leftHorn1.setAttribute("d", "m -18,3 -6,5 h 7");
           leftHorn1.setAttribute("id", "leftHorn1");
           this.group.appendChild(leftHorn1);
 
           const rightHorn1 = document.createElementNS(this.svgNS, "path");
-          rightHorn1.setAttribute("style",`fill:${faceFill};stroke:black;stroke-width:2`);
-          rightHorn1.setAttribute("d", "m 18,3 6,5 h -7");          rightHorn1.setAttribute("id", "rightHorn1");
-          this.group.appendChild(rightHorn1);  
+          rightHorn1.setAttribute(
+            "style",
+            `fill:${faceFill};stroke:black;stroke-width:2`
+          );
+          rightHorn1.setAttribute("d", "m 18,3 6,5 h -7");
+          rightHorn1.setAttribute("id", "rightHorn1");
+          this.group.appendChild(rightHorn1);
         case 3:
           const leftHorn2 = document.createElementNS(this.svgNS, "path");
-          leftHorn2.setAttribute("style",`fill:${faceFill};stroke:black;stroke-width:2`);
+          leftHorn2.setAttribute(
+            "style",
+            `fill:${faceFill};stroke:black;stroke-width:2`
+          );
           leftHorn2.setAttribute("d", "m -16, 9 -4,5 7,-2");
           leftHorn2.setAttribute("id", "leftHorn2");
           this.group.appendChild(leftHorn2);
 
           const rightHorn2 = document.createElementNS(this.svgNS, "path");
-          rightHorn2.setAttribute("style",`fill:${faceFill};stroke:black;stroke-width:2`);
+          rightHorn2.setAttribute(
+            "style",
+            `fill:${faceFill};stroke:black;stroke-width:2`
+          );
           rightHorn2.setAttribute("d", "m 16,9 4,5 -7,-2");
           rightHorn2.setAttribute("id", "rightHorn2");
-          this.group.appendChild(rightHorn2);                           
+          this.group.appendChild(rightHorn2);
         case 2:
           const leftHorn3 = document.createElementNS(this.svgNS, "path");
-          leftHorn3.setAttribute("style",`fill:${faceFill};stroke:black;stroke-width:2`);
+          leftHorn3.setAttribute(
+            "style",
+            `fill:${faceFill};stroke:black;stroke-width:2`
+          );
           leftHorn3.setAttribute("d", "m -13,13 -3,6 6,-3");
           leftHorn3.setAttribute("id", "leftHorn3");
           this.group.appendChild(leftHorn3);
 
           const rightHorn3 = document.createElementNS(this.svgNS, "path");
-          rightHorn3.setAttribute("style",`fill:${faceFill};stroke:black;stroke-width:2`);
+          rightHorn3.setAttribute(
+            "style",
+            `fill:${faceFill};stroke:black;stroke-width:2`
+          );
           rightHorn3.setAttribute("d", "m 13,13 3,6 -6,-3");
           rightHorn3.setAttribute("id", "rightHorn3");
-          this.group.appendChild(rightHorn3);                    
+          this.group.appendChild(rightHorn3);
         case 1:
           const leftHorn4 = document.createElementNS(this.svgNS, "path");
-          leftHorn4.setAttribute("style",`fill:${faceFill};stroke:black;stroke-width:2`);
+          leftHorn4.setAttribute(
+            "style",
+            `fill:${faceFill};stroke:black;stroke-width:2`
+          );
           leftHorn4.setAttribute("d", "m -8, 16 -1,5 4,-4");
           leftHorn4.setAttribute("id", "leftHorn4");
           this.group.appendChild(leftHorn4);
 
           const rightHorn4 = document.createElementNS(this.svgNS, "path");
-          rightHorn4.setAttribute("style",`fill:${faceFill};stroke:black;stroke-width:2`);
+          rightHorn4.setAttribute(
+            "style",
+            `fill:${faceFill};stroke:black;stroke-width:2`
+          );
           rightHorn4.setAttribute("d", "m 8, 16 1,5 -4,-4");
           rightHorn4.setAttribute("id", "rightHorn4");
-          this.group.appendChild(rightHorn4);          
+          this.group.appendChild(rightHorn4);
         default:
-          break;          ;
-  
+          break;
       }
-
     }
+  }
+
+  setWhiskers(){
+
   }
   getGroup() {
     return this.group;
@@ -387,13 +403,17 @@ class Sprite {
     };
 
     const onTouchStart = (e) => {
-      e.preventDefault(); // Prevent default touch events
+      if (e.touches.length > 1) {
+        e.preventDefault();
+      }
       startDragging(e, true);
     };
 
     this.group.addEventListener("mousedown", onMouseDown);
-    this.group.addEventListener("touchstart", onTouchStart);
+    this.group.addEventListener("touchstart", onTouchStart, { passive: false });
     this.group.style.cursor = "grab";
+    this.group.style.touchAction = "none";
+
   }
 
   updateTransform(dx, dy, transform) {
