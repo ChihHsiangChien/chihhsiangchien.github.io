@@ -138,7 +138,6 @@ class Sprite {
     );
     const faceColor = hasDominantAllele ? "DarkTurquoise" : "lightblue";
     this.group.querySelector("#face").setAttribute("fill", faceColor);
-
   }
 
   setEyeball() {
@@ -224,27 +223,25 @@ class Sprite {
     leftEar.setAttribute(
       "style",
       `fill:${faceFill};stroke:black;stroke-width:2`
-    )
+    );
     leftEar.setAttribute("id", "leftEar");
 
     const rightEar = document.createElementNS(this.svgNS, "path");
     rightEar.setAttribute(
       "style",
       `fill:${faceFill};stroke:black;stroke-width:2`
-    )
+    );
     rightEar.setAttribute("id", "rightEar");
-
 
     if (count > 1) {
       leftEar.setAttribute("d", "M -8,-18 C -20,-25 -27,-13 -18,-5");
-      rightEar.setAttribute("d", "M 8,-18 C 20,-25 27,-13 18,-5");      
-    }
-    else{
+      rightEar.setAttribute("d", "M 8,-18 C 20,-25 27,-13 18,-5");
+    } else {
       leftEar.setAttribute("d", "M -8,-17 -21,-19 -17,-8");
       rightEar.setAttribute("d", "M 8,-17 21,-19 17,-8");
     }
-    this.group.appendChild(leftEar); 
-    this.group.appendChild(rightEar);    
+    this.group.appendChild(leftEar);
+    this.group.appendChild(rightEar);
   }
 
   setHorns() {
@@ -337,9 +334,7 @@ class Sprite {
     }
   }
 
-  setWhiskers(){
-
-  }
+  setWhiskers() {}
   getGroup() {
     return this.group;
   }
@@ -413,18 +408,24 @@ class Sprite {
     this.group.addEventListener("touchstart", onTouchStart, { passive: false });
     this.group.style.cursor = "grab";
     this.group.style.touchAction = "none";
-
   }
 
   updateTransform(dx, dy, transform) {
+    const svgContainer = document.getElementById("svgContainer");
+    const svgRect = svgContainer.getBoundingClientRect();
+    const groupRect = this.group.getBoundingClientRect();
+
     this.group.setAttribute(
       "transform",
       `translate(${dx}, ${dy}) ${transform}`
     );
+
     const transformMatrix = this.group.transform.baseVal.consolidate().matrix;
     if (transformMatrix) {
       const newX = transformMatrix.e || 0;
       const newY = transformMatrix.f || 0;
+
+
       this.group.setAttribute("data-translateX", newX);
       this.group.setAttribute("data-translateY", newY);
     }
