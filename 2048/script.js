@@ -1,7 +1,4 @@
 const GRID_SIZE = 4;
-const CELL_SIZE = 100;
-const CELL_GAP = 15;
-
 const gameBoard = document.getElementById('game-board');
 const scoreElement = document.getElementById('score');
 
@@ -163,5 +160,7 @@ document.addEventListener('touchend', event => {
     touchStartX = 0;
     touchStartY = 0;
 });
+
+window.addEventListener('resize', renderGrid);
 
 initializeGame();
