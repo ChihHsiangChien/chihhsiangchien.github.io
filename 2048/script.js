@@ -37,17 +37,20 @@ function addRandomTile() {
 
 function renderGrid() {
     gameBoard.innerHTML = '';
-    grid.forEach((row, i) => {
-        row.forEach((cell, j) => {
+    for (let i = 0; i < GRID_SIZE; i++) {
+        for (let j = 0; j < GRID_SIZE; j++) {
             const tile = document.createElement('div');
             tile.classList.add('tile');
-            if (cell !== null) {
-                tile.textContent = TILE_TYPES[cell];
-                tile.classList.add(`tile-${Math.pow(2, cell + 1)}`);
+            if (grid[i][j] !== null) {
+                tile.textContent = TILE_TYPES[grid[i][j]];
+                tile.classList.add(`tile-${Math.pow(2, grid[i][j] + 1)}`);
+            } else {
+                // 添加空白格子的樣式
+                tile.classList.add('tile-empty');
             }
             gameBoard.appendChild(tile);
-        });
-    });
+        }
+    }
 }
 
 function moveTiles(direction) {
