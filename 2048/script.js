@@ -9,7 +9,10 @@ const TILE_TYPES = ['細胞', '組織', '器官', '器官系統', '個體', '族
 
 //卷軸問題
 window.scrollTo(0,0);
-window.onscroll = function () { window.scrollTo(0, 0); };
+window.addEventListener("scroll", (e) => {
+    e.preventDefault();
+    window.scrollTo(0, 0);
+  });
 
 function initializeGame() {
     grid = createGrid();
