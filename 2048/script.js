@@ -13,6 +13,17 @@ window.addEventListener("scroll", (e) => {
     e.preventDefault();
     window.scrollTo(0, 0);
   });
+const $body = document.querySelector('body');
+
+export default {
+enable() {
+    $body.style.overflow = 'hidden';
+},
+disable() {
+    $body.style.removeProperty('overflow');
+}
+};
+
 
 function initializeGame() {
     grid = createGrid();
