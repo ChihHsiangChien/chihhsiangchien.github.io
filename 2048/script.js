@@ -257,7 +257,41 @@ function moveTiles2(direction) {
 
 
 function mergeTiles(tiles, isForward) { 
+    const originalTiles = [...tiles];
+    let workingTiles = [...tiles];
+
+    if (!isForward) workingTiles.reverse();
+    
+    const mergedTiles = [];
+    let i = 0;
+    while (i < workingTiles.length) {
+        if (i + 1 < workingTiles.length && workingTiles[i].value === workingTiles[i + 1].value) {
+            mergedTiles.push({ value: workingTiles[i].value + 1, originalRow: workingTiles[i].originalRow, originalCol: workingTiles[i].originalCol });
+            i += 2;
+        } else {
+            mergedTiles.push(workingTiles[i]);
+            i++;
+        }
+    }
+
+    while (mergedTiles.length < GRID_SIZE) {
+        mergedTiles.push(null);
+    }
+
+    if (!isForward) mergedTiles.reverse();
+
+    const hasChanged = mergedTiles.some((tile, index) => {
+        const originalTile = originalTiles[index];
+        return originalTile === null ? tile !== null : tile === null || tile.value !== originalTile.value;
+    });
+
+    return hasChanged ? mergedTiles : originalTiles;
+}
+
+
+function mergeTiles1(tiles, isForward) { 
     const originalTiles = [...tiles]; // 複製原始的 tiles 用於比較
+
     if (!isForward) tiles.reverse(); // 如果是反向（向下或向右移動），則需要先反轉陣列
     
     const mergedTiles = [];
