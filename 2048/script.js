@@ -1,4 +1,4 @@
-const GRID_SIZE = 6;
+const GRID_SIZE = 4;
 const gameBoard = document.getElementById('game-board');
 const scoreElement = document.getElementById('score');
 
