@@ -64,8 +64,8 @@ function renderGrid() {
     }
 }
 
+
 function moveTiles(direction) {
-    let moved = false;
     const newGrid = createGrid(); // 建立一個新的網格
     const movingTiles = []; // 儲存正在移動的方塊及其移動資訊
     const isVertical = direction === 'ArrowUp' || direction === 'ArrowDown';
@@ -88,6 +88,8 @@ function moveTiles(direction) {
 
         tiles = mergeTiles(tiles, isForward); // 合併 tiles，並傳入方向
 
+     
+
         let idx = isForward ? 0 : GRID_SIZE - 1;
         tiles.forEach(tile => {
             if (tile !== null) { // 檢查是否為 null
@@ -104,11 +106,13 @@ function moveTiles(direction) {
                 idx += isForward ? 1 : -1;
             }
         });
+
     }
 
     // 判斷網格是否改變，如果改變則更新
     if (JSON.stringify(grid) !== JSON.stringify(newGrid)) {
-        moved = true;
+    //if (!gridsAreEqual(grid, newGrid)) {
+
         grid = newGrid;
         renderGrid(movingTiles); // 將正在移動的 tiles 資訊傳遞給 renderGrid 以觸發動畫
 
@@ -121,10 +125,18 @@ function moveTiles(direction) {
         }, 150); // 與 CSS 動畫持續時間相同
     }
 
-    return moved;
 }
 
-
+function gridsAreEqual(grid1, grid2) {
+    for (let i = 0; i < GRID_SIZE; i++) {
+        for (let j = 0; j < GRID_SIZE; j++) {
+            if (grid1[i][j] !== grid2[i][j]) {
+                return false; // 如果任何一個方塊不同，則返回false
+            }
+        }
+    }
+    return true; // 如果所有方塊都相同，返回true
+}
 
 function mergeTiles(tiles, isForward) {
     if (!isForward) tiles.reverse(); // 如果是反向（向下或向右移動），則需要先反轉陣列
