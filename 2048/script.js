@@ -1,4 +1,4 @@
-const GRID_SIZE = 6;
+const GRID_SIZE = 3;
 const gameBoard = document.getElementById('game-board');
 const scoreElement = document.getElementById('score');
 
@@ -8,7 +8,8 @@ gameBoard.style.gridTemplateColumns = `repeat(${GRID_SIZE}, 1fr)`;
 let grid = [];
 let score = 0;
 
-const TILE_TYPES = ['細胞', '組織', '器官', '器官系統', '個體', '族群', '群集', '生態系', '生物圈'];
+const TILE_TYPES = ['細胞', '組織', '器官', '器官系統', '個體', 
+                    '族群', '群集', '生態系', '生物圈', '地球','太陽系'];
 
 //卷軸問題
 window.scrollTo(0,0);
@@ -20,7 +21,7 @@ window.addEventListener("scroll", (e) => {
 function initializeGame() {
     grid = createGrid();
     addRandomTile();
-    addRandomTile();
+    //addRandomTile();
     renderGrid();
 }
 
@@ -41,33 +42,76 @@ function addRandomTile() {
     }
     if (emptyTiles.length > 0) {
         const { x, y } = emptyTiles[Math.floor(Math.random() * emptyTiles.length)];
-        grid[x][y] = Math.random() < 0.9 ? 0 : 1;  // 90% chance for '細胞', 10% for '組織'
+        //grid[x][y] = Math.random() < 0.9 ? 0 : 1;  // 90% chance for '細胞', 10% for '組織'
+        grid[x][y] = 0;  // 100% '細胞'
     }
 }
 
 
-function renderGrid() {
-    gameBoard.innerHTML = ''; // 清空之前的格子
-    for (let i = 0; i < GRID_SIZE; i++) {
-        for (let j = 0; j < GRID_SIZE; j++) {
-            const tile = document.createElement('div');
-            tile.classList.add('tile');
-            if (grid[i][j] !== null) {
-                tile.textContent = TILE_TYPES[grid[i][j]];
-                tile.classList.add(`tile-${Math.pow(2, grid[i][j] + 1)}`);
-                //tile.classList.add('move'); // 添加動畫類
-            } else {
-                tile.classList.add('tile-empty');
+function renderGrid({ movingTiles = [], merged = [] } = {}) {
+
+    // 遍歷 movingTiles，給 tile 添加移動動畫
+    if (movingTiles.length === 0){
+
+        gameBoard.innerHTML = ''; // 清空之前的格子
+
+        for (let i = 0; i < GRID_SIZE; i++) {
+            for (let j = 0; j < GRID_SIZE; j++) {
+                const tile = document.createElement('div');
+                tile.classList.add('tile');
+    
+                if (grid[i][j] !== null) {
+                    // 檢查ij有沒有在merged，有的話需要產生特效
+                    merged.forEach(m=>{
+                        if(i === m.Row & j === m.Col){
+                            // 
+                            tile.style.transition = 'transform 0.1s';
+                            tile.style.transform = 'scale(1.05)';
+
+                            // 在 0.1 秒后恢复到原来的尺寸
+                            setTimeout(() => {
+                                tile.style.transform = 'scale(1)';
+                            }, 100);  // 100 毫秒后执行
+                        };
+                    });
+                    tile.textContent = TILE_TYPES[grid[i][j]];
+                    tile.classList.add(`tile-${Math.pow(2, grid[i][j] + 1)}`);                    
+                } else {
+                    tile.classList.add('tile-empty');
+                }
+                gameBoard.appendChild(tile);
             }
-            gameBoard.appendChild(tile);
         }
     }
+
+
+    else{
+        /*根據movingTiles的內容value, fromCol, toCol, fromRow, toRow
+        從gameBoard中找到child，移動child到特定的位置
+        */        
+        movingTiles.forEach(movingTile => {
+            const fromTile = gameBoard.children[movingTile.fromRow * GRID_SIZE + movingTile.fromCol];
+            const toTile = gameBoard.children[movingTile.toRow * GRID_SIZE + movingTile.toCol];
+    
+            const fromTileRect = fromTile.getBoundingClientRect();
+            const toTileRect = toTile.getBoundingClientRect();
+    
+            let translateX = toTileRect.left - fromTileRect.left;
+            let translateY = toTileRect.top - fromTileRect.top;
+    
+            fromTile.style.transform = `translate(${translateX}px, ${translateY}px)`;
+            fromTile.style.transition = 'transform 0.2s ease-in-out, opacity 0.2s ease-in-out'; 
+        });
+    }
+
 }
 
 
 function moveTiles(direction) {
     const newGrid = createGrid(); // 建立一個新的網格
     const movingTiles = []; // 儲存正在移動的方塊及其移動資訊
+    let merged = []; //產生合併的方塊位置
+
     const isVertical = direction === 'ArrowUp' || direction === 'ArrowDown';
     const isForward = direction === 'ArrowUp' || direction === 'ArrowLeft';
 
@@ -86,9 +130,15 @@ function moveTiles(direction) {
             }
         }
 
-        tiles = mergeTiles(tiles, isForward); // 合併 tiles，並傳入方向
+        let results = mergeTiles(tiles, isForward); // 合併 tiles，並傳入方向
+        tiles  = results[0];
 
-     
+        // 產生合併的位置
+        results[1].forEach(m =>{
+            merged.push(m);
+        });
+        
+        
 
         let idx = isForward ? 0 : GRID_SIZE - 1;
         tiles.forEach(tile => {
@@ -106,49 +156,40 @@ function moveTiles(direction) {
                 idx += isForward ? 1 : -1;
             }
         });
-
     }
 
     // 判斷網格是否改變，如果改變則更新
-    if (JSON.stringify(grid) !== JSON.stringify(newGrid)) {
-    //if (!gridsAreEqual(grid, newGrid)) {
 
+    if (JSON.stringify(grid) !== JSON.stringify(newGrid)) {
         grid = newGrid;
-        renderGrid(movingTiles); // 將正在移動的 tiles 資訊傳遞給 renderGrid 以觸發動畫
+        renderGrid({movingTiles: movingTiles}); // 將正在移動的 tiles 資訊傳遞給 renderGrid 以觸發動畫
 
         // 等待動畫完成後再添加新 tile
         setTimeout(() => {
             addRandomTile();
-            renderGrid();
+            renderGrid({merged: merged});
             updateScore();
             checkWinCondition();
-        }, 150); // 與 CSS 動畫持續時間相同
+        }, 200); // 與 CSS 動畫持續時間相同
     }
 
 }
 
-function gridsAreEqual(grid1, grid2) {
-    for (let i = 0; i < GRID_SIZE; i++) {
-        for (let j = 0; j < GRID_SIZE; j++) {
-            if (grid1[i][j] !== grid2[i][j]) {
-                return false; // 如果任何一個方塊不同，則返回false
-            }
-        }
-    }
-    return true; // 如果所有方塊都相同，返回true
-}
+
 
 function mergeTiles(tiles, isForward) {
     if (!isForward) tiles.reverse(); // 如果是反向（向下或向右移動），則需要先反轉陣列
-    
+    const merged = []; //紀錄被合併的方塊位置
     const mergedTiles = [];
     let i = 0;
     while (i < tiles.length) {
         if (i + 1 < tiles.length && tiles[i].value === tiles[i + 1].value) {
             // 合併相同值的 tiles
+            score += (tiles[i].value + 1) * 100;
             mergedTiles.push({ value: tiles[i].value + 1, originalRow: tiles[i].originalRow, originalCol: tiles[i].originalCol });
-            i += 2; // 跳過被合併的下一個 tile
-            score += 100;
+            merged.push({ Row: tiles[i].originalRow, Col: tiles[i].originalCol });
+            i += 2; // 跳過被合併的下一個 tile            
+            
         } else {
             mergedTiles.push(tiles[i]);
             i++;
@@ -160,9 +201,10 @@ function mergeTiles(tiles, isForward) {
         mergedTiles.push(null); // 在結尾處填充 null 代表空格子
     }
 
-    if (!isForward) mergedTiles.reverse(); // 如果是反向，則再次反轉回來
+    //if (!isForward) mergedTiles.reverse(); // 如果是反向，則再次反轉回來
     
-    return mergedTiles;
+    return [mergedTiles, merged];
+    
 }
 
 
