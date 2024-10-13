@@ -1,14 +1,75 @@
-// L-System Variables
-let axiom = "F-F-F-F"; // Initial axiom
-let sentence = axiom;
-let rules = [];
-let len = 50;
+// JSON 資料
+const lSystems = [
+    {
+        axiom: "F-F-F-F",
+        rules: [{ input: "F", output: "F+FF-FF-F-F+F+FF-F-F+F+FF+FF-F" }],
+        angle: 90
+    },
+    {
+        axiom: "-F",
+        rules: [{ input: "F", output: "F+F-F-F+F" }],
+        angle: 90
+    },
+    {
+        axiom: "F+F+F+F",
+        rules: [
+            { input: "F", output: "F+f-FF+F+FF+Ff+FF-f+FF-F-FF-Ff-FFF" },
+            { input: "f", output: "ffffff" }
+        ],
+        angle: 90
+    },
+    {
+        axiom: "F-F-F-F",
+        rules: [
+            { input: "F", output: "FF-F-F-F-F-F+F" }
+        ],
+        angle: 90        
+    },
+    {
+        axiom: "F-F-F-F",
+        rules: [
+            { input: "F", output: "FF-F-F-F-FF" }
+        ],
+        angle: 90        
+    },    
+    {
+        axiom: "F-F-F-F",
+        rules: [
+            { input: "F", output: "FF-F+F-F-FF" }
+        ],
+        angle: 90        
+    },    
+    {
+        axiom: "F-F-F-F",
+        rules: [
+            { input: "F", output: "FF-F--F-F" }
+        ],
+        angle: 90        
+    },         
+    {
+        axiom: "F",
+        rules: [
+            { input: "F", output: "F[+F]F[-F]F" }
+        ],
+        angle: 25.7        
+    },
+    {
+        axiom: "F",
+        rules: [
+            { input: "F", output: "FF-[-F+F+F]+[+F-F-F]" }
+        ],
+        angle: 22.5    
+    },      
+    {
+        axiom: "X",
+        rules: [
+            { input: "X", output: "F[+X]F[-X]+X" },
+            { input: "F", output: "FF" }
 
-// Canvas and context
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
-canvas.width = 800;
-canvas.height = 600;
+        ],
+        angle: 20    
+    },          
+];
 
 // Sliders and input elements
 const xOriginSlider = document.getElementById("xOrigin");
@@ -21,44 +82,160 @@ const resetBtn = document.getElementById("resetBtn");
 const generateBtn = document.getElementById("generateBtn");
 const redrawBtn = document.getElementById("redrawBtn"); // New redraw button
 
+// 動態生成選項
+function populateSelect() {
+    lSystems.forEach((system, index) => {
+        const option = document.createElement("option");
+        option.value = index;
+        option.textContent = `sys ${index + 1}`;
+        lSystemSelect.appendChild(option);
+    });
+}
 
+// 初始化顯示
+function updateDisplay(index) {
+    const selectedSystem = lSystems[index];
+
+    // 更新 axiom 和 angle
+    axiomInput.value = selectedSystem.axiom;
+    angleInput.value = selectedSystem.angle;
+
+    // 格式化並顯示規則
+    let rulesText = "";
+    selectedSystem.rules.forEach(rule => {
+        rulesText += `${rule.input} -> ${rule.output}\n`;
+    });
+    ruleInput.value = rulesText.trim();
+}
+
+
+// 當下拉選單變更時更新顯示
+lSystemSelect.addEventListener("change", function() {
+    updateDisplay(this.value);
+    setup();    
+});
+
+// 預設顯示第一個 L-System
+populateSelect();
+updateDisplay(0);
+
+
+
+
+// L-System Variables
+let axiom = axiomInput.value;; // Initial axiom
+let sentence = axiom;
+let rules = [];
+let len = 50;
+
+// Canvas and context
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+canvas.width = 800;
+canvas.height = 600;
+
+
+
+// drag
+let isDragging = false; // To check if we are dragging
+let startX, startY; // To store where the drag starts
+
+// Zoom scaling parameters
+const zoomFactor = 0.1; // Amount of zoom per scroll step
+const minScale = 0.1; // Minimum zoom scale
+const maxScale = 10;   // Maximum zoom scale
+let scale = 1;
 
 // Default origin
 let xOrigin = canvas.width / 2;
 let yOrigin = canvas.height / 2;
 
-// Define the rule (F → F−F+F+FF−F−F+F)
-rules[0] = {
-    input: "F",
-    output: "F+F-F-FF+F+F-F"
-};
+// Event listener for mouse down - start drag
+canvas.addEventListener("mousedown", (e) => {
+    isDragging = true;
+    startX = e.offsetX - xOrigin; // Calculate the initial offset
+    startY = e.offsetY - yOrigin;
+});
 
-// Generate the next sequence in the L-System
-function generate2() {
-    let nextSentence = "";
-    for (let i = 0; i < sentence.length; i++) {
-        let current = sentence[i];
-        let found = false;
-        for (let j = 0; j < rules.length; j++) {
-            if (current === rules[j].input) {
-                nextSentence += rules[j].output;
-                found = true;
-                break;
-            }
-        }
-        if (!found) {
-            nextSentence += current; // If no rule matches, keep the character as is
-        }
+
+// Event listener for mouse move - dragging
+canvas.addEventListener("mousemove", (e) => {
+    if (isDragging) {
+        xOrigin = e.offsetX - startX; // Adjust the x and y origin
+        yOrigin = e.offsetY - startY;
+        xOriginSlider.value = xOrigin;
+        yOriginSlider.value = yOrigin;
+        draw(); // Redraw the L-system as you drag
     }
-    sentence = nextSentence;
-    draw();
-    console.log(sentence);
-    len *= 0.6; // 縮短線段長度
+});
+
+// Event listener for mouse up - stop drag
+canvas.addEventListener("mouseup", () => {
+    isDragging = false; // Stop dragging
+});
+
+// Event listener for mouse leave - stop drag
+canvas.addEventListener("mouseleave", () => {
+    isDragging = false; // Stop dragging if the mouse leaves the canvas
+});
+
+
+// Event listener for mouse wheel - zoom in/out
+canvas.addEventListener("wheel", (e) => {
+    e.preventDefault(); // Prevent default scrolling behavior
+
+    const mouseX = e.offsetX; // Get mouse X position
+    const mouseY = e.offsetY; // Get mouse Y position
+
+    // Determine the direction of the scroll (positive means zoom out, negative means zoom in)
+    if (e.deltaY < 0) {
+        // Zoom in
+        scale = Math.min(scale + zoomFactor, maxScale);
+    } else {
+        // Zoom out
+        scale = Math.max(scale - zoomFactor, minScale);
+    }
+
+    // Adjust the origin to zoom relative to the mouse position
+    xOrigin = mouseX - (mouseX - xOrigin) * (scale / (scale - zoomFactor));
+    yOrigin = mouseY - (mouseY - yOrigin) * (scale / (scale - zoomFactor));
+    scaleSlider.value =scale;
+
+    draw(); // Redraw the canvas with the new scale and origin
+});
+
+
+// Function to parse rules from the textarea input
+function parseRules() {
+    // Get the input from the ruleInput textarea
+    const ruleInput = document.getElementById("ruleInput").value.trim();
+    const ruleLines = ruleInput.split("\n");
+
+    // Clear the existing rules
+    rules = [];
+
+    // Process each line
+    ruleLines.forEach(line => {
+        const parts = line.split("->");
+        if (parts.length === 2) {
+            const input = parts[0].trim();  // The symbol before '->'
+            const output = parts[1].trim(); // The string after '->'
+            rules.push({
+                input: input,
+                output: output
+            });
+        }
+    });
+    
+    //console.log("Parsed Rules:", rules);
 }
+
 
 
 // Redefine the length before drawing each iteration
 function generate() {
+    parseRules(); // Parse rules before generating the L-system
+
     let nextSentence = "";
     for (let i = 0; i < sentence.length; i++) {
         let current = sentence[i];
@@ -82,70 +259,6 @@ function generate() {
     draw();
 }
 
-// Calculate scaling factor to fit the drawing inside the canvas
-function calculateScale() {
-    let totalF = 0;
-    for (let i = 0; i < sentence.length; i++) {
-        if (sentence[i] === "F") {
-            totalF++;
-        }
-    }
-    
-    // Estimate the total drawing length based on the number of "F" and len
-    const totalDrawingHeight = totalF * len/20;
-    const totalDrawingWidth = totalF * len/20; // Assuming F moves horizontally as well
-
-    // Calculate scale factor to fit drawing within both canvas dimensions
-    const heightScaleFactor = (canvas.height * 0.8) / totalDrawingHeight; // 80% of canvas height
-    const widthScaleFactor = (canvas.width * 0.8) / totalDrawingWidth; // 80% of canvas width
-
-    // Use the smaller scaling factor to ensure the drawing fits within both dimensions
-    const scaleFactor = Math.min(heightScaleFactor, widthScaleFactor, 1);
-
-    console.log(`Height Scale: ${heightScaleFactor}, Width Scale: ${widthScaleFactor}, Final Scale: ${scaleFactor}`);
-    //return scaleFactor;
-    return 1;
-}
-
-
-// Draw the L-System sentence
-function draw2() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.save();
-
-    // Update origin from sliders
-    xOrigin = parseInt(xOriginSlider.value, 10);
-    yOrigin = parseInt(yOriginSlider.value, 10);
-
-    // Convert the angle from degrees to radians
-    angle = (parseInt(angleInput.value) * Math.PI) / 180;
-
-    ctx.translate(xOrigin, yOrigin);
-    ctx.strokeStyle = "green";
-    ctx.lineWidth = 2;
-
-    for (let i = 0; i < sentence.length; i++) {
-        let current = sentence[i];
-
-        if (current === "F") {
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-            ctx.lineTo(0, -len);
-            ctx.stroke();
-            ctx.translate(0, -len); // Move the drawing position forward
-        } else if (current === "+") {
-            ctx.rotate(angle); // Rotate clockwise
-        } else if (current === "-") {
-            ctx.rotate(-angle); // Rotate counterclockwise
-        } else if (current === "[") {
-            ctx.save(); // Save the current drawing state
-        } else if (current === "]") {
-            ctx.restore(); // Restore the saved state
-        }
-    }
-
-    ctx.restore();
-}
 
 
 
@@ -158,11 +271,11 @@ function draw() {
     yOrigin = yOriginSlider.value;
 
     // Convert the angle from degrees to radians
-    angle = (parseInt(angleInput.value) * Math.PI) / 180;
+    angle = (parseFloat(angleInput.value) * Math.PI) / 180;
 
     ctx.translate(xOrigin, yOrigin);
-    ctx.strokeStyle = "green";
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = "grey";
+    ctx.lineWidth = 1;
 
     // Apply the current scale
     ctx.scale(scale, scale); // Apply scaling
@@ -170,20 +283,53 @@ function draw() {
     for (let i = 0; i < sentence.length; i++) {
         let current = sentence[i];
 
-        if (current === "F") {
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-            ctx.lineTo(0, -len);
-            ctx.stroke();
-            ctx.translate(0, -len); // Move the drawing position forward
-        } else if (current === "+") {
-            ctx.rotate(angle); // Rotate clockwise
-        } else if (current === "-") {
-            ctx.rotate(-angle); // Rotate counterclockwise
-        } else if (current === "[") {
-            ctx.save(); // Save the current drawing state
-        } else if (current === "]") {
-            ctx.restore(); // Restore the saved state
+        switch (current) {
+            case "F":
+            case "G": // Move forward and draw a line (G acts the same as F in this context)
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(0, -len);
+                ctx.stroke();
+                ctx.translate(0, -len); // Move forward by len
+                break;
+
+            case "X":
+                // Draw a circle at the current position for 'X'
+                ctx.beginPath();
+                ctx.arc(0, 0, len / 4, 0, 2 * Math.PI); // Draw a circle with radius len / 2
+                ctx.stroke();
+                break;                
+
+            case "f": // Move forward without drawing
+                ctx.translate(0, -len); // Just move without drawing
+                break;
+
+            case "+": // Turn left (rotate clockwise)
+                ctx.rotate(angle);
+                break;
+
+            case "-": // Turn right (rotate counterclockwise)
+                ctx.rotate(-angle);
+                break;
+
+            case "|": // Turn around (180 degrees)
+                ctx.rotate(Math.PI); // Rotate by 180 degrees
+                break;
+
+            case "[": // Save the current state (start a branch)
+                ctx.save(); // Save the current state (position, angle)
+                break;
+
+            case "]": // Restore the saved state (complete a branch)
+                ctx.restore(); // Restore the previously saved state
+                break;
+
+            case "]": // Restore the saved state (complete a branch)
+                ctx.restore(); // Restore the previously saved state
+                break;
+            default:
+                // For other symbols (e.g. ∧, &, \, /, $, ., {), which we are ignoring
+                break;
         }
     }
 
@@ -194,8 +340,10 @@ function draw() {
 function reset() {
     // Get the values from input fields
     axiom = axiomInput.value;
-    rules[0].output = ruleInput.value;
-    sentence = axiom;
+    sentence = axiom;    
+    //rules[0].output = ruleInput.value;
+    rules = ruleInput.value;
+
     len = 50; // Reset the length
     
     // Reset sliders to initial positions
@@ -208,12 +356,16 @@ function reset() {
 // Redraw function
 function redraw() {
     scale = parseFloat(scaleSlider.value); // Get the current scale value
+
     draw(); // Redraw the current state
 }
+
 
 // Initial setup
 function setup() {
     angle = parseFloat(document.getElementById("angleInput").value); // Get angle from input
+    
+    //reset()
     draw();
 }
 
