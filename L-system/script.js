@@ -68,8 +68,62 @@ const lSystems = [
 
         ],
         angle: 20    
-    },          
+    },
+    {
+        axiom: "Fl",
+        rules: [
+            { input: "Fl", output: "Fl+Fr++Fr-Fl--FlFl-Fr+" },
+            { input: "Fr", output: "-Fl+FrFr++Fr+Fl--Fl-Fr" },
+        ],
+        angle: 60    
+    },
+    {
+        axiom: "Fl",
+        rules: [
+            { input: "Fl", output: "FlFl-Fr-Fr+Fl+Fl-Fr-FrFl+Fr+FlFlFr-Fl+Fr+FlFl+Fr-FlFr-Fr-Fl+Fl+FrFr-" },
+            { input: "Fr", output: "+FlFl-Fr-Fr+Fl+FlFr+Fl-FrFr-Fl-Fr+FlFrFr-Fl-FrFl+Fl+Fr-Fr-Fl+Fl+FrFr" },
+        ],
+        angle: 90    
+    },
+    {
+        axiom: "-L",
+        rules: [
+            { input: "L", output: "LF+RFR+FL-F-LFLFL-FRFR+" },
+            { input: "R", output: "-LFLF+RFRFR+F+RF-LFL-FR" },
+        ],
+        angle: 90    
+    },
+    {
+        axiom: "-L",
+        rules: [
+            { input: "L", output: "LFLF+RFR+FLFL-FRF-LFL-FR+F+RF-LFL-FRFRFR+" },
+            { input: "R", output: "-LFLFLF+RFR+FL-F-LF+RFR+FLF+RFRF-LFL-FRFR" },
+        ],
+        angle: 90    
+    },
+    {
+        axiom: "L",
+        rules: [
+            { input: "L", output: "LFRFL-F-RFLFR+F+LFRFL" },
+            { input: "R", output: "RFLFR+F+LFRFL-F-RFLFR" },
+        ],
+        angle: 90    
+    },        
+    {
+        axiom: "L",
+        rules: [
+            { input: "L", output: "L+F+R-F-L+F+R-F-L-F-R+F+L-F-R-F-L+F+R-F-L-F-R-F-L+F+R+F+L+F+R-F-L+F+R+F+L-R-F+F+L+F+R-F-L+F+R-F-L" },
+            { input: "R", output: "R-F-L+F+R-F-L+F+R+F+L-F-R+F+L+F+R-F-L+F+R+F+L+F+R-F-L-F-R-F-L+F+R-F-L-F-R+F+L-F-R-F-L+F+R-F-L+F+R" },
+        ],
+        angle: 45    
+    }    
 ];
+//卷軸問題
+window.scrollTo(0,0);
+window.addEventListener("scroll", (e) => {
+    e.preventDefault();
+    window.scrollTo(0, 0);
+});
 
 // Sliders and input elements
 const xOriginSlider = document.getElementById("xOrigin");
@@ -80,14 +134,14 @@ const angleInput = document.getElementById("angleInput"); // Angle input
 const scaleSlider = document.getElementById("scale"); // Scale slider
 const resetBtn = document.getElementById("resetBtn");
 const generateBtn = document.getElementById("generateBtn");
-const redrawBtn = document.getElementById("redrawBtn"); // New redraw button
+//const redrawBtn = document.getElementById("redrawBtn"); // New redraw button
 
 // 動態生成選項
 function populateSelect() {
     lSystems.forEach((system, index) => {
         const option = document.createElement("option");
         option.value = index;
-        option.textContent = `sys ${index + 1}`;
+        option.textContent = `${index + 1}`;
         lSystemSelect.appendChild(option);
     });
 }
@@ -112,7 +166,8 @@ function updateDisplay(index) {
 // 當下拉選單變更時更新顯示
 lSystemSelect.addEventListener("change", function() {
     updateDisplay(this.value);
-    setup();    
+    //setup();
+    reset();        
 });
 
 // 預設顯示第一個 L-System
@@ -230,15 +285,22 @@ function parseRules() {
     //console.log("Parsed Rules:", rules);
 }
 
+function getSymbols(sentence) {
+    return sentence.match(/Fl|Fr|F|G|L|R|f|\+|\-|X|\[|\]/g) || []; // 確保返回空數組以防匹配失敗
+}
 
-
-// Redefine the length before drawing each iteration
 function generate() {
     parseRules(); // Parse rules before generating the L-system
 
+    // 使用正則表達式匹配所有符號
+    const symbols = getSymbols(sentence);
+
     let nextSentence = "";
-    for (let i = 0; i < sentence.length; i++) {
-        let current = sentence[i];
+
+    for (let i = 0; i < symbols.length; i++) {
+        let current = symbols[i];
+        
+        // 查找匹配的規則
         let found = false;
         for (let j = 0; j < rules.length; j++) {
             if (current === rules[j].input) {
@@ -248,18 +310,16 @@ function generate() {
             }
         }
         if (!found) {
-            nextSentence += current; // If no rule matches, keep the character as is
+            nextSentence += current; // 如果沒有匹配的規則，保留當前字符
         }
     }
+
     sentence = nextSentence;
     
-    // Shorten the length but keep it dynamic
+    // 縮短長度但保持動態
     len *= 0.6; 
-
     draw();
 }
-
-
 
 
 function draw() {
@@ -280,17 +340,23 @@ function draw() {
     // Apply the current scale
     ctx.scale(scale, scale); // Apply scaling
 
-    for (let i = 0; i < sentence.length; i++) {
-        let current = sentence[i];
+    // Split the sentence into an array of symbols (e.g., Fl, Fr, F, G, +, -)
+    const symbols = getSymbols(sentence);
+    for (let i = 0; i < symbols.length; i++) {
+        let current = symbols[i];
 
         switch (current) {
             case "F":
+            case "Fl": // Move forward and draw a line
+            case "Fr": // Move forward and draw a line
+            case "L": // Move forward and draw a line
+            case "R": // Move forward and draw a line                        
             case "G": // Move forward and draw a line (G acts the same as F in this context)
                 ctx.beginPath();
                 ctx.moveTo(0, 0);
                 ctx.lineTo(0, -len);
                 ctx.stroke();
-                ctx.translate(0, -len); // Move forward by len
+                ctx.translate(0, -len);
                 break;
 
             case "X":
@@ -324,9 +390,6 @@ function draw() {
                 ctx.restore(); // Restore the previously saved state
                 break;
 
-            case "]": // Restore the saved state (complete a branch)
-                ctx.restore(); // Restore the previously saved state
-                break;
             default:
                 // For other symbols (e.g. ∧, &, \, /, $, ., {), which we are ignoring
                 break;
@@ -335,6 +398,8 @@ function draw() {
 
     ctx.restore();
 }
+
+
 
 // Reset the L-System with new axiom and rule
 function reset() {
@@ -356,7 +421,6 @@ function reset() {
 // Redraw function
 function redraw() {
     scale = parseFloat(scaleSlider.value); // Get the current scale value
-
     draw(); // Redraw the current state
 }
 
@@ -364,13 +428,11 @@ function redraw() {
 // Initial setup
 function setup() {
     angle = parseFloat(document.getElementById("angleInput").value); // Get angle from input
-    
-    //reset()
     draw();
 }
 
 
-redrawBtn.addEventListener("click", redraw); // Call redraw when button is clicked
+//redrawBtn.addEventListener("click", redraw); // Call redraw when button is clicked
 resetBtn.addEventListener("click", reset);
 generateBtn.addEventListener("click", generate);
 
