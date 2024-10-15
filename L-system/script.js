@@ -1,4 +1,5 @@
 // JSON 資料
+/*
 const lSystems = [
     {
         axiom: "F-F-F-F",
@@ -118,6 +119,265 @@ const lSystems = [
         angle: 45    
     }    
 ];
+*/
+
+const lSystems = [
+    {
+        axiom: "F-F-F-F",
+        rules: [
+            {
+                input: "F",
+                outputs: [
+                    { output: "F+FF-FF-F-F+F+FF-F-F+F+FF+FF-F", probability: 1 }
+                ]
+            }
+        ],
+        angle: 90
+    },
+    {
+        axiom: "-F",
+        rules: [
+            {
+                input: "F",
+                outputs: [
+                    { output: "F+F-F-F+F", probability: 1 }
+                ]
+            }
+        ],
+        angle: 90
+    },
+    {
+        axiom: "F+F+F+F",
+        rules: [
+            {
+                input: "F",
+                outputs: [
+                    { output: "F+f-FF+F+FF+Ff+FF-f+FF-F-FF-Ff-FFF", probability: 1 }
+                ]
+            },
+            {
+                input: "f",
+                outputs: [
+                    { output: "ffffff", probability: 1 }
+                ]
+            }
+        ],
+        angle: 90
+    },
+    {
+        axiom: "F-F-F-F",
+        rules: [
+            {
+                input: "F",
+                outputs: [
+                    { output: "FF-F-F-F-F-F+F", probability: 1 }
+                ]
+            }
+        ],
+        angle: 90        
+    },
+    {
+        axiom: "F-F-F-F",
+        rules: [
+            {
+                input: "F",
+                outputs: [
+                    { output: "FF-F-F-F-FF", probability: 1 }
+                ]
+            }
+        ],
+        angle: 90        
+    },    
+    {
+        axiom: "F-F-F-F",
+        rules: [
+            {
+                input: "F",
+                outputs: [
+                    { output: "FF-F+F-F-FF", probability: 1 }
+                ]
+            }
+        ],
+        angle: 90        
+    },    
+    {
+        axiom: "F-F-F-F",
+        rules: [
+            {
+                input: "F",
+                outputs: [
+                    { output: "FF-F--F-F", probability: 1 }
+                ]
+            }
+        ],
+        angle: 90        
+    },         
+    {
+        axiom: "F",
+        rules: [
+            {
+                input: "F",
+                outputs: [
+                    { output: "F[+F]F[-F]F", probability: 1 }
+                ]
+            }
+        ],
+        angle: 25.7        
+    },
+    {
+        axiom: "F",
+        rules: [
+            {
+                input: "F",
+                outputs: [
+                    { output: "FF-[-F+F+F]+[+F-F-F]", probability: 1 }
+                ]
+            }
+        ],
+        angle: 22.5    
+    },      
+    {
+        axiom: "X",
+        rules: [
+            {
+                input: "X",
+                outputs: [
+                    { output: "F[+X]F[-X]+X", probability: 1 }
+                ]
+            },
+            {
+                input: "F",
+                outputs: [
+                    { output: "FF", probability: 1 }
+                ]
+            }
+        ],
+        angle: 20    
+    },
+    {
+        axiom: "Fl",
+        rules: [
+            {
+                input: "Fl",
+                outputs: [
+                    { output: "Fl+Fr++Fr-Fl--FlFl-Fr+", probability: 1 }
+                ]
+            },
+            {
+                input: "Fr",
+                outputs: [
+                    { output: "-Fl+FrFr++Fr+Fl--Fl-Fr", probability: 1 }
+                ]
+            }
+        ],
+        angle: 60    
+    },
+    {
+        axiom: "Fl",
+        rules: [
+            {
+                input: "Fl",
+                outputs: [
+                    { output: "FlFl-Fr-Fr+Fl+Fl-Fr-FrFl+Fr+FlFlFr-Fl+Fr+FlFl+Fr-FlFr-Fr-Fl+Fl+FrFr-", probability: 1 }
+                ]
+            },
+            {
+                input: "Fr",
+                outputs: [
+                    { output: "+FlFl-Fr-Fr+Fl+FlFr+Fl-FrFr-Fl-Fr+FlFrFr-Fl-FrFl+Fl+Fr-Fr-Fl+Fl+FrFr", probability: 1 }
+                ]
+            }
+        ],
+        angle: 90    
+    },
+    {
+        axiom: "-L",
+        rules: [
+            {
+                input: "L",
+                outputs: [
+                    { output: "LF+RFR+FL-F-LFLFL-FRFR+", probability: 1 }
+                ]
+            },
+            {
+                input: "R",
+                outputs: [
+                    { output: "-LFLF+RFRFR+F+RF-LFL-FR", probability: 1 }
+                ]
+            }
+        ],
+        angle: 90    
+    },
+    {
+        axiom: "-L",
+        rules: [
+            {
+                input: "L",
+                outputs: [
+                    { output: "LFLF+RFR+FLFL-FRF-LFL-FR+F+RF-LFL-FRFRFR+", probability: 1 }
+                ]
+            },
+            {
+                input: "R",
+                outputs: [
+                    { output: "-LFLFLF+RFR+FL-F-LF+RFR+FLF+RFRF-LFL-FRFR", probability: 1 }
+                ]
+            }
+        ],
+        angle: 90    
+    },
+    {
+        axiom: "L",
+        rules: [
+            {
+                input: "L",
+                outputs: [
+                    { output: "LFRFL-F-RFLFR+F+LFRFL", probability: 1 }
+                ]
+            },
+            {
+                input: "R",
+                outputs: [
+                    { output: "RFLFR+F+LFRFL-F-RFLFR", probability: 1 }
+                ]
+            }
+        ],
+        angle: 90    
+    },        
+    {
+        axiom: "L",
+        rules: [
+            {
+                input: "L",
+                outputs: [
+                    { output: "L+F+R-F-L+F+R-F-L-F-R+F+L-F-R-F-L+F+R-F-L-F-R-F-L+F+R+F+L+F+R-F-L+F+R+F+L-R-F+F+L+F+R-F-L+F+R-F-L", probability: 1 }
+                ]
+            },
+            {
+                input: "R",
+                outputs: [
+                    { output: "R-F-L+F+R-F-L+F+R+F+L-F-R+F+L+F+R-F-L+F+R+F+L+F+R-F-L-F-R-F-L+F+R-F-L-F-R+F+L-F-R-F-L+F+R-F-L+F+R", probability: 1 }
+                ]
+            }
+        ],
+        angle: 45    
+    },
+    {
+        "axiom": "F",
+        "rules": [
+            {
+                "input": "F",
+                "outputs": [
+                    { "output": "F[+F]F[-F]F", "probability": 0.34 },
+                    { "output": "F[+F]F", "probability": 0.33 },
+                    { "output": "F[-F]F", "probability": 0.33 }
+                ]
+            }
+        ],
+        "angle": 25
+    }        
+];
+
 //卷軸問題
 window.scrollTo(0,0);
 window.addEventListener("scroll", (e) => {
@@ -148,6 +408,30 @@ function populateSelect() {
 
 // 初始化顯示
 function updateDisplay(index) {
+    const selectedSystem = lSystems[index];
+
+    // 更新 axiom 和 angle
+    axiomInput.value = selectedSystem.axiom;
+    angleInput.value = selectedSystem.angle;
+
+    // 格式化並顯示規則
+    let rulesText = "";
+    selectedSystem.rules.forEach(rule => {
+        rule.outputs.forEach(outputRule => {
+            // 如果概率是 1，就不顯示概率
+            if (outputRule.probability === 1) {
+                rulesText += `${rule.input} -> ${outputRule.output} \n`;
+            } else {
+                rulesText += `${rule.input} ${outputRule.probability}-> ${outputRule.output} \n`;
+            }
+        });
+    });
+
+    ruleInput.value = rulesText.trim(); // 移除最後多餘的換行
+}
+
+
+function updateDisplay2(index) {
     const selectedSystem = lSystems[index];
 
     // 更新 axiom 和 angle
@@ -257,11 +541,54 @@ canvas.addEventListener("wheel", (e) => {
     scaleSlider.value =scale;
 
     draw(); // Redraw the canvas with the new scale and origin
-});
-
+}, { passive: true });
 
 // Function to parse rules from the textarea input
 function parseRules() {
+    // Get the input from the ruleInput textarea
+    const ruleInput = document.getElementById("ruleInput").value.trim();
+    const ruleLines = ruleInput.split("\n");
+
+    // Clear the existing rules
+    rules = [];
+
+    // Process each line
+    ruleLines.forEach(line => {
+        const parts = line.split("->");
+        if (parts.length === 2) {
+            const inputWithProbability = parts[0].trim(); // The symbol with probability before '->'
+            const output = parts[1].trim();               // The string after '->'
+
+            // Split input and probability (probability is optional)
+            let probability = 1;
+            let input;
+
+            const inputSplit = inputWithProbability.split(" ");
+            if (inputSplit.length === 2) {
+                input = inputSplit[0].trim();            // Extract the input symbol
+                probability = parseFloat(inputSplit[1].trim()); // Extract probability
+            } else {
+                input = inputWithProbability.trim(); // No probability, just input symbol
+            }
+
+            // Check if the rule for the input already exists, append to outputs array if it does
+            let existingRule = rules.find(rule => rule.input === input);
+            if (existingRule) {
+                existingRule.outputs.push({ output: output, probability: probability });
+            } else {
+                rules.push({
+                    input: input,
+                    outputs: [{ output: output, probability: probability }]
+                });
+            }
+        }
+    });
+    
+    //console.log("Parsed Rules:", rules);
+}
+
+
+function parseRules2() {
     // Get the input from the ruleInput textarea
     const ruleInput = document.getElementById("ruleInput").value.trim();
     const ruleLines = ruleInput.split("\n");
@@ -290,6 +617,75 @@ function getSymbols(sentence) {
 }
 
 function generate() {
+    parseRules(); // Parse rules before generating the L-system
+
+    // Get all symbols in the current sentence
+    const symbols = getSymbols(sentence);
+
+    let nextSentence = "";
+
+    // Iterate through each symbol in the sentence
+    for (let i = 0; i < symbols.length; i++) {
+        let current = symbols[i];
+
+        // Find a matching rule for the current symbol
+        let found = false;
+        for (let j = 0; j < rules.length; j++) {
+            if (current === rules[j].input) {
+                const outputs = rules[j].outputs;
+
+                if (outputs.length > 1) {
+                    // If there are multiple outputs, randomly select one based on probabilities
+                    let chosenOutput = chooseByProbability(outputs);
+                    nextSentence += chosenOutput;
+                } else {
+                    // If only one output, use it directly
+                    nextSentence += outputs[0].output;
+                }
+
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            nextSentence += current; // If no rule is found, retain the current symbol
+        }
+    }
+
+    sentence = nextSentence;
+
+    // Shorten the length but keep it dynamic
+    len *= 0.6;
+
+    draw();
+}
+
+// Helper function to randomly choose an output based on probabilities
+function chooseByProbability(outputs) {
+    let sum = 0;
+    let rand = Math.random();
+
+    // Sum all probabilities
+    outputs.forEach(output => {
+        sum += output.probability;
+    });
+
+    // Normalize if the sum is not exactly 1
+    let cumulative = 0;
+    for (let i = 0; i < outputs.length; i++) {
+        cumulative += outputs[i].probability / sum;
+        if (rand < cumulative) {
+            return outputs[i].output;
+        }
+    }
+
+    // Fallback in case of rounding errors
+    return outputs[outputs.length - 1].output;
+}
+
+
+function generate2() {
     parseRules(); // Parse rules before generating the L-system
 
     // 使用正則表達式匹配所有符號
