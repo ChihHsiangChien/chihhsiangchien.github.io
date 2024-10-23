@@ -1,60 +1,3 @@
-class Dots {
-  constructor(num, startAngle, angle) {
-    this.num = num;
-    this.startAngle = startAngle;
-    this.angle = angle;
-    this.centerX = canvas.width / 2;
-    this.centerY = canvas.height / 2;
-    this.distanceTocenter = 20;
-    this.size = 10;
-    this.distanceScaleFactor = 0.1;
-    this.radiusScaleFactor = 0;
-  }
-
-  draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-
-    // 繪製紅色小圓
-    ctx.beginPath();
-    ctx.arc(this.centerX, this.centerY, 5, 0, 2 * Math.PI); 
-    ctx.fillStyle = 'black';
-    ctx.fill();
-    ctx.closePath();
-
-    for (var i = 0; i < this.num; i++) {
-      var dotAngle = this.startAngle + this.angle * i;
-      var radians = (dotAngle / 180) * Math.PI;
-
-      // 每個點距離中心的距離，每圈加一個distanceScaleFactor
-      var distance =
-        this.distanceTocenter +
-        this.distanceTocenter *
-          Math.floor((this.startAngle + this.angle * i) / 360) *
-          this.distanceScaleFactor;
-      var posx = this.centerX + distance * Math.cos(radians);
-      var posy = this.centerY + distance * Math.sin(radians);
-      ctx.beginPath();
-      ctx.arc(
-        posx,
-        posy,
-        this.size * (1 + this.radiusScaleFactor * i),
-        0,
-        2 * Math.PI
-      );
-      ctx.fillStyle = "rgba(100, 100, 100, 0.5)";
-
-      ctx.fill();
-
-      // 判斷是否顯示編號
-      if (showNumbersCheckbox.checked) {
-        ctx.fillStyle = "black";  // 編號文字的顏色
-        ctx.font = "14px Arial";  // 字體大小與類型
-        ctx.fillText(i + 1, posx-5, posy-5);  // 編號位置
-      }  
-    }
-  }
-}
 
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
@@ -66,11 +9,104 @@ const initNum = 500;
 const initStartAngle = 0;
 const initAngle = 122;
 const size = 10;
-const dots = new Dots(initNum, initStartAngle, initAngle);
+const startAngle = 1;
+const initConnectValue = 0;
 
-const showNumbersCheckbox = document.getElementById("showNumbersCheckbox");
+document.getElementById("showNumbersCheckbox");
 
 
+class Dots {
+  constructor(num, startAngle, angle) {
+    this.num = num;
+    this.startAngle = startAngle;
+    this.angle = angle;
+    this.centerX = canvas.width / 2;
+    this.centerY = canvas.height / 2;
+    this.distanceTocenter = 20;
+    this.size = 10;
+    this.distanceScaleFactor = 0.1;
+    this.radiusScaleFactor = 0;
+    this.connectValue = initConnectValue;
+  }
+
+  draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // 繪製紅色小圓
+    ctx.beginPath();
+    ctx.arc(this.centerX, this.centerY, 5, 0, 2 * Math.PI); 
+    ctx.fillStyle = 'black';
+    ctx.fill();
+    ctx.closePath();
+
+    // 記錄所有點的位置，以便連線
+    const positions = [];
+
+    for (var i = 0; i < this.num; i++) {
+        var dotAngle = this.startAngle + this.angle * i;
+        var radians = (dotAngle / 180) * Math.PI;
+
+        // 每個點距離中心的距離，每圈加一個distanceScaleFactor
+        var distance =
+            this.distanceTocenter +
+            this.distanceTocenter *
+            Math.floor((this.startAngle + this.angle * i) / 360) *
+            this.distanceScaleFactor;
+        var posx = this.centerX + distance * Math.cos(radians);
+        var posy = this.centerY + distance * Math.sin(radians);
+
+        // 儲存位置，供後續連線使用
+        positions.push({ x: posx, y: posy });
+
+        // 繪製每個點
+        ctx.beginPath();
+        ctx.arc(
+            posx,
+            posy,
+            this.size * (1 + this.radiusScaleFactor * i),
+            0,
+            2 * Math.PI
+        );
+        ctx.fillStyle = "rgba(100, 100, 100, 0.5)";
+        ctx.fill();
+
+        // 判斷是否顯示編號
+        if (showNumbersCheckbox.checked) {
+            ctx.fillStyle = "black";  // 編號文字的顏色
+            ctx.font = "14px Arial";  // 字體大小與類型
+            ctx.fillText(i + 1, posx - 5, posy - 5);  // 編號位置
+        }
+    }
+
+    // 呼叫連線功能
+    if (this.connectValue > 0){
+      this.connect(positions)
+    }
+}
+
+
+  // Connect dots based on connectValue
+  connect(positions) {
+    for (let i = 0; i < positions.length; i++) {
+        
+        let nextIndex = i + this.connectValue;  // 根據 connectValue 計算下一個點的索引
+        if (nextIndex >= positions.length){
+          continue; // continue
+        }
+        // 取出點的座標
+        let pos1 = positions[i];
+        let pos2 = positions[nextIndex];
+
+        // 畫線連接兩個點
+        ctx.beginPath();
+        ctx.moveTo(pos1.x, pos1.y);
+        ctx.lineTo(pos2.x, pos2.y);
+        ctx.strokeStyle = "blue";  // 線條顏色
+        ctx.stroke();
+        ctx.closePath();
+    }
+  }
+}
 
 function drawCenter() {
   // 清空canvas
@@ -87,7 +123,8 @@ function drawCenter() {
   ctx.fill();
   ctx.closePath();
 }
-drawCenter();
+
+const dots = new Dots(initNum, initStartAngle, initAngle);
 dots.draw();
 
 // Number of dots controls
@@ -218,7 +255,38 @@ sizeSlider.addEventListener("input", function (event) {
   dots.draw();
 });
 
+ // connect control
 
+// 获取 HTML 元素
+const connectSlider = document.getElementById("connectSlider");
+const connectValue = document.getElementById("connectValue");
+const connectInput = document.getElementById("connectInput");
+
+// 初始化值
+let connectValueNum = initConnectValue;
+connectSlider.value = initConnectValue;
+connectValue.textContent = initConnectValue;
+connectInput.value = initConnectValue;
+
+
+
+// 更新 connectSlider 和 connectInput 的值同步
+connectSlider.addEventListener("input", function (event) {
+    dots.connectValue = parseInt(event.target.value);
+    connectValue.textContent = event.target.value;
+    connectInput.value = event.target.value;
+    dots.draw();    
+});
+
+connectInput.addEventListener("input", function (event) {
+    const value = parseInt(event.target.value);
+    dots.connectValue = value;
+    connectSlider.value = value;
+    connectValue.textContent = value;
+    dots.draw();
+});
+
+/////////////////////////////////////
 // Update the angle input display
 function updateAngleInput() {
   const angle = angleSlider.value;
