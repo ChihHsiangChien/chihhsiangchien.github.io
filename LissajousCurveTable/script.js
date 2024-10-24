@@ -8,7 +8,7 @@ canvas.width = 500;
 canvas.height = 500;
 
 // 定義曲線參數
-const size = 8; 
+const size = 9; 
 const ratio = 3 ;
 const cellSize = canvas.width / size;
 
