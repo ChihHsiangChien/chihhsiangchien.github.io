@@ -9,7 +9,7 @@ let grid = [];
 let score = 0;
 
 const TILE_TYPES = ['細胞', '組織', '器官', '器官系統', '個體', 
-                    '族群', '群集', '生態系', '生物圈', '地球','太陽系'];
+                    '族群', '群集', '生態系', '生物圈', '地球','太陽系','宇宙','虛空'];
 
 //卷軸問題
 window.scrollTo(0,0);
@@ -214,7 +214,7 @@ function updateScore() {
 
 function checkWinCondition() {
     if (grid.some(row => row.includes(TILE_TYPES.length - 1))) {
-        alert('恭喜你贏了！你已經達到了"生物圈"級別！');
+        alert('恭喜你贏了！你已經達到了最頂級！');
     }
 }
 
