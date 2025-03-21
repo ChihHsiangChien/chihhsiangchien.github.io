@@ -2,6 +2,7 @@ const canvas = document.getElementById('lissajousCanvas');
 const ctx = canvas.getContext('2d');
 let speed = 1;
 let time = 0;
+let showLines = true; // Variable to toggle line visibility
 
 // 設定畫布大小
 canvas.width = 500;
@@ -46,13 +47,15 @@ function drawCurve(x0, y0, freqX, freqY, col, row) {
         
         if (i === 0) {
             ctx.moveTo(x, y);
-        } else {
+        } else if (showLines) { // Only draw lines if showLines is true
             ctx.lineTo(x, y);
         }
     }
     
-    ctx.strokeStyle = `hsl(${(freqX + freqY) * 30}, 80%, 50%)`;
-    ctx.stroke();
+    if (showLines) {
+        ctx.strokeStyle = `hsl(${(freqX + freqY) * 30}, 80%, 50%)`;
+        ctx.stroke();
+    }
     
     // 繪製跟蹤點
     if (!((row === 0 && col === 0) || (row > 0 && col > 0))) {
@@ -99,19 +102,26 @@ function draw() {
 }
 
 // 速度控制
-document.getElementById('speedUp').addEventListener('click', () => {
-    speed = Math.min(speed + 0.5, 5);
-    updateSpeedDisplay();
-});
-
-document.getElementById('speedDown').addEventListener('click', () => {
-    speed = Math.max(speed - 0.5, 0.5);
-    updateSpeedDisplay();
-});
-
 function updateSpeedDisplay() {
     document.getElementById('speedDisplay').textContent = `Speed: ${speed}x`;
 }
 
-// 開始動畫
-draw();
+// Add event listener to toggle lines
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('toggleLines').addEventListener('click', () => {
+        showLines = !showLines; // Toggle the showLines variable
+    });
+
+    document.getElementById('speedUp').addEventListener('click', () => {
+        speed = Math.min(speed + 0.5, 5);
+        updateSpeedDisplay();
+    });
+
+    document.getElementById('speedDown').addEventListener('click', () => {
+        speed = Math.max(speed - 0.5, 0.5);
+        updateSpeedDisplay();
+    });
+
+    // Start the animation
+    draw();
+});
