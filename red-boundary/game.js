@@ -1,3 +1,6 @@
+// 在文件開頭添加導出聲明
+export { startGame, resetGame };
+
 // Game state
 let gameState = {
     tests: [],
@@ -12,19 +15,25 @@ let gameState = {
     currentGridSize: 6  // 初始網格大小
 };
 
-// 在文件開頭添加 Firebase 配置
+// Firebase 配置和初始化
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.5.0/firebase-app.js";
+import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/11.5.0/firebase-firestore.js";
+import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.5.0/firebase-analytics.js";
+
 const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_AUTH_DOMAIN",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_STORAGE_BUCKET",
-    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-    appId: "YOUR_APP_ID"
+    apiKey: "AIzaSyAnWXmKCDSf9uuN1Gl6Id_p5ME-2lsl89w",
+    authDomain: "red-boundary-test.firebaseapp.com",
+    projectId: "red-boundary-test",
+    storageBucket: "red-boundary-test.firebasestorage.app",
+    messagingSenderId: "96092389524",
+    appId: "1:96092389524:web:0cfd09c36b6deaa6207481",
+    measurementId: "G-3R1VDGFBJV"
 };
 
 // 初始化 Firebase
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+const db = getFirestore(app);
 
 // Color generation utilities
 function generateColorPool() {
@@ -270,12 +279,12 @@ function showResults() {
     // 生成邊界地圖
     generateBoundaryMap();
 
-    // 添加人口統計信息收集界面
+    // 添加人口統計訊息收集界面
     const demographicsDiv = document.createElement('div');
     demographicsDiv.className = 'demographics-container';
     demographicsDiv.innerHTML = `
         <div class="demographics-form">
-            <h3>請提供一些基本信息</h3>
+            <h3>請提供一些基本資料</h3>
             <div class="form-group">
                 <label>性別：</label>
                 <div class="button-group">
@@ -388,11 +397,14 @@ function showResults() {
         const testData = {
             gender: selectedGender,
             ageRange: selectedAge,
-            tests: gameState.tests,
+            tests: gameState.tests.map(test => ({
+                color: test.color,
+                isRed: test.isRed
+            })),
             redCount: redCount,
             redRange: redRange,
             totalTests: gameState.currentTest,
-            timestamp: new Date(),
+            timestamp: new Date().toISOString(),
             userAgent: navigator.userAgent,
             screenSize: {
                 width: window.innerWidth,
@@ -401,13 +413,14 @@ function showResults() {
         };
 
         try {
-            await db.collection('redBoundaryTests').add(testData);
+            const docRef = await addDoc(collection(db, 'redBoundaryTests'), testData);
+            console.log('Document written with ID: ', docRef.id);
             alert('感謝您的參與！');
             // 禁用提交按鈕防止重複提交
             document.getElementById('submitDemographics').disabled = true;
             document.getElementById('submitDemographics').textContent = '已提交';
         } catch (error) {
-            console.error('提交失敗:', error);
+            console.error('Error adding document: ', error);
             alert('提交失敗，請稍後再試');
         }
     });
