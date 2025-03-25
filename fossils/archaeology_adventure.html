@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>考古探險記</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+            background-color: #f5f5dc; /* 淺米色背景，像沙子 */
+        }
+        
+        #canvasContainer {
+            position: relative;
+            width: 100%;
+            height: 100vh;
+            touch-action: none;
+        }
+        
+        #mainCanvas {
+            display: block;
+            background-color: #f5f5dc;
+            touch-action: none;
+        }
+        
+        #layerControls {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+        }
+        
+        button {
+            background-color: #4CAF50; /* 綠色 */
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 10px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+        
+        button:hover {
+            background-color: #3e8e41;
+        }
+        
+        button.disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        
+        #storyPanel {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-top: 3px solid #4CAF50;
+            box-shadow: 0 -3px 10px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            max-height: 30vh;
+            overflow-y: auto;
+            transition: transform 0.3s ease;
+            transform: translateY(0);
+        }
+        
+        #storyHeader {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        #storyTitle {
+            font-size: 20px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        #storyMinimize {
+            background: none;
+            border: none;
+            color: #333;
+            cursor: pointer;
+            font-size: 24px;
+        }
+        
+        #storyContent {
+            margin-bottom: 15px;
+            font-size: 16px;
+            line-height: 1.5;
+            color: #444;
+        }
+        
+        #dayCounter {
+            font-weight: bold;
+            color: #4CAF50;
+            margin-bottom: 10px;
+        }
+        
+        #storyButtons {
+            display: flex;
+            gap: 10px;
+        }
+        
+        #storyPanel.minimized {
+            transform: translateY(calc(100% - 40px));
+        }
+        
+        #codeExchangePanel {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            max-width: 300px;
+        }
+        
+        #excavationCode {
+            font-weight: bold;
+            margin-bottom: 10px;
+            word-break: break-all;
+            padding: 10px;
+            background: #eee;
+            border-radius: 5px;
+            display: none;
+        }
+        
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        
+        #toast {
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            z-index: 2000;
+            display: none;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        /* 添加面板控制按鈕樣式 */
+        .panel-control {
+            position: fixed;
+            width: 50px;
+            height: 50px;
+            background-color: rgba(74, 185, 80, 0.8);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            z-index: 1001;
+            color: white;
+            font-size: 24px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        }
+        
+        #toggleCodePanel {
+            top: 20px;
+            right: 20px;
+        }
+        
+        #toggleLayerPanel {
+            top: 20px;
+            left: 20px;
+        }
+        
+        @media (max-width: 768px) {
+            #layerControls {
+                top: 10px;
+                left: 10px;
+                padding: 10px;
+            }
+            
+            #codeExchangePanel {
+                top: 10px;
+                right: 10px;
+                padding: 10px;
+                max-width: 200px;
+            }
+            
+            button {
+                padding: 8px;
+                font-size: 14px;
+            }
+            
+            .panel-control {
+                width: 40px;
+                height: 40px;
+                font-size: 18px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="canvasContainer">
+        <canvas id="mainCanvas"></canvas>
+    </div>
+    
+    <div class="panel-control" id="toggleLayerPanel">L</div>
+    <div id="layerControls" style="display: none;">
+        <button id="moveToTop" class="disabled">移到最上層</button>
+        <button id="moveUp" class="disabled">上移一層</button>
+        <button id="moveDown" class="disabled">下移一層</button>
+        <button id="moveToBottom" class="disabled">移到最下層</button>
+    </div>
+    
+    <div class="panel-control" id="toggleCodePanel">C</div>
+    <div id="codeExchangePanel" style="display: none;">
+        <div id="excavationCode"></div>
+        <input type="text" id="codeInput" placeholder="輸入發掘代碼">
+        <button id="applyCodeBtn">應用代碼</button>
+    </div>
+    
+    <div id="storyPanel">
+        <div id="storyHeader">
+            <div id="storyTitle">考古探險記</div>
+            <button id="storyMinimize">-</button>
+        </div>
+        <div id="dayCounter">第1天</div>
+        <div id="storyContent">
+            歡迎來到迪諾斯考古挖掘基地！你是一名充滿熱情的年輕考古學家，剛剛加入一個專注於發掘遠古生物骨骼的考古團隊。
+            今天是你的第一天，準備好開始你的考古生涯了嗎？
+        </div>
+        <div id="storyButtons">
+            <button id="nextDayBtn">開始挖掘</button>
+            <button id="shareCodeBtn" class="hidden">分享發現</button>
+            <button id="completeBtn" class="hidden">完成任務</button>
+        </div>
+    </div>
+    
+    <div id="toast"></div>
+    
+    <!-- 導入骨頭管理腳本 -->
+    <script src="boneManager.js"></script>
+    
+    <script>
+        // 故事管理類
+        class StoryManager {
+            constructor() {
+                this.currentDay = 1;
+                this.maxDays = 3;
+                this.storyPanel = document.getElementById('storyPanel');
+                this.storyTitle = document.getElementById('storyTitle');
+                this.dayCounter = document.getElementById('dayCounter');
+                this.storyContent = document.getElementById('storyContent');
+                this.nextDayBtn = document.getElementById('nextDayBtn');
+                this.shareCodeBtn = document.getElementById('shareCodeBtn');
+                this.completeBtn = document.getElementById('completeBtn');
+                this.storyMinimize = document.getElementById('storyMinimize');
+                this.excavationCode = document.getElementById('excavationCode');
+                this.codeInput = document.getElementById('codeInput');
+                this.applyCodeBtn = document.getElementById('applyCodeBtn');
+                this.toast = document.getElementById('toast');
+                
+                // 初始骨頭池 - 所有可能的骨頭ID
+                this.allBoneIds = [
+                    "image1", "image2", "image3", 
+                    "image4", "image5", "image6",
+                    "image7", "image8", "image9", 
+                    "image10", "image11", "image12",
+                    "image13", "image14", "image15"
+                ];
+                
+                // 每天的故事內容
+                this.dailyStories = {
+                    1: {
+                        title: "第一天：初次發掘",
+                        content: "在迪諾斯盆地的烈日下，你開始了考古生涯的第一天。土層深處，你能感受到歷史的呼喚。當你小心地刮除覆蓋在神秘物體上的沙土時，一塊古老的骨骼逐漸顯露出來！導師告訴你，這可能屬於6500萬年前生活在這片土地上的古老生物。",
+                        event: "挖掘過程中，一場小型沙塵暴突然襲來，你迅速保護好發掘的骨骼，但失去了一些可能的線索。收工時，營地的老考古學家分享了他年輕時的發現故事，激發了你的熱情。"
+                    },
+                    2: {
+                        title: "第二天：沙漠秘密",
+                        content: "今天氣溫更高，但你的熱情不減。昨晚的風吹走了表層沙土，露出了新的痕跡。午後，當陽光以特定角度照射時，你注意到地面上的一道不尋常的凹痕，順著它挖掘，你發現了更多骨骼碎片！這些可能是同一生物的一部分。",
+                        event: "營地的供水系統突然出現故障，大家需要節約用水。在整理今天的發現時，你無意中聽到其他考古隊發現了一塊特殊的頭骨化石，這讓你思考自己的發現可能屬於什麼生物。"
+                    },
+                    3: {
+                        title: "第三天：最後機會",
+                        content: "資金限制使得這是本次發掘的最後一天。一早，你就充滿決心地來到昨天的發掘點。運用你這兩天學到的技巧，你更加熟練地清理著化石周圍的泥土。下午，你挖掘到了一些與之前不同的骨骼結構，這讓所有人都感到興奮！",
+                        event: "太陽落山前，遠處的考古隊傳來喊聲，他們似乎有重大發現。你的導師建議，如果能與其他考古隊交流發現，或許能拼湊出更完整的史前生物圖景。明天就要離開了，這是最後的機會！"
+                    }
+                };
+                
+                // 初始化事件監聽器
+                this.setupEventListeners();
+                
+                // 設置骨頭管理器
+                this.boneManager = new BoneManager();
+                
+                // 開始時先清空所有骨頭
+                this.boneManager.bones = [];
+                this.boneManager.draw();
+            }
+            
+            setupEventListeners() {
+                // 下一天按鈕
+                this.nextDayBtn.addEventListener('click', () => {
+                    if (this.currentDay <= this.maxDays) {
+                        this.progressToNextDay();
+                    }
+                });
+                
+                // 分享代碼按鈕
+                this.shareCodeBtn.addEventListener('click', () => {
+                    this.generateAndShowCode();
+                });
+                
+                // 完成任務按鈕
+                this.completeBtn.addEventListener('click', () => {
+                    this.completeExcavation();
+                });
+                
+                // 面板最小化按鈕
+                this.storyMinimize.addEventListener('click', () => {
+                    this.storyPanel.classList.toggle('minimized');
+                    this.storyMinimize.textContent = this.storyPanel.classList.contains('minimized') ? '+' : '-';
+                });
+                
+                // 應用代碼按鈕
+                this.applyCodeBtn.addEventListener('click', () => {
+                    const code = this.codeInput.value.trim();
+                    if (code) {
+                        this.applyExcavationCode(code);
+                    } else {
+                        this.showToast('請輸入有效的發掘代碼');
+                    }
+                });
+                
+                // 控制面板切換按鈕
+                document.getElementById('toggleLayerPanel').addEventListener('click', () => {
+                    const panel = document.getElementById('layerControls');
+                    panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+                });
+                
+                document.getElementById('toggleCodePanel').addEventListener('click', () => {
+                    const panel = document.getElementById('codeExchangePanel');
+                    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+                });
+            }
+            
+            // 進展到下一天
+            progressToNextDay() {
+                if (this.currentDay <= this.maxDays) {
+                    const dayStory = this.dailyStories[this.currentDay];
+                    this.storyTitle.textContent = dayStory.title;
+                    this.dayCounter.textContent = `第${this.currentDay}天`;
+                    
+                    // 組合故事內容和事件
+                    this.storyContent.textContent = dayStory.content + '\n\n事件: ' + dayStory.event;
+                    
+                    // 添加新的骨頭
+                    this.addRandomBones();
+                    
+                    // 更新按鈕狀態
+                    if (this.currentDay === this.maxDays) {
+                        this.nextDayBtn.textContent = '完成發掘';
+                        this.nextDayBtn.classList.add('hidden');
+                        this.completeBtn.classList.remove('hidden');
+                    }
+                    
+                    // 顯示分享代碼按鈕（從第二天開始）
+                    if (this.currentDay >= 2) {
+                        this.shareCodeBtn.classList.remove('hidden');
+                    }
+                    
+                    // 增加天數計數
+                    this.currentDay++;
+                }
+            }
+            
+            // 添加隨機骨頭
+            addRandomBones() {
+                // 決定這一天要添加多少骨頭（2-4塊）
+                const bonesToAdd = Math.floor(Math.random() * 3) + 2;
+                
+                // 從所有骨頭ID中隨機選擇
+                const selectedBones = [];
+                const availableBones = [...this.allBoneIds];
+                
+                // 如果是第一天，強制清空之前的骨頭
+                if (this.currentDay === 1) {
+                    this.boneManager.bones = [];
+                }
+                
+                // 隨機選擇骨頭
+                for (let i = 0; i < bonesToAdd && availableBones.length > 0; i++) {
+                    const randomIndex = Math.floor(Math.random() * availableBones.length);
+                    const selectedBoneId = availableBones.splice(randomIndex, 1)[0];
+                    selectedBones.push(selectedBoneId);
+                }
+                
+                // 加載選中的骨頭
+                this.loadSelectedBones(selectedBones);
+            }
+            
+            // 加載選定的骨頭
+            async loadSelectedBones(boneIds) {
+                for (const boneId of boneIds) {
+                    const img = new Image();
+                    img.src = `bones/${boneId}.png`;
+                    await new Promise((resolve, reject) => {
+                        img.onload = () => {
+                            // 計算中央1/3的區域
+                            const canvasWidth = this.boneManager.canvas.width;
+                            const canvasHeight = this.boneManager.canvas.height;
+                            const margin = 50;
+                            
+                            // 計算中央1/3的範圍
+                            const centralStartX = canvasWidth / 3;
+                            const centralStartY = canvasHeight / 3;
+                            const centralEndX = canvasWidth * 2 / 3;
+                            const centralEndY = canvasHeight * 2 / 3;
+                            
+                            // 計算可用的中央區域大小（考慮邊距）
+                            const availableWidth = centralEndX - centralStartX - 2 * margin;
+                            const availableHeight = centralEndY - centralStartY - 2 * margin;
+                            
+                            // 生成中央1/3區域內的隨機位置
+                            const randomX = centralStartX + margin + Math.random() * availableWidth;
+                            const randomY = centralStartY + margin + Math.random() * availableHeight;
+                            
+                            // 生成隨機旋轉角度
+                            const randomRotation = Math.random() * Math.PI * 2;
+                            
+                            // 創建骨頭對象
+                            const bone = {
+                                id: boneId,
+                                image: img,
+                                x: randomX / this.boneManager.globalScale,
+                                y: randomY / this.boneManager.globalScale,
+                                width: img.width,
+                                height: img.height,
+                                rotation: randomRotation,
+                                scale: 1,
+                                handleAngle: 0,
+                                handleVisible: false
+                            };
+                            bone.originalX = bone.x;
+                            bone.originalY = bone.y;
+                            this.boneManager.bones.push(bone);
+                            resolve();
+                        };
+                        img.onerror = reject;
+                    });
+                }
+                
+                // 重新繪製畫布
+                this.boneManager.draw();
+                
+                // 顯示提示消息
+                this.showToast(`發現了${boneIds.length}塊新的骨頭碎片！`);
+            }
+            
+            // 生成並顯示代碼
+            generateAndShowCode() {
+                // 創建代碼，包含骨頭ID和位置、旋轉信息
+                const bonesData = this.boneManager.bones.map(bone => ({
+                    id: bone.id,
+                    x: bone.x,
+                    y: bone.y,
+                    rotation: bone.rotation
+                }));
+                
+                // 添加一個混淆鍵值對，防止猜測
+                const randomSalt = Math.floor(Math.random() * 1000000);
+                
+                // 創建包含鹽值的數據對象
+                const codeData = {
+                    v: 1, // 版本號
+                    s: randomSalt, // 鹽值
+                    b: bonesData // 骨頭數據
+                };
+                
+                // 壓縮並編碼數據
+                const jsonString = JSON.stringify(codeData);
+                const compressedCode = btoa(jsonString).replace(/=/g, '');
+                
+                // 顯示代碼
+                this.excavationCode.textContent = compressedCode;
+                this.excavationCode.style.display = 'block';
+                
+                // 顯示提示
+                this.showToast('發掘代碼已生成，可以分享給其他考古隊！');
+            }
+            
+            // 應用挖掘代碼
+            applyExcavationCode(code) {
+                try {
+                    // 解碼
+                    const decodedString = atob(code);
+                    const decodedData = JSON.parse(decodedString);
+                    
+                    // 檢查版本
+                    if (decodedData.v !== 1) {
+                        throw new Error('不支援的代碼版本');
+                    }
+                    
+                    // 提取骨頭數據
+                    const bonesData = decodedData.b;
+                    
+                    // 加載骨頭 (不過濾重複的骨頭)
+                    this.loadBonesFromCode(bonesData);
+                    
+                    // 清空輸入框
+                    this.codeInput.value = '';
+                    
+                    // 顯示提示
+                    this.showToast(`成功導入了${bonesData.length}塊其他考古隊發現的骨頭！`);
+                } catch (error) {
+                    console.error('解析代碼出錯:', error);
+                    this.showToast('無效的發掘代碼');
+                }
+            }
+            
+            // 從代碼加載骨頭
+            async loadBonesFromCode(bonesData) {
+                // 移除過濾，允許加載重複的骨頭
+                for (const boneData of bonesData) {
+                    const img = new Image();
+                    img.src = `bones/${boneData.id}.png`;
+                    await new Promise((resolve, reject) => {
+                        img.onload = () => {
+                            // 創建骨頭對象
+                            const bone = {
+                                id: boneData.id,
+                                image: img,
+                                x: boneData.x,
+                                y: boneData.y,
+                                width: img.width,
+                                height: img.height,
+                                rotation: boneData.rotation,
+                                scale: 1,
+                                handleAngle: 0,
+                                handleVisible: false
+                            };
+                            bone.originalX = bone.x;
+                            bone.originalY = bone.y;
+                            this.boneManager.bones.push(bone);
+                            resolve();
+                        };
+                        img.onerror = reject;
+                    });
+                }
+                
+                // 重新繪製畫布
+                this.boneManager.draw();
+            }
+            
+            // 完成挖掘
+            completeExcavation() {
+                // 顯示結束故事
+                this.storyTitle.textContent = "挖掘完成！";
+                this.dayCounter.textContent = "總共發現：" + this.boneManager.bones.length + " 塊骨頭";
+                
+                let completionMessage = "你成功完成了為期三天的考古挖掘工作！雖然沒能發掘出完整的骨架，但你的發現為整個團隊帶來了寶貴的資料。";
+                
+                if (this.boneManager.bones.length < 6) {
+                    completionMessage += "\n\n你的發現數量略顯不足。別灰心，考古工作就是這樣，需要耐心和運氣。與其他考古隊交流，您可能會有更多發現！";
+                } else if (this.boneManager.bones.length < 9) {
+                    completionMessage += "\n\n你獲得了不少發現！這些骨頭碎片對重建史前生物將有很大幫助。繼續與其他考古隊合作，拼湊完整的圖景。";
+                } else {
+                    completionMessage += "\n\n太棒了！你發現了大量寶貴的骨骼化石。研究人員對你的成果讚不絕口，這次發掘將在古生物學領域留下重要的一筆！";
+                }
+                
+                this.storyContent.textContent = completionMessage;
+                
+                // 更新按鈕
+                this.completeBtn.classList.add('hidden');
+                this.nextDayBtn.classList.add('hidden');
+                
+                // 顯示提示
+                this.showToast('恭喜完成考古挖掘任務！');
+            }
+            
+            // 顯示提示消息
+            showToast(message) {
+                this.toast.textContent = message;
+                this.toast.style.display = 'block';
+                
+                setTimeout(() => {
+                    this.toast.style.display = 'none';
+                }, 3000);
+            }
+        }
+        
+        // 當網頁載入完成後初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            // 初始化故事管理器
+            const storyManager = new StoryManager();
+        });
+    </script>
+</body>
+</html> 
