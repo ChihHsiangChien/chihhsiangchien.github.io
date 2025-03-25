@@ -12,7 +12,7 @@ class BoneManager {
         this.lastY = 0;
         this.isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
         this.isSmallScreen = window.innerWidth < 768 || window.innerHeight < 768;
-        this.version = "0.1"; // 版本號
+        this.version = "0.2"; // 版本號
         this.setGlobalScale(); // 根據設備和螢幕方向設置縮放比例
         this.setupCanvas();
         this.loadBones();
@@ -63,8 +63,17 @@ class BoneManager {
 
     // 處理視窗大小變化和方向變化
     handleResize() {
+        // 檢查是否發生了螢幕方向變化
+        const wasLandscape = this.isLandscape;
+        this.isLandscape = window.innerWidth > window.innerHeight;
+        const orientationChanged = wasLandscape !== this.isLandscape;
+        
         // 更新螢幕大小檢測
         this.isSmallScreen = window.innerWidth < 768 || window.innerHeight < 768;
+        
+        // 保存舊的畫布尺寸
+        const oldWidth = this.canvas.width;
+        const oldHeight = this.canvas.height;
         
         // 重新計算縮放比例
         this.setGlobalScale();
@@ -72,15 +81,88 @@ class BoneManager {
         // 更新畫布大小
         this.updateCanvasSize();
         
+        // 如果發生了螢幕方向變化，調整所有骨頭的位置
+        if (orientationChanged && this.bones.length > 0) {
+            console.log('螢幕方向變化，調整骨頭位置');
+            this.adjustBonePositionsForOrientation(oldWidth, oldHeight);
+        }
+        
         // 重新繪製畫面
         this.draw();
     }
+    
+    // 調整所有骨頭的位置以適應新的螢幕方向
+    adjustBonePositionsForOrientation(oldWidth, oldHeight) {
+        const newWidth = this.canvas.width;
+        const newHeight = this.canvas.height;
+        
+        // 計算位置縮放比例
+        const widthRatio = newWidth / oldWidth;
+        const heightRatio = newHeight / oldHeight;
+        
+        // 設置邊距
+        const margin = 50;
+        const availableWidth = newWidth - 2 * margin;
+        const availableHeight = newHeight - 2 * margin;
+        
+        // 調整每個骨頭的位置
+        this.bones.forEach(bone => {
+            // 獲取骨頭的中心位置相對於舊畫布的比例
+            const relativeCenterX = (bone.x + bone.width / 2) / oldWidth;
+            const relativeCenterY = (bone.y + bone.height / 2) / oldHeight;
+            
+            // 計算在新畫布上的中心位置
+            const newCenterX = relativeCenterX * newWidth;
+            const newCenterY = relativeCenterY * newHeight;
+            
+            // 計算考慮縮放後的骨頭尺寸
+            const scaledWidth = bone.width * this.globalScale;
+            const scaledHeight = bone.height * this.globalScale;
+            
+            // 計算新的左上角位置
+            let newX = newCenterX - bone.width / 2;
+            let newY = newCenterY - bone.height / 2;
+            
+            // 確保骨頭完全在可視區域內
+            // 左邊界
+            if (newX * this.globalScale < margin) {
+                newX = margin / this.globalScale;
+            }
+            // 右邊界
+            if ((newX + bone.width) * this.globalScale > newWidth - margin) {
+                newX = (newWidth - margin - scaledWidth) / this.globalScale;
+            }
+            // 上邊界
+            if (newY * this.globalScale < margin) {
+                newY = margin / this.globalScale;
+            }
+            // 下邊界
+            if ((newY + bone.height) * this.globalScale > newHeight - margin) {
+                newY = (newHeight - margin - scaledHeight) / this.globalScale;
+            }
+            
+            // 更新骨頭位置
+            bone.x = newX;
+            bone.y = newY;
+        });
+    }
 
     updateCanvasSize() {
+        // 保存舊的畫布尺寸以便比較
+        const oldWidth = this.canvas.width;
+        const oldHeight = this.canvas.height;
+        
         // 设置画布为窗口大小，最大化展示空间
         this.canvas.width = window.innerWidth;
         this.canvas.height = window.innerHeight;
-        this.draw();
+        
+        // 更新橫屏狀態
+        this.isLandscape = window.innerWidth > window.innerHeight;
+        
+        // 只有在初始化後才繪製，避免在構造函數中調用時（畫布尚未準備好）出現問題
+        if (this.bones) {
+            this.draw();
+        }
     }
 
     async loadBones() {
@@ -88,9 +170,12 @@ class BoneManager {
             const response = await fetch('bones/bones_info.json');
             const bonesInfo = await response.json();
             
+            // 初始化橫屏狀態
+            this.isLandscape = window.innerWidth > window.innerHeight;
+            
             // 定義畫面邊界，留出邊距確保骨頭完全在畫面內
-            const margin = 300;
-            const availableWidth = this.canvas.width * 0.5;
+            const margin = 50;
+            const availableWidth = this.canvas.width - 2 * margin;
             const availableHeight = this.canvas.height - 2 * margin;
             
             // 加载每个骨头图片
@@ -104,8 +189,8 @@ class BoneManager {
                         const scaledHeight = img.height * this.globalScale;
                         
                         // 確保骨頭在畫面範圍內
-                        const maxX = this.canvas.width - scaledWidth;
-                        const maxY = this.canvas.height - scaledHeight;
+                        const maxX = this.canvas.width - scaledWidth - margin;
+                        const maxY = this.canvas.height - scaledHeight - margin;
                         
                         // 生成隨機位置，確保在畫面內
                         const randomX = margin + Math.random() * (availableWidth - scaledWidth);
