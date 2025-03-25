@@ -12,6 +12,7 @@ class BoneManager {
         this.lastY = 0;
         this.isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
         this.isSmallScreen = window.innerWidth < 768 || window.innerHeight < 768;
+        this.isControlPanelVisible = true; // 控制面板初始為顯示狀態
         this.version = "0.2"; // 版本號
         this.setGlobalScale(); // 根據設備和螢幕方向設置縮放比例
         this.setupCanvas();
@@ -307,6 +308,13 @@ class BoneManager {
                 button.classList.add('disabled');
             }
         }
+        
+        // 根據初始狀態設置控制面板顯示
+        if (this.isControlPanelVisible) {
+            this.layerControls.style.display = 'flex';
+        } else {
+            this.layerControls.style.display = 'none';
+        }
     }
 
     getCanvasCoordinates(clientX, clientY) {
@@ -321,6 +329,12 @@ class BoneManager {
         const coords = this.getCanvasCoordinates(e.clientX, e.clientY);
         const x = coords.x;
         const y = coords.y;
+        
+        // 檢查是否點擊了控制面板切換按鈕
+        if (this.isPointInToggleButton(x, y)) {
+            this.toggleControlPanel();
+            return;
+        }
         
         // 重置拖动状态，但保留选中和旋转状态
         this.isDragging = false;
@@ -547,6 +561,9 @@ class BoneManager {
         
         // 在左下角繪製版本號
         this.drawVersionNumber();
+        
+        // 在右下角繪製控制面板切換按鈕
+        this.drawControlToggleButton();
     }
     
     // 繪製版本號的函數
@@ -564,6 +581,81 @@ class BoneManager {
         this.ctx.fillText(`v${this.version}`, margin, this.canvas.height - margin);
         
         this.ctx.restore();
+    }
+    
+    // 繪製控制面板切換按鈕
+    drawControlToggleButton() {
+        this.ctx.save();
+        
+        // 設置按鈕位置與大小
+        const buttonSize = 40;
+        const margin = 15;
+        const x = this.canvas.width - buttonSize - margin;
+        const y = this.canvas.height - buttonSize - margin;
+        
+        // 繪製圓形背景
+        this.ctx.beginPath();
+        this.ctx.arc(x + buttonSize/2, y + buttonSize/2, buttonSize/2, 0, Math.PI * 2);
+        this.ctx.fillStyle = 'rgba(74, 185, 80, 0.8)';
+        this.ctx.fill();
+        
+        // 繪製按鈕圖標（顯示/隱藏符號）
+        this.ctx.beginPath();
+        if (this.isControlPanelVisible) {
+            // 繪製隱藏圖標（眼睛帶斜線）
+            this.ctx.moveTo(x + buttonSize/4, y + buttonSize/2);
+            this.ctx.lineTo(x + buttonSize*3/4, y + buttonSize/2);
+            this.ctx.moveTo(x + buttonSize/4, y + buttonSize/3);
+            this.ctx.lineTo(x + buttonSize*3/4, y + buttonSize*2/3);
+            this.ctx.moveTo(x + buttonSize*3/4, y + buttonSize/3);
+            this.ctx.lineTo(x + buttonSize/4, y + buttonSize*2/3);
+        } else {
+            // 繪製顯示圖標（眼睛）
+            this.ctx.arc(x + buttonSize/2, y + buttonSize/2, buttonSize/4, 0, Math.PI * 2);
+            this.ctx.moveTo(x + buttonSize*3/4, y + buttonSize/2);
+            this.ctx.arc(x + buttonSize/2, y + buttonSize/2, buttonSize/4, 0, Math.PI);
+        }
+        this.ctx.strokeStyle = 'white';
+        this.ctx.lineWidth = 2;
+        this.ctx.stroke();
+        
+        // 保存按鈕區域供點擊檢測使用
+        this.toggleButtonArea = {
+            x: x,
+            y: y,
+            width: buttonSize,
+            height: buttonSize
+        };
+        
+        this.ctx.restore();
+    }
+    
+    // 檢查點擊是否在切換按鈕內
+    isPointInToggleButton(x, y) {
+        if (!this.toggleButtonArea) return false;
+        
+        const btn = this.toggleButtonArea;
+        const centerX = btn.x + btn.width/2;
+        const centerY = btn.y + btn.height/2;
+        const radius = btn.width/2;
+        
+        const distance = Math.sqrt(Math.pow(x - centerX, 2) + Math.pow(y - centerY, 2));
+        return distance <= radius;
+    }
+
+    // 切換控制面板的顯示狀態
+    toggleControlPanel() {
+        this.isControlPanelVisible = !this.isControlPanelVisible;
+        
+        // 更新控制面板的顯示狀態
+        if (this.isControlPanelVisible) {
+            this.layerControls.style.display = 'flex';
+        } else {
+            this.layerControls.style.display = 'none';
+        }
+        
+        console.log(`控制面板已${this.isControlPanelVisible ? '顯示' : '隱藏'}`);
+        this.draw(); // 重繪以更新切換按鈕的圖標
     }
 
     isPointInBone(x, y, bone) {
