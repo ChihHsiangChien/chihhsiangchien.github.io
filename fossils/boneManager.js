@@ -89,8 +89,8 @@ class BoneManager {
             const bonesInfo = await response.json();
             
             // 定義畫面邊界，留出邊距確保骨頭完全在畫面內
-            const margin = 50;
-            const availableWidth = this.canvas.width - 2 * margin;
+            const margin = 300;
+            const availableWidth = this.canvas.width * 0.5;
             const availableHeight = this.canvas.height - 2 * margin;
             
             // 加载每个骨头图片
