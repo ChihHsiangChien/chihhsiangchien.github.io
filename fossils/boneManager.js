@@ -11,6 +11,7 @@ class BoneManager {
         this.lastX = 0;
         this.lastY = 0;
         this.globalScale = 0.6; // 固定缩放比例为60%
+        this.isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
         this.setupCanvas();
         this.loadBones();
         this.addEventListeners();
@@ -18,21 +19,24 @@ class BoneManager {
     }
 
     setupCanvas() {
-        // 设置画布为窗口大小，最大化展示空间
-        this.canvas.width = window.innerWidth;
-        this.canvas.height = window.innerHeight;
+        // 检测并适应屏幕方向
+        this.updateCanvasSize();
         
         // 调整画布容器大小以匹配画布
         this.canvasContainer.style.width = '100%';
         this.canvasContainer.style.height = '100vh';
         this.canvasContainer.style.margin = '0';
         
-        // 添加窗口大小改变事件监听器
-        window.addEventListener('resize', () => {
-            this.canvas.width = window.innerWidth;
-            this.canvas.height = window.innerHeight;
-            this.draw();
-        });
+        // 添加窗口大小改变和屏幕方向变化事件监听器
+        window.addEventListener('resize', this.updateCanvasSize.bind(this));
+        window.addEventListener('orientationchange', this.updateCanvasSize.bind(this));
+    }
+
+    updateCanvasSize() {
+        // 设置画布为窗口大小，最大化展示空间
+        this.canvas.width = window.innerWidth;
+        this.canvas.height = window.innerHeight;
+        this.draw();
     }
 
     async loadBones() {
@@ -94,12 +98,26 @@ class BoneManager {
     }
 
     addEventListeners() {
+        // 鼠标事件
         this.canvas.addEventListener('mousedown', this.handleMouseDown.bind(this));
         this.canvas.addEventListener('mousemove', this.handleMouseMove.bind(this));
-        
-        // 将mouseup事件监听器添加到document上，而不仅仅是画布
         document.addEventListener('mouseup', this.handleMouseUp.bind(this));
         document.addEventListener('mouseleave', this.handleMouseUp.bind(this));
+        
+        // 触摸事件
+        this.canvas.addEventListener('touchstart', this.handleTouchStart.bind(this));
+        this.canvas.addEventListener('touchmove', this.handleTouchMove.bind(this));
+        document.addEventListener('touchend', this.handleTouchEnd.bind(this));
+        document.addEventListener('touchcancel', this.handleTouchEnd.bind(this));
+        
+        // 禁用移动设备上的默认触摸行为（如滚动、缩放）
+        this.canvas.addEventListener('touchstart', function(e) {
+            e.preventDefault();
+        }, { passive: false });
+        
+        this.canvas.addEventListener('touchmove', function(e) {
+            e.preventDefault();
+        }, { passive: false });
         
         // 图层控制按钮事件
         document.getElementById('moveToTop').addEventListener('click', () => {
@@ -120,6 +138,37 @@ class BoneManager {
         });
     }
 
+    // 触摸事件处理函数
+    handleTouchStart(e) {
+        if (e.touches.length === 1) {
+            // 单指触摸 - 转换为鼠标事件格式处理
+            const touch = e.touches[0];
+            const mouseEvent = {
+                clientX: touch.clientX,
+                clientY: touch.clientY,
+                preventDefault: () => e.preventDefault()
+            };
+            this.handleMouseDown(mouseEvent);
+        }
+    }
+
+    handleTouchMove(e) {
+        if (e.touches.length === 1) {
+            // 单指移动 - 转换为鼠标事件格式处理
+            const touch = e.touches[0];
+            const mouseEvent = {
+                clientX: touch.clientX,
+                clientY: touch.clientY,
+                preventDefault: () => e.preventDefault()
+            };
+            this.handleMouseMove(mouseEvent);
+        }
+    }
+
+    handleTouchEnd(e) {
+        this.handleMouseUp(e);
+    }
+
     updateLayerControls() {
         const buttons = this.layerControls.getElementsByTagName('button');
         for (const button of buttons) {
@@ -131,10 +180,18 @@ class BoneManager {
         }
     }
 
-    handleMouseDown(e) {
+    getCanvasCoordinates(clientX, clientY) {
         const rect = this.canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+        return {
+            x: clientX - rect.left,
+            y: clientY - rect.top
+        };
+    }
+
+    handleMouseDown(e) {
+        const coords = this.getCanvasCoordinates(e.clientX, e.clientY);
+        const x = coords.x;
+        const y = coords.y;
         
         // 重置拖动状态，但保留选中和旋转状态
         this.isDragging = false;
@@ -158,17 +215,11 @@ class BoneManager {
             const dy = y - handleY;
             const distance = Math.sqrt(dx * dx + dy * dy);
             
-            console.log('手柄位置计算:', {
-                centerX, centerY, 
-                handleDistance, 
-                handleAngle: angle * 180 / Math.PI,
-                handleX, handleY, 
-                clickX: x, clickY: y, 
-                distance
-            });
+            // 增大触摸设备上的点击区域
+            const touchRadius = this.isTouchDevice ? 30 : 20;
             
-            // 检测是否点击了旋转手柄（增大点击区域）
-            if (distance <= 20) {
+            // 检测是否点击了旋转手柄
+            if (distance <= touchRadius) {
                 console.log('✓ 点击了旋转手柄');
                 this.isRotating = true;
                 this.lastX = x;
@@ -227,9 +278,9 @@ class BoneManager {
     handleMouseMove(e) {
         if (!this.selectedBone) return;
         
-        const rect = this.canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+        const coords = this.getCanvasCoordinates(e.clientX, e.clientY);
+        const x = coords.x;
+        const y = coords.y;
         
         if (this.isRotating) {
             // 旋转模式 - 使用画布坐标进行计算
