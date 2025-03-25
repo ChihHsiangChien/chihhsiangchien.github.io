@@ -174,10 +174,24 @@ class BoneManager {
             // 初始化橫屏狀態
             this.isLandscape = window.innerWidth > window.innerHeight;
             
-            // 定義畫面邊界，留出邊距確保骨頭完全在畫面內
+            // 定義畫面邊界，使骨頭集中在畫面中央1/3的空間
             const margin = 50;
-            const availableWidth = this.canvas.width - 2 * margin;
-            const availableHeight = this.canvas.height - 2 * margin;
+            
+            // 計算中央1/3的區域
+            const canvasWidth = this.canvas.width;
+            const canvasHeight = this.canvas.height;
+            
+            // 計算中央1/3的範圍 (左上角和右下角)
+            const centralStartX = canvasWidth / 3;
+            const centralStartY = canvasHeight / 3;
+            const centralEndX = canvasWidth * 2 / 3;
+            const centralEndY = canvasHeight * 2 / 3;
+            
+            // 計算可用的中央區域大小（考慮邊距）
+            const availableWidth = centralEndX - centralStartX - 2 * margin;
+            const availableHeight = centralEndY - centralStartY - 2 * margin;
+            
+            console.log(`初始化骨頭在中央1/3區域: X(${centralStartX + margin}-${centralEndX - margin}), Y(${centralStartY + margin}-${centralEndY - margin})`);
             
             // 加载每个骨头图片
             for (const boneInfo of bonesInfo) {
@@ -189,13 +203,9 @@ class BoneManager {
                         const scaledWidth = img.width * this.globalScale;
                         const scaledHeight = img.height * this.globalScale;
                         
-                        // 確保骨頭在畫面範圍內
-                        const maxX = this.canvas.width - scaledWidth - margin;
-                        const maxY = this.canvas.height - scaledHeight - margin;
-                        
-                        // 生成隨機位置，確保在畫面內
-                        const randomX = margin + Math.random() * (availableWidth - scaledWidth);
-                        const randomY = margin + Math.random() * (availableHeight - scaledHeight);
+                        // 生成中央1/3區域內的隨機位置
+                        const randomX = centralStartX + margin + Math.random() * availableWidth;
+                        const randomY = centralStartY + margin + Math.random() * availableHeight;
                         
                         // 生成隨機旋轉角度（0-360度轉為弧度）
                         const randomRotation = Math.random() * Math.PI * 2;
