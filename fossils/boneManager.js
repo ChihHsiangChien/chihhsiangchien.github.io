@@ -10,12 +10,41 @@ class BoneManager {
         this.isRotating = false;
         this.lastX = 0;
         this.lastY = 0;
-        this.globalScale = 0.6; // 固定缩放比例为60%
         this.isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        this.isSmallScreen = window.innerWidth < 768 || window.innerHeight < 768;
+        this.version = "0.1"; // 版本號
+        this.setGlobalScale(); // 根據設備和螢幕方向設置縮放比例
         this.setupCanvas();
         this.loadBones();
         this.addEventListeners();
         this.updateLayerControls();
+    }
+
+    // 根據設備和螢幕方向設置縮放比例
+    setGlobalScale() {
+        // 基本縮放比例
+        let scale = 0.6;
+        
+        // 檢測是否是手機或平板
+        if (this.isTouchDevice) {
+            // 基本觸控設備縮放
+            scale = 0.5;
+            
+            // 螢幕尺寸較小時進一步縮小
+            if (this.isSmallScreen) {
+                scale = 0.4;
+            }
+            
+            // 檢測橫屏模式（寬度大於高度）
+            if (window.innerWidth > window.innerHeight) {
+                // 橫屏時再縮小一點
+                scale *= 0.8;
+            }
+        }
+        
+        // 設置全局縮放比例
+        this.globalScale = scale;
+        console.log(`設置縮放比例: ${this.globalScale}, 裝置類型: ${this.isTouchDevice ? '觸控' : '非觸控'}, 螢幕大小: ${this.isSmallScreen ? '小' : '大'}, 方向: ${window.innerWidth > window.innerHeight ? '橫' : '直'}`);
     }
 
     setupCanvas() {
@@ -28,8 +57,23 @@ class BoneManager {
         this.canvasContainer.style.margin = '0';
         
         // 添加窗口大小改变和屏幕方向变化事件监听器
-        window.addEventListener('resize', this.updateCanvasSize.bind(this));
-        window.addEventListener('orientationchange', this.updateCanvasSize.bind(this));
+        window.addEventListener('resize', this.handleResize.bind(this));
+        window.addEventListener('orientationchange', this.handleResize.bind(this));
+    }
+
+    // 處理視窗大小變化和方向變化
+    handleResize() {
+        // 更新螢幕大小檢測
+        this.isSmallScreen = window.innerWidth < 768 || window.innerHeight < 768;
+        
+        // 重新計算縮放比例
+        this.setGlobalScale();
+        
+        // 更新畫布大小
+        this.updateCanvasSize();
+        
+        // 重新繪製畫面
+        this.draw();
     }
 
     updateCanvasSize() {
@@ -415,6 +459,26 @@ class BoneManager {
                 this.ctx.restore();
             }
         });
+        
+        // 在左下角繪製版本號
+        this.drawVersionNumber();
+    }
+    
+    // 繪製版本號的函數
+    drawVersionNumber() {
+        this.ctx.save();
+        
+        // 設定文字樣式
+        this.ctx.font = '12px Arial';
+        this.ctx.fillStyle = 'rgba(100, 100, 100, 0.7)';
+        this.ctx.textAlign = 'left';
+        this.ctx.textBaseline = 'bottom';
+        
+        // 在左下角繪製版本號，留出一點邊距
+        const margin = 10;
+        this.ctx.fillText(`v${this.version}`, margin, this.canvas.height - margin);
+        
+        this.ctx.restore();
     }
 
     isPointInBone(x, y, bone) {
