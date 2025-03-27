@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>互動煙火效果</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            touch-action: manipulation;
+            background-color: #000;
+            transition: background-color 0.3s;
+        }
+        
+        canvas {
+            display: block;
+            cursor: pointer;
+        }
+        
+        .instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            padding: 10px;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 16px;
+            pointer-events: none;
+            transition: color 0.3s;
+        }
+        
+        .dark body {
+            background-color: #000;
+        }
+        
+        .light body {
+            background-color: #111;
+        }
+        
+        .dark .instructions {
+            color: rgba(255, 255, 255, 0.8);
+        }
+        
+        .light .instructions {
+            color: rgba(255, 255, 255, 0.9);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    <div class="instructions">點擊畫面任意位置產生煙火</div>
+
+    <script>
+        // 檢測暗/亮模式
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.classList.add('dark');
+            document.documentElement.classList.remove('light');
+        } else {
+            document.documentElement.classList.add('light');
+            document.documentElement.classList.remove('dark');
+        }
+        
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+            if (event.matches) {
+                document.documentElement.classList.add('dark');
+                document.documentElement.classList.remove('light');
+            } else {
+                document.documentElement.classList.add('light');
+                document.documentElement.classList.remove('dark');
+            }
+        });
+
+        // 煙火效果
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // 設置canvas尺寸為窗口大小
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        
+        // 當窗口大小改變時，重新設置canvas尺寸
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+        
+        // 粒子類
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                
+                this.velocity = {
+                    x: Math.random() * 6 - 3,
+                    y: Math.random() * 6 - 3
+                };
+                
+                this.radius = Math.random() * 2 + 1;
+                this.alpha = 1;
+                this.decay = Math.random() * 0.015 + 0.01;
+                this.gravity = 0.08;
+            }
+            
+            update() {
+                this.velocity.y += this.gravity;
+                
+                this.x += this.velocity.x;
+                this.y += this.velocity.y;
+                
+                this.alpha -= this.decay;
+                
+                return this.alpha > 0;
+            }
+            
+            draw() {
+                ctx.globalAlpha = this.alpha;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+                ctx.globalAlpha = 1;
+            }
+        }
+        
+        // 煙火類
+        class Firework {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.particles = [];
+                this.createParticles();
+            }
+            
+            createParticles() {
+                // 隨機選擇一個主顏色
+                const colors = [
+                    '#FF5252', '#FF4081', '#E040FB', '#7C4DFF', '#536DFE',
+                    '#448AFF', '#40C4FF', '#18FFFF', '#64FFDA', '#69F0AE',
+                    '#B2FF59', '#EEFF41', '#FFFF00', '#FFD740', '#FFAB40', '#FF6E40'
+                ];
+                const baseColor = colors[Math.floor(Math.random() * colors.length)];
+                
+                // 創建多個粒子
+                const particleCount = Math.floor(Math.random() * 50) + 80;
+                for (let i = 0; i < particleCount; i++) {
+                    // 有10%的機會使用白色粒子
+                    const color = Math.random() < 0.1 ? '#FFFFFF' : baseColor;
+                    this.particles.push(new Particle(this.x, this.y, color));
+                }
+            }
+            
+            update() {
+                // 更新所有粒子並保留有效的粒子
+                this.particles = this.particles.filter(particle => particle.update());
+                
+                // 如果沒有粒子，返回false表示煙火已結束
+                return this.particles.length > 0;
+            }
+            
+            draw() {
+                this.particles.forEach(particle => particle.draw());
+            }
+        }
+        
+        // 存儲所有活躍的煙火
+        let fireworks = [];
+        
+        // 動畫循環
+        function animate() {
+            // 使用半透明背景清除畫布，產生拖尾效果
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // 更新所有煙火並保留有效的煙火
+            fireworks = fireworks.filter(firework => {
+                firework.draw();
+                return firework.update();
+            });
+            
+            requestAnimationFrame(animate);
+        }
+        
+        // 啟動動畫
+        animate();
+        
+        // 點擊事件處理
+        function handleClick(e) {
+            const x = e.clientX || e.touches[0].clientX;
+            const y = e.clientY || e.touches[0].clientY;
+            
+            // 創建一個新煙火
+            fireworks.push(new Firework(x, y));
+            
+            // 如果煙火太多，移除最老的一些
+            if (fireworks.length > 10) {
+                fireworks = fireworks.slice(-10);
+            }
+        }
+        
+        // 添加點擊和觸摸事件監聽器
+        canvas.addEventListener('click', handleClick);
+        canvas.addEventListener('touchstart', handleClick);
+    </script>
+</body>
+</html>
