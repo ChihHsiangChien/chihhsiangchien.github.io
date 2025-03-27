@@ -129,16 +129,52 @@
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
             z-index: 1000;
             max-width: 300px;
+            text-align: center;
         }
         
-        #excavationCode {
-            font-weight: bold;
-            margin-bottom: 10px;
-            word-break: break-all;
+        #qrCodeContainer {
+            margin: 10px auto;
             padding: 10px;
-            background: #eee;
+            background: white;
             border-radius: 5px;
+            width: 200px;
+            height: 200px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #videoContainer {
             display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 2000;
+        }
+
+        #qrVideo {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            max-width: 100%;
+            max-height: 100%;
+        }
+
+        #closeVideo {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: white;
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            font-size: 20px;
+            cursor: pointer;
         }
         
         input[type="text"] {
@@ -235,9 +271,15 @@
     
     <div class="panel-control" id="toggleCodePanel">C</div>
     <div id="codeExchangePanel" style="display: none;">
-        <div id="excavationCode"></div>
+        <div id="qrCodeContainer"></div>
+        <button id="scanQRBtn">掃描 QR Code</button>
         <input type="text" id="codeInput" placeholder="輸入發掘代碼">
         <button id="applyCodeBtn">應用代碼</button>
+    </div>
+
+    <div id="videoContainer">
+        <video id="qrVideo"></video>
+        <button id="closeVideo">×</button>
     </div>
     
     <div id="storyPanel">
@@ -261,6 +303,10 @@
     
     <!-- 導入骨頭管理腳本 -->
     <script src="boneManager.js"></script>
+    <!-- 導入 QR Code 生成庫 -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.4.4/build/qrcode.min.js"></script>
+    <!-- 導入 QR Code 掃描庫 -->
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     
     <script>
         // 故事管理類
@@ -363,6 +409,15 @@
                 document.getElementById('toggleCodePanel').addEventListener('click', () => {
                     const panel = document.getElementById('codeExchangePanel');
                     panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+                });
+
+                // 添加掃描按鈕事件
+                document.getElementById('scanQRBtn').addEventListener('click', () => {
+                    this.startQRScanner();
+                });
+
+                document.getElementById('closeVideo').addEventListener('click', () => {
+                    this.stopQRScanner();
                 });
             }
             
@@ -481,7 +536,6 @@
             
             // 生成並顯示代碼
             generateAndShowCode() {
-                // 創建代碼，包含骨頭ID和位置、旋轉信息
                 const bonesData = this.boneManager.bones.map(bone => ({
                     id: bone.id,
                     x: bone.x,
@@ -489,26 +543,34 @@
                     rotation: bone.rotation
                 }));
                 
-                // 添加一個混淆鍵值對，防止猜測
                 const randomSalt = Math.floor(Math.random() * 1000000);
-                
-                // 創建包含鹽值的數據對象
                 const codeData = {
-                    v: 1, // 版本號
-                    s: randomSalt, // 鹽值
-                    b: bonesData // 骨頭數據
+                    v: 1,
+                    s: randomSalt,
+                    b: bonesData
                 };
                 
-                // 壓縮並編碼數據
                 const jsonString = JSON.stringify(codeData);
                 const compressedCode = btoa(jsonString).replace(/=/g, '');
                 
-                // 顯示代碼
-                this.excavationCode.textContent = compressedCode;
-                this.excavationCode.style.display = 'block';
+                // 生成 QR Code
+                const qrContainer = document.getElementById('qrCodeContainer');
+                qrContainer.innerHTML = '';  // 清除舊的 QR Code
+                QRCode.toCanvas(qrContainer, compressedCode, {
+                    width: 200,
+                    margin: 1,
+                    color: {
+                        dark: '#000000',
+                        light: '#ffffff'
+                    }
+                }, (error) => {
+                    if (error) {
+                        console.error('生成 QR Code 出錯:', error);
+                        this.showToast('生成 QR Code 失敗');
+                    }
+                });
                 
-                // 顯示提示
-                this.showToast('發掘代碼已生成，可以分享給其他考古隊！');
+                this.showToast('已生成 QR Code，可以分享給其他考古隊！');
             }
             
             // 應用挖掘代碼
@@ -609,6 +671,59 @@
                     this.toast.style.display = 'none';
                 }, 3000);
             }
+
+            // 開始 QR Code 掃描
+            async startQRScanner() {
+                const videoContainer = document.getElementById('videoContainer');
+                const video = document.getElementById('qrVideo');
+                
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                    video.srcObject = stream;
+                    video.play();
+                    videoContainer.style.display = 'block';
+
+                    // 開始掃描
+                    this.scanQRCode(video, stream);
+                } catch (error) {
+                    console.error('無法啟動相機:', error);
+                    this.showToast('無法啟動相機，請檢查權限設定');
+                }
+            }
+
+            // 掃描 QR Code
+            scanQRCode(video, stream) {
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                
+                const scanInterval = setInterval(() => {
+                    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                        canvas.width = video.videoWidth;
+                        canvas.height = video.videoHeight;
+                        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                        
+                        const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+                        const code = jsQR(imageData.data, imageData.width, imageData.height);
+                        
+                        if (code) {
+                            // 找到 QR Code，停止掃描
+                            clearInterval(scanInterval);
+                            this.stopQRScanner(stream);
+                            this.applyExcavationCode(code.data);
+                        }
+                    }
+                }, 100);
+            }
+
+            // 停止 QR Code 掃描
+            stopQRScanner(stream) {
+                const videoContainer = document.getElementById('videoContainer');
+                videoContainer.style.display = 'none';
+                
+                if (stream) {
+                    stream.getTracks().forEach(track => track.stop());
+                }
+            }
         }
         
         // 當網頁載入完成後初始化
@@ -618,4 +733,4 @@
         });
     </script>
 </body>
-</html> 
+</html>
