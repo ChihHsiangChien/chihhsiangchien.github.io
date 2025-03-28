@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV 編碼轉換</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/encoding-japanese/2.0.0/encoding.min.js"></script>
+</head>
+<body>
+    <h2>CSV 編碼轉換 (Big5 ⇄ UTF-8)</h2>
+    <input type="file" id="fileInput" accept=".csv"><br><br>
+    <label>選擇輸出編碼：</label>
+    <select id="encodingSelect">
+        <option value="utf-8">UTF-8</option>
+        <option value="big5">Big5</option>
+    </select>
+    <button onclick="convertCSV()">轉換並下載</button>
+    <script>
+        function convertCSV() {
+            const fileInput = document.getElementById("fileInput");
+            const selectedEncoding = document.getElementById("encodingSelect").value;
+            if (!fileInput.files.length) {
+                alert("請選擇 CSV 檔案");
+                return;
+            }
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+            reader.readAsArrayBuffer(file);
+            reader.onload = function(event) {
+                const arrayBuffer = event.target.result;
+                const uint8Array = new Uint8Array(arrayBuffer);
+                
+                // 更準確的編碼偵測和轉換邏輯
+                let decodedText;
+                try {
+                    // 嘗試使用 Big5 解碼
+                    decodedText = new TextDecoder('big5').decode(uint8Array);
+                    
+                    // 檢查解碼是否成功（通過檢查是否包含有效的中文字）
+                    if (!/[\u4e00-\u9fff]/.test(decodedText)) {
+                        // 若不包含中文，嘗試 UTF-8 解碼
+                        decodedText = new TextDecoder('utf-8').decode(uint8Array);
+                    }
+                } catch (error) {
+                    alert("無法解碼檔案，請確認檔案編碼是否為 Big5 或 UTF-8");
+                    return;
+                }
+
+                // 轉換為目標編碼
+                if (selectedEncoding === "utf-8") {
+                    // 如果已經是 UTF-8，直接下載
+                    downloadCSV(decodedText, file.name, "utf-8");
+                } else if (selectedEncoding === "big5") {
+                    // 轉換為 Big5
+                    try {
+                        const big5Array = Encoding.convert(decodedText, {
+                            to: 'BIG5', 
+                            from: 'UNICODE',
+                            type: 'array'
+                        });
+                        const big5Uint8Array = new Uint8Array(big5Array);
+                        downloadCSV(big5Uint8Array, file.name, "big5");
+                    } catch (error) {
+                        alert("轉換 Big5 編碼時發生錯誤");
+                        console.error(error);
+                    }
+                }
+            };
+            reader.onerror = function() {
+                alert("檔案讀取失敗，請確認檔案是否為 Big5 或 UTF-8");
+            };
+        }
+
+        function downloadCSV(data, filename, encoding) {
+            let blob;
+            if (encoding === "utf-8") {
+                // 對於 UTF-8，使用文字數據
+                blob = new Blob([data], { type: "text/csv;charset=utf-8" });
+            } else if (encoding === "big5") {
+                // 對於 Big5，使用二進制數據
+                blob = new Blob([data], { type: "text/csv;charset=big5" });
+            }
+            
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = filename.replace(".csv", `_${encoding}.csv`);
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(a.href);  // 釋放記憶體
+        }
+    </script>
+</body>
+</html>
