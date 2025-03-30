@@ -31,33 +31,56 @@ const BOAT_TYPES = {
     }
 };
 
-// Initialize Firebase
+// Firebase configuration
 const firebaseConfig = {
-    // Replace with your Firebase config
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_AUTH_DOMAIN",
-    databaseURL: "YOUR_DATABASE_URL",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_STORAGE_BUCKET",
-    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-    appId: "YOUR_APP_ID"
+    apiKey: "AIzaSyBeBOkZC9VcfEZh8wSZwzZAjEjpkoLn6ug",
+    authDomain: "fishgame-9a619.firebaseapp.com",    
+    projectId: "fishgame-9a619",
+    storageBucket: "fishgame-9a619.firebasestorage.app",
+    messagingSenderId: "589605726016",
+    appId: "1:589605726016:web:8263335bdc950b7277fca5",
+    measurementId: "G-3QY9WR0LPK"
 };
 
 // Initialize Firebase
-firebase.initializeApp(firebaseConfig);
-const database = firebase.database();
+let database;
+let analytics;
+
+// Wait for Firebase to be ready
+document.addEventListener('DOMContentLoaded', function() {
+    if (typeof firebase !== 'undefined') {
+        firebase.initializeApp(firebaseConfig);
+        database = firebase.database();
+        analytics = firebase.analytics();
+        init();
+    } else {
+        console.error('Firebase SDK not loaded');
+    }
+});
 
 // Initialize game
 function init() {
+    console.log('Initializing game...');
+    
     // Check if there's a room number in the URL
     const urlParams = new URLSearchParams(window.location.search);
     const roomNumber = urlParams.get('room');
     if (roomNumber) {
+        console.log('Room number found in URL:', roomNumber);
         document.getElementById('room-code').value = roomNumber;
     }
 
+    // Setup room cleanup
+    setupRoomCleanup();
+    
+    // Clean up inactive rooms
+    cleanupInactiveRooms();
+    
     // Initialize fish school
     createFishSchool();
+    
+    // Update room activity periodically
+    setInterval(updateRoomActivity, 60000); // Update every minute
 }
 
 // Create fish school
@@ -86,13 +109,22 @@ function updateFishSchool() {
 
 // Create a new game room
 function createRoom() {
+    console.log('Attempting to create new room...');
     const playerName = document.getElementById('player-name').value;
     if (!playerName) {
+        console.error('No player name provided');
         alert('Please enter your name');
         return;
     }
 
+    if (!database) {
+        console.error('Firebase database not initialized');
+        alert('Error: Database connection not available');
+        return;
+    }
+
     const roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+    console.log('Generated room code:', roomCode);
     
     const gameSettings = {
         maxFish: parseInt(document.getElementById('max-fish').value) || 500,
@@ -104,81 +136,188 @@ function createRoom() {
         currentRound: 0,
         fishPopulation: parseInt(document.getElementById('initial-fish').value) || 50,
         createdBy: playerName,
-        createdAt: Date.now()
+        createdAt: Date.now(),
+        lastActivity: Date.now()
     };
 
-    // Save room data to localStorage
-    localStorage.setItem(`room_${roomCode}`, JSON.stringify(gameSettings));
-    localStorage.setItem(`players_${roomCode}`, JSON.stringify({}));
+    console.log('Game settings:', gameSettings);
 
-    currentPlayer = {
-        name: playerName,
-        money: gameSettings.startingMoney,
-        boatType: 'SMALL',
-        fishCaught: 0
-    };
-    currentRoom = roomCode;
-    isGameMaster = true;
-    showGameMasterScreen();
-    updatePlayerList();
+    // Save room data to Firebase
+    const roomRef = database.ref(`rooms/${roomCode}`);
+    console.log('Saving room data to Firebase...');
     
-    // Display room code to share
-    alert(`Room created! Share this code with players: ${roomCode}`);
+    roomRef.set(gameSettings)
+        .then(() => {
+            console.log('Room created successfully in Firebase');
+            
+            currentPlayer = {
+                name: playerName,
+                money: gameSettings.startingMoney,
+                boatType: 'SMALL',
+                fishCaught: 0
+            };
+            currentRoom = roomCode;
+            isGameMaster = true;
+            
+            // Save initial player data
+            const playerRef = database.ref(`rooms/${roomCode}/players/${playerName}`);
+            return playerRef.set(currentPlayer);
+        })
+        .then(() => {
+            console.log('Initial player data saved');
+            showGameMasterScreen();
+            updatePlayerList();
+            
+            // Display room code to share
+            alert(`Room created! Share this code with players: ${roomCode}`);
+        })
+        .catch((error) => {
+            console.error('Error creating room:', error);
+            alert('Error creating room. Please try again.');
+        });
+}
+
+// Setup room cleanup on window close
+function setupRoomCleanup() {
+    window.addEventListener('beforeunload', function() {
+        if (isGameMaster && currentRoom) {
+            console.log('Game master leaving, cleaning up room...');
+            const roomRef = database.ref(`rooms/${currentRoom}`);
+            roomRef.remove()
+                .then(() => {
+                    console.log('Room cleaned up successfully');
+                })
+                .catch((error) => {
+                    console.error('Error cleaning up room:', error);
+                });
+        }
+    });
+}
+
+// Update room activity timestamp
+function updateRoomActivity() {
+    if (!currentRoom || !database) return;
+    
+    const roomRef = database.ref(`rooms/${currentRoom}`);
+    roomRef.update({
+        lastActivity: Date.now()
+    }).catch(error => {
+        console.error('Error updating room activity:', error);
+    });
+}
+
+// Clean up inactive rooms
+function cleanupInactiveRooms() {
+    if (!database) return;
+    
+    const roomsRef = database.ref('rooms');
+    roomsRef.once('value')
+        .then((snapshot) => {
+            const now = Date.now();
+            const inactiveThreshold = 5 * 60 * 1000; // 5 minutes
+            
+            snapshot.forEach((roomSnapshot) => {
+                const roomData = roomSnapshot.val();
+                if (now - roomData.lastActivity > inactiveThreshold) {
+                    console.log('Cleaning up inactive room:', roomSnapshot.key);
+                    roomSnapshot.ref.remove();
+                }
+            });
+        })
+        .catch((error) => {
+            console.error('Error cleaning up inactive rooms:', error);
+        });
 }
 
 // Join an existing room
 function joinRoom() {
+    console.log('Attempting to join room...');
     const roomNumber = document.getElementById('room-code').value;
     const playerName = document.getElementById('player-name').value;
 
+    console.log('Room number:', roomNumber);
+    console.log('Player name:', playerName);
+
     if (!roomNumber || !playerName) {
+        console.error('Missing room number or player name');
         alert('Please enter both room number and your name');
         return;
     }
 
+    if (!database) {
+        console.error('Firebase database not initialized');
+        alert('Error: Database connection not available');
+        return;
+    }
+
+    console.log('Accessing Firebase database...');
     const roomRef = database.ref(`rooms/${roomNumber}`);
-    roomRef.once('value').then((snapshot) => {
-        if (snapshot.exists()) {
-            const gameSettings = snapshot.val();
-            if (!gameSettings.isActive) {
-                currentPlayer = {
-                    name: playerName,
-                    money: gameSettings.startingMoney,
-                    boatType: 'SMALL',
-                    fishCaught: 0
-                };
-                currentRoom = roomNumber;
-                showPlayerScreen();
-                updatePlayerData();
-                gameState = gameSettings;
-                updateFishSchool();
-                updatePlayerStats();
-                startRoundTimer();
-                setupGameListeners();
+    
+    roomRef.once('value')
+        .then((snapshot) => {
+            console.log('Received room data:', snapshot.val());
+            if (snapshot.exists()) {
+                const gameSettings = snapshot.val();
+                if (!gameSettings.isActive) {
+                    console.log('Room found and not active, joining...');
+                    currentPlayer = {
+                        name: playerName,
+                        money: gameSettings.startingMoney,
+                        boatType: 'SMALL',
+                        fishCaught: 0
+                    };
+                    currentRoom = roomNumber;
+                    showPlayerScreen();
+                    updatePlayerData();
+                    gameState = gameSettings;
+                    updateFishSchool();
+                    updatePlayerStats();
+                    startRoundTimer();
+                    setupGameListeners();
+                } else {
+                    console.log('Room is already active');
+                    alert('Game is already in progress');
+                }
             } else {
-                alert('Game is already in progress');
+                console.log('Room not found in database');
+                alert('Room not found');
             }
-        } else {
-            alert('Room not found');
-        }
-    });
+        })
+        .catch((error) => {
+            console.error('Error accessing room:', error);
+            alert('Error joining room. Please try again.');
+        });
 }
 
 // Setup Firebase listeners
 function setupGameListeners() {
-    if (!currentRoom) return;
+    console.log('Setting up game listeners...');
+    if (!currentRoom) {
+        console.error('No current room set');
+        return;
+    }
 
     const roomRef = database.ref(`rooms/${currentRoom}`);
+    console.log('Setting up room listener for:', currentRoom);
+    
     roomRef.on('value', (snapshot) => {
+        console.log('Room data updated:', snapshot.val());
         if (snapshot.exists()) {
             gameState = snapshot.val();
             updateFishSchool();
             updatePlayerStats();
+        } else {
+            console.error('Room data no longer exists');
         }
+    }, (error) => {
+        console.error('Error in room listener:', error);
     });
 
     const playersRef = database.ref(`rooms/${currentRoom}/players`);
+    console.log('Setting up players listener for:', currentRoom);
+    
     playersRef.on('value', (snapshot) => {
+        console.log('Players data updated:', snapshot.val());
         if (snapshot.exists()) {
             const playersData = snapshot.val();
             if (currentPlayer && playersData[currentPlayer.name]) {
@@ -186,34 +325,254 @@ function setupGameListeners() {
                 updatePlayerStats();
             }
         }
+    }, (error) => {
+        console.error('Error in players listener:', error);
     });
 }
 
-// Start the game
-function startGame() {
-    if (!isGameMaster) return;
-
-    const roomData = JSON.parse(localStorage.getItem(`room_${currentRoom}`));
-    roomData.isActive = true;
-    roomData.currentRound = 1;
-    roomData.roundStartTime = Date.now();
+// Show/hide screens
+function showGameMasterScreen() {
+    console.log('Showing game master screen...');
+    const loginScreen = document.getElementById('login-screen');
+    const gameMasterScreen = document.getElementById('game-master-screen');
+    const playerScreen = document.getElementById('player-screen');
     
-    localStorage.setItem(`room_${currentRoom}`, JSON.stringify(roomData));
-    gameState = roomData;
-    startRoundTimer();
-    updateFishSchool();
+    if (loginScreen && gameMasterScreen && playerScreen) {
+        console.log('Found all required screen elements');
+        loginScreen.classList.add('hidden');
+        gameMasterScreen.classList.remove('hidden');
+        playerScreen.classList.add('hidden');
+        console.log('Screen transition complete');
+        
+        // Initialize game master controls
+        const startButton = document.getElementById('start-game');
+        const endButton = document.getElementById('end-game');
+        
+        if (startButton) {
+            startButton.onclick = startGame;
+            console.log('Start game button initialized');
+        }
+        
+        if (endButton) {
+            endButton.onclick = endGame;
+            console.log('End game button initialized');
+        }
+        
+        // Update initial player list
+        updatePlayerList();
+    } else {
+        console.error('Missing screen elements:', {
+            loginScreen: !!loginScreen,
+            gameMasterScreen: !!gameMasterScreen,
+            playerScreen: !!playerScreen
+        });
+    }
 }
 
-// End the game
-function endGame() {
-    if (!isGameMaster) return;
-
-    const roomData = JSON.parse(localStorage.getItem(`room_${currentRoom}`));
-    roomData.isActive = false;
-    roomData.gameEndTime = Date.now();
+function showPlayerScreen() {
+    const loginScreen = document.getElementById('login-screen');
+    const playerScreen = document.getElementById('player-screen');
     
-    localStorage.setItem(`room_${currentRoom}`, JSON.stringify(roomData));
-    gameState = roomData;
+    if (loginScreen && playerScreen) {
+        loginScreen.classList.add('hidden');
+        playerScreen.classList.remove('hidden');
+    }
+}
+
+// Update player stats display
+function updatePlayerStats() {
+    if (!currentPlayer) return;
+
+    const nameDisplay = document.getElementById('player-name-display');
+    const moneyDisplay = document.getElementById('player-money');
+    const capacityDisplay = document.getElementById('boat-capacity');
+    const caughtDisplay = document.getElementById('fish-caught');
+
+    if (nameDisplay) nameDisplay.textContent = currentPlayer.name;
+    if (moneyDisplay) moneyDisplay.textContent = `$${currentPlayer.money}`;
+    if (capacityDisplay) capacityDisplay.textContent = 
+        `${BOAT_TYPES[currentPlayer.boatType].capacity} fish`;
+    if (caughtDisplay) caughtDisplay.textContent = currentPlayer.fishCaught;
+}
+
+// Update player data in Firebase
+function updatePlayerData() {
+    console.log('Updating player data...');
+    if (!currentRoom || !currentPlayer) {
+        console.error('Missing room or player data');
+        return;
+    }
+
+    const playerRef = database.ref(`rooms/${currentRoom}/players/${currentPlayer.name}`);
+    console.log('Updating player:', currentPlayer.name);
+    
+    playerRef.set(currentPlayer)
+        .then(() => {
+            console.log('Player data updated successfully');
+        })
+        .catch((error) => {
+            console.error('Error updating player data:', error);
+        });
+}
+
+// Update game state in Firebase
+function updateGameState() {
+    console.log('Updating game state...');
+    if (!currentRoom || !gameState) {
+        console.error('Missing room or game state');
+        return;
+    }
+    
+    const roomRef = database.ref(`rooms/${currentRoom}`);
+    console.log('Updating room:', currentRoom);
+    
+    roomRef.set(gameState)
+        .then(() => {
+            console.log('Game state updated successfully');
+        })
+        .catch((error) => {
+            console.error('Error updating game state:', error);
+        });
+}
+
+// Update player list display
+function updatePlayerList() {
+    console.log('Updating player list...');
+    if (!currentRoom) {
+        console.error('No current room set');
+        return;
+    }
+
+    const playerList = document.getElementById('player-list');
+    if (!playerList) {
+        console.error('Player list element not found');
+        return;
+    }
+
+    const playersRef = database.ref(`rooms/${currentRoom}/players`);
+    console.log('Fetching players from Firebase...');
+    
+    playersRef.once('value')
+        .then((snapshot) => {
+            if (snapshot.exists()) {
+                const playersData = snapshot.val();
+                console.log('Current players data:', playersData);
+                
+                playerList.innerHTML = '';
+                Object.values(playersData).forEach(player => {
+                    console.log('Adding player to list:', player);
+                    const playerElement = document.createElement('div');
+                    playerElement.className = 'player-item';
+                    playerElement.innerHTML = `
+                        <h4>${player.name}</h4>
+                        <p>Money: $${player.money}</p>
+                        <p>Boat: ${player.boatType}</p>
+                        <p>Fish Caught: ${player.fishCaught}</p>
+                    `;
+                    playerList.appendChild(playerElement);
+                });
+                console.log('Player list updated successfully');
+            } else {
+                console.log('No players found in room');
+                playerList.innerHTML = '<p>No players joined yet</p>';
+            }
+        })
+        .catch((error) => {
+            console.error('Error updating player list:', error);
+        });
+}
+
+// Round timer functionality
+let roundTimer = null;
+
+function startRoundTimer() {
+    console.log('Starting round timer...');
+    if (roundTimer) {
+        console.log('Clearing existing timer');
+        clearInterval(roundTimer);
+    }
+    
+    if (!gameState) {
+        console.error('No game state available');
+        return;
+    }
+
+    const roundTime = gameState.roundTime;
+    let timeLeft = roundTime;
+    
+    const timerDisplay = document.getElementById('round-timer');
+    if (timerDisplay) {
+        console.log('Updating timer display');
+        timerDisplay.textContent = `Round ${gameState.currentRound} - Time Left: ${timeLeft}s`;
+    } else {
+        console.error('Timer display element not found');
+    }
+    
+    roundTimer = setInterval(() => {
+        timeLeft--;
+        if (timerDisplay) {
+            timerDisplay.textContent = `Round ${gameState.currentRound} - Time Left: ${timeLeft}s`;
+        }
+        
+        if (timeLeft <= 0) {
+            console.log('Round time up, ending round');
+            clearInterval(roundTimer);
+            endRound();
+        }
+    }, 1000);
+}
+
+function endRound() {
+    console.log('Ending round...');
+    if (!currentRoom) {
+        console.error('No current room set');
+        return;
+    }
+    
+    const roomRef = database.ref(`rooms/${currentRoom}`);
+    roomRef.once('value')
+        .then((snapshot) => {
+            if (snapshot.exists()) {
+                const roomData = snapshot.val();
+                console.log('Current room data:', roomData);
+                
+                // Update fish population (reproduction)
+                const reproductionRate = 0.2; // 20% reproduction rate
+                const newFish = Math.floor(roomData.fishPopulation * reproductionRate);
+                roomData.fishPopulation = Math.min(
+                    roomData.fishPopulation + newFish,
+                    roomData.maxFish
+                );
+                
+                console.log('Updated fish population:', roomData.fishPopulation);
+                
+                // Check if game should end
+                if (roomData.fishPopulation < roomData.survivalThreshold) {
+                    console.log('Fish population below threshold, ending game');
+                    roomData.isActive = false;
+                    return roomRef.set(roomData);
+                }
+                
+                // Start next round
+                roomData.currentRound++;
+                roomData.roundStartTime = Date.now();
+                console.log('Starting next round:', roomData.currentRound);
+                return roomRef.set(roomData);
+            } else {
+                console.error('Room not found in database');
+                return Promise.reject('Room not found');
+            }
+        })
+        .then(() => {
+            console.log('Round ended successfully');
+            gameState = roomData;
+            updateFishSchool();
+            startRoundTimer();
+        })
+        .catch((error) => {
+            console.error('Error ending round:', error);
+            alert('Error ending round. Please try again.');
+        });
 }
 
 // Catch fish
@@ -226,6 +585,8 @@ function catchFish(event) {
 
     // Get click position relative to fishing area
     const fishingArea = document.querySelector('.fishing-area');
+    if (!fishingArea) return;
+
     const rect = fishingArea.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
@@ -319,130 +680,93 @@ function upgradeBoat() {
     }
 }
 
-// Update player data in localStorage
-function updatePlayerData() {
-    if (!currentRoom || !currentPlayer) return;
-
-    const playersData = JSON.parse(localStorage.getItem(`players_${currentRoom}`) || '{}');
-    playersData[currentPlayer.name] = currentPlayer;
-    localStorage.setItem(`players_${currentRoom}`, JSON.stringify(playersData));
-}
-
-// Update game state in localStorage
-function updateGameState() {
-    if (!currentRoom || !gameState) return;
-    localStorage.setItem(`room_${currentRoom}`, JSON.stringify(gameState));
-}
-
-// Update player list display
-function updatePlayerList() {
-    if (!currentRoom) return;
-
-    const playerList = document.getElementById('player-list');
-    const playersData = JSON.parse(localStorage.getItem(`players_${currentRoom}`) || '{}');
-    
-    playerList.innerHTML = '';
-    Object.values(playersData).forEach(player => {
-        const playerElement = document.createElement('div');
-        playerElement.className = 'player-item';
-        playerElement.innerHTML = `
-            <h4>${player.name}</h4>
-            <p>Money: $${player.money}</p>
-            <p>Boat: ${player.boatType}</p>
-            <p>Fish Caught: ${player.fishCaught}</p>
-        `;
-        playerList.appendChild(playerElement);
-    });
-}
-
-// Round timer functionality
-let roundTimer = null;
-
-function startRoundTimer() {
-    if (roundTimer) clearInterval(roundTimer);
-    
-    const roundTime = gameState.roundTime;
-    let timeLeft = roundTime;
-    
-    const timerDisplay = document.getElementById('round-timer');
-    if (timerDisplay) {
-        timerDisplay.textContent = `Round ${gameState.currentRound} - Time Left: ${timeLeft}s`;
-    }
-    
-    roundTimer = setInterval(() => {
-        timeLeft--;
-        if (timerDisplay) {
-            timerDisplay.textContent = `Round ${gameState.currentRound} - Time Left: ${timeLeft}s`;
-        }
-        
-        if (timeLeft <= 0) {
-            clearInterval(roundTimer);
-            endRound();
-        }
-    }, 1000);
-}
-
-function endRound() {
-    if (!currentRoom) return;
-    
-    const roomData = JSON.parse(localStorage.getItem(`room_${currentRoom}`));
-    
-    // Update fish population (reproduction)
-    const reproductionRate = 0.2; // 20% reproduction rate
-    const newFish = Math.floor(roomData.fishPopulation * reproductionRate);
-    roomData.fishPopulation = Math.min(
-        roomData.fishPopulation + newFish,
-        roomData.maxFish
-    );
-    
-    // Check if game should end
-    if (roomData.fishPopulation < roomData.survivalThreshold) {
-        roomData.isActive = false;
-        localStorage.setItem(`room_${currentRoom}`, JSON.stringify(roomData));
-        alert('Game Over! Fish population has fallen below the survival threshold.');
+// Start the game
+function startGame() {
+    console.log('Attempting to start game...');
+    if (!isGameMaster) {
+        console.error('Not game master, cannot start game');
         return;
     }
-    
-    // Start next round
-    roomData.currentRound++;
-    roomData.roundStartTime = Date.now();
-    localStorage.setItem(`room_${currentRoom}`, JSON.stringify(roomData));
-    gameState = roomData;
-    updateFishSchool();
-    startRoundTimer();
-}
 
-// Show/hide screens
-function showGameMasterScreen() {
-    document.getElementById('login-screen').classList.add('hidden');
-    document.getElementById('game-master-screen').classList.remove('hidden');
-    document.getElementById('player-screen').classList.add('hidden');
-}
-
-function showPlayerScreen() {
-    const loginScreen = document.getElementById('login-screen');
-    const playerScreen = document.getElementById('player-screen');
-    
-    if (loginScreen && playerScreen) {
-        loginScreen.classList.add('hidden');
-        playerScreen.classList.remove('hidden');
+    if (!currentRoom) {
+        console.error('No current room set');
+        return;
     }
+
+    console.log('Updating game state for room:', currentRoom);
+    const roomRef = database.ref(`rooms/${currentRoom}`);
+    
+    roomRef.once('value')
+        .then((snapshot) => {
+            if (snapshot.exists()) {
+                const roomData = snapshot.val();
+                console.log('Current room data:', roomData);
+                
+                roomData.isActive = true;
+                roomData.currentRound = 1;
+                roomData.roundStartTime = Date.now();
+                
+                console.log('Updating room with new game state:', roomData);
+                return roomRef.set(roomData);
+            } else {
+                console.error('Room not found in database');
+                return Promise.reject('Room not found');
+            }
+        })
+        .then(() => {
+            console.log('Game started successfully');
+            gameState = roomData;
+            startRoundTimer();
+            updateFishSchool();
+            updatePlayerList();
+        })
+        .catch((error) => {
+            console.error('Error starting game:', error);
+            alert('Error starting game. Please try again.');
+        });
 }
 
-// Update player stats display
-function updatePlayerStats() {
-    if (!currentPlayer) return;
+// End the game
+function endGame() {
+    console.log('Attempting to end game...');
+    if (!isGameMaster) {
+        console.error('Not game master, cannot end game');
+        return;
+    }
 
-    const nameDisplay = document.getElementById('player-name-display');
-    const moneyDisplay = document.getElementById('player-money');
-    const capacityDisplay = document.getElementById('boat-capacity');
-    const caughtDisplay = document.getElementById('fish-caught');
+    if (!currentRoom) {
+        console.error('No current room set');
+        return;
+    }
 
-    if (nameDisplay) nameDisplay.textContent = currentPlayer.name;
-    if (moneyDisplay) moneyDisplay.textContent = `$${currentPlayer.money}`;
-    if (capacityDisplay) capacityDisplay.textContent = 
-        `${BOAT_TYPES[currentPlayer.boatType].capacity} fish`;
-    if (caughtDisplay) caughtDisplay.textContent = currentPlayer.fishCaught;
+    console.log('Updating game state for room:', currentRoom);
+    const roomRef = database.ref(`rooms/${currentRoom}`);
+    
+    roomRef.once('value')
+        .then((snapshot) => {
+            if (snapshot.exists()) {
+                const roomData = snapshot.val();
+                console.log('Current room data:', roomData);
+                
+                roomData.isActive = false;
+                roomData.gameEndTime = Date.now();
+                
+                console.log('Updating room with end game state:', roomData);
+                return roomRef.set(roomData);
+            } else {
+                console.error('Room not found in database');
+                return Promise.reject('Room not found');
+            }
+        })
+        .then(() => {
+            console.log('Game ended successfully');
+            gameState = roomData;
+            alert('Game has ended!');
+        })
+        .catch((error) => {
+            console.error('Error ending game:', error);
+            alert('Error ending game. Please try again.');
+        });
 }
 
 // Initialize game when page loads
