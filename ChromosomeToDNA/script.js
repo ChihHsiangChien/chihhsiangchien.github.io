@@ -71,90 +71,137 @@ function init() {
 // --- 創建染色體 (簡化表示) ---
 function createChromosome() {
     chromosomeGroup = new THREE.Group();
-    const material = new THREE.MeshStandardMaterial({
-        color: 0x8888ff, // 淡紫色
-        roughness: 0.5,
-        metalness: 0.2,
-        wireframe: false // 設為 true 可看線框
+    
+    // 創建染色體DNA材質
+    const dnaMaterial = new THREE.MeshStandardMaterial({
+        color: 0xff8888, // 紅色DNA
+        roughness: 0.6,
+        metalness: 0.1,
+        wireframe: false
     });
 
-    // 使用多個扭曲的圓柱體或球體模擬濃縮的染色體結構
-    // 這裡用一個簡單的、扭曲的管狀體代替
-    const curve = new THREE.CatmullRomCurve3([
-        new THREE.Vector3(-10, 0, 0),
-        new THREE.Vector3(-5, 5, 2),
-        new THREE.Vector3(0, 0, -3),
-        new THREE.Vector3(5, -5, 2),
-        new THREE.Vector3(10, 0, 0)
-    ]);
-    const geometry = new THREE.TubeGeometry(curve, 64, 2, 16, false); // path, tubularSegments, radius, radialSegments, closed
-    const chromosomeMesh = new THREE.Mesh(geometry, material);
+    // 創建一個緊密纏繞的DNA螺旋來形成棒狀染色體
+    const points = [];
+    const height = 20; // 染色體高度
+    const radius = 1.2; // 基本半徑
+    const turns = 40; // 螺旋纏繞次數（增加以獲得更緊密的外觀）
+    const pointCount = turns * 20; // 足夠的點以獲得平滑曲線
+    
+    // 創建高密度螺旋形狀以模擬緊密纏繞的DNA
+    for (let i = 0; i < pointCount; i++) {
+        const t = i / pointCount;
+        const angle = t * Math.PI * 2 * turns;
+        
+        // 螺旋半徑有些微變化以增加自然感
+        const currentRadius = radius * (1 + Math.sin(t * Math.PI * 10) * 0.1);
+        
+        const x = currentRadius * Math.sin(angle);
+        const y = height * (t - 0.5); // 讓染色體位於中心
+        const z = currentRadius * Math.cos(angle);
+        
+        points.push(new THREE.Vector3(x, y, z));
+    }
+    
+    // 創建染色體DNA螺旋
+    const curve = new THREE.CatmullRomCurve3(points);
+    const geometry = new THREE.TubeGeometry(curve, 400, 0.3, 8, false); // 減小管徑以表示DNA線
+    const chromosomeMesh = new THREE.Mesh(geometry, dnaMaterial);
     chromosomeGroup.add(chromosomeMesh);
 
-    // 再加一些球體增加複雜感
-    for (let i = 0; i < 10; i++) {
-        const sphereGeo = new THREE.SphereGeometry(1.5 + Math.random() * 1, 16, 16);
-        const sphere = new THREE.Mesh(sphereGeo, material);
-        const point = curve.getPoint(Math.random());
-        sphere.position.copy(point).add(new THREE.Vector3(
-            (Math.random() - 0.5) * 3,
-            (Math.random() - 0.5) * 3,
-            (Math.random() - 0.5) * 3
-        ));
-        chromosomeGroup.add(sphere);
-    }
-
     scene.add(chromosomeGroup);
+    
+    // 返回曲線供核小體使用
+    return curve;
 }
 
-// --- 創建核小體 (DNA + 組蛋白) (簡化表示) ---
+// --- 創建核小體 (DNA + 組蛋白) 使用連續的DNA線 ---
 function createNucleosomes() {
     nucleosomeGroup = new THREE.Group();
     const histoneMaterial = new THREE.MeshStandardMaterial({ color: 0x00ff00, roughness: 0.8 }); // 綠色組蛋白
     const dnaMaterial = new THREE.MeshStandardMaterial({ color: 0xff8888, roughness: 0.6 }); // 紅色DNA
 
-    const histoneGeometry = new THREE.SphereGeometry(1, 16, 16); // 組蛋白核心 (簡化為球體)
-
-    // 創建多個核小體
-    for (let i = 0; i < 8; i++) {
+    const histoneGeometry = new THREE.SphereGeometry(1, 16, 16); // 組蛋白核心
+    
+    // 獲取染色體曲線作為參考
+    const chromosomeCurve = createChromosome();
+    
+    // 為了創建連續的DNA線，我們需要一個完整的路徑
+    const dnaPoints = [];
+    const nucleosomeCount = 8;
+    
+    // 沿著染色體曲線放置核小體，並創建連續DNA路徑
+    for (let i = 0; i < nucleosomeCount; i++) {
         const nucleosome = new THREE.Group();
-
-        // 組蛋白核心
+        
+        // 計算核小體在染色體上的位置
+        const t = i / (nucleosomeCount - 1);
+        const basePosition = chromosomeCurve.getPoint(t);
+        
+        // 添加組蛋白核心
         const histone = new THREE.Mesh(histoneGeometry, histoneMaterial);
+        histone.position.copy(basePosition);
         nucleosome.add(histone);
-
-        // 環繞的 DNA (簡化為環狀管)
-        const dnaCurve = new THREE.CatmullRomCurve3([
-             // 創建一個環繞球體的路徑
-            new THREE.Vector3(1.2, 0, 0),
-            new THREE.Vector3(0, 1.2, 0.5),
-            new THREE.Vector3(-1.2, 0, 0),
-            new THREE.Vector3(0, -1.2, -0.5),
-            new THREE.Vector3(1.2, 0, 0) // 閉合
-        ]);
-        const dnaGeometry = new THREE.TubeGeometry(dnaCurve, 32, 0.2, 8, false);
-        const dnaStrand = new THREE.Mesh(dnaGeometry, dnaMaterial);
-        nucleosome.add(dnaStrand);
-
-        // 隨機放置核小體
-        nucleosome.position.set(
-            (Math.random() - 0.5) * 10,
-            (Math.random() - 0.5) * 10,
-            (Math.random() - 0.5) * 10
-        );
-       nucleosome.rotation.set(
-            Math.random() * Math.PI * 2,
-            Math.random() * Math.PI * 2,
-            Math.random() * Math.PI * 2
-        );
-
-
+        
+        // 為每個核小體創建環繞的DNA路徑點
+        const wrappingPoints = 16; // 環繞點數
+        const radius = 1.2; // 環繞半徑
+        
+        // 如果不是第一個核小體，添加連接前一個核小體的DNA段
+        if (i > 0) {
+            // 獲取前一個核小體的最後位置
+            const prevPosition = chromosomeCurve.getPoint((i - 1) / (nucleosomeCount - 1));
+            
+            // 創建連接線 (簡化為直線)
+            const connectorPoints = [];
+            const steps = 5;
+            
+            for (let s = 0; s < steps; s++) {
+                const alpha = s / steps;
+                const x = prevPosition.x + (basePosition.x - prevPosition.x) * alpha;
+                const y = prevPosition.y + (basePosition.y - prevPosition.y) * alpha;
+                const z = prevPosition.z + (basePosition.z - prevPosition.z) * alpha;
+                
+                // 添加一些隨機波動使其看起來更自然
+                const wave = Math.sin(alpha * Math.PI) * 0.5;
+                connectorPoints.push(new THREE.Vector3(
+                    x + wave * (Math.random() - 0.5),
+                    y + wave * (Math.random() - 0.5),
+                    z + wave * (Math.random() - 0.5)
+                ));
+            }
+            
+            // 添加到整體DNA路徑
+            dnaPoints.push(...connectorPoints);
+        }
+        
+        // 創建環繞組蛋白的DNA點
+        for (let j = 0; j < wrappingPoints; j++) {
+            const angle = (j / wrappingPoints) * Math.PI * 2;
+            const heightOffset = (j / wrappingPoints) * 0.6 - 0.3; // 使DNA螺旋上升
+            
+            // 計算環繞點
+            const x = basePosition.x + Math.cos(angle) * radius;
+            const y = basePosition.y + heightOffset;
+            const z = basePosition.z + Math.sin(angle) * radius;
+            
+            dnaPoints.push(new THREE.Vector3(x, y, z));
+        }
+        
+        // 微調核小體位置以適應曲線
+        nucleosome.position.copy(basePosition);
+        
+        // 添加到核小體群組
         nucleosomeGroup.add(nucleosome);
     }
+    
+    // 創建整個連續的DNA線
+    const dnaCurve = new THREE.CatmullRomCurve3(dnaPoints);
+    const dnaGeometry = new THREE.TubeGeometry(dnaCurve, 200, 0.2, 8, false);
+    const dnaStrand = new THREE.Mesh(dnaGeometry, dnaMaterial);
+    nucleosomeGroup.add(dnaStrand);
 
     scene.add(nucleosomeGroup);
 }
-
 // --- 創建 DNA 雙股螺旋 (簡化表示) ---
 function createDNA() {
     dnaGroup = new THREE.Group();
