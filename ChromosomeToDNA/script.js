@@ -2,8 +2,23 @@
 let scene, camera, renderer, controls;
 let container, infoLevelText, loadingElement;
 
-// --- 物件群組 ---
-let chromosomeGroup, nucleosomeGroup, dnaGroup;
+// --- 統一的數據模型 ---
+const dnaStructure = {
+    chromosome: {
+        curve: null,      // 染色體的主曲線
+        length: 50,       // 染色體長度
+        group: null       // Three.js組對象
+    },
+    nucleosomes: {
+        count: 20,         // 核小體數量
+        positions: [],    // 核小體位置數組
+        group: null       // Three.js組對象
+    },
+    dna: {
+        positions: [],    // DNA雙螺旋在各核小體位置的映射
+        group: null       // Three.js組對象
+    }
+};
 
 // --- 狀態變數 ---
 let currentLevel = 'chromosome'; // 'chromosome', 'nucleosome', 'dna'
@@ -54,8 +69,8 @@ function init() {
     createDNA();
 
     // 初始隱藏非染色體層級
-    nucleosomeGroup.visible = false;
-    dnaGroup.visible = false;
+    dnaStructure.nucleosomes.group.visible = false;
+    dnaStructure.dna.group.visible = false;
 
     // --- 事件監聽 ---
     window.addEventListener('resize', onWindowResize, false);
@@ -64,92 +79,140 @@ function init() {
     // --- 隱藏載入提示 ---
     loadingElement.style.display = 'none';
 
+    // --- 初始界面更新 ---
+    updateInfo();
+
     // --- 開始動畫循環 ---
     animate();
 }
 
 // --- 創建染色體 (簡化表示) ---
 function createChromosome() {
-    chromosomeGroup = new THREE.Group();
+    dnaStructure.chromosome.group = new THREE.Group();
     
     // 創建染色體DNA材質
     const dnaMaterial = new THREE.MeshStandardMaterial({
-        color: 0xff8888, // 紅色DNA
+        color: 0xff9988, // 紅色DNA
         roughness: 0.6,
         metalness: 0.1,
-        wireframe: false
+        transparent: true // 啟用透明度以便動畫
     });
 
-    // 創建一個緊密纏繞的DNA螺旋來形成棒狀染色體
+    // 基於圖片所示的電話線超螺旋結構
     const points = [];
-    const height = 20; // 染色體高度
-    const radius = 1.2; // 基本半徑
-    const turns = 40; // 螺旋纏繞次數（增加以獲得更緊密的外觀）
-    const pointCount = turns * 20; // 足夠的點以獲得平滑曲線
+    const height = dnaStructure.chromosome.length; // 染色體高度
     
-    // 創建高密度螺旋形狀以模擬緊密纏繞的DNA
-    for (let i = 0; i < pointCount; i++) {
-        const t = i / pointCount;
-        const angle = t * Math.PI * 2 * turns;
+    // 定義參數
+    const baseSpiralTurns = 100; // 基本螺旋數（電話線本身的螺旋）
+    const supercoilTwists = 10; // 超螺旋扭轉次數 (Z字型纏繞)
+    const pointsPerTurn = 10; // 每圈的點數
+    const totalPoints = baseSpiralTurns * pointsPerTurn; // 總點數
+    
+    // 定義基本螺旋參數
+    const baseRadius = 1.5; // 基本螺旋半徑
+    const supercoilRadius = 3.0; // 超螺旋半徑
+    
+    // 創建形似圖片中的超螺旋結構
+    for (let i = 0; i < totalPoints; i++) {
+        const t = i / totalPoints; // 0到1的參數
         
-        // 螺旋半徑有些微變化以增加自然感
-        const currentRadius = radius * (1 + Math.sin(t * Math.PI * 10) * 0.1);
+        // 基本螺旋參數 (細小的電話線螺旋)
+        const baseAngle = t * Math.PI * 2 * baseSpiralTurns;
         
-        const x = currentRadius * Math.sin(angle);
-        const y = height * (t - 0.5); // 讓染色體位於中心
-        const z = currentRadius * Math.cos(angle);
+        // 超螺旋參數 (整體的Z型扭曲)
+        const supercoilAngle = t * Math.PI * 2 * supercoilTwists;
+        const supercoilPhase = Math.sin(supercoilAngle);
+        
+        // 構建主路徑 - 這是一條S形路徑
+        const pathX = supercoilRadius * supercoilPhase;
+        const pathY = height * (t - 0.5); // 中心對齊
+        const pathZ = 0;
+        
+        // 構建基本螺旋 - 圍繞主路徑
+        // 使用不同的半徑在x和z方向，創建橢圓形橫截面
+        const localX = baseRadius * Math.cos(baseAngle);
+        const localZ = baseRadius * Math.sin(baseAngle);
+        
+        // 根據超螺旋相位旋轉基本螺旋，使其跟隨主路徑的轉彎
+        const rotationAngle = Math.atan2(Math.cos(supercoilAngle), 0);
+        const rotatedX = localX * Math.cos(rotationAngle) - localZ * Math.sin(rotationAngle);
+        const rotatedZ = localX * Math.sin(rotationAngle) + localZ * Math.cos(rotationAngle);
+        
+        // 最終點位置
+        const x = pathX + rotatedX;
+        const y = pathY;
+        const z = pathZ + rotatedZ;
         
         points.push(new THREE.Vector3(x, y, z));
     }
     
-    // 創建染色體DNA螺旋
-    const curve = new THREE.CatmullRomCurve3(points);
-    const geometry = new THREE.TubeGeometry(curve, 400, 0.3, 8, false); // 減小管徑以表示DNA線
-    const chromosomeMesh = new THREE.Mesh(geometry, dnaMaterial);
-    chromosomeGroup.add(chromosomeMesh);
-
-    scene.add(chromosomeGroup);
+    // 如果需要更多的扭曲度，可以添加一個後處理步驟
+    // 根據圖片，整體結構在中間還有一個交叉
+    for (let i = 0; i < points.length; i++) {
+        const t = i / points.length;
+        // 增加額外的彎曲使中間部分交叉
+        const bendFactor = Math.sin(t * Math.PI) * 1.8;
+        points[i].z += bendFactor;
+    }
     
-    // 返回曲線供核小體使用
-    return curve;
+    // 保存曲線供其它層次使用
+    const curve = new THREE.CatmullRomCurve3(points);
+    dnaStructure.chromosome.curve = curve;
+    
+    // 創建染色體DNA螺旋，使用較細的管徑以匹配電話線效果
+    const geometry = new THREE.TubeGeometry(curve, 800, 0.18, 8, false);
+    const chromosomeMesh = new THREE.Mesh(geometry, dnaMaterial);
+    dnaStructure.chromosome.group.add(chromosomeMesh);
+
+    scene.add(dnaStructure.chromosome.group);
 }
 
-// --- 創建核小體 (DNA + 組蛋白) 使用連續的DNA線 ---
+// --- 創建核小體 (DNA + 組蛋白) ---
 function createNucleosomes() {
-    nucleosomeGroup = new THREE.Group();
-    const histoneMaterial = new THREE.MeshStandardMaterial({ color: 0x00ff00, roughness: 0.8 }); // 綠色組蛋白
-    const dnaMaterial = new THREE.MeshStandardMaterial({ color: 0xff8888, roughness: 0.6 }); // 紅色DNA
+    dnaStructure.nucleosomes.group = new THREE.Group();
+    dnaStructure.nucleosomes.positions = []; // 重置位置數組
+    
+    const histoneMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0x00ff00, 
+        roughness: 0.8,
+        transparent: true 
+    });
+    
+    const dnaMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0xff8888, 
+        roughness: 0.6,
+        transparent: true 
+    });
 
     const histoneGeometry = new THREE.SphereGeometry(1, 16, 16); // 組蛋白核心
     
-    // 獲取染色體曲線作為參考
-    const chromosomeCurve = createChromosome();
-    
     // 為了創建連續的DNA線，我們需要一個完整的路徑
     const dnaPoints = [];
-    const nucleosomeCount = 8;
+    const nucleosomeCount = dnaStructure.nucleosomes.count;
     
-    // 沿著染色體曲線放置核小體，並創建連續DNA路徑
+    // 沿著染色體曲線放置核小體
     for (let i = 0; i < nucleosomeCount; i++) {
         const nucleosome = new THREE.Group();
         
-        // 計算核小體在染色體上的位置
+        // 計算核小體在染色體曲線上的位置
         const t = i / (nucleosomeCount - 1);
-        const basePosition = chromosomeCurve.getPoint(t);
+        const basePosition = dnaStructure.chromosome.curve.getPoint(t);
+        
+        // 保存核小體位置供DNA層次使用
+        dnaStructure.nucleosomes.positions.push(basePosition.clone());
         
         // 添加組蛋白核心
         const histone = new THREE.Mesh(histoneGeometry, histoneMaterial);
-        histone.position.copy(basePosition);
         nucleosome.add(histone);
         
         // 為每個核小體創建環繞的DNA路徑點
-        const wrappingPoints = 16; // 環繞點數
-        const radius = 1.2; // 環繞半徑
+        const wrappingPoints = 10; // 增加環繞點數以獲得更平滑的環繞
+        const radius = 1.5; // 環繞半徑
         
         // 如果不是第一個核小體，添加連接前一個核小體的DNA段
         if (i > 0) {
-            // 獲取前一個核小體的最後位置
-            const prevPosition = chromosomeCurve.getPoint((i - 1) / (nucleosomeCount - 1));
+            // 獲取前一個核小體的位置
+            const prevPosition = dnaStructure.nucleosomes.positions[i-1];
             
             // 創建連接線 (簡化為直線)
             const connectorPoints = [];
@@ -179,42 +242,68 @@ function createNucleosomes() {
             const angle = (j / wrappingPoints) * Math.PI * 2;
             const heightOffset = (j / wrappingPoints) * 0.6 - 0.3; // 使DNA螺旋上升
             
-            // 計算環繞點
-            const x = basePosition.x + Math.cos(angle) * radius;
-            const y = basePosition.y + heightOffset;
-            const z = basePosition.z + Math.sin(angle) * radius;
+            // 計算相對於組蛋白中心的環繞點
+            const x = Math.cos(angle) * radius;
+            const y = heightOffset;
+            const z = Math.sin(angle) * radius;
             
-            dnaPoints.push(new THREE.Vector3(x, y, z));
+            // 轉換為世界坐標並添加到基礎位置
+            const point = new THREE.Vector3(
+                basePosition.x + x,
+                basePosition.y + y,
+                basePosition.z + z
+            );
+            
+            dnaPoints.push(point);
         }
         
-        // 微調核小體位置以適應曲線
+        // 設置核小體位置
         nucleosome.position.copy(basePosition);
         
         // 添加到核小體群組
-        nucleosomeGroup.add(nucleosome);
+        dnaStructure.nucleosomes.group.add(nucleosome);
     }
     
     // 創建整個連續的DNA線
     const dnaCurve = new THREE.CatmullRomCurve3(dnaPoints);
     const dnaGeometry = new THREE.TubeGeometry(dnaCurve, 200, 0.2, 8, false);
     const dnaStrand = new THREE.Mesh(dnaGeometry, dnaMaterial);
-    nucleosomeGroup.add(dnaStrand);
+    dnaStructure.nucleosomes.group.add(dnaStrand);
 
-    scene.add(nucleosomeGroup);
+    scene.add(dnaStructure.nucleosomes.group);
 }
-// --- 創建 DNA 雙股螺旋 (簡化表示) ---
-function createDNA() {
-    dnaGroup = new THREE.Group();
-    const strandMaterial1 = new THREE.MeshStandardMaterial({ color: 0xff0000, roughness: 0.5 }); // 紅色鏈
-    const strandMaterial2 = new THREE.MeshStandardMaterial({ color: 0x0000ff, roughness: 0.5 }); // 藍色鏈
-    const basePairMaterial = new THREE.MeshStandardMaterial({ color: 0xffff00, roughness: 0.8 }); // 黃色鹼基對
 
-    const radius = 0.5; // 螺旋半徑
-    const height = 10; // 螺旋總高度
-    const turns = 5; // 螺旋圈數
-    const segments = 100; // 每圈分段數
-    const tubeRadius = 0.1; // 鏈的粗細
-    const baseRadius = 0.05; // 鹼基對的粗細
+// --- 創建 DNA 雙股螺旋 ---
+// --- 创建 DNA 双股螺旋 (简化表示) ---
+function createDNA() {
+    dnaStructure.dna.group = new THREE.Group();
+    
+    // 材质定义
+    const strandMaterial1 = new THREE.MeshStandardMaterial({ 
+        color: 0xff0000, 
+        roughness: 0.5, 
+        transparent: true 
+    }); // 红色链
+    
+    const strandMaterial2 = new THREE.MeshStandardMaterial({ 
+        color: 0x0000ff, 
+        roughness: 0.5, 
+        transparent: true 
+    }); // 蓝色链
+    
+    const basePairMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0xffff00, 
+        roughness: 0.8, 
+        transparent: true 
+    }); // 黄色碱基对
+
+    // 仅创建一条DNA双螺旋，位于场景中心
+    const radius = 0.5; // 螺旋半径
+    const height = 10; // 螺旋总高度
+    const turns = 5; // 螺旋圈数
+    const segments = 100; // 每圈分段数
+    const tubeRadius = 0.1; // 链的粗细
+    const baseRadius = 0.05; // 碱基对的粗细
 
     const points1 = [];
     const points2 = [];
@@ -222,52 +311,57 @@ function createDNA() {
 
     for (let i = 0; i <= segments * turns; i++) {
         const angle = (i / segments) * Math.PI * 2;
-        const y = (i / (segments * turns)) * height - height / 2; // 從中間開始
+        const y = (i / (segments * turns)) * height - height / 2; // 从中间开始
 
-        // 鏈 1
+        // 链 1
         const x1 = Math.cos(angle) * radius;
         const z1 = Math.sin(angle) * radius;
         points1.push(new THREE.Vector3(x1, y, z1));
 
-        // 鏈 2 (相位差 180 度)
+        // 链 2 (相位差 180 度)
         const x2 = Math.cos(angle + Math.PI) * radius;
         const z2 = Math.sin(angle + Math.PI) * radius;
         points2.push(new THREE.Vector3(x2, y, z2));
 
-        // 每隔一段添加鹼基對連接點 (簡化)
-        if (i % Math.floor(segments / 10) === 0) { // 每 1/10 圈加一個鹼基對
-             basePositions.push({ p1: new THREE.Vector3(x1, y, z1), p2: new THREE.Vector3(x2, y, z2) });
+        // 每隔一段添加碱基对连接点
+        if (i % Math.floor(segments / 10) === 0) { // 每 1/10 圈加一个碱基对
+            basePositions.push({ p1: new THREE.Vector3(x1, y, z1), p2: new THREE.Vector3(x2, y, z2) });
         }
     }
 
-    // 創建鏈
+    // 创建链
     const curve1 = new THREE.CatmullRomCurve3(points1);
     const curve2 = new THREE.CatmullRomCurve3(points2);
     const geometry1 = new THREE.TubeGeometry(curve1, segments * turns, tubeRadius, 8, false);
     const geometry2 = new THREE.TubeGeometry(curve2, segments * turns, tubeRadius, 8, false);
     const strand1 = new THREE.Mesh(geometry1, strandMaterial1);
     const strand2 = new THREE.Mesh(geometry2, strandMaterial2);
-    dnaGroup.add(strand1);
-    dnaGroup.add(strand2);
+    dnaStructure.dna.group.add(strand1);
+    dnaStructure.dna.group.add(strand2);
 
-    // 創建鹼基對 (簡化為圓柱體)
+    // 创建碱基对 (简化为圆柱体)
     basePositions.forEach(pos => {
         const direction = new THREE.Vector3().subVectors(pos.p2, pos.p1);
         const length = direction.length();
         const baseGeometry = new THREE.CylinderGeometry(baseRadius, baseRadius, length, 8);
         const basePair = new THREE.Mesh(baseGeometry, basePairMaterial);
 
-        // 定位和旋轉圓柱體
-        basePair.position.copy(pos.p1).add(direction.multiplyScalar(0.5)); // 放在兩點中間
-        basePair.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize()); // Y 軸對準方向
+        // 定位和旋转圆柱体
+        basePair.position.copy(pos.p1).add(direction.multiplyScalar(0.5)); // 放在两点中间
+        basePair.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize()); // Y 轴对准方向
 
-        dnaGroup.add(basePair);
+        dnaStructure.dna.group.add(basePair);
     });
 
+    // 保存一个参考位置，用于过渡动画
+    dnaStructure.dna.positions = [{
+        nucleosomeIndex: 0,
+        position: new THREE.Vector3(0, 0, 0),
+        segment: dnaStructure.dna.group
+    }];
 
-    scene.add(dnaGroup);
+    scene.add(dnaStructure.dna.group);
 }
-
 
 // --- 處理縮放和層級切換 ---
 function onControlsChange() {
@@ -280,70 +374,131 @@ function onControlsChange() {
 
     // Zoom In
     if (distance < zoomThresholds.toNucleosome && currentLevel === 'chromosome') {
-        transitionToLevel('nucleosome');
+        // 找到染色體上最接近目標點的位置
+        const targetPoint = findClosestPointOnChromosome(controls.target);
+        transitionToLevel('nucleosome', targetPoint);
     } else if (distance < zoomThresholds.toDna && currentLevel === 'nucleosome') {
-        transitionToLevel('dna');
+        // 找到最接近目標點的核小體
+        const closestNucleosome = findClosestNucleosome(controls.target);
+        transitionToLevel('dna', closestNucleosome.position);
     }
     // Zoom Out
     else if (distance > zoomThresholds.toNucleosome && currentLevel === 'nucleosome') {
-        transitionToLevel('chromosome');
+        transitionToLevel('chromosome', new THREE.Vector3(0, 0, 0));
     } else if (distance > zoomThresholds.toDna && currentLevel === 'dna') {
-         transitionToLevel('nucleosome');
+        // 找到對應DNA片段的核小體位置
+        const nucleosomePosition = findNucleosomeForDNA(controls.target);
+        transitionToLevel('nucleosome', nucleosomePosition);
     }
 }
 
+// 找到染色體曲線上最接近目標點的位置
+function findClosestPointOnChromosome(targetPoint) {
+    // 用於搜索曲線上最接近點的分段數
+    const divisions = 100;
+    let closestPoint = null;
+    let minDistance = Infinity;
+    
+    // 沿曲線搜索最接近的點
+    for (let i = 0; i <= divisions; i++) {
+        const t = i / divisions;
+        const pointOnCurve = dnaStructure.chromosome.curve.getPoint(t);
+        const distance = pointOnCurve.distanceTo(targetPoint);
+        
+        if (distance < minDistance) {
+            minDistance = distance;
+            closestPoint = pointOnCurve;
+        }
+    }
+    
+    return closestPoint || new THREE.Vector3(0, 0, 0);
+}
+
+// 找到最接近目標點的核小體
+function findClosestNucleosome(targetPoint) {
+    let closestIndex = 0;
+    let minDistance = Infinity;
+    
+    dnaStructure.nucleosomes.positions.forEach((position, index) => {
+        const distance = position.distanceTo(targetPoint);
+        if (distance < minDistance) {
+            minDistance = distance;
+            closestIndex = index;
+        }
+    });
+    
+    return {
+        index: closestIndex,
+        position: dnaStructure.nucleosomes.positions[closestIndex]
+    };
+}
+
+// 找到對應DNA片段的核小體位置
+function findNucleosomeForDNA(targetPoint) {
+    // 由于只有一个DNA双螺旋，我们需要找到最接近的核小体
+    let closestIndex = 0;
+    let minDistance = Infinity;
+    
+    dnaStructure.nucleosomes.positions.forEach((position, index) => {
+        const distance = position.distanceTo(targetPoint);
+        if (distance < minDistance) {
+            minDistance = distance;
+            closestIndex = index;
+        }
+    });
+    
+    return dnaStructure.nucleosomes.positions[closestIndex] || new THREE.Vector3(0, 0, 0);
+}
+
 // --- 層級切換動畫 ---
-function transitionToLevel(targetLevel) {
+function transitionToLevel(targetLevel, targetPoint) {
     if (isTransitioning || currentLevel === targetLevel) return;
     isTransitioning = true;
     console.log(`Transitioning from ${currentLevel} to ${targetLevel}`);
 
     const duration = 1.0; // 動畫持續時間 (秒)
-    let targetCameraPosition = new THREE.Vector3();
-    let targetControlsTarget = new THREE.Vector3(0, 0, 0); // 新的觀察目標點
     let targetGroupToShow, targetGroupToHide;
     let zoomLevel;
+    let targetControlsTarget = targetPoint.clone(); // 新的觀察目標點
 
     // 確定要顯示/隱藏的群組和目標相機位置/縮放級別
     if (targetLevel === 'nucleosome') {
-        targetGroupToShow = nucleosomeGroup;
+        targetGroupToShow = dnaStructure.nucleosomes.group;
         if (currentLevel === 'chromosome') {
-            targetGroupToHide = chromosomeGroup;
+            targetGroupToHide = dnaStructure.chromosome.group;
             zoomLevel = (zoomThresholds.toNucleosome + zoomThresholds.toDna) / 2; // 設置到核小體層級的典型距離
-             // 可以隨機選擇一個核小體的位置作為目標，或者保持 (0,0,0)
-            // targetControlsTarget = nucleosomeGroup.children[0].position.clone();
         } else { // 從 DNA 返回
-            targetGroupToHide = dnaGroup;
+            targetGroupToHide = dnaStructure.dna.group;
             zoomLevel = (zoomThresholds.toNucleosome + zoomThresholds.toDna) / 2;
         }
     } else if (targetLevel === 'dna') {
-        targetGroupToShow = dnaGroup;
-        targetGroupToHide = nucleosomeGroup;
-        zoomLevel = zoomThresholds.toDna / 2; // 設置到DNA層級的典型距離
-        // 可以設置目標為DNA的中心
-        // targetControlsTarget = dnaGroup.position.clone(); // 如果 DNA Group 有特定位置
+        targetGroupToShow = dnaStructure.dna.group;
+        targetGroupToHide = dnaStructure.nucleosomes.group;
+        zoomLevel = zoomThresholds.toDna / 2; // 设置到DNA层级的典型距离
+        
+        // 找到最接近的核小体作为DNA的目标位置
+        const closestNucleosome = findClosestNucleosome(targetPoint);
+        
+        // 将DNA定位到该核小体位置
+        dnaStructure.dna.group.position.copy(closestNucleosome.position);
+        targetControlsTarget = closestNucleosome.position.clone();
     } else { // targetLevel === 'chromosome'
-        targetGroupToShow = chromosomeGroup;
-        targetGroupToHide = nucleosomeGroup;
+        targetGroupToShow = dnaStructure.chromosome.group;
+        targetGroupToHide = currentLevel === 'nucleosome' ? 
+                           dnaStructure.nucleosomes.group : 
+                           dnaStructure.dna.group;
+        targetControlsTarget = new THREE.Vector3(0, 0, 0);
         zoomLevel = (zoomThresholds.toNucleosome + controls.maxDistance) / 3; // 設置到染色體層級的典型距離
     }
 
     // 計算目標相機位置：保持當前方向，但調整距離
-    targetCameraPosition = camera.position.clone().normalize().multiplyScalar(zoomLevel);
+    const cameraDirection = camera.position.clone().sub(controls.target).normalize();
+    const targetCameraPosition = targetControlsTarget.clone().add(cameraDirection.multiplyScalar(zoomLevel));
 
-     // 確保目標群組可見以進行淡入
+    // 確保目標群組可見以進行淡入
     targetGroupToShow.visible = true;
-    if (targetGroupToShow.children.length > 0 && targetGroupToShow.children[0].material) {
-         gsap.set(targetGroupToShow.children, { opacity: 0 }); // 初始透明度為0 (假設所有子物件都有材質)
-         // 更健壯的方式是遍歷設置透明度
-         targetGroupToShow.traverse(child => {
-            if (child.isMesh && child.material) {
-                child.material.transparent = true; // 必須設置為 true 才能控制 opacity
-                child.material.opacity = 0;
-            }
-        });
-    }
-
+    prepareGroupForTransition(targetGroupToShow, 0); // 初始透明度為0
+    prepareGroupForTransition(targetGroupToHide, 1); // 初始透明度為1
 
     // 使用 GSAP 創建動畫
     gsap.timeline({
@@ -353,14 +508,8 @@ function transitionToLevel(targetLevel) {
             isTransitioning = false;
             updateInfo();
             console.log(`Transition complete. Current level: ${currentLevel}`);
-             // 恢復目標群組的透明度（如果之前設置過）
-             targetGroupToShow.traverse(child => {
-                 if (child.isMesh && child.material) {
-                     child.material.opacity = 1;
-                    // 可以選擇性地將 transparent 設回 false 以提高性能，但如果後續還需淡出則保留 true
-                    // child.material.transparent = false;
-                 }
-             });
+            // 恢復目標群組的透明度
+            prepareGroupForTransition(targetGroupToShow, 1);
         }
     })
     .to(camera.position, { // 相機位置動畫
@@ -378,27 +527,55 @@ function transitionToLevel(targetLevel) {
         ease: "power2.inOut",
         onUpdate: () => controls.update() // 持續更新控制器
     }, 0)
-    .to(targetGroupToHide.children, { // 舊群組淡出 (假設子物件有材質)
-        opacity: 0,
-        duration: duration * 0.5, // 較快淡出
-        ease: "power1.in",
-        stagger: 0.01, // 可以稍微錯開動畫
-        onStart: () => {
-             targetGroupToHide.traverse(child => {
-                if (child.isMesh && child.material) {
-                    child.material.transparent = true;
-                }
-            });
-        }
+    .to({}, { // 群組淡出動畫
+        duration: duration * 0.5,
+        onUpdate: function() {
+            const progress = this.progress();
+            updateGroupOpacity(targetGroupToHide, 1 - progress);
+        },
+        ease: "power1.in"
     }, 0)
-     .to(targetGroupToShow.children, { // 新群組淡入
-        opacity: 1,
-        duration: duration * 0.7, // 較慢淡入
-        ease: "power1.out",
-        stagger: 0.01,
-        delay: duration * 0.3 // 在舊群組開始淡出後再開始淡入
+    .to({}, { // 群組淡入動畫
+        duration: duration * 0.7,
+        delay: duration * 0.3,
+        onUpdate: function() {
+            const progress = this.progress();
+            updateGroupOpacity(targetGroupToShow, progress);
+        },
+        ease: "power1.out"
     }, 0);
+}
 
+// 準備群組進行透明度過渡
+function prepareGroupForTransition(group, initialOpacity) {
+    group.traverse(child => {
+        if (child.isMesh && child.material) {
+            if (Array.isArray(child.material)) {
+                child.material.forEach(mat => {
+                    mat.transparent = true;
+                    mat.opacity = initialOpacity;
+                });
+            } else {
+                child.material.transparent = true;
+                child.material.opacity = initialOpacity;
+            }
+        }
+    });
+}
+
+// 更新群組透明度
+function updateGroupOpacity(group, opacity) {
+    group.traverse(child => {
+        if (child.isMesh && child.material) {
+            if (Array.isArray(child.material)) {
+                child.material.forEach(mat => {
+                    mat.opacity = opacity;
+                });
+            } else {
+                child.material.opacity = opacity;
+            }
+        }
+    });
 }
 
 // --- 更新介面訊息 ---
@@ -428,18 +605,15 @@ function animate() {
         controls.update();
     }
 
-    // 在這裡可以添加模型的自旋轉等動畫
-    // if (chromosomeGroup && chromosomeGroup.visible) {
-    //     chromosomeGroup.rotation.y += 0.001;
-    // }
-     if (nucleosomeGroup && nucleosomeGroup.visible) {
-         nucleosomeGroup.rotation.y += 0.002;
-         nucleosomeGroup.rotation.x += 0.001;
-     }
-    // if (dnaGroup && dnaGroup.visible) {
-    //      dnaGroup.rotation.y += 0.005;
-    // }
-
+    // 添加模型的自旋轉等動畫，根據當前層級選擇性地應用
+    if (currentLevel === 'nucleosome' && dnaStructure.nucleosomes.group.visible) {
+        dnaStructure.nucleosomes.group.rotation.y += 0.002;
+        dnaStructure.nucleosomes.group.rotation.x += 0.001;
+    }
+    
+    if (currentLevel === 'dna' && dnaStructure.dna.group.visible) {
+        dnaStructure.dna.group.rotation.y += 0.003;
+    }
 
     renderer.render(scene, camera);
 }
