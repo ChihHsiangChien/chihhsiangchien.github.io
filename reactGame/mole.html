@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Whack-a-Mole with React</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      background-color: #fefefe;
+    }
+    .grid {
+      display: grid;
+      gap: 10px;
+      justify-content: center;
+      margin-top: 20px;
+    }
+    .hole {
+      width: 80px;
+      height: 80px;
+      background: #ccc;
+      border-radius: 50%;
+      position: relative;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    .mole {
+      background: brown;
+      animation: pop 0.3s ease-in-out;
+    }
+    .hole.hit {
+      background: red;
+      animation: explode 0.3s ease-out;
+    }
+
+    @keyframes explode {
+      0% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.4); opacity: 0.7; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    @keyframes pop {
+      0% { transform: scale(0.5); opacity: 0.5; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- 音效 -->
+  <audio id="hitSound" src="https://www.myinstants.com/media/sounds/cartoon-jump.mp3" preload="auto"></audio>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    function WhackAMole({ gridSize = 3, gameDuration = 30 }) {
+      const totalCells = gridSize * gridSize;
+      const [moleIndex, setMoleIndex] = useState(null);
+      const [score, setScore] = useState(0);
+      const [timeLeft, setTimeLeft] = useState(gameDuration);
+      const [isPlaying, setIsPlaying] = useState(true);
+      const [hitIndex, setHitIndex] = useState(null);
+
+      // 倒數計時
+      useEffect(() => {
+        if (!isPlaying) return;
+
+        const timer = setInterval(() => {
+          setTimeLeft(prev => {
+            if (prev <= 1) {
+              setIsPlaying(false);
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+
+        return () => clearInterval(timer);
+      }, [isPlaying]);
+
+      // 隨機生成地鼠
+      useEffect(() => {
+        if (!isPlaying) return;
+
+        const moleTimer = setInterval(() => {
+          const randomIndex = Math.floor(Math.random() * totalCells);
+          setMoleIndex(randomIndex);
+        }, 800);
+
+        return () => clearInterval(moleTimer);
+      }, [isPlaying, totalCells]);
+
+      // 點擊事件處理（支持觸控）
+      const handleClick = (index) => {
+        if (!isPlaying) return;
+        if (index === moleIndex) {
+          setScore(score + 1);
+          setMoleIndex(null);
+          setHitIndex(index);  // 設置爆炸效果
+
+          // 播放音效
+          const sound = document.getElementById("hitSound");
+          sound.currentTime = 0;
+          sound.play();
+
+          // 清除 hit 標記（讓動畫能重播）
+          setTimeout(() => setHitIndex(null), 300);
+        }
+      };
+
+      const handleTouch = (index) => {
+        handleClick(index);  // 觸控點擊事件
+      };
+
+      const gridStyle = {
+        gridTemplateColumns: `repeat(${gridSize}, 80px)`,
+      };
+
+      return (
+        <div>
+          <h2>分數: {score}</h2>
+          <h3>剩餘時間: {timeLeft} 秒</h3>
+          {!isPlaying && <h2 style={{ color: "red" }}>遊戲結束！</h2>}
+          <div className="grid" style={gridStyle}>
+            {Array(totalCells).fill(0).map((_, i) => (
+              <div
+                key={i}
+                className={`hole ${i === moleIndex ? 'mole' : ''} ${i === hitIndex ? 'hit' : ''}`}
+                onClick={() => handleClick(i)}
+                onTouchStart={() => handleTouch(i)}  // 觸控支援
+              />
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<WhackAMole gridSize={7} gameDuration={30} />);
+  </script>
+</body>
+</html>
