@@ -5,7 +5,7 @@ export class SpikeProteinManager {
             spikeLength: config.spikeLength || 0.3,
             spikeRadius: config.spikeRadius || 0.03,
             spikeColor: config.spikeColor || 0xff0000,
-            surfaceRadius: config.surfaceRadius || 1.2,
+            surfaceRadius: config.surfaceRadius || 1.35,
             detail: config.detail || 8
         };
     }

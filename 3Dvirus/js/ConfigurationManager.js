@@ -61,8 +61,8 @@ export class ConfigurationManager {
                 spikeCount: 50,
                 spikeLength: 0.3,
                 spikeRadius: 0.03,
-                spikeColor: 0xff0000,
-                surfaceRadius: 1.2,
+                spikeColor: 0xff5500,
+                surfaceRadius: 1.35,
                 detail: 8
             }
         };
