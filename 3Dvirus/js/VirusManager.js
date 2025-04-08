@@ -26,6 +26,20 @@ export class VirusManager {
             this.configManager.getConfig('genetic')
         );
 
+        // --- 獲取包膜配置 ---
+        const envelopeConfig = this.configManager.getConfig('envelope');
+        this.envelopeManager = new EnvelopeManager(envelopeConfig);
+
+        // --- 獲取原始刺突配置 ---
+        const spikeConfig = this.configManager.getConfig('spike');
+
+        // --- 創建 SpikeProteinManager，並用包膜半徑覆蓋 surfaceRadius ---
+        this.spikeManager = new SpikeProteinManager({
+            ...spikeConfig, // 先展開原始的 spike 配置
+            surfaceRadius: envelopeConfig.radius // <--- 關鍵：用包膜的半徑覆蓋 surfaceRadius
+        });
+                
+        /*
         this.envelopeManager = new EnvelopeManager(
             this.configManager.getConfig('envelope')
         );
@@ -33,6 +47,7 @@ export class VirusManager {
         this.spikeManager = new SpikeProteinManager(
             this.configManager.getConfig('spike')
         );
+        */
 
         // Create virus components
         this.capsidStructure = this.capsidManager.createCapsidStructure();
