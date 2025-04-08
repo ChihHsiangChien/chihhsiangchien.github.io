@@ -54,7 +54,7 @@ export class ConfigurationManager {
                 radius: 1.2,
                 detail: 32,
                 color: 0xffff00,
-                opacity: 0.2,
+                opacity: 0.9,
                 thickness: 0.1
             },
             spike: {
