@@ -67,7 +67,7 @@ export class VirusManager {
             () => this.toggleCapsidVisibility()
         );
 
-        document.getElementById('toggleGenetic')?.addEventListener(
+        document.getElementById('toggleGeneticMaterial')?.addEventListener(
             'click', 
             () => this.toggleGeneticVisibility()
         );
@@ -147,7 +147,7 @@ export class VirusManager {
         }
     }
 
-    toggleEnvelopeVisibility() {
+    toggleEnvelopeVisibility() {        
         const isVisible = this.configManager.toggleEnvelopeVisibility();
         if (this.envelopeStructure) {
             this.envelopeStructure.visible = isVisible;
