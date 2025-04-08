@@ -48,22 +48,32 @@ export class ClippingManager {
 
         const clippingPlanes = enabled ? [this.plane] : null;
 
+        const configureMaterial = (material) => {
+            if (material) {
+                material.clippingPlanes = clippingPlanes;
+                material.clipIntersection = false;
+                material.clipShadows = true;
+                material.wireframe = false;
+                material.side = THREE.FrontSide;
+                material.needsUpdate = true;
+            }
+        };
+
+        // Handle mesh's own material
         if (Array.isArray(mesh.material)) {
-            mesh.material.forEach(mat => {
-                if (mat) {
-                    mat.clippingPlanes = clippingPlanes;
-                    mat.needsUpdate = true;
-                }
-            });
+            mesh.material.forEach(configureMaterial);
         } else if (mesh.material) {
-            mesh.material.clippingPlanes = clippingPlanes;
-            mesh.material.needsUpdate = true;
+            configureMaterial(mesh.material);
         }
 
-        // Handle children
+        // Handle all child mesh materials
         mesh.traverse(child => {
             if (child.isMesh && child !== mesh) {
-                this.applyToMesh(child, enabled);
+                if (Array.isArray(child.material)) {
+                    child.material.forEach(configureMaterial);
+                } else if (child.material) {
+                    configureMaterial(child.material);
+                }
             }
         });
     }

@@ -27,7 +27,10 @@ export class EnvelopeManager {
             color: this.config.color,
             transparent: true,
             opacity: this.config.opacity,
-            side: THREE.DoubleSide
+            side: THREE.FrontSide,
+            clipShadows: true,
+            clipIntersection: false,
+            wireframe: false
         });
 
         const outerSphere = new THREE.Mesh(outerGeometry, material);

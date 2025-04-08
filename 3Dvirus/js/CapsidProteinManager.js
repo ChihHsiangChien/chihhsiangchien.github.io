@@ -31,7 +31,9 @@ class CapsidProteinManager {
         return new THREE.MeshPhongMaterial({ 
             color: this.config.proteinColor,
             shininess: this.config.proteinShininess,
-            specular: this.config.proteinSpecular
+            specular: this.config.proteinSpecular,
+            side: THREE.FrontSide,
+            clipShadows: true
         });
     }
 
@@ -40,7 +42,10 @@ class CapsidProteinManager {
             color: this.config.capsidColor,
             transparent: true,
             opacity: this.config.capsidOpacity,
-            wireframe: false
+            wireframe: false,
+            side: THREE.FrontSide,
+            clipShadows: true,
+            clipIntersection: false
         });
     }
 
