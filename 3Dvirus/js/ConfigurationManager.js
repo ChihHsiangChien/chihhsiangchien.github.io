@@ -51,18 +51,18 @@ export class ConfigurationManager {
                 }
             },
             envelope: {
-                radius: 1.2,
+                radius: 1.5,
                 detail: 32,
                 color: 0xffff00,
                 opacity: 0.9,
                 thickness: 0.1
             },
             spike: {
-                spikeCount: 50,
+                spikeCount: 100,
                 spikeLength: 0.3,
                 spikeRadius: 0.03,
                 spikeColor: 0xff5500,
-                surfaceRadius: 1.35,
+                surfaceRadius: 1.8,
                 detail: 8
             }
         };
