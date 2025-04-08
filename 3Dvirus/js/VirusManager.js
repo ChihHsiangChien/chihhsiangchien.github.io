@@ -162,7 +162,10 @@ export class VirusManager {
     }
 
     setOpacity(opacity) {
-        this.capsidManager.setOpacity(opacity);
+        console.log('Setting opacity to:', opacity);
+        //this.capsidManager.setOpacity(opacity);
+        this.envelopeManager.setOpacity(opacity);
+        this.spikeManager.setOpacity(opacity);
     }
 
     // Configuration methods
