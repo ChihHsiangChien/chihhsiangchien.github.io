@@ -51,12 +51,9 @@ class CapsidProteinManager {
 
     createCapsidStructure() {
         const capsidGeometry = new THREE.IcosahedronGeometry(1, 1);
-        console.log('Geometry position count:', capsidGeometry.attributes.position.count);
-
         this.capsid = new THREE.Mesh(capsidGeometry, this.components.capsidMaterial);
 
         const faces = this.extractFacesFromGeometry(capsidGeometry);
-        console.log('Number of faces extracted:', faces.length);
         const proteinCount = faces.length * 7;
         this.capsidProteins = this.createProteins(faces, proteinCount);
 
