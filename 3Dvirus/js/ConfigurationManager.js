@@ -1,6 +1,34 @@
 export class ConfigurationManager {
     constructor() {
         this.config = {
+            scene: {
+                backgroundColor: 0xeeeeee,
+                cameraFov: 75,
+                cameraNear: 0.1,
+                cameraFar: 1000,
+                cameraPosition: { x: 0, y: 0, z: 4 },
+                controls: {
+                    minDistance: 1,
+                    maxDistance: 10,
+                    dampingFactor: 0.05
+                },
+                lights: {
+                    ambient: {
+                        color: 0x404040,
+                        intensity: 0.6
+                    },
+                    directional1: {
+                        color: 0xffffff,
+                        intensity: 1.0,
+                        position: { x: 5, y: 5, z: 5 }
+                    },
+                    directional2: {
+                        color: 0xffffff,
+                        intensity: 0.8,
+                        position: { x: -5, y: -5, z: -5 }
+                    }
+                }
+            },
             capsid: {
                 proteinSize: 0.05,
                 proteinDetail: 16,
@@ -22,44 +50,16 @@ export class ConfigurationManager {
                 color: 0xff0000,
                 shininess: 100
             },
-            scene: {
-                backgroundColor: 0xeeeeee,
-                cameraFov: 75,
-                cameraNear: 0.1,
-                cameraFar: 1000,
-                cameraPosition: { x: 0, y: 0, z: 5 },
-                controls: {
-                    minDistance: 2,
-                    maxDistance: 10,
-                    dampingFactor: 0.05
-                },
-                lights: {
-                    ambient: {
-                        color: 0x404040,
-                        intensity: 0.6
-                    },
-                    directional1: {
-                        color: 0xffffff,
-                        intensity: 1.0,
-                        position: { x: 5, y: 5, z: 5 }
-                    },
-                    directional2: {
-                        color: 0xffffff,
-                        intensity: 0.8,
-                        position: { x: -5, y: -5, z: -5 }
-                    }
-                }
-            },
             envelope: {
                 radius: 1.5,
                 detail: 32,
-                color: 0xffff00,
+                color: 0xeeee00,
                 opacity: 0.9,
                 thickness: 0.1
             },
             spike: {
-                spikeCount: 100,
-                spikeLength: 0.3,
+                spikeCount: 150,
+                spikeLength: 0.2,
                 spikeRadius: 0.03,
                 spikeColor: 0xff5500,
                 surfaceRadius: 1.8,
@@ -68,7 +68,6 @@ export class ConfigurationManager {
         };
 
         this.state = {
-            isCrossSection: false,
             isVirusVisible: true,
             isCapsidVisible: true,
             isGeneticMaterialVisible: true,
@@ -97,10 +96,6 @@ export class ConfigurationManager {
         this.state = { ...this.state, ...newState };
     }
 
-    toggleCrossSection() {
-        this.state.isCrossSection = !this.state.isCrossSection;
-        return this.state.isCrossSection;
-    }
 
     toggleVirusVisibility() {
         this.state.isVirusVisible = !this.state.isVirusVisible;

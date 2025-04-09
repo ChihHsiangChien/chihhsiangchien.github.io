@@ -10,7 +10,13 @@ export class VirusManager {
     constructor(canvasId = 'virusCanvas') {
         this.configManager = new ConfigurationManager();
         this.scene = new Scene(canvasId);
-        this.clippingManager = new ClippingManager({ helpers: true });
+        //關掉剖面的線框
+        this.clippingManager = new ClippingManager({ 
+            helpers: false, // 關閉剖面幫助器
+            planeConstant: 2 // <--- 在這裡設定初始值
+
+
+         });
         
         this.initializeComponents();
         this.setupEventListeners();
@@ -62,19 +68,35 @@ export class VirusManager {
         this.scene.add(this.spikeProteins);
 
         // Add clipping plane helper if available
+        /*
         const helper = this.clippingManager.getHelper();
         if (helper) {
             this.scene.add(helper);
         }
+        */
+        // --- 在初始化時就啟用剖面 ---
+        this.applyClippingToAll(true); // <--- 新增：立即應用剖面
 
         // Start animation
         this.scene.animate(() => this.update());
     }
 
     setupEventListeners() {
+        /*
         document.getElementById('toggleCrossSection')?.addEventListener(
             'click', 
             () => this.toggleCrossSection()
+        );
+        */
+
+        document.getElementById('toggleSpike')?.addEventListener(
+            'click',
+            () => this.toggleSpikeVisibility()
+        );
+
+        document.getElementById('toggleEnvelope')?.addEventListener(
+            'click',
+            () => this.toggleEnvelopeVisibility()
         );
 
         document.getElementById('toggleCapsid')?.addEventListener(
@@ -87,15 +109,8 @@ export class VirusManager {
             () => this.toggleGeneticVisibility()
         );
 
-        document.getElementById('toggleEnvelope')?.addEventListener(
-            'click',
-            () => this.toggleEnvelopeVisibility()
-        );
 
-        document.getElementById('toggleSpike')?.addEventListener(
-            'click',
-            () => this.toggleSpikeVisibility()
-        );
+
 
         // Add clipping plane control events if needed
         document.getElementById('adjustClipping')?.addEventListener(
@@ -125,18 +140,20 @@ export class VirusManager {
         }
 
         // Update clipping state
-        this.updateClipping(state.isCrossSection);
+        // 因為剖面現在總是啟用，不需要在每一幀都去應用它
+        //this.updateClipping(state.isCrossSection);
     }
-
+    /*
     toggleCrossSection() {
         const isCrossSection = this.configManager.toggleCrossSection();
         this.updateClipping(isCrossSection);
         
         // Toggle helper visibility
-        this.clippingManager.toggleHelper();
+        //this.clippingManager.toggleHelper();
     }
+    */
 
-    updateClipping(enabled) {
+    applyClippingToAll(enabled) {
         // Apply clipping to all components
         this.clippingManager.applyToMesh(this.capsidStructure, enabled);
         this.clippingManager.applyToMesh(this.geneticMaterial, enabled);
@@ -213,11 +230,23 @@ export class VirusManager {
                 break;
 
             case 'spike':
-                this.spikeManager.updateConfig(this.configManager.getConfig('spike'));
-                this.scene.remove(this.spikeProteins);
-                this.spikeProteins = this.spikeManager.createSpikes();
-                this.scene.add(this.spikeProteins);
-                break;
+
+
+                 // --- 確保更新 spike 時也使用正確的包膜半徑 ---
+                 // 新增以下四行代碼
+                 // 獲取當前的包膜半徑配置
+
+                 const envelopeRadius = this.configManager.getConfig('envelope').radius;
+                 const spikeConfig = {
+                     ...this.configManager.getConfig('spike'),
+                     surfaceRadius: envelopeRadius // 重新應用包膜半徑
+                 };
+
+                 this.spikeManager.updateConfig(spikeConfig);
+                 this.scene.remove(this.spikeProteins);
+                 this.spikeProteins = this.spikeManager.createSpikes();
+                 this.scene.add(this.spikeProteins);
+                 break;               
                 
             case 'scene':
                 const sceneConfig = this.configManager.getConfig('scene');
@@ -231,7 +260,7 @@ export class VirusManager {
 
         // Reapply clipping if enabled
         if (this.configManager.getState().isCrossSection) {
-            this.updateClipping(true);
+            this.applyClippingToAll(true); // <--- 在重建後重新應用剖面
         }
     }
 }

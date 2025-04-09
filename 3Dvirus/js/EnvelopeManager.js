@@ -1,11 +1,11 @@
 export class EnvelopeManager {
     constructor(config = {}) {
         this.config = {
-            radius: config.radius || 1.2,
-            detail: config.detail || 32,
-            color: config.color || 0xffff00,
-            opacity: config.opacity || 0.2,
-            thickness: config.thickness || 0.1
+            radius: config.radius,
+            detail: config.detail,
+            color: config.color,
+            opacity: config.opacity,
+            thickness: config.thickness
         };
     }
 
@@ -27,7 +27,9 @@ export class EnvelopeManager {
             color: this.config.color,
             transparent: true,
             opacity: this.config.opacity,
-            side: THREE.FrontSide,
+            // side: THREE.FrontSide, // Change this line
+
+            side: THREE.DoubleSide,
             clipShadows: true,
             clipIntersection: false,
             wireframe: false

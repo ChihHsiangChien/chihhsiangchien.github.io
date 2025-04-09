@@ -53,8 +53,8 @@ export class ClippingManager {
                 material.clippingPlanes = clippingPlanes;
                 material.clipIntersection = false;
                 material.clipShadows = true;
-                material.wireframe = false;
-                material.side = THREE.FrontSide;
+                //material.wireframe = false;
+                //material.side = THREE.FrontSide;
                 material.needsUpdate = true;
             }
         };

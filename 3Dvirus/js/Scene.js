@@ -1,3 +1,5 @@
+import { ConfigurationManager } from './ConfigurationManager.js';
+
 export class Scene {
     constructor(canvasId) {
         this.sceneElements = this.initializeScene(canvasId);
@@ -26,15 +28,20 @@ export class Scene {
     }
 
     setupControls() {
+        const configManager = new ConfigurationManager();
+        const sceneConfig = configManager.getConfig('scene');
+
         const { camera, renderer } = this.sceneElements;
         this.controls = new THREE.OrbitControls(camera, renderer.domElement);
         this.controls.enableDamping = true;
-        this.controls.dampingFactor = 0.05;
+        this.controls.dampingFactor = sceneConfig.controls.dampingFactor;
         this.controls.screenSpacePanning = false;
-        this.controls.minDistance = 2;
-        this.controls.maxDistance = 10;
-        camera.position.z = 5;
+        this.controls.minDistance = sceneConfig.controls.minDistance;
+        this.controls.maxDistance = sceneConfig.controls.maxDistance;
+        camera.position.set(sceneConfig.cameraPosition.x, sceneConfig.cameraPosition.y, sceneConfig.cameraPosition.z);
+
     }
+
 
     setupLighting() {
         const { scene } = this.sceneElements;
