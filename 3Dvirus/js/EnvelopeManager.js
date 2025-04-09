@@ -16,12 +16,13 @@ export class EnvelopeManager {
             this.config.detail,
             this.config.detail
         );
-        
+        /*
         const innerGeometry = new THREE.SphereGeometry(
             this.config.radius - this.config.thickness,
             this.config.detail,
             this.config.detail
         );
+        */
 
         const material = new THREE.MeshPhongMaterial({
             color: this.config.color,
@@ -36,12 +37,12 @@ export class EnvelopeManager {
         });
 
         const outerSphere = new THREE.Mesh(outerGeometry, material);
-        const innerSphere = new THREE.Mesh(innerGeometry, material);
+        //const innerSphere = new THREE.Mesh(innerGeometry, material);
 
         // Create a group to hold both spheres
         this.envelope = new THREE.Group();
         this.envelope.add(outerSphere);
-        this.envelope.add(innerSphere);
+        //this.envelope.add(innerSphere);
 
         return this.envelope;
     }
