@@ -1,236 +1,227 @@
+// Configuration for the simulation
+const config = {
+    totalSprites: 6,
+    spriteSize: 25,
+    offspringAreaCountLimit: 32,
+    defaultArea: { x: 10, y: 10, width: 160, height: 200 },
+    breedingArea: { x: 180, y: 10, width: 100, height: 100 },
+    offspringArea: { x: 290, y: 10, width: 280, height: 380 },
+    chromosomeCount: 4, // Number of chromosomes per creature
+    creatureType: Elf, // Type of creature to use (e.g., Elf, etc.)
+};
+
+// 全局變數，追蹤 Alleles 是否應該顯示 ---
+let globalAllelesVisible = false;
+
+// 用來儲存所有生物物件的陣列
+const creatures = [];
+
+
+// Function to create a creature with random chromosomes
+function createCreature(id, x, y, size, creatureType, chromosomeCount) {
+    const spriteChromosomes = [];
+    for (let j = 1; j <= chromosomeCount; j++) {
+        spriteChromosomes.push(new Chromosome(j, creatureType.getRandomAlleles(j)));
+        spriteChromosomes.push(new Chromosome(j, creatureType.getRandomAlleles(j)));
+    }
+    return new creatureType(
+        id,
+        x,
+        y,
+        size,
+        spriteChromosomes
+    );
+}
 // Create the SVG element
 const svgNS = "http://www.w3.org/2000/svg";
 const svg = document.createElementNS(svgNS, "svg");
-
 svg.setAttribute("viewBox", "0 0 600 400");
-
-// Append the SVG to the container div
 document.getElementById("svgContainer").appendChild(svg);
 
 // Define areas
-const defaultArea = { x: 10, y: 10, width: 160, height: 200 };
-const breedingArea = { x: 180, y: 10, width: 100, height: 100 };
-const offspringArea = { x: 290, y: 10, width: 280, height: 380 };
-
-const offspringAreaCountLimit = 32; // 子代區的子代數目
-const totalSprites = 8; // 預設區有多少子代
-const spirteSize = 25; //尺寸
-
-
-// Gene pool
-const genePools = [
-  { chromosome: 1, alleles: ["Z", "z"] },
-  { chromosome: 1, alleles: ["A", "A", "a", "a", "a"] },
-  { chromosome: 2, alleles: ["circleEye", "circleEyeLess"] },
-  { chromosome: 2, alleles: ["tail", "tailless"] },    
-  { chromosome: 2, alleles: ["horn", ""] },
-  { chromosome: 2, alleles: ["horn", ""] },  
-  { chromosome: 3, alleles: ["roundEar", "roundEarLess"] },
-  { chromosome: 4, alleles: ["X"] },
-  { chromosome: 4, alleles: ["X", "Y"] }, // Example sex chromosomes
-];
 
 // Draw areas
 function drawArea(area, className) {
-  const rect = document.createElementNS(svgNS, "rect");
-  rect.setAttribute("x", area.x);
-  rect.setAttribute("y", area.y);
-  rect.setAttribute("width", area.width);
-  rect.setAttribute("height", area.height);
-  rect.setAttribute("fill", "white");
-  rect.setAttribute("stroke", "black");
-  rect.setAttribute("stroke-width", "2");
-  rect.setAttribute("class", className);
-  svg.appendChild(rect);
+    const rect = document.createElementNS(svgNS, "rect");
+    rect.setAttribute("x", area.x);
+    rect.setAttribute("y", area.y);
+    rect.setAttribute("width", area.width);
+    rect.setAttribute("height", area.height);
+    rect.setAttribute("fill", "white");
+    rect.setAttribute("stroke", "black");
+    rect.setAttribute("stroke-width", "2");
+    rect.setAttribute("class", className);
+    svg.appendChild(rect);
 }
 
-drawArea(defaultArea, "default-area");
-drawArea(breedingArea, "breeding-area");
-drawArea(offspringArea, "offspring-area");
+drawArea(config.defaultArea, "default-area");
+drawArea(config.breedingArea, "breeding-area");
+drawArea(config.offspringArea, "offspring-area");
 
-// Function to get random allele from genePool
-function getRandomAlleles(chromosomeNumber) {
-  // 找到给定染色体编号的所有基因池
-  const genePoolsForChromosome = genePools.filter(
-    (pool) => pool.chromosome === chromosomeNumber
-  );
-
-  // 遍历每个基因池，并从中选择一个随机等位基因
-  const alleles = genePoolsForChromosome.map((pool) => {
-    return pool.alleles[Math.floor(Math.random() * pool.alleles.length)];
-  });
-
-  return alleles;
-}
-
-// Function to generate regular positions arranged in columns
+// Function to generate regular positions
 function getRegularPosition(index, total, maxWidth, maxHeight, columns) {
-  const rows = Math.ceil(total / columns);
-  const spacingX = maxWidth / (columns + 1);
-  const spacingY = maxHeight / (rows + 1);
-
-  const column = index % columns;
-  const row = Math.floor(index / columns);
-
-  return {
-    x: (column + 1) * spacingX,
-    y: (row + 1) * spacingY,
-  };
+    const rows = Math.ceil(total / columns);
+    const spacingX = maxWidth / (columns + 1);
+    const spacingY = maxHeight / (rows + 1);
+    const column = index % columns;
+    const row = Math.floor(index / columns);
+    return {
+        x: (column + 1) * spacingX,
+        y: (row + 1) * spacingY,
+    };
 }
 
-// 生殖
-for (let i = 1; i <= totalSprites; i++) {
-  const position = getRegularPosition(
-    i - 1,
-    totalSprites,
-    defaultArea.width,
-    defaultArea.height,
-    2
-  );
-
-  const spriteChromosomes = [];
-  for (let j = 1; j <= 4; j++) {
-    // Add both chromosomes for each pair
-    spriteChromosomes.push(new Chromosome(j, getRandomAlleles(j)));
-    spriteChromosomes.push(new Chromosome(j, getRandomAlleles(j)));
-  }
-  //spriteChromosomes.push(new Chromosome(4, getRandomAlleles(4)));
-
-  new Sprite(
-    `sprite${i}`,
-    defaultArea.x + position.x,
-    defaultArea.y + position.y,
-    spirteSize,
-    spriteChromosomes
-  );
-}
+// Create initial elves using an async IIFE
+let offspringCount = 0;
+(async () => {
+    for (let i = 1; i <= config.totalSprites; i++) {
+        const position = getRegularPosition(i - 1, config.totalSprites, config.defaultArea.width, config.defaultArea.height, 2);
+        const elf = createCreature(
+            `sprite${i}`,
+            config.defaultArea.x + position.x,
+            config.defaultArea.y + position.y,
+            config.spriteSize,
+            config.creatureType,
+            config.chromosomeCount);
+        await elf.init(config.defaultArea.x + position.x, config.defaultArea.y + position.y);
+        // 將創建的生物物件存入陣列 ---
+        creatures.push(elf);        
+    }
+})();
 
 // Breeding function
-let offspringCount = 0;
+document.getElementById("breedButton").addEventListener("click", async () => {
+    const spritesInBreedingArea = [];
+    svg.querySelectorAll(".sprite").forEach((sprite) => {
+        const translateX = parseFloat(sprite.getAttribute("data-translateX"));
+        const translateY = parseFloat(sprite.getAttribute("data-translateY"));
+        if (!isNaN(translateX) && !isNaN(translateY)) {
+            if (
+                translateX > config.breedingArea.x &&
+                translateX < config.breedingArea.x + config.breedingArea.width &&
+                translateY > config.breedingArea.y &&
+                translateY < config.breedingArea.y + config.breedingArea.height
+            ) {
+                spritesInBreedingArea.push(sprite);
+            }
+        }
+    });
 
-document.getElementById("breedButton").addEventListener("click", () => {
-  const spritesInBreedingArea = [];
-  svg.querySelectorAll(".sprite").forEach((sprite) => {
-    const translateX = parseFloat(sprite.getAttribute("data-translateX"));
-    const translateY = parseFloat(sprite.getAttribute("data-translateY"));
-
-    if (!isNaN(translateX) && !isNaN(translateY)) {
-      // Check if the sprite is within the breeding area bounds
-      if (
-        translateX > breedingArea.x &&
-        translateX < breedingArea.x + breedingArea.width &&
-        translateY > breedingArea.y &&
-        translateY < breedingArea.y + breedingArea.height
-      ) {
-        spritesInBreedingArea.push(sprite);
-      }
-    } else {
-      console.error("Invalid coordinates for sprite:", sprite);
-    }
-  });
-  // 繁殖區有兩個個體時
-  if (spritesInBreedingArea.length === 2) {
-    const parent1ChromosomesAttr =
-      spritesInBreedingArea[0].getAttribute("data-chromosomes");
-    const parent2ChromosomesAttr =
-      spritesInBreedingArea[1].getAttribute("data-chromosomes");
-
-    // Parse JSON string to get arrays of chromosome objects
-    const parent1Chromosomes = JSON.parse(parent1ChromosomesAttr);
-    const parent2Chromosomes = JSON.parse(parent2ChromosomesAttr);
-
-    // Initialize offspring chromosomes array
-    const offspringChromosomes = [];
-
-    // Determine the maximum number of chromosomes between both parents
-    const maxChromosomeNumber = Math.max(
-      parent1Chromosomes.length,
-      parent2Chromosomes.length
-    );
-
-    // Iterate through each chromosome number
-    for (
-      let chromosomeNumber = 1;
-      chromosomeNumber <= maxChromosomeNumber;
-      chromosomeNumber++
-    ) {
-      // Find all chromosomes from parent 1 with the current chromosome number
-      const parent1MatchingChromosomes = parent1Chromosomes.filter(
-        (chromosome) => chromosome.number === chromosomeNumber
-      );
-
-      // Find all chromosomes from parent 2 with the current chromosome number
-      const parent2MatchingChromosomes = parent2Chromosomes.filter(
-        (chromosome) => chromosome.number === chromosomeNumber
-      );
-
-      // Randomly select one chromosome from parent 1 if available
-      if (parent1MatchingChromosomes.length > 0) {
-        const randomIndex = Math.floor(
-          Math.random() * parent1MatchingChromosomes.length
+    if (spritesInBreedingArea.length === 2) {
+        const parent1ChromosomesAttr = spritesInBreedingArea[0].getAttribute("data-chromosomes");
+        const parent2ChromosomesAttr = spritesInBreedingArea[1].getAttribute("data-chromosomes");
+        
+        const parent1Chromosomes = JSON.parse(parent1ChromosomesAttr);
+        const parent2Chromosomes = JSON.parse(parent2ChromosomesAttr);
+        const offspringChromosomes = [];
+        
+        const maxChromosomeNumber = Math.max(
+            parent1Chromosomes.length,
+            parent2Chromosomes.length
         );
-        offspringChromosomes.push(parent1MatchingChromosomes[randomIndex]);
-      }
-      // Randomly select one chromosome from parent 2 if available
-      if (parent2MatchingChromosomes.length > 0) {
-        const randomIndex = Math.floor(
-          Math.random() * parent2MatchingChromosomes.length
+
+        for (let chromosomeNumber = 1; chromosomeNumber <= maxChromosomeNumber; chromosomeNumber++) {
+            const parent1MatchingChromosomes = parent1Chromosomes.filter(
+                (chromosome) => chromosome.number === chromosomeNumber
+            );
+            const parent2MatchingChromosomes = parent2Chromosomes.filter(
+                (chromosome) => chromosome.number === chromosomeNumber
+            );
+
+            if (parent1MatchingChromosomes.length > 0) {
+                const randomIndex = Math.floor(Math.random() * parent1MatchingChromosomes.length);
+                offspringChromosomes.push(parent1MatchingChromosomes[randomIndex]);
+            }
+            if (parent2MatchingChromosomes.length > 0) {
+                const randomIndex = Math.floor(Math.random() * parent2MatchingChromosomes.length);
+                offspringChromosomes.push(parent2MatchingChromosomes[randomIndex]);
+            }
+        }
+
+        const position = getRegularPosition(
+            offspringCount % config.offspringAreaCountLimit,
+            config.offspringAreaCountLimit,
+            config.offspringArea.width,
+            config.offspringArea.height,
+            4
         );
-        offspringChromosomes.push(parent2MatchingChromosomes[randomIndex]);
-      }
+
+        const offspring = createCreature(
+            `offspring${offspringCount + 1}`,
+            config.offspringArea.x + position.x, config.offspringArea.y + position.y, config.spriteSize, config.creatureType, config.chromosomeCount
+        );
+        // 在 init 之前設定 offspring 的染色體 (重要！)
+        offspring.chromosomes = offspringChromosomes; // 直接賦值繼承的染色體        
+        await offspring.init(config.offspringArea.x + position.x, config.offspringArea.y + position.y);
+        creatures.push(offspring); // 將後代物件也存起來
+        // 根據全局變數設定新生 offspring 的 alleles 可見性 ---
+        offspring.setAllelesVisibility(globalAllelesVisible);
+        
+       
+        offspringCount++;
     }
-
-    // Determine position for the offspring sprite
-    const position = getRegularPosition(
-      offspringCount % offspringAreaCountLimit,
-      offspringAreaCountLimit,
-      offspringArea.width,
-      offspringArea.height,
-      4
-    );
-
-    // Create new offspring sprite with the generated chromosomes
-    new Sprite(
-      `offspring${offspringCount + 1}`,
-      offspringArea.x + position.x,
-      offspringArea.y + position.y,
-      spirteSize,
-      offspringChromosomes
-    );
-
-    offspringCount++;
-  }
 });
 
-//按下刪除按鈕
+// Delete offspring button handler
 document.getElementById("deleteButton").addEventListener("click", () => {
-  const spritesInOffspringArea = [];
-  svg.querySelectorAll(".sprite").forEach((sprite) => {
-    const translateX = parseFloat(sprite.getAttribute("data-translateX"));
-    const translateY = parseFloat(sprite.getAttribute("data-translateY"));
+    const spritesInOffspringArea = [];
+    svg.querySelectorAll(".sprite").forEach((sprite) => {
+        const translateX = parseFloat(sprite.getAttribute("data-translateX"));
+        const translateY = parseFloat(sprite.getAttribute("data-translateY"));
+        if (!isNaN(translateX) && !isNaN(translateY)) {
+            if (
+                translateX > config.offspringArea.x &&
+                translateX < config.offspringArea.x + config.offspringArea.width &&
+                translateY > config.offspringArea.y &&
+                translateY < config.offspringArea.y + config.offspringArea.height
+            ) {
+                spritesInOffspringArea.push(sprite);
+            }
+        }
+    });
+    // --- 新增：從 creatures 陣列中移除對應的物件 ---
+    const idsToRemove = new Set();
+    spritesInOffspringArea.forEach((sprite) => {
+      idsToRemove.add(sprite.id);
+      sprite.remove();
+    });
 
-    if (!isNaN(translateX) && !isNaN(translateY)) {
-      // Check if the sprite is within the offspring area bounds
-      if (
-        translateX > offspringArea.x &&
-        translateX < offspringArea.x + offspringArea.width &&
-        translateY > offspringArea.y &&
-        translateY < offspringArea.y + offspringArea.height
-      ) {
-        spritesInOffspringArea.push(sprite);
+    // 從後往前遍歷以安全地刪除元素
+    for (let i = creatures.length - 1; i >= 0; i--) {
+      if (idsToRemove.has(creatures[i].id)) {
+          creatures.splice(i, 1);
       }
-    } else {
-      console.error("Invalid coordinates for sprite:", sprite);
-    }
-  });
-
-  // Remove sprites found in the offspring area
-  spritesInOffspringArea.forEach((sprite) => {
-    sprite.remove(); // Remove the sprite from the SVG
-    // Optionally, perform any additional cleanup or logic here
-  });
-  offspringCount = 0;
+    }    
+    offspringCount = 0;
 });
 
+// Add toggle alleles button handler
+document.getElementById("toggleAllelesButton").addEventListener("click", () => {
+  // 1. 切換全局狀態變數
+  globalAllelesVisible = !globalAllelesVisible;
+  // 2. 更新所有現存生物的顯示狀態以匹配全局狀態
+
+  creatures.forEach(creature => {
+    // 使用 BaseCreature 中的方法來設置可見性
+    creature.setAllelesVisibility(globalAllelesVisible);
+  });
 
 
+  /*
+  creatures.forEach(creature => {
+    creature.toggleAllelesText(); // 呼叫物件自身的方法
+  });  
+  */
+  /*
+    svg.querySelectorAll(".sprite").forEach((sprite) => {
+        const spriteId = sprite.getAttribute("id");
+        const group = document.getElementById(spriteId);
+        const allelesTextElement = group.querySelector("#alleles-text");
+        if (allelesTextElement) {
+            const currentDisplay = allelesTextElement.style.display;
+            allelesTextElement.style.display = currentDisplay === "none" ? "block" : "none";
+        }
+    });
+    */
+
+});
