@@ -92,7 +92,7 @@ class Elf extends BaseCreature {
             chromosome.alleles.includes("A")
         );
         // 如果有 "A" (顯性)，臉色設為 DarkTurquoise；否則 (隱性 a/a)，設為 lightblue
-        const faceColor = hasDominantAllele ? "DarkTurquoise" : "lightblue";
+        const faceColor = hasDominantAllele ? "pink" : "lightblue";
         // 在精靈的 SVG 群組 (this.group) 中尋找 ID 為 "face" 的元素
         const faceElement = this.group.querySelector("#face");
         // 如果找到了臉部元素，就設定其 "fill" (填充) 屬性為計算出的顏色
