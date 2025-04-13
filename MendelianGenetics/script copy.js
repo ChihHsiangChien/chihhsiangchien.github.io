@@ -4,8 +4,11 @@ const svg = document.createElementNS(svgNS, "svg");
 
 svg.setAttribute("viewBox", "0 0 600 400");
 
+
 // Append the SVG to the container div
 document.getElementById("svgContainer").appendChild(svg);
+
+
 
 // Define areas
 const defaultArea = { x: 10, y: 10, width: 160, height: 200 };
@@ -16,6 +19,22 @@ const offspringAreaCountLimit = 32; // 子代區的子代數目
 const totalSprites = 8; // 預設區有多少子代
 const spirteSize = 25; //尺寸
 
+//
+function getSVGCoordinates(event, svgElement) {
+  const pt = svgElement.createSVGPoint(); // Create an SVGPoint
+  pt.x = event.clientX; // Get the mouse client X coordinate
+  pt.y = event.clientY; // Get the mouse client Y coordinate
+
+  // Get the transformation matrix from screen coordinates to SVG coordinates
+  const ctm = svgElement.getScreenCTM();
+  if (ctm) {
+    const svgP = pt.matrixTransform(ctm.inverse()); // Apply the inverse matrix
+    return { x: svgP.x, y: svgP.y };
+  }
+  // Fallback or error handling if CTM is not available
+  console.error("Could not get Screen CTM");
+  return { x: 0, y: 0 }; // Or some default
+}
 
 // Gene pool
 const genePools = [
@@ -77,6 +96,8 @@ function getRegularPosition(index, total, maxWidth, maxHeight, columns) {
     y: (row + 1) * spacingY,
   };
 }
+
+
 
 // 生殖
 for (let i = 1; i <= totalSprites; i++) {
