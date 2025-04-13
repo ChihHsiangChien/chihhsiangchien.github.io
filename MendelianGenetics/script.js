@@ -1,8 +1,7 @@
 // Create the SVG element
 const svgNS = "http://www.w3.org/2000/svg";
 const svg = document.createElementNS(svgNS, "svg");
-svg.setAttribute("width", "600");
-svg.setAttribute("height", "400");
+
 svg.setAttribute("viewBox", "0 0 600 400");
 
 // Append the SVG to the container div
@@ -16,6 +15,8 @@ const offspringArea = { x: 290, y: 10, width: 280, height: 380 };
 const offspringAreaCountLimit = 32; // 子代區的子代數目
 const totalSprites = 8; // 預設區有多少子代
 const spirteSize = 25; //尺寸
+
+
 // Gene pool
 const genePools = [
   { chromosome: 1, alleles: ["Z", "z"] },
@@ -76,8 +77,6 @@ function getRegularPosition(index, total, maxWidth, maxHeight, columns) {
     y: (row + 1) * spacingY,
   };
 }
-
-
 
 // 生殖
 for (let i = 1; i <= totalSprites; i++) {
