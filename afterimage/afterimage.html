@@ -1,0 +1,266 @@
+<!DOCTYPE HTML>
+<!--球的運動修改自 https://jsfiddle.net/rtoal/wvp4scLL/  -->
+
+<style type="text/css">
+    body {
+        float: left;
+        text-align: center;
+    }
+
+    #setting {
+        float: right;
+        text-align: left;
+        line-height: 15px;
+        font-size: 15px;
+        color: #000000;
+        font-weight: lighter;
+        vertical-align: top;
+        padding: 10px 20px 0px 10px;
+    }
+
+    #canvas {
+        float: right;
+        position: relative;
+        background-color: #ccddcc;
+        margin: 1em auto;
+    }
+
+    .ball {
+        background-color: black;
+        position: absolute;
+        display: inline-block;
+        border-radius: 50%;
+    }
+</style>
+<html>
+
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+    <title>負片後像AfterImage</title>
+</head>
+
+<body>
+    <h2>負片後像</h2>
+
+    <div id="canvas"></div>
+    <div id="setting">
+
+        <div class="slidecontainer">
+            <p>背景顏色: <span id="bgcolor_value"></span></p>
+            <p><input type="range" min="0" max="255" value="170" class="slider" id="bgcolor_range"></p>
+            <hr>
+
+            <p>球的顏色R: <span id="ballcolor_value_r"></span></p>
+            <p><input type="range" min="0" max="255" value="255" class="slider" id="ballcolor_range_r"></p>
+            <p>球的顏色G: <span id="ballcolor_value_g"></span></p>
+            <p><input type="range" min="0" max="255" value="0" class="slider" id="ballcolor_range_g"></p>
+            <p>球的顏色B: <span id="ballcolor_value_b"></span></p>
+            <p><input type="range" min="0" max="255" value="255" class="slider" id="ballcolor_range_b"></p>
+            <hr>
+            <p>執行速度: <span id="speed_value"></span></p>
+            <p><input type="range" min="1" max="20" value="4" class="slider" id="speed_range"></p>
+            <hr>
+            <p>作者:<a href="http://a-chien.blogspot.com/2019/12/blog-post_19.html" target="_blank">阿簡生物筆記</a>的那個人</p>
+
+        </div>
+    </div>
+
+
+
+
+    <script type="text/javascript">
+        //設定底圖畫布
+        var canvas = {
+            element: document.getElementById('canvas'),
+            width: 500,
+            height: 500,
+
+            initialize: function () {
+                this.element.style.width = this.width + 'px';
+                this.element.style.height = this.height + 'px';
+                this.element.style.backgroundColor = 'rgb(' + bgcolor_slider.value + ',' + bgcolor_slider.value + ',' + bgcolor_slider.value + ')';
+                document.body.appendChild(this.element);
+            },
+
+            changeColor: function (grayscale) {
+                this.element.style.backgroundColor = 'rgb(' + grayscale + ',' + grayscale + ',' + grayscale + ')';
+            },
+
+        };
+
+
+        //背景顏色
+        var bgcolor_slider = document.getElementById("bgcolor_range");
+        var bgcolor_value = document.getElementById("bgcolor_value");
+        bgcolor_value.innerHTML = bgcolor_slider.value;
+
+        //用slider調整背景顏色
+        bgcolor_slider.oninput = function () {
+            bgcolor_value.innerHTML = this.value;
+            canvas.changeColor(this.value);
+        }
+
+
+        //球的顏色
+        var ballcolor_slider_r = document.getElementById("ballcolor_range_r");
+        var ballcolor_slider_g = document.getElementById("ballcolor_range_g");
+        var ballcolor_slider_b = document.getElementById("ballcolor_range_b");
+
+        var ballcolor_value_r = document.getElementById("ballcolor_value_r");
+        var ballcolor_value_g = document.getElementById("ballcolor_value_g");
+        var ballcolor_value_b = document.getElementById("ballcolor_value_b");
+
+        //改變html標籤內的色彩數值
+        ballcolor_value_r.innerHTML = ballcolor_slider_r.value;
+        ballcolor_value_g.innerHTML = ballcolor_slider_g.value;
+        ballcolor_value_b.innerHTML = ballcolor_slider_b.value;
+
+        //用slider調整球的顏色
+        ballcolor_slider_r.oninput = function () {
+            ballcolor_value_r.innerHTML = this.value;
+        }
+        ballcolor_slider_g.oninput = function () {
+            ballcolor_value_g.innerHTML = this.value;
+        }
+        ballcolor_slider_b.oninput = function () {
+            ballcolor_value_b.innerHTML = this.value;
+        }
+
+        //修改速度
+        var speed_slider = document.getElementById("speed_range");
+        var speed_value = document.getElementById("speed_value");
+        speed_value.innerHTML = speed_slider.value;
+        var speed = speed_slider.value;
+
+        var allBalls = []; // 在創建球之後會把它們加進來
+
+
+        //用slider調整速度
+        speed_slider.oninput = function () {
+            speed_value.innerHTML = this.value;
+            speed = this.value;
+
+            // *** 核心修正：清除所有球的舊 timeout 並重新啟動 ***
+            allBalls.forEach(function (ballInstance) {
+                if (ballInstance.timeoutId) {
+                    clearTimeout(ballInstance.timeoutId); // 清除舊的排程
+                    ballInstance.timeoutId = null; // 重設 ID
+                }
+                // 立即使用當前角度和新速度重新安排下一次繪製
+                // 注意：ball_center 有特殊的 r, g, b 值
+                if (ballInstance === ball_center) {
+                    ballInstance.draw(ballInstance.currentTheta, 25, 25, 25);
+                } else {
+                    ballInstance.draw(ballInstance.currentTheta);
+                }
+            });
+        }
+
+
+
+        //定義畫布中心點
+        var center_x = canvas.width / 2;
+        var center_y = canvas.height / 2;
+
+
+        var Ball = {
+            create: function (width, height, color, dtheta, dist) {
+                var newBall = Object.create(this);
+
+                newBall.width = width || 70;
+                newBall.height = height || 70;
+                newBall.color = color || 'rgb(' + ballcolor_slider_r.value + ',' + ballcolor_slider_g.value + ',' + ballcolor_slider_b.value + ')';
+                newBall.dtheta = dtheta || 30;
+                newBall.dist = dist || 200;
+
+                newBall.element = document.createElement('div');
+                newBall.element.style.backgroundColor = color || 'rgb(' + ballcolor_slider_r.value + ',' + ballcolor_slider_g.value + ',' + ballcolor_slider_b.value + ')';
+                newBall.element.style.width = newBall.width + 'px';
+                newBall.element.style.height = newBall.height + 'px';
+                newBall.element.className += ' ball';
+                newBall.width = parseInt(newBall.element.style.width);
+                newBall.height = parseInt(newBall.element.style.height);
+                canvas.element.appendChild(newBall.element);
+                return newBall;
+            },
+            moveTo: function (theta) {
+                this.element.style.left = center_x - .5 * this.width + this.dist * Math.sin(theta * Math.PI / 180) + 'px';
+                this.element.style.top = center_y - .5 * this.height + this.dist * Math.cos(theta * Math.PI / 180) + 'px';
+            },
+            changeDirectionIfNecessary: function (theta) {
+                // 這個函數在目前邏輯下似乎沒作用，因為角度在 draw 呼叫時就處理了
+                // 但保留它以防萬一
+                // if (theta >= 360) {
+                //     theta = theta % 360; // 使用模數運算更安全
+                // }
+                // return theta; // 應該返回處理後的值，雖然沒被使用
+
+            },
+            draw: function (theta, r, g, b) {
+                // 確保角度在 0-359 範圍內
+                var currentDrawTheta = theta % 360;
+                if (currentDrawTheta < 0) currentDrawTheta += 360; // 處理負角度
+
+                // *** 儲存當前繪製的角度 ***
+                this.currentTheta = currentDrawTheta;
+
+                var color_r = r || ballcolor_slider_r.value;
+                var color_g = g || ballcolor_slider_g.value;
+                var color_b = b || ballcolor_slider_b.value;
+
+                this.moveTo(theta);
+                this.element.style.backgroundColor = 'rgb(' + color_r + ',' + color_g + ',' + color_b + ')';
+
+                var ball = this;
+                var nextTheta = currentDrawTheta + ball.dtheta;
+
+                // 清除可能存在的舊 timeout (以防萬一，雖然主要靠 slider oninput 清除)
+                if (ball.timeoutId) {
+                    clearTimeout(ball.timeoutId);
+                }
+
+                // *** 儲存新的 timeout ID ***
+                ball.timeoutId = setTimeout(function () {
+                    // ball.changeDirectionIfNecessary(theta); // 這個呼叫似乎多餘
+                    // 傳遞下一個角度和可能的顏色參數
+                    ball.draw(nextTheta, r, g, b);
+                }, 1000 / speed);   // 使用當前的全域 speed
+            }
+        };
+
+        canvas.initialize();
+        var ball1 = Ball.create();
+        var ball2 = Ball.create();
+        var ball3 = Ball.create();
+        var ball4 = Ball.create();
+        var ball5 = Ball.create();
+        var ball6 = Ball.create();
+        var ball7 = Ball.create();
+        var ball8 = Ball.create();
+        var ball9 = Ball.create();
+        var ball10 = Ball.create();
+        var ball11 = Ball.create();
+        var ball_center = Ball.create(10, 10, null, 0, 0.01); // 使用 null 讓 draw 處理顏色
+
+
+        // *** 將所有球加入陣列 ***
+        allBalls = [ball1, ball2, ball3, ball4, ball5, ball6, ball7, ball8, ball9, ball10, ball11, ball_center];
+
+        ball1.draw(0);
+        ball2.draw(30);
+        ball3.draw(60);
+        ball4.draw(90);
+        ball5.draw(120);
+        ball6.draw(150);
+        ball7.draw(180);
+        ball8.draw(210);
+        ball9.draw(240);
+        ball10.draw(270);
+        ball11.draw(300);
+        ball_center.draw(0, 25, 25, 25); // 傳入中心球的固定顏色
+        // 這裡的顏色是固定的，因為 ball_center 的顏色不會改變
+    </script>
+
+</body>
+
+</html>
