@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Animal Cell</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden; /* Prevent scrollbars */
+            font-family: sans-serif;
+            background-color: #f0f0f0; /* Light background for contrast */
+        }
+
+        #container {
+            width: 100%;
+            height: 100vh; /* Full viewport height */
+            position: relative; /* Needed for absolute positioning of UI elements */
+        }
+
+        canvas {
+            display: block; /* Prevent extra space below canvas */
+        }
+
+        #controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            max-height: calc(100vh - 40px); /* Limit height */
+            overflow-y: auto; /* Add scroll if needed */
+            z-index: 10;
+            min-width: 200px;
+        }
+
+        #controls h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #555;
+            padding-bottom: 5px;
+        }
+
+        #controls div {
+            margin-bottom: 10px;
+        }
+         #controls label {
+            display: block;
+            margin-bottom: 5px;
+         }
+        #controls input[type="checkbox"],
+        #controls input[type="range"] {
+             vertical-align: middle;
+             margin-right: 5px;
+        }
+         #controls input[type="range"] {
+             width: 120px;
+         }
+
+        .label {
+            position: absolute;
+            background-color: rgba(0, 0, 0, 0.75);
+            color: white;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            white-space: nowrap;
+            pointer-events: none; /* Allow clicks to pass through */
+            transform: translate(-50%, -120%); /* Position above the point */
+            display: none; /* Hidden by default */
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <!-- Labels Container -->
+        <div id="labels"></div>
+
+        <!-- Controls Panel -->
+        <div id="controls">
+            <h3>Settings</h3>
+            <div>
+                <label for="membraneOpacity">Membrane Opacity:</label>
+                <input type="range" id="membraneOpacity" min="0" max="1" step="0.05" value="0.4">
+                <span id="membraneOpacityValue">0.4</span>
+            </div>
+             <div>
+                <label for="rotationSpeed">Auto-Rotate Speed:</label>
+                <input type="range" id="rotationSpeed" min="0" max="0.02" step="0.001" value="0.002">
+                <span id="rotationSpeedValue">0.002</span>
+            </div>
+            <div>
+                <input type="checkbox" id="wireframeToggle">
+                <label for="wireframeToggle">Wireframe Mode</label>
+            </div>
+
+            <h3>Organelle Visibility</h3>
+            <div>
+                <input type="checkbox" id="nucleusToggle" data-organelle="Nucleus" checked>
+                <label for="nucleusToggle">Nucleus</label>
+            </div>
+             <div>
+                <input type="checkbox" id="mitoToggle" data-organelle="Mitochondrion" checked>
+                <label for="mitoToggle">Mitochondria</label>
+            </div>
+            <div>
+                <input type="checkbox" id="erToggle" data-organelle="Endoplasmic Reticulum" checked>
+                <label for="erToggle">Endoplasmic Reticulum</label>
+            </div>
+             <div>
+                <input type="checkbox" id="golgiToggle" data-organelle="Golgi Apparatus" checked>
+                <label for="golgiToggle">Golgi Apparatus</label>
+            </div>
+             <div>
+                <input type="checkbox" id="lysoToggle" data-organelle="Lysosome" checked>
+                <label for="lysoToggle">Lysosomes</label>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import maps polyfill -->
+    <!-- Remove this when import maps will be widely supported -->
+    <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.158.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/"
+        }
+      }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        let scene, camera, renderer, controls;
+        let raycaster, mouse;
+        let INTERSECTED; // Currently hovered object
+        let labelsContainer, labelElement; // For displaying labels
+        let cellGroup; // Group to hold all cell components for easier rotation/scaling
+
+        // Organelle storage
+        const organelles = {
+            "Nucleus": [],
+            "Mitochondrion": [],
+            "Endoplasmic Reticulum": [],
+            "Golgi Apparatus": [],
+            "Lysosome": [],
+            "Cell Membrane": []
+        };
+
+        const materials = {}; // Store materials for easy modification (like wireframe)
+
+        // --- Initialization ---
+        function init() {
+            // Basic Scene Setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xeeeeee); // Light gray background
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 3, 8); // Adjusted camera position
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.getElementById('container').appendChild(renderer.domElement);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+            directionalLight.position.set(5, 10, 7.5);
+            directionalLight.castShadow = true; // Optional: for shadows
+            scene.add(directionalLight);
+
+             // Controls
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true; // Smooth camera movement
+            controls.dampingFactor = 0.05;
+            controls.minDistance = 3;
+            controls.maxDistance = 20;
+
+            // Raycasting for mouse interaction
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+
+            // Label setup
+            labelsContainer = document.getElementById('labels');
+            labelElement = document.createElement('div');
+            labelElement.className = 'label';
+            labelsContainer.appendChild(labelElement);
+
+            // Create cell components
+            cellGroup = new THREE.Group();
+            scene.add(cellGroup);
+            createMaterials();
+            createCellModel();
+
+            // Event Listeners
+            window.addEventListener('resize', onWindowResize);
+            document.addEventListener('mousemove', onMouseMove, false);
+            setupControls(); // Setup UI controls listeners
+
+            // Start Animation Loop
+            animate();
+        }
+
+        // --- Create Materials ---
+        function createMaterials() {
+            materials.membrane = new THREE.MeshStandardMaterial({
+                color: 0xffa0a0, // Pinkish
+                transparent: true,
+                opacity: 0.4,
+                side: THREE.DoubleSide, // Render both sides
+                roughness: 0.6,
+                metalness: 0.1
+            });
+            materials.nucleus = new THREE.MeshStandardMaterial({ color: 0x8a2be2, roughness: 0.5, metalness: 0.1 }); // Purple
+            materials.mitochondrion = new THREE.MeshStandardMaterial({ color: 0xffa500, roughness: 0.7, metalness: 0.1 }); // Orange
+            materials.er = new THREE.MeshStandardMaterial({ color: 0xadd8e6, roughness: 0.8, metalness: 0.1 }); // Light Blue
+            materials.golgi = new THREE.MeshStandardMaterial({ color: 0xf08080, roughness: 0.8, metalness: 0.1 }); // Light Coral
+            materials.lysosome = new THREE.MeshStandardMaterial({ color: 0x90ee90, roughness: 0.6, metalness: 0.1 }); // Light Green
+        }
+
+
+        // --- Create Cell Model ---
+        function createCellModel() {
+            const CELL_RADIUS = 3;
+
+            // 1. Outer Membrane
+            const membraneGeo = new THREE.SphereGeometry(CELL_RADIUS, 64, 32);
+            const membrane = new THREE.Mesh(membraneGeo, materials.membrane);
+            membrane.userData = { name: "Cell Membrane" };
+            organelles["Cell Membrane"].push(membrane);
+            cellGroup.add(membrane);
+
+            // 2. Nucleus
+            const nucleusGeo = new THREE.SphereGeometry(CELL_RADIUS * 0.4, 32, 16);
+            const nucleus = new THREE.Mesh(nucleusGeo, materials.nucleus);
+            nucleus.position.set(0, 0, 0); // Centered
+            nucleus.userData = { name: "Nucleus" };
+            organelles["Nucleus"].push(nucleus);
+            cellGroup.add(nucleus);
+
+            // 3. Mitochondria (Multiple)
+            const mitoGeo = new THREE.CapsuleGeometry(CELL_RADIUS * 0.08, CELL_RADIUS * 0.2, 16, 32);
+            for (let i = 0; i < 6; i++) {
+                const mito = new THREE.Mesh(mitoGeo, materials.mitochondrion);
+                // Random positions within the cell, avoiding the nucleus center
+                const radius = CELL_RADIUS * (0.5 + Math.random() * 0.4);
+                const angle = Math.random() * Math.PI * 2;
+                const heightAngle = (Math.random() - 0.5) * Math.PI * 0.8; // Angle for spherical distribution
+
+                mito.position.set(
+                    radius * Math.cos(angle) * Math.cos(heightAngle),
+                    radius * Math.sin(heightAngle),
+                    radius * Math.sin(angle) * Math.cos(heightAngle)
+                );
+                mito.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+                mito.userData = { name: "Mitochondrion" };
+                organelles["Mitochondrion"].push(mito);
+                cellGroup.add(mito);
+            }
+
+            // 4. Endoplasmic Reticulum (Simplified representation)
+             const erGroup = new THREE.Group();
+             erGroup.userData = { name: "Endoplasmic Reticulum" }; // Group has the name
+             const tubeGeo = new THREE.TorusGeometry(CELL_RADIUS * 0.55, CELL_RADIUS * 0.05, 16, 50);
+             for(let i = 0; i < 3; i++) {
+                 const erTube = new THREE.Mesh(tubeGeo, materials.er);
+                 erTube.rotation.x = Math.PI / 2 + (Math.random() - 0.5) * 0.5;
+                 erTube.rotation.y = Math.random() * Math.PI;
+                 erTube.scale.set(1, 1, 0.5 + Math.random() * 0.5); // Flattened torus
+                 erTube.userData = { name: "Endoplasmic Reticulum" }; // Also name children for raycasting
+                 organelles["Endoplasmic Reticulum"].push(erTube);
+                 erGroup.add(erTube);
+             }
+             erGroup.position.y = -0.1; // Slightly offset
+             cellGroup.add(erGroup);
+
+
+             // 5. Golgi Apparatus (Simplified stack)
+             const golgiGroup = new THREE.Group();
+             golgiGroup.userData = { name: "Golgi Apparatus" };
+             const diskGeo = new THREE.CylinderGeometry(CELL_RADIUS * 0.25, CELL_RADIUS * 0.25, 0.05, 32);
+             for (let i = 0; i < 5; i++) {
+                 const golgiDisk = new THREE.Mesh(diskGeo, materials.golgi);
+                 golgiDisk.position.set(CELL_RADIUS * 0.8, CELL_RADIUS * 0.1 * (i - 2), CELL_RADIUS*0.5);
+                 golgiDisk.rotation.z = Math.PI / 8; // Tilt the stack slightly
+                 golgiDisk.scale.x = 1.0 - i * 0.1; // Make disks smaller towards one end
+                 golgiDisk.scale.z = 1.0 - i * 0.1;
+                 golgiDisk.userData = { name: "Golgi Apparatus" };
+                 organelles["Golgi Apparatus"].push(golgiDisk);
+                 golgiGroup.add(golgiDisk);
+             }
+             golgiGroup.rotation.y = Math.PI / 4; // Rotate the whole apparatus
+             cellGroup.add(golgiGroup);
+
+             // 6. Lysosomes (Small Spheres)
+            const lysoGeo = new THREE.SphereGeometry(CELL_RADIUS * 0.07, 16, 8);
+            for (let i = 0; i < 8; i++) {
+                const lyso = new THREE.Mesh(lysoGeo, materials.lysosome);
+                 const radius = CELL_RADIUS * (0.6 + Math.random() * 0.3);
+                const angle = Math.random() * Math.PI * 2;
+                const heightAngle = (Math.random() - 0.5) * Math.PI;
+
+                lyso.position.set(
+                    radius * Math.cos(angle) * Math.cos(heightAngle),
+                    radius * Math.sin(heightAngle),
+                    radius * Math.sin(angle) * Math.cos(heightAngle)
+                );
+                lyso.userData = { name: "Lysosome" };
+                organelles["Lysosome"].push(lyso);
+                cellGroup.add(lyso);
+            }
+        }
+
+
+        // --- Event Handlers ---
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function onMouseMove(event) {
+            // Calculate mouse position in normalized device coordinates (-1 to +1)
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            // Check for intersections only if mouse is potentially over the canvas area
+             // (Simple check, might need refinement if controls overlay is large)
+             const controlsRect = document.getElementById('controls').getBoundingClientRect();
+             if (event.clientX > controlsRect.left && event.clientY < controlsRect.bottom && event.clientY > controlsRect.top ) {
+                 // Mouse might be over controls, don't raycast
+                 clearHighlight();
+                 labelElement.style.display = 'none';
+                 INTERSECTED = null;
+                 return;
+             }
+
+            // Update the picking ray with the camera and mouse position
+            raycaster.setFromCamera(mouse, camera);
+
+            // Calculate objects intersecting the picking ray
+            // Important: Use cellGroup.children for raycasting to only hit organelles inside
+            const intersects = raycaster.intersectObjects(cellGroup.children, true); // `true` for recursive check
+
+            if (intersects.length > 0) {
+                let firstIntersectedObject = intersects[0].object;
+
+                // Traverse up to find the group if the direct hit has no name (like part of ER/Golgi)
+                while (!firstIntersectedObject.userData.name && firstIntersectedObject.parent) {
+                     firstIntersectedObject = firstIntersectedObject.parent;
+                }
+
+                 // Ignore membrane intersection if looking from outside? Optional.
+                 // if (firstIntersectedObject.userData.name === "Cell Membrane") { ... }
+
+
+                if (INTERSECTED !== firstIntersectedObject && firstIntersectedObject.userData.name && firstIntersectedObject.visible) {
+                    clearHighlight(); // Clear previous highlight
+
+                    INTERSECTED = firstIntersectedObject;
+                    // console.log("Hovering:", INTERSECTED.userData.name); // Debugging
+
+                    // Highlight: Make slightly emissive
+                    if (INTERSECTED.material) { // Check if it's a mesh
+                         INTERSECTED.currentHex = INTERSECTED.material.emissive ? INTERSECTED.material.emissive.getHex() : 0x000000;
+                         INTERSECTED.material.emissive = new THREE.Color(0x555555); // Add slight glow
+                    } else if (INTERSECTED.isGroup) {
+                        // Highlight all children meshes in the group
+                        INTERSECTED.traverse((child) => {
+                            if(child.isMesh && child.material) {
+                                child.currentHex = child.material.emissive ? child.material.emissive.getHex() : 0x000000;
+                                child.material.emissive = new THREE.Color(0x555555);
+                            }
+                        });
+                    }
+
+
+                    // Update and position Label
+                    labelElement.textContent = INTERSECTED.userData.name;
+                    updateLabelPosition(intersects[0].point); // Position label at intersection point
+                    labelElement.style.display = 'block';
+
+                } else if (!firstIntersectedObject.userData.name || !firstIntersectedObject.visible) {
+                    // Intersected something without a name or invisible, clear highlight
+                     clearHighlight();
+                     labelElement.style.display = 'none';
+                     INTERSECTED = null;
+                }
+
+            } else {
+                 clearHighlight();
+                 labelElement.style.display = 'none';
+                 INTERSECTED = null;
+            }
+        }
+
+        function clearHighlight() {
+             if (INTERSECTED) {
+                 if (INTERSECTED.material) { // Single mesh
+                     INTERSECTED.material.emissive.setHex(INTERSECTED.currentHex);
+                 } else if (INTERSECTED.isGroup) { // Group like ER or Golgi
+                      INTERSECTED.traverse((child) => {
+                         if(child.isMesh && child.material && typeof child.currentHex !== 'undefined') {
+                            child.material.emissive.setHex(child.currentHex);
+                         }
+                     });
+                 }
+             }
+        }
+
+        function updateLabelPosition(point) {
+            const vector = point.clone(); // Use intersection point
+            vector.project(camera); // Project 3D point to 2D screen space (-1 to 1)
+
+            const x = (vector.x * 0.5 + 0.5) * window.innerWidth;
+            const y = (vector.y * -0.5 + 0.5) * window.innerHeight;
+
+            labelElement.style.left = `${x}px`;
+            labelElement.style.top = `${y}px`;
+        }
+
+        // --- UI Controls Setup ---
+        function setupControls() {
+            const membraneOpacitySlider = document.getElementById('membraneOpacity');
+            const membraneOpacityValue = document.getElementById('membraneOpacityValue');
+            const wireframeToggle = document.getElementById('wireframeToggle');
+            const rotationSpeedSlider = document.getElementById('rotationSpeed');
+            const rotationSpeedValue = document.getElementById('rotationSpeedValue');
+
+            // Membrane Opacity
+            membraneOpacitySlider.addEventListener('input', (event) => {
+                const opacity = parseFloat(event.target.value);
+                materials.membrane.opacity = opacity;
+                membraneOpacityValue.textContent = opacity.toFixed(2);
+                // No need for needsUpdate on opacity usually, but good practice for some props
+                materials.membrane.needsUpdate = true;
+            });
+
+             // Rotation Speed
+            rotationSpeedSlider.addEventListener('input', (event) => {
+                const speed = parseFloat(event.target.value);
+                rotationSpeedValue.textContent = speed.toFixed(3);
+                // We'll read this value directly in the animate loop
+            });
+
+            // Wireframe Toggle
+            wireframeToggle.addEventListener('change', (event) => {
+                const isWireframe = event.target.checked;
+                scene.traverse((object) => {
+                    if (object.isMesh && object.material) {
+                         // Handle multiple materials if necessary
+                         if (Array.isArray(object.material)) {
+                            object.material.forEach(mat => mat.wireframe = isWireframe);
+                         } else {
+                            object.material.wireframe = isWireframe;
+                         }
+                    }
+                });
+            });
+
+             // Organelle Visibility Toggles
+            const toggles = document.querySelectorAll('#controls input[type="checkbox"][data-organelle]');
+            toggles.forEach(toggle => {
+                toggle.addEventListener('change', (event) => {
+                    const organelleName = event.target.dataset.organelle;
+                    const isVisible = event.target.checked;
+                    if (organelles[organelleName]) {
+                        organelles[organelleName].forEach(obj => {
+                            obj.visible = isVisible;
+                        });
+                    }
+                    // If hiding the currently intersected object, clear highlight/label
+                    if (!isVisible && INTERSECTED && INTERSECTED.userData.name === organelleName) {
+                         clearHighlight();
+                         labelElement.style.display = 'none';
+                         INTERSECTED = null;
+                    }
+                });
+            });
+        }
+
+
+        // --- Animation Loop ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Update Controls
+            controls.update(); // Only needed if enableDamping is true
+
+            // Auto-rotation
+            const rotationSpeed = parseFloat(document.getElementById('rotationSpeed').value);
+             if (rotationSpeed > 0 && !controls.manualRotation) { // Add a flag if you want rotation to stop on user interaction
+                cellGroup.rotation.y += rotationSpeed;
+             }
+
+
+            renderer.render(scene, camera);
+
+            // Keep label position updated if an object is selected
+            // Note: This can be CPU intensive if many labels are always visible.
+            // For hover, updating only on mouse move is usually sufficient.
+            // If you needed labels to "stick" after a click, you'd update here.
+            // if (INTERSECTED) {
+            //    updateLabelPosition(INTERSECTED.position); // Or use a fixed offset point
+            // }
+        }
+
+        // --- Start ---
+        init();
+
+    </script>
+</body>
+</html>
