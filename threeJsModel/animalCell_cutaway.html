@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Animal Cell (Image Based)</title>
+    <style>
+        /* CSS remains largely the same as the previous version */
+        body { margin: 0; overflow: hidden; font-family: sans-serif; background-color: #ffffff; }
+        #container { width: 100%; height: 100vh; position: relative; }
+        canvas { display: block; }
+        #controls {
+            position: absolute; top: 10px; right: 10px; background-color: rgba(0, 0, 0, 0.7);
+            color: white; padding: 15px; border-radius: 8px; max-height: calc(100vh - 40px);
+            overflow-y: auto; z-index: 10; min-width: 200px;
+        }
+        #controls h3 { margin-top: 0; margin-bottom: 10px; border-bottom: 1px solid #555; padding-bottom: 5px; }
+        #controls div { margin-bottom: 10px; }
+        #controls label { display: block; margin-bottom: 5px; }
+        #controls input[type="checkbox"], #controls input[type="range"] { vertical-align: middle; margin-right: 5px; }
+        #controls input[type="range"] { width: 120px; }
+        .label {
+            position: absolute; background-color: rgba(0, 0, 0, 0.75); color: white; padding: 3px 8px;
+            border-radius: 4px; font-size: 12px; white-space: nowrap; pointer-events: none;
+            transform: translate(-50%, -120%); display: none; z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="labels"></div>
+        <div id="controls">
+            <h3>Settings</h3>
+            <div>
+                <label for="membraneOpacity">Membrane Opacity:</label>
+                <input type="range" id="membraneOpacity" min="0" max="1" step="0.05" value="0.7">
+                <span id="membraneOpacityValue">0.7</span>
+            </div>
+             <div>
+                <label for="rotationSpeed">Auto-Rotate Speed:</label>
+                <input type="range" id="rotationSpeed" min="-0.01" max="0.01" step="0.001" value="0.001">
+                <span id="rotationSpeedValue">0.001</span>
+            </div>
+            <div>
+                <input type="checkbox" id="wireframeToggle">
+                <label for="wireframeToggle">Wireframe Mode</label>
+            </div>
+             <div>
+                <input type="checkbox" id="clippingToggle" checked>
+                <label for="clippingToggle">Enable Cutaway</label>
+            </div>
+
+            <h3>Organelle Visibility</h3>
+            <div>
+                <input type="checkbox" id="nucleusToggle" data-organelle="Nucleus" checked>
+                <label for="nucleusToggle">Nucleus</label>
+            </div>
+             <div>
+                <input type="checkbox" id="mitoToggle" data-organelle="Mitochondrion" checked>
+                <label for="mitoToggle">Mitochondria</label>
+            </div>
+            <div>
+                <input type="checkbox" id="erToggle" data-organelle="Endoplasmic Reticulum" checked>
+                <label for="erToggle">Endoplasmic Reticulum</label>
+            </div>
+             <div>
+                <input type="checkbox" id="golgiToggle" data-organelle="Golgi Apparatus" checked>
+                <label for="golgiToggle">Golgi Apparatus</label>
+            </div>
+             <div>
+                <input type="checkbox" id="vesicleToggle" data-organelle="Vesicle" checked>
+                <label for="vesicleToggle">Vesicles</label>
+            </div>
+             <div>
+                <input type="checkbox" id="membraneToggle" data-organelle="Cell Membrane" checked>
+                <label for="membraneToggle">Cell Membrane</label>
+            </div>
+              <div>
+                <input type="checkbox" id="cutLineToggle" data-organelle="Cut Line" checked>
+                <label for="cutLineToggle">Show Cut Line</label>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import maps polyfill -->
+    <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.158.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/"
+        }
+      }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        let scene, camera, renderer, controls;
+        let raycaster, mouse;
+        let INTERSECTED;
+        let labelsContainer, labelElement;
+        let cellGroup; // Group holds membrane + organelles
+        let cytoplasmBackground; // The inner color plane/sphere
+
+        const organelles = {
+            "Nucleus": [],
+            "Mitochondrion": [],
+            "Endoplasmic Reticulum": [],
+            "Golgi Apparatus": [],
+            "Vesicle": [], // Renamed from Lysosome for generality based on image
+            "Cell Membrane": [],
+            "Cut Line": []
+        };
+
+        const materials = {};
+        const clippingPlanes = [
+            // Cut away the positive X and positive Z quadrant
+            new THREE.Plane( new THREE.Vector3( -1, 0, 0 ), 0 ), // Clip everything with X > 0
+            new THREE.Plane( new THREE.Vector3( 0, 0, -1 ), 0 )  // Clip everything with Z > 0
+        ];
+        const CELL_RADIUS = 3; // Define globally
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xffffff); // White background like the image
+
+            camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+             // Position camera to approximate the image view (looking slightly down and from an angle)
+            camera.position.set(CELL_RADIUS * 1.8, CELL_RADIUS * 1.5, CELL_RADIUS * 1.8);
+            camera.lookAt(0, 0, 0);
+
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.localClippingEnabled = true; // IMPORTANT for cutaway
+            document.getElementById('container').appendChild(renderer.domElement);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(8, 15, 10);
+            scene.add(directionalLight);
+             const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.4); // Fill light
+            directionalLight2.position.set(-8, -5, -10);
+            scene.add(directionalLight2);
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.minDistance = CELL_RADIUS * 1.2; // Prevent zooming too close
+            controls.maxDistance = CELL_RADIUS * 5;
+            controls.target.set(0, 0, 0); // Ensure controls focus on the cell center
+
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+
+            labelsContainer = document.getElementById('labels');
+            labelElement = document.createElement('div');
+            labelElement.className = 'label';
+            labelsContainer.appendChild(labelElement);
+
+            cellGroup = new THREE.Group();
+            scene.add(cellGroup);
+
+            createMaterials();
+            createCellModel();
+            createCytoplasmBackground(); // Create the inner background surface
+
+            window.addEventListener('resize', onWindowResize);
+            document.addEventListener('mousemove', onMouseMove, false);
+            setupControls();
+
+            animate();
+        }
+
+        function createMaterials() {
+             const commonSettings = {
+                 clippingPlanes: clippingPlanes,
+                 clipIntersection: false, // Cut cleanly, don't show intersection line on model
+                 side: THREE.DoubleSide // Needed for clipped view
+             };
+
+            materials.membrane = new THREE.MeshStandardMaterial({
+                color: 0xffa0a0, // Pinkish outer
+                roughness: 0.7, metalness: 0.1,
+                transparent: true, opacity: 0.7, // Make slightly transparent
+                ...commonSettings
+            });
+            materials.cytoplasm = new THREE.MeshBasicMaterial({ // Basic material for flat color inside
+                color: 0xffe4e1, // Light pink/beige interior
+                side: THREE.BackSide, // Render only the inside face
+                 clippingPlanes: clippingPlanes, // Must also be clipped
+                 clipIntersection: false
+            });
+            materials.nucleus = new THREE.MeshStandardMaterial({ color: 0x9370DB, roughness: 0.5, metalness: 0.1, ...commonSettings }); // Medium Purple
+            materials.mitochondrion = new THREE.MeshStandardMaterial({ color: 0xffb84d, roughness: 0.7, metalness: 0.1, ...commonSettings }); // Yellow-Orange
+            materials.er = new THREE.MeshStandardMaterial({ color: 0xd8bfd8, roughness: 0.8, metalness: 0.1, ...commonSettings }); // Thistle/Light Purplish Pink for ER
+            materials.golgi = new THREE.MeshStandardMaterial({ color: 0xffb6c1, roughness: 0.8, metalness: 0.1, ...commonSettings }); // Light Pink for Golgi
+            materials.vesicle = new THREE.MeshStandardMaterial({ color: 0xadd8e6, roughness: 0.6, metalness: 0.1, ...commonSettings }); // Light Blue for vesicles
+
+            // Material for the blue cut line (not clipped)
+            materials.cutLine = new THREE.MeshBasicMaterial({ color: 0x0000ff, side: THREE.DoubleSide });
+        }
+
+        // Create a sphere slightly smaller than the membrane to act as the background color for the cutaway interior
+        function createCytoplasmBackground() {
+            const cytoplasmGeo = new THREE.SphereGeometry(CELL_RADIUS * 0.99, 64, 32); // Slightly smaller
+            cytoplasmBackground = new THREE.Mesh(cytoplasmGeo, materials.cytoplasm);
+             cytoplasmBackground.renderOrder = -1; // Try to render before organelles
+             cytoplasmBackground.userData = { name: "Cytoplasm" }; // Give it a name but prevent highlighting usually
+             // Do not add to organelles list for toggling/highlighting
+             cellGroup.add(cytoplasmBackground);
+        }
+
+
+        function createCellModel() {
+            // 1. Outer Membrane
+            const membraneGeo = new THREE.SphereGeometry(CELL_RADIUS, 64, 32);
+            const membrane = new THREE.Mesh(membraneGeo, materials.membrane);
+            membrane.userData = { name: "Cell Membrane" };
+            organelles["Cell Membrane"].push(membrane);
+            cellGroup.add(membrane);
+
+             // Add Blue lines for cut edges
+             const lineRadius = CELL_RADIUS * 1.005; // Slightly outside membrane
+             const lineTubeRadius = CELL_RADIUS * 0.015; // Thin tube
+
+             // XY plane edge (Z=0, X<0, Y varies)
+             const arcShapeXY = new THREE.Shape();
+             arcShapeXY.absarc(0, 0, lineRadius, Math.PI / 2, -Math.PI / 2, true); // Arc from +Y to -Y on negative X side
+             const arcGeoXY = new THREE.TubeGeometry(arcShapeXY, 32, lineTubeRadius, 8, false);
+             const cutLineXY = new THREE.Mesh(arcGeoXY, materials.cutLine);
+             cutLineXY.rotation.x = Math.PI / 2; // Rotate to align with XY plane
+             cutLineXY.userData = { name: "Cut Line" };
+             organelles["Cut Line"].push(cutLineXY);
+             cellGroup.add(cutLineXY);
+
+             // YZ plane edge (X=0, Z<0, Y varies)
+              const arcShapeYZ = new THREE.Shape();
+             arcShapeYZ.absarc(0, 0, lineRadius, Math.PI / 2, -Math.PI / 2, true); // Arc from +Y to -Y on negative Z side
+             const arcGeoYZ = new THREE.TubeGeometry(arcShapeYZ, 32, lineTubeRadius, 8, false);
+             const cutLineYZ = new THREE.Mesh(arcGeoYZ, materials.cutLine);
+             cutLineYZ.rotation.y = -Math.PI / 2; // Rotate to align with YZ plane
+             cutLineYZ.userData = { name: "Cut Line" };
+             organelles["Cut Line"].push(cutLineYZ);
+             cellGroup.add(cutLineYZ);
+
+             // XZ plane edge (Y=0, X<0, Z<0) - bottom quarter circle
+             const arcShapeXZ = new THREE.Shape();
+             arcShapeXZ.absarc(0, 0, lineRadius, Math.PI, Math.PI * 1.5, false); // Arc from -X to -Z
+             const arcGeoXZ = new THREE.TubeGeometry(arcShapeXZ, 32, lineTubeRadius, 8, false);
+             const cutLineXZ = new THREE.Mesh(arcGeoXZ, materials.cutLine);
+              // No rotation needed, already in XZ plane
+             cutLineXZ.userData = { name: "Cut Line" };
+             organelles["Cut Line"].push(cutLineXZ);
+             cellGroup.add(cutLineXZ);
+
+
+            // 2. Nucleus
+            const nucleusGeo = new THREE.SphereGeometry(CELL_RADIUS * 0.4, 32, 16);
+            const nucleus = new THREE.Mesh(nucleusGeo, materials.nucleus);
+            nucleus.position.set(0, CELL_RADIUS * 0.1, 0); // Slightly raise nucleus like in image
+            nucleus.userData = { name: "Nucleus" };
+            organelles["Nucleus"].push(nucleus);
+            cellGroup.add(nucleus);
+
+            // 3. Mitochondria (Place strategically based on image)
+            const mitoGeo = new THREE.CapsuleGeometry(CELL_RADIUS * 0.08, CELL_RADIUS * 0.25, 16, 32);
+            const mitoPositions = [
+                { p: [-0.5, 0.9, -1.0], r: [0, 0.5, 0.2] },
+                { p: [-1.2, -0.8, -0.8], r: [0.3, 0, -0.5] },
+                { p: [0.2, 1.0, -1.5], r: [0.8, 0.2, 0] }, // Near top cut edge
+                { p: [-1.5, 0.2, 0.5], r: [0, -0.8, 0.5] }, // Deeper inside
+                { p: [-0.8, -1.5, -0.5], r: [-0.5, 0, 0.8] }, // Lower part
+                 { p: [-0.2, -0.2, -1.8], r: [0, 1.5, 0] }, // Near back Z cut
+            ];
+            mitoPositions.forEach(data => {
+                const mito = new THREE.Mesh(mitoGeo, materials.mitochondrion);
+                mito.position.set(data.p[0]*CELL_RADIUS*0.6, data.p[1]*CELL_RADIUS*0.6, data.p[2]*CELL_RADIUS*0.6);
+                mito.rotation.set(data.r[0]*Math.PI, data.r[1]*Math.PI, data.r[2]*Math.PI);
+                mito.userData = { name: "Mitochondrion" };
+                organelles["Mitochondrion"].push(mito);
+                cellGroup.add(mito);
+            });
+
+
+            // 4. Endoplasmic Reticulum (Simplified, near nucleus)
+             const erGroup = new THREE.Group();
+             erGroup.userData = { name: "Endoplasmic Reticulum" };
+             const erTubeGeo = new THREE.TorusGeometry(CELL_RADIUS * 0.5, CELL_RADIUS * 0.05, 16, 50);
+             const erPositions = [
+                 { p: [0, 0.5, 0], s: [1, 1, 0.6], r: [0.5, 0, 0.1] },
+                 { p: [0.1, 0.3, -0.2], s: [0.9, 0.9, 0.5], r: [0.6, 0.2, -0.1] },
+                 { p: [-0.1, 0.1, 0.1], s: [1.1, 1.1, 0.7], r: [0.4, -0.1, 0.2] },
+             ];
+              erPositions.forEach(data => {
+                const erTube = new THREE.Mesh(erTubeGeo, materials.er);
+                erTube.position.set(data.p[0], data.p[1], data.p[2]);
+                erTube.scale.set(data.s[0], data.s[1], data.s[2]);
+                erTube.rotation.set(data.r[0]*Math.PI, data.r[1]*Math.PI, data.r[2]*Math.PI);
+                erTube.userData = { name: "Endoplasmic Reticulum" }; // Name part for raycasting
+                organelles["Endoplasmic Reticulum"].push(erTube); // Add individual parts for visibility toggle
+                erGroup.add(erTube);
+             });
+             // We add the group but also track individual parts in the organelles array
+             erGroup.position.set(nucleus.position.x * 0.8, nucleus.position.y * 0.8, nucleus.position.z * 0.8); // Position relative to nucleus slightly
+             cellGroup.add(erGroup);
+
+
+            // 5. Golgi Apparatus (Stack near bottom-left cut face)
+            const golgiGroup = new THREE.Group();
+            golgiGroup.userData = { name: "Golgi Apparatus" };
+            const diskGeo = new THREE.CylinderGeometry(CELL_RADIUS * 0.3, CELL_RADIUS * 0.3, 0.06, 32);
+            const numDisks = 5;
+            for (let i = 0; i < numDisks; i++) {
+                const golgiDisk = new THREE.Mesh(diskGeo, materials.golgi);
+                const yPos = CELL_RADIUS * (-0.5 + (i * 0.1)); // Stack vertically in lower part
+                const xzOffset = i * 0.1;
+                golgiDisk.position.set(CELL_RADIUS * -0.6 + xzOffset*0.5, yPos, CELL_RADIUS * -0.6 + xzOffset*0.5); // Place near corner cut
+                golgiDisk.rotation.x = Math.PI * 0.05; // Slight tilt
+                golgiDisk.rotation.z = Math.PI * -0.05;
+                golgiDisk.scale.x = 1.0 - i * 0.1; // Taper slightly
+                golgiDisk.scale.z = 1.0 - i * 0.1;
+                golgiDisk.userData = { name: "Golgi Apparatus" };
+                organelles["Golgi Apparatus"].push(golgiDisk);
+                golgiGroup.add(golgiDisk);
+            }
+             golgiGroup.rotation.y = Math.PI / 4; // Rotate stack to face cut better
+             cellGroup.add(golgiGroup);
+
+
+            // 6. Vesicles (Small blue spheres)
+            const vesicleGeo = new THREE.SphereGeometry(CELL_RADIUS * 0.06, 16, 8);
+             const vesiclePositions = [
+                 [-0.8, 0.8, -0.8],
+                 [-1.2, 0.5, 0.2],
+                 [-0.5, -1.0, -1.0],
+                 [0.1, -0.5, -1.2],
+                 [-1.5, -0.5, 0.5], // Deeper inside
+                 [-0.4, 1.2, 0.3], // High up
+                 [-1.0, 0.0, -1.5] // Near back cut
+             ];
+             vesiclePositions.forEach(p => {
+                 const vesicle = new THREE.Mesh(vesicleGeo, materials.vesicle);
+                 vesicle.position.set(p[0]*CELL_RADIUS*0.7, p[1]*CELL_RADIUS*0.7, p[2]*CELL_RADIUS*0.7);
+                 vesicle.userData = { name: "Vesicle" };
+                 organelles["Vesicle"].push(vesicle);
+                 cellGroup.add(vesicle);
+             });
+        }
+
+        // --- Event Handlers ---
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function onMouseMove(event) {
+            // Standard raycasting and label logic (mostly unchanged from previous)
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            const controlsRect = document.getElementById('controls').getBoundingClientRect();
+            if (event.clientX >= controlsRect.left && event.clientY <= controlsRect.bottom && event.clientX <= controlsRect.right && event.clientY >= controlsRect.top) {
+                 clearHighlight();
+                 labelElement.style.display = 'none';
+                 INTERSECTED = null;
+                 return;
+             }
+
+            raycaster.setFromCamera(mouse, camera);
+            // Important: Use cellGroup.children, recursive=true. Filter out cytoplasm background and cut lines.
+            const intersects = raycaster.intersectObjects(cellGroup.children, true)
+                                      .filter(intersect => intersect.object !== cytoplasmBackground && !intersect.object.userData.name?.includes("Cut Line") && intersect.object.visible);
+
+
+            if (intersects.length > 0) {
+                let firstIntersectedObject = intersects[0].object;
+                let namedParent = firstIntersectedObject;
+
+                 // Traverse up to find the object/group with the primary name (e.g., ER group, Golgi group)
+                 while (namedParent.parent && namedParent.parent !== cellGroup && !organelles[namedParent.userData.name]) {
+                      if(namedParent.parent.userData.name && organelles[namedParent.parent.userData.name]) {
+                          namedParent = namedParent.parent;
+                          break; // Found a named group we track
+                      }
+                       namedParent = namedParent.parent; // Keep going up
+                 }
+                 // If we ended up at cellGroup, just use the originally intersected object
+                 if (namedParent === cellGroup) namedParent = firstIntersectedObject;
+
+
+                if (INTERSECTED !== namedParent && namedParent.userData.name && namedParent.visible) {
+                    clearHighlight();
+                    INTERSECTED = namedParent;
+
+                    // Highlight logic (same as before, handles groups and meshes)
+                    if (INTERSECTED.material && INTERSECTED.isMesh) {
+                         INTERSECTED.currentHex = INTERSECTED.material.emissive ? INTERSECTED.material.emissive.getHex() : 0x000000;
+                         INTERSECTED.material.emissive = new THREE.Color(0x555555);
+                    } else if (INTERSECTED.isGroup) {
+                        INTERSECTED.traverse((child) => {
+                            if(child.isMesh && child.material && child.visible) { // Check visibility
+                                child.currentHex = child.material.emissive ? child.material.emissive.getHex() : 0x000000;
+                                child.material.emissive = new THREE.Color(0x555555);
+                            }
+                        });
+                    }
+
+                    // Update Label (use the name of the potentially found parent group)
+                    labelElement.textContent = INTERSECTED.userData.name;
+                    updateLabelPosition(intersects[0].point);
+                    labelElement.style.display = 'block';
+
+                } else if (!namedParent.userData.name || !namedParent.visible) {
+                    // Intersected something without a name, invisible, or background
+                     clearHighlight();
+                     labelElement.style.display = 'none';
+                     INTERSECTED = null;
+                }
+
+            } else {
+                 clearHighlight();
+                 labelElement.style.display = 'none';
+                 INTERSECTED = null;
+            }
+        }
+
+        function clearHighlight() {
+             if (INTERSECTED) {
+                 if (INTERSECTED.material && INTERSECTED.isMesh) {
+                      if (typeof INTERSECTED.currentHex !== 'undefined') {
+                           INTERSECTED.material.emissive.setHex(INTERSECTED.currentHex);
+                      }
+                 } else if (INTERSECTED.isGroup) {
+                      INTERSECTED.traverse((child) => {
+                         if(child.isMesh && child.material && typeof child.currentHex !== 'undefined') {
+                            child.material.emissive.setHex(child.currentHex);
+                         }
+                     });
+                 }
+             }
+             INTERSECTED = null; // Make sure to clear the reference
+        }
+
+
+        function updateLabelPosition(point) {
+            // Position label logic (unchanged)
+             const vector = point.clone();
+            vector.project(camera);
+            const x = (vector.x * 0.5 + 0.5) * window.innerWidth;
+            const y = (vector.y * -0.5 + 0.5) * window.innerHeight;
+            labelElement.style.left = `${x}px`;
+            labelElement.style.top = `${y}px`;
+        }
+
+        // --- UI Controls Setup ---
+        function setupControls() {
+            const membraneOpacitySlider = document.getElementById('membraneOpacity');
+            const membraneOpacityValue = document.getElementById('membraneOpacityValue');
+            const wireframeToggle = document.getElementById('wireframeToggle');
+            const rotationSpeedSlider = document.getElementById('rotationSpeed');
+            const rotationSpeedValue = document.getElementById('rotationSpeedValue');
+            const clippingToggle = document.getElementById('clippingToggle');
+
+            // Membrane Opacity
+            membraneOpacitySlider.addEventListener('input', (event) => {
+                const opacity = parseFloat(event.target.value);
+                materials.membrane.opacity = opacity;
+                membraneOpacityValue.textContent = opacity.toFixed(2);
+            });
+
+             // Rotation Speed
+            rotationSpeedSlider.addEventListener('input', (event) => {
+                 const speed = parseFloat(event.target.value);
+                 rotationSpeedValue.textContent = speed.toFixed(3);
+             });
+
+             // Wireframe Toggle
+            wireframeToggle.addEventListener('change', (event) => {
+                const isWireframe = event.target.checked;
+                // Traverse the main cell group, apply wireframe EXCEPT to cytoplasm and cut lines
+                cellGroup.traverse((object) => {
+                    if (object.isMesh && object.material && object !== cytoplasmBackground && !object.userData.name?.includes("Cut Line")) {
+                         if (Array.isArray(object.material)) { // Just in case
+                            object.material.forEach(mat => mat.wireframe = isWireframe);
+                         } else {
+                            object.material.wireframe = isWireframe;
+                         }
+                    }
+                });
+            });
+
+             // Clipping Toggle
+             clippingToggle.addEventListener('change', (event) => {
+                 renderer.localClippingEnabled = event.target.checked;
+                 // Toggle visibility of cut lines based on clipping state
+                 const cutLinesVisible = event.target.checked && document.getElementById('cutLineToggle').checked;
+                 organelles["Cut Line"].forEach(line => line.visible = cutLinesVisible);
+
+             });
+
+             // Organelle Visibility Toggles
+            const toggles = document.querySelectorAll('#controls input[type="checkbox"][data-organelle]');
+            toggles.forEach(toggle => {
+                toggle.addEventListener('change', (event) => {
+                    const organelleName = event.target.dataset.organelle;
+                    const isVisible = event.target.checked;
+                    if (organelles[organelleName]) {
+                         // Special handling for cut lines - only visible if clipping is also on
+                         if (organelleName === "Cut Line") {
+                             const clippingEnabled = document.getElementById('clippingToggle').checked;
+                             organelles[organelleName].forEach(obj => obj.visible = isVisible && clippingEnabled);
+                         } else {
+                              organelles[organelleName].forEach(obj => {
+                                 // If it's a group (like ER/Golgi), toggle the group itself
+                                 if (obj.isGroup) {
+                                     obj.visible = isVisible;
+                                 } else if (obj.isMesh) {
+                                     // If individual part (like mito, vesicle), toggle the mesh
+                                     obj.visible = isVisible;
+                                 }
+                                 // Also ensure children of groups reflect visibility (though group visibility usually handles this)
+                                 obj.traverse(child => { if(child !== obj) child.visible = isVisible; });
+                             });
+                         }
+                    }
+                    // Clear highlight if the hovered object type is hidden
+                    if (!isVisible && INTERSECTED && INTERSECTED.userData.name === organelleName) {
+                         clearHighlight();
+                         labelElement.style.display = 'none';
+                         // INTERSECTED is cleared in clearHighlight
+                    }
+                });
+            });
+        }
+
+
+        // --- Animation Loop ---
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+
+            const rotationSpeed = parseFloat(document.getElementById('rotationSpeed').value);
+            cellGroup.rotation.y += rotationSpeed;
+
+            renderer.render(scene, camera);
+        }
+
+        // --- Start ---
+        init();
+    </script>
+</body>
+</html>
