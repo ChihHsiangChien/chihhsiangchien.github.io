@@ -104,7 +104,9 @@ Microscope.prototype.onMouseMove = function (event) {
     const deltaX = mouseX - this.startX;
     const deltaY = mouseY - this.startY;
 
-    if ((deltaX * deltaX + deltaY * deltaY) > 16) {
+    // 使用較小的觸控閾值以提升 iOS 響應速度
+    const threshold = (event.type === "touchmove") ? 1 : 4;
+    if ((deltaX * deltaX + deltaY * deltaY) > threshold * threshold) {
       this.offsetX += deltaX;
       this.offsetY += deltaY;
 
@@ -450,6 +452,8 @@ function zoom(zoomFactor, sender) {
       buttons[i].style.backgroundColor = ""; // Set the default color here
     }
   }
+  // 更新 iOS 過濾效果
+  updateFilters();
 }
 
 // 接收按鈕指令改變載物台高度，改變模糊程度
@@ -458,12 +462,16 @@ function moveStage(delta) {
 
   microscope.moveStage(delta);
   microscope.drawInitialImage();
+  // 更新 iOS 過濾效果
+  updateFilters();
 }
 
 // 接收按鈕指令改變亮度，模擬光圈調整大小
 function setBrightness(delta) {
   microscope.brightnessFactor += delta;
   microscope.drawInitialImage();
+  // 更新 iOS 過濾效果
+  updateFilters();
 }
 
 // iOS無法用CSS的Blur濾鏡，需另外實作
@@ -496,6 +504,31 @@ function applyBlur(ctx, image, blurFactor) {
   ctx.imageSmoothingQuality = "default";
 }
 function applyBrightness(ctx, brightnessFactor) { }
+// 在 Microscope class 上新增移動載玻片的方法
+Microscope.prototype.moveSlide = function(dxUnit, dyUnit) {
+  // 根據 zoomFactor 調整移動步長
+  const step = Math.max(1, Math.round(100 / this.zoomFactor));
+  const dx = dxUnit * step;
+  const dy = dyUnit * step;
+  this.slideX += dx;
+  this.slideY += dy;
+  this.specimenX += dx;
+  this.specimenY += dy;
+  this.bugs.forEach(function(bug) { bug.x += dx; bug.y += dy; });
+  this.drawInitialImage();
+  this.drawZoomImage(this.zoomCanvas);
+};
+// 檢測是否為 iOS 裝置
+function isIOS() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+}
+// 更新 CSS 過濾效果 (iOS 使用 CSS filter 作為 fallback)
+function updateFilters() {
+  if (isIOS()) {
+    microscope.canvas.style.filter = `brightness(${microscope.brightnessFactor}%)`;
+    microscope.zoomCanvas.style.filter = `blur(${microscope.blurFactor}px) brightness(${microscope.brightnessFactor}%)`;
+  }
+}
 
 // 建 Microscope instance
 const microscope = new Microscope("cell.jpg", "canvas", "zoomCanvas");
@@ -542,7 +575,59 @@ setInterval(() => {
       }
     }
 
-    microscope.drawInitialImage();
   });
+  // 重新繪製一次畫面
+  microscope.drawInitialImage();
+  // 更新 iOS 過濾效果
+  updateFilters();
 }, 250);
-
+// 全域移動載玻片函式 (按鈕使用)
+function moveSlide(dxUnit, dyUnit) {
+  microscope.moveSlide(dxUnit, dyUnit);
+}
+// 監聽鍵盤方向鍵移動載玻片
+window.addEventListener("keydown", function (e) {
+  let handled = true;
+  switch (e.key) {
+    case "ArrowLeft":
+      moveSlide(-1, 0);
+      break;
+    case "ArrowRight":
+      moveSlide(1, 0);
+      break;
+    case "ArrowUp":
+      moveSlide(0, -1);
+      break;
+    case "ArrowDown":
+      moveSlide(0, 1);
+      break;
+    default:
+      handled = false;
+  }
+  if (handled) {
+    e.preventDefault();
+  }
+});
+// 初始更新過濾效果（若為 iOS）
+updateFilters();
+// Prevent pinch and double-tap zoom on touch devices
+(function() {
+  var lastTouchEnd = 0;
+  document.addEventListener('touchstart', function(e) {
+    if (e.touches.length > 1) {
+      e.preventDefault();
+    }
+  }, { passive: false });
+  document.addEventListener('touchend', function(e) {
+    var now = Date.now();
+    if (now - lastTouchEnd <= 300) {
+      e.preventDefault();
+    }
+    lastTouchEnd = now;
+  }, false);
+})();
+// Prevent default double-click/double-tap zoom on canvas
+['canvas', 'zoomCanvas'].forEach(function(id) {
+  var el = document.getElementById(id);
+  if (el) el.addEventListener('dblclick', function(e) { e.preventDefault(); });
+});
