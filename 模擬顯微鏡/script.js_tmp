@@ -1,12 +1,15 @@
 class Microscope {
   constructor(imageUrl, canvasId, zoomCanvasId) {
+    this.image = new Image();
+    this.image.onload = this.drawInitialImage.bind(this);
+    this.image.src = imageUrl;
 
     this.canvas = document.getElementById(canvasId);
     this.ctx = this.canvas.getContext("2d");
 
     this.zoomCanvas = document.getElementById(zoomCanvasId);
     this.zoomCtx = this.zoomCanvas.getContext("2d");
-    /*
+
     this.canvas.width = 400;
     this.canvas.height = 300;
 
@@ -14,16 +17,15 @@ class Microscope {
     this.zoomCanvas.height = this.canvas.height;
 
     this.zoomCanvas.width = this.canvas.width;
-    */
 
     this.zoomFactor = 5; // 要跟html裡的第一個button的參數相同
 
     this.offsetX = 0;
     this.offsetY = 0;
 
-    // 載物台圓孔位置 (稍後在 resize 中更新)
-    this.observationX = 0;
-    this.observationY = 0;
+    // 載物台圓孔位置
+    this.observationX = this.canvas.width / 2;
+    this.observationY = this.canvas.height / 2;
     this.ObservationCircleRadius = 20;
     this.ObservationCircleColor = "rgba(247, 256, 210, 1)";
 
@@ -47,27 +49,22 @@ class Microscope {
     this.slideColor = "rgba(186, 217, 230, 0.1)";
     this.slideWidth = 150;
     this.slideHeight = 50;
-    //this.slideX = (this.canvas.width - this.slideWidth) / 2 - this.distanceToMiddle;
-    //this.slideY = (this.canvas.height - this.slideHeight) / 2 - this.distanceToMiddle;
-    this.slideX = 0; // 將在 resize 時設定
-    this.slideY = 0; // 將在 resize 時設定
+    this.slideX =
+      (this.canvas.width - this.slideWidth) / 2 - this.distanceToMiddle;
+    this.slideY =
+      (this.canvas.height - this.slideHeight) / 2 - this.distanceToMiddle;
 
     // 載玻片上的標本設定
     this.specimenWidth = 30;
     this.specimenHeight = 30;
-    //this.specimenX = this.slideX + (this.slideWidth - this.specimenWidth) / 2;
-    //this.specimenY = this.slideY + (this.slideHeight - this.specimenHeight) / 2;
-    this.specimenX = 0; // 將在 resize 時設定
-    this.specimenY = 0; // 將在 resize 時設定
-
+    this.specimenX = this.slideX + (this.slideWidth - this.specimenWidth) / 2;
+    this.specimenY = this.slideY + (this.slideHeight - this.specimenHeight) / 2;
 
     // 載物台設定
     this.stageWidth = 180;
     this.stageHeight = 120;
-    //this.stageX = this.canvas.width / 2 - this.stageWidth / 2;
-    //this.stageY = this.canvas.height / 2 - this.stageHeight / 2;
-    this.stageX = 0; // 將在 resize 時設定
-    this.stageY = 0; // 將在 resize 時設定    
+    this.stageX = this.canvas.width / 2 - this.stageWidth / 2;
+    this.stageY = this.canvas.height / 2 - this.stageHeight / 2;
     this.stageColor = "rgba(66, 72, 74,1)";
 
     // 模糊程度
@@ -79,14 +76,6 @@ class Microscope {
 
     // bugs
     this.bugs = [];
-
-    this.image = new Image();
-    // 確保圖片載入後執行第一次 resize 和繪圖
-    this.image.onload = () => {
-      // this.drawInitialImage(); // 不再由 onload 直接觸發繪圖
-      resizeCanvases(); // 圖片載入後，執行第一次 resize (會包含繪圖)
-    };
-    this.image.src = imageUrl;    
   }
 
   onMouseDown(event) {
@@ -540,78 +529,6 @@ function updateFilters() {
     microscope.zoomCanvas.style.filter = `blur(${microscope.blurFactor}px) brightness(${microscope.brightnessFactor}%)`;
   }
 }
-// <<<--- 新增 resize 函數和事件監聽器 --- START --->>>
-function resizeCanvases() {
-  // 獲取一個 canvas 的容器 (canvas-container) 的尺寸，或者直接獲取 canvas 的 offsetWidth/Height
-  // 使用 offsetWidth/Height 比較直接，它反映了 CSS 佈局後的實際像素尺寸
-  const displayWidth = microscope.canvas.offsetWidth;
-  const displayHeight = microscope.canvas.offsetHeight;
-
-  // 檢查尺寸是否真的改變了，避免不必要的重設和重繪
-  if (microscope.canvas.width !== displayWidth || microscope.canvas.height !== displayHeight) {
-
-    console.log(`Resizing canvases to: ${displayWidth} x ${displayHeight}`);
-
-    // --- 儲存舊的標本位置 (在重新計算之前) ---
-    const oldSpecimenX = microscope.specimenX;
-    const oldSpecimenY = microscope.specimenY;
-
-    // --- 更新 Canvas 繪圖表面尺寸 ---
-    microscope.canvas.width = displayWidth;
-    microscope.canvas.height = displayHeight;
-    microscope.zoomCanvas.width = displayWidth; // 兩個 canvas 尺寸相同
-    microscope.zoomCanvas.height = displayHeight;
-
-    // --- 重新計算依賴畫布尺寸的屬性 ---
-    // 重新計算觀察孔中心
-    microscope.observationX = microscope.canvas.width / 2;
-    microscope.observationY = microscope.canvas.height / 2;
-
-    // 重新計算載物台初始中心位置
-    microscope.stageX = microscope.canvas.width / 2 - microscope.stageWidth / 2;
-    microscope.stageY = microscope.canvas.height / 2 - microscope.stageHeight / 2;
-
-    // 重新計算載玻片和標本的初始中心位置 (相對於畫布中心)
-    microscope.slideX = (microscope.canvas.width - microscope.slideWidth) / 2 - microscope.distanceToMiddle;
-    microscope.slideY = (microscope.canvas.height - microscope.slideHeight) / 2 - microscope.distanceToMiddle;
-    // *** 重新計算新的標本位置 ***
-    microscope.specimenX = microscope.slideX + (microscope.slideWidth - microscope.specimenWidth) / 2;
-    microscope.specimenY = microscope.slideY + (microscope.slideHeight - microscope.specimenHeight) / 2;
-
-    // --- 計算標本位置的變化量 ---
-    const deltaX = microscope.specimenX - oldSpecimenX;
-    const deltaY = microscope.specimenY - oldSpecimenY;
-
-    // --- 更新所有 bug 的位置 ---
-    // 將標本區域移動的距離應用到每個 bug 上
-    microscope.bugs.forEach(bug => {
-      bug.x += deltaX;
-      bug.y += deltaY;
-    });
-    // --- Bug 位置更新結束 ---
-
-    // --- 重新繪製 ---
-    // 確保 microscope 物件和圖片已準備好
-    if (microscope && microscope.image.complete) {
-       microscope.drawInitialImage();
-       // drawInitialImage 內部會呼叫 drawZoomImage，所以理論上不需要下面這行
-       // 但明確呼叫更保險，以防未來 drawInitialImage 邏輯變更
-       microscope.drawZoomImage(microscope.zoomCanvas);
-       // 更新 iOS 的 CSS filter (如果需要)
-       updateFilters();
-    }
-  }
-}
-
-// 頁面載入完成後執行一次 resize
-// 使用 'load' 確保所有資源 (包括圖片) 都載入完成，且 CSS 樣式已應用
-window.addEventListener('load', resizeCanvases);
-
-// 視窗大小改變時執行 resize
-window.addEventListener('resize', resizeCanvases);
-
-// <<<--- 新增 resize 函數和事件監聽器 --- END --->>>s
-
 
 // 建 Microscope instance
 const microscope = new Microscope("cell.jpg", "canvas", "zoomCanvas");
