@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>血紅素結構比較 + 突變點註解</title>
+  <script src="https://3dmol.csb.pitt.edu/build/3Dmol-min.js"></script>
+  <style>
+    body {
+      font-family: "Noto Sans TC", sans-serif;
+      margin: 0;
+      background-color: #f7f7f7;
+    }
+    header {
+      background-color: #333;
+      color: white;
+      padding: 1em;
+      text-align: center;
+    }
+    .controls {
+      text-align: center;
+      padding: 1em;
+    }
+    .controls button {
+      margin: 0.3em;
+      padding: 0.6em 1.2em;
+      font-size: 1em;
+      border-radius: 6px;
+      border: none;
+      background-color: #444;
+      color: white;
+      cursor: pointer;
+    }
+    .controls button:hover {
+      background-color: #666;
+    }
+    .viewer-container {
+      display: flex;
+      flex-wrap: nowrap; /* Changed from wrap to nowrap for side-by-side */
+      justify-content: space-around;
+      gap: 1em;
+      padding: 1em;
+    }
+    .viewer-box {
+      flex: 1;
+      min-width: 300px; /* Added min-width for better responsiveness */
+      height: 500px;
+      position: relative;
+      border: 1px solid #ccc;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      background-color: white;
+      touch-action: none; /* Keep touch-action */
+    }
+    .viewer-label {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background-color: rgba(0,0,0,0.5);
+      color: white;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 1em;
+      z-index: 10; /* Ensure label is on top */
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  血紅素結構比較：正常 vs HbE 變異 
+</header>
+
+<div class="controls">
+  <strong>模型樣式：</strong>
+  <button onclick="changeStyle('cartoon')">卡通</button>
+  <button onclick="changeStyle('stick')">棒狀</button>
+  <button onclick="changeStyle('sphere')">球體</button>
+  <button onclick="changeStyle('line')">線條</button>
+  <button onclick="changeStyle('surface')">表面</button>
+</div>
+
+<div class="viewer-container">
+  <div class="viewer-box" id="viewer1">
+    <div class="viewer-label">HbA（正常）</div>
+  </div>
+  <div class="viewer-box" id="viewer2">
+    <div class="viewer-label">HbE（β26 Glu → Lys）</div>
+  </div>
+</div>
+
+<script>
+    const viewers = {};
+
+    // --- No longer needed: Coordinate constants ---
+    // const viewer1_coords = { ... };
+    // const viewer2_coords = { ... };
+
+    // --- No longer needed: Label style function ---
+    // function createLabelStyleOptions(labelText) { ... }
+
+    function loadStructure(viewerId, pdbId, mutation) {
+      console.log(`[${viewerId}] Creating viewer...`);
+      const viewer = $3Dmol.createViewer(viewerId, { backgroundColor: 'white' });
+      viewers[viewerId] = { viewer, pdbId, mutation };
+
+      console.log(`[${viewerId}] Downloading PDB: ${pdbId}`);
+      $3Dmol.download("pdb:" + pdbId, viewer, {multimodel:true, coordformat:'pdb'}, function () {
+        console.log(`[${viewerId}] PDB ${pdbId} downloaded. Applying initial cartoon style.`);
+        viewer.setStyle({}, { cartoon: { color: 'spectrum' } });
+
+        // --- REMOVED: Origin Test Label ---
+        // try { viewer.addLabel(...); } catch (e) { ... }
+
+        if (mutation) {
+          console.log(`[${viewerId}] Highlighting mutation:`, mutation);
+          const initialHighlightStyle = { cartoon: { color: "red" } };
+          viewer.setStyle({ chain: mutation.chain, resi: mutation.resi }, initialHighlightStyle);
+
+          // --- REMOVED: Mutation Label Addition ---
+          // const selectionSpec = ...;
+          // try {
+          //   const selectedAtoms = ...;
+          //   if (selectedAtoms.length > 0) {
+          //     let labelOptions = ...;
+          //     let explicitCoords = ...;
+          //     labelOptions.position = ...;
+          //     viewer.addLabel(...);
+          //   } else { ... }
+          // } catch (e) { ... }
+        }
+
+        console.log(`[${viewerId}] Zooming and rendering initial view.`);
+        viewer.zoomTo();
+        viewer.render();
+        viewer.zoom(0.8);
+        console.log(`[${viewerId}] Initial load complete.`);
+      });
+    }
+
+    function changeStyle(styleType) {
+      console.log(`--- Changing style to: ${styleType} ---`);
+      for (const id in viewers) {
+        const { viewer, mutation } = viewers[id];
+        console.log(`[${id}] Processing style change to ${styleType}`);
+
+        // --- REMOVED: removeAllLabels() is no longer strictly necessary if no labels are added ---
+        // viewer.removeAllLabels();
+        viewer.removeAllSurfaces(); // Keep this if using surfaces
+        viewer.setStyle({}, {}); // Clear previous styles
+
+        // Apply main style...
+        let mainStyle = {};
+        if (styleType === 'cartoon') { mainStyle = { cartoon: { color: 'spectrum' } }; viewer.setStyle({}, mainStyle); }
+        else if (styleType === 'stick') { mainStyle = { stick: {} }; viewer.setStyle({}, mainStyle); }
+        else if (styleType === 'sphere') { mainStyle = { sphere: {} }; viewer.setStyle({}, mainStyle); }
+        else if (styleType === 'line') { mainStyle = { line: {} }; viewer.setStyle({}, mainStyle); }
+        else if (styleType === 'surface') { viewer.addSurface($3Dmol.SurfaceType.VDW, { opacity: 0.85, color: 'white' }); viewer.addStyle({}, { cartoon: { color: 'lightgray', style:'trace', radius:0.1 } }); }
+        else { console.warn(`[${id}] Unknown styleType requested: ${styleType}`); }
+
+        // --- REMOVED: Origin Test Style Label ---
+        // try { viewer.addLabel(...); } catch (e) { ... }
+
+        // Re-add mutation highlight
+        if (mutation) {
+          console.log(`[${id}] Re-applying mutation highlight for style ${styleType}:`, mutation);
+          let highlightStyle = {};
+          if (styleType === 'cartoon') { highlightStyle = { cartoon: { color: 'red' } }; }
+          else if (styleType === 'stick') { highlightStyle = { stick: { color: 'red' } }; }
+          else if (styleType === 'sphere') { highlightStyle = { sphere: { color: 'red', radius: 0.5 } }; }
+          else if (styleType === 'line') { highlightStyle = { line: { color: 'red' } }; }
+          else if (styleType === 'surface') { highlightStyle = { stick: { color: "red", radius: 0.3 } }; } // Keep stick highlight inside surface
+          viewer.setStyle({ chain: mutation.chain, resi: mutation.resi }, highlightStyle);
+          console.log(`[${id}] Highlight style applied:`, highlightStyle);
+
+          // --- REMOVED: Mutation Label Re-addition ---
+          // const selectionSpec = ...;
+          // try {
+          //    const selectedAtoms = ...;
+          //    if (selectedAtoms.length > 0) {
+          //       let labelOptions = ...;
+          //       let explicitCoords = ...;
+          //       labelOptions.position = ...;
+          //       viewer.addLabel(...);
+          //    } else { ... }
+          // } catch (e) { ... }
+
+        } else {
+           console.log(`[${id}] No mutation info to re-apply highlight.`); // Adjusted log message
+        }
+
+        console.log(`[${id}] Rendering final view for style ${styleType}.`);
+        viewer.render();
+        console.log(`[${id}] Style change to ${styleType} complete.`);
+      }
+       console.log(`--- Style change finished for ${styleType} ---`);
+    }
+
+    // --- Data ---
+    // Label property is no longer used, but keeping the object structure is fine
+    const hbaMutation = {
+      resi: 26,
+      chain: "B",
+      label: "β鏈第26位：Glu（正常）" // Ignored
+    };
+    const hbeMutation = {
+      resi: 26,
+      chain: "B",
+      label: "β鏈第26位：Lys（突變）" // Ignored
+    };
+
+    // --- Load Structures ---
+    loadStructure("viewer1", "2HHB", hbaMutation);
+    loadStructure("viewer2", "1NQP", hbeMutation);
+
+</script>
+
+
+
+
+
+
+
+
+  
+
+
+</body>
+</html>
