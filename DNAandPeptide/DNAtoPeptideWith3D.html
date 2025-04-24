@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DNA轉換成胺基酸序列與3D結構示意</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0; /* Remove default margin */
+      padding: 0;
+      background-color: #f4f4f4;
+      display: flex; /* Use flexbox for layout */
+      min-height: 100vh; /* Ensure body takes full height */
+    }
+    .sidebar {
+        width: 450px; /* Fixed width for controls */
+        padding: 20px;
+        background-color: white;
+        box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+        overflow-y: auto; /* Allow scrolling if content overflows */
+        z-index: 10; /* Keep sidebar above canvas */
+        display: flex;
+        flex-direction: column;
+        max-height: 100vh; /* Prevent sidebar from exceeding viewport height */
+    }
+    .main-content {
+        flex-grow: 1; /* Canvas takes remaining space */
+        position: relative; /* Needed for absolute positioning of canvas */
+        min-height: 100vh; /* Ensure it can contain full height canvas */
+    }
+    #peptideCanvas {
+        display: block; /* Remove extra space below canvas */
+        width: 100%;
+        height: 100%; /* Fill the main content area */
+        position: absolute; /* Position relative to main-content */
+        top: 0;
+        left: 0;
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+      margin-top: 0; /* Remove default margin */
+      font-size: 1.5em; /* Adjust title size */
+    }
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 16px;
+      font-weight: bold;
+    }
+    input, button {
+      width: 100%;
+      padding: 12px;
+      margin-bottom: 20px;
+      font-size: 16px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      box-sizing: border-box;
+    }
+    button {
+      background-color: #5cb85c;
+      color: white;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    button:hover {
+      background-color: #4cae4c;
+    }
+    #output {
+      background-color: #e9f7df;
+      padding: 15px;
+      border-radius: 5px;
+      font-size: 13px; /* Smaller font for more text */
+      margin-top: 10px; /* Reduced margin */
+      border: 1px solid #d0e9c6;
+      flex-shrink: 1; /* Allow output to shrink if needed */
+      overflow-y: auto; /* Scroll if text is long */
+      word-wrap: break-word; /* Wrap long sequences */
+      min-height: 100px; /* Ensure minimum height */
+    }
+    #output p {
+        margin: 5px 0; /* Tighter spacing */
+    }
+    #output span:first-child {
+      font-weight: bold;
+      color: #3c763d;
+      min-width: 150px; /* Adjust alignment */
+      display: inline-block;
+    }
+     #legend {
+        margin-top: 15px;
+        padding: 10px;
+        background-color: #fafafa;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        font-size: 12px; /* Smaller legend font */
+        line-height: 1.5; /* Adjust line height */
+        flex-shrink: 0; /* Prevent legend from shrinking */
+    }
+    #legend h2 {
+        text-align: center;
+        margin-top: 0;
+        margin-bottom: 8px; /* Reduced margin */
+        color: #555;
+        font-size: 14px; /* Adjust size */
+    }
+    .legend-item {
+        display: flex;
+        align-items: center;
+        margin-bottom: 3px; /* Tighter spacing */
+    }
+    .legend-color-box {
+        width: 11px; /* Slightly smaller */
+        height: 11px;
+        border-radius: 50%;
+        margin-right: 6px; /* Adjust spacing */
+        border: 1px solid #ccc; /* Add border for visibility */
+        flex-shrink: 0; /* Prevent shrinking */
+    }
+    .legend-path-info {
+        font-style: italic;
+        color: #666;
+        margin-top: 5px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="sidebar">
+    <h1>DNA轉換成胺基酸序列與3D結構示意</h1>
+    <label for="dna">輸入DNA編碼股序列：</label>
+    <input type="text" id="dna" placeholder="例如：TTTGCTTCAACT (會自動移除ATCG以外字元)" />
+    <button onclick="convert()">轉換</button>
+
+    <div id="output">
+      <p><span>處理後DNA序列：</span><span id="cleanedDnaDisplay"></span></p>
+      <p><span>mRNA序列：</span><span id="mrna"></span></p>
+      <p><span>胺基酸序列（英文縮寫）：</span><span id="aminoAcidsFull"></span></p>
+      <p><span>胺基酸序列（縮寫字母）：</span><span id="aminoAcidsShort"></span></p>
+      <p><span>胺基酸序列（中文名稱）：</span><span id="aminoAcidsChinese"></span></p>
+    </div>
+
+    <!-- Legend for 3D View -->
+    <div id="legend">
+        <h2>3D結構圖例</h2>
+        <div class="legend-item">
+            <span class="legend-color-box" style="background-color: #4682B4;"></span> 親水性 (Hydrophilic)
+        </div>
+        <div class="legend-item">
+            <span class="legend-color-box" style="background-color: #FFB347;"></span> 疏水性 (Hydrophobic)
+        </div>
+        <div class="legend-item">
+            <span class="legend-color-box" style="background-color: #808080;"></span> 中性/特殊 (Neutral/Special)
+        </div>
+         <div class="legend-item">
+            <span class="legend-color-box" style="background-color: #DC143C;"></span> 終止 (Stop)
+        </div>
+         <div class="legend-item">
+            <span style="display: inline-block; width: 12px; height: 4px; background-color: #555555; margin-right: 8px; vertical-align: middle;"></span> 胜肽鍵 (Peptide Bond)
+        </div>
+        <div class="legend-path-info">
+            路徑形狀示意 (相同序列結果固定)：<br> <!-- Added note about consistency -->
+            - 隨機彎曲: 無規捲曲 (Coil)<br>
+            - 螺旋狀: α-螺旋 (Alpha Helix)<br>
+            - 較直線段: β-摺疊 (Beta Sheet)
+        </div>
+        <p style="font-size: 11px; text-align: center; margin-top: 8px;">使用滑鼠拖曳旋轉、滾輪縮放</p>
+    </div>
+  </div>
+
+  <div class="main-content">
+      <canvas id="peptideCanvas"></canvas>
+  </div>
+
+  <!-- Include Three.js library and OrbitControls -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.162.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.162.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // --- Codon Table (with property) ---
+    const codonTable = {
+        // Hydrophilic (Polar or Charged) - Blue: #4682B4
+        "UCA": {short: "S", full: "Ser", chinese: "絲氨酸", property: "hydrophilic"}, "UCG": {short: "S", full: "Ser", chinese: "絲氨酸", property: "hydrophilic"}, "AGU": {short: "S", full: "Ser", chinese: "絲氨酸", property: "hydrophilic"}, "AGC": {short: "S", full: "Ser", chinese: "絲氨酸", property: "hydrophilic"}, "ACU": {short: "T", full: "Thr", chinese: "蘇氨酸", property: "hydrophilic"}, "ACC": {short: "T", full: "Thr", chinese: "蘇氨酸", property: "hydrophilic"}, "ACA": {short: "T", full: "Thr", chinese: "蘇氨酸", property: "hydrophilic"}, "ACG": {short: "T", full: "Thr", chinese: "蘇氨酸", property: "hydrophilic"}, "UGU": {short: "C", full: "Cys", chinese: "半胱氨酸", property: "hydrophilic"}, "UGC": {short: "C", full: "Cys", chinese: "半胱氨酸", property: "hydrophilic"}, "UAU": {short: "Y", full: "Tyr", chinese: "酪氨酸", property: "hydrophilic"}, "UAC": {short: "Y", full: "Tyr", chinese: "酪氨酸", property: "hydrophilic"}, "AAU": {short: "N", full: "Asn", chinese: "天冬酰胺", property: "hydrophilic"}, "AAC": {short: "N", full: "Asn", chinese: "天冬酰胺", property: "hydrophilic"}, "CAA": {short: "Q", full: "Gln", chinese: "谷氨酰胺", property: "hydrophilic"}, "CAG": {short: "Q", full: "Gln", chinese: "谷氨酰胺", property: "hydrophilic"}, "GAU": {short: "D", full: "Asp", chinese: "天冬氨酸", property: "hydrophilic"}, "GAC": {short: "D", full: "Asp", chinese: "天冬氨酸", property: "hydrophilic"}, "GAA": {short: "E", full: "Glu", chinese: "谷氨酸", property: "hydrophilic"}, "GAG": {short: "E", full: "Glu", chinese: "谷氨酸", property: "hydrophilic"}, "CAU": {short: "H", full: "His", chinese: "組氨酸", property: "hydrophilic"}, "CAC": {short: "H", full: "His", chinese: "組氨酸", property: "hydrophilic"}, "AAA": {short: "K", full: "Lys", chinese: "賴氨酸", property: "hydrophilic"}, "AAG": {short: "K", full: "Lys", chinese: "賴氨酸", property: "hydrophilic"}, "CGU": {short: "R", full: "Arg", chinese: "精氨酸", property: "hydrophilic"}, "CGC": {short: "R", full: "Arg", chinese: "精氨酸", property: "hydrophilic"}, "CGA": {short: "R", full: "Arg", chinese: "精氨酸", property: "hydrophilic"}, "CGG": {short: "R", full: "Arg", chinese: "精氨酸", property: "hydrophilic"}, "AGA": {short: "R", full: "Arg", chinese: "精氨酸", property: "hydrophilic"}, "AGG": {short: "R", full: "Arg", chinese: "精氨酸", property: "hydrophilic"},
+        // Hydrophobic (Nonpolar) - Orange: #FFB347
+        "UUU": {short: "F", full: "Phe", chinese: "苯丙氨酸", property: "hydrophobic"}, "UUC": {short: "F", full: "Phe", chinese: "苯丙氨酸", property: "hydrophobic"}, "UUA": {short: "L", full: "Leu", chinese: "亮氨酸", property: "hydrophobic"}, "UUG": {short: "L", full: "Leu", chinese: "亮氨酸", property: "hydrophobic"}, "CUU": {short: "L", full: "Leu", chinese: "亮氨酸", property: "hydrophobic"}, "CUC": {short: "L", full: "Leu", chinese: "亮氨酸", property: "hydrophobic"}, "CUA": {short: "L", full: "Leu", chinese: "亮氨酸", property: "hydrophobic"}, "CUG": {short: "L", full: "Leu", chinese: "亮氨酸", property: "hydrophobic"}, "AUU": {short: "I", full: "Ile", chinese: "異亮氨酸", property: "hydrophobic"}, "AUC": {short: "I", full: "Ile", chinese: "異亮氨酸", property: "hydrophobic"}, "AUA": {short: "I", full: "Ile", chinese: "異亮氨酸", property: "hydrophobic"}, "AUG": {short: "M", full: "Met", chinese: "甲硫氨酸", property: "hydrophobic"}, "GUU": {short: "V", full: "Val", chinese: "纈氨酸", property: "hydrophobic"}, "GUC": {short: "V", full: "Val", chinese: "纈氨酸", property: "hydrophobic"}, "GUA": {short: "V", full: "Val", chinese: "纈氨酸", property: "hydrophobic"}, "GUG": {short: "V", full: "Val", chinese: "纈氨酸", property: "hydrophobic"}, "GCU": {short: "A", full: "Ala", chinese: "丙氨酸", property: "hydrophobic"}, "GCC": {short: "A", full: "Ala", chinese: "丙氨酸", property: "hydrophobic"}, "GCA": {short: "A", full: "Ala", chinese: "丙氨酸", property: "hydrophobic"}, "GCG": {short: "A", full: "Ala", chinese: "丙氨酸", property: "hydrophobic"}, "UGG": {short: "W", full: "Trp", chinese: "色氨酸", property: "hydrophobic"},
+        // Neutral / Special - Gray: #808080
+        "UCU": {short: "S", full: "Ser", chinese: "絲氨酸", property: "hydrophilic"}, "UCC": {short: "S", full: "Ser", chinese: "絲氨酸", property: "hydrophilic"}, // Reclassified Ser as hydrophilic
+        "CCU": {short: "P", full: "Pro", chinese: "脯氨酸", property: "neutral"}, "CCC": {short: "P", full: "Pro", chinese: "脯氨酸", property: "neutral"}, "CCA": {short: "P", full: "Pro", chinese: "脯氨酸", property: "neutral"}, "CCG": {short: "P", full: "Pro", chinese: "脯氨酸", property: "neutral"}, "GGU": {short: "G", full: "Gly", chinese: "甘氨酸", property: "neutral"}, "GGC": {short: "G", full: "Gly", chinese: "甘氨酸", property: "neutral"}, "GGA": {short: "G", full: "Gly", chinese: "甘氨酸", property: "neutral"}, "GGG": {short: "G", full: "Gly", chinese: "甘氨酸", property: "neutral"},
+        // Stop Codons - Red: #DC143C
+        "UAA": {short: "Stop", full: "Stop", chinese: "終止", property: "stop"}, "UAG": {short: "Stop", full: "Stop", chinese: "終止", property: "stop"}, "UGA": {short: "Stop", full: "Stop", chinese: "終止", property: "stop"}
+    };
+
+    // --- Global Variables for Three.js ---
+    let scene, camera, renderer, controls, peptideGroup;
+    const canvas = document.getElementById('peptideCanvas');
+    const mainContent = document.querySelector('.main-content');
+
+    // --- Color Mapping ---
+    const colors = {
+        hydrophilic: 0x4682B4, // Steel Blue
+        hydrophobic: 0xFFB347, // Pastel Orange
+        neutral: 0x808080,     // Gray
+        stop: 0xDC143C,         // Crimson Red
+        bond: 0x555555         // Dark Gray for bonds
+    };
+
+    // --- Seedable Pseudo-Random Number Generator (Mulberry32) ---
+    function mulberry32(a) {
+        return function() {
+          var t = a += 0x6D2B79F5;
+          t = Math.imul(t ^ t >>> 15, t | 1);
+          t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+          return ((t ^ t >>> 14) >>> 0) / 4294967296;
+        }
+    }
+
+    // --- Simple String Hash Function (for seeding) ---
+    function simpleHash(str) {
+        let hash = 0;
+        if (str.length === 0) return hash;
+        for (let i = 0; i < str.length; i++) {
+            const char = str.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash |= 0; // Convert to 32bit integer
+        }
+        return hash;
+    }
+
+    // --- Initialize Three.js Scene ---
+    function initThree() {
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xeeeeee); // Light gray background
+
+        const aspectRatio = mainContent.clientWidth / mainContent.clientHeight;
+        camera = new THREE.PerspectiveCamera(75, aspectRatio, 0.1, 1000);
+        camera.position.z = 15; // Start further back
+        camera.position.y = 5;
+
+        renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+        renderer.setSize(mainContent.clientWidth, mainContent.clientHeight);
+        renderer.setPixelRatio(window.devicePixelRatio); // For sharper rendering on high DPI screens
+
+        // Lights
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); // Softer ambient light
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(5, 10, 7.5);
+        scene.add(directionalLight);
+
+        // Controls
+        controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true; // Smooths out the controls
+        controls.dampingFactor = 0.1;
+        controls.screenSpacePanning = false; // Pan in plane parallel to camera
+
+        // Group to hold peptide chain objects
+        peptideGroup = new THREE.Group();
+        scene.add(peptideGroup);
+
+        // Handle window resize
+        window.addEventListener('resize', onWindowResize, false);
+
+        // Start animation loop
+        animate();
+    }
+
+    // --- Animation Loop ---
+    function animate() {
+        requestAnimationFrame(animate);
+        controls.update(); // Only required if controls.enableDamping or controls.autoRotate are set to true
+        renderer.render(scene, camera);
+    }
+
+    // --- Resize Handler ---
+    function onWindowResize() {
+        const width = mainContent.clientWidth;
+        const height = mainContent.clientHeight;
+
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
+        renderer.setSize(width, height);
+    }
+
+    // --- Draw Peptide Structure in 3D (Now accepts a PRNG) ---
+    function drawPeptideStructure3D(aminoAcidsData, seededRandom) { // Added seededRandom parameter
+        // Clear previous peptide model
+        peptideGroup.clear(); // Remove all children from the group
+
+        if (!aminoAcidsData || aminoAcidsData.length === 0) {
+            renderer.render(scene, camera); // Render the empty scene
+            return; // Nothing to draw
+        }
+
+        // If no PRNG provided (e.g., initial call), use Math.random (non-deterministic)
+        // This shouldn't happen with the current flow but acts as a fallback.
+        const randomFunc = seededRandom || Math.random;
+
+        const sphereRadius = 0.5;
+        const bondRadius = 0.1;
+        const bondDistance = 1.5; // Distance between sphere centers
+
+        let currentPosition = new THREE.Vector3(0, 0, 0);
+        let previousPosition = new THREE.Vector3(0, 0, 0);
+
+        // --- Structure Generation State ---
+        let currentStructure = 'coil'; // 'coil', 'helix', 'sheet'
+        let remainingInStructure = 0;
+        let direction = new THREE.Vector3(1, 0, 0); // Initial direction
+        let helixAxis = new THREE.Vector3(0, 1, 0); // Axis for helix rotation
+        const helixAngleStep = Math.PI / 3; // Angle per residue in helix (adjust for tightness)
+        const tempVec = new THREE.Vector3(); // Reusable vector for calculations
+        const tempVec2 = new THREE.Vector3(); // Another reusable vector
+
+        // Helper function to get a random integer using the provided PRNG
+        function getRandomInt(min, max, rng) { // Added rng parameter
+            min = Math.ceil(min);
+            max = Math.floor(max);
+            return Math.floor(rng() * (max - min + 1)) + min;
+        }
+
+        // Helper function for random vector component using the provided PRNG
+        function randomComponent(rng) {
+            return rng() - 0.5;
+        }
+
+        for (let i = 0; i < aminoAcidsData.length; i++) {
+            const aa = aminoAcidsData[i];
+            const color = colors[aa.property] || colors.neutral;
+
+            // --- Determine Structure Type ---
+            if (remainingInStructure <= 0) {
+                const rand = randomFunc(); // Use the seeded PRNG
+                if (rand < 0.25 && aminoAcidsData.length - i >= 5) { // Start Helix (25% chance, min length 5)
+                    currentStructure = 'helix';
+                    remainingInStructure = getRandomInt(5, 12, randomFunc); // Use seeded PRNG
+                    // Define helix axis roughly perpendicular to current direction
+                    tempVec.set(0, 1, 0); // Use Y axis as default 'up'
+                    if (Math.abs(direction.y) > 0.9) tempVec.set(1, 0, 0); // If direction is vertical, use X axis
+                    helixAxis.crossVectors(direction, tempVec).normalize();
+                    if (helixAxis.lengthSq() < 0.1) helixAxis.set(0, 1, 0); // Fallback if cross product fails
+
+                } else if (rand < 0.45 && aminoAcidsData.length - i >= 4) { // Start Sheet (20% chance, min length 4)
+                    currentStructure = 'sheet';
+                    remainingInStructure = getRandomInt(4, 10, randomFunc); // Use seeded PRNG
+                    // Sheet direction will tend to persist, maybe slight curve
+                    // Use seeded random for the bend
+                    direction.add(tempVec2.set(randomComponent(randomFunc), randomComponent(randomFunc), randomComponent(randomFunc)).multiplyScalar(0.1)).normalize();
+
+                } else { // Default to Coil (55% chance or if near end)
+                    currentStructure = 'coil';
+                    remainingInStructure = getRandomInt(3, 8, randomFunc); // Use seeded PRNG
+                }
+                 // Ensure structure doesn't exceed remaining AAs
+                 remainingInStructure = Math.min(remainingInStructure, aminoAcidsData.length - i);
+            }
+
+
+            // --- Calculate Position based on Structure ---
+            if (i > 0) {
+                previousPosition.copy(currentPosition);
+
+                // Move base position forward
+                currentPosition.addScaledVector(direction, bondDistance);
+
+                // Apply structure-specific modifications to direction for the *next* step
+                switch (currentStructure) {
+                    case 'helix':
+                        // Rotate the direction vector around the helix axis
+                        direction.applyAxisAngle(helixAxis, helixAngleStep);
+                        // Optional: Add a slight drift to the helix axis itself over time (use seeded random)
+                        helixAxis.lerp(tempVec2.set(randomComponent(randomFunc), randomComponent(randomFunc), randomComponent(randomFunc)).normalize(), 0.05).normalize();
+                        break;
+                    case 'sheet':
+                        // Keep direction relatively stable, maybe slight random wobble (use seeded random)
+                        direction.add(tempVec2.set(randomComponent(randomFunc), randomComponent(randomFunc), randomComponent(randomFunc)).multiplyScalar(0.05)).normalize();
+                        break;
+                    case 'coil':
+                    default:
+                        // Apply larger random changes for coil (use seeded random)
+                        const axisY = new THREE.Vector3(0, 1, 0);
+                        const axisZ = new THREE.Vector3(0, 0, 1);
+                        direction.applyAxisAngle(axisY, (randomFunc() - 0.5) * 0.6); // Yaw
+                        direction.applyAxisAngle(axisZ, (randomFunc() - 0.5) * 0.6); // Pitch
+                        direction.normalize();
+                        // Occasionally make a bigger turn (use seeded random)
+                        if (randomFunc() < 0.1) {
+                             direction.applyAxisAngle(axisY, (randomFunc() - 0.5) * Math.PI / 2);
+                        }
+                        break;
+                }
+                direction.normalize(); // Ensure unit vector
+
+            } else {
+                 // First amino acid at origin
+                 currentPosition.set(0, 0, 0);
+                 previousPosition.set(0,0,0); // Initialize previous for first bond
+            }
+
+            // --- Create Amino Acid Sphere ---
+            const sphereGeometry = new THREE.SphereGeometry(sphereRadius, 16, 12);
+            const sphereMaterial = new THREE.MeshStandardMaterial({
+                color: color,
+                roughness: 0.5,
+                metalness: 0.1
+            });
+            const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+            sphere.position.copy(currentPosition);
+            sphere.userData = { type: 'aminoAcid', info: aa, index: i, structure: currentStructure }; // Store structure type
+            peptideGroup.add(sphere);
+
+            // --- Create Peptide Bond (Cylinder) ---
+            if (i > 0) {
+                const bondVector = tempVec.subVectors(currentPosition, previousPosition); // Use tempVec
+                const bondLength = bondVector.length();
+                // Ensure bond length isn't zero (can happen with complex paths)
+                if (bondLength > 0.01) {
+                    const bondGeometry = new THREE.CylinderGeometry(bondRadius, bondRadius, bondLength, 8);
+                    const bondMaterial = new THREE.MeshStandardMaterial({
+                        color: colors.bond,
+                        roughness: 0.8,
+                        metalness: 0.0
+                    });
+                    const bondCylinder = new THREE.Mesh(bondGeometry, bondMaterial);
+
+                    // Position the cylinder halfway between the spheres
+                    bondCylinder.position.copy(previousPosition).addScaledVector(bondVector, 0.5);
+
+                    // Orient the cylinder
+                    bondCylinder.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), bondVector.normalize());
+
+                    peptideGroup.add(bondCylinder);
+                }
+            }
+
+            remainingInStructure--; // Decrement counter
+        }
+
+        // --- Adjust Camera to Fit the Peptide ---
+        if (aminoAcidsData.length > 0) {
+            setTimeout(() => { // Use setTimeout to ensure bounding box is calculated correctly
+                const boundingBox = new THREE.Box3().setFromObject(peptideGroup);
+                const center = new THREE.Vector3();
+                const size = new THREE.Vector3();
+                boundingBox.getCenter(center);
+                boundingBox.getSize(size);
+
+                if (!isFinite(size.x) || !isFinite(size.y) || !isFinite(size.z) || size.lengthSq() === 0) {
+                    console.warn("Invalid bounding box size. Resetting camera.");
+                    size.set(1, 1, 1); // Minimal size
+                    center.set(0,0,0); // Center at origin
+                }
+
+                const maxDim = Math.max(size.x, size.y, size.z);
+                const fov = camera.fov * (Math.PI / 180);
+                let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2));
+                cameraZ = Math.max(cameraZ, sphereRadius * 5); // Ensure minimum distance based on sphere size
+                cameraZ *= 1.6; // Add slightly more padding
+
+                const newCamPos = new THREE.Vector3(center.x + size.x / 5, center.y + size.y / 5, center.z + cameraZ); // Adjust offset slightly
+                camera.position.copy(newCamPos);
+                camera.lookAt(center);
+                controls.target.copy(center);
+                controls.update();
+            }, 0);
+        } else {
+            // Reset camera if no peptide
+            camera.position.set(0, 5, 15);
+            camera.lookAt(0, 0, 0);
+            controls.target.set(0, 0, 0);
+            controls.update();
+        }
+    }
+
+
+    // --- Original DNA/RNA Logic ---
+
+    function dnaToMrna(dna) {
+      // Assumes input dna is already cleaned and uppercase ATCG string
+      const dnaToMrnaMap = { 'A': 'A', 'T': 'U', 'C': 'C', 'G': 'G' };
+      return dna.split('').map(nucleotide => dnaToMrnaMap[nucleotide]).join('');
+    }
+
+    // --- Global convert function (accessible by button) ---
+    window.convert = function() {
+      const dnaInput = document.getElementById('dna').value; // Get raw input
+
+      // --- Clean the input ---
+      const cleanedDnaInput = dnaInput.replace(/[^ATCG]/gi, '');
+
+      // Display the cleaned DNA sequence in the output area
+      document.getElementById('cleanedDnaDisplay').textContent = cleanedDnaInput.toUpperCase(); // Show cleaned version
+
+      // Use the cleaned input for checks and processing
+      if (cleanedDnaInput.length === 0) {
+        alert("請輸入有效的DNA序列 (已自動移除空白、換行、'-'及無效字元)");
+        // Clear previous results if input becomes empty after cleaning
+        document.getElementById('mrna').textContent = '';
+        document.getElementById('aminoAcidsFull').textContent = '';
+        document.getElementById('aminoAcidsShort').textContent = '';
+        document.getElementById('aminoAcidsChinese').textContent = '';
+        drawPeptideStructure3D([]); // Clear 3D view (no PRNG needed here)
+        return;
+      }
+
+      // --- Generate Seed and PRNG ---
+      const seed = simpleHash(cleanedDnaInput);
+      const seededRandom = mulberry32(seed); // Create the PRNG instance for this conversion
+
+      // Process the cleaned DNA
+      const dna = cleanedDnaInput.toUpperCase(); // Ensure uppercase
+      const mrna = dnaToMrna(dna);
+      const aminoAcidsFull = [];
+      const aminoAcidsShort = [];
+      const aminoAcidsChinese = [];
+      const aminoAcidsData = []; // Array for 3D visualization data
+
+      for (let i = 0; i < mrna.length; i += 3) {
+        const codon = mrna.slice(i, i + 3);
+        // Ensure codon is complete (3 bases) before lookup
+        if (codon.length === 3) {
+            if (codonTable[codon]) {
+                const aaInfo = codonTable[codon];
+                aminoAcidsFull.push(aaInfo.full);
+                aminoAcidsShort.push(aaInfo.short);
+                aminoAcidsChinese.push(aaInfo.chinese);
+                aminoAcidsData.push(aaInfo);
+                if (aaInfo.property === 'stop') {
+                    break; // Stop translation and visualization
+                }
+            } else {
+                // Handle unknown codons
+                aminoAcidsFull.push("?");
+                aminoAcidsShort.push("?");
+                aminoAcidsChinese.push("未知");
+                aminoAcidsData.push({short: "?", full: "Unknown", chinese: "未知", property: "neutral"});
+            }
+        }
+         // If codon.length < 3, it's the end of sequence, ignore incomplete codon
+      }
+
+      // Display text results
+      document.getElementById('mrna').textContent = mrna;
+      document.getElementById('aminoAcidsFull').textContent = aminoAcidsFull.join("-");
+      document.getElementById('aminoAcidsShort').textContent = aminoAcidsShort.join("-");
+      document.getElementById('aminoAcidsChinese').textContent = aminoAcidsChinese.join("-");
+
+      // Draw the 3D structure using the seeded PRNG
+      drawPeptideStructure3D(aminoAcidsData, seededRandom); // Pass the PRNG instance
+    }
+
+    // --- Initialization ---
+    initThree(); // Set up the Three.js environment on load
+
+    // Optional: Trigger conversion on Enter key
+    document.getElementById('dna').addEventListener('keypress', function(event) {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            window.convert(); // Call the globally exposed function
+        }
+    });
+
+     // Optional: Draw empty or example on load
+     drawPeptideStructure3D([]); // Start empty (no PRNG needed)
+     // Clear output fields on load as well
+     document.getElementById('cleanedDnaDisplay').textContent = '';
+     document.getElementById('mrna').textContent = '';
+     document.getElementById('aminoAcidsFull').textContent = '';
+     document.getElementById('aminoAcidsShort').textContent = '';
+     document.getElementById('aminoAcidsChinese').textContent = '';
+
+     // Example on load:
+     // document.getElementById('dna').value = 'ATG'.repeat(5) + 'GCG'.repeat(10) + 'GTG'.repeat(8) + 'CCC'.repeat(5) + 'AAA'.repeat(12) + 'TAG';
+     // window.convert();
+
+  </script>
+</body>
+</html>
