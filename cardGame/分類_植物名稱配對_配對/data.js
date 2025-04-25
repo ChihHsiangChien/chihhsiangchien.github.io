@@ -9,7 +9,7 @@ var cardData = [
   { name: "過貓", category: "蕨類" },
   { name: "腎蕨", category: "蕨類" },
   { name: "矮松", category: "裸子植物" },
-  { name: "臺灣二葉松", category: "裸子植物" },
+  { name: "二葉松", category: "裸子植物" },
   { name: "歐洲赤松", category: "裸子植物" },
   { name: "剛葉松", category: "裸子植物" },
   { name: "銀杏", category: "裸子植物" },

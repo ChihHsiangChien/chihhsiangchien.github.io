@@ -293,15 +293,36 @@ function checkClickedOverlapedCard(mouseX, mouseY) {
 
 // 在配對遊戲點卡片
 function clickIfMatch(event) {
+  console.log("clickIfMatch - isProcessing:", isProcessingClick, "Selected:", selectedCards.map(c => c.name));
+
+  // If already processing a pair, ignore this click
+  if (isProcessingClick) {
+    return;
+  }
+
   event.preventDefault(); // Prevent default touch events
   var rect = canvas.getBoundingClientRect();
   var { mouseX, mouseY } = getMouseCoordinates(event, rect);
   var selected = checkClickedCard(mouseX, mouseY); // 找出點到的卡片
-  if (selectedCards.length < 2) {
-    addToSelectedCards(selected, selectedCards); // 把點到的卡片放進 selectedCards
+
+  // Only process if a valid card was clicked
+  if (selected) {
+    // Only add if the card isn't already selected (prevents double-adding the same card)
+    // and if we don't already have 2 cards selected
+    if (!selectedCards.includes(selected) && selectedCards.length < 2) {
+        addToSelectedCards(selected, selectedCards); // 把點到的卡片放進 selectedCards
+        drawCards(cards); // <<<--- IMMEDIATELY REDRAW to show selection (red color)
+    }
+  } else {
+    // Clicked on empty space, do nothing
+    return;
   }
-  handleMatchingCards(); // 檢查是否同一個分類
-  drawCards(cards);
+
+  // Check if we now have two cards selected to start the matching process
+  if (selectedCards.length === 2) {
+    handleMatchingCards(); // 檢查是否同一個分類
+  }
+  // drawCards(cards);
 }
 
 // 在順序遊戲點卡片
@@ -624,45 +645,111 @@ function checkCardsPlacement() {
 
 // 處理兩張已選擇的卡片是否匹配
 function handleMatchingCards() {
+  console.log("handleMatchingCards - Setting isProcessing=true. Selected:", selectedCards.map(c => c.name));
+
   if (selectedCards.length === 2) {
-    var card1 = selectedCards[0];
-    var card2 = selectedCards[1];
+      // Start processing, prevent further clicks
+      isProcessingClick = true; // <--- SET FLAG
 
-    if (card1.category === card2.category) {
-      correctSound.play();
+      var card1 = selectedCards[0];
+      var card2 = selectedCards[1];
 
-      score += correctScore;
-      scoreElement.innerText = "score: " + score;
+      if (card1.category === card2.category) {
+          correctSound.play();
+          score += correctScore;
+          scoreElement.innerText = "score: " + score;
 
-      setTimeout(function () {
-        // Matched: Remove the cards from the array
-        var index1 = cards.indexOf(card1);
-        cards.splice(index1, 1);
-        var index2 = cards.indexOf(card2);
-        cards.splice(index2, 1);
-        // Reset the selected cards array
-        selectedCards = [];
+          setTimeout(function () {
+              // Matched: Remove the cards from the array
+              // It's safer to remove them by reference if possible,
+              // or ensure indices are correct *before* splicing twice.
+              // Removing higher index first avoids shifting issues for the second splice.
+              var index1 = cards.indexOf(card1);
+              var index2 = cards.indexOf(card2);
 
-        // Redraw the cards
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        drawCards(cards);
+              // Ensure both cards were found before splicing
+              if (index1 > -1 && index2 > -1) {
+                   // Remove the card with the higher index first
+                   console.log("Match Timeout - Before Splice - isProcessing:", isProcessingClick, "Indices:", index1, index2, "Cards:", cards.map(c => c.name));
 
-        if (cards.length == 0) {
-          youWin();
-        }
-      }, 200);
-    } else {
-      // Not matched
-      wrongSound.play();
-      score -= wrongScore;
-      scoreElement.innerText = "score: " + score;
-      setTimeout(function () {
-        selectedCards = [];
-        drawCards(cards);
-      }, 200);
-    }
+                   if (index1 > index2) {
+                        cards.splice(index1, 1);
+                        cards.splice(index2, 1);
+                   } else {
+                        cards.splice(index2, 1);
+                        cards.splice(index1, 1);
+                   }
+              } else {
+                   // Handle potential error: one or both cards already removed?
+                   console.error("Error: Could not find cards to remove.", card1, card2, index1, index2);
+              }
+
+
+              // Reset the selected cards array
+              selectedCards = [];
+
+              // Redraw the cards
+              ctx.clearRect(0, 0, canvas.width, canvas.height);
+              drawCards(cards);
+
+              if (cards.length == 0) {
+                  youWin();
+              }
+
+              // Finished processing, allow clicks again
+              console.log("Match Timeout - Setting isProcessing=false");
+
+              isProcessingClick = false; // <--- RESET FLAG
+          }, 200); // Delay slightly to show the match
+      } else {
+          // Not matched
+          wrongSound.play();
+          score -= wrongScore;
+          scoreElement.innerText = "score: " + score;
+          setTimeout(function () {
+              // 答錯了，就原地呈現卡片的category
+
+
+
+              // Show the category of the cards
+              // Use drawCards to calculate the font size
+              var fontSize = fontRatio * cardWidth;
+              if (card1.category.length > maxLength) {
+                var ratio = maxLength / card1.category.length; // 計算縮小比例
+                fontSize *= ratio; // 乘上比例以縮小字體大小
+              }
+
+              setTimeout(function () {
+                ctx.fillStyle = "red";
+                ctx.font = fontSize + "px Arial";
+                  ctx.fillText(
+                    card1.category,
+                    card1.x + cardWidth * 0.1,
+                    card1.y + cardHeight * fontRatio * fontHeightRatio
+                  );
+                  
+                  ctx.font = fontSize + "px Arial";
+                  ctx.fillText(
+                    card2.category,
+                    card2.x + cardWidth * 0.1,
+                    card2.y + cardHeight * fontRatio * fontHeightRatio                    
+                );
+              }, 100);
+
+              // Reset the selected cards array
+
+              selectedCards = [];
+              drawCards(cards); // Redraw to deselect visually
+              // Finished processing, allow clicks again
+              console.log("Mismatch Timeout - Setting isProcessing=false");
+
+              isProcessingClick = false; // <--- RESET FLAG
+          }, 200); // Delay slightly to show the second card before deselecting
+      }
   }
+  // No need for isProcessingClick = false here, it's handled in the timeouts
 }
+
 
 //檢查新加入的selectedCards是否按照順序
 function handleOrderingCards() {

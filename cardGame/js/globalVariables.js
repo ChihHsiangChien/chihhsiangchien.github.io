@@ -72,3 +72,5 @@ var cardsFacing = true;
 
 // gameType
 var gameType;
+
+var isProcessingClick = false;
