@@ -1,6 +1,6 @@
 var categoryNames = [["蘚苔", "蕨類", "裸子植物", "被子植物"]];
 var cardData = [
-  { name: "地錢", category: "蘚苔" },
+  { name: "蘚苔", category: "蘚苔" },
   { name: "土馬騌", category: "蘚苔" },
   { name: "水苔", category: "蘚苔" },
   { name: "地錢", category: "蘚苔" },
@@ -18,7 +18,7 @@ var cardData = [
   { name: "松樹", category: "裸子植物" },
   { name: "綠豆", category: "雙子葉植物" },  
   { name: "花生", category: "雙子葉植物" },
-  { name: "綠豆", category: "雙子葉植物" },
+  { name: "豌豆", category: "雙子葉植物" },
   { name: "向日葵", category: "雙子葉植物" },
   { name: "菩提", category: "雙子葉植物" },
   { name: "油菜", category: "雙子葉植物" },
