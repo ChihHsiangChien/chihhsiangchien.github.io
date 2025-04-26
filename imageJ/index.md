@@ -1,8 +1,8 @@
 # 目錄
 
 * [簡介](README.md)
-請參考影像處理的詳細步驟：[影像處理流程](imageProcess.md)  
-[影像分析流程](workflow.md)
+* [影像前處理流程](workflow.md)  
+* 前處理的詳細步驟：[影像處理流程](imageProcess.md)  
 
 
 ## 主題一：ImageJ入門與影像處理
