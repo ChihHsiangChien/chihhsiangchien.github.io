@@ -8,7 +8,7 @@
 ### DeepImageJ
 1. 安裝配置
    ```
-   // 安裝插件
+   // 安裝plugin
    Help > Update... > Manage Update Sites
    // 選擇 DeepImageJ
    

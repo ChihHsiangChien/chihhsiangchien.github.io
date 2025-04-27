@@ -1,6 +1,5 @@
-# 影像前處理決策流程圖（含 ImageJ 操作指引）
+# 影像前處理決策方法
 
----
 
 ## 1. 是否影像太模糊或太銳利？
 
@@ -171,15 +170,3 @@
 7.  **輸出數據 (Data Output)**
     *   分析結果顯示在 ImageJ 的 `Results Table` 中。
     *   可將表格 `File > Save As...` 匯出成 `.csv` 或 `.txt` 文件，以便後續使用 Excel, Python (Pandas), R 等工具進行統計分析和繪圖。
-
----
-
-## 小結 (簡化版流程)
-
-1.  **影像讀取與預處理：** `去雜訊` (如 `Median` 或 `Gaussian Blur`)
-2.  **影像增強：** `增強對比` (如 `CLAHE` 或 `Histogram Equalization`) 或 `背景校正`
-3.  **影像分割：** `閾值處理` (如 `Otsu` 或 `Local Threshold`) 得到二值影像
-4.  **後處理：** `形態學修正` (如 `Open`, `Close`, `Watershed`) 清理和分離物件
-5.  **測量分析：** `粒子分析` (`Analyze Particles`) 提取特徵數據
-6.  **結果匯出：** 儲存 `Results Table`
-
