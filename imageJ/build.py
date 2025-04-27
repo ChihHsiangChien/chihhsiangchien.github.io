@@ -46,7 +46,7 @@ def convert_md_to_html(md_path):
 <body>
 
 <div id="toc">
-<h2><a href="index.html">主頁</a></h2>
+<h2><a href="index.html">回到首頁</a></h2>
 
 <div class="toc-container">
 {toc_html}

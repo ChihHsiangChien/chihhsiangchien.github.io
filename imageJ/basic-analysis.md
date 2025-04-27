@@ -72,7 +72,25 @@
 
 ## 基本測量功能
 
+### 測量參數配置
+- 使用 `Analyze > Set Measurements`
+- 常用測量項目：
+  - Area（面積）
+  - Mean gray value（平均灰度值）
+  - Integrated density（積分密度）
+  - Standard deviation（標準差）
+  - Min & max gray value（最大最小灰度值）
+  - Perimeter（周長）
+  - Shape descriptors（形狀描述子）
+
 ### 空間測量
+
+
+#### 空間校正
+- 比例尺設定
+- 單位轉換
+- 校正標準
+
 應用案例：
 1. 長度測量
    - 神經突觸長度測量

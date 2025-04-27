@@ -1,7 +1,7 @@
-# TrackMate插件應用指南
+# TrackMateplugin應用指南
 
 ## 簡介
-TrackMate是ImageJ/Fiji中強大的物體追蹤插件，特別適用於生物醫學研究中的細胞追蹤與動態分析。本章將詳細介紹TrackMate的使用方法和應用案例。
+TrackMate是ImageJ/Fiji中強大的物體追蹤plugin，特別適用於生物醫學研究中的細胞追蹤與動態分析。本章將詳細介紹TrackMate的使用方法和應用案例。
 
 ## 基本概念
 
