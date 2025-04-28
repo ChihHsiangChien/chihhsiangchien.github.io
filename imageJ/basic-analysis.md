@@ -174,10 +174,10 @@
 目標：測量50個細胞的面積並進行統計分析
 
 步驟：
-1. 開啟影像：File > Open...
-2. 設定比例尺：Analyze > Set Scale...
+1. 開啟影像：`File > Open...`
+2. 設定比例尺：`Analyze > Set Scale...`
 3. 設定測量項目：
-   Analyze > Set Measurements...
+   `Analyze > Set Measurements...`
    - Area
    - Mean gray value
    - Perimeter
@@ -194,7 +194,7 @@
 目標：分析細胞核和細胞質的螢光強度比值
 
 步驟：
-1. 分離通道：Image > Color > Split Channels
+1. 分離通道：`Image > Color > Split Channels`
 2. 設定測量參數：
    - Integrated density
    - Area
