@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>image-texture</title>
+<link rel="stylesheet" href="styles.css">
+<!-- KaTeX CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" integrity="sha384-wcIxkf4k558AjM3Yz3BBFQUbk/zgIYC2R0QpeeYb+TwlBVMrlgLqwRjRtGZiK7ww" crossorigin="anonymous">
+</head>
+<body>
+
+<div id="toc">
+<h2><a href="index.html">回到首頁</a></h2>
+<div class="toc-container">
+<div class="toc">
+<ul>
+<li><a href="#image-texture">影像紋理（Image Texture）</a><ul>
+<li><a href="#_1">什麼是影像紋理？</a></li>
+<li><a href="#_2">紋理的應用場景</a></li>
+<li><a href="#_3">紋理分析的理論基礎</a></li>
+<li><a href="#_4">常見的紋理分析方法</a></li>
+<li><a href="#glcm">GLCM（灰階共生矩陣）</a><ul>
+<li><a href="#glcm_1">GLCM 是什麼？</a></li>
+<li><a href="#glcm_2">GLCM 測量哪些特徵？</a></li>
+</ul>
+</li>
+<li><a href="#glcm_3">GLCM 計算範例</a><ul>
+<li><a href="#1">1. 設定計算條件</a></li>
+<li><a href="#2">2. 找出像素對</a></li>
+<li><a href="#3-glcm">3. 建立 GLCM</a></li>
+<li><a href="#4-glcm">4. 正規化 GLCM</a></li>
+<li><a href="#5">5. 計算特徵量</a></li>
+<li><a href="#6">6. 小結</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+
+</div>
+</div>
+<div id="content">
+<h1 id="image-texture">影像紋理（Image Texture）</h1>
+<h2 id="_1">什麼是影像紋理？</h2>
+<p>影像紋理是指影像中像素灰階分佈的局部變化模式，例如粗糙、平滑、規律、隨機等。<br />
+紋理特徵通常描述像素間的空間關係，能夠補充形狀與強度資訊，是生醫影像分析中重要的一環。</p>
+<hr />
+<h2 id="_2">紋理的應用場景</h2>
+<ul>
+<li><strong>腫瘤診斷</strong><br />
+  利用紋理特徵判斷腫瘤的良惡性（例如 MRI、超音波影像）。</li>
+<li><strong>組織分類</strong><br />
+  區分不同類型的生物組織（如肌肉、脂肪、纖維組織）。</li>
+<li><strong>疾病預測與分期</strong><br />
+  透過紋理變化預測疾病進程（如肝臟纖維化程度）。</li>
+<li><strong>醫學影像輔助診斷（CAD）系統</strong><br />
+  作為機器學習、深度學習模型的重要特徵來源。</li>
+</ul>
+<hr />
+<h2 id="_3">紋理分析的理論基礎</h2>
+<p>紋理分析的核心是量化影像中像素間的「灰階關係」，通常從以下角度描述：</p>
+<ul>
+<li><strong>灰階差異大小</strong>（對比度）</li>
+<li><strong>紋理的規律程度</strong>（均勻性）</li>
+<li><strong>資訊豐富程度</strong>（熵）</li>
+<li><strong>能量分佈</strong>（能量或二階矩）</li>
+</ul>
+<hr />
+<h2 id="_4">常見的紋理分析方法</h2>
+<ul>
+<li><strong>統計量方法（Statistical Methods）</strong><br />
+  直接統計像素灰階的分佈與關係，如 GLCM（灰階共生矩陣）、GLRLM（灰階游程矩陣）。</li>
+<li><strong>變換域方法（Transform-based Methods）</strong><br />
+  如傅立葉變換（FFT）、小波變換（Wavelet Transform），分析頻率與尺度特性。</li>
+<li><strong>結構模型（Structural Methods）</strong><br />
+  建立紋理的幾何或規則模型，例如紋理合成或馬可夫隨機場（MRF）。</li>
+<li><strong>深度學習方法（Deep Learning Methods）</strong><br />
+  使用卷積神經網絡（CNN）自動學習紋理特徵。</li>
+</ul>
+<hr />
+<h2 id="glcm">GLCM（灰階共生矩陣）</h2>
+<h3 id="glcm_1">GLCM 是什麼？</h3>
+<p><a href="glcm-interactive.html">GLCM互動範例</a>  </p>
+<p>GLCM（Gray-Level Co-occurrence Matrix）是一種最經典的統計量方法。<br />
+它記錄了影像中<strong>一對像素灰階值</strong>同時出現的頻率，依據特定<strong>方向</strong>和<strong>距離</strong>統計而得。</p>
+<p>舉例來說：
+- 在方向 0°，距離 1 的情況下，GLCM 記錄的是每個像素與<strong>右側相鄰像素</strong>的灰階關係。</p>
+<h3 id="glcm_2">GLCM 測量哪些特徵？</h3>
+<p>從 GLCM 可以計算出多種紋理特徵，常見包括：</p>
+<ul>
+<li><strong>Contrast（對比度）</strong><br />
+  測量鄰近像素灰階差異的平方平均值，反映影像紋理的「粗糙程度」。</li>
+<li><strong>Homogeneity（均勻性）</strong><br />
+  測量鄰近像素灰階差異的反比，灰階差異小則值高。</li>
+<li><strong>Energy（能量）</strong><br />
+  測量矩陣元素平方和，反映影像的「規則性」。</li>
+<li><strong>Entropy（熵）</strong><br />
+  測量影像灰階關係的「隨機度」，亂度高時熵大。</li>
+</ul>
+<hr />
+<h2 id="glcm_3">GLCM 計算範例</h2>
+<p>假設有一張 <span class="arithmatex">\(3   \times 3\)</span> 的灰階影像如下：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;"></th>
+<th style="text-align: center;"></th>
+<th style="text-align: center;"></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">100</td>
+<td style="text-align: center;">100</td>
+<td style="text-align: center;">101</td>
+</tr>
+<tr>
+<td style="text-align: center;">100</td>
+<td style="text-align: center;">101</td>
+<td style="text-align: center;">102</td>
+</tr>
+<tr>
+<td style="text-align: center;">101</td>
+<td style="text-align: center;">102</td>
+<td style="text-align: center;">102</td>
+</tr>
+</tbody>
+</table>
+<p>這裡的灰階值只有：100、101、102。</p>
+<h3 id="1">1. 設定計算條件</h3>
+<ul>
+<li><strong>方向</strong>：0°（向右）</li>
+<li><strong>距離</strong>：1 像素</li>
+</ul>
+<p>只考慮每個像素與右邊像素的組合關係。</p>
+<h3 id="2">2. 找出像素對</h3>
+<p>從影像中列出右側鄰居的像素對：</p>
+<ul>
+<li>(100, 100)</li>
+<li>(100, 101)</li>
+<li>(100, 101)</li>
+<li>(101, 102)</li>
+<li>(101, 102)</li>
+</ul>
+<h3 id="3-glcm">3. 建立 GLCM</h3>
+<p>列出灰階對應次數：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">i\j</th>
+<th style="text-align: center;">100</th>
+<th style="text-align: center;">101</th>
+<th style="text-align: center;">102</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">100</td>
+<td style="text-align: center;">1</td>
+<td style="text-align: center;">2</td>
+<td style="text-align: center;">0</td>
+</tr>
+<tr>
+<td style="text-align: center;">101</td>
+<td style="text-align: center;">0</td>
+<td style="text-align: center;">0</td>
+<td style="text-align: center;">2</td>
+</tr>
+<tr>
+<td style="text-align: center;">102</td>
+<td style="text-align: center;">0</td>
+<td style="text-align: center;">0</td>
+<td style="text-align: center;">0</td>
+</tr>
+</tbody>
+</table>
+<h3 id="4-glcm">4. 正規化 GLCM</h3>
+<p>將所有出現次數除以總像素對數（5 對）：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: center;">i\j</th>
+<th style="text-align: center;">100</th>
+<th style="text-align: center;">101</th>
+<th style="text-align: center;">102</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center;">100</td>
+<td style="text-align: center;">0.2</td>
+<td style="text-align: center;">0.4</td>
+<td style="text-align: center;">0</td>
+</tr>
+<tr>
+<td style="text-align: center;">101</td>
+<td style="text-align: center;">0</td>
+<td style="text-align: center;">0</td>
+<td style="text-align: center;">0.4</td>
+</tr>
+<tr>
+<td style="text-align: center;">102</td>
+<td style="text-align: center;">0</td>
+<td style="text-align: center;">0</td>
+<td style="text-align: center;">0</td>
+</tr>
+</tbody>
+</table>
+<h3 id="5">5. 計算特徵量</h3>
+<p><strong>(1) Contrast（對比度）</strong></p>
+<div class="arithmatex">\[
+Contrast = \sum_{i,j} (i-j)^2 \times P(i,j)
+\]</div>
+<p>計算各元素：</p>
+<ul>
+<li>(100,100): <span class="arithmatex">\((100-100)^2 \times 0.2 = 0\)</span></li>
+<li>(100,101): <span class="arithmatex">\((100-101)^2 \times 0.4 = 1 \times 0.4 = 0.4\)</span></li>
+<li>(101,102): <span class="arithmatex">\((101-102)^2 \times 0.4 = 1 \times 0.4 = 0.4\)</span></li>
+</ul>
+<p>加總：</p>
+<div class="arithmatex">\[
+Contrast = 0 + 0.4 + 0.4 = 0.8
+\]</div>
+<hr />
+<p><strong>(2) Homogeneity（均勻性）</strong></p>
+<div class="arithmatex">\[
+Homogeneity = \sum_{i,j} \frac{P(i,j)}{1 + |i-j|}
+\]</div>
+<p>計算各元素：</p>
+<ul>
+<li>(100,100): <span class="arithmatex">\(\frac{0.2}{1+0} = 0.2\)</span></li>
+<li>(100,101): <span class="arithmatex">\(\frac{0.4}{1+1} = 0.2\)</span></li>
+<li>(101,102): <span class="arithmatex">\(\frac{0.4}{1+1} = 0.2\)</span></li>
+</ul>
+<p>加總：</p>
+<div class="arithmatex">\[
+Homogeneity = 0.2 + 0.2 + 0.2 = 0.6
+\]</div>
+<hr />
+<p><strong>(3) Entropy（熵）</strong></p>
+<div class="arithmatex">\[
+Entropy = -\sum_{i,j} P(i,j) \log_2(P(i,j))
+\]</div>
+<p>計算各元素（取對數基底 2）：</p>
+<ul>
+<li>(100,100): <span class="arithmatex">\(-0.2 \times \log_2(0.2) \approx 0.464\)</span> </li>
+<li>(100,101): <span class="arithmatex">\(-0.4 \times \log_2(0.4) \approx 0.528\)</span> </li>
+<li>(101,102): <span class="arithmatex">\(-0.4 \times \log_2(0.4) \approx 0.528\)</span> </li>
+</ul>
+<p>加總：</p>
+<div class="arithmatex">\[
+Entropy \approx 0.464 + 0.528 + 0.528 = 1.52
+\]</div>
+<hr />
+<h3 id="6">6. 小結</h3>
+<p>這張小影像的 GLCM 特徵是：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">特徵</th>
+<th style="text-align: left;">數值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">Contrast</td>
+<td style="text-align: left;">0.8</td>
+</tr>
+<tr>
+<td style="text-align: left;">Homogeneity</td>
+<td style="text-align: left;">0.6</td>
+</tr>
+<tr>
+<td style="text-align: left;">Entropy</td>
+<td style="text-align: left;">1.52</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<!-- Mermaid JS -->
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({}); // Keep double braces for literal JS object
+  mermaid.run({ nodes: document.querySelectorAll('.language-mermaid') }); // Keep double braces
+</script>
+
+<!-- KaTeX JS -->
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoBPJpTUs74ddyc4bFZSM1TVlQDA60VBbJS0oA934VSz82sBx1X7kSx2ATBDIyd" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk" crossorigin="anonymous"></script>
+<!-- *** CORRECTED SCRIPT WITH ${...} ESCAPING *** -->
+        <script>
+            document.addEventListener("DOMContentLoaded", function() {
+                renderMathInElement(document.body, {
+                    delimiters: [
+                        { left: '$$',  right: '$$',  display: true },
+                        { left: '\\[', right: '\\]', display: true },
+                        { left: '\\(', right: '\\)', display: false }
+                    ],
+                    ignoredTags: ['script','noscript','style','textarea','pre','code'],
+                    throwOnError: false
+                });
+            });
+        </script>
+
+</body>
+</html>

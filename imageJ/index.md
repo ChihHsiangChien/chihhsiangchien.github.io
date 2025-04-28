@@ -24,6 +24,9 @@
 - [細胞核分割實作](nucleus-segmentation.md)
 - [自動標記與分類](auto-classification.md)
 
+# 影像分析
+- [影像紋理分析](image-texture.md)
+
 # 進階影像分析
 
 - [多通道分析](multichannel-analysis.md)
