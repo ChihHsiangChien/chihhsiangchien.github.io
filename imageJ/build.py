@@ -19,21 +19,23 @@ def convert_md_to_html(md_path):
     md_text = convert_links(md_text)
 
     # 使用 markdown 函式庫產生 HTML 和 TOC
-    # 加入 'tables' 擴充功能
-    md = markdown.Markdown(extensions=[
-        TocExtension(toc_depth='1-3', permalink=False),
-        'tables',  # <--- 加入這個擴充功能
-        'markdown.extensions.fenced_code',
-        'markdown.extensions.fenced_code', # 處理 ``` ``` 程式碼區塊
-        # 如果需要其他擴充功能，也可以加在這裡，例如：
-        
-        'markdown.extensions.attr_list'  # <--- 加入這個        
-        #'markdown.extensions.codehilite', # 程式碼高亮 (需安裝 Pygments)        
+    md = markdown.Markdown(
+        extensions=[
+            TocExtension(toc_depth='1-3', permalink=False),
+            'tables',
+            'markdown.extensions.fenced_code',
+            'markdown.extensions.attr_list',
+            'pymdownx.arithmatex'
+        ],
+        extension_configs={
+            'pymdownx.arithmatex': {
+                'generic': True
+            }
+        }
+    )
 
-
-    ])
     html_body = md.convert(md_text)
-    toc_html = md.toc # 直接取得 markdown 產生的 TOC
+    toc_html = md.toc
 
     # 拼成完整的 HTML
     html_full = f"""<!DOCTYPE html>
@@ -42,47 +44,45 @@ def convert_md_to_html(md_path):
 <meta charset="UTF-8">
 <title>{os.path.splitext(os.path.basename(md_path))[0]}</title>
 <link rel="stylesheet" href="styles.css">
+<!-- KaTeX CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" integrity="sha384-wcIxkf4k558AjM3Yz3BBFQUbk/zgIYC2R0QpeeYb+TwlBVMrlgLqwRjRtGZiK7ww" crossorigin="anonymous">
 </head>
 <body>
 
 <div id="toc">
 <h2><a href="index.html">回到首頁</a></h2>
-
 <div class="toc-container">
 {toc_html}
 </div>
 </div>
-
 <div id="content">
 {html_body}
 </div>
 
-<!-- 如果需要使用 Mermaid JS，請取消註解以下代碼並確保 Mermaid JS 已正確安裝 -->
-<!-- Mermaid 是一個用於生成圖表和流程圖的 JavaScript 庫。 -->
-<!-- 官方文件: https://mermaid-js.github.io/mermaid/#/ -->
+<!-- Mermaid JS -->
 <script type="module">
-  // 初始化 Mermaid JS，啟用自動渲染
   import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.esm.min.mjs';
-  // 設定 Mermaid 的配置
-  mermaid.initialize({{
-    startOnLoad: true,
-    theme: 'neutral',
-    flowchart: {{
-      curve: 'linear'
-    }},
-    sequence: {{
-      actorFontSize: 16,
-      actorMargin: 10,
-      boxTextMargin: 6,
-      noteMargin: 10,
-      messageMargin: 10
-    }}
-  }});  
-
-  // 自動渲染所有的 Mermaid 圖表
-  mermaid.run({{ nodes: document.querySelectorAll('.language-mermaid') }});
-
+  mermaid.initialize({{}}); // Keep double braces for literal JS object
+  mermaid.run({{ nodes: document.querySelectorAll('.language-mermaid') }}); // Keep double braces
 </script>
+
+<!-- KaTeX JS -->
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoBPJpTUs74ddyc4bFZSM1TVlQDA60VBbJS0oA934VSz82sBx1X7kSx2ATBDIyd" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk" crossorigin="anonymous"></script>
+<!-- *** CORRECTED SCRIPT WITH ${{...}} ESCAPING *** -->
+        <script>
+            document.addEventListener("DOMContentLoaded", function() {{
+                renderMathInElement(document.body, {{
+                    delimiters: [
+                        {{ left: '$$',  right: '$$',  display: true }},
+                        {{ left: '\\\\[', right: '\\\\]', display: true }},
+                        {{ left: '\\\\(', right: '\\\\)', display: false }}
+                    ],
+                    ignoredTags: ['script','noscript','style','textarea','pre','code'],
+                    throwOnError: false
+                }});
+            }});
+        </script>
 
 </body>
 </html>
@@ -96,8 +96,6 @@ def convert_md_to_html(md_path):
         f.write(html_full)
 
     print(f'✅ {md_path} → {output_path}')
-
-# ... (build_all 和 if __name__ == '__main__' 部分不變) ...
 
 def build_all():
     for filename in os.listdir(input_folder):
