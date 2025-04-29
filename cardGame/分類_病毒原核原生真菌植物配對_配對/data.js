@@ -90,5 +90,4 @@ var cardData = [
 { name: "傷寒", category: "原核" },
 { name: "霍亂", category: "原核" },
 { name: "球菌", category: "原核" },
-
 ];
