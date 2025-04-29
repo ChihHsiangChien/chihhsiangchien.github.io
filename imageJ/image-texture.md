@@ -70,6 +70,15 @@ GLCM（Gray-Level Co-occurrence Matrix）是一種最經典的統計量方法。
 - **Entropy（熵）**  
   測量影像灰階關係的「隨機度」，亂度高時熵大。
 
+| 特徵名 | 解釋 | 解讀 |
+|:---|:---|:---|
+| Contrast（對比度） | 鄰近像素間灰階差異的加權總和 | 高對比＝紋理粗糙 |
+| Homogeneity（均勻性） | 鄰近像素灰階越接近得分越高 | 高均勻＝紋理平滑 |
+| Entropy（熵） | 紋理資訊量，亂度高得分高 | 熵高＝紋理複雜、粗糙 |
+| Energy（能量） | GLCM元素的平方和，平滑紋理能量高 | 能量高＝紋理有序 |
+| Correlation（相關性） | 兩灰階值間的線性關係 | 依據影像特性解讀 |
+
+
 ---
 
 ## GLCM 計算範例
@@ -191,3 +200,26 @@ Entropy \approx 0.464 + 0.528 + 0.528 = 1.52
 | Contrast | 0.8 |
 | Homogeneity | 0.6 |
 | Entropy | 1.52 |
+
+# 使用imagej
+## 灰階化影像
+GLCM 的計算需要灰階影像，如果你的影像是彩色的，先將它轉換為灰階影像：`Image > Type > 8-bit`，將影像轉換為 8 位灰階影像。
+
+## 安裝 GLCM plugin
+[Texture Analyzer](https://imagej.net/ij/plugins/texture.html)
+
+## 計算 GLCM 特徵
+現在讓我們來運行 GLCM 分析：
+在 ImageJ 中，選擇 `Plugins > Texture > `。
+在彈出視窗中設置如下參數：
+- Distance: 設為 1，表示相鄰像素。
+- Angle: 可以選擇 0°（右方）、45°、90° 或 135°，這取決於你要分析的方向。對於標準情況，選擇 0°。
+- Levels: 設為 8 或 16，這取決於你影像的灰階範圍（通常 8 即可）。
+- Symmetric: 如果勾選，會計算對稱的 GLCM（不會區分 i 和 j 的順序），一般來說可以不勾選。
+
+## 查看計算結果
+計算完成後，ImageJ 會顯示一個結果表格，列出各種 GLCM 特徵，通常包括：
+- Contrast（對比度）
+- Homogeneity（均勻性）
+- Energy（能量）
+- Entropy（熵）
