@@ -78,4 +78,17 @@ var cardData = [
   { name: "稻", category: "單子葉植物" },
   { name: "蘭花", category: "單子葉植物" },
   { name: "水仙", category: "單子葉植物" },	
+  { name: "登革熱", category: "病毒" },	  
+  { name: "新冠肺炎", category: "病毒" },	    
+{ name: "小兒麻痺", category: "病毒" },
+{ name: "日本腦炎", category: "病毒" },
+{ name: "麻疹", category: "病毒" },
+{ name: "水痘", category: "病毒" },
+{ name: "病毒", category: "病毒" },
+{ name: "愛滋病", category: "病毒" },
+{ name: "肺結核", category: "原核" },
+{ name: "傷寒", category: "原核" },
+{ name: "霍亂", category: "原核" },
+{ name: "球菌", category: "原核" },
+
 ];
