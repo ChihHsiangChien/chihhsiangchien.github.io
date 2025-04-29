@@ -1,4 +1,4 @@
-var categoryNames = [["蘚苔", "蕨類", "裸子植物", "被子植物"]];
+var categoryNames = [["蘚苔", "蕨類", "裸子植物", "單子葉植物","雙子葉植物"]];
 var cardData = [
   { name: "蘚苔", category: "蘚苔" },
   { name: "土馬騌", category: "蘚苔" },
