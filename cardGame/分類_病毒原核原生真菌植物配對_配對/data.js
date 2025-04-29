@@ -51,6 +51,8 @@ var cardData = [
   { name: "鐵線蕨", category: "蕨類" },
   { name: "鳥巢蕨", category: "蕨類" },
   { name: "過貓", category: "蕨類" },
+  { name: "過溝菜蕨", category: "蕨類" },
+  { name: "山蘇花", category: "蕨類" },  
   { name: "腎蕨", category: "蕨類" },
   { name: "矮松", category: "裸子植物" },
   { name: "二葉松", category: "裸子植物" },
