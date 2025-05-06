@@ -15,8 +15,9 @@ class Game {
         this.correctEnemiesRemaining = 0; // 新增：追蹤剩下多少正確敵人
         this.isAdvancingNextRound = false; // Flag to prevent multiple next round triggers
         this.initialEnemyCountForRound = 0; // How many enemies started this round
-  
-        
+        this.lastShotTime = 0; // For shoot cooldown
+        this.shootCooldownTime = 300; // Milliseconds for shoot cooldown (adjust as needed)
+
         // Initialize the game only after data is loaded
         this.init();
     }
@@ -50,13 +51,46 @@ class Game {
         }
     }
 
+    updatePlayerPosition(boardX) { // boardX is the raw X coordinate from event, relative to game board's left edge
+        const playerWidth = this.player.offsetWidth || 50; // Player's actual width or fallback
+        // Assuming boardX is where the user's finger/mouse is, and they intend it to be the player's center.
+        let newPlayerLeft = boardX - (playerWidth / 2);
+
+        // Constrain player's left edge within the game board
+        this.playerX = Math.max(0, Math.min(this.gameBoard.offsetWidth - playerWidth, newPlayerLeft));
+        this.player.style.left = this.playerX + 'px';
+    }
+
     setupEventListeners() {
+        // Mouse move to control player
         document.addEventListener('mousemove', (e) => {
             const rect = this.gameBoard.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            this.playerX = Math.max(25, Math.min(this.gameBoard.offsetWidth - 25, mouseX));
-            this.player.style.left = this.playerX + 'px';
+            // Update player position if mouse is roughly over the game board area
+            if (e.clientX >= rect.left - player.offsetWidth && e.clientX <= rect.right + player.offsetWidth) { // Wider activation for mouse
+                this.updatePlayerPosition(e.clientX - rect.left);
+            }
         });
+
+        // Touch events for player movement (on the gameBoard)
+        this.gameBoard.addEventListener('touchstart', (e) => {
+            if (e.touches.length > 0) {
+                // e.preventDefault(); // Uncomment if tap on board shouldn't also shoot, but might interfere.
+                const rect = this.gameBoard.getBoundingClientRect();
+                this.updatePlayerPosition(e.touches[0].clientX - rect.left);
+            }
+        });
+
+        this.gameBoard.addEventListener('touchmove', (e) => {
+            e.preventDefault(); // Prevent page scrolling while dragging player
+            if (e.touches.length > 0) {
+                const rect = this.gameBoard.getBoundingClientRect();
+                // Update player position if touch is within game board horizontal bounds
+                const clientX = e.touches[0].clientX;
+                if (clientX >= rect.left && clientX <= rect.right) {
+                    this.updatePlayerPosition(clientX - rect.left);
+                }
+            }
+        }, { passive: false }); // passive: false is required for e.preventDefault() in touchmove
     }
 
     spawnNextFeature() {
@@ -156,14 +190,25 @@ class Game {
     }
 
     shoot() {
+        const now = performance.now();
+        if (!this.gameActive || (now - this.lastShotTime < this.shootCooldownTime)) {
+            return; // Cooldown active or game not active
+        }
+        this.lastShotTime = now;
+
         const bullet = document.createElement('div');
+        const playerWidth = this.player.offsetWidth || 50; // Get player width, fallback to 50
+        const bulletWidth = 10; // Bullet width from CSS (or define here)
+        // playerX is the left edge. Bullet should fire from player's center.
+        const bulletLeft = this.playerX + (playerWidth / 2) - (bulletWidth / 2);
+
         bullet.style.cssText = `
             position: absolute;
-            width: 10px;
+            width: ${bulletWidth}px;
             height: 20px;
             background: yellow;
             bottom: 70px;
-            left: ${this.playerX + 20}px;
+            left: ${bulletLeft}px;
         `;
         this.gameBoard.appendChild(bullet);
 
@@ -171,7 +216,7 @@ class Game {
             const bulletTop = bullet.offsetTop;
             if (bulletTop <= 0) {
                 clearInterval(bulletInterval);
-                bullet.remove();
+                if (bullet.parentNode) bullet.remove(); // Remove only if still in DOM
             } else {
                 bullet.style.top = (bulletTop - 5) + 'px';
                 this.checkCollisions(bullet, bulletInterval); // Pass interval ID
@@ -323,7 +368,7 @@ class Game {
 // Add click event listener to shoot
 // Using 'touchend' for better responsiveness on touch devices,
 // and 'click' as a fallback or for mouse users.
-function handleShootInput() {
+function handleShootInput(event) { // Added event parameter, though not strictly used with current cooldown
     const game = window.game;
     if (game && game.gameActive) {
         game.shoot();
@@ -331,7 +376,7 @@ function handleShootInput() {
 }
 
 document.addEventListener('click', handleShootInput);
-//document.addEventListener('touchend', handleShootInput);
+document.addEventListener('touchend', handleShootInput);
 
 // Start the game when the page loads
 window.addEventListener('load', () => {
