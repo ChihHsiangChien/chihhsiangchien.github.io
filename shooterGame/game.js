@@ -262,7 +262,9 @@ class Game {
                         setTimeout(() => this.spawnNextFeature(), 500); // 延遲 0.5 秒後出下一題
                     }                    
                 } else {
-                    this.score = Math.max(0, this.score - 10);
+                    //this.score = Math.max(0, this.score - 10);
+                    this.score -= 10; // 直接扣分，允許負分
+
                     this.scoreElement.textContent = this.score;
 
                     // Change background to red and leave it
