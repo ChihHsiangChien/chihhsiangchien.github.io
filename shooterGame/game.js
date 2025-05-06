@@ -331,7 +331,7 @@ function handleShootInput() {
 }
 
 document.addEventListener('click', handleShootInput);
-document.addEventListener('touchend', handleShootInput);
+//document.addEventListener('touchend', handleShootInput);
 
 // Start the game when the page loads
 window.addEventListener('load', () => {
