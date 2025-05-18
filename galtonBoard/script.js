@@ -5,9 +5,9 @@ const ballCountInput = document.getElementById('ballCount');
 
 const distributionContainer = document.getElementById('distribution');
 
-const width = 700;
-const height = 1000;
-canvas.width = width;
+let width = 700;
+let height = 600;
+canvas.width = width; // 設定初始寬度
 canvas.height = height;
 
 const ballCount = 500;
@@ -162,22 +162,33 @@ function drawBall(ball) {
     ctx.fill();
 }
 
+const yOffset = 0;  // 设置 Y 轴偏移量, 增加偏移量
+
 function drawBoard() {
     ctx.clearRect(0, 0, width, height);
     
     // 畫釘子
     pins.forEach(pin => {
         ctx.beginPath();
-        ctx.arc(pin.x, pin.y, pin.radius, 0, Math.PI * 2);
+        ctx.arc(pin.x, pin.y + yOffset, pin.radius, 0, Math.PI * 2);
         ctx.fillStyle = '#000';
         ctx.fill();
     });
+    
 }
 
 
 function updateDistribution() {
     distributionContainer.innerHTML = '';
     const maxBinHeight = Math.max(...bins);
+
+    // 計算畫布內容寬度
+    const leftMostPinX = pins[0].x;
+    const rightMostPinX = pins[pins.length - 1].x; // 假設pins按x座標排序
+    const contentWidth = rightMostPinX - leftMostPinX;
+
+    distributionContainer.style.width = `${contentWidth}px`; // 設定統計圖寬度
+    distributionContainer.style.marginLeft = `${leftMostPinX}px`;
     bins.forEach((count, index) => {
         const bin = document.createElement('div');
         bin.className = 'bin';
@@ -242,7 +253,7 @@ startButton.addEventListener('click', () => {
     }    
     balls.length = 0;  // Clear old balls
     for (let i = 0; i < ballCount; i++) {
-        balls.push(new Ball(1/2 * width, Math.random() * (-100), ballRadius));
+        balls.push(new Ball(width / 2 + (Math.random() - 0.5) * 50, Math.random() * (-100), ballRadius));
     }
     bins.fill(0);
     updateDistribution();
