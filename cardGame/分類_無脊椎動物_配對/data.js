@@ -25,7 +25,7 @@ var cardData = [
   { name: "蟹", category: "節肢動物" },
   { name: "蟬", category: "節肢動物" },
   { name: "衣魚", category: "節肢動物" },
-  { name: "頭蝨", category: "節肢動物" },
+  { name: "蟑螂", category: "節肢動物" },
   { name: "螞蟻", category: "節肢動物" },
   { name: "海星", category: "棘皮動物" },
   { name: "海膽", category: "棘皮動物" },
