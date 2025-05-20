@@ -6,7 +6,7 @@ from typing import List, Optional
 import sys
 
 class TileEditor:
-    def __init__(self, image_folder: str = "tileset3"):
+    def __init__(self, image_folder: str = "tileset"):
         self.image_folder = image_folder
         self.output_folder = os.path.join(image_folder, "output")
         self.target_tile_size = (32, 32)
