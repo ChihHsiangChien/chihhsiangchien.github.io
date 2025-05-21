@@ -9,8 +9,7 @@ class TileEditor:
     def __init__(self, image_folder: str = "tileset"):
         self.image_folder = image_folder
         self.output_folder = os.path.join(image_folder, "output")
-        self.target_tile_size = (32, 32)
-        self.tiles_per_row = 8
+        self.target_tile_size = (48, 48)
 
         # Create output directory if needed
         if not os.path.exists(image_folder):
@@ -380,49 +379,91 @@ class TileEditor:
         self.refresh_display()
 
     def save_tileset(self):
-        """Save the current tileset"""
+        """Save the current tileset, preserving the relative positions of tiles from the source."""
         try:
             filename_to_save = self.save_filename_var.get()
             if not filename_to_save:
                 messagebox.showerror("Error", "Filename cannot be empty.")
                 return
             if not filename_to_save.lower().endswith((".png", ".jpg", ".jpeg")):
-                filename_to_save += ".png" # Ensure it has a common image extension
-            # Get all tiles
-            tiles = []
+                filename_to_save += ".png"
+
             img_w, img_h = self.current_image.size
-            y = self.params["origin_y"]
+            orig_x = self.params["origin_x"]
+            orig_y = self.params["origin_y"]
+            tile_w_src = self.params["tile_w"]
+            tile_h_src = self.params["tile_h"]
+            offset_x_src = self.params["offset_x"]
+            offset_y_src = self.params["offset_y"]
             
-            while y + self.params["tile_h"] <= img_h:
-                x = self.params["origin_x"]
-                while x + self.params["tile_w"] <= img_w:
-                    tile = self.current_image.crop(
-                        (x, y, x + self.params["tile_w"], y + self.params["tile_h"]))
-                    tile = tile.resize(self.target_tile_size, Image.Resampling.NEAREST)
-                    tiles.append(tile)
-                    x += self.params["tile_w"] + self.params["offset_x"]
-                y += self.params["tile_h"] + self.params["offset_y"]
+            target_w, target_h = self.target_tile_size
 
-            if tiles:
-                # Create tileset image
-                rows = (len(tiles) + self.tiles_per_row - 1) // self.tiles_per_row
-                result = Image.new("RGBA", 
-                                 (self.tiles_per_row * self.target_tile_size[0],
-                                  rows * self.target_tile_size[1]))
+            if tile_w_src <= 0 or tile_h_src <= 0:
+                messagebox.showerror("Error", "Tile width (tile_w) and Tile height (tile_h) must be positive.")
+                return
 
-                # Paste tiles into tileset
-                for i, tile in enumerate(tiles):
-                    px = (i % self.tiles_per_row) * self.target_tile_size[0]
-                    py = (i // self.tiles_per_row) * self.target_tile_size[1]
-                    result.paste(tile, (px, py))
+            # Effective step size in the source image
+            step_w_src = tile_w_src + offset_x_src
+            step_h_src = tile_h_src + offset_y_src
 
-                # Save result
-                save_path = os.path.join(self.output_folder, filename_to_save)
-                result.save(save_path)
-                print(f"Saved: {save_path}")
+            # --- Determine the number of rows and columns of tiles to extract ---
+            extracted_rows_data = [] # To store lists of resized tiles per row
+            
+            current_y_scan = orig_y
+            max_cols_in_any_row = 0
+
+            while current_y_scan + tile_h_src <= img_h:
+                current_row_tiles = []
+                current_x_scan = orig_x
+                while current_x_scan + tile_w_src <= img_w:
+                    tile = self.current_image.crop((
+                        current_x_scan, 
+                        current_y_scan, 
+                        current_x_scan + tile_w_src, 
+                        current_y_scan + tile_h_src
+                    ))
+                    resized_tile = tile.resize(self.target_tile_size, Image.Resampling.NEAREST)
+                    current_row_tiles.append(resized_tile)
+                    
+                    if step_w_src <= 0: # Avoid infinite loop if step is not positive
+                        break 
+                    current_x_scan += step_w_src
+                
+                if current_row_tiles:
+                    extracted_rows_data.append(current_row_tiles)
+                    if len(current_row_tiles) > max_cols_in_any_row:
+                        max_cols_in_any_row = len(current_row_tiles)
+                
+                if step_h_src <= 0: # Avoid infinite loop if step is not positive
+                    break
+                current_y_scan += step_h_src
+
+            if not extracted_rows_data or max_cols_in_any_row == 0:
+                messagebox.showinfo("Info", "No tiles to save with current parameters.")
+                return
+
+            num_rows_extracted = len(extracted_rows_data)
+            num_cols_to_render = max_cols_in_any_row
+
+            output_image_width = num_cols_to_render * target_w
+            output_image_height = num_rows_extracted * target_h
+            result_image = Image.new("RGBA", (output_image_width, output_image_height))
+
+            for r_idx, row_of_tiles in enumerate(extracted_rows_data):
+                for c_idx, tile_image in enumerate(row_of_tiles):
+                    paste_x = c_idx * target_w
+                    paste_y = r_idx * target_h
+                    result_image.paste(tile_image, (paste_x, paste_y))
+            
+            save_path = os.path.join(self.output_folder, filename_to_save)
+            result_image.save(save_path)
+            print(f"Saved: {save_path}")
+            messagebox.showinfo("Success", f"Tileset saved to {save_path}")
 
         except Exception as e:
-            print(f"Error saving tileset: {e}")
+            import traceback
+            print(f"Error saving tileset: {e}\n{traceback.format_exc()}")
+            messagebox.showerror("Error", f"An error occurred while saving: {e}")
 
     def run(self):
         """Start the application"""

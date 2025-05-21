@@ -164,7 +164,7 @@ let tadpoles = [];
 
 // 創建蝌蚪實例
 function initializeTadpoles() {
-  const numberOfTadpoles = Math.floor(Math.random() * 1001) + 1000;
+  const numberOfTadpoles = Math.floor(Math.random() * 1001) + 1500;
   tadpoles = [];
 
   for (let i = 0; i < numberOfTadpoles; i++) {
