@@ -1,152 +1,175 @@
-# EcoQuest：動物探索者
+EcoQuest：動物探索者
+一、技術規格
+引擎：Phaser 3
 
-## 技術規格
+工具鏈：Codex CLI
 
-- 引擎：Phaser 3
-- 工具鏈：Codex CLI
-- 美術風格：像素化（pixel art）
-- 畫面解析度：1280x720（16:9）
-- Tile 大小：32x32 px
-- 使用 Tiled 製作地圖，匯出 JSON 格式
+畫面解析度：1280x720（16:9）
 
----
+Tile 大小：48x48 px
 
-## 核心玩法
+地圖：使用 Tiled 編輯器製作，匯出 JSON 格式
 
-玩家操控角色探索整合六種生態地形的大地圖，並依指示收集特定動物。每收集一種動物，即顯示該動物的教育資訊，例如棲息地、生態功能與保育狀況。
+Tileset：所有地圖共用一張 tileset.png
 
----
+美術風格：像素風（Pixel Art）
 
-## 生態地形分區
+二、遊戲核心架構
+1. 世界地圖 + 各生態區地圖（Biome）
+使用同一張 tileset.png，搭配不同的 tilemap JSON 製作多張地圖。
 
-地圖為 Tilemap 結構，由以下六大區域構成：
+世界地圖（WorldScene）供玩家點選進入不同的 biome。
 
-| 地形     | 區域大小（tiles） | 描述                          |
-|----------|-------------------|-------------------------------|
-| 山地     | 20 x 20           | 岩石、高地、灰地              |
-| 平原     | 20 x 20           | 草地、泥地、野花              |
-| 森林     | 20 x 20           | 樹木、灌木、落葉              |
-| 草原     | 20 x 20           | 淺黃草、小丘、低矮灌木        |
-| 潮間帶   | 20 x 20           | 沙灘、岩岸、水痕              |
-| 海洋     | 20 x 20           | 淺海、深海、珊瑚              |
+每個 biome 使用獨立的場景與地圖（BiomeScene）。
 
----
+地圖切換可透過場景切換或 tile 邊界觸發。
 
-## 遊戲角色
+2. 動物互動與任務目標
+每張 biome 地圖中隨機產生背景動物與迷路動物。
 
-### 玩家角色
+玩家需在各 biome 找到迷路動物，觸發問答後帶回原始 biome。
 
-- 角色尺寸：32x32 px 像素角色
-- 可四向移動（WASD 或方向鍵）
-- 具備與動物互動的能力（按 E）
+答對題目後動物會跟隨玩家（貪吃蛇效果）。
 
-### 生物角色
+成功帶回正確 biome 即完成任務，記錄進度。
 
-## 凍原
-植物：地衣、草、灌木
-動物：
+3. 問答系統
+問答資料以 JSON 儲存，並附有 questionId。
 
-## 森林
-動物：五色鳥、穿山甲、台灣水鹿
+玩家與動物互動時抽選尚未回答過的題目。
 
-## 草原
-動物：羚羊、斑馬、長頸鹿、疣豬、獅子、鬣狗
+題目正確才能帶走動物，錯誤則無法跟隨。
 
-## 沙漠
-動物：駱駝、跳鼠、沐霧甲蟲、響尾蛇、駱駝、沙漠玫瑰
+三、生態地形與動物配置
+地形	Tilemap 名稱	描述	範例動物
+山地	mountain	岩石、高地、灰地	雪豹、山羊
+森林	forest	樹木、灌木、落葉	穿山甲、五色鳥、水鹿
+草原	grassland	淺黃草、丘陵	羚羊、斑馬、疣豬、獅子
+沙漠	desert	沙丘、仙人掌	駱駝、跳鼠、霧甲蟲、響尾蛇
+湖泊	lake	淡水水域、岸邊草叢	吳郭魚、翠鳥、螃蟹
+溪流	stream	流水、石塊	貝類、魚、昆蟲、蝦蟹
+河口	estuary	紅樹林、泥灘	彈塗魚、招潮蟹、小白鷺
+潮間帶	tidal_zone	沙灘、水痕	方蟹、海藻
+淺海區	coastal	藻類、礁岩	海龜、海豚
+大洋區	ocean	深海、浮游藻類	珊瑚、魚、蝦
 
-## 湖泊池塘
-動物：昆蟲、螺、蝦、蟹、吳郭魚、草魚、翠鳥
+四、遊戲流程與互動邏輯
+玩家角色
+尺寸：48x48 px
 
-## 溪流
-動物：昆蟲、螺、貝、蝦、蟹、魚
+移動：四向（WASD）
 
-## 河口
-植物：蘆葦、紅樹林
-動物：沙蠶、蝦、螃蟹、彈塗魚、招潮蟹、小白鷺
+完整支援觸控螢幕
 
-## 潮間帶
-植物：海藻
-動物：方蟹
+功能：靠近動物並按 E 鍵互動
 
-## 淺海區
-植物：大型藻類
-動物：海龜、海豚
+跟隨動物（迷路動物）
+初始分布於錯誤 biome
 
-## 大洋區
-植物：浮游藻類
-動物：魚、蝦、蟹、貝、珊瑚蟲
+互動觸發問答（從題庫中抽取尚未出現的題目）
 
-    "Camel", 
-    "long-eared jerboa", 
-    "Fog-basking beetle",
-    "Rattlesnake",
-    "Desert rose",
-    "Dragonfly",
-    "Snail",
-    "Shrimp",
-    "Crab",
-    "Tilapia",
-    "Grass carp",
-    "Kingfisher",
-    "Clam",
-    "Fish",
-    "Reed",
-    "Mangrove",
-    "Nereis",
-    "Mud crab",
-    "Mudskipper",
-    "Fiddler crab",
-    "Little egret",
-    "Seaweed",
-    "Square crab",
-    "Macroalgae",
-    "Coral polyp"
+答對後成為跟隨角色（陣列方式、貪吃蛇邏輯）
 
+跟隨途中不可再次互動
 
+抵達原始 biome 後移除跟隨，顯示教育資訊
 
-- 每種動物以 sprite 呈現，可互動
-- 互動後顯示一張教育資訊卡（含圖文）
+五、資料結構與檔案組織
+檔案結構
 
----
+project/
+├── assets/
+│   ├── tileset.png               # 共用地圖素材
+│   ├── biomes/
+│   │   ├── forest.json           # 每個 biome 的 tilemap
+│   ├── sprites/
+│   │   ├── animals.png
+│   │   └── player.png
+├── data/
+│   ├── stray_animals.json        # 迷路動物資訊
+│   ├── biomes.js                 # 各 biome 動物對照表
+│   └── questions.json            # 問答題庫
+├── scenes/
+│   ├── WorldScene.js             # 世界地圖
+│   ├── BiomeScene.js             # 各地圖共用邏輯
+│   ├── QuizScene.js              # 問答場景
+├── objects/
+│   ├── Player.js
+│   └── Animal.js
+├── main.js
+└── index.html
+迷路動物資料格式（stray_animals.json）
+```json
 
-## 使用者介面（UI）
+[
+  {
+    "id": "camel_01",
+    "type": "camel",
+    "originBiome": "desert",
+    "currentBiome": "grassland",
+    "x": 120,
+    "y": 200,
+    "questionId": "q_13"
+  }
+]
+```
+問答資料（questions.json）
+```json
+[
+  {
+    "id": "q_13",
+    "question": "駱駝適合生活在哪種環境？",
+    "options": ["沙漠", "森林", "湖泊", "草原"],
+    "answer": "沙漠"
+  }
+]
+```
+動物圖像資料（可選分離）
+```json
+{
+  "camel": {
+    "spritesheet": "camel.png",
+    "frameWidth": 48,
+    "frameHeight": 48,
+    "animations": {
+      "idle": [0],
+      "walk": [1, 2, 3]
+    }
+  }
+}
+```
+六、程式建議架構
+BiomeManager 範例
+js
+複製
+編輯
+class BiomeManager {
+  constructor(scene) {
+    this.scene = scene;
+    this.currentAnimals = [];
+  }
 
-- 當前目標指示（例如：「尋找：松鼠」）
-- 動物圖鑑進度條
-- 教育資訊面板（動物互動時顯示）
+  async loadBiomeCharacters(biomeName) {
+    const data = await fetch(`data/biomes/${biomeName}.json`).then(r => r.json());
+    this.clearAll();
 
----
+    for (const animal of data.strayAnimals) {
+      const sprite = this.scene.add.sprite(animal.x, animal.y, animal.type);
+      this.currentAnimals.push(sprite);
+    }
+  }
 
-## 基礎功能設計
+  clearAll() {
+    this.currentAnimals.forEach(a => a.destroy());
+    this.currentAnimals = [];
+  }
+}
+七、效能與擴充建議
+共用 tileset：所有 tilemap 使用同一張 tileset.png 降低記憶體。
 
-- 載入地圖與 tileset 圖片
-- 在地圖上生成玩家角色與動物 sprite
-- 玩家靠近動物並按下 E 鍵後觸發對話框
-- 記錄已收集動物進度
+懶加載資源：僅載入當前 biome 所需動物素材。
 
----
+背景角色：使用 Group 隨機生成，不儲存狀態。
 
-## 檔案結構建議
+可擴充設計：支援動物變裝、季節變化等進階特性。
 
-/assets
-/tilesets/kenney-ecosystem.png
-/maps/eco-map.json
-/sprites/player.png
-/sprites/animals/
-turtle.png
-squirrel.png
-...
-/scenes
-MainScene.js
-/spec.md
-/index.html
-/game.js
-
-
----
-
-
-## 備註
-
-本遊戲為教育用途，圖像採開源像素素材，遊戲不與 AI agent 互動，僅使用 AI 作為開發輔助工具。

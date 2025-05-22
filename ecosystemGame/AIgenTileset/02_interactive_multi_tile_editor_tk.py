@@ -5,36 +5,57 @@ from PIL import Image, ImageTk
 from typing import List, Optional
 import sys
 
+class Config:
+    """Configuration settings for the Tile Editor."""
+    IMAGE_FOLDER_DEFAULT: str = "generated_tilesets"
+    OUTPUT_FOLDER_NAME: str = "generated_tilesets_output"  # Name of the subfolder for output
+    TARGET_TILE_SIZE: tuple[int, int] = (48, 48)
+    ALLOWED_EXTENSIONS: tuple[str, ...] = (".png", ".jpg", ".jpeg")
+
+    # Initial parameters for tile cutting
+    INITIAL_PARAMS: dict[str, int] = {
+        "origin_x": 0,
+        "origin_y": 0,
+        "tile_w": 40,
+        "tile_h": 40,
+        "offset_x": 0,
+        "offset_y": 0,
+    }
+
+    # Preview settings
+    PREVIEW_TILE_DISPLAY_SIZE: int = 50
+    PREVIEW_GRID_COLS: int = 4
+    PREVIEW_GRID_ROWS: int = 4
+    PREVIEW_TILE_LIMIT: int = PREVIEW_GRID_COLS * PREVIEW_GRID_ROWS # Max tiles in preview
+
+    # UI and Interaction
+    ZOOM_MIN: float = 0.1
+    ZOOM_MAX: float = 5.0
+    ZOOM_STEP_MULTIPLIER: float = 0.9 # For zooming out, 1/0.9 for zooming in
+
+
 class TileEditor:
-    def __init__(self, image_folder: str = "tileset"):
+    def __init__(self, image_folder: str = Config.IMAGE_FOLDER_DEFAULT):
         self.image_folder = image_folder
-        self.output_folder = os.path.join(image_folder, "output")
-        self.target_tile_size = (48, 48)
+        self.output_folder = os.path.join(self.image_folder, Config.OUTPUT_FOLDER_NAME)
+        self.target_tile_size = Config.TARGET_TILE_SIZE
 
         # Create output directory if needed
-        if not os.path.exists(image_folder):
-            print(f"Error: Image folder '{image_folder}' does not exist!")
+        if not os.path.exists(self.image_folder):
+            print(f"Error: Image folder '{self.image_folder}' does not exist!")
             sys.exit(1)
         os.makedirs(self.output_folder, exist_ok=True)
 
-        # Parameters for tile cutting
-        self.params = {
-            "origin_x": 0,
-            "origin_y": 0,
-            "tile_w": 40,
-            "tile_h": 40,
-            "offset_x": 0,
-            "offset_y": 0,
-        }
+        self.params = Config.INITIAL_PARAMS.copy()
 
         # Load all image files
-        self.image_files = [f for f in os.listdir(image_folder) 
-                           if f.lower().endswith((".png", ".jpg", ".jpeg"))]
+        self.image_files = [f for f in os.listdir(self.image_folder)
+                           if f.lower().endswith(Config.ALLOWED_EXTENSIONS)]
         if not self.image_files:
-            print(f"Error: No image files found in '{image_folder}'!")
+            print(f"Error: No image files found in '{self.image_folder}'!")
             sys.exit(1)
 
-        self.image_paths = [os.path.join(image_folder, f) for f in self.image_files]
+        self.image_paths = [os.path.join(self.image_folder, f) for f in self.image_files]
         self.current_index = 0
         
         # Initialize main window
@@ -204,9 +225,9 @@ class TileEditor:
         self.main_canvas.create_image(
             self.image_offset_x, self.image_offset_y,
             image=self.display_photo, anchor='nw')
-
-        # Draw grid on main display if enabled and zoomed enough
-        if self.show_grid and self.zoom_factor >= 0.5:
+        
+        # Draw grid on main display if enabled
+        if self.show_grid: # Grid is now always drawn if toggled on, regardless of zoom level
             self.draw_grid()
 
         # Draw capture area box
@@ -262,25 +283,25 @@ class TileEditor:
         self.preview_canvas.delete("all")
         
         # Calculate tile placement
-        tile_size = 50  # Display size for preview tiles
+        tile_display_size = Config.PREVIEW_TILE_DISPLAY_SIZE
         margin = 2
-        cols = 4
-        rows = 4
+        cols = Config.PREVIEW_GRID_COLS
+        # rows = Config.PREVIEW_GRID_ROWS # Not strictly needed if using PREVIEW_TILE_LIMIT
         
         # Store PhotoImage references
         self.preview_photos = []
         
-        for i, tile in enumerate(preview_tiles[:16]):  # Limit to 16 tiles
+        for i, tile in enumerate(preview_tiles[:Config.PREVIEW_TILE_LIMIT]):
             # Resize tile for preview
-            preview_tile = tile.resize((tile_size, tile_size))
+            preview_tile = tile.resize((tile_display_size, tile_display_size))
             photo = ImageTk.PhotoImage(preview_tile)
             self.preview_photos.append(photo)
             
             # Calculate position
             row = i // cols
             col = i % cols
-            x = col * (tile_size + margin)
-            y = row * (tile_size + margin)
+            x = col * (tile_display_size + margin)
+            y = row * (tile_display_size + margin)
             
             # Display tile
             self.preview_canvas.create_image(x, y, image=photo, anchor='nw')
@@ -294,10 +315,12 @@ class TileEditor:
             # Calculate center of view in image coordinates
             view_center_x = (canvas_width/2 - self.image_offset_x) / self.zoom_factor
             view_center_y = (canvas_height/2 - self.image_offset_y) / self.zoom_factor
-            
-            # Calculate starting point for 4x4 grid centered on view
-            start_x = view_center_x - (2 * (self.params["tile_w"] + self.params["offset_x"]))
-            start_y = view_center_y - (2 * (self.params["tile_h"] + self.params["offset_y"]))
+
+            # Calculate starting point for Config.PREVIEW_GRID_COLS x Config.PREVIEW_GRID_ROWS grid centered on view
+            half_preview_grid_width_tiles = Config.PREVIEW_GRID_COLS / 2
+            half_preview_grid_height_tiles = Config.PREVIEW_GRID_ROWS / 2
+            start_x = view_center_x - (half_preview_grid_width_tiles * (self.params["tile_w"] + self.params["offset_x"]))
+            start_y = view_center_y - (half_preview_grid_height_tiles * (self.params["tile_h"] + self.params["offset_y"]))
             
             # Adjust to nearest tile boundary
             start_x = ((start_x - self.params["origin_x"]) // 
@@ -312,12 +335,12 @@ class TileEditor:
             tiles = []
             img_w, img_h = self.current_image.size
             
-            for row in range(4):
+            for row in range(Config.PREVIEW_GRID_ROWS):
                 y = start_y + row * (self.params["tile_h"] + self.params["offset_y"])
                 if y < 0 or y + self.params["tile_h"] > img_h:
                     continue
                     
-                for col in range(4):
+                for col in range(Config.PREVIEW_GRID_COLS):
                     x = start_x + col * (self.params["tile_w"] + self.params["offset_x"])
                     if x < 0 or x + self.params["tile_w"] > img_w:
                         continue
@@ -351,9 +374,9 @@ class TileEditor:
     def zoom(self, event):
         """Handle zoom events from mouse wheel"""
         if event.num == 5 or event.delta < 0:  # Zoom out
-            self.zoom_factor = max(0.1, self.zoom_factor * 0.9)
+            self.zoom_factor = max(Config.ZOOM_MIN, self.zoom_factor * Config.ZOOM_STEP_MULTIPLIER)
         else:  # Zoom in
-            self.zoom_factor = min(5.0, self.zoom_factor * 1.1)
+            self.zoom_factor = min(Config.ZOOM_MAX, self.zoom_factor / Config.ZOOM_STEP_MULTIPLIER)
         
         self.refresh_display()
 
@@ -385,7 +408,7 @@ class TileEditor:
             if not filename_to_save:
                 messagebox.showerror("Error", "Filename cannot be empty.")
                 return
-            if not filename_to_save.lower().endswith((".png", ".jpg", ".jpeg")):
+            if not filename_to_save.lower().endswith(Config.ALLOWED_EXTENSIONS):
                 filename_to_save += ".png"
 
             img_w, img_h = self.current_image.size
@@ -470,5 +493,8 @@ class TileEditor:
         self.root.mainloop()
 
 if __name__ == "__main__":
-    editor = TileEditor()
+    # You can specify a different image folder when creating the editor
+    # For example: editor = TileEditor(image_folder="my_other_tilesets")
+    # If no argument is provided, it uses Config.IMAGE_FOLDER_DEFAULT
+    editor = TileEditor() 
     editor.run()
