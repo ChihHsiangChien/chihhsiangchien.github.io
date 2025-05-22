@@ -30,7 +30,7 @@ var cardData = [
   { name: "海星", category: "棘皮動物" },
   { name: "海膽", category: "棘皮動物" },
   { name: "海參", category: "棘皮動物" },
-  { name: "海膽", category: "棘皮動物" },
+  { name: "馬糞海膽", category: "棘皮動物" },
   { name: "魟魚", category: "魚類" },
   { name: "鯊魚", category: "魚類" },
   { name: "小丑魚", category: "魚類" },
