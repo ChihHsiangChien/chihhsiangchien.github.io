@@ -16,7 +16,7 @@ client = genai.Client(api_key=api_key)
 # === 設定區 (Configuration) ===
 API_MODEL = "gemini-2.0-flash-preview-image-generation" 
 OUTPUT_FOLDER = "generated_tilesets"
-IMAGES_PER_BIOME = 3                  # 每個生態系要產生的圖像數量
+IMAGES_PER_BIOME = 4                  # 每個生態系要產生的圖像數量
 WAIT_TIME_SECONDS = 7 # 每次 API 呼叫後的等待時間 (秒)
 
 # === 儲存圖片 ===

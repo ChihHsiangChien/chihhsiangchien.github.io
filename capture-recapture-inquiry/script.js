@@ -62,9 +62,9 @@ async function runEstimation() {
     avgMarkedCounts,
     avgErrors,
     "scatterPlot3",
-    "標記數量 vs 平均值誤差百分比(半對數圖)",
+    "標記數量 vs 平均值不確定度(半對數圖)",
     "標記數量",
-    "誤差百分比",
+    "不確定度",
     "rgba(75, 192, 192, 0.6)",
     true
   );
@@ -84,7 +84,7 @@ async function runEstimation() {
     "rgba(192, 75, 192, 0.6)"
   );
 
-  // 用中位數計算誤差
+  // 用中位數計算不確定度
   const medErrors = medMarkedCounts.map((count) => {
     const medEstimate = medianEstimates[count];
     return calculateError(totalPopulation, medEstimate);
@@ -94,9 +94,9 @@ async function runEstimation() {
     medMarkedCounts,
     medErrors,
     "scatterPlot5",
-    "標記數量 vs 中位數誤差百分比(半對數圖)",
+    "標記數量 vs 中位數不確定度(半對數圖)",
     "標記數量",
-    "誤差百分比",
+    "不確定度",
     "rgba(192, 75, 192, 0.6)",
     true
   );
