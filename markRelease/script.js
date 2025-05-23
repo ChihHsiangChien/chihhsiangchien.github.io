@@ -354,7 +354,7 @@ submitGuessBtn.addEventListener('click', () => {
   const totalTadpoles = tadpoles.length;
   const error = Math.abs(totalTadpoles - guess);
   const errorPercentage = (error / totalTadpoles) * 100;
-  message.innerHTML = `誤差百分比: ${errorPercentage.toFixed(2)}%<br>(實際數量: ${totalTadpoles})`;
+  message.innerHTML = `不確定度(誤差): ${errorPercentage.toFixed(2)}%<br>(實際數量: ${totalTadpoles})`;
 
   // 清空輸入框
   guessInput.value = '';
