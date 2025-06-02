@@ -374,8 +374,8 @@
                     <span id="baseEnergyCostValue" class="value-display">1</span>
                 </div>
                 <div class="control-group">
-                    <label for="reproductionEnergyCostFactorSlider" title="設定生物繁殖時能量消耗的程度。例如，因子為2表示繁殖後能量變為原來的一半(消耗50%)；因子為1.1表示消耗約9%。">繁殖耗能因子:</label>
-                    <input type="range" id="reproductionEnergyCostFactorSlider" min="1.1" max="4" value="2" step="0.1" title="調整繁殖時的能量消耗程度。能量將除以此因子。">
+                    <label for="reproductionEnergyCostFactorSlider" title="設定繁殖後能量的計算方式。此數值為「除數」：繁殖後能量 = 原能量 ÷ 此數值。例如：設為 2，繁殖後能量減半 (消耗50%能量)；設為 4，能量剩餘1/4 (消耗75%能量)。數值越小，繁殖時消耗的能量越少。">繁殖能量成本 (除數):</label>
+                    <input type="range" id="reproductionEnergyCostFactorSlider" min="1.1" max="4" value="2" step="0.1" title="調整繁殖能量成本的「除數」。數值越小，繁殖消耗的能量越少。">
                     <span id="reproductionEnergyCostFactorValue" class="value-display">2</span>
                 </div>
                 <div class="button-group">
@@ -1211,27 +1211,36 @@
             autoScaleYAxisCheckbox.disabled = false;
 
             if (patches.length > 0) { 
-                goContinuousButton.disabled = false; goOnceButton.disabled = false; 
+                goContinuousButton.disabled = false; goOnceButton.disabled = false;
 
-                // Update control panel sliders with current simulation counts.
-                // Dispatching 'input' will trigger listeners that update config 
-                // and call updateInitialAnimalPopulations / updateInitialLimitedGrassVisuals
-                // which will adjust the live simulation state on the canvas.
-                initialNumberSheepSlider.value = sheep.length;
-                initialNumberSheepSlider.dispatchEvent(new Event('input'));
+                // Capture final counts BEFORE any config/slider changes that might trigger repopulation prematurely
+                const finalSheepCount = sheep.length;
+                const finalRabbitCount = rabbits.length;
+                const finalWolfCount = wolves.length; // This will be 0 if all wolves died
+                const finalGrassPercent = (worldWidth > 0 && worldHeight > 0) ? Math.round((calculateCurrentGrassCount() / (worldWidth * worldHeight)) * 100) : 0;
 
-                initialNumberRabbitsSlider.value = rabbits.length;
-                initialNumberRabbitsSlider.dispatchEvent(new Event('input'));
+                // Update config object directly with these final counts
+                config.initialNumberSheep = finalSheepCount;
+                config.initialNumberRabbits = finalRabbitCount;
+                config.initialNumberWolves = finalWolfCount; // config will now have the correct 0 if wolves died
+                config.initialLimitedGrassPercent = finalGrassPercent;
 
-                initialNumberWolvesSlider.value = wolves.length;
-                initialNumberWolvesSlider.dispatchEvent(new Event('input'));
+                // Update sliders and their display values directly from the corrected config
+                initialNumberSheepSlider.value = config.initialNumberSheep;
+                document.getElementById('initialNumberSheepValue').textContent = config.initialNumberSheep;
 
-                const currentGrassPercent = (worldWidth > 0 && worldHeight > 0) ? (calculateCurrentGrassCount() / (worldWidth * worldHeight)) * 100 : 0;
-                initialLimitedGrassPercentSlider.value = Math.round(currentGrassPercent);
-                initialLimitedGrassPercentSlider.dispatchEvent(new Event('input'));
-                
-                // drawWorld(); // updateInitial... functions already call drawWorld
-                // updateDisplays(); // updateInitial... functions already call updateDisplays
+                initialNumberRabbitsSlider.value = config.initialNumberRabbits;
+                document.getElementById('initialNumberRabbitsValue').textContent = config.initialNumberRabbits;
+
+                initialNumberWolvesSlider.value = config.initialNumberWolves; // Will be 0 if finalWolfCount was 0
+                document.getElementById('initialNumberWolvesValue').textContent = config.initialNumberWolves; // Span will show 0
+
+                initialLimitedGrassPercentSlider.value = config.initialLimitedGrassPercent;
+                document.getElementById('initialLimitedGrassPercentValue').textContent = config.initialLimitedGrassPercent;
+
+                // Now, call updateInitialAnimalPopulations ONCE to synchronize the animal arrays
+                // and the visual world based on the now correct and consistent config.
+                updateInitialAnimalPopulations(); // This will use the correct config values.
             } else { 
                 goContinuousButton.disabled = true; goOnceButton.disabled = true; 
             }
