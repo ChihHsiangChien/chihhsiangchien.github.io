@@ -236,10 +236,10 @@
             font-size: 1.1em;
         } */
         canvas#populationChart, canvas#energyPyramidChart {
-            width: 100% !important;
-            height: 100% !important; /* Ensure canvas tries to fill space before flex-grow */
+            width: 100%; 
+            height: 100%; /* Ensure canvas tries to fill space before flex-grow */
             flex-grow: 1; /* Chart canvas takes available space in its container */
-            min-height: 0; /* 配合 flex-grow */
+            min-height: 0; /* Allow shrinking for flex-grow */
         }
     </style>
 </head>
@@ -385,6 +385,7 @@
                     <button id="resetDefaultsButton" title="將所有控制面板的設定恢復到預設值，並重新開始模擬於第0回合。">預設值</button>
 
                 </div>
+                <div id="simulationMessages" style="text-align: center; margin-top: 10px; color: red; font-weight: bold; min-height: 1.2em;"></div>
             </div>
         </div>
 
@@ -434,8 +435,28 @@
         // you'd need to resize it in JS when the window resizes or when elements change.
         // For now, `aspect-ratio: 1/1` in CSS for `canvas#simulationCanvas` helps maintain it square.
 
-        const worldWidth = 50; 
-        const worldHeight = 50;
+        // --- Constants for Drawing and Simulation Logic ---
+        const PATCH_COLOR_LIMITED_GRASS_PRESENT = '#66CDAA'; // 有限草B 存在時的顏色
+        const PATCH_COLOR_LIMITED_GRASS_ABSENT = '#D2B48C';  // 有限草B 缺乏時的顏色 (泥土色)
+        const PATCH_COLOR_UNLIMITED_GRASS = '#90EE90';     // 無限草A 的顏色
+        const PATCH_COLOR_NO_GRASS = '#D3D3D3';            // 沒有任何草種被啟用時的顏色
+        
+        const AGENT_FONT_SIZE_MULTIPLIER = 1; // Current user setting (patchSize * 2 for larger icons)
+        const ENERGY_FONT_SIZE_MULTIPLIER = 0.3;
+
+        const SHEEP_ICON = '🐑';
+        const WOLF_ICON = '🐺';
+        const RABBIT_ICON = '🐇';
+
+        const SHEEP_ENERGY_COLOR = 'blue';
+        const WOLF_ENERGY_COLOR = 'red';
+        const RABBIT_ENERGY_COLOR = 'purple';
+
+        const PATCH_PCOLOR_GREEN = 'green'; // For internal logic (patch.pcolor value)
+        const PATCH_PCOLOR_BROWN = 'brown'; // For internal logic (patch.pcolor value)
+        const AGENT_CENTER_X_OFFSET = 0.5;        const AGENT_CENTER_Y_OFFSET = 0.5;        const ENERGY_TEXT_Y_OFFSET_FACTOR = 0.8; // For positioning energy text relative to patch top
+        const worldWidth = 25; 
+        const worldHeight = 25;
         let patchSize = simCanvasElement.width / worldWidth; // Recalculate if canvas size changes
 
         let config = {
@@ -531,7 +552,7 @@
 
         const showEnergyCheckbox = document.getElementById('showEnergy');
 
-        const setupButton = document.getElementById('setupButton');
+        // const setupButton = document.getElementById('setupButton'); // Unused variable
         const goOnceButton = document.getElementById('goOnceButton');
         const goContinuousButton = document.getElementById('goContinuousButton');
         const stopButton = document.getElementById('stopButton');
@@ -549,6 +570,16 @@
         const showEnergyPyramidButton = document.getElementById('showEnergyPyramidButton');
         const populationChartCanvasElement = document.getElementById('populationChart');
         const energyPyramidCanvasElement = document.getElementById('energyPyramidChart');
+        const simulationMessagesElement = document.getElementById('simulationMessages');
+
+        function displaySimulationMessage(message) {
+            if (simulationMessagesElement) {
+                simulationMessagesElement.textContent = message;
+            }
+        }
+        function clearSimulationMessage() {
+            if (simulationMessagesElement) simulationMessagesElement.textContent = '';
+        }
 
         function setupSliderListener(sliderElement, valueDisplayId, configKey) {
             const valueDisplay = document.getElementById(valueDisplayId);
@@ -627,8 +658,8 @@
                 for (let r = 0; r < worldWidth; r++) {
                     for (let c = 0; c < worldHeight; c++) {
                         if (patches[r] && patches[r][c]) { // Ensure patch exists
-                            patches[r][c].pcolor = (Math.random() * 100 < config.initialLimitedGrassPercent) ? 'green' : 'brown';
-                            patches[r][c].countdown = (patches[r][c].pcolor === 'green') ? config.grassRegrowthTime : Math.floor(Math.random() * config.grassRegrowthTime);
+                            patches[r][c].pcolor = (Math.random() * 100 < config.initialLimitedGrassPercent) ? PATCH_PCOLOR_GREEN : PATCH_PCOLOR_BROWN;
+                            patches[r][c].countdown = (patches[r][c].pcolor === PATCH_PCOLOR_GREEN) ? config.grassRegrowthTime : Math.floor(Math.random() * config.grassRegrowthTime);
                         }
                     }
                 }
@@ -749,7 +780,7 @@
             let count = 0;
             for (let r = 0; r < worldWidth; r++) {
                 for (let c = 0; c < worldHeight; c++) {
-                    if (patches[r] && patches[r][c] && patches[r][c].pcolor === 'green') count++;
+                    if (patches[r] && patches[r][c] && patches[r][c].pcolor === PATCH_PCOLOR_GREEN) count++;
                 }
             }
             return count;
@@ -832,21 +863,22 @@
         
         function setup() {
             stopSimulation();
+            clearSimulationMessage();
             patchSize = simCanvasElement.width / worldWidth; 
             ticks = 0; sheep = []; wolves = []; rabbits = []; patches = []; // Initialize rabbits array
 
             for (let i = 0; i < worldWidth; i++) {
                 patches[i] = [];
                 for (let j = 0; j < worldHeight; j++) {
-                    let pcolor, countdown;
+                    let pcolorValue, countdown;
                     if (config.hasLimitedGrass) { // Use initialLimitedGrassPercent for initial setup
-                        pcolor = (Math.random() * 100 < config.initialLimitedGrassPercent) ? 'green' : 'brown';
-                        countdown = (pcolor === 'green') ? config.grassRegrowthTime : Math.floor(Math.random() * config.grassRegrowthTime);
+                        pcolorValue = (Math.random() * 100 < config.initialLimitedGrassPercent) ? PATCH_PCOLOR_GREEN : PATCH_PCOLOR_BROWN;
+                        countdown = (pcolorValue === PATCH_PCOLOR_GREEN) ? config.grassRegrowthTime : Math.floor(Math.random() * config.grassRegrowthTime);
                     } else { // If no limited grass, patches are neutral (e.g., for unlimited grass or just space)
-                        pcolor = 'brown'; // Or a neutral color like '#E0E0E0'
+                        pcolorValue = PATCH_PCOLOR_BROWN; // Or a neutral color like '#E0E0E0'
                         countdown = 0; 
                     }
-                    patches[i][j] = { pcolor: pcolor, countdown: countdown };
+                    patches[i][j] = { pcolor: pcolorValue, countdown: countdown };
                 }
             }
 
@@ -951,7 +983,8 @@
             setup();
 
             // Inform the user. setup() calls updateDisplays() and drawWorld().
-            alert("所有設定已重置為預設值，模擬已重新開始於第0回合。\n您可以直接開始模擬或繼續調整。");
+            // alert("所有設定已重置為預設值，模擬已重新開始於第0回合。\n您可以直接開始模擬或繼續調整。");
+            displaySimulationMessage("所有設定已重置為預設值，模擬已重新開始於第0回合。");
         }
 
         function calculateTrophicEnergies() {
@@ -976,14 +1009,16 @@
             let anyAnimalSelected = config.hasSheep || config.hasRabbit || config.hasWolf;
 
             if (anyAnimalSelected && !anySelectableAnimalExists) {
-                 alert("所有選定的動物都消失了，模擬停止。"); stopSimulation(); return;
+                //  alert("所有選定的動物都消失了，模擬停止。"); 
+                 displaySimulationMessage("所有選定的動物都消失了，模擬停止。");
+                 stopSimulation(); return;
             }
 
             let totalHerbivores = (config.hasSheep ? sheep.length : 0) + (config.hasRabbit ? rabbits.length : 0);
             let wolvesEffectivelyExtinct = config.hasWolf ? wolves.length === 0 : true;
 
             if (wolvesEffectivelyExtinct && totalHerbivores > config.maxHerbivores && (config.hasSheep || config.hasRabbit)) {
-                alert("草食動物數量過多，牠們佔滿了這片土地！模擬停止。"); stopSimulation(); return;
+                displaySimulationMessage("草食動物數量過多，牠們佔滿了這片土地！模擬停止。"); stopSimulation(); return;
             }
 
             // Sheep logic (if sheep are enabled)
@@ -994,7 +1029,7 @@
                     let energyGainedThisTurn = 0;
                     if (config.hasLimitedGrass) {
                         const patch = patches[s.x][s.y];
-                        if (patch.pcolor === 'green') { patch.pcolor = 'brown'; patch.countdown = config.grassRegrowthTime; energyGainedThisTurn += config.energyFromLimitedGrass; }
+                        if (patch.pcolor === PATCH_PCOLOR_GREEN) { patch.pcolor = PATCH_PCOLOR_BROWN; patch.countdown = config.grassRegrowthTime; energyGainedThisTurn += config.energyFromLimitedGrass; }
                     }
                     if (energyGainedThisTurn === 0 && config.hasUnlimitedGrass) {
                         energyGainedThisTurn += config.energyFromUnlimitedGrass;
@@ -1022,8 +1057,8 @@
                     let energyGainedThisTurn = 0;
                     if (config.hasLimitedGrass) {
                         const patch = patches[r.x][r.y];
-                        if (patch.pcolor === 'green') {
-                            patch.pcolor = 'brown';
+                        if (patch.pcolor === PATCH_PCOLOR_GREEN) {
+                            patch.pcolor = PATCH_PCOLOR_BROWN;
                             patch.countdown = config.grassRegrowthTime;
                             energyGainedThisTurn += config.energyFromLimitedGrass; // Rabbits also eat limited grass
                         }
@@ -1077,10 +1112,10 @@
             if (config.hasLimitedGrass) {
                 for (let r = 0; r < worldWidth; r++) for (let c = 0; c < worldHeight; c++) {
                     const patch = patches[r][c];
-                    if (patch.pcolor === 'brown') { 
+                    if (patch.pcolor === PATCH_PCOLOR_BROWN) { 
                         patch.countdown--; 
                         if (patch.countdown <= 0 && calculateCurrentGrassCount() < config.grassCarryingCapacity) {
-                            patch.pcolor = 'green'; 
+                            patch.pcolor = PATCH_PCOLOR_GREEN; 
                         }
                     }
                 }
@@ -1108,45 +1143,45 @@
             ctx.clearRect(0, 0, simCanvasElement.width, simCanvasElement.height);
             for (let r = 0; r < worldWidth; r++) for (let c = 0; c < worldHeight; c++) {
                 const patch = patches[r][c];
-                ctx.fillStyle = (patch.pcolor === 'green') ? '#66CDAA' : '#D2B48C';
+                ctx.fillStyle = (patch.pcolor === PATCH_PCOLOR_GREEN) ? PATCH_COLOR_LIMITED_GRASS_PRESENT : PATCH_COLOR_LIMITED_GRASS_ABSENT;
                 if (!config.hasLimitedGrass && config.hasUnlimitedGrass) { // If only unlimited grass, make it look always green
-                    ctx.fillStyle = '#90EE90'; // Lighter green for unlimited
+                    ctx.fillStyle = PATCH_COLOR_UNLIMITED_GRASS; 
                 } else if (!config.hasLimitedGrass && !config.hasUnlimitedGrass) {
-                    ctx.fillStyle = '#D3D3D3'; // Neutral grey if no grass selected
+                    ctx.fillStyle = PATCH_COLOR_NO_GRASS; 
                 }
                 ctx.fillRect(r * patchSize, c * patchSize, patchSize, patchSize);
             }
-            const agentFontSize = patchSize * 0.7;
-            const energyFontSize = patchSize * 0.3;
+            const agentFontSize = patchSize * AGENT_FONT_SIZE_MULTIPLIER;
+            const energyFontSize = patchSize * ENERGY_FONT_SIZE_MULTIPLIER;
             ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
 
             if (config.hasSheep) {
                 sheep.forEach(s => {
                     ctx.font = `${agentFontSize}px Arial`;
-                    ctx.fillText('🐑', (s.x + 0.5) * patchSize, (s.y + 0.5) * patchSize);
+                    ctx.fillText(SHEEP_ICON, (s.x + AGENT_CENTER_X_OFFSET) * patchSize, (s.y + AGENT_CENTER_Y_OFFSET) * patchSize);
                     if (config.showEnergy) {
-                        ctx.fillStyle = 'blue'; ctx.font = `${energyFontSize}px Arial`;
-                        ctx.fillText(Math.round(s.energy), (s.x + 0.5) * patchSize, (s.y + 0.8) * patchSize);
+                        ctx.fillStyle = SHEEP_ENERGY_COLOR; ctx.font = `${energyFontSize}px Arial`;
+                        ctx.fillText(Math.round(s.energy), (s.x + AGENT_CENTER_X_OFFSET) * patchSize, (s.y + ENERGY_TEXT_Y_OFFSET_FACTOR) * patchSize);
                     }
                 });
             }
             if (config.hasWolf) {
                 wolves.forEach(w => {
                     ctx.font = `${agentFontSize}px Arial`;
-                    ctx.fillText('🐺', (w.x + 0.5) * patchSize, (w.y + 0.5) * patchSize);
+                    ctx.fillText(WOLF_ICON, (w.x + AGENT_CENTER_X_OFFSET) * patchSize, (w.y + AGENT_CENTER_Y_OFFSET) * patchSize);
                     if (config.showEnergy) {
-                        ctx.fillStyle = 'red'; ctx.font = `${energyFontSize}px Arial`;
-                        ctx.fillText(Math.round(w.energy), (w.x + 0.5) * patchSize, (w.y + 0.8) * patchSize);
+                        ctx.fillStyle = WOLF_ENERGY_COLOR; ctx.font = `${energyFontSize}px Arial`;
+                        ctx.fillText(Math.round(w.energy), (w.x + AGENT_CENTER_X_OFFSET) * patchSize, (w.y + ENERGY_TEXT_Y_OFFSET_FACTOR) * patchSize);
                     }
                 });
             }
             if (config.hasRabbit) {
                 rabbits.forEach(r => { 
                     ctx.font = `${agentFontSize}px Arial`;
-                    ctx.fillText('🐇', (r.x + 0.5) * patchSize, (r.y + 0.5) * patchSize);
+                    ctx.fillText(RABBIT_ICON, (r.x + AGENT_CENTER_X_OFFSET) * patchSize, (r.y + AGENT_CENTER_Y_OFFSET) * patchSize);
                     if (config.showEnergy) {
-                        ctx.fillStyle = 'purple'; ctx.font = `${energyFontSize}px Arial`;
-                        ctx.fillText(Math.round(r.energy), (r.x + 0.5) * patchSize, (r.y + 0.8) * patchSize);
+                        ctx.fillStyle = RABBIT_ENERGY_COLOR; ctx.font = `${energyFontSize}px Arial`;
+                        ctx.fillText(Math.round(r.energy), (s.x + AGENT_CENTER_X_OFFSET) * patchSize, (s.y + ENERGY_TEXT_Y_OFFSET_FACTOR) * patchSize);
                     }
                 });
             }
@@ -1174,7 +1209,7 @@
         }
         function startSimulation() { 
             if (simulationRunning) return;
-
+            clearSimulationMessage();
             simulationRunning = true;
             goContinuousButton.textContent = "運行中"; goContinuousButton.disabled = true;
             goOnceButton.disabled = true; /* setupButton removed */ stopButton.disabled = false;
