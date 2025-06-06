@@ -25,6 +25,7 @@ export function initPopulationChart() {
       responsive: true,
       maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
+      elements: { point: { radius: 0 } },
       scales: {
         x: { title: { display: true, text: '回合' } },
         y: {
@@ -38,14 +39,22 @@ export function initPopulationChart() {
 }
 
 export function updatePopulationChart() {
-  chartLabels.push(ticks);
-  if (chartLabels.length > MAX_POINTS) chartLabels.shift();
+  const lastTick = chartLabels[chartLabels.length - 1];
+  const isSameTick = lastTick === ticks;
+  if (!isSameTick) {
+    chartLabels.push(ticks);
+    if (chartLabels.length > MAX_POINTS) chartLabels.shift();
+  }
   popChart.data.labels = chartLabels;
   speciesList.forEach((spec, idx) => {
     const val = spec.type === 'producer' ? countPlants() : animals[spec.key].length;
     const arr = popChart.data.datasets[idx].data;
-    arr.push(val);
-    if (arr.length > MAX_POINTS) arr.shift();
+    if (!isSameTick) {
+      arr.push(val);
+      if (arr.length > MAX_POINTS) arr.shift();
+    } else {
+      arr[arr.length - 1] = val;
+    }
     popChart.data.datasets[idx].hidden = !config['has' + capitalize(spec.key)];
   });
   popChart.update('none');

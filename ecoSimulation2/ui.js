@@ -14,16 +14,20 @@ function capitalize(str) {
 
 export function updateStats() {
   document.getElementById('ticksDisplay').textContent = `回合: ${ticks}`;
-  document.getElementById('rabbitsCountDisplay').textContent = `兔群: ${animals.rabbit?.length || 0}`;
-  document.getElementById('sheepCountDisplay').textContent = `羊群: ${animals.sheep?.length || 0}`;
-  document.getElementById('wolvesCountDisplay').textContent = `狼群: ${animals.wolf?.length || 0}`;
-  const ugEl = document.getElementById('unlimitedGrassStatDisplay');
-  const ugLabel = ugEl.textContent.split(':')[0];
-  ugEl.textContent = `${ugLabel}: ${countPlants()}`;
-  const lgEl = document.getElementById('limitedGrassStatDisplay');
-  const lgLabel = lgEl.textContent.split(':')[0];
-  const totalPatches = patches.reduce((sum, row) => sum + row.length, 0);
-  lgEl.textContent = `${lgLabel}: ${totalPatches - countPlants()}`;
+  const container = document.getElementById('speciesStatsContainer');
+  container.innerHTML = '';
+  speciesList.forEach(spec => {
+    const hasKey = 'has' + capitalize(spec.key);
+    if (!config[hasKey]) return;
+    const span = document.createElement('span');
+    span.className = 'stat-group';
+    span.style.backgroundColor = spec.energyColor;
+    const count = spec.type === 'producer'
+      ? countPlants()
+      : animals[spec.key]?.length || 0;
+    span.textContent = `${spec.displayName}: ${count}`;
+    container.append(span);
+  });
 }
 
 let simulationInterval = null;
@@ -32,10 +36,9 @@ let simulationRunning = false;
 const controlsContainer = document.querySelector('.controls');
 // Preserve static general controls (from first <hr> onward) to reinsert after dynamic species controls
 const _initialControlsHTML = controlsContainer.innerHTML;
-// Find second <hr> to locate start of static general controls section
+// Grab static general controls section (from the first <hr> onward)
 const _firstHr = _initialControlsHTML.indexOf('<hr');
-const _hrIndex = _firstHr >= 0 ? _initialControlsHTML.indexOf('<hr', _firstHr + 1) : -1;
-const generalControlsHTML = _hrIndex >= 0 ? _initialControlsHTML.slice(_hrIndex) : '';
+const generalControlsHTML = _firstHr >= 0 ? _initialControlsHTML.slice(_firstHr) : '';
 const canvas = document.getElementById('simulationCanvas');
 const ctx = canvas.getContext('2d');
 
@@ -57,11 +60,17 @@ export function initUI() {
     chk.addEventListener('change', () => {
       config[hasKey] = chk.checked;
       updateControlVisibility();
-      if (chk.checked) {
-        spawnSpecies(spec.key);
-      } else {
-        animals[spec.key] = [];
-      }
+    if (chk.checked) {
+      spawnSpecies(spec.key);
+      const initCtrl = spec.controls.find(c => c.key.startsWith('initialNumber'));
+      const initKey = initCtrl.key;
+      config[initKey] = animals[spec.key].length;
+      const initSlider = document.getElementById(initKey);
+      initSlider.value = config[initKey];
+      document.getElementById(initKey + 'Value').textContent = config[initKey];
+    } else {
+      animals[spec.key] = [];
+    }
       drawWorld(ctx, canvas.width / worldWidth);
       updateStats();
       if (document.getElementById('showPopulationChartButton').classList.contains('active')) {
@@ -73,7 +82,11 @@ export function initUI() {
     cg.append(lbl, chk);
     controlsContainer.append(cg);
     // species sliders
-    const box = document.createElement('div'); box.id = spec.key + 'Controls'; box.className = 'species-controls-group';
+    const box = document.createElement('div');
+    box.id = spec.key + 'Controls';
+    box.className = 'species-controls-group';
+    // 彩色標示：控制面板同種生物使用對應能量顏色背景
+    box.style.backgroundColor = spec.energyColor;
     spec.controls.forEach(ctrl => {
       const row = document.createElement('div'); row.className = 'control-group';
       const label = document.createElement('label'); label.htmlFor = ctrl.key; label.textContent = ctrl.label;
