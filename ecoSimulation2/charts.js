@@ -85,3 +85,101 @@ export function updateEnergyChart() {
   energyChart.data.datasets[0].data = [tertiary, secondary, primary, producer];
   energyChart.update('none');
 }
+
+/**
+ * Draw an arrow from (x1,y1) to (x2,y2) with the given color.
+ */
+// The food web is rendered via SVG to maintain aspect ratio and crisp arrowheads.
+/**
+ * Initialize the food web SVG container and draw the initial web.
+ */
+export function initFoodWeb() {
+  const svg = document.getElementById('foodWebSvg');
+  const width = svg.clientWidth || 600;
+  const height = svg.clientHeight || 400;
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  updateFoodWeb();
+}
+
+/**
+ * Update the food web SVG based on current species counts and relationships.
+ */
+export function updateFoodWeb() {
+  const svg = document.getElementById('foodWebSvg');
+  if (!svg) return;
+  // Clear previous contents
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  const [ , , width, height ] = svg.getAttribute('viewBox').split(' ').map(Number);
+  // Define arrowhead marker
+  const ns = 'http://www.w3.org/2000/svg';
+  const defs = document.createElementNS(ns, 'defs');
+  const marker = document.createElementNS(ns, 'marker');
+  marker.setAttribute('id', 'arrow');
+  marker.setAttribute('viewBox', '0 0 10 10');
+  marker.setAttribute('refX', '10');
+  marker.setAttribute('refY', '5');
+  marker.setAttribute('markerUnits', 'strokeWidth');
+  marker.setAttribute('markerWidth', '8');
+  marker.setAttribute('markerHeight', '6');
+  marker.setAttribute('orient', 'auto');
+  const arrowPath = document.createElementNS(ns, 'path');
+  arrowPath.setAttribute('d', 'M0,0 L10,5 L0,10 Z');
+  arrowPath.setAttribute('fill', '#999');
+  marker.appendChild(arrowPath);
+  defs.appendChild(marker);
+  svg.appendChild(defs);
+  // Compute node positions on a circle
+  const n = speciesList.length;
+  const cx = width / 2;
+  const cy = height / 2;
+  const R = Math.min(width, height) / 2 - 40;
+  const step = (Math.PI * 2) / n;
+  const positions = speciesList.map((spec, i) => {
+    const ang = -Math.PI / 2 + i * step;
+    return { x: cx + R * Math.cos(ang), y: cy + R * Math.sin(ang) };
+  });
+  // Draw edges (prey -> predator)
+  speciesList.forEach((spec, i) => {
+    spec.prey.forEach(preyKey => {
+      const j = speciesList.findIndex(s => s.key === preyKey);
+      if (j >= 0) {
+        const line = document.createElementNS(ns, 'line');
+        line.setAttribute('x1', positions[j].x);
+        line.setAttribute('y1', positions[j].y);
+        line.setAttribute('x2', positions[i].x);
+        line.setAttribute('y2', positions[i].y);
+        line.setAttribute('stroke', '#999');
+        line.setAttribute('stroke-width', '2');
+        line.setAttribute('marker-end', 'url(#arrow)');
+        svg.appendChild(line);
+      }
+    });
+  });
+  // Draw nodes (rect + text)
+  speciesList.forEach((spec, i) => {
+    const pos = positions[i];
+    const cnt = spec.type === 'producer' ? countPlants() : animals[spec.key].length;
+    const bg = cnt > 0 ? spec.energyColor : '#ddd';
+    const label = spec.icon + spec.displayName;
+    // Create text element first to measure size
+    const text = document.createElementNS(ns, 'text');
+    text.setAttribute('x', pos.x);
+    text.setAttribute('y', pos.y);
+    text.setAttribute('text-anchor', 'middle');
+    text.setAttribute('dominant-baseline', 'middle');
+    text.setAttribute('font-size', '14px');
+    text.textContent = label;
+    svg.appendChild(text);
+    const bbox = text.getBBox();
+    const pad = 6;
+    const rect = document.createElementNS(ns, 'rect');
+    rect.setAttribute('x', bbox.x - pad);
+    rect.setAttribute('y', bbox.y - pad);
+    rect.setAttribute('width', bbox.width + pad * 2);
+    rect.setAttribute('height', bbox.height + pad * 2);
+    rect.setAttribute('fill', bg);
+    rect.setAttribute('stroke', '#555');
+    svg.insertBefore(rect, text);
+  });
+}

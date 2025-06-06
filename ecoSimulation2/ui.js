@@ -5,7 +5,7 @@ import {
 } from './simulation.js';
 import {
   initPopulationChart, initEnergyPyramidChart,
-  updatePopulationChart, updateEnergyChart
+  updatePopulationChart, updateEnergyChart, initFoodWeb, updateFoodWeb
 } from './charts.js';
 
 function capitalize(str) {
@@ -102,8 +102,10 @@ export function initUI() {
           updateStats();
           if (document.getElementById('showPopulationChartButton').classList.contains('active')) {
             updatePopulationChart();
-          } else {
+          } else if (document.getElementById('showEnergyPyramidButton').classList.contains('active')) {
             updateEnergyChart();
+          } else if (document.getElementById('showFoodWebButton').classList.contains('active')) {
+            updateFoodWeb();
           }
         } else if (ctrl.key === 'initialPlantPercent') {
           // live-update plant coverage based on new initial percentage
@@ -112,8 +114,10 @@ export function initUI() {
           updateStats();
           if (document.getElementById('showPopulationChartButton').classList.contains('active')) {
             updatePopulationChart();
-          } else {
+          } else if (document.getElementById('showEnergyPyramidButton').classList.contains('active')) {
             updateEnergyChart();
+          } else if (document.getElementById('showFoodWebButton').classList.contains('active')) {
+            updateFoodWeb();
           }
         }
       });
@@ -131,6 +135,7 @@ export function initUI() {
   document.getElementById('resetDefaultsButton').addEventListener('click', resetAll);
   document.getElementById('showPopulationChartButton').addEventListener('click', () => toggleChart('population'));
   document.getElementById('showEnergyPyramidButton').addEventListener('click', () => toggleChart('energy'));
+  document.getElementById('showFoodWebButton').addEventListener('click', () => toggleChart('foodWeb'));
   updateControlVisibility();
 }
 
@@ -156,8 +161,10 @@ function stepSimulation() {
   updateStats();
   if (document.getElementById('showPopulationChartButton').classList.contains('active')) {
     updatePopulationChart();
-  } else {
+  } else if (document.getElementById('showEnergyPyramidButton').classList.contains('active')) {
     updateEnergyChart();
+  } else if (document.getElementById('showFoodWebButton').classList.contains('active')) {
+    updateFoodWeb();
   }
 }
 
@@ -181,15 +188,21 @@ function stopContinuous() {
 function toggleChart(type) {
   const popBtn = document.getElementById('showPopulationChartButton');
   const energyBtn = document.getElementById('showEnergyPyramidButton');
+  const foodBtn = document.getElementById('showFoodWebButton');
+  const popCanvas = document.getElementById('populationChart');
+  const energyCanvas = document.getElementById('energyPyramidChart');
+  const foodSvg = document.getElementById('foodWebSvg');
+  popBtn.classList.toggle('active', type === 'population');
+  energyBtn.classList.toggle('active', type === 'energy');
+  foodBtn.classList.toggle('active', type === 'foodWeb');
+  popCanvas.style.display = type === 'population' ? 'block' : 'none';
+  energyCanvas.style.display = type === 'energy' ? 'block' : 'none';
+  foodSvg.style.display = type === 'foodWeb' ? 'block' : 'none';
   if (type === 'population') {
-    popBtn.classList.add('active');
-    energyBtn.classList.remove('active');
-    document.getElementById('populationChart').style.display = 'block';
-    document.getElementById('energyPyramidChart').style.display = 'none';
-  } else {
-    popBtn.classList.remove('active');
-    energyBtn.classList.add('active');
-    document.getElementById('populationChart').style.display = 'none';
-    document.getElementById('energyPyramidChart').style.display = 'block';
+    updatePopulationChart();
+  } else if (type === 'energy') {
+    updateEnergyChart();
+  } else if (type === 'foodWeb') {
+    updateFoodWeb();
   }
 }

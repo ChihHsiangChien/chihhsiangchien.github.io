@@ -1,5 +1,5 @@
 import { setup, drawWorld, worldWidth } from './simulation.js';
-import { initPopulationChart, initEnergyPyramidChart, updatePopulationChart, updateEnergyChart } from './charts.js';
+import { initPopulationChart, initEnergyPyramidChart, updatePopulationChart, updateEnergyChart, initFoodWeb } from './charts.js';
 import { initUI, updateStats } from './ui.js';
 
 window.addEventListener('DOMContentLoaded', () => {
@@ -12,4 +12,5 @@ window.addEventListener('DOMContentLoaded', () => {
   updateStats();
   initPopulationChart();
   initEnergyPyramidChart();
+  initFoodWeb();
 });
