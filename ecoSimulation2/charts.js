@@ -27,7 +27,11 @@ export function initPopulationChart() {
       interaction: { mode: 'index', intersect: false },
       scales: {
         x: { title: { display: true, text: '回合' } },
-        y: { title: { display: true, text: '數量' } }
+        y: {
+          type: 'logarithmic',
+          title: { display: true, text: '數量' },
+          ticks: { callback: value => Number(value.toString()) }
+        }
       }
     }
   });

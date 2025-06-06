@@ -71,7 +71,9 @@ export class Herbivore extends Entity {
     const patch = patches[this.x][this.y];
     if (patch.isPlant()) {
       patch.consume();
-      this.gainEnergy(config[`${this.preyKey}GainFrom${capitalize(this.preyKey)}`]);
+      this.gainEnergy(
+        config[`${this.key}GainFrom${capitalize(this.preyKey)}`]
+      );
     }
   }
 
