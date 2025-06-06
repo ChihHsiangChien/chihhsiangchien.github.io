@@ -1,0 +1,1392 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>生態模擬</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 15px; /* Reduced padding */
+            background-color: #f4f7f6;
+            color: #333;
+            height: 100vh; /* Make body take full viewport height */
+            overflow: hidden; /* Prevent body scrollbars for single page view */
+        }
+        h1 {
+            color: #444;
+            margin-top: 0;
+            margin-bottom: 1px; /* Reduced margin */
+            font-size: 1em;
+        }
+        .main-content {
+            display: flex;
+            gap: 15px; /* Reduced gap */
+            width: 100%;
+            max-width: 1400px; /* Allow wider layout */
+            height: calc(100vh - 70px); /* Adjust based on h1 and padding */
+        }
+        .left-panel {
+            display: flex;
+            flex-direction: column;
+            width: 300px; /* Fixed width for controls */
+            flex-shrink: 0;
+            gap: 10px;
+        }
+        .controls {
+            padding: 5px; /* Reduced padding */
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow-y: auto; /* Allow scroll within controls if needed */
+            max-height: 100%; /* Ensure it fits within left-panel */
+        }
+        .controls h2 {
+            margin-top: 0;
+            margin-bottom: 5px;
+            text-align: center;
+            font-size: 1.2em;
+        }
+        .control-group {
+            margin-bottom: 4px; /* Reduced margin */
+            display: flex;
+            /* flex-wrap: wrap; */ /* 移除或設為 nowrap 以防止換行 */
+            align-items: center;
+        }
+        .control-group label {
+            font-weight: bold;
+            font-size: 0.85em; /* Slightly smaller font */
+            margin-right: 5px;
+            flex-basis: 120px; /* Fixed basis for labels */
+        }
+        .control-group input[type="range"] {
+            flex-grow: 1; /* Allow slider to take remaining space */
+            height: 18px;
+        }
+        .control-group .value-display {
+            font-size: 0.8em;
+            width: 35px; /* Fixed width for value display */
+            text-align: right;
+            margin-left: 5px;
+        }
+        .control-group select,
+        .control-group input[type="checkbox"] {
+            margin-left: auto; /* Push select/checkbox to the right if label is short */
+        }
+         .control-group input[type="checkbox"] {
+            transform: scale(0.9);
+        }
+        .species-controls-group {
+            padding: 8px;
+            margin-bottom: 8px;
+            border-radius: 4px;
+            border: 1px solid #eee;
+        }
+        #unlimitedGrassControls { background-color: #90EE90; } /* Unlimited grass color */
+        #limitedGrassControls { background-color: #66CDAA; }   /* Limited grass (edible) color */
+        #sheepControls { background-color: #e0f2ff; }          /* Light blue for sheep - can be adjusted if needed */
+        #rabbitControls { background-color: #f3e8ff; }         /* Light purple for rabbits - can be adjusted if needed */
+        #wolfControls { background-color: #ffe0e0; }           /* Light red for wolves - can be adjusted if needed */
+
+        .control-group input[type="range"]:disabled {
+            opacity: 0.5;
+        }
+
+        .button-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        button {
+            padding: 8px 10px; /* Reduced padding */
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em; /* Reduced font size */
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .right-panel {
+            display: flex;
+            flex-direction: row; /* 改為水平排列 */
+            flex-grow: 1;
+            gap: 10px;
+            min-width: 0; /* Important for flex item to shrink properly */
+        }
+        .simulation-area {
+            flex: 1; /* 佔據可用空間的一半 */
+            min-width: 0; /* 允許縮小 */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #fff;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            /* height: 100%; */ /* Flex items in a row stretch vertically by default */
+        }
+        canvas#simulationCanvas {
+            border: 1px solid #ccc;
+            /* Max width/height to fit, aspect ratio maintained by JS or fixed values */
+            max-width: 100%;
+            /* max-height: 350px; Removed, size will be controlled by flex-grow and aspect-ratio */
+            flex-grow: 1; /* 畫布將填滿 .simulation-area 中的垂直可用空間 (減去 .stats 的空間) */
+            min-height: 0; /* 配合 flex-grow */
+            aspect-ratio: 1 / 1; /* Keep it square */
+            background-color: #e0ffe0;
+        }
+        .stats {
+            margin-top: 8px;
+            padding: 8px;
+            background-color: #f9f9f9;
+            border-radius: 6px;
+            text-align: center;
+            font-size: 0.9em;
+            width: 100%;
+            box-sizing: border-box;
+            flex-shrink: 0; /* 防止 .stats 被壓縮 */
+        }
+        .stats span {
+            margin: 0 8px;
+        }
+        .stats .stat-group {
+            display: inline-flex; /* Changed to inline-flex for horizontal layout */
+            align-items: center;
+            padding: 3px 6px;
+            margin: 0 2px; /* Reduced margin between groups */
+            border-radius: 4px;
+        }
+        .stats .animal-stats, .stats .tick-stat {
+             /* Optional: if you want a background for animal/tick stats too */
+        }
+        .stats .grass-stats-container {
+            display: inline-flex; /* Keep grass stats together */
+            align-items: center;
+            margin: 0 2px; /* Add consistent margin with other stat groups */
+
+        }
+        .stats .grass-stat-item {
+            display: inline-flex; /* Align color box and text */
+            align-items: center;
+            padding: 3px 6px;
+            margin: 0 2px; /* Margin between individual grass stats */
+            border-radius: 4px;
+            font-size: 0.85em; /* Slightly smaller font for grass stats */
+        }
+
+        /* Styling for individual animal stat items */
+        #sheepCountDisplay, #rabbitsCountDisplay, #wolvesCountDisplay {
+            padding: 3px 6px;
+            border-radius: 4px;
+            font-size: 0.85em; /* Consistent with grass items */
+            margin: 0 1px; /* Small margin between animal items */
+        }
+        #sheepCountDisplay { background-color: #e0f2ff; } /* Matches #sheepControls */
+        #rabbitsCountDisplay { background-color: #f3e8ff; } /* Matches #rabbitControls */
+        #wolvesCountDisplay { background-color: #ffe0e0; } /* Matches #wolfControls */
+
+        .chart-area {
+            flex: 1; /* 佔據可用空間的一半 */
+            min-width: 0; /* 允許縮小 */
+            padding: 10px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            /* min-height: 150px; Removed, height will be determined by flex parent */
+        }
+        .chart-toggle-buttons {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 10px;
+        }
+        .chart-toggle-buttons button {
+            padding: 6px 12px;
+            font-size: 0.85em;
+            margin: 0 5px;
+            background-color: #e9ecef;
+            color: #495057;
+            border: 1px solid #ced4da;
+        }
+        .chart-toggle-buttons button.active {
+            background-color: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        /* .chart-area h2 {
+            text-align: center;
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        } */
+        canvas#populationChart, canvas#energyPyramidChart {
+            width: 100%; 
+            height: 100%; /* Ensure canvas tries to fill space before flex-grow */
+            flex-grow: 1; /* Chart canvas takes available space in its container */
+            min-height: 0; /* Allow shrinking for flex-grow */
+        }
+    </style>
+</head>
+<body>
+    <h1>生態模擬</h1>
+    <div class="main-content">
+        <div class="left-panel">
+            <div class="controls">
+                <div class="control-group">
+                    <label for="selectUnlimitedGrass" title="啟用或停用無限草(A)。無限草提供固定能量，且不會被吃光。">啟用無限草(A):</label>
+                    <input type="checkbox" id="selectUnlimitedGrass" checked title="勾選以啟用無限草(A)。">
+                </div>
+                <div id="unlimitedGrassControls" class="species-controls-group">
+                    <div class="control-group">
+                        <label for="energyFromUnlimitedGrass" title="設定草食動物每次從無限草(A)中獲取的能量值。">無限草A獲能:</label>
+                        <input type="range" id="energyFromUnlimitedGrass" min="1" max="10" value="2" step="1" title="調整草食動物從無限草(A)獲取的能量。">
+                        <span id="energyFromUnlimitedGrassValue" class="value-display">2</span>
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <label for="selectLimitedGrass" title="啟用或停用有限草(B)。有限草會被吃掉，並需要時間再生，有最大負荷量限制。">啟用有限草(B):</label>
+                    <input type="checkbox" id="selectLimitedGrass" title="勾選以啟用有限草(B)。">
+                </div>
+                <div id="limitedGrassControls" class="species-controls-group">
+                    <div class="control-group">
+                        <label for="energyFromLimitedGrass" title="設定草食動物每次從有限草(B)中獲取的能量值。">有限草B獲能:</label>
+                        <input type="range" id="energyFromLimitedGrass" min="1" max="20" value="4" step="1" title="調整草食動物從有限草(B)獲取的能量。">
+                        <span id="energyFromLimitedGrassValue" class="value-display">4</span>
+                    </div>
+                    <div class="control-group">
+                        <label for="initialLimitedGrassPercent" title="設定模擬開始時，有限草(B)在畫布上的初始覆蓋百分比。">草B初始覆蓋%:</label>
+                        <input type="range" id="initialLimitedGrassPercent" min="0" max="100" value="50" step="1" title="調整有限草(B)的初始覆蓋率。">
+                        <span id="initialLimitedGrassPercentValue" class="value-display">50</span>
+                    </div>
+                    <div class="control-group">
+                        <label for="grassRegrowthTime" title="設定有限草(B)被吃掉後，需要多少回合才能重新長出來。">草B再生(回合):</label>
+                        <input type="range" id="grassRegrowthTime" min="1" max="100" value="30" title="調整有限草(B)的再生所需回合數。">
+                        <span id="grassRegrowthTimeValue" class="value-display">30</span>
+                    </div>
+                    <div class="control-group">
+                        <label for="grassCarryingCapacity" title="設定地圖上有限草(B)的最大總量。當草地數量達到此值時，不再繼續再生，直到有草被吃掉。">草B負荷量:</label>
+                        <input type="range" id="grassCarryingCapacity" min="100" max="2500" value="2000" step="50" title="調整有限草(B)的最大負荷量。">
+                        <span id="grassCarryingCapacityValue" class="value-display">2000</span>
+                    </div>
+                </div>
+
+                <hr style="margin: 8px 0; border-color: #eee;">
+
+                <div class="control-group">
+                    <label for="selectSheep" title="啟用或停用羊群。">啟用羊群:</label>
+                    <input type="checkbox" id="selectSheep" checked title="勾選以在模擬中包含羊群。">
+                </div>
+                <div id="sheepControls" class="species-controls-group">
+                    <div class="control-group">
+                        <label for="initialNumberSheep" title="設定模擬開始時羊的初始數量。">初始羊群:</label>
+                        <input type="range" id="initialNumberSheep" min="0" max="500" value="100" title="調整初始羊群數量。">
+                        <span id="initialNumberSheepValue" class="value-display">100</span>
+                    </div>
+                    <div class="control-group">
+                        <label for="sheepReproduce" title="設定羊每回合繁殖的機率百分比。">羊繁殖率%:</label>
+                        <input type="range" id="sheepReproduce" min="0" max="10" value="4" title="調整羊的繁殖機率。">
+                        <span id="sheepReproduceValue" class="value-display">4</span>
+                    </div>
+                    <div class="control-group">
+                        <label for="sheepSpeed" title="設定羊每回合移動的步數。數值越大移動越快。">羊速度:</label>
+                        <input type="range" id="sheepSpeed" min="1" max="5" value="1" step="1" title="調整羊每回合移動的次數。">
+                        <span id="sheepSpeedValue" class="value-display">1</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label for="selectRabbit" title="啟用或停用兔群。">啟用兔群:</label>
+                    <input type="checkbox" id="selectRabbit" title="勾選以在模擬中包含兔群。">
+                </div>
+                <div id="rabbitControls" class="species-controls-group">
+                    <div class="control-group">
+                        <label for="initialNumberRabbits" title="設定模擬開始時兔的初始數量。">初始兔群:</label>
+                        <input type="range" id="initialNumberRabbits" min="0" max="500" value="0" title="調整初始兔群數量。">
+                        <span id="initialNumberRabbitsValue" class="value-display">0</span>
+                    </div>
+                    <div class="control-group">
+                        <label for="rabbitReproduce" title="設定兔每回合繁殖的機率百分比。">兔繁殖率%:</label>
+                        <input type="range" id="rabbitReproduce" min="0" max="15" value="6" title="調整兔的繁殖機率。">
+                        <span id="rabbitReproduceValue" class="value-display">6</span>
+                    </div>
+                    <div class="control-group">
+                        <label for="rabbitSpeed" title="設定兔每回合移動的步數。數值越大移動越快。">兔速度:</label>
+                        <input type="range" id="rabbitSpeed" min="1" max="5" value="2" step="1" title="調整兔每回合移動的次數。">
+                        <span id="rabbitSpeedValue" class="value-display">2</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label for="selectWolf" title="啟用或停用狼群。">啟用狼群:</label>
+                    <input type="checkbox" id="selectWolf" title="勾選以在模擬中包含狼群。">
+                </div>
+                <div id="wolfControls" class="species-controls-group">
+                    <div class="control-group">
+                        <label for="initialNumberWolves" title="設定模擬開始時狼的初始數量。">初始狼群:</label>
+                        <input type="range" id="initialNumberWolves" min="0" max="250" value="50" title="調整初始狼群數量。">
+                        <span id="initialNumberWolvesValue" class="value-display">50</span>
+                    </div>
+                    <div class="control-group">
+                        <label for="wolfGainFromFood" title="設定狼每次成功捕食一隻羊後獲得的能量值。">狼(羊)獲能:</label>
+                        <input type="range" id="wolfGainFromFood" min="5" max="50" value="20" title="調整狼從羊獲取的能量。">
+                        <span id="wolfGainFromFoodValue" class="value-display">20</span>
+                    </div>
+                    <div class="control-group">
+                        <label for="wolfGainFromRabbitFood" title="設定狼每次成功捕食一隻兔後獲得的能量值。">狼(兔)獲能:</label>
+                        <input type="range" id="wolfGainFromRabbitFood" min="1" max="30" value="10" title="調整狼從兔獲取的能量。">
+                        <span id="wolfGainFromRabbitFoodValue" class="value-display">10</span>
+                    </div>
+                    <div class="control-group">
+                        <label for="wolfReproduce" title="設定狼每回合繁殖的機率百分比。">狼繁殖率%:</label>
+                        <input type="range" id="wolfReproduce" min="0" max="10" value="5" title="調整狼的繁殖機率。">
+                        <span id="wolfReproduceValue" class="value-display">5</span>
+                    </div>
+                    <div class="control-group">
+                        <label for="maxWolves" title="設定狼群的最大數量上限。">最大狼群:</label>
+                        <input type="range" id="maxWolves" min="0" max="1000" value="200" step="10" title="調整狼群的總數上限。">
+                        <span id="maxWolvesValue" class="value-display">200</span>
+                    </div>
+                </div>
+
+                <hr style="margin: 8px 0; border-color: #eee;">
+                <p style="font-size: 0.9em; text-align: center; margin: 2px 0;">通用設定:</p>
+
+                <div class="control-group">
+                    <label for="maxHerbivores" title="設定草食動物(羊和兔的總和)的最大數量上限。當狼群消失且草食動物達到此上限時，模擬將停止。">草食動物負荷量:</label>
+                    <input type="range" id="maxHerbivores" min="500" max="10000" value="2000" step="100" title="調整草食動物的總數上限。">
+                    <span id="maxHerbivoresValue" class="value-display">2000</span>
+                </div>
+
+                <div class="control-group">
+                    <label for="showEnergy" title="在模擬畫面上顯示或隱藏每個生物個體的能量值。">顯示能量:</label>
+                    <input type="checkbox" id="showEnergy" title="勾選以在生物下方顯示其當前能量值。">
+                </div>
+                <div class="control-group">
+                    <label for="autoScaleYAxisCheckbox" title="設定族群大小變化圖的Y軸是否自動根據數據調整範圍，或使用固定的對數刻度起點。">Y軸自動縮放:</label>
+                    <input type="checkbox" id="autoScaleYAxisCheckbox" title="勾選以啟用Y軸自動縮放。取消勾選則Y軸從0.1開始。">
+                </div>
+
+                <div class="control-group">
+                    <label for="baseEnergyCostSlider" title="設定所有生物每回合移動和維持生命所需消耗的基礎能量值。">基礎耗能/回合:</label>
+                    <input type="range" id="baseEnergyCostSlider" min="0" max="5" value="1" step="1" title="調整生物每回合的基礎能量消耗。">
+                    <span id="baseEnergyCostValue" class="value-display">1</span>
+                </div>
+                <div class="control-group">
+                    <label for="reproductionEnergyCostFactorSlider" title="設定繁殖後能量的計算方式。此數值為「除數」：繁殖後能量 = 原能量 ÷ 此數值。例如：設為 2，繁殖後能量減半 (消耗50%能量)；設為 4，能量剩餘1/4 (消耗75%能量)。數值越小，繁殖時消耗的能量越少。">繁殖能量成本 (除數):</label>
+                    <input type="range" id="reproductionEnergyCostFactorSlider" min="1.1" max="4" value="2" step="0.1" title="調整繁殖能量成本的「除數」。數值越小，繁殖消耗的能量越少。">
+                    <span id="reproductionEnergyCostFactorValue" class="value-display">2</span>
+                </div>
+                <div class="button-group">
+                    <button id="goContinuousButton" title="連續運行模擬，直到手動停止或觸發停止條件。">連續執行</button>                    
+                    <button id="goOnceButton" title="讓模擬前進一個回合。">單回合執行</button>                    
+                    <button id="stopButton" disabled title="暫停正在連續運行的模擬。">停止</button>
+                    <button id="resetDefaultsButton" title="將所有控制面板的設定恢復到預設值，並重新開始模擬於第0回合。">預設值</button>
+
+                </div>
+                <div id="simulationMessages" style="text-align: center; margin-top: 10px; color: red; font-weight: bold; min-height: 1.2em;"></div>
+            </div>
+        </div>
+
+        <div class="right-panel">
+            <div class="simulation-area">
+                <canvas id="simulationCanvas" width="450" height="450"></canvas> <!-- Fixed size or use JS to set based on available space -->
+                <div class="stats">                    
+                    <span id="ticksDisplay" class="stat-group tick-stat">回合: 0</span>
+                    <span class="stat-group animal-stats">
+                        <span id="rabbitsCountDisplay">兔群: N/A</span>                        
+                        <span id="sheepCountDisplay">羊群: N/A</span>
+                        <span id="wolvesCountDisplay">狼群: N/A</span>
+                    </span>
+                    <div class="grass-stats-container">
+                        <span id="unlimitedGrassStatDisplay" class="grass-stat-item" style="background-color: #cfe9cf;">
+                            無限草A: N/A
+                        </span>
+                        <span id="limitedGrassStatDisplay" class="grass-stat-item" style="background-color: #b2dfdb;">
+                            有限草B: 0
+                        </span>
+                    </div>
+                </div>
+            </div>
+            <div class="chart-area">
+                <div class="chart-toggle-buttons">
+                    <button id="showPopulationChartButton" class="active" title="顯示各族群數量隨時間變化的折線圖。">族群大小圖</button>
+                    <button id="showEnergyPyramidButton" title="顯示生產者、初級消費者和次級消費者的總能量比較橫條圖。">能量比較</button>
+                </div>
+                <canvas id="populationChart" style="display: block;"></canvas>
+                <canvas id="energyPyramidChart" style="display: none;"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Global Parameters & Configuration ---
+        const simCanvasElement = document.getElementById('simulationCanvas');
+        const ctx = simCanvasElement.getContext('2d');
+
+        // Dynamic canvas sizing (optional, can be fixed in HTML/CSS)
+        // let availableCanvasSize = Math.min(simCanvasElement.parentElement.offsetWidth - 20, simCanvasElement.parentElement.offsetHeight - 50); // 20 for padding, 50 for stats
+        // availableCanvasSize = Math.max(200, availableCanvasSize); // Min size
+        // simCanvasElement.width = availableCanvasSize;
+        // simCanvasElement.height = availableCanvasSize;
+        // For simplicity, using fixed size from HTML initially. If dynamic:
+        // If you want to make the canvas truly responsive to the .simulation-area size,
+        // you'd need to resize it in JS when the window resizes or when elements change.
+        // For now, `aspect-ratio: 1/1` in CSS for `canvas#simulationCanvas` helps maintain it square.
+
+        // --- Constants for Drawing and Simulation Logic ---
+        const PATCH_COLOR_LIMITED_GRASS_PRESENT = '#66CDAA'; // 有限草B 存在時的顏色
+        const PATCH_COLOR_LIMITED_GRASS_ABSENT = '#D2B48C';  // 有限草B 缺乏時的顏色 (泥土色)
+        const PATCH_COLOR_UNLIMITED_GRASS = '#aadeaa';     // 無限草A 的顏色 (稍暗以增加對比)
+        const PATCH_COLOR_NO_GRASS = '#D3D3D3';            // 沒有任何草種被啟用時的顏色
+        
+        const AGENT_FONT_SIZE_MULTIPLIER = 1; // Current user setting (patchSize * 2 for larger icons)
+        const ENERGY_FONT_SIZE_MULTIPLIER = 0.5;
+
+        const SHEEP_ICON = '🐑';
+        const WOLF_ICON = '🐺';
+        const RABBIT_ICON = '🐇';
+
+        const SHEEP_ENERGY_COLOR = 'blue';
+        const WOLF_ENERGY_COLOR = 'red';
+        const RABBIT_ENERGY_COLOR = 'purple';
+
+        const PATCH_PCOLOR_GREEN = 'green'; // For internal logic (patch.pcolor value)
+        const PATCH_PCOLOR_BROWN = 'brown'; // For internal logic (patch.pcolor value)
+        const AGENT_CENTER_X_OFFSET = 0.5;        const AGENT_CENTER_Y_OFFSET = 0.5;        const ENERGY_TEXT_Y_OFFSET_FACTOR = 0.8; // For positioning energy text relative to patch top
+        const worldWidth = 25; 
+        const worldHeight = 25;
+        let patchSize = simCanvasElement.width / worldWidth; // Recalculate if canvas size changes
+
+        let config = {
+            // Component selection
+            hasUnlimitedGrass: true,
+            hasLimitedGrass: false,
+            hasSheep: true,
+            hasRabbit: false,
+            hasWolf: false,
+
+            // Unlimited Grass (A)
+            energyFromUnlimitedGrass: 2,
+
+            // Limited Grass (B)
+            energyFromLimitedGrass: 4, // Energy herbivores get from eating limited grass
+            initialLimitedGrassPercent: 50, // New: Initial percentage of limited grass
+            grassRegrowthTime: 30,
+            grassCarryingCapacity: 2000,
+
+            // Sheep
+            initialNumberSheep: 100,
+            sheepReproduce: 4,
+
+            sheepSpeed: 1, // New: Sheep speed (moves per tick)
+
+            // Rabbit
+            initialNumberRabbits: 0,
+            rabbitReproduce: 6,
+
+            // Wolf
+            initialNumberWolves: 50,
+            wolfGainFromFood: 20, // Energy from eating sheep
+            wolfGainFromRabbitFood: 10, // Energy from eating rabbit
+            wolfReproduce: 5,
+            maxWolves: 200, // New: Max wolves population
+
+            rabbitSpeed: 2, // New: Rabbit speed (moves per tick)
+
+            // General
+            maxHerbivores: 2000, // Max combined sheep and rabbits
+            showEnergy: false,
+            autoScaleYAxis: false, // New: For chart Y-axis auto-scaling
+            baseEnergyCost: 1, // New: Base energy cost per tick for all agents
+            reproductionEnergyCostFactor: 2 // New: Energy is divided by this factor upon reproduction (e.g., 2 means 50% cost)
+        };
+        // Store the initial default configuration for the reset button
+        const initialDefaultConfig = JSON.parse(JSON.stringify(config));
+
+        let patches = [];
+        let sheep = [];
+        let wolves = [];
+        let rabbits = []; // New: Array for rabbits        
+        let ticks = 0;
+        let simulationInterval = null;
+        let simulationRunning = false;
+
+        let currentVisibleChart = 'population'; // 'population' or 'energyPyramid'
+        let populationChartInstance = null;
+        let energyPyramidChartInstance = null;
+        let chartData = {
+            labels: [], 
+            sheep: [], wolves: [], grass: [], rabbits: []
+        };
+        const MAX_CHART_POINTS = 300; // Reduced points for performance with faster updates
+
+        // --- UI Elements ---
+        // Checkboxes for selecting components
+        const selectUnlimitedGrassCheckbox = document.getElementById('selectUnlimitedGrass');
+        const selectLimitedGrassCheckbox = document.getElementById('selectLimitedGrass');
+        const selectSheepCheckbox = document.getElementById('selectSheep');
+        const selectRabbitCheckbox = document.getElementById('selectRabbit');
+        const selectWolfCheckbox = document.getElementById('selectWolf');
+
+        // Sliders for Unlimited Grass A
+        const energyFromUnlimitedGrassSlider = document.getElementById('energyFromUnlimitedGrass');
+        // Sliders for Limited Grass B
+        const energyFromLimitedGrassSlider = document.getElementById('energyFromLimitedGrass');
+        const initialLimitedGrassPercentSlider = document.getElementById('initialLimitedGrassPercent'); // New
+        const grassRegrowthTimeSlider = document.getElementById('grassRegrowthTime');
+        const grassCarryingCapacitySlider = document.getElementById('grassCarryingCapacity');
+        // Sliders for Sheep        
+        const initialNumberSheepSlider = document.getElementById('initialNumberSheep');
+        const sheepReproduceSlider = document.getElementById('sheepReproduce');
+        const sheepSpeedSlider = document.getElementById('sheepSpeed'); // New
+        // Sliders for Rabbit
+        const rabbitSpeedSlider = document.getElementById('rabbitSpeed'); // New
+        const initialNumberRabbitsSlider = document.getElementById('initialNumberRabbits');
+        const rabbitReproduceSlider = document.getElementById('rabbitReproduce');
+        // Sliders for Wolf
+        const initialNumberWolvesSlider = document.getElementById('initialNumberWolves');
+        const wolfGainFromFoodSlider = document.getElementById('wolfGainFromFood');
+        const wolfGainFromRabbitFoodSlider = document.getElementById('wolfGainFromRabbitFood');
+        const wolfReproduceSlider = document.getElementById('wolfReproduce');
+        const maxWolvesSlider = document.getElementById('maxWolves'); // New
+        // General Sliders
+        const autoScaleYAxisCheckbox = document.getElementById('autoScaleYAxisCheckbox'); // New
+        const maxHerbivoresSlider = document.getElementById('maxHerbivores');
+        const baseEnergyCostSlider = document.getElementById('baseEnergyCostSlider'); // New
+        const reproductionEnergyCostFactorSlider = document.getElementById('reproductionEnergyCostFactorSlider'); // New
+
+
+        const showEnergyCheckbox = document.getElementById('showEnergy');
+
+        // const setupButton = document.getElementById('setupButton'); // Unused variable
+        const goOnceButton = document.getElementById('goOnceButton');
+        const goContinuousButton = document.getElementById('goContinuousButton');
+        const stopButton = document.getElementById('stopButton');
+        const resetDefaultsButton = document.getElementById('resetDefaultsButton');
+
+        const ticksDisplay = document.getElementById('ticksDisplay');
+        const sheepCountDisplay = document.getElementById('sheepCountDisplay');
+        const wolvesCountDisplay = document.getElementById('wolvesCountDisplay');
+        const rabbitsCountDisplay = document.getElementById('rabbitsCountDisplay'); // New
+        const unlimitedGrassStatDisplay = document.getElementById('unlimitedGrassStatDisplay');
+        const limitedGrassStatDisplay = document.getElementById('limitedGrassStatDisplay');
+        
+        // Chart toggle buttons
+        const showPopulationChartButton = document.getElementById('showPopulationChartButton');
+        const showEnergyPyramidButton = document.getElementById('showEnergyPyramidButton');
+        const populationChartCanvasElement = document.getElementById('populationChart');
+        const energyPyramidCanvasElement = document.getElementById('energyPyramidChart');
+        const simulationMessagesElement = document.getElementById('simulationMessages');
+
+        function displaySimulationMessage(message) {
+            if (simulationMessagesElement) {
+                simulationMessagesElement.textContent = message;
+            }
+        }
+        function clearSimulationMessage() {
+            if (simulationMessagesElement) simulationMessagesElement.textContent = '';
+        }
+
+        function setupSliderListener(sliderElement, valueDisplayId, configKey) {
+            const valueDisplay = document.getElementById(valueDisplayId);
+            sliderElement.addEventListener('input', () => {
+                valueDisplay.textContent = sliderElement.value;
+                config[configKey] = parseFloat(sliderElement.value);
+                if (configKey === 'initialLimitedGrassPercent') updateInitialLimitedGrassVisuals(); // Real-time update for this slider
+                // Real-time update for initial animal numbers
+                if (['initialNumberSheep', 'initialNumberRabbits', 'initialNumberWolves'].includes(configKey)) {
+                    updateInitialAnimalPopulations();
+                }
+            });
+            valueDisplay.textContent = sliderElement.value; // Initialize
+            config[configKey] = parseFloat(sliderElement.value); // Initialize
+        }
+
+        function setupCheckboxListener(checkboxElement, configKey, controlsGroupId) {
+            checkboxElement.addEventListener('change', () => {
+                config[configKey] = checkboxElement.checked;
+                updateControlVisibility();
+                // If simulation was set up, changing components might require re-setup
+                if (patches.length > 0) {
+                    // Consider stopping simulation or prompting for re-setup
+                    // For now, just update chart visibility if applicable
+                    if (populationChartInstance) {
+                        // Current dataset order in initChart:
+                        // 0: Limited Grass B
+                        // 1: Rabbits
+                        // 2: Sheep
+                        // 3: Wolves
+                        if (configKey === 'hasLimitedGrass') {
+                            populationChartInstance.data.datasets[0].hidden = !config.hasLimitedGrass;
+                        } else if (configKey === 'hasRabbit') {
+                             populationChartInstance.data.datasets[1].hidden = !config.hasRabbit;
+                        } else if (configKey === 'hasSheep') {
+                            populationChartInstance.data.datasets[2].hidden = !config.hasSheep;
+                        } else if (configKey === 'hasWolf') {
+                            populationChartInstance.data.datasets[3].hidden = !config.hasWolf;
+                        }
+                        populationChartInstance.update('none');
+                    }
+                    updateDisplays();
+                    if (configKey === 'hasLimitedGrass') updateInitialLimitedGrassVisuals(); // Update visuals when toggling limited grass
+                    // Update animal populations when toggling species
+                    if (['hasSheep', 'hasRabbit', 'hasWolf'].includes(configKey)) {
+                        updateInitialAnimalPopulations();
+                    }
+                }
+            });
+            config[configKey] = checkboxElement.checked; // Initialize
+        }
+
+        function updateControlVisibility() {
+            // Helper function to enable/disable controls within a group
+            const setControlsDisabled = (groupId, isDisabled) => {
+                const group = document.getElementById(groupId);
+                if (group) {
+                    group.querySelectorAll('input[type="range"], input[type="number"], select').forEach(input => {
+                        input.disabled = isDisabled;
+                    });
+                }
+            };
+
+            setControlsDisabled('unlimitedGrassControls', !config.hasUnlimitedGrass);
+            setControlsDisabled('limitedGrassControls', !config.hasLimitedGrass);
+            setControlsDisabled('sheepControls', !config.hasSheep);
+            setControlsDisabled('rabbitControls', !config.hasRabbit);
+            setControlsDisabled('wolfControls', !config.hasWolf);
+        }
+
+        function updateInitialLimitedGrassVisuals() {
+            if (patches.length === 0 || simulationRunning) return; // Only if world exists and not running
+
+            // Re-seed limited grass based on the current percentage if it's enabled
+            if (config.hasLimitedGrass) {
+                for (let r = 0; r < worldWidth; r++) {
+                    for (let c = 0; c < worldHeight; c++) {
+                        if (patches[r] && patches[r][c]) { // Ensure patch exists
+                            patches[r][c].pcolor = (Math.random() * 100 < config.initialLimitedGrassPercent) ? PATCH_PCOLOR_GREEN : PATCH_PCOLOR_BROWN;
+                            patches[r][c].countdown = (patches[r][c].pcolor === PATCH_PCOLOR_GREEN) ? config.grassRegrowthTime : Math.floor(Math.random() * config.grassRegrowthTime);
+                        }
+                    }
+                }
+            }
+            // If !config.hasLimitedGrass, the drawWorld function will handle rendering patches
+            // as non-limited-grass (e.g., unlimited grass color or neutral).
+
+            drawWorld();    // Redraw the world with the new grass distribution
+            updateDisplays(); // Update the statistical displays
+        }
+
+        function updateInitialAnimalPopulations() {
+            if (patches.length === 0 || simulationRunning) return; // Only if world exists and not running
+
+            // Clear existing animal populations
+            sheep = [];
+            rabbits = [];
+            wolves = [];
+
+            // Re-populate based on current config, if enabled
+            let sheepInitialEnergyMax = (config.energyFromLimitedGrass || config.energyFromUnlimitedGrass || 4) * 2;
+            let rabbitInitialEnergyMax = (config.energyFromLimitedGrass || config.energyFromUnlimitedGrass || 3) * 2;
+            let wolfInitialEnergyMax = (config.wolfGainFromFood || config.wolfGainFromRabbitFood || 20) * 2; // Consider both food sources for wolves
+
+            if (config.hasSheep) {
+                for (let i = 0; i < config.initialNumberSheep; i++) {
+                    sheep.push(new Agent(Math.floor(Math.random() * worldWidth), Math.floor(Math.random() * worldHeight), Math.floor(Math.random() * sheepInitialEnergyMax), 'sheep'));
+                }
+            }
+            if (config.hasRabbit) {
+                for (let i = 0; i < config.initialNumberRabbits; i++) {
+                    rabbits.push(new Agent(Math.floor(Math.random() * worldWidth), Math.floor(Math.random() * worldHeight), Math.floor(Math.random() * rabbitInitialEnergyMax), 'rabbit'));
+                }
+            }
+            if (config.hasWolf) {
+                for (let i = 0; i < config.initialNumberWolves; i++) {
+                    wolves.push(new Agent(Math.floor(Math.random() * worldWidth), Math.floor(Math.random() * worldHeight), Math.floor(Math.random() * wolfInitialEnergyMax), 'wolf'));
+                }
+            }
+
+            drawWorld();
+            updateDisplays();
+            // Update the current data point in the chart if it exists
+            if (populationChartInstance && chartData.labels.length > 0) {
+                const lastIndex = chartData.labels.length - 1;
+                chartData.sheep[lastIndex] = sheep.length;
+                chartData.rabbits[lastIndex] = rabbits.length;
+                chartData.wolves[lastIndex] = wolves.length;
+                populationChartInstance.update('none');
+            }
+        }
+
+        function updateChartYAxisOptions() {
+            if (!populationChartInstance) return;
+
+            if (config.autoScaleYAxis) {
+                populationChartInstance.options.scales.y.min = undefined; // Let Chart.js determine min based on data
+                // populationChartInstance.options.scales.y.suggestedMax = undefined; // Let Chart.js determine max
+            } else {
+                populationChartInstance.options.scales.y.min = 0.1; // Fixed min for logarithmic scale
+                // populationChartInstance.options.scales.y.suggestedMax = undefined; // Let Chart.js determine max
+            }
+            populationChartInstance.update('none');
+        }
+
+
+        // Setup Listeners for checkboxes
+        setupCheckboxListener(selectUnlimitedGrassCheckbox, 'hasUnlimitedGrass', 'unlimitedGrassControls');
+        setupCheckboxListener(selectLimitedGrassCheckbox, 'hasLimitedGrass', 'limitedGrassControls');
+        setupCheckboxListener(selectSheepCheckbox, 'hasSheep', 'sheepControls');
+        setupCheckboxListener(selectRabbitCheckbox, 'hasRabbit', 'rabbitControls');
+        setupCheckboxListener(selectWolfCheckbox, 'hasWolf', 'wolfControls');
+
+        // Setup Listeners for sliders
+        setupSliderListener(energyFromUnlimitedGrassSlider, 'energyFromUnlimitedGrassValue', 'energyFromUnlimitedGrass');
+        setupSliderListener(energyFromLimitedGrassSlider, 'energyFromLimitedGrassValue', 'energyFromLimitedGrass');
+        setupSliderListener(initialLimitedGrassPercentSlider, 'initialLimitedGrassPercentValue', 'initialLimitedGrassPercent'); // New
+        setupSliderListener(grassRegrowthTimeSlider, 'grassRegrowthTimeValue', 'grassRegrowthTime');
+        setupSliderListener(grassCarryingCapacitySlider, 'grassCarryingCapacityValue', 'grassCarryingCapacity');
+        setupSliderListener(sheepSpeedSlider, 'sheepSpeedValue', 'sheepSpeed'); // New
+        setupSliderListener(rabbitSpeedSlider, 'rabbitSpeedValue', 'rabbitSpeed'); // New
+        setupSliderListener(initialNumberSheepSlider, 'initialNumberSheepValue', 'initialNumberSheep');
+        setupSliderListener(sheepReproduceSlider, 'sheepReproduceValue', 'sheepReproduce');
+        setupSliderListener(initialNumberRabbitsSlider, 'initialNumberRabbitsValue', 'initialNumberRabbits');
+        setupSliderListener(rabbitReproduceSlider, 'rabbitReproduceValue', 'rabbitReproduce');
+        setupSliderListener(initialNumberWolvesSlider, 'initialNumberWolvesValue', 'initialNumberWolves');
+        setupSliderListener(wolfGainFromFoodSlider, 'wolfGainFromFoodValue', 'wolfGainFromFood');
+        setupSliderListener(wolfGainFromRabbitFoodSlider, 'wolfGainFromRabbitFoodValue', 'wolfGainFromRabbitFood');
+        setupSliderListener(wolfReproduceSlider, 'wolfReproduceValue', 'wolfReproduce');
+        setupSliderListener(maxWolvesSlider, 'maxWolvesValue', 'maxWolves'); // New
+        setupSliderListener(maxHerbivoresSlider, 'maxHerbivoresValue', 'maxHerbivores');
+        setupSliderListener(baseEnergyCostSlider, 'baseEnergyCostValue', 'baseEnergyCost'); // New
+        setupSliderListener(reproductionEnergyCostFactorSlider, 'reproductionEnergyCostFactorValue', 'reproductionEnergyCostFactor'); // New
+
+        showEnergyCheckbox.addEventListener('change', () => {
+            config.showEnergy = showEnergyCheckbox.checked;
+            if (patches.length > 0) drawWorld(); 
+        });
+
+        autoScaleYAxisCheckbox.addEventListener('change', () => {
+            config.autoScaleYAxis = autoScaleYAxisCheckbox.checked;
+            updateChartYAxisOptions();
+        });
+
+        class Agent { // Same as before
+            constructor(x, y, energy, type) {
+                this.x = x; this.y = y; this.energy = energy; this.type = type;
+                this.id = Math.random().toString(36).substr(2, 9);
+            }
+            move() {
+                let angle = Math.random() * 360;
+                let dx = Math.round(Math.cos(angle * Math.PI / 180));
+                let dy = Math.round(Math.sin(angle * Math.PI / 180));
+                this.x = (this.x + dx + worldWidth + worldWidth) % worldWidth; // Double worldWidth for robust modulo
+                this.y = (this.y + dy + worldHeight + worldHeight) % worldHeight;
+            }
+        }
+
+        function calculateCurrentGrassCount() { // Same as before
+            if (!config.hasLimitedGrass || !patches.length) return 0;
+            let count = 0;
+            for (let r = 0; r < worldWidth; r++) {
+                for (let c = 0; c < worldHeight; c++) {
+                    if (patches[r] && patches[r][c] && patches[r][c].pcolor === PATCH_PCOLOR_GREEN) count++;
+                }
+            }
+            return count;
+        }
+
+        function initPopulationChart() { 
+            if (populationChartInstance) populationChartInstance.destroy();
+            // const chartCanvas = document.getElementById('populationChart'); // Already defined as populationChartCanvasElement
+            const ctxPopChart = populationChartCanvasElement.getContext('2d');
+            populationChartInstance = new Chart(ctxPopChart, {
+                type: 'line',
+                data: {
+                    labels: chartData.labels,
+                    datasets: [
+                        { label: '有限草B', data: chartData.grass, borderColor: 'rgb(75, 192, 75)', backgroundColor: 'rgba(75, 192, 75, 0.1)', tension: 0.1, hidden: !config.hasLimitedGrass, pointRadius: 0, borderWidth: 1.5 },                    
+                        { label: '兔群', data: chartData.rabbits, borderColor: 'rgb(153, 102, 255)', backgroundColor: 'rgba(153, 102, 255, 0.1)', tension: 0.1, pointRadius: 0, borderWidth: 1.5, hidden: !config.hasRabbit },                        
+                        { label: '羊群', data: chartData.sheep, borderColor: 'rgb(54, 162, 235)', backgroundColor: 'rgba(54, 162, 235, 0.1)', tension: 0.1, pointRadius: 0, borderWidth: 1.5, hidden: !config.hasSheep },
+                        { label: '狼群', data: chartData.wolves, borderColor: 'rgb(255, 99, 132)', backgroundColor: 'rgba(255, 99, 132, 0.1)', tension: 0.1, pointRadius: 0, borderWidth: 1.5, hidden: !config.hasWolf }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false, },
+                    scales: {
+                        x: { title: { display: true, text: '模擬回合', font: {size: 10} }, ticks: { font: {size: 9} } },
+                        y: { 
+                            type: 'logarithmic', 
+                            display: true, 
+                            title: { display: true, text: '族群數量 (對數)', font: {size: 10} }, 
+                            min: config.autoScaleYAxis ? undefined : 0.1, // Set min based on config
+                            // suggestedMax: will be auto-calculated by Chart.js
+                            ticks: { font: {size: 9}, callback: function(value, index, values) { if (value === 0.1 || value === 1 || value === 10 || value === 100 || value === 1000 || value === 10000) return value; } } 
+                        }
+                    },
+                    plugins: { 
+                        title: { display: true, text: '族群大小變化圖', font: {size: 14} }, 
+                        legend: { position: 'top', labels: { font: {size: 10}, boxWidth: 20, padding: 10 } } 
+                    },
+                    animation: { duration: 0 }, // Disable animation for faster updates
+                    elements: { line: { borderWidth: 1.5 } }
+                }
+            });
+        }
+
+        function initEnergyPyramidChart() {
+            if (energyPyramidChartInstance) energyPyramidChartInstance.destroy();
+            const ctxEnergyChart = energyPyramidCanvasElement.getContext('2d');
+
+            const energies = calculateTrophicEnergies();
+
+            energyPyramidChartInstance = new Chart(ctxEnergyChart, {
+                type: 'bar',
+                data: {
+                    labels: ['次級消費者 (狼)', '初級消費者 (羊+兔)', '生產者 (草B)'],
+                    datasets: [{
+                        label: '總能量',
+                        data: [energies.secondaryConsumer, energies.primaryConsumer, energies.producer],
+                        backgroundColor: [
+                            'rgba(255, 99, 132, 0.7)',  // Red for secondary consumers
+                            'rgba(255, 159, 64, 0.7)', // Orange for primary consumers
+                            'rgba(75, 192, 75, 0.7)',  // Green for producers
+                        ],
+                        borderColor: [
+                            'rgb(255, 99, 132)',
+                            'rgb(255, 159, 64)',
+                            'rgb(75, 192, 75)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    indexAxis: 'y', // Makes it a horizontal bar chart
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { x: { beginAtZero: true, title: { display: true, text: '總能量單位', font: {size: 10} } }, y: { ticks: { font: {size: 10} } } },
+                    plugins: { title: { display: true, text: '能量橫條圖', font: {size: 14} }, legend: { display: false } },
+                    animation: { duration: 0 }
+                }
+            });
+        }
+        
+        function setup() {
+            stopSimulation();
+            clearSimulationMessage();
+            patchSize = simCanvasElement.width / worldWidth; 
+            ticks = 0; sheep = []; wolves = []; rabbits = []; patches = []; // Initialize rabbits array
+
+            for (let i = 0; i < worldWidth; i++) {
+                patches[i] = [];
+                for (let j = 0; j < worldHeight; j++) {
+                    let pcolorValue, countdown;
+                    if (config.hasLimitedGrass) { // Use initialLimitedGrassPercent for initial setup
+                        pcolorValue = (Math.random() * 100 < config.initialLimitedGrassPercent) ? PATCH_PCOLOR_GREEN : PATCH_PCOLOR_BROWN;
+                        countdown = (pcolorValue === PATCH_PCOLOR_GREEN) ? config.grassRegrowthTime : Math.floor(Math.random() * config.grassRegrowthTime);
+                    } else { // If no limited grass, patches are neutral (e.g., for unlimited grass or just space)
+                        pcolorValue = PATCH_PCOLOR_BROWN; // Or a neutral color like '#E0E0E0'
+                        countdown = 0; 
+                    }
+                    patches[i][j] = { pcolor: pcolorValue, countdown: countdown };
+                }
+            }
+
+            let sheepInitialEnergyMax = (config.energyFromLimitedGrass || config.energyFromUnlimitedGrass || 4) * 2;
+            let rabbitInitialEnergyMax = (config.energyFromLimitedGrass || config.energyFromUnlimitedGrass || 3) * 2;
+            let wolfInitialEnergyMax = (config.wolfGainFromFood || 20) * 2;
+
+            if (config.hasSheep) {
+                for (let i = 0; i < config.initialNumberSheep; i++) {
+                    sheep.push(new Agent(Math.floor(Math.random() * worldWidth), Math.floor(Math.random() * worldHeight), Math.floor(Math.random() * sheepInitialEnergyMax), 'sheep'));
+                }
+            }
+            if (config.hasRabbit && config.initialNumberRabbits > 0) {
+                for (let i = 0; i < config.initialNumberRabbits; i++) {
+                    rabbits.push(new Agent(Math.floor(Math.random() * worldWidth), Math.floor(Math.random() * worldHeight), Math.floor(Math.random() * rabbitInitialEnergyMax), 'rabbit'));
+                }
+            }
+            if (config.hasWolf) {
+                for (let i = 0; i < config.initialNumberWolves; i++) {
+                    wolves.push(new Agent(Math.floor(Math.random() * worldWidth), Math.floor(Math.random() * worldHeight), Math.floor(Math.random() * wolfInitialEnergyMax), 'wolf'));
+                }
+            }
+            
+            if (currentVisibleChart === 'population') {
+                chartData.labels = [ticks]; 
+                chartData.sheep = [sheep.length]; 
+                chartData.wolves = [wolves.length]; 
+                chartData.rabbits = [rabbits.length];
+                chartData.grass = [config.hasLimitedGrass ? calculateCurrentGrassCount() : 0];
+                
+                if (!populationChartInstance) initPopulationChart();
+                else { 
+                    populationChartInstance.data.labels = chartData.labels;
+                    populationChartInstance.data.datasets[0].data = chartData.grass; 
+                    populationChartInstance.data.datasets[1].data = chartData.rabbits; 
+                    populationChartInstance.data.datasets[2].data = chartData.sheep;
+                    populationChartInstance.data.datasets[3].data = chartData.wolves;
+
+                    populationChartInstance.data.datasets[0].hidden = !config.hasLimitedGrass;
+                    populationChartInstance.data.datasets[1].hidden = !config.hasRabbit;
+                    populationChartInstance.data.datasets[2].hidden = !config.hasSheep;
+                    populationChartInstance.data.datasets[3].hidden = !config.hasWolf;
+                    populationChartInstance.update('none');
+                }
+            } else if (currentVisibleChart === 'energyPyramid') {
+                if (!energyPyramidChartInstance) initEnergyPyramidChart();
+                else updateEnergyPyramidChartData();
+            }
+            
+            updateDisplays(); drawWorld(); enableButtonsAfterSetup();
+        }
+        function resetToDefaults() {
+            stopSimulation(); // Stop simulation if running
+
+            // Apply defaults to config object first by creating a deep copy
+            Object.assign(config, JSON.parse(JSON.stringify(initialDefaultConfig)));
+
+            // Update UI elements from the now-reset config and trigger their events
+            // Checkboxes
+            selectUnlimitedGrassCheckbox.checked = config.hasUnlimitedGrass;
+            selectUnlimitedGrassCheckbox.dispatchEvent(new Event('change'));
+            selectLimitedGrassCheckbox.checked = config.hasLimitedGrass;
+            selectLimitedGrassCheckbox.dispatchEvent(new Event('change'));
+            selectSheepCheckbox.checked = config.hasSheep;
+            selectSheepCheckbox.dispatchEvent(new Event('change'));
+            selectRabbitCheckbox.checked = config.hasRabbit;
+            selectRabbitCheckbox.dispatchEvent(new Event('change'));
+            selectWolfCheckbox.checked = config.hasWolf;
+            selectWolfCheckbox.dispatchEvent(new Event('change'));
+            showEnergyCheckbox.checked = config.showEnergy;
+            showEnergyCheckbox.dispatchEvent(new Event('change'));
+            autoScaleYAxisCheckbox.checked = config.autoScaleYAxis;
+            autoScaleYAxisCheckbox.dispatchEvent(new Event('change'));
+
+            // Sliders - set value, then dispatch 'input' to update display span and config (via listener)
+            const slidersToReset = [
+                { el: energyFromUnlimitedGrassSlider, key: 'energyFromUnlimitedGrass' },
+                { el: energyFromLimitedGrassSlider, key: 'energyFromLimitedGrass' },
+                { el: initialLimitedGrassPercentSlider, key: 'initialLimitedGrassPercent' },
+                { el: grassRegrowthTimeSlider, key: 'grassRegrowthTime' },
+                { el: grassCarryingCapacitySlider, key: 'grassCarryingCapacity' },
+                { el: initialNumberSheepSlider, key: 'initialNumberSheep' },
+                { el: sheepReproduceSlider, key: 'sheepReproduce' },
+                { el: initialNumberRabbitsSlider, key: 'initialNumberRabbits' },
+                { el: sheepSpeedSlider, key: 'sheepSpeed' }, // New
+                { el: rabbitSpeedSlider, key: 'rabbitSpeed' }, // New
+                { el: rabbitReproduceSlider, key: 'rabbitReproduce' },
+                { el: initialNumberWolvesSlider, key: 'initialNumberWolves' },
+                { el: wolfGainFromFoodSlider, key: 'wolfGainFromFood' },
+                { el: wolfGainFromRabbitFoodSlider, key: 'wolfGainFromRabbitFood' },
+                { el: wolfReproduceSlider, key: 'wolfReproduce' },
+                { el: maxWolvesSlider, key: 'maxWolves' }, // New
+                { el: maxHerbivoresSlider, key: 'maxHerbivores' },
+                { el: baseEnergyCostSlider, key: 'baseEnergyCost' }, // New
+                { el: reproductionEnergyCostFactorSlider, key: 'reproductionEnergyCostFactor' } // New
+            ];
+            slidersToReset.forEach(item => {
+                item.el.value = config[item.key];
+                item.el.dispatchEvent(new Event('input'));
+            });
+
+            // Call setup() to completely re-initialize the simulation world
+            // based on the now-default config values. This resets ticks to 0,
+            // clears and re-populates animals/patches, resets the chart, etc.
+            setup();
+
+            // Inform the user. setup() calls updateDisplays() and drawWorld().
+            // alert("所有設定已重置為預設值，模擬已重新開始於第0回合。\n您可以直接開始模擬或繼續調整。");
+            displaySimulationMessage("所有設定已重置為預設值，模擬已重新開始於第0回合。");
+        }
+
+        function calculateTrophicEnergies() {
+            const producerEnergy = config.hasLimitedGrass ? calculateCurrentGrassCount() * config.energyFromLimitedGrass : 0;
+            
+            const sheepEnergy = config.hasSheep ? sheep.reduce((sum, s) => sum + Math.max(0, s.energy), 0) : 0;
+            const rabbitEnergy = config.hasRabbit ? rabbits.reduce((sum, r) => sum + Math.max(0, r.energy), 0) : 0;
+            const primaryConsumerEnergy = sheepEnergy + rabbitEnergy;
+
+            const secondaryConsumerEnergy = config.hasWolf ? wolves.reduce((sum, w) => sum + Math.max(0, w.energy), 0) : 0;
+
+            return { producer: producerEnergy, primaryConsumer: primaryConsumerEnergy, secondaryConsumer: secondaryConsumerEnergy };
+        }
+
+        function go() {
+            let activeAnimalTypes = (config.hasSheep && sheep.length > 0) || 
+                                  (config.hasRabbit && rabbits.length > 0) || 
+                                  (config.hasWolf && wolves.length > 0);
+            let anySelectableAnimalExists = (config.hasSheep && sheep.length > 0) ||
+                                          (config.hasRabbit && rabbits.length > 0) ||
+                                          (config.hasWolf && wolves.length > 0);
+            let anyAnimalSelected = config.hasSheep || config.hasRabbit || config.hasWolf;
+
+            if (anyAnimalSelected && !anySelectableAnimalExists) {
+                //  alert("所有選定的動物都消失了，模擬停止。"); 
+                 displaySimulationMessage("所有選定的動物都消失了，模擬停止。");
+                 stopSimulation(); return;
+            }
+
+            let totalHerbivores = (config.hasSheep ? sheep.length : 0) + (config.hasRabbit ? rabbits.length : 0);
+            let wolvesEffectivelyExtinct = config.hasWolf ? wolves.length === 0 : true;
+
+            if (wolvesEffectivelyExtinct && totalHerbivores > config.maxHerbivores && (config.hasSheep || config.hasRabbit)) {
+                displaySimulationMessage("草食動物數量過多，牠們佔滿了這片土地！模擬停止。"); stopSimulation(); return;
+            }
+
+            // Sheep logic (if sheep are enabled)
+            if (config.hasSheep) {
+                for (let i = sheep.length - 1; i >= 0; i--) {
+                    const s = sheep[i]; 
+                    for(let moveCount = 0; moveCount < config.sheepSpeed; moveCount++) { // Move multiple times based on speed
+                        s.move();
+                    }
+                    s.energy -= config.baseEnergyCost; // Use configured base cost
+                    let energyGainedThisTurn = 0;
+                    if (config.hasLimitedGrass) {
+                        const patch = patches[s.x][s.y];
+                        if (patch.pcolor === PATCH_PCOLOR_GREEN) { patch.pcolor = PATCH_PCOLOR_BROWN; patch.countdown = config.grassRegrowthTime; energyGainedThisTurn += config.energyFromLimitedGrass; }
+                    }
+                    if (energyGainedThisTurn === 0 && config.hasUnlimitedGrass) {
+                        energyGainedThisTurn += config.energyFromUnlimitedGrass;
+                    }
+                    s.energy += energyGainedThisTurn;
+
+                    if (s.energy < 0) { sheep.splice(i, 1); continue; }
+                    
+                    let currentTotalHerbivoresForSheepRepro = (config.hasSheep ? sheep.length : 0) + (config.hasRabbit ? rabbits.length : 0);
+                    if (Math.random() * 100 < config.sheepReproduce) {
+                        if (currentTotalHerbivoresForSheepRepro < config.maxHerbivores) {
+                            s.energy /= config.reproductionEnergyCostFactor; // Use configured reproduction cost
+                            const offspring = new Agent(s.x, s.y, s.energy, 'sheep'); 
+                            offspring.move(); sheep.push(offspring);
+                        }
+                    }
+                }
+            }
+            // Rabbit logic (if rabbits are enabled)
+            if (config.hasRabbit) { 
+                for (let i = rabbits.length - 1; i >= 0; i--) {
+                    const r = rabbits[i];
+                    for(let moveCount = 0; moveCount < config.rabbitSpeed; moveCount++) { // Move multiple times based on speed
+                        r.move();
+                    }
+                    r.energy -= config.baseEnergyCost; // Use configured base cost
+                    let energyGainedThisTurn = 0;
+                    if (config.hasLimitedGrass) {
+                        const patch = patches[r.x][r.y];
+                        if (patch.pcolor === PATCH_PCOLOR_GREEN) {
+                            patch.pcolor = PATCH_PCOLOR_BROWN;
+                            patch.countdown = config.grassRegrowthTime;
+                            energyGainedThisTurn += config.energyFromLimitedGrass; // Rabbits also eat limited grass
+                        }
+                    }
+                    if (energyGainedThisTurn === 0 && config.hasUnlimitedGrass) {
+                        energyGainedThisTurn += config.energyFromUnlimitedGrass;
+                    }
+                    r.energy += energyGainedThisTurn;
+
+                    if (r.energy < 0) { rabbits.splice(i, 1); continue; }
+
+                    let currentTotalHerbivoresForRabbitRepro = (config.hasSheep ? sheep.length : 0) + (config.hasRabbit ? rabbits.length : 0);
+                    if (Math.random() * 100 < config.rabbitReproduce) {
+                        if (currentTotalHerbivoresForRabbitRepro < config.maxHerbivores) {
+                            r.energy /= config.reproductionEnergyCostFactor; // Use configured reproduction cost
+                            const offspring = new Agent(r.x, r.y, r.energy, 'rabbit');
+                            offspring.move();
+                            rabbits.push(offspring);
+                        }
+                    }
+                }
+            }
+            
+            // Wolves logic (if wolves are enabled)
+            if (config.hasWolf) {
+                for (let i = wolves.length - 1; i >= 0; i--) {
+                    const w = wolves[i]; 
+                    // Wolves could also have speed, but for now they move once like the original sheep
+                    w.move(); 
+                    w.energy -= config.baseEnergyCost; // Use configured base cost
+                    let ate = false;
+                    // Try to eat sheep first (if sheep are enabled and exist)
+                    if (config.hasSheep && sheep.length > 0) {
+                        for (let j = sheep.length - 1; j >= 0; j--) {
+                            if (sheep[j].x === w.x && sheep[j].y === w.y) { sheep.splice(j, 1); w.energy += config.wolfGainFromFood; ate = true; break; }
+                        }
+                    }
+                    // If no sheep eaten, try to eat rabbit (if rabbits are enabled and exist)
+                    if (!ate && config.hasRabbit && rabbits.length > 0) {
+                        for (let k = rabbits.length - 1; k >= 0; k--) {
+                            if (rabbits[k].x === w.x && rabbits[k].y === w.y) { rabbits.splice(k, 1); w.energy += config.wolfGainFromRabbitFood; ate = true; break; }
+                        }
+                    }
+                    if (w.energy < 0) { wolves.splice(i, 1); continue; }
+                    if (Math.random() * 100 < config.wolfReproduce) {
+                        // Check if wolf population is below maxWolves before reproducing
+                        if (config.hasWolf && wolves.length < config.maxWolves) {
+                            w.energy /= config.reproductionEnergyCostFactor; // Use configured reproduction cost
+                            const offspring = new Agent(w.x, w.y, w.energy, 'wolf'); 
+                            offspring.move(); wolves.push(offspring);
+                        }
+                    }
+                }
+            }
+            // Patch logic (Limited Grass B Regrowth with Carrying Capacity)
+            if (config.hasLimitedGrass) {
+                for (let r = 0; r < worldWidth; r++) for (let c = 0; c < worldHeight; c++) {
+                    const patch = patches[r][c];
+                    if (patch.pcolor === PATCH_PCOLOR_BROWN) { 
+                        patch.countdown--; 
+                        if (patch.countdown <= 0 && calculateCurrentGrassCount() < config.grassCarryingCapacity) {
+                            patch.pcolor = PATCH_PCOLOR_GREEN; 
+                        }
+                    }
+                }
+            }
+            ticks++;
+            
+            if (currentVisibleChart === 'population') {
+                chartData.labels.push(ticks); 
+                chartData.sheep.push(sheep.length); 
+                chartData.wolves.push(wolves.length);
+                chartData.grass.push(config.hasLimitedGrass ? calculateCurrentGrassCount() : 0);
+                chartData.rabbits.push(rabbits.length);
+                if (chartData.labels.length > MAX_CHART_POINTS) { chartData.labels.shift(); chartData.sheep.shift(); chartData.wolves.shift(); chartData.grass.shift(); chartData.rabbits.shift(); }
+                if (populationChartInstance) populationChartInstance.update('none');
+            } else if (currentVisibleChart === 'energyPyramid') {
+                if (energyPyramidChartInstance) updateEnergyPyramidChartData();
+            }
+
+
+            updateDisplays(); drawWorld();
+            // Termination checks are now at the beginning of go()
+        }
+
+        function drawWorld() { // Drawing logic largely the same
+            ctx.clearRect(0, 0, simCanvasElement.width, simCanvasElement.height);
+            for (let r = 0; r < worldWidth; r++) for (let c = 0; c < worldHeight; c++) {
+                const patch = patches[r][c];
+                ctx.fillStyle = (patch.pcolor === PATCH_PCOLOR_GREEN) ? PATCH_COLOR_LIMITED_GRASS_PRESENT : PATCH_COLOR_LIMITED_GRASS_ABSENT;
+                if (!config.hasLimitedGrass && config.hasUnlimitedGrass) { // If only unlimited grass, make it look always green
+                    ctx.fillStyle = PATCH_COLOR_UNLIMITED_GRASS; 
+                } else if (!config.hasLimitedGrass && !config.hasUnlimitedGrass) {
+                    ctx.fillStyle = PATCH_COLOR_NO_GRASS; 
+                }
+                ctx.fillRect(r * patchSize, c * patchSize, patchSize, patchSize);
+            }
+            const agentFontSize = patchSize * AGENT_FONT_SIZE_MULTIPLIER;
+            const energyFontSize = patchSize * ENERGY_FONT_SIZE_MULTIPLIER;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+
+            if (config.hasSheep) {
+                sheep.forEach(s => {
+                    ctx.font = `${agentFontSize}px Arial`;
+                    ctx.fillText(SHEEP_ICON, (s.x + AGENT_CENTER_X_OFFSET) * patchSize, (s.y + AGENT_CENTER_Y_OFFSET) * patchSize);
+                    if (config.showEnergy) {
+                        ctx.fillStyle = SHEEP_ENERGY_COLOR; ctx.font = `${energyFontSize}px Arial`;
+                        ctx.fillText(Math.round(s.energy), (s.x + AGENT_CENTER_X_OFFSET) * patchSize, (s.y + ENERGY_TEXT_Y_OFFSET_FACTOR) * patchSize);
+                    }
+                });
+            }
+            if (config.hasWolf) {
+                wolves.forEach(w => {
+                    ctx.font = `${agentFontSize}px Arial`;
+                    ctx.fillText(WOLF_ICON, (w.x + AGENT_CENTER_X_OFFSET) * patchSize, (w.y + AGENT_CENTER_Y_OFFSET) * patchSize);
+                    if (config.showEnergy) {
+                        ctx.fillStyle = WOLF_ENERGY_COLOR; ctx.font = `${energyFontSize}px Arial`;
+                        ctx.fillText(Math.round(w.energy), (w.x + AGENT_CENTER_X_OFFSET) * patchSize, (w.y + ENERGY_TEXT_Y_OFFSET_FACTOR) * patchSize);
+                    }
+                });
+            }
+            if (config.hasRabbit) {
+                rabbits.forEach(r => { 
+                    ctx.font = `${agentFontSize}px Arial`;
+                    ctx.fillText(RABBIT_ICON, (r.x + AGENT_CENTER_X_OFFSET) * patchSize, (r.y + AGENT_CENTER_Y_OFFSET) * patchSize);
+                    if (config.showEnergy) {
+                        ctx.fillStyle = RABBIT_ENERGY_COLOR; ctx.font = `${energyFontSize}px Arial`; // Ensure energyFontSize is updated if multiplier changes
+                        ctx.fillText(Math.round(r.energy), (r.x + AGENT_CENTER_X_OFFSET) * patchSize, (r.y + ENERGY_TEXT_Y_OFFSET_FACTOR) * patchSize);
+                    }
+                });
+            }
+        }
+
+        function updateDisplays() { 
+            ticksDisplay.textContent = `回合: ${ticks}`;
+            unlimitedGrassStatDisplay.textContent = `無限草A: ${config.hasUnlimitedGrass ? `供應中` : '停用'}`;
+            const grassVal = calculateCurrentGrassCount();
+            limitedGrassStatDisplay.textContent = `有限草B: ${config.hasLimitedGrass ? grassVal : (config.hasLimitedGrass === false ? '停用' : 0)}`; // Show 0 if enabled but empty, else "停用"
+            rabbitsCountDisplay.textContent = `兔群: ${config.hasRabbit ? rabbits.length : 0}`;                        
+            sheepCountDisplay.textContent = `羊群: ${config.hasSheep ? sheep.length : 0}`;
+            wolvesCountDisplay.textContent = `狼群: ${config.hasWolf ? wolves.length : 0}`;
+
+
+        }
+
+        function updateEnergyPyramidChartData() {
+            if (!energyPyramidChartInstance) return;
+            const energies = calculateTrophicEnergies();
+            energyPyramidChartInstance.data.datasets[0].data[0] = energies.secondaryConsumer;
+            energyPyramidChartInstance.data.datasets[0].data[1] = energies.primaryConsumer;
+            energyPyramidChartInstance.data.datasets[0].data[2] = energies.producer;
+            energyPyramidChartInstance.update('none');
+        }
+        function startSimulation() { 
+            if (simulationRunning) return;
+            clearSimulationMessage();
+            simulationRunning = true;
+            goContinuousButton.textContent = "運行中"; goContinuousButton.disabled = true;
+            goOnceButton.disabled = true; /* setupButton removed */ stopButton.disabled = false;
+            resetDefaultsButton.disabled = true;
+
+            // Disable all parameter-changing controls during simulation, except a few
+            document.querySelectorAll('.controls input[type="range"], .controls select, .controls input[type="checkbox"]').forEach(el => {
+                if (el.id !== 'showEnergy' && el.id !== 'autoScaleYAxisCheckbox' && el.id !== 'stopButton') {
+                    el.disabled = true;
+                }
+            });
+            showEnergyCheckbox.disabled = false; // Ensure these are explicitly enabled
+            autoScaleYAxisCheckbox.disabled = false;
+
+            simulationInterval = setInterval(go, 60); // Slightly faster interval
+        }
+        function stopSimulation() { 
+            simulationRunning = false; clearInterval(simulationInterval);
+            goContinuousButton.textContent = "連續執行";
+            /* setupButton removed */ stopButton.disabled = true; resetDefaultsButton.disabled = false;
+
+            // Re-enable controls: master checkboxes first, then let updateControlVisibility handle groups.
+            selectUnlimitedGrassCheckbox.disabled = false;
+            selectLimitedGrassCheckbox.disabled = false;
+            selectSheepCheckbox.disabled = false;
+            selectRabbitCheckbox.disabled = false;
+            selectWolfCheckbox.disabled = false;
+            
+            updateControlVisibility(); // Re-enables/disables sliders within groups based on checkboxes
+
+            // Manually re-enable general controls
+            maxHerbivoresSlider.disabled = false;
+            showEnergyCheckbox.disabled = false;
+            autoScaleYAxisCheckbox.disabled = false;
+            baseEnergyCostSlider.disabled = false; // 確保基礎耗能滑桿被重新啟用
+            reproductionEnergyCostFactorSlider.disabled = false; // 確保繁殖能量成本滑桿被重新啟用
+
+            if (patches.length > 0) { 
+                goContinuousButton.disabled = false; goOnceButton.disabled = false;
+
+                // Capture final counts BEFORE any config/slider changes that might trigger repopulation prematurely
+                const finalSheepCount = sheep.length;
+                const finalRabbitCount = rabbits.length;
+                const finalWolfCount = wolves.length; // This will be 0 if all wolves died
+                const finalGrassPercent = (worldWidth > 0 && worldHeight > 0) ? Math.round((calculateCurrentGrassCount() / (worldWidth * worldHeight)) * 100) : 0;
+
+                // Update config object directly with these final counts
+                config.initialNumberSheep = finalSheepCount;
+                config.initialNumberRabbits = finalRabbitCount;
+                config.initialNumberWolves = finalWolfCount; // config will now have the correct 0 if wolves died
+                config.initialLimitedGrassPercent = finalGrassPercent;
+
+                // Update sliders and their display values directly from the corrected config
+                initialNumberSheepSlider.value = config.initialNumberSheep;
+                document.getElementById('initialNumberSheepValue').textContent = config.initialNumberSheep;
+
+                initialNumberRabbitsSlider.value = config.initialNumberRabbits;
+                document.getElementById('initialNumberRabbitsValue').textContent = config.initialNumberRabbits;
+
+                initialNumberWolvesSlider.value = config.initialNumberWolves; // Will be 0 if finalWolfCount was 0
+                document.getElementById('initialNumberWolvesValue').textContent = config.initialNumberWolves; // Span will show 0
+
+                initialLimitedGrassPercentSlider.value = config.initialLimitedGrassPercent;
+                document.getElementById('initialLimitedGrassPercentValue').textContent = config.initialLimitedGrassPercent;
+
+                // Now, call updateInitialAnimalPopulations ONCE to synchronize the animal arrays
+                // and the visual world based on the now correct and consistent config.
+                updateInitialAnimalPopulations(); // This will use the correct config values.
+            } else { 
+                goContinuousButton.disabled = true; goOnceButton.disabled = true; 
+            }
+        }
+        function enableButtonsAfterSetup() { goOnceButton.disabled = false; goContinuousButton.disabled = false; }
+        function disableButtonsBeforeSetup() { goOnceButton.disabled = true; goContinuousButton.disabled = true; stopButton.disabled = true; }
+
+
+        goOnceButton.addEventListener('click', go);
+        goContinuousButton.addEventListener('click', startSimulation);
+        stopButton.addEventListener('click', stopSimulation);
+        resetDefaultsButton.addEventListener('click', resetToDefaults);
+        
+        showPopulationChartButton.addEventListener('click', () => {
+            if (currentVisibleChart === 'population') return;
+            currentVisibleChart = 'population';
+            populationChartCanvasElement.style.display = 'block';
+            energyPyramidCanvasElement.style.display = 'none';
+            showPopulationChartButton.classList.add('active');
+            showEnergyPyramidButton.classList.remove('active');
+
+            // Ensure population chart is initialized and up-to-date
+            if (!populationChartInstance) {
+                initPopulationChart(); // This will use current chartData
+            } else {
+                // Resync data, as it might be stale if simulation ran while hidden
+                populationChartInstance.data.labels = chartData.labels;
+                populationChartInstance.data.datasets[0].data = chartData.grass;
+                populationChartInstance.data.datasets[1].data = chartData.rabbits;
+                populationChartInstance.data.datasets[2].data = chartData.sheep;
+                populationChartInstance.data.datasets[3].data = chartData.wolves;
+                populationChartInstance.update('none');
+            }
+        });
+
+        showEnergyPyramidButton.addEventListener('click', () => {
+            if (currentVisibleChart === 'energyPyramid') return;
+            currentVisibleChart = 'energyPyramid';
+            populationChartCanvasElement.style.display = 'none';
+            energyPyramidCanvasElement.style.display = 'block';
+            showEnergyPyramidButton.classList.add('active');
+            showPopulationChartButton.classList.remove('active');
+
+            if (!energyPyramidChartInstance) initEnergyPyramidChart();
+            else updateEnergyPyramidChartData(); // Ensure it's current
+        });
+
+        window.onload = () => {
+            // Initialize checkbox states from config
+            selectUnlimitedGrassCheckbox.checked = config.hasUnlimitedGrass;
+            selectLimitedGrassCheckbox.checked = config.hasLimitedGrass;
+            selectSheepCheckbox.checked = config.hasSheep;
+            selectRabbitCheckbox.checked = config.hasRabbit;
+            selectWolfCheckbox.checked = config.hasWolf;
+            showEnergyCheckbox.checked = config.showEnergy;
+            autoScaleYAxisCheckbox.checked = config.autoScaleYAxis; // Initialize new checkbox
+            // modelVersionSelect.value = config.modelVersion; // REMOVE THIS LINE
+
+            // Initialize slider values in UI and config from default config
+            document.querySelectorAll('input[type="range"]').forEach(slider => slider.dispatchEvent(new Event('input')));
+            
+            // Set initial canvas size based on CSS or explicit values
+            // patchSize = simCanvasElement.width / worldWidth; 
+            // (already done before setup() is called via the setup() function itself)
+            
+            disableButtonsBeforeSetup();
+            setup(); 
+            updateControlVisibility(); // Ensure controls are correctly shown/hidden on load
+
+        };
+    </script>
+</body>
+</html>
