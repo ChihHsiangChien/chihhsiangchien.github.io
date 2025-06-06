@@ -1,5 +1,10 @@
 import { Herbivore, Predator } from './entities.js';
 
+// helper to map species key to config.has<Species> property
+function capitalize(str) {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
 export const worldWidth = 25;
 export const worldHeight = 25;
 
@@ -164,15 +169,18 @@ export function setup() {
       patches[x][y] = new Patch();
     }
   }
-  // initialize animal arrays and populations
+  // initialize animal arrays and populations (honoring enable/disable toggles)
   speciesList.forEach(spec => {
     if (spec.type !== 'producer') {
       animals[spec.key] = [];
+      // skip species not enabled via checkbox
+      if (!config['has' + capitalize(spec.key)]) return;
       const initKey = spec.controls.find(c => c.key.startsWith('initialNumber')).key;
       const count = config[initKey];
+      const gainKey = spec.controls.find(c => c.key.includes('GainFrom')).key;
+      const energyMax = config[gainKey] * 2;
+      const ctor = spec.type === 'herbivore' ? Herbivore : Predator;
       for (let i = 0; i < count; i++) {
-        const energyMax = config[spec.controls.find(c => c.key.includes('GainFrom')).key] * 2;
-        const ctor = spec.type === 'herbivore' ? Herbivore : Predator;
         const indiv = new ctor(
           Math.floor(Math.random() * worldWidth),
           Math.floor(Math.random() * worldHeight),
@@ -191,6 +199,18 @@ export function countPlants() {
     if (patches[x][y].isPlant()) c++;
   }
   return c;
+}
+
+/**
+ * Regenerate all patches according to current initialPlantPercent and plant regrowth settings.
+ * Does not affect existing animals.
+ */
+export function regenPatches() {
+  for (let x = 0; x < worldWidth; x++) {
+    for (let y = 0; y < worldHeight; y++) {
+      patches[x][y] = new Patch();
+    }
+  }
 }
 
 export function go() {
@@ -232,4 +252,29 @@ export function drawWorld(ctx, patchSize) {
   speciesList.filter(s => s.type !== 'producer').forEach(spec => {
     animals[spec.key].forEach(ind => ind.draw(ctx, patchSize, config.showEnergy));
   });
+}
+
+/**
+ * Spawn a fresh population of the given species (honoring its initialNumber and energy settings).
+ * Clears any existing individuals of that species and adds new ones at random positions.
+ * @param {string} key speciesList.key identifying the species to spawn
+ */
+export function spawnSpecies(key) {
+  const spec = speciesList.find(s => s.key === key);
+  if (!spec || spec.type === 'producer') return;
+  animals[spec.key] = [];
+  const initCtrl = spec.controls.find(c => c.key.startsWith('initialNumber'));
+  const count = config[initCtrl.key];
+  const gainCtrl = spec.controls.find(c => c.key.includes('GainFrom'));
+  const energyMax = config[gainCtrl.key] * 2;
+  const ctor = spec.type === 'herbivore' ? Herbivore : Predator;
+  for (let i = 0; i < count; i++) {
+    const indiv = new ctor(
+      Math.floor(Math.random() * worldWidth),
+      Math.floor(Math.random() * worldHeight),
+      Math.random() * energyMax,
+      spec.key
+    );
+    animals[spec.key].push(indiv);
+  }
 }

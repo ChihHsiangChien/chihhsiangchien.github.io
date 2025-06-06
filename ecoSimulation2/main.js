@@ -1,6 +1,6 @@
 import { setup, drawWorld, worldWidth } from './simulation.js';
 import { initPopulationChart, initEnergyPyramidChart, updatePopulationChart, updateEnergyChart } from './charts.js';
-import { initUI } from './ui.js';
+import { initUI, updateStats } from './ui.js';
 
 window.addEventListener('DOMContentLoaded', () => {
   initUI();
@@ -9,6 +9,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const ctx = canvas.getContext('2d');
   const patchSize = canvas.width / worldWidth;
   drawWorld(ctx, patchSize);
+  updateStats();
   initPopulationChart();
   initEnergyPyramidChart();
 });

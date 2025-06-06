@@ -1,6 +1,7 @@
 import {
   speciesList, config, initialConfig,
-  setup, go, drawWorld, patches, animals, countPlants, worldWidth
+  setup, go, drawWorld, patches, animals, countPlants, worldWidth, ticks,
+  spawnSpecies, regenPatches
 } from './simulation.js';
 import {
   initPopulationChart, initEnergyPyramidChart,
@@ -11,33 +12,63 @@ function capitalize(str) {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
+export function updateStats() {
+  document.getElementById('ticksDisplay').textContent = `回合: ${ticks}`;
+  document.getElementById('rabbitsCountDisplay').textContent = `兔群: ${animals.rabbit?.length || 0}`;
+  document.getElementById('sheepCountDisplay').textContent = `羊群: ${animals.sheep?.length || 0}`;
+  document.getElementById('wolvesCountDisplay').textContent = `狼群: ${animals.wolf?.length || 0}`;
+  const ugEl = document.getElementById('unlimitedGrassStatDisplay');
+  const ugLabel = ugEl.textContent.split(':')[0];
+  ugEl.textContent = `${ugLabel}: ${countPlants()}`;
+  const lgEl = document.getElementById('limitedGrassStatDisplay');
+  const lgLabel = lgEl.textContent.split(':')[0];
+  const totalPatches = patches.reduce((sum, row) => sum + row.length, 0);
+  lgEl.textContent = `${lgLabel}: ${totalPatches - countPlants()}`;
+}
+
 let simulationInterval = null;
 let simulationRunning = false;
 
 const controlsContainer = document.querySelector('.controls');
+// Preserve static general controls (from first <hr> onward) to reinsert after dynamic species controls
+const _initialControlsHTML = controlsContainer.innerHTML;
+// Find second <hr> to locate start of static general controls section
+const _firstHr = _initialControlsHTML.indexOf('<hr');
+const _hrIndex = _firstHr >= 0 ? _initialControlsHTML.indexOf('<hr', _firstHr + 1) : -1;
+const generalControlsHTML = _hrIndex >= 0 ? _initialControlsHTML.slice(_hrIndex) : '';
 const canvas = document.getElementById('simulationCanvas');
 const ctx = canvas.getContext('2d');
-const statsContainer = document.querySelector('.stats');
-const goOnceButton = document.getElementById('goOnceButton');
-const goContinuousButton = document.getElementById('goContinuousButton');
-const stopButton = document.getElementById('stopButton');
-const resetButton = document.getElementById('resetDefaultsButton');
-const showPopulationChartButton = document.getElementById('showPopulationChartButton');
-const showEnergyPyramidButton = document.getElementById('showEnergyPyramidButton');
 
 export function initUI() {
-  // Build dynamic controls
+  // Build dynamic species controls, then reinsert static general controls
   controlsContainer.innerHTML = '';
   speciesList.forEach(spec => {
     // enable checkbox
     const cg = document.createElement('div'); cg.className = 'control-group';
     const lbl = document.createElement('label'); lbl.htmlFor = 'select' + capitalize(spec.key);
     lbl.textContent = `啟用${spec.displayName}`;
-    const chk = document.createElement('input'); chk.type = 'checkbox'; chk.id = 'select' + capitalize(spec.key);
-    chk.checked = true;
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.id = 'select' + capitalize(spec.key);
+    // default to unchecked unless config.has<Species> already set
+    const hasKey = 'has' + capitalize(spec.key);
+    chk.checked = config[hasKey] !== undefined ? config[hasKey] : false;
+    config[hasKey] = chk.checked;
     chk.addEventListener('change', () => {
-      config['has' + capitalize(spec.key)] = chk.checked;
+      config[hasKey] = chk.checked;
       updateControlVisibility();
+      if (chk.checked) {
+        spawnSpecies(spec.key);
+      } else {
+        animals[spec.key] = [];
+      }
+      drawWorld(ctx, canvas.width / worldWidth);
+      updateStats();
+      if (document.getElementById('showPopulationChartButton').classList.contains('active')) {
+        updatePopulationChart();
+      } else {
+        updateEnergyChart();
+      }
     });
     cg.append(lbl, chk);
     controlsContainer.append(cg);
@@ -52,21 +83,41 @@ export function initUI() {
       slider.addEventListener('input', () => {
         config[ctrl.key] = parseFloat(slider.value);
         val.textContent = slider.value;
+        if (ctrl.key.startsWith('initialNumber') && config[hasKey]) {
+          spawnSpecies(spec.key);
+          drawWorld(ctx, canvas.width / worldWidth);
+          updateStats();
+          if (document.getElementById('showPopulationChartButton').classList.contains('active')) {
+            updatePopulationChart();
+          } else {
+            updateEnergyChart();
+          }
+        } else if (ctrl.key === 'initialPlantPercent') {
+          // live-update plant coverage based on new initial percentage
+          regenPatches();
+          drawWorld(ctx, canvas.width / worldWidth);
+          updateStats();
+          if (document.getElementById('showPopulationChartButton').classList.contains('active')) {
+            updatePopulationChart();
+          } else {
+            updateEnergyChart();
+          }
+        }
       });
       row.append(label, slider, val);
       box.append(row);
     });
     controlsContainer.append(box);
   });
-  // general controls listeners
+  // Reinsert static general controls markup (preserve dynamic listeners)
+  controlsContainer.insertAdjacentHTML('beforeend', generalControlsHTML);
   document.getElementById('showEnergy').addEventListener('change', e => { config.showEnergy = e.target.checked; });
-  // buttons
-  goOnceButton.addEventListener('click', stepSimulation);
-  goContinuousButton.addEventListener('click', startContinuous);
-  stopButton.addEventListener('click', stopContinuous);
-  resetButton.addEventListener('click', resetAll);
-  showPopulationChartButton.addEventListener('click', () => toggleChart('population'));
-  showEnergyPyramidButton.addEventListener('click', () => toggleChart('energy'));
+  document.getElementById('goOnceButton').addEventListener('click', stepSimulation);
+  document.getElementById('goContinuousButton').addEventListener('click', startContinuous);
+  document.getElementById('stopButton').addEventListener('click', stopContinuous);
+  document.getElementById('resetDefaultsButton').addEventListener('click', resetAll);
+  document.getElementById('showPopulationChartButton').addEventListener('click', () => toggleChart('population'));
+  document.getElementById('showEnergyPyramidButton').addEventListener('click', () => toggleChart('energy'));
   updateControlVisibility();
 }
 
@@ -83,12 +134,14 @@ function resetAll() {
   initUI();
   setup();
   drawWorld(ctx, canvas.width / worldWidth);
+  updateStats();
 }
 
 function stepSimulation() {
   go();
   drawWorld(ctx, canvas.width / worldWidth);
-  if (showPopulationChartButton.classList.contains('active')) {
+  updateStats();
+  if (document.getElementById('showPopulationChartButton').classList.contains('active')) {
     updatePopulationChart();
   } else {
     updateEnergyChart();
@@ -98,6 +151,8 @@ function stepSimulation() {
 function startContinuous() {
   if (simulationRunning) return;
   simulationRunning = true;
+  // enable stop button now that continuous simulation is running
+  document.getElementById('stopButton').disabled = false;
   simulationInterval = setInterval(() => {
     stepSimulation();
   }, 100);
@@ -106,17 +161,21 @@ function startContinuous() {
 function stopContinuous() {
   simulationRunning = false;
   clearInterval(simulationInterval);
+  // disable stop button when simulation is stopped
+  document.getElementById('stopButton').disabled = true;
 }
 
 function toggleChart(type) {
+  const popBtn = document.getElementById('showPopulationChartButton');
+  const energyBtn = document.getElementById('showEnergyPyramidButton');
   if (type === 'population') {
-    showPopulationChartButton.classList.add('active');
-    showEnergyPyramidButton.classList.remove('active');
+    popBtn.classList.add('active');
+    energyBtn.classList.remove('active');
     document.getElementById('populationChart').style.display = 'block';
     document.getElementById('energyPyramidChart').style.display = 'none';
   } else {
-    showPopulationChartButton.classList.remove('active');
-    showEnergyPyramidButton.classList.add('active');
+    popBtn.classList.remove('active');
+    energyBtn.classList.add('active');
     document.getElementById('populationChart').style.display = 'none';
     document.getElementById('energyPyramidChart').style.display = 'block';
   }
