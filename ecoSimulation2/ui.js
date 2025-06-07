@@ -17,8 +17,6 @@ export function updateStats() {
   const container = document.getElementById('speciesStatsContainer');
   container.innerHTML = '';
   speciesList.forEach(spec => {
-    const hasKey = 'has' + capitalize(spec.key);
-    if (!config[hasKey]) return;
     const span = document.createElement('span');
     span.className = 'stat-group';
     span.style.backgroundColor = spec.energyColor;
@@ -53,21 +51,22 @@ export function initUI() {
     const chk = document.createElement('input');
     chk.type = 'checkbox';
     chk.id = 'select' + capitalize(spec.key);
-    // default to unchecked unless config.has<Species> already set
+    // default to checked for producer, or preserve existing config.has<Species>
     const hasKey = 'has' + capitalize(spec.key);
-    chk.checked = config[hasKey] !== undefined ? config[hasKey] : false;
+    chk.checked = config[hasKey] !== undefined ? config[hasKey] : (spec.type === 'producer');
     config[hasKey] = chk.checked;
     chk.addEventListener('change', () => {
       config[hasKey] = chk.checked;
-      updateControlVisibility();
     if (chk.checked) {
       spawnSpecies(spec.key);
       const initCtrl = spec.controls.find(c => c.key.startsWith('initialNumber'));
-      const initKey = initCtrl.key;
-      config[initKey] = animals[spec.key].length;
-      const initSlider = document.getElementById(initKey);
-      initSlider.value = config[initKey];
-      document.getElementById(initKey + 'Value').textContent = config[initKey];
+      if (initCtrl) {
+        const initKey = initCtrl.key;
+        config[initKey] = animals[spec.key].length;
+        const initSlider = document.getElementById(initKey);
+        initSlider.value = config[initKey];
+        document.getElementById(initKey + 'Value').textContent = config[initKey];
+      }
     } else {
       animals[spec.key] = [];
     }
@@ -128,7 +127,6 @@ export function initUI() {
   });
   // Reinsert static general controls markup (preserve dynamic listeners)
   controlsContainer.insertAdjacentHTML('beforeend', generalControlsHTML);
-  document.getElementById('showEnergy').addEventListener('change', e => { config.showEnergy = e.target.checked; });
   document.getElementById('goOnceButton').addEventListener('click', stepSimulation);
   document.getElementById('goContinuousButton').addEventListener('click', startContinuous);
   document.getElementById('stopButton').addEventListener('click', stopContinuous);
@@ -136,15 +134,8 @@ export function initUI() {
   document.getElementById('showPopulationChartButton').addEventListener('click', () => toggleChart('population'));
   document.getElementById('showEnergyPyramidButton').addEventListener('click', () => toggleChart('energy'));
   document.getElementById('showFoodWebButton').addEventListener('click', () => toggleChart('foodWeb'));
-  updateControlVisibility();
 }
 
-function updateControlVisibility() {
-  speciesList.forEach(spec => {
-    const box = document.getElementById(spec.key + 'Controls');
-    box.style.display = config['has' + capitalize(spec.key)] ? 'block' : 'none';
-  });
-}
 
 function resetAll() {
   clearInterval(simulationInterval);
@@ -159,6 +150,22 @@ function stepSimulation() {
   go();
   drawWorld(ctx, canvas.width / worldWidth);
   updateStats();
+  // Sync control-panel "數量" sliders to current simulation counts for enabled species
+  speciesList.forEach(spec => {
+    const hasKey = 'has' + capitalize(spec.key);
+    if (config[hasKey]) {
+      const initCtrl = spec.controls.find(c => c.key.startsWith('initialNumber'));
+      if (initCtrl) {
+        const key = initCtrl.key;
+        const cnt = spec.type === 'producer' ? countPlants() : (animals[spec.key]?.length || 0);
+        config[key] = cnt;
+        const slider = document.getElementById(key);
+        if (slider) slider.value = cnt;
+        const disp = document.getElementById(key + 'Value');
+        if (disp) disp.textContent = cnt;
+      }
+    }
+  });
   if (document.getElementById('showPopulationChartButton').classList.contains('active')) {
     updatePopulationChart();
   } else if (document.getElementById('showEnergyPyramidButton').classList.contains('active')) {
@@ -195,9 +202,12 @@ function toggleChart(type) {
   popBtn.classList.toggle('active', type === 'population');
   energyBtn.classList.toggle('active', type === 'energy');
   foodBtn.classList.toggle('active', type === 'foodWeb');
-  popCanvas.style.display = type === 'population' ? 'block' : 'none';
-  energyCanvas.style.display = type === 'energy' ? 'block' : 'none';
-  foodSvg.style.display = type === 'foodWeb' ? 'block' : 'none';
+  popCanvas.style.display     = type === 'population' ? 'block' : 'none';
+  energyCanvas.style.display  = type === 'energy' ? 'block' : 'none';
+  foodSvg.style.display       = type === 'foodWeb' ? 'block' : 'none';
+  // hide/show the food-web edge count only on foodWeb view
+  const edgeCountEl = document.getElementById('foodWebEdgeCount');
+  if (edgeCountEl) edgeCountEl.style.display = type === 'foodWeb' ? 'block' : 'none';
   if (type === 'population') {
     updatePopulationChart();
   } else if (type === 'energy') {
