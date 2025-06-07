@@ -188,7 +188,7 @@ function initTest() {
                 <button class="boundary-btn" id="noBtn">No ←</button>
                 <button class="boundary-btn" id="yesBtn">Yes →</button>
             </div>
-            <div class="keyboard-hint">可以使用 ← → 方向键回答</div>
+            <div class="keyboard-hint">可以使用 ← → 方向鍵回答</div>
         </div>
     `;
     startNewTest();
@@ -303,6 +303,14 @@ function showResults() {
                     <button class="demo-btn" data-age="50plus">50歲以上</button>
                 </div>
             </div>
+            <div class="form-group">
+                <label>色覺狀況：</label>
+                <div class="button-group">
+                    <button class="demo-btn" data-color-vision="normal">正常色覺</button>
+                    <button class="demo-btn" data-color-vision="colorblind">色盲</button>
+                    <button class="demo-btn" data-color-vision="color_deficient">色弱</button>
+                </div>
+            </div>
             <button id="submitDemographics" class="submit-btn" disabled>提交結果</button>
         </div>
     `;
@@ -365,6 +373,7 @@ function showResults() {
     // 添加事件監聽器
     let selectedGender = null;
     let selectedAge = null;
+    let selectedColorVision = null;
 
     // 性別選擇
     document.querySelectorAll('[data-gender]').forEach(button => {
@@ -386,10 +395,20 @@ function showResults() {
         });
     });
 
+    // 色覺狀況選擇
+    document.querySelectorAll('[data-color-vision]').forEach(button => {
+        button.addEventListener('click', () => {
+            document.querySelectorAll('[data-color-vision]').forEach(btn => btn.classList.remove('selected'));
+            button.classList.add('selected');
+            selectedColorVision = button.dataset.colorVision;
+            checkFormComplete();
+        });
+    });
+
     // 檢查表單是否完整
     function checkFormComplete() {
         const submitButton = document.getElementById('submitDemographics');
-        submitButton.disabled = !(selectedGender && selectedAge);
+        submitButton.disabled = !(selectedGender && selectedAge && selectedColorVision);
     }
 
     // 提交按鈕事件
@@ -397,6 +416,7 @@ function showResults() {
         const testData = {
             gender: selectedGender,
             ageRange: selectedAge,
+            colorVision: selectedColorVision,
             tests: gameState.tests.map(test => ({
                 color: test.color,
                 isRed: test.isRed
