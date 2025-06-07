@@ -598,9 +598,10 @@ class BoneManager {
         this.ctx.save();
         
         // 設置按鈕位置與大小
-        const buttonSize = 40;
+        const buttonSize = 50;
         const margin = 15;
-        const x = this.canvas.width - buttonSize - margin;
+        // const x = this.canvas.width - buttonSize - margin;
+        const x = margin; // 修改X座標，使其靠左
         const y = this.canvas.height - buttonSize - margin;
         
         // 繪製圓形背景
@@ -610,24 +611,24 @@ class BoneManager {
         this.ctx.fill();
         
         // 繪製按鈕圖標（顯示/隱藏符號）
-        this.ctx.beginPath();
+        // 使用 Emoji 繪製圖標
+        const iconSize = buttonSize * 0.6; // Emoji 大小，可根據需要調整
+        this.ctx.font = `${iconSize}px sans-serif`; // 使用通用字體
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        // Emoji 通常自帶顏色，fillStyle 在此可能主要影響備用字體
+        this.ctx.fillStyle = 'white'; 
+
+        const iconX = x + buttonSize / 2;
+        const iconY = y + buttonSize / 2;
+
         if (this.isControlPanelVisible) {
-            // 繪製隱藏圖標（眼睛帶斜線）
-            this.ctx.moveTo(x + buttonSize/4, y + buttonSize/2);
-            this.ctx.lineTo(x + buttonSize*3/4, y + buttonSize/2);
-            this.ctx.moveTo(x + buttonSize/4, y + buttonSize/3);
-            this.ctx.lineTo(x + buttonSize*3/4, y + buttonSize*2/3);
-            this.ctx.moveTo(x + buttonSize*3/4, y + buttonSize/3);
-            this.ctx.lineTo(x + buttonSize/4, y + buttonSize*2/3);
+            // 控制面板可見，按鈕功能為隱藏 -> 顯示 "閉眼" (🙈) Emoji
+            this.ctx.fillText('🙈', iconX, iconY);
         } else {
-            // 繪製顯示圖標（眼睛）
-            this.ctx.arc(x + buttonSize/2, y + buttonSize/2, buttonSize/4, 0, Math.PI * 2);
-            this.ctx.moveTo(x + buttonSize*3/4, y + buttonSize/2);
-            this.ctx.arc(x + buttonSize/2, y + buttonSize/2, buttonSize/4, 0, Math.PI);
+            // 控制面板隱藏，按鈕功能為顯示 -> 顯示 "開眼" (👁️) Emoji
+            this.ctx.fillText('👁️', iconX, iconY);
         }
-        this.ctx.strokeStyle = 'white';
-        this.ctx.lineWidth = 2;
-        this.ctx.stroke();
         
         // 保存按鈕區域供點擊檢測使用
         this.toggleButtonArea = {
