@@ -34,7 +34,8 @@ export class Entity {
   }
 
   updateBase() {
-    this.expendEnergy(config.baseEnergyCost);
+    // use species-specific base energy cost
+    this.expendEnergy(config[`${this.key}BaseEnergyCost`]);
   }
 
   draw(ctx, patchSize, showEnergy) {
@@ -81,7 +82,7 @@ export class Herbivore extends Entity {
     const spec = speciesList.find(s => s.key === this.key);
     const cap = config[spec.capacityKey];
     if (Math.random() * 100 < this.reproduceRate && currentCount < cap) {
-      this.energy /= config.reproductionEnergyCostFactor;
+      this.energy *= config[`${this.key}ReproductionEnergyCostFactor`];
       const offspring = new Herbivore(this.x, this.y, this.energy, this.key);
       offspring.move();
       return offspring;
@@ -125,7 +126,7 @@ export class Predator extends Entity {
     const spec = speciesList.find(s => s.key === this.key);
     const cap = config[spec.capacityKey];
     if (Math.random() * 100 < this.reproduceRate && currentCount < cap) {
-      this.energy /= config.reproductionEnergyCostFactor;
+      this.energy *= config[`${this.key}ReproductionEnergyCostFactor`];
       const offspring = new Predator(this.x, this.y, this.energy, this.key);
       offspring.move();
       return offspring;

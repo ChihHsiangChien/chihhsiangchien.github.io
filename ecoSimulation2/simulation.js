@@ -13,99 +13,111 @@ export let initialConfig = {};
 
 export const speciesList = [
   {
-    key: 'plant', displayName: '植物', icon: '🌱', energyColor: 'green',
+    key: 'plant', displayName: '植物', icon: '🌱', energyColor: '#c8e6c9',
     type: 'producer', prey: [],
     capacityKey: 'plantCarryingCapacity',
     controls: [
-      { key: 'energyFromPlant', label: '植物獲能', min: 1, max: 10, step: 1, default: 4 },
+      { key: 'energyFromPlant', label: '植物獲能', min: 10, max: 100, step: 10, default: 40 },
       { key: 'initialPlantPercent', label: '初始覆蓋%', min: 0, max: 100, step: 1, default: 50 },
       { key: 'plantRegrowthTime', label: '再生(回合)', min: 1, max: 100, step: 1, default: 30 },
       { key: 'plantCarryingCapacity', label: '負荷量', min: 100, max: 2500, step: 50, default: 2000 }
     ]
   },
   {
-    key: 'squirrel', displayName: '松鼠', icon: '🐿️', energyColor: 'brown',
+    key: 'squirrel', displayName: '松鼠', icon: '🐿️', energyColor: '#bcaaa4',
     type: 'herbivore', prey: ['plant'],
     capacityKey: 'maxSquirrels',
     controls: [
-      { key: 'initialNumberSquirrel', label: '初始數量', min: 0, max: 500, step: 1, default: 100 },
+      { key: 'initialNumberSquirrel', label: '數量', min: 0, max: 500, step: 1, default: 100 },
       { key: 'squirrelReproduce', label: '繁殖率%', min: 0, max: 15, step: 1, default: 6 },
       { key: 'squirrelSpeed', label: '速度', min: 1, max: 5, step: 1, default: 2 },
       { key: 'squirrelGainFromPlant', label: '獲能(植物)', min: 1, max: 20, step: 1, default: 4 },
-      { key: 'maxSquirrels', label: '負荷量', min: 0, max: 10000, step: 100, default: 2000 }
+      { key: 'maxSquirrels', label: '負荷量', min: 0, max: 10000, step: 100, default: 2000 },
+      { key: 'squirrelBaseEnergyCost', label: '基礎耗能/回合', min: 0, max: 5, step: 1, default: 1 },
+      { key: 'squirrelReproductionEnergyCostFactor', label: '繁殖保留能量', min: 0.1, max: 0.8, step: 0.01, default: 0.5 }
     ]
   },
   {
-    key: 'mouse', displayName: '老鼠', icon: '🐭', energyColor: 'gray',
+    key: 'mouse', displayName: '老鼠', icon: '🐭', energyColor: '#e0e0e0',
     type: 'herbivore', prey: ['plant'],
     capacityKey: 'maxMice',
     controls: [
-      { key: 'initialNumberMouse', label: '初始數量', min: 0, max: 500, step: 1, default: 100 },
+      { key: 'initialNumberMouse', label: '數量', min: 0, max: 500, step: 1, default: 100 },
       { key: 'mouseReproduce', label: '繁殖率%', min: 0, max: 15, step: 1, default: 6 },
       { key: 'mouseSpeed', label: '速度', min: 1, max: 5, step: 1, default: 2 },
       { key: 'mouseGainFromPlant', label: '獲能(植物)', min: 1, max: 20, step: 1, default: 4 },
-      { key: 'maxMice', label: '負荷量', min: 0, max: 10000, step: 100, default: 2000 }
+      { key: 'maxMice', label: '負荷量', min: 0, max: 10000, step: 100, default: 2000 },
+      { key: 'mouseBaseEnergyCost', label: '基礎耗能/回合', min: 0, max: 5, step: 1, default: 1 },
+      { key: 'mouseReproductionEnergyCostFactor', label: '繁殖保留能量', min: 0.1, max: 0.8, step: 0.01, default: 0.5 }
     ]
   },
   {
-    key: 'rabbit', displayName: '兔子', icon: '🐰', energyColor: 'orange',
+    key: 'rabbit', displayName: '兔子', icon: '🐰', energyColor: '#ffe0b2',
     type: 'herbivore', prey: ['plant'],
     capacityKey: 'maxRabbits',
     controls: [
-      { key: 'initialNumberRabbit', label: '初始數量', min: 0, max: 500, step: 1, default: 100 },
+      { key: 'initialNumberRabbit', label: '數量', min: 0, max: 500, step: 1, default: 100 },
       { key: 'rabbitReproduce', label: '繁殖率%', min: 0, max: 15, step: 1, default: 6 },
       { key: 'rabbitSpeed', label: '速度', min: 1, max: 5, step: 1, default: 2 },
       { key: 'rabbitGainFromPlant', label: '獲能(植物)', min: 1, max: 20, step: 1, default: 4 },
-      { key: 'maxRabbits', label: '負荷量', min: 0, max: 10000, step: 100, default: 2000 }
+      { key: 'maxRabbits', label: '負荷量', min: 0, max: 10000, step: 100, default: 2000 },
+      { key: 'rabbitBaseEnergyCost', label: '基礎耗能/回合', min: 0, max: 5, step: 1, default: 1 },
+      { key: 'rabbitReproductionEnergyCostFactor', label: '繁殖保留能量', min: 0.1, max: 0.8, step: 0.01, default: 0.5 }
     ]
   },
   {
-    key: 'pheasant', displayName: '雉雞', icon: '🐓', energyColor: 'purple',
+    key: 'pheasant', displayName: '雉雞', icon: '🐓', energyColor: '#e1bee7',
     type: 'herbivore', prey: ['plant'],
     capacityKey: 'maxPheasants',
     controls: [
-      { key: 'initialNumberPheasant', label: '初始數量', min: 0, max: 500, step: 1, default: 100 },
+      { key: 'initialNumberPheasant', label: '數量', min: 0, max: 500, step: 1, default: 100 },
       { key: 'pheasantReproduce', label: '繁殖率%', min: 0, max: 15, step: 1, default: 6 },
       { key: 'pheasantSpeed', label: '速度', min: 1, max: 5, step: 1, default: 2 },
       { key: 'pheasantGainFromPlant', label: '獲能(植物)', min: 1, max: 20, step: 1, default: 4 },
-      { key: 'maxPheasants', label: '負荷量', min: 0, max: 10000, step: 100, default: 2000 }
+      { key: 'maxPheasants', label: '負荷量', min: 0, max: 10000, step: 100, default: 2000 },
+      { key: 'pheasantBaseEnergyCost', label: '基礎耗能/回合', min: 0, max: 5, step: 1, default: 1 },
+      { key: 'pheasantReproductionEnergyCostFactor', label: '繁殖保留能量', min: 0.1, max: 0.8, step: 0.01, default: 0.5 }
     ]
   },
   {
-    key: 'snake', displayName: '蛇', icon: '🐍', energyColor: 'green',
+    key: 'snake', displayName: '蛇', icon: '🐍', energyColor: '#dcedc8',
     type: 'predator', prey: ['squirrel', 'mouse', 'rabbit'],
     capacityKey: 'maxSnakes',
     controls: [
-      { key: 'initialNumberSnake', label: '初始數量', min: 0, max: 250, step: 1, default: 50 },
+      { key: 'initialNumberSnake', label: '數量', min: 0, max: 250, step: 1, default: 50 },
       { key: 'snakeReproduce', label: '繁殖率%', min: 0, max: 10, step: 1, default: 5 },
       { key: 'snakeSpeed', label: '速度', min: 1, max: 5, step: 1, default: 2 },
       { key: 'snakeGainFromSquirrel', label: '獲能(松鼠)', min: 1, max: 50, step: 1, default: 20 },
       { key: 'snakeGainFromMouse', label: '獲能(老鼠)', min: 1, max: 50, step: 1, default: 20 },
       { key: 'snakeGainFromRabbit', label: '獲能(兔子)', min: 1, max: 50, step: 1, default: 20 },
-      { key: 'maxSnakes', label: '負荷量', min: 0, max: 1000, step: 10, default: 200 }
+      { key: 'maxSnakes', label: '負荷量', min: 0, max: 1000, step: 10, default: 200 },
+      { key: 'snakeBaseEnergyCost', label: '基礎耗能/回合', min: 0, max: 5, step: 1, default: 1 },
+      { key: 'snakeReproductionEnergyCostFactor', label: '繁殖保留能量', min: 0.1, max: 0.8, step: 0.01, default: 0.5 }
     ]
   },
   {
-    key: 'weasel', displayName: '黃鼠狼', icon: '🦡', energyColor: 'brown',
+    key: 'weasel', displayName: '黃鼠狼', icon: '🦡', energyColor: '#ffcc80',
     type: 'predator', prey: ['squirrel', 'mouse', 'rabbit', 'pheasant'],
     capacityKey: 'maxWeasels',
     controls: [
-      { key: 'initialNumberWeasel', label: '初始數量', min: 0, max: 250, step: 1, default: 50 },
+      { key: 'initialNumberWeasel', label: '數量', min: 0, max: 250, step: 1, default: 50 },
       { key: 'weaselReproduce', label: '繁殖率%', min: 0, max: 10, step: 1, default: 5 },
       { key: 'weaselSpeed', label: '速度', min: 1, max: 5, step: 1, default: 2 },
       { key: 'weaselGainFromSquirrel', label: '獲能(松鼠)', min: 1, max: 50, step: 1, default: 20 },
       { key: 'weaselGainFromMouse', label: '獲能(老鼠)', min: 1, max: 50, step: 1, default: 20 },
       { key: 'weaselGainFromRabbit', label: '獲能(兔子)', min: 1, max: 50, step: 1, default: 20 },
       { key: 'weaselGainFromPheasant', label: '獲能(雉雞)', min: 1, max: 50, step: 1, default: 20 },
-      { key: 'maxWeasels', label: '負荷量', min: 0, max: 1000, step: 10, default: 200 }
+      { key: 'maxWeasels', label: '負荷量', min: 0, max: 1000, step: 10, default: 200 },
+      { key: 'weaselBaseEnergyCost', label: '基礎耗能/回合', min: 0, max: 5, step: 1, default: 1 },
+      { key: 'weaselReproductionEnergyCostFactor', label: '繁殖保留能量', min: 0.1, max: 0.8, step: 0.01, default: 0.5 }
     ]
   },
   {
-    key: 'eagle', displayName: '鷹', icon: '🦅', energyColor: 'red',
+    key: 'eagle', displayName: '鷹', icon: '🦅', energyColor: '#ffab91',
     type: 'predator', prey: ['snake', 'pheasant', 'squirrel', 'mouse', 'rabbit'],
     capacityKey: 'maxEagles',
     controls: [
-      { key: 'initialNumberEagle', label: '初始數量', min: 0, max: 100, step: 1, default: 30 },
+      { key: 'initialNumberEagle', label: '數量', min: 0, max: 100, step: 1, default: 30 },
       { key: 'eagleReproduce', label: '繁殖率%', min: 0, max: 10, step: 1, default: 5 },
       { key: 'eagleSpeed', label: '速度', min: 1, max: 5, step: 1, default: 2 },
       { key: 'eagleGainFromSnake', label: '獲能(蛇)', min: 5, max: 50, step: 1, default: 20 },
@@ -113,7 +125,9 @@ export const speciesList = [
       { key: 'eagleGainFromSquirrel', label: '獲能(松鼠)', min: 5, max: 50, step: 1, default: 20 },
       { key: 'eagleGainFromMouse', label: '獲能(老鼠)', min: 5, max: 50, step: 1, default: 20 },
       { key: 'eagleGainFromRabbit', label: '獲能(兔子)', min: 5, max: 50, step: 1, default: 20 },
-      { key: 'maxEagles', label: '負荷量', min: 0, max: 1000, step: 10, default: 100 }
+      { key: 'maxEagles', label: '負荷量', min: 0, max: 1000, step: 10, default: 100 },
+      { key: 'eagleBaseEnergyCost', label: '基礎耗能/回合', min: 0, max: 5, step: 1, default: 1 },
+      { key: 'eagleReproductionEnergyCostFactor', label: '繁殖保留能量', min: 0.1, max: 0.8, step: 0.01, default: 0.5 }
     ]
   }
 ];
@@ -125,9 +139,6 @@ speciesList.forEach(spec => {
   });
 });
 // general settings
-config.showEnergy = false;
-config.baseEnergyCost = 1;
-config.reproductionEnergyCostFactor = 2;
 initialConfig = JSON.parse(JSON.stringify(config));
 
 export let patches = [];
@@ -250,7 +261,7 @@ export function drawWorld(ctx, patchSize) {
     ctx.fillRect(x * patchSize, y * patchSize, patchSize, patchSize);
   }
   speciesList.filter(s => s.type !== 'producer').forEach(spec => {
-    animals[spec.key].forEach(ind => ind.draw(ctx, patchSize, config.showEnergy));
+    animals[spec.key].forEach(ind => ind.draw(ctx, patchSize, true));
   });
 }
 
