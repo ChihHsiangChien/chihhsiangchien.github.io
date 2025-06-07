@@ -188,7 +188,7 @@ function initTest() {
                 <button class="boundary-btn" id="noBtn">No ←</button>
                 <button class="boundary-btn" id="yesBtn">Yes →</button>
             </div>
-            <div class="keyboard-hint">可以使用 ← → 方向键回答</div>
+            <div class="keyboard-hint">可以使用 ← → 方向鍵回答</div>
         </div>
     `;
     startNewTest();
