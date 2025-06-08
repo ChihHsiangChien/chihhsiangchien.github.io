@@ -1,12 +1,28 @@
 // 模式：'lv' 為 Lotka–Volterra 模式，'sine' 為相位示範模式（可獨立調整振幅、週期與相位差）
-let currentMode = 'sine';
+// 97年生物指考第9題
+// 初始模式設定為 Lotka–Volterra 模式
+let currentMode = 'lv';
 const descriptions = {
-  lv: '調整參數，圖表即時更新時間序列與相位圖。若想瞭解經典方程式，可切換顯示/隱藏方程式內容。',
-  sine: '調整參數，圖表即時更新時間序列與相位圖。此模式示範捕食者與獵物振幅與週期可獨立調整，預設相同，並可改變相位差。若想瞭解方程式，可切換顯示/隱藏方程式內容。'
+  lv: '假設狐狸捕捉兔子，這些參數怎麼影響牠們之間的關係？',
+  sine: '此模式調整捕食者與獵物振幅與週期可獨立調整，並可改變相位差。'
+};
+// 各模式的頁面標題 (h1 與 <title>)
+const titles = {
+  lv: '捕食者-獵物模型：Lotka–Volterra 方程式',
+  sine: '相位示範模式 (Sine 模式)'
 };
 
 function updateDescriptions() {
   document.getElementById('mode-description').textContent = descriptions[currentMode];
+}
+
+/**
+ * 更新頁面主標題 (h1) 與瀏覽器標籤標題 (<title>)
+ */
+function updateTitle() {
+  const titleText = titles[currentMode];
+  document.querySelector('h1').textContent = titleText;
+  document.title = titleText;
 }
 
 function updateEquationsContent() {
@@ -16,7 +32,7 @@ function updateEquationsContent() {
 <pre>dx/dt = α x - β x y
 dy/dt = δ x y - γ y</pre>`;
   } else {
-    eq.innerHTML = `<p>示範方程式 (獵物與捕食者振幅與週期可獨立調整)：</p>
+    eq.innerHTML = `<p> (獵物與捕食者振幅與週期可獨立調整)：</p>
 <pre>x(t) = Aₓ + Aₓ sin(2π t / Tₓ)
 y(t) = Aᵧ + Aᵧ sin(2π t / Tᵧ + φ)</pre>`;
   }
@@ -24,14 +40,26 @@ y(t) = Aᵧ + Aᵧ sin(2π t / Tᵧ + φ)</pre>`;
 
 function updateLayout() {
   const main = document.getElementById('main-content');
-  if (currentMode === 'sine') main.classList.add('sine-layout');
-  else main.classList.remove('sine-layout');
+  const container = document.querySelector('.container');
+  if (currentMode === 'sine') {
+    main.classList.add('sine-layout');
+    main.classList.remove('lv-layout');
+    container.classList.add('sine-mode');
+    container.classList.remove('lv-mode');
+  } else {
+    main.classList.add('lv-layout');
+    main.classList.remove('sine-layout');
+    container.classList.add('lv-mode');
+    container.classList.remove('sine-mode');
+  }
 }
 
 function toggleMode() {
   currentMode = currentMode === 'lv' ? 'sine' : 'lv';
   document.getElementById('lv-params').hidden = currentMode !== 'lv';
   document.getElementById('sine-params').hidden = currentMode !== 'sine';
+  // 更新標題、說明、排版與圖形
+  updateTitle();
   document.getElementById('toggle-mode').textContent =
     currentMode === 'lv' ? '切換到相位示範模式' : '切換到 Lotka–Volterra 模式';
   updateDescriptions();
@@ -130,18 +158,28 @@ function drawPlots(data) {
       {x: data.t, y: data.x, mode: 'lines', name: '獵物 Prey'},
       {x: data.t, y: data.y, mode: 'lines', name: '捕食者 Predator'}
     ], {title: '數量隨時間變化', xaxis: {title: '時間'}, yaxis: {title: '數量'}});
+    const eqScaleLv = !!document.getElementById('equal-scale-lv')?.checked;
+    const phaseLayoutLv = {
+      title: '相位圖 (捕食者 vs 獵物)',
+      xaxis: {title: '捕食者數量'},
+      yaxis: {title: '獵物數量'}
+    };
+    if (eqScaleLv) {
+      phaseLayoutLv.yaxis.scaleanchor = 'x';
+      phaseLayoutLv.yaxis.scaleratio = 1;
+    }
     Plotly.newPlot('phase-space', [
       {x: data.y, y: data.x, mode: 'lines', name: 'Phase 路徑'}
-    ], {title: '相位圖 (捕食者 vs 獵物)', xaxis: {title: '捕食者數量'}, yaxis: {title: '獵物數量'}});
+    ], phaseLayoutLv);
   } else {
     // 相位示範模式：時間序列與相位圖
     Plotly.newPlot('time-series', [
       {x: data.t, y: data.x, mode: 'lines', name: '獵物 Prey'},
       {x: data.t, y: data.y, mode: 'lines', name: '捕食者 Predator'}
-    ], {title: '數量隨時間變化 (相位示範模式)', xaxis: {title: '時間'}, yaxis: {title: '數量'}});
+    ], {title: '數量隨時間變化', xaxis: {title: '時間'}, yaxis: {title: '數量'}});
     const eqScale = !!document.getElementById('equal-scale')?.checked;
     const phaseLayout = {
-      title: '相位圖 (捕食者 vs 獵物, 相位示範模式)',
+      title: '相位圖 (捕食者 vs 獵物)',
       xaxis: {title: '捕食者數量'},
       yaxis: {title: '獵物數量'}
     };
@@ -180,6 +218,8 @@ window.addEventListener('load', function() {
   document.getElementById('sine-params').hidden = currentMode !== 'sine';
   document.getElementById('toggle-mode').textContent =
     currentMode === 'lv' ? '切換到相位示範模式' : '切換到 Lotka–Volterra 模式';
+  // 初始載入時同步更新標題、說明與排版
+  updateTitle();
   updateDescriptions();
   updateLayout();
   updatePlots();
