@@ -1,10 +1,10 @@
-// 模式：'lv' 為 Lotka–Volterra 模式，'sine' 為相位示範模式（可獨立調整振幅、週期與相位差）
+// 模式：'lv' 為 Lotka–Volterra 模式，'sine' 為相位示範模式（可獨立調整基線、振幅、週期與相位差）
 // 97年生物指考第9題
 // 初始模式設定為 Lotka–Volterra 模式
 let currentMode = 'lv';
 const descriptions = {
   lv: '假設狐狸捕捉兔子，這些參數怎麼影響牠們之間的關係？',
-  sine: '此模式調整捕食者與獵物振幅與週期可獨立調整，並可改變相位差。'
+  sine: '此模式可獨立調整捕食者與獵物的基線、振幅、週期，並可改變相位差。'
 };
 // 各模式的頁面標題 (h1 與 <title>)
 const titles = {
@@ -32,9 +32,9 @@ function updateEquationsContent() {
 <pre>dx/dt = α x - β x y
 dy/dt = δ x y - γ y</pre>`;
   } else {
-    eq.innerHTML = `<p> (獵物與捕食者振幅與週期可獨立調整)：</p>
-<pre>x(t) = Aₓ + Aₓ sin(2π t / Tₓ)
-y(t) = Aᵧ + Aᵧ sin(2π t / Tᵧ + φ)</pre>`;
+    eq.innerHTML = `<p> (獵物與捕食者基線、振幅與週期可獨立調整)：</p>
+<pre>x(t) = Bₓ + Aₓ sin(2π t / Tₓ)
+y(t) = Bᵧ + Aᵧ sin(2π t / Tᵧ + φ)</pre>`;
   }
 }
 
@@ -89,6 +89,8 @@ function getParams() {
   } else {
     return {
       mode: 'sine',
+      baselineX: parseFloat(document.getElementById('baselineX').value),
+      baselineY: parseFloat(document.getElementById('baselineY').value),
       amplitudeX: parseFloat(document.getElementById('amplitudeX').value),
       amplitudeY: parseFloat(document.getElementById('amplitudeY').value),
       periodX: parseFloat(document.getElementById('periodX').value),
@@ -135,18 +137,18 @@ function simulate(params) {
     }
     return {t, x, y};
   } else {
-    const {amplitudeX, amplitudeY, periodX, periodY, phaseShift, tmax, dt} = params;
+    const {baselineX, baselineY, amplitudeX, amplitudeY, periodX, periodY, phaseShift, tmax, dt} = params;
     const n = Math.ceil(tmax / dt) + 1;
     const t = new Array(n);
     const x = new Array(n);
     const y = new Array(n);
     for (let i = 0; i < n; i++) {
       t[i] = i * dt;
-      // 基線偏移至各自振幅，確保數值非負
+      // 根據基線與振幅計算數值
       const thetaX = (2 * Math.PI * t[i]) / periodX;
       const thetaY = (2 * Math.PI * t[i]) / periodY + phaseShift * 2 * Math.PI;
-      x[i] = amplitudeX + amplitudeX * Math.sin(thetaX);
-      y[i] = amplitudeY + amplitudeY * Math.sin(thetaY);
+      x[i] = baselineX + amplitudeX * Math.sin(thetaX);
+      y[i] = baselineY + amplitudeY * Math.sin(thetaY);
     }
     return {t, x, y};
   }
