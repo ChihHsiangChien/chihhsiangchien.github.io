@@ -5,8 +5,8 @@
     
     //'data/modules/pollution_module.json',
     'data/modules/common_elements.json',    
-    'data/modules/spoonbills_crisis_module.json',
-    'data/modules/forest_fire_module.json',
+    'data/modules/spoonbills_crisis.json',
+    'data/modules/forest_fire.json',
     // ... 其他模組檔案
   ];
   const markovChainFile = 'data/markov_chains.json'; // 或您選擇的其他路徑
@@ -521,7 +521,7 @@
             <p class="font-bold">${evt.id}</p>
             ${evt.description ? `<p class="text-sm mb-1">${evt.description}</p>` : ''}
             <div class="mt-1 text-xs flex flex-wrap">
-              ${effectsHTML || '<span class="text-gray-500">無立即效果</span>'}
+            ${effectsHTML || '<span class="text-gray-500">無立即效果</span>'}
             </div>
           </div>  
         </div>
