@@ -6,7 +6,7 @@
   // Game Control Variables
   const MAX_EVENTS_TO_SHOW_PER_TURN = 10; // 每回合最多顯示的事件數量
   const PM25_CRISIS_THRESHOLD = 80;      // 觸發「細懸浮微粒太高」旗標的 PM2.5 閾值
-  const MAX_STRATEGIES_TO_CHOOSE_PER_TURN = 3; // 每回合可選擇的策略卡數量
+  const MAX_STRATEGIES_TO_CHOOSE_PER_TURN = 5; // 每回合可選擇的策略卡數量
   const STRATEGIES_PER_PAGE = 40; // 每頁顯示的策略卡數量
   const MAX_TURNS = 20; // 遊戲最大回合數
 
