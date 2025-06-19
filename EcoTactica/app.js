@@ -2,13 +2,14 @@
 (async function() {
   // Global toggle for Markov chain functionality
   const useMarkovChains = false; // Set to false to disable all Markov chain features
+  const USE_TURN_BASED_SYSTEM = true; // 設定為 false 以停用回合制進程 (遊戲可能需要其他勝利/失敗條件)
 
   // Game Control Variables
   const MAX_EVENTS_TO_SHOW_PER_TURN = -1; // 每回合最多顯示的事件數量
   const PM25_CRISIS_THRESHOLD = 80;      // 觸發「細懸浮微粒太高」旗標的 PM2.5 閾值
-  const MAX_STRATEGIES_TO_CHOOSE_PER_TURN = 7; // 每回合可選擇的策略卡數量
+  const MAX_STRATEGIES_TO_CHOOSE_PER_TURN = 6; // 每回合可選擇的策略卡數量
   const STRATEGIES_PER_PAGE = 40; // 每頁顯示的策略卡數量
-  const MAX_TURNS = 10; // 遊戲最大回合數
+  const MAX_TURNS = 20; // 遊戲最大回合數
 
   // Scoring Constants
   const MAX_METRIC_VALUE_PER_CATEGORY = 1000;
@@ -16,7 +17,7 @@
   const MAX_POSSIBLE_METRIC_SUM = NUM_CORE_METRICS * MAX_METRIC_VALUE_PER_CATEGORY;
   const METRICS_SCORE_WEIGHT_PERCENT = 80; // 70% for metrics contribution to score
   const TURNS_SCORE_WEIGHT_PERCENT = 20;   // 30% for turns contribution to score
-  const MAX_TOTAL_SCORE = 100;
+  const MAX_TOTAL_SCORE = 1000;
 
   // 預先定義一些代表正面成就的旗標，用於成績單顯示
   const POSITIVE_ACHIEVEMENT_FLAGS = [
@@ -819,9 +820,11 @@
 
   // Check for game over conditions
   function checkGameOverConditions() {
-    if (gameState.turn > MAX_TURNS) {
-      return `達到最大回合數 (${MAX_TURNS} 回)。`;
+    if (USE_TURN_BASED_SYSTEM && gameState.turn > MAX_TURNS) {
+      return `達到最大回合數 (${MAX_TURNS} 回合)。`;
     }
+    // 如果未使用回合制，則 MAX_TURNS 不作為遊戲結束的直接原因，
+    // 遊戲將依賴其他條件（如指標耗盡或所有事件處理完畢）。
     if (gameState.biodiversity <= 0) return "「生物多樣性」耗盡。";
     if (gameState.economy <= 0) return "「經濟可行性」崩潰。";
     if (gameState.publicTrust <= 0) return "「公共信任度」歸零。";
@@ -829,8 +832,10 @@
     if (gameState.social <= 0) return "「社會公平」瓦解。";
 
     // 遊戲開始後 (turn > 1)，如果當前回合已無作用中事件，則遊戲結束
-    // 這個檢查點應該在 processPreChoiceEvents 之後，確保 activeEventObjects 是最新的
-    if (gameState.turn > 1 && gameState.activeEventObjects.length === 0) {
+    // 如果未使用回合制，這個條件變得更重要
+    // 如果使用回合制，這仍然是一個可能的結束條件，表示玩家提前解決了所有問題
+    const noActiveEventsCondition = gameState.turn > 1 && gameState.activeEventObjects.length === 0;
+    if (noActiveEventsCondition) {
       return "所有當前事件已處理完畢。";
     }
     return null; // No game over condition met
@@ -838,24 +843,35 @@
 
   // Handle game over
   function handleGameOver(reason) {
-    // Calculate score
     let currentMetricSum = gameState.biodiversity + gameState.economy + gameState.publicTrust + gameState.climate + gameState.social;
     currentMetricSum = Math.max(0, currentMetricSum); // Ensure sum isn't negative
 
-    const metricScoreContribution = (currentMetricSum / MAX_POSSIBLE_METRIC_SUM) * METRICS_SCORE_WEIGHT_PERCENT;
+    let metricScoreContribution;
+    let turnScoreContribution;
 
-    let completedTurnsForScore = gameState.turn - 1; // Turns completed before game over
-    if (gameState.turn > MAX_TURNS) { // Ended due to MAX_TURNS
-      completedTurnsForScore = MAX_TURNS;
+    if (USE_TURN_BASED_SYSTEM) {
+      // 指標分數貢獻 = (當前指標總和 / 可能的最高指標總和) * (總分上限 * 指標權重百分比)
+      metricScoreContribution = (currentMetricSum / MAX_POSSIBLE_METRIC_SUM) * (MAX_TOTAL_SCORE * (METRICS_SCORE_WEIGHT_PERCENT / 100));
+
+      let completedTurnsForScore = gameState.turn - 1; // Turns completed before game over
+      if (reason === `達到最大回合數 (${MAX_TURNS} 回合)。` || gameState.turn > MAX_TURNS) {
+        completedTurnsForScore = MAX_TURNS;
+      }
+      completedTurnsForScore = Math.max(0, completedTurnsForScore);
+      // 回合分數貢獻 = (完成回合數 / 最大回合數) * (總分上限 * 回合權重百分比)
+      turnScoreContribution = MAX_TURNS > 0 ? (completedTurnsForScore / MAX_TURNS) * (MAX_TOTAL_SCORE * (TURNS_SCORE_WEIGHT_PERCENT / 100)) : 0;
+    } else {
+      // 如果未使用回合制，分數主要基於指標，回合數影響降低或移除
+      metricScoreContribution = (currentMetricSum / MAX_POSSIBLE_METRIC_SUM) * MAX_TOTAL_SCORE; // 指標佔所有分數
+      turnScoreContribution = 0; // 回合分數貢獻為0
+      // 或者，如果仍想給予回合一些权重，即使不是回合制，可以這樣設計：
+      // 注意：這裡的範例是將回合數作為扣分項，回合越少分數越高，與回合制邏輯不同
+      // metricScoreContribution = (currentMetricSum / MAX_POSSIBLE_METRIC_SUM) * 90; // 例如 90%
+      // turnScoreContribution = Math.min(10, Math.max(0, 10 - (gameState.turn / 5))); // 例如，回合越少，額外獎勵分越高，上限10分
     }
-    completedTurnsForScore = Math.max(0, completedTurnsForScore);
 
-    const turnScoreContribution = MAX_TURNS > 0 ? (completedTurnsForScore / MAX_TURNS) * TURNS_SCORE_WEIGHT_PERCENT : 0;
-
-    //let finalScore = Math.round(metricScoreContribution + turnScoreContribution);
-    let finalScore = metricScoreContribution + turnScoreContribution;
+    let finalScore = Math.round(metricScoreContribution + turnScoreContribution);
     finalScore = Math.max(0, Math.min(MAX_TOTAL_SCORE, finalScore)); // Clamp score
-
     // Hide main game UI elements
     const mainHeader = document.getElementById('main-header');
     if (mainHeader) mainHeader.classList.add('hidden');
@@ -868,12 +884,78 @@
     const gameOverReasonEl = document.getElementById('game-over-reason');
     const gameOverScoreEl = document.getElementById('game-over-score');
     const achievedFlagsDiv = document.getElementById('achieved-flags-summary');
+    const metricsChartCanvas = document.getElementById('metricsRadarChart');
     const unresolvedEventsDiv = document.getElementById('unresolved-events-summary');
     const restartButton = document.getElementById('restart-game-btn');
 
     if (gameOverReasonEl) gameOverReasonEl.textContent = `原因：${reason}`;
     updateTurnScoreDisplay(`最終治理分數：${finalScore}`); // 更新標題旁的分數
-    if (gameOverScoreEl) gameOverScoreEl.textContent = `您的治理分數為：${finalScore.toFixed(1)}`;
+    if (gameOverScoreEl) gameOverScoreEl.textContent = `您的治理分數為：${finalScore}`;
+
+    // Render Radar Chart for metrics
+    if (metricsChartCanvas && typeof Chart !== 'undefined') {
+      const chartData = {
+        labels: ['生物多樣性', '經濟可行性', '公共信任度', '氣候穩定度', '社會公平'],
+        datasets: [{
+          label: '最終指標狀態',
+          data: [
+            gameState.biodiversity,
+            gameState.economy,
+            gameState.publicTrust,
+            gameState.climate,
+            gameState.social
+          ],
+          fill: true,
+          backgroundColor: 'rgba(54, 162, 235, 0.2)', // Blueish
+          borderColor: 'rgb(54, 162, 235)',
+          pointBackgroundColor: 'rgb(54, 162, 235)',
+          pointBorderColor: '#fff',
+          pointHoverBackgroundColor: '#fff',
+          pointHoverBorderColor: 'rgb(54, 162, 235)'
+        }]
+      };
+      new Chart(metricsChartCanvas, {
+        type: 'radar',
+        data: chartData,
+        options: {
+          animation: false, // 禁用所有動畫
+          elements: {
+            line: {
+              borderWidth: 3
+            }
+          },
+          scales: {
+            r: {
+              angleLines: { display: true },
+              suggestedMin: 0,
+              suggestedMax: MAX_METRIC_VALUE_PER_CATEGORY, // Use your defined max value
+              ticks: {
+                stepSize: 200, // Adjust stepSize as needed
+                backdropColor: 'rgba(0,0,0,0)' // Transparent backdrop for ticks
+              },
+              pointLabels: {
+                font: {
+                    size: 12 // Adjust font size for labels like '生物多樣性'
+                },
+                color: '#fff' // White color for point labels
+              },
+              grid: {
+                color: 'rgba(255, 255, 255, 0.2)' // Lighter grid lines
+              }
+            }
+          },
+          plugins: {
+            legend: {
+              labels: {
+                color: '#fff' // White color for legend label
+              }
+            }
+          }
+        }
+      });
+    } else if (typeof Chart === 'undefined') {
+        console.warn("Chart.js is not loaded. Radar chart cannot be displayed.");
+    }
 
     // Populate achieved flags
     if (achievedFlagsDiv) {
@@ -1258,7 +1340,11 @@
     gameState.selectedStrategies = []; // Clear selected strategies for the new turn
     gameState.strategyPage = 1; // Reset to first page for new turn
     
-    updateTurnScoreDisplay(`第 ${gameState.turn} / ${MAX_TURNS} 回合`); // 更新標題旁的回合數
+    if (USE_TURN_BASED_SYSTEM) {
+      updateTurnScoreDisplay(`第 ${gameState.turn} / ${MAX_TURNS} 回合`);
+    } else {
+      updateTurnScoreDisplay(`第 ${gameState.turn} 回合`); // 如果不是回合制，不顯示總回合數
+    }
     // Render initial state of UI elements for the new turn
     renderDashboard(); // Now uses the cleared activeEventObjects, so count is 0.
     renderFlags();
