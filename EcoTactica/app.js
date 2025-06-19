@@ -4,11 +4,11 @@
   const useMarkovChains = false; // Set to false to disable all Markov chain features
 
   // Game Control Variables
-  const MAX_EVENTS_TO_SHOW_PER_TURN = 10; // 每回合最多顯示的事件數量
+  const MAX_EVENTS_TO_SHOW_PER_TURN = -1; // 每回合最多顯示的事件數量
   const PM25_CRISIS_THRESHOLD = 80;      // 觸發「細懸浮微粒太高」旗標的 PM2.5 閾值
-  const MAX_STRATEGIES_TO_CHOOSE_PER_TURN = 5; // 每回合可選擇的策略卡數量
+  const MAX_STRATEGIES_TO_CHOOSE_PER_TURN = 7; // 每回合可選擇的策略卡數量
   const STRATEGIES_PER_PAGE = 40; // 每頁顯示的策略卡數量
-  const MAX_TURNS = 20; // 遊戲最大回合數
+  const MAX_TURNS = 5; // 遊戲最大回合數
 
   // Scoring Constants
   const MAX_METRIC_VALUE_PER_CATEGORY = 1000;
@@ -18,15 +18,24 @@
   const TURNS_SCORE_WEIGHT_PERCENT = 20;   // 30% for turns contribution to score
   const MAX_TOTAL_SCORE = 100;
 
+  // 預先定義一些代表正面成就的旗標，用於成績單顯示
+  const POSITIVE_ACHIEVEMENT_FLAGS = [
+    "石虎族群恢復", "石虎棲地成功連結",
+    "綠蠵龜族群穩定", "產卵地保護計畫成功", "海洋環境改善",
+    "森林大火已控制", "森林生態開始恢復",
+    "黑面琵鷺族群恢復", "黑面琵鷺保護區成立"
+    // 可以根據遊戲內容持續添加
+  ];
+
   // Load data
   const moduleFiles = [
     
     //'data/modules/pollution_module.json',
     'data/modules/common_elements.json',    
-    'data/modules/spoonbills_crisis.json',
-    'data/modules/leopard_cat_crisis.json',
+    //'data/modules/spoonbills_crisis.json',
+    //'data/modules/leopard_cat_crisis.json',
     'data/modules/forest_fire.json',
-    'data/modules/green_sea_turtle_conservation.json',
+    //'data/modules/green_sea_turtle_conservation.json',
 
     // ... 其他模組檔案
   ];
@@ -68,12 +77,15 @@
   
 
   // Game state
+  function getRandomInitialMetric() {
+    return Math.floor(Math.random() * 501) + 300; // 示例：隨機 300-800
+  }  
   const gameState = {
-    biodiversity: 1000,
-    economy: 200,
-    publicTrust: 500,
-    climate: 500,
-    social: 500,
+    biodiversity: getRandomInitialMetric(),
+    economy: getRandomInitialMetric(),
+    publicTrust: getRandomInitialMetric(),
+    climate: getRandomInitialMetric(),
+    social: getRandomInitialMetric(),
     pm25_level: 60,
     // pm25_threshold: 65, // This was used for a flag, can be kept if still needed for other logic
     flags: {}, // Flags will be populated by Markov chain init and game events
@@ -92,11 +104,18 @@
     cardPanel: document.getElementById('card-panel'),
     uiControlsArea: document.getElementById('ui-controls-area'),
     eventDisplayPanel: document.getElementById('event-display-panel'),
+    turnSummaryPanel: document.getElementById('turn-summary-panel'),
     // Pagination and Confirm buttons will be cached after creation in their setup functions
+    turnScoreDisplay: document.getElementById('turn-score-display'),
   };
 
 
   // Utils
+  function updateTurnScoreDisplay(text) {
+    if (DOMElements.turnScoreDisplay) {
+      DOMElements.turnScoreDisplay.textContent = text;
+    }
+  }
   function clamp(v) { return Math.max(0, Math.min(1000, v)); }
   function getFlag(name) { return !!gameState.flags[name]; }
   function setFlag(name, val = true) { gameState.flags[name] = val; }
@@ -117,7 +136,7 @@
 
   // Global effect mapping for cards
   const EFFECT_MAPPING = [
-    { key: 'effect_biodiversity', label: '生多', color: 'text-green-600' },
+    { key: 'effect_biodiversity', label: '生物', color: 'text-green-600' },
     { key: 'effect_economy', label: '經濟', color: 'text-blue-600' },
     { key: 'effect_public_trust', label: '信任', color: 'text-purple-600' },
     { key: 'effect_climate', label: '氣候', color: 'text-orange-600' },
@@ -362,7 +381,7 @@
       btn.innerHTML = `
         <div class="flex justify-between items-center mb-1">
           <h3 class="text-base font-semibold break-words">${card.id}</h3>
-          ${(card.set_flag && card.set_flag.length > 0) ? `<button class="strategy-info-btn text-xs text-blue-500 hover:text-blue-700 focus:outline-none p-1" title="顯示旗標效果"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></button>` : ''}
+          ${(card.set_flag && card.set_flag.length > 0) ? `<button class="strategy-info-btn text-xs text-blue-500 hover:text-blue-700 focus:outline-none p-1" title="顯示狀態效果"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></button>` : ''}
         </div>
         ${card.description ? `<p class="text-xs text-gray-600 flex-1 mb-2 break-words">${card.description}</p>` : '<p class="mb-2">&nbsp;</p>'}
         <div class="mt-auto text-xs flex flex-wrap">
@@ -401,7 +420,7 @@
           if (card.set_flag && card.set_flag.length > 0) {
             message = `產生的效果: ${card.set_flag.join(', ')}`;
           } else {
-            message = "此卡無設定旗標的效果。"; // 理論上按鈕不應出現於此情況
+            message = "此卡無設定狀態的效果。"; // 理論上按鈕不應出現於此情況
           }
           alert(message);
         });
@@ -506,26 +525,165 @@
     }
   }
 
+  // Function to show turn summary panel
+  function showTurnSummary(changes) {
+    const summaryPanel = DOMElements.turnSummaryPanel;
+    const metricsChangesDiv = document.getElementById('summary-metrics-changes');
+    const flagsChangedDiv = document.getElementById('summary-flags-changed');
+    const newStrategiesDiv = document.getElementById('summary-new-strategies');
+    // Potentially add a new div for event effects if we merge them here
+    // const eventEffectsDiv = document.getElementById('summary-event-effects');
+    const ackSummaryBtn = document.getElementById('acknowledge-turn-summary-btn');
+
+    // 清空舊內容並重設標題
+    metricsChangesDiv.innerHTML = '<h3 class="text-lg font-semibold text-gray-700 mb-1">指標變化：</h3>'; // Reset
+    flagsChangedDiv.innerHTML = '<h3 class="text-lg font-semibold text-gray-700 mb-1">狀態變化：</h3>'; // Reset
+    newStrategiesDiv.innerHTML = '<h3 class="text-lg font-semibold text-gray-700 mb-1">新解鎖的策略：</h3>'; // Reset
+
+    let hasMetricChanges = false;
+    for (const metric in changes.metrics) {
+      if (changes.metrics[metric].delta !== 0) {
+        hasMetricChanges = true;
+        const p = document.createElement('p');
+        p.className = `text-sm ${changes.metrics[metric].delta > 0 ? 'text-green-600' : 'text-red-600'}`;
+        p.textContent = `${metric}：${changes.metrics[metric].oldVal} → ${changes.metrics[metric].newVal} (${changes.metrics[metric].delta > 0 ? '+' : ''}${changes.metrics[metric].delta})`;
+        metricsChangesDiv.appendChild(p);
+      }
+    }
+    if (!hasMetricChanges) {
+      const p = document.createElement('p');
+      p.className = 'text-sm text-gray-500';
+      p.textContent = '本回合指標無直接變化。';
+      metricsChangesDiv.appendChild(p);
+    }
+
+    let hasFlagChanges = false;
+    if (changes.flags.set.length > 0) {
+      hasFlagChanges = true;
+      const p = document.createElement('p');
+      p.className = 'text-sm text-green-600';
+      p.textContent = `新增狀態：${changes.flags.set.join('、 ')}`;
+      flagsChangedDiv.appendChild(p);
+    }
+    if (changes.flags.cleared.length > 0) {
+      hasFlagChanges = true;
+      const p = document.createElement('p');
+      p.className = 'text-sm text-red-600';
+      p.textContent = `移除狀態：${changes.flags.cleared.join('、 ')}`;
+      flagsChangedDiv.appendChild(p);
+    }
+    if (!hasFlagChanges) {
+      const p = document.createElement('p');
+      p.className = 'text-sm text-gray-500';
+      p.textContent = '本回合狀態無變化。';
+      flagsChangedDiv.appendChild(p);
+    }
+
+    // 顯示新解鎖的策略
+    if (changes.newlyAvailableStrategies && changes.newlyAvailableStrategies.length > 0) {
+      changes.newlyAvailableStrategies.forEach(strategy => {
+        const p = document.createElement('p');
+        p.className = 'text-sm text-blue-600';
+        p.textContent = `✓ ${strategy.id}`; // 或 strategy.title
+        newStrategiesDiv.appendChild(p);
+      });
+    } else {
+      const p = document.createElement('p');
+      p.className = 'text-sm text-gray-500';
+      p.textContent = '本回合無新策略解鎖。';
+      newStrategiesDiv.appendChild(p);
+    }
+    ackSummaryBtn.onclick = () => {
+      summaryPanel.classList.add('hidden');
+      processEndOfTurn(); // Proceed to next turn logic
+    };
+    summaryPanel.classList.remove('hidden');
+  }
   // Apply effects of all selected strategies and proceed
-  function applySelectedStrategies() {
+  function applySelectedStrategies(triggeredEventsFromTurn) { // Pass triggered events
+
+    // 記錄本回合開始時可用的策略
+    const strategiesAvailableAtTurnStart = getAvailableStrategies().map(s => s.id);
+
+    // --- Collect changes for summary ---
+    // Store initial state for accurate delta calculation
+    const initialGameStateForSummary = {
+        biodiversity: gameState.biodiversity,
+        economy: gameState.economy,
+        publicTrust: gameState.publicTrust,
+        climate: gameState.climate,
+        social: gameState.social,
+        flags: { ...gameState.flags } // Shallow copy for flags
+    };
+
+    const turnChanges = {
+      metrics: {
+        '生物多樣性': { oldVal: initialGameStateForSummary.biodiversity, delta: 0, newVal: initialGameStateForSummary.biodiversity },
+        '經濟可行性': { oldVal: initialGameStateForSummary.economy, delta: 0, newVal: initialGameStateForSummary.economy },
+        '公共信任度': { oldVal: initialGameStateForSummary.publicTrust, delta: 0, newVal: initialGameStateForSummary.publicTrust },
+        '氣候穩定度': { oldVal: initialGameStateForSummary.climate, delta: 0, newVal: initialGameStateForSummary.climate },
+        '社會公平': { oldVal: initialGameStateForSummary.social, delta: 0, newVal: initialGameStateForSummary.social }
+      },
+      flags: { set: [], cleared: [] },
+      newlyAvailableStrategies: []
+      // You might want to add a section for event effects if they are also summarized here
+      // eventEffects: []
+    };
+
+    // 1. Apply EVENT effects first (if passed and not yet applied)
+    if (triggeredEventsFromTurn && triggeredEventsFromTurn.length > 0) {
+        triggeredEventsFromTurn.forEach(evt => {
+            if (evt.hasOwnProperty('effect_biodiversity')) gameState.biodiversity = clamp(gameState.biodiversity + evt.effect_biodiversity);
+            if (evt.hasOwnProperty('effect_economy')) gameState.economy = clamp(gameState.economy + evt.effect_economy);
+            if (evt.hasOwnProperty('effect_public_trust')) gameState.publicTrust = clamp(gameState.publicTrust + evt.effect_public_trust);
+            if (evt.hasOwnProperty('effect_climate')) gameState.climate = clamp(gameState.climate + evt.effect_climate);
+            if (evt.hasOwnProperty('effect_social')) gameState.social = clamp(gameState.social + evt.effect_social);
+
+            if (evt.set_flag && Array.isArray(evt.set_flag)) {
+                evt.set_flag.forEach(flagName => {
+                    if (!gameState.flags[flagName]) turnChanges.flags.set.push(flagName); // Collect only new flags
+                    setFlag(flagName);
+                });
+            }
+            if (evt.clear_flag && Array.isArray(evt.clear_flag)) {
+                 evt.clear_flag.forEach(flagName => {
+                    if (gameState.flags[flagName]) turnChanges.flags.cleared.push(flagName);
+                    clearFlag(flagName);
+                });
+            }
+            // turnChanges.eventEffects.push({id: evt.id, description: "Event applied"});
+        });
+    }
+
+    // 2. Apply STRATEGY effects
     gameState.selectedStrategies.forEach(card => {
-      // apply effects
+      // apply metric effects from strategies
       gameState.biodiversity = clamp(gameState.biodiversity + (card.effect_biodiversity || 0));
       gameState.economy = clamp(gameState.economy + (card.effect_economy || 0));
       gameState.publicTrust = clamp(gameState.publicTrust + (card.effect_public_trust || 0));
       gameState.climate = clamp(gameState.climate + (card.effect_climate || 0));
       gameState.social = clamp(gameState.social + (card.effect_social || 0));
 
-      // Handle set_flag from strategy card
+      // Collect flag changes from strategies
       if (card.set_flag && Array.isArray(card.set_flag)) {
-        card.set_flag.forEach(flagName => setFlag(flagName));
+        card.set_flag.forEach(flagName => {
+            // Avoid duplicating if event already set it, though setFlag is idempotent
+            if (!turnChanges.flags.set.includes(flagName) && !initialGameStateForSummary.flags[flagName]) {
+                 turnChanges.flags.set.push(flagName);
+            }
+            setFlag(flagName); // Apply the flag
+        });
       }
-      // Handle clear_flag from strategy card
       if (card.clear_flag && Array.isArray(card.clear_flag)) {
-        card.clear_flag.forEach(flagName => clearFlag(flagName));
+        card.clear_flag.forEach(flagName => {
+            if (!turnChanges.flags.cleared.includes(flagName) && initialGameStateForSummary.flags[flagName]) {
+                turnChanges.flags.cleared.push(flagName);
+            }
+            clearFlag(flagName); // Apply the flag
+        });
       }
 
-      // Handle Markov chain effects from strategy card
+      // Handle Markov chain effects from strategy card (if any)
       if (useMarkovChains && card.markov_effects && Array.isArray(card.markov_effects)) {
         card.markov_effects.forEach(effect => {
           const chainName = effect.chain_name;
@@ -594,12 +752,31 @@
       }
     });
 
+    // Now, correctly calculate deltas for the summary based on the *actual* changes
+    turnChanges.metrics['生物多樣性'].newVal = gameState.biodiversity;
+    turnChanges.metrics['經濟可行性'].newVal = gameState.economy;
+    turnChanges.metrics['公共信任度'].newVal = gameState.publicTrust;
+    turnChanges.metrics['氣候穩定度'].newVal = gameState.climate;
+    turnChanges.metrics['社會公平'].newVal = gameState.social;
+
+    turnChanges.metrics['生物多樣性'].delta = gameState.biodiversity - initialGameStateForSummary.biodiversity;
+    turnChanges.metrics['經濟可行性'].delta = gameState.economy - initialGameStateForSummary.economy;
+    turnChanges.metrics['公共信任度'].delta = gameState.publicTrust - initialGameStateForSummary.publicTrust;
+    turnChanges.metrics['氣候穩定度'].delta = gameState.climate - initialGameStateForSummary.climate;
+    turnChanges.metrics['社會公平'].delta = gameState.social - initialGameStateForSummary.social;
+
+    // 計算新解鎖的策略
+    const strategiesAvailableAtTurnEnd = getAvailableStrategies();
+    turnChanges.newlyAvailableStrategies = strategiesAvailableAtTurnEnd.filter(
+      strategy => !strategiesAvailableAtTurnStart.includes(strategy.id)
+    );
+
+
     gameState.selectedStrategies = []; // Clear selected cards after applying
     renderSelectedStrategyIDs(); // Clear the display of selected IDs
-    renderFlags(); // Update flag display after potential changes
     checkAndClearResolvedEvents(); // Check if any events are resolved by this strategy's effects
-    // Proceed to end-of-turn processing (Markov chains, next turn)
-    processEndOfTurn();
+    
+    showTurnSummary(turnChanges); // Show summary panel instead of directly going to next turn
   }
 
   // Check for game over conditions
@@ -637,7 +814,8 @@
 
     const turnScoreContribution = MAX_TURNS > 0 ? (completedTurnsForScore / MAX_TURNS) * TURNS_SCORE_WEIGHT_PERCENT : 0;
 
-    let finalScore = Math.round(metricScoreContribution + turnScoreContribution);
+    //let finalScore = Math.round(metricScoreContribution + turnScoreContribution);
+    let finalScore = metricScoreContribution + turnScoreContribution;
     finalScore = Math.max(0, Math.min(MAX_TOTAL_SCORE, finalScore)); // Clamp score
 
     // Hide main game UI elements
@@ -651,10 +829,45 @@
     const gameOverScreen = document.getElementById('game-over-screen');
     const gameOverReasonEl = document.getElementById('game-over-reason');
     const gameOverScoreEl = document.getElementById('game-over-score');
+    const achievedFlagsDiv = document.getElementById('achieved-flags-summary');
+    const unresolvedEventsDiv = document.getElementById('unresolved-events-summary');
     const restartButton = document.getElementById('restart-game-btn');
 
     if (gameOverReasonEl) gameOverReasonEl.textContent = `原因：${reason}`;
-    if (gameOverScoreEl) gameOverScoreEl.textContent = `您的治理分數為：${finalScore}`;
+    updateTurnScoreDisplay(`最終治理分數：${finalScore}`); // 更新標題旁的分數
+    if (gameOverScoreEl) gameOverScoreEl.textContent = `您的治理分數為：${finalScore.toFixed(1)}`;
+
+    // Populate achieved flags
+    if (achievedFlagsDiv) {
+      achievedFlagsDiv.innerHTML = '<h3 class="text-lg font-semibold text-green-400 mb-1">達成的關鍵狀態：</h3>'; // Reset
+      const achieved = POSITIVE_ACHIEVEMENT_FLAGS.filter(flag => getFlag(flag));
+      if (achieved.length > 0) {
+        achieved.forEach(flag => {
+          const p = document.createElement('p');
+          p.className = 'text-sm text-gray-300 ml-2';
+          p.textContent = `✓ ${flag}`;
+          achievedFlagsDiv.appendChild(p);
+        });
+      } else {
+        achievedFlagsDiv.innerHTML += '<p class="text-sm text-gray-400 ml-2">尚無特別成就。</p>';
+      }
+    }
+
+    // Populate unresolved events
+    if (unresolvedEventsDiv) {
+      unresolvedEventsDiv.innerHTML = '<h3 class="text-lg font-semibold text-red-400 mb-1">仍未解決的事件：</h3>'; // Reset
+      if (gameState.activeEventObjects.length > 0) {
+        gameState.activeEventObjects.forEach(event => {
+          const p = document.createElement('p');
+          p.className = 'text-sm text-gray-300 ml-2';
+          p.textContent = `⚠ ${event.id}`; // 或 event.title
+          unresolvedEventsDiv.appendChild(p);
+        });
+      } else {
+        unresolvedEventsDiv.innerHTML += '<p class="text-sm text-gray-400 ml-2">所有事件均已處理完畢！</p>';
+      }
+    }
+
     if (gameOverScreen) gameOverScreen.classList.remove('hidden');
 
     if (restartButton) {
@@ -765,16 +978,18 @@
 
     if (triggeredEventsThisTurn.length > 0) {
       let eventsToActuallyShow = triggeredEventsThisTurn;
-      if (triggeredEventsThisTurn.length > MAX_EVENTS_TO_SHOW_PER_TURN) {
-        // 如果觸發的事件多於上限，則隨機選取
-        // 先洗牌，再取前 MAX_EVENTS_TO_SHOW_PER_TURN 個
+      // 檢查 MAX_EVENTS_TO_SHOW_PER_TURN 是否為 -1 (表示全部顯示)
+      // 且觸發的事件數量是否超過設定的上限
+      if (MAX_EVENTS_TO_SHOW_PER_TURN !== -1 && triggeredEventsThisTurn.length > MAX_EVENTS_TO_SHOW_PER_TURN) {
+        // 如果不是全部顯示，且事件數量超過上限，則隨機選取
         eventsToActuallyShow = shuffle(triggeredEventsThisTurn).slice(0, MAX_EVENTS_TO_SHOW_PER_TURN);
       }
+      // 如果 MAX_EVENTS_TO_SHOW_PER_TURN 為 -1，則 eventsToActuallyShow 會保持為 triggeredEventsThisTurn (即全部顯示)
 
       // 使用篩選後或隨機選取後的事件列表來渲染
       renderEventCards(eventsToActuallyShow, () => {
-        // This inner callback is from renderEventCards' acknowledge button.
-        // Event display and ack button are hidden by renderEventCards.
+        // This callback is now called when events are presented (or if no events).
+        // It should lead to strategy selection.
         callbackAfterEventsHandled(); // Proceed to show banner/choices.
       });
     } else {
@@ -796,7 +1011,8 @@
     DOMElements.eventDisplayPanel.innerHTML = ''; 
     const panel = DOMElements.eventDisplayPanel;
 
-    // Remove previous ack button if any, before creating a new one
+    // We are removing the old "acknowledge-all-events-btn" as its function
+    // will be merged into the new turn summary panel.
     const oldAckButton = DOMElements.uiControlsArea.querySelector('#acknowledge-all-events-btn');
     if (oldAckButton) oldAckButton.remove();
 
@@ -865,48 +1081,19 @@
               }
             }
           } else { // No disappears_if_flag_set defined
-            message = "此事件無特定旗標消除條件。"; // 理論上按鈕不應出現於此情況
+            message = "此事件無特定狀態消除條件。"; // 理論上按鈕不應出現於此情況
           }
           alert(message);
         });
       }
     });
 
-    const ackButton = document.createElement('button');
-    ackButton.id = 'acknowledge-all-events-btn';
-    ackButton.className = 'mt-4 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50';
-    ackButton.textContent = '確認並繼續';
-    
-    ackButton.onclick = () => {
-      eventsToDisplay.forEach(evt => {
-        if (evt.hasOwnProperty('effect_biodiversity')) gameState.biodiversity = clamp(gameState.biodiversity + evt.effect_biodiversity);
-        if (evt.hasOwnProperty('effect_economy')) gameState.economy = clamp(gameState.economy + evt.effect_economy);
-        if (evt.hasOwnProperty('effect_public_trust')) gameState.publicTrust = clamp(gameState.publicTrust + evt.effect_public_trust);
-        if (evt.hasOwnProperty('effect_climate')) gameState.climate = clamp(gameState.climate + evt.effect_climate);
-        if (evt.hasOwnProperty('effect_social')) gameState.social = clamp(gameState.social + evt.effect_social);
-
-        // Handle set_flag for events
-        if (evt.set_flag && Array.isArray(evt.set_flag)) {
-            evt.set_flag.forEach(flagName => setFlag(flagName));
-        }
-        // Handle clear_flag for events
-        if (evt.clear_flag && Array.isArray(evt.clear_flag)) {
-            evt.clear_flag.forEach(flagName => clearFlag(flagName));
-        }
-      });
-      
-      renderDashboard();
-      renderFlags();
-
-      // Keep event cards visible after acknowledgement
-      // panel.innerHTML = ''; // Do not clear the event cards
-      // panel.classList.add('hidden'); // Do not hide the panel
-      ackButton.remove(); // Remove the button itself
-      // The ackButtonContainer div remains in the layout, empty, until next turn's cleanup.
-
-      if (onAllEventsAcknowledgedCallback) onAllEventsAcknowledgedCallback();
-    };    
-    DOMElements.uiControlsArea.appendChild(ackButton);
+    // Instead of creating an ack button here, we directly call the callback.
+    // The effects of these events will be applied and summarized LATER,
+    // after strategy selection, in the showTurnSummary.
+    // The `eventsToDisplay` are stored in `gameState.activeEventObjects`.
+    // We pass them to `applySelectedStrategies` later.
+    if (onAllEventsAcknowledgedCallback) onAllEventsAcknowledgedCallback();
   }
 
   // Check and clear events based on gameState conditions
@@ -1011,6 +1198,7 @@
     gameState.selectedStrategies = []; // Clear selected strategies for the new turn
     gameState.strategyPage = 1; // Reset to first page for new turn
     
+    updateTurnScoreDisplay(`第 ${gameState.turn} / ${MAX_TURNS} 回合`); // 更新標題旁的回合數
     // Render initial state of UI elements for the new turn
     renderDashboard(); // Now uses the cleared activeEventObjects, so count is 0.
     renderFlags();
@@ -1019,6 +1207,7 @@
     // Prepare UI panels
     DOMElements.cardPanel.classList.add('hidden');
     DOMElements.banner.classList.add('hidden');
+    DOMElements.turnSummaryPanel.classList.add('hidden'); // Ensure summary panel is hidden
     DOMElements.eventDisplayPanel.classList.add('hidden'); 
     DOMElements.eventDisplayPanel.innerHTML = ''; // Clear event cards from previous turn
 
@@ -1030,6 +1219,7 @@
     if (DOMElements.prevStrategyPageBtn) DOMElements.prevStrategyPageBtn.classList.add('hidden');
     if (DOMElements.nextStrategyPageBtn) DOMElements.nextStrategyPageBtn.classList.add('hidden');
     if (DOMElements.strategyPageInfo) DOMElements.strategyPageInfo.classList.add('hidden');
+    // The old ack button for events is removed in renderEventCards.
     if (DOMElements.confirmStrategiesBtn) DOMElements.confirmStrategiesBtn.classList.add('hidden');
 
     processPreChoiceEvents(() => {
@@ -1041,6 +1231,10 @@
         return; // Stop further turn processing
       }
 
+      // Pass the active events (which were set in renderEventCards) to the confirm button's action
+      if (DOMElements.confirmStrategiesBtn) {
+        DOMElements.confirmStrategiesBtn.onclick = () => applySelectedStrategies(gameState.activeEventObjects);
+      }
       DOMElements.banner.classList.remove('hidden');
       DOMElements.cardPanel.classList.remove('hidden');
       renderBanner();
