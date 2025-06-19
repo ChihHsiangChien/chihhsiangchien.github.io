@@ -8,7 +8,7 @@
   const PM25_CRISIS_THRESHOLD = 80;      // 觸發「細懸浮微粒太高」旗標的 PM2.5 閾值
   const MAX_STRATEGIES_TO_CHOOSE_PER_TURN = 7; // 每回合可選擇的策略卡數量
   const STRATEGIES_PER_PAGE = 40; // 每頁顯示的策略卡數量
-  const MAX_TURNS = 5; // 遊戲最大回合數
+  const MAX_TURNS = 10; // 遊戲最大回合數
 
   // Scoring Constants
   const MAX_METRIC_VALUE_PER_CATEGORY = 1000;
@@ -32,10 +32,11 @@
     
     //'data/modules/pollution_module.json',
     'data/modules/common_elements.json',    
-    //'data/modules/spoonbills_crisis.json',
-    //'data/modules/leopard_cat_crisis.json',
+    'data/modules/spoonbills_crisis.json',
+    'data/modules/leopard_cat_crisis.json',
     'data/modules/forest_fire.json',
-    //'data/modules/green_sea_turtle_conservation.json',
+    //'data/modules/test.json'
+    'data/modules/green_sea_turtle_conservation.json',
 
     // ... 其他模組檔案
   ];
@@ -500,11 +501,6 @@
       confirmButton.textContent = '確認策略';
       confirmButton.className = 'mt-2 mb-2 ml-4 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded shadow focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed';
       confirmButton.disabled = true; // Initially disabled
-
-      confirmButton.addEventListener('click', () => {
-        // 由於 0 到 MAX_STRATEGIES_TO_CHOOSE_PER_TURN 張都是有效選擇，直接套用策略
-        applySelectedStrategies();
-      });
       // Insert confirm button after pagination controls if they exist, or at the end
       if (DOMElements.nextStrategyPageBtn && DOMElements.nextStrategyPageBtn.nextSibling) {
         DOMElements.uiControlsArea.insertBefore(confirmButton, DOMElements.nextStrategyPageBtn.nextSibling);
@@ -512,6 +508,20 @@
         DOMElements.uiControlsArea.appendChild(confirmButton);
       }
       DOMElements.confirmStrategiesBtn = confirmButton; // Cache it
+      // Move event listener binding here, so it's only added once when the button is created.
+      confirmButton.addEventListener('click', () => {
+        // The click handler in startTurnSequence will set the correct parameters for applySelectedStrategies
+        // For now, this click will be handled by the more specific one in startTurnSequence
+        // This generic one can be removed if startTurnSequence always re-assigns it.
+        // However, to ensure it always has a base handler:
+        if (typeof DOMElements.confirmStrategiesBtn.onclick === 'function') {
+             // If startTurnSequence has set a specific onclick, let that one handle it.
+             // Otherwise, this could be a fallback, though ideally startTurnSequence manages it.
+        } else {
+            // Fallback or initial setup if needed, though startTurnSequence should override.
+            // applySelectedStrategies(gameState.activeEventObjects); // Example fallback
+        }
+      });
     }
 
     return confirmButton;
@@ -532,7 +542,7 @@
     const flagsChangedDiv = document.getElementById('summary-flags-changed');
     const newStrategiesDiv = document.getElementById('summary-new-strategies');
     // Potentially add a new div for event effects if we merge them here
-    // const eventEffectsDiv = document.getElementById('summary-event-effects');
+    // const eventEffectsDiv = document.getElementById('summary-event-effects');    
     const ackSummaryBtn = document.getElementById('acknowledge-turn-summary-btn');
 
     // 清空舊內容並重設標題
@@ -633,6 +643,18 @@
     // 1. Apply EVENT effects first (if passed and not yet applied)
     if (triggeredEventsFromTurn && triggeredEventsFromTurn.length > 0) {
         triggeredEventsFromTurn.forEach(evt => {
+            // NOTE: Event flag effects are now applied in renderEventCards.
+            // Metric effects are still applied here before strategy metrics.
+            if (evt.hasOwnProperty('effect_biodiversity')) gameState.biodiversity = clamp(gameState.biodiversity + evt.effect_biodiversity);
+            if (evt.hasOwnProperty('effect_economy')) gameState.economy = clamp(gameState.economy + evt.effect_economy);
+            if (evt.hasOwnProperty('effect_public_trust')) gameState.publicTrust = clamp(gameState.publicTrust + evt.effect_public_trust);
+            if (evt.hasOwnProperty('effect_climate')) gameState.climate = clamp(gameState.climate + evt.effect_climate);
+            if (evt.hasOwnProperty('effect_social')) gameState.social = clamp(gameState.social + evt.effect_social);
+
+            // Flag effects were already collected for summary in renderEventCards if we change it
+            // For now, let's assume flags are set here if not pre-applied for summary accuracy.
+            // This part needs careful handling if flags are pre-applied for UI and also for summary.
+            /*
             if (evt.hasOwnProperty('effect_biodiversity')) gameState.biodiversity = clamp(gameState.biodiversity + evt.effect_biodiversity);
             if (evt.hasOwnProperty('effect_economy')) gameState.economy = clamp(gameState.economy + evt.effect_economy);
             if (evt.hasOwnProperty('effect_public_trust')) gameState.publicTrust = clamp(gameState.publicTrust + evt.effect_public_trust);
@@ -651,12 +673,14 @@
                     clearFlag(flagName);
                 });
             }
+            */
             // turnChanges.eventEffects.push({id: evt.id, description: "Event applied"});
         });
     }
 
     // 2. Apply STRATEGY effects
     gameState.selectedStrategies.forEach(card => {
+      
       // apply metric effects from strategies
       gameState.biodiversity = clamp(gameState.biodiversity + (card.effect_biodiversity || 0));
       gameState.economy = clamp(gameState.economy + (card.effect_economy || 0));
@@ -666,21 +690,35 @@
 
       // Collect flag changes from strategies
       if (card.set_flag && Array.isArray(card.set_flag)) {
-        card.set_flag.forEach(flagName => {
+          card.set_flag.forEach(flagName => {
             // Avoid duplicating if event already set it, though setFlag is idempotent
             if (!turnChanges.flags.set.includes(flagName) && !initialGameStateForSummary.flags[flagName]) {
-                 turnChanges.flags.set.push(flagName);
+              turnChanges.flags.set.push(flagName);
             }
-            setFlag(flagName); // Apply the flag
-        });
-      }
-      if (card.clear_flag && Array.isArray(card.clear_flag)) {
+            setFlag(flagName);  // Apply the flag
+          });
+        } else if (card.set_flag && typeof card.set_flag === 'string') {
+          if (!turnChanges.flags.set.includes(card.set_flag) && !initialGameStateForSummary.flags[card.set_flag]) {
+            turnChanges.flags.set.push(card.set_flag);
+          }
+          setFlag(card.set_flag);
+        }
+      
+      
+      
+      if (card.clear_flag && Array.isArray(card.clear_flag)) {        
         card.clear_flag.forEach(flagName => {
             if (!turnChanges.flags.cleared.includes(flagName) && initialGameStateForSummary.flags[flagName]) {
                 turnChanges.flags.cleared.push(flagName);
             }
             clearFlag(flagName); // Apply the flag
         });
+      }
+      else if (card.clear_flag && typeof card.clear_flag === 'string') {
+        if (!turnChanges.flags.cleared.includes(card.clear_flag) && initialGameStateForSummary.flags[card.clear_flag]) {
+            turnChanges.flags.cleared.push(card.clear_flag);
+        }
+        clearFlag(card.clear_flag);
       }
 
       // Handle Markov chain effects from strategy card (if any)
@@ -771,7 +809,7 @@
       strategy => !strategiesAvailableAtTurnStart.includes(strategy.id)
     );
 
-
+    
     gameState.selectedStrategies = []; // Clear selected cards after applying
     renderSelectedStrategyIDs(); // Clear the display of selected IDs
     checkAndClearResolvedEvents(); // Check if any events are resolved by this strategy's effects
@@ -1030,6 +1068,27 @@
 
     panel.classList.remove('hidden'); // Show the panel
 
+    // --- START: Apply event flag effects immediately and update UI ---
+    eventsToDisplay.forEach(evt => {
+      // Handle set_flag for events (array or string)
+      if (evt.set_flag && Array.isArray(evt.set_flag)) {
+        evt.set_flag.forEach(flagName => setFlag(flagName));
+      } else if (evt.set_flag && typeof evt.set_flag === 'string') {
+        setFlag(evt.set_flag);
+      }
+
+      // Handle clear_flag for events (array or string)
+      if (evt.clear_flag && Array.isArray(evt.clear_flag)) {
+        evt.clear_flag.forEach(flagName => clearFlag(flagName));
+      } else if (evt.clear_flag && typeof evt.clear_flag === 'string') {
+        clearFlag(evt.clear_flag);
+      }
+    });
+    if (eventsToDisplay.length > 0) {
+        renderFlags(); // Update flag panel immediately after setting/clearing flags from events
+    }
+    // --- END: Apply event flag effects ---
+
 
     eventsToDisplay.forEach(evt => {
       const cardEl = document.createElement('div');
@@ -1105,12 +1164,13 @@
       let shouldDisappear = false;
       const flagCondition = event.disappears_if_flag_set;
 
+    
       if (flagCondition) {
         // For disappears_if_flag_set, an empty array or null/undefined condition means it does NOT disappear.
         // The 'AND' mode for evaluateFlagCondition handles this correctly if flagCondition is an array or object.
         // If flagCondition is a string, it's evaluated directly.
         if (evaluateFlagCondition(flagCondition, getFlag, 'AND')) {
-          shouldDisappear = true;
+          shouldDisappear = true;        
         }
       }
       if (!shouldDisappear && event.disappears_if_flag_not_set && !getFlag(event.disappears_if_flag_not_set)) {
@@ -1132,14 +1192,14 @@
       }
 
       if (shouldDisappear) {
-        const eventCardElement = DOMElements.eventDisplayPanel.querySelector(`[data-event-id="${event.id}"]`);
+        const eventCardElement = DOMElements.eventDisplayPanel.querySelector(`[data-event-id="${event.id}"]`);      
         if (eventCardElement) {
           eventCardElement.remove();
         }
         eventsWereModifiedThisCheck = true;
         // Do not add to remainingActiveEvents, it's being removed
       } else {
-        remainingActiveEvents.push(event); // Keep in activeEventObjects
+        remainingActiveEvents.push(event); // Keep in activeEventObjects      
       }
     });
 
