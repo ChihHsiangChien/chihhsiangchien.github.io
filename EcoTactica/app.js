@@ -7,9 +7,9 @@
   // Game Control Variables
   const MAX_EVENTS_TO_SHOW_PER_TURN = -1; // 每回合最多顯示的事件數量
   const PM25_CRISIS_THRESHOLD = 80;      // 觸發「細懸浮微粒太高」旗標的 PM2.5 閾值
-  const MAX_STRATEGIES_TO_CHOOSE_PER_TURN = 6; // 每回合可選擇的策略卡數量
+  const MAX_STRATEGIES_TO_CHOOSE_PER_TURN = 7; // 每回合可選擇的策略卡數量
   const STRATEGIES_PER_PAGE = 40; // 每頁顯示的策略卡數量
-  const MAX_TURNS = 20; // 遊戲最大回合數
+  const MAX_TURNS = 30; // 遊戲最大回合數
 
   // Scoring Constants
   const MAX_METRIC_VALUE_PER_CATEGORY = 1000;
@@ -21,10 +21,27 @@
 
   // 預先定義一些代表正面成就的旗標，用於成績單顯示
   const POSITIVE_ACHIEVEMENT_FLAGS = [
+    // Specific module achievements
     "石虎族群恢復", "石虎棲地成功連結",
     "綠蠵龜族群穩定", "產卵地保護計畫成功", "海洋環境改善",
     "森林大火已控制", "森林生態開始恢復",
-    "黑面琵鷺族群恢復", "黑面琵鷺保護區成立"
+    "黑面琵鷺族群恢復", "黑面琵鷺保護區成立",
+    "福壽螺數量受控", "本土螺種保育啟動", // Assuming "福壽螺數量受控" is a positive step
+
+    // Pollution module achievements
+    "全球合作減排",
+    "市場導向環保",
+    "空氣污染改善", "水質污染改善",
+    "餐飲業環保轉型", "減少塑膠垃圾",
+
+    // Common elements achievements
+    "國際合作",
+    "建立基礎科學研究",
+    "民眾保育總體意識提升",
+    "全國生態監測網絡建立",
+    "關鍵棲地已劃設保護區",
+    "遺傳多樣性保育計畫啟動",
+    "生態廊道成功連結",
     // 可以根據遊戲內容持續添加
   ];
 
@@ -36,8 +53,10 @@
     'data/modules/spoonbills_crisis.json',
     'data/modules/leopard_cat_crisis.json',
     'data/modules/forest_fire.json',
-    //'data/modules/test.json'
+    'data/modules/golden_apple_snail_invasion.json',
     'data/modules/green_sea_turtle_conservation.json',
+    'data/modules/pollution.json'
+     //'data/modules/test.json'    
 
     // ... 其他模組檔案
   ];
@@ -83,11 +102,11 @@
     return Math.floor(Math.random() * 501) + 300; // 示例：隨機 300-800
   }  
   const gameState = {
-    biodiversity: getRandomInitialMetric(),
-    economy: getRandomInitialMetric(),
-    publicTrust: getRandomInitialMetric(),
-    climate: getRandomInitialMetric(),
-    social: getRandomInitialMetric(),
+    biodiversity: 600,
+    economy: 600,
+    publicTrust: 600,
+    climate: 600,
+    social: 600,
     pm25_level: 60,
     // pm25_threshold: 65, // This was used for a flag, can be kept if still needed for other logic
     flags: {}, // Flags will be populated by Markov chain init and game events
@@ -536,15 +555,17 @@
     }
   }
 
-  // Function to show turn summary panel
-  function showTurnSummary(changes) {
+  // Function to show turn summary panel (now takes preview and original selections)
+  function showTurnSummary(changesPreview, originalSelectedStrategies) {
     const summaryPanel = DOMElements.turnSummaryPanel;
     const metricsChangesDiv = document.getElementById('summary-metrics-changes');
     const flagsChangedDiv = document.getElementById('summary-flags-changed');
     const newStrategiesDiv = document.getElementById('summary-new-strategies');
-    // Potentially add a new div for event effects if we merge them here
-    // const eventEffectsDiv = document.getElementById('summary-event-effects');    
-    const ackSummaryBtn = document.getElementById('acknowledge-turn-summary-btn');
+
+    // Remove the old ackSummaryBtn logic as it's replaced
+    // const ackSummaryBtn = document.getElementById('acknowledge-turn-summary-btn'); // This line was causing the error
+    const oldAckButton = document.getElementById('acknowledge-turn-summary-btn'); // Defensive check
+    if (oldAckButton && oldAckButton.parentElement) oldAckButton.parentElement.removeChild(oldAckButton);
 
     // 清空舊內容並重設標題
     metricsChangesDiv.innerHTML = '<h3 class="text-lg font-semibold text-gray-700 mb-1">指標變化：</h3>'; // Reset
@@ -552,12 +573,12 @@
     newStrategiesDiv.innerHTML = '<h3 class="text-lg font-semibold text-gray-700 mb-1">新解鎖的策略：</h3>'; // Reset
 
     let hasMetricChanges = false;
-    for (const metric in changes.metrics) {
-      if (changes.metrics[metric].delta !== 0) {
+    for (const metric in changesPreview.metrics) {
+      if (changesPreview.metrics[metric].delta !== 0) {
         hasMetricChanges = true;
         const p = document.createElement('p');
-        p.className = `text-sm ${changes.metrics[metric].delta > 0 ? 'text-green-600' : 'text-red-600'}`;
-        p.textContent = `${metric}：${changes.metrics[metric].oldVal} → ${changes.metrics[metric].newVal} (${changes.metrics[metric].delta > 0 ? '+' : ''}${changes.metrics[metric].delta})`;
+        p.className = `text-sm ${changesPreview.metrics[metric].delta > 0 ? 'text-green-600' : 'text-red-600'}`;
+        p.textContent = `${metric}：${changesPreview.metrics[metric].oldVal} → ${changesPreview.metrics[metric].newVal} (${changesPreview.metrics[metric].delta > 0 ? '+' : ''}${changesPreview.metrics[metric].delta})`;
         metricsChangesDiv.appendChild(p);
       }
     }
@@ -569,18 +590,18 @@
     }
 
     let hasFlagChanges = false;
-    if (changes.flags.set.length > 0) {
+    if (changesPreview.flags.set.length > 0) {
       hasFlagChanges = true;
       const p = document.createElement('p');
       p.className = 'text-sm text-green-600';
-      p.textContent = `新增狀態：${changes.flags.set.join('、 ')}`;
+      p.textContent = `新增狀態：${changesPreview.flags.set.join('、 ')}`;
       flagsChangedDiv.appendChild(p);
     }
-    if (changes.flags.cleared.length > 0) {
+    if (changesPreview.flags.cleared.length > 0) {
       hasFlagChanges = true;
       const p = document.createElement('p');
       p.className = 'text-sm text-red-600';
-      p.textContent = `移除狀態：${changes.flags.cleared.join('、 ')}`;
+      p.textContent = `移除狀態：${changesPreview.flags.cleared.join('、 ')}`;
       flagsChangedDiv.appendChild(p);
     }
     if (!hasFlagChanges) {
@@ -591,8 +612,8 @@
     }
 
     // 顯示新解鎖的策略
-    if (changes.newlyAvailableStrategies && changes.newlyAvailableStrategies.length > 0) {
-      changes.newlyAvailableStrategies.forEach(strategy => {
+    if (changesPreview.newlyAvailableStrategies && changesPreview.newlyAvailableStrategies.length > 0) {
+      changesPreview.newlyAvailableStrategies.forEach(strategy => {
         const p = document.createElement('p');
         p.className = 'text-sm text-blue-600';
         p.textContent = `✓ ${strategy.id}`; // 或 strategy.title
@@ -604,129 +625,174 @@
       p.textContent = '本回合無新策略解鎖。';
       newStrategiesDiv.appendChild(p);
     }
-    ackSummaryBtn.onclick = () => {
-      summaryPanel.classList.add('hidden');
-      processEndOfTurn(); // Proceed to next turn logic
-    };
-    summaryPanel.classList.remove('hidden');
-  }
-  // Apply effects of all selected strategies and proceed
-  function applySelectedStrategies(triggeredEventsFromTurn) { // Pass triggered events
 
-    // 記錄本回合開始時可用的策略
-    const strategiesAvailableAtTurnStart = getAvailableStrategies().map(s => s.id);
-
-    // --- Collect changes for summary ---
-    // Store initial state for accurate delta calculation
-    const initialGameStateForSummary = {
-        biodiversity: gameState.biodiversity,
-        economy: gameState.economy,
-        publicTrust: gameState.publicTrust,
-        climate: gameState.climate,
-        social: gameState.social,
-        flags: { ...gameState.flags } // Shallow copy for flags
-    };
-
-    const turnChanges = {
-      metrics: {
-        '生物多樣性': { oldVal: initialGameStateForSummary.biodiversity, delta: 0, newVal: initialGameStateForSummary.biodiversity },
-        '經濟可行性': { oldVal: initialGameStateForSummary.economy, delta: 0, newVal: initialGameStateForSummary.economy },
-        '公共信任度': { oldVal: initialGameStateForSummary.publicTrust, delta: 0, newVal: initialGameStateForSummary.publicTrust },
-        '氣候穩定度': { oldVal: initialGameStateForSummary.climate, delta: 0, newVal: initialGameStateForSummary.climate },
-        '社會公平': { oldVal: initialGameStateForSummary.social, delta: 0, newVal: initialGameStateForSummary.social }
-      },
-      flags: { set: [], cleared: [] },
-      newlyAvailableStrategies: []
-      // You might want to add a section for event effects if they are also summarized here
-      // eventEffects: []
-    };
-
-    // 1. Apply EVENT effects first (if passed and not yet applied)
-    if (triggeredEventsFromTurn && triggeredEventsFromTurn.length > 0) {
-        triggeredEventsFromTurn.forEach(evt => {
-            // NOTE: Event flag effects are now applied in renderEventCards.
-            // Metric effects are still applied here before strategy metrics.
-            if (evt.hasOwnProperty('effect_biodiversity')) gameState.biodiversity = clamp(gameState.biodiversity + evt.effect_biodiversity);
-            if (evt.hasOwnProperty('effect_economy')) gameState.economy = clamp(gameState.economy + evt.effect_economy);
-            if (evt.hasOwnProperty('effect_public_trust')) gameState.publicTrust = clamp(gameState.publicTrust + evt.effect_public_trust);
-            if (evt.hasOwnProperty('effect_climate')) gameState.climate = clamp(gameState.climate + evt.effect_climate);
-            if (evt.hasOwnProperty('effect_social')) gameState.social = clamp(gameState.social + evt.effect_social);
-
-            // Flag effects were already collected for summary in renderEventCards if we change it
-            // For now, let's assume flags are set here if not pre-applied for summary accuracy.
-            // This part needs careful handling if flags are pre-applied for UI and also for summary.
-            /*
-            if (evt.hasOwnProperty('effect_biodiversity')) gameState.biodiversity = clamp(gameState.biodiversity + evt.effect_biodiversity);
-            if (evt.hasOwnProperty('effect_economy')) gameState.economy = clamp(gameState.economy + evt.effect_economy);
-            if (evt.hasOwnProperty('effect_public_trust')) gameState.publicTrust = clamp(gameState.publicTrust + evt.effect_public_trust);
-            if (evt.hasOwnProperty('effect_climate')) gameState.climate = clamp(gameState.climate + evt.effect_climate);
-            if (evt.hasOwnProperty('effect_social')) gameState.social = clamp(gameState.social + evt.effect_social);
-
-            if (evt.set_flag && Array.isArray(evt.set_flag)) {
-                evt.set_flag.forEach(flagName => {
-                    if (!gameState.flags[flagName]) turnChanges.flags.set.push(flagName); // Collect only new flags
-                    setFlag(flagName);
-                });
-            }
-            if (evt.clear_flag && Array.isArray(evt.clear_flag)) {
-                 evt.clear_flag.forEach(flagName => {
-                    if (gameState.flags[flagName]) turnChanges.flags.cleared.push(flagName);
-                    clearFlag(flagName);
-                });
-            }
-            */
-            // turnChanges.eventEffects.push({id: evt.id, description: "Event applied"});
-        });
+    // Create new buttons in their container
+    let buttonsContainer = summaryPanel.querySelector('.summary-buttons-container');
+    if (!buttonsContainer) { // Should exist from index.html
+      console.error("Summary buttons container not found in summary panel!");
+      buttonsContainer = document.createElement('div');
+      buttonsContainer.className = 'summary-buttons-container mt-4 flex justify-end space-x-2';
+      summaryPanel.appendChild(buttonsContainer);
+    } else {
+      buttonsContainer.innerHTML = ''; // Clear any old buttons
     }
 
-    // 2. Apply STRATEGY effects
-    gameState.selectedStrategies.forEach(card => {
-      
-      // apply metric effects from strategies
-      gameState.biodiversity = clamp(gameState.biodiversity + (card.effect_biodiversity || 0));
-      gameState.economy = clamp(gameState.economy + (card.effect_economy || 0));
-      gameState.publicTrust = clamp(gameState.publicTrust + (card.effect_public_trust || 0));
-      gameState.climate = clamp(gameState.climate + (card.effect_climate || 0));
-      gameState.social = clamp(gameState.social + (card.effect_social || 0));
+    const confirmSummaryBtn = document.createElement('button');
+    confirmSummaryBtn.id = 'confirm-actual-turn-btn';
+    confirmSummaryBtn.textContent = '確認並結束回合';
+    confirmSummaryBtn.className = 'px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded shadow focus:outline-none';
+    confirmSummaryBtn.onclick = () => {
+      summaryPanel.classList.add('hidden');
+      // Pass originalSelectedStrategies for Markov chain processing if needed by commitTurnChanges
+      commitTurnChanges(changesPreview, originalSelectedStrategies); 
+    };
+    buttonsContainer.appendChild(confirmSummaryBtn);
 
-      // Collect flag changes from strategies
-      if (card.set_flag && Array.isArray(card.set_flag)) {
-          card.set_flag.forEach(flagName => {
-            // Avoid duplicating if event already set it, though setFlag is idempotent
-            if (!turnChanges.flags.set.includes(flagName) && !initialGameStateForSummary.flags[flagName]) {
-              turnChanges.flags.set.push(flagName);
-            }
-            setFlag(flagName);  // Apply the flag
-          });
-        } else if (card.set_flag && typeof card.set_flag === 'string') {
-          if (!turnChanges.flags.set.includes(card.set_flag) && !initialGameStateForSummary.flags[card.set_flag]) {
-            turnChanges.flags.set.push(card.set_flag);
-          }
-          setFlag(card.set_flag);
-        }
-      
-      
-      
-      if (card.clear_flag && Array.isArray(card.clear_flag)) {        
-        card.clear_flag.forEach(flagName => {
-            if (!turnChanges.flags.cleared.includes(flagName) && initialGameStateForSummary.flags[flagName]) {
-                turnChanges.flags.cleared.push(flagName);
-            }
-            clearFlag(flagName); // Apply the flag
-        });
-      }
-      else if (card.clear_flag && typeof card.clear_flag === 'string') {
-        if (!turnChanges.flags.cleared.includes(card.clear_flag) && initialGameStateForSummary.flags[card.clear_flag]) {
-            turnChanges.flags.cleared.push(card.clear_flag);
-        }
-        clearFlag(card.clear_flag);
-      }
+    const cancelSummaryBtn = document.createElement('button');
+    cancelSummaryBtn.id = 'cancel-strategy-preview-btn';
+    cancelSummaryBtn.textContent = '返回修改策略';
+    cancelSummaryBtn.className = 'px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded shadow focus:outline-none';
+    cancelSummaryBtn.onclick = () => {
+      summaryPanel.classList.add('hidden');
+      gameState.selectedStrategies = [...originalSelectedStrategies]; // Restore selections
+      DOMElements.banner.classList.remove('hidden');
+      DOMElements.cardPanel.classList.remove('hidden');
+      renderBanner();
+      renderChoices(); // Re-render choices, highlighting restored selections
+      updatePaginationControlsState();
+      if (DOMElements.confirmStrategiesBtn) DOMElements.confirmStrategiesBtn.classList.remove('hidden');
+      updateConfirmStrategiesButtonState();
+      renderSelectedStrategyIDs();
+    };
+    buttonsContainer.appendChild(cancelSummaryBtn);
 
-      // Handle Markov chain effects from strategy card (if any)
-      if (useMarkovChains && card.markov_effects && Array.isArray(card.markov_effects)) {
+    summaryPanel.classList.remove('hidden');
+  }
+
+// Add these functions before initiateStrategyApplicationAndSummary
+
+function calculateStrategyEffectsPreview(currentGameState, selectedStrategies, triggeredEventsFromTurn, strategiesAvailableAtTurnStart) {
+  // Create a temporary game state copy for calculation
+  const previewGameState = {
+    biodiversity: currentGameState.biodiversity,
+    economy: currentGameState.economy,
+    publicTrust: currentGameState.publicTrust,
+    climate: currentGameState.climate,
+    social: currentGameState.social,
+    pm25_level: currentGameState.pm25_level, // If PM2.5 is also affected by strategies
+    flags: { ...currentGameState.flags } // Shallow copy flags
+  };
+
+  const previewTurnChanges = {
+    metrics: {
+      '生物多樣性': { oldVal: currentGameState.biodiversity, delta: 0, newVal: currentGameState.biodiversity },
+      '經濟可行性': { oldVal: currentGameState.economy, delta: 0, newVal: currentGameState.economy },
+      '公共信任度': { oldVal: currentGameState.publicTrust, delta: 0, newVal: currentGameState.publicTrust },
+      '氣候穩定度': { oldVal: currentGameState.climate, delta: 0, newVal: currentGameState.climate },
+      '社會公平': { oldVal: currentGameState.social, delta: 0, newVal: currentGameState.social }
+      // If PM2.5 should also be shown in summary changes, add it here
+    },
+    flags: { set: [], cleared: [] },
+    newlyAvailableStrategies: []
+    // Note: Markov chain transition matrix modification is complex.
+    // The preview might not show its detailed changes directly,
+    // or only estimate its potential impact on next turn's flags/metrics.
+    // For now, this doesn't handle previewing Markov transition matrix changes.
+  };
+
+  // a. Apply metric effects of current turn events
+  // (Flag effects from events are applied in renderEventCards to currentGameState.flags)
+  if (triggeredEventsFromTurn && triggeredEventsFromTurn.length > 0) {
+    triggeredEventsFromTurn.forEach(evt => {
+      if (evt.hasOwnProperty('effect_biodiversity')) previewGameState.biodiversity = clamp(previewGameState.biodiversity + evt.effect_biodiversity);
+      if (evt.hasOwnProperty('effect_economy')) previewGameState.economy = clamp(previewGameState.economy + evt.effect_economy);
+      if (evt.hasOwnProperty('effect_public_trust')) previewGameState.publicTrust = clamp(previewGameState.publicTrust + evt.effect_public_trust);
+      if (evt.hasOwnProperty('effect_climate')) previewGameState.climate = clamp(previewGameState.climate + evt.effect_climate);
+      if (evt.hasOwnProperty('effect_social')) previewGameState.social = clamp(previewGameState.social + evt.effect_social);
+      // Event's set_flag/clear_flag already affected currentGameState.flags in renderEventCards.
+      // previewGameState.flags was copied from currentGameState.flags, so it includes event flag effects.
+    });
+  }
+
+  // b. Apply metric and flag effects of selected strategies to previewGameState
+  selectedStrategies.forEach(card => {
+    previewGameState.biodiversity = clamp(previewGameState.biodiversity + (card.effect_biodiversity || 0));
+    previewGameState.economy = clamp(previewGameState.economy + (card.effect_economy || 0));
+    previewGameState.publicTrust = clamp(previewGameState.publicTrust + (card.effect_public_trust || 0));
+    previewGameState.climate = clamp(previewGameState.climate + (card.effect_climate || 0));
+    previewGameState.social = clamp(previewGameState.social + (card.effect_social || 0));
+
+    if (card.set_flag) {
+      const flagsToSet = Array.isArray(card.set_flag) ? card.set_flag : [card.set_flag];
+      flagsToSet.forEach(flagName => {
+        if (!previewGameState.flags[flagName]) { // Only record as newly set if the flag didn't exist
+          if (!previewTurnChanges.flags.set.includes(flagName)) previewTurnChanges.flags.set.push(flagName);
+        }
+        previewGameState.flags[flagName] = true;
+      });
+    }
+    if (card.clear_flag) {
+      const flagsToClear = Array.isArray(card.clear_flag) ? card.clear_flag : [card.clear_flag];
+      flagsToClear.forEach(flagName => {
+        if (previewGameState.flags[flagName]) { // Only record as cleared if the flag existed
+          if (!previewTurnChanges.flags.cleared.includes(flagName)) previewTurnChanges.flags.cleared.push(flagName);
+        }
+        delete previewGameState.flags[flagName];
+      });
+    }
+  });
+
+  // c. Calculate metric deltas
+  previewTurnChanges.metrics['生物多樣性'].newVal = previewGameState.biodiversity;
+  previewTurnChanges.metrics['經濟可行性'].newVal = previewGameState.economy;
+  previewTurnChanges.metrics['公共信任度'].newVal = previewGameState.publicTrust;
+  previewTurnChanges.metrics['氣候穩定度'].newVal = previewGameState.climate;
+  previewTurnChanges.metrics['社會公平'].newVal = previewGameState.social;
+
+  previewTurnChanges.metrics['生物多樣性'].delta = previewGameState.biodiversity - currentGameState.biodiversity;
+  previewTurnChanges.metrics['經濟可行性'].delta = previewGameState.economy - currentGameState.economy;
+  previewTurnChanges.metrics['公共信任度'].delta = previewGameState.publicTrust - currentGameState.publicTrust;
+  previewTurnChanges.metrics['氣候穩定度'].delta = previewGameState.climate - currentGameState.climate;
+  previewTurnChanges.metrics['社會公平'].delta = previewGameState.social - currentGameState.social;
+
+  // d. Calculate newly unlocked strategies (based on previewGameState.flags)
+  // A temporary getFlag function is needed to query previewGameState.flags
+  const getPreviewFlag = (name) => !!previewGameState.flags[name];
+  const strategiesAvailableAtTurnEndPreview = strategiesArr.filter(strategy =>
+    areFlagsMet(strategy.required_flag, getPreviewFlag) &&
+    !isProhibitedByFlags(strategy.prohibit_flag, getPreviewFlag)
+  );
+  // Filter out strategies that were already available at the start of the turn
+  const strategiesAvailableAtTurnStartIds = strategiesAvailableAtTurnStart.map(s => typeof s === 'object' ? s.id : s); // Ensure we have IDs
+
+  previewTurnChanges.newlyAvailableStrategies = strategiesAvailableAtTurnEndPreview.filter(
+    strategy => !strategiesAvailableAtTurnStartIds.includes(strategy.id)
+  );
+
+
+  return previewTurnChanges;
+}
+
+function commitTurnChanges(turnChangesPreview, selectedStrategiesForMarkov) {
+  // a. Apply metric changes
+  gameState.biodiversity = turnChangesPreview.metrics['生物多樣性'].newVal;
+  gameState.economy = turnChangesPreview.metrics['經濟可行性'].newVal;
+  gameState.publicTrust = turnChangesPreview.metrics['公共信任度'].newVal;
+  gameState.climate = turnChangesPreview.metrics['氣候穩定度'].newVal;
+  gameState.social = turnChangesPreview.metrics['社會公平'].newVal;
+  // If PM2.5 is also affected, update gameState.pm25_level here
+
+  // b. Apply flag changes
+  turnChangesPreview.flags.set.forEach(flagName => setFlag(flagName));
+  turnChangesPreview.flags.cleared.forEach(flagName => clearFlag(flagName));
+
+  // c. Apply Markov chain effects (moved from original applySelectedStrategies)
+  if (useMarkovChains && selectedStrategiesForMarkov && selectedStrategiesForMarkov.length > 0) {
+    selectedStrategiesForMarkov.forEach(card => {
+      if (card.markov_effects && Array.isArray(card.markov_effects)) {
         card.markov_effects.forEach(effect => {
           const chainName = effect.chain_name;
-          if (markovChains[chainName]) { // Check if the chain exists
+          if (markovChains[chainName]) {
             const chain = markovChains[chainName];
             if (chain && chain.states && chain.transitions) {
               const targetColIndex = chain.states.indexOf(effect.target_col_state);
@@ -734,7 +800,6 @@
                 console.warn(`Markov effect error: Target state "${effect.target_col_state}" not found in chain "${chainName}".`);
                 return;
               }
-
               const probabilityIncrease = effect.probability_increase_flat || 0;
               if (probabilityIncrease === 0) return;
 
@@ -744,78 +809,83 @@
                 new_target_prob = Math.max(0, Math.min(1, new_target_prob)); // Clamp target probability
 
                 const actual_delta_for_target = new_target_prob - old_target_prob;
-
-                if (Math.abs(actual_delta_for_target) < 1e-9) { // Effectively no change
-                  return;
-                }
+                if (Math.abs(actual_delta_for_target) < 1e-9) return; // Effectively no change
 
                 row[targetColIndex] = new_target_prob;
-
                 const sum_others_old = 1.0 - old_target_prob;
                 const sum_others_new = 1.0 - new_target_prob;
 
-                if (sum_others_old > 1e-9) { // If there was probability in other states to begin with
+                if (sum_others_old > 1e-9) { // If there was probability in other states
                   const scale_factor_for_others = sum_others_new / sum_others_old;
                   for (let i = 0; i < row.length; i++) {
-                    if (i !== targetColIndex) {
-                      row[i] *= scale_factor_for_others;
-                    }
+                    if (i !== targetColIndex) row[i] *= scale_factor_for_others;
                   }
                 } else if (sum_others_new > 1e-9) { // old_target_prob was ~1.0, new_target_prob is < 1.0. Distribute to others.
                   const num_other_states = row.length - 1;
                   if (num_other_states > 0) {
                     const amount_to_add_to_each_other = sum_others_new / num_other_states;
                     for (let i = 0; i < row.length; i++) {
-                      if (i !== targetColIndex) {
-                        row[i] = amount_to_add_to_each_other;
-                      }
+                      if (i !== targetColIndex) row[i] = amount_to_add_to_each_other;
                     }
                   }
                 }
-
-                // Final normalization pass for the row to ensure sum is 1 and no negatives
+                // Final normalization pass for the row
                 let current_row_sum = 0;
                 for(let i=0; i<row.length; ++i) {
-                    if(row[i] < 0) row[i] = 0; // Clamp any negatives
+                    if(row[i] < 0) row[i] = 0; // Clamp negatives
                     current_row_sum += row[i];
                 }
                 if (current_row_sum > 1e-9) {
-                    for (let i = 0; i < row.length; i++) {
-                        row[i] /= current_row_sum;
-                    }
-                } // else: if sum is 0, it's a problematic state, potentially leave as is or error.
+                    for (let i = 0; i < row.length; i++) row[i] /= current_row_sum;
+                }
               });
             }
           }
         });
       }
     });
+  }
 
-    // Now, correctly calculate deltas for the summary based on the *actual* changes
-    turnChanges.metrics['生物多樣性'].newVal = gameState.biodiversity;
-    turnChanges.metrics['經濟可行性'].newVal = gameState.economy;
-    turnChanges.metrics['公共信任度'].newVal = gameState.publicTrust;
-    turnChanges.metrics['氣候穩定度'].newVal = gameState.climate;
-    turnChanges.metrics['社會公平'].newVal = gameState.social;
+  // d. Cleanup and subsequent processing
+  gameState.selectedStrategies = []; // Clear selected strategies
+  renderSelectedStrategyIDs();
+  checkAndClearResolvedEvents(); // Check if any events are resolved by these effects
 
-    turnChanges.metrics['生物多樣性'].delta = gameState.biodiversity - initialGameStateForSummary.biodiversity;
-    turnChanges.metrics['經濟可行性'].delta = gameState.economy - initialGameStateForSummary.economy;
-    turnChanges.metrics['公共信任度'].delta = gameState.publicTrust - initialGameStateForSummary.publicTrust;
-    turnChanges.metrics['氣候穩定度'].delta = gameState.climate - initialGameStateForSummary.climate;
-    turnChanges.metrics['社會公平'].delta = gameState.social - initialGameStateForSummary.social;
+  processEndOfTurn(); // Proceed to end-of-turn logic
+}
 
-    // 計算新解鎖的策略
-    const strategiesAvailableAtTurnEnd = getAvailableStrategies();
-    turnChanges.newlyAvailableStrategies = strategiesAvailableAtTurnEnd.filter(
-      strategy => !strategiesAvailableAtTurnStart.includes(strategy.id)
+  // Apply effects of all selected strategies and proceed
+  // Renamed to reflect new purpose: initiate preview, then optionally apply.
+  function initiateStrategyApplicationAndSummary(triggeredEventsFromTurn) { 
+    // 記錄本回合開始時可用的策略
+    const strategiesAvailableAtTurnStart = getAvailableStrategies().map(s => s.id);
+
+    // --- Collect changes for summary ---
+    // Snapshot of current state for preview calculation
+    const currentGameStateSnapshot = {
+        biodiversity: gameState.biodiversity,
+        economy: gameState.economy,
+        publicTrust: gameState.publicTrust,
+        climate: gameState.climate,
+        social: gameState.social,
+        pm25_level: gameState.pm25_level,
+        flags: { ...gameState.flags } // Shallow copy for flags
+    };
+
+    // 1. Calculate preview effects
+    // Ensure calculateStrategyEffectsPreview function is defined and available
+    const turnChangesPreview = calculateStrategyEffectsPreview(
+      currentGameStateSnapshot,
+      gameState.selectedStrategies, // Use the currently selected strategies
+      triggeredEventsFromTurn,      // Events active this turn
+      strategiesAvailableAtTurnStart  // Strategies available at start of turn
     );
 
-    
-    gameState.selectedStrategies = []; // Clear selected cards after applying
-    renderSelectedStrategyIDs(); // Clear the display of selected IDs
-    checkAndClearResolvedEvents(); // Check if any events are resolved by this strategy's effects
-    
-    showTurnSummary(turnChanges); // Show summary panel instead of directly going to next turn
+    // 2. Store the strategies selected at the time of preview for potential cancellation
+    const strategiesAtTimeOfPreview = [...gameState.selectedStrategies];
+
+    // 3. Show the turn summary with the previewed changes and the original selections
+    showTurnSummary(turnChangesPreview, strategiesAtTimeOfPreview);
   }
 
   // Check for game over conditions
@@ -1379,7 +1449,7 @@
 
       // Pass the active events (which were set in renderEventCards) to the confirm button's action
       if (DOMElements.confirmStrategiesBtn) {
-        DOMElements.confirmStrategiesBtn.onclick = () => applySelectedStrategies(gameState.activeEventObjects);
+        DOMElements.confirmStrategiesBtn.onclick = () => initiateStrategyApplicationAndSummary(gameState.activeEventObjects);
       }
       DOMElements.banner.classList.remove('hidden');
       DOMElements.cardPanel.classList.remove('hidden');
