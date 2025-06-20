@@ -25,8 +25,7 @@
     "石虎族群恢復", "石虎棲地成功連結",
     "綠蠵龜族群穩定", "產卵地保護計畫成功", "海洋環境改善",
     "森林大火已控制", "森林生態開始恢復",
-    "黑面琵鷺族群恢復", "黑面琵鷺保護區成立",
-    "福壽螺數量受控", "本土螺種保育啟動", // Assuming "福壽螺數量受控" is a positive step
+    "黑面琵鷺族群恢復", "黑面琵鷺保護區成立",    
 
     // Pollution module achievements
     "全球合作減排",
@@ -48,8 +47,8 @@
   // Load data
   const moduleFiles = [
     
-    //'data/modules/pollution_module.json',
     'data/modules/common_elements.json',    
+    'data/modules/habitat_and_biodiversity.json',        
     'data/modules/spoonbills_crisis.json',
     'data/modules/leopard_cat_crisis.json',
     'data/modules/forest_fire.json',
@@ -1284,9 +1283,9 @@ function commitTurnChanges(turnChangesPreview, selectedStrategiesForMarkov) {
               message = `消除所需的條件: ${condition}`;
             } else if (typeof condition === 'object') {
               if (condition.and && Array.isArray(condition.and)) {
-                message = `消除所需的條件 (AND): ${condition.and.join(' 且 ')}`;
+                message = `消除所需的條件: ${condition.and.join(' 且 ')}`;
               } else if (condition.or && Array.isArray(condition.or)) {
-                message = `消除所需的條件 (OR): ${condition.or.join(' 或 ')}`;
+                message = `消除所需的條件: ${condition.or.join(' 或 ')}`;
               } else {
                 message = "此事件消除條件格式無法識別。";
               }
