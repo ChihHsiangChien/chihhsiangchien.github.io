@@ -416,8 +416,8 @@
     if (asetBuffer.length === 2) {
       addrPtr = (asetBuffer[0] << 4) | asetBuffer[1];
       if (addrPtr >= MEMORY_SIZE) addrPtr = 0;
-      // On hardware, ASET would show 'F' to indicate readiness for input.
-      updateDisplay(NIBBLE_MASK);
+      // Per user feedback, ASET should show the content of the new address.
+      updateDisplay(memory[addrPtr]);
       updateAddressLEDs(addrPtr);
       updateRegisters();
       asetBuffer = [];
