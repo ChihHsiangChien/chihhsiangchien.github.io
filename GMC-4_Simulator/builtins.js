@@ -1,6 +1,4 @@
 // builtins.js
-// 內建七個預載程式機器碼框架
-// 請根據官方手冊或 mook 提供的程式碼，填入對應的 code/data 陣列，並確保導入本檔案後可在模擬器中執行。
 
 window.builtins = {
 
@@ -21,13 +19,12 @@ window.builtins = {
   },  
   0x9: {
     name: 'Organ',
-    // 讀取按鍵，若有按鍵則播放對應音階，否則繼續等待
+    // 持續等待按鍵，按下按鍵後播放對應音階。
     code: [
-      0x0, // 00: KA (讀取按鍵到 A)
-      0xC, 0x0, // 01: CIA 0 (若 A=0, flag=0)
-      0xF, 0x0, 0x0, // 03: JUMP 00 (若 A!=0, flag=1, 跳回等待)
-      0xE, 0xB, // 06: CAL SUND (播放 A 暫存器對應的音階)
-      0xF, 0x0, 0x0, // 08: JUMP 00 (播放完跳回等待)
+      0x0,       // 00: KA (讀取按鍵到 A。若無按鍵，flag=1)
+      0xF, 0x0, 0x0, // 01: JUMP 00 (若 flag=1，表示無按鍵，跳回 00 繼續等待)
+      0xE, 0xB, // 04: CAL SUND (若有按鍵，播放 A 暫存器對應的音階。flag=1)
+      0xF, 0x0, 0x0  // 06: JUMP 00 (播放完畢，跳回 00 繼續等待)
     ]
   },
   0xB: {
@@ -96,31 +93,62 @@ window.builtins = {
   0xA: {
     name: 'Music Player',
     // 播放儲存在資料記憶體中的音符序列
+    // 修正：重構了程式邏輯，以正確處理 CIA 和 JUMP 的條件判斷
     code: [
-      0xA, 0x0, // 00: TIY 0 (Y 指向資料記憶體開頭)
-      0x5, // 02: MA (讀取音符到 A)
-      0xC, 0x0, // 03: CIA 0 (檢查是否為結束符 0)
-      0xF, 0x1, 0x3, // 05: JUMP 13 (若是，跳到結束)
-      0xE, 0xB, // 08: CAL SUND (播放音符)
-      0xB, 0x1, // 0A: AIY 1 (Y 指向下一音符)
-      0x8, 0x9, 0xE, 0xC, // 0C: TIA 9, CAL TIMR (音符間隔)
-      0xF, 0x0, 0x2, // 10: JUMP 02 (迴圈播放下一個音符)
-      0xE, 0x7, // 13: CAL ENDS (播放結束音)
-      0xF, 0x1, 0x5, // 15: JUMP 15 (停止)
+      // 00: 初始化 Y 暫存器
+      0xA, 0x0,
+      // 02: loop_start - 主迴圈開始
+      0x5,            // MA (讀取音符到 A)
+      0xC, 0x0,       // CIA 0 (若 A!=0, flag=1)
+      0xF, 0x0, 0xD,  // JUMP 0D (若 A!=0, 跳到播放音符)
+      // 若 A=0, 執行到此處, 表示音樂結束
+      0xE, 0x7,       // CAL ENDS (播放結束音)
+      0xF, 0x1, 0x8,  // JUMP 18 (跳到結尾並停止)
+      // 0D: play_note - 播放音符
+      0xE, 0xB,       // CAL SUND
+      0xB, 0x1,       // AIY 1 (Y 指向下一音符)
+      0x8, 0x9,       // TIA 9 (設定音符間隔)
+      0xE, 0xC,       // CAL TIMR (延遲)
+      0xF, 0x0, 0x2,  // JUMP 02 (回到主迴圈)
+      // 18: halt - 停止
+      0xF, 0x1, 0x8
     ],
     // 資料: 小星星 (前段)
-    data: [1, 1, 5, 5, 6, 6, 5, 0, 4, 4, 3, 3, 2, 2, 1, 0]
+    data: [1, 1, 5, 5, 6, 6, 5, 4, 4, 3, 3, 2, 2, 1, 0]
   },
   0xF: {
     name: 'Morse Code Generator',
     // 將資料記憶體中的 1 (dit) 和 2 (dah) 轉為摩斯電碼音效
+    // 修正：修正了所有因 JUMP 指令為 3-byte 長度而導致的位址計算錯誤
     code: [
-      0xA, 0x0, 0x5, 0xC, 0x0, 0xF, 0x1, 0xD, // 00: TIY 0, MA, CIA 0, JUMP 1D (讀取資料，若為0則結束)
-      0xC, 0x1, 0xF, 0x1, 0x8, // 08: CIA 1, JUMP 18 (若為1，跳到播放短音)
-      0xE, 0xA, // 0D: CAL LONS (播放長音)
-      0xB, 0x1, 0x8, 0x3, 0xE, 0xC, 0xF, 0x0, 0x0, // 0F: AIY 1, TIA 3, CAL TIMR, JUMP 00 (指向下一資料並迴圈)
-      0xE, 0x9, 0xF, 0x0, 0xF, // 18: CAL SHTS, JUMP 0F (播放短音並跳轉)
-      0xE, 0x7, 0xF, 0x1, 0xF, // 1D: CAL ENDS, JUMP 1F (結束)
+      // 00: TIY 0
+      0xA, 0x0,
+      // 02: loop_start: MA
+      0x5,
+      // 03: CIA 0 (檢查是否結束)
+      0xC, 0x0,
+      // 05: JUMP 0D (若 A!=0, 跳到 process_char)
+      0xF, 0x0, 0xD,
+      // 08: (若 A==0) CAL ENDS
+      0xE, 0x7,
+      // 0A: JUMP 22 (跳到 halt)
+      0xF, 0x2, 0x2,
+      // 0D: process_char: CIA 1 (檢查是否為 dit)
+      0xC, 0x1,
+      // 0F: JUMP 17 (若 A!=1, 跳到 play_dah)
+      0xF, 0x1, 0x7,
+      // 12: (若 A==1) CAL SHTS (播放短音)
+      0xE, 0x9,
+      // 14: JUMP 19 (跳到 next_char)
+      0xF, 0x1, 0x9,
+      // 17: play_dah: CAL LONS (播放長音), 然後直接執行 next_char
+      0xE, 0xA,
+      // 19: next_char: AIY 1, TIA 3, CAL TIMR
+      0xB, 0x1, 0x8, 0x3, 0xE, 0xC,
+      // 1F: JUMP 02 (回到主迴圈)
+      0xF, 0x0, 0x2,
+      // 22: halt: JUMP 22 (無限迴圈停止)
+      0xF, 0x2, 0x2
     ],
     // 資料: SOS
     data: [1, 1, 1, 2, 2, 2, 1, 1, 1, 0]

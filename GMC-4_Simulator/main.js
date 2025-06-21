@@ -93,7 +93,9 @@
   let regY = 0;
   let flag = 0;
 
-  let isRunning = false;
+  let isExecuting = false; // In execution mode (run or step)
+  let isLooping = false;   // In continuous run loop
+  let lastKeyPressed = null; // Buffer for the last key pressed during execution
 
   // --- UI Initialization ---
   function createLEDs(container, count) {
@@ -170,22 +172,40 @@
   }
 
   function updateProgramView() {
-    let rawMemoryTxt = '';
+    let rawMemoryHtml = '';
     let disassembledTxt = '';
     let currentDisassemblyAddr = 0;
 
     // --- Generate Raw Memory View (Left Column) ---
-    // This shows the content of all program memory addresses.
+    // This shows the content of program and data memory in a grid.
+
+    // Data Memory Header
+    rawMemoryHtml = `<div class="col-span-4 text-yellow-400 text-center font-bold mt-1 mb-2">--- Program Memory ---</div>`;
+
     for (let i = 0; i <= PROGRAM_MEMORY_END; i++) {
       const value = memory[i];
       let valueStr = value.toString(16).toUpperCase();
       // If it's a default 'F' (not explicitly written), make it lighter.
       if (value === NIBBLE_MASK && !writtenAddresses.has(i)) {
-        valueStr = `<span class="text-gray-500">${valueStr}</span>`;
+        valueStr = `<span class="text-gray-600">${valueStr}</span>`;
       }
-      rawMemoryTxt += `${i.toString(16).padStart(2, '0').toUpperCase()}: ${valueStr}\n`;
+      rawMemoryHtml += `<div>${i.toString(16).padStart(2, '0').toUpperCase()}: ${valueStr}</div>`;
     }
-    programViewRaw.innerHTML = rawMemoryTxt;
+
+    // Data Memory Header
+    rawMemoryHtml += `<div class="col-span-4 text-yellow-400 text-center font-bold mt-4 mb-2">--- Data Memory ---</div>`;
+
+    // Data Memory Content
+    for (let i = DATA_MEMORY_START; i <= DATA_MEMORY_END; i++) {
+      const value = memory[i];
+      let valueStr = value.toString(16).toUpperCase();
+      // If it's a default 'F' and not explicitly written, make it lighter.
+      if (value === NIBBLE_MASK && !writtenAddresses.has(i)) {
+        valueStr = `<span class="text-gray-600">${valueStr}</span>`;
+      }
+      rawMemoryHtml += `<div>${i.toString(16).padStart(2, '0').toUpperCase()}: ${valueStr}</div>`;
+    }
+    programViewRaw.innerHTML = rawMemoryHtml;
 
     // --- Generate Disassembled View (Right Column) ---
     // This disassembles only the parts of memory that have been written to (or loaded).
@@ -233,12 +253,40 @@
         // If it's not a recognized instruction, just show the raw hex for the disassembler side.
         line = `${currentDisassemblyAddr.toString(16).padStart(2, '0').toUpperCase()}: ${opcode.toString(16).toUpperCase()}      | (Data/Unknown)`;
       }
-      disassembledTxt += line + '\n';
+
+      // Highlight the current instruction if executing
+      if (isExecuting && currentDisassemblyAddr === addrPtr) {
+        disassembledTxt += `<span class="bg-yellow-900">${line}</span>\n`;
+      } else {
+        disassembledTxt += line + '\n';
+      }
+
       currentDisassemblyAddr += advance;
     }
-    programViewDisassembled.textContent = disassembledTxt;
+    programViewDisassembled.innerHTML = disassembledTxt;
   }
 
+  function updatePauseButton() {
+    const pauseButton = document.querySelector('button[data-cmd="pause"]');
+    if (!pauseButton) return;
+
+    if (!isExecuting) { // Not running at all
+        pauseButton.textContent = 'PAUSE';
+        pauseButton.disabled = true;
+        pauseButton.classList.add('opacity-50', 'cursor-not-allowed');
+        pauseButton.classList.remove('bg-green-600', 'hover:bg-green-700');
+        pauseButton.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
+    } else { // Executing (running or paused)
+        pauseButton.disabled = false;
+        pauseButton.classList.remove('opacity-50', 'cursor-not-allowed');
+        const isResuming = !isLooping;
+        pauseButton.textContent = isResuming ? 'RESUME' : 'PAUSE';
+        pauseButton.classList.toggle('bg-green-600', isResuming);
+        pauseButton.classList.toggle('hover:bg-green-700', isResuming);
+        pauseButton.classList.toggle('bg-indigo-600', !isResuming);
+        pauseButton.classList.toggle('hover:bg-indigo-700', !isResuming);
+    }
+  }
   // --- UI Feedback ---
   function provideButtonFeedback(buttonElement) {
     // Add classes for the pressed state.
@@ -283,12 +331,14 @@
         'C', 'D', 'E', 'F', { cmd: 'aset', text: 'A SET', color: 'bg-blue-600', hover: 'hover:bg-blue-700' },
         '8', '9', 'A', 'B', { cmd: 'incr', text: 'INCR', color: 'bg-green-600', hover: 'hover:bg-green-700' },
         '4', '5', '6', '7', { cmd: 'run', text: 'RUN', color: 'bg-yellow-600', hover: 'hover:bg-yellow-700' },
-        '0', '1', '2', '3', { cmd: 'reset', text: 'RESET', color: 'bg-red-600', hover: 'hover:bg-red-700' }
+        '0', '1', '2', '3', { cmd: 'reset', text: 'RESET', color: 'bg-red-600', hover: 'hover:bg-red-700' },
+        { cmd: 'step', text: 'STEP', color: 'bg-purple-600', hover: 'hover:bg-purple-700', span: 'col-span-2' },
+        { cmd: 'pause', text: 'PAUSE', color: 'bg-indigo-600', hover: 'hover:bg-indigo-700', span: 'col-span-3' }
     ];
 
     keypad.innerHTML = ''; // Clear any existing buttons
 
-    const commandHandler = (cmd) => {
+    const commandHandler = async (cmd) => {
         switch (cmd) {
             case 'reset':
                 resetMachine();
@@ -303,12 +353,29 @@
                 setAddress();
                 break;
             case 'run':
-                if (!isRunning) {
+                if (!isExecuting) { // Only start a new run if not already running or paused
                     if (asetBuffer.length === 1 && loadBuiltinProgram(asetBuffer[0])) {
                         asetBuffer = [];
                         tempInput = null;
-                    } else {
-                        executeProgram(addrPtr);
+                    }
+                    isExecuting = true;
+                    isLooping = true;
+                    updatePauseButton();
+                    await executeProgramLoop();
+                }
+                break;
+            case 'step':
+                if (!isLooping) {
+                    await executeStep();
+                    updatePauseButton();
+                }
+                break;
+            case 'pause':
+                if (isExecuting) { // Can only pause/resume if execution has started
+                    isLooping = !isLooping; // Toggle the looping state
+                    updatePauseButton();
+                    if (isLooping) { // If we are resuming, start the loop again
+                        await executeProgramLoop();
                     }
                 }
                 break;
@@ -318,6 +385,9 @@
     keypadLayout.forEach(keyInfo => {
         const btn = document.createElement('button');
         const baseStyle = 'py-2 rounded transition-transform duration-100 ease-in-out select-none';
+        if (keyInfo.span) {
+            btn.classList.add(keyInfo.span);
+        }
 
         if (typeof keyInfo === 'string') {
             // Hex key
@@ -327,13 +397,17 @@
             btn.addEventListener('click', (event) => {
                 const num = parseInt(val, 16);
                 provideButtonFeedback(event.currentTarget);
-                playShortPi();
-                if (asetBuffer.length < 2) {
-                    asetBuffer.push(num);
-                    updateDisplay(num);
-                } else {
-                    tempInput = num;
-                    updateDisplay(tempInput);
+                if (isExecuting) {
+                    lastKeyPressed = num; // Store key press if running
+                } else { // Programming mode
+                    playShortPi(); // 僅在程式設計模式下播放按鍵音
+                    if (asetBuffer.length < 2) {
+                        asetBuffer.push(num);
+                        updateDisplay(num);
+                    } else {
+                        tempInput = num;
+                        updateDisplay(tempInput);
+                    }
                 }
             });
         } else {
@@ -368,14 +442,16 @@
     regY = 0;
     flag = 0;
     // Soft RESET: Only resets pointers and registers, memory content is preserved.
-    // writtenAddresses is intentionally not cleared on soft reset.
+    // writtenAddresses is intentionally not cleared on soft reset.    
+    isExecuting = false;
+    isLooping = false;
     // On hardware, RESET would show 'F' to indicate readiness.
     updateDisplay(NIBBLE_MASK);
     updateAddressLEDs(addrPtr);
     updateRegisters();
     updateProgramView();
+    updatePauseButton();
     clear2PinLEDs();
-    isRunning = false;
   }
 
   function hardResetMachine() {
@@ -445,7 +521,15 @@
         writtenAddresses.add(i);
       }
     });
-    if (pkg.data) { pkg.data.forEach((v, i) => { if (i < 0x10) memory[DATA_MEMORY_START + i] = v & NIBBLE_MASK; }); } // Data memory doesn't show in program view
+    if (pkg.data) {
+      pkg.data.forEach((v, i) => {
+        const addr = DATA_MEMORY_START + i;
+        if (addr <= DATA_MEMORY_END) {
+          memory[addr] = v & NIBBLE_MASK;
+          writtenAddresses.add(addr);
+        }
+      });
+    }
     updateDisplay(memory[addrPtr]);
     updateAddressLEDs(addrPtr);
     updateRegisters();
@@ -455,23 +539,32 @@
   }
 
   // --- Execution Engine ---
-  async function executeProgram(startAddr) {
-    isRunning = true;
-    addrPtr = startAddr;
-
-    while (isRunning && addrPtr < MEMORY_SIZE) {
+  async function executeSingleInstruction() {
+    if (!isExecuting || addrPtr >= MEMORY_SIZE) {
+      isExecuting = isLooping = false;
+      return;
+    }
       const opcode = memory[addrPtr++];
       switch (opcode) {
-        case 0x0: // KA: K->Ar (Simplified: skip waiting for keypress)
-          // No key input, flag=1. Hardware reads keyboard, we just set flag.
-          flag = 1;
+        case 0x0: // KA: K->Ar
+          if (lastKeyPressed !== null) {
+            regA = lastKeyPressed;
+            flag = 0;
+            lastKeyPressed = null; // Consume the keypress
+          } else {
+            flag = 1;
+          }
           break;
         case 0x1: // AO: Ar->Op (Display register A)
           updateDisplay(regA);
           flag = 1;
           break;
         case 0x4: // AM: Ar->M (Write to data memory)
-          memory[DATA_MEMORY_START + regY] = regA & NIBBLE_MASK;
+          {
+            const addr = DATA_MEMORY_START + regY;
+            memory[addr] = regA & NIBBLE_MASK;
+            writtenAddresses.add(addr);
+          }
           flag = 1;
           break;
         case 0x5: // MA: M->Ar (Read from data memory)
@@ -581,9 +674,12 @@
               case 0xE: // CAL DEM-: M[Y] - A -> M[Y], Y--
                 {
                   const addr = DATA_MEMORY_START + regY;
-                  const val = memory[addr] & NIBBLE_MASK;
-                  const result = val - regA;
-                  memory[addr] = (result + 0x10) & NIBBLE_MASK; // Handle borrow
+                  if (addr >= DATA_MEMORY_START && addr <= DATA_MEMORY_END) {
+                    const val = memory[addr] & NIBBLE_MASK;
+                    const result = val - regA;
+                    memory[addr] = (result + 0x10) & NIBBLE_MASK; // Handle borrow
+                    writtenAddresses.add(addr);
+                  }
                   regY = (regY - 1 + 0x10) & NIBBLE_MASK; // Decrement Y with wrap-around
                   flag = 1;
                 }
@@ -591,12 +687,16 @@
               case 0xF: // CAL DEM+: M[Y] + A -> M[Y], Y--
                 {
                   const addr = DATA_MEMORY_START + regY;
-                  const val = memory[addr] & NIBBLE_MASK;
-                  const sum = val + regA;
-                  memory[addr] = sum & NIBBLE_MASK;
-                  if (sum > NIBBLE_MASK) { // On overflow, increment M[Y-1]
-                    const prevAddr = DATA_MEMORY_START + ((regY - 1 + 0x10) & NIBBLE_MASK);
-                    memory[prevAddr] = (memory[prevAddr] + 1) & NIBBLE_MASK;
+                  if (addr >= DATA_MEMORY_START && addr <= DATA_MEMORY_END) {
+                    const val = memory[addr] & NIBBLE_MASK;
+                    const sum = val + regA;
+                    memory[addr] = sum & NIBBLE_MASK;
+                    writtenAddresses.add(addr);
+                    if (sum > NIBBLE_MASK) { // On overflow, increment M[Y-1]
+                      const prevAddr = DATA_MEMORY_START + ((regY - 1 + 0x10) & NIBBLE_MASK);
+                      memory[prevAddr] = (memory[prevAddr] + 1) & NIBBLE_MASK;
+                      writtenAddresses.add(prevAddr);
+                    }
                   }
                   regY = (regY - 1 + 0x10) & NIBBLE_MASK; // Decrement Y with wrap-around
                   flag = 1;
@@ -620,31 +720,66 @@
           }
           break;
         default:
-          // Unknown instruction, stop execution
-          isRunning = false;
+          // Unknown instruction, stop execution.
+          isExecuting = isLooping = false;
           break;
       }
 
       updateAddressLEDs(addrPtr);
       updateRegisters();
-      // updateDisplay(regA); // Display is often explicitly controlled by instructions
-
       updateProgramView();
+  }
 
-      // Delay for visualization
-      await sleep(180);
+  async function executeProgramLoop() {
+    while (isLooping) {
+      await executeSingleInstruction();
+      if (!isLooping) break; // Instruction might have stopped the loop
+      await sleep(50);
+    }    
+    // The loop has ended. The state (isLooping, isExecuting) has already been set 
+    // by the trigger that stopped the loop (e.g., pause handler or an instruction).
+    updateProgramView(); // Final update to remove highlight if execution fully stopped.
+    updatePauseButton(); // Update button state (e.g., to RESUME or disabled).
+  }
+
+  async function executeStep() {
+    if (!isExecuting) {
+      isExecuting = true;
     }
-    isRunning = false;
+    await executeSingleInstruction();
   }
 
   function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
+  function setupInfoModal() {
+    const infoIcon = document.getElementById('info-icon');
+    const infoModal = document.getElementById('info-modal');
+    const closeModalBtn = document.getElementById('close-modal-btn');
+
+    if (infoIcon && infoModal && closeModalBtn) {
+        infoIcon.addEventListener('click', () => {
+            infoModal.classList.remove('hidden');
+        });
+
+        closeModalBtn.addEventListener('click', () => {
+            infoModal.classList.add('hidden');
+        });
+
+        infoModal.addEventListener('click', (event) => {
+            if (event.target === infoModal) {
+                infoModal.classList.add('hidden');
+            }
+        });
+    }
+  }
+
   // --- Initialization ---
   function init() {
     setupControls();
     hardResetMachine();
+    setupInfoModal();
   }
 
   init();
