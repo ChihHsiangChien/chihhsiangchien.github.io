@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="zh-hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>視錯覺</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f0f0; /* Light background for the page */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px; /* Add some padding around the content for smaller screens */
+            box-sizing: border-box; /* Include padding in element's total width and height */
+        }
+
+        .container {
+            max-width: 800px; /* Adjusted overall width limit */
+        }
+
+        .panel {
+            /* Consistent styling for panels */
+            box-sizing: content-box; /* Ensures padding/border don't affect fixed width/height */
+            background-color: transparent;
+            /* Panel size reduced for new layout */
+            width: 350px;
+            height: 350px;
+            position: relative; /* Essential for absolute positioning of inner layers */
+            overflow: hidden; /* Ensures layers don't spill out */
+            border-radius: 0.75rem; /* Tailwind's rounded-xl */
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); /* Tailwind's shadow-2xl */
+            transition: all 0.3s ease-in-out;
+        }
+
+        /* Base styling for all layers that will be toggled */
+        .background-layer,
+        .middle-square-layer,
+        .dots-layer {
+            position: absolute;
+            /* transition: opacity 0.3s ease-in-out; */ /* 移除此行以取消漸變動畫 */
+            border-radius: 0.5rem; /* Rounded corners for layers */
+        }
+
+        /* Full size layers */
+        .background-layer,
+        .dots-layer {
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Middle square layer - centered */
+        .middle-square-layer {
+            width: 200px; /* Inner square size, adjusted for smaller panel */
+            height: 200px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+        }
+
+        .dots-layer {
+            z-index: 20; /* Dots on top of the square and background */
+            /* Dots will be dynamically positioned in JS, not using CSS Grid here */
+        }
+
+        .dot {
+            position: absolute; /* Absolute positioning for individual dots */
+            /* width and height, and background-color are now set dynamically by JavaScript */
+            border-radius: 50%; /* Perfect circles */
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+    <div class="container mx-auto p-4 flex flex-col items-center">
+        <h1 class="text-4xl font-extrabold mb-8 text-gray-900 text-center">方塊顏色一樣喔！</h1>
+
+        <!-- Main content wrapper for side-by-side layout on large screens -->
+        <div class="flex flex-col lg:flex-row items-center lg:items-start gap-12 w-full justify-center">
+
+            <!-- Panels Container -->
+            <div class="flex flex-col md:flex-row gap-8">
+                <!-- Left Panel (Reference) -->
+                <div id="panelLeft" class="panel border-4 border-black">
+                    <!-- Layers are now empty divs, styled and populated by JS -->
+                    <div id="backgroundLayerLeft" class="background-layer"></div>
+                    <div id="middleSquareLayerLeft" class="middle-square-layer"></div>
+                    <div id="dotsLayerLeft" class="dots-layer"></div>
+                </div>
+
+                <!-- Right Panel (Interactive) -->
+                <div id="panelRight" class="panel border-4 border-black">
+                    <!-- Layers are now empty divs, styled and populated by JS -->
+                    <div id="backgroundLayerRight" class="background-layer"></div>
+                    <div id="middleSquareLayerRight" class="middle-square-layer"></div>
+                    <div id="dotsLayerRight" class="dots-layer"></div>
+                </div>
+            </div>
+
+            <!-- UI Controls Container -->
+            <div class="flex flex-col items-center gap-8 w-full max-w-sm">
+                <!-- Control Buttons -->
+                <div class="flex flex-wrap justify-center gap-4 w-full">
+                    <button id="toggleDotsBtn" class="px-6 py-3 bg-gray-700 text-white text-base font-bold rounded-full shadow-lg hover:bg-gray-800 focus:outline-none focus:ring-4 focus:ring-gray-600 focus:ring-opacity-75">
+                        圓點
+                    </button>
+                    <button id="toggleSquareBtn" class="px-6 py-3 bg-gray-700 text-white text-base font-bold rounded-full shadow-lg hover:bg-gray-800 focus:outline-none focus:ring-4 focus:ring-gray-600 focus:ring-opacity-75">
+                        方塊
+                    </button>
+                    <button id="toggleBackgroundBtn" class="px-6 py-3 bg-gray-700 text-white text-base font-bold rounded-full shadow-lg hover:bg-gray-800 focus:outline-none focus:ring-4 focus:ring-gray-600 focus:ring-opacity-75">
+                        背景
+                    </button>
+                    <button id="resetBtn" class="px-6 py-3 bg-gray-500 text-white text-base font-bold rounded-full shadow-lg hover:bg-gray-600 focus:outline-none focus:ring-4 focus:ring-gray-400 focus:ring-opacity-75">
+                        Reset
+                    </button>
+                </div>
+
+                <!-- Control Sliders -->
+                <div class="flex flex-col items-center gap-6 w-full">
+                    <!-- Dot Size Slider -->
+                    <div class="flex flex-col items-center gap-2 w-full">
+                        <label for="dotSizeSlider" class="text-lg font-bold text-gray-800">圓點大小: <span id="dotSizeValue">30</span>px</label>
+                        <input id="dotSizeSlider" type="range" min="5" max="50" value="30" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
+                    </div>
+
+                    <!-- Hue Slider 1: backgroundLeft = dotsRight -->
+                    <div class="flex flex-col items-center gap-2 w-full">
+                        <label for="backgroundDotHueSlider1" class="text-lg font-bold text-gray-800">背景左 / 圓點右 色相: <span id="backgroundDotHueValue1">40</span>°</label>
+                        <input id="backgroundDotHueSlider1" type="range" min="0" max="360" value="40" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
+                    </div>
+
+                    <!-- Hue Slider 2: backgroundRight = dotsLeft -->
+                    <div class="flex flex-col items-center gap-2 w-full">
+                        <label for="backgroundDotHueSlider2" class="text-lg font-bold text-gray-800">背景右 / 圓點左 色相: <span id="backgroundDotHueValue2">270</span>°</label>
+                        <input id="backgroundDotHueSlider2" type="range" min="0" max="360" value="270" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
+                    </div>
+
+                    <!-- Hue Slider 3: squareLeft = squareRight -->
+                    <div class="flex flex-col items-center gap-2 w-full">
+                        <label for="squareHueSlider" class="text-lg font-bold text-gray-800">方塊色相: <span id="squareHueValue">180</span>°</label>
+                        <input id="squareHueSlider" type="range" min="0" max="360" value="180" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <p class="mt-8 text-center text-lg max-w-2xl text-gray-700">
+            調整這些元素的存在與否，觀察你如何感知顏色
+        </p>
+    </div>
+
+    <script>
+        // Constants for colors using Tailwind CSS classes
+        const COLORS = {
+            // Base HSL values (hue, saturation, lightness) for each color type
+            // Hue will be controlled by sliders, Saturation and Lightness are fixed for now.
+            // These values are approximations of the original Tailwind colors.
+            colorGroup1: { hue: 40, sat: 96, light: 60 },  // Yellow-ish (for backgroundLeft, dotsRight)
+            colorGroup2: { hue: 270, sat: 70, light: 25 }, // Purple-ish (for backgroundRight, dotsLeft)
+            colorGroup3: { hue: 180, sat: 70, light: 60 }, // Cyan-ish (for squareLeft, squareRight)
+
+            // Note: The illusion relies on specific saturation and lightness values.
+            // Changing these might alter the illusion's effectiveness.
+            
+            // Border Colors for the right panel illusion
+            borderBlack: 'border-black',
+            borderPurple: 'border-purple-800' // Matches outer background of right panel
+        };
+
+        const PANEL_SIZE = 350; // Centralized panel size constant
+
+        // DOM Elements
+        const panelLeft = document.getElementById('panelLeft');
+        const panelRight = document.getElementById('panelRight');
+
+        const backgroundLayerLeft = document.getElementById('backgroundLayerLeft');
+        const middleSquareLayerLeft = document.getElementById('middleSquareLayerLeft');
+        const dotsLayerLeft = document.getElementById('dotsLayerLeft');
+
+        const backgroundLayerRight = document.getElementById('backgroundLayerRight');
+        const middleSquareLayerRight = document.getElementById('middleSquareLayerRight');
+        const dotsLayerRight = document.getElementById('dotsLayerRight');
+
+        const toggleDotsBtn = document.getElementById('toggleDotsBtn');
+        const toggleSquareBtn = document.getElementById('toggleSquareBtn');
+        const toggleBackgroundBtn = document.getElementById('toggleBackgroundBtn');
+        const resetBtn = document.getElementById('resetBtn');
+
+        const dotSizeSlider = document.getElementById('dotSizeSlider');
+        const dotSizeValue = document.getElementById('dotSizeValue');
+        const backgroundDotHueSlider1 = document.getElementById('backgroundDotHueSlider1');
+        const backgroundDotHueValue1 = document.getElementById('backgroundDotHueValue1');
+        const backgroundDotHueSlider2 = document.getElementById('backgroundDotHueSlider2');
+        const backgroundDotHueValue2 = document.getElementById('backgroundDotHueValue2');
+        const squareHueSlider = document.getElementById('squareHueSlider');
+        const squareHueValue = document.getElementById('squareHueValue');
+
+
+        /**
+         * Populates a dots layer with individual dot elements,
+         * ensuring they are correctly sized and positioned.
+         * @param {HTMLElement} container - The DOM element (dots-layer) to append dots to.
+         * @param {string} dotColorHSL - The HSL color string for each dot (e.g., "hsl(180, 70%, 60%)").
+         * @param {number} panelWidth - The width of the panel the dots are within.
+         * @param {number} dotSize - The desired size (width/height) of each dot in pixels.
+         * @param {number} gap - The desired gap between dots in pixels.
+         */
+        function populateDotsLayer(container, dotColorHSL, panelWidth, dotSize, gap) {
+            container.innerHTML = ''; // Clear existing dots
+            const totalSpaceForDots = panelWidth;
+            const effectiveDotSize = dotSize + gap; // Dot size + gap defines the cell size
+            const dotsPerRow = Math.floor(totalSpaceForDots / effectiveDotSize);
+            const numRows = Math.floor(totalSpaceForDots / effectiveDotSize);
+
+            // Calculate offset to center the grid of dots if it doesn't perfectly fill the panel
+            const actualDotsWidth = dotsPerRow * effectiveDotSize - gap;
+            const actualDotsHeight = numRows * effectiveDotSize - gap;
+            const startX = (panelWidth - actualDotsWidth) / 2;
+            const startY = (panelWidth - actualDotsHeight) / 2;
+
+            for (let row = 0; row < numRows; row++) {
+                for (let col = 0; col < dotsPerRow; col++) {
+                    const dot = document.createElement('div');
+                    dot.classList.add('dot'); // Only add 'dot' class, color is set by style
+                    dot.style.backgroundColor = dotColorHSL; // Apply HSL color directly
+                    dot.style.width = `${dotSize}px`;
+                    dot.style.height = `${dotSize}px`;
+                    dot.style.left = `${startX + col * effectiveDotSize}px`;
+                    dot.style.top = `${startY + row * effectiveDotSize}px`;
+                    container.appendChild(dot);
+                }
+            }
+        }
+
+        /**
+         * Initializes the visual elements of both panels with their respective colors and layers.
+         */
+        function initializePanels() {
+            const panelSize = PANEL_SIZE; // Use the centralized constant
+            const dotSize = parseInt(dotSizeSlider.value, 10); // Get initial size from slider
+            const dotGap = 5;      // Based on CSS gap
+
+            // Set initial colors based on slider values (which are set to default in HTML)
+            // These functions will also populate the dots layers.
+            updateBackgroundDotHue1();
+            updateBackgroundDotHue2();
+            updateSquareHue();
+
+            
+            // Set initial border for both panels
+            panelLeft.classList.add(COLORS.borderBlack); // Left panel always has a black border initially
+            panelRight.classList.add(COLORS.borderBlack); // Right panel starts with a black border
+
+            // Ensure all layers are visible initially
+            setLayerVisibility('dots', 1);
+            setLayerVisibility('middleSquare', 1);
+            setLayerVisibility('background', 1);
+        }
+
+        /**
+         * Toggles the opacity of a specified layer type on both panels.
+         * @param {string} layerType - The type of layer ('dots', 'middleSquare', 'background').
+         */
+        function toggleLayerVisibility(layerType) {
+            const layerLeft = document.getElementById(`${layerType}LayerLeft`);
+            const layerRight = document.getElementById(`${layerType}LayerRight`);
+
+            // Toggle opacity: if current opacity is 0 (hidden), set to 1 (visible), else set to 0.
+            const newOpacity = (layerLeft.style.opacity === '0') ? '1' : '0';
+            setLayerVisibility(layerType, newOpacity);
+        }
+
+        /**
+         * Sets the opacity of a specified layer type on both panels.
+         * @param {string} layerType - The type of layer ('dots', 'middleSquare', 'background').
+         * @param {number|string} opacityValue - The desired opacity (0 for hidden, 1 for visible).
+         */
+        function setLayerVisibility(layerType, opacityValue) {
+            const layerLeft = document.getElementById(`${layerType}LayerLeft`);
+            const layerRight = document.getElementById(`${layerType}LayerRight`);
+
+            if (layerLeft) layerLeft.style.opacity = opacityValue;
+            if (layerRight) layerRight.style.opacity = opacityValue;
+        }
+
+        /**
+         * Resets all panels to their initial state.
+         */
+        function resetPanels() {
+            // Reset right panel's border to black
+            panelRight.classList.remove(COLORS.borderPurple);
+            panelRight.classList.add(COLORS.borderBlack);
+
+            // Reset all layers to visible
+            setLayerVisibility('dots', 1);
+            setLayerVisibility('middleSquare', 1);
+            setLayerVisibility('background', 1);
+        }
+
+        /**
+         * Updates the hue for backgroundLeft and dotsRight based on slider 1.
+         */
+        function updateBackgroundDotHue1() {
+            const newHue = parseInt(backgroundDotHueSlider1.value, 10);
+            backgroundDotHueValue1.textContent = newHue;
+
+            const hslColor = `hsl(${newHue}, ${COLORS.colorGroup1.sat}%, ${COLORS.colorGroup1.light}%)`;
+            backgroundLayerLeft.style.backgroundColor = hslColor;
+
+            // Re-populate dotsLayerRight with the new color and current dot size
+            const panelSize = PANEL_SIZE;
+            const dotSize = parseInt(dotSizeSlider.value, 10);
+            const dotGap = 5;
+            populateDotsLayer(dotsLayerRight, hslColor, panelSize, dotSize, dotGap);
+        }
+
+        /**
+         * Updates the hue for backgroundRight and dotsLeft based on slider 2.
+         */
+        function updateBackgroundDotHue2() {
+            const newHue = parseInt(backgroundDotHueSlider2.value, 10);
+            backgroundDotHueValue2.textContent = newHue;
+
+            const hslColor = `hsl(${newHue}, ${COLORS.colorGroup2.sat}%, ${COLORS.colorGroup2.light}%)`;
+            backgroundLayerRight.style.backgroundColor = hslColor;
+
+            // Re-populate dotsLayerLeft with the new color and current dot size
+            const panelSize = PANEL_SIZE;
+            const dotSize = parseInt(dotSizeSlider.value, 10);
+            const dotGap = 5;
+            populateDotsLayer(dotsLayerLeft, hslColor, panelSize, dotSize, dotGap);
+        }
+
+        /**
+         * Updates the hue for squareLeft and squareRight based on the square hue slider.
+         */
+        function updateSquareHue() {
+            const newHue = parseInt(squareHueSlider.value, 10);
+            squareHueValue.textContent = newHue;
+
+            const hslColor = `hsl(${newHue}, ${COLORS.colorGroup3.sat}%, ${COLORS.colorGroup3.light}%)`;
+            middleSquareLayerLeft.style.backgroundColor = hslColor;
+            middleSquareLayerRight.style.backgroundColor = hslColor;
+        }
+
+
+
+
+
+
+        /**
+         * Updates the dot size based on the slider and re-populates the dot layers.
+         */
+        function handleDotSizeChange() {
+            const newDotSize = parseInt(dotSizeSlider.value, 10);
+            dotSizeValue.textContent = newDotSize;
+
+            const panelSize = PANEL_SIZE; // Use the centralized constant
+            const dotGap = 5;      // Based on CSS gap
+
+            // Re-populate both dot layers with the new size, using their *current* background colors
+            // dotsLayerLeft's color is tied to backgroundLayerRight's color
+            // dotsLayerRight's color is tied to backgroundLayerLeft's color
+            populateDotsLayer(dotsLayerLeft, backgroundLayerRight.style.backgroundColor, panelSize, newDotSize, dotGap);
+            populateDotsLayer(dotsLayerRight, backgroundLayerLeft.style.backgroundColor, panelSize, newDotSize, dotGap);
+        }
+
+        // Event Listeners
+        window.onload = function() {
+            initializePanels();
+            toggleDotsBtn.addEventListener('click', () => toggleLayerVisibility('dots'));
+            toggleSquareBtn.addEventListener('click', () => toggleLayerVisibility('middleSquare'));
+            toggleBackgroundBtn.addEventListener('click', () => toggleLayerVisibility('background'));
+            resetBtn.addEventListener('click', resetPanels); // This will now reset all sliders and colors
+
+            dotSizeSlider.addEventListener('input', handleDotSizeChange);
+            backgroundDotHueSlider1.addEventListener('input', updateBackgroundDotHue1);
+            backgroundDotHueSlider2.addEventListener('input', updateBackgroundDotHue2);
+            squareHueSlider.addEventListener('input', updateSquareHue);
+        };
+    </script>
+</body>
+</html>
