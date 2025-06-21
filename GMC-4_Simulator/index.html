@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GMC-4 模擬器</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .seven-segment-container {
+      width: 80px;
+      height: 120px;
+      position: relative;
+      background-color: #1a202c; /* bg-gray-800 */
+      border-radius: 0.375rem; /* rounded-md */
+      padding: 10px;
+      transform: skewX(-3deg); /* Add a slight slant for style */
+    }
+    .segment {
+      position: absolute;
+      background-color: #2d3748; /* bg-gray-700 for OFF state */
+      border-radius: 3px;
+      transition: background-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+    }
+    .segment.on {
+      background-color: #ef4444; /* bg-red-500 for ON state */
+      box-shadow: 0 0 8px #ef4444, 0 0 12px #ef4444;
+    }
+    /* Segment positioning and sizing */
+    .segment.a { top: 5%; left: 15%; width: 70%; height: 10%; }
+    .segment.b { top: 15%; left: 85%; width: 10%; height: 35%; }
+    .segment.c { top: 50%; left: 85%; width: 10%; height: 35%; }
+    .segment.d { top: 85%; left: 15%; width: 70%; height: 10%; }
+    .segment.e { top: 50%; left: 5%; width: 10%; height: 35%; }
+    .segment.f { top: 15%; left: 5%; width: 10%; height: 35%; }
+    .segment.g { top: 45%; left: 15%; width: 70%; height: 10%; }
+  </style>
+</head>
+<body class="bg-gray-900 text-white p-6">
+  <div class="max-w-7xl mx-auto space-y-6">
+    <h1 class="text-2xl font-bold text-center mb-4">GMC-4 模擬器</h1>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <!-- Left Column: Simulator -->
+      <div class="space-y-6">
+        <!-- 主顯示與 Address LEDs -->
+        <div class="flex justify-center space-x-6">
+          <div class="text-center">
+            <div class="text-sm mb-1">7-Segment Display</div>
+            <div id="display" class="seven-segment-container">
+              <div class="segment a"></div>
+              <div class="segment b"></div>
+              <div class="segment c"></div>
+              <div class="segment d"></div>
+              <div class="segment e"></div>
+              <div class="segment f"></div>
+              <div class="segment g"></div>
+            </div>
+          </div>
+          <div>
+            <div class="text-sm mb-1">Address LEDs</div>
+            <div id="leds" class="flex space-x-1">
+              <!-- 7個address LEDs -->
+            </div>
+          </div>
+          <div>
+            <div class="text-sm mb-1">2-pin LEDs (CAL 指令燈)</div>
+            <div id="led2pins" class="flex space-x-1">
+              <!-- 2-pin LEDs -->
+            </div>
+          </div>
+        </div>
+
+        <!-- 暫存器顯示 -->
+        <div class="grid grid-cols-5 gap-4 bg-gray-800 p-4 rounded font-mono text-center">
+          <div>A: <span id="regA">0</span></div>
+          <div>B: <span id="regB">0</span></div>
+          <div>Y: <span id="regY">0</span></div>
+          <div>Flag: <span id="regFlag">0</span></div>
+          <div>PC: <span id="regPC">00</span></div>
+        </div>
+
+        <!-- Hex Keypad -->
+        <div id="keypad" class="grid grid-cols-5 gap-3"></div>
+
+        <!-- 控制按鈕 -->
+        <div class="mt-3">
+          <button data-cmd="hard_reset" class="w-full py-2 rounded bg-red-800 hover:bg-red-900 transition-transform duration-100 ease-in-out">HARD RESET (Clear Memory)</button>
+        </div>
+      </div>
+
+      <!-- Right Column: Program View -->
+      <div class="flex flex-col">
+        <h2 class="text-lg font-bold mb-2">Program Memory</h2>
+        <div class="flex flex-row gap-4 h-96 md:h-full overflow-y-auto bg-gray-800 p-3 rounded font-mono text-sm">
+          <div id="programViewRaw" class="flex-1 whitespace-pre-wrap columns-4 text-gray-300"></div>
+          <div id="programViewDisassembled" class="flex-1 whitespace-pre-wrap border-l border-gray-700 pl-4 columns-1"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Command Reference Tables -->
+    <div class="mt-8 space-y-6">
+      <h2 class="text-xl font-bold">Command Reference</h2>
+      <!-- Main Instructions -->
+      <div class="overflow-x-auto">
+        <h3 class="text-lg font-semibold mb-2">Main Instructions</h3>
+        <table class="min-w-full bg-gray-800 rounded text-sm">
+          <thead class="bg-gray-700">
+            <tr class="border-b border-gray-600">
+              <th class="p-2 text-left">Code</th><th class="p-2 text-left">Mnemonic</th><th class="p-2 text-left">Action</th><th class="p-2 text-left">Flag</th><th class="p-2 text-left">Detail</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="border-b border-gray-700"><td class="p-2 align-top font-mono">0</td><td class="p-2 align-top font-mono">KA</td><td class="p-2 align-top font-mono">K-&gt;Ar</td><td class="p-2 align-top">0, 1</td><td class="p-2 align-top">Keypad to A register. Flag=1 if no key pressed.</td></tr>
+            <tr class="border-b border-gray-700"><td class="p-2 align-top font-mono">1</td><td class="p-2 align-top font-mono">AO</td><td class="p-2 align-top font-mono">Ar-&gt;Op</td><td class="p-2 align-top">1</td><td class="p-2 align-top">Display A register.</td></tr>
+            <tr class="border-b border-gray-700"><td class="p-2 align-top font-mono">2</td><td class="p-2 align-top font-mono">CH</td><td class="p-2 align-top font-mono">Ar&lt;=&gt;Br, Yr&lt;=&gt;Zr</td><td class="p-2 align-top">1</td><td class="p-2 align-top">Exchange A&lt;=&gt;B and Y&lt;=&gt;Z. (Not Implemented)</td></tr>
+            <tr class="border-b border-gray-700"><td class="p-2 align-top font-mono">3</td><td class="p-2 align-top font-mono">CY</td><td class="p-2 align-top font-mono">Ar&lt;=&gt;Yr</td><td class="p-2 align-top">1</td><td class="p-2 align-top">Exchange A&lt;=&gt;Y. (Not Implemented)</td></tr>
+            <tr class="border-b border-gray-700"><td class="p-2 align-top font-mono">4</td><td class="p-2 align-top font-mono">AM</td><td class="p-2 align-top font-mono">Ar-&gt;M</td><td class="p-2 align-top">1</td><td class="p-2 align-top">Write A to memory (addr 50+Y).</td></tr>
+            <tr class="border-b border-gray-700"><td class="p-2 align-top font-mono">5</td><td class="p-2 align-top font-mono">MA</td><td class="p-2 align-top font-mono">M-&gt;Ar</td><td class="p-2 align-top">1</td><td class="p-2 align-top">Read from memory (addr 50+Y) to A.</td></tr>
+            <tr class="border-b border-gray-700"><td class="p-2 align-top font-mono">6</td><td class="p-2 align-top font-mono">M+</td><td class="p-2 align-top font-mono">M+Ar-&gt;Ar</td><td class="p-2 align-top">0, 1</td><td class="p-2 align-top">Add memory to A. Flag=1 on overflow.</td></tr>
+            <tr class="border-b border-gray-700"><td class="p-2 align-top font-mono">7</td><td class="p-2 align-top font-mono">M-</td><td class="p-2 align-top font-mono">M-Ar-&gt;Ar</td><td class="p-2 align-top">0, 1</td><td class="p-2 align-top">Subtract A from memory. Flag=1 if negative.</td></tr>
+            <tr class="border-b border-gray-700"><td class="p-2 align-top font-mono">8</td><td class="p-2 align-top font-mono">TIA [ ]</td><td class="p-2 align-top font-mono">[ ]-&gt;Ar</td><td class="p-2 align-top">1</td><td class="p-2 align-top">Transfer immediate to A.</td></tr>
+            <tr class="border-b border-gray-700"><td class="p-2 align-top font-mono">9</td><td class="p-2 align-top font-mono">AIA [ ]</td><td class="p-2 align-top font-mono">Ar+[ ]-&gt;Ar</td><td class="p-2 align-top">0, 1</td><td class="p-2 align-top">Add immediate to A. Flag=1 on overflow.</td></tr>
+            <tr class="border-b border-gray-700"><td class="p-2 align-top font-mono">A</td><td class="p-2 align-top font-mono">TIY [ ]</td><td class="p-2 align-top font-mono">[ ]-&gt;Yr</td><td class="p-2 align-top">1</td><td class="p-2 align-top">Transfer immediate to Y.</td></tr>
+            <tr class="border-b border-gray-700"><td class="p-2 align-top font-mono">B</td><td class="p-2 align-top font-mono">AIY [ ]</td><td class="p-2 align-top font-mono">Yr+[ ]-&gt;Yr</td><td class="p-2 align-top">0, 1</td><td class="p-2 align-top">Add immediate to Y. Flag=1 on overflow.</td></tr>
+            <tr class="border-b border-gray-700"><td class="p-2 align-top font-mono">C</td><td class="p-2 align-top font-mono">CIA [ ]</td><td class="p-2 align-top font-mono">Ar!=[ ]?</td><td class="p-2 align-top">0, 1</td><td class="p-2 align-top">Compare immediate to A. Flag=1 if not equal.</td></tr>
+            <tr class="border-b border-gray-700"><td class="p-2 align-top font-mono">D</td><td class="p-2 align-top font-mono">CIY [ ]</td><td class="p-2 align-top font-mono">Yr!=[ ]?</td><td class="p-2 align-top">0, 1</td><td class="p-2 align-top">Compare immediate to Y. Flag=1 if not equal.</td></tr>
+            <tr class="border-b border-gray-700"><td class="p-2 align-top font-mono">E</td><td class="p-2 align-top font-mono">-</td><td class="p-2 align-top font-mono">-</td><td class="p-2 align-top">-</td><td class="p-2 align-top">Extended code (see table below).</td></tr>
+            <tr class="border-b border-gray-700"><td class="p-2 align-top font-mono">F</td><td class="p-2 align-top font-mono">JUMP [ ][ ]</td><td class="p-2 align-top font-mono">JUMP</td><td class="p-2 align-top">1</td><td class="p-2 align-top">Jump to immediate address if Flag=1.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <!-- Extended Instructions -->
+      <div class="overflow-x-auto">
+        <h3 class="text-lg font-semibold mb-2">Extended Instructions (CAL)</h3>
+        <table class="min-w-full bg-gray-800 rounded text-sm">
+          <thead class="bg-gray-700">
+            <tr class="border-b border-gray-600">
+              <th class="p-2 text-left">Code</th><th class="p-2 text-left">Mnemonic</th><th class="p-2 text-left">Flag</th><th class="p-2 text-left">Detail</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="border-b border-gray-700"><td class="p-2 align-top font-mono">E0</td><td class="p-2 align-top font-mono">CAL RSTO</td><td class="p-2 align-top">1</td><td class="p-2 align-top">Clear the 7-segment readout.</td></tr>
+            <tr class="border-b border-gray-700"><td class="p-2 align-top font-mono">E1</td><td class="p-2 align-top font-mono">CAL SETR</td><td class="p-2 align-top">1</td><td class="p-2 align-top">Turn on 2-pin LED at index Y (0-6).</td></tr>
+            <tr class="border-b border-gray-700"><td class="p-2 align-top font-mono">E2</td><td class="p-2 align-top font-mono">CAL RSTR</td><td class="p-2 align-top">1</td><td class="p-2 align-top">Turn off 2-pin LED at index Y (0-6).</td></tr>
+            <tr class="border-b border-gray-700"><td class="p-2 align-top font-mono">E4</td><td class="p-2 align-top font-mono">CAL CMPL</td><td class="p-2 align-top">1</td><td class="p-2 align-top">Complement the A register.</td></tr>
+            <tr class="border-b border-gray-700"><td class="p-2 align-top font-mono">E7</td><td class="p-2 align-top font-mono">CAL ENDS</td><td class="p-2 align-top">1</td><td class="p-2 align-top">Play the End sound.</td></tr>
+            <tr class="border-b border-gray-700"><td class="p-2 align-top font-mono">E8</td><td class="p-2 align-top font-mono">CAL ERRS</td><td class="p-2 align-top">1</td><td class="p-2 align-top">Play the Error sound.</td></tr>
+            <tr class="border-b border-gray-700"><td class="p-2 align-top font-mono">E9</td><td class="p-2 align-top font-mono">CAL SHTS</td><td class="p-2 align-top">1</td><td class="p-2 align-top">Play a short sound.</td></tr>
+            <tr class="border-b border-gray-700"><td class="p-2 align-top font-mono">EA</td><td class="p-2 align-top font-mono">CAL LONS</td><td class="p-2 align-top">1</td><td class="p-2 align-top">Play a longer sound.</td></tr>
+            <tr class="border-b border-gray-700"><td class="p-2 align-top font-mono">EB</td><td class="p-2 align-top font-mono">CAL SUND</td><td class="p-2 align-top">1</td><td class="p-2 align-top">Play a note based on A register (1-E).</td></tr>
+            <tr class="border-b border-gray-700"><td class="p-2 align-top font-mono">EC</td><td class="p-2 align-top font-mono">CAL TIMR</td><td class="p-2 align-top">1</td><td class="p-2 align-top">Pause for (A+1) * 0.1 seconds.</td></tr>
+            <tr class="border-b border-gray-700"><td class="p-2 align-top font-mono">ED</td><td class="p-2 align-top font-mono">CAL DSPR</td><td class="p-2 align-top">1</td><td class="p-2 align-top">Set 2-pin LEDs from data memory (5F & 5E).</td></tr>
+            <tr class="border-b border-gray-700"><td class="p-2 align-top font-mono">EE</td><td class="p-2 align-top font-mono">CAL DEM-</td><td class="p-2 align-top">1</td><td class="p-2 align-top">M[Y] -= A, then Y--.</td></tr>
+            <tr class="border-b border-gray-700"><td class="p-2 align-top font-mono">EF</td><td class="p-2 align-top font-mono">CAL DEM+</td><td class="p-2 align-top">1</td><td class="p-2 align-top">M[Y] += A, then Y--. Handles carry to M[Y-1].</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+<script src="builtins.js"></script>
+<script src="main.js"></script>
+</body>
+</html>
