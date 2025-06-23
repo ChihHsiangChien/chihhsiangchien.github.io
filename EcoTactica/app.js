@@ -7,13 +7,15 @@
   // Game Control Variables
   const MAX_EVENTS_TO_SHOW_PER_TURN = -1; // 每回合最多顯示的事件數量
   const PM25_CRISIS_THRESHOLD = 80;      // 觸發「細懸浮微粒太高」旗標的 PM2.5 閾值
-  const MAX_STRATEGIES_TO_CHOOSE_PER_TURN = 7; // 每回合可選擇的策略卡數量
-  const STRATEGIES_PER_PAGE = 40; // 每頁顯示的策略卡數量
-  const MAX_TURNS = 30; // 遊戲最大回合數
+  const CLIMATE_CRISIS_THRESHOLD = 500;  // 觸發「氣候危機」旗標的氣候分數閾值
+  const MAX_STRATEGIES_TO_CHOOSE_PER_TURN = 7; // 每回合可選擇的政策卡數量
+  const STRATEGIES_PER_PAGE = 40; // 每頁顯示的政策卡數量
+  const MAX_TURNS = 20; // 遊戲最大回合數
 
   // Scoring Constants
   const MAX_METRIC_VALUE_PER_CATEGORY = 1000;
-  const NUM_CORE_METRICS = 5; // Biodiversity, Economy, Public Trust, Climate, Social
+  const PM25_MAX_LEVEL_FOR_SCORING = 200; // PM2.5 level at which its score becomes 0
+  const NUM_CORE_METRICS = 6; // Biodiversity, Economy, Public Trust, Climate, Social, PM2.5
   const MAX_POSSIBLE_METRIC_SUM = NUM_CORE_METRICS * MAX_METRIC_VALUE_PER_CATEGORY;
   const METRICS_SCORE_WEIGHT_PERCENT = 80; // 70% for metrics contribution to score
   const TURNS_SCORE_WEIGHT_PERCENT = 20;   // 30% for turns contribution to score
@@ -27,6 +29,10 @@
     "森林大火已控制", "森林生態開始恢復",
     "黑面琵鷺族群恢復", "黑面琵鷺保護區成立",    
 
+    // Agriculture and Energy Achievements
+    "傳統農業轉型計畫", "電網穩定計畫完成", "綠色能源政策", "全民節能已推動",
+
+
     // Pollution module achievements
     "全球合作減排",
     "市場導向環保",
@@ -34,13 +40,19 @@
     "餐飲業環保轉型", "減少塑膠垃圾",
 
     // Common elements achievements
-    "國際合作",
+    "國際合作", "外交關係改善", "社會和解計畫",
     "建立基礎科學研究",
     "民眾保育總體意識提升",
     "全國生態監測網絡建立",
     "關鍵棲地已劃設保護區",
     "遺傳多樣性保育計畫啟動",
     "生態廊道成功連結",
+
+    // Pollution Control Achievements (from pollution.json)
+    "河川整治完成", "土壤已改良", "地下水已淨化",
+
+    // Tourism Achievements (from tourism.json)
+    "永續觀光已實施"
     // 可以根據遊戲內容持續添加
   ];
 
@@ -53,7 +65,9 @@
     'data/modules/leopard_cat_crisis.json',
     'data/modules/forest_fire.json',
     'data/modules/golden_apple_snail_invasion.json',
-    'data/modules/green_sea_turtle_conservation.json',
+    'data/modules/agriculture_and_energy.json',
+    'data/modules/green_sea_turtle_conservation.json',    
+    'data/modules/tourism.json', 
     'data/modules/pollution.json'
      //'data/modules/test.json'    
 
@@ -64,6 +78,7 @@
   async function loadGameData() {
     let combinedEvents = [];
     let combinedStrategies = [];
+    let combinedRandomEvents = []; // NEW
 
     try {
       const loadedModules = await Promise.all(
@@ -80,10 +95,13 @@
         if (module.strategies && Array.isArray(module.strategies)) {
           combinedStrategies = combinedStrategies.concat(module.strategies);
         }
+        if (module.random_events && Array.isArray(module.random_events)) { // NEW
+          combinedRandomEvents = combinedRandomEvents.concat(module.random_events);
+        }
       });
 
       const markovChains = await fetch(markovChainFile).then(r => r.json());
-      return [combinedEvents, combinedStrategies, markovChains];
+      return [combinedEvents, combinedStrategies, markovChains, combinedRandomEvents]; // MODIFIED
     } catch (error) {
       console.error("Error loading game data:", error);
       // Handle error appropriately, e.g., show an error message to the user
@@ -92,7 +110,7 @@
     }
   }
 
-  const [eventsArr, strategiesArr, markovChains] = await loadGameData();
+  const [eventsArr, strategiesArr, markovChains, randomEventsArr] = await loadGameData(); // MODIFIED
 
   
 
@@ -138,7 +156,10 @@
   }
   function clamp(v) { return Math.max(0, Math.min(1000, v)); }
   function getFlag(name) { return !!gameState.flags[name]; }
-  function setFlag(name, val = true) { gameState.flags[name] = val; }
+  function setFlag(name) { // MODIFIED
+    // Store the turn number when the flag is set
+    gameState.flags[name] = { setAtTurn: gameState.turn }; 
+  }
   function clearFlag(name) { delete gameState.flags[name]; }
 
   function shuffle(arr) {
@@ -160,7 +181,8 @@
     { key: 'effect_economy', label: '經濟', color: 'text-blue-600' },
     { key: 'effect_public_trust', label: '信任', color: 'text-purple-600' },
     { key: 'effect_climate', label: '氣候', color: 'text-orange-600' },
-    { key: 'effect_social', label: '社會', color: 'text-pink-600' }
+    { key: 'effect_social', label: '社會', color: 'text-pink-600' },
+    { key: 'effect_pm25', label: 'PM2.5', color: 'text-gray-600' }
   ];
 
   // Map Markov chain internal names to Chinese display names
@@ -310,7 +332,7 @@
   // Render turn banner
   function renderBanner() {
     // 更新提示文字，告知玩家最多可選擇的卡片數量
-    DOMElements.banner.textContent = `回合 ${gameState.turn}：請選擇最多 ${MAX_STRATEGIES_TO_CHOOSE_PER_TURN} 張策略卡 (${gameState.selectedStrategies.length} 已選)`;
+    DOMElements.banner.textContent = `回合 ${gameState.turn}：請選擇最多 ${MAX_STRATEGIES_TO_CHOOSE_PER_TURN} 張政策卡 (${gameState.selectedStrategies.length} 已選)`;
   }
 
   // Render flag checkboxes (show Chinese labels)
@@ -380,7 +402,7 @@
     choices.forEach(card => {
       const btn = document.createElement('button');
       // color-code border based on net effect (sum of all metrics)
-      const net = (card.effect_biodiversity || 0) + (card.effect_economy || 0) + (card.effect_public_trust || 0) + (card.effect_climate || 0) + (card.effect_social || 0);
+      const net = (card.effect_biodiversity || 0) + (card.effect_economy || 0) + (card.effect_public_trust || 0) + (card.effect_climate || 0) + (card.effect_social || 0) - (card.effect_pm25 || 0);
       const borderColor = net > 0 ? 'border-green-500' : net < 0 ? 'border-red-500' : 'border-yellow-500';      
       // Use w-full to make the card take the full width of its grid cell, remove max-w-xs.
       let baseButtonClasses = `w-full bg-indigo-50 hover:shadow-lg active:shadow-md focus:outline-none rounded-lg border ${borderColor} transition-all p-4 flex flex-col`;
@@ -397,7 +419,7 @@
           effectsHTML += `<span class="${effect.color} mr-2 whitespace-nowrap">${card[effect.key] >= 0 ? '+' : ''}${card[effect.key]} ${effect.label}</span>`;
         }
       });
-
+      
       btn.innerHTML = `
         <div class="flex justify-between items-center mb-1">
           <h3 class="text-base font-semibold break-words">${card.id}</h3>
@@ -419,7 +441,7 @@
             gameState.selectedStrategies.push(card);
             btn.classList.add(...SELECTED_STRATEGY_CLASSES);
           } else {
-            alert(`每回合最多只能選擇 ${MAX_STRATEGIES_TO_CHOOSE_PER_TURN} 張策略卡。`);
+            alert(`每回合最多只能選擇 ${MAX_STRATEGIES_TO_CHOOSE_PER_TURN} 張政策卡。`);
             return;
           }
         }
@@ -689,7 +711,7 @@ function calculateStrategyEffectsPreview(currentGameState, selectedStrategies, t
       '公共信任度': { oldVal: currentGameState.publicTrust, delta: 0, newVal: currentGameState.publicTrust },
       '氣候穩定度': { oldVal: currentGameState.climate, delta: 0, newVal: currentGameState.climate },
       '社會公平': { oldVal: currentGameState.social, delta: 0, newVal: currentGameState.social }
-      // If PM2.5 should also be shown in summary changes, add it here
+      , 'PM2.5 等級': { oldVal: currentGameState.pm25_level, delta: 0, newVal: currentGameState.pm25_level }
     },
     flags: { set: [], cleared: [] },
     newlyAvailableStrategies: []
@@ -708,6 +730,7 @@ function calculateStrategyEffectsPreview(currentGameState, selectedStrategies, t
       if (evt.hasOwnProperty('effect_public_trust')) previewGameState.publicTrust = clamp(previewGameState.publicTrust + evt.effect_public_trust);
       if (evt.hasOwnProperty('effect_climate')) previewGameState.climate = clamp(previewGameState.climate + evt.effect_climate);
       if (evt.hasOwnProperty('effect_social')) previewGameState.social = clamp(previewGameState.social + evt.effect_social);
+      if (evt.hasOwnProperty('effect_pm25')) previewGameState.pm25_level = Math.max(0, previewGameState.pm25_level + evt.effect_pm25); // PM2.5 can't be negative
       // Event's set_flag/clear_flag already affected currentGameState.flags in renderEventCards.
       // previewGameState.flags was copied from currentGameState.flags, so it includes event flag effects.
     });
@@ -720,6 +743,7 @@ function calculateStrategyEffectsPreview(currentGameState, selectedStrategies, t
     previewGameState.publicTrust = clamp(previewGameState.publicTrust + (card.effect_public_trust || 0));
     previewGameState.climate = clamp(previewGameState.climate + (card.effect_climate || 0));
     previewGameState.social = clamp(previewGameState.social + (card.effect_social || 0));
+    previewGameState.pm25_level = Math.max(0, previewGameState.pm25_level + (card.effect_pm25 || 0));
 
     if (card.set_flag) {
       const flagsToSet = Array.isArray(card.set_flag) ? card.set_flag : [card.set_flag];
@@ -747,12 +771,14 @@ function calculateStrategyEffectsPreview(currentGameState, selectedStrategies, t
   previewTurnChanges.metrics['公共信任度'].newVal = previewGameState.publicTrust;
   previewTurnChanges.metrics['氣候穩定度'].newVal = previewGameState.climate;
   previewTurnChanges.metrics['社會公平'].newVal = previewGameState.social;
+  previewTurnChanges.metrics['PM2.5 等級'].newVal = previewGameState.pm25_level;
 
   previewTurnChanges.metrics['生物多樣性'].delta = previewGameState.biodiversity - currentGameState.biodiversity;
   previewTurnChanges.metrics['經濟可行性'].delta = previewGameState.economy - currentGameState.economy;
   previewTurnChanges.metrics['公共信任度'].delta = previewGameState.publicTrust - currentGameState.publicTrust;
   previewTurnChanges.metrics['氣候穩定度'].delta = previewGameState.climate - currentGameState.climate;
   previewTurnChanges.metrics['社會公平'].delta = previewGameState.social - currentGameState.social;
+  previewTurnChanges.metrics['PM2.5 等級'].delta = previewGameState.pm25_level - currentGameState.pm25_level;
 
   // d. Calculate newly unlocked strategies (based on previewGameState.flags)
   // A temporary getFlag function is needed to query previewGameState.flags
@@ -779,7 +805,7 @@ function commitTurnChanges(turnChangesPreview, selectedStrategiesForMarkov) {
   gameState.publicTrust = turnChangesPreview.metrics['公共信任度'].newVal;
   gameState.climate = turnChangesPreview.metrics['氣候穩定度'].newVal;
   gameState.social = turnChangesPreview.metrics['社會公平'].newVal;
-  // If PM2.5 is also affected, update gameState.pm25_level here
+  gameState.pm25_level = turnChangesPreview.metrics['PM2.5 等級'].newVal;
 
   // b. Apply flag changes
   turnChangesPreview.flags.set.forEach(flagName => setFlag(flagName));
@@ -912,7 +938,10 @@ function commitTurnChanges(turnChangesPreview, selectedStrategiesForMarkov) {
 
   // Handle game over
   function handleGameOver(reason) {
-    let currentMetricSum = gameState.biodiversity + gameState.economy + gameState.publicTrust + gameState.climate + gameState.social;
+    // Calculate PM2.5 score (inverted: lower PM2.5 level is better)
+    const pm25Score = MAX_METRIC_VALUE_PER_CATEGORY * (1 - (Math.min(gameState.pm25_level, PM25_MAX_LEVEL_FOR_SCORING) / PM25_MAX_LEVEL_FOR_SCORING));
+
+    let currentMetricSum = gameState.biodiversity + gameState.economy + gameState.publicTrust + gameState.climate + gameState.social + pm25Score;
     currentMetricSum = Math.max(0, currentMetricSum); // Ensure sum isn't negative
 
     let metricScoreContribution;
@@ -964,7 +993,7 @@ function commitTurnChanges(turnChangesPreview, selectedStrategiesForMarkov) {
     // Render Radar Chart for metrics
     if (metricsChartCanvas && typeof Chart !== 'undefined') {
       const chartData = {
-        labels: ['生物多樣性', '經濟可行性', '公共信任度', '氣候穩定度', '社會公平'],
+        labels: ['生物多樣性', '經濟可行性', '公共信任度', '氣候穩定度', '社會公平', '空氣品質'],
         datasets: [{
           label: '最終指標狀態',
           data: [
@@ -972,7 +1001,8 @@ function commitTurnChanges(turnChangesPreview, selectedStrategiesForMarkov) {
             gameState.economy,
             gameState.publicTrust,
             gameState.climate,
-            gameState.social
+            gameState.social,
+            pm25Score // Use the calculated score for the chart
           ],
           fill: true,
           backgroundColor: 'rgba(54, 162, 235, 0.2)', // Blueish
@@ -1148,13 +1178,66 @@ function commitTurnChanges(turnChangesPreview, selectedStrategiesForMarkov) {
   function processPreChoiceEvents(callbackAfterEventsHandled) {
     // Check pollution flag based on current gameState
     // PM25_CRISIS_THRESHOLD is now a global constant
-    if (gameState.pm25_level > PM25_CRISIS_THRESHOLD) {      setFlag('細懸浮微粒太高');
+    if (gameState.pm25_level > PM25_CRISIS_THRESHOLD) {
+      setFlag('細懸浮微粒太高');
       renderFlags(); // Update flag display immediately
     } else {
       if (getFlag('細懸浮微粒太高')) { // Only clear and re-render if it was set
         clearFlag('細懸浮微粒太高');
         renderFlags(); // Update flag display immediately
       }
+    }
+
+    // 根據氣候分數檢查氣候危機旗標
+    if (gameState.climate < CLIMATE_CRISIS_THRESHOLD) {
+      if (!getFlag('氣候危機')) { // 僅在旗標未設定時才設定並重繪
+        setFlag('氣候危機');
+        renderFlags();
+      }
+    } else {
+      if (getFlag('氣候危機')) { // 僅在旗標已設定時才清除並重繪
+        clearFlag('氣候危機');
+        renderFlags();
+      }
+    }
+
+    // Process random events for this turn
+    const randomEventsToApply = [];
+    if (randomEventsArr && randomEventsArr.length > 0) {
+      randomEventsArr.forEach(evt => {
+        if (evt.trigger_flag && getFlag(evt.trigger_flag)) {
+          // Check if the event is time-limited by the number of turns since its trigger flag was set
+          if (evt.active_for_turns) {
+            const flagData = gameState.flags[evt.trigger_flag];
+            // Ensure the flag data is in the new format { setAtTurn: ... }
+            if (!flagData || typeof flagData.setAtTurn !== 'number') {
+              console.warn(`Flag '${evt.trigger_flag}' for random event '${evt.id}' is not in the correct format. Skipping time check.`);
+            } else {
+              const turnsSinceSet = gameState.turn - flagData.setAtTurn;
+              if (turnsSinceSet >= evt.active_for_turns) {
+                return; // Skip because the event's active period has expired
+              }
+            }
+          }
+
+          // Check probability of the event occurring this turn
+          const triggerProbability = evt.trigger_probability || 1; // Default to 100% chance if not specified
+          if (Math.random() < (1 / triggerProbability)) {
+            randomEventsToApply.push(evt);
+          }
+        }
+      });
+    }
+
+    // Apply effects of triggered random events. These happen in the background.
+    if (randomEventsToApply.length > 0) {
+      randomEventsToApply.forEach(evt => {
+        if (evt.hasOwnProperty('effect_public_trust')) gameState.publicTrust = clamp(gameState.publicTrust + evt.effect_public_trust);
+        if (evt.hasOwnProperty('effect_social')) gameState.social = clamp(gameState.social + evt.effect_social);
+        // Add other effects as needed
+        console.log(`隨機事件發生: ${evt.title}`);
+      });
+      renderDashboard(); // Re-render dashboard to show metric changes from random events
     }
     const triggeredEventsThisTurn = [];
     eventsArr.forEach(evt => {
@@ -1253,6 +1336,11 @@ function commitTurnChanges(turnChangesPreview, selectedStrategiesForMarkov) {
           effectsHTML += `<span class="${effect.color} mr-2 whitespace-nowrap">${evt[effect.key] >= 0 ? '+' : ''}${evt[effect.key]} ${effect.label}</span>`;
         }
       });
+      // Manually check for effect_pm25 since it's new
+      if (evt['effect_pm25'] !== undefined && evt['effect_pm25'] !== 0) {
+          const pm25_effect = EFFECT_MAPPING.find(e => e.key === 'effect_pm25');
+          effectsHTML += `<span class="${pm25_effect.color} mr-2 whitespace-nowrap">${evt['effect_pm25'] >= 0 ? '+' : ''}${evt['effect_pm25']} ${pm25_effect.label}</span>`;
+      }
 
       cardEl.innerHTML = `
         <div class="flex">
