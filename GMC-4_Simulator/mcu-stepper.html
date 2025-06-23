@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>4-bit MCU Opcode Simulator</title>
+  <script src="https://unpkg.com/konva@9.3.0/konva.min.js"></script>
+  <style>
+    body { font-family: sans-serif; margin: 0; }
+    #controls { padding: 10px; }
+    .mem-row { display: flex; align-items: center; margin-bottom: 4px; }
+    .mem-addr { width: 40px; font-weight: bold; }
+    input.mem-cell {
+      width: 30px; text-align: center; margin-right: 4px;
+      color: #aaa;
+    }
+    .mem-cell.active {
+      color: #000;
+    }
+    .mem-bin {
+      font-family: monospace;
+      color: #aaa;
+      margin-left: 5px;
+    }
+    .mem-bin.active {
+      color: #000;
+      font-weight: bold;
+    }
+    .pc-highlight {
+      background-color: #ffff99;
+    }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <span>Memory:</span>
+    <div id="memory"></div>
+    <br />
+    <button onclick="step()">Step</button>
+    <button onclick="resetPC()">Reset</button>
+    <button onclick="hardReset()">Hard Reset</button>
+    <span>PC: <span id="pc">00</span></span>
+    <span style="margin-left: 10px;">A: <span id="areg">0</span></span>
+    <span style="margin-left: 10px;">B: <span id="breg">0</span></span>
+    <span style="margin-left: 10px;">Y: <span id="yreg">0</span></span>
+    <span style="margin-left: 10px;">Flag: <span id="flag">0</span></span>
+  </div>
+  <div id="circuit"></div>
+
+  <script>
+    const memory = new Array(64).fill(15); // default 0b1111
+    let PC = 0;
+    let A = 0, B = 0, Y = 0, Flag = 0;
+
+    const memDiv = document.getElementById("memory");
+    const memInputs = [];
+    const memBinSpans = [];
+    for (let i = 0; i < 16; i++) {
+      const row = document.createElement("div");
+      row.className = "mem-row";
+      const label = document.createElement("span");
+      label.className = "mem-addr";
+      label.innerText = i.toString(16).padStart(2, '0').toUpperCase();
+      const input = document.createElement("input");
+      input.type = "text";
+      input.maxLength = 1;
+      input.className = "mem-cell";
+      input.value = "F";
+      input.dataset.index = i;
+      const bin = document.createElement("span");
+      bin.className = "mem-bin";
+      bin.innerText = "1111";
+      input.oninput = () => {
+        const val = parseInt(input.value, 16);
+        memory[i] = isNaN(val) ? 15 : (val & 0xF);
+        input.classList.add("active");
+        bin.innerText = memory[i].toString(2).padStart(4, '0');
+        bin.classList.add("active");
+        updateUI();
+      };
+      row.appendChild(label);
+      row.appendChild(input);
+      row.appendChild(bin);
+      memDiv.appendChild(row);
+      memInputs.push(input);
+      memBinSpans.push(bin);
+    }
+
+    const stage = new Konva.Stage({ container: 'circuit', width: 500, height: 200 });
+    const layer = new Konva.Layer();
+    stage.add(layer);
+    const operandText = new Konva.Text({ x: 20, y: 50, text: 'Operand: --', fontSize: 16 });
+    const controlText = new Konva.Text({ x: 20, y: 80, text: 'Control: --', fontSize: 16 });
+    const aRegBox = new Konva.Rect({ x: 200, y: 50, width: 80, height: 40, stroke: 'black', fill: '#fff' });
+    const aRegText = new Konva.Text({ x: 210, y: 60, text: 'A = 0', fontSize: 16 });
+    layer.add(operandText, controlText, aRegBox, aRegText);
+    layer.draw();
+
+    function updateUI() {
+      document.getElementById("pc").innerText = PC.toString(16).padStart(2, '0').toUpperCase();
+      document.getElementById("areg").innerText = A;
+      document.getElementById("breg").innerText = B;
+      document.getElementById("yreg").innerText = Y;
+      document.getElementById("flag").innerText = Flag;
+      aRegText.text(`A = ${A}`);
+      aRegBox.fill('#fff');
+      operandText.text(`Operand: --`);
+      controlText.text('Control: --');
+      for (let i = 0; i < memInputs.length; i++) {
+        const val = memory[i];
+        memInputs[i].classList.remove("pc-highlight");
+        memBinSpans[i].innerText = val.toString(2).padStart(4, '0');
+        memInputs[i].classList.toggle("active", val !== 15);
+        memBinSpans[i].classList.toggle("active", val !== 15);
+        //memBinSpans[i].classList.remove("active");
+        memInputs[i].value = val.toString(16).toUpperCase();
+        if (i === PC) memInputs[i].classList.add("pc-highlight");
+      }
+      layer.draw();
+    }
+
+    function step() {
+      const opcode = memory[PC];
+      const operand = memory[(PC + 1) & 0x3F];
+      const op2 = memory[(PC + 2) & 0x3F];
+      switch (opcode) {
+        case 0x0: A = 0; Flag = 1; controlText.text('KA'); break;
+        case 0x1: Flag = 1; controlText.text('AO');operandText.text(`Output: ${A}`);
+break;
+        case 0x2: [A, B] = [B, A]; Flag = 1; controlText.text('CH'); break;
+        case 0x3: [A, Y] = [Y, A]; Flag = 1; controlText.text('CY'); break;
+        case 0x4: memory[0x50 + Y] = A; Flag = 1; controlText.text('AM'); break;
+        case 0x5: A = memory[0x50 + Y]; Flag = 1; controlText.text('MA'); break;
+        case 0x6: const sum = memory[0x50 + Y] + A; A = sum & 0xF; Flag = sum > 0xF ? 1 : 0; controlText.text('M+'); break;
+        case 0x7: const diff = memory[0x50 + Y] - A; A = diff & 0xF; Flag = diff < 0 ? 1 : 0; controlText.text('M-'); break;
+        case 0x8: A = operand; Flag = 1; PC++; controlText.text('TIA'); break;
+        case 0x9: const add = A + operand; A = add & 0xF; Flag = add > 0xF ? 1 : 0; PC++; controlText.text('AIA'); break;
+        case 0xA: Y = operand; Flag = 1; PC++; controlText.text('TIY'); break;
+        case 0xB: const yadd = Y + operand; Y = yadd & 0xF; Flag = yadd > 0xF ? 1 : 0; PC++; controlText.text('AIY'); break;
+        case 0xC: Flag = (A !== operand) ? 1 : 0; PC++; controlText.text('CIA'); break;
+        case 0xD: Flag = (Y !== operand) ? 1 : 0; PC++; controlText.text('CIY'); break;
+        case 0xF: if (Flag === 1) PC = ((operand << 4) | op2) & 0x3F; else PC += 3; controlText.text('JUMP'); return updateUI();
+        default: controlText.text(`Unknown opcode: ${opcode}`);
+      }
+      PC = (PC + 1) & 0x3F;
+      updateUI();
+    }
+
+    function resetPC() {
+      PC = 0;
+      updateUI();
+    }
+
+    function hardReset() {
+      for (let i = 0; i < memory.length; i++) memory[i] = 15;
+      A = B = Y = PC = Flag = 0;
+      updateUI();
+    }
+
+    updateUI();
+  </script>
+</body>
+</html>

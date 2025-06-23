@@ -9,6 +9,7 @@
   const regAEl = document.getElementById('regA');
   const regBEl = document.getElementById('regB');
   const regYEl = document.getElementById('regY');
+  const regZEl = document.getElementById('regZ'); // Get the new Z register element
   const regFlagEl = document.getElementById('regFlag');
   const regPCEl = document.getElementById('regPC');
   const programViewRaw = document.getElementById('programViewRaw');
@@ -91,6 +92,11 @@
   let regA = 0;
   let regB = 0;
   let regY = 0;
+  let regZ = 0; // Add state for Z register
+  let regA_aux = 0; // Auxiliary A register
+  let regB_aux = 0; // Auxiliary B register
+  let regY_aux = 0; // Auxiliary Y register
+  let regZ_aux = 0; // Auxiliary Z register
   let flag = 0;
 
   let isExecuting = false; // In execution mode (run or step)
@@ -167,6 +173,7 @@
     regAEl.textContent = regA;
     regBEl.textContent = regB;
     regYEl.textContent = regY;
+    regZEl.textContent = regZ;
     regFlagEl.textContent = flag;
     regPCEl.textContent = addrPtr.toString(16).padStart(2, '0').toUpperCase();
   }
@@ -440,6 +447,11 @@
     regA = 0;
     regB = 0;
     regY = 0;
+    regZ = 0;
+    regA_aux = 0;
+    regB_aux = 0;
+    regY_aux = 0;
+    regZ_aux = 0;
     flag = 0;
     // Soft RESET: Only resets pointers and registers, memory content is preserved.
     // writtenAddresses is intentionally not cleared on soft reset.    
@@ -511,7 +523,7 @@
     addrPtr = 0x00;
     tempInput = null;
     asetBuffer = [];
-    regA = regB = regY = flag = 0;
+    regA = 0; regB = 0; regY = 0; regZ = 0; regA_aux = 0; regB_aux = 0; regY_aux = 0; regZ_aux = 0; flag = 0;
     memory.fill(NIBBLE_MASK);
     writtenAddresses.clear();
 
@@ -557,6 +569,17 @@
           break;
         case 0x1: // AO: Ar->Op (Display register A)
           updateDisplay(regA);
+          flag = 1;
+          break;
+        case 0x2: // CH: Ar<->Br, Yr<->Zr
+          // Exchange A and B registers.
+          [regA, regB] = [regB, regA]; // Exchange A <=> B
+          [regY, regZ] = [regZ, regY]; // Exchange Y <=> Z
+          flag = 1;
+          break;
+        case 0x3: // CY: Ar<->Yr
+          // Exchange A and Y registers.
+          [regA, regY] = [regY, regA];
           flag = 1;
           break;
         case 0x4: // AM: Ar->M (Write to data memory)
@@ -634,6 +657,17 @@
               case 0x0: // CAL RSTO: Reset 7-seg display
                 updateDisplay(0);
                 break;
+              case 0xE5: // CAL CHNG: Swap A/B/Y/Z with A'/B'/Y'/Z' (Auxiliary registers)
+                  [regA, regA_aux] = [regA_aux, regA];
+                  [regB, regB_aux] = [regB_aux, regB];
+                  [regY, regY_aux] = [regY_aux, regY];
+                  [regZ, regZ_aux] = [regZ_aux, regZ];
+                  break;
+              case 0xE6: // CAL SIFT: Shift A register right 1 bit. Flag=1 if LSB was 0.
+                  const lsb = regA & 0x1; // Get the least significant bit
+                  regA = regA >> 1;       // Right shift A
+                  flag = (lsb === 0) ? 1 : 0; // Set flag based on original LSB
+                  break;
               case 0x1: // CAL SETR: Turn on 2-pin LED at index Y
                 clear2PinLEDs();
                 set2PinLED(regY, true);
@@ -705,6 +739,10 @@
               default:
                 // Other subcodes not implemented
                 break;
+            }
+            // All CAL instructions set flag to 1, unless specifically overridden by the subcode (e.g., E6)
+            if (subCode !== 0xE6) {
+                flag = 1;
             }
           }
           break;
