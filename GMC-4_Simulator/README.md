@@ -51,21 +51,23 @@ GMC-4 被稱為 4-bit 微電腦，主要原因在於其 CPU 內部處理資料�
 
 ### 指令集支援狀況
 
-| 指令              | 支援狀態 |
-|------------------|:--------:|
-| KA, AO          | 已實作   |
-| CH, CY          | 尚未實作 |
-| AM, MA, M+, M-  | 已實作   |
-| TIA, AIA, TIY, AIY | 已實作   |
-| CIA, CIY         | 已實作   |
-| JUMP             | 已實作   |
-| 延伸碼 (E0–EF)    | 部分實作 |
+| 指令              |
+|------------------|
+| KA, AO           |
+| CH, CY           |
+| AM, MA, M+, M-   |
+| TIA, AIA, TIY, AIY |
+| CIA, CIY         |
+| JUMP             |
+| 延伸碼 (E0–EF)    |
 
 延伸碼 (CAL 系列) 實作支援：
 - E0: CAL RSTO (清除 7 段顯示)
 - E1: CAL SETR (點亮 2-pin LED)
 - E2: CAL RSTR (熄滅 2-pin LED)
 - E4: CAL CMPL (A 暫存器補數)
+- E5: CAL CHNG (交換 A/B/Y/Z 暫存器與輔助暫存器 A'/B'/Y'/Z')
+- E6: CAL SIFT (A 暫存器右移 1 位元)
 - E7: CAL ENDS (播放結束聲)
 - E8: CAL ERRS (播放錯誤聲)
 - E9: CAL SHTS (播放短 pi)
@@ -76,11 +78,11 @@ GMC-4 被稱為 4-bit 微電腦，主要原因在於其 CPU 內部處理資料�
 - EE: CAL DEM- (記憶體減法)
 - EF: CAL DEM+ (記憶體加法)
 
-尚未實作：E3 (保留)、E5 (CAL CHNG)、E6 (CAL SIFT)。
+尚未實作：E3 (保留)。
 
 ## 已知限制
 
-- 部分指令 (CH、CY、CAL CHNG/CAL SIFT) 尚未完整實作，僅提供基本示範流程。
+- 部分指令 (E3 (保留)) 尚未完整實作。
 - 模擬器將記憶體初始化為全零 (硬體實際為 0xF)、鍵盤讀取 (KA 指令) 簡化為跳過等候。
 - Soft RESET 僅重置指針與暫存器，不影響記憶體內容（對應實體 GMC-4 軟重置行為）。
 - 已支援預載程式功能，請見下方「載入內建程式」範例，並可於 `builtins.js` 中配置程式機器碼。
