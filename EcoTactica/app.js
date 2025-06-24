@@ -944,20 +944,27 @@ function commitTurnChanges(turnChangesPreview, selectedStrategiesForMarkov) {
     let currentMetricSum = gameState.biodiversity + gameState.economy + gameState.publicTrust + gameState.climate + gameState.social + pm25Score;
     currentMetricSum = Math.max(0, currentMetricSum); // Ensure sum isn't negative
 
-    let metricScoreContribution;
-    let turnScoreContribution;
+    let metricScoreContribution = 0;
+    let turnScoreContribution = 0;
 
     if (USE_TURN_BASED_SYSTEM) {
       // 指標分數貢獻 = (當前指標總和 / 可能的最高指標總和) * (總分上限 * 指標權重百分比)
       metricScoreContribution = (currentMetricSum / MAX_POSSIBLE_METRIC_SUM) * (MAX_TOTAL_SCORE * (METRICS_SCORE_WEIGHT_PERCENT / 100));
 
-      let completedTurnsForScore = gameState.turn - 1; // Turns completed before game over
-      if (reason === `達到最大回合數 (${MAX_TURNS} 回合)。` || gameState.turn > MAX_TURNS) {
-        completedTurnsForScore = MAX_TURNS;
+      // 計算回合分數貢獻：回合數越少，分數越高
+      let turnsTakenForScoring;
+      if (reason === `達到最大回合數 (${MAX_TURNS} 回合)。` || gameState.turn > MAX_TURNS) { // 遊戲因達到最大回合數而結束
+        turnsTakenForScoring = MAX_TURNS;
+      } else { // 遊戲因其他條件（如解決所有事件或指標耗盡）而提前結束
+        turnsTakenForScoring = gameState.turn;
       }
-      completedTurnsForScore = Math.max(0, completedTurnsForScore);
-      // 回合分數貢獻 = (完成回合數 / 最大回合數) * (總分上限 * 回合權重百分比)
-      turnScoreContribution = MAX_TURNS > 0 ? (completedTurnsForScore / MAX_TURNS) * (MAX_TOTAL_SCORE * (TURNS_SCORE_WEIGHT_PERCENT / 100)) : 0;
+      turnsTakenForScoring = Math.max(1, turnsTakenForScoring); // 確保至少為 1 回合，避免除以零或負數
+
+      // 回合分數貢獻 = (最大回合數 - 已進行回合數 + 1) / 最大回合數 * (總分上限 * 回合權重百分比)
+      // 這樣設計使得回合數越少，此部分分數越高。
+      turnScoreContribution = MAX_TURNS > 0 ? ((MAX_TURNS - turnsTakenForScoring + 1) / MAX_TURNS) * (MAX_TOTAL_SCORE * (TURNS_SCORE_WEIGHT_PERCENT / 100)) : 0;
+       
+      
     } else {
       // 如果未使用回合制，分數主要基於指標，回合數影響降低或移除
       metricScoreContribution = (currentMetricSum / MAX_POSSIBLE_METRIC_SUM) * MAX_TOTAL_SCORE; // 指標佔所有分數
