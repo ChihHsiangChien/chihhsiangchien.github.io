@@ -6,9 +6,9 @@
 
   // Game Control Variables
   const MAX_EVENTS_TO_SHOW_PER_TURN = -1; // 每回合最多顯示的事件數量
-  const PM25_CRISIS_THRESHOLD = 80;      // 觸發「細懸浮微粒太高」旗標的 PM2.5 閾值
-  const CLIMATE_CRISIS_THRESHOLD = 500;  // 觸發「氣候危機」旗標的氣候分數閾值
-  const MAX_STRATEGIES_TO_CHOOSE_PER_TURN = 7; // 每回合可選擇的政策卡數量
+  const PM25_CRISIS_THRESHOLD = 70;      // 觸發「細懸浮微粒太高」旗標的 PM2.5 閾值
+  const CLIMATE_CRISIS_THRESHOLD = 550;  // 觸發「氣候危機」旗標的氣候分數閾值
+  const MAX_STRATEGIES_TO_CHOOSE_PER_TURN = 3; // 每回合可選擇的政策卡數量
   const STRATEGIES_PER_PAGE = 40; // 每頁顯示的政策卡數量
   const MAX_TURNS = 20; // 遊戲最大回合數
 
@@ -17,8 +17,8 @@
   const PM25_MAX_LEVEL_FOR_SCORING = 200; // PM2.5 level at which its score becomes 0
   const NUM_CORE_METRICS = 6; // Biodiversity, Economy, Public Trust, Climate, Social, PM2.5
   const MAX_POSSIBLE_METRIC_SUM = NUM_CORE_METRICS * MAX_METRIC_VALUE_PER_CATEGORY;
-  const METRICS_SCORE_WEIGHT_PERCENT = 80; // 70% for metrics contribution to score
-  const TURNS_SCORE_WEIGHT_PERCENT = 20;   // 30% for turns contribution to score
+  const METRICS_SCORE_WEIGHT_PERCENT = 70; // 70% for metrics contribution to score
+  const TURNS_SCORE_WEIGHT_PERCENT = 30;   // 30% for turns contribution to score
   const MAX_TOTAL_SCORE = 1000;
 
   // 預先定義一些代表正面成就的旗標，用於成績單顯示
@@ -124,8 +124,7 @@
     publicTrust: 600,
     climate: 600,
     social: 600,
-    pm25_level: 60,
-    // pm25_threshold: 65, // This was used for a flag, can be kept if still needed for other logic
+    pm25_level: 60,    
     flags: {}, // Flags will be populated by Markov chain init and game events
     turn: 1,
     activeEventObjects: [], // To store currently displayed event objects
@@ -363,7 +362,7 @@
     if (gameState.selectedStrategies.length > 0) {
       const title = document.createElement('h4');
       title.className = 'text-sm font-semibold mb-1 text-gray-700';
-      title.textContent = '已選策略：';
+      title.textContent = '已選政策：';
       DOMElements.selectedStrategiesDisplay.appendChild(title);
       gameState.selectedStrategies.forEach(card => {
         const idEl = document.createElement('p');
@@ -539,7 +538,7 @@
     if (!confirmButton) {
       confirmButton = document.createElement('button');
       confirmButton.id = 'confirm-strategies-btn';
-      confirmButton.textContent = '確認策略';
+      confirmButton.textContent = '確認政策';
       confirmButton.className = 'mt-2 mb-2 ml-4 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded shadow focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed';
       confirmButton.disabled = true; // Initially disabled
       // Insert confirm button after pagination controls if they exist, or at the end
@@ -591,7 +590,7 @@
     // 清空舊內容並重設標題
     metricsChangesDiv.innerHTML = '<h3 class="text-lg font-semibold text-gray-700 mb-1">指標變化：</h3>'; // Reset
     flagsChangedDiv.innerHTML = '<h3 class="text-lg font-semibold text-gray-700 mb-1">狀態變化：</h3>'; // Reset
-    newStrategiesDiv.innerHTML = '<h3 class="text-lg font-semibold text-gray-700 mb-1">新解鎖的策略：</h3>'; // Reset
+    newStrategiesDiv.innerHTML = '<h3 class="text-lg font-semibold text-gray-700 mb-1">新解鎖的政策：</h3>'; // Reset
 
     let hasMetricChanges = false;
     for (const metric in changesPreview.metrics) {
@@ -632,7 +631,7 @@
       flagsChangedDiv.appendChild(p);
     }
 
-    // 顯示新解鎖的策略
+    // 顯示新解鎖的政策
     if (changesPreview.newlyAvailableStrategies && changesPreview.newlyAvailableStrategies.length > 0) {
       changesPreview.newlyAvailableStrategies.forEach(strategy => {
         const p = document.createElement('p');
@@ -643,7 +642,7 @@
     } else {
       const p = document.createElement('p');
       p.className = 'text-sm text-gray-500';
-      p.textContent = '本回合無新策略解鎖。';
+      p.textContent = '本回合無新政策解鎖。';
       newStrategiesDiv.appendChild(p);
     }
 
@@ -671,7 +670,7 @@
 
     const cancelSummaryBtn = document.createElement('button');
     cancelSummaryBtn.id = 'cancel-strategy-preview-btn';
-    cancelSummaryBtn.textContent = '返回修改策略';
+    cancelSummaryBtn.textContent = '返回修改政策';
     cancelSummaryBtn.className = 'px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded shadow focus:outline-none';
     cancelSummaryBtn.onclick = () => {
       summaryPanel.classList.add('hidden');
@@ -882,7 +881,7 @@ function commitTurnChanges(turnChangesPreview, selectedStrategiesForMarkov) {
   // Apply effects of all selected strategies and proceed
   // Renamed to reflect new purpose: initiate preview, then optionally apply.
   function initiateStrategyApplicationAndSummary(triggeredEventsFromTurn) { 
-    // 記錄本回合開始時可用的策略
+    // 記錄本回合開始時可用的政策
     const strategiesAvailableAtTurnStart = getAvailableStrategies().map(s => s.id);
 
     // --- Collect changes for summary ---
