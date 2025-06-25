@@ -101,7 +101,7 @@ window.gameLevels = [
         maxAdvancedMissiles: 2,
         missileRadius: 1,
         advancedMissileRadius: 3.5, // 增加半徑，讓高級飛彈策略更可行
-        maxInequalitiesPerShot: 2,
+        maxInequalitiesPerShot: 4,
         availableTerms: ["x", "y", "abs(x)", "abs(y)"],
         allowedOperators: [">", "<", "≥", "≤", "="],
         targetBuildings: [
@@ -118,7 +118,7 @@ window.gameLevels = [
         maxAdvancedMissiles: 1,
         missileRadius: 0.8,
         advancedMissileRadius: 2,
-        maxInequalitiesPerShot: 2,
+        maxInequalitiesPerShot: 4,
         availableTerms: ["x", "y", "y-2x", "2x-y"],
         allowedOperators: [">", "<"],
         targetBuildings: [
@@ -135,7 +135,7 @@ window.gameLevels = [
         maxAdvancedMissiles: 2,
         missileRadius: 1,
         advancedMissileRadius: 2.5, // 縮小半徑，避免一發通關，增加挑戰
-        maxInequalitiesPerShot: 1,
+        maxInequalitiesPerShot: 4,
         availableTerms: ["x", "y", "abs(x)+abs(y)"],
         allowedOperators: ["<", "≤"],
         targetBuildings: [
@@ -201,7 +201,7 @@ window.gameLevels = [
         maxAdvancedMissiles: 2,
         missileRadius: 1,
         advancedMissileRadius: 2.5,
-        maxInequalitiesPerShot: 2,
+        maxInequalitiesPerShot: 4,
         availableTerms: ["x", "y", "y-x^2", "x^2-y"],
         allowedOperators: [">", "<", "="],
         targetBuildings: [
