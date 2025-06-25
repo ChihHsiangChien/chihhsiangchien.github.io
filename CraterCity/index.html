@@ -3,9 +3,81 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>天坑之城 - CraterCity</title>
-    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <title>飛彈</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.11.0/math.min.js"></script>
+    <script>
+        // Try multiple CDNs for Three.js
+        function loadThreeJS() {
+            const cdnUrls = [
+                'https://unpkg.com/three@0.84.0/build/three.min.js',            
+                'https://cdn.jsdelivr.net/npm/three@0.84.0/build/three.min.js',                
+                'https://cdnjs.cloudflare.com/ajax/libs/three.js/r84/three.min.js'
+            ];
+            
+            let currentIndex = 0;
+            
+            function tryLoadCDN(index) {
+                if (index >= cdnUrls.length) {
+                    console.error('所有Three.js CDN都載入失敗');
+                    return;
+                }
+                
+                console.log(`嘗試載入Three.js CDN ${index + 1}:`, cdnUrls[index]);
+                const script = document.createElement('script');
+                script.src = cdnUrls[index];
+                
+                script.onload = function() {
+                    console.log('Three.js載入成功!');
+                    // 載入OrbitControls
+                    loadOrbitControls();
+                };
+                
+                script.onerror = function() {
+                    console.log(`CDN ${index + 1} 載入失敗，嘗試下一個...`);
+                    tryLoadCDN(index + 1);
+                };
+                
+                document.head.appendChild(script);
+            }
+            
+            tryLoadCDN(0);
+        }
+        
+        // Load OrbitControls
+        function loadOrbitControls() {
+            const controlsUrls = [
+                'https://unpkg.com/three@0.84.0/examples/js/controls/OrbitControls.js',
+                'https://cdn.jsdelivr.net/npm/three@0.84.0/examples/js/controls/OrbitControls.js'
+            ];
+            
+            function tryLoadControls(index) {
+                if (index >= controlsUrls.length) {
+                    console.warn('OrbitControls載入失敗，將使用基本控制');
+                    return;
+                }
+                
+                const script = document.createElement('script');
+                script.src = controlsUrls[index];
+                
+                script.onload = function() {
+                    console.log('OrbitControls載入成功!');
+                };
+                
+                script.onerror = function() {
+                    console.log(`OrbitControls CDN ${index + 1} 載入失敗`);
+                    tryLoadControls(index + 1);
+                };
+                
+                document.head.appendChild(script);
+            }
+            
+            tryLoadControls(0);
+        }
+        
+        // Start loading Three.js immediately
+        loadThreeJS();
+    </script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -15,15 +87,16 @@
                 <h1>天坑之城 CraterCity</h1>
                 <div class="level-info">
                     <span>關卡: {{ currentLevel.levelId }}</span>
-                    <span>填土次數: {{ fillCount }}/{{ currentLevel.maxFills }}</span>
-                    <span>得分: {{ score }}</span>
+                    <span>飛彈: {{ missilesUsed }}/{{ currentLevel.maxMissiles }}</span>
+                    <span>高級飛彈: {{ advancedMissilesUsed }}/{{ currentLevel.maxAdvancedMissiles }}</span>
+                    <span>摧毀建築: {{ destroyedBuildings }}/{{ totalBuildings }}</span>
                 </div>
             </div>
             
             <div class="game-main">
                 <!-- 左側控制面板 -->
                 <div class="control-panel">
-                    <h3>建立不等式</h3>
+                    <h3>飛彈瞄準系統</h3>
                     
                     <div class="inequality-builder">
                         <div class="current-inequalities">
@@ -31,25 +104,38 @@
                                 <span>{{ inequality.display }}</span>
                                 <button @click="removeInequality(index)" class="remove-btn">×</button>
                             </div>
+                            <div v-if="currentInequalities.length === 0" class="empty-state">
+                                請由此處新增不等式
+                            </div>                            
                         </div>
                         
                         <div class="inequality-input">
-                            <select v-model="selectedTerm" class="term-select">
-                                <option value="">選擇項目</option>
-                                <option v-for="term in currentLevel.availableTerms" :key="term" :value="term">
-                                    {{ term }}
-                                </option>
-                            </select>
-                            
-                            <select v-model="selectedOperator" class="operator-select">
-                                <option value="">選擇運算子</option>
-                                <option v-for="op in currentLevel.allowedOperators" :key="op" :value="op">
-                                    {{ op }}
-                                </option>
-                            </select>
-                            
-                            <input v-model="constantValue" type="number" placeholder="常數" class="constant-input">
-                            
+                            <div class="input-group">
+                                <label>項目</label>
+                                <div class="button-group">
+                                    <button v-for="term in currentLevel.availableTerms" :key="term"
+                                            @click="selectTerm(term)"
+                                            :class="{ active: selectedTerm === term }"
+                                            class="choice-btn">
+                                        {{ term }}
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="input-group">
+                                <label>運算子</label>
+                                <div class="button-group">
+                                    <button v-for="op in currentLevel.allowedOperators" :key="op"
+                                            @click="selectOperator(op)"
+                                            :class="{ active: selectedOperator === op }"
+                                            class="choice-btn operator-btn">
+                                        {{ op }}
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="input-group">
+                                <label>常數</label>
+                                <input v-model="constantValue" type="number" placeholder="常數" class="constant-input">
+                            </div>
                             <button @click="addInequality" :disabled="!canAddInequality" class="add-btn">
                                 新增不等式
                             </button>
@@ -57,11 +143,12 @@
                     </div>
                     
                     <div class="control-buttons">
-                        <button @click="previewRegion" :disabled="currentInequalities.length === 0" class="preview-btn">
-                            預覽
+
+                        <button @click="fireMissile" :disabled="currentInequalities.length === 0 || missilesUsed >= currentLevel.maxMissiles" class="fire-btn">
+                            發射飛彈
                         </button>
-                        <button @click="fillRegion" :disabled="currentInequalities.length === 0 || fillCount >= currentLevel.maxFills" class="fill-btn">
-                            填土
+                        <button @click="fireAdvancedMissile" :disabled="currentInequalities.length === 0 || advancedMissilesUsed >= currentLevel.maxAdvancedMissiles" class="advanced-fire-btn">
+                            發射高級飛彈
                         </button>
                         <button @click="clearInequalities" class="clear-btn">
                             重設
@@ -72,14 +159,20 @@
                     </div>
                 </div>
                 
-                <!-- 右側遊戲畫布 -->
-                <div class="canvas-container">
-                    <canvas ref="gameCanvas" width="600" height="600" @mousemove="onMouseMove"></canvas>
+                <!-- 右側3D遊戲場景 -->
+                <div class="scene-container">
+                    <div ref="threeContainer" class="three-container"></div>
                 </div>
             </div>
         </div>
     </div>
 
     <script src="game.js"></script>
+    <!-- 音效元素 -->
+    <audio id="sound-launch" src="assets/sounds/launch.mp3" preload="auto"></audio>
+    <audio id="sound-explosion" src="assets/sounds/explosion.mp3" preload="auto"></audio>
+    <audio id="sound-buildingExplosion" src="assets/sounds/buildingExplosion.mp3" preload="auto"></audio>    
+
+
 </body>
 </html>
