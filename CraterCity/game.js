@@ -171,7 +171,7 @@ function startApp() {
 
     {
         levelId: "level-03-2d-simple",
-        maxMissiles: 5,
+        maxMissiles: 50,
         maxAdvancedMissiles: 2,
         advancedMissileRadius: 1.5,
         maxInequalitiesPerShot: 4,
@@ -189,7 +189,7 @@ function startApp() {
         maxMissiles: 3,
         maxAdvancedMissiles: 1,
         advancedMissileRadius: 2,
-        maxInequalitiesPerShot: 1,
+        maxInequalitiesPerShot: 2,
         availableTerms: ["x"],
         allowedOperators: [">", "<", ">=", "<="],
         targetBuildings: [
@@ -202,7 +202,7 @@ function startApp() {
         maxMissiles: 4,
         maxAdvancedMissiles: 1,
         advancedMissileRadius: 2,
-        maxInequalitiesPerShot: 2,
+        maxInequalitiesPerShot: 4,
         availableTerms: ["x"],
         allowedOperators: [">", "<", ">=", "<="],
         targetBuildings: [
