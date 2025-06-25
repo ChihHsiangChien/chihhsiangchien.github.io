@@ -186,8 +186,14 @@ const app = createApp({
             totalScore: 0,
             fireButtonPresses: 0,
             showLevelCompleteModal: false,
-            
+            pendingExplosionCallbacks: 0, // 新增：追蹤待處理的爆炸回呼數量
+            selectedLevelIndex: 0, // 新增：用於關卡選擇下拉選單
+            showOutOfMissilesModal: false, // 新增：控制飛彈用盡彈出視窗
             // Graphics and Game Logic State
+            isFullscreen: false, // 新增：追蹤全螢幕狀態
+            showGameMessage: false, // 新增：控制遊戲內訊息提示
+            gameMessage: '', // 新增：遊戲內訊息內容
+            gameMessageTimeout: null, // 新增：用於清除訊息的計時器
             graphicsEngine: null,
             logicalBuildings: [], // { id, x, y, ..., isDestroyed }
             logicalTrees: [], // { id, x, y, isDestroyed }
@@ -200,6 +206,40 @@ const app = createApp({
             soundExplosion: null,
             soundBuildingExplosion: null,            
         };
+    },
+    watch: {
+        // 監聽 isFullscreen 狀態的變化，並更新按鈕的文字
+        isFullscreen(isFull) {
+            const button = document.getElementById('fullscreen-btn');
+            if (button) {
+                button.innerHTML = isFull ? '&#x26F6; 退出' : '&#x26F6; 全螢幕'; // 使用圖示和文字
+            }
+        },
+        showGameMessage(isVisible) {
+            const messageBox = document.getElementById('game-message-box');
+            if (messageBox) {
+                if (isVisible) {
+                    messageBox.textContent = this.gameMessage;
+                    messageBox.style.visibility = 'visible';
+                    messageBox.style.opacity = '1';
+                    messageBox.style.top = '70px';
+                } else {
+                    messageBox.style.opacity = '0';
+                    messageBox.style.top = '50px'; // 消失時稍微向上移動
+                    // 確保動畫播放完畢後再隱藏元素，避免閃爍
+                    setTimeout(() => {
+                        if (!this.showGameMessage) messageBox.style.visibility = 'hidden';
+                    }, 300); // 需與CSS transition時間匹配
+                }
+            }
+        },
+        // 當下拉選單的值改變時，立即觸發關卡切換
+        selectedLevelIndex(newIndex, oldIndex) {
+            // 避免在初始化或程式化更新時觸發
+            if (newIndex !== oldIndex) {
+                this.goToSelectedLevel();
+            }
+        }
     },
     computed: {
         currentLevel() {
@@ -216,14 +256,41 @@ const app = createApp({
     mounted() {
         console.log('Vue組件已掛載，等待Three.js載入...');
         this.waitForThreeJS();
-        
+
         // 獲取音效元素
         this.soundLaunch = document.getElementById('sound-launch');
         this.soundExplosion = document.getElementById('sound-explosion');
-        this.soundBuildingExplosion = document.getElementById('sound-buildingExplosion');        
+        this.soundBuildingExplosion = document.getElementById('sound-buildingExplosion');
+
+        this.selectedLevelIndex = this.currentLevelIndex; // 初始化選單為當前關卡
+        this.setupUIExtensions(); // 設定額外的UI元素，如全螢幕按鈕
 
     },
     methods: {
+        goToSelectedLevel() {
+            // 如果有彈出視窗，先關閉
+            if (this.showLevelCompleteModal || this.showOutOfMissilesModal) {
+                this.showLevelCompleteModal = false;
+                this.showOutOfMissilesModal = false;
+            }
+            // 確保 currentLevelIndex 與下拉選單同步
+            this.currentLevelIndex = this.selectedLevelIndex;
+            this.resetLevel();
+        },
+        showTemporaryMessage(message, duration = 3000) {
+            this.gameMessage = message;
+            this.showGameMessage = true;
+
+            // 如果已有計時器，先清除，避免訊息被過早關閉
+            if (this.gameMessageTimeout) {
+                clearTimeout(this.gameMessageTimeout);
+            }
+
+            this.gameMessageTimeout = setTimeout(() => {
+                this.showGameMessage = false;
+            }, duration);
+        },
+
         playSound(soundElement) {
             if (soundElement) {
                 // 將音效播放時間重置為開頭，以便可以快速重複播放
@@ -305,8 +372,12 @@ const app = createApp({
                 switch (ineq.operator) {
                     case '>': return leftValue > rightValue + epsilon;
                     case '<': return leftValue < rightValue - epsilon;
-                    case '>=': return leftValue >= rightValue - epsilon;
-                    case '<=': return leftValue <= rightValue + epsilon;
+                    case '>=':
+                    case '≥':
+                        return leftValue >= rightValue - epsilon;
+                    case '<=':
+                    case '≤':
+                        return leftValue <= rightValue + epsilon;
                     case '=': return Math.abs(leftValue - rightValue) < epsilon;
                     default: return false;
                 }
@@ -408,20 +479,42 @@ const app = createApp({
         
         fireMissile() {
             if (this.currentInequalities.length === 0 || this.missilesUsed >= this.currentLevel.maxMissiles || this.levelCompleted) return;
-            
+
+            const targetPoints = this.calculateTargetRegion(this.currentInequalities);
+            if (targetPoints.length === 0) {
+                this.showTemporaryMessage('目標區域無效！不等式沒有交集。');
+                return; // 不發射，也不清除不等式
+            }
+
             this.fireButtonPresses++;
             console.log('發射飛彈 (3D模式)');
-            this.launchMultipleTargetMissiles(false);
+            this.launchMultipleTargetMissiles(false, targetPoints);
             this.clearInequalities(); // This will also clear the preview via the graphics engine
         },
         
         fireAdvancedMissile() {
             if (this.currentInequalities.length === 0 || this.advancedMissilesUsed >= this.currentLevel.maxAdvancedMissiles || this.levelCompleted) return;
-            
+
+            const targetPoints = this.calculateTargetRegion(this.currentInequalities);
+            if (targetPoints.length === 0) {
+                this.showTemporaryMessage('目標區域無效！不等式沒有交集。');
+                return; // 不發射，也不清除不等式
+            }
+
             this.fireButtonPresses++;
             console.log('發射高級飛彈 (3D模式)');
-            this.launchMultipleTargetMissiles(true);
+            this.launchMultipleTargetMissiles(true, targetPoints);
             this.clearInequalities(); // This will also clear the preview via the graphics engine
+        },
+
+        checkMissileExhaustion() {
+            const regularMissilesExhausted = this.missilesUsed >= this.currentLevel.maxMissiles;
+            const advancedMissilesExhausted = this.advancedMissilesUsed >= this.currentLevel.maxAdvancedMissiles;
+
+            // 如果兩種飛彈都用盡，且關卡尚未完成
+            if (regularMissilesExhausted && advancedMissilesExhausted && !this.levelCompleted) {
+                this.showOutOfMissilesModal = true;
+            }
         },
 
         calculateScore() {
@@ -434,9 +527,7 @@ const app = createApp({
             this.totalScore += this.score;
         },
         
-        launchMultipleTargetMissiles(isAdvanced) {
-            const targetPoints = this.calculateTargetRegion(this.currentInequalities);
-            if (targetPoints.length === 0) return;
+        launchMultipleTargetMissiles(isAdvanced, targetPoints) {
             
             // 計算可用飛彈數量
             const availableMissiles = isAdvanced ? 
@@ -454,14 +545,18 @@ const app = createApp({
                 finalTargets = this.shuffleArray(finalTargets).slice(0, availableMissiles);
             }
             
+            // 追蹤這一批次發射的所有飛彈
+            this.pendingExplosionCallbacks += finalTargets.length;
+
             // 發射飛彈到每個目標點
             finalTargets.forEach((target, index) => {
                 setTimeout(() => {
                     this.playSound(this.soundLaunch);
                     if (this.graphicsEngine) {
-                        this.graphicsEngine.launchAnimatedMissile(target.x, target.y, isAdvanced, this.currentLevel.advancedMissileRadius);
+                        const explosionRadius = isAdvanced ? this.currentLevel.advancedMissileRadius : this.currentLevel.missileRadius;
+                        this.graphicsEngine.launchAnimatedMissile(target.x, target.y, isAdvanced, explosionRadius);
                     }
-                    
+
                     if (isAdvanced) {
                         this.advancedMissilesUsed++;
                     } else {
@@ -481,7 +576,7 @@ const app = createApp({
         },
         
         handleMissileExplosion(explosionData) {
-            let buildingWasHit = false; // 標記是否有建築物被擊中
+            let buildingWasHit = false;
             
             // 檢查建築物摧毀情況
             this.logicalBuildings.forEach(building => {
@@ -493,7 +588,7 @@ const app = createApp({
                     if (distance <= explosionData.radius) {
                         building.isDestroyed = true;
                         this.destroyedBuildings++;
-                        buildingWasHit = true; // 標記為擊中
+                        buildingWasHit = true;
 
                         // 觸發視覺銷毀
                         if (this.graphicsEngine) {
@@ -527,10 +622,22 @@ const app = createApp({
                 this.playSound(this.soundExplosion);
             }
 
-            // 延遲一小段時間再檢查，讓摧毀動畫有時間開始
-            setTimeout(() => {
-                this.checkLevelCompletion();
-            }, 100);
+            // 每次爆炸後，減少待處理的爆炸計數
+            if (this.pendingExplosionCallbacks > 0) {
+                this.pendingExplosionCallbacks--;
+            }
+
+            // 當所有飛行中的飛彈都爆炸後，才檢查遊戲狀態
+            if (this.pendingExplosionCallbacks === 0) {
+                this.$nextTick(() => {
+                    // 優先檢查關卡是否完成
+                    this.checkLevelCompletion();
+                    // 如果關卡未完成，再檢查飛彈是否用盡
+                    if (!this.levelCompleted) {
+                        this.checkMissileExhaustion();
+                    }
+                });
+            }
         },
         
         checkLevelCompletion() {
@@ -544,18 +651,25 @@ const app = createApp({
         
         nextLevel() {
             this.showLevelCompleteModal = false;
-            // 使用 setTimeout 確保在執行繁重任務前，modal消失的動畫能夠順暢播放
             setTimeout(() => {
                 if (this.currentLevelIndex < this.levels.length - 1) {
-                    this.currentLevelIndex++;
-                    this.resetLevel();
+                    // 直接更新 selectedLevelIndex，讓 watcher 自動觸發關卡切換
+                    this.selectedLevelIndex++;
                 } else {
                     alert(`恭喜！您已完成所有關卡！\n最終總分: ${this.totalScore}`);
                 }
             }, 100);
         },
+
+        restartCurrentLevel() {
+            this.showOutOfMissilesModal = false; // 關閉彈出視窗
+            this.resetLevel(); // 重設當前關卡
+        },
         
         resetLevel() {
+            // 確保下拉選單與當前關卡同步
+            this.selectedLevelIndex = this.currentLevelIndex;
+
             this.missilesUsed = 0;
             this.advancedMissilesUsed = 0;
             this.destroyedBuildings = 0;
@@ -588,6 +702,80 @@ const app = createApp({
             if (this.graphicsEngine) {
                 this.graphicsEngine.resetScene(this.logicalBuildings, this.logicalTrees);
             }
+        },
+
+        setupUIExtensions() {
+            // 創建全螢幕按鈕
+            const button = document.createElement('button');
+            button.id = 'fullscreen-btn';
+            
+            // 設定初始文字，避免載入時為空
+            button.innerHTML = '&#x26F6; 全螢幕';
+            
+            // 設定樣式
+            Object.assign(button.style, {
+                position: 'absolute',
+                top: '10px',
+                right: '10px',
+                zIndex: '1000',
+                padding: '8px 12px',
+                fontSize: '14px',
+                cursor: 'pointer',
+                backgroundColor: 'rgba(44, 62, 80, 0.8)',
+                color: 'white',
+                border: '1px solid rgba(255, 255, 255, 0.5)',
+                borderRadius: '5px',
+                backdropFilter: 'blur(2px)' // 提供一個漂亮的毛玻璃效果
+            });
+
+            // 將按鈕附加到 Vue 應用的根元素上
+            this.$el.appendChild(button);
+
+            // 綁定點擊事件和全螢幕狀態變更事件
+            button.addEventListener('click', this.toggleFullscreen);
+            document.addEventListener('fullscreenchange', this.handleFullscreenChange);
+
+            // 初始化按鈕狀態
+            this.handleFullscreenChange();
+
+            // 創建遊戲訊息提示框
+            const messageBox = document.createElement('div');
+            messageBox.id = 'game-message-box';
+            Object.assign(messageBox.style, {
+                position: 'absolute',
+                top: '50px', // 初始位置（動畫前）
+                left: '50%',
+                transform: 'translateX(-50%)',
+                backgroundColor: 'rgba(220, 53, 69, 0.9)', // 紅色警告背景
+                color: 'white',
+                padding: '12px 24px',
+                borderRadius: '8px',
+                zIndex: '1001',
+                fontSize: '16px',
+                fontWeight: 'bold',
+                pointerEvents: 'none', // 讓滑鼠可以穿透
+                transition: 'opacity 0.3s ease, top 0.3s ease',
+                opacity: '0',
+                visibility: 'hidden'
+            });
+            this.$el.appendChild(messageBox);
+        },
+
+        toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                // 進入全螢幕模式
+                document.documentElement.requestFullscreen().catch(err => {
+                    console.error(`無法進入全螢幕模式: ${err.message} (${err.name})`);
+                    alert(`您的瀏覽器不支援或拒絕了全螢幕請求。`);
+                });
+            } else if (document.exitFullscreen) {
+                // 退出全螢幕模式
+                document.exitFullscreen();
+            }
+        },
+
+        handleFullscreenChange() {
+            this.isFullscreen = !!document.fullscreenElement;
         }
     }
 });

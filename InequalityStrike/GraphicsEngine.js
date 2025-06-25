@@ -134,26 +134,31 @@ class GraphicsEngine {
         }
     }
 
-    launchAnimatedMissile(targetX, targetY, isAdvanced, advancedMissileRadius) {
-        const geometry = new THREE.SphereGeometry(0.2, 8, 6);
-        const material = new THREE.MeshLambertMaterial({ color: isAdvanced ? 0x00ff00 : 0xff4444, emissive: isAdvanced ? 0x002200 : 0x220000 });
+    launchAnimatedMissile(targetX, targetY, isAdvanced, explosionRadius) {
+        // 根據飛彈類型決定視覺大小
+        const visualRadius = isAdvanced ? 0.35 : 0.2;
+        const geometry = new THREE.SphereGeometry(visualRadius, 8, 6);
+        
+        // 將兩種飛彈的顏色統一
+        const missileColor = 0xff4444; // 紅色
+        const emissiveColor = 0x220000; // 微弱的自發光
+        const material = new THREE.MeshLambertMaterial({ color: missileColor, emissive: emissiveColor });
         const mesh = this.markRaw(new THREE.Mesh(geometry, material));
         mesh.position.set(10, -10, 0.5);
         this.scene.add(mesh);
 
         const trailGeometry = new THREE.BufferGeometry();
         trailGeometry.addAttribute('position', new THREE.BufferAttribute(new Float32Array(30 * 3), 3));
-        const trailMaterial = new THREE.LineBasicMaterial({ color: isAdvanced ? 0x00ff00 : 0xff4444, transparent: true, opacity: 0.6 });
+        const trailMaterial = new THREE.LineBasicMaterial({ color: missileColor, transparent: true, opacity: 0.6 });
         const trailLine = this.markRaw(new THREE.Line(trailGeometry, trailMaterial));
         trailLine.geometry.setDrawRange(0, 0);
         this.scene.add(trailLine);
 
         this.missiles.push({
             mesh, trailLine, trail: [],
-            startX: 10, startY: -10, startZ: 0.5,
-            targetX, targetY, targetZ: 0.5,
+            startX: 10, startY: -10, startZ: 0.5, targetX, targetY, targetZ: 0.5,
             isAdvanced, startTime: Date.now(), flightTime: 3000,
-            explosionRadius: isAdvanced ? advancedMissileRadius : 1
+            explosionRadius: explosionRadius // 直接使用傳入的轟炸半徑
         });
     }
 
