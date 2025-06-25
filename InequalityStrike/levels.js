@@ -151,7 +151,7 @@ window.gameLevels = [
         maxMissiles: 5, // 減少一般飛彈，鼓勵使用不等式
         maxAdvancedMissiles: 2,
         missileRadius: 1,
-        advancedMissileRadius: 2.5,
+        advancedMissileRadius: 4,
         maxInequalitiesPerShot: 4,
         availableTerms: ["x", "y", "x^2+y^2"],
         allowedOperators: [">", "<", "≥", "≤", "="],
@@ -168,7 +168,7 @@ window.gameLevels = [
         maxMissiles: 2, // 減少飛彈，匹配目標數量
         maxAdvancedMissiles: 1, // 減少飛彈，匹配目標數量
         missileRadius: 1,
-        advancedMissileRadius: 2,
+        advancedMissileRadius: 4,
         maxInequalitiesPerShot: 4,
         availableTerms: ["x", "y"],
         allowedOperators: ["=", "≥", "≤"],
@@ -183,7 +183,7 @@ window.gameLevels = [
         maxMissiles: 6,
         maxAdvancedMissiles: 2,
         missileRadius: 1,
-        advancedMissileRadius: 3,
+        advancedMissileRadius: 4,
         maxInequalitiesPerShot: 4,
         availableTerms: ["x", "y", "abs(y)"],
         allowedOperators: [">", "<", "≥", "≤", "="],
@@ -200,7 +200,7 @@ window.gameLevels = [
         maxMissiles: 5,
         maxAdvancedMissiles: 2,
         missileRadius: 1,
-        advancedMissileRadius: 2.5,
+        advancedMissileRadius: 4,
         maxInequalitiesPerShot: 4,
         availableTerms: ["x", "y", "y-x^2", "x^2-y"],
         allowedOperators: [">", "<", "="],
@@ -238,7 +238,7 @@ window.gameLevels = [
         maxMissiles: 6, // 減少飛彈，增加最終關卡的挑戰性
         maxAdvancedMissiles: 2, // 減少飛彈，增加最終關卡的挑戰性
         missileRadius: 1,
-        advancedMissileRadius: 2,
+        advancedMissileRadius: 4,
         maxInequalitiesPerShot: 6,
         availableTerms: ["x", "y", "x^2+y^2", "abs(x)", "abs(y)", "x+y", "x-y"],
         allowedOperators: [">", "<", "≥", "≤", "="],
