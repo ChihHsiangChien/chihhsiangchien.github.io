@@ -134,10 +134,10 @@ window.gameLevels = [
         maxMissiles: 4,
         maxAdvancedMissiles: 2,
         missileRadius: 1,
-        advancedMissileRadius: 2.5, // 縮小半徑，避免一發通關，增加挑戰
+        advancedMissileRadius: 3, // 縮小半徑，避免一發通關，增加挑戰
         maxInequalitiesPerShot: 4,
         availableTerms: ["x", "y", "abs(x)+abs(y)"],
-        allowedOperators: ["<", "≤"],
+        allowedOperators: ["<", "≤",">"],
         targetBuildings: [
             {x: 2, y: 0, z: 0, color: 0xA5A5A5, height: 2},
             {x: -2, y: 0, z: 0, color: 0xA5A5A5, height: 2},
