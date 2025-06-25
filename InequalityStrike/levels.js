@@ -36,7 +36,7 @@ window.gameLevels = [
         missileRadius: 1, 
         advancedMissileRadius: 3,
         maxInequalitiesPerShot: 4,
-        availableTerms: ["x", "2y", "x + y", "x - y"],
+        availableTerms: ["3x", "2y", "x + y", "x - y"],
         allowedOperators: [">", "<", "≥", "≤", "="],
         targetBuildings: [
             {x: 2, y: 2, z: 0, color: 0xA5A5A5, height: 2},
@@ -52,7 +52,7 @@ window.gameLevels = [
         missileRadius: 1, 
         advancedMissileRadius: 2.5,
         maxInequalitiesPerShot: 3,
-        availableTerms: ["x", "y", "x + y", "x - y"],
+        availableTerms: ["3x", "4y", "x + y", "x - y"],
         allowedOperators: [">", "<", "≥", "≤", "="],
         targetBuildings: [
             {x: 2, y: 2, z: 0, color: 0xA5A5A5, height: 2},
@@ -68,7 +68,7 @@ window.gameLevels = [
         missileRadius: 1, 
         advancedMissileRadius: 3,
         maxInequalitiesPerShot: 5,
-        availableTerms: ["x", "y", "2x", "2y", "x + y", "x - y"],
+        availableTerms: ["2x", "2y", "x + y", "x - y"],
         allowedOperators: [">", "<", "≥", "≤", "="],
         targetBuildings: [
             {x: 1, y: 4, z: 0, color: 0xA5A5A5, height: 2},
