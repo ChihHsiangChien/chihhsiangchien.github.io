@@ -177,12 +177,14 @@
 </template>
 
 <script>
+import { availableDatasets } from '../config/datasets';
+
 export default {
   name: 'EditPage',
   data() {
     return {
-      datasets: ['heart'],
-      dataset: 'heart',
+      datasets: [...availableDatasets], // Initialize from the centralized config
+      dataset: availableDatasets[0] || '', // Set default to the first available dataset, or empty
       newDatasetName: '',
       title: 'BioAnnotator',
       imageUrl: '',
@@ -357,8 +359,11 @@ export default {
     },
     createDataset() {
         const newName = this.newDatasetName.trim();
-        if (newName && !this.datasets.includes(newName)) {
-            this.datasets.push(newName);
+        // For now, this only adds the new dataset to the in-memory list for the current session.
+        // In a real application, creating a new dataset would typically involve a backend call
+        // to create the actual folder and files on the server.
+        if (newName && !this.datasets.includes(newName)) { // Check against current in-memory list
+            this.datasets.push(newName); // Add to in-memory list for immediate use
             this.dataset = newName;
             this.resetCanvas();
             this.newDatasetName = '';

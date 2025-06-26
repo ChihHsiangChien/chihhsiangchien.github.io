@@ -21,7 +21,7 @@
               <div>
                 <label class="block text-sm font-medium mb-2">Dataset</label>
                 <div class="flex space-x-2">
-                  <select v-model="dataset" @change="loadData" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                  <select v-model="dataset" @change="onDatasetChange" class="w-full px-3 py-2 border border-gray-300 rounded-md">
                     <option disabled value="">Select a dataset</option>
                     <option v-for="d in datasets" :key="d" :value="d">{{ d }}</option>
                   </select>
@@ -145,12 +145,14 @@
 
 
 <script>
+import { availableDatasets } from '../config/datasets';
+
 export default {
   name: 'TogglePage',
   data() {
     return {
-      dataset: '',
-      datasets: ['heart'], // Hardcoded for now, similar to EditPage
+      datasets: [...availableDatasets],
+      dataset: this.$route.params.dataset || availableDatasets[0] || '',
       title: '',
       imageUrl: '',
       canvasWidth: 800,
@@ -233,10 +235,6 @@ export default {
       });
     }
   },
-  mounted() {
-    this.dataset = this.$route.params.dataset;
-    this.loadData();
-  },
   updated() {
     this.$nextTick(() => {
       if (this.$refs.labelRefs) {
@@ -249,11 +247,37 @@ export default {
       }
     });
   },
+  mounted() {
+    // Load data when the component is first mounted. This is the key fix.
+    // The previous watcher with `immediate: true` was not firing `loadData` on initial load.
+    this.loadData();
+  },
   methods: {
+    onDatasetChange() {
+      // When the user selects a new dataset from the dropdown,
+      // update the URL. The watcher will then handle loading the data.
+      this.$router.push({ name: 'Toggle', params: { dataset: this.dataset } });
+    },
     async loadData() {
+      // Clear current state to show loading message
+      this.title = '';
+      this.imageUrl = ''; // Explicitly clear image to show "Loading dataset..."
+      this.labels = []; // Clear labels
+      this.labelDimensions = []; // Clear dimensions
+      this.allLabelsRevealed = false; // Reset toggle state
+      console.log("TogglePage: loadData started for dataset:", this.dataset);
+
+      if (!this.dataset) {
+        console.warn("No dataset selected or provided. Loading sample data.");
+        this.createSampleData();
+        console.log("TogglePage: Using sample data. imageUrl:", this.imageUrl);
+        return;
+      }
+
       try {
         const response = await fetch(`/datasets/${this.dataset}/data.json?t=${new Date().getTime()}`);
         if (response.ok) {
+          console.log("TogglePage: data.json fetch successful.");
           const data = await response.json();
           this.canvasWidth = data.canvas?.width || 800;
           this.canvasHeight = data.canvas?.height || 600;
@@ -268,15 +292,26 @@ export default {
             revealed: false // Ensure all labels start as hidden
           }));
           if (data.image) {
-            this.imageUrl = `/datasets/${this.dataset}/${data.image}`;
+            const newImageUrl = `/datasets/${this.dataset}/${data.image}`;
+            this.imageUrl = newImageUrl; // Set imageUrl from loaded data
+            console.log("TogglePage: Data loaded. imageUrl set to:", this.imageUrl);
           }
+          else {
+            this.imageUrl = ''; // Explicitly set to empty string if no image
+            console.log("TogglePage: No image specified in data.json. imageUrl set to empty.");
+            console.warn(`Dataset '${this.dataset}' has no image specified in data.json.`);
+          }
+          console.log("TogglePage: Labels loaded (count):", this.labels.length);
+          console.log("TogglePage: Final imageUrl after loadData completion:", this.imageUrl);
         } else {
           throw new Error('Failed to load data');
         }
       } catch (error) {
         console.error('Error loading data:', error);
         // Create sample data for demonstration
+        console.log("TogglePage: Error loading data, falling back to sample data.");
         this.createSampleData();
+        this.resetAll(); // Reset revealed state for sample data
       }
     },
     toggleCollapse(sectionName) {
@@ -317,7 +352,8 @@ export default {
           style: { ...this.defaultLabelStyle },
           revealed: false
         }
-      ]
+      ];
+      console.log("TogglePage: createSampleData finished. imageUrl:", this.imageUrl);
     },
     
     onImageLoad() {
@@ -325,6 +361,10 @@ export default {
       if (img) {
         this.imageSettings.naturalWidth = img.naturalWidth;
         this.imageSettings.naturalHeight = img.naturalHeight;
+        // Center the image on the canvas, similar to EditPage.vue
+        this.imageSettings.x = (this.canvasWidth - this.imageDisplayWidth) / 2;
+        this.imageSettings.y = (this.canvasHeight - this.imageDisplayHeight) / 2;
+        console.log("TogglePage: Image loaded. Natural dimensions:", this.imageSettings.naturalWidth, this.imageSettings.naturalHeight);
       }
     },
     
@@ -352,12 +392,11 @@ export default {
     // Watch for changes in the route parameter to load new datasets
     '$route.params.dataset': {
       handler(newDataset) {
-        if (newDataset && newDataset !== this.dataset) {
-          this.dataset = newDataset;
-          this.loadData();
-        }
-      },
-      immediate: true // Load data immediately when component is mounted
+        // This now only handles subsequent navigations (e.g., back/forward button
+        // or changing the dataset via the dropdown).
+        this.dataset = newDataset;
+        this.loadData();
+      }
     }
   }
 }
