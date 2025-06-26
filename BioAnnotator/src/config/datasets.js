@@ -1,3 +1,4 @@
 export const availableDatasets = [
-  '0_heart' // Add other dataset names here as you create them
+  '0_heart',
+  '1_細胞'
 ];

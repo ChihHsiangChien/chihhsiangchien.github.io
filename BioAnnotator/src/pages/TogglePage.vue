@@ -174,8 +174,8 @@ export default {
       },
       labels: [],
       labelDimensions: [],
-      collapsedStates: {
-        mainControlPanel: true, // Default to hidden
+      collapsedStates: { 
+        mainControlPanel: false, // Default to visible
       },
       allLabelsRevealed: false, // New property to track global reveal state
     }
