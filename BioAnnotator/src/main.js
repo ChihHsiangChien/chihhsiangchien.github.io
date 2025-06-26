@@ -8,9 +8,10 @@ import './style.css'
 import EditPage from './pages/EditPage.vue'
 import TogglePage from './pages/TogglePage.vue'
 import DragPage from './pages/DragPage.vue'
+import HomePage from './pages/HomePage.vue'
 
 const routes = [
-  { path: '/', redirect: '/edit/heart' },
+  { path: '/', component: HomePage },
   { path: '/edit/:dataset', component: EditPage },
   { path: '/toggle/:dataset', component: TogglePage },
   { path: '/drag/:dataset', component: DragPage }
