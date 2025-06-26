@@ -1,47 +1,61 @@
 <template>
   <div class="toggle-page">
+    <!-- Toggle Button -->
+    <button 
+      @click="toggleCollapse('mainControlPanel')" 
+      class="fixed top-20 left-4 z-30 bg-white p-2 rounded-full shadow-lg hover:bg-gray-100 transition-all duration-300"
+      :class="{ 'rotate-180': collapsedStates.mainControlPanel }"
+      title="Toggle Control Panel"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+      </svg>
+    </button>
+
     <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
       <!-- Control Panel (Left Side) -->
-      <div class="lg:col-span-1 order-last lg:order-first">
-        <div class="bg-white rounded-lg shadow-lg p-4 space-y-4 sticky top-4">
-          <!-- Dataset Selector -->
-          <div>
-            <label class="block text-sm font-medium mb-2">Dataset</label>
-            <div class="flex space-x-2">
-              <select v-model="dataset" @change="loadData" class="w-full px-3 py-2 border border-gray-300 rounded-md">
-                <option disabled value="">Select a dataset</option>
-                <option v-for="d in datasets" :key="d" :value="d">{{ d }}</option>
-              </select>
-            </div>
-          </div>
+      <transition name="slide-left">
+        <div v-if="!collapsedStates.mainControlPanel" class="lg:col-span-1 order-last lg:order-first">
+          <div class="bg-white rounded-lg shadow-lg p-4 space-y-4 sticky top-4">
+              <!-- Dataset Selector -->
+              <div>
+                <label class="block text-sm font-medium mb-2">Dataset</label>
+                <div class="flex space-x-2">
+                  <select v-model="dataset" @change="loadData" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                    <option disabled value="">Select a dataset</option>
+                    <option v-for="d in datasets" :key="d" :value="d">{{ d }}</option>
+                  </select>
+                </div>
+              </div>
 
-          <h3 class="text-lg font-semibold border-b pb-2">Controls</h3>
+              <h3 class="text-lg font-semibold border-b pb-2">Controls</h3>
 
-          <!-- Title Display -->
-          <div>
-            <label class="block text-sm font-medium mb-2">Current Diagram</label>
-            <p class="text-xl font-bold text-gray-800">{{ title }}</p>
-          </div>
+              <!-- Title Display -->
+              <div>
+                <label class="block text-sm font-medium mb-2">Current Diagram</label>
+                <p class="text-xl font-bold text-gray-800">{{ title }}</p>
+              </div>
 
-          <!-- Action Buttons -->
-          <div class="space-y-2 pt-4 border-t">
-            <button @click="toggleAllLabels" class="w-full bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600">
-              {{ allLabelsRevealed ? 'Hide All Labels' : 'Show All Labels' }}
-            </button>
-            <button 
-              @click="resetAll"
-              class="w-full bg-gray-500 text-white py-2 px-4 rounded hover:bg-gray-600"
-            >
-              Reset All
-            </button>
+              <!-- Action Buttons -->
+              <div class="space-y-2 pt-4 border-t">
+                <button @click="toggleAllLabels" class="w-full bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600">
+                  {{ allLabelsRevealed ? 'Hide All Labels' : 'Show All Labels' }}
+                </button>
+                <button 
+                  @click="resetAll"
+                  class="w-full bg-gray-500 text-white py-2 px-4 rounded hover:bg-gray-600"
+                >
+                  Reset All
+                </button>
+              </div>
           </div>
         </div>
-      </div>
+      </transition>
 
       <!-- Image Canvas (Right Side) -->
-      <div class="lg:col-span-3">
-        <div class="bg-white rounded-lg shadow-lg p-4">
-          <h2 class="text-2xl font-bold mb-4">Toggle Mode</h2>
+      <div class="transition-all duration-300" :class="collapsedStates.mainControlPanel ? 'lg:col-span-4' : 'lg:col-span-3'">
+        <div class="bg-white rounded-lg shadow-lg p-4"> 
+          <h2 class="text-2xl font-bold mb-4"> {{ title }}</h2>
           <!-- The image and labels container -->
           <div 
             class="relative inline-block bg-white border-2 border-gray-300 overflow-hidden" 
@@ -116,6 +130,20 @@
   </div>
 </template>
 
+<style scoped>
+.slide-left-enter-active,
+.slide-left-leave-active {
+  transition: all 0.4s ease-in-out;
+}
+
+.slide-left-enter-from,
+.slide-left-leave-to {
+  transform: translateX(-100%);
+  opacity: 0;
+}
+</style>
+
+
 <script>
 export default {
   name: 'TogglePage',
@@ -144,6 +172,9 @@ export default {
       },
       labels: [],
       labelDimensions: [],
+      collapsedStates: {
+        mainControlPanel: true, // Default to hidden
+      },
       allLabelsRevealed: false, // New property to track global reveal state
     }
   },
@@ -247,6 +278,9 @@ export default {
         // Create sample data for demonstration
         this.createSampleData();
       }
+    },
+    toggleCollapse(sectionName) {
+      this.collapsedStates[sectionName] = !this.collapsedStates[sectionName];
     },
     
     createSampleData() {
