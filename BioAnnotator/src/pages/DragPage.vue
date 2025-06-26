@@ -1,140 +1,117 @@
 <template>
   <div class="drag-page">
-    <h2 class="text-2xl font-bold mb-4">Drag Mode - {{ dataset }}</h2>
-    
     <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+      <!-- Candidate Labels Panel (Left Side) -->
+      <div class="lg:col-span-1 order-last lg:order-first">
+          <div class="bg-white rounded-lg shadow-lg p-4 space-y-4 sticky top-4">
+            <h3 class="text-lg font-semibold border-b pb-2">Candidate Labels</h3>
+            <div class="flex flex-wrap gap-2">
+              <div 
+                v-for="label in availableLabels" 
+                :key="label.id"
+                class="px-3 py-1 rounded text-center whitespace-nowrap cursor-move hover:bg-blue-200 transition-colors"
+                :style="{ 
+                  backgroundColor: label.style.bgColor, 
+                  border: `1px solid ${label.style.lineColor}`,
+                  color: label.style.textColor, 
+                  fontSize: label.style.fontSize + 'px'
+                }"
+                draggable="true"
+                @dragstart="handleDragStart(label, $event)"
+              >
+                {{ label.text }}
+              </div>
+            </div>
+            <div class="space-y-2 pt-4 border-t">
+              <button @click="checkAnswers" class="w-full bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600">Check Answers</button>
+              <button @click="resetGame" class="w-full bg-gray-500 text-white py-2 px-4 rounded hover:bg-gray-600">Reset Game</button>
+            </div>
+          </div>
+        </div>
+
       <!-- Image and Drop Zones -->
       <div class="lg:col-span-3">
         <div class="bg-white rounded-lg shadow-lg p-4">
-          <div class="relative inline-block">
+          <h2 class="text-2xl font-bold mb-4">Drag Mode - {{ title }}</h2> 
+          <div 
+            class="relative inline-block bg-white border-2 border-gray-300 overflow-hidden" 
+            :style="{ width: canvasWidth + 'px', height: canvasHeight + 'px' }"
+            ref="canvasRef"
+          >
             <img 
               v-if="imageUrl"
               :src="imageUrl" 
               @load="onImageLoad"
               ref="imageRef"
-              class="max-w-full h-auto border"
+              class="absolute pointer-events-none"
+              :style="{ left: imageSettings.x + 'px', top: imageSettings.y + 'px', width: imageDisplayWidth + 'px', height: imageDisplayHeight + 'px' }"
             />
-            <div v-else class="w-full h-64 bg-gray-200 flex items-center justify-center">
-              <p>Loading image...</p>
+            <div v-else class="w-full h-full bg-gray-200 flex items-center justify-center rounded-md">
+              <p class="text-gray-500">Loading dataset...</p>
             </div>
             
             <!-- Drop Zones -->
             <div 
               v-for="(label, index) in labels" 
-              :key="'drop-' + index"
-              class="absolute border-2 border-dashed border-gray-400 rounded-lg bg-gray-100 bg-opacity-75 flex items-center justify-center min-w-[100px] min-h-[40px]"
-              :style="{ left: label.position.x + 'px', top: label.position.y + 'px' }"
+              :key="label.id"
+              ref="dropZoneRefs"
+              class="absolute cursor-pointer flex items-center justify-center transition-all duration-100 rounded"
+              :style="{ left: label.position.x + 'px', top: label.position.y + 'px', transform: 'translate(-50%, -50%)' }"
               @dragover="handleDragOver"
               @drop="handleDrop(index, $event)"
+              @dragleave="dragOverIndex = -1"
+              @dragenter="dragOverIndex = index"
               :class="{ 
-                'border-green-500 bg-green-100': label.matched,
-                'border-red-500 bg-red-100': label.incorrect,
-                'border-blue-500 bg-blue-100': dragOverIndex === index
+                'border-blue-500': dragOverIndex === index,
+                'border-green-500': label.isCorrect, // After check
+                'border-red-500': label.isWrong, // After check
+                'border-dashed border-black': !label.isFilled, // Default empty, black border
+                'border-solid': label.isFilled || label.isCorrect || label.isWrong, // Solid border when filled or checked
               }"
             >
-              <span v-if="label.matched" class="text-green-700 font-medium">{{ label.text }}</span>
-              <span v-else-if="label.incorrect" class="text-red-700 font-medium">{{ label.incorrectText }}</span>
-              <span v-else class="text-gray-500 text-sm">Drop here</span>
+              <div v-if="label.isFilled"
+                class="px-3 py-1 rounded text-center whitespace-nowrap w-full h-full flex items-center justify-center"
+                :style="{ 
+                  backgroundColor: label.style.bgColor, 
+                  color: label.style.textColor, 
+                  fontSize: label.style.fontSize + 'px'
+                }">
+                {{ label.placedText }}
+              </div> 
+              <div v-else
+                class="px-3 py-1 rounded text-center whitespace-nowrap text-transparent select-none w-full h-full flex items-center justify-center"
+                :style="{
+                  backgroundColor: '#f0f0f0', /* A neutral grey background */
+                  border: `1px dashed ${label.style.lineColor}`,
+
+                  fontSize: label.style.fontSize + 'px'
+                }">{{ label.text }}</div>
             </div>
             
             <!-- Connectors -->
             <svg 
               v-if="imageUrl"
               class="absolute top-0 left-0 pointer-events-none"
-              :width="imageWidth"
-              :height="imageHeight"
+              :width="canvasWidth"
+              :height="canvasHeight"
             >
-              <line 
-                v-for="(label, index) in labels"
-                :key="'line-' + index"
-                :x1="label.position.x + 50"
-                :y1="label.position.y + 20"
-                :x2="label.connector.x"
-                :y2="label.connector.y"
-                stroke="#6b7280"
-                stroke-width="2"
-                stroke-dasharray="3,3"
-              />
-              <circle
-                v-for="(label, index) in labels"
-                :key="'circle-' + index"
-                :cx="label.connector.x"
-                :cy="label.connector.y"
-                r="3"
-                fill="#6b7280"
-              />
+              <g v-for="(label, index) in labelsWithConnectorPoints" :key="'g-' + index">
+                <line
+                  :x1="label.connectorStart.x" :y1="label.connectorStart.y"
+                  :x2="label.connector.x"
+                  :y2="label.connector.y"
+                  :stroke="label.style.lineColor"
+                  :stroke-width="label.style.lineWidth"
+                  :stroke-dasharray="label.style.lineStyle === 'dashed' ? '5,5' : 'none'"
+                />
+                <circle
+                  :cx="label.connector.x"
+                  :cy="label.connector.y"
+                  r="6"
+                  :fill="label.style.lineColor"
+                />
+              </g>
             </svg>
-          </div>
-        </div>
-        
-        <!-- Draggable Labels -->
-        <div class="mt-4 bg-white rounded-lg shadow-lg p-4">
-          <h3 class="text-lg font-semibold mb-3">Drag the labels to their correct positions:</h3>
-          <div class="flex flex-wrap gap-2">
-            <div 
-              v-for="(label, index) in shuffledLabels" 
-              :key="'drag-' + index"
-              v-if="!label.used"
-              class="bg-blue-100 border border-blue-300 px-3 py-2 rounded cursor-move hover:bg-blue-200 transition-colors"
-              draggable="true"
-              @dragstart="handleDragStart(label, $event)"
-            >
-              {{ label.text }}
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <!-- Score Panel -->
-      <div class="lg:col-span-1">
-        <div class="bg-white rounded-lg shadow-lg p-4">
-          <h3 class="text-lg font-semibold mb-4">Score</h3>
-          
-          <div class="space-y-4">
-            <div class="text-center">
-              <div class="text-3xl font-bold text-blue-600">{{ score }}</div>
-              <div class="text-sm text-gray-600">Points</div>
-            </div>
-            
-            <div class="space-y-2">
-              <div class="flex justify-between">
-                <span class="text-sm">Correct:</span>
-                <span class="text-green-600 font-medium">{{ correctCount }}</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-sm">Incorrect:</span>
-                <span class="text-red-600 font-medium">{{ incorrectCount }}</span>
-              </div>
-              <div class="flex justify-between">
-                <span class="text-sm">Remaining:</span>
-                <span class="text-gray-600 font-medium">{{ remainingCount }}</span>
-              </div>
-            </div>
-            
-            <div class="w-full bg-gray-200 rounded-full h-2.5">
-              <div 
-                class="bg-green-600 h-2.5 rounded-full transition-all duration-300"
-                :style="{ width: progressPercentage + '%' }"
-              ></div>
-            </div>
-            
-            <div v-if="startTime" class="text-center">
-              <div class="text-lg font-bold">{{ formattedTime }}</div>
-              <div class="text-sm text-gray-600">Time</div>
-            </div>
-            
-            <button 
-              @click="resetGame"
-              class="w-full bg-gray-500 text-white py-2 px-4 rounded hover:bg-gray-600"
-            >
-              Reset
-            </button>
-            
-            <div v-if="gameComplete" class="mt-4 p-3 bg-green-100 border border-green-400 rounded text-green-700 text-center">
-              <div class="font-bold">🎉 Complete!</div>
-              <div class="text-sm">Final Score: {{ score }}</div>
-              <div class="text-sm">Time: {{ formattedTime }}</div>
-            </div>
           </div>
         </div>
       </div>
@@ -150,55 +127,126 @@ export default {
       dataset: '',
       title: '',
       imageUrl: '',
-      imageWidth: 0,
-      imageHeight: 0,
-      labels: [],
-      shuffledLabels: [],
-      score: 0,
-      correctCount: 0,
-      incorrectCount: 0,
-      startTime: null,
-      elapsedTime: 0,
-      timer: null,
+      canvasWidth: 800,
+      canvasHeight: 600,
+      imageSettings: {
+        x: 0,
+        y: 0,
+        scale: 1,
+        naturalWidth: 0,
+        naturalHeight: 0,
+      },
+      defaultLabelStyle: {
+        fontSize: 14,
+        textColor: '#000000',
+        lineColor: '#ef4444',
+        lineWidth: 2,
+        lineStyle: 'solid',
+        bgColor: '#ffff00',
+      },
+      labelDimensions: [], // For connector calculation
+      labels: [], // Represents drop zones
+      shuffledLabels: [], // Represents draggable labels
+      draggedLabelData: null, // Stores the full label object being dragged
       dragOverIndex: -1,
-      gameComplete: false
     }
   },
   computed: {
-    remainingCount() {
-      return this.labels.filter(label => !label.matched).length
+    availableLabels() {
+      return this.shuffledLabels.filter(label => !label.isUsed);
     },
-    progressPercentage() {
-      if (this.labels.length === 0) return 0
-      return Math.round((this.correctCount / this.labels.length) * 100)
+    imageDisplayWidth() {
+      return this.imageSettings.naturalWidth * this.imageSettings.scale;
     },
-    formattedTime() {
-      const minutes = Math.floor(this.elapsedTime / 60)
-      const seconds = this.elapsedTime % 60
-      return `${minutes}:${seconds.toString().padStart(2, '0')}`
+    imageDisplayHeight() {
+      return this.imageSettings.naturalHeight * this.imageSettings.scale;
+    },
+    labelsWithConnectorPoints() {
+      if (this.labelDimensions.length !== this.labels.length) {
+        return this.labels.map(l => ({ ...l, connectorStart: l.position }));
+      }
+
+      return this.labels.map((label, index) => {
+        const dims = this.labelDimensions[index];
+        if (!dims || !dims.width) {
+          return { ...label, connectorStart: label.position };
+        }
+
+        const labelWidth = dims.width;
+        const labelHeight = dims.height;
+        const labelCenter = label.position;
+        const connectorEnd = label.connector;
+
+        const deltaX = connectorEnd.x - labelCenter.x;
+        const deltaY = connectorEnd.y - labelCenter.y;
+
+        const halfWidth = labelWidth / 2;
+        const halfHeight = labelHeight / 2;
+
+        if (Math.abs(deltaX) <= halfWidth && Math.abs(deltaY) <= halfHeight) {
+          return { ...label, connectorStart: { ...connectorEnd } };
+        }
+
+        const slope = deltaY / deltaX;
+        const diagSlope = halfHeight / halfWidth;
+
+        let finalX, finalY;
+
+        if (deltaX === 0) { // Vertical line
+            finalX = labelCenter.x;
+            finalY = labelCenter.y + halfHeight * Math.sign(deltaY);
+        } else if (Math.abs(slope) < diagSlope) {
+            // Intersects left/right
+            finalX = labelCenter.x + halfWidth * Math.sign(deltaX);
+            finalY = labelCenter.y + halfWidth * slope * Math.sign(deltaX);
+        } else {
+            // Intersects top/bottom
+            finalX = labelCenter.x + (halfHeight / slope) * Math.sign(deltaY);
+            finalY = labelCenter.y + halfHeight * Math.sign(deltaY);
+        }
+
+        return { ...label, connectorStart: { x: finalX, y: finalY } };
+      });
     }
   },
   mounted() {
     this.dataset = this.$route.params.dataset
     this.loadData()
   },
+  updated() {
+    this.$nextTick(() => {
+      if (this.$refs.dropZoneRefs) {
+        const newDimensions = this.$refs.dropZoneRefs.map(el => el ? { width: el.offsetWidth, height: el.offsetHeight } : { width: 0, height: 0 });
+        // Prevent an infinite update loop by only updating if the dimensions have actually changed.
+        if (JSON.stringify(newDimensions) !== JSON.stringify(this.labelDimensions)) {
+          this.labelDimensions = newDimensions;
+        }
+      }
+    });
+  },
+
   beforeUnmount() {
-    if (this.timer) {
-      clearInterval(this.timer)
-    }
+    // No timer to clear in this version
   },
   methods: {
     async loadData() {
       try {
-        const response = await fetch(`/datasets/${this.dataset}/data.json`)
+        const response = await fetch(`/datasets/${this.dataset}/data.json?t=${new Date().getTime()}`);
         if (response.ok) {
           const data = await response.json()
+          this.canvasWidth = data.canvas?.width || 800;
+          this.canvasHeight = data.canvas?.height || 600;
+          this.imageSettings = { ...this.imageSettings, ...data.imageSettings };
           this.title = data.title || ''
           this.labels = data.labels.map(label => ({
+            id: self.crypto.randomUUID(), // Add unique ID
             ...label,
-            matched: false,
-            incorrect: false,
-            incorrectText: ''
+            style: { ...this.defaultLabelStyle, ...label.style }, // Apply default and loaded styles
+            isFilled: false, // Is this drop zone filled?
+            placedText: '', // Text of the label placed here
+            placedLabelId: null, // ID of the label placed here
+            isCorrect: false, // Is the placed label correct? (after check)
+            isWrong: false, // Is the placed label wrong? (after check)
           }))
           if (data.image) {
             this.imageUrl = `/datasets/${this.dataset}/${data.image}`
@@ -222,52 +270,63 @@ export default {
           <text x="200" y="160" text-anchor="middle" font-family="Arial" font-size="16">Sample Heart</text>
         </svg>
       `)
+      this.canvasWidth = 800;
+      this.canvasHeight = 600;
+      this.imageSettings = {
+        x: 0, y: 0, scale: 1, naturalWidth: 0, naturalHeight: 0
+      }; // Correctly close the object literal
       this.labels = [
         {
+          id: self.crypto.randomUUID(),
           text: 'Left Ventricle',
           position: { x: 50, y: 100 },
           connector: { x: 150, y: 180 },
-          matched: false,
-          incorrect: false,
-          incorrectText: ''
+          style: { ...this.defaultLabelStyle },
+          isFilled: false, placedText: '', placedLabelId: null, isCorrect: false, isWrong: false
         },
         {
+          id: self.crypto.randomUUID(),
           text: 'Right Ventricle', 
           position: { x: 300, y: 100 },
           connector: { x: 250, y: 180 },
-          matched: false,
-          incorrect: false,
-          incorrectText: ''
+          style: { ...this.defaultLabelStyle },
+          isFilled: false, placedText: '', placedLabelId: null, isCorrect: false, isWrong: false
         },
         {
+          id: self.crypto.randomUUID(),
           text: 'Aorta',
           position: { x: 150, y: 50 },
           connector: { x: 200, y: 100 },
-          matched: false,
-          incorrect: false,
-          incorrectText: ''
+          style: { ...this.defaultLabelStyle },
+          isFilled: false, placedText: '', placedLabelId: null, isCorrect: false, isWrong: false
         }
       ]
       this.shuffleLabels()
     },
     
     shuffleLabels() {
-      this.shuffledLabels = [...this.labels]
-        .map(label => ({ ...label, used: false }))
+      // Create draggable labels from the original labels, ensuring unique IDs and `isUsed` status
+      this.shuffledLabels = [...this.labels].map(label => ({ 
+        id: label.id, // Use the same ID as the target label for easy lookup
+        text: label.text,
+        style: { ...label.style }, // Copy style
+        isUsed: false // Not yet placed
+      }))
         .sort(() => Math.random() - 0.5)
     },
     
     onImageLoad() {
       const img = this.$refs.imageRef
-      this.imageWidth = img.offsetWidth
-      this.imageHeight = img.offsetHeight
+      this.imageSettings.naturalWidth = img.naturalWidth;
+      this.imageSettings.naturalHeight = img.naturalHeight;
+      // Center the image on the canvas
+      this.imageSettings.x = (this.canvasWidth - this.imageDisplayWidth) / 2;
+      this.imageSettings.y = (this.canvasHeight - this.imageDisplayHeight) / 2;
     },
     
     handleDragStart(label, event) {
-      if (!this.startTime) {
-        this.startTimer()
-      }
-      event.dataTransfer.setData('text/plain', label.text)
+      event.dataTransfer.setData('text/plain', label.id) // Pass the ID of the dragged label
+      this.draggedLabelData = label // Store the full label object being dragged
     },
     
     handleDragOver(event) {
@@ -276,80 +335,72 @@ export default {
     
     handleDrop(dropIndex, event) {
       event.preventDefault()
-      const draggedText = event.dataTransfer.getData('text/plain')
-      const targetLabel = this.labels[dropIndex]
+      this.dragOverIndex = -1 // Reset drag over state
       
-      this.dragOverIndex = -1
+      if (!this.draggedLabelData) return // No label being dragged
       
-      if (targetLabel.matched) return
+      const targetDropZone = this.labels[dropIndex]
       
-      // Reset previous incorrect state
-      targetLabel.incorrect = false
-      targetLabel.incorrectText = ''
+      // If the target drop zone is already filled, return the dragged label to the candidate panel
+      if (targetDropZone.isFilled) {
+        this.draggedLabelData.isUsed = false // Make it available again
+        this.draggedLabelData = null
+        return
+      }
       
-      if (draggedText === targetLabel.text) {
-        // Correct match
-        targetLabel.matched = true
-        this.correctCount++
-        this.score += 10
-        
-        // Mark the dragged label as used
-        const shuffledLabel = this.shuffledLabels.find(label => label.text === draggedText)
-        if (shuffledLabel) shuffledLabel.used = true
-        
-        // Check if game is complete
-        if (this.correctCount === this.labels.length) {
-          this.gameComplete = true
-          this.stopTimer()
-          // Bonus points for speed
-          const timeBonus = Math.max(0, 300 - this.elapsedTime)
-          this.score += timeBonus
+      // Place the label
+      targetDropZone.isFilled = true
+      targetDropZone.placedText = this.draggedLabelData.text
+      targetDropZone.placedLabelId = this.draggedLabelData.id
+      this.draggedLabelData.isUsed = true // Mark as used
+      
+      // Reset correctness state for this drop zone
+      targetDropZone.isCorrect = false
+      targetDropZone.isWrong = false
+
+      this.draggedLabelData = null // Clear dragged data
+    },
+
+    checkAnswers() {
+      this.labels.forEach((dropZone, index) => {
+        if (dropZone.isFilled) {
+          if (dropZone.placedText === dropZone.text) { // Check against original correct text
+            dropZone.isCorrect = true
+            dropZone.isWrong = false
+          } else {
+            dropZone.isCorrect = false
+            dropZone.isWrong = true
+            // Return wrong label to candidate panel
+            const placedShuffledLabel = this.shuffledLabels.find(sl => sl.id === dropZone.placedLabelId)
+            if (placedShuffledLabel) {
+              placedShuffledLabel.isUsed = false
+            }
+            // Clear drop zone
+            dropZone.isFilled = false
+            dropZone.placedText = ''
+            dropZone.placedLabelId = null
+          }
+        } else {
+          // If drop zone is empty, it's implicitly wrong for the check
+          dropZone.isCorrect = false
+          dropZone.isWrong = true
         }
-      } else {
-        // Incorrect match
-        targetLabel.incorrect = true
-        targetLabel.incorrectText = draggedText
-        this.incorrectCount++
-        this.score = Math.max(0, this.score - 2)
-        
-        // Reset after a delay
-        setTimeout(() => {
-          targetLabel.incorrect = false
-          targetLabel.incorrectText = ''
-        }, 2000)
-      }
-    },
-    
-    startTimer() {
-      this.startTime = Date.now()
-      this.timer = setInterval(() => {
-        this.elapsedTime = Math.floor((Date.now() - this.startTime) / 1000)
-      }, 1000)
-    },
-    
-    stopTimer() {
-      if (this.timer) {
-        clearInterval(this.timer)
-        this.timer = null
-      }
+      })
     },
     
     resetGame() {
-      this.score = 0
-      this.correctCount = 0
-      this.incorrectCount = 0
-      this.elapsedTime = 0
-      this.startTime = null
-      this.gameComplete = false
-      this.stopTimer()
-      
       this.labels.forEach(label => {
-        label.matched = false
-        label.incorrect = false
-        label.incorrectText = ''
+        label.isFilled = false
+        label.placedText = ''
+        label.placedLabelId = null
+        label.isCorrect = false
+        label.isWrong = false
       })
       
-      this.shuffleLabels()
+      this.shuffledLabels.forEach(label => {
+        label.isUsed = false
+      })
+      this.shuffleLabels() // Re-shuffle for a new game
     }
   }
 }

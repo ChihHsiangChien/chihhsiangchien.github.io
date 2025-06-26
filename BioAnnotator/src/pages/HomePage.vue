@@ -5,8 +5,8 @@
     <p>Please select an activity to begin:</p>
     <nav>
       <router-link to="/edit/heart" class="nav-link">Annotate Heart Data (Edit)</router-link>
-      <router-link to="/toggle/cell" class="nav-link">Toggle Cell Parts</router-link>
-      <router-link to="/drag/dna" class="nav-link">Organize DNA Sequence (Drag)</router-link>
+      <router-link to="/toggle/heart" class="nav-link">Toggle Heart Data</router-link>
+      <router-link to="/drag/heart" class="nav-link">Organize Heart Data (Drag)</router-link>
     </nav>
   </div>
 </template>
