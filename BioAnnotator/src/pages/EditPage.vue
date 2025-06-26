@@ -184,7 +184,7 @@ export default {
   data() {
     return {
       datasets: [...availableDatasets], // Initialize from the centralized config
-      dataset: availableDatasets[0] || '', // Set default to the first available dataset, or empty
+      dataset: this.$route.params.dataset || availableDatasets[0] || '', // Set default to the first available dataset, or empty
       newDatasetName: '',
       title: 'BioAnnotator',
       imageUrl: '',
@@ -287,6 +287,13 @@ export default {
         }
       },
       deep: true // Watch for changes inside the style object
+    },
+    // Watch for changes in the route parameter to load new datasets
+    '$route.params.dataset': {
+      handler(newDataset) {
+        this.dataset = newDataset;
+        this.loadData();
+      },
     }
   },
   mounted() {
