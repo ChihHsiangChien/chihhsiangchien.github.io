@@ -1,96 +1,115 @@
 <template>
   <div class="toggle-page">
-    <h2 class="text-2xl font-bold mb-4">Toggle Mode - {{ dataset }}</h2>
-    
-    <div class="bg-white rounded-lg shadow-lg p-4">
-      <div class="relative inline-block">
-        <img 
-          v-if="imageUrl"
-          :src="imageUrl" 
-          @load="onImageLoad"
-          ref="imageRef"
-          class="max-w-full h-auto border"
-        />
-        <div v-else class="w-full h-64 bg-gray-200 flex items-center justify-center">
-          <p>Loading image...</p>
-        </div>
-        
-        <!-- Hidden Labels (clickable areas) -->
-        <div 
-          v-for="(label, index) in labels" 
-          :key="index"
-          class="absolute cursor-pointer"
-          :style="{ left: label.position.x + 'px', top: label.position.y + 'px' }"
-          @click="toggleLabel(index)"
-        >
-          <div 
-            v-if="!label.revealed"
-            class="bg-gray-400 opacity-75 px-4 py-2 rounded text-sm text-transparent select-none min-w-[80px] min-h-[24px]"
-          >
-            {{ label.text }}
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+      <!-- Control Panel (Left Side) -->
+      <div class="lg:col-span-1 order-last lg:order-first">
+        <div class="bg-white rounded-lg shadow-lg p-4 space-y-4 sticky top-4">
+          <!-- Dataset Selector -->
+          <div>
+            <label class="block text-sm font-medium mb-2">Dataset</label>
+            <div class="flex space-x-2">
+              <select v-model="dataset" @change="loadData" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                <option disabled value="">Select a dataset</option>
+                <option v-for="d in datasets" :key="d" :value="d">{{ d }}</option>
+              </select>
+            </div>
           </div>
-          <div 
-            v-else
-            class="bg-yellow-200 border border-yellow-600 px-2 py-1 rounded text-sm animate-pulse"
-          >
-            {{ label.text }}
+
+          <h3 class="text-lg font-semibold border-b pb-2">Controls</h3>
+
+          <!-- Title Display -->
+          <div>
+            <label class="block text-sm font-medium mb-2">Current Diagram</label>
+            <p class="text-xl font-bold text-gray-800">{{ title }}</p>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="space-y-2 pt-4 border-t">
+            <button @click="toggleAllLabels" class="w-full bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600">
+              {{ allLabelsRevealed ? 'Hide All Labels' : 'Show All Labels' }}
+            </button>
+            <button 
+              @click="resetAll"
+              class="w-full bg-gray-500 text-white py-2 px-4 rounded hover:bg-gray-600"
+            >
+              Reset All
+            </button>
           </div>
         </div>
-        
-        <!-- Connectors (always visible) -->
-        <svg 
-          v-if="imageUrl"
-          class="absolute top-0 left-0 pointer-events-none"
-          :width="imageWidth"
-          :height="imageHeight"
-        >
-          <line 
-            v-for="(label, index) in labels"
-            :key="'line-' + index"
-            :x1="label.position.x + 40"
-            :y1="label.position.y + 12"
-            :x2="label.connector.x"
-            :y2="label.connector.y"
-            stroke="#6b7280"
-            stroke-width="2"
-            stroke-dasharray="5,5"
-          />
-          <circle
-            v-for="(label, index) in labels"
-            :key="'circle-' + index"
-            :cx="label.connector.x"
-            :cy="label.connector.y"
-            r="4"
-            fill="#6b7280"
-          />
-        </svg>
       </div>
-      
-      <!-- Progress Panel -->
-      <div class="mt-6 bg-gray-50 rounded-lg p-4">
-        <div class="flex justify-between items-center mb-4">
-          <h3 class="text-lg font-semibold">Progress</h3>
-          <button 
-            @click="resetAll"
-            class="bg-gray-500 text-white px-3 py-1 rounded hover:bg-gray-600 text-sm"
-          >
-            Reset All
-          </button>
-        </div>
-        
-        <div class="w-full bg-gray-200 rounded-full h-2.5 mb-4">
+
+      <!-- Image Canvas (Right Side) -->
+      <div class="lg:col-span-3">
+        <div class="bg-white rounded-lg shadow-lg p-4">
+          <h2 class="text-2xl font-bold mb-4">Toggle Mode</h2>
+          <!-- The image and labels container -->
           <div 
-            class="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
-            :style="{ width: progressPercentage + '%' }"
-          ></div>
-        </div>
-        
-        <p class="text-sm text-gray-600">
-          {{ revealedCount }} of {{ labels.length }} labels revealed ({{ progressPercentage }}%)
-        </p>
-        
-        <div v-if="allRevealed" class="mt-4 p-3 bg-green-100 border border-green-400 rounded text-green-700">
-          🎉 Congratulations! You've revealed all the labels!
+            class="relative inline-block bg-white border-2 border-gray-300 overflow-hidden" 
+            :style="{ width: canvasWidth + 'px', height: canvasHeight + 'px' }"
+            ref="canvasRef"
+          >
+            <img 
+              v-if="imageUrl" 
+              :src="imageUrl" 
+              @load="onImageLoad" 
+              ref="imageRef" 
+              class="absolute pointer-events-none"
+              :style="{ left: imageSettings.x + 'px', top: imageSettings.y + 'px', width: imageDisplayWidth + 'px', height: imageDisplayHeight + 'px' }"
+            />
+            <div v-else class="w-full h-full bg-gray-200 flex items-center justify-center rounded-md">
+              <p class="text-gray-500">Loading dataset...</p>
+            </div>
+
+            <!-- Labels (clickable areas) -->
+            <div v-for="(label, index) in labels" :key="label.id"
+              ref="labelRefs"
+              class="absolute cursor-pointer"
+              :style="{ left: label.position.x + 'px', top: label.position.y + 'px', transform: 'translate(-50%, -50%)' }"
+              @click="toggleLabel(index)">
+              
+              <div v-if="!label.revealed"
+                class="px-3 py-1 rounded text-center whitespace-nowrap bg-gray-400 opacity-75 text-transparent select-none"
+                :style="{ fontSize: label.style.fontSize + 'px' }"
+              >
+                {{ label.text }}
+              </div>
+              <div v-else
+                class="px-3 py-1 rounded text-center whitespace-nowrap"
+                :style="{ 
+                  backgroundColor: label.style.bgColor, 
+                  border: `1px solid ${label.style.lineColor}`,
+                  color: label.style.textColor, 
+                  fontSize: label.style.fontSize + 'px'
+                }">
+                {{ label.text }}
+              </div>
+            </div>
+            
+            <!-- Connectors (always visible) -->
+            <svg 
+              v-if="imageUrl"
+              class="absolute top-0 left-0 pointer-events-none"
+              :width="canvasWidth"
+              :height="canvasHeight"
+            >
+              <g v-for="(label, index) in labelsWithConnectorPoints" :key="'g-' + index">
+                <line
+                  :x1="label.connectorStart.x" :y1="label.connectorStart.y"
+                  :x2="label.connector.x"
+                  :y2="label.connector.y"
+                  :stroke="label.style.lineColor"
+                  :stroke-width="label.style.lineWidth"
+                  :stroke-dasharray="label.style.lineStyle === 'dashed' ? '5,5' : 'none'"
+                />
+                <circle
+                  :cx="label.connector.x"
+                  :cy="label.connector.y"
+                  r="6"
+                  :fill="label.style.lineColor"
+                />
+              </g>
+            </svg>
+          </div>
         </div>
       </div>
     </div>
@@ -103,50 +122,130 @@ export default {
   data() {
     return {
       dataset: '',
+      datasets: ['heart'], // Hardcoded for now, similar to EditPage
       title: '',
       imageUrl: '',
-      imageWidth: 0,
-      imageHeight: 0,
-      labels: []
+      canvasWidth: 800,
+      canvasHeight: 600,
+      imageSettings: {
+        x: 0,
+        y: 0,
+        scale: 1,
+        naturalWidth: 0,
+        naturalHeight: 0,
+      },
+      defaultLabelStyle: {
+        fontSize: 14,
+        textColor: '#000000',
+        lineColor: '#ef4444',
+        lineWidth: 2,
+        lineStyle: 'solid',
+        bgColor: '#ffff00',
+      },
+      labels: [],
+      labelDimensions: [],
+      allLabelsRevealed: false, // New property to track global reveal state
     }
   },
   computed: {
-    revealedCount() {
-      return this.labels.filter(label => label.revealed).length
+    // Removed revealedCount, progressPercentage, allRevealed as they are no longer needed for the UI
+    imageDisplayWidth() {
+      return this.imageSettings.naturalWidth * this.imageSettings.scale;
     },
-    progressPercentage() {
-      if (this.labels.length === 0) return 0
-      return Math.round((this.revealedCount / this.labels.length) * 100)
+    imageDisplayHeight() {
+      return this.imageSettings.naturalHeight * this.imageSettings.scale;
     },
-    allRevealed() {
-      return this.labels.length > 0 && this.revealedCount === this.labels.length
+    labelsWithConnectorPoints() {
+      if (this.labelDimensions.length !== this.labels.length) {
+        return this.labels.map(l => ({ ...l, connectorStart: l.position }));
+      }
+
+      return this.labels.map((label, index) => {
+        const dims = this.labelDimensions[index];
+        if (!dims || !dims.width) {
+          // If not measured, connector starts from the center
+          return { ...label, connectorStart: label.position };
+        }
+
+        const labelWidth = dims.width;
+        const labelHeight = dims.height;
+        const labelCenter = label.position;
+        const connectorEnd = label.connector;
+
+        const deltaX = connectorEnd.x - labelCenter.x;
+        const deltaY = connectorEnd.y - labelCenter.y;
+
+        const halfWidth = labelWidth / 2;
+        const halfHeight = labelHeight / 2;
+
+        if (Math.abs(deltaX) <= halfWidth && Math.abs(deltaY) <= halfHeight) {
+          return { ...label, connectorStart: { ...connectorEnd } };
+        }
+
+        const slope = deltaY / deltaX;
+        const diagSlope = halfHeight / halfWidth;
+
+        let finalX, finalY;
+
+        if (deltaX === 0) {
+            finalX = labelCenter.x;
+            finalY = labelCenter.y + halfHeight * Math.sign(deltaY);
+        } else if (Math.abs(slope) < diagSlope) {
+            finalX = labelCenter.x + halfWidth * Math.sign(deltaX);
+            finalY = labelCenter.y + halfWidth * slope * Math.sign(deltaX);
+        } else {
+            finalX = labelCenter.x + (halfHeight / slope) * Math.sign(deltaY);
+            finalY = labelCenter.y + halfHeight * Math.sign(deltaY);
+        }
+
+        return { ...label, connectorStart: { x: finalX, y: finalY } };
+      });
     }
   },
   mounted() {
-    this.dataset = this.$route.params.dataset
-    this.loadData()
+    this.dataset = this.$route.params.dataset;
+    this.loadData();
+  },
+  updated() {
+    this.$nextTick(() => {
+      if (this.$refs.labelRefs) {
+        const newDimensions = this.$refs.labelRefs.map(el => el ? { width: el.offsetWidth, height: el.offsetHeight } : { width: 0, height: 0 });
+        // Prevent an infinite update loop by only updating if the dimensions have actually changed.
+        // A simple stringify is sufficient here to compare the array of objects.
+        if (JSON.stringify(newDimensions) !== JSON.stringify(this.labelDimensions)) {
+          this.labelDimensions = newDimensions;
+        }
+      }
+    });
   },
   methods: {
     async loadData() {
       try {
-        const response = await fetch(`/datasets/${this.dataset}/data.json`)
+        const response = await fetch(`/datasets/${this.dataset}/data.json?t=${new Date().getTime()}`);
         if (response.ok) {
-          const data = await response.json()
-          this.title = data.title || ''
-          this.labels = data.labels.map(label => ({
+          const data = await response.json();
+          this.canvasWidth = data.canvas?.width || 800;
+          this.canvasHeight = data.canvas?.height || 600;
+          if (data.imageSettings) {
+            this.imageSettings = { ...this.imageSettings, ...data.imageSettings };
+          }
+          this.title = data.title || '';
+          this.labels = (data.labels || []).map(label => ({
+            id: self.crypto.randomUUID(),
             ...label,
-            revealed: false
-          }))
+            style: { ...this.defaultLabelStyle, ...label.style },
+            revealed: false // Ensure all labels start as hidden
+          }));
           if (data.image) {
-            this.imageUrl = `/datasets/${this.dataset}/${data.image}`
+            this.imageUrl = `/datasets/${this.dataset}/${data.image}`;
           }
         } else {
-          throw new Error('Failed to load data')
+          throw new Error('Failed to load data');
         }
       } catch (error) {
-        console.error('Error loading data:', error)
+        console.error('Error loading data:', error);
         // Create sample data for demonstration
-        this.createSampleData()
+        this.createSampleData();
       }
     },
     
@@ -161,40 +260,70 @@ export default {
       `)
       this.labels = [
         {
+          id: self.crypto.randomUUID(),
           text: 'Left Ventricle',
           position: { x: 50, y: 100 },
           connector: { x: 150, y: 180 },
+          style: { ...this.defaultLabelStyle },
           revealed: false
         },
         {
+          id: self.crypto.randomUUID(),
           text: 'Right Ventricle', 
           position: { x: 300, y: 100 },
           connector: { x: 250, y: 180 },
+          style: { ...this.defaultLabelStyle },
           revealed: false
         },
         {
+          id: self.crypto.randomUUID(),
           text: 'Aorta',
           position: { x: 150, y: 50 },
           connector: { x: 200, y: 100 },
+          style: { ...this.defaultLabelStyle },
           revealed: false
         }
       ]
     },
     
     onImageLoad() {
-      const img = this.$refs.imageRef
-      this.imageWidth = img.offsetWidth
-      this.imageHeight = img.offsetHeight
+      const img = this.$refs.imageRef;
+      if (img) {
+        this.imageSettings.naturalWidth = img.naturalWidth;
+        this.imageSettings.naturalHeight = img.naturalHeight;
+      }
     },
     
     toggleLabel(index) {
-      this.labels[index].revealed = !this.labels[index].revealed
+      this.labels[index].revealed = !this.labels[index].revealed;
+      // If a label is individually toggled, the "allLabelsRevealed" state might no longer be accurate.
+      // We could re-evaluate it here, but for a teaching tool, simply letting the individual toggle override is fine.
     },
     
+    toggleAllLabels() {
+      this.allLabelsRevealed = !this.allLabelsRevealed;
+      this.labels.forEach(label => {
+        label.revealed = this.allLabelsRevealed;
+      });
+    },
+
     resetAll() {
       this.labels.forEach(label => {
-        label.revealed = false
-      })
+        label.revealed = false;
+      });
+      this.allLabelsRevealed = false; // Reset the global toggle state
+    }
+  },
+  watch: {
+    // Watch for changes in the route parameter to load new datasets
+    '$route.params.dataset': {
+      handler(newDataset) {
+        if (newDataset && newDataset !== this.dataset) {
+          this.dataset = newDataset;
+          this.loadData();
+        }
+      },
+      immediate: true // Load data immediately when component is mounted
     }
   }
 }
