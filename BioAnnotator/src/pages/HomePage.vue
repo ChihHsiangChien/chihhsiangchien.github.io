@@ -4,15 +4,18 @@
     <p>This application provides several tools for biological annotation.</p>
     <p>Please select an activity to begin:</p>
     <nav>
-      <router-link to="/edit/heart" class="nav-link">Annotate Heart Data (Edit)</router-link>
-      <router-link to="/toggle/heart" class="nav-link">Toggle Heart Data</router-link>
-      <router-link to="/drag/heart" class="nav-link">Organize Heart Data (Drag)</router-link>
+      <router-link :to="`/edit/${defaultDataset}`" class="nav-link">Annotate {{ defaultDataset }} Data (Edit)</router-link>
+      <router-link :to="`/toggle/${defaultDataset}`" class="nav-link">Toggle {{ defaultDataset }} Data</router-link>
+      <router-link :to="`/drag/${defaultDataset}`" class="nav-link">Organize {{ defaultDataset }} Data (Drag)</router-link>
     </nav>
   </div>
 </template>
 
 <script setup>
-// This component doesn't require any specific script logic for now.
+import { availableDatasets } from '../config/datasets';
+
+// Use the first available dataset for the default nav links
+const defaultDataset = availableDatasets[0] || 'heart';
 </script>
 
 <style scoped>
