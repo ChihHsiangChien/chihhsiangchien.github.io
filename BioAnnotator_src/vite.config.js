@@ -7,5 +7,9 @@ export default defineConfig({
   base: '/BioAnnotator/',
   build: {
     outDir: 'dist'
-  }
+  },
+  preview: {
+    host: true,   // 這是關鍵，讓 preview server 對外網路可見
+    port: 4173,   // 你想用的端口
+  },  
 })

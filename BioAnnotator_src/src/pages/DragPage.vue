@@ -43,13 +43,12 @@
                   color: label.style.textColor, 
                   fontSize: label.style.fontSize + 'px'
                 }"
-                draggable="true"
-                @dragstart="handleDragStart(label, $event)"
+                @pointerdown="handlePointerDown(label, $event)"
+                style="touch-action: none;"
               >
                 {{ label.text }}
               </div>
             </div>
-
           </div>
         </div>
 
@@ -81,10 +80,6 @@
               ref="dropZoneRefs"
               class="absolute cursor-pointer flex items-center justify-center transition-all duration-100 rounded"
               :style="{ left: label.position.x + 'px', top: label.position.y + 'px', transform: 'translate(-50%, -50%)' }"
-              @dragover="handleDragOver"
-              @drop="handleDrop(index, $event)"
-              @dragleave="dragOverIndex = -1"
-              @dragenter="dragOverIndex = index"
               :class="{ 
                 'border-blue-500': dragOverIndex === index,
                 'border-green-500': label.isCorrect, // After check
@@ -147,6 +142,14 @@
       title="Student Test Link"
       @close="isQrModalVisible = false" 
     />
+    <!-- Ghost element for dragging -->
+    <div
+      v-if="isDragging && draggedLabelData"
+      :style="ghostStyle"
+      class="px-3 py-1 rounded text-center whitespace-nowrap"
+    >
+      {{ draggedLabelData.text }}
+    </div>
   </div>
 </template>
 
@@ -183,6 +186,8 @@ export default {
       shuffledLabels: [], // Represents draggable labels
       draggedLabelData: null, // Stores the full label object being dragged
       dragOverIndex: -1,
+      isDragging: false,
+      pointerPosition: { x: 0, y: 0 },
     
       timerInterval: null,
       timerSeconds: 0,
@@ -205,13 +210,28 @@ export default {
       return this.dataset ? `/test/${this.dataset}` : '/';
     },
     fullStudentTestUrl() {
-      if (!this.dataset) {
-        const origin = typeof window !== 'undefined' ? window.location.origin : '';
-        return `${origin}/BioAnnotator/#/test/placeholder`;
-      }
-      const resolvedRoute = this.$router.resolve({ name: 'Test', params: { dataset: this.dataset } });
       const origin = typeof window !== 'undefined' ? window.location.origin : '';
-      return `${origin}${resolvedRoute.href}`; // resolvedRoute.href 會自動含有 # 號
+      const datasetName = this.dataset || 'placeholder';
+      const resolvedRoute = this.$router.resolve({ name: 'Test', params: { dataset: datasetName } });
+      return `${origin}${resolvedRoute.href}`;
+    },
+    ghostStyle() {
+      if (!this.isDragging || !this.draggedLabelData) {
+        return { display: 'none' };
+      }
+      return {
+        position: 'fixed',
+        left: `${this.pointerPosition.x}px`,
+        top: `${this.pointerPosition.y}px`,
+        transform: 'translate(-50%, -50%)',
+        pointerEvents: 'none',
+        zIndex: 1000,
+        // Copy style from the source label
+        backgroundColor: this.draggedLabelData.style.bgColor,
+        border: `1px solid ${this.draggedLabelData.style.lineColor}`,
+        color: this.draggedLabelData.style.textColor,
+        fontSize: `${this.draggedLabelData.style.fontSize}px`,
+      };
     },
     imageDisplayWidth() {
       return this.imageSettings.naturalWidth * this.imageSettings.scale;
@@ -291,7 +311,9 @@ export default {
     }
   },
   beforeUnmount() {
-    this.stopTimer(); // Ensure timer is cleared if component is unmounted
+    this.stopTimer();
+    document.removeEventListener('pointermove', this.handlePointerMove);
+    document.removeEventListener('pointerup', this.handlePointerUp);
   },
   mounted() {
     // Load data when the component is first mounted.
@@ -443,34 +465,78 @@ export default {
       const remainingSeconds = seconds % 60;
       return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
     },
-    
-    handleDragStart(label, event) {
-      event.dataTransfer.setData('text/plain', label.id) // Pass the ID of the dragged label
-      this.draggedLabelData = label // Store the full label object being dragged
+
+    handlePointerDown(label, event) {
+      // Prevent default behavior, like text selection or page scrolling on touch
+      event.preventDefault();
+
+      this.isDragging = true;
+      this.draggedLabelData = label;
+      this.pointerPosition.x = event.clientX;
+      this.pointerPosition.y = event.clientY;
+
+      document.addEventListener('pointermove', this.handlePointerMove);
+      document.addEventListener('pointerup', this.handlePointerUp);
+
       this.startTimer(); // Start timer when first drag begins
     },
-    
-    handleDragOver(event) {
-      event.preventDefault()
+
+    handlePointerMove(event) {
+      if (!this.isDragging) return;
+      event.preventDefault();
+
+      this.pointerPosition.x = event.clientX;
+      this.pointerPosition.y = event.clientY;
+
+      // Check for drop zone intersection
+      this.dragOverIndex = -1;
+      const dropZones = this.$refs.dropZoneRefs;
+      if (!dropZones) return;
+
+      for (let i = 0; i < dropZones.length; i++) {
+        const zone = dropZones[i];
+        if (zone) {
+          const rect = zone.getBoundingClientRect();
+          if (
+            event.clientX >= rect.left &&
+            event.clientX <= rect.right &&
+            event.clientY >= rect.top &&
+            event.clientY <= rect.bottom
+          ) {
+            this.dragOverIndex = i;
+            break;
+          }
+        }
+      }
+    },
+
+    handlePointerUp(event) {
+      if (!this.isDragging) return;
+      event.preventDefault();
+
+      if (this.dragOverIndex !== -1) {
+        this.handleDrop(this.dragOverIndex);
+      }
+
+      this.isDragging = false;
+      this.draggedLabelData = null;
+      this.dragOverIndex = -1 // Reset drag over state
+
+      document.removeEventListener('pointermove', this.handlePointerMove);
+      document.removeEventListener('pointerup', this.handlePointerUp);
     },
     
-    handleDrop(dropIndex, event) {
-      event.preventDefault()
-      this.dragOverIndex = -1 // Reset drag over state
-      
-      if (!this.draggedLabelData) return // No label being dragged
-      
+    handleDrop(dropIndex) {
+      if (!this.draggedLabelData) return; // No label being dragged
+
       const targetDropZone = this.labels[dropIndex]
       
       // If the target drop zone is already filled, return the dragged label to the candidate panel
       if (targetDropZone.isFilled) {
         // Optionally, allow swapping or just prevent drop.
         // Current logic: prevent drop and return to candidate.
-        const draggedLabelInShuffled = this.shuffledLabels.find(sl => sl.id === this.draggedLabelData.id);
-        if (draggedLabelInShuffled) {
-            draggedLabelInShuffled.isUsed = false; // Make it available again
-        }
-        this.draggedLabelData = null
+        // No action needed, the label was not marked as 'used' yet.
+        this.draggedLabelData = null;
         return
       }
       
