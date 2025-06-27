@@ -12,11 +12,62 @@
         var bioAnnotatorBasePath = '/BioAnnotator/';
 
         // Check if the path starts with the BioAnnotator base path
-        if (path.startsWith(bioAnnotatorBasePath)) {
-            // If it does, redirect to the BioAnnotator SPA's root (index.html)
-            // Vue Router will then handle the specific sub-path
-            window.location.replace(bioAnnotatorBasePath);
-        } else {
+        // We also check that it's not exactly the base path, as that's not a 404.
+        if (path.startsWith(bioAnnotatorBasePath) && path !== bioAnnotatorBasePath) {
+            // This is a request for a deep link within the BioAnnotator SPA.
+            // We need to load the BioAnnotator's index.html content
+            // while preserving the current URL in the address bar.
+            fetch(bioAnnotatorBasePath + 'index.html')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.text();
+                })
+                .then(html => {
+                    // Create a temporary div to parse the fetched HTML
+                    var tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = html;
+
+                    // Extract head and body content
+                    var fetchedHead = tempDiv.querySelector('head');
+                    var fetchedBody = tempDiv.querySelector('body');
+
+                    // Clear current document head and body
+                    document.head.innerHTML = '';
+                    document.body.innerHTML = '';
+
+                    // Append fetched head elements, handling scripts for re-execution
+                    Array.from(fetchedHead.children).forEach(node => {
+                        if (node.tagName === 'SCRIPT') {
+                            var newScript = document.createElement('script');
+                            Array.from(node.attributes).forEach(attr => newScript.setAttribute(attr.name, attr.value));
+                            newScript.textContent = node.textContent;
+                            document.head.appendChild(newScript);
+                        } else {
+                            document.head.appendChild(node.cloneNode(true));
+                        }
+                    });
+
+                    // Append fetched body elements, handling scripts for re-execution
+                    Array.from(fetchedBody.children).forEach(node => {
+                        if (node.tagName === 'SCRIPT') {
+                            var newScript = document.createElement('script');
+                            Array.from(node.attributes).forEach(attr => newScript.setAttribute(attr.name, attr.value));
+                            newScript.textContent = node.textContent;
+                            document.body.appendChild(newScript);
+                        } else {
+                            document.body.appendChild(node.cloneNode(true));
+                        }
+                    });
+
+                    // Set the title from the fetched HTML
+                    document.title = tempDiv.querySelector('title')?.textContent || 'BioAnnotator';
+                })
+                .catch(error => {
+                    console.error('Error loading BioAnnotator index.html:', error);
+                    displayGeneric404(); // Fallback to generic 404 if loading fails
+                });        } else {
             // If it's not a BioAnnotator path, display a generic 404 message
             // You can customize this part for other 404s on your main site
             document.addEventListener('DOMContentLoaded', function() {
@@ -31,6 +82,7 @@
     <style> body { font-family: sans-serif; margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; background-color: #f4f4f4; color: #333; } h1 { color: #d32f2f; } a { color: #1976d2; text-decoration: none; } a:hover { text-decoration: underline; } </style>
 </head>
 <body>
-    <!-- Content will be added by JavaScript for non-BioAnnotator 404s -->
+    <!-- The content will be dynamically injected by the script -->
+    <div id="content"></div>
 </body>
 </html>
