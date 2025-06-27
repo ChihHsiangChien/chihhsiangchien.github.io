@@ -5,7 +5,7 @@
       <div class="lg:col-span-1 order-last lg:order-first">
           <div class="bg-white rounded-lg shadow-lg p-4 space-y-4 sticky top-4">
             <div class="text-center -mt-2">
-              <router-link :to="studentTestUrl" target="_blank" class="text-sm text-blue-600 hover:underline align-middle">(Open Student Test View)</router-link>
+              <router-link :to="studentTestUrl" target="_blank" class="text-sm text-blue-600 hover:underline align-middle">(Student Test View)</router-link>
               <button @click="isQrModalVisible = true" class="ml-1 inline-block align-middle" title="Show QR Code">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-600 hover:text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v1m6 11h-1m-2-11h1m-1 12v1m-7-7h1m5 4h1M5 12H4m11 6v-1M8 6H7m1 6h1m7-1h1M5 8v1m11-5h-1m-1 11v-1m-6-1H8" />
@@ -596,10 +596,10 @@ export default {
       if (allCorrect) {
         this.stopTimer();
         this.calculateFinalScore();
-        this.gameMessage = `Congratulations! All correct! Your score: ${this.score}`;
+        this.gameMessage = `恭喜! 全部正確! 你的分數: ${this.score}`;
         this.gameMessageClass = 'text-green-600';
       } else {
-        this.gameMessage = `Some answers are incorrect. Wrong attempts: ${this.wrongAttempts}. Try again!`;
+        this.gameMessage = `有些答案不正確。錯誤嘗試次數: ${this.wrongAttempts} 再試一次!`;
         this.gameMessageClass = 'text-red-600';
       }
     },

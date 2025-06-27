@@ -28,11 +28,9 @@
                 </div>
               </div>
 
-              <h3 class="text-lg font-semibold border-b pb-2">Controls</h3>
 
               <!-- Title Display -->
               <div>
-                <label class="block text-sm font-medium mb-2">Current Diagram</label>
                 <p class="text-xl font-bold text-gray-800">{{ title }}</p>
               </div>
 

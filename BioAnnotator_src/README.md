@@ -8,6 +8,26 @@ A modular, web-based interactive labeling and assessment system for biology educ
 - **Toggle Mode** (`/toggle/:dataset`) - Student learning mode with clickable reveal functionality  
 - **Drag Mode** (`/drag/:dataset`) - Student assessment mode with drag-and-drop scoring
 
+## Project Structure
+
+```
+public/                   # Static assets and datasets
+  datasets/               # Stores all module data
+    [dataset-name]/
+      image.png           # Image file for the module
+      data.json           # Label definitions and settings
+src/                      # Source code
+  App.vue                 # Main application component
+  main.js                 # Vue app initialization
+  router/                 # Vue Router configuration
+  pages/                  # Route components for different modes
+    EditPage.vue          # Teacher interface for label creation
+    TogglePage.vue        # Student interactive reveal mode
+    DragPage.vue          # Student drag assessment mode
+  components/             # Reusable Vue components (e.g., QrCodeModal.vue)
+  layouts/                # Layout components for different route groups
+  config/                 # Configuration files (e.g., datasets.js)
+```
 ## Quick Start
 
 1. Install dependencies:
