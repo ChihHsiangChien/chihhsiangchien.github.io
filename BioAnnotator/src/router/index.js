@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomePage from '../pages/HomePage.vue'
+import StudentDragLayout from '../layouts/StudentDragLayout.vue'; // New student drag layout
+import { RouterView } from 'vue-router'; // Import RouterView
 import EditPage from '../pages/EditPage.vue'
 import TogglePage from '../pages/TogglePage.vue'
 import DragPage from '../pages/DragPage.vue'
@@ -35,7 +37,21 @@ const routes = [
     name: 'Test',
     component: DragPage, // Re-using the same component
     meta: { layout: 'StudentLayout' } // Student view (no navbar)
-  }
+  },  
+  {
+    // New route for the student-facing drag game list
+    path: '/student-drag',
+    component: RouterView, // This route itself renders a RouterView
+    meta: { layout: 'StudentDragLayout' }, // And uses StudentDragLayout as its wrapper
+    children: [
+      {
+        path: ':dataset', // Nested route for specific dataset
+        name: 'StudentDragGame', // A new name for this specific drag game route
+        component: DragPage,
+        props: true,
+      },
+    ],
+  },
 ]
 
 const router = createRouter({

@@ -2,7 +2,9 @@
   <div class="home-container">
     <h1 class="text-3xl font-bold mb-4">Welcome to the BioAnnotator</h1>
     <p class="text-lg mb-6">This application provides several tools for biological annotation.</p>
-    <p class="text-xl font-semibold mb-4">Select a Dataset and Activity:</p>
+    <p class="text-lg mb-6">
+      <router-link to="/student-drag" class="text-blue-600 hover:underline">Go to Student Drag Games</router-link>
+    </p>
 
     <div class="bg-white shadow-lg rounded-lg p-6">
       <div class="grid grid-cols-4 gap-4 text-center font-bold text-gray-700 border-b pb-2 mb-2">

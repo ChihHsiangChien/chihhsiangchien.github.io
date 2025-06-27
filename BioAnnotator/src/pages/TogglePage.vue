@@ -82,7 +82,7 @@
               @click="toggleLabel(index)">
               
               <div v-if="!label.revealed"
-                class="px-3 py-1 rounded text-center whitespace-nowrap bg-gray-400 opacity-75 text-transparent select-none"
+                class="px-3 py-1 rounded text-center whitespace-nowrap bg-gray-400 text-transparent select-none"
                 :style="{ fontSize: label.style.fontSize + 'px' }"
               >
                 {{ label.text }}
@@ -275,7 +275,7 @@ export default {
       }
 
       try {
-        const response = await fetch(`/datasets/${this.dataset}/data.json?t=${new Date().getTime()}`);
+        const response = await fetch(`${import.meta.env.BASE_URL}datasets/${encodeURIComponent(this.dataset)}/data.json?t=${new Date().getTime()}`);
         if (response.ok) {
           console.log("TogglePage: data.json fetch successful.");
           const data = await response.json();
@@ -292,7 +292,7 @@ export default {
             revealed: false // Ensure all labels start as hidden
           }));
           if (data.image) {
-            const newImageUrl = `/datasets/${this.dataset}/${data.image}`;
+            const newImageUrl = `${import.meta.env.BASE_URL}datasets/${encodeURIComponent(this.dataset)}/${data.image}`;
             this.imageUrl = newImageUrl; // Set imageUrl from loaded data
             console.log("TogglePage: Data loaded. imageUrl set to:", this.imageUrl);
           }

@@ -21,11 +21,12 @@ import { availableDatasets } from '../config/datasets';
 
 export default {
   name: 'DefaultLayout',
-  data() {
-    return {
-      // Use the first available dataset for the default nav links
-      defaultDataset: availableDatasets[0] || 'heart'
-    }
+  computed: {
+    defaultDataset() {
+      // Get the dataset from the current route parameters,
+      // or fallback to the first available dataset, or 'heart' if none are found.
+      return this.$route.params.dataset || availableDatasets[0] || 'heart';
+    },
   }
 }
 </script>

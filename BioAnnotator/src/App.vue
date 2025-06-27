@@ -7,12 +7,14 @@
 <script>
 import DefaultLayout from './layouts/DefaultLayout.vue';
 import StudentLayout from './layouts/StudentLayout.vue';
+import StudentDragLayout from './layouts/StudentDragLayout.vue'; // Import the new layout
 
 export default {
   name: 'App',
   components: {
     DefaultLayout,
-    StudentLayout
+    StudentLayout,
+    StudentDragLayout // Add it to components
   },
   computed: {
     layout() {

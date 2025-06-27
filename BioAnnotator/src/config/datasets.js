@@ -1,4 +1,5 @@
 export const availableDatasets = [
-  '0_heart',
-  '1_細胞'
+  '1_cell',
+  '1_複式顯微鏡',
+  '4_心臟'
 ];

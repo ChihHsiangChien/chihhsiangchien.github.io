@@ -37,6 +37,16 @@
                 <label class="block text-sm font-medium mb-2">Title</label>
                 <input v-model="title" class="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="Enter title"/>
               </div>
+
+              <!-- Game Settings -->
+              <div class="mt-4 pt-4 border-t">
+                <h5 class="text-sm font-semibold mb-2">Drag & Drop Game Settings</h5>
+                <div class="space-y-2">
+                  <div><label class="block text-xs font-medium">Expected Duration (s)</label><input type="number" v-model.number="gameSettings.expectedDurationSeconds" class="w-full px-2 py-1 border border-gray-300 rounded text-sm" placeholder="e.g., 60"/></div>
+                  <div><label class="block text-xs font-medium">Initial Score</label><input type="number" v-model.number="gameSettings.initialScore" class="w-full px-2 py-1 border border-gray-300 rounded text-sm" placeholder="e.g., 1000"/></div>
+                  <div><label class="block text-xs font-medium">Penalty Per Wrong Attempt</label><input type="number" v-model.number="gameSettings.penaltyPerWrongAttempt" class="w-full px-2 py-1 border border-gray-300 rounded text-sm" placeholder="e.g., 50"/></div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -200,10 +210,10 @@ export default {
       defaultLabelStyle: {
         fontSize: 14,
         textColor: '#000000',
-        lineColor: '#ef4444',
-        lineWidth: 2,
+        lineColor: '#000000',
+        lineWidth: 3,
         lineStyle: 'solid',
-        bgColor: '#ffff00',
+        bgColor: '#ffffff',
       },
       labelDimensions: [],
       labels: [],
@@ -216,6 +226,12 @@ export default {
         datasetManagement: true,
         canvasImageControls: true,
         selectedLabelEditor: false,
+      },
+      // Game settings for DragPage
+      gameSettings: {
+        expectedDurationSeconds: 60,
+        initialScore: 1000,
+        penaltyPerWrongAttempt: 50,
       },
     }
   },
@@ -322,35 +338,60 @@ export default {
     document.removeEventListener('mouseup', this.handleMouseUp);
   },
   methods: {
+    async findDefaultImage(datasetName) {
+      const extensions = ['png', 'jpg', 'jpeg', 'svg', 'gif'];
+      for (const ext of extensions) {
+        const imageUrl = `${import.meta.env.BASE_URL}datasets/${encodeURIComponent(datasetName)}/image.${ext}`;
+        try {
+          // Use fetch with HEAD method to check for existence without downloading the body
+          const response = await fetch(imageUrl, { method: 'HEAD' });
+          if (response.ok) {
+            return imageUrl; // Found it!
+          }
+        } catch (e) {
+          // This will happen for 404s or network errors, which is expected.
+          // We can silently continue to the next extension.
+        }
+      }
+      return ''; // No default image found
+    },
     async loadData() {
       if (!this.dataset) return;
       try {
-        const response = await fetch(`/datasets/${this.dataset}/data.json?t=${new Date().getTime()}`);
-        if (response.ok) {
-          const data = await response.json();
-          // Load canvas and image settings with defaults for backward compatibility
-          this.canvasWidth = data.canvas?.width || 800;
-          this.canvasHeight = data.canvas?.height || 600;
-          if (data.imageSettings) {
-            this.imageSettings = { ...this.imageSettings, ...data.imageSettings };
-          }
-          this.title = data.title || 'New Annotation';
-          this.labels = (data.labels || []).map(label => ({
-            id: self.crypto.randomUUID(), // Add a unique ID for stable keys
-            ...label,
-            style: { ...this.defaultLabelStyle, ...label.style }
-          }));
-          if (data.image) {
-            this.imageUrl = `/datasets/${this.dataset}/${data.image}`;
-          } else {
-            this.imageUrl = '';
-          }
+        const response = await fetch(`${import.meta.env.BASE_URL}datasets/${encodeURIComponent(this.dataset)}/data.json?t=${new Date().getTime()}`);
+        if (!response.ok) {
+          throw new Error(`Failed to load data.json, status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        this.canvasWidth = data.canvas?.width || 800;
+        this.canvasHeight = data.canvas?.height || 600;
+        if (data.imageSettings) {
+          this.imageSettings = { ...this.imageSettings, ...data.imageSettings };
+        }
+        this.gameSettings = {
+          expectedDurationSeconds: 60, initialScore: 1000, penaltyPerWrongAttempt: 50,
+          ...(data.gameSettings || {})
+        };
+        this.title = data.title || 'New Annotation';
+        this.labels = (data.labels || []).map(label => ({
+          id: self.crypto.randomUUID(),
+          ...label,
+          style: { ...this.defaultLabelStyle, ...label.style }
+        }));
+        if (data.image) {
+          this.imageUrl = `${import.meta.env.BASE_URL}datasets/${encodeURIComponent(this.dataset)}/${data.image}`;
         } else {
-           this.resetCanvas();
+          this.imageUrl = '';
         }
       } catch (error) {
-        console.error('Error loading data:', error);
+        console.error('Error loading data.json:', error);
         this.resetCanvas();
+        this.title = this.dataset;
+        const defaultImage = await this.findDefaultImage(this.dataset);
+        if (defaultImage) {
+          this.imageUrl = defaultImage;
+        }
       }
     },
     resetCanvas() {
@@ -362,21 +403,23 @@ export default {
         this.imageSettings = {
             x: 0, y: 0, scale: 1, naturalWidth: 0, naturalHeight: 0
         };
+        this.gameSettings = {
+            expectedDurationSeconds: 60,
+            initialScore: 1000,
+            penaltyPerWrongAttempt: 50,
+        };
         this.selectedLabelIndex = -1;
     },
     createDataset() {
         const newName = this.newDatasetName.trim();
-        // For now, this only adds the new dataset to the in-memory list for the current session.
-        // In a real application, creating a new dataset would typically involve a backend call
-        // to create the actual folder and files on the server.
-        if (newName && !this.datasets.includes(newName)) { // Check against current in-memory list
-            this.datasets.push(newName); // Add to in-memory list for immediate use
+        if (newName && !this.datasets.includes(newName)) {
+            this.datasets.push(newName);
             this.dataset = newName;
-            this.resetCanvas();
+            this.loadData(); // Call loadData to attempt loading the new dataset (and its default image)
             this.newDatasetName = '';
-            alert(`Dataset '${newName}' created. Upload an image and save to create its folder and files.`);
+            alert(`Dataset '${newName}' selected. If a corresponding image exists on the server, it has been loaded. Save to create the JSON file.`);
         } else {
-            alert('Please enter a unique name for the new dataset.');
+            alert('Please enter a unique, non-empty name for the new dataset.');
         }
     },
     toggleCollapse(sectionName) {
@@ -409,6 +452,7 @@ export default {
             height: this.canvasHeight,
         },
         imageSettings: this.imageSettings,
+        gameSettings: this.gameSettings,
         labels: this.labels.map(label => ({
             text: label.text,
             position: label.position,
@@ -420,10 +464,10 @@ export default {
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      link.download = `${this.dataset || 'annotations'}.json`;
+      link.download = `data.json`;
       link.click();
       URL.revokeObjectURL(link.href);
-      alert('To complete saving, place the downloaded JSON file and the image in a new folder under `public/datasets/`');
+      //alert('To complete saving, place the downloaded JSON file and the image in a new folder under `public/datasets/`');
     },
     handleImageUpload(event) {
       const file = event.target.files[0];
