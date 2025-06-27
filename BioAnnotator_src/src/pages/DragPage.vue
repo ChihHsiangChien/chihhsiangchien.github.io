@@ -205,16 +205,13 @@ export default {
       return this.dataset ? `/test/${this.dataset}` : '/';
     },
     fullStudentTestUrl() {
-      // Use the router to resolve the full path including the base URL (e.g., /BioAnnotator/)
-      // This makes it robust for different deployment environments like GitHub Pages.
       if (!this.dataset) {
-        // Return a placeholder or the base URL if the dataset is not yet loaded to prevent router errors.
         const origin = typeof window !== 'undefined' ? window.location.origin : '';
-        return `${origin}${this.$router.options.history.base}`;
+        return `${origin}/BioAnnotator/#/test/placeholder`;
       }
       const resolvedRoute = this.$router.resolve({ name: 'Test', params: { dataset: this.dataset } });
       const origin = typeof window !== 'undefined' ? window.location.origin : '';
-      return `${origin}${resolvedRoute.href}`;
+      return `${origin}${resolvedRoute.href}`; // resolvedRoute.href 會自動含有 # 號
     },
     imageDisplayWidth() {
       return this.imageSettings.naturalWidth * this.imageSettings.scale;
