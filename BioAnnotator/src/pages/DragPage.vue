@@ -4,7 +4,6 @@
       <!-- Candidate Labels Panel (Left Side) -->
       <div class="lg:col-span-1 order-last lg:order-first">
           <div class="bg-white rounded-lg shadow-lg p-4 space-y-4 sticky top-4">
-            <h3 class="text-lg font-semibold border-b pb-2">Game Controls & Info</h3>
             <div class="text-center -mt-2">
               <router-link :to="studentTestUrl" target="_blank" class="text-sm text-blue-600 hover:underline align-middle">(Open Student Test View)</router-link>
               <button @click="isQrModalVisible = true" class="ml-1 inline-block align-middle" title="Show QR Code">
@@ -27,11 +26,12 @@
                 {{ gameMessage }}
               </div>
             </div>
-              <div class="space-y-2 pt-4 border-t">
-                <button @click="checkAnswers" class="w-full bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600">Check Answers</button>
-                <button @click="resetGame" class="w-full bg-gray-500 text-white py-2 px-4 rounded hover:bg-gray-600">Reset Game</button>
-              </div>
-            <h3 class="text-lg font-semibold border-b pb-2 mt-4">Candidate Labels</h3>
+                <div class="pt-4 border-t">
+                <div class="grid grid-cols-2 gap-2">
+                  <button @click="checkAnswers" class="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600 w-full">Check</button>
+                  <button @click="resetGame" class="bg-gray-500 text-white py-2 px-4 rounded hover:bg-gray-600 w-full">Reset</button>
+                </div>
+                </div>
             <div class="flex flex-wrap gap-2">
               <div 
                 v-for="label in availableLabels" 
@@ -319,7 +319,7 @@ export default {
         return;
       }      
       try {
-        const response = await fetch(`/datasets/${this.dataset}/data.json?t=${new Date().getTime()}`);
+        const response = await fetch(`${import.meta.env.BASE_URL}datasets/${encodeURIComponent(this.dataset)}/data.json?t=${new Date().getTime()}`);
         if (!response.ok) {
           // If response is not OK (e.g., 404), throw an error to go to catch block
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -338,13 +338,13 @@ export default {
           style: { ...this.defaultLabelStyle, ...label.style }, // Apply default and loaded styles
           isFilled: false, // Is this drop zone filled?
           placedText: '', // Text of the label placed here
-          placedLabelId: null, // ID of the label placed here,
+          placedLabelId: null, // ID of the label placed here
           placedLabelStyle: null, // NEW: Store style of the placed label
           isCorrect: false, // Is the placed label correct? (after check)
           isWrong: false, // Is the placed label wrong? (after check)
         }))
         if (data.image) {
-          this.imageUrl = `/datasets/${this.dataset}/${data.image}`
+          this.imageUrl = `${import.meta.env.BASE_URL}datasets/${encodeURIComponent(this.dataset)}/${data.image}`
         } else {
           this.imageUrl = ''; // Explicitly set to empty string if no image
           console.warn(`Dataset '${this.dataset}' has no image specified in data.json.`);
