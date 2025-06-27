@@ -1,4 +1,4 @@
-name: Deploy BioAnnotator to Pages under /bioannotator/
+name: Deploy BioAnnotator into /bioannotator
 
 on:
   push:
@@ -10,28 +10,34 @@ permissions:
   contents: write
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Install and Build
+      - name: Build BioAnnotator
         run: |
           cd BioAnnotator
           npm ci
           npm run build
 
-      - name: Deploy to /bioannotator/
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_branch: main
-          publish_dir: ./BioAnnotator/dist
-          destination_dir: bioannotator
-          allow_empty_commit: true
-          force_orphan: false
+      - name: Copy dist to bioannotator/
+        run: |
+          rm -rf bioannotator
+          mkdir bioannotator
+          cp -r BioAnnotator/dist/* bioannotator/
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add bioannotator
+          git commit -m "deploy: update bioannotator at $(date +'%Y-%m-%d %H:%M:%S')" || echo "No changes to commit"
+          git push
