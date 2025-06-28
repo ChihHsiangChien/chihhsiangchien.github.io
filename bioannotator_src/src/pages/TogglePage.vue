@@ -175,6 +175,7 @@ export default {
       collapsedStates: { 
         mainControlPanel: false, // Default to visible
       },
+      imagePositionLoaded: false,
       allLabelsRevealed: false, // New property to track global reveal state
     }
   },
@@ -277,6 +278,7 @@ export default {
         if (response.ok) {
           console.log("TogglePage: data.json fetch successful.");
           const data = await response.json();
+          this.imagePositionLoaded = !!data.imageSettings; // Check if position data exists
           this.canvasWidth = data.canvas?.width || 800;
           this.canvasHeight = data.canvas?.height || 600;
           if (data.imageSettings) {
@@ -317,6 +319,7 @@ export default {
     },
     
     createSampleData() {
+      this.imagePositionLoaded = false; // New sample data should be centered
       this.title = 'Sample Heart'
       this.imageUrl = 'data:image/svg+xml;base64,' + btoa(`
         <svg width="400" height="300" xmlns="http://www.w3.org/2000/svg">
@@ -359,9 +362,11 @@ export default {
       if (img) {
         this.imageSettings.naturalWidth = img.naturalWidth;
         this.imageSettings.naturalHeight = img.naturalHeight;
-        // Center the image on the canvas, similar to EditPage.vue
-        this.imageSettings.x = (this.canvasWidth - this.imageDisplayWidth) / 2;
-        this.imageSettings.y = (this.canvasHeight - this.imageDisplayHeight) / 2;
+        // Center the image on the canvas only if its position wasn't loaded from JSON
+        if (!this.imagePositionLoaded) {
+          this.imageSettings.x = (this.canvasWidth - this.imageDisplayWidth) / 2;
+          this.imageSettings.y = (this.canvasHeight - this.imageDisplayHeight) / 2;
+        }
         console.log("TogglePage: Image loaded. Natural dimensions:", this.imageSettings.naturalWidth, this.imageSettings.naturalHeight);
       }
     },

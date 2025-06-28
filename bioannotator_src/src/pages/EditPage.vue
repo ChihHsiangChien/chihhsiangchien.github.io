@@ -222,6 +222,7 @@ export default {
       dragConnectorIndex: -1,
       isDraggingImage: false,
       dragOffset: { x: 0, y: 0 },
+      imagePositionLoaded: false,
       collapsedStates: {
         datasetManagement: true,
         canvasImageControls: true,
@@ -364,6 +365,8 @@ export default {
         }
         
         const data = await response.json();
+        this.imagePositionLoaded = !!data.imageSettings; // Check if position data exists
+
         this.canvasWidth = data.canvas?.width || 800;
         this.canvasHeight = data.canvas?.height || 600;
         if (data.imageSettings) {
@@ -409,6 +412,7 @@ export default {
             penaltyPerWrongAttempt: 50,
         };
         this.selectedLabelIndex = -1;
+        this.imagePositionLoaded = false;
     },
     createDataset() {
         const newName = this.newDatasetName.trim();
@@ -472,6 +476,7 @@ export default {
     handleImageUpload(event) {
       const file = event.target.files[0];
       if (file) {
+        this.imagePositionLoaded = false; // A newly uploaded image should be centered
         this.imageUrl = URL.createObjectURL(file);
         // To save, we need the file name.
         // This is a simplified approach.
@@ -487,9 +492,11 @@ export default {
       const img = this.$refs.imageRef;
       this.imageSettings.naturalWidth = img.naturalWidth;
       this.imageSettings.naturalHeight = img.naturalHeight;
-      // Center the image on the canvas
-      this.imageSettings.x = (this.canvasWidth - this.imageDisplayWidth) / 2;
-      this.imageSettings.y = (this.canvasHeight - this.imageDisplayHeight) / 2;
+      // Center the image on the canvas only if its position wasn't loaded from JSON
+      if (!this.imagePositionLoaded) {
+        this.imageSettings.x = (this.canvasWidth - this.imageDisplayWidth) / 2;
+        this.imageSettings.y = (this.canvasHeight - this.imageDisplayHeight) / 2;
+      }
     },
     addLabel(event) {
       const rect = event.target.getBoundingClientRect();
