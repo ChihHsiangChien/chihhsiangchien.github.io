@@ -1,6 +1,6 @@
 <template>
   <div class="home-container">
-    <h1 class="text-3xl font-bold mb-4">BioAnnotator</h1>
+    <h1 class="text-3xl font-bold mb-4">bioannotator</h1>
 
     <p class="text-lg mb-6">
       <router-link to="/student-drag" class="text-blue-600 hover:underline">Go to Student Drag Games</router-link>
