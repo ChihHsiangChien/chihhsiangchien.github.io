@@ -200,6 +200,7 @@ export default {
       gameMessage: '',
       gameMessageClass: '', // For styling success/failure
       isQrModalVisible: false,
+      imagePositionLoaded: false,
     }
   },
   computed: {
@@ -344,6 +345,7 @@ export default {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         const data = await response.json()
+        this.imagePositionLoaded = !!data.imageSettings; // Check if position data exists
         this.canvasWidth = data.canvas?.width || 800;
         this.canvasHeight = data.canvas?.height || 600;
         this.imageSettings = { ...this.imageSettings, ...data.imageSettings };
@@ -378,6 +380,7 @@ export default {
     },
     
     createSampleData() {
+      this.imagePositionLoaded = false; // New sample data should be centered
       this.title = 'Sample Heart'
       this.expectedDurationSeconds = 60;
       this.initialScore = 1000;
@@ -439,9 +442,11 @@ export default {
       const img = this.$refs.imageRef
       this.imageSettings.naturalWidth = img.naturalWidth;
       this.imageSettings.naturalHeight = img.naturalHeight;
-      // Center the image on the canvas
-      this.imageSettings.x = (this.canvasWidth - this.imageDisplayWidth) / 2;
-      this.imageSettings.y = (this.canvasHeight - this.imageDisplayHeight) / 2;
+      // Center the image on the canvas only if its position wasn't loaded from JSON
+      if (!this.imagePositionLoaded) {
+        this.imageSettings.x = (this.canvasWidth - this.imageDisplayWidth) / 2;
+        this.imageSettings.y = (this.canvasHeight - this.imageDisplayHeight) / 2;
+      }
     },
 
     startTimer() {
