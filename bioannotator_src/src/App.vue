@@ -7,14 +7,16 @@
 <script>
 import DefaultLayout from './layouts/DefaultLayout.vue';
 import StudentLayout from './layouts/StudentLayout.vue';
-import StudentDragLayout from './layouts/StudentDragLayout.vue'; // Import the new layout
+import StudentDragLayout from './layouts/StudentDragLayout.vue';
+import AdminLayout from './layouts/AdminLayout.vue';
 
 export default {
   name: 'App',
   components: {
     DefaultLayout,
     StudentLayout,
-    StudentDragLayout // Add it to components
+    StudentDragLayout,
+    AdminLayout
   },
   computed: {
     layout() {

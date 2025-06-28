@@ -4,7 +4,6 @@
       <div class="container mx-auto flex justify-between items-center">
         <router-link to="/" class="font-bold text-lg hover:text-blue-300">bioannotator</router-link>
         <div>
-          <router-link :to="`/edit/${defaultDataset}`" class="px-3 py-2 rounded hover:bg-gray-700">Edit</router-link>
           <router-link :to="`/toggle/${defaultDataset}`" class="px-3 py-2 rounded hover:bg-gray-700">Toggle</router-link>
           <router-link :to="`/drag/${defaultDataset}`" class="px-3 py-2 rounded hover:bg-gray-700">Drag</router-link>
         </div>

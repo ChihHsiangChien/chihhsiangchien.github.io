@@ -5,7 +5,7 @@
       <div class="lg:col-span-1 order-last lg:order-first">
           <div class="bg-white rounded-lg shadow-lg p-4 space-y-4 sticky top-4">
             <div class="text-center -mt-2">
-              <router-link :to="studentTestUrl" target="_blank" class="text-sm text-blue-600 hover:underline align-middle">(Student Test View)</router-link>
+              <router-link :to="studentTestUrl" target="_blank" class="text-sm text-blue-600 hover:underline align-middle">單頁連結</router-link>
               <button @click="isQrModalVisible = true" class="ml-1 inline-block align-middle" title="Show QR Code">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-600 hover:text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v1m6 11h-1m-2-11h1m-1 12v1m-7-7h1m5 4h1M5 12H4m11 6v-1M8 6H7m1 6h1m7-1h1M5 8v1m11-5h-1m-1 11v-1m-6-1H8" />
@@ -89,13 +89,15 @@
               }"
             >
               <div v-if="label.isFilled"
-                class="px-3 py-1 rounded text-center whitespace-nowrap w-full h-full flex items-center justify-center"
+                class="px-3 py-1 rounded text-center whitespace-nowrap w-full h-full flex items-center justify-center cursor-move"
                 :style="{ 
                   backgroundColor: label.placedLabelStyle.bgColor, 
                   color: label.placedLabelStyle.textColor, 
                   border: `2px dashed ${label.placedLabelStyle.lineColor}`,
-                  fontSize: label.placedLabelStyle.fontSize + 'px'
-                }">
+                  fontSize: label.placedLabelStyle.fontSize + 'px',
+                  'touch-action': 'none'
+                }"
+                @pointerdown.stop="handlePointerDownOnPlacedLabel(label, $event)">
                 {{ label.placedText }}
               </div> 
               <div v-else
@@ -486,6 +488,26 @@ export default {
       this.startTimer(); // Start timer when first drag begins
     },
 
+    handlePointerDownOnPlacedLabel(dropZoneLabel, event) {
+      // Find the original shuffled label that was placed in this zone
+      const placedShuffledLabel = this.shuffledLabels.find(sl => sl.id === dropZoneLabel.placedLabelId);
+      if (!placedShuffledLabel) return; // Should not happen
+
+      // Mark the label as available again in the candidate list
+      placedShuffledLabel.isUsed = false;
+
+      // Clear the drop zone's state
+      dropZoneLabel.isFilled = false;
+      dropZoneLabel.placedText = '';
+      dropZoneLabel.placedLabelId = null;
+      dropZoneLabel.placedLabelStyle = null;
+      dropZoneLabel.isCorrect = false;
+      dropZoneLabel.isWrong = false;
+
+      // Start a new drag with this label
+      this.handlePointerDown(placedShuffledLabel, event);
+    },
+
     handlePointerMove(event) {
       if (!this.isDragging) return;
       event.preventDefault();
@@ -533,35 +555,35 @@ export default {
     
     handleDrop(dropIndex) {
       if (!this.draggedLabelData) return; // No label being dragged
-
-      const targetDropZone = this.labels[dropIndex]
       
-      // If the target drop zone is already filled, return the dragged label to the candidate panel
+      const targetDropZone = this.labels[dropIndex];
+
+      // If the target drop zone is already filled, we perform a swap.
+      // The old label will be returned to the candidate pool.
       if (targetDropZone.isFilled) {
-        // Optionally, allow swapping or just prevent drop.
-        // Current logic: prevent drop and return to candidate.
-        // No action needed, the label was not marked as 'used' yet.
-        this.draggedLabelData = null;
-        return
+        // Find the shuffledLabel corresponding to the one already in the drop zone.
+        const oldShuffledLabel = this.shuffledLabels.find(sl => sl.id === targetDropZone.placedLabelId);
+        if (oldShuffledLabel) {
+          // Mark it as not used, so it reappears in the candidate list.
+          oldShuffledLabel.isUsed = false;
+        }
       }
       
-      // Place the label
-      targetDropZone.isFilled = true
-      targetDropZone.placedText = this.draggedLabelData.text
-      targetDropZone.placedLabelId = this.draggedLabelData.id
-      targetDropZone.placedLabelStyle = { ...this.draggedLabelData.style } // Store the style of the dragged label
+      // Place the new label into the drop zone.
+      targetDropZone.isFilled = true;
+      targetDropZone.placedText = this.draggedLabelData.text;
+      targetDropZone.placedLabelId = this.draggedLabelData.id;
+      targetDropZone.placedLabelStyle = { ...this.draggedLabelData.style };
 
-      // Mark the dragged label as used in the shuffledLabels array
-      const draggedLabelInShuffled = this.shuffledLabels.find(sl => sl.id === this.draggedLabelData.id);
-      if (draggedLabelInShuffled) {
-          draggedLabelInShuffled.isUsed = true;
+      // Mark the dragged label as 'used' so it's removed from the candidate list.
+      const newShuffledLabel = this.shuffledLabels.find(sl => sl.id === this.draggedLabelData.id);
+      if (newShuffledLabel) {
+        newShuffledLabel.isUsed = true;
       }
       
-      // Reset correctness state for this drop zone
-      targetDropZone.isCorrect = false
-      targetDropZone.isWrong = false
-
-      this.draggedLabelData = null // Clear dragged data
+      // Reset correctness state for this drop zone, as it has a new label.
+      targetDropZone.isCorrect = false;
+      targetDropZone.isWrong = false;
     },
 
     checkAnswers() {
