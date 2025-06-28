@@ -196,7 +196,7 @@ export default {
       datasets: [...availableDatasets], // Initialize from the centralized config
       dataset: this.$route.params.dataset || availableDatasets[0] || '', // Set default to the first available dataset, or empty
       newDatasetName: '',
-      title: 'BioAnnotator',
+      title: 'bioannotator',
       imageUrl: '',
       canvasWidth: 800,
       canvasHeight: 600,

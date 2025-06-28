@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-BioAnnotator is a modular, web-based interactive labeling and assessment system for biology education. It enables educators to annotate anatomical/ecological images and create interactive learning modules for students.
+bioannotator is a modular, web-based interactive labeling and assessment system for biology education. It enables educators to annotate anatomical/ecological images and create interactive learning modules for students.
 
 ## Tech Stack
 

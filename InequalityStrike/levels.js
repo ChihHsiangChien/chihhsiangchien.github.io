@@ -83,7 +83,7 @@ window.gameLevels = [
         maxMissiles: 5,
         maxAdvancedMissiles: 3,
         missileRadius: 1,
-        advancedMissileRadius: 2,
+        advancedMissileRadius: 3,
         maxInequalitiesPerShot: 2,
         availableTerms: ["x", "y", "x^2+y^2"],
         allowedOperators: [">", "<", "≥", "≤", "="],

@@ -597,8 +597,18 @@
       if (changesPreview.metrics[metric].delta !== 0) {
         hasMetricChanges = true;
         const p = document.createElement('p');
-        p.className = `text-sm ${changesPreview.metrics[metric].delta > 0 ? 'text-green-600' : 'text-red-600'}`;
-        p.textContent = `${metric}：${changesPreview.metrics[metric].oldVal} → ${changesPreview.metrics[metric].newVal} (${changesPreview.metrics[metric].delta > 0 ? '+' : ''}${changesPreview.metrics[metric].delta})`;
+        const delta = changesPreview.metrics[metric].delta;
+        let colorClass;
+
+        if (metric === 'PM2.5 等級') {
+          // 對 PM2.5 來說，減少 (delta < 0) 是好的 (綠色)
+          colorClass = delta < 0 ? 'text-green-600' : 'text-red-600';
+        } else {
+          // 對其他指標來說，增加 (delta > 0) 是好的 (綠色)
+          colorClass = delta > 0 ? 'text-green-600' : 'text-red-600';
+        }
+        p.className = `text-sm ${colorClass}`;
+        p.textContent = `${metric}：${changesPreview.metrics[metric].oldVal} → ${changesPreview.metrics[metric].newVal} (${delta > 0 ? '+' : ''}${delta})`;
         metricsChangesDiv.appendChild(p);
       }
     }

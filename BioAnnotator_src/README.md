@@ -1,4 +1,4 @@
-# BioAnnotator
+# bioannotator
 
 A modular, web-based interactive labeling and assessment system for biology education.
 
@@ -40,12 +40,12 @@ src/                      # Source code
    npm run dev
    ```
 
-3. Open http://localhost:5173/BioAnnotator/ in your browser
+3. Open http://localhost:5173/bioannotator/ in your browser
 
 4. Navigate to different modes:
-   - Edit: http://localhost:5173/BioAnnotator/#/edit/heart
-   - Toggle: http://localhost:5173/BioAnnotator/#/toggle/heart  
-   - Drag: http://localhost:5173/BioAnnotator/#/drag/heart
+   - Edit: http://localhost:5173/bioannotator/#/edit/heart
+   - Toggle: http://localhost:5173/bioannotator/#/toggle/heart  
+   - Drag: http://localhost:5173/bioannotator/#/drag/heart
 
 ## Usage
 
