@@ -1,5 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import HomePage from '../pages/HomePage.vue'
+import AdminPage from '../pages/AdminPage.vue'
 import StudentDragLayout from '../layouts/StudentDragLayout.vue'; // New student drag layout
 import { RouterView } from 'vue-router'; // Import RouterView
 import EditPage from '../pages/EditPage.vue'
@@ -13,6 +14,12 @@ const routes = [
     component: HomePage,
     meta: { layout: 'DefaultLayout' }
   },
+  {
+    path: '/Admin',
+    name: 'Admin',
+    component: AdminPage,
+    meta: { layout: 'AdminLayout' }
+  },  
   {
     path: '/edit/:dataset',
     name: 'Edit',
