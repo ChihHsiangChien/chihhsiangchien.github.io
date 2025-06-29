@@ -1,14 +1,26 @@
 # bioannotator
 
-A modular, web-based interactive labeling and assessment system for biology education.
+一個模組化的線上生物圖譜互動教材與評量系統。
 
-## Features
+## 專案特色
 
-- **Edit Mode** (`/edit/:dataset`) - Teacher interface for creating and editing anatomical labels
-- **Toggle Mode** (`/toggle/:dataset`) - Student learning mode with clickable reveal functionality  
-- **Drag Mode** (`/drag/:dataset`) - Student assessment mode with drag-and-drop scoring
+- **編輯模式 (Edit Mode)** (`/edit/:dataset`)
+  - 專為教師設計的所見即所得編輯介面。
+  - 只需上傳圖片，即可透過點擊與拖曳輕鬆新增、調整標籤與指引線。
+  - 可自訂標籤樣式（顏色、字體大小）與遊戲設定（時間、分數）。
+  - 完成後可產生 QR Code，方便在課堂上快速分享給學生。
 
-## Project Structure
+- **翻牌模式 (Toggle Mode)** (`/toggle/:dataset`)
+  - 適合學生自學與複習。
+  - 點擊圖上的標示點即可顯示或隱藏對應的構造名稱，像數位抽認卡一樣加深記憶。
+
+- **拖曳遊戲模式 (Drag Mode)** (`/drag/:dataset` & `/student-drag/:dataset`)
+  - 將靜態圖譜轉化為有趣的配對遊戲。
+  - 學生需將被打亂的標籤拖曳至正確的位置。
+  - 系統會即時給予回饋（答對或答錯），並計算時間與分數。
+  - 提供專為學生設計的獨立入口 (`/student-drag`)，展示所有可玩的遊戲列表。
+
+## 專案結構
 
 ```
 public/                   # Static assets and datasets
@@ -17,10 +29,10 @@ public/                   # Static assets and datasets
       image.png           # Image file for the module
       data.json           # Label definitions and settings
 src/                      # Source code
-  App.vue                 # Main application component
-  main.js                 # Vue app initialization
-  router/                 # Vue Router configuration
-  pages/                  # Route components for different modes
+  App.vue                 # 主應用程式組件
+  main.js                 # Vue App 初始化
+  router/                 # Vue Router 路由設定
+  pages/                  # 各模式的頁面組件
     EditPage.vue          # Teacher interface for label creation
     TogglePage.vue        # Student interactive reveal mode
     DragPage.vue          # Student drag assessment mode
