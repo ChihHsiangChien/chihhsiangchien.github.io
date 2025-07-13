@@ -323,6 +323,7 @@
     const stigmaGeometry = new THREE.CylinderGeometry(stigmaRadius, stigmaRadius, stigmaHeight, 32);
     const stigmaMaterial = new THREE.MeshStandardMaterial({
         color: 0x77aa77, // 較深的綠色
+        side: THREE.DoubleSide,
         roughness: 0.8,
         depthWrite: false,
         clippingPlanes: [clipPlaneOvaryZ] // 套用與子房相同的裁切
@@ -401,12 +402,30 @@
       // 3. 建立花粉管 (先用空的 geometry)
       const tubeMaterial = new THREE.MeshStandardMaterial({
           color: 0xffddaa,
-          side: THREE.DoubleSide
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.5,
+          depthWrite: false // 不寫入深度
+
       });
       const pollenTube = new THREE.Mesh(new THREE.BufferGeometry(), tubeMaterial);
       group.add(pollenTube);
 
-      return { group, pollenTube, pollenTubePath };
+      // 4. 建立管核與精細胞
+      const tubeNucleusMaterial = new THREE.MeshStandardMaterial({ color: 0xff9900, emissive: 0x553300 });
+      const tubeNucleus = new THREE.Mesh(new THREE.SphereGeometry(0.04*0.5, 8, 8), tubeNucleusMaterial);
+      tubeNucleus.visible = false; // 預設隱藏
+      group.add(tubeNucleus);
+
+      // 使用 createCell 函式建立包含細胞核的精細胞
+      const sperm1 = createCell(0x6666ff, 0.04); // 傳入顏色和半徑
+      const sperm2 = createCell(0x6666ff, 0.04);
+      sperm1.visible = false; // 預設隱藏
+      sperm2.visible = false; // 預設隱藏
+      group.add(sperm1, sperm2);
+
+      // 將所有需要動畫控制的物件回傳
+      return { group, pollenTube, pollenTubePath, tubeNucleus, sperm1, sperm2 };
   }
 
   // === 初始化 Three.js ===
@@ -454,7 +473,14 @@
   scene.add(styleAndStigma);
   
   // === 建立花粉與花粉管 ===
-  const { group: pollenGroup, pollenTube, pollenTubePath } = createPollenAndTube(stigmaTopPosition, ovaryTopY, micropylePosition, ovuleBBox, sacBBox);
+  const { 
+    group: pollenGroup, 
+    pollenTube, 
+    pollenTubePath, 
+    tubeNucleus, 
+    sperm1, 
+    sperm2 
+  } = createPollenAndTube(stigmaTopPosition, ovaryTopY, micropylePosition, ovuleBBox, sacBBox);
   scene.add(pollenGroup);
 
   // === UI 控制器事件 ===
@@ -463,8 +489,6 @@
   const toggleOvuleBtn = document.getElementById('toggle-ovule-btn');
   const integumentOpacitySlider = document.getElementById('integument-opacity-slider');
   const animationSlider = document.getElementById('animation-slider');
-
-  
 
   ovuleZClipSlider.addEventListener('input', (event) => {
     // 當滑桿移動時，更新胚珠裁切平面的位置
@@ -490,24 +514,6 @@
     });
   });
 
-  animationSlider.addEventListener('input', (event) => {
-      const progress = parseFloat(event.target.value);
-
-      if (progress > 0.01) {
-          const tubePoints = pollenTubePath.getPoints(100); // 取得路徑上 100 個點
-          const currentPointCount = Math.max(2, Math.ceil(progress * tubePoints.length));
-          const currentPath = new THREE.CatmullRomCurve3(tubePoints.slice(0, currentPointCount));
-
-          // 更新管狀幾何體
-          if (pollenTube.geometry) pollenTube.geometry.dispose(); // 釋放舊的 geometry 避免記憶體洩漏
-          pollenTube.geometry = new THREE.TubeGeometry(currentPath, currentPointCount, 0.05, 8, false);
-      } else {
-          // 如果進度為 0，清空 geometry
-          if (pollenTube.geometry) pollenTube.geometry.dispose();
-          pollenTube.geometry = new THREE.BufferGeometry();
-      }
-  });  
-
   toggleOvuleBtn.addEventListener('click', () => {
     ovule.visible = !ovule.visible;
     toggleOvuleBtn.textContent = ovule.visible ? '隱藏胚珠' : '顯示胚珠';
@@ -523,6 +529,63 @@
   function animate() {
     requestAnimationFrame(animate);
     controls.update();
+
+    // --- 花粉管與細胞動畫 ---
+    const progress = parseFloat(animationSlider.value);
+
+    if (progress > 0.01) {
+        const tubePoints = pollenTubePath.getPoints(200); // 增加路徑點的密度以提高精度
+        const currentPointCount = Math.max(2, Math.ceil(progress * tubePoints.length));
+        const currentPath = new THREE.CatmullRomCurve3(tubePoints.slice(0, currentPointCount));
+
+        // 更新管狀幾何體
+        if (pollenTube.geometry) pollenTube.geometry.dispose();
+        pollenTube.geometry = new THREE.TubeGeometry(currentPath, currentPointCount, 0.05, 8, false);
+
+        // 顯示細胞
+        // The visibility of each cell will be determined by the logic below
+
+        // 計算目前花粉管的總長度
+        const currentLength = currentPath.getLength();
+
+        // --- 更新管核與精細胞位置 ---
+        const tubeNucleusOffset = 0.05; // 管核與管尖的距離
+        const sperm1Offset = 0.15;      // 精細胞1與管尖的距離
+        const sperm2Offset = 0.25;      // 精細胞2與管尖的距離
+
+        // 只有當花粉管長度足夠時才顯示管核，並讓它與管尖保持一個小距離
+        if (currentLength > tubeNucleusOffset) {
+            const t_nucleus = 1 - (tubeNucleusOffset / currentLength);
+            tubeNucleus.position.copy(currentPath.getPointAt(t_nucleus));
+            tubeNucleus.visible = true;
+        } else {
+            tubeNucleus.visible = false;
+        }
+
+        // 只有當花粉管長度足夠時才顯示精細胞
+        if (currentLength > sperm1Offset) {
+            const t1 = 1 - (sperm1Offset / currentLength);
+            sperm1.position.copy(currentPath.getPointAt(t1));
+            sperm1.visible = true;
+        } else {
+            sperm1.visible = false;
+        }
+        if (currentLength > sperm2Offset) {
+            const t2 = 1 - (sperm2Offset / currentLength);
+            sperm2.position.copy(currentPath.getPointAt(t2));
+            sperm2.visible = true;
+        } else {
+            sperm2.visible = false;
+        }
+    } else {
+        // 如果進度為 0，清空 geometry 並隱藏所有細胞
+        if (pollenTube.geometry) pollenTube.geometry.dispose();
+        pollenTube.geometry = new THREE.BufferGeometry();
+        tubeNucleus.visible = false;
+        sperm1.visible = false;
+        sperm2.visible = false;
+    }
+
     renderer.render(scene, camera);
   }
   animate();
