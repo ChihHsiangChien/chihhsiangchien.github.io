@@ -7,8 +7,24 @@
 </head>
 <body>
 <div id="controls-panel" style="position: absolute; bottom: 10px; left: 10px; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; color: white; z-index: 10;">
-  <label for="z-clip-slider">珠被 Z軸 切面</label>
-  <input type="range" id="z-clip-slider" min="-1.5" max="1.5" value="1.5" step="0.01" style="width: 200px;">
+  <div>
+    <label for="ovary-z-clip-slider">子房 Z軸 切面</label>
+    <input type="range" id="ovary-z-clip-slider" min="-1" max="4" value="0" step="0.01" style="width: 200px;">
+  </div>  
+  <div style="margin-bottom: 10px;">
+    <label for="ovule-z-clip-slider">珠被 Z軸 切面</label>
+    <input type="range" id="ovule-z-clip-slider" min="-0.5" max="1.5" value="1.5" step="0.01" style="width: 200px;">
+  </div>
+  <div style="margin-top: 10px;">
+    <label for="animation-slider">花粉管生長</label>
+    <input type="range" id="animation-slider" min="0" max="1" value="0" step="0.01" style="width: 200px;">
+  </div>
+  <div style="margin-top: 10px;">
+    <label for="integument-opacity-slider">珠被透明度</label>
+    <input type="range" id="integument-opacity-slider" min="0" max="1" value="1" step="0.01" style="width: 200px;">
+  </div>
+
+  <button id="toggle-ovule-btn" style="width: 100%; margin-top: 10px; padding: 5px;">隱藏胚珠</button>
 </div>
 <script type="importmap">
 {
@@ -22,7 +38,34 @@
   import * as THREE from 'three';
   import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-  // === 建立細胞球體 ===
+  // === 顏色變數 ===
+  const integumentColor = 0xffcc00; // 珠被、珠柄、反足細胞顏色
+
+  // --- 建立裁切平面 ---
+  const clipPlaneOvuleZ = new THREE.Plane(new THREE.Vector3(0, 0, -1), 1.5); // 用於胚珠
+  const clipPlaneOvaryZ = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0);   // 用於子房
+
+  // --- 建立可共用的材質 ---
+  const innerIntegumentMaterial = new THREE.MeshStandardMaterial({
+      color: integumentColor,
+      transparent: false, // 預設不透明
+      opacity: 1,
+      side: THREE.DoubleSide,
+      depthWrite: true, // 不透明物件應寫入深度
+      clippingPlanes: [clipPlaneOvuleZ]
+  });
+
+  const outerIntegumentMaterial = new THREE.MeshStandardMaterial({
+      color: integumentColor,
+      transparent: false, // 預設不透明
+      opacity: 1,
+      side: THREE.DoubleSide,
+      depthWrite: true, // 不透明物件應寫入深度
+      clippingPlanes: [clipPlaneOvuleZ]
+  });
+
+
+  // === 建立細胞球體func ===
   function createCell(color = 0xffffcc, radius = 0.2) {
     const group = new THREE.Group();
 
@@ -52,7 +95,7 @@
     return group;
   }
 
-  // === 建立胚囊 7 細胞 ===
+  // === 建立胚囊 7 細胞 func===
   function createEmbryoSacGroup() {
     const sac = new THREE.Group();
 
@@ -78,7 +121,7 @@
         color: 0xccffcc,
         transparent: true,
         opacity: 0.4,
-        side: THREE.DoubleSide  // 也设置为双面
+        side: THREE.DoubleSide  // 雙面
 
       })
     );
@@ -102,7 +145,7 @@
 
     // 反足細胞（三個在頂部）
     for (let i = 0; i < 3; i++) {
-      const anti = createCell(0xffcc66, 0.18);
+      const anti = createCell(integumentColor, 0.18);
       anti.position.set((i - 1) * 0.3, 0.6, 0);
       sac.add(anti);
     }
@@ -111,76 +154,75 @@
     const sacShell = new THREE.Mesh(
       new THREE.SphereGeometry(0.7, 32, 32),
       new THREE.MeshStandardMaterial({
-        color: 0x779966,
+        color: 0xAA9966,
         side: THREE.DoubleSide,
-        clippingPlanes: [clipPlaneZ] // 將裁切平面應用於此材質
-
+        transparent: true, // 改為半透明
+        opacity: 0.5,
+        depthWrite: false  // 不要寫入深度，避免遮擋問題
       })
     );
     sacShell.scale.set(1, 1.3, 1); // 拉伸以模擬胚囊形狀
     sac.add(sacShell);
 
-    return sac;
+    // --- 新增回傳資訊 ---
+    // 計算 BBox 前先更新世界矩陣
+    sac.updateMatrixWorld(true);
+    const bbox = new THREE.Box3().setFromObject(sac);
+
+    // 取得卵細胞座標 (世界座標，在此例中等於局部座標)
+    const eggCellPosition = egg.position.clone();
+
+    // 取得中央細胞核座標 (世界座標)
+    const centralNucleiPositions = [
+        nucleus1.getWorldPosition(new THREE.Vector3()),
+        nucleus2.getWorldPosition(new THREE.Vector3())
+    ];
+
+    return { group: sac, bbox, eggCellPosition, centralNucleiPositions };
   }
 
-  // --- 建立一個專門用來切割珠被的裁切平面 ---
-  const clipPlaneZ = new THREE.Plane(new THREE.Vector3(0, 0, -1), 1.5);
-
-  // 建立單一胚珠
-  function createOvuleWithIntegument() {
+  // 建立單一胚珠 func
+  function createOvuleWithIntegument({ group: sac, bbox: sacBBox, eggCellPosition, centralNucleiPositions }) {
     const ovuleGroup = new THREE.Group();
 
     // 胚囊內部
-    const sac = createEmbryoSacGroup();
     ovuleGroup.add(sac);
 
+    // 根據胚囊大小計算珠被尺寸
+    const sacSize = sacBBox.getSize(new THREE.Vector3());
+    const baseInnerRadius = sacSize.x / 2 + 0.05; // 內珠被半徑比胚囊寬度稍大
+    const scaleYInner = (sacSize.y / 2 + 0.1) / baseInnerRadius; // 內珠被Y軸縮放
+
     // 內層珠被
-    const innerGeometry = new THREE.SphereGeometry(0.75, 32, 32, 0, Math.PI * 2, 0, Math.PI * 0.85);
-    innerGeometry.scale(1, 1.4, 1); // 调整缩放以匹配胚囊形状
+    const innerGeometry = new THREE.SphereGeometry(baseInnerRadius, 32, 32, 0, Math.PI * 2, 0, Math.PI * 0.85);
+    innerGeometry.scale(1, scaleYInner, 1); // 调整缩放以匹配胚囊形状
     const inner = new THREE.Mesh(
-      innerGeometry,
-      new THREE.MeshStandardMaterial({
-        color: 0xffcc66,
-        transparent: true,
-        opacity: 0.6,
-        side: THREE.DoubleSide,
-        depthWrite: false, // 防止深度冲突
-        clippingPlanes: [clipPlaneZ] // 將裁切平面應用於此材質
-      })
+      innerGeometry, innerIntegumentMaterial
     );
     ovuleGroup.add(inner);
 
     // 外層珠被
-    const outerGeometry = new THREE.SphereGeometry(0.77, 32, 32, 0, Math.PI * 2, 0, Math.PI * 0.8); // 開口比內層稍大
-    outerGeometry.scale(1, 1.5, 1); // 调整缩放
+    const baseOuterRadius = baseInnerRadius + 0.02;
+    const scaleYOuter = scaleYInner + 0.1;
+    const outerGeometry = new THREE.SphereGeometry(baseOuterRadius, 32, 32, 0, Math.PI * 2, 0, Math.PI * 0.8); // 開口比內層稍大
+    outerGeometry.scale(1, scaleYOuter, 1); // 调整缩放
     const outer = new THREE.Mesh(
-      outerGeometry,
-      new THREE.MeshStandardMaterial({
-        color: 0xffcc66,
-        transparent: true,
-        opacity: 0.6,
-        side: THREE.DoubleSide,
-        depthWrite: false, // 防止深度冲突
-        clippingPlanes: [clipPlaneZ] // 將裁切平面應用於此材質
-      })
+      outerGeometry, outerIntegumentMaterial
     );
     ovuleGroup.add(outer);
 
-
     // 珠柄 (Funiculus and Raphe)
-    const outerRadius = 0.77;
-    const outerScaleY = 1.5;
-    const ovuleTopY = outerRadius * outerScaleY; // 胚珠頂部 Y 座標
-    const ovuleSideX = outerRadius; // 胚珠側面 X 座標
+    const ovuleTopY = baseOuterRadius * scaleYOuter; // 胚珠頂部 Y 座標
+    const ovuleSideX = baseOuterRadius; // 胚珠側面 X 座標
 
     // 使用 CatmullRomCurve3 可以通過一系列的點來定義平滑曲線
     const curve = new THREE.CatmullRomCurve3([
       new THREE.Vector3(0, ovuleTopY - 0.1, 0),   // 起點 (合點)
-      new THREE.Vector3(0, ovuleTopY * 1.1 , 0),  // 彎曲點 1      
-      new THREE.Vector3(ovuleSideX * 0.8, ovuleTopY * 0.9 , 0),  // 彎曲點 1
-      
-      new THREE.Vector3(ovuleSideX * 1.1, -ovuleTopY * 0.2, 0), // 彎曲點 3
-      new THREE.Vector3(0.7, -ovuleTopY-0.3, 0)                     // 終點 (珠柄基部)
+      new THREE.Vector3(0, ovuleTopY * 1.1 , 0),
+      new THREE.Vector3(ovuleSideX * 0.8, ovuleTopY * 0.9 , 0),
+      new THREE.Vector3(ovuleSideX * 1.1, -ovuleTopY * 0.2, 0),
+      new THREE.Vector3(0.1, -ovuleTopY-0.5, 0),
+      new THREE.Vector3(0.0, -ovuleTopY-0.8, 0)
     ]);
 
     // 2. 根據曲線路徑建立管狀幾何體
@@ -188,21 +230,190 @@
 
     // 3. 建立 Mesh 並加入場景
     const stalk = new THREE.Mesh(stalkGeometry, new THREE.MeshStandardMaterial({
-      color: 0xffcc66, // 改成珠柄常見的顏色
-      depthWrite: true, // 防止深度冲突
-
+      color: integumentColor, // 珠柄顏色
+      depthWrite: true,
 
     }));
     ovuleGroup.add(stalk);
 
-    return ovuleGroup;
+    // 計算珠孔位置 (外層珠被開口處的局部座標)
+    const micropyleLocalPosition = new THREE.Vector3(0, -baseOuterRadius * scaleYOuter, 0);
+    // 更新 group 的世界矩陣，以確保 BBox 計算正確
+    ovuleGroup.updateMatrixWorld(true);
+    const ovuleGroupBBox = new THREE.Box3().setFromObject(ovuleGroup);
+
+    return { 
+      group: ovuleGroup, 
+      micropylePosition: micropyleLocalPosition, 
+      bbox: ovuleGroupBBox,
+      eggCellPosition: eggCellPosition, // 將座標透傳出去
+      centralNucleiPositions: centralNucleiPositions // 將座標透傳出去
+    };
+  }
+
+
+  // === 建立子房 func ===  
+  function createOvary() {
+    const ovaryGroup = new THREE.Group();
+    // 將尺寸參數化，方便管理與回傳
+    const innerRadius = 1;
+    const outerRadius = 1.05;
+    const scaleY = 2;
+    const scaleX = 1.5;
+    const scaleZ = 1.5;
+
+    // 建立內壁
+    const innerGeometry = new THREE.SphereGeometry(innerRadius, 32, 32);
+    const innerMaterial = new THREE.MeshStandardMaterial({
+      color: 0x88cc88,
+      side: THREE.DoubleSide,
+      transparent: true,
+      depthWrite: false, // 設為 false 以解決透明物體排序問題
+      opacity: 0.5,
+      clippingPlanes: [clipPlaneOvaryZ] // 將裁切平面應用於此材質
+    });
+    const innerMesh = new THREE.Mesh(innerGeometry, innerMaterial);
+    innerMesh.scale.set(scaleX, scaleY, scaleZ); // 拉伸
+    ovaryGroup.add(innerMesh);
+
+    // 建立外壁 
+    const outerGeometry = new THREE.SphereGeometry(outerRadius, 32, 32);
+    const outerMaterial = new THREE.MeshStandardMaterial({
+      color: 0x66aa66,
+      side: THREE.DoubleSide,
+      transparent: true,
+      depthWrite: false, // 設為 false 以解決透明物體排序問題
+      opacity: 0.5,
+      clippingPlanes: [clipPlaneOvaryZ] // 將裁切平面應用於此材質
+    });
+    const outerMesh = new THREE.Mesh(outerGeometry, outerMaterial);
+    outerMesh.scale.set(scaleX, scaleY, scaleZ); // 拉伸
+    ovaryGroup.add(outerMesh);
+
+    // 計算子房頂部 Y 座標 使用內壁
+    const topY = innerRadius * scaleY;
+
+    return { group: ovaryGroup, topY: topY };
+  }
+
+  // === 建立花柱與柱頭 func ===
+  function createStyleAndStigma(ovaryTopY) {
+    const group = new THREE.Group();
+    const styleHeight = 3; // 花柱高度
+    const styleRadius = 0.2; // 花柱半徑
+    const stigmaRadius = 0.5; // 柱頭半徑
+    const stigmaHeight = 0.2; // 柱頭高度
+
+    // 花柱 (Style)
+    const styleGeometry = new THREE.CylinderGeometry(styleRadius, styleRadius, styleHeight, 32);
+    const styleMaterial = new THREE.MeshStandardMaterial({
+      color: 0x99cc99, // 換個綠色系
+      side: THREE.DoubleSide,
+      transparent: true,
+      depthWrite: false,
+      opacity: 0.8,
+      clippingPlanes: [clipPlaneOvaryZ] // 套用與子房相同的裁切
+    });
+    const styleMesh = new THREE.Mesh(styleGeometry, styleMaterial);
+    // 將花柱放在子房頂部
+    styleMesh.position.set(0, ovaryTopY + styleHeight / 2, 0);
+    group.add(styleMesh);
+
+    // 柱頭 (Stigma)
+    const stigmaGeometry = new THREE.CylinderGeometry(stigmaRadius, stigmaRadius, stigmaHeight, 32);
+    const stigmaMaterial = new THREE.MeshStandardMaterial({
+        color: 0x77aa77, // 較深的綠色
+        roughness: 0.8,
+        depthWrite: false,
+        clippingPlanes: [clipPlaneOvaryZ] // 套用與子房相同的裁切
+    });
+    const stigmaMesh = new THREE.Mesh(stigmaGeometry, stigmaMaterial);
+    // 將柱頭放在花柱頂部
+    const stigmaCenterY = ovaryTopY + styleHeight + stigmaHeight / 2;
+    stigmaMesh.position.set(0, stigmaCenterY, 0);
+    group.add(stigmaMesh);
+
+    // 計算柱頭頂部位置並回傳
+    const stigmaTopY = stigmaCenterY + stigmaHeight / 2;
+    const stigmaTopPosition = new THREE.Vector3(0, stigmaTopY, 0);
+
+    return { group: group, stigmaTopPosition: stigmaTopPosition };
+  }
+
+  // === 建立花粉與花粉管 func ===
+  function createPollenAndTube(stigmaTop, ovaryTop, micropyleTarget, ovuleBBox, sacBBox) {
+      const group = new THREE.Group();
+
+      // 1. 建立花粉粒
+      const pollen = new THREE.Mesh(
+          new THREE.SphereGeometry(0.1, 16, 16),
+          new THREE.MeshStandardMaterial({ color: 0xffff00 })
+      );
+      pollen.position.copy(stigmaTop).y += 0.1; // 放在柱頭頂端稍上方
+      group.add(pollen);
+
+      // 2. 定義花粉管路徑，使其繞過胚珠的 BBox
+      const ovuleCenter = ovuleBBox.getCenter(new THREE.Vector3());
+      const ovuleSize = ovuleBBox.getSize(new THREE.Vector3());
+      const ovuleHeight = ovuleSize.y;
+
+      const avoidancePoint1 = new THREE.Vector3(
+          ovuleBBox.min.x - 0.2, // 在 X 軸方向繞過
+          ovuleCenter.y + ovuleHeight * 0.25, // 在胚珠中心點上方 1/4 高度的位置
+          ovuleCenter.z // 保持與中心點相同的 Z 軸
+      );
+
+      const avoidancePoint2 = new THREE.Vector3(
+          ovuleBBox.min.x - 0.2 , // 在 X 軸方向繞過
+          ovuleCenter.y - ovuleHeight * 0.1,
+          ovuleCenter.z // 保持與中心點相同的 Z 軸
+      );
+
+      const avoidancePoint3 = new THREE.Vector3(
+          ovuleBBox.min.x-0.1 , // 在 X 軸方向繞過
+          ovuleCenter.y - ovuleHeight * 0.2, // 在胚珠中心點上方 1/4 高度的位置
+          ovuleCenter.z // 保持與中心點相同的 Z 軸
+      );      
+
+      const approachPoint = new THREE.Vector3(
+          micropyleTarget.x -0.2,
+          micropyleTarget.y -0.2, // 從 BBox 下方接近
+          micropyleTarget.z
+      );
+      const sacCenter = sacBBox.getCenter(new THREE.Vector3());
+      const sacBottom = new THREE.Vector3(
+          sacCenter.x,
+          sacBBox.min.y,
+          sacCenter.z,
+      );
+      const pollenTubePath = new THREE.CatmullRomCurve3([
+          pollen.position.clone(), // 起點：花粉粒
+          new THREE.Vector3(0, stigmaTop.y * 0.5 + ovaryTop * 0.5, 0), // 中點：花柱中間
+          new THREE.Vector3(0, ovaryTop, 0), // 中點：子房頂部
+          avoidancePoint1,          // 繞到胚珠側面
+          avoidancePoint2,          // 繞到胚珠側面          
+          avoidancePoint3,          // 繞到胚珠側面                    
+          approachPoint,           // 繞到珠孔下方
+          micropyleTarget,         // 穿過珠孔
+          sacBottom              // 終點
+      ]);
+
+      // 3. 建立花粉管 (先用空的 geometry)
+      const tubeMaterial = new THREE.MeshStandardMaterial({
+          color: 0xffddaa,
+          side: THREE.DoubleSide
+      });
+      const pollenTube = new THREE.Mesh(new THREE.BufferGeometry(), tubeMaterial);
+      group.add(pollenTube);
+
+      return { group, pollenTube, pollenTubePath };
   }
 
   // === 初始化 Three.js ===
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xaaaaaa);
+  scene.background = new THREE.Color(0xeeeeee);
   const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 100);
-  camera.position.set(0, 0, 2.5);
+  camera.position.set(0, 0, 8);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(innerWidth, innerHeight);
@@ -219,15 +430,87 @@
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
 
-  // === 建立胚珠 ===
-  const ovule = createOvuleWithIntegument();
+  // === 建立胚囊 ===
+  const sacData = createEmbryoSacGroup();
+  const sacBBox = sacData.bbox; // 胚囊的 BBox
+
+  // === 建立胚珠 (珠被、珠柄) ===
+  const ovuleData = createOvuleWithIntegument(sacData); // 呼叫方式不變，依然簡潔
+  const ovule = ovuleData.group;
+  const micropylePosition = ovuleData.micropylePosition;
+  const ovuleBBox = ovuleData.bbox; // 整個胚珠的 BBox
+  const eggCellPosition = ovuleData.eggCellPosition;
   scene.add(ovule);
 
+  // === 建立子房、花柱與柱頭 ===
+  const ovaryData = createOvary();
+  const ovary = ovaryData.group;
+  const ovaryTopY = ovaryData.topY;
+  scene.add(ovary);
+ 
+  const styleAndStigmaData = createStyleAndStigma(ovaryTopY);
+  const styleAndStigma = styleAndStigmaData.group;
+  const stigmaTopPosition = styleAndStigmaData.stigmaTopPosition; 
+  scene.add(styleAndStigma);
+  
+  // === 建立花粉與花粉管 ===
+  const { group: pollenGroup, pollenTube, pollenTubePath } = createPollenAndTube(stigmaTopPosition, ovaryTopY, micropylePosition, ovuleBBox, sacBBox);
+  scene.add(pollenGroup);
+
   // === UI 控制器事件 ===
-  const zClipSlider = document.getElementById('z-clip-slider');
-  zClipSlider.addEventListener('input', (event) => {
-    // 當滑桿移動時，更新裁切平面的位置
-    clipPlaneZ.constant = parseFloat(event.target.value);
+  const ovuleZClipSlider = document.getElementById('ovule-z-clip-slider');
+  const ovaryZClipSlider = document.getElementById('ovary-z-clip-slider');
+  const toggleOvuleBtn = document.getElementById('toggle-ovule-btn');
+  const integumentOpacitySlider = document.getElementById('integument-opacity-slider');
+  const animationSlider = document.getElementById('animation-slider');
+
+  
+
+  ovuleZClipSlider.addEventListener('input', (event) => {
+    // 當滑桿移動時，更新胚珠裁切平面的位置
+    clipPlaneOvuleZ.constant = parseFloat(event.target.value);
+  });
+
+  ovaryZClipSlider.addEventListener('input', (event) => {
+    // 當滑桿移動時，更新子房裁切平面的位置
+    clipPlaneOvaryZ.constant = parseFloat(event.target.value);
+  });
+
+  integumentOpacitySlider.addEventListener('input', (event) => {
+    const opacity = parseFloat(event.target.value);
+    const isTransparent = opacity < 1;
+
+    // 同時更新內外珠被的材質屬性
+    [innerIntegumentMaterial, outerIntegumentMaterial].forEach(material => {
+        material.transparent = isTransparent;
+        material.opacity = opacity;
+        // 關鍵：只有在不透明時才寫入深度，以避免透明物件的排序問題
+        material.depthWrite = !isTransparent; 
+        material.needsUpdate = true; // 通知 Three.js 材質已更新
+    });
+  });
+
+  animationSlider.addEventListener('input', (event) => {
+      const progress = parseFloat(event.target.value);
+
+      if (progress > 0.01) {
+          const tubePoints = pollenTubePath.getPoints(100); // 取得路徑上 100 個點
+          const currentPointCount = Math.max(2, Math.ceil(progress * tubePoints.length));
+          const currentPath = new THREE.CatmullRomCurve3(tubePoints.slice(0, currentPointCount));
+
+          // 更新管狀幾何體
+          if (pollenTube.geometry) pollenTube.geometry.dispose(); // 釋放舊的 geometry 避免記憶體洩漏
+          pollenTube.geometry = new THREE.TubeGeometry(currentPath, currentPointCount, 0.05, 8, false);
+      } else {
+          // 如果進度為 0，清空 geometry
+          if (pollenTube.geometry) pollenTube.geometry.dispose();
+          pollenTube.geometry = new THREE.BufferGeometry();
+      }
+  });  
+
+  toggleOvuleBtn.addEventListener('click', () => {
+    ovule.visible = !ovule.visible;
+    toggleOvuleBtn.textContent = ovule.visible ? '隱藏胚珠' : '顯示胚珠';
   });
 
   // === 畫面更新 ===
