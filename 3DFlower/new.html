@@ -342,7 +342,7 @@
   }
 
   // === 建立花粉與花粉管 func ===
-  function createPollenAndTube(stigmaTop, ovaryTop, micropyleTarget, ovuleBBox, sacBBox) {
+  function createPollenAndTube(stigmaTop, ovaryTop, micropyleTarget, ovuleBBox, sacBBox, eggCellPosition, centralNucleiPositions) {
       const group = new THREE.Group();
 
       // 1. 建立花粉粒
@@ -399,6 +399,13 @@
           sacBottom              // 終點
       ]);
 
+      // 4. 建立雙重授精的獨立路徑
+      // 計算中央細胞的目標點 (兩個核的中間)
+      const centralCellTarget = centralNucleiPositions[0].clone().lerp(centralNucleiPositions[1], 0.5);
+      // 建立從花粉管終點到卵細胞與中央細胞的直線路徑
+      const sperm1Path = new THREE.LineCurve3(sacBottom, eggCellPosition);
+      const sperm2Path = new THREE.LineCurve3(sacBottom, centralCellTarget);
+
       // 3. 建立花粉管 (先用空的 geometry)
       const tubeMaterial = new THREE.MeshStandardMaterial({
           color: 0xffddaa,
@@ -411,7 +418,7 @@
       const pollenTube = new THREE.Mesh(new THREE.BufferGeometry(), tubeMaterial);
       group.add(pollenTube);
 
-      // 4. 建立管核與精細胞
+      // 5. 建立管核與精細胞
       const tubeNucleusMaterial = new THREE.MeshStandardMaterial({ color: 0xff9900, emissive: 0x553300 });
       const tubeNucleus = new THREE.Mesh(new THREE.SphereGeometry(0.04*0.5, 8, 8), tubeNucleusMaterial);
       tubeNucleus.visible = false; // 預設隱藏
@@ -425,7 +432,7 @@
       group.add(sperm1, sperm2);
 
       // 將所有需要動畫控制的物件回傳
-      return { group, pollenTube, pollenTubePath, tubeNucleus, sperm1, sperm2 };
+      return { group, pollenTube, pollenTubePath, tubeNucleus, sperm1, sperm2, sperm1Path, sperm2Path };
   }
 
   // === 初始化 Three.js ===
@@ -478,9 +485,11 @@
     pollenTube, 
     pollenTubePath, 
     tubeNucleus, 
-    sperm1, 
-    sperm2 
-  } = createPollenAndTube(stigmaTopPosition, ovaryTopY, micropylePosition, ovuleBBox, sacBBox);
+    sperm1,
+    sperm2,
+    sperm1Path,
+    sperm2Path
+  } = createPollenAndTube(stigmaTopPosition, ovaryTopY, micropylePosition, ovuleBBox, sacBBox, ovuleData.eggCellPosition, ovuleData.centralNucleiPositions);
   scene.add(pollenGroup);
 
   // === UI 控制器事件 ===
@@ -530,60 +539,76 @@
     requestAnimationFrame(animate);
     controls.update();
 
-    // --- 花粉管與細胞動畫 ---
+    // --- 動畫邏輯 ---
     const progress = parseFloat(animationSlider.value);
 
+    // --- 動畫階段控制 ---
+    // 階段1: 花粉管生長 (進度 0 -> 0.8)
+    // 階段2: 雙重授精 (進度 0.8 -> 1.0)
+    const fertilizationStartTime = 0.8; 
+    const tubeGrowthProgress = Math.min(1, progress / fertilizationStartTime);
+    const fertilizationProgress = Math.max(0, (progress - fertilizationStartTime) / (1.0 - fertilizationStartTime));
+
+    // --- 花粉管動畫 ---
     if (progress > 0.01) {
-        const tubePoints = pollenTubePath.getPoints(200); // 增加路徑點的密度以提高精度
-        const currentPointCount = Math.max(2, Math.ceil(progress * tubePoints.length));
+        const tubePoints = pollenTubePath.getPoints(200);
+        const currentPointCount = Math.max(2, Math.ceil(tubeGrowthProgress * tubePoints.length));
         const currentPath = new THREE.CatmullRomCurve3(tubePoints.slice(0, currentPointCount));
 
-        // 更新管狀幾何體
         if (pollenTube.geometry) pollenTube.geometry.dispose();
         pollenTube.geometry = new THREE.TubeGeometry(currentPath, currentPointCount, 0.05, 8, false);
+    } else {
+        // 如果進度為 0，清空 geometry 並隱藏所有細胞
+        if (pollenTube.geometry) pollenTube.geometry.dispose();
+        pollenTube.geometry = new THREE.BufferGeometry();
+    }
 
-        // 顯示細胞
-        // The visibility of each cell will be determined by the logic below
-
-        // 計算目前花粉管的總長度
+    // --- 細胞核與精細胞動畫 ---
+    if (progress < 0.01) {
+        // 隱藏所有在起點的細胞
+        tubeNucleus.visible = false;
+        sperm1.visible = false;
+        sperm2.visible = false;
+    } else if (progress < fertilizationStartTime) {
+        // 階段 1: 沿著生長中的花粉管移動
+        const currentPath = pollenTube.geometry.parameters.path;
         const currentLength = currentPath.getLength();
 
-        // --- 更新管核與精細胞位置 ---
-        const tubeNucleusOffset = 0.05; // 管核與管尖的距離
-        const sperm1Offset = 0.15;      // 精細胞1與管尖的距離
-        const sperm2Offset = 0.25;      // 精細胞2與管尖的距離
-
-        // 只有當花粉管長度足夠時才顯示管核，並讓它與管尖保持一個小距離
+        const tubeNucleusOffset = 0.05;
         if (currentLength > tubeNucleusOffset) {
-            const t_nucleus = 1 - (tubeNucleusOffset / currentLength);
-            tubeNucleus.position.copy(currentPath.getPointAt(t_nucleus));
+            tubeNucleus.position.copy(currentPath.getPointAt(1 - (tubeNucleusOffset / currentLength)));
             tubeNucleus.visible = true;
         } else {
             tubeNucleus.visible = false;
         }
 
-        // 只有當花粉管長度足夠時才顯示精細胞
+        const sperm1Offset = 0.15;
         if (currentLength > sperm1Offset) {
-            const t1 = 1 - (sperm1Offset / currentLength);
-            sperm1.position.copy(currentPath.getPointAt(t1));
+            sperm1.position.copy(currentPath.getPointAt(1 - (sperm1Offset / currentLength)));
             sperm1.visible = true;
         } else {
             sperm1.visible = false;
         }
+
+        const sperm2Offset = 0.25;
         if (currentLength > sperm2Offset) {
-            const t2 = 1 - (sperm2Offset / currentLength);
-            sperm2.position.copy(currentPath.getPointAt(t2));
+            sperm2.position.copy(currentPath.getPointAt(1 - (sperm2Offset / currentLength)));
             sperm2.visible = true;
         } else {
             sperm2.visible = false;
         }
     } else {
-        // 如果進度為 0，清空 geometry 並隱藏所有細胞
-        if (pollenTube.geometry) pollenTube.geometry.dispose();
-        pollenTube.geometry = new THREE.BufferGeometry();
-        tubeNucleus.visible = false;
-        sperm1.visible = false;
-        sperm2.visible = false;
+        // 階段 2: 雙重授精
+        tubeNucleus.visible = true;
+        sperm1.visible = true;
+        sperm2.visible = true;
+
+        // 管核停在花粉管末端
+        tubeNucleus.position.copy(pollenTubePath.getPointAt(1));
+
+        // 精細胞沿著各自的路徑移動
+        sperm1.position.copy(sperm1Path.getPointAt(fertilizationProgress));
+        sperm2.position.copy(sperm2Path.getPointAt(fertilizationProgress));
     }
 
     renderer.render(scene, camera);
