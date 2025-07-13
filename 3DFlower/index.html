@@ -1,19 +1,30 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
   <title>花的構造</title>
-  <style>body { margin: 0; background-color: #aaaaaa; }</style>
+  <style>
+    body { margin: 0; background-color: #aaaaaa; }
+
+    .mode-btn.active {
+      border-color: #fff !important;
+      color: #fff !important;
+    }
+  </style>
 </head>
 <body>
 <div id="controls-panel" style="position: absolute; bottom: 10px; left: 10px; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; color: white; z-index: 10;">
+  <div style="margin-bottom: 10px;">
+    <button id="single-ovule-btn" class="mode-btn active" style="padding: 5px; border: 1px solid #fff; background: #333; color: #fff; cursor: pointer;">單胚珠模式</button>
+    <button id="multi-ovule-btn" class="mode-btn" style="padding: 5px; border: 1px solid #555; background: #111; color: #888; cursor: pointer;">多胚珠模式</button>
+  </div>
   <div>
     <label for="ovary-z-clip-slider">子房 Z軸 切面</label>
     <input type="range" id="ovary-z-clip-slider" min="-1" max="4" value="0" step="0.01" style="width: 200px;">
   </div>  
   <div style="margin-bottom: 10px;">
     <label for="ovule-z-clip-slider">珠被 Z軸 切面</label>
-    <input type="range" id="ovule-z-clip-slider" min="-0.5" max="1.5" value="1.5" step="0.01" style="width: 200px;">
+    <input type="range" id="ovule-z-clip-slider" min="0" max="1.5" value="1.5" step="0.01" style="width: 200px;">
   </div>
   <div style="margin-top: 10px;">
     <label for="animation-slider">花粉管生長</label>
@@ -21,7 +32,7 @@
   </div>
   <div style="margin-top: 10px;">
     <label for="integument-opacity-slider">珠被透明度</label>
-    <input type="range" id="integument-opacity-slider" min="0" max="1" value="1" step="0.01" style="width: 200px;">
+    <input type="range" id="integument-opacity-slider" min="0.5" max="1" value="1" step="0.01" style="width: 200px;">
   </div>
 
   <button id="toggle-ovule-btn" style="width: 100%; margin-top: 10px; padding: 5px;">隱藏胚珠</button>
@@ -292,8 +303,9 @@
 
     // 計算子房頂部 Y 座標 使用內壁
     const topY = innerRadius * scaleY;
+    const bottomY = -topY; // 底部 Y 座標
 
-    return { group: ovaryGroup, topY: topY };
+    return { group: ovaryGroup, topY: topY, bottomY: bottomY };
   }
 
   // === 建立花柱與柱頭 func ===
@@ -435,6 +447,123 @@
       return { group, pollenTube, pollenTubePath, tubeNucleus, sperm1, sperm2, sperm1Path, sperm2Path };
   }
 
+  // === 建立雌蕊的工廠函式 ===
+  function createPistil(config) {
+    const mainGroup = new THREE.Group();
+    let animationObjects = {}; // 用於存放需要動畫控制的物件
+
+    // 1. 建立子房、花柱與柱頭 (所有模式共用)
+    const ovaryData = createOvary();
+    const ovary = ovaryData.group;
+    const ovaryTopY = ovaryData.topY;
+    const ovaryBottomY = ovaryData.bottomY;
+    mainGroup.add(ovary);
+
+    const styleAndStigmaData = createStyleAndStigma(ovaryTopY);
+    const styleAndStigma = styleAndStigmaData.group;
+    const stigmaTopPosition = styleAndStigmaData.stigmaTopPosition;
+    mainGroup.add(styleAndStigma);
+
+
+    // 2. 根據模式建立胚珠及相關物件
+    if (config.mode === 'single') {
+      // --- 單胚珠模式：建立完整的單一胚珠與花粉管 ---
+      const sacData = createEmbryoSacGroup();
+      const ovuleData = createOvuleWithIntegument(sacData);
+      const ovule = ovuleData.group;
+      mainGroup.add(ovule);
+
+      const pollenData = createPollenAndTube(
+        stigmaTopPosition,
+        ovaryTopY,
+        ovuleData.micropylePosition,
+        ovuleData.bbox,
+        sacData.bbox,
+        ovuleData.eggCellPosition,
+        ovuleData.centralNucleiPositions
+      );
+      mainGroup.add(pollenData.group);
+      animationObjects = {
+        pollenTube: pollenData.pollenTube,
+        pollenTubePath: pollenData.pollenTubePath,
+        tubeNucleus: pollenData.tubeNucleus,
+        sperm1: pollenData.sperm1,
+        sperm2: pollenData.sperm2,
+        sperm1Path: pollenData.sperm1Path,
+        sperm2Path: pollenData.sperm2Path
+      };
+
+    } else if (config.mode === 'multi') {
+
+      // 2. 在子房內增加中軸 (胎座)
+      const axisHeight = ovaryTopY - ovaryBottomY; // 比子房略短
+      const axisRadius = 0.1;
+      const axisGeometry = new THREE.CylinderGeometry(axisRadius, axisRadius, axisHeight, 16);
+      const axisMaterial = new THREE.MeshStandardMaterial({ color: 0x77bb77, roughness: 0.8 });
+      const centralAxis = new THREE.Mesh(axisGeometry, axisMaterial);
+      
+      mainGroup.add(centralAxis);
+
+      // --- 多胚珠模式：建立多個簡化胚珠的佔位符 ---
+      const ovuleCount = 6;
+      for (let i = 0; i < ovuleCount; i++) {
+        // --- 修改：為每個胚珠都建立完整的胚囊 ---
+        const sacData = createEmbryoSacGroup();
+
+        // 根據胚囊資料建立完整的胚珠 (珠被等)
+        const ovuleData = createOvuleWithIntegument(sacData);
+        const ovule = ovuleData.group;
+
+        // 在子房內部分布胚珠，改為XY平面上的交錯排列
+        const xOffset = 0.5;
+        const ySpacing = 1.0;
+        const yStart = 1.2;
+        const yStagger = 0.4;
+
+        const side = (i % 2 === 0) ? 1 : -1; // 1 for right (x>0), -1 for left (x<0)
+        const rowIndex = Math.floor(i / 2); // 0, 1, 2 for the row index
+
+        const x = side * xOffset;
+        const y = yStart - (rowIndex * ySpacing) - (side === -1 ? yStagger : 0);
+
+        ovule.position.set(x, y, 0); // 排列在 XY 平面
+        if (side === 1) {
+          ovule.rotation.z = -side * (Math.PI / 3) ; // 右側
+        } else {
+          ovule.rotation.y =  Math.PI;
+          ovule.rotation.z = side * (Math.PI / 3) ; // 左側
+        }
+        ovule.scale.set(0.3, 0.3, 0.4); // 縮小尺寸以容納多個
+
+        mainGroup.add(ovule);
+      }
+      // 多胚珠模式目前沒有動畫物件
+      animationObjects = null;
+    }
+
+    // 將動畫物件附加到主群組上，方便 animate 函式存取
+    mainGroup.animationObjects = animationObjects;
+    return mainGroup;
+  }
+
+  // === 資源清理函式 ===
+  function disposeGroup(group) {
+    if (!group) return;
+    group.traverse(object => {
+      if (object.isMesh) {
+        if (object.geometry) {
+          object.geometry.dispose();
+        }
+        // 注意：共享的材質(innerIntegumentMaterial等)不應在此處釋放
+        // 只有動態建立的、非共享的材質才需要釋放
+        if (object.material && !Object.values(sharedMaterials).includes(object.material)) {
+          object.material.dispose();
+        }
+      }
+    });
+    scene.remove(group);
+  }
+
   // === 初始化 Three.js ===
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0xeeeeee);
@@ -445,6 +574,13 @@
   renderer.setSize(innerWidth, innerHeight);
   renderer.localClippingEnabled = true; // *** 啟用局部裁切功能 ***
   document.body.appendChild(renderer.domElement);
+  
+  // 將共享材質集中管理，方便清理時判斷
+  const sharedMaterials = {
+    innerIntegumentMaterial,
+    outerIntegumentMaterial
+  };
+
 
   // === 光源 ===
   scene.add(new THREE.AmbientLight(0x888888));
@@ -455,7 +591,7 @@
   // === OrbitControls ===
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
-
+  /*
   // === 建立胚囊 ===
   const sacData = createEmbryoSacGroup();
   const sacBBox = sacData.bbox; // 胚囊的 BBox
@@ -491,13 +627,41 @@
     sperm2Path
   } = createPollenAndTube(stigmaTopPosition, ovaryTopY, micropylePosition, ovuleBBox, sacBBox, ovuleData.eggCellPosition, ovuleData.centralNucleiPositions);
   scene.add(pollenGroup);
+  */
+  // === 場景狀態與建構 ===
+  let pistilGroup; // 用於存放當前場景的主模型
+
+  function buildScene(config) {
+    // 1. 清理舊場景
+    disposeGroup(pistilGroup);
+
+    // 2. 建立新場景
+    pistilGroup = createPistil(config);
+
+    // 3. 加入場景
+    scene.add(pistilGroup);
+
+    // 4. 更新UI按鈕狀態
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+        btn.classList.remove('active');
+        btn.style.background = '#111';
+        btn.style.color = '#888';
+    });
+    const activeBtn = document.getElementById(config.mode === 'single' ? 'single-ovule-btn' : 'multi-ovule-btn');
+    activeBtn.classList.add('active');
+    activeBtn.style.background = '#333';
+  }
 
   // === UI 控制器事件 ===
+  const singleOvuleBtn = document.getElementById('single-ovule-btn');
+  const multiOvuleBtn = document.getElementById('multi-ovule-btn');
+
   const ovuleZClipSlider = document.getElementById('ovule-z-clip-slider');
   const ovaryZClipSlider = document.getElementById('ovary-z-clip-slider');
   const toggleOvuleBtn = document.getElementById('toggle-ovule-btn');
   const integumentOpacitySlider = document.getElementById('integument-opacity-slider');
   const animationSlider = document.getElementById('animation-slider');
+
 
   ovuleZClipSlider.addEventListener('input', (event) => {
     // 當滑桿移動時，更新胚珠裁切平面的位置
@@ -524,8 +688,18 @@
   });
 
   toggleOvuleBtn.addEventListener('click', () => {
-    ovule.visible = !ovule.visible;
-    toggleOvuleBtn.textContent = ovule.visible ? '隱藏胚珠' : '顯示胚珠';
+    // 遍歷主群組，找到所有胚珠並切換可見性
+    if (pistilGroup) {
+        const ovules = [];
+        pistilGroup.traverse(child => {
+            // 這裡需要一個更好的方式來識別胚珠，暫時用名字或類型
+            if (child.children.some(c => c.material === innerIntegumentMaterial)) {
+                child.visible = !child.visible;
+            }
+        });
+    }
+    // toggleOvuleBtn.textContent = ovule.visible ? '隱藏胚珠' : '顯示胚珠';
+
   });
 
   // === 畫面更新 ===
@@ -535,20 +709,37 @@
     renderer.setSize(innerWidth, innerHeight);
   });
 
+  singleOvuleBtn.addEventListener('click', () => {
+    buildScene({ mode: 'single' });
+  });
+
+  multiOvuleBtn.addEventListener('click', () => {
+    buildScene({ mode: 'multi' });
+  });
+
   function animate() {
     requestAnimationFrame(animate);
     controls.update();
 
     // --- 動畫邏輯 ---
     const progress = parseFloat(animationSlider.value);
+    // 檢查當前模型是否有動畫物件
+    if (!pistilGroup || !pistilGroup.animationObjects) {
+      renderer.render(scene, camera);
+      return; // 如果沒有動畫物件 (如多胚珠模式)，則直接渲染並返回
+    }
+    
 
     // --- 動畫階段控制 ---
-    // 階段1: 花粉管生長 (進度 0 -> 0.8)
-    // 階段2: 雙重授精 (進度 0.8 -> 1.0)
-    const fertilizationStartTime = 0.8; 
+    // 階段1: 花粉管生長 (進度 0 -> 0.6)
+    // 階段2: 雙重授精 (進度 0.6 -> 1.0)
+    const fertilizationStartTime = 0.6; 
     const tubeGrowthProgress = Math.min(1, progress / fertilizationStartTime);
     const fertilizationProgress = Math.max(0, (progress - fertilizationStartTime) / (1.0 - fertilizationStartTime));
 
+    const { pollenTube, pollenTubePath, tubeNucleus, sperm1, sperm2, sperm1Path, sperm2Path } = pistilGroup.animationObjects;
+
+    
     // --- 花粉管動畫 ---
     if (progress > 0.01) {
         const tubePoints = pollenTubePath.getPoints(200);
@@ -613,6 +804,10 @@
 
     renderer.render(scene, camera);
   }
+
+  // === 初始建構場景 ===
+  buildScene({ mode: 'single' }); // 預設以單胚珠模式啟動
+
   animate();
 </script>
 </body>
