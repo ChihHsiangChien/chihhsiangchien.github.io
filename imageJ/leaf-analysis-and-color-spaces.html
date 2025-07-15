@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>leaf-analysis-and-color-spaces</title>
+<link rel="stylesheet" href="styles.css">
+<!-- KaTeX CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" integrity="sha384-wcIxkf4k558AjM3Yz3BBFQUbk/zgIYC2R0QpeeYb+TwlBVMrlgLqwRjRtGZiK7ww" crossorigin="anonymous">
+</head>
+<body>
+
+<div id="toc">
+<h2><a href="index.html">回到首頁</a></h2>
+<div class="toc-container">
+<div class="toc">
+<ul>
+<li><a href="#_1">從一片葉子學分析：空間校正、色彩空間與分割技巧</a><ul>
+<li><a href="#1">1. 開啟範例與空間校正</a></li>
+<li><a href="#2-hsb">2. 認識色彩空間：為何需要 HSB？</a><ul>
+<li><a href="#_2">實作：分離所有通道並用直方圖評估</a></li>
+</ul>
+</li>
+<li><a href="#3-segmentation">3. 分割葉片區域 (Segmentation)</a><ul>
+<li><a href="#color-threshold-rgb">方法一：Color Threshold (在原始RGB影像上)</a></li>
+<li><a href="#standard-threshold-8-bit">方法二：Standard Threshold (在 8-bit影像上使用)</a></li>
+</ul>
+</li>
+<li><a href="#cropping">裁剪影像以聚焦分析區域 (Cropping)</a></li>
+<li><a href="#4">4. 進行測量</a><ul>
+<li><a href="#vs">測量策略：使用選區 vs. 直接分析二值化影像</a></li>
+<li><a href="#set-measurements">認識測量參數 (Set Measurements)</a></li>
+<li><a href="#_8">實作：測量形狀參數 (面積與周長)</a></li>
+<li><a href="#_9">實作：進階測量 (碎形維度)</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+
+</div>
+</div>
+<div id="content">
+<h1 id="_1">從一片葉子學分析：空間校正、色彩空間與分割技巧</h1>
+<p>本章節將以 ImageJ 內建的 <code>Leaf</code> 範例影像為核心，進行完整的影像分析流程。過程包括：</p>
+<ol>
+<li>如何利用影像中的比例尺進行<strong>空間校正</strong>。</li>
+<li>理解 <strong>RGB</strong> 與 <strong>HSB (HSV)</strong> 色彩空間的差異，以及為何後者更利於顏色分割。</li>
+<li>使用 <strong>Color Threshold</strong> 和 <strong>標準 Threshold</strong> 兩種方法來分割出目標物。</li>
+<li>進行多種科學測量，包括<strong>面積</strong>、<strong>周長</strong>，以及<strong>碎形分析</strong>。</li>
+</ol>
+<h2 id="1">1. 開啟範例與空間校正</h2>
+<p>沒有正確的校正，所有的測量都只是像素遊戲。讓我們先賦予影像真實的物理單位。</p>
+<ol>
+<li>開啟範例影像 <code>File &gt; Open Samples &gt; Leaf (36K)</code>。</li>
+<li>影像上方有一支尺。這就是我們校正的依據。</li>
+<li>從工具列選擇<strong>直線工具 (Line Tool)</strong>。</li>
+<li>沿著 <code>2 cm</code> 的黑色線段，從一端精確地畫到另一端。</li>
+<li>執行 <code>Analyze &gt; Set Scale...</code>。</li>
+<li>在彈出的對話框中：<ul>
+<li><code>Distance in pixels</code>: ImageJ 會自動填入您剛畫的線段長度。</li>
+<li><code>Known distance</code>: 輸入 <strong>2</strong>。</li>
+<li><code>Unit of length</code>: 輸入 <strong>cm</strong>。</li>
+<li><code>Global</code>: <strong>建議不要勾選</strong>，這樣此校正只會應用於這張葉子影像。</li>
+<li>點擊 <code>OK</code>。</li>
+</ul>
+</li>
+</ol>
+<p>現在，您的影像已經被校正。之後的所有測量單位都將是 <code>cm</code>。</p>
+<h2 id="2-hsb">2. 認識色彩空間：為何需要 HSB？</h2>
+<p>我們要如何從影像中分離出「綠色」的葉子？在電腦中，顏色通常用兩種模型來描述：</p>
+<ul>
+<li>
+<p><strong>RGB (Red, Green, Blue):</strong></p>
+<ul>
+<li>這是最常見的<strong>硬體導向</strong>模型，對應螢幕顯示的三原色光。</li>
+<li><strong>缺點：</strong> 對人類不直觀。一片葉子的「綠色」可能包含多種不同的R、G、B組合（亮綠、暗綠、黃綠），很難用簡單的RGB範圍來定義。</li>
+</ul>
+</li>
+<li>
+<p><strong>HSB (Hue, Saturation, Brightness)，也常稱為 HSV (Value):</strong></p>
+<ul>
+<li>這是<strong>人類視覺導向</strong>的模型，更符合我們描述顏色的方式。</li>
+<li><strong>色相 (Hue):</strong> 純粹的顏色，如紅、黃、綠、藍。可以想成一個360度的色環。</li>
+<li><strong>飽和度 (Saturation):</strong> 顏色的純度或鮮豔度。從灰色到最鮮豔的顏色。</li>
+<li><strong>亮度 (Brightness/Value):</strong> 顏色的明暗程度。</li>
+</ul>
+</li>
+</ul>
+<h3 id="_2">實作：分離所有通道並用直方圖評估</h3>
+<p>以下將 RGB 和 HSB 通道全部拆分出來，並用直方圖來「定量」地觀察它們的差異。</p>
+<ol>
+<li>確保 <code>Leaf</code> 影像是當前視窗。</li>
+<li><strong>分離 HSB 通道：</strong> 執行 <code>Image &gt; Type &gt; HSB Stack</code>。您會得到一個包含 <code>Hue</code>, <code>Saturation</code>, <code>Brightness</code> 三個灰階影像的堆疊。</li>
+<li>
+<p><strong>拆分 HSB stack為不同影像</strong>，執行 <code>Image › Stacks › Stack to Images...</code>。會將剛剛的堆疊拆成三張影像。</p>
+</li>
+<li>
+<p><strong>分離 RGB 通道：</strong> 再載入 <code>Leaf</code> 影像視窗，執行 <code>Image &gt; Color &gt; Split Channels</code>。您會得到 <code>(red)</code>, <code>(green)</code>, <code>(blue)</code> 三個獨立的灰階影像。</p>
+</li>
+<li><strong>觀察直方圖：</strong> 依序點選這六個灰階影像中的任意一個，執行 <code>Analyze &gt; Histogram</code> (或按 <code>Ctrl+H</code>) 來查看其像素分佈。</li>
+</ol>
+<h4 id="_3">觀察與分析</h4>
+<ol>
+<li>觀察6張直方圖的表現，有沒有哪一張直方圖呈現明顯的峰，而且彼此不重疊，並觀察這些峰實際上代表影像的哪個部份？</li>
+</ol>
+<h4 id="_4">分割的原理與決策</h4>
+<p><strong>影像分割 (Segmentation)</strong> 的核心原理是<strong>根據像素的某一項特徵將其分類</strong>。最簡單的方法是<strong>閾值分割 (Thresholding)</strong>，即「設定一個值，高於此值的為目標，低於此值的為背景」。</p>
+<p>一個好的分割策略，就是要選擇一個能最大化「目標」與「背景」差異的特徵。<strong>直方圖就是我們用來評估這個差異的工具。</strong></p>
+<p><strong>決策依據：</strong> 一個適合用來分割的通道，其直方圖應該呈現<strong>雙峰分佈 (Bimodal)</strong>，且兩個峰之間有<strong>清晰、深邃的山谷</strong>。這個山谷就是設定閾值的最佳位置。</p>
+<h2 id="3-segmentation">3. 分割葉片區域 (Segmentation)</h2>
+<p>我們將介紹兩種方法來分離葉子。</p>
+<h3 id="color-threshold-rgb">方法一：Color Threshold (在原始RGB影像上)</h3>
+<p>此方法直接在彩色影像上操作，非常直觀。</p>
+<ol>
+<li>關閉 <code>HSB Stack</code>，重新開啟原始的 <code>Leaf</code> 影像。</li>
+<li>執行 <code>Image &gt; Adjust &gt; Color Threshold...</code>。</li>
+<li>在 <code>Color Threshold</code> 視窗中：<ul>
+<li>將下拉選單從預設的 <code>RGB</code> 改為 <code>HSB</code>。</li>
+<li><strong>調整滑桿：</strong> 將代表綠色的區間選取起來。您會看到影像預覽中，只有葉子被標示為紅色。</li>
+<li>可以微調 Saturation 和 Brightness 滑桿來排除背景中的雜點。</li>
+<li>確認選取範圍無誤後，點擊視窗下方的 <code>Select</code> 按鈕。</li>
+</ul>
+</li>
+</ol>
+<p>此時，葉子的輪廓已經被建立成一個<strong>選區 (ROI)</strong>。您可以直接進行測量。</p>
+<h3 id="standard-threshold-8-bit">方法二：Standard Threshold (在 8-bit影像上使用)</h3>
+<p>此方法是影像分割的經典流程：先將影像轉換為單一的灰階通道，然後再使用 <code>Image &gt; Adjust &gt; Threshold...</code> 進行分割。關鍵在於選擇一個最能凸顯目標的灰階通道。從我們先前的直方圖分析可知，<strong>Saturation 通道</strong>是最佳選擇。但為了完整性，我們也介紹另一種常見的灰階轉換方式。</p>
+<h4 id="a-saturation">做法 A: 使用 Saturation 通道</h4>
+<ol>
+<li>使用我們在步驟2中產生的 <strong>HSB Stack</strong> 影像。</li>
+<li>點選 <strong>Saturation</strong> 通道的視窗 (或是從 HSB Stack 中選擇 Saturation 切片)。</li>
+<li>執行 <code>Image &gt; Adjust &gt; Threshold...</code> (或按 <code>Ctrl+Shift+T</code>)。</li>
+<li>拖動滑桿，將代表葉片的灰色區域選取起來。</li>
+<li>點擊 <code>Apply</code>。影像會被轉換成一張黑白的<strong>二值化遮罩 (Binary Mask)</strong>，白色代表目標區域(前景)，黑色代表背景。</li>
+</ol>
+<h4 id="b-8-bit">做法 B: 直接轉換為 8-bit 灰階影像</h4>
+<ol>
+<li>重新載入一張原始的 <code>Leaf</code> 影像。</li>
+<li>執行 <code>Image › Type › 8-bit</code>。<ul>
+<li><strong>原理說明:</strong> 這一步會將 RGB 彩色影像轉換為 8-bit 灰階影像。ImageJ 提供兩種轉換公式，可在 <code>Edit &gt; Options &gt; Conversions...</code> 中設定：<ul>
+<li><strong>平均法 (預設不勾選 "Weighted RGB to Grayscale Conversion"):</strong>
+  <code>灰階值 = (紅 + 綠 + 藍) / 3</code></li>
+<li><strong>加權法 (勾選 "Weighted RGB to Grayscale Conversion"):</strong> 這種方法更符合人眼對綠色的敏感度。
+  <code>灰階值 = 0.299 * 紅 + 0.587 * 綠 + 0.114 * 藍</code></li>
+</ul>
+</li>
+</ul>
+</li>
+<li>對這張新產生的 8-bit 灰階影像執行 <code>Image &gt; Adjust &gt; Threshold...</code>。</li>
+<li><strong>比較與思考：</strong> 試著用這種方式分割葉子，並比較其直方圖與 <code>Hue</code> 通道的直方圖。您會發現，直接轉換的灰階影像，其葉子與背景的灰階值比較多重疊，很難找到一個完美的閾值，因此需要選擇合適的通道。</li>
+</ol>
+<p>無論使用何種方法，最終產生的二值化遮罩是後續進行粒子分析和測量的基礎。</p>
+<h2 id="cropping">裁剪影像以聚焦分析區域 (Cropping)</h2>
+<p>在進行測量之前，一個很好的習慣是將影像裁剪(Crop)到只剩下我們感興趣的物體。這樣做可以去除像尺標、背景雜訊等不必要的干擾，讓後續的分析更單純。</p>
+<ol>
+<li>
+<p><strong>選取葉子區域:</strong></p>
+<ul>
+<li>在經過分割、產生<strong>二值化遮罩</strong>的影像上，從工具列選擇<strong>矩形選取工具 (Rectangle Selection Tool)</strong>。</li>
+<li>畫一個剛剛好能框住整個白色葉片區域的矩形。或者你也可在進行分割之前就先裁剪出目標區域，再進行分隔。</li>
+</ul>
+</li>
+<li>
+<p><strong>執行裁剪:</strong></p>
+<ul>
+<li>執行 <code>Image &gt; Crop</code>。</li>
+</ul>
+</li>
+</ol>
+<p><strong>觀察結果：</strong></p>
+<p>影像會被裁切成您所選取矩形的大小，只留下葉子主體。接下來的所有測量都將在這個更乾淨、更聚焦的影像上進行，可以避免不小心測量到影像邊緣的雜訊。</p>
+<h2 id="4">4. 進行測量</h2>
+<p>現在我們有了葉子的選區或遮罩，可以開始測量了。若<strong>二值化遮罩</strong>影像有多個不相連的白色區域，可先使用工具列上的 <strong>魔術棒工具 (Wand Tool)</strong> (快捷鍵 <code>W</code>)，在要測量的目標白色區域內點擊一下，系統會自動選取相連的白色區域。</p>
+<h3 id="vs">測量策略：使用選區 vs. 直接分析二值化影像</h3>
+<p>在 ImageJ 中，有兩種主要的測量路徑，了解它們的差異至關重要：</p>
+<ol>
+<li>
+<p><strong>在原始影像上使用「選區」(ROI) 進行測量 (<code>Analyze &gt; Measure</code>)</strong></p>
+<ul>
+<li><strong>這是什麼？</strong> 「選區」是一個浮動的輪廓（ROI），它定義了測量的邊界，但測量的是<strong>底下原始影像</strong>的像素值。</li>
+<li><strong>流程：</strong> 將二值化遮罩轉換為選區 (例如，使用魔術棒工具點擊)，然後切換回<strong>原始影像</strong>（如 <code>Leaf.jpg</code> 或某個灰階通道），再按下 <code>Ctrl+M</code>。</li>
+<li><strong>何時使用？</strong> 當您需要測量<strong>原始強度</strong>相關的參數時。例如，您想知道葉片區域在原始影像中的「平均綠色強度」或「積分密度」。您用分割好的輪廓來界定範圍，但數據來源是原始影像。</li>
+</ul>
+</li>
+<li>
+<p><strong>直接分析「二值化影像」(Mask) (<code>Analyze &gt; Analyze Particles...</code>)</strong></p>
+<ul>
+<li><strong>這是什麼？</strong> 直接在黑白遮罩影像上進行分析。此時，白色像素本身就是被測量的對象。</li>
+<li><strong>流程：</strong> 保持<strong>二值化影像</strong>為當前視窗，執行 <code>Analyze &gt; Analyze Particles...</code>。</li>
+<li><strong>何時使用？</strong> 當您主要關心物體的<strong>形狀或數量</strong>時。例如，測量葉片<strong>面積</strong>、<strong>周長</strong>、<strong>圓形度</strong>或計算影像中有多少個物體。此時，原始影像的灰階值已不重要。</li>
+</ul>
+</li>
+</ol>
+<blockquote>
+<p><strong>總結：</strong></p>
+<ul>
+<li>想測量<strong>「形狀」</strong> (<code>Area</code>, <code>Perimeter</code>) 或<strong>「計數」</strong> → 直接分析<strong>二值化影像</strong>。</li>
+<li>想測量<strong>「強度」</strong> (<code>Mean</code>, <code>IntDen</code>) → 在<strong>原始影像</strong>上套用<strong>選區</strong>。</li>
+</ul>
+</blockquote>
+<h3 id="set-measurements">認識測量參數 (Set Measurements)</h3>
+<p>在執行 <code>Analyze &gt; Measure</code> 或 <code>Analyze Particles...</code> 之前，我們可以透過 <code>Analyze &gt; Set Measurements...</code> 指令來決定結果表格中要顯示哪些測量項目。了解這些參數的意義，能幫助您選擇最適合研究目的的量化指標。</p>
+<p>以下是常用參數的說明：</p>
+<h4 id="_5">基本與強度測量</h4>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">參數 (選項)</th>
+<th style="text-align: left;">結果欄位</th>
+<th style="text-align: left;">說明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>Area</strong></td>
+<td style="text-align: left;"><code>Area</code></td>
+<td style="text-align: left;">選區的面積。如果影像經過空間校正，單位會是物理單位（如 cm²），否則為像素平方 (pixels²)。</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Mean Gray Value</strong></td>
+<td style="text-align: left;"><code>Mean</code></td>
+<td style="text-align: left;">選區內所有像素的平均灰階值。若經過強度校正，則單位為校正後的物理單位。對於RGB影像，會先轉換為灰階再計算。</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Standard Deviation</strong></td>
+<td style="text-align: left;"><code>StdDev</code></td>
+<td style="text-align: left;">選區內像素灰階值的標準差，反映了亮度的離散程度。</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Min &amp; Max Gray Level</strong></td>
+<td style="text-align: left;"><code>Min</code>, <code>Max</code></td>
+<td style="text-align: left;">選區內的最小與最大灰階值。</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Modal Gray Value</strong></td>
+<td style="text-align: left;"><code>Mode</code></td>
+<td style="text-align: left;">選區內出現頻率最高的灰階值（眾數），對應直方圖的最高峰。</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Median</strong></td>
+<td style="text-align: left;"><code>Median</code></td>
+<td style="text-align: left;">選區內像素灰階值的中位數。相較於平均值，較不受極端值（雜訊點）影響。</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Integrated Density</strong></td>
+<td style="text-align: left;"><code>IntDen</code>, <code>RawIntDen</code></td>
+<td style="text-align: left;"><strong>積分密度</strong>。<code>IntDen</code> = <code>Area</code> × <code>Mean</code>；<code>RawIntDen</code> = 選區內所有像素的灰階值總和。在螢光定量等分析中非常重要，能反映選區內訊號的總量。</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Skewness</strong></td>
+<td style="text-align: left;"><code>Skew</code></td>
+<td style="text-align: left;"><strong>偏度</strong>。衡量灰階分佈的不對稱性。正偏態表示分佈偏向左側（低亮度），負偏態表示偏向右側（高亮度）。</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Kurtosis</strong></td>
+<td style="text-align: left;"><code>Kurt</code></td>
+<td style="text-align: left;"><strong>峰度</strong>。衡量灰階分佈的峰態陡峭程度。高聳的峰態有較高的峰度值。</td>
+</tr>
+</tbody>
+</table>
+<h4 id="_6">形狀與位置測量</h4>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">參數 (選項)</th>
+<th style="text-align: left;">結果欄位</th>
+<th style="text-align: left;">說明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>Perimeter</strong></td>
+<td style="text-align: left;"><code>Perimeter</code></td>
+<td style="text-align: left;">選區的邊界長度（周長）。</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Centroid</strong></td>
+<td style="text-align: left;"><code>X</code>, <code>Y</code></td>
+<td style="text-align: left;"><strong>形心（幾何中心）</strong>。選區所有像素點X、Y座標的算術平均值，代表物體的幾何中心位置。</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Center of Mass</strong></td>
+<td style="text-align: left;"><code>XM</code>, <code>YM</code></td>
+<td style="text-align: left;"><strong>質心</strong>。以像素亮度為權重的座標平均值。質心會偏向選區中較亮的區域。</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Bounding Rectangle</strong></td>
+<td style="text-align: left;"><code>BX</code>, <code>BY</code>, <code>Width</code>, <code>Height</code></td>
+<td style="text-align: left;"><strong>邊界矩形</strong>。能完全包圍選區的最小矩形。回傳其左上角座標(BX, BY)及寬高。</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Feret's Diameter</strong></td>
+<td style="text-align: left;"><code>Feret</code>, <code>FeretAngle</code>, <code>MinFeret</code></td>
+<td style="text-align: left;"><strong>費雷特直徑（最大口徑）</strong>。選區邊界上任意兩點間的最長距離。<code>MinFeret</code> 則是最小口徑。常用來描述不規則物體的尺寸。</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Fit Ellipse</strong></td>
+<td style="text-align: left;"><code>Major</code>, <code>Minor</code>, <code>Angle</code></td>
+<td style="text-align: left;"><strong>擬合橢圓</strong>。計算出最能貼合選區的橢圓，並回傳其長軸(<code>Major</code>)、短軸(<code>Minor</code>)及長軸與X軸的夾角(<code>Angle</code>)。</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Shape Descriptors</strong></td>
+<td style="text-align: left;"><code>Circ.</code>, <code>AR</code>, <code>Round</code>, <code>Solidity</code></td>
+<td style="text-align: left;"><strong>形狀描述子</strong>，一組用來量化形狀的指標：<br> - <strong><code>Circ.</code> (圓形度):</strong> <code>4π*面積/周長²</code>。值為1.0表示完美的圓形，越接近0.0表示越狹長。<br> - <strong><code>AR</code> (長寬比):</strong> <code>長軸/短軸</code>，需同時啟用 "Fit Ellipse"。<br> - <strong><code>Round</code> (圓度):</strong> <code>4*面積/(π*長軸²)</code>，是長寬比的倒數。<br> - <strong><code>Solidity</code> (實心度):</strong> <code>面積/凸包面積</code>。值接近1表示物體較實心、無凹陷。</td>
+</tr>
+</tbody>
+</table>
+<h4 id="_7">其他設定</h4>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">參數 (選項)</th>
+<th style="text-align: left;">說明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>Area Fraction</strong></td>
+<td style="text-align: left;">顯示被閾值（Threshold）標紅的像素所佔的面積百分比。</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Limit to Threshold</strong></td>
+<td style="text-align: left;">勾選後，所有測量（如Mean, Min, Max）都只會計算被閾值標紅的像素，忽略選區內未被標紅的像素。這對於在不完美的分割區域中精確測量訊號非常有用。</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Stack Position</strong></td>
+<td style="text-align: left;">在處理影像堆疊（Stack）時，記錄測量發生在哪個通道(<code>Ch</code>)、切片(<code>Slice</code>)或幀(<code>Frame</code>)。</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Display Label</strong></td>
+<td style="text-align: left;">在結果表格的第一欄顯示影像名稱和切片編號，方便辨識數據來源。</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Redirect To</strong></td>
+<td style="text-align: left;"><strong>重定向</strong>。允許您在影像A上圈選ROI，但實際測量影像B上對應位置的像素值。對於多通道分析（如在DAPI通道上圈核，測量GFP通道的強度）極為重要。</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Decimal Places</strong></td>
+<td style="text-align: left;">設定結果表格中小數點後顯示的位數。</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_8">實作：測量形狀參數 (面積與周長)</h3>
+<p>測量面積與周長這類形狀參數時，我們關心的是物體的輪廓，而不是其內部像素的灰階值。因此，無論是直接分析<strong>二值化影像</strong>，還是在任意影像上使用由該輪廓建立的<strong>選區(ROI)</strong>，得到的面積和周長結果都會是<strong>一樣的</strong>。</p>
+<p>以下我們介紹兩種等效的方法。</p>
+<h4 id="a-analyze-particles">方法 A: 使用 <code>Analyze Particles...</code> (推薦用於多物件分析)</h4>
+<p>此指令會自動掃描整張<strong>二值化影像</strong>，找出所有白色物體並逐一測量。</p>
+<ol>
+<li>使用 <strong>二值化遮罩</strong> 影像。</li>
+<li>執行 <code>Analyze &gt; Set Measurements...</code>，確保 <code>Area</code> 和 <code>Perimeter</code> 都已勾選。</li>
+<li>執行 <code>Analyze &gt; Analyze Particles...</code>。<ul>
+<li><code>Size (cm^2)</code>: 可以設定一個最小值（如 <code>0.1</code>）來過濾掉可能的微小雜訊。</li>
+<li><code>Show</code>: 選擇 <code>Outlines</code>，這樣可以在新視窗中看到被測量的物體輪廓。</li>
+<li>勾選 <code>Display results</code> 和 <code>Summarize</code>。</li>
+</ul>
+</li>
+<li>點擊 <code>OK</code>。</li>
+<li><strong>觀察結果：</strong> 在 "Results" 表格中，您會看到每個被偵測到的粒子（葉子）的 <code>Area</code> 和 <code>Perimeter</code>。</li>
+</ol>
+<h4 id="b-analyze-measure">方法 B: 使用 <code>Analyze &gt; Measure</code> (推薦用於單一物件測量)</h4>
+<p>此指令只會測量當前<strong>作用中的選區 (ROI)</strong>。</p>
+<ol>
+<li>在 <strong>二值化遮罩</strong> 影像上，使用 <strong>魔術棒工具 (Wand Tool)</strong> 點擊白色葉片區域，建立選區。</li>
+<li>執行 <code>Analyze &gt; Set Measurements...</code>，確保 <code>Area</code> 和 <code>Perimeter</code> 都已勾選。</li>
+<li>執行 <code>Analyze &gt; Measure</code> (或按 <code>Ctrl+M</code>)。</li>
+<li><strong>觀察結果：</strong> 在 "Results" 表格中，您會看到一行數據，其中的 <code>Area</code> 和 <code>Perimeter</code> 與方法A的結果相同。</li>
+</ol>
+<blockquote>
+<p><strong>重點：</strong> 由於 <code>Area</code> 和 <code>Perimeter</code> 只跟選區的形狀有關，所以當您使用方法B時，即使將選區套用到原始的彩色 <code>Leaf</code> 影像上再按 <code>Ctrl+M</code>，得到的 <code>Area</code> 和 <code>Perimeter</code> 數值依然不變。改變的只會是 <code>Mean</code>、<code>Min</code>、<code>Max</code> 等與像素強度相關的測量值。這也再次印證了我們在「測量策略」章節中的結論。</p>
+</blockquote>
+<h3 id="_9">實作：進階測量 (碎形維度)</h3>
+<p>碎形維度 (Fractal Dimension) 是一個用來描述複雜、不規則邊界的指標。一個平滑的圓周長，其碎形維度接近1；而一個極度皺褶、複雜的海岸線，其維度會更高（例如1.2~1.3）。我們可以藉此量化葉緣的複雜程度。</p>
+<blockquote>
+<p><strong>碎形維度測量的意義與用途</strong></p>
+<p>傳統的歐幾里得幾何（如周長、面積）擅長描述規則形狀，但對於自然界中常見的複雜、不規則的結構（如海岸線、雲朵、血管網路）就顯得力不從心。碎形維度（D）提供了一個超越傳統整數維度（線=1D, 面=2D, 體=3D）的量化指標，用來描述一個物體<strong>「填充空間」的複雜程度</strong>。</p>
+<ul>
+<li>
+<p><strong>數值解讀：</strong> 一個二維輪廓的碎形維度 D 值介於1和2之間。D值越接近1，表示邊界越平滑、簡單（像一條直線）。D值越接近2，表示邊界越曲折、複雜，幾乎快要能填滿一個平面。</p>
+</li>
+<li>
+<p><strong>應用舉例：</strong></p>
+<ul>
+<li><strong>神經科學：</strong> 量化神經元樹突分支的複雜度。一個D值較高的神經元，可能代表其連結能力更強或更成熟。</li>
+<li><strong>腫瘤學：</strong> 分析腫瘤邊緣的規律性。惡性腫瘤的邊緣通常更不規則，其碎形維度可能比良性腫瘤更高。</li>
+<li><strong>植物學：</strong> 比較不同生長條件下，植物根系或葉緣的複雜程度。</li>
+<li><strong>材料科學：</strong> 描述材料斷裂面的粗糙度。</li>
+</ul>
+</li>
+</ul>
+</blockquote>
+<ol>
+<li>使用<strong>二值化遮罩</strong>影像。</li>
+<li>執行 <code>Analyze &gt; Tools &gt; Fractal Box Count...</code>。</li>
+<li>ImageJ 會產生一個圖表和一個 Log 視窗。在 Log 視窗中，您會看到 <code>D=1.234</code> 這樣的數值，這個 <strong>D 值</strong>就是葉緣的碎形維度。這個值越高，代表葉緣越不規則、越複雜。<a href="https://imagej.net/ij/plugins/fraclac/FLHelp/BoxCounting.htm">Box Counting細節說明</a></li>
+</ol>
+</div>
+
+<!-- Mermaid JS -->
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({}); // Keep double braces for literal JS object
+  mermaid.run({ nodes: document.querySelectorAll('.language-mermaid') }); // Keep double braces
+</script>
+
+<!-- KaTeX JS -->
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoBPJpTUs74ddyc4bFZSM1TVlQDA60VBbJS0oA934VSz82sBx1X7kSx2ATBDIyd" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk" crossorigin="anonymous"></script>
+<!-- *** CORRECTED SCRIPT WITH ${...} ESCAPING *** -->
+        <script>
+            document.addEventListener("DOMContentLoaded", function() {
+                renderMathInElement(document.body, {
+                    delimiters: [
+                        { left: '$$',  right: '$$',  display: true },
+                        { left: '\\[', right: '\\]', display: true },
+                        { left: '\\(', right: '\\)', display: false }
+                    ],
+                    ignoredTags: ['script','noscript','style','textarea','pre','code'],
+                    throwOnError: false
+                });
+            });
+        </script>
+
+</body>
+</html>

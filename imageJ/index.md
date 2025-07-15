@@ -1,15 +1,17 @@
 # ImageJ入門
 
 - [ImageJ安裝與配置](installation.md)
-- [檔案格式與支援](file-formats.md)
-- [界面介紹與基本操作](interface.md)
-- [比例尺設定](scale-bar.md)
-- [基本分析工具](basic-analysis.md)
+- [數位影像基礎知識](digital-image-basics.md)
+- [從像素到微米：基礎測量與校正](from-pixels-to-microns.md)
+- [從一片葉子學分析：空間校正、色彩空間與分割技巧](leaf-analysis-and-color-spaces.md)
+- [多目標測量：ROI管理器與形態學分析](embryo-analysis.md)
+- [螢光強度定量：分析細胞核/質的訊號分佈](fluorescence-quantification.md)
 - [粒子分析](particle-analysis.md)
 - [影像堆疊與序列](image-stacks.md)
 - [ROI選擇與管理](roi-management.md)
 - [Z投影](z-projection.md)
 - [色彩通道分離與合併](color-channels.md)
+- [檔案格式與支援](file-formats.md)
 
 
 # 影像前處理（Image Preprocessing）
@@ -18,12 +20,17 @@
 - [前處理的詳細步驟](imageProcess.md)  
 - [雜訊消除](noise-reduction.md)
 - [影像校正-濾波與影像增強](image-correction.md)
+- [強度校正](intensity-calibration.md)
 - [影像增強技術](image-enhancement.md)
 - [影像分割](segmentation.md)：把目標區域（例如細胞、器官）分出來。
 
 
 # 影像分析（Image Analysis）
 - 特徵擷取：找出分割區域的形狀、大小、強度、紋理等特徵。
+- [進階分割：腦組織的細部分割 (灰質、白質、腦脊髓液)](mri-tissue-segmentation.md)
+- [MRI 紋理分析：量化灰質與白質的結構特徵](mri-texture-analysis.md)
+- [3D 形態學分析：量化大腦的表面積與複雜度](mri-3d-morphometry.md)
+- [自動化流程：撰寫 Macro 腳本完成端到端分析](mri-automation-macro.md)
     - 把影像裡的圖像資訊轉成數字，這些數字可以被後續統計、機器學習或直接用來做測量。
     - 形狀特徵：面積、周長、圓形度（circularity）、長寬比（aspect ratio）
     - 強度特徵：平均灰階值、最大最小值、標準差（影像亮度或密度變化）
@@ -31,7 +38,6 @@
     - 邊界特徵：邊緣鋸齒狀程度、邊界平滑度
     - 拓撲特徵：連通數量（如細胞核數）、空洞數量等等- 影像分類（Image Classification）－將影像或區塊歸類到不同類別（如良性/惡性）。
 - 測量（Quantification）：根據特徵進行數值計算，例如細胞面積、細胞數目、血管長度、腫瘤體積等等。
-- [影像紋理分析](image-texture.md)
 
 
 # 進階影像分析
