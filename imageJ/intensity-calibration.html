@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>intensity-calibration</title>
+<link rel="stylesheet" href="styles.css">
+<!-- KaTeX CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" integrity="sha384-wcIxkf4k558AjM3Yz3BBFQUbk/zgIYC2R0QpeeYb+TwlBVMrlgLqwRjRtGZiK7ww" crossorigin="anonymous">
+</head>
+<body>
+
+<div id="toc">
+<h2><a href="index.html">回到首頁</a></h2>
+<div class="toc-container">
+<div class="toc">
+<ul>
+<li><a href="#intensity-calibration">影像強度校正 (Intensity Calibration)</a><ul>
+<li><a href="#1">1. 什麼是強度校正？</a></li>
+<li><a href="#2">2. 為什麼需要進行強度校正？——非線性的世界</a><ul>
+<li><a href="#_1">深入探討：為何染色深度與濃度常呈飽和曲線？</a></li>
+</ul>
+</li>
+<li><a href="#3">3. 常見應用場景</a></li>
+<li><a href="#4-imagej">4. 如何在 ImageJ 中進行校正</a><ul>
+<li><a href="#rodbard">關於 Rodbard 曲線</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+
+</div>
+</div>
+<div id="content">
+<h1 id="intensity-calibration">影像強度校正 (Intensity Calibration)</h1>
+<h2 id="1">1. 什麼是強度校正？</h2>
+<p>強度校正（Intensity Calibration）是將影像中無單位的像素灰階值（例如 8-bit 的 0-255）轉換為具有實際物理意義單位的過程。這個功能對於科學定量分析至關重要，它能讓您的測量結果從「相對亮度」變成「絕對物理量」。</p>
+<p>校正的核心是透過一組「已知標準品」建立一個轉換模型（校正曲線），然後將這個模型應用於整張影像。</p>
+<h2 id="2">2. 為什麼需要進行強度校正？——非線性的世界</h2>
+<p>一個常見的誤解是，影像的灰階值與我們想測量的物理量（如濃度、放射性）之間是簡單的線性關係。然而，在絕大多數情況下，這種關係是<strong>非線性的</strong>。</p>
+<blockquote>
+<p><strong>為什麼關係通常是非線性的？</strong></p>
+<ul>
+<li><strong>成像設備的非線性響應：</strong> 相機、掃描儀或感測器本身對光線強度的反應通常不是完美的線性。在低光或高光區域，訊號可能會被壓縮或飽和。一張「亮兩倍」的影像，其灰階值不一定剛好是原來的兩倍。</li>
+<li><strong>物理過程本身的非線性：</strong> 許多科學實驗的底層物理或化學過程就是非線性的。</li>
+<li><strong>影像後處理的影響：</strong> 成像軟體或硬體內建的預處理（如對比度拉伸、Gamma校正）會改變像素值與原始訊號的對應關係。</li>
+<li><strong>儲存格式的限制：</strong> 大部分影像是 8-bit 格式，只能記錄 256 個灰階層次。真實世界中微小的物理量變化可能因為數位化而被歸入同一個灰階值，導致精度損失。</li>
+</ul>
+</blockquote>
+<p>因此，校正是必要的，因為它能將失真的像素值對應回一個具有真實物理意義的數值，使數據變得可靠、可比較。</p>
+<h3 id="_1">深入探討：為何染色深度與濃度常呈飽和曲線？</h3>
+<p>在生物染色實驗中，染色深度（影像訊號強度）與樣本濃度之間的關係是典型的非線性，通常呈現為一條<strong>飽和曲線</strong>。</p>
+<p>這背後的原因主要有三點：</p>
+<ol>
+<li>
+<p><strong>染劑結合的物理化學機制：</strong>
+    染劑與目標分子（如蛋白質、DNA）的結合反應遵循類似酵素動力學的<strong>飽和模型</strong>。在低濃度時，訊號與濃度幾乎成正比；但隨著濃度升高，可結合的目標位點越來越少，反應趨於飽和，訊號強度便不再增加。</p>
+</li>
+<li>
+<p><strong>組織/材料的物理特性：</strong>
+    染劑在樣本中的擴散、穿透和結合會受到組織密度、結構屏障、pH值、溫度等多種因素影響，這些都會導致非理想、非線性的反應。</p>
+</li>
+<li>
+<p><strong>成像系統的響應限制：</strong>
+    即使染色反應是線性的，成像設備（如螢光顯微鏡的相機）本身也有其<strong>動態範圍</strong>的極限。當訊號強度超過感測器的上限時，就會發生<strong>飽和</strong>（Saturation），所有超亮的像素值都會被記錄為最大值（如 255），導致高濃度區域的細節丟失。</p>
+</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">因素來源</th>
+<th style="text-align: left;">造成非線性的原因</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>染劑與標的物作用</strong></td>
+<td style="text-align: left;">結合反應具飽和性，類似米氏方程。</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>組織/材料特性</strong></td>
+<td style="text-align: left;">染劑擴散不均、結構阻擋、非專一性結合。</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>成像設備</strong></td>
+<td style="text-align: left;">感測器動態範圍有限，會產生訊號飽和。</td>
+</tr>
+</tbody>
+</table>
+<h2 id="3">3. 常見應用場景</h2>
+<ul>
+<li>
+<p><strong>放射性測量 (Radioactive Isotope Imaging):</strong></p>
+<ul>
+<li><strong>應用：</strong> 核醫學、放射生物學。</li>
+<li><strong>說明：</strong> 使用不同濃度的放射性標準樣本建立校正曲線，將灰階值對應為放射活性（如 Bq/mL），從而定量分析樣品中的放射性分布。</li>
+</ul>
+</li>
+<li>
+<p><strong>光密度計校正 (Optical Density Calibration):</strong></p>
+<ul>
+<li><strong>應用：</strong> 膠片掃描、X光片數位化。</li>
+<li><strong>說明：</strong> 使用已知光密度（Optical Density, OD）值的標準灰階板，將影像的像素灰階值轉換為實際的OD值。</li>
+</ul>
+</li>
+<li>
+<p><strong>凝膠電泳定量 (Gel Electrophoresis Quantification):</strong></p>
+<ul>
+<li><strong>應用：</strong> 分子生物學（如 Western blot、DNA 凝膠）。</li>
+<li><strong>說明：</strong> 透過一組已知濃度的標準條帶建立校正曲線，從而估算未知樣本條帶的濃度。</li>
+</ul>
+</li>
+<li>
+<p><strong>螢光/吸光度影像分析 (Fluorescence/Absorbance Imaging):</strong></p>
+<ul>
+<li><strong>應用：</strong> 顯微影像、ELISA 微量盤讀取。</li>
+<li><strong>說明：</strong> 利用已知濃度的螢光探針或染劑建立標準曲線，讓灰階值轉換為濃度單位（如 μM、ng/mL）。</li>
+</ul>
+</li>
+<li>
+<p><strong>材料科學 (Materials Imaging):</strong></p>
+<ul>
+<li><strong>應用：</strong> 掃描電子顯微鏡（SEM）、X-ray CT。</li>
+<li><strong>說明：</strong> 將灰階值轉換為物理量（如厚度、密度），幫助進行材料結構的定量分析。</li>
+</ul>
+</li>
+</ul>
+<h2 id="4-imagej">4. 如何在 ImageJ 中進行校正</h2>
+<p>ImageJ 的 <code>Analyze &gt; Calibrate...</code> 功能可以幫助我們完成這個過程。</p>
+<ol>
+<li>
+<p><strong>測量標準品：</strong></p>
+<ul>
+<li>在您的影像中，必須包含一組已知物理量（如濃度、光密度）的標準品。</li>
+<li>使用選擇工具（如矩形）框選每一個標準品區域。</li>
+<li>執行 <code>Analyze &gt; Measure</code> (或按 <code>Ctrl+M</code>) 記錄下每個標準品區域的平均灰階值（Mean Gray Value）。</li>
+</ul>
+</li>
+<li>
+<p><strong>建立校正曲線：</strong></p>
+<ul>
+<li>執行 <code>Analyze &gt; Calibrate...</code>。</li>
+<li>左側的欄位會顯示您剛剛測量的灰階值。</li>
+<li>在右側的欄位中，<strong>手動輸入</strong>每個灰階值對應的<strong>真實物理量</strong>。</li>
+<li>從 <strong>Function</strong> 下拉選單中，選擇一個最適合您數據的<strong>擬合曲線</strong>。ImageJ 提供了多種選項，包括線性、多項式以及適用於飽和曲線的 <strong>Rodbard</strong> 函式。</li>
+<li>在 <strong>Unit</strong> 欄位中，輸入物理量的單位（如 <code>OD</code>, <code>μg/mL</code>, <code>Bq</code>）。</li>
+</ul>
+</li>
+<li>
+<p><strong>套用校正：</strong></p>
+<ul>
+<li>點擊 <code>OK</code>。ImageJ 會根據您建立的校正曲線，將整張影像的灰階值轉換為已校正的數值。</li>
+<li>此時，當您將滑鼠移動到影像上，狀態列顯示的 <code>value</code> 將不再是 0-255 的灰階值，而是帶有物理單位的校正後數值。之後的所有測量也將使用這個新單位。</li>
+</ul>
+</li>
+</ol>
+<h3 id="rodbard">關於 Rodbard 曲線</h3>
+<p>Rodbard 是一種常用於生物測定分析的四參數邏輯擬合函式，其公式為：
+<code>y = d + (a - d) / (1 + (x / c)^b)</code></p>
+<p>它非常適合描述具有「S」形或飽和特性的數據，例如螢光強度與蛋白質濃度的關係，能夠準確地反映「初期變化快、後期趨緩」的典型科學現象。</p>
+</div>
+
+<!-- Mermaid JS -->
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({}); // Keep double braces for literal JS object
+  mermaid.run({ nodes: document.querySelectorAll('.language-mermaid') }); // Keep double braces
+</script>
+
+<!-- KaTeX JS -->
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoBPJpTUs74ddyc4bFZSM1TVlQDA60VBbJS0oA934VSz82sBx1X7kSx2ATBDIyd" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk" crossorigin="anonymous"></script>
+<!-- *** CORRECTED SCRIPT WITH ${...} ESCAPING *** -->
+        <script>
+            document.addEventListener("DOMContentLoaded", function() {
+                renderMathInElement(document.body, {
+                    delimiters: [
+                        { left: '$$',  right: '$$',  display: true },
+                        { left: '\\[', right: '\\]', display: true },
+                        { left: '\\(', right: '\\)', display: false }
+                    ],
+                    ignoredTags: ['script','noscript','style','textarea','pre','code'],
+                    throwOnError: false
+                });
+            });
+        </script>
+
+</body>
+</html>
