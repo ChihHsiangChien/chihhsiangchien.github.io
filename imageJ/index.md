@@ -1,6 +1,7 @@
 # ImageJ入門
 
 - [ImageJ安裝與配置](installation.md)
+- [檔案格式與支援](file-formats.md)
 - [數位影像基礎知識](digital-image-basics.md)
 - [從像素到微米：基礎測量與校正](from-pixels-to-microns.md)
 - [從葉片學分析：空間校正、色彩空間與分割技巧](leaf-analysis-and-color-spaces.md)
@@ -10,15 +11,14 @@
 - [粒子分析](particle-analysis.md)
 - [影像堆疊與序列](image-stacks.md)
 - [ROI選擇與管理](roi-management.md)
-- [Z投影](z-projection.md)
-- [色彩通道分離與合併](color-channels.md)
-- [檔案格式與支援](file-formats.md)
+
 
 
 # 影像前處理（Image Preprocessing）
 
 - [影像前處理流程圖](workflowChart.md)  
 - [前處理的詳細步驟](imageProcess.md)  
+- [影像對位](image-registration.md)
 - [雜訊消除](noise-reduction.md)
 - [影像校正-濾波與影像增強](image-correction.md)
 - [強度校正](intensity-calibration.md)
@@ -45,7 +45,7 @@
 
 - [多通道分析](multichannel-analysis.md)
 - [時序動態分析](time-series.md)
-- [3D重建與影像對位](3d-registration.md)
+
 
 # 大型影像處理
 

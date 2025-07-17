@@ -2,7 +2,6 @@
 
 我們將以 ImageJ 內建的 `Fluorescent Cells.tif` 範例影像為基礎，學習如何測量一個目標蛋白在細胞核（Nucleus）和細胞質（Cytoplasm）中的分佈，並計算其比值。
 
-這是一個非常核心的實驗技能，常用於研究蛋白質的核質轉位（Nucleocytoplasmic Shuttling）等現象。
 
 ## 1. 案例介紹與準備工作
 

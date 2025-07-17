@@ -1,106 +1,160 @@
 # 影像前處理決策方法
 
-
-## 1. 是否影像太模糊或太銳利？
-
-### 1-1. 銳化影像 (Sharpening)
-
-*   **目的：** 改善模糊影像，使邊緣更清楚
-*   **ImageJ 操作：**
-    *   `Process > Enhance Contrast`
-    *   `Process > Filters > Sharpen`
-    *   `Plugins > Filters > Unsharp Mask`
-
----
-
-### 1-2. 模糊平滑影像 (Blurring)
-
-*   **目的：** 去除過強邊緣或雜訊
-*   **ImageJ 操作：**
-    *   `Process > Filters > Gaussian Blur...`
-    *   `Process > Filters > Median...`
-    *   `Process > Smooth`
+## 流程總覽
+根據 [前處理流程圖](workflowChart.md)，主要步驟如下：
+1. 彩色影像轉灰階
+2. 背景分離（靜態/動態背景相減）
+3. 對比度增強
+4. 去雜訊（依雜訊類型選擇方法）
+5. 邊緣偵測
+6. 形態學操作
+7. 輪廓分析/分割
 
 ---
 
-## 2. 是否有明顯的雜訊？
-
-### 2-1. 去除椒鹽雜訊 (Salt-and-Pepper Noise)
+## 1. 彩色影像轉灰階
 
 *   **ImageJ 操作：**
-    *   `Process > Filters > Median...`
-
-### 2-2. 去除高斯雜訊 (Gaussian Noise)
-
-*   **ImageJ 操作：**
-    *   `Process > Filters > Gaussian Blur...`
-
-### 2-3. 去除週期性雜訊 (Periodic Noise)
-
-*   **ImageJ 操作：**
-    1.  `Process > FFT > FFT`
-    2.  在頻域影像中，遮罩處理高亮區域（代表週期性雜訊）
-    3.  `Process > FFT > Inverse FFT`
+    *   `Image > Type > 8-bit` 或 `Image > Type > 16-bit`（將彩色影像轉為灰階）
+    *   若原始影像為 RGB，可用 `Image > Type > RGB Stack` 分離通道
 
 ---
 
-## 3. 是否影像對比度太低或亮度不均？
+## 2. 背景分離（前景/背景分割）
 
-### 3-1. 增強對比 (Contrast Enhancement)
+*   **靜態背景相減法：**
+    *   `Process > Image Calculator...`，選擇原始影像與背景影像，運算方式選 `Subtract`
+*   **動態背景建模：**
+    *   若有影像序列，可用 `Process > Subtract Background...`（設定 rolling ball 半徑）
+    *   進階：需外掛如 `Background Subtraction` 或用 Macro 處理多張影像
+
+---
+
+## 3. 對比度增強/亮度均勻化
 
 *   **ImageJ 操作：**
     *   `Image > Adjust > Brightness/Contrast...`
-    *   `Process > Enhance Contrast...` (可勾選 `Normalize` / `Equalize Histogram`)
-
-### 3-2. 自訂 Gamma 或 LUT 調整
-
-*   **ImageJ 操作：**
-    *   `Image > Lookup Tables` (選擇並套用合適的 LUT，部分 LUT 可調整 Gamma)
-    *   `Image > Adjust > Gamma...` (可能需要額外插件)
+    *   `Process > Enhance Contrast...`（可勾選 Normalize/Equalize Histogram）
+    *   `Process > Subtract Background...`（校正不均勻背景）
 
 ---
 
-## 4. 是否需要區分前景與背景？
+## 4. 去雜訊（依 workflow 選擇）
 
-### 4-1. 閾值二值化 (Thresholding)
-
-*   **ImageJ 操作：**
-    *   `Image > Adjust > Threshold...`
-    *   在彈出視窗中，可從下拉選單選擇自動閾值方法 (如 `Otsu`, `Yen`, `MaxEntropy` 等)
-    *   調整閾值範圍後，按 `Apply` 將影像轉換為二值影像。
-
-### 4-2. 自適應閾值 (Adaptive Thresholding)
-
-*   **需求：** 通常需要安裝插件，例如 `Auto Local Threshold`。
-*   **ImageJ 操作 (以 Auto Local Threshold 為例)：**
-    1.  安裝 `Auto Local Threshold` 插件。
-    2.  使用 `Plugins > Auto Local Threshold`。
-    3.  選擇合適的局部閾值方法 (如 `Mean`, `Median`, `MidGrey`, `Phansalkar`, `Bernsen` 等)。
+*   **椒鹽雜訊/需保邊：**
+    *   `Process > Filters > Median...`
+*   **高斯雜訊/平滑為主：**
+    *   `Process > Filters > Gaussian Blur...`
+*   **強烈保邊（進階）：**
+    *   需安裝 Bilateral Filter 插件（`Plugins > Bilateral Filter`）
 
 ---
 
-## 5. 是否要強調或抽出特定形狀特徵？
+## 5. 邊緣偵測
 
-### 5-1. 邊緣偵測 (Edge Detection)
+ImageJ 可利用 `Process > Filters > Convolve...` 自訂卷積核進行各種邊緣偵測。以下提供常用 kernel 範例：
 
-*   **ImageJ 操作：**
-    *   `Process > Find Edges` (使用 Sobel 算子)
-    *   **進階：** 可使用插件如 `Plugins > FeatureJ > FeatureJ Edges` (提供 Canny 等更多方法)
+*   **Sobel（高對比）：**
+    *   在 Convolve 視窗輸入：
 
-### 5-2. 數學形態學 (Mathematical Morphology)
+        ```
+        1 0 -1
+        2 0 -2
+        1 0 -1
+        ```
 
-*   **ImageJ 操作：**
-    *   **設定結構元素：** `Process > Binary > Options...` (選擇結構元素形狀和前景/背景色)
-    *   **基本操作：**
-        *   `Process > Binary > Erode` (侵蝕)
-        *   `Process > Binary > Dilate` (膨脹)
-        *   `Process > Binary > Open` (開啟：先侵蝕再膨脹，去除小噪點)
-        *   `Process > Binary > Close` (關閉：先膨脹再侵蝕，填補小空洞)
-    *   **其他操作：**
-        *   `Process > Binary > Skeletonize` (骨架化)
+    *   或
+
+        ```
+        1 2 1
+        0 0 0
+        -1 -2 -1
+        ```
+
+    *   分別為 X/Y 方向，需各自執行一次。
+
+*   **Scharr（高對比）：**
+    *   在 Convolve 視窗輸入：
+
+        ```
+        3 0 -3
+        10 0 -10
+        3 0 -3
+        ```
+
+    *   或
+
+        ```
+        3 10 3
+        0 0 0
+        -3 -10 -3
+        ```
+
+    *   分別為 X/Y 方向，需各自執行一次。
+
+*   **Laplacian（找細節/斑點）：**
+    *   在 Convolve 視窗輸入：
+
+        ```
+        0 1 0
+        1 -4 1
+        0 1 0
+        ```
+
+    *   或
+    
+        ```
+        1 1 1
+        1 -8 1
+        1 1 1
+        ```
+
+*   **Canny（效果均衡）：**
+    *   Canny 邊緣偵測需多步驟（高斯模糊 + Sobel + 非極大值抑制 +雙閾值），ImageJ 無直接 kernel，但可用 Convolve 先做高斯模糊與 Sobel，再手動後處理。
+
+> 操作步驟：`Process > Filters > Convolve...`，將上述 kernel 貼入視窗即可。
 
 ---
 
+## 6. 邊緣細化/形態學操作
+
+*   **ImageJ 操作：**
+    *   `Process > Binary > Erode`（侵蝕）
+    *   `Process > Binary > Dilate`（膨脹）
+    *   `Process > Binary > Open`（開啟）
+    *   `Process > Binary > Close`（關閉）
+    *   `Process > Binary > Skeletonize`（骨架化）
+    *   `Process > Binary > Watershed`（分水嶺分割）
+
+---
+
+## 7. 輪廓分析/分割
+
+*   **ImageJ 操作：**
+    *   `Analyze > Analyze Particles...`（偵測、量測分割後的物件）
+    *   可設定 Size/Circularity 範圍，並選擇輸出結果
+
+---
+
+## 8. 批次處理與自動化
+
+*   **錄製 Macro：**
+    *   `Plugins > Macros > Record...` 開始錄製操作
+    *   完成後 `Create` 儲存 Macro
+*   **批次處理：**
+    *   `Process > Batch > Macro...`，選擇 Macro 與資料夾批次處理
+
+---
+
+## 常見細胞分析基本流程（Workflow）
+
+1. **輸入影像**：`File > Open...`
+2. **去雜訊**：`Process > Filters > Gaussian Blur...` 或 `Median...`
+3. **增強對比/亮度均勻化**：`Process > Enhance Contrast...`、`Subtract Background...`
+4. **門檻處理/分割**：`Image > Adjust > Threshold...` 或安裝 `Auto Local Threshold` 插件
+5. **形態學運算**：`Process > Binary > ...`
+6. **粒子分析**：`Analyze > Analyze Particles...`
+7. **輸出數據**：`File > Save As...` 匯出結果
 ## 6. 是否圖像角度或大小不一致？
 
 ### 6-1. 幾何轉換 (Geometric Transformations)
