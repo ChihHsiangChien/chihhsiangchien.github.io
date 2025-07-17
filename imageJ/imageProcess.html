@@ -15,42 +15,26 @@
 <div class="toc">
 <ul>
 <li><a href="#_1">影像前處理決策方法</a><ul>
-<li><a href="#1">1. 是否影像太模糊或太銳利？</a><ul>
-<li><a href="#1-1-sharpening">1-1. 銳化影像 (Sharpening)</a></li>
-<li><a href="#1-2-blurring">1-2. 模糊平滑影像 (Blurring)</a></li>
-</ul>
-</li>
-<li><a href="#2">2. 是否有明顯的雜訊？</a><ul>
-<li><a href="#2-1-salt-and-pepper-noise">2-1. 去除椒鹽雜訊 (Salt-and-Pepper Noise)</a></li>
-<li><a href="#2-2-gaussian-noise">2-2. 去除高斯雜訊 (Gaussian Noise)</a></li>
-<li><a href="#2-3-periodic-noise">2-3. 去除週期性雜訊 (Periodic Noise)</a></li>
-</ul>
-</li>
-<li><a href="#3">3. 是否影像對比度太低或亮度不均？</a><ul>
-<li><a href="#3-1-contrast-enhancement">3-1. 增強對比 (Contrast Enhancement)</a></li>
-<li><a href="#3-2-gamma-lut">3-2. 自訂 Gamma 或 LUT 調整</a></li>
-</ul>
-</li>
-<li><a href="#4">4. 是否需要區分前景與背景？</a><ul>
-<li><a href="#4-1-thresholding">4-1. 閾值二值化 (Thresholding)</a></li>
-<li><a href="#4-2-adaptive-thresholding">4-2. 自適應閾值 (Adaptive Thresholding)</a></li>
-</ul>
-</li>
-<li><a href="#5">5. 是否要強調或抽出特定形狀特徵？</a><ul>
-<li><a href="#5-1-edge-detection">5-1. 邊緣偵測 (Edge Detection)</a></li>
-<li><a href="#5-2-mathematical-morphology">5-2. 數學形態學 (Mathematical Morphology)</a></li>
-</ul>
-</li>
-<li><a href="#6">6. 是否圖像角度或大小不一致？</a><ul>
+<li><a href="#_2">流程總覽</a></li>
+<li><a href="#1">1. 彩色影像轉灰階</a></li>
+<li><a href="#2">2. 背景分離（前景/背景分割）</a></li>
+<li><a href="#3">3. 對比度增強/亮度均勻化</a></li>
+<li><a href="#4-workflow">4. 去雜訊（依 workflow 選擇）</a></li>
+<li><a href="#5">5. 邊緣偵測</a></li>
+<li><a href="#6">6. 邊緣細化/形態學操作</a></li>
+<li><a href="#7">7. 輪廓分析/分割</a></li>
+<li><a href="#8">8. 批次處理與自動化</a></li>
+<li><a href="#workflow">常見細胞分析基本流程（Workflow）</a></li>
+<li><a href="#6_1">6. 是否圖像角度或大小不一致？</a><ul>
 <li><a href="#6-1-geometric-transformations">6-1. 幾何轉換 (Geometric Transformations)</a></li>
 </ul>
 </li>
-<li><a href="#7">7. 是否要進行大量影像處理？</a><ul>
+<li><a href="#7_1">7. 是否要進行大量影像處理？</a><ul>
 <li><a href="#7-1-batch-processing">7-1. 使用批次處理 (Batch Processing)</a></li>
 <li><a href="#7-2-python-pyimagej">7-2. 使用 Python 自動化 (推薦 pyimagej)</a></li>
 </ul>
 </li>
-<li><a href="#workflow">常見的細胞分析基本流程 (Workflow)</a></li>
+<li><a href="#workflow_1">常見的細胞分析基本流程 (Workflow)</a></li>
 </ul>
 </li>
 </ul>
@@ -60,122 +44,181 @@
 </div>
 <div id="content">
 <h1 id="_1">影像前處理決策方法</h1>
-<h2 id="1">1. 是否影像太模糊或太銳利？</h2>
-<h3 id="1-1-sharpening">1-1. 銳化影像 (Sharpening)</h3>
+<h2 id="_2">流程總覽</h2>
+<p>根據 <a href="workflowChart.html">前處理流程圖</a>，主要步驟如下：
+1. 彩色影像轉灰階
+2. 背景分離（靜態/動態背景相減）
+3. 對比度增強
+4. 去雜訊（依雜訊類型選擇方法）
+5. 邊緣偵測
+6. 形態學操作
+7. 輪廓分析/分割</p>
+<hr />
+<h2 id="1">1. 彩色影像轉灰階</h2>
 <ul>
-<li><strong>目的：</strong> 改善模糊影像，使邊緣更清楚</li>
 <li><strong>ImageJ 操作：</strong><ul>
-<li><code>Process &gt; Enhance Contrast</code></li>
-<li><code>Process &gt; Filters &gt; Sharpen</code></li>
-<li><code>Plugins &gt; Filters &gt; Unsharp Mask</code></li>
+<li><code>Image &gt; Type &gt; 8-bit</code> 或 <code>Image &gt; Type &gt; 16-bit</code>（將彩色影像轉為灰階）</li>
+<li>若原始影像為 RGB，可用 <code>Image &gt; Type &gt; RGB Stack</code> 分離通道</li>
 </ul>
 </li>
 </ul>
 <hr />
-<h3 id="1-2-blurring">1-2. 模糊平滑影像 (Blurring)</h3>
+<h2 id="2">2. 背景分離（前景/背景分割）</h2>
 <ul>
-<li><strong>目的：</strong> 去除過強邊緣或雜訊</li>
-<li><strong>ImageJ 操作：</strong><ul>
-<li><code>Process &gt; Filters &gt; Gaussian Blur...</code></li>
-<li><code>Process &gt; Filters &gt; Median...</code></li>
-<li><code>Process &gt; Smooth</code></li>
+<li><strong>靜態背景相減法：</strong><ul>
+<li><code>Process &gt; Image Calculator...</code>，選擇原始影像與背景影像，運算方式選 <code>Subtract</code></li>
+</ul>
+</li>
+<li><strong>動態背景建模：</strong><ul>
+<li>若有影像序列，可用 <code>Process &gt; Subtract Background...</code>（設定 rolling ball 半徑）</li>
+<li>進階：需外掛如 <code>Background Subtraction</code> 或用 Macro 處理多張影像</li>
 </ul>
 </li>
 </ul>
 <hr />
-<h2 id="2">2. 是否有明顯的雜訊？</h2>
-<h3 id="2-1-salt-and-pepper-noise">2-1. 去除椒鹽雜訊 (Salt-and-Pepper Noise)</h3>
-<ul>
-<li><strong>ImageJ 操作：</strong><ul>
-<li><code>Process &gt; Filters &gt; Median...</code></li>
-</ul>
-</li>
-</ul>
-<h3 id="2-2-gaussian-noise">2-2. 去除高斯雜訊 (Gaussian Noise)</h3>
-<ul>
-<li><strong>ImageJ 操作：</strong><ul>
-<li><code>Process &gt; Filters &gt; Gaussian Blur...</code></li>
-</ul>
-</li>
-</ul>
-<h3 id="2-3-periodic-noise">2-3. 去除週期性雜訊 (Periodic Noise)</h3>
-<ul>
-<li><strong>ImageJ 操作：</strong><ol>
-<li><code>Process &gt; FFT &gt; FFT</code></li>
-<li>在頻域影像中，遮罩處理高亮區域（代表週期性雜訊）</li>
-<li><code>Process &gt; FFT &gt; Inverse FFT</code></li>
-</ol>
-</li>
-</ul>
-<hr />
-<h2 id="3">3. 是否影像對比度太低或亮度不均？</h2>
-<h3 id="3-1-contrast-enhancement">3-1. 增強對比 (Contrast Enhancement)</h3>
+<h2 id="3">3. 對比度增強/亮度均勻化</h2>
 <ul>
 <li><strong>ImageJ 操作：</strong><ul>
 <li><code>Image &gt; Adjust &gt; Brightness/Contrast...</code></li>
-<li><code>Process &gt; Enhance Contrast...</code> (可勾選 <code>Normalize</code> / <code>Equalize Histogram</code>)</li>
-</ul>
-</li>
-</ul>
-<h3 id="3-2-gamma-lut">3-2. 自訂 Gamma 或 LUT 調整</h3>
-<ul>
-<li><strong>ImageJ 操作：</strong><ul>
-<li><code>Image &gt; Lookup Tables</code> (選擇並套用合適的 LUT，部分 LUT 可調整 Gamma)</li>
-<li><code>Image &gt; Adjust &gt; Gamma...</code> (可能需要額外插件)</li>
+<li><code>Process &gt; Enhance Contrast...</code>（可勾選 Normalize/Equalize Histogram）</li>
+<li><code>Process &gt; Subtract Background...</code>（校正不均勻背景）</li>
 </ul>
 </li>
 </ul>
 <hr />
-<h2 id="4">4. 是否需要區分前景與背景？</h2>
-<h3 id="4-1-thresholding">4-1. 閾值二值化 (Thresholding)</h3>
+<h2 id="4-workflow">4. 去雜訊（依 workflow 選擇）</h2>
 <ul>
-<li><strong>ImageJ 操作：</strong><ul>
-<li><code>Image &gt; Adjust &gt; Threshold...</code></li>
-<li>在彈出視窗中，可從下拉選單選擇自動閾值方法 (如 <code>Otsu</code>, <code>Yen</code>, <code>MaxEntropy</code> 等)</li>
-<li>調整閾值範圍後，按 <code>Apply</code> 將影像轉換為二值影像。</li>
+<li><strong>椒鹽雜訊/需保邊：</strong><ul>
+<li><code>Process &gt; Filters &gt; Median...</code></li>
+</ul>
+</li>
+<li><strong>高斯雜訊/平滑為主：</strong><ul>
+<li><code>Process &gt; Filters &gt; Gaussian Blur...</code></li>
+</ul>
+</li>
+<li><strong>強烈保邊（進階）：</strong><ul>
+<li>需安裝 Bilateral Filter 插件（<code>Plugins &gt; Bilateral Filter</code>）</li>
 </ul>
 </li>
 </ul>
-<h3 id="4-2-adaptive-thresholding">4-2. 自適應閾值 (Adaptive Thresholding)</h3>
+<hr />
+<h2 id="5">5. 邊緣偵測</h2>
+<p>ImageJ 可利用 <code>Process &gt; Filters &gt; Convolve...</code> 自訂卷積核進行各種邊緣偵測。以下提供常用 kernel 範例：</p>
 <ul>
-<li><strong>需求：</strong> 通常需要安裝插件，例如 <code>Auto Local Threshold</code>。</li>
-<li><strong>ImageJ 操作 (以 Auto Local Threshold 為例)：</strong><ol>
-<li>安裝 <code>Auto Local Threshold</code> 插件。</li>
-<li>使用 <code>Plugins &gt; Auto Local Threshold</code>。</li>
-<li>選擇合適的局部閾值方法 (如 <code>Mean</code>, <code>Median</code>, <code>MidGrey</code>, <code>Phansalkar</code>, <code>Bernsen</code> 等)。</li>
+<li>
+<p><strong>Sobel（高對比）：</strong></p>
+<ul>
+<li>
+<p>在 Convolve 視窗輸入：</p>
+<p><code>1 0 -1
+2 0 -2
+1 0 -1</code></p>
+</li>
+<li>
+<p>或</p>
+<p><code>1 2 1
+0 0 0
+-1 -2 -1</code></p>
+</li>
+<li>
+<p>分別為 X/Y 方向，需各自執行一次。</p>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>Scharr（高對比）：</strong></p>
+<ul>
+<li>
+<p>在 Convolve 視窗輸入：</p>
+<p><code>3 0 -3
+10 0 -10
+3 0 -3</code></p>
+</li>
+<li>
+<p>或</p>
+<p><code>3 10 3
+0 0 0
+-3 -10 -3</code></p>
+</li>
+<li>
+<p>分別為 X/Y 方向，需各自執行一次。</p>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>Laplacian（找細節/斑點）：</strong></p>
+<ul>
+<li>
+<p>在 Convolve 視窗輸入：</p>
+<p><code>0 1 0
+1 -4 1
+0 1 0</code></p>
+</li>
+<li>
+<p>或</p>
+<p><code>1 1 1
+1 -8 1
+1 1 1</code></p>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>Canny（效果均衡）：</strong></p>
+<ul>
+<li>Canny 邊緣偵測需多步驟（高斯模糊 + Sobel + 非極大值抑制 +雙閾值），ImageJ 無直接 kernel，但可用 Convolve 先做高斯模糊與 Sobel，再手動後處理。</li>
+</ul>
+</li>
+</ul>
+<blockquote>
+<p>操作步驟：<code>Process &gt; Filters &gt; Convolve...</code>，將上述 kernel 貼入視窗即可。</p>
+</blockquote>
+<hr />
+<h2 id="6">6. 邊緣細化/形態學操作</h2>
+<ul>
+<li><strong>ImageJ 操作：</strong><ul>
+<li><code>Process &gt; Binary &gt; Erode</code>（侵蝕）</li>
+<li><code>Process &gt; Binary &gt; Dilate</code>（膨脹）</li>
+<li><code>Process &gt; Binary &gt; Open</code>（開啟）</li>
+<li><code>Process &gt; Binary &gt; Close</code>（關閉）</li>
+<li><code>Process &gt; Binary &gt; Skeletonize</code>（骨架化）</li>
+<li><code>Process &gt; Binary &gt; Watershed</code>（分水嶺分割）</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="7">7. 輪廓分析/分割</h2>
+<ul>
+<li><strong>ImageJ 操作：</strong><ul>
+<li><code>Analyze &gt; Analyze Particles...</code>（偵測、量測分割後的物件）</li>
+<li>可設定 Size/Circularity 範圍，並選擇輸出結果</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="8">8. 批次處理與自動化</h2>
+<ul>
+<li><strong>錄製 Macro：</strong><ul>
+<li><code>Plugins &gt; Macros &gt; Record...</code> 開始錄製操作</li>
+<li>完成後 <code>Create</code> 儲存 Macro</li>
+</ul>
+</li>
+<li><strong>批次處理：</strong><ul>
+<li><code>Process &gt; Batch &gt; Macro...</code>，選擇 Macro 與資料夾批次處理</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="workflow">常見細胞分析基本流程（Workflow）</h2>
+<ol>
+<li><strong>輸入影像</strong>：<code>File &gt; Open...</code></li>
+<li><strong>去雜訊</strong>：<code>Process &gt; Filters &gt; Gaussian Blur...</code> 或 <code>Median...</code></li>
+<li><strong>增強對比/亮度均勻化</strong>：<code>Process &gt; Enhance Contrast...</code>、<code>Subtract Background...</code></li>
+<li><strong>門檻處理/分割</strong>：<code>Image &gt; Adjust &gt; Threshold...</code> 或安裝 <code>Auto Local Threshold</code> 插件</li>
+<li><strong>形態學運算</strong>：<code>Process &gt; Binary &gt; ...</code></li>
+<li><strong>粒子分析</strong>：<code>Analyze &gt; Analyze Particles...</code></li>
+<li><strong>輸出數據</strong>：<code>File &gt; Save As...</code> 匯出結果</li>
 </ol>
-</li>
-</ul>
-<hr />
-<h2 id="5">5. 是否要強調或抽出特定形狀特徵？</h2>
-<h3 id="5-1-edge-detection">5-1. 邊緣偵測 (Edge Detection)</h3>
-<ul>
-<li><strong>ImageJ 操作：</strong><ul>
-<li><code>Process &gt; Find Edges</code> (使用 Sobel 算子)</li>
-<li><strong>進階：</strong> 可使用插件如 <code>Plugins &gt; FeatureJ &gt; FeatureJ Edges</code> (提供 Canny 等更多方法)</li>
-</ul>
-</li>
-</ul>
-<h3 id="5-2-mathematical-morphology">5-2. 數學形態學 (Mathematical Morphology)</h3>
-<ul>
-<li><strong>ImageJ 操作：</strong><ul>
-<li><strong>設定結構元素：</strong> <code>Process &gt; Binary &gt; Options...</code> (選擇結構元素形狀和前景/背景色)</li>
-<li><strong>基本操作：</strong><ul>
-<li><code>Process &gt; Binary &gt; Erode</code> (侵蝕)</li>
-<li><code>Process &gt; Binary &gt; Dilate</code> (膨脹)</li>
-<li><code>Process &gt; Binary &gt; Open</code> (開啟：先侵蝕再膨脹，去除小噪點)</li>
-<li><code>Process &gt; Binary &gt; Close</code> (關閉：先膨脹再侵蝕，填補小空洞)</li>
-</ul>
-</li>
-<li><strong>其他操作：</strong><ul>
-<li><code>Process &gt; Binary &gt; Skeletonize</code> (骨架化)</li>
-</ul>
-</li>
-</ul>
-</li>
-</ul>
-<hr />
-<h2 id="6">6. 是否圖像角度或大小不一致？</h2>
+<h2 id="6_1">6. 是否圖像角度或大小不一致？</h2>
 <h3 id="6-1-geometric-transformations">6-1. 幾何轉換 (Geometric Transformations)</h3>
 <ul>
 <li><strong>ImageJ 操作：</strong><ul>
@@ -187,7 +230,7 @@
 </li>
 </ul>
 <hr />
-<h2 id="7">7. 是否要進行大量影像處理？</h2>
+<h2 id="7_1">7. 是否要進行大量影像處理？</h2>
 <h3 id="7-1-batch-processing">7-1. 使用批次處理 (Batch Processing)</h3>
 <ul>
 <li><strong>ImageJ Macro 操作：</strong><ol>
@@ -206,7 +249,7 @@
 </li>
 </ul>
 <h3 id="7-2-python-pyimagej">7-2. 使用 Python 自動化 (推薦 <code>pyimagej</code>)</h3>
-<h2 id="workflow">常見的細胞分析基本流程 (Workflow)</h2>
+<h2 id="workflow_1">常見的細胞分析基本流程 (Workflow)</h2>
 <ol>
 <li>
 <p><strong>輸入影像 (Image Input)</strong></p>

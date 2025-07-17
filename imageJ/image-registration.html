@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>image-registration</title>
+<link rel="stylesheet" href="styles.css">
+<!-- KaTeX CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" integrity="sha384-wcIxkf4k558AjM3Yz3BBFQUbk/zgIYC2R0QpeeYb+TwlBVMrlgLqwRjRtGZiK7ww" crossorigin="anonymous">
+</head>
+<body>
+
+<div id="toc">
+<h2><a href="index.html">回到首頁</a></h2>
+<div class="toc-container">
+<div class="toc">
+<ul>
+<li><a href="#image-registration-sift">影像對位 (Image Registration): 使用 SIFT 對齊影像堆疊</a><ul>
+<li><a href="#1-image-registration">1. 什麼是影像對位 (Image Registration)？</a></li>
+<li><a href="#2-stack">2. 準備工作：產生一個測試用的影像stack</a><ul>
+<li><a href="#macro">Macro 腳本</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#3-linear-stack-alignment-with-sift">3. 使用 Linear Stack Alignment with SIFT 進行對位</a><ul>
+<li><a href="#sift">SIFT 設定視窗參數說明</a><ul>
+<li><a href="#1-scale-invariant-interest-point-detector">1. Scale Invariant Interest Point Detector（尺度不變特徵點偵測器）</a></li>
+<li><a href="#2-feature-descriptor">2. Feature Descriptor（特徵描述符）</a></li>
+<li><a href="#3-geometric-consensus-filter">3. Geometric Consensus Filter（幾何一致性篩選器）</a></li>
+<li><a href="#4-output">4. Output（輸出選項）</a></li>
+</ul>
+</li>
+<li><a href="#_1">操作步驟</a></li>
+</ul>
+</li>
+<li><a href="#4">4. 評估對位結果</a></li>
+<li><a href="#_2">如何觀察影像是否需要對位？</a><ul>
+<li><a href="#1">1. 產生一個僅有平移位移的測試影像堆疊</a></li>
+<li><a href="#2-z-standard-deviation-z-project">2. 使用標準差 Z-投影 (Standard Deviation Z-Project) 視覺化位移</a></li>
+<li><a href="#3-lut">3. 使用 LUT 增強視覺化效果</a></li>
+<li><a href="#4_1">4. 評估對位後的效果</a></li>
+</ul>
+</li>
+</ul>
+</div>
+
+</div>
+</div>
+<div id="content">
+<h1 id="image-registration-sift">影像對位 (Image Registration): 使用 SIFT 對齊影像堆疊</h1>
+<h2 id="1-image-registration">1. 什麼是影像對位 (Image Registration)？</h2>
+<p>影像對位（或稱影像對齊、配準）是將兩張或多張影像進行空間上的對齊，使得影像中相同的物體或特徵能夠重疊在一起的過程。這在許多科學分析中是至關重要的一步。</p>
+<p><strong>常見應用場景：</strong></p>
+<ul>
+<li><strong>時間序列分析：</strong> 校正活細胞影像中因細胞移動或顯微鏡平台漂移造成的抖動。</li>
+<li><strong>連續切片重組：</strong> 將連續的組織切片影像（如病理切片、電顯切片）對齊，以重建 3D 結構。</li>
+<li><strong>多模態影像融合：</strong> 將來自不同成像設備的影像（如 MRI 和 PET）對齊，以整合不同來源的資訊。</li>
+<li><strong>影像拼接：</strong> 將多個視野的影像無縫拼接成一張大的全景圖。</li>
+</ul>
+<p>本章節將介紹如何使用 Fiji 內建的 <strong>Linear Stack Alignment with SIFT</strong> 插件，對一個有位移和旋轉的影像堆疊進行自動對位。</p>
+<h2 id="2-stack">2. 準備工作：產生一個測試用的影像stack</h2>
+<p>為了演示對位的功能，我們首先用一個簡單的 Macro 腳本來產生一個「故意沒對齊」的影像stack。這個腳本會將<code>Blobs</code>這個範例影像檔，利用迴圈建立一個有旋轉個帶有文字的影像，然後在迴圈中不斷地對其進行微小的位移和旋轉，產生一系列連續但抖動的影像。</p>
+<h3 id="macro">Macro 腳本</h3>
+<p>將以下程式碼複製到 Fiji 的腳本編輯器 (<code>File &gt; New &gt; Script...</code>)，語言選擇 <code>ImageJ Macro</code>，然後點擊 <code>Run</code>。</p>
+<pre><code class="language-ijm">// 參數設定
+n = 10; // 產生幾張圖片
+width = 256;
+height = 254;
+
+newImage(&quot;Stack&quot;, &quot;8-bit black&quot;, width, height, 1); // 初始化 Stack
+selectWindow(&quot;Stack&quot;);
+
+
+// 主迴圈
+for (i = 0; i &lt; n; i++) {
+    run(&quot;Blobs (25K)&quot;);
+    wait(100);
+    originalTitle = getTitle();
+    /*
+    scaleX = 1 + random()*0.4;
+    scaleY = 1 + random()*0.4;
+    */
+    scaleX = 1 + random()*0.5;
+    scaleY = scaleX;
+    angle = random()*20 - 10;
+    dx = random()*30-15;
+    dy = random()*30-15;
+    // 計算縮放比例
+
+    run(&quot;Scale...&quot;, &quot;x=&quot; + scaleX + &quot; y=&quot; + scaleY + &quot; interpolation=Bilinear average process create&quot;);
+    wait(100);
+    scaledTitle = getTitle();
+    close(originalTitle);
+
+    // 旋轉
+
+    run(&quot;Rotate... &quot;, &quot;angle=&quot; + angle + &quot; grid=1 interpolation=Bilinear enlarge&quot;);
+
+
+    // 平移
+    makeRectangle(0, 0, getWidth(), getHeight());
+    run(&quot;Translate...&quot;, &quot;x=&quot; + dx + &quot; y=&quot; + dy);
+
+    // 裁切
+    makeRectangle(0, 0, width, height);
+    run(&quot;Crop&quot;);
+
+    // 複製貼入 Stack
+    run(&quot;Copy&quot;);
+    selectWindow(&quot;Stack&quot;);
+    run(&quot;Add Slice&quot;);
+    run(&quot;Paste&quot;);
+
+    // 關閉處理圖
+    close(scaledTitle);
+}
+selectWindow(&quot;Stack&quot;);
+setSlice(1);
+run(&quot;Delete Slice&quot;);
+</code></pre>
+<p>執行完畢後，你會得到一個名為 <code>Misaligned_Stack</code> 的影像堆疊。用滑鼠滾輪或下方的滑桿來回瀏覽，你會清楚地看到文字有明顯的抖動和旋轉。這就是我們要校正的目標。</p>
+<h1 id="3-linear-stack-alignment-with-sift">3. 使用 Linear Stack Alignment with SIFT 進行對位</h1>
+<p><strong>SIFT (Scale-Invariant Feature Transform)</strong> 是一種強大的電腦視覺演算法，它能在影像中找到獨特的「特徵點」，即使影像經過縮放、旋轉或亮度變化，這些特徵點也能被穩定地識別和匹配。Fiji 的對位插件就是利用這個原理來計算出每張影像之間的轉換關係。</p>
+<h2 id="sift">SIFT 設定視窗參數說明</h2>
+<p>當您執行 <code>Plugins &gt; Registration &gt; Linear Stack Alignment with SIFT</code> 時，會彈出一個設定對話框。以下是其中各項主要參數的詳細說明：</p>
+<h3 id="1-scale-invariant-interest-point-detector">1. Scale Invariant Interest Point Detector（尺度不變特徵點偵測器）</h3>
+<p>SIFT 的第一步是檢測影像中的關鍵特徵點。這些點在不同尺度下都能被穩定地檢測到，因此稱為「尺度不變」。</p>
+<ul>
+<li><strong>Initial Gaussian blur (px):</strong> <code>1.60</code><ul>
+<li><strong>意義：</strong> 在尋找特徵點之前，對影像進行初步的高斯模糊，以減少雜訊干擾，使後續的特徵點檢測更加穩定。</li>
+<li><strong>數值：</strong> 高斯模糊的標準差。值越大，模糊效果越強。一般值 1.60 是一個經驗值，既能有效降噪，又不會過度模糊影像細節。</li>
+</ul>
+</li>
+<li><strong>Steps per scale octave:</strong> <code>3</code><ul>
+<li><strong>意義：</strong> 為了實現尺度不變性，SIFT 會在影像的不同尺度（大小）上進行特徵點檢測。一個 "octave" 代表影像尺寸減半的一個層級。這個參數決定了在一個 octave 內，進行幾次特徵點檢測。</li>
+<li><strong>數值：</strong> 值越大，在一個 octave 內檢查的尺度越多，理論上能找到更多、更精確的特徵點，但計算量也越大。預設值 3 在效率和效果之間取得平衡。</li>
+</ul>
+</li>
+<li><strong>Minimum image size (px):</strong> <code>64</code><ul>
+<li><strong>意義：</strong> SIFT 在建立尺度空間時，會將影像逐步縮小。此參數限制了影像縮放的最小尺寸。</li>
+<li><strong>數值：</strong> 如果影像的寬或高小於最小值，則會先放大到最小值再處理。預設值 64 通常適用於大多數影像。</li>
+</ul>
+</li>
+<li><strong>Maximum image size (px):</strong> <code>1024</code><ul>
+<li><strong>意義：</strong> SIFT 在建立尺度空間時，會將影像逐步縮小。此參數限制了影像縮放的最大尺寸。</li>
+<li><strong>數值：</strong> 如果影像的寬或高大於最大值，則會先縮小到最大值。預設值 1024 通常適用於大多數影像。</li>
+</ul>
+</li>
+</ul>
+<h3 id="2-feature-descriptor">2. Feature Descriptor（特徵描述符）</h3>
+<p>找到特徵點後，SIFT 會為每個點計算一個「描述符」，這個描述符包含了該點周圍區域的梯度資訊，並對旋轉具有不變性。</p>
+<ul>
+<li><strong>Feature descriptor size:</strong> <code>4</code><ul>
+<li><strong>意義：</strong> 特徵描述符的大小。SIFT 將特徵點周圍的區域劃分為一個 <code>size x size</code> 的網格，預設是 4 x 4。</li>
+<li><strong>數值：</strong> 這個值決定了描述符的精細程度。值越大，描述符包含的資訊越多，區分力越強，但也越容易受到局部變形的影響。</li>
+</ul>
+</li>
+<li><strong>Feature descriptor orientation bins:</strong> <code>8</code><ul>
+<li><strong>意義：</strong> 為了實現旋轉不變性，SIFT 會計算特徵點周圍區域的主方向，並將梯度方向量化為若干個 bins。這個參數指定了方向 bins 的數量。</li>
+<li><strong>數值：</strong> 預設值 8 將 360 度劃分為 8 個方向區間，每個區間 45 度。</li>
+</ul>
+</li>
+<li><strong>Closest/next closest ratio:</strong> <code>0.92</code><ul>
+<li><strong>意義：</strong> 在特徵點匹配時，SIFT 會尋找在另一張影像中最相似的特徵點。這個參數用於判斷匹配的可靠性。</li>
+<li><strong>數值：</strong> 只有當最相似的特徵點與第二相似的特徵點的相似度比例小於這個值時，才認為匹配成功。值越小，匹配越嚴格，誤匹配率越低，但可能也會漏掉一些正確匹配。預設值 0.92 是一個經驗值。</li>
+</ul>
+</li>
+</ul>
+<h3 id="3-geometric-consensus-filter">3. Geometric Consensus Filter（幾何一致性篩選器）</h3>
+<p>在找到一組初始的特徵點匹配後，通常還需要一個「幾何一致性篩選器」來排除錯誤的匹配，找到一組符合某種幾何變換關係的匹配點對。</p>
+<ul>
+<li><strong>Maximal alignment error (px):</strong> <code>25.00</code><ul>
+<li><strong>意義：</strong> 允許的最大對齊誤差。在擬合幾何變換模型（如仿射變換）時，如果一對匹配點在變換後的距離大於這個值，則認為是誤匹配，會被排除。</li>
+<li><strong>數值：</strong> 值越大，允許的誤差越大，可能保留更多匹配點，但也可能引入更多誤匹配。</li>
+</ul>
+</li>
+<li><strong>Inlier ratio:</strong> <code>0.05</code><ul>
+<li><strong>意義：</strong> 內點比例。在擬合幾何變換模型時，SIFT 會計算有多少匹配點符合這個模型（稱為內點，inliers）。如果內點比例小於這個值，則認為匹配失敗。</li>
+<li><strong>數值：</strong> 值越小，對匹配點的數量要求越高，對齊結果越可靠。</li>
+</ul>
+</li>
+<li><strong>Expected transformation:</strong> <code>Similarity</code><ul>
+<li><strong>意義：</strong> 預期的變換模型。這個參數指定了要用哪種數學模型來描述影像之間的變換關係。</li>
+<li><strong>選項：</strong><ul>
+<li><code>Translation</code>: 只能校正水平和垂直的位移。</li>
+<li><code>Rigid</code>: 可以校正位移和<strong>旋轉</strong>。</li>
+<li><code>Similarity</code>: 可以校正位移、旋轉和<strong>等向縮放</strong>。</li>
+<li><code>Affine</code>: 可以校正位移、旋轉、縮放和<strong>傾斜/錯切</strong>。這是功能最強大、最靈活的模型。</li>
+<li><strong>對於我們的測試案例，因為包含了位移和旋轉，選擇 <code>Affine</code> 或 <code>Rigid</code> 都可以，<code>Affine</code> 更為通用。</strong></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h3 id="4-output">4. Output（輸出選項）</h3>
+<ul>
+<li><strong>Interpolate:</strong> ☑️ (勾選)<ul>
+<li><strong>意義：</strong> 是否在套用幾何變換後進行插值。</li>
+<li><strong>效果：</strong> 勾選後，會使變換後的影像更加平滑，減少鋸齒狀的偽影。<strong>建議勾選</strong>。</li>
+</ul>
+</li>
+<li><strong>Show info:</strong> ◻️ (未勾選)<ul>
+<li><strong>意義：</strong> 是否在結果中顯示詳細的對齊資訊。</li>
+<li><strong>效果：</strong> 如果勾選，會在 Log 視窗中輸出每張影像的變換矩陣等資訊。</li>
+</ul>
+</li>
+<li><strong>Show transformation matrix:</strong> ☑️ (勾選)<ul>
+<li><strong>意義：</strong> 是否在結果視窗中顯示計算出的變換矩陣。</li>
+<li><strong>效果：</strong> 勾選後，會在新的對齊後影像堆疊的視窗標題中顯示變換矩陣，方便查看。</li>
+</ul>
+</li>
+</ul>
+<h2 id="_1">操作步驟</h2>
+<ol>
+<li>確保 <code>Stack</code> 是當前作用中的影像視窗。</li>
+<li>執行 <code>Plugins &gt; Registration &gt; Linear Stack Alignment with SIFT</code>。</li>
+<li>會彈出設定對話框，您可以根據上述說明調整參數。</li>
+<li>點擊 <code>OK</code> 開始執行。插件會計算每張影像與前一張影像的對應關係，並產生一個新的、已對齊的影像堆疊。</li>
+</ol>
+<h1 id="4">4. 評估對位結果</h1>
+<p>對位完成後，你會得到一個新的視窗，標題通常是 <code>Aligned Stack</code>。</p>
+<ol>
+<li><strong>直接觀察：</strong> 在新的對齊後影像堆疊上，使用滑鼠滾輪或下方的滑桿來回瀏覽。你會發現，原本的抖動和旋轉幾乎完全消失了。</li>
+<li><strong>動畫比較：</strong><ul>
+<li>將原始的stack對齊後的stack視窗並排。</li>
+<li>分別在兩個視窗上執行 <code>Image &gt; Stacks &gt; Start Animation</code> (或按 <code>\</code> 鍵)。</li>
+<li>你會非常直觀地看到對位前後的差異。</li>
+</ul>
+</li>
+</ol>
+<h1 id="_2">如何觀察影像是否需要對位？</h1>
+<p>在進行影像對位前，首要的問題是：「如何判斷我的影像堆疊有位移，以及對位後效果好不好？」除了手動瀏覽影像外，我們可以用 Z-投影 (Z-projection) 的方法來客觀、快速地視覺化影像的抖動程度。</p>
+<h3 id="1">1. 產生一個僅有平移位移的測試影像堆疊</h3>
+<p>為了演示這個方法，我們先修改先前的 Macro 腳本，讓它只產生平移位移，移除旋轉和縮放，以模擬常見的顯微鏡平台漂移。</p>
+<h4 id="macro_1">修改後的 Macro 腳本</h4>
+<pre><code class="language-ijm">// Macro to create a stack with only translational jitter
+
+// Parameters
+n = 20; // Number of slices to generate
+width = 256;
+height = 254;
+max_shift = 5; // Maximum pixel shift in x and y
+
+// Initialize the stack
+newImage(&quot;Shifted Stack&quot;, &quot;8-bit black&quot;, width, height, 1);
+selectWindow(&quot;Shifted Stack&quot;);
+
+// Main loop to create shifted slices
+for (i = 0; i &lt; n; i++) {
+    // Open the base image
+    run(&quot;Blobs (25K)&quot;);
+    originalTitle = getTitle();
+
+    // Generate random translation values
+    dx = random() * max_shift * 2 - max_shift; // Shift between -5 and +5
+    dy = random() * max_shift * 2 - max_shift; // Shift between -5 and +5
+
+    // Apply translation
+    run(&quot;Translate...&quot;, &quot;x=&quot; + dx + &quot; y=&quot; + dy + &quot; interpolation=None&quot;);
+
+    // Copy the shifted image to the stack
+    run(&quot;Copy&quot;);
+    selectWindow(&quot;Shifted Stack&quot;);
+    run(&quot;Add Slice&quot;);
+    run(&quot;Paste&quot;);
+
+    // Clean up
+    close(originalTitle);
+}
+
+// Clean up the initial slice
+selectWindow(&quot;Shifted Stack&quot;);
+setSlice(1);
+run(&quot;Delete Slice&quot;);
+print(&quot;Shifted Stack created with &quot; + nSlices() + &quot; slices.&quot;);
+</code></pre>
+<p>這段腳本會產生一個名為 <code>Shifted Stack</code> 的影像堆疊，其中每一張影像都相對於前一張有微小的隨機平移。</p>
+<h3 id="2-z-standard-deviation-z-project">2. 使用標準差 Z-投影 (Standard Deviation Z-Project) 視覺化位移</h3>
+<p>這個方法是評估對位的核心技巧。</p>
+<ul>
+<li>
+<p><strong>原理：</strong></p>
+<ul>
+<li>對於一個<strong>完美對齊</strong>的靜態影像堆疊，每個像素點 (x, y) 在所有切片 (Z) 中的灰階值應該是完全相同的。因此，這個像素位置的<strong>標準差 (Standard Deviation)</strong> 會趨近於 0。</li>
+<li>對於一個<strong>有位移</strong>的影像堆疊，物體的邊緣會在不同的切片中掃過不同的像素位置。這些被邊緣掃過的像素，其灰階值會劇烈變化（一下是背景的黑色，一下是物體的前景色），因此它們的標準差會非常高。</li>
+<li>所以，一張標準差投影圖就能清晰地將「抖動區域」用高亮度標示出來。</li>
+</ul>
+</li>
+<li>
+<p><strong>操作步驟：</strong></p>
+<ol>
+<li>選取剛剛產生的 <code>Shifted Stack</code> 影像視窗。</li>
+<li>執行 <code>Image &gt; Stacks &gt; Z Project...</code>。</li>
+<li>在彈出的對話框中，將 <code>Projection type</code> 設定為 <code>Standard Deviation</code>。</li>
+<li>點擊 <code>OK</code>。</li>
+</ol>
+</li>
+<li>
+<p><strong>結果觀察：</strong>
+    你會得到一張新的灰階影像。在物體的邊緣會出現明亮的「鬼影」或「光暈」，看起來就像甜甜圈的輪廓。這些亮區就代表了在整個堆疊中位移最大的地方。位移越大，這個光暈就越寬、越亮。</p>
+</li>
+</ul>
+<h3 id="3-lut">3. 使用 LUT 增強視覺化效果</h3>
+<p>為了讓標準差的差異更明顯，我們可以為這張投影圖套上<strong>偽彩色查找表</strong> (LUT)。</p>
+<ol>
+<li>選取標準差投影圖。</li>
+<li>執行 <code>Image &gt; Lookup Tables</code>，並選擇一個對比強烈的 LUT，例如 <code>Fire</code>、<code>Rainbow RGB</code> 或 <code>16 Colors</code>。</li>
+</ol>
+<p>套用後，位移最大的區域會被標示為最醒目的顏色（例如紅色或白色），讓你對位移的嚴重程度一目了然。</p>
+<h3 id="4_1">4. 評估對位後的效果</h3>
+<p>這個方法同樣可以用來驗證對位是否成功。</p>
+<ol>
+<li>對原始的 <code>Shifted Stack</code> 執行 SIFT 對位，得到 <code>Aligned Stack</code>。</li>
+<li>對這個 <code>Aligned Stack</code> <strong>重複進行一次標準差 Z-投影</strong>。</li>
+</ol>
+<p>比較前後兩張標準差投影圖，你會發現：
+*   <strong>對位前：</strong> 投影圖有明顯的光暈。
+*   <strong>對位後：</strong> 投影圖應該會變得非常暗，幾乎沒有亮區，證明各切片間的位移已被成功校正。</p>
+</div>
+
+<!-- Mermaid JS -->
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({}); // Keep double braces for literal JS object
+  mermaid.run({ nodes: document.querySelectorAll('.language-mermaid') }); // Keep double braces
+</script>
+
+<!-- KaTeX JS -->
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoBPJpTUs74ddyc4bFZSM1TVlQDA60VBbJS0oA934VSz82sBx1X7kSx2ATBDIyd" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk" crossorigin="anonymous"></script>
+<!-- *** CORRECTED SCRIPT WITH ${...} ESCAPING *** -->
+        <script>
+            document.addEventListener("DOMContentLoaded", function() {
+                renderMathInElement(document.body, {
+                    delimiters: [
+                        { left: '$$',  right: '$$',  display: true },
+                        { left: '\\[', right: '\\]', display: true },
+                        { left: '\\(', right: '\\)', display: false }
+                    ],
+                    ignoredTags: ['script','noscript','style','textarea','pre','code'],
+                    throwOnError: false
+                });
+            });
+        </script>
+
+</body>
+</html>
