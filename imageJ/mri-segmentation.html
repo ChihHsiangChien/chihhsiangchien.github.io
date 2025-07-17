@@ -21,13 +21,17 @@
 <li><a href="#_2">操作前的建議</a></li>
 </ul>
 </li>
-<li><a href="#2-brain-extraction-skull-stripping">2. 步驟一：分離腦組織 (Brain Extraction / Skull Stripping)</a></li>
+<li><a href="#2-brain-extraction-skull-stripping">2. 步驟一：分離腦組織 (Brain Extraction / Skull Stripping)</a><ul>
+<li><a href="#_3">方法一：基於閾值的分割 (快速但可能不準確)</a></li>
+<li><a href="#_4">方法二：使用機器學習進行分割 (更穩健、推薦)</a></li>
+</ul>
+</li>
 <li><a href="#3-skull-segmentation">3. 步驟二：分離頭骨 (Skull Segmentation)</a></li>
 <li><a href="#4-3d">4. 步驟三：3D 視覺化呈現</a></li>
 <li><a href="#5">5. 結論與後續分析</a></li>
 <li><a href="#6-volume-quantification">6. 定量分析：計算體積 (Volume Quantification)</a><ul>
-<li><a href="#_3">計算原理</a></li>
-<li><a href="#_4">操作步驟</a></li>
+<li><a href="#_5">計算原理</a></li>
+<li><a href="#_6">操作步驟</a></li>
 </ul>
 </li>
 </ul>
@@ -68,6 +72,7 @@
 </li>
 </ol>
 <h2 id="2-brain-extraction-skull-stripping">2. 步驟一：分離腦組織 (Brain Extraction / Skull Stripping)</h2>
+<h3 id="_3">方法一：基於閾值的分割 (快速但可能不準確)</h3>
 <p>我們的第一個目標是建立一個只包含腦組織的<strong>二值化遮罩 (Binary Mask)</strong>。這個過程也常被稱為「去頭骨 (Skull Stripping)」。</p>
 <ol>
 <li>
@@ -105,6 +110,44 @@
 </ul>
 </li>
 </ol>
+<h3 id="_4">方法二：使用機器學習進行分割 (更穩健、推薦)</h3>
+<p>當腦組織和頭骨的灰階強度非常相似時，單純的閾值分割會失敗。此時，我們應該使用 Fiji 內建的 <strong>Trainable Weka Segmentation</strong> 插件，它不僅依賴灰階值，還能學習紋理、邊緣等特徵，分割效果更佳。</p>
+<ol>
+<li>
+<p><strong>開啟插件與設定：</strong></p>
+<ul>
+<li>開啟原始的 <code>t1-header.tif</code> 影像。</li>
+<li>執行 <code>Plugins &gt; Segmentation &gt; Trainable Weka Segmentation</code>。</li>
+<li>在 Weka 視窗中，點擊 <code>Settings</code>，確認 <code>Training features</code> 中的選項（預設即可）。</li>
+<li>點擊 <code>Create new class</code> 建立三個類別，並分別命名為 <code>Brain</code>, <code>Skull</code>, <code>Background</code>。</li>
+</ul>
+</li>
+<li>
+<p><strong>提供訓練樣本 (Training)：</strong></p>
+<ul>
+<li><strong>標記 Brain:</strong> 在 Weka 視窗中選中 <code>Brain</code> 類別。使用 <strong>手繪選取工具 (Freehand selection)</strong>，在影像的腦組織區域畫幾個小圈，每畫一個就點擊 <code>Add to class 'Brain'</code> 按鈕。<strong>技巧：</strong> 請在不同的腦區（灰質、白質）和不同的 Z-slice 上都提供樣本。</li>
+<li><strong>標記 Skull:</strong> 選中 <code>Skull</code> 類別，在頭骨的亮色區域畫圈並加入。</li>
+<li><strong>標記 Background:</strong> 選中 <code>Background</code> 類別，在腦外的黑色區域（包括腦脊髓液和影像背景）畫圈並加入。</li>
+</ul>
+</li>
+<li>
+<p><strong>訓練與產生結果：</strong></p>
+<ul>
+<li>點擊 <code>Train classifier</code> 按鈕進行訓練。右側的預覽視窗會即時顯示分類結果。如果結果不理想，可以增加更多樣本並重新訓練。</li>
+<li>對預覽滿意後，點擊 <code>Create result</code>。這會產生一張新的<strong>分類結果影像 (classified image)</strong>。</li>
+</ul>
+</li>
+<li>
+<p><strong>從分類結果中提取腦部遮罩：</strong></p>
+<ul>
+<li>在產生的分類結果影像上，執行 <code>Image &gt; Adjust &gt; Threshold...</code>。</li>
+<li>在 Weka 中，第一個類別 (<code>Brain</code>) 的像素值通常是 1。將閾值滑桿的上下限都設為 <strong>1</strong>，這樣就只選取了腦部。</li>
+<li>點擊 <code>Apply</code>，即可得到一張乾淨的 <code>Brain Mask</code>。</li>
+</ul>
+</li>
+</ol>
+<hr />
+<p><strong>註：</strong> 接下來分離頭骨的步驟，無論您使用方法一或方法二得到的 <code>Brain Mask</code>，操作流程都是一樣的。</p>
 <h2 id="3-skull-segmentation">3. 步驟二：分離頭骨 (Skull Segmentation)</h2>
 <p>分離頭骨的邏輯很簡單：<strong>頭骨 = 整個頭部 - 腦組織</strong>。</p>
 <ol>
@@ -183,7 +226,7 @@
 <p>這些產生的遮罩（Masks）不僅可用於視覺化，更是定量分析的基礎。例如，您可以對 <code>Brain Mask</code> 影像堆疊執行 <code>Analyze &gt; Histogram</code>，並將 <code>Count</code>（像素數）乘以每個體素（Voxel）的體積，就可以估算出總腦容量。</p>
 <h2 id="6-volume-quantification">6. 定量分析：計算體積 (Volume Quantification)</h2>
 <p>得到腦組織和頭骨的遮罩後，最直接的應用之一就是計算它們的體積。這在臨床診斷和形態學研究中至關重要。</p>
-<h3 id="_3">計算原理</h3>
+<h3 id="_5">計算原理</h3>
 <p>體積計算的邏輯非常簡單：</p>
 <p><strong>總體積 = 體素(Voxel)的總數量 × 單一體素的體積</strong></p>
 <ul>
@@ -192,7 +235,7 @@
 <li><strong>單一體素的體積:</strong> 這需要我們對影像進行空間校正，定義每個體素的真實物理尺寸。</li>
 </ul>
 <p>根據此 MRI 數據集的官方資訊，其體素尺寸為 <strong>1 mm × 1 mm × 1.33 mm</strong>。</p>
-<h3 id="_4">操作步驟</h3>
+<h3 id="_6">操作步驟</h3>
 <p>我們將以計算 <strong>腦組織體積</strong> 為例。計算頭骨體積的步驟完全相同，只需將操作對象換成 <code>Skull Mask</code> 即可。</p>
 <h4 id="61-set-scale">步驟 6.1: 設定空間校正 (Set Scale)</h4>
 <p>在進行任何測量之前，必須先讓 ImageJ 知道影像的真實尺度。</p>

@@ -29,7 +29,7 @@
     -   執行 `Image > Stacks > Orthogonal Views` 可以同時從三個正交平面（橫斷面、冠狀面、矢狀面）觀察影像，這對於理解 3D 結構非常有幫助。
 
 ## 2. 步驟一：分離腦組織 (Brain Extraction / Skull Stripping)
-
+### 方法一：基於閾值的分割 (快速但可能不準確)
 我們的第一個目標是建立一個只包含腦組織的**二值化遮罩 (Binary Mask)**。這個過程也常被稱為「去頭骨 (Skull Stripping)」。
 
 1.  **影像複製與轉換：**
@@ -53,6 +53,33 @@
     *   在 `Show` 下拉選單中選擇 `Masks`。
     *   勾選 `Display results` 和 `Clear results`。
     *   點擊 `OK`。ImageJ 會產生一張新的遮罩影像，上面只剩下我們需要的腦組織遮罩。這就是最終的 `Brain Mask`。
+
+### 方法二：使用機器學習進行分割 (更穩健、推薦)
+
+當腦組織和頭骨的灰階強度非常相似時，單純的閾值分割會失敗。此時，我們應該使用 Fiji 內建的 **Trainable Weka Segmentation** 插件，它不僅依賴灰階值，還能學習紋理、邊緣等特徵，分割效果更佳。
+
+1.  **開啟插件與設定：**
+    *   開啟原始的 `t1-header.tif` 影像。
+    *   執行 `Plugins > Segmentation > Trainable Weka Segmentation`。
+    *   在 Weka 視窗中，點擊 `Settings`，確認 `Training features` 中的選項（預設即可）。
+    *   點擊 `Create new class` 建立三個類別，並分別命名為 `Brain`, `Skull`, `Background`。
+
+2.  **提供訓練樣本 (Training)：**
+    *   **標記 Brain:** 在 Weka 視窗中選中 `Brain` 類別。使用 **手繪選取工具 (Freehand selection)**，在影像的腦組織區域畫幾個小圈，每畫一個就點擊 `Add to class 'Brain'` 按鈕。**技巧：** 請在不同的腦區（灰質、白質）和不同的 Z-slice 上都提供樣本。
+    *   **標記 Skull:** 選中 `Skull` 類別，在頭骨的亮色區域畫圈並加入。
+    *   **標記 Background:** 選中 `Background` 類別，在腦外的黑色區域（包括腦脊髓液和影像背景）畫圈並加入。
+
+3.  **訓練與產生結果：**
+    *   點擊 `Train classifier` 按鈕進行訓練。右側的預覽視窗會即時顯示分類結果。如果結果不理想，可以增加更多樣本並重新訓練。
+    *   對預覽滿意後，點擊 `Create result`。這會產生一張新的**分類結果影像 (classified image)**。
+
+4.  **從分類結果中提取腦部遮罩：**
+    *   在產生的分類結果影像上，執行 `Image > Adjust > Threshold...`。
+    *   在 Weka 中，第一個類別 (`Brain`) 的像素值通常是 1。將閾值滑桿的上下限都設為 **1**，這樣就只選取了腦部。
+    *   點擊 `Apply`，即可得到一張乾淨的 `Brain Mask`。
+
+---
+**註：** 接下來分離頭骨的步驟，無論您使用方法一或方法二得到的 `Brain Mask`，操作流程都是一樣的。
 
 ## 3. 步驟二：分離頭骨 (Skull Segmentation)
 
