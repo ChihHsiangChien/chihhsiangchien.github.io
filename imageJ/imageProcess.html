@@ -15,21 +15,30 @@
 <div class="toc">
 <ul>
 <li><a href="#_1">影像前處理決策方法</a><ul>
-<li><a href="#_2">流程總覽</a></li>
-<li><a href="#1">1. 彩色影像轉灰階</a></li>
-<li><a href="#2">2. 背景分離（前景/背景分割）</a></li>
-<li><a href="#3">3. 對比度增強/亮度均勻化</a></li>
-<li><a href="#4-workflow">4. 去雜訊（依 workflow 選擇）</a></li>
-<li><a href="#5">5. 邊緣偵測</a></li>
-<li><a href="#6">6. 邊緣細化/形態學操作</a></li>
-<li><a href="#7">7. 輪廓分析/分割</a></li>
-<li><a href="#8">8. 批次處理與自動化</a></li>
+<li><a href="#_2">彩色影像轉灰階</a></li>
+<li><a href="#_3">去雜訊</a><ul>
+<li><a href="#_4">平均濾波器</a></li>
+<li><a href="#_5">中值濾波器</a></li>
+<li><a href="#_6">高斯模糊</a></li>
+<li><a href="#_7">實作產生噪點的影像，再進行去雜訊處理</a></li>
+</ul>
+</li>
+<li><a href="#_10">背景分離（前景/背景分割）</a></li>
+<li><a href="#_11">對比度增強/亮度均勻化</a></li>
+<li><a href="#_12">邊緣偵測</a><ul>
+<li><a href="#_13">內建方法</a></li>
+<li><a href="#macro">自訂卷積核加上Macro</a></li>
+</ul>
+</li>
+<li><a href="#_15">邊緣細化/形態學操作</a></li>
+<li><a href="#_16">輪廓分析/分割</a></li>
+<li><a href="#_17">批次處理與自動化</a></li>
 <li><a href="#workflow">常見細胞分析基本流程（Workflow）</a></li>
-<li><a href="#6_1">6. 是否圖像角度或大小不一致？</a><ul>
+<li><a href="#6">6. 是否圖像角度或大小不一致？</a><ul>
 <li><a href="#6-1-geometric-transformations">6-1. 幾何轉換 (Geometric Transformations)</a></li>
 </ul>
 </li>
-<li><a href="#7_1">7. 是否要進行大量影像處理？</a><ul>
+<li><a href="#7">7. 是否要進行大量影像處理？</a><ul>
 <li><a href="#7-1-batch-processing">7-1. 使用批次處理 (Batch Processing)</a></li>
 <li><a href="#7-2-python-pyimagej">7-2. 使用 Python 自動化 (推薦 pyimagej)</a></li>
 </ul>
@@ -44,26 +53,88 @@
 </div>
 <div id="content">
 <h1 id="_1">影像前處理決策方法</h1>
-<h2 id="_2">流程總覽</h2>
-<p>根據 <a href="workflowChart.html">前處理流程圖</a>，主要步驟如下：
-1. 彩色影像轉灰階
-2. 背景分離（靜態/動態背景相減）
-3. 對比度增強
-4. 去雜訊（依雜訊類型選擇方法）
-5. 邊緣偵測
-6. 形態學操作
-7. 輪廓分析/分割</p>
-<hr />
-<h2 id="1">1. 彩色影像轉灰階</h2>
+<h2 id="_2">彩色影像轉灰階</h2>
+<p>如果影像是 RGB 或多通道影像，需要先轉換為單一的灰階影像才能進行後續處理。</p>
 <ul>
+<li><strong>策略：</strong><ul>
+<li>選擇一個對比度最高、目標最清晰的通道進行轉換（例如，DAPI 染核選藍色通道）。</li>
+<li>轉換成不同的色彩空間，例如<code>HSB Stack</code>、<code>Lab Stack</code>，觀察不同通道的差異。</li>
+</ul>
+</li>
 <li><strong>ImageJ 操作：</strong><ul>
-<li><code>Image &gt; Type &gt; 8-bit</code> 或 <code>Image &gt; Type &gt; 16-bit</code>（將彩色影像轉為灰階）</li>
-<li>若原始影像為 RGB，可用 <code>Image &gt; Type &gt; RGB Stack</code> 分離通道</li>
+<li><code>Image &gt; Type &gt; 8-bit</code> 或 <code>Image &gt; Type &gt; 16-bit</code>：將彩色影像轉換為灰階。</li>
+<li><code>Image &gt; Color &gt; Split Channels</code>：將多通道影像分離，以便選擇最佳通道。</li>
 </ul>
 </li>
 </ul>
 <hr />
-<h2 id="2">2. 背景分離（前景/背景分割）</h2>
+<h2 id="_3">去雜訊</h2>
+<ul>
+<li>如果影像出現明顯隨機雜訊（如 salt-and-pepper、感光雜訊），應使用去噪處理，如 <code>Median Filter</code> 或 <code>Gaussian Blur</code>。</li>
+<li>如果雜訊輕微或會影響細節邊緣，則略過此步驟或使用更小的模糊範圍（sigma 較小的 Gaussian）。</li>
+</ul>
+<h3 id="_4">平均濾波器</h3>
+<ul>
+<li>imagej操作有兩個<ul>
+<li><code>Process › Smooth</code>：固定範圍3X3</li>
+<li><code>Process &gt; Filters &gt; Mean...</code>：這個可以指定範圍</li>
+</ul>
+</li>
+<li>針對每個像素，它會計算其周圍特定範圍內所有像素的平均值來取代。</li>
+<li>能有效減少隨機雜訊，例如高斯雜訊 (Gaussian Noise) 或其他均勻分佈的隨機雜訊。</li>
+<li>也因為會對所有像素進行平均，無論這些像素是雜訊還是影像的重要邊緣，所以會導致<strong>邊緣變得模糊不清</strong>。對於細節豐富的影像，過度使用平均濾波可能會損失很多重要的資訊。</li>
+</ul>
+<h3 id="_5">中值濾波器</h3>
+<ul>
+<li>imagej有兩個操作可以做，一種是預設值<ul>
+<li><code>Process › Noise › Despeckle</code>：這是固定3X3範圍</li>
+<li><code>Process &gt; Filters &gt; Median...</code>：這個可以指定範圍</li>
+</ul>
+</li>
+<li>去除<strong>椒鹽雜訊</strong>(影像中隨機分佈的亮點像鹽粒，或暗點像胡椒)</li>
+<li>影像中包含突兀的、孤立的亮點或暗點時使用</li>
+<li>在需要在不顯著模糊重要特徵或邊緣的情況下清理影像時使用。</li>
+</ul>
+<h3 id="_6">高斯模糊</h3>
+<ul>
+<li>imagej操作：<ul>
+<li><code>Process &gt; Filters &gt; Gaussian Blur...</code></li>
+</ul>
+</li>
+<li>利用高斯函數（一種鐘形曲線）來平滑影像並減少高斯雜訊 (Gaussian Noise)。</li>
+<li>高斯雜訊是一種常見的隨機雜訊，其分佈符合常態分佈（高斯分佈），通常表現為像素強度上的細微<strong>隨機</strong>波動，使影像看起來有點模糊或顆粒感。</li>
+<li><strong>高斯濾波器</strong>透過計算像素及其鄰近像素的加權平均值來實現平滑。權重的大小由高斯函數決定，這意味著離中心像素越近的像素對新像素值的貢獻越大，而越遠的像素貢獻越小。這種加權平均的方式產生了非常自然且平滑的模糊效果。</li>
+<li>半徑 (Sigma，σ)：半徑值越大，模糊程度越高，影像的平滑效果也越明顯。反之，半徑值越小，模糊程度越低。</li>
+</ul>
+<h3 id="_7">實作產生噪點的影像，再進行去雜訊處理</h3>
+<h4 id="_8">產生高斯雜訊的圖片</h4>
+<ul>
+<li>執行<code>File &gt; New &gt; Image...</code>，使用預設值產生白色的8-bit影像。</li>
+<li>執行<code>Process › Noise › Add Noise</code>，這會在畫面產生<strong>高斯雜訊</strong> (平均值0，標準差25)，<a href="https://imagej.net/ij/docs/menus/process.html#noise">參見</a>。</li>
+<li>你也可以試試直接用以下的 Macro產生圖片</li>
+</ul>
+<pre><code class="language-ijm">newImage(&quot;高斯雜訊&quot;, &quot;8-bit white&quot;, 512, 512, 1);
+run(&quot;Add Noise&quot;);
+</code></pre>
+<ul>
+<li>如果要指定高斯的標準差可以用<code>Add Specified Noise...</code></li>
+</ul>
+<pre><code class="language-ijm">newImage(&quot;高雜訊圖片&quot;, &quot;8-bit white&quot;, 512, 512, 1);
+run(&quot;Add Specified Noise...&quot;, &quot;standard=80&quot;);
+</code></pre>
+<h4 id="_9">產生椒鹽雜訊的圖片</h4>
+<ul>
+<li>執行<code>File › Open Samples › Clown</code>，再將此影像轉為 8-bit，執行<code>Image › Type › 8-bit</code></li>
+<li>執行<code>Process › Noise › Salt and Pepper</code>，這會產生<strong>椒鹽雜訊</strong>(隨機使 2.5%的像素變為黑色，2.5變為白色)</li>
+<li>你也可以試試直接用以下的 Macro產生圖片</li>
+</ul>
+<pre><code class="language-ijm">run(&quot;Clown&quot;);
+run(&quot;8-bit&quot;);
+run(&quot;Salt and Pepper&quot;);
+rename(&quot;椒鹽雜訊&quot;);
+</code></pre>
+<hr />
+<h2 id="_10">背景分離（前景/背景分割）</h2>
 <ul>
 <li><strong>靜態背景相減法：</strong><ul>
 <li><code>Process &gt; Image Calculator...</code>，選擇原始影像與背景影像，運算方式選 <code>Subtract</code></li>
@@ -76,7 +147,7 @@
 </li>
 </ul>
 <hr />
-<h2 id="3">3. 對比度增強/亮度均勻化</h2>
+<h2 id="_11">對比度增強/亮度均勻化</h2>
 <ul>
 <li><strong>ImageJ 操作：</strong><ul>
 <li><code>Image &gt; Adjust &gt; Brightness/Contrast...</code></li>
@@ -86,94 +157,136 @@
 </li>
 </ul>
 <hr />
-<h2 id="4-workflow">4. 去雜訊（依 workflow 選擇）</h2>
+<h2 id="_12">邊緣偵測</h2>
+<p>ImageJ 內建了一些邊緣檢測的方式，也可以用 <code>Process &gt; Filters &gt; Convolve...</code> 自訂卷積核進行各種邊緣偵測。</p>
+<h3 id="_13">內建方法</h3>
 <ul>
-<li><strong>椒鹽雜訊/需保邊：</strong><ul>
-<li><code>Process &gt; Filters &gt; Median...</code></li>
+<li><strong>Sobel</strong><ul>
+<li>內建的<code>Process &gt; Find Edges</code> 就是用Sobel kernel做的<strong>梯度</strong>邊緣檢測。</li>
+<li>適用情境：找出物體輪廓或分界線，對灰階變化敏感。</li>
+<li>是<strong>一階導數邊緣偵測器</strong>，專門用來找出影像中灰階強度「變化最大的區域」——也就是<strong>邊緣</strong>。</li>
+<li>計算影像中水平方向（Gx）與垂直方向（Gy）的梯度，然後根據這些梯度來估計邊緣的位置與方向。因此對偵測斜邊或曲邊</li>
+<li>在含有雜訊或模糊的影像中，容易誤判邊緣。</li>
 </ul>
 </li>
-<li><strong>高斯雜訊/平滑為主：</strong><ul>
-<li><code>Process &gt; Filters &gt; Gaussian Blur...</code></li>
-</ul>
-</li>
-<li><strong>強烈保邊（進階）：</strong><ul>
-<li>需安裝 Bilateral Filter 插件（<code>Plugins &gt; Bilateral Filter</code>）</li>
-</ul>
-</li>
-</ul>
-<hr />
-<h2 id="5">5. 邊緣偵測</h2>
-<p>ImageJ 可利用 <code>Process &gt; Filters &gt; Convolve...</code> 自訂卷積核進行各種邊緣偵測。以下提供常用 kernel 範例：</p>
+<li>
+<p><strong>Unsharp Mask</strong></p>
 <ul>
-<li>
-<p><strong>Sobel（高對比）：</strong></p>
-<ul>
-<li>
-<p>在 Convolve 視窗輸入：</p>
-<p><code>1 0 -1
-2 0 -2
-1 0 -1</code></p>
-</li>
-<li>
-<p>或</p>
-<p><code>1 2 1
-0 0 0
--1 -2 -1</code></p>
-</li>
-<li>
-<p>分別為 X/Y 方向，需各自執行一次。</p>
-</li>
+<li>適用加強邊緣對比，常用於細節強化。</li>
+<li>內建：<code>Process &gt; Filters &gt; Unsharp Mask...</code></li>
+<li>用模糊來突顯細節。邏輯如下： 原圖 - 模糊圖 = 高頻細節（即邊緣）。</li>
+<li>先對影像做「模糊處理」，取得低頻背景，再將原圖減去模糊圖像得到高頻圖像（細節），再乘上Mask Weight（遮罩權重），控制加回多少細節，再加回原圖，產生更清晰、更銳利的影像。</li>
 </ul>
 </li>
 <li>
-<p><strong>Scharr（高對比）：</strong></p>
+<p><strong>Variance</strong></p>
 <ul>
-<li>
-<p>在 Convolve 視窗輸入：</p>
-<p><code>3 0 -3
-10 0 -10
-3 0 -3</code></p>
-</li>
-<li>
-<p>或</p>
-<p><code>3 10 3
-0 0 0
--3 -10 -3</code></p>
-</li>
-<li>
-<p>分別為 X/Y 方向，需各自執行一次。</p>
-</li>
+<li>將每個像素替換為鄰域變異數，可突顯邊緣與紋理，因為邊緣處變異數通常較高。</li>
+<li>內建：<code>Process &gt; Filters &gt; Variance...</code></li>
 </ul>
 </li>
 <li>
 <p><strong>Laplacian（找細節/斑點）：</strong></p>
 <ul>
 <li>
-<p>在 Convolve 視窗輸入：</p>
+<p><code>Process &gt; Filters &gt; Laplacian</code> 應用拉普拉斯濾波器，常用於邊緣增強。在 <code>Process &gt; Filters &gt; Convolve...</code> 視窗輸入以下任何一種kernel。<br />
+    第一種</p>
 <p><code>0 1 0
 1 -4 1
 0 1 0</code></p>
-</li>
-<li>
-<p>或</p>
+<p>第二種  </p>
 <p><code>1 1 1
-1 -8 1
+1 -8 1  
 1 1 1</code></p>
 </li>
 </ul>
 </li>
 <li>
-<p><strong>Canny（效果均衡）：</strong></p>
+<p><strong>Scharr</strong></p>
 <ul>
-<li>Canny 邊緣偵測需多步驟（高斯模糊 + Sobel + 非極大值抑制 +雙閾值），ImageJ 無直接 kernel，但可用 Convolve 先做高斯模糊與 Sobel，再手動後處理。</li>
+<li>
+<p>是一階導數濾波器，用來偵測影像中灰階變化的方向與強度（即邊緣）。它與 Sobel 非常類似，但權重經過特殊優化，使得旋轉不變性更好、方向性更穩定，對 45°、斜邊緣效果較好，相對於Sobel對雜訊略微不那麼敏感。</p>
+</li>
+<li>
+<p><strong>邊緣強度</strong>（Gradient Magnitude）是透過兩個方向的導數（梯度）來估算的：<br />
+    水平方向的梯度：<span class="arithmatex">\(𝐺_𝑥\)</span><br />
+    ​垂直方向的梯度：<span class="arithmatex">\(𝐺_𝑦\)</span><br />
+<span class="arithmatex">\(G = \sqrt{G_x^2 + G_y^2} \)</span>  </p>
+<p>x 方向的 kernel</p>
+<p><code>3 0 -3
+10 0 -10
+3 0 -3</code></p>
+<p>y 方向的 kernel  </p>
+<p><code>3 10 3
+0 0 0
+-3 -10 -3</code></p>
+</li>
 </ul>
 </li>
 </ul>
-<blockquote>
-<p>操作步驟：<code>Process &gt; Filters &gt; Convolve...</code>，將上述 kernel 貼入視窗即可。</p>
-</blockquote>
+<h3 id="macro">自訂卷積核加上Macro</h3>
+<h4 id="_14">邊緣強度的計算方式</h4>
+<p><strong>邊緣強度</strong>（Gradient Magnitude）是透過兩個方向的導數（梯度）來估算的：  </p>
+<ul>
+<li>水平方向的梯度：<span class="arithmatex">\(𝐺_𝑥\)</span></li>
+<li>垂直方向的梯度：<span class="arithmatex">\(𝐺_𝑦\)</span>  </li>
+<li><span class="arithmatex">\(G = \sqrt{G_x^2 + G_y^2} \)</span>  </li>
+</ul>
+<h4 id="scharr">以<strong>Scharr</strong>計算為例</h4>
+<p>我們可以直接用Macro來直接產生邊緣偵測後的圖。</p>
+<pre><code class="language-ijm">
+// Scharr Filter - Full Edge Magnitude Macro
+// 適用於灰階圖像
+
+// Step 0: 檢查影像並轉為 32-bit
+run(&quot;Duplicate...&quot;, &quot;title=Original&quot;);
+run(&quot;32-bit&quot;);
+
+// Step 1: Apply Scharr X
+run(&quot;Duplicate...&quot;, &quot;title=Gx&quot;);
+selectWindow(&quot;Gx&quot;);
+run(&quot;Convolve...&quot;, &quot;text1='3 0 -3\n10 0 -10\n3 0 -3'&quot;);
+
+// Step 2: Apply Scharr Y
+selectWindow(&quot;Original&quot;);
+run(&quot;Duplicate...&quot;, &quot;title=Gy&quot;);
+selectWindow(&quot;Gy&quot;);
+run(&quot;Convolve...&quot;, &quot;text1='3 10 3\n0 0 0\n-3 -10 -3'&quot;);
+
+// Step 3: Gx^2
+selectWindow(&quot;Gx&quot;);
+run(&quot;Square&quot;);
+rename(&quot;Gx2&quot;);
+
+// Step 4: Gy^2
+selectWindow(&quot;Gy&quot;);
+run(&quot;Square&quot;);
+rename(&quot;Gy2&quot;);
+
+// Step 5: Add Gx^2 + Gy^2
+imageCalculator(&quot;Add create&quot;, &quot;Gx2&quot;, &quot;Gy2&quot;);
+rename(&quot;G2&quot;);
+
+// Step 6: Square root → Gradient Magnitude
+run(&quot;Square Root&quot;);
+rename(&quot;Scharr Gradient Magnitude&quot;);
+
+// Step 7: Optional - enhance visibility
+run(&quot;Enhance Contrast&quot;, &quot;saturated=0.35&quot;);
+</code></pre>
+<h4 id="macrosobelkernel">把上述Macro，改成<code>Sobel</code>的Kernel</h4>
+<p>X 方向的 kernel</p>
+<pre><code>1 0 -1
+2 0 -2
+1 0 -1
+</code></pre>
+<p>Y 方向</p>
+<pre><code>1 2 1
+0 0 0
+-1 -2 -1
+</code></pre>
 <hr />
-<h2 id="6">6. 邊緣細化/形態學操作</h2>
+<h2 id="_15">邊緣細化/形態學操作</h2>
 <ul>
 <li><strong>ImageJ 操作：</strong><ul>
 <li><code>Process &gt; Binary &gt; Erode</code>（侵蝕）</li>
@@ -186,7 +299,7 @@
 </li>
 </ul>
 <hr />
-<h2 id="7">7. 輪廓分析/分割</h2>
+<h2 id="_16">輪廓分析/分割</h2>
 <ul>
 <li><strong>ImageJ 操作：</strong><ul>
 <li><code>Analyze &gt; Analyze Particles...</code>（偵測、量測分割後的物件）</li>
@@ -195,7 +308,7 @@
 </li>
 </ul>
 <hr />
-<h2 id="8">8. 批次處理與自動化</h2>
+<h2 id="_17">批次處理與自動化</h2>
 <ul>
 <li><strong>錄製 Macro：</strong><ul>
 <li><code>Plugins &gt; Macros &gt; Record...</code> 開始錄製操作</li>
@@ -218,7 +331,7 @@
 <li><strong>粒子分析</strong>：<code>Analyze &gt; Analyze Particles...</code></li>
 <li><strong>輸出數據</strong>：<code>File &gt; Save As...</code> 匯出結果</li>
 </ol>
-<h2 id="6_1">6. 是否圖像角度或大小不一致？</h2>
+<h2 id="6">6. 是否圖像角度或大小不一致？</h2>
 <h3 id="6-1-geometric-transformations">6-1. 幾何轉換 (Geometric Transformations)</h3>
 <ul>
 <li><strong>ImageJ 操作：</strong><ul>
@@ -230,7 +343,7 @@
 </li>
 </ul>
 <hr />
-<h2 id="7_1">7. 是否要進行大量影像處理？</h2>
+<h2 id="7">7. 是否要進行大量影像處理？</h2>
 <h3 id="7-1-batch-processing">7-1. 使用批次處理 (Batch Processing)</h3>
 <ul>
 <li><strong>ImageJ Macro 操作：</strong><ol>
