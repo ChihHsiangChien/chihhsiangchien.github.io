@@ -30,11 +30,11 @@
 
 ## 2. 步驟一：分離腦組織 (Brain Extraction / Skull Stripping)
 ### 方法一：基於閾值的分割 (快速但可能不準確)
-我們的第一個目標是建立一個只包含腦組織的**二值化遮罩 (Binary Mask)**。這個過程也常被稱為「去頭骨 (Skull Stripping)」。
+我們的第一個目標是建立一個只包含腦組織的**二值化遮罩 (Binary Mask)**。
 
 1.  **影像複製與轉換：**
     *   為保留原始數據，先複製一份影像：`Image > Duplicate...`，並將新影像命名為 `Brain Mask`。
-    *   T1 影像是灰階影像，如果不是，請先轉換：`Image > Type > 8-bit` 或 `16-bit`。
+    *   請先轉換為8-bit影像：`Image > Type > 8-bit`。
 
 2.  **閾值分割 (Thresholding)：**
     *   在 `Brain Mask` 視窗上，執行 `Image > Adjust > Threshold...` (`Ctrl+Shift+T`)。

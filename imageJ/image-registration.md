@@ -79,7 +79,7 @@ selectWindow("Stack");
 setSlice(1);
 run("Delete Slice");
 ```
-執行完畢後，你會得到一個名為 `Misaligned_Stack` 的影像堆疊。用滑鼠滾輪或下方的滑桿來回瀏覽，你會清楚地看到文字有明顯的抖動和旋轉。這就是我們要校正的目標。
+執行完畢後，你會得到一個名為 `Misaligned_Stack` 的影像堆疊。用滑鼠滾輪或下方的滑桿來回瀏覽，你會清楚地看到影像有明顯變換。這就是我們要校正的目標。
 
 
 # 3. 使用 Linear Stack Alignment with SIFT 進行對位

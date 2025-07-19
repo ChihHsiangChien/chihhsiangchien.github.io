@@ -101,5 +101,3 @@
 > -   **校正後的值：** `Corrected_Mean_Nuc = Mean_Nuc - Mean_Bkg`
 > -   **校正後的值：** `Corrected_Mean_Cyto = Mean_Cyto - Mean_Bkg`
 > -   **校正後的比值：** `Ratio = Corrected_Mean_Cyto / Corrected_Mean_Nuc`
-
-恭喜！您已經完成了一次完整的螢光定量分析，這個方法論可以廣泛應用於各種多通道影像的共定位與強度分析中。

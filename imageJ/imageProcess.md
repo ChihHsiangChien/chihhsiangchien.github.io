@@ -52,7 +52,7 @@ newImage("高斯雜訊", "8-bit white", 512, 512, 1);
 run("Add Noise");
 ```
 
-*   如果要指定高斯的標準差可以用`Add Specified Noise...`
+*   如果要指定高斯的標準差可以用**Add Specified Noise...**
 
 ```ijm
 newImage("高雜訊圖片", "8-bit white", 512, 512, 1);
@@ -72,24 +72,320 @@ rename("椒鹽雜訊");
 ```
 ---
 ## 背景分離（前景/背景分割）
+將背景分離得到前景的方式，有以下幾種方式。
 
-*   **靜態背景相減法：**
+*   **靜態背景建模：**
+    *   例如拍攝時的空白背景（例如沒細胞或螢光染劑的場景）
+    *   用一系列影像進行平均產生背景圖（假設物體分布隨機，將這些影像進行平均後，就會呈現背景光照分布）
+    *   如果有以上這些影像，可以將**原始影像減去背景影像**，這樣就可以得到前景影像。
     *   `Process > Image Calculator...`，選擇原始影像與背景影像，運算方式選 `Subtract`
 *   **動態背景建模：**
-    *   若有影像序列，可用 `Process > Subtract Background...`（設定 rolling ball 半徑）
-    *   進階：需外掛如 `Background Subtraction` 或用 Macro 處理多張影像
+    *   你也可以用演算法直接算出背景影像，用 `Process > Subtract Background...`，設定 rolling ball 半徑。原理我們在下方的產生實作影像後來說明。
+
+### 實作1
+#### 產生實作影像
+請執行以下Macro，這會產生三張圖片，模擬的是本來有**原細胞**的影像，在一個不平均的光場(**原光場**)照明，並且伴隨著**取樣雜訊**，得到了**待處理影像**。你的目標就是從**待處理影像**還原得到**原細胞**這張圖的樣子。
+
+```ijm
+width = 512;
+height = 512;
+
+centerX = width/2;
+centerY = height/2;
+
+
+newImage("原光場", "32-bit black", width, height, 1);
+sigma = 200;
+for (y = 0; y < height; y++) {
+  for (x = 0; x < width; x++) {
+    dx = x - centerX;
+    dy = y - centerY;
+    value = exp(-(dx*dx + dy*dy)/(2*sigma*sigma));
+    setPixel(x, y, value);
+  }
+}
+run("8-bit");
+
+
+newImage("原細胞", "8-bit black", width, height, 1);
+for (i = 0; i < 40; i++) {
+    x = 20 + random()*480;
+    y = 20 + random()*480;
+    size = 8 + random()*10;
+    setColor(255);
+    makeOval(x, y, size, size);
+    fill();
+}
+
+imageCalculator("Add create", "原光場", "原細胞");
+run("Enhance Contrast...", "saturated=0.35 normalize");
+run("Add Noise");
+run("Gaussian Blur...", "sigma=0.5");
+rename("待處理的影像");
+```
+#### 觀察影像
+1.   我們利用一些工具來觀察這些影像。請點選**原光場**，這是利用高斯函數產生的影像，模擬顯微鏡下產生的不均勻光場。先用直線工具拉一條由最左到最右的直線，然後選擇` Analyze › Plot Profile`。你看到的圖形就是高斯函數。
+2.   用` Analyze › 3D Surface Plot`分別觀察三張影像。前面講到的一種**Subtract Background...**的方法原理就是想像有一顆特定半徑的球在平面下方滾動，它所接觸的區域就是背景。滾完影像之後，就可以得到一張背景圖。然後就可以減去這張背景圖了。
+
+#### 靜態影像背景建模
+1.   這個影像有隨機雜訊，所以要先用 `Process > Filters > Gaussian Blur...`去雜訊
+2.   以下為了展示兩種分離背景的方式，所以我們要先將去雜訊處理後的影像再複製一份，選擇` Image > Duplicate...`。
+3.   由於已經有原始的光場影像，所以可以直接減去這張影像。使用`Process > Image Calculator...`，選擇原始影像與背景影像，運算方式選 `Subtract`。
+
+#### 動態影像背景建模
+選擇剛剛複製後的另外一個去雜訊後影像，執行`Process > Subtract Background...`，設定 rolling ball 半徑。因為要用一顆球在背景下方滾動，所以不可以讓球滾進前進的高峰底部，所以通常會設定球的半徑至少是前景目標半徑的三倍左右。你可以點選**Create Background**，觀察這種演算法算出的背景圖是不是接近**原光場**。
+
+### 實作2
+#### 產生實作影像
+執行以下Macro，這會產生一個stack，有一群細胞流動，背景有一些方塊。你的目的是將前景的細胞分離出來
+```ijm
+// 參數
+stackSize = 20;
+width = 512;
+height = 512;
+numCells = 30;
+numBoxes = 5;
+boxSize = 30;
+
+setBatchMode(true);
+
+// 儲存背景固定位置
+fixedX = newArray(numBoxes);
+fixedY = newArray(numBoxes);
+for (i = 0; i < numBoxes; i++) {
+    fixedX[i] = random() * (width - boxSize);
+    fixedY[i] = random() * (height - boxSize);
+}
+
+// 每個細胞的屬性：位置、半徑、速度
+cellX = newArray(numCells);
+cellY = newArray(numCells);
+cellR = newArray(numCells);
+cellDX = newArray(numCells);
+cellDY = newArray(numCells);
+
+// 初始位置與屬性
+for (i = 0; i < numCells; i++) {
+    cellX[i] = random() * (width - 40) + 20;
+    cellY[i] = random() * (height - 40) + 20;
+    cellR[i] = 8 + random() * 4; // 半徑 8~12
+    cellDX[i] = random()*12 - 6;  // 速度 -6 ~ 6
+    cellDY[i] = random()*12 - 6;
+}
+
+// 建立空 stack
+run("New...", "name=細胞流 type=8-bit width="+width+" height="+height+" slices=1 fill=Black");
+selectWindow("細胞流");
+
+
+// 每張 slice
+for (s = 0; s < stackSize; s++) {
+    newImage("Temp", "8-bit black", width, height, 1);
+
+    // 畫背景固定方塊
+    setColor(80);
+    for (i = 0; i < numBoxes; i++) {
+        makeRectangle(fixedX[i], fixedY[i], boxSize, boxSize);
+        run("Fill");
+    }
+
+    // 畫細胞
+    setColor(200);
+    for (i = 0; i < numCells; i++) {
+        // 畫圓形細胞
+        r = cellR[i];
+        makeOval(cellX[i] - r, cellY[i] - r, 2*r, 2*r);
+        run("Fill");
+
+        // 更新位置（下一張用）
+        cellX[i] += cellDX[i];
+        cellY[i] += cellDY[i];
+
+        // 邊界反彈（避免跑出去）
+        if (cellX[i] < r || cellX[i] > width - r) cellDX[i] *= -1;
+        if (cellY[i] < r || cellY[i] > height - r) cellDY[i] *= -1;
+    }
+
+    run("Select None");
+
+    // 貼到主 stack
+    run("Copy");
+    selectWindow("細胞流");
+    run("Add Slice");
+    run("Paste");
+
+    // 關閉暫時影像
+    selectWindow("Temp");
+    close();
+}
+
+selectWindow("細胞流");
+setSlice(1);
+run("Delete Slice");
+resetMinAndMax();
+setBatchMode(false);
+
+```
+#### 從stack產生背景圖片
+1.   選擇**細胞流**的stack，執行` Image › Stacks › Z Project...`
+2.   **Projection type**，有幾種選擇，你可以試試看**Average Instensity**或是**Max Instensity**，然後產生背景圖。
+
+#### 將stack的細胞前景與背景分離
+1.   使用`Process > Image Calculator...`，選擇stack與背景影像，運算方式選 `Subtract`。
 
 ---
 
 ## 對比度增強/亮度均勻化
+當影像中細胞與背景的對比過低（灰階值接近），整體偏灰或對比低，邊界不明顯，導致難以分辨邊界，則使用對比增強方法讓目標的邊界更明顯。
 
 *   **ImageJ 操作：**
     *   `Image > Adjust > Brightness/Contrast...`
-    *   `Process > Enhance Contrast...`（可勾選 Normalize/Equalize Histogram）
-    *   `Process > Subtract Background...`（校正不均勻背景）
+    *   `Process > Enhance Contrast...`
+    *   `Process › Enhance Local Contrast (CLAHE)`（區域自適應對比）
 
+### 調整亮度對比
+#### 產生實作影像
+
+請執行以下macro，這會產生一張影像，細胞的像素強度和背景十分接近。
+
+```ijm
+newImage("Test", "8-bit black", 512, 512, 1);
+setColor(50);   // 背景值
+run("Select All");
+run("Fill");
+
+setColor(52);   // 細胞值
+makeOval(200, 200, 100, 100);
+run("Fill");
+run("Select None");
+
+```
+
+執行`Image > Adjust > Brightness/Contrast...`，調整各種參數按下apply之後，會改變像素的**強度值**
+
+### 對比度增強
+執行 `Process > Enhance Contrast...` 是調整影像對比度的常用方法。
+
+#### 核心參數：Saturated Pixels
+這個參數設定了在自動拉伸對比度時，允許多少百分比的像素被「飽和」（即變成純黑0或純白255）。預設值（如0.35%）會忽略最亮和最暗的一小部分像素，避免極端值過度影響整體對比度，讓結果更貼近視覺感受。
+
+#### 選項分析與適用情境
+
+在 `Enhance Contrast` 對話框中，主要有 `Normalize` 和 `Equalize Histogram` 兩個勾選框。不同的組合適用於不同的分析需求。
+
+**情境一：不勾選任何選項 (預設)**
+
+*   **行為：**
+    *   **僅視覺增強**：只改變影像的查找表 (Look-Up Table, LUT)，讓影像在螢幕上看起來對比度更高。
+    *   **不改變原始數據**：除非你按下 `Apply` 按鈕，否則影像的實際像素值（灰階值）完全不變。
+    *   基於 `Saturated pixels` 百分比進行線性拉伸，但範圍不一定會擴展到完整的 0-255。
+*   **適用情境：**
+    *   **初步觀察與檢視**：當你只想「看得更清楚一點」來判斷影像品質或尋找特徵，但不想冒險修改原始數據時。
+    *   **保留數據完整性**：在進行任何定量分析之前，這是最安全的視覺化方法，因為它保證了後續測量的數據是原始、未經修改的。
+
+**情境二：勾選 `Normalize`**
+
+*   **行為：**
+    *   **線性拉伸至全範圍**：將影像中現有的最低灰階值映射為0，最高灰階值映射為255（以8-bit為例），中間的灰階值進行等比例的線性拉伸。
+    *   **改變原始數據**：此操作會直接修改影像的像素值。
+    *   **保持相對亮度**：雖然像素值改變了，但像素之間的相對亮度關係保持不變。
+*   **適用情境：**
+    *   **準備進行分割**：當影像整體偏暗或灰濛濛時，`Normalize` 可以有效拉開前景與背景的對比，讓後續的閾值分割（Thresholding）更容易設定和執行。
+    *   **標準化多張影像**：在批次處理中，對每張影像進行 Normalize 可以使其具有相似的對比度範圍，增加分析的一致性。
+
+**情境三：勾選 `Equalize Histogram`**
+
+*   **行為：**
+    *   **非線性轉換**：重新分佈影像的像素灰階值，使得直方圖（Histogram）盡可能變得平坦。這意味著每個灰階級別的像素數量會趨於一致。
+    *   **改變原始數據**：此操作會大幅度、非線性地修改像素值。
+    *   **強化局部細節**：能顯著增強原本對比度極低的區域的細節，讓暗部或亮部的紋理變得清晰可見。
+*   **適用情境：**
+    *   **紋理分析與特徵觀察**：當你關心的不是絕對的灰階值，而是物體的紋理、邊緣等局部特徵時，此方法非常有效。
+    *   **應謹慎用於定量分析**：由於它會徹底改變像素的原始分佈和相對關係，通常不建議在需要測量螢光強度等絕對值的定量分析前使用。
+
+#### 總結比較
+
+| 選項組合 | 行為 | 改變數據？ | 主要用途 |
+|:---|:---|:---|:---|
+| **不勾選** | 僅改變顯示 (LUT)，線性視覺增強 | 否 (除非按 Apply) | 安全的初步觀察，保留原始數據 |
+| **勾選 Normalize** | 線性拉伸灰階值至全範圍 | 是 | 增強整體對比，為分割做準備 |
+| **勾選 Equalize Histogram** | 非線性重排灰階值，使直方圖平坦化 | 是 | 強化局部細節與紋理，不適用於強度定量 |
+
+> **重要提示：** 在 `Enhance Contrast` 視窗中，任何調整（無論是否勾選選項）都只是預覽效果。只有當你點擊 `Apply` 按鈕時，影像的像素值才會被真正修改並儲存。
+
+### CLAHE
+對傳統 Histogram Equalization（HE，直方圖均衡） 的改進
+
+|方法 |	原理簡述|
+| :-----| :---- |
+|HE | 將整張影像的直方圖拉平，提升整體對比，但容易產生過度對比或強化雜訊。|
+|AHE |	把影像切成小區塊（局部），各自做 HE，改善區域對比，但更容易過強或放大雜訊。|
+|CLAHE | 在 AHE 基礎上加入 對比限制，抑制雜訊放大，效果更穩定自然。|
+
+#### 運作流程：
+1.   將影像切成小區塊（tiles），例如每個 tile 是 8×8、16×16 pixels。
+2.   每個 tile 各自進行直方圖均衡，將灰階分布平均化，提高區域內對比。
+3.   加入對比限制（Clip Limit），限制直方圖中的最大頻率，防止某些灰階值過度增強，抑制雜訊。
+4.   將不同區塊間進行雙線性插值，避免不同區塊之間出現突兀的邊界，讓整體視覺自然平滑。
+
+#### 適用情況
+顯微鏡下光照不均、對比不足、目標邊界不明。
+
+#### 產生實作影像
+
+請執行以下macro，這會產生一個亮度不均勻的影像，請執行`Process › Enhance Local Contrast (CLAHE)`觀察結果。
+
+```ijm
+setBatchMode(true);
+
+// 建立影像「原光場」
+newImage("原光場", "8-bit black", 512, 512, 1);
+for (y = 0; y < 512; y++) {
+  for (x = 0; x < 512; x++) {
+    v = 0.6*(x + y)/2 + 40*sin(x/30.0)*cos(y/45.0);
+    if (v < 0) v = 0;
+    if (v > 200) v = 200;
+    setPixel(x, y, v);
+  }
+}
+run("Gaussian Blur...", "sigma=30");
+
+
+// 建立影像「原細胞」
+newImage("原細胞", "8-bit black", 512, 512, 1);
+setColor(255);
+gridSize = 10;
+spacingX = 512 / gridSize;
+spacingY = 512 / gridSize;
+radius = 10;
+for (i = 0; i < gridSize; i++) {
+  for (j = 0; j < gridSize; j++) {
+    x = i * spacingX + spacingX / 2;
+    y = j * spacingY + spacingY / 2;
+    makeOval(x - radius, y - radius, 2 * radius, 2 * radius);
+    fill();
+  }
+}
+
+
+// 使用影像計算器合成影像
+imageCalculator("Add create", "原光場", "原細胞");
+
+
+// 接著對合成影像做後續處理
+selectWindow("Result of 原光場");
+run("Enhance Contrast...", "saturated=0.35 normalize");
+run("Add Noise");
+run("Gaussian Blur...", "sigma=0.5");
+rename("待處理的影像");
+
+run("Select None");
+resetMinAndMax();
+// 解除批次模式，強制刷新並顯示所有視窗
+setBatchMode(false);
+
+```
 ---
-
 
 ## 邊緣偵測
 
@@ -268,9 +564,10 @@ Y 方向
 5. **形態學運算**：`Process > Binary > ...`
 6. **粒子分析**：`Analyze > Analyze Particles...`
 7. **輸出數據**：`File > Save As...` 匯出結果
-## 6. 是否圖像角度或大小不一致？
 
-### 6-1. 幾何轉換 (Geometric Transformations)
+## 是否圖像角度或大小不一致？
+
+### 幾何轉換 (Geometric Transformations)
 
 *   **ImageJ 操作：**
     *   **旋轉：** `Image > Transform > Rotate...`
@@ -280,9 +577,9 @@ Y 方向
 
 ---
 
-## 7. 是否要進行大量影像處理？
+## 是否要進行大量影像處理？
 
-### 7-1. 使用批次處理 (Batch Processing)
+### 使用批次處理 (Batch Processing)
 
 *   **ImageJ Macro 操作：**
     1.  **錄製Macro：** `Plugins > Macros > Record...` 開始錄製你的操作步驟。
@@ -295,7 +592,7 @@ Y 方向
         *   設定輸出格式 (`Format`)。
         *   點擊 `Process` 開始批次處理。
 
-### 7-2. 使用 Python 自動化 (推薦 `pyimagej`)
+### 使用 Python 自動化 (推薦 `pyimagej`)
 
 ## 常見的細胞分析基本流程 (Workflow)
 
