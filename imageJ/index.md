@@ -6,10 +6,11 @@
 - [從葉片學分析：空間校正、色彩空間與分割技巧](leaf-analysis-and-color-spaces.md)
 
 # 影像前處理（Image Preprocessing）
-- [影像前處理流程圖](workflowChart.md)  
-- [前處理的詳細步驟](imageProcess.md)  
 - [影像對位](image-registration.md)
+- [空間校正](spatial-correction.md)
 - [強度校正](intensity-calibration.md)
+- [影像處理的詳細步驟](imageProcess.md)  
+- [影像前處理流程圖](workflowChart.md)  
 
 # 案例介紹：分析胚胎
 - [多目標測量：ROI管理器與形態學分析](embryo-analysis.md)

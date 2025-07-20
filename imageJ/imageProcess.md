@@ -1,9 +1,31 @@
-# 影像前處理決策方法
+# 影像處理決策
+## 前處理
+在分析、特徵提取、分割、分類或追蹤之前，對影像進行的一系列處理操作，目的是提升影像品質、減少干擾，使後續任務更準確、更穩定、更容易自動化。
 
+| 類型 | 目的 | 常見方法 |
+|:---|:---|:---|
+| 降噪 |  去除感測器雜訊或背景干擾 | Gaussian、Median|
+| 對比增強 | 拉大前景與背景的強度差異 | CLAHE、Histogram Equalization、Gamma|
+| 背景校正 | 補償光照不均或不良背景 | Flat-field、Rolling Ball、Subtract Background|
+| 影像校準 | 幾何對齊、尺度統一、畸變矯正 | Registration、Rescale、Deskew|
+| 標準化 | 統一輸入格式、大小或色階 | Resize、Normalize、Color Conversion|
+| 強調特徵 | 讓特徵變得更明顯 | Edge enhancement、Top-hat、Morphology|
 
-## 彩色影像轉灰階
+## 分析
 
-如果影像是 RGB 或多通道影像，需要先轉換為單一的灰階影像才能進行後續處理。
+| 類型 | 目的 | 常見方法 |
+|:---|:---|:---|
+| 分割（Segmentation） | 將影像切分為物件與背景，屬於分析開始的第一步 | Threshold, Watershed, Region Growing |
+| 特徵擷取（Feature Extraction） | 量化目標區域的數值特徵，供分類使用 | 面積、周長、形狀指標、紋理特徵 |
+| 追蹤（Tracking） | 比較不同時間點/切片的物件動向 | TrackMate、粒子追蹤 |
+| 分類（Classification） | 把物件歸類為不同類型，例如細胞種類或健康狀態 | 機器學習模型、分群、人工標註 |
+| 測量與統計（Measurement & Stats） | 分析量化資料，例如平均大小、密度分布 | ROI 分析、統計圖、分布曲線 |
+| 資料視覺化 | 將分析結果以圖像、動畫、圖表呈現 | Overlay、3D rendering、volume rendering |
+
+# 流程說明
+## 1.彩色影像轉灰階
+
+RGB 或多通道影像，需要先轉換為單一的灰階影像才能進行後續處理。
 
 *   **策略：**
     *   選擇一個對比度最高、目標最清晰的通道進行轉換（例如，DAPI 染核選藍色通道）。
@@ -13,12 +35,12 @@
     *   `Image > Color > Split Channels`：將多通道影像分離，以便選擇最佳通道。
 ---
 
-## 去雜訊
+## 2.去雜訊
 *   如果影像出現明顯隨機雜訊（如 salt-and-pepper、感光雜訊），應使用去噪處理。
 *   如果雜訊輕微或會影響細節邊緣，則略過此步驟或使用更小的模糊範圍（sigma 較小的 Gaussian）。
 
 ### 平均濾波器
-*   imagej有兩處可以做
+*   imagej有兩處可以做平均濾波器
     *   `Process › Smooth`：固定範圍3X3
     *   `Process > Filters > Mean...`：這個可以指定範圍
 *   針對每個像素，它會計算其周圍特定範圍內所有像素的平均值來取代。
@@ -26,7 +48,7 @@
 *   也因為會對所有像素進行平均，無論這些像素是雜訊還是影像的重要邊緣，所以會導致**邊緣變得模糊不清**。對於細節豐富的影像，過度使用平均濾波可能會損失很多重要的資訊。
 
 ### 中值濾波器
-*   imagej有兩處可以做
+*   imagej有兩處可以做中值濾波器
     *   `Process › Noise › Despeckle`：這是固定3X3範圍
     *   `Process > Filters > Median...`：這個可以指定範圍
 *   去除**椒鹽雜訊**(影像中隨機分佈的亮點像鹽粒，或暗點像胡椒)
@@ -41,22 +63,24 @@
 *   半徑 (Sigma，σ)：半徑值越大，模糊程度越高，影像的平滑效果也越明顯。反之，半徑值越小，模糊程度越低。
 
 
-### 實作產生噪點的影像，再進行去雜訊處理
+### 實作
+產生噪點的影像，再進行去雜訊處理
+
 #### 產生高斯雜訊的圖片
 *   執行`File > New > Image...`，使用預設值產生白色的8-bit影像。
 *   執行`Process › Noise › Add Noise`，這會在畫面產生**高斯雜訊** (平均值0，標準差25)，[參見](https://imagej.net/ij/docs/menus/process.html#noise)。
 *   你也可以試試直接用以下的 Macro產生圖片
 
 ```ijm
-newImage("高斯雜訊", "8-bit white", 512, 512, 1);
-run("Add Noise");
+    newImage("高斯雜訊", "8-bit white", 512, 512, 1);
+    run("Add Noise");
 ```
 
 *   如果要指定高斯的標準差可以用**Add Specified Noise...**
 
 ```ijm
-newImage("高雜訊圖片", "8-bit white", 512, 512, 1);
-run("Add Specified Noise...", "standard=80");
+    newImage("高雜訊圖片", "8-bit white", 512, 512, 1);
+    run("Add Specified Noise...", "standard=80");
 ```
 
 #### 產生椒鹽雜訊的圖片
@@ -65,13 +89,13 @@ run("Add Specified Noise...", "standard=80");
 *   你也可以試試直接用以下的 Macro產生圖片
 
 ```ijm
-run("Clown");
-run("8-bit");
-run("Salt and Pepper");
-rename("椒鹽雜訊");
+    run("Clown");
+    run("8-bit");
+    run("Salt and Pepper");
+    rename("椒鹽雜訊");
 ```
 ---
-## 背景分離（前景/背景分割）
+## 3.背景分離（前景/背景分割）
 將背景分離得到前景的方式，有以下幾種方式。
 
 *   **靜態背景建模：**
@@ -87,41 +111,41 @@ rename("椒鹽雜訊");
 請執行以下Macro，這會產生三張圖片，模擬的是本來有**原細胞**的影像，在一個不平均的光場(**原光場**)照明，並且伴隨著**取樣雜訊**，得到了**待處理影像**。你的目標就是從**待處理影像**還原得到**原細胞**這張圖的樣子。
 
 ```ijm
-width = 512;
-height = 512;
+    width = 512;
+    height = 512;
 
-centerX = width/2;
-centerY = height/2;
-
-
-newImage("原光場", "32-bit black", width, height, 1);
-sigma = 200;
-for (y = 0; y < height; y++) {
-  for (x = 0; x < width; x++) {
-    dx = x - centerX;
-    dy = y - centerY;
-    value = exp(-(dx*dx + dy*dy)/(2*sigma*sigma));
-    setPixel(x, y, value);
-  }
-}
-run("8-bit");
+    centerX = width/2;
+    centerY = height/2;
 
 
-newImage("原細胞", "8-bit black", width, height, 1);
-for (i = 0; i < 40; i++) {
-    x = 20 + random()*480;
-    y = 20 + random()*480;
-    size = 8 + random()*10;
-    setColor(255);
-    makeOval(x, y, size, size);
-    fill();
-}
+    newImage("原光場", "32-bit black", width, height, 1);
+    sigma = 200;
+    for (y = 0; y < height; y++) {
+    for (x = 0; x < width; x++) {
+        dx = x - centerX;
+        dy = y - centerY;
+        value = exp(-(dx*dx + dy*dy)/(2*sigma*sigma));
+        setPixel(x, y, value);
+    }
+    }
+    run("8-bit");
 
-imageCalculator("Add create", "原光場", "原細胞");
-run("Enhance Contrast...", "saturated=0.35 normalize");
-run("Add Noise");
-run("Gaussian Blur...", "sigma=0.5");
-rename("待處理的影像");
+
+    newImage("原細胞", "8-bit black", width, height, 1);
+    for (i = 0; i < 40; i++) {
+        x = 20 + random()*480;
+        y = 20 + random()*480;
+        size = 8 + random()*10;
+        setColor(255);
+        makeOval(x, y, size, size);
+        fill();
+    }
+
+    imageCalculator("Add create", "原光場", "原細胞");
+    run("Enhance Contrast...", "saturated=0.35 normalize");
+    run("Add Noise");
+    run("Gaussian Blur...", "sigma=0.5");
+    rename("待處理的影像");
 ```
 #### 觀察影像
 1.   我們利用一些工具來觀察這些影像。請點選**原光場**，這是利用高斯函數產生的影像，模擬顯微鏡下產生的不均勻光場。先用直線工具拉一條由最左到最右的直線，然後選擇` Analyze › Plot Profile`。你看到的圖形就是高斯函數。
@@ -235,7 +259,7 @@ setBatchMode(false);
 
 ---
 
-## 對比度增強/亮度均勻化
+## 4.對比度增強/亮度均勻化
 當影像中細胞與背景的對比過低（灰階值接近），整體偏灰或對比低，邊界不明顯，導致難以分辨邊界，則使用對比增強方法讓目標的邊界更明顯。
 
 *   **ImageJ 操作：**
@@ -387,7 +411,7 @@ setBatchMode(false);
 ```
 ---
 
-## 邊緣偵測
+## 5.邊緣偵測
 
 ImageJ 內建了一些邊緣檢測的方式，也可以用 `Process > Filters > Convolve...` 自訂卷積核進行各種邊緣偵測。
 
@@ -522,115 +546,168 @@ Y 方向
 0 0 0
 -1 -2 -1
 ```
+---
+
+## 6.門檻處理/分割
+*   **全局閾值 (Global Threshold):**
+    *    整張影像使用同一個閾值。
+    *   `Image > Adjust > Threshold...`。
+    *   `Image › Adjust › Auto Threshold`。
+*   **局部閾值 (Local Threshold):**
+    *   影像被分成小區域，每個區域計算自己的閾值。
+    *   適用於背景亮度不均勻。
+    *   `Image › Adjust › Auto Local Threshold`    
 
 ---
 
-## 邊緣細化/形態學操作
+## 7.形態學運算
 
-*   **ImageJ 操作：**
-    *   `Process > Binary > Erode`（侵蝕）
-    *   `Process > Binary > Dilate`（膨脹）
-    *   `Process > Binary > Open`（開啟）
-    *   `Process > Binary > Close`（關閉）
-    *   `Process > Binary > Skeletonize`（骨架化）
-    *   `Process > Binary > Watershed`（分水嶺分割）
+*   主要在二值影像上操作 (`Process > Binary > ...`)。
+*   `Process > Binary > Erode` 侵蝕: 縮小物件，去除毛刺。
+*   `Process > Binary > Dilate`膨脹: 擴大物件，填補內部小孔。
+*   `Process > Binary > Open` 開啟: 先侵蝕後膨脹，可斷開細微連接、去除小噪點。
+*   `Process > Binary > Close` 關閉: 先膨脹後侵蝕，可連接鄰近物件、填補內部孔洞。
+*   `Process > Binary > Skeletonize` 骨架化
+*   `Process > Binary > Watershed`分水嶺分割：用於分離相連或重疊的細胞。
+*   `Process > Binary > Distance Map`：距離變換 
+
+### 實作
+
+```ijm
+// 建立空白影像
+newImage("BinaryDemo", "8-bit black", 512, 512, 1);
+setForegroundColor(255, 255, 255);
+
+// ---------- 粗圓 + 毛刺 ----------
+for (i = 0; i < 3; i++) {
+    x = 80 + i * 60;
+    y = 80;
+    r = 25;
+    makeOval(x - r, y - r, r * 2, r * 2);
+    fill();
+}
+
+// 毛刺圓形
+centerX = 250;
+centerY = 80;
+nPoints = 36;
+xPoints = newArray(nPoints);
+yPoints = newArray(nPoints);
+for (i = 0; i < nPoints; i++) {
+    angle = 2 * PI * i / nPoints;
+    r = 25 + random() * 10;
+    xPoints[i] = centerX + r * cos(angle);
+    yPoints[i] = centerY + r * sin(angle);
+}
+makeSelection("polygon", xPoints, yPoints); fill();
+
+// ---------- 細線 ----------
+for (i = 0; i < 4; i++) {
+    y = 150 + i * 10;
+    makeLine(50, y, 200, y);
+    run("Draw", "slice");
+}
+
+// ---------- 貼邊形狀 ----------
+makeRectangle(0, 300, 60, 60); fill();
+makeRectangle(450, 300, 60, 60); fill();
+makeRectangle(200, 450, 100, 60); fill();
+
+// ---------- 破碎物件 ----------
+setColor(255, 255, 255);
+makeRectangle(300, 300, 20, 20); fill();
+makeRectangle(321, 300, 20, 20); fill();
+makeRectangle(342, 300, 20, 20); fill();
+makeRectangle(321, 321, 20, 20); fill();
+
+// ---------- 密集群圓 ----------
+x0 = 400;
+y0 = 400;
+r = 15;
+for (i = 0; i < 3; i++) {
+    for (j = 0; j < 3; j++) {
+        dx = x0 + i * 25;
+        dy = y0 + j * 25;
+        makeOval(dx - r, dy - r, r * 2, r * 2);
+        fill();
+    }
+}
+
+// 二值化
+run("Make Binary");
+
+```
+
+
+```ijm
+// 參數設定
+width = 512;
+height = 512;
+pointRadius = 3;
+
+// 建立空白影像
+newImage("Multi-Pattern Particles", "8-bit black", width, height, 1);
+setForegroundColor(255, 255, 255);
+
+// -------------------- 區域1：隨機分佈 --------------------
+nRandom = 50;
+for (i = 0; i < nRandom; i++) {
+    x = random()*160 + 10;    // 區域X: [10,170]
+    y = random()*160 + 10;    // 區域Y: [10,170]
+    makeOval(x - pointRadius, y - pointRadius, pointRadius*2, pointRadius*2);
+    fill();
+}
+
+// -------------------- 區域2：密集群聚 --------------------
+nClusters = 3;
+pointsPerCluster = 20;
+for (c = 0; c < nClusters; c++) {
+    cx = 200 + c * 30 + random()*10; // 區域X: 約在 200-300
+    cy = 60 + random()*60;
+    for (i = 0; i < pointsPerCluster; i++) {
+        dx = random()*20 - 10;
+        dy = random()*20 - 10;
+        x = cx + dx;
+        y = cy + dy;
+        makeOval(x - pointRadius, y - pointRadius, pointRadius*2, pointRadius*2);
+        fill();
+    }
+}
+
+// -------------------- 區域3：規則排列 --------------------
+for (i = 0; i < 6; i++) {
+    for (j = 0; j < 6; j++) {
+        x = 350 + i * 20;
+        y = 50 + j * 20;
+        makeOval(x - pointRadius, y - pointRadius, pointRadius*2, pointRadius*2);
+        fill();
+    }
+}
+
+// 完成後進行二值化
+run("Make Binary");
+
+```
+---
+
+## 8.輪廓分析/分割
+*   `Analyze > Analyze Particles...`
+*   在二值影像上偵測獨立的物件 (粒子/細胞)。
+*   可設定大小 (Size) 和圓形度 (Circularity) 範圍來篩選目標。
+*   測量參數包括：面積 (Area)、中心點 (Centroid)、周長 (Perimeter)、圓形度、長短軸等。
+*   勾選 `Display results`, `Clear results`, `Summarize`, `Add to Manager` 等選項控制輸出。
 
 ---
 
-## 輪廓分析/分割
+## 9.輸出數據
+*   分析結果顯示在 ImageJ 的 `Results Table` 中。
+*   可將表格 `File > Save As...` 匯出成 `.csv` 或 `.txt` 文件，以便後續使用 Excel, Python (Pandas), R 等工具進行統計分析和繪圖。
 
-*   **ImageJ 操作：**
-    *   `Analyze > Analyze Particles...`（偵測、量測分割後的物件）
-    *   可設定 Size/Circularity 範圍，並選擇輸出結果
+## 幾何轉換
 
----
-
-## 批次處理與自動化
-
-*   **錄製 Macro：**
-    *   `Plugins > Macros > Record...` 開始錄製操作
-    *   完成後 `Create` 儲存 Macro
-*   **批次處理：**
-    *   `Process > Batch > Macro...`，選擇 Macro 與資料夾批次處理
+*   **旋轉：** `Image > Transform > Rotate...`
+*   **縮放：** `Image > Transform > Scale...`
+*   **翻轉：** `Image > Transform > Flip Horizontally / Flip Vertically`
+*   **精確對齊：** 使用 ROI 工具選取參考區域，再用 `Edit > Selection > Specify...` 設定精確座標或大小，輔助對齊。
 
 ---
-
-## 常見細胞分析基本流程（Workflow）
-
-1. **輸入影像**：`File > Open...`
-2. **去雜訊**：`Process > Filters > Gaussian Blur...` 或 `Median...`
-3. **增強對比/亮度均勻化**：`Process > Enhance Contrast...`、`Subtract Background...`
-4. **門檻處理/分割**：`Image > Adjust > Threshold...` 或安裝 `Auto Local Threshold` 插件
-5. **形態學運算**：`Process > Binary > ...`
-6. **粒子分析**：`Analyze > Analyze Particles...`
-7. **輸出數據**：`File > Save As...` 匯出結果
-
-## 是否圖像角度或大小不一致？
-
-### 幾何轉換 (Geometric Transformations)
-
-*   **ImageJ 操作：**
-    *   **旋轉：** `Image > Transform > Rotate...`
-    *   **縮放：** `Image > Transform > Scale...`
-    *   **翻轉：** `Image > Transform > Flip Horizontally / Flip Vertically`
-    *   **精確對齊：** 使用 ROI 工具選取參考區域，再用 `Edit > Selection > Specify...` 設定精確座標或大小，輔助對齊。
-
----
-
-## 是否要進行大量影像處理？
-
-### 使用批次處理 (Batch Processing)
-
-*   **ImageJ Macro 操作：**
-    1.  **錄製Macro：** `Plugins > Macros > Record...` 開始錄製你的操作步驟。
-    2.  完成操作後，在 Recorder 視窗點擊 `Create`。
-    3.  **測試Macro：** `Plugins > Macros > Run...` 選擇剛才儲存的Macro文件 (`.ijm`) 運行。
-    4.  **批次處理：** `Process > Batch > Macro...`
-        *   設定 `Input` 資料夾 (來源影像)。
-        *   設定 `Output` 資料夾 (儲存結果)。
-        *   選擇 `Macro` 文件。
-        *   設定輸出格式 (`Format`)。
-        *   點擊 `Process` 開始批次處理。
-
-### 使用 Python 自動化 (推薦 `pyimagej`)
-
-## 常見的細胞分析基本流程 (Workflow)
-
-1.  **輸入影像 (Image Input)**
-    *   通常是顯微鏡影像。
-    *   格式可能是 `TIFF`, `JPG`, `PNG` 等，有時是多通道 (multi-channel) 或 Z-stack 影像。
-
-2.  **去雜訊 (Noise Reduction)**
-    *   `Gaussian blur` (高斯模糊): 去除高頻雜訊，使背景平滑。適用於高斯分佈的雜訊。
-    *   `Median filter` (中值濾波): 更適合消除 `salt-and-pepper noise` (椒鹽雜訊/雜點)。
-
-3.  **增強對比/亮度均勻化 (Enhancement / Illumination Correction)**
-    *   `Histogram equalization` (直方圖均化): 全局性地增強對比度。
-    *   `CLAHE` (Contrast Limited Adaptive Histogram Equalization): 自適應直方圖均衡，分區塊處理，對局部對比度改善更佳，尤其適用於亮度不均的影像。
-    *   背景減除 (`Process > Subtract Background...`): 適用於背景緩慢變化的情況。
-
-4.  **門檻處理/分割 (Thresholding / Segmentation)**
-    *   **全局閾值 (Global Threshold):** 整張影像使用同一個閾值。
-        *   `Image > Adjust > Threshold...` (可選 `Otsu`, `MaxEntropy` 等自動方法)。
-    *   **局部閾值 (Local Threshold):** 影像被分成小區域，每個區域計算自己的閾值。
-        *   適用於背景亮度不均勻。
-        *   需插件如 `Auto Local Threshold` (提供 `Phansalkar`, `Bernsen`, `Mean`, `Median` 等方法)。
-
-5.  **形態學運算 (Morphological Operations)**
-    *   主要在二值影像上操作 (`Process > Binary > ...`)。
-    *   `Erosion` (侵蝕): 縮小物件，去除毛刺。
-    *   `Dilation` (膨脹): 擴大物件，填補內部小孔。
-    *   `Opening` (開啟): 先侵蝕後膨脹，可斷開細微連接、去除小噪點。
-    *   `Closing` (關閉): 先膨脹後侵蝕，可連接鄰近物件、填補內部孔洞。
-    *   `Watershed` 分水嶺分割: `Process > Binary > Watershed`，常用於分離相連或重疊的細胞。通常需要先進行距離變換 (`Process > Binary > Distance Map`)。
-
-6.  **粒子分析 (Analyze Particles)**
-    *   `Analyze > Analyze Particles...`
-    *   在二值影像上偵測獨立的物件 (粒子/細胞)。
-    *   可設定大小 (Size) 和圓形度 (Circularity) 範圍來篩選目標。
-    *   測量參數包括：面積 (Area)、中心點 (Centroid)、周長 (Perimeter)、圓形度、長短軸等。
-    *   勾選 `Display results`, `Clear results`, `Summarize`, `Add to Manager` 等選項控制輸出。
-
-7.  **輸出數據 (Data Output)**
-    *   分析結果顯示在 ImageJ 的 `Results Table` 中。
-    *   可將表格 `File > Save As...` 匯出成 `.csv` 或 `.txt` 文件，以便後續使用 Excel, Python (Pandas), R 等工具進行統計分析和繪圖。

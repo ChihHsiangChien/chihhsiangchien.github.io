@@ -7,11 +7,13 @@
 
 ### 巨集語言介紹
 ImageJ使用一種簡單的內建腳本語言，稱為 **ImageJ Macro Language**。
+
 - 它具有基本的程式結構，包括變數、運算子、條件判斷和迴圈。
 - 主要用於呼叫ImageJ的選單指令、操作影像窗口、讀取和寫入數據。
 
 #### 基本語法
-```
+
+```ijm
    run("Command");
    selectWindow("Image");
    setThreshold(0, 255);
@@ -27,11 +29,13 @@ ImageJ使用一種簡單的內建腳本語言，稱為 **ImageJ Macro Language**
 
 ### 巨集錄製
 ImageJ提供了一個方便的巨集錄製器，可以將手動操作轉換為巨集程式碼。
+
 - 錄製器會記錄您在選單中執行的大多數操作以及一些對話框互動。
 - 這是學習巨集語法和了解特定操作對應的指令的絕佳方式。
 
 
 在ImageJ中錄製巨集：
+
 -   開啟 `Plugins > Macros > Record...`。
 -   錄製窗口會彈出，顯示正在記錄的指令。
 -   執行您想要自動化的手動步驟（例如：開啟影像、調整亮度/對比度、套用濾波器、執行分析）。
@@ -52,7 +56,8 @@ ImageJ Macro Language 的語法類似於C語言或其他腳本語言，但更簡
 
 
 #### 基本變數
-```
+
+```ijm
    // 數值類型
    var number = 123;
    var decimal = 3.14;
@@ -65,7 +70,8 @@ ImageJ Macro Language 的語法類似於C語言或其他腳本語言，但更簡
 ```
 #### 運算符與表達式
 - 算術運算
-```
+
+```ijm
    // 基本運算
    sum = a + b;
    difference = a - b;
@@ -78,7 +84,8 @@ ImageJ Macro Language 的語法類似於C語言或其他腳本語言，但更簡
 ```
 
 - 邏輯運算
-```
+
+```ijm
    // 比較運算
    if (value > threshold) {
        print("Above threshold");
@@ -147,7 +154,7 @@ ImageJ Macro Language 的語法類似於C語言或其他腳本語言，但更簡
 ### 函數與程序
 - ImageJ巨集語言提供了大量的內建函數和程序（指令）。
 - 內建函數： 用於執行特定的操作，例如數學計算、字串處理、檔案操作、獲取影像資訊等。它們通常有返回值。
-- 程序（指令）： 大多數對應ImageJ的選單命令或對話框操作。它們執行一個動作，通常沒有返回值。可以使用 run() 命令或直接使用指令名稱調用。
+- 程序（指令）： 大多數對應ImageJ的選單命令或對話框操作。它們執行一個動作，通常沒有返回值。可以使用**run()** 命令或直接使用指令名稱調用。
 - 自定義函數： 您可以編寫自己的函數來組織程式碼和重用邏輯。
 
 
@@ -193,15 +200,16 @@ ImageJ Macro Language 的語法類似於C語言或其他腳本語言，但更簡
 ```
 
 #### 尋找內建函數和指令：
-- 在巨集編輯器中，使用 Help > Macro Functions 可以查看ImageJ Macro Language的所有內建函數和語法說明。
+- 在巨集編輯器中，使用 `Help > Macro Functions`可以查看ImageJ Macro Language的所有內建函數和語法說明。
 - 巨集錄製器是查找特定選單操作對應指令的最佳工具。
-- 許多複雜的操作可能對應一個帶有多個參數的 run() 指令。
+- 許多複雜的操作可能對應一個帶有多個參數的**run()** 指令。
 
 
 ## 影像處理命令
 
 ### 基本命令
-1. 影像操作
+
+- 影像操作
 ```
    // 打開影像
    open(path);
@@ -212,8 +220,7 @@ ImageJ Macro Language 的語法類似於C語言或其他腳本語言，但更簡
    // 關閉影像
    close();
 ```
-
-2. 處理命令
+- 處理命令
 ```
    // 影像增強
    run("Enhance Contrast...", "saturated=0.35");
@@ -223,8 +230,9 @@ ImageJ Macro Language 的語法類似於C語言或其他腳本語言，但更簡
 ```
 
 ### 選區操作
-1. ROI操作
-```
+- ROI操作
+
+```ijm
    // 創建選區
    makeRectangle(x, y, width, height);
    
@@ -233,10 +241,11 @@ ImageJ Macro Language 的語法類似於C語言或其他腳本語言，但更簡
    
    // 選擇ROI
    roiManager("Select", index);
-   ```
-
-2. 測量操作
 ```
+
+- 測量操作
+
+```ijm
    // 設置測量參數
    run("Set Measurements...", "area mean standard");
    
@@ -245,28 +254,29 @@ ImageJ Macro Language 的語法類似於C語言或其他腳本語言，但更簡
 ```
 ## 巨集程式範例
 
-#### 簡單範例
-```ijm
-// 這是一個簡單的巨集範例
-// 取得當前開啟的影像的名稱
-title = getTitle();
-print("當前影像名稱: " + title);
+- 簡單範例
 
-// 如果影像名稱包含 "細胞"
-if (indexOf(title, "細胞") > -1) {
-    // 執行閾值分割 (使用Otsu算法)
-    setAutoThreshold("Otsu");
-    run("Analyze Particles...", "size=50-Infinity");
-    print("對細胞影像進行了粒子分析。");
-} else {
-    print("非細胞影像，跳過分析。");
-}
+    ```ijm
+    // 這是一個簡單的巨集範例
+    // 取得當前開啟的影像的名稱
+    title = getTitle();
+    print("當前影像名稱: " + title);
 
-// 迴圈處理多個範圍的閾值
-for (i = 0; i <= 255; i += 50) {
-    setThreshold(i, 255);
-    print("設置閾值範圍: " + i + "-255");
-}
+    // 如果影像名稱包含 "細胞"
+    if (indexOf(title, "細胞") > -1) {
+        // 執行閾值分割 (使用Otsu算法)
+        setAutoThreshold("Otsu");
+        run("Analyze Particles...", "size=50-Infinity");
+        print("對細胞影像進行了粒子分析。");
+    } else {
+        print("非細胞影像，跳過分析。");
+    }
+
+    // 迴圈處理多個範圍的閾值
+    for (i = 0; i <= 255; i += 50) {
+        setThreshold(i, 255);
+        print("設置閾值範圍: " + i + "-255");
+    }
 ```
 
 #### 影像自動分割
@@ -296,7 +306,8 @@ for (i = 0; i <= 255; i += 50) {
        "size=100-Infinity circularity=0.5-1.00 show=Outlines display exclude clear");
 ```
 #### 影像互動分割
-```
+
+```ijm
 macro "Interactive Segmentation" {
     // 用戶選擇ROI
     setTool("freehand");
@@ -392,18 +403,18 @@ function analyzeColonies() {
 
 #### 形態測量
 ```
-macro "Morphological Analysis" {
-    // 設置測量參數
-    run("Set Measurements...", 
-        "area perimeter shape feret's integrated display redirect=None decimal=3");
-    
-    // 執行分析
-    run("Analyze Particles...", 
-        "size=0-Infinity show=Outlines display clear");
-    
-    // 導出結果
-    saveAs("Results", "morphology_results.csv");
-}
+    macro "Morphological Analysis" {
+        // 設置測量參數
+        run("Set Measurements...", 
+            "area perimeter shape feret's integrated display redirect=None decimal=3");
+        
+        // 執行分析
+        run("Analyze Particles...", 
+            "size=0-Infinity show=Outlines display clear");
+        
+        // 導出結果
+        saveAs("Results", "morphology_results.csv");
+    }
 ```
 
 
@@ -412,8 +423,8 @@ macro "Morphological Analysis" {
 這使得巨集更加靈活，可以適應不同的影像和需求。
 
 #### 在ImageJ巨集中建立使用者互動：
-- 訊息提示： 使用 print() 函數將訊息輸出到Log窗口；使用 showMessage() 或 showMessageWithCancel() 彈出訊息對話框。   
-- 參數輸入： 使用 Dialog.create() 創建自定義對話框，並使用 Dialog.addNumber(), Dialog.addString(), Dialog.addCheckbox() 等方法添加輸入控件。最後使用 Dialog.show() 顯示對話框並獲取使用者輸入的值。
+- 訊息提示： 使用 **print()** 函數將訊息輸出到Log窗口；使用 **showMessage()** 或 **showMessageWithCancel()** 彈出訊息對話框。   
+- 參數輸入： 使用 **Dialog.create()** 創建自定義對話框，並使用 **Dialog.addNumber()**, **Dialog.addString()**, **Dialog.addCheckbox()**, **Dialog.addCheckbox()** 等方法添加輸入控件。最後使用 **Dialog.show()** 顯示對話框並獲取使用者輸入的值。
 
 ```ijm
 // 範例：彈出對話框讓使用者輸入粒子分析的最小尺寸
@@ -431,12 +442,12 @@ if (minSize > 0) {
 
 
 ### 批次處理 (Batch Processing)
-批次處理允許您自動地對整個文件夾或一系列影像執行相同的巨集或操作。
+批次處理允許自動地對整個文件夾或一系列影像執行相同的巨集或操作。
 這對於處理大量影像數據非常高效。
 
 #### 在ImageJ中執行批次處理：
 - ImageJ有一個內建的批次處理器，特別用於執行巨集或腳本。
-- 開啟 Process > Batch > Macro... 或 Process > Batch > Script...。
+- 開啟 `Process > Batch > Macro... `。
 - 選擇輸入文件夾（包含要處理的影像）和輸出文件夾（用於保存結果）。
 - 您可以選擇是否處理子文件夾。
 - 在文本區域貼上或編寫您要執行的巨集程式碼。此巨集應該設計為處理當前開啟的影像，並包含保存結果的指令。
@@ -447,84 +458,84 @@ if (minSize > 0) {
     - 點擊 `Process` 開始批次處理。
 
 ```ijm
-// 範例：批次處理巨集 (用於Process > Batch > Macro...)
-// 假設輸入文件夾中的影像是 .tif 格式
-// 假設輸出文件夾用於保存處理後的 .tif 影像
+    // 範例：批次處理巨集 (用於Process > Batch > Macro...)
+    // 假設輸入文件夾中的影像是 .tif 格式
+    // 假設輸出文件夾用於保存處理後的 .tif 影像
 
-input = getArgument(); 
-// 在批次模式下，getArgument() 返回當前要處理的檔案完整路徑
-open(input);
+    input = getArgument(); 
+    // 在批次模式下，getArgument() 返回當前要處理的檔案完整路徑
+    open(input);
 
-// 執行一些處理步驟 (例如：閾值和分析粒子)
-setAutoThreshold("Default");
-run("Analyze Particles...", "display clear stack"); // 'display' 可以選擇是否顯示分析結果窗口
-// 注意：批量處理時，通常不顯示結果窗口，而是將結果保存到文件
+    // 執行一些處理步驟 (例如：閾值和分析粒子)
+    setAutoThreshold("Default");
+    run("Analyze Particles...", "display clear stack"); // 'display' 可以選擇是否顯示分析結果窗口
+    // 注意：批量處理時，通常不顯示結果窗口，而是將結果保存到文件
 
-// 獲取輸出文件夾路徑
-outputFolder = getDirectory("output");
-// 獲取原始檔案名 (不含擴展名)
-fileName = File.getName(input);
-dotIndex = fileName(fileName, ".");
-if (dotIndex > 0) fileName = substring(fileName, 0, dotIndex);
+    // 獲取輸出文件夾路徑
+    outputFolder = getDirectory("output");
+    // 獲取原始檔案名 (不含擴展名)
+    fileName = File.getName(input);
+    dotIndex = fileName(fileName, ".");
+    if (dotIndex > 0) fileName = substring(fileName, 0, dotIndex);
 
-// 保存處理後的影像
-saveAs("Tiff", outputFolder + fileName + "_processed.tif");
+    // 保存處理後的影像
+    saveAs("Tiff", outputFolder + fileName + "_processed.tif");
 
-// 保存分析結果到CSV文件 (如果Analyze Particles設置為不顯示結果窗口)
-// 需要在Analyze > Set Measurements... 中設置並可能需要 Results.save() 指令，根據實際需求調整
-// results = getResultsTable();
-// results.save(outputFolder + fileName + "_results.csv");
-// 關閉當前影像
-close();
+    // 保存分析結果到CSV文件 (如果Analyze Particles設置為不顯示結果窗口)
+    // 需要在Analyze > Set Measurements... 中設置並可能需要 Results.save() 指令，根據實際需求調整
+    // results = getResultsTable();
+    // results.save(outputFolder + fileName + "_results.csv");
+    // 關閉當前影像
+    close();
 ```
 
 
 #### 文件處理
 ```
-macro "Batch Process" {
-    input = getDirectory("Input Directory");
-    output = getDirectory("Output Directory");
-    files = getFileList(input);
-    
-    // 處理每個文件
-    for (i = 0; i < files.length; i++) {
-        if (endsWith(files[i], ".tif")) {
-            processFile(input + files[i], output);
+    macro "Batch Process" {
+        input = getDirectory("Input Directory");
+        output = getDirectory("Output Directory");
+        files = getFileList(input);
+        
+        // 處理每個文件
+        for (i = 0; i < files.length; i++) {
+            if (endsWith(files[i], ".tif")) {
+                processFile(input + files[i], output);
+            }
         }
     }
-}
 
-function processFile(input, output) {
-    // 打開文件
-    open(input);
-    
-    // 處理步驟
-    run("Subtract Background...", "rolling=50");
-    run("Gaussian Blur...", "sigma=2");
-    setAutoThreshold("Otsu");
-    run("Convert to Mask");
-    
-    // 保存結果
-    saveAs("Tiff", output + "processed_" + getTitle());
-    close();
-}
+    function processFile(input, output) {
+        // 打開文件
+        open(input);
+        
+        // 處理步驟
+        run("Subtract Background...", "rolling=50");
+        run("Gaussian Blur...", "sigma=2");
+        setAutoThreshold("Otsu");
+        run("Convert to Mask");
+        
+        // 保存結果
+        saveAs("Tiff", output + "processed_" + getTitle());
+        close();
+    }
 ```
 
 #### 並行處理
 ```
-macro "Parallel Processing" {
-    // 設置線程數
-    threads = 4;
-    files = getFileList(getDirectory("Input"));
-    batchSize = floor(files.length / threads);
-    
-    // 分配任務
-    for (t = 0; t < threads; t++) {
-        startIndex = t * batchSize;
-        endIndex = (t == threads-1) ? files.length : (t+1) * batchSize;
-        processFileBatch(startIndex, endIndex);
+    macro "Parallel Processing" {
+        // 設置線程數
+        threads = 4;
+        files = getFileList(getDirectory("Input"));
+        batchSize = floor(files.length / threads);
+        
+        // 分配任務
+        for (t = 0; t < threads; t++) {
+            startIndex = t * batchSize;
+            endIndex = (t == threads-1) ? files.length : (t+1) * batchSize;
+            processFileBatch(startIndex, endIndex);
+        }
     }
-}
 ```
 
 
@@ -552,22 +563,22 @@ macro "Parallel Processing" {
 
 #### 結果視覺化
 ```
-macro "Visualize Results" {
-    // 生成直方圖
-    run("Histogram");
-    
-    // 產生圖表
-    Plot.create("Analysis Results", "Measurement", "Value");
-    Plot.add("Circle", xPoints, yPoints);
-    Plot.show();
-}
+    macro "Visualize Results" {
+        // 生成直方圖
+        run("Histogram");
+        
+        // 產生圖表
+        Plot.create("Analysis Results", "Measurement", "Value");
+        Plot.add("Circle", xPoints, yPoints);
+        Plot.show();
+    }
 ```
 
 
 ### 模組化設計
 
 - 巨集模組
-```
+```ijm
    // 主函數
    macro "Main" {
        initialize();
@@ -672,7 +683,7 @@ macro "Visualize Results" {
 ```
 
 #### ImageJ巨集編輯器的除錯功能：
-- 開啟巨集文件 (Plugins > Macros > Open... 或在錄製後創建)。
+- 開啟巨集文件 (`Plugins > Macros > Open...` 或在錄製後創建)。
 - 巨集編輯器提供以下功能：
     - Syntax Check (Ctrl+K 或 Cmd+K): 檢查語法錯誤。
     - Run (Ctrl+R 或 Cmd+R): 執行整個巨集。
