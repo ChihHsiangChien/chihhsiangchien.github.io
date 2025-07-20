@@ -9,8 +9,15 @@
 - [影像對位](image-registration.md)
 - [空間校正](spatial-correction.md)
 - [強度校正](intensity-calibration.md)
-- [影像處理的詳細步驟](imageProcess.md)  
+- [影像處理](imageProcess.md)  
 - [影像前處理流程圖](workflowChart.md)  
+
+# 影像分析
+- [影像分割](segmentation.md)
+- [形態學處理](morphology.md)
+- [特徵擷取](feature-extraction.md)
+- [TrackMate](trackmate.md)
+- [時序動態分析](time-series.md)
 
 # 案例介紹：分析胚胎
 - [多目標測量：ROI管理器與形態學分析](embryo-analysis.md)
@@ -24,29 +31,12 @@
 - [進階分割：腦組織的細部分割 (灰質、白質、腦脊髓液)](mri-tissue-segmentation.md)
 - [3D 形態學分析：量化大腦的表面積與複雜度](mri-3d-morphometry.md)
 
-# TEMP
-- [影像分割](segmentation.md)：把目標區域（例如細胞、器官）分出來。
-
-
-# 進階影像分析
-- [多通道分析](multichannel-analysis.md)
-- [時序動態分析](time-series.md)
-
-
-# 大型影像處理
-- [大型影像處理技術](large-image-processing.md)
+# 進階
 - [批次處理基礎](batch-processing.md)
-
-# plugins應用
-
-- [TrackMate使用指南](trackmate.md)
-- [3D列印模型製作](3d-printing.md)
-- [深度學習應用](deep-learning.md)
-
-#  腳本設計與自動化
-
 - [自動化與巨集程式設計](automation-and-macro.md)
 - [Python整合指南](python-integration.md)
+- [深度學習應用](deep-learning.md)
+- [大型影像處理技術](large-image-processing.md)
 
 
 # 網路文件

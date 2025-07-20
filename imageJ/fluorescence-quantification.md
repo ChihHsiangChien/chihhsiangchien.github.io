@@ -101,3 +101,24 @@
 > -   **校正後的值：** `Corrected_Mean_Nuc = Mean_Nuc - Mean_Bkg`
 > -   **校正後的值：** `Corrected_Mean_Cyto = Mean_Cyto - Mean_Bkg`
 > -   **校正後的比值：** `Ratio = Corrected_Mean_Cyto / Corrected_Mean_Nuc`
+
+
+## 共定位分析
+
+### 基本概念
+- 共定位（Colocalization）定義
+- 空間重疊（Spatial Overlap）
+- 強度相關（Intensity Correlation）
+- 分析意義與限制
+
+### 分析方法
+1. 定性分析
+    - 通道疊加
+    - 散點圖（Scatter Plot）
+    - RGB合成
+
+2. 定量分析
+    - Pearson相關係數
+    - Manders重疊係數
+    - Costes方法
+    - Li強度相關商
