@@ -4,11 +4,11 @@
 
 | 類型 | 目的 | 常見方法 |
 |:---|:---|:---|
-| 降噪 |  去除感測器雜訊或背景干擾 | Gaussian、Median|
-| 對比增強 | 拉大前景與背景的強度差異 | CLAHE、Histogram Equalization、Gamma|
-| 背景校正 | 補償光照不均或不良背景 | Flat-field、Rolling Ball、Subtract Background|
-| 影像校準 | 幾何對齊、尺度統一、畸變矯正 | Registration、Rescale、Deskew|
 | 標準化 | 統一輸入格式、大小或色階 | Resize、Normalize、Color Conversion|
+| 影像校準 | 幾何對齊、尺度統一、畸變矯正 | Registration、Rescale、Deskew|
+| 降噪 |  去除感測器雜訊或背景干擾 | Gaussian、Median|
+| 背景校正 | 補償光照不均或不良背景 | Flat-field、Rolling Ball、Subtract Background|
+| 對比增強 | 拉大前景與背景的強度差異 | CLAHE、Histogram Equalization、Gamma|
 | 強調特徵 | 讓特徵變得更明顯 | Edge enhancement、Top-hat、Morphology|
 
 ## 分析
@@ -23,6 +23,15 @@
 | 資料視覺化 | 將分析結果以圖像、動畫、圖表呈現 | Overlay、3D rendering、volume rendering |
 
 # 流程說明
+
+## 標準化
+### 幾何轉換
+
+*   **旋轉：** `Image > Transform > Rotate...`
+*   **縮放：** `Image > Transform > Scale...`
+*   **翻轉：** `Image > Transform > Flip Horizontally / Flip Vertically`
+*   **精確對齊：** 使用 ROI 工具選取參考區域，再用 `Edit > Selection > Specify...` 設定精確座標或大小，輔助對齊。
+
 ## 1.彩色影像轉灰階
 
 RGB 或多通道影像，需要先轉換為單一的灰階影像才能進行後續處理。
@@ -35,7 +44,7 @@ RGB 或多通道影像，需要先轉換為單一的灰階影像才能進行後�
     *   `Image > Color > Split Channels`：將多通道影像分離，以便選擇最佳通道。
 ---
 
-## 2.去雜訊
+## 2.降噪
 *   如果影像出現明顯隨機雜訊（如 salt-and-pepper、感光雜訊），應使用去噪處理。
 *   如果雜訊輕微或會影響細節邊緣，則略過此步驟或使用更小的模糊範圍（sigma 較小的 Gaussian）。
 
@@ -260,12 +269,22 @@ setBatchMode(false);
 ---
 
 ## 4.對比度增強/亮度均勻化
-當影像中細胞與背景的對比過低（灰階值接近），整體偏灰或對比低，邊界不明顯，導致難以分辨邊界，則使用對比增強方法讓目標的邊界更明顯。
+當影像中細胞與背景的對比過低（灰階值接近），整體偏灰或邊界模糊，將導致無法清楚分辨細胞輪廓。這時可以使用對比度增強的方法，使影像中目標物的邊界更清晰，提升後續分割或量測的效果。
 
-*   **ImageJ 操作：**
-    *   `Image > Adjust > Brightness/Contrast...`
-    *   `Process > Enhance Contrast...`
-    *   `Process › Enhance Local Contrast (CLAHE)`（區域自適應對比）
+#### 適用情境：
+- 細胞邊界灰階與背景差異小
+- 整體影像偏灰、不清楚
+- 邊緣不明顯，二值化後無法完整區分細胞
+
+
+#### ImageJ 操作：
+
+| 功能 | 操作路徑 | 說明 |
+|------|-----------|------|
+| **亮度/對比調整** | `Image > Adjust > Brightness/Contrast...` | 手動調整亮度與對比，適合預覽最佳視覺效果。 |
+| **對比度自動增強** | `Process > Enhance Contrast...` | 自動調整直方圖分布，提升對比。可勾選 Normalize 或 Equalize Histogram。 |
+| **Gamma 調整** | `Process > Math > Gamma...` | 調整影像的 Gamma 值，讓暗部或亮部更明顯。適用於全灰階影像。 |
+| **區域對比增強（CLAHE）** | `Process > Enhance Local Contrast (CLAHE)` | 局部自適應對比增強，適合處理光照不均、背景不平坦的影像。 |
 
 ### 調整亮度對比
 #### 產生實作影像
@@ -336,7 +355,20 @@ run("Select None");
 | **勾選 Equalize Histogram** | 非線性重排灰階值，使直方圖平坦化 | 是 | 強化局部細節與紋理，不適用於強度定量 |
 
 > **重要提示：** 在 `Enhance Contrast` 視窗中，任何調整（無論是否勾選選項）都只是預覽效果。只有當你點擊 `Apply` 按鈕時，影像的像素值才會被真正修改並儲存。
+### Gamma
 
+執行 `Gamma...` 時，會對影像中每個像素 `p` 套用以下公式：
+
+\[
+f(p) = \left( \frac{p}{255} \right)^\gamma \times 255
+\]
+
+- γ（Gamma）值範圍：0.1 ~ 5.0
+- 當 γ < 1：亮部拉升、暗部壓縮 → 強調暗區細節  
+- 當 γ > 1：亮部壓縮、暗部拉升 → 強調亮區細節  
+- 適用於 8-bit、16-bit 及 RGB 圖像  
+  - RGB 圖像會對三個色頻分別套用此轉換  
+  - 對 16-bit 影像則以影像的 min/max 值做標準化處理（非255）
 ### CLAHE
 對傳統 Histogram Equalization（HE，直方圖均衡） 的改進
 
@@ -546,168 +578,4 @@ Y 方向
 0 0 0
 -1 -2 -1
 ```
----
-
-## 6.門檻處理/分割
-*   **全局閾值 (Global Threshold):**
-    *    整張影像使用同一個閾值。
-    *   `Image > Adjust > Threshold...`。
-    *   `Image › Adjust › Auto Threshold`。
-*   **局部閾值 (Local Threshold):**
-    *   影像被分成小區域，每個區域計算自己的閾值。
-    *   適用於背景亮度不均勻。
-    *   `Image › Adjust › Auto Local Threshold`    
-
----
-
-## 7.形態學運算
-
-*   主要在二值影像上操作 (`Process > Binary > ...`)。
-*   `Process > Binary > Erode` 侵蝕: 縮小物件，去除毛刺。
-*   `Process > Binary > Dilate`膨脹: 擴大物件，填補內部小孔。
-*   `Process > Binary > Open` 開啟: 先侵蝕後膨脹，可斷開細微連接、去除小噪點。
-*   `Process > Binary > Close` 關閉: 先膨脹後侵蝕，可連接鄰近物件、填補內部孔洞。
-*   `Process > Binary > Skeletonize` 骨架化
-*   `Process > Binary > Watershed`分水嶺分割：用於分離相連或重疊的細胞。
-*   `Process > Binary > Distance Map`：距離變換 
-
-### 實作
-
-```ijm
-// 建立空白影像
-newImage("BinaryDemo", "8-bit black", 512, 512, 1);
-setForegroundColor(255, 255, 255);
-
-// ---------- 粗圓 + 毛刺 ----------
-for (i = 0; i < 3; i++) {
-    x = 80 + i * 60;
-    y = 80;
-    r = 25;
-    makeOval(x - r, y - r, r * 2, r * 2);
-    fill();
-}
-
-// 毛刺圓形
-centerX = 250;
-centerY = 80;
-nPoints = 36;
-xPoints = newArray(nPoints);
-yPoints = newArray(nPoints);
-for (i = 0; i < nPoints; i++) {
-    angle = 2 * PI * i / nPoints;
-    r = 25 + random() * 10;
-    xPoints[i] = centerX + r * cos(angle);
-    yPoints[i] = centerY + r * sin(angle);
-}
-makeSelection("polygon", xPoints, yPoints); fill();
-
-// ---------- 細線 ----------
-for (i = 0; i < 4; i++) {
-    y = 150 + i * 10;
-    makeLine(50, y, 200, y);
-    run("Draw", "slice");
-}
-
-// ---------- 貼邊形狀 ----------
-makeRectangle(0, 300, 60, 60); fill();
-makeRectangle(450, 300, 60, 60); fill();
-makeRectangle(200, 450, 100, 60); fill();
-
-// ---------- 破碎物件 ----------
-setColor(255, 255, 255);
-makeRectangle(300, 300, 20, 20); fill();
-makeRectangle(321, 300, 20, 20); fill();
-makeRectangle(342, 300, 20, 20); fill();
-makeRectangle(321, 321, 20, 20); fill();
-
-// ---------- 密集群圓 ----------
-x0 = 400;
-y0 = 400;
-r = 15;
-for (i = 0; i < 3; i++) {
-    for (j = 0; j < 3; j++) {
-        dx = x0 + i * 25;
-        dy = y0 + j * 25;
-        makeOval(dx - r, dy - r, r * 2, r * 2);
-        fill();
-    }
-}
-
-// 二值化
-run("Make Binary");
-
-```
-
-
-```ijm
-// 參數設定
-width = 512;
-height = 512;
-pointRadius = 3;
-
-// 建立空白影像
-newImage("Multi-Pattern Particles", "8-bit black", width, height, 1);
-setForegroundColor(255, 255, 255);
-
-// -------------------- 區域1：隨機分佈 --------------------
-nRandom = 50;
-for (i = 0; i < nRandom; i++) {
-    x = random()*160 + 10;    // 區域X: [10,170]
-    y = random()*160 + 10;    // 區域Y: [10,170]
-    makeOval(x - pointRadius, y - pointRadius, pointRadius*2, pointRadius*2);
-    fill();
-}
-
-// -------------------- 區域2：密集群聚 --------------------
-nClusters = 3;
-pointsPerCluster = 20;
-for (c = 0; c < nClusters; c++) {
-    cx = 200 + c * 30 + random()*10; // 區域X: 約在 200-300
-    cy = 60 + random()*60;
-    for (i = 0; i < pointsPerCluster; i++) {
-        dx = random()*20 - 10;
-        dy = random()*20 - 10;
-        x = cx + dx;
-        y = cy + dy;
-        makeOval(x - pointRadius, y - pointRadius, pointRadius*2, pointRadius*2);
-        fill();
-    }
-}
-
-// -------------------- 區域3：規則排列 --------------------
-for (i = 0; i < 6; i++) {
-    for (j = 0; j < 6; j++) {
-        x = 350 + i * 20;
-        y = 50 + j * 20;
-        makeOval(x - pointRadius, y - pointRadius, pointRadius*2, pointRadius*2);
-        fill();
-    }
-}
-
-// 完成後進行二值化
-run("Make Binary");
-
-```
----
-
-## 8.輪廓分析/分割
-*   `Analyze > Analyze Particles...`
-*   在二值影像上偵測獨立的物件 (粒子/細胞)。
-*   可設定大小 (Size) 和圓形度 (Circularity) 範圍來篩選目標。
-*   測量參數包括：面積 (Area)、中心點 (Centroid)、周長 (Perimeter)、圓形度、長短軸等。
-*   勾選 `Display results`, `Clear results`, `Summarize`, `Add to Manager` 等選項控制輸出。
-
----
-
-## 9.輸出數據
-*   分析結果顯示在 ImageJ 的 `Results Table` 中。
-*   可將表格 `File > Save As...` 匯出成 `.csv` 或 `.txt` 文件，以便後續使用 Excel, Python (Pandas), R 等工具進行統計分析和繪圖。
-
-## 幾何轉換
-
-*   **旋轉：** `Image > Transform > Rotate...`
-*   **縮放：** `Image > Transform > Scale...`
-*   **翻轉：** `Image > Transform > Flip Horizontally / Flip Vertically`
-*   **精確對齊：** 使用 ROI 工具選取參考區域，再用 `Edit > Selection > Specify...` 設定精確座標或大小，輔助對齊。
-
 ---
