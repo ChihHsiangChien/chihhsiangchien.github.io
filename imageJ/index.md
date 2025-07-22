@@ -16,8 +16,7 @@
 - [影像分割](segmentation.md)
 - [形態學處理](morphology.md)
 - [特徵擷取](feature-extraction.md)
-- [TrackMate](trackmate.md)
-- [時序動態分析](time-series.md)
+
 
 # 案例介紹：分析胚胎
 - [多目標測量：Roi manager與形態學分析](embryo-analysis.md)
@@ -31,6 +30,8 @@
 
 
 # 進階
+- [TrackMate](trackmate.md)
+- [時序動態分析](time-series.md)
 - [批次處理基礎](batch-processing.md)
 - [自動化與巨集程式設計](automation-and-macro.md)
 - [Python整合指南](python-integration.md)
