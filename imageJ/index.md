@@ -20,16 +20,15 @@
 - [時序動態分析](time-series.md)
 
 # 案例介紹：分析胚胎
-- [多目標測量：ROI管理器與形態學分析](embryo-analysis.md)
+- [多目標測量：Roi manager與形態學分析](embryo-analysis.md)
 
 # 案例介紹：分析螢光影像
 - [螢光強度定量：分析細胞核/質的訊號分佈](fluorescence-quantification.md)
 
 # 案例介紹：分析大腦
-- [進行 MRI 影像分割：分離頭骨與腦組織](mri-segmentation.md)
-- [影像紋理分析：大腦紋理](image-texture.md)
-- [進階分割：腦組織的細部分割 (灰質、白質、腦脊髓液)](mri-tissue-segmentation.md)
-- [3D 形態學分析：量化大腦的表面積與複雜度](mri-3d-morphometry.md)
+- [影像紋理分析大腦紋理](image-texture.md)
+- [機器學習分割與體積、表面積分析](mri-segmentation.md)
+
 
 # 進階
 - [批次處理基礎](batch-processing.md)
