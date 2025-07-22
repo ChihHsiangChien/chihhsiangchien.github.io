@@ -15,23 +15,33 @@
 <div class="toc">
 <ul>
 <li><a href="#t1-headertif-mri">使用 t1-header.tif 進行 MRI 影像分割：分離頭骨與腦組織</a><ul>
-<li><a href="#1">1. 案例介紹與準備工作</a><ul>
+<li><a href="#_1">案例介紹與準備工作</a><ul>
 <li><a href="#t1-headertif">認識範例影像 t1-header.tif</a></li>
-<li><a href="#_1">分析目標</a></li>
 <li><a href="#_2">操作前的建議</a></li>
 </ul>
 </li>
-<li><a href="#2-brain-extraction-skull-stripping">2. 步驟一：分離腦組織 (Brain Extraction / Skull Stripping)</a><ul>
-<li><a href="#_3">方法一：基於閾值的分割 (快速但可能不準確)</a></li>
-<li><a href="#_4">方法二：使用機器學習進行分割 (更穩健、推薦)</a></li>
+<li><a href="#_3">步驟一：分離腦組織</a><ul>
+<li><a href="#_4">使用機器學習進行分割</a></li>
 </ul>
 </li>
-<li><a href="#3-skull-segmentation">3. 步驟二：分離頭骨 (Skull Segmentation)</a></li>
-<li><a href="#4-3d">4. 步驟三：3D 視覺化呈現</a></li>
-<li><a href="#5">5. 結論與後續分析</a></li>
-<li><a href="#6-volume-quantification">6. 定量分析：計算體積 (Volume Quantification)</a><ul>
+<li><a href="#skull-segmentation">步驟二：分離頭骨 (Skull Segmentation)</a></li>
+<li><a href="#3d">步驟三：3D 視覺化呈現</a></li>
+<li><a href="#volume-quantification">定量分析：計算體積 (Volume Quantification)</a><ul>
 <li><a href="#_5">計算原理</a></li>
 <li><a href="#_6">操作步驟</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#3d_1">3D 形態學分析：量化大腦的表面積與複雜度</a><ul>
+<li><a href="#_8">分析目標與理論背景</a><ul>
+<li><a href="#sphericity">球形度 (Sphericity)</a></li>
+</ul>
+</li>
+<li><a href="#_9">操作步驟</a><ul>
+<li><a href="#3d_2">準備 3D 遮罩</a></li>
+<li><a href="#3d-object-counter">使用 3D Object Counter 進行分析</a></li>
+<li><a href="#_10">結果</a></li>
 </ul>
 </li>
 </ul>
@@ -44,8 +54,7 @@
 <div id="content">
 <h1 id="t1-headertif-mri">使用 t1-header.tif 進行 MRI 影像分割：分離頭骨與腦組織</h1>
 <p>本章節將以 <code>t1-header.tif</code> 這組 T1 加權的腦部 MRI 影像為範例，學習如何使用 ImageJ/Fiji 進行基礎的影像分割，將感興趣的解剖結構，如腦組織（Brain）和頭骨（Skull），分離出來，並進行 3D 視覺化呈現。</p>
-<p>這項技術是醫學影像分析的基礎，對於體積計算、形態學研究和手術規劃至關重要。</p>
-<h2 id="1">1. 案例介紹與準備工作</h2>
+<h2 id="_1">案例介紹與準備工作</h2>
 <h3 id="t1-headertif">認識範例影像 <code>t1-header.tif</code></h3>
 <p>這是一套包含 129 張連續切片的 T1 加權 MRI 影像堆疊（Image Stack）。</p>
 <ul>
@@ -56,12 +65,6 @@
 </ul>
 </li>
 </ul>
-<h3 id="_1">分析目標</h3>
-<ol>
-<li>從影像中分離出<strong>腦組織</strong>。</li>
-<li>分離出<strong>頭骨</strong>結構。</li>
-<li>將分離出的結構進行 <strong>3D 視覺化</strong>。</li>
-</ol>
 <h3 id="_2">操作前的建議</h3>
 <ol>
 <li><strong>開啟影像：</strong> 直接將 <code>t1-header.tif</code> 檔案拖曳至 Fiji/ImageJ 視窗，或使用 <code>File &gt; Open...</code>。</li>
@@ -70,64 +73,29 @@
 <li>執行 <code>Image &gt; Stacks &gt; Orthogonal Views</code> 可以同時從三個正交平面（橫斷面、冠狀面、矢狀面）觀察影像，這對於理解 3D 結構非常有幫助。</li>
 </ul>
 </li>
+<li>使用工具觀察這種有z stack的影像，例如<code>Plugins &gt; 3D viewer</code>或是 <code>Plugints &gt; Volumln Viewer</code></li>
 </ol>
-<h2 id="2-brain-extraction-skull-stripping">2. 步驟一：分離腦組織 (Brain Extraction / Skull Stripping)</h2>
-<h3 id="_3">方法一：基於閾值的分割 (快速但可能不準確)</h3>
-<p>我們的第一個目標是建立一個只包含腦組織的<strong>二值化遮罩 (Binary Mask)</strong>。</p>
-<ol>
-<li>
-<p><strong>影像複製與轉換：</strong></p>
-<ul>
-<li>為保留原始數據，先複製一份影像：<code>Image &gt; Duplicate...</code>，並將新影像命名為 <code>Brain Mask</code>。</li>
-<li>請先轉換為8-bit影像：<code>Image &gt; Type &gt; 8-bit</code>。</li>
-</ul>
-</li>
-<li>
-<p><strong>閾值分割 (Thresholding)：</strong></p>
-<ul>
-<li>在 <code>Brain Mask</code> 視窗上，執行 <code>Image &gt; Adjust &gt; Threshold...</code> (<code>Ctrl+Shift+T</code>)。</li>
-<li><strong>手動調整閾值：</strong> 拖動下方滑桿，目標是讓腦組織（腦灰質與白質）被完整選取（顯示為紅色），同時盡可能排除周圍的腦脊髓液和頭骨。您會發現一個介於 30-140 左右的範圍可能是一個不錯的起點。</li>
-<li>點擊 <code>Apply</code>，將影像轉換為黑白的二值化影像。</li>
-</ul>
-</li>
-<li>
-<p><strong>形態學後處理 (Post-processing)：</strong></p>
-<ul>
-<li>此時的遮罩可能不完美，包含雜訊或空洞。我們用形態學操作來清理它。</li>
-<li><strong>填補空洞：</strong> <code>Process &gt; Binary &gt; Fill Holes</code>。此步驟會填滿腦組織內部因對比度差異產生的小洞（如心室）。</li>
-<li><strong>去除雜訊：</strong> <code>Process &gt; Binary &gt; Open</code>。此步驟可以移除一些與主體不相連的微小亮點雜訊。</li>
-</ul>
-</li>
-<li>
-<p><strong>選取最大物件：</strong></p>
-<ul>
-<li>經過處理後，影像中最大的連通區域應該就是腦部。我們使用粒子分析來分離它。</li>
-<li>執行 <code>Analyze &gt; Analyze Particles...</code>。</li>
-<li>設定 <code>Size (pixel^2)</code> 為一個較大的值，例如 <code>5000-Infinity</code>，以確保只選取到腦部。</li>
-<li>在 <code>Show</code> 下拉選單中選擇 <code>Masks</code>。</li>
-<li>勾選 <code>Display results</code> 和 <code>Clear results</code>。</li>
-<li>點擊 <code>OK</code>。ImageJ 會產生一張新的遮罩影像，上面只剩下我們需要的腦組織遮罩。這就是最終的 <code>Brain Mask</code>。</li>
-</ul>
-</li>
-</ol>
-<h3 id="_4">方法二：使用機器學習進行分割 (更穩健、推薦)</h3>
-<p>當腦組織和頭骨的灰階強度非常相似時，單純的閾值分割會失敗。此時，我們應該使用 Fiji 內建的 <strong>Trainable Weka Segmentation</strong> 插件，它不僅依賴灰階值，還能學習紋理、邊緣等特徵，分割效果更佳。</p>
+<h2 id="_3">步驟一：分離腦組織</h2>
+<p>我們的目標是建立一個只包含腦組織的<strong>二值化遮罩 (Binary Mask)</strong>，你可以先用之前學過的<code>Image &gt; Adjust &gt; Threshold...</code>進行處理，目標是讓腦組織（腦灰質與白質）被完整選取，同時盡可能排除周圍的腦脊髓液和頭骨。如果需要可以再後續用形態學處理來清理空洞與雜訊。</p>
+<p>除了上述手動方法外，我們將利用機器學習來進行分割。</p>
+<h3 id="_4">使用機器學習進行分割</h3>
+<p>當腦組織和頭骨的灰階強度非常相似時，單純的閾值分割會失敗。此時，可以用 Fiji 內建的 <strong>Trainable Weka Segmentation</strong> ，它不僅只靠灰階值，還能學習紋理、邊緣等特徵，分割效果更佳。</p>
 <ol>
 <li>
 <p><strong>開啟插件與設定：</strong></p>
 <ul>
-<li>開啟原始的 <code>t1-header.tif</code> 影像。</li>
+<li>開啟的 <code>t1-header.tif</code> 影像。</li>
 <li>執行 <code>Plugins &gt; Segmentation &gt; Trainable Weka Segmentation</code>。</li>
 <li>在 Weka 視窗中，點擊 <code>Settings</code>，確認 <code>Training features</code> 中的選項（預設即可）。</li>
-<li>點擊 <code>Create new class</code> 建立三個類別，並分別命名為 <code>Brain</code>, <code>Skull</code>, <code>Background</code>。</li>
+<li>點擊 <code>Create new class</code> 建立三個類別，並分別命名為 <code>Brain</code>, <code>Other</code>, <code>Background</code>。</li>
 </ul>
 </li>
 <li>
 <p><strong>提供訓練樣本 (Training)：</strong></p>
 <ul>
-<li><strong>標記 Brain:</strong> 在 Weka 視窗中選中 <code>Brain</code> 類別。使用 <strong>手繪選取工具 (Freehand selection)</strong>，在影像的腦組織區域畫幾個小圈，每畫一個就點擊 <code>Add to class 'Brain'</code> 按鈕。<strong>技巧：</strong> 請在不同的腦區（灰質、白質）和不同的 Z-slice 上都提供樣本。</li>
-<li><strong>標記 Skull:</strong> 選中 <code>Skull</code> 類別，在頭骨的亮色區域畫圈並加入。</li>
-<li><strong>標記 Background:</strong> 選中 <code>Background</code> 類別，在腦外的黑色區域（包括腦脊髓液和影像背景）畫圈並加入。</li>
+<li><strong>標記 Brain:</strong> 在 Weka 視窗中選中 <code>Brain</code> 類別。使用 <strong>選取工具</strong>，在影像的腦組織區域畫幾個小圈，每畫一個就點擊 <code>Add to class 'Brain'</code> 按鈕。<strong>技巧：</strong> 請在不同的腦區（灰質、白質）和不同的 Z-slice 上都提供樣本。</li>
+<li><strong>標記 Other:</strong> 選中 <code>Skull</code> 類別，在頭骨的亮色區域畫圈並加入。</li>
+<li><strong>標記 Background:</strong> 選中 <code>Background</code> 類別，在腦外的黑色區域畫圈並加入。</li>
 </ul>
 </li>
 <li>
@@ -147,8 +115,7 @@
 </li>
 </ol>
 <hr />
-<p><strong>註：</strong> 接下來分離頭骨的步驟，無論您使用方法一或方法二得到的 <code>Brain Mask</code>，操作流程都是一樣的。</p>
-<h2 id="3-skull-segmentation">3. 步驟二：分離頭骨 (Skull Segmentation)</h2>
+<h2 id="skull-segmentation">步驟二：分離頭骨 (Skull Segmentation)</h2>
 <p>分離頭骨的邏輯很簡單：<strong>頭骨 = 整個頭部 - 腦組織</strong>。</p>
 <ol>
 <li>
@@ -180,7 +147,7 @@
 </ul>
 </li>
 </ol>
-<h2 id="4-3d">4. 步驟三：3D 視覺化呈現</h2>
+<h2 id="3d">步驟三：3D 視覺化呈現</h2>
 <p>現在我們有了各自獨立的 <code>Brain Mask</code> 和 <code>Skull Mask</code>，可以使用 3D Viewer 將它們視覺化。</p>
 <ol>
 <li>
@@ -215,45 +182,36 @@
 </li>
 </ol>
 <p>現在，您應該可以在 3D Viewer 中看到半透明的頭骨包覆著腦組織的立體模型。您可以用滑鼠自由地旋轉和縮放，從不同角度觀察這些結構。</p>
-<h2 id="5">5. 結論與後續分析</h2>
-<p>透過本教學，我們學習了一套標準的醫學影像分割流程：</p>
-<ol>
-<li><strong>閾值分割</strong>：利用灰階值差異分離主要結構。</li>
-<li><strong>形態學處理</strong>：清理並優化分割結果。</li>
-<li><strong>影像運算</strong>：透過遮罩間的加減來分離複雜結構。</li>
-<li><strong>3D 視覺化</strong>：將分割結果以立體模型呈現。</li>
-</ol>
-<p>這些產生的遮罩（Masks）不僅可用於視覺化，更是定量分析的基礎。例如，您可以對 <code>Brain Mask</code> 影像堆疊執行 <code>Analyze &gt; Histogram</code>，並將 <code>Count</code>（像素數）乘以每個體素（Voxel）的體積，就可以估算出總腦容量。</p>
-<h2 id="6-volume-quantification">6. 定量分析：計算體積 (Volume Quantification)</h2>
-<p>得到腦組織和頭骨的遮罩後，最直接的應用之一就是計算它們的體積。這在臨床診斷和形態學研究中至關重要。</p>
+<p>這些產生的遮罩（Masks）不僅可用於視覺化，也可以進行定量分析。例如對 <code>Brain Mask</code> 影像堆疊執行 <code>Analyze &gt; Histogram</code>，並將 <code>Count</code>（像素數）乘以每個體素（Voxel）的體積，就可以估算出總腦容量。</p>
+<h2 id="volume-quantification">定量分析：計算體積 (Volume Quantification)</h2>
 <h3 id="_5">計算原理</h3>
-<p>體積計算的邏輯非常簡單：</p>
+<p>體積計算的邏輯是：</p>
 <p><strong>總體積 = 體素(Voxel)的總數量 × 單一體素的體積</strong></p>
 <ul>
 <li><strong>體素 (Voxel):</strong> 可以理解為 3D 空間中的一個像素點，它具有長、寬、高。</li>
 <li><strong>體素總數量:</strong> 在我們的二值化遮罩（如 <code>Brain Mask</code>）中，這就是所有白色像素的總和。</li>
 <li><strong>單一體素的體積:</strong> 這需要我們對影像進行空間校正，定義每個體素的真實物理尺寸。</li>
 </ul>
-<p>根據此 MRI 數據集的官方資訊，其體素尺寸為 <strong>1 mm × 1 mm × 1.33 mm</strong>。</p>
+<p>根據此 MRI 數據集的<code>Image &gt; Properties...</code>，其體素尺寸為 <strong>1.5 mm × 1.5 mm × 1.5 mm</strong>。</p>
 <h3 id="_6">操作步驟</h3>
-<p>我們將以計算 <strong>腦組織體積</strong> 為例。計算頭骨體積的步驟完全相同，只需將操作對象換成 <code>Skull Mask</code> 即可。</p>
-<h4 id="61-set-scale">步驟 6.1: 設定空間校正 (Set Scale)</h4>
+<p>我們將以計算 <strong>腦組織體積</strong> 為例。。</p>
+<h4 id="set-scale">設定空間校正 (Set Scale)</h4>
 <p>在進行任何測量之前，必須先讓 ImageJ 知道影像的真實尺度。</p>
 <ol>
 <li>選取 <code>Brain Mask</code> 或任何一張原始影像堆疊。</li>
 <li>執行 <code>Image &gt; Properties...</code> (快捷鍵 <code>Ctrl+Shift+P</code>)。</li>
 <li>在彈出的對話框中，填入已知的體素尺寸：<ul>
 <li><code>Unit of length</code>: <strong>mm</strong></li>
-<li><code>Pixel width</code>: <strong>1.0</strong></li>
-<li><code>Pixel height</code>: <strong>1.0</strong></li>
-<li><code>Voxel depth</code>: <strong>1.33</strong> (這是 Z 軸的尺寸，即切片厚度)</li>
+<li><code>Pixel width</code>: <strong>1.5</strong></li>
+<li><code>Pixel height</code>: <strong>1.5</strong></li>
+<li><code>Voxel depth</code>: <strong>1.5</strong> (這是 Z 軸的尺寸，即切片厚度)</li>
 </ul>
 </li>
 <li>勾選 <code>Global</code>，這樣此設定會應用到所有開啟的影像。</li>
 <li>點擊 <code>OK</code>。</li>
 </ol>
 <p>完成後，影像視窗的標題會顯示校正後的尺寸。</p>
-<h4 id="62">步驟 6.2: 計算體素總數並獲得體積</h4>
+<h4 id="_7">計算體素總數並獲得體積</h4>
 <p>有兩種推薦的方法可以得到體積。</p>
 <p><strong>方法 A：使用直方圖 (Histogram)</strong></p>
 <p>此方法讓您了解背後的計算過程。</p>
@@ -261,13 +219,7 @@
 <li>選取 <code>Brain Mask</code> 影像堆疊。</li>
 <li>執行 <code>Analyze &gt; Histogram</code> (快捷鍵 <code>Ctrl+H</code>)。</li>
 <li>在彈出的 Histogram 視窗中，您會看到一個表格。由於這是二值化影像，只有兩個值：0 (黑色背景) 和 255 (白色前景)。</li>
-<li>找到 <code>Value</code> 為 <strong>255</strong> 的那一列，其對應的 <code>Count</code> 值就是白色體素的總數量。例如，我們得到 <code>Count = 1075345</code>。</li>
-<li><strong>手動計算體積：</strong><ul>
-<li>單一體素體積 = 1.0 mm × 1.0 mm × 1.33 mm = 1.33 mm³</li>
-<li>總腦體積 = <code>1075345</code> (體素總數) × <code>1.33</code> mm³ ≈ <code>1,430,208</code> mm³</li>
-<li>我們也可以換算成更常用的單位： <strong>1,430.2 cm³</strong> (因為 1 cm³ = 1000 mm³)。</li>
-</ul>
-</li>
+<li>找到 <code>Value</code> 為 <strong>255</strong> 的那一列，其對應的 <code>Count</code> 值就是白色體素的總數量，將這個數字與單一體素體積相乘，就可以得到腦的體積。</li>
 </ol>
 <p><strong>方法 B：使用 3D 物件計數器 (3D Object Counter) (更直接)</strong></p>
 <p>Fiji 內建的強大 3D 分析工具可以直接給出校正後的體積。</p>
@@ -279,7 +231,43 @@
 <li>點擊 <code>OK</code>。</li>
 <li>在彈出的 "3D Results" 表格中，<code>Volume</code> 欄位直接顯示了計算好的體積（單位為 mm³），並且 <code>Voxels</code> 欄位顯示了體素總數，與直方圖方法得到的結果一致。</li>
 </ol>
-<p>使用相同的方法操作 <code>Skull Mask</code>，您就可以得到頭骨的體積了。</p>
+<h1 id="3d_1">3D 形態學分析：量化大腦的表面積與複雜度</h1>
+<p>我們已經學會了如何從 MRI 影像中分割出大腦並計算其<strong>體積</strong>。然而，體積只是描述一個三維物體最基礎的參數。大腦最顯著的特徵之一是其表面佈滿了複雜的溝（Sulci）與迴（Gyri），這極大地增加了其表面積。</p>
+<p>使用 ImageJ/Fiji 來測量更進階的 <strong>3D 形態學 (Morphometry)</strong> 參數，如<strong>表面積 (Surface Area)</strong> 和<strong>球形度 (Sphericity)</strong>，從而量化大腦的結構複雜度。</p>
+<h2 id="_8">分析目標與理論背景</h2>
+<h3 id="sphericity">球形度 (Sphericity)</h3>
+<p><strong>球形度</strong>是一個用來描述物體形狀有多麼接近完美球體的無因次參數。其值範圍在 0 到 1 之間：
+-   <strong>值為 1：</strong> 表示物體是一個完美的球體。
+-   <strong>值越接近 0：</strong> 表示物體形狀越不規則、越扁平或越細長。</p>
+<p>其計算公式為：</p>
+<p><code>Sphericity = (π^(1/3) * (6 * Volume)^(2/3)) / Surface Area</code></p>
+<p>從公式可以看出，在<strong>體積 (Volume) 相同</strong>的情況下，<strong>表面積 (Surface Area) 越大</strong>的物體，其<strong>球形度就越低</strong>。對於大腦而言，複雜的溝迴結構使其在有限的顱腔體積內容納了巨大的皮層表面積，因此其球形度會遠低於一個同樣體積的光滑球體。</p>
+<h2 id="_9">操作步驟</h2>
+<h3 id="3d_2">準備 3D 遮罩</h3>
+<p>使用在<code>Brain Mask</code> 作為分析對象。</p>
+<ol>
+<li>開啟 <code>t1-header.tif</code> 影像並依照先前教學產生 <code>Brain Mask</code> 影像堆疊。</li>
+<li>觀察<strong>空間校正：</strong> ：影像已經過空間校正 (<code>Image &gt; Properties...</code>，體素尺寸為 1.5 x 1.5 x 1.5 mm)。這一步對於計算真實的物理表面積和體積至關重要。</li>
+</ol>
+<h3 id="3d-object-counter">使用 3D Object Counter 進行分析</h3>
+<ol>
+<li>選取 <code>Brain Mask</code> 影像堆疊。</li>
+<li>執行 <code>Analyze &gt; 3D Object Counter</code>。</li>
+<li><strong>參數設定：</strong><ul>
+<li><code>Threshold</code>: 設為一個介於 1-255 的值（例如 128），以確保只計算白色物件。</li>
+<li><code>Min. Voxel</code>: 設為一個較大的值（如 1000），以過濾掉可能的微小雜訊。</li>
+<li>確保 <code>Volumes</code> 和 <code>Surface areas</code> 這兩個選項都被勾選。</li>
+</ul>
+</li>
+<li>點擊 <code>OK</code>。</li>
+</ol>
+<h3 id="_10">結果</h3>
+<p>分析完成後，會彈出一個 "3D Results" 表格。</p>
+<ul>
+<li><strong><code>Volume [mm^3]</code>:</strong> 這就是我們之前計算過的大腦體積。</li>
+<li><strong><code>Surface [mm^2]</code>:</strong> 這就是大腦的總表面積。</li>
+</ul>
+<p>使用這兩個值，代入公式計算大腦的球形度。</p>
 </div>
 
 <!-- Mermaid JS -->
