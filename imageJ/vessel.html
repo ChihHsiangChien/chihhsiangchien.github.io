@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>vessel</title>
+<link rel="stylesheet" href="styles.css">
+<!-- KaTeX CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" integrity="sha384-wcIxkf4k558AjM3Yz3BBFQUbk/zgIYC2R0QpeeYb+TwlBVMrlgLqwRjRtGZiK7ww" crossorigin="anonymous">
+</head>
+<body>
+
+<div id="toc">
+<h2><a href="index.html">回到首頁</a></h2>
+<div class="toc-container">
+<div class="toc">
+<ul>
+<li><a href="#_1">血管計算</a><ul>
+<li><a href="#_2">生成範例圖片</a></li>
+</ul>
+</li>
+</ul>
+</div>
+
+</div>
+</div>
+<div id="content">
+<h1 id="_1">血管計算</h1>
+<h2 id="_2">生成範例圖片</h2>
+<ol>
+<li>針對範例圖片，先轉成8-bit影像。</li>
+<li>對血管輪廓進行骨架化處理，執行<code>Plugins › Skeleton › Skeletonize (2D/3D)</code></li>
+<li>分析骨架並顯示結果 <code>Analyze › Skeleton › Analyze Skeleton (2D/3D)</code>，勾選<code>Show detailed info</code></li>
+<li>將結果加總對照程式估計的長度。</li>
+</ol>
+<pre><code class="language-ijm">// ==== 使用者可調參數 ====
+totalTargetLength = 300;       // 目標總長度（像素）
+maxDepth = 8;                  // 分支深度（越大分支越多）
+angleVariation = 80;           // 分支角度變化範圍（度）
+branchRatio = 0.7;             // 分支長度縮短比例
+
+// ==== 隨機控制開關 ====
+enableRandomness = false;       // 全域隨機控制開關
+enableRandomAngle = false;      // 啟用隨機角度？
+enableRandomLength = true;     // 啟用隨機長度？
+
+
+
+// ==== 畫樹狀分支函數 ====
+function drawBranch(x, y, angleDeg, length, depth) {
+  if (depth == 0) return 0;
+
+  if (totalDrawnLength + length &gt; totalTargetLength)
+    length = totalTargetLength - totalDrawnLength;
+  if (length &lt;= 0) return 0;
+
+  angleRad = angleDeg * PI / 180;
+
+  // 計算終點
+  x2 = x + cos(angleRad) * length;
+  y2 = y + sin(angleRad) * length;
+
+  // 分支寬度隨深度調整
+  maxRadius = 8;
+  baseRadius = maxRadius * (depth / maxDepth);
+  radius = baseRadius;
+  if (enableRandomness &amp;&amp; enableRandomLength)
+    radius *= 0.8 + 0.4 * random();  // 半徑加入隨機變異
+  if (radius &lt; 1) radius = 1;
+
+  // 繪製分支：使用小圓點堆疊形成粗線
+  steps = floor(length);
+  for (i = 0; i &lt;= steps; i++) {
+    px = x + cos(angleRad) * i ;
+    py = y + sin(angleRad) * i ;
+    makeOval(px - radius / 2, py - radius / 2, radius, radius);
+    run(&quot;Fill&quot;);
+  }
+
+  totalDrawnLength += length;
+
+  // 新分支長度與角度變化
+  newLength = length * branchRatio;
+  if (enableRandomness &amp;&amp; enableRandomLength)
+    newLength *= 0.8 + 0.4 * random();
+
+  delta = angleVariation;
+  if (enableRandomness &amp;&amp; enableRandomAngle)
+    delta *= (random() * 2 - 1);  // 在 ±angleVariation 範圍內隨機
+
+  // 遞迴分支（左右）
+  currentBranchLength = 0;
+  if (!enableRandomness || random() &lt; 0.8)
+    currentBranchLength = currentBranchLength + drawBranch(x2, y2, angleDeg - delta, newLength, depth - 1);
+  if (!enableRandomness || random() &lt; 0.8)
+    currentBranchLength = currentBranchLength + drawBranch(x2, y2, angleDeg + delta, newLength, depth - 1);
+
+  return length + currentBranchLength;
+}
+
+
+
+// ==== 建立畫布 ====
+width = 512;
+height = 512;
+newImage(&quot;Vessel Tree&quot;, &quot;RGB black&quot;, width, height, 1);
+setColor(255, 255, 255);
+run(&quot;Line Width...&quot;, &quot;line=3&quot;);
+
+// ==== 全域變數 ====
+totalDrawnLength = 0;
+
+// ==== 主程式 ====
+setBatchMode(&quot;hide&quot;);
+setBatchMode(true); 
+
+startX = width / 2;
+startY = height - 10;
+initialLength = totalTargetLength / 3.0;
+
+print(&quot;開始繪製樹狀血管樹...&quot;);
+totalDrawnLength = drawBranch(startX, startY, -90, initialLength, maxDepth);
+setBatchMode(false); 
+print(&quot;估計總長度（程式計算）: &quot; + totalDrawnLength);
+
+//run(&quot;8-bit&quot;); // 確保影像為8位元格式
+//run(&quot;Skeletonize (2D/3D)&quot;); // 對血管輪廓進行骨架化處理
+//run(&quot;Analyze Skeleton (2D/3D)&quot;, &quot;prune=none show display&quot;); // 分析骨架並顯示結果，包括總長度
+
+
+
+</code></pre>
+</div>
+
+<!-- Mermaid JS -->
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({}); // Keep double braces for literal JS object
+  mermaid.run({ nodes: document.querySelectorAll('.language-mermaid') }); // Keep double braces
+</script>
+
+<!-- KaTeX JS -->
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoBPJpTUs74ddyc4bFZSM1TVlQDA60VBbJS0oA934VSz82sBx1X7kSx2ATBDIyd" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk" crossorigin="anonymous"></script>
+<!-- *** CORRECTED SCRIPT WITH ${...} ESCAPING *** -->
+        <script>
+            document.addEventListener("DOMContentLoaded", function() {
+                renderMathInElement(document.body, {
+                    delimiters: [
+                        { left: '$$',  right: '$$',  display: true },
+                        { left: '\\[', right: '\\]', display: true },
+                        { left: '\\(', right: '\\)', display: false }
+                    ],
+                    ignoredTags: ['script','noscript','style','textarea','pre','code'],
+                    throwOnError: false
+                });
+            });
+        </script>
+
+</body>
+</html>
