@@ -1,7 +1,12 @@
-# 血管計算
+# 管長計算
+## 
+1. 開啟`File › Open Samples › Bat Cochlea Volume`蝙蝠耳蝸當成範例，這是一個已經二值化的影像。
+2. 執行`Image › Stacks › 3D Project...`或是 `Plugins › 3D Viewer` 觀察其立體結構。
+3. 對二值化影像輪廓進行骨架化處理，執行` Plugins › Skeleton › Skeletonize (2D/3D)`
+3. 分析骨架並顯示結果 ` Analyze › Skeleton › Analyze Skeleton (2D/3D)`，勾選`Show detailed info`
 
 ## 生成範例圖片 
-
+0. 執行以下macro，此範例會生成一個碎形樹，並產生程式預估的長度(繪製時就量測，可當作標準答案)。
 1. 針對範例圖片，先轉成8-bit影像。
 2. 對血管輪廓進行骨架化處理，執行` Plugins › Skeleton › Skeletonize (2D/3D)`
 3. 分析骨架並顯示結果 ` Analyze › Skeleton › Analyze Skeleton (2D/3D)`，勾選`Show detailed info`

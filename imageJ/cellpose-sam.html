@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>cellpose-sam</title>
+<link rel="stylesheet" href="styles.css">
+<!-- KaTeX CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" integrity="sha384-wcIxkf4k558AjM3Yz3BBFQUbk/zgIYC2R0QpeeYb+TwlBVMrlgLqwRjRtGZiK7ww" crossorigin="anonymous">
+</head>
+<body>
+
+<div id="toc">
+<h2><a href="index.html">回到首頁</a></h2>
+<div class="toc-container">
+<div class="toc">
+<ul>
+<li><a href="#cellpose-sam">Cellpose-SAM</a><ul>
+<li><a href="#_1">使用方式</a></li>
+<li><a href="#_2">核心設計與優勢</a></li>
+<li><a href="#robust">訓練資料與穩健性(robust)</a></li>
+</ul>
+</li>
+</ul>
+</div>
+
+</div>
+</div>
+<div id="content">
+<h1 id="cellpose-sam">Cellpose-SAM</h1>
+<ul>
+<li>Cellpose-SAM 是一個專為<strong>細胞分割</strong>而設計的深度學習模型，其目標是實現超人類的泛化能力(superhuman Generalization)，使其在各種生物學資料上都能表現出色，即使面對新的實驗、組織或顯微鏡類型所產生的分佈外 (out-of-distribution) 資料也能有效運作。</li>
+<li>結合了預訓練的 <strong>Segment Anything Model (SAM)</strong>的強大學習能力與 <strong>Cellpose架構</strong>中將知識轉換為分割的優勢。</li>
+</ul>
+<h2 id="_1">使用方式</h2>
+<p>Cellpose-SAM的使用方式包含以下幾種</p>
+<ul>
+<li>使用<a href="https://www.cellpose.org/">Cellpose</a>的官方網站，上傳檔案進行分割</li>
+<li>使用 <a href="https://huggingface.co/spaces/mouseland/cellpose">hugging face</a>來進行分割</li>
+<li>如果本機電腦有GPU，也可以到<a href="https://github.com/MouseLand/cellpose">github</a>下載安裝本機，利用python環境執行。</li>
+<li>也可以在colab環境運行，但需要購買運算單元才有GPU可以用。Cellpose-SAM的<a href="https://github.com/MouseLand/cellpose">github</a>有提供colab範例。</li>
+</ul>
+<p>執行後下載<strong>mask</strong>或<strong>outlines</strong>回到本機電腦，在fiji/imagej載入進行分析。</p>
+<h2 id="_2">核心設計與優勢</h2>
+<p>Cellpose-SAM 的設計結合了兩個強大框架的優點：</p>
+<ul>
+<li>基礎模型 SAM 的通用影像理解能力：<ul>
+<li>Cellpose-SAM 利用了預訓練的 Segment Anything Model (SAM) 的變壓器骨幹。SAM 在一個龐大的通用影像資料集 SA-1B 上進行了預訓練，該資料集包含 300,000 張影像和 10.2 百萬個手動標註的感興趣區域 (ROIs)。</li>
+<li>這種預訓練讓 SAM 學習到自然影像的通用結構和強大的歸納偏置 (inductive biases)。這些歸納偏置對於分佈外泛化特別有益，尤其是在僅用有限資料進行微調時，使得模型能夠「理解」其被要求執行的任務。</li>
+<li>為了適應生物影像，Cellpose-SAM 對 SAM 的編碼器進行了修改，例如將輸入影像尺寸從 1024x1024 縮減到 256x256，並將 patch 大小從 16x16 縮小到 8x8，同時將局部注意力層改回全局注意力。</li>
+</ul>
+</li>
+<li>Cellpose 框架在生物分割上的專長：<ul>
+<li>Cellpose-SAM 結合了 SAM 強大的影像編碼器與 Cellpose 框架的獨特優勢。儘管 SAM 提供了卓越的影像編碼能力，但它在密集影像分割方面存在設計上的弱點。</li>
+<li>Cellpose 框架擅長將知識轉化為精確的分割結果。它使用一個 U-Net 類神經網路來預測向量流（flow vectors），作為分割的中間表示。這種機制被證明比其他如基於提示 (prompt-based) 的分割框架更適合生物分割任務，並且在從知識到實際分割結果的轉換方面表現出色。Cellpose-SAM 直接從 SAM 編碼器的輸出預測 Cellpose 的向量流場，捨棄了 SAM 的解碼器模組，從而簡化了密集分割的流程。</li>
+</ul>
+</li>
+</ul>
+<h2 id="robust">訓練資料與穩健性(robust)</h2>
+<p>Cellpose-SAM 的訓練策略旨在最大化其泛化能力和對現實世界影像變異的穩健性：</p>
+<ul>
+<li>綜合性生物影像資料集：<ul>
+<li>在以 SAM 預訓練權重初始化的基礎上，Cellpose-SAM 在一個更新且整合的細胞與細胞核資料集上進行了進一步訓練。</li>
+<li>這個龐大的訓練資料集包含了 22,826 張訓練影像和總計 3,341,254 個手動標註的感興趣區域 (ROIs)。它整合了目前主要的公開生物影像資料集，包括：<ul>
+<li>Cellpose (更新版)</li>
+<li>Cellpose Nuclei</li>
+<li>TissueNet</li>
+<li>LiveCell</li>
+<li>Omnipose (螢光和相位差顯微鏡影像)</li>
+<li>YeaZ (明場和相位差酵母細胞影像)</li>
+<li>DeepBacs (多種細菌的明場和螢光影像)</li>
+<li>Neurips 2022 挑戰資料集 (手動選取子集)</li>
+<li>多個細胞核分割資料集：MoNuSeg, MoNuSAC, CryoNuSeg, NuInsSeg, BCCD, CPM 15+17, TNBC, LynSec, IHC TMA, CoNIC, PanNuke。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>增強robust的資料增強技術：<ul>
+<li>為了應對顯微鏡影像中常見的各種挑戰，Cellpose-SAM 在訓練時融入了多種資料增強 (data augmentations) 技術，使其對影像操作和降級表現出強大的穩健性，從而簡化了使用者操作：<ul>
+<li>通道順序不變性：訓練時隨機置換影像通道的順序，使模型對通道順序完全不變。使用者無需指定哪個通道代表何種染劑。</li>
+<li>細胞大小不變性：模型在訓練時使用了從 7.5 到 120 像素的廣泛細胞直徑範圍的影像，使其能夠原生運行於各種解析度的影像上，無需使用者預先指定細胞直徑或依賴額外的細胞大小估計模型。</li>
+<li>對影像降級的穩健性：Cellpose-SAM 在訓練時加入了顯微鏡影像中常見的降級現象，例如泊松雜訊 (Poisson noise)、像素大小改變/影像降採樣 (downsampling) 以及等向性與非等向性模糊 (isotropic and anisotropic blur)。這使得 Cellpose-SAM 無需額外的影像恢復步驟即可獲得最佳性能。</li>
+<li>其他標準增強：包括隨機旋轉、翻轉、縮放、裁剪、轉換為灰度圖、反轉對比度、隨機丟棄通道，以及亮度/對比度擾</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+
+<!-- Mermaid JS -->
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({}); // Keep double braces for literal JS object
+  mermaid.run({ nodes: document.querySelectorAll('.language-mermaid') }); // Keep double braces
+</script>
+
+<!-- KaTeX JS -->
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoBPJpTUs74ddyc4bFZSM1TVlQDA60VBbJS0oA934VSz82sBx1X7kSx2ATBDIyd" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk" crossorigin="anonymous"></script>
+<!-- *** CORRECTED SCRIPT WITH ${...} ESCAPING *** -->
+        <script>
+            document.addEventListener("DOMContentLoaded", function() {
+                renderMathInElement(document.body, {
+                    delimiters: [
+                        { left: '$$',  right: '$$',  display: true },
+                        { left: '\\[', right: '\\]', display: true },
+                        { left: '\\(', right: '\\)', display: false }
+                    ],
+                    ignoredTags: ['script','noscript','style','textarea','pre','code'],
+                    throwOnError: false
+                });
+            });
+        </script>
+
+</body>
+</html>

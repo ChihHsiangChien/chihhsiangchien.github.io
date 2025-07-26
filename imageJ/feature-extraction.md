@@ -54,3 +54,65 @@
 *   分析結果顯示在 ImageJ 的 `Results Table` 中。
 *   可將表格 `File > Save As...` 匯出成 `.csv` 或 `.txt` 文件，以便後續使用 Excel, Python (Pandas), R 等工具進行統計分析和繪圖。
 
+
+
+### Show選項說明
+
+請執行這個macro，觀察不同show產生的效果。
+
+```ijm
+// 建立原始影像
+
+
+newImage("original", "8-bit black", 512, 512, 1);
+setColor(255);
+
+// 畫圓形
+makeOval(50, 50, 100, 100);
+run("Fill");
+run("Select None");
+
+// 畫方形
+makeRectangle(200, 50, 100, 100);
+run("Fill");
+run("Select None");
+
+// 畫三角形（使用多邊形）
+makePolygon(150,300, 250,300, 200,200);
+run("Fill");
+run("Select None");
+
+// Binarize（轉為二值圖）
+setThreshold(1, 255);
+run("Convert to Mask");
+
+
+// 各種 show 模式與對應標籤
+shows = newArray(
+    "Overlay",
+    "[Overlay Masks]",
+    "Outlines",
+    "[Bare Outlines]",
+    "Ellipses",
+    "Masks",
+    "[Count Masks]"
+);
+
+// 執行每種 show 模式
+for (i = 0; i < shows.length ; i++) {
+    selectImage("original");
+    showOption = shows[i];
+    
+    if (i == 0 || i == 1) run("Duplicate...", "title="+ showOption);
+
+    run("Analyze Particles...", " show=" + showOption );
+    wait(200); // 等待新視窗建立
+    idList = getList("image.titles");
+    newest = idList[lengthOf(idList) - 1]; // 最新產生的圖    
+    selectImage(newest);
+	rename(showOption);
+
+}
+
+
+```

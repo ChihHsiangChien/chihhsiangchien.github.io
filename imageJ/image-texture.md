@@ -182,15 +182,15 @@ Entropy \approx 0.464 + 0.528 + 0.528 = 1.52
 
 ### 操作步驟
 
-#### 準備工作 (Preparation)
+#### 準備工作
 1.  **開啟影像：** 開啟範例影像 `File > Open Samples > T1 Head (2.4M, 16-bits)`。
 2.  **開啟 ROI 管理器：** 執行 `Analyze > Tools > ROI Manager...`。
-3.  **安裝插件 (若無)：** 大部分 Fiji 都內建了紋理分析插件。若沒有，可透過 `Help > Update... > Manage update sites`，勾選 `Texture` 或 `Bio-Formats` 相關的更新站點來安裝。常用的插件是 `GLCM Texture Analyzer`。
+3.  **安裝插件 (若無)：** 常用的plugin是 `GLCM Texture Analyzer`。若沒有，可透過 `Help > Update... > Manage update sites`，勾選 `Texture` 或 `Bio-Formats` 來安裝。
 
-#### 選取感興趣區域 (ROI Selection)
+#### 選取ROI Selection
 我們需要在典型的灰質和白質區域手動定義幾個 ROI 以進行比較。
 
-1.    瀏覽影像堆疊，找到一個腦部結構清晰的切片（例如 slice 60-80），然後做`Image › Duplicate...`，複製其中一張影像。
+1.    瀏覽影像堆疊，找到一個腦部結構清晰的切片，然後做`Image › Duplicate...`，複製其中一張影像。
 2.    GLCM 的計算需要灰階影像，將影像轉換為 8 位灰階影像：`Image > Type > 8-bit`。
 3.    從 ImageJ 主工具列選擇 **自由選取工具 (freehand Selection)**。
 3.    **定義灰質 ROI:**
@@ -207,7 +207,7 @@ Entropy \approx 0.464 + 0.528 + 0.528 = 1.52
 4.    改執行`white`ROI，重複以上動作。
 
 ### 結果解讀與結論
-觀察兩個表格的差異，這些客觀數據是否符合我們對灰白質的主觀感受？白質的紋理確實比灰質更平滑、更均質，而灰質的紋理則更粗糙、更複雜。
+觀察兩個表格的差異，這些數據是否符合我們對灰白質的主觀感受？白質的紋理確實比灰質更平滑、更均質，而灰質的紋理則更粗糙、更複雜。
 
 | 特徵名 | 英文 | 意義 | 解讀 |
 |:---|:---|:---|:---|
