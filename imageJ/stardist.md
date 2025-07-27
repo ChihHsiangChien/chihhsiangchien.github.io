@@ -1,6 +1,5 @@
 # StarDist for Fiji 使用教學
 
-
 ## 什麼是 StarDist？
 
 StarDist 是一種基於深度學習的實例分割（Instance Segmentation）工具，特別適用於生物顯微影像。它利用「星形凸多邊形（Star-convex Polygon）」模型，能有效偵測形狀接近圓形、橢圓形或不規則但中心放射狀的物體，如細胞或細胞核。
@@ -10,17 +9,25 @@ StarDist 是一種基於深度學習的實例分割（Instance Segmentation）�
 ---
 
 ## 安裝 StarDist plugin
-
+fiji上有兩種stardist可以使用，一個是單純的stardist plugin，安裝方式：
 1.  開啟 Fiji
 2.  選擇上方選單：`Help > Update...`。
 3.  在 Updater 視窗中，點擊左下角的 `Manage update sites` 按鈕。
 4.  在更新站點列表中，找到並**勾選**以下兩個站點：
     *   `CSBDeep`
-    *   `StarDist`
-    > 如果列表中沒有，請點選 `Update URLs` 重新整理。
+    *   `StarDist`    
 5.  點擊 `Close` 按鈕返回，然後點選 `Apply changes` 開始安裝。
 6.  安裝完成後，**重新啟動 Fiji**。
 
+另一種是在 DeepImagej裡，只要安裝DeepImagej就可以使用
+1. 到`Help > Update...`安裝`DeepImageJ`
+2. 執行` Plugins › DeepImageJ › DeepImageJ Cellpose`
+3. 第一次使用時，會先要求你安裝python。但安裝後第一次執行可能出現error，這問題可能來自共享記憶體的實作有問題。需要手動換掉 Fiji 中的 JNA 函式庫：
+    1. 到官方 JNA GitHub：[https://github.com/java-native-access/jna](https://github.com/java-native-access/jna)下載 JNA 最新 release（建議用 5.12.1 或以上）找到最新版本的`jna.jar`和`jna-platform.jar`
+    2. 把它們放進： `Fiji.app/jars/`，若該資料夾已有舊版 jna.jar，請先備份並移除。
+
+
+但目前我使用的是第二種方法，因為第一種方法我一直無法處理錯誤訊息
 ---
 
 ## 使用 StarDist 插件分割影像
@@ -30,10 +37,12 @@ StarDist 是一種基於深度學習的實例分割（Instance Segmentation）�
 -   開啟一張 2D 或 2D 時間序列影像。
 -   支援單通道灰階影像（如 DAPI 螢光）或 RGB 彩色影像（如 H&E 病理切片）。
 -   測試影像也可從 Broad Bioimage Benchmark Collection 取得。
+-   **影像預處理**：在執行 StarDist 前，進行適當的預處理（如背景扣除、對比度增強）有時能提升分割效果。
+-   **3D 影像**：目前不支援 3D 影像分割。若有 3D 分割需求，請改用 Python 版本的 StarDist。
 
 ### 2. 啟動與設定
 
-啟動路徑：`Plugins > StarDist > StarDist 2D`
+啟動路徑：`Plugins > StarDist > StarDist 2D`或也可以使用` Plugins › DeepImageJ › DeepImageJ StarDist`，但後者要安裝DeepImagej。
 
 #### 主要設定項目
 
@@ -63,14 +72,6 @@ StarDist 是一種基於深度學習的實例分割（Instance Segmentation）�
 ### 3. 執行與檢視結果
 
 成功執行後，Fiji 會：
--   顯示分割結果（Label image 或在原圖上疊加 ROI）。
+-   顯示分割結果（Label image）。
 -   若選擇了 `ROI Manager`，會在 ROI 管理器中列出所有偵測到的物件。
 -   在 ROI Manager 中點選 `Show All` 可在影像上顯示所有 ROI 的疊加效果。
-
----
-
-## 注意事項
-
--   **無需 GPU**：Fiji 插件版本已為 CPU 執行進行優化，不需安裝 CUDA 或特定的顯示卡驅動。
--   **影像預處理**：在執行 StarDist 前，進行適當的預處理（如背景扣除、對比度增強）有時能提升分割效果。
--   **3D 影像**：Fiji 插件目前不支援 3D 影像分割。若有 3D 分割需求，請改用 Python 版本的 StarDist。

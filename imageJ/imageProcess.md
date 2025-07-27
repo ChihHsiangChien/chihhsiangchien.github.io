@@ -1,26 +1,46 @@
 # 影像處理決策
-## 前處理
-在分析、特徵提取、分割、分類或追蹤之前，對影像進行的一系列處理操作，目的是提升影像品質、減少干擾，使後續任務更準確、更穩定、更容易自動化。
+## 流程
+
+```{.mermaid}
+flowchart TD
+    A[選擇合適通道]-->B[空間與強度校正]
+    B-->C[降噪]
+    C-->D[背景分離]
+    D-->E[對比增強]
+    E --> C
+    E-->F[邊緣偵測]
+    C-->F    
+    F-->C    
+    F-->G[分割]
+    B-->G
+    C-->G
+    D-->G
+    G-->H1[特徵擷取]
+    G-->H2[追蹤]    
+    H1-->H3[分類]    
+    
+```
+
+前處理的目的是提升影像品質、減少干擾，使後續任務更準確、更穩定、更容易自動化。
 
 | 類型 | 目的 | 常見方法 |
 |:---|:---|:---|
 | 標準化 | 統一輸入格式、大小或色階 | Resize、Normalize、Color Conversion|
 | 影像校準 | 幾何對齊、尺度統一、畸變矯正 | Registration、Rescale、Deskew|
 | 降噪 |  去除感測器雜訊或背景干擾 | Gaussian、Median|
-| 背景校正 | 補償光照不均或不良背景 | Flat-field、Rolling Ball、Subtract Background|
+| 背景分離 | 補償光照不均或不良背景 | Flat-field、Rolling Ball、Subtract Background|
 | 對比增強 | 拉大前景與背景的強度差異 | CLAHE、Histogram Equalization、Gamma|
-| 強調特徵 | 讓特徵變得更明顯 | Edge enhancement、Top-hat、Morphology|
+| 邊緣偵測 | 讓特徵變得更明顯 | Edge enhancement、Top-hat、Morphology|
 
 ## 分析
 
 | 類型 | 目的 | 常見方法 |
 |:---|:---|:---|
-| 分割（Segmentation） | 將影像切分為物件與背景，屬於分析開始的第一步 | Threshold, Watershed, Region Growing |
-| 特徵擷取（Feature Extraction） | 量化目標區域的數值特徵，供分類使用 | 面積、周長、形狀指標、紋理特徵 |
-| 追蹤（Tracking） | 比較不同時間點/切片的物件動向 | TrackMate、粒子追蹤 |
-| 分類（Classification） | 把物件歸類為不同類型，例如細胞種類或健康狀態 | 機器學習模型、分群、人工標註 |
-| 測量與統計（Measurement & Stats） | 分析量化資料，例如平均大小、密度分布 | ROI 分析、統計圖、分布曲線 |
-| 資料視覺化 | 將分析結果以圖像、動畫、圖表呈現 | Overlay、3D rendering、volume rendering |
+| 分割 | 將影像切分為物件與背景，屬於分析開始的第一步 | Threshold, Watershed, Region Growing |
+| 特徵擷取 | 量化目標區域的數值特徵，供分類使用 | 面積、周長、形狀指標、紋理特徵 |
+| 追蹤| 比較不同時間點/切片的物件動向 | TrackMate |
+| 分類| 把物件歸類為不同類型，例如細胞種類或健康狀態 | 機器學習模型、分群、人工標註 |
+
 
 # 流程說明
 
