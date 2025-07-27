@@ -12,7 +12,7 @@ flowchart TD
 
     %% Background Subtraction Path
     BG_Proc -- 提供靜態背景圖 --> BG_Static[靜態背景相減法]
-    BG_Proc -- 提供影像序列/影片 --> BG_Model[背景建模 e.g., GMM, KNN, Median + 相減]
+    BG_Proc -- 提供影像序列/影片 --> BG_Model[背景建模 e.g., Median + 相減]
     BG_Static --> FG_Image[取得前景遮罩/影像]
     BG_Model --> FG_Image
     FG_Image --> 處理前景
@@ -27,12 +27,10 @@ flowchart TD
     B -- No --> D{選擇邊緣偵測方法}
 
     C_select -- 椒鹽雜訊/需保邊 --> C1[Median]
-    C_select -- 高斯雜訊/平滑為主 --> C2[Gaussian]
-    C_select -- 高斯雜訊且需強烈保邊 --> C3[Bilateral]
+    C_select -- 高斯雜訊/平滑為主 --> C2[Gaussian]    
 
     C1 --> D
-    C2 --> D
-    C3 --> D
+    C2 --> D    
 
     D --高對比--> F1[Sobel/Scharr]
     D --效果均衡--> F2[Canny]

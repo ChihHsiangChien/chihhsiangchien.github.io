@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>morphological-segmentation</title>
+<link rel="stylesheet" href="styles.css">
+<!-- KaTeX CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" integrity="sha384-wcIxkf4k558AjM3Yz3BBFQUbk/zgIYC2R0QpeeYb+TwlBVMrlgLqwRjRtGZiK7ww" crossorigin="anonymous">
+</head>
+<body>
+
+<div id="toc">
+<h2><a href="index.html">回到首頁</a></h2>
+<div class="toc-container">
+<div class="toc">
+<ul>
+<li><a href="#morphological-segmentation">形態學分割 (Morphological Segmentation)</a><ul>
+<li><a href="#_1">簡介</a></li>
+<li><a href="#_2">操作流程</a></li>
+<li><a href="#_3">參數詳解</a><ul>
+<li><a href="#1-input-image-panel">1. 輸入影像面板 (Input Image Panel)</a></li>
+<li><a href="#2-watershed-segmentation-panel">2. 分水嶺分割面板 (Watershed Segmentation Panel)</a></li>
+<li><a href="#3-result-panel">3. 結果面板 (Result Panel)</a></li>
+<li><a href="#4-post-processing-panel">4. 後處理面板 (Post-processing Panel)</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#_4">實作</a></li>
+</ul>
+</div>
+
+</div>
+</div>
+<div id="content">
+<h1 id="morphological-segmentation">形態學分割 (Morphological Segmentation)</h1>
+<h2 id="_1">簡介</h2>
+<p>Morphological Segmentation結合了形態學操作（如擴展最小值、形態學梯度）與分水嶺演算法，能夠對各種類型（8、16、32 位元）的 2D 和 3D 灰度影像進行高效分割。</p>
+<hr />
+<h2 id="_2">操作流程</h2>
+<ol>
+<li><strong>開啟影像</strong>：在 Fiji 中開啟任何灰度影像（單一 2D 影像或 3D 堆疊）。</li>
+<li><strong>啟動插件</strong>：執行 <code>Plugins &gt; MorphoLibJ &gt; Segmentation &gt; Morphological Segmentation</code>。</li>
+<li><strong>設定參數</strong>：在插件視窗中，依序設定「輸入影像」、「分水嶺分割」的參數。</li>
+<li><strong>執行分割</strong>：點擊 <code>Run</code> 按鈕。</li>
+<li><strong>檢視與匯出</strong>：在「結果面板」中選擇不同的顯示方式，並可將結果匯出為新影像。</li>
+<li><strong>後處理</strong>：如有需要，可使用「後處理面板」的功能對分割結果進行微調。</li>
+</ol>
+<blockquote>
+<p><strong>提示：</strong> 在主畫布中，您可以隨時平移、縮放或滾動切片，就像操作一般 ImageJ 視窗一樣。</p>
+</blockquote>
+<hr />
+<h2 id="_3">參數詳解</h2>
+<h3 id="1-input-image-panel">1. 輸入影像面板 (Input Image Panel)</h3>
+<p>此面板用於定義輸入影像的性質。這是關鍵的第一步，因為分水嶺演算法預期物件的邊界具有較高的強度值（即影像的梯度）。</p>
+<ul>
+<li>
+<p><strong>邊界影像 (Border Image):</strong> 如果您的輸入影像<strong>已經是</strong>經過邊緣檢測或梯度計算的結果（例如，物件邊界是亮線），請選擇此項。</p>
+</li>
+<li>
+<p><strong>物件影像 (Object Image):</strong> 如果您的輸入影像是原始影像，其中物件本身比背景亮或暗，請選擇此項。選擇後會啟用以下選項：</p>
+<ul>
+<li><strong>梯度類型 (Gradient Type):</strong> 選擇計算梯度的演算法。</li>
+<li><strong>半徑 (Radius):</strong> 設定計算梯度時的半徑（以像素為單位）。</li>
+<li><strong>顯示梯度影像 (Display gradient image):</strong> 勾選後，主畫布將顯示計算出的梯度影像，方便觀察。</li>
+</ul>
+</li>
+</ul>
+<blockquote>
+<p><strong>影像預處理：</strong> 此外掛程式雖內建梯度計算，但根據影像特性，您可能仍需在執行此前進行其他預處理，如降噪（<code>Process &gt; Filters &gt; Gaussian Blur</code>）或背景校正（<code>Process &gt; Subtract Background</code>）。</p>
+</blockquote>
+<h3 id="2-watershed-segmentation-panel">2. 分水嶺分割面板 (Watershed Segmentation Panel)</h3>
+<p>此面板用於設定分割演算法的核心參數。</p>
+<ul>
+<li><strong>容差 (Tolerance):</strong><ul>
+<li><strong>作用：</strong> 控制搜尋區域最小值（Regional Minima）的強度動態範圍。這是影響分割結果最重要的參數。</li>
+<li><strong>效果：</strong><ul>
+<li><strong>增加容差值</strong>：會合併更多相似區域，減少最終分割出的物件數量（防止過度分割）。</li>
+<li><strong>減少容差值</strong>：對強度變化更敏感，會產生更多的分割物件。</li>
+</ul>
+</li>
+<li><strong>注意：</strong> 此值與影像的位元深度密切相關。<ul>
+<li><strong>8-bit 影像 (0-255):</strong> 建議從 <code>10</code> 開始嘗試。</li>
+<li><strong>16-bit 影像 (0-65535):</strong> 應大幅增加，例如 <code>2000</code>。<blockquote>
+<p><strong>實例應用：</strong> 根據您的輸入範例「設定Tolerance35」，您應該在「容差 (Tolerance)」輸入框中填入數值 <code>35</code>。</p>
+</blockquote>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h4 id="advanced-options">高級選項 (Advanced options)</h4>
+<p>點擊後可設定更多參數：</p>
+<ul>
+<li>
+<p><strong>計算壩線 (Calculate dams):</strong></p>
+<ul>
+<li><strong>勾選 (預設):</strong> 在分割出的不同物件之間產生單像素寬的邊界線（即「壩」）。</li>
+<li><strong>不勾選:</strong> 產生填滿顏色的區域，物件之間直接相鄰，沒有邊界線。</li>
+</ul>
+</li>
+<li>
+<p><strong>連通性 (Connectivity):</strong></p>
+<ul>
+<li><strong>作用：</strong> 定義像素的鄰域關係。</li>
+<li><strong>選項：</strong> 2D 可選 4 或 8；3D 可選 6 或 26。</li>
+<li><strong>建議：</strong> 選擇非對角線的連通性（2D用<code>4</code>，3D用<code>6</code>）通常能產生更圓滑、自然的物件輪廓。</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h3 id="3-result-panel">3. 結果面板 (Result Panel)</h3>
+<p>此面板在執行分割後啟用，用於視覺化與匯出結果。</p>
+<ul>
+<li>
+<p><strong>顯示 (Display):</strong> 提供四種視覺化模式：</p>
+<ul>
+<li><strong>疊加盆地 (Overlaid basins):</strong> 在原始影像上以不同顏色疊加分割出的物件。</li>
+<li><strong>疊加壩線 (Overlaid dams):</strong> 在原始影像上以紅色疊加分水嶺邊界線。</li>
+<li><strong>集水盆地 (Catchment basins):</strong> 產生一張新的彩色標籤影像，每個物件有獨立的顏色。</li>
+<li><strong>分水嶺線 (Watershed lines):</strong> 產生一張新的二值影像，顯示黑色的邊界線與白色的物件。</li>
+</ul>
+</li>
+<li>
+<p><strong>顯示結果疊加層 (Show result overlay):</strong> 用於快速開關疊加層的顯示。</p>
+</li>
+<li><strong>建立影像按鈕 (Create image button):</strong> 將當前畫布中顯示的結果（包含疊加層）儲存為一張新的影像。</li>
+</ul>
+<hr />
+<h3 id="4-post-processing-panel">4. 後處理面板 (Post-processing Panel)</h3>
+<p>此面板在執行分割後啟用，提供手動修正工具。</p>
+<ul>
+<li>
+<p><strong>合併標籤 (Merge labels):</strong></p>
+<ul>
+<li><strong>用途：</strong> 手動合併被過度分割的區域。</li>
+<li><strong>操作：</strong> 使用 <strong>手繪選取工具</strong> 或 <strong>點工具</strong> 選取多個想合併的物件，然後點擊此按鈕。第一個被選中的物件顏色將應用於所有被選物件。<blockquote>
+<p><strong>多切片操作提示：</strong> 在 3D 堆疊中，可使用「點工具」並按住 <code>SHIFT</code> 鍵，在不同切片上點選要合併的物件。</p>
+</blockquote>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>隨機顏色 (Shuffle colors):</strong></p>
+<ul>
+<li><strong>用途：</strong> 當相鄰的兩個物件被分配到相似顏色，難以區分時，點擊此按鈕可隨機重新分配所有顏色，以利觀察。</li>
+</ul>
+</li>
+</ul>
+<h1 id="_4">實作</h1>
+<p>使用範例影像<code>Blobs</code>進行分割，Tolerance設定35。</p>
+</div>
+
+<!-- Mermaid JS -->
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({}); // Keep double braces for literal JS object
+  mermaid.run({ nodes: document.querySelectorAll('.language-mermaid') }); // Keep double braces
+</script>
+
+<!-- KaTeX JS -->
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoBPJpTUs74ddyc4bFZSM1TVlQDA60VBbJS0oA934VSz82sBx1X7kSx2ATBDIyd" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk" crossorigin="anonymous"></script>
+<!-- *** CORRECTED SCRIPT WITH ${...} ESCAPING *** -->
+        <script>
+            document.addEventListener("DOMContentLoaded", function() {
+                renderMathInElement(document.body, {
+                    delimiters: [
+                        { left: '$$',  right: '$$',  display: true },
+                        { left: '\\[', right: '\\]', display: true },
+                        { left: '\\(', right: '\\)', display: false }
+                    ],
+                    ignoredTags: ['script','noscript','style','textarea','pre','code'],
+                    throwOnError: false
+                });
+            });
+        </script>
+
+</body>
+</html>
