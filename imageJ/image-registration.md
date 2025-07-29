@@ -261,8 +261,8 @@ print("Shifted Stack created with " + nSlices() + " slices.");
 1. 請這個顯微鏡下拍攝的紫錦草雄蕊毛的細胞，進行影像對位。
 2. 對位後，使用標準差的z投影，並進行套色。
 
-[video](video/cell.mp4)
-匯入240-270的frame進行對位
+[video](video/cell.mp4)匯入240-270的frame進行對位
+[教學影片](https://youtu.be/FDy9RBgLiH4)
 
 ```ijm
 

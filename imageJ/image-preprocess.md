@@ -1,4 +1,5 @@
 # 影像處理決策
+[教學影片](https://youtu.be/CWK6-s0Eq8Q)
 ## 流程
 
 ```{.mermaid}

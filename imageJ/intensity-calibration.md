@@ -1,4 +1,5 @@
 # 影像強度校正 (Intensity Calibration)
+[教學影片](https://youtu.be/FDy9RBgLiH4)
 
 ## 1. 什麼是強度校正？
 
