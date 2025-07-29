@@ -5,18 +5,16 @@
 - [從像素到微米：基礎測量與校正](from-pixels-to-microns.md)
 - [從葉片學分析：空間校正、色彩空間與分割技巧](leaf-analysis-and-color-spaces.md)
 
-# 影像前處理（Image Preprocessing）
+# 影像處理
 - [影像對位](image-registration.md)
 - [空間校正](spatial-correction.md)
 - [強度校正](intensity-calibration.md)
-- [影像處理](imageProcess.md)  
-
-# 影像分析
-- [影像分割](segmentation.md)
+- [影像前處理](image-preprocess.md)  
 - [binary mask image,labeled image與ROI的轉換](8-bit-conversion.md)
+    - [實作dot blob的分割與特徵擷取](segmentation-demo.md)
+- [影像分割](segmentation.md)
 - [形態學處理](morphology.md)
     - [形態學處理範例-骨架化分析長度](skeleton.md)
-    - [實作dot blob的分割與特徵擷取](segmentation-demo.md)
 - [特徵擷取](feature-extraction.md)
 - [紋理分析](image-texture.md)
 
@@ -30,14 +28,11 @@
 # 案例介紹：分析大腦
 - [機器學習分割與體積、表面積分析](mri-segmentation.md)
 
-
 # 進階
-- [TrackMate](trackmate.md)
+- [粒子追蹤TrackMate](trackmate.md)
 - [時序動態分析](time-series.md)
-- [批次處理基礎](batch-processing.md)
 - [自動化與巨集程式設計](automation-and-macro.md)
-- [Python整合指南](python-integration.md)
-- [大型影像處理技術](large-image-processing.md)
+- [Python整合](python-integration.md)
 
 
 # 網路文件
