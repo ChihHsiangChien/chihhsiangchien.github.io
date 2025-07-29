@@ -49,6 +49,8 @@ ImageJ 的 `Analyze > Calibrate...` 功能可以幫助我們完成這個過程�
 
 以下的課程將使用**中央氣象署**的**雨量日累積圖**來進行教學。請進入[中央氣象署網站](https://www.cwa.gov.tw/V8/C/P/Rainfall/Rainfall_QZJ.html)下載**雨量日累積圖**，請下載**灰階**版本。
 
+或使用此範例[雨量圖](img/rain.jpg)
+
 1.  下載後請用imagej開啟，先打開`Image > Show Info`，因為是尚未做強度校正的影像，所以會有一段**Uncalibrated**的文字。我們在校正後會再來看這段文字的變化。
 2.  雖然這張圖是灰階影像，但目前其實還是RGB，所以要先轉換成真的灰階，執行 `Image › Type › 8-bit`。
 3.  使用方框選取工具，針對右邊的灰階與雨量關係的bar進行測量，每框好一個位置，就執行 `Analyze > Measure` (或按 `Ctrl+M`) 記錄下每個標準品區域的平均灰階值（Mean Gray Value），這會在**result**表格中紀錄該區域的平均強度。

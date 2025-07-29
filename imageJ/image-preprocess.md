@@ -6,18 +6,13 @@ flowchart TD
     A[選擇合適通道]-->B[空間與強度校正]
     B-->C[降噪]
     C-->D[背景分離]
-    D-->E[對比增強]
-    E --> C
+    D-->E[對比增強]    
     E-->F[邊緣偵測]
-    C-->F    
-    F-->C    
     F-->G[分割]
-    B-->G
-    C-->G
-    D-->G
-    G-->H1[特徵擷取]
-    G-->H2[追蹤]    
-    H1-->H3[分類]    
+    G-->H[形態學處理]
+    H-->I[特徵擷取]
+    I-->J1[追蹤]    
+    I-->J2[分類]    
     
 ```
 
@@ -26,31 +21,23 @@ flowchart TD
 | 類型 | 目的 | 常見方法 |
 |:---|:---|:---|
 | 標準化 | 統一輸入格式、大小或色階 | Resize、Normalize、Color Conversion|
-| 影像校準 | 幾何對齊、尺度統一、畸變矯正 | Registration、Rescale、Deskew|
+| 影像校準 | 幾何對齊、尺度統一、畸變矯正 | Registration、Rescale|
 | 降噪 |  去除感測器雜訊或背景干擾 | Gaussian、Median|
-| 背景分離 | 補償光照不均或不良背景 | Flat-field、Rolling Ball、Subtract Background|
+| 背景分離 | 補償光照不均或不良背景 | Rolling Ball、Subtract Background|
 | 對比增強 | 拉大前景與背景的強度差異 | CLAHE、Histogram Equalization、Gamma|
 | 邊緣偵測 | 讓特徵變得更明顯 | Edge enhancement、Top-hat、Morphology|
-
-## 分析
-
-| 類型 | 目的 | 常見方法 |
-|:---|:---|:---|
-| 分割 | 將影像切分為物件與背景，屬於分析開始的第一步 | Threshold, Watershed, Region Growing |
-| 特徵擷取 | 量化目標區域的數值特徵，供分類使用 | 面積、周長、形狀指標、紋理特徵 |
-| 追蹤| 比較不同時間點/切片的物件動向 | TrackMate |
-| 分類| 把物件歸類為不同類型，例如細胞種類或健康狀態 | 機器學習模型、分群、人工標註 |
 
 
 # 流程說明
 
-## 標準化
-### 幾何轉換
+## 幾何轉換
 
 *   **旋轉：** `Image > Transform > Rotate...`
 *   **縮放：** `Image > Transform > Scale...`
 *   **翻轉：** `Image > Transform > Flip Horizontally / Flip Vertically`
-*   **對位：** 使用演算法將stack對齊，參考[影像對位](image-registration.md)
+*   **[影像對位](image-registration.md)**
+*   **[空間校正](spatial-correction.md)**
+*   **[強度校正](intensity-calibration.md)**
 
 ## 1.彩色影像轉灰階
 
@@ -65,7 +52,7 @@ RGB 或多通道影像，需要先轉換為單一的灰階影像才能進行後�
 ---
 
 ## 2.降噪
-*   如果影像出現明顯隨機雜訊（如 salt-and-pepper、感光雜訊），應使用降噪處理。
+*   如果影像出現明顯隨機雜訊（如 椒鹽雜訊salt-and-pepper、感光雜訊），應使用降噪處理。
 *   如果雜訊輕微或會影響細節邊緣，則可略過此步驟或使用更小的模糊範圍（sigma 較小的 Gaussian）。
 
 ### 平均濾波器
@@ -73,7 +60,7 @@ RGB 或多通道影像，需要先轉換為單一的灰階影像才能進行後�
     *   `Process › Smooth`：固定3X3範圍
     *   `Process > Filters > Mean...`：可以指定範圍
 *   針對每個像素，它會計算其周圍特定範圍內所有像素的平均值來取代。
-*   能減少隨機雜訊，例如高斯雜訊 (Gaussian Noise) 或其他均勻分佈的隨機雜訊。
+*   能減少**隨機雜訊**，例如高斯雜訊 (Gaussian Noise) 或其他均勻分佈的隨機雜訊。
 *   也因為會對所有像素進行平均，無論這些像素是雜訊還是影像的重要邊緣，所以會導致**邊緣變得模糊不清**。對於細節豐富的影像，過度使用平均濾波可能會損失重要的資訊。
 
 ### 中值濾波器
@@ -88,109 +75,103 @@ RGB 或多通道影像，需要先轉換為單一的灰階影像才能進行後�
 *   imagej操作：
     *   `Process > Filters > Gaussian Blur...`
 *   利用高斯函數（一種鐘形曲線）來平滑影像並減少高斯雜訊 (Gaussian Noise)。
-*   高斯雜訊是一種常見的隨機雜訊，其分佈符合常態分佈（高斯分佈），通常表現為像素強度上的細微**隨機**波動，使影像看起來有點模糊或顆粒感。
+*   高斯雜訊是一種常見的**隨機雜訊**，其分佈符合常態分佈（高斯分佈），通常表現為像素強度上的細微**隨機**波動，使影像看起來有點模糊或顆粒感。
 *   **高斯濾波器**透過計算像素及其鄰近像素的加權平均值來實現平滑。權重的大小由高斯函數決定，這意味著離中心像素越近的像素對新像素值的貢獻越大，而越遠的像素貢獻越小。這種加權平均的方式產生了非常自然且平滑的模糊效果。
 *   半徑 (Sigma，σ)：半徑值越大，模糊程度越高，影像的平滑效果也越明顯。反之，半徑值越小，模糊程度越低。
 
 
 ### 實作
-執行以下產生噪點影像的Macro，再進行降噪處理，觀察不同處理過程對應不同噪點的影響。
+執行以下產生噪點影像的Macro(或手動產生影像)，產生三種不同雜訊的圖片，再圈選區域進行**降噪處理**，然後使用直方圖觀察處理前後的差異。
 
-#### 產生高斯雜訊的圖片
-*   執行`File > New > Image...`，產生白色的8-bit影像。
-*   執行`Process › Noise › Add Noise`，這會在畫面產生**高斯雜訊** (平均值0，標準差25)，[參見](https://imagej.net/ij/docs/menus/process.html#noise)。
-*   你也可以試試直接用以下的 Macro產生圖片
+* 產生**高斯雜訊**的圖片
+    *   執行`File > New > Image...`，產生白色的8-bit影像。
+    *   執行`Process › Noise › Add Noise`，這會在畫面產生**高斯雜訊** (平均值0，標準差25)，[參見](https://imagej.net/ij/docs/menus/process.html#noise)。
+    *   如果要指定高斯的標準差可以用**Add Specified Noise...**
+* 產生**椒鹽雜訊**的圖片
+    *   執行`File › Open Samples › Clown`，再將此影像轉為 8-bit，執行`Image › Type › 8-bit`
+    *   執行`Process › Noise › Salt and Pepper`，這會產生**椒鹽雜訊**(隨機使 2.5%的像素變為黑色，2.5變為白色)
 
-```ijm
-    newImage("高斯雜訊", "8-bit white", 512, 512, 1);
-    run("Add Noise");
-```
-
-*   如果要指定高斯的標準差可以用**Add Specified Noise...**
+**Macro**
 
 ```ijm
-    newImage("高雜訊圖片", "8-bit white", 512, 512, 1);
-    run("Add Specified Noise...", "standard=80");
+newImage("高斯雜訊", "8-bit white", 512, 512, 1);
+run("Add Noise");
+newImage("更多高斯雜訊", "8-bit white", 512, 512, 1);
+run("Add Specified Noise...", "standard=80");
+run("Clown");
+run("8-bit");
+run("Salt and Pepper");
+rename("椒鹽雜訊");
 ```
 
-#### 產生椒鹽雜訊的圖片
-*   執行`File › Open Samples › Clown`，再將此影像轉為 8-bit，執行`Image › Type › 8-bit`
-*   執行`Process › Noise › Salt and Pepper`，這會產生**椒鹽雜訊**(隨機使 2.5%的像素變為黑色，2.5變為白色)
-*   你也可以試試直接用以下的 Macro產生圖片
-
-```ijm
-    run("Clown");
-    run("8-bit");
-    run("Salt and Pepper");
-    rename("椒鹽雜訊");
-```
 ---
 ## 3.背景分離（前景/背景分割）
-1.  背景是什麼？背景包含拍攝的雜訊或你不需要的物件。
-2.  將背景分離得到前景的基本原理就是**整張圖片減去背景圖**。
+1.  背景是拍攝的雜訊或你不需要的物件。
+2.  將背景分離得到前景的基本原理是**整張圖片減去背景圖**。
 3.  減去背景的方法是`Process > Image Calculator...`，選擇原始影像與背景影像，運算方式選 `Subtract`
-4.  背景圖要怎麼得到呢？有以下的幾種方式
+4.  如何得到背景圖？有以下的幾種方式
     1.  拍攝一張沒有細胞或沒有染劑的影像
     2.  用一個stack的系列影像進行平均產生背景圖。假設物體分布隨機，將這些影像進行**平均**後，就會呈現背景光照分布。
     3.  用演算法直接算出背景影像，直接用 `Process > Subtract Background...`。原理我們在下方的產生實作影像後來說明。
 
-### 實作1
+### 實作-靜態建模背景
 #### 產生實作影像
 請執行以下Macro，這會產生三張圖片，模擬的是本來有**原細胞**的影像，在一個不平均的光場(**原光場**)照明，並且伴隨著**取樣雜訊**，得到了**待處理影像**。你的目標就是從**待處理影像**還原得到**原細胞**這張圖的樣子。
 
 ```ijm
-    width = 512;
-    height = 512;
+width = 512;
+height = 512;
 
-    centerX = width/2;
-    centerY = height/2;
-
-
-    newImage("原光場", "32-bit black", width, height, 1);
-    sigma = 200;
-    for (y = 0; y < height; y++) {
-    for (x = 0; x < width; x++) {
-        dx = x - centerX;
-        dy = y - centerY;
-        value = exp(-(dx*dx + dy*dy)/(2*sigma*sigma));
-        setPixel(x, y, value);
-    }
-    }
-    run("8-bit");
+centerX = width/2;
+centerY = height/2;
 
 
-    newImage("原細胞", "8-bit black", width, height, 1);
-    for (i = 0; i < 40; i++) {
-        x = 20 + random()*480;
-        y = 20 + random()*480;
-        size = 8 + random()*10;
-        setColor(255);
-        makeOval(x, y, size, size);
-        fill();
-    }
+newImage("原光場", "32-bit black", width, height, 1);
+sigma = 200;
+for (y = 0; y < height; y++) {
+for (x = 0; x < width; x++) {
+    dx = x - centerX;
+    dy = y - centerY;
+    value = exp(-(dx*dx + dy*dy)/(2*sigma*sigma));
+    setPixel(x, y, value);
+}
+}
+run("8-bit");
 
-    imageCalculator("Add create", "原光場", "原細胞");
-    run("Enhance Contrast...", "saturated=0.35 normalize");
-    run("Add Noise");
-    run("Gaussian Blur...", "sigma=0.5");
-    rename("待處理的影像");
+
+newImage("原細胞", "8-bit black", width, height, 1);
+for (i = 0; i < 40; i++) {
+    x = 20 + random()*480;
+    y = 20 + random()*480;
+    size = 8 + random()*10;
+    setColor(255);
+    makeOval(x, y, size, size);
+    fill();
+}
+
+imageCalculator("Add create", "原光場", "原細胞");
+run("Enhance Contrast...", "saturated=0.35 normalize");
+run("Add Noise");
+run("Gaussian Blur...", "sigma=0.5");
+rename("待處理的影像");
+run("Tile");
 ```
 #### 觀察影像
 1.   我們利用一些工具來觀察這些影像。請點選**原光場**，這是利用高斯函數產生的影像，模擬顯微鏡下產生的不均勻光場。先用直線工具拉一條由最左到最右的直線，然後選擇` Analyze › Plot Profile`。你看到的圖形就是高斯函數。
 2.   用` Analyze › 3D Surface Plot`分別觀察三張影像。
-3.   **Subtract Background...**的演算法原理：有一顆特定半徑的球在平面下方滾動，它所接觸的區域就是背景。滾完影像之後，就可以得到一張背景圖。
+
 
 #### 分離前景與背景
 1.   觀察直方圖會發現這個影像有隨機雜訊，所以先用 `Process > Filters > Gaussian Blur...`去雜訊
 2.   以下展示兩種分離背景的方式，所以我們將去雜訊處理後的影像再複製一份，選擇` Image > Duplicate...`。
 3.   由於已經有原始的**光場影像**，所以可以直接減去這張影像。使用`Process > Image Calculator...`，選擇原始影像與背景影像，運算方式選 `Subtract`。
-4.   選擇剛剛複製後的另外一個去雜訊後影像，執行`Process > Subtract Background...`，設定 rolling ball 半徑。因為要用一顆球在背景下方滾動，所以不可以讓球滾進前進的高峰底部，所以通常會設定球的半徑至少是前景目標半徑的三倍左右。你可以點選**Create Background**，觀察這種演算法算出的背景圖是不是接近**原光場**。
+4.   選擇剛剛複製後的另外一個去雜訊後影像，執行`Process > Subtract Background...`，設定 rolling ball 半徑。**Subtract Background...**的演算法原理是有一顆特定半徑的球在平面下方滾動，它所接觸的區域就是背景。滾完影像之後，就可以得到一張背景圖。因為要用一顆球在背景下方滾動，所以不可以讓球滾進前進的高峰底部，所以通常會設定球的半徑至少是前景目標半徑的三倍左右。你可以點選**Create Background**，觀察這種演算法算出的背景圖是不是接近**原光場**。
 5.   選項中的**Sliding parabolic filter (滑動拋物線濾波器)**會將「滾動球」的概念替換為一個具有相同曲率的滑動拋物面。這個拋物面在影像數據的下方滑動，其頂部的軌跡被用來估計背景，可以處理更大的像素值範圍
     *  拋物面比球體在處理大範圍的影像像素值（例如，16 位元或 32 位元影像，像素值遠大於典型物體大小）
     *  複雜的背景模式
     *  前景物體的形狀或強度不完全符合滾動球的假設時
 
-### 實作2
+### 實作-動態建模背景
 #### 產生實作影像
 執行以下Macro，這會產生一個stack，有一群細胞流動，背景有一些方塊。你的目的是將前景的細胞分離出來
 ```ijm
@@ -281,12 +262,12 @@ resetMinAndMax();
 setBatchMode(false);
 
 ```
-#### 從stack產生背景圖片
-1.   選擇**細胞流**的stack，執行` Image › Stacks › Z Project...`
-2.   **Projection type**，有幾種選擇，你可以試試看**Average Instensity**或是**Max Instensity**，然後產生背景圖。
+1. 從stack產生背景圖片
+    1.   選擇**細胞流**的stack，執行` Image › Stacks › Z Project...`
+    2.   **Projection type**，有幾種選擇，你可以試試看**Average Instensity**或是**Max Instensity**，然後產生背景圖。
 
-#### 將stack的細胞前景與背景分離
-1.   使用`Process > Image Calculator...`，選擇stack與背景影像，運算方式選 `Subtract`。
+2. 將stack的細胞前景與背景分離
+    1.   使用`Process > Image Calculator...`，選擇stack與背景影像，運算方式選 `Subtract`。
 
 ---
 
@@ -331,12 +312,19 @@ run("Select None");
 ### 對比度增強
 執行 `Process > Enhance Contrast...` 是調整影像對比度的常用方法。
 
-#### 核心參數：Saturated Pixels
+#### Saturated Pixels
 這個參數設定了在自動拉伸對比度時，允許多少百分比的像素被「飽和」（即變成純黑0或純白255）。預設值（如0.35%）會忽略最亮和最暗的一小部分像素，避免極端值過度影響整體對比度，讓結果更貼近視覺感受。
 
 #### 選項分析與適用情境
 
 在 `Enhance Contrast` 對話框中，主要有 `Normalize` 和 `Equalize Histogram` 兩個勾選框。不同的組合適用於不同的分析需求。
+
+| 選項組合 | 行為 | 改變數據？ | 主要用途 |
+|:---|:---|:---|:---|
+| **不勾選** | 僅改變顯示 (LUT)，線性視覺增強 | 否 (除非按 Apply) | 安全的初步觀察，保留原始數據 |
+| **勾選 Normalize** | 線性拉伸灰階值至全範圍 | 是 | 增強整體對比，為分割做準備 |
+| **勾選 Equalize Histogram** | 非線性重排灰階值，使直方圖平坦化 | 是 | 強化局部細節與紋理，不適用於強度定量 |
+
 
 **情境一：不勾選任何選項 (預設)**
 
@@ -368,13 +356,6 @@ run("Select None");
     *   **紋理分析與特徵觀察**：當你關心的不是絕對的灰階值，而是物體的紋理、邊緣等局部特徵時，此方法非常有效。
     *   **應謹慎用於定量分析**：由於它會徹底改變像素的原始分佈和相對關係，不建議使用在需要測量強度絕對值的定量分析。
 
-#### 總結比較
-
-| 選項組合 | 行為 | 改變數據？ | 主要用途 |
-|:---|:---|:---|:---|
-| **不勾選** | 僅改變顯示 (LUT)，線性視覺增強 | 否 (除非按 Apply) | 安全的初步觀察，保留原始數據 |
-| **勾選 Normalize** | 線性拉伸灰階值至全範圍 | 是 | 增強整體對比，為分割做準備 |
-| **勾選 Equalize Histogram** | 非線性重排灰階值，使直方圖平坦化 | 是 | 強化局部細節與紋理，不適用於強度定量 |
 
 
 ### Gamma
@@ -411,15 +392,15 @@ f(p) = \left( \frac{p}{255} \right)^\gamma \times 255
 
 #### 產生實作影像
 
-請執行以下macro，這會產生一個亮度不均勻的影像，請執行`Process › Enhance Local Contrast (CLAHE)`觀察結果。
+請執行以下macro，這會產生一個亮度不均勻的影像，然後針對不同的blocksize執行`Process › Enhance Local Contrast (CLAHE)`。
 
 ```ijm
 setBatchMode(true);
 
 // 建立影像「原光場」
-newImage("原光場", "8-bit black", 512, 512, 1);
-for (y = 0; y < 512; y++) {
-  for (x = 0; x < 512; x++) {
+newImage("原光場", "8-bit black", 256, 256, 1);
+for (y = 0; y < 256; y++) {
+  for (x = 0; x < 256; x++) {
     v = 0.6*(x + y)/2 + 40*sin(x/30.0)*cos(y/45.0);
     if (v < 0) v = 0;
     if (v > 200) v = 200;
@@ -430,12 +411,12 @@ run("Gaussian Blur...", "sigma=30");
 
 
 // 建立影像「原細胞」
-newImage("原細胞", "8-bit black", 512, 512, 1);
+newImage("原細胞", "8-bit black", 256, 256, 1);
 setColor(255);
-gridSize = 10;
-spacingX = 512 / gridSize;
-spacingY = 512 / gridSize;
-radius = 10;
+gridSize = 5;
+spacingX = 256 / gridSize;
+spacingY = 256 / gridSize;
+radius = 5;
 for (i = 0; i < gridSize; i++) {
   for (j = 0; j < gridSize; j++) {
     x = i * spacingX + spacingX / 2;
@@ -459,8 +440,33 @@ rename("待處理的影像");
 
 run("Select None");
 resetMinAndMax();
+
 // 解除批次模式，強制刷新並顯示所有視窗
 setBatchMode(false);
+
+selectImage("待處理的影像");
+run("Duplicate...", "title=127");
+selectImage("127");
+run("Enhance Local Contrast (CLAHE)", "blocksize=127 histogram=256 maximum=3 mask=*None*");
+
+
+selectImage("待處理的影像");
+run("Duplicate...", "title=63");
+selectImage("63");
+run("Enhance Local Contrast (CLAHE)", "blocksize=63 histogram=256 maximum=3 mask=*None*");
+run("Tile");
+
+selectImage("待處理的影像");
+run("Duplicate...", "title=31");
+selectImage("31");
+run("Enhance Local Contrast (CLAHE)", "blocksize=31 histogram=256 maximum=3 mask=*None*");
+run("Tile");
+
+selectImage("待處理的影像");
+run("Duplicate...", "title=15");
+selectImage("15");
+run("Enhance Local Contrast (CLAHE)", "blocksize=15 histogram=256 maximum=3 mask=*None*");
+run("Tile");
 
 ```
 ---
@@ -477,19 +483,19 @@ ImageJ 內建了一些邊緣檢測的方式，也可以用 `Process > Filters > 
     *   計算影像中水平方向（Gx）與垂直方向（Gy）的梯度，然後根據這些梯度來估計邊緣的位置與方向。因此對偵測斜邊或曲邊
     *   在含有雜訊或模糊的影像中，容易誤判邊緣。
 *   **Unsharp Mask**
-    *   適用加強邊緣對比，常用於細節強化。
     *   內建：`Process > Filters > Unsharp Mask...`
+    *   適用加強邊緣對比，常用於細節強化。    
     *   用模糊來突顯細節。邏輯如下： 原圖 - 模糊圖 = 高頻細節（即邊緣）。
     *   先對影像做「模糊處理」，取得低頻背景，再將原圖減去模糊圖像得到高頻圖像（細節），再乘上Mask Weight（遮罩權重），控制加回多少細節，再加回原圖，產生更清晰、更銳利的影像。
 
 
 *   **Variance**
-    *   將每個像素替換為鄰域變異數，可突顯邊緣與紋理，因為邊緣處變異數通常較高。
     *   內建：`Process > Filters > Variance...`
+    *   將每個像素替換為鄰域變異數，可突顯邊緣與紋理，因為邊緣處變異數通常較高。
 
-
-*   **Laplacian（找細節/斑點）：**
-    *   `Process > Filters > Laplacian` 應用拉普拉斯濾波器，常用於邊緣增強。在 `Process > Filters > Convolve...` 視窗輸入以下任何一種kernel。  
+*   **Laplacian**
+    *   ` Plugins › Process › Laplace (3D)` 應用拉普拉斯濾波器，常用於邊緣增強，找細節或斑點。
+    *   也可以用 `Process > Filters > Convolve...` 視窗輸入以下任何一種kernel。  
         第一種
 
         ```
@@ -601,3 +607,38 @@ Y 方向
 -1 -2 -1
 ```
 ---
+
+## Macro實作
+
+觀察 `Find Edges`、`Unsharp Mask`、`Variance`、`Laplace`、`Bilateral Filter`、`Top Hat`等濾波器進行前處理的效果。
+
+```ijm
+run("Blobs (25K)");
+run("Invert LUT");
+
+run("Duplicate...", "title=sobel");
+run("Find Edges");
+
+selectImage("blobs.gif");
+run("Duplicate...", "title=UnsharpMask-10-0.6");
+run("Unsharp Mask...", "radius=10 mask=0.6");
+
+selectImage("blobs.gif");
+run("Duplicate...", "title=Variance0");
+run("Variance...", "radius=0");
+
+selectImage("blobs.gif");
+run("Laplace (3D)");
+rename("Laplace");
+
+selectImage("blobs.gif");
+run("Bilateral Filter", "spatial=10 range=50");
+rename("Bilateral");
+
+selectImage("blobs.gif");
+run("Duplicate...", "title=topHat50");
+run("Top Hat...", "radius=50");
+
+run("Tile");
+
+```

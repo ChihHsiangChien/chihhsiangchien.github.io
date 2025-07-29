@@ -48,13 +48,9 @@
 這類方法根據像素之間的相似性將它們合併到同一個區域。
 
 -   **區域生長 (Region Growing)：**
-    -   **原理：** 從一個或多個「種子點」開始，逐步將周圍滿足特定相似性準則（如灰度值在一定範圍內、範圍如何界定）的像素加入到當前區域中，直到沒有符合條件的相鄰像素為止。
-    **方法**
-    -   工具列的**wand tool**，雙擊會有進階選項。取得的selection，再加入ROI manager。
-    -   ` Plugins › MorphoLibJ › Segmentation › Interactive Marker-controlled Watershed`，可手動加入種子點進行分割。請參考[region-growing](region-growing.md)
-
-
-[形態學分割](morphological-segmentation.md)
+    -   **原理：** 從一個或多個**種子點**開始，根據區域內的像素相似性建立分區（如灰度值在一定範圍內），直到沒有符合條件的相鄰像素為止。
+    -   例如使用工具列的**wand tool**，雙擊會有進階選項。取得的selection，再加入ROI manager。
+    -   使用 [MorphoLibJ 的各種 segmentation plugins](morphlibj-segmentation.md)
 
 ## 機器學習方法
 
@@ -62,8 +58,4 @@
 
 -   **[Trainable Weka Segmentation](trainable-weka-segmentation.md)**
 -   **[Cellpose-SAM ](cellpose-sam.md)**
--   **[stardist細胞分割](stardist.md)**
-    
-
-# 後處理
-分割結果可能包含雜訊（小孔洞、孤立的小區域）、邊界不平滑或物體連接不緊密等問題，則利用形態學處理來優化結果，然後再利用`Analyze > Analyze Particles...`來過濾取出selections。
+-   **[stardist細胞分割](stardist.md)**   

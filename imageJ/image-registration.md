@@ -17,7 +17,7 @@
 
 為了演示對位的功能，我們首先用一個簡單的 Macro 腳本來產生一個「故意沒對齊」的影像stack。這個腳本會使用`Blobs`這個範例影像檔，利用迴圈不斷地對其進行微小的位移和旋轉，產生一系列連續但抖動的影像。
 
-### Macro 腳本
+**Macro 腳本**
 
 將以下程式碼複製到 Fiji 的腳本編輯器 (`File > New > Script...`)，語言選擇 `ImageJ Macro`，然後點擊 `Run`。
 
@@ -173,7 +173,7 @@ SIFT 的第一步是檢測影像中的關鍵特徵點。這些點在不同尺度
 
 為了演示這個方法，我們先修改先前的 Macro 腳本，讓它只產生平移位移，移除旋轉和縮放，以模擬常見的顯微鏡平台漂移。
 
-#### 修改後的 Macro 腳本
+**修改後的 Macro 腳本**
 
 ```ijm
 // Macro to create a stack with only translational jitter

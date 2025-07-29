@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>morphlibj-segmentation</title>
+<link rel="stylesheet" href="styles.css">
+<!-- KaTeX CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" integrity="sha384-wcIxkf4k558AjM3Yz3BBFQUbk/zgIYC2R0QpeeYb+TwlBVMrlgLqwRjRtGZiK7ww" crossorigin="anonymous">
+</head>
+<body>
+
+<div id="toc">
+<h2><a href="index.html">回到首頁</a></h2>
+<div class="toc-container">
+<div class="toc">
+<ul>
+<li><a href="#morpholibj">MorphoLibJ</a><ul>
+<li><a href="#_1">安裝</a></li>
+<li><a href="#_2">基本原理</a></li>
+<li><a href="#classic-watershed">Classic Watershed</a><ul>
+<li><a href="#_3">使用方法</a></li>
+<li><a href="#_6">實作</a></li>
+</ul>
+</li>
+<li><a href="#marker-controlled-watershed">Marker-controlled Watershed</a><ul>
+<li><a href="#_7">使用方法</a></li>
+<li><a href="#_11">實作</a></li>
+</ul>
+</li>
+<li><a href="#interactive-marker-controlled-watershed">Interactive Marker-controlled Watershed</a><ul>
+<li><a href="#_12">使用方法</a></li>
+<li><a href="#_13">實作</a></li>
+</ul>
+</li>
+<li><a href="#morphological-segmentation">Morphological Segmentation 形態學分割</a><ul>
+<li><a href="#_14">使用方法</a></li>
+<li><a href="#_15">參數</a></li>
+<li><a href="#_16">實作</a></li>
+</ul>
+</li>
+<li><a href="#distance-transform-watershed">Distance Transform Watershed</a><ul>
+<li><a href="#distance-transform-watershed_1">Distance Transform Watershed</a></li>
+<li><a href="#distance-transform-watershed-3d">Distance Transform Watershed (3D)</a></li>
+<li><a href="#_17">實作</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+
+</div>
+</div>
+<div id="content">
+<h1 id="morpholibj">MorphoLibJ</h1>
+<h2 id="_1">安裝</h2>
+<ol>
+<li>執行<code>Help › Update…</code>，按<code>Manage update sites</code>。</li>
+<li>搜尋<code>IJPB-plugins</code>，按下<code>Apply</code>，安裝後重新啟動Fiji。</li>
+</ol>
+<h2 id="_2">基本原理</h2>
+<p><strong>分水嶺(Watershed)演算法</strong>將影像視為一個地形圖，模擬水往低處流的概念，從最低點向外淹水擴展，直到遇到其他區域的擴展，然後形成邊界。為了避免過度分割，通常需要手動或自動生成一些「標記」(種子點)，這些標記代表了每個要分割的物體內部，從這些標記開始淹水。這個過程中，區域（region）會從種子點或最低點開始「長出來」，所以是典型的region growing策略。</p>
+<p>在 MorphoLibJ 中，分水嶺方法主要基於<strong>梯度圖</strong>或<strong>距離圖</strong>。</p>
+<h2 id="classic-watershed">Classic Watershed</h2>
+<p>原理請見<a href="https://imagej.net/plugins/classic-watershed">官方網頁的圖</a></p>
+<h3 id="_3">使用方法</h3>
+<p>Classic Watershed 插件可在任何 2D 和 3D 的灰階影像（8、16 和 32-bit）上運行。
+至少需要開啟一張影像才能運行此插件。</p>
+<h4 id="_4">參數</h4>
+<ul>
+<li><strong>Input image</strong>: 要進行淹水的灰階影像，通常是影像的梯度圖。</li>
+<li><strong>Mask image (optional)</strong>: 可選的二值影像，與輸入影像維度相同，可用於限制演算法的應用區域。設定為 “None” 則在整個輸入影像上運行。</li>
+<li><strong>Use diagonal connectivity</strong>: 選擇此項以允許在對角線方向上進行淹水（2D 為 8-connectivity，3D 為 26-connectivity）。</li>
+<li><strong>Min h</strong>: 開始淹水的最小灰階值（預設為影像類型的最小值）。</li>
+<li><strong>Max h</strong>: 淹水達到的最大灰階值（預設為影像類型的最大值）。</li>
+</ul>
+<h4 id="_5">輸出</h4>
+<ul>
+<li>標記影像 (Labeled image)，包含最終的集水盆地（整數值 1, 2, 3…）和分水嶺線（值為 0）。</li>
+</ul>
+<h3 id="_6">實作</h3>
+<p>執行此Macro觀看範例，適當前處理可避免<strong>過度分割</strong></p>
+<pre><code class="language-ijm">run(&quot;Blobs (25K)&quot;);
+run(&quot;Invert LUT&quot;);
+run(&quot;Invert&quot;);
+rename(&quot;origin&quot;);
+
+
+run(&quot;Classic Watershed&quot;, &quot;input=origin mask=None use min=0 max=150&quot;);
+run(&quot;3-3-2 RGB&quot;);
+rename(&quot;直接watershed&quot;);
+
+
+
+selectWindow(&quot;origin&quot;);
+run(&quot;Duplicate...&quot;, &quot;title=高斯模糊&quot;);
+run(&quot;Gaussian Blur...&quot;, &quot;sigma=3&quot;);
+run(&quot;Classic Watershed&quot;, &quot;input=高斯模糊 mask=None use min=0 max=150&quot;);
+run(&quot;3-3-2 RGB&quot;);
+rename(&quot;高斯後watershed&quot;);
+
+run(&quot;Tile&quot;);
+</code></pre>
+<h2 id="marker-controlled-watershed">Marker-controlled Watershed</h2>
+<p><a href="https://imagej.net/plugins/marker-controlled-watershed">官方網頁說明</a>
+從特定的種子點或標記開始淹水的過程，標記點通常選擇影像梯度圖的局部最小值。</p>
+<h3 id="_7">使用方法</h3>
+<p>至少需要兩張影像才能運行：</p>
+<ul>
+<li><strong>輸入影像 (Input image)</strong>: 一張 2D 或 3D 的灰階影像，用於進行淹水模擬，通常是影像的<strong>梯度圖</strong>。</li>
+<li><strong>標記影像 (Marker image)</strong>: 一張與輸入影像維度相同的影像，其中包含作為種子點的標記。這些標記是像素的連通區域，每個區域都有不同的標籤值。它們通常對應輸入影像的局部最小值，但也可以任意設定。</li>
+</ul>
+<p>此外，還可以選擇性地加入第三張影像：</p>
+<ul>
+<li><strong>遮罩影像 (Mask image)</strong>: 一張二值影像，維度與輸入和標記影像相同，可用於限制演算法的應用區域。若設定為 “None”，則演算法將在整個輸入影像上運行。</li>
+</ul>
+<h4 id="_8">參數</h4>
+<ul>
+<li><strong>緊湊度 (Compactness)</strong>: 此參數用來控制分割結果中各區域（集水盆地）的形狀規則性，數值範圍從 0 開始。</li>
+<li><strong>二值標記 (Binary markers)</strong>: 如果您的標記影像是二值的（即物件像素值相同，未經標記），請勾選此項，插件會自動為其進行標記。</li>
+<li><strong>計算分水嶺線 (Calculate dams)</strong>: 勾選此項以計算並產生分水嶺線。</li>
+<li><strong>使用對角線連通 (Use diagonal connectivity)</strong>: 勾選此項以允許在對角線方向上進行淹水。</li>
+</ul>
+<h4 id="_9">參數詳解</h4>
+<h5 id="1-compactness">1. 緊湊度 (Compactness)</h5>
+<p><code>Compactness = 0</code> (傳統分水嶺)
+- <strong>行為：</strong> 執行傳統的、完全基於梯度（影像邊緣）的分水嶺演算法。
+- <strong>結果：</strong> 分割線會嚴格沿著影像中梯度最強的路徑，因此產生的區域形狀可能非常不規則，完全由影像內容決定。</p>
+<p><code>Compactness &gt; 0</code> (緊湊分水嶺)
+- <strong>行為：</strong> 啟用「緊湊分水嶺」演算法，在分割過程中加入形狀約束，鼓勵產生的區域更圓滑、更緊湊。
+- <strong>結果：</strong>
+    - <strong>值越大，形狀越規則：</strong> 較大的緊湊度值會使分割區域更接近圓形或凸形，邊界更平滑。
+    - <strong>抑制雜訊：</strong> 對於有雜訊或邊緣不清晰的影像，適當的緊湊度有助於獲得更連貫、視覺上更平滑的分割結果。
+    - <strong>潛在風險：</strong> 過高的值可能導致過度平滑，使分割結果失去物件的真實細節，甚至將相鄰物件錯誤地合併。</p>
+<p>選擇最佳值通常需要反覆試驗，原則如下：</p>
+<ol>
+<li><strong>從 <code>0</code> 開始：</strong> 先以傳統分水嶺的結果作為基準，觀察區域是否過於破碎或邊緣鋸齒嚴重。</li>
+<li><strong>逐步增加：</strong> 如果物件預期是規則形狀，或結果受雜訊影響嚴重，可逐步增加緊湊度（如 0.1, 0.5, 1.0...），並觀察變化。</li>
+<li><strong>視覺評估是關鍵：</strong><ul>
+<li><strong>過小：</strong> 結果可能不夠平滑，充滿小而分散的區域。</li>
+<li><strong>適中：</strong> 區域邊緣變得平滑規整，同時保留了物件的主要細節。</li>
+<li><strong>過大：</strong> 結果過於圓滑，可能導致欠分割（物件被合併）或細節丟失。</li>
+</ul>
+</li>
+<li><strong>考慮影像特性：</strong><ul>
+<li><strong>高雜訊影像：</strong> 適當的緊湊度（如 0.5 ~ 2.0）有助於消除假邊緣。</li>
+<li><strong>複雜形狀物件：</strong> 若物件本身形狀不規則，應使用較小的緊湊度，以避免過度簡化其真實輪廓。</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h5 id="2-calculate-dams">2. 計算分水嶺線 (Calculate Dams)</h5>
+<p>此功能決定是否在分割出的不同區域之間產生明確的「分水嶺線」（Dams）。</p>
+<ul>
+<li><strong>地形學比喻：</strong><ul>
+<li><strong>集水盆地 (Catchment Basins):</strong> 影像中的同質區域（如物件內部）。</li>
+<li><strong>分水嶺線/壩 (Watershed Lines/Dams):</strong> 分隔不同盆地的山脊，對應影像中梯度最高的邊界。</li>
+</ul>
+</li>
+</ul>
+<p><strong>啟用 "Calculate Dams"</strong>
+- <strong>結果：</strong> 在不同區域之間會產生一條單像素寬的邊界線（即「壩」）。
+- <strong>優點：</strong>
+    - <strong>視覺化邊界：</strong> 清晰地顯示每個物件的精確輪廓。
+    - <strong>區分相鄰物件：</strong> 明確劃分緊密相鄰的物件。
+    - <strong>利於後續分析：</strong> 方便進行周長測量或拓撲分析。</p>
+<p><strong>禁用 "Calculate Dams"</strong>
+- <strong>結果：</strong> 只會產生一個個填滿顏色的區域，區域之間直接相鄰，沒有邊界線。
+- <strong>優點：</strong>
+    - <strong>簡化數據：</strong> 當你只關心每個區域的標籤和屬性（如面積、平均強度），而不需要邊界線時，結果更簡潔。
+    - <strong>避免額外像素：</strong> 分割結果只包含物件本身，沒有額外的邊界線像素。</p>
+<h4 id="_10">輸出</h4>
+<ul>
+<li>一個標籤影像 (Labeled image)，其中包含分割出的集水盆地，以及（可選的）分水嶺線（dams）。</li>
+</ul>
+<h3 id="_11">實作</h3>
+<p>執行以下Macro</p>
+<pre><code class="language-ijm">run(&quot;Blobs (25K)&quot;);
+run(&quot;Invert LUT&quot;);
+run(&quot;Duplicate...&quot;, &quot;title=origin&quot;);
+
+
+selectImage(&quot;origin&quot;);
+run(&quot;Duplicate...&quot;, &quot;title=edge&quot;);
+run(&quot;Gaussian Blur...&quot;, &quot;sigma=3&quot;);
+run(&quot;Find Edges&quot;);
+
+
+selectImage(&quot;origin&quot;);
+run(&quot;Duplicate...&quot;, &quot;title=binary&quot;);
+run(&quot;Gaussian Blur...&quot;, &quot;sigma=3&quot;);
+setAutoThreshold(&quot;Triangle dark&quot;);
+run(&quot;Convert to Mask&quot;);
+
+
+selectImage(&quot;binary&quot;);
+run(&quot;Duplicate...&quot;, &quot;title=point&quot;);
+run(&quot;Ultimate Points&quot;);
+
+
+run(&quot;Marker-controlled Watershed&quot;, &quot;input=edge marker=point mask=None compactness=0 use&quot;);
+run(&quot;glasbey on dark&quot;);
+run(&quot;Label Map to ROIs&quot;, &quot;connectivity=C4 vertex_location=Corners name_pattern=r%03d&quot;);
+
+run(&quot;Tile&quot;);
+
+
+
+</code></pre>
+<h2 id="interactive-marker-controlled-watershed">Interactive Marker-controlled Watershed</h2>
+<p>互動式標記控制的分水嶺分割</p>
+<h3 id="_12">使用方法</h3>
+<ol>
+<li>在影像上使用 <strong>Point Tool</strong>、<strong>Multi-point Tool</strong> 或任何選取工具，標示出您感興趣的物件（作為「種子點」）。</li>
+<li>將這些標記加入 <strong>ROI Manager</strong> (<code>Analyze &gt; Tools &gt; ROI Manager...</code>)。</li>
+<li>在 ROI Manager 視窗中，<strong>選取</strong>所有要作為種子點的 ROI。</li>
+<li>啟動插件：<code>Plugins › MorphoLibJ › Segmentation › Interactive Marker-controlled Watershed</code>。</li>
+</ol>
+<hr />
+<h3 id="_13">實作</h3>
+<p>範例：使用<a href="img/維管束.tif">維管束圖片</a>進行細胞分割。<a href="https://www.researchgate.net/figure/Transverse-sections-of-mature-root-and-hypocotyl-regions-from-seedlings-7-days-after_fig4_27695560">圖片來源</a></p>
+<p>開啟維管束圖片後，執行Macro</p>
+<pre><code class="language-ijm">run(&quot;Duplicate...&quot;, &quot;title=1&quot;);
+run(&quot;8-bit&quot;);
+run(&quot;Gaussian Blur...&quot;, &quot;sigma=1&quot;);
+run(&quot;Gaussian Blur...&quot;, &quot;sigma=1&quot;);
+run(&quot;Subtract Background...&quot;, &quot;rolling=10 light sliding&quot;);
+run(&quot;Invert&quot;);
+run(&quot;Duplicate...&quot;, &quot;title=2&quot;);
+setAutoThreshold(&quot;Triangle&quot;);
+//setThreshold(0, 9);
+run(&quot;Convert to Mask&quot;);
+run(&quot;Duplicate...&quot;, &quot;title=3&quot;);
+run(&quot;Distance Map&quot;);
+run(&quot;Find Maxima...&quot;, &quot;prominence=1 output=[Point Selection]&quot;);
+run(&quot;ROI Manager...&quot;);
+roiManager(&quot;Add&quot;);
+selectImage(&quot;1&quot;);
+roiManager(&quot;Select&quot;, 0);
+run(&quot;Interactive Marker-controlled Watershed&quot;);
+
+</code></pre>
+<h2 id="morphological-segmentation">Morphological Segmentation 形態學分割</h2>
+<p>Morphological Segmentation結合了形態學操作（如擴展最小值、形態學梯度）與分水嶺演算法，能夠對各種類型（8、16、32 位元）的 2D 和 3D 灰度影像進行高效分割。</p>
+<h3 id="_14">使用方法</h3>
+<ol>
+<li><strong>開啟影像</strong>：在 Fiji 中開啟任何8-bit影像（單一 2D 影像或 3D 堆疊）。</li>
+<li><strong>啟動插件</strong>：執行 <code>Plugins &gt; MorphoLibJ &gt; Segmentation &gt; Morphological Segmentation</code>。</li>
+<li><strong>設定參數</strong>：在插件視窗中，依序設定「輸入影像」、「分水嶺分割」的參數。</li>
+<li><strong>執行分割</strong>：點擊 <code>Run</code> 按鈕。</li>
+<li><strong>檢視與匯出</strong>：在「結果面板」中選擇不同的顯示方式，並可將結果匯出為新影像。</li>
+<li><strong>後處理</strong>：如有需要，可使用「後處理面板」的功能對分割結果進行微調。</li>
+</ol>
+<p>在主畫布中可以隨時平移、縮放或滾動切片，就像操作一般 ImageJ 視窗一樣。</p>
+<hr />
+<h3 id="_15">參數</h3>
+<h4 id="1">1. 輸入影像</h4>
+<ul>
+<li>
+<p><strong>邊界影像 (Border Image):</strong> 如果您的輸入影像<strong>已經是</strong>經過邊緣檢測或梯度計算的結果（例如，物件邊界是亮線），請選擇此項。</p>
+</li>
+<li>
+<p><strong>物件影像 (Object Image):</strong> 如果您的輸入影像是原始影像，其中物件本身比背景亮或暗，請選擇此項。選擇後會啟用以下選項：</p>
+<ul>
+<li><strong>梯度類型 (Gradient Type):</strong> 選擇計算梯度的演算法。</li>
+<li><strong>半徑 (Radius):</strong> 設定計算梯度時的半徑（以像素為單位）。</li>
+<li><strong>顯示梯度影像 (Display gradient image):</strong> 勾選後，主畫布將顯示計算出的梯度影像，方便觀察。</li>
+</ul>
+</li>
+</ul>
+<h4 id="2">2. 分水嶺分割</h4>
+<p>設定分割演算法的核心參數。</p>
+<ul>
+<li><strong>容差 (Tolerance):</strong><ul>
+<li><strong>作用：</strong> 控制搜尋區域最小值（Regional Minima）的強度動態範圍。這是影響分割結果最重要的參數。</li>
+<li><strong>效果：</strong><ul>
+<li><strong>增加容差值</strong>：會合併更多相似區域，減少最終分割出的物件數量（防止過度分割）。</li>
+<li><strong>減少容差值</strong>：對強度變化更敏感，會產生更多的分割物件。</li>
+</ul>
+</li>
+<li><strong>注意：</strong> 此值與影像的位元深度密切相關。<ul>
+<li><strong>8-bit 影像 (0-255):</strong> 建議從 <code>10</code> 開始嘗試。</li>
+<li><strong>16-bit 影像 (0-65535):</strong> 應大幅增加，例如 <code>2000</code>。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>計算壩線 (Calculate dams):</strong></p>
+<ul>
+<li><strong>勾選 (預設):</strong> 在分割出的不同物件之間產生單像素寬的邊界線（即「壩」）。</li>
+<li><strong>不勾選:</strong> 產生填滿顏色的區域，物件之間直接相鄰，沒有邊界線。</li>
+</ul>
+</li>
+<li>
+<p><strong>連通性 (Connectivity):</strong></p>
+<ul>
+<li><strong>作用：</strong> 定義像素的鄰域關係。</li>
+<li><strong>選項：</strong> 2D 可選 4 或 8；3D 可選 6 或 26。</li>
+<li><strong>建議：</strong> 選擇非對角線的連通性（2D用<code>4</code>，3D用<code>6</code>）通常能產生更圓滑、自然的物件輪廓。</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h4 id="3">3. 結果</h4>
+<p>此面板在執行分割後啟用，用於視覺化與匯出結果。</p>
+<ul>
+<li>
+<p><strong>顯示 (Display):</strong> 提供四種視覺化模式：</p>
+<ul>
+<li><strong>疊加盆地 (Overlaid basins):</strong> 在原始影像上以不同顏色疊加分割出的物件。</li>
+<li><strong>疊加壩線 (Overlaid dams):</strong> 在原始影像上以紅色疊加分水嶺邊界線。</li>
+<li><strong>集水盆地 (Catchment basins):</strong> 產生一張新的彩色標籤影像，每個物件有獨立的顏色。</li>
+<li><strong>分水嶺線 (Watershed lines):</strong> 產生一張新的二值影像，顯示黑色的邊界線與白色的物件。</li>
+</ul>
+</li>
+<li>
+<p><strong>顯示結果疊加層 (Show result overlay):</strong> 用於快速開關疊加層的顯示。</p>
+</li>
+<li><strong>建立影像按鈕 (Create image button):</strong> 將當前畫布中顯示的結果（包含疊加層）儲存為一張新的影像。</li>
+</ul>
+<hr />
+<h4 id="4-post-processing">4. 後處理 Post-processing</h4>
+<ul>
+<li><strong>合併標籤 (Merge labels):</strong><ul>
+<li><strong>用途：</strong> 手動合併被過度分割的區域。</li>
+<li><strong>操作：</strong> 使用 <strong>手繪選取工具</strong> 或 <strong>點工具</strong> 選取多個想合併的物件，然後點擊此按鈕。第一個被選中的物件顏色將應用於所有被選物件。</li>
+</ul>
+</li>
+</ul>
+<blockquote>
+<p><strong>多切片操作提示：</strong> 在 3D 堆疊中，可使用「點工具」並按住 <code>SHIFT</code> 鍵，在不同切片上點選要合併的物件。</p>
+</blockquote>
+<ul>
+<li><strong>隨機顏色 (Shuffle colors):</strong><ul>
+<li><strong>用途：</strong> 當相鄰的兩個物件被分配到相似顏色，難以區分時，點擊此按鈕可隨機重新分配所有顏色，以利觀察。</li>
+</ul>
+</li>
+</ul>
+<h3 id="_16">實作</h3>
+<p>使用範例影像<code>Blobs</code>進行分割，Tolerance設定35。</p>
+<h2 id="distance-transform-watershed">Distance Transform Watershed</h2>
+<p>一種分離二值影像中相接觸物件的經典方法是利用<strong>距離變換(distance transform)</strong>和<strong>分水嶺法(watershed method)</strong>。其想法是在重疊物件的中心盡可能遠的地方建立邊界。這種策略對圓形物件效果很好，被稱為<strong>距離變換分水嶺 (Distance Transform Watershed)</strong>。它包括計算二值影像的距離變換，將其反轉（因此影像最暗的部分是物件的中心），然後使用原始影像作為遮罩對其應用分水嶺。在我們的實作中，我們包含了一個使用擴展最小值的分水嶺選項，以便使用者可以控制物件分裂和合併的數量。</p>
+<p>能分離相互接觸的二值物體 (如細胞、顆粒)，有效處理黏連物體，分割線位於物體間距最遠處。</p>
+<p>MorphoLibJ 在 <code>Plugins › MorphoLibJ › Binary Images…</code> 選單下提供演算法：</p>
+<h3 id="distance-transform-watershed_1">Distance Transform Watershed</h3>
+<p><code>Distance Transform Watershed</code> 需要一個 2D 8-bit 的二值影像來運行。若是如此，將會彈出如下的對話框：</p>
+<p>插件參數分為距離變換和分水嶺選項：</p>
+<h4 id="distance-map-options">距離圖選項 (Distance map options):</h4>
+<ul>
+<li><strong>Distances</strong>: 允許選擇一組預定義的權重，用於計算距離變換（使用歐幾里得度量的Chamfer近似）。這些權重會影響最終結果中邊界的位置，特別是形狀。選項包括：<ul>
+<li>Chessboard (1,1): 所有鄰居的權重均為1。</li>
+<li>City-Block (1,2): 正交鄰居權重為1，對角鄰居權重為2。</li>
+<li>Quasi-Euclidean (1,1.41): 正交鄰居權重為1，對角鄰居權重為√2。</li>
+<li>Borgefors (3,4): 正交鄰居權重為3，對角鄰居權重為4（3x3遮罩下歐幾里得距離的最佳近似）。</li>
+<li>Weights (2,3): 正交鄰居權重為2，對角鄰居權重為3。</li>
+<li>Weights (5,7): 正交鄰居權重為5，對角鄰居權重為7。</li>
+<li>Chessknight (5,7,11): 正交鄰居權重為5，對角鄰居權重為7，馬步（chess-knight moves）權重為11（5x5遮罩下最佳近似）。</li>
+</ul>
+</li>
+<li><strong>Output type</strong>: 16 或 32-bit，用於以短整數或浮點數精度計算距離。</li>
+<li><strong>Normalize weights</strong>: 指示是否應將結果距離圖標準化（將距離除以第一個Chamfer權重）。</li>
+</ul>
+<h4 id="watershed-options">分水嶺選項 (Watershed options):</h4>
+<ul>
+<li><strong>Dynamic</strong>: 與 Morphological Segmentation 插件中的動態值相同，這是用於在反向距離變換影像中搜索區域最小值的強度動態範圍。基本上，增加此值會導致更多物件合併，減少此值則會導致更多物件分裂。</li>
+<li><strong>Connectivity</strong>: 像素連通性（4 或 8）。選擇非對角線連通性（4）通常能產生更圓滑的物件。</li>
+</ul>
+<p>最後，可以點擊 <strong>Preview</strong> 選項來視覺化目前插件配置的結果。</p>
+<p><strong>結果</strong>：2D 32位元標籤影像（每個物件一個索引值）。</p>
+<h3 id="distance-transform-watershed-3d">Distance Transform Watershed (3D)</h3>
+<p><code>Distance Transform Watershed 3D</code> 需要一個 3D 8-bit 的二值影像來運行。若是如此，將會彈出如下的對話框：</p>
+<p>參數與 2D 版本相同，但部分參數已修改為對 3D 影像：</p>
+<h4 id="distance-map-options_1">距離圖選項 (Distance map options):</h4>
+<ul>
+<li><strong>Distances</strong>: 現在可用的選項包括：<ul>
+<li>Chessboard (1,1,1): 所有鄰居的權重均為1。</li>
+<li>City-Block (1,2,3): 正交鄰居權重為1，對角鄰居權重為2，立方體對角鄰居權重為3。</li>
+<li>Quasi-Euclidean (1,1.41,1.73): 正交鄰居權重為1，對角鄰居權重為√2，立方體對角鄰居權重為√3。</li>
+<li>Borgefors (3,4,5): 正交鄰居權重為3，對角鄰居權重為4，立方體對角鄰居權重為5（3x3x3遮罩下歐幾里得距離的最佳近似）。</li>
+</ul>
+</li>
+<li><strong>Output type</strong>: 16 或 32-bit，用於以短整數或浮點數精度計算距離。</li>
+<li><strong>Normalize weights</strong>: 指示是否應將結果距離圖標準化（將距離除以第一個Chamfer權重）。</li>
+</ul>
+<h4 id="watershed-options_1">分水嶺選項 (Watershed options):</h4>
+<ul>
+<li><strong>Dynamic</strong>: 與 2D 版本相同，這是用於在反向距離變換影像中搜索區域最小值的強度動態範圍。基本上，增加此值會導致更多物件合併，減少此值則會導致更多物件分裂。</li>
+<li><strong>Connectivity</strong>: 體素連通性（6 或 26）。選擇非對角線連通性（6）通常能產生更圓滑的物件。</li>
+</ul>
+<p><strong>結果</strong>：3D 32位元標籤影像（每個物件一個索引值）。</p>
+<h3 id="_17">實作</h3>
+<p>使用<a href="img/維管束.tif">維管束圖片</a>進行細胞分割。<a href="https://www.researchgate.net/figure/Transverse-sections-of-mature-root-and-hypocotyl-regions-from-seedlings-7-days-after_fig4_27695560">圖片來源</a></p>
+<p>開啟維管束檔案後，執行以下Macro</p>
+<pre><code class="language-ijm">run(&quot;Duplicate...&quot;, &quot;title=binary&quot;)
+
+run(&quot;8-bit&quot;);
+run(&quot;Gaussian Blur...&quot;, &quot;sigma=2&quot;);
+setAutoThreshold(&quot;Triangle dark&quot;);
+run(&quot;Convert to Mask&quot;);
+run(&quot;Distance Transform Watershed&quot;, &quot;distances=[Quasi-Euclidean (1,1.41)] output=[32 bits] normalize dynamic=1 connectivity=4&quot;);
+run(&quot;glasbey on dark&quot;);
+run(&quot;Label Map to ROIs&quot;, &quot;connectivity=C4 vertex_location=Corners name_pattern=r%03d&quot;);
+run(&quot;ROI Manager...&quot;);
+
+run(&quot;Tile&quot;);
+
+</code></pre>
+</div>
+
+<!-- Mermaid JS -->
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({}); // Keep double braces for literal JS object
+  mermaid.run({ nodes: document.querySelectorAll('.language-mermaid') }); // Keep double braces
+</script>
+
+<!-- KaTeX JS -->
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoBPJpTUs74ddyc4bFZSM1TVlQDA60VBbJS0oA934VSz82sBx1X7kSx2ATBDIyd" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk" crossorigin="anonymous"></script>
+<!-- *** CORRECTED SCRIPT WITH ${...} ESCAPING *** -->
+        <script>
+            document.addEventListener("DOMContentLoaded", function() {
+                renderMathInElement(document.body, {
+                    delimiters: [
+                        { left: '$$',  right: '$$',  display: true },
+                        { left: '\\[', right: '\\]', display: true },
+                        { left: '\\(', right: '\\)', display: false }
+                    ],
+                    ignoredTags: ['script','noscript','style','textarea','pre','code'],
+                    throwOnError: false
+                });
+            });
+        </script>
+
+</body>
+</html>
