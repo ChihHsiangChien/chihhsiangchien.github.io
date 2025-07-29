@@ -262,3 +262,29 @@ print("Shifted Stack created with " + nSlices() + " slices.");
 2. 對位後，使用標準差的z投影，並進行套色。
 
 [video](video/cell.mp4)
+匯入240-270的frame進行對位
+
+```ijm
+
+selectImage("before");
+run("Z Project...", "projection=[Standard Deviation]");
+selectImage("after");
+run("Z Project...", "projection=[Standard Deviation]");
+
+selectImage("after");
+run("Z Project...", "projection=[Average Intensity]");
+run("8-bit");
+
+selectImage("STD_after");
+run("8-bit");
+
+run("Fire");
+
+run("Enhance Contrast", "saturated=0.35");
+run("Apply LUT");
+
+selectImage("AVG_after");
+run("Merge Channels...", "c1=STD_after c4=AVG_after create");
+
+```
+
