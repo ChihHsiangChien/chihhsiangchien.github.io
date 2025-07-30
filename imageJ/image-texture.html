@@ -273,8 +273,136 @@ Entropy \approx 0.464 + 0.528 + 0.528 = 1.52
 <ol>
 <li><strong>開啟影像：</strong> 開啟範例影像 <code>File &gt; Open Samples &gt; T1 Head (2.4M, 16-bits)</code>。</li>
 <li><strong>開啟 ROI 管理器：</strong> 執行 <code>Analyze &gt; Tools &gt; ROI Manager...</code>。</li>
-<li><strong>安裝插件 (若無)：</strong> 常用的plugin是 <code>GLCM Texture Analyzer</code>。若沒有，可透過 <code>Help &gt; Update... &gt; Manage update sites</code>，勾選 <code>Texture</code> 或 <code>Bio-Formats</code> 來安裝。</li>
+<li><strong>開啟Macro</strong> 在Text Window貼上以下Macro</li>
 </ol>
+<pre><code class="language-ijm">macro &quot;Main&quot; {
+
+    step = 1;
+
+    calculateASM = true;
+    calculateContrast = true;
+    calculateCorrelation = true;
+    calculateIDM = true;
+    calculateEntropy = true;
+
+    run(&quot;Clear Results&quot;);
+
+    n = roiManager(&quot;count&quot;);
+    if (n == 0) exit(&quot;ROI Manager 中沒有 ROI&quot;);
+
+    for (i = 0; i &lt; n; i++) {
+        roiManager(&quot;select&quot;, i);
+        GLCM_Texture_Macro(i, step, calculateASM, calculateContrast, calculateCorrelation, calculateIDM, calculateEntropy);
+    }
+
+    print(&quot;GLCM Texture analysis done for &quot; + n + &quot; ROIs.&quot;);
+}
+
+function GLCM_Texture_Macro(roiIndex, step, doASM, doContrast, doCorrelation, doIDM, doEntropy) {
+
+
+    if (bitDepth() != 8) {
+        exit(&quot;僅支援8-bit灰階影像&quot;);
+    }
+
+    getSelectionBounds(x, y, w, h);
+
+    pixels = newArray(w * h);
+    idx = 0;
+    for (yy = y; yy &lt; y + h; yy++) {
+        for (xx = x; xx &lt; x + w; xx++) {
+            pixels[idx] = getPixel(xx, yy);
+            idx++;
+        }
+    }
+
+    size = 257;
+    glcm = newArray(size * size);
+    Array.fill(glcm, 0);
+
+    pixelCounter = 0;
+
+    // 0度方向 GLCM
+    for (row = 0; row &lt; h; row++) {
+        for (col = 0; col &lt; w - step; col++) {
+            a = pixels[row * w + col];
+            b = pixels[row * w + col + step];
+            index1 = a * size + b;
+            index2 = b * size + a;
+            glcm[index1] += 1;
+            glcm[index2] += 1;
+            pixelCounter += 2;
+        }
+    }
+
+    for (i = 0; i &lt; size * size; i++) {
+        glcm[i] /= pixelCounter;
+    }
+
+    asm = 0;
+    contrast = 0;
+    correlation = 0;
+    IDM = 0;
+    entropy = 0;
+
+    px = 0;
+    py = 0;
+
+    for (a = 0; a &lt; size; a++) {
+        for (b = 0; b &lt; size; b++) {
+            val = glcm[a * size + b];
+            px += a * val;
+            py += b * val;
+        }
+    }
+
+    stdevx = 0;
+    stdevy = 0;
+
+    for (a = 0; a &lt; size; a++) {
+        for (b = 0; b &lt; size; b++) {
+            val = glcm[a * size + b];
+            stdevx += (a - px) * (a - px) * val;
+            stdevy += (b - py) * (b - py) * val;
+        }
+    }
+
+    for (a = 0; a &lt; size; a++) {
+        for (b = 0; b &lt; size; b++) {
+            val = glcm[a * size + b];
+            asm += val * val;
+            contrast += (a - b) * (a - b) * val;
+            if (stdevx != 0 &amp;&amp; stdevy != 0) {
+                correlation += ((a - px) * (b - py) * val) / (stdevx * stdevy);
+            }
+            IDM += val / (1 + (a - b) * (a - b));
+            if (val &gt; 0) {
+                entropy -= val * log(val);
+            }
+        }
+    }
+
+    nRows = nResults();
+    setResult(&quot;ROI Index&quot;, nRows, roiIndex + 1);
+    setResult(&quot;Step size&quot;, nRows, step);
+    setResult(&quot;ROI Name&quot;, nRows, Roi.getName);
+    setResult(&quot;Angular Second Moment&quot;, nRows, asm);
+    setResult(&quot;Contrast&quot;, nRows, contrast);
+    setResult(&quot;Correlation&quot;, nRows, correlation);
+    setResult(&quot;Inverse Difference Moment&quot;, nRows, IDM);
+    setResult(&quot;Entropy&quot;, nRows, entropy);
+    updateResults();
+
+    print(&quot;ROI &quot; + (roiIndex + 1) + &quot; GLCM features:&quot;);
+    print(&quot;  ASM = &quot; + asm);
+    print(&quot;  Contrast = &quot; + contrast);
+    print(&quot;  Correlation = &quot; + correlation);
+    print(&quot;  IDM = &quot; + IDM);
+    print(&quot;  Entropy = &quot; + entropy);
+}
+
+
+</code></pre>
 <h4 id="roi-selection">選取ROI Selection</h4>
 <p>我們需要在典型的灰質和白質區域手動定義幾個 ROI 以進行比較。</p>
 <ol>
@@ -291,16 +419,10 @@ Entropy \approx 0.464 + 0.528 + 0.528 = 1.52
 <li>加入 ROI 管理器並命名為 <code>white</code>。</li>
 </ul>
 </li>
-</ol>
-<h4 id="glcm-running-the-glcm-analysis">執行 GLCM 分析 (Running the GLCM Analysis)</h4>
-<ol>
-<li>在 ROI manager中，選擇剛剛建立的 <code>grey</code> ROI，執行 <code>Analyze &gt; GLCM Texture</code> 。</li>
-<li>在彈出的對話框中，保持預設參數（例如，<code>Step size (d)</code>=1），然後點擊 <code>OK</code>。</li>
-<li>執行後，會彈出一個 "Results" 表格，在此表格選擇 <code>File &gt;　Rename</code>改名成 <code>Grey</code>。</li>
-<li>改執行<code>white</code>ROI，重複以上動作。</li>
+<li>執行Macro的GLCM 分析，就會分析ROI manager的每一個ROI，並寫入Result。</li>
 </ol>
 <h3 id="_8">結果解讀與結論</h3>
-<p>觀察兩個表格的差異，這些數據是否符合我們對灰白質的主觀感受？白質的紋理確實比灰質更平滑、更均質，而灰質的紋理則更粗糙、更複雜。</p>
+<p>觀察表格，這些數據是否符合我們對灰白質的主觀感受？白質的紋理確實比灰質更平滑、更均質，而灰質的紋理則更粗糙、更複雜。</p>
 <table>
 <thead>
 <tr>

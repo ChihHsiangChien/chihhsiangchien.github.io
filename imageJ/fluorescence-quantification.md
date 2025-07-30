@@ -25,14 +25,15 @@
 為了分別觀察不同通道的影像品質，請利用` Image › Color › Split Channels`將影像分成不同通道來分析。
 
 在進行量化影像前，我們必須注意影像的幾項品質:
+
 1. 是否產生**有損壓縮(lossy compression)**嗎？
 2. **最高亮度**資訊是否已經丟失？
 3. 是否**均勻背景**？是否**偵測器偏移**(uniform background / detector offset)？
 
-#### **有損壓縮(lossy compression)**
+#### 有損壓縮(lossy compression)
 使用**放大鏡工具**放大影像，是否會看到 8x8的**方形偽影(square shaped artifacts)**。若有，可能被進行過**JPEG 壓縮**，因為JPEG是基於 8x8 像素區塊進行壓縮的演算法，每個區塊都會損失各自的高頻訊號，因此彼此區塊會產生不連續的界面，產生明顯區塊邊界。
 
-#### **最高亮度**資訊是否已經丟失？
+#### 最高亮度資訊是否已經丟失？
 
 影像採樣時，進入偵測器的光線量過多，超出了偵測器所能線性響應的範圍，因此產生**飽和(saturated)**，這會使得感測器的讀數限制在最大值（例如255），超過這個數字的都會被**剪切(clipped)**，因此會觀察到**過度曝光(overexposed)**。
 
@@ -40,7 +41,7 @@
 
 請注意藍色通道中的直方圖，強度值255的像素數量有108個。（也許真實強度有高於255的，但卻被剪切了）
 
-#### *均勻背景**/**偵測器偏移**
+#### **均勻背景**/**偵測器偏移**
 當沒有任何光子進入偵測器，理論上偵測器應該會採樣到0值，但如果產生偵測器偏移（detector offset），則應該是黑色的區域就會產生非零的數值。你可以用兩種方式檢查：
 
 * 使用工具列的`Pixel inspector`，觀察應該黑色的部位是否非零。
@@ -48,17 +49,18 @@
 
 請觀察綠色通道的直方圖和另外兩個通道的直方圖差異。
 
-如果影像產生這種offset，則在後續做**共定位分析**時，需要進行**背景減除(Background Subtraction)**或**零偏移校正(Zero Offset Correction / Bias Correction)**的，否則會影響一些需要用像素絕對強度來運算的係數，例如**Manders係數**。
+如果影像產生這種offset，則在後續做**共定位分析**時，需要進行**背景減除(Background Subtraction)**或**零偏移校正(Zero Offset Correction / Bias Correction)**的，否則會影響一些需要用像素**絕對強度**來運算的係數，例如**Manders係數**。
 
 ### 如何進行偏移校正
 校正的目的是為了去除所有來自非目標分子或環境的光學噪音，突出真實的訊號。（想像一下大家都站在箱子上量身高，最後得到的身高應該如何校正回真實身高？）
 
 操作方式：
+
 * 手動選擇背景區域：在影像的空白區域（例如細胞周圍沒有螢光的區域）測量平均強度，然後從整個影像中減去這個值。（但結果可能產生負值）
     1. 使用矩形選區工具，選取一個足夠大的背景區域。`Analyze > Measure`或 `Ctrl+M` 來獲取該區域的平均像素值。
     2. 使用`Process > Math > Subtract...`扣除該數值
 
-* 使用內建的[背景分離](imageProcess.html#3)`Process > Subtract Background...`
+* 使用內建的[背景分離](image-preprocess.html#3)`Process > Subtract Background...`
 * 拍攝背景影像：拍攝一個不含目標染料但具有所有其他樣品成分和培養條件的空白樣品影像，然後從實驗影像中減去它。
 
     1. 拍攝多張空白影像，然後將這這些影像堆疊起來，計算它們的平均值（`Image > Stacks > Z Project...`，選擇 **Average**）。這張平均影像就是你的「偏置主幀 (Master Bias Frame)」。
@@ -81,7 +83,7 @@
 
 DAPI的藍色通道有清晰的細胞核輪廓，可以用來定義細胞核的選區 (ROI)。
 
-1.  **分離通道：**：執行 `Image > Color > Split Channels`。，執行`Image > Rename..`重新命名成 `red`, `green`, `blue` 三張獨立的灰階影像。
+1.  **分離通道：**：執行 `Image > Color > Split Channels`。執行`Image > Rename..`重新命名成 `red`, `green`, `blue` 三張獨立的灰階影像。
 2.  **分割細胞核：**
     *   選取 `(blue)` 這張影像。
     *   執行 `Image > Adjust > Threshold...` 來選取細胞核。
@@ -89,12 +91,12 @@ DAPI的藍色通道有清晰的細胞核輪廓，可以用來定義細胞核的�
 3.  **將細胞核 ROI 加入manager：**
     *   執行 `Analyze > Analyze Particles...`。
     *   設定 `Size` 來過濾掉小雜訊，例如 `50-Infinity`。
-    *   **關鍵：** 務必勾選 `Add to Manager`。
-    *   點擊 `OK`。現在，所有細胞核的輪廓都被加入到 ROI manager中了。
+    *   勾選 `Add to Manager`，然後點擊 `OK`，所有細胞核的輪廓都被加入到 ROI manager中了。
     *   在 ROI manager 刪掉不屬於細胞核的部份，例如部份文字可能被選入 ROI。
 
 ### 2. 定義**細胞**區域
 選取 `(red)` 通道影像，因為能大致顯示整個細胞的輪廓。
+
 1.  **定義細胞粗略範圍**
     *   選擇紅色通道影像，執行`Image > Duplicate..`，複製一張，接下來的操作都用這張圖來運算。
     *   使用工具列的圓形圈選工具，右鍵選擇**Selection Brush Tool**，這可以讓你用筆刷的方式圈出細胞界線。針對左上角的單一細胞，用此工具粗略畫出細胞範圍。
@@ -105,22 +107,24 @@ DAPI的藍色通道有清晰的細胞核輪廓，可以用來定義細胞核的�
     *   針對此遮罩影像，執行`Edit › Selection › Create Selection`，可以將其轉為選區，在 ROI Manager按下**Add**，就可以有單獨一個細胞的ROI。可以點擊 `Rename...` 將其命名為 `Cell-1`。
 
 ### 3. 定義**細胞質**區域
-* 在ROI Manager找尋屬於前述細胞的細胞核區域，將之rename為`Nu-1`。
-* 按**ctrl**，**同時**選中**Cell-1**和**Nu-1**，選擇點擊 `More >>` 按鈕，選擇 `XOR`。
-* 這會產生一個新的 ROI，其形狀就像一個甜甜圈，這就是我們需要的**細胞質區域**。
-* 將這個新的 "甜甜圈" ROI 也加入manager，並命名為 `Cyto-1`。
-* 你可以選中`Cyto-1`之後，執行`Edit › Selection › Create Mask`，就可以看見這個甜甜圈形狀的細胞質。
+
+1. 在ROI Manager找尋屬於前述細胞的細胞核區域，將之rename為`Nu-1`。
+2. 按**ctrl**，**同時**選中**Cell-1**和**Nu-1**，選擇點擊 `More >>` 按鈕，選擇 `XOR`。(XOR是互斥，請理解成「有你就沒有我，有我就沒有你」)
+3. 這會產生一個新的 ROI，其形狀就像一個甜甜圈，這就是我們需要的**細胞質區域**。
+4. 將這個新的 "甜甜圈" ROI 也加入manager，並命名為 `Cyto-1`。
+5. 你可以選中`Cyto-1`之後，執行`Edit › Selection › Create Mask`，就可以看見這個甜甜圈形狀的細胞質。
 
 現在，我們的 ROI manager中應該至少有三個 ROI：`Nu-1`、`Cell-1` 和 `Cyto-1`。
 
 ## 進行定量分析
-你可以針對單一影像，多個ROI進行測量。也可以針對一個stack的每個slice，作多個ROI的測量。
+你可以針對單一影像的多個ROI進行測量，也可以針對一個stack的每個slice，作多個ROI的測量。
+
 1. 單一影像，多個ROI的測量
-*  同時選取你要測量的ROI，並選擇要測量的影像，按下ROI manager的`Measure`
+    *  同時選取你要測量的ROI，並選擇要測量的影像，按下ROI manager的`Measure`
 
 2. 單一stack，多個ROI的測量
-*  你可以再開啟原始的`Fluorescent Cells.tif`，或是將已經經過背景扣除的三張影像再透過`Image > Color > Merge Channels`或是`Imagew > Stacks > Images to Stack `組合成stack。
-*  ，在 ROI manager視窗中，選中多個ROI，點擊 `More >>` 按鈕，然後選擇 `Multi Measure`。
+    *  你可以再開啟原始的`Fluorescent Cells.tif`，或是將已經經過背景扣除的三張影像再透過`Image > Color > Merge Channels`或是`Imagew > Stacks > Images to Stack `組合成stack。
+    *  在 ROI manager視窗中，選中多個ROI，點擊 `More >>` 按鈕，然後選擇 `Multi Measure`。
 
 
 
@@ -152,9 +156,3 @@ DAPI的藍色通道有清晰的細胞核輪廓，可以用來定義細胞核的�
 - **Manders 分割係數**：分別計算兩通道中共定位像素的螢光量佔總螢光量的比例，範圍 0 ~ 1。越接近 1 表示共定位程度越高。
 - **Costes 統計檢定**：評估觀察到的相關性是否顯著高於隨機重疊，P 值 < 0.05 表示共定位具統計意義。
 - **Li's ICQ**：衡量像素強度對的共現性，+0.5 完美共定位，0 隨機分佈，-0.5 空間排斥。
-
-## 補充說明
-
-- 共定位分析可針對不同 ROI（細胞核、細胞質、整個細胞）分別執行，比較各區域的分子分布與共定位程度。
-- 建議分析前先進行背景扣除與偏移校正，以避免雜訊影響結果。
-- Coloc2 支援自動閾值（Costes）與統計檢定，結果更具客觀性。
