@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>vesselsAnalyze</title>
+<link rel="stylesheet" href="styles.css">
+<!-- KaTeX CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" integrity="sha384-wcIxkf4k558AjM3Yz3BBFQUbk/zgIYC2R0QpeeYb+TwlBVMrlgLqwRjRtGZiK7ww" crossorigin="anonymous">
+</head>
+<body>
+
+<div id="toc">
+<h2><a href="index.html">回到首頁</a></h2>
+<div class="toc-container">
+<div class="toc">
+<ul>
+<li><a href="#_1">分析血管</a><ul>
+<li><a href="#_2">分析需求</a></li>
+<li><a href="#macro">示範Macro</a></li>
+</ul>
+</li>
+</ul>
+</div>
+
+</div>
+</div>
+<div id="content">
+<h1 id="_1">分析血管</h1>
+<p><a href="https://youtu.be/eA2KTmPswm8">教學影片</a></p>
+<p><a href="img/vessel.tiff">血管圖片</a></p>
+<h2 id="_2">分析需求</h2>
+<p>圖為血管內皮細胞在Matrigel內形成了微血管網絡，需要分析
+1. 血管環數量(中間有一個洞，周圍一圈，就可以稱做一個環)
+2. 微血管總長度 (微血管形成的網路所有length的總和)
+3. 微血管平均管徑</p>
+<h2 id="macro">示範Macro</h2>
+<p>請參考教學影片，逐步執行Macro觀察</p>
+<pre><code class="language-ijm">// 先開啟檔案
+run(&quot;8-bit&quot;);
+rename(&quot;origin&quot;);
+
+// 裁切
+makeRectangle(0, 0, 864, 668);
+run(&quot;Crop&quot;);
+
+
+// 降噪
+selectImage(&quot;origin&quot;);
+run(&quot;Duplicate...&quot;, &quot;title=deNoise &quot;);
+run(&quot;Gaussian Blur...&quot;, &quot;sigma=2&quot;);
+run(&quot;Median...&quot;,&quot;radius=3&quot;);
+
+
+// 局部對比度增強 CLAHE
+selectImage(&quot;deNoise&quot;);
+run(&quot;Duplicate...&quot;, &quot;title=CLAHE &quot;);
+run(&quot;Enhance Local Contrast (CLAHE)&quot;, &quot;blocksize=63 histogram=256 maximum=3 mask=*None*&quot;);
+
+// MorphologicalSegmentaion
+selectImage(&quot;deNoise&quot;);
+run(&quot;Duplicate...&quot;, &quot;title=deNoiseInverse&quot;);
+run(&quot;Invert&quot;);
+run(&quot;Morphological Segmentation&quot;);
+
+
+
+// 局部threshold
+selectImage(&quot;CLAHE&quot;);
+run(&quot;Duplicate...&quot;, &quot;title=localThreshold&quot;);
+run(&quot;Auto Local Threshold&quot;, &quot;method=Niblack radius=15 parameter_1=0 parameter_2=0 white&quot;);
+
+// 形態學處理
+selectImage(&quot;localThreshold&quot;);
+run(&quot;Duplicate...&quot;, &quot;title=fillHoles&quot;);
+run(&quot;Fill Holes&quot;);
+
+
+// 產生distance map
+selectImage(&quot;fillHoles&quot;);
+run(&quot;Duplicate...&quot;, &quot;title=Distance&quot;);
+run(&quot;Distance Map&quot;);
+
+// 產生Maxima當種子
+selectImage(&quot;Distance&quot;);
+run(&quot;Find Maxima...&quot;, &quot;prominence=10 exclude output=[Point Selection]&quot;);
+roiManager(&quot;Add&quot;);
+
+
+// 血管寬度與長度估算
+selectImage(&quot;deNoise&quot;);
+run(&quot;Duplicate...&quot;, &quot;title=ridge &quot;);
+run(&quot;Ridge Detection&quot;, &quot;line_width=10 high_contrast=150 low_contrast=20 darkline estimate_width extend_line displayresults add_to_manager method_for_overlap_resolution=SLOPE sigma=3.39 lower_threshold=0.51 upper_threshold=1.36 minimum_line_length=0 maximum=0&quot;);
+
+
+/*
+// 產生梯度圖
+selectImage(&quot;deNoise&quot;);
+run(&quot;Duplicate...&quot;, &quot;title=edge&quot;);
+run(&quot;Find Edges&quot;);
+*/
+
+
+
+/*
+// 降噪更多產生distance map
+selectImage(&quot;origin&quot;);
+run(&quot;Duplicate...&quot;, &quot;title=deNoiseMoreInvert &quot;);
+run(&quot;Gaussian Blur...&quot;, &quot;sigma=2&quot;);
+run(&quot;Median...&quot;,&quot;radius=2&quot;);
+run(&quot;Auto Local Threshold&quot;, &quot;method=Niblack radius=15 parameter_1=0 parameter_2=0 white&quot;);
+run(&quot;Fill Holes&quot;);
+run(&quot;Distance Map&quot;);
+run(&quot;Invert&quot;);
+run(&quot;Enhance Contrast&quot;, &quot;saturated=0.35&quot;);
+*/
+
+
+</code></pre>
+</div>
+
+<!-- Mermaid JS -->
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({}); // Keep double braces for literal JS object
+  mermaid.run({ nodes: document.querySelectorAll('.language-mermaid') }); // Keep double braces
+</script>
+
+<!-- KaTeX JS -->
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoBPJpTUs74ddyc4bFZSM1TVlQDA60VBbJS0oA934VSz82sBx1X7kSx2ATBDIyd" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk" crossorigin="anonymous"></script>
+<!-- *** CORRECTED SCRIPT WITH ${...} ESCAPING *** -->
+        <script>
+            document.addEventListener("DOMContentLoaded", function() {
+                renderMathInElement(document.body, {
+                    delimiters: [
+                        { left: '$$',  right: '$$',  display: true },
+                        { left: '\\[', right: '\\]', display: true },
+                        { left: '\\(', right: '\\)', display: false }
+                    ],
+                    ignoredTags: ['script','noscript','style','textarea','pre','code'],
+                    throwOnError: false
+                });
+            });
+        </script>
+
+</body>
+</html>
