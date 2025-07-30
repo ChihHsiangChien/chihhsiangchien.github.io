@@ -1,4 +1,5 @@
 # 螢光強度定量：分析細胞核/質的訊號分佈
+[教學影片](https://youtu.be/-PP4eWnxjt8)
 
 我們將以 ImageJ 內建的 `Fluorescent Cells.tif` 範例影像為基礎，學習影像強度的定量。
 
@@ -143,7 +144,6 @@ DAPI的藍色通道有清晰的細胞核輪廓，可以用來定義細胞核的�
     - 在 Coloc2 視窗中，分別選擇紅色與綠色通道影像作為 Channel 1 和 Channel 2。
     - 在 Mask/ROI 欄位選擇欲分析的 ROI（例如 Cyto-1）。
     - 設定分析參數（如 Pearson、Manders、Costes、Li 等），可依需求勾選。
-    - 建議將迭代次數設為 100 以獲得更穩健的統計檢定。
 
 3. **執行與結果解讀**
     - 點擊「OK」開始分析。
