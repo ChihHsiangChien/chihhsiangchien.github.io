@@ -11,9 +11,9 @@
 - [強度校正](intensity-calibration.md)
 - [影像前處理](image-preprocess.md)  
 - [binary mask image,labeled image與ROI的轉換](8-bit-conversion.md)
-- [影像分割](segmentation.md)
-    - [實作dot blob的分割與特徵擷取](segmentation-demo.md)
+- [影像分割](segmentation.md)    
 - [形態學處理](morphology.md)
+    - [實作dot blob的分割與特徵擷取](segmentation-demo.md)
     - [形態學處理範例-骨架化分析長度](skeleton.md)
 - [特徵擷取](feature-extraction.md)
 - [紋理分析](image-texture.md)
@@ -30,9 +30,7 @@
 
 # 進階
 - [粒子追蹤TrackMate](trackmate.md)
-- [時序動態分析](time-series.md)
 - [自動化與巨集程式設計](automation-and-macro.md)
-- [Python整合](python-integration.md)
 
 
 # 網路文件

@@ -185,7 +185,138 @@ Entropy \approx 0.464 + 0.528 + 0.528 = 1.52
 #### 準備工作
 1.  **開啟影像：** 開啟範例影像 `File > Open Samples > T1 Head (2.4M, 16-bits)`。
 2.  **開啟 ROI 管理器：** 執行 `Analyze > Tools > ROI Manager...`。
-3.  **安裝插件 (若無)：** 常用的plugin是 `GLCM Texture Analyzer`。若沒有，可透過 `Help > Update... > Manage update sites`，勾選 `Texture` 或 `Bio-Formats` 來安裝。
+3.  **開啟Macro** 在Text Window貼上以下Macro
+
+```ijm
+macro "Main" {
+
+    step = 1;
+
+    calculateASM = true;
+    calculateContrast = true;
+    calculateCorrelation = true;
+    calculateIDM = true;
+    calculateEntropy = true;
+
+    run("Clear Results");
+
+    n = roiManager("count");
+    if (n == 0) exit("ROI Manager 中沒有 ROI");
+
+    for (i = 0; i < n; i++) {
+        roiManager("select", i);
+        GLCM_Texture_Macro(i, step, calculateASM, calculateContrast, calculateCorrelation, calculateIDM, calculateEntropy);
+    }
+
+    print("GLCM Texture analysis done for " + n + " ROIs.");
+}
+
+function GLCM_Texture_Macro(roiIndex, step, doASM, doContrast, doCorrelation, doIDM, doEntropy) {
+    
+
+    if (bitDepth() != 8) {
+        exit("僅支援8-bit灰階影像");
+    }
+
+    getSelectionBounds(x, y, w, h);
+
+    pixels = newArray(w * h);
+    idx = 0;
+    for (yy = y; yy < y + h; yy++) {
+        for (xx = x; xx < x + w; xx++) {
+            pixels[idx] = getPixel(xx, yy);
+            idx++;
+        }
+    }
+
+    size = 257;
+    glcm = newArray(size * size);
+    Array.fill(glcm, 0);
+
+    pixelCounter = 0;
+
+    // 0度方向 GLCM
+    for (row = 0; row < h; row++) {
+        for (col = 0; col < w - step; col++) {
+            a = pixels[row * w + col];
+            b = pixels[row * w + col + step];
+            index1 = a * size + b;
+            index2 = b * size + a;
+            glcm[index1] += 1;
+            glcm[index2] += 1;
+            pixelCounter += 2;
+        }
+    }
+
+    for (i = 0; i < size * size; i++) {
+        glcm[i] /= pixelCounter;
+    }
+
+    asm = 0;
+    contrast = 0;
+    correlation = 0;
+    IDM = 0;
+    entropy = 0;
+
+    px = 0;
+    py = 0;
+
+    for (a = 0; a < size; a++) {
+        for (b = 0; b < size; b++) {
+            val = glcm[a * size + b];
+            px += a * val;
+            py += b * val;
+        }
+    }
+
+    stdevx = 0;
+    stdevy = 0;
+
+    for (a = 0; a < size; a++) {
+        for (b = 0; b < size; b++) {
+            val = glcm[a * size + b];
+            stdevx += (a - px) * (a - px) * val;
+            stdevy += (b - py) * (b - py) * val;
+        }
+    }
+
+    for (a = 0; a < size; a++) {
+        for (b = 0; b < size; b++) {
+            val = glcm[a * size + b];
+            asm += val * val;
+            contrast += (a - b) * (a - b) * val;
+            if (stdevx != 0 && stdevy != 0) {
+                correlation += ((a - px) * (b - py) * val) / (stdevx * stdevy);
+            }
+            IDM += val / (1 + (a - b) * (a - b));
+            if (val > 0) {
+                entropy -= val * log(val);
+            }
+        }
+    }
+
+    nRows = nResults();
+    setResult("ROI Index", nRows, roiIndex + 1);
+    setResult("Step size", nRows, step);
+    setResult("ROI Name", nRows, Roi.getName);
+    setResult("Angular Second Moment", nRows, asm);
+    setResult("Contrast", nRows, contrast);
+    setResult("Correlation", nRows, correlation);
+    setResult("Inverse Difference Moment", nRows, IDM);
+    setResult("Entropy", nRows, entropy);
+    updateResults();
+
+    print("ROI " + (roiIndex + 1) + " GLCM features:");
+    print("  ASM = " + asm);
+    print("  Contrast = " + contrast);
+    print("  Correlation = " + correlation);
+    print("  IDM = " + IDM);
+    print("  Entropy = " + entropy);
+}
+
+
+```
+
 
 #### 選取ROI Selection
 我們需要在典型的灰質和白質區域手動定義幾個 ROI 以進行比較。
@@ -199,15 +330,11 @@ Entropy \approx 0.464 + 0.528 + 0.528 = 1.52
 4.    **定義白質 ROI:**
       *   先在ROI manager選擇 grey的ROI，然後按鍵盤的方向鍵，將這個區域移動到白質區域。
       *   加入 ROI 管理器並命名為 `white`。
+5.    執行Macro的GLCM 分析，就會分析ROI manager的每一個ROI，並寫入Result。
 
-#### 執行 GLCM 分析 (Running the GLCM Analysis)
-1.    在 ROI manager中，選擇剛剛建立的 `grey` ROI，執行 `Analyze > GLCM Texture` 。
-2.    在彈出的對話框中，保持預設參數（例如，`Step size (d)`=1），然後點擊 `OK`。
-3.    執行後，會彈出一個 "Results" 表格，在此表格選擇 `File >　Rename`改名成 `Grey`。
-4.    改執行`white`ROI，重複以上動作。
 
 ### 結果解讀與結論
-觀察兩個表格的差異，這些數據是否符合我們對灰白質的主觀感受？白質的紋理確實比灰質更平滑、更均質，而灰質的紋理則更粗糙、更複雜。
+觀察表格，這些數據是否符合我們對灰白質的主觀感受？白質的紋理確實比灰質更平滑、更均質，而灰質的紋理則更粗糙、更複雜。
 
 | 特徵名 | 英文 | 意義 | 解讀 |
 |:---|:---|:---|:---|
