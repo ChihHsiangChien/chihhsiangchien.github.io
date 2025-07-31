@@ -14,3 +14,23 @@ run("Open");
 run("Close-");
 run("Analyze Particles...", "size=250-Infinity circularity=0.65-1.00 show=Outlines add");
 ```
+
+**如何將參數和命令寫在迴圈裡?**
+
+```ijm
+run("Blobs (25K)");
+rename("origin");
+
+for (i = 0; i < 10; i++) {
+	selectImage("origin");
+	rad = 10 + i;
+	
+	run("Duplicate...", "title=" + rad);
+
+	run("Auto Local Threshold", "method=Otsu radius="+ rad +" parameter_1=0 parameter_2=0 white");
+
+}
+run("Tile");
+
+
+```
