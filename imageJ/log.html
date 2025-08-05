@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>log</title>
+<link rel="stylesheet" href="styles.css">
+<!-- KaTeX CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" integrity="sha384-wcIxkf4k558AjM3Yz3BBFQUbk/zgIYC2R0QpeeYb+TwlBVMrlgLqwRjRtGZiK7ww" crossorigin="anonymous">
+</head>
+<body>
+
+<div id="toc">
+<h2><a href="index.html">回到首頁</a></h2>
+<div class="toc-container">
+<div class="toc">
+<ul>
+<li><a href="#_1"></a></li>
+<li><a href="#log">Log</a></li>
+<li><a href="#_2">演算法</a></li>
+</ul>
+</div>
+
+</div>
+</div>
+<div id="content">
+<h1 id="_1"></h1>
+<h1 id="log">Log</h1>
+<p>LoG 偵測亮點的常見做法：
+先做 Gaussian blur（平滑），再做 Laplacian operator（找出邊緣或極值點），這樣的組合就構成了 LoG。</p>
+<h1 id="_2">演算法</h1>
+<p>LoG(x, y) = ∇²(G(x, y) * I(x, y))
+= 對影像模糊後，再施加 Laplacian（2階導數）</p>
+<p>sigma = particle_diameter / (2 * sqrt(2))</p>
+<pre><code class="language-ijm">
+// ==== 使用者設定參數 ====
+// 預期的粒子直徑，單位為像素，用來估算適當的平滑程度
+particle_diameter = 55.0;
+
+// 強度閾值，用來過濾背景雜訊或低強度的偽點
+quality_threshold = 0.5;
+
+// ==== 計算推導參數 ====
+// 依據粒子大小計算 Gaussian Blur 所需的 sigma 值
+// 這裡的公式源自 LoG 最適 sigma 理論，sigma ≈ d / (2√2)
+sigma = particle_diameter * 0.35;
+
+
+// ==== 複製原始影像備份使用 ====
+// 將目前顯示的影像複製一份，命名為 &quot;Original&quot;
+run(&quot;Duplicate...&quot;, &quot;title=Original&quot;);
+rename(&quot;Original&quot;);
+
+
+// ==== 高斯模糊影像處理 ====
+// 再次複製影像準備進行模糊處理，命名為 &quot;Blurred&quot;
+run(&quot;Duplicate...&quot;, &quot;title=Blurred&quot;);
+
+// 轉為 32-bit 浮點影像，以支援之後的卷積運算
+run(&quot;32-bit&quot;);
+
+// 套用 Gaussian Blur，sigma 由前面推算而來
+run(&quot;Gaussian Blur...&quot;, &quot;sigma=&quot; + sigma);
+
+
+// ==== 套用 Laplacian 濾波器 ====
+// 使用自訂的 Laplacian 卷積核（5x5），模擬 Laplacian 運算
+// 中間為正，周圍為負，有助於偵測亮點中心
+run(&quot;Convolve...&quot;, &quot;text1=[-1 -1 -1 -1 -1\n-1 -1 -1 -1 -1\n-1 -1 24 -1 -1\n-1 -1 -1 -1 -1\n-1 -1 -1 -1 -1\n] normalize&quot;);
+
+
+// ==== （可選）增強 LoG 結果對比 ====
+// 增強對比，讓 LoG 結果更明顯，避免灰階變化太小導致 threshold 失敗
+run(&quot;Enhance Contrast&quot;, &quot;saturated=0.35&quot;);
+
+
+// ==== 找出極大值點（亮點中心） ====
+// 使用 Find Maxima 偵測出 LoG 響應圖中明顯的極大值（亮點中心）
+// 這些點的亮度需要高於給定的 prominence threshold 才會被接受
+run(&quot;Find Maxima...&quot;, &quot;prominence=&quot;+ quality_threshold +&quot; light output=[Point Selection]&quot;);
+
+
+// ==== 將極大值結果儲存到 ROI Manager 中 ====
+// 重置 ROI 管理器（清空原有 ROI）
+roiManager(&quot;Reset&quot;);
+
+// 將目前的點選區加入 ROI 管理器
+roiManager(&quot;Add&quot;);
+
+
+// ==== 回到原始影像，疊加偵測結果 ====
+// 切換回 &quot;Original&quot; 影像視窗
+selectWindow(&quot;Original&quot;);
+
+// 在原始影像中選取剛剛加入的 ROI 點
+roiManager(&quot;Select&quot;, 0);
+
+
+// ==== 關閉處理過的中介影像，保持工作空間整潔 ====
+// 關閉 &quot;Blurred&quot; 處理影像視窗
+selectWindow(&quot;Blurred&quot;);
+close();
+
+</code></pre>
+</div>
+
+<!-- Mermaid JS -->
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({}); // Keep double braces for literal JS object
+  mermaid.run({ nodes: document.querySelectorAll('.language-mermaid') }); // Keep double braces
+</script>
+
+<!-- KaTeX JS -->
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoBPJpTUs74ddyc4bFZSM1TVlQDA60VBbJS0oA934VSz82sBx1X7kSx2ATBDIyd" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk" crossorigin="anonymous"></script>
+<!-- *** CORRECTED SCRIPT WITH ${...} ESCAPING *** -->
+        <script>
+            document.addEventListener("DOMContentLoaded", function() {
+                renderMathInElement(document.body, {
+                    delimiters: [
+                        { left: '$$',  right: '$$',  display: true },
+                        { left: '\\[', right: '\\]', display: true },
+                        { left: '\\(', right: '\\)', display: false }
+                    ],
+                    ignoredTags: ['script','noscript','style','textarea','pre','code'],
+                    throwOnError: false
+                });
+            });
+        </script>
+
+</body>
+</html>

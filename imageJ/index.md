@@ -10,12 +10,13 @@
 - [空間校正](spatial-correction.md)
 - [強度校正](intensity-calibration.md)
 - [影像前處理](image-preprocess.md)  
-- [binary mask image,labeled image與ROI的轉換](8-bit-conversion.md)
+- [binary mask image,label image與ROI的轉換](8-bit-conversion.md)
 - [影像分割](segmentation.md)    
 - [形態學處理](morphology.md)
     - [實作dot blob的分割與特徵擷取](segmentation-demo.md)
     - [形態學處理範例-骨架化分析長度](skeleton.md)
     - [分析血管](vesselsAnalyze.md)
+- [形態學重建去噪](morphology-reconstruction.md)    
 - [特徵擷取](feature-extraction.md)
 - [紋理分析](image-texture.md)
 
@@ -33,6 +34,10 @@
 - [粒子追蹤TrackMate](trackmate.md)
 - [自動化與巨集程式設計](automation-and-macro.md)
 - [SNT](snt.md)
+
+# 其他
+- [Laplacian of Gaussian](log.md)
+- [Difference of Gaussian（DoG）亮點偵測](dog.md)
 
 # 網路文件
 - [阿簡 imagej入門課程影片](https://youtu.be/BcTdMkF_cB0?si=s8aBQYIetW7LCAjU)

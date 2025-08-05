@@ -12,15 +12,7 @@ Cellpose-SAM的使用方式包含以下幾種
     *   執行後下載**mask**或**outlines**回到本機電腦，在fiji/imagej載入進行分析。
 2. 本機使用     
     *   如果本機電腦有GPU，也可以到[github](https://github.com/MouseLand/cellpose)下載安裝本機，利用python環境執行。   
-    *   fiji安裝deepimagej後也有cellpose可使用，但fiji上目前只能使用cyto1,cyto2,cyto3,nuclei等模型。沒有辦法使用最新的Cellpose-SAM
 
-
-### 在fiji安裝
-1. 到`Help > Update...`安裝`DeepImageJ`
-2. 執行` Plugins › DeepImageJ › DeepImageJ Cellpose`
-3. 第一次使用時，會先要求你安裝python。但安裝後第一次執行可能出現error，這問題可能來自共享記憶體的實作有問題。需要手動換掉 Fiji 中的 JNA 函式庫：
-    1. 到官方 JNA GitHub：[https://github.com/java-native-access/jna](https://github.com/java-native-access/jna)下載 JNA 最新 release（建議用 5.12.1 或以上）找到最新版本的`jna.jar`和`jna-platform.jar`
-    2. 把它們放進： `Fiji.app/jars/`，若該資料夾已有舊版 jna.jar，請先備份並移除。
 
 ## 核心設計與優勢
 
