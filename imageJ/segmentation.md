@@ -50,12 +50,13 @@
 -   **區域生長 (Region Growing)：**
     -   **原理：** 從一個或多個**種子點**開始，根據區域內的像素相似性建立分區（如灰階值在一定範圍內），直到沒有符合條件的相鄰像素為止。
     -   例如使用工具列的**wand tool**，雙擊會有進階選項。取得的selection，再加入ROI manager。
-    -   使用 [MorphoLibJ 的各種 segmentation plugins](morphlibj-segmentation.md)
+    -   例如使用 [MorphoLibJ 的各種 segmentation plugins](morphlibj-segmentation.md)，執行**分水嶺分割**也是從種子點開始，模擬「水從低點往上淹」，直到碰到其他水源的邊界，這些邊界就成為區域的分界線（即分水嶺）。
 
 ## 機器學習
 
 從大量標記好的影像數據中學習特徵和模式，自動執行分割任務。
 
 -   **[Trainable Weka Segmentation](trainable-weka-segmentation.md)**
+-   **[deepimagej](deepimagej.md)**
 -   **[Cellpose-SAM ](cellpose-sam.md)**
--   **[stardist細胞分割](stardist.md)**   
+-   **[stardist細胞分割](stardist.md)**

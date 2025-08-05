@@ -1,4 +1,7 @@
 # MorphoLibJ
+
+[教學影片](https://youtu.be/og4IUgi3yro)
+
 ## 安裝
 
 1. 執行`Help › Update…`，按`Manage update sites`。
@@ -6,13 +9,42 @@
 
 ## 基本原理
 
-**分水嶺(Watershed)演算法**將影像視為一個地形圖，模擬水往低處流的概念，從最低點向外淹水擴展，直到遇到其他區域的擴展，然後形成邊界。為了避免過度分割，通常需要手動或自動生成一些「標記」(種子點)，這些標記代表了每個要分割的物體內部，從這些標記開始淹水。這個過程中，區域（region）會從種子點或最低點開始「長出來」，所以是典型的region growing策略。
+**分水嶺(Watershed)演算法**將影像視為一個地形圖，模擬水往低處流的概念，從最低點向外淹水擴展，直到遇到其他區域的擴展，然後形成邊界。為了避免過度分割，通常需要手動或自動生成一些「標記」(**種子點**)，這些標記代表了每個要分割的物體內部，從這些標記開始淹水。這個過程中，區域（region）會從種子點或最低點開始「長出來」，所以是典型的region growing策略。
 
 
+在 MorphoLibJ 中，分水嶺方法主要基於**梯度圖**或**距離圖**，其中有些方法會需要手動或自動產生種子點。
 
-在 MorphoLibJ 中，分水嶺方法主要基於**梯度圖**或**距離圖**。
+### 梯度圖
+梯度圖 (Gradient Image)：**梯度最大的區域**可以理解為**影像中亮度或灰度變化最劇烈的區域**。物體的邊界通常是亮度變化最大的地方，因此梯度影像會突出物體邊緣。若當作地形圖來看，則可視做在目標前景的外圍建出高牆。
 
+你有以下數種方式可以產生梯度圖：
 
+- 執行`Process › Find Edges`，這是利用Sobel濾波器產生邊緣強化的效果。
+
+-  ` Process › Filters › Convolve...`輸入卷積核，例如預設的就是一種加強中心像素與周圍差異的方式，屬於Laplacian-like operator 。屬於一種擴展版高通濾波器（high-pass filter），它的目的是強調圖像中快速變化的部分，也就是邊緣（edges）或紋理（textures）。
+
+```
+-1 -1 -1 -1 -1
+-1 -1 -1 -1 -1
+-1 -1 24 -1 -1
+-1 -1 -1 -1 -1
+-1 -1 -1 -1 -1
+```
+
+如果是傳統的Laplacian則是這種形式（3x3）
+```
+0 -1 0
+-1 4 -1
+0 -1 0
+```
+
+### 距離圖
+
+輸入**二值化影像**後，執行` Process › Binary › Distance Map`，會產生距離圖(Euclidian distance map,EDM)。將其反相，則可將前景視作山谷，用來做後續的分水嶺算法。
+
+### 種子點
+1. 種子點可利用 [Laplacian of Gaussian](log.md)或 [Difference of Gaussian（DoG）亮點偵測](dog.md)產生
+2. 或是輸入**二值化影像**，執行` Process › Binary › Ultimate Points`就可以產生**Ultimate Points** 終極點。這個方法是對二值圖產生距離圖後再找出Maxima。此點的value是EDM的數字，等同此粒子內最大內切圓的半徑。可作為分割粒子依據，會產生**ultimate eroded points (UEPs)**。
 
 ## Classic Watershed
 原理請見[官方網頁的圖](https://imagej.net/plugins/classic-watershed)
@@ -36,7 +68,7 @@ Classic Watershed 插件可在任何 2D 和 3D 的灰階影像（8、16 和 32-b
 
 ### 實作
 
-執行此Macro觀看範例，適當前處理可避免**過度分割**
+執行此Macro觀看範例，可以發現前處理如去噪可避免**過度分割**
 
 ```ijm
 run("Blobs (25K)");
@@ -63,7 +95,9 @@ run("Tile");
 
 ## Marker-controlled Watershed
 [官方網頁說明](https://imagej.net/plugins/marker-controlled-watershed)
-從特定的種子點或標記開始淹水的過程，標記點通常選擇影像梯度圖的局部最小值。
+
+- 從特定的種子點或標記開始淹水的過程，標記點通常選擇影像梯度圖的局部最小值。（指定特定谷底，開始灌水）
+
 
 ### 使用方法
 
@@ -178,7 +212,7 @@ run("Tile");
 互動式標記控制的分水嶺分割
 
 ### 使用方法
-1.  在影像上使用 **Point Tool**、**Multi-point Tool** 或任何選取工具，標示出您感興趣的物件（作為「種子點」）。
+1.  在影像上使用 **Point Tool**、**Multi-point Tool** 或任何選取工具，標示出您感興趣的物件（作為「種子點」）。可事先製作，或使用這個plugin的時候，臨時加入ROI manager，並update加入影像中。
 2.  將這些標記加入 **ROI Manager** (`Analyze > Tools > ROI Manager...`)。
 3.  在 ROI Manager 視窗中，**選取**所有要作為種子點的 ROI。
 4.  執行`Plugins › MorphoLibJ › Segmentation › Interactive Marker-controlled Watershed`
@@ -200,7 +234,6 @@ run("Subtract Background...", "rolling=10 light sliding");
 run("Invert");
 run("Duplicate...", "title=2");
 setAutoThreshold("Triangle");
-//setThreshold(0, 9);
 run("Convert to Mask");
 run("Duplicate...", "title=3");
 run("Distance Map");
@@ -240,6 +273,12 @@ Morphological Segmentation結合了形態學操作（如擴展最小值、形態
     -   **半徑 (Radius):** 設定計算梯度時的半徑（以像素為單位）。
     -   **顯示梯度影像 (Display gradient image):** 勾選後，主畫布將顯示計算出的梯度影像，方便觀察。
 
+
+| 梯度類型 | 計算方式 | 邊緣厚度 | 邊緣位置 | 視覺效果 |
+|:---|:---|:---|:---|:---|
+| 形態學梯度 | 膨脹 - 侵蝕 | 較厚 | 涵蓋物體邊緣內外兩側 | 邊界輪廓清晰，但較粗 |
+| 內部梯度 | 原始 - 侵蝕 | 較薄 | 位於物體的內側 | 邊界精確，但偏內 |
+| 外部梯度 | 膨脹 - 原始 | 較薄 | 位於物體的外側 | 邊界精確，但偏外 |
 
 #### 2. 分水嶺分割
 
