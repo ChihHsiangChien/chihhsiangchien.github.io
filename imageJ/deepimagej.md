@@ -1,6 +1,9 @@
 # DeepImagej
 
 [官方網站](https://deepimagej.github.io)
+[教學影片](https://youtu.be/Rcx5OkWBWUI)
+
+
 
 ## 在fiji安裝
 1. 到`Help > Update...`安裝`DeepImageJ`
