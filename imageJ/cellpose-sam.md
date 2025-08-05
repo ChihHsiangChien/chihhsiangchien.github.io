@@ -1,4 +1,7 @@
 # Cellpose-SAM 
+
+[教學影片](https://youtu.be/ZvEJ3NkETDE)
+
 * Cellpose-SAM 是一個專為**細胞分割**而設計的深度學習模型，其目標是實現超人類的泛化能力(superhuman Generalization)，使其在各種生物學資料上都能表現出色，即使面對新的實驗、組織或顯微鏡類型所產生的分佈外 (out-of-distribution) 資料也能有效運作。
 * 結合了預訓練的 **Segment Anything Model (SAM)**的強大學習能力與 **Cellpose架構**中將知識轉換為分割的優勢。
 
