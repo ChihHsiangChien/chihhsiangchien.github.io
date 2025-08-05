@@ -1,6 +1,6 @@
 # Trainable Weka Segmentation
-[教學影片](https://youtu.be/-4DBJi7QtR8)  
-`Plugins > Segmentation > Trainable Weka Segmentation`  
+- [教學影片](https://youtu.be/-4DBJi7QtR8)  
+- 執行路徑`Plugins > Segmentation > Trainable Weka Segmentation`  
 
 
 基於機器學習庫Weka，允許使用者選擇一系列像素特徵（如灰度、邊緣、紋理）並手動標記不同類別的區域（如細胞核、細胞質、背景）作為訓練數據。
