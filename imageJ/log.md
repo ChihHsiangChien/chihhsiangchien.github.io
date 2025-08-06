@@ -1,6 +1,4 @@
-# 
-
-# Log
+# LoG
 LoG 偵測亮點的常見做法：
 先做 Gaussian blur（平滑），再做 Laplacian operator（找出邊緣或極值點），這樣的組合就構成了 LoG。
 
@@ -12,6 +10,7 @@ sigma = particle_diameter / (2 * sqrt(2))
 
 ```ijm
 
+run("Dot Blot");
 // ==== 使用者設定參數 ====
 // 預期的粒子直徑，單位為像素，用來估算適當的平滑程度
 particle_diameter = 55.0;
