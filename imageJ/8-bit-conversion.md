@@ -4,9 +4,9 @@
     2. 在ROI manager按`add`加入
 
 2. **binary image -> label image**
-    1. ` Analyze › Analyse Particles` show勾選`Count Mask`就會產生Labeled 16-bit image，每個區塊為一個獨特的數字。(此部份可以參考 [特徵擷取](feature-extraction.md)最後的show說明)
+    1. ` Analyze › Analyse Particles` show勾選`Count Mask`就會產生Labeled 16-bit image，每個區塊為一個獨特的數字。(此部份可以參考 [特徵擷取](feature-extraction.md)最後的show說明)。或者使用`Plugins › MorphoLibJ › Binary Images › Connected Components Labeling`(但要先安裝`IJPB`)。
     2. 調整顯示顏色
-        1. `Image > Lookup Table > glasbey_on_dark`可以改變成隨機顏色
+        1. `Image > Lookup Table > glasbey_on_dark`可以改變成相近區塊有明顯差異的顏色
         2. `Plugins › MorphoLibJ › Label Images › Set Label Map`也可以shuffle顏色。
 
 # label 16-bit image

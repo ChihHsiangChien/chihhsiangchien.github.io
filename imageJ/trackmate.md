@@ -25,16 +25,20 @@ TrackMate 是 Fiji 影像處理軟體中一個強大且模組化的外掛程式�
 
 ---
 
-### 3. 選擇偵測演算法 (Detector)
+### 3. 選擇偵測演算法 (Select a Detector)
 
 TrackMate 提供多種偵測演算法來識別影像中的物體。偵測器負責找出影像中的「點」(Spots) 或輪廓，並為其提供基本的數值特徵，例如座標、半徑和品質。
 
-
+- DoG detector
+- Hessian detector
+- **Label-Image detector (標籤影像偵測器)**：從標籤影像中建立物體。標籤影像中每個物體由不同的整數值表示，這有助於分離接觸的物體。
+- LoG detector
+- Manual annotation
 - **Mask detector (遮罩偵測器)**：從二值化遮罩影像中建立物體。物體由像素值大於 0 的連通區域組成。通常會將遮罩作為原始影像的一個額外通道。
 - **Thresholding detector (閾值偵測器)**：從灰階影像中，根據指定閾值來分割物體。
-- **Label-Image detector (標籤影像偵測器)**：從標籤影像中建立物體。標籤影像中每個物體由不同的整數值表示，這有助於分離接觸的物體。
-- TrackMate-Ilastik
+以下有安裝其他外掛才會出現
 - TrackMate-MorphoLibJ：依賴 MorphoLibJ 庫中的 Morphological Segmentation
+- TrackMate-Ilastik
 - TrackMate-StarDist：利用 StarDist 深度學習模型進行細胞核等物體分割
 - TrackMate-Weka：依賴 Trainable Weka Segmentation 外掛程式來分割物體
 
@@ -57,7 +61,8 @@ TrackMate 提供多種偵測演算法來識別影像中的物體。偵測器負�
 - **初始點過濾 (Initial Spot Filtering)**：
     - 偵測完成後，會進入「初始點過濾」步驟。
     - 此步驟的目的是在計算所有點的詳細特徵之前，根據「品質 (Quality)」值篩選掉大量不相關的點，以節省記憶體和計算時間。
-    - 偵測器會為每個點分配一個「品質」值，反映偵測結果的可靠性。你可以根據品質的直方圖手動設定一個閾值。低於此閾值的點將被完全丟棄，不會用於後續處理或儲存。這個步驟是不可逆的。
+    - 偵測器會為每個點分配一個「品質」值，反映偵測結果的可靠性。
+    - quality是一個數值特徵，反映了detector對該spot檢測結果的信心程度。較高的quality值通常表示該spot更可能是真實的目標物體而非噪聲。不同的detector會用不同的方法計算quality，但都遵循"越高越好"的原則。你可以根據品質的直方圖手動設定一個閾值。低於此閾值的點將被完全丟棄。
     - 對於大多數簡單的案例，可以將閾值條保持在接近 0 的位置
 
 
@@ -88,13 +93,14 @@ TrackMate 提供多種偵測演算法來識別影像中的物體。偵測器負�
 
 此面板讓你選擇粒子追蹤的演算法，即「追蹤器」(Tracker)。追蹤器會將偵測到的點連結起來，形成完整的軌跡 (Tracks)。
 
-- **[The LAP trackers](https://imagej.net/plugins/trackmate/trackers/lap-trackers)**：LAP 追蹤器 (Linear Assignment Problem, LAP)基於線性分配問題 (LAP) 框架。適用於**布朗運動的粒子**，在粒子密度不高時也適用於非布朗運動。
+- **[LAP trackers](https://imagej.net/plugins/trackmate/trackers/lap-trackers)**：LAP 追蹤器，基於線性分配問題 (LAP，Linear Assignment Problem)。適用於**布朗運動的粒子**，在粒子密度不高時也適用於非布朗運動。
     - **Simple LAP tracker** (簡單 LAP 追蹤器)：處理**間隙閉合 (gap-closing)** 事件（粒子在某個frame消失，到幾個frame之後又出現），不處理粒子分裂 (splitting)或合併 (merging) 事件。連結成本僅基於點之間的距離。
     - **LAP tracker** (LAP 追蹤器)：允許偵測所有類型的事件，包括**間隙閉合、分裂和合併事件**。可根據物體特徵值差異來調整連結成本。
 
-- **[Linear motion LAP tracker](https://imagej.net/plugins/trackmate/trackers/kalman-tracker)**：基於**Kalman filter**去預測**等速**粒子移動的軌跡。
+- **[Kalman tracker](https://imagej.net/plugins/trackmate/trackers/kalman-tracker)**：基於**Kalman filter**去預測**等速**粒子移動的軌跡。
     - 能夠處理 occlusion（遮擋事件），例如被其他細胞遮擋。
     - Kalman filter 建立的是「動態模型」，預測物件在無觀測時的合理位置。即使某些影格沒有偵測到實體，Kalman 仍能依據上一狀態與速度估計，持續推進軌跡。能容忍短暫消失的物件或是掃描過程中的 detection failure。
+- Advanced Kalman tracker
 - **[The Overlap tracker](https://imagej.net/plugins/trackmate/trackers/kalman-tracker)**: 適用於複雜的形狀且有限的移動速度，基於圖像中物件的**空間重疊程度（pixel/region overlap）**來建立軌跡，
     - 適用情景如移動距離小於其直徑的大型物體。（[教學範例的爪蟾細胞移動](https://imagej.net/plugins/trackmate/detectors/trackmate-morpholibj)）。
     - 或是([教學範例的乳癌細胞移動](https://imagej.net/plugins/trackmate/detectors/trackmate-cellpose))，細胞往下移動，而有些新細胞會從影像上方出現。
@@ -105,22 +111,42 @@ TrackMate 提供多種偵測演算法來識別影像中的物體。偵測器負�
 
 ### 9. 追蹤器配置面板
 
-LAP 追蹤器有幾個重要參數需要配置：
+#### LAP 追蹤器參數
 
 - **Frame to Frame linking (幀到幀連結)**
     - Max distance (最大距離)：設定在兩幀之間連結兩個物體的最大允許距離。如果兩個點之間的距離超過此值，它們將不會被考慮連結。
-- **Allow gap closing (允許間隙閉合)**
-    - 勾選此選項，允許軌跡在物體短暫消失後重新連結。
+    - Feature penalties (特徵懲罰)
+- **Gap closing (允許間隙閉合)**
+    - Allow gap closing (允許間隙閉合)勾選此選項，允許軌跡在物體短暫消失後重新連結。
     - Max distance (最大距離)：間隙閉合的最大距離。
     - Max frame gap (最大幀間隙)：物體消失的最大幀數，超過此幀數將不會被連結。
-- **Allow track segment splitting (允許軌跡段分裂)**
-    - 勾選此選項以偵測分裂事件，例如細胞分裂。
+- **Track splitting (允許軌跡段分裂)**
+    - Allow track segment splitting勾選此選項以偵測分裂事件，例如細胞分裂。
     - Max distance (最大距離)：分裂事件的最大距離。
-- **Allow track segment merging (允許軌跡段合併)**
-    - 勾選此選項以偵測合併事件。
+    - Feature penalties for splitting
+- **Track merging (允許軌跡段合併)**
+    - Allow track segment merging勾選此選項以偵測合併事件。
     - Max distance (最大距離)：合併事件的最大距離。
-- **Feature penalties (特徵懲罰)**：可以根據物體的特徵值差異來調整連結成本，例如懲罰平均強度差異大的連結。對於本示範，你可以暫時不添加。
+    - Feature penalties for merging
+- **Feature penalties (特徵懲罰)**：可以根據物體的特徵值差異來調整連結成本，例如懲罰平均強度差異大的連結。tracker在連接spots時不僅考慮空間距離，還能根據物體的特徵差異來調整連接成本。 TrackerKeys.java:83-96 這些特徵可以包括亮度、大小、形狀等物理屬性。當兩個spots的特徵差異較大時，連接成本會相應增加，使tracker傾向於選擇特徵相似的spots進行連接。在實際使用中，如果沒有設定feature penalties，系統會回退到使用純距離的成本函數。
 
+
+#### Simple LAP參數
+- Linking max distance (連接最大距離)
+- Gap-closing max distance (間隙閉合最大距離)
+- Gap-closing max frame gap (間隙閉合最大幀間隔)
+
+
+#### Kalman Tracker / Advanced Kalman Tracker參數
+Kalman濾波器的設定
+- Initial search radius (初始搜索半徑)
+- Search radius (搜索半徑)
+- Max frame gap (最大幀間隔)
+- Feature penalties
+- Splitting和merging設定
+
+#### Nearest Neighbor Tracker參數
+- Maximal linking distance (最大連接距離)
 ---
 
 ### 10. 軌跡過濾 (set filter on tracks)
