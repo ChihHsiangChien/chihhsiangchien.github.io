@@ -1,0 +1,709 @@
+document.addEventListener('DOMContentLoaded', () => {
+    // --- Map Initialization ---
+    const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' });
+    const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles &copy; Esri' });
+    const topoLayer = L.tileLayer('https://{s}.tile.opentomap.org/{z}/{x}/{y}.png', { attribution: 'Map data: &copy; OpenStreetMap contributors, SRTM | Map style: &copy; OpenTopoMap (CC-BY-SA)' });
+    const map = L.map('map', { center: [24.8047, 120.9734], zoom: 14, layers: [osmLayer] });
+    L.control.layers({ "OpenStreetMap": osmLayer, "Satellite": satelliteLayer, "Topographic": topoLayer }).addTo(map);
+
+    // --- Game State & UI ---
+    let placedEvents = {};
+    let guideLine = null;
+    let locationsData = [];
+    let gameData = {}; // Store game data globally
+    let ghostCard = null;
+    let dragOffset = { x: 0, y: 0 };
+    let lastDragEvent = null; // To store the last mouse event during drag
+    const cardContainer = document.getElementById('card-container');
+    const checkAnswersBtn = document.getElementById('check-answers-btn');
+    const rightPanel = document.getElementById('right-panel');
+    const panelContent = document.getElementById('panel-content');
+    const togglePanelBtn = document.getElementById('toggle-panel-btn');
+    const toggleIcon = document.getElementById('toggle-icon');
+    const mapContainer = document.getElementById('map');
+
+    let timelineEnabled = false;
+    let timelineSlider = null;
+    let timelinePlayBtn = null;
+    let timelinePauseBtn = null;
+    let timelineInterval = null;
+    let placedChrono = []; // Will be populated with {event, marker} objects
+
+    // --- Game Setup ---
+    fetch('data.json').then(response => response.json()).then(data => {
+        gameData = data; // Store data
+        setupGame(gameData);
+
+        // 檢查網址參數，啟用自動播放模式
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('mode') === 'autoplay') {
+            autoPlaceAndStartTimeline(gameData);
+        }
+    });
+
+    function setupGame(data) {
+        locationsData = data.locations;
+        // --- 隨機排序事件卡片 ---
+        const shuffledEvents = [...data.events];
+        for (let i = shuffledEvents.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffledEvents[i], shuffledEvents[j]] = [shuffledEvents[j], shuffledEvents[i]];
+        }
+        shuffledEvents.forEach(event => cardContainer.appendChild(createCard(event)));
+        locationsData.forEach(location => {
+            L.circle([location.lat, location.lng], { radius: location.radius, droppable: true, location_id: location.location_id })
+             .addTo(map)
+             .bindTooltip(location.name, { permanent: true, direction: 'center', className: 'location-tooltip' });
+        });
+
+        map.on('droppable:drop', handleDrop);
+        checkAnswersBtn.addEventListener('click', () => checkAnswers(gameData));
+        map.on('zoomend', handleZoom);
+        setupTimelineSlider(data, map); // Setup timeline slider here
+
+        togglePanelBtn.addEventListener('click', () => {
+            const isCollapsed = rightPanel.classList.contains('w-0');
+
+            if (isCollapsed) {
+                // Expand panel
+                rightPanel.classList.remove('w-0');
+                rightPanel.classList.add('w-1/3');
+                panelContent.classList.remove('hidden');
+                mapContainer.classList.remove('w-full');
+                mapContainer.classList.add('w-2/3');
+                toggleIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />'; // > icon to indicate collapse action
+                togglePanelBtn.style.right = 'calc(33.3333vw - 1.25rem)';
+            } else {
+                // Collapse panel
+                rightPanel.classList.remove('w-1/3');
+                rightPanel.classList.add('w-0');
+                panelContent.classList.add('hidden');
+                mapContainer.classList.remove('w-2/3');
+                mapContainer.classList.add('w-full');
+                toggleIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />'; // < icon to indicate expand action
+                togglePanelBtn.style.right = '0.5rem';
+            }
+
+            setTimeout(() => {
+                map.invalidateSize();
+            }, 300); // Match CSS transition duration
+        });
+    }
+
+    function createCard(event) {
+        const card = document.createElement('div');
+        card.className = 'p-2 mb-2 bg-white rounded shadow cursor-pointer border-2 border-gray-300';
+        card.id = event.event_id;
+        const year = new Date(event.start_time).getFullYear();
+        card.innerHTML = `<h3 class="font-bold text-sm flex justify-between items-center"><span>${event.title}</span><span class="text-xs text-gray-500 font-normal ml-2">${year}</span></h3><p class="text-xs text-gray-600 mt-1 hidden">${event.description}</p>`;
+        card.addEventListener('click', () => card.querySelector('p').classList.toggle('hidden'));
+        
+        const draggable = new L.Draggable(card);
+        draggable.enable();
+
+        card.addEventListener('mousedown', (e) => {
+            const cardRect = card.getBoundingClientRect();
+            dragOffset = {
+                x: e.clientX - cardRect.left,
+                y: e.clientY - cardRect.top
+            };
+        });
+
+        draggable.on('dragstart', function(e) {
+            ghostCard = L.DomUtil.create('div', 'is-dragging', document.body);
+            ghostCard.innerHTML = this._element.querySelector('h3').outerHTML; // Only copy the title
+            ghostCard.style.width = this._element.offsetWidth + 'px';
+            L.DomUtil.setOpacity(this._element, 0.5);
+        });
+
+        draggable.on('drag', (e) => {
+            moveGhost(e.originalEvent);
+
+            const mapContainer = map.getContainer();
+            const mapRect = mapContainer.getBoundingClientRect();
+            const mouseX = e.originalEvent.clientX;
+            const mouseY = e.originalEvent.clientY;
+
+            // Only show guideline if dragging over the map
+            if (mouseX >= mapRect.left && mouseX <= mapRect.right && mouseY >= mapRect.top && mouseY <= mapRect.bottom) {
+                updateGuideLine(e.originalEvent);
+            } else {
+                if (guideLine) {
+                    map.removeLayer(guideLine);
+                    guideLine = null;
+                }
+            }
+            lastDragEvent = e; // Store the event to get coordinates on dragend
+        });
+
+        draggable.on('dragend', function(e) {
+            L.DomUtil.setOpacity(this._element, 1);
+            if (guideLine) {
+                map.removeLayer(guideLine);
+            }
+            guideLine = null;
+
+            let successfulDrop = false;
+            if (lastDragEvent) {
+                const mapContainer = map.getContainer();
+                const mapRect = mapContainer.getBoundingClientRect();
+                const mouseX = lastDragEvent.originalEvent.clientX;
+                const mouseY = lastDragEvent.originalEvent.clientY;
+                const droppedOnMap = mouseX >= mapRect.left && mouseX <= mapRect.right && mouseY >= mapRect.top && mouseY <= mapRect.bottom;
+
+                if (droppedOnMap) {
+                    const latLng = map.mouseEventToLatLng(lastDragEvent.originalEvent);
+                    const closestLocation = findClosestLocation(latLng, locationsData);
+
+                    if (closestLocation) {
+                        const droppedOnCircle = findCircleByLocationId(closestLocation.location_id);
+                        if (droppedOnCircle) {
+                            map.fire('droppable:drop', { drop: droppedOnCircle, drag: this });
+                            successfulDrop = true;
+                        }
+                    }
+                }
+            }
+
+            if (!successfulDrop) {
+                // If drop was not successful, remove ghost and reset card position
+                if (ghostCard) {
+                    L.DomUtil.remove(ghostCard);
+                    ghostCard = null;
+                }
+                this._element.style.position = '';
+                this._element.style.left = '';
+                this._element.style.top = '';
+                this._element.style.transform = '';
+            }
+
+            lastDragEvent = null; // Reset for the next drag operation
+        });
+        return card;
+    }
+    
+    function moveGhost(e) {
+        if (ghostCard) {
+            ghostCard.style.left = (e.clientX - dragOffset.x) + 'px';
+            ghostCard.style.top = (e.clientY - dragOffset.y) + 'px';
+        }
+    }
+
+    function updateGuideLine(e) {
+        if (guideLine) map.removeLayer(guideLine);
+        const latLng = map.mouseEventToLatLng(e);
+        const closestLocation = findClosestLocation(latLng, locationsData);
+        if (closestLocation) {
+            guideLine = L.polyline([latLng, [closestLocation.lat, closestLocation.lng]], { color: 'red', dashArray: '5, 5' }).addTo(map);
+        }
+    }
+
+    function handleDrop({ drop, drag }) {
+
+        const card = drag._element;
+        const oldPlacedEvent = placedEvents[card.id];
+
+        if (ghostCard) {
+            const dropLatLng = drop.getLatLng();
+            const dropPoint = map.latLngToContainerPoint(dropLatLng);
+            
+            const targetX = dropPoint.x - ghostCard.offsetWidth / 2;
+            const targetY = dropPoint.y - ghostCard.offsetHeight / 2;
+
+            ghostCard.style.transition = 'left 0.2s ease-out, top 0.2s ease-out';
+            ghostCard.style.left = targetX + 'px';
+            ghostCard.style.top = targetY + 'px';
+
+            // Remove ghost after animation
+            setTimeout(() => {
+                if (ghostCard) {
+                    L.DomUtil.remove(ghostCard);
+                    ghostCard = null;
+                }
+                card.style.display = 'none'; // Hide original card after ghost is gone
+            }, 200); // Match transition duration
+        } else {
+            card.style.display = 'none'; // Hide immediately if no ghost (shouldn't happen)
+        }
+
+        // If this card was already placed somewhere else, remove the old marker
+        if (oldPlacedEvent) {
+            map.removeLayer(oldPlacedEvent.marker);
+            repositionMarkersAtLocation(oldPlacedEvent.droppedLocationId); // Reposition markers at the old location
+        }
+
+        const eventId = card.id;
+        const eventData = gameData.events.find(e => e.event_id === eventId);
+        const year = new Date(eventData.start_time).getFullYear();
+
+        const markerIcon = L.divIcon({
+            html: `<div class="placed-event-marker"><span>${eventData.title}</span><span class="marker-year">${year}</span></div>`,
+            className: 'custom-div-icon',
+            iconSize: null,
+        });
+
+        const marker = L.marker(drop.getLatLng(), { icon: markerIcon, draggable: true }).addTo(map);
+
+        // --- Add popup with description ---
+        if (eventData.description) {
+            marker.bindPopup(`<b>${eventData.title}</b><br>${eventData.description}`);
+        }
+
+        // --- Enable re-dragging placed cards ---
+        marker.on('dragstart', function(e) {
+            const markerInstance = this;
+            markerInstance.originalLatLng = markerInstance.getLatLng(); // Store original position
+            const eventId = Object.keys(placedEvents).find(key => placedEvents[key].marker === markerInstance);
+            if (!eventId) return;
+
+            const originalCard = document.getElementById(eventId);
+
+            // The original card is hidden with `display: none`, so its offsetWidth is 0.
+            // We need to temporarily make it visible to get the correct width for the ghost.
+            const originalDisplay = originalCard.style.display;
+            originalCard.style.display = 'block'; // Temporarily show to measure.
+            const cardWidth = originalCard.offsetWidth;
+            originalCard.style.display = originalDisplay; // Hide it back immediately.
+
+            ghostCard = L.DomUtil.create('div', 'is-dragging', document.body);
+            ghostCard.innerHTML = originalCard.querySelector('h3').outerHTML;
+            ghostCard.style.width = cardWidth + 'px';
+            
+            markerInstance.setOpacity(0); // Hide the marker being dragged
+            dragOffset = { x: ghostCard.offsetWidth / 2, y: ghostCard.offsetHeight / 2 };
+        });
+
+        marker.on('drag', function(e) {
+            moveGhost(e.originalEvent);
+            updateGuideLine(e.originalEvent);
+            lastDragEvent = e;
+        });
+
+        marker.on('dragend', function(e) {
+            const markerInstance = this;
+            if (guideLine) map.removeLayer(guideLine); guideLine = null;
+            if (ghostCard) L.DomUtil.remove(ghostCard); ghostCard = null;
+            
+            if (lastDragEvent) {
+                const mouseX = lastDragEvent.originalEvent.clientX;
+                const mouseY = lastDragEvent.originalEvent.clientY;
+                const cardContainerRect = cardContainer.getBoundingClientRect();
+                const eventId = Object.keys(placedEvents).find(key => placedEvents[key].marker === markerInstance);
+
+                // Check if dropped on the card container
+                if (eventId && mouseX >= cardContainerRect.left && mouseX <= cardContainerRect.right && mouseY >= cardContainerRect.top && mouseY <= cardContainerRect.bottom) {
+                    // --- Handle drop on container ---
+                    const oldLocationId = placedEvents[eventId].droppedLocationId;
+                    map.removeLayer(markerInstance);
+                    delete placedEvents[eventId];
+
+                    const cardElement = document.getElementById(eventId);
+                    cardElement.style.display = 'block';
+                    cardElement.style.position = ''; cardElement.style.left = ''; cardElement.style.top = ''; cardElement.style.transform = '';
+
+                    repositionMarkersAtLocation(oldLocationId);
+                    updateCheckButtonState();
+                } else {
+                    // --- Handle drop on map (existing logic) ---
+                    const latLng = map.mouseEventToLatLng(lastDragEvent.originalEvent);
+                    const closestLocation = findClosestLocation(latLng, locationsData);
+                    if (closestLocation && eventId) {
+                        const droppedOnCircle = findCircleByLocationId(closestLocation.location_id);
+                        const originalCardElement = document.getElementById(eventId);
+                        map.fire('droppable:drop', { drop: droppedOnCircle, drag: { _element: originalCardElement } });
+                    } else {
+                        markerInstance.setLatLng(markerInstance.originalLatLng);
+                        markerInstance.setOpacity(1);
+                    }
+                }
+            }
+        });
+
+        placedEvents[card.id] = {
+            marker: marker,
+            droppedLocationId: drop.options.location_id
+        };
+
+        updateCheckButtonState();
+
+        repositionMarkersAtLocation(drop.options.location_id);
+    }
+
+    function checkAnswers(data) {
+        let allCorrect = true;
+        const locationsToUpdate = new Set();
+
+        data.events.forEach(event => {
+            const placed = placedEvents[event.event_id];
+            if (placed) {
+                if (placed.droppedLocationId === event.location_id) {
+                    // Correctly placed: style it and disable dragging
+                    const year = new Date(event.start_time).getFullYear();
+                    const correctIcon = L.divIcon({ html: `<div class="placed-event-marker placed-event-marker--correct"><span>${event.title}</span><span class="marker-year">${year}</span></div>`, className: 'custom-div-icon', iconSize: null });
+                    placed.marker.setIcon(correctIcon);
+                    if (placed.marker.dragging) {
+                        placed.marker.dragging.disable();
+                    }
+                } else {
+                    // Incorrectly placed: return card to list
+                    allCorrect = false;
+                    map.removeLayer(placed.marker);
+                    
+                    const cardElement = document.getElementById(event.event_id);
+                    cardElement.style.display = 'block';
+                    
+                    // Reset position styles left by L.Draggable
+                    cardElement.style.position = '';
+                    cardElement.style.left = '';
+                    cardElement.style.top = '';
+                    cardElement.style.transform = '';
+
+                    locationsToUpdate.add(placed.droppedLocationId);
+                    delete placedEvents[event.event_id];
+                }
+            } else {
+                // Not placed at all
+                allCorrect = false;
+            }
+        });
+
+        locationsToUpdate.forEach(locationId => repositionMarkersAtLocation(locationId));
+
+        if (allCorrect) {
+            checkAnswersBtn.style.display = 'none';
+
+            // --- Populate Chronological Data for Timeline ---
+            // This needs to be done here because only now are the markers guaranteed to be correct.
+            placedChrono = data.events
+                .map(eventData => {
+                    const placed = placedEvents[eventData.event_id];
+                    return {
+                        event: eventData,
+                        marker: placed ? placed.marker : null // Get the final, correct marker
+                    };
+                })
+                .sort((a, b) => new Date(a.event.start_time) - new Date(b.event.start_time));
+
+            // --- Enable Timeline Mode ---
+            timelineEnabled = true;
+            // Enable slider and buttons
+            if (timelineSlider) {
+                timelineSlider.disabled = false;
+                timelineSlider.style.pointerEvents = 'auto';
+                timelineSlider.style.display = 'block';
+            }
+            const timelineControlsContainer = document.getElementById('timeline-controls-container');
+            if (timelineControlsContainer) {
+                timelineControlsContainer.style.display = 'block';
+            }
+            if (timelinePlayBtn) {
+                timelinePlayBtn.disabled = false;
+                timelinePlayBtn.style.pointerEvents = 'auto';
+            }
+            if (timelinePauseBtn) {
+                timelinePauseBtn.disabled = false;
+                timelinePauseBtn.style.pointerEvents = 'auto';
+            }
+            
+            // Trigger initial highlight on the first event
+            highlightStep(parseInt(timelineSlider.value, 10));
+        } else {
+            // Not all correct, so disable the button until all cards are placed again.
+            updateCheckButtonState();
+        }
+    }
+
+    function updateCheckButtonState() {
+        const placedCount = Object.keys(placedEvents).length;
+        checkAnswersBtn.disabled = placedCount === 0;
+    }
+
+    function highlightStep(idx) {
+        // This part is for clearing highlights if the timeline gets disabled.
+        if (!timelineEnabled) {
+            placedChrono.forEach((item, i) => {
+                const cardElement = document.getElementById(item.event.event_id);
+                if (cardElement) {
+                    cardElement.classList.remove('timeline-card-highlight');
+                }
+            });
+            return;
+        }
+
+        // When timeline is enabled, only highlight markers on the map.
+        placedChrono.forEach((item, i) => {
+            if (item.marker) {
+                const year = new Date(item.event.start_time).getFullYear();
+                if (i === idx) {
+                    item.marker.setZIndexOffset(1000);
+                    item.marker.setIcon(L.divIcon({
+                        html: `<div class="placed-event-marker placed-event-marker--correct placed-event-marker--highlight"><span>${item.event.title}</span><span class="marker-year">${year}</span></div>`,
+                        className: 'custom-div-icon',
+                        iconSize: null,
+                    }));
+                    map.panTo(item.marker.getLatLng());
+                } else {
+                    item.marker.setZIndexOffset(0);
+                    item.marker.setIcon(L.divIcon({
+                        html: `<div class="placed-event-marker placed-event-marker--correct"><span>${item.event.title}</span><span class="marker-year">${year}</span></div>`,
+                        className: 'custom-div-icon',
+                        iconSize: null,
+                    }));
+                }
+            }
+        });
+    }
+
+    // --- Timeline Slider UI ---
+    function setupTimelineSlider(data, map) {
+        // Remove any previous slider
+        const oldSlider = document.querySelector('input[type="range"][style*="fixed"]');
+        if (oldSlider) oldSlider.remove();
+        const oldControlsContainer = document.getElementById('timeline-controls-container');
+        if (oldControlsContainer) oldControlsContainer.remove();
+        const oldTooltip = document.getElementById('timeline-tooltip');
+        if (oldTooltip) oldTooltip.remove();
+
+        // Create slider
+        timelineSlider = document.createElement('input');
+        timelineSlider.type = 'range';
+        timelineSlider.min = 0;
+        // The max value is based on the total number of events.
+        // placedChrono will be populated later with correct markers.
+        timelineSlider.max = data.events.length > 0 ? data.events.length - 1 : 0;
+        timelineSlider.value = 0;
+        timelineSlider.step = 1;
+        timelineSlider.style.position = 'fixed';
+        timelineSlider.style.left = '50%';
+        timelineSlider.style.bottom = '32px';
+        timelineSlider.style.transform = 'translateX(-50%)';
+        timelineSlider.style.width = '60vw';
+        timelineSlider.style.zIndex = '9999';
+        timelineSlider.style.background = '#fff';
+        timelineSlider.style.padding = '8px';
+        timelineSlider.style.borderRadius = '8px';
+        timelineSlider.style.boxShadow = '0 2px 8px #0003';
+        timelineSlider.style.display = 'none'; // Initially hidden
+        timelineSlider.style.pointerEvents = 'none'; // Disabled at start
+        timelineSlider.disabled = true;
+
+        // Create a container for the buttons to ensure they occupy the same position
+        const timelineControlsContainer = document.createElement('div');
+        timelineControlsContainer.id = 'timeline-controls-container';
+        timelineControlsContainer.style.position = 'fixed';
+        timelineControlsContainer.style.left = 'calc(50% - 35vw)'; // Position the container
+        timelineControlsContainer.style.bottom = '28px';
+        timelineControlsContainer.style.zIndex = '9999';
+        timelineControlsContainer.style.display = 'none'; // Initially hidden
+
+        // Play/Pause buttons
+        timelinePlayBtn = document.createElement('button');
+        timelinePlayBtn.textContent = '▶️';
+        timelinePlayBtn.style.fontSize = '1.5rem';
+        timelinePlayBtn.style.background = '#fff';
+        timelinePlayBtn.style.border = '1px solid #ccc';
+        timelinePlayBtn.style.borderRadius = '0.5rem';
+        timelinePlayBtn.style.padding = '0.2rem 0.8rem';
+        timelinePlayBtn.style.cursor = 'pointer';
+        timelinePlayBtn.style.display = 'block';
+        timelinePlayBtn.style.pointerEvents = 'none'; // Disabled at start
+        timelinePlayBtn.disabled = true;
+
+        timelinePauseBtn = document.createElement('button');
+        timelinePauseBtn.textContent = '⏸️';
+        timelinePauseBtn.style.fontSize = '1.5rem';
+        timelinePauseBtn.style.background = '#fff';
+        timelinePauseBtn.style.border = '1px solid #ccc';
+        timelinePauseBtn.style.borderRadius = '0.5rem';
+        timelinePauseBtn.style.padding = '0.2rem 0.8rem';
+        timelinePauseBtn.style.cursor = 'pointer';
+        timelinePauseBtn.style.display = 'none';
+        timelinePauseBtn.style.pointerEvents = 'none'; // Disabled at start
+        timelinePauseBtn.disabled = true;
+
+        document.body.appendChild(timelineSlider);
+        timelineControlsContainer.appendChild(timelinePlayBtn);
+        timelineControlsContainer.appendChild(timelinePauseBtn);
+        document.body.appendChild(timelineControlsContainer);
+
+        // --- Tooltip for Slider ---
+        const timelineTooltip = document.createElement('div');
+        timelineTooltip.id = 'timeline-tooltip';
+        timelineTooltip.style.position = 'fixed';
+        timelineTooltip.style.background = 'rgba(0, 0, 0, 0.8)';
+        timelineTooltip.style.color = 'white';
+        timelineTooltip.style.padding = '5px 10px';
+        timelineTooltip.style.borderRadius = '4px';
+        timelineTooltip.style.display = 'none';
+        timelineTooltip.style.zIndex = '10000';
+        timelineTooltip.style.pointerEvents = 'none';
+        timelineTooltip.style.whiteSpace = 'nowrap';
+        document.body.appendChild(timelineTooltip);
+
+        timelineSlider.addEventListener('mousemove', (e) => {
+            if (!timelineEnabled) return;
+
+            const sliderRect = timelineSlider.getBoundingClientRect();
+            const hoverPosition = e.clientX - sliderRect.left;
+            const percentage = hoverPosition / sliderRect.width;
+            const maxIndex = parseInt(timelineSlider.max, 10);
+            let index = Math.round(percentage * maxIndex);
+            index = Math.max(0, Math.min(maxIndex, index));
+
+            if (placedChrono[index]) {
+                const event = placedChrono[index].event;
+                const year = new Date(event.start_time).getFullYear();
+                timelineTooltip.textContent = `${year}: ${event.title}`;
+                
+                timelineTooltip.style.display = 'block';
+                timelineTooltip.style.left = `${e.clientX}px`;
+                timelineTooltip.style.top = `${sliderRect.top - 10}px`; // Position above the slider
+                timelineTooltip.style.transform = 'translate(-50%, -100%)'; // Center horizontally, place above
+            }
+        });
+
+        timelineSlider.addEventListener('mouseleave', () => {
+            timelineTooltip.style.display = 'none';
+        });
+
+        let currentIdx = 0;
+
+        function updateTimelineUI(idx) {
+            highlightStep(idx);
+        }
+
+        timelineSlider.oninput = (e) => {
+            if (!timelineSlider.disabled) {
+                currentIdx = parseInt(timelineSlider.value, 10);
+                updateTimelineUI(currentIdx);
+            }
+        };
+
+        timelinePlayBtn.onclick = () => {
+            if (timelinePlayBtn.disabled) return;
+            timelinePlayBtn.style.display = 'none'; // Hide play button
+            timelinePauseBtn.style.display = 'block'; // Show pause button
+            timelineInterval = setInterval(() => {
+                currentIdx++;
+                if (currentIdx >= placedChrono.length) {
+                    currentIdx = 0; // Loop back to the beginning
+                }
+                timelineSlider.value = currentIdx;
+                updateTimelineUI(currentIdx);
+            }, 1200);
+        };
+
+        timelinePauseBtn.onclick = () => {
+            if (timelinePauseBtn.disabled) return;
+            timelinePauseBtn.style.display = 'none'; // Hide pause button
+            timelinePlayBtn.style.display = 'block'; // Show play button
+            clearInterval(timelineInterval);
+        };
+
+        // Initial highlight (only if timelineEnabled)
+        // highlightStep(currentIdx); // Moved to checkAnswers to ensure it runs after placedChrono is populated
+    }
+
+    function handleZoom() {
+        const locationsToUpdate = new Set(Object.values(placedEvents).map(p => p.droppedLocationId));
+        locationsToUpdate.forEach(locationId => {
+            repositionMarkersAtLocation(locationId);
+        });
+    }
+
+    function findClosestLocation(latLng, locations) {
+        let closest = null, minDistance = Infinity;
+        locations.forEach(loc => {
+            const distance = map.distance(latLng, [loc.lat, loc.lng]);
+            if (distance < minDistance) {
+                minDistance = distance;
+                closest = loc;
+            }
+        });
+        return closest;
+    }
+
+    function findCircleByLocationId(locationId) {
+        let foundLayer = null;
+        map.eachLayer(layer => {
+            if (layer.options.location_id === locationId) {
+                foundLayer = layer;
+            }
+        });
+        return foundLayer;
+    }
+
+    function repositionMarkersAtLocation(locationId) {
+        // 1. Find all events placed at this location
+        const placedAtLocation = Object.entries(placedEvents)
+            .filter(([eventId, data]) => data.droppedLocationId === locationId)
+            .map(([eventId, data]) => {
+                // 2. Get full event data for sorting
+                const eventData = gameData.events.find(e => e.event_id === eventId);
+                return {
+                    marker: data.marker,
+                    event: eventData
+                };
+            });
+
+        // 3. Sort them by start_time
+        placedAtLocation.sort((a, b) => new Date(a.event.start_time) - new Date(b.event.start_time));
+
+        if (placedAtLocation.length > 0) {
+            const locationData = locationsData.find(l => l.location_id === locationId);
+            if (!locationData) return;
+
+            // 4. Convert center lat/lng to pixel coordinates
+            const centerPoint = map.latLngToContainerPoint([locationData.lat, locationData.lng]);
+            const markerHeight = 20; // Approximate height of a marker, adjust as needed
+            // Dynamic padding based on zoom level
+            const padding = Math.max(0, (map.getZoom() - 13) * 3);
+
+            // Calculation to stack markers below the location label
+            const locationLabelHeight = 30; // Approximate height of the location label tooltip
+            const spacingBelowLabel = -10;   // Gap between label and first marker
+            const startY = centerPoint.y + (locationLabelHeight / 2) + spacingBelowLabel + (markerHeight / 2);
+
+            // 5. Calculate new position for each marker
+            placedAtLocation.forEach((item, index) => {
+                const newY = startY + index * (markerHeight + padding);
+                const newX = centerPoint.x - 25;
+                const newPoint = L.point( newX , newY);
+                
+                // 6. Convert back to lat/lng and update marker
+                const newLatLng = map.containerPointToLatLng(newPoint);
+                item.marker.setLatLng(newLatLng);
+            });
+        }
+    }
+
+    // 自動播放模式：自動將所有事件卡片放到正確位置並啟用時間軸
+    function autoPlaceAndStartTimeline(data) {
+        // 1. 依序將所有事件卡片放到正確地點
+        data.events.forEach(event => {
+            const card = document.getElementById(event.event_id);
+            if (!card) return;
+            // 找到正確地點的 circle
+            const location = locationsData.find(loc => loc.location_id === event.location_id);
+            if (!location) return;
+            const circle = findCircleByLocationId(location.location_id);
+            if (!circle) return;
+
+            // 模擬拖放：直接呼叫 handleDrop
+            handleDrop({
+                drop: circle,
+                drag: { _element: card }
+            });
+        });
+
+        // 2. 檢查答案（會啟用時間軸）
+        checkAnswers(data);
+
+        // 3. 自動播放時間軸
+        setTimeout(() => {
+            if (timelinePlayBtn && !timelinePlayBtn.disabled) {
+                timelinePlayBtn.click();
+            }
+        }, 800); // 稍微延遲，確保 UI 已更新
+    }
+});
