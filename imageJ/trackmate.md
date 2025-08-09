@@ -27,29 +27,68 @@ TrackMate 是 Fiji 影像處理軟體中一個強大且模組化的外掛程式�
 
 ### 3. 選擇偵測演算法 (Select a Detector)
 
-TrackMate 提供多種偵測演算法來識別影像中的物體。偵測器負責找出影像中的「點」(Spots) 或輪廓，並為其提供基本的數值特徵，例如座標、半徑和品質。
+TrackMate 提供多種偵測演算法來識別影像中的物體。偵測器負責找出影像中的**點(Spots)** 或**輪廓**，並為其提供基本的數值特徵，例如座標、半徑和品質。
 
-- DoG detector
-- Hessian detector
+- **DoG detector**
+    - 檢測圖像中亮點(bright blobs)的檢測器，基於高斯差分的檢測器，計算兩個不同sigma值的高斯濾波器差值來近似LoG濾波器。
+    - 特別適合**小尺寸點的檢測（< ~5像**素）**，計算在直接空間進行，速度較快。 
+
+- **Hessian detector**
+    - 檢測亮點(bright blobs)的檢測器，基於計算圖像的Hessian矩陣行列式來工作。
+    - Hessian detector相比LoG detector具有更好的邊緣響應消除能力，特別適合檢測具有強邊緣的圖像中的點。
+
 - **Label-Image detector (標籤影像偵測器)**：從標籤影像中建立物體。標籤影像中每個物體由不同的整數值表示，這有助於分離接觸的物體。
-- LoG detector
-- Manual annotation
+
+- **LoG detector**
+    - 使用拉普拉斯高斯濾波器來檢測blob狀結構，適合檢測各種尺寸的blob狀結構，對於**大點檢測或需要高精度**表現更好，計算在傅立葉空間進行。
+
+- **Manual annotation**
+
 - **Mask detector (遮罩偵測器)**：從二值化遮罩影像中建立物體。物體由像素值大於 0 的連通區域組成。通常會將遮罩作為原始影像的一個額外通道。
+
 - **Thresholding detector (閾值偵測器)**：從灰階影像中，根據指定閾值來分割物體。
+
 以下有安裝其他外掛才會出現
-- TrackMate-MorphoLibJ：依賴 MorphoLibJ 庫中的 Morphological Segmentation
-- TrackMate-Ilastik
-- TrackMate-StarDist：利用 StarDist 深度學習模型進行細胞核等物體分割
-- TrackMate-Weka：依賴 Trainable Weka Segmentation 外掛程式來分割物體
+
+- **TrackMate-MorphoLibJ**：利用 MorphoLibJ 庫中的 Morphological Segmentation
+- **TrackMate-Ilastik**
+- **TrackMate-StarDist**：利用 StarDist 深度學習模型進行細胞核等物體分割
+- **TrackMate-Weka**：利用 Trainable Weka Segmentation 外掛程式來分割物體
 
 ---
 
 ### 4. 偵測器配置面板
 
-#### Mask Detector 的配置
+#### LoG Detector (Laplacian of Gaussian)
+- Target Channel: 選擇要偵測的通道，預設值為1
+- Radius: 預期斑點半徑，預設值為5.0
+- Threshold :品質閾值，低於此值的斑點將被濾掉，預設值為0
+- Median Filtering：是否進行**中值濾波**預處理，預設為false
+- Sub-pixel Localization : 是否進行亞像素定位，預設為true
 
-- **Mask Channel (遮罩通道)**：指定遮罩影像所在的通道。例如，如果你的原始影像有兩個通道，第二個通道是遮罩，則選擇 Channel 2。
-- **Simplify contours (簡化輪廓)**：
+#### DoG Detector (Difference of Gaussian)
+- DoG偵測器與LoG偵測器 使用相同的設定參數
+
+#### Hessian Detector
+- Target Channel: 目標通道選擇 
+- Radius XY : XY方向半徑
+- Radius Z : Z方向半徑，預設值為8.0
+- Threshold: 品質閾值 
+- Normalize: 是否標準化品質值到0-1範圍，預設為false
+- Sub-pixel Localization: 亞像素定位
+
+#### Threshold Detector
+- Target Channel: 目標通道
+- Intensity Threshold: 強度閾值
+- Simplify Contours: 是否簡化輪廓
+
+#### Label Image Detector
+- 與Threshold Detector設定大部分相同，但不設定強度閾值
+
+#### Mask Detector
+
+- Mask Channel：指定遮罩影像所在的通道。例如，如果你的原始影像有兩個通道，第二個通道是遮罩，則選擇 Channel 2。
+- Simplify contours (簡化輪廓)：
     - 當偵測器獲得物體輪廓時，勾選這個選項會產生一個更平滑、包含更少線段的簡化形狀。
     - 優點：生成更小的 TrackMate 文件，更重要的是，可以產生更準確的形態特徵，因為像素級的輪廓會高估周長，進而影響相關的形態特徵。
     - 建議在物體足夠大（通常大於 10 個像素）時使用此選項，否則簡化可能導致輪廓不準確。
@@ -139,6 +178,7 @@ TrackMate 提供多種偵測演算法來識別影像中的物體。偵測器負�
 
 #### Kalman Tracker / Advanced Kalman Tracker參數
 Kalman濾波器的設定
+
 - Initial search radius (初始搜索半徑)
 - Search radius (搜索半徑)
 - Max frame gap (最大幀間隔)
@@ -147,6 +187,7 @@ Kalman濾波器的設定
 
 #### Nearest Neighbor Tracker參數
 - Maximal linking distance (最大連接距離)
+
 ---
 
 ### 10. 軌跡過濾 (set filter on tracks)
@@ -218,68 +259,75 @@ Kalman濾波器的設定
 
 
 ## 教學範例
-
 - [mask-detector](https://imagej.net/plugins/trackmate/detectors/trackmate-mask-detector)
-    - 範例影像：[C.elegans胚胎發育](https://zenodo.org/records/5132918)
-        - LAP tracker
-            - Frame to Frame linking (幀間連結)：設定兩個物體之間連結的最大距離，對於本範例影像，使用 20  (microns)。
-            - Allow gap closing (允許間隙閉合)：勾選此方框。設定 Max distance (最大距離) 為 20 微米，Max frame gap (最大幀間隙) 為 5。
-            - Allow track segment splitting (允許軌跡片段分裂)：勾選此方框（例如，因細胞分裂引起）。設定 Max distance (最大距離) 為 20 (microns) 。
-
 - [thresholding-detector](https://imagej.net/plugins/trackmate/detectors/trackmate-thresholding-detector)
-    - 範例影像：[cell migration](https://zenodo.org/records/5220796)
-        - LAP tracker
-            - Frame to Frame linking ：maximum distance to link two objects between frames：20 microns.
-            - Allow gap closing box ： Max distance: 20 microns and Max frame gap: 4. 
-            - Allow track segment splitting and insert value Max distance: 20 microns. 
-            - untickedB  Track segment merging
-
 - [label-image-detector](https://imagej.net/plugins/trackmate/detectors/trackmate-label-image-detector)
-    - 範例影像：[Tracking label images](https://zenodo.org/records/5221424)
-        - LAP tracker
-
 - [trackmate-ilastik](https://imagej.net/plugins/trackmate/detectors/trackmate-ilastik)
-    - 範例影像：[腦膜炎雙球菌的細胞生長Neisseria meningitidis bacterial growths](https://zenodo.org/records/5419619)
-        - LAP Tracker
-
 - [trackmate-morpholibj](https://imagej.net/plugins/trackmate/detectors/trackmate-morpholibj)
-    - 範例影像：[爪蟾Xenopus的細胞](https://zenodo.org/records/5211585)
-      - Overlap tracker(直徑大於移動距離，很大顆慢慢走)
-
 - [trackmate-stardist](https://imagej.net/plugins/trackmate/detectors/trackmate-stardist)
-    - 範例影像：[癌細胞](https://zenodo.org/records/5206107)
-        - LAP tracker
-
 - [trackmate-cellpose](https://imagej.net/plugins/trackmate/detectors/trackmate-cellpose)
-    - 範例影像：[乳癌細胞](https://zenodo.org/records/5864646)
-        - 使用 Overlap tracker 優於 LAP tracker，因為細胞往下移動，而有些細胞會從影像上方出現。LAP 可能會誤認為這些新細胞是某個在其下方的細胞「剛剛分裂」所產生的子細胞，結果會導致錯誤的細胞分裂事件。因為LAP 預設以距離最短、分配代價最低為對應依據，不一定能辨認「畫面外進入 vs 真正的細胞分裂」。
-
-    - 範例影像：[膠質母細胞瘤](https://zenodo.org/records/5863317)
-        - 檔案包括預訓練模型
-        - Simple LAP tracker
-
-
 - [trackmate-cellpose-advanced](https://imagej.net/plugins/trackmate/detectors/trackmate-cellpose-advanced)
-
 - [trackmate-weka](https://imagej.net/plugins/trackmate/detectors/trackmate-weka)
-    - 範例影像：[human dermal microvascular blood endothelial cells expressing Paxillin](https://zenodo.org/records/5226842)
-        - 檔案包括 trained Weka classifier.
-
-### 教學範例01
-本教學將使用一個 C.elegans 胚胎影像會使用 Mask 偵測器進行追蹤。這個影片是從一個更長的影片中擷取的最大強度投影 (MIP)，並已針對本教學目的進行簡化。 
-
-1. 在 Fiji 中開啟影像 **CelegansEarly_MIP.tif**。
-2. 此影像有兩個通道：
-   - **第一個通道**：包含原始影像資料，顯示經過 eGFP-H2B 染色並在雷射掃描共焦顯微鏡下成像的 C.elegans 胚胎螢光。可以看到細胞核的移動和分裂，以及兩個較小的極體。
-   - **第二個通道**：包含透過以下步驟處理後的訊號分割結果：
-     1. 中值濾波 (Median filter)
-     2. 高斯濾波 (Gaussian filter)
-     3. 簡單的閾值處理 (Plain thresholding)
-
-1. 選擇 `Mask Detector`，這在 C. elegans 的教程中被用來處理預先生成好的遮罩影像。
-2. 選擇 `LAP tracker`，因為它能夠處理**分裂事件 (split events)** 的偵測。因為活動的極體，可能會出現錯誤的分裂，其被錯誤地連接到頂部細胞的影片。可以手動糾正，或根據面積篩選極體。
 
 
+## 範例影像
+### [C.elegans胚胎發育](https://zenodo.org/records/5132918)
+
+- 此影像是C. elegans 胚胎影像，是從一個更長的影片中擷取的最大強度投影 (MIP)。 
+- 此影像有兩個通道：
+    - **第一個通道**：包含原始影像資料，顯示經過 eGFP-H2B 染色並在雷射掃描共焦顯微鏡下成像的 C.elegans 胚胎螢光。可以看到細胞核的移動和分裂，以及兩個較小的極體。
+    - **第二個通道**：包含透過以下步驟處理後的訊號分割結果：
+        1. 中值濾波 (Median filter)
+        2. 高斯濾波 (Gaussian filter)
+        3. 簡單的閾值處理 (Plain thresholding)    
+- 使用`Mask Detector`
+- 使用`LAP tracker`
+    - 因為能夠處理**分裂事件 (split events)** 的偵測。極體可能會出現錯誤的分裂，其被錯誤地連接到頂部細胞的影片。可以手動糾正，或根據面積篩選極體。
+    - Frame to Frame linking (幀間連結)：設定兩個物體之間連結的最大距離，對於本範例影像，使用 20  (microns)。
+    - Allow gap closing (允許間隙閉合)：勾選此方框。設定 Max distance (最大距離) 為 20 微米，Max frame gap (最大幀間隙) 為 5。
+    - Allow track segment splitting (允許軌跡片段分裂)：勾選此方框（例如，因細胞分裂引起）。設定 Max distance (最大距離) 為 20 (microns) 。
+
+
+### [cell migration](https://zenodo.org/records/5220796)
+
+- 使用thresholding detector
+- LAP tracker
+    - Frame to Frame linking ：maximum distance to link two objects between frames：20 microns.
+    - Allow gap closing box ： Max distance: 20 microns and Max frame gap: 4. 
+    - Allow track segment splitting and insert value Max distance: 20 microns. 
+    - untickedB  Track segment merging    
+### [Tracking label images](https://zenodo.org/records/5221424)
+- 使用 label image detector
+- LAP tracker        
+
+### [腦膜炎雙球菌的細胞生長Neisseria meningitidis bacterial growths](https://zenodo.org/records/5419619)
+
+- 使用 trackmate-ilastik
+- LAP Tracker
+
+### [爪蟾Xenopus的細胞](https://zenodo.org/records/5211585)
+- 使用trackmate-morpholibj
+- Overlap tracker(直徑大於移動距離，很大顆慢慢走)
+
+### [癌細胞](https://zenodo.org/records/5206107)
+
+- 使用trackmate-stardist
+- LAP tracker
+### [乳癌細胞](https://zenodo.org/records/5864646)
+
+- 使用 trackmate-cellpose
+- 使用 Overlap tracker 優於 LAP tracker，因為細胞往下移動，而有些細胞會從影像上方出現。LAP 可能會誤認為這些新細胞是某個在其下方的細胞「剛剛分裂」所產生的子細胞，結果會導致錯誤的細胞分裂事件。因為LAP 預設以距離最短、分配代價最低為對應依據，不一定能辨認「畫面外進入 vs 真正的細胞分裂」。
+
+### [膠質母細胞瘤](https://zenodo.org/records/5863317)
+- 使用trackmate-cellpose
+- 檔案包括預訓練模型
+- Simple LAP tracker
+
+### [human dermal microvascular blood endothelial cells expressing Paxillin](https://zenodo.org/records/5226842)
+- 使用trackmate-weka
+- 檔案內有 trained Weka classifier
+
+## 其他
 #### 繪製細胞核形狀隨時間的變化
 
 有了細胞形狀及其譜系後，可以追蹤細胞分裂時形狀如何變化。例如繪製底部細胞的細胞核大小和圓度隨時間的變化。
@@ -305,3 +353,4 @@ Kalman濾波器的設定
     ◦ 在細胞核和極體之間繪製一條線。
     ◦ 按下 D 鍵進行繪製。由於你選擇了黑色，沿著線 ROI 的像素將被替換為 0，從而將 Mask 分割成兩個部分。
     ◦ 現在你可以像之前一樣繼續追蹤。這樣，極體和細胞核將被分割為兩個獨立的斑點。   
+
