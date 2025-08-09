@@ -180,6 +180,96 @@ document.addEventListener('DOMContentLoaded', () => {
 
             lastDragEvent = null; // Reset for the next drag operation
         });
+
+        // --- Touch 支援 ---
+        card.addEventListener('touchstart', (e) => {
+            if (e.touches.length !== 1) return;
+            e.stopPropagation();
+            e.preventDefault();
+            const touch = e.touches[0];
+            const cardRect = card.getBoundingClientRect();
+            dragOffset = {
+                x: touch.clientX - cardRect.left,
+                y: touch.clientY - cardRect.top
+            };
+            ghostCard = L.DomUtil.create('div', 'is-dragging', document.body);
+            ghostCard.innerHTML = card.querySelector('h3').outerHTML;
+            ghostCard.style.width = card.offsetWidth + 'px';
+            L.DomUtil.setOpacity(card, 0.5);
+        }, { passive: false });
+
+        card.addEventListener('touchmove', (e) => {
+            if (e.touches.length !== 1) return;
+            e.stopPropagation();
+            e.preventDefault();
+            const touch = e.touches[0];
+            moveGhost(touch);
+
+            const mapContainer = map.getContainer();
+            const mapRect = mapContainer.getBoundingClientRect();
+            const mouseX = touch.clientX;
+            const mouseY = touch.clientY;
+
+            if (mouseX >= mapRect.left && mouseX <= mapRect.right && mouseY >= mapRect.top && mouseY <= mapRect.bottom) {
+                // 構造 MouseEvent-like 物件給 updateGuideLine
+                updateGuideLine({
+                    clientX: mouseX,
+                    clientY: mouseY
+                });
+            } else {
+                if (guideLine) {
+                    map.removeLayer(guideLine);
+                    guideLine = null;
+                }
+            }
+            lastDragEvent = { originalEvent: { clientX: mouseX, clientY: mouseY } };
+        }, { passive: false });
+
+        card.addEventListener('touchend', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            L.DomUtil.setOpacity(card, 1);
+            if (guideLine) {
+                map.removeLayer(guideLine);
+            }
+            guideLine = null;
+
+            let successfulDrop = false;
+            if (lastDragEvent) {
+                const mapContainer = map.getContainer();
+                const mapRect = mapContainer.getBoundingClientRect();
+                const mouseX = lastDragEvent.originalEvent.clientX;
+                const mouseY = lastDragEvent.originalEvent.clientY;
+                const droppedOnMap = mouseX >= mapRect.left && mouseX <= mapRect.right && mouseY >= mapRect.top && mouseY <= mapRect.bottom;
+
+                if (droppedOnMap) {
+                    const latLng = map.mouseEventToLatLng(lastDragEvent.originalEvent);
+                    const closestLocation = findClosestLocation(latLng, locationsData);
+
+                    if (closestLocation) {
+                        const droppedOnCircle = findCircleByLocationId(closestLocation.location_id);
+                        if (droppedOnCircle) {
+                            map.fire('droppable:drop', { drop: droppedOnCircle, drag: { _element: card } });
+                            successfulDrop = true;
+                        }
+                    }
+                }
+            }
+
+            if (!successfulDrop) {
+                if (ghostCard) {
+                    L.DomUtil.remove(ghostCard);
+                    ghostCard = null;
+                }
+                card.style.position = '';
+                card.style.left = '';
+                card.style.top = '';
+                card.style.transform = '';
+            }
+
+            lastDragEvent = null;
+        }, { passive: false });
+
         return card;
     }
     
@@ -707,4 +797,20 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }, 800); // 稍微延遲，確保 UI 已更新
     }
+
+    // --- 行動裝置事件列表高度自動調整 ---
+    function adjustCardContainerHeight() {
+        // 檢查按鈕高度（可依實際按鈕高度微調）
+        const checkBtnHeight = checkAnswersBtn.offsetHeight || 56;
+        // 上方 padding（可依 UI 微調）
+        const topPadding = 16;
+        // 下方安全距離
+        const bottomPadding = 24;
+        // 計算可用高度
+        const availableHeight = window.innerHeight - topPadding - checkBtnHeight - bottomPadding;
+        cardContainer.style.maxHeight = availableHeight + 'px';
+        cardContainer.style.overflowY = 'auto';
+    }
+    adjustCardContainerHeight();
+    window.addEventListener('resize', adjustCardContainerHeight);
 });
