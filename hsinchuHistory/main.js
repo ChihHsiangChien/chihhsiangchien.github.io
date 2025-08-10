@@ -102,11 +102,30 @@ document.addEventListener('DOMContentLoaded', () => {
         card.className = 'p-2 mb-2 bg-white rounded shadow cursor-pointer border-2 border-gray-300';
         card.id = event.event_id;
         const year = new Date(event.start_time).getFullYear();
-        card.innerHTML = `<h3 class="font-bold text-sm flex justify-between items-center"><span>${event.title}</span><span class="text-xs text-gray-500 font-normal ml-2">${year}</span></h3><p class="text-xs text-gray-600 mt-1 hidden">${event.description}</p>`;
+
+        let imageHTML = '';
+        if (event.image) {
+            imageHTML = `<img src="${event.image}" alt="${event.title}" class="mt-2 w-full h-auto rounded">`;
+        }
+
+        let linksHTML = '';
+        if (event.links && event.links.length > 0) {
+            linksHTML += '<div class="mt-2 text-xs space-x-2">';
+            event.links.forEach(link => {
+                linksHTML += `<a href="${link.url}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">${link.name}</a>`;
+            });
+            linksHTML += '</div>';
+        }
+
+        card.innerHTML = `<h3 class="font-bold text-sm flex justify-between items-center"><span>${event.title}</span><span class="text-xs text-gray-500 font-normal ml-2">${year}</span></h3><div class="details hidden mt-1">${imageHTML}<p class="text-xs text-gray-600 mt-2">${event.description || ''}</p>${linksHTML}</div>`;
 
         // 滑鼠點擊展開/收合 description
-        card.addEventListener('click', () => card.querySelector('p').classList.toggle('hidden'));
+        card.addEventListener('click', () => card.querySelector('.details').classList.toggle('hidden'));
 
+        // 防止點擊連結時觸發卡片的點擊事件 (會展開/收合內容)
+        card.querySelectorAll('a').forEach(link => {
+            link.addEventListener('click', e => e.stopPropagation());
+        });
 
         const draggable = new L.Draggable(card);
         draggable.enable();
@@ -250,7 +269,7 @@ document.addEventListener('DOMContentLoaded', () => {
        
         card.addEventListener('touchend', (e) => {
             if (!isDragging) {
-                card.querySelector('p').classList.toggle('hidden');
+                card.querySelector('.details').classList.toggle('hidden');
             }            
             e.stopPropagation();
             e.preventDefault();
@@ -364,10 +383,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const markerLatLng = drop.getBounds ? drop.getBounds().getCenter() : drop.getLatLng();
         const marker = L.marker(markerLatLng, { icon: markerIcon, draggable: true }).addTo(map);
 
-        // --- Add popup with description ---
-        if (eventData.description) {
-            marker.bindPopup(`<b>${eventData.title}</b><br>${eventData.description}`);
+        // --- Add popup with description and links ---
+        let popupContent = `<b>${eventData.title}</b>`;
+        if (eventData.image) {
+            popupContent += `<br><img src="${eventData.image}" alt="${eventData.title}" style="width:100%; max-width:200px; margin-top:8px; border-radius:4px;">`;
         }
+        if (eventData.description) {
+            popupContent += `<br>${eventData.description}`;
+        }
+        if (eventData.links && eventData.links.length > 0) {
+            popupContent += '<div style="margin-top: 8px;">';
+            eventData.links.forEach(link => {
+                popupContent += `<a href="${link.url}" target="_blank" rel="noopener noreferrer" style="margin-right: 8px;">${link.name}</a>`;
+            });
+            popupContent += '</div>';
+        }
+        marker.bindPopup(popupContent);
 
         // --- Enable re-dragging placed cards ---
         marker.on('dragstart', function(e) {
