@@ -11,7 +11,27 @@ document.addEventListener('DOMContentLoaded', () => {
     map.getPane('highlightedMarkerPane').style.zIndex = 651; // Above default markers (600) and tooltips (650)
     map.getPane('highlightedMarkerPane').style.pointerEvents = 'none'; // Allow clicks to pass through
 
+    const regionColorConfig = window.regionColorConfig || {}; // Get from global scope
+
     L.control.layers({ "OpenStreetMap": osmLayer, "Satellite": satelliteLayer, "Topographic": topoLayer }).addTo(map);
+
+    function injectRegionStyles(config) {
+        const styleElement = document.createElement('style');
+        let cssRules = '';
+        for (const regionKey in config) {
+            const region = config[regionKey];
+            if (region.name) {
+                cssRules += `
+                    .location-tooltip.region-${region.name} {
+                        background-color: ${region.mapBgColor};
+                        border-color: ${region.borderColor};
+                    }
+                `;
+            }
+        }
+        styleElement.textContent = cssRules;
+        document.head.appendChild(styleElement);
+    }
 
     // --- Game State & UI ---
     let placedEvents = {};
@@ -64,6 +84,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function setupGame(data) {
         locationsData = data.locations;
+        injectRegionStyles(regionColorConfig);
+
         // --- 預設排序並渲染卡片 ---
         const sortedEvents = [...data.events].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
         renderCards(sortedEvents);
@@ -113,7 +135,7 @@ document.addEventListener('DOMContentLoaded', () => {
         locationsData.forEach(location => {
             let layer;
             const region = location.region || 'default';
-            const colorInfo = regionColors[region] || regionColors.default;
+            const colorInfo = regionColorConfig[region] || regionColorConfig.default;
 
             if (location.shape === 'polygon') {
                 // 如果是多邊形，使用 L.polygon
@@ -123,7 +145,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 layer = L.circle(location.center, { radius: location.radius, droppable: true, location_id: location.location_id });
             }
             layer.addTo(map)
-                 .bindTooltip(`<span>${location.name}</span>`, { permanent: true, direction: 'center', className: `location-tooltip ${colorInfo.map}` });
+                 .bindTooltip(`<span>${location.name}</span>`, { permanent: true, direction: 'center', className: `location-tooltip region-${colorInfo.name}` });
 
             // Now that the layer is on the map, get its bounds.
             // We must handle circles specially, as their getBounds() method requires the map
@@ -200,8 +222,11 @@ document.addEventListener('DOMContentLoaded', () => {
     function createCard(event) {
         const card = document.createElement('div');
         const region = event.region || 'default';
-        const colorInfo = regionColors[region] || regionColors.default;
-        card.className = `draggable-card p-2 mb-2 mr-10 rounded shadow cursor-pointer border-2 ${colorInfo.bg} ${colorInfo.border}`;
+        const colorInfo = regionColorConfig[region] || regionColorConfig.default;
+        card.className = `draggable-card p-2 mb-2 mr-2 rounded shadow cursor-pointer border-2`;
+        card.style.backgroundColor = colorInfo.bgColor;
+        card.style.borderColor = colorInfo.borderColor;
+        card.style.color = colorInfo.textColor;
         card.id = event.event_id;
         const year = new Date(event.start_time).getFullYear();
 
