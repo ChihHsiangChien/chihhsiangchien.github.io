@@ -3,7 +3,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' });
     const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles &copy; Esri' });
     const topoLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { attribution: 'Map data: &copy; OpenStreetMap contributors, SRTM | Map style: &copy; OpenTopoMap (CC-BY-SA)' });
-    const map = L.map('map', { center: [24.8047, 120.9734], zoom: 14, layers: [satelliteLayer] });
+    // Initialize map without a specific center/zoom; it will be set dynamically.
+    const map = L.map('map', { layers: [satelliteLayer] });
     L.control.layers({ "OpenStreetMap": osmLayer, "Satellite": satelliteLayer, "Topographic": topoLayer }).addTo(map);
 
     // --- Game State & UI ---
@@ -26,6 +27,11 @@ document.addEventListener('DOMContentLoaded', () => {
     let timelineSlider = null;
     let timelinePlayBtn = null;
     let timelinePauseBtn = null;
+    let scaleToggleButton = null;
+    let highlightToggleButton = null;
+    let autoPanToggleButton = null;
+    let isAutoPanEnabled = true; // 新增：自動平移狀態，預設開啟
+    let isHighlightModeEnabled = true; // 新增：高亮模式狀態，預設開啟
     let placedChrono = []; // Will be populated with {event, marker} objects
 
     // --- Game Setup ---
@@ -49,6 +55,10 @@ document.addEventListener('DOMContentLoaded', () => {
             [shuffledEvents[i], shuffledEvents[j]] = [shuffledEvents[j], shuffledEvents[i]];
         }
         shuffledEvents.forEach(event => cardContainer.appendChild(createCard(event)));
+
+        // --- Create a bounds object to fit all locations ---
+        const bounds = L.latLngBounds();
+
         locationsData.forEach(location => {
             let layer;
             if (location.shape === 'polygon') {
@@ -59,8 +69,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 layer = L.circle(location.center, { radius: location.radius, droppable: true, location_id: location.location_id });
             }
             layer.addTo(map)
-                 .bindTooltip(location.name, { permanent: true, direction: 'center', className: 'location-tooltip' });
+                 .bindTooltip(`<span>${location.name}</span>`, { permanent: true, direction: 'center', className: 'location-tooltip' });
+
+            // Now that the layer is on the map, get its bounds.
+            // We must handle circles specially, as their getBounds() method requires the map
+            // to be initialized with a view (zoom/center), which we are about to set with fitBounds().
+            // It's a chicken-and-egg problem. So, we calculate the circle's bounds manually.
+            if (layer instanceof L.Polygon) {
+                bounds.extend(layer.getBounds());
+            } else if (layer instanceof L.Circle) {
+                bounds.extend(layer.getLatLng().toBounds(layer.getRadius()));
+            }
         });
+
+        // --- Fit map to the calculated bounds ---
+        if (bounds.isValid()) {
+            map.fitBounds(bounds, { padding: [50, 50] });
+        }
 
         map.on('droppable:drop', handleDrop);
         checkAnswersBtn.addEventListener('click', () => checkAnswers(gameData));
@@ -68,10 +93,26 @@ document.addEventListener('DOMContentLoaded', () => {
         // Pass callbacks and getters to decouple timeline logic from main.js
         const getPlacedChrono = () => placedChrono;
         const isTimelineEnabled = () => timelineEnabled;
-        const controls = setupTimelineSlider(data, map, highlightStep, getPlacedChrono, isTimelineEnabled);
+        const toggleHighlightMode = () => {
+            isHighlightModeEnabled = !isHighlightModeEnabled;
+            // 更新按鈕外觀以提供視覺回饋
+            highlightToggleButton.style.opacity = isHighlightModeEnabled ? '1' : '0.5';
+            highlightToggleButton.title = isHighlightModeEnabled ? '關閉高亮模式' : '開啟高亮模式';
+            highlightStep(parseInt(timelineSlider.value, 10)); // 立即重新整理地圖樣式
+        };
+        const toggleAutoPan = () => {
+            isAutoPanEnabled = !isAutoPanEnabled;
+            // 更新按鈕外觀以提供視覺回饋
+            autoPanToggleButton.style.opacity = isAutoPanEnabled ? '1' : '0.5';
+            autoPanToggleButton.title = isAutoPanEnabled ? '關閉自動平移' : '開啟自動平移';
+        };
+        const controls = setupTimelineSlider(data, map, highlightStep, getPlacedChrono, isTimelineEnabled, toggleHighlightMode, toggleAutoPan);
         timelineSlider = controls.timelineSlider;
         timelinePlayBtn = controls.timelinePlayBtn;
         timelinePauseBtn = controls.timelinePauseBtn;
+        scaleToggleButton = controls.scaleToggleButton;
+        highlightToggleButton = controls.highlightToggleButton;
+        autoPanToggleButton = controls.autoPanToggleButton;
 
         togglePanelBtn.addEventListener('click', () => {
             const isCollapsed = rightPanel.classList.contains('w-0');
@@ -110,7 +151,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let imageHTML = '';
         if (event.image) {
-            imageHTML = `<img src="${event.image}" alt="${event.title}" class="mt-2 w-full h-auto rounded">`;
+            imageHTML = `
+                <div class="mt-2">
+                    <img src="${event.image}" alt="${event.title}" class="w-full h-auto rounded">
+                    ${event.image_source ? `<div class="text-left text-xs text-gray-500 mt-1">圖片來源：<a href="${event.image_source.url}" target="_blank" rel="noopener noreferrer" class="hover:underline">${event.image_source.name}</a></div>` : ''}
+                </div>
+            `;
         }
 
         let linksHTML = '';
@@ -320,7 +366,10 @@ document.addEventListener('DOMContentLoaded', () => {
         // --- Add popup with description and links ---
         let popupContent = `<b>${eventData.title}</b>`;
         if (eventData.image) {
-            popupContent += `<br><img src="${eventData.image}" alt="${eventData.title}" style="width:100%; max-width:200px; margin-top:8px; border-radius:4px;">`;
+            popupContent += `
+                <br><img src="${eventData.image}" alt="${eventData.title}" style="width:100%; max-width:200px; margin-top:8px; border-radius:4px;">
+                ${eventData.image_source ? `<div style="text-align:left; font-size:0.75rem; color:#666; margin-top:4px;">圖片來源：<a href="${eventData.image_source.url}" target="_blank" rel="noopener noreferrer">${eventData.image_source.name}</a></div>` : ''}
+            `;
         }
         if (eventData.description) {
             popupContent += `<br>${eventData.description}`;
@@ -495,7 +544,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             const timelineControlsContainer = document.getElementById('timeline-controls-container');
             if (timelineControlsContainer) {
-                timelineControlsContainer.style.display = 'block';
+                timelineControlsContainer.style.display = 'flex';
             }
             if (timelinePlayBtn) {
                 timelinePlayBtn.disabled = false;
@@ -504,6 +553,18 @@ document.addEventListener('DOMContentLoaded', () => {
             if (timelinePauseBtn) {
                 timelinePauseBtn.disabled = false;
                 timelinePauseBtn.style.pointerEvents = 'auto';
+            }
+            if (scaleToggleButton) { // <-- 3. 在遊戲完成時啟用按鈕
+                scaleToggleButton.disabled = false;
+                scaleToggleButton.style.pointerEvents = 'auto';
+            }
+            if (highlightToggleButton) {
+                highlightToggleButton.disabled = false;
+                highlightToggleButton.style.pointerEvents = 'auto';
+            }
+            if (autoPanToggleButton) {
+                autoPanToggleButton.disabled = false;
+                autoPanToggleButton.style.pointerEvents = 'auto';
             }
             
             // Trigger initial highlight on the first event
@@ -520,37 +581,82 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function highlightStep(idx) {
-        // This part is for clearing highlights if the timeline gets disabled.
         if (!timelineEnabled) {
-            placedChrono.forEach((item, i) => {
-                const cardElement = document.getElementById(item.event.event_id);
-                if (cardElement) {
-                    cardElement.classList.remove('timeline-card-highlight');
-                }
-            });
-            return;
-        }
-
-        // When timeline is enabled, only highlight markers on the map.
-        placedChrono.forEach((item, i) => {
-            if (item.marker) {
-                const year = new Date(item.event.start_time).getFullYear();
-                if (i === idx) {
-                    item.marker.setZIndexOffset(1000);
-                    item.marker.setIcon(L.divIcon({
-                        html: `<div class="placed-event-marker placed-event-marker--correct placed-event-marker--highlight"><span>${item.event.title}</span><span class="marker-year">${year}</span></div>`,
-                        className: 'custom-div-icon',
-                        iconSize: null,
-                    }));
-                    map.panTo(item.marker.getLatLng());
-                } else {
-                    item.marker.setZIndexOffset(0);
+            // Clear all highlights when timeline is disabled
+            placedChrono.forEach(item => {
+                if (item.marker) {
+                    const year = new Date(item.event.start_time).getFullYear();
                     item.marker.setIcon(L.divIcon({
                         html: `<div class="placed-event-marker placed-event-marker--correct"><span>${item.event.title}</span><span class="marker-year">${year}</span></div>`,
                         className: 'custom-div-icon',
                         iconSize: null,
                     }));
                 }
+            });
+            map.eachLayer(layer => {
+                if (layer.getTooltip() && layer.getTooltip().getElement()) {
+                    layer.getTooltip().getElement().classList.remove('location-tooltip--dimmed', 'location-tooltip--highlight');
+                }
+            });
+            return;
+        }
+
+        // --- 處理非高亮模式 ---
+        if (!isHighlightModeEnabled) {
+            const currentEvent = placedChrono[idx];
+            if (currentEvent && currentEvent.marker && isAutoPanEnabled) {
+                map.panTo(currentEvent.marker.getLatLng());
+            }
+            // 將所有 marker 和地點標籤恢復為中性樣式
+            placedChrono.forEach(item => {
+                if (item.marker) {
+                    const year = new Date(item.event.start_time).getFullYear();
+                    item.marker.setIcon(L.divIcon({
+                        html: `<div class="placed-event-marker placed-event-marker--correct"><span>${item.event.title}</span><span class="marker-year">${year}</span></div>`,
+                        className: 'custom-div-icon',
+                        iconSize: null,
+                    }));
+                }
+            });
+            map.eachLayer(layer => {
+                if (layer.getTooltip() && layer.getTooltip().getElement()) {
+                    layer.getTooltip().getElement().classList.remove('location-tooltip--dimmed', 'location-tooltip--highlight');
+                }
+            });
+            return; // 結束函式，不執行後續的高亮邏輯
+        }
+
+        // Get the location_id of the currently highlighted event
+        const highlightedEvent = placedChrono[idx];
+        const highlightedLocationId = highlightedEvent ? highlightedEvent.event.location_id : null;
+
+        // --- Update Event Markers ---
+        placedChrono.forEach((item, i) => {
+            if (item.marker) {
+                const year = new Date(item.event.start_time).getFullYear();
+                const isHighlighted = i === idx;
+                const markerClass = `placed-event-marker placed-event-marker--correct ${isHighlighted ? 'placed-event-marker--highlight' : 'placed-event-marker--dimmed'}`;
+                
+                item.marker.setZIndexOffset(isHighlighted ? 1000 : 0);
+                item.marker.setIcon(L.divIcon({
+                    html: `<div class="${markerClass}"><span>${item.event.title}</span><span class="marker-year">${year}</span></div>`,
+                    className: 'custom-div-icon',
+                    iconSize: null,
+                }));
+
+                if (isHighlighted && isAutoPanEnabled) {
+                    map.panTo(item.marker.getLatLng());
+                }
+            }
+        });
+
+        // --- Update Location Labels ---
+        map.eachLayer(layer => {
+            if (layer.options.location_id && layer.getTooltip() && layer.getTooltip().getElement()) {
+                const tooltipEl = layer.getTooltip().getElement();
+                const isHighlighted = layer.options.location_id === highlightedLocationId;
+                tooltipEl.classList.toggle('location-tooltip--highlight', isHighlighted);
+                tooltipEl.classList.toggle('location-tooltip--dimmed', !isHighlighted);
             }
         });
     }
