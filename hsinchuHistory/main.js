@@ -52,9 +52,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         shuffledEvents.forEach(event => cardContainer.appendChild(createCard(event)));
         locationsData.forEach(location => {
-            L.circle([location.lat, location.lng], { radius: location.radius, droppable: true, location_id: location.location_id })
-             .addTo(map)
-             .bindTooltip(location.name, { permanent: true, direction: 'center', className: 'location-tooltip' });
+            let layer;
+            if (location.shape === 'polygon') {
+                // 如果是多邊形，使用 L.polygon
+                layer = L.polygon(location.points, { droppable: true, location_id: location.location_id });
+            } else {
+                // 預設為圓形
+                layer = L.circle(location.center, { radius: location.radius, droppable: true, location_id: location.location_id });
+            }
+            layer.addTo(map)
+                 .bindTooltip(location.name, { permanent: true, direction: 'center', className: 'location-tooltip' });
         });
 
         map.on('droppable:drop', handleDrop);
@@ -304,7 +311,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const latLng = map.mouseEventToLatLng(e);
         const closestLocation = findClosestLocation(latLng, locationsData);
         if (closestLocation) {
-            guideLine = L.polyline([latLng, [closestLocation.lat, closestLocation.lng]], { color: 'red', dashArray: '5, 5' }).addTo(map);                        
+            // Now all locations have a 'center' property
+            guideLine = L.polyline([latLng, closestLocation.center], { color: 'red', dashArray: '5, 5' }).addTo(map);
         }
         //console.log('[updateGuideLine] guideLine:', guideLine);                
     }
@@ -315,7 +323,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const oldPlacedEvent = placedEvents[card.id];
 
         if (ghostCard) {
-            const dropLatLng = drop.getLatLng();
+            // 對於多邊形，取得其邊界中心點
+            const dropLatLng = drop.getBounds ? drop.getBounds().getCenter() : drop.getLatLng();
             const dropPoint = map.latLngToContainerPoint(dropLatLng);
             
             const targetX = dropPoint.x - ghostCard.offsetWidth / 2;
@@ -353,7 +362,8 @@ document.addEventListener('DOMContentLoaded', () => {
             iconSize: null,
         });
 
-        const marker = L.marker(drop.getLatLng(), { icon: markerIcon, draggable: true }).addTo(map);
+        const markerLatLng = drop.getBounds ? drop.getBounds().getCenter() : drop.getLatLng();
+        const marker = L.marker(markerLatLng, { icon: markerIcon, draggable: true }).addTo(map);
 
         // --- Add popup with description ---
         if (eventData.description) {
@@ -867,7 +877,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function findClosestLocation(latLng, locations) {
         let closest = null, minDistance = Infinity;
         locations.forEach(loc => {
-            const distance = map.distance(latLng, [loc.lat, loc.lng]);
+            // Now all locations have a 'center' property
+            const distance = map.distance(latLng, loc.center);
             if (distance < minDistance) {
                 minDistance = distance;
                 closest = loc;
@@ -907,7 +918,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!locationData) return;
 
             // 4. Convert center lat/lng to pixel coordinates
-            const centerPoint = map.latLngToContainerPoint([locationData.lat, locationData.lng]);
+            // Now all locations have a 'center' property
+            const centerPoint = map.latLngToContainerPoint(locationData.center);
             const markerHeight = 20; // Approximate height of a marker, adjust as needed
             // Dynamic padding based on zoom level
             const padding = Math.max(0, (map.getZoom() - 13) * 3);
