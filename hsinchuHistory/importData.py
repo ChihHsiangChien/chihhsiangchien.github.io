@@ -21,6 +21,7 @@ locations_dict = {}
 for _, row in filtered.iterrows():
     location_name = str(row['地點']).strip()
     coords_str = str(row['經緯度']).strip()
+    region = str(row['區域']).strip()
 
     # 跳過空地點或空座標
     if location_name and coords_str and coords_str.lower() != 'nan':
@@ -30,7 +31,9 @@ for _, row in filtered.iterrows():
                 "location_id": location_name,
                 "name": location_name,
                 "center": [lat, lon],
+                "region": region,
                 "radius": 50  # 預設值，你可以改
+
             }
 
 locations = list(locations_dict.values())
@@ -50,6 +53,10 @@ for _, row in filtered.iterrows():
     # description = 說明
     description = str(row['說明']).strip()
 
+    # region = 區域
+    region = str(row['區域']).strip()
+
+
     # Links
     links = []
     for i in range(1, 4):
@@ -66,7 +73,8 @@ for _, row in filtered.iterrows():
         "location_id": location_name,
         "event_type": "single",  # 預設為 single
         "start_time": start_time,
-        "description": description
+        "description": description,
+        "region": region
     }
     if links:
         event_data["links"] = links
