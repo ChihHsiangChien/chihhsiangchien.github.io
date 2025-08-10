@@ -26,7 +26,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let timelineSlider = null;
     let timelinePlayBtn = null;
     let timelinePauseBtn = null;
-    let timelineInterval = null;
     let placedChrono = []; // Will be populated with {event, marker} objects
 
     // --- Game Setup ---
@@ -66,7 +65,13 @@ document.addEventListener('DOMContentLoaded', () => {
         map.on('droppable:drop', handleDrop);
         checkAnswersBtn.addEventListener('click', () => checkAnswers(gameData));
         map.on('zoomend', handleZoom);
-        setupTimelineSlider(data, map); // Setup timeline slider here
+        // Pass callbacks and getters to decouple timeline logic from main.js
+        const getPlacedChrono = () => placedChrono;
+        const isTimelineEnabled = () => timelineEnabled;
+        const controls = setupTimelineSlider(data, map, highlightStep, getPlacedChrono, isTimelineEnabled);
+        timelineSlider = controls.timelineSlider;
+        timelinePlayBtn = controls.timelinePlayBtn;
+        timelinePauseBtn = controls.timelinePauseBtn;
 
         togglePanelBtn.addEventListener('click', () => {
             const isCollapsed = rightPanel.classList.contains('w-0');
@@ -99,7 +104,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function createCard(event) {
         const card = document.createElement('div');
-        card.className = 'p-2 mb-2 bg-white rounded shadow cursor-pointer border-2 border-gray-300';
+        card.className = 'draggable-card p-2 mb-2 bg-white rounded shadow cursor-pointer border-2 border-gray-300';
         card.id = event.event_id;
         const year = new Date(event.start_time).getFullYear();
 
@@ -119,203 +124,132 @@ document.addEventListener('DOMContentLoaded', () => {
 
         card.innerHTML = `<h3 class="font-bold text-sm flex justify-between items-center"><span>${event.title}</span><span class="text-xs text-gray-500 font-normal ml-2">${year}</span></h3><div class="details hidden mt-1">${imageHTML}<p class="text-xs text-gray-600 mt-2">${event.description || ''}</p>${linksHTML}</div>`;
 
-        // 滑鼠點擊展開/收合 description
-        card.addEventListener('click', () => card.querySelector('.details').classList.toggle('hidden'));
-
-        // 防止點擊連結時觸發卡片的點擊事件 (會展開/收合內容)
+        // 防止點擊連結時觸發卡片的拖曳事件
         card.querySelectorAll('a').forEach(link => {
-            link.addEventListener('click', e => e.stopPropagation());
+            // 使用 pointerdown 阻止事件冒泡到卡片，避免觸發拖曳
+            link.addEventListener('pointerdown', e => e.stopPropagation());
         });
 
-        const draggable = new L.Draggable(card);
-        draggable.enable();
-
-        card.addEventListener('mousedown', (e) => {
-            const cardRect = card.getBoundingClientRect();
-            dragOffset = {
-                x: e.clientX - cardRect.left,
-                y: e.clientY - cardRect.top
-            };
-        });
-
-        draggable.on('dragstart', function(e) {
-            ghostCard = L.DomUtil.create('div', 'is-dragging', document.body);
-            ghostCard.innerHTML = this._element.querySelector('h3').outerHTML; // Only copy the title
-            ghostCard.style.width = this._element.offsetWidth + 'px';
-            L.DomUtil.setOpacity(this._element, 0.5);
-        });
-
-        draggable.on('drag', (e) => {
-            moveGhost(e.originalEvent);
-
-            const mapContainer = map.getContainer();
-            const mapRect = mapContainer.getBoundingClientRect();
-            const mouseX = e.originalEvent.clientX;
-            const mouseY = e.originalEvent.clientY;
-
-            // Only show guideline if dragging over the map
-            if (mouseX >= mapRect.left && mouseX <= mapRect.right && mouseY >= mapRect.top && mouseY <= mapRect.bottom) {
-                updateGuideLine(e.originalEvent);
-            } else {
-                if (guideLine) {
-                    map.removeLayer(guideLine);
-                    guideLine = null;
-                }
-            }
-            lastDragEvent = e; // Store the event to get coordinates on dragend
-        });
-
-        draggable.on('dragend', function(e) {
-            L.DomUtil.setOpacity(this._element, 1);
-            if (guideLine) {
-                map.removeLayer(guideLine);
-            }
-            guideLine = null;
-
-            let successfulDrop = false;
-            if (lastDragEvent) {
-                const mapContainer = map.getContainer();
-                const mapRect = mapContainer.getBoundingClientRect();
-                const mouseX = lastDragEvent.originalEvent.clientX;
-                const mouseY = lastDragEvent.originalEvent.clientY;
-                const droppedOnMap = mouseX >= mapRect.left && mouseX <= mapRect.right && mouseY >= mapRect.top && mouseY <= mapRect.bottom;
-
-                if (droppedOnMap) {
-                    const latLng = map.mouseEventToLatLng(lastDragEvent.originalEvent);
-                    const closestLocation = findClosestLocation(latLng, locationsData);
-
-                    if (closestLocation) {
-                        const droppedOnCircle = findCircleByLocationId(closestLocation.location_id);
-                        if (droppedOnCircle) {
-                            map.fire('droppable:drop', { drop: droppedOnCircle, drag: this });
-                            successfulDrop = true;
-                        }
-                    }
-                }
-            }
-
-            if (!successfulDrop) {
-                // If drop was not successful, remove ghost and reset card position
-                if (ghostCard) {
-                    L.DomUtil.remove(ghostCard);
-                    ghostCard = null;
-                }
-                this._element.style.position = '';
-                this._element.style.left = '';
-                this._element.style.top = '';
-                this._element.style.transform = '';
-            }
-
-            lastDragEvent = null; // Reset for the next drag operation
-        });
-
-        // --- Touch 支援 ---
+        // --- Unified Drag and Click Handling ---
         let isDragging = false;
-        let touchStartX = 0, touchStartY = 0;
+        let pointerDownPos = { x: 0, y: 0 };
 
-        card.addEventListener('touchstart', (e) => {
-            isDragging = false;
+        card.addEventListener('pointerdown', (e) => {
+            // 只有主要按鈕（滑鼠左鍵、觸控、觸控筆）才能觸發拖曳
+            if (e.pointerType === 'mouse' && e.button !== 0) return;
 
-            if (e.touches.length !== 1) return;
             e.stopPropagation();
-            e.preventDefault();
-            const touch = e.touches[0];
-            touchStartX = touch.clientX;
-            touchStartY = touch.clientY;
+
+            isDragging = false;
+            pointerDownPos = { x: e.clientX, y: e.clientY };
+
+            // 監聽 document 上的 move 和 up 事件，以便在卡片外也能追蹤
+            document.addEventListener('pointermove', onPointerMove);
+            document.addEventListener('pointerup', onPointerUp, { once: true }); // 自動移除監聽器
+        }, { passive: false });
+
+        function startDrag(e) {
+            isDragging = true;
 
             const cardRect = card.getBoundingClientRect();
-            dragOffset = {
-                x: touch.clientX - cardRect.left,
-                y: touch.clientY - cardRect.top
-            };
+            dragOffset = { x: e.clientX - cardRect.left, y: e.clientY - cardRect.top };
+
             ghostCard = L.DomUtil.create('div', 'is-dragging', document.body);
             ghostCard.innerHTML = card.querySelector('h3').outerHTML;
             ghostCard.style.width = card.offsetWidth + 'px';
             L.DomUtil.setOpacity(card, 0.5);
-        }, { passive: false });
 
-        card.addEventListener('touchmove', function(e) {
-            if (!e.touches || e.touches.length !== 1) return;
-            e.stopPropagation();
-            e.preventDefault(); // 防止頁面滾動，確保拖曳事件持續觸發
-            const touch = e.touches[0];
-            // 判斷是否拖曳
-            if (Math.abs(touch.clientX - touchStartX) > 10 || Math.abs(touch.clientY - touchStartY) > 10) {
-                isDragging = true;
-            }
+            // 初始 ghost 位置
+            moveGhost(e);
+        }
 
-            // 讓 ghostCard 跟著手指移動
-            moveGhost({ clientX: touch.clientX, clientY: touch.clientY });
+        function onPointerMove(e) {
+            // 為支援觸控拖曳，需立即防止瀏覽器預設的捲動行為
+            e.preventDefault();
 
-            const mapContainer = map.getContainer();
-            const mapRect = mapContainer.getBoundingClientRect();
-            const mouseX = touch.clientX;
-            const mouseY = touch.clientY;
-
-            // 只有在地圖範圍內才顯示 guideLine
-            if (mouseX >= mapRect.left && mouseX <= mapRect.right && mouseY >= mapRect.top && mouseY <= mapRect.bottom) {
-                updateGuideLine({ clientX: mouseX, clientY: mouseY });
-            } else {
-                if (guideLine) {
-                    map.removeLayer(guideLine);
-                    guideLine = null;
+            if (!isDragging) {
+                // 檢查移動距離是否超過閾值，以區分點擊和拖曳
+                const posDiff = Math.sqrt(Math.pow(e.clientX - pointerDownPos.x, 2) + Math.pow(e.clientY - pointerDownPos.y, 2));
+                if (posDiff > 5) { // 移動超過 5px 才開始拖曳
+                    startDrag(e);
                 }
             }
-            // 更新 lastDragEvent 結構，和 draggable.on('drag', ...) 一致
-            lastDragEvent = { originalEvent: { clientX: mouseX, clientY: mouseY } };
-        }, { passive: false });        
 
-        // 手指點擊展開/收合 description（排除拖曳）
-       
-        card.addEventListener('touchend', (e) => {
-            if (!isDragging) {
+            // 如果正在拖曳（不論是剛開始還是持續中），更新鬼魂卡片位置
+            if (isDragging) {
+                moveGhost(e);
+                updateGuideAndLastEvent(e);
+            }
+        }
+
+        function onPointerUp(e) {
+            document.removeEventListener('pointermove', onPointerMove);
+
+            if (isDragging) {
+                L.DomUtil.setOpacity(card, 1);
+                if (guideLine) { map.removeLayer(guideLine); guideLine = null; }
+                handleDropAttempt(card);
+                lastDragEvent = null;
+            } else {
+                // 如果不是拖曳，就視為點擊
                 card.querySelector('.details').classList.toggle('hidden');
-            }            
-            e.stopPropagation();
-            e.preventDefault();
-            L.DomUtil.setOpacity(card, 1);
+            }
+            isDragging = false;
+        }
+
+        return card;
+    }
+
+    function updateGuideAndLastEvent(e) {
+        const mapContainer = map.getContainer();
+        const mapRect = mapContainer.getBoundingClientRect();
+        const mouseX = e.clientX;
+        const mouseY = e.clientY;
+
+        if (mouseX >= mapRect.left && mouseX <= mapRect.right && mouseY >= mapRect.top && mouseY <= mapRect.bottom) {
+            updateGuideLine(e);
+        } else {
             if (guideLine) {
                 map.removeLayer(guideLine);
+                guideLine = null;
             }
-            guideLine = null;
+        }
+        lastDragEvent = { originalEvent: e };
+    }
 
-            let successfulDrop = false;
-            if (lastDragEvent) {
-                const mapContainer = map.getContainer();
-                const mapRect = mapContainer.getBoundingClientRect();
-                const mouseX = lastDragEvent.originalEvent.clientX;
-                const mouseY = lastDragEvent.originalEvent.clientY;
-                const droppedOnMap = mouseX >= mapRect.left && mouseX <= mapRect.right && mouseY >= mapRect.top && mouseY <= mapRect.bottom;
+    function handleDropAttempt(cardElement) {
+        let successfulDrop = false;
+        if (lastDragEvent) {
+            const mapContainer = map.getContainer();
+            const mapRect = mapContainer.getBoundingClientRect();
+            const mouseX = lastDragEvent.originalEvent.clientX;
+            const mouseY = lastDragEvent.originalEvent.clientY;
+            const droppedOnMap = mouseX >= mapRect.left && mouseX <= mapRect.right && mouseY >= mapRect.top && mouseY <= mapRect.bottom;
 
-                if (droppedOnMap) {
-                    const latLng = map.mouseEventToLatLng(lastDragEvent.originalEvent);
-                    const closestLocation = findClosestLocation(latLng, locationsData);
+            if (droppedOnMap) {
+                const latLng = map.mouseEventToLatLng(lastDragEvent.originalEvent);
+                const closestLocation = findClosestLocation(latLng, locationsData);
 
-                    if (closestLocation) {
-                        const droppedOnCircle = findCircleByLocationId(closestLocation.location_id);
-                        if (droppedOnCircle) {
-                            map.fire('droppable:drop', { drop: droppedOnCircle, drag: { _element: card } });
-                            successfulDrop = true;
-                        }
+                if (closestLocation) {
+                    const droppedOnCircle = findCircleByLocationId(closestLocation.location_id);
+                    if (droppedOnCircle) {
+                        map.fire('droppable:drop', { drop: droppedOnCircle, drag: { _element: cardElement } });
+                        successfulDrop = true;
                     }
                 }
             }
+        }
 
-            if (!successfulDrop) {
-                if (ghostCard) {
-                    L.DomUtil.remove(ghostCard);
-                    ghostCard = null;
-                }
-                card.style.position = '';
-                card.style.left = '';
-                card.style.top = '';
-                card.style.transform = '';
+        if (!successfulDrop) {
+            if (ghostCard) {
+                L.DomUtil.remove(ghostCard);
+                ghostCard = null;
             }
-
-            lastDragEvent = null;
-        }, { passive: false });
-
-        return card;
+            cardElement.style.position = '';
+            cardElement.style.left = '';
+            cardElement.style.top = '';
+            cardElement.style.transform = '';
+        }
     }
     
     function moveGhost(e) {
@@ -423,11 +357,11 @@ document.addEventListener('DOMContentLoaded', () => {
             markerInstance.setOpacity(0); // Hide the marker being dragged
             dragOffset = { x: ghostCard.offsetWidth / 2, y: ghostCard.offsetHeight / 2 };
         });
-
+        
         marker.on('drag', function(e) {
             // The originalEvent can be a MouseEvent or a TouchEvent.
             // We need an object with clientX/clientY for our functions.
-            let eventForCoords = e.originalEvent;
+            let eventForCoords = e.originalEvent; // Leaflet's drag event has originalEvent
             if (eventForCoords.touches && eventForCoords.touches.length > 0) {
                 // On touch devices, use the first touch point.
                 eventForCoords = eventForCoords.touches[0];
@@ -435,7 +369,7 @@ document.addEventListener('DOMContentLoaded', () => {
             moveGhost(eventForCoords);
             updateGuideLine(eventForCoords);
             lastDragEvent = { originalEvent: eventForCoords }; // 修正：儲存處理過的座標物件
-        });
+        });        
 
         marker.on('dragend', function(e) {
             const markerInstance = this;
@@ -481,136 +415,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 markerInstance.setOpacity(1);
             }
         });
-
-
-
-        // 新增 Touch 支援
-        marker.on('touchstart', function(e) {
-            // 阻止瀏覽器預設的滾動行為，確保拖曳的流暢性
-            console.log('--- [DEBUG] marker.touchstart event fired ---');
-            e.originalEvent.preventDefault();
-            e.originalEvent.stopPropagation();
-
-
-            if (!e.originalEvent.touches || e.originalEvent.touches.length !== 1) {
-                console.log('[DEBUG] touchstart ignored, touch count is not 1.');
-                return;
-            }
-            const touch = e.originalEvent.touches[0];
-            const markerInstance = this;
-            console.log('[DEBUG] Marker instance:', markerInstance);
-
-            markerInstance.originalLatLng = markerInstance.getLatLng();
-            const eventId = Object.keys(placedEvents).find(key => placedEvents[key].marker === markerInstance);
-            
-            console.log('[DEBUG] Found eventId:', eventId);
-
-            if (!eventId) {
-                console.error('[DEBUG] CRITICAL: Could not find eventId for this marker. Exiting touchstart.');
-                return;
-            }
-            const originalCard = document.getElementById(eventId);
-            console.log('[DEBUG] Found originalCard element:', originalCard);
-
-            // 暫時顯示卡片取得寬度
-            const originalDisplay = originalCard.style.display;
-            originalCard.style.display = 'block';
-            const cardWidth = originalCard.offsetWidth;
-            originalCard.style.display = originalDisplay;
-            console.log('[DEBUG] Calculated card width:', cardWidth);
-
-            ghostCard = L.DomUtil.create('div', 'is-dragging', document.body);
-            ghostCard.innerHTML = originalCard.querySelector('h3').outerHTML;
-            ghostCard.style.width = cardWidth + 'px';
-            console.log('[DEBUG] Created ghostCard:', ghostCard);
-
-            markerInstance.setOpacity(0);
-            dragOffset = { x: ghostCard.offsetWidth / 2, y: ghostCard.offsetHeight / 2 };
-            console.log('[DEBUG] Drag offset set:', dragOffset);
-            console.log('--- [DEBUG] marker.touchstart event end ---');
-
-        }, { passive: false });
-
-        marker.on('touchmove', function(e) {
-            // 阻止瀏覽器預設的滾動行為，確保拖曳的流暢性
-            e.originalEvent.preventDefault();
-            e.originalEvent.stopPropagation();
-            // 修正：Leaflet 事件中，原始 DOM 事件在 e.originalEvent
-            if (!e.originalEvent.touches || e.originalEvent.touches.length !== 1) return;
-            const touch = e.originalEvent.touches[0];
-
-            // 檢查 clientX/clientY 是否有效且在地圖範圍
-            const mapRect = map.getContainer().getBoundingClientRect();
-            const mouseX = touch.clientX;
-            const mouseY = touch.clientY;
-            const validCoords = typeof mouseX === 'number' && typeof mouseY === 'number' && !isNaN(mouseX) && !isNaN(mouseY);
-
-            if (
-                validCoords &&
-                mouseX >= mapRect.left &&
-                mouseX <= mapRect.right &&
-                mouseY >= mapRect.top &&
-                mouseY <= mapRect.bottom
-            ) {
-                moveGhost({ clientX: mouseX, clientY: mouseY }); // 傳 MouseEvent-like 物件
-                updateGuideLine({ clientX: mouseX, clientY: mouseY });
-                lastDragEvent = { originalEvent: { clientX: mouseX, clientY: mouseY } };
-            } else {
-                if (guideLine) {
-                    map.removeLayer(guideLine);
-                    guideLine = null;
-                }
-                lastDragEvent = null;
-            }
-        }, { passive: false });
-
-        marker.on('touchend', function(e) {
-            e.originalEvent.preventDefault();
-            e.originalEvent.stopPropagation();
-                        
-            const markerInstance = this;
-            if (guideLine) map.removeLayer(guideLine); guideLine = null;
-            if (ghostCard) L.DomUtil.remove(ghostCard); ghostCard = null;
-
-            if (lastDragEvent) {
-                const mouseX = lastDragEvent.originalEvent.clientX;
-                const mouseY = lastDragEvent.originalEvent.clientY;
-                const cardContainerRect = cardContainer.getBoundingClientRect();
-                const eventId = Object.keys(placedEvents).find(key => placedEvents[key].marker === markerInstance);
-
-                // 檢查是否放回卡片區
-                if (eventId && mouseX >= cardContainerRect.left && mouseX <= cardContainerRect.right && mouseY >= cardContainerRect.top && mouseY <= cardContainerRect.bottom) {
-                    const oldLocationId = placedEvents[eventId].droppedLocationId;
-                    map.removeLayer(markerInstance);
-                    delete placedEvents[eventId];
-
-                    const cardElement = document.getElementById(eventId);
-                    cardElement.style.display = 'block';
-                    cardElement.style.position = ''; cardElement.style.left = ''; cardElement.style.top = ''; cardElement.style.transform = '';
-
-                    repositionMarkersAtLocation(oldLocationId);
-                    updateCheckButtonState();
-                } else {
-                    // 檢查是否放到地圖其他地點
-                    const latLng = map.mouseEventToLatLng(lastDragEvent.originalEvent);
-                    const closestLocation = findClosestLocation(latLng, locationsData);
-                    if (closestLocation && eventId) {
-                        const droppedOnCircle = findCircleByLocationId(closestLocation.location_id);
-                        const originalCardElement = document.getElementById(eventId);
-                        map.fire('droppable:drop', { drop: droppedOnCircle, drag: { _element: originalCardElement } });
-                    } else {
-                        markerInstance.setLatLng(markerInstance.originalLatLng);
-                        markerInstance.setOpacity(1);
-                    }
-                }
-            } else {
-                // 處理拖曳到地圖外放開的情況，lastDragEvent 會是 null
-                // 將 marker 恢復到原始位置並設為可見
-                markerInstance.setLatLng(markerInstance.originalLatLng);
-                markerInstance.setOpacity(1);
-            }
-            lastDragEvent = null;
-        }, { passive: false });
 
         placedEvents[card.id] = {
             marker: marker,
@@ -685,6 +489,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 timelineSlider.style.pointerEvents = 'auto';
                 timelineSlider.style.display = 'block';
             }
+            const ticksContainer = document.getElementById('timeline-ticks-container');
+            if (ticksContainer) {
+                ticksContainer.style.display = 'block';
+            }
             const timelineControlsContainer = document.getElementById('timeline-controls-container');
             if (timelineControlsContainer) {
                 timelineControlsContainer.style.display = 'block';
@@ -747,155 +555,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- Timeline Slider UI ---
-    function setupTimelineSlider(data, map) {
-        // Remove any previous slider
-        const oldSlider = document.querySelector('input[type="range"][style*="fixed"]');
-        if (oldSlider) oldSlider.remove();
-        const oldControlsContainer = document.getElementById('timeline-controls-container');
-        if (oldControlsContainer) oldControlsContainer.remove();
-        const oldTooltip = document.getElementById('timeline-tooltip');
-        if (oldTooltip) oldTooltip.remove();
-
-        // Create slider
-        timelineSlider = document.createElement('input');
-        timelineSlider.type = 'range';
-        timelineSlider.min = 0;
-        // The max value is based on the total number of events.
-        // placedChrono will be populated later with correct markers.
-        timelineSlider.max = data.events.length > 0 ? data.events.length - 1 : 0;
-        timelineSlider.value = 0;
-        timelineSlider.step = 1;
-        timelineSlider.style.position = 'fixed';
-        timelineSlider.style.left = '50%';
-        timelineSlider.style.bottom = '32px';
-        timelineSlider.style.transform = 'translateX(-50%)';
-        timelineSlider.style.width = '60vw';
-        timelineSlider.style.zIndex = '9999';
-        timelineSlider.style.background = '#fff';
-        timelineSlider.style.padding = '8px';
-        timelineSlider.style.borderRadius = '8px';
-        timelineSlider.style.boxShadow = '0 2px 8px #0003';
-        timelineSlider.style.display = 'none'; // Initially hidden
-        timelineSlider.style.pointerEvents = 'none'; // Disabled at start
-        timelineSlider.disabled = true;
-
-        // Create a container for the buttons to ensure they occupy the same position
-        const timelineControlsContainer = document.createElement('div');
-        timelineControlsContainer.id = 'timeline-controls-container';
-        timelineControlsContainer.style.position = 'fixed';
-        timelineControlsContainer.style.left = 'calc(50% - 35vw)'; // Position the container
-        timelineControlsContainer.style.bottom = '28px';
-        timelineControlsContainer.style.zIndex = '9999';
-        timelineControlsContainer.style.display = 'none'; // Initially hidden
-
-        // Play/Pause buttons
-        timelinePlayBtn = document.createElement('button');
-        timelinePlayBtn.textContent = '▶️';
-        timelinePlayBtn.style.fontSize = '1.5rem';
-        timelinePlayBtn.style.background = '#fff';
-        timelinePlayBtn.style.border = '1px solid #ccc';
-        timelinePlayBtn.style.borderRadius = '0.5rem';
-        timelinePlayBtn.style.padding = '0.2rem 0.8rem';
-        timelinePlayBtn.style.cursor = 'pointer';
-        timelinePlayBtn.style.display = 'block';
-        timelinePlayBtn.style.pointerEvents = 'none'; // Disabled at start
-        timelinePlayBtn.disabled = true;
-
-        timelinePauseBtn = document.createElement('button');
-        timelinePauseBtn.textContent = '⏸️';
-        timelinePauseBtn.style.fontSize = '1.5rem';
-        timelinePauseBtn.style.background = '#fff';
-        timelinePauseBtn.style.border = '1px solid #ccc';
-        timelinePauseBtn.style.borderRadius = '0.5rem';
-        timelinePauseBtn.style.padding = '0.2rem 0.8rem';
-        timelinePauseBtn.style.cursor = 'pointer';
-        timelinePauseBtn.style.display = 'none';
-        timelinePauseBtn.style.pointerEvents = 'none'; // Disabled at start
-        timelinePauseBtn.disabled = true;
-
-        document.body.appendChild(timelineSlider);
-        timelineControlsContainer.appendChild(timelinePlayBtn);
-        timelineControlsContainer.appendChild(timelinePauseBtn);
-        document.body.appendChild(timelineControlsContainer);
-
-        // --- Tooltip for Slider ---
-        const timelineTooltip = document.createElement('div');
-        timelineTooltip.id = 'timeline-tooltip';
-        timelineTooltip.style.position = 'fixed';
-        timelineTooltip.style.background = 'rgba(0, 0, 0, 0.8)';
-        timelineTooltip.style.color = 'white';
-        timelineTooltip.style.padding = '5px 10px';
-        timelineTooltip.style.borderRadius = '4px';
-        timelineTooltip.style.display = 'none';
-        timelineTooltip.style.zIndex = '10000';
-        timelineTooltip.style.pointerEvents = 'none';
-        timelineTooltip.style.whiteSpace = 'nowrap';
-        document.body.appendChild(timelineTooltip);
-
-        timelineSlider.addEventListener('mousemove', (e) => {
-            if (!timelineEnabled) return;
-
-            const sliderRect = timelineSlider.getBoundingClientRect();
-            const hoverPosition = e.clientX - sliderRect.left;
-            const percentage = hoverPosition / sliderRect.width;
-            const maxIndex = parseInt(timelineSlider.max, 10);
-            let index = Math.round(percentage * maxIndex);
-            index = Math.max(0, Math.min(maxIndex, index));
-
-            if (placedChrono[index]) {
-                const event = placedChrono[index].event;
-                const year = new Date(event.start_time).getFullYear();
-                timelineTooltip.textContent = `${year}: ${event.title}`;
-                
-                timelineTooltip.style.display = 'block';
-                timelineTooltip.style.left = `${e.clientX}px`;
-                timelineTooltip.style.top = `${sliderRect.top - 10}px`; // Position above the slider
-                timelineTooltip.style.transform = 'translate(-50%, -100%)'; // Center horizontally, place above
-            }
-        });
-
-        timelineSlider.addEventListener('mouseleave', () => {
-            timelineTooltip.style.display = 'none';
-        });
-
-        let currentIdx = 0;
-
-        function updateTimelineUI(idx) {
-            highlightStep(idx);
-        }
-
-        timelineSlider.oninput = (e) => {
-            if (!timelineSlider.disabled) {
-                currentIdx = parseInt(timelineSlider.value, 10);
-                updateTimelineUI(currentIdx);
-            }
-        };
-
-        timelinePlayBtn.onclick = () => {
-            if (timelinePlayBtn.disabled) return;
-            timelinePlayBtn.style.display = 'none'; // Hide play button
-            timelinePauseBtn.style.display = 'block'; // Show pause button
-            timelineInterval = setInterval(() => {
-                currentIdx++;
-                if (currentIdx >= placedChrono.length) {
-                    currentIdx = 0; // Loop back to the beginning
-                }
-                timelineSlider.value = currentIdx;
-                updateTimelineUI(currentIdx);
-            }, 1200);
-        };
-
-        timelinePauseBtn.onclick = () => {
-            if (timelinePauseBtn.disabled) return;
-            timelinePauseBtn.style.display = 'none'; // Hide pause button
-            timelinePlayBtn.style.display = 'block'; // Show play button
-            clearInterval(timelineInterval);
-        };
-
-        // Initial highlight (only if timelineEnabled)
-        // highlightStep(currentIdx); // Moved to checkAnswers to ensure it runs after placedChrono is populated
-    }
 
     function handleZoom() {
         const locationsToUpdate = new Set(Object.values(placedEvents).map(p => p.droppedLocationId));
