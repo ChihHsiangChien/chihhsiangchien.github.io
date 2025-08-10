@@ -5,6 +5,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const topoLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { attribution: 'Map data: &copy; OpenStreetMap contributors, SRTM | Map style: &copy; OpenTopoMap (CC-BY-SA)' });
     // Initialize map without a specific center/zoom; it will be set dynamically.
     const map = L.map('map', { layers: [satelliteLayer] });
+
+    // Create a dedicated pane for highlighted markers to ensure they are always on top.
+    map.createPane('highlightedMarkerPane');
+    map.getPane('highlightedMarkerPane').style.zIndex = 651; // Above default markers (600) and tooltips (650)
+    map.getPane('highlightedMarkerPane').style.pointerEvents = 'none'; // Allow clicks to pass through
+
     L.control.layers({ "OpenStreetMap": osmLayer, "Satellite": satelliteLayer, "Topographic": topoLayer }).addTo(map);
 
     // --- Game State & UI ---
@@ -46,21 +52,69 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    function renderCards(eventsToRender) {
+        cardContainer.innerHTML = ''; // Clear existing cards
+        eventsToRender.forEach(event => {
+            // Only create a card if it hasn't been placed on the map yet
+            if (!placedEvents[event.event_id]) {
+                cardContainer.appendChild(createCard(event));
+            }
+        });
+    }
+
     function setupGame(data) {
         locationsData = data.locations;
-        // --- 隨機排序事件卡片 ---
-        const shuffledEvents = [...data.events];
-        for (let i = shuffledEvents.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [shuffledEvents[i], shuffledEvents[j]] = [shuffledEvents[j], shuffledEvents[i]];
-        }
-        shuffledEvents.forEach(event => cardContainer.appendChild(createCard(event)));
+        // --- 預設排序並渲染卡片 ---
+        const sortedEvents = [...data.events].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+        renderCards(sortedEvents);
 
+        // --- Sorting Logic ---
+        const sortYearAscBtn = document.getElementById('sort-year-asc');
+        const sortYearDescBtn = document.getElementById('sort-year-desc');
+        const sortTitleAscBtn = document.getElementById('sort-title-asc');
+        const sortTitleDescBtn = document.getElementById('sort-title-desc');
+        const sortButtons = [sortYearAscBtn, sortYearDescBtn, sortTitleAscBtn, sortTitleDescBtn];
+
+        function updateSortButtonStyles(activeButton) {
+            sortButtons.forEach(btn => {
+                btn.classList.remove('bg-blue-500', 'text-white');
+                btn.classList.add('bg-gray-200', 'text-gray-700');
+            });
+            activeButton.classList.add('bg-blue-500', 'text-white');
+            activeButton.classList.remove('bg-gray-200', 'text-gray-700');
+        }
+
+        sortYearAscBtn.addEventListener('click', () => {
+            const sorted = [...gameData.events].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+            renderCards(sorted);
+            updateSortButtonStyles(sortYearAscBtn);
+        });
+
+        sortYearDescBtn.addEventListener('click', () => {
+            const sorted = [...gameData.events].sort((a, b) => new Date(b.start_time) - new Date(a.start_time));
+            renderCards(sorted);
+            updateSortButtonStyles(sortYearDescBtn);
+        });
+
+        sortTitleAscBtn.addEventListener('click', () => {
+            const sorted = [...gameData.events].sort((a, b) => a.title.localeCompare(b.title, 'zh-Hant'));
+            renderCards(sorted);
+            updateSortButtonStyles(sortTitleAscBtn);
+        });
+
+        sortTitleDescBtn.addEventListener('click', () => {
+            const sorted = [...gameData.events].sort((a, b) => b.title.localeCompare(a.title, 'zh-Hant'));
+            renderCards(sorted);
+            updateSortButtonStyles(sortTitleDescBtn);
+        });
         // --- Create a bounds object to fit all locations ---
         const bounds = L.latLngBounds();
 
         locationsData.forEach(location => {
             let layer;
+            const region = location.region || 'default';
+            const colorInfo = regionColors[region] || regionColors.default;
+
             if (location.shape === 'polygon') {
                 // 如果是多邊形，使用 L.polygon
                 layer = L.polygon(location.points, { droppable: true, location_id: location.location_id });
@@ -69,7 +123,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 layer = L.circle(location.center, { radius: location.radius, droppable: true, location_id: location.location_id });
             }
             layer.addTo(map)
-                 .bindTooltip(`<span>${location.name}</span>`, { permanent: true, direction: 'center', className: 'location-tooltip' });
+                 .bindTooltip(`<span>${location.name}</span>`, { permanent: true, direction: 'center', className: `location-tooltip ${colorInfo.map}` });
 
             // Now that the layer is on the map, get its bounds.
             // We must handle circles specially, as their getBounds() method requires the map
@@ -145,7 +199,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function createCard(event) {
         const card = document.createElement('div');
-        card.className = 'draggable-card p-2 mb-2 bg-white rounded shadow cursor-pointer border-2 border-gray-300';
+        const region = event.region || 'default';
+        const colorInfo = regionColors[region] || regionColors.default;
+        card.className = `draggable-card p-2 mb-2 mr-10 rounded shadow cursor-pointer border-2 ${colorInfo.bg} ${colorInfo.border}`;
         card.id = event.event_id;
         const year = new Date(event.start_time).getFullYear();
 
@@ -635,9 +691,21 @@ document.addEventListener('DOMContentLoaded', () => {
             if (item.marker) {
                 const year = new Date(item.event.start_time).getFullYear();
                 const isHighlighted = i === idx;
-                const markerClass = `placed-event-marker placed-event-marker--correct ${isHighlighted ? 'placed-event-marker--highlight' : 'placed-event-marker--dimmed'}`;
-                
-                item.marker.setZIndexOffset(isHighlighted ? 1000 : 0);
+
+                // --- Pane switching for robust z-index ---
+                const targetPane = isHighlighted ? 'highlightedMarkerPane' : 'markerPane';
+                if (item.marker.options.pane !== targetPane) {
+                    // The most reliable way to change a marker's pane is to re-add it to the map.
+                    // This might seem like a hack, but it's how Leaflet handles pane updates for existing layers.
+                    item.marker.options.pane = targetPane;
+                    if (map.hasLayer(item.marker)) {
+                        map.removeLayer(item.marker);
+                        map.addLayer(item.marker);
+                    }
+                }
+
+                // --- Styling ---
+                const markerClass = `placed-event-marker placed-event-marker--correct ${isHighlighted ? 'placed-event-marker--highlight' : 'placed-event-marker--dimmed'}`;                
                 item.marker.setIcon(L.divIcon({
                     html: `<div class="${markerClass}"><span>${item.event.title}</span><span class="marker-year">${year}</span></div>`,
                     className: 'custom-div-icon',
@@ -651,14 +719,25 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         // --- Update Location Labels ---
+        let highlightedLayer = null;
         map.eachLayer(layer => {
             if (layer.options.location_id && layer.getTooltip() && layer.getTooltip().getElement()) {
                 const tooltipEl = layer.getTooltip().getElement();
                 const isHighlighted = layer.options.location_id === highlightedLocationId;
                 tooltipEl.classList.toggle('location-tooltip--highlight', isHighlighted);
                 tooltipEl.classList.toggle('location-tooltip--dimmed', !isHighlighted);
+
+                if (isHighlighted) {
+                    highlightedLayer = layer;
+                }
             }
         });
+
+        // After styling all layers, bring the highlighted one to the front
+        // to ensure it's not obscured by other layers.
+        if (highlightedLayer) {
+            highlightedLayer.bringToFront();
+        }
     }
 
 
