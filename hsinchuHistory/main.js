@@ -385,9 +385,16 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         marker.on('drag', function(e) {
-            moveGhost(e.originalEvent);
-            updateGuideLine(e.originalEvent);
-            lastDragEvent = e;
+            // The originalEvent can be a MouseEvent or a TouchEvent.
+            // We need an object with clientX/clientY for our functions.
+            let eventForCoords = e.originalEvent;
+            if (eventForCoords.touches && eventForCoords.touches.length > 0) {
+                // On touch devices, use the first touch point.
+                eventForCoords = eventForCoords.touches[0];
+            }
+            moveGhost(eventForCoords);
+            updateGuideLine(eventForCoords);
+            lastDragEvent = { originalEvent: eventForCoords }; // 修正：儲存處理過的座標物件
         });
 
         marker.on('dragend', function(e) {
@@ -427,6 +434,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         markerInstance.setOpacity(1);
                     }
                 }
+            } else {
+                // 新增：處理拖曳到地圖外放開的情況
+                // 將 marker 恢復到原始位置並設為可見
+                markerInstance.setLatLng(markerInstance.originalLatLng);
+                markerInstance.setOpacity(1);
             }
         });
 
@@ -434,28 +446,55 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 新增 Touch 支援
         marker.on('touchstart', function(e) {
-            if (!e.originalEvent.touches || e.originalEvent.touches.length !== 1) return;
+            // 阻止瀏覽器預設的滾動行為，確保拖曳的流暢性
+            console.log('--- [DEBUG] marker.touchstart event fired ---');
+            e.originalEvent.preventDefault();
+            e.originalEvent.stopPropagation();
+
+
+            if (!e.originalEvent.touches || e.originalEvent.touches.length !== 1) {
+                console.log('[DEBUG] touchstart ignored, touch count is not 1.');
+                return;
+            }
             const touch = e.originalEvent.touches[0];
             const markerInstance = this;
+            console.log('[DEBUG] Marker instance:', markerInstance);
+
             markerInstance.originalLatLng = markerInstance.getLatLng();
             const eventId = Object.keys(placedEvents).find(key => placedEvents[key].marker === markerInstance);
-            if (!eventId) return;
+            
+            console.log('[DEBUG] Found eventId:', eventId);
+
+            if (!eventId) {
+                console.error('[DEBUG] CRITICAL: Could not find eventId for this marker. Exiting touchstart.');
+                return;
+            }
             const originalCard = document.getElementById(eventId);
+            console.log('[DEBUG] Found originalCard element:', originalCard);
 
             // 暫時顯示卡片取得寬度
             const originalDisplay = originalCard.style.display;
             originalCard.style.display = 'block';
             const cardWidth = originalCard.offsetWidth;
             originalCard.style.display = originalDisplay;
+            console.log('[DEBUG] Calculated card width:', cardWidth);
 
             ghostCard = L.DomUtil.create('div', 'is-dragging', document.body);
             ghostCard.innerHTML = originalCard.querySelector('h3').outerHTML;
             ghostCard.style.width = cardWidth + 'px';
+            console.log('[DEBUG] Created ghostCard:', ghostCard);
+
             markerInstance.setOpacity(0);
             dragOffset = { x: ghostCard.offsetWidth / 2, y: ghostCard.offsetHeight / 2 };
+            console.log('[DEBUG] Drag offset set:', dragOffset);
+            console.log('--- [DEBUG] marker.touchstart event end ---');
+
         }, { passive: false });
 
         marker.on('touchmove', function(e) {
+            // 阻止瀏覽器預設的滾動行為，確保拖曳的流暢性
+            e.originalEvent.preventDefault();
+            e.originalEvent.stopPropagation();
             // 修正：Leaflet 事件中，原始 DOM 事件在 e.originalEvent
             if (!e.originalEvent.touches || e.originalEvent.touches.length !== 1) return;
             const touch = e.originalEvent.touches[0];
@@ -486,6 +525,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }, { passive: false });
 
         marker.on('touchend', function(e) {
+            e.originalEvent.preventDefault();
+            e.originalEvent.stopPropagation();
+                        
             const markerInstance = this;
             if (guideLine) map.removeLayer(guideLine); guideLine = null;
             if (ghostCard) L.DomUtil.remove(ghostCard); ghostCard = null;
@@ -521,6 +563,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         markerInstance.setOpacity(1);
                     }
                 }
+            } else {
+                // 處理拖曳到地圖外放開的情況，lastDragEvent 會是 null
+                // 將 marker 恢復到原始位置並設為可見
+                markerInstance.setLatLng(markerInstance.originalLatLng);
+                markerInstance.setOpacity(1);
             }
             lastDragEvent = null;
         }, { passive: false });
