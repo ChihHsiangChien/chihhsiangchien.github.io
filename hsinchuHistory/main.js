@@ -97,8 +97,11 @@ document.addEventListener('DOMContentLoaded', () => {
         card.id = event.event_id;
         const year = new Date(event.start_time).getFullYear();
         card.innerHTML = `<h3 class="font-bold text-sm flex justify-between items-center"><span>${event.title}</span><span class="text-xs text-gray-500 font-normal ml-2">${year}</span></h3><p class="text-xs text-gray-600 mt-1 hidden">${event.description}</p>`;
+
+        // 滑鼠點擊展開/收合 description
         card.addEventListener('click', () => card.querySelector('p').classList.toggle('hidden'));
-        
+
+
         const draggable = new L.Draggable(card);
         draggable.enable();
 
@@ -182,11 +185,19 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         // --- Touch 支援 ---
+        let isDragging = false;
+        let touchStartX = 0, touchStartY = 0;
+
         card.addEventListener('touchstart', (e) => {
+            isDragging = false;
+
             if (e.touches.length !== 1) return;
             e.stopPropagation();
             e.preventDefault();
             const touch = e.touches[0];
+            touchStartX = touch.clientX;
+            touchStartY = touch.clientY;
+
             const cardRect = card.getBoundingClientRect();
             dragOffset = {
                 x: touch.clientX - cardRect.left,
@@ -198,34 +209,43 @@ document.addEventListener('DOMContentLoaded', () => {
             L.DomUtil.setOpacity(card, 0.5);
         }, { passive: false });
 
-        card.addEventListener('touchmove', (e) => {
-            if (e.touches.length !== 1) return;
+        card.addEventListener('touchmove', function(e) {
+            if (!e.touches || e.touches.length !== 1) return;
             e.stopPropagation();
-            e.preventDefault();
+            e.preventDefault(); // 防止頁面滾動，確保拖曳事件持續觸發
             const touch = e.touches[0];
-            moveGhost(touch);
+            // 判斷是否拖曳
+            if (Math.abs(touch.clientX - touchStartX) > 10 || Math.abs(touch.clientY - touchStartY) > 10) {
+                isDragging = true;
+            }
+
+            // 讓 ghostCard 跟著手指移動
+            moveGhost({ clientX: touch.clientX, clientY: touch.clientY });
 
             const mapContainer = map.getContainer();
             const mapRect = mapContainer.getBoundingClientRect();
             const mouseX = touch.clientX;
             const mouseY = touch.clientY;
 
+            // 只有在地圖範圍內才顯示 guideLine
             if (mouseX >= mapRect.left && mouseX <= mapRect.right && mouseY >= mapRect.top && mouseY <= mapRect.bottom) {
-                // 構造 MouseEvent-like 物件給 updateGuideLine
-                updateGuideLine({
-                    clientX: mouseX,
-                    clientY: mouseY
-                });
+                updateGuideLine({ clientX: mouseX, clientY: mouseY });
             } else {
                 if (guideLine) {
                     map.removeLayer(guideLine);
                     guideLine = null;
                 }
             }
+            // 更新 lastDragEvent 結構，和 draggable.on('drag', ...) 一致
             lastDragEvent = { originalEvent: { clientX: mouseX, clientY: mouseY } };
-        }, { passive: false });
+        }, { passive: false });        
 
+        // 手指點擊展開/收合 description（排除拖曳）
+       
         card.addEventListener('touchend', (e) => {
+            if (!isDragging) {
+                card.querySelector('p').classList.toggle('hidden');
+            }            
             e.stopPropagation();
             e.preventDefault();
             L.DomUtil.setOpacity(card, 1);
@@ -279,14 +299,14 @@ document.addEventListener('DOMContentLoaded', () => {
             ghostCard.style.top = (e.clientY - dragOffset.y) + 'px';
         }
     }
-
     function updateGuideLine(e) {
         if (guideLine) map.removeLayer(guideLine);
         const latLng = map.mouseEventToLatLng(e);
         const closestLocation = findClosestLocation(latLng, locationsData);
         if (closestLocation) {
-            guideLine = L.polyline([latLng, [closestLocation.lat, closestLocation.lng]], { color: 'red', dashArray: '5, 5' }).addTo(map);
+            guideLine = L.polyline([latLng, [closestLocation.lat, closestLocation.lng]], { color: 'red', dashArray: '5, 5' }).addTo(map);                        
         }
+        //console.log('[updateGuideLine] guideLine:', guideLine);                
     }
 
     function handleDrop({ drop, drag }) {
@@ -409,6 +429,101 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         });
+
+
+
+        // 新增 Touch 支援
+        marker.on('touchstart', function(e) {
+            if (!e.originalEvent.touches || e.originalEvent.touches.length !== 1) return;
+            const touch = e.originalEvent.touches[0];
+            const markerInstance = this;
+            markerInstance.originalLatLng = markerInstance.getLatLng();
+            const eventId = Object.keys(placedEvents).find(key => placedEvents[key].marker === markerInstance);
+            if (!eventId) return;
+            const originalCard = document.getElementById(eventId);
+
+            // 暫時顯示卡片取得寬度
+            const originalDisplay = originalCard.style.display;
+            originalCard.style.display = 'block';
+            const cardWidth = originalCard.offsetWidth;
+            originalCard.style.display = originalDisplay;
+
+            ghostCard = L.DomUtil.create('div', 'is-dragging', document.body);
+            ghostCard.innerHTML = originalCard.querySelector('h3').outerHTML;
+            ghostCard.style.width = cardWidth + 'px';
+            markerInstance.setOpacity(0);
+            dragOffset = { x: ghostCard.offsetWidth / 2, y: ghostCard.offsetHeight / 2 };
+        }, { passive: false });
+
+        marker.on('touchmove', function(e) {
+            // 修正：Leaflet 事件中，原始 DOM 事件在 e.originalEvent
+            if (!e.originalEvent.touches || e.originalEvent.touches.length !== 1) return;
+            const touch = e.originalEvent.touches[0];
+
+            // 檢查 clientX/clientY 是否有效且在地圖範圍
+            const mapRect = map.getContainer().getBoundingClientRect();
+            const mouseX = touch.clientX;
+            const mouseY = touch.clientY;
+            const validCoords = typeof mouseX === 'number' && typeof mouseY === 'number' && !isNaN(mouseX) && !isNaN(mouseY);
+
+            if (
+                validCoords &&
+                mouseX >= mapRect.left &&
+                mouseX <= mapRect.right &&
+                mouseY >= mapRect.top &&
+                mouseY <= mapRect.bottom
+            ) {
+                moveGhost({ clientX: mouseX, clientY: mouseY }); // 傳 MouseEvent-like 物件
+                updateGuideLine({ clientX: mouseX, clientY: mouseY });
+                lastDragEvent = { originalEvent: { clientX: mouseX, clientY: mouseY } };
+            } else {
+                if (guideLine) {
+                    map.removeLayer(guideLine);
+                    guideLine = null;
+                }
+                lastDragEvent = null;
+            }
+        }, { passive: false });
+
+        marker.on('touchend', function(e) {
+            const markerInstance = this;
+            if (guideLine) map.removeLayer(guideLine); guideLine = null;
+            if (ghostCard) L.DomUtil.remove(ghostCard); ghostCard = null;
+
+            if (lastDragEvent) {
+                const mouseX = lastDragEvent.originalEvent.clientX;
+                const mouseY = lastDragEvent.originalEvent.clientY;
+                const cardContainerRect = cardContainer.getBoundingClientRect();
+                const eventId = Object.keys(placedEvents).find(key => placedEvents[key].marker === markerInstance);
+
+                // 檢查是否放回卡片區
+                if (eventId && mouseX >= cardContainerRect.left && mouseX <= cardContainerRect.right && mouseY >= cardContainerRect.top && mouseY <= cardContainerRect.bottom) {
+                    const oldLocationId = placedEvents[eventId].droppedLocationId;
+                    map.removeLayer(markerInstance);
+                    delete placedEvents[eventId];
+
+                    const cardElement = document.getElementById(eventId);
+                    cardElement.style.display = 'block';
+                    cardElement.style.position = ''; cardElement.style.left = ''; cardElement.style.top = ''; cardElement.style.transform = '';
+
+                    repositionMarkersAtLocation(oldLocationId);
+                    updateCheckButtonState();
+                } else {
+                    // 檢查是否放到地圖其他地點
+                    const latLng = map.mouseEventToLatLng(lastDragEvent.originalEvent);
+                    const closestLocation = findClosestLocation(latLng, locationsData);
+                    if (closestLocation && eventId) {
+                        const droppedOnCircle = findCircleByLocationId(closestLocation.location_id);
+                        const originalCardElement = document.getElementById(eventId);
+                        map.fire('droppable:drop', { drop: droppedOnCircle, drag: { _element: originalCardElement } });
+                    } else {
+                        markerInstance.setLatLng(markerInstance.originalLatLng);
+                        markerInstance.setOpacity(1);
+                    }
+                }
+            }
+            lastDragEvent = null;
+        }, { passive: false });
 
         placedEvents[card.id] = {
             marker: marker,
