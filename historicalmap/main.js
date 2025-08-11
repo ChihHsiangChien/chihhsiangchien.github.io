@@ -1,4 +1,43 @@
+// 1. 引入地圖設定
+import { mapsData } from './maps.config.js'; // 假設你將 JS 改為 module 形式
+
 document.addEventListener('DOMContentLoaded', () => {
+    let sequentialMode = false;
+    let currentEventIndex = 0;
+    let eventsData = []; // To store sorted events for sequential mode
+
+    // 2. 從 URL 讀取要顯示的地圖 ID 和模式
+    const urlParams = new URLSearchParams(window.location.search);
+    const mapId = urlParams.get('map') || 'chutung-history'; // 預設載入竹東地圖
+    sequentialMode = urlParams.get('mode') === 'sequential';
+    const currentMapConfig = mapsData[mapId];
+
+    if (!currentMapConfig) {
+        console.error(`Map with id "${mapId}" not found in maps.config.js`);
+        // 可以在此顯示錯誤訊息或載入預設地圖
+        return;
+    }
+
+    // 3. 根據設定檔載入對應的資料
+    fetch(currentMapConfig.dataPath)
+        .then(response => response.json())
+        .then(data => {
+            // 將地圖資料和區域顏色設定一起傳入 setupGame
+            setupGame(data, currentMapConfig.regionColorConfig);
+
+            // 檢查網址參數，啟用自動播放模式
+            if (urlParams.get('mode') === 'autoplay') {
+                autoPlaceAndStartTimeline(data);
+                
+                // 自動收合右側面板以提供更好的觀看體驗
+                const rightPanel = document.getElementById('right-panel');
+                const isCollapsed = rightPanel.classList.contains('w-0');
+                if (!isCollapsed) {
+                    document.getElementById('toggle-panel-btn').click();
+                }
+            }
+        });
+            
     // --- Map Initialization ---
     const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' });
     const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles &copy; Esri' });
@@ -10,8 +49,6 @@ document.addEventListener('DOMContentLoaded', () => {
     map.createPane('highlightedMarkerPane');
     map.getPane('highlightedMarkerPane').style.zIndex = 651; // Above default markers (600) and tooltips (650)
     map.getPane('highlightedMarkerPane').style.pointerEvents = 'none'; // Allow clicks to pass through
-
-    const regionColorConfig = window.regionColorConfig || {}; // Get from global scope
 
     L.control.layers({ "OpenStreetMap": osmLayer, "Satellite": satelliteLayer, "Topographic": topoLayer }).addTo(map);
 
@@ -60,42 +97,65 @@ document.addEventListener('DOMContentLoaded', () => {
     let isHighlightModeEnabled = true; // 新增：高亮模式狀態，預設開啟
     let placedChrono = []; // Will be populated with {event, marker} objects
 
-    // --- Game Setup ---
-    fetch('data.json').then(response => response.json()).then(data => {
-        gameData = data; // Store data
-        setupGame(gameData);
+    function updateDraggableCards() {
+        if (!sequentialMode) return;
+        const cards = document.querySelectorAll('.draggable-card');
+        const nextEvent = eventsData[currentEventIndex];
 
-        // 檢查網址參數，啟用自動播放模式
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.get('mode') === 'autoplay') {
-            autoPlaceAndStartTimeline(gameData);
-        }
-    });
+        cards.forEach(card => {
+            // The card is draggable if it's the next event in sequence.
+            const isDraggable = nextEvent && card.id === nextEvent.event_id;
+            //card.setAttribute('draggable', isDraggable);
+            card.dataset.draggable = isDraggable; // 用 data-draggable
 
-    function renderCards(eventsToRender) {
-        cardContainer.innerHTML = ''; // Clear existing cards
-        eventsToRender.forEach(event => {
-            // Only create a card if it hasn't been placed on the map yet
-            if (!placedEvents[event.event_id]) {
-                cardContainer.appendChild(createCard(event));
+            if (isDraggable) {
+                card.classList.remove('opacity-50', 'cursor-not-allowed');
+                card.classList.add('cursor-pointer');
+            } else {
+                card.classList.add('opacity-50', 'cursor-not-allowed');
+                card.classList.remove('cursor-pointer');
             }
         });
     }
 
-    function setupGame(data) {
+    function renderCards(eventsToRender, regionColorConfig) {
+        cardContainer.innerHTML = ''; // Clear existing cards
+        eventsToRender.forEach(event => {
+            // Only create a card if it hasn't been placed on the map yet
+            if (!placedEvents[event.event_id]) {
+                cardContainer.appendChild(createCard(event, regionColorConfig));
+            }
+        });
+        if (sequentialMode) {
+            updateDraggableCards();
+        }
+    }
+
+    function setupGame(data, regionColorConfig) {
+        gameData = data; // 將載入的資料存到全域變數中
         locationsData = data.locations;
         injectRegionStyles(regionColorConfig);
 
         // --- 預設排序並渲染卡片 ---
         const sortedEvents = [...data.events].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
-        renderCards(sortedEvents);
+        eventsData = sortedEvents; // Store for sequential mode
+        renderCards(sortedEvents, regionColorConfig);
 
         // --- Sorting Logic ---
         const sortYearAscBtn = document.getElementById('sort-year-asc');
         const sortYearDescBtn = document.getElementById('sort-year-desc');
-        const sortTitleAscBtn = document.getElementById('sort-title-asc');
-        const sortTitleDescBtn = document.getElementById('sort-title-desc');
-        const sortButtons = [sortYearAscBtn, sortYearDescBtn, sortTitleAscBtn, sortTitleDescBtn];
+        const sortRegionAscBtn = document.getElementById('sort-region-asc');
+        const sortRegionDescBtn = document.getElementById('sort-region-desc');
+        const sortButtons = [sortYearAscBtn, sortYearDescBtn, sortRegionAscBtn, sortRegionDescBtn];
+        
+        if (sequentialMode) {
+            checkAnswersBtn.style.display = 'none';
+            const sortContainer = document.getElementById('sort-buttons-container');
+            if (sortContainer) {
+                sortContainer.style.display = 'none';
+            }
+        }
+
 
         function updateSortButtonStyles(activeButton) {
             sortButtons.forEach(btn => {
@@ -108,26 +168,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
         sortYearAscBtn.addEventListener('click', () => {
             const sorted = [...gameData.events].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
-            renderCards(sorted);
+            renderCards(sorted, regionColorConfig);
             updateSortButtonStyles(sortYearAscBtn);
         });
 
         sortYearDescBtn.addEventListener('click', () => {
             const sorted = [...gameData.events].sort((a, b) => new Date(b.start_time) - new Date(a.start_time));
-            renderCards(sorted);
+            renderCards(sorted, regionColorConfig);
             updateSortButtonStyles(sortYearDescBtn);
         });
 
-        sortTitleAscBtn.addEventListener('click', () => {
-            const sorted = [...gameData.events].sort((a, b) => a.title.localeCompare(b.title, 'zh-Hant'));
-            renderCards(sorted);
-            updateSortButtonStyles(sortTitleAscBtn);
+        sortRegionAscBtn.addEventListener('click', () => {
+            const sorted = [...gameData.events].sort((a, b) => (a.region || '').localeCompare(b.region || '', 'zh-Hant'));
+            renderCards(sorted, regionColorConfig);
+            updateSortButtonStyles(sortRegionAscBtn);
         });
 
-        sortTitleDescBtn.addEventListener('click', () => {
-            const sorted = [...gameData.events].sort((a, b) => b.title.localeCompare(a.title, 'zh-Hant'));
-            renderCards(sorted);
-            updateSortButtonStyles(sortTitleDescBtn);
+        sortRegionDescBtn.addEventListener('click', () => {
+            const sorted = [...gameData.events].sort((a, b) => (b.region || '').localeCompare(a.region || '', 'zh-Hant'));
+            renderCards(sorted, regionColorConfig);
+            updateSortButtonStyles(sortRegionDescBtn);
         });
         // --- Create a bounds object to fit all locations ---
         const bounds = L.latLngBounds();
@@ -147,10 +207,6 @@ document.addEventListener('DOMContentLoaded', () => {
             layer.addTo(map)
                  .bindTooltip(`<span>${location.name}</span>`, { permanent: true, direction: 'center', className: `location-tooltip region-${colorInfo.name}` });
 
-            // Now that the layer is on the map, get its bounds.
-            // We must handle circles specially, as their getBounds() method requires the map
-            // to be initialized with a view (zoom/center), which we are about to set with fitBounds().
-            // It's a chicken-and-egg problem. So, we calculate the circle's bounds manually.
             if (layer instanceof L.Polygon) {
                 bounds.extend(layer.getBounds());
             } else if (layer instanceof L.Circle) {
@@ -171,14 +227,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const isTimelineEnabled = () => timelineEnabled;
         const toggleHighlightMode = () => {
             isHighlightModeEnabled = !isHighlightModeEnabled;
-            // 更新按鈕外觀以提供視覺回饋
             highlightToggleButton.style.opacity = isHighlightModeEnabled ? '1' : '0.5';
             highlightToggleButton.title = isHighlightModeEnabled ? '關閉高亮模式' : '開啟高亮模式';
-            highlightStep(parseInt(timelineSlider.value, 10)); // 立即重新整理地圖樣式
+            highlightStep(parseInt(timelineSlider.value, 10));
         };
         const toggleAutoPan = () => {
             isAutoPanEnabled = !isAutoPanEnabled;
-            // 更新按鈕外觀以提供視覺回饋
             autoPanToggleButton.style.opacity = isAutoPanEnabled ? '1' : '0.5';
             autoPanToggleButton.title = isAutoPanEnabled ? '關閉自動平移' : '開啟自動平移';
         };
@@ -200,7 +254,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 panelContent.classList.remove('hidden');
                 mapContainer.classList.remove('w-full');
                 mapContainer.classList.add('w-2/3');
-                toggleIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />'; // > icon to indicate collapse action
+                toggleIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />';
                 togglePanelBtn.style.right = 'calc(33.3333vw - 1.25rem)';
             } else {
                 // Collapse panel
@@ -209,17 +263,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 panelContent.classList.add('hidden');
                 mapContainer.classList.remove('w-2/3');
                 mapContainer.classList.add('w-full');
-                toggleIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />'; // < icon to indicate expand action
+                toggleIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />';
                 togglePanelBtn.style.right = '0.5rem';
             }
 
             setTimeout(() => {
                 map.invalidateSize();
-            }, 300); // Match CSS transition duration
+            }, 300);
         });
     }
 
-    function createCard(event) {
+    function createCard(event, regionColorConfig) {
         const card = document.createElement('div');
         const region = event.region || 'default';
         const colorInfo = regionColorConfig[region] || regionColorConfig.default;
@@ -251,58 +305,45 @@ document.addEventListener('DOMContentLoaded', () => {
 
         card.innerHTML = `<h3 class="font-bold text-sm flex justify-between items-center"><span>${event.title}</span><span class="text-xs text-gray-500 font-normal ml-2">${year}</span></h3><div class="details hidden mt-1">${imageHTML}<p class="text-xs text-gray-600 mt-2">${event.description || ''}</p>${linksHTML}</div>`;
 
-        // 防止點擊連結時觸發卡片的拖曳事件
         card.querySelectorAll('a').forEach(link => {
-            // 使用 pointerdown 阻止事件冒泡到卡片，避免觸發拖曳
             link.addEventListener('pointerdown', e => e.stopPropagation());
         });
 
-        // --- Unified Drag and Click Handling ---
         let isDragging = false;
         let pointerDownPos = { x: 0, y: 0 };
 
         card.addEventListener('pointerdown', (e) => {
-            // 只有主要按鈕（滑鼠左鍵、觸控、觸控筆）才能觸發拖曳
-            if (e.pointerType === 'mouse' && e.button !== 0) return;
+            if ((e.pointerType === 'mouse' && e.button !== 0) || (sequentialMode && card.dataset.draggable !== 'true')) {
+                return;
+            }
 
             e.stopPropagation();
-
             isDragging = false;
             pointerDownPos = { x: e.clientX, y: e.clientY };
 
-            // 監聽 document 上的 move 和 up 事件，以便在卡片外也能追蹤
             document.addEventListener('pointermove', onPointerMove);
-            document.addEventListener('pointerup', onPointerUp, { once: true }); // 自動移除監聽器
+            document.addEventListener('pointerup', onPointerUp, { once: true });
         }, { passive: false });
 
         function startDrag(e) {
             isDragging = true;
-
             const cardRect = card.getBoundingClientRect();
             dragOffset = { x: e.clientX - cardRect.left, y: e.clientY - cardRect.top };
-
             ghostCard = L.DomUtil.create('div', 'is-dragging', document.body);
             ghostCard.innerHTML = card.querySelector('h3').outerHTML;
             ghostCard.style.width = card.offsetWidth + 'px';
             L.DomUtil.setOpacity(card, 0.5);
-
-            // 初始 ghost 位置
             moveGhost(e);
         }
 
         function onPointerMove(e) {
-            // 為支援觸控拖曳，需立即防止瀏覽器預設的捲動行為
             e.preventDefault();
-
             if (!isDragging) {
-                // 檢查移動距離是否超過閾值，以區分點擊和拖曳
                 const posDiff = Math.sqrt(Math.pow(e.clientX - pointerDownPos.x, 2) + Math.pow(e.clientY - pointerDownPos.y, 2));
-                if (posDiff > 5) { // 移動超過 5px 才開始拖曳
+                if (posDiff > 5) {
                     startDrag(e);
                 }
             }
-
-            // 如果正在拖曳（不論是剛開始還是持續中），更新鬼魂卡片位置
             if (isDragging) {
                 moveGhost(e);
                 updateGuideAndLastEvent(e);
@@ -311,14 +352,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         function onPointerUp(e) {
             document.removeEventListener('pointermove', onPointerMove);
-
             if (isDragging) {
                 L.DomUtil.setOpacity(card, 1);
                 if (guideLine) { map.removeLayer(guideLine); guideLine = null; }
                 handleDropAttempt(card);
                 lastDragEvent = null;
             } else {
-                // 如果不是拖曳，就視為點擊
                 card.querySelector('.details').classList.toggle('hidden');
             }
             isDragging = false;
@@ -390,19 +429,60 @@ document.addEventListener('DOMContentLoaded', () => {
         const latLng = map.mouseEventToLatLng(e);
         const closestLocation = findClosestLocation(latLng, locationsData);
         if (closestLocation) {
-            // Now all locations have a 'center' property
             guideLine = L.polyline([latLng, closestLocation.center], { color: 'red', dashArray: '5, 5' }).addTo(map);
         }
-        //console.log('[updateGuideLine] guideLine:', guideLine);                
     }
 
     function handleDrop({ drop, drag }) {
-
         const card = drag._element;
+        const eventId = card.id;
+        const droppedLocationId = drop.options.location_id;
+        const eventData = gameData.events.find(e => e.event_id === eventId);
+
+        // --- Sequential Mode Logic ---
+        if (sequentialMode) {
+            const correctEvent = eventsData[currentEventIndex];
+            const isCorrect = correctEvent && eventId === correctEvent.event_id && droppedLocationId === correctEvent.location_id;
+
+            if (isCorrect) {
+                // Correct placement
+                card.style.display = 'none'; // Hide card from panel
+                if (ghostCard) { L.DomUtil.remove(ghostCard); ghostCard = null; }
+
+                const year = new Date(eventData.start_time).getFullYear();
+                const correctIcon = L.divIcon({
+                    html: `<div class="placed-event-marker placed-event-marker--correct"><span>${eventData.title}</span><span class="marker-year">${year}</span></div>`,
+                    className: 'custom-div-icon',
+                    iconSize: null,
+                });
+                const markerLatLng = drop.getBounds ? drop.getBounds().getCenter() : drop.getLatLng();
+                const marker = L.marker(markerLatLng, { icon: correctIcon }).addTo(map);
+                
+                // Add to placedEvents so repositioning and final check works
+                placedEvents[eventId] = { marker: marker, droppedLocationId: droppedLocationId };
+                
+                repositionMarkersAtLocation(droppedLocationId);
+
+                currentEventIndex++;
+                updateDraggableCards();
+
+                if (currentEventIndex >= eventsData.length) {
+                    // Game finished, call checkAnswers to enable timeline
+                    checkAnswers(gameData);
+                }
+            } else {
+                // Incorrect placement
+                if (ghostCard) { L.DomUtil.remove(ghostCard); ghostCard = null; }
+                L.DomUtil.setOpacity(card, 1);
+                card.classList.add('card-shake');
+                setTimeout(() => card.classList.remove('card-shake'), 820);
+            }
+            return; // End execution for sequential mode
+        }
+
         const oldPlacedEvent = placedEvents[card.id];
 
         if (ghostCard) {
-            // 對於多邊形，取得其邊界中心點
             const dropLatLng = drop.getBounds ? drop.getBounds().getCenter() : drop.getLatLng();
             const dropPoint = map.latLngToContainerPoint(dropLatLng);
             
@@ -413,26 +493,22 @@ document.addEventListener('DOMContentLoaded', () => {
             ghostCard.style.left = targetX + 'px';
             ghostCard.style.top = targetY + 'px';
 
-            // Remove ghost after animation
             setTimeout(() => {
                 if (ghostCard) {
                     L.DomUtil.remove(ghostCard);
                     ghostCard = null;
                 }
-                card.style.display = 'none'; // Hide original card after ghost is gone
-            }, 200); // Match transition duration
+                card.style.display = 'none';
+            }, 200);
         } else {
-            card.style.display = 'none'; // Hide immediately if no ghost (shouldn't happen)
+            card.style.display = 'none';
         }
 
-        // If this card was already placed somewhere else, remove the old marker
         if (oldPlacedEvent) {
             map.removeLayer(oldPlacedEvent.marker);
-            repositionMarkersAtLocation(oldPlacedEvent.droppedLocationId); // Reposition markers at the old location
+            repositionMarkersAtLocation(oldPlacedEvent.droppedLocationId);
         }
 
-        const eventId = card.id;
-        const eventData = gameData.events.find(e => e.event_id === eventId);
         const year = new Date(eventData.start_time).getFullYear();
 
         const markerIcon = L.divIcon({
@@ -444,7 +520,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const markerLatLng = drop.getBounds ? drop.getBounds().getCenter() : drop.getLatLng();
         const marker = L.marker(markerLatLng, { icon: markerIcon, draggable: true }).addTo(map);
 
-        // --- Add popup with description and links ---
         let popupContent = `<b>${eventData.title}</b>`;
         if (eventData.image) {
             popupContent += `
@@ -464,41 +539,34 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         marker.bindPopup(popupContent);
 
-        // --- Enable re-dragging placed cards ---
         marker.on('dragstart', function(e) {
             const markerInstance = this;
-            markerInstance.originalLatLng = markerInstance.getLatLng(); // Store original position
+            markerInstance.originalLatLng = markerInstance.getLatLng();
             const eventId = Object.keys(placedEvents).find(key => placedEvents[key].marker === markerInstance);
             if (!eventId) return;
 
             const originalCard = document.getElementById(eventId);
-
-            // The original card is hidden with `display: none`, so its offsetWidth is 0.
-            // We need to temporarily make it visible to get the correct width for the ghost.
             const originalDisplay = originalCard.style.display;
-            originalCard.style.display = 'block'; // Temporarily show to measure.
+            originalCard.style.display = 'block';
             const cardWidth = originalCard.offsetWidth;
-            originalCard.style.display = originalDisplay; // Hide it back immediately.
+            originalCard.style.display = originalDisplay;
 
             ghostCard = L.DomUtil.create('div', 'is-dragging', document.body);
             ghostCard.innerHTML = originalCard.querySelector('h3').outerHTML;
             ghostCard.style.width = cardWidth + 'px';
             
-            markerInstance.setOpacity(0); // Hide the marker being dragged
+            markerInstance.setOpacity(0);
             dragOffset = { x: ghostCard.offsetWidth / 2, y: ghostCard.offsetHeight / 2 };
         });
         
         marker.on('drag', function(e) {
-            // The originalEvent can be a MouseEvent or a TouchEvent.
-            // We need an object with clientX/clientY for our functions.
-            let eventForCoords = e.originalEvent; // Leaflet's drag event has originalEvent
+            let eventForCoords = e.originalEvent;
             if (eventForCoords.touches && eventForCoords.touches.length > 0) {
-                // On touch devices, use the first touch point.
                 eventForCoords = eventForCoords.touches[0];
             }
             moveGhost(eventForCoords);
             updateGuideLine(eventForCoords);
-            lastDragEvent = { originalEvent: eventForCoords }; // 修正：儲存處理過的座標物件
+            lastDragEvent = { originalEvent: eventForCoords };
         });        
 
         marker.on('dragend', function(e) {
@@ -512,9 +580,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const cardContainerRect = cardContainer.getBoundingClientRect();
                 const eventId = Object.keys(placedEvents).find(key => placedEvents[key].marker === markerInstance);
 
-                // Check if dropped on the card container
                 if (eventId && mouseX >= cardContainerRect.left && mouseX <= cardContainerRect.right && mouseY >= cardContainerRect.top && mouseY <= cardContainerRect.bottom) {
-                    // --- Handle drop on container ---
                     const oldLocationId = placedEvents[eventId].droppedLocationId;
                     map.removeLayer(markerInstance);
                     delete placedEvents[eventId];
@@ -526,7 +592,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     repositionMarkersAtLocation(oldLocationId);
                     updateCheckButtonState();
                 } else {
-                    // --- Handle drop on map (existing logic) ---
                     const latLng = map.mouseEventToLatLng(lastDragEvent.originalEvent);
                     const closestLocation = findClosestLocation(latLng, locationsData);
                     if (closestLocation && eventId) {
@@ -539,8 +604,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
             } else {
-                // 新增：處理拖曳到地圖外放開的情況
-                // 將 marker 恢復到原始位置並設為可見
                 markerInstance.setLatLng(markerInstance.originalLatLng);
                 markerInstance.setOpacity(1);
             }
@@ -552,7 +615,6 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         updateCheckButtonState();
-
         repositionMarkersAtLocation(drop.options.location_id);
     }
 
@@ -564,7 +626,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const placed = placedEvents[event.event_id];
             if (placed) {
                 if (placed.droppedLocationId === event.location_id) {
-                    // Correctly placed: style it and disable dragging
                     const year = new Date(event.start_time).getFullYear();
                     const correctIcon = L.divIcon({ html: `<div class="placed-event-marker placed-event-marker--correct"><span>${event.title}</span><span class="marker-year">${year}</span></div>`, className: 'custom-div-icon', iconSize: null });
                     placed.marker.setIcon(correctIcon);
@@ -572,14 +633,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         placed.marker.dragging.disable();
                     }
                 } else {
-                    // Incorrectly placed: return card to list
                     allCorrect = false;
                     map.removeLayer(placed.marker);
                     
                     const cardElement = document.getElementById(event.event_id);
                     cardElement.style.display = 'block';
                     
-                    // Reset position styles left by L.Draggable
                     cardElement.style.position = '';
                     cardElement.style.left = '';
                     cardElement.style.top = '';
@@ -589,7 +648,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     delete placedEvents[event.event_id];
                 }
             } else {
-                // Not placed at all
                 allCorrect = false;
             }
         });
@@ -599,21 +657,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (allCorrect) {
             checkAnswersBtn.style.display = 'none';
 
-            // --- Populate Chronological Data for Timeline ---
-            // This needs to be done here because only now are the markers guaranteed to be correct.
             placedChrono = data.events
                 .map(eventData => {
                     const placed = placedEvents[eventData.event_id];
                     return {
                         event: eventData,
-                        marker: placed ? placed.marker : null // Get the final, correct marker
+                        marker: placed ? placed.marker : null
                     };
                 })
                 .sort((a, b) => new Date(a.event.start_time) - new Date(b.event.start_time));
 
-            // --- Enable Timeline Mode ---
             timelineEnabled = true;
-            // Enable slider and buttons
             if (timelineSlider) {
                 timelineSlider.disabled = false;
                 timelineSlider.style.pointerEvents = 'auto';
@@ -635,7 +689,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 timelinePauseBtn.disabled = false;
                 timelinePauseBtn.style.pointerEvents = 'auto';
             }
-            if (scaleToggleButton) { // <-- 3. 在遊戲完成時啟用按鈕
+            if (scaleToggleButton) {
                 scaleToggleButton.disabled = false;
                 scaleToggleButton.style.pointerEvents = 'auto';
             }
@@ -648,10 +702,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 autoPanToggleButton.style.pointerEvents = 'auto';
             }
             
-            // Trigger initial highlight on the first event
             highlightStep(parseInt(timelineSlider.value, 10));
         } else {
-            // Not all correct, so disable the button until all cards are placed again.
             updateCheckButtonState();
         }
     }
@@ -663,7 +715,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function highlightStep(idx) {
         if (!timelineEnabled) {
-            // Clear all highlights when timeline is disabled
             placedChrono.forEach(item => {
                 if (item.marker) {
                     const year = new Date(item.event.start_time).getFullYear();
@@ -682,13 +733,11 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // --- 處理非高亮模式 ---
         if (!isHighlightModeEnabled) {
             const currentEvent = placedChrono[idx];
             if (currentEvent && currentEvent.marker && isAutoPanEnabled) {
                 map.panTo(currentEvent.marker.getLatLng());
             }
-            // 將所有 marker 和地點標籤恢復為中性樣式
             placedChrono.forEach(item => {
                 if (item.marker) {
                     const year = new Date(item.event.start_time).getFullYear();
@@ -704,32 +753,24 @@ document.addEventListener('DOMContentLoaded', () => {
                     layer.getTooltip().getElement().classList.remove('location-tooltip--dimmed', 'location-tooltip--highlight');
                 }
             });
-            return; // 結束函式，不執行後續的高亮邏輯
+            return;
         }
 
-        // Get the location_id of the currently highlighted event
         const highlightedEvent = placedChrono[idx];
         const highlightedLocationId = highlightedEvent ? highlightedEvent.event.location_id : null;
 
-        // --- Update Event Markers ---
         placedChrono.forEach((item, i) => {
             if (item.marker) {
                 const year = new Date(item.event.start_time).getFullYear();
                 const isHighlighted = i === idx;
-
-                // --- Pane switching for robust z-index ---
                 const targetPane = isHighlighted ? 'highlightedMarkerPane' : 'markerPane';
                 if (item.marker.options.pane !== targetPane) {
-                    // The most reliable way to change a marker's pane is to re-add it to the map.
-                    // This might seem like a hack, but it's how Leaflet handles pane updates for existing layers.
                     item.marker.options.pane = targetPane;
                     if (map.hasLayer(item.marker)) {
                         map.removeLayer(item.marker);
                         map.addLayer(item.marker);
                     }
                 }
-
-                // --- Styling ---
                 const markerClass = `placed-event-marker placed-event-marker--correct ${isHighlighted ? 'placed-event-marker--highlight' : 'placed-event-marker--dimmed'}`;                
                 item.marker.setIcon(L.divIcon({
                     html: `<div class="${markerClass}"><span>${item.event.title}</span><span class="marker-year">${year}</span></div>`,
@@ -743,7 +784,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // --- Update Location Labels ---
         let highlightedLayer = null;
         map.eachLayer(layer => {
             if (layer.options.location_id && layer.getTooltip() && layer.getTooltip().getElement()) {
@@ -758,13 +798,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // After styling all layers, bring the highlighted one to the front
-        // to ensure it's not obscured by other layers.
         if (highlightedLayer) {
             highlightedLayer.bringToFront();
         }
     }
-
 
     function handleZoom() {
         const locationsToUpdate = new Set(Object.values(placedEvents).map(p => p.droppedLocationId));
@@ -776,7 +813,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function findClosestLocation(latLng, locations) {
         let closest = null, minDistance = Infinity;
         locations.forEach(loc => {
-            // Now all locations have a 'center' property
             const distance = map.distance(latLng, loc.center);
             if (distance < minDistance) {
                 minDistance = distance;
@@ -797,11 +833,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function repositionMarkersAtLocation(locationId) {
-        // 1. Find all events placed at this location
         const placedAtLocation = Object.entries(placedEvents)
             .filter(([eventId, data]) => data.droppedLocationId === locationId)
             .map(([eventId, data]) => {
-                // 2. Get full event data for sorting
                 const eventData = gameData.events.find(e => e.event_id === eventId);
                 return {
                     marker: data.marker,
@@ -809,77 +843,58 @@ document.addEventListener('DOMContentLoaded', () => {
                 };
             });
 
-        // 3. Sort them by start_time
         placedAtLocation.sort((a, b) => new Date(a.event.start_time) - new Date(b.event.start_time));
 
         if (placedAtLocation.length > 0) {
             const locationData = locationsData.find(l => l.location_id === locationId);
             if (!locationData) return;
 
-            // 4. Convert center lat/lng to pixel coordinates
-            // Now all locations have a 'center' property
             const centerPoint = map.latLngToContainerPoint(locationData.center);
-            const markerHeight = 20; // Approximate height of a marker, adjust as needed
-            // Dynamic padding based on zoom level
+            const markerHeight = 20;
             const padding = Math.max(0, (map.getZoom() - 13) * 3);
-
-            // Calculation to stack markers below the location label
-            const locationLabelHeight = 30; // Approximate height of the location label tooltip
-            const spacingBelowLabel = -10;   // Gap between label and first marker
+            const locationLabelHeight = 30;
+            const spacingBelowLabel = -10;
             const startY = centerPoint.y + (locationLabelHeight / 2) + spacingBelowLabel + (markerHeight / 2);
 
-            // 5. Calculate new position for each marker
             placedAtLocation.forEach((item, index) => {
                 const newY = startY + index * (markerHeight + padding);
                 const newX = centerPoint.x - 25;
                 const newPoint = L.point( newX , newY);
                 
-                // 6. Convert back to lat/lng and update marker
                 const newLatLng = map.containerPointToLatLng(newPoint);
                 item.marker.setLatLng(newLatLng);
             });
         }
     }
 
-    // 自動播放模式：自動將所有事件卡片放到正確位置並啟用時間軸
     function autoPlaceAndStartTimeline(data) {
-        // 1. 依序將所有事件卡片放到正確地點
         data.events.forEach(event => {
             const card = document.getElementById(event.event_id);
             if (!card) return;
-            // 找到正確地點的 circle
             const location = locationsData.find(loc => loc.location_id === event.location_id);
             if (!location) return;
             const circle = findCircleByLocationId(location.location_id);
             if (!circle) return;
 
-            // 模擬拖放：直接呼叫 handleDrop
             handleDrop({
                 drop: circle,
                 drag: { _element: card }
             });
         });
 
-        // 2. 檢查答案（會啟用時間軸）
         checkAnswers(data);
 
-        // 3. 自動播放時間軸
         setTimeout(() => {
             if (timelinePlayBtn && !timelinePlayBtn.disabled) {
                 timelinePlayBtn.click();
             }
-        }, 800); // 稍微延遲，確保 UI 已更新
+        }, 800);
     }
 
-    // --- 行動裝置事件列表高度自動調整 ---
     function adjustCardContainerHeight() {
-        // 檢查按鈕高度（可依實際按鈕高度微調）
         const checkBtnHeight = checkAnswersBtn.offsetHeight || 56;
-        // 上方 padding（可依 UI 微調）
         const topPadding = 16;
-        // 下方安全距離
         const bottomPadding = 24;
-        // 計算可用高度
         const availableHeight = window.innerHeight - topPadding - checkBtnHeight - bottomPadding;
         cardContainer.style.maxHeight = availableHeight + 'px';
         cardContainer.style.overflowY = 'auto';

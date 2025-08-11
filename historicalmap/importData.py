@@ -90,7 +90,7 @@ final_data = {
 }
 
 # 儲存成檔案
-with open("data.json", "w", encoding="utf-8") as f:
+with open("./data/chutung.json", "w", encoding="utf-8") as f:
     json.dump(final_data, f, ensure_ascii=False, indent=4)
 
 print(json.dumps(final_data, ensure_ascii=False, indent=4))
