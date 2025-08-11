@@ -22,26 +22,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // 3. 根據設定檔載入對應的資料
     fetch(currentMapConfig.dataPath)
         .then(response => response.json())
-        .then(data => {
-            // 將地圖資料和區域顏色設定一起傳入 setupGame
+        .then(async data => {
             setupGame(data, currentMapConfig.regionColorConfig);
 
-            // 檢查網址參數，啟用自動播放模式
+            const timelineContainer = document.getElementById('timeline-container');
             if (urlParams.get('mode') === 'autoplay') {
-                autoPlaceAndStartTimeline(data);
-                
-                // 自動收合右側面板以提供更好的觀看體驗
-                setTimeout(() => {
-                    const rightPanel = document.getElementById('right-panel');
-                    const toggleBtn = document.getElementById('toggle-panel-btn');
-                    const isCollapsed = rightPanel && rightPanel.classList.contains('w-0');
-                    if (rightPanel && toggleBtn && !isCollapsed) {
-                        toggleBtn.click();
-                    }
-                }, 500); // 可依實際情況調整延遲時間
+                await autoPlaceAndCollapsePanel(data, timelineContainer);
+            } else {
+                if (timelineContainer) timelineContainer.classList.add('hidden');
             }
         });
-            
+
     // --- Map Initialization ---
     const map = setupMap('map', 'satellite');
 
@@ -242,7 +233,8 @@ document.addEventListener('DOMContentLoaded', () => {
             autoPanToggleButton.style.opacity = isAutoPanEnabled ? '1' : '0.5';
             autoPanToggleButton.title = isAutoPanEnabled ? '關閉自動平移' : '開啟自動平移';
         };
-        const controls = setupTimelineSlider(data, map, highlightStep, getPlacedChrono, isTimelineEnabled, toggleHighlightMode, toggleAutoPan);
+
+        const controls = window.setupTimelineSlider(data, map, highlightStep, getPlacedChrono, isTimelineEnabled, toggleHighlightMode, toggleAutoPan);
         timelineSlider = controls.timelineSlider;
         timelinePlayBtn = controls.timelinePlayBtn;
         timelinePauseBtn = controls.timelinePauseBtn;
@@ -961,4 +953,33 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     adjustCardContainerHeight();
     window.addEventListener('resize', adjustCardContainerHeight);
+
+    // --- 簡化 autoplay mode 控制流程 ---
+    async function autoPlaceAndCollapsePanel(data, timelineContainer) {
+        autoPlaceAndStartTimeline(data);
+        await delay(500);
+
+        const rightPanel = document.getElementById('right-panel');
+        const toggleBtn = document.getElementById('toggle-panel-btn');
+        const isCollapsed = rightPanel && rightPanel.classList.contains('w-0');
+
+        if (rightPanel && toggleBtn && !isCollapsed) {
+            toggleBtn.click();
+            await delay(350); // 等待收合動畫
+            // 收合後主動更新 timeline ticks layout
+            if (window.updateTimelineTicksLayout) window.updateTimelineTicksLayout();
+            // 新增：主動執行一次 scaleToggleButton 的 function（確保 slider/ticks 位置正確）
+            if (window.timelineScaleToggle) window.timelineScaleToggle();
+        }
+        
+        if (timelineContainer) timelineContainer.classList.remove('hidden');
+        // 顯示 timelineContainer 後再主動更新一次
+        if (window.updateTimelineTicksLayout) window.updateTimelineTicksLayout();
+        // 再執行一次 scaleToggleButton 的 function
+        if (window.timelineScaleToggle) window.timelineScaleToggle();
+    }
+
+    function delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
 });
