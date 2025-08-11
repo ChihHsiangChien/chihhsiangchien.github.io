@@ -482,6 +482,25 @@ document.addEventListener('DOMContentLoaded', () => {
             const correctEvent = eventsData[currentEventIndex];
             const isCorrect = correctEvent && eventId === correctEvent.event_id && droppedLocationId === correctEvent.location_id;
 
+            // 宣告 popupContent 於此區塊最前面
+            let popupContent = `<b>${eventData.title}</b>`;
+            if (eventData.image) {
+                popupContent += `
+                    <br><img src="${eventData.image}" alt="${eventData.title}" style="width:100%; max-width:200px; margin-top:8px; border-radius:4px;">
+                    ${eventData.image_source ? `<div style="text-align:left; font-size:0.75rem; color:#666; margin-top:4px;">圖片來源：<a href="${eventData.image_source.url}" target="_blank" rel="noopener noreferrer">${eventData.image_source.name}</a></div>` : ''}
+                `;
+            }
+            if (eventData.description) {
+                popupContent += `<br>${eventData.description}`;
+            }
+            if (eventData.links && eventData.links.length > 0) {
+                popupContent += '<div style="margin-top: 8px;">';
+                eventData.links.forEach(link => {
+                    popupContent += `<a href="${link.url}" target="_blank" rel="noopener noreferrer" style="margin-right: 8px;">${link.name}</a>`;
+                });
+                popupContent += '</div>';
+            }
+
             if (isCorrect) {
                 // Correct placement
                 card.style.display = 'none'; // Hide card from panel
@@ -495,10 +514,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 const markerLatLng = drop.getBounds ? drop.getBounds().getCenter() : drop.getLatLng();
                 const marker = L.marker(markerLatLng, { icon: correctIcon }).addTo(map);
-                
+                marker.bindPopup(popupContent);
+
                 // Add to placedEvents so repositioning and final check works
                 placedEvents[eventId] = { marker: marker, droppedLocationId: droppedLocationId };
-                
+
                 repositionMarkersAtLocation(droppedLocationId);
 
                 currentEventIndex++;
