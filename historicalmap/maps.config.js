@@ -1,0 +1,25 @@
+// maps.config.js
+export const mapsData = {
+  'chutung-history': {
+    name: '竹東歷史互動地圖',
+    dataPath: './data/chutung.json', 
+    regionColorConfig: {
+      '新竹': { name: 'hsinchu', bgColor: '#dbeafe', borderColor: '#60a5fa', textColor: '#1e40af', mapBgColor: 'rgba(219, 234, 254, 0.9)' },
+      '竹東': { name: 'chutung', bgColor: '#dcfce7', borderColor: '#4ade80', textColor: '#166534', mapBgColor: 'rgba(220, 252, 231, 0.9)' },
+      '竹北': { name: 'chubei', bgColor: '#ffedd5', borderColor: '#fb923c', textColor: '#9a3412', mapBgColor: 'rgba(255, 237, 213, 0.9)' },
+      '員崠': { name: 'yuantung', bgColor: '#fef9c3', borderColor: '#facc15', textColor: '#854d0e', mapBgColor: 'rgba(254, 249, 195, 0.9)' },
+      '寶山': { name: 'paoshan', bgColor: 'rgba(224, 231, 255, 1)', borderColor: '#818CF8', textColor: '#3730A3', mapBgColor: 'rgba(224, 231, 255, 0.9)' },
+      'default': { name: 'default', bgColor: '#ffffff', borderColor: '#d1d5db', textColor: '#1f2937', mapBgColor: 'rgba(255, 255, 255, 0.9)' }
+    }
+  },
+  'taipei-history': {
+    name: '台北古城變遷',
+    dataPath: './data/taipei.json', // 假設這是台北地圖的資料
+    regionColorConfig: {
+      '萬華': { name: 'wanhua', bgColor: '#fee2e2', borderColor: '#f87171', textColor: '#991b1b', mapBgColor: 'rgba(254, 226, 226, 0.9)' },
+      '大稻埕': { name: 'dadaocheng', bgColor: '#fae8ff', borderColor: '#e879f9', textColor: '#86198f', mapBgColor: 'rgba(250, 232, 255, 0.9)' },
+      'default': { name: 'default', bgColor: '#ffffff', borderColor: '#d1d5db', textColor: '#1f2937', mapBgColor: 'rgba(255, 255, 255, 0.9)' }
+    }
+  }
+  // ...未來可以繼續增加更多地圖
+};
