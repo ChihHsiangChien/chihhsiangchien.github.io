@@ -1,5 +1,6 @@
 // 1. 引入地圖設定
-import { mapsData } from './maps.config.js'; // 假設你將 JS 改為 module 形式
+import { mapsData } from './maps.config.js';
+import { setupMap } from './map.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     let sequentialMode = false;
@@ -30,27 +31,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 autoPlaceAndStartTimeline(data);
                 
                 // 自動收合右側面板以提供更好的觀看體驗
-                const rightPanel = document.getElementById('right-panel');
-                const isCollapsed = rightPanel.classList.contains('w-0');
-                if (!isCollapsed) {
-                    document.getElementById('toggle-panel-btn').click();
-                }
+                setTimeout(() => {
+                    const rightPanel = document.getElementById('right-panel');
+                    const toggleBtn = document.getElementById('toggle-panel-btn');
+                    const isCollapsed = rightPanel && rightPanel.classList.contains('w-0');
+                    if (rightPanel && toggleBtn && !isCollapsed) {
+                        toggleBtn.click();
+                    }
+                }, 500); // 可依實際情況調整延遲時間
             }
         });
             
     // --- Map Initialization ---
-    const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' });
-    const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles &copy; Esri' });
-    const topoLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { attribution: 'Map data: &copy; OpenStreetMap contributors, SRTM | Map style: &copy; OpenTopoMap (CC-BY-SA)' });
-    // Initialize map without a specific center/zoom; it will be set dynamically.
-    const map = L.map('map', { layers: [satelliteLayer] });
-
-    // Create a dedicated pane for highlighted markers to ensure they are always on top.
-    map.createPane('highlightedMarkerPane');
-    map.getPane('highlightedMarkerPane').style.zIndex = 651; // Above default markers (600) and tooltips (650)
-    map.getPane('highlightedMarkerPane').style.pointerEvents = 'none'; // Allow clicks to pass through
-
-    L.control.layers({ "OpenStreetMap": osmLayer, "Satellite": satelliteLayer, "Topographic": topoLayer }).addTo(map);
+    const map = setupMap('map', 'satellite');
 
     function injectRegionStyles(config) {
         const styleElement = document.createElement('style');
