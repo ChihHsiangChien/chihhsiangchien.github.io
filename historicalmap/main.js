@@ -109,6 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 card.classList.remove('cursor-pointer');
             }
         });
+        updateCardCount(); // 只在全部卡片狀態更新後呼叫一次
     }
 
     function renderCards(eventsToRender, regionColorConfig) {
@@ -122,6 +123,18 @@ document.addEventListener('DOMContentLoaded', () => {
         if (sequentialMode) {
             updateDraggableCards();
         }
+        updateCardCount();
+    }
+
+    // --- 卡片統計更新函式 ---
+    function updateCardCount() {
+        const cardCountSpan = document.getElementById('card-count');
+        if (!cardCountSpan || !gameData.events) return;
+        const total = gameData.events.length;
+        const placed = Object.keys(placedEvents).length; // 已放入地圖
+        cardCountSpan.textContent = `已放入：${placed} / 全部：${total}`;        
+        //const sorted = document.querySelectorAll('.draggable-card').length;
+        //cardCountSpan.textContent = `卡片：${sorted} / ${total}`;
     }
 
     function setupGame(data, regionColorConfig) {
@@ -306,6 +319,8 @@ document.addEventListener('DOMContentLoaded', () => {
         let pointerDownPos = { x: 0, y: 0 };
 
         card.addEventListener('pointerdown', (e) => {
+            e.preventDefault(); // 防止選取文字
+
             if ((e.pointerType === 'mouse' && e.button !== 0) || (sequentialMode && card.dataset.draggable !== 'true')) {
                 return;
             }
@@ -345,6 +360,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         function onPointerUp(e) {
             document.removeEventListener('pointermove', onPointerMove);
+            // 拖曳結束時移除所有 tooltip 的 guide-highlight class
+            map.eachLayer(layer => {
+                if (layer.options && layer.options.location_id && layer.getTooltip && layer.getTooltip() && layer.getTooltip().getElement()) {
+                    layer.getTooltip().getElement().classList.remove('location-tooltip--guide-highlight');
+                }
+            });
+            window._lastGuideTooltipId = null;
             if (isDragging) {
                 L.DomUtil.setOpacity(card, 1);
                 if (guideLine) { map.removeLayer(guideLine); guideLine = null; }
@@ -419,8 +441,31 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     function updateGuideLine(e) {
         if (guideLine) map.removeLayer(guideLine);
+        // 儲存上一次 highlight 的 tooltip id
+        if (!window._lastGuideTooltipId) window._lastGuideTooltipId = null;
         const latLng = map.mouseEventToLatLng(e);
         const closestLocation = findClosestLocation(latLng, locationsData);
+        let currentTooltipId = null;
+        if (closestLocation) {
+            currentTooltipId = closestLocation.location_id;
+        }
+        // 只有目標 tooltip id 變更時才移除/加入 highlight class
+        if (window._lastGuideTooltipId !== currentTooltipId) {
+            // 先移除所有 highlight class
+            map.eachLayer(layer => {
+                if (layer.options && layer.options.location_id && layer.getTooltip && layer.getTooltip() && layer.getTooltip().getElement()) {
+                    layer.getTooltip().getElement().classList.remove('location-tooltip--guide-highlight');
+                }
+            });
+            // 加入新的 highlight class
+            if (currentTooltipId) {
+                const targetLayer = findCircleByLocationId(currentTooltipId);
+                if (targetLayer && targetLayer.getTooltip && targetLayer.getTooltip() && targetLayer.getTooltip().getElement()) {
+                    targetLayer.getTooltip().getElement().classList.add('location-tooltip--guide-highlight');
+                }
+            }
+            window._lastGuideTooltipId = currentTooltipId;
+        }
         if (closestLocation) {
             guideLine = L.polyline([latLng, closestLocation.center], { color: 'red', dashArray: '5, 5' }).addTo(map);
         }
@@ -607,8 +652,9 @@ document.addEventListener('DOMContentLoaded', () => {
             droppedLocationId: drop.options.location_id
         };
 
-        updateCheckButtonState();
-        repositionMarkersAtLocation(drop.options.location_id);
+    updateCheckButtonState();
+    repositionMarkersAtLocation(drop.options.location_id);
+    updateCardCount();
     }
 
     function checkAnswers(data) {
@@ -639,6 +685,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     locationsToUpdate.add(placed.droppedLocationId);
                     delete placedEvents[event.event_id];
+                    updateCardCount();                    
                 }
             } else {
                 allCorrect = false;
