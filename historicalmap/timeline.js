@@ -1,7 +1,7 @@
 // --- Timeline Slider UI ---
-function setupTimelineSlider(data, map, onStepHighlight, getPlacedChrono, isTimelineEnabled, onToggleHighlight, onToggleAutoPan) {
+function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPlacedChrono, isTimelineEnabled, onToggleHighlight, onToggleAutoPan) {
     let timelineInterval = null;
-    let isTimeScaleMode = false;
+    let isTimeScaleMode = true;
 
     // 移除舊的 DOM 元素
     [
@@ -103,8 +103,8 @@ function setupTimelineSlider(data, map, onStepHighlight, getPlacedChrono, isTime
 
     // slider 的位置和尺寸
     timelineSlider.style.position = 'absolute';
-    timelineSlider.style.left = '20%';
-    timelineSlider.style.width = '75%'; // 或 '80%'，依需求
+    timelineSlider.style.left = '25%';
+    timelineSlider.style.width = '70%'; // 或 '80%'，依需求
     timelineSlider.style.top = '40px';
     timelineSlider.style.zIndex = '10002'; /* 確保在其他元素之上 */
 
@@ -118,11 +118,17 @@ function setupTimelineSlider(data, map, onStepHighlight, getPlacedChrono, isTime
             const topOffset = sliderRect.top - containerRect.top;
             const sliderWidth = sliderRect.width;
 
-            eventIndexTicksContainer.style.left = leftOffset + 'px';
-            eventIndexTicksContainer.style.width = sliderWidth + 'px';
+            // sliderContainer最左和最右有一段空間是slider不會用到的
+            const leftPadding = 6;
+            const usableWidth = sliderRect.width - 2 * leftPadding;
+
+
+            // 設定tick的位置在slider上
+            eventIndexTicksContainer.style.left = leftOffset + leftPadding + 'px';
+            eventIndexTicksContainer.style.width = usableWidth + 'px';
             eventIndexTicksContainer.style.bottom = topOffset + 'px';
-            timeScaleTicksContainer.style.left = leftOffset + 'px';
-            timeScaleTicksContainer.style.width = sliderWidth + 'px';
+            timeScaleTicksContainer.style.left = leftOffset + leftPadding + 'px';
+            timeScaleTicksContainer.style.width = usableWidth + 'px';
             timeScaleTicksContainer.style.bottom = topOffset + 'px';
         });
     }
@@ -143,17 +149,19 @@ function setupTimelineSlider(data, map, onStepHighlight, getPlacedChrono, isTime
 
     // --- Tooltip for Slider ---
     const timelineTooltip = document.createElement('div');
+
     timelineTooltip.id = 'timeline-tooltip';
     Object.assign(timelineTooltip.style, {
         position: 'fixed',
         background: 'rgba(0, 0, 0, 0.8)',
         color: 'white',
-        padding: '5px 10px',
+        padding: '5px 5px',
         borderRadius: '4px',
         display: 'none',
         zIndex: '10002',
         pointerEvents: 'none',
-        whiteSpace: 'nowrap'
+        whiteSpace: 'nowrap',
+        
     });
     document.body.appendChild(timelineTooltip);
 
@@ -161,6 +169,7 @@ function setupTimelineSlider(data, map, onStepHighlight, getPlacedChrono, isTime
         if (!isTimelineEnabled()) return;
         // 只取得 sliderRect，不執行 updateTicksContainerLayout
         const sliderRect = timelineSlider.getBoundingClientRect();
+        const timelineContainerRect = timelineContainer.getBoundingClientRect();        
         const percentage = (e.clientX - sliderRect.left) / sliderRect.width;
         let eventToShow = null;
         const currentPlacedChrono = getPlacedChrono();
@@ -182,41 +191,49 @@ function setupTimelineSlider(data, map, onStepHighlight, getPlacedChrono, isTime
                 eventToShow = currentPlacedChrono[index].event;
             }
         }
-        if (eventToShow) {
+        if (eventToShow && timelineContainerRect.top > 0) {
             const year = new Date(eventToShow.start_time).getFullYear();
             timelineTooltip.textContent = `${year}: ${eventToShow.title}`;
             timelineTooltip.style.display = 'block';
+
+            const tooltipHeight = timelineTooltip.offsetHeight || 30; // 預設高度30，避免初次為0
             timelineTooltip.style.left = `${e.clientX}px`;
-            timelineTooltip.style.top = `${sliderRect.top - 10}px`;
-            timelineTooltip.style.transform = 'translate(-50%, -100%)';
-        }
+            timelineTooltip.style.top = `${timelineContainerRect.top - tooltipHeight}px`; // 頂部往上偏移
+            timelineTooltip.style.transform = 'translate(-50%, 0%)';        
+        } else {
+            timelineTooltip.style.display = 'none';
+        }        
     });
     timelineSlider.addEventListener('mouseleave', () => {
         timelineTooltip.style.display = 'none';
     });
 
+    // 決定 slider 滑到哪個位置就切換 highlight     
     let currentIdx = 0;
     timelineSlider.oninput = (e) => {
         if (!timelineSlider.disabled) {
-            // 只做 highlight，不執行 updateTicksContainerLayout
             if (isTimeScaleMode) {
+                // 找到最接近的事件時間
                 const currentTime = parseInt(timelineSlider.value, 10);
-                let newIndex = 0;
-                const currentPlacedChrono = getPlacedChrono();
-                if (currentPlacedChrono && currentPlacedChrono.length > 0) {
-                    const firstFutureIndex = currentPlacedChrono.findIndex(item => new Date(item.event.start_time).getTime() > currentTime);
-                    if (firstFutureIndex === -1) newIndex = currentPlacedChrono.length - 1;
-                    else if (firstFutureIndex === 0) newIndex = 0;
-                    else newIndex = firstFutureIndex - 1;
+                const eventTimes = sortedEvents.map(ev => new Date(ev.start_time).getTime());
+                // 找到最接近的事件
+                let closestIdx = 0;
+                let minDiff = Math.abs(eventTimes[0] - currentTime);
+                for (let i = 1; i < eventTimes.length; i++) {
+                    const diff = Math.abs(eventTimes[i] - currentTime);
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        closestIdx = i;
+                    }
                 }
-                currentIdx = newIndex;
+                timelineSlider.value = eventTimes[closestIdx]; // 強制跳到最近事件
+                onStepHighlight(closestIdx);
             } else {
                 currentIdx = parseInt(timelineSlider.value, 10);
+                onStepHighlight(currentIdx);
             }
-            onStepHighlight(currentIdx);
         }
-    };
-
+    };    
     // --- 播放速度控制 ---
     let playbackSpeed = 1;
     const setPlaybackSpeed = (speed) => {
@@ -262,13 +279,14 @@ function setupTimelineSlider(data, map, onStepHighlight, getPlacedChrono, isTime
 
     // 產生事件索引模式的 ticks
     eventIndexTicksContainer.innerHTML = ''; // 清空
+    const thumbDiameter = 24; // 與 CSS 保持一致
     for (let i = 0; i < totalEvents; i++) {
         const percentage = i / (totalEvents - 1);
         const tick = document.createElement('div');
         Object.assign(tick.style, {
             position: 'absolute',
             left: `${percentage * 100}%`,
-            transform: 'translateX(-50%)',
+            
             width: '1px',
             height: '10px',
             background: '#9ca3af'
@@ -276,14 +294,55 @@ function setupTimelineSlider(data, map, onStepHighlight, getPlacedChrono, isTime
         eventIndexTicksContainer.appendChild(tick);
     }
 
+    
+    const yearRanges = mapConfig.yearRanges || [];
 
+    function getYearRangeColor(year) {
+        for (const range of yearRanges) {
+            if (year >= range.start && year <= range.end) {
+                return range.color;
+            }
+        }
+        return '#6b7280'; // 預設色
+    }
+
+
+    // 產生時間刻度背景色區塊
+    if (totalTimeSpan > 0 && yearRanges.length > 0) {
+        yearRanges.forEach(range => {
+            // 計算區段起訖百分比
+            const startDate = new Date(range.start, 0, 1);
+            const endDate = new Date(range.end, 11, 31);
+            const startPercent = Math.max(0, (startDate.getTime() - minDate.getTime()) / totalTimeSpan);
+            const endPercent = Math.min(1, (endDate.getTime() - minDate.getTime()) / totalTimeSpan);
+            const widthPercent = (endPercent - startPercent) * 100;
+
+            // 建立背景色區塊
+            const bgDiv = document.createElement('div');
+            Object.assign(bgDiv.style, {
+                position: 'absolute',
+                left: `${startPercent * 100}%`,
+                width: `${widthPercent}%`,
+                top: '0',
+                bottom: '0',
+                background: range.color,
+                opacity: '0.25',
+                zIndex: '1',
+                pointerEvents: 'none',
+                borderRadius: '6px'
+            });
+            timeScaleTicksContainer.appendChild(bgDiv);
+        });
+    }
+    
+    // 產生時間刻度的 ticks 
     if (totalTimeSpan > 0) {
         const startYear = minDate.getFullYear();
         const endYear = maxDate.getFullYear();
         const yearSpan = endYear - startYear;
         let yearInterval = 1;
         if (yearSpan > 200) yearInterval = 50;
-        else if (yearSpan > 100) yearInterval = 20;
+        else if (yearSpan > 100) yearInterval = 10;
         else if (yearSpan > 50) yearInterval = 10;
         else if (yearSpan > 20) yearInterval = 5;
         const firstTickYear = Math.ceil(startYear / yearInterval) * yearInterval;
@@ -291,21 +350,46 @@ function setupTimelineSlider(data, map, onStepHighlight, getPlacedChrono, isTime
             const yearDate = new Date(year, 0, 1);
             const percentage = (yearDate.getTime() - minDate.getTime()) / totalTimeSpan;
             if (percentage > 0 && percentage < 1) {
+                const tickColor = getYearRangeColor(year);
                 const tick = document.createElement('div');
                 Object.assign(tick.style, {
                     position: 'absolute',
                     transform: 'translateX(-50%)',
                     textAlign: 'center',
                     fontSize: '12px',
-                    color: '#6b7280',
+                    color: '#1e1f20ff',
                     left: `${percentage * 100}%`
                 });
                 tick.innerHTML = `<div>${year}</div>
-                    <div style="width: 1px; height: 5px; background-color: #9ca3af; margin: 0 auto 2px;"></div>`;
+                    <div style="width: 1px; height: 5px; background-color: #1e1f20ff; margin: 0 auto 2px;"></div>`;
                 timeScaleTicksContainer.appendChild(tick);
             }
         }
     }
+    
+    // 產生事件刻度 紅色圓形（時間刻度模式下）
+    if (totalTimeSpan > 0 && sortedEvents.length > 0) {
+        sortedEvents.forEach(event => {
+            const eventDate = new Date(event.start_time);
+            const percentage = (eventDate.getTime() - minDate.getTime()) / totalTimeSpan;
+            if (percentage >= 0 && percentage <= 1) {
+                const eventTick = document.createElement('div');
+                Object.assign(eventTick.style, {
+                    position: 'absolute',
+                    width: '8px',           // 圓形寬度
+                    height: '8px',          // 圓形高度
+                    left: `${percentage * 100}%`,
+                    transform: 'translateX(-50%)', // 使圓形中心對齊
+                    bottom: `${timeScaleTicksContainer.getBoundingClientRect().bottom + 5}px`,
+                    background: '#96000061', // 可自訂顏色
+                    borderRadius: '50%',    // 變成圓形
+                    zIndex: '2'
+                });
+                timeScaleTicksContainer.appendChild(eventTick);
+            }
+        });
+    } 
+    
 
     // --- 控制按鈕容器 ---
     let timelineControlsContainer = document.createElement('div');
@@ -314,7 +398,7 @@ function setupTimelineSlider(data, map, onStepHighlight, getPlacedChrono, isTime
         position: 'absolute',
         left: '0',        
         bottom: '10px',
-        width: '25%',
+        width: '20%',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'flex-start',

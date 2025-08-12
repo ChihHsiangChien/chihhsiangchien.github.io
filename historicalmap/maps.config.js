@@ -10,7 +10,13 @@ export const mapsData = {
       '員崠': { name: 'yuantung', bgColor: '#fef9c3', borderColor: '#facc15', textColor: '#854d0e', mapBgColor: 'rgba(254, 249, 195, 0.9)' },
       '寶山': { name: 'paoshan', bgColor: 'rgba(224, 231, 255, 1)', borderColor: '#818CF8', textColor: '#3730A3', mapBgColor: 'rgba(224, 231, 255, 0.9)' },
       'default': { name: 'default', bgColor: '#ffffff', borderColor: '#d1d5db', textColor: '#1f2937', mapBgColor: 'rgba(255, 255, 255, 0.9)' }
-    }
+    },
+    yearRanges: [
+      { start: 1683, end: 1894, color: '#6bbaffff', label: '清領' },
+      { start: 1895, end: 1945, color: '#ff8c00ff', label: '日治' },
+      { start: 1946, end: 2100, color: '#07adbcff', label: '戰後' }
+      // 其他年段可再加
+    ]    
   },
   'taipei-history': {
     name: '台北古城變遷',

@@ -234,7 +234,7 @@ document.addEventListener('DOMContentLoaded', () => {
             autoPanToggleButton.title = isAutoPanEnabled ? '關閉自動平移' : '開啟自動平移';
         };
 
-        const controls = window.setupTimelineSlider(data, map, highlightStep, getPlacedChrono, isTimelineEnabled, toggleHighlightMode, toggleAutoPan);
+        const controls = window.setupTimelineSlider(data, map, currentMapConfig, highlightStep, getPlacedChrono, isTimelineEnabled, toggleHighlightMode, toggleAutoPan);
         timelineSlider = controls.timelineSlider;
         timelinePlayBtn = controls.timelinePlayBtn;
         timelinePauseBtn = controls.timelinePauseBtn;
@@ -969,7 +969,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // 收合後主動更新 timeline ticks layout
             if (window.updateTimelineTicksLayout) window.updateTimelineTicksLayout();
             // 新增：主動執行一次 scaleToggleButton 的 function（確保 slider/ticks 位置正確）
-            if (window.timelineScaleToggle) window.timelineScaleToggle();
+            //if (window.timelineScaleToggle) window.timelineScaleToggle();
         }
         
         if (timelineContainer) timelineContainer.classList.remove('hidden');
