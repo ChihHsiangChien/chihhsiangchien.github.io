@@ -1,7 +1,7 @@
 // --- Timeline Slider UI ---
 function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPlacedChrono, isTimelineEnabled, onToggleHighlight, onToggleAutoPan) {
     let timelineInterval = null;
-    let isTimeScaleMode = true;
+    let isTimeScaleMode = false;
 
     // 移除舊的 DOM 元素
     [
@@ -20,6 +20,7 @@ function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPlacedChro
     const timelineSlider = document.getElementById('timeline-slider');
     const timelineContainer = document.getElementById('timeline-container');
     const playbackSpeedSelect = document.getElementById('playback-speed');
+
 
     // --- 控制按鈕建立 ---
     const timelinePlayBtn = document.createElement('button');
@@ -275,7 +276,13 @@ function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPlacedChro
     const totalEvents = sortedEvents.length;
     const totalTimeSpan = maxDate.getTime() - minDate.getTime();
 
-
+    // 初始化 timelineSlider 的值
+    console.log('timelineSlider:', timelineSlider);    
+    if (isTimeScaleMode) {
+        timelineSlider.value = String(minDate.getTime()); // 設置為時間刻度模式的最小時間
+    } else {
+        timelineSlider.value = '0'; // 設置為事件索引模式的第一個索引
+    }
 
     // 產生事件索引模式的 ticks
     eventIndexTicksContainer.innerHTML = ''; // 清空
@@ -436,25 +443,46 @@ function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPlacedChro
     };
     timelinePauseBtn.addEventListener('pointerup', pauseTimeline);
 
-    function updateSliderScale() {
+    function updateSliderScale(currentValue = null) {
+        if (currentValue === null) {
+            // 如果沒有傳入當前值，根據當前模式獲取滑塊值
+            currentValue = isTimeScaleMode
+                ? parseInt(timelineSlider.value, 10) // 當前時間刻度模式的時間值
+                : parseInt(timelineSlider.value, 10); // 當前事件索引模式的索引值
+        }
+
+        // 切換模式
+        isTimeScaleMode = !isTimeScaleMode;
+
         if (isTimeScaleMode) {
+            // 切換到時間刻度模式
             timelineSlider.min = minDate.getTime();
             timelineSlider.max = maxDate.getTime();
-            timelineSlider.step = 1000 * 60 * 60 * 24;
-            const currentPlacedChrono = getPlacedChrono();
-            if (currentPlacedChrono && currentPlacedChrono[currentIdx]) {
-                const eventDate = new Date(currentPlacedChrono[currentIdx].event.start_time);
-                timelineSlider.value = eventDate.getTime();
+            timelineSlider.step = 1000 * 60 * 60 * 24; // 一天
+            if (!isNaN(currentValue)) {
+                // 將索引轉換為對應的時間
+                const eventTime = sortedEvents[currentValue]?.start_time
+                    ? new Date(sortedEvents[currentValue].start_time).getTime()
+                    : minDate.getTime();
+                timelineSlider.value = String(eventTime);
             }
             scaleToggleButton.innerHTML = '🔢';
             scaleToggleButton.title = '切換事件索引模式';
             eventIndexTicksContainer.style.display = 'none';
             timeScaleTicksContainer.style.display = isTimelineEnabled() ? 'flex' : 'none';
         } else {
+            // 切換到事件索引模式
             timelineSlider.min = 0;
             timelineSlider.max = totalEvents > 0 ? totalEvents - 1 : 0;
             timelineSlider.step = 1;
-            timelineSlider.value = currentIdx;
+            if (!isNaN(currentValue)) {
+                // 將時間轉換為對應的索引
+                const closestIndex = sortedEvents.findIndex(event => {
+                    const eventTime = new Date(event.start_time).getTime();
+                    return eventTime >= currentValue;
+                });
+                timelineSlider.value = closestIndex !== -1 ? String(closestIndex) : '0';
+            }
             scaleToggleButton.innerHTML = '📅';
             scaleToggleButton.title = '切換時間刻度模式';
             eventIndexTicksContainer.style.display = isTimelineEnabled() ? 'flex' : 'none';
@@ -463,13 +491,14 @@ function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPlacedChro
     }
 
     scaleToggleButton.addEventListener('pointerup', () => {
-        isTimeScaleMode = !isTimeScaleMode;
-        updateSliderScale();
+        const currentValue = parseInt(timelineSlider.value, 10); // 獲取當前滑塊值
+        updateSliderScale(currentValue); // 傳入當前值進行模式切換
     });
 
-    // 新增：暴露 scaleToggleButton 的功能給外部呼叫
+    // 暴露給外部的切換功能
     window.timelineScaleToggle = () => {
-        updateSliderScale();
+        const currentValue = parseInt(timelineSlider.value, 10); // 獲取當前滑塊值
+        updateSliderScale(currentValue); // 傳入當前值進行模式切換
     };
 
     highlightToggleButton.addEventListener('pointerup', onToggleHighlight);

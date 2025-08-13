@@ -719,6 +719,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 })
                 .sort((a, b) => new Date(a.event.start_time) - new Date(b.event.start_time));
 
+            // 修正：同時間事件微調 start_time
+            for (let i = 1; i < placedChrono.length; i++) {
+                const prevTime = new Date(placedChrono[i - 1].event.start_time).getTime();
+                const currTime = new Date(placedChrono[i].event.start_time).getTime();
+                if (currTime <= prevTime) {
+                    // 增加 1 天 ，根據 timelineSlider.step的設定
+                    placedChrono[i].event.start_time = new Date(prevTime + 86400000).toISOString();
+                }
+            }                
+
             timelineEnabled = true;
             if (timelineSlider) {
                 timelineSlider.disabled = false;
@@ -919,6 +929,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // 遍歷所有事件，找到對應的卡片和地圖位置，然後呼叫 handleDrop，直接將卡片放到 marker 上
     function autoPlaceAndStartTimeline(data) {
         data.events.forEach(event => {
             const card = document.getElementById(event.event_id);
@@ -956,7 +967,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- 簡化 autoplay mode 控制流程 ---
     async function autoPlaceAndCollapsePanel(data, timelineContainer) {
+
+        // ...收合 panel 相關程式...
         autoPlaceAndStartTimeline(data);
+
         await delay(500);
 
         const rightPanel = document.getElementById('right-panel');
@@ -977,9 +991,83 @@ document.addEventListener('DOMContentLoaded', () => {
         if (window.updateTimelineTicksLayout) window.updateTimelineTicksLayout();
         // 再執行一次 scaleToggleButton 的 function
         if (window.timelineScaleToggle) window.timelineScaleToggle();
+
+        enableTimelineKeydown();
+
+ 
     }
 
     function delay(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
+
+    function enableTimelineKeydown() {
+        // 先移除舊的監聽，避免重複
+        window.removeEventListener('keydown', timelineKeydownHandler);
+        window.addEventListener('keydown', timelineKeydownHandler);
+    }
+
+    //時間軸用左右鍵控制
+    function timelineKeydownHandler(e) {
+        if (!timelineEnabled || !timelineSlider || timelineSlider.disabled || timelineSlider.style.display === 'none') return;
+        if (placedChrono.length === 0) return;
+
+        const isTimeScaleMode = timelineSlider.step && timelineSlider.step != '1';
+        const eventTimes = placedChrono.map(item => new Date(item.event.start_time).getTime());
+        //console.log(eventTimes);
+        // 只在按鍵時找一次最接近的 index，之後直接用 index ±1
+        let currentIdx = 0;
+        if (isTimeScaleMode) {
+            const currentTime = parseInt(timelineSlider.value, 10);
+            console.log("currentTime:" + currentTime);
+            let minDiff = Math.abs(eventTimes[0] - currentTime);
+            currentIdx = 0;
+            for (let i = 1; i < eventTimes.length; i++) {
+                const diff = Math.abs(eventTimes[i] - currentTime);
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    currentIdx = i;
+                }
+            }
+            console.log("currentIdx:" + currentIdx);
+            console.log("---");
+        } else {
+            currentIdx = parseInt(timelineSlider.value, 10);
+            
+        }
+
+        if (e.key === 'ArrowLeft') {
+            let idx;
+            if (isTimeScaleMode) {
+                // 時間刻度模式
+                idx = Math.max(0, currentIdx - 1);
+                while (idx > 0 && eventTimes[idx] === eventTimes[currentIdx]) {
+                    idx--;
+                }
+                timelineSlider.value = String(eventTimes[idx]);
+            } else {
+                // 事件索引模式
+                idx = Math.max(0, currentIdx - 1);
+                timelineSlider.value = String(idx);
+            }
+            highlightStep(idx);
+        } else if (e.key === 'ArrowRight') {
+            let idx;
+            if (isTimeScaleMode) {
+                // 時間刻度模式
+                idx = Math.min(eventTimes.length - 1, currentIdx + 1);
+                while (idx < eventTimes.length - 1 && eventTimes[idx] === eventTimes[currentIdx]) {
+                    idx++;
+                }
+                timelineSlider.value = String(eventTimes[idx]);
+            } else {
+                // 事件索引模式
+                idx = Math.min(eventTimes.length - 1, currentIdx + 1);
+                timelineSlider.value = String(idx);
+            }
+            highlightStep(idx);
+        }
+    }
+
+
 });
