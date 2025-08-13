@@ -1,0 +1,20 @@
+export const uiContext = {
+    cardContainer: null,
+    placedEvents: {},
+    gameData: {},
+    eventsToRender: [],
+    regionColorConfig: {},
+    createCard: null,
+    sequentialMode: false,
+    moveGhost: null,
+    updateGuideAndLastEvent: null,
+    map: null,
+    locationsData: [],
+    guideLineRef: { value: null },
+    lastDragEventRef: { value: null },
+    ghostCardRef: { value: null },
+    dragOffsetRef: { x: 0, y: 0 },
+    handleDropAttempt: null,
+    updateDraggableCards: null,
+    updateCardCount: null
+};

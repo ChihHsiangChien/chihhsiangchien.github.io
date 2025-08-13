@@ -1,4 +1,6 @@
 // 引入設定
+import { uiContext } from './context.js';
+
 import { mapsData } from './maps.config.js';
 import { setupMap } from './map.js';
 import { moveGhost, updateGuideLine, findClosestLocation, findCircleByLocationId, repositionMarkersAtLocation } from './map.js';
@@ -13,7 +15,9 @@ import { adjustCardContainerHeight } from './uiUtils.js';
 import { setupTimelineSlider, timelineKeydownHandler } from './timeline.js';
 
 
-import { updateDraggableCards } from './uiController.js';
+import { updateDraggableCards, updateCardCount } from './uiController.js';
+import { renderCards } from './uiController.js';
+
 
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -96,7 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let placedChrono = []; // Will be populated with {event, marker} objects
 
 
-    function renderCards(eventsToRender, regionColorConfig) {
+    function renderCards123(eventsToRender, regionColorConfig) {
         cardContainer.innerHTML = ''; // Clear existing cards
         eventsToRender.forEach(event => {
             // Only create a card if it hasn't been placed on the map yet
@@ -127,19 +131,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 currentEventIndex
             });
         }
-        updateCardCount();
+        updateCardCount({ gameData, placedEvents });
     }
 
-    // --- 卡片統計更新函式 ---
-    function updateCardCount() {
-        const cardCountSpan = document.getElementById('card-count');
-        if (!cardCountSpan || !gameData.events) return;
-        const total = gameData.events.length;
-        const placed = Object.keys(placedEvents).length; // 已放入地圖
-        cardCountSpan.textContent = `已放入：${placed} / 全部：${total}`;        
-        //const sorted = document.querySelectorAll('.draggable-card').length;
-        //cardCountSpan.textContent = `卡片：${sorted} / ${total}`;
-    }
+
 
     function setupGame(data, regionColorConfig) {
         gameData = data; // 將載入的資料存到全域變數中
@@ -149,7 +144,28 @@ document.addEventListener('DOMContentLoaded', () => {
         // --- 預設排序並渲染卡片 ---
         const sortedEvents = [...data.events].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
         eventsData = sortedEvents; // Store for sequential mode
-        renderCards(sortedEvents, regionColorConfig);
+
+
+        uiContext.cardContainer = cardContainer;
+        uiContext.placedEvents = placedEvents;
+        uiContext.createCard = createCard;
+        uiContext.sequentialMode = sequentialMode;
+        uiContext.moveGhost = moveGhost;
+        uiContext.updateGuideAndLastEvent = updateGuideAndLastEvent;
+        uiContext.map = map;
+        uiContext.locationsData = locationsData;
+        uiContext.guideLineRef = { value: guideLine };
+        uiContext.lastDragEventRef = { value: lastDragEvent };
+        uiContext.ghostCardRef = { value: ghostCard };
+        uiContext.dragOffsetRef = dragOffset;
+        uiContext.handleDropAttempt = handleDropAttempt;
+        uiContext.updateDraggableCards = () => updateDraggableCards({ sequentialMode, eventsData, currentEventIndex });
+        uiContext.updateCardCount = () => updateCardCount({ gameData, placedEvents });
+
+        uiContext.regionColorConfig = regionColorConfig;        
+        //renderCards(sortedEvents, regionColorConfig);
+        uiContext.eventsToRender = sortedEvents;
+        renderCards();
 
         // --- Sorting Logic ---
         const sortYearAscBtn = document.getElementById('sort-year-asc');
@@ -178,25 +194,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
         sortYearAscBtn.addEventListener('click', () => {
             const sorted = [...gameData.events].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
-            renderCards(sorted, regionColorConfig);
+            uiContext.eventsToRender = sorted;
+            renderCards();
             updateSortButtonStyles(sortYearAscBtn);
         });
 
         sortYearDescBtn.addEventListener('click', () => {
             const sorted = [...gameData.events].sort((a, b) => new Date(b.start_time) - new Date(a.start_time));
-            renderCards(sorted, regionColorConfig);
+            uiContext.eventsToRender = sorted;
+            renderCards();
             updateSortButtonStyles(sortYearDescBtn);
         });
 
         sortRegionAscBtn.addEventListener('click', () => {
             const sorted = [...gameData.events].sort((a, b) => (a.region || '').localeCompare(b.region || '', 'zh-Hant'));
-            renderCards(sorted, regionColorConfig);
+            uiContext.eventsToRender = sorted;
+            renderCards();
             updateSortButtonStyles(sortRegionAscBtn);
         });
 
         sortRegionDescBtn.addEventListener('click', () => {
             const sorted = [...gameData.events].sort((a, b) => (b.region || '').localeCompare(a.region || '', 'zh-Hant'));
-            renderCards(sorted, regionColorConfig);
+            uiContext.eventsToRender = sorted;
+            renderCards();
             updateSortButtonStyles(sortRegionDescBtn);
         });
         // --- Create a bounds object to fit all locations ---
@@ -288,14 +308,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleDropAttempt(cardElement) {
         let successfulDrop = false;
+        const lastDragEvent = uiContext.lastDragEventRef.value;
+
         if (lastDragEvent) {
+
             const mapContainer = map.getContainer();
             const mapRect = mapContainer.getBoundingClientRect();
             const mouseX = lastDragEvent.originalEvent.clientX;
             const mouseY = lastDragEvent.originalEvent.clientY;
             const droppedOnMap = mouseX >= mapRect.left && mouseX <= mapRect.right && mouseY >= mapRect.top && mouseY <= mapRect.bottom;
-
-            if (droppedOnMap) {
+            
+            if (droppedOnMap) {                        
                 const latLng = map.mouseEventToLatLng(lastDragEvent.originalEvent);
                 const closestLocation = findClosestLocation(map, latLng, locationsData);
 
@@ -509,7 +532,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         updateCheckButtonState();
         repositionMarkersAtLocation(map, drop.options.location_id, placedEvents, gameData, locationsData);
-        updateCardCount();
+        updateCardCount({gameData, placedEvents});
     }
 
     function checkAnswers(data) {
@@ -540,7 +563,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     locationsToUpdate.add(placed.droppedLocationId);
                     delete placedEvents[event.event_id];
-                    updateCardCount();                    
+                    updateCardCount({gameData, placedEvents});
                 }
             } else {
                 allCorrect = false;

@@ -1,27 +1,32 @@
-export function renderCards({
-    eventsToRender,
-    regionColorConfig,
-    cardContainer,
-    placedEvents,
-    createCard,
-    sequentialMode,
-    moveGhost,
-    updateGuideAndLastEvent,
-    map,
-    locationsData,
-    guideLineRef,
-    lastDragEventRef,
-    ghostCardRef,
-    dragOffsetRef,
-    handleDropAttempt,
-    updateDraggableCards,
-    updateCardCount
-}) {
+import { uiContext } from './context.js';
+
+export function renderCards({ eventsToRender, regionColorConfig } = {}) {
+    // 若沒傳參數則用 context 內的
+    const events = eventsToRender || uiContext.eventsToRender;
+    const regionCfg = regionColorConfig || uiContext.regionColorConfig;
+    const {
+        cardContainer,
+        placedEvents,
+        createCard,
+        sequentialMode,
+        moveGhost,
+        updateGuideAndLastEvent,
+        map,
+        locationsData,
+        guideLineRef,
+        lastDragEventRef,
+        ghostCardRef,
+        dragOffsetRef,
+        handleDropAttempt,
+        updateDraggableCards,
+        updateCardCount
+    } = uiContext;
+
     cardContainer.innerHTML = '';
-    eventsToRender.forEach(event => {
+    events.forEach(event => {
         if (!placedEvents[event.event_id]) {
             cardContainer.appendChild(
-                createCard(event, regionColorConfig, {
+                createCard(event, regionCfg, {
                     sequentialMode,
                     moveGhost,
                     updateGuideAndLastEvent,
@@ -62,6 +67,7 @@ export function updateDraggableCards({ sequentialMode, eventsData, currentEventI
     });
 }
 
+// --- 卡片統計更新函式 ---
 export function updateCardCount({ gameData, placedEvents }) {
     const cardCountSpan = document.getElementById('card-count');
     if (!cardCountSpan || !gameData.events) return;
