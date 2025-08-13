@@ -76,17 +76,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const toggleIcon = document.getElementById('toggle-icon');
     const mapContainer = document.getElementById('map');
 
-    let timelineEnabled = false;
-    let timelineSlider = null;
-    let timelinePlayBtn = null;
-    let timelinePauseBtn = null;
-    let scaleToggleButton = null;
-    let highlightToggleButton = null;
-    let autoPanToggleButton = null;
-    let isAutoPanEnabled = true; // 自動平移狀態，預設開啟
-    let isHighlightModeEnabled = true; // 高亮模式狀態，預設開啟
-    //let placedChrono = []; // Will be populated with {event, marker} objects
-
     function setupGame(data, regionColorConfig) {
         uiContext.gameData = data;
         uiContext.locationsData = data.locations;
@@ -215,19 +204,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function setupTimelineControls(data, regionColorConfig) {
         const getPlacedChrono = () => uiContext.placedChrono;
-        const isTimelineEnabled = () => timelineEnabled;
+        const isTimelineEnabled = () => uiContext.timelineEnabled;
         const toggleHighlightMode = () => {
-            isHighlightModeEnabled = !isHighlightModeEnabled;
-            highlightToggleButton.style.opacity = isHighlightModeEnabled ? '1' : '0.5';
-            highlightToggleButton.title = isHighlightModeEnabled ? '關閉高亮模式' : '開啟高亮模式';
-            highlightStep(parseInt(timelineSlider.value, 10));
+            uiContext.isHighlightModeEnabled = !uiContext.isHighlightModeEnabled;
+            uiContext.highlightToggleButton.style.opacity = uiContext.isHighlightModeEnabled ? '1' : '0.5';
+            uiContext.highlightToggleButton.title = uiContext.isHighlightModeEnabled ? '關閉高亮模式' : '開啟高亮模式';
+            highlightStep(parseInt(uiContext.timelineSlider.value, 10));
         };
         const toggleAutoPan = () => {
-            isAutoPanEnabled = !isAutoPanEnabled;
-            autoPanToggleButton.style.opacity = isAutoPanEnabled ? '1' : '0.5';
-            autoPanToggleButton.title = isAutoPanEnabled ? '關閉自動平移' : '開啟自動平移';
+            uiContext.isAutoPanEnabled = !uiContext.isAutoPanEnabled;
+            uiContext.autoPanToggleButton.style.opacity = uiContext.isAutoPanEnabled ? '1' : '0.5';
+            uiContext.autoPanToggleButton.title = uiContext.isAutoPanEnabled ? '關閉自動平移' : '開啟自動平移';
         };
-
+    
         const controls = setupTimelineSlider(
             data, 
             map, 
@@ -238,12 +227,12 @@ document.addEventListener('DOMContentLoaded', () => {
             toggleHighlightMode, 
             toggleAutoPan
         );
-        timelineSlider = controls.timelineSlider;
-        timelinePlayBtn = controls.timelinePlayBtn;
-        timelinePauseBtn = controls.timelinePauseBtn;
-        scaleToggleButton = controls.scaleToggleButton;
-        highlightToggleButton = controls.highlightToggleButton;
-        autoPanToggleButton = controls.autoPanToggleButton;
+        uiContext.timelineSlider = controls.timelineSlider;
+        uiContext.timelinePlayBtn = controls.timelinePlayBtn;
+        uiContext.timelinePauseBtn = controls.timelinePauseBtn;
+        uiContext.scaleToggleButton = controls.scaleToggleButton;
+        uiContext.highlightToggleButton = controls.highlightToggleButton;
+        uiContext.autoPanToggleButton = controls.autoPanToggleButton;
     }
 
     function setupPanelToggle() {
@@ -582,11 +571,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }                
 
-            timelineEnabled = true;
-            if (timelineSlider) {
-                timelineSlider.disabled = false;
-                timelineSlider.style.pointerEvents = 'auto';
-                timelineSlider.style.display = 'block';
+            uiContext.timelineEnabled = true;
+            if (uiContext.timelineSlider) {
+                uiContext.timelineSlider.disabled = false;
+                uiContext.timelineSlider.style.pointerEvents = 'auto';
+                uiContext.timelineSlider.style.display = 'block';
             }
             const ticksContainer = document.getElementById('timeline-ticks-container');
             if (ticksContainer) {
@@ -596,28 +585,28 @@ document.addEventListener('DOMContentLoaded', () => {
             if (timelineControlsContainer) {
                 timelineControlsContainer.style.display = 'flex';
             }
-            if (timelinePlayBtn) {
-                timelinePlayBtn.disabled = false;
-                timelinePlayBtn.style.pointerEvents = 'auto';
+            if (uiContext.timelinePlayBtn) {
+                uiContext.timelinePlayBtn.disabled = false;
+                uiContext.timelinePlayBtn.style.pointerEvents = 'auto';
             }
-            if (timelinePauseBtn) {
-                timelinePauseBtn.disabled = false;
-                timelinePauseBtn.style.pointerEvents = 'auto';
+            if (uiContext.timelinePauseBtn) {
+                uiContext.timelinePauseBtn.disabled = false;
+                uiContext.timelinePauseBtn.style.pointerEvents = 'auto';
             }
-            if (scaleToggleButton) {
-                scaleToggleButton.disabled = false;
-                scaleToggleButton.style.pointerEvents = 'auto';
+            if (uiContext.scaleToggleButton) {
+                uiContext.scaleToggleButton.disabled = false;
+                uiContext.scaleToggleButton.style.pointerEvents = 'auto';
             }
-            if (highlightToggleButton) {
-                highlightToggleButton.disabled = false;
-                highlightToggleButton.style.pointerEvents = 'auto';
+            if (uiContext.highlightToggleButton) {
+                uiContext.highlightToggleButton.disabled = false;
+                uiContext.highlightToggleButton.style.pointerEvents = 'auto';
             }
-            if (autoPanToggleButton) {
-                autoPanToggleButton.disabled = false;
-                autoPanToggleButton.style.pointerEvents = 'auto';
+            if (uiContext.autoPanToggleButton) {
+                uiContext.autoPanToggleButton.disabled = false;
+                uiContext.autoPanToggleButton.style.pointerEvents = 'auto';
             }
             
-            highlightStep(parseInt(timelineSlider.value, 10));
+            highlightStep(parseInt(uiContext.timelineSlider.value, 10));
         } else {
             updateCheckButtonState();
         }
@@ -629,7 +618,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function highlightStep(idx) {
-        if (!timelineEnabled) {
+        if (!uiContext.timelineEnabled) {
             uiContext.placedChrono.forEach(item => {
                 if (item.marker) {
                     const year = new Date(item.event.start_time).getFullYear();
@@ -647,10 +636,10 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             return;
         }
-
-        if (!isHighlightModeEnabled) {
+    
+        if (!uiContext.isHighlightModeEnabled) {
             const currentEvent = uiContext.placedChrono[idx];
-            if (currentEvent && currentEvent.marker && isAutoPanEnabled) {
+            if (currentEvent && currentEvent.marker && uiContext.isAutoPanEnabled) {
                 map.panTo(currentEvent.marker.getLatLng());
             }
             uiContext.placedChrono.forEach(item => {
@@ -670,10 +659,10 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             return;
         }
-
+    
         const highlightedEvent = uiContext.placedChrono[idx];
         const highlightedLocationId = highlightedEvent ? highlightedEvent.event.location_id : null;
-
+    
         uiContext.placedChrono.forEach((item, i) => {
             if (item.marker) {
                 const year = new Date(item.event.start_time).getFullYear();
@@ -692,13 +681,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     className: 'custom-div-icon',
                     iconSize: null,
                 }));
-
-                if (isHighlighted && isAutoPanEnabled) {
+    
+                if (isHighlighted && uiContext.isAutoPanEnabled) {
                     map.panTo(item.marker.getLatLng());
                 }
             }
         });
-
+    
         let highlightedLayer = null;
         map.eachLayer(layer => {
             if (layer.options.location_id && layer.getTooltip() && layer.getTooltip().getElement()) {
@@ -706,16 +695,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 const isHighlighted = layer.options.location_id === highlightedLocationId;
                 tooltipEl.classList.toggle('location-tooltip--highlight', isHighlighted);
                 tooltipEl.classList.toggle('location-tooltip--dimmed', !isHighlighted);
-
+    
                 if (isHighlighted) {
                     highlightedLayer = layer;
                 }
             }
         });
-
+    
         if (highlightedLayer) {
             highlightedLayer.bringToFront();
         }
+    }
+    
+    function timelineKeydownProxy(e) {
+        timelineKeydownHandler(
+            e, 
+            uiContext.timelineEnabled, 
+            uiContext.timelineSlider, 
+            uiContext.placedChrono, 
+            highlightStep
+        );
     }
 
     function handleZoom() {
@@ -746,8 +745,8 @@ document.addEventListener('DOMContentLoaded', () => {
         checkAnswers(data);
 
         setTimeout(() => {
-            if (timelinePlayBtn && !timelinePlayBtn.disabled) {
-                timelinePlayBtn.click();
+            if (uiContext.timelinePlayBtn && !uiContext.timelinePlayBtn.disabled) {
+                uiContext.timelinePlayBtn.click();
             }
         }, 800);
     }
@@ -794,9 +793,10 @@ document.addEventListener('DOMContentLoaded', () => {
     function timelineKeydownProxy(e) {
         timelineKeydownHandler(
             e, 
-            timelineEnabled, 
-            timelineSlider, 
+            uiContext.timelineEnabled, 
+            uiContext.timelineSlider, 
             uiContext.placedChrono, 
-            highlightStep);
-    }    
+            highlightStep
+        );
+    }
 });
