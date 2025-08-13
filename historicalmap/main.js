@@ -1,6 +1,15 @@
-// 1. 引入地圖設定
+// 引入設定
 import { mapsData } from './maps.config.js';
 import { setupMap } from './map.js';
+import { moveGhost, updateGuideLine, findClosestLocation, findCircleByLocationId, repositionMarkersAtLocation } from './map.js';
+import { updateGuideAndLastEvent } from './map.js';
+
+import { createCard } from './card.js';
+
+import { delay } from './utils.js';
+import { adjustCardContainerHeight } from './uiUtils.js';
+import { setupTimelineSlider, timelineKeydownHandler } from './timeline.js';
+
 
 document.addEventListener('DOMContentLoaded', () => {
     let sequentialMode = false;
@@ -108,7 +117,23 @@ document.addEventListener('DOMContentLoaded', () => {
         eventsToRender.forEach(event => {
             // Only create a card if it hasn't been placed on the map yet
             if (!placedEvents[event.event_id]) {
-                cardContainer.appendChild(createCard(event, regionColorConfig));
+                //cardContainer.appendChild(createCard(event, regionColorConfig));
+            cardContainer.appendChild(
+                createCard(event, regionColorConfig, {
+                    sequentialMode,
+                    moveGhost,
+                    updateGuideAndLastEvent,
+                    map,
+                    locationsData,
+                    getGuideLine: () => guideLine,
+                    setGuideLine: val => { guideLine = val; },
+                    setLastDragEvent: val => { lastDragEvent = val; },
+                    getGhostCard: () => ghostCard,
+                    setGhostCard: val => { ghostCard = val; },
+                    dragOffsetRef: dragOffset,
+                    handleDropAttempt
+                })
+            );               
             }
         });
         if (sequentialMode) {
@@ -234,7 +259,7 @@ document.addEventListener('DOMContentLoaded', () => {
             autoPanToggleButton.title = isAutoPanEnabled ? '關閉自動平移' : '開啟自動平移';
         };
 
-        const controls = window.setupTimelineSlider(data, map, currentMapConfig, highlightStep, getPlacedChrono, isTimelineEnabled, toggleHighlightMode, toggleAutoPan);
+        const controls = setupTimelineSlider(data, map, currentMapConfig, highlightStep, getPlacedChrono, isTimelineEnabled, toggleHighlightMode, toggleAutoPan);        
         timelineSlider = controls.timelineSlider;
         timelinePlayBtn = controls.timelinePlayBtn;
         timelinePauseBtn = controls.timelinePauseBtn;
@@ -271,124 +296,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function createCard(event, regionColorConfig) {
-        const card = document.createElement('div');
-        const region = event.region || 'default';
-        const colorInfo = regionColorConfig[region] || regionColorConfig.default;
-        card.className = `draggable-card p-2 mb-2 mr-2 rounded shadow cursor-pointer border-2`;
-        card.style.backgroundColor = colorInfo.bgColor;
-        card.style.borderColor = colorInfo.borderColor;
-        card.style.color = colorInfo.textColor;
-        card.id = event.event_id;
-        const year = new Date(event.start_time).getFullYear();
 
-        let imageHTML = '';
-        if (event.image) {
-            imageHTML = `
-                <div class="mt-2">
-                    <img src="${event.image}" alt="${event.title}" class="w-full h-auto rounded">
-                    ${event.image_source ? `<div class="text-left text-xs text-gray-500 mt-1">圖片來源：<a href="${event.image_source.url}" target="_blank" rel="noopener noreferrer" class="hover:underline">${event.image_source.name}</a></div>` : ''}
-                </div>
-            `;
-        }
-
-        let linksHTML = '';
-        if (event.links && event.links.length > 0) {
-            linksHTML += '<div class="mt-2 text-xs space-x-2">';
-            event.links.forEach(link => {
-                linksHTML += `<a href="${link.url}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">${link.name}</a>`;
-            });
-            linksHTML += '</div>';
-        }
-
-        card.innerHTML = `<h3 class="font-bold text-sm flex justify-between items-center"><span>${event.title}</span><span class="text-xs text-gray-500 font-normal ml-2">${year}</span></h3><div class="details hidden mt-1">${imageHTML}<p class="text-xs text-gray-600 mt-2">${event.description || ''}</p>${linksHTML}</div>`;
-
-        card.querySelectorAll('a').forEach(link => {
-            link.addEventListener('pointerdown', e => e.stopPropagation());
-        });
-
-        let isDragging = false;
-        let pointerDownPos = { x: 0, y: 0 };
-
-        card.addEventListener('pointerdown', (e) => {
-            e.preventDefault(); // 防止選取文字
-
-            if ((e.pointerType === 'mouse' && e.button !== 0) || (sequentialMode && card.dataset.draggable !== 'true')) {
-                return;
-            }
-
-            e.stopPropagation();
-            isDragging = false;
-            pointerDownPos = { x: e.clientX, y: e.clientY };
-
-            document.addEventListener('pointermove', onPointerMove);
-            document.addEventListener('pointerup', onPointerUp, { once: true });
-        }, { passive: false });
-
-        function startDrag(e) {
-            isDragging = true;
-            const cardRect = card.getBoundingClientRect();
-            dragOffset = { x: e.clientX - cardRect.left, y: e.clientY - cardRect.top };
-            ghostCard = L.DomUtil.create('div', 'is-dragging', document.body);
-            ghostCard.innerHTML = card.querySelector('h3').outerHTML;
-            ghostCard.style.width = card.offsetWidth + 'px';
-            L.DomUtil.setOpacity(card, 0.5);
-            moveGhost(e);
-        }
-
-        function onPointerMove(e) {
-            e.preventDefault();
-            if (!isDragging) {
-                const posDiff = Math.sqrt(Math.pow(e.clientX - pointerDownPos.x, 2) + Math.pow(e.clientY - pointerDownPos.y, 2));
-                if (posDiff > 5) {
-                    startDrag(e);
-                }
-            }
-            if (isDragging) {
-                moveGhost(e);
-                updateGuideAndLastEvent(e);
-            }
-        }
-
-        function onPointerUp(e) {
-            document.removeEventListener('pointermove', onPointerMove);
-            // 拖曳結束時移除所有 tooltip 的 guide-highlight class
-            map.eachLayer(layer => {
-                if (layer.options && layer.options.location_id && layer.getTooltip && layer.getTooltip() && layer.getTooltip().getElement()) {
-                    layer.getTooltip().getElement().classList.remove('location-tooltip--guide-highlight');
-                }
-            });
-            window._lastGuideTooltipId = null;
-            if (isDragging) {
-                L.DomUtil.setOpacity(card, 1);
-                if (guideLine) { map.removeLayer(guideLine); guideLine = null; }
-                handleDropAttempt(card);
-                lastDragEvent = null;
-            } else {
-                card.querySelector('.details').classList.toggle('hidden');
-            }
-            isDragging = false;
-        }
-
-        return card;
-    }
-
-    function updateGuideAndLastEvent(e) {
-        const mapContainer = map.getContainer();
-        const mapRect = mapContainer.getBoundingClientRect();
-        const mouseX = e.clientX;
-        const mouseY = e.clientY;
-
-        if (mouseX >= mapRect.left && mouseX <= mapRect.right && mouseY >= mapRect.top && mouseY <= mapRect.bottom) {
-            updateGuideLine(e);
-        } else {
-            if (guideLine) {
-                map.removeLayer(guideLine);
-                guideLine = null;
-            }
-        }
-        lastDragEvent = { originalEvent: e };
-    }
 
     function handleDropAttempt(cardElement) {
         let successfulDrop = false;
@@ -401,10 +309,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (droppedOnMap) {
                 const latLng = map.mouseEventToLatLng(lastDragEvent.originalEvent);
-                const closestLocation = findClosestLocation(latLng, locationsData);
+                const closestLocation = findClosestLocation(map, latLng, locationsData);
 
                 if (closestLocation) {
-                    const droppedOnCircle = findCircleByLocationId(closestLocation.location_id);
+                    const droppedOnCircle = findCircleByLocationId(map, closestLocation.location_id);
                     if (droppedOnCircle) {
                         map.fire('droppable:drop', { drop: droppedOnCircle, drag: { _element: cardElement } });
                         successfulDrop = true;
@@ -424,44 +332,7 @@ document.addEventListener('DOMContentLoaded', () => {
             cardElement.style.transform = '';
         }
     }
-    
-    function moveGhost(e) {
-        if (ghostCard) {
-            ghostCard.style.left = (e.clientX - dragOffset.x) + 'px';
-            ghostCard.style.top = (e.clientY - dragOffset.y) + 'px';
-        }
-    }
-    function updateGuideLine(e) {
-        if (guideLine) map.removeLayer(guideLine);
-        // 儲存上一次 highlight 的 tooltip id
-        if (!window._lastGuideTooltipId) window._lastGuideTooltipId = null;
-        const latLng = map.mouseEventToLatLng(e);
-        const closestLocation = findClosestLocation(latLng, locationsData);
-        let currentTooltipId = null;
-        if (closestLocation) {
-            currentTooltipId = closestLocation.location_id;
-        }
-        // 只有目標 tooltip id 變更時才移除/加入 highlight class
-        if (window._lastGuideTooltipId !== currentTooltipId) {
-            // 先移除所有 highlight class
-            map.eachLayer(layer => {
-                if (layer.options && layer.options.location_id && layer.getTooltip && layer.getTooltip() && layer.getTooltip().getElement()) {
-                    layer.getTooltip().getElement().classList.remove('location-tooltip--guide-highlight');
-                }
-            });
-            // 加入新的 highlight class
-            if (currentTooltipId) {
-                const targetLayer = findCircleByLocationId(currentTooltipId);
-                if (targetLayer && targetLayer.getTooltip && targetLayer.getTooltip() && targetLayer.getTooltip().getElement()) {
-                    targetLayer.getTooltip().getElement().classList.add('location-tooltip--guide-highlight');
-                }
-            }
-            window._lastGuideTooltipId = currentTooltipId;
-        }
-        if (closestLocation) {
-            guideLine = L.polyline([latLng, closestLocation.center], { color: 'red', dashArray: '5, 5' }).addTo(map);
-        }
-    }
+
 
     function handleDrop({ drop, drag }) {
         const card = drag._element;
@@ -511,7 +382,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Add to placedEvents so repositioning and final check works
                 placedEvents[eventId] = { marker: marker, droppedLocationId: droppedLocationId };
 
-                repositionMarkersAtLocation(droppedLocationId);
+                repositionMarkersAtLocation(map, droppedLocationId, placedEvents, gameData, locationsData);
 
                 currentEventIndex++;
                 updateDraggableCards();
@@ -556,7 +427,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (oldPlacedEvent) {
             map.removeLayer(oldPlacedEvent.marker);
-            repositionMarkersAtLocation(oldPlacedEvent.droppedLocationId);
+            repositionMarkersAtLocation(map, oldPlacedEvent.droppedLocationId, placedEvents, gameData, locationsData);
         }
 
         const year = new Date(eventData.start_time).getFullYear();
@@ -614,8 +485,16 @@ document.addEventListener('DOMContentLoaded', () => {
             if (eventForCoords.touches && eventForCoords.touches.length > 0) {
                 eventForCoords = eventForCoords.touches[0];
             }
-            moveGhost(eventForCoords);
-            updateGuideLine(eventForCoords);
+            moveGhost(ghostCard, dragOffset,eventForCoords);
+
+            const guideLineRef = { value: guideLine };
+            updateGuideLine({
+                map,
+                guideLineRef,
+                event: eventForCoords,
+                locationsData
+            });    
+            guideLine = guideLineRef.value;        
             lastDragEvent = { originalEvent: eventForCoords };
         });        
 
@@ -639,13 +518,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     cardElement.style.display = 'block';
                     cardElement.style.position = ''; cardElement.style.left = ''; cardElement.style.top = ''; cardElement.style.transform = '';
 
-                    repositionMarkersAtLocation(oldLocationId);
+                    repositionMarkersAtLocation(map, oldLocationId, placedEvents, gameData, locationsData);
                     updateCheckButtonState();
                 } else {
                     const latLng = map.mouseEventToLatLng(lastDragEvent.originalEvent);
-                    const closestLocation = findClosestLocation(latLng, locationsData);
+                    const closestLocation = findClosestLocation(map, latLng, locationsData);
                     if (closestLocation && eventId) {
-                        const droppedOnCircle = findCircleByLocationId(closestLocation.location_id);
+                        const droppedOnCircle = findCircleByLocationId(map, closestLocation.location_id);
                         const originalCardElement = document.getElementById(eventId);
                         map.fire('droppable:drop', { drop: droppedOnCircle, drag: { _element: originalCardElement } });
                     } else {
@@ -664,9 +543,9 @@ document.addEventListener('DOMContentLoaded', () => {
             droppedLocationId: drop.options.location_id
         };
 
-    updateCheckButtonState();
-    repositionMarkersAtLocation(drop.options.location_id);
-    updateCardCount();
+        updateCheckButtonState();
+        repositionMarkersAtLocation(map, drop.options.location_id, placedEvents, gameData, locationsData);
+        updateCardCount();
     }
 
     function checkAnswers(data) {
@@ -704,7 +583,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        locationsToUpdate.forEach(locationId => repositionMarkersAtLocation(locationId));
+        locationsToUpdate.forEach(locationId => repositionMarkersAtLocation(map, locationId, placedEvents, gameData, locationsData));
 
         if (allCorrect) {
             checkAnswersBtn.style.display = 'none';
@@ -868,66 +747,11 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleZoom() {
         const locationsToUpdate = new Set(Object.values(placedEvents).map(p => p.droppedLocationId));
         locationsToUpdate.forEach(locationId => {
-            repositionMarkersAtLocation(locationId);
+            repositionMarkersAtLocation(map, locationId, placedEvents, gameData, locationsData);
         });
     }
 
-    function findClosestLocation(latLng, locations) {
-        let closest = null, minDistance = Infinity;
-        locations.forEach(loc => {
-            const distance = map.distance(latLng, loc.center);
-            if (distance < minDistance) {
-                minDistance = distance;
-                closest = loc;
-            }
-        });
-        return closest;
-    }
 
-    function findCircleByLocationId(locationId) {
-        let foundLayer = null;
-        map.eachLayer(layer => {
-            if (layer.options.location_id === locationId) {
-                foundLayer = layer;
-            }
-        });
-        return foundLayer;
-    }
-
-    function repositionMarkersAtLocation(locationId) {
-        const placedAtLocation = Object.entries(placedEvents)
-            .filter(([eventId, data]) => data.droppedLocationId === locationId)
-            .map(([eventId, data]) => {
-                const eventData = gameData.events.find(e => e.event_id === eventId);
-                return {
-                    marker: data.marker,
-                    event: eventData
-                };
-            });
-
-        placedAtLocation.sort((a, b) => new Date(a.event.start_time) - new Date(b.event.start_time));
-
-        if (placedAtLocation.length > 0) {
-            const locationData = locationsData.find(l => l.location_id === locationId);
-            if (!locationData) return;
-
-            const centerPoint = map.latLngToContainerPoint(locationData.center);
-            const markerHeight = 20;
-            const padding = Math.max(0, (map.getZoom() - 13) * 3);
-            const locationLabelHeight = 30;
-            const spacingBelowLabel = -10;
-            const startY = centerPoint.y + (locationLabelHeight / 2) + spacingBelowLabel + (markerHeight / 2);
-
-            placedAtLocation.forEach((item, index) => {
-                const newY = startY + index * (markerHeight + padding);
-                const newX = centerPoint.x - 25;
-                const newPoint = L.point( newX , newY);
-                
-                const newLatLng = map.containerPointToLatLng(newPoint);
-                item.marker.setLatLng(newLatLng);
-            });
-        }
-    }
 
     // 遍歷所有事件，找到對應的卡片和地圖位置，然後呼叫 handleDrop，直接將卡片放到 marker 上
     function autoPlaceAndStartTimeline(data) {
@@ -936,7 +760,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!card) return;
             const location = locationsData.find(loc => loc.location_id === event.location_id);
             if (!location) return;
-            const circle = findCircleByLocationId(location.location_id);
+            const circle = findCircleByLocationId(map, location.location_id);
             if (!circle) return;
 
             handleDrop({
@@ -954,16 +778,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 800);
     }
 
-    function adjustCardContainerHeight() {
-        const checkBtnHeight = checkAnswersBtn.offsetHeight || 56;
-        const topPadding = 16;
-        const bottomPadding = 24;
-        const availableHeight = window.innerHeight - topPadding - checkBtnHeight - bottomPadding;
-        cardContainer.style.maxHeight = availableHeight + 'px';
-        cardContainer.style.overflowY = 'auto';
-    }
-    adjustCardContainerHeight();
-    window.addEventListener('resize', adjustCardContainerHeight);
+    adjustCardContainerHeight(cardContainer, checkAnswersBtn);
+    window.addEventListener('resize', () => adjustCardContainerHeight(cardContainer, checkAnswersBtn));
 
     // --- 簡化 autoplay mode 控制流程 ---
     async function autoPlaceAndCollapsePanel(data, timelineContainer) {
@@ -993,81 +809,15 @@ document.addEventListener('DOMContentLoaded', () => {
         if (window.timelineScaleToggle) window.timelineScaleToggle();
 
         enableTimelineKeydown();
-
  
     }
 
-    function delay(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
-    }
-
     function enableTimelineKeydown() {
-        // 先移除舊的監聽，避免重複
-        window.removeEventListener('keydown', timelineKeydownHandler);
-        window.addEventListener('keydown', timelineKeydownHandler);
+        window.removeEventListener('keydown', timelineKeydownProxy);
+        window.addEventListener('keydown', timelineKeydownProxy);
     }
 
-    //時間軸用左右鍵控制
-    function timelineKeydownHandler(e) {
-        if (!timelineEnabled || !timelineSlider || timelineSlider.disabled || timelineSlider.style.display === 'none') return;
-        if (placedChrono.length === 0) return;
-
-        const isTimeScaleMode = timelineSlider.step && timelineSlider.step != '1';
-        const eventTimes = placedChrono.map(item => new Date(item.event.start_time).getTime());
-        //console.log(eventTimes);
-        // 只在按鍵時找一次最接近的 index，之後直接用 index ±1
-        let currentIdx = 0;
-        if (isTimeScaleMode) {
-            const currentTime = parseInt(timelineSlider.value, 10);
-            console.log("currentTime:" + currentTime);
-            let minDiff = Math.abs(eventTimes[0] - currentTime);
-            currentIdx = 0;
-            for (let i = 1; i < eventTimes.length; i++) {
-                const diff = Math.abs(eventTimes[i] - currentTime);
-                if (diff < minDiff) {
-                    minDiff = diff;
-                    currentIdx = i;
-                }
-            }
-            console.log("currentIdx:" + currentIdx);
-            console.log("---");
-        } else {
-            currentIdx = parseInt(timelineSlider.value, 10);
-            
-        }
-
-        if (e.key === 'ArrowLeft') {
-            let idx;
-            if (isTimeScaleMode) {
-                // 時間刻度模式
-                idx = Math.max(0, currentIdx - 1);
-                while (idx > 0 && eventTimes[idx] === eventTimes[currentIdx]) {
-                    idx--;
-                }
-                timelineSlider.value = String(eventTimes[idx]);
-            } else {
-                // 事件索引模式
-                idx = Math.max(0, currentIdx - 1);
-                timelineSlider.value = String(idx);
-            }
-            highlightStep(idx);
-        } else if (e.key === 'ArrowRight') {
-            let idx;
-            if (isTimeScaleMode) {
-                // 時間刻度模式
-                idx = Math.min(eventTimes.length - 1, currentIdx + 1);
-                while (idx < eventTimes.length - 1 && eventTimes[idx] === eventTimes[currentIdx]) {
-                    idx++;
-                }
-                timelineSlider.value = String(eventTimes[idx]);
-            } else {
-                // 事件索引模式
-                idx = Math.min(eventTimes.length - 1, currentIdx + 1);
-                timelineSlider.value = String(idx);
-            }
-            highlightStep(idx);
-        }
-    }
-
-
+    function timelineKeydownProxy(e) {
+        timelineKeydownHandler(e, timelineEnabled, timelineSlider, placedChrono, highlightStep);
+    }    
 });

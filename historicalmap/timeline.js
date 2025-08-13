@@ -1,5 +1,5 @@
 // --- Timeline Slider UI ---
-function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPlacedChrono, isTimelineEnabled, onToggleHighlight, onToggleAutoPan) {
+export function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPlacedChrono, isTimelineEnabled, onToggleHighlight, onToggleAutoPan) {
     let timelineInterval = null;
     let isTimeScaleMode = false;
 
@@ -277,7 +277,6 @@ function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPlacedChro
     const totalTimeSpan = maxDate.getTime() - minDate.getTime();
 
     // 初始化 timelineSlider 的值
-    console.log('timelineSlider:', timelineSlider);    
     if (isTimeScaleMode) {
         timelineSlider.value = String(minDate.getTime()); // 設置為時間刻度模式的最小時間
     } else {
@@ -507,4 +506,62 @@ function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPlacedChro
     return { timelineSlider, timelinePlayBtn, timelinePauseBtn, scaleToggleButton, highlightToggleButton, autoPanToggleButton };
 }
 
-window.setupTimelineSlider = setupTimelineSlider;
+//時間軸用左右鍵控制
+export function timelineKeydownHandler(e, timelineEnabled, timelineSlider, placedChrono, highlightStep) {
+    if (!timelineEnabled || !timelineSlider || timelineSlider.disabled || timelineSlider.style.display === 'none') return;
+    if (placedChrono.length === 0) return;
+
+    const isTimeScaleMode = timelineSlider.step && timelineSlider.step != '1';
+    const eventTimes = placedChrono.map(item => new Date(item.event.start_time).getTime());
+    // 只在按鍵時找一次最接近的 index，之後直接用 index ±1
+    let currentIdx = 0;
+    if (isTimeScaleMode) {
+        const currentTime = parseInt(timelineSlider.value, 10);
+        let minDiff = Math.abs(eventTimes[0] - currentTime);
+        currentIdx = 0;
+        for (let i = 1; i < eventTimes.length; i++) {
+            const diff = Math.abs(eventTimes[i] - currentTime);
+            if (diff < minDiff) {
+                minDiff = diff;
+                currentIdx = i;
+            }
+        }
+    } else {
+        currentIdx = parseInt(timelineSlider.value, 10);
+        
+    }
+
+    if (e.key === 'ArrowLeft') {
+        let idx;
+        if (isTimeScaleMode) {
+            // 時間刻度模式
+            idx = Math.max(0, currentIdx - 1);
+            while (idx > 0 && eventTimes[idx] === eventTimes[currentIdx]) {
+                idx--;
+            }
+            timelineSlider.value = String(eventTimes[idx]);
+        } else {
+            // 事件索引模式
+            idx = Math.max(0, currentIdx - 1);
+            timelineSlider.value = String(idx);
+        }
+        highlightStep(idx);
+    } else if (e.key === 'ArrowRight') {
+        let idx;
+        if (isTimeScaleMode) {
+            // 時間刻度模式
+            idx = Math.min(eventTimes.length - 1, currentIdx + 1);
+            while (idx < eventTimes.length - 1 && eventTimes[idx] === eventTimes[currentIdx]) {
+                idx++;
+            }
+            timelineSlider.value = String(eventTimes[idx]);
+        } else {
+            // 事件索引模式
+            idx = Math.min(eventTimes.length - 1, currentIdx + 1);
+            timelineSlider.value = String(idx);
+        }
+        highlightStep(idx);
+    }
+}
+
+//window.setupTimelineSlider = setupTimelineSlider;
