@@ -67,8 +67,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Game State & UI ---
     let guideLine = null;
-    let locationsData = [];
-    let gameData = {}; // Store game data globally
     let ghostCard = null;
     let dragOffset = { x: 0, y: 0 };
     let lastDragEvent = null; // To store the last mouse event during drag
@@ -92,8 +90,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let placedChrono = []; // Will be populated with {event, marker} objects
 
     function setupGame(data, regionColorConfig) {
-        gameData = data;
-        locationsData = data.locations;
+        uiContext.gameData = data;
+        uiContext.locationsData = data.locations;
         injectRegionStyles(regionColorConfig);
 
         // --- 預設排序並渲染卡片 ---
@@ -109,7 +107,7 @@ document.addEventListener('DOMContentLoaded', () => {
         fitMapToLocations();
 
         map.on('droppable:drop', handleDrop);
-        checkAnswersBtn.addEventListener('click', () => checkAnswers(gameData));
+        checkAnswersBtn.addEventListener('click', () => checkAnswers(uiContext.gameData));
         map.on('zoomend', handleZoom);
 
         setupTimelineControls(data, regionColorConfig);
@@ -126,14 +124,17 @@ document.addEventListener('DOMContentLoaded', () => {
         uiContext.moveGhost = moveGhost;
         uiContext.updateGuideAndLastEvent = updateGuideAndLastEvent;
         uiContext.map = map;
-        uiContext.locationsData = locationsData;
+        //uiContext.locationsData = locationsData;
         uiContext.guideLineRef = { value: guideLine };
         uiContext.lastDragEventRef = { value: lastDragEvent };
         uiContext.ghostCardRef = { value: ghostCard };
         uiContext.dragOffsetRef = dragOffset;
         uiContext.handleDropAttempt = handleDropAttempt;
         uiContext.updateDraggableCards = updateDraggableCards;
-        uiContext.updateCardCount = () => updateCardCount({ gameData, placedEvents: uiContext.placedEvents });
+        uiContext.updateCardCount = () => updateCardCount({
+            gameData: uiContext.gameData,
+            placedEvents: uiContext.placedEvents
+        });
         uiContext.regionColorConfig = regionColorConfig;
         uiContext.eventsToRender = sortedEvents;
         uiContext.currentEventIndex = 0;        
@@ -163,28 +164,28 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         sortYearAscBtn.addEventListener('click', () => {
-            const sorted = [...gameData.events].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+            const sorted = [...uiContext.gameData.events].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
             uiContext.eventsToRender = sorted;
             renderCards();
             updateSortButtonStyles(sortYearAscBtn);
         });
 
         sortYearDescBtn.addEventListener('click', () => {
-            const sorted = [...gameData.events].sort((a, b) => new Date(b.start_time) - new Date(a.start_time));
+            const sorted = [...uiContext.gameData.events].sort((a, b) => new Date(b.start_time) - new Date(a.start_time));
             uiContext.eventsToRender = sorted;
             renderCards();
             updateSortButtonStyles(sortYearDescBtn);
         });
 
         sortRegionAscBtn.addEventListener('click', () => {
-            const sorted = [...gameData.events].sort((a, b) => (a.region || '').localeCompare(b.region || '', 'zh-Hant'));
+            const sorted = [...uiContext.gameData.events].sort((a, b) => (a.region || '').localeCompare(b.region || '', 'zh-Hant'));
             uiContext.eventsToRender = sorted;
             renderCards();
             updateSortButtonStyles(sortRegionAscBtn);
         });
 
         sortRegionDescBtn.addEventListener('click', () => {
-            const sorted = [...gameData.events].sort((a, b) => (b.region || '').localeCompare(a.region || '', 'zh-Hant'));
+            const sorted = [...uiContext.gameData.events].sort((a, b) => (b.region || '').localeCompare(a.region || '', 'zh-Hant'));
             uiContext.eventsToRender = sorted;
             renderCards();
             updateSortButtonStyles(sortRegionDescBtn);
@@ -193,7 +194,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderLocationsOnMap(regionColorConfig) {
         const bounds = L.latLngBounds();
-        locationsData.forEach(location => {
+        uiContext.locationsData.forEach(location => {
             let layer;
             const region = location.region || 'default';
             const colorInfo = regionColorConfig[region] || regionColorConfig.default;
@@ -290,7 +291,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (droppedOnMap) {                        
                 const latLng = map.mouseEventToLatLng(lastDragEvent.originalEvent);
-                const closestLocation = findClosestLocation(map, latLng, locationsData);
+                const closestLocation = findClosestLocation(map, latLng, uiContext.locationsData);
 
                 if (closestLocation) {
                     const droppedOnCircle = findCircleByLocationId(map, closestLocation.location_id);
@@ -319,8 +320,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const card = drag._element;
         const eventId = card.id;
         const droppedLocationId = drop.options.location_id;
-        const eventData = gameData.events.find(e => e.event_id === eventId);
-    
+        const eventData = uiContext.gameData.events.find(e => e.event_id === eventId);
+
 
         // --- Sequential Mode Logic ---
         if (uiContext.sequentialMode) {
@@ -349,7 +350,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Add to placedEvents so repositioning and final check works
                 uiContext.placedEvents[eventId] = { marker: marker, droppedLocationId: droppedLocationId };
 
-                repositionMarkersAtLocation(map, droppedLocationId, uiContext.placedEvents, gameData, locationsData);
+                repositionMarkersAtLocation(map, droppedLocationId, uiContext.placedEvents, uiContext.gameData, uiContext.locationsData);
 
                 // 1. 先更新 currentEventIndex
                 uiContext.currentEventIndex++;
@@ -363,7 +364,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (uiContext.currentEventIndex >= uiContext.eventsData.length) {
                     // Game finished, call checkAnswers to enable timeline
-                    checkAnswers(gameData);
+                    checkAnswers(uiContext.gameData);
                 }
             } else {
                 // Incorrect placement
@@ -401,7 +402,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (oldPlacedEvent) {
             map.removeLayer(oldPlacedEvent.marker);
-            repositionMarkersAtLocation(map, oldPlacedEvent.droppedLocationId, uiContext.placedEvents, gameData, locationsData);
+            repositionMarkersAtLocation(map, oldPlacedEvent.droppedLocationId, uiContext.placedEvents, uiContext.gameData, uiContext.locationsData);
         }
 
         const year = new Date(eventData.start_time).getFullYear();
@@ -452,9 +453,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 map,
                 guideLineRef,
                 event: eventForCoords,
-                locationsData
-            });    
-            guideLine = guideLineRef.value;        
+                locationsData: uiContext.locationsData
+            });
+            guideLine = guideLineRef.value;
             lastDragEvent = { originalEvent: eventForCoords };
         });        
 
@@ -491,11 +492,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     cardElement.style.display = 'block';
                     cardElement.style.position = ''; cardElement.style.left = ''; cardElement.style.top = ''; cardElement.style.transform = '';
 
-                    repositionMarkersAtLocation(map, oldLocationId, uiContext.placedEvents, gameData, locationsData);
+                    repositionMarkersAtLocation(map, oldLocationId, uiContext.placedEvents, uiContext.gameData, uiContext.locationsData);
                     updateCheckButtonState();
                 } else {
                     const latLng = map.mouseEventToLatLng(lastDragEvent.originalEvent);
-                    const closestLocation = findClosestLocation(map, latLng, locationsData);
+                    const closestLocation = findClosestLocation(map, latLng, uiContext.locationsData);
                     if (closestLocation && eventId) {
                         const droppedOnCircle = findCircleByLocationId(map, closestLocation.location_id);
                         const originalCardElement = document.getElementById(eventId);
@@ -517,8 +518,8 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         updateCheckButtonState();
-        repositionMarkersAtLocation(map, drop.options.location_id, uiContext.placedEvents, gameData, locationsData);
-        updateCardCount({gameData, placedEvents: uiContext.placedEvents});
+        repositionMarkersAtLocation(map, drop.options.location_id, uiContext.placedEvents, uiContext.gameData, uiContext.locationsData);
+        updateCardCount({gameData: uiContext.gameData, placedEvents: uiContext.placedEvents});
     }
 
     function checkAnswers(data) {
@@ -549,14 +550,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     locationsToUpdate.add(placed.droppedLocationId);
                     delete uiContext.placedEvents[event.event_id];
-                    updateCardCount({gameData, placedEvents: uiContext.placedEvents});
+                    updateCardCount({gameData: uiContext.gameData, placedEvents: uiContext.placedEvents});
                 }
             } else {
                 allCorrect = false;
             }
         });
 
-        locationsToUpdate.forEach(locationId => repositionMarkersAtLocation(map, locationId, uiContext.placedEvents, gameData, locationsData));
+        locationsToUpdate.forEach(locationId => repositionMarkersAtLocation(map, locationId, uiContext.placedEvents, uiContext.gameData, uiContext.locationsData));
 
         if (allCorrect) {
             checkAnswersBtn.style.display = 'none';
@@ -720,7 +721,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleZoom() {
         const locationsToUpdate = new Set(Object.values(uiContext.placedEvents).map(p => p.droppedLocationId));
         locationsToUpdate.forEach(locationId => {
-            repositionMarkersAtLocation(map, locationId, uiContext.placedEvents, gameData, locationsData);
+            repositionMarkersAtLocation(map, locationId, uiContext.placedEvents, uiContext.gameData, uiContext.locationsData);
         });
     }
 
@@ -731,7 +732,7 @@ document.addEventListener('DOMContentLoaded', () => {
         data.events.forEach(event => {
             const card = document.getElementById(event.event_id);
             if (!card) return;
-            const location = locationsData.find(loc => loc.location_id === event.location_id);
+            const location = uiContext.locationsData.find(loc => loc.location_id === event.location_id);
             if (!location) return;
             const circle = findCircleByLocationId(map, location.location_id);
             if (!circle) return;
