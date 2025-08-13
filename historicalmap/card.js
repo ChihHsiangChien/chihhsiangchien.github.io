@@ -81,6 +81,8 @@ export function createCard(event, regionColorConfig, options = {}) {
 
     function onPointerMove(e) {
         e.preventDefault();
+        if (setLastDragEvent) setLastDragEvent({ originalEvent: e }); // <-- 直接加在這裡
+
         if (!isDragging) {
             const posDiff = Math.sqrt(Math.pow(e.clientX - pointerDownPos.x, 2) + Math.pow(e.clientY - pointerDownPos.y, 2));
             if (posDiff > 5) {
