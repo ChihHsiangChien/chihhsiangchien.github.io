@@ -7,6 +7,8 @@ import { updateGuideAndLastEvent } from './map.js';
 import { createCard } from './card.js';
 
 import { delay } from './utils.js';
+import { generatePopupContent } from './utils.js';
+
 import { adjustCardContainerHeight } from './uiUtils.js';
 import { setupTimelineSlider, timelineKeydownHandler } from './timeline.js';
 
@@ -339,6 +341,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const eventId = card.id;
         const droppedLocationId = drop.options.location_id;
         const eventData = gameData.events.find(e => e.event_id === eventId);
+    
 
         // --- Sequential Mode Logic ---
         if (sequentialMode) {
@@ -346,23 +349,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const isCorrect = correctEvent && eventId === correctEvent.event_id && droppedLocationId === correctEvent.location_id;
 
             // 宣告 popupContent 於此區塊最前面
-            let popupContent = `<b>${eventData.title}</b>`;
-            if (eventData.image) {
-                popupContent += `
-                    <br><img src="${eventData.image}" alt="${eventData.title}" style="width:100%; max-width:200px; margin-top:8px; border-radius:4px;">
-                    ${eventData.image_source ? `<div style="text-align:left; font-size:0.75rem; color:#666; margin-top:4px;">圖片來源：<a href="${eventData.image_source.url}" target="_blank" rel="noopener noreferrer">${eventData.image_source.name}</a></div>` : ''}
-                `;
-            }
-            if (eventData.description) {
-                popupContent += `<br>${eventData.description}`;
-            }
-            if (eventData.links && eventData.links.length > 0) {
-                popupContent += '<div style="margin-top: 8px;">';
-                eventData.links.forEach(link => {
-                    popupContent += `<a href="${link.url}" target="_blank" rel="noopener noreferrer" style="margin-right: 8px;">${link.name}</a>`;
-                });
-                popupContent += '</div>';
-            }
+            let popupContent = generatePopupContent(eventData);
+
 
             if (isCorrect) {
                 // Correct placement
@@ -441,23 +429,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const markerLatLng = drop.getBounds ? drop.getBounds().getCenter() : drop.getLatLng();
         const marker = L.marker(markerLatLng, { icon: markerIcon, draggable: true }).addTo(map);
 
-        let popupContent = `<b>${eventData.title}</b>`;
-        if (eventData.image) {
-            popupContent += `
-                <br><img src="${eventData.image}" alt="${eventData.title}" style="width:100%; max-width:200px; margin-top:8px; border-radius:4px;">
-                ${eventData.image_source ? `<div style="text-align:left; font-size:0.75rem; color:#666; margin-top:4px;">圖片來源：<a href="${eventData.image_source.url}" target="_blank" rel="noopener noreferrer">${eventData.image_source.name}</a></div>` : ''}
-            `;
-        }
-        if (eventData.description) {
-            popupContent += `<br>${eventData.description}`;
-        }
-        if (eventData.links && eventData.links.length > 0) {
-            popupContent += '<div style="margin-top: 8px;">';
-            eventData.links.forEach(link => {
-                popupContent += `<a href="${link.url}" target="_blank" rel="noopener noreferrer" style="margin-right: 8px;">${link.name}</a>`;
-            });
-            popupContent += '</div>';
-        }
+
+        let popupContent = generatePopupContent(eventData);
+
         marker.bindPopup(popupContent);
 
         marker.on('dragstart', function(e) {
