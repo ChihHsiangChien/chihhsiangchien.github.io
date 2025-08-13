@@ -14,10 +14,8 @@ import { renderCards } from './uiController.js';
 
 document.addEventListener('DOMContentLoaded', () => {
         
-    //  let sequentialMode = false;
-    //let eventsData = []; // To store sorted events for sequential mode
 
-    // 2. 從 URL 讀取要顯示的地圖 ID 和模式
+    // 從 URL 讀取要顯示的地圖 ID 和模式
     const urlParams = new URLSearchParams(window.location.search);
     const mapId = urlParams.get('map') || 'chutung-history'; // 預設載入竹東地圖
     uiContext.sequentialMode = urlParams.get('mode') === 'sequential';
@@ -66,8 +64,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     // --- Game State & UI ---
-    //let ghostCard = null;
-    //let lastDragEvent = null; // To store the last mouse event during drag
     const cardContainer = document.getElementById('card-container');
     const checkAnswersBtn = document.getElementById('check-answers-btn');
     const rightPanel = document.getElementById('right-panel');
