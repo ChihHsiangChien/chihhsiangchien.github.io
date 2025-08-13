@@ -87,22 +87,38 @@ document.addEventListener('DOMContentLoaded', () => {
     let scaleToggleButton = null;
     let highlightToggleButton = null;
     let autoPanToggleButton = null;
-    let isAutoPanEnabled = true; // 新增：自動平移狀態，預設開啟
-    let isHighlightModeEnabled = true; // 新增：高亮模式狀態，預設開啟
+    let isAutoPanEnabled = true; // 自動平移狀態，預設開啟
+    let isHighlightModeEnabled = true; // 高亮模式狀態，預設開啟
     let placedChrono = []; // Will be populated with {event, marker} objects
 
-
-
     function setupGame(data, regionColorConfig) {
-        gameData = data; // 將載入的資料存到全域變數中
+        gameData = data;
         locationsData = data.locations;
         injectRegionStyles(regionColorConfig);
 
         // --- 預設排序並渲染卡片 ---
         const sortedEvents = [...data.events].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
-        eventsData = sortedEvents; // Store for sequential mode
+        eventsData = sortedEvents;
 
+        setupUiContext(regionColorConfig, sortedEvents);
+        renderCards();
 
+        setupSortButtons(regionColorConfig);
+        renderLocationsOnMap(regionColorConfig);
+        fitMapToLocations();
+
+        map.on('droppable:drop', handleDrop);
+        checkAnswersBtn.addEventListener('click', () => checkAnswers(gameData));
+        map.on('zoomend', handleZoom);
+
+        setupTimelineControls(data, regionColorConfig);
+
+        setupPanelToggle();
+    }
+
+    // --- 拆分出的小函式 ---
+
+    function setupUiContext(regionColorConfig, sortedEvents) {
         uiContext.cardContainer = cardContainer;
         uiContext.placedEvents = placedEvents;
         uiContext.createCard = createCard;
@@ -118,27 +134,23 @@ document.addEventListener('DOMContentLoaded', () => {
         uiContext.handleDropAttempt = handleDropAttempt;
         uiContext.updateDraggableCards = () => updateDraggableCards({ sequentialMode, eventsData, currentEventIndex });
         uiContext.updateCardCount = () => updateCardCount({ gameData, placedEvents });
-
-        uiContext.regionColorConfig = regionColorConfig;        
-        //renderCards(sortedEvents, regionColorConfig);
+        uiContext.regionColorConfig = regionColorConfig;
         uiContext.eventsToRender = sortedEvents;
-        renderCards();
+    }
 
-        // --- Sorting Logic ---
+    function setupSortButtons(regionColorConfig) {
         const sortYearAscBtn = document.getElementById('sort-year-asc');
         const sortYearDescBtn = document.getElementById('sort-year-desc');
         const sortRegionAscBtn = document.getElementById('sort-region-asc');
         const sortRegionDescBtn = document.getElementById('sort-region-desc');
         const sortButtons = [sortYearAscBtn, sortYearDescBtn, sortRegionAscBtn, sortRegionDescBtn];
-        
+
         if (sequentialMode) {
             checkAnswersBtn.style.display = 'none';
             const sortContainer = document.getElementById('sort-buttons-container');
-            if (sortContainer) {
-                sortContainer.style.display = 'none';
-            }
+            if (sortContainer) sortContainer.style.display = 'none';
+            return;
         }
-
 
         function updateSortButtonStyles(activeButton) {
             sortButtons.forEach(btn => {
@@ -176,23 +188,22 @@ document.addEventListener('DOMContentLoaded', () => {
             renderCards();
             updateSortButtonStyles(sortRegionDescBtn);
         });
-        // --- Create a bounds object to fit all locations ---
-        const bounds = L.latLngBounds();
+    }
 
+    function renderLocationsOnMap(regionColorConfig) {
+        const bounds = L.latLngBounds();
         locationsData.forEach(location => {
             let layer;
             const region = location.region || 'default';
             const colorInfo = regionColorConfig[region] || regionColorConfig.default;
 
             if (location.shape === 'polygon') {
-                // 如果是多邊形，使用 L.polygon
                 layer = L.polygon(location.points, { droppable: true, location_id: location.location_id });
             } else {
-                // 預設為圓形
                 layer = L.circle(location.center, { radius: location.radius, droppable: true, location_id: location.location_id });
             }
             layer.addTo(map)
-                 .bindTooltip(`<span>${location.name}</span>`, { permanent: true, direction: 'center', className: `location-tooltip region-${colorInfo.name}` });
+                .bindTooltip(`<span>${location.name}</span>`, { permanent: true, direction: 'center', className: `location-tooltip region-${colorInfo.name}` });
 
             if (layer instanceof L.Polygon) {
                 bounds.extend(layer.getBounds());
@@ -200,16 +211,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 bounds.extend(layer.getLatLng().toBounds(layer.getRadius()));
             }
         });
+        // 存 bounds 供 fitMapToLocations 使用
+        map._customBounds = bounds;
+    }
 
-        // --- Fit map to the calculated bounds ---
-        if (bounds.isValid()) {
+    function fitMapToLocations() {
+        const bounds = map._customBounds;
+        if (bounds && bounds.isValid()) {
             map.fitBounds(bounds, { padding: [50, 50] });
         }
+    }
 
-        map.on('droppable:drop', handleDrop);
-        checkAnswersBtn.addEventListener('click', () => checkAnswers(gameData));
-        map.on('zoomend', handleZoom);
-        // Pass callbacks and getters to decouple timeline logic from main.js
+    function setupTimelineControls(data, regionColorConfig) {
         const getPlacedChrono = () => placedChrono;
         const isTimelineEnabled = () => timelineEnabled;
         const toggleHighlightMode = () => {
@@ -224,19 +237,22 @@ document.addEventListener('DOMContentLoaded', () => {
             autoPanToggleButton.title = isAutoPanEnabled ? '關閉自動平移' : '開啟自動平移';
         };
 
-        const controls = setupTimelineSlider(data, map, currentMapConfig, highlightStep, getPlacedChrono, isTimelineEnabled, toggleHighlightMode, toggleAutoPan);        
+        const controls = setupTimelineSlider(
+            data, map, currentMapConfig, highlightStep,
+            getPlacedChrono, isTimelineEnabled, toggleHighlightMode, toggleAutoPan
+        );
         timelineSlider = controls.timelineSlider;
         timelinePlayBtn = controls.timelinePlayBtn;
         timelinePauseBtn = controls.timelinePauseBtn;
         scaleToggleButton = controls.scaleToggleButton;
         highlightToggleButton = controls.highlightToggleButton;
         autoPanToggleButton = controls.autoPanToggleButton;
+    }
 
+    function setupPanelToggle() {
         togglePanelBtn.addEventListener('click', () => {
             const isCollapsed = rightPanel.classList.contains('w-0');
-
             if (isCollapsed) {
-                // Expand panel
                 rightPanel.classList.remove('w-0');
                 rightPanel.classList.add('w-1/3');
                 panelContent.classList.remove('hidden');
@@ -245,7 +261,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 toggleIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />';
                 togglePanelBtn.style.right = 'calc(33.3333vw - 1.25rem)';
             } else {
-                // Collapse panel
                 rightPanel.classList.remove('w-1/3');
                 rightPanel.classList.add('w-0');
                 panelContent.classList.add('hidden');
@@ -254,7 +269,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 toggleIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />';
                 togglePanelBtn.style.right = '0.5rem';
             }
-
             setTimeout(() => {
                 map.invalidateSize();
             }, 300);
