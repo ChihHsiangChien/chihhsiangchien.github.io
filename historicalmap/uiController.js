@@ -26,20 +26,7 @@ export function renderCards({ eventsToRender, regionColorConfig } = {}) {
     events.forEach(event => {
         if (!placedEvents[event.event_id]) {
             cardContainer.appendChild(
-                createCard(event, regionCfg, {
-                    sequentialMode,
-                    moveGhost,
-                    updateGuideAndLastEvent,
-                    map,
-                    locationsData,
-                    getGuideLine: () => guideLineRef.value,
-                    setGuideLine: val => { guideLineRef.value = val; },
-                    setLastDragEvent: val => { lastDragEventRef.value = val; },
-                    getGhostCard: () => ghostCardRef.value,
-                    setGhostCard: val => { ghostCardRef.value = val; },
-                    dragOffsetRef,
-                    handleDropAttempt
-                })
+                createCard(event, regionCfg)
             );
         }
     });
