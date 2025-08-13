@@ -1,18 +1,28 @@
-export function createCard(event, regionColorConfig, options = {}) {
+import { uiContext } from './context.js';
+
+
+export function createCard(event, regionColorConfig) {
+
     const {
-        sequentialMode = false,
+        sequentialMode,
         moveGhost,
         updateGuideAndLastEvent,
         map,
         locationsData,
-        getGuideLine,
-        setGuideLine,
-        setLastDragEvent,
+        guideLineRef,
+        lastDragEventRef,
+        ghostCardRef,
         dragOffsetRef,
-        getGhostCard,
-        setGhostCard,
         handleDropAttempt
-    } = options;
+    } = uiContext;
+
+    // 需要 getter/setter 的話可這樣包裝
+    const getGuideLine = () => guideLineRef.value;
+    const setGuideLine = val => { guideLineRef.value = val; };
+    const setLastDragEvent = val => { lastDragEventRef.value = val; };
+    const getGhostCard = () => ghostCardRef.value;
+    const setGhostCard = val => { ghostCardRef.value = val; };
+
 
     const card = document.createElement('div');
     const region = event.region || 'default';

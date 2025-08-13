@@ -1,24 +1,16 @@
 // 引入設定
 import { uiContext } from './context.js';
-
 import { mapsData } from './maps.config.js';
 import { setupMap } from './map.js';
 import { moveGhost, updateGuideLine, findClosestLocation, findCircleByLocationId, repositionMarkersAtLocation } from './map.js';
 import { updateGuideAndLastEvent } from './map.js';
-
 import { createCard } from './card.js';
-
 import { delay } from './utils.js';
 import { generatePopupContent } from './utils.js';
-
 import { adjustCardContainerHeight } from './uiUtils.js';
 import { setupTimelineSlider, timelineKeydownHandler } from './timeline.js';
-
-
 import { updateDraggableCards, updateCardCount } from './uiController.js';
 import { renderCards } from './uiController.js';
-
-
 
 document.addEventListener('DOMContentLoaded', () => {
     let sequentialMode = false;
@@ -98,41 +90,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let isAutoPanEnabled = true; // 新增：自動平移狀態，預設開啟
     let isHighlightModeEnabled = true; // 新增：高亮模式狀態，預設開啟
     let placedChrono = []; // Will be populated with {event, marker} objects
-
-
-    function renderCards123(eventsToRender, regionColorConfig) {
-        cardContainer.innerHTML = ''; // Clear existing cards
-        eventsToRender.forEach(event => {
-            // Only create a card if it hasn't been placed on the map yet
-            if (!placedEvents[event.event_id]) {
-                //cardContainer.appendChild(createCard(event, regionColorConfig));
-            cardContainer.appendChild(
-                createCard(event, regionColorConfig, {
-                    sequentialMode,
-                    moveGhost,
-                    updateGuideAndLastEvent,
-                    map,
-                    locationsData,
-                    getGuideLine: () => guideLine,
-                    setGuideLine: val => { guideLine = val; },
-                    setLastDragEvent: val => { lastDragEvent = val; },
-                    getGhostCard: () => ghostCard,
-                    setGhostCard: val => { ghostCard = val; },
-                    dragOffsetRef: dragOffset,
-                    handleDropAttempt
-                })
-            );               
-            }
-        });
-        if (sequentialMode) {
-            updateDraggableCards({
-                sequentialMode,
-                eventsData,
-                currentEventIndex
-            });
-        }
-        updateCardCount({ gameData, placedEvents });
-    }
 
 
 
@@ -303,8 +260,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }, 300);
         });
     }
-
-
 
     function handleDropAttempt(cardElement) {
         let successfulDrop = false;
