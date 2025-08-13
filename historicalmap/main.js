@@ -67,7 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Game State & UI ---
     //let ghostCard = null;
-    let lastDragEvent = null; // To store the last mouse event during drag
+    //let lastDragEvent = null; // To store the last mouse event during drag
     const cardContainer = document.getElementById('card-container');
     const checkAnswersBtn = document.getElementById('check-answers-btn');
     const rightPanel = document.getElementById('right-panel');
@@ -124,7 +124,7 @@ document.addEventListener('DOMContentLoaded', () => {
         uiContext.map = map;
         //uiContext.locationsData = locationsData;
         //uiContext.guideLineRef = { value: guideLine };
-        uiContext.lastDragEventRef = { value: lastDragEvent };
+        //uiContext.lastDragEventRef = { value: lastDragEvent };
         //uiContext.ghostCardRef = { value: ghostCard };
         //uiContext.dragOffsetRef = dragOffset;
         uiContext.handleDropAttempt = handleDropAttempt;
@@ -461,11 +461,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 event: eventForCoords,
                 locationsData: uiContext.locationsData
             });
-            lastDragEvent = { originalEvent: eventForCoords };
-        });        
+            uiContext.lastDragEventRef.value = { originalEvent: eventForCoords };
+        });
 
         marker.on('dragend', function(e) {
-
+            const lastDragEvent = uiContext.lastDragEventRef.value;
             map.eachLayer(layer => {
                 if (
                     layer.options &&
