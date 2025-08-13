@@ -36,8 +36,10 @@ export function renderCards({ eventsToRender, regionColorConfig } = {}) {
     if (updateCardCount) updateCardCount();
 }
 
-export function updateDraggableCards({ sequentialMode, eventsData, currentEventIndex }) {
-    if (!sequentialMode) return;
+export function updateDraggableCards() {
+    const { sequentialMode, eventsData, currentEventIndex } = uiContext;
+
+    if (!sequentialMode || !Array.isArray(eventsData) || typeof currentEventIndex !== 'number') return;
     const cards = document.querySelectorAll('.draggable-card');
     const nextEvent = eventsData[currentEventIndex];
 

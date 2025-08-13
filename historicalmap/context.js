@@ -16,5 +16,7 @@ export const uiContext = {
     dragOffsetRef: { x: 0, y: 0 },
     handleDropAttempt: null,
     updateDraggableCards: null,
-    updateCardCount: null
+    updateCardCount: null,
+    eventsData: [],
+    currentEventIndex: 0    
 };
