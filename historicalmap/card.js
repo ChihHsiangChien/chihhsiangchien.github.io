@@ -114,6 +114,7 @@ export function createCard(event, regionColorConfig) {
 
     function onPointerUp(e) {
         document.removeEventListener('pointermove', onPointerMove);
+
         map.eachLayer(layer => {
             if (layer.options && layer.options.location_id && layer.getTooltip && layer.getTooltip() && layer.getTooltip().getElement()) {
                 layer.getTooltip().getElement().classList.remove('location-tooltip--guide-highlight');

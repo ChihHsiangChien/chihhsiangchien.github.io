@@ -66,7 +66,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     // --- Game State & UI ---
-    let placedEvents = {};
     let guideLine = null;
     let locationsData = [];
     let gameData = {}; // Store game data globally
@@ -122,7 +121,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function setupUiContext(regionColorConfig, sortedEvents) {
         uiContext.cardContainer = cardContainer;
-        uiContext.placedEvents = placedEvents;
         uiContext.createCard = createCard;
         //uiContext.sequentialMode = sequentialMode;
         uiContext.moveGhost = moveGhost;
@@ -135,7 +133,7 @@ document.addEventListener('DOMContentLoaded', () => {
         uiContext.dragOffsetRef = dragOffset;
         uiContext.handleDropAttempt = handleDropAttempt;
         uiContext.updateDraggableCards = updateDraggableCards;
-        uiContext.updateCardCount = () => updateCardCount({ gameData, placedEvents });
+        uiContext.updateCardCount = () => updateCardCount({ gameData, placedEvents: uiContext.placedEvents });
         uiContext.regionColorConfig = regionColorConfig;
         uiContext.eventsToRender = sortedEvents;
         uiContext.currentEventIndex = 0;        
@@ -349,9 +347,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 marker.bindPopup(popupContent);
 
                 // Add to placedEvents so repositioning and final check works
-                placedEvents[eventId] = { marker: marker, droppedLocationId: droppedLocationId };
+                uiContext.placedEvents[eventId] = { marker: marker, droppedLocationId: droppedLocationId };
 
-                repositionMarkersAtLocation(map, droppedLocationId, placedEvents, gameData, locationsData);
+                repositionMarkersAtLocation(map, droppedLocationId, uiContext.placedEvents, gameData, locationsData);
 
                 // 1. 先更新 currentEventIndex
                 uiContext.currentEventIndex++;
@@ -377,7 +375,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return; // End execution for sequential mode
         }
 
-        const oldPlacedEvent = placedEvents[card.id];
+        const oldPlacedEvent = uiContext.placedEvents[card.id];
 
         if (ghostCard) {
             const dropLatLng = drop.getBounds ? drop.getBounds().getCenter() : drop.getLatLng();
@@ -403,7 +401,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (oldPlacedEvent) {
             map.removeLayer(oldPlacedEvent.marker);
-            repositionMarkersAtLocation(map, oldPlacedEvent.droppedLocationId, placedEvents, gameData, locationsData);
+            repositionMarkersAtLocation(map, oldPlacedEvent.droppedLocationId, uiContext.placedEvents, gameData, locationsData);
         }
 
         const year = new Date(eventData.start_time).getFullYear();
@@ -425,7 +423,7 @@ document.addEventListener('DOMContentLoaded', () => {
         marker.on('dragstart', function(e) {
             const markerInstance = this;
             markerInstance.originalLatLng = markerInstance.getLatLng();
-            const eventId = Object.keys(placedEvents).find(key => placedEvents[key].marker === markerInstance);
+            const eventId = Object.keys(uiContext.placedEvents).find(key => uiContext.placedEvents[key].marker === markerInstance);
             if (!eventId) return;
 
             const originalCard = document.getElementById(eventId);
@@ -461,6 +459,19 @@ document.addEventListener('DOMContentLoaded', () => {
         });        
 
         marker.on('dragend', function(e) {
+
+            map.eachLayer(layer => {
+                if (
+                    layer.options &&
+                    layer.options.location_id &&
+                    layer.getTooltip &&
+                    layer.getTooltip() &&
+                    layer.getTooltip().getElement()
+                ) {
+                    layer.getTooltip().getElement().classList.remove('location-tooltip--guide-highlight');
+                }
+            });
+            window._lastGuideTooltipId = null;            
             const markerInstance = this;
             if (guideLine) map.removeLayer(guideLine); guideLine = null;
             if (ghostCard) L.DomUtil.remove(ghostCard); ghostCard = null;
@@ -469,18 +480,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 const mouseX = lastDragEvent.originalEvent.clientX;
                 const mouseY = lastDragEvent.originalEvent.clientY;
                 const cardContainerRect = cardContainer.getBoundingClientRect();
-                const eventId = Object.keys(placedEvents).find(key => placedEvents[key].marker === markerInstance);
+                const eventId = Object.keys(uiContext.placedEvents).find(key => uiContext.placedEvents[key].marker === markerInstance);
 
                 if (eventId && mouseX >= cardContainerRect.left && mouseX <= cardContainerRect.right && mouseY >= cardContainerRect.top && mouseY <= cardContainerRect.bottom) {
-                    const oldLocationId = placedEvents[eventId].droppedLocationId;
+                    const oldLocationId = uiContext.placedEvents[eventId].droppedLocationId;
                     map.removeLayer(markerInstance);
-                    delete placedEvents[eventId];
+                    delete uiContext.placedEvents[eventId];
 
                     const cardElement = document.getElementById(eventId);
                     cardElement.style.display = 'block';
                     cardElement.style.position = ''; cardElement.style.left = ''; cardElement.style.top = ''; cardElement.style.transform = '';
 
-                    repositionMarkersAtLocation(map, oldLocationId, placedEvents, gameData, locationsData);
+                    repositionMarkersAtLocation(map, oldLocationId, uiContext.placedEvents, gameData, locationsData);
                     updateCheckButtonState();
                 } else {
                     const latLng = map.mouseEventToLatLng(lastDragEvent.originalEvent);
@@ -500,14 +511,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        placedEvents[card.id] = {
+        uiContext.placedEvents[card.id] = {
             marker: marker,
             droppedLocationId: drop.options.location_id
         };
 
         updateCheckButtonState();
-        repositionMarkersAtLocation(map, drop.options.location_id, placedEvents, gameData, locationsData);
-        updateCardCount({gameData, placedEvents});
+        repositionMarkersAtLocation(map, drop.options.location_id, uiContext.placedEvents, gameData, locationsData);
+        updateCardCount({gameData, placedEvents: uiContext.placedEvents});
     }
 
     function checkAnswers(data) {
@@ -515,7 +526,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const locationsToUpdate = new Set();
 
         data.events.forEach(event => {
-            const placed = placedEvents[event.event_id];
+            const placed = uiContext.placedEvents[event.event_id];
             if (placed) {
                 if (placed.droppedLocationId === event.location_id) {
                     const year = new Date(event.start_time).getFullYear();
@@ -537,22 +548,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     cardElement.style.transform = '';
 
                     locationsToUpdate.add(placed.droppedLocationId);
-                    delete placedEvents[event.event_id];
-                    updateCardCount({gameData, placedEvents});
+                    delete uiContext.placedEvents[event.event_id];
+                    updateCardCount({gameData, placedEvents: uiContext.placedEvents});
                 }
             } else {
                 allCorrect = false;
             }
         });
 
-        locationsToUpdate.forEach(locationId => repositionMarkersAtLocation(map, locationId, placedEvents, gameData, locationsData));
+        locationsToUpdate.forEach(locationId => repositionMarkersAtLocation(map, locationId, uiContext.placedEvents, gameData, locationsData));
 
         if (allCorrect) {
             checkAnswersBtn.style.display = 'none';
 
             placedChrono = data.events
                 .map(eventData => {
-                    const placed = placedEvents[eventData.event_id];
+                    const placed = uiContext.placedEvents[eventData.event_id];
                     return {
                         event: eventData,
                         marker: placed ? placed.marker : null
@@ -612,7 +623,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateCheckButtonState() {
-        const placedCount = Object.keys(placedEvents).length;
+        const placedCount = Object.keys(uiContext.placedEvents).length;
         checkAnswersBtn.disabled = placedCount === 0;
     }
 
@@ -707,9 +718,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handleZoom() {
-        const locationsToUpdate = new Set(Object.values(placedEvents).map(p => p.droppedLocationId));
+        const locationsToUpdate = new Set(Object.values(uiContext.placedEvents).map(p => p.droppedLocationId));
         locationsToUpdate.forEach(locationId => {
-            repositionMarkersAtLocation(map, locationId, placedEvents, gameData, locationsData);
+            repositionMarkersAtLocation(map, locationId, uiContext.placedEvents, gameData, locationsData);
         });
     }
 
