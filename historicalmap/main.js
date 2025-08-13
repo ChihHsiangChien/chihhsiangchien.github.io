@@ -13,14 +13,15 @@ import { updateDraggableCards, updateCardCount } from './uiController.js';
 import { renderCards } from './uiController.js';
 
 document.addEventListener('DOMContentLoaded', () => {
-    let sequentialMode = false;
+        
+    //  let sequentialMode = false;
     let currentEventIndex = 0;
-    let eventsData = []; // To store sorted events for sequential mode
+    //let eventsData = []; // To store sorted events for sequential mode
 
     // 2. 從 URL 讀取要顯示的地圖 ID 和模式
     const urlParams = new URLSearchParams(window.location.search);
     const mapId = urlParams.get('map') || 'chutung-history'; // 預設載入竹東地圖
-    sequentialMode = urlParams.get('mode') === 'sequential';
+    uiContext.sequentialMode = urlParams.get('mode') === 'sequential';
     const currentMapConfig = mapsData[mapId];
 
     if (!currentMapConfig) {
@@ -64,6 +65,9 @@ document.addEventListener('DOMContentLoaded', () => {
         document.head.appendChild(styleElement);
     }
 
+
+
+
     // --- Game State & UI ---
     let placedEvents = {};
     let guideLine = null;
@@ -98,7 +102,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // --- 預設排序並渲染卡片 ---
         const sortedEvents = [...data.events].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
-        eventsData = sortedEvents;
+        //eventsData = sortedEvents;
+        uiContext.eventsData = sortedEvents;
 
         setupUiContext(regionColorConfig, sortedEvents);
         renderCards();
@@ -122,7 +127,7 @@ document.addEventListener('DOMContentLoaded', () => {
         uiContext.cardContainer = cardContainer;
         uiContext.placedEvents = placedEvents;
         uiContext.createCard = createCard;
-        uiContext.sequentialMode = sequentialMode;
+        //uiContext.sequentialMode = sequentialMode;
         uiContext.moveGhost = moveGhost;
         uiContext.updateGuideAndLastEvent = updateGuideAndLastEvent;
         uiContext.map = map;
@@ -132,10 +137,11 @@ document.addEventListener('DOMContentLoaded', () => {
         uiContext.ghostCardRef = { value: ghostCard };
         uiContext.dragOffsetRef = dragOffset;
         uiContext.handleDropAttempt = handleDropAttempt;
-        uiContext.updateDraggableCards = () => updateDraggableCards({ sequentialMode, eventsData, currentEventIndex });
+        uiContext.updateDraggableCards = updateDraggableCards;
         uiContext.updateCardCount = () => updateCardCount({ gameData, placedEvents });
         uiContext.regionColorConfig = regionColorConfig;
         uiContext.eventsToRender = sortedEvents;
+        uiContext.currentEventIndex = currentEventIndex;        
     }
 
     function setupSortButtons(regionColorConfig) {
@@ -145,7 +151,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const sortRegionDescBtn = document.getElementById('sort-region-desc');
         const sortButtons = [sortYearAscBtn, sortYearDescBtn, sortRegionAscBtn, sortRegionDescBtn];
 
-        if (sequentialMode) {
+        if (uiContext.sequentialMode) {
             checkAnswersBtn.style.display = 'none';
             const sortContainer = document.getElementById('sort-buttons-container');
             if (sortContainer) sortContainer.style.display = 'none';
@@ -322,8 +328,8 @@ document.addEventListener('DOMContentLoaded', () => {
     
 
         // --- Sequential Mode Logic ---
-        if (sequentialMode) {
-            const correctEvent = eventsData[currentEventIndex];
+        if (uiContext.sequentialMode) {
+            const correctEvent = uiContext.eventsData[uiContext.currentEventIndex];
             const isCorrect = correctEvent && eventId === correctEvent.event_id && droppedLocationId === correctEvent.location_id;
 
             // 宣告 popupContent 於此區塊最前面
@@ -350,14 +356,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 repositionMarkersAtLocation(map, droppedLocationId, placedEvents, gameData, locationsData);
 
+                // 1. 先更新 currentEventIndex
                 currentEventIndex++;
-                updateDraggableCards({
-                    sequentialMode,
-                    eventsData,
-                    currentEventIndex
-                });
 
-                if (currentEventIndex >= eventsData.length) {
+                // 2. 同步到 uiContext
+                uiContext.currentEventIndex = currentEventIndex;
+                //uiContext.eventsData = eventsData;    
+
+                // 3. 直接呼叫，不帶參數
+                updateDraggableCards();
+
+                if (uiContext.currentEventIndex >= uiContext.eventsData.length) {
                     // Game finished, call checkAnswers to enable timeline
                     checkAnswers(gameData);
                 }
