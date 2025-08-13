@@ -19,5 +19,15 @@ export const uiContext = {
     updateCardCount: null,
     placedChrono: [],
     eventsData: [],
-    currentEventIndex: 0    
+    currentEventIndex: 0,
+    
+    timelineEnabled: false,
+    timelineSlider: null,
+    timelinePlayBtn: null,
+    timelinePauseBtn: null,
+    scaleToggleButton: null,
+    highlightToggleButton: null,
+    autoPanToggleButton: null,
+    isAutoPanEnabled: true,
+    isHighlightModeEnabled: true,
 };
