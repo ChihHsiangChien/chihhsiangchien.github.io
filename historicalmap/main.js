@@ -13,6 +13,9 @@ import { adjustCardContainerHeight } from './uiUtils.js';
 import { setupTimelineSlider, timelineKeydownHandler } from './timeline.js';
 
 
+import { updateDraggableCards } from './uiController.js';
+
+
 document.addEventListener('DOMContentLoaded', () => {
     let sequentialMode = false;
     let currentEventIndex = 0;
@@ -92,27 +95,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let isHighlightModeEnabled = true; // 新增：高亮模式狀態，預設開啟
     let placedChrono = []; // Will be populated with {event, marker} objects
 
-    function updateDraggableCards() {
-        if (!sequentialMode) return;
-        const cards = document.querySelectorAll('.draggable-card');
-        const nextEvent = eventsData[currentEventIndex];
-
-        cards.forEach(card => {
-            // The card is draggable if it's the next event in sequence.
-            const isDraggable = nextEvent && card.id === nextEvent.event_id;
-            //card.setAttribute('draggable', isDraggable);
-            card.dataset.draggable = isDraggable; // 用 data-draggable
-
-            if (isDraggable) {
-                card.classList.remove('opacity-50', 'cursor-not-allowed');
-                card.classList.add('cursor-pointer');
-            } else {
-                card.classList.add('opacity-50', 'cursor-not-allowed');
-                card.classList.remove('cursor-pointer');
-            }
-        });
-        updateCardCount(); // 只在全部卡片狀態更新後呼叫一次
-    }
 
     function renderCards(eventsToRender, regionColorConfig) {
         cardContainer.innerHTML = ''; // Clear existing cards
@@ -139,7 +121,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
         if (sequentialMode) {
-            updateDraggableCards();
+            updateDraggableCards({
+                sequentialMode,
+                eventsData,
+                currentEventIndex
+            });
         }
         updateCardCount();
     }
@@ -373,7 +359,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 repositionMarkersAtLocation(map, droppedLocationId, placedEvents, gameData, locationsData);
 
                 currentEventIndex++;
-                updateDraggableCards();
+                updateDraggableCards({
+                    sequentialMode,
+                    eventsData,
+                    currentEventIndex
+                });
 
                 if (currentEventIndex >= eventsData.length) {
                     // Game finished, call checkAnswers to enable timeline
