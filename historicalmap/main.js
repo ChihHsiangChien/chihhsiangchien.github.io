@@ -66,8 +66,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     // --- Game State & UI ---
-    let guideLine = null;
-    let ghostCard = null;
+    //let ghostCard = null;
     let dragOffset = { x: 0, y: 0 };
     let lastDragEvent = null; // To store the last mouse event during drag
     const cardContainer = document.getElementById('card-container');
@@ -125,9 +124,9 @@ document.addEventListener('DOMContentLoaded', () => {
         uiContext.updateGuideAndLastEvent = updateGuideAndLastEvent;
         uiContext.map = map;
         //uiContext.locationsData = locationsData;
-        uiContext.guideLineRef = { value: guideLine };
+        //uiContext.guideLineRef = { value: guideLine };
         uiContext.lastDragEventRef = { value: lastDragEvent };
-        uiContext.ghostCardRef = { value: ghostCard };
+        //uiContext.ghostCardRef = { value: ghostCard };
         uiContext.dragOffsetRef = dragOffset;
         uiContext.handleDropAttempt = handleDropAttempt;
         uiContext.updateDraggableCards = updateDraggableCards;
@@ -304,9 +303,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (!successfulDrop) {
-            if (ghostCard) {
-                L.DomUtil.remove(ghostCard);
-                ghostCard = null;
+            if (uiContext.ghostCardRef.value) {
+                L.DomUtil.remove(uiContext.ghostCardRef.value);
+                uiContext.ghostCardRef.value = null;
             }
             cardElement.style.position = '';
             cardElement.style.left = '';
@@ -335,8 +334,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isCorrect) {
                 // Correct placement
                 card.style.display = 'none'; // Hide card from panel
-                if (ghostCard) { L.DomUtil.remove(ghostCard); ghostCard = null; }
-
+                if (uiContext.ghostCardRef.value) {
+                    L.DomUtil.remove(uiContext.ghostCardRef.value);
+                    uiContext.ghostCardRef.value = null;
+                }
                 const year = new Date(eventData.start_time).getFullYear();
                 const correctIcon = L.divIcon({
                     html: `<div class="placed-event-marker placed-event-marker--correct"><span>${eventData.title}</span><span class="marker-year">${year}</span></div>`,
@@ -368,7 +369,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } else {
                 // Incorrect placement
-                if (ghostCard) { L.DomUtil.remove(ghostCard); ghostCard = null; }
+                if (uiContext.ghostCardRef.value) {
+                    L.DomUtil.remove(uiContext.ghostCardRef.value);
+                    uiContext.ghostCardRef.value = null;
+                }
                 L.DomUtil.setOpacity(card, 1);
                 card.classList.add('card-shake');
                 setTimeout(() => card.classList.remove('card-shake'), 820);
@@ -378,21 +382,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const oldPlacedEvent = uiContext.placedEvents[card.id];
 
-        if (ghostCard) {
+        if (uiContext.ghostCardRef.value) {
             const dropLatLng = drop.getBounds ? drop.getBounds().getCenter() : drop.getLatLng();
             const dropPoint = map.latLngToContainerPoint(dropLatLng);
             
-            const targetX = dropPoint.x - ghostCard.offsetWidth / 2;
-            const targetY = dropPoint.y - ghostCard.offsetHeight / 2;
+            const targetX = dropPoint.x - uiContext.ghostCardRef.value.offsetWidth / 2;
+            const targetY = dropPoint.y - uiContext.ghostCardRef.value.offsetHeight / 2;
 
-            ghostCard.style.transition = 'left 0.2s ease-out, top 0.2s ease-out';
-            ghostCard.style.left = targetX + 'px';
-            ghostCard.style.top = targetY + 'px';
+            uiContext.ghostCardRef.value.style.transition = 'left 0.2s ease-out, top 0.2s ease-out';
+            uiContext.ghostCardRef.value.style.left = targetX + 'px';
+            uiContext.ghostCardRef.value.style.top = targetY + 'px';
 
             setTimeout(() => {
-                if (ghostCard) {
-                    L.DomUtil.remove(ghostCard);
-                    ghostCard = null;
+                if (uiContext.ghostCardRef.value) {
+                    L.DomUtil.remove(uiContext.ghostCardRef.value);
+                    uiContext.ghostCardRef.value = null;
                 }
                 card.style.display = 'none';
             }, 200);
@@ -433,12 +437,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const cardWidth = originalCard.offsetWidth;
             originalCard.style.display = originalDisplay;
 
-            ghostCard = L.DomUtil.create('div', 'is-dragging', document.body);
-            ghostCard.innerHTML = originalCard.querySelector('h3').outerHTML;
-            ghostCard.style.width = cardWidth + 'px';
+            uiContext.ghostCardRef.value = L.DomUtil.create('div', 'is-dragging', document.body);
+            uiContext.ghostCardRef.value.innerHTML = originalCard.querySelector('h3').outerHTML;
+            uiContext.ghostCardRef.value.style.width = cardWidth + 'px';
             
             markerInstance.setOpacity(0);
-            dragOffset = { x: ghostCard.offsetWidth / 2, y: ghostCard.offsetHeight / 2 };
+            dragOffset = { x: uiContext.ghostCardRef.value.offsetWidth / 2, y: uiContext.ghostCardRef.value.offsetHeight / 2 };
         });
         
         marker.on('drag', function(e) {
@@ -446,16 +450,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if (eventForCoords.touches && eventForCoords.touches.length > 0) {
                 eventForCoords = eventForCoords.touches[0];
             }
-            moveGhost(ghostCard, dragOffset,eventForCoords);
+            moveGhost(uiContext.ghostCardRef.value, dragOffset,eventForCoords);
 
-            const guideLineRef = { value: guideLine };
+            
             updateGuideLine({
                 map,
-                guideLineRef,
+                guideLineRef: uiContext.guideLineRef,
                 event: eventForCoords,
                 locationsData: uiContext.locationsData
             });
-            guideLine = guideLineRef.value;
             lastDragEvent = { originalEvent: eventForCoords };
         });        
 
@@ -474,9 +477,14 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             window._lastGuideTooltipId = null;            
             const markerInstance = this;
-            if (guideLine) map.removeLayer(guideLine); guideLine = null;
-            if (ghostCard) L.DomUtil.remove(ghostCard); ghostCard = null;
-            
+            if (uiContext.guideLineRef.value) map.removeLayer(uiContext.guideLineRef.value);
+            uiContext.guideLineRef.value = null;
+
+            if (uiContext.ghostCardRef.value) {
+                L.DomUtil.remove(uiContext.ghostCardRef.value);
+                uiContext.ghostCardRef.value = null;
+            }
+
             if (lastDragEvent) {
                 const mouseX = lastDragEvent.originalEvent.clientX;
                 const mouseY = lastDragEvent.originalEvent.clientY;
