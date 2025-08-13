@@ -57,7 +57,9 @@ export function updateDraggableCards() {
 }
 
 // --- 卡片統計更新函式 ---
-export function updateCardCount({ gameData, placedEvents }) {
+export function updateCardCount() {
+    if (!uiContext) return;    
+    const { gameData, placedEvents } = uiContext;
     const cardCountSpan = document.getElementById('card-count');
     if (!cardCountSpan || !gameData.events) return;
     const total = gameData.events.length;

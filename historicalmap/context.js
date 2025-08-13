@@ -17,6 +17,7 @@ export const uiContext = {
     handleDropAttempt: null,
     updateDraggableCards: null,
     updateCardCount: null,
+    placedChrono: [],
     eventsData: [],
     currentEventIndex: 0    
 };

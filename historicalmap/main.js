@@ -85,7 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let autoPanToggleButton = null;
     let isAutoPanEnabled = true; // 自動平移狀態，預設開啟
     let isHighlightModeEnabled = true; // 高亮模式狀態，預設開啟
-    let placedChrono = []; // Will be populated with {event, marker} objects
+    //let placedChrono = []; // Will be populated with {event, marker} objects
 
     function setupGame(data, regionColorConfig) {
         uiContext.gameData = data;
@@ -118,21 +118,12 @@ document.addEventListener('DOMContentLoaded', () => {
     function setupUiContext(regionColorConfig, sortedEvents) {
         uiContext.cardContainer = cardContainer;
         uiContext.createCard = createCard;
-        //uiContext.sequentialMode = sequentialMode;
         uiContext.moveGhost = moveGhost;
         uiContext.updateGuideAndLastEvent = updateGuideAndLastEvent;
         uiContext.map = map;
-        //uiContext.locationsData = locationsData;
-        //uiContext.guideLineRef = { value: guideLine };
-        //uiContext.lastDragEventRef = { value: lastDragEvent };
-        //uiContext.ghostCardRef = { value: ghostCard };
-        //uiContext.dragOffsetRef = dragOffset;
         uiContext.handleDropAttempt = handleDropAttempt;
         uiContext.updateDraggableCards = updateDraggableCards;
-        uiContext.updateCardCount = () => updateCardCount({
-            gameData: uiContext.gameData,
-            placedEvents: uiContext.placedEvents
-        });
+        uiContext.updateCardCount = updateCardCount;
         uiContext.regionColorConfig = regionColorConfig;
         uiContext.eventsToRender = sortedEvents;
         uiContext.currentEventIndex = 0;        
@@ -223,7 +214,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function setupTimelineControls(data, regionColorConfig) {
-        const getPlacedChrono = () => placedChrono;
+        const getPlacedChrono = () => uiContext.placedChrono;
         const isTimelineEnabled = () => timelineEnabled;
         const toggleHighlightMode = () => {
             isHighlightModeEnabled = !isHighlightModeEnabled;
@@ -238,8 +229,14 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         const controls = setupTimelineSlider(
-            data, map, currentMapConfig, highlightStep,
-            getPlacedChrono, isTimelineEnabled, toggleHighlightMode, toggleAutoPan
+            data, 
+            map, 
+            currentMapConfig, 
+            highlightStep,
+            getPlacedChrono, 
+            isTimelineEnabled, 
+            toggleHighlightMode, 
+            toggleAutoPan
         );
         timelineSlider = controls.timelineSlider;
         timelinePlayBtn = controls.timelinePlayBtn;
@@ -352,18 +349,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 repositionMarkersAtLocation(map, droppedLocationId, uiContext.placedEvents, uiContext.gameData, uiContext.locationsData);
 
-                // 1. 先更新 currentEventIndex
                 uiContext.currentEventIndex++;
 
-                // 2. 同步到 uiContext
-                //uiContext.currentEventIndex = currentEventIndex;
-                //uiContext.eventsData = eventsData;    
-
-                // 3. 直接呼叫，不帶參數
                 updateDraggableCards();
 
                 if (uiContext.currentEventIndex >= uiContext.eventsData.length) {
-                    // Game finished, call checkAnswers to enable timeline
                     checkAnswers(uiContext.gameData);
                 }
             } else {
@@ -529,7 +519,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         updateCheckButtonState();
         repositionMarkersAtLocation(map, drop.options.location_id, uiContext.placedEvents, uiContext.gameData, uiContext.locationsData);
-        updateCardCount({gameData: uiContext.gameData, placedEvents: uiContext.placedEvents});
+        updateCardCount();
     }
 
     function checkAnswers(data) {
@@ -560,7 +550,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     locationsToUpdate.add(placed.droppedLocationId);
                     delete uiContext.placedEvents[event.event_id];
-                    updateCardCount({gameData: uiContext.gameData, placedEvents: uiContext.placedEvents});
+                    updateCardCount();
                 }
             } else {
                 allCorrect = false;
@@ -572,7 +562,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (allCorrect) {
             checkAnswersBtn.style.display = 'none';
 
-            placedChrono = data.events
+            uiContext.placedChrono = data.events
                 .map(eventData => {
                     const placed = uiContext.placedEvents[eventData.event_id];
                     return {
@@ -583,12 +573,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 .sort((a, b) => new Date(a.event.start_time) - new Date(b.event.start_time));
 
             // 修正：同時間事件微調 start_time
-            for (let i = 1; i < placedChrono.length; i++) {
-                const prevTime = new Date(placedChrono[i - 1].event.start_time).getTime();
-                const currTime = new Date(placedChrono[i].event.start_time).getTime();
+            for (let i = 1; i < uiContext.placedChrono.length; i++) {
+                const prevTime = new Date(uiContext.placedChrono[i - 1].event.start_time).getTime();
+                const currTime = new Date(uiContext.placedChrono[i].event.start_time).getTime();
                 if (currTime <= prevTime) {
                     // 增加 1 天 ，根據 timelineSlider.step的設定
-                    placedChrono[i].event.start_time = new Date(prevTime + 86400000).toISOString();
+                    uiContext.placedChrono[i].event.start_time = new Date(prevTime + 86400000).toISOString();
                 }
             }                
 
@@ -640,7 +630,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function highlightStep(idx) {
         if (!timelineEnabled) {
-            placedChrono.forEach(item => {
+            uiContext.placedChrono.forEach(item => {
                 if (item.marker) {
                     const year = new Date(item.event.start_time).getFullYear();
                     item.marker.setIcon(L.divIcon({
@@ -659,11 +649,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (!isHighlightModeEnabled) {
-            const currentEvent = placedChrono[idx];
+            const currentEvent = uiContext.placedChrono[idx];
             if (currentEvent && currentEvent.marker && isAutoPanEnabled) {
                 map.panTo(currentEvent.marker.getLatLng());
             }
-            placedChrono.forEach(item => {
+            uiContext.placedChrono.forEach(item => {
                 if (item.marker) {
                     const year = new Date(item.event.start_time).getFullYear();
                     item.marker.setIcon(L.divIcon({
@@ -681,10 +671,10 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const highlightedEvent = placedChrono[idx];
+        const highlightedEvent = uiContext.placedChrono[idx];
         const highlightedLocationId = highlightedEvent ? highlightedEvent.event.location_id : null;
 
-        placedChrono.forEach((item, i) => {
+        uiContext.placedChrono.forEach((item, i) => {
             if (item.marker) {
                 const year = new Date(item.event.start_time).getFullYear();
                 const isHighlighted = i === idx;
@@ -802,6 +792,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function timelineKeydownProxy(e) {
-        timelineKeydownHandler(e, timelineEnabled, timelineSlider, placedChrono, highlightStep);
+        timelineKeydownHandler(
+            e, 
+            timelineEnabled, 
+            timelineSlider, 
+            uiContext.placedChrono, 
+            highlightStep);
     }    
 });
