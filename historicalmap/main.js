@@ -67,7 +67,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Game State & UI ---
     //let ghostCard = null;
-    let dragOffset = { x: 0, y: 0 };
     let lastDragEvent = null; // To store the last mouse event during drag
     const cardContainer = document.getElementById('card-container');
     const checkAnswersBtn = document.getElementById('check-answers-btn');
@@ -127,7 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
         //uiContext.guideLineRef = { value: guideLine };
         uiContext.lastDragEventRef = { value: lastDragEvent };
         //uiContext.ghostCardRef = { value: ghostCard };
-        uiContext.dragOffsetRef = dragOffset;
+        //uiContext.dragOffsetRef = dragOffset;
         uiContext.handleDropAttempt = handleDropAttempt;
         uiContext.updateDraggableCards = updateDraggableCards;
         uiContext.updateCardCount = () => updateCardCount({
@@ -442,7 +441,10 @@ document.addEventListener('DOMContentLoaded', () => {
             uiContext.ghostCardRef.value.style.width = cardWidth + 'px';
             
             markerInstance.setOpacity(0);
-            dragOffset = { x: uiContext.ghostCardRef.value.offsetWidth / 2, y: uiContext.ghostCardRef.value.offsetHeight / 2 };
+            uiContext.dragOffsetRef.value = { 
+                x: uiContext.ghostCardRef.value.offsetWidth / 2, 
+                y: uiContext.ghostCardRef.value.offsetHeight / 2 
+            };
         });
         
         marker.on('drag', function(e) {
@@ -450,7 +452,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (eventForCoords.touches && eventForCoords.touches.length > 0) {
                 eventForCoords = eventForCoords.touches[0];
             }
-            moveGhost(uiContext.ghostCardRef.value, dragOffset,eventForCoords);
+            moveGhost(uiContext.ghostCardRef.value, uiContext.dragOffsetRef.value, eventForCoords);
 
             
             updateGuideLine({
