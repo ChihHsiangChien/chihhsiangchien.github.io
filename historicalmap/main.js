@@ -15,7 +15,6 @@ import { renderCards } from './uiController.js';
 document.addEventListener('DOMContentLoaded', () => {
         
     //  let sequentialMode = false;
-    let currentEventIndex = 0;
     //let eventsData = []; // To store sorted events for sequential mode
 
     // 2. 從 URL 讀取要顯示的地圖 ID 和模式
@@ -64,8 +63,6 @@ document.addEventListener('DOMContentLoaded', () => {
         styleElement.textContent = cssRules;
         document.head.appendChild(styleElement);
     }
-
-
 
 
     // --- Game State & UI ---
@@ -141,7 +138,7 @@ document.addEventListener('DOMContentLoaded', () => {
         uiContext.updateCardCount = () => updateCardCount({ gameData, placedEvents });
         uiContext.regionColorConfig = regionColorConfig;
         uiContext.eventsToRender = sortedEvents;
-        uiContext.currentEventIndex = currentEventIndex;        
+        uiContext.currentEventIndex = 0;        
     }
 
     function setupSortButtons(regionColorConfig) {
@@ -357,10 +354,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 repositionMarkersAtLocation(map, droppedLocationId, placedEvents, gameData, locationsData);
 
                 // 1. 先更新 currentEventIndex
-                currentEventIndex++;
+                uiContext.currentEventIndex++;
 
                 // 2. 同步到 uiContext
-                uiContext.currentEventIndex = currentEventIndex;
+                //uiContext.currentEventIndex = currentEventIndex;
                 //uiContext.eventsData = eventsData;    
 
                 // 3. 直接呼叫，不帶參數
