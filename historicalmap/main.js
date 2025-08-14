@@ -1,6 +1,8 @@
 // 引入設定
 import { uiContext } from './context.js';
+
 import { mapsData } from './maps.config.js';
+
 import { setupMap } from './map.js';
 import { moveGhost,  } from './map.js';
 import { renderLocationsOnMap, fitMapToLocations }from './map.js';
@@ -13,23 +15,18 @@ import { adjustCardContainerHeight } from './uiController.js';
 import { renderCards } from './uiController.js';
 import { updateDraggableCards, updateCardCount } from './uiController.js';
 import { setupSortButtons } from './uiController.js';
+import { injectRegionStyles } from './uiController.js';
+import { setupPanelToggle } from './uiController.js';
 
 import {setupTimelineControls} from './timeline.js';
-
 
 import { checkAnswers } from './gameLogic.js';
 import { handleDrop,} from './gameLogic.js';
 import { handleDropAttempt } from './gameLogic.js';
-
-import { injectRegionStyles } from './uiController.js';
-import { setupPanelToggle } from './uiController.js';
-
 import { autoPlaceAndCollapsePanel } from './gameLogic.js';
 
 
 document.addEventListener('DOMContentLoaded', () => {
-        
-
     // 從 URL 讀取要顯示的地圖 ID 和模式
     const urlParams = new URLSearchParams(window.location.search);
     const mapId = urlParams.get('map') || 'chutung-history'; // 預設載入竹東地圖
@@ -66,7 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const panelContent = document.getElementById('panel-content');
     const mapContainer = document.getElementById('map');
     const toggleIcon = document.getElementById('toggle-icon'); 
-    
+
     function setupUiContext(regionColorConfig, sortedEvents) {
         uiContext.cardContainer = cardContainer;
         uiContext.togglePanelBtn = togglePanelBtn;
@@ -86,7 +83,6 @@ document.addEventListener('DOMContentLoaded', () => {
         uiContext.currentEventIndex = 0;  
         uiContext.checkAnswersBtn = checkAnswersBtn;      
     }
-
     function setupGame(data, regionColorConfig) {
         uiContext.gameData = data;
         uiContext.locationsData = data.locations;
@@ -109,7 +105,6 @@ document.addEventListener('DOMContentLoaded', () => {
         setupTimelineControls(data, regionColorConfig,  map, currentMapConfig);
         setupPanelToggle();
     }
-
 
 
     adjustCardContainerHeight(cardContainer, checkAnswersBtn);
