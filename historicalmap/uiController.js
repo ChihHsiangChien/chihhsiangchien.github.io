@@ -1,5 +1,17 @@
 import { uiContext } from './context.js';
 
+
+export function initUiDomElements() {
+    uiContext.cardContainer = document.getElementById('card-container');
+    uiContext.checkAnswersBtn = document.getElementById('check-answers-btn');
+    uiContext.togglePanelBtn = document.getElementById('toggle-panel-btn');
+    uiContext.rightPanel = document.getElementById('right-panel');
+    uiContext.panelContent = document.getElementById('panel-content');
+    uiContext.mapContainer = document.getElementById('map');
+    uiContext.toggleIcon = document.getElementById('toggle-icon');
+}
+
+
 export function renderCards({ eventsToRender, regionColorConfig } = {}) {
     // 若沒傳參數則用 context 內的
     const events = eventsToRender || uiContext.eventsToRender;
