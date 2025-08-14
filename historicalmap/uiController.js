@@ -85,6 +85,25 @@ export function adjustCardContainerHeight(cardContainer, checkAnswersBtn) {
     cardContainer.style.overflowY = 'auto';
 }
 
+
+
+export function injectRegionStyles(config) {
+    const styleElement = document.createElement('style');
+    let cssRules = '';
+    for (const regionKey in config) {
+        const region = config[regionKey];
+        if (region.name) {
+            cssRules += `
+                .location-tooltip.region-${region.name} {
+                    background-color: ${region.mapBgColor};
+                    border-color: ${region.borderColor};
+                }
+            `;
+        }
+    }
+    styleElement.textContent = cssRules;
+    document.head.appendChild(styleElement);
+}
 export function setupSortButtons(regionColorConfig) {
     const sortYearAscBtn = document.getElementById('sort-year-asc');
     const sortYearDescBtn = document.getElementById('sort-year-desc');
@@ -134,5 +153,38 @@ export function setupSortButtons(regionColorConfig) {
         uiContext.eventsToRender = sorted;
         renderCards();
         updateSortButtonStyles(sortRegionDescBtn);
+    });
+}
+
+export function setupPanelToggle() {
+    const { togglePanelBtn, rightPanel, panelContent, mapContainer, toggleIcon } = uiContext;
+    if (!togglePanelBtn || !rightPanel || !panelContent || !mapContainer || !toggleIcon) {
+        console.error('setupPanelToggle: One or more DOM elements are missing in uiContext', {
+            togglePanelBtn, rightPanel, panelContent, mapContainer, toggleIcon
+        });
+        return;
+    }
+    togglePanelBtn.addEventListener('click', () => {
+        const isCollapsed = rightPanel.classList.contains('w-0');
+        if (isCollapsed) {
+            rightPanel.classList.remove('w-0');
+            rightPanel.classList.add('w-1/3');
+            panelContent.classList.remove('hidden');
+            mapContainer.classList.remove('w-full');
+            mapContainer.classList.add('w-2/3');
+            toggleIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />';
+            togglePanelBtn.style.right = 'calc(33.3333vw - 1.25rem)';
+        } else {
+            rightPanel.classList.remove('w-1/3');
+            rightPanel.classList.add('w-0');
+            panelContent.classList.add('hidden');
+            mapContainer.classList.remove('w-2/3');
+            mapContainer.classList.add('w-full');
+            toggleIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />';
+            togglePanelBtn.style.right = '0.5rem';
+        }
+        setTimeout(() => {
+            uiContext.map.invalidateSize();
+        }, 300);
     });
 }
