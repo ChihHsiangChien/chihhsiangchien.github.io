@@ -3,9 +3,9 @@ import { repositionMarkersAtLocation } from './map.js';
 import { updateCheckButtonState, updateCardCount } from './uiController.js';
 import { updateDraggableCards } from './uiController.js';
 
-import { setupMarkerDragEvents }from './map.js';
-import { findClosestLocation }from './map.js';
-import { findCircleByLocationId }from './map.js';
+import { setupMarkerDragEvents } from './map.js';
+import { findClosestLocation } from './map.js';
+import { findCircleByLocationId } from './map.js';
 
 import { highlightStep } from './timeline.js';
 import { enableTimelineKeydown } from './timeline.js';

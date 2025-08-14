@@ -4,12 +4,14 @@ import { uiContext } from './context.js';
 import { mapsData } from './maps.config.js';
 
 import { setupMap } from './map.js';
-import { moveGhost,  } from './map.js';
-import { renderLocationsOnMap, fitMapToLocations }from './map.js';
+import { moveGhost } from './map.js';
+import { renderLocationsOnMap, fitMapToLocations } from './map.js';
 import { updateGuideAndLastEvent } from './map.js';
 import { handleZoom } from './map.js';
 
 import { createCard } from './card.js';
+
+import { initUiDomElements } from './uiController.js';
 
 import { adjustCardContainerHeight } from './uiController.js';
 import { renderCards } from './uiController.js';
@@ -21,12 +23,16 @@ import { setupPanelToggle } from './uiController.js';
 import {setupTimelineControls} from './timeline.js';
 
 import { checkAnswers } from './gameLogic.js';
-import { handleDrop,} from './gameLogic.js';
+import { handleDrop } from './gameLogic.js';
 import { handleDropAttempt } from './gameLogic.js';
 import { autoPlaceAndCollapsePanel } from './gameLogic.js';
 
 
 document.addEventListener('DOMContentLoaded', () => {
+    // --- Map Initialization ---
+    const map = setupMap('map', 'satellite');    
+    initUiDomElements();
+
     // 從 URL 讀取要顯示的地圖 ID 和模式
     const urlParams = new URLSearchParams(window.location.search);
     const mapId = urlParams.get('map') || 'chutung-history'; // 預設載入竹東地圖
@@ -52,25 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-    // --- Map Initialization ---
-    const map = setupMap('map', 'satellite');
-
-    // --- Game State & UI ---
-    const cardContainer = document.getElementById('card-container');
-    const checkAnswersBtn = document.getElementById('check-answers-btn');
-    const togglePanelBtn = document.getElementById('toggle-panel-btn');
-    const rightPanel = document.getElementById('right-panel');
-    const panelContent = document.getElementById('panel-content');
-    const mapContainer = document.getElementById('map');
-    const toggleIcon = document.getElementById('toggle-icon'); 
-
     function setupUiContext(regionColorConfig, sortedEvents) {
-        uiContext.cardContainer = cardContainer;
-        uiContext.togglePanelBtn = togglePanelBtn;
-        uiContext.rightPanel = rightPanel;
-        uiContext.panelContent = panelContent;
-        uiContext.mapContainer = mapContainer;
-        uiContext.toggleIcon = toggleIcon;
         uiContext.createCard = createCard;
         uiContext.moveGhost = moveGhost;
         uiContext.updateGuideAndLastEvent = updateGuideAndLastEvent;
@@ -81,8 +69,8 @@ document.addEventListener('DOMContentLoaded', () => {
         uiContext.regionColorConfig = regionColorConfig;
         uiContext.eventsToRender = sortedEvents;
         uiContext.currentEventIndex = 0;  
-        uiContext.checkAnswersBtn = checkAnswersBtn;      
-    }
+    }   
+
     function setupGame(data, regionColorConfig) {
         uiContext.gameData = data;
         uiContext.locationsData = data.locations;
@@ -100,13 +88,13 @@ document.addEventListener('DOMContentLoaded', () => {
         fitMapToLocations(map);
 
         map.on('droppable:drop', (e) => handleDrop({ ...e, map }));
-        checkAnswersBtn.addEventListener('click', () => checkAnswers(uiContext.gameData, map));
+        uiContext.checkAnswersBtn.addEventListener('click', () => checkAnswers(uiContext.gameData, map));
         map.on('zoomend', () => handleZoom(map));
         setupTimelineControls(data, regionColorConfig,  map, currentMapConfig);
         setupPanelToggle();
     }
 
 
-    adjustCardContainerHeight(cardContainer, checkAnswersBtn);
-    window.addEventListener('resize', () => adjustCardContainerHeight(cardContainer, checkAnswersBtn));
+    adjustCardContainerHeight(uiContext.cardContainer, uiContext.checkAnswersBtn);
+    window.addEventListener('resize', () => adjustCardContainerHeight(uiContext.cardContainer, uiContext.checkAnswersBtn));
 });
