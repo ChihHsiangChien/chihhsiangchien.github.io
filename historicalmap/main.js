@@ -301,135 +301,137 @@ document.addEventListener('DOMContentLoaded', () => {
         const eventId = card.id;
         const droppedLocationId = drop.options.location_id;
         const eventData = uiContext.gameData.events.find(e => e.event_id === eventId);
-
-
-        // --- Sequential Mode Logic ---
+    
         if (uiContext.sequentialMode) {
-            const correctEvent = uiContext.eventsData[uiContext.currentEventIndex];
-            const isCorrect = correctEvent && eventId === correctEvent.event_id && droppedLocationId === correctEvent.location_id;
-
-            // 宣告 popupContent 於此區塊最前面
-            let popupContent = generatePopupContent(eventData);
-
-
-            if (isCorrect) {
-                // Correct placement
-                card.style.display = 'none'; // Hide card from panel
-                if (uiContext.ghostCardRef.value) {
-                    L.DomUtil.remove(uiContext.ghostCardRef.value);
-                    uiContext.ghostCardRef.value = null;
-                }
-                const year = new Date(eventData.start_time).getFullYear();
-                const correctIcon = L.divIcon({
-                    html: `<div class="placed-event-marker placed-event-marker--correct"><span>${eventData.title}</span><span class="marker-year">${year}</span></div>`,
-                    className: 'custom-div-icon',
-                    iconSize: null,
-                });
-                const markerLatLng = drop.getBounds ? drop.getBounds().getCenter() : drop.getLatLng();
-                const marker = L.marker(markerLatLng, { icon: correctIcon }).addTo(map);
-                marker.bindPopup(popupContent);
-
-                // Add to placedEvents so repositioning and final check works
-                uiContext.placedEvents[eventId] = { marker: marker, droppedLocationId: droppedLocationId };
-
-                repositionMarkersAtLocation(map, droppedLocationId, uiContext.placedEvents, uiContext.gameData, uiContext.locationsData);
-
-                uiContext.currentEventIndex++;
-
-                updateDraggableCards();
-
-                if (uiContext.currentEventIndex >= uiContext.eventsData.length) {
-                    checkAnswers(uiContext.gameData);
-                }
-            } else {
-                // Incorrect placement
-                if (uiContext.ghostCardRef.value) {
-                    L.DomUtil.remove(uiContext.ghostCardRef.value);
-                    uiContext.ghostCardRef.value = null;
-                }
-                L.DomUtil.setOpacity(card, 1);
-                card.classList.add('card-shake');
-                setTimeout(() => card.classList.remove('card-shake'), 820);
-            }
-            return; // End execution for sequential mode
+            handleSequentialDrop({ card, eventId, droppedLocationId, eventData, drop });
+            return;
         }
-
+    
+        handleNormalDrop({ card, eventId, droppedLocationId, eventData, drop });
+    }
+    
+    // Sequential mode 處理
+    function handleSequentialDrop({ card, eventId, droppedLocationId, eventData, drop }) {
+        const correctEvent = uiContext.eventsData[uiContext.currentEventIndex];
+        const isCorrect = correctEvent && eventId === correctEvent.event_id && droppedLocationId === correctEvent.location_id;
+        let popupContent = generatePopupContent(eventData);
+    
+        if (isCorrect) {
+            card.style.display = 'none';
+            removeGhostCard();
+            const marker = createStaticMarker(drop, eventData, popupContent);
+            uiContext.placedEvents[eventId] = { marker, droppedLocationId };
+            repositionMarkersAtLocation(map, droppedLocationId, uiContext.placedEvents, uiContext.gameData, uiContext.locationsData);
+            uiContext.currentEventIndex++;
+            updateDraggableCards();
+            if (uiContext.currentEventIndex >= uiContext.eventsData.length) {
+                checkAnswers(uiContext.gameData);
+            }
+        } else {
+            removeGhostCard();
+            L.DomUtil.setOpacity(card, 1);
+            card.classList.add('card-shake');
+            setTimeout(() => card.classList.remove('card-shake'), 820);
+        }
+    }
+    
+    // 一般模式處理
+    function handleNormalDrop({ card, eventId, droppedLocationId, eventData, drop }) {
         const oldPlacedEvent = uiContext.placedEvents[card.id];
-
+        animateGhostCardDrop(card, drop);
+    
+        if (oldPlacedEvent) {
+            map.removeLayer(oldPlacedEvent.marker);
+            repositionMarkersAtLocation(map, oldPlacedEvent.droppedLocationId, uiContext.placedEvents, uiContext.gameData, uiContext.locationsData);
+        }
+    
+        const marker = createDraggableMarker(drop, eventData);
+        marker.bindPopup(generatePopupContent(eventData));
+        setupMarkerDragEvents(marker);
+    
+        uiContext.placedEvents[card.id] = {
+            marker,
+            droppedLocationId: drop.options.location_id
+        };
+    
+        updateCheckButtonState();
+        repositionMarkersAtLocation(map, drop.options.location_id, uiContext.placedEvents, uiContext.gameData, uiContext.locationsData);
+        updateCardCount();
+    }
+    
+    // 處理 ghostCard 動畫與移除
+    function animateGhostCardDrop(card, drop) {
         if (uiContext.ghostCardRef.value) {
             const dropLatLng = drop.getBounds ? drop.getBounds().getCenter() : drop.getLatLng();
             const dropPoint = map.latLngToContainerPoint(dropLatLng);
-            
             const targetX = dropPoint.x - uiContext.ghostCardRef.value.offsetWidth / 2;
             const targetY = dropPoint.y - uiContext.ghostCardRef.value.offsetHeight / 2;
-
             uiContext.ghostCardRef.value.style.transition = 'left 0.2s ease-out, top 0.2s ease-out';
             uiContext.ghostCardRef.value.style.left = targetX + 'px';
             uiContext.ghostCardRef.value.style.top = targetY + 'px';
-
             setTimeout(() => {
-                if (uiContext.ghostCardRef.value) {
-                    L.DomUtil.remove(uiContext.ghostCardRef.value);
-                    uiContext.ghostCardRef.value = null;
-                }
+                removeGhostCard();
                 card.style.display = 'none';
             }, 200);
         } else {
             card.style.display = 'none';
         }
-
-        if (oldPlacedEvent) {
-            map.removeLayer(oldPlacedEvent.marker);
-            repositionMarkersAtLocation(map, oldPlacedEvent.droppedLocationId, uiContext.placedEvents, uiContext.gameData, uiContext.locationsData);
-        }
-
+    }
+    
+    // 建立靜態 marker（sequential mode）
+    function createStaticMarker(drop, eventData, popupContent) {
         const year = new Date(eventData.start_time).getFullYear();
-
+        const correctIcon = L.divIcon({
+            html: `<div class="placed-event-marker placed-event-marker--correct"><span>${eventData.title}</span><span class="marker-year">${year}</span></div>`,
+            className: 'custom-div-icon',
+            iconSize: null,
+        });
+        const markerLatLng = drop.getBounds ? drop.getBounds().getCenter() : drop.getLatLng();
+        const marker = L.marker(markerLatLng, { icon: correctIcon }).addTo(map);
+        marker.bindPopup(popupContent);
+        return marker;
+    }
+    
+    // 建立可拖曳 marker（一般模式）
+    function createDraggableMarker(drop, eventData) {
+        const year = new Date(eventData.start_time).getFullYear();
         const markerIcon = L.divIcon({
             html: `<div class="placed-event-marker"><span>${eventData.title}</span><span class="marker-year">${year}</span></div>`,
             className: 'custom-div-icon',
             iconSize: null,
         });
-
         const markerLatLng = drop.getBounds ? drop.getBounds().getCenter() : drop.getLatLng();
-        const marker = L.marker(markerLatLng, { icon: markerIcon, draggable: true }).addTo(map);
-
-
-        let popupContent = generatePopupContent(eventData);
-
-        marker.bindPopup(popupContent);
-
+        return L.marker(markerLatLng, { icon: markerIcon, draggable: true }).addTo(map);
+    }
+    
+    // 註冊 marker 拖曳事件
+    function setupMarkerDragEvents(marker) {
         marker.on('dragstart', function(e) {
             const markerInstance = this;
             markerInstance.originalLatLng = markerInstance.getLatLng();
             const eventId = Object.keys(uiContext.placedEvents).find(key => uiContext.placedEvents[key].marker === markerInstance);
             if (!eventId) return;
-
             const originalCard = document.getElementById(eventId);
             const originalDisplay = originalCard.style.display;
             originalCard.style.display = 'block';
             const cardWidth = originalCard.offsetWidth;
             originalCard.style.display = originalDisplay;
-
             uiContext.ghostCardRef.value = L.DomUtil.create('div', 'is-dragging', document.body);
             uiContext.ghostCardRef.value.innerHTML = originalCard.querySelector('h3').outerHTML;
             uiContext.ghostCardRef.value.style.width = cardWidth + 'px';
-            
             markerInstance.setOpacity(0);
             uiContext.dragOffsetRef.value = { 
                 x: uiContext.ghostCardRef.value.offsetWidth / 2, 
                 y: uiContext.ghostCardRef.value.offsetHeight / 2 
             };
         });
-        
+    
         marker.on('drag', function(e) {
             let eventForCoords = e.originalEvent;
             if (eventForCoords.touches && eventForCoords.touches.length > 0) {
                 eventForCoords = eventForCoords.touches[0];
             }
             moveGhost(uiContext.ghostCardRef.value, uiContext.dragOffsetRef.value, eventForCoords);
-
-            
             updateGuideLine({
                 map,
                 guideLineRef: uiContext.guideLineRef,
@@ -438,7 +440,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             uiContext.lastDragEventRef.value = { originalEvent: eventForCoords };
         });
-
+    
         marker.on('dragend', function(e) {
             const lastDragEvent = uiContext.lastDragEventRef.value;
             map.eachLayer(layer => {
@@ -456,27 +458,25 @@ document.addEventListener('DOMContentLoaded', () => {
             const markerInstance = this;
             if (uiContext.guideLineRef.value) map.removeLayer(uiContext.guideLineRef.value);
             uiContext.guideLineRef.value = null;
-
+    
             if (uiContext.ghostCardRef.value) {
                 L.DomUtil.remove(uiContext.ghostCardRef.value);
                 uiContext.ghostCardRef.value = null;
             }
-
+    
             if (lastDragEvent) {
                 const mouseX = lastDragEvent.originalEvent.clientX;
                 const mouseY = lastDragEvent.originalEvent.clientY;
                 const cardContainerRect = cardContainer.getBoundingClientRect();
                 const eventId = Object.keys(uiContext.placedEvents).find(key => uiContext.placedEvents[key].marker === markerInstance);
-
+    
                 if (eventId && mouseX >= cardContainerRect.left && mouseX <= cardContainerRect.right && mouseY >= cardContainerRect.top && mouseY <= cardContainerRect.bottom) {
                     const oldLocationId = uiContext.placedEvents[eventId].droppedLocationId;
                     map.removeLayer(markerInstance);
                     delete uiContext.placedEvents[eventId];
-
                     const cardElement = document.getElementById(eventId);
                     cardElement.style.display = 'block';
                     cardElement.style.position = ''; cardElement.style.left = ''; cardElement.style.top = ''; cardElement.style.transform = '';
-
                     repositionMarkersAtLocation(map, oldLocationId, uiContext.placedEvents, uiContext.gameData, uiContext.locationsData);
                     updateCheckButtonState();
                 } else {
@@ -496,15 +496,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 markerInstance.setOpacity(1);
             }
         });
-
-        uiContext.placedEvents[card.id] = {
-            marker: marker,
-            droppedLocationId: drop.options.location_id
-        };
-
-        updateCheckButtonState();
-        repositionMarkersAtLocation(map, drop.options.location_id, uiContext.placedEvents, uiContext.gameData, uiContext.locationsData);
-        updateCardCount();
+    }
+    
+    // 移除 ghostCard
+    function removeGhostCard() {
+        if (uiContext.ghostCardRef.value) {
+            L.DomUtil.remove(uiContext.ghostCardRef.value);
+            uiContext.ghostCardRef.value = null;
+        }
     }
 
     function checkAnswers(data) {
