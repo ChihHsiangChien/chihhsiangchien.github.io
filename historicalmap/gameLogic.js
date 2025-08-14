@@ -7,6 +7,9 @@ import { findClosestLocation }from './map.js';
 import { findCircleByLocationId }from './map.js';
 import { updateDraggableCards } from './uiController.js';
 
+import { enableTimelineKeydown } from './timeline.js';
+import { delay } from './utils.js';
+
 /**
  * 產生事件的 popup HTML 內容
  * @param {Object} eventData
@@ -288,4 +291,64 @@ export function checkAnswers(data, map) {
     } else {
         updateCheckButtonState();
     }
+}
+
+
+
+// 遍歷所有事件，找到對應的卡片和地圖位置，然後呼叫 handleDrop，直接將卡片放到 marker 上
+export function autoPlaceAndStartTimeline(data, map) {
+    data.events.forEach(event => {
+        const card = document.getElementById(event.event_id);
+        if (!card) return;
+        const location = uiContext.locationsData.find(loc => loc.location_id === event.location_id);
+        if (!location) return;
+        const circle = findCircleByLocationId(map, location.location_id);
+        if (!circle) return;
+
+        handleDrop({
+            drop: circle,
+            drag: { _element: card },
+            map: uiContext.map
+        });
+    });
+
+    checkAnswers(uiContext.gameData, map);
+
+    setTimeout(() => {
+        if (uiContext.timelinePlayBtn && !uiContext.timelinePlayBtn.disabled) {
+            uiContext.timelinePlayBtn.click();
+        }
+    }, 800);
+}
+
+
+
+// --- 簡化 autoplay mode 控制流程 ---
+export async function autoPlaceAndCollapsePanel(data, timelineContainer, map) {
+
+    // ...收合 panel 相關程式...
+    autoPlaceAndStartTimeline(data,map);
+
+    await delay(500);
+
+    const rightPanel = document.getElementById('right-panel');
+    const toggleBtn = document.getElementById('toggle-panel-btn');
+    const isCollapsed = rightPanel && rightPanel.classList.contains('w-0');
+
+    if (rightPanel && toggleBtn && !isCollapsed) {
+        toggleBtn.click();
+        await delay(350); // 等待收合動畫
+        // 收合後主動更新 timeline ticks layout
+        if (window.updateTimelineTicksLayout) window.updateTimelineTicksLayout();
+        // 新增：主動執行一次 scaleToggleButton 的 function（確保 slider/ticks 位置正確）
+        //if (window.timelineScaleToggle) window.timelineScaleToggle();
+    }
+    
+    if (timelineContainer) timelineContainer.classList.remove('hidden');
+    // 顯示 timelineContainer 後再主動更新一次
+    if (window.updateTimelineTicksLayout) window.updateTimelineTicksLayout();
+    // 再執行一次 scaleToggleButton 的 function
+    if (window.timelineScaleToggle) window.timelineScaleToggle();
+
+    enableTimelineKeydown();
 }

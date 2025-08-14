@@ -1,6 +1,7 @@
 import { uiContext } from './context.js';
 import { updateCheckButtonState } from './uiController.js';
 
+
 // map.js
 
 export function setupMap(mapContainerId = 'map', defaultLayer = 'satellite') {
@@ -283,5 +284,13 @@ export function setupMarkerDragEvents(marker, map) {
             markerInstance.setLatLng(markerInstance.originalLatLng);
             markerInstance.setOpacity(1);
         }
+    });
+}
+
+
+export function handleZoom(map) {
+    const locationsToUpdate = new Set(Object.values(uiContext.placedEvents).map(p => p.droppedLocationId));
+    locationsToUpdate.forEach(locationId => {
+        repositionMarkersAtLocation(map, locationId, uiContext.placedEvents, uiContext.gameData, uiContext.locationsData);
     });
 }
