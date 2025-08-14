@@ -1,3 +1,6 @@
+import { uiContext } from './context.js';
+import { updateCheckButtonState } from './uiController.js';
+
 // map.js
 
 export function setupMap(mapContainerId = 'map', defaultLayer = 'satellite') {
@@ -153,4 +156,132 @@ export function updateGuideAndLastEvent({
         }
     }
     setLastDragEvent({ originalEvent: event });
+}
+
+
+export function renderLocationsOnMap(map, regionColorConfig) {
+    const bounds = L.latLngBounds();
+    uiContext.locationsData.forEach(location => {
+        let layer;
+        const region = location.region || 'default';
+        const colorInfo = regionColorConfig[region] || regionColorConfig.default;
+
+        if (location.shape === 'polygon') {
+            layer = L.polygon(location.points, { droppable: true, location_id: location.location_id });
+        } else {
+            layer = L.circle(location.center, { radius: location.radius, droppable: true, location_id: location.location_id });
+        }
+        layer.addTo(map)
+            .bindTooltip(`<span>${location.name}</span>`, { permanent: true, direction: 'center', className: `location-tooltip region-${colorInfo.name}` });
+
+        if (layer instanceof L.Polygon) {
+            bounds.extend(layer.getBounds());
+        } else if (layer instanceof L.Circle) {
+            bounds.extend(layer.getLatLng().toBounds(layer.getRadius()));
+        }
+    });
+    // 存 bounds 供 fitMapToLocations 使用
+    map._customBounds = bounds;
+}
+
+export function fitMapToLocations(map) {
+    const bounds = map._customBounds;
+    if (bounds && bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [50, 50] });
+    }
+}
+
+
+// 註冊 marker 拖曳事件
+export function setupMarkerDragEvents(marker, map) {
+    marker.on('dragstart', function(e) {
+        const markerInstance = this;
+        markerInstance.originalLatLng = markerInstance.getLatLng();
+        const eventId = Object.keys(uiContext.placedEvents).find(key => uiContext.placedEvents[key].marker === markerInstance);
+        if (!eventId) return;
+        const originalCard = document.getElementById(eventId);
+        const originalDisplay = originalCard.style.display;
+        originalCard.style.display = 'block';
+        const cardWidth = originalCard.offsetWidth;
+        originalCard.style.display = originalDisplay;
+        uiContext.ghostCardRef.value = L.DomUtil.create('div', 'is-dragging', document.body);
+        uiContext.ghostCardRef.value.innerHTML = originalCard.querySelector('h3').outerHTML;
+        uiContext.ghostCardRef.value.style.width = cardWidth + 'px';
+        markerInstance.setOpacity(0);
+        uiContext.dragOffsetRef.value = { 
+            x: uiContext.ghostCardRef.value.offsetWidth / 2, 
+            y: uiContext.ghostCardRef.value.offsetHeight / 2 
+        };
+    });
+
+    marker.on('drag', function(e) {
+        let eventForCoords = e.originalEvent;
+        if (eventForCoords.touches && eventForCoords.touches.length > 0) {
+            eventForCoords = eventForCoords.touches[0];
+        }
+        moveGhost(uiContext.ghostCardRef.value, uiContext.dragOffsetRef.value, eventForCoords);
+        updateGuideLine({
+            map,
+            guideLineRef: uiContext.guideLineRef,
+            event: eventForCoords,
+            locationsData: uiContext.locationsData
+        });
+        uiContext.lastDragEventRef.value = { originalEvent: eventForCoords };
+    });
+
+    marker.on('dragend', function(e) {
+        const lastDragEvent = uiContext.lastDragEventRef.value;
+        map.eachLayer(layer => {
+            if (
+                layer.options &&
+                layer.options.location_id &&
+                layer.getTooltip &&
+                layer.getTooltip() &&
+                layer.getTooltip().getElement()
+            ) {
+                layer.getTooltip().getElement().classList.remove('location-tooltip--guide-highlight');
+            }
+        });
+        window._lastGuideTooltipId = null;            
+        const markerInstance = this;
+        if (uiContext.guideLineRef.value) map.removeLayer(uiContext.guideLineRef.value);
+        uiContext.guideLineRef.value = null;
+
+        if (uiContext.ghostCardRef.value) {
+            L.DomUtil.remove(uiContext.ghostCardRef.value);
+            uiContext.ghostCardRef.value = null;
+        }
+
+        if (lastDragEvent) {
+            const mouseX = lastDragEvent.originalEvent.clientX;
+            const mouseY = lastDragEvent.originalEvent.clientY;
+            const cardContainerRect = uiContext.cardContainer.getBoundingClientRect();
+            const eventId = Object.keys(uiContext.placedEvents).find(key => uiContext.placedEvents[key].marker === markerInstance);
+
+            if (eventId && mouseX >= cardContainerRect.left && mouseX <= cardContainerRect.right && mouseY >= cardContainerRect.top && mouseY <= cardContainerRect.bottom) {
+                const oldLocationId = uiContext.placedEvents[eventId].droppedLocationId;
+                map.removeLayer(markerInstance);
+                delete uiContext.placedEvents[eventId];
+                const cardElement = document.getElementById(eventId);
+                cardElement.style.display = 'block';
+                cardElement.style.position = ''; cardElement.style.left = ''; cardElement.style.top = ''; cardElement.style.transform = '';
+                repositionMarkersAtLocation(map, oldLocationId, uiContext.placedEvents, uiContext.gameData, uiContext.locationsData);
+                updateCheckButtonState();
+            } else {
+                const latLng = map.mouseEventToLatLng(lastDragEvent.originalEvent);
+                const closestLocation = findClosestLocation(map, latLng, uiContext.locationsData);
+                if (closestLocation && eventId) {
+                    const droppedOnCircle = findCircleByLocationId(map, closestLocation.location_id);
+                    const originalCardElement = document.getElementById(eventId);
+                    map.fire('droppable:drop', { drop: droppedOnCircle, drag: { _element: originalCardElement } });
+                } else {
+                    markerInstance.setLatLng(markerInstance.originalLatLng);
+                    markerInstance.setOpacity(1);
+                }
+            }
+        } else {
+            markerInstance.setLatLng(markerInstance.originalLatLng);
+            markerInstance.setOpacity(1);
+        }
+    });
 }

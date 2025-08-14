@@ -30,4 +30,6 @@ export const uiContext = {
     autoPanToggleButton: null,
     isAutoPanEnabled: true,
     isHighlightModeEnabled: true,
+    
+    checkAnswersBtn: null
 };

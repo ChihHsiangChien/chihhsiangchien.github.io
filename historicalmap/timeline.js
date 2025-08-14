@@ -1,3 +1,5 @@
+import { uiContext } from './context.js';
+
 // --- Timeline Slider UI ---
 export function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPlacedChrono, isTimelineEnabled, onToggleHighlight, onToggleAutoPan) {
     let timelineInterval = null;
@@ -228,10 +230,10 @@ export function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPla
                     }
                 }
                 timelineSlider.value = eventTimes[closestIdx]; // 強制跳到最近事件
-                onStepHighlight(closestIdx);
+                onStepHighlight(closestIdx, map);
             } else {
                 currentIdx = parseInt(timelineSlider.value, 10);
-                onStepHighlight(currentIdx);
+                onStepHighlight(currentIdx, map);
             }
         }
     };    
@@ -265,7 +267,7 @@ export function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPla
             } else {
                 timelineSlider.value = currentIdx;
             }
-            onStepHighlight(currentIdx);
+            onStepHighlight(currentIdx, map);
         }, intervalMs);
     }
 
@@ -507,7 +509,7 @@ export function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPla
 }
 
 //時間軸用左右鍵控制
-export function timelineKeydownHandler(e, timelineEnabled, timelineSlider, placedChrono, highlightStep) {
+export function timelineKeydownHandler(e, timelineEnabled, timelineSlider, placedChrono, highlightStep, map) {
     if (!timelineEnabled || !timelineSlider || timelineSlider.disabled || timelineSlider.style.display === 'none') return;
     if (placedChrono.length === 0) return;
 
@@ -545,7 +547,7 @@ export function timelineKeydownHandler(e, timelineEnabled, timelineSlider, place
             idx = Math.max(0, currentIdx - 1);
             timelineSlider.value = String(idx);
         }
-        highlightStep(idx);
+        highlightStep(idx, map);
     } else if (e.key === 'ArrowRight') {
         let idx;
         if (isTimeScaleMode) {
@@ -560,8 +562,150 @@ export function timelineKeydownHandler(e, timelineEnabled, timelineSlider, place
             idx = Math.min(eventTimes.length - 1, currentIdx + 1);
             timelineSlider.value = String(idx);
         }
-        highlightStep(idx);
+        highlightStep(idx, map);
     }
 }
 
 //window.setupTimelineSlider = setupTimelineSlider;
+export function setupTimelineControls(data, regionColorConfig, map, currentMapConfig) {
+    const getPlacedChrono = () => uiContext.placedChrono;
+    const isTimelineEnabled = () => uiContext.timelineEnabled;
+    const toggleHighlightMode = () => {
+        uiContext.isHighlightModeEnabled = !uiContext.isHighlightModeEnabled;
+        uiContext.highlightToggleButton.style.opacity = uiContext.isHighlightModeEnabled ? '1' : '0.5';
+        uiContext.highlightToggleButton.title = uiContext.isHighlightModeEnabled ? '關閉高亮模式' : '開啟高亮模式';
+        highlightStep(parseInt(uiContext.timelineSlider.value, 10), map);
+    };
+    const toggleAutoPan = () => {
+        uiContext.isAutoPanEnabled = !uiContext.isAutoPanEnabled;
+        uiContext.autoPanToggleButton.style.opacity = uiContext.isAutoPanEnabled ? '1' : '0.5';
+        uiContext.autoPanToggleButton.title = uiContext.isAutoPanEnabled ? '關閉自動平移' : '開啟自動平移';
+    };
+
+    const controls = setupTimelineSlider(
+        data, 
+        map, 
+        currentMapConfig, 
+        highlightStep,
+        getPlacedChrono, 
+        isTimelineEnabled, 
+        toggleHighlightMode, 
+        toggleAutoPan
+    );
+    uiContext.timelineSlider = controls.timelineSlider;
+    uiContext.timelinePlayBtn = controls.timelinePlayBtn;
+    uiContext.timelinePauseBtn = controls.timelinePauseBtn;
+    uiContext.scaleToggleButton = controls.scaleToggleButton;
+    uiContext.highlightToggleButton = controls.highlightToggleButton;
+    uiContext.autoPanToggleButton = controls.autoPanToggleButton;
+}
+
+
+export function highlightStep(idx, map) {
+    map = map || uiContext.map;
+    if (!map || typeof map.hasLayer !== 'function') return;
+    
+    if (!uiContext.timelineEnabled) {
+        uiContext.placedChrono.forEach(item => {
+            if (item.marker) {
+                const year = new Date(item.event.start_time).getFullYear();
+                item.marker.setIcon(L.divIcon({
+                    html: `<div class="placed-event-marker placed-event-marker--correct"><span>${item.event.title}</span><span class="marker-year">${year}</span></div>`,
+                    className: 'custom-div-icon',
+                    iconSize: null,
+                }));
+            }
+        });
+        map.eachLayer(layer => {
+            if (layer.getTooltip() && layer.getTooltip().getElement()) {
+                layer.getTooltip().getElement().classList.remove('location-tooltip--dimmed', 'location-tooltip--highlight');
+            }
+        });
+        return;
+    }
+
+    if (!uiContext.isHighlightModeEnabled) {
+        const currentEvent = uiContext.placedChrono[idx];
+        if (currentEvent && currentEvent.marker && uiContext.isAutoPanEnabled) {
+            map.panTo(currentEvent.marker.getLatLng());
+        }
+        uiContext.placedChrono.forEach(item => {
+            if (item.marker) {
+                const year = new Date(item.event.start_time).getFullYear();
+                item.marker.setIcon(L.divIcon({
+                    html: `<div class="placed-event-marker placed-event-marker--correct"><span>${item.event.title}</span><span class="marker-year">${year}</span></div>`,
+                    className: 'custom-div-icon',
+                    iconSize: null,
+                }));
+            }
+        });
+        map.eachLayer(layer => {
+            if (layer.getTooltip() && layer.getTooltip().getElement()) {
+                layer.getTooltip().getElement().classList.remove('location-tooltip--dimmed', 'location-tooltip--highlight');
+            }
+        });
+        return;
+    }
+
+    const highlightedEvent = uiContext.placedChrono[idx];
+    const highlightedLocationId = highlightedEvent ? highlightedEvent.event.location_id : null;
+
+    uiContext.placedChrono.forEach((item, i) => {
+        if (item.marker) {
+            const year = new Date(item.event.start_time).getFullYear();
+            const isHighlighted = i === idx;
+            const targetPane = isHighlighted ? 'highlightedMarkerPane' : 'markerPane';
+            if (item.marker.options.pane !== targetPane) {
+                item.marker.options.pane = targetPane;
+                if (map.hasLayer(item.marker)) {
+                    map.removeLayer(item.marker);
+                    map.addLayer(item.marker);
+                }
+            }
+            const markerClass = `placed-event-marker placed-event-marker--correct ${isHighlighted ? 'placed-event-marker--highlight' : 'placed-event-marker--dimmed'}`;                
+            item.marker.setIcon(L.divIcon({
+                html: `<div class="${markerClass}"><span>${item.event.title}</span><span class="marker-year">${year}</span></div>`,
+                className: 'custom-div-icon',
+                iconSize: null,
+            }));
+
+            if (isHighlighted && uiContext.isAutoPanEnabled) {
+                map.panTo(item.marker.getLatLng());
+            }
+        }
+    });
+
+    let highlightedLayer = null;
+    map.eachLayer(layer => {
+        if (layer.options.location_id && layer.getTooltip() && layer.getTooltip().getElement()) {
+            const tooltipEl = layer.getTooltip().getElement();
+            const isHighlighted = layer.options.location_id === highlightedLocationId;
+            tooltipEl.classList.toggle('location-tooltip--highlight', isHighlighted);
+            tooltipEl.classList.toggle('location-tooltip--dimmed', !isHighlighted);
+
+            if (isHighlighted) {
+                highlightedLayer = layer;
+            }
+        }
+    });
+
+    if (highlightedLayer) {
+        highlightedLayer.bringToFront();
+    }
+}
+    
+function timelineKeydownProxy(e) {
+    timelineKeydownHandler(
+        e, 
+        uiContext.timelineEnabled, 
+        uiContext.timelineSlider, 
+        uiContext.placedChrono, 
+        highlightStep,
+        uiContext.map
+    );
+}
+
+export function enableTimelineKeydown() {
+    window.removeEventListener('keydown', timelineKeydownProxy);
+    window.addEventListener('keydown', timelineKeydownProxy);
+}

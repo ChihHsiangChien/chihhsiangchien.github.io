@@ -3,14 +3,22 @@ import { uiContext } from './context.js';
 import { mapsData } from './maps.config.js';
 import { setupMap } from './map.js';
 import { moveGhost, updateGuideLine, findClosestLocation, findCircleByLocationId, repositionMarkersAtLocation } from './map.js';
+import { renderLocationsOnMap, fitMapToLocations, setupMarkerDragEvents }from './map.js';
 import { updateGuideAndLastEvent } from './map.js';
 import { createCard } from './card.js';
 import { delay } from './utils.js';
-import { generatePopupContent } from './utils.js';
-import { adjustCardContainerHeight } from './uiUtils.js';
-import { setupTimelineSlider, timelineKeydownHandler } from './timeline.js';
-import { updateDraggableCards, updateCardCount } from './uiController.js';
+
+import { adjustCardContainerHeight } from './uiController.js';
 import { renderCards } from './uiController.js';
+import { updateDraggableCards, updateCardCount } from './uiController.js';
+import { setupSortButtons } from './uiController.js';
+
+import {setupTimelineControls} from './timeline.js';
+import {highlightStep} from './timeline.js';
+import {enableTimelineKeydown} from './timeline.js';
+
+import { checkAnswers } from './gameLogic.js';
+import { handleDrop, handleNormalDrop, handleSequentialDrop } from './gameLogic.js';
 
 document.addEventListener('DOMContentLoaded', () => {
         
@@ -86,14 +94,14 @@ document.addEventListener('DOMContentLoaded', () => {
         renderCards();
 
         setupSortButtons(regionColorConfig);
-        renderLocationsOnMap(regionColorConfig);
-        fitMapToLocations();
+        renderLocationsOnMap(map, regionColorConfig);
+        fitMapToLocations(map);
 
-        map.on('droppable:drop', handleDrop);
-        checkAnswersBtn.addEventListener('click', () => checkAnswers(uiContext.gameData));
+        map.on('droppable:drop', (e) => handleDrop({ ...e, map }));
+        checkAnswersBtn.addEventListener('click', () => checkAnswers(uiContext.gameData, map));
         map.on('zoomend', handleZoom);
 
-        setupTimelineControls(data, regionColorConfig);
+        setupTimelineControls(data, regionColorConfig,  map, currentMapConfig);
 
         setupPanelToggle();
     }
@@ -111,125 +119,14 @@ document.addEventListener('DOMContentLoaded', () => {
         uiContext.updateCardCount = updateCardCount;
         uiContext.regionColorConfig = regionColorConfig;
         uiContext.eventsToRender = sortedEvents;
-        uiContext.currentEventIndex = 0;        
+        uiContext.currentEventIndex = 0;  
+        uiContext.checkAnswersBtn = checkAnswersBtn;      
     }
 
-    function setupSortButtons(regionColorConfig) {
-        const sortYearAscBtn = document.getElementById('sort-year-asc');
-        const sortYearDescBtn = document.getElementById('sort-year-desc');
-        const sortRegionAscBtn = document.getElementById('sort-region-asc');
-        const sortRegionDescBtn = document.getElementById('sort-region-desc');
-        const sortButtons = [sortYearAscBtn, sortYearDescBtn, sortRegionAscBtn, sortRegionDescBtn];
 
-        if (uiContext.sequentialMode) {
-            checkAnswersBtn.style.display = 'none';
-            const sortContainer = document.getElementById('sort-buttons-container');
-            if (sortContainer) sortContainer.style.display = 'none';
-            return;
-        }
 
-        function updateSortButtonStyles(activeButton) {
-            sortButtons.forEach(btn => {
-                btn.classList.remove('bg-blue-500', 'text-white');
-                btn.classList.add('bg-gray-200', 'text-gray-700');
-            });
-            activeButton.classList.add('bg-blue-500', 'text-white');
-            activeButton.classList.remove('bg-gray-200', 'text-gray-700');
-        }
 
-        sortYearAscBtn.addEventListener('click', () => {
-            const sorted = [...uiContext.gameData.events].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
-            uiContext.eventsToRender = sorted;
-            renderCards();
-            updateSortButtonStyles(sortYearAscBtn);
-        });
 
-        sortYearDescBtn.addEventListener('click', () => {
-            const sorted = [...uiContext.gameData.events].sort((a, b) => new Date(b.start_time) - new Date(a.start_time));
-            uiContext.eventsToRender = sorted;
-            renderCards();
-            updateSortButtonStyles(sortYearDescBtn);
-        });
-
-        sortRegionAscBtn.addEventListener('click', () => {
-            const sorted = [...uiContext.gameData.events].sort((a, b) => (a.region || '').localeCompare(b.region || '', 'zh-Hant'));
-            uiContext.eventsToRender = sorted;
-            renderCards();
-            updateSortButtonStyles(sortRegionAscBtn);
-        });
-
-        sortRegionDescBtn.addEventListener('click', () => {
-            const sorted = [...uiContext.gameData.events].sort((a, b) => (b.region || '').localeCompare(a.region || '', 'zh-Hant'));
-            uiContext.eventsToRender = sorted;
-            renderCards();
-            updateSortButtonStyles(sortRegionDescBtn);
-        });
-    }
-
-    function renderLocationsOnMap(regionColorConfig) {
-        const bounds = L.latLngBounds();
-        uiContext.locationsData.forEach(location => {
-            let layer;
-            const region = location.region || 'default';
-            const colorInfo = regionColorConfig[region] || regionColorConfig.default;
-
-            if (location.shape === 'polygon') {
-                layer = L.polygon(location.points, { droppable: true, location_id: location.location_id });
-            } else {
-                layer = L.circle(location.center, { radius: location.radius, droppable: true, location_id: location.location_id });
-            }
-            layer.addTo(map)
-                .bindTooltip(`<span>${location.name}</span>`, { permanent: true, direction: 'center', className: `location-tooltip region-${colorInfo.name}` });
-
-            if (layer instanceof L.Polygon) {
-                bounds.extend(layer.getBounds());
-            } else if (layer instanceof L.Circle) {
-                bounds.extend(layer.getLatLng().toBounds(layer.getRadius()));
-            }
-        });
-        // 存 bounds 供 fitMapToLocations 使用
-        map._customBounds = bounds;
-    }
-
-    function fitMapToLocations() {
-        const bounds = map._customBounds;
-        if (bounds && bounds.isValid()) {
-            map.fitBounds(bounds, { padding: [50, 50] });
-        }
-    }
-
-    function setupTimelineControls(data, regionColorConfig) {
-        const getPlacedChrono = () => uiContext.placedChrono;
-        const isTimelineEnabled = () => uiContext.timelineEnabled;
-        const toggleHighlightMode = () => {
-            uiContext.isHighlightModeEnabled = !uiContext.isHighlightModeEnabled;
-            uiContext.highlightToggleButton.style.opacity = uiContext.isHighlightModeEnabled ? '1' : '0.5';
-            uiContext.highlightToggleButton.title = uiContext.isHighlightModeEnabled ? '關閉高亮模式' : '開啟高亮模式';
-            highlightStep(parseInt(uiContext.timelineSlider.value, 10));
-        };
-        const toggleAutoPan = () => {
-            uiContext.isAutoPanEnabled = !uiContext.isAutoPanEnabled;
-            uiContext.autoPanToggleButton.style.opacity = uiContext.isAutoPanEnabled ? '1' : '0.5';
-            uiContext.autoPanToggleButton.title = uiContext.isAutoPanEnabled ? '關閉自動平移' : '開啟自動平移';
-        };
-    
-        const controls = setupTimelineSlider(
-            data, 
-            map, 
-            currentMapConfig, 
-            highlightStep,
-            getPlacedChrono, 
-            isTimelineEnabled, 
-            toggleHighlightMode, 
-            toggleAutoPan
-        );
-        uiContext.timelineSlider = controls.timelineSlider;
-        uiContext.timelinePlayBtn = controls.timelinePlayBtn;
-        uiContext.timelinePauseBtn = controls.timelinePauseBtn;
-        uiContext.scaleToggleButton = controls.scaleToggleButton;
-        uiContext.highlightToggleButton = controls.highlightToggleButton;
-        uiContext.autoPanToggleButton = controls.autoPanToggleButton;
-    }
 
     function setupPanelToggle() {
         togglePanelBtn.addEventListener('click', () => {
@@ -296,421 +193,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
-    function handleDrop({ drop, drag }) {
-        const card = drag._element;
-        const eventId = card.id;
-        const droppedLocationId = drop.options.location_id;
-        const eventData = uiContext.gameData.events.find(e => e.event_id === eventId);
-    
-        if (uiContext.sequentialMode) {
-            handleSequentialDrop({ card, eventId, droppedLocationId, eventData, drop });
-            return;
-        }
-    
-        handleNormalDrop({ card, eventId, droppedLocationId, eventData, drop });
-    }
-    
-    // Sequential mode 處理
-    function handleSequentialDrop({ card, eventId, droppedLocationId, eventData, drop }) {
-        const correctEvent = uiContext.eventsData[uiContext.currentEventIndex];
-        const isCorrect = correctEvent && eventId === correctEvent.event_id && droppedLocationId === correctEvent.location_id;
-        let popupContent = generatePopupContent(eventData);
-    
-        if (isCorrect) {
-            card.style.display = 'none';
-            removeGhostCard();
-            const marker = createStaticMarker(drop, eventData, popupContent);
-            uiContext.placedEvents[eventId] = { marker, droppedLocationId };
-            repositionMarkersAtLocation(map, droppedLocationId, uiContext.placedEvents, uiContext.gameData, uiContext.locationsData);
-            uiContext.currentEventIndex++;
-            updateDraggableCards();
-            if (uiContext.currentEventIndex >= uiContext.eventsData.length) {
-                checkAnswers(uiContext.gameData);
-            }
-        } else {
-            removeGhostCard();
-            L.DomUtil.setOpacity(card, 1);
-            card.classList.add('card-shake');
-            setTimeout(() => card.classList.remove('card-shake'), 820);
-        }
-    }
-    
-    // 一般模式處理
-    function handleNormalDrop({ card, eventId, droppedLocationId, eventData, drop }) {
-        const oldPlacedEvent = uiContext.placedEvents[card.id];
-        animateGhostCardDrop(card, drop);
-    
-        if (oldPlacedEvent) {
-            map.removeLayer(oldPlacedEvent.marker);
-            repositionMarkersAtLocation(map, oldPlacedEvent.droppedLocationId, uiContext.placedEvents, uiContext.gameData, uiContext.locationsData);
-        }
-    
-        const marker = createDraggableMarker(drop, eventData);
-        marker.bindPopup(generatePopupContent(eventData));
-        setupMarkerDragEvents(marker);
-    
-        uiContext.placedEvents[card.id] = {
-            marker,
-            droppedLocationId: drop.options.location_id
-        };
-    
-        updateCheckButtonState();
-        repositionMarkersAtLocation(map, drop.options.location_id, uiContext.placedEvents, uiContext.gameData, uiContext.locationsData);
-        updateCardCount();
-    }
-    
-    // 處理 ghostCard 動畫與移除
-    function animateGhostCardDrop(card, drop) {
-        if (uiContext.ghostCardRef.value) {
-            const dropLatLng = drop.getBounds ? drop.getBounds().getCenter() : drop.getLatLng();
-            const dropPoint = map.latLngToContainerPoint(dropLatLng);
-            const targetX = dropPoint.x - uiContext.ghostCardRef.value.offsetWidth / 2;
-            const targetY = dropPoint.y - uiContext.ghostCardRef.value.offsetHeight / 2;
-            uiContext.ghostCardRef.value.style.transition = 'left 0.2s ease-out, top 0.2s ease-out';
-            uiContext.ghostCardRef.value.style.left = targetX + 'px';
-            uiContext.ghostCardRef.value.style.top = targetY + 'px';
-            setTimeout(() => {
-                removeGhostCard();
-                card.style.display = 'none';
-            }, 200);
-        } else {
-            card.style.display = 'none';
-        }
-    }
-    
-    // 建立靜態 marker（sequential mode）
-    function createStaticMarker(drop, eventData, popupContent) {
-        const year = new Date(eventData.start_time).getFullYear();
-        const correctIcon = L.divIcon({
-            html: `<div class="placed-event-marker placed-event-marker--correct"><span>${eventData.title}</span><span class="marker-year">${year}</span></div>`,
-            className: 'custom-div-icon',
-            iconSize: null,
-        });
-        const markerLatLng = drop.getBounds ? drop.getBounds().getCenter() : drop.getLatLng();
-        const marker = L.marker(markerLatLng, { icon: correctIcon }).addTo(map);
-        marker.bindPopup(popupContent);
-        return marker;
-    }
-    
-    // 建立可拖曳 marker（一般模式）
-    function createDraggableMarker(drop, eventData) {
-        const year = new Date(eventData.start_time).getFullYear();
-        const markerIcon = L.divIcon({
-            html: `<div class="placed-event-marker"><span>${eventData.title}</span><span class="marker-year">${year}</span></div>`,
-            className: 'custom-div-icon',
-            iconSize: null,
-        });
-        const markerLatLng = drop.getBounds ? drop.getBounds().getCenter() : drop.getLatLng();
-        return L.marker(markerLatLng, { icon: markerIcon, draggable: true }).addTo(map);
-    }
-    
-    // 註冊 marker 拖曳事件
-    function setupMarkerDragEvents(marker) {
-        marker.on('dragstart', function(e) {
-            const markerInstance = this;
-            markerInstance.originalLatLng = markerInstance.getLatLng();
-            const eventId = Object.keys(uiContext.placedEvents).find(key => uiContext.placedEvents[key].marker === markerInstance);
-            if (!eventId) return;
-            const originalCard = document.getElementById(eventId);
-            const originalDisplay = originalCard.style.display;
-            originalCard.style.display = 'block';
-            const cardWidth = originalCard.offsetWidth;
-            originalCard.style.display = originalDisplay;
-            uiContext.ghostCardRef.value = L.DomUtil.create('div', 'is-dragging', document.body);
-            uiContext.ghostCardRef.value.innerHTML = originalCard.querySelector('h3').outerHTML;
-            uiContext.ghostCardRef.value.style.width = cardWidth + 'px';
-            markerInstance.setOpacity(0);
-            uiContext.dragOffsetRef.value = { 
-                x: uiContext.ghostCardRef.value.offsetWidth / 2, 
-                y: uiContext.ghostCardRef.value.offsetHeight / 2 
-            };
-        });
-    
-        marker.on('drag', function(e) {
-            let eventForCoords = e.originalEvent;
-            if (eventForCoords.touches && eventForCoords.touches.length > 0) {
-                eventForCoords = eventForCoords.touches[0];
-            }
-            moveGhost(uiContext.ghostCardRef.value, uiContext.dragOffsetRef.value, eventForCoords);
-            updateGuideLine({
-                map,
-                guideLineRef: uiContext.guideLineRef,
-                event: eventForCoords,
-                locationsData: uiContext.locationsData
-            });
-            uiContext.lastDragEventRef.value = { originalEvent: eventForCoords };
-        });
-    
-        marker.on('dragend', function(e) {
-            const lastDragEvent = uiContext.lastDragEventRef.value;
-            map.eachLayer(layer => {
-                if (
-                    layer.options &&
-                    layer.options.location_id &&
-                    layer.getTooltip &&
-                    layer.getTooltip() &&
-                    layer.getTooltip().getElement()
-                ) {
-                    layer.getTooltip().getElement().classList.remove('location-tooltip--guide-highlight');
-                }
-            });
-            window._lastGuideTooltipId = null;            
-            const markerInstance = this;
-            if (uiContext.guideLineRef.value) map.removeLayer(uiContext.guideLineRef.value);
-            uiContext.guideLineRef.value = null;
-    
-            if (uiContext.ghostCardRef.value) {
-                L.DomUtil.remove(uiContext.ghostCardRef.value);
-                uiContext.ghostCardRef.value = null;
-            }
-    
-            if (lastDragEvent) {
-                const mouseX = lastDragEvent.originalEvent.clientX;
-                const mouseY = lastDragEvent.originalEvent.clientY;
-                const cardContainerRect = cardContainer.getBoundingClientRect();
-                const eventId = Object.keys(uiContext.placedEvents).find(key => uiContext.placedEvents[key].marker === markerInstance);
-    
-                if (eventId && mouseX >= cardContainerRect.left && mouseX <= cardContainerRect.right && mouseY >= cardContainerRect.top && mouseY <= cardContainerRect.bottom) {
-                    const oldLocationId = uiContext.placedEvents[eventId].droppedLocationId;
-                    map.removeLayer(markerInstance);
-                    delete uiContext.placedEvents[eventId];
-                    const cardElement = document.getElementById(eventId);
-                    cardElement.style.display = 'block';
-                    cardElement.style.position = ''; cardElement.style.left = ''; cardElement.style.top = ''; cardElement.style.transform = '';
-                    repositionMarkersAtLocation(map, oldLocationId, uiContext.placedEvents, uiContext.gameData, uiContext.locationsData);
-                    updateCheckButtonState();
-                } else {
-                    const latLng = map.mouseEventToLatLng(lastDragEvent.originalEvent);
-                    const closestLocation = findClosestLocation(map, latLng, uiContext.locationsData);
-                    if (closestLocation && eventId) {
-                        const droppedOnCircle = findCircleByLocationId(map, closestLocation.location_id);
-                        const originalCardElement = document.getElementById(eventId);
-                        map.fire('droppable:drop', { drop: droppedOnCircle, drag: { _element: originalCardElement } });
-                    } else {
-                        markerInstance.setLatLng(markerInstance.originalLatLng);
-                        markerInstance.setOpacity(1);
-                    }
-                }
-            } else {
-                markerInstance.setLatLng(markerInstance.originalLatLng);
-                markerInstance.setOpacity(1);
-            }
-        });
-    }
-    
-    // 移除 ghostCard
-    function removeGhostCard() {
-        if (uiContext.ghostCardRef.value) {
-            L.DomUtil.remove(uiContext.ghostCardRef.value);
-            uiContext.ghostCardRef.value = null;
-        }
-    }
-
-    function checkAnswers(data) {
-        let allCorrect = true;
-        const locationsToUpdate = new Set();
-
-        data.events.forEach(event => {
-            const placed = uiContext.placedEvents[event.event_id];
-            if (placed) {
-                if (placed.droppedLocationId === event.location_id) {
-                    const year = new Date(event.start_time).getFullYear();
-                    const correctIcon = L.divIcon({ html: `<div class="placed-event-marker placed-event-marker--correct"><span>${event.title}</span><span class="marker-year">${year}</span></div>`, className: 'custom-div-icon', iconSize: null });
-                    placed.marker.setIcon(correctIcon);
-                    if (placed.marker.dragging) {
-                        placed.marker.dragging.disable();
-                    }
-                } else {
-                    allCorrect = false;
-                    map.removeLayer(placed.marker);
-                    
-                    const cardElement = document.getElementById(event.event_id);
-                    cardElement.style.display = 'block';
-                    
-                    cardElement.style.position = '';
-                    cardElement.style.left = '';
-                    cardElement.style.top = '';
-                    cardElement.style.transform = '';
-
-                    locationsToUpdate.add(placed.droppedLocationId);
-                    delete uiContext.placedEvents[event.event_id];
-                    updateCardCount();
-                }
-            } else {
-                allCorrect = false;
-            }
-        });
-
-        locationsToUpdate.forEach(locationId => repositionMarkersAtLocation(map, locationId, uiContext.placedEvents, uiContext.gameData, uiContext.locationsData));
-
-        if (allCorrect) {
-            checkAnswersBtn.style.display = 'none';
-
-            uiContext.placedChrono = data.events
-                .map(eventData => {
-                    const placed = uiContext.placedEvents[eventData.event_id];
-                    return {
-                        event: eventData,
-                        marker: placed ? placed.marker : null
-                    };
-                })
-                .sort((a, b) => new Date(a.event.start_time) - new Date(b.event.start_time));
-
-            // 修正：同時間事件微調 start_time
-            for (let i = 1; i < uiContext.placedChrono.length; i++) {
-                const prevTime = new Date(uiContext.placedChrono[i - 1].event.start_time).getTime();
-                const currTime = new Date(uiContext.placedChrono[i].event.start_time).getTime();
-                if (currTime <= prevTime) {
-                    // 增加 1 天 ，根據 timelineSlider.step的設定
-                    uiContext.placedChrono[i].event.start_time = new Date(prevTime + 86400000).toISOString();
-                }
-            }                
-
-            uiContext.timelineEnabled = true;
-            if (uiContext.timelineSlider) {
-                uiContext.timelineSlider.disabled = false;
-                uiContext.timelineSlider.style.pointerEvents = 'auto';
-                uiContext.timelineSlider.style.display = 'block';
-            }
-            const ticksContainer = document.getElementById('timeline-ticks-container');
-            if (ticksContainer) {
-                ticksContainer.style.display = 'block';
-            }
-            const timelineControlsContainer = document.getElementById('timeline-controls-container');
-            if (timelineControlsContainer) {
-                timelineControlsContainer.style.display = 'flex';
-            }
-            if (uiContext.timelinePlayBtn) {
-                uiContext.timelinePlayBtn.disabled = false;
-                uiContext.timelinePlayBtn.style.pointerEvents = 'auto';
-            }
-            if (uiContext.timelinePauseBtn) {
-                uiContext.timelinePauseBtn.disabled = false;
-                uiContext.timelinePauseBtn.style.pointerEvents = 'auto';
-            }
-            if (uiContext.scaleToggleButton) {
-                uiContext.scaleToggleButton.disabled = false;
-                uiContext.scaleToggleButton.style.pointerEvents = 'auto';
-            }
-            if (uiContext.highlightToggleButton) {
-                uiContext.highlightToggleButton.disabled = false;
-                uiContext.highlightToggleButton.style.pointerEvents = 'auto';
-            }
-            if (uiContext.autoPanToggleButton) {
-                uiContext.autoPanToggleButton.disabled = false;
-                uiContext.autoPanToggleButton.style.pointerEvents = 'auto';
-            }
-            
-            highlightStep(parseInt(uiContext.timelineSlider.value, 10));
-        } else {
-            updateCheckButtonState();
-        }
-    }
-
-    function updateCheckButtonState() {
-        const placedCount = Object.keys(uiContext.placedEvents).length;
-        checkAnswersBtn.disabled = placedCount === 0;
-    }
-
-    function highlightStep(idx) {
-        if (!uiContext.timelineEnabled) {
-            uiContext.placedChrono.forEach(item => {
-                if (item.marker) {
-                    const year = new Date(item.event.start_time).getFullYear();
-                    item.marker.setIcon(L.divIcon({
-                        html: `<div class="placed-event-marker placed-event-marker--correct"><span>${item.event.title}</span><span class="marker-year">${year}</span></div>`,
-                        className: 'custom-div-icon',
-                        iconSize: null,
-                    }));
-                }
-            });
-            map.eachLayer(layer => {
-                if (layer.getTooltip() && layer.getTooltip().getElement()) {
-                    layer.getTooltip().getElement().classList.remove('location-tooltip--dimmed', 'location-tooltip--highlight');
-                }
-            });
-            return;
-        }
-    
-        if (!uiContext.isHighlightModeEnabled) {
-            const currentEvent = uiContext.placedChrono[idx];
-            if (currentEvent && currentEvent.marker && uiContext.isAutoPanEnabled) {
-                map.panTo(currentEvent.marker.getLatLng());
-            }
-            uiContext.placedChrono.forEach(item => {
-                if (item.marker) {
-                    const year = new Date(item.event.start_time).getFullYear();
-                    item.marker.setIcon(L.divIcon({
-                        html: `<div class="placed-event-marker placed-event-marker--correct"><span>${item.event.title}</span><span class="marker-year">${year}</span></div>`,
-                        className: 'custom-div-icon',
-                        iconSize: null,
-                    }));
-                }
-            });
-            map.eachLayer(layer => {
-                if (layer.getTooltip() && layer.getTooltip().getElement()) {
-                    layer.getTooltip().getElement().classList.remove('location-tooltip--dimmed', 'location-tooltip--highlight');
-                }
-            });
-            return;
-        }
-    
-        const highlightedEvent = uiContext.placedChrono[idx];
-        const highlightedLocationId = highlightedEvent ? highlightedEvent.event.location_id : null;
-    
-        uiContext.placedChrono.forEach((item, i) => {
-            if (item.marker) {
-                const year = new Date(item.event.start_time).getFullYear();
-                const isHighlighted = i === idx;
-                const targetPane = isHighlighted ? 'highlightedMarkerPane' : 'markerPane';
-                if (item.marker.options.pane !== targetPane) {
-                    item.marker.options.pane = targetPane;
-                    if (map.hasLayer(item.marker)) {
-                        map.removeLayer(item.marker);
-                        map.addLayer(item.marker);
-                    }
-                }
-                const markerClass = `placed-event-marker placed-event-marker--correct ${isHighlighted ? 'placed-event-marker--highlight' : 'placed-event-marker--dimmed'}`;                
-                item.marker.setIcon(L.divIcon({
-                    html: `<div class="${markerClass}"><span>${item.event.title}</span><span class="marker-year">${year}</span></div>`,
-                    className: 'custom-div-icon',
-                    iconSize: null,
-                }));
-    
-                if (isHighlighted && uiContext.isAutoPanEnabled) {
-                    map.panTo(item.marker.getLatLng());
-                }
-            }
-        });
-    
-        let highlightedLayer = null;
-        map.eachLayer(layer => {
-            if (layer.options.location_id && layer.getTooltip() && layer.getTooltip().getElement()) {
-                const tooltipEl = layer.getTooltip().getElement();
-                const isHighlighted = layer.options.location_id === highlightedLocationId;
-                tooltipEl.classList.toggle('location-tooltip--highlight', isHighlighted);
-                tooltipEl.classList.toggle('location-tooltip--dimmed', !isHighlighted);
-    
-                if (isHighlighted) {
-                    highlightedLayer = layer;
-                }
-            }
-        });
-    
-        if (highlightedLayer) {
-            highlightedLayer.bringToFront();
-        }
-    }
-    
-    function timelineKeydownProxy(e) {
-        timelineKeydownHandler(
-            e, 
-            uiContext.timelineEnabled, 
-            uiContext.timelineSlider, 
-            uiContext.placedChrono, 
-            highlightStep
-        );
-    }
 
     function handleZoom() {
         const locationsToUpdate = new Set(Object.values(uiContext.placedEvents).map(p => p.droppedLocationId));
@@ -718,7 +200,6 @@ document.addEventListener('DOMContentLoaded', () => {
             repositionMarkersAtLocation(map, locationId, uiContext.placedEvents, uiContext.gameData, uiContext.locationsData);
         });
     }
-
 
 
     // 遍歷所有事件，找到對應的卡片和地圖位置，然後呼叫 handleDrop，直接將卡片放到 marker 上
@@ -733,11 +214,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
             handleDrop({
                 drop: circle,
-                drag: { _element: card }
+                drag: { _element: card },
+                map: uiContext.map
             });
         });
 
-        checkAnswers(data);
+        checkAnswers(uiContext.gameData, map);
 
         setTimeout(() => {
             if (uiContext.timelinePlayBtn && !uiContext.timelinePlayBtn.disabled) {
@@ -780,18 +262,4 @@ document.addEventListener('DOMContentLoaded', () => {
  
     }
 
-    function enableTimelineKeydown() {
-        window.removeEventListener('keydown', timelineKeydownProxy);
-        window.addEventListener('keydown', timelineKeydownProxy);
-    }
-
-    function timelineKeydownProxy(e) {
-        timelineKeydownHandler(
-            e, 
-            uiContext.timelineEnabled, 
-            uiContext.timelineSlider, 
-            uiContext.placedChrono, 
-            highlightStep
-        );
-    }
 });
