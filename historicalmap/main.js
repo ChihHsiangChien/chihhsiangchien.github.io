@@ -21,6 +21,10 @@ import { checkAnswers } from './gameLogic.js';
 import { handleDrop, handleNormalDrop, handleSequentialDrop } from './gameLogic.js';
 import { handleDropAttempt } from './gameLogic.js';
 
+import { injectRegionStyles } from './uiController.js';
+import { setupPanelToggle } from './uiController.js';
+
+
 document.addEventListener('DOMContentLoaded', () => {
         
 
@@ -53,35 +57,20 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Map Initialization ---
     const map = setupMap('map', 'satellite');
 
-    function injectRegionStyles(config) {
-        const styleElement = document.createElement('style');
-        let cssRules = '';
-        for (const regionKey in config) {
-            const region = config[regionKey];
-            if (region.name) {
-                cssRules += `
-                    .location-tooltip.region-${region.name} {
-                        background-color: ${region.mapBgColor};
-                        border-color: ${region.borderColor};
-                    }
-                `;
-            }
-        }
-        styleElement.textContent = cssRules;
-        document.head.appendChild(styleElement);
-    }
 
 
     // --- Game State & UI ---
     const cardContainer = document.getElementById('card-container');
     const checkAnswersBtn = document.getElementById('check-answers-btn');
+    const togglePanelBtn = document.getElementById('toggle-panel-btn');
     const rightPanel = document.getElementById('right-panel');
     const panelContent = document.getElementById('panel-content');
-    const togglePanelBtn = document.getElementById('toggle-panel-btn');
-    const toggleIcon = document.getElementById('toggle-icon');
     const mapContainer = document.getElementById('map');
+    const toggleIcon = document.getElementById('toggle-icon'); 
 
     function setupGame(data, regionColorConfig) {
+
+
         uiContext.gameData = data;
         uiContext.locationsData = data.locations;
         injectRegionStyles(regionColorConfig);
@@ -107,10 +96,14 @@ document.addEventListener('DOMContentLoaded', () => {
         setupPanelToggle();
     }
 
-    // --- 拆分出的小函式 ---
 
     function setupUiContext(regionColorConfig, sortedEvents) {
         uiContext.cardContainer = cardContainer;
+        uiContext.togglePanelBtn = togglePanelBtn;
+        uiContext.rightPanel = rightPanel;
+        uiContext.panelContent = panelContent;
+        uiContext.mapContainer = mapContainer;
+        uiContext.toggleIcon = toggleIcon;
         uiContext.createCard = createCard;
         uiContext.moveGhost = moveGhost;
         uiContext.updateGuideAndLastEvent = updateGuideAndLastEvent;
@@ -125,31 +118,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
-    function setupPanelToggle() {
-        togglePanelBtn.addEventListener('click', () => {
-            const isCollapsed = rightPanel.classList.contains('w-0');
-            if (isCollapsed) {
-                rightPanel.classList.remove('w-0');
-                rightPanel.classList.add('w-1/3');
-                panelContent.classList.remove('hidden');
-                mapContainer.classList.remove('w-full');
-                mapContainer.classList.add('w-2/3');
-                toggleIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />';
-                togglePanelBtn.style.right = 'calc(33.3333vw - 1.25rem)';
-            } else {
-                rightPanel.classList.remove('w-1/3');
-                rightPanel.classList.add('w-0');
-                panelContent.classList.add('hidden');
-                mapContainer.classList.remove('w-2/3');
-                mapContainer.classList.add('w-full');
-                toggleIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />';
-                togglePanelBtn.style.right = '0.5rem';
-            }
-            setTimeout(() => {
-                map.invalidateSize();
-            }, 300);
-        });
-    }
+
 
 
 

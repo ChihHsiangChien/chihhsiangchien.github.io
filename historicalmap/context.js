@@ -31,5 +31,12 @@ export const uiContext = {
     isAutoPanEnabled: true,
     isHighlightModeEnabled: true,
     
-    checkAnswersBtn: null
+
+    cardContainer:null,
+    togglePanelBtn:null,
+    rightPanel:null,
+    panelContent:null,
+    mapContainer:null,
+    toggleIcon:null,
+    checkAnswersBtn:null
 };
