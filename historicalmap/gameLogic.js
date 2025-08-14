@@ -3,6 +3,8 @@ import { repositionMarkersAtLocation } from './map.js';
 import { updateCheckButtonState, updateCardCount } from './uiController.js';
 import { highlightStep } from './timeline.js';
 import { setupMarkerDragEvents }from './map.js';
+import { findClosestLocation }from './map.js';
+import { findCircleByLocationId }from './map.js';
 import { updateDraggableCards } from './uiController.js';
 
 /**
@@ -31,6 +33,44 @@ function generatePopupContent(eventData) {
     return popupContent;
 }
 
+export function handleDropAttempt(cardElement) {
+    let successfulDrop = false;
+    const lastDragEvent = uiContext.lastDragEventRef.value;
+    const map = uiContext.map;
+
+    if (lastDragEvent) {
+
+        const mapContainer = map.getContainer();
+        const mapRect = mapContainer.getBoundingClientRect();
+        const mouseX = lastDragEvent.originalEvent.clientX;
+        const mouseY = lastDragEvent.originalEvent.clientY;
+        const droppedOnMap = mouseX >= mapRect.left && mouseX <= mapRect.right && mouseY >= mapRect.top && mouseY <= mapRect.bottom;
+        
+        if (droppedOnMap) {                        
+            const latLng = map.mouseEventToLatLng(lastDragEvent.originalEvent);
+            const closestLocation = findClosestLocation(map, latLng, uiContext.locationsData);
+
+            if (closestLocation) {
+                const droppedOnCircle = findCircleByLocationId(map, closestLocation.location_id);
+                if (droppedOnCircle) {
+                    map.fire('droppable:drop', { drop: droppedOnCircle, drag: { _element: cardElement } });
+                    successfulDrop = true;
+                }
+            }
+        }
+    }
+
+    if (!successfulDrop) {
+        if (uiContext.ghostCardRef.value) {
+            L.DomUtil.remove(uiContext.ghostCardRef.value);
+            uiContext.ghostCardRef.value = null;
+        }
+        cardElement.style.position = '';
+        cardElement.style.left = '';
+        cardElement.style.top = '';
+        cardElement.style.transform = '';
+    }
+}
 
 // 處理 ghostCard 動畫與移除
 function animateGhostCardDrop(card, drop, map) {
