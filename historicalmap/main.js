@@ -52,11 +52,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const timelineContainer = document.getElementById('timeline-container');
             if (urlParams.get('mode') === 'autoplay') {
+                uiContext.autoplayMode = true;
                 await autoPlaceAndCollapsePanel(data, timelineContainer, map);
             } else {
                 if (timelineContainer) timelineContainer.classList.add('hidden');
             }
         });
+
+
+    adjustCardContainerHeight(uiContext.cardContainer, uiContext.checkAnswersBtn);
+    window.addEventListener('resize', () => adjustCardContainerHeight(uiContext.cardContainer, uiContext.checkAnswersBtn));        
 
     function setupUiContext(regionColorConfig, sortedEvents) {
         uiContext.createCard = createCard;
@@ -86,15 +91,14 @@ document.addEventListener('DOMContentLoaded', () => {
         setupSortButtons(regionColorConfig);
         renderLocationsOnMap(map, regionColorConfig);
         fitMapToLocations(map);
+        uiContext.checkAnswersBtn.addEventListener('click', () => checkAnswers(uiContext.gameData, map));
 
         map.on('droppable:drop', (e) => handleDrop({ ...e, map }));
-        uiContext.checkAnswersBtn.addEventListener('click', () => checkAnswers(uiContext.gameData, map));
         map.on('zoomend', () => handleZoom(map));
         setupTimelineControls(data, regionColorConfig,  map, currentMapConfig);
         setupPanelToggle();
     }
 
 
-    adjustCardContainerHeight(uiContext.cardContainer, uiContext.checkAnswersBtn);
-    window.addEventListener('resize', () => adjustCardContainerHeight(uiContext.cardContainer, uiContext.checkAnswersBtn));
+
 });

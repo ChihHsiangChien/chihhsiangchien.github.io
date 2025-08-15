@@ -107,6 +107,49 @@ hsinchuHistory/
   - `.placed-event-marker--highlight`: 時間軸高亮時的樣式。
   - `.location-tooltip`: 地點標籤的樣式。
 
+---
+
+## 地圖功能 API 說明
+
+以下為 `map.js` 主要函式及其用途簡介：
+
+- `setupMap(mapContainerId = 'map', defaultLayer = 'satellite')`  
+  初始化地圖，設定底圖圖層與圖層切換控制。
+
+- `findClosestLocation(map, latLng, locations)`  
+  尋找最近地點，僅依賴 map 物件與傳入參數。
+
+- `findCircleByLocationId(map, locationId)`  
+  根據地點 ID 找出地圖上的圖層（circle/polygon）。
+
+- `repositionMarkersAtLocation(map, locationId, placedEvents, gameData, locationsData)`  
+  重新排列同一地點的 marker 位置，依賴 map、locationsData、placedEvents。
+
+- `moveGhost(ghostCard, dragOffset, e)`  
+  移動拖曳時的 ghostCard（虛擬卡片）。
+
+- `updateGuideLine({ map, guideLineRef, event, locationsData })`  
+  更新拖曳時的指引線與 tooltip 樣式。
+
+- `updateGuideAndLastEvent({ map, guideLine, event, locationsData, setGuideLine, setLastDragEvent })`  
+  更新拖曳時的指引線與最後拖曳事件資訊。
+
+- `renderLocationsOnMap(map, regionColorConfig)`  
+  在地圖上渲染所有地點（circle/polygon），並設定 tooltip。
+
+- `fitMapToLocations(map)`  
+  讓地圖自動縮放至所有地點的範圍。
+
+- `setupMarkerDragEvents(marker, map)`  
+  註冊 marker 拖曳相關事件（dragstart, drag, dragend）。
+
+- `handleZoom(map)`  
+  地圖縮放時，重新排列所有已放置 marker 的位置。
+
+---
+
+> 詳細實作請參見 `historicalmap/map.js` 檔案。
+
 ## 維護注意事項
 
 - **動畫系統**: 目前的動畫主要是透過增刪 CSS class 實現。`GEMINI.md` 規格文件曾規劃了更複雜的動畫（如閃爍、淡入淡出），對應的 `animations.js` 檔案還保留在專案中，但目前未被 `main.js` 主邏輯使用。未來若要擴充動畫功能，可參考該檔案的設計。

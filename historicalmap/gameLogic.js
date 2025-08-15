@@ -7,8 +7,8 @@ import { setupMarkerDragEvents } from './map.js';
 import { findClosestLocation } from './map.js';
 import { findCircleByLocationId } from './map.js';
 
-import { highlightStep } from './timeline.js';
-import { enableTimelineKeydown } from './timeline.js';
+import { enableTimelineFeatures } from './timeline.js';
+
 
 import { delay } from './utils.js';
 
@@ -38,23 +38,28 @@ function generatePopupContent(eventData) {
     return popupContent;
 }
 
+// 重複 DOM reset 行為抽出
+function resetCardPosition(cardElement) {
+    cardElement.style.display = 'block';
+    cardElement.style.position = '';
+    cardElement.style.left = '';
+    cardElement.style.top = '';
+    cardElement.style.transform = '';
+}
+
 export function handleDropAttempt(cardElement) {
     let successfulDrop = false;
     const lastDragEvent = uiContext.lastDragEventRef.value;
     const map = uiContext.map;
 
     if (lastDragEvent) {
-
         const mapContainer = map.getContainer();
         const mapRect = mapContainer.getBoundingClientRect();
-        const mouseX = lastDragEvent.originalEvent.clientX;
-        const mouseY = lastDragEvent.originalEvent.clientY;
+        const { clientX: mouseX, clientY: mouseY } = lastDragEvent.originalEvent;
         const droppedOnMap = mouseX >= mapRect.left && mouseX <= mapRect.right && mouseY >= mapRect.top && mouseY <= mapRect.bottom;
-        
         if (droppedOnMap) {                        
             const latLng = map.mouseEventToLatLng(lastDragEvent.originalEvent);
             const closestLocation = findClosestLocation(map, latLng, uiContext.locationsData);
-
             if (closestLocation) {
                 const droppedOnCircle = findCircleByLocationId(map, closestLocation.location_id);
                 if (droppedOnCircle) {
@@ -66,14 +71,8 @@ export function handleDropAttempt(cardElement) {
     }
 
     if (!successfulDrop) {
-        if (uiContext.ghostCardRef.value) {
-            L.DomUtil.remove(uiContext.ghostCardRef.value);
-            uiContext.ghostCardRef.value = null;
-        }
-        cardElement.style.position = '';
-        cardElement.style.left = '';
-        cardElement.style.top = '';
-        cardElement.style.transform = '';
+        removeGhostCard();
+        resetCardPosition(cardElement);
     }
 }
 
@@ -183,7 +182,10 @@ function createDraggableMarker(drop, eventData, map) {
         iconSize: null,
     });
     const markerLatLng = drop.getBounds ? drop.getBounds().getCenter() : drop.getLatLng();
-    return L.marker(markerLatLng, { icon: markerIcon, draggable: true }).addTo(map);
+    
+    // 判斷 autoplay 模式
+    const isAutoplay = uiContext.autoplayMode === true;
+    return L.marker(markerLatLng, { icon: markerIcon, draggable: !isAutoplay }).addTo(map);    
 }
 
 
@@ -213,14 +215,7 @@ export function checkAnswers(data, map) {
             } else {
                 allCorrect = false;
                 map.removeLayer(placed.marker);
-
-                const cardElement = document.getElementById(event.event_id);
-                cardElement.style.display = 'block';
-                cardElement.style.position = '';
-                cardElement.style.left = '';
-                cardElement.style.top = '';
-                cardElement.style.transform = '';
-
+                resetCardPosition(document.getElementById(event.event_id));
                 locationsToUpdate.add(placed.droppedLocationId);
                 delete uiContext.placedEvents[event.event_id];
                 updateCardCount();
@@ -234,68 +229,33 @@ export function checkAnswers(data, map) {
 
     if (allCorrect) {
         uiContext.checkAnswersBtn.style.display = 'none';
+        uiContext.placedChrono = buildChronologicalPlacedEvents(data.events, uiContext.placedEvents);
 
-        uiContext.placedChrono = data.events
-            .map(eventData => {
-                const placed = uiContext.placedEvents[eventData.event_id];
-                return {
-                    event: eventData,
-                    marker: placed ? placed.marker : null
-                };
-            })
-            .sort((a, b) => new Date(a.event.start_time) - new Date(b.event.start_time));
+        enableTimelineFeatures(map);
 
-        // 修正：同時間事件微調 start_time
-        for (let i = 1; i < uiContext.placedChrono.length; i++) {
-            const prevTime = new Date(uiContext.placedChrono[i - 1].event.start_time).getTime();
-            const currTime = new Date(uiContext.placedChrono[i].event.start_time).getTime();
-            if (currTime <= prevTime) {
-                uiContext.placedChrono[i].event.start_time = new Date(prevTime + 86400000).toISOString();
-            }
-        }
-
-        uiContext.timelineEnabled = true;
-        if (uiContext.timelineSlider) {
-            uiContext.timelineSlider.disabled = false;
-            uiContext.timelineSlider.style.pointerEvents = 'auto';
-            uiContext.timelineSlider.style.display = 'block';
-        }
-        const ticksContainer = document.getElementById('timeline-ticks-container');
-        if (ticksContainer) {
-            ticksContainer.style.display = 'block';
-        }
-        const timelineControlsContainer = document.getElementById('timeline-controls-container');
-        if (timelineControlsContainer) {
-            timelineControlsContainer.style.display = 'flex';
-        }
-        if (uiContext.timelinePlayBtn) {
-            uiContext.timelinePlayBtn.disabled = false;
-            uiContext.timelinePlayBtn.style.pointerEvents = 'auto';
-        }
-        if (uiContext.timelinePauseBtn) {
-            uiContext.timelinePauseBtn.disabled = false;
-            uiContext.timelinePauseBtn.style.pointerEvents = 'auto';
-        }
-        if (uiContext.scaleToggleButton) {
-            uiContext.scaleToggleButton.disabled = false;
-            uiContext.scaleToggleButton.style.pointerEvents = 'auto';
-        }
-        if (uiContext.highlightToggleButton) {
-            uiContext.highlightToggleButton.disabled = false;
-            uiContext.highlightToggleButton.style.pointerEvents = 'auto';
-        }
-        if (uiContext.autoPanToggleButton) {
-            uiContext.autoPanToggleButton.disabled = false;
-            uiContext.autoPanToggleButton.style.pointerEvents = 'auto';
-        }
-
-        highlightStep(parseInt(uiContext.timelineSlider.value, 10), map);
     } else {
         updateCheckButtonState();
     }
 }
 
+function buildChronologicalPlacedEvents(events, placedEvents) {
+    // 產生排序後且修正同時間的事件陣列
+    const chrono = events
+        .map(eventData => ({
+            event: { ...eventData }, // 複製，避免直接改到原資料
+            marker: placedEvents[eventData.event_id]?.marker || null
+        }))
+        .sort((a, b) => new Date(a.event.start_time) - new Date(b.event.start_time));
 
+    for (let i = 1; i < chrono.length; i++) {
+        const prevTime = new Date(chrono[i - 1].event.start_time).getTime();
+        const currTime = new Date(chrono[i].event.start_time).getTime();
+        if (currTime <= prevTime) {
+            chrono[i].event.start_time = new Date(prevTime + 86400000).toISOString();
+        }
+    }
+    return chrono;
+}
 
 // 遍歷所有事件，找到對應的卡片和地圖位置，然後呼叫 handleDrop，直接將卡片放到 marker 上
 export function autoPlaceAndStartTimeline(data, map) {
@@ -314,13 +274,13 @@ export function autoPlaceAndStartTimeline(data, map) {
         });
     });
 
-    checkAnswers(uiContext.gameData, map);
+    //checkAnswers(uiContext.gameData, map);
 
-    setTimeout(() => {
-        if (uiContext.timelinePlayBtn && !uiContext.timelinePlayBtn.disabled) {
-            uiContext.timelinePlayBtn.click();
-        }
-    }, 800);
+    // 直接產生排序後的資料
+    uiContext.placedChrono = buildChronologicalPlacedEvents(data.events, uiContext.placedEvents);
+
+    // 啟用 timeline
+    enableTimelineFeatures(map);
 }
 
 
@@ -352,5 +312,5 @@ export async function autoPlaceAndCollapsePanel(data, timelineContainer, map) {
     // 再執行一次 scaleToggleButton 的 function
     if (window.timelineScaleToggle) window.timelineScaleToggle();
 
-    enableTimelineKeydown();
+
 }
