@@ -2,6 +2,9 @@ import { uiContext } from './context.js';
 
 
 // 啟用 timeline 相關元件與按鈕
+/**
+ * 啟用時間軸功能，顯示並啟用相關按鈕與元件
+ */
 export function enableTimelineFeatures(map) {
     uiContext.timelineEnabled = true;
     if (uiContext.timelineSlider) {
@@ -37,6 +40,9 @@ export function enableTimelineFeatures(map) {
 
 
     
+/**
+ * 代理 timeline 鍵盤事件處理
+ */
 function timelineKeydownProxy(e) {
     timelineKeydownHandler(
         e, 
@@ -51,6 +57,9 @@ function timelineKeydownProxy(e) {
 
 
 // --- 工具函式 ---
+/**
+ * 找出最接近指定時間的事件索引
+ */
 export function findClosestEventIndex(eventTimes, targetTime) {
     let closestIdx = 0;
     let minDiff = Math.abs(eventTimes[0] - targetTime);
@@ -65,6 +74,9 @@ export function findClosestEventIndex(eventTimes, targetTime) {
 }
 
 // --- Timeline Slider UI ---
+/**
+ * 清除時間軸相關的 DOM 元素
+ */
 function clearTimelineDom() {
     [
         'timeline-controls-container',
@@ -80,6 +92,9 @@ function clearTimelineDom() {
 }
 
 // --- 控制按鈕建立 ---
+/**
+ * 建立時間軸控制按鈕
+ */
 function createTimelineControls({
     onPlay,
     onPause,
@@ -186,6 +201,9 @@ function createTimelineControls({
     };
 }
 
+/**
+ * 更新 ticks 容器的 layout
+ */
 export function updateTicksContainerLayout(timelineSlider, timelineContainer, eventIndexTicksContainer, timeScaleTicksContainer) {
     requestAnimationFrame(() => {
         if (!timelineSlider || !timelineContainer) return;
@@ -204,7 +222,9 @@ export function updateTicksContainerLayout(timelineSlider, timelineContainer, ev
     });
 }
 
-
+/**
+ * 建立事件索引模式下的 ticks
+ */
 function createEventIndexTicks(container, totalEvents) {
     container.innerHTML = '';
     for (let i = 0; i < totalEvents; i++) {
@@ -221,6 +241,9 @@ function createEventIndexTicks(container, totalEvents) {
     }
 }
 
+/**
+ * 建立時間刻度模式下的年份 ticks 與背景區塊
+ */
 function createTimeScaleTicks(container, minDate, maxDate, yearRanges, totalTimeSpan) {
     container.innerHTML = '';
     // 背景色區塊
@@ -275,9 +298,9 @@ function createTimeScaleTicks(container, minDate, maxDate, yearRanges, totalTime
     }
 }
 
-
-
-/** 建立時間刻度模式下的事件紅點 */
+/**
+ * 建立時間刻度模式下的事件紅點
+ */
 function createTimeScaleEventDots(container, sortedEvents, minDate, totalTimeSpan) {
     sortedEvents.forEach(event => {
         const eventDate = new Date(event.start_time);
@@ -300,6 +323,9 @@ function createTimeScaleEventDots(container, sortedEvents, minDate, totalTimeSpa
     });
 }
 
+/**
+ * 設定時間軸 slider 與相關 UI
+ */
 export function setupTimelineSlider(
     data, map, mapConfig, onStepHighlight, getPlacedChrono, isTimelineEnabled, onToggleHighlight, onToggleAutoPan
 ) {
@@ -486,6 +512,9 @@ export function setupTimelineSlider(
     };
 
     // --- 抽出的小函式 ---
+    /**
+     * 建立事件索引 ticks 容器
+     */
     function createEventIndexTicksContainer(container) {
         const el = document.createElement('div');
         el.id = 'timeline-ticks-container';
@@ -500,6 +529,9 @@ export function setupTimelineSlider(
         container.appendChild(el);
         return el;
     }
+    /**
+     * 建立時間刻度 ticks 容器
+     */
     function createTimeScaleTicksContainer(container) {
         const el = document.createElement('div');
         el.id = 'time-scale-ticks-container';
@@ -517,6 +549,9 @@ export function setupTimelineSlider(
         container.appendChild(el);
         return el;
     }
+    /**
+     * 設定 timeline slider 樣式
+     */
     function styleTimelineSlider(slider) {
         slider.style.position = 'absolute';
         slider.style.left = '25%';
@@ -524,6 +559,9 @@ export function setupTimelineSlider(
         slider.style.top = '40px';
         slider.style.zIndex = '10002';
     }
+    /**
+     * 設定 ticks layout 監聽
+     */
     function setupTicksLayoutObserver(slider, container, eventTicks, timeTicks) {
         updateTicksContainerLayout(slider, container, eventTicks, timeTicks);
         const observer = new MutationObserver(() => {
@@ -537,6 +575,9 @@ export function setupTimelineSlider(
         });
         window.updateTimelineTicksLayout = updateTicksContainerLayout;
     }
+    /**
+     * 建立 timeline tooltip
+     */
     function createTimelineTooltip() {
         const tooltip = document.createElement('div');
         tooltip.id = 'timeline-tooltip';
@@ -554,6 +595,9 @@ export function setupTimelineSlider(
         document.body.appendChild(tooltip);
         return tooltip;
     }
+    /**
+     * 設定 timeline tooltip 事件
+     */
     function setupTimelineTooltipEvents(
         slider, container, tooltip, isTimelineEnabled, isTimeScaleModeGetter, getPlacedChrono, minDate, totalTimeSpan, sortedEvents
     ) {
@@ -598,6 +642,9 @@ export function setupTimelineSlider(
             tooltip.style.display = 'none';
         });
     }
+    /**
+     * 設定播放速度下拉選單
+     */
     function setupPlaybackSpeed(select, setSpeedFn) {
         if (select) {
             select.addEventListener('change', (e) => {
@@ -608,6 +655,9 @@ export function setupTimelineSlider(
 }
 
 //時間軸用左右鍵控制
+/**
+ * 處理時間軸左右鍵事件
+ */
 export function timelineKeydownHandler(e, timelineEnabled, timelineSlider, placedChrono, highlightStep, map) {
     if (!timelineEnabled || !timelineSlider || timelineSlider.disabled || timelineSlider.style.display === 'none') return;
     if (placedChrono.length === 0) return;
@@ -657,6 +707,9 @@ export function timelineKeydownHandler(e, timelineEnabled, timelineSlider, place
 }
 
 //window.setupTimelineSlider = setupTimelineSlider;
+/**
+ * 設定時間軸控制元件與事件
+ */
 export function setupTimelineControls(data, regionColorConfig, map, currentMapConfig) {
     const getPlacedChrono = () => uiContext.placedChrono;
     const isTimelineEnabled = () => uiContext.timelineEnabled;
@@ -691,6 +744,9 @@ export function setupTimelineControls(data, regionColorConfig, map, currentMapCo
 }
 
 
+/**
+ * 高亮顯示指定索引的事件
+ */
 export function highlightStep(idx, map) {
     map = map || uiContext.map;
     if (!map || typeof map.hasLayer !== 'function') return;
