@@ -2,8 +2,8 @@ import { uiContext } from './context.js';
 import { updateCheckButtonState } from './uiController.js';
 
 
-// map.js
 
+// 初始化地圖，設定底圖圖層與圖層切換控制。
 export function setupMap(mapContainerId = 'map', defaultLayer = 'satellite') {
     const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' });
     const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles &copy; Esri' });
@@ -91,7 +91,7 @@ export function repositionMarkersAtLocation(map, locationId, placedEvents, gameD
     }
 }
 
-
+// 移動拖曳時的 ghostCard（虛擬卡片）。
 export function moveGhost(ghostCard, dragOffset, e) {
     if (ghostCard) {
         ghostCard.style.left = (e.clientX - dragOffset.x) + 'px';
@@ -99,17 +99,18 @@ export function moveGhost(ghostCard, dragOffset, e) {
     }
 }
 
+// 更新拖曳時的指引線與 tooltip 樣式。
 export function updateGuideLine({ map, guideLineRef, event, locationsData }) {
 
     if (guideLineRef.value) map.removeLayer(guideLineRef.value);
 
-    if (!window._lastGuideTooltipId) window._lastGuideTooltipId = null;
+    if (!uiContext.lastGuideTooltipId) uiContext.lastGuideTooltipId = null;
     const latLng = map.mouseEventToLatLng(event);
     const closestLocation = findClosestLocation(map, latLng, locationsData);
     let currentTooltipId = null;
     if (closestLocation) currentTooltipId = closestLocation.location_id;
 
-    if (window._lastGuideTooltipId !== currentTooltipId) {
+    if (uiContext.lastGuideTooltipId !== currentTooltipId) {
         map.eachLayer(layer => {
             if (layer.options && layer.options.location_id && layer.getTooltip && layer.getTooltip() && layer.getTooltip().getElement()) {
                 layer.getTooltip().getElement().classList.remove('location-tooltip--guide-highlight');
@@ -121,13 +122,14 @@ export function updateGuideLine({ map, guideLineRef, event, locationsData }) {
                 targetLayer.getTooltip().getElement().classList.add('location-tooltip--guide-highlight');
             }
         }
-        window._lastGuideTooltipId = currentTooltipId;
+        uiContext.lastGuideTooltipId = currentTooltipId;
     }
     if (closestLocation) {
         guideLineRef.value = L.polyline([latLng, closestLocation.center], { color: 'red', dashArray: '5, 5' }).addTo(map);
     }
 }
 
+// 更新拖曳時的指引線與最後拖曳事件資訊。
 export function updateGuideAndLastEvent({
     map,
     guideLine,
@@ -159,7 +161,7 @@ export function updateGuideAndLastEvent({
     setLastDragEvent({ originalEvent: event });
 }
 
-
+// 在地圖上渲染所有地點（circle/polygon），並設定 tooltip。
 export function renderLocationsOnMap(map, regionColorConfig) {
     const bounds = L.latLngBounds();
     uiContext.locationsData.forEach(location => {
@@ -185,6 +187,7 @@ export function renderLocationsOnMap(map, regionColorConfig) {
     map._customBounds = bounds;
 }
 
+// 讓地圖自動縮放至所有地點的範圍。
 export function fitMapToLocations(map) {
     const bounds = map._customBounds;
     if (bounds && bounds.isValid()) {
@@ -194,100 +197,115 @@ export function fitMapToLocations(map) {
 
 
 // 註冊 marker 拖曳事件
-export function setupMarkerDragEvents(marker, map) {
-    marker.on('dragstart', function(e) {
-        const markerInstance = this;
-        markerInstance.originalLatLng = markerInstance.getLatLng();
+// 註冊 marker 拖曳事件的起始處理。
+function handleMarkerDragStart(markerInstance) {
+    markerInstance.originalLatLng = markerInstance.getLatLng();
+    const eventId = Object.keys(uiContext.placedEvents).find(key => uiContext.placedEvents[key].marker === markerInstance);
+    if (!eventId) return;
+    const originalCard = document.getElementById(eventId);
+    const originalDisplay = originalCard.style.display;
+    originalCard.style.display = 'block';
+    const cardWidth = originalCard.offsetWidth;
+    originalCard.style.display = originalDisplay;
+    uiContext.ghostCardRef.value = L.DomUtil.create('div', 'is-dragging', document.body);
+    uiContext.ghostCardRef.value.innerHTML = originalCard.querySelector('h3').outerHTML;
+    uiContext.ghostCardRef.value.style.width = cardWidth + 'px';
+    markerInstance.setOpacity(0);
+    uiContext.dragOffsetRef.value = { 
+        x: uiContext.ghostCardRef.value.offsetWidth / 2, 
+        y: uiContext.ghostCardRef.value.offsetHeight / 2 
+    };
+}
+
+// 處理 marker 拖曳過程中的事件。
+function handleMarkerDrag(e, map) {
+    let eventForCoords = e.originalEvent;
+    if (eventForCoords.touches && eventForCoords.touches.length > 0) {
+        eventForCoords = eventForCoords.touches[0];
+    }
+    moveGhost(uiContext.ghostCardRef.value, uiContext.dragOffsetRef.value, eventForCoords);
+    updateGuideLine({
+        map,
+        guideLineRef: uiContext.guideLineRef,
+        event: eventForCoords,
+        locationsData: uiContext.locationsData
+    });
+    uiContext.lastDragEventRef.value = { originalEvent: eventForCoords };
+}
+
+// 處理 marker 拖曳結束時的事件。
+function handleMarkerDragEnd(markerInstance, map) {
+    const lastDragEvent = uiContext.lastDragEventRef.value;
+    map.eachLayer(layer => {
+        if (
+            layer.options &&
+            layer.options.location_id &&
+            layer.getTooltip &&
+            layer.getTooltip() &&
+            layer.getTooltip().getElement()
+        ) {
+            layer.getTooltip().getElement().classList.remove('location-tooltip--guide-highlight');
+        }
+    });
+    uiContext.lastGuideTooltipId = null;
+    if (uiContext.guideLineRef.value) map.removeLayer(uiContext.guideLineRef.value);
+    uiContext.guideLineRef.value = null;
+
+    if (uiContext.ghostCardRef.value) {
+        L.DomUtil.remove(uiContext.ghostCardRef.value);
+        uiContext.ghostCardRef.value = null;
+    }
+
+    if (lastDragEvent) {
+        const mouseX = lastDragEvent.originalEvent.clientX;
+        const mouseY = lastDragEvent.originalEvent.clientY;
+        const cardContainerRect = uiContext.cardContainer.getBoundingClientRect();
         const eventId = Object.keys(uiContext.placedEvents).find(key => uiContext.placedEvents[key].marker === markerInstance);
-        if (!eventId) return;
-        const originalCard = document.getElementById(eventId);
-        const originalDisplay = originalCard.style.display;
-        originalCard.style.display = 'block';
-        const cardWidth = originalCard.offsetWidth;
-        originalCard.style.display = originalDisplay;
-        uiContext.ghostCardRef.value = L.DomUtil.create('div', 'is-dragging', document.body);
-        uiContext.ghostCardRef.value.innerHTML = originalCard.querySelector('h3').outerHTML;
-        uiContext.ghostCardRef.value.style.width = cardWidth + 'px';
-        markerInstance.setOpacity(0);
-        uiContext.dragOffsetRef.value = { 
-            x: uiContext.ghostCardRef.value.offsetWidth / 2, 
-            y: uiContext.ghostCardRef.value.offsetHeight / 2 
-        };
+
+        if (eventId && mouseX >= cardContainerRect.left && mouseX <= cardContainerRect.right && mouseY >= cardContainerRect.top && mouseY <= cardContainerRect.bottom) {
+            const oldLocationId = uiContext.placedEvents[eventId].droppedLocationId;
+            map.removeLayer(markerInstance);
+            delete uiContext.placedEvents[eventId];
+            const cardElement = document.getElementById(eventId);
+            cardElement.style.display = 'block';
+            cardElement.style.position = ''; cardElement.style.left = ''; cardElement.style.top = ''; cardElement.style.transform = '';
+            repositionMarkersAtLocation(map, oldLocationId, uiContext.placedEvents, uiContext.gameData, uiContext.locationsData);
+            updateCheckButtonState();
+        } else {
+            const latLng = map.mouseEventToLatLng(lastDragEvent.originalEvent);
+            const closestLocation = findClosestLocation(map, latLng, uiContext.locationsData);
+            if (closestLocation && eventId) {
+                const droppedOnCircle = findCircleByLocationId(map, closestLocation.location_id);
+                const originalCardElement = document.getElementById(eventId);
+                map.fire('droppable:drop', { drop: droppedOnCircle, drag: { _element: originalCardElement } });
+            } else {
+                markerInstance.setLatLng(markerInstance.originalLatLng);
+                markerInstance.setOpacity(1);
+            }
+        }
+    } else {
+        markerInstance.setLatLng(markerInstance.originalLatLng);
+        markerInstance.setOpacity(1);
+    }
+}
+
+// 註冊 marker 拖曳相關事件（dragstart, drag, dragend）。
+export function setupMarkerDragEvents(marker, map) {
+    marker.on('dragstart', function() {
+        handleMarkerDragStart(this);
     });
 
     marker.on('drag', function(e) {
-        let eventForCoords = e.originalEvent;
-        if (eventForCoords.touches && eventForCoords.touches.length > 0) {
-            eventForCoords = eventForCoords.touches[0];
-        }
-        moveGhost(uiContext.ghostCardRef.value, uiContext.dragOffsetRef.value, eventForCoords);
-        updateGuideLine({
-            map,
-            guideLineRef: uiContext.guideLineRef,
-            event: eventForCoords,
-            locationsData: uiContext.locationsData
-        });
-        uiContext.lastDragEventRef.value = { originalEvent: eventForCoords };
+        handleMarkerDrag(e, map);
     });
 
-    marker.on('dragend', function(e) {
-        const lastDragEvent = uiContext.lastDragEventRef.value;
-        map.eachLayer(layer => {
-            if (
-                layer.options &&
-                layer.options.location_id &&
-                layer.getTooltip &&
-                layer.getTooltip() &&
-                layer.getTooltip().getElement()
-            ) {
-                layer.getTooltip().getElement().classList.remove('location-tooltip--guide-highlight');
-            }
-        });
-        window._lastGuideTooltipId = null;            
-        const markerInstance = this;
-        if (uiContext.guideLineRef.value) map.removeLayer(uiContext.guideLineRef.value);
-        uiContext.guideLineRef.value = null;
-
-        if (uiContext.ghostCardRef.value) {
-            L.DomUtil.remove(uiContext.ghostCardRef.value);
-            uiContext.ghostCardRef.value = null;
-        }
-
-        if (lastDragEvent) {
-            const mouseX = lastDragEvent.originalEvent.clientX;
-            const mouseY = lastDragEvent.originalEvent.clientY;
-            const cardContainerRect = uiContext.cardContainer.getBoundingClientRect();
-            const eventId = Object.keys(uiContext.placedEvents).find(key => uiContext.placedEvents[key].marker === markerInstance);
-
-            if (eventId && mouseX >= cardContainerRect.left && mouseX <= cardContainerRect.right && mouseY >= cardContainerRect.top && mouseY <= cardContainerRect.bottom) {
-                const oldLocationId = uiContext.placedEvents[eventId].droppedLocationId;
-                map.removeLayer(markerInstance);
-                delete uiContext.placedEvents[eventId];
-                const cardElement = document.getElementById(eventId);
-                cardElement.style.display = 'block';
-                cardElement.style.position = ''; cardElement.style.left = ''; cardElement.style.top = ''; cardElement.style.transform = '';
-                repositionMarkersAtLocation(map, oldLocationId, uiContext.placedEvents, uiContext.gameData, uiContext.locationsData);
-                updateCheckButtonState();
-            } else {
-                const latLng = map.mouseEventToLatLng(lastDragEvent.originalEvent);
-                const closestLocation = findClosestLocation(map, latLng, uiContext.locationsData);
-                if (closestLocation && eventId) {
-                    const droppedOnCircle = findCircleByLocationId(map, closestLocation.location_id);
-                    const originalCardElement = document.getElementById(eventId);
-                    map.fire('droppable:drop', { drop: droppedOnCircle, drag: { _element: originalCardElement } });
-                } else {
-                    markerInstance.setLatLng(markerInstance.originalLatLng);
-                    markerInstance.setOpacity(1);
-                }
-            }
-        } else {
-            markerInstance.setLatLng(markerInstance.originalLatLng);
-            markerInstance.setOpacity(1);
-        }
+    marker.on('dragend', function() {
+        handleMarkerDragEnd(this, map);
     });
 }
 
 
+// 地圖縮放時，重新排列所有已放置 marker 的位置。
 export function handleZoom(map) {
     const locationsToUpdate = new Set(Object.values(uiContext.placedEvents).map(p => p.droppedLocationId));
     locationsToUpdate.forEach(locationId => {

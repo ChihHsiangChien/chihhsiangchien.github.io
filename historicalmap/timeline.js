@@ -1,11 +1,7 @@
 import { uiContext } from './context.js';
 
 // --- Timeline Slider UI ---
-export function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPlacedChrono, isTimelineEnabled, onToggleHighlight, onToggleAutoPan) {
-    let timelineInterval = null;
-    let isTimeScaleMode = false;
-
-    // 移除舊的 DOM 元素
+function clearTimelineDom() {
     [
         'timeline-controls-container',
         'timeline-tooltip',
@@ -17,14 +13,17 @@ export function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPla
     });
     const oldSlider = document.querySelector('input[type="range"][style*="fixed"]');
     if (oldSlider) oldSlider.remove();
+}
 
-    // 取得現有 DOM 元素
-    const timelineSlider = document.getElementById('timeline-slider');
-    const timelineContainer = document.getElementById('timeline-container');
-    const playbackSpeedSelect = document.getElementById('playback-speed');
-
-
-    // --- 控制按鈕建立 ---
+function createTimelineControls({
+    onPlay,
+    onPause,
+    onScaleToggle,
+    onHighlightToggle,
+    onAutoPanToggle,
+    playbackSpeedSelect
+}) {
+    // Play 按鈕
     const timelinePlayBtn = document.createElement('button');
     timelinePlayBtn.id = 'play-pause-btn';
     timelinePlayBtn.textContent = '▶️';
@@ -40,6 +39,7 @@ export function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPla
         pointerEvents: 'auto'
     });
 
+    // Pause 按鈕
     const timelinePauseBtn = document.createElement('button');
     timelinePauseBtn.id = 'pause-btn';
     timelinePauseBtn.textContent = '⏸️';
@@ -55,6 +55,7 @@ export function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPla
         pointerEvents: 'auto'
     });
 
+    // Scale 切換按鈕
     const scaleToggleButton = document.createElement('button');
     scaleToggleButton.id = 'timeline-scale-btn';
     scaleToggleButton.innerHTML = '📅';
@@ -62,6 +63,7 @@ export function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPla
     scaleToggleButton.className = 'ml-2 px-2 py-1 rounded border';
     scaleToggleButton.style.marginRight = '0.5rem';
 
+    // Highlight 切換按鈕
     const highlightToggleButton = document.createElement('button');
     highlightToggleButton.id = 'timeline-highlight-btn';
     highlightToggleButton.innerHTML = '🔦';
@@ -69,12 +71,102 @@ export function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPla
     highlightToggleButton.className = 'ml-2 px-2 py-1 rounded border';
     highlightToggleButton.style.marginRight = '0.5rem';
 
+    // AutoPan 切換按鈕
     const autoPanToggleButton = document.createElement('button');
     autoPanToggleButton.id = 'timeline-autopan-btn';
     autoPanToggleButton.innerHTML = '🎦';
     autoPanToggleButton.title = '切換自動平移';
     autoPanToggleButton.className = 'ml-2 px-2 py-1 rounded border';
     autoPanToggleButton.style.marginRight = '0.5rem';
+
+    // 綁定事件
+    timelinePlayBtn.addEventListener('pointerup', onPlay);
+    timelinePauseBtn.addEventListener('pointerup', onPause);
+    scaleToggleButton.addEventListener('pointerup', onScaleToggle);
+    highlightToggleButton.addEventListener('pointerup', onHighlightToggle);
+    autoPanToggleButton.addEventListener('pointerup', onAutoPanToggle);
+
+    // 控制按鈕容器
+    const timelineControlsContainer = document.createElement('div');
+    timelineControlsContainer.id = 'timeline-controls-container';
+    Object.assign(timelineControlsContainer.style, {
+        position: 'absolute',
+        left: '0',
+        bottom: '10px',
+        width: '20%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'flex-start',
+        zIndex: '10001'
+    });
+
+    // 依序 append 按鈕
+    timelineControlsContainer.appendChild(scaleToggleButton);
+    timelineControlsContainer.appendChild(highlightToggleButton);
+    timelineControlsContainer.appendChild(autoPanToggleButton);
+    timelineControlsContainer.appendChild(timelinePlayBtn);
+    timelineControlsContainer.appendChild(timelinePauseBtn);
+    if (playbackSpeedSelect) {
+        playbackSpeedSelect.style.marginLeft = '0.5rem';
+        timelineControlsContainer.appendChild(playbackSpeedSelect);
+    }
+
+    return {
+        timelineControlsContainer,
+        timelinePlayBtn,
+        timelinePauseBtn,
+        scaleToggleButton,
+        highlightToggleButton,
+        autoPanToggleButton
+    };
+}
+
+export function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPlacedChrono, isTimelineEnabled, onToggleHighlight, onToggleAutoPan) {
+    let timelineInterval = null;
+    let isTimeScaleMode = false;
+
+    clearTimelineDom();
+
+    // 取得現有 DOM 元素
+    const timelineSlider = uiContext.timelineSlider;
+    const timelineContainer = uiContext.timelineContainer;
+    const playbackSpeedSelect = uiContext.playbackSpeedSelect;
+
+    timelineSlider.addEventListener('keydown', e => {
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+            e.preventDefault();
+        }
+    });    
+
+    // --- 控制按鈕建立 ---
+    // 建立控制按鈕
+    const controls = createTimelineControls({
+        onPlay: () => {
+            if (controls.timelinePlayBtn.disabled) return;
+            controls.timelinePlayBtn.style.display = 'none';
+            controls.timelinePauseBtn.style.display = 'block';
+            controls.timelinePauseBtn.disabled = false;
+            startTimelineInterval();
+        },
+        onPause: () => {
+            if (controls.timelinePauseBtn.disabled) return;
+            controls.timelinePauseBtn.style.display = 'none';
+            controls.timelinePlayBtn.style.display = 'block';
+            controls.timelinePlayBtn.disabled = false;
+            clearInterval(timelineInterval);
+            timelineInterval = null;
+        },
+        onScaleToggle: () => {
+            const currentValue = parseInt(timelineSlider.value, 10);
+            updateSliderScale(currentValue);
+        },
+        onHighlightToggle: onToggleHighlight,
+        onAutoPanToggle: onToggleAutoPan,
+        playbackSpeedSelect
+    });
+
+    timelineContainer.appendChild(controls.timelineControlsContainer);
+
 
     // --- Ticks for Slider ---
     const eventIndexTicksContainer = document.createElement('div');
@@ -220,15 +312,8 @@ export function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPla
                 const currentTime = parseInt(timelineSlider.value, 10);
                 const eventTimes = sortedEvents.map(ev => new Date(ev.start_time).getTime());
                 // 找到最接近的事件
-                let closestIdx = 0;
-                let minDiff = Math.abs(eventTimes[0] - currentTime);
-                for (let i = 1; i < eventTimes.length; i++) {
-                    const diff = Math.abs(eventTimes[i] - currentTime);
-                    if (diff < minDiff) {
-                        minDiff = diff;
-                        closestIdx = i;
-                    }
-                }
+                const closestIdx = findClosestEventIndex(eventTimes, currentTime);
+
                 timelineSlider.value = eventTimes[closestIdx]; // 強制跳到最近事件
                 onStepHighlight(closestIdx, map);
             } else {
@@ -399,51 +484,6 @@ export function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPla
     } 
     
 
-    // --- 控制按鈕容器 ---
-    let timelineControlsContainer = document.createElement('div');
-    timelineControlsContainer.id = 'timeline-controls-container';
-    Object.assign(timelineControlsContainer.style, {
-        position: 'absolute',
-        left: '0',        
-        bottom: '10px',
-        width: '20%',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'flex-start',
-        zIndex: '10001'
-    });
-    timelineContainer.appendChild(timelineControlsContainer);
-
-    // 依序 append 按鈕
-    timelineControlsContainer.appendChild(scaleToggleButton);
-    timelineControlsContainer.appendChild(highlightToggleButton);
-    timelineControlsContainer.appendChild(autoPanToggleButton);
-    timelineControlsContainer.appendChild(timelinePlayBtn);
-    timelineControlsContainer.appendChild(timelinePauseBtn);
-    if (playbackSpeedSelect) {
-        playbackSpeedSelect.style.marginLeft = '0.5rem';
-        timelineControlsContainer.appendChild(playbackSpeedSelect);
-    }
-
-
-    timelinePlayBtn.addEventListener('pointerup', () => {
-        if (timelinePlayBtn.disabled) return;
-        timelinePlayBtn.style.display = 'none';
-        timelinePauseBtn.style.display = 'block';
-        timelinePauseBtn.disabled = false;
-        startTimelineInterval(); // 修正：統一用 playbackSpeed
-    });
-
-    const pauseTimeline = () => {
-        if (timelinePauseBtn.disabled) return;
-        timelinePauseBtn.style.display = 'none';
-        timelinePlayBtn.style.display = 'block';
-        timelinePlayBtn.disabled = false;
-        clearInterval(timelineInterval);
-        timelineInterval = null;
-    };
-    timelinePauseBtn.addEventListener('pointerup', pauseTimeline);
-
     function updateSliderScale(currentValue = null) {
         if (currentValue === null) {
             // 如果沒有傳入當前值，根據當前模式獲取滑塊值
@@ -467,8 +507,8 @@ export function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPla
                     : minDate.getTime();
                 timelineSlider.value = String(eventTime);
             }
-            scaleToggleButton.innerHTML = '🔢';
-            scaleToggleButton.title = '切換事件索引模式';
+            controls.scaleToggleButton.innerHTML = '🔢';
+            controls.scaleToggleButton.title = '切換事件索引模式';
             eventIndexTicksContainer.style.display = 'none';
             timeScaleTicksContainer.style.display = isTimelineEnabled() ? 'flex' : 'none';
         } else {
@@ -484,17 +524,13 @@ export function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPla
                 });
                 timelineSlider.value = closestIndex !== -1 ? String(closestIndex) : '0';
             }
-            scaleToggleButton.innerHTML = '📅';
-            scaleToggleButton.title = '切換時間刻度模式';
+            controls.scaleToggleButton.innerHTML = '📅';
+            controls.scaleToggleButton.title = '切換時間刻度模式';
             eventIndexTicksContainer.style.display = isTimelineEnabled() ? 'flex' : 'none';
             timeScaleTicksContainer.style.display = 'none';
         }
     }
 
-    scaleToggleButton.addEventListener('pointerup', () => {
-        const currentValue = parseInt(timelineSlider.value, 10); // 獲取當前滑塊值
-        updateSliderScale(currentValue); // 傳入當前值進行模式切換
-    });
 
     // 暴露給外部的切換功能
     window.timelineScaleToggle = () => {
@@ -502,10 +538,18 @@ export function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPla
         updateSliderScale(currentValue); // 傳入當前值進行模式切換
     };
 
-    highlightToggleButton.addEventListener('pointerup', onToggleHighlight);
-    autoPanToggleButton.addEventListener('pointerup', onToggleAutoPan);
+    controls.highlightToggleButton.addEventListener('pointerup', onToggleHighlight);
+    controls.autoPanToggleButton.addEventListener('pointerup', onToggleAutoPan);
 
-    return { timelineSlider, timelinePlayBtn, timelinePauseBtn, scaleToggleButton, highlightToggleButton, autoPanToggleButton };
+    //return { timelineSlider, timelinePlayBtn, timelinePauseBtn, scaleToggleButton, highlightToggleButton, autoPanToggleButton };
+    return {
+        timelineSlider,
+        timelinePlayBtn: controls.timelinePlayBtn,
+        timelinePauseBtn: controls.timelinePauseBtn,
+        scaleToggleButton: controls.scaleToggleButton,
+        highlightToggleButton: controls.highlightToggleButton,
+        autoPanToggleButton: controls.autoPanToggleButton
+    };    
 }
 
 //時間軸用左右鍵控制
@@ -518,16 +562,7 @@ export function timelineKeydownHandler(e, timelineEnabled, timelineSlider, place
     // 只在按鍵時找一次最接近的 index，之後直接用 index ±1
     let currentIdx = 0;
     if (isTimeScaleMode) {
-        const currentTime = parseInt(timelineSlider.value, 10);
-        let minDiff = Math.abs(eventTimes[0] - currentTime);
-        currentIdx = 0;
-        for (let i = 1; i < eventTimes.length; i++) {
-            const diff = Math.abs(eventTimes[i] - currentTime);
-            if (diff < minDiff) {
-                minDiff = diff;
-                currentIdx = i;
-            }
-        }
+        currentIdx = findClosestEventIndex(eventTimes, parseInt(timelineSlider.value, 10));
     } else {
         currentIdx = parseInt(timelineSlider.value, 10);
         
@@ -693,6 +728,43 @@ export function highlightStep(idx, map) {
         highlightedLayer.bringToFront();
     }
 }
+
+
+// 啟用 timeline 相關元件與按鈕
+export function enableTimelineFeatures(map) {
+    uiContext.timelineEnabled = true;
+    if (uiContext.timelineSlider) {
+        uiContext.timelineSlider.disabled = false;
+        uiContext.timelineSlider.style.pointerEvents = 'auto';
+        uiContext.timelineSlider.style.display = 'block';
+    }
+
+    [
+        document.getElementById('timeline-ticks-container'),
+        document.getElementById('timeline-controls-container')
+    ].forEach((el, idx) => {
+        if (el) el.style.display = idx === 0 ? 'block' : 'flex';
+    });
+
+    [
+        uiContext.timelinePlayBtn,
+        uiContext.timelinePauseBtn,
+        uiContext.scaleToggleButton,
+        uiContext.highlightToggleButton,
+        uiContext.autoPanToggleButton
+    ].forEach(btn => {
+        if (btn) {
+            btn.disabled = false;
+            btn.style.pointerEvents = 'auto';
+        }
+    });
+
+    highlightStep(parseInt(uiContext.timelineSlider.value, 10), map);
+    window.removeEventListener('keydown', timelineKeydownProxy);
+    window.addEventListener('keydown', timelineKeydownProxy);    
+}
+
+
     
 function timelineKeydownProxy(e) {
     timelineKeydownHandler(
@@ -705,7 +777,15 @@ function timelineKeydownProxy(e) {
     );
 }
 
-export function enableTimelineKeydown() {
-    window.removeEventListener('keydown', timelineKeydownProxy);
-    window.addEventListener('keydown', timelineKeydownProxy);
+function findClosestEventIndex(eventTimes, targetTime) {
+    let closestIdx = 0;
+    let minDiff = Math.abs(eventTimes[0] - targetTime);
+    for (let i = 1; i < eventTimes.length; i++) {
+        const diff = Math.abs(eventTimes[i] - targetTime);
+        if (diff < minDiff) {
+            minDiff = diff;
+            closestIdx = i;
+        }
+    }
+    return closestIdx;
 }

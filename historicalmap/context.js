@@ -23,6 +23,8 @@ export const uiContext = {
     
     timelineEnabled: false,
     timelineSlider: null,
+    timelineContainer: null,
+    playbackSpeedSelect: null,
     timelinePlayBtn: null,
     timelinePauseBtn: null,
     scaleToggleButton: null,
@@ -30,15 +32,21 @@ export const uiContext = {
     autoPanToggleButton: null,
     isAutoPanEnabled: true,
     isHighlightModeEnabled: true,
-    
 
-    cardContainer:null,
-    togglePanelBtn:null,
-    rightPanel:null,
-    panelContent:null,
-    mapContainer:null,
-    toggleIcon:null,
-    checkAnswersBtn:null
+    autoplayMode: false,
+    
+    cardContainer: null,
+    togglePanelBtn: null,
+    rightPanel: null,
+    panelContent: null,
+    mapContainer: null,
+    toggleIcon: null,
+    checkAnswersBtn: null,
+
+    lastGuideTooltipId: null,
+
+
+
 };
 
 
