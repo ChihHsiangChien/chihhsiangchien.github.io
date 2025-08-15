@@ -1,5 +1,29 @@
 import { uiContext } from './context.js';
 
+// --- 工具函式 ---
+export function findClosestEventIndex(eventTimes, targetTime) {
+    let closestIdx = 0;
+    let minDiff = Math.abs(eventTimes[0] - targetTime);
+    for (let i = 1; i < eventTimes.length; i++) {
+        const diff = Math.abs(eventTimes[i] - targetTime);
+        if (diff < minDiff) {
+            minDiff = diff;
+            closestIdx = i;
+        }
+    }
+    return closestIdx;
+}
+
+function getYearRangeColor(year, yearRanges) {
+    for (const range of yearRanges) {
+        if (year >= range.start && year <= range.end) {
+            return range.color;
+        }
+    }
+    return '#6b7280'; // 預設色
+}
+
+
 // --- Timeline Slider UI ---
 function clearTimelineDom() {
     [
@@ -15,6 +39,7 @@ function clearTimelineDom() {
     if (oldSlider) oldSlider.remove();
 }
 
+// --- 控制按鈕建立 ---
 function createTimelineControls({
     onPlay,
     onPause,
@@ -121,6 +146,24 @@ function createTimelineControls({
     };
 }
 
+export function updateTicksContainerLayout(timelineSlider, timelineContainer, eventIndexTicksContainer, timeScaleTicksContainer) {
+    requestAnimationFrame(() => {
+        if (!timelineSlider || !timelineContainer) return;
+        const sliderRect = timelineSlider.getBoundingClientRect();
+        const containerRect = timelineContainer.getBoundingClientRect();
+        const leftOffset = sliderRect.left - containerRect.left;
+        const topOffset = sliderRect.top - containerRect.top;
+        const leftPadding = 6;
+        const usableWidth = sliderRect.width - 2 * leftPadding;
+        eventIndexTicksContainer.style.left = leftOffset + leftPadding + 'px';
+        eventIndexTicksContainer.style.width = usableWidth + 'px';
+        eventIndexTicksContainer.style.bottom = topOffset + 'px';
+        timeScaleTicksContainer.style.left = leftOffset + leftPadding + 'px';
+        timeScaleTicksContainer.style.width = usableWidth + 'px';
+        timeScaleTicksContainer.style.bottom = topOffset + 'px';
+    });
+}
+
 export function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPlacedChrono, isTimelineEnabled, onToggleHighlight, onToggleAutoPan) {
     let timelineInterval = null;
     let isTimeScaleMode = false;
@@ -203,43 +246,36 @@ export function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPla
     timelineSlider.style.top = '40px';
     timelineSlider.style.zIndex = '10002'; /* 確保在其他元素之上 */
 
-    // --- ticksContainer layout update function ---
-    function updateTicksContainerLayout() {
-        requestAnimationFrame(() => {
-            if (!timelineSlider || !timelineContainer) return;
-            const sliderRect = timelineSlider.getBoundingClientRect();
-            const containerRect = timelineContainer.getBoundingClientRect();
-            const leftOffset = sliderRect.left - containerRect.left;
-            const topOffset = sliderRect.top - containerRect.top;
-            const sliderWidth = sliderRect.width;
 
-            // sliderContainer最左和最右有一段空間是slider不會用到的
-            const leftPadding = 6;
-            const usableWidth = sliderRect.width - 2 * leftPadding;
-
-
-            // 設定tick的位置在slider上
-            eventIndexTicksContainer.style.left = leftOffset + leftPadding + 'px';
-            eventIndexTicksContainer.style.width = usableWidth + 'px';
-            eventIndexTicksContainer.style.bottom = topOffset + 'px';
-            timeScaleTicksContainer.style.left = leftOffset + leftPadding + 'px';
-            timeScaleTicksContainer.style.width = usableWidth + 'px';
-            timeScaleTicksContainer.style.bottom = topOffset + 'px';
-        });
-    }
 
     // 初始呼叫一次
-    updateTicksContainerLayout();
-
+    updateTicksContainerLayout(
+        timelineSlider,
+        timelineContainer,
+        eventIndexTicksContainer,
+        timeScaleTicksContainer
+    );
     // 只在 resize、panel收合、timelineContainer顯示時執行
     const observer = new MutationObserver(() => {
         if (!timelineContainer.classList.contains('hidden')) {
-            updateTicksContainerLayout();
+            updateTicksContainerLayout(
+                timelineSlider,
+                timelineContainer,
+                eventIndexTicksContainer,
+                timeScaleTicksContainer
+            );
         }
     });
     observer.observe(timelineContainer, { attributes: true, attributeFilter: ['class'] });
 
-    window.addEventListener('resize', updateTicksContainerLayout);
+    window.addEventListener('resize', () => {
+        updateTicksContainerLayout(
+            timelineSlider,
+            timelineContainer,
+            eventIndexTicksContainer,
+            timeScaleTicksContainer
+        );
+    });
     window.updateTimelineTicksLayout = updateTicksContainerLayout;
 
     // --- Tooltip for Slider ---
@@ -386,18 +422,9 @@ export function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPla
         });
         eventIndexTicksContainer.appendChild(tick);
     }
-
-    
+    // 取得 yearRanges    
     const yearRanges = mapConfig.yearRanges || [];
 
-    function getYearRangeColor(year) {
-        for (const range of yearRanges) {
-            if (year >= range.start && year <= range.end) {
-                return range.color;
-            }
-        }
-        return '#6b7280'; // 預設色
-    }
 
 
     // 產生時間刻度背景色區塊
@@ -443,7 +470,7 @@ export function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPla
             const yearDate = new Date(year, 0, 1);
             const percentage = (yearDate.getTime() - minDate.getTime()) / totalTimeSpan;
             if (percentage > 0 && percentage < 1) {
-                const tickColor = getYearRangeColor(year);
+                const tickColor = getYearRangeColor(year, yearRanges);
                 const tick = document.createElement('div');
                 Object.assign(tick.style, {
                     position: 'absolute',
@@ -777,15 +804,3 @@ function timelineKeydownProxy(e) {
     );
 }
 
-function findClosestEventIndex(eventTimes, targetTime) {
-    let closestIdx = 0;
-    let minDiff = Math.abs(eventTimes[0] - targetTime);
-    for (let i = 1; i < eventTimes.length; i++) {
-        const diff = Math.abs(eventTimes[i] - targetTime);
-        if (diff < minDiff) {
-            minDiff = diff;
-            closestIdx = i;
-        }
-    }
-    return closestIdx;
-}
