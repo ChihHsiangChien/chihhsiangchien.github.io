@@ -312,5 +312,9 @@ export async function autoPlaceAndCollapsePanel(data, timelineContainer, map) {
     // 再執行一次 scaleToggleButton 的 function
     if (window.timelineScaleToggle) window.timelineScaleToggle();
 
+    // 隱藏排序按鈕區塊
+    const sortContainer = document.getElementById('sort-buttons-container');
+    if (sortContainer) sortContainer.style.display = 'none';
+
 
 }

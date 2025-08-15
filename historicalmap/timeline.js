@@ -64,16 +64,6 @@ export function findClosestEventIndex(eventTimes, targetTime) {
     return closestIdx;
 }
 
-function getYearRangeColor(year, yearRanges) {
-    for (const range of yearRanges) {
-        if (year >= range.start && year <= range.end) {
-            return range.color;
-        }
-    }
-    return '#6b7280'; // 預設色
-}
-
-
 // --- Timeline Slider UI ---
 function clearTimelineDom() {
     [
@@ -310,7 +300,9 @@ function createTimeScaleEventDots(container, sortedEvents, minDate, totalTimeSpa
     });
 }
 
-export function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPlacedChrono, isTimelineEnabled, onToggleHighlight, onToggleAutoPan) {
+export function setupTimelineSlider(
+    data, map, mapConfig, onStepHighlight, getPlacedChrono, isTimelineEnabled, onToggleHighlight, onToggleAutoPan
+) {
     let timelineInterval = null;
     let isTimeScaleMode = false;
 
@@ -321,203 +313,92 @@ export function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPla
     const timelineContainer = uiContext.timelineContainer;
     const playbackSpeedSelect = uiContext.playbackSpeedSelect;
 
-    timelineSlider.addEventListener('keydown', e => {
-        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-            e.preventDefault();
-        }
-    });    
+    // --- 事件資料預處理 ---
+    const sortedEvents = [...data.events].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+    const minDate = sortedEvents.length > 0 ? new Date(sortedEvents[0].start_time) : new Date();
+    const maxDate = sortedEvents.length > 0 ? new Date(sortedEvents[sortedEvents.length - 1].start_time) : new Date();
+    const totalEvents = sortedEvents.length;
+    const totalTimeSpan = maxDate.getTime() - minDate.getTime();
+    const yearRanges = mapConfig.yearRanges || [];
 
-    // --- 控制按鈕建立 ---
-    // 建立控制按鈕
+    // --- 控制按鈕 ---
     const controls = createTimelineControls({
-        onPlay: () => {
-            if (controls.timelinePlayBtn.disabled) return;
-            controls.timelinePlayBtn.style.display = 'none';
-            controls.timelinePauseBtn.style.display = 'block';
-            controls.timelinePauseBtn.disabled = false;
-            startTimelineInterval();
-        },
-        onPause: () => {
-            if (controls.timelinePauseBtn.disabled) return;
-            controls.timelinePauseBtn.style.display = 'none';
-            controls.timelinePlayBtn.style.display = 'block';
-            controls.timelinePlayBtn.disabled = false;
-            clearInterval(timelineInterval);
-            timelineInterval = null;
-        },
-        onScaleToggle: () => {
-            const currentValue = parseInt(timelineSlider.value, 10);
-            updateSliderScale(currentValue);
-        },
+        onPlay: () => handlePlay(),
+        onPause: () => handlePause(),
+        onScaleToggle: () => updateSliderScale(),
         onHighlightToggle: onToggleHighlight,
         onAutoPanToggle: onToggleAutoPan,
         playbackSpeedSelect
     });
-
     timelineContainer.appendChild(controls.timelineControlsContainer);
 
+    // --- Ticks ---
+    const eventIndexTicksContainer = createEventIndexTicksContainer(timelineContainer);
+    const timeScaleTicksContainer = createTimeScaleTicksContainer(timelineContainer);
 
-    // --- Ticks for Slider ---
-    const eventIndexTicksContainer = document.createElement('div');
-    eventIndexTicksContainer.id = 'timeline-ticks-container';
-    eventIndexTicksContainer.className = 'h-4 flex items-center';
-    Object.assign(eventIndexTicksContainer.style, {
-        position: 'absolute',
-        bottom: '30px',
-        height: '30px',
-        pointerEvents: 'none',
-        zIndex: '9998'
-    });
-    timelineContainer.appendChild(eventIndexTicksContainer);
+    createEventIndexTicks(eventIndexTicksContainer, totalEvents);
+    if (totalTimeSpan > 0) {
+        createTimeScaleTicks(timeScaleTicksContainer, minDate, maxDate, yearRanges, totalTimeSpan);
+    }
+    createTimeScaleEventDots(timeScaleTicksContainer, sortedEvents, minDate, totalTimeSpan);
 
-    const timeScaleTicksContainer = document.createElement('div');
-    timeScaleTicksContainer.id = 'time-scale-ticks-container';
-    timeScaleTicksContainer.className = 'h-8 flex items-center';
-    Object.assign(timeScaleTicksContainer.style, {
-        position: 'absolute',
-        bottom: '30px',
-        padding: '0 10px',
-        height: '30px',
-        background: '#fff',
-        zIndex: '9998',
-        pointerEvents: 'none',
-        display: 'none'
-    });
-    timelineContainer.appendChild(timeScaleTicksContainer);
+    // --- Slider 位置與尺寸 ---
+    styleTimelineSlider(timelineSlider);
 
-    // slider 的位置和尺寸
-    timelineSlider.style.position = 'absolute';
-    timelineSlider.style.left = '25%';
-    timelineSlider.style.width = '70%'; // 或 '80%'，依需求
-    timelineSlider.style.top = '40px';
-    timelineSlider.style.zIndex = '10002'; /* 確保在其他元素之上 */
+    // --- ticks layout ---
+    setupTicksLayoutObserver(timelineSlider, timelineContainer, eventIndexTicksContainer, timeScaleTicksContainer);
 
-
-
-    // 初始呼叫一次
-    updateTicksContainerLayout(
-        timelineSlider,
-        timelineContainer,
-        eventIndexTicksContainer,
-        timeScaleTicksContainer
+    // --- Tooltip ---
+    const timelineTooltip = createTimelineTooltip();
+    setupTimelineTooltipEvents(
+        timelineSlider, timelineContainer, timelineTooltip, 
+        isTimelineEnabled, isTimeScaleModeGetter, getPlacedChrono, minDate, totalTimeSpan, sortedEvents
     );
-    // 只在 resize、panel收合、timelineContainer顯示時執行
-    const observer = new MutationObserver(() => {
-        if (!timelineContainer.classList.contains('hidden')) {
-            updateTicksContainerLayout(
-                timelineSlider,
-                timelineContainer,
-                eventIndexTicksContainer,
-                timeScaleTicksContainer
-            );
-        }
-    });
-    observer.observe(timelineContainer, { attributes: true, attributeFilter: ['class'] });
 
-    window.addEventListener('resize', () => {
-        updateTicksContainerLayout(
-            timelineSlider,
-            timelineContainer,
-            eventIndexTicksContainer,
-            timeScaleTicksContainer
-        );
-    });
-    window.updateTimelineTicksLayout = updateTicksContainerLayout;
-
-    // --- Tooltip for Slider ---
-    const timelineTooltip = document.createElement('div');
-
-    timelineTooltip.id = 'timeline-tooltip';
-    Object.assign(timelineTooltip.style, {
-        position: 'fixed',
-        background: 'rgba(0, 0, 0, 0.8)',
-        color: 'white',
-        padding: '5px 5px',
-        borderRadius: '4px',
-        display: 'none',
-        zIndex: '10002',
-        pointerEvents: 'none',
-        whiteSpace: 'nowrap',
-        
-    });
-    document.body.appendChild(timelineTooltip);
-
-    timelineSlider.addEventListener('mousemove', (e) => {
-        if (!isTimelineEnabled()) return;
-        // 只取得 sliderRect，不執行 updateTicksContainerLayout
-        const sliderRect = timelineSlider.getBoundingClientRect();
-        const timelineContainerRect = timelineContainer.getBoundingClientRect();        
-        const percentage = (e.clientX - sliderRect.left) / sliderRect.width;
-        let eventToShow = null;
-        const currentPlacedChrono = getPlacedChrono();
-        if (isTimeScaleMode) {
-            const hoverTime = minDate.getTime() + percentage * (totalTimeSpan);
-            if (currentPlacedChrono && currentPlacedChrono.length > 0) {
-                const firstFutureIndex = currentPlacedChrono.findIndex(item => new Date(item.event.start_time).getTime() > hoverTime);
-                let indexToShow = -1;
-                if (firstFutureIndex === -1) indexToShow = currentPlacedChrono.length - 1;
-                else if (firstFutureIndex === 0) indexToShow = 0;
-                else indexToShow = firstFutureIndex - 1;
-                if (indexToShow !== -1) eventToShow = currentPlacedChrono[indexToShow].event;
-            }
-        } else {
-            const maxIndex = parseInt(timelineSlider.max, 10);
-            let index = Math.round(percentage * maxIndex);
-            index = Math.max(0, Math.min(maxIndex, index));
-            if (currentPlacedChrono && currentPlacedChrono[index]) {
-                eventToShow = currentPlacedChrono[index].event;
-            }
-        }
-        if (eventToShow && timelineContainerRect.top > 0) {
-            const year = new Date(eventToShow.start_time).getFullYear();
-            timelineTooltip.textContent = `${year}: ${eventToShow.title}`;
-            timelineTooltip.style.display = 'block';
-
-            const tooltipHeight = timelineTooltip.offsetHeight || 30; // 預設高度30，避免初次為0
-            timelineTooltip.style.left = `${e.clientX}px`;
-            timelineTooltip.style.top = `${timelineContainerRect.top - tooltipHeight}px`; // 頂部往上偏移
-            timelineTooltip.style.transform = 'translate(-50%, 0%)';        
-        } else {
-            timelineTooltip.style.display = 'none';
-        }        
-    });
-    timelineSlider.addEventListener('mouseleave', () => {
-        timelineTooltip.style.display = 'none';
-    });
-
-    // 決定 slider 滑到哪個位置就切換 highlight     
+    // --- Slider input事件 ---
     let currentIdx = 0;
     timelineSlider.oninput = (e) => {
         if (!timelineSlider.disabled) {
             if (isTimeScaleMode) {
-                // 找到最接近的事件時間
                 const currentTime = parseInt(timelineSlider.value, 10);
                 const eventTimes = sortedEvents.map(ev => new Date(ev.start_time).getTime());
-                // 找到最接近的事件
                 const closestIdx = findClosestEventIndex(eventTimes, currentTime);
-
-                timelineSlider.value = eventTimes[closestIdx]; // 強制跳到最近事件
+                timelineSlider.value = eventTimes[closestIdx];
                 onStepHighlight(closestIdx, map);
             } else {
                 currentIdx = parseInt(timelineSlider.value, 10);
                 onStepHighlight(currentIdx, map);
             }
         }
-    };    
-    // --- 播放速度控制 ---
+    };
+
+    // --- 播放速度 ---
     let playbackSpeed = 1;
-    const setPlaybackSpeed = (speed) => {
+    setupPlaybackSpeed(playbackSpeedSelect, setPlaybackSpeed);
+
+    function setPlaybackSpeed(speed) {
         playbackSpeed = speed;
-        // 若正在播放，重啟 interval
         if (timelineInterval) {
             clearInterval(timelineInterval);
             startTimelineInterval();
         }
-    };
-    if (playbackSpeedSelect) {
-        playbackSpeedSelect.addEventListener('change', (e) => {
-            setPlaybackSpeed(Number(e.target.value));
-        });
+    }
+
+    // --- 播放/暫停 ---
+    function handlePlay() {
+        if (controls.timelinePlayBtn.disabled) return;
+        controls.timelinePlayBtn.style.display = 'none';
+        controls.timelinePauseBtn.style.display = 'block';
+        controls.timelinePauseBtn.disabled = false;
+        startTimelineInterval();
+    }
+    function handlePause() {
+        if (controls.timelinePauseBtn.disabled) return;
+        controls.timelinePauseBtn.style.display = 'none';
+        controls.timelinePlayBtn.style.display = 'block';
+        controls.timelinePlayBtn.disabled = false;
+        clearInterval(timelineInterval);
+        timelineInterval = null;
     }
     function startTimelineInterval() {
         const baseMs = 1200;
@@ -538,75 +419,19 @@ export function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPla
         }, intervalMs);
     }
 
-    // --- Get date range for time scale mode ---
-    const sortedEvents = [...data.events].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
-    const minDate = sortedEvents.length > 0 ? new Date(sortedEvents[0].start_time) : new Date();
-    const maxDate = sortedEvents.length > 0 ? new Date(sortedEvents[sortedEvents.length - 1].start_time) : new Date();
-    const totalEvents = sortedEvents.length;
-    const totalTimeSpan = maxDate.getTime() - minDate.getTime();
-    const yearRanges = mapConfig.yearRanges || [];
-
-    // 初始化 timelineSlider 的值
-    if (isTimeScaleMode) {
-        timelineSlider.value = String(minDate.getTime()); // 設置為時間刻度模式的最小時間
-    } else {
-        timelineSlider.value = '0'; // 設置為事件索引模式的第一個索引
-    }
-
-    // 產生事件索引模式的 ticks
-    createEventIndexTicks(eventIndexTicksContainer, totalEvents);
-    
-    // 產生時間刻度的 ticks 
-    if (totalTimeSpan > 0) {
-        createTimeScaleTicks(timeScaleTicksContainer, minDate, maxDate, yearRanges, totalTimeSpan);
-    }
-    createTimeScaleEventDots(timeScaleTicksContainer, sortedEvents, minDate, totalTimeSpan);
-
-
-
-    /*
-    // 產生事件刻度 紅色圓形（時間刻度模式下）
-    if (totalTimeSpan > 0 && sortedEvents.length > 0) {
-        sortedEvents.forEach(event => {
-            const eventDate = new Date(event.start_time);
-            const percentage = (eventDate.getTime() - minDate.getTime()) / totalTimeSpan;
-            if (percentage >= 0 && percentage <= 1) {
-                const eventTick = document.createElement('div');
-                Object.assign(eventTick.style, {
-                    position: 'absolute',
-                    width: '8px',           // 圓形寬度
-                    height: '8px',          // 圓形高度
-                    left: `${percentage * 100}%`,
-                    transform: 'translateX(-50%)', // 使圓形中心對齊
-                    bottom: `${timeScaleTicksContainer.getBoundingClientRect().bottom + 5}px`,
-                    background: '#96000061', // 可自訂顏色
-                    borderRadius: '50%',    // 變成圓形
-                    zIndex: '2'
-                });
-                timeScaleTicksContainer.appendChild(eventTick);
-            }
-        });
-    } 
-    */
-
+    // --- Slider scale切換 ---
     function updateSliderScale(currentValue = null) {
         if (currentValue === null) {
-            // 如果沒有傳入當前值，根據當前模式獲取滑塊值
             currentValue = isTimeScaleMode
-                ? parseInt(timelineSlider.value, 10) // 當前時間刻度模式的時間值
-                : parseInt(timelineSlider.value, 10); // 當前事件索引模式的索引值
+                ? parseInt(timelineSlider.value, 10)
+                : parseInt(timelineSlider.value, 10);
         }
-
-        // 切換模式
         isTimeScaleMode = !isTimeScaleMode;
-
         if (isTimeScaleMode) {
-            // 切換到時間刻度模式
             timelineSlider.min = minDate.getTime();
             timelineSlider.max = maxDate.getTime();
-            timelineSlider.step = 1000 * 60 * 60 * 24; // 一天
+            timelineSlider.step = 1000 * 60 * 60 * 24;
             if (!isNaN(currentValue)) {
-                // 將索引轉換為對應的時間
                 const eventTime = sortedEvents[currentValue]?.start_time
                     ? new Date(sortedEvents[currentValue].start_time).getTime()
                     : minDate.getTime();
@@ -617,12 +442,10 @@ export function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPla
             eventIndexTicksContainer.style.display = 'none';
             timeScaleTicksContainer.style.display = isTimelineEnabled() ? 'flex' : 'none';
         } else {
-            // 切換到事件索引模式
             timelineSlider.min = 0;
             timelineSlider.max = totalEvents > 0 ? totalEvents - 1 : 0;
             timelineSlider.step = 1;
             if (!isNaN(currentValue)) {
-                // 將時間轉換為對應的索引
                 const closestIndex = sortedEvents.findIndex(event => {
                     const eventTime = new Date(event.start_time).getTime();
                     return eventTime >= currentValue;
@@ -635,18 +458,24 @@ export function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPla
             timeScaleTicksContainer.style.display = 'none';
         }
     }
+    function isTimeScaleModeGetter() {
+        return isTimeScaleMode;
+    }
 
+    // --- 初始化slider值 ---
+    if (isTimeScaleMode) {
+        timelineSlider.value = String(minDate.getTime());
+    } else {
+        timelineSlider.value = '0';
+    }
 
-    // 暴露給外部的切換功能
+    // --- 暴露切換功能 ---
     window.timelineScaleToggle = () => {
-        const currentValue = parseInt(timelineSlider.value, 10); // 獲取當前滑塊值
-        updateSliderScale(currentValue); // 傳入當前值進行模式切換
+        const currentValue = parseInt(timelineSlider.value, 10);
+        updateSliderScale(currentValue);
     };
 
-    controls.highlightToggleButton.addEventListener('pointerup', onToggleHighlight);
-    controls.autoPanToggleButton.addEventListener('pointerup', onToggleAutoPan);
-
-    //return { timelineSlider, timelinePlayBtn, timelinePauseBtn, scaleToggleButton, highlightToggleButton, autoPanToggleButton };
+    // --- 返回控制元件 ---
     return {
         timelineSlider,
         timelinePlayBtn: controls.timelinePlayBtn,
@@ -654,7 +483,128 @@ export function setupTimelineSlider(data, map,mapConfig, onStepHighlight, getPla
         scaleToggleButton: controls.scaleToggleButton,
         highlightToggleButton: controls.highlightToggleButton,
         autoPanToggleButton: controls.autoPanToggleButton
-    };    
+    };
+
+    // --- 抽出的小函式 ---
+    function createEventIndexTicksContainer(container) {
+        const el = document.createElement('div');
+        el.id = 'timeline-ticks-container';
+        el.className = 'h-4 flex items-center';
+        Object.assign(el.style, {
+            position: 'absolute',
+            bottom: '30px',
+            height: '30px',
+            pointerEvents: 'none',
+            zIndex: '9998'
+        });
+        container.appendChild(el);
+        return el;
+    }
+    function createTimeScaleTicksContainer(container) {
+        const el = document.createElement('div');
+        el.id = 'time-scale-ticks-container';
+        el.className = 'h-8 flex items-center';
+        Object.assign(el.style, {
+            position: 'absolute',
+            bottom: '30px',
+            padding: '0 10px',
+            height: '30px',
+            background: '#fff',
+            zIndex: '9998',
+            pointerEvents: 'none',
+            display: 'none'
+        });
+        container.appendChild(el);
+        return el;
+    }
+    function styleTimelineSlider(slider) {
+        slider.style.position = 'absolute';
+        slider.style.left = '25%';
+        slider.style.width = '70%';
+        slider.style.top = '40px';
+        slider.style.zIndex = '10002';
+    }
+    function setupTicksLayoutObserver(slider, container, eventTicks, timeTicks) {
+        updateTicksContainerLayout(slider, container, eventTicks, timeTicks);
+        const observer = new MutationObserver(() => {
+            if (!container.classList.contains('hidden')) {
+                updateTicksContainerLayout(slider, container, eventTicks, timeTicks);
+            }
+        });
+        observer.observe(container, { attributes: true, attributeFilter: ['class'] });
+        window.addEventListener('resize', () => {
+            updateTicksContainerLayout(slider, container, eventTicks, timeTicks);
+        });
+        window.updateTimelineTicksLayout = updateTicksContainerLayout;
+    }
+    function createTimelineTooltip() {
+        const tooltip = document.createElement('div');
+        tooltip.id = 'timeline-tooltip';
+        Object.assign(tooltip.style, {
+            position: 'fixed',
+            background: 'rgba(0, 0, 0, 0.8)',
+            color: 'white',
+            padding: '5px 5px',
+            borderRadius: '4px',
+            display: 'none',
+            zIndex: '10002',
+            pointerEvents: 'none',
+            whiteSpace: 'nowrap',
+        });
+        document.body.appendChild(tooltip);
+        return tooltip;
+    }
+    function setupTimelineTooltipEvents(
+        slider, container, tooltip, isTimelineEnabled, isTimeScaleModeGetter, getPlacedChrono, minDate, totalTimeSpan, sortedEvents
+    ) {
+        slider.addEventListener('mousemove', (e) => {
+            if (!isTimelineEnabled()) return;
+            const sliderRect = slider.getBoundingClientRect();
+            const timelineContainerRect = container.getBoundingClientRect();
+            const percentage = (e.clientX - sliderRect.left) / sliderRect.width;
+            let eventToShow = null;
+            const currentPlacedChrono = getPlacedChrono();
+            if (isTimeScaleModeGetter()) {
+                const hoverTime = minDate.getTime() + percentage * (totalTimeSpan);
+                if (currentPlacedChrono && currentPlacedChrono.length > 0) {
+                    const firstFutureIndex = currentPlacedChrono.findIndex(item => new Date(item.event.start_time).getTime() > hoverTime);
+                    let indexToShow = -1;
+                    if (firstFutureIndex === -1) indexToShow = currentPlacedChrono.length - 1;
+                    else if (firstFutureIndex === 0) indexToShow = 0;
+                    else indexToShow = firstFutureIndex - 1;
+                    if (indexToShow !== -1) eventToShow = currentPlacedChrono[indexToShow].event;
+                }
+            } else {
+                const maxIndex = parseInt(slider.max, 10);
+                let index = Math.round(percentage * maxIndex);
+                index = Math.max(0, Math.min(maxIndex, index));
+                if (currentPlacedChrono && currentPlacedChrono[index]) {
+                    eventToShow = currentPlacedChrono[index].event;
+                }
+            }
+            if (eventToShow && timelineContainerRect.top > 0) {
+                const year = new Date(eventToShow.start_time).getFullYear();
+                tooltip.textContent = `${year}: ${eventToShow.title}`;
+                tooltip.style.display = 'block';
+                const tooltipHeight = tooltip.offsetHeight || 30;
+                tooltip.style.left = `${e.clientX}px`;
+                tooltip.style.top = `${timelineContainerRect.top - tooltipHeight}px`;
+                tooltip.style.transform = 'translate(-50%, 0%)';
+            } else {
+                tooltip.style.display = 'none';
+            }
+        });
+        slider.addEventListener('mouseleave', () => {
+            tooltip.style.display = 'none';
+        });
+    }
+    function setupPlaybackSpeed(select, setSpeedFn) {
+        if (select) {
+            select.addEventListener('change', (e) => {
+                setSpeedFn(Number(e.target.value));
+            });
+        }
+    }
 }
 
 //時間軸用左右鍵控制
@@ -833,4 +783,3 @@ export function highlightStep(idx, map) {
         highlightedLayer.bringToFront();
     }
 }
-
