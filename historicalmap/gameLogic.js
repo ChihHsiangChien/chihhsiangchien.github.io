@@ -184,8 +184,8 @@ function createDraggableMarker(drop, eventData, map) {
     const markerLatLng = drop.getBounds ? drop.getBounds().getCenter() : drop.getLatLng();
     
     // 判斷 autoplay 模式
-    const isAutoplay = uiContext.autoplayMode === true;
-    return L.marker(markerLatLng, { icon: markerIcon, draggable: !isAutoplay }).addTo(map);    
+    const isTimelineMode = uiContext.timelineMode === true;
+    return L.marker(markerLatLng, { icon: markerIcon, draggable: !isTimelineMode }).addTo(map);    
 }
 
 
@@ -311,10 +311,6 @@ export async function autoPlaceAndCollapsePanel(data, timelineContainer, map) {
     if (window.updateTimelineTicksLayout) window.updateTimelineTicksLayout();
     // 再執行一次 scaleToggleButton 的 function
     if (window.timelineScaleToggle) window.timelineScaleToggle();
-
-    // 隱藏排序按鈕區塊
-    const sortContainer = document.getElementById('sort-buttons-container');
-    if (sortContainer) sortContainer.style.display = 'none';
 
 
 }

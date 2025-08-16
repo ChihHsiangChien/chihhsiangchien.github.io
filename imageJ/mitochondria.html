@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>mitochondria</title>
+<link rel="stylesheet" href="styles.css">
+<!-- KaTeX CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.css" integrity="sha384-wcIxkf4k558AjM3Yz3BBFQUbk/zgIYC2R0QpeeYb+TwlBVMrlgLqwRjRtGZiK7ww" crossorigin="anonymous">
+</head>
+<body>
+
+<div id="toc">
+<h2><a href="index.html">回到首頁</a></h2>
+<div class="toc-container">
+<div class="toc">
+<ul>
+<li><a href="#_1">粒線體數量與體積分析</a><ul>
+<li><a href="#_2">使用者需求</a><ul>
+<li><a href="#_3">樣本資訊</a></li>
+<li><a href="#_4">分析需求</a></li>
+</ul>
+</li>
+<li><a href="#_5">流程</a><ul>
+<li><a href="#_6">影像預處理</a></li>
+<li><a href="#_7">影像分割</a></li>
+<li><a href="#_8">二值化影像的切割</a></li>
+<li><a href="#3d-rendering">3D rendering</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+
+</div>
+</div>
+<div id="content">
+<h1 id="_1">粒線體數量與體積分析</h1>
+<p><a href="https://youtu.be/fxiGpamOC0I">教學影片</a></p>
+<h2 id="_2">使用者需求</h2>
+<h3 id="_3">樣本資訊</h3>
+<ul>
+<li><strong>樣本名稱</strong>: NAc_aligned.tif</li>
+<li><strong>來源</strong>: 小鼠腦區 Nucleus Accumbens</li>
+<li><strong>染色方式</strong>: 細胞膜脂質染上重金屬 Osmium tetroxide</li>
+<li><strong>影像設備</strong>: 掃描電子顯微鏡 (SEM)</li>
+<li><strong>影像資訊</strong>: <ul>
+<li>Voxel size: 6.5(x) × 6.5(y) × 60(z) nm</li>
+<li>切片數量: 111 slices</li>
+<li>已用 SIFT 對齊</li>
+</ul>
+</li>
+</ul>
+<h3 id="_4">分析需求</h3>
+<ol>
+<li>
+<p><strong>分割粒線體</strong></p>
+<ul>
+<li><strong>目標</strong>: 分割出粒線體，並計算各個粒線體的體積。</li>
+<li><strong>附圖</strong>: (segmentation example) 為粒線體標定範例。<ul>
+<li>已分割的粒線體: 粉紅色</li>
+<li>非粒線體: 紫色</li>
+<li>紅箭頭: 尚未分割的粒線體範例</li>
+</ul>
+</li>
+<li><strong>辨認原則</strong>:<ul>
+<li>a. 具有黑色框線的圓形或橢圓形，內部似有 cristae 的線條。</li>
+<li>b. 全黑 (solid black) 的圓形或橢圓形為非粒線體。</li>
+<li>c. 被更大結構黑框包圍的亦屬粒線體。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>
+<p><strong>3D 呈現</strong></p>
+<ul>
+<li>3D rendering 分割出的粒線體。</li>
+</ul>
+</li>
+<li>
+<p><strong>特徵計算</strong></p>
+<ul>
+<li>計算粒線體的數量與各別體積。</li>
+</ul>
+</li>
+</ol>
+<h2 id="_5">流程</h2>
+<h3 id="_6">影像預處理</h3>
+<ol>
+<li>
+<p><code>Image › Stacks › 3D Project...</code>取 <code>min intensity</code>取得具有完整影像的範圍，再套用到原始stack進行<code>crop</code>。</p>
+</li>
+<li>
+<p>複製出單一slice，進行FFT，測試產生頻譜圖。在頻譜圖上進行處理，將週期性結構去除，並將頻譜圖轉回空間域。</p>
+</li>
+<li>
+<p>將處理後的頻譜圖，利用<code>Image &gt; Adjust &gt; Threshold...</code>進行二值化處理，目標是阻擋的頻率範圍為黑色，允許通過的頻率為白色。</p>
+</li>
+<li>
+<p>利用<code>Process › FFT › Custom Filter...</code>套用上述頻譜圖，將原始影像stack中的週期性結構去除。</p>
+</li>
+</ol>
+<h3 id="_7">影像分割</h3>
+<ol>
+<li>
+<p>使用 <code>Plugins › Segmentation › Trainable Weka Segmentation 3D</code>進行處理，class1作為背景或非粒線體，class2作為粒線體。</p>
+</li>
+<li>
+<p>使用<code>freehand line tool</code>標註粒線體與背景。</p>
+</li>
+<li>
+<p>使用適中寬度的freehand line：設置stroke width為3-5像素，沿著粒線體中心線繪製：這樣可以捕獲粒線體的主要特徵，在多個切片上標註：確保3D結構的完整性。</p>
+</li>
+<li>
+<p>training後，得到的結果影像為二值化影像。</p>
+</li>
+</ol>
+<h3 id="_8">二值化影像的切割</h3>
+<ol>
+<li>
+<p>使用<code>Analyze › 3D Objects Counter</code>將二值化影像切割成各個粒線體。每個粒線體都會有一個獨立的ID。且可以得到分析表格，其中包含每個粒線體的體積資訊。</p>
+</li>
+<li>
+<p>利用<code>Image &gt; Adjust &gt; Threshold...</code>用單一粒線體的ID，並將其轉換為二值化影像。</p>
+</li>
+<li>
+<p>此二值化影像與原始影像進行<code>Image › Calculator Plus...</code>，選擇<code>AND</code>運算，將原始影像中非粒線體的部分去除。即可得到分割後的粒線體影像。</p>
+</li>
+</ol>
+<h3 id="3d-rendering">3D rendering</h3>
+<ol>
+<li>將上述結果影像crop後，利用<code>Plugins › 3D Viewer</code>進行3D重建。可看到分割後的粒線體的立體影像。</li>
+</ol>
+</div>
+
+<!-- Mermaid JS -->
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({}); // Keep double braces for literal JS object
+  mermaid.run({ nodes: document.querySelectorAll('.language-mermaid') }); // Keep double braces
+</script>
+
+<!-- KaTeX JS -->
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/katex.min.js" integrity="sha384-hIoBPJpTUs74ddyc4bFZSM1TVlQDA60VBbJS0oA934VSz82sBx1X7kSx2ATBDIyd" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.10/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk" crossorigin="anonymous"></script>
+<!-- *** CORRECTED SCRIPT WITH ${...} ESCAPING *** -->
+        <script>
+            document.addEventListener("DOMContentLoaded", function() {
+                renderMathInElement(document.body, {
+                    delimiters: [
+                        { left: '$$',  right: '$$',  display: true },
+                        { left: '\\[', right: '\\]', display: true },
+                        { left: '\\(', right: '\\)', display: false }
+                    ],
+                    ignoredTags: ['script','noscript','style','textarea','pre','code'],
+                    throwOnError: false
+                });
+            });
+        </script>
+
+</body>
+</html>
