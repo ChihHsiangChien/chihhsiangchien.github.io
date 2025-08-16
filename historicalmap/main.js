@@ -9,9 +9,12 @@ import { renderLocationsOnMap, fitMapToLocations } from './map.js';
 import { updateGuideAndLastEvent } from './map.js';
 import { handleZoom } from './map.js';
 
+
+
 import { createCard } from './card.js';
 
 import { initUiDomElements } from './uiController.js';
+import { insertSortButtonsContainerIfNeeded } from './uiController.js';
 
 import { adjustCardContainerHeight } from './uiController.js';
 import { renderCards } from './uiController.js';
@@ -48,15 +51,16 @@ document.addEventListener('DOMContentLoaded', () => {
     fetch(currentMapConfig.dataPath)
         .then(response => response.json())
         .then(async data => {
-            setupGame(data, currentMapConfig.regionColorConfig);
+            uiContext.timelineMode = urlParams.get('mode') === 'timeline';
 
+            setupGame(data, currentMapConfig.regionColorConfig);
             const timelineContainer = document.getElementById('timeline-container');
-            if (urlParams.get('mode') === 'autoplay') {
-                uiContext.autoplayMode = true;
+            if (uiContext.timelineMode) {
                 await autoPlaceAndCollapsePanel(data, timelineContainer, map);
             } else {
                 if (timelineContainer) timelineContainer.classList.add('hidden');
             }
+
         });
 
 
@@ -81,6 +85,12 @@ document.addEventListener('DOMContentLoaded', () => {
         uiContext.locationsData = data.locations;
         injectRegionStyles(regionColorConfig);
 
+
+        // --- 只在一般模式插入排序區塊 ---
+        //const panelContent = document.getElementById('panel-content');
+        if (!uiContext.sequentialMode && !uiContext.timelineMode) {
+            insertSortButtonsContainerIfNeeded(uiContext.panelContent);
+        }     
         // --- 預設排序並渲染卡片 ---
         const sortedEvents = [...data.events].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
         uiContext.eventsData = sortedEvents;

@@ -33,7 +33,7 @@ export const uiContext = {
     isAutoPanEnabled: true,
     isHighlightModeEnabled: true,
 
-    autoplayMode: false,
+    timelineMode: false,
     
     cardContainer: null,
     togglePanelBtn: null,

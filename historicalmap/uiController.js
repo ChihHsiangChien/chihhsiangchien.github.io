@@ -18,6 +18,27 @@ export function initUiDomElements() {
     uiContext.playbackSpeedSelect = document.getElementById('playback-speed');    
 }
 
+export function insertSortButtonsContainerIfNeeded(panelContent) {
+    if (!panelContent) return;
+    if (document.getElementById('sort-buttons-container')) return;
+    if (uiContext.sequentialMode || uiContext.timelineMode) return;
+    const sortDiv = document.createElement('div');
+    sortDiv.id = 'sort-buttons-container';
+    sortDiv.className = 'p-4 border-b bg-white shadow-sm';
+    sortDiv.innerHTML = `
+        <div class="flex justify-between items-center select-none">
+            <div class="flex flex-wrap gap-1 justify-end select-none">
+                <button id="sort-year-asc" class="px-3 py-1 text-xs bg-blue-500 text-white rounded-full shadow-sm hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75 select-none">年代 ▲</button>
+                <button id="sort-year-desc" class="px-3 py-1 text-xs bg-gray-200 text-gray-700 rounded-full shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-75 select-none">年代 ▼</button>
+                <button id="sort-region-asc" class="px-3 py-1 text-xs bg-gray-200 text-gray-700 rounded-full shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-75 select-none">區域 ▲</button>
+                <button id="sort-region-desc" class="px-3 py-1 text-xs bg-gray-200 text-gray-700 rounded-full shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-75 select-none">區域 ▼</button>
+            </div>
+            <span id="card-count" class="ml-4 text-xs text-gray-500 select-none"></span>
+        </div>
+    `;
+    panelContent.insertBefore(sortDiv, panelContent.firstChild);
+}
+
 /**
  * 根據傳入或 context 內的事件資料，渲染卡片到卡片容器。
  * 若為循序模式則只允許一張卡片可拖曳。

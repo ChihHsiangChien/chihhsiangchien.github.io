@@ -34,6 +34,7 @@
 - [粒子追蹤TrackMate](trackmate.md)
 - [自動化與巨集程式設計](automation-and-macro.md)
 - [SNT](snt.md)
+- [粒線體數量與體積分析](mitochondria.md)
 
 # 其他
 - [Laplacian of Gaussian](log.md)
