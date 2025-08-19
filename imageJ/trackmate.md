@@ -1,4 +1,5 @@
 # TrackMate plugin 應用指南
+[教學影片](https://youtu.be/0zI7-LUbDEE)
 
 ## TrackMate 影像追蹤教學
 
@@ -298,7 +299,11 @@ Kalman濾波器的設定
     - untickedB  Track segment merging    
 ### [Tracking label images](https://zenodo.org/records/5221424)
 - 使用 label image detector
+    -  in frame 65 you will see small floating cells that were segmented. add a spot filter to remove anything with an Area lower than 230.    
 - LAP tracker        
+    - Max distance: 20 microns and Max frame gap: 5.
+    - Allow track segment splitting and insert value Max distance: 30 microns.
+
 
 ### [腦膜炎雙球菌的細胞生長Neisseria meningitidis bacterial growths](https://zenodo.org/records/5419619)
 
@@ -344,13 +349,12 @@ Kalman濾波器的設定
 
 #### 處理觸碰的細胞 (Mask 編輯)
 
-- 有一些觸碰的細胞被錯誤地識別為一個物體，修復方法：你可以直接編輯二進位 Mask。
-    ◦ 返回到 TrackMate 精靈的第一個面板。
-    ◦ 在影像顯示區，選擇有問題的時間點（例如，在 C.elegans 教學中是第 9 幀），並將第二個通道設定為活躍狀態。
-    ◦ 放大有缺陷 Mask 的細胞核。
-    ◦ 在 ImageJ 工具欄中，選擇線段工具。
-    ◦ 雙擊顏色選擇工具，並選擇黑色作為前景色。
-    ◦ 在細胞核和極體之間繪製一條線。
-    ◦ 按下 D 鍵進行繪製。由於你選擇了黑色，沿著線 ROI 的像素將被替換為 0，從而將 Mask 分割成兩個部分。
-    ◦ 現在你可以像之前一樣繼續追蹤。這樣，極體和細胞核將被分割為兩個獨立的斑點。   
+1. 有一些觸碰的細胞被錯誤地識別為一個物體，直接編輯Mask進行修復。
+2. 回到 TrackMate 精靈的第一個面板。
+3. 在影像顯示區，選擇有問題的時間點（例如，在 C.elegans 教學中是第 9 幀），處理第二個通道。
+4. 放大有缺陷 Mask 的細胞核。
+5. 在 ImageJ 工具欄中，選擇線段工具。
+6. 雙擊顏色選擇工具，並選擇黑色作為前景色。
+7. 在細胞核和極體之間繪製一條黑線，作為切割
+8. 重複之前的工作進行追蹤。
 
