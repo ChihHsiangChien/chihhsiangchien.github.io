@@ -39,6 +39,8 @@
 # 其他
 - [Laplacian of Gaussian](log.md)
 - [Difference of Gaussian（DoG）亮點偵測](dog.md)
+- [FFT（快速傅立葉轉換）](fft.md)
+- [方法學](methodology.md)
 
 # 網路文件
 - [阿簡 imagej入門課程影片](https://youtu.be/BcTdMkF_cB0?si=s8aBQYIetW7LCAjU)
