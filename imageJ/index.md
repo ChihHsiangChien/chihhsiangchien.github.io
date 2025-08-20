@@ -12,11 +12,16 @@
 - [影像前處理](image-preprocess.md)  
 - [binary mask image,label image與ROI的轉換](8-bit-conversion.md)
 - [影像分割](segmentation.md)    
+- 其他分割
+    - [Laplacian of Gaussian](log.md)
+    - [Difference of Gaussian（DoG）亮點偵測](dog.md)
 - [形態學處理](morphology.md)
     - [實作dot blob的分割與特徵擷取](segmentation-demo.md)
     - [形態學處理範例-骨架化分析長度](skeleton.md)
     - [分析血管](vesselsAnalyze.md)
-- [形態學重建去噪](morphology-reconstruction.md)    
+- 去噪的其他方法    
+    - [形態學重建去噪](morphology-reconstruction.md)    
+    - [FFT（快速傅立葉轉換）](fft.md)
 - [特徵擷取](feature-extraction.md)
 - [紋理分析](image-texture.md)
 
@@ -30,16 +35,15 @@
 # 案例介紹：分析大腦
 - [機器學習分割與體積、表面積分析](mri-segmentation.md)
 
-# 進階
-- [粒子追蹤TrackMate](trackmate.md)
-- [自動化與巨集程式設計](automation-and-macro.md)
-- [SNT](snt.md)
+# 案例介紹：分析粒線體數量與體積，以及3D rendering
 - [粒線體數量與體積分析](mitochondria.md)
 
+# 案例介紹：研究細胞的突起，如神經纖維
+- [SNT](snt.md)
+
 # 其他
-- [Laplacian of Gaussian](log.md)
-- [Difference of Gaussian（DoG）亮點偵測](dog.md)
-- [FFT（快速傅立葉轉換）](fft.md)
+- [粒子追蹤TrackMate](trackmate.md)
+- [自動化與巨集程式設計](automation-and-macro.md)
 - [方法學](methodology.md)
 
 # 網路文件
