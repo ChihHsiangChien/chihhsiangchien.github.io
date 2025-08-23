@@ -74,12 +74,15 @@
 <body>
 <div id="controls-panel">
   <div>
-    <button id="single-ovule-btn" class="mode-btn active">單胚珠模式</button>
-    <button id="multi-ovule-btn" class="mode-btn">多胚珠模式</button>
+    <button id="basal-ovule-btn" class="mode-btn active">單胚珠模式</button>
+    <button id="axile-ovule-btn" class="mode-btn">多胚珠模式1</button>
+    <button id="marginal-ovule-btn" class="mode-btn">多胚珠模式2</button>
+    <button id="parietal-ovule-btn" class="mode-btn">多胚珠模式3</button>
+
   </div>
   <div>
     <label for="ovary-z-clip-slider">子房 Z軸 切面</label>
-    <input type="range" id="ovary-z-clip-slider" min="-1" max="4" value="3" step="0.01">
+    <input type="range" id="ovary-z-clip-slider" min="-0.1" max="2" value="1.2" step="0.01">
   </div>
   <div>
     <label for="ovary-y-clip-slider">子房 Y軸 切面</label>
@@ -116,7 +119,7 @@
 
   // --- 建立裁切平面 ---
   const clipPlaneOvuleZ = new THREE.Plane(new THREE.Vector3(0, 0, -1), 1.5); // 用於胚珠
-  const clipPlaneOvaryZ = new THREE.Plane(new THREE.Vector3(0, 0, -1), 3);   // 用於子房Z
+  const clipPlaneOvaryZ = new THREE.Plane(new THREE.Vector3(0, 0, -1), 1.2);   // 用於子房Z
   const clipPlaneOvaryY = new THREE.Plane(new THREE.Vector3(0, -1, 0), 6);   // 用於子房Y
 
   // --- 建立可共用的材質 ---
@@ -594,7 +597,7 @@
     mainGroup.add(styleAndStigma);
 
     // 2. 根據模式建立胚珠及相關物件
-    if (config.mode === 'single') {
+    if (config.mode === 'basal') {
       // --- 單胚珠模式：建立完整的單一胚珠與花粉管 ---
       const sacData = createEmbryoSacGroup();
       const ovuleData = createOvuleWithIntegument(sacData);
@@ -622,7 +625,7 @@
         sperm2Path: pollenData.sperm2Path
       };
 
-    } else if (config.mode === 'multi') {
+    } else if (config.mode === 'axile') {
       // 2. 在子房內增加中軸 (胎座)
       const axis = createOvaryAxis(ovaryData);
       mainGroup.add(axis);
@@ -632,7 +635,7 @@
       const septa = createOvarySepta(ovaryData,septaCount);
       mainGroup.add(septa);
 
-      // --- 多胚珠模式 ---
+      // --- 多胚珠中軸胎座 ---
       // 根據隔間數量建立胚珠數量，每個隔間兩個胚珠
 
       const ovulePerLayer = septaCount * 2;
@@ -679,31 +682,95 @@
         }
       }
 
-        
-        /*
-        const xOffset = 0.5;
-        const ySpacing = 1.0;
-        const yStart = 1.2;
-        const yStagger = 0.4;
-        const side = (i % 2 === 0) ? 1 : -1;
-        const rowIndex = Math.floor(i / 2);
-        const x = side * xOffset;
-        const y = yStart - (rowIndex * ySpacing) - (side === -1 ? yStagger : 0);
-        ovule.position.set(x, y, 0);
-        if (side === 1) {
-          ovule.rotation.z = -side * (Math.PI / 3);
-        } else {
-          ovule.rotation.y = Math.PI;
-          ovule.rotation.z = side * (Math.PI / 3);
-        }
-        ovule.scale.set(0.15, 0.15, 0.2);
-        mainGroup.add(ovule);          
-        */
-
-
-
       // 花粉管預設無動畫
       animationObjects = null;
+    } else if (config.mode === 'marginal') {
+      // --- 邊緣胎座
+      const ovuleCount = 8;
+      const r = ovaryData.innerRadius;
+      const scaleX = ovaryData.scaleX;
+      const scaleY = ovaryData.scaleY;
+      const ovaryCenter = ovaryData.center.clone();
+
+      for (let i = 0; i < ovuleCount; i++) {
+        const sacData = createEmbryoSacGroup();
+        const ovuleData = createOvuleWithIntegument(sacData);
+        const ovule = ovuleData.group;        
+        const theta = Math.PI * 1.2 + (i / ovuleCount) * Math.PI * 0.8;
+        const ovuleBBox = ovuleData.bbox;
+        const ovuleHeight = ovuleBBox.max.y - ovuleBBox.min.y;
+        const ovaryScale = 0.2;
+
+        // 1. 計算橢圓上的點 
+        let x = Math.sin(theta) * (r * scaleX - 0.58 * ovuleHeight * ovaryScale);
+        let y = Math.cos(theta) * (r * scaleY - 0.58 * ovuleHeight * ovaryScale);
+        let z = 0; // 固定在 z=0 平面
+
+        // 3. 設定胚珠位置
+        ovule.position.set(x, y, z);
+        ovule.rotation.z = -theta +  Math.PI;
+        // 4. 讓胚珠朝向 ovary 中心
+        //ovule.lookAt(ovaryCenter);
+        ovule.scale.set(ovaryScale, ovaryScale, ovaryScale);
+        mainGroup.add(ovule);
+      }
+      // 目前不含花粉管動畫
+      animationObjects = null;
+
+
+    } else if (config.mode === 'parietal') {
+      // --- 側膜胎座 ---
+      const ovuleCount = 6;
+      const r = ovaryData.innerRadius;
+      const scaleX = ovaryData.scaleX;
+      const scaleY = ovaryData.scaleY;
+      const scaleZ = ovaryData.scaleZ;
+      const ovaryCenter = ovaryData.center.clone();
+      const ovaryScale = 0.2;
+      const septa = 3;
+
+      for(let septaIdx = 0; septaIdx < septa; septaIdx++){
+        const zOffsetTheta = 2 * Math.PI/septa * septaIdx ;
+        for (let i = 0; i < ovuleCount; i++) {
+          const sacData = createEmbryoSacGroup();
+          const ovuleData = createOvuleWithIntegument(sacData);
+          const ovule = ovuleData.group;        
+          // 讓每組胚珠平均分布在橢圓上
+          const theta = Math.PI * 1.1 +(i / ovuleCount) * Math.PI *0.9;
+          const ovuleBBox = ovuleData.bbox;
+          const ovuleHeight = ovuleBBox.max.y - ovuleBBox.min.y;
+
+          // 先計算在 xz 平面上的橢圓座標
+          let x0 = Math.sin(theta) * (r * scaleX - 0.58 * ovuleHeight * ovaryScale);
+          let y0 = Math.cos(theta) * (r * scaleY - 0.58 * ovuleHeight * ovaryScale);
+          let z0 = 0;
+
+          // 將這一組橢圓平面繞 y 軸旋轉 zOffsetTheta
+          let x = x0 * Math.cos(zOffsetTheta) - z0 * Math.sin(zOffsetTheta);
+          let z = x0 * Math.sin(zOffsetTheta) + z0 * Math.cos(zOffsetTheta);
+          let y = y0;
+
+          ovule.position.set(x, y, z);
+
+          // 讓胚珠朝向 ovary 中心
+          //ovule.lookAt(ovaryCenter);
+          //ovule.rotation.z = -theta +  Math.PI;
+          // 讓胚珠底部 y 軸朝向子房壁
+          const ovuleWorldPos = ovule.getWorldPosition(new THREE.Vector3());
+          const dirToWall = ovuleWorldPos.clone().sub(ovaryCenter).normalize();
+          // local -Y 軸要對齊 dirToWall
+          const up = new THREE.Vector3(0, -1, 0);
+          const quat = new THREE.Quaternion().setFromUnitVectors(up, dirToWall);
+          ovule.setRotationFromQuaternion(quat);          
+
+          //ovule.rotateZ(zOffsetTheta);
+
+          ovule.scale.set(ovaryScale, ovaryScale, ovaryScale);
+          mainGroup.add(ovule);
+        }
+      }       
+      animationObjects = null;
+
     }
 
     mainGroup.animationObjects = animationObjects;
@@ -780,14 +847,22 @@
         btn.style.background = '#111';
         btn.style.color = '#888';
     });
-    const activeBtn = document.getElementById(config.mode === 'single' ? 'single-ovule-btn' : 'multi-ovule-btn');
-    activeBtn.classList.add('active');
-    activeBtn.style.background = '#333';
+
+
+    const activeBtnId = `${config.mode}-ovule-btn`;
+    const activeBtn = document.getElementById(activeBtnId);
+    if (activeBtn) {
+      activeBtn.classList.add('active');
+      activeBtn.style.background = '#333';
+      activeBtn.style.color = '#fff';
+    }    
   }
 
   // === UI 控制器事件 ===
-  const singleOvuleBtn = document.getElementById('single-ovule-btn');
-  const multiOvuleBtn = document.getElementById('multi-ovule-btn');
+  const basalOvuleBtn = document.getElementById('basal-ovule-btn');
+  const axileOvuleBtn = document.getElementById('axile-ovule-btn');
+  const marginalOvuleBtn = document.getElementById('marginal-ovule-btn');
+  const parietalOvuleBtn = document.getElementById('parietal-ovule-btn');
 
   const ovuleZClipSlider = document.getElementById('ovule-z-clip-slider');
   const ovaryZClipSlider = document.getElementById('ovary-z-clip-slider');
@@ -859,12 +934,19 @@
     renderer.setSize(innerWidth, innerHeight);
   });
 
-  singleOvuleBtn.addEventListener('click', () => {
-    buildScene({ mode: 'single' });
+  basalOvuleBtn.addEventListener('click', () => {
+    buildScene({ mode: 'basal' });
   });
 
-  multiOvuleBtn.addEventListener('click', () => {
-    buildScene({ mode: 'multi' });
+  axileOvuleBtn.addEventListener('click', () => {
+    buildScene({ mode: 'axile' });
+  });
+  marginalOvuleBtn.addEventListener('click', () => {
+    buildScene({ mode: 'marginal' });
+  });  
+
+  parietalOvuleBtn.addEventListener('click', () => {
+    buildScene({ mode: 'parietal' });
   });
 
   function animate() {
@@ -928,6 +1010,8 @@
         sperm1.visible = false;
         sperm2.visible = false;
     } else if (progress < fertilizationStartTime) {
+      
+      /*
         // 階段 1: 沿著生長中的花粉管移動
         const currentPath = pollenTube.geometry.parameters.path;
         const currentLength = currentPath.getLength();
@@ -952,6 +1036,28 @@
         } else {
             sperm2.visible = false;
         }
+        */
+        const params = pollenTube.geometry?.parameters;
+        const currentPath = params?.path;
+        if (!currentPath) {
+            tubeNucleus.visible = false;
+            sperm1.visible = false;
+            sperm2.visible = false;
+        } else {
+            const currentLength = currentPath.getLength();
+
+            tubeNucleus.visible = currentLength > TUBE_NUCLEUS_OFFSET;
+            if (tubeNucleus.visible)
+                tubeNucleus.position.copy(currentPath.getPointAt(1 - (TUBE_NUCLEUS_OFFSET / currentLength)));
+
+            sperm1.visible = currentLength > SPERM_1_OFFSET;
+            if (sperm1.visible)
+                sperm1.position.copy(currentPath.getPointAt(1 - (SPERM_1_OFFSET / currentLength)));
+
+            sperm2.visible = currentLength > SPERM_2_OFFSET;
+            if (sperm2.visible)
+                sperm2.position.copy(currentPath.getPointAt(1 - (SPERM_2_OFFSET / currentLength)));
+        }
     } else {
         // 階段 2: 雙重授精
         tubeNucleus.visible = true;
@@ -970,7 +1076,7 @@
   }
 
   // === 初始建構場景 ===
-  buildScene({ mode: 'single' }); // 預設以單胚珠模式啟動
+  buildScene({ mode: 'basal' }); // 預設以單胚珠模式啟動
 
   animate();
 </script>
