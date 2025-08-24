@@ -720,7 +720,7 @@
 
     } else if (config.mode === 'parietal') {
       // --- 側膜胎座 ---
-      const ovuleCount = 6;
+      const ovuleCount = 5;
       const r = ovaryData.innerRadius;
       const scaleX = ovaryData.scaleX;
       const scaleY = ovaryData.scaleY;
@@ -732,41 +732,82 @@
       for(let septaIdx = 0; septaIdx < septa; septaIdx++){
         const zOffsetTheta = 2 * Math.PI/septa * septaIdx ;
         for (let i = 0; i < ovuleCount; i++) {
-          const sacData = createEmbryoSacGroup();
-          const ovuleData = createOvuleWithIntegument(sacData);
-          const ovule = ovuleData.group;        
-          // 讓每組胚珠平均分布在橢圓上
-          const theta = Math.PI * 1.1 +(i / ovuleCount) * Math.PI *0.9;
-          const ovuleBBox = ovuleData.bbox;
-          const ovuleHeight = ovuleBBox.max.y - ovuleBBox.min.y;
+          // 這裡每個 i 位置產生兩顆胚珠
+          const pairCount = 2;
+          const pairAngleDelta = Math.PI * 0.1; // 兩顆胚珠的角度間隔（可調整）
+          for (let pairIdx = 0; pairIdx < pairCount; pairIdx++) {
 
-          // 先計算在 xz 平面上的橢圓座標
-          let x0 = Math.sin(theta) * (r * scaleX - 0.58 * ovuleHeight * ovaryScale);
-          let y0 = Math.cos(theta) * (r * scaleY - 0.58 * ovuleHeight * ovaryScale);
-          let z0 = 0;
+            const sacData = createEmbryoSacGroup();
+            const ovuleData = createOvuleWithIntegument(sacData);
+            const ovule = ovuleData.group;        
+            const ovuleBBox = ovuleData.bbox;
+            const ovuleHeight = ovuleBBox.max.y - ovuleBBox.min.y;
 
-          // 將這一組橢圓平面繞 y 軸旋轉 zOffsetTheta
-          let x = x0 * Math.cos(zOffsetTheta) - z0 * Math.sin(zOffsetTheta);
-          let z = x0 * Math.sin(zOffsetTheta) + z0 * Math.cos(zOffsetTheta);
-          let y = y0;
+            // 讓每組胚珠平均分布在橢圓上，並讓一對胚珠組位在XZ平面上，兩個有角度差pairAngleDelta
 
-          ovule.position.set(x, y, z);
+            // 每組胚珠在XY平面的角度
+            const thetaXY = Math.PI * 1.1 +(i / ovuleCount) * Math.PI *0.9;
+            const a = r * scaleX; // 橢圓的長軸半徑
+            const b = r * scaleY; // 橢圓的短軸半徑
+            const sinT = Math.sin(thetaXY);
+            const cosT = Math.cos(thetaXY);
+            const centerX = sinT * (a - 0.58 * ovuleHeight * ovaryScale);
+            const centerY = cosT * (b - 0.58 * ovuleHeight * ovaryScale);
+            const centerZ = 0;            
 
-          // 讓胚珠朝向 ovary 中心
-          //ovule.lookAt(ovaryCenter);
-          //ovule.rotation.z = -theta +  Math.PI;
-          // 讓胚珠底部 y 軸朝向子房壁
-          const ovuleWorldPos = ovule.getWorldPosition(new THREE.Vector3());
-          const dirToWall = ovuleWorldPos.clone().sub(ovaryCenter).normalize();
-          // local -Y 軸要對齊 dirToWall
-          const up = new THREE.Vector3(0, -1, 0);
-          const quat = new THREE.Quaternion().setFromUnitVectors(up, dirToWall);
-          ovule.setRotationFromQuaternion(quat);          
+            // 橢圓在該點的主曲率半徑
+            const pairRadius = Math.abs(centerX);
 
-          //ovule.rotateZ(zOffsetTheta);
 
-          ovule.scale.set(ovaryScale, ovaryScale, ovaryScale);
-          mainGroup.add(ovule);
+
+            // === 驗證用：畫出 pairRadius 圓環 ===
+            /*
+            const ringGeometry = new THREE.TorusGeometry(pairRadius, 0.01, 8, 64);
+            const ringMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+            ring.position.set(0 * Math.cos(zOffsetTheta) - 0 * Math.sin(zOffsetTheta),
+                              centerY,
+                              0 * Math.sin(zOffsetTheta) + 0 * Math.cos(zOffsetTheta));
+            ring.rotation.x = Math.PI / 2; // 讓圓環平行於 XZ 平面
+            mainGroup.add(ring);        
+            */
+
+            // 胚珠與胚珠組中心在XZ平面的角度差
+            const thetaXZdelta = (pairIdx - 0.5) * pairAngleDelta;
+            //const thetaXZdelta = (pairIdx) * pairAngleDelta;
+
+            // 在XZ平面上繞開
+
+            const x0 = 0 + Math.sin(thetaXZdelta) * pairRadius;
+            const y0 = centerY;
+            const z0 = 0 + Math.cos(thetaXZdelta) * pairRadius;
+
+            // 將這一組橢圓平面繞 y 軸旋轉 zOffsetTheta
+            let x = x0 * Math.cos(zOffsetTheta) - z0 * Math.sin(zOffsetTheta);
+            let z = x0 * Math.sin(zOffsetTheta) + z0 * Math.cos(zOffsetTheta);
+            let y = y0;
+
+            ovule.position.set(x, y, z);
+
+            // 讓胚珠朝向 ovary 中心
+            // 讓胚珠底部 y 軸朝向子房壁
+            const ovuleWorldPos = ovule.getWorldPosition(new THREE.Vector3());
+            // 算出從子房中心（ovaryCenter）指向胚珠的方向向量（單位向量）。
+            const dirToWall = ovuleWorldPos.clone().sub(ovaryCenter).normalize();
+            // local -Y 軸要對齊 dirToWall
+            const up = new THREE.Vector3(0, -1, 0);
+            // 計算一個四元數，能把本地 -Y 軸轉到 dirToWall 的方向。
+            const quat = new THREE.Quaternion().setFromUnitVectors(up, dirToWall);
+            ovule.setRotationFromQuaternion(quat);      
+
+            const ovuleYRotation = septaIdx * 2 * Math.PI / septa * 0;
+            ovule.rotateY(ovuleYRotation); //  local Y 軸旋轉    
+
+            //ovule.rotateZ(zOffsetTheta);
+
+            ovule.scale.set(ovaryScale, ovaryScale, ovaryScale);
+            mainGroup.add(ovule);
+          }  
         }
       }       
       animationObjects = null;
