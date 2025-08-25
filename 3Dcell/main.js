@@ -102,7 +102,7 @@ const outerMembrane = createOuterMembrane();
 outerMembrane.material.clippingPlanes = [clipYPlane, clipZPlane];
 //scene.add(outerMembrane);
 
-// --- 產生隨機遊走的內膜管子 ---
+// --- 產生內膜 ---
 function createInnerMembrane(params) {
     // Marching Cubes/Metaballs 實現
     // 產生螺旋形球心
@@ -126,7 +126,7 @@ function createInnerMembrane(params) {
         points.push(new THREE.Vector3(x, y, z));
     }
     // Marching Cubes 設定
-    const resolution = 40;
+    const resolution = 80;
     const size = 8.0;
     const field = new Float32Array(resolution * resolution * resolution);
     const sphereRadius = 1.1;
