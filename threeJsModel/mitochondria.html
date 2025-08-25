@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        // --- 產生隨機loop管狀路徑 ---
+        function randomPointInEllipsoid(a, b, c) {
+            // 均勻分布在橢球內
+            let u = Math.random(), v = Math.random(), w = Math.random();
+            let theta = 2 * Math.PI * u;
+            let phi = Math.acos(2 * v - 1);
+            let r = Math.cbrt(w); // 立方根保證均勻
+            return new THREE.Vector3(
+                a * r * Math.sin(phi) * Math.cos(theta),
+                b * r * Math.cos(phi),
+                c * r * Math.sin(phi) * Math.sin(theta)
+            );
+        }
+        // 外膜橢球參數
+        const a = 4 * 1.5, b = 2.5, c = 2.5;
+        // 產生N個隨機點，不首尾相接
+        function generateCurve(numPoints = 12) {
+            let points = [];
+            for(let i=0;i<numPoints;i++) {
+                points.push(randomPointInEllipsoid(a*0.85, b*0.85, c*0.85));
+            }
+            return new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.5);
+        }
+        // 粗細變化函數
+        function bulgeRadius(t) {
+            // t: 0~1，sin波+雜訊
+            let base = 0.25;
+            let bulge = 0.15 * Math.sin(6 * Math.PI * t + Math.PI/3);
+            let noise = 0.08 * (Math.sin(17 * t + 1.7) + Math.sin(7 * t + 0.3));
+            return base + bulge + noise;
+        }
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    document.body.appendChild(renderer.domElement);
+    // 啟用全域裁切
+    renderer.localClippingEnabled = true;
+        
+        // 設定攝影機位置
+        camera.position.z = 10;
+        
+        // 加入燈光
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1); // 柔和的白光
+        scene.add(ambientLight);
+        
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.9); // 來自特定方向的光
+        directionalLight.position.set(5, 5, 5).normalize();
+        scene.add(directionalLight);
+
+        // 加入軌道控制器，讓使用者可以旋轉和縮放
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true; // 啟用阻尼效果，使其感覺更平滑
+        controls.dampingFactor = 0.05;
+        controls.screenSpacePanning = false;
+        controls.minDistance = 5;
+        controls.maxDistance = 20;
+
+        // 參數化函數來定義粒線體內膜的表面
+        // 褶皺強度參數
+        let wrinkleXStrength = 1, wrinkleYStrength = 1, wrinkleZStrength = 1;
+        let depthX = 0, depthY = 0, depthZ = 0.5;
+        // 頻率與相位參數
+        let freq = 10, phase = 0;
+        // 雜訊強度參數
+        let noiseStrength = 0;
+        // 平滑 value noise（格點插值），讓雜訊有空間連續性
+        function lerp(a, b, t) {
+            return a + (b - a) * t;
+        }
+        function hash3(x, y, z) {
+            // 產生可重現的偽隨機值
+            return (Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453) % 1;
+        }
+        function smoothstep(t) {
+            return t * t * (3 - 2 * t);
+        }
+        function pseudoNoise(x, y, z) {
+            // 取整數格點
+            let x0 = Math.floor(x), y0 = Math.floor(y), z0 = Math.floor(z);
+            let x1 = x0 + 1, y1 = y0 + 1, z1 = z0 + 1;
+            // 小數部分
+            let tx = smoothstep(x - x0);
+            let ty = smoothstep(y - y0);
+            let tz = smoothstep(z - z0);
+            // 八個格點的隨機值
+            let c000 = hash3(x0, y0, z0);
+            let c100 = hash3(x1, y0, z0);
+            let c010 = hash3(x0, y1, z0);
+            let c110 = hash3(x1, y1, z0);
+            let c001 = hash3(x0, y0, z1);
+            let c101 = hash3(x1, y0, z1);
+            let c011 = hash3(x0, y1, z1);
+            let c111 = hash3(x1, y1, z1);
+            // 三線性插值
+            let c00 = lerp(c000, c100, tx);
+            let c01 = lerp(c001, c101, tx);
+            let c10 = lerp(c010, c110, tx);
+            let c11 = lerp(c011, c111, tx);
+            let c0 = lerp(c00, c10, ty);
+            let c1 = lerp(c01, c11, ty);
+            let c = lerp(c0, c1, tz);
+            return c;
+        }
+        const noiseSlider = document.getElementById('noise');
+        const noiseValue = document.getElementById('noiseValue');
+        function cristaeSurface(u, v, target) {
+            // u ∈ [0, 2π], v ∈ [0, π]
+            let theta = u * 2 * Math.PI;   // 環向角
+            let phi   = v * Math.PI;       // 緯度角
+            // 基礎的長橢球半徑
+            let a = 4, b = 2.5, c = 2.5;
+            // 分別調整xyz的褶皺，頻率與相位可調
+            let wrinkleX = wrinkleXStrength * Math.sin(freq * u + phase) * Math.cos(phi);
+            let wrinkleY = wrinkleYStrength * Math.sin(freq * 10 * u + phase) * Math.sin(phi);
+            let wrinkleZ = wrinkleZStrength * Math.sin(freq * theta + phase) * Math.cos(phi);
+            // xyz方向的depth，頻率與相位可調
+            let dX = depthX * Math.sin(freq * theta + phase) * Math.sin(phi);
+            let dY = depthY * Math.sin(freq * theta + phase + Math.PI/2) * Math.sin(phi);
+            let dZ = depthZ * Math.sin(freq * theta + phase) * Math.sin(phi);
+            // 讓這個變化在兩極處（v=0 和 v=1）變小
+            let r = 1;
+            // 雜訊
+            let noise = noiseStrength * (pseudoNoise(u, v, theta) - 0.5);
+            // 重新定義 x, y, z 座標
+            let x = a * r * Math.sin(phi) * Math.cos(theta) + wrinkleX + dX + noise;
+            let y = b * r * Math.cos(phi) + wrinkleY + dY + noise;
+            let z = c * r * Math.sin(phi) * Math.sin(theta) + wrinkleZ + dZ + noise;
+            target.set(x, y, z);
+        }
+    // 連接 frequency/phase slider
+    const freqSlider = document.getElementById('freq');
+    const phaseSlider = document.getElementById('phase');
+    const freqValue = document.getElementById('freqValue');
+    const phaseValue = document.getElementById('phaseValue');
+    // 連接 depth slider
+    const depthXSlider = document.getElementById('depthX');
+    const depthYSlider = document.getElementById('depthY');
+    const depthZSlider = document.getElementById('depthZ');
+    const depthXValue = document.getElementById('depthXValue');
+    const depthYValue = document.getElementById('depthYValue');
+    const depthZValue = document.getElementById('depthZValue');
+
+    // 建立管狀內膜（不首尾相接）
+    let curve = generateCurve(18);
+    let geometry = new THREE.TubeGeometry(curve, 300, 0.3, 16, false, bulgeRadius);
+        const material = new THREE.MeshStandardMaterial({
+            color: 0x9852a4,
+            metalness: 0.1,
+            roughness: 0.6,
+            side: THREE.DoubleSide,
+            clippingPlanes: []
+        });
+        let innerMembrane = new THREE.Mesh(geometry, material);
+        scene.add(innerMembrane);
+        // 連接 wrinkle slider
+        const wrinkleXSlider = document.getElementById('wrinkleX');
+        const wrinkleYSlider = document.getElementById('wrinkleY');
+        const wrinkleZSlider = document.getElementById('wrinkleZ');
+        const wrinkleXValue = document.getElementById('wrinkleXValue');
+        const wrinkleYValue = document.getElementById('wrinkleYValue');
+        const wrinkleZValue = document.getElementById('wrinkleZValue');
+
+    function updateWrinkleAndDepth() {
+            wrinkleXStrength = parseFloat(wrinkleXSlider.value);
+            wrinkleYStrength = parseFloat(wrinkleYSlider.value);
+            wrinkleZStrength = parseFloat(wrinkleZSlider.value);
+            wrinkleXValue.textContent = wrinkleXStrength;
+            wrinkleYValue.textContent = wrinkleYStrength;
+            wrinkleZValue.textContent = wrinkleZStrength;
+            depthX = parseFloat(depthXSlider.value);
+            depthY = parseFloat(depthYSlider.value);
+            depthZ = parseFloat(depthZSlider.value);
+            depthXValue.textContent = depthX;
+            depthYValue.textContent = depthY;
+            depthZValue.textContent = depthZ;
+            freq = parseFloat(freqSlider.value);
+            phase = parseFloat(phaseSlider.value);
+            freqValue.textContent = freq;
+            phaseValue.textContent = phase;
+            noiseStrength = parseFloat(noiseSlider.value);
+            noiseValue.textContent = noiseStrength;
+            // 重新建立geometry
+            scene.remove(innerMembrane);
+            geometry.dispose();
+            geometry = new THREE.ParametricGeometry(cristaeSurface, 100, 100);
+            innerMembrane = new THREE.Mesh(geometry, material);
+            scene.add(innerMembrane);
+        }
+        wrinkleXSlider.addEventListener('input', updateWrinkleAndDepth);
+        wrinkleYSlider.addEventListener('input', updateWrinkleAndDepth);
+        wrinkleZSlider.addEventListener('input', updateWrinkleAndDepth);
+        depthXSlider.addEventListener('input', updateWrinkleAndDepth);
+        depthYSlider.addEventListener('input', updateWrinkleAndDepth);
+        depthZSlider.addEventListener('input', updateWrinkleAndDepth);
+        freqSlider.addEventListener('input', updateWrinkleAndDepth);
+        phaseSlider.addEventListener('input', updateWrinkleAndDepth);
+    noiseSlider.addEventListener('input', updateWrinkleAndDepth);
+    // 初始化
+    updateWrinkleAndDepth();
+
+    // 建立半透明的外膜
+        const outerMaterial = new THREE.MeshPhongMaterial({
+            color: 0xaa66cc, 
+            transparent: true,
+            opacity: 0.4,
+            side: THREE.DoubleSide,
+            clippingPlanes: [] // 之後會設置
+        });
+        const outerGeometry = new THREE.SphereGeometry(3.5, 32, 32);
+        const outerMembrane = new THREE.Mesh(outerGeometry, outerMaterial);
+        outerMembrane.scale.set(1.5, 1, 1); // 調整為更長的橢球形
+        scene.add(outerMembrane);
+        
+        // --- 裁切平面 ---
+        let zPlane = new THREE.Plane(new THREE.Vector3(0,0,-1), 0); // z > value 顯示
+        renderer.clippingPlanes = [zPlane];
+        material.clippingPlanes = [zPlane];
+        outerMaterial.clippingPlanes = [zPlane];
+
+        // 連接 slider
+        const zSlider = document.getElementById('zSlider');
+        const zValue = document.getElementById('zValue');
+        zSlider.addEventListener('input', function() {
+            let z = parseFloat(zSlider.value);
+            zValue.textContent = z.toFixed(2);
+            zPlane.constant = z;
+        });
+        // 初始化
+        zPlane.constant = parseFloat(zSlider.value);
+        zValue.textContent = zSlider.value;
+
+        // 動畫迴圈
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update(); // 每次渲染都更新控制器
+            renderer.render(scene, camera);
+        }
+        
+        // 處理視窗大小改變
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // 啟動動畫
+        animate();
+    </script>
+</body>
+</html>
