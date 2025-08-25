@@ -16,12 +16,12 @@ uiDiv.style.color = '#fff';
 uiDiv.innerHTML = `
     <div style="margin-bottom:6px;">
         <label for="clipZ">橫切 (Z): </label>
-        <input type="range" id="clipZ" min="-10" max="10" step="0.01" value="10">
+        <input type="range" id="clipZ" min="-20" max="20" step="0.01" value="20">
         <span id="clipZValue">0</span>
     </div>
     <div style="margin-bottom:6px;">
         <label for="clipY">縱切 (Y): </label>
-        <input type="range" id="clipY" min="-10" max="10" step="0.01" value="10">
+        <input type="range" id="clipY" min="-20" max="20" step="0.01" value="20">
         <span id="clipYValue">0</span>
     </div>
     <div style="margin-bottom:6px;">
@@ -65,8 +65,8 @@ camera.position.z = 10;
 
 
 // --- 裁切平面 ---
-const clipYPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 10); 
-const clipZPlane = new THREE.Plane(new THREE.Vector3(0, 0, -1), 10);
+const clipYPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 20); 
+const clipZPlane = new THREE.Plane(new THREE.Vector3(0, 0, -1), 20);
 renderer.localClippingEnabled = true;
 
 // --- 燈光設定 ---
@@ -109,25 +109,29 @@ function createInnerMembrane(params) {
     const points = [];
     const N = 40;
     // 以橢圓為包絡線，並在橢圓上做高頻率sin/cos震盪
-    const ellipseA = params?.ellipseA ?? 2.0;
-    const ellipseB = params?.ellipseB ?? 1.5;
+
+    const length = 3;
     const freq = params?.freq ?? 8;
     const amp = params?.amp ?? 0.7;
     for (let i = 0; i < N; i++) {
-        const t = i / (N - 1);
-        const angle = 2 * Math.PI * t;
-        // 橢圓上的點
-        let x = ellipseA * Math.cos(angle);
-        let y = ellipseB * Math.sin(angle);
-        // 疊加高頻率sin/cos震盪
-        x += amp * Math.sin(freq * angle);
-        y += amp * Math.cos(freq * angle);
+        const t = i / (N - 1); // 0~1
+        const x = -length / 2 + length * t;
+        // 包絡線：最大在中間，兩端為0
+        const envelope = Math.sin(Math.PI * t);
+        // 高頻sin波 疊加在y
+        const y = amp * envelope * Math.sin(freq * 2 * Math.PI * t);
         const z = 0;
         points.push(new THREE.Vector3(x, y, z));
     }
+    // --- points 視覺化 ---
+    const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
+    const lineMaterial = new THREE.LineBasicMaterial({ color: 0x00ffcc, linewidth: 2 });
+    const line = new THREE.Line(lineGeometry, lineMaterial);
+    line.name = "innerMembraneGuideLine";
+
     // Marching Cubes 設定
     const resolution = 80;
-    const size = 8.0;
+    const size = 4.0;
     const field = new Float32Array(resolution * resolution * resolution);
     const sphereRadius = 1.1;
     // 填入 Metaball 場
@@ -167,7 +171,13 @@ function createInnerMembrane(params) {
     }
     // 預設level
     const defaultLevel = 8;
-    return marchingCubes(field, resolution, defaultLevel, size);
+    //return marchingCubes(field, resolution, defaultLevel, size);
+    const mc = marchingCubes(field, resolution, defaultLevel, size);
+    // 用 group 包起來
+    const group = new THREE.Group();
+    group.add(mc);
+    group.add(line);
+    return group;    
 }
 
 let innerMembraneParams = {
@@ -235,8 +245,12 @@ levelSlider.addEventListener('input', function() {
     const newLevel = parseFloat(levelSlider.value);
     levelValue.textContent = levelSlider.value;
     if (innerMembrane) {
-        innerMembrane.isolation = newLevel;
-        innerMembrane.update();
+
+        //innerMembrane.isolation = newLevel;
+        //innerMembrane.update();
+        const mc = innerMembrane.children[0];
+        mc.isolation = newLevel;
+        mc.update();        
     }
 });
 
@@ -265,14 +279,6 @@ function animate() {
     requestAnimationFrame(animate);
     controls.update(); // 讓 OrbitControls 持續更新
     renderer.render(scene, camera);
-    // log 內膜是否在場景中
-    if (innerMembrane.parent) {
-        // 只 log 一次
-        if (!animate.logged) {
-            console.log('innerMembrane parent:', innerMembrane.parent);
-            animate.logged = true;
-        }
-    }
 }
 animate();
 
