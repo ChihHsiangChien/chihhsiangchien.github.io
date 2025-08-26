@@ -312,3 +312,76 @@ export function handleZoom(map) {
         repositionMarkersAtLocation(map, locationId, uiContext.placedEvents, uiContext.gameData, uiContext.locationsData);
     });
 }
+
+export function updateMarkerHighlightByFilter(filteredEvents) {
+    if (!uiContext.placedChrono || !Array.isArray(uiContext.placedChrono)) return;
+
+    // 先建立一個 set 方便查詢
+    const filteredIds = new Set(filteredEvents.map(e => e.event_id));
+
+    uiContext.placedChrono.forEach(item => {
+        if (!item.marker) return;
+        const year = new Date(item.event.start_time).getFullYear();
+        // 判斷是否在篩選結果內
+        if (filteredIds.has(item.event.event_id)) {
+            // 正常樣式
+            item.marker.setIcon(L.divIcon({
+                html: `<div class="placed-event-marker placed-event-marker--correct"><span>${item.event.title}</span><span class="marker-year">${year}</span></div>`,
+                className: 'custom-div-icon',
+                iconSize: null,
+            }));
+            if (item.marker._icon) {
+                item.marker._icon.classList.remove('dimmed-marker');
+            }
+        } else {
+            // dimmed 樣式
+            item.marker.setIcon(L.divIcon({
+                html: `<div class="placed-event-marker placed-event-marker--dimmed"><span>${item.event.title}</span><span class="marker-year">${year}</span></div>`,
+                className: 'custom-div-icon',
+                iconSize: null,
+            }));
+            if (item.marker._icon) {
+                item.marker._icon.classList.add('dimmed-marker');
+            }
+        }
+    });
+}
+
+export function clearAllMarkerHighlights() {
+    if (!uiContext.map) return;
+
+    // 1. 清除所有已放置事件的 marker 樣式（依 timeline.js highlightStep 寫法）
+    if (uiContext.placedChrono && Array.isArray(uiContext.placedChrono)) {
+        uiContext.placedChrono.forEach(item => {
+            if (item.marker) {
+                const year = new Date(item.event.start_time).getFullYear();
+                item.marker.setIcon(L.divIcon({
+                    html: `<div class="placed-event-marker placed-event-marker--correct"><span>${item.event.title}</span><span class="marker-year">${year}</span></div>`,
+                    className: 'custom-div-icon',
+                    iconSize: null,
+                }));
+            }
+        });
+    }
+
+    // 2. 清除所有地點 tooltip 的 highlight/dimmed 樣式
+    uiContext.map.eachLayer(layer => {
+        if (layer.options && layer.options.location_id && layer.getTooltip && layer.getTooltip() && layer.getTooltip().getElement()) {
+            const tooltipEl = layer.getTooltip().getElement();
+            tooltipEl.classList.remove('location-tooltip--highlight');
+            tooltipEl.classList.remove('location-tooltip--guide-highlight');
+            tooltipEl.classList.remove('location-tooltip--dimmed');
+        }
+    });
+
+    // 3. 也可移除 marker 上的 highlight class（如果有用 class 控制）
+    uiContext.map.eachLayer(layer => {
+        if (layer._icon) {
+            layer._icon.classList.remove('highlight-marker');
+        }
+    });
+
+    // 4. 重置 highlight 狀態
+    uiContext.lastHighlightedMarker = null;
+    uiContext.lastGuideTooltipId = null;
+}
