@@ -327,10 +327,10 @@ function createTimeScaleEventDots(container, sortedEvents, minDate, totalTimeSpa
  * 設定時間軸 slider 與相關 UI
  */
 export function setupTimelineSlider(
-    data, map, mapConfig, onStepHighlight, getPlacedChrono, isTimelineEnabled, onToggleHighlight, onToggleAutoPan
+    data, map, mapConfig, onStepHighlight, getPlacedChrono, isTimelineEnabled, onToggleHighlight, onToggleAutoPan, defaultTimeScaleMode = true
 ) {
     let timelineInterval = null;
-    let isTimeScaleMode = false;
+    let isTimeScaleMode = defaultTimeScaleMode;
 
     clearTimelineDom();
 
@@ -710,7 +710,7 @@ export function timelineKeydownHandler(e, timelineEnabled, timelineSlider, place
 /**
  * 設定時間軸控制元件與事件
  */
-export function setupTimelineControls(data, regionColorConfig, map, currentMapConfig) {
+export function setupTimelineControls(data, regionColorConfig, map, currentMapConfig, defaultTimeScaleMode = true) {
     const getPlacedChrono = () => uiContext.placedChrono;
     const isTimelineEnabled = () => uiContext.timelineEnabled;
     const toggleHighlightMode = () => {
@@ -733,7 +733,8 @@ export function setupTimelineControls(data, regionColorConfig, map, currentMapCo
         getPlacedChrono, 
         isTimelineEnabled, 
         toggleHighlightMode, 
-        toggleAutoPan
+        toggleAutoPan,
+        defaultTimeScaleMode 
     );
     uiContext.timelineSlider = controls.timelineSlider;
     uiContext.timelinePlayBtn = controls.timelinePlayBtn;
@@ -741,6 +742,7 @@ export function setupTimelineControls(data, regionColorConfig, map, currentMapCo
     uiContext.scaleToggleButton = controls.scaleToggleButton;
     uiContext.highlightToggleButton = controls.highlightToggleButton;
     uiContext.autoPanToggleButton = controls.autoPanToggleButton;
+    uiContext.defaultTimeScaleMode = defaultTimeScaleMode;
 }
 
 

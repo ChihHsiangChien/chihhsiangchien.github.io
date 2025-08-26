@@ -1,4 +1,6 @@
 import { uiContext } from './context.js';
+import {highlightStep} from './timeline.js';
+
 
 /**
  * 初始化 UI 相關的 DOM 元素，並存入 uiContext 方便後續存取。
@@ -53,18 +55,41 @@ export function renderCards({ eventsToRender, regionColorConfig } = {}) {
         createCard,
         sequentialMode,
         updateDraggableCards,
-        updateCardCount
+        updateCardCount,
+        timelineMode,
+        map 
+
     } = uiContext;
 
     cardContainer.innerHTML = '';
-    // 避免重複查詢 regionCfg
+    const mapInstance = uiContext.map;
+
+
     events.forEach(event => {
-        if (!placedEvents[event.event_id]) {
-            cardContainer.appendChild(createCard(event, regionCfg));
+        if (timelineMode || !placedEvents[event.event_id]) {
+            const card = createCard(event, regionCfg);
+            if (timelineMode) {
+                setupTimelineCardClick(card, event);
+            }
+            cardContainer.appendChild(card);
         }
     });
     if (sequentialMode && updateDraggableCards) updateDraggableCards();
     if (updateCardCount) updateCardCount();
+}
+
+function setupTimelineCardClick(card, event) {
+    card.setAttribute('draggable', 'false');
+    card.classList.add('cursor-pointer', 'opacity-80');
+    card.onclick = () => {
+        // 找到該事件在 placedChrono 的 index
+        const placedChrono = uiContext.placedChrono;
+        if (!placedChrono) return;
+        const idx = placedChrono.findIndex(item => item.event.event_id === event.event_id);
+        if (idx !== -1 && typeof highlightStep === 'function') {
+            highlightStep(idx, uiContext.map);
+        }
+    };
 }
 
 /**
