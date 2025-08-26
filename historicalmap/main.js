@@ -91,6 +91,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!uiContext.sequentialMode && !uiContext.timelineMode) {
             insertSortButtonsContainerIfNeeded(uiContext.panelContent);
         }     
+
+   
         // --- 預設排序並渲染卡片 ---
         const sortedEvents = [...data.events].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
         uiContext.eventsData = sortedEvents;
@@ -109,6 +111,57 @@ document.addEventListener('DOMContentLoaded', () => {
         setupPanelToggle();
     }
 
+    function insertCategoryButtonsIfNeeded(events, panelContent) {
+        // 取得所有 category（排除 undefined/null/空字串）
+        const categories = Array.from(
+            new Set(events.map(e => e.category).filter(c => c && c.trim()))
+        );
+        // 若沒有 category 欄位則不顯示
+        if (categories.length === 0) return;
 
+        // 避免重複插入
+        if (document.getElementById('category-buttons-container')) return;
+
+        const catDiv = document.createElement('div');
+        catDiv.id = 'category-buttons-container';
+        catDiv.className = 'p-2 flex flex-wrap gap-2 bg-white border-b';
+
+        // "全部" 按鈕
+        const allBtn = document.createElement('button');
+        allBtn.textContent = '全部';
+        allBtn.className = 'px-3 py-1 text-xs bg-blue-500 text-white rounded-full shadow-sm';
+        allBtn.onclick = () => {
+            uiContext.eventsToRender = [...uiContext.eventsData];
+            renderCards();
+            updateCategoryButtonStyles(allBtn);
+        };
+        catDiv.appendChild(allBtn);
+
+        // 其他 category 按鈕
+        categories.forEach(cat => {
+            const btn = document.createElement('button');
+            btn.textContent = cat;
+            btn.className = 'px-3 py-1 text-xs bg-gray-200 text-gray-700 rounded-full shadow-sm';
+            btn.onclick = () => {
+                uiContext.eventsToRender = uiContext.eventsData.filter(e => e.category === cat);
+                renderCards();
+                updateCategoryButtonStyles(btn);
+            };
+            catDiv.appendChild(btn);
+        });
+
+        // 樣式切換
+        function updateCategoryButtonStyles(activeBtn) {
+            catDiv.querySelectorAll('button').forEach(btn => {
+                btn.classList.toggle('bg-blue-500', btn === activeBtn);
+                btn.classList.toggle('text-white', btn === activeBtn);
+                btn.classList.toggle('bg-gray-200', btn !== activeBtn);
+                btn.classList.toggle('text-gray-700', btn !== activeBtn);
+            });
+        }
+
+        // 插入到 panelContent 最上方
+        panelContent.insertBefore(catDiv, panelContent.firstChild);
+    }
 
 });
