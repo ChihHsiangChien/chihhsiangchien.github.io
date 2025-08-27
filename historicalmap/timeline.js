@@ -1,4 +1,7 @@
 import { uiContext } from './context.js';
+import { stringToTextColorAlpha } from './colorUtils.js';
+
+
 
 
 // 啟用 timeline 相關元件與按鈕
@@ -314,7 +317,7 @@ function createTimeScaleEventDots(container, sortedEvents, minDate, totalTimeSpa
                 left: `${percentage * 100}%`,
                 transform: 'translateX(-50%)',
                 bottom: '0px',
-                background: '#96000061',
+                background: stringToTextColorAlpha(event.category, 0.5),
                 borderRadius: '50%',
                 zIndex: '2'
             });
@@ -494,6 +497,7 @@ export function setupTimelineSlider(
     } else {
         timelineSlider.value = '0';
     }
+
 
     // --- 暴露切換功能 ---
     window.timelineScaleToggle = () => {

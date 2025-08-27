@@ -283,37 +283,18 @@ export function autoPlaceAndStartTimeline(data, map) {
     enableTimelineFeatures(map);
 }
 
-
+export function showAndSyncTimelineUI(timelineContainer) {
+    if (timelineContainer) timelineContainer.classList.remove('hidden');
+    if (window.updateTimelineTicksLayout) window.updateTimelineTicksLayout();
+    if (window.timelineScaleToggle) window.timelineScaleToggle();
+}
 
 // --- 簡化 autoplay mode 控制流程 ---
 export async function autoPlaceCards(data, timelineContainer, map) {
-
     // ...收合 panel 相關程式...
     autoPlaceAndStartTimeline(data,map);
-
     await delay(500);
 
-    const rightPanel = document.getElementById('right-panel');
-    const toggleBtn = document.getElementById('toggle-panel-btn');
-    const isCollapsed = rightPanel && rightPanel.classList.contains('w-0');
-
-    /* 自動點擊「收合」按鈕並等待動畫結束
-    if (rightPanel && toggleBtn && !isCollapsed) {
-        toggleBtn.click();
-        await delay(350); // 等待收合動畫
-        // 收合後主動更新 timeline ticks layout
-        if (window.updateTimelineTicksLayout) window.updateTimelineTicksLayout();
-        // 新增：主動執行一次 scaleToggleButton 的 function（確保 slider/ticks 位置正確）
-        //if (window.timelineScaleToggle) window.timelineScaleToggle();
-    }
-    */
-    
-    if (timelineContainer) timelineContainer.classList.remove('hidden');
-    // 顯示 timelineContainer 後再主動更新一次
-    if (window.updateTimelineTicksLayout) window.updateTimelineTicksLayout();
-    // 再執行一次 scaleToggleButton 的 function
-    if (window.timelineScaleToggle) window.timelineScaleToggle();
-    
-
+    //showAndSyncTimelineUI(timelineContainer);
 
 }
