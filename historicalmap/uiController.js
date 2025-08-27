@@ -313,7 +313,7 @@ export function setupPanelToggle() {
 
 
 // category 按鈕會直接篩選 data 並重建 timeline
-export function insertCategoryButtonsIfNeeded(data, panelContent, regionColorConfig, map, currentMapConfig) {
+export function insertCategoryButtonsIfNeeded(data, panelContent, map, currentMapConfig) {
     const events = data.events;
     const categories = Array.from(
         new Set(events.map(e => e.category).filter(c => c && c.trim()))
@@ -335,7 +335,7 @@ export function insertCategoryButtonsIfNeeded(data, panelContent, regionColorCon
     allBtn.onclick = () => {
         selectedCategories.clear();
         updateCategoryButtonStyles();
-        filterTimelineByCategories(selectedCategories, data, regionColorConfig, map, currentMapConfig, catDiv);
+        filterTimelineByCategories(selectedCategories, data, map, currentMapConfig, catDiv);
     };
     catDiv.appendChild(allBtn);
 
@@ -351,7 +351,7 @@ export function insertCategoryButtonsIfNeeded(data, panelContent, regionColorCon
                 selectedCategories.add(cat);
             }
             updateCategoryButtonStyles();
-            filterTimelineByCategories(selectedCategories, data, regionColorConfig, map, currentMapConfig, catDiv);
+            filterTimelineByCategories(selectedCategories, data, map, currentMapConfig, catDiv);
         };
         btn.dataset.category = cat;
         catDiv.appendChild(btn);
@@ -379,10 +379,10 @@ export function insertCategoryButtonsIfNeeded(data, panelContent, regionColorCon
     panelContent.insertBefore(catDiv, panelContent.firstChild);
 
     // 預設啟動全部
-    filterTimelineByCategories(selectedCategories, data, regionColorConfig, map, currentMapConfig, catDiv);
+    filterTimelineByCategories(selectedCategories, data, map, currentMapConfig, catDiv);
 }
 
-export async function filterTimelineByCategories(selectedCategories, data, regionColorConfig, map, currentMapConfig, catDiv) {
+export async function filterTimelineByCategories(selectedCategories, data, map, currentMapConfig, catDiv) {
     //clearAllMarkerHighlights();
 
     // 篩選事件
@@ -405,7 +405,7 @@ export async function filterTimelineByCategories(selectedCategories, data, regio
     // 重新啟動 timeline
     const timelineContainer = document.getElementById('timeline-container');
     await autoPlaceCards(filteredData, timelineContainer, map);
-    setupTimelineControls(filteredData, map, currentMapConfig, false);
+    setupTimelineControls(filteredData, map, currentMapConfig, true);
     
     renderCards();
 }

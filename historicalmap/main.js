@@ -54,7 +54,7 @@ document.addEventListener('DOMContentLoaded', () => {
         .then(async data => {
             uiContext.timelineMode = urlParams.get('mode') === 'timeline';
 
-            setupGame(data, currentMapConfig.regionColorConfig);
+            setupGame(data);
             const timelineContainer = document.getElementById('timeline-container');
             if (uiContext.timelineMode) {
                 await autoPlaceCards(data, timelineContainer, map);
@@ -70,20 +70,19 @@ document.addEventListener('DOMContentLoaded', () => {
     adjustCardContainerHeight(uiContext.cardContainer, uiContext.checkAnswersBtn);
     window.addEventListener('resize', () => adjustCardContainerHeight(uiContext.cardContainer, uiContext.checkAnswersBtn));        
 
-    function setupUiContext(regionColorConfig, sortedEvents) {
+    function setupUiContext(sortedEvents) {
         uiContext.createCard = createCard;
         uiContext.moveGhost = moveGhost;
         uiContext.updateGuideAndLastEvent = updateGuideAndLastEvent;
         uiContext.map = map;
         uiContext.handleDropAttempt = handleDropAttempt;
         uiContext.updateDraggableCards = updateDraggableCards;
-        uiContext.updateCardCount = updateCardCount;
-        uiContext.regionColorConfig = regionColorConfig;
+        uiContext.updateCardCount = updateCardCount;        
         uiContext.eventsToRender = sortedEvents;
         uiContext.currentEventIndex = 0;  
     }   
 
-    function setupGame(data, regionColorConfig) {
+    function setupGame(data) {
         uiContext.gameData = data;
         uiContext.locationsData = data.locations;
         const regionList = Array.from(new Set(data.locations.map(loc => loc.region || 'default')));
@@ -101,11 +100,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const sortedEvents = [...data.events].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
         uiContext.eventsData = sortedEvents;
 
-        setupUiContext(regionColorConfig, sortedEvents);
+        setupUiContext(sortedEvents);
 
         // Timeline mode: 動態產生 category 按鈕
         if (uiContext.timelineMode) {
-            insertCategoryButtonsIfNeeded(data, uiContext.panelContent, regionColorConfig, map, currentMapConfig);
+            insertCategoryButtonsIfNeeded(data, uiContext.panelContent, map, currentMapConfig);
         }
 
         renderCards();
