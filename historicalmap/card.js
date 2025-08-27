@@ -59,6 +59,11 @@ export function createCard(event, regionColorConfig) {
         link.addEventListener('pointerdown', e => e.stopPropagation());
     });
 
+    // timelineMode 下不啟用拖曳
+    if (uiContext.timelineMode) {
+        return card;
+    }
+    
     let isDragging = false;
     let pointerDownPos = { x: 0, y: 0 };
 
