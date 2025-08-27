@@ -290,7 +290,7 @@ export function showAndSyncTimelineUI(timelineContainer) {
 }
 
 // --- 簡化 autoplay mode 控制流程 ---
-export async function autoPlaceCards(data, timelineContainer, map) {
+export async function autoPlaceCards(data, map) {
     // ...收合 panel 相關程式...
     autoPlaceAndStartTimeline(data,map);
     await delay(500);

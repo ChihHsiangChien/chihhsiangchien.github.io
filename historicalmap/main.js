@@ -58,7 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setupGame(data);
             const timelineContainer = document.getElementById('timeline-container');
             if (uiContext.timelineMode) {
-                await autoPlaceCards(data, timelineContainer, map);
+                await autoPlaceCards(data, uiContext.map);
                 renderCards();                
                 showAndSyncTimelineUI(timelineContainer);
                 

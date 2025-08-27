@@ -401,7 +401,7 @@ export async function filterTimelineByCategories(selectedCategories, data, map, 
 
     // 重新啟動 timeline
     const timelineContainer = document.getElementById('timeline-container');
-    await autoPlaceCards(filteredData, timelineContainer, map);
+    await autoPlaceCards(filteredData, map);
 
     setupTimelineControls(filteredData, map, currentMapConfig, false);
     showAndSyncTimelineUI(timelineContainer);
