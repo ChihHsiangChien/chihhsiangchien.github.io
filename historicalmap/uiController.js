@@ -1,5 +1,11 @@
 import { uiContext } from './context.js';
-import {highlightStep} from './timeline.js';
+import { highlightStep } from './timeline.js';
+import { setupTimelineControls } from './timeline.js';
+import { updateMarkerHighlightByFilter } from './map.js';
+import { autoPlaceCards } from './gameLogic.js';
+
+
+
 
 
 /**
@@ -90,6 +96,7 @@ function setupTimelineCardClick(card, event) {
             highlightStep(idx, uiContext.map);
         }
     };
+
 }
 
 /**
@@ -264,4 +271,104 @@ export function setupPanelToggle() {
             uiContext.map.invalidateSize();
         }, 300);
     });
+}
+
+
+
+// category 按鈕會直接篩選 data 並重建 timeline
+export function insertCategoryButtonsIfNeeded(data, panelContent, regionColorConfig, map, currentMapConfig) {
+    const events = data.events;
+    const categories = Array.from(
+        new Set(events.map(e => e.category).filter(c => c && c.trim()))
+    );
+    if (categories.length === 0) return;
+    if (document.getElementById('category-buttons-container')) return;
+
+    const catDiv = document.createElement('div');
+    catDiv.id = 'category-buttons-container';
+    catDiv.className = 'p-2 flex flex-wrap gap-2 bg-white border-b';
+
+    // 儲存目前選中的 category
+    let selectedCategories = new Set();
+
+    // "全部" 按鈕
+    const allBtn = document.createElement('button');
+    allBtn.textContent = '全部';
+    allBtn.className = 'px-3 py-1 text-xs bg-blue-500 text-white rounded-full shadow-sm';
+    allBtn.onclick = () => {
+        selectedCategories.clear();
+        updateCategoryButtonStyles();
+        filterTimelineByCategories(selectedCategories, data, regionColorConfig, map, currentMapConfig, catDiv);
+    };
+    catDiv.appendChild(allBtn);
+
+    // 其他 category 按鈕
+    categories.forEach(cat => {
+        const btn = document.createElement('button');
+        btn.textContent = cat;
+        btn.className = 'px-3 py-1 text-xs bg-gray-200 text-gray-700 rounded-full shadow-sm';
+        btn.onclick = () => {
+            if (selectedCategories.has(cat)) {
+                selectedCategories.delete(cat);
+            } else {
+                selectedCategories.add(cat);
+            }
+            updateCategoryButtonStyles();
+            filterTimelineByCategories(selectedCategories, data, regionColorConfig, map, currentMapConfig, catDiv);
+        };
+        btn.dataset.category = cat;
+        catDiv.appendChild(btn);
+    });
+
+    // 樣式切換
+    function updateCategoryButtonStyles() {
+        // "全部" 按鈕高亮：沒有選任何 category 時
+        allBtn.classList.toggle('bg-blue-500', selectedCategories.size === 0);
+        allBtn.classList.toggle('text-white', selectedCategories.size === 0);
+        allBtn.classList.toggle('bg-gray-200', selectedCategories.size !== 0);
+        allBtn.classList.toggle('text-gray-700', selectedCategories.size !== 0);
+
+        // 其他 category 按鈕
+        catDiv.querySelectorAll('button[data-category]').forEach(btn => {
+            const cat = btn.dataset.category;
+            const active = selectedCategories.has(cat);
+            btn.classList.toggle('bg-blue-500', active);
+            btn.classList.toggle('text-white', active);
+            btn.classList.toggle('bg-gray-200', !active);
+            btn.classList.toggle('text-gray-700', !active);
+        });
+    }
+
+    panelContent.insertBefore(catDiv, panelContent.firstChild);
+
+    // 預設啟動全部
+    filterTimelineByCategories(selectedCategories, data, regionColorConfig, map, currentMapConfig, catDiv);
+}
+
+export async function filterTimelineByCategories(selectedCategories, data, regionColorConfig, map, currentMapConfig, catDiv) {
+    //clearAllMarkerHighlights();
+
+    // 篩選事件
+    let filteredEvents;
+    if (!selectedCategories || selectedCategories.size === 0) {
+        filteredEvents = [...data.events];
+    } else {
+        filteredEvents = data.events.filter(e => selectedCategories.has(e.category));
+    }
+
+    updateMarkerHighlightByFilter(filteredEvents);
+    // 產生新的 data 給 timeline
+    const filteredData = { ...data, events: filteredEvents };
+
+    // 更新卡片
+    uiContext.eventsData = filteredEvents;
+    uiContext.eventsToRender = filteredEvents;
+    renderCards();
+
+    // 重新啟動 timeline
+    const timelineContainer = document.getElementById('timeline-container');
+    await autoPlaceCards(filteredData, timelineContainer, map);
+    setupTimelineControls(filteredData, regionColorConfig, map, currentMapConfig, false);
+    
+    renderCards();
 }
