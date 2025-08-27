@@ -258,7 +258,13 @@ function buildChronologicalPlacedEvents(events, placedEvents) {
 }
 
 // 遍歷所有事件，找到對應的卡片和地圖位置，然後呼叫 handleDrop，直接將卡片放到 marker 上
-export function autoPlaceAndStartTimeline(data, map) {
+export function autoPlace(data, map) {
+    // 先移除所有已放置的 marker
+    Object.values(uiContext.placedEvents).forEach(({ marker }) => {
+        if (marker) map.removeLayer(marker);
+    });
+    uiContext.placedEvents = {};
+
     data.events.forEach(event => {
         const card = document.getElementById(event.event_id);
         if (!card) return;
@@ -274,13 +280,9 @@ export function autoPlaceAndStartTimeline(data, map) {
         });
     });
 
-    //checkAnswers(uiContext.gameData, map);
-
     // 直接產生排序後的資料
     uiContext.placedChrono = buildChronologicalPlacedEvents(data.events, uiContext.placedEvents);
 
-    // 啟用 timeline
-    enableTimelineFeatures(map);
 }
 
 export function showAndSyncTimelineUI(timelineContainer) {
@@ -291,10 +293,12 @@ export function showAndSyncTimelineUI(timelineContainer) {
 
 // --- 簡化 autoplay mode 控制流程 ---
 export async function autoPlaceCards(data, map) {
-    // ...收合 panel 相關程式...
-    autoPlaceAndStartTimeline(data,map);
+
+    autoPlace(data,map);
     await delay(500);
 
+    // 啟用 timeline
+    enableTimelineFeatures(map);
     //showAndSyncTimelineUI(timelineContainer);
 
 }
