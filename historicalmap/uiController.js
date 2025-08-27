@@ -6,6 +6,7 @@ import { autoPlaceCards } from './gameLogic.js';
 import { stringToBgColor, stringToBorderColor, stringToTextColor, stringToHslBg, stringToHslBorder } from './colorUtils.js';
 import { slug } from './colorUtils.js';
 import { showAndSyncTimelineUI } from './gameLogic.js';
+import { renderLocationsOnMap, fitMapToLocations } from './map.js'; 
 
 
 /**
@@ -94,6 +95,19 @@ function setupTimelineCardClick(card, event) {
         const idx = placedChrono.findIndex(item => item.event.event_id === event.event_id);
         if (idx !== -1 && typeof highlightStep === 'function') {
             highlightStep(idx, uiContext.map);
+            // 新增：同步移動 timeline slider
+            const slider = uiContext.timelineSlider;
+            if (slider) {
+                if (slider.step && slider.step !== '1') {
+                    // 時間刻度模式
+                    const eventTime = new Date(placedChrono[idx].event.start_time).getTime();
+                    slider.value = eventTime;
+                } else {
+                    // 事件索引模式
+                    slider.value = idx;
+                }
+                slider.dispatchEvent(new Event('input'));
+            }        
         }
     };
 
@@ -172,38 +186,6 @@ export function injectRegionStyles(regionList) {
             }
         `;
     });
-    styleElement.textContent = cssRules;
-    document.head.appendChild(styleElement);
-}
-
-export function injectRegionStyles2(config) {
-    if (document.getElementById('region-style')) return;
-    const styleElement = document.createElement('style');
-    styleElement.id = 'region-style';
-    let cssRules = '';
-    for (const regionKey in config) {
-        /*
-        const region = config[regionKey];
-        if (region.name) {
-            cssRules += `
-                .location-tooltip.region-${region.name} {
-                    background-color: ${region.mapBgColor};
-                    border-color: ${region.borderColor};
-                }
-            `;
-        }
-        */
-        // regionKey 直接用來產生顏色
-        // regionKey 直接用來產生顏色
-        const bg = stringToHslBg(regionKey);
-        const border = stringToHslBorder(regionKey);
-        cssRules += `
-            .location-tooltip.region-${regionKey} {
-                background-color: ${bg};
-                border-color: ${border};
-            }
-        `;       
-    }
     styleElement.textContent = cssRules;
     document.head.appendChild(styleElement);
 }
@@ -402,6 +384,11 @@ export async function filterTimelineByCategories(selectedCategories, data, map, 
     // 重新啟動 timeline
     const timelineContainer = document.getElementById('timeline-container');
     await autoPlaceCards(filteredData, map);
+
+    //新增 是否多餘？
+    renderLocationsOnMap(map, data.locations, filteredEvents);
+    fitMapToLocations(map, data.locations, filteredEvents);
+
 
     setupTimelineControls(filteredData, map, currentMapConfig, false);
     showAndSyncTimelineUI(timelineContainer);

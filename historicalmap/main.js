@@ -58,10 +58,11 @@ document.addEventListener('DOMContentLoaded', () => {
             setupGame(data);
             const timelineContainer = document.getElementById('timeline-container');
             if (uiContext.timelineMode) {
-                await autoPlaceCards(data, uiContext.map);
+                const filteredEvents = uiContext.eventsToRender || sortedEvents;
+                const filteredData = { ...data, events: filteredEvents };                
+                await autoPlaceCards(filteredData, uiContext.map);
                 renderCards();                
-                showAndSyncTimelineUI(timelineContainer);
-                
+                showAndSyncTimelineUI(timelineContainer);                
             } else {
                 if (timelineContainer) timelineContainer.classList.add('hidden');
             }
@@ -113,13 +114,35 @@ document.addEventListener('DOMContentLoaded', () => {
         renderCards();
 
         setupSortButtons();
-        renderLocationsOnMap(map);
-        fitMapToLocations(map);
+
+        // 修改這裡：根據 timelineMode 決定傳入 events
+        if (uiContext.timelineMode) {
+            // 只顯示 filteredEvents 對應地點
+            const filteredEvents = uiContext.eventsToRender || sortedEvents;
+            renderLocationsOnMap(map, data.locations, filteredEvents);
+            fitMapToLocations(map, data.locations, filteredEvents); 
+        
+
+        } else {
+            // 顯示全部地點
+            renderLocationsOnMap(map, data.locations);
+            fitMapToLocations(map, data.locations);
+
+        }        
+
         uiContext.checkAnswersBtn.addEventListener('click', () => checkAnswers(uiContext.gameData, map));
 
         map.on('droppable:drop', (e) => handleDrop({ ...e, map }));
         map.on('zoomend', () => handleZoom(map));
-        setupTimelineControls(data, map, currentMapConfig, false);
+        //setupTimelineControls(data, map, currentMapConfig, false);
+        setupTimelineControls(
+            uiContext.timelineMode 
+                ? { ...data, events: (uiContext.eventsToRender || sortedEvents) } 
+                : data, 
+            map, 
+            currentMapConfig, 
+            false
+        );        
         setupPanelToggle();
     }
 

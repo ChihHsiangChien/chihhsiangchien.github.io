@@ -80,7 +80,7 @@ export function repositionMarkersAtLocation(map, locationId, placedEvents, gameD
         const markerHeight = 20;
         const padding = Math.max(0, (map.getZoom() - 13) * 3);
         const locationLabelHeight = 30;
-        const spacingBelowLabel = -10;
+        const spacingBelowLabel = 25;
         const startY = centerPoint.y + (locationLabelHeight / 2) + spacingBelowLabel + (markerHeight / 2);
 
         placedAtLocation.forEach((item, index) => {
@@ -163,10 +163,30 @@ export function updateGuideAndLastEvent({
     setLastDragEvent({ originalEvent: event });
 }
 
+
 // 在地圖上渲染所有地點（circle/polygon），並設定 tooltip。
-export function renderLocationsOnMap(map) {
+export function renderLocationsOnMap(map, locations = uiContext.locationsData, events = null) {
+    // 清除舊圖層（可選，視需求）
+    // map.eachLayer(layer => { ... });
+    // 先移除舊的 location 圖層（只移除有 location_id 的 circle/polygon）
+    map.eachLayer(layer => {
+        if (
+            layer.options &&
+            layer.options.location_id
+        ) {
+            map.removeLayer(layer);
+        }
+    });
+
+    // 若有 events，僅顯示這些事件對應的地點
+    let filteredLocations = locations;
+    if (events && Array.isArray(events)) {
+        const locationIds = new Set(events.map(e => e.location_id));
+        filteredLocations = locations.filter(loc => locationIds.has(loc.location_id));
+    }
+
     const bounds = L.latLngBounds();
-    uiContext.locationsData.forEach(location => {
+    filteredLocations.forEach(location => {
         let layer;
 
         if (location.shape === 'polygon') {
@@ -180,7 +200,8 @@ export function renderLocationsOnMap(map) {
         layer.addTo(map)
             .bindTooltip(`<span>${location.name}</span>`, {
                 permanent: true,
-                direction: 'center',
+                direction: 'bottom', // 或 'right', 'left', 'bottom'
+                offset: L.point(0, 10), // 這裡調整位移
                 className: `location-tooltip region-${regionKey}`
             });
 
@@ -192,13 +213,26 @@ export function renderLocationsOnMap(map) {
     });
     // 存 bounds 供 fitMapToLocations 使用
     map._customBounds = bounds;
-
 }
 
+
 // 讓地圖自動縮放至所有地點的範圍。
-export function fitMapToLocations(map) {
-    const bounds = map._customBounds;
-    if (bounds && bounds.isValid()) {
+// 支援傳入 events，只縮放到這些事件對應的地點
+export function fitMapToLocations(map, locations = uiContext.locationsData, events = null) {
+    let filteredLocations = locations;
+    if (events && Array.isArray(events)) {
+        const locationIds = new Set(events.map(e => e.location_id));
+        filteredLocations = locations.filter(loc => locationIds.has(loc.location_id));
+    }
+    const bounds = L.latLngBounds();
+    filteredLocations.forEach(location => {
+        if (location.shape === 'polygon') {
+            bounds.extend(L.polygon(location.points).getBounds());
+        } else {
+            bounds.extend(L.circle(location.center, { radius: location.radius }).getLatLng().toBounds(location.radius));
+        }
+    });
+    if (bounds.isValid()) {
         map.fitBounds(bounds, { padding: [50, 50] });
     }
 }
