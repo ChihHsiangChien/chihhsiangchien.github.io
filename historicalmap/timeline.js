@@ -710,7 +710,7 @@ export function timelineKeydownHandler(e, timelineEnabled, timelineSlider, place
 /**
  * 設定時間軸控制元件與事件
  */
-export function setupTimelineControls(data, regionColorConfig, map, currentMapConfig, defaultTimeScaleMode = true) {
+export function setupTimelineControls(data, map, currentMapConfig, defaultTimeScaleMode = true) {
     const getPlacedChrono = () => uiContext.placedChrono;
     const isTimelineEnabled = () => uiContext.timelineEnabled;
     const toggleHighlightMode = () => {

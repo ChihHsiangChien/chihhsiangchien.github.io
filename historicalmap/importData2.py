@@ -32,7 +32,7 @@ for _, row in filtered.iterrows():
                 "name": location_name,
                 "center": [lat, lon],
                 "region": region,
-                "radius": 50  # 預設值，你可以改
+                "radius": 10  # 預設值，你可以改
 
             }
 

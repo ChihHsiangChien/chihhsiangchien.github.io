@@ -86,7 +86,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function setupGame(data, regionColorConfig) {
         uiContext.gameData = data;
         uiContext.locationsData = data.locations;
-        injectRegionStyles(regionColorConfig);
+        const regionList = Array.from(new Set(data.locations.map(loc => loc.region || 'default')));
+        injectRegionStyles(regionList);
 
 
         // --- 只在一般模式插入排序區塊 ---
@@ -109,14 +110,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         renderCards();
 
-        setupSortButtons(regionColorConfig);
-        renderLocationsOnMap(map, regionColorConfig);
+        setupSortButtons();
+        renderLocationsOnMap(map);
         fitMapToLocations(map);
         uiContext.checkAnswersBtn.addEventListener('click', () => checkAnswers(uiContext.gameData, map));
 
         map.on('droppable:drop', (e) => handleDrop({ ...e, map }));
         map.on('zoomend', () => handleZoom(map));
-        setupTimelineControls(data, regionColorConfig,  map, currentMapConfig, false);
+        setupTimelineControls(data, map, currentMapConfig, false);
         setupPanelToggle();
     }
 

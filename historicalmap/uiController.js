@@ -3,6 +3,9 @@ import { highlightStep } from './timeline.js';
 import { setupTimelineControls } from './timeline.js';
 import { updateMarkerHighlightByFilter } from './map.js';
 import { autoPlaceCards } from './gameLogic.js';
+import { stringToBgColor, stringToBorderColor, stringToTextColor, stringToHslBg, stringToHslBorder } from './colorUtils.js';
+import { slug } from './colorUtils.js';
+
 
 
 
@@ -154,12 +157,35 @@ export function adjustCardContainerHeight(cardContainer, checkAnswersBtn) {
  * 根據地區顏色設定，動態注入對應的 CSS 樣式到 <head>。
  * 避免重複注入。
  */
-export function injectRegionStyles(config) {
+
+
+export function injectRegionStyles(regionList) {
+    if (document.getElementById('region-style')) return;
+    const styleElement = document.createElement('style');
+    styleElement.id = 'region-style';
+    let cssRules = '';
+    regionList.forEach(region => {
+        const key = slug(region);
+        const bg = stringToHslBg(region);
+        const border = stringToHslBorder(region);
+        cssRules += `
+            .location-tooltip.region-${key} {
+                background-color: ${bg};
+                border-color: ${border};
+            }
+        `;
+    });
+    styleElement.textContent = cssRules;
+    document.head.appendChild(styleElement);
+}
+
+export function injectRegionStyles2(config) {
     if (document.getElementById('region-style')) return;
     const styleElement = document.createElement('style');
     styleElement.id = 'region-style';
     let cssRules = '';
     for (const regionKey in config) {
+        /*
         const region = config[regionKey];
         if (region.name) {
             cssRules += `
@@ -169,6 +195,17 @@ export function injectRegionStyles(config) {
                 }
             `;
         }
+        */
+        // regionKey 直接用來產生顏色
+        // regionKey 直接用來產生顏色
+        const bg = stringToHslBg(regionKey);
+        const border = stringToHslBorder(regionKey);
+        cssRules += `
+            .location-tooltip.region-${regionKey} {
+                background-color: ${bg};
+                border-color: ${border};
+            }
+        `;       
     }
     styleElement.textContent = cssRules;
     document.head.appendChild(styleElement);
@@ -182,7 +219,7 @@ let sortButtonsInitialized = false;
  * 僅初始化一次，循序模式下隱藏排序與檢查按鈕。
  * 點擊按鈕後會重新渲染卡片並更新按鈕樣式。
  */
-export function setupSortButtons(regionColorConfig) {
+export function setupSortButtons() {
     const sortYearAscBtn = document.getElementById('sort-year-asc');
     const sortYearDescBtn = document.getElementById('sort-year-desc');
     const sortRegionAscBtn = document.getElementById('sort-region-asc');
@@ -368,7 +405,7 @@ export async function filterTimelineByCategories(selectedCategories, data, regio
     // 重新啟動 timeline
     const timelineContainer = document.getElementById('timeline-container');
     await autoPlaceCards(filteredData, timelineContainer, map);
-    setupTimelineControls(filteredData, regionColorConfig, map, currentMapConfig, false);
+    setupTimelineControls(filteredData, map, currentMapConfig, false);
     
     renderCards();
 }
