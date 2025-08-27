@@ -1,5 +1,7 @@
 // 單一 hash function
 function stringHash(str) {
+    str = (str || '').toString(); // 保證是字串且不為 undefined
+
     let hash = 5381; // 使用 djb2 hash
     for (let i = 0; i < str.length; i++) {
         hash = ((hash << 5) + hash) + str.charCodeAt(i); // hash * 33 + c
@@ -14,6 +16,8 @@ function stringHash(str) {
 
 // 通用 HSL/HSLA 產生器
 function hslFromString(str, { s = 60, l = 92, a = 1 } = {}) {
+    str = (str || '').toString(); // 保證是字串
+
     const hue = stringHash(str);
     if (a < 1) {
         return `hsla(${hue}, ${s}%, ${l}%, ${a})`;
@@ -38,6 +42,10 @@ export function stringToHslBg(str) {
 }
 export function stringToHslBorder(str) {
     return hslFromString(str, { s: 70, l: 60, a: 1 }); // 地圖邊框
+}
+
+export function stringToTextColorAlpha(str, alpha = 1) {
+    return hslFromString(str, { s: 60, l: 30, a: alpha });
 }
 
 export function slug(str) {

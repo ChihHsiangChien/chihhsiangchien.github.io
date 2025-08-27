@@ -30,6 +30,7 @@ import { checkAnswers } from './gameLogic.js';
 import { handleDrop } from './gameLogic.js';
 import { handleDropAttempt } from './gameLogic.js';
 import { autoPlaceCards } from './gameLogic.js';
+import { showAndSyncTimelineUI } from './gameLogic.js';
 
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -59,6 +60,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (uiContext.timelineMode) {
                 await autoPlaceCards(data, timelineContainer, map);
                 renderCards();                
+                showAndSyncTimelineUI(timelineContainer);
+                
             } else {
                 if (timelineContainer) timelineContainer.classList.add('hidden');
             }

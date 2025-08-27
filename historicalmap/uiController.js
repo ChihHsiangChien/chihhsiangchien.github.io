@@ -5,10 +5,7 @@ import { updateMarkerHighlightByFilter } from './map.js';
 import { autoPlaceCards } from './gameLogic.js';
 import { stringToBgColor, stringToBorderColor, stringToTextColor, stringToHslBg, stringToHslBorder } from './colorUtils.js';
 import { slug } from './colorUtils.js';
-
-
-
-
+import { showAndSyncTimelineUI } from './gameLogic.js';
 
 
 /**
@@ -405,7 +402,9 @@ export async function filterTimelineByCategories(selectedCategories, data, map, 
     // 重新啟動 timeline
     const timelineContainer = document.getElementById('timeline-container');
     await autoPlaceCards(filteredData, timelineContainer, map);
-    setupTimelineControls(filteredData, map, currentMapConfig, true);
-    
+
+    setupTimelineControls(filteredData, map, currentMapConfig, false);
+    showAndSyncTimelineUI(timelineContainer);
+
     renderCards();
 }
