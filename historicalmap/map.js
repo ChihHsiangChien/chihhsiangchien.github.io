@@ -1,5 +1,7 @@
 import { uiContext } from './context.js';
 import { updateCheckButtonState } from './uiController.js';
+import { slug } from './colorUtils.js';
+
 
 
 
@@ -162,20 +164,25 @@ export function updateGuideAndLastEvent({
 }
 
 // 在地圖上渲染所有地點（circle/polygon），並設定 tooltip。
-export function renderLocationsOnMap(map, regionColorConfig) {
+export function renderLocationsOnMap(map) {
     const bounds = L.latLngBounds();
     uiContext.locationsData.forEach(location => {
         let layer;
-        const region = location.region || 'default';
-        const colorInfo = regionColorConfig[region] || regionColorConfig.default;
 
         if (location.shape === 'polygon') {
             layer = L.polygon(location.points, { droppable: true, location_id: location.location_id });
         } else {
             layer = L.circle(location.center, { radius: location.radius, droppable: true, location_id: location.location_id });
         }
+
+        const regionKey = slug(location.region);
+
         layer.addTo(map)
-            .bindTooltip(`<span>${location.name}</span>`, { permanent: true, direction: 'center', className: `location-tooltip region-${colorInfo.name}` });
+            .bindTooltip(`<span>${location.name}</span>`, {
+                permanent: true,
+                direction: 'center',
+                className: `location-tooltip region-${regionKey}`
+            });
 
         if (layer instanceof L.Polygon) {
             bounds.extend(layer.getBounds());
@@ -185,6 +192,7 @@ export function renderLocationsOnMap(map, regionColorConfig) {
     });
     // 存 bounds 供 fitMapToLocations 使用
     map._customBounds = bounds;
+
 }
 
 // 讓地圖自動縮放至所有地點的範圍。

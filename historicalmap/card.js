@@ -1,4 +1,5 @@
 import { uiContext } from './context.js';
+import { stringToBgColor, stringToBorderColor, stringToTextColor, stringToHslBg, stringToHslBorder } from './colorUtils.js';
 
 
 export function createCard(event, regionColorConfig) {
@@ -25,12 +26,25 @@ export function createCard(event, regionColorConfig) {
 
 
     const card = document.createElement('div');
-    const region = event.region || 'default';
-    const colorInfo = regionColorConfig[region] || regionColorConfig.default;
+
+
+    // 用category自動做文字類色
+    // 用region 做背景和邊框顏色
+    const category = event.category || '';
+    const region = event.region || '';
+
     card.className = `draggable-card p-2 mb-2 mr-2 rounded shadow cursor-pointer border-2`;
-    card.style.backgroundColor = colorInfo.bgColor;
-    card.style.borderColor = colorInfo.borderColor;
-    card.style.color = colorInfo.textColor;
+    
+    //const colorInfo = regionColorConfig[region] || regionColorConfig.default;    
+    //card.style.backgroundColor = colorInfo.bgColor;
+    //card.style.borderColor = colorInfo.borderColor;        
+    //card.style.color = colorInfo.textColor;
+
+    card.style.backgroundColor = stringToBgColor(region);
+    card.style.borderColor = stringToBorderColor(region);
+    card.style.color = stringToTextColor(category);
+
+    
     card.id = event.event_id;
     const year = new Date(event.start_time).getFullYear();
 

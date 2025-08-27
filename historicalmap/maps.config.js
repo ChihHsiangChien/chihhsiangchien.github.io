@@ -3,6 +3,7 @@ export const mapsData = {
   'chutung-history': {
     name: '竹東歷史互動地圖',
     dataPath: './data/chutung.json', 
+    /*
     regionColorConfig: {
       '新竹': { name: 'hsinchu', bgColor: '#dbeafe', borderColor: '#60a5fa', textColor: '#1e40af', mapBgColor: 'rgba(219, 234, 254, 0.9)' },
       '竹東': { name: 'chutung', bgColor: '#dcfce7', borderColor: '#4ade80', textColor: '#166534', mapBgColor: 'rgba(220, 252, 231, 0.9)' },
@@ -11,6 +12,7 @@ export const mapsData = {
       '寶山': { name: 'paoshan', bgColor: 'rgba(224, 231, 255, 1)', borderColor: '#818CF8', textColor: '#3730A3', mapBgColor: 'rgba(224, 231, 255, 0.9)' },
       'default': { name: 'default', bgColor: '#ffffff', borderColor: '#d1d5db', textColor: '#1f2937', mapBgColor: 'rgba(255, 255, 255, 0.9)' }
     },
+    */
     yearRanges: [
       { start: 1683, end: 1894, color: '#6bbaffff', label: '清領' },
       { start: 1895, end: 1945, color: '#ff8c00ff', label: '日治' },
@@ -18,24 +20,17 @@ export const mapsData = {
       // 其他年段可再加
     ]    
   },
-  'taipei-history': {
-    name: '台北古城變遷',
-    dataPath: './data/taipei.json', // 假設這是台北地圖的資料
-    regionColorConfig: {
-      '萬華': { name: 'wanhua', bgColor: '#fee2e2', borderColor: '#f87171', textColor: '#991b1b', mapBgColor: 'rgba(254, 226, 226, 0.9)' },
-      '大稻埕': { name: 'dadaocheng', bgColor: '#fae8ff', borderColor: '#e879f9', textColor: '#86198f', mapBgColor: 'rgba(250, 232, 255, 0.9)' },
-      'default': { name: 'default', bgColor: '#ffffff', borderColor: '#d1d5db', textColor: '#1f2937', mapBgColor: 'rgba(255, 255, 255, 0.9)' }
-    }
-  },
   'hsinchu-history': {
     name: '新竹歷史',
     dataPath: 'data/hsinchu.json',
+    /*
     regionColorConfig: {
       // 依需求設定顏色
       '新竹': { bgColor: '#f0f8ff', borderColor: '#4682b4', textColor: '#222', mapBgColor: 'rgba(240,248,255,0.9)' },
       // 其他區域...
       'default': { bgColor: '#fff', borderColor: '#aaa', textColor: '#222', mapBgColor: 'rgba(255,255,255,0.9)' }
     },
+    */
     yearRanges: [
       { start: 1683, end: 1894, color: '#6bbaffff', label: '清領' },
       { start: 1895, end: 1945, color: '#ff8c00ff', label: '日治' },
