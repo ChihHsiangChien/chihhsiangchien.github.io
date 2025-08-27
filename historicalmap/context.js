@@ -3,7 +3,6 @@ export const uiContext = {
     placedEvents: {},
     gameData: {},
     eventsToRender: [],
-    regionColorConfig: {},
     createCard: null,
     sequentialMode: false,
     moveGhost: null,
