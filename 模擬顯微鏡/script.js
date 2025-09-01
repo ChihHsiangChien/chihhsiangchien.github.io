@@ -77,6 +77,8 @@ class Microscope {
     // 亮度
     this.brightnessFactor = 10;
 
+    this.apertureSize = 5; // 預設光圈大小，1~10
+
     // bugs
     this.bugs = [];
 
@@ -219,8 +221,12 @@ Microscope.prototype.drawInitialImage = function () {
     this.slideHeight
   );
 
-  // 檢查是否在蟲蟲模式
-  if (document.getElementById("bugs").checked) {
+
+  // 若有勾選顯示DF，則在載玻片上繪製 "DF"
+
+  const mode = document.querySelector('input[name="mode"]:checked').value;
+
+  if (mode === "bugs") {
     // 繪製水樣
     this.ctx.fillStyle = "rgba(193, 222, 250, 0.5)";
     this.ctx.fillRect(
@@ -229,8 +235,21 @@ Microscope.prototype.drawInitialImage = function () {
       this.specimenWidth,
       this.specimenHeight
     );
+  } else if (mode === "df") {
+    // 繪製 DF 字母
+    this.ctx.save();
+    this.ctx.font = "bold 28px Arial";
+    this.ctx.fillStyle = "rgba(0,0,0,0.7)";
+    this.ctx.textBaseline = "middle";
+    this.ctx.textAlign = "center";
+    this.ctx.fillText(
+      "DF",
+      this.slideX + this.slideWidth / 2,
+      this.slideY + this.slideHeight / 2
+    );
+    this.ctx.restore();
   } else {
-    // 繪製標本小圖
+    // 標本模式
     this.ctx.drawImage(
       this.image,
       0,
@@ -243,6 +262,13 @@ Microscope.prototype.drawInitialImage = function () {
       this.specimenHeight
     );
   }
+  // 畫蟲蟲（只在蟲蟲模式）
+  if (mode === "bugs") {
+    this.bugs.forEach(function (bug) {
+      bug.drawOnCanvas();
+    });
+  }
+
 
   // 在原canvas畫放大的框
   /*
@@ -254,12 +280,6 @@ Microscope.prototype.drawInitialImage = function () {
     this.canvas.height / this.zoomFactor
   );
   */
-  //畫蟲蟲
-  if (document.getElementById("bugs").checked) {
-    this.bugs.forEach(function (bug) {
-      bug.drawOnCanvas();
-    });
-  }
 
   // 執行初始的放大影像繪製
   this.drawZoomImage(this.zoomCanvas);
@@ -332,8 +352,9 @@ Microscope.prototype.drawZoomImage = function (newCanvas) {
     this.slideHeight * this.zoomFactor
   );
 
-  // 檢查是否在蟲蟲模式
-  if (document.getElementById("bugs").checked) {
+  const mode = document.querySelector('input[name="mode"]:checked').value;
+
+  if (mode === "bugs") {
     // 繪製水樣
     newCtx.fillStyle = "rgba(193, 222, 250, 0.5)";
     newCtx.fillRect(
@@ -342,8 +363,22 @@ Microscope.prototype.drawZoomImage = function (newCanvas) {
       this.specimenWidth * this.zoomFactor,
       this.specimenHeight * this.zoomFactor
     );
+  } else if (mode === "df") {
+    // 繪製 DF 字母，字體大小隨 zoomFactor 放大
+    newCtx.save();
+    const fontSize = 48 * this.zoomFactor / 5; // 5是預設倍率，48是基準字體
+    newCtx.font = `bold ${fontSize}px Arial`;
+    newCtx.fillStyle = "rgba(0,0,0,0.7)";
+    newCtx.textBaseline = "middle";
+    newCtx.textAlign = "center";
+    newCtx.fillText(
+      "DF",
+      zoomedSlideX + (this.slideWidth * this.zoomFactor) / 2,
+      zoomedSlideY + (this.slideHeight * this.zoomFactor) / 2
+    );
+    newCtx.restore();
   } else {
-    // 繪製標本小圖
+    // 標本模式
     newCtx.drawImage(
       this.image,
       0,
@@ -357,12 +392,14 @@ Microscope.prototype.drawZoomImage = function (newCanvas) {
     );
   }
 
-  //繪製蟲
-  if (document.getElementById("bugs").checked) {
+  // 畫蟲蟲（只在蟲蟲模式）
+  if (mode === "bugs") {
     this.bugs.forEach(function (bug) {
       bug.drawOnZoomCanvas();
     });
   }
+
+
   // Reset the filter
   newCtx.filter = "none";
 
@@ -377,18 +414,20 @@ Microscope.prototype.drawZoomImage = function (newCanvas) {
     newCtx.restore();
   }
 
-  // 繪製十字準星
-  if (document.getElementById("bugs").checked && this.zoomFactor == 40) {
+
+  // 繪製十字準星（只在蟲蟲模式且 40X）
+  if (mode === "bugs" && this.zoomFactor == 40) {
     newCtx.strokeStyle = "red";
-    newCtx.beginPath(); // Start a new path
+    newCtx.beginPath();
     newCtx.moveTo(newCanvas.width / 2 - 10, newCanvas.height / 2);
     newCtx.lineTo(newCanvas.width / 2 + 10, newCanvas.height / 2);
-    newCtx.stroke(); // Render the path
-    newCtx.beginPath(); // Start a new path
+    newCtx.stroke();
+    newCtx.beginPath();
     newCtx.moveTo(newCanvas.width / 2, newCanvas.height / 2 - 10);
     newCtx.lineTo(newCanvas.width / 2, newCanvas.height / 2 + 10);
-    newCtx.stroke(); // Render the path
-  }
+    newCtx.stroke();
+  }  
+
 };
 
 // 調整載物台改變模糊程度
@@ -477,13 +516,6 @@ function moveStage(delta) {
   updateFilters();
 }
 
-// 接收按鈕指令改變亮度，模擬光圈調整大小
-function setBrightness(delta) {
-  microscope.brightnessFactor += delta;
-  microscope.drawInitialImage();
-  // 更新 iOS 過濾效果
-  updateFilters();
-}
 
 // iOS無法用CSS的Blur濾鏡，需另外實作
 function applyBlur(ctx, image, blurFactor) {
@@ -516,6 +548,27 @@ function applyBlur(ctx, image, blurFactor) {
 }
 function applyBrightness(ctx, brightnessFactor) { }
 // 在 Microscope class 上新增移動載玻片的方法
+
+
+// 接收按鈕指令改變亮度，模擬光圈調整大小
+function setBrightness(delta) {
+  microscope.brightnessFactor += delta;
+  microscope.drawInitialImage();
+  // 更新 iOS 過濾效果
+  updateFilters();
+}
+
+// 調整光圈的函式
+function setAperture(delta) {
+  microscope.apertureSize = Math.max(1, Math.min(10, microscope.apertureSize + delta));
+  // 景深與光圈反比，光圈大則模糊多
+  // 光圈越大，亮度越高，景深越淺（模糊越大）
+  microscope.brightnessFactor = 50 + microscope.apertureSize * 10; // 你可調整這個公式  
+  microscope.blurFactor = microscope.apertureSize * 2; // 你可調整這個倍率
+  microscope.drawInitialImage();
+  updateFilters();
+}
+
 Microscope.prototype.moveSlide = function(dxUnit, dyUnit) {
   // 根據 zoomFactor 調整移動步長
   const step = Math.max(1, Math.round(100 / this.zoomFactor));
