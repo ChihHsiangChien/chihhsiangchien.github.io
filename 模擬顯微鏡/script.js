@@ -192,7 +192,7 @@ Microscope.prototype.drawStage = function () {
 };
 
 //畫canvas上的初始影像(左圖)
-Microscope.prototype.drawInitialImage = function () {
+Microscope.prototype. drawInitialImage = function () {
   this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
   // 繪製外框
