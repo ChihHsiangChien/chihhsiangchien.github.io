@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>Microscope Stage & Aperture 3D Viewer</title>
+  <style>
+    body { margin: 0; background: #222; color: #fff; }
+    #viewer { width: 100vw; height: 100vh; display: block; }
+    .label { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.5); padding: 8px; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <div class="label">滑鼠左鍵旋轉，右鍵拖曳，滾輪縮放</div>
+  <div id="viewer"></div>
+  <script type="module">
+    import * as THREE from './lib/three.module.js';
+    import { OrbitControls } from './lib/OrbitControls.js';
+    import { STLLoader } from './lib/STLLoader.js';
+
+  const container = document.getElementById('viewer');
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setClearColor(0x222222);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  container.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 100);
+    camera.position.set(0, 10, 20);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    /*
+    controls.target.set(0,0,2);
+    controls.update();
+    controls.minPolarAngle = 3 / 4 * Math.PI;
+    controls.maxPolarAngle = 5 / 4 * Math.PI;
+    controls.minAzimuthAngle = 0;
+    controls.maxAzimuthAngle = 0;
+    */
+
+    controls.target.set(0,0,2);
+    controls.update();
+    // 允許從正上方(0)到正下方(Math.PI)觀看
+    controls.minPolarAngle = 0;
+    controls.maxPolarAngle = Math.PI;
+    // 解除方位角鎖定，允許繞Y軸自由旋轉
+    controls.minAzimuthAngle = -Infinity;
+    controls.maxAzimuthAngle = Infinity;
+
+
+    // 環境光與平行光
+    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+    dirLight.position.set(10, 10, 10);
+    scene.add(dirLight);
+
+    const root = new THREE.Group();
+    scene.add(root);   
+
+  // raycaster / interaction state for clicking the aperture disk
+  const raycaster = new THREE.Raycaster();
+  const pointer = new THREE.Vector2();
+  let apertureMesh = null; // the mesh itself (for hit tests)
+  let aperturePivot = null; // pivot group placed at the disk center (for rotation)
+  let apertureTargetRotation = 0; // radians
+
+  // Optional: set this to a Vector3 to force the pivot center for the aperture disk.
+  // Example: const APERTURE_CENTER = new THREE.Vector3(0, 0, 2);
+  // Set to null to use the STL geometry bounding-box center (default).
+  // -- Updated: preset to a concrete value for testing --
+  const APERTURE_CENTER = new THREE.Vector3(2, 0, 0);
+
+    // 載入 STL
+    const loader = new STLLoader();
+    loader.load('stage.stl', geometry => {
+      const material = new THREE.MeshStandardMaterial({ color: 0x6699ff, metalness: 0.2, roughness: 0.7 });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      root.add(mesh);
+      // add a 3D sprite label above the stage that says '載物臺'
+      try {
+        geometry.computeBoundingBox();
+        const bbox = geometry.boundingBox.clone();
+        const center = new THREE.Vector3();
+        bbox.getCenter(center);
+
+        // create canvas texture with Chinese text
+        const DPR = Math.max(1, window.devicePixelRatio || 1);
+        const cw = 256 * DPR;
+        const ch = 128 * DPR;
+        const canvas = document.createElement('canvas');
+        canvas.width = cw;
+        canvas.height = ch;
+        const ctx = canvas.getContext('2d');
+        ctx.scale(DPR, DPR);
+        ctx.clearRect(0, 0, cw, ch);
+        ctx.fillStyle = 'white';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        // choose a font size that looks reasonable
+        ctx.font = '36px sans-serif';
+        ctx.fillText('載物臺', cw / (2 * DPR), ch / (2 * DPR));
+
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.encoding = THREE.sRGBEncoding;
+        tex.needsUpdate = true;
+
+        const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+        const sprite = new THREE.Sprite(spriteMat);
+        // scale sprite so text is readable relative to model size
+        sprite.scale.set(3, 1.5, 1);
+        // position slightly above the top of the stage
+        sprite.position.set(center.x, bbox.max.y + 0.15, center.z);
+        sprite.renderOrder = 999;
+        root.add(sprite);
+      } catch (e) {
+        console.warn('Failed to create stage label:', e);
+      }
+    });
+    loader.load('aperture_disk.stl', geometry => {
+      const material = new THREE.MeshStandardMaterial({ color: 0xffcc66, metalness: 0.2, roughness: 0.7 });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+
+  // compute geometry center (fallback) and create a pivot at that center so rotation is around disk center
+  geometry.computeBoundingBox();
+  const computedCenter = new THREE.Vector3();
+  geometry.boundingBox.getCenter(computedCenter);
+
+  // allow consumer override via APERTURE_CENTER; otherwise use computed center
+  const center = APERTURE_CENTER ? APERTURE_CENTER.clone() : computedCenter;
+
+  // debug info to help verify which center is used
+  console.log('aperture: APERTURE_CENTER =', APERTURE_CENTER, ', computedCenter =', computedCenter);
+
+  // create pivot at world position = center, and move mesh so its local origin is at the pivot
+  const pivot = new THREE.Group();
+  pivot.position.copy(center);
+  mesh.position.sub(center); // move mesh into pivot-local coordinates
+
+  // expose both mesh (for raycasting) and pivot (for rotation)
+  apertureMesh = mesh;
+  apertureMesh.name = 'aperture_disk';
+  aperturePivot = pivot;
+  aperturePivot.name = 'aperture_pivot';
+  aperturePivot.add(apertureMesh);
+  root.add(aperturePivot);
+  console.log('aperture: pivot created at', aperturePivot.position);
+    });
+
+    function animate() {
+      requestAnimationFrame(animate);
+      // smooth-animate aperture rotation towards target when present
+      if (aperturePivot) {
+        // ease toward target rotation on Z axis of the pivot (rotate around chosen center)
+        aperturePivot.rotation.z = THREE.MathUtils.lerp(aperturePivot.rotation.z, apertureTargetRotation, 0.15);
+        // snap when very close to avoid tiny perpetual differences
+        if (Math.abs(aperturePivot.rotation.z - apertureTargetRotation) < 0.0005) aperturePivot.rotation.z = apertureTargetRotation;
+      }
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // pointer interaction: rotate aperture by 60deg per click when clicked
+    function onPointerMove(event) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      if (!apertureMesh) {
+        renderer.domElement.style.cursor = '';
+        return;
+      }
+      raycaster.setFromCamera(pointer, camera);
+      const hits = raycaster.intersectObject(apertureMesh, true);
+      renderer.domElement.style.cursor = hits.length ? 'pointer' : '';
+    }
+
+    function onPointerDown(event) {
+      // detect clicks on the aperture mesh
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      if (!apertureMesh) return;
+      raycaster.setFromCamera(pointer, camera);
+      const hits = raycaster.intersectObject(apertureMesh, true);
+      if (hits.length) {
+        // add 60 degrees (Math.PI/3) to the target rotation
+        apertureTargetRotation += Math.PI / 3;
+      }
+    }
+
+    renderer.domElement.addEventListener('pointermove', onPointerMove);
+    renderer.domElement.addEventListener('pointerdown', onPointerDown);
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
