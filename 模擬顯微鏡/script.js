@@ -670,7 +670,7 @@ window.addEventListener('resize', resizeCanvases);
 const microscope = new Microscope("cell.jpg", "canvas", "zoomCanvas");
 
 // 產生蟲蟲
-microscope.generateBugs(10);
+microscope.generateBugs(1);
 
 setInterval(() => {
   microscope.bugs.forEach((bug) => {

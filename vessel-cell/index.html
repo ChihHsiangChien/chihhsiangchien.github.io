@@ -1,0 +1,672 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Vessel cell demo</title>
+  <style>
+    html,body { height:100%; margin:0; background:#111; color:#ddd; font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial; }
+    #ui { position:fixed; left:8px; top:8px; z-index:10; background:rgba(0,0,0,0.5); padding:8px; border-radius:6px; }
+    canvas { display:block; margin:0 auto; background:#000; image-rendering:pixelated; }
+    label { font-size:13px; }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <label>cells: <span id="countLabel">120</span></label>
+    <input id="count" type="range" min="0" max="2000" value="120" />
+    <button id="pause">Pause</button>
+    <label>scale: <span id="scaleLabel">2</span></label>
+    <input id="scale" type="range" min="1" max="6" value="2" />
+  </div>
+
+  <canvas id="c"></canvas>
+
+  <script>
+  // Demo: load vessel.csv (255 = vessel, 0 = background), create mask and animate blood cells inside vessel
+
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  const countInput = document.getElementById('count');
+  const countLabel = document.getElementById('countLabel');
+  const pauseBtn = document.getElementById('pause');
+  const scaleInput = document.getElementById('scale');
+  const scaleLabel = document.getElementById('scaleLabel');
+
+  let mask = null; // Uint8Array rows*cols mask (1 = vessel)
+  let cols = 0, rows = 0;
+  let pixelScale = parseInt(scaleInput.value,10) || 2;
+  scaleLabel.textContent = pixelScale;
+
+  // nearest-vessel map (computed after parseCSV)
+  let distMap = null; // Int32Array cols*rows: Manhattan distance to nearest vessel (0 for vessel)
+  let nearestX = null; // Int32Array storing x index of nearest vessel pixel
+  let nearestY = null; // Int32Array storing y index of nearest vessel pixel
+  let insideDist = null; // Int32Array: for vessel pixels, distance to nearest background (0 for background)
+
+  // allowed-mask and nearest-allowed maps (depend on chosen margin)
+  let allowedMask = null; // Uint8Array
+  let allowedNearestX = null;
+  let allowedNearestY = null;
+  let allowedList = null; // array of allowed indices for quick sampling
+  let arteryEntries = null; // indices near left-top
+  let veinEntries = null;   // indices near right-bottom
+  let arteryMask = null;
+  let veinMask = null;
+
+  function parseCSV(text){
+    const lines = text.trim().split(/\r?\n/).filter(l=>l.length>0);
+    rows = lines.length;
+    const grid = lines.map(l => l.split(',').map(s => Number(s.trim()||0)));
+    cols = grid[0].length;
+    mask = new Uint8Array(cols*rows);
+    for(let y=0;y<rows;y++){
+      const row = grid[y];
+      for(let x=0;x<cols;x++){
+        mask[y*cols + x] = (row[x] === 255) ? 1 : 0;
+      }
+    }
+    // build nearest-vessel info right after mask is ready
+    buildNearestMap();
+  }
+
+  // Build Manhattan-distance nearest-vessel map using multi-source BFS
+  function buildNearestMap(){
+    const N = cols*rows;
+    distMap = new Int32Array(N);
+    nearestX = new Int32Array(N);
+    nearestY = new Int32Array(N);
+    const qx = [];
+    const qy = [];
+    // initialize
+    for(let i=0;i<N;i++){
+      distMap[i] = -1;
+      nearestX[i] = -1;
+      nearestY[i] = -1;
+    }
+    for(let y=0;y<rows;y++){
+      for(let x=0;x<cols;x++){
+        const idx = y*cols + x;
+        if(mask[idx]){
+          distMap[idx] = 0;
+          nearestX[idx] = x;
+          nearestY[idx] = y;
+          qx.push(x); qy.push(y);
+        }
+      }
+    }
+    // BFS 4-neighbor
+    let qi = 0;
+    while(qi < qx.length){
+      const cx = qx[qi];
+      const cy = qy[qi];
+      const cidx = cy*cols + cx;
+      const cd = distMap[cidx];
+      qi++;
+      const neighbors = [ [cx-1,cy],[cx+1,cy],[cx,cy-1],[cx,cy+1] ];
+      for(const nb of neighbors){
+        const nx = nb[0], ny = nb[1];
+        if(nx>=0 && nx<cols && ny>=0 && ny<rows){
+          const nidx = ny*cols + nx;
+          if(distMap[nidx] === -1){
+            distMap[nidx] = cd + 1;
+            // propagate nearest vessel coordinate
+            nearestX[nidx] = nearestX[cidx];
+            nearestY[nidx] = nearestY[cidx];
+            qx.push(nx); qy.push(ny);
+          }
+        }
+      }
+    }
+    // build insideDist: distance from vessel pixels to nearest background (multi-source BFS from background)
+    insideDist = new Int32Array(N);
+    for(let i=0;i<N;i++) insideDist[i] = -1;
+    const bqx = [];
+    const bqy = [];
+    for(let y=0;y<rows;y++){
+      for(let x=0;x<cols;x++){
+        const idx = y*cols + x;
+        if(!mask[idx]){ // background
+          insideDist[idx] = 0;
+          bqx.push(x); bqy.push(y);
+        }
+      }
+    }
+    let bqi = 0;
+    while(bqi < bqx.length){
+      const cx = bqx[bqi];
+      const cy = bqy[bqi];
+      const cidx = cy*cols + cx;
+      const cd = insideDist[cidx];
+      bqi++;
+      const neighbors = [ [cx-1,cy],[cx+1,cy],[cx,cy-1],[cx,cy+1] ];
+      for(const nb of neighbors){
+        const nx = nb[0], ny = nb[1];
+        if(nx>=0 && nx<cols && ny>=0 && ny<rows){
+          const nidx = ny*cols + nx;
+          if(insideDist[nidx] === -1){
+            insideDist[nidx] = cd + 1;
+            bqx.push(nx); bqy.push(ny);
+          }
+        }
+      }
+    }
+  }
+
+  // Build allowed-mask and nearest-allowed maps for a given margin (grid units)
+  function buildAllowedNearest(margin){
+    const N = cols*rows;
+    allowedMask = new Uint8Array(N);
+    allowedNearestX = new Int32Array(N);
+    allowedNearestY = new Int32Array(N);
+    allowedList = [];
+    // allowed if inside vessel and insideDist >= margin
+    for(let i=0;i<N;i++){
+      allowedMask[i] = 0;
+      allowedNearestX[i] = -1; allowedNearestY[i] = -1;
+    }
+    for(let y=0;y<rows;y++){
+      for(let x=0;x<cols;x++){
+        const idx = y*cols + x;
+        if(mask[idx] && insideDist[idx] >= margin){
+          allowedMask[idx] = 1;
+          allowedNearestX[idx] = x;
+          allowedNearestY[idx] = y;
+          allowedList.push(idx);
+        }
+      }
+    }
+    // if no allowed pixels, leave allowedList empty and maps as -1
+    if(allowedList.length === 0) return;
+    // build simple entry lists/flags: artery ~ left-top quadrant, vein ~ right-bottom quadrant
+    arteryEntries = [];
+    veinEntries = [];
+    arteryMask = new Uint8Array(N);
+    veinMask = new Uint8Array(N);
+    const xThird = Math.floor(cols/3);
+    const yThird = Math.floor(rows/3);
+    for(const idx of allowedList){
+      const ay = Math.floor(idx / cols);
+      const ax = idx % cols;
+      if(ax <= xThird && ay <= yThird){ arteryEntries.push(idx); arteryMask[idx]=1; }
+      if(ax >= cols - xThird - 1 && ay >= rows - yThird - 1){ veinEntries.push(idx); veinMask[idx]=1; }
+    }
+    // BFS to fill nearestAllowed coords for all pixels
+    const qx2 = [];
+    const qy2 = [];
+    for(const idx of allowedList){
+      const ay = Math.floor(idx / cols);
+      const ax = idx % cols;
+      qx2.push(ax); qy2.push(ay);
+    }
+    let qi2 = 0;
+    while(qi2 < qx2.length){
+      const cx = qx2[qi2];
+      const cy = qy2[qi2];
+      const cidx = cy*cols + cx;
+      const nb4 = [ [cx-1,cy],[cx+1,cy],[cx,cy-1],[cx,cy+1] ];
+      qi2++;
+      for(const nb of nb4){
+        const nx = nb[0], ny = nb[1];
+        if(nx>=0 && nx<cols && ny>=0 && ny<rows){
+          const nidx = ny*cols + nx;
+          if(allowedNearestX[nidx] === -1){
+            allowedNearestX[nidx] = allowedNearestX[cidx];
+            allowedNearestY[nidx] = allowedNearestY[cidx];
+            qx2.push(nx); qy2.push(ny);
+          }
+        }
+      }
+    }
+  }
+
+  // --- Pressure/velocity field for grid-based flow (method 2) ---
+  let pressure = null; // Float32Array
+  let pressureOld = null;
+  let pressureFixed = null; // Uint8Array flags for Dirichlet boundaries
+  let velX = null; // Float32Array
+  let velY = null; // Float32Array
+  let cond = null; // Float32Array conductivity (0 outside vessel)
+  let velScale = 1.0; // tuning multiplier for visual velocity
+
+  function buildConductivityAndBoundaries(){
+    const N = cols*rows;
+    pressure = new Float32Array(N);
+    pressureOld = new Float32Array(N);
+    pressureFixed = new Uint8Array(N);
+    velX = new Float32Array(N);
+    velY = new Float32Array(N);
+    cond = new Float32Array(N);
+    // set conductivity based on horizontal region (artery/capillary/vein)
+    for(let y=0;y<rows;y++){
+      for(let x=0;x<cols;x++){
+        const idx = y*cols + x;
+        if(mask[idx]){
+          const ratio = x / Math.max(1, cols-1);
+          if(ratio < 1/3) cond[idx] = 1.0; // artery large conductance
+          else if(ratio > 2/3) cond[idx] = 1.0; // vein large conductance
+          else cond[idx] = 0.35; // capillary lower conductance
+          pressure[idx] = 0.5; pressureOld[idx] = 0.5; pressureFixed[idx] = 0;
+        } else {
+          cond[idx] = 0.0; pressure[idx] = 0.0; pressureOld[idx] = 0.0; pressureFixed[idx] = 0;
+        }
+      }
+    }
+    // set Dirichlet on artery/vein entries
+    if(arteryEntries && arteryEntries.length){
+      for(const idx of arteryEntries){ pressure[idx] = 1.0; pressureOld[idx] = 1.0; pressureFixed[idx] = 1; }
+    }
+    if(veinEntries && veinEntries.length){
+      for(const idx of veinEntries){ pressure[idx] = 0.0; pressureOld[idx] = 0.0; pressureFixed[idx] = 1; }
+    }
+  }
+
+  // Jacobi solver for pressure (simple, iterative)
+  function solvePressure(iterCount){
+    if(!pressure) return;
+    const N = cols*rows;
+    const tmp = new Float32Array(N);
+    for(let it=0; it<iterCount; it++){
+      for(let y=0;y<rows;y++){
+        for(let x=0;x<cols;x++){
+          const idx = y*cols + x;
+          if(!mask[idx]){ tmp[idx] = 0.0; continue; }
+          if(pressureFixed[idx]){ tmp[idx] = pressure[idx]; continue; }
+          let sum = 0.0, wsum = 0.0;
+          const nb = [[x-1,y],[x+1,y],[x,y-1],[x,y+1]];
+          for(const n of nb){
+            const nx = n[0], ny = n[1];
+            if(nx>=0 && nx<cols && ny>=0 && ny<rows){
+              const nidx = ny*cols + nx;
+              if(mask[nidx]){
+                const w = (cond[idx] + cond[nidx]) * 0.5;
+                sum += w * pressureOld[nidx];
+                wsum += w;
+              }
+            }
+          }
+          tmp[idx] = (wsum > 0) ? (sum / wsum) : pressureOld[idx];
+        }
+      }
+      // swap
+      for(let i=0;i<N;i++) pressureOld[i] = tmp[i];
+    }
+    // copy back
+    for(let i=0;i<N;i++) pressure[i] = pressureOld[i];
+  }
+
+  function computeVelocityFromPressure(){
+    if(!pressure) return;
+    for(let y=0;y<rows;y++){
+      for(let x=0;x<cols;x++){
+        const idx = y*cols + x;
+        if(!mask[idx]){ velX[idx]=0; velY[idx]=0; continue; }
+        // central differences (handle boundaries)
+        const getP = (xx,yy)=>{
+          if(xx<0||xx>=cols||yy<0||yy>=rows) return pressure[idx];
+          const id = yy*cols + xx; return pressure[id];
+        };
+        const pxm = getP(x-1,y), pxp = getP(x+1,y);
+        const pym = getP(x,y-1), pyp = getP(x,y+1);
+        let gx = (pxp - pxm) * 0.5;
+        let gy = (pyp - pym) * 0.5;
+        // velocity = -grad(pressure)
+        gx = -gx; gy = -gy;
+        // scale by conductivity and visual scale
+        velX[idx] = gx * cond[idx] * velScale;
+        velY[idx] = gy * cond[idx] * velScale;
+      }
+    }
+  }
+
+  function fetchCSV(){
+    return fetch('vessel.csv').then(r=>r.text());
+  }
+
+  // Set canvas size based on CSV dimensions and scale
+  function resizeCanvas(){
+    canvas.width = cols * pixelScale;
+    canvas.height = rows * pixelScale;
+    canvas.style.width = canvas.width + 'px';
+    canvas.style.height = canvas.height + 'px';
+  }
+
+  // Draw vessel mask as background
+  function drawMask(){
+    const img = ctx.createImageData(canvas.width, canvas.height);
+    for(let y=0;y<rows;y++){
+      for(let x=0;x<cols;x++){
+        const m = mask[y*cols + x];
+        // fill scaled block
+        for(let sy=0; sy<pixelScale; sy++){
+          const py = y*pixelScale + sy;
+          for(let sx=0; sx<pixelScale; sx++){
+            const px = x*pixelScale + sx;
+            const i = (py*canvas.width + px)*4;
+            if(m){ // vessel: dark gray
+              img.data[i+0] = 80;
+              img.data[i+1] = 80;
+              img.data[i+2] = 80;
+              img.data[i+3] = 255;
+            } else { // background: near black
+              img.data[i+0] = 10;
+              img.data[i+1] = 10;
+              img.data[i+2] = 10;
+              img.data[i+3] = 255;
+            }
+          }
+        }
+      }
+    }
+    ctx.putImageData(img,0,0);
+  }
+
+  // Helper: check mask at floating pos (samples nearest pixel)
+  function maskAtFx(xf, yf){
+    const x = Math.floor(xf / pixelScale);
+    const y = Math.floor(yf / pixelScale);
+    if(x<0||x>=cols||y<0||y>=rows) return 0;
+    return mask[y*cols + x];
+  }
+
+  // Spawn cells at random vessel pixels
+  function randomVesselPos(){
+    // sample random until find vessel
+    for(let i=0;i<2000;i++){
+      const xi = Math.floor(Math.random()*cols);
+      const yi = Math.floor(Math.random()*rows);
+      if(mask[yi*cols + xi]){
+        // center of scaled pixel
+        return { x: (xi + 0.5) * pixelScale, y: (yi + 0.5) * pixelScale };
+      }
+    }
+    // fallback center
+    return { x: canvas.width/2, y: canvas.height/2 };
+  }
+
+  // Determine region flow by x coordinate (simple heuristic):
+  // left third = artery (flow down), right third = vein (flow up), middle = capillary (mostly horizontal)
+  function flowForXpixel(px){
+    const xi = Math.floor(px / pixelScale);
+    const ratio = xi / Math.max(1, cols-1);
+    if(ratio < 1/3){
+      // artery: downward flow
+      return { vx: (Math.random()-0.5)*0.3, vy: 0.6 + Math.random()*0.6 };
+    } else if(ratio > 2/3){
+      // vein: upward flow
+      return { vx: (Math.random()-0.5)*0.3, vy: - (0.6 + Math.random()*0.6) };
+    } else {
+      // capillary: small rightward flow with small vertical jitter
+      return { vx: 0.3 + Math.random()*0.5, vy: (Math.random()-0.5)*0.2 };
+    }
+  }
+
+  // Cells
+  let cells = [];
+  function createCells(n, initial=false){
+    cells = [];
+    for(let i=0;i<n;i++){
+      // spawn strategy: if initial startup, distribute across allowedList; otherwise prefer artery/vein entries
+      let p, spawnIdx = -1, spawnType = 'cap';
+      if(initial && allowedList && allowedList.length){
+        const idx = allowedList[Math.floor(Math.random()*allowedList.length)];
+        const ay = Math.floor(idx / cols);
+        const ax = idx % cols;
+        p = { x: (ax + 0.5) * pixelScale, y: (ay + 0.5) * pixelScale };
+        spawnIdx = idx;
+      } else if(arteryEntries && arteryEntries.length && veinEntries && veinEntries.length){
+        // alternate or randomly choose side to create flow balance
+        if(i % 2 === 0){
+          const idx = arteryEntries[Math.floor(Math.random()*arteryEntries.length)];
+          const ay = Math.floor(idx / cols); const ax = idx % cols;
+          p = { x: (ax + 0.5) * pixelScale, y: (ay + 0.5) * pixelScale };
+          spawnIdx = idx; spawnType = 'artery';
+        } else {
+          const idx = veinEntries[Math.floor(Math.random()*veinEntries.length)];
+          const ay = Math.floor(idx / cols); const ax = idx % cols;
+          p = { x: (ax + 0.5) * pixelScale, y: (ay + 0.5) * pixelScale };
+          spawnIdx = idx; spawnType = 'vein';
+        }
+      } else if(allowedList && allowedList.length){
+        const idx = allowedList[Math.floor(Math.random()*allowedList.length)];
+        const ay = Math.floor(idx / cols);
+        const ax = idx % cols;
+        p = { x: (ax + 0.5) * pixelScale, y: (ay + 0.5) * pixelScale };
+        spawnIdx = idx;
+      } else {
+        p = randomVesselPos();
+      }
+      // velocity: set direction according to spawnType or local flow
+      let vx=0, vy=0;
+      if(spawnType === 'artery'){
+        // artery: initial downward
+        vx = (Math.random()-0.5)*0.3; vy = 0.8 + Math.random()*0.6;
+      } else if(spawnType === 'vein'){
+        // vein: initial upward
+        vx = (Math.random()-0.5)*0.3; vy = - (0.8 + Math.random()*0.6);
+      } else {
+        const flow = flowForXpixel(p.x);
+        vx = flow.vx + (Math.random()-0.5)*0.6;
+        vy = flow.vy + (Math.random()-0.5)*0.6;
+      }
+      const baseR = pixelScale * 3;
+      cells.push({ x:p.x, y:p.y, vx:vx, vy:vy, r: baseR, baseR, spawnIdx, spawnType });
+    }
+  }
+
+  // Animation loop
+  let paused = false;
+  function step(){
+    if(!mask) return;
+    if(!paused){
+      // redraw background
+      drawMask();
+      // draw and move cells (iterate backwards so we can remove)
+  let toSpawnArtery = 0, toSpawnVein = 0;
+  for(let ci = cells.length - 1; ci >= 0; ci--){
+    const c = cells[ci];
+          // apply local velocity from pressure-based field if available, else fallback to flowForXpixel
+    let sampledVx = null, sampledVy = null;
+    const sx = Math.floor(c.x / pixelScale);
+    const sy = Math.floor(c.y / pixelScale);
+    if(sx>=0 && sx<cols && sy>=0 && sy<rows && velX){
+      const sidx = sy*cols + sx;
+      sampledVx = velX[sidx]; sampledVy = velY[sidx];
+    }
+    if(sampledVx !== null){
+      c.vx += (sampledVx - c.vx) * 0.18 + (Math.random()-0.5)*0.02;
+      c.vy += (sampledVy - c.vy) * 0.18 + (Math.random()-0.5)*0.02;
+    } else {
+      const localFlow = flowForXpixel(c.x);
+      c.vx += (localFlow.vx - c.vx) * 0.06 + (Math.random()-0.5)*0.02;
+      c.vy += (localFlow.vy - c.vy) * 0.06 + (Math.random()-0.5)*0.02;
+    }
+
+          // try move
+          let nx = c.x + c.vx;
+          let ny = c.y + c.vy;
+    if(maskAtFx(nx, ny)){
+      c.x = nx; c.y = ny;
+      c.outsideCount = 0;
+      // if cell moved into artery/vein mask, remove it immediately and schedule spawn
+      const gx2 = Math.floor(c.x / pixelScale);
+      const gy2 = Math.floor(c.y / pixelScale);
+      if(gx2>=0 && gx2<cols && gy2>=0 && gy2<rows){
+        const gidx2 = gy2*cols + gx2;
+        if(arteryMask && arteryMask[gidx2]){ toSpawnArtery++; cells.splice(ci,1); continue; }
+        if(veinMask && veinMask[gidx2]){ toSpawnVein++; cells.splice(ci,1); continue; }
+      }
+    } else {
+            // if next step is outside vessel, attempt to follow local flow to re-enter
+            // use nearest-vessel map to smoothly nudge back in and slide along edge
+            // convert current float pos to nearest grid index
+            const gx = Math.floor(c.x / pixelScale);
+            const gy = Math.floor(c.y / pixelScale);
+            if(gx>=0 && gx<cols && gy>=0 && gy<rows){
+              const gidx = gy*cols + gx;
+              const nxv = nearestX[gidx];
+              const nyv = nearestY[gidx];
+              if(allowedList && allowedList.length){
+                // find nearest allowed pixel using allowedNearest maps
+                const anx = allowedNearestX[gidx];
+                const any = allowedNearestY[gidx];
+                if(anx >= 0){
+                  const tx = (anx + 0.5) * pixelScale;
+                  const ty = (any + 0.5) * pixelScale;
+                  let dx = tx - c.x;
+                  let dy = ty - c.y;
+                  const dist = Math.hypot(dx, dy) || 1;
+                  // move towards allowed center smoothly
+                  c.x += dx * 0.22;
+                  c.y += dy * 0.22;
+                  // slide along tangent similar to before but using allowed center
+                  const nxn = dx / dist;
+                  const nyn = dy / dist;
+                  let txn = -nyn;
+                  let tyn = nxn;
+                  const dot = c.vx * txn + c.vy * tyn;
+                  c.vx = txn * dot + nxn * (c.vx * nxn + c.vy * nyn) * 0.25;
+                  c.vy = tyn * dot + nyn * (c.vx * nxn + c.vy * nyn) * 0.25;
+                  c.vx += txn * (Math.random()-0.5) * 0.03;
+                  c.vy += tyn * (Math.random()-0.5) * 0.03;
+                }
+              } else {
+                // fallback to previous nearest-vessel behavior
+                if(nxv >= 0){
+                  const tx = (nxv + 0.5) * pixelScale;
+                  const ty = (nyv + 0.5) * pixelScale;
+                  let dx = tx - c.x; let dy = ty - c.y;
+                  const dist = Math.hypot(dx, dy) || 1;
+                  const pull = Math.min(1.0, 0.6 + 0.08 * dist);
+                  c.x += dx * 0.18 * pull; c.y += dy * 0.18 * pull;
+                }
+              }
+    } else {
+      // outside canvas: increment outside counter
+      c.outsideCount = (c.outsideCount||0) + 1;
+      // if it's clearly left the canvas area or has been outside multiple frames, remove it
+      if(c.x < 0 || c.y < 0 || c.x > canvas.width || c.y > canvas.height || c.outsideCount > 6){
+        // count spawn depending on spawnType
+        if(c.spawnType === 'artery') toSpawnArtery++;
+        else if(c.spawnType === 'vein') toSpawnVein++;
+        else {
+          // if generic cell left, respawn into allowed random
+          if(allowedList && allowedList.length){
+            const idx = allowedList[Math.floor(Math.random()*allowedList.length)];
+            const ay = Math.floor(idx / cols), ax = idx % cols;
+            c.x = (ax + 0.5) * pixelScale; c.y = (ay + 0.5) * pixelScale;
+            const flow = flowForXpixel(c.x);
+            c.vx = flow.vx + (Math.random()-0.5)*0.6;
+            c.vy = flow.vy + (Math.random()-0.5)*0.6;
+          } else {
+            const p = randomVesselPos(); c.x = p.x; c.y = p.y;
+          }
+        }
+        // remove this cell (swap with last)
+        cells.splice(ci,1);
+        continue;
+      } else {
+        // small bounce to keep it moving near border
+        c.vx *= -0.6; c.vy *= -0.6;
+      }
+    }
+          }
+
+  // clamp to canvas
+  if(c.x < 0) c.x = 0;
+  if(c.y < 0) c.y = 0;
+  if(c.x > canvas.width) c.x = canvas.width;
+  if(c.y > canvas.height) c.y = canvas.height;
+
+        // draw cell (soft red)
+        const grad = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, c.r*2);
+        grad.addColorStop(0, 'rgba(255,90,90,1)');
+        grad.addColorStop(0.4, 'rgba(200,30,30,0.9)');
+        grad.addColorStop(1, 'rgba(120,10,10,0.1)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, c.r, 0, Math.PI*2);
+    ctx.fill();
+    }
+    // after processing all cells, spawn replacements at entries to keep count stable
+    const desired = parseInt(countInput.value,10) || 0;
+    let toSpawn = desired - cells.length;
+    // prioritize artery spawns then vein
+    while(toSpawn > 0 && arteryEntries && arteryEntries.length){
+      const idx = arteryEntries[Math.floor(Math.random()*arteryEntries.length)];
+      const ay = Math.floor(idx / cols), ax = idx % cols;
+      const p = { x: (ax + 0.5) * pixelScale, y: (ay + 0.5) * pixelScale };
+      const vx = (Math.random()-0.5)*0.3; const vy = 0.8 + Math.random()*0.6;
+      const baseR = pixelScale * 1.2;
+      cells.push({ x:p.x, y:p.y, vx:vx, vy:vy, r: baseR, baseR, spawnIdx: idx, spawnType: 'artery' });
+      toSpawn--;
+    }
+    while(toSpawn > 0 && veinEntries && veinEntries.length){
+      const idx = veinEntries[Math.floor(Math.random()*veinEntries.length)];
+      const ay = Math.floor(idx / cols), ax = idx % cols;
+      const p = { x: (ax + 0.5) * pixelScale, y: (ay + 0.5) * pixelScale };
+      const vx = (Math.random()-0.5)*0.3; const vy = - (0.8 + Math.random()*0.6);
+      const baseR = pixelScale * 1.2;
+      cells.push({ x:p.x, y:p.y, vx:vx, vy:vy, r: baseR, baseR, spawnIdx: idx, spawnType: 'vein' });
+      toSpawn--;
+    }
+    // if still need to spawn, fill from allowedList
+    while(toSpawn > 0 && allowedList && allowedList.length){
+      const idx = allowedList[Math.floor(Math.random()*allowedList.length)];
+      const ay = Math.floor(idx / cols), ax = idx % cols;
+      const p = { x: (ax + 0.5) * pixelScale, y: (ay + 0.5) * pixelScale };
+      const flow = flowForXpixel(p.x);
+      const vx = flow.vx + (Math.random()-0.5)*0.6;
+      const vy = flow.vy + (Math.random()-0.5)*0.6;
+      const baseR = pixelScale * 1.2;
+      cells.push({ x:p.x, y:p.y, vx:vx, vy:vy, r: baseR, baseR, spawnIdx: idx, spawnType: 'cap' });
+      toSpawn--;
+    }
+    }
+    requestAnimationFrame(step);
+  }
+
+  // wire up UI
+  countInput.addEventListener('input', ()=>{
+    const n = parseInt(countInput.value,10);
+    countLabel.textContent = n;
+    createCells(n);
+  });
+  scaleInput.addEventListener('input', ()=>{
+    pixelScale = parseInt(scaleInput.value,10);
+    scaleLabel.textContent = pixelScale;
+    if(cols && rows){
+      resizeCanvas();
+  // rebuild allowed maps using margin computed from typical cell radius
+  const sampleR = Math.max(1.2, pixelScale*1.1);
+  const margin = Math.ceil(sampleR / pixelScale) + 1; // ensure small buffer
+  buildAllowedNearest(margin);
+  // update existing cells size to match new scale (keep positions/velocities)
+  const newSize = pixelScale * 1.2;
+  for(const c of cells){ c.r = newSize; c.baseR = newSize; }
+  // rebuild pressure/velocity field
+  buildConductivityAndBoundaries();
+  solvePressure(120);
+  computeVelocityFromPressure();
+    }
+  });
+  pauseBtn.addEventListener('click', ()=>{ paused = !paused; pauseBtn.textContent = paused ? 'Resume' : 'Pause'; });
+
+  // init
+  fetchCSV().then(text=>{
+    parseCSV(text);
+    resizeCanvas();
+  drawMask();
+  // initial allowed map based on pixelScale and typical radius
+  const sampleR = Math.max(1.2, pixelScale*1.1);
+  const margin = Math.ceil(sampleR / pixelScale) + 1;
+  buildAllowedNearest(margin);
+  createCells(parseInt(countInput.value,10), true);
+    requestAnimationFrame(step);
+  }).catch(err=>{
+    console.error('Failed to load vessel.csv', err);
+    ctx.fillStyle = '#fff'; ctx.font='16px sans-serif'; ctx.fillText('Failed to load vessel.csv (open via a local server)',20,40);
+  });
+  </script>
+</body>
+</html>
