@@ -110,7 +110,7 @@
         // scale sprite so text is readable relative to model size
         sprite.scale.set(3, 1.5, 1);
         // position slightly above the top of the stage
-        sprite.position.set(center.x, bbox.max.y + 0.15, center.z);
+        sprite.position.set(center.x - 2, bbox.max.y-2, center.z + 2);
         sprite.renderOrder = 999;
         root.add(sprite);
       } catch (e) {
@@ -147,6 +147,45 @@
   aperturePivot.add(apertureMesh);
   root.add(aperturePivot);
   console.log('aperture: pivot created at', aperturePivot.position);
+  // create a 3D sprite label below the aperture that says '光圈'
+  try {
+    // ensure bounding box is available on the geometry
+    geometry.computeBoundingBox();
+    const bbox = geometry.boundingBox.clone();
+
+    // create canvas texture with Chinese text
+    const DPR = Math.max(1, window.devicePixelRatio || 1);
+    const cw = 256 * DPR;
+    const ch = 128 * DPR;
+    const canvas = document.createElement('canvas');
+    canvas.width = cw;
+    canvas.height = ch;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(DPR, DPR);
+    ctx.clearRect(0, 0, cw, ch);
+    ctx.fillStyle = 'white';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '60px sans-serif';
+    ctx.fillText('光圈', cw / (2 * DPR), ch / (2 * DPR));
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.encoding = THREE.sRGBEncoding;
+    tex.needsUpdate = true;
+
+    const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+    const sprite = new THREE.Sprite(spriteMat);
+    // scale sprite so text is readable relative to model size
+    sprite.scale.set(2.5, 1.2, 1);
+    // position slightly below the bottom of the aperture (world coords)
+    // pivot.position is the world center used for the aperture; bbox.min.y is the mesh-local bottom
+    const labelWorldY = aperturePivot.position.y + bbox.min.y - 0.55;
+    sprite.position.set(aperturePivot.position.x, labelWorldY, aperturePivot.position.z+1);
+    sprite.renderOrder = 999;
+    root.add(sprite);
+  } catch (e) {
+    console.warn('Failed to create aperture label:', e);
+  }
     });
 
     function animate() {
