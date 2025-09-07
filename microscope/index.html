@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>Microscope Viewer</title>
+  <style>
+    body { margin: 0; background: #222; color: #fff; }
+    #viewer { width: 100vw; height: 100vh; display: block; }
+    .label { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.5); padding: 8px; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <div class="label">滑鼠左鍵旋轉，右鍵拖曳，滾輪縮放</div>
+  <div id="viewer"></div>
+  <script type="module">
+    import * as THREE from './lib/three.module.js';
+    import { OrbitControls } from './lib/OrbitControls.js';
+    import { STLLoader } from './lib/STLLoader.js';
+
+  const container = document.getElementById('viewer');
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setClearColor(0x222222);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  container.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 100);
+    camera.position.set(0, 100, 20);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    /*
+    controls.target.set(0,0,2);
+    controls.update();
+    controls.minPolarAngle = 3 / 4 * Math.PI;
+    controls.maxPolarAngle = 5 / 4 * Math.PI;
+    controls.minAzimuthAngle = 0;
+    controls.maxAzimuthAngle = 0;
+    */
+
+    controls.target.set(0,0,2);
+    controls.update();
+    // 允許從正上方(0)到正下方(Math.PI)觀看
+    controls.minPolarAngle = 0;
+    controls.maxPolarAngle = Math.PI;
+    // 解除方位角鎖定，允許繞Y軸自由旋轉
+    controls.minAzimuthAngle = -Infinity;
+    controls.maxAzimuthAngle = Infinity;
+
+
+    // 環境光與平行光
+    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+    dirLight.position.set(10, 10, 10);
+    scene.add(dirLight);
+
+    const root = new THREE.Group();
+    scene.add(root);   
+
+  // raycaster / interaction state for clicking the aperture disk
+  const raycaster = new THREE.Raycaster();
+  const pointer = new THREE.Vector2();
+  let apertureMesh = null; // the mesh itself (for hit tests)
+  let aperturePivot = null; // pivot group placed at the disk center (for rotation)
+  let apertureTargetRotation = 0; // radians
+
+  // Optional: set this to a Vector3 to force the pivot center for the aperture disk.
+  // Example: const APERTURE_CENTER = new THREE.Vector3(0, 0, 2);
+  // Set to null to use the STL geometry bounding-box center (default).
+  // -- Updated: preset to OpenSCAD pivot (0,-40,0) transformed to three.js (0,0,40) --
+  const APERTURE_CENTER = new THREE.Vector3(0, 0, 40 );
+
+  // If your STL was exported from OpenSCAD (Z-up) and looks rotated in three.js (Y-up),
+  // enable this flag to apply a correction at load time.
+  const OPENSCAD_REORIENT = true;
+
+  // rotatable parts config: map filename (or pattern) -> config
+  const rotatableConfigs = {
+  // add optional `step` (radians) to control per-click rotation amount; default = Math.PI/3
+  'disk.stl': { id: 'aperture', axis: new THREE.Vector3(0, 1, 0), label: '光圈', step: Math.PI/3 },
+  'objective.stl': { id: 'objective', axis: new THREE.Vector3(0, 1, 0), label: '物鏡', step: Math.PI*2/3 },
+  'eyepiece.stl': { id: 'eyepiece', axis: new THREE.Vector3(0, 1, 0), label: '目鏡', step: Math.PI/6 },
+  'big_knob.stl': { id: 'big_knob', axis: new THREE.Vector3(0, 1, 0), label: '大旋鈕', step: Math.PI/8 },
+  'small_knob.stl': { id: 'small_knob', axis: new THREE.Vector3(0, 1, 0), label: '小旋鈕', step: Math.PI/12 }
+  };
+
+  // Optional: per-part OpenSCAD coordinates for pivot center and axis (Z-up)
+  // Fill these with the coordinates you use in OpenSCAD (model space). They will be
+  // converted to three.js coordinates automatically when OPENSCAD_REORIENT is true.
+  // Example:
+  // const scadPartConfigs = {
+  //   'disk.stl': { scadCenter: new THREE.Vector3(0, -40, 0), scadAxis: new THREE.Vector3(0, 0, 1) }
+  // };
+  const scadPartConfigs = {
+  // example: big knob pivot in OpenSCAD local coords (Z-up)
+  // OpenSCAD pivot: (140, 0, 150) and rotate around local Y in OpenSCAD
+  'eyepiece.stl': { scadCenter: new THREE.Vector3(0, 0, 0), scadAxis: new THREE.Vector3(0, 0, 1) },
+  'objective.stl': { scadCenter: new THREE.Vector3(-25, 0, 350), scadAxis: new THREE.Vector3(0.514496, 0, 0.847493) },  
+  'big_knob.stl': { scadCenter: new THREE.Vector3(140, 0, 150), scadAxis: new THREE.Vector3(0, 1, 0) },
+  'small_knob.stl': { scadCenter: new THREE.Vector3(140, 0, 150), scadAxis: new THREE.Vector3(0, 1, 0) }
+  };
+
+  // Convert an OpenSCAD position/vector to three.js space (applies the same transform
+  // used on geometries when OPENSCAD_REORIENT is true)
+  function scadToThree(vec) {
+    const v = vec.clone();
+    if (OPENSCAD_REORIENT) {
+      const m = new THREE.Matrix4().makeRotationX(-Math.PI / 2);
+      v.applyMatrix4(m);
+    }
+    return v;
+  }
+
+  // Resolve center and axis for a given filename. Uses scadPartConfigs, rotatableConfigs, APERTURE_CENTER, or geometry bbox.
+  function resolvePartCenterAndAxis(filename, geometry, cfg) {
+    // ensure geometry bbox present
+    if (geometry && typeof geometry.computeBoundingBox === 'function') geometry.computeBoundingBox();
+    const bbox = geometry && geometry.boundingBox ? geometry.boundingBox : null;
+
+    // center priority: scadPartConfigs.scadCenter -> cfg.center -> APERTURE_CENTER (for disk) -> bbox center
+    let center = null;
+    const scadCfg = scadPartConfigs[filename];
+    if (scadCfg && scadCfg.scadCenter) {
+      center = scadToThree(scadCfg.scadCenter.clone());
+    } else if (cfg && cfg.center) {
+      center = cfg.center.clone();
+    } else if (filename && /disk|aperture/i.test(filename) && APERTURE_CENTER) {
+      center = APERTURE_CENTER.clone();
+    } else if (bbox) {
+      center = bbox.getCenter(new THREE.Vector3()).clone();
+    } else {
+      center = new THREE.Vector3();
+    }
+
+    // axis priority: scadPartConfigs.scadAxis -> cfg.axis -> default Y
+    let axis = null;
+    if (scadCfg && scadCfg.scadAxis) {
+      axis = scadToThree(scadCfg.scadAxis.clone()).normalize();
+    } else if (cfg && cfg.axis) {
+      axis = cfg.axis.clone().normalize();
+    } else {
+      axis = new THREE.Vector3(0, 1, 0);
+    }
+
+    return { center, axis };
+  }
+
+  // runtime registry of parts that can be rotated
+  const rotatableParts = {}; // id -> { pivot, mesh, axis, current, target, ease }
+  const DEBUG_VIS = true; // set to true to visualize pivots/axes
+  // expose for debugging in console
+  window.rotatableParts = rotatableParts;
+
+  function reorientGeometryForOpenSCAD(geometry) {
+    // many OpenSCAD exports are Z-up; three.js uses Y-up by default.
+    // rotate -90deg around X to convert Z-up -> Y-up.
+    if (geometry && typeof geometry.rotateX === 'function') {
+      geometry.rotateX(-Math.PI / 2);
+    } else if (geometry && geometry.applyMatrix4) {
+      const m = new THREE.Matrix4().makeRotationX(-Math.PI / 2);
+      geometry.applyMatrix4(m);
+    }
+    // recompute normals if available
+    if (typeof geometry.computeVertexNormals === 'function') geometry.computeVertexNormals();
+    if (typeof geometry.computeBoundingBox === 'function') geometry.computeBoundingBox();
+  }
+
+    // 載入資料夾中所有 STL
+    const loader = new STLLoader();
+    // 列出此資料夾中要載入的 .stl 檔案（由伺服器端靜態提供）
+    const stlFiles = [
+      'base.stl',
+      'big_knob.stl',
+      'disk.stl',
+      'eyepiece.stl',
+      'light.stl',
+      'objective.stl',
+      'small_knob.stl',
+      'stage.stl'
+    ];
+
+  // helper: create a canvas sprite with given text
+    function makeTextSprite(text, fontSize = 60, width = 256, height = 128) {
+      const DPR = Math.max(1, window.devicePixelRatio || 1);
+      const cw = width * DPR;
+      const ch = height * DPR;
+      const canvas = document.createElement('canvas');
+      canvas.width = cw;
+      canvas.height = ch;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(DPR, DPR);
+      ctx.clearRect(0, 0, cw, ch);
+      ctx.fillStyle = 'white';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = `${fontSize}px sans-serif`;
+      ctx.fillText(text, width / 2, height / 2);
+  const tex = new THREE.CanvasTexture(canvas);
+  // support newer three.js (colorSpace) while keeping backward compatibility (encoding)
+  if ('colorSpace' in tex) tex.colorSpace = THREE.SRGBColorSpace || 'srgb';
+  else tex.encoding = THREE.sRGBEncoding;
+  tex.needsUpdate = true;
+      return tex;
+    }
+
+    // fit camera to show entire object group after all models finish loading
+    function fitCameraToObject(object3D, camera, controls, margin = 1.2) {
+      const box = new THREE.Box3().setFromObject(object3D);
+      if (!box || box.isEmpty()) return;
+      const center = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
+      const maxDim = Math.max(size.x, size.y, size.z);
+      const fov = camera.fov * Math.PI / 180;
+      let distance = (maxDim * 0.5) / Math.tan(fov / 2);
+      distance *= margin;
+
+      // keep current viewing direction from controls.target to camera if possible
+      const dir = camera.position.clone().sub(controls.target || new THREE.Vector3()).normalize();
+      if (dir.length() === 0) dir.set(0, 0, 1);
+      camera.position.copy(center).add(dir.multiplyScalar(distance));
+
+      // adjust near/far to encompass the scene
+      camera.near = Math.max(0.01, distance / 1000);
+      camera.far = Math.max(1000, distance * 1000);
+      camera.updateProjectionMatrix();
+
+      controls.target.copy(center);
+      controls.update();
+    }
+
+    // simple load counter to detect when all files have finished (success or error)
+    let _loadedCount = 0;
+    const _totalFiles = stlFiles.length;
+    function markLoaded() {
+      _loadedCount++;
+      if (_loadedCount >= _totalFiles) {
+        // microtask to ensure scene graph updated
+        setTimeout(() => fitCameraToObject(root, camera, controls, 1.2), 0);
+      }
+    }
+
+    stlFiles.forEach(filename => {
+      loader.load(filename, geometry => {
+        // If needed, reorient geometry exported from OpenSCAD
+        if (OPENSCAD_REORIENT) {
+          try { reorientGeometryForOpenSCAD(geometry); } catch (e) { console.warn('reorient failed', e); }
+        }
+        // choose material color heuristically by filename
+        let color = 0x999999;
+        if (/stage/i.test(filename)) color = 0x6699ff;
+        else if (/disk|aperture/i.test(filename)) color = 0xffcc66;
+        else if (/knob|eyepiece|objective/i.test(filename)) color = 0xffcc66;
+        else if (/light/i.test(filename)) color = 0xffee99;
+
+        const material = new THREE.MeshStandardMaterial({ color, metalness: 0.2, roughness: 0.7 });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.name = filename;
+
+        // special-case: stage -> add label '載物臺'
+        if (/stage/i.test(filename)) {
+          root.add(mesh);
+          try {
+            geometry.computeBoundingBox();
+            const bbox = geometry.boundingBox.clone();
+            const center = new THREE.Vector3();
+            bbox.getCenter(center);
+            const tex = makeTextSprite('載物臺', 52, 256, 128);
+            const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+            const sprite = new THREE.Sprite(spriteMat);
+            sprite.scale.set(3, 1.5, 1);
+            sprite.position.set(center.x - 2, bbox.max.y - 2, center.z + 2);
+            sprite.renderOrder = 999;
+            root.add(sprite);
+          } catch (e) {
+            console.warn('Failed to create stage label for', filename, e);
+          }
+          markLoaded();
+          return;
+        }
+
+        // special-case: disk/aperture -> create pivot so it rotates around its center and enable interaction
+        if (/disk|aperture/i.test(filename)) {
+          // resolve center and axis (this will convert OpenSCAD pivots if provided)
+          const cfg = rotatableConfigs[filename];
+          const { center, axis } = resolvePartCenterAndAxis(filename, geometry, cfg);
+          console.log('aperture:', filename, 'resolved center =', center, 'axis =', axis);
+          const pivot = new THREE.Group();
+          pivot.position.copy(center);
+          mesh.position.sub(center);
+          apertureMesh = mesh;
+          apertureMesh.name = 'aperture_disk';
+          aperturePivot = pivot;
+          aperturePivot.name = 'aperture_pivot';
+          aperturePivot.add(apertureMesh);
+          root.add(aperturePivot);
+          // register rotatable part if configured
+          if (cfg) {
+            rotatableParts[cfg.id] = {
+              pivot: aperturePivot,
+              mesh: apertureMesh,
+              axis: axis.clone().normalize(),
+              current: 0,
+              target: 0,
+              ease: 0.15,
+              label: cfg.label,
+              step: (cfg.step !== undefined) ? cfg.step : Math.PI / 3
+            };
+            if (DEBUG_VIS) {
+              const s = new THREE.Mesh(new THREE.SphereGeometry(0.5), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+              aperturePivot.add(s);
+              const ah = new THREE.AxesHelper(5);
+              aperturePivot.add(ah);
+            }
+          }
+          console.log('aperture: pivot created at', aperturePivot.position);
+          // label '光圈'
+          try {
+            geometry.computeBoundingBox();
+            const bbox = geometry.boundingBox.clone();
+            const tex = makeTextSprite('光圈', 60, 256, 128);
+            const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+            const sprite = new THREE.Sprite(spriteMat);
+            sprite.scale.set(2.5, 1.2, 1);
+            const labelWorldY = aperturePivot.position.y + bbox.min.y - 0.55;
+            sprite.position.set(aperturePivot.position.x, labelWorldY, aperturePivot.position.z + 1);
+            sprite.renderOrder = 999;
+            root.add(sprite);
+          } catch (e) {
+            console.warn('Failed to create aperture label for', filename, e);
+          }
+          markLoaded();
+          return;
+        }
+
+        // default: add mesh to scene
+        // If this filename is configured as rotatable, create a pivot at its center and register it
+        const cfg = rotatableConfigs[filename];
+        if (cfg) {
+          try {
+            const { center: partCenter, axis: partAxis } = resolvePartCenterAndAxis(filename, geometry, cfg);
+            const partPivot = new THREE.Group();
+            partPivot.position.copy(partCenter);
+            mesh.position.sub(partCenter);
+            partPivot.add(mesh);
+            root.add(partPivot);
+            rotatableParts[cfg.id] = {
+              pivot: partPivot,
+              mesh: mesh,
+              axis: partAxis.clone().normalize(),
+              current: 0,
+              target: 0,
+              ease: 0.15,
+              label: cfg.label,
+              step: (cfg.step !== undefined) ? cfg.step : Math.PI / 3
+            };
+            if (DEBUG_VIS) {
+              const s = new THREE.Mesh(new THREE.SphereGeometry(0.5), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+              partPivot.add(s);
+              const ah = new THREE.AxesHelper(5);
+              partPivot.add(ah);
+            }
+          } catch (e) {
+            console.warn('Failed to register rotatable part for', filename, e);
+            root.add(mesh);
+          }
+        } else {
+          root.add(mesh);
+        }
+        markLoaded();
+      }, undefined, err => {
+        console.warn('Failed to load', filename, err);
+        markLoaded();
+      });
+    });
+
+    function animate() {
+      requestAnimationFrame(animate);
+      // update all registered rotatable parts
+      Object.values(rotatableParts).forEach(part => {
+        // ease current -> target
+        part.current = THREE.MathUtils.lerp(part.current, part.target, part.ease);
+        // if the axis is exactly one of the principal axes, write into rotation.x/y/z directly for slight performance
+        const ax = part.axis;
+        // treat nearly-exact ±1 principal axes as principal and apply sign
+        const eps = 1e-6;
+        if (Math.abs(ax.x) > 1 - eps && Math.abs(ax.y) < eps && Math.abs(ax.z) < eps) {
+          part.pivot.rotation.x = part.current * Math.sign(ax.x);
+        } else if (Math.abs(ax.y) > 1 - eps && Math.abs(ax.x) < eps && Math.abs(ax.z) < eps) {
+          part.pivot.rotation.y = part.current * Math.sign(ax.y);
+        } else if (Math.abs(ax.z) > 1 - eps && Math.abs(ax.x) < eps && Math.abs(ax.y) < eps) {
+          part.pivot.rotation.z = part.current * Math.sign(ax.z);
+        } else {
+          // arbitrary axis: set quaternion from axis-angle
+          const q = new THREE.Quaternion().setFromAxisAngle(ax, part.current);
+          part.pivot.quaternion.copy(q);
+        }
+      });
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // pointer interaction: rotate aperture by 60deg per click when clicked
+    function onPointerMove(event) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      if (!apertureMesh) {
+        renderer.domElement.style.cursor = '';
+        return;
+      }
+      raycaster.setFromCamera(pointer, camera);
+      const hits = raycaster.intersectObject(apertureMesh, true);
+      renderer.domElement.style.cursor = hits.length ? 'pointer' : '';
+    }
+
+    function onPointerDown(event) {
+      // detect clicks on the aperture mesh
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(pointer, camera);
+      // test against all registered rotatable parts first
+      const candidates = Object.values(rotatableParts).map(p => p.mesh);
+      const hits = raycaster.intersectObjects(candidates, true);
+      if (hits.length) {
+        // find which part was hit (mesh match)
+        const hitMesh = hits[0].object;
+        const partEntry = Object.values(rotatableParts).find(p => p.mesh === hitMesh || p.mesh === hits[0].object || hits[0].object.parent === p.mesh);
+        if (partEntry) {
+          // add configured step to the target rotation for that part
+          const step = (partEntry.step !== undefined) ? partEntry.step : Math.PI / 3;
+          partEntry.target += step;
+          return;
+        }
+      }
+      // fallback: original aperture behavior if set
+      if (apertureMesh) {
+        const apertureHits = raycaster.intersectObject(apertureMesh, true);
+        if (apertureHits.length) apertureTargetRotation += Math.PI / 3;
+      }
+    }
+
+    renderer.domElement.addEventListener('pointermove', onPointerMove);
+    renderer.domElement.addEventListener('pointerdown', onPointerDown);
+
+    // runtime helpers: change per-part step or set target programmatically
+    window.setPartStep = function(partId, radians) {
+      if (rotatableParts[partId]) rotatableParts[partId].step = radians;
+    };
+    window.setPartTarget = function(partId, radians) {
+      if (rotatableParts[partId]) rotatableParts[partId].target = radians;
+    };
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
