@@ -20,14 +20,10 @@ main_body_base_h = 100;
 
 // 物鏡 
 lens_r = 15;
-lens_l = [55, 70, 85];
+lens_l = [50, 65, 80];
 
-    
-dist_z = 30;
-dist_x = 25;  
-
-turret_h = 40;
-turret_r = 70;
+turret_h = 30;
+turret_r = 60;
 
 // 載物臺
 stage_z = 200;
@@ -74,16 +70,19 @@ module microscope() {
     base();
     main_body();    
 
+    
 
     objective_lenses();    
 
 
-
+    
     stage();    
 
     aperture_disk();
     
     big_knob();
+
+    
     small_knob();
 
     
@@ -152,36 +151,6 @@ module main_body() {
     }
 
 }
-// 物鏡
-module objective_lenses( R=30) {
-    //鼻輪角度
-    angle = 45;
-    base_z = base_h + main_body_h;
-    
-  
-
-    translate([-dist_x,0,base_z])
-    union(){
-        rotate(a=angle, v=[0,1,0])
-            cylinder(h = turret_h, r = turret_r, center=true);
-        
-        // 物鏡旋轉時 物鏡的旋轉圓心距離物鏡頂部距離
-        n = len(lens_l);    
-        for (i = [0:n-1]){
-            angle = 360*i/n;
-            rotate(a = angle, v = [-1,0,-1])
-            translate([dist_x,0,-(lens_l[i]/2 + dist_z)])    
-            cylinder(h=lens_l[i], r=lens_r, center=true);
-        }
-    }
-
-    
-
-
-
-    
-}
-
 // -------- 自訂點積函數 --------
 function dot(v1, v2) = v1[0]*v2[0] + v1[1]*v2[1] + v1[2]*v2[2];
 
@@ -196,7 +165,7 @@ function rotate_vector(v, a, axis) =
 
 
 // 物鏡
-module objective_lenses2( R=30) {
+module objective_lenses( R=30) {
     n = len(lens_l);
     base_z = base_h + main_body_h;
 
@@ -372,7 +341,7 @@ module eyepiece() {
 module eyepiece_base(){
     angle = 45;
     base_pos = [-eyepiece_tube_h*sin(angle)+90, 0, base_h + main_body_h + arm_h +50];
-    z2 = base_h + main_body_h + arm_h+10;    
+    z2 = base_h + main_body_h + arm_h;    
 
 
     hull() {
