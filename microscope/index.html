@@ -7,11 +7,34 @@
     body { margin: 0; background: #222; color: #fff; }
     #viewer { width: 100vw; height: 100vh; display: block; }
     .label { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.5); padding: 8px; border-radius: 6px; }
+    /* floating knob UI */
+    .knob-ui {
+      position: absolute;
+      width: 64px;
+      height: 64px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.9);
+      background: rgba(0,0,0,0.35);
+      backdrop-filter: blur(4px);
+      z-index: 9999;
+      cursor: pointer;
+      pointer-events: auto;
+    }
+    .knob-ui svg { width: 38px; height: 38px; fill: white; opacity: 0.95; }
   </style>
 </head>
 <body>
   <div class="label">滑鼠左鍵旋轉，右鍵拖曳，滾輪縮放</div>
   <div id="viewer"></div>
+  <div id="knobUI" class="knob-ui" title="粗調節輪：控制載物臺升降"> 
+    <!-- bidirectional double-arrow circle -->
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 2 L15 6 H13 V11 H11 V6 H9 L12 2 Z M12 22 L9 18 H11 V13 H13 V18 H15 L12 22 Z M4 11 H8 V13 H4 V11 Z M16 11 H20 V13 H16 V11 Z" />
+    </svg>
+  </div>
   <script type="module">
     import * as THREE from './lib/three.module.js';
     import { OrbitControls } from './lib/OrbitControls.js';
@@ -76,11 +99,11 @@
   // rotatable parts config: map filename (or pattern) -> config
   const rotatableConfigs = {
   // add optional `step` (radians) to control per-click rotation amount; default = Math.PI/3
-  'disk.stl': { id: 'aperture', axis: new THREE.Vector3(0, 1, 0), label: '光圈', step: Math.PI/3 },
+  'disk.stl': { id: 'aperture', axis: new THREE.Vector3(0, 1, 0), label: '光圈', step: -Math.PI/3 },
   'objective.stl': { id: 'objective', axis: new THREE.Vector3(0, 1, 0), label: '物鏡', step: Math.PI*2/3 },
   'eyepiece.stl': { id: 'eyepiece', axis: new THREE.Vector3(0, 1, 0), label: '目鏡', step: Math.PI/6 },
-  'big_knob.stl': { id: 'big_knob', axis: new THREE.Vector3(0, 1, 0), label: '大旋鈕', step: Math.PI/8 },
-  'small_knob.stl': { id: 'small_knob', axis: new THREE.Vector3(0, 1, 0), label: '小旋鈕', step: Math.PI/12 }
+  'big_knob.stl': { id: 'big_knob', axis: new THREE.Vector3(0, 1, 0), label: '粗調節輪', step: Math.PI/8 },
+  'small_knob.stl': { id: 'small_knob', axis: new THREE.Vector3(0, 1, 0), label: '細調節輪', step: Math.PI/12 }
   };
 
   // Optional: per-part OpenSCAD coordinates for pivot center and axis (Z-up)
@@ -150,6 +173,19 @@
   // expose for debugging in console
   window.rotatableParts = rotatableParts;
 
+  // stage group reference for moving up/down
+  let stageGroup = null;
+  let pendingLightStageMesh = null;
+  let lightStageMesh = null; // reference to light_stage mesh for brightness control
+  // big knob id if present
+  let bigKnobEntry = null;
+  // UI element
+  const knobUI = document.getElementById('knobUI');
+  let knobUIVisible = false;
+  // base positions to maintain relative offsets
+  let baseStageY = 0;
+  let baseApertureY = 0;
+
   function reorientGeometryForOpenSCAD(geometry) {
     // many OpenSCAD exports are Z-up; three.js uses Y-up by default.
     // rotate -90deg around X to convert Z-up -> Y-up.
@@ -172,7 +208,8 @@
       'big_knob.stl',
       'disk.stl',
       'eyepiece.stl',
-      'light.stl',
+      'light_stage.stl',
+      'light_source.stl',
       'objective.stl',
       'small_knob.stl',
       'stage.stl'
@@ -234,7 +271,14 @@
       _loadedCount++;
       if (_loadedCount >= _totalFiles) {
         // microtask to ensure scene graph updated
-        setTimeout(() => fitCameraToObject(root, camera, controls, 1.2), 0);
+        setTimeout(() => {
+          fitCameraToObject(root, camera, controls, 1.2);
+          // capture base Y positions once scene is fit and meshes/pivots exist
+          try {
+            if (stageGroup) baseStageY = stageGroup.position.y;
+            if (aperturePivot) baseApertureY = aperturePivot.position.y;
+          } catch (e) { console.warn('Failed to capture base positions', e); }
+        }, 0);
       }
     }
 
@@ -246,10 +290,11 @@
         }
         // choose material color heuristically by filename
         let color = 0x999999;
-        if (/stage/i.test(filename)) color = 0x6699ff;
+        if (/light/i.test(filename)) color = 0xffee99;        
+        else if (/stage/i.test(filename)) color = 0x6699ff;        
         else if (/disk|aperture/i.test(filename)) color = 0xffcc66;
         else if (/knob|eyepiece|objective/i.test(filename)) color = 0xffcc66;
-        else if (/light/i.test(filename)) color = 0xffee99;
+
 
         const material = new THREE.MeshStandardMaterial({ color, metalness: 0.2, roughness: 0.7 });
         const mesh = new THREE.Mesh(geometry, material);
@@ -258,8 +303,16 @@
         mesh.name = filename;
 
         // special-case: stage -> add label '載物臺'
-        if (/stage/i.test(filename)) {
-          root.add(mesh);
+        if (/stage/i.test(filename) && filename !== 'light_stage.stl') {
+          stageGroup = new THREE.Group();
+          stageGroup.add(mesh);
+          root.add(stageGroup);
+          // 如果 light_stage.stl 已經載入，這時加進來
+          if (pendingLightStageMesh) {
+            stageGroup.add(pendingLightStageMesh);
+            lightStageMesh = pendingLightStageMesh; // set reference
+            pendingLightStageMesh = null;
+          }
           try {
             geometry.computeBoundingBox();
             const bbox = geometry.boundingBox.clone();
@@ -275,6 +328,18 @@
           } catch (e) {
             console.warn('Failed to create stage label for', filename, e);
           }
+          markLoaded();
+          return;
+        }
+
+        // light_stage.stl：如果 stageGroup 已經有就直接加，否則暫存
+        if (filename === 'light_stage.stl') {
+          if (stageGroup) {
+            stageGroup.add(mesh);
+          } else {
+            pendingLightStageMesh = mesh;
+          }
+          lightStageMesh = mesh; // store reference for brightness control
           markLoaded();
           return;
         }
@@ -302,7 +367,7 @@
               axis: axis.clone().normalize(),
               current: 0,
               target: 0,
-              ease: 0.15,
+              ease: 0.5,
               label: cfg.label,
               step: (cfg.step !== undefined) ? cfg.step : Math.PI / 3
             };
@@ -350,10 +415,14 @@
               axis: partAxis.clone().normalize(),
               current: 0,
               target: 0,
-              ease: 0.15,
+              ease: 0.5,
               label: cfg.label,
               step: (cfg.step !== undefined) ? cfg.step : Math.PI / 3
             };
+            // capture big_knob entry for stage linkage
+            if (cfg.id === 'big_knob') {
+              bigKnobEntry = rotatableParts[cfg.id];
+            }
             if (DEBUG_VIS) {
               const s = new THREE.Mesh(new THREE.SphereGeometry(0.5), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
               partPivot.add(s);
@@ -396,8 +465,79 @@
           part.pivot.quaternion.copy(q);
         }
       });
+      // control light_stage brightness based on aperture rotation
+      if (lightStageMesh && rotatableParts['aperture']) {
+        const aperture = rotatableParts['aperture'];
+        const angle = ((-aperture.current % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI); // normalize to [0, 2π), inverted for negative step
+        const level = Math.floor(angle / (2 * Math.PI / 6)); // 0 to 5
+        const intensity = 0.2 + (level / 5) * 0.8; // 0.2 to 1.0
+        const originalColor = new THREE.Color(0xffee99);
+        const hsl = originalColor.getHSL({});
+        hsl.l *= intensity;
+        lightStageMesh.material.color.setHSL(hsl.h, hsl.s, hsl.l);
+      }
       renderer.render(scene, camera);
     }
+    
+    // update UI position each frame (after render to use camera proj)
+    function updateKnobUI() {
+      // show UI if big knob pivot exists
+      const entry = rotatableParts['big_knob'] || bigKnobEntry;
+      if (!entry || !entry.pivot) {
+        knobUI.style.display = 'none';
+        knobUIVisible = false;
+        return;
+      }
+      // get world position of the pivot
+      const worldPos = new THREE.Vector3();
+      entry.pivot.getWorldPosition(worldPos);
+      // project to NDC
+      const ndc = worldPos.clone().project(camera);
+      // convert to screen coords relative to renderer dom
+      const rect = renderer.domElement.getBoundingClientRect();
+      const x = (ndc.x * 0.5 + 0.5) * rect.width + rect.left;
+      const y = (-ndc.y * 0.5 + 0.5) * rect.height + rect.top;
+      // position the UI slightly offset to the right
+      knobUI.style.left = `${x + 24}px`;
+      knobUI.style.top = `${y - 32}px`;
+      knobUI.style.display = 'flex';
+      knobUIVisible = true;
+    }
+
+    // small helper: move stage vertically in world units
+    function moveStageBy(dy) {
+      if (!stageGroup) return;
+      stageGroup.position.y += dy;
+    }
+
+    // map big knob rotation target to stage Y position (one full rotation moves stage by some amount)
+    function syncKnobToStage() {
+      const knob = rotatableParts['big_knob'];
+      if (!knob || !stageGroup) return;
+      // define a conversion: radians -> world units; tune as needed
+      const radiusFactor = 20; // scale of vertical travel per radian
+      const desiredY = knob.target * radiusFactor;
+      // ease stage position toward desired (simple lerp)
+      stageGroup.position.y = THREE.MathUtils.lerp(stageGroup.position.y, desiredY, 0.8);
+      // also move aperture (if present) to keep its relative offset to stage
+      if (aperturePivot) {
+        // compute desired aperture world Y as baseApertureY + (stageY - baseStageY)
+        const dy = stageGroup.position.y - baseStageY;
+        const desiredApertureY = baseApertureY + dy;
+        // ease the aperture pivot's world position Y by adjusting its local position
+        // since aperturePivot is a Group in world coords, set its position.y directly
+        aperturePivot.position.y = THREE.MathUtils.lerp(aperturePivot.position.y, desiredApertureY, 0.8);
+      }
+    }
+
+    // call updateKnobUI in animation frames by wrapping the renderer render with UI update
+    (function wrapRenderLoop() {
+      const origRender = renderer.render.bind(renderer);
+      renderer.render = function(sceneArg, cameraArg) {
+        origRender(sceneArg, cameraArg);
+        updateKnobUI();
+      };
+    })();
     animate();
 
     // pointer interaction: rotate aperture by 60deg per click when clicked
@@ -444,6 +584,23 @@
     renderer.domElement.addEventListener('pointermove', onPointerMove);
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
 
+    // knob UI click: left half -> up, right half -> down (or toggle)
+    knobUI.addEventListener('click', (ev) => {
+      // compute click relative to element center
+      const r = knobUI.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      if (ev.clientX < cx) {
+        // move up
+        moveStageBy(1.0);
+        // also nudge knob target backwards so it visually rotates
+        if (rotatableParts['big_knob']) rotatableParts['big_knob'].target -= 0.12;
+      } else {
+        // move down
+        moveStageBy(-1.0);
+        if (rotatableParts['big_knob']) rotatableParts['big_knob'].target += 0.12;
+      }
+    });
+
     // runtime helpers: change per-part step or set target programmatically
     window.setPartStep = function(partId, radians) {
       if (rotatableParts[partId]) rotatableParts[partId].step = radians;
@@ -457,6 +614,14 @@
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
     });
+    // ensure stage sync runs each frame
+    (function startSync() {
+      const step = () => {
+        syncKnobToStage();
+        requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    })();
   </script>
 </body>
 </html>

@@ -70,7 +70,7 @@ $fn = 100; // 圓形和圓柱體的細節度
 
 // 主模組
 module microscope() {
-
+    
     base();
     main_body();    
 
@@ -89,9 +89,10 @@ module microscope() {
     
     eyepiece();
     eyepiece_base();
+    
 
-
-    light_plate();
+    light_stage();
+    light_source();
 
 
 }
@@ -111,15 +112,17 @@ module base() {
 
     }
 }
-module light_plate(){
-    union(){
-        translate([0, 0, base_h + light_tube_h/2-5]) cylinder(h = light_tube_h, r = light_hole_r,  center=true);
-        
-        translate([0,0,stage_z]){
-            cylinder(h=stage_h, r=stage_hole_r, $fn=64, center=true);
-        }       
-    } 
+module light_stage(){
+       
+    translate([0,0,stage_z]){
+        cylinder(h=stage_h, r=stage_hole_r, $fn=64, center=true);
+    }       
+
 }
+
+module light_source(){
+    translate([0, 0, base_h + light_tube_h/2-5]) cylinder(h = light_tube_h, r = light_hole_r,  center=true);
+    }
 
 // 主體支架和鏡臂
 module main_body() {
@@ -269,7 +272,7 @@ module aperture_disk() {
         translate(center) 
             cylinder(h = disk_h, r = disk_r, $fn=64, center=true);
         for(i=[0:5]) {
-            angle = i*360 / len(aperture_holes) + 30;
+            angle = i*360 / len(aperture_holes) + 90;
             //length = disk_r - 5 - max(aperture_holes);
             length = -center[1];
             r_hole = aperture_holes[i];
