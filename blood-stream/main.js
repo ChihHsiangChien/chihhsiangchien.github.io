@@ -5,14 +5,15 @@ window.onload = function () {
     let particles = [];
     const particleCount = 200;
     const particleRadius = 0.5;
-    const tubeRadius = 3.5;
+    const tubeRadius = 4;
     
-    const compressionFactor = 0.5;
-    const compressionSpeed = 0.8;
+    const compressionFactor = 0.2;
+    const compressionSpeed = 0.5;
     const tubeLength = 200;      // 血管長度
     const compressionLength = 30; // 壓縮區長度
     const centralSectionZ = 0;
 
+    const pulseImpulse = 20;
     // Physics bodies and meshes
     let frontValveBodies = [], backValveBodies = [];
     let frontValveMeshes = [], backValveMeshes = [];
@@ -276,44 +277,34 @@ window.onload = function () {
     
     function createValve(position) {
         const valveSize = tubeRadius * 2;
-        const leafGeometry = new THREE.BoxGeometry(0.2, valveSize * 0.7, 0.1);
-        const leafMaterial = new THREE.MeshLambertMaterial({ color: 0x3498db, transparent: true, opacity: 0.9 });
-        
-        const valveLeaf1 = new THREE.Mesh(leafGeometry, leafMaterial);
-        const valveLeaf2 = new THREE.Mesh(leafGeometry, leafMaterial);
-        
-        const valveBody1 = new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(0.1, valveSize*0.35, 0.05)) });
-        const valveBody2 = new CANNON.Body({ mass: 0, shape: new CANNON.Box(new CANNON.Vec3(0.1, valveSize*0.35, 0.05)) });
-
+        // 讓瓣膜顏色明顯
+        const leafMaterial = new THREE.MeshLambertMaterial({ color: 0xff0000, transparent: false, opacity: 1 });
+        const leafGeometry = new THREE.BoxGeometry(tubeRadius * 1.5, valveSize * 0.7, 0.2);
+        // 單片瓣膜
+        const valveLeaf = new THREE.Mesh(leafGeometry, leafMaterial);
+        // 物理剛體：薄片，橫跨血管
+        const valveBody = new CANNON.Body({
+            mass: 0,
+            shape: new CANNON.Box(new CANNON.Vec3((tubeRadius * 1.5) / 2, (valveSize * 0.7) / 2, 0.1)),
+            collisionFilterGroup: 2,
+            collisionFilterMask: 1 // 只與血球碰撞
+        });
+        let zPos;
         if (position === 'front') {
-            valveLeaf1.position.set(-tubeRadius * 0.5, 0, -tubeLength / 2 + 1);
-            valveLeaf2.position.set(tubeRadius * 0.5, 0, -tubeLength / 2 + 1);
-            
-            valveBody1.position.set(-tubeRadius * 0.5, 0, -tubeLength / 2 + 1);
-            valveBody2.position.set(tubeRadius * 0.5, 0, -tubeLength / 2 + 1);
-
-            const hinge1 = new CANNON.LockConstraint(valveBody1, valveBody2);
-            world.addConstraint(hinge1);
-            
-            frontValveMeshes.push(valveLeaf1, valveLeaf2);
-            frontValveBodies.push(valveBody1, valveBody2);
+            zPos = -compressionLength / 2 - 1;
+            valveLeaf.position.set(0, 0, zPos);
+            valveBody.position.set(0, 0, zPos);
+            frontValveMeshes.push(valveLeaf);
+            frontValveBodies.push(valveBody);
         } else if (position === 'back') {
-            valveLeaf1.position.set(-tubeRadius * 0.5, 0, tubeLength / 2 - 1);
-            valveLeaf2.position.set(tubeRadius * 0.5, 0, tubeLength / 2 - 1);
-
-            valveBody1.position.set(-tubeRadius * 0.5, 0, tubeLength / 2 - 1);
-            valveBody2.position.set(tubeRadius * 0.5, 0, tubeLength / 2 - 1);
-
-            const hinge2 = new CANNON.LockConstraint(valveBody1, valveBody2);
-            world.addConstraint(hinge2);
-            
-            backValveMeshes.push(valveLeaf1, valveLeaf2);
-            backValveBodies.push(valveBody1, valveBody2);
+            zPos = compressionLength / 2 + 1;
+            valveLeaf.position.set(0, 0, zPos);
+            valveBody.position.set(0, 0, zPos);
+            backValveMeshes.push(valveLeaf);
+            backValveBodies.push(valveBody);
         }
-        
-        scene.add(valveLeaf1, valveLeaf2);
-        world.addBody(valveBody1);
-        world.addBody(valveBody2);
+        scene.add(valveLeaf);
+        world.addBody(valveBody);
     }
     
     function addValve(position) {
@@ -383,12 +374,9 @@ window.onload = function () {
         compressionZoneMesh.scale.x = currentTubeRadius / tubeRadius;
         compressionZoneMesh.scale.y = 1;  //這是血管軸
         compressionZoneMesh.scale.z = currentTubeRadius / tubeRadius; // 長度不變
-        // 力量基準值
-        const maxStrength = 100 * Math.abs(currentCompression);
         if (vesselState === 'compress' || vesselState === 'expand') {
             particles.forEach(p => {
                 const posZ = p.body.position.z;
-                const pulseImpulse = 50;
                 if (!p.hasPulsed) {
                     if (vesselState === 'compress') {
                         // 壓縮時，只給一次 impulse
@@ -424,29 +412,45 @@ window.onload = function () {
             const r = Math.sqrt(p.body.position.x**2 + p.body.position.y**2);
             if (r > tubeRadius) {
                 const direction = new CANNON.Vec3(p.body.position.x, p.body.position.y, 0).unit();
-                const normalForce = direction.scale(-1500); // 增強約束力
+                const normalForce = direction.scale(-1500);
                 p.body.applyForce(normalForce, p.body.position);
             }
-            
-            // 前瓣膜物理
-            if (frontValveEnabled) {
-                const valveZ = frontValveBodies[0].position.z;
-                if (p.body.position.z < valveZ && p.body.velocity.z < 0) { // 逆流時關閉瓣膜
-                    frontValveBodies.forEach(b => {
-                        const pushBackForce = new CANNON.Vec3(0, 0, -20);
-                        b.applyImpulse(pushBackForce, b.position);
-                    });
+            // 單向閥物理：
+            // z 減少（順流），z 增加是逆流
+            // 前瓣膜zPos = -compressionLength / 2 - 1
+            // 後瓣膜zPos = compressionLength / 2 + 1
+            // particle的postion.z若在兩瓣膜之間，且velocity.z > 0 則後瓣膜阻擋             
+            // particle的postion.z若在兩瓣膜之間，且velocity.z < 0 則前瓣膜阻擋
+            if (frontValveEnabled && backValveEnabled && frontValveBodies.length > 0 && backValveBodies.length > 0) {
+                const frontZ = frontValveBodies[0].position.z;
+                const backZ = backValveBodies[0].position.z;
+                // 在兩瓣膜之間
+                if (p.body.position.z > frontZ && p.body.position.z < backZ) {
+                    // 順流（z 減少）允許，逆流（z 增加）阻擋
+                    if (p.body.velocity.z > 0) { // 逆流，阻擋於後瓣膜
+                        p.body.velocity.z = 0;
+                        p.body.position.z = backZ;
+                    } else if (p.body.velocity.z < 0) { // 順流，檢查前瓣膜
+                        // 不阻擋
+                    }
                 }
-            }
-
-            // 後瓣膜物理
-            if (backValveEnabled) {
-                const valveZ = backValveBodies[0].position.z;
-                if (p.body.position.z > valveZ && p.body.velocity.z > 0) { // 順流時開啟瓣膜
-                    backValveBodies.forEach(b => {
-                        const pushBackForce = new CANNON.Vec3(0, 0, 20);
-                        b.applyImpulse(pushBackForce, b.position);
-                    });
+            } else if (frontValveEnabled && frontValveBodies.length > 0) {
+                const frontZ = frontValveBodies[0].position.z;
+                if (p.body.position.z > frontZ && p.body.velocity.z < 0) {
+                    // 只裝前瓣膜時，z 減少（順流）允許，z 增加（逆流）不會進入這區間
+                    // 不阻擋
+                }
+                if (p.body.position.z > frontZ && p.body.velocity.z > 0) {
+                    // 逆流，阻擋於前瓣膜外側
+                    p.body.velocity.z = 0;
+                    p.body.position.z = frontZ;
+                }
+            } else if (backValveEnabled && backValveBodies.length > 0) {
+                const backZ = backValveBodies[0].position.z;
+                if (p.body.position.z < backZ && p.body.velocity.z > 0) {
+                    // 逆流，阻擋於後瓣膜內側
+                    p.body.velocity.z = 0;
+                    p.body.position.z = backZ;
                 }
             }
         });
@@ -476,18 +480,13 @@ window.onload = function () {
             p.mesh.quaternion.copy(p.body.quaternion);
         });
 
-        if (frontValveEnabled) {
+        if (frontValveEnabled && frontValveMeshes.length > 0 && frontValveBodies.length > 0) {
             frontValveMeshes[0].position.copy(frontValveBodies[0].position);
             frontValveMeshes[0].quaternion.copy(frontValveBodies[0].quaternion);
-            frontValveMeshes[1].position.copy(frontValveBodies[1].position);
-            frontValveMeshes[1].quaternion.copy(frontValveBodies[1].quaternion);
         }
-        
-        if (backValveEnabled) {
+        if (backValveEnabled && backValveMeshes.length > 0 && backValveBodies.length > 0) {
             backValveMeshes[0].position.copy(backValveBodies[0].position);
             backValveMeshes[0].quaternion.copy(backValveBodies[0].quaternion);
-            backValveMeshes[1].position.copy(backValveBodies[1].position);
-            backValveMeshes[1].quaternion.copy(backValveBodies[1].quaternion);
         }
 
         renderer.render(scene, camera);
