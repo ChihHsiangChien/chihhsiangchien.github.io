@@ -6,6 +6,7 @@ function getActivityFile() {
   const activity = params.get('activity');
   if (activity === 'animal') return 'data_animal.json';
   if (activity === 'plant') return 'data_plant.json';
+  if (activity === 'heart') return 'data_heart.json';
   return 'data.json';
 }
 
@@ -14,7 +15,7 @@ function loadActivity() {
   fetch(getActivityFile())
     .then(res => res.json())
     .then(data => {
-      document.getElementById('activity-title').textContent = data.title || '排序活動';
+      //document.getElementById('activity-title').textContent = data.title || '排序活動';
       initCards(data);
     });
 }
@@ -35,7 +36,9 @@ tocBtns.forEach(btn => {
 loadActivity();
 
 const list = document.getElementById('sortable-list');
+
 let correctOrder = [];
+let isCyclic = false;
 
 
 // 依標題自動產生顏色（hash to HSL）
@@ -54,6 +57,7 @@ function getCardColor(title, color) {
 function initCards(data) {
   // 取得正確順序
   correctOrder = data.cards.map(card => card.title);
+  isCyclic = !!data.isCyclic;
   // 隨機排序
   const shuffled = [...data.cards].sort(() => Math.random() - 0.5);
   list.innerHTML = '';
@@ -152,35 +156,73 @@ document.getElementById('check-btn').onclick = function() {
     const span = li.querySelector('.card-title');
     return span ? span.textContent : li.textContent;
   });
+  let isAllCorrect = false;
   let correct = 0;
-  for (let i = 0; i < correctOrder.length; i++) {
-    // 移除舊的標記
-    const mark = cards[i].querySelector('.checkmark');
-    if (mark) mark.remove();
-    // 檢查正確與否
-    if (userOrder[i] === correctOrder[i]) {
-      correct++;
-      const o = document.createElement('span');
-      o.className = 'checkmark';
-      o.textContent = 'O';
-      o.style.color = '#388e3c';
-      o.style.float = 'right';
-      o.style.fontWeight = 'bold';
-      o.style.fontSize = '1.3em';
-      cards[i].appendChild(o);
-    } else {
-      const x = document.createElement('span');
-      x.className = 'checkmark';
-      x.textContent = 'X';
-      x.style.color = '#d32f2f';
-      x.style.float = 'right';
-      x.style.fontWeight = 'bold';
-      x.style.fontSize = '1.3em';
-      cards[i].appendChild(x);
+  if (isCyclic) {
+    // 循環比對
+    const n = correctOrder.length;
+    for (let offset = 0; offset < n; offset++) {
+      let match = true;
+      for (let i = 0; i < n; i++) {
+        if (userOrder[i] !== correctOrder[(i + offset) % n]) {
+          match = false;
+          break;
+        }
+      }
+      if (match) {
+        isAllCorrect = true;
+        break;
+      }
+    }
+    // 標記 O/X
+    for (let i = 0; i < n; i++) {
+      const mark = cards[i].querySelector('.checkmark');
+      if (mark) mark.remove();
+      const span = document.createElement('span');
+      span.className = 'checkmark';
+      if (isAllCorrect) {
+        span.textContent = 'O';
+        span.style.color = '#388e3c';
+      } else {
+        span.textContent = 'X';
+        span.style.color = '#d32f2f';
+      }
+      span.style.float = 'right';
+      span.style.fontWeight = 'bold';
+      span.style.fontSize = '1.3em';
+      cards[i].appendChild(span);
+    }
+  } else {
+    // 一般模式
+    for (let i = 0; i < correctOrder.length; i++) {
+      // 移除舊的標記
+      const mark = cards[i].querySelector('.checkmark');
+      if (mark) mark.remove();
+      // 檢查正確與否
+      if (userOrder[i] === correctOrder[i]) {
+        correct++;
+        const o = document.createElement('span');
+        o.className = 'checkmark';
+        o.textContent = 'O';
+        o.style.color = '#388e3c';
+        o.style.float = 'right';
+        o.style.fontWeight = 'bold';
+        o.style.fontSize = '1.3em';
+        cards[i].appendChild(o);
+      } else {
+        const x = document.createElement('span');
+        x.className = 'checkmark';
+        x.textContent = 'X';
+        x.style.color = '#d32f2f';
+        x.style.float = 'right';
+        x.style.fontWeight = 'bold';
+        x.style.fontSize = '1.3em';
+        cards[i].appendChild(x);
+      }
     }
   }
   const result = document.getElementById('result');
-  if (correct === correctOrder.length) {
+  if ((isCyclic && isAllCorrect) || (!isCyclic && correct === correctOrder.length)) {
     result.textContent = '全部正確！';
     result.style.color = '#2d6cdf';
   } else {
