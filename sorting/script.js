@@ -5,6 +5,7 @@ function getActivityFile() {
   const params = new URLSearchParams(window.location.search);
   const activity = params.get('activity');
   if (activity === 'animal') return 'data_animal.json';
+  if (activity === 'plant') return 'data_plant.json';
   return 'data.json';
 }
 
