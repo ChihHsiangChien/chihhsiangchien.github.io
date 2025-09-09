@@ -70,7 +70,7 @@ $fn = 100; // 圓形和圓柱體的細節度
 
 // 主模組
 module microscope() {
-    
+    /*
     base();
     main_body();    
 
@@ -80,9 +80,9 @@ module microscope() {
 
 
     stage();    
-
+    */
     aperture_disk();
-    
+    /*
     big_knob();
     small_knob();
 
@@ -93,7 +93,7 @@ module microscope() {
 
     light_stage();
     light_source();
-
+    */
 
 }
 
