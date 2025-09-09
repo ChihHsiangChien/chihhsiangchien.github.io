@@ -27,11 +27,13 @@ let ionsDimmed = false;
 toggleIonBtn.addEventListener('click', () => {
     ionsDimmed = !ionsDimmed;
     ions.forEach(ion => {
-        if (ion.type === 'Cl' || ion.type === 'Na') {
+        if (ion.type === 'Cl' || ion.type === 'Na' || ion.type === 'H2O') {
             ion.element.style.opacity = ionsDimmed ? '0.2' : '1';
         }
     });
 });
+
+
 const ionSize = 15;
 const liquidHeight = 100;
 
@@ -46,7 +48,13 @@ const ionSizes = {
 // Function to create an ion element
 function createIon(type, isNew = false) {
     const ion = document.createElement('div');
-    ion.classList.add('ion', `${type}-ion`);
+    // Use CSS class names that match style.css: OH uses .OH-ion, H2O styles use .H2O-molecule
+    ion.classList.add('ion');
+    if (type === 'H2O') {
+        ion.classList.add('H2O-molecule');
+    } else {
+        ion.classList.add(`${type}-ion`);
+    }
     if (type === 'OH') {
         ion.innerHTML = '<div class="O-atom"></div><div class="H-atom"></div>';
     } else if (type === 'H2O') {
@@ -62,9 +70,12 @@ function createIon(type, isNew = false) {
     const dropTargetY = beakerBottom - liquidBottom;
     //const dropTargetY = liquidBottom; 
     if (isNew) {
-        // Start from the top of the beaker for new ions
-        startX = 50; // Center
-        startY = 10; // Top
+        // Start near the top inside the liquid (use bottom % so 80% is near top)
+        // Use a safer top margin (80%) and account for ion height (sizeYPercent)
+        startX = 50; // Center horizontally
+        // place within bounds so larger ions won't overflow visually
+        // keep a bit of margin from the top and ensure the whole element stays inside
+        startY = Math.min(100 - sizeYPercent - 1, 80);
     } else {
         // Random position within the liquid for initial ions
         startX = Math.random() * (100 - sizeXPercent) + sizeXPercent / 2;
@@ -75,15 +86,22 @@ function createIon(type, isNew = false) {
     ion.style.bottom = `${startY}%`;
 
     // 根據 ionsDimmed 狀態自動設置 Na+ 和 Cl- 透明度
-    if ((type === 'Na' || type === 'Cl') && typeof ionsDimmed !== 'undefined') {
+    if ((type === 'Na' || type === 'Cl' || type === 'H2O') && typeof ionsDimmed !== 'undefined') {
         ion.style.opacity = ionsDimmed ? '0.2' : '1';
     }
 
-    // Add initial random velocity
+    // Add initial random velocity. For newly created ions prefer a small downward
+    // y velocity so they don't immediately move above the liquid surface.
     ion.velocity = {
         x: (Math.random() - 0.5) * 0.5,
         y: (Math.random() - 0.5) * 0.5
     };
+    if (isNew) {
+        // ensure downward movement (negative bottom-percent velocity)
+        ion.velocity.y = -Math.abs(ion.velocity.y) || -0.1;
+        // make downward velocity gentle
+        ion.velocity.y *= 0.6;
+    }
 
     return ion;
 }
@@ -99,12 +117,12 @@ function initializeSolution() {
     for (let i = 0; i < initialH; i++) {
         const hIon = createIon('H');
         liquid.appendChild(hIon);
-        ions.push({ type: 'H', element: hIon, state: 'active', x: parseFloat(hIon.style.left), y: parseFloat(hIon.style.bottom), velocity: hIon.velocity });
+    ions.push({ type: 'H', element: hIon, state: 'active', x: parseFloat(hIon.style.left), y: parseFloat(hIon.style.bottom), velocity: hIon.velocity, birth: performance.now() });
     }
     for (let i = 0; i < initialCl; i++) {
         const clIon = createIon('Cl');
         liquid.appendChild(clIon);
-        ions.push({ type: 'Cl', element: clIon, state: 'active', x: parseFloat(clIon.style.left), y: parseFloat(clIon.style.bottom), velocity: clIon.velocity });
+    ions.push({ type: 'Cl', element: clIon, state: 'active', x: parseFloat(clIon.style.left), y: parseFloat(clIon.style.bottom), velocity: clIon.velocity, birth: performance.now() });
     }
     
     updateDisplay();
@@ -153,17 +171,23 @@ addBtn.addEventListener('click', () => {
         for (let i = 0; i < amountToAdd; i++) {
             const naIon = createIon('Na', true);
             const ohIon = createIon('OH', true);            
-            /*
+            // Align OH with Na to ensure they start together and avoid OH
+            // randomly spawning above the surface.
             ohIon.style.left = naIon.style.left;
             ohIon.style.bottom = naIon.style.bottom;
             ohIon.velocity = { ...naIon.velocity };
-            */
+
             liquid.appendChild(naIon);
             liquid.appendChild(ohIon);
-            const x = parseFloat(naIon.style.left);
-            const y = parseFloat(naIon.style.bottom);
-            ions.push({ type: 'Na', element: naIon, state: 'active', x, y, velocity: naIon.velocity });
-            ions.push({ type: 'OH', element: ohIon, state: 'active', x, y, velocity: ohIon.velocity });
+            // Parse and clamp coordinates so ions never start outside liquid bounds
+            const x = Math.max(0, Math.min(100, parseFloat(naIon.style.left) || 50));
+            const yRaw = parseFloat(naIon.style.bottom) || 80;
+            const size = ionSizes['OH'] || 15;
+            const sizeYPercent = (size / 300) * 100;
+            const y = Math.max(sizeYPercent / 2, Math.min(100 - sizeYPercent / 2, yRaw));
+            const now = performance.now();
+            ions.push({ type: 'Na', element: naIon, state: 'active', x, y, velocity: naIon.velocity, birth: now });
+            ions.push({ type: 'OH', element: ohIon, state: 'active', x, y, velocity: ohIon.velocity, birth: now });
         }
         updateDisplay();
     }, 1000);
@@ -214,22 +238,43 @@ function animate() {
     let hIons = ions.filter(ion => ion.type === 'H' && ion.state === 'active');
     let ohIons = ions.filter(ion => ion.type === 'OH' && ion.state === 'active');
 
+    // Neutralization: require a short grace period after creation so newly
+    // spawned OH/Na are visible before immediately neutralizing.
+    const NEUTRALIZE_MIN_DISTANCE = 12; // smaller threshold for cleaner visuals
+    const NEUTRALIZE_GRACE_MS = 150; // ms
     for (let hIon of hIons) {
         for (let ohIon of ohIons) {
             if (hIon.state === 'active' && ohIon.state === 'active') {
+                const now = performance.now();
+                if ((now - (hIon.birth || 0)) < NEUTRALIZE_GRACE_MS) continue;
+                if ((now - (ohIon.birth || 0)) < NEUTRALIZE_GRACE_MS) continue;
+
                 const dx = hIon.x - ohIon.x;
                 const dy = hIon.y - ohIon.y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
-                const minDistance = 20;
-                
-                if (distance < minDistance) {
+
+                if (distance < NEUTRALIZE_MIN_DISTANCE) {
                     hIon.state = 'neutralized';
                     ohIon.state = 'neutralized';
 
+                    // Create H2O at the midpoint and position it there
+                    const midX = (hIon.x + ohIon.x) / 2;
+                    const midY = (hIon.y + ohIon.y) / 2;
                     const h2o = createIon('H2O');
+                    h2o.style.left = `${midX}%`;
+                    h2o.style.bottom = `${midY}%`;
+                    // ensure H2O doesn't immediately drift
+                    h2o.velocity = { 
+                        x: (Math.random() - 0.5) * 0.5,
+                        y: (Math.random() - 0.5) * 0.5 
+                    };
+                    // make sure it's visually above background
+                    h2o.style.zIndex = '5';
+                    h2o.style.pointerEvents = 'none';
+                    console.log('H2O created at', midX, midY);
                     liquid.appendChild(h2o);
-                    ions.push({ type: 'H2O', element: h2o, state: 'active', x: (hIon.x + ohIon.x) / 2, y: (hIon.y + ohIon.y) / 2, velocity: h2o.velocity });
-                    
+                    ions.push({ type: 'H2O', element: h2o, state: 'active', x: Number(midX), y: Number(midY), velocity: h2o.velocity, birth: now });
+
                     hIon.element.remove();
                     ohIon.element.remove();
                     updateDisplay();
@@ -256,6 +301,11 @@ function animate() {
             if (ion.y <= sizeYPercent / 2 || ion.y >= 100 - sizeYPercent / 2) {
                 ion.velocity.y *= -1;
             }
+
+            // Clamp to ensure ion never visually exceeds liquid bounds
+            ion.x = Math.max(sizeXPercent / 2, Math.min(100 - sizeXPercent / 2, ion.x));
+            ion.y = Math.max(sizeYPercent / 2, Math.min(100 - sizeYPercent / 2, ion.y));
+                        
             
             // Apply new position
             ion.element.style.left = `${ion.x}%`;
@@ -266,5 +316,8 @@ function animate() {
 }
 
 // Initial setup
+// Ensure ions can't visually overflow the liquid element
+liquid.style.overflow = 'hidden';
+
 initializeSolution();
 animate();
