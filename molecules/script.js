@@ -11,7 +11,7 @@ let isPaused = false;
 
 const membraneWidth = 30; // 細胞膜視覺寬度
 const spaceBetweenMembrane = 20; // 磷脂分子間距
-const membraneX = canvas.width / 2; // 細胞膜 X 座標
+let membraneX = canvas.width / 2; // 細胞膜 X 座標
 
 // 分子數量設定
 const counts = {
@@ -213,10 +213,38 @@ function drawMolecule(molecule) {
 }
 
 function drawMembrane() {
+  // ...existing code...
+  // ...existing code...
+  // --- 最後繪製葡萄糖通道（紫色蛋白通道） ---
+  if (enableGlucoseChannel) {
+  
+    const channelWidth = membraneWidth * 1.5;
+    const channelHeight = 70;
+    const channelX = membraneX - channelWidth / 2;
+    const channelY = canvas.height / 2 - channelHeight / 2;
+    ctx.save();
+    ctx.beginPath();
+    ctx.strokeStyle = "#4B2991";
+    ctx.fillStyle = "#8B5DE8";
+    ctx.lineWidth = 6;
+    ctx.moveTo(channelX + 14, channelY);
+    ctx.lineTo(channelX + channelWidth - 14, channelY);
+    ctx.bezierCurveTo(
+      channelX + channelWidth + 18, channelY + channelHeight / 2,
+      channelX + channelWidth - 14, channelY + channelHeight,
+      channelX + 14, channelY + channelHeight
+    );
+    ctx.lineTo(channelX + 14, channelY);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
   const numPhospholipids = Math.floor(canvas.height / phospholipid.spacing);
   const startY = (canvas.height - numPhospholipids * phospholipid.spacing) / 2;
 
   // 繪製細胞內側 (背景)
+  
   ctx.fillStyle = "#fffacd"; // 淡黃色代表細胞內
   ctx.fillRect(
     0,
@@ -225,7 +253,8 @@ function drawMembrane() {
     canvas.height
   );
 
-  // 繪製膜結構
+  
+  // 繪製膜結構  
   for (let i = 0; i < numPhospholipids; i++) {
     const y = startY + i * phospholipid.spacing + phospholipid.spacing / 2;
 
@@ -315,6 +344,7 @@ function drawMembrane() {
     ctx.fill();
     ctx.stroke();
   }
+    
 }
 
 // 繪製UI控件
@@ -375,6 +405,7 @@ function updateMoleculeCounts() {
 // --- 更新與碰撞檢測 ---
 // 分子間碰撞開關
 let enableMoleculeCollision = false;
+let enableGlucoseChannel = false;
 
 function update() {
   if (isPaused) return;
@@ -395,16 +426,28 @@ function update() {
         m.x = m.radius;
         m.vx *= -1;
       }
-      // 細胞膜左側
-      if (m.x + m.radius > membraneLeftEdge && m.x < membraneX && m.vx > 0) {
-        m.x = membraneLeftEdge - m.radius;
-        m.vx *= -1;
-      }
-      // 細胞膜右側
-      if (m.x - m.radius < membraneRightEdge && m.x > membraneX && m.vx < 0) {
-        m.x = membraneRightEdge + m.radius;
-        m.vx *= -1;
-      }
+        // 細胞膜左側
+        if (
+          (
+            !enableGlucoseChannel ||
+            m.y < canvas.height / 2 - 35 || m.y > canvas.height / 2 + 35
+          ) &&
+          m.x + m.radius > membraneLeftEdge && m.x < membraneX && m.vx > 0
+        ) {
+          m.x = membraneLeftEdge - m.radius;
+          m.vx *= -1;
+        }
+        // 細胞膜右側
+        if (
+          (
+            !enableGlucoseChannel ||
+            m.y < canvas.height / 2 - 35 || m.y > canvas.height / 2 + 35
+          ) &&
+          m.x - m.radius < membraneRightEdge && m.x > membraneX && m.vx < 0
+        ) {
+          m.x = membraneRightEdge + m.radius;
+          m.vx *= -1;
+        }
       // 右側牆
       if (m.x + m.radius > canvas.width) {
         m.x = canvas.width - m.radius;
@@ -424,19 +467,19 @@ function update() {
       m.y = m.radius;
       m.vy *= -1;
     } else if (m.y + m.radius > canvas.height) {
-      m.y = canvas.height - m.radius;
-      m.vy *= -1;
-    }
-
-    // 細胞膜碰撞檢測 (將膜視為不可穿透的牆)
-    /*
-    const membraneLeftEdge = membraneX - membraneWidth / 2;
-    const membraneRightEdge = membraneX + membraneWidth / 2;
-
-    // 從左側接近膜
-    if (m.x + m.radius > membraneLeftEdge && m.x < membraneX && m.vx > 0) {
-      m.x = membraneLeftEdge - m.radius;
-      m.vx *= -1;
+       // 細胞膜通道判斷
+       if (!enableGlucoseChannel) {
+         // 細胞膜左側
+         if (m.x + m.radius > membraneLeftEdge && m.x < membraneX && m.vx > 0) {
+           m.x = membraneLeftEdge - m.radius;
+           m.vx *= -1;
+         }
+         // 細胞膜右側
+         if (m.x - m.radius < membraneRightEdge && m.x > membraneX && m.vx < 0) {
+           m.x = membraneRightEdge + m.radius;
+           m.vx *= -1;
+         }
+       }
     }
     // 從右側接近膜
     else if (
@@ -447,7 +490,7 @@ function update() {
       m.x = membraneRightEdge + m.radius;
       m.vx *= -1;
     }
-      */
+      
   });
 
   // 分子間碰撞檢測（根據開關）
@@ -510,6 +553,18 @@ function update() {
 // --- 創建控制面板 ---
 function createControlPanel() {
   const controlPanel = document.createElement("div");
+  // 葡萄糖通道開關
+  const glucoseChannelLabel = document.createElement("label");
+  glucoseChannelLabel.textContent = "葡萄糖通道";
+  glucoseChannelLabel.style.marginLeft = "10px";
+  const glucoseChannelCheckbox = document.createElement("input");
+  glucoseChannelCheckbox.type = "checkbox";
+  glucoseChannelCheckbox.style.marginLeft = "5px";
+  glucoseChannelCheckbox.checked = false;
+  glucoseChannelLabel.appendChild(glucoseChannelCheckbox);
+
+  // 將通道開關加入控制面板
+  controlPanel.appendChild(glucoseChannelLabel);
   // 補回控制元件宣告
   const speedControl = document.createElement("input");
   speedControl.type = "range";
@@ -695,6 +750,11 @@ function createControlPanel() {
   container.appendChild(canvas);
   container.appendChild(controlPanel);
 
+
+  glucoseChannelCheckbox.addEventListener("change", () => {
+    enableGlucoseChannel = glucoseChannelCheckbox.checked;
+    console.log("fdsa");
+  });  
   return {
     speedControl,
     pauseButton,
@@ -706,7 +766,9 @@ function createControlPanel() {
     outsideH2OInput,
     outsideO2Input,
     updateButton,
+  glucoseChannelCheckbox,
   };
+
 }
 
 // --- 觸控和滑鼠事件處理 ---
@@ -740,6 +802,7 @@ function setupInteractions() {
 
   // 找到點擊/觸摸的分子
   function findTouchedMolecule(x, y) {
+  
     for (let i = molecules.length - 1; i >= 0; i--) {
       const m = molecules[i];
       const dx = m.x - x;
