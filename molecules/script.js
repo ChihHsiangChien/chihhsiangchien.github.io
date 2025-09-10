@@ -21,8 +21,8 @@ const counts = {
 
 // 分子計數追蹤
 let currentCounts = {
-  inside: { CO2: 0, H2O: 0, O2: 0 },
-  outside: { CO2: 0, H2O: 0, O2: 0 },
+  inside: { CO2: 0, H2O: 50, O2: 0, Glucose: 0 },
+  outside: { CO2: 0, H2O: 50, O2: 0, Glucose: 10 },
 };
 
 const atomRadius = { C: 6, O: 5, H: 3 };
@@ -79,14 +79,14 @@ const moleculeStructures = {
       { element: "O", color: "red", x: 0, y: 0, radius: atomRadius.O },
       {
         element: "H",
-        color: "blue",
+        color: "white",
         x: bondLength * Math.cos(h2oAngle / 2),
         y: bondLength * Math.sin(h2oAngle / 2),
         radius: atomRadius.H,
       },
       {
         element: "H",
-        color: "blue",
+        color: "white",
         x: bondLength * Math.cos(h2oAngle / 2),
         y: -bondLength * Math.sin(h2oAngle / 2),
         radius: atomRadius.H,
@@ -97,6 +97,42 @@ const moleculeStructures = {
       [0, 2],
     ],
     baseRadius: atomRadius.O,
+  },
+  Glucose: {
+    atoms: [
+      // 六個碳原子（黑色）
+      { element: "C", color: "black", x: 0, y: 0, radius: atomRadius.C },
+      { element: "C", color: "black", x: bondLength, y: 0, radius: atomRadius.C },
+      { element: "C", color: "black", x: bondLength, y: bondLength, radius: atomRadius.C },
+      { element: "C", color: "black", x: 0, y: bondLength, radius: atomRadius.C },
+      { element: "C", color: "black", x: -bondLength, y: bondLength, radius: atomRadius.C },
+      { element: "C", color: "black", x: -bondLength, y: 0, radius: atomRadius.C },
+
+      // 六個氧原子（紅色）
+      { element: "O", color: "red", x: 0, y: -bondLength * 1.5, radius: atomRadius.O },
+      { element: "O", color: "red", x: bondLength * 1.5, y: 0, radius: atomRadius.O },
+      { element: "O", color: "red", x: bondLength * 1.5, y: bondLength, radius: atomRadius.O },
+      { element: "O", color: "red", x: 0, y: bondLength * 1.5, radius: atomRadius.O },
+      { element: "O", color: "red", x: -bondLength * 1.5, y: bondLength, radius: atomRadius.O },
+      { element: "O", color: "red", x: -bondLength * 1.5, y: 0, radius: atomRadius.O },
+
+      // 六個氫原子（白色）
+      { element: "H", color: "white", x: bondLength, y: -bondLength * 1.5, radius: atomRadius.H },
+      { element: "H", color: "white", x: bondLength * 1.5, y: -bondLength, radius: atomRadius.H },
+      { element: "H", color: "white", x: bondLength * 1.5, y: bondLength * 1.5, radius: atomRadius.H },
+      { element: "H", color: "white", x: 0, y: bondLength * 2, radius: atomRadius.H },
+      { element: "H", color: "white", x: -bondLength * 1.5, y: bondLength * 1.5, radius: atomRadius.H },
+      { element: "H", color: "white", x: -bondLength * 1.5, y: -bondLength, radius: atomRadius.H },
+    ],
+    bonds: [
+      // 碳骨架
+      [0,1],[1,2],[2,3],[3,4],[4,5],[5,0],
+      // 碳-氧
+      [0,6],[1,7],[2,8],[3,9],[4,10],[5,11],
+      // 碳-氫
+      [1,12],[2,13],[3,14],[4,15],[5,16],[0,17]
+    ],
+    baseRadius: atomRadius.C,
   },
 };
 
@@ -293,6 +329,7 @@ function drawUI() {
   ctx.fillText(`CO₂: ${currentCounts.inside.CO2}`, 10, 40);
   ctx.fillText(`H₂O: ${currentCounts.inside.H2O}`, 10, 60);
   ctx.fillText(`O₂: ${currentCounts.inside.O2}`, 10, 80);
+  ctx.fillText(`葡萄糖: ${currentCounts.inside.Glucose ?? 0}`, 10, 100);
 
   // 細胞外部分子計數
   ctx.textAlign = "right";
@@ -300,6 +337,7 @@ function drawUI() {
   ctx.fillText(`CO₂: ${currentCounts.outside.CO2}`, canvas.width - 10, 40);
   ctx.fillText(`H₂O: ${currentCounts.outside.H2O}`, canvas.width - 10, 60);
   ctx.fillText(`O₂: ${currentCounts.outside.O2}`, canvas.width - 10, 80);
+  ctx.fillText(`葡萄糖: ${currentCounts.outside.Glucose ?? 0}`, canvas.width - 10, 100);
 
   // 模擬速度顯示
   ctx.textAlign = "center";
@@ -335,6 +373,9 @@ function updateMoleculeCounts() {
 }
 
 // --- 更新與碰撞檢測 ---
+// 分子間碰撞開關
+let enableMoleculeCollision = false;
+
 function update() {
   if (isPaused) return;
 
@@ -344,13 +385,40 @@ function update() {
     m.y += m.vy * simulationSpeed;
     m.rotation += m.angularVelocity * simulationSpeed; // 更新角度
 
-    // 邊界碰撞檢測
-    if (m.x - m.radius < 0) {
-      m.x = m.radius;
-      m.vx *= -1;
-    } else if (m.x + m.radius > canvas.width) {
-      m.x = canvas.width - m.radius;
-      m.vx *= -1;
+    // 邊界碰撞檢查
+    const membraneLeftEdge = membraneX - membraneWidth / 2;
+    const membraneRightEdge = membraneX + membraneWidth / 2;
+
+    if (m.type === "Glucose") {
+      // 左側牆
+      if (m.x - m.radius < 0) {
+        m.x = m.radius;
+        m.vx *= -1;
+      }
+      // 細胞膜左側
+      if (m.x + m.radius > membraneLeftEdge && m.x < membraneX && m.vx > 0) {
+        m.x = membraneLeftEdge - m.radius;
+        m.vx *= -1;
+      }
+      // 細胞膜右側
+      if (m.x - m.radius < membraneRightEdge && m.x > membraneX && m.vx < 0) {
+        m.x = membraneRightEdge + m.radius;
+        m.vx *= -1;
+      }
+      // 右側牆
+      if (m.x + m.radius > canvas.width) {
+        m.x = canvas.width - m.radius;
+        m.vx *= -1;
+      }
+    } else {
+      // 其他分子
+      if (m.x - m.radius < 0) {
+        m.x = m.radius;
+        m.vx *= -1;
+      } else if (m.x + m.radius > canvas.width) {
+        m.x = canvas.width - m.radius;
+        m.vx *= -1;
+      }
     }
     if (m.y - m.radius < 0) {
       m.y = m.radius;
@@ -382,52 +450,54 @@ function update() {
       */
   });
 
-  // 分子間碰撞檢測
-  for (let i = 0; i < molecules.length; i++) {
-    for (let j = i + 1; j < molecules.length; j++) {
-      const m1 = molecules[i];
-      const m2 = molecules[j];
+  // 分子間碰撞檢測（根據開關）
+  if (enableMoleculeCollision) {
+    for (let i = 0; i < molecules.length; i++) {
+      for (let j = i + 1; j < molecules.length; j++) {
+        const m1 = molecules[i];
+        const m2 = molecules[j];
 
-      const dx = m2.x - m1.x;
-      const dy = m2.y - m1.y;
-      const distanceSq = dx * dx + dy * dy;
-      const combinedRadius = m1.radius + m2.radius;
+        const dx = m2.x - m1.x;
+        const dy = m2.y - m1.y;
+        const distanceSq = dx * dx + dy * dy;
+        const combinedRadius = m1.radius + m2.radius;
 
-      if (distanceSq < combinedRadius * combinedRadius) {
-        // 碰撞發生
-        const distance = Math.sqrt(distanceSq);
-        const overlap = combinedRadius - distance;
+        if (distanceSq < combinedRadius * combinedRadius) {
+          // 碰撞發生
+          const distance = Math.sqrt(distanceSq);
+          const overlap = combinedRadius - distance;
 
-        // 將分子分開以避免卡住
-        const adjustX = (dx / distance) * overlap * 0.5;
-        const adjustY = (dy / distance) * overlap * 0.5;
-        m1.x -= adjustX;
-        m1.y -= adjustY;
-        m2.x += adjustX;
-        m2.y += adjustY;
+          // 將分子分開以避免卡住
+          const adjustX = (dx / distance) * overlap * 0.5;
+          const adjustY = (dy / distance) * overlap * 0.5;
+          m1.x -= adjustX;
+          m1.y -= adjustY;
+          m2.x += adjustX;
+          m2.y += adjustY;
 
-        // 簡化的彈性碰撞反應
-        const nx = dx / distance;
-        const ny = dy / distance;
+          // 簡化的彈性碰撞反應
+          const nx = dx / distance;
+          const ny = dy / distance;
 
-        // 計算相對速度
-        const dvx = m1.vx - m2.vx;
-        const dvy = m1.vy - m2.vy;
+          // 計算相對速度
+          const dvx = m1.vx - m2.vx;
+          const dvy = m1.vy - m2.vy;
 
-        // 計算相對速度在法線方向上的投影 (點積)
-        const dotProduct = dvx * nx + dvy * ny;
+          // 計算相對速度在法線方向上的投影 (點積)
+          const dotProduct = dvx * nx + dvy * ny;
 
-        // 如果分子正在靠近才進行速度交換
-        if (dotProduct < 0) {
-          const impulse = (2 * dotProduct) / 2; // 假設質量為1
-          m1.vx -= impulse * nx;
-          m1.vy -= impulse * ny;
-          m2.vx += impulse * nx;
-          m2.vy += impulse * ny;
+          // 如果分子正在靠近才進行速度交換
+          if (dotProduct < 0) {
+            const impulse = (2 * dotProduct) / 2; // 假設質量為1
+            m1.vx -= impulse * nx;
+            m1.vy -= impulse * ny;
+            m2.vx += impulse * nx;
+            m2.vy += impulse * ny;
 
-          // 碰撞也可能影響旋轉，稍微增加一點隨機性
-          //m1.angularVelocity += getRandom(-0.01, 0.01) * simulationSpeed;
-          //m2.angularVelocity += getRandom(-0.01, 0.01) * simulationSpeed;
+            // 碰撞也可能影響旋轉，稍微增加一點隨機性
+            //m1.angularVelocity += getRandom(-0.01, 0.01) * simulationSpeed;
+            //m2.angularVelocity += getRandom(-0.01, 0.01) * simulationSpeed;
+          }
         }
       }
     }
@@ -440,96 +510,57 @@ function update() {
 // --- 創建控制面板 ---
 function createControlPanel() {
   const controlPanel = document.createElement("div");
-  controlPanel.style.marginTop = "10px";
-  controlPanel.style.padding = "10px";
-  controlPanel.style.borderTop = "1px solid #ccc";
-
-  // 速度控制
-  const speedControl = document.createElement("div");
-  speedControl.style.marginBottom = "15px";
-
-  const speedLabel = document.createElement("label");
-  speedLabel.textContent = "模擬速度: ";
-  speedLabel.style.marginRight = "10px";
-
-  const speedSlider = document.createElement("input");
-  speedSlider.type = "range";
-  speedSlider.min = "0.1";
-  speedSlider.max = "3.0";
-  speedSlider.step = "0.1";
-  speedSlider.value = simulationSpeed;
-  speedSlider.style.width = "150px";
-  speedSlider.style.verticalAlign = "middle";
-
-  const speedValue = document.createElement("span");
-  speedValue.textContent = `${simulationSpeed.toFixed(1)}x`;
-  speedValue.style.marginLeft = "10px";
-
-  speedSlider.addEventListener("input", () => {
-    simulationSpeed = parseFloat(speedSlider.value);
-    speedValue.textContent = `${simulationSpeed.toFixed(1)}x`;
+  // 補回控制元件宣告
+  const speedControl = document.createElement("input");
+  speedControl.type = "range";
+  speedControl.min = "0.5";
+  speedControl.max = "5";
+  speedControl.step = "0.1";
+  speedControl.value = simulationSpeed;
+  speedControl.style.width = "120px";
+  speedControl.style.marginRight = "10px";
+  speedControl.addEventListener("input", () => {
+    simulationSpeed = parseFloat(speedControl.value);
   });
 
-  speedControl.appendChild(speedLabel);
-  speedControl.appendChild(speedSlider);
-  speedControl.appendChild(speedValue);
-
-  // 暫停/繼續按鈕
   const pauseButton = document.createElement("button");
-  pauseButton.textContent = "暫停";
+  pauseButton.textContent = "暫停/繼續";
   pauseButton.style.marginRight = "10px";
-  pauseButton.style.padding = "5px 15px";
-
   pauseButton.addEventListener("click", () => {
     isPaused = !isPaused;
-    pauseButton.textContent = isPaused ? "繼續" : "暫停";
   });
 
-  // 重置按鈕
   const resetButton = document.createElement("button");
-  resetButton.textContent = "重置";
-  resetButton.style.padding = "5px 15px";
-  resetButton.style.marginRight = "10px";
-
+  resetButton.textContent = "重設";
   resetButton.addEventListener("click", () => {
     init();
-    isPaused = false;
-    pauseButton.textContent = "暫停";
   });
-
-  // 分子設定控制
-  const moleculeSettingsDiv = document.createElement("div");
-  moleculeSettingsDiv.style.marginTop = "15px";
-  moleculeSettingsDiv.style.display = "grid";
-  moleculeSettingsDiv.style.gridTemplateColumns = "auto auto auto auto";
-  moleculeSettingsDiv.style.gap = "5px";
-  moleculeSettingsDiv.style.alignItems = "center";
+  // 分子設定控制（表格排版）
+  const moleculeSettingsTable = document.createElement("table");
+  moleculeSettingsTable.style.marginTop = "15px";
+  moleculeSettingsTable.style.width = "100%";
+  moleculeSettingsTable.style.borderCollapse = "collapse";
+  moleculeSettingsTable.style.textAlign = "center";
 
   // 標題列
-  const locationHeader = document.createElement("div");
-  locationHeader.textContent = "";
+  const headerRow = document.createElement("tr");
+  const emptyTh = document.createElement("th");
+  emptyTh.textContent = "";
+  headerRow.appendChild(emptyTh);
+  ["CO₂", "H₂O", "O₂", "葡萄糖"].forEach((name) => {
+    const th = document.createElement("th");
+    th.textContent = name;
+    th.style.fontWeight = "bold";
+    headerRow.appendChild(th);
+  });
+  moleculeSettingsTable.appendChild(headerRow);
 
-  const co2Header = document.createElement("div");
-  co2Header.textContent = "CO₂";
-  co2Header.style.fontWeight = "bold";
-
-  const h2oHeader = document.createElement("div");
-  h2oHeader.textContent = "H₂O";
-  h2oHeader.style.fontWeight = "bold";
-
-  const o2Header = document.createElement("div");
-  o2Header.textContent = "O₂";
-  o2Header.style.fontWeight = "bold";
-
-  moleculeSettingsDiv.appendChild(locationHeader);
-  moleculeSettingsDiv.appendChild(co2Header);
-  moleculeSettingsDiv.appendChild(h2oHeader);
-  moleculeSettingsDiv.appendChild(o2Header);
-
-  // 細胞內設定
-  const insideLabel = document.createElement("div");
-  insideLabel.textContent = "細胞內:";
-  insideLabel.style.fontWeight = "bold";
+  // 細胞內 row
+  const insideRow = document.createElement("tr");
+  const insideLabelTd = document.createElement("td");
+  insideLabelTd.textContent = "細胞內:";
+  insideLabelTd.style.fontWeight = "bold";
+  insideRow.appendChild(insideLabelTd);
 
   const insideCO2Input = document.createElement("input");
   insideCO2Input.type = "number";
@@ -537,6 +568,9 @@ function createControlPanel() {
   insideCO2Input.max = "20";
   insideCO2Input.value = counts.inside.CO2;
   insideCO2Input.style.width = "50px";
+  const insideCO2Td = document.createElement("td");
+  insideCO2Td.appendChild(insideCO2Input);
+  insideRow.appendChild(insideCO2Td);
 
   const insideH2OInput = document.createElement("input");
   insideH2OInput.type = "number";
@@ -544,6 +578,9 @@ function createControlPanel() {
   insideH2OInput.max = "20";
   insideH2OInput.value = counts.inside.H2O;
   insideH2OInput.style.width = "50px";
+  const insideH2OTd = document.createElement("td");
+  insideH2OTd.appendChild(insideH2OInput);
+  insideRow.appendChild(insideH2OTd);
 
   const insideO2Input = document.createElement("input");
   insideO2Input.type = "number";
@@ -551,16 +588,28 @@ function createControlPanel() {
   insideO2Input.max = "20";
   insideO2Input.value = counts.inside.O2;
   insideO2Input.style.width = "50px";
+  const insideO2Td = document.createElement("td");
+  insideO2Td.appendChild(insideO2Input);
+  insideRow.appendChild(insideO2Td);
 
-  moleculeSettingsDiv.appendChild(insideLabel);
-  moleculeSettingsDiv.appendChild(insideCO2Input);
-  moleculeSettingsDiv.appendChild(insideH2OInput);
-  moleculeSettingsDiv.appendChild(insideO2Input);
+  const insideGlucoseInput = document.createElement("input");
+  insideGlucoseInput.type = "number";
+  insideGlucoseInput.min = "0";
+  insideGlucoseInput.max = "20";
+  insideGlucoseInput.value = counts.inside.Glucose || 0;
+  insideGlucoseInput.style.width = "50px";
+  const insideGlucoseTd = document.createElement("td");
+  insideGlucoseTd.appendChild(insideGlucoseInput);
+  insideRow.appendChild(insideGlucoseTd);
 
-  // 細胞外設定
-  const outsideLabel = document.createElement("div");
-  outsideLabel.textContent = "細胞外:";
-  outsideLabel.style.fontWeight = "bold";
+  moleculeSettingsTable.appendChild(insideRow);
+
+  // 細胞外 row
+  const outsideRow = document.createElement("tr");
+  const outsideLabelTd = document.createElement("td");
+  outsideLabelTd.textContent = "細胞外:";
+  outsideLabelTd.style.fontWeight = "bold";
+  outsideRow.appendChild(outsideLabelTd);
 
   const outsideCO2Input = document.createElement("input");
   outsideCO2Input.type = "number";
@@ -568,6 +617,9 @@ function createControlPanel() {
   outsideCO2Input.max = "20";
   outsideCO2Input.value = counts.outside.CO2;
   outsideCO2Input.style.width = "50px";
+  const outsideCO2Td = document.createElement("td");
+  outsideCO2Td.appendChild(outsideCO2Input);
+  outsideRow.appendChild(outsideCO2Td);
 
   const outsideH2OInput = document.createElement("input");
   outsideH2OInput.type = "number";
@@ -575,6 +627,9 @@ function createControlPanel() {
   outsideH2OInput.max = "20";
   outsideH2OInput.value = counts.outside.H2O;
   outsideH2OInput.style.width = "50px";
+  const outsideH2OTd = document.createElement("td");
+  outsideH2OTd.appendChild(outsideH2OInput);
+  outsideRow.appendChild(outsideH2OTd);
 
   const outsideO2Input = document.createElement("input");
   outsideO2Input.type = "number";
@@ -582,38 +637,50 @@ function createControlPanel() {
   outsideO2Input.max = "20";
   outsideO2Input.value = counts.outside.O2;
   outsideO2Input.style.width = "50px";
+  const outsideO2Td = document.createElement("td");
+  outsideO2Td.appendChild(outsideO2Input);
+  outsideRow.appendChild(outsideO2Td);
 
-  moleculeSettingsDiv.appendChild(outsideLabel);
-  moleculeSettingsDiv.appendChild(outsideCO2Input);
-  moleculeSettingsDiv.appendChild(outsideH2OInput);
-  moleculeSettingsDiv.appendChild(outsideO2Input);
+  const outsideGlucoseInput = document.createElement("input");
+  outsideGlucoseInput.type = "number";
+  outsideGlucoseInput.min = "0";
+  outsideGlucoseInput.max = "20";
+  outsideGlucoseInput.value = counts.outside.Glucose || 0;
+  outsideGlucoseInput.style.width = "50px";
+  const outsideGlucoseTd = document.createElement("td");
+  outsideGlucoseTd.appendChild(outsideGlucoseInput);
+  outsideRow.appendChild(outsideGlucoseTd);
+
+  moleculeSettingsTable.appendChild(outsideRow);
 
   // 更新分子數量按鈕
   const updateButton = document.createElement("button");
   updateButton.textContent = "更新分子數量";
   updateButton.style.padding = "5px 15px";
   updateButton.style.marginTop = "10px";
-  updateButton.style.gridColumn = "1 / span 4";
+  updateButton.style.width = "100%";
+  updateButton.style.gridColumn = "1 / span 5";
 
   updateButton.addEventListener("click", () => {
     counts.inside.CO2 = parseInt(insideCO2Input.value) || 0;
     counts.inside.H2O = parseInt(insideH2OInput.value) || 0;
     counts.inside.O2 = parseInt(insideO2Input.value) || 0;
+    counts.inside.Glucose = parseInt(insideGlucoseInput.value) || 0;
 
     counts.outside.CO2 = parseInt(outsideCO2Input.value) || 0;
     counts.outside.H2O = parseInt(outsideH2OInput.value) || 0;
     counts.outside.O2 = parseInt(outsideO2Input.value) || 0;
+    counts.outside.Glucose = parseInt(outsideGlucoseInput.value) || 0;
 
     init();
   });
 
-  moleculeSettingsDiv.appendChild(updateButton);
-
-  // 添加所有控制項到控制面板
+  // 控制面板加入表格和按鈕
+  moleculeSettingsTable.appendChild(updateButton);
   controlPanel.appendChild(speedControl);
   controlPanel.appendChild(pauseButton);
   controlPanel.appendChild(resetButton);
-  controlPanel.appendChild(moleculeSettingsDiv);
+  controlPanel.appendChild(moleculeSettingsTable);
 
   // 將控制面板添加到 canvas 下方
   const container = document.createElement("div");
@@ -629,7 +696,7 @@ function createControlPanel() {
   container.appendChild(controlPanel);
 
   return {
-    speedControl: speedSlider,
+    speedControl,
     pauseButton,
     resetButton,
     insideCO2Input,

@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>分子合成器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8;
+            color: #1a202c;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2rem;
+            width: 100%;
+            max-width: 1000px;
+        }
+
+        .atom-selection {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            flex-wrap: wrap;
+            padding: 2rem;
+            background-color: #e2e8f0;
+            border-radius: 1.5rem;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .atom-container {
+            width: 80px;
+            height: 80px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: grab;
+            user-select: none;
+            text-align: center;
+        }
+        
+        .atom {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            color: white;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+            cursor: grab;
+        }
+        
+        .atom:active {
+            cursor: grabbing;
+        }
+
+        .atom-o {
+            background-color: #ef4444; /* red */
+        }
+        .atom-c {
+            background-color: #4b5563; /* black */
+        }
+        .atom-h {
+            background-color: #d1d5db; /* light gray */
+            color: #1a202c;
+        }
+        .atom-n {
+            background-color: #4a5568; /* dark gray */
+        }
+        
+        .atom-container:hover .atom {
+            transform: scale(1.05);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .synthesis-area {
+            width: 100%;
+            max-width: 400px;
+            min-height: 250px;
+            border: 4px dashed #9ca3af;
+            border-radius: 1.5rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+            padding: 1rem;
+            background-color: #f9fafb;
+            position: relative;
+            overflow: hidden;
+            transition: background-color 0.3s ease;
+        }
+
+        .synthesis-area.dragging {
+            background-color: #c9d2de;
+        }
+
+        .synthesis-atom-stack {
+            position: relative;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.25rem;
+            transition: transform 0.2s ease;
+        }
+
+        .synthesis-atom-stack:hover {
+            transform: translateY(-5px);
+        }
+
+        .synthesis-atom-count {
+            position: absolute;
+            top: -10px;
+            right: -10px;
+            background-color: #3b82f6;
+            color: white;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 0.75rem;
+            font-weight: bold;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+
+        .combine-btn {
+            padding: 0.75rem 2rem;
+            background-color: #4299e1;
+            color: white;
+            border: none;
+            border-radius: 9999px;
+            font-size: 1.125rem;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            transition: background-color 0.3s ease, transform 0.2s ease;
+        }
+
+        .combine-btn:hover {
+            background-color: #3182ce;
+            transform: translateY(-2px);
+        }
+
+        .molecule-display {
+            width: 100%;
+            max-width: 400px;
+            min-height: 250px;
+            background-color: #ffffff;
+            border-radius: 1.5rem;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 1rem;
+            text-align: center;
+            transition: transform 0.5s ease;
+        }
+
+        .molecule-display.fade-in {
+            transform: translateY(0);
+            opacity: 1;
+        }
+        
+        .molecule-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 1rem;
+            color: #2d3748;
+        }
+
+        .molecule-image {
+            width: 180px;
+            height: 180px;
+        }
+
+        .water-img {
+            content: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiB2aWV3Qm94PSIwIDAgMjAwIDIwMCI+PHRpdGxlPldhdGVyIE1vbGVjdWxlPC90aXRsZT48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImEiIHgxPSI1MCUiIHkxPSIwJSIgeDI9IjUwJSIgeTI9IjEwMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiNmZGU4ZWRmIi8+PHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjYjJkY2ZmIi8+PC9saW5lYXJHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9ImIiIHgxPSI1MCUiIHkxPSIwJSIgeDI9IjUwJSIgeTI9IjEwMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiM2Mzk4YWIiLz48c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiMwMDAwZmYiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48cGF0aCBmaWxsPSIjREREREREIiBkPSJNIDgwIDc4IGMgLTQuMTggLTcuMiAtMTQuNDIgLTEwLjUgLTIyLjY2IC03LjMzIGMgLTguMjQgMy4xNyAtMTQuMTQgMTEuOTcgLTEwLjk1IDIwLjIxIGMgMy4xOSAxMi4yNyAyMi40IDIzLjU5IDMzLjYgMjQuMDIgYyAxMS4xOSAwLjQzIDIwLjcxIC04LjE4IDI1LjIzIC0xOC40NSBjIDQuNTIgLTEwLjI4IC0wLjQ4IC0xOC4xOCAtNy4yMyAtMjIuMjggYyAtMi45IC0xLjc1IC03LjY3IC0zLjcyIC0xMC4yMiAtNC4xNSIvPjxwYXRoIGZpbGw9IiNGRkZGRkYiIGQ9Ik0gMTA2LjMyIDcwLjMyIGMgLTEuMjYgLTEuODcgLTIuODcgLTMuNDUgLTQuNzMgLTQuNzMgYyAtMi42NiAtMS44NCAtNS44MyAtMi44NiAtOS4wMSAtMi43OSBjIC0zLjU0IDAuMDcgLTYuODcgMS4zNiAtOS42NSA0LjQ0IGMgLTIuOTkgMy4yMSAtNC42OCA3Ljc2IC00LjI5IDEyLjIgYyAwLjQgNC40MyAxLjk3IDguNjIgNC45IDExLjQ4IGMgMi44IDYuMDcgOC45MiAxMC43NSAxNS44NiAxMi43NyBjIDYuOTIgMi4wMiAxNC4xMiAxLjQ4IDIwLjE2IC0xLjE5IGMgNS45OSAtMi43MiAxMC42NyAtNy45OSAxMy42NyAtMTMuOTMgYyAzLjU1IC01LjIxIDUuMTYgLTExLjQ1IDQuNTUgLTE4LjI2IGMgLTAuNjIgLTYuNzQgLTMuOTUgLTEyLjI3IC04LjM1IC0xNi41OSBjIC01LjYyIC01LjUzIC0xMy4zNyAtOC43OCAtMjAuNDUgLTcuNiBjIC0xMS41NiAxLjk4IC0yMi45OCA1Ljc1IC0yMy40NyAxNy4zMiBjIC0wLjQ2IDExLjU3IDkuNTYgMjAuOTQgMTYuNjEgMjYuOTkgYyA3LjU4IDYuNjQgMTguNDggMTAuOTkgMjcuNjMgOC4wMiBjIDkuMTEgLTIuOTIgMTQuNDkgLTAuNDcgMTkuOTkgLTYuMjEgYyAxLjIzIC0xLjI5IDIuMjUgLTMuMjkgMy4xIC01LjI0IGMgMi4yNSAtNS4yNSAzLjM1IC0xMC42NiAyLjUxIC0xNi43MyBjLTAuODYgLTYuOTggLTQuNTUgLTExLjY4IC05LjU0IC0xNC43NiBjLTQuMjUgLTIuNjQtOS4yNSAtMy45OSAtMTQuMyAtNC4wOCBjLTUuMDUgLTAuMSAtMTAuMDggMC42OSAtMTQuODMgMS41MSBjLTEuNzMgMC4zIC0zLjI3IDEuMjQgLTQuNjIgMi40MSBjLTMuMDQgMi40MSAtNS4wOSA1LjI1IC03LjQyIDguNjQgYy0xLjYyIDIuMDYgLTMuNTYgMy45NyAtNS42NyA1LjczIi8+PGNpcmNsZSBjeD0iMTAwIiBjeT0iNTAiIHJ4PSI0MCIgcnk9IjQwIiBmaWxsPSJ1cmwoI2IpIi8+PC9zdmc+');
+        }
+
+        .co2-img {
+            content: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMjAwIDEwMCI+PHRpdGxlPkNhcmJvbiBEaW94aWRlIE1vbGVjdWxlPC90aXRsZT48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImEiIHgxPSI1MCUiIHkxPSIwJSIgeDI9IjUwJSIgeTI9IjEwMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiNmZGU4ZWRmIi8+PHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjYjJkY2ZmIi8+PC9saW5lYXJHcmFkaWVudD48bGluZWFyR3JhZGllbnQgaWQ9ImIiIHgxPSI1MCUiIHkxPSIwJSIgeDI9IjUwJSIgeTI9IjEwMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0b3AtY29sb3I9IiM2Mzk4YWIiLz48c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiMwMDAwZmYiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSIyNSIgZmlsbD0iI0ZGMDAwMCIvPjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzAwMDAwMCIgc3Ryb2tlLXdpZHRoPSI0IiBkPSJNMjUgNTBoNTAiLz48Y2lyY2xlIGN4PSIxNTAiIGN5PSI1MCIgcj0iMjUiIGZpbGw9IiMwMDAwMDAiLz48cGF0aCBmaWxsPSJub25lIiBzdHJva2U9IiMwMDAwMDAiIHN0cm9rZS13aWR0aD0iNCIgZD0iTTE3NSA1MGgtNTAiLz48Y2lyY2xlIGN4PSIxMDciIGN5PSI1MyIgcj0iMjgiIGZpbGw9IiMwMDAwMDAiLz48L3N2Zz4=');
+        }
+
+        .glucose-img {
+            content: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiB2aWV3Qm94PSIwIDAgMjAwIDIwMCI+PHRpdGxlPkdseWNvc2UgTW9sZWN1bGU8L3RpdGxlPjxwYXRoIGZpbGw9IiNGRkZGRkYiIGQ9Ik05NC41LDgwLjJsLTExLDYuMjdjLTcuMTgsNC4xMS0xMS4zLDExLjgyLTExLjMsMTkuODZjMCw4LjA2LDQuMDcsMTUuMjYsMTEuMDUsMTkuMzZsMTIuNzgsNy4zNWMtMi41OC01LjcxLTYuMDctMTIuMDMtMTAuNS0xNy40NmMtNC40My01LjQzLTkuOTQtOS44OS0xNS41My0xMy40NGMtNS41OC0zLjU1LTExLjE4LTUuNzgtMTYuMTctNi42Yy00Ljk3LTAuODItOS4yNywwLjY1LTEyLjM0LDMuOTVjLTMuMDcsMy4zLTMuOTMsNy44Mi0yLjE5LDEyLjYxYzEuNzQsNC43OSw1LjA0LDkuMjYsOC41OSwxMi40M2MzLjU1LDMuMTcsNy4wOCw1LjgyLDEwLjUsNy41OWM2LjcxLDMuMzQsMTMuODIsNC43MSwyMS4xOSwzLjg0YzcuMzgtMC44NywxNC42NS00LjUyLDIwLjg4LTEwLjk1YzYuMjMtNi40MywxMC45MS0xNC40NCwxMy45Mi0yMy45MWMyLjgxLTguOTctMi4yNC0xOS4yNy04LjI4LTI2LjY2Yy02LjA0LTcuMzktMTQuMzctMTIuMjUtMjIuNjMtMTQuMjVjLTguMjYtMS45OS0xNi41Ni0xLjQ0LTIzLjk0LDIuNDNjLTcuMzgsMy44OC0xNC4yNiw5LjgzLTE5LjY3LDE2LjYyYzQuNzgsMS41Ljg5LDMuNDgsMTAuMDgsNS4yOSI+PC9wYXRoPjxjaXJjbGUgY3g9IjEwMCIgY3k9IjEwMCIgcj0iMzAiIGZpbGw9IiMwMDAwMDAiLz48L3N2Zz4=');
+        }
+        
+        .ammonia-img {
+            content: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiB2aWV3Qm94PSIwIDAgMjAwIDIwMCI+PHRpdGxlPkFtbW9uaWEgTW9sZWN1bGU8L3RpdGxlPjxwYXRoIGZpbGw9IiM0QTU1Njg7IiBkPSJNMTIwIDcwIGMgLTEwIDAgLTExLjEgMTAgLTI1IDAgYyAtNy42IC01LjQgLTE5LjMgLTYuNyAtMjEuMSAtMS42IGMgLTEuNyA1LjEgLTAuNiAxMi40IDUuNSA4LjIgYyA2LjEgLTQuMiAxMi4zIC05LjUgMTguNiAtMTIuMSBjIDYuMyAtMi41IDEzLjIgLTMuOSAyMC4yIC0zLjkgYyA3LjEgMCAxMy43IDEuMSAxOS44IDMuNyBjIDYuMSA0LjkgOS42IDEyLjMgOS40IDE5LjggYyAtMC4yIDcuNSAtNC4xIDE0LjMgLTEwLjggMTguNSBjIC02LjYgNC4xIC0xNC44IDUuMSAtMjMuMSA0LjMgYyAtOC4zIC0wLjggLTE1LjQgLTIuOSAtMjEuOCAtNi4yIGMgLTUuNSAtMi44IC0xMS4yIC00LjUgLTE3LjIgLTYuNCBjIC02LjEgLTEuOSAtMTIuNCAtMi45IC0xOC40IC0yLjMgYyAtNC4yIC0wLjQgLTYuOCAxLjIgLTkuMiAyLjggYyAtMS42IDEuMSAtMy4yIDMuMSAtNC40IDUuMSBjIC0yLjcgNS4zIC0zLjggMTEuNyAtMi44IDE4LjUgYyAxLjEgNi44IDMuOSAxMy42IDcuNCAxOC44IGMgMy41IDUuMiA5LjcgNy4yIDE2LjIgNi42IGMgNi41IC0wLjUgMTIuNiAtMi40IDE4LjIgLTYuNCBjIDUuOCAtNC40IDEwLjcgLTkuNyAxNS42IC0xNS41IGMgNC45IC01LjggOC44IC0xMS41IDEyLjEgLTE4LjUgYyAyLjkgLTYuMSAzLjkgLTEyLjQgMy45IC0xOS4zIGMgMCAtNS4zIDAuNSAtMTAuMyAtMS40IC0xNC45IGMgLTEuOSAtNC42IC01LjcgLTAuOSAtMTEuOCAwLjggYyAtNi4xIDEuNyAtMTAuNyAzLjYgLTE1LjIgNC45IGMgLTQuNSAxLjMgLTcuNSAyLjIgLTEwLjUgMi4yIGMgLTMgMCAtNS40IC0xLjEgLTYuOCAtMi41IGMgLTEuNSAtMS40IC0xLjggLTMuNSAtMS44IC01LjggYyAwIC0yLjMgMC41IC01LjEgMS45IC03LjYgYyAxLjUgLTIuNiAzLjIgLTUuNCA0LjYgLTguMSBjIDEuNSAtMi44IDMtNS43IDQuNyAtOC43IGMgMS44IC0zLjEgMi45IC02LjMgMi44IC05LjkgYyAtMC4yIC01LjIgLTEuMyAtMTAuNSAtMi42IC0xNi41IGMgLTEuMyAtNiAtMi42IC0xMi42IC0zLjUgLTE5LjEgYyAtMC45IC02LjUgLTEuOCAtMTMgLTIuOCAtMTkuNCBjIC0xIC02LjUgLTEuOSAtMTMgLTIuOCAtMTkuNiBjIC0wLjkgLTYuNiAtMS44IC0xMy4zIC0yLjggLTIwLjEgYyAtMSAtNi44IC0yIC0xMy41IC0yLjggLTIwLjUgYyAtMC43IC03IDAuMSAtMTQuMSAyLjkgLTIxLjIgYyAyLjcgLTcgNC44IC0xMy44IDcuNyAtMjAuOSBjIDIuOCAtNyAxLjUgLTE1LjkgLTMuMiAtMjIuNCBjIC00LjcgLTYuNSA1LjggLTYuMyAxMi45IC00LjEgYyA3LjEgMi4yIDEzLjggNS44IDIwLjIgMTAuMyBjIDYuNCA0LjUgMTEuOCA5LjcgMTYuMiAxNS44IGMgNC40IDYuMSA2LjkgMTIuNiA3LjEgMTkuNyBjIDAuMiA3LjEgLTIuMSAxNC4yIC01LjQgMjAuNiBjIC0zLjMgNi40IC03LjkgMTIuNCAtMTIuNyAxNy42IGMgLTQuOCA1LjIgLTkuOCAxMC4xIC0xNS4xIDE0LjMgYyAtNS4zIDQuMyAtMTAuOCAxMC44IC0xNi4zIDE1LjcgYyAtNS40IDQuOSAtMTAuMiAxMC43IC0xNC40IDE3LjUgYyAtNC4yIDYuOCAtNy40IDE0LjEgLTkuMiAyMS42IGMgLTEuOCA3LjUgLTAuNSAxNS40IDIuMyAyMi41IGMgMi44IDcuMSA0LjggMTQuNCA4LjQgMjEuOSBjIDMuNiA3LjUgNi44IDE1LjUgMTEuMSAyMy42IGMgNC4zIDguMSA4LjEgMTUuOCAxMi40IDI0LjcgYyA0LjMgOC45IDYuNSAxNy45IDcuMyAyNy41IGMgMC44IDkuNiAwLjcgMTkuNyAtMC41IDI5LjggYyAtMS4yIDEwLjIgLTMuNyAyMC40IC03IDMwLjEgYyAtMy40IDkuNyAtNy45IDE4LjggLTEzLjcgMjYuMiBjIC01LjggNy41IC0xMi4yIDEzLjMgLTIwLjcgMTUuOCBjIC04LjUgMi41IC0xNy44IDIgLTI2LjYgLTEuNyBjIC04LjggLTMuOCAtMTUuOSAtMTEgLTIyLjMgLTE5LjMgYyAtNi40IC04LjMgLTEwLjggLTE2LjggLTExLjUgLTI2LjMgYyAtMC42IC05LjUgMi4yIC0xOC44IDguMSAtMjYuNyBjIDUuOCAtNy44IDE1LjkgLTE0IDIzLjIgLTE5LjQgYyA3LjQgLTUuNCAxNS45IC05LjIgMjUuMSAtMTEuOCBjIDkuMiAtMi42IDE4LjcgLTMuMyAyNy44IC0zLjcgYyA5LjEgLTAuNCAxOC40IDAgMjcuMyAxLjggYyA4LjkgMS44IDE3LjQgNC44IDI1LjYgOC44IGMgOC4yIDQgMTUuNiA5LjkgMjEuNyAxNi42IGMgNi4xIDYuNyAxMC4zIDE0LjcgMTIuNSAyMy42IGMgMi4yIDguOSAxLjQgMTguMyAtMi4xIDI3LjIgYyAtMy41IDguOSAtOC42IDE3LjMgLTE0LjggMjQuOCBjIC02LjMgNy41IC0xMy41IDEzLjkgLTIwLjcgMTguNCBjIC03LjIgNC40IC0xNC42IDYuNiAtMjMuMiA2LjYgYyAtOC42IDAgLTE2LjIgLTIuMiAtMjMuNCAtNi42IGMgLTcuMiAtNC40IC0xMy41IC0xMC45IC0xOS44IC0xOC45IGMgLTYuMyAtOC4xIC0xMC41IC0xNy4zIC0xMi44IC0yNi41IGMgLTIuMyAtOS4yIC0yLjMgLTE4LjggLTAuNiAtMjggYyAxLjcgLTkuMyA0LjggLTE4LjQgOC4yIC0yNy4zIGMgMy40IC04LjkgNi44IC0xNy41IDEwLjMgLTI1LjggYyAzLjUtOC4zIDYuNiAtMTYuMiAxMS4yIC0yMy45IGMgNC42IC03LjcgOS43IC0xNS4xIDE1LjYgLTIyLjEgYyA1LjkgLTcgMTAuNyAtMTMuNSAxNS43IC0xOS42IGMgNSAtNi4xIDkuMSAtMTEuOCAxMy40IC0xNy41IGMgNC4zIC01LjcgOC4yIC0xMS41IDEyIC0xNy4xIGMgMy44IC01LjYgNy4xIC0xMS4xIDEwLjMgLTE2LjQgYyAzLjIgLTUuNCA2IC0xMC44IDguMyAtMTYuNCBjIDIuMiAtNS41IDMuMSAtMTIuNyAwLjkgLTIxLjUgYyAtMi4yIC04LjcgLTYuMiAtMTYuNiAtMTIuMSAtMjMuOSBjIC01LjkgLTcuMyAtMTQuNyAtMTIuMyAtMjMuNSAtMTQuNyBjIC04LjggLTIuNSAtMTguMyAtMi42IC0yNy43IC0xLjEgYyAtOS40IDEuNSAtMTguMyA1LjYgLTI2LjUgMTIuNiBjIC04LjMgNyAtMTUuMyAxNS44IC0yMS40IDI0LjkgYyAtNi4xIDkuMiAtMTAuMyAxOS40IC0xMi4yIDI5LjkgYyAtMS45IDEwLjYgLTIuNiAyMS40IC0xLjggMzIuMyBjIDAuNyAxMC45IDIuMiAyMS42IDMuOSAzMi40IGMgMS43IDEwLjcgMi45IDIxLjQgMy45IDMyLjIgYyAwLjkgMTAuOCA1LjIgMjEuMyAxMi4zIDI4LjcgYyA3LjIgNy40IDE2LjkgMTIuMiAyNi45IDE1LjEgYyAxMC4xIDIuOSAyMC4yIDMuNyAzMC4yIDMuNyBjIDEwIDAgMTkgLTMuNiAyNy4zIC05LjcgYyA4LjIgLTYuMSA5LjEgLTguMyAyMi41IC02LjkgYyAxMy40IDEuNCAxMi43IDEuMSAxMy4xIDExLjUgYyAwLjQgMTAuMyAtMC43IDIwLjggLTMuNSAzMS4xIGMgLTIuNyAxMC4zIC01LjMgMjAuOCAtNy42IDMxLjMgYyAtMi4yIDEwLjUgLTMuMiAyMS41IC0zLjIgMzIuMSBjIDAgMTAuNiAtMS4xIDIxLjEgLTMuNiAzMS4yIGMgLTIuNSA5LjggLTcuOCAxOS4zIC0xNS41IDI1LjcgYyAtNy42IDYuNCAtMTUuOCA3LjEgLTI1LjcgMy42IGMgLTkuOSAtMy41IC0xOC44IC05LjIgLTI1LjIgLTE3LjMgYyAtNi40IC04LjEgLTEwLjUgLTE4LjEgLTEzLjEgLTI3LjYgYyAtMi42IC05LjUgLTMuMyAtMTkgLTIuNCAtMjguNSBjIDAuOSAtOS40IDIuMyAtMTguNyAzLjggLTI3LjcgYyAxLjUgLTkgMi43IC0xNy43IDQuMiAtMjYuNiBjIDEuNSAtOC45IDIuNyAtMTcuNyA0LjEgLTI2LjYgYyAxLjQgLTkuMyAyLjMgLTIwLjIgMi40IC0zMC4yIGMgMC4xIC05LjkgLTAuOSAtMTkuOSAtMy4yIC0yOS40IGMgLTIuMyAtOS42IC01LjggLTE5LjIgLTExLjYgLTI2LjEgYyAtNS44IC02LjkgLTEzLjggLTExLjkgLTIyLjMgLTE0LjggYyAtOC41IC0yLjkgLTE3LjggLTMuMyAtMjcuMiAtMi4yIGMgLTkuNSAxLjEgLTE4LjQgMy4yIC0yNi41IDYuNyBjIC04LjIgMy41IC0xNi41IDcuOCAtMjQuNSA2LjMgYyAtOCAtMS41IC0xMS40IC01LjkgLTEzLjQgLTEyLjQgYyAtMS42IC01LjMgLTMuOCAtMTEgLTYuOCAtMTUuOSBjIC0zIC00LjkgLTcuNSAtOS4zIC0xMi42IC0xMS42IGMgLTUuMSAtMi40IC0xMC44IC00LjIgLTE3LjMgLTMuOSBjIC02LjQgMC4zIC0xMi4zIDEuMyAtMTguMSAyLjUgYyAtNS43IDEuMiAtMTAuMyAyLjggLTE1LjUgNC41IGMgLTUuMiAxLjYgLTkuMiAzLjIgLTEzLjQgNC44IGMgLTQuMiAxLjYgLTcuMiAzLjIgLTkuOCAyLjUgYyAtMi42IC0wLjggLTUuMiAtMy45IC01LjIgLTcuNSBjIDAgLTMuNiAyLjYgLTcuMyA1LjIgLTkuOSBjIDIuNiAtMi42IDYuMSAtNC42IDkuOSAtNi42IGMgMy44IC0yIDcuOCAtMy44IDExLjkgLTUuMyBjIDQuMSAtMS42IDguMiAtMy4xIDEyLjYgLTQuNiBjIDQuMyAtMS41IDguNyAtMy4xIDEyLjggLTUuMSBjIDQuMiAtMiA1LjggLTIuMyA5LjggLTIuNSBjIDQgLTAuMiA1LjIgLTEuMiA4LjUgLTUuNCBjIDMuNCAtNC4yIDYuNCAtOS40IDkuOSAtMTQuNSBjIDMuNSAtNS4xIDUuOSAtMTAuMiA2LjkgLTE1LjEgYyAxLjEgLTQuOSAxLjcgLTkuNyAwLjYgLTE0LjMgYyAtMS4yIC00LjcgLTIuOSAtOS40IC00LjYgLTE0LjkgYyAtMS44IC01LjUgLTMuNSAtMTEuNCAtMy44IC0xNy40IGMgLTAuMiAtNiAwLjYgLTEyLjIgMi4zIC0xOC40IGMgMS43IC02LjIgMi43IC0xMi43IDQuMyAtMTkuMiBjIDEuNiAtNi41IDMuMSAtMTMuMSA0LjcgLTE5LjcgYyAxLjYgLTYuNiAyLjIgLTEzLjUgMS42IC0yMC4xIGMgLTAuNSAtNi43IC0zLjcgLTEzLjUgLTYuNSAtMTkuOCBjLTIuOCAtNi4zIC01LjcgLTEyLjcgLTkuNSAtMTkuNSBjLTMuOCAtNi44IC04LjYgLTEzLjYgLTE0LjQgLTIwLjEgYyAtNS44IC02LjUgLTEyLjEgLTEyLjcgLTE5LjIgLTE3LjIgYyAtNy4xIC00LjYgLTE1LjUgLTYuOCAtMjQuNiAtNS41IGMgLTkuMSAxLjMgLTE3LjggMy44IC0yNi4yIDcuMSBjIC04LjQgMy4zIC0xNi42IDYuNiAtMjQuNyA5LjkgYyAtOC4yIDMuMyAtMTYuMyA2LjkgLTI0LjQgOS4zIGMgLTguMSAyLjQgLTE2LjEgMy42IC0yNC4yIDMuNiBjIC04LjEgMCAtMTUuOCAtMi41IC0yMy40IC01LjkgYyAtNy42IC0zLjQgLTE0LjggLTcuOCAtMjEuMiAtMTIuNiBjIC02LjUgLTQuOSAtMTIuNiAtOS43IC0xOC44IC0xMy41IGMgLTYuMiAtMy44IC0xMi41IC03LjYgLTIwLjEgLTEwLjUgYyAtNy42IC0yLjkgLTE1LjcgLTQuMyAtMjMuNSAtNC41IGMgLTcuOCAtMC4yIC0xNS41IDAuOSAtMjMuMSAxLjYgYyAtNy41IDAuNyAtMTUuMSA2LjYgLTE4LjMgMTUuNCBjIC0zLjMgOC43IC00LjUgMTguNCAtNC43IDI5LjMgYyAtMC4yIDEwLjggMC43IDIxLjUgMi4yIDMyLjUgYyAxLjUgMTAuOSAzLjggMjIgNS41IDMyLjkgYyAxLjcgMTAuOSA0LjQgMjIuNiA3LjEgMzMuNSBjIDIuNyAxMC45IDUuMiAyMS42IDcuNCAzMS45IGMgMi4yIDEwLjMgNC40IDIwLjIgNi42IDMwLjEgYyAyLjIgOS44IDQuNCAxOS40IDcuMyAyOS4yIGMgMi44IDkuOSAzLjkgMjAuMyAzLjIgMzAuOSBjIC0wLjcgMTAuNyAtMy4xIDIxLjggLTUuOSAzMi44IGMgLTIuOCAxMS4xIC01LjIgMjIuMiAtNi41IDMzLjEgYyAtMS4zIDEwLjkgLTAuOSAyMS42IDEuOCAzMi4zIGMgMi44IDEwLjcgNy4yIDIwLjUgMTMuMiAyNy40IGMgNiA0LjIgMTMuNyA2LjkgMjMuNCA3LjcgYyA5LjcgMC44IDIwLjUgLTAuNSAzMC45IC01LjMgYyAxMC41IC00LjcgMTkuMSAtMTIuMyAyNi45IC0yMC45IGMgNy43IC04LjUgMTMuMyAtMTguMSAxNi43IC0yOC4yIGMgMy40IC0xMC4xIDQuMiAtMjAuNiAyLjUgLTMxIGMgLTEuNyAtMTAuMyAtNC42IC0yMC42IC05LjMgLTI5LjYgYyAtNC42IC05LjEgLTEwLjIgLTE3LjMgLTE2LjMgLTIzLjIgYyAtNi4yIC01LjggLTEyLjkgLTEwLjYgLTIwLjIgLTE0LjYgYyAtNy4zIC00IC0xNS4xIC03LjcgLTIzLjMgLTExLjIgYyAtOC4yIC0zLjUgLTE2LjQgLTYuOCAtMjQuNSAtMTAuNCBjIC04LjEgLTMuNiAtMTYgLTcuMiAtMjMuNCAtMTAuMSBjIC03LjQgLTIuOSAtMTQuMiAtNS45IC0yMC4xIC04LjQgYyAtNi4xIC0yLjYgLTExLjcgLTYuMiAtMTUuOSAtMTEuOCBjIC00LjMgLTUuNSAtNi44IC0xMiAtNy44IC0xOC42IGMgLTEuMSAtNi42IC0wLjIgLTEzLjEgMi4yIC0xOC45IGMgMi40IC01LjggNi4yIC05LjIgMTAuNCAtMTEuMiBjIDQuMiAtMiAxMC43IC0zLjIgMTcuMSAtNC40IGMgNi40IC0xLjIgMTIuMSAtMi43IDE4LjIgLTMuOSBjIDYgLTEuMiAxMS43IC0yLjMgMTcgLTQuMiBjIDUuMyAtMS45IDkuOSAtNC43IDE0LjMgLTcuOSBjIDQuNCAtMy4yIDguNyAtNi42IDEzIC05LjUgYyA0LjMgLTIuOSA3LjkgLTUuMyAxMS4yIC03LjQgYyAzLjMgLTIuMSA1LjcgLTIuNiA5LjYgLTIuNiBjIDMuOSA4LjggLTcuMiA5LjQgLTE4LjcgOS40IGMgLTEuMiAwIC0zLjUgLTAuMyAtMy41IC0wLjIgYyAtMi45IDAuMiAtNS4yIDEuMyAtNy41IDIuNyBjIC0yLjMgMS40IC00LjUgMy4zIC02LjYgNS40IGMgLTIuMSA2LjYgLTEwLjMgMTMuNCAtMTguMSAxOC41IGMgLTcuNyA1LjEgLTE2LjggOS4xIC0yNS44IDEyLjQgYyAtOS4xIDMuMyAtMTguMiA1LjIgLTI3LjYgNS4zIGMgLTkuNCAwLjEgLTE4LjUgLTAuNyAtMjcuNCAtMi42IGMgLTguOCAtMS45IC0xNy41IC00LjYgLTI0LjcgLTcuOSBjIC03LjIgLTMuMyAtMTIuNyAtNy45IC0xNi45IC0xMy41IGMgLTQuMiAtNS42IC01LjcgLTEyLjggLTMuNSAtMjAuNSBjIDIuMiAtNy43IDYuNCAtMTQuMyAxMS41IC0xOS44IGMgNS4xIC01LjUgMTAuNiAtOS42IDE2LjMgLTEzLjcgYg==');
+        }
+
+        .nitrogen-img {
+            content: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMDAiIGhlaWdodD0iMTAwIiB2aWV3Qm94PSIwIDAgMjAwIDEwMCI+PHRpdGxlPk5pdHJvZ2VuIE1vbGVjdWxlPC90aXRsZT48Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSIyNSIgZmlsbD0iIzQ2NjY4OSIvPjxsaW5lIHgxPSI3NSIgeTE9IjUwIiB4Mj0iMTI1IiB5Mj0iNTAiIHN0cm9rZT0iIzQ2NjY4OSIgc3Ryb2tlLXdpZHRoPSI0Ii8+PGNpcmNsZSBjeD0iMTUwIiBjeT0iNTAiIHI9IjI1IiBmaWxsPSIjNDY2Njg5Ii8+PC9zdmc+');
+        }
+
+        .no-result-text {
+            color: #4a5568;
+            font-size: 1.25rem;
+            text-align: center;
+        }
+
+        @media (max-width: 640px) {
+            .container {
+                gap: 1rem;
+            }
+            .atom-selection {
+                padding: 1rem;
+                gap: 1rem;
+            }
+            .atom-container {
+                width: 70px;
+                height: 70px;
+            }
+            .atom {
+                width: 50px;
+                height: 50px;
+            }
+            .synthesis-area {
+                width: 100%;
+                min-height: 200px;
+            }
+            .molecule-image {
+                width: 150px;
+                height: 150px;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <div class="container">
+        <div class="atom-selection">
+            <!-- 原子選擇區 -->
+            <div class="atom-container" draggable="true" data-atom="O">
+                <div class="atom atom-o">O</div>
+                <div class="mt-2 text-sm text-gray-700">氧原子</div>
+            </div>
+            <div class="atom-container" draggable="true" data-atom="C">
+                <div class="atom atom-c">C</div>
+                <div class="mt-2 text-sm text-gray-700">碳原子</div>
+            </div>
+            <div class="atom-container" draggable="true" data-atom="H">
+                <div class="atom atom-h">H</div>
+                <div class="mt-2 text-sm text-gray-700">氫原子</div>
+            </div>
+            <div class="atom-container" draggable="true" data-atom="N">
+                <div class="atom atom-n">N</div>
+                <div class="mt-2 text-sm text-gray-700">氮原子</div>
+            </div>
+        </div>
+
+        <div class="synthesis-area" id="synthesis-area">
+            <p class="no-result-text">拖曳原子至此合成區</p>
+        </div>
+
+        <button id="combine-btn" class="combine-btn">組合</button>
+        
+        <div class="molecule-display" id="molecule-display">
+            <p class="no-result-text">組合結果會顯示在此</p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const atoms = document.querySelectorAll('.atom-container');
+            const synthesisArea = document.getElementById('synthesis-area');
+            const combineBtn = document.getElementById('combine-btn');
+            const moleculeDisplay = document.getElementById('molecule-display');
+            let droppedAtoms = [];
+
+            // 拖曳開始事件
+            atoms.forEach(atom => {
+                atom.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData('text/plain', atom.querySelector('.atom').textContent);
+                    e.dataTransfer.effectAllowed = 'copy';
+                });
+            });
+
+            // 拖曳經過事件
+            synthesisArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'copy';
+                synthesisArea.classList.add('dragging');
+            });
+
+            synthesisArea.addEventListener('dragleave', () => {
+                synthesisArea.classList.remove('dragging');
+            });
+
+            // 拖曳放置事件
+            synthesisArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                synthesisArea.classList.remove('dragging');
+
+                const atomType = e.dataTransfer.getData('text/plain');
+                if (atomType) {
+                    droppedAtoms.push(atomType);
+                    updateSynthesisAreaDisplay();
+                }
+            });
+
+            // 更新合成區的顯示
+            function updateSynthesisAreaDisplay() {
+                synthesisArea.innerHTML = '';
+                const counts = droppedAtoms.reduce((acc, atom) => {
+                    acc[atom] = (acc[atom] || 0) + 1;
+                    return acc;
+                }, {});
+
+                if (Object.keys(counts).length === 0) {
+                    synthesisArea.innerHTML = '<p class="no-result-text">拖曳原子至此合成區</p>';
+                } else {
+                    Object.keys(counts).forEach(atomType => {
+                        const count = counts[atomType];
+                        const atomStack = document.createElement('div');
+                        atomStack.className = 'synthesis-atom-stack';
+                        atomStack.dataset.atom = atomType;
+
+                        const atomElement = document.createElement('div');
+                        atomElement.className = `atom atom-${atomType.toLowerCase()}`;
+                        atomElement.textContent = atomType;
+                        atomStack.appendChild(atomElement);
+
+                        if (count > 1) {
+                            const countDisplay = document.createElement('span');
+                            countDisplay.className = 'synthesis-atom-count';
+                            countDisplay.textContent = count;
+                            atomStack.appendChild(countDisplay);
+                        }
+
+                        // 點擊移除功能
+                        atomStack.addEventListener('click', () => {
+                            const index = droppedAtoms.indexOf(atomType);
+                            if (index > -1) {
+                                droppedAtoms.splice(index, 1);
+                            }
+                            updateSynthesisAreaDisplay();
+                        });
+
+                        synthesisArea.appendChild(atomStack);
+                    });
+                }
+            }
+
+            // 組合按鈕點擊事件
+            combineBtn.addEventListener('click', () => {
+                if (droppedAtoms.length === 0) {
+                    displayResult('請先拖曳原子到合成區！');
+                    return;
+                }
+
+                const counts = droppedAtoms.reduce((acc, atom) => {
+                    acc[atom] = (acc[atom] || 0) + 1;
+                    return acc;
+                }, {});
+                
+                let result = { title: '', image: null };
+
+                // 檢查 H2O
+                if (counts['O'] === 1 && counts['H'] === 2 && Object.keys(counts).length === 2) {
+                    result = { title: '水分子 ($H_2O$)', image: 'water-img' };
+                }
+                // 檢查 CO2
+                else if (counts['C'] === 1 && counts['O'] === 2 && Object.keys(counts).length === 2) {
+                    result = { title: '二氧化碳 ($CO_2$)', image: 'co2-img' };
+                }
+                // 檢查葡萄糖 (C6H12O6)
+                else if (counts['C'] === 6 && counts['H'] === 12 && counts['O'] === 6 && Object.keys(counts).length === 3) {
+                    result = { title: '葡萄糖 ($C_6H_{12}O_6$)', image: 'glucose-img' };
+                }
+                // 檢查氨 (NH3)
+                else if (counts['N'] === 1 && counts['H'] === 3 && Object.keys(counts).length === 2) {
+                    result = { title: '氨 ($NH_3$)', image: 'ammonia-img' };
+                }
+                // 檢查氮氣 (N2)
+                else if (counts['N'] === 2 && Object.keys(counts).length === 1) {
+                    result = { title: '氮氣 ($N_2$)', image: 'nitrogen-img' };
+                }
+                // 其他未定義的組合
+                else {
+                    const formula = Object.keys(counts).map(atom => {
+                        const count = counts[atom];
+                        return count > 1 ? `${atom}${count}` : atom;
+                    }).join('');
+                    result = { title: `無法組合出已知的分子：${formula}`, image: null };
+                }
+
+                displayResult(result);
+            });
+
+            // 顯示結果到分子顯示區
+            function displayResult(result) {
+                moleculeDisplay.innerHTML = ''; // 清空顯示區
+
+                if (typeof result === 'string') {
+                    const p = document.createElement('p');
+                    p.className = 'no-result-text';
+                    p.textContent = result;
+                    moleculeDisplay.appendChild(p);
+                } else {
+                    const title = document.createElement('h2');
+                    title.className = 'molecule-title';
+                    title.textContent = result.title;
+                    moleculeDisplay.appendChild(title);
+
+                    if (result.image) {
+                        const img = document.createElement('div');
+                        img.className = `molecule-image ${result.image}`;
+                        moleculeDisplay.appendChild(img);
+                    } else {
+                        const p = document.createElement('p');
+                        p.className = 'no-result-text';
+                        p.textContent = `無法組合出已知的分子`;
+                        moleculeDisplay.appendChild(p);
+                    }
+                }
+
+                // 重置合成區
+                droppedAtoms = [];
+                updateSynthesisAreaDisplay();
+            }
+        });
+    </script>
+</body>
+</html>
