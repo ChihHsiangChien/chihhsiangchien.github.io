@@ -6,7 +6,7 @@ canvas.width = window.innerWidth > 800 ? 800 : window.innerWidth - 20;
 canvas.height = 500;
 
 // 模擬控制參數
-let simulationSpeed = 2.0; // 速度倍率
+let simulationSpeed = 0.5; // 速度倍率
 let isPaused = false;
 
 const membraneWidth = 30; // 細胞膜視覺寬度
