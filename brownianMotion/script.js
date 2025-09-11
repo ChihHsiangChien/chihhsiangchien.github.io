@@ -50,7 +50,7 @@ function drawParticles() {
     particles.forEach(particle => {
         ctx.beginPath();
         ctx.arc(particle.x, particle.y, particleRadius, 0, Math.PI * 2);
-        ctx.fillStyle = 'white';
+        ctx.fillStyle = 'rgba(255,0,0,0.8)'; // 紅色帶透明度
         ctx.fill();
         ctx.closePath();
     });
