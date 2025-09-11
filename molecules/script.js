@@ -213,11 +213,8 @@ function drawMolecule(molecule) {
 }
 
 function drawMembrane() {
-  // ...existing code...
-  // ...existing code...
   // --- 最後繪製葡萄糖通道（紫色蛋白通道） ---
   if (enableGlucoseChannel) {
-  
     const channelWidth = membraneWidth * 1.5;
     const channelHeight = 70;
     const channelX = membraneX - channelWidth / 2;
@@ -227,15 +224,19 @@ function drawMembrane() {
     ctx.strokeStyle = "#4B2991";
     ctx.fillStyle = "#8B5DE8";
     ctx.lineWidth = 6;
-    ctx.moveTo(channelX + 14, channelY);
-    ctx.lineTo(channelX + channelWidth - 14, channelY);
+    /*
+    ctx.moveTo(channelX - 50, channelY);
+    ctx.lineTo(channelX + channelWidth - 10, channelY);
     ctx.bezierCurveTo(
       channelX + channelWidth + 18, channelY + channelHeight / 2,
-      channelX + channelWidth - 14, channelY + channelHeight,
-      channelX + 14, channelY + channelHeight
+      channelX + channelWidth - 20, channelY + channelHeight,
+      channelX - 50, channelY + channelHeight
     );
     ctx.lineTo(channelX + 14, channelY);
     ctx.closePath();
+    */
+   ctx.rect(channelX, channelY, channelWidth, channelHeight);
+
     ctx.fill();
     ctx.stroke();
     ctx.restore();
@@ -414,75 +415,82 @@ function update() {
     // 更新位置 (考慮模擬速度)
     m.x += m.vx * simulationSpeed;
     m.y += m.vy * simulationSpeed;
-    m.rotation += m.angularVelocity * simulationSpeed; // 更新角度
+    m.rotation += m.angularVelocity * simulationSpeed;
 
-    // 邊界碰撞檢查
+    // 邊界計算
     const membraneLeftEdge = membraneX - membraneWidth / 2;
     const membraneRightEdge = membraneX + membraneWidth / 2;
 
-    if (m.type === "Glucose") {
-      // 左側牆
-      if (m.x - m.radius < 0) {
-        m.x = m.radius;
-        m.vx *= -1;
-      }
-        // 細胞膜左側
-        if (
-          (
-            !enableGlucoseChannel ||
-            m.y < canvas.height / 2 - 35 || m.y > canvas.height / 2 + 35
-          ) &&
-          m.x + m.radius > membraneLeftEdge && m.x < membraneX && m.vx > 0
-        ) {
-          m.x = membraneLeftEdge - m.radius;
-          m.vx *= -1;
-        }
-        // 細胞膜右側
-        if (
-          (
-            !enableGlucoseChannel ||
-            m.y < canvas.height / 2 - 35 || m.y > canvas.height / 2 + 35
-          ) &&
-          m.x - m.radius < membraneRightEdge && m.x > membraneX && m.vx < 0
-        ) {
-          m.x = membraneRightEdge + m.radius;
-          m.vx *= -1;
-        }
-      // 右側牆
-      if (m.x + m.radius > canvas.width) {
-        m.x = canvas.width - m.radius;
-        m.vx *= -1;
-      }
-    } else {
-      // 其他分子
-      if (m.x - m.radius < 0) {
-        m.x = m.radius;
-        m.vx *= -1;
-      } else if (m.x + m.radius > canvas.width) {
-        m.x = canvas.width - m.radius;
-        m.vx *= -1;
-      }
+    // X方向邊界：分子碰到畫布左右牆壁會反彈
+    if (m.x - m.radius < 0) {
+      m.x = m.radius;
+      m.vx *= -1;
+    } else if (m.x + m.radius > canvas.width) {
+      m.x = canvas.width - m.radius;
+      m.vx *= -1;
     }
+
+    // Y方向邊界：分子碰到畫布上下邊界會反彈
     if (m.y - m.radius < 0) {
       m.y = m.radius;
       m.vy *= -1;
-    } else if (m.y + m.radius > canvas.height) {
-       // 細胞膜通道判斷
-       if (!enableGlucoseChannel) {
-         // 細胞膜左側
-         if (m.x + m.radius > membraneLeftEdge && m.x < membraneX && m.vx > 0) {
-           m.x = membraneLeftEdge - m.radius;
-           m.vx *= -1;
-         }
-         // 細胞膜右側
-         if (m.x - m.radius < membraneRightEdge && m.x > membraneX && m.vx < 0) {
-           m.x = membraneRightEdge + m.radius;
-           m.vx *= -1;
-         }
-       }
     }
-    // 從右側接近膜
-    else if (
+    if (m.y + m.radius > canvas.height) {
+      m.y = canvas.height - m.radius;
+      m.vy *= -1;
+    }
+
+    // --- 細胞膜碰撞區 ---
+    // 1. 葡萄糖分子（Glucose）有專屬通道，只有通道開啟且在通道範圍內才可通過
+    if (m.type === "Glucose") {
+      // 細胞膜左側：若通道關閉或不在通道範圍，則反彈
+      if (( !enableGlucoseChannel ||
+            m.y < canvas.height / 2 - 35 || 
+            m.y > canvas.height / 2 + 35
+          ) &&
+          m.x + m.radius > membraneLeftEdge && 
+          m.x < membraneX && m.vx > 0
+      ) {
+        m.x = membraneLeftEdge - m.radius;
+        m.vx *= -1;
+      }
+      // 細胞膜右側：若通道關閉或不在通道範圍，則反彈，否則可通過
+      if (( !enableGlucoseChannel ||
+            m.y < canvas.height / 2 - 35 || 
+            m.y > canvas.height / 2 + 35
+          ) &&
+          m.x - m.radius < membraneRightEdge && 
+          m.x > membraneX && m.vx < 0
+      ) {
+        m.x = membraneRightEdge + m.radius;
+        m.vx *= -1;
+      }
+      // 若通道開啟且在通道範圍，則可自由通過（不做任何處理）
+    }
+    // 2. 水 氧氣 二氧化碳 分子可自由穿透
+    else if (!enableGlucoseChannel &&
+       m.type !== "H2O" &&
+       m.type !== "CO2" &&
+       m.type !== "O2"
+    ) {
+      // 細胞膜左側 會反彈
+      if (m.x + m.radius > membraneLeftEdge && m.x < membraneX && m.vx > 0) {
+        m.x = membraneLeftEdge - m.radius;
+        m.vx *= -1;
+      }
+      // 細胞膜右側 會反彈
+      if (m.x - m.radius < membraneRightEdge && m.x > membraneX && m.vx < 0) {
+        m.x = membraneRightEdge + m.radius;
+        m.vx *= -1;
+      }
+    }
+
+    // 3. 從細胞外右側接近膜時的特殊反彈（防止分子卡在膜邊緣，水分子不受此限制）
+    if (
+      m.type !== "H2O" &&
+      m.type !== "CO2" &&
+      m.type !== "O2" &&
+      !(m.type === "Glucose" && enableGlucoseChannel && m.y >= canvas.height / 2 - 35 && m.y <= canvas.height / 2 + 35) &&
       m.x - m.radius < membraneRightEdge &&
       m.x > membraneX &&
       m.vx < 0
@@ -490,7 +498,6 @@ function update() {
       m.x = membraneRightEdge + m.radius;
       m.vx *= -1;
     }
-      
   });
 
   // 分子間碰撞檢測（根據開關）
@@ -552,6 +559,7 @@ function update() {
 
 // --- 創建控制面板 ---
 function createControlPanel() {
+  /*
   const controlPanel = document.createElement("div");
   // 葡萄糖通道開關
   const glucoseChannelLabel = document.createElement("label");
@@ -590,6 +598,8 @@ function createControlPanel() {
   resetButton.addEventListener("click", () => {
     init();
   });
+  */
+
   // 分子設定控制（表格排版）
   const moleculeSettingsTable = document.createElement("table");
   moleculeSettingsTable.style.marginTop = "15px";
@@ -708,6 +718,44 @@ function createControlPanel() {
 
   moleculeSettingsTable.appendChild(outsideRow);
 
+  const controlPanel = document.createElement("div");
+  // 葡萄糖通道開關
+  const glucoseChannelLabel = document.createElement("label");
+  glucoseChannelLabel.textContent = "葡萄糖通道";
+  glucoseChannelLabel.style.marginLeft = "10px";
+  const glucoseChannelCheckbox = document.createElement("input");
+  glucoseChannelCheckbox.type = "checkbox";
+  glucoseChannelCheckbox.style.marginLeft = "5px";
+  glucoseChannelCheckbox.checked = false;
+  glucoseChannelLabel.appendChild(glucoseChannelCheckbox);
+
+
+  // 補回控制元件宣告
+  const speedControl = document.createElement("input");
+  speedControl.type = "range";
+  speedControl.min = "0.5";
+  speedControl.max = "5";
+  speedControl.step = "0.1";
+  speedControl.value = simulationSpeed;
+  speedControl.style.width = "120px";
+  speedControl.style.marginRight = "10px";
+  speedControl.addEventListener("input", () => {
+    simulationSpeed = parseFloat(speedControl.value);
+  });
+
+  const pauseButton = document.createElement("button");
+  pauseButton.textContent = "暫停/繼續";
+  pauseButton.style.marginRight = "10px";
+  pauseButton.addEventListener("click", () => {
+    isPaused = !isPaused;
+  });
+
+  const resetButton = document.createElement("button");
+  resetButton.textContent = "重設";
+  resetButton.addEventListener("click", () => {
+    init();
+  });
+  
   // 更新分子數量按鈕
   const updateButton = document.createElement("button");
   updateButton.textContent = "更新分子數量";
@@ -731,11 +779,17 @@ function createControlPanel() {
   });
 
   // 控制面板加入表格和按鈕
-  moleculeSettingsTable.appendChild(updateButton);
+  //moleculeSettingsTable.appendChild(updateButton);
+  controlPanel.appendChild(moleculeSettingsTable);
+  controlPanel.appendChild(updateButton);
+
+  
+  
   controlPanel.appendChild(speedControl);
   controlPanel.appendChild(pauseButton);
   controlPanel.appendChild(resetButton);
-  controlPanel.appendChild(moleculeSettingsTable);
+  // 將通道開關加入控制面板
+  controlPanel.appendChild(glucoseChannelLabel);  
 
   // 將控制面板添加到 canvas 下方
   const container = document.createElement("div");
