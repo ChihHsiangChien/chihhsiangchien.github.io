@@ -1,25 +1,33 @@
 // 設定畫布和粒子參數
 const canvas = document.getElementById('brownianCanvas');
 const ctx = canvas.getContext('2d');
-const particlesCount = 1000; // 粒子的數量
+const particlesPerClick = 100; // 每次點擊產生的粒子數量
 const particleRadius = 3;
 const particleSpeed = 2; // 每次移動的像素範圍
 let particles = [];
+let currentColor = 'rgba(255,0,0,0.8)';
 
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-// 初始化粒子，所有粒子起始於畫布的中心
-function initializeParticles() {
-    const centerX = canvas.width / 2;
-    const centerY = canvas.height / 2;
 
-    for (let i = 0; i < particlesCount; i++) {
+// 將hex顏色轉rgba字串
+function hexToRgba(hex, alpha=0.8) {
+    const r = parseInt(hex.slice(1,3), 16);
+    const g = parseInt(hex.slice(3,5), 16);
+    const b = parseInt(hex.slice(5,7), 16);
+    return `rgba(${r},${g},${b},${alpha})`;
+}
+
+// 在指定位置新增一批粒子，帶顏色
+function addParticlesAt(x, y) {
+    for (let i = 0; i < particlesPerClick; i++) {
         particles.push({
-            x: centerX,
-            y: centerY,
+            x: x,
+            y: y,
             vx: 0,
-            vy: 0
+            vy: 0,
+            color: currentColor
         });
     }
 }
@@ -46,15 +54,22 @@ function updateParticles() {
 // 繪製粒子
 function drawParticles() {
     ctx.clearRect(0, 0, canvas.width, canvas.height); // 清除畫布
-
     particles.forEach(particle => {
         ctx.beginPath();
         ctx.arc(particle.x, particle.y, particleRadius, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(255,0,0,0.8)'; // 紅色帶透明度
+        ctx.fillStyle = particle.color || 'rgba(255,0,0,0.8)';
         ctx.fill();
         ctx.closePath();
     });
 }
+// 顏色選擇器事件
+const colorPicker = document.getElementById('colorPicker');
+if (colorPicker) {
+    colorPicker.addEventListener('input', function(e) {
+        currentColor = hexToRgba(e.target.value, 0.8);
+    });
+}
+
 
 // 動畫循環
 function animate() {
@@ -63,6 +78,23 @@ function animate() {
     requestAnimationFrame(animate); // 呼叫下一幀
 }
 
-// 初始化並開始動畫
-initializeParticles();
+// 監聽滑鼠點擊事件
+canvas.addEventListener('click', function(e) {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    addParticlesAt(x, y);
+});
+
+// 監聽觸控事件
+canvas.addEventListener('touchstart', function(e) {
+    const rect = canvas.getBoundingClientRect();
+    for (let i = 0; i < e.touches.length; i++) {
+        const x = e.touches[i].clientX - rect.left;
+        const y = e.touches[i].clientY - rect.top;
+        addParticlesAt(x, y);
+    }
+});
+
+// 開始動畫循環
 animate();
