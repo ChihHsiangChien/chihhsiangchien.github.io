@@ -125,6 +125,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Common variables for touch and mouse drag
     let draggedItem = null;
+    let floatingCard = null;
     
     // Set up drag-and-drop listeners for variable cards
     variablesContainer.querySelectorAll('.draggable-card').forEach(card => {
@@ -133,7 +134,6 @@ document.addEventListener('DOMContentLoaded', () => {
             draggedItem = e.target;
             e.target.classList.add('dragging');
             e.dataTransfer.setData('text/plain', e.target.id);
-
         });
 
         card.addEventListener('dragend', (e) => {
@@ -146,6 +146,51 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             draggedItem = e.target.closest('.draggable-card');
             draggedItem.classList.add('dragging');
+
+            // 建立浮動卡片
+            floatingCard = draggedItem.cloneNode(true);
+            floatingCard.style.position = 'fixed';
+            floatingCard.style.pointerEvents = 'none';
+            floatingCard.style.zIndex = 9999;
+            floatingCard.style.opacity = 0.8;
+            floatingCard.classList.add('dragging');
+            document.body.appendChild(floatingCard);
+        });
+
+        // 讓浮動卡片跟隨手指移動
+        card.addEventListener('touchmove', (e) => {
+            if (!floatingCard) return;
+            const touch = e.touches[0];
+            floatingCard.style.left = (touch.clientX - floatingCard.offsetWidth / 2) + 'px';
+            floatingCard.style.top = (touch.clientY - floatingCard.offsetHeight / 2) + 'px';
+        });
+
+        // 放開時自動判斷落點並 drop
+        card.addEventListener('touchend', (e) => {
+            if (!draggedItem) {
+                if (floatingCard) {
+                    floatingCard.remove();
+                    floatingCard = null;
+                }
+                return;
+            }
+            const touch = e.changedTouches[0];
+            const dropTarget = document.elementFromPoint(touch.clientX, touch.clientY);
+            if (dropTarget && dropTarget.closest('.experiment-slot')) {
+                const dropSlot = dropTarget.closest('.experiment-slot');
+                const droppedCardId = draggedItem.id;
+                const slotsArr = [document.getElementById('slot1'), document.getElementById('slot2')];
+                const dropSlotIndex = slotsArr.indexOf(dropSlot);
+                if (dropSlotIndex !== -1) {
+                    handleDrop(droppedCardId, dropSlotIndex);
+                }
+            }
+            draggedItem.classList.remove('dragging');
+            draggedItem = null;
+            if (floatingCard) {
+                floatingCard.remove();
+                floatingCard = null;
+            }
         });
     });
 
@@ -169,11 +214,15 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         // Touch events
+        // Touch移動時讓浮動卡片跟隨手指
         slot.addEventListener('touchmove', (e) => {
             e.preventDefault();
             const touch = e.touches[0];
+            if (floatingCard) {
+                floatingCard.style.left = (touch.clientX - floatingCard.offsetWidth / 2) + 'px';
+                floatingCard.style.top = (touch.clientY - floatingCard.offsetHeight / 2) + 'px';
+            }
             const targetElement = document.elementFromPoint(touch.clientX, touch.clientY);
-            
             slots.forEach(s => s.classList.remove('dragover'));
             if (targetElement && targetElement.closest('.experiment-slot')) {
                 targetElement.closest('.experiment-slot').classList.add('dragover');
@@ -183,21 +232,27 @@ document.addEventListener('DOMContentLoaded', () => {
         slot.addEventListener('touchend', (e) => {
             e.preventDefault();
             slots.forEach(s => s.classList.remove('dragover'));
-            
-            if (!draggedItem) return;
-
+            if (!draggedItem) {
+                if (floatingCard) {
+                    floatingCard.remove();
+                    floatingCard = null;
+                }
+                return;
+            }
             const touch = e.changedTouches[0];
             const dropTarget = document.elementFromPoint(touch.clientX, touch.clientY);
-
             if (dropTarget && dropTarget.closest('.experiment-slot')) {
                 const dropSlot = dropTarget.closest('.experiment-slot');
                 const droppedCardId = draggedItem.id;
                 const dropSlotIndex = slots.indexOf(dropSlot);
                 handleDrop(droppedCardId, dropSlotIndex);
             }
-            
             draggedItem.classList.remove('dragging');
             draggedItem = null;
+            if (floatingCard) {
+                floatingCard.remove();
+                floatingCard = null;
+            }
         });
     });
 
@@ -214,6 +269,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         const clonedCard = droppedCard.cloneNode(true);
+        clonedCard.removeAttribute('id'); // 避免多個相同 id 影響原卡片
         clonedCard.classList.remove('dragging');
         clonedCard.draggable = false;
         clonedCard.style.cursor = 'pointer';
@@ -321,7 +377,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!svgContainer) return;
 
         let combinedSVG = `<svg viewBox="0 0 100 100" class="robot-svg w-full h-full">`;
-        
         // Draw base robot
         const robotBase = `<rect x="15" y="30" width="70" height="40" rx="10" ry="10" stroke="#4a5568" stroke-width="3" fill="${robotSVG.color[variables.color] || '#6b7280'}"/>`;
         const robotHead = `<circle cx="50" cy="25" r="10" fill="#4a5568"/>`;
@@ -329,12 +384,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Draw tires if they exist
         const tiresSVG = variables.tires ? robotSVG.tires[variables.tires] : '';
-
         // Draw package if it exists
         const packageSVG = variables.package ? robotSVG.package[variables.package] : '';
 
-        combinedSVG += robotBase + robotHead + robotAntenna + tiresSVG + packageSVG + `</svg>`;
-        
+        // 機器人內部顯示A或B
+        let robotLabel = '';
+        if (variables.robot === 'A' || variables.robot === 'B') {
+            robotLabel = `<text x="50" y="55" text-anchor="middle" alignment-baseline="middle" font-size="28" font-weight="bold" fill="#fff">${variables.robot}</text>`;
+        }
+
+        combinedSVG += robotBase + robotHead + robotAntenna + tiresSVG + packageSVG + robotLabel + `</svg>`;
         // Inject the final SVG into the container
         svgContainer.innerHTML = combinedSVG;
     }
@@ -456,7 +515,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const historyCard = document.createElement('div');
             historyCard.className = 'bg-gray-50 p-4 rounded-lg shadow-sm border-2 border-gray-200';
             
-            const timeDiff = Math.abs(parseFloat(item.time1) - parseFloat(item.time2));
+            const timeDiff = parseFloat(item.time1) - parseFloat(item.time2);
             /*
             let config1Html = '';
             for (const type in item.config1) {
@@ -484,15 +543,28 @@ document.addEventListener('DOMContentLoaded', () => {
             config2Html += `<p class="text-sm"><span class="font-bold">${typeName}</span>: ${name}</p>`;
         }
 
-            const summary = `
-                <p class="font-bold text-lg mb-2">實驗 #${index + 1} <span class="text-sm font-normal text-gray-500">(${item.timestamp})</span></p>
-                <p class="text-gray-700">結果：第一組花費 ${item.time1} 秒，第二組花費 ${item.time2} 秒。時間差：${timeDiff.toFixed(2)} 秒。</p>
-                <p class="text-gray-700 mt-2 font-bold">實驗組一變因：</p>
-                <div class="ml-4">${config1Html}</div>
-                <p class="text-gray-700 mt-2 font-bold">實驗組二變因：</p>
-                <div class="ml-4">${config2Html}</div>
-                <!-- <p class="text-gray-700 mt-2">分析：${item.analysis}</p> -->
-            `;
+                        // 以表格方式呈現兩組變因
+                        const types = ['robot', 'package', 'conveyor', 'power', 'tires', 'color'];
+                        let tableRows = '';
+                        for (const type of types) {
+                                const value1 = item.config1[type] ? (valueNames[type] && valueNames[type][item.config1[type]] ? valueNames[type][item.config1[type]] : item.config1[type]) : '-';
+                                const value2 = item.config2[type] ? (valueNames[type] && valueNames[type][item.config2[type]] ? valueNames[type][item.config2[type]] : item.config2[type]) : '-';
+                                const typeName = variableNames[type] ? variableNames[type] : type;
+                                // 若不同則標色
+                                const diff = value1 !== value2 ? 'bg-yellow-100 font-bold' : '';
+                                tableRows += `<tr><td class="border px-2 py-1">${typeName}</td><td class="border px-2 py-1 ${diff}">${value1}</td><td class="border px-2 py-1 ${diff}">${value2}</td></tr>`;
+                        }
+                        const summary = `
+                                <p class="font-bold text-lg mb-2">實驗 #${index + 1} <span class="text-sm font-normal text-gray-500">(${item.timestamp})</span></p>
+                                <p class="text-gray-700">結果：第一組花費 ${item.time1} 秒，第二組花費 ${item.time2} 秒。時間差：${timeDiff.toFixed(2)} 秒。</p>
+                                <div class="overflow-x-auto mt-2">
+                                    <table class="min-w-full border text-sm text-center bg-white">
+                                        <thead><tr class="bg-gray-100"><th class="border px-2 py-1">變因</th><th class="border px-2 py-1">第一組</th><th class="border px-2 py-1">第二組</th></tr></thead>
+                                        <tbody>${tableRows}</tbody>
+                                    </table>
+                                </div>
+                                <!-- <p class="text-gray-700 mt-2">分析：${item.analysis}</p> -->
+                        `;
             historyCard.innerHTML = summary;
             historyList.prepend(historyCard); // Add to the top of the list
         });
