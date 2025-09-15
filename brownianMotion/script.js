@@ -1,6 +1,7 @@
 // 設定畫布和粒子參數
 const canvas = document.getElementById('brownianCanvas');
 const ctx = canvas.getContext('2d');
+
 const particlesPerClick = 100; // 每次點擊產生的粒子數量
 const particleRadius = 3;
 const particleSpeed = 2; // 每次移動的像素範圍
@@ -9,6 +10,30 @@ let currentColor = 'rgba(255,0,0,0.8)';
 
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
+
+// UI: Toggle button for fading unclicked (default color) particles
+let fadeWhiteParticles = false;
+const fadeBtn = document.createElement('button');
+fadeBtn.textContent = '淡化未變色粒子';
+fadeBtn.style.position = 'fixed';
+fadeBtn.style.top = '10px';
+fadeBtn.style.left = '10px';
+fadeBtn.style.zIndex = 1000;
+fadeBtn.style.padding = '8px 16px';
+fadeBtn.style.fontSize = '16px';
+fadeBtn.style.background = '#222';
+fadeBtn.style.color = '#fff';
+fadeBtn.style.border = 'none';
+fadeBtn.style.borderRadius = '6px';
+fadeBtn.style.cursor = 'pointer';
+fadeBtn.style.opacity = 0.85;
+fadeBtn.addEventListener('mouseenter', () => fadeBtn.style.opacity = 1);
+fadeBtn.addEventListener('mouseleave', () => fadeBtn.style.opacity = 0.85);
+fadeBtn.addEventListener('click', () => {
+    fadeWhiteParticles = !fadeWhiteParticles;
+    fadeBtn.textContent = fadeWhiteParticles ? '顯示全部粒子' : '淡化未變色粒子';
+});
+document.body.appendChild(fadeBtn);
 
 
 // 將hex顏色轉rgba字串
@@ -55,11 +80,20 @@ function updateParticles() {
 function drawParticles() {
     ctx.clearRect(0, 0, canvas.width, canvas.height); // 清除畫布
     particles.forEach(particle => {
+        ctx.save();
         ctx.beginPath();
         ctx.arc(particle.x, particle.y, particleRadius, 0, Math.PI * 2);
-        ctx.fillStyle = particle.color || 'rgba(255,0,0,0.8)';
+        // 判斷是否要淡化未變色粒子（即顏色為預設 currentColor）
+        let isDefault = !particle.color || particle.color === currentColor;
+        if (fadeWhiteParticles && isDefault) {
+            ctx.globalAlpha = 0.15;
+        } else {
+            ctx.globalAlpha = 1.0;
+        }
+        ctx.fillStyle = particle.color || currentColor;
         ctx.fill();
         ctx.closePath();
+        ctx.restore();
     });
 }
 // 顏色選擇器事件

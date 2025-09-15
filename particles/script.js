@@ -3,8 +3,33 @@ const canvas = document.getElementById('brownianCanvas');
 const ctx = canvas.getContext('2d');
 const particlesCount = 1000; // 粒子的數量
 const particleRadius = 5;
+
 const particleSpeed = 2; // 每次移動的像素範圍
 let particles = [];
+
+// UI: Toggle button for fading unclicked (white) particles
+let fadeWhiteParticles = false;
+const fadeBtn = document.createElement('button');
+fadeBtn.textContent = '淡化未變色粒子';
+fadeBtn.style.position = 'fixed';
+fadeBtn.style.top = '10px';
+fadeBtn.style.left = '10px';
+fadeBtn.style.zIndex = 1000;
+fadeBtn.style.padding = '8px 16px';
+fadeBtn.style.fontSize = '16px';
+fadeBtn.style.background = '#222';
+fadeBtn.style.color = '#fff';
+fadeBtn.style.border = 'none';
+fadeBtn.style.borderRadius = '6px';
+fadeBtn.style.cursor = 'pointer';
+fadeBtn.style.opacity = 0.85;
+fadeBtn.addEventListener('mouseenter', () => fadeBtn.style.opacity = 1);
+fadeBtn.addEventListener('mouseleave', () => fadeBtn.style.opacity = 0.85);
+fadeBtn.addEventListener('click', () => {
+    fadeWhiteParticles = !fadeWhiteParticles;
+    fadeBtn.textContent = fadeWhiteParticles ? '顯示全部粒子' : '淡化未變色粒子';
+});
+document.body.appendChild(fadeBtn);
 
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
@@ -105,11 +130,19 @@ function drawParticles() {
     ctx.clearRect(0, 0, canvas.width, canvas.height); // 清除畫布
 
     particles.forEach(particle => {
+        ctx.save();
         ctx.beginPath();
         ctx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
+        // 若啟用淡化且粒子為白色（未被點擊變色）
+        if (fadeWhiteParticles && (particle.color === 'white' || particle.color === '#FFFFFF' || particle.color === '#ffffff')) {
+            ctx.globalAlpha = 0.15;
+        } else {
+            ctx.globalAlpha = 1.0;
+        }
         ctx.fillStyle = particle.color;
         ctx.fill();
         ctx.closePath();
+        ctx.restore();
     });
 }
 
@@ -143,12 +176,9 @@ canvas.addEventListener('click', function(event) {
 
 // 隨機產生顏色
 function getRandomColor() {
-    const letters = '0123456789ABCDEF';
-    let color = '#';
-    for (let i = 0; i < 6; i++) {
-        color += letters[Math.floor(Math.random() * 16)];
-    }
-    return color;
+    // 產生高彩度顏色（HSL: 色相隨機，飽和度90%，亮度55%）
+    const hue = Math.floor(Math.random() * 360);
+    return `hsl(${hue}, 90%, 55%)`;
 }
 
 // 動畫循環
