@@ -4,7 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const droppedCardsSlots = [document.getElementById('dropped-cards-slot1'), document.getElementById('dropped-cards-slot2')];
     const startButton = document.getElementById('startButton');
     const resetButton = document.getElementById('resetButton');
-    const toggleHistoryButton = document.getElementById('toggleHistory');
+    //const toggleHistoryButton = document.getElementById('toggleHistory');
     const historyContainer = document.getElementById('history-container');
     const historyList = document.getElementById('history-list');
     const messageEl = document.getElementById('message');
@@ -18,191 +18,52 @@ document.addEventListener('DOMContentLoaded', () => {
     const robotVariables = [{}, {}];
     const experimentHistory = [];
 
-    // 1. 集中卡片SVG
-    const cardSVG = {
-        robot: {
-            A: `<svg width="32" height="32"><circle cx="16" cy="16" r="14" fill="#4a5568"/><text x="16" y="22" text-anchor="middle" font-size="18" fill="#fff">A</text></svg>`,
-            B: `<svg width="32" height="32"><circle cx="16" cy="16" r="14" fill="#4a5568"/><text x="16" y="22" text-anchor="middle" font-size="18" fill="#fff">B</text></svg>`
-        },
-        package: {
-            1: `<svg width="32" height="32"><rect x="6" y="10" width="20" height="12" rx="3" fill="#a0522d" stroke="#8b4513" stroke-width="2"/></svg>`,
-            2: `<svg width="32" height="32"><rect x="4" y="8" width="24" height="16" rx="4" fill="#654321" stroke="#4a2e1d" stroke-width="2"/></svg>`
-        },
-        conveyor: {
-            blue: `<svg width="32" height="32"><rect x="4" y="14" width="24" height="4" fill="#60a5fa"/></svg>`,
-            yellow: `<svg width="32" height="32"><rect x="4" y="14" width="24" height="4" fill="#fbbf24"/></svg>`
-        },
-        power: {
-            Lightspeed: `<svg width="32" height="32"><rect x="10" y="8" width="12" height="16" rx="3" fill="#fbbf24" stroke="#b45309" stroke-width="2"/><text x="16" y="20" text-anchor="middle" font-size="14" fill="#b45309">⚡</text></svg>`,
-            Endurance: `<svg width="32" height="32"><rect x="10" y="8" width="12" height="16" rx="3" fill="#60a5fa" stroke="#1e40af" stroke-width="2"/><text x="16" y="20" text-anchor="middle" font-size="14" fill="#1e40af">🔋</text></svg>`
-        },
-        tires: {
-            Rubber: `<svg width="32" height="32"><circle cx="16" cy="16" r="12" fill="#4a5568" stroke="#cbd5e1" stroke-width="3"/></svg>`,
-            Metal: `<svg width="32" height="32"><circle cx="16" cy="16" r="12" fill="#a0aec0" stroke="#4a5568" stroke-width="2"/></svg>`
-        }
-    };
 
-    // 2. 動態產生卡片
-    const cardList = [
-        {type: 'robot', value: 'A', label: '機器人A'},
-        {type: 'robot', value: 'B', label: '機器人B'},
-        {type: 'package', value: '1', label: '包裹1'},
-        {type: 'package', value: '2', label: '包裹2'},
-        {type: 'conveyor', value: 'blue', label: '藍傳送帶'},
-        {type: 'conveyor', value: 'yellow', label: '黃傳送帶'},
-        {type: 'power', value: 'Lightspeed', label: '光速電池'},
-        {type: 'power', value: 'Endurance', label: '耐力電池'},
-        {type: 'tires', value: 'Rubber', label: '橡膠輪胎'},
-        {type: 'tires', value: 'Metal', label: '金屬輪胎'}
-    ];
+    // 產生卡片（依 variableDefinitions 動態產生）
+    variablesContainer.innerHTML = '';
+    Object.entries(variableDefinitions).forEach(([type, def]) => {
+        Object.entries(def.values).forEach(([value, valDef]) => {
+            const div = document.createElement('div');
+            div.className = 'draggable-card text-center bg-white p-3 rounded-lg shadow-sm';
+            div.draggable = true;
+            div.dataset.type = type;
+            div.dataset.value = value;
+            div.innerHTML = `${valDef.cardSVG || ''}<p>${valDef.label}</p>`;
+            div.id = `${type}_${value}`;
+            variablesContainer.appendChild(div);
+        });
+    });
 
-    variablesContainer.innerHTML = ''; // 清空原本的內容
-    cardList.forEach(card => {
-        const div = document.createElement('div');
-        div.className = 'draggable-card text-center bg-white p-3 rounded-lg shadow-sm';
-        div.draggable = true;
-        div.dataset.type = card.type;
-        div.dataset.value = card.value;
-        div.innerHTML = `${cardSVG[card.type][card.value] || ''}<p>${card.label}</p>`;
-        div.id = `${card.type}_${card.value}`;
-        variablesContainer.appendChild(div);
-    });    
-    
-    // SVG assets for robot visualization 機器人外型
-    const robotSVG = {
-        // Base robot body
-        'base': `
-            <svg viewBox="0 0 100 100" class="robot-svg w-full h-full">
-                <rect x="15" y="30" width="70" height="40" rx="10" ry="10" stroke="#4a5568" stroke-width="3" fill="#6b7280"/>
-                <circle cx="50" cy="25" r="10" fill="#4a5568"/>
-                <rect x="40" y="5" width="20" height="20" rx="5" ry="5" fill="#e2e8f0"/>
-            </svg>
-        `,
-        // Robot colors
-        'color': {
-            'Red': '#ef4444',
-            'Blue': '#3b82f6',
-        },
-        // Tires
-        'tires': {
-            'Rubber': `
-                <g transform="translate(0, 70)">
-                    <circle cx="30" cy="0" r="15" fill="#4a5568" stroke="#cbd5e1" stroke-width="5"/>
-                    <circle cx="70" cy="0" r="15" fill="#4a5568" stroke="#cbd5e1" stroke-width="5"/>
-                </g>
-            `,
-            'Metal': `
-                <g transform="translate(0, 70)">
-                    <circle cx="30" cy="0" r="15" fill="#a0aec0" stroke="#4a5568" stroke-width="2"/>
-                    <circle cx="70" cy="0" r="15" fill="#a0aec0" stroke="#4a5568" stroke-width="2"/>
+    // 動態產生名稱查詢表（for history/顯示用）
+    const variableNames = {};
+    const valueNames = {};
+    Object.entries(variableDefinitions).forEach(([type, def]) => {
+        variableNames[type] = def.label;
+        valueNames[type] = {};
+        Object.entries(def.values).forEach(([value, valDef]) => {
+            valueNames[type][value] = valDef.label;
+        });
+    });
 
-                </g>
-            `
-        },
-        // Packages
-        'package': {
-            '1': `
-                <g transform="translate(35, -10)">
-                    <rect x="0" y="0" width="30" height="30" rx="3" ry="3" fill="#a0522d" stroke="#8b4513" stroke-width="2"/>
-                    <line x1="0" y1="15" x2="30" y2="15" stroke="#8b4513" stroke-width="2"/>
-                    <line x1="15" y1="0" x2="15" y2="30" stroke="#8b4513" stroke-width="2"/>
-                </g>
-            `,
-            '2': `
-                <g transform="translate(30, -20)">
-                    <rect x="0" y="0" width="40" height="40" rx="5" ry="5" fill="#654321" stroke="#4a2e1d" stroke-width="2"/>
-                    <line x1="0" y1="20" x2="40" y2="20" stroke="#4a2e1d" stroke-width="2"/>
-                    <line x1="20" y1="0" x2="20" y2="40" stroke="#4a2e1d" stroke-width="2"/>
-                </g>
-            `
-        },
-        // Power (battery) SVGs
-        'power': {
-            'Lightspeed': `
-                <g transform="translate(85, 50)">
-                    <rect x="-10" y="-15" width="20" height="30" rx="4" ry="4" fill="#fbbf24" stroke="#b45309" stroke-width="2"/>
-                    <rect x="-4" y="-20" width="8" height="6" rx="2" ry="2" fill="#fde68a" stroke="#b45309" stroke-width="1"/>
-                    <text x="0" y="5" text-anchor="middle" alignment-baseline="middle" font-size="12" font-weight="bold" fill="#b45309">⚡</text>
-                </g>
-            `,
-            'Endurance': `
-                <g transform="translate(85, 50)">
-                    <rect x="-10" y="-15" width="20" height="30" rx="4" ry="4" fill="#60a5fa" stroke="#1e40af" stroke-width="2"/>
-                    <rect x="-4" y="-20" width="8" height="6" rx="2" ry="2" fill="#dbeafe" stroke="#1e40af" stroke-width="1"/>
-                    <text x="0" y="5" text-anchor="middle" alignment-baseline="middle" font-size="12" font-weight="bold" fill="#1e40af">🔋</text>
-                </g>
-            `
-        },
+    // 動態產生速度修正查詢表
+    const speedModifiers = {};
+    Object.entries(variableDefinitions).forEach(([type, def]) => {
+        speedModifiers[type] = {};
+        Object.entries(def.values).forEach(([value, valDef]) => {
+            speedModifiers[type][value] = valDef.speed || 0;
+        });
+    });
 
-        // conveyor
-        'conveyor': {
-            'blue': `
-                <g transform="translate(10, 80)">
-                    <rect x="0" y="0" width="80" height="12" rx="4" fill="#60a5fa" stroke="#2563eb" stroke-width="2"/>
-                    <circle cx="12" cy="6" r="4" fill="#3b82f6"/>
-                    <circle cx="40" cy="6" r="4" fill="#3b82f6"/>
-                    <circle cx="68" cy="6" r="4" fill="#3b82f6"/>
-                </g>
-            `,
-            'yellow': `
-                <g transform="translate(10, 80)">
-                    <rect x="0" y="0" width="80" height="12" rx="4" fill="#fbbf24" stroke="#b45309" stroke-width="2"/>
-                    <circle cx="12" cy="6" r="4" fill="#f59e42"/>
-                    <circle cx="40" cy="6" r="4" fill="#f59e42"/>
-                    <circle cx="68" cy="6" r="4" fill="#f59e42"/>
-                </g>
-            `
-        },
+    // 動態產生 robotSVG 組件查詢表
+    const robotSVG = {};
+    // 依 variableDefinitions 組合 robotSVG 片段
+    Object.entries(variableDefinitions).forEach(([type, def]) => {
+        robotSVG[type] = {};
+        Object.entries(variableDefinitions[type].values).forEach(([value, valDef]) => {
+            robotSVG[type][value] = valDef.robotSVG || '';
+        });
+    });
 
-    };
-    
-    // Define the base speed and distance
-    const baseSpeed = 100; // units/second
-    const distance = 500; // units
-
-    // Define variable effects on speed
-    const speedModifiers = {
-        'package': { '1': 0, '2': -40 },
-        'conveyor': { 'blue': 0, 'yellow': 20 },
-        'power': { 'Lightspeed': 20, 'Endurance': 10 },
-        'tires': { 'Rubber': 0, 'Metal': -10 },
-        'color': { 'Red': 10, 'Blue': -15 }
-    };
-    
-    // Chinese names for variable types
-    const variableNames = {
-        'robot': '機器人',
-        'package': '包裹',
-        'conveyor': '傳送帶',
-        'power': '電池品牌',
-        'tires': '輪胎材質'
-    };
-
-        // Chinese names for variable values
-
-    const valueNames = {
-        'robot': {
-            'A': '機器人A',
-            'B': '機器人B'
-        },
-        'package': {
-            '1': '包裹1',
-            '2': '包裹2'
-        },
-        'conveyor': {
-            'blue': '黃傳送帶',
-            'yellow': '藍傳送帶'
-        },
-        'power': {
-            'Lightspeed': '光速電池',
-            'Endurance': '耐力電池'
-        },
-        'tires': {
-            'Rubber': '橡膠',
-            'Metal': '金屬'
-        }
-    };
-    
 
     // Common variables for touch and mouse drag
     let draggedItem = null;
@@ -397,7 +258,7 @@ document.addEventListener('DOMContentLoaded', () => {
         experimentHistory.length = 0;
         renderHistory();
     });
-
+    /*
     // Toggle history section visibility
     toggleHistoryButton.addEventListener('click', () => {
         const isHidden = historyContainer.classList.contains('hidden');
@@ -409,6 +270,7 @@ document.addEventListener('DOMContentLoaded', () => {
             toggleHistoryButton.textContent = '顯示';
         }
     });
+    */
 
     // Update variables and check for valid setup
     function updateSlotVariables(slotIndex) {
@@ -425,8 +287,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Check if all variables are selected and enable the start button
     function checkExperimentReadiness() {
         const [vars1, vars2] = [robotVariables[0], robotVariables[1]];
-        const types = ['robot', 'package', 'conveyor', 'power', 'tires'];
-        
+        //const types = ['robot', 'package', 'conveyor', 'power', 'tires'];
+        const types = Object.keys(variableDefinitions);
         let populated = true;
         if (!vars1 || !vars2) {
             populated = false;
@@ -459,29 +321,48 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 有機器人卡片時顯示完整機器人
         if (variables.robot === 'A' || variables.robot === 'B') {
+            /*
             let combinedSVG = `<svg viewBox="0 0 100 100" class="robot-svg w-full h-full">`;
-            // Draw base robot
-            const robotBase = `<rect x="15" y="30" width="70" height="40" rx="10" ry="10" stroke="#4a5568" stroke-width="3" fill='#6b7280'}"/>`;
-            const robotHead = `<circle cx="50" cy="25" r="10" fill="#4a5568"/>`;
-            const robotAntenna = `<rect x="40" y="5" width="20" height="20" rx="5" ry="5" fill="#e2e8f0"/>`;
-            const tiresSVG = variables.tires ? robotSVG.tires[variables.tires] : '';
-            const packageSVG = variables.package ? robotSVG.package[variables.package] : '';
-            const powerSVG = variables.power ? robotSVG.power[variables.power] : '';
-            const conveyorSVG = variables.conveyor ? robotSVG.conveyor[variables.conveyor] : '';
-
+            // 先加 base
+            combinedSVG += `
+                <rect x="15" y="30" width="70" height="40" rx="10" ry="10" stroke="#4a5568" stroke-width="3" fill="#6b7280"/>
+                <circle cx="50" cy="25" r="10" fill="#4a5568"/>
+                <rect x="40" y="5" width="20" height="20" rx="5" ry="5" fill="#e2e8f0"/>
+            `;
+            */
+            let combinedSVG = `<svg viewBox="0 0 100 100" class="robot-svg w-full h-full">`;
+            // 先加 base（改為引用 robotSVG.robot[variables.robot]）
+            if (variables.robot && robotSVG.robot && robotSVG.robot[variables.robot]) {
+                combinedSVG += robotSVG.robot[variables.robot];
+            }           
+           
+            // 依照 variableDefinitions 組合其他部件
+            Object.keys(variableDefinitions).forEach(type => {
+                if (type !== 'robot' && variables[type] && robotSVG[type] && robotSVG[type][variables[type]]) {
+                    combinedSVG += robotSVG[type][variables[type]];
+                }
+            });
+            // 機器人標籤
             let robotLabel = `<text x="50" y="55" text-anchor="middle" alignment-baseline="middle" font-size="28" font-weight="bold" fill="#fff">${variables.robot}</text>`;
-            combinedSVG += robotBase + robotHead + robotAntenna + tiresSVG + powerSVG + packageSVG + conveyorSVG + robotLabel + `</svg>`;
-            svgContainer.innerHTML = combinedSVG;
+            combinedSVG += robotLabel + `</svg>`;
+            svgContainer.innerHTML = combinedSVG;           
         } else {
             // 非機器人狀態下，彈性組合多個圖示
-            let hasAny = variables.package || variables.tires || variables.power || variables.conveyor;
+            //let hasAny = variables.package || variables.tires || variables.power || variables.conveyor;
+            let hasAny = Object.keys(variableDefinitions).some(type => variables[type]);
             if (hasAny) {
                 let combinedSVG = `<svg viewBox="0 0 100 100" class="robot-svg w-full h-full">`;
+                /*
                 if (variables.package) combinedSVG += robotSVG.package[variables.package];
                 if (variables.tires) combinedSVG += robotSVG.tires[variables.tires];
                 if (variables.power) combinedSVG += robotSVG.power[variables.power];
                 if (variables.conveyor) combinedSVG += robotSVG.conveyor[variables.conveyor];
-
+                */
+                Object.keys(variableDefinitions).forEach(type => {
+                    if (variables[type] && robotSVG[type] && robotSVG[type][variables[type]]) {
+                        combinedSVG += robotSVG[type][variables[type]];
+                    }
+                });             
                 // 其他變因可依需求加入
                 combinedSVG += `</svg>`;
                 svgContainer.innerHTML = combinedSVG;
@@ -523,7 +404,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
             // 加入隨機誤差（±5%）
-            const errorFactor = 1 + (Math.random() * 0.1 - 0.05); // 0.95 ~ 1.05
+            const errorFactor = 1 + (Math.random() * 2 * RANDOM_ERROR_RANGE - RANDOM_ERROR_RANGE); // 例如 0.95 ~ 1.05
             const time = (distance / totalSpeed) * errorFactor;
             
             results.push({ robotId: index, time: time, vars: robot });
@@ -561,7 +442,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const vars1 = result1.vars;
         const vars2 = result2.vars;
-        const types = ['robot', 'package', 'conveyor', 'power', 'tires'];
+        //const types = ['robot', 'package', 'conveyor', 'power', 'tires'];
+        const types = Object.keys(variableDefinitions);
         const diffVariable = types.find(type => vars1[type] !== vars2[type]);
         const diffCount = types.filter(type => vars1[type] !== vars2[type]).length;
 
@@ -597,11 +479,52 @@ document.addEventListener('DOMContentLoaded', () => {
             timestamp: new Date().toLocaleTimeString()
         };
         experimentHistory.push(historyItem);
-        renderHistory();
+        //renderHistory();
+        // 只新增最新一筆
+        renderSingleHistory(historyItem, experimentHistory.length);        
     }
 
+    function renderSingleHistory(item, index) {
+        // 若是第一筆，先清空
+        if (index === 1) {
+            historyList.innerHTML = '';
+        }
+
+        const historyCard = document.createElement('div');
+        historyCard.className = 'bg-gray-50 p-4 rounded-lg shadow-sm border-2 border-gray-200';
+
+        // ...（下方內容同你原本 renderHistory 內部的 tableRows 與 summary 組裝）...
+
+        // 以表格方式呈現兩組變因
+        const types = Object.keys(variableDefinitions);
+        let tableRows = '';
+        for (const type of types) {
+            const value1 = item.config1[type] ? (valueNames[type] && valueNames[type][item.config1[type]] ? valueNames[type][item.config1[type]] : item.config1[type]) : '-';
+            const value2 = item.config2[type] ? (valueNames[type] && valueNames[type][item.config2[type]] ? valueNames[type][item.config2[type]] : item.config2[type]) : '-';
+            const typeName = variableNames[type] ? variableNames[type] : type;
+            const diff = value1 !== value2 ? 'bg-yellow-100 font-bold' : '';
+            tableRows += `<tr><td class="border px-2 py-1">${typeName}</td><td class="border px-2 py-1 ${diff}">${value1}</td><td class="border px-2 py-1 ${diff}">${value2}</td></tr>`;
+        }
+        const summary = `
+            <p class="font-bold text-lg mb-2">實驗 #${index} <span class="text-sm font-normal text-gray-500">(${item.timestamp})</span></p>
+            <div class="overflow-x-auto mt-2">
+                <table class="min-w-full border text-sm text-center bg-white">
+                    <thead><tr class="bg-gray-100"><th class="border px-2 py-1">變因</th><th class="border px-2 py-1">第一組</th><th class="border px-2 py-1">第二組</th></tr></thead>
+                    <tbody>
+                        ${tableRows}
+                        <tr class="bg-blue-50 font-bold">
+                            <td class="border px-2 py-1">完成時間 (秒)</td>
+                            <td class="border px-2 py-1">${item.time1}</td>
+                            <td class="border px-2 py-1">${item.time2}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        `;
+        historyCard.innerHTML = summary;
+        historyList.prepend(historyCard);
+    }
     function renderHistory() {
-        console.log('Rendering history:', experimentHistory);
         historyList.innerHTML = ''; // Clear previous history
         if (experimentHistory.length === 0) {
             historyList.innerHTML = '<p class="text-center text-gray-500 mt-4">尚無歷史記錄。</p>';
@@ -640,8 +563,8 @@ document.addEventListener('DOMContentLoaded', () => {
             config2Html += `<p class="text-sm"><span class="font-bold">${typeName}</span>: ${name}</p>`;
         }
 
-                        // 以表格方式呈現兩組變因
-                        const types = ['robot', 'package', 'conveyor', 'power', 'tires'];
+                        // 以表格方式呈現兩組變因                        
+                        const types = Object.keys(variableDefinitions);                        
                         let tableRows = '';
                         for (const type of types) {
                                 const value1 = item.config1[type] ? (valueNames[type] && valueNames[type][item.config1[type]] ? valueNames[type][item.config1[type]] : item.config1[type]) : '-';
@@ -653,11 +576,17 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                         const summary = `
                                 <p class="font-bold text-lg mb-2">實驗 #${index + 1} <span class="text-sm font-normal text-gray-500">(${item.timestamp})</span></p>
-                                <p class="text-gray-700">結果：第一組花費 ${item.time1} 秒，第二組花費 ${item.time2} 秒。時間差：${timeDiff.toFixed(2)} 秒。</p>
                                 <div class="overflow-x-auto mt-2">
                                     <table class="min-w-full border text-sm text-center bg-white">
                                         <thead><tr class="bg-gray-100"><th class="border px-2 py-1">變因</th><th class="border px-2 py-1">第一組</th><th class="border px-2 py-1">第二組</th></tr></thead>
-                                        <tbody>${tableRows}</tbody>
+                                        <tbody>
+                                            ${tableRows}
+                                            <tr class="bg-blue-50 font-bold">
+                                                <td class="border px-2 py-1">完成時間 (秒)</td>
+                                                <td class="border px-2 py-1">${item.time1}</td>
+                                                <td class="border px-2 py-1">${item.time2}</td>
+                                            </tr>
+                                        </tbody>
                                     </table>
                                 </div>
                                 <!-- <p class="text-gray-700 mt-2">分析：${item.analysis}</p> -->
