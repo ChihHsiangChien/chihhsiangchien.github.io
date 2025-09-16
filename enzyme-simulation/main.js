@@ -809,16 +809,48 @@ function drawSummaryChart() {
   const yMax = Math.max(...sorted.map(r => r.reaction), 1);
 
   // draw polyline (uses same mapping as points)
-  c.strokeStyle = '#ef476f';
-  c.lineWidth = 2;
-  c.beginPath();
+  // draw all historical points as gray
+  c.fillStyle = '#bbb';
   for (let i = 0; i < sorted.length; i++) {
     const x = marginLeft + ((sorted[i].temp - tickStart) / (tickEnd - tickStart)) * plotW;
     const y = drawingH - marginBottom - (sorted[i].reaction / yMax) * plotH;
-    if (i === 0) c.moveTo(x, y);
-    else c.lineTo(x, y);
+    c.beginPath(); c.arc(x, y, 4, 0, 2 * Math.PI); c.fill();
+  }
+
+  // group by temperature and compute median reaction for each temp
+  const groups = new Map();
+  for (const r of experimentResults) {
+    const t = r.temp;
+    if (!groups.has(t)) groups.set(t, []);
+    groups.get(t).push(r.reaction);
+  }
+  const medians = [];
+  for (const [t, arr] of groups.entries()) {
+    arr.sort((a,b)=>a-b);
+    const mid = Math.floor(arr.length/2);
+    const median = (arr.length % 2 === 1) ? arr[mid] : Math.round((arr[mid-1]+arr[mid])/2);
+    medians.push({ temp: t, reaction: median });
+  }
+  medians.sort((a,b)=>a.temp - b.temp);
+
+  // draw median polyline (red)
+  c.strokeStyle = '#ef476f';
+  c.lineWidth = 2;
+  c.beginPath();
+  for (let i = 0; i < medians.length; i++) {
+    const x = marginLeft + ((medians[i].temp - tickStart) / (tickEnd - tickStart)) * plotW;
+    const y = drawingH - marginBottom - (medians[i].reaction / yMax) * plotH;
+    if (i === 0) c.moveTo(x, y); else c.lineTo(x, y);
   }
   c.stroke();
+
+  // draw median points in red
+  c.fillStyle = '#ef476f';
+  for (const m of medians) {
+    const x = marginLeft + ((m.temp - tickStart) / (tickEnd - tickStart)) * plotW;
+    const y = drawingH - marginBottom - (m.reaction / yMax) * plotH;
+    c.beginPath(); c.arc(x, y, 5, 0, 2*Math.PI); c.fill();
+  }
 
   // x-axis ticks and labels
   c.fillStyle = '#333';
@@ -834,15 +866,7 @@ function drawSummaryChart() {
   c.fillText(String(t), tx - 10, drawingH - marginBottom + 20);
   }
 
-  // draw data points (same mapping)
-  c.fillStyle = '#ef476f';
-  for (let i = 0; i < sorted.length; i++) {
-    const x = marginLeft + ((sorted[i].temp - tickStart) / (tickEnd - tickStart)) * plotW;
-    const y = drawingH - marginBottom - (sorted[i].reaction / yMax) * plotH;
-    c.beginPath();
-    c.arc(x, y, 5, 0, 2 * Math.PI);
-    c.fill();
-  }
+  // (historical points already drawn in gray earlier)
 
   // axis labels
   c.fillStyle = '#333';
