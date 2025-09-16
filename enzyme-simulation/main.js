@@ -1,3 +1,22 @@
+// ====== 重要參數集中設定 ======
+// 受質靠近酵素活化位時，對齊的偏移角度（單位：弧度，0為完全對齊酵素）
+let substrateAngleOffset = 0; // 例如 Math.PI/2 代表90度
+let activeSiteX = 4;
+let activeSiteY = -1;
+let temp = 37; // 當前溫度
+const T_opt = 37; // 最佳溫度
+const T_denature = 60; // 變性臨界溫度
+
+let k_attract = 0.15; // 酵素吸引力強度
+let bindingThreshold = 8; // 活化位結合距離
+let enzymeRadius = 20; // 酵素半徑
+let substrateRadius = 10; // 受質半徑
+let productRadius = 12; // 產物半徑
+let inertCount = 0; // 非專一分子數量
+let enzymeCount = 5;
+let substrateCount = 20;
+
+
 // ====== 實驗數據儲存 ======
 let experimentResults = [];
 let experimentRunning = false;
@@ -109,7 +128,7 @@ class Enzyme {
     this.y = y;
     this.active = true;
     this.attractionRadius = 80;
-    this.activeSite = { x: 20, y: 0 }; // 相對於中心
+    this.activeSite = { x: activeSiteX, y: activeSiteY }; // 相對於中心
     this.svgNormal = svgNormal;
     this.svgDenatured = svgDenatured;
     this.reactionCount = 0;
@@ -165,8 +184,7 @@ class Enzyme {
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (dist < this.attractionRadius) {
       // 吸引力強度與距離成反比
-      const k = 0.15;
-      return { x: (dx / dist) * k, y: (dy / dist) * k };
+      return { x: (dx / dist) * k_attract, y: (dy / dist) * k_attract };
     }
     return null;
   }
@@ -175,7 +193,7 @@ class Enzyme {
     const dx = site.x - substrate.x;
     const dy = site.y - substrate.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    return dist < 8 && !substrate.bound && this.active;
+  return dist < bindingThreshold && !substrate.bound && this.active;
   }
 }
 
@@ -188,6 +206,7 @@ class Substrate {
     this.bound = false;
     this.svg = svg;
     this.bindingTimer = 0;
+    this.angle = 0;
   }
   move(width, height) {
     if (!this.bound) {
@@ -203,11 +222,31 @@ class Substrate {
     }
   }
   display(ctx) {
-    drawSVG(ctx, this.svg, this.x - 10, this.y - 10, 20, 20);
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.angle);
+    drawSVG(ctx, this.svg, -substrateRadius, -substrateRadius, substrateRadius * 2, substrateRadius * 2);
+    ctx.restore();
   }
   applyForce(force) {
     this.vx += force.x;
     this.vy += force.y;
+  }
+  rotateToEnzymeAngle(enzymeAngle) {
+    // 讓受質旋轉到和酵素角度加上偏移
+    let targetAngle = enzymeAngle + substrateAngleOffset;
+    let dAngle = targetAngle - this.angle;
+    dAngle = ((dAngle + Math.PI) % (2 * Math.PI)) - Math.PI;
+    this.angle += dAngle * 0.2;
+  }
+  rotateTo(targetX, targetY) {
+    // 保留原本朝向活化位的函式
+    const dx = targetX - this.x;
+    const dy = targetY - this.y;
+    const targetAngle = Math.atan2(dy, dx);
+    let dAngle = targetAngle - this.angle;
+    dAngle = ((dAngle + Math.PI) % (2 * Math.PI)) - Math.PI;
+    this.angle += dAngle * 0.2;
   }
 }
 
@@ -231,7 +270,7 @@ class Product {
     if (this.y < 8 || this.y > height - 8) this.vy *= -1;
   }
   display(ctx) {
-    drawSVG(ctx, this.svg, this.x - 12, this.y - 10, 24, 20);
+  drawSVG(ctx, this.svg, this.x - productRadius, this.y - productRadius, productRadius * 2, productRadius * 1.67);
   }
 }
 
@@ -240,15 +279,36 @@ function drawSVG(ctx, svg, x, y, w, h) {
   const img = new window.Image();
   const svg64 = btoa(unescape(encodeURIComponent(svg)));
   img.src = 'data:image/svg+xml;base64,' + svg64;
-  ctx.drawImage(img, x, y, w, h);
+  // 等待圖片載入後再畫，直接用SVG原始大小
+  img.onload = function() {
+    let iw = img.width;
+    let ih = img.height;
+    // 若寬高為0，嘗試從SVG字串抓viewBox
+    if (iw === 0 || ih === 0) {
+      const match = svg.match(/viewBox\s*=\s*['\"]([\d\.]+) ([\d\.]+) ([\d\.]+) ([\d\.]+)['\"]/);
+      if (match) {
+        iw = parseFloat(match[3]);
+        ih = parseFloat(match[4]);
+      } else {
+        iw = w; ih = h;
+      }
+    }
+    // 直接用SVG原始大小繪製
+    ctx.drawImage(img, x, y, iw, ih);
+  };
+  // 若已載入直接畫
+  if (img.complete && img.naturalWidth > 0) {
+    let iw = img.naturalWidth;
+    let ih = img.naturalHeight;
+    ctx.drawImage(img, x, y, iw, ih);
+  }
 }
 
 // ====== 主程式邏輯 ======
 let enzymes = [], substrates = [], products = [], inerts = [];
 let svgEnzActive, svgEnzDenatured, svgSubstrate, svgProduct, svgProduct2;
 let reactionCount = 0;
-let temp = 37;
-let T_opt = 37, T_denature = 60;
+
 let denatureProb = 0;
 let chartData = [];
 let chartTime = 0;
@@ -258,31 +318,6 @@ let chartTime = 0;
 const canvas = document.getElementById('simCanvas');
 const ctx = canvas.getContext('2d');
 const width = canvas.width, height = canvas.height;
-
-// 新增控制面板
-let controlPanel = document.createElement('div');
-controlPanel.style.textAlign = 'center';
-controlPanel.style.margin = '1em';
-controlPanel.innerHTML = `
-  <button id="addSubstrateBtn">添加新受質</button>
-  <select id="enzymeSelect">
-    <option value="old">原有酵素</option>
-    <option value="new">新酵素</option>
-  </select>
-  <button id="addEnzymeBtn">添加新酵素</button>
-  <br><br>
-  <button id="toggleEnzyme" class="toggle-btn" style="background:#8ecae6;">酵素</button>
-  <button id="toggleSubstrate" class="toggle-btn" style="background:#ffb703;">受質</button>
-  <button id="toggleProduct" class="toggle-btn" style="background:#ffd166;">產物</button>
-  <button id="toggleInert" class="toggle-btn" style="background:#bdb2ff;">非專一分子</button>
-`;
-// 插入到 .main-flex 之前，若找不到則加在 body 最前
-const mainFlex = document.querySelector('.main-flex');
-if (mainFlex) {
-  document.body.insertBefore(controlPanel, mainFlex);
-} else {
-  document.body.insertBefore(controlPanel, document.body.firstChild);
-}
 
 // highlight/dimmed 狀態
 let showEnzyme = true, showSubstrate = true, showProduct = true, showInert = true;
@@ -310,16 +345,16 @@ document.getElementById('toggleInert').onclick = function() {
 
 // ====== 初始化 ======
 async function init() {
-  [svgEnzActive, svgEnzDenatured, svgSubstrate, svgProduct, svgProduct2] = await Promise.all([
+  [svgEnzActive, svgEnzDenatured, svgSubstrate, svgProduct1, svgProduct2] = await Promise.all([
     loadSVG('enzyme_active.svg'),
     loadSVG('enzyme_denatured.svg'),
     loadSVG('substrate.svg'),
-    loadSVG('product.svg'),
+    loadSVG('product1.svg'),
     loadSVG('product2.svg')
   ]);
   // 初始化酵素
   enzymes = [];
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < enzymeCount; i++) {
     const angle = (i / 8) * 2 * Math.PI;
     const r = 180;
     enzymes.push(new Enzyme(
@@ -330,7 +365,7 @@ async function init() {
   }
   // 初始化受質
   substrates = [];
-  for (let i = 0; i < 18; i++) {
+  for (let i = 0; i < substrateCount; i++) {
     substrates.push(new Substrate(
       Math.random() * (width - 40) + 20,
       Math.random() * (height - 40) + 20,
@@ -339,7 +374,7 @@ async function init() {
   }
   products = [];
   inerts = [];
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < inertCount; i++) {
     inerts.push(new InertMolecule(
       Math.random() * (width - 40) + 20,
       Math.random() * (height - 40) + 20
@@ -480,11 +515,20 @@ function drawSummaryChart() {
       // 檢查是否進入任何酵素吸引區
       for (const enz of enzymes) {
         const force = enz.attract(sub);
-        if (force) sub.applyForce(force);
+        const site = enz.getActiveSiteWorld();
+        if (force) {
+          sub.applyForce(force);
+          // 進入吸引區時自動旋轉到酵素角度+偏移
+          sub.rotateToEnzymeAngle(enz.angle);
+        }
+        // 只有真的靠近活化位才設為 bound
         if (enz.checkBinding(sub)) {
           sub.bound = true;
           sub.bindingTimer = 0;
           enz.reactionCount++;
+          // 結合時強制對齊酵素角度+偏移
+          sub.rotateToEnzymeAngle(enz.angle);
+          break;
         }
       }
     }
@@ -513,7 +557,7 @@ function drawSummaryChart() {
         products.push(new Product(
           sub.x, sub.y,
           Math.cos(angle) * speed, Math.sin(angle) * speed,
-          svgProduct
+          svgProduct1
         ));
         products.push(new Product(
           sub.x, sub.y,
@@ -596,9 +640,6 @@ function drawChart() {
   c.moveTo(10, 10); c.lineTo(10, chart.height - 10); c.lineTo(chart.width - 10, chart.height - 10);
   c.stroke();
 }
-
-// ====== 溫度滑桿事件 ======
-// 已改用表單設定溫度，移除舊的 tempSlider 事件監聽
 
 // ====== 啟動 ======
 init();
