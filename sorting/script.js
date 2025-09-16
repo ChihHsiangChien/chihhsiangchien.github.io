@@ -7,7 +7,8 @@ function getActivityFile() {
   if (activity === 'animal') return 'data_animal.json';
   if (activity === 'plant') return 'data_plant.json';
   if (activity === 'heart') return 'data_heart.json';
-  return 'data.json';
+  if (activity === 'science') return 'data_scientific.json';
+  return 'data_scientific.json';
 }
 
 
