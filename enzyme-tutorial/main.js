@@ -1,5 +1,27 @@
-// 酵素作用模擬主程式
-// 拖曳 substrate 與 enzyme，重疊時產生兩個 product 並給予不同速度與阻尼
+// 監聽溫度 slider
+const tempSlider = document.getElementById('temp-slider');
+const tempValue = document.getElementById('temp-value');
+if (tempSlider && tempValue) {
+	tempSlider.addEventListener('input', function() {
+		const t = parseInt(tempSlider.value, 10);
+		tempValue.textContent = t;
+		enzymes.forEach(e => e.checkDenature(t));
+	});
+}
+// --- 反應規則集中維護 ---
+const reactions = [
+  {
+    enzymeType: 'decompositionA',
+    substrateTypes: ['A'],
+    products: ['B', 'C']
+  },
+  {
+    enzymeType: 'synthesisC',
+    substrateTypes: ['A', 'B'],
+    products: ['C']
+  }
+  // ...可擴充
+];
 
 
 // 多個酵素與受質動態管理
@@ -31,17 +53,17 @@ function clearAll() {
 }
 
 
-
 // --- 類別設計 ---
 class Enzyme {
-	constructor(type, x, y, angle, specificity = null) {
-		this.type = type; // 'synthesis' | 'decomposition' | ...
-		this.specificity = specificity; // 受質專一性
+	constructor(type, x, y, angle, denatureTemp = 50) {
+		this.type = type; // 例如 'synthesisA', 'synthesisB', 'decompositionA' ...		
 		this.x = x;
 		this.y = y;
+    this.denatureTemp = denatureTemp;
+    this.denatured = false;
 		this.angle = angle;
 		this.el = document.createElement('img');
-		this.el.src = type === 'decomposition' ? 'enzyme_denatured.svg' : 'enzyme_active.svg';
+		this.el.src = this.getIconSrc();
 		this.el.className = 'draggable enzyme';
 		this.el.style.left = x + 'px';
 		this.el.style.top = y + 'px';
@@ -56,13 +78,42 @@ class Enzyme {
 		this.activation.style.top = y + 'px';
 		canvas.appendChild(this.activation);
 	}
-	updatePosition(x, y) {
-		this.x = x; this.y = y;
-		this.el.style.left = x + 'px';
-		this.el.style.top = y + 'px';
-		this.activation.style.left = x + 'px';
-		this.activation.style.top = y + 'px';
+	getIconSrc() {
+		// 根據 type 決定圖示
+    if (this.type === 'decompositionA') return 'enzyme_A_active.svg';        
+		if (this.type === 'synthesisA') return 'enzyme_A_active.svg';
+		if (this.type === 'synthesisB') return 'enzyme_B_active.svg';
+		return 'enzyme_A_active.svg';
 	}
+	// 檢查溫度，超過即變性（不可逆）
+	checkDenature(temp) {
+		if (!this.denatured && temp >= this.denatureTemp) {
+			this.denatured = true;
+			this.el.src = this.getDenaturedIconSrc();
+			if (this.activation) {
+				this.activation.remove();
+				this.activation = null;
+			}
+		}
+	}
+
+  getDenaturedIconSrc() {
+    // 根據 type 回傳不同變性圖示
+    if (this.type === 'decompositionA') return 'enzyme_A_denatured.svg';
+    if (this.type === 'synthesisA') return 'enzyme_A_denatured.svg';
+    if (this.type === 'synthesisB') return 'enzyme_B_denatured.svg';    
+    return 'enzyme_denatured.svg';
+  }
+
+		updatePosition(x, y) {
+			this.x = x; this.y = y;
+			this.el.style.left = x + 'px';
+			this.el.style.top = y + 'px';
+			if (this.activation) {
+				this.activation.style.left = x + 'px';
+				this.activation.style.top = y + 'px';
+			}
+		}
 	setAngle(angle) {
 		this.angle = angle;
 		this.el.dataset.angle = angle;
@@ -81,7 +132,7 @@ class Substrate {
 		this.y = y;
 		this.angle = angle;
 		this.el = document.createElement('img');
-		this.el.src = 'substrate.svg';
+		this.el.src = this.getIconSrc();
 		this.el.className = 'draggable substrate';
 		this.el.style.left = x + 'px';
 		this.el.style.top = y + 'px';
@@ -89,6 +140,13 @@ class Substrate {
 		this.el.dataset.angle = angle;
 		this.el.style.transform = `rotate(${angle}deg)`;
 		canvas.appendChild(this.el);
+	}
+  getIconSrc() {
+		// 根據 type 決定圖示
+		if (this.type === 'A') return 'A.svg';
+		if (this.type === 'B') return 'B.svg';
+		if (this.type === 'C') return 'C.svg';    
+		return 'A.svg';
 	}
 	updatePosition(x, y) {
 		this.x = x; this.y = y;
@@ -108,18 +166,26 @@ class Substrate {
 function renderAll() {
 	clearAll();
 	// 酵素與活化位
+	// 這裡可根據需求產生多種型態
 	for (let i = 0; i < parseInt(enzymeCountInput.value); i++) {
 		let x = randomPosX();
 		let y = randomPosY();
 		let angle = Math.floor(Math.random() * 360);
-		enzymes.push(new Enzyme('synthesis', x, y, angle));
+		// 交錯產生不同型態酵素
+		//let type = (i % 2 === 0) ? 'synthesisA' : 'decompositionA';
+    let type = 'decompositionA';
+    let denatureTemp = 30;
+		enzymes.push(new Enzyme(type, x, y, angle, denatureTemp ));
 	}
 	// 受質
 	for (let i = 0; i < parseInt(substrateCountInput.value); i++) {
 		let x = randomPosX();
 		let y = randomPosY();
 		let angle = Math.floor(Math.random() * 360);
-		substrates.push(new Substrate('default', x, y, angle));
+		// 交錯產生不同型態受質    
+		//let type = (i % 2 === 0) ? 'A' : 'AB';
+    let type = 'A';
+		substrates.push(new Substrate(type, x, y, angle));
 	}
 	updateActivationSites();
 	bindDraggable();
@@ -206,6 +272,7 @@ canvas.onpointerup = function(e) {
 canvas.onpointerleave = canvas.onpointerup;
 
 function getCenter(el) {
+	if (!el) return { x: 0, y: 0 };
 	return {
 		x: el.offsetLeft + el.offsetWidth / 2,
 		y: el.offsetTop + el.offsetHeight / 2
@@ -223,45 +290,57 @@ function isNearActivation(idx, enzymeIdx) {
 	return distance(s, a) < 32;
 }
 
+
+
 // 嘗試讓受質吸附到任一活化位
 function trySnapToAnyActivation(substrateIdx) {
-	for (let enzymeIdx = 0; enzymeIdx < enzymes.length; enzymeIdx++) {
-		if (isNearActivation(substrateIdx, enzymeIdx)) {
-			// 吸附到該酵素活化位
-			substrates[substrateIdx].updatePosition(enzymes[enzymeIdx].x, enzymes[enzymeIdx].y);
-			// 旋轉對齊該酵素
-			const enzymeAngle = enzymes[enzymeIdx].angle || 0;
-			substrates[substrateIdx].el.style.transition = 'filter 0.2s, transform 0.4s';
-			substrates[substrateIdx].el.style.filter = 'drop-shadow(0 0 12px #ff9800)';
-			substrates[substrateIdx].el.style.transform = `scale(1.15) rotate(${enzymeAngle}deg)`;
-			enzymes[enzymeIdx].el.style.transition = 'filter 0.2s, transform 0.2s';
-			enzymes[enzymeIdx].el.style.filter = 'drop-shadow(0 0 12px #ff9800)';
-			enzymes[enzymeIdx].el.style.transform = `scale(1.08) rotate(${enzymeAngle}deg)`;
-			setTimeout(() => {
-				substrates[substrateIdx].el.style.filter = '';
-				substrates[substrateIdx].el.style.transform = `rotate(${enzymeAngle}deg)`;
-				enzymes[enzymeIdx].el.style.filter = '';
-				enzymes[enzymeIdx].el.style.transform = `rotate(${enzymeAngle}deg)`;
-				triggerReaction(substrateIdx, enzymeIdx);
-			}, 800);
-			break;
-		}
-	}
+  for (let enzymeIdx = 0; enzymeIdx < enzymes.length; enzymeIdx++) {
+    if (isNearActivation(substrateIdx, enzymeIdx)) {
+      // 查找反應規則
+      const enzyme = enzymes[enzymeIdx];
+      const substrate = substrates[substrateIdx];
+      const rule = reactions.find(r =>
+        r.enzymeType === enzyme.type &&
+        r.substrateTypes.includes(substrate.type)
+      );
+      if (!rule) continue;
+      substrate.updatePosition(enzyme.x, enzyme.y);
+      const enzymeAngle = enzyme.angle || 0;
+      substrate.el.style.transition = 'filter 0.2s, transform 0.4s';
+      substrate.el.style.filter = 'drop-shadow(0 0 12px #ff9800)';
+      substrate.el.style.transform = `scale(1.15) rotate(${enzymeAngle}deg)`;
+      enzyme.el.style.transition = 'filter 0.2s, transform 0.2s';
+      enzyme.el.style.filter = 'drop-shadow(0 0 12px #ff9800)';
+      enzyme.el.style.transform = `scale(1.08) rotate(${enzymeAngle}deg)`;
+      setTimeout(() => {
+        substrate.el.style.filter = '';
+        substrate.el.style.transform = `rotate(${enzymeAngle}deg)`;
+        enzyme.el.style.filter = '';
+        enzyme.el.style.transform = `rotate(${enzymeAngle}deg)`;
+        triggerReaction(substrateIdx, enzymeIdx, rule);
+      }, 800);
+      break;
+    }
+  }
 }
 
-function triggerReaction(idx, enzymeIdx) {
-	// 受質消失
-	substrates[idx].el.style.opacity = 0;
-	setTimeout(() => {
-		if (substrates[idx]) substrates[idx].remove();
-		substrates.splice(idx, 1);
-		bindDraggable();
-	}, 300);
-	// 產生兩個產物，隨機方向180度相反，並旋轉
-	const center = getCenter(enzymes[enzymeIdx].activation);
-	const theta = Math.random() * Math.PI * 2;
-	createProduct('product1.svg', center, theta);
-	createProduct('product2.svg', center, theta + Math.PI);
+function triggerReaction(idx, enzymeIdx, rule) {
+  substrates[idx].el.style.opacity = 0;
+  setTimeout(() => {
+    if (substrates[idx]) substrates[idx].remove();
+    substrates.splice(idx, 1);
+    bindDraggable();
+  }, 300);
+  // 根據反應規則產生產物
+  const center = getCenter(enzymes[enzymeIdx].activation);
+  const theta = Math.random() * Math.PI * 2;
+  if (rule && rule.products && rule.products.length > 0) {
+    for (let i = 0; i < rule.products.length; i++) {
+      const prodName = rule.products[i];
+      const angle = theta + (i * Math.PI);
+      createProduct(prodName + '.svg', center, angle);
+    }
+  }
 }
 
 function createProduct(src, center, angle) {
@@ -302,3 +381,4 @@ enzymeCountInput.onchange = renderAll;
 substrateCountInput.onchange = renderAll;
 
 window.addEventListener('DOMContentLoaded', renderAll);
+
