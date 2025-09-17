@@ -588,70 +588,95 @@ function renderLeftSpecList(){
 function onSubmit(){
   const rows = spec.rows || [];
   const heads = spec.head || [];
-  let correct = 0, total = 0;
+  // Score per-card: count total placed cards and how many are correct
+  let correct = 0, totalCardsPlaced = 0, totalExpectedCards = 0;
 
+  // compute total expected cards (for info) by summing array/string counts
+  rows.forEach((r)=>{
+    (r.content||[]).forEach(expectedRaw=>{
+      if (Array.isArray(expectedRaw)) totalExpectedCards += expectedRaw.length;
+      else if (expectedRaw != null) totalExpectedCards += 1;
+    });
+  });
+
+  // iterate over each cell, evaluate every card inside it
   document.querySelectorAll('.cell').forEach(cell=>{
     const key = cell.dataset.key;
     const [i,j] = key.split(':').map(Number);
     const expectedRaw = ((rows[i]&&rows[i].content)||[])[j];
-    // Preferred: expectedRaw can be an array of acceptable strings, otherwise a single string.
     let expectedList = [];
     if (Array.isArray(expectedRaw)) expectedList = expectedRaw.map(String);
     else if (expectedRaw != null) expectedList = [String(expectedRaw)];
-    total++;
-    const cardId = state.placements[key];
-    if(!cardId){
+
+    // gather all card elements currently in this cell
+    const cardsInCell = Array.from(cell.querySelectorAll('.card'));
+    if(cardsInCell.length === 0){
       cell.classList.remove('correct');
       cell.classList.remove('wrong');
       return;
     }
-    const card = state.cards[cardId];
-    // correct if the card text matches any acceptable expected text
-    if(card && expectedList.length && expectedList.includes(card.text)){
-      cell.classList.add('correct');
-      cell.classList.remove('wrong');
-      correct++;
-      // mark card
-      const elc = document.querySelector(`[data-card-id='${cardId}']`);
-      if(elc){elc.classList.add('correct'); elc.classList.remove('wrong')}
-    } else {
-      cell.classList.add('wrong');
-      cell.classList.remove('correct');
-      const elc = document.querySelector(`[data-card-id='${cardId}']`);
-      if(elc){elc.classList.add('wrong'); elc.classList.remove('correct')}
-      if(el('opt-auto-return').checked){
-        // move back to pool after short delay
-        setTimeout(()=>{
-          const elc2 = document.querySelector(`[data-card-id='${cardId}']`);
-          if(elc2){
-            // try to return to original row-pool, fall back to global pool
-            let returned = false;
-            try{
-              const meta = state.cards[cardId];
-              if(meta && (meta.row !== undefined && meta.row !== null)){
-                const rp2 = document.querySelector(`.row-pool[data-row='${meta.row}']`);
-                if(rp2){ rp2.appendChild(elc2); returned = true; }
-              }
-            }catch(e){}
-            if(!returned){ const pool = el('card-pool'); pool.appendChild(elc2); }
-          }
-          delete state.placements[key];
-          cell.classList.remove('wrong');
-        },600);
+
+    // For per-card scoring, evaluate each card separately
+    let anyWrong = false;
+    cardsInCell.forEach(cardEl =>{
+      const cardId = cardEl.dataset.cardId;
+      const meta = state.cards[cardId];
+      totalCardsPlaced++;
+      const text = meta ? meta.text : cardEl.textContent;
+      if(expectedList.length && expectedList.includes(text)){
+        // correct placement for this card
+        correct++;
+        cardEl.classList.add('correct'); cardEl.classList.remove('wrong');
+      } else {
+        anyWrong = true;
+        cardEl.classList.add('wrong'); cardEl.classList.remove('correct');
+        // handle auto-return per-card
+        if(el('opt-auto-return').checked){
+          setTimeout(()=>{
+            const elc2 = document.querySelector(`[data-card-id='${cardId}']`);
+            if(elc2){
+              // try to return to original row-pool, fall back to global pool
+              let returned = false;
+              try{
+                const m = state.cards[cardId];
+                if(m && (m.row !== undefined && m.row !== null)){
+                  const rp2 = document.querySelector(`.row-pool[data-row='${m.row}']`);
+                  if(rp2){ rp2.appendChild(elc2); returned = true; }
+                }
+              }catch(e){}
+              if(!returned){ const pool = el('card-pool'); if(pool) pool.appendChild(elc2); }
+            }
+            // cleanup placement mapping for this cell if needed
+            try{ if(state.placements && state.placements[key] && state.placements[key] === cardId) delete state.placements[key]; }catch(_){ }
+            // clear wrong marker from cell level (we'll recompute in next submit)
+            cell.classList.remove('wrong');
+          },600);
+        }
       }
+    });
+
+    // set cell-level classes: correct if none wrong and at least one card present and all match
+    if(!anyWrong && cardsInCell.length > 0){
+      cell.classList.add('correct'); cell.classList.remove('wrong');
+    } else if(anyWrong){
+      cell.classList.add('wrong'); cell.classList.remove('correct');
     }
+
+    // Update representative placement mapping: keep the first card id for compatibility
+    if(cardsInCell.length > 0){ state.placements[key] = cardsInCell[0].dataset.cardId; }
   });
 
-  const score = Math.round((correct/total)*100);
-  logEvent({type:'submit',correct,total,score,timestamp:Date.now()});
-  // log-output UI removed; logs are kept in memory
+  // compute percentage based on total candidate cards (all cards generated)
+  const totalCandidates = Object.keys(state.cards || {}).length;
+  const score = totalCandidates > 0 ? Math.round((correct/totalCandidates)*100) : 0;
+  logEvent({type:'submit',correct,totalPlaced:totalCardsPlaced,totalExpected:totalExpectedCards,totalCandidates,score,timestamp:Date.now()});
 
   // Show non-blocking result panel for any submit
-  showResultPanel(`得分 ${score}% (${correct}/${total})`);
+  showResultPanel(`得分 ${score}% (${correct}/${totalCandidates})`);
 
-  // Still show an alert only when everything is correct
-  if (correct === total) {
-    alert(`正確 ${correct} / ${total}，得分 ${score}%`);
+  // Still show an alert only when everything is correct (all candidate cards are placed correctly)
+  if (totalCandidates > 0 && correct === totalCandidates) {
+    alert(`正確 ${correct} / ${totalCandidates}，得分 ${score}%`);
   }
 }
 
@@ -725,13 +750,25 @@ function onViewAnswer(){
   if (Array.isArray(expectedRaw)) expectedList = expectedRaw.map(String);
   else if (expectedRaw != null) expectedList = [String(expectedRaw)];
 
-      // find a card matching any of the expected texts
-      const cardEl = Array.from(document.querySelectorAll('.card')).find(c=> expectedList.includes(c.textContent));
-      if(cardEl){
-        const cell = document.querySelector(`.cell[data-row='${i}'][data-col='${j}']`);
-        if(cell){
-          cell.querySelector('.cell-inner').appendChild(cardEl);
-          state.placements[cell.dataset.key] = cardEl.dataset.cardId;
+      // find and place matching cards.
+      const allCards = Array.from(document.querySelectorAll('.card'));
+      // track already placed card ids so we don't reuse the same card
+      const alreadyPlaced = new Set(Object.values(state.placements || {}));
+      const cell = document.querySelector(`.cell[data-row='${i}'][data-col='${j}']`);
+      if (cell) {
+        let firstPlacedId = null;
+        // try to place every expected text (if present as a card and not already placed)
+        for (const exp of expectedList) {
+          const cardEl = allCards.find(c => c.textContent === exp && !alreadyPlaced.has(c.dataset.cardId));
+          if (cardEl) {
+            cell.querySelector('.cell-inner').appendChild(cardEl);
+            alreadyPlaced.add(cardEl.dataset.cardId);
+            if (!firstPlacedId) {
+              firstPlacedId = cardEl.dataset.cardId;
+              // keep compatibility: store one representative id in state.placements
+              state.placements[cell.dataset.key] = firstPlacedId;
+            }
+          }
         }
       }
     });
