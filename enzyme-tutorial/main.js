@@ -12,13 +12,12 @@ if (tempSlider && tempValue) {
 const reactions = [
   {
     enzymeType: 'decompositionA',
+    enzymeActiveIcon: 'enzyme_A_active.svg',
+    enzymeDenaturedIcon: 'enzyme_A_denatured.svg',
     substrateTypes: ['A'],
-    products: ['B', 'C']
-  },
-  {
-    enzymeType: 'synthesisC',
-    substrateTypes: ['A', 'B'],
-    products: ['C']
+    substrateIcons: ['A.svg'],
+    products: ['B', 'C'],
+    productIcons: ['B.svg', 'C.svg']
   }
   // ...可擴充
 ];
@@ -33,6 +32,7 @@ const substrateCountInput = document.getElementById('substrate-count');
 
 let enzymes = [];
 let substrates = [];
+let products = [];
 let dragging = null;
 let offsetX = 0, offsetY = 0;
 let dragType = null; // 'enzyme' or 'substrate'
@@ -46,45 +46,46 @@ function randomPosY() {
 }
 // --- 物件導向清除 ---
 function clearAll() {
-  enzymes.forEach(e => e.remove());
-  substrates.forEach(s => s.remove());
-  enzymes = [];
-  substrates = [];
+	enzymes.forEach(e => e.remove());
+	substrates.forEach(s => s.remove());
+	products.forEach(p => p.remove && p.remove());
+	enzymes = [];
+	substrates = [];
+	products = [];
 }
 
 
 // --- 類別設計 ---
 class Enzyme {
-	constructor(type, x, y, angle, denatureTemp = 50) {
-		this.type = type; // 例如 'synthesisA', 'synthesisB', 'decompositionA' ...		
-		this.x = x;
-		this.y = y;
-    this.denatureTemp = denatureTemp;
-    this.denatured = false;
-		this.angle = angle;
-		this.el = document.createElement('img');
-		this.el.src = this.getIconSrc();
-		this.el.className = 'draggable enzyme';
-		this.el.style.left = x + 'px';
-		this.el.style.top = y + 'px';
-		this.el.style.zIndex = 2;
-		this.el.dataset.angle = angle;
-		this.el.style.transform = `rotate(${angle}deg)`;
-		canvas.appendChild(this.el);
-		// 活化位
-		this.activation = document.createElement('div');
-		this.activation.className = 'activation-site';
-		this.activation.style.left = x + 'px';
-		this.activation.style.top = y + 'px';
-		canvas.appendChild(this.activation);
-	}
-	getIconSrc() {
-		// 根據 type 決定圖示
-    if (this.type === 'decompositionA') return 'enzyme_A_active.svg';        
-		if (this.type === 'synthesisA') return 'enzyme_A_active.svg';
-		if (this.type === 'synthesisB') return 'enzyme_B_active.svg';
-		return 'enzyme_A_active.svg';
-	}
+		constructor(type, x, y, angle, denatureTemp = 50) {
+			this.type = type; // 例如 'synthesisA', 'synthesisB', 'decompositionA' ...
+			this.x = x;
+			this.y = y;
+			this.denatureTemp = denatureTemp;
+			this.denatured = false;
+			this.angle = angle;
+			this.el = document.createElement('img');
+			this.el.src = this.getIconSrc();
+			this.el.className = 'draggable enzyme';
+			this.el.style.left = x + 'px';
+			this.el.style.top = y + 'px';
+			this.el.style.zIndex = 2;
+			this.el.dataset.angle = angle;
+			this.el.style.transform = `rotate(${angle}deg)`;
+			canvas.appendChild(this.el);
+			// 活化位
+			this.activation = document.createElement('div');
+			this.activation.className = 'activation-site';
+			this.activation.style.left = x + 'px';
+			this.activation.style.top = y + 'px';
+			canvas.appendChild(this.activation);
+		}
+		getIconSrc() {
+			// 從 reactions array 取得對應 enzymeType 的 active icon
+			const rule = reactions.find(r => r.enzymeType === this.type);
+			if (rule && rule.enzymeActiveIcon) return rule.enzymeActiveIcon;
+			return 'enzyme_A_active.svg';
+		}
 	// 檢查溫度，超過即變性（不可逆）
 	checkDenature(temp) {
 		if (!this.denatured && temp >= this.denatureTemp) {
@@ -97,13 +98,12 @@ class Enzyme {
 		}
 	}
 
-  getDenaturedIconSrc() {
-    // 根據 type 回傳不同變性圖示
-    if (this.type === 'decompositionA') return 'enzyme_A_denatured.svg';
-    if (this.type === 'synthesisA') return 'enzyme_A_denatured.svg';
-    if (this.type === 'synthesisB') return 'enzyme_B_denatured.svg';    
-    return 'enzyme_denatured.svg';
-  }
+	getDenaturedIconSrc() {
+		// 從 reactions array 取得對應 enzymeType 的 denatured icon
+		const rule = reactions.find(r => r.enzymeType === this.type);
+		if (rule && rule.enzymeDenaturedIcon) return rule.enzymeDenaturedIcon;
+		return 'enzyme_denatured.svg';
+	}
 
 		updatePosition(x, y) {
 			this.x = x; this.y = y;
@@ -141,12 +141,15 @@ class Substrate {
 		this.el.style.transform = `rotate(${angle}deg)`;
 		canvas.appendChild(this.el);
 	}
-  getIconSrc() {
-		// 根據 type 決定圖示
-		if (this.type === 'A') return 'A.svg';
-		if (this.type === 'B') return 'B.svg';
-		if (this.type === 'C') return 'C.svg';    
-		return 'A.svg';
+	getIconSrc() {
+		// 從 reactions array 找到有此 substrateType 的反應，並取對應 icon
+		for (const rule of reactions) {
+			const idx = rule.substrateTypes.indexOf(this.type);
+			if (idx !== -1 && rule.substrateIcons && rule.substrateIcons[idx]) {
+				return rule.substrateIcons[idx];
+			}
+		}
+		return this.type + '.svg'; // fallback
 	}
 	updatePosition(x, y) {
 		this.x = x; this.y = y;
@@ -203,42 +206,53 @@ function updateActivationSites() {
 	}
 }
 
-function bindDraggable() {
-	enzymes.forEach((enzyme, idx) => {
-		enzyme.el.onpointerdown = e => startDrag(e, 'enzyme', idx);
-	});
-	substrates.forEach((substrate, idx) => {
-		substrate.el.onpointerdown = e => startDrag(e, 'substrate', idx);
-	});
-}
 
-function startDrag(e, type, idx) {  
-	dragging = (type === 'enzyme' ? enzymes[idx] : substrates[idx]);
-	dragType = type;
-	dragIndex = idx;
-	const rect = dragging.el.getBoundingClientRect();
-	offsetX = e.clientX - rect.left;
-	offsetY = e.clientY - rect.top;
-	dragging.el.style.filter = 'brightness(1.2) drop-shadow(0 0 8px #00bcd4)';
-	// 設定自訂 ghost image
-	if (e.dataTransfer) {
-		e.dataTransfer.setDragImage(dragging.el, 20, 20);
-	} else if (typeof e.target.setPointerCapture === 'function') {
-		try {
-			const ghost = dragging.el.cloneNode(true);
-			ghost.style.position = 'absolute';
-			ghost.style.left = '-9999px';
-			ghost.style.top = '-9999px';
-			ghost.style.pointerEvents = 'none';
-			ghost.style.opacity = '1';
-			ghost.style.transform = dragging.el.style.transform;
-			document.body.appendChild(ghost);
-			e.target.setPointerCapture(e.pointerId);
-			setTimeout(() => ghost.remove(), 1000);
-		} catch {}
+	function bindDraggable() {
+		enzymes.forEach((enzyme, idx) => {
+			enzyme.el.onpointerdown = e => startDrag(e, 'enzyme', idx);
+		});
+		substrates.forEach((substrate, idx) => {
+			substrate.el.onpointerdown = e => startDrag(e, 'substrate', idx);
+		});
+		products.forEach((product, idx) => {
+			if (product.el) product.el.onpointerdown = e => startDrag(e, 'product', idx);
+		});
 	}
-	dragging.el.setPointerCapture(e.pointerId);
-}
+
+
+	function startDrag(e, type, idx) {
+		if (type === 'enzyme') {
+			dragging = enzymes[idx];
+		} else if (type === 'substrate') {
+			dragging = substrates[idx];
+		} else if (type === 'product') {
+			dragging = products[idx];
+		}
+		dragType = type;
+		dragIndex = idx;
+		const rect = dragging.el.getBoundingClientRect();
+		offsetX = e.clientX - rect.left;
+		offsetY = e.clientY - rect.top;
+		dragging.el.style.filter = 'brightness(1.2) drop-shadow(0 0 8px #00bcd4)';
+		// 設定自訂 ghost image
+		if (e.dataTransfer) {
+			e.dataTransfer.setDragImage(dragging.el, 20, 20);
+		} else if (typeof e.target.setPointerCapture === 'function') {
+			try {
+				const ghost = dragging.el.cloneNode(true);
+				ghost.style.position = 'absolute';
+				ghost.style.left = '-9999px';
+				ghost.style.top = '-9999px';
+				ghost.style.pointerEvents = 'none';
+				ghost.style.opacity = '1';
+				ghost.style.transform = dragging.el.style.transform;
+				document.body.appendChild(ghost);
+				e.target.setPointerCapture(e.pointerId);
+				setTimeout(() => ghost.remove(), 1000);
+			} catch {}
+		}
+		dragging.el.setPointerCapture(e.pointerId);
+	}
 
 canvas.onpointermove = function(e) {
 	if (!dragging) return;
@@ -343,15 +357,45 @@ function triggerReaction(idx, enzymeIdx, rule) {
   }
 }
 
+
+class Product {
+	constructor(type, x, y, angle, src) {
+		this.type = type;
+		this.x = x;
+		this.y = y;
+		this.angle = angle;
+		this.el = document.createElement('img');
+		this.el.src = src;
+		this.el.className = 'draggable product';
+		this.el.style.left = x + 'px';
+		this.el.style.top = y + 'px';
+		this.el.style.zIndex = 2;
+		this.el.dataset.angle = angle;
+		this.el.style.transform = `rotate(${angle}deg)`;
+		canvas.appendChild(this.el);
+	}
+	updatePosition(x, y) {
+		this.x = x; this.y = y;
+		this.el.style.left = x + 'px';
+		this.el.style.top = y + 'px';
+	}
+	setAngle(angle) {
+		this.angle = angle;
+		this.el.dataset.angle = angle;
+		this.el.style.transform = `rotate(${angle}deg)`;
+	}
+	remove() {
+		this.el.remove();
+	}
+}
+
 function createProduct(src, center, angle) {
-	const prod = document.createElement('img');
-	prod.src = src;
-	prod.className = 'product';
-	prod.style.left = (center.x - 20) + 'px';
-	prod.style.top = (center.y - 20) + 'px';
-	prod.style.transform = 'rotate(0deg)';
-	prod.style.zIndex = 1;
-	canvas.appendChild(prod);
+	// 解析 type from src (e.g., 'B.svg' => 'B')
+	let type = src.replace('.svg', '');
+	let x = center.x - 20;
+	let y = center.y - 20;
+	let prod = new Product(type, x, y, 0, src);
+	products.push(prod);
 	// 隨機速度
 	let v = 3 + Math.random() * 2;
 	let vx = Math.cos(angle) * v;
@@ -360,21 +404,22 @@ function createProduct(src, center, angle) {
 	let rot = 0;
 	let rotSpeed = (Math.random() - 0.5) * 8;
 	function animate() {
-		let x = parseFloat(prod.style.left);
-		let y = parseFloat(prod.style.top);
+		let x = parseFloat(prod.el.style.left);
+		let y = parseFloat(prod.el.style.top);
 		x += vx;
 		y += vy;
 		vx *= damping;
 		vy *= damping;
 		rot += rotSpeed;
-		prod.style.left = x + 'px';
-		prod.style.top = y + 'px';
-		prod.style.transform = `rotate(${rot}deg)`;
+		prod.el.style.left = x + 'px';
+		prod.el.style.top = y + 'px';
+		prod.el.style.transform = `rotate(${rot}deg)`;
 		if (Math.abs(vx) > 0.1 || Math.abs(vy) > 0.1) {
 			requestAnimationFrame(animate);
 		}
 	}
 	animate();
+	bindDraggable();
 }
 
 enzymeCountInput.onchange = renderAll;
