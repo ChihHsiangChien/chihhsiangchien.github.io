@@ -10,6 +10,8 @@ let state = {
   placements: {},
   logs: []
 };
+// app mode from URL params, e.g. mode=teach
+let APP_MODE = '';
 
 const el = id => document.getElementById(id);
 
@@ -184,6 +186,11 @@ function build(){
     const pool = document.createElement('div');
     pool.className = 'row-pool';
     pool.dataset.row = i;
+  // allow drag/drop into the per-row pool
+  pool.addEventListener('dragenter', onDragEnter);
+  pool.addEventListener('dragover', onDragOver);
+  pool.addEventListener('dragleave', onDragLeave);
+  pool.addEventListener('drop', onDrop);
     poolWrap.appendChild(pool);
     grid.appendChild(poolWrap);
   });
@@ -296,9 +303,173 @@ function hashString(str){
 }
 
 function attachControls(){
-  el('btn-submit').addEventListener('click', onSubmit);
-  el('btn-reset').addEventListener('click', onReset);
-  el('btn-answer').addEventListener('click', onViewAnswer);
+  const btnSubmit = el('btn-submit'); if(btnSubmit) btnSubmit.onclick = onSubmit;
+  const btnReset = el('btn-reset'); if(btnReset) btnReset.onclick = onReset;
+  const btnAnswer = el('btn-answer'); if(btnAnswer) btnAnswer.onclick = viewAnswerOrTeach;
+  const teachBtn = document.getElementById('btn-teach');
+  if(teachBtn){
+    const updateTeachLabel = ()=>{ teachBtn.textContent = (APP_MODE === 'teach') ? '退出教學' : '教學模式'; };
+    // toggle teach mode when clicking the button (assign onclick to avoid duplicate listeners)
+    teachBtn.onclick = ()=>{
+      if(APP_MODE === 'teach'){
+        APP_MODE = '';
+        // rebuild UI to reset placements and pools
+        build();
+        // remove mode param from URL without reloading
+        try{ const params = new URLSearchParams(location.search); params.delete('mode'); history.replaceState(null,'', location.pathname + (params.toString() ? '?'+params.toString() : '')); }catch(e){}
+      } else {
+        APP_MODE = 'teach';
+        // ensure UI is rebuilt then enter teach mode
+        build();
+        setTimeout(()=>enterTeachMode(),40);
+        // add mode=teach to URL without reloading
+        try{ const params = new URLSearchParams(location.search); params.set('mode','teach'); history.replaceState(null,'', location.pathname + '?' + params.toString()); }catch(e){}
+      }
+      updateTeachLabel();
+    };
+    updateTeachLabel();
+  }
+}
+
+function viewAnswerOrTeach(){
+  if(APP_MODE === 'teach') enterTeachMode();
+  else onViewAnswer();
+}
+
+// Place answers then hide the text on placed cards; clicking each card reveals its text.
+function enterTeachMode(){
+  // place answers into cells
+  onViewAnswer();
+
+  // For each card now in a cell, hide its text and set up reveal-on-click
+  document.querySelectorAll('.cell .card').forEach(cardEl =>{
+    try{
+      const cardId = cardEl.dataset.cardId;
+      const metaText = (state.cards && state.cards[cardId] && state.cards[cardId].text) ? state.cards[cardId].text : cardEl.textContent;
+      // store real text and original styles
+      cardEl.dataset.revealText = metaText;
+      // capture original colors so we can restore later
+      try{ cardEl.dataset.origBg = cardEl.style.background || ''; }catch(_){}
+      try{ cardEl.dataset.origBorder = cardEl.style.borderColor || ''; }catch(_){}
+      // preserve current width so clearing text doesn't collapse the card
+      const w = cardEl.offsetWidth;
+      if(w && w > 10) cardEl.style.minWidth = w + 'px';
+      // preserve current height as well so hiding text doesn't collapse vertical size
+      const h = cardEl.offsetHeight;
+      if(h && h > 8) cardEl.style.minHeight = h + 'px';
+
+      // Also preserve the parent cell's minHeight while any teach-card inside is hidden
+      // This prevents the whole row (Y position) from shifting while some cards are flipped.
+      try{
+        const cell = cardEl.closest('.cell');
+        if(cell){
+          const cellH = cell.offsetHeight;
+          if(cellH && cellH > 8){
+            // store original cell minHeight so we can restore later
+            if(!cell.dataset.origMinHeight) cell.dataset.origMinHeight = cell.style.minHeight || '';
+            cell.style.minHeight = cellH + 'px';
+            // track how many hidden teach-cards are in this cell
+            const cur = parseInt(cell.dataset.teachHiddenCount || '0', 10) || 0;
+            cell.dataset.teachHiddenCount = String(cur + 1);
+          }
+        }
+      }catch(_){ }
+
+      // show card back: empty text and light gray background
+      cardEl.textContent = '';
+      cardEl.style.background = '#eeeeee';
+      cardEl.style.borderColor = '#cccccc';
+  // mark as teach card; by default disable dragging for students, but allow
+  // dragging if the app is in teacher mode so instructors can move cards.
+  cardEl.dataset.teach = '1';
+  // enable native dragging for teachers (APP_MODE === 'teach'), otherwise keep disabled
+  cardEl.draggable = (APP_MODE === 'teach');
+
+      // attach click to toggle reveal (flip) with animation
+      const clickHandler = function onToggle(){
+        try{
+          // set common flip properties
+          cardEl.style.transition = 'transform 260ms ease';
+          cardEl.style.transformStyle = 'preserve-3d';
+          cardEl.style.backfaceVisibility = 'hidden';
+
+          const doReveal = !!cardEl.dataset.revealText;
+
+          // first half: rotate to 90deg
+          cardEl.style.willChange = 'transform';
+          cardEl.style.transform = 'rotateY(90deg)';
+
+          setTimeout(()=>{
+            if(doReveal){
+              // reveal: restore text and styles
+              cardEl.textContent = cardEl.dataset.revealText;
+              delete cardEl.dataset.revealText;
+              try{ if(cardEl.dataset.origBg) cardEl.style.background = cardEl.dataset.origBg; else cardEl.style.removeProperty('background'); }catch(_){ }
+              try{ if(cardEl.dataset.origBorder) cardEl.style.borderColor = cardEl.dataset.origBorder; else cardEl.style.removeProperty('border-color'); }catch(_){ }
+              // mark that we need to clear min size guards after animation completes
+              try{ cardEl._needsSizeClear = true; }catch(_){ }
+              // keep draggable if in teach mode, otherwise keep disabled
+              cardEl.draggable = (APP_MODE === 'teach');
+              // reduce hidden count on parent cell; if zero, clear the cell minHeight in cleanup
+              try{
+                const cell = cardEl.closest('.cell');
+                if(cell){
+                  const cur = parseInt(cell.dataset.teachHiddenCount || '0', 10) || 0;
+                  const next = Math.max(0, cur - 1);
+                  cell.dataset.teachHiddenCount = String(next);
+                  if(next === 0){
+                    // schedule clearing of the cell minHeight after animation completes
+                    cardEl._clearCellMinAfter = true;
+                  }
+                }
+              }catch(_){ }
+            } else {
+              // hide: store current text and original styles, then blank
+              try{ cardEl.dataset.revealText = cardEl.textContent || cardEl.dataset.revealText || ''; }catch(_){ }
+              try{ cardEl.dataset.origBg = cardEl.style.background || cardEl.dataset.origBg || ''; }catch(_){ }
+              try{ cardEl.dataset.origBorder = cardEl.style.borderColor || cardEl.dataset.origBorder || ''; }catch(_){ }
+              const w2 = cardEl.offsetWidth; if(w2 && w2 > 10) cardEl.style.minWidth = w2 + 'px';
+              const h2 = cardEl.offsetHeight; if(h2 && h2 > 8) cardEl.style.minHeight = h2 + 'px';
+              cardEl.textContent = '';
+              cardEl.style.background = '#eeeeee';
+              cardEl.style.borderColor = '#cccccc';
+              cardEl.dataset.teach = '1';
+              // when hiding, only disable dragging for student mode; in teach mode leave draggable
+              cardEl.draggable = (APP_MODE === 'teach');
+              // increment parent cell hidden count (we already set it when entering teach mode, but
+              // toggling back to hidden should re-increment if needed)
+              try{
+                const cell = cardEl.closest('.cell');
+                if(cell){
+                  const cur = parseInt(cell.dataset.teachHiddenCount || '0', 10) || 0;
+                  cell.dataset.teachHiddenCount = String(cur + 1);
+                  // ensure cell keeps its minHeight
+                  if(!cell.style.minHeight || cell.style.minHeight === ''){
+                    const ch = cell.offsetHeight; if(ch && ch > 8) cell.style.minHeight = ch + 'px';
+                  }
+                }
+              }catch(_){ }
+            }
+
+            // second half: rotate back to 0
+            requestAnimationFrame(()=>{ cardEl.style.transform = 'rotateY(0deg)'; });
+          }, 160);
+
+          // cleanup after animation
+          setTimeout(()=>{
+            try{
+              // clear size guards on the card if requested (do this after the flip to avoid layout jumps)
+              if(cardEl._needsSizeClear){ try{ cardEl.style.minWidth = ''; cardEl.style.minHeight = ''; }catch(_){ } delete cardEl._needsSizeClear; }
+              // if this flip indicated we should clear the parent cell minHeight, do so now
+              if(cardEl._clearCellMinAfter){ try{ const cell = cardEl.closest('.cell'); if(cell){ const cnt = parseInt(cell.dataset.teachHiddenCount || '0',10)||0; if(cnt === 0){ cell.style.minHeight = cell.dataset.origMinHeight || ''; delete cell.dataset.origMinHeight; } } }catch(_){ } delete cardEl._clearCellMinAfter; }
+              cardEl.style.transform = ''; cardEl.style.transition = ''; cardEl.style.transformStyle = ''; cardEl.style.backfaceVisibility = ''; cardEl.style.willChange = '';
+            }catch(_){ }
+          }, 520);
+        }catch(e){ /* ignore */ }
+      };
+      cardEl.addEventListener('click', clickHandler);
+    }catch(e){/* ignore */}
+  });
 }
 
 /* utilities */
@@ -355,12 +526,15 @@ function onDragLeave(e){
 function onDrop(e){
   e.preventDefault();
   // find the containing .cell (if drop happens on .cell-inner or children)
-  const cell = (e.target && e.target.closest) ? e.target.closest('.cell') : e.currentTarget;
+  // determine if dropped on a cell or a row-pool
+  const pool = (e.target && e.target.closest) ? e.target.closest('.row-pool') : null;
+  const cell = (e.target && e.target.closest) ? e.target.closest('.cell') : null;
   if(cell) cell.classList.remove('highlight');
   const id = (e.dataTransfer && e.dataTransfer.getData ? e.dataTransfer.getData('text/plain') : null) || dragCardId;
-  console.debug('drop event', {cell: cell && cell.dataset && cell.dataset.key, cardId:id});
+  console.debug('drop event', {cell: cell && cell.dataset && cell.dataset.key, pool: pool && pool.dataset && pool.dataset.row, cardId:id});
   if(!id) return;
-  placeCardToCell(id, cell || e.currentTarget);
+  if(pool) placeCardToPool(id, pool);
+  else placeCardToCell(id, cell || e.currentTarget);
 }
 
 /* Pointer / touch fallback for cards and cells */
@@ -369,6 +543,9 @@ let pointerState = { dragging:false, cardEl:null, startX:0, startY:0, ghost:null
 function onCardPointerDown(e){
   // begin drag-like interaction
   const elCard = e.currentTarget;
+  // if this card is part of teach-mode hidden answers, do not pick it up
+  // allow teachers to pick up teach-mode cards when APP_MODE === 'teach'
+  if(elCard.dataset && elCard.dataset.teach && APP_MODE !== 'teach') return;
   // Only handle pointer-based drag for touch/pen — avoid preventing native mouse dragstart
   if(e.pointerType && e.pointerType !== 'touch' && e.pointerType !== 'pen') return;
   e.preventDefault();
@@ -403,6 +580,9 @@ function onCardTouchStart(e){
   const touch = e.changedTouches && e.changedTouches[0] ? e.changedTouches[0] : (e.touches && e.touches[0]);
   if(!touch) return;
   const el = e.currentTarget;
+  // if this card is part of teach-mode hidden answers, do not pick it up
+  // allow teachers to pick up teach-mode cards when APP_MODE === 'teach'
+  if(el.dataset && el.dataset.teach && APP_MODE !== 'teach') return;
 
   // Create a minimal synthetic event that onCardPointerDown can use
   const synthetic = {
@@ -459,16 +639,26 @@ function onPointerUp(e){
   pointerState.dragging = false;
   const g = pointerState.ghost;
   const elUnder = document.elementFromPoint(e.clientX, e.clientY);
+  const pool = elUnder && elUnder.closest && elUnder.closest('.row-pool');
   const cell = elUnder && elUnder.closest && elUnder.closest('.cell');
-  if(cell){
-    const id = pointerState.cardEl.dataset.cardId;
-    placeCardToCell(id, cell);
-  }
+  if(pool){ const id = pointerState.cardEl.dataset.cardId; placeCardToPool(id, pool); }
+  else if(cell){ const id = pointerState.cardEl.dataset.cardId; placeCardToCell(id, cell); }
   if(g) g.remove();
   pointerState.cardEl = null; pointerState.ghost = null;
   document.querySelectorAll('.cell.highlight').forEach(n=>n.classList.remove('highlight'));
   console.debug('pointerup');
   updateDebug();
+}
+
+// place a card into a row-pool element
+function placeCardToPool(cardId, poolEl){
+  const cardEl = document.querySelector(`[data-card-id='${cardId}']`);
+  if(!cardEl || !poolEl) return;
+  poolEl.appendChild(cardEl);
+  cardEl.classList.add('in-pool');
+  // clear any cell-level classes and placements that referenced this card
+  const key = Object.keys(state.placements || {}).find(k => state.placements[k] === cardId);
+  if(key) delete state.placements[key];
 }
 
 function onCellPointerDown(e){
@@ -554,6 +744,11 @@ function renderSpecSelector(){
       spec = specsList[idx].spec;
       // rebuild UI
       build();
+      // if teach mode is active, re-enter teach mode after switching spec
+      if(APP_MODE === 'teach'){
+        // defer slightly to allow build to finish DOM updates
+        setTimeout(()=>enterTeachMode(), 40);
+      }
       updateDebug();
     }
   });
@@ -574,6 +769,10 @@ function renderLeftSpecList(){
     it.addEventListener('click', ()=>{
       spec = s.spec;
       build();
+      // if teach mode is active, re-enter teach mode after switching spec
+      if(APP_MODE === 'teach'){
+        setTimeout(()=>enterTeachMode(), 40);
+      }
       // mark active
       document.querySelectorAll('.spec-item').forEach(n=>n.classList.remove('active'));
       it.classList.add('active');
@@ -774,7 +973,8 @@ function onViewAnswer(){
     });
   });
   logEvent({type:'view-answer',timestamp:Date.now()});
-  el('log-output').textContent = JSON.stringify(state.logs,null,2);
+  const lo = document.getElementById('log-output');
+  if(lo) lo.textContent = JSON.stringify(state.logs,null,2);
 }
 
 function logEvent(obj){
@@ -783,6 +983,14 @@ function logEvent(obj){
 
 /* boot */
 window.addEventListener('DOMContentLoaded', async ()=>{
+  // read mode param
+  try{ const params = new URLSearchParams(location.search); APP_MODE = params.get('mode') || ''; }catch(e){}
   await loadSpec();
   build();
+  // if mode=teach, optionally auto-enter teach view (do not auto-reveal text)
+  if(APP_MODE === 'teach'){
+    // place answers but keep them hidden until clicked
+    // defer slightly to allow build to finish
+    setTimeout(()=>enterTeachMode(), 40);
+  }
 });
