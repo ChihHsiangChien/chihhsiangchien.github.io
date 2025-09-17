@@ -211,10 +211,34 @@ function generateCards(){
   const heads = spec.head || [];
 
   // flatten into card objects with correct coordinates
+  // Support two content shapes per cell:
+  // 1) string (possibly containing multiple items separated by '、', ',', '，', ';', '/')
+  // 2) array of strings (each element is an individual item already)
+  // For arrays, produce one card per element. For strings, split by separators if needed.
   const cards = [];
-  rows.forEach((r,i)=>{
-    (r.content || []).forEach((text,j)=>{
-      cards.push({text, row:i, col:j});
+  // Only support structured arrays for multiple items. Strings are treated as a
+  // single card (no separator-based splitting).
+  rows.forEach((r, i) => {
+    (r.content || []).forEach((cellItem, j) => {
+      if (Array.isArray(cellItem)) {
+        // already an array of items -> each becomes its own card
+        cellItem.forEach(p => {
+          if (typeof p === 'string') {
+            const txt = p.trim();
+            if (txt) cards.push({ text: txt, row: i, col: j });
+          } else if (p != null) {
+            // non-string element: stringify safely
+            cards.push({ text: String(p), row: i, col: j });
+          }
+        });
+      } else if (typeof cellItem === 'string') {
+        // Treat the whole string as a single card (no splitting)
+        const txt = cellItem.trim();
+        if (txt) cards.push({ text: txt, row: i, col: j });
+      } else if (cellItem != null) {
+        // fallback for numbers/objects: stringify
+        cards.push({ text: String(cellItem), row: i, col: j });
+      }
     });
   });
 
@@ -240,11 +264,13 @@ function generateCards(){
       cardEl.style.borderColor = border;
     }catch(e){ /* ignore coloring errors */ }
 
-    cardEl.addEventListener('dragstart', onDragStart);
-    cardEl.addEventListener('dragend', onDragEnd);
+  cardEl.addEventListener('dragstart', onDragStart);
+  cardEl.addEventListener('dragend', onDragEnd);
 
-    // pointer for touch-dnd fallback
-    cardEl.addEventListener('pointerdown', onCardPointerDown);
+  // pointer for touch-dnd fallback
+  cardEl.addEventListener('pointerdown', onCardPointerDown);
+  // touch fallback for browsers that don't provide pointer events (older iOS)
+  cardEl.addEventListener('touchstart', onCardTouchStart, { passive: false });
 
     // append to per-row pool if exists, otherwise to fallback container
     const rp = document.querySelector(`.row-pool[data-row='${c.row}']`);
@@ -346,7 +372,10 @@ function onCardPointerDown(e){
   // Only handle pointer-based drag for touch/pen — avoid preventing native mouse dragstart
   if(e.pointerType && e.pointerType !== 'touch' && e.pointerType !== 'pen') return;
   e.preventDefault();
-  elCard.setPointerCapture(e.pointerId);
+  // setPointerCapture may not exist in touch-only environments; guard it
+  if (typeof elCard.setPointerCapture === 'function' && typeof e.pointerId !== 'undefined') {
+    try{ elCard.setPointerCapture(e.pointerId); } catch(_){}
+  }
   pointerState.dragging = true;
   pointerState.cardEl = elCard;
   pointerState.startX = e.clientX;
@@ -365,6 +394,49 @@ function onCardPointerDown(e){
   window.addEventListener('pointermove', onPointerMove);
   window.addEventListener('pointerup', onPointerUp, {once:true});
   console.debug('pointerdown start', elCard.dataset.cardId, elCard.textContent);
+}
+
+// Touch fallback wrapper: translate touch events to the existing pointer drag flow.
+function onCardTouchStart(e){
+  // touchstart may be used on devices without pointer events (older Safari)
+  e.preventDefault();
+  const touch = e.changedTouches && e.changedTouches[0] ? e.changedTouches[0] : (e.touches && e.touches[0]);
+  if(!touch) return;
+  const el = e.currentTarget;
+
+  // Create a minimal synthetic event that onCardPointerDown can use
+  const synthetic = {
+    currentTarget: el,
+    clientX: touch.clientX,
+    clientY: touch.clientY,
+    pointerType: 'touch',
+    pointerId: Date.now() % 1000000,
+    preventDefault: () => e.preventDefault()
+  };
+
+  // Start pointer-like drag
+  onCardPointerDown(synthetic);
+
+  // touchmove/touchend wrappers to forward to pointer handlers
+  function touchMoveHandler(ev){
+    ev.preventDefault();
+    const t = ev.touches && ev.touches[0];
+    if(!t) return;
+    // call pointer move with a simple object containing clientX/Y
+    onPointerMove({ clientX: t.clientX, clientY: t.clientY });
+  }
+  function touchEndHandler(ev){
+    ev.preventDefault();
+    const t = ev.changedTouches && ev.changedTouches[0];
+    const clientX = t ? t.clientX : synthetic.clientX;
+    const clientY = t ? t.clientY : synthetic.clientY;
+    // forward to pointer up
+    onPointerUp({ clientX, clientY });
+    window.removeEventListener('touchmove', touchMoveHandler);
+  }
+
+  window.addEventListener('touchmove', touchMoveHandler, { passive: false });
+  window.addEventListener('touchend', touchEndHandler, { passive: false, once: true });
 }
 
 function onPointerMove(e){
@@ -521,7 +593,11 @@ function onSubmit(){
   document.querySelectorAll('.cell').forEach(cell=>{
     const key = cell.dataset.key;
     const [i,j] = key.split(':').map(Number);
-    const expected = ((rows[i]&&rows[i].content)||[])[j];
+    const expectedRaw = ((rows[i]&&rows[i].content)||[])[j];
+    // Preferred: expectedRaw can be an array of acceptable strings, otherwise a single string.
+    let expectedList = [];
+    if (Array.isArray(expectedRaw)) expectedList = expectedRaw.map(String);
+    else if (expectedRaw != null) expectedList = [String(expectedRaw)];
     total++;
     const cardId = state.placements[key];
     if(!cardId){
@@ -530,7 +606,8 @@ function onSubmit(){
       return;
     }
     const card = state.cards[cardId];
-    if(card && card.text === expected){
+    // correct if the card text matches any acceptable expected text
+    if(card && expectedList.length && expectedList.includes(card.text)){
       cell.classList.add('correct');
       cell.classList.remove('wrong');
       correct++;
@@ -569,8 +646,48 @@ function onSubmit(){
   logEvent({type:'submit',correct,total,score,timestamp:Date.now()});
   // log-output UI removed; logs are kept in memory
 
-  // show a brief result
-  alert(`正確 ${correct} / ${total}，得分 ${score}%`);
+  // Show non-blocking result panel for any submit
+  showResultPanel(`得分 ${score}% (${correct}/${total})`);
+
+  // Still show an alert only when everything is correct
+  if (correct === total) {
+    alert(`正確 ${correct} / ${total}，得分 ${score}%`);
+  }
+}
+
+// Result panel: a small non-blocking panel that auto-hides
+let resultPanelTimeout = null;
+function ensureResultPanel(){
+  if(document.getElementById('result-panel')) return;
+  const p = document.createElement('div');
+  p.id = 'result-panel';
+  p.style.position = 'fixed';
+  p.style.right = '18px';
+  p.style.bottom = '18px';
+  p.style.padding = '10px 14px';
+  p.style.background = 'rgba(0,0,0,0.75)';
+  p.style.color = 'white';
+  p.style.borderRadius = '8px';
+  p.style.fontSize = '14px';
+  p.style.zIndex = 20000;
+  p.style.boxShadow = '0 6px 18px rgba(0,0,0,0.35)';
+  p.style.opacity = '0';
+  p.style.transition = 'opacity 240ms ease';
+  document.body.appendChild(p);
+}
+function showResultPanel(text, ms = 4000){
+  ensureResultPanel();
+  const p = document.getElementById('result-panel');
+  p.textContent = text;
+  p.style.opacity = '1';
+  if(resultPanelTimeout) clearTimeout(resultPanelTimeout);
+  resultPanelTimeout = setTimeout(()=>{ p.style.opacity = '0'; }, ms);
+}
+
+function hideResultPanel(){
+  const p = document.getElementById('result-panel');
+  if(p){ p.style.opacity = '0'; }
+  if(resultPanelTimeout) clearTimeout(resultPanelTimeout);
 }
 
 function onReset(){
@@ -602,9 +719,14 @@ function onViewAnswer(){
 
   const rows = spec.rows || [];
   rows.forEach((r,i)=>{
-    (r.content||[]).forEach((text,j)=>{
-      // find a card matching this text
-      const cardEl = Array.from(document.querySelectorAll('.card')).find(c=>c.textContent === text);
+    (r.content||[]).forEach((expectedRaw,j)=>{
+  // expectedRaw can be an array (preferred) or a single string
+  let expectedList = [];
+  if (Array.isArray(expectedRaw)) expectedList = expectedRaw.map(String);
+  else if (expectedRaw != null) expectedList = [String(expectedRaw)];
+
+      // find a card matching any of the expected texts
+      const cardEl = Array.from(document.querySelectorAll('.card')).find(c=> expectedList.includes(c.textContent));
       if(cardEl){
         const cell = document.querySelector(`.cell[data-row='${i}'][data-col='${j}']`);
         if(cell){
