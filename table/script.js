@@ -15,6 +15,11 @@ let APP_MODE = '';
 
 const el = id => document.getElementById(id);
 
+// Flip animation timing constants (ms)
+const FLIP_HALF_MS = 160;   // time to rotate to 90deg
+const FLIP_TOTAL_MS = 520;  // total cleanup time after full flip
+const FLIP_TRANSITION = 'transform 260ms ease';
+
 async function loadSpec(){
   // Check URL parameters `spec`. Support multiple entries: ?spec=a.json&spec=b.json
   const params = new URLSearchParams(location.search);
@@ -260,7 +265,9 @@ function generateCards(){
     cardEl.className = 'card in-pool small';
     cardEl.draggable = true;
     cardEl.textContent = c.text;
-    cardEl.dataset.cardId = id;
+  cardEl.dataset.cardId = id;
+  // store canonical text for robust matching (used by onViewAnswer)
+  try{ cardEl.dataset.canonicalText = String(c.text); }catch(_){ }
 
     // color coding: generate pastel color based on row label
     try{
@@ -388,16 +395,13 @@ function enterTeachMode(){
       // attach click to toggle reveal (flip) with animation
       const clickHandler = function onToggle(){
         try{
-          // set common flip properties
-          cardEl.style.transition = 'transform 260ms ease';
-          cardEl.style.transformStyle = 'preserve-3d';
-          cardEl.style.backfaceVisibility = 'hidden';
-
+          // use CSS classes to drive the flip animation
           const doReveal = !!cardEl.dataset.revealText;
 
-          // first half: rotate to 90deg
-          cardEl.style.willChange = 'transform';
-          cardEl.style.transform = 'rotateY(90deg)';
+          // start first half of flip by adding the 'flipping' class which sets transition
+          cardEl.classList.add('flipping');
+          // apply the mid-rotation state
+          cardEl.classList.add('flip-mid');
 
           setTimeout(()=>{
             if(doReveal){
@@ -451,23 +455,26 @@ function enterTeachMode(){
               }catch(_){ }
             }
 
-            // second half: rotate back to 0
-            requestAnimationFrame(()=>{ cardEl.style.transform = 'rotateY(0deg)'; });
-          }, 160);
+            // second half: remove mid-rotation marker so CSS returns it to front state
+            requestAnimationFrame(()=>{ cardEl.classList.remove('flip-mid'); });
+          }, FLIP_HALF_MS);
 
-          // cleanup after animation
+          // cleanup after animation: remove flipping class and clear size guards
           setTimeout(()=>{
             try{
               // clear size guards on the card if requested (do this after the flip to avoid layout jumps)
               if(cardEl._needsSizeClear){ try{ cardEl.style.minWidth = ''; cardEl.style.minHeight = ''; }catch(_){ } delete cardEl._needsSizeClear; }
               // if this flip indicated we should clear the parent cell minHeight, do so now
               if(cardEl._clearCellMinAfter){ try{ const cell = cardEl.closest('.cell'); if(cell){ const cnt = parseInt(cell.dataset.teachHiddenCount || '0',10)||0; if(cnt === 0){ cell.style.minHeight = cell.dataset.origMinHeight || ''; delete cell.dataset.origMinHeight; } } }catch(_){ } delete cardEl._clearCellMinAfter; }
-              cardEl.style.transform = ''; cardEl.style.transition = ''; cardEl.style.transformStyle = ''; cardEl.style.backfaceVisibility = ''; cardEl.style.willChange = '';
+              // remove animation classes
+              cardEl.classList.remove('flipping'); cardEl.classList.remove('flip-mid');
             }catch(_){ }
-          }, 520);
+          }, FLIP_TOTAL_MS);
         }catch(e){ /* ignore */ }
       };
-      cardEl.addEventListener('click', clickHandler);
+  // ensure we don't accumulate multiple click handlers if enterTeachMode is called repeatedly
+  try{ cardEl.onclick = null; }catch(_){ }
+  cardEl.onclick = clickHandler;
     }catch(e){/* ignore */}
   });
 }
@@ -766,7 +773,9 @@ function renderLeftSpecList(){
     const it = document.createElement('div');
     it.className = 'spec-item';
     it.textContent = s.name || `spec ${i+1}`;
-    it.addEventListener('click', ()=>{
+    // use onclick assignment to avoid accumulating multiple listeners
+    try{ it.onclick = null; }catch(_){ }
+    it.onclick = ()=>{
       spec = s.spec;
       build();
       // if teach mode is active, re-enter teach mode after switching spec
@@ -776,7 +785,7 @@ function renderLeftSpecList(){
       // mark active
       document.querySelectorAll('.spec-item').forEach(n=>n.classList.remove('active'));
       it.classList.add('active');
-    });
+    };
     listEl.appendChild(it);
   });
   // mark first active
@@ -957,8 +966,21 @@ function onViewAnswer(){
       if (cell) {
         let firstPlacedId = null;
         // try to place every expected text (if present as a card and not already placed)
-        for (const exp of expectedList) {
-          const cardEl = allCards.find(c => c.textContent === exp && !alreadyPlaced.has(c.dataset.cardId));
+        for (const expRaw of expectedList) {
+          const exp = String(expRaw).trim();
+          const cardEl = allCards.find(c => {
+            if(!c || !c.dataset) return false;
+            if(alreadyPlaced.has(c.dataset.cardId)) return false;
+            // prefer canonical dataset value (works even if visible textContent is blank)
+            const canon = (c.dataset.canonicalText !== undefined) ? String(c.dataset.canonicalText).trim() : null;
+            if(canon && canon === exp) return true;
+            // fallback to state.cards mapping
+            try{
+              const meta = state.cards && state.cards[c.dataset.cardId];
+              if(meta && String(meta.text).trim() === exp) return true;
+            }catch(_){ }
+            return false;
+          });
           if (cardEl) {
             cell.querySelector('.cell-inner').appendChild(cardEl);
             alreadyPlaced.add(cardEl.dataset.cardId);
