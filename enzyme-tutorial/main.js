@@ -1,5 +1,3 @@
-
-
 // 多個酵素與受質動態管理
 const canvas = document.getElementById('canvas');
 const enzymeCountInput = document.getElementById('enzyme-count');
@@ -160,11 +158,8 @@ if (toolbox && canvas) {
 import { reactions } from './enzyme-reactions.js';
 
 
-
-
-
 // 活化位判斷半徑（像素）
-const ACTIVATION_SITE_RADIUS = 32;
+const ACTIVATION_SITE_RADIUS = 35;
 
 
 // 多活化位支援
@@ -197,50 +192,85 @@ class Enzyme {
 		// 活化位
 		this.activation = document.createElement('div');
 		this.activation.className = 'activation-site';
+		/*
 		this.activation.style.left = x + 'px';
 		this.activation.style.top = y + 'px';
+		*/
 		canvas.appendChild(this.activation);
 		// 暫存已吸附的分子（for 多受質合成）
 		this.boundMolecules = [];
+		this.updateActivationPosition();
 	}
-  getIconSrc() {
-    // 從 reactions array 取得對應 type 的 active icon
-    const rule = reactions.find(r => r.type === this.type);
-    if (rule && rule.enzymeActiveIcon) return rule.enzymeActiveIcon;
-    return 'enzyme_A_active.svg';
-  }
-  // 檢查溫度，超過即變性（不可逆）
-  checkDenature(temp) {
-    if (!this.denatured && temp >= this.denatureTemp) {
-      this.denatured = true;
-      this.el.src = this.getDenaturedIconSrc();
-      if (this.activation) {
-        this.activation.remove();
-        this.activation = null;
-      }
-    }
-  }
+	getIconSrc() {
+		// 從 reactions array 取得對應 type 的 active icon
+		const rule = reactions.find(r => r.type === this.type);
+		if (rule && rule.enzymeActiveIcon) return rule.enzymeActiveIcon;
+		return 'enzyme_A_active.svg';
+	}
+	// 檢查溫度，超過即變性（不可逆）
+	checkDenature(temp) {
+		if (!this.denatured && temp >= this.denatureTemp) {
+		this.denatured = true;
+		this.el.src = this.getDenaturedIconSrc();
+		if (this.activation) {
+			this.activation.remove();
+			this.activation = null;
+		}
+		}
+	}
 
-  getDenaturedIconSrc() {
-    // 從 reactions array 取得對應 type 的 denatured icon
-    const rule = reactions.find(r => r.type === this.type);
-    if (rule && rule.enzymeDenaturedIcon) return rule.enzymeDenaturedIcon;
-    return 'enzyme_denatured.svg';
-  }
+	getDenaturedIconSrc() {
+		// 從 reactions array 取得對應 type 的 denatured icon
+		const rule = reactions.find(r => r.type === this.type);
+		if (rule && rule.enzymeDenaturedIcon) return rule.enzymeDenaturedIcon;
+		return 'enzyme_denatured.svg';
+	}
 
-  updatePosition(x, y) {
-    this.x = x; this.y = y;
-    this.el.style.left = x + 'px';
-    this.el.style.top = y + 'px';
-    if (this.activation) {
-      this.activation.style.left = x + 'px';
-      this.activation.style.top = y + 'px';
-    }
-  }
+	updatePosition(x, y) {
+		this.x = x; this.y = y;
+		this.el.style.left = x + 'px';
+		this.el.style.top = y + 'px';
+		this.activation.style.left = x + 'px';
+		this.activation.style.top = y + 'px';
+		if (this.activation) {
+			// 若有 updateActivationPosition 方法則呼叫，否則 fallback
+			if (typeof this.updateActivationPosition === 'function') {
+				this.updateActivationPosition();
+			} else {
+				this.activation.style.left = x + 'px';
+				this.activation.style.top = y + 'px';
+			}
+		}
+		// 移動已結合的受質分子
+		if (this.boundMolecules && this.boundMolecules.length > 0) {
+			// 以酵素中心為基準
+			const centerX = this.x + (this.el.width || 40) / 2;
+			const centerY = this.y + (this.el.height || 40) / 2;
+			this.boundMolecules.forEach((m, i) => {
+				// 多受質時可稍微錯開
+				const offset = 10 * i - 10 * (this.boundMolecules.length - 1) / 2;
+				m.updatePosition(centerX + offset - (m.el.width || 40) / 2, centerY - (m.el.height || 40) / 2);
+			});
+		}
+	}
+	updateActivationPosition() {
+		if (!this.activation) return;
+		// 設定活化位距離酵素中心 r 像素（可調整）
+		const r = 1;
+		const rad = (this.angle || 0) * Math.PI / 180;
+		const centerX = this.x + this.el.width / 2;
+		const centerY = this.y + this.el.height / 2;
+		// 活化位在正上方（-90度），可依需求調整
+		const ax = centerX + r * Math.cos(rad - Math.PI/2) - this.activation.offsetWidth / 2;
+		const ay = centerY + r * Math.sin(rad - Math.PI/2) - this.activation.offsetHeight / 2;
+		this.activation.style.left = ax + 'px';
+		this.activation.style.top = ay + 'px';
+	}	
 	setAngle(angle) {
 		this.angle = angle;
 		this.el.dataset.angle = angle;
 		this.el.style.transform = `rotate(${angle}deg)`;
+		this.updateActivationPosition();
 	}
 	remove() {
 		this.el.remove();
@@ -471,7 +501,23 @@ function trySnapToAnyActivation(idx) {
 			if (!enzyme.boundMolecules) enzyme.boundMolecules = [];
 			// 避免重複吸附同一分子
 			if (enzyme.boundMolecules.includes(molecule)) continue;
+			// 限制同型受質吸附數量不可超過規則需求
+			// countTypes 提到區塊外，避免重複宣告
+			if (typeof trySnapToAnyActivation.countTypes !== 'function') {
+				trySnapToAnyActivation.countTypes = function(arr) {
+					const map = {};
+					arr.forEach(t => { map[t] = (map[t] || 0) + 1; });
+					return map;
+				};
+			}
+			const requiredTypes_local = rule.substrates;
+			const reqCount_local = trySnapToAnyActivation.countTypes(requiredTypes_local);
+			const curCount_local = trySnapToAnyActivation.countTypes(enzyme.boundMolecules.map(m => m.type));
+			const molType = molecule.type;
+			if ((curCount_local[molType] || 0) >= (reqCount_local[molType] || 0)) continue;
 			enzyme.boundMolecules.push(molecule);
+			// 讓已結合分子不再攔截 pointer 事件
+			molecule.el.style.pointerEvents = 'none';
 			molecule.updatePosition(enzyme.x, enzyme.y);
 			const enzymeAngle = enzyme.angle || 0;
 			molecule.el.style.transition = 'filter 0.2s, transform 0.4s';
@@ -481,10 +527,24 @@ function trySnapToAnyActivation(idx) {
 			enzyme.el.style.filter = 'drop-shadow(0 0 12px #ff9800)';
 			enzyme.el.style.transform = `scale(1.08) rotate(${enzymeAngle}deg)`;
 
-			// 檢查是否所有受質都到齊
-			const requiredTypes = rule.substrates.slice().sort();
-			const currentTypes = enzyme.boundMolecules.map(m => m.type).sort();
-			const allArrived = requiredTypes.length === currentTypes.length && requiredTypes.every((v, i) => v === currentTypes[i]);
+			// 檢查是否所有受質都到齊（型別與數量都要完全符合，不能重複）
+			function countTypes(arr) {
+				const map = {};
+				arr.forEach(t => { map[t] = (map[t] || 0) + 1; });
+				return map;
+			}
+			const requiredTypes = rule.substrates;
+			const currentTypes = enzyme.boundMolecules.map(m => m.type);
+			const reqCount = countTypes(requiredTypes);
+			const curCount = countTypes(currentTypes);
+			let allArrived = true;
+			for (const t in reqCount) {
+				if (curCount[t] !== reqCount[t]) { allArrived = false; break; }
+			}
+			// 不能有多餘型別
+			for (const t in curCount) {
+				if (!(t in reqCount)) { allArrived = false; break; }
+			}
 
 			setTimeout(() => {
 				molecule.el.style.filter = '';
@@ -509,7 +569,11 @@ function triggerReaction(idxs, enzymeIdx, rule) {
 	if (!Array.isArray(idxs)) idxs = [idxs];
 	// 先讓所有分子淡出
 	idxs.forEach(idx => {
-		if (molecules[idx]) molecules[idx].el.style.opacity = 0;
+		if (molecules[idx]) {
+			molecules[idx].el.style.opacity = 0;
+			// 恢復 pointer 事件，避免產物也被禁用
+			molecules[idx].el.style.pointerEvents = 'auto';
+		}
 	});
 	setTimeout(() => {
 		// 移除所有受質分子
