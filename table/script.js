@@ -1,3 +1,13 @@
+// --- Sound effects ---
+const soundPlace = new Audio('sounds/place.mp3');
+const soundFlip = new Audio('sounds/flip.mp3');
+function playPlaceSound() {
+  try { soundPlace.currentTime = 0; soundPlace.play(); } catch(e){}
+}
+function playFlipSound() {
+  try { soundFlip.currentTime = 0; soundFlip.play(); } catch(e){}
+}
+
 // 載入 spec.json 並建立練習
 const SPEC_PATH = 'spec.json';
 
@@ -21,55 +31,38 @@ const FLIP_TOTAL_MS = 520;  // total cleanup time after full flip
 const FLIP_TRANSITION = 'transform 260ms ease';
 
 async function loadSpec(){
-  // Check URL parameters `spec`. Support multiple entries: ?spec=a.json&spec=b.json
-  const params = new URLSearchParams(location.search);
-  const specParams = params.getAll('spec');
-  if(specParams && specParams.length){
-    specsList = [];
-    // try to load each spec param (inline JSON or fetch path)
-    for(const sp of specParams){
-      // try inline JSON
-      try{
-        const decoded = decodeURIComponent(sp);
-        if(decoded.trim().startsWith('{') || decoded.trim().startsWith('[')){
-          const parsed = JSON.parse(decoded);
-          specsList.push({name: parsed.title || 'inline', spec: parsed});
-          console.info('載入 inline spec');
-          continue;
-        }
-      }catch(e){ /* not inline */ }
 
-      // try fetch
-      try{
-        let tried = false;
-  // if sp looks like a simple name (no slash and short), try data/<name>.json
-        if(!sp.includes('/') && sp.length && sp.length < 80){
-          const candidate = `data/${sp}.json`;
-          try{
-            const r2 = await fetch(candidate);
-            if(r2.ok){ const j = await r2.json(); specsList.push({name: j.title || sp, spec: j}); console.info('fetch', candidate, 'ok'); tried = true; continue; }
-          }catch(e){ /* ignore */ }
-          // try absolute-ish
-          const candidate2 = `/table/data/${sp}.json`;
-          try{ const r3 = await fetch(candidate2); if(r3.ok){ const j = await r3.json(); specsList.push({name: j.title || sp, spec: j}); console.info('fetch', candidate2, 'ok'); tried = true; continue; } }catch(e){}
-        }
-
-        const res = await fetch(sp);
-        if(res.ok){ const j = await res.json(); specsList.push({name: j.title || sp, spec: j}); console.info('fetch', sp, 'ok'); continue; }
-        if(!tried) console.warn('fetch', sp, 'status', res.status);
-      }catch(err){ console.warn('fetch', sp, 'error', err); }
+  // 1. 取得所有可用 spec 清單
+  let allSpecs = [];
+  try {
+    const manifestRes = await fetch('data/index.json');
+    if (manifestRes.ok) {
+      const list = await manifestRes.json();
+      for (const fname of list) {
+        try {
+          const res = await fetch(`data/${fname}`);
+          if (res.ok) {
+            const j = await res.json();
+            allSpecs.push({ name: j.title || fname.replace(/\.json$/,''), spec: j, filename: fname.replace(/\.json$/,'') });
+          }
+        } catch (e) { }
+      }
     }
-  // if we loaded at least one spec, set the first as active and render selector UI
-  if(specsList.length){ spec = specsList[0].spec; renderSpecSelector(); renderLeftSpecList(); return; }
-  }
+  } catch (e) { }
 
-  // default: try to gather available spec files and pick SPEC_PATH
-  await populateSpecListFromFiles();
-  if(specsList && specsList.length){
-    // if populate found any, set first as active
-    spec = specsList[0].spec;
-    renderSpecSelector();
-    renderLeftSpecList();
+  // 2. 依 URL 參數決定目前 spec
+  const params = new URLSearchParams(location.search);
+  const specParam = params.get('spec');
+  let activeIdx = 0;
+  if (specParam && allSpecs.length) {
+    const idx = allSpecs.findIndex(s => s.filename === specParam || s.filename+".json" === specParam || s.name === specParam);
+    if (idx >= 0) activeIdx = idx;
+  }
+  specsList = allSpecs;
+  if (specsList.length) {
+    spec = specsList[activeIdx].spec;
+    renderSpecSelector(activeIdx);
+    renderLeftSpecList(activeIdx);
     return;
   }
 
@@ -395,6 +388,9 @@ function enterTeachMode(){
       // attach click to toggle reveal (flip) with animation
       const clickHandler = function onToggle(){
         try{
+          // 播放翻面音效（只在教學模式下）
+          if(APP_MODE === 'teach') playFlipSound();
+
           // use CSS classes to drive the flip animation
           const doReveal = !!cardEl.dataset.revealText;
 
@@ -666,6 +662,7 @@ function placeCardToPool(cardId, poolEl){
   // clear any cell-level classes and placements that referenced this card
   const key = Object.keys(state.placements || {}).find(k => state.placements[k] === cardId);
   if(key) delete state.placements[key];
+  playPlaceSound();
 }
 
 function onCellPointerDown(e){
@@ -720,6 +717,7 @@ function placeCardToCell(cardId, cell){
   cell.querySelector('.cell-inner').appendChild(cardEl);
   cardEl.classList.remove('in-pool');
   state.placements[key] = cardId;
+  playPlaceSound();
 
   // clear styles
   cell.classList.remove('correct','wrong');
@@ -730,66 +728,62 @@ function updateDebug(){
   return;
 }
 
-function renderSpecSelector(){
+function renderSpecSelector(activeIdx = 0){
   const container = el('spec-selector-container');
   if(!container) return;
   container.innerHTML = '';
-  if(!specsList || specsList.length <= 1) return;
+  if(!specsList || !specsList.length) return;
 
   const label = document.createElement('label');
   label.textContent = '題目： ';
   const sel = document.createElement('select');
   specsList.forEach((s,i)=>{
     const opt = document.createElement('option');
-    opt.value = i;
+    opt.value = s.filename || i;
     opt.textContent = s.name || `spec ${i+1}`;
+    if(i === activeIdx) opt.selected = true;
     sel.appendChild(opt);
   });
   sel.addEventListener('change', ()=>{
-    const idx = Number(sel.value);
-    if(Number.isFinite(idx) && specsList[idx]){
-      spec = specsList[idx].spec;
-      // rebuild UI
-      build();
-      // if teach mode is active, re-enter teach mode after switching spec
-      if(APP_MODE === 'teach'){
-        // defer slightly to allow build to finish DOM updates
-        setTimeout(()=>enterTeachMode(), 40);
-      }
-      updateDebug();
-    }
+    const val = sel.value;
+    // 切換時直接跳轉網址
+    const url = new URL(location.href);
+    url.searchParams.set('spec', val);
+    location.href = url.toString();
   });
   container.appendChild(label);
   container.appendChild(sel);
 }
 
 // Also populate left panel list (clickable) if available
-function renderLeftSpecList(){
+function renderLeftSpecList(activeIdx = 0) {
   const listEl = el('spec-list');
-  if(!listEl) return;
+  if (!listEl) return;
   listEl.innerHTML = '';
-  if(!specsList || !specsList.length){ listEl.textContent = '無可用題目'; return; }
-  specsList.forEach((s,i)=>{
+  if (!specsList || !specsList.length) {
+    listEl.textContent = '無可用題目';
+    return;
+  }
+  specsList.forEach((s, i) => {
     const it = document.createElement('div');
     it.className = 'spec-item';
-    it.textContent = s.name || `spec ${i+1}`;
+    it.textContent = s.name || `spec ${i + 1}`;
+    if (i === activeIdx) it.classList.add('active');
     // use onclick assignment to avoid accumulating multiple listeners
-    try{ it.onclick = null; }catch(_){ }
-    it.onclick = ()=>{
+    try { it.onclick = null; } catch (_) { }
+    it.onclick = () => {
       spec = s.spec;
       build();
       // if teach mode is active, re-enter teach mode after switching spec
-      if(APP_MODE === 'teach'){
-        setTimeout(()=>enterTeachMode(), 40);
+      if (APP_MODE === 'teach') {
+        setTimeout(() => enterTeachMode(), 40);
       }
       // mark active
-      document.querySelectorAll('.spec-item').forEach(n=>n.classList.remove('active'));
+      document.querySelectorAll('.spec-item').forEach(n => n.classList.remove('active'));
       it.classList.add('active');
     };
     listEl.appendChild(it);
   });
-  // mark first active
-  const first = listEl.querySelector('.spec-item'); if(first) first.classList.add('active');
 }
 
 /* controls */
