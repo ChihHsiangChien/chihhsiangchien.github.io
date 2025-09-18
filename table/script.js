@@ -138,7 +138,7 @@ function build(){
   // trailing header for per-row pools
   const poolHead = document.createElement('div');
   poolHead.className = 'col-head pool-head';
-  poolHead.textContent = '候選卡片';
+  poolHead.textContent = '候選';
   grid.appendChild(poolHead);
 
   // rows
