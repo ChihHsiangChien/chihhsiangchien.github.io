@@ -46,8 +46,8 @@ async function loadDataSources() {
 		{file: 'cells.json', name: '細胞結構'},
         {file: 'elements.json', name: '元素與化合物'},
         {file: 'cell-shape.json', name: '細胞形狀'},
-        {file: 'cell-function.json', name: '細胞功能'}
-
+        {file: 'cell-function.json', name: '細胞功能'},
+		{file: 'leaf-function.json', name: '葉內構造功能'}
 	];
 	dataSourceSelect.innerHTML = '';
 	files.forEach(f => {
