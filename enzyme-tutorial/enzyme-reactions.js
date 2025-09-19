@@ -20,7 +20,7 @@ export const reactions = [
     substrateIcons: ['C.svg','D.svg'],
     products: ['E'],
     productIcons: ['E.svg'],
-    denatureTemp: 60
+    denatureTemp: 70
   }  
   // ...可擴充
 ];
