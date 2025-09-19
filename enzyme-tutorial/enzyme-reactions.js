@@ -9,7 +9,8 @@ export const reactions = [
     substrates: ['A'],
     substrateIcons: ['A.svg'],
     products: ['B', 'C'],
-    productIcons: ['B.svg', 'C.svg']
+    productIcons: ['B.svg', 'C.svg'],
+    denatureTemp: 40
   },
   {
     type: 'synthesisE',
@@ -18,7 +19,8 @@ export const reactions = [
     substrates: ['C','D'],
     substrateIcons: ['C.svg','D.svg'],
     products: ['E'],
-    productIcons: ['E.svg']
+    productIcons: ['E.svg'],
+    denatureTemp: 60
   }  
   // ...可擴充
 ];
