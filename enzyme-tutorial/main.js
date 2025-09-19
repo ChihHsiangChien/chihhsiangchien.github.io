@@ -167,7 +167,7 @@ class Enzyme {
   }
   remove() {
     this.el.remove();
-    this.activation.remove();
+    if (this.activation) this.activation.remove();
   }
 
   randomizeVelocity() {
@@ -694,6 +694,7 @@ function createProduct(src, center, angle) {
     }
   }
   animate();
+  molecule.startBrownian();
   bindDraggable();
 }
 
