@@ -486,7 +486,7 @@ function setupTeachCardFlipHandler(cardEl) {
     let dragging = false;
     let timer = setTimeout(() => {
       timer = null;
-      // 長按進入拖曳
+      // 長按進入拖曱
       dragging = true;
       pointerState.dragging = true;
       pointerState.cardEl = cardEl;
@@ -647,7 +647,6 @@ function onDragStart(e) {
   } catch (_) {}
   e.target.classList.add("dragging");
   console.debug("dragstart", id, e.target.textContent);
-  updateDebug();
 }
 function onDragEnd(e) {
   if (e.target) e.target.classList.remove("dragging");
@@ -1017,7 +1016,7 @@ function onSubmit() {
 
     const cardsInCell = Array.from(cell.querySelectorAll(".card"));
     if (cardsInCell.length === 0) {
-      cell.classList.remove("correct", "wrong");
+      clearMark(cell);
       return;
     }
 
@@ -1080,15 +1079,28 @@ function getExpectedList(rows, i, j) {
   return normalizeExpectedList(expectedRaw);
 }
 
+function clearMark(el) {
+  el.classList.remove("correct", "wrong");
+}
+
 function markCard(cardEl, isCorrect) {
+  clearMark(cardEl);
   if (isCorrect) {
     cardEl.classList.add("correct");
-    cardEl.classList.remove("wrong");
   } else {
     cardEl.classList.add("wrong");
-    cardEl.classList.remove("correct");
   }
 }
+
+function markCell(cell, anyWrong, cardsCount) {
+  clearMark(cell);
+  if (!anyWrong && cardsCount > 0) {
+    cell.classList.add("correct");
+  } else if (anyWrong) {
+    cell.classList.add("wrong");
+  }
+}
+
 function handleAutoReturn(cardEl, cardId, key, cell) {
   if (!el("opt-auto-return").checked) return;
   setTimeout(() => {
@@ -1106,16 +1118,6 @@ function handleAutoReturn(cardEl, cardId, key, cell) {
     } catch (_) {}
     cell.classList.remove("wrong");
   }, 600);
-}
-
-function markCell(cell, anyWrong, cardsCount) {
-  if (!anyWrong && cardsCount > 0) {
-    cell.classList.add("correct");
-    cell.classList.remove("wrong");
-  } else if (anyWrong) {
-    cell.classList.add("wrong");
-    cell.classList.remove("correct");
-  }
 }
 
 // Result panel: a small non-blocking panel that auto-hides
@@ -1160,12 +1162,8 @@ function hideResultPanel() {
 function onReset() {
   resetAllCardsToPools();
   state.placements = {};
-  document
-    .querySelectorAll(".cell")
-    .forEach((c) => c.classList.remove("correct", "wrong"));
-  document
-    .querySelectorAll(".card")
-    .forEach((c) => c.classList.remove("correct", "wrong"));
+  document.querySelectorAll(".cell").forEach(clearMark);
+  document.querySelectorAll(".card").forEach(clearMark);
   logEvent({ type: "reset", timestamp: Date.now() });
 }
 
@@ -1203,7 +1201,6 @@ function onViewAnswer() {
   });
 
   logEvent({ type: "view-answer", timestamp: Date.now() });
-  updateLogOutput();
 }
 
 function returnCardToPool(cardEl, cardId) {
