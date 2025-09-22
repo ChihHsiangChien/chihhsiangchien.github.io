@@ -435,53 +435,6 @@ function autoDetectBinding() {
   autoDetectBatchIndex = (autoDetectBatchIndex + 1) % AUTO_DETECT_BATCH;
 }
 
-function autoDetectBinding2() {
-  if (molecules.length === 0) return;
-  buildGrid();
-  const batchSize = Math.ceil(molecules.length / AUTO_DETECT_BATCH);
-  const start = autoDetectBatchIndex * batchSize;
-  const end = Math.min(start + batchSize, molecules.length);
-
-  for (let idx = start; idx < end; idx++) {
-    const m = molecules[idx];
-    if (!m || !m.el) continue;
-    if (m.el.style.pointerEvents !== "none" && dragging !== m) {
-      let near = false;
-      let enzymeAngle = 0;
-      // 只檢查同格與鄰近格的酵素
-      const neighborKeys = getNeighborKeys(m.x, m.y);
-      for (const key of neighborKeys) {
-        const cell = grid[key];
-        if (!cell) continue;
-        for (const enzymeIdx of cell.enzymes) {
-          const enzyme = enzymes[enzymeIdx];
-          if (!enzyme) continue;
-          const rule = reactions.find(
-            (r) => r.type === enzyme.type && r.substrates.includes(m.type)
-          );
-          if (rule && isNearActivation(idx, enzymeIdx)) {
-            near = true;
-            enzymeAngle = enzyme.angle || 0;
-            break;
-          }
-        }
-        if (near) break;
-      }
-      if (near) {
-        m.el.style.transition = "filter 0.2s, transform 0.4s";
-        m.el.style.filter = "drop-shadow(0 0 12px #ff9800)";
-        m.el.style.transform = `scale(1.15) rotate(${enzymeAngle}deg)`;
-      } else {
-        m.el.style.transition = "filter 0.2s, transform 0.4s";
-        m.el.style.filter = "";
-        m.el.style.transform = `rotate(${m.angle || 0}deg)`;
-      }
-      if (!dragging) trySnapToAnyActivation(idx);
-    }
-  }
-  autoDetectBatchIndex = (autoDetectBatchIndex + 1) % AUTO_DETECT_BATCH;
-}
-
 // 嘗試讓受質吸附到任一活化位
 function trySnapToAnyActivation(idx) {
   const molecule = molecules[idx];
