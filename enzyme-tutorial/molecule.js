@@ -1,5 +1,5 @@
 import { reactions } from "./enzyme-reactions.js";
-import { temperatureToSpeed } from "./main.js";
+import { temperatureToSpeed } from "./utils.js";
 
 export class Molecule {
   constructor(type, x, y, angle) {

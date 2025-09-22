@@ -2,6 +2,16 @@
 import { reactions } from "./enzyme-reactions.js";
 import { Enzyme } from "./enzyme.js";
 import { Molecule } from "./molecule.js";
+import {
+  getGridKey,
+  getNeighborKeys,
+  temperatureToSpeed,
+  getCenter,
+  distance,
+  getSVGMainColor,
+  getSVGMainColorFromUrl
+} from "./utils.js";
+
 
 const substrateToEnzymeTypes = {};
 reactions.forEach(r => {
@@ -59,12 +69,6 @@ let moleculeCount = {};
 let bindingDetectFrame = 0;
 let bindingDetectInterval  = 1;
 
-function getGridKey(x, y) {
-  const gx = Math.floor(x / GRID_SIZE);
-  const gy = Math.floor(y / GRID_SIZE);
-  return `${gx},${gy}`;
-}
-
 function buildGrid() {
   grid = {};
   molecules.forEach((m, idx) => {
@@ -79,45 +83,6 @@ function buildGrid() {
   });
 }
 
-function getNeighborKeys(x, y) {
-  const gx = Math.floor(x / GRID_SIZE);
-  const gy = Math.floor(y / GRID_SIZE);
-  const keys = [];
-  for (let dx = -1; dx <= 1; dx++) {
-    for (let dy = -1; dy <= 1; dy++) {
-      keys.push(`${gx + dx},${gy + dy}`);
-    }
-  }
-  return keys;
-}
-
-
-
-// 溫度轉速度函數
-export function temperatureToSpeed(temp) {
-  // temp: 攝氏溫度，最低-10度，最高可自訂
-  const minTemp = -10,
-    maxTemp = 50;
-  const minSpeed = 0.2,
-    maxSpeed = 2;
-  const t = Math.max(minTemp, Math.min(maxTemp, temp));
-  // 線性對應
-  return (
-    minSpeed + ((maxSpeed - minSpeed) * (t - minTemp)) / (maxTemp - minTemp)
-  );
-}
-
-function getCenter(el) {
-  if (!el) return { x: 0, y: 0 };
-  return {
-    x: el.offsetLeft + el.offsetWidth / 2,
-    y: el.offsetTop + el.offsetHeight / 2,
-  };
-}
-
-function distance(a, b) {
-  return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
-}
 
 function isNearActivation(idx, enzymeIdx) {
   // Ensure enzymeIdx is valid and enzyme has activation property
@@ -237,34 +202,6 @@ function globalAnimationLoop() {
   requestAnimationFrame(globalAnimationLoop);
 }
 
-// JS 動態載入 SVG，解析 <path> 或 <circle> 的 fill 屬性，取得主色
-function getSVGMainColor(svgText, fallback = "#888") {
-  // 1. 先找 fill="..."
-  let match = svgText.match(/fill="([^"]+)"/i);
-  if (match) return match[1];
-
-  // 2. 再找 style="...fill:...;"
-  match = svgText.match(/style="[^"]*fill:([^;"]+)/i);
-  if (match) return match[1];
-
-  // 3. 再找 stroke="..."
-  match = svgText.match(/stroke="([^"]+)"/i);
-  if (match) return match[1];
-
-  // 4. 再找 style="...stroke:...;"
-  match = svgText.match(/style="[^"]*stroke:([^;"]+)/i);
-  if (match) return match[1];
-
-  return fallback;
-}
-
-// fetch 版本
-function getSVGMainColorFromUrl(svgUrl, fallback = "#888") {
-  return fetch(svgUrl)
-    .then(res => res.text())
-    .then(svgText => getSVGMainColor(svgText, fallback))
-    .catch(() => fallback);
-}
 // 初始化圖表
 function initConcentrationChart() {
   const ctx = document.getElementById('concentration-chart').getContext('2d');
@@ -358,17 +295,6 @@ function updateConcentrationChart() {
   const enzymeTypes = Array.from(new Set(reactions.map(r => r.type)));
   enzymeTypes.forEach((type, i) => {
     chartData.datasets[i].data.push(enzymeCount[type] || 0);
-    /*
-    chartData.datasets[i].data.push(
-      enzymes.filter(e =>
-        e.type === type &&
-        e.el &&
-        e.el.parentElement === canvas &&
-        e.el.style.display !== "none" &&
-        e.el.style.opacity !== "0"
-      ).length
-    );
-    */
   });
 
   // 只統計 canvas 內且有顯示的分子
@@ -379,17 +305,6 @@ function updateConcentrationChart() {
   );
   moleculeTypes.forEach((type, i) => {
     chartData.datasets[enzymeTypes.length + i].data.push(moleculeCount[type] || 0);
-    /*
-    chartData.datasets[enzymeTypes.length + i].data.push(
-      molecules.filter(m =>
-        m.type === type &&
-        m.el &&
-        m.el.parentElement === canvas &&
-        m.el.style.display !== "none" &&
-        m.el.style.opacity !== "0"
-      ).length
-    );
-    */
   });
 
   // 最多顯示 100 筆
