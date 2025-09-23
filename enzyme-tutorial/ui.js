@@ -1,3 +1,24 @@
+import { state } from "./state.js";
+import { reactions } from "./enzyme-reactions.js";
+import { addEnzymeFromToolbox, 
+    addMoleculeFromToolbox, 
+    randomPosX, 
+    randomPosY, 
+    handleTempSliderInput, 
+    bindDraggable, 
+    updateAllBrownian, 
+    isNearActivation,
+    updateActivationSites, 
+    trySnapToAnyActivation,
+    clearAll,
+    updateCurrentChart
+ } from "./main.js"; 
+const canvas = document.getElementById("canvas");
+const tempSlider = document.getElementById("temp-slider");
+const tempValue = document.getElementById("temp-value");
+const brownianSwitch = document.getElementById("brownian-switch");
+const toolbox = document.getElementById("toolbox");
+
 export function bindUIEvents() {
   // Chart tabs 切換
   document.querySelectorAll("#chart-tabs button").forEach(btn => {
