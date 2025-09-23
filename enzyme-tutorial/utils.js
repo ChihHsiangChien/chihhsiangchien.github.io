@@ -53,3 +53,11 @@ export function getSVGMainColorFromUrl(svgUrl, fallback = "#888") {
     .then(svgText => getSVGMainColor(svgText, fallback))
     .catch(() => fallback);
 }
+
+export function countTypes(arr) {
+  const map = {};
+  arr.forEach((t) => {
+    map[t] = (map[t] || 0) + 1;
+  });
+  return map;
+}
