@@ -13,6 +13,20 @@ import {
 } from "./utils.js";
 
 
+const state = {
+  enzymes: [],
+  molecules: [],
+  enzymeCount: {},
+  moleculeCount: {},
+  activationSites: [],
+  dragging: null,
+  dragType: null,
+  dragIndex: -1,
+  // ...其他全域狀態也可逐步搬進來
+};
+
+
+
 const substrateToEnzymeTypes = {};
 reactions.forEach(r => {
   (r.substrates || []).forEach(s => {
@@ -44,14 +58,10 @@ const ENZYME_BROWNIAN_SPEED_RATIO = 0.03;
 const ACTIVATION_SITE_RADIUS = 35;
 
 // 多活化位支援
-let activationSites = [];
-let enzymes = [];
-let molecules = [];
-let dragging = null;
+
 let offsetX = 0,
   offsetY = 0;
-let dragType = null; // 'enzyme' or 'substrate'
-let dragIndex = -1;
+
 
 
 
@@ -63,20 +73,18 @@ let grid = {};
 let autoDetectBatchIndex = 0;
 const AUTO_DETECT_BATCH = 4; // 分成4批更新碰撞
 
-let enzymeCount = {};
-let moleculeCount = {};
 
 let bindingDetectFrame = 0;
 let bindingDetectInterval  = 1;
 
 function buildGrid() {
   grid = {};
-  molecules.forEach((m, idx) => {
+  state.molecules.forEach((m, idx) => {
     const key = getGridKey(m.x, m.y);
     if (!grid[key]) grid[key] = { molecules: [], enzymes: [] };
     grid[key].molecules.push(idx);
   });
-  enzymes.forEach((e, idx) => {
+  state.enzymes.forEach((e, idx) => {
     const key = getGridKey(e.x, e.y);
     if (!grid[key]) grid[key] = { molecules: [], enzymes: [] };
     grid[key].enzymes.push(idx);
@@ -86,19 +94,15 @@ function buildGrid() {
 
 function isNearActivation(idx, enzymeIdx) {
   // Ensure enzymeIdx is valid and enzyme has activation property
-  if (!enzymes[enzymeIdx] || !enzymes[enzymeIdx].activation) {
+  if (!state.enzymes[enzymeIdx] || !state.enzymes[enzymeIdx].activation) {
     return false;
   }
-  // 檢查 molecules[idx] 是否存在
-  if (!molecules[idx] || !molecules[idx].el) {
-    console.warn("Invalid molecule or missing element:", {
-      idx,
-      molecule: molecules[idx],
-    });
+  // 檢查 state.molecules[idx] 是否存在
+  if (!state.molecules[idx] || !state.molecules[idx].el) {
     return false;
   }
-  const s = getCenter(molecules[idx].el);
-  const a = getCenter(enzymes[enzymeIdx].activation);
+  const s = getCenter(state.molecules[idx].el);
+  const a = getCenter(state.enzymes[enzymeIdx].activation);
   return distance(s, a) < ACTIVATION_SITE_RADIUS;
 }
 
@@ -112,7 +116,7 @@ function randomPosY() {
 function globalAnimationLoop() {
   // Brownian 運動
   const temp = parseInt(tempSlider.value, 10);
-  molecules.forEach(m => {
+  state.molecules.forEach(m => {
     // 產物彈開動畫：只要有 _productDamping 就執行，不管布朗運動開關
     if (m._productDamping) {
       m.vx *= m._productDamping;
@@ -167,7 +171,7 @@ function globalAnimationLoop() {
       m.updatePosition(nx, ny);
     }
   });
-  enzymes.forEach(e => {
+  state.enzymes.forEach(e => {
     if (e.brownianActive && brownianSwitch.checked) {
       //const temp = parseInt(tempSlider.value, 10);
       if (Math.random() < 0.1) {
@@ -294,7 +298,7 @@ function updateConcentrationChart() {
   // 只統計 canvas 內且有顯示的酵素
   const enzymeTypes = Array.from(new Set(reactions.map(r => r.type)));
   enzymeTypes.forEach((type, i) => {
-    chartData.datasets[i].data.push(enzymeCount[type] || 0);
+    chartData.datasets[i].data.push(state.enzymeCount[type] || 0);
   });
 
   // 只統計 canvas 內且有顯示的分子
@@ -304,7 +308,7 @@ function updateConcentrationChart() {
     )
   );
   moleculeTypes.forEach((type, i) => {
-    chartData.datasets[enzymeTypes.length + i].data.push(moleculeCount[type] || 0);
+    chartData.datasets[enzymeTypes.length + i].data.push(state.moleculeCount[type] || 0);
   });
 
   // 最多顯示 100 筆
@@ -327,7 +331,7 @@ function renderAll() {
   }
   if (tempSlider) {
     tempSlider.addEventListener("input", () => {
-      molecules.forEach((m) => m.randomizeVelocity(parseInt(tempSlider.value, 10)));
+      state.molecules.forEach((m) => m.randomizeVelocity(parseInt(tempSlider.value, 10)));
     });
   }
   updateActivationSites();
@@ -336,83 +340,99 @@ function renderAll() {
 
 // --- 物件導向清除 ---
 function clearAll() {
-  enzymes.forEach((e) => e.remove());
-  molecules.forEach((m) => m.remove && m.remove());
-  enzymes = [];
-  molecules = [];
-  enzymeCount = {};
-  moleculeCount = {};  
+  state.enzymes.forEach((e) => e.remove());
+  state.molecules.forEach((m) => m.remove && m.remove());
+  state.enzymes = [];
+  state.molecules = [];
+  state.enzymeCount = {};
+  state.moleculeCount = {};  
 }
 
 // 啟動/停止所有分子的布朗運動（全域）
 function updateAllBrownian() {
-  molecules.forEach((m) => {
+  state.molecules.forEach((m) => {
     m.brownianActive = brownianSwitch.checked;
   });
-  enzymes.forEach((e) => {
+  state.enzymes.forEach((e) => {
     e.brownianActive = brownianSwitch.checked;
   });
 }
 
 function updateActivationSites() {
-  for (let i = 0; i < activationSites.length; i++) {
-    if (enzymes[i]) {
-      activationSites[i].style.left = enzymes[i].offsetLeft + "px";
-      activationSites[i].style.top = enzymes[i].offsetTop + "px";
-      activationSites[i].style.display = "";
+  for (let i = 0; i < state.activationSites.length; i++) {
+    if (state.enzymes[i]) {
+      state.activationSites[i].style.left = state.enzymes[i].offsetLeft + "px";
+      state.activationSites[i].style.top = state.enzymes[i].offsetTop + "px";
+      state.activationSites[i].style.display = "";
     } else {
-      activationSites[i].style.display = "none";
+      state.activationSites[i].style.display = "none";
     }
   }
 }
 
 function bindDraggable() {
-  enzymes.forEach((enzyme, idx) => {
+  state.enzymes.forEach((enzyme, idx) => {
     enzyme.el.onpointerdown = (e) => startDrag(e, "enzyme", idx);
   });
-  molecules.forEach((molecule, idx) => {
+  state.molecules.forEach((molecule, idx) => {
     molecule.el.onpointerdown = (e) => startDrag(e, "molecule", idx);
   });
 }
 
-// 自動偵測分子靠近活化位並吸附（只針對布朗運動，不處理拖曳中的分子）
-
+// 自動偵測分子或酵素靠近活化位並吸附（支援酵素作為受質）
 function autoDetectBinding() {
-  if (molecules.length === 0) return;
+  // 將 state.molecules 與 enzymes 都視為「可被當作受質」的物件
+  const allSubstrates = [
+    ...state.molecules.map((m, idx) => ({ obj: m, idx, type: "molecule" })),
+    ...state.enzymes.map((e, idx) => ({ obj: e, idx, type: "enzyme" }))
+  ];
+  if (allSubstrates.length === 0) return;
   buildGrid();
-  const batchSize = Math.ceil(molecules.length / AUTO_DETECT_BATCH);
+  const batchSize = Math.ceil(allSubstrates.length / AUTO_DETECT_BATCH);
   const start = autoDetectBatchIndex * batchSize;
-  const end = Math.min(start + batchSize, molecules.length);
+  const end = Math.min(start + batchSize, allSubstrates.length);
 
-  for (let idx = start; idx < end; idx++) {
-    const m = molecules[idx];
-    if (!m || !m.el) continue;
+  for (let i = start; i < end; i++) {
+    const { obj: substrate, idx, type } = allSubstrates[i];
+    if (!substrate || !substrate.el) continue;
     // 只在有對應酵素存在時才進行偵測
-    const enzymeTypes = substrateToEnzymeTypes[m.type];
+    const enzymeTypes = substrateToEnzymeTypes[substrate.type];
     if (!enzymeTypes) continue;
     let hasEnzyme = false;
     for (const et of enzymeTypes) {
-      if (enzymeCount[et] > 0) {
+      if (state.enzymeCount[et] > 0) {
         hasEnzyme = true;
         break;
       }
     }
     if (!hasEnzyme) continue; // 沒有對應酵素，跳過偵測
 
-    if (m.el.style.pointerEvents !== "none" && dragging !== m) {
+    // 拖曳中或 pointerEvents 關閉時不處理
+    if (substrate.el.style.pointerEvents !== "none" && state.dragging !== substrate) {
       let near = false;
       let enzymeAngle = 0;
-      const neighborKeys = getNeighborKeys(m.x, m.y);
+      const neighborKeys = getNeighborKeys(substrate.x, substrate.y);
       for (const key of neighborKeys) {
         const cell = grid[key];
         if (!cell) continue;
         for (const enzymeIdx of cell.enzymes) {
-          const enzyme = enzymes[enzymeIdx];
+          const enzyme = state.enzymes[enzymeIdx];
           if (!enzyme) continue;
           const rule = reactions.find(
-            (r) => r.type === enzyme.type && r.substrates.includes(m.type)
+            (r) => r.type === enzyme.type && r.substrates.includes(substrate.type)
           );
-          if (rule && isNearActivation(idx, enzymeIdx)) {
+          // 支援酵素作為受質時，需判斷是否靠近活化位
+          // state.molecules 用 isNearActivation，酵素則自訂
+          let isNear = false;
+          if (type === "molecule") {
+            isNear = isNearActivation(idx, enzymeIdx);
+          } else if (type === "enzyme") {
+            // 酵素作為受質時，判斷兩酵素中心距離
+            const sCenter = getCenter(substrate.el);
+            const aCenter = getCenter(enzyme.activation);
+            isNear = distance(sCenter, aCenter) < ACTIVATION_SITE_RADIUS;
+          }
+          if (rule && isNear) {
             near = true;
             enzymeAngle = enzyme.angle || 0;
             break;
@@ -421,158 +441,63 @@ function autoDetectBinding() {
         if (near) break;
       }
       if (near) {
-        m.el.style.transition = "filter 0.2s, transform 0.4s";
-        m.el.style.filter = "drop-shadow(0 0 12px #ff9800)";
-        m.el.style.transform = `scale(1.15) rotate(${enzymeAngle}deg)`;
+        substrate.el.style.transition = "filter 0.2s, transform 0.4s";
+        substrate.el.style.filter = "drop-shadow(0 0 12px #ff9800)";
+        substrate.el.style.transform = `scale(1.15) rotate(${enzymeAngle}deg)`;
       } else {
-        m.el.style.transition = "filter 0.2s, transform 0.4s";
-        m.el.style.filter = "";
-        m.el.style.transform = `rotate(${m.angle || 0}deg)`;
+        substrate.el.style.transition = "filter 0.2s, transform 0.4s";
+        substrate.el.style.filter = "";
+        substrate.el.style.transform = `rotate(${substrate.angle || 0}deg)`;
       }
-      if (!dragging) trySnapToAnyActivation(idx);
+      if (!state.dragging) {
+        if (type === "molecule") {
+          trySnapToAnyActivation(idx, "molecule");
+        } else if (type === "enzyme") {
+          trySnapToAnyActivation(idx, "enzyme");
+        }
+      }
     }
   }
   autoDetectBatchIndex = (autoDetectBatchIndex + 1) % AUTO_DETECT_BATCH;
 }
 
-// 嘗試讓受質吸附到任一活化位
-function trySnapToAnyActivation(idx) {
-  const molecule = molecules[idx];
-  if (!molecule || !molecule.el) return;
-  for (let enzymeIdx = 0; enzymeIdx < enzymes.length; enzymeIdx++) {
-    const enzyme = enzymes[enzymeIdx];
-    if (!enzyme) continue;
 
-    const molecule = molecules[idx];
-    if (!enzyme || !molecule || !molecule.el) continue;
 
-    // Ensure enzyme and molecule are valid before proceeding
-    if (!enzyme || !molecule) {
-      continue;
-    }
 
-    // Check if either the substrate is near the enzyme or the enzyme is near the substrate
-    //if (isNearActivation(idx, enzymeIdx) || isNearActivation(enzymeIdx, idx)) {
-    if (isNearActivation(idx, enzymeIdx)) {
-      const rule = reactions.find(
-        (r) => r.type === enzyme.type && r.substrates.includes(molecule.type)
-      );
-      if (!rule) continue;
-
-      // 多受質合成：需等所有受質到齊才觸發
-      if (!enzyme.boundMolecules) enzyme.boundMolecules = [];
-      if (enzyme.boundMolecules.includes(molecule)) continue;
-
-      if (typeof trySnapToAnyActivation.countTypes !== "function") {
-        trySnapToAnyActivation.countTypes = function (arr) {
-          const map = {};
-          arr.forEach((t) => {
-            map[t] = (map[t] || 0) + 1;
-          });
-          return map;
-        };
-      }
-
-      const requiredTypes_local = rule.substrates;
-      const reqCount_local =
-        trySnapToAnyActivation.countTypes(requiredTypes_local);
-      const curCount_local = trySnapToAnyActivation.countTypes(
-        enzyme.boundMolecules.map((m) => m.type)
-      );
-      const molType = molecule.type;
-      if ((curCount_local[molType] || 0) >= (reqCount_local[molType] || 0))
-        continue;
-
-      enzyme.boundMolecules.push(molecule);
-      molecule.el.style.pointerEvents = "none";
-      molecule.stopBrownian && molecule.stopBrownian();
-      molecule.updatePosition(enzyme.x, enzyme.y);
-      const enzymeAngle = enzyme.angle || 0;
-      molecule.el.style.transition = "filter 0.2s, transform 0.4s";
-      molecule.el.style.filter = "drop-shadow(0 0 12px #ff9800)";
-      molecule.el.style.transform = `scale(1.15) rotate(${enzymeAngle}deg)`;
-      enzyme.el.style.transition = "filter 0.2s, transform 0.2s";
-      enzyme.el.style.filter = "drop-shadow(0 0 12px #ff9800)";
-      enzyme.el.style.transform = `scale(1.08) rotate(${enzymeAngle}deg)`;
-
-      function countTypes(arr) {
-        const map = {};
-        arr.forEach((t) => {
-          map[t] = (map[t] || 0) + 1;
-        });
-        return map;
-      }
-
-      const requiredTypes = rule.substrates;
-      const currentTypes = enzyme.boundMolecules.map((m) => m.type);
-      const reqCount = countTypes(requiredTypes);
-      const curCount = countTypes(currentTypes);
-      let allArrived = true;
-      for (const t in reqCount) {
-        if (curCount[t] !== reqCount[t]) {
-          allArrived = false;
-          break;
-        }
-      }
-      for (const t in curCount) {
-        if (!(t in reqCount)) {
-          allArrived = false;
-          break;
-        }
-      }
-
-      if (allArrived && !enzyme.reacting) {
-        enzyme.reacting = true;
-        setTimeout(() => {
-          molecule.el.style.filter = "";
-          molecule.el.style.transform = `rotate(${enzymeAngle}deg)`;
-          enzyme.el.style.filter = "";
-          enzyme.el.style.transform = `rotate(${enzymeAngle}deg)`;
-          const idxs = enzyme.boundMolecules
-            .map((m) => molecules.indexOf(m))
-            .filter((i) => i !== -1);
-          enzyme.boundMolecules = [];
-          triggerReaction(idxs, enzymeIdx, rule);
-          enzyme.reacting = false;
-        }, 300);
-        return;
-      }
-      break;
-    }
-  }
-}
-
-function triggerReaction(idxs, enzymeIdx, rule) {  
-  chartPaused = true;  
-  // Prevent triggering reaction if idxs is empty
+// 修改：triggerReaction 支援酵素作為受質
+function triggerReaction(idxs, enzymeIdx, rule) {
+  chartPaused = true;
   if (!idxs || idxs.length === 0) {
-    chartPaused = false; // ← 加這行
+    chartPaused = false;
     return;
   }
-
-  // idxs: 受質分子的索引（可為單一數字或陣列）
-  if (!Array.isArray(idxs)) idxs = [idxs];
-
-  // 先讓所有分子淡出
-  idxs.forEach((idx) => {
-    if (molecules[idx]) {
-      molecules[idx].el.style.opacity = 0;
-      // 恢復 pointer 事件，避免產物也被禁用
-      molecules[idx].el.style.pointerEvents = "auto";
+  // idxs: [{idx, type}] 陣列
+  // 先讓所有受質淡出
+  idxs.forEach(({ idx, type }) => {
+    if (type === "molecule" && state.molecules[idx]) {
+      state.molecules[idx].el.style.opacity = 0;
+      state.molecules[idx].el.style.pointerEvents = "auto";
+    } else if (type === "enzyme" && state.enzymes[idx]) {
+      state.enzymes[idx].el.style.opacity = 0;
+      state.enzymes[idx].el.style.pointerEvents = "auto";
     }
   });
 
   setTimeout(() => {
-    // 移除所有受質分子
-    // 注意：要從大到小刪除，避免索引錯亂
+    // 移除所有受質
     idxs
-      .sort((a, b) => b - a)
-      .forEach((idx) => {
-        if (molecules[idx]) {
-          const type = molecules[idx].type;
-          moleculeCount[type] = Math.max(0, (moleculeCount[type] || 1) - 1);
-          molecules[idx].remove();
-          molecules.splice(idx, 1);
+      .sort((a, b) => b.idx - a.idx)
+      .forEach(({ idx, type }) => {
+        if (type === "molecule" && state.molecules[idx]) {
+          const t = state.molecules[idx].type;
+          state.moleculeCount[t] = Math.max(0, (state.moleculeCount[t] || 1) - 1);
+          state.molecules[idx].remove();
+          state.molecules.splice(idx, 1);
+        } else if (type === "enzyme" && state.enzymes[idx]) {
+          const t = state.enzymes[idx].type;
+          state.enzymeCount[t] = Math.max(0, (state.enzymeCount[t] || 1) - 1);
+          state.enzymes[idx].remove();
+          state.enzymes.splice(idx, 1);
         }
       });
     chartPaused = false;
@@ -585,9 +510,8 @@ function triggerReaction(idxs, enzymeIdx, rule) {
     audio.play();
   }
 
-
   // 產生產物
-  const center = getCenter(enzymes[enzymeIdx].activation);
+  const center = getCenter(state.enzymes[enzymeIdx].activation);
   const theta = Math.random() * Math.PI * 2;
   if (rule && rule.products && rule.products.length > 0) {
     for (let i = 0; i < rule.products.length; i++) {
@@ -598,13 +522,134 @@ function triggerReaction(idxs, enzymeIdx, rule) {
   }
 }
 
+// 嘗試讓受質吸附到任一活化位
+function trySnapToAnyActivation(idx, type = "molecule") {
+
+  // type: "molecule"（預設）或 "enzyme"
+  let substrate, substrateArr;
+  if (type === "molecule") {
+    substrateArr = state.molecules;
+  } else if (type === "enzyme") {
+    substrateArr = state.enzymes;
+  } else {
+    return;
+  }
+  substrate = substrateArr[idx];
+
+  if (!substrate || !substrate.el) {
+    return;
+  }
+
+  for (let enzymeIdx = 0; enzymeIdx < state.enzymes.length; enzymeIdx++) {
+    const enzyme = state.enzymes[enzymeIdx];
+    if (!enzyme || (type === "enzyme" && enzyme === substrate)) continue;
+
+    const rule = reactions.find(
+      (r) => r.type === enzyme.type && r.substrates.includes(substrate.type)
+    );
+
+    if (!rule) {
+      // debug: 沒有對應反應規則
+      //console.log(`[debug] 無對應反應: enzyme.type=${enzyme.type}, substrate.type=${substrate.type}`);
+      continue;
+    }
+
+    // 判斷是否靠近活化位
+    let isNear = false;
+    if (type === "molecule") {
+      isNear = isNearActivation(idx, enzymeIdx);
+    } else if (type === "enzyme") {
+      const sCenter = getCenter(substrate.el);
+      const aCenter = getCenter(enzyme.activation);
+      const dist = distance(sCenter, aCenter);
+      isNear = dist < ACTIVATION_SITE_RADIUS;
+    }
+    if (!isNear) continue;
+
+    // 多受質合成：需等所有受質到齊才觸發
+    if (!enzyme.boundMolecules) enzyme.boundMolecules = [];
+    if (enzyme.boundMolecules.includes(substrate)) {
+      continue;
+    }
+
+    function countTypes(arr) {
+      const map = {};
+      arr.forEach((t) => {
+        map[t] = (map[t] || 0) + 1;
+      });
+      return map;
+    }
+
+    const requiredTypes = rule.substrates;
+    const reqCount = countTypes(requiredTypes);
+    const curCount = countTypes(enzyme.boundMolecules.map((m) => m.type));
+    const subType = substrate.type;
+    if ((curCount[subType] || 0) >= (reqCount[subType] || 0)) {
+      continue;
+    }
+
+    enzyme.boundMolecules.push(substrate);
+    substrate.el.style.pointerEvents = "none";
+    substrate.stopBrownian && substrate.stopBrownian();
+    substrate.updatePosition(enzyme.x, enzyme.y);
+    const enzymeAngle = enzyme.angle || 0;
+    substrate.el.style.transition = "filter 0.2s, transform 0.4s";
+    substrate.el.style.filter = "drop-shadow(0 0 12px #ff9800)";
+    substrate.el.style.transform = `scale(1.15) rotate(${enzymeAngle}deg)`;
+    enzyme.el.style.transition = "filter 0.2s, transform 0.2s";
+    enzyme.el.style.filter = "drop-shadow(0 0 12px #ff9800)";
+    enzyme.el.style.transform = `scale(1.08) rotate(${enzymeAngle}deg)`;
+
+    // 判斷是否所有受質到齊
+    const currentTypes = enzyme.boundMolecules.map((m) => m.type);
+    const curCount2 = countTypes(currentTypes);
+    let allArrived = true;
+    for (const t in reqCount) {
+      if (curCount2[t] !== reqCount[t]) {
+        allArrived = false;
+        break;
+      }
+    }
+    for (const t in curCount2) {
+      if (!(t in reqCount)) {
+        allArrived = false;
+        break;
+      }
+    }
+
+    if (allArrived && !enzyme.reacting) {
+      enzyme.reacting = true;
+      setTimeout(() => {
+        substrate.el.style.filter = "";
+        substrate.el.style.transform = `rotate(${enzymeAngle}deg)`;
+        enzyme.el.style.filter = "";
+        enzyme.el.style.transform = `rotate(${enzymeAngle}deg)`;
+        // 取得受質索引（molecules 或 enzymes）
+        const idxs = enzyme.boundMolecules.map((m) => {
+          let idxM = state.molecules.indexOf(m);
+          if (idxM !== -1) return { idx: idxM, type: "molecule" };
+          let idxE = state.enzymes.indexOf(m);
+          if (idxE !== -1) return { idx: idxE, type: "enzyme" };
+          return null;
+        }).filter(i => i !== null);
+        enzyme.boundMolecules = [];
+        triggerReaction(idxs, enzymeIdx, rule);
+        enzyme.reacting = false;
+      }, 300);
+      return;
+    }
+    break;
+  }
+}
+
+
 function createProduct(src, center, angle) {
   let type = src;
   let x = center.x - 20;
   let y = center.y - 20;
   let molecule = new Molecule(type, x, y, 0);
-  molecules.push(molecule);
-  moleculeCount[type] = (moleculeCount[type] || 0) + 1;
+  state.molecules.push(molecule);
+  state.moleculeCount[type] = (state.moleculeCount[type] || 0) + 1;
   molecule.startBrownian && molecule.startBrownian();
 
   // 給予初速（噴射）
@@ -628,8 +673,8 @@ function addEnzymeFromToolbox(enzymeType, x, y, angle) {
   const temp = parseInt(tempSlider.value, 10);
   enzyme.randomizeVelocity(temp, ENZYME_BROWNIAN_SPEED_RATIO);  
   enzyme.checkDenature(temp);
-  enzymes.push(enzyme);
-  enzymeCount[enzymeType] = (enzymeCount[enzymeType] || 0) + 1;
+  state.enzymes.push(enzyme);
+  state.enzymeCount[enzymeType] = (state.enzymeCount[enzymeType] || 0) + 1;
   if (brownianSwitch.checked && enzyme.startBrownian) {
     enzyme.startBrownian();
   }
@@ -641,8 +686,8 @@ function addMoleculeFromToolbox(moleculeType, x, y) {
   const temp = parseInt(tempSlider.value, 10);
   const molecule = new Molecule(moleculeType, x, y, angle);
   molecule.randomizeVelocity(temp);
-  molecules.push(molecule);
-  moleculeCount[moleculeType] = (moleculeCount[moleculeType] || 0) + 1;
+  state.molecules.push(molecule);
+  state.moleculeCount[moleculeType] = (state.moleculeCount[moleculeType] || 0) + 1;
   // Enable Brownian motion for the new molecule if the switch is checked
   if (brownianSwitch.checked && molecule.startBrownian) {
     molecule.startBrownian();
@@ -653,94 +698,100 @@ function addMoleculeFromToolbox(moleculeType, x, y) {
 function handleTempSliderInput() {
   const t = parseInt(tempSlider.value, 10);
   tempValue.textContent = t;
-  enzymes.forEach((e) => e.checkDenature(t));
+  state.enzymes.forEach((e) => e.checkDenature(t));
 }
 
 function startDrag(e, type, idx) {
   if (type === "enzyme") {
-    dragging = enzymes[idx];
-    dragging.stopBrownian && dragging.stopBrownian();
+    state.dragging = state.enzymes[idx];
+    state.dragging.stopBrownian && state.dragging.stopBrownian();
   } else if (type === "molecule") {
-    dragging = molecules[idx];
-    dragging.stopBrownian && dragging.stopBrownian();
+    state.dragging = state.molecules[idx];
+    state.dragging.stopBrownian && state.dragging.stopBrownian();
   }
-  dragType = type;
-  dragIndex = idx;
-  const rect = dragging.el.getBoundingClientRect();
+  state.dragType = type;
+  state.dragIndex = idx;
+  const rect = state.dragging.el.getBoundingClientRect();
   offsetX = e.clientX - rect.left;
   offsetY = e.clientY - rect.top;
-  dragging.el.style.filter = "brightness(1.2) drop-shadow(0 0 8px #00bcd4)";
+  state.dragging.el.style.filter = "brightness(1.2) drop-shadow(0 0 8px #00bcd4)";
   // 設定自訂 ghost image
   if (e.dataTransfer) {
-    e.dataTransfer.setDragImage(dragging.el, 20, 20);
+    e.dataTransfer.setDragImage(state.dragging.el, 20, 20);
   } else if (typeof e.target.setPointerCapture === "function") {
     try {
-      const ghost = dragging.el.cloneNode(true);
+      const ghost = state.dragging.el.cloneNode(true);
       ghost.style.position = "absolute";
       ghost.style.left = "-9999px";
       ghost.style.top = "-9999px";
       ghost.style.pointerEvents = "none";
       ghost.style.opacity = "1";
-      ghost.style.transform = dragging.el.style.transform;
+      ghost.style.transform = state.dragging.el.style.transform;
       document.body.appendChild(ghost);
       e.target.setPointerCapture(e.pointerId);
       setTimeout(() => ghost.remove(), 1000);
     } catch {}
   }
-  dragging.el.setPointerCapture(e.pointerId);
+  state.dragging.el.setPointerCapture(e.pointerId);
 }
 
 canvas.onpointermove = function (e) {
-  if (!dragging) return;
+  if (!state.dragging) return;
   const canvasRect = canvas.getBoundingClientRect();
   let x = e.clientX - canvasRect.left - offsetX;
   let y = e.clientY - canvasRect.top - offsetY;
   x = Math.max(0, Math.min(canvasRect.width - 40, x));
   y = Math.max(0, Math.min(canvasRect.height - 40, y));
-  dragging.updatePosition(x, y);
+  state.dragging.updatePosition(x, y);
   // 立即同步 ghost/本體旋轉
-  if (dragging.angle !== undefined) {
-    dragging.setAngle(dragging.angle);
+  if (state.dragging.angle !== undefined) {
+    state.dragging.setAngle(state.dragging.angle);
   }
-  if (dragType === "enzyme") updateActivationSites();
+  if (state.dragType === "enzyme") updateActivationSites();
 
-  if (dragType === "molecule") {
+  if (state.dragType === "molecule") {
     let near = false;
     let enzymeAngle = 0;
-    for (let enzymeIdx = 0; enzymeIdx < enzymes.length; enzymeIdx++) {
-      const enzyme = enzymes[enzymeIdx];
+    for (let enzymeIdx = 0; enzymeIdx < state.enzymes.length; enzymeIdx++) {
+      const enzyme = state.enzymes[enzymeIdx];
       if (!enzyme) continue;
       const rule = reactions.find(
-        (r) => r.type === enzyme.type && r.substrates.includes(dragging.type)
+        (r) => r.type === enzyme.type && r.substrates.includes(state.dragging.type)
       );
-      if (rule && isNearActivation(dragIndex, enzymeIdx)) {
+      if (rule && isNearActivation(state.dragIndex, enzymeIdx)) {
         near = true;
         enzymeAngle = enzyme.angle || 0;
         break;
       }
     }
     if (near) {
-      dragging.el.style.transition = "filter 0.2s, transform 0.4s";
-      dragging.el.style.filter = "drop-shadow(0 0 12px #ff9800)";
-      dragging.el.style.transform = `scale(1.15) rotate(${enzymeAngle})deg`;
+      state.dragging.el.style.transition = "filter 0.2s, transform 0.4s";
+      state.dragging.el.style.filter = "drop-shadow(0 0 12px #ff9800)";
+      state.dragging.el.style.transform = `scale(1.15) rotate(${enzymeAngle})deg`;
     } else {
-      dragging.el.style.transition = "filter 0.2s, transform 0.4s";
-      dragging.el.style.filter = "";
-      dragging.el.style.transform = `rotate(${dragging.angle || 0}deg)`;
+      state.dragging.el.style.transition = "filter 0.2s, transform 0.4s";
+      state.dragging.el.style.filter = "";
+      state.dragging.el.style.transform = `rotate(${state.dragging.angle || 0}deg)`;
     }
   }
 };
 
 // pointerup 時才做實際吸附
 canvas.onpointerup = function (e) {
-  if (dragging) dragging.el.style.filter = "";
-  if (dragType === "molecule") {
-    trySnapToAnyActivation(dragIndex);
-  } else if (dragType === "enzyme") {
-    for (let i = 0; i < molecules.length; i++) {
-      trySnapToAnyActivation(i);
-    }
+  if (state.dragging) state.dragging.el.style.filter = "";
+
+  if (state.dragType === "molecule") {
+    trySnapToAnyActivation(state.dragIndex,"molecule");
+  } else if (state.dragType === "enzyme") {
+    trySnapToAnyActivation(state.dragIndex, "enzyme");
   }
+  /*
+  } else if (state.dragType === "enzyme") {
+    for (let i = 0; i < state.molecules.length; i++) {
+      trySnapToAnyActivation(i, "enzyme");
+    }      
+  }
+  */
 
   // 判斷是否在 toolbox 區
   const toolbox = document.getElementById("toolbox");
@@ -753,32 +804,32 @@ canvas.onpointerup = function (e) {
       e.clientY <= rect.bottom
     ) {
       // 在 toolbox 區，執行刪除
-      if (dragType === "enzyme") {
-        enzymes[dragIndex].remove();
-        enzymes.splice(dragIndex, 1);
+      if (state.dragType === "enzyme") {
+        state.enzymes[state.dragIndex].remove();
+        state.enzymes.splice(state.dragIndex, 1);
         bindDraggable();
-      } else if (dragType === "molecule") {
+      } else if (state.dragType === "molecule") {
 
         // 同步移除所有酵素的 boundMolecules 參照
-        enzymes.forEach(enzyme => {
+        state.enzymes.forEach(enzyme => {
           if (enzyme.boundMolecules) {
-            enzyme.boundMolecules = enzyme.boundMolecules.filter(m => m !== molecules[dragIndex]);
+            enzyme.boundMolecules = enzyme.boundMolecules.filter(m => m !== state.molecules[state.dragIndex]);
           }
         });        
-        molecules[dragIndex].remove();
-        molecules.splice(dragIndex, 1);
+        state.molecules[state.dragIndex].remove();
+        state.molecules.splice(state.dragIndex, 1);
         bindDraggable();
       }
-      dragging = null;
-      dragType = null;
-      dragIndex = -1;
+      state.dragging = null;
+      state.dragType = null;
+      state.dragIndex = -1;
       return;
     }
   }
 
-  dragging = null;
-  dragType = null;
-  dragIndex = -1;
+  state.dragging = null;
+  state.dragType = null;
+  state.dragIndex = -1;
 };
 canvas.onpointerleave = canvas.onpointerup;
 
@@ -987,13 +1038,13 @@ if (toolbox && canvas) {
       const moleculeType = minus10btn.dataset.moleculetype;
       if (type === "enzyme" && enzymeType) {
         // 找出畫面上所有該類型酵素
-        const targets = enzymes.filter(e => e.type === enzymeType);
+        const targets = state.enzymes.filter(e => e.type === enzymeType);
         const removeCount = Math.min(10, targets.length);
         for (let i = 0; i < removeCount; i++) {
-          const idx = enzymes.findIndex(e => e.type === enzymeType);
+          const idx = state.enzymes.findIndex(e => e.type === enzymeType);
           if (idx !== -1) {
             // 釋放已結合的受質
-            const enzyme = enzymes[idx];
+            const enzyme = state.enzymes[idx];
             if (enzyme.boundMolecules && enzyme.boundMolecules.length > 0) {
               enzyme.boundMolecules.forEach(m => {
                 if (m.el) {
@@ -1004,28 +1055,28 @@ if (toolbox && canvas) {
               });
               enzyme.boundMolecules = [];
             }            
-            enzymes[idx].remove();
-            enzymes.splice(idx, 1);
-            enzymeCount[enzymeType] = Math.max(0, (enzymeCount[enzymeType] || 1) - 1);
+            state.enzymes[idx].remove();
+            state.enzymes.splice(idx, 1);
+            state.enzymeCount[enzymeType] = Math.max(0, (state.enzymeCount[enzymeType] || 1) - 1);
           }
         }
         bindDraggable();
       } else if (type === "molecule" && moleculeType) {
         // 找出畫面上所有該類型分子
-        const targets = molecules.filter(m => m.type === moleculeType);
+        const targets = state.molecules.filter(m => m.type === moleculeType);
         const removeCount = Math.min(10, targets.length);
         for (let i = 0; i < removeCount; i++) {
-          const idx = molecules.findIndex(m => m.type === moleculeType);
+          const idx = state.molecules.findIndex(m => m.type === moleculeType);
           if (idx !== -1) {
             // 同步移除所有酵素的 boundMolecules 參照 ---
-            enzymes.forEach(enzyme => {
+            state.enzymes.forEach(enzyme => {
               if (enzyme.boundMolecules) {
-                enzyme.boundMolecules = enzyme.boundMolecules.filter(m => m !== molecules[idx]);
+                enzyme.boundMolecules = enzyme.boundMolecules.filter(m => m !== state.molecules[idx]);
               }
             });            
-            molecules[idx].remove();
-            molecules.splice(idx, 1);
-            moleculeCount[moleculeType] = Math.max(0, (moleculeCount[moleculeType] || 1) - 1);
+            state.molecules[idx].remove();
+            state.molecules.splice(idx, 1);
+            state.moleculeCount[moleculeType] = Math.max(0, (state.moleculeCount[moleculeType] || 1) - 1);
           }
         }
         bindDraggable();
@@ -1041,13 +1092,13 @@ if (toolbox && canvas) {
       const moleculeType = minus10btn.dataset.moleculetype;
       if (type === "enzyme" && enzymeType) {
         // ...原本移除酵素內容...
-        const targets = enzymes.filter(e => e.type === enzymeType);
+        const targets = state.enzymes.filter(e => e.type === enzymeType);
         const removeCount = Math.min(10, targets.length);
         for (let i = 0; i < removeCount; i++) {
-          const idx = enzymes.findIndex(e => e.type === enzymeType);
+          const idx = state.enzymes.findIndex(e => e.type === enzymeType);
           if (idx !== -1) {
             // 釋放已結合的受質
-            const enzyme = enzymes[idx];
+            const enzyme = state.enzymes[idx];
             if (enzyme.boundMolecules && enzyme.boundMolecules.length > 0) {
               enzyme.boundMolecules.forEach(m => {
                 if (m.el) {
@@ -1058,27 +1109,27 @@ if (toolbox && canvas) {
               });
               enzyme.boundMolecules = [];
             }
-            enzymes[idx].remove();
-            enzymes.splice(idx, 1);
-            enzymeCount[enzymeType] = Math.max(0, (enzymeCount[enzymeType] || 1) - 1);
+            state.enzymes[idx].remove();
+            state.enzymes.splice(idx, 1);
+            state.enzymeCount[enzymeType] = Math.max(0, (state.enzymeCount[enzymeType] || 1) - 1);
           }
         }
         bindDraggable();
       } else if (type === "molecule" && moleculeType) {
         // ...原本移除分子內容...
-        const targets = molecules.filter(m => m.type === moleculeType);
+        const targets = state.molecules.filter(m => m.type === moleculeType);
         const removeCount = Math.min(10, targets.length);
         for (let i = 0; i < removeCount; i++) {
-          const idx = molecules.findIndex(m => m.type === moleculeType);
+          const idx = state.molecules.findIndex(m => m.type === moleculeType);
           if (idx !== -1) {
-            enzymes.forEach(enzyme => {
+            state.enzymes.forEach(enzyme => {
               if (enzyme.boundMolecules) {
-                enzyme.boundMolecules = enzyme.boundMolecules.filter(m => m !== molecules[idx]);
+                enzyme.boundMolecules = enzyme.boundMolecules.filter(m => m !== state.molecules[idx]);
               }
             });
-            molecules[idx].remove();
-            molecules.splice(idx, 1);
-            moleculeCount[moleculeType] = Math.max(0, (moleculeCount[moleculeType] || 1) - 1);
+            state.state.molecules[idx].remove();
+            state.state.molecules.splice(idx, 1);
+            state.moleculeCount[moleculeType] = Math.max(0, (state.moleculeCount[moleculeType] || 1) - 1);
           }
         }
         bindDraggable();
