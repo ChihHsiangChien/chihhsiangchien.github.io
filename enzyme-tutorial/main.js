@@ -20,6 +20,10 @@ import { updateActivationSites } from "./ui.js";
 import { globalAnimationLoop, autoDetectBinding } from "./animation.js";
 import { initConcentrationChart, updateConcentrationChart, updateCurrentChart } from "./chart.js";
 import { triggerReaction, createProduct } from "./reaction.js";
+import { getSVGMainColorFromUrl } from "./utils.js";
+
+import { runExperiment } from "./experiment.js";
+
 
 export const substrateToEnzymeTypes = {};
 reactions.forEach(r => {
@@ -287,13 +291,40 @@ export function startDrag(e, type, idx) {
   state.dragging.el.setPointerCapture(e.pointerId);
 }
 
+
+
 clearAll();
 setInterval(updateConcentrationChart, 1000); // 每秒更新
 globalAnimationLoop();
 
 // 主程式啟動
-window.addEventListener("DOMContentLoaded", () => {
+window.addEventListener("DOMContentLoaded", async () => {
+
+
+  // 預先取得所有酵素主色
+  state.enzymeColors = {}; // { [enzymeType]: color }
+  const enzymeTypes = Array.from(new Set(reactions.map(r => r.type)));
+  for (const type of enzymeTypes) {
+    const rule = reactions.find(r => r.type === type);
+    if (rule && rule.enzymeActiveIcon) {
+      state.enzymeColors[type] = await getSVGMainColorFromUrl(rule.enzymeActiveIcon, "#8009ff");
+    }
+  }
+
   renderToolbox(toolbox);  
+
+  // 實驗模式酵素選單初始化
+  
+  const enzymeSelect = document.getElementById("exp-enzyme-select");
+  enzymeSelect.innerHTML = enzymeTypes.map(type => `<option value="${type}">${type}</option>`).join("");
+  state.expTempSelectedEnzyme = enzymeTypes[0] || null;
+
+  // 綁定「開始實驗」按鈕
+  const expStartBtn = document.getElementById("exp-start-btn");
+  if (expStartBtn) {
+    expStartBtn.onclick = runExperiment;
+  }
+
   renderAll();  
   bindUIEvents();
   initConcentrationChart();

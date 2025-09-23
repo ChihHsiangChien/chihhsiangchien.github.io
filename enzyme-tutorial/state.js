@@ -16,7 +16,10 @@ export const state = {
   pendingToolboxItem: null,
   chartPaused: false,
   chartTime: 0,
-  charts: { concentration: null },
+  charts: { 
+    concentration: null,
+    expTemp: null // 新增
+ },
   chartData: {
     concentration: { labels: [], datasets: [] },
   },
@@ -25,6 +28,10 @@ export const state = {
   draggingType: null,
   draggingEnzymeType: null,
   draggingMoleculeType: null,
+  
+  // 實驗模式相關
+  expTempData: {}, // { [enzymeType]: [ { temp, value }, ... ] }
+  expTempSelectedEnzyme: null // 目前選擇的酵素  
 };
 
 export const ENZYME_BROWNIAN_SPEED_RATIO = 0.03;
