@@ -22,7 +22,24 @@ const state = {
   dragging: null,
   dragType: null,
   dragIndex: -1,
-  // ...其他全域狀態也可逐步搬進來
+  autoDetectBatchIndex: 0,
+  grid: {},
+  bindingDetectFrame: 0,
+  bindingDetectInterval: 1,
+  offsetX: 0,
+  offsetY: 0,
+  pendingToolboxItem: null,
+  chartPaused: false,
+  chartTime: 0,
+  charts: {concentration: null},
+  chartData:{
+    concentration: { labels: [], datasets: [] },  
+  },
+  currentChartType:"concentration",
+  draggingGhost: null,
+  draggingType: null,
+  draggingEnzymeType: null,
+  draggingMoleculeType: null,  
 };
 
 
@@ -36,12 +53,6 @@ reactions.forEach(r => {
 });
 
 
-let chart = null;
-let chartData = {
-  labels: [],
-  datasets: []
-};
-let chartPaused = false;
 
 
 const canvas = document.getElementById("canvas");
@@ -49,45 +60,27 @@ const tempSlider = document.getElementById("temp-slider");
 const tempValue = document.getElementById("temp-value");
 let brownianSwitch = document.getElementById("brownian-switch");
 const toolbox = document.getElementById("toolbox");
-let pendingToolboxItem = null;
 
 
 const ENZYME_BROWNIAN_SPEED_RATIO = 0.03;
-
-// 活化位判斷半徑（像素）
-const ACTIVATION_SITE_RADIUS = 35;
-
-// 多活化位支援
-
-let offsetX = 0,
-  offsetY = 0;
-
-
+const ACTIVATION_SITE_RADIUS = 35;  // 活化位判斷半徑（像素）
 
 
 // --- 空間分割法（Grid） ---
 const GRID_SIZE = 80; // 每格 80px，可依需求調整
-let grid = {};
-
-
-let autoDetectBatchIndex = 0;
 const AUTO_DETECT_BATCH = 4; // 分成4批更新碰撞
 
-
-let bindingDetectFrame = 0;
-let bindingDetectInterval  = 1;
-
 function buildGrid() {
-  grid = {};
+  state.grid = {};
   state.molecules.forEach((m, idx) => {
     const key = getGridKey(m.x, m.y);
-    if (!grid[key]) grid[key] = { molecules: [], enzymes: [] };
-    grid[key].molecules.push(idx);
+    if (!state.grid[key]) state.grid[key] = { molecules: [], enzymes: [] };
+    state.grid[key].molecules.push(idx);
   });
   state.enzymes.forEach((e, idx) => {
     const key = getGridKey(e.x, e.y);
-    if (!grid[key]) grid[key] = { molecules: [], enzymes: [] };
-    grid[key].enzymes.push(idx);
+    if (!state.grid[key]) state.grid[key] = { molecules: [], enzymes: [] };
+    state.grid[key].enzymes.push(idx);
   });
 }
 
@@ -198,8 +191,8 @@ function globalAnimationLoop() {
   // 吸附偵測
   // autoDetectBinding();
     // 吸附偵測降頻（每3幀執行一次）
-  bindingDetectFrame = (bindingDetectFrame + 1) % bindingDetectInterval;
-  if (bindingDetectFrame === 0) {
+  state.bindingDetectFrame = (state.bindingDetectFrame + 1) % state.bindingDetectInterval;
+  if (state.bindingDetectFrame === 0) {
     autoDetectBinding();
   }
 
@@ -217,14 +210,14 @@ function initConcentrationChart() {
   );
   const enzymeTypes = Array.from(new Set(reactions.map(r => r.type)));
   // 建立 datasets
-  chartData = {
+  state.chartData.concentration = {
     labels: [],
     datasets: [
       ...enzymeTypes.map(type => ({
         label: `酵素-${type}`,
         data: [],
         borderColor: '#8009ff',
-        backgroundColor: ';#8009ff22',
+        backgroundColor: '#8009ff22',
         fill: false,
         tension: 0.2,
         pointRadius: 0
@@ -240,11 +233,14 @@ function initConcentrationChart() {
       }))
     ]
   };
-  chart = new Chart(ctx, {
+  // 建立 chart 實例並存到 state.charts
+  state.charts.concentration = new Chart(ctx, {
     type: 'line',
-    data: chartData,
+    data: state.chartData.concentration,
     options: {
-      responsive: false,
+      responsive: true,
+      maintainAspectRatio: true,
+      aspectRatio: 0.8, // 或 2，依你需求    
       animation: false,
       scales: {
         x: { title: { display: true, text: '時間 (秒)' } },
@@ -271,9 +267,9 @@ function initConcentrationChart() {
     }
     if (icon) {
       const color = await getSVGMainColorFromUrl(icon, "#009688");
-      chartData.datasets[enzymeTypes.length + i].backgroundColor = color;
-      chartData.datasets[enzymeTypes.length + i].borderColor = color;      
-      chart.update();
+      state.chartData.concentration.datasets[enzymeTypes.length + i].backgroundColor = color;
+      state.chartData.concentration.datasets[enzymeTypes.length + i].borderColor = color;      
+      state.charts.concentration.update();
     }
   });
   // 酵素同理
@@ -281,24 +277,23 @@ function initConcentrationChart() {
     const rule = reactions.find(r => r.type === type);
     if (rule && rule.enzymeActiveIcon) {
       const color = await getSVGMainColorFromUrl(rule.enzymeActiveIcon, "#8009ff");
-      chartData.datasets[i].backgroundColor = color;
-      chartData.datasets[i].borderColor = color;
-      chart.update();
+      state.chartData.concentration.datasets[i].backgroundColor = color;
+      state.chartData.concentration.datasets[i].borderColor = color;
+      state.charts.concentration.update();
     }
   });
-
 }
 
 function updateConcentrationChart() {
-  if (chartPaused) return;
-  if (!chart) return;
-  chartTime += 1;
-  chartData.labels.push(chartTime);
+  if (state.chartPaused) return;
+  if (!state.charts.concentration) return;
+  state.chartTime += 1;
+  state.chartData.concentration.labels.push(state.chartTime);
 
   // 只統計 canvas 內且有顯示的酵素
   const enzymeTypes = Array.from(new Set(reactions.map(r => r.type)));
   enzymeTypes.forEach((type, i) => {
-    chartData.datasets[i].data.push(state.enzymeCount[type] || 0);
+    state.chartData.concentration.datasets[i].data.push(state.enzymeCount[type] || 0);
   });
 
   // 只統計 canvas 內且有顯示的分子
@@ -308,20 +303,40 @@ function updateConcentrationChart() {
     )
   );
   moleculeTypes.forEach((type, i) => {
-    chartData.datasets[enzymeTypes.length + i].data.push(state.moleculeCount[type] || 0);
+    state.chartData.concentration.datasets[enzymeTypes.length + i].data.push(state.moleculeCount[type] || 0);
   });
 
   // 最多顯示 100 筆
-  if (chartData.labels.length > 100) {
-    chartData.labels.shift();
-    chartData.datasets.forEach(ds => ds.data.shift());
+  if (state.chartData.concentration.labels.length > 100) {
+    state.chartData.concentration.labels.shift();
+    state.chartData.concentration.datasets.forEach(ds => ds.data.shift());
   }
-  chartData.datasets.forEach(ds => {
+  state.chartData.concentration.datasets.forEach(ds => {
     ds.hidden = ds.data.every(v => v === 0);
   });  
-  chart.update();
+  state.charts.concentration.update();
 }
 
+
+function updateCurrentChart() {
+  const type = state.currentChartType;
+  if (type === "concentration") {
+    updateConcentrationChart();
+  }
+  // 之後可加其他 chart 的更新
+}
+
+document.querySelectorAll("#chart-tabs button").forEach(btn => {
+  btn.onclick = function() {
+    const type = btn.dataset.type;
+    state.currentChartType = type;
+    // 顯示對應 chart，隱藏其他
+    document.querySelectorAll("#chart-panels canvas").forEach(cvs => {
+      cvs.style.display = cvs.id === type + "-chart" ? "" : "none";
+    });
+    updateCurrentChart();
+  };
+});
 
 function renderAll() {
   updateAllBrownian();
@@ -389,7 +404,7 @@ function autoDetectBinding() {
   if (allSubstrates.length === 0) return;
   buildGrid();
   const batchSize = Math.ceil(allSubstrates.length / AUTO_DETECT_BATCH);
-  const start = autoDetectBatchIndex * batchSize;
+  const start = state.autoDetectBatchIndex * batchSize;
   const end = Math.min(start + batchSize, allSubstrates.length);
 
   for (let i = start; i < end; i++) {
@@ -413,7 +428,7 @@ function autoDetectBinding() {
       let enzymeAngle = 0;
       const neighborKeys = getNeighborKeys(substrate.x, substrate.y);
       for (const key of neighborKeys) {
-        const cell = grid[key];
+        const cell = state.grid[key];
         if (!cell) continue;
         for (const enzymeIdx of cell.enzymes) {
           const enzyme = state.enzymes[enzymeIdx];
@@ -458,7 +473,7 @@ function autoDetectBinding() {
       }
     }
   }
-  autoDetectBatchIndex = (autoDetectBatchIndex + 1) % AUTO_DETECT_BATCH;
+  state.autoDetectBatchIndex = (state.autoDetectBatchIndex + 1) % AUTO_DETECT_BATCH;
 }
 
 
@@ -466,9 +481,9 @@ function autoDetectBinding() {
 
 // 修改：triggerReaction 支援酵素作為受質
 function triggerReaction(idxs, enzymeIdx, rule) {
-  chartPaused = true;
+  state.chartPaused = true;
   if (!idxs || idxs.length === 0) {
-    chartPaused = false;
+    state.chartPaused = false;
     return;
   }
   // idxs: [{idx, type}] 陣列
@@ -500,7 +515,7 @@ function triggerReaction(idxs, enzymeIdx, rule) {
           state.enzymes.splice(idx, 1);
         }
       });
-    chartPaused = false;
+    state.chartPaused = false;
     bindDraggable();
   }, 300);
 
@@ -712,8 +727,8 @@ function startDrag(e, type, idx) {
   state.dragType = type;
   state.dragIndex = idx;
   const rect = state.dragging.el.getBoundingClientRect();
-  offsetX = e.clientX - rect.left;
-  offsetY = e.clientY - rect.top;
+  state.offsetX = e.clientX - rect.left;
+  state.offsetY = e.clientY - rect.top;
   state.dragging.el.style.filter = "brightness(1.2) drop-shadow(0 0 8px #00bcd4)";
   // 設定自訂 ghost image
   if (e.dataTransfer) {
@@ -738,8 +753,8 @@ function startDrag(e, type, idx) {
 canvas.onpointermove = function (e) {
   if (!state.dragging) return;
   const canvasRect = canvas.getBoundingClientRect();
-  let x = e.clientX - canvasRect.left - offsetX;
-  let y = e.clientY - canvasRect.top - offsetY;
+  let x = e.clientX - canvasRect.left - state.offsetX;
+  let y = e.clientY - canvasRect.top - state.offsetY;
   x = Math.max(0, Math.min(canvasRect.width - 40, x));
   y = Math.max(0, Math.min(canvasRect.height - 40, y));
   state.dragging.updatePosition(x, y);
@@ -839,53 +854,53 @@ if (toolbox && canvas) {
     // 滑鼠拖曳已支援，這裡加觸控/點擊
     item.addEventListener("touchstart", (e) => {
       e.preventDefault();
-      pendingToolboxItem = item;
+      state.pendingToolboxItem = item;
       // 可加 highlight 效果
       item.style.boxShadow = "0 0 0 3px #00bcd4";
     });
     item.addEventListener("click", (e) => {
       // 桌機點擊也可用
-      pendingToolboxItem = item;
+      state.pendingToolboxItem = item;
       item.style.boxShadow = "0 0 0 3px #00bcd4";
     });
   });
 
   // 點 canvas 新增
   canvas.addEventListener("touchstart", (e) => {
-    if (pendingToolboxItem) {
+    if (state.pendingToolboxItem) {
       const touch = e.touches[0];
       const rect = canvas.getBoundingClientRect();
       let x = touch.clientX - rect.left - 20;
       let y = touch.clientY - rect.top - 20;
       let angle = Math.floor(Math.random() * 360);
-      const type = pendingToolboxItem.dataset.type;
-      const enzymeType = pendingToolboxItem.dataset.enzymetype;
-      const moleculeType = pendingToolboxItem.dataset.moleculetype;
+      const type = state.pendingToolboxItem.dataset.type;
+      const enzymeType = state.pendingToolboxItem.dataset.enzymetype;
+      const moleculeType = state.pendingToolboxItem.dataset.moleculetype;
       if (type === "enzyme" && enzymeType) {
         addEnzymeFromToolbox(enzymeType, x, y, angle);
       } else if (type === "molecule" && moleculeType) {
         addMoleculeFromToolbox(moleculeType, x, y);
       }
-      pendingToolboxItem.style.boxShadow = "";
-      pendingToolboxItem = null;
+      state.pendingToolboxItem.style.boxShadow = "";
+      state.pendingToolboxItem = null;
     }
   });
   canvas.addEventListener("click", (e) => {
-    if (pendingToolboxItem) {
+    if (state.pendingToolboxItem) {
       const rect = canvas.getBoundingClientRect();
       let x = e.clientX - rect.left - 20;
       let y = e.clientY - rect.top - 20;
       let angle = Math.floor(Math.random() * 360);
-      const type = pendingToolboxItem.dataset.type;
-      const enzymeType = pendingToolboxItem.dataset.enzymetype;
-      const moleculeType = pendingToolboxItem.dataset.moleculetype;
+      const type = state.pendingToolboxItem.dataset.type;
+      const enzymeType = state.pendingToolboxItem.dataset.enzymetype;
+      const moleculeType = state.pendingToolboxItem.dataset.moleculetype;
       if (type === "enzyme" && enzymeType) {
         addEnzymeFromToolbox(enzymeType, x, y, angle);
       } else if (type === "molecule" && moleculeType) {
         addMoleculeFromToolbox(moleculeType, x, y);
       }
-      pendingToolboxItem.style.boxShadow = "";
-      pendingToolboxItem = null;
+      state.pendingToolboxItem.style.boxShadow = "";
+      state.pendingToolboxItem = null;
     }
   });
 }
@@ -1139,36 +1154,32 @@ if (toolbox && canvas) {
 
 }
 // --- Touch 拖曳支援（for mobile/tablet）---
-let draggingGhost = null;
-let draggingType = null;
-let draggingEnzymeType = null;
-let draggingMoleculeType = null;
 
 toolbox.querySelectorAll(".toolbox-item").forEach((item) => {
   item.addEventListener("touchstart", (e) => {
     e.preventDefault();
     const touch = e.touches[0];
-    draggingType = item.dataset.type;
-    draggingEnzymeType = item.dataset.enzymetype;
-    draggingMoleculeType = item.dataset.moleculetype;
+    state.draggingType = item.dataset.type;
+    state.draggingEnzymeType = item.dataset.enzymetype;
+    state.draggingMoleculeType = item.dataset.moleculetype;
     // 建立 ghost image
-    draggingGhost = item.cloneNode(true);
-    draggingGhost.style.position = "fixed";
-    draggingGhost.style.left = touch.clientX - 20 + "px";
-    draggingGhost.style.top = touch.clientY - 20 + "px";
-    draggingGhost.style.opacity = "0.7";
-    draggingGhost.style.pointerEvents = "none";
-    draggingGhost.style.zIndex = 9999;
-    document.body.appendChild(draggingGhost);
+    state.draggingGhost = item.cloneNode(true);
+    state.draggingGhost.style.position = "fixed";
+    state.draggingGhost.style.left = touch.clientX - 20 + "px";
+    state.draggingGhost.style.top = touch.clientY - 20 + "px";
+    state.draggingGhost.style.opacity = "0.7";
+    state.draggingGhost.style.pointerEvents = "none";
+    state.draggingGhost.style.zIndex = 9999;
+    document.body.appendChild(state.draggingGhost);
   });
   item.addEventListener("touchmove", (e) => {
-    if (!draggingGhost) return;
+    if (!state.draggingGhost) return;
     const touch = e.touches[0];
-    draggingGhost.style.left = touch.clientX - 20 + "px";
-    draggingGhost.style.top = touch.clientY - 20 + "px";
+    state.draggingGhost.style.left = touch.clientX - 20 + "px";
+    state.draggingGhost.style.top = touch.clientY - 20 + "px";
   });
   item.addEventListener("touchend", (e) => {
-    if (draggingGhost) {
+    if (state.draggingGhost) {
       // 判斷是否在 canvas 上
       const touch = e.changedTouches[0];
       const rect = canvas.getBoundingClientRect();
@@ -1181,22 +1192,22 @@ toolbox.querySelectorAll(".toolbox-item").forEach((item) => {
         let x = touch.clientX - rect.left - 20;
         let y = touch.clientY - rect.top - 20;
         let angle = Math.floor(Math.random() * 360);
-        if (draggingType === "enzyme" && draggingEnzymeType) {
-          addEnzymeFromToolbox(draggingEnzymeType, x, y, angle);
-        } else if (draggingType === "molecule" && draggingMoleculeType) {
-          addMoleculeFromToolbox(draggingMoleculeType, x, y);
+        if (state.draggingType === "enzyme" && state.draggingEnzymeType) {
+          addEnzymeFromToolbox(state.draggingEnzymeType, x, y, angle);
+        } else if (state.draggingType === "molecule" && state.draggingMoleculeType) {
+          addMoleculeFromToolbox(state.draggingMoleculeType, x, y);
         }
       }
-      draggingGhost.remove();
-      draggingGhost = null;
-      draggingType = null;
-      draggingEnzymeType = null;
-      draggingMoleculeType = null;
+      state.draggingGhost.remove();
+      state.draggingGhost = null;
+      state.draggingType = null;
+      state.draggingEnzymeType = null;
+      state.draggingMoleculeType = null;
     }
   });
 });
+
 clearAll();
-let chartTime = 0;
 setInterval(updateConcentrationChart, 1000); // 每秒更新
 globalAnimationLoop();
 
@@ -1206,11 +1217,11 @@ if (tempSlider && tempValue) {
 
 document.getElementById('reset-btn').onclick = function() {
   clearAll(); // 清除所有分子/酵素/產物
-  if (chart) {
-    chartData.labels = [];
-    chartData.datasets.forEach(ds => ds.data = []);
-    chartTime = 0;
-    chart.update();
+  if (state.charts.concentration) {
+    state.chartData.concentration.labels = [];
+    state.chartData.concentration.datasets.forEach(ds => ds.data = []);
+    state.chartTime = 0;
+    state.charts.concentration.update();
   }
 };
 
