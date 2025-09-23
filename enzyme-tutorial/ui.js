@@ -4,10 +4,8 @@ import { addItemFromToolbox,
     randomPosX, 
     randomPosY, 
     handleTempSliderInput, 
-    bindDraggable, 
     updateAllBrownian, 
-    isNearActivation,
-    updateActivationSites, 
+    isNearActivation,    
     trySnapToAnyActivation,
     clearAll,    
  } from "./main.js"; 
@@ -484,3 +482,25 @@ export function renderToolbox(toolbox) {
     toolbox.appendChild(div);
   });
 }
+
+export function bindDraggable() {
+  state.enzymes.forEach((enzyme, idx) => {
+    enzyme.el.onpointerdown = (e) => startDrag(e, "enzyme", idx);
+  });
+  state.molecules.forEach((molecule, idx) => {
+    molecule.el.onpointerdown = (e) => startDrag(e, "molecule", idx);
+  });
+}
+
+export function updateActivationSites() {
+  for (let i = 0; i < state.activationSites.length; i++) {
+    if (state.enzymes[i]) {
+      state.activationSites[i].style.left = state.enzymes[i].offsetLeft + "px";
+      state.activationSites[i].style.top = state.enzymes[i].offsetTop + "px";
+      state.activationSites[i].style.display = "";
+    } else {
+      state.activationSites[i].style.display = "none";
+    }
+  }
+}
+

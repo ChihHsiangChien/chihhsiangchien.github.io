@@ -10,11 +10,12 @@ import {
 } from "./utils.js";
 import { state, 
   ACTIVATION_SITE_RADIUS, 
-  GRID_SIZE, 
   ENZYME_BROWNIAN_SPEED_RATIO, 
-  AUTO_DETECT_BATCH } from "./state.js";
+  } from "./state.js";
 import { bindUIEvents } from "./ui.js";
 import { renderToolbox } from "./ui.js";
+import { bindDraggable } from "./ui.js";
+import { updateActivationSites } from "./ui.js";
 
 import { globalAnimationLoop, autoDetectBinding } from "./animation.js";
 import { initConcentrationChart, updateConcentrationChart, updateCurrentChart } from "./chart.js";
@@ -97,28 +98,6 @@ export function updateAllBrownian() {
     e.brownianActive = brownianSwitch.checked;
   });
 }
-
-export function updateActivationSites() {
-  for (let i = 0; i < state.activationSites.length; i++) {
-    if (state.enzymes[i]) {
-      state.activationSites[i].style.left = state.enzymes[i].offsetLeft + "px";
-      state.activationSites[i].style.top = state.enzymes[i].offsetTop + "px";
-      state.activationSites[i].style.display = "";
-    } else {
-      state.activationSites[i].style.display = "none";
-    }
-  }
-}
-
-export function bindDraggable() {
-  state.enzymes.forEach((enzyme, idx) => {
-    enzyme.el.onpointerdown = (e) => startDrag(e, "enzyme", idx);
-  });
-  state.molecules.forEach((molecule, idx) => {
-    molecule.el.onpointerdown = (e) => startDrag(e, "molecule", idx);
-  });
-}
-
 
 
 // 嘗試讓受質吸附到任一活化位

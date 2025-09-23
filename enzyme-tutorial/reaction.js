@@ -1,7 +1,7 @@
 import { state } from "./state.js";
-import { bindDraggable } from "./main.js";
 import { Molecule } from "./molecule.js";
 import { getCenter} from "./utils.js";
+import { bindDraggable } from "./ui.js";
 
 // triggerReaction 支援酵素作為受質
 export function triggerReaction(idxs, enzymeIdx, rule) {
