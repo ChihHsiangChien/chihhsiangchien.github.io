@@ -36,5 +36,16 @@ export const reactions = [
     denatureTemp: 80,
     sound: 'sounds/decom.mp3'
   },
+  {
+    type: 'enzymeB_decompose_enzymeA',
+    enzymeActiveIcon: 'svg/enzyme_B_active.svg',
+    enzymeDenaturedIcon: 'svg/enzyme_B_denatured.svg',
+    substrates: ['decompositionA'], // 這裡填酵素A的type
+    substrateIcons: ['svg/enzyme_A_active.svg'],
+    products: ['H', 'I'],
+    productIcons: ['svg/H.svg', 'svg/I.svg'],
+    denatureTemp: 60,
+    sound: 'sounds/decom.mp3'
+  },  
   // ...可擴充
 ];
