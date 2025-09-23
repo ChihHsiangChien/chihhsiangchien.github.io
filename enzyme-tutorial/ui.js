@@ -1,7 +1,6 @@
 import { state } from "./state.js";
 import { reactions } from "./enzyme-reactions.js";
-import { addEnzymeFromToolbox, 
-    addMoleculeFromToolbox, 
+import { addItemFromToolbox, 
     randomPosX, 
     randomPosY, 
     handleTempSliderInput, 
@@ -10,9 +9,11 @@ import { addEnzymeFromToolbox,
     isNearActivation,
     updateActivationSites, 
     trySnapToAnyActivation,
-    clearAll,
-    updateCurrentChart
+    clearAll,    
  } from "./main.js"; 
+
+import { updateCurrentChart } from "./chart.js";
+
 const canvas = document.getElementById("canvas");
 const tempSlider = document.getElementById("temp-slider");
 const tempValue = document.getElementById("temp-value");
@@ -82,9 +83,9 @@ export function bindUIEvents() {
         const enzymeType = state.pendingToolboxItem.dataset.enzymetype;
         const moleculeType = state.pendingToolboxItem.dataset.moleculetype;
         if (type === "enzyme" && enzymeType) {
-          addEnzymeFromToolbox(enzymeType, x, y, angle);
+          addItemFromToolbox("enzyme", enzymeType, x, y, angle);
         } else if (type === "molecule" && moleculeType) {
-          addMoleculeFromToolbox(moleculeType, x, y);
+          addItemFromToolbox("molecule", moleculeType, x, y);
         }
         state.pendingToolboxItem.style.boxShadow = "";
         state.pendingToolboxItem = null;
@@ -100,9 +101,9 @@ export function bindUIEvents() {
         const enzymeType = state.pendingToolboxItem.dataset.enzymetype;
         const moleculeType = state.pendingToolboxItem.dataset.moleculetype;
         if (type === "enzyme" && enzymeType) {
-          addEnzymeFromToolbox(enzymeType, x, y, angle);
+          addItemFromToolbox("enzyme", enzymeType, x, y, angle);
         } else if (type === "molecule" && moleculeType) {
-          addMoleculeFromToolbox(moleculeType, x, y);
+          addItemFromToolbox("molecule", moleculeType, x, y);
         }
         state.pendingToolboxItem.style.boxShadow = "";
         state.pendingToolboxItem = null;
@@ -134,9 +135,9 @@ export function bindUIEvents() {
       let y = e.clientY - rect.top - 20;
       let angle = Math.floor(Math.random() * 360);
       if (type === "enzyme" && enzymeType) {
-        addEnzymeFromToolbox(enzymeType, x, y, angle);
+        addItemFromToolbox("enzyme", enzymeType, x, y, angle);
       } else if (type === "molecule" && moleculeType) {
-        addMoleculeFromToolbox(moleculeType, x, y);
+        addItemFromToolbox("molecule", moleculeType, x, y);
       }
     });
 
@@ -152,9 +153,9 @@ export function bindUIEvents() {
           let y = randomPosY();
           let angle = Math.floor(Math.random() * 360);
           if (type === "enzyme" && enzymeType) {
-            addEnzymeFromToolbox(enzymeType, x, y, angle);
+            addItemFromToolbox("enzyme", enzymeType, x, y, angle);
           } else if (type === "molecule" && moleculeType) {
-            addMoleculeFromToolbox(moleculeType, x, y);
+            addItemFromToolbox("molecule", moleculeType, x, y);
           }
         }
       });
@@ -169,9 +170,9 @@ export function bindUIEvents() {
           let y = randomPosY();
           let angle = Math.floor(Math.random() * 360);
           if (type === "enzyme" && enzymeType) {
-            addEnzymeFromToolbox(enzymeType, x, y, angle);
+            addItemFromToolbox("enzyme", enzymeType, x, y, angle);
           } else if (type === "molecule" && moleculeType) {
-            addMoleculeFromToolbox(moleculeType, x, y);
+            addItemFromToolbox("molecule", moleculeType, x, y);
           }
         }
       });
@@ -314,9 +315,9 @@ export function bindUIEvents() {
             let y = touch.clientY - rect.top - 20;
             let angle = Math.floor(Math.random() * 360);
             if (state.draggingType === "enzyme" && state.draggingEnzymeType) {
-              addEnzymeFromToolbox(state.draggingEnzymeType, x, y, angle);
+              addItemFromToolbox(state.draggingEnzymeType, x, y, angle);
             } else if (state.draggingType === "molecule" && state.draggingMoleculeType) {
-              addMoleculeFromToolbox(state.draggingMoleculeType, x, y);
+              addItemFromToolbox(state.draggingMoleculeType, x, y);
             }
           }
           state.draggingGhost.remove();
@@ -417,4 +418,69 @@ export function bindUIEvents() {
     };
     canvas.onpointerleave = canvas.onpointerup;
   }
+}
+
+
+export function renderToolbox(toolbox) {
+  toolbox.innerHTML = "";
+  // 酵素
+  const enzymeTypes = Array.from(new Set(reactions.map((r) => r.type)));
+  enzymeTypes.forEach((type) => {
+    const rule = reactions.find((r) => r.type === type);
+    const icon = rule && rule.enzymeActiveIcon ? rule.enzymeActiveIcon : "enzyme_A_active.svg";
+    const div = document.createElement("div");
+    div.draggable = true;
+    div.className = "toolbox-item";
+    div.dataset.type = "enzyme";
+    div.dataset.enzymetype = type;
+    div.style.width = "40px";
+    div.style.height = "40px";
+    div.style.cursor = "grab";
+    div.innerHTML = `
+      <img src="${icon}" alt="酵素${type}" style="width:40px;height:40px;">
+      <div class="toolbox-btn-group">
+        <span class="toolbox-add10" title="一次新增10個" data-type="enzyme" data-enzymetype="${type}" style="margin-left:4px;cursor:pointer;font-size:13px;color:#8009ff;font-weight:bold;">+10</span>
+        <span class="toolbox-minus10" title="一次移除10個" data-type="enzyme" data-enzymetype="${type}" style="margin-left:4px;cursor:pointer;font-size:13px;color:#f44336;font-weight:bold;">-10</span>
+      </div>    
+    `;
+    toolbox.appendChild(div);
+  });
+  // 分子
+  const moleculeTypes = Array.from(
+    new Set(
+      reactions.flatMap((r) => [...(r.substrates || []), ...(r.products || [])])
+    )
+  ).filter(type => !enzymeTypes.includes(type)); //過濾掉已經是酵素的分子
+  moleculeTypes.forEach((type) => {
+    let icon = null;
+    for (const rule of reactions) {
+      const idx = rule.substrates.indexOf(type);
+      if (idx !== -1 && rule.substrateIcons && rule.substrateIcons[idx]) {
+        icon = rule.substrateIcons[idx];
+        break;
+      }
+      const prodIdx = rule.products.indexOf(type);
+      if (prodIdx !== -1 && rule.productIcons && rule.productIcons[prodIdx]) {
+        icon = rule.productIcons[prodIdx];
+        break;
+      }
+    }
+    if (!icon) icon = type + ".svg";
+    const div = document.createElement("div");
+    div.draggable = true;
+    div.className = "toolbox-item";
+    div.dataset.type = "molecule";
+    div.dataset.moleculetype = type;
+    div.style.width = "40px";
+    div.style.height = "40px";
+    div.style.cursor = "grab";
+    div.innerHTML = `
+      <img src="${icon}" alt="分子${type}" style="width:40px;height:40px;">
+      <div class="toolbox-btn-group">
+        <span class="toolbox-add10" title="一次新增10個" data-type="molecule" data-moleculetype="${type}" style="margin-left:4px;cursor:pointer;font-size:13px;color:#8009ff;font-weight:bold;">+10</span>
+        <span class="toolbox-minus10" title="一次移除10個" data-type="molecule" data-moleculetype="${type}" style="margin-left:4px;cursor:pointer;font-size:13px;color:#f44336;font-weight:bold;">-10</span>
+      </div>
+    `;
+    toolbox.appendChild(div);
+  });
 }
