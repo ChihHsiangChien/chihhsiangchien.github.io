@@ -253,7 +253,7 @@ export function handleTempSliderInput() {
   state.enzymes.forEach((e) => e.checkDenature(t));
 }
 
-function startDrag(e, type, idx) {
+export function startDrag(e, type, idx) {
   if (type === "enzyme") {
     state.dragging = state.enzymes[idx];
     state.dragging.stopBrownian && state.dragging.stopBrownian();

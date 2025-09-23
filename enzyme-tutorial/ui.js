@@ -7,7 +7,8 @@ import { addItemFromToolbox,
     updateAllBrownian, 
     isNearActivation,    
     trySnapToAnyActivation,
-    clearAll,    
+    clearAll,
+    startDrag
  } from "./main.js"; 
 
 import { updateCurrentChart } from "./chart.js";
