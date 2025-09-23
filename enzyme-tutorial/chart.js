@@ -128,3 +128,112 @@ export function updateCurrentChart() {
   }
   // 之後可加其他 chart 的更新
 }
+
+
+
+
+/**
+ * 實驗模式：反應分子與溫度圖表
+ * state.expTempData = {
+ *   [enzymeType]: [ { temp, value }, ... ]
+ * }
+ * value: 單次實驗產生的反應分子數
+ */
+
+export function updateExpTempChart() {
+  const cvs = document.getElementById("exp-temp-chart");
+  if (!cvs) return;
+  const ctx = cvs.getContext("2d");
+  if (!state.expTempData) return;
+
+
+  const enzymeTypes = Object.keys(state.expTempData);
+  const datasets = [];
+
+  enzymeTypes.forEach((enzymeType, idx) => {
+    const raw = state.expTempData[enzymeType];
+    const tempGroups = {};
+    raw.forEach(({ temp, value }) => {
+      if (!tempGroups[temp]) tempGroups[temp] = [];
+      tempGroups[temp].push(value);
+    });
+    const temps = Object.keys(tempGroups).map(Number).sort((a, b) => a - b);
+    function median(arr) {
+      if (!arr.length) return 0;
+      const sorted = arr.slice().sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      return sorted.length % 2 === 0
+        ? (sorted[mid - 1] + sorted[mid]) / 2
+        : sorted[mid];
+    }
+    const medians = temps.map(t => median(tempGroups[t]));
+
+
+    // 取得酵素 icon url
+    const rule = reactions.find(r => r.type === enzymeType);
+    let color = "#8009ff"; // 預設色
+    if (rule && rule.enzymeActiveIcon) {
+        // 注意：getSVGMainColorFromUrl 是 async，這裡需 await 或預先取得顏色
+        // 建議可在 init 時預先取得顏色並存到 state
+        color = state.enzymeColors?.[enzymeType] || color;
+    }    
+
+    // 灰點：單次實驗
+    datasets.push({
+      label: `${enzymeType} 單次實驗`,
+      data: raw.map(({ temp, value }) => ({ x: temp, y: value })),
+      showLine: false,
+      pointBackgroundColor: "#aaa",
+      pointBorderColor: "#aaa",
+      pointRadius: 4,
+      type: "scatter"
+    });
+    // 彩色線+點：中位數
+    datasets.push({
+    label: `${enzymeType} 中位數`,
+    data: temps.map((t, i) => ({ x: t, y: medians[i] })),
+    borderColor: color,
+    backgroundColor: color,
+    pointBackgroundColor: color,
+    pointBorderColor: color,
+    pointRadius: 7,
+    fill: false,
+    tension: 0,
+    showLine: true,
+    type: "line"
+    });
+  });
+
+  // 初始化或更新 Chart
+  if (!state.charts.expTemp) {
+    state.charts.expTemp = new Chart(ctx, {
+      type: "scatter",
+      data: { datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        aspectRatio: 1.2,
+        animation: false,
+        plugins: {
+          legend: { display: true }
+        },
+        scales: {
+          x: {
+            title: { display: true, text: "溫度 (°C)" },
+            type: "linear",
+            min: 0,
+            max: 100
+          },
+          y: {
+            title: { display: true, text: "反應次數" },
+            beginAtZero: true
+          }
+        }
+      }
+    });
+  } else {
+    state.charts.expTemp.data.datasets = datasets;
+    state.charts.expTemp.update();
+  }
+}
+

@@ -11,7 +11,7 @@ import { addItemFromToolbox,
     startDrag
  } from "./main.js"; 
 
-import { updateCurrentChart } from "./chart.js";
+import { updateCurrentChart, updateExpTempChart } from "./chart.js"; // ← 新增 updateExpTempChart
 
 const canvas = document.getElementById("canvas");
 const tempSlider = document.getElementById("temp-slider");
@@ -28,9 +28,18 @@ export function bindUIEvents() {
       document.querySelectorAll("#chart-panels canvas").forEach(cvs => {
         cvs.style.display = cvs.id === type + "-chart" ? "" : "none";
       });
-      updateCurrentChart();
+      // 濃度變化圖
+      if (type === "concentration") {
+        updateCurrentChart();
+      }
+      // 反應分子與溫度圖
+      if (type === "exp-temp") {
+        updateExpTempChart();
+      }
+      // 其他圖表可依需求擴充
     };
   });
+
 
   // Reset 按鈕
   const resetBtn = document.getElementById('reset-btn');
