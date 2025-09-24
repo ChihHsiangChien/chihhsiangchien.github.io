@@ -106,10 +106,10 @@ export function clearAll() {
 // 啟動/停止所有分子的布朗運動（全域）
 export function updateAllBrownian() {
   state.molecules.forEach((m) => {
-    m.brownianActive = brownianSwitch.checked;
+    m.brownianActive = state.brownianEnabled;
   });
   state.enzymes.forEach((e) => {
-    e.brownianActive = brownianSwitch.checked;
+    e.brownianActive = state.brownianEnabled;
   });
 }
 
@@ -237,7 +237,6 @@ export function trySnapToAnyActivation(idx, type = "molecule") {
  */
 export function addItemFromToolbox(type, itemType, x, y, angle) {
   const temp = parseInt(tempSlider.value, 10);
-  // 用 state.brownianEnabled 取代 brownianSwitch.checked
   const brownianEnabled = state.brownianEnabled;
 
   if (type === "enzyme") {

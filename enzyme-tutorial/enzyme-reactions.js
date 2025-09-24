@@ -10,7 +10,7 @@ export const reactions = [
     substrateIcons: ['svg/A.svg'],
     products: ['B', 'C'],
     productIcons: ['svg/B.svg', 'svg/C.svg'],
-    denatureTemp: 40,
+    denatureTemp: 50,
     sound: 'sounds/decom.mp3'
 
   },
@@ -44,7 +44,7 @@ export const reactions = [
     substrateIcons: ['svg/enzyme_A_active.svg'],
     products: ['H', 'I'],
     productIcons: ['svg/H.svg', 'svg/I.svg'],
-    denatureTemp: 60,
+    denatureTemp: 40,
     sound: 'sounds/decom.mp3'
   },  
   // ...可擴充
