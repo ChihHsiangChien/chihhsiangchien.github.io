@@ -1,8 +1,9 @@
 // filepath: c:\Users\User\Documents\GitHub\chihhsiangchien.github.io\enzyme-tutorial\experiment.js
 import { state } from "./state.js";
 import { reactions } from "./enzyme-reactions.js";
-import { clearAll, addItemFromToolbox, randomPosX, randomPosY, handleTempSliderInput, updateAllBrownian } from "./main.js";
-
+import { clearAll, addItemFromToolbox, handleTempSliderInput, updateAllBrownian } from "./main.js";
+import { randomPosX, randomPosY } from "./utils.js";
+import { generateUniquePositions } from "./utils.js";
 
 
 export async function runExperiment() {
@@ -16,10 +17,12 @@ export async function runExperiment() {
   const enzymeSource = document.querySelector('input[name="exp-enzyme-source"]:checked').value;
   if (enzymeSource === "new") {
     clearAll();
-    // 自動加入新酵素
-    for (let i = 0; i < 10; i++) {
-      addItemFromToolbox("enzyme", enzymeType, randomPosX(), randomPosY());
-    }
+    // 不重複放酵素
+    const enzymePositions = generateUniquePositions(10, 100);
+    enzymePositions.forEach(pos => {
+      addItemFromToolbox("enzyme", enzymeType, pos.x, pos.y, pos.angle);
+    });
+
     // 自動加入對應受質
     const rule = reactions.find(r => r.type === enzymeType);
     if (rule && rule.substrates) {
@@ -87,3 +90,55 @@ export async function runExperiment() {
   });
 }
 
+export async function runAutoExperiment(abortObj) {
+  const enzymeType = document.getElementById("exp-enzyme-select").value;
+  const tempInterval = parseInt(document.getElementById("auto-temp-interval").value, 10);
+  const time = parseInt(document.getElementById("exp-time-input").value, 10);
+  const repeat = parseInt(document.getElementById("auto-repeat").value, 10);
+  const autoExpBtn = document.getElementById("auto-exp-btn");
+  const autoExpStopBtn = document.getElementById("auto-exp-stop-btn");
+
+  autoExpBtn.disabled = true;
+  autoExpBtn.textContent = "自動實驗中...";
+  autoExpBtn.style.background = "#aaa";
+  autoExpBtn.style.cursor = "not-allowed";
+  if (autoExpStopBtn) {
+    autoExpStopBtn.disabled = false;
+    autoExpStopBtn.style.opacity = "1";
+  }
+
+  // 清空該酵素的實驗資料
+  state.expTempData[enzymeType] = [];
+
+  for (let temp = 0; temp <= 100; temp += tempInterval) {
+    for (let r = 0; r < repeat; r++) {
+      if (abortObj && abortObj.aborted) {
+        autoExpBtn.disabled = false;
+        autoExpBtn.textContent = "開始自動實驗";
+        autoExpBtn.style.background = "#8009ff";
+        autoExpBtn.style.cursor = "pointer";
+        if (autoExpStopBtn) {
+          autoExpStopBtn.disabled = true;
+          autoExpStopBtn.style.opacity = "0.5";
+        }
+        return;
+      }
+      // 設定溫度
+      document.getElementById("exp-enzyme-select").value = enzymeType;
+      document.getElementById("exp-temp-input").value = temp;
+      document.getElementById("exp-time-input").value = time;
+      document.getElementById("exp-use-new-enzyme").checked = true;
+      await runExperiment();
+      await new Promise(res => setTimeout(res, 200));
+    }
+  }
+
+  autoExpBtn.disabled = false;
+  autoExpBtn.textContent = "開始自動實驗";
+  autoExpBtn.style.background = "#8009ff";
+  autoExpBtn.style.cursor = "pointer";
+  if (autoExpStopBtn) {
+    autoExpStopBtn.disabled = true;
+    autoExpStopBtn.style.opacity = "0.5";
+  }
+}

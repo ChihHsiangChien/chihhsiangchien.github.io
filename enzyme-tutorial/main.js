@@ -16,13 +16,14 @@ import { bindUIEvents } from "./ui.js";
 import { renderToolbox } from "./ui.js";
 import { bindDraggable } from "./ui.js";
 import { updateActivationSites } from "./ui.js";
+import { initEnzymeSelect, bindExperimentButtons } from "./ui.js";
 
 import { globalAnimationLoop, autoDetectBinding } from "./animation.js";
 import { initConcentrationChart, updateConcentrationChart, updateCurrentChart } from "./chart.js";
 import { triggerReaction, createProduct } from "./reaction.js";
 import { getSVGMainColorFromUrl } from "./utils.js";
 
-import { runExperiment } from "./experiment.js";
+import { runExperiment} from "./experiment.js";
 
 export const soundCache = {};
 export function preloadSounds(reactions) {
@@ -79,12 +80,6 @@ export function isNearActivation(idx, enzymeIdx) {
   return distance(s, a) < ACTIVATION_SITE_RADIUS;
 }
 
-export function randomPosX() {
-  return Math.floor(Math.random() * (canvas.clientWidth - 40));
-}
-export function randomPosY() {
-  return Math.floor(Math.random() * (canvas.clientHeight - 40));
-}
 
 
 function renderAll() {
@@ -323,18 +318,16 @@ window.addEventListener("DOMContentLoaded", async () => {
   }
 
   renderToolbox(toolbox);  
+  // 選單初始化
+  initEnzymeSelect("exp-enzyme-select", enzymeTypes);
+  initEnzymeSelect("auto-enzyme-select", enzymeTypes);
 
-  // 實驗模式酵素選單初始化
-  
-  const enzymeSelect = document.getElementById("exp-enzyme-select");
-  enzymeSelect.innerHTML = enzymeTypes.map(type => `<option value="${type}">${type}</option>`).join("");
   state.expTempSelectedEnzyme = enzymeTypes[0] || null;
 
-  // 綁定「開始實驗」按鈕
-  const expStartBtn = document.getElementById("exp-start-btn");
-  if (expStartBtn) {
-    expStartBtn.onclick = runExperiment;
-  }
+  // 按鈕綁定
+  let autoExpAbort = { aborted: false };
+  bindExperimentButtons(runExperiment, null, autoExpAbort);
+
 
   renderAll();  
   bindUIEvents();

@@ -1,8 +1,6 @@
 import { state } from "./state.js";
 import { reactions } from "./enzyme-reactions.js";
-import { addItemFromToolbox, 
-    randomPosX, 
-    randomPosY, 
+import { randomPosX, randomPosY } from "./utils.js";import { addItemFromToolbox, 
     handleTempSliderInput, 
     updateAllBrownian, 
     isNearActivation,    
@@ -12,6 +10,8 @@ import { addItemFromToolbox,
  } from "./main.js"; 
 
 import { updateCurrentChart, updateExpTempChart } from "./chart.js"; // ← 新增 updateExpTempChart
+import { generateUniquePositions } from "./utils.js";
+
 
 const canvas = document.getElementById("canvas");
 const tempSlider = document.getElementById("temp-slider");
@@ -160,36 +160,12 @@ export function bindUIEvents() {
     toolbox.querySelectorAll(".toolbox-add10").forEach((x10btn) => {
       x10btn.addEventListener("click", (e) => {
         e.stopPropagation();
-        const type = x10btn.dataset.type;
-        const enzymeType = x10btn.dataset.enzymetype;
-        const moleculeType = x10btn.dataset.moleculetype;
-        for (let i = 0; i < 10; i++) {
-          let x = randomPosX();
-          let y = randomPosY();
-          let angle = Math.floor(Math.random() * 360);
-          if (type === "enzyme" && enzymeType) {
-            addItemFromToolbox("enzyme", enzymeType, x, y, angle);
-          } else if (type === "molecule" && moleculeType) {
-            addItemFromToolbox("molecule", moleculeType, x, y);
-          }
-        }
+        handleToolboxAdd(x10btn, 10);
       });
       x10btn.addEventListener("touchstart", (e) => {
         e.stopPropagation();
         e.preventDefault();
-        const type = x10btn.dataset.type;
-        const enzymeType = x10btn.dataset.enzymetype;
-        const moleculeType = x10btn.dataset.moleculetype;
-        for (let i = 0; i < 10; i++) {
-          let x = randomPosX();
-          let y = randomPosY();
-          let angle = Math.floor(Math.random() * 360);
-          if (type === "enzyme" && enzymeType) {
-            addItemFromToolbox("enzyme", enzymeType, x, y, angle);
-          } else if (type === "molecule" && moleculeType) {
-            addItemFromToolbox("molecule", moleculeType, x, y);
-          }
-        }
+        handleToolboxAdd(x10btn, 10);
       });
     });
 
@@ -520,4 +496,59 @@ export function updateActivationSites() {
     }
   }
 }
+
+export function initEnzymeSelect(selectId, enzymeTypes) {
+  const select = document.getElementById(selectId);
+  if (select) {
+    select.innerHTML = enzymeTypes.map(type => `<option value="${type}">${type}</option>`).join("");
+  }
+}
+
+export function bindExperimentButtons(runExperiment, runAutoExperiment, autoExpAbort) {
+  const expStartBtn = document.getElementById("exp-start-btn");
+  if (expStartBtn) expStartBtn.onclick = runExperiment;
+
+  const autoExpBtn = document.getElementById("auto-exp-btn");
+  const autoExpStopBtn = document.getElementById("auto-exp-stop-btn");
+
+  if (autoExpBtn) {
+    autoExpBtn.onclick = () => {
+      autoExpBtn.disabled = true;
+      autoExpStopBtn.disabled = false;
+      autoExpStopBtn.style.opacity = "1";
+      autoExpAbort.aborted = false;
+      import("./experiment.js").then(mod => mod.runAutoExperiment(autoExpAbort)).finally(() => {
+        autoExpBtn.disabled = false;
+        autoExpStopBtn.disabled = true;
+        autoExpStopBtn.style.opacity = "0.5";
+      });
+    };
+  }
+
+  if (autoExpStopBtn) {
+    autoExpStopBtn.disabled = true;
+    autoExpStopBtn.style.opacity = "0.5";
+    autoExpStopBtn.onclick = () => {
+      autoExpAbort.aborted = true;
+      autoExpStopBtn.disabled = true;
+      autoExpStopBtn.style.opacity = "0.5";
+    };
+  }
+}
+
+export function handleToolboxAdd(btn, num) {
+  const type = btn.dataset.type;
+  const enzymeType = btn.dataset.enzymetype;
+  const moleculeType = btn.dataset.moleculetype;
+  // 產生不重複位置
+  const positions = generateUniquePositions(num, 100);
+  positions.forEach(({ x, y, angle }) => {
+    if (type === "enzyme" && enzymeType) {
+      addItemFromToolbox("enzyme", enzymeType, x, y, angle);
+    } else if (type === "molecule" && moleculeType) {
+      addItemFromToolbox("molecule", moleculeType, x, y);
+    }
+  });
+}
+
 

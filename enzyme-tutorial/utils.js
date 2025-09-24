@@ -1,3 +1,11 @@
+export function randomPosX() {
+  return Math.floor(Math.random() * (canvas.clientWidth - 40));
+}
+export function randomPosY() {
+  return Math.floor(Math.random() * (canvas.clientHeight - 40));
+}
+
+
 export function getGridKey(x, y, gridSize = 80) {
   const gx = Math.floor(x / gridSize);
   const gy = Math.floor(y / gridSize);
@@ -60,4 +68,19 @@ export function countTypes(arr) {
     map[t] = (map[t] || 0) + 1;
   });
   return map;
+}
+
+export function generateUniquePositions(count, minDist = 40) {
+  const positions = [];
+  let tries = 0;
+  while (positions.length < count && tries < count * 30) {
+    let x = randomPosX();
+    let y = randomPosY();
+    let angle = Math.floor(Math.random() * 360);
+    if (!positions.some(pos => Math.abs(pos.x - x) < minDist && Math.abs(pos.y - y) < minDist)) {
+      positions.push({ x, y, angle });
+    }
+    tries++;
+  }
+  return positions;
 }
