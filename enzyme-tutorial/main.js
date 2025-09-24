@@ -24,6 +24,16 @@ import { getSVGMainColorFromUrl } from "./utils.js";
 
 import { runExperiment } from "./experiment.js";
 
+export const soundCache = {};
+export function preloadSounds(reactions) {
+  reactions.forEach(r => {
+    if (r.sound) {
+      const audio = new Audio(r.sound);
+      audio.load();
+      soundCache[r.sound] = audio;
+    }
+  });
+}
 
 export const substrateToEnzymeTypes = {};
 reactions.forEach(r => {
@@ -227,6 +237,9 @@ export function trySnapToAnyActivation(idx, type = "molecule") {
  */
 export function addItemFromToolbox(type, itemType, x, y, angle) {
   const temp = parseInt(tempSlider.value, 10);
+  // 用 state.brownianEnabled 取代 brownianSwitch.checked
+  const brownianEnabled = state.brownianEnabled;
+
   if (type === "enzyme") {
     const rule = reactions.find((r) => r.type === itemType);
     const denatureTemp = rule && rule.denatureTemp ? rule.denatureTemp : 50;
@@ -235,7 +248,7 @@ export function addItemFromToolbox(type, itemType, x, y, angle) {
     enzyme.checkDenature(temp);
     state.enzymes.push(enzyme);
     state.enzymeCount[itemType] = (state.enzymeCount[itemType] || 0) + 1;
-    if (brownianSwitch.checked && enzyme.startBrownian) {
+    if (brownianEnabled && enzyme.startBrownian) {
       enzyme.startBrownian();
     }
   } else if (type === "molecule") {
@@ -244,13 +257,12 @@ export function addItemFromToolbox(type, itemType, x, y, angle) {
     molecule.randomizeVelocity(temp);
     state.molecules.push(molecule);
     state.moleculeCount[itemType] = (state.moleculeCount[itemType] || 0) + 1;
-    if (brownianSwitch.checked && molecule.startBrownian) {
+    if (brownianEnabled && molecule.startBrownian) {
       molecule.startBrownian();
     }
   }
   bindDraggable();
 }
-
 export function handleTempSliderInput() {
   const t = parseInt(tempSlider.value, 10);
   tempValue.textContent = t;
