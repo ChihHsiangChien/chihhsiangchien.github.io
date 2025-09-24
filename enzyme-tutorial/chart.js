@@ -87,6 +87,8 @@ export function initConcentrationChart() {
   });
 }
 
+
+
 export function updateConcentrationChart() {
   if (state.chartPaused) return;
   if (!state.charts.concentration) return;

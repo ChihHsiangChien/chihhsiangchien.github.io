@@ -10,7 +10,7 @@ export async function runExperiment() {
   const temp = parseInt(document.getElementById("exp-temp-input").value, 10);
   const time = parseInt(document.getElementById("exp-time-input").value, 10);
   const expStartBtn = document.getElementById("exp-start-btn");
-
+  const brownianToggleBtn = document.getElementById("brownian-toggle-btn");
   state.expTempSelectedEnzyme = enzymeType;
 
   const enzymeSource = document.querySelector('input[name="exp-enzyme-source"]:checked').value;
@@ -37,7 +37,12 @@ export async function runExperiment() {
   handleTempSliderInput();
 
   // 啟動布朗運動
-  document.getElementById("brownian-switch").checked = true;
+  state.brownianEnabled = true;
+  if (brownianToggleBtn) {
+    brownianToggleBtn.textContent = "啟用布朗運動";
+    brownianToggleBtn.style.background = "#009688";
+    brownianToggleBtn.style.color = "#fff";
+  }
   updateAllBrownian();
 
   // 記錄初始產物數

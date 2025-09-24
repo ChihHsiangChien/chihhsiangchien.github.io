@@ -87,6 +87,7 @@ export function bindUIEvents() {
 
     // 點 canvas 新增
     canvas.addEventListener("touchstart", (e) => {
+      e.preventDefault();
       if (state.pendingToolboxItem) {
         const touch = e.touches[0];
         const rect = canvas.getBoundingClientRect();
@@ -102,7 +103,7 @@ export function bindUIEvents() {
           addItemFromToolbox("molecule", moleculeType, x, y);
         }
         state.pendingToolboxItem.style.boxShadow = "";
-        state.pendingToolboxItem = null;
+        // state.pendingToolboxItem = null;
       }
     });
     canvas.addEventListener("click", (e) => {
@@ -120,7 +121,7 @@ export function bindUIEvents() {
           addItemFromToolbox("molecule", moleculeType, x, y);
         }
         state.pendingToolboxItem.style.boxShadow = "";
-        state.pendingToolboxItem = null;
+        // state.pendingToolboxItem = null;
       }
     });
 

@@ -45,6 +45,7 @@ export function triggerReaction(idxs, enzymeIdx, rule) {
   }, 300);
 
   // 播放反應聲音
+  /*
   if (rule && rule.sound) {
     // 複製一個新的 Audio 物件，確保可同時播放
     const src = rule.sound;
@@ -58,6 +59,7 @@ export function triggerReaction(idxs, enzymeIdx, rule) {
       audio.play();
     }
   }
+  */
 
 
   // 產生產物
