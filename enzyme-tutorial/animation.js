@@ -45,7 +45,9 @@ export function globalAnimationLoop() {
     }
 
     // 只有布朗運動開啟時才執行布朗運動
-    if (m.brownianActive && brownianSwitch.checked) {
+
+    // 只有布朗運動開啟時才執行布朗運動
+    if (m.brownianActive && state.brownianEnabled) {
       if (Math.random() < 0.1) m.randomizeVelocity(temp);
       const speed = temperatureToSpeed(temp);
       const angle = Math.atan2(m.vy, m.vx) + (Math.random() - 0.5) * 0.3;
@@ -76,9 +78,9 @@ export function globalAnimationLoop() {
       m.updatePosition(nx, ny);
     }
   });
+
   state.enzymes.forEach(e => {
-    if (e.brownianActive && brownianSwitch.checked) {
-      //const temp = parseInt(tempSlider.value, 10);
+    if (e.brownianActive && state.brownianEnabled) {
       if (Math.random() < 0.1) {
         e.randomizeVelocity(temp, ENZYME_BROWNIAN_SPEED_RATIO);
       }

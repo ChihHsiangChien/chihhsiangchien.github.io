@@ -4,6 +4,7 @@ export const state = {
   enzymeCount: {},
   moleculeCount: {},
   activationSites: [],
+  brownianEnabled: true,
   dragging: null,
   dragType: null,
   dragIndex: -1,

@@ -2,6 +2,7 @@ import { state } from "./state.js";
 import { Molecule } from "./molecule.js";
 import { getCenter} from "./utils.js";
 import { bindDraggable } from "./ui.js";
+import { soundCache } from "./main.js";
 
 // triggerReaction 支援酵素作為受質
 export function triggerReaction(idxs, enzymeIdx, rule) {
@@ -45,8 +46,17 @@ export function triggerReaction(idxs, enzymeIdx, rule) {
 
   // 播放反應聲音
   if (rule && rule.sound) {
-    const audio = new Audio(rule.sound);
-    audio.play();
+    // 複製一個新的 Audio 物件，確保可同時播放
+    const src = rule.sound;
+    if (soundCache[src]) {
+      const audio = soundCache[src].cloneNode();
+      audio.currentTime = 0;
+      audio.play();
+    } else {
+      // 備援：直接 new
+      const audio = new Audio(src);
+      audio.play();
+    }
   }
 
 

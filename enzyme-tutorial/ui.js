@@ -16,7 +16,7 @@ import { updateCurrentChart, updateExpTempChart } from "./chart.js"; // ← 新�
 const canvas = document.getElementById("canvas");
 const tempSlider = document.getElementById("temp-slider");
 const tempValue = document.getElementById("temp-value");
-const brownianSwitch = document.getElementById("brownian-switch");
+const brownianToggleBtn = document.getElementById("brownian-toggle-btn");
 const toolbox = document.getElementById("toolbox");
 
 export function bindUIEvents() {
@@ -61,8 +61,14 @@ export function bindUIEvents() {
   }
 
   // Brownian switch
-  if (brownianSwitch) {
-    brownianSwitch.addEventListener("change", updateAllBrownian);
+  if (brownianToggleBtn) {
+    brownianToggleBtn.onclick = function() {
+      state.brownianEnabled = !state.brownianEnabled;
+      brownianToggleBtn.textContent = state.brownianEnabled ? "啟用布朗運動" : "停用布朗運動";
+      brownianToggleBtn.style.background = state.brownianEnabled ? "#009688" : "#aaa";
+      brownianToggleBtn.style.color = state.brownianEnabled ? "#fff" : "#333";
+      updateAllBrownian();
+    };
   }
 
   // Toolbox 點擊/觸控
@@ -323,9 +329,9 @@ export function bindUIEvents() {
             let y = touch.clientY - rect.top - 20;
             let angle = Math.floor(Math.random() * 360);
             if (state.draggingType === "enzyme" && state.draggingEnzymeType) {
-              addItemFromToolbox(state.draggingEnzymeType, x, y, angle);
+              addItemFromToolbox("enzyme", state.draggingEnzymeType, x, y, angle);
             } else if (state.draggingType === "molecule" && state.draggingMoleculeType) {
-              addItemFromToolbox(state.draggingMoleculeType, x, y);
+              addItemFromToolbox("molecule", state.draggingMoleculeType, x, y);
             }
           }
           state.draggingGhost.remove();
