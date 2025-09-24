@@ -406,12 +406,70 @@ function viewAnswerOrTeach() {
 
 // Place answers then hide the text on placed cards; clicking each card reveals its text.
 
+function enterTeachMode2() {
+  // place answers into cells
+  onViewAnswer();
+
+  /*
+  // 隱藏候選欄與每列 pool
+  document.querySelectorAll('.pool-head, .row-pool-wrap').forEach(el => {
+    el.style.display = 'none';
+  });  
+  */
+  // For each card now in a cell, hide its text and set up reveal-on-click
+  document.querySelectorAll(".cell .card").forEach(setupTeachCard);
+}
+
 function enterTeachMode() {
   // place answers into cells
   onViewAnswer();
 
+  // 隱藏候選欄與每列 pool
+  document.querySelectorAll('.pool-head, .row-pool-wrap').forEach(el => {
+    el.style.display = 'none';
+  });
+
+  // 調整 grid 結構，移除 pool 欄位
+  const grid = document.querySelector('.table-grid');
+  if (grid) {
+    const heads = spec.head || [];
+    grid.style.gridTemplateColumns = `160px repeat(${heads.length}, 1fr)`;
+  }
+
   // For each card now in a cell, hide its text and set up reveal-on-click
   document.querySelectorAll(".cell .card").forEach(setupTeachCard);
+}
+
+// 退出教學模式時恢復 pool 欄與 grid 結構
+function build() {
+  el("exercise-title").textContent = spec.title || "練習";
+  const table = el("table");
+  table.innerHTML = "";
+
+  const heads = spec.head || [];
+  const rows = spec.rows || [];
+
+  const grid = createTableGrid(heads, rows);
+  table.appendChild(grid);
+
+  // 恢復 pool 欄顯示
+  setTimeout(() => {
+    document.querySelectorAll('.pool-head, .row-pool-wrap').forEach(el => {
+      el.style.display = '';
+    });
+    // 恢復 grid 結構
+    if (grid) {
+      grid.style.gridTemplateColumns = `160px repeat(${heads.length}, 1fr) 220px`;
+    }
+  }, 0);
+
+  document.addEventListener("dragover", function (e) {
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+  });
+
+  generateCards();
+  attachControls();
 }
 
 function setupTeachCard(cardEl) {
@@ -473,7 +531,7 @@ function setupTeachCardFlipHandler(cardEl) {
 
   // 滑鼠點擊直接翻牌
   cardEl.onclick = function(e) {
-    console.log('[flip] onclick', cardEl.dataset.cardId);
+    //console.log('[flip] onclick', cardEl.dataset.cardId);
     const now = Date.now();
     if (now - lastFlipTime < FLIP_DEBOUNCE_MS) return;
     lastFlipTime = now;
@@ -481,6 +539,7 @@ function setupTeachCardFlipHandler(cardEl) {
   };
 
   // 觸控：短按翻牌，長按拖曳
+  /*
   cardEl.ontouchstart = function(e) {
     let moved = false;
     let dragging = false;
@@ -494,7 +553,7 @@ function setupTeachCardFlipHandler(cardEl) {
       // 但要確保只在長按時才設 dragging
       console.log('[flip] long press, will drag', cardEl.dataset.cardId);
       // 你可以在這裡啟動拖曳流程
-    }, 220);
+    }, 220);    
 
     function cancel(ev) {
       if (timer) {
@@ -528,6 +587,15 @@ function setupTeachCardFlipHandler(cardEl) {
     cardEl.addEventListener('touchmove', onMove, { passive: false });
     cardEl.addEventListener('touchcancel', cancel, { passive: false });
   };
+  */
+  // 觸控：只要短按就翻牌，不再支援長按拖曳
+  cardEl.ontouchstart = function(e) {
+    e.preventDefault();
+    const now = Date.now();
+    if (now - lastFlipTime < FLIP_DEBOUNCE_MS) return;
+    lastFlipTime = now;
+    flipTeachCard(cardEl);
+  }; 
 }
 
 function flipTeachCard(cardEl) {
@@ -1275,4 +1343,13 @@ window.addEventListener("DOMContentLoaded", async () => {
     // defer slightly to allow build to finish
     setTimeout(() => enterTeachMode(), 40);
   }
+
+  const toggleBtn = document.getElementById("toggle-left-panel");
+  const leftPanel = document.getElementById("left-panel");
+  if (toggleBtn && leftPanel) {
+    toggleBtn.onclick = () => {
+      leftPanel.classList.toggle("hidden");
+      toggleBtn.textContent = leftPanel.classList.contains("hidden") ? "顯示側欄" : "隱藏側欄";
+    };
+  }  
 });
