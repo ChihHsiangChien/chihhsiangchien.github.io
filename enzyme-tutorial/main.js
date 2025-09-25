@@ -3,6 +3,7 @@ import { reactions } from "./enzyme-reactions.js";
 import { Enzyme } from "./enzyme.js";
 import { Molecule } from "./molecule.js";
 import {
+  getNeighborGridKeys,
   getGridKey,
   getCenter,
   distance,
@@ -109,9 +110,135 @@ export function updateAllBrownian() {
 }
 
 
-// 嘗試讓受質吸附到任一活化位
-export function trySnapToAnyActivation(idx, type = "molecule") {
+// 取得受質所在格與鄰近格的酵素 index
+function getNearbyEnzymeIndices(x, y, gridSize) {
+  const keys = getNeighborGridKeys(x, y, gridSize); // 需實作：回傳(x, y)所在格與鄰近格的key陣列
+  let indices = [];
+  keys.forEach(key => {
+    if (state.grid[key]) {
+      indices = indices.concat(state.grid[key].enzymes);
+    }
+  });
+  return indices;
+}
 
+// ...existing code...
+
+// 嘗試讓受質吸附到任一活化位（優化：只檢查鄰近格酵素）
+export function trySnapToAnyActivation(idx, type = "molecule") {
+  let substrate, substrateArr;
+  if (type === "molecule") {
+    substrateArr = state.molecules;
+  } else if (type === "enzyme") {
+    substrateArr = state.enzymes;
+  } else {
+    return;
+  }
+  substrate = substrateArr[idx];
+
+  if (!substrate || !substrate.el) {
+    return;
+  }
+
+  // 取得附近酵素 index（優化重點）
+  const { x, y } = substrate;
+  const nearbyEnzymeIndices = getNearbyEnzymeIndices(x, y, state.gridSize);
+
+  for (let i = 0; i < nearbyEnzymeIndices.length; i++) {
+    const enzymeIdx = nearbyEnzymeIndices[i];
+    const enzyme = state.enzymes[enzymeIdx];
+    if (!enzyme || (type === "enzyme" && enzyme === substrate)) continue;
+
+    const rule = reactions.find(
+      (r) => r.type === enzyme.type && r.substrates.includes(substrate.type)
+    );
+
+    if (!rule) {
+      continue;
+    }
+
+    // 判斷是否靠近活化位
+    let isNear = false;
+    if (type === "molecule") {
+      isNear = isNearActivation(idx, enzymeIdx);
+    } else if (type === "enzyme") {
+      const sCenter = getCenter(substrate.el);
+      const aCenter = getCenter(enzyme.activation);
+      const dist = distance(sCenter, aCenter);
+      isNear = dist < ACTIVATION_SITE_RADIUS;
+    }
+    if (!isNear) continue;
+
+    // 多受質合成：需等所有受質到齊才觸發
+    if (!enzyme.boundMolecules) enzyme.boundMolecules = [];
+    if (enzyme.boundMolecules.includes(substrate)) {
+      continue;
+    }
+
+    const requiredTypes = rule.substrates;
+    const reqCount = countTypes(requiredTypes);
+    const curCount = countTypes(enzyme.boundMolecules.map((m) => m.type));
+    const subType = substrate.type;
+    if ((curCount[subType] || 0) >= (reqCount[subType] || 0)) {
+      continue;
+    }
+
+    enzyme.boundMolecules.push(substrate);
+    substrate.el.style.pointerEvents = "none";
+    substrate.stopBrownian && substrate.stopBrownian();
+    substrate.updatePosition(enzyme.x, enzyme.y);
+    const enzymeAngle = enzyme.angle || 0;
+    substrate.el.style.transition = "filter 0.2s, transform 0.4s";
+    substrate.el.style.filter = "drop-shadow(0 0 12px #ff9800)";
+    substrate.el.style.transform = `scale(1.15) rotate(${enzymeAngle}deg)`;
+    enzyme.el.style.transition = "filter 0.2s, transform 0.2s";
+    enzyme.el.style.filter = "drop-shadow(0 0 12px #ff9800)";
+    enzyme.el.style.transform = `scale(1.08) rotate(${enzymeAngle}deg)`;
+
+    // 判斷是否所有受質到齊
+    const currentTypes = enzyme.boundMolecules.map((m) => m.type);
+    const curCount2 = countTypes(currentTypes);
+    let allArrived = true;
+    for (const t in reqCount) {
+      if (curCount2[t] !== reqCount[t]) {
+        allArrived = false;
+        break;
+      }
+    }
+    for (const t in curCount2) {
+      if (!(t in reqCount)) {
+        allArrived = false;
+        break;
+      }
+    }
+
+    if (allArrived && !enzyme.reacting) {
+      enzyme.reacting = true;
+      setTimeout(() => {
+        substrate.el.style.filter = "";
+        substrate.el.style.transform = `rotate(${enzymeAngle}deg)`;
+        enzyme.el.style.filter = "";
+        enzyme.el.style.transform = `rotate(${enzymeAngle}deg)`;
+        // 取得受質索引（molecules 或 enzymes）
+        const idxs = enzyme.boundMolecules.map((m) => {
+          let idxM = state.molecules.indexOf(m);
+          if (idxM !== -1) return { idx: idxM, type: "molecule" };
+          let idxE = state.enzymes.indexOf(m);
+          if (idxE !== -1) return { idx: idxE, type: "enzyme" };
+          return null;
+        }).filter(i => i !== null);
+        enzyme.boundMolecules = [];
+        triggerReaction(idxs, enzymeIdx, rule);
+        enzyme.reacting = false;
+      }, 300);
+      return;
+    }
+    break;
+  }
+}
+
+// 嘗試讓受質吸附到任一活化位
+export function trySnapToAnyActivation2(idx, type = "molecule") {
   // type: "molecule"（預設）或 "enzyme"
   let substrate, substrateArr;
   if (type === "molecule") {
