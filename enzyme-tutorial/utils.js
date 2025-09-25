@@ -12,6 +12,23 @@ export function getGridKey(x, y, gridSize = 80) {
   return `${gx},${gy}`;
 }
 
+
+// 回傳 (x, y) 所在格與周圍8格的 key 陣列
+export function getNeighborGridKeys(x, y, gridSize = 60) {
+  const keys = [];  
+  const cx = Math.floor(x / gridSize);
+  const cy = Math.floor(y / gridSize);
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dy = -1; dy <= 1; dy++) {
+      const nx = cx + dx;
+      const ny = cy + dy;
+      keys.push(getGridKey(nx * gridSize, ny * gridSize));
+    }
+  }
+  return keys;
+}
+
+
 export function getNeighborKeys(x, y, gridSize = 80) {
   const gx = Math.floor(x / gridSize);
   const gy = Math.floor(y / gridSize);

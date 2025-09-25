@@ -42,7 +42,7 @@ export function triggerReaction(idxs, enzymeIdx, rule) {
       });
     state.chartPaused = false;
     bindDraggable();
-  }, 300);
+  }, 50);
 
   // 播放反應聲音
   /*

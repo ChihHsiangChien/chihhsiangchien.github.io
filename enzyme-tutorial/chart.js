@@ -17,7 +17,7 @@ export function initConcentrationChart() {
     labels: [],
     datasets: [
       ...enzymeTypes.map(type => ({
-        label: `酵素-${type}`,
+        label: `${type}`,
         data: [],
         borderColor: '#8009ff',
         backgroundColor: '#8009ff22',
@@ -26,7 +26,7 @@ export function initConcentrationChart() {
         pointRadius: 0
       })),
       ...moleculeTypes.map(type => ({
-        label: `分子-${type}`,
+        label: `${type}`,
         data: [],
         borderColor: '#009688',
         backgroundColor: '#00968822',
@@ -42,9 +42,12 @@ export function initConcentrationChart() {
     data: state.chartData.concentration,
     options: {
       responsive: true,
-      maintainAspectRatio: true,
+      maintainAspectRatio: false,
       aspectRatio: 0.8, // 或 2，依你需求    
       animation: false,
+      plugins: {
+        legend: { display: false } // <--- 加這行就不會顯示 legend
+      },      
       scales: {
         x: { title: { display: true, text: '時間 (秒)' } },
         y: { title: { display: true, text: '數量' }, beginAtZero: true }
@@ -87,8 +90,6 @@ export function initConcentrationChart() {
   });
 }
 
-
-
 export function updateConcentrationChart() {
   if (state.chartPaused) return;
   if (!state.charts.concentration) return;
@@ -112,13 +113,16 @@ export function updateConcentrationChart() {
   });
 
   // 最多顯示 100 筆
-  if (state.chartData.concentration.labels.length > 100) {
+  if (state.chartData.concentration.labels.length > 10) {
     state.chartData.concentration.labels.shift();
     state.chartData.concentration.datasets.forEach(ds => ds.data.shift());
   }
+
+  
   state.chartData.concentration.datasets.forEach(ds => {
     ds.hidden = ds.data.every(v => v === 0);
   });  
+  
   state.charts.concentration.update();
 }
 
@@ -213,7 +217,7 @@ export function updateExpTempChart() {
       data: { datasets },
       options: {
         responsive: true,
-        maintainAspectRatio: true,
+        maintainAspectRatio: false,
         aspectRatio: 1.2,
         animation: false,
         plugins: {
