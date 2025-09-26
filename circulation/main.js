@@ -74,6 +74,8 @@ function drawArrow(ctx, x1, y1, x2, y2) {
   ctx.strokeStyle = "#1976d2";
   ctx.lineWidth = 2;
   ctx.stroke();
+  /*
+  // 箭頭
   ctx.beginPath();
   ctx.moveTo(x2, y2);
   ctx.lineTo(
@@ -91,6 +93,7 @@ function drawArrow(ctx, x1, y1, x2, y2) {
   );
   ctx.fillStyle = "#1976d2";
   ctx.fill();
+  */
 }
 
 // 粒子類別（即時隨機選出口）
@@ -243,8 +246,8 @@ function init() {
       ellipses.forEach(node => {
         nodeMap[node.id] = node;
       });      
-      drawNodes(ctx, ellipses, nodeMap);
-      //drawEdges(ctx, edges, nodeMap);
+      // drawNodes(ctx, ellipses, nodeMap);
+      // drawEdges(ctx, edges, nodeMap);
 
       resetParticles();
       animate();
