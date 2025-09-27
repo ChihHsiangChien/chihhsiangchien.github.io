@@ -3,7 +3,7 @@ let ctx,
   nodeMap = {},
   ellipses = [],
   particles = [];
-let PARTICLE_COUNT = 100;
+let PARTICLE_COUNT = 500;
 
 // 取得所有 ellipse 節點
 function getEllipses(cells) {
