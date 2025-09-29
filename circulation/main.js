@@ -31,10 +31,16 @@ const OXYGEN_RADIUS = CELL_RADIUS * 1.5;         // 氧分子小圓半徑（單�
 const OXYGEN_ANIM_DISTANCE = 10;   // 氧分子動畫進出距離（單位：像素）
 const COLOR_OXYGEN = "#4fc3f7"; // 氧分子顏色
 
+let FADE_CELLS = false;
+let highlightCells = []; // 儲存被 highlight 的 cell 索引
+const HIGHLIGHT_RADIUS = 30; // 點擊半徑（像素）
+
 // === UI 控制 ===
 const cellCountInput = document.getElementById('cellCountInput');
 const heartPeriodInput = document.getElementById('heartPeriodInput');
 const heartPeriodLabel = document.getElementById('heartPeriodLabel');
+const fadeToggleBtn = document.getElementById('fadeToggleBtn');
+const canvas = document.getElementById("graph");
 
 
 // 取得所有 ellipse 節點
@@ -161,7 +167,8 @@ function drawArrowHead(ctx, x2, y2, angle, headlen = 12, color = "#1976d2") {
 
 // 畫血球
 function drawCells(ctx, cells, nodeMap) {
-  for (const c of cells) {
+  for (let i = 0; i < cells.length; i++) {
+    const c = cells[i];
     if (c.isDone()) continue;
     c.update();
     const pos = c.getPos(nodeMap);
@@ -174,13 +181,18 @@ function drawCells(ctx, cells, nodeMap) {
     if (c.oxygenLevel === "oxygenated") fillColor = COLOR_OXYGENATED;
     else if (c.oxygenLevel === "deoxygenated") fillColor = COLOR_DEOXYGENATED;
 
+    // 淡化處理
+    if (FADE_CELLS && !highlightCells.includes(i)) {
+      ctx.globalAlpha = 0.05;
+    } else if (highlightCells.includes(i)) {
+      ctx.globalAlpha = 1.0;
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = "#1976d2";
+    }
+
     ctx.fillStyle = fillColor;
     ctx.fill();
-    /*
-    ctx.strokeStyle = "#b71c1c";
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    */
+    if (highlightCells.includes(i)) ctx.stroke();
 
     // --- 氧分子動畫 ---
     if (c.oxygenAnim) {
@@ -190,11 +202,9 @@ function drawCells(ctx, cells, nodeMap) {
       let dx = 0, dy = 0;
       const angle = c.oxygenAnim.angle || 0;
       if (c.oxygenAnim.type === "in") {
-        // 從外圍進入
         dx = Math.cos(angle) * (CELL_RADIUS + OXYGEN_ANIM_DISTANCE) * (1 - c.oxygenAnim.progress);
         dy = Math.sin(angle) * (CELL_RADIUS + OXYGEN_ANIM_DISTANCE) * (1 - c.oxygenAnim.progress);
       } else {
-        // 從中心往外
         dx = Math.cos(angle) * (CELL_RADIUS + OXYGEN_ANIM_DISTANCE) * c.oxygenAnim.progress;
         dy = Math.sin(angle) * (CELL_RADIUS + OXYGEN_ANIM_DISTANCE) * c.oxygenAnim.progress;
       }
@@ -203,10 +213,11 @@ function drawCells(ctx, cells, nodeMap) {
       ctx.fillStyle = COLOR_OXYGEN;
       ctx.fill();
       ctx.restore();
-    }    
+    }
     ctx.restore();
   }
 }
+
 
 function buildOutEdgesMap(edges) {
   outEdgesMap = {};
@@ -438,7 +449,7 @@ function init() {
       animate();
 
       // 點擊重設粒子
-      canvas.addEventListener("click", resetCells);
+      // canvas.addEventListener("click", resetCells);
     })
     .catch((err) => {
       document.getElementById("output").textContent =
@@ -459,6 +470,12 @@ window.setHeartPeriod = function(val) {
 // 讓 resetCells 可被外部呼叫
 window.resetCells = resetCells;
 
+fadeToggleBtn.addEventListener('click', function() {
+  FADE_CELLS = !FADE_CELLS;
+  fadeToggleBtn.textContent = '血球淡化：' + (FADE_CELLS ? '開' : '關');
+});
+fadeToggleBtn.textContent = '血球淡化：' + (FADE_CELLS ? '開' : '關');
+
 cellCountInput.addEventListener('change', function() {
   window.setCellCount(Number(this.value));
   window.resetCells();
@@ -471,6 +488,29 @@ heartPeriodInput.addEventListener('input', function() {
 
 // 初始化顯示
 heartPeriodLabel.textContent = heartPeriodInput.value;
+
+canvas.addEventListener("click", function(e) {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  let minDist = Infinity;
+  let minIdx = -1;
+  for (let i = 0; i < cells.length; i++) {
+    const pos = cells[i].getPos(nodeMap);
+    const dx = pos.x - mx;
+    const dy = pos.y - my;
+    const dist = dx * dx + dy * dy;
+    if (dist < HIGHLIGHT_RADIUS * HIGHLIGHT_RADIUS && dist < minDist) {
+      minDist = dist;
+      minIdx = i;
+    }
+  }
+  // 多選：如果有找到且還沒在 highlightCells 裡才加入
+  if (minIdx >= 0 && !highlightCells.includes(minIdx)) {
+    highlightCells.push(minIdx);
+  }
+});
+
 
 // 啟動
 init();
