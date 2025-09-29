@@ -415,13 +415,13 @@ function init() {
       edges = getEdges(mxCells);
 
       findFirstVentricleIds();
-
+      /*
       document.getElementById("output").textContent =
         "Ellipses:\n" +
         JSON.stringify(ellipses, null, 2) +
         "\n\nEdges:\n" +
         JSON.stringify(edges, null, 2);
-
+      */
       buildOutEdgesMap(edges);
       const canvas = document.getElementById("graph");
       ctx = canvas.getContext("2d");
