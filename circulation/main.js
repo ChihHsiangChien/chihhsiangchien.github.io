@@ -3,20 +3,39 @@ let ctx,
   nodeMap = {},
   ellipses = [],
   cells = [];
-let CELL_COUNT = 10;
+
+let outEdgesMap = {};  
+let CELL_COUNT = 2500;
 
 
 // === 參數集中管理 ===
 const CELL_RADIUS = 3;         // 血球半徑（像素）
 const CELL_SPEED_MIN = 0.02;   // 血球最小速度
 const CELL_SPEED_MAX = 0.14;   // 血球最大速度
+const VESSEL_WIDTH_SCALE = 5; // 血管寬度倍率
 
-const HEART_PERIOD = 300;      // 心臟跳動週期（幀數，約3秒）
+let HEART_PERIOD = 60;      // 心臟跳動週期（幀數）越大越慢
 let heartFrame = 0;            // 心臟動畫計數
+const FPS = 60; // 假設動畫每秒60幀
 
+let FIRST_LEFT_VENTRICLE_ID = null;
+let FIRST_RIGHT_VENTRICLE_ID = null;
 
-const FIRST_LEFT_VENTRICLE_ID = "393";
-const FIRST_RIGHT_VENTRICLE_ID = "177";
+const OXYGEN_PICKUP_PROB = 0.2;   // 肺動脈氧合機率
+const OXYGEN_RELEASE_PROB = 0.2;  // 小動脈釋放氧機率
+const COLOR_OXYGENATED = "#ff3b3b"; // 鮮紅色
+const COLOR_DEOXYGENATED = "#b71c1c"; // 暗紅色
+const COLOR_NORMAL = "#ff3b3b"; // 原本顏色
+
+const OXYGEN_RADIUS = CELL_RADIUS * 1.5;         // 氧分子小圓半徑（單位：像素，會乘CELL_RADIUS）
+const OXYGEN_ANIM_DISTANCE = 10;   // 氧分子動畫進出距離（單位：像素）
+const COLOR_OXYGEN = "#4fc3f7"; // 氧分子顏色
+
+// === UI 控制 ===
+const cellCountInput = document.getElementById('cellCountInput');
+const heartPeriodInput = document.getElementById('heartPeriodInput');
+const heartPeriodLabel = document.getElementById('heartPeriodLabel');
+
 
 // 取得所有 ellipse 節點
 function getEllipses(cells) {
@@ -52,6 +71,19 @@ function getEdges(cells) {
         target: cell.getAttribute("target"),
       };
     });
+}
+
+
+function findFirstVentricleIds() {
+  for (const node of ellipses) {
+    if (!FIRST_LEFT_VENTRICLE_ID && node.value.includes("左心室")) {
+      FIRST_LEFT_VENTRICLE_ID = node.id;
+    }
+    if (!FIRST_RIGHT_VENTRICLE_ID && node.value.includes("右心室")) {
+      FIRST_RIGHT_VENTRICLE_ID = node.id;
+    }
+    if (FIRST_LEFT_VENTRICLE_ID && FIRST_RIGHT_VENTRICLE_ID) break;
+  }
 }
 
 // 畫所有節點
@@ -95,7 +127,7 @@ function drawBloodVessel(ctx, x1, y1, x2, y2, strokeWidth) {
   ctx.moveTo(x1, y1);
   ctx.lineTo(x2, y2);
   ctx.strokeStyle = "#ffcaca6f";
-  ctx.lineWidth = strokeWidth*5 || 2;
+  ctx.lineWidth = strokeWidth * VESSEL_WIDTH_SCALE || 2;
   ctx.stroke();
   ctx.restore();  
   // drawArrowHead(ctx, x2, y2, angle, headlen, "#1976d2"); // 可選擇是否畫箭頭
@@ -136,13 +168,52 @@ function drawCells(ctx, cells, nodeMap) {
     ctx.save();
     ctx.beginPath();
     ctx.arc(pos.x, pos.y, CELL_RADIUS, 0, 2 * Math.PI);
-    ctx.fillStyle = "#ff5722";
+
+    // 根據氧氣狀態決定顏色
+    let fillColor = COLOR_NORMAL;
+    if (c.oxygenLevel === "oxygenated") fillColor = COLOR_OXYGENATED;
+    else if (c.oxygenLevel === "deoxygenated") fillColor = COLOR_DEOXYGENATED;
+
+    ctx.fillStyle = fillColor;
     ctx.fill();
+    /*
     ctx.strokeStyle = "#b71c1c";
     ctx.lineWidth = 1;
     ctx.stroke();
+    */
+
+    // --- 氧分子動畫 ---
+    if (c.oxygenAnim) {
+      ctx.save();
+      ctx.globalAlpha = 1 - c.oxygenAnim.progress;
+      let r = OXYGEN_RADIUS;
+      let dx = 0, dy = 0;
+      const angle = c.oxygenAnim.angle || 0;
+      if (c.oxygenAnim.type === "in") {
+        // 從外圍進入
+        dx = Math.cos(angle) * (CELL_RADIUS + OXYGEN_ANIM_DISTANCE) * (1 - c.oxygenAnim.progress);
+        dy = Math.sin(angle) * (CELL_RADIUS + OXYGEN_ANIM_DISTANCE) * (1 - c.oxygenAnim.progress);
+      } else {
+        // 從中心往外
+        dx = Math.cos(angle) * (CELL_RADIUS + OXYGEN_ANIM_DISTANCE) * c.oxygenAnim.progress;
+        dy = Math.sin(angle) * (CELL_RADIUS + OXYGEN_ANIM_DISTANCE) * c.oxygenAnim.progress;
+      }
+      ctx.beginPath();
+      ctx.arc(pos.x + dx, pos.y + dy, r, 0, 2 * Math.PI);
+      ctx.fillStyle = COLOR_OXYGEN;
+      ctx.fill();
+      ctx.restore();
+    }    
     ctx.restore();
   }
+}
+
+function buildOutEdgesMap(edges) {
+  outEdgesMap = {};
+  edges.forEach(e => {
+    if (!outEdgesMap[e.source]) outEdgesMap[e.source] = [];
+    outEdgesMap[e.source].push(e);
+  });
 }
 
 // cell類別（即時隨機選出口）
@@ -158,6 +229,9 @@ class Cell {
     this.pathWidth = 10; // 路徑寬度
     this.frameCount = 0;      // <--- 加這行
     this.offsetInterval = 8;  // 每幾幀才更新 offset
+    this.oxygenAction = "none"; // "none" | "can_pickup" | "can_release"
+    this.oxygenLevel = "oxygenated"; // "oxygenated" | "deoxygenated"
+    this.oxygenAnim = null; // {type: "in"|"out", progress: 0~1}
 
   }  
   getCurrentValue() {
@@ -167,20 +241,9 @@ class Cell {
 
   chooseNext() {
     // 找所有從 currentNode 出發的邊
-    let outs = edges.filter((e) => e.source === this.currentNode);
+    //let outs = edges.filter((e) => e.source === this.currentNode);
+    let outs = outEdgesMap[this.currentNode] || [];
 
-    // 取得目前與目標節點的 value
-    const currValue = nodeMap[this.currentNode]?.value || "";
-
-    // 你可以在這裡根據 value 過濾不允許的逆行（如心室→心房）
-    outs = outs.filter(e => {
-      const targetValue = nodeMap[e.target]?.value || "";
-      // 範例：阻擋所有「心室」到「心房」的逆行
-      if (currValue.includes("心室") && targetValue.includes("心房")) {
-        return false;
-      }
-      return true;
-    });
 
     if (outs.length === 0) {
       this.nextNode = null;
@@ -189,32 +252,7 @@ class Cell {
     const nextEdge = outs[Math.floor(Math.random() * outs.length)];
     this.nextNode = nextEdge.target;
 
-    // --- 多個心臟節點的加速機制 ---
-    // 只要 value 包含「心房」或「心室」就視為心臟部位
-    const isEnteringHeart = nodeMap[nextEdge.target]?.value?.match(/心室/);
-    const isLeavingHeart = nodeMap[nextEdge.source]?.value?.match(/心室/);
-
-    const DIASTOLE_RATIO = 2/3; // 舒張期比例
-    const SYSTOLE_RATIO = 1/3;  // 收縮期比例
-
-    const phase = (heartFrame % HEART_PERIOD) / HEART_PERIOD;
-    let heartBoost = 1;
-    // 進入心臟（吸入加速，舒張期）
-    if (isEnteringHeart) {
-      if (phase < DIASTOLE_RATIO) {
-        // phase / DIASTOLE_RATIO 會從 0~1
-        heartBoost = 1 + 0.7 * Math.sin(Math.PI * (phase / DIASTOLE_RATIO));
-      }
-    }
-    // 離開心臟（打出加速，收縮期）
-    if (isLeavingHeart) {
-      if (phase >= DIASTOLE_RATIO) {
-        // (phase - DIASTOLE_RATIO) / SYSTOLE_RATIO 會從 0~1
-        heartBoost = 1 + 0.7 * Math.sin(Math.PI * ((phase - DIASTOLE_RATIO) / SYSTOLE_RATIO));
-      }
-    }
-
-    // 根據 strokeWidth 設定速度
+    // 設定基礎速度
     const minW = 1, maxW = 5;
     const minS = CELL_SPEED_MIN, maxS = CELL_SPEED_MAX;
     const w = Math.max(minW, Math.min(nextEdge.strokeWidth, maxW));
@@ -222,14 +260,48 @@ class Cell {
 
     // 加入亂數微調（±10%）
     const rand = 0.9 + Math.random() * 0.2;
-    this.speed = baseSpeed * heartBoost * rand;
-    this.baseSpeed = this.speed; // 新增這行，記住基礎速度
+    this.baseSpeed = baseSpeed * rand;
+    this.speed = this.baseSpeed;
 
+    // === 根據血管寬度設定 pathWidth ===
+    // 你可以調整這個倍率，讓抖動範圍更自然
+    this.pathWidth = nextEdge.strokeWidth * VESSEL_WIDTH_SCALE; 
   }
+
+  updateOxygenState() {
+    const currNodeValue = nodeMap[this.currentNode]?.value || "";
+
+    // 狀態切換
+    if (currNodeValue.includes("肺動脈")) {
+      this.oxygenAction = "can_pickup";
+    } else if (currNodeValue.includes("肺靜脈")) {
+      this.oxygenAction = "none";
+    } else if (currNodeValue.includes("小動脈")) {
+      this.oxygenAction = "can_release";
+    } else if (currNodeValue.includes("小靜脈")) {
+      this.oxygenAction = "none";
+    }
+
+    // 氧化狀態改變
+    if (this.oxygenAction === "can_pickup" && this.oxygenLevel === "deoxygenated") {
+      if (Math.random() < OXYGEN_PICKUP_PROB) {
+        this.oxygenLevel = "oxygenated";
+        this.oxygenAnim = { type: "in", progress: 0, angle: Math.random() * 2 * Math.PI }; // 隨機方向
+
+      }
+    }
+    if (this.oxygenAction === "can_release" && this.oxygenLevel === "oxygenated") {
+      if (Math.random() < OXYGEN_RELEASE_PROB) {
+        this.oxygenLevel = "deoxygenated";
+        this.oxygenAnim = { type: "out", progress: 0, angle: Math.random() * 2 * Math.PI }; // 隨機方向
+
+      }
+    }
+  }  
 
   update() {
     const phase = (heartFrame % HEART_PERIOD) / HEART_PERIOD;
-    const heartBoost = 1 + 0.7 * Math.sin(phase * 2 * Math.PI);
+    const heartBoost = 1 + 0.9 * Math.sin(phase * 2 * Math.PI);
     this.speed = this.baseSpeed * heartBoost;
 
     // --- SYSTOLE時，心室內血球有機率被彈回對應的第一個心室節點 ---
@@ -251,6 +323,13 @@ class Cell {
         }
       }
     }
+    // 推進氧分子動畫
+    if (this.oxygenAnim) {
+      this.oxygenAnim.progress += 0.08;
+      if (this.oxygenAnim.progress >= 1) {
+        this.oxygenAnim = null;
+      }
+    }
 
     if (!this.nextNode) return;
     this.t += this.speed;
@@ -258,38 +337,11 @@ class Cell {
       this.currentNode = this.nextNode;
       this.t = 0;
       this.chooseNext();
+      this.updateOxygenState(); // 進入新節點時才處理狀態
+
     }
   }
 
-  update3() {
-    // === 新增：所有血球都受心臟週期影響 ===
-    const phase = (heartFrame % HEART_PERIOD) / HEART_PERIOD;
-    // 你可以調整 0.7 這個數字決定加速幅度
-    const heartBoost = 1 + 0.7 * Math.sin(phase * 2 * Math.PI);
-
-    // 讓速度跟著心跳變化
-    // const originalSpeed = this.speed;
-    // this.speed = originalSpeed * heartBoost;
-    this.speed = this.baseSpeed * heartBoost; // 每幀用 baseSpeed 當基準
-
-
-    if (!this.nextNode) return;
-    this.t += this.speed;
-    if (this.t >= 1) {
-      this.currentNode = this.nextNode;
-      this.t = 0;
-      this.chooseNext();
-    }
-  }  
-  update2() {
-    if (!this.nextNode) return;
-    this.t += this.speed;
-    if (this.t >= 1) {
-      this.currentNode = this.nextNode;
-      this.t = 0;
-      this.chooseNext();
-    }
-  }
   isDone() {
     return !this.nextNode;
   }
@@ -362,12 +414,15 @@ function init() {
       ellipses = getEllipses(mxCells);
       edges = getEdges(mxCells);
 
+      findFirstVentricleIds();
+
       document.getElementById("output").textContent =
         "Ellipses:\n" +
         JSON.stringify(ellipses, null, 2) +
         "\n\nEdges:\n" +
         JSON.stringify(edges, null, 2);
 
+      buildOutEdgesMap(edges);
       const canvas = document.getElementById("graph");
       ctx = canvas.getContext("2d");
       ctx.clearRect(0, 0, 800, 800);
@@ -390,6 +445,32 @@ function init() {
         "載入 data.xml 失敗：" + err;
     });
 }
+
+// 讓 main.js 可存取這兩個全域變數
+window.setCellCount = function(val) { 
+  CELL_COUNT = val; 
+};
+window.setHeartPeriod = function(val) { 
+  // HEART_PERIOD 是 const，需改為 let
+  // bpm: 每分鐘幾次
+  HEART_PERIOD = Math.round(FPS * 60 / val); // 幀數
+};
+
+// 讓 resetCells 可被外部呼叫
+window.resetCells = resetCells;
+
+cellCountInput.addEventListener('change', function() {
+  window.setCellCount(Number(this.value));
+  window.resetCells();
+});
+
+heartPeriodInput.addEventListener('input', function() {
+  heartPeriodLabel.textContent = this.value;
+  window.setHeartPeriod(Number(this.value));
+});
+
+// 初始化顯示
+heartPeriodLabel.textContent = heartPeriodInput.value;
 
 // 啟動
 init();
