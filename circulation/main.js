@@ -28,7 +28,7 @@ const COLOR_DEOXYGENATED = "#b71c1c"; // 暗紅色
 const COLOR_NORMAL = "#ff3b3b"; // 原本顏色
 
 const OXYGEN_RADIUS = CELL_RADIUS * 1.5;         // 氧分子小圓半徑（單位：像素，會乘CELL_RADIUS）
-const OXYGEN_ANIM_DISTANCE = 10;   // 氧分子動畫進出距離（單位：像素）
+const OXYGEN_ANIM_DISTANCE = 20;   // 氧分子動畫進出距離（單位：像素）
 const COLOR_OXYGEN = "#4fc3f7"; // 氧分子顏色
 
 let FADE_CELLS = false;
@@ -41,7 +41,54 @@ const heartPeriodInput = document.getElementById('heartPeriodInput');
 const heartPeriodLabel = document.getElementById('heartPeriodLabel');
 const fadeToggleBtn = document.getElementById('fadeToggleBtn');
 const canvas = document.getElementById("graph");
+const vesselCanvas = document.getElementById("vesselLayer");
+const vesselCtx = vesselCanvas.getContext("2d");
 
+function setupUI() {
+  // 血球淡化按鈕
+  fadeToggleBtn.addEventListener('click', function() {
+    FADE_CELLS = !FADE_CELLS;
+    fadeToggleBtn.textContent = '血球淡化：' + (FADE_CELLS ? '開' : '關');
+  });
+  fadeToggleBtn.textContent = '血球淡化：' + (FADE_CELLS ? '開' : '關');
+
+  // 細胞數量調整
+  cellCountInput.addEventListener('change', function() {
+    window.setCellCount(Number(this.value));
+    window.resetCells();
+  });
+
+  // 心搏速率調整
+  heartPeriodInput.addEventListener('input', function() {
+    heartPeriodLabel.textContent = this.value;
+    window.setHeartPeriod(Number(this.value));
+  });
+  // 初始化顯示
+  heartPeriodLabel.textContent = heartPeriodInput.value;
+
+  // 點擊畫面 highlight 附近血球
+  canvas.addEventListener("click", function(e) {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    let minDist = Infinity;
+    let minIdx = -1;
+    for (let i = 0; i < cells.length; i++) {
+      const pos = cells[i].getPos(nodeMap);
+      const dx = pos.x - mx;
+      const dy = pos.y - my;
+      const dist = dx * dx + dy * dy;
+      if (dist < HIGHLIGHT_RADIUS * HIGHLIGHT_RADIUS && dist < minDist) {
+        minDist = dist;
+        minIdx = i;
+      }
+    }
+    // 多選：如果有找到且還沒在 highlightCells 裡才加入
+    if (minIdx >= 0 && !highlightCells.includes(minIdx)) {
+      highlightCells.push(minIdx);
+    }
+  });
+}
 
 // 取得所有 ellipse 節點
 function getEllipses(cells) {
@@ -78,7 +125,6 @@ function getEdges(cells) {
       };
     });
 }
-
 
 function findFirstVentricleIds() {
   for (const node of ellipses) {
@@ -164,8 +210,7 @@ function drawArrowHead(ctx, x2, y2, angle, headlen = 12, color = "#1976d2") {
   ctx.restore();
 }
 
-
-// 畫血球
+// 畫血球，根據新結構取得氧氣狀態與動畫
 function drawCells(ctx, cells, nodeMap) {
   for (let i = 0; i < cells.length; i++) {
     const c = cells[i];
@@ -178,8 +223,8 @@ function drawCells(ctx, cells, nodeMap) {
 
     // 根據氧氣狀態決定顏色
     let fillColor = COLOR_NORMAL;
-    if (c.oxygenLevel === "oxygenated") fillColor = COLOR_OXYGENATED;
-    else if (c.oxygenLevel === "deoxygenated") fillColor = COLOR_DEOXYGENATED;
+    if (c.oxygenState.level === "oxygenated") fillColor = COLOR_OXYGENATED;
+    else if (c.oxygenState.level === "deoxygenated") fillColor = COLOR_DEOXYGENATED;
 
     // 淡化處理
     if (FADE_CELLS && !highlightCells.includes(i)) {
@@ -195,18 +240,19 @@ function drawCells(ctx, cells, nodeMap) {
     if (highlightCells.includes(i)) ctx.stroke();
 
     // --- 氧分子動畫 ---
-    if (c.oxygenAnim) {
+    const anim = c.oxygenAnim.get();
+    if (anim) {
       ctx.save();
-      ctx.globalAlpha = 1 - c.oxygenAnim.progress;
+      ctx.globalAlpha = 1 - anim.progress;
       let r = OXYGEN_RADIUS;
       let dx = 0, dy = 0;
-      const angle = c.oxygenAnim.angle || 0;
-      if (c.oxygenAnim.type === "in") {
-        dx = Math.cos(angle) * (CELL_RADIUS + OXYGEN_ANIM_DISTANCE) * (1 - c.oxygenAnim.progress);
-        dy = Math.sin(angle) * (CELL_RADIUS + OXYGEN_ANIM_DISTANCE) * (1 - c.oxygenAnim.progress);
+      const angle = anim.angle || 0;
+      if (anim.type === "in") {
+        dx = Math.cos(angle) * (CELL_RADIUS + OXYGEN_ANIM_DISTANCE) * (1 - anim.progress);
+        dy = Math.sin(angle) * (CELL_RADIUS + OXYGEN_ANIM_DISTANCE) * (1 - anim.progress);
       } else {
-        dx = Math.cos(angle) * (CELL_RADIUS + OXYGEN_ANIM_DISTANCE) * c.oxygenAnim.progress;
-        dy = Math.sin(angle) * (CELL_RADIUS + OXYGEN_ANIM_DISTANCE) * c.oxygenAnim.progress;
+        dx = Math.cos(angle) * (CELL_RADIUS + OXYGEN_ANIM_DISTANCE) * anim.progress;
+        dy = Math.sin(angle) * (CELL_RADIUS + OXYGEN_ANIM_DISTANCE) * anim.progress;
       }
       ctx.beginPath();
       ctx.arc(pos.x + dx, pos.y + dy, r, 0, 2 * Math.PI);
@@ -227,6 +273,63 @@ function buildOutEdgesMap(edges) {
   });
 }
 
+
+// --- 新增：氧氣狀態與動畫管理類別 ---
+class OxygenState {
+  constructor() {
+    this.action = "none"; // "none" | "can_pickup" | "can_release"
+    this.level = "oxygenated"; // "oxygenated" | "deoxygenated"
+  }
+  update(currentNode) {
+    const currNodeValue = nodeMap[currentNode]?.value || "";
+    // 狀態切換
+    if (currNodeValue.includes("肺動脈")) {
+      this.action = "can_pickup";
+    } else if (currNodeValue.includes("肺靜脈")) {
+      this.action = "none";
+    } else if (currNodeValue.includes("小動脈")) {
+      this.action = "can_release";
+    } else if (currNodeValue.includes("小靜脈")) {
+      this.action = "none";
+    }
+  }
+  tryPickup() {
+    if (this.action === "can_pickup" && this.level === "deoxygenated" && Math.random() < OXYGEN_PICKUP_PROB) {
+      this.level = "oxygenated";
+      return true;
+    }
+    return false;
+  }
+  tryRelease() {
+    if (this.action === "can_release" && this.level === "oxygenated" && Math.random() < OXYGEN_RELEASE_PROB) {
+      this.level = "deoxygenated";
+      return true;
+    }
+    return false;
+  }
+}
+
+class OxygenAnimation {
+  constructor() {
+    this.anim = null; // {type: "in"|"out", progress: 0~1, angle}
+  }
+  trigger(type) {
+    this.anim = { type, progress: 0, angle: Math.random() * 2 * Math.PI };
+  }
+  update() {
+    if (this.anim) {
+      this.anim.progress += 0.08;
+      if (this.anim.progress >= 1) {
+        this.anim = null;
+      }
+    }
+  }
+  get() {
+    return this.anim;
+  }
+}
+
+
 // cell類別（即時隨機選出口）
 class Cell {
   constructor(startId) {
@@ -240,9 +343,10 @@ class Cell {
     this.pathWidth = 10; // 路徑寬度
     this.frameCount = 0;      // <--- 加這行
     this.offsetInterval = 8;  // 每幾幀才更新 offset
-    this.oxygenAction = "none"; // "none" | "can_pickup" | "can_release"
-    this.oxygenLevel = "oxygenated"; // "oxygenated" | "deoxygenated"
-    this.oxygenAnim = null; // {type: "in"|"out", progress: 0~1}
+
+    // --- 狀態與動畫物件 ---
+    this.oxygenState = new OxygenState();
+    this.oxygenAnim = new OxygenAnimation();   
 
   }  
   getCurrentValue() {
@@ -278,37 +382,18 @@ class Cell {
     // 你可以調整這個倍率，讓抖動範圍更自然
     this.pathWidth = nextEdge.strokeWidth * VESSEL_WIDTH_SCALE; 
   }
-
-  updateOxygenState() {
-    const currNodeValue = nodeMap[this.currentNode]?.value || "";
-
+  updateOxygenStateAndAnim() {
     // 狀態切換
-    if (currNodeValue.includes("肺動脈")) {
-      this.oxygenAction = "can_pickup";
-    } else if (currNodeValue.includes("肺靜脈")) {
-      this.oxygenAction = "none";
-    } else if (currNodeValue.includes("小動脈")) {
-      this.oxygenAction = "can_release";
-    } else if (currNodeValue.includes("小靜脈")) {
-      this.oxygenAction = "none";
-    }
+    this.oxygenState.update(this.currentNode);
 
-    // 氧化狀態改變
-    if (this.oxygenAction === "can_pickup" && this.oxygenLevel === "deoxygenated") {
-      if (Math.random() < OXYGEN_PICKUP_PROB) {
-        this.oxygenLevel = "oxygenated";
-        this.oxygenAnim = { type: "in", progress: 0, angle: Math.random() * 2 * Math.PI }; // 隨機方向
-
-      }
+    // 氧化狀態改變與動畫
+    if (this.oxygenState.tryPickup()) {
+      this.oxygenAnim.trigger("in");
     }
-    if (this.oxygenAction === "can_release" && this.oxygenLevel === "oxygenated") {
-      if (Math.random() < OXYGEN_RELEASE_PROB) {
-        this.oxygenLevel = "deoxygenated";
-        this.oxygenAnim = { type: "out", progress: 0, angle: Math.random() * 2 * Math.PI }; // 隨機方向
-
-      }
+    if (this.oxygenState.tryRelease()) {
+      this.oxygenAnim.trigger("out");
     }
-  }  
+  }
 
   update() {
     const phase = (heartFrame % HEART_PERIOD) / HEART_PERIOD;
@@ -335,12 +420,7 @@ class Cell {
       }
     }
     // 推進氧分子動畫
-    if (this.oxygenAnim) {
-      this.oxygenAnim.progress += 0.08;
-      if (this.oxygenAnim.progress >= 1) {
-        this.oxygenAnim = null;
-      }
-    }
+    this.oxygenAnim.update();
 
     if (!this.nextNode) return;
     this.t += this.speed;
@@ -348,7 +428,7 @@ class Cell {
       this.currentNode = this.nextNode;
       this.t = 0;
       this.chooseNext();
-      this.updateOxygenState(); // 進入新節點時才處理狀態
+      this.updateOxygenStateAndAnim(); // 進入新節點時才處理狀態
 
     }
   }
@@ -404,8 +484,8 @@ function randomStartId(ellipses) {
 // 動畫主迴圈
 function animate() {
   ctx.clearRect(0, 0, 800, 800);
-  drawEdges(ctx, edges, nodeMap);
-  //drawNodes(ctx, ellipses, nodeMap);
+  // drawEdges(ctx, edges, nodeMap);
+  // drawNodes(ctx, ellipses, nodeMap);
   heartFrame = (heartFrame + 1) % HEART_PERIOD;
 
   // 畫血球
@@ -444,12 +524,11 @@ function init() {
       });      
       // drawNodes(ctx, ellipses, nodeMap);
       // drawEdges(ctx, edges, nodeMap);
-
+      setupUI();
+      drawEdges(vesselCtx, edges, nodeMap);
       resetCells();
       animate();
 
-      // 點擊重設粒子
-      // canvas.addEventListener("click", resetCells);
     })
     .catch((err) => {
       document.getElementById("output").textContent =
@@ -462,7 +541,6 @@ window.setCellCount = function(val) {
   CELL_COUNT = val; 
 };
 window.setHeartPeriod = function(val) { 
-  // HEART_PERIOD 是 const，需改為 let
   // bpm: 每分鐘幾次
   HEART_PERIOD = Math.round(FPS * 60 / val); // 幀數
 };
@@ -470,47 +548,7 @@ window.setHeartPeriod = function(val) {
 // 讓 resetCells 可被外部呼叫
 window.resetCells = resetCells;
 
-fadeToggleBtn.addEventListener('click', function() {
-  FADE_CELLS = !FADE_CELLS;
-  fadeToggleBtn.textContent = '血球淡化：' + (FADE_CELLS ? '開' : '關');
-});
-fadeToggleBtn.textContent = '血球淡化：' + (FADE_CELLS ? '開' : '關');
-
-cellCountInput.addEventListener('change', function() {
-  window.setCellCount(Number(this.value));
-  window.resetCells();
-});
-
-heartPeriodInput.addEventListener('input', function() {
-  heartPeriodLabel.textContent = this.value;
-  window.setHeartPeriod(Number(this.value));
-});
-
-// 初始化顯示
-heartPeriodLabel.textContent = heartPeriodInput.value;
-
-canvas.addEventListener("click", function(e) {
-  const rect = canvas.getBoundingClientRect();
-  const mx = e.clientX - rect.left;
-  const my = e.clientY - rect.top;
-  let minDist = Infinity;
-  let minIdx = -1;
-  for (let i = 0; i < cells.length; i++) {
-    const pos = cells[i].getPos(nodeMap);
-    const dx = pos.x - mx;
-    const dy = pos.y - my;
-    const dist = dx * dx + dy * dy;
-    if (dist < HIGHLIGHT_RADIUS * HIGHLIGHT_RADIUS && dist < minDist) {
-      minDist = dist;
-      minIdx = i;
-    }
-  }
-  // 多選：如果有找到且還沒在 highlightCells 裡才加入
-  if (minIdx >= 0 && !highlightCells.includes(minIdx)) {
-    highlightCells.push(minIdx);
-  }
-});
-
 
 // 啟動
 init();
+
