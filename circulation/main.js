@@ -8,6 +8,8 @@ let outEdgesMap = {};
 
 let currentView = "circulation";
 let lastView = "circulation";
+let showCirculationSVG = true;
+
 
 // === 參數集中管理 ===
 let PARTICLE_COUNT = 2500;
@@ -19,6 +21,8 @@ const VESSEL_WIDTH_SCALE = 5; // 血管寬度倍率
 let HEART_PERIOD = 60;      // 心臟跳動週期（幀數）越大越慢
 let heartFrame = 0;         // 心臟動畫計數
 const FPS = 60;             // 假設動畫每秒60幀
+
+const DIASTOLE_RATIO = 2 / 3; // 心臟收縮舒張動畫參數
 
 let FIRST_LEFT_VENTRICLE_ID = null;
 let FIRST_RIGHT_VENTRICLE_ID = null;
@@ -42,30 +46,39 @@ const cellCountInput = document.getElementById('cellCountInput');
 const heartPeriodInput = document.getElementById('heartPeriodInput');
 const heartPeriodLabel = document.getElementById('heartPeriodLabel');
 const fadeToggleBtn = document.getElementById('fadeToggleBtn');
-const canvas = document.getElementById("graph");
+const toggleCirculationSVGBtn = document.getElementById('toggleCirculationSVGBtn');
+
+
 const vesselCanvas = document.getElementById("vesselLayer");
+const svg = document.getElementById('mainSVG');
+const vesselLayer = document.getElementById('vesselLayer');
 const vesselCtx = vesselCanvas.getContext("2d");
+const canvas = document.getElementById("graph"); // 或 mainCanvas
+ctx = canvas.getContext("2d");
 
 function setupUI() {
-
-
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', function() {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       this.classList.add('active');
       const newView = this.dataset.view;
-      if (newView !== lastView) {
-        currentView = newView;
-        if (currentView !== "circulation") {
-          ctx.clearRect(0, 0, 800, 800);
-          vesselCtx.clearRect(0, 0, 800, 800);
-        } else {
-          // 只有從其他 tab 切回 circulation 時才重繪底圖
-          drawEdges(vesselCtx, edges, nodeMap);
-        }
-        lastView = currentView;
+      if (newView === lastView) return;
+
+      currentView = newView;
+
+      if (currentView === "alveolus") {
+        showAlveolusView();
+      } else if (currentView === "circulation") {
+        showCirculationView();
+        drawEdges(vesselCtx, edges, nodeMap);
+      } else {
+        // 其他 tab
+        showCirculationView();
+        ctx.clearRect(0, 0, 800, 800);
+        vesselCtx.clearRect(0, 0, 800, 800);
       }
-      // 如果 newView === lastView，什麼都不做
+
+      lastView = currentView;
     });
   });
   // 預設啟用第一個 tab
@@ -77,6 +90,14 @@ function setupUI() {
     fadeToggleBtn.textContent = '血球淡化：' + (FADE_CELLS ? '開' : '關');
   });
   fadeToggleBtn.textContent = '血球淡化：' + (FADE_CELLS ? '開' : '關');
+
+  toggleCirculationSVGBtn.addEventListener('click', function() {
+    showCirculationSVG = !showCirculationSVG;
+    toggleCirculationSVGBtn.textContent =  (showCirculationSVG ? '顯示' : '隱藏')+ '心室';
+    svg.style.display = (showCirculationSVG && currentView === "circulation") ? "block" : "none";
+  });
+  toggleCirculationSVGBtn.textContent =  (showCirculationSVG ? '顯示' : '隱藏')+ '心室';
+
 
   // 細胞數量調整
   cellCountInput.addEventListener('change', function() {
@@ -115,6 +136,96 @@ function setupUI() {
     }
   });
 }
+
+
+function showAlveolusView() {
+  vesselLayer.style.display = "none";
+  graph.style.display = "none";
+  svg.style.display = "block";
+  drawAlveolusSVG();
+}
+
+function showCirculationView() {
+  vesselLayer.style.display = "block";
+  graph.style.display = "block";
+  svg.style.display = "block"; // 讓 SVG 疊加顯示
+  // drawCirculationSVG();
+}
+
+function drawCirculationSVG(phase = 0) {
+  svg.innerHTML = "";
+
+  // 收縮時縮小，舒張時放大
+  let scale = 1;
+  if (phase < DIASTOLE_RATIO) {
+    // 收縮期：scale 0.85~1
+    scale = 0.85 + 0.15 * (phase / DIASTOLE_RATIO);
+  } else {
+    // 舒張期：scale 1~1.1
+    scale = 1 + 0.1 * ((phase - DIASTOLE_RATIO) / (1 - DIASTOLE_RATIO));
+  }
+
+  // 動態調整 rx/ry
+  const baseRx = 35, baseRy = 35;
+  const rx = baseRx * scale;
+  const ry = baseRy * scale;
+
+  const leftVentricle = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
+  leftVentricle.setAttribute("cx", 380);
+  leftVentricle.setAttribute("cy", 465);
+  leftVentricle.setAttribute("rx", rx);
+  leftVentricle.setAttribute("ry", ry);
+  leftVentricle.setAttribute("fill", "#f5f5f5");
+  leftVentricle.setAttribute("stroke", "#ffababff");
+  leftVentricle.setAttribute("stroke-width", "4");
+  svg.appendChild(leftVentricle);
+
+  const rightVentricle = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
+  rightVentricle.setAttribute("cx", 310);
+  rightVentricle.setAttribute("cy", 490);
+  rightVentricle.setAttribute("rx", rx);
+  rightVentricle.setAttribute("ry", ry);
+  rightVentricle.setAttribute("fill", "#f5f5f5");
+  rightVentricle.setAttribute("stroke", "#ffababff");
+  rightVentricle.setAttribute("stroke-width", "4");
+  svg.appendChild(rightVentricle);
+
+}
+function drawAlveolusSVG() {
+  // 清空 SVG
+  svg.innerHTML = "";
+  /*
+  // 畫一個肺泡
+  const alveolus = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+  alveolus.setAttribute("cx", 400);
+  alveolus.setAttribute("cy", 400);
+  alveolus.setAttribute("r", 120);
+  alveolus.setAttribute("fill", "#fffbe7");
+  alveolus.setAttribute("stroke", "#e0b96a");
+  alveolus.setAttribute("stroke-width", "6");
+  svg.appendChild(alveolus);
+
+  // 畫微血管網（紅藍交錯的細線環繞肺泡）
+  for (let i = 0; i < 18; i++) {
+    const angle = (i / 18) * 2 * Math.PI;
+    const x1 = 400 + Math.cos(angle) * 120;
+    const y1 = 400 + Math.sin(angle) * 120;
+    const x2 = 400 + Math.cos(angle) * 160;
+    const y2 = 400 + Math.sin(angle) * 160;
+    const capillary = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    capillary.setAttribute("x1", x1);
+    capillary.setAttribute("y1", y1);
+    capillary.setAttribute("x2", x2);
+    capillary.setAttribute("y2", y2);
+    capillary.setAttribute("stroke", i % 2 === 0 ? "#ff3b3b" : "#1976d2");
+    capillary.setAttribute("stroke-width", "4");
+    svg.appendChild(capillary);
+  }
+
+  */
+}
+
+
 
 // 取得所有 ellipse 節點
 function getEllipses(cells) {
@@ -397,8 +508,7 @@ class Cell extends Particle {
     const heartBoost = 1 + 0.9 * Math.sin(phase * 2 * Math.PI);
     this.speed = this.baseSpeed * heartBoost;
 
-    // 心室彈回
-    const DIASTOLE_RATIO = 2/3;
+    // 心室彈回    
     if (phase >= DIASTOLE_RATIO) {
       const currValue = nodeMap[this.currentNode]?.value || "";
       if (currValue.includes("左心室") && this.currentNode !== FIRST_LEFT_VENTRICLE_ID) {
@@ -507,11 +617,23 @@ function animate() {
   ctx.clearRect(0, 0, 800, 800);
   // drawEdges(ctx, edges, nodeMap);
   // drawNodes(ctx, ellipses, nodeMap);
+  
   heartFrame = (heartFrame + 1) % HEART_PERIOD;
+  const phase = (heartFrame % HEART_PERIOD) / HEART_PERIOD;
 
-  // 畫血球
+
+  // 畫血球與心室動畫
   if (currentView === "circulation") {
+    if (showCirculationSVG) {
+      svg.style.display = "block";
+      drawCirculationSVG(phase);
+    } else {
+      svg.style.display = "none";
+    }
     drawParticles(ctx, particles, nodeMap);
+
+  } else {
+    svg.style.display = "none";
   }
   requestAnimationFrame(animate);
 }
@@ -548,6 +670,7 @@ function init() {
       // drawNodes(ctx, ellipses, nodeMap);
       // drawEdges(ctx, edges, nodeMap);
       setupUI();
+      // drawCirculationSVG();
       drawEdges(vesselCtx, edges, nodeMap);
       resetParticles();
       animate();
