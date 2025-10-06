@@ -12,11 +12,22 @@ let showCirculationSVG = true;
 
 
 // === 參數集中管理 ===
-let PARTICLE_COUNT = 2500;
+const CONFIG = {
+  NODE_OFFSET: 50,           // 節點座標偏移
+  PARTICLE_DRIFT: 1.2,       // 血球抖動幅度
+  PATH_WIDTH_DEFAULT: 10,    // 預設血管寬度
+  CANVAS_SIZE: 800,          // 畫布大小
+  NODE_RADIUS: 20,           // 節點圓半徑
+  ARROW_HEADLEN: 12,         // 箭頭長度
+  FADE_ALPHA: 0.05,          // 血球淡化透明度
+  VESSEL_WIDTH_SCALE: 5,     // 血管寬度倍率
+  HEART_REBOUND_PROB: 0,   // 心室彈回機率  
+};
+
+let PARTICLE_COUNT = 800;
 const PARTICLE_RADIUS = 3;         // 血球半徑（像素）
 const PARTICLE_SPEED_MIN = 0.02;   // 血球最小速度
 const PARTICLE_SPEED_MAX = 0.14;   // 血球最大速度
-const VESSEL_WIDTH_SCALE = 5; // 血管寬度倍率
 
 let HEART_PERIOD = 60;      // 心臟跳動週期（幀數）越大越慢
 let heartFrame = 0;         // 心臟動畫計數
@@ -40,6 +51,45 @@ const COLOR_OXYGEN = "#4fc3f7"; // 氧分子顏色
 let FADE_CELLS = false;
 let highlightParticles = []; // 儲存被 highlight 的 particle 索引
 const HIGHLIGHT_RADIUS = 30; // 點擊半徑（像素）
+
+// === 瓣膜 ===
+const valves = [
+  { type: "mitral", 
+    from: "leftAtrium", 
+    to: "leftVentricle", isOpen: false, 
+    cx: 385, cy: 410 },
+  { type: "tricuspid", 
+    from: "rightAtrium", 
+    to: "rightVentricle", isOpen: false, 
+    cx: 290, cy: 460 },
+  { type: "aortic", 
+    from: "leftVentricle", 
+    to: "aorta", isOpen: false, 
+    cx: 352, cy: 400 },
+  { type: "pulmonary", 
+    from: "rightVentricle", 
+    to: "pulmonaryArtery", isOpen: false, 
+    cx: 315, cy: 400 }
+];
+
+// === 心房心室參數集中管理 ===
+const ATRIAL_SYSTOLE_END = 0.2; // 心房收縮結束 phase
+const BASE_ATRIA_RX = 30;
+const BASE_ATRIA_RY = 30;
+const BASE_LEFT_ATRIUM_CX = 387;
+const BASE_LEFT_ATRIUM_CY = 370;
+const BASE_RIGHT_ATRIUM_CX = 270;
+const BASE_RIGHT_ATRIUM_CY = 425;
+
+const BASE_LEFT_VENTRICLE_RX = 40;
+const BASE_LEFT_VENTRICLE_RY = 40;
+const BASE_RIGHT_VENTRICLE_RX = 35;
+const BASE_RIGHT_VENTRICLE_RY = 35;
+const BASE_LEFT_VENTRICLE_CX = 388;
+const BASE_LEFT_VENTRICLE_CY = 470;
+const BASE_RIGHT_VENTRICLE_CX = 310;
+const BASE_RIGHT_VENTRICLE_CY = 490;
+
 
 // === UI 控制 ===
 const cellCountInput = document.getElementById('cellCountInput');
@@ -74,8 +124,8 @@ function setupUI() {
       } else {
         // 其他 tab
         showCirculationView();
-        ctx.clearRect(0, 0, 800, 800);
-        vesselCtx.clearRect(0, 0, 800, 800);
+        ctx.clearRect(0, 0, CONFIG.CANVAS_SIZE, CONFIG.CANVAS_SIZE);
+        vesselCtx.clearRect(0, 0, CONFIG.CANVAS_SIZE, CONFIG.CANVAS_SIZE);
       }
 
       lastView = currentView;
@@ -91,12 +141,17 @@ function setupUI() {
   });
   fadeToggleBtn.textContent = '血球淡化：' + (FADE_CELLS ? '開' : '關');
 
+  const clearHighlightBtn = document.getElementById('clearHighlightBtn');
+  clearHighlightBtn.addEventListener('click', function() {
+    highlightParticles = [];
+  });
+
   toggleCirculationSVGBtn.addEventListener('click', function() {
     showCirculationSVG = !showCirculationSVG;
-    toggleCirculationSVGBtn.textContent =  (showCirculationSVG ? '顯示' : '隱藏')+ '心室';
+    toggleCirculationSVGBtn.textContent = '心房心室：' +  (showCirculationSVG ? '開' : '關');
     svg.style.display = (showCirculationSVG && currentView === "circulation") ? "block" : "none";
   });
-  toggleCirculationSVGBtn.textContent =  (showCirculationSVG ? '顯示' : '隱藏')+ '心室';
+  toggleCirculationSVGBtn.textContent =  '心房心室：' +  (showCirculationSVG ? '開' : '關');
 
 
   // 細胞數量調整
@@ -152,45 +207,106 @@ function showCirculationView() {
   // drawCirculationSVG();
 }
 
+
 function drawCirculationSVG(phase = 0) {
   svg.innerHTML = "";
 
-  // 收縮時縮小，舒張時放大
-  let scale = 1;
-  if (phase < DIASTOLE_RATIO) {
-    // 收縮期：scale 0.85~1
-    scale = 0.85 + 0.15 * (phase / DIASTOLE_RATIO);
+  // --- 心房動畫 ---
+  let atrialScale = 1, atrialColor = "#ffe0e0";
+  if (phase < ATRIAL_SYSTOLE_END) {
+    // 心房收縮：縮小
+    atrialScale = 0.85 + 0.15 * (phase / ATRIAL_SYSTOLE_END);
+    atrialColor = "#ffb3b3";
   } else {
-    // 舒張期：scale 1~1.1
-    scale = 1 + 0.1 * ((phase - DIASTOLE_RATIO) / (1 - DIASTOLE_RATIO));
+    // 心房舒張：放大
+    atrialScale = 1 + 0.08 * ((phase - ATRIAL_SYSTOLE_END) / (1 - ATRIAL_SYSTOLE_END));
+    atrialColor = "#ffe0e0";
   }
 
-  // 動態調整 rx/ry
-  const baseRx = 35, baseRy = 35;
-  const rx = baseRx * scale;
-  const ry = baseRy * scale;
+  // --- 心室動畫 ---
+  let ventricularScale = 1, ventricularColor = "#f5f5f5";
+  if (phase < ATRIAL_SYSTOLE_END) {
+    // 心室尚未收縮
+    ventricularScale = 1;
+    ventricularColor = "#f5f5f5";
+  } else if (phase < DIASTOLE_RATIO) {
+    // 心室收縮：縮小
+    ventricularScale = 0.85 + 0.15 * ((phase - ATRIAL_SYSTOLE_END) / (DIASTOLE_RATIO - ATRIAL_SYSTOLE_END));
+    ventricularColor = "#ffb3b3";
+  } else {
+    // 心室舒張：放大
+    ventricularScale = 1 + 0.1 * ((phase - DIASTOLE_RATIO) / (1 - DIASTOLE_RATIO));
+    ventricularColor = "#ffe0e0";
+  }
 
+  // --- 畫心房（左、右） ---
+  const leftAtrium = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
+  leftAtrium.setAttribute("cx", BASE_LEFT_ATRIUM_CX);
+  leftAtrium.setAttribute("cy", BASE_LEFT_ATRIUM_CY);
+  leftAtrium.setAttribute("rx", BASE_ATRIA_RX * atrialScale);
+  leftAtrium.setAttribute("ry", BASE_ATRIA_RY * atrialScale);
+  leftAtrium.setAttribute("fill", atrialColor);
+  leftAtrium.setAttribute("stroke", "#ffb3b3");
+  leftAtrium.setAttribute("stroke-width", "3");
+  svg.appendChild(leftAtrium);
+
+  const rightAtrium = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
+  rightAtrium.setAttribute("cx", BASE_RIGHT_ATRIUM_CX);
+  rightAtrium.setAttribute("cy", BASE_RIGHT_ATRIUM_CY);
+  rightAtrium.setAttribute("rx", BASE_ATRIA_RX * atrialScale);
+  rightAtrium.setAttribute("ry", BASE_ATRIA_RY * atrialScale);
+  rightAtrium.setAttribute("fill", atrialColor);
+  rightAtrium.setAttribute("stroke", "#ffb3b3");
+  rightAtrium.setAttribute("stroke-width", "3");
+  svg.appendChild(rightAtrium);
+
+  // --- 畫心室（左、右） ---
   const leftVentricle = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
-  leftVentricle.setAttribute("cx", 380);
-  leftVentricle.setAttribute("cy", 465);
-  leftVentricle.setAttribute("rx", rx);
-  leftVentricle.setAttribute("ry", ry);
-  leftVentricle.setAttribute("fill", "#f5f5f5");
-  leftVentricle.setAttribute("stroke", "#ffababff");
+  leftVentricle.setAttribute("cx", BASE_LEFT_VENTRICLE_CX);
+  leftVentricle.setAttribute("cy", BASE_LEFT_VENTRICLE_CY);
+  leftVentricle.setAttribute("rx", BASE_LEFT_VENTRICLE_RX * ventricularScale);
+  leftVentricle.setAttribute("ry", BASE_LEFT_VENTRICLE_RY * ventricularScale);
+  leftVentricle.setAttribute("fill", ventricularColor);
+  leftVentricle.setAttribute("stroke", "#ffb3b3");
   leftVentricle.setAttribute("stroke-width", "4");
   svg.appendChild(leftVentricle);
 
   const rightVentricle = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
-  rightVentricle.setAttribute("cx", 310);
-  rightVentricle.setAttribute("cy", 490);
-  rightVentricle.setAttribute("rx", rx);
-  rightVentricle.setAttribute("ry", ry);
-  rightVentricle.setAttribute("fill", "#f5f5f5");
-  rightVentricle.setAttribute("stroke", "#ffababff");
+  rightVentricle.setAttribute("cx", BASE_RIGHT_VENTRICLE_CX);
+  rightVentricle.setAttribute("cy", BASE_RIGHT_VENTRICLE_CY);
+  rightVentricle.setAttribute("rx", BASE_RIGHT_VENTRICLE_RX * ventricularScale);
+  rightVentricle.setAttribute("ry", BASE_RIGHT_VENTRICLE_RY * ventricularScale);
+  rightVentricle.setAttribute("fill", ventricularColor);
+  rightVentricle.setAttribute("stroke", "#ffb3b3");
   rightVentricle.setAttribute("stroke-width", "4");
   svg.appendChild(rightVentricle);
 
+  // --- 動態設定瓣膜開關狀態 ---
+  // 房室瓣（mitral, tricuspid）在心房收縮期開啟，心室收縮期關閉
+  // 動脈瓣（aortic, pulmonary）在心室收縮期開啟，其他時期關閉
+  valves.forEach(valve => {
+    if (valve.type === "mitral" || valve.type === "tricuspid") {
+      valve.isOpen = phase < ATRIAL_SYSTOLE_END;
+    } else {
+      valve.isOpen = (phase >= ATRIAL_SYSTOLE_END && phase < DIASTOLE_RATIO);
+    }
+  });
+
+  // --- 畫瓣膜 ---
+  valves.forEach(valve => {
+    const valveElem = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
+    valveElem.setAttribute("cx", valve.cx);
+    valveElem.setAttribute("cy", valve.cy);
+    valveElem.setAttribute("rx", valve.isOpen ? 14 : 6);
+    valveElem.setAttribute("ry", 6);
+    valveElem.setAttribute("fill", valve.isOpen ? "#a5d6a7" : "#ef5350");
+    valveElem.setAttribute("opacity", valve.isOpen ? "0.6" : "1");
+    valveElem.setAttribute("stroke", "#333");
+    valveElem.setAttribute("stroke-width", "2");
+    svg.appendChild(valveElem);
+  });  
 }
+
 function drawAlveolusSVG() {
   // 清空 SVG
   svg.innerHTML = "";
@@ -229,7 +345,8 @@ function drawAlveolusSVG() {
 
 // 取得所有 ellipse 節點
 function getEllipses(cells) {
-  return cells
+  const nodeMap = {};
+  const ellipses = cells
     .filter((cell) => cell.getAttribute("style")?.includes("ellipse"))
     .map((cell) => {
       const id = cell.getAttribute("id");
@@ -237,9 +354,13 @@ function getEllipses(cells) {
       const x = geometry?.getAttribute("x") ?? 0;
       const y = geometry?.getAttribute("y") ?? 0;
       const value = cell.getAttribute("value") || "";
-      return { id, x: Number(x), y: Number(y), value };
+      const node = { id, x: Number(x), y: Number(y), value };
+      nodeMap[id] = node;
+      return node;
     });
+  return { ellipses, nodeMap };
 }
+
 
 // 取得所有 edge（有向邊）
 function getEdges(cells) {
@@ -263,6 +384,8 @@ function getEdges(cells) {
     });
 }
 
+
+
 function findFirstVentricleIds() {
   for (const node of ellipses) {
     if (!FIRST_LEFT_VENTRICLE_ID && node.value.includes("左心室")) {
@@ -280,7 +403,7 @@ function drawNodes(ctx, nodes, nodeMap) {
   nodes.forEach((node) => {
     nodeMap[node.id] = node;
     ctx.beginPath();
-    ctx.arc(node.x + 50, node.y + 50, 20, 0, 2 * Math.PI);
+    ctx.arc(node.x + CONFIG.NODE_OFFSET, node.y + CONFIG.NODE_OFFSET, CONFIG.NODE_RADIUS, 0, 0, 0, 2 * Math.PI);
     ctx.fillStyle = "#fff";
     ctx.fill();
     ctx.strokeStyle = "#333";
@@ -289,7 +412,7 @@ function drawNodes(ctx, nodes, nodeMap) {
     ctx.font = "14px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(node.id, node.x + 50, node.y + 50);
+    ctx.fillText(node.id, node.x + CONFIG.NODE_OFFSET, node.y + CONFIG.NODE_OFFSET);
   });
 }
 
@@ -300,13 +423,13 @@ function drawEdges(ctx, edges, nodeMap) {
     const to = nodeMap[edge.target];
     const strokeWidth = edge.strokeWidth || 1;
     if (!from || !to) return;
-    drawBloodVessel(ctx, from.x + 50, from.y + 50, to.x + 50, to.y + 50, strokeWidth);
+    drawBloodVessel(ctx, from.x + CONFIG.NODE_OFFSET, from.y + CONFIG.NODE_OFFSET, to.x + CONFIG.NODE_OFFSET, to.y + CONFIG.NODE_OFFSET, strokeWidth);
   });
 }
 
 // 畫血管
 function drawBloodVessel(ctx, x1, y1, x2, y2, strokeWidth) {
-  const headlen = 12;
+  const headlen = CONFIG.ARROW_HEADLEN;
   const dx = x2 - x1;
   const dy = y2 - y1;
   const angle = Math.atan2(dy, dx);
@@ -316,7 +439,7 @@ function drawBloodVessel(ctx, x1, y1, x2, y2, strokeWidth) {
   ctx.moveTo(x1, y1);
   ctx.lineTo(x2, y2);
   ctx.strokeStyle = "#ffcaca6f";
-  ctx.lineWidth = strokeWidth * VESSEL_WIDTH_SCALE || 2;
+  ctx.lineWidth = strokeWidth * CONFIG.VESSEL_WIDTH_SCALE || 2; 
   ctx.stroke();
   ctx.restore();  
   // drawArrowHead(ctx, x2, y2, angle, headlen, "#1976d2"); // 可選擇是否畫箭頭
@@ -325,7 +448,7 @@ function drawBloodVessel(ctx, x1, y1, x2, y2, strokeWidth) {
 
 
 // 畫箭頭
-function drawArrowHead(ctx, x2, y2, angle, headlen = 12, color = "#1976d2") {
+function drawArrowHead(ctx, x2, y2, angle, headlen = CONFIG.ARROW_HEADLEN, color = "#1976d2") {
   ctx.save();
   ctx.beginPath();
   ctx.moveTo(x2, y2);
@@ -348,22 +471,25 @@ function drawArrowHead(ctx, x2, y2, angle, headlen = 12, color = "#1976d2") {
 }
 
 function drawParticles(ctx, particles, nodeMap) {
+  // 先全部 update
   for (let i = 0; i < particles.length; i++) {
     const p = particles[i];
-    if (p.isDone()) continue;
-    p.update();
-    if (typeof p.draw === "function") {
+    if (!p.isDone()) p.update();
+  }
+  // 再全部 draw
+  for (let i = 0; i < particles.length; i++) {
+    const p = particles[i];
+    if (!p.isDone() && typeof p.draw === "function") {
       p.draw(ctx, nodeMap, i);
-    }    
+    }
   }
 }
 
-
 function buildOutEdgesMap(edges) {
-  outEdgesMap = {};
+  outEdgesMap = new Map();
   edges.forEach(e => {
-    if (!outEdgesMap[e.source]) outEdgesMap[e.source] = [];
-    outEdgesMap[e.source].push(e);
+    if (!outEdgesMap.has(e.source)) outEdgesMap.set(e.source, []);
+    outEdgesMap.get(e.source).push(e);
   });
 }
 
@@ -432,10 +558,10 @@ class Particle {
     this.speed = 0.02;
     this.chooseNext();
     this.offset = 0;
-    this.pathWidth = 10;
+    this.pathWidth = CONFIG.PATH_WIDTH_DEFAULT;
   }
   chooseNext() {
-    let outs = outEdgesMap[this.currentNode] || [];
+    let outs = outEdgesMap.get(this.currentNode) || [];
     if (outs.length === 0) {
       this.nextNode = null;
       return;
@@ -454,7 +580,8 @@ class Particle {
     this.baseSpeed = baseSpeed * rand;
     this.speed = this.baseSpeed;
 
-    this.pathWidth = nextEdge.strokeWidth * VESSEL_WIDTH_SCALE;
+    this.pathWidth = nextEdge.strokeWidth * CONFIG.VESSEL_WIDTH_SCALE;
+;
   }
   update() {
     // 預設只推進位置
@@ -469,20 +596,21 @@ class Particle {
   isDone() {
     return !this.nextNode;
   }
+  
   getPos(nodeMap) {
     const from = nodeMap[this.currentNode];
     const to = nodeMap[this.nextNode];
     if (!from || !to) return { x: 0, y: 0 };
-    const fx = from.x + 50;
-    const fy = from.y + 50;
-    const tx = to.x + 50;
-    const ty = to.y + 50;
+    const fx = from.x + CONFIG.NODE_OFFSET;
+    const fy = from.y + CONFIG.NODE_OFFSET;
+    const tx = to.x + CONFIG.NODE_OFFSET;
+    const ty = to.y + CONFIG.NODE_OFFSET;
     const dx = tx - fx;
     const dy = ty - fy;
     const len = Math.sqrt(dx * dx + dy * dy) || 1;
     const nx = -dy / len;
     const ny = dx / len;
-    const drift = (Math.random() - 0.5) * 1.2;
+    const drift = (Math.random() - 0.5) * CONFIG.PARTICLE_DRIFT;
     this.offset += drift;
     const halfWidth = this.pathWidth / 2;
     if (this.offset > halfWidth) this.offset = halfWidth;
@@ -512,13 +640,13 @@ class Cell extends Particle {
     if (phase >= DIASTOLE_RATIO) {
       const currValue = nodeMap[this.currentNode]?.value || "";
       if (currValue.includes("左心室") && this.currentNode !== FIRST_LEFT_VENTRICLE_ID) {
-        if (Math.random() < 0.1) {
+        if (Math.random() < CONFIG.HEART_REBOUND_PROB) {
           this.nextNode = FIRST_LEFT_VENTRICLE_ID;
           this.t = 0;
         }
       }
       if (currValue.includes("右心室") && this.currentNode !== FIRST_RIGHT_VENTRICLE_ID) {
-        if (Math.random() < 0.1) {
+        if (Math.random() < CONFIG.HEART_REBOUND_PROB) {
           this.nextNode = FIRST_RIGHT_VENTRICLE_ID;
           this.t = 0;
         }
@@ -559,7 +687,7 @@ class Cell extends Particle {
 
     // 淡化處理
     if (FADE_CELLS && !highlightParticles.includes(i)) {
-      ctx.globalAlpha = 0.05;
+      ctx.globalAlpha = CONFIG.FADE_ALPHA;
     } else if (highlightParticles.includes(i)) {
       ctx.globalAlpha = 1.0;
       ctx.lineWidth = 1.5;
@@ -614,7 +742,7 @@ function randomStartId(ellipses) {
 
 // 動畫主迴圈
 function animate() {
-  ctx.clearRect(0, 0, 800, 800);
+  ctx.clearRect(0, 0, CONFIG.CANVAS_SIZE, CONFIG.CANVAS_SIZE);
   // drawEdges(ctx, edges, nodeMap);
   // drawNodes(ctx, ellipses, nodeMap);
   
@@ -647,7 +775,11 @@ function init() {
       const xmlDoc = parser.parseFromString(xmlString, "text/xml");
       const mxCells = Array.from(xmlDoc.getElementsByTagName("mxCell"));
 
-      ellipses = getEllipses(mxCells);
+      // ellipses = getEllipses(mxCells);
+      
+      const result = getEllipses(mxCells);
+      ellipses = result.ellipses;
+      nodeMap = result.nodeMap;
       edges = getEdges(mxCells);
 
       findFirstVentricleIds();
@@ -661,12 +793,8 @@ function init() {
       buildOutEdgesMap(edges);
       const canvas = document.getElementById("graph");
       ctx = canvas.getContext("2d");
-      ctx.clearRect(0, 0, 800, 800);
+      ctx.clearRect(0, 0, CONFIG.CANVAS_SIZE, CONFIG.CANVAS_SIZE);
 
-      nodeMap = {};
-      ellipses.forEach(node => {
-        nodeMap[node.id] = node;
-      });      
       // drawNodes(ctx, ellipses, nodeMap);
       // drawEdges(ctx, edges, nodeMap);
       setupUI();
