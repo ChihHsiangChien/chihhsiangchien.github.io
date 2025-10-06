@@ -293,6 +293,7 @@ function drawCirculationSVG(phase = 0) {
   });
 
   // --- 畫瓣膜 ---
+  /*
   valves.forEach(valve => {
     const valveElem = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
     valveElem.setAttribute("cx", valve.cx);
@@ -305,6 +306,7 @@ function drawCirculationSVG(phase = 0) {
     valveElem.setAttribute("stroke-width", "2");
     svg.appendChild(valveElem);
   });  
+  */
 }
 
 function drawAlveolusSVG() {
