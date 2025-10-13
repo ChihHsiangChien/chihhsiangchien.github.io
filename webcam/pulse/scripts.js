@@ -136,7 +136,7 @@ function extractRedChannel(pixels) {
     }
   }
 
-  // 计算红光平均值
+  // 計算紅光平均值
   var sum = redValues.reduce(function (a, b) {
     return a + b;
   }, 0);
