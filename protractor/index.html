@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>可列印量角器 — protractor-print.html</title>
+  <style>
+    :root{
+      --page-width-mm:210; /* default A4 */
+      --page-height-mm:297;
+      --margin-mm:12;
+      --bg:#ffffff;
+      --ink:#000;
+      --label-font: 10pt/1 "Helvetica Neue", Arial, sans-serif;
+    }
+
+    /* Ensure printed page size and no extra browser margins when printing */
+    @page {
+      size: calc(var(--page-width-mm) * 1mm) calc(var(--page-height-mm) * 1mm);
+      margin: 0;
+    }
+
+    html,body{height:100%;background:var(--bg);color:var(--ink);font-family:Arial,Helvetica,sans-serif}
+    body{display:flex;flex-direction:column;align-items:center;padding:8px;box-sizing:border-box}
+
+    .toolbar{width:100%;max-width:1100px;display:flex;gap:8px;align-items:center;margin-bottom:8px}
+    .toolbar label{font-size:13px}
+    .controls{display:flex;gap:8px;align-items:center}
+    select,input[type=number]{padding:6px;border-radius:6px;border:1px solid #ccc}
+    button{padding:8px 12px;border-radius:6px;border:1px solid #888;background:#eee;cursor:pointer}
+    button.primary{background:#1b73e8;color:white;border-color:#1666c3}
+
+    /* The printable page container: size controlled by CSS variables (mm) */
+    .page{
+      width: calc(var(--page-width-mm) * 1mm);
+      height: calc(var(--page-height-mm) * 1mm);
+      box-shadow: 0 2px 10px rgba(0,0,0,.15);
+      background:var(--bg);
+      position:relative;
+      display:flex;align-items:center;justify-content:center;
+      box-sizing:border-box;
+      overflow:visible;
+    }
+
+    /* protractor area is an SVG that fills the page minus margins */
+    .protractor-wrap{width:calc(100% - (var(--margin-mm) * 2mm));height:calc(100% - (var(--margin-mm) * 2mm));}
+
+    /* small print helper note */
+    .note{font-size:12px;color:#444;margin-top:6px}
+
+    /* ensure the UI doesn't appear in print */
+    @media print{
+      body{padding:0}
+      .toolbar,.note{display:none}
+      .page{box-shadow:none}
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <div class="controls">
+      <label>頁面尺寸</label>
+      <select id="pageSize">
+        <option value="A4">A4 (210 × 297 mm)</option>
+        <option value="Letter">Letter (216 × 279 mm)</option>
+        <option value="A3">A3 (297 × 420 mm)</option>
+        <option value="Custom">自訂 (mm)</option>
+      </select>
+      <input id="customW" type="number" min="50" value="210" style="width:80px;display:none"/> ×
+      <input id="customH" type="number" min="50" value="297" style="width:80px;display:none"/>
+
+      <label>邊界 (mm)</label>
+      <input id="marginMM" type="number" min="0" value="12" style="width:70px"/>
+
+      <label>外徑 (mm)</label>
+      <input id="outerDiameter" type="number" min="10" value="0" style="width:80px"/>      
+
+      <label>角度範圍</label>
+      <input id="startDeg" type="number" min="-360" max="360" value="0" style="width:70px"/> —
+      <input id="endDeg" type="number" min="-360" max="360" value="180" style="width:70px"/>
+
+      <label>刻度間距 (°)</label>
+      <input id="majorStep" type="number" min="1" value="10" style="width:70px"/>
+      <input id="minorStep" type="number" min="1" value="1" style="width:70px"/>
+
+      <button id="redraw">重新產生</button>
+    </div>
+
+    <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+      <button id="saveSvg">另存 SVG</button>
+      <button class="primary" id="printBtn">列印 (預覽)</button>
+    </div>
+  </div>
+
+  <div class="page" id="page">
+    <div class="protractor-wrap" id="wrap">
+      <!-- SVG will be injected here -->
+    </div>
+  </div>
+
+  <div class="note">列印時請在印表機設定選擇「實際大小 / 100%」並關閉頁首/頁尾。若要精準刻度，請確認沒有縮放。</div>
+
+  <script>
+    const pageSize = document.getElementById('pageSize');
+    const customW = document.getElementById('customW');
+    const customH = document.getElementById('customH');
+    const marginInput = document.getElementById('marginMM');
+    const outerDiameterInput = document.getElementById('outerDiameter');
+
+    const startDegInput = document.getElementById('startDeg');
+    const endDegInput = document.getElementById('endDeg');
+    const majorStep = document.getElementById('majorStep');
+    const minorStep = document.getElementById('minorStep');
+    const redrawBtn = document.getElementById('redraw');
+    const wrap = document.getElementById('wrap');
+    const pageEl = document.getElementById('page');
+    const saveSvgBtn = document.getElementById('saveSvg');
+    const printBtn = document.getElementById('printBtn');
+
+    const presets = {
+      'A4': {w:210,h:297},
+      'Letter': {w:216,h:279},
+      'A3': {w:297,h:420}
+    };
+
+    function applyPageSize(name){
+      if(name === 'Custom'){
+        customW.style.display = 'inline-block';
+        customH.style.display = 'inline-block';
+      } else {
+        customW.style.display = 'none';
+        customH.style.display = 'none';
+      }
+      const w = name === 'Custom' ? parseFloat(customW.value) : presets[name].w;
+      const h = name === 'Custom' ? parseFloat(customH.value) : presets[name].h;
+      document.documentElement.style.setProperty('--page-width-mm', w);
+      document.documentElement.style.setProperty('--page-height-mm', h);
+      document.documentElement.style.setProperty('--margin-mm', marginInput.value);
+
+      // update @page rule by inserting a style block (safer cross-browser)
+      const existing = document.getElementById('dynamicPageStyle');
+      if(existing) existing.remove();
+      const style = document.createElement('style');
+      style.id = 'dynamicPageStyle';
+      style.textContent = `@page{ size: ${w}mm ${h}mm; margin:0 }`;
+      document.head.appendChild(style);
+    }
+
+    function degToRad(d){ return d * Math.PI / 180; }
+
+    function drawProtractor(){
+      // read settings
+      const start = Number(startDegInput.value);
+      const end = Number(endDegInput.value);
+      const major = Math.max(1, Number(majorStep.value));
+      const minor = Math.max(1, Number(minorStep.value));
+      const marginMM = Number(marginInput.value);
+      const outerDiameter = Number(outerDiameterInput.value); // Ensure outerDiameter is updated
+
+      // compute pixel dimensions from CSS mm values (we'll use mm units in SVG for print accuracy)
+      const style = getComputedStyle(document.documentElement);
+      const pageW = parseFloat(style.getPropertyValue('--page-width-mm'));
+      const pageH = parseFloat(style.getPropertyValue('--page-height-mm'));
+      const innerW = pageW - marginMM*2;
+      const innerH = pageH - marginMM*2;
+      const svgW = innerW;
+      const svgH = innerH;
+
+      // create svg element with viewBox in mm for accurate printing
+      const xmlns = 'http://www.w3.org/2000/svg';
+      const svg = document.createElementNS(xmlns,'svg');
+      svg.setAttribute('width', svgW + 'mm');
+      svg.setAttribute('height', svgH + 'mm');
+      svg.setAttribute('viewBox', `0 0 ${svgW} ${svgH}`);
+      svg.setAttribute('xmlns', xmlns);
+      svg.setAttribute('preserveAspectRatio','xMidYMid meet');
+
+      // background rect (optional subtle)
+      const bg = document.createElementNS(xmlns,'rect');
+      bg.setAttribute('x',0); bg.setAttribute('y',0); bg.setAttribute('width',svgW); bg.setAttribute('height',svgH);
+      bg.setAttribute('fill','none');
+      svg.appendChild(bg);
+
+      // center point
+      const cx = svgW/2;
+      const cy = svgH/2;
+
+      // radius: fit inside the inner box
+      let radius;
+      if(outerDiameter > 0 && outerDiameter/2 < Math.min(svgW, svgH)/2){
+        radius = outerDiameter/2;
+      }else{
+        radius = Math.min(svgW, svgH)/2 - 4; // leave small gap for labels
+      }
+
+      // draw outer arc (from start to end)
+      const largeArc = Math.abs(end-start) > 180 ? 1 : 0;
+      const startRad = degToRad(start - 90); // rotate so 0deg at right and 90deg up -> shift -90
+      const endRad = degToRad(end - 90);
+      const sx = cx + radius * Math.cos(startRad);
+      const sy = cy + radius * Math.sin(startRad);
+      const ex = cx + radius * Math.cos(endRad);
+      const ey = cy + radius * Math.sin(endRad);
+
+      const arc = document.createElementNS(xmlns,'path');
+      arc.setAttribute('d', `M ${sx} ${sy} A ${radius} ${radius} 0 ${largeArc} 1 ${ex} ${ey}`);
+      arc.setAttribute('stroke', 'black');
+      arc.setAttribute('stroke-width','0.8');
+      arc.setAttribute('fill','none');
+      svg.appendChild(arc);
+
+      // draw center mark
+      const dot = document.createElementNS(xmlns,'circle');
+      dot.setAttribute('cx',cx); dot.setAttribute('cy',cy); dot.setAttribute('r',0.8); dot.setAttribute('fill','black');
+      svg.appendChild(dot);
+
+      // Adjust tick length and font size based on radius
+      const tickLength = Math.max(0.5, radius * 0.08); // Minimum tick length is 2
+      const fontSize = Math.max(3, radius * 0.12); // Minimum font size is 4
+
+      // draw ticks and labels
+      const minA = Math.min(start,end);
+      const maxA = Math.max(start,end);
+      // iterate degrees from minA to maxA
+      for(let a = minA; a <= maxA; a += minor){
+        const angleRad = degToRad(a - 90);
+        // Adjust tick length for major ticks to extend to the center
+        const innerTick = a % major === 0 ? 0 : radius - tickLength; // Major ticks extend to the center
+        const outerTick = radius;
+        const x1 = cx + innerTick * Math.cos(angleRad);
+        const y1 = cy + innerTick * Math.sin(angleRad);
+        const x2 = cx + outerTick * Math.cos(angleRad);
+        const y2 = cy + outerTick * Math.sin(angleRad);
+        const tick = document.createElementNS(xmlns,'line');
+        tick.setAttribute('x1',x1); tick.setAttribute('y1',y1); tick.setAttribute('x2',x2); tick.setAttribute('y2',y2);
+        tick.setAttribute('stroke','black');
+
+        // Adjust tick stroke width based on outer diameter
+        const strokeWidth = Math.max(0.2, radius * 0.005); // Minimum stroke width is 0.2
+        tick.setAttribute('stroke-width', a % major === 0 ? strokeWidth * 2 : strokeWidth);
+        svg.appendChild(tick);
+
+        if(a % major === 0){
+          // label
+          const labelRadius = radius - tickLength - 5; // Place a bit inwards
+          const lx = cx + (labelRadius) * Math.cos(angleRad);
+          const ly = cy + (labelRadius) * Math.sin(angleRad);
+          const text = document.createElementNS(xmlns,'text');
+          text.setAttribute('x', lx);
+          text.setAttribute('y', ly);
+          text.setAttribute('font-size', fontSize); // Adjusted font size
+          text.setAttribute('text-anchor','middle');
+          text.setAttribute('alignment-baseline','middle');
+          text.textContent = a;
+          svg.appendChild(text);
+        }
+      }
+
+      // optionally draw inner semicircle for style
+      const innerR = radius - 12;
+      const innerArc = document.createElementNS(xmlns,'path');
+      const isx = cx + innerR * Math.cos(startRad);
+      const isy = cy + innerR * Math.sin(startRad);
+      const iex = cx + innerR * Math.cos(endRad);
+      const iey = cy + innerR * Math.sin(endRad);
+      innerArc.setAttribute('d', `M ${isx} ${isy} A ${innerR} ${innerR} 0 ${largeArc} 1 ${iex} ${iey}`);
+      innerArc.setAttribute('stroke','black'); innerArc.setAttribute('stroke-width','0.35'); innerArc.setAttribute('fill','none');
+      svg.appendChild(innerArc);
+
+      // replace previous svg
+      wrap.innerHTML = '';
+      wrap.appendChild(svg);
+
+      // save svg element reference
+      currentSvg = svg;
+    }
+
+    // download current svg
+    let currentSvg = null;
+    saveSvgBtn.addEventListener('click', ()=>{
+      if(!currentSvg) return alert('請先按「重新產生」。');
+      const serializer = new XMLSerializer();
+      const str = serializer.serializeToString(currentSvg);
+      const blob = new Blob([str], {type: 'image/svg+xml'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'protractor.svg';
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    });
+
+    // printing
+    printBtn.addEventListener('click', ()=>{
+      // show print preview
+      window.print();
+    });
+
+    // apply changes and redraw
+    function updateAndDraw(){
+      applyPageSize(pageSize.value);
+      document.documentElement.style.setProperty('--margin-mm', marginInput.value);
+      drawProtractor();
+    }
+
+    // events
+    pageSize.addEventListener('change', ()=> updateAndDraw());
+    customW.addEventListener('change', ()=> updateAndDraw());
+    customH.addEventListener('change', ()=> updateAndDraw());
+    marginInput.addEventListener('change', ()=> updateAndDraw());
+    outerDiameterInput.addEventListener('change', ()=> updateAndDraw());
+
+    document.addEventListener('DOMContentLoaded', () => {
+      console.log('DOM fully loaded and parsed'); // Debugging log
+
+      if (redrawBtn) {
+        console.log('Redraw button found'); // Debugging log
+        redrawBtn.addEventListener('click', () => {
+          console.log('Redraw button clicked'); // Debugging log
+          updateAndDraw();
+        });
+      } else {
+        console.error('Redraw button not found'); // Debugging log
+      }
+    });
+
+    // Set default outer diameter
+    outerDiameterInput.value = 50; // Default value in mm
+
+    // initial draw
+    updateAndDraw();
+  </script>
+</body>
+</html>
+
