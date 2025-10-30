@@ -365,7 +365,7 @@
     ctx.font = `${Math.max(12, Math.floor(mag.r*0.22))}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('OIL', mag.x, mag.y);
+    ctx.fillText('油滴  ', mag.x, mag.y);
 
     ctx.restore();
   }
