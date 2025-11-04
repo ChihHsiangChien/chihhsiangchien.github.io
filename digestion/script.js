@@ -8,7 +8,124 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const info = document.getElementById('info');
 
   // viewBox of svg is 0 0 400 900
-  const viewBox = {width:400, height:900};
+  // centralize visual size variables so they can be tuned in one place
+  const SIZES = {
+    svgViewBox: { width: 140, height: 200 },
+    hex: {
+      r: 10,
+      gap: 2,
+      fill: '#6f6fe0',
+      stroke: 'rgba(0,0,0,0.06)',
+      horizFactor: 1.75,
+      extraHeight: 4,
+      smallR: 10,
+      largeR: 12
+    },
+    aa: {
+      r: 10,
+      smallR: 8,
+      // connector between residues (more visible defaults)
+      linkColor: 'rgba(216,90,90,0.85)',
+      linkWidth: 3,
+      linkOpacity: 0.95,
+      // where to place the link relative to residue shapes: 'under' or 'over'
+      linkPlace: 'over'
+    },
+    trig: {
+      glycerolWidth: 28,
+      glycerolRectW: 30,
+      glycerolRectH: 15,
+      glycerolRectRx: 3,
+      faHeight: 6,
+      faWidthMin: 6,
+      gap: 6,
+      faHeightMult: 6,
+      svgPadding: 8,
+      faSvg: { width: 12, height: 44 }
+    },
+    child: {
+      padding: '2px',
+      borderRadius: '6px'
+    },
+    split: {
+      gap: 8,
+      spread: 8
+    },
+    token: {
+      initialGlc: 6,
+      initialAA: 10
+    }
+  };
+
+  // Debug helpers (enable for tracing emissions and conversions)
+  const DEBUG = false; // set false to silence debug output
+  // on-page debug panel (visible when DEBUG=true)
+  let _debugPanel = null;
+  function ensureDebugPanel(){
+    if(_debugPanel || !DEBUG) return _debugPanel;
+    _debugPanel = document.createElement('div');
+    _debugPanel.id = 'digestion-debug-panel';
+    _debugPanel.style.position = 'fixed';
+    _debugPanel.style.right = '12px';
+    _debugPanel.style.bottom = '12px';
+    _debugPanel.style.width = '320px';
+    _debugPanel.style.maxHeight = '40vh';
+    _debugPanel.style.overflow = 'auto';
+    _debugPanel.style.background = 'rgba(20,20,20,0.9)';
+    _debugPanel.style.color = '#e6e6e6';
+    _debugPanel.style.fontSize = '12px';
+    _debugPanel.style.padding = '8px';
+    _debugPanel.style.borderRadius = '8px';
+    _debugPanel.style.zIndex = 99999;
+    _debugPanel.style.boxShadow = '0 6px 18px rgba(0,0,0,0.4)';
+    _debugPanel.style.fontFamily = 'monospace';
+    const header = document.createElement('div');
+    header.textContent = 'digestion DEBUG';
+    header.style.fontWeight = '600';
+    header.style.marginBottom = '6px';
+    header.style.fontSize = '13px';
+    _debugPanel.appendChild(header);
+    const clearBtn = document.createElement('button');
+    clearBtn.textContent = 'Clear';
+    clearBtn.style.fontSize = '11px';
+    clearBtn.style.marginLeft = '8px';
+    clearBtn.addEventListener('click', ()=>{ while(_debugPanel.children.length>1) _debugPanel.removeChild(_debugPanel.lastChild); });
+    header.appendChild(clearBtn);
+    document.body.appendChild(_debugPanel);
+    return _debugPanel;
+  }
+
+  function debugLog(...args){
+    if(!DEBUG) return;
+    // Console output (use log so it's visible even if debug level filtered)
+    if(console && console.log) console.log('[digestion]', ...args);
+    try{
+      const panel = ensureDebugPanel();
+      if(panel){
+        const line = document.createElement('div');
+        line.style.padding = '2px 0';
+        const time = new Date().toLocaleTimeString();
+        const text = args.map(a=>{
+          try{ return (typeof a === 'string')? a : JSON.stringify(a); }catch(e){ return String(a); }
+        }).join(' ');
+        line.textContent = `${time} ${text}`;
+        panel.appendChild(line);
+        // keep panel to reasonable length
+        while(panel.children.length > 201) panel.removeChild(panel.children[1]);
+      }
+    }catch(e){ /* ignore */ }
+  }
+
+  function debugFlash(el, color='rgba(0,0,0,0.12)'){
+    try{
+      if(!el || !el.style) return;
+      const prev = el.style.boxShadow || '';
+      el.style.boxShadow = `0 0 0 6px ${color}`;
+      setTimeout(()=>{ el.style.boxShadow = prev; }, 420);
+    }catch(e){ /* ignore */ }
+  }
+
+  const viewBox = { width: SIZES.svgViewBox.width, height: SIZES.svgViewBox.height };
   const pathLen = path.getTotalLength();
 
   // compute thresholds (path lengths) for mouth and small intestine zones
@@ -50,11 +167,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
     };
   }
   // helper: create an inline SVG chain of flat-top hexagons
-  function createHexChainSVG(count, r=10, gap=2, fill='#6f6fe0', stroke='rgba(0,0,0,0.06)'){
+  function createHexChainSVG(count, r = SIZES.hex.r, gap = SIZES.hex.gap, fill = SIZES.hex.fill, stroke = SIZES.hex.stroke){
     const sqrt3 = Math.sqrt(3);
-    const horiz = r * 1.75; // horizontal spacing between centers
-    const width = (count - 1) * horiz + r * 2 + gap * (count-1);
-    const height = r * sqrt3 + 4;
+    const horiz = r * SIZES.hex.horizFactor; // horizontal spacing between centers
+    const width = (count - 1) * horiz + r * 2 + gap * (count - 1);
+    const height = r * sqrt3 + SIZES.hex.extraHeight;
     const svgEl = document.createElementNS('http://www.w3.org/2000/svg','svg');
     svgEl.setAttribute('width', width);
     svgEl.setAttribute('height', height);
@@ -86,7 +203,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // helper: create an inline SVG chain for amino-acid shapes (alternating circle/rect)
   // create amino chain SVG from an ordered sequence of shapes
   // seq: array of shape strings: 'triangle'|'square'|'diamond'|'circle'
-  function createAminoChainSVGFromSequence(seq, r=10){
+  function createAminoChainSVGFromSequence(seq, r = SIZES.aa.r){
     const n = seq.length;
     // lay out shapes along a gentle Bezier curve from left to right
     const width = Math.max(60, n * (r*2 + 6));
@@ -111,7 +228,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
     // helper: compute a color for an amino-acid shape using same hue but varying saturation/lightness
     function aaColor(shape){
-      const hue = 8; // base hue (red-orange)
+      const hue = (SIZES.aaHue || 8); // base hue (red-orange)
       const map = {
         'circle': [60, 50],
         'square': [75, 44],
@@ -124,9 +241,55 @@ document.addEventListener('DOMContentLoaded', ()=>{
       return `hsl(${hue} ${sat}% ${light}%)`;
     }
 
+    // compute positions for all residues first so we can draw a connecting link
+    const positions = [];
     for(let i=0;i<n;i++){
       const t = n===1?0.5: i/(n-1);
-      const pos = bezier(t);
+      positions.push(bezier(t));
+    }
+
+    // draw a smooth linking path between amino-acid centers using Catmull-Rom -> Bezier
+    let linkPath = null;
+    if(positions.length > 1){
+      // convert array of {x,y} into a smooth cubic-bezier path that passes through all points
+      function catmullRom2bezier(pts){
+        const d = pts;
+        const n = d.length;
+        if(n === 0) return '';
+        if(n === 1) return `M ${d[0].x} ${d[0].y}`;
+        if(n === 2) return `M ${d[0].x} ${d[0].y} L ${d[1].x} ${d[1].y}`;
+        let path = `M ${d[0].x} ${d[0].y}`;
+        for(let i=0;i<n-1;i++){
+          const p0 = i > 0 ? d[i-1] : d[i];
+          const p1 = d[i];
+          const p2 = d[i+1];
+          const p3 = i+2 < n ? d[i+2] : p2;
+          // Catmull-Rom to Bezier conversion (standard tension = 0.5 -> divide by 6)
+          const c1x = p1.x + (p2.x - p0.x) / 6;
+          const c1y = p1.y + (p2.y - p0.y) / 6;
+          const c2x = p2.x - (p3.x - p1.x) / 6;
+          const c2y = p2.y - (p3.y - p1.y) / 6;
+          path += ` C ${c1x} ${c1y}, ${c2x} ${c2y}, ${p2.x} ${p2.y}`;
+        }
+        return path;
+      }
+
+      const dAttr = catmullRom2bezier(positions);
+      const linkPath = document.createElementNS('http://www.w3.org/2000/svg','path');
+      linkPath.setAttribute('d', dAttr);
+      linkPath.setAttribute('fill', 'none');
+      linkPath.setAttribute('stroke', SIZES.aa.linkColor || 'rgba(0,0,0,0.35)');
+      linkPath.setAttribute('stroke-width', String(SIZES.aa.linkWidth || Math.max(1, r*0.45)));
+      linkPath.setAttribute('stroke-linecap', 'round');
+      linkPath.setAttribute('stroke-linejoin', 'round');
+      linkPath.setAttribute('stroke-opacity', String(SIZES.aa.linkOpacity ?? 0.95));
+      linkPath.setAttribute('pointer-events', 'none');
+      linkPath.setAttribute('class', 'svg-aa-link');
+    }
+
+    // now render each residue on top of the link
+    for(let i=0;i<n;i++){
+      const pos = positions[i];
       const shape = seq[i];
       const fill = aaColor(shape);
       if(shape === 'circle'){
@@ -177,6 +340,13 @@ document.addEventListener('DOMContentLoaded', ()=>{
         svgEl.appendChild(poly);
       }
     }
+    // append link on top if requested
+    if(linkPath && (SIZES.aa.linkPlace === 'over')){
+      svgEl.appendChild(linkPath);
+    }else if(linkPath){
+      // ensure link is underneath shapes
+      svgEl.insertBefore(linkPath, svgEl.firstChild);
+    }
     return svgEl;
   }
 
@@ -217,17 +387,17 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
     if(type === 'carb'){
       // start as a starch chain (6 hexagons)
-      const initialGlc = 6; // number of glucose units in this starch token
-      const svgChain = createHexChainSVG(initialGlc, 10, 0, '#6f6fe0');
+      const initialGlc = SIZES.token.initialGlc; // number of glucose units in this starch token
+      const svgChain = createHexChainSVG(initialGlc, SIZES.hex.r, 0, SIZES.hex.fill);
       // store original glucose count for later conversions
       el.dataset.glucoseCount = String(initialGlc);
       el.appendChild(svgChain);
       el.title = '澱粉 (多醣)';
     }else if(type === 'protein'){
       // start as a protein chain composed of several amino-acid shapes
-      const initialAA = 10; // user requested 10 amino acids per protein
+      const initialAA = SIZES.token.initialAA; // user requested amino acids per protein
       const seq = generateAminoSequence(initialAA);
-      const svgChain = createAminoChainSVGFromSequence(seq, 8);
+      const svgChain = createAminoChainSVGFromSequence(seq, SIZES.aa.smallR);
       el.dataset.aminoCount = String(initialAA);
       el.dataset.aminoSeq = JSON.stringify(seq);
       el.appendChild(svgChain);
@@ -249,14 +419,14 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }
 
   // create an inline SVG representing a triglyceride: one large glycerol rect and three long thin fatty-acid rects
-  function createTriglycerideSVG(glycerolWidth=28, faHeight=6){
+  function createTriglycerideSVG(glycerolWidth = SIZES.trig.glycerolWidth, faHeight = SIZES.trig.faHeight){
     // overall layout: glycerol block on top, three vertical fatty-acid tails below (like comb teeth)
-    const faW = Math.max(6, faHeight); // thin tail width
-    const faH = faHeight * 6; // tail length
-    const gap = 6;
-    const contentWidth = Math.max(glycerolWidth, faW*3 + gap*2);
-    const width = contentWidth + 8;
-    const height = glycerolWidth + 8 + faH;
+    const faW = Math.max(SIZES.trig.faWidthMin, faHeight); // thin tail width
+    const faH = faHeight * SIZES.trig.faHeightMult; // tail length
+    const gap = SIZES.trig.gap;
+    const contentWidth = Math.max(glycerolWidth, faW * 3 + gap * 2);
+    const width = contentWidth + SIZES.trig.svgPadding;
+    const height = glycerolWidth + SIZES.trig.svgPadding + faH;
     const svgEl = document.createElementNS('http://www.w3.org/2000/svg','svg');
     svgEl.setAttribute('width', width);
     svgEl.setAttribute('height', height);
@@ -264,21 +434,21 @@ document.addEventListener('DOMContentLoaded', ()=>{
     svgEl.setAttribute('aria-hidden','true');
 
     // glycerol block centered at top
-    const glycerol = document.createElementNS('http://www.w3.org/2000/svg','rect');
-    const gx = (width - glycerolWidth) / 2;
-    const gy = 2;
-    glycerol.setAttribute('x', gx);
-    glycerol.setAttribute('y', gy);
-    glycerol.setAttribute('width', 30);
-    glycerol.setAttribute('height', 15);
-    glycerol.setAttribute('rx', 3);
+  const glycerol = document.createElementNS('http://www.w3.org/2000/svg','rect');
+  const gx = (width - glycerolWidth) / 2;
+  const gy = 2;
+  glycerol.setAttribute('x', gx);
+  glycerol.setAttribute('y', gy);
+  glycerol.setAttribute('width', SIZES.trig.glycerolRectW);
+  glycerol.setAttribute('height', SIZES.trig.glycerolRectH);
+  glycerol.setAttribute('rx', SIZES.trig.glycerolRectRx);
     glycerol.setAttribute('fill', 'hsl(40 70% 55%)'); // warm golden glycerol
     glycerol.setAttribute('class','svg-fat-gly');
     svgEl.appendChild(glycerol);
 
     // three fatty acid tails below the glycerol block
-    const startX = (width - (faW*3 + gap*2)) / 2;
-    const tailY = gy + glycerolWidth - 15 ;
+    const startX = (width - (faW * 3 + gap * 2)) / 2;
+    const tailY = gy + glycerolWidth - SIZES.trig.glycerolRectH;
     for(let i=0;i<3;i++){
       const fa = document.createElementNS('http://www.w3.org/2000/svg','rect');
       const x = startX + i * (faW + gap);
@@ -303,15 +473,15 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if(kind === 'gly'){
       el.dataset.glycerol = '1';
       const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
-      svg.setAttribute('width', 30);
-      svg.setAttribute('height', 15);
-      svg.setAttribute('viewBox','0 0 20 20');
+      svg.setAttribute('width', SIZES.trig.glycerolRectW);
+      svg.setAttribute('height', SIZES.trig.glycerolRectH);
+      svg.setAttribute('viewBox', `0 0 ${SIZES.trig.glycerolRectW} ${SIZES.trig.glycerolRectH}`);
       const r = document.createElementNS('http://www.w3.org/2000/svg','rect');
-      r.setAttribute('x',0); 
-      r.setAttribute('y',0); 
-      r.setAttribute('width',30); 
-      r.setAttribute('height',15); 
-      r.setAttribute('rx',3);
+      r.setAttribute('x',0);
+      r.setAttribute('y',0);
+      r.setAttribute('width', SIZES.trig.glycerolRectW);
+      r.setAttribute('height', SIZES.trig.glycerolRectH);
+      r.setAttribute('rx', SIZES.trig.glycerolRectRx);
       r.setAttribute('fill','hsl(40 70% 55%)');
       svg.appendChild(r);
       el.appendChild(svg);
@@ -319,11 +489,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
       el.dataset.fatty = '1';
       const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
       // vertical thin rectangle for fatty acid
-      svg.setAttribute('width', 12);
-      svg.setAttribute('height', 44);
-      svg.setAttribute('viewBox','0 0 12 44');
+      svg.setAttribute('width', SIZES.trig.faSvg.width);
+      svg.setAttribute('height', SIZES.trig.faSvg.height);
+      svg.setAttribute('viewBox', `0 0 ${SIZES.trig.faSvg.width} ${SIZES.trig.faSvg.height}`);
       const r = document.createElementNS('http://www.w3.org/2000/svg','rect');
-      r.setAttribute('x',2); r.setAttribute('y',0); r.setAttribute('width',8); r.setAttribute('height',40); r.setAttribute('rx',3);
+      r.setAttribute('x',2); r.setAttribute('y',0); r.setAttribute('width', SIZES.trig.faSvg.width - 4); r.setAttribute('height', SIZES.trig.faSvg.height - 4); r.setAttribute('rx',3);
       r.setAttribute('fill','hsl(40 65% 45%)');
       svg.appendChild(r);
       el.appendChild(svg);
@@ -338,13 +508,13 @@ document.addEventListener('DOMContentLoaded', ()=>{
     el.className = `moving child ${kind}-child`;
     el.style.left = '0px';
     el.style.top = '0px';
-    el.style.padding = '2px';
-    el.style.borderRadius = '6px';
+  el.style.padding = SIZES.child.padding;
+  el.style.borderRadius = SIZES.child.borderRadius;
     el.style.background = 'transparent';
     el.dataset.type = kind;
     if(kind === 'carb'){
       el.dataset.glucoseCount = String(unitSize);
-      const svg = createHexChainSVG(unitSize, unitSize===1?8:10, 0, fill);
+      const svg = createHexChainSVG(unitSize, unitSize===1 ? SIZES.aa.smallR : SIZES.hex.r, 0, fill);
       el.appendChild(svg);
     }else if(kind === 'protein'){
       el.dataset.aminoCount = String(unitSize);
@@ -352,10 +522,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
       let seq = null;
       try{ seq = el.dataset.aminoSeq ? JSON.parse(el.dataset.aminoSeq) : null; }catch(e){ seq = null; }
       if(seq && Array.isArray(seq)){
-        el.appendChild(createAminoChainSVGFromSequence(seq, unitSize===1?8:10));
+        el.appendChild(createAminoChainSVGFromSequence(seq, unitSize===1 ? SIZES.aa.smallR : SIZES.aa.r));
       }else{
         const placeholder = new Array(unitSize).fill('circle');
-        el.appendChild(createAminoChainSVGFromSequence(placeholder, unitSize===1?8:10));
+        el.appendChild(createAminoChainSVGFromSequence(placeholder, unitSize===1 ? SIZES.aa.smallR : SIZES.aa.r));
       }
     }
     document.body.appendChild(el);
@@ -412,10 +582,17 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   // Convert a detached maltose child into individual glucose detached children
   function convertChildToGlucose(childEl, atLen, remainingDuration){
+    // idempotent guard
+    if(childEl.dataset._converted) return;
+    childEl.dataset._converted = 'toGlucose';
     const gCount = parseInt(childEl.dataset.glucoseCount||'2',10);
+    debugLog('convertChildToGlucose', {gCount, atLen, remainingDuration, dataset: childEl.dataset});
     // create gCount new child tokens (single glucose) and animate them from atLen
     for(let i=0;i<gCount;i++){
       const gl = createMovingChild(1,'#6f6fe0');
+      // annotate and flash emitted glucose
+      gl.dataset.emittedBy = 'convertChildToGlucose';
+      debugFlash(gl, 'rgba(111,111,224,0.25)');
       // small speed variation
       const factor = 0.9 + Math.random()*0.3;
       animateChildAlongPath(gl, atLen + i*2, Math.max(400, remainingDuration*factor), '葡萄糖');
@@ -432,7 +609,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
       const aa = createMovingChild(1,'#d85a5a','protein');
       // draw this aa shape specifically inside the child
       aa.innerHTML = '';
-      aa.appendChild(createAminoChainSVGFromSequence([shape], 8));
+  aa.appendChild(createAminoChainSVGFromSequence([shape], SIZES.aa.smallR));
       aa.dataset.aminoSeq = JSON.stringify([shape]);
       const factor = 0.9 + Math.random()*0.3;
       animateChildAlongPath(aa, atLen + i*2, Math.max(350, remainingDuration*factor), '胺基酸');
@@ -442,22 +619,88 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   // Convert token into maltose; if startLen provided, emit detached maltose child tokens that continue along path
   function convertToMaltose(el, startLen, remainingDuration){
+    // idempotent guard: prevent double conversion
+    if(el.dataset._converted) return;
+    el.dataset._converted = 'maltose';
     const gCount = parseInt(el.dataset.glucoseCount || '6',10);
-    const maltoseUnits = Math.max(1, Math.floor(gCount/2));
+    // compute number of maltose (pairs) and whether there's a leftover glucose
+    const maltoseUnits = Math.floor(gCount / 2);
+    const remainder = gCount % 2;
+    debugLog('convertToMaltose', {gCount, maltoseUnits, remainder, dataset: el.dataset});
     if(typeof startLen === 'number'){
-      // emit maltoseUnits detached children that each contain 2 glucose units
+      // emit maltose (pairs) first
+      let offsetIndex = 0;
       for(let i=0;i<maltoseUnits;i++){
         const child = createMovingChild(2, '#9b8ef0');
-        // slight position offset so children don't perfectly overlap at spawn
-        const offsetLen = startLen + i * 2;
+        child.dataset.emittedBy = 'convertToMaltose';
+        debugFlash(child, 'rgba(155,142,240,0.25)');
+        const offsetLen = startLen + offsetIndex * 2;
         const factor = 0.85 + Math.random()*0.4; // speed variation
         animateChildAlongPath(child, offsetLen, Math.max(300, remainingDuration * factor), '麥芽糖');
+        offsetIndex++;
+      }
+      // if there's a leftover single glucose, emit it as a single-glucose child
+      if(remainder === 1){
+        const single = createMovingChild(1, '#6f6fe0');
+        single.dataset.emittedBy = 'convertToMaltose';
+        debugFlash(single, 'rgba(111,111,224,0.25)');
+        const factor = 0.9 + Math.random()*0.3;
+        animateChildAlongPath(single, startLen + offsetIndex * 2, Math.max(300, remainingDuration * factor), '葡萄糖');
       }
       // remove original token element
       el.remove();
     }else{
-      // fallback: render inline split visuals inside the token
-      splitIntoElements(el, maltoseUnits, {unitSize:2, fill:'#9b8ef0', label:'麥芽糖 (二糖)'});
+      // fallback: inline split visuals showing maltose pairs and optional leftover glucose
+      // build a split container similar to splitIntoElements but allow mixed unit sizes
+      el.innerHTML = '';
+      const splitContainer = document.createElement('div');
+      splitContainer.className = 'split-container';
+      splitContainer.style.position = 'relative';
+      splitContainer.style.display = 'flex';
+      splitContainer.style.gap = String(SIZES.split.gap || 8) + 'px';
+      splitContainer.style.alignItems = 'center';
+
+      // maltose (pairs)
+      for(let i=0;i<maltoseUnits;i++){
+        const child = document.createElement('div');
+        child.className = 'split-mol';
+        child.style.width = 'auto';
+        child.style.height = 'auto';
+        child.style.display = 'inline-block';
+        child.style.transition = 'transform 420ms cubic-bezier(.2,.9,.2,1), opacity 420ms ease';
+        child.setAttribute('aria-hidden','false');
+        const svgUnit = createHexChainSVG(2, SIZES.hex.r, 0, '#9b8ef0');
+        child.appendChild(svgUnit);
+        splitContainer.appendChild(child);
+      }
+      // leftover single glucose, if any
+      if(remainder === 1){
+        const child = document.createElement('div');
+        child.className = 'split-mol';
+        child.style.width = 'auto';
+        child.style.height = 'auto';
+        child.style.display = 'inline-block';
+        child.style.transition = 'transform 420ms cubic-bezier(.2,.9,.2,1), opacity 420ms ease';
+        child.setAttribute('aria-hidden','false');
+        const svgUnit = createHexChainSVG(1, SIZES.hex.smallR, 0, '#6f6fe0');
+        child.appendChild(svgUnit);
+        splitContainer.appendChild(child);
+      }
+      el.appendChild(splitContainer);
+      el.title = '麥芽糖 / 葡萄糖 (分解結果)';
+      // slight separation animation: spread children horizontally a bit
+      requestAnimationFrame(()=>{
+        const children = splitContainer.children;
+        const total = children.length;
+        for(let i=0;i<total;i++){
+          const c = children[i];
+          const mid = (total-1)/2;
+          const idx = i - mid;
+          const x = idx * (SIZES.split.spread || 8);
+          const y = Math.abs(idx) * 1;
+          c.style.transform = `translate(${x}px, ${y}px)`;
+        }
+      });
     }
   }
 
@@ -466,15 +709,17 @@ document.addEventListener('DOMContentLoaded', ()=>{
     // get sequence and partition into groups of 2 or 3 while preserving order
     const seq = el.dataset.aminoSeq ? JSON.parse(el.dataset.aminoSeq) : new Array(parseInt(el.dataset.aminoCount||'6',10)).fill('circle');
     const groups = partitionSequence(seq);
-    if(typeof startLen === 'number'){
+  if(el.dataset._converted) return;
+  el.dataset._converted = 'polypeptide';
+  if(typeof startLen === 'number'){
       for(let i=0;i<groups.length;i++){
         const grp = groups[i];
         const child = createMovingChild(grp.length, '#d85a5a', 'protein');
         // store the sequence for this child so later splitting preserves order
         child.dataset.aminoSeq = JSON.stringify(grp);
         // update visual to reflect real subsequence
-        child.innerHTML = '';
-        child.appendChild(createAminoChainSVGFromSequence(grp, 10));
+  child.innerHTML = '';
+  child.appendChild(createAminoChainSVGFromSequence(grp, SIZES.aa.r));
         const offsetLen = startLen + i * 2;
         const factor = 0.85 + Math.random()*0.4;
         animateChildAlongPath(child, offsetLen, Math.max(300, remainingDuration * factor), '多肽');
@@ -489,10 +734,15 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   // Convert token into glucose; if startLen provided, emit detached glucose child tokens that continue along path
   function convertToGlucose(el, startLen, remainingDuration){
+    if(el.dataset._converted) return;
+    el.dataset._converted = 'glucose';
     const gCount = parseInt(el.dataset.glucoseCount || '6',10);
+    debugLog('convertToGlucose', {gCount, startLen, remainingDuration, dataset: el.dataset});
     if(typeof startLen === 'number'){
       for(let i=0;i<gCount;i++){
         const child = createMovingChild(1, '#6f6fe0');
+        child.dataset.emittedBy = 'convertToGlucose';
+        debugFlash(child, 'rgba(111,111,224,0.25)');
         const offsetLen = startLen + i * 2;
         const factor = 0.9 + Math.random()*0.4;
         animateChildAlongPath(child, offsetLen, Math.max(200, remainingDuration * factor), '葡萄糖');
@@ -506,13 +756,15 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   // Convert token into amino acids (used when a whole protein token reaches small intestine without prior stomach split)
   function convertToAminoAcids(el, startLen, remainingDuration){
+    if(el.dataset._converted) return;
+    el.dataset._converted = 'aminoacids';
     const seq = el.dataset.aminoSeq ? JSON.parse(el.dataset.aminoSeq) : new Array(parseInt(el.dataset.aminoCount||'6',10)).fill('circle');
     if(typeof startLen === 'number'){
       for(let i=0;i<seq.length;i++){
         const shape = seq[i];
         const child = createMovingChild(1, '#d85a5a', 'protein');
         child.innerHTML = '';
-        child.appendChild(createAminoChainSVGFromSequence([shape], 8));
+  child.appendChild(createAminoChainSVGFromSequence([shape], SIZES.aa.smallR));
         child.dataset.aminoSeq = JSON.stringify([shape]);
         const offsetLen = startLen + i * 2;
         const factor = 0.9 + Math.random()*0.4;
@@ -526,6 +778,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   // Convert triglyceride token into glycerol + fatty acids
   function convertToFat(el, startLen, remainingDuration){
+    if(el.dataset._converted) return;
+    el.dataset._converted = 'fat';
     const glycerolCount = parseInt(el.dataset.glycerolCount || '1', 10);
     const fattyCount = parseInt(el.dataset.fattyCount || '3', 10);
     if(typeof startLen === 'number'){
@@ -585,7 +839,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
       child.setAttribute('aria-hidden','false');
 
       // create an SVG representing this unit
-      const svgUnit = createHexChainSVG(unitSize, unitSize===1?10:12, 0, fill);
+  const svgUnit = createHexChainSVG(unitSize, unitSize===1 ? SIZES.hex.smallR : SIZES.hex.largeR, 0, fill);
       child.appendChild(svgUnit);
       splitContainer.appendChild(child);
     }
@@ -640,6 +894,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
     function step(timestamp){
       if(!startTime) startTime = timestamp;
+      // if the token element was removed by an earlier conversion, stop processing
+      if(!tokenEl.isConnected) return;
       const elapsed = timestamp - startTime;
       const t = Math.min(1, elapsed/duration);
       const len = t * pathLen;
@@ -658,8 +914,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
           if(type === 'carb'){
             // compute remaining duration for children (proportional to distance left)
             const remainingDuration = Math.max(300, duration * (1 - t));
-            convertToMaltose(tokenEl, len, remainingDuration);
-            info.textContent = `${label} 在口中部分水解，形成麥芽糖（二糖，成對顯示）。`;
+              debugLog('animateAlongPath: convertToMaltose call', {label, len, remainingDuration, dataset: tokenEl.dataset});
+              convertToMaltose(tokenEl, len, remainingDuration);
+            info.textContent = `${label} 在口中部分水解，形成麥芽糖（二糖，成對顯示)。`;
+            // stop further processing for this token in this frame (it may have been removed)
+            return;
           }
         }
       }
@@ -670,8 +929,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
         if(insideStomachNow && type === 'protein'){
           stomachConverted = true;
           const remainingDuration = Math.max(300, duration * (1 - t));
-          convertToPolypeptide(tokenEl, len, remainingDuration);
+            debugLog('animateAlongPath: convertToPolypeptide call', {label, len, remainingDuration, dataset: tokenEl.dataset});
+            convertToPolypeptide(tokenEl, len, remainingDuration);
           info.textContent = `${label} 到達胃，蛋白質被分解為多肽（polypeptide）。`;
+          // token may have been removed; stop further processing this frame
+          return;
         }
       }
 
@@ -680,19 +942,25 @@ document.addEventListener('DOMContentLoaded', ()=>{
         smallConverted = true;
         const remainingDuration = Math.max(200, duration * (1 - t));
         if(type === 'carb'){
+          debugLog('animateAlongPath: convertToGlucose call', {label, len, remainingDuration, dataset: tokenEl.dataset});
           convertToGlucose(tokenEl, len, remainingDuration);
           info.textContent = `${label} 到達小腸，已轉換為小分子（葡萄糖）。`;
+          // convertToGlucose removes the token; stop further processing
+          return;
         }else if(type === 'protein'){
           // convert protein (or remaining polypeptide) into individual amino acids
           convertToAminoAcids(tokenEl, len, remainingDuration);
           info.textContent = `${label} 到達小腸，蛋白質被分解為胺基酸。`;
+          return;
         }else if(type === 'fat'){
           // convert triglyceride into glycerol + 3 fatty acids
           convertToFat(tokenEl, len, remainingDuration);
           info.textContent = `${label} 到達小腸，脂質被分解為甘油與脂肪酸。`;
+          return;
         }else{
           convertVisual(tokenEl,type);
           info.textContent = `${label} 到達小腸，已轉換為小分子。`;
+          return;
         }
       }
 
