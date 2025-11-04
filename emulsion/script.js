@@ -101,11 +101,36 @@
       const y = clamp(inner.y + r + 8 + Math.random() * (topBand - 2*r - 16), inner.y + r + 8, inner.y + topBand - r - 8);
       const d = {x,y,r};
       if (!collidesAny(d, largeDrops, 2)){
+        // add small motion state for pre-emulsify floating
+        d.baseX = d.x;
+        d.baseY = d.y;
+        d.theta = Math.random()*Math.PI*2;
+        d.wobble = rand(0.4, 1.2);
         largeDrops.push(d);
       }
     }
 
     phase = 'before';
+  }
+
+  function loopBefore(){
+    // gentle floating for largeDrops
+    const ampX = 0.35; // horizontal wobble amplitude
+    const ampY = 0.25; // vertical wobble amplitude
+    const rise = -0.03; // slight upward drift per frame
+    const topLimit = inner.y + Math.max(8, inner.h * 0.02);
+    const bottomLimit = inner.y + Math.max(40, inner.h * 0.22);
+
+    for (const d of largeDrops){
+      d.theta += 0.02 * d.wobble + Math.random()*0.01;
+      const dx = Math.cos(d.theta) * ampX * d.wobble * (0.6 + Math.random()*0.8);
+      const dy = Math.sin(d.theta) * ampY * d.wobble * (0.6 + Math.random()*0.8) + rise * (0.5 + Math.random()*0.5);
+      d.x = clamp(d.x + dx, inner.x + d.r + 3, inner.x + inner.w - d.r - 3);
+      d.y = clamp(d.y + dy, topLimit + d.r, bottomLimit - d.r);
+    }
+
+    drawScene(0);
+    rafId = requestAnimationFrame(loopBefore);
   }
 
   function makeSmallTargets(){
@@ -260,11 +285,26 @@
       ctx.arc(d.x, d.y, d.r, 0, Math.PI*2);
       ctx.fill();
       if (withRing){
-        ctx.strokeStyle = C.ring;
-        ctx.lineWidth = Math.max(1, d.r*0.35);
-        ctx.beginPath();
-        ctx.arc(d.x, d.y, d.r + ctx.lineWidth*0.35, 0, Math.PI*2);
-        ctx.stroke();
+        // draw emulsifier as discrete beads around the droplet
+        // ring radius slightly outside core
+        const ringOffset = Math.max(1.2, d.r * 0.28);
+        const ringR = d.r + ringOffset;
+        // choose bead size proportional to droplet radius
+        const beadR = Math.max(1.2, Math.min(6, d.r * 0.35));
+        // estimate bead count from circumference and bead size, clamp for performance
+        const circ = 2 * Math.PI * ringR;
+        let beadCount = Math.round(circ / (beadR * 2.2));
+        beadCount = Math.max(6, Math.min(18, beadCount));
+
+        ctx.fillStyle = C.ring;
+        for (let i = 0; i < beadCount; i++){
+          const a = (i / beadCount) * Math.PI * 2;
+          const bx = d.x + Math.cos(a) * ringR;
+          const by = d.y + Math.sin(a) * ringR;
+          ctx.beginPath();
+          ctx.arc(bx, by, beadR, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
     }
   }
@@ -323,8 +363,8 @@
     ctx.stroke();
 
     // content: oil droplet size transitions
-    const R0 = mag.r * 0.48; // before radius
-    const R1 = mag.r * 0.30; // after radius
+    const R0 = mag.r * 0.6; // before radius
+    const R1 = mag.r * 0.2; // after radius
     const easeT = t; // already eased above for roi; similar feel
     const r = lerp(R0, R1, easeT);
     // Draw oil core
@@ -337,23 +377,36 @@
     const ringAlpha = (phase === 'before') ? 0 : 1;
     const visible = phase === 'emulsifying' ? easeT : ringAlpha;
     if (visible > 0){
-      // outer ring
+      // draw emulsifier as discrete beads arranged just outside the oil core
       ctx.globalAlpha = visible;
-      ctx.strokeStyle = C.ring;
-      ctx.lineWidth = Math.max(2, mag.r * 0.06);
-      ctx.beginPath();
-      ctx.arc(mag.x, mag.y, r + ctx.lineWidth*0.6, 0, Math.PI*2);
-      ctx.stroke();
+      // determine sample radius from actual smallDrops (or animDrops while animating)
+      let sampleR = r;
+      let sampleIdx = -1;
+      if (smallDrops.length){
+        const target = {x: roiX, y: roiY};
+        sampleIdx = nearestIndex(target, smallDrops);
+        if (phase === 'emulsifying' && animDrops && animDrops[sampleIdx]){
+          sampleR = animDrops[sampleIdx].pr || smallDrops[sampleIdx].r;
+        } else {
+          sampleR = smallDrops[sampleIdx].r;
+        }
+      }
 
-      // heads as beads
-      const beads = 14;
-      const beadR = Math.max(3, Math.min(6, mag.r*0.07));
-      for (let i=0;i<beads;i++){
-        const a = (i/beads) * Math.PI*2;
-        const bx = mag.x + Math.cos(a) * (r + ctx.lineWidth*0.6);
-        const by = mag.y + Math.sin(a) * (r + ctx.lineWidth*0.6);
+      // Use the displayed oil radius `r` to position beads so they match the visual droplet
+      const beadR = Math.max(1.6, Math.min(6, r * 0.35));
+      const ringOffsetLocal = Math.max(1, r * 0.15);
+      const ringRlocal = r + ringOffsetLocal;
+      const circ = 2 * Math.PI * ringRlocal;
+      let beadCount = Math.round(circ / (beadR * 2.2));
+      const maxBeads = (W < 540) ? 8 : 18;
+      beadCount = Math.max(6, Math.min(maxBeads, beadCount));
+
+      ctx.fillStyle = C.ring;
+      for (let i=0;i<beadCount;i++){
+        const a = (i/beadCount) * Math.PI*2;
+        const bx = mag.x + Math.cos(a) * ringRlocal;
+        const by = mag.y + Math.sin(a) * ringRlocal;
         ctx.beginPath();
-        ctx.fillStyle = C.ring;
         ctx.arc(bx, by, beadR, 0, Math.PI*2);
         ctx.fill();
       }
@@ -361,8 +414,14 @@
     }
 
     // label
-    ctx.fillStyle = C.ink;
-    ctx.font = `${Math.max(12, Math.floor(mag.r*0.22))}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+  ctx.fillStyle = C.ink;
+  // Scale the label font size with the droplet radii R0 -> R1 so the text follows the visual size
+  // R0 and R1 were used above to compute the displayed droplet radius `r`.
+  // Compute two font sizes mapped from R0 and R1, then interpolate using easeT.
+  const fontSize0 = Math.max(10, Math.round(R0 * 0.45));
+  const fontSize1 = Math.max(9, Math.round(R1 * 0.55));
+  const fontSize = Math.max(9, Math.round(lerp(fontSize0, fontSize1, easeT)));
+  ctx.font = `${fontSize}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('油滴  ', mag.x, mag.y);
@@ -400,6 +459,17 @@
     return best;
   }
 
+  function nearestIndex(p, pts){
+    let bestI = 0;
+    let bestD = Infinity;
+    for (let i=0;i<pts.length;i++){
+      const q = pts[i];
+      const dd = (p.x - q.x)*(p.x - q.x) + (p.y - q.y)*(p.y - q.y);
+      if (dd < bestD){ bestD = dd; bestI = i; }
+    }
+    return bestI;
+  }
+
   function roundedRect(c, x, y, w, h, r){
     const rr = Math.min(r, w/2, h/2);
     c.beginPath();
@@ -412,11 +482,13 @@
   }
 
   function reset(){
+    // stop any running loop then re-init before-state and start floating
+    cancelAnimationFrame(rafId);
     actionBtn.disabled = false;
     replayBtn.disabled = true;
     setupBefore();
     drawScene(0);
-    cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(loopBefore);
   }
 
   // Events
@@ -427,4 +499,5 @@
   // Kickoff
   resize();
   drawScene(0);
+  rafId = requestAnimationFrame(loopBefore);
 })();
