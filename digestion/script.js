@@ -28,20 +28,33 @@ document.addEventListener('DOMContentLoaded', ()=>{
       linkColor: 'rgba(216,90,90,0.85)',
       linkWidth: 3,
       linkOpacity: 0.95,
+      // control curvature of amino-acid chain link
+      curveAmplitude: 20,
+      curveWaves: 3,
+      // span controls how much of the bezier curve the residues occupy.
+      // 1 = full length (default behavior). <1 compresses them toward the center
+      // (e.g. 0.8 or 0.6 makes residues closer together).
+      span: 0.6,
+      // optional extra gap used by width computation (keeps backward compat.)
+      gap: 6,
       // where to place the link relative to residue shapes: 'under' or 'over'
       linkPlace: 'over'
     },
     trig: {
       glycerolWidth: 28,
       glycerolRectW: 30,
-      glycerolRectH: 15,
-      glycerolRectRx: 3,
-      faHeight: 6,
-      faWidthMin: 6,
+      glycerolRectH: 12,
+      // corner radius for the glycerol rectangle
+      glycerolCornerRadius: 3,
+      // fatty-acid tail sizing
+      faHeight: 5,
+      fattyAcidMinWidth: 6,
       gap: 6,
-      faHeightMult: 6,
+      fattyAcidHeightMultiplier: 5,
+      // vertical offset applied to fatty-acid tail Y (positive moves tails down)
+      fattyAcidYOffset: -10,
       svgPadding: 8,
-      faSvg: { width: 12, height: 44 }
+      faSvg: { width: 12, height: 30 }
     },
     child: {
       padding: '2px',
@@ -49,7 +62,19 @@ document.addEventListener('DOMContentLoaded', ()=>{
     },
     split: {
       gap: 8,
-      spread: 8
+      spread: 8,
+      // margin (in path-length units) before the end of small intestine where
+      // children will be absorbed (disappear). Increase to make them travel
+      // further into the small intestine before fading.
+      absorbMargin: 0,
+      // probabilistic absorption parameters: when a single-unit child is in
+      // the small intestine, its chance to be absorbed increases with
+      // proximity to `smallEnd`. The probability per animation step is:
+      //   chance = baseProb + (maxProb - baseProb) * (p^exponent)
+      // where p is normalized position in small intestine [0..1].
+      absorbBaseProb: 0.02,
+      absorbMaxProb: 0.9,
+      absorbProbExponent: 2
     },
     token: {
       initialGlc: 6,
@@ -128,14 +153,104 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const viewBox = { width: SIZES.svgViewBox.width, height: SIZES.svgViewBox.height };
   const pathLen = path.getTotalLength();
 
-  // compute thresholds (path lengths) for mouth and small intestine zones
-  const svgRect = () => svg.getBoundingClientRect();
-  const zoneRect = zone.getBBox(); // small intestine in svg coords
-  const mouthRect = mouth.getBBox(); // mouth zone in svg coords
-  const stomach = document.getElementById('stomachZone');
-  const stomachRect = stomach.getBBox();
+  // compute thresholds (path lengths) for mouth / stomach / small intestine zones
+  // New behavior: zones may be defined as SVG polygons/polylines (preferred).
+  // Fallback: if polygon points are not available, use element.getBBox() (legacy behavior).
 
-  function findZoneRange(box){
+  // parse a 'points' attribute robustly into [{x,y},...]
+  function parsePointsAttr(str){
+    if(!str) return [];
+    // allow separators like "", ",", or whitespace
+    const nums = String(str).trim().replace(/,/g,' ').split(/\s+/).map(Number).filter(n=>!isNaN(n));
+    const out = [];
+    for(let i=0;i+1<nums.length;i+=2) out.push({x: nums[i], y: nums[i+1]});
+    return out;
+  }
+
+  // return polygon points for an SVG element if possible (polygon/polyline/rect/circle/path fallback)
+  function getElementPolygon(el){
+    if(!el) return null;
+    const tag = (el.tagName || '').toLowerCase();
+    // polygon / polyline: parse explicit points
+    if(tag === 'polygon' || tag === 'polyline'){
+      return parsePointsAttr(el.getAttribute('points'));
+    }
+
+    // if element has a 'd' attribute (path data) or is a path, sample points along that path
+    const dattr = el.getAttribute && el.getAttribute('d');
+    if(dattr || tag === 'path'){
+      const d = dattr || el.getAttribute('d') || el.getAttribute('D') || '';
+      if(d && d.length){
+        return createPathPointsFromD(d, 120);
+      }
+      // fallback to bbox if d is empty
+      const b2 = el.getBBox();
+      return [
+        {x: b2.x, y: b2.y},
+        {x: b2.x + b2.width, y: b2.y},
+        {x: b2.x + b2.width, y: b2.y + b2.height},
+        {x: b2.x, y: b2.y + b2.height}
+      ];
+    }
+
+    // rect/circle/ellipse -> convert bbox to rectangle polygon
+    if(tag === 'rect' || tag === 'circle' || tag === 'ellipse'){
+      const b = el.getBBox();
+      return [
+        {x: b.x, y: b.y},
+        {x: b.x + b.width, y: b.y},
+        {x: b.x + b.width, y: b.y + b.height},
+        {x: b.x, y: b.y + b.height}
+      ];
+    }
+    return null;
+  }
+
+  // create an in-memory path element from a d-string and sample N points along it
+  function createPathPointsFromD(dString, maxPoints){
+    try{
+      const tmp = document.createElementNS('http://www.w3.org/2000/svg','path');
+      tmp.setAttribute('d', dString);
+      // ensure it's in the DOM so getTotalLength works in some browsers
+      // append to svg temporarily and remove after sampling
+      svg.appendChild(tmp);
+      const L = tmp.getTotalLength();
+      const pts = [];
+      const steps = Math.max(4, Math.min(512, Math.floor(L / (Math.max(1, L / (maxPoints || 80))))));
+      const step = Math.max(1, Math.floor(L / (maxPoints || 80)));
+      for(let i=0;i<=L;i+=step){
+        const p = tmp.getPointAtLength(i);
+        pts.push({x: p.x, y: p.y});
+      }
+      // ensure last point included
+      if(pts.length === 0){
+        const p0 = tmp.getPointAtLength(0);
+        pts.push({x: p0.x, y: p0.y});
+      }
+      tmp.remove();
+      return pts;
+    }catch(e){
+      try{ tmp && tmp.remove(); }catch(_){/*ignore*/}
+      return [];
+    }
+  }
+
+  // point-in-polygon test (ray-casting)
+  function pointInPolygon(pt, vs){
+    if(!vs || vs.length === 0) return false;
+    let x = pt.x, y = pt.y;
+    let inside = false;
+    for(let i=0, j=vs.length-1; i<vs.length; j=i++){
+      const xi = vs[i].x, yi = vs[i].y;
+      const xj = vs[j].x, yj = vs[j].y;
+      const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+      if(intersect) inside = !inside;
+    }
+    return inside;
+  }
+
+  // legacy bbox-based finder (kept for fallback)
+  function findZoneRangeLegacy(box){
     let start = 0, end = pathLen;
     for(let i=0;i<=pathLen;i+=2){
       const p = path.getPointAtLength(i);
@@ -148,13 +263,291 @@ document.addEventListener('DOMContentLoaded', ()=>{
     return {start,end};
   }
 
-  const {start: smallStart, end: smallEnd} = findZoneRange(zoneRect);
-  const {start: mouthStart, end: mouthEnd} = findZoneRange(mouthRect);
-  const {start: stomachStart, end: stomachEnd} = findZoneRange(stomachRect);
-  // determine if path starts inside mouth zone (prevents immediate conversion)
+  // find path-length range where path points fall inside the element's polygon (or bbox fallback)
+  function findZoneRangeForElement(el){
+    const poly = getElementPolygon(el);
+    if(poly && poly.length >= 3){
+      let start = 0, end = pathLen;
+      for(let i=0;i<=pathLen;i+=2){
+        const p = path.getPointAtLength(i);
+        if(pointInPolygon(p, poly)){ start = i; break; }
+      }
+      for(let i=Math.floor(pathLen);i>=0;i-=2){
+        const p = path.getPointAtLength(i);
+        if(pointInPolygon(p, poly)){ end = i; break; }
+      }
+      return {start,end};
+    }
+    // fallback to bbox
+    const box = el.getBBox();
+    return findZoneRangeLegacy(box);
+  }
+
+  // compute ranges using polygon-aware finder
+  const smallZoneEl = zone;
+  const mouthEl = mouth;
+  const stomachEl = document.getElementById('stomachZone');
+  // compute original zone ranges from SVG elements
+  const _orig = {};
+  const _small = findZoneRangeForElement(smallZoneEl);
+  const _mouth = findZoneRangeForElement(mouthEl);
+  const _stomach = findZoneRangeForElement(stomachEl);
+  _orig.smallStart = _small.start; _orig.smallEnd = _small.end;
+  _orig.mouthStart = _mouth.start; _orig.mouthEnd = _mouth.end;
+  _orig.stomachStart = _stomach.start; _orig.stomachEnd = _stomach.end;
+
+  // current active zone boundaries (may be overridden by debug UI)
+  // initialize from the SVG-detected originals; these are declared here so
+  // they exist before any overrides are applied.
+  let mouthStart = _orig.mouthStart;
+  let mouthEnd = _orig.mouthEnd;
+  let stomachStart = _orig.stomachStart;
+  let stomachEnd = _orig.stomachEnd;
+  let smallStart = _orig.smallStart;
+  let smallEnd = _orig.smallEnd;
+  // esophagus (between mouth end and stomach start)
+  let esophStart = (typeof _orig.mouthEnd === 'number') ? _orig.mouthEnd : 0;
+  let esophEnd = (typeof _orig.stomachStart === 'number') ? _orig.stomachStart : (typeof _orig.mouthEnd === 'number' ? _orig.mouthEnd : 0);
+
+  const ZONE_OVERRIDES = {
+    mouthEndPct: 3.9,
+    esophEndPct: 16.2,
+    stomachEndPct: 21.3,
+    smallEndPct: 70.3
+  };
+
+  // 當 pathLen 已知時，用百分比覆寫 zone 長度（會取代之後的變數初始值）
+  if(typeof ZONE_OVERRIDES === 'object'){
+    const toLen = pct => (pathLen>0) ? (pct/100) * pathLen : 0;
+    mouthStart = 0;
+    mouthEnd = toLen(ZONE_OVERRIDES.mouthEndPct || 0);
+    esophStart = mouthEnd;
+    esophEnd = toLen(ZONE_OVERRIDES.esophEndPct || 0);
+    stomachStart = esophEnd;
+    stomachEnd = toLen(ZONE_OVERRIDES.stomachEndPct || 0);
+    smallStart = stomachEnd;
+    smallEnd = toLen(ZONE_OVERRIDES.smallEndPct || 0);
+
+    // redraw debug markers if DEBUG 模式開啟
+    if(typeof drawSmallIntestineDebugMarkers === 'function') drawSmallIntestineDebugMarkers();
+  }
+
+  // (zone boundary variables are declared earlier so overrides can apply)
+
+  // debug helper: draw markers for smallStart / smallEnd on the main SVG
+  function drawSmallIntestineDebugMarkers(){
+    try{
+      // if debugging is disabled, ensure any existing debug group is removed
+      // and do nothing further.
+      const prev = document.getElementById('debug-absorb-markers');
+      if(!DEBUG){ if(prev) prev.remove(); return; }
+      // remove existing debug group
+      if(prev) prev.remove();
+      const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+      g.setAttribute('id','debug-absorb-markers');
+      g.setAttribute('pointer-events','none');
+      // helper to create a small circle + label
+      function addMarker(atLen, color, label){
+        if(typeof atLen !== 'number' || isNaN(atLen)) return;
+        const p = path.getPointAtLength(Math.max(0, Math.min(pathLen, atLen)));
+        const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+        c.setAttribute('cx', String(p.x));
+        c.setAttribute('cy', String(p.y));
+        c.setAttribute('r','2.5');
+        c.setAttribute('fill', color);
+        c.setAttribute('stroke','white');
+        c.setAttribute('stroke-width','0.6');
+        g.appendChild(c);
+        const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+        t.setAttribute('x', String(p.x + 4));
+        t.setAttribute('y', String(p.y + 4));
+        t.setAttribute('font-size','6');
+        t.setAttribute('fill', color);
+        t.setAttribute('font-family','sans-serif');
+        t.textContent = label;
+        g.appendChild(t);
+      }
+
+      // helper to draw a colored segment along the digestPath from a..b
+      function addSegment(aLen, bLen, color, dash){
+        if(typeof aLen !== 'number' || typeof bLen !== 'number') return;
+        const a = Math.max(0, Math.min(pathLen, aLen));
+        const b = Math.max(0, Math.min(pathLen, bLen));
+        if(Math.abs(b-a) < 1) return;
+        const L = Math.abs(b - a);
+        const steps = Math.max(6, Math.min(300, Math.floor(L / 2)));
+        let d = '';
+        for(let i=0;i<=steps;i++){
+          const t = a + (i/steps) * (b - a);
+          const p = path.getPointAtLength(t);
+          d += (i===0? 'M ' : ' L ') + p.x + ' ' + p.y;
+        }
+        const seg = document.createElementNS('http://www.w3.org/2000/svg','path');
+        seg.setAttribute('d', d);
+        seg.setAttribute('fill','none');
+        seg.setAttribute('stroke', color);
+        seg.setAttribute('stroke-width','2');
+        if(dash) seg.setAttribute('stroke-dasharray', dash);
+        seg.setAttribute('opacity','0.9');
+        g.appendChild(seg);
+      }
+
+      // draw zones: mouth (0..mouthEnd), esophagus (mouthEnd..esophEnd), stomach (esophEnd..stomachEnd), small (stomachEnd..smallEnd)
+      addSegment(0, mouthEnd, 'rgba(200,30,30,0.7)');
+      addSegment(mouthEnd, esophEnd, 'rgba(220,120,30,0.7)');
+      addSegment(esophEnd, stomachEnd, 'rgba(200,160,60,0.7)');
+      addSegment(stomachEnd, smallEnd, 'rgba(34,139,34,0.7)','4 3');
+      // highlight the final 50% of the small intestine separately
+      if(typeof smallStart === 'number' && typeof smallEnd === 'number' && smallEnd > smallStart){
+        const smallMid = smallStart + 0.5 * (smallEnd - smallStart);
+        addSegment(smallMid, smallEnd, 'rgba(34,139,34,0.95)');
+        addSegment(smallEnd, pathLen, 'rgba(120,30,160,0.5)','6 4');
+        // marker for small-midpoint
+        addMarker(smallMid, '#32CD32', 'smallMid');
+      }else{
+        addSegment(smallEnd, pathLen, 'rgba(120,30,160,0.5)','6 4');
+      }
+
+      // markers for boundaries
+      addMarker(mouthEnd, '#b22222', 'mouthEnd');
+      addMarker(esophEnd, '#d9772a', 'esophEnd');
+      addMarker(stomachEnd, '#b8860b', 'stomachEnd');
+      addMarker(smallStart, '#228B22', 'smallStart');
+      addMarker(smallEnd, '#006400', 'smallEnd');
+      svg.appendChild(g);
+    }catch(e){ /* ignore debug drawing errors */ }
+  }
+
+  // draw markers when debugging is enabled
+  if(DEBUG) drawSmallIntestineDebugMarkers();
+
+  // --- DEBUG: interactive zone sliders to override boundaries ---
+  function createZoneDebugPanel(){
+    try{
+      const existing = document.getElementById('zone-debug-panel');
+      if(existing) existing.remove();
+      const panel = document.createElement('div');
+      panel.id = 'zone-debug-panel';
+      panel.style.position = 'fixed';
+      panel.style.left = '12px';
+      panel.style.top = '12px';
+      panel.style.width = '320px';
+      panel.style.maxHeight = '60vh';
+      panel.style.overflow = 'auto';
+      panel.style.background = 'rgba(20,20,20,0.9)';
+      panel.style.color = '#e6e6e6';
+      panel.style.fontSize = '12px';
+      panel.style.padding = '8px';
+      panel.style.borderRadius = '8px';
+      panel.style.zIndex = 999999;
+      panel.style.boxShadow = '0 6px 18px rgba(0,0,0,0.4)';
+      panel.style.fontFamily = 'system-ui, sans-serif';
+
+      const header = document.createElement('div');
+      header.style.fontWeight = '600';
+      header.style.marginBottom = '6px';
+      header.textContent = 'ZONE DEBUG';
+      panel.appendChild(header);
+
+      const info = document.createElement('div');
+      info.style.fontSize = '11px';
+      info.style.marginBottom = '8px';
+      info.textContent = 'Use sliders to override digestPath boundaries (percent of path length).';
+      panel.appendChild(info);
+
+      // helper to create a slider row
+      function makeSlider(id,label,initialPct){
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.flexDirection = 'column';
+        row.style.gap = '4px';
+        row.style.marginBottom = '8px';
+        const lab = document.createElement('label');
+        lab.textContent = label;
+        lab.style.fontSize = '11px';
+        row.appendChild(lab);
+        const ctrl = document.createElement('input');
+        ctrl.type = 'range';
+        ctrl.min = '0'; ctrl.max = '100'; ctrl.step = '0.1';
+        ctrl.value = String(initialPct);
+        ctrl.id = id;
+        ctrl.style.width = '100%';
+        row.appendChild(ctrl);
+        const read = document.createElement('div');
+        read.style.fontSize = '11px';
+        read.style.opacity = '0.9';
+        read.textContent = `${initialPct.toFixed(1)}%`;
+        row.appendChild(read);
+        ctrl.addEventListener('input', ()=>{ read.textContent = `${Number(ctrl.value).toFixed(1)}%`; applyZoneOverridesFromSliders(); });
+        return {row, ctrl, read};
+      }
+
+  // compute initial percentages from the current active zone values (which
+  // may already have been overridden by ZONE_OVERRIDES). Fall back to
+  // the originally-detected _orig values when a current value isn't set.
+  const toPct = v => (pathLen>0 ? (v/pathLen*100) : 0);
+  const mouthEndPct = toPct((typeof mouthEnd === 'number' && !isNaN(mouthEnd)) ? mouthEnd : (_orig.mouthEnd || 0));
+  const esophagusEndPct = toPct((typeof esophEnd === 'number' && !isNaN(esophEnd)) ? esophEnd : (_orig.stomachStart || 0));
+  const stomachEndPct = toPct((typeof stomachEnd === 'number' && !isNaN(stomachEnd)) ? stomachEnd : (_orig.stomachEnd || 0));
+  const smallEndPct = toPct((typeof smallEnd === 'number' && !isNaN(smallEnd)) ? smallEnd : (_orig.smallEnd || 0));
+
+      const sMouth = makeSlider('dbg-mouthEnd','Mouth end (%)', mouthEndPct);
+      const sEsoph = makeSlider('dbg-esophEnd','Esophagus end (%)', esophagusEndPct);
+      const sStomach = makeSlider('dbg-stomachEnd','Stomach end (%)', stomachEndPct);
+      const sSmall = makeSlider('dbg-smallEnd','Small intestine end (%)', smallEndPct);
+
+      panel.appendChild(sMouth.row);
+      panel.appendChild(sEsoph.row);
+      panel.appendChild(sStomach.row);
+      panel.appendChild(sSmall.row);
+
+      const btnRow = document.createElement('div');
+      btnRow.style.display='flex'; btnRow.style.gap='8px'; btnRow.style.marginTop='6px';
+      const reset = document.createElement('button'); reset.textContent='Reset';
+      reset.style.fontSize='12px'; reset.addEventListener('click', ()=>{ sMouth.ctrl.value = String(mouthEndPct); sMouth.read.textContent = `${mouthEndPct.toFixed(1)}%`; sEsoph.ctrl.value = String(esophagusEndPct); sEsoph.read.textContent = `${esophagusEndPct.toFixed(1)}%`; sStomach.ctrl.value = String(stomachEndPct); sStomach.read.textContent = `${stomachEndPct.toFixed(1)}%`; sSmall.ctrl.value = String(smallEndPct); sSmall.read.textContent = `${smallEndPct.toFixed(1)}%`; applyZoneOverridesFromSliders(); });
+      const close = document.createElement('button'); close.textContent='Close'; close.style.fontSize='12px'; close.addEventListener('click', ()=>{ panel.remove(); drawSmallIntestineDebugMarkers(); });
+      btnRow.appendChild(reset); btnRow.appendChild(close);
+      panel.appendChild(btnRow);
+
+      // expose controls to window for console tweaking
+      window.__zoneDebugControls = {sMouth, sEsoph, sStomach, sSmall};
+
+      document.body.appendChild(panel);
+      // initial apply
+      applyZoneOverridesFromSliders();
+    }catch(e){ console && console.warn && console.warn('zone debug panel error', e); }
+  }
+
+  function applyZoneOverridesFromSliders(){
+    try{
+      const c = window.__zoneDebugControls;
+      if(!c) return;
+      // read percent values, ensure monotonic increasing order
+      let mEnd = Math.max(0, Math.min(100, Number(c.sMouth.ctrl.value)));
+      let eEnd = Math.max(mEnd, Math.min(100, Number(c.sEsoph.ctrl.value)));
+      let stEnd = Math.max(eEnd, Math.min(100, Number(c.sStomach.ctrl.value)));
+      let smEnd = Math.max(stEnd, Math.min(100, Number(c.sSmall.ctrl.value)));
+
+      // convert to lengths and enforce monotonicity
+      mouthStart = 0; mouthEnd = (mEnd/100) * pathLen;
+      esophStart = mouthEnd; esophEnd = (eEnd/100) * pathLen;
+      stomachStart = esophEnd; stomachEnd = (stEnd/100) * pathLen;
+      smallStart = stomachEnd; smallEnd = (smEnd/100) * pathLen;
+
+      // redraw markers
+      drawSmallIntestineDebugMarkers();
+    }catch(e){/*ignore*/}
+  }
+
+  if(DEBUG){ createZoneDebugPanel(); }
+
+  // determine if path starts inside mouth polygon/bbox (prevents immediate conversion)
   const startsInMouth = (()=>{
     const p0 = path.getPointAtLength(0);
-    return (p0.y >= mouthRect.y && p0.y <= mouthRect.y + mouthRect.height);
+    const poly = getElementPolygon(mouthEl);
+    if(poly && poly.length >= 3) return pointInPolygon(p0, poly);
+    const b = mouthEl.getBBox();
+    return (p0.y >= b.y && p0.y <= b.y + b.height);
   })();
 
   function svgPointToScreen(pt){
@@ -242,10 +635,20 @@ document.addEventListener('DOMContentLoaded', ()=>{
     }
 
     // compute positions for all residues first so we can draw a connecting link
+    // positions are sampled along the base bezier but we add a configurable
+    // sinusoidal offset to the y coordinate to create a more curved/wavy chain.
+    // To allow tuning density (how close residues are), we support SIZES.aa.span
+    // which compresses the t-range used to sample the bezier. span in (0,1].
     const positions = [];
+    const span = (SIZES.aa.span !== undefined) ? SIZES.aa.span : 1;
+    const startT = (1 - span) / 2; // center the sampling window
     for(let i=0;i<n;i++){
-      const t = n===1?0.5: i/(n-1);
-      positions.push(bezier(t));
+      const t = (n===1) ? 0.5 : (startT + (i/(n-1)) * span);
+      const base = bezier(t);
+      // normalize wave phase across the sampling window so waves behave consistently
+      const localT = (span > 0) ? ((t - startT) / span) : 0;
+      const wave = (SIZES.aa.curveAmplitude || 0) * Math.sin(localT * Math.PI * 2 * (SIZES.aa.curveWaves || 1));
+      positions.push({ x: base.x, y: base.y + wave });
     }
 
     // draw a smooth linking path between amino-acid centers using Catmull-Rom -> Bezier
@@ -274,9 +677,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
         return path;
       }
 
-      const dAttr = catmullRom2bezier(positions);
-      const linkPath = document.createElementNS('http://www.w3.org/2000/svg','path');
-      linkPath.setAttribute('d', dAttr);
+  const dAttr = catmullRom2bezier(positions);
+  // assign to outer-scoped linkPath (avoid shadowing with const)
+  linkPath = document.createElementNS('http://www.w3.org/2000/svg','path');
+  linkPath.setAttribute('d', dAttr);
       linkPath.setAttribute('fill', 'none');
       linkPath.setAttribute('stroke', SIZES.aa.linkColor || 'rgba(0,0,0,0.35)');
       linkPath.setAttribute('stroke-width', String(SIZES.aa.linkWidth || Math.max(1, r*0.45)));
@@ -421,8 +825,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // create an inline SVG representing a triglyceride: one large glycerol rect and three long thin fatty-acid rects
   function createTriglycerideSVG(glycerolWidth = SIZES.trig.glycerolWidth, faHeight = SIZES.trig.faHeight){
     // overall layout: glycerol block on top, three vertical fatty-acid tails below (like comb teeth)
-    const faW = Math.max(SIZES.trig.faWidthMin, faHeight); // thin tail width
-    const faH = faHeight * SIZES.trig.faHeightMult; // tail length
+  const faW = Math.max(SIZES.trig.fattyAcidMinWidth, faHeight); // thin tail width
+  const faH = faHeight * SIZES.trig.fattyAcidHeightMultiplier; // tail length
     const gap = SIZES.trig.gap;
     const contentWidth = Math.max(glycerolWidth, faW * 3 + gap * 2);
     const width = contentWidth + SIZES.trig.svgPadding;
@@ -441,14 +845,16 @@ document.addEventListener('DOMContentLoaded', ()=>{
   glycerol.setAttribute('y', gy);
   glycerol.setAttribute('width', SIZES.trig.glycerolRectW);
   glycerol.setAttribute('height', SIZES.trig.glycerolRectH);
-  glycerol.setAttribute('rx', SIZES.trig.glycerolRectRx);
+  glycerol.setAttribute('rx', SIZES.trig.glycerolCornerRadius);
     glycerol.setAttribute('fill', 'hsl(40 70% 55%)'); // warm golden glycerol
     glycerol.setAttribute('class','svg-fat-gly');
     svgEl.appendChild(glycerol);
 
     // three fatty acid tails below the glycerol block
     const startX = (width - (faW * 3 + gap * 2)) / 2;
-    const tailY = gy + glycerolWidth - SIZES.trig.glycerolRectH;
+  // allow an explicit offset (tunable via SIZES.trig.fattyAcidYOffset) so
+  // fatty-acid tails can be nudged vertically without changing glycerol geometry
+  const tailY = gy + glycerolWidth - SIZES.trig.glycerolRectH + (SIZES.trig.fattyAcidYOffset || 0);
     for(let i=0;i<3;i++){
       const fa = document.createElementNS('http://www.w3.org/2000/svg','rect');
       const x = startX + i * (faW + gap);
@@ -481,7 +887,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
       r.setAttribute('y',0);
       r.setAttribute('width', SIZES.trig.glycerolRectW);
       r.setAttribute('height', SIZES.trig.glycerolRectH);
-      r.setAttribute('rx', SIZES.trig.glycerolRectRx);
+  r.setAttribute('rx', SIZES.trig.glycerolCornerRadius);
       r.setAttribute('fill','hsl(40 70% 55%)');
       svg.appendChild(r);
       el.appendChild(svg);
@@ -539,11 +945,82 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const remaining = Math.max(50, baseRemainingDuration || 2000);
     let converted = false;
 
+    // children should not travel all the way to the very end of the digestive path
+    // — they should disappear before entering the large intestine. Use the
+    // small intestine end (`smallEnd`) as the cutoff. If smallEnd is not
+    // available, fall back to the full path length.
+    const childEndCutoff = (typeof smallEnd === 'number' && !isNaN(smallEnd)) ? Math.max(0, Math.min(pathLen, smallEnd)) : pathLen;
+
+    // if the start position is already at/after the cutoff, fade immediately
+    if(start >= childEndCutoff){
+      childEl.style.transition = 'opacity 400ms ease, transform 400ms ease';
+      childEl.style.opacity = '0';
+      setTimeout(()=>childEl.remove(), 450);
+      return;
+    }
+
+    // absorption scheduling: single-unit small molecules should be absorbed
+    // when they enter the small intestine (smallStart). We schedule a small
+    // randomized delay per child to avoid them all disappearing simultaneously.
+    let absorptionScheduled = false;
+
     function step(ts){
       if(!startTime) startTime = ts;
       const elapsed = ts - startTime;
       const t = Math.min(1, elapsed/remaining);
-      const len = start + t * (pathLen - start);
+      // limit child travel to the small-intestine cutoff instead of full path
+      const len = start + t * (Math.max(start, childEndCutoff) - start);
+      // If this is a single-unit small molecule (e.g. glucose or single AA)
+      // and it has crossed into the small intestine, schedule absorption.
+      // Use dataset signals to detect unit children (glucoseCount==1 or aminoCount==1).
+  const isCarbSingle = (childEl.dataset.type === 'carb') && (parseInt(childEl.dataset.glucoseCount||'1',10) === 1);
+  const isProteinSingle = (childEl.dataset.type === 'protein') && (parseInt(childEl.dataset.aminoCount||'1',10) === 1);
+  // fats are created as single-unit children (glycerol or fatty-acid). Treat
+  // them as single-unit small molecules for absorption purposes so that
+  // glycerol and fatty acids also randomly disappear in the latter 50%.
+  const isFatSingle = (childEl.dataset.type === 'fat') && (childEl.dataset.glycerol === '1' || childEl.dataset.fatty === '1');
+  const shouldAbsorb = !absorptionScheduled && (isCarbSingle || isProteinSingle || isFatSingle);
+      if(shouldAbsorb){
+        // New behavior: absorption is probabilistic and increases with
+        // proximity to smallEnd. If smallStart/smallEnd are available, compute
+        // a normalized position p in [0..1] and use a configurable curve to
+        // derive the per-step chance to absorb. If the zones are not
+        // available, fall back to the previous margin-based cutoff.
+        if(typeof smallStart === 'number' && typeof smallEnd === 'number' && !isNaN(smallStart) && !isNaN(smallEnd) && (smallEnd > smallStart)){
+          if(len >= smallStart && len <= smallEnd){
+            const p = (len - smallStart) / (smallEnd - smallStart); // 0..1
+            const baseProb = (SIZES && SIZES.split && typeof SIZES.split.absorbBaseProb === 'number') ? SIZES.split.absorbBaseProb : 0.02;
+            const maxProb = (SIZES && SIZES.split && typeof SIZES.split.absorbMaxProb === 'number') ? SIZES.split.absorbMaxProb : 0.9;
+            const exp = (SIZES && SIZES.split && typeof SIZES.split.absorbProbExponent === 'number') ? SIZES.split.absorbProbExponent : 2;
+            const chance = Math.min(1, Math.max(0, baseProb + (maxProb - baseProb) * Math.pow(Math.max(0, Math.min(1, p)), exp)));
+            if(Math.random() < chance){
+              absorptionScheduled = true;
+              const stagger = 50 + Math.floor(Math.random() * 400);
+              setTimeout(()=>{
+                try{
+                  childEl.style.transition = 'opacity 400ms ease, transform 400ms ease';
+                  childEl.style.opacity = '0';
+                  setTimeout(()=>{ try{ childEl.remove(); }catch(_){/*ignore*/} }, 450);
+                }catch(e){/*ignore*/}
+              }, stagger);
+            }
+          }
+        }else{
+          const margin = (SIZES && SIZES.split && SIZES.split.absorbMargin) ? SIZES.split.absorbMargin : 8;
+          const absorbThreshold = Math.max(0, childEndCutoff - margin);
+          if(len >= absorbThreshold){
+            absorptionScheduled = true;
+            const stagger = 50 + Math.floor(Math.random() * 400);
+            setTimeout(()=>{
+              try{
+                childEl.style.transition = 'opacity 400ms ease, transform 400ms ease';
+                childEl.style.opacity = '0';
+                setTimeout(()=>{ try{ childEl.remove(); }catch(_){/*ignore*/} }, 450);
+              }catch(e){/*ignore*/}
+            }, stagger);
+          }
+        }
+      }
       const pt = path.getPointAtLength(len);
       const screen = svgPointToScreen(pt);
       childEl.style.left = `${screen.x}px`;
@@ -889,7 +1366,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const tokenEl = createMovingToken(type,label);
     let startTime = null;
     let mouthConverted = false;
-  let stomachConverted = false;
+    let stomachConverted = false;
     let smallConverted = false;
 
     function step(timestamp){
