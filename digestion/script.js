@@ -22,19 +22,19 @@ document.addEventListener('DOMContentLoaded', ()=>{
       largeR: 12
     },
     aa: {
-      r: 10,
+      r: 5,
       smallR: 8,
       // connector between residues (more visible defaults)
       linkColor: 'rgba(216,90,90,0.85)',
       linkWidth: 3,
       linkOpacity: 0.95,
       // control curvature of amino-acid chain link
-      curveAmplitude: 20,
+      curveAmplitude: 10,
       curveWaves: 3,
       // span controls how much of the bezier curve the residues occupy.
       // 1 = full length (default behavior). <1 compresses them toward the center
       // (e.g. 0.8 or 0.6 makes residues closer together).
-      span: 0.6,
+      span: 0.2,
       // optional extra gap used by width computation (keeps backward compat.)
       gap: 6,
       // where to place the link relative to residue shapes: 'under' or 'over'
@@ -67,6 +67,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
       // children will be absorbed (disappear). Increase to make them travel
       // further into the small intestine before fading.
       absorbMargin: 0,
+      // small entry margin to avoid immediate on-spawn conversions when
+      // mouthStart === 0 or zones align with the path origin. Units are in
+      // path-length coordinates (same units as path.getPointAtLength).
+      entryMargin: 2,
       // probabilistic absorption parameters: when a single-unit child is in
       // the small intestine, its chance to be absorbed increases with
       // proximity to `smallEnd`. The probability per animation step is:
@@ -84,6 +88,16 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   // Debug helpers (enable for tracing emissions and conversions)
   const DEBUG = false; // set false to silence debug output
+   // Simulation controls
+   // SIM_SPEED: multiplier applied to elapsed time in animations (1 = normal,
+   // <1 = slower, >1 = faster). SIM_PAUSED freezes animations by adjusting
+   // start timestamps so elapsed does not advance while paused.
+   let SIM_SPEED = 1.0;
+   let SIM_PAUSED = false;
+  // Configuration: whether to use SVG zone elements for detection. When
+  // false, the SVG elements like #smallIntestineZone and #stomachZone are
+  // treated as purely visual and zones are derived from percentages below.
+  const USE_ELEMENT_ZONES = false;
   // on-page debug panel (visible when DEBUG=true)
   let _debugPanel = null;
   function ensureDebugPanel(){
@@ -118,6 +132,53 @@ document.addEventListener('DOMContentLoaded', ()=>{
     header.appendChild(clearBtn);
     document.body.appendChild(_debugPanel);
     return _debugPanel;
+  }
+
+  // speed control UI (always available) — pause/resume + speed slider
+  function createSpeedControlPanel(){
+    const existing = document.getElementById('speed-control-panel');
+    if(existing) return existing;
+    const panel = document.createElement('div');
+    panel.id = 'speed-control-panel';
+    panel.style.position = 'fixed';
+    panel.style.left = '12px';
+    panel.style.bottom = '12px';
+    panel.style.width = '220px';
+    panel.style.background = 'rgba(0,0,0,0.7)';
+    panel.style.color = '#fff';
+    panel.style.fontSize = '12px';
+    panel.style.padding = '8px';
+    panel.style.borderRadius = '8px';
+    panel.style.zIndex = 9999999;
+    panel.style.fontFamily = 'system-ui, sans-serif';
+
+    const header = document.createElement('div');
+    header.style.fontWeight = '600';
+    header.style.marginBottom = '6px';
+    header.textContent = 'Simulation Speed';
+    panel.appendChild(header);
+
+    const row = document.createElement('div');
+    row.style.display = 'flex'; row.style.gap = '8px'; row.style.alignItems = 'center';
+
+    const btn = document.createElement('button');
+    btn.textContent = SIM_PAUSED ? 'Resume' : 'Pause';
+    btn.style.fontSize = '12px';
+    btn.addEventListener('click', ()=>{ SIM_PAUSED = !SIM_PAUSED; btn.textContent = SIM_PAUSED ? 'Resume' : 'Pause'; });
+    row.appendChild(btn);
+
+    const speedWrap = document.createElement('div');
+    speedWrap.style.display='flex'; speedWrap.style.flexDirection='column'; speedWrap.style.flex='1';
+    const slider = document.createElement('input');
+    slider.type = 'range'; slider.min = '0.1'; slider.max = '2.0'; slider.step = '0.05'; slider.value = String(SIM_SPEED);
+    const label = document.createElement('div'); label.style.fontSize='11px'; label.style.marginTop='4px'; label.textContent = `speed: ${SIM_SPEED.toFixed(2)}x`;
+    slider.addEventListener('input', ()=>{ SIM_SPEED = Number(slider.value); label.textContent = `speed: ${SIM_SPEED.toFixed(2)}x`; });
+    speedWrap.appendChild(slider); speedWrap.appendChild(label);
+
+    row.appendChild(speedWrap);
+    panel.appendChild(row);
+    document.body.appendChild(panel);
+    return panel;
   }
 
   function debugLog(...args){
@@ -287,14 +348,39 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const smallZoneEl = zone;
   const mouthEl = mouth;
   const stomachEl = document.getElementById('stomachZone');
-  // compute original zone ranges from SVG elements
+  // compute original zone ranges. If USE_ELEMENT_ZONES is true we sample
+  // the SVG zone elements; otherwise treat the SVG markers as visual only
+  // and derive zone lengths from configured percentages (ZONE_OVERRIDES).
   const _orig = {};
-  const _small = findZoneRangeForElement(smallZoneEl);
-  const _mouth = findZoneRangeForElement(mouthEl);
-  const _stomach = findZoneRangeForElement(stomachEl);
-  _orig.smallStart = _small.start; _orig.smallEnd = _small.end;
-  _orig.mouthStart = _mouth.start; _orig.mouthEnd = _mouth.end;
-  _orig.stomachStart = _stomach.start; _orig.stomachEnd = _stomach.end;
+  // default percentage fallbacks (used when not using element zones)
+  const DEFAULT_ZONE_PCTS = { mouthEndPct: 3.9, esophEndPct: 16.2, stomachEndPct: 21.3, smallEndPct: 70.3 };
+  // explicit override values (can be replaced by debug UI). Declared early
+  // so code that checks for ZONE_OVERRIDES does not hit the temporal
+  // dead zone when accessing the binding before initialization.
+  const ZONE_OVERRIDES = {
+    mouthEndPct: 3.9,
+    esophEndPct: 16.2,
+    stomachEndPct: 21.3,
+    smallEndPct: 70.3
+  };
+  if(USE_ELEMENT_ZONES){
+    const _small = findZoneRangeForElement(smallZoneEl);
+    const _mouth = findZoneRangeForElement(mouthEl);
+    const _stomach = findZoneRangeForElement(stomachEl);
+    _orig.smallStart = _small.start; _orig.smallEnd = _small.end;
+    _orig.mouthStart = _mouth.start; _orig.mouthEnd = _mouth.end;
+    _orig.stomachStart = _stomach.start; _orig.stomachEnd = _stomach.end;
+  }else{
+    // use percentages (ZONE_OVERRIDES may be replaced later by debug panel)
+    const pcts = (typeof ZONE_OVERRIDES === 'object' && ZONE_OVERRIDES) ? ZONE_OVERRIDES : DEFAULT_ZONE_PCTS;
+    const toLen = pct => (pathLen>0 ? (pct/100) * pathLen : 0);
+    _orig.mouthStart = 0;
+    _orig.mouthEnd = toLen(pcts.mouthEndPct || DEFAULT_ZONE_PCTS.mouthEndPct);
+    _orig.stomachStart = toLen(pcts.esophEndPct || DEFAULT_ZONE_PCTS.esophEndPct);
+    _orig.stomachEnd = toLen(pcts.stomachEndPct || DEFAULT_ZONE_PCTS.stomachEndPct);
+    _orig.smallStart = toLen(pcts.stomachEndPct || DEFAULT_ZONE_PCTS.stomachEndPct);
+    _orig.smallEnd = toLen(pcts.smallEndPct || DEFAULT_ZONE_PCTS.smallEndPct);
+  }
 
   // current active zone boundaries (may be overridden by debug UI)
   // initialize from the SVG-detected originals; these are declared here so
@@ -308,13 +394,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // esophagus (between mouth end and stomach start)
   let esophStart = (typeof _orig.mouthEnd === 'number') ? _orig.mouthEnd : 0;
   let esophEnd = (typeof _orig.stomachStart === 'number') ? _orig.stomachStart : (typeof _orig.mouthEnd === 'number' ? _orig.mouthEnd : 0);
-
-  const ZONE_OVERRIDES = {
-    mouthEndPct: 3.9,
-    esophEndPct: 16.2,
-    stomachEndPct: 21.3,
-    smallEndPct: 70.3
-  };
 
   // 當 pathLen 已知時，用百分比覆寫 zone 長度（會取代之後的變數初始值）
   if(typeof ZONE_OVERRIDES === 'object'){
@@ -540,6 +619,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }
 
   if(DEBUG){ createZoneDebugPanel(); }
+  // always create speed control UI so users can pause or change simulation speed
+  try{ createSpeedControlPanel(); }catch(e){/*ignore*/}
 
   // determine if path starts inside mouth polygon/bbox (prevents immediate conversion)
   const startsInMouth = (()=>{
@@ -941,6 +1022,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // Animate a detached child along the path starting at `startLen` for remaining duration
   function animateChildAlongPath(childEl, startLen, baseRemainingDuration, label){
     let startTime = null;
+    let lastFrameTs = null;
     const start = Math.max(0, startLen);
     const remaining = Math.max(50, baseRemainingDuration || 2000);
     let converted = false;
@@ -965,9 +1047,15 @@ document.addEventListener('DOMContentLoaded', ()=>{
     let absorptionScheduled = false;
 
     function step(ts){
-      if(!startTime) startTime = ts;
+      if(!startTime){ startTime = ts; lastFrameTs = ts; }
+      if(lastFrameTs === null) lastFrameTs = ts;
+      // if paused, advance startTime so elapsed does not include paused duration
+      if(SIM_PAUSED){ startTime += (ts - lastFrameTs); lastFrameTs = ts; requestAnimationFrame(step); return; }
       const elapsed = ts - startTime;
-      const t = Math.min(1, elapsed/remaining);
+      // apply speed multiplier: effective elapsed scales with SIM_SPEED
+      const effectiveElapsed = elapsed * (typeof SIM_SPEED === 'number' ? SIM_SPEED : 1);
+      const t = Math.min(1, effectiveElapsed / remaining);
+      lastFrameTs = ts;
       // limit child travel to the small-intestine cutoff instead of full path
       const len = start + t * (Math.max(start, childEndCutoff) - start);
       // If this is a single-unit small molecule (e.g. glucose or single AA)
@@ -987,8 +1075,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
         // derive the per-step chance to absorb. If the zones are not
         // available, fall back to the previous margin-based cutoff.
         if(typeof smallStart === 'number' && typeof smallEnd === 'number' && !isNaN(smallStart) && !isNaN(smallEnd) && (smallEnd > smallStart)){
-          if(len >= smallStart && len <= smallEnd){
-            const p = (len - smallStart) / (smallEnd - smallStart); // 0..1
+          // only allow probabilistic absorption in the latter half of the small intestine
+          const smallMid = smallStart + 0.5 * (smallEnd - smallStart);
+          if(len >= smallMid && len <= smallEnd){
+            // normalize p across smallMid..smallEnd so chance only increases within the latter half
+            const p = (smallEnd > smallMid) ? ((len - smallMid) / (smallEnd - smallMid)) : 1;
             const baseProb = (SIZES && SIZES.split && typeof SIZES.split.absorbBaseProb === 'number') ? SIZES.split.absorbBaseProb : 0.02;
             const maxProb = (SIZES && SIZES.split && typeof SIZES.split.absorbMaxProb === 'number') ? SIZES.split.absorbMaxProb : 0.9;
             const exp = (SIZES && SIZES.split && typeof SIZES.split.absorbProbExponent === 'number') ? SIZES.split.absorbProbExponent : 2;
@@ -1368,13 +1459,18 @@ document.addEventListener('DOMContentLoaded', ()=>{
     let mouthConverted = false;
     let stomachConverted = false;
     let smallConverted = false;
+    let lastFrameTs = null;
 
     function step(timestamp){
-      if(!startTime) startTime = timestamp;
+      if(!startTime){ startTime = timestamp; lastFrameTs = timestamp; }
+      if(lastFrameTs === null) lastFrameTs = timestamp;
+      if(SIM_PAUSED){ startTime += (timestamp - lastFrameTs); lastFrameTs = timestamp; requestAnimationFrame(step); return; }
       // if the token element was removed by an earlier conversion, stop processing
       if(!tokenEl.isConnected) return;
       const elapsed = timestamp - startTime;
-      const t = Math.min(1, elapsed/duration);
+      const effectiveElapsed = elapsed * (typeof SIM_SPEED === 'number' ? SIM_SPEED : 1);
+      const t = Math.min(1, effectiveElapsed/duration);
+      lastFrameTs = timestamp;
       const len = t * pathLen;
       const pt = path.getPointAtLength(len);
       const screen = svgPointToScreen(pt);
@@ -1386,14 +1482,16 @@ document.addEventListener('DOMContentLoaded', ()=>{
       if(!mouthConverted){
         // only convert if we enter mouth after starting (or after passing the mouth end)
         const insideMouthNow = (len >= mouthStart && len <= mouthEnd);
-        if((!startsInMouth && insideMouthNow) || (startsInMouth && len > mouthEnd + 2)){
+        const entryMargin = (SIZES && SIZES.split && typeof SIZES.split.entryMargin === 'number') ? SIZES.split.entryMargin : 2;
+        const enteredMouth = len > (mouthStart + entryMargin);
+        if((!startsInMouth && insideMouthNow && enteredMouth) || (startsInMouth && len > mouthEnd + 2)){
           mouthConverted = true;
           if(type === 'carb'){
             // compute remaining duration for children (proportional to distance left)
             const remainingDuration = Math.max(300, duration * (1 - t));
               debugLog('animateAlongPath: convertToMaltose call', {label, len, remainingDuration, dataset: tokenEl.dataset});
               convertToMaltose(tokenEl, len, remainingDuration);
-            info.textContent = `${label} 在口中部分水解，形成麥芽糖（二糖，成對顯示)。`;
+            info.textContent = `${label} 在口中部份分解，形成麥芽糖。`;
             // stop further processing for this token in this frame (it may have been removed)
             return;
           }
@@ -1408,7 +1506,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
           const remainingDuration = Math.max(300, duration * (1 - t));
             debugLog('animateAlongPath: convertToPolypeptide call', {label, len, remainingDuration, dataset: tokenEl.dataset});
             convertToPolypeptide(tokenEl, len, remainingDuration);
-          info.textContent = `${label} 到達胃，蛋白質被分解為多肽（polypeptide）。`;
+          info.textContent = `${label} 到達胃，蛋白質被分解為多肽。`;
           // token may have been removed; stop further processing this frame
           return;
         }
@@ -1421,7 +1519,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
         if(type === 'carb'){
           debugLog('animateAlongPath: convertToGlucose call', {label, len, remainingDuration, dataset: tokenEl.dataset});
           convertToGlucose(tokenEl, len, remainingDuration);
-          info.textContent = `${label} 到達小腸，已轉換為小分子（葡萄糖）。`;
+          info.textContent = `${label} 到達小腸，已轉換為葡萄糖。`;
           // convertToGlucose removes the token; stop further processing
           return;
         }else if(type === 'protein'){
