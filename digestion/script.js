@@ -870,6 +870,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
     el.style.left = '0px';
     el.style.top = '0px';
 
+    // random rotation initializer: store initial angle (deg) and angular speed (deg/sec)
+    // so moving tokens will gently spin as they travel.
+    el._rotInit = (Math.random() * 40) - 20; // -20..+20 deg
+    el._rotSpeed = (Math.random() * 160) - 80; // -80..+80 deg/sec
+
     if(type === 'carb'){
       // start as a starch chain (6 hexagons)
       const initialGlc = SIZES.token.initialGlc; // number of glucose units in this starch token
@@ -999,6 +1004,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
   el.style.borderRadius = SIZES.child.borderRadius;
     el.style.background = 'transparent';
     el.dataset.type = kind;
+    // random rotation initializer for detached children as well
+    el._rotInit = (Math.random() * 40) - 20;
+    el._rotSpeed = (Math.random() * 160) - 80;
     if(kind === 'carb'){
       el.dataset.glucoseCount = String(unitSize);
       const svg = createHexChainSVG(unitSize, unitSize===1 ? SIZES.aa.smallR : SIZES.hex.r, 0, fill);
@@ -1112,11 +1120,15 @@ document.addEventListener('DOMContentLoaded', ()=>{
           }
         }
       }
-      const pt = path.getPointAtLength(len);
-      const screen = svgPointToScreen(pt);
-      childEl.style.left = `${screen.x}px`;
-      childEl.style.top = `${screen.y}px`;
-      childEl.style.transform = 'translate(-50%,-50%)';
+  const pt = path.getPointAtLength(len);
+  const screen = svgPointToScreen(pt);
+  // compute rotation based on per-element init and speed (deg/sec)
+  const rotInit = (typeof childEl._rotInit === 'number') ? childEl._rotInit : (childEl._rotInit = (Math.random()*40 - 20));
+  const rotSpeed = (typeof childEl._rotSpeed === 'number') ? childEl._rotSpeed : (childEl._rotSpeed = (Math.random()*160 - 80));
+  const angleNow = rotInit + rotSpeed * (effectiveElapsed / 1000);
+  childEl.style.left = `${screen.x}px`;
+  childEl.style.top = `${screen.y}px`;
+  childEl.style.transform = `translate(-50%,-50%) rotate(${angleNow}deg)`;
 
       // if this child represents multiple units, convert when reaching small intestine
       const kind = childEl.dataset.type || 'carb';
@@ -1472,11 +1484,15 @@ document.addEventListener('DOMContentLoaded', ()=>{
       const t = Math.min(1, effectiveElapsed/duration);
       lastFrameTs = timestamp;
       const len = t * pathLen;
-      const pt = path.getPointAtLength(len);
-      const screen = svgPointToScreen(pt);
-      tokenEl.style.left = `${screen.x}px`;
-      tokenEl.style.top = `${screen.y}px`;
-      tokenEl.style.transform = 'translate(-50%,-50%)';
+  const pt = path.getPointAtLength(len);
+  const screen = svgPointToScreen(pt);
+  // compute rotation for this token based on initial/randomized values
+  const rotInitT = (typeof tokenEl._rotInit === 'number') ? tokenEl._rotInit : (tokenEl._rotInit = (Math.random()*40 - 20));
+  const rotSpeedT = (typeof tokenEl._rotSpeed === 'number') ? tokenEl._rotSpeed : (tokenEl._rotSpeed = (Math.random()*160 - 80));
+  const angleT = rotInitT + rotSpeedT * (effectiveElapsed / 1000);
+  tokenEl.style.left = `${screen.x}px`;
+  tokenEl.style.top = `${screen.y}px`;
+  tokenEl.style.transform = `translate(-50%,-50%) rotate(${angleT}deg)`;
 
       // mouth conversion: starch -> maltose (paired glucose)
       if(!mouthConverted){
