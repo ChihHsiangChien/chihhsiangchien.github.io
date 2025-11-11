@@ -640,6 +640,223 @@ document.addEventListener('DOMContentLoaded', ()=>{
       y: r.top + pt.y * scaleY
     };
   }
+  // --- Gland fluids / emitters -------------------------------------------
+  // visual particles emitted from glands (saliva, gastric juice, bile,
+  // pancreatic juice, intestinal secretions). Tunables live under SIZES.fluid.
+  SIZES.fluid = SIZES.fluid || {
+    particleR: 5,
+    particleCountSaliva: 6,
+    particleCountStomach: 8,
+    particleCountPancreas: 6,
+    particleCountLiver: 6,
+    particleCountIntestine: 3,
+    lifespan: 1400, // ms travel+fade
+    speedFactor: 1.0,
+    colors: {
+      saliva: '#bfe9ff',
+      gastric: '#ffd2a8',
+      bile: '#9fe08a',
+      pancreatic: '#fff7b2',
+      intestinal: '#cdeffd'
+    }
+  };
+
+  function createFluidParticle(kind){
+    const el = document.createElement('div');
+    el.className = `fluid-particle fluid-${kind}`;
+    const r = SIZES.fluid.particleR;
+    el.style.width = `${r*2}px`;
+    el.style.height = `${r*2}px`;
+    el.style.borderRadius = '50%';
+    el.style.position = 'fixed';
+    el.style.pointerEvents = 'none';
+    el.style.zIndex = 999998;
+    el.style.opacity = '0.95';
+    el.style.transform = 'translate(-50%,-50%)';
+    el.dataset.kind = kind;
+    el.style.background = SIZES.fluid.colors[kind] || '#ddd';
+    // subtle random initial offset/rotation
+    el._rotInit = (Math.random()*40 - 20);
+    el._rotSpeed = (Math.random()*120 - 60);
+    document.body.appendChild(el);
+    return el;
+  }
+
+  // animate a fluid particle from startLen forward by travelLen (or until cutoff)
+  function animateFluidParticle(el, startLen, travelLen, duration){
+    let startTime = null;
+    const cutoff = Math.min(pathLen, (typeof smallEnd === 'number' ? smallEnd : pathLen));
+    function step(ts){
+      if(!startTime) startTime = ts;
+      const elapsed = ts - startTime;
+      const t = Math.min(1, elapsed / duration);
+      const len = startLen + t * travelLen;
+      if(len > cutoff) {
+        // fade and remove
+        el.style.transition = 'opacity 400ms ease, transform 400ms ease';
+        el.style.opacity = '0';
+        setTimeout(()=>{ try{ el.remove(); }catch(_){/*ignore*/} }, 420);
+        return;
+      }
+      const pt = path.getPointAtLength(len);
+      const screen = svgPointToScreen(pt);
+      const angle = el._rotInit + el._rotSpeed * (elapsed/1000);
+      el.style.left = `${screen.x}px`;
+      el.style.top = `${screen.y}px`;
+      el.style.transform = `translate(-50%,-50%) rotate(${angle}deg)`;
+      // fade towards end
+      if(elapsed > duration * 0.6){ el.style.opacity = String(Math.max(0, 1 - (elapsed - duration*0.6)/(duration*0.4))); }
+      if(t < 1) requestAnimationFrame(step);
+      else { try{ el.remove(); }catch(_){/*ignore*/} }
+    }
+    requestAnimationFrame(step);
+  }
+
+  // convenience: emit `count` particles from a path length `startLen` spreading forward
+  function emitFluid(kind, count, startLen, spreadLen){
+    if(!path || pathLen <= 0) return;
+    const durBase = SIZES.fluid.lifespan * (SIZES.fluid.speedFactor || 1);
+    for(let i=0;i<count;i++){
+      const p = createFluidParticle(kind);
+      // stagger start offset slightly to create a cloud
+      const offset = (i - (count-1)/2) * (spreadLen / Math.max(1,count));
+      const sLen = Math.max(0, Math.min(pathLen, startLen + offset));
+      const travel = Math.max(8, (spreadLen || 60) + Math.random()*40);
+      const dur = Math.max(300, durBase * (0.8 + Math.random()*0.6));
+      animateFluidParticle(p, sLen, travel, dur);
+    }
+  }
+
+  // schedule gland emitters (idempotent)
+  function createGlandEmitters(){
+    // clear existing
+    if(window.__digestEmitters && Array.isArray(window.__digestEmitters.timers)){
+      window.__digestEmitters.timers.forEach(id=>clearInterval(id));
+    }
+    window.__digestEmitters = { timers: [] };
+
+    // saliva: emit at mouth midpoint periodically
+    try{
+      const mouthMid = (typeof mouthStart === 'number' && typeof mouthEnd === 'number') ? (mouthStart + mouthEnd) / 2 : 0;
+      const salivaTimer = setInterval(()=>{
+        if(window.__digestEmitters && window.__digestEmitters.enabled && window.__digestEmitters.enabled.saliva) emitFluid('saliva', SIZES.fluid.particleCountSaliva, mouthMid, 40);
+      }, 3000);
+      window.__digestEmitters.timers.push(salivaTimer);
+    }catch(e){}
+
+    // gastric juice: emit in stomach region
+    try{
+      const stomachMid = (typeof stomachStart === 'number' && typeof stomachEnd === 'number') ? (stomachStart + stomachEnd) / 2 : Math.max(0, pathLen * 0.2);
+      const stomachTimer = setInterval(()=>{
+        if(window.__digestEmitters && window.__digestEmitters.enabled && window.__digestEmitters.enabled.gastric) emitFluid('gastric', SIZES.fluid.particleCountStomach, stomachMid, 50);
+      }, 5200);
+      window.__digestEmitters.timers.push(stomachTimer);
+    }catch(e){}
+
+    // pancreas & liver: release into proximal small intestine (near smallStart)
+    try{
+      const prox = (typeof smallStart === 'number' && typeof smallEnd === 'number') ? (smallStart + Math.min(smallStart + (smallEnd-smallStart)*0.07, smallEnd)) : Math.max(0, pathLen*0.28);
+  const panTimer = setInterval(()=>{ if(window.__digestEmitters && window.__digestEmitters.enabled && window.__digestEmitters.enabled.pancreatic) emitFluid('pancreatic', SIZES.fluid.particleCountPancreas, prox, 36); }, 6700);
+  const liverTimer = setInterval(()=>{ if(window.__digestEmitters && window.__digestEmitters.enabled && window.__digestEmitters.enabled.bile) emitFluid('bile', SIZES.fluid.particleCountLiver, prox + 8, 36); }, 8800);
+      window.__digestEmitters.timers.push(panTimer, liverTimer);
+    }catch(e){}
+
+    // intestinal glands: frequent light trickles along small intestine
+    try{
+      const intTimer = setInterval(() => {
+        if (typeof smallStart !== 'number' || typeof smallEnd !== 'number') return;
+        if(!(window.__digestEmitters && window.__digestEmitters.enabled && window.__digestEmitters.enabled.intestinal)) return;
+        // emit a few at random positions along the small intestine
+        for (let i = 0; i < 2; i++) {
+          const s = smallStart + Math.random() * (smallEnd - smallStart);
+          emitFluid('intestinal', SIZES.fluid.particleCountIntestine, s, 18 + Math.random() * 20);
+        }
+      }, 1800);
+      window.__digestEmitters.timers.push(intTimer);
+    }catch(e){}
+  }
+
+  // start emitters once pathLen and zone boundaries are available
+  try{ createGlandEmitters(); }catch(e){/*ignore*/}
+  // ensure enabled flags exist so UI can toggle automatic emission per gland
+  window.__digestEmitters = window.__digestEmitters || { timers: [] };
+  window.__digestEmitters.enabled = window.__digestEmitters.enabled || {
+    saliva: false,
+    gastric: false,
+    pancreatic: false,
+    bile: false,
+    intestinal: false
+  };
+
+  // create a small control panel for gland emission: manual Emit + Auto toggle
+  function createGlandControlPanel(){
+    try{
+      const existing = document.getElementById('gland-control-panel');
+      if(existing) return existing;
+      const panel = document.createElement('div');
+      panel.id = 'gland-control-panel';
+      panel.style.position = 'fixed';
+      panel.style.right = '12px';
+      panel.style.bottom = '80px';
+      panel.style.width = '220px';
+      panel.style.background = 'rgba(0,0,0,0.7)';
+      panel.style.color = '#fff';
+      panel.style.fontSize = '12px';
+      panel.style.padding = '8px';
+      panel.style.borderRadius = '8px';
+      panel.style.zIndex = 9999999;
+      panel.style.fontFamily = 'system-ui, sans-serif';
+
+      const header = document.createElement('div');
+      header.style.fontWeight = '600';
+      header.style.marginBottom = '6px';
+      header.textContent = '消化腺';
+      panel.appendChild(header);
+
+      const glands = [
+        {k:'saliva', label:'唾液'},
+        {k:'gastric', label:'胃液'},
+        {k:'pancreatic', label:'胰液'},
+        {k:'bile', label:'膽汁'},
+        {k:'intestinal', label:'腸液'}
+      ];
+
+      glands.forEach(g=>{
+        const row = document.createElement('div');
+        row.style.display = 'flex'; row.style.gap = '8px'; row.style.alignItems = 'center'; row.style.marginBottom = '6px';
+        const lab = document.createElement('div'); lab.textContent = g.label; lab.style.flex = '1'; lab.style.fontSize='13px';
+        const emitBtn = document.createElement('button'); emitBtn.textContent = '分泌'; emitBtn.style.fontSize='12px';
+        const chk = document.createElement('input'); chk.type = 'checkbox'; chk.id = `gland-auto-${g.k}`;
+        chk.checked = !!(window.__digestEmitters && window.__digestEmitters.enabled && window.__digestEmitters.enabled[g.k]);
+        chk.addEventListener('change', ()=>{ window.__digestEmitters.enabled[g.k] = chk.checked; });
+        emitBtn.addEventListener('click', ()=>{
+          // compute startLen for this gland similar to createGlandEmitters
+          const mouthMid = (typeof mouthStart === 'number' && typeof mouthEnd === 'number') ? (mouthStart + mouthEnd) / 2 : 0;
+          const stomachMid = (typeof stomachStart === 'number' && typeof stomachEnd === 'number') ? (stomachStart + stomachEnd) / 2 : Math.max(0, pathLen * 0.2);
+          const prox = (typeof smallStart === 'number' && typeof smallEnd === 'number') ? (smallStart + Math.min(smallStart + (smallEnd-smallStart)*0.07, smallEnd)) : Math.max(0, pathLen*0.28);
+          if(g.k === 'saliva') emitFluid('saliva', SIZES.fluid.particleCountSaliva, mouthMid, 40);
+          else if(g.k === 'gastric') emitFluid('gastric', SIZES.fluid.particleCountStomach, stomachMid, 50);
+          else if(g.k === 'pancreatic') emitFluid('pancreatic', SIZES.fluid.particleCountPancreas, prox, 36);
+          else if(g.k === 'bile') emitFluid('bile', SIZES.fluid.particleCountLiver, prox + 8, 36);
+          else if(g.k === 'intestinal'){
+            // emit a small cluster along the small intestine
+            const s = (typeof smallStart === 'number' && typeof smallEnd === 'number') ? (smallStart + 0.5*(smallEnd-smallStart)) : (pathLen*0.5);
+            emitFluid('intestinal', SIZES.fluid.particleCountIntestine, s, 26);
+          }
+        });
+        row.appendChild(lab);
+        row.appendChild(emitBtn);
+        const autoWrap = document.createElement('label'); autoWrap.style.display='flex'; autoWrap.style.alignItems='center'; autoWrap.style.gap='4px'; autoWrap.style.fontSize='12px'; autoWrap.appendChild(chk); const txt = document.createElement('span'); txt.textContent='Auto'; autoWrap.appendChild(txt);
+        row.appendChild(autoWrap);
+        panel.appendChild(row);
+      });
+
+      document.body.appendChild(panel);
+      return panel;
+    }catch(e){/*ignore*/}
+  }
+  // create gland control panel (non-invasive): users can click to emit or enable Auto
+  try{ createGlandControlPanel(); }catch(e){/*ignore*/}
   // helper: create an inline SVG chain of flat-top hexagons
   function createHexChainSVG(count, r = SIZES.hex.r, gap = SIZES.hex.gap, fill = SIZES.hex.fill, stroke = SIZES.hex.stroke){
     const sqrt3 = Math.sqrt(3);
