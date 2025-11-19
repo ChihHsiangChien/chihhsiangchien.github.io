@@ -116,7 +116,7 @@ function updateVisualization(t) {
     // 5. Sternum Animation (Move up)
     const sternumY = 100 + (t * -20);
     sternum.setAttribute('y', sternumY);
-
+    /*
     // 6. Air Particles Animation (Flow)
     // t=0 (Empty): Particles up (outside)
     // t=1 (Full): Particles down (inside)
@@ -125,4 +125,5 @@ function updateVisualization(t) {
     const airOpacity = 0.4 + (t * 0.6); 
     airParticles.setAttribute('transform', `translate(0, ${airY})`);
     airParticles.setAttribute('opacity', airOpacity);
+    */
 }
