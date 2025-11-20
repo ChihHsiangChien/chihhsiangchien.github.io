@@ -11,80 +11,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const stageTitle = document.getElementById('stage-title');
     const stageDesc = document.getElementById('stage-desc');
     const mechanismDesc = document.getElementById('mechanism-desc');
-    const buttons = document.querySelectorAll('.stage-btn');
+    const buttons = document.querySelectorAll('.toggle-btn');
+    const resetBtn = document.getElementById('reset-btn');
 
     // State
-    let currentStage = 'normal';
     let particles = [];
     let animationId;
     let flowSpeed = 2;
-    let vesselWidth = 80; // Initial height of lumen
+    let vesselWidth = 80; // Current width
+    let targetWidth = 80; // Target width
     let isVasodilation = false;
     let isLeaking = false;
-
-    // Configuration
-    const config = {
-        normal: {
-            speed: 2,
-            width: 80,
-            vasodilation: false,
-            leaking: false,
-            injuryOpacity: 0,
-            swellingOpacity: 0,
-            nerveActive: false,
-            title: "正常狀態 (Normal)",
-            desc: "組織與血管處於恆定狀態，血流速度正常，無發炎反應。",
-            mech: "生理平衡：血管壁完整，血流穩定，無免疫細胞聚集。"
-        },
-        red: {
-            speed: 3,
-            width: 120, // Vasodilation
-            vasodilation: true,
-            leaking: false,
-            injuryOpacity: 1,
-            swellingOpacity: 0,
-            nerveActive: false,
-            title: "紅 (Redness / Rubor)",
-            desc: "受傷後，組織釋放組織胺(Histamine)等化學物質，導致微血管擴張，血流量增加，使患部發紅。",
-            mech: "微血管擴張 (Vasodilation)：增加局部血流量，帶來更多免疫細胞。"
-        },
-        heat: {
-            speed: 5, // Faster flow
-            width: 120,
-            vasodilation: true,
-            leaking: false,
-            injuryOpacity: 1,
-            swellingOpacity: 0,
-            nerveActive: false,
-            title: "熱 (Heat / Calor)",
-            desc: "大量的血液流向患部，血液帶有體熱，導致局部溫度升高，有助於抑制細菌生長並加速代謝。",
-            mech: "充血 (Hyperemia)：血流速度與流量增加，將核心體溫帶至周邊組織。"
-        },
-        swelling: {
-            speed: 2, // Slows down due to leakage/stasis
-            width: 120,
-            vasodilation: true,
-            leaking: true,
-            injuryOpacity: 1,
-            swellingOpacity: 0.4,
-            nerveActive: false,
-            title: "腫 (Swelling / Tumor)",
-            desc: "血管通透性增加，白血球與富含蛋白質的血漿從血管滲入組織間隙，造成局部水腫。",
-            mech: "血管通透性增加 (Increased Permeability)：內皮細胞收縮，讓血漿與白血球滲出至組織。"
-        },
-        pain: {
-            speed: 2,
-            width: 120,
-            vasodilation: true,
-            leaking: true,
-            injuryOpacity: 1,
-            swellingOpacity: 0.4,
-            nerveActive: true,
-            title: "痛 (Pain / Dolor)",
-            desc: "腫脹壓迫神經末梢，加上發炎介質(如前列腺素、巴緩激肽)直接刺激痛覺受器，產生疼痛感。",
-            mech: "神經壓迫與化學刺激：組織腫脹壓迫神經，化學物質(PGE2, Bradykinin)降低痛覺閾值。"
-        }
-    };
+    const activeEffects = new Set();
 
     // Initialize Particles
     function initParticles() {
@@ -146,15 +84,52 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // DOM Elements
+    const skinSurface = document.getElementById('skin-surface');
+    const skinLayerFill = document.getElementById('skin-layer-fill');
+    const tissueBg = document.getElementById('tissue-bg');
+    // swellingOverlay already defined
+    
+    let swellingLevel = 0; // 0 to 1
+
     // Animation Loop
     function animate() {
         // Update Vessel Width (Smooth transition)
-        const targetWidth = config[currentStage].width;
         const widthDiff = targetWidth - vesselWidth;
         if (Math.abs(widthDiff) > 0.5) {
             vesselWidth += widthDiff * 0.05;
         }
         
+        // Update Swelling Level
+        const targetSwelling = activeEffects.has('swelling') ? 1 : 0;
+        const swellingDiff = targetSwelling - swellingLevel;
+        if (Math.abs(swellingDiff) > 0.01) {
+            swellingLevel += swellingDiff * 0.05;
+        }
+
+        // Animate Skin Surface (Bulge Up)
+        // Normal: M 0 50 L 800 50
+        // Swelling: M 0 50 Q 400 0 800 50 (Bulge up to y=0)
+        const bulgeY = 50 - (swellingLevel * 50);
+        const skinPath = `M 0 50 Q 400 ${bulgeY} 800 50`;
+        skinSurface.setAttribute("d", skinPath);
+
+        // Animate Skin Layer Fill (Follow bulge)
+        // Top is flat at 0, Bottom follows bulgeY
+        const skinFillPath = `M 0 0 L 800 0 L 800 50 Q 400 ${bulgeY} 0 50 Z`;
+        skinLayerFill.setAttribute("d", skinFillPath);
+
+        // Animate Tissue Background (Follow bulge)
+        // Top follows bulgeY, Bottom flat at 300
+        const tissuePath = `M 0 50 Q 400 ${bulgeY} 800 50 L 800 300 L 0 300 Z`;
+        tissueBg.setAttribute("d", tissuePath);
+
+        // Animate Swelling Overlay (Match Bulge)
+        // Shape: M 0 50 Q 400 bulgeY 800 50 L 800 300 L 0 300 Z
+        const overlayPath = `M 0 50 Q 400 ${bulgeY} 800 50 L 800 300 L 0 300 Z`;
+        swellingOverlay.setAttribute("d", overlayPath);
+        swellingOverlay.setAttribute("opacity", swellingLevel * 0.3); // Max opacity 0.3
+
         // Calculate centering
         // Fixed center at y=50 (relative to group)
         // Lumen Y starts at 50 - width/2
@@ -166,13 +141,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const vesselWallTop = document.getElementById('vessel-wall-top');
         const vesselWallBottom = document.getElementById('vessel-wall-bottom');
         
-        // Top Wall: Ends at lumenY. Height fixed at 10 or dynamic? Let's keep it fixed thickness 10 for now, or stretch?
-        // User said "expand up and down". If wall is the boundary, it should move.
-        // Let's say wall thickness is 10.
+        // Top Wall
         vesselWallTop.setAttribute("y", lumenY - 10);
         vesselWallTop.setAttribute("height", 10);
         
-        // Bottom Wall: Starts at lumenY + width
+        // Bottom Wall
         vesselWallBottom.setAttribute("y", lumenY + vesselWidth);
         vesselWallBottom.setAttribute("height", 10);
 
@@ -182,8 +155,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Leaked cells logic
                 if (p.type === 'wbc') {
                     // Chemotaxis: Move towards injury site (400, -250 relative to vessel group)
+                    // Note: Injury site visual is at y=80 (in root SVG), vessel group at y=300.
+                    // So relative y = 80 - 300 = -220.
                     const targetX = 400;
-                    const targetY = -250;
+                    const targetY = -220;
                     const dx = targetX - p.x;
                     const dy = targetY - p.y;
                     const dist = Math.sqrt(dx*dx + dy*dy);
@@ -200,7 +175,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Plasma: Drift up and spread
                     p.y -= 0.5;
                     p.x += (Math.random() - 0.5) * 2;
-                    if (p.y < -280) p.y = -280; // Stop at top
+                    // Stop at skin surface (approx -250 relative to vessel group)
+                    // Skin is at y=50, vessel group at y=300 -> relative y = -250
+                    if (p.y < -250) p.y = -250; 
                 }
             } else {
                 // Normal flow
@@ -239,7 +216,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         // Nerve Animation (Pain stage)
-        if (config[currentStage].nerveActive) {
+        if (activeEffects.has('pain')) {
             if (Math.floor(Date.now() / 200) % 2 === 0) {
                 nerve.setAttribute("stroke", "#ff6b6b");
                 nerveEnding.setAttribute("fill", "#ff6b6b");
@@ -255,86 +232,48 @@ document.addEventListener('DOMContentLoaded', () => {
         animationId = requestAnimationFrame(animate);
     }
 
-    function animateLeakage(p) {
-        // Move cell from vessel (y > 0) to tissue (y < 0)
-        let currentY = p.y;
-        let currentX = p.x;
-        
-        // Target for WBCs: Injury Site (approx 400, 50)
-        // Note: Tissue Y is 0-300 in SVG coords, but vessel group is translated by (0, 300).
-        // So injury site (y=50) is at y = 50 - 300 = -250 relative to vessel group?
-        // No, injury site is in root SVG at y=50. Vessel group is at y=300.
-        // So relative to vessel group, injury site is at y = 50 - 300 = -250.
-        // Current p.y is relative to vessel group (e.g., 10 to 90).
-        
-        const targetY = -250 + Math.random() * 40; // Near injury site
-        const targetX = 400 + (Math.random() - 0.5) * 60;
+    function updateVisualization() {
+        // Defaults
+        let newTargetWidth = 80;
+        let newFlowSpeed = 2;
+        isLeaking = false;
+        let isPain = false;
+        let injuryOpacity = 0;
+        let swellingOpacity = 0;
 
-        function step() {
-            if (p.type === 'wbc') {
-                // Chemotaxis: Move towards injury
-                const dx = targetX - currentX;
-                const dy = targetY - currentY;
-                const dist = Math.sqrt(dx*dx + dy*dy);
-                
-                if (dist > 5) {
-                    currentX += (dx / dist) * 1.5; // Speed
-                    currentY += (dy / dist) * 1.5;
-                }
-            } else {
-                // Plasma: Just drift up and spread
-                if (currentY > -280) {
-                    currentY -= 1;
-                    currentX += (Math.random() - 0.5) * 2;
-                }
-            }
-            
-            p.el.setAttribute("cx", currentX);
-            p.el.setAttribute("cy", currentY);
-            
-            // Update stored pos for next frame if needed, but this loop runs independently?
-            // Actually, animate() loop also updates p.x/p.y. We should probably handle this in animate() 
-            // or disable animate() update for leaked particles.
-            // Currently animate() handles leaked particles:
-            // if (p.leaked) { p.x += 0.1; ... }
-            // So we should NOT use a separate loop here, but update the logic in animate().
+        // Apply Effects
+        if (activeEffects.has('red')) {
+            newTargetWidth = 120; // Vasodilation
+            injuryOpacity = 1;
         }
-        // step(); // Don't run separate loop. Update animate() instead.
-    }
-
-    // Stage Switching Logic
-    function setStage(stage) {
-        currentStage = stage;
-        const data = config[stage];
-        
-        // Update UI
-        stageTitle.textContent = data.title;
-        stageDesc.textContent = data.desc;
-        mechanismDesc.textContent = data.mech;
-        
-        buttons.forEach(btn => {
-            btn.classList.remove('active');
-            if (btn.dataset.stage === stage) btn.classList.add('active');
-        });
+        if (activeEffects.has('heat')) {
+            newFlowSpeed = 5; // Increased speed
+        }
+        if (activeEffects.has('swelling')) {
+            isLeaking = true;
+            swellingOpacity = 1;
+        }
+        if (activeEffects.has('pain')) {
+            isPain = true;
+        }
 
         // Update Logic Params
-        flowSpeed = data.speed;
-        isVasodilation = data.vasodilation;
-        isLeaking = data.leaking;
-
+        targetWidth = newTargetWidth;
+        flowSpeed = newFlowSpeed;
+        
         // Visual Updates
         injurySite.style.transition = "opacity 1s";
-        injurySite.setAttribute("opacity", data.injuryOpacity);
+        injurySite.setAttribute("opacity", activeEffects.size > 0 ? 1 : 0); // Show injury if any inflammation
 
         swellingOverlay.style.transition = "opacity 1s";
-        swellingOverlay.setAttribute("opacity", data.swellingOpacity);
+        swellingOverlay.setAttribute("opacity", swellingOpacity);
 
         // Vessel Color Change
         const stop1 = document.getElementById('vessel-stop-1');
         const stop2 = document.getElementById('vessel-stop-2');
         
-        if (stage !== 'normal') {
-            // Inflamed color (Brighter/Darker Red)
+        if (activeEffects.size > 0) {
+            // Inflamed color
             stop1.style.stopColor = "#ff0000";
             stop2.style.stopColor = "#cc0000";
         } else {
@@ -343,22 +282,84 @@ document.addEventListener('DOMContentLoaded', () => {
             stop2.style.stopColor = "#ff8787";
         }
 
-        // Reset leaked cells if going back to normal
-        if (stage === 'normal') {
-            particles.forEach(p => {
-                p.leaked = false;
-                p.y = 10 + Math.random() * (80 - 20);
-                p.el.setAttribute("cy", p.y);
-            });
+        // Nerve Animation State handled in animate()
+        const nerve = document.getElementById('nerve');
+        const nerveEnding = document.getElementById('nerve-ending');
+        if (isPain) {
+            nerve.style.animation = "nervePulse 0.5s infinite alternate";
+            nerveEnding.style.fill = "#ff0000";
+        } else {
+            nerve.style.animation = "none";
+            nerveEnding.style.fill = "#ffd43b";
         }
+
+        // Update Text
+        updateText();
+    }
+
+    function updateText() {
+        if (activeEffects.size === 0) {
+            stageTitle.textContent = "正常狀態";
+            stageDesc.textContent = "組織與血管處於恆定狀態，血流速度正常，無發炎反應。";
+            mechanismDesc.textContent = "--";
+            return;
+        }
+
+        const titles = [];
+        const descs = [];
+        const mechs = [];
+
+        if (activeEffects.has('red')) {
+            titles.push("紅 (Redness)");
+            descs.push("血管擴張，血流增加。");
+            mechs.push("組織胺促使血管平滑肌舒張，管徑變大，血流量增加，導致局部發紅。");
+        }
+        if (activeEffects.has('heat')) {
+            titles.push("熱 (Heat)");
+            descs.push("血流速度加快，代謝活躍。");
+            mechs.push("充血與代謝率增加，將深層體溫帶至體表，導致局部發熱。");
+        }
+        if (activeEffects.has('swelling')) {
+            titles.push("腫 (Swelling)");
+            descs.push("組織液與白血球滲出。");
+            mechs.push("血管通透性增加，血漿與白血球滲入組織間隙，造成局部腫脹。");
+        }
+        if (activeEffects.has('pain')) {
+            titles.push("痛 (Pain)");
+            descs.push("神經受壓迫與刺激。");
+            mechs.push("腫脹壓迫神經末梢，加上發炎介質（如前列腺素）刺激，產生疼痛感。");
+        }
+
+        stageTitle.textContent = titles.join(" + ");
+        stageDesc.textContent = descs.join(" ");
+        mechanismDesc.innerHTML = mechs.map(m => `<li>${m}</li>`).join("");
     }
 
     // Event Listeners
     buttons.forEach(btn => {
         btn.addEventListener('click', () => {
-            setStage(btn.dataset.stage);
+            const effect = btn.dataset.effect;
+            if (activeEffects.has(effect)) {
+                activeEffects.delete(effect);
+                btn.classList.remove('active');
+            } else {
+                activeEffects.add(effect);
+                btn.classList.add('active');
+            }
+            updateVisualization();
         });
     });
+
+    if (resetBtn) {
+        resetBtn.addEventListener('click', () => {
+            activeEffects.clear();
+            buttons.forEach(btn => btn.classList.remove('active'));
+            updateVisualization();
+        });
+    }
+
+    // Initial Update
+    updateVisualization();
 
     // Start
     initParticles();
