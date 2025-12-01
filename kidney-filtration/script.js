@@ -6,6 +6,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const startBtn = document.getElementById('startBtn');
     const resetBtn = document.getElementById('resetBtn');
     const toggleLabelsBtn = document.getElementById('toggleLabelsBtn');
+    const hyperglycemiaBtn = document.getElementById('hyperglycemiaBtn');
+    const proteinuriaBtn = document.getElementById('proteinuriaBtn');
+    const toggleTooltipsBtn = document.getElementById('toggleTooltipsBtn');
     const infoText = document.getElementById('info-text');
 
     let isRunning = false;
@@ -13,6 +16,20 @@ document.addEventListener('DOMContentLoaded', () => {
     let animationId;
     let spawnTimer = 0;
     let showParticleLabels = false;
+    let alwaysShowTooltips = false;
+    // Pathology states
+    let pathology = {
+        hyperglycemia: false,
+        proteinuria: false
+    };
+
+    function updatePathologyInfo() {
+        const active = [];
+        if (pathology.hyperglycemia) active.push('高血糖：近曲小管葡萄糖載體飽和，部分葡萄糖出現於尿液');
+        if (pathology.proteinuria) active.push('蛋白尿：過濾障壁受損，蛋白質進入濾液');
+        if (active.length === 0) return; // keep existing message unless pathology active
+        infoText.textContent = active.join('；');
+    }
 
     // Define paths
     // 1. Nephron Path (Filtrate)
@@ -31,19 +48,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 2. Blood Path (Capillaries)
     // Starts at afferent arteriole (Left), goes to glomerulus (Center), then efferent (Left/Down), then wraps around tubules
-    const bloodPathData = `
+    const bloodPathData2 = `
         M 50 140 
         L 110 140 
         C 120 120, 150 120, 160 140 
         C 170 160, 130 170, 130 140 
         C 130 120, 160 120, 160 150
         C 160 170, 120 170, 110 160
-        L 110 160
-        C 110 200, 200 200, 200 300 
-        C 200 550, 400 550, 400 400 
+        L 85 160
+        C 85 200, 180 220, 180 320 
+        C 200 600, 440 550, 440 400 
         C 400 300, 500 300, 600 300 
         L 750 300
     `;
+    const bloodPathData = `
+        m 50,140
+        h 60
+        c 10,-20 36.41243,-20.55193 46.41243,-0.55193 10,20 -38.279,40.48673 -38.279,10.48673 0,-20 35.39871,-22.59502 30.27597,6.96437 -3.03564,17.5163 -30.61713,11.99696 -38.68537,-4.35027
+        L 83.896133,152.27293
+        C 65.958293,152.80968 57.74672,180.81272 180,320 200,600 440,550 440,400 400,300 500,300 600,300
+        h 150`;
 
     // Glomerulus Visual Path (The knot structure inside the capsule)
     const glomerulusPathData = `
@@ -70,7 +94,7 @@ document.addEventListener('DOMContentLoaded', () => {
             cx: 145,
             cy: 150,
             r: 50,
-            title: '腎絲球 (Glomerulus)',
+            title: '腎絲球',
             description: '血液在此進行過濾作用。小分子（水、葡萄糖、鹽類、尿素）可通過，大分子（蛋白質）被阻擋。'
         },
         {
@@ -80,7 +104,7 @@ document.addEventListener('DOMContentLoaded', () => {
             y: 120,
             width: 100,
             height: 200,
-            title: '近曲小管 (PCT)',
+            title: '近曲小管',
             description: '主要的再吸收區域。葡萄糖被完全再吸收，大部分的水和鹽類也在此回收。'
         },
         {
@@ -90,7 +114,7 @@ document.addEventListener('DOMContentLoaded', () => {
             y: 400,
             width: 150,
             height: 150,
-            title: '亨利氏套 (Loop of Henle)',
+            title: '亨利氏套',
             description: '下降支：水分再吸收。上升支：鹽類再吸收。此處建立滲透壓梯度，幫助尿液濃縮。'
         },
         {
@@ -100,7 +124,7 @@ document.addEventListener('DOMContentLoaded', () => {
             y: 220,
             width: 150,
             height: 120,
-            title: '遠曲小管 (DCT)',
+            title: '遠曲小管',
             description: '精細調節水分和鹽類平衡，受荷爾蒙（如醛固酮、抗利尿激素）調控。'
         }
     ];
@@ -141,9 +165,6 @@ document.addEventListener('DOMContentLoaded', () => {
         structureLayer.appendChild(capillary);
 
         // Interactive regions (drawn first, behind everything)
-        const floatingTooltip = document.getElementById('floating-tooltip');
-        const tooltipContent = floatingTooltip.querySelector('.tooltip-content');
-        
         interactiveRegions.forEach(region => {
             let element;
             if (region.shape === 'circle') {
@@ -163,63 +184,84 @@ document.addEventListener('DOMContentLoaded', () => {
             element.setAttribute("id", region.id);
             element.style.cursor = 'pointer';
             
+            // Create individual tooltip for this region
+            const tooltip = document.createElement('div');
+            tooltip.className = 'floating-tooltip region-tooltip';
+            tooltip.innerHTML = `<div class="tooltip-content"><strong>${region.title}</strong>${region.description}</div>`;
+            document.body.appendChild(tooltip);
+            
+            // Function to show tooltip for a region
+            const showTooltipForRegion = () => {
+                // Use requestAnimationFrame to ensure layout is stable
+                requestAnimationFrame(() => {
+                    let tooltipX, tooltipY;
+                    
+                    if (region.shape === 'circle') {
+                        // Position to the right of the circle
+                        tooltipX = region.cx + region.r /2 ;
+                        tooltipY = region.cy - region.r*3 ;
+                    } else {
+                        // Position to the right of the rectangle
+                        tooltipX = region.x + region.width + 10;
+                        tooltipY = region.y + region.height / 2;
+                    }
+                    
+                    // Convert SVG coordinates to page coordinates
+                    const svgPoint = svg.createSVGPoint();
+                    svgPoint.x = tooltipX;
+                    svgPoint.y = tooltipY;
+                    const screenPoint = svgPoint.matrixTransform(svg.getScreenCTM());
+                    
+                    // Position and show tooltip
+                    tooltip.style.left = screenPoint.x + 'px';
+                    tooltip.style.top = screenPoint.y + 'px';
+                    tooltip.style.display = 'block';
+                    
+                    // Trigger reflow before adding visible class for smooth transition
+                    tooltip.offsetHeight;
+                    tooltip.classList.add('visible');
+                    
+                    element.classList.add('region-hover');
+                });
+            };
+            
+            const hideTooltipForRegion = () => {
+                tooltip.classList.remove('visible');
+                setTimeout(() => {
+                    tooltip.style.display = 'none';
+                }, 300);
+                element.classList.remove('region-hover');
+            };
+            
+            // Store the show/hide functions and tooltip element for later use
+            element._showTooltip = showTooltipForRegion;
+            element._hideTooltip = hideTooltipForRegion;
+            element._tooltip = tooltip;
+            element._regionData = region;
+            
             // Add hover events
             element.addEventListener('mouseenter', (e) => {
-                // Calculate position next to the region
-                const svgRect = svg.getBoundingClientRect();
-                const containerRect = document.querySelector('.container').getBoundingClientRect();
-                
-                let tooltipX, tooltipY;
-                
-                if (region.shape === 'circle') {
-                    // Position to the right of the circle
-                    tooltipX = region.cx + region.r + 20;
-                    tooltipY = region.cy;
-                } else {
-                    // Position to the right of the rectangle
-                    tooltipX = region.x + region.width + 20;
-                    tooltipY = region.y + region.height / 2;
+                if (!alwaysShowTooltips) {
+                    showTooltipForRegion();
                 }
-                
-                // Convert SVG coordinates to page coordinates
-                const svgPoint = svg.createSVGPoint();
-                svgPoint.x = tooltipX;
-                svgPoint.y = tooltipY;
-                const screenPoint = svgPoint.matrixTransform(svg.getScreenCTM());
-                
-                // Set tooltip content
-                tooltipContent.innerHTML = `<strong>${region.title}</strong>${region.description}`;
-                
-                // Position and show tooltip
-                floatingTooltip.style.left = screenPoint.x + 'px';
-                floatingTooltip.style.top = screenPoint.y + 'px';
-                floatingTooltip.style.display = 'block';
-                
-                // Trigger reflow before adding visible class for smooth transition
-                floatingTooltip.offsetHeight;
-                floatingTooltip.classList.add('visible');
-                
-                element.classList.add('region-hover');
             });
             
             element.addEventListener('mouseleave', () => {
-                floatingTooltip.classList.remove('visible');
-                setTimeout(() => {
-                    floatingTooltip.style.display = 'none';
-                }, 300);
-                element.classList.remove('region-hover');
+                if (!alwaysShowTooltips) {
+                    hideTooltipForRegion();
+                }
             });
             
             structureLayer.appendChild(element);
         });
 
         // Labels
-        addLabel(100, 80, "鮑氏囊 (Bowman's Capsule)");
-        addLabel(100, 200, "腎絲球 (Glomerulus)");
-        addLabel(280, 200, "近曲小管 (PCT)");
-        addLabel(330, 520, "亨利氏套 (Loop of Henle)");
-        addLabel(530, 250, "遠曲小管 (DCT)");
-        addLabel(610, 500, "集尿管 (Collecting Duct)");
+        addLabel(100, 80, "鮑氏囊");
+        addLabel(100, 200, "腎絲球");
+        addLabel(280, 200, "近曲小管");
+        addLabel(330, 520, "亨利氏套");
+        addLabel(530, 250, "遠曲小管");
+        addLabel(610, 500, "集尿管");
         addLabel(30, 130, "入球小動脈");
         addLabel(700, 280, "腎靜脈");
     }
@@ -234,7 +276,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Particle System
-    const particleTypes = [
+    const particleTypesBase = [
         { type: 'water', color: '#3498db', radius: 4, label: '水' },
         { type: 'salt', color: '#e74c3c', radius: 4, label: '鹽' },
         { type: 'urea', color: '#f1c40f', radius: 4, label: '尿素' },
@@ -242,9 +284,26 @@ document.addEventListener('DOMContentLoaded', () => {
         { type: 'glucose', color: '#2ecc71', radius: 5, label: '葡萄糖' }
     ];
 
+    function chooseParticleType() {
+        // Adjust spawn probabilities under hyperglycemia (more glucose fraction)
+        if (!pathology.hyperglycemia) {
+            return particleTypesBase[Math.floor(Math.random() * particleTypesBase.length)];
+        }
+        // Weighted: increase glucose probability
+        const weighted = [];
+        particleTypesBase.forEach(t => {
+            if (t.type === 'glucose') {
+                for (let i = 0; i < 5; i++) weighted.push(t); // higher weight
+            } else {
+                weighted.push(t);
+            }
+        });
+        return weighted[Math.floor(Math.random() * weighted.length)];
+    }
+
     class Particle {
         constructor() {
-            const typeData = particleTypes[Math.floor(Math.random() * particleTypes.length)];
+            const typeData = chooseParticleType();
             this.type = typeData.type;
             this.color = typeData.color;
             this.radius = typeData.radius;
@@ -282,6 +341,12 @@ document.addEventListener('DOMContentLoaded', () => {
             
             this.bloodLength = this.bloodPathEl.getTotalLength();
             this.nephronLength = this.nephronPathEl.getTotalLength();
+
+            // Ensure not all water/salt are reabsorbed: one-time checks per segment
+            this.checkedPCT = false;
+            this.checkedLoopWater = false;
+            this.checkedLoopSalt = false;
+            this.checkedDCT = false;
         }
 
         update() {
@@ -316,38 +381,59 @@ document.addEventListener('DOMContentLoaded', () => {
             if (this.path === 'blood' && this.progress > 0.15 && this.progress < 0.25 && !this.filtered) {
                 this.filtered = true;
                 if (this.type !== 'protein') {
-                    // Filtration: Move to nephron path
                     this.path = 'nephron';
-                    this.progress = 0; // Reset progress for new path
-                    infoText.textContent = "過濾作用：小分子（水、鹽、葡萄糖、尿素）進入鮑氏囊。";
+                    this.progress = 0;
                 } else {
-                    infoText.textContent = "過濾作用：蛋白質太大，留在血管中。";
+                    // Protein normally retained; if proteinuria allow leak (probability)
+                    if (pathology.proteinuria && Math.random() < 0.5) {
+                        this.path = 'nephron';
+                        this.progress = 0;
+                    }
                 }
             }
 
-            // Reabsorption Logic
+            // Reabsorption Logic (probabilistic, single-check per segment)
             if (this.path === 'nephron' && !this.isReabsorbing) {
                 // PCT (approx 0.1 - 0.3 of nephron path)
-                if (this.progress > 0.1 && this.progress < 0.3) {
+                if (this.progress >= 0.12 && this.progress < 0.3 && !this.checkedPCT) {
+                    this.checkedPCT = true;
                     if (this.type === 'glucose') {
-                        this.startReabsorption(0.35); // Reabsorb to early capillary
-                        infoText.textContent = "再吸收：葡萄糖在近曲小管被完全再吸收回血液。";
-                    } else if ((this.type === 'water' || this.type === 'salt') && Math.random() < 0.02) {
-                        this.startReabsorption(0.35 + Math.random() * 0.1);
+                        // Saturable transport: under hyperglycemia some glucose escapes
+                        if (!pathology.hyperglycemia || Math.random() < 0.9) {
+                            this.startReabsorption(0.35);
+                        }
+                    } else if (this.type === 'water' || this.type === 'salt') {
+                        // Majority reabsorbed here, but allow some to pass on
+                        if (Math.random() < 0.6) {
+                            this.startReabsorption(0.35 + Math.random() * 0.1);
+                        }
                     }
                 }
                 // Loop of Henle (0.3 - 0.6)
-                else if (this.progress > 0.3 && this.progress < 0.6) {
-                    if (this.type === 'water' && this.progress < 0.45 && Math.random() < 0.02) {
-                         this.startReabsorption(0.5); // Descending limb water
-                    } else if (this.type === 'salt' && this.progress > 0.45 && Math.random() < 0.02) {
-                         this.startReabsorption(0.55); // Ascending limb salt
+                else if (this.progress >= 0.3 && this.progress < 0.6) {
+                    // Descending limb: water
+                    if (this.type === 'water' && this.progress < 0.45 && !this.checkedLoopWater) {
+                        this.checkedLoopWater = true;
+                        if (Math.random() < 0.3) {
+                            this.startReabsorption(0.5);
+                        }
+                    }
+                    // Ascending limb: salt
+                    if (this.type === 'salt' && this.progress >= 0.48 && !this.checkedLoopSalt) {
+                        this.checkedLoopSalt = true;
+                        if (Math.random() < 0.3) {
+                            this.startReabsorption(0.55);
+                        }
                     }
                 }
                 // DCT (0.6 - 0.8)
-                else if (this.progress > 0.6 && this.progress < 0.8) {
-                    if ((this.type === 'water' || this.type === 'salt') && Math.random() < 0.02) {
-                        this.startReabsorption(0.7);
+                else if (this.progress >= 0.6 && this.progress < 0.8 && !this.checkedDCT) {
+                    this.checkedDCT = true;
+                    if (this.type === 'water' || this.type === 'salt') {
+                        // Fine-tuning; small additional chance
+                        if (Math.random() < 0.2) {
+                            this.startReabsorption(0.7);
+                        }
                     }
                 }
             }
@@ -419,6 +505,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!isRunning) {
             isRunning = true;
             startBtn.textContent = "暫停";
+            infoText.textContent = pathology.hyperglycemia || pathology.proteinuria ? infoText.textContent : '過濾與再吸收進行中';
             animate();
         } else {
             isRunning = false;
@@ -439,7 +526,45 @@ document.addEventListener('DOMContentLoaded', () => {
         cancelAnimationFrame(animationId);
         particles.forEach(p => p.remove());
         particles = [];
-        infoText.textContent = "點擊「開始模擬」以觀察腎臟運作過程。";
+        infoText.textContent = "點擊「開始」以啟動模擬。";
+    });
+
+    hyperglycemiaBtn.addEventListener('click', () => {
+        pathology.hyperglycemia = !pathology.hyperglycemia;
+        hyperglycemiaBtn.classList.toggle('active', pathology.hyperglycemia);
+        updatePathologyInfo();
+    });
+
+    proteinuriaBtn.addEventListener('click', () => {
+        pathology.proteinuria = !pathology.proteinuria;
+        proteinuriaBtn.classList.toggle('active', pathology.proteinuria);
+        updatePathologyInfo();
+    });
+
+    toggleTooltipsBtn.addEventListener('click', () => {
+        alwaysShowTooltips = !alwaysShowTooltips;
+        toggleTooltipsBtn.textContent = alwaysShowTooltips ? '滑鼠顯示說明' : '總是顯示說明';
+        
+        const allRegions = document.querySelectorAll('.interactive-region');
+        
+        if (alwaysShowTooltips) {
+            // Show all tooltips for all regions
+            allRegions.forEach(el => {
+                if (el._showTooltip && el._tooltip) {
+                    el._showTooltip();
+                    el._tooltip.classList.add('always-show');
+                }
+            });
+        } else {
+            // Return to hover mode - hide all tooltips
+            allRegions.forEach(el => {
+                if (el._hideTooltip && el._tooltip) {
+                    el._tooltip.classList.remove('always-show', 'visible');
+                    el._tooltip.style.display = 'none';
+                    el.classList.remove('region-hover');
+                }
+            });
+        }
     });
 
     drawStructures();
