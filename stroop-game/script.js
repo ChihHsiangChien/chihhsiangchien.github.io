@@ -19,6 +19,39 @@ let state = {
     correctAnswerName: ''
 };
 
+// Web Audio API Context
+const AudioContext = window.AudioContext || window.webkitAudioContext;
+const audioCtx = new AudioContext();
+
+function playSound(type) {
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+    const oscillator = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    
+    if (type === 'correct') {
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(600, audioCtx.currentTime); // High pitch
+        oscillator.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.1);
+        gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + 0.1);
+    } else {
+        oscillator.type = 'sawtooth';
+        oscillator.frequency.setValueAtTime(150, audioCtx.currentTime); // Low buzz
+        oscillator.frequency.linearRampToValueAtTime(100, audioCtx.currentTime + 0.2);
+        gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + 0.2);
+    }
+}
+
 // DOM Elements
 const startScreen = document.getElementById('start-screen');
 const gameScreen = document.getElementById('game-screen');
@@ -197,6 +230,7 @@ function handleAnswer(selectedName) {
     if (selectedName === state.correctAnswerName) {
         // Correct
         state.correctAnswers++;
+        playSound('correct');
         const timeBonus = Math.ceil(state.timeLeft / 100) * 10; // Max 500 bonus
         points = 100 + timeBonus;
         state.score += points;
@@ -205,6 +239,7 @@ function handleAnswer(selectedName) {
         feedbackEl.classList.add('correct');
     } else {
         // Wrong or Timeout
+        playSound('wrong');
         feedbackEl.textContent = selectedName ? '答錯了!' : '時間到!';
         feedbackEl.classList.add('wrong');
     }
