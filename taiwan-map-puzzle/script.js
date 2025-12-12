@@ -166,11 +166,16 @@ function showQuestion() {
     svg.setAttribute('viewBox', `${viewBoxX} ${viewBoxY} ${viewBoxWidth} ${viewBoxHeight}`);
     svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
     
+    // 找到該縣市在原始資料中的索引，確保顏色一致
+    const countyIndex = gameState.geoData.features.findIndex(
+        f => f.properties.id === gameState.currentQuestion.properties.id
+    );
+    
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     path.setAttribute('d', pathData);
-    path.setAttribute('fill', COLORS[gameState.currentIndex % COLORS.length]);
+    path.setAttribute('fill', COLORS[countyIndex % COLORS.length]);
     path.setAttribute('stroke', '#333');
-    path.setAttribute('stroke-width', '1.5');
+    path.setAttribute('stroke-width', '1');
     
     svg.appendChild(path);
     
