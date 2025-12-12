@@ -3,7 +3,7 @@
 class LungVisualization {
     constructor() {
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0xf5f5f5);
+        this.scene.background = new THREE.Color(0x2c3e50);
         
         const container = document.getElementById('canvas-container');
         this.width = container.clientWidth;
