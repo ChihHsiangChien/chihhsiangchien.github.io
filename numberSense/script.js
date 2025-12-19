@@ -145,9 +145,17 @@ class Game {
     const containerWidth = container.clientWidth;
     const containerHeight = container.clientHeight;
     const size = 30; // square size
+    const padding = 50; // Distance from border
     const squares = [];
     
-    // Add visual container logic if needed, but absolute pos is fine.
+    // Ensure container is large enough for padding
+    const effectiveWidth = containerWidth - size - (2 * padding);
+    const effectiveHeight = containerHeight - size - (2 * padding);
+
+    if (effectiveWidth < 0 || effectiveHeight < 0) {
+        // Fallback if container is too small, reduce padding or ignore
+        console.warn("Container too small for requested padding");
+    }
     
     for (let i = 0; i < count; i++) {
       let x, y, overlap;
@@ -156,8 +164,14 @@ class Game {
 
       do {
         overlap = false;
-        x = Math.random() * (containerWidth - size);
-        y = Math.random() * (containerHeight - size);
+        if (effectiveWidth > 0 && effectiveHeight > 0) {
+            x = padding + Math.random() * effectiveWidth;
+            y = padding + Math.random() * effectiveHeight;
+        } else {
+             // Fallback
+             x = Math.random() * (containerWidth - size);
+             y = Math.random() * (containerHeight - size);
+        }
 
         for (const s of squares) {
             if (x < s.x + size &&
