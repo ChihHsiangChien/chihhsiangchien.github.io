@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>紅外線訊號調變與解調變 (IR Modulation Demo)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Noto+Sans+TC:wght@400;500;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <!-- Tailwind via CDN for utility classes if needed, but we will mostly use custom CSS for specific scientific look -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'scifi-bg': '#0a0a12',
+                        'scifi-panel': '#161621',
+                        'scifi-accent': '#00ff9d',
+                        'scifi-trace-1': '#ff0055', // Data
+                        'scifi-trace-2': '#00ccff', // Carrier
+                        'scifi-trace-3': '#ccff00', // Modulated
+                    },
+                    fontFamily: {
+                        mono: ['"JetBrains Mono"', 'monospace'],
+                        sans: ['"Noto Sans TC"', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .glass-panel {
+                @apply bg-scifi-panel/80 backdrop-blur-md border border-white/10 rounded-xl shadow-lg;
+            }
+            .canvas-container {
+                @apply relative w-full h-[150px] bg-black/50 rounded-lg border border-white/5 overflow-hidden shadow-inner;
+            }
+            .control-slider {
+                @apply w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer;
+            }
+            .control-slider::-webkit-slider-thumb {
+                @apply w-4 h-4 bg-scifi-accent rounded-full shadow-[0_0_10px_rgba(0,255,157,0.5)] appearance-none transition-all hover:scale-125;
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-scifi-bg text-gray-200 font-sans min-h-screen py-8 px-4 selection:bg-scifi-accent selection:text-black">
+
+    <div class="max-w-4xl mx-auto space-y-8">
+
+        <!-- Header -->
+        <header class="text-center space-y-2">
+            <h1
+                class="text-3xl md:text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-scifi-accent to-blue-500">
+                紅外線調變 (IR Modulation) 互動演示
+            </h1>
+            <p class="text-gray-400 max-w-2xl mx-auto">
+                模擬遙控器如何將低頻的「訊號」載在 38KHz 的「載波」上發射出去。<br>
+                <span class="text-sm opacity-70">注意：為了視覺與聽覺演示，此處頻率已經過調整，非真實 38KHz。</span>
+            </p>
+        </header>
+
+        <!-- Main Controls -->
+        <div class="glass-panel p-6 flex flex-col items-center justify-center space-y-4">
+            <div id="start-overlay"
+                class="absolute inset-0 bg-black/80 z-50 flex items-center justify-center rounded-xl backdrop-blur-sm">
+                <button id="btn-start"
+                    class="px-8 py-3 bg-scifi-accent text-black font-bold rounded-full shadow-[0_0_20px_rgba(0,255,157,0.4)] hover:shadow-[0_0_30px_rgba(0,255,157,0.6)] hover:scale-105 transition-all">
+                    點擊開始演示 (Start Demo)
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 w-full">
+                <!-- Data Signal Controls -->
+                <div class="space-y-4">
+                    <h3
+                        class="text-scifi-trace-1 font-mono font-bold uppercase tracking-wider border-b border-scifi-trace-1/30 pb-1">
+                        1. 資料訊號 (Data Signal)
+                    </h3>
+                    <p class="text-xs text-gray-400">這代表人想傳送的資訊 (例如：按下了 "開機" 鍵)。</p>
+                    <div class="space-y-2">
+                        <label class="flex justify-between text-sm font-mono">
+                            <span>Frequency</span>
+                            <span id="val-data-freq">2 Hz</span>
+                        </label>
+                        <input type="range" id="slider-data-freq" class="control-slider" min="0.5" max="10" step="0.5"
+                            value="2">
+                    </div>
+                </div>
+
+                <!-- Carrier Signal Controls -->
+                <div class="space-y-4">
+                    <h3
+                        class="text-scifi-trace-2 font-mono font-bold uppercase tracking-wider border-b border-scifi-trace-2/30 pb-1">
+                        2.載波訊號 (Carrier Wave)
+                    </h3>
+                    <p class="text-xs text-gray-400">這是用來運送資料的高頻紅外線閃爍訊號 (實際為 38KHz)。</p>
+                    <div class="space-y-2">
+                        <label class="flex justify-between text-sm font-mono">
+                            <span>Frequency</span>
+                            <span id="val-carrier-freq">400 Hz</span>
+                        </label>
+                        <input type="range" id="slider-carrier-freq" class="control-slider" min="100" max="1000"
+                            step="50" value="400">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Visualizations -->
+        <div class="space-y-6">
+
+            <!-- Scope 1: Data -->
+            <div class="space-y-2">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-scifi-trace-1 font-mono font-bold">原始訊號 (Baseband)</h3>
+                    <button id="btn-audio-data"
+                        class="text-xs px-3 py-1 border border-scifi-trace-1 text-scifi-trace-1 rounded hover:bg-scifi-trace-1 hover:text-black transition-colors">
+                        🔈 試聽 (Listen)
+                    </button>
+                </div>
+                <div class="canvas-container h-[120px]">
+                    <canvas id="canvas-data" class="w-full h-full"></canvas>
+                </div>
+            </div>
+
+            <!-- Scope 2: Carrier -->
+            <div class="space-y-2">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-scifi-trace-2 font-mono font-bold">載波 (Carrier)</h3>
+                    <button id="btn-audio-carrier"
+                        class="text-xs px-3 py-1 border border-scifi-trace-2 text-scifi-trace-2 rounded hover:bg-scifi-trace-2 hover:text-black transition-colors">
+                        🔈 試聽 (Listen)
+                    </button>
+                </div>
+                <div class="canvas-container h-[100px]">
+                    <canvas id="canvas-carrier" class="w-full h-full"></canvas>
+                </div>
+            </div>
+
+            <!-- Scope 3: Modulated -->
+            <div class="space-y-2">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-scifi-trace-3 font-mono font-bold px-2 py-1 bg-scifi-trace-3/10 rounded">
+                        調變後訊號 (Modulated Output)
+                    </h3>
+                    <button id="btn-audio-mod"
+                        class="text-xs px-3 py-1 border border-scifi-trace-3 text-scifi-trace-3 rounded hover:bg-scifi-trace-3 hover:text-black transition-colors font-bold">
+                        🔈 試聽結果 (Listen Result)
+                    </button>
+                </div>
+                <div class="p-4 glass-panel border-scifi-trace-3/30 shadow-[0_0_15px_rgba(204,255,0,0.1)]">
+                    <div class="canvas-container h-[180px] bg-black">
+                        <canvas id="canvas-mod" class="w-full h-full"></canvas>
+                    </div>
+                    <p class="mt-2 text-sm text-gray-400 font-mono">
+                        Logic: <span class="text-white">Output = Data × Carrier</span>. <br>
+                        當資料為 1 (High) 時，發射載波；當資料為 0 (Low) 時，不發射。
+                    </p>
+                </div>
+            </div>
+
+            <!-- Scope 4: Demodulated (Simple Rectified/Filtered visual concept) -->
+            <div class="space-y-2 opacity-80 hover:opacity-100 transition-opacity">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-white font-mono font-bold">接收端解調 (Receiver Demodulation)</h3>
+                </div>
+                <div class="canvas-container h-[100px] border-dashed border-gray-600">
+                    <canvas id="canvas-demod" class="w-full h-full"></canvas>
+                </div>
+                <p class="text-xs text-gray-500">接收器收到紅外線後，會濾除高頻載波，還原出原始訊號。</p>
+            </div>
+
+        </div>
+
+        <footer class="text-center text-gray-600 text-sm pb-8">
+            <p>Built with Web Audio API & Canvas.</p>
+        </footer>
+
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
