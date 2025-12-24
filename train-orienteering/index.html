@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>內灣時刻表 Orienteering 求解器</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; }
+    fieldset { margin-bottom: 16px; }
+    label { display: inline-block; width: 120px; margin-right: 8px; }
+    input[type="text"], input[type="number"], select { width: 200px; }
+    pre { background: #f5f5f5; padding: 12px; overflow-x: auto; }
+    .row { margin: 6px 0; }
+    button { padding: 6px 12px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip { border: 1px solid #ccc; padding: 4px 8px; border-radius: 4px; background: #fafafa; }
+    .chip input { margin-right: 4px; }
+  </style>
+</head>
+<body>
+  <h2>內灣時刻表 Orienteering 求解器</h2>
+  <fieldset>
+    <legend>參數</legend>
+    <div class="row">
+      <label for="start">起點</label>
+      <select id="start"></select>
+    </div>
+    <div class="row">
+      <label for="end">終點</label>
+      <select id="end"></select>
+    </div>
+    <div class="row">
+      <label for="startTime">出發時間</label>
+      <input id="startTime" type="time" value="07:00" />
+    </div>
+    <div class="row">
+      <label for="endTime">截止時間</label>
+      <input id="endTime" type="time" value="09:30" />
+    </div>
+    <div class="row">
+      <label for="dwell">最少停留 (分)</label>
+      <input id="dwell" type="number" min="0" value="1" />
+    </div>
+    <div class="row">
+      <label>必須造訪</label>
+      <div id="mustBox" class="chips"></div>
+    </div>
+    <div class="row">
+      <label>排除</label>
+      <div id="excludeBox" class="chips"></div>
+    </div>
+    <button id="solveBtn">開始計算</button>
+  </fieldset>
+  <div id="status"></div>
+  <pre id="output"></pre>
+
+  <script>
+    const statusEl = document.getElementById('status');
+    const outputEl = document.getElementById('output');
+    const startSel = document.getElementById('start');
+    const endSel = document.getElementById('end');
+    const mustBox = document.getElementById('mustBox');
+    const excludeBox = document.getElementById('excludeBox');
+
+    let edgesByFrom = {};
+    let stations = [];
+
+    const parseHHMM = (s) => {
+      const [h, m] = s.split(':').map(Number);
+      return h * 60 + m;
+    };
+
+    const fmtHHMM = (t) => {
+      const h = Math.floor(t / 60) % 24;
+      const m = t % 60;
+      return `${h}:${m.toString().padStart(2, '0')}`;
+    };
+
+    const fmtWait = (minutes) => (minutes >= 0 ? `stay ${minutes} min` : 'stay N/A');
+
+    const pad = (name, width) => name.padEnd(width, ' ');
+
+    async function loadData() {
+      statusEl.textContent = 'Loading edges_from.json...';
+      const res = await fetch('edges_from.json');
+      if (!res.ok) throw new Error('Failed to load edges_from.json');
+      const data = await res.json();
+      buildEdges(data.edges);
+      statusEl.textContent = 'Loaded';
+    }
+
+    function buildEdges(edges) {
+      edgesByFrom = {};
+      const stationSet = new Set();
+      edges.forEach((e) => {
+        const dep = e.dep?.trim();
+        const arr = e.arr?.trim();
+        if (!dep || !arr || !dep.includes(':') || !arr.includes(':')) return;
+        const edge = {
+          train: String(e.train),
+          origin: e.from,
+          dest: e.to,
+          dep: parseHHMM(dep),
+          arr: parseHHMM(arr),
+          direction: e.direction || '',
+        };
+        stationSet.add(edge.origin);
+        stationSet.add(edge.dest);
+        if (!edgesByFrom[edge.origin]) edgesByFrom[edge.origin] = [];
+        edgesByFrom[edge.origin].push(edge);
+      });
+      Object.values(edgesByFrom).forEach((lst) => lst.sort((a, b) => a.dep - b.dep));
+      const desiredOrder = [
+        '新竹', '北新竹', '千甲', '新莊', '竹中', '上員', '榮華', '竹東', '橫山', '九讚頭', '合興', '富貴', '內灣',
+      ];
+      const setArr = Array.from(stationSet);
+      const ordered = desiredOrder.filter((s) => stationSet.has(s));
+      const remaining = setArr.filter((s) => !desiredOrder.includes(s));
+      stations = ordered.concat(remaining.sort());
+      populateStations();
+    }
+
+    function populateStations() {
+      startSel.innerHTML = '';
+      endSel.innerHTML = '';
+      for (const s of stations) {
+        const opt1 = document.createElement('option');
+        opt1.value = opt1.textContent = s;
+        startSel.appendChild(opt1);
+        const opt2 = document.createElement('option');
+        opt2.value = opt2.textContent = s;
+        endSel.appendChild(opt2.cloneNode(true));
+      }
+      // Default end = start
+      endSel.value = startSel.value;
+
+      // Build checkboxes for must/exclude
+      const buildChips = (box, name) => {
+        box.innerHTML = '';
+        for (const s of stations) {
+          const label = document.createElement('label');
+          label.className = 'chip';
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.value = s;
+          cb.name = name;
+          label.appendChild(cb);
+          label.appendChild(document.createTextNode(s));
+          box.appendChild(label);
+        }
+      };
+      buildChips(mustBox, 'must');
+      buildChips(excludeBox, 'exclude');
+    }
+
+    function earliestArrivalWithChoice(src, startTime, dst, dwell) {
+      const INF = 1e9;
+      const best = new Map();
+      const pq = [];
+      const push = (t, station, first, firstEdge) => {
+        pq.push([t, station, first, firstEdge]);
+        pq.sort((a, b) => a[0] - b[0]);
+      };
+      best.set(src, startTime);
+      push(startTime, src, true, null);
+      while (pq.length) {
+        const [t, u, first, firstEdge] = pq.shift();
+        if (t > (best.get(u) ?? INF)) continue;
+        if (u === dst) return [t, firstEdge];
+        const ready = first ? t : t + dwell;
+        for (const e of edgesByFrom[u] || []) {
+          if (e.dep < ready) continue;
+          const nt = e.arr;
+          if (nt < (best.get(e.dest) ?? INF)) {
+            best.set(e.dest, nt);
+            push(nt, e.dest, false, first ? e : firstEdge);
+          }
+        }
+      }
+      return null;
+    }
+
+    function solve(params) {
+      const { start, end, startTime, endTime, dwell, mustList, excludeList } = params;
+      const allowedSet = new Set(stations.filter((s) => !excludeList.has(s)));
+      allowedSet.add(start);
+      allowedSet.add(end);
+      mustList.forEach((s) => allowedSet.add(s));
+
+      const idx = new Map(stations.map((s, i) => [s, i]));
+      const startIdx = idx.get(start);
+      const endIdx = idx.get(end);
+
+      let bestCount = 0;
+      let bestPath = [];
+      let found = false;
+
+      const mustMask = mustList.reduce((m, s) => m | (1 << idx.get(s)), 0);
+      const allowedMask = Array.from(allowedSet).reduce((m, s) => m | (1 << idx.get(s)), 0);
+
+      const returnCache = new Map();
+      const key = (st, t) => `${st}|${Math.floor(t / 5) * 5}`;
+      const canReturn = (st, t) => {
+        const k = key(st, t);
+        if (!returnCache.has(k)) {
+          returnCache.set(k, earliestArrivalWithChoice(st, t, end, dwell)?.[0] ?? null);
+        }
+        return returnCache.get(k);
+      };
+
+      function dfs(cur, t, visitedMask, path, arrived) {
+        const ea = canReturn(cur, t + (arrived ? dwell : 0));
+        if (ea !== null && ea <= endTime && (visitedMask & mustMask) === mustMask) {
+          const visitedCnt = countBits(visitedMask & allowedMask);
+          if (visitedCnt > bestCount) {
+            bestCount = visitedCnt;
+            bestPath = path.slice();
+            found = true;
+          }
+        }
+
+        const ready = arrived ? t + dwell : t;
+        for (const e of edgesByFrom[cur] || []) {
+          if (e.dep < ready) continue;
+          if (e.arr > endTime) continue;
+          if (!allowedSet.has(e.dest)) continue;
+          const vIdx = idx.get(e.dest);
+          if (vIdx === endIdx && (visitedMask & (1 << endIdx))) continue;
+          if (visitedMask & (1 << vIdx)) continue;
+          const ea2 = canReturn(e.dest, e.arr + dwell);
+          if (ea2 === null || ea2 > endTime) continue;
+          path.push(e);
+          dfs(e.dest, e.arr, visitedMask | (1 << vIdx), path, true);
+          path.pop();
+        }
+      }
+
+      dfs(start, startTime, 1 << startIdx, [], false);
+      return { bestCount, bestPath, found };
+    }
+
+    function countBits(n) {
+      let c = 0;
+      while (n) {
+        c += n & 1;
+        n >>= 1;
+      }
+      return c;
+    }
+
+    function parseList(val) {
+      return val
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+
+    function renderResult(params, result) {
+      const { bestCount, bestPath, found } = result;
+      if (!found) {
+        outputEl.textContent = '無法在時窗內涵蓋所有必須造訪的站點。';
+        return;
+      }
+      // For return leg info and stay calc
+      const retInfo = bestPath.length
+        ? earliestArrivalWithChoice(
+            bestPath[bestPath.length - 1].dest,
+            bestPath[bestPath.length - 1].arr + params.dwell,
+            params.end,
+            params.dwell
+          )
+        : earliestArrivalWithChoice(params.start, params.startTime + params.dwell, params.end, params.dwell);
+
+      const stationWidth = Math.max(...stations.map((s) => s.length)) + 1;
+
+      const lines = [];
+      lines.push(`可造訪站數（含起點）: ${bestCount}`);
+      let cur = params.start;
+      let curT = params.startTime;
+      for (let i = 0; i < bestPath.length; i++) {
+        const e = bestPath[i];
+        let nextDep = null;
+        if (i + 1 < bestPath.length) nextDep = bestPath[i + 1].dep;
+        else if (retInfo && retInfo[1]) nextDep = retInfo[1].dep;
+        const stay = nextDep !== null ? Math.max(0, nextDep - e.arr) : null;
+        const stayTxt = stay !== null ? fmtWait(stay) : 'stay N/A';
+        lines.push(
+          `${pad(cur, stationWidth)} ${fmtHHMM(curT).padStart(5)} -> [${e.train}] ${pad(e.origin, stationWidth)} ${fmtHHMM(
+            e.dep
+          ).padStart(5)} -> ${pad(e.dest, stationWidth)} ${fmtHHMM(e.arr).padStart(5)} | ${stayTxt.padStart(12)} at ${e.dest}`
+        );
+        cur = e.dest;
+        curT = e.arr;
+      }
+      if (retInfo) {
+        const [retArr, firstEdge] = retInfo;
+        if (firstEdge) {
+          lines.push(
+            `${pad(cur, stationWidth)} ${fmtHHMM(curT).padStart(5)} -> [${firstEdge.train}] ${pad(
+              firstEdge.origin,
+              stationWidth
+            )} ${fmtHHMM(firstEdge.dep).padStart(5)} -> ${pad(firstEdge.dest, stationWidth)} ${fmtHHMM(firstEdge.arr).padStart(5)}`
+          );
+        }
+        lines.push(`抵達 ${params.end} ${fmtHHMM(retArr)}（截止 ${fmtHHMM(params.endTime)}）`);
+      }
+      outputEl.textContent = lines.join('\n');
+    }
+
+    document.getElementById('solveBtn').addEventListener('click', () => {
+      try {
+        const start = startSel.value;
+        const end = endSel.value || start;
+        const startTime = parseHHMM(document.getElementById('startTime').value || '07:00');
+        const endTime = parseHHMM(document.getElementById('endTime').value || '09:30');
+        const dwell = Number(document.getElementById('dwell').value || 1);
+        const mustList = Array.from(document.querySelectorAll('input[name="must"]:checked')).map((el) => el.value);
+        const excludeList = new Set(
+          Array.from(document.querySelectorAll('input[name="exclude"]:checked')).map((el) => el.value)
+        );
+
+        // Resolve conflicts: if a station is both must and exclude, prefer must and drop it from exclude.
+        const overlap = mustList.filter((s) => excludeList.has(s));
+        if (overlap.length) {
+          overlap.forEach((s) => excludeList.delete(s));
+          statusEl.textContent = `已自動移除排除與必訪重疊: ${overlap.join(', ')}`;
+        }
+
+        if (!stations.includes(start) || !stations.includes(end)) {
+          outputEl.textContent = '起訖站不在時刻表內';
+          return;
+        }
+        for (const s of mustList) {
+          if (!stations.includes(s)) {
+            outputEl.textContent = `必須站點不存在: ${s}`;
+            return;
+          }
+        }
+
+        const res = solve({ start, end, startTime, endTime, dwell, mustList, excludeList });
+        renderResult({ start, end, startTime, endTime, dwell }, res);
+      } catch (err) {
+        outputEl.textContent = '錯誤: ' + err.message;
+      }
+    });
+
+    loadData().catch((err) => {
+      statusEl.textContent = 'Load error: ' + err.message;
+    });
+  </script>
+</body>
+</html>
