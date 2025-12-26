@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>血糖恆定模擬系統</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="container">
+        <!-- Sidebar Controls (Left) -->
+        <div class="control-panel">
+            <div class="readout">
+                <div class="readout-item">
+                    <label class="switch">
+                        <input type="checkbox" id="toggle-auto" checked>
+                        <span class="slider round"></span>
+                    </label>
+                    <label style="margin-left: 10px;">自動調節 (Homeostasis)</label>
+                </div>
+                <div class="readout-item">
+                    <label>肌肉量 (Muscle Mass)</label>
+                    <input type="range" id="muscle-mass-slider" min="1" max="3" step="0.1" value="1">
+                </div>
+                <div class="readout-item">
+                    <label>血糖濃度 (mg/dL)</label>
+                    <span id="blood-glucose-display"
+                        style="font-size: 1.2em; font-weight: bold; margin-left: auto;">100</span>
+                </div>
+                <div class="readout-item">
+                    <label>胰島素 (Insulin)</label>
+                    <div class="bar-container">
+                        <div class="bar" id="insulin-bar"></div>
+                    </div>
+                </div>
+                <div class="readout-item">
+                    <label>升糖素 (Glucagon)</label>
+                    <div class="bar-container">
+                        <div class="bar" id="glucagon-bar"></div>
+                    </div>
+                </div>
+                <div class="readout-item">
+                    <label>腎上腺素 (Adrenaline)</label>
+                    <div class="bar-container">
+                        <div class="bar" id="adrenaline-bar"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="controls">
+                <button id="btn-eat" class="btn eat">🍽️ 進食 (增加血糖)</button>
+                <button id="btn-insulin" class="btn insulin">⬇️ 注射胰島素 (降低血糖)</button>
+                <button id="btn-glucagon" class="btn glucagon">⬆️ 注射升糖素 (升高血糖)</button>
+                <button id="btn-exercise" class="btn exercise">🏃 運動 (消耗血糖)</button>
+            </div>
+        </div>
+
+        <!-- Main Content Area -->
+        <div class="main-content">
+
+            <div class="simulation-area">
+                <!-- Central Bloodstream Visualization -->
+                <svg id="bloodstream-svg" viewBox="0 0 1000 500">
+                    <!-- Main Systemic Loop (Central Horizontal Ellipse) -->
+                    <!-- Center (500, 250). Radius X=250, Y=50 (Shrunk vertically) -->
+                    <path id="main-loop" d="M 500 200 A 250 50 0 1 0 500 300 A 250 50 0 1 0 500 200" fill="none"
+                        stroke="#e74c3c" stroke-width="20" stroke-opacity="0.2" />
+
+                    <!-- Branches (Paths for animation: Hub -> Organ) -->
+
+                    <!-- BRAIN -->
+                    <path id="path-brain" d="M 500 200 L 500 100" stroke="#e74c3c" stroke-width="8"
+                        stroke-opacity="0.2" />
+                    <path id="path-brain-vein" d="M 520 100 L 520 200" stroke="#3498db" stroke-width="8"
+                        stroke-opacity="0.2" />
+
+                    <!-- OTHER -->
+                    <path id="path-other" d="M 300 210 L 150 110" stroke="#e74c3c" stroke-width="8"
+                        stroke-opacity="0.2" />
+                    <path id="path-other-vein" d="M 165 110 L 315 210" stroke="#3498db" stroke-width="8"
+                        stroke-opacity="0.2" />
+
+                    <!-- LIVER -->
+                    <!-- Artery (In) -->
+                    <path id="path-liver" d="M 700 210 L 850 110" stroke="#e74c3c" stroke-width="8"
+                        stroke-opacity="0.2" />
+                    <!-- Vein (Out - Blue) Offset X+15 -->
+                    <path id="path-liver-vein" d="M 865 110 L 715 210" stroke="#3498db" stroke-width="8"
+                        stroke-opacity="0.2" />
+
+                    <!-- FAT -->
+                    <!-- Artery (In) -->
+                    <path id="path-fat" d="M 300 290 L 150 390" stroke="#e74c3c" stroke-width="8"
+                        stroke-opacity="0.2" />
+                    <!-- Vein (Out - Blue) Offset X+15 -->
+                    <path id="path-fat-vein" d="M 165 390 L 315 290" stroke="#3498db" stroke-width="8"
+                        stroke-opacity="0.2" />
+
+                    <!-- INTESTINE -->
+                    <path id="path-intestine" d="M 500 300 L 500 400" stroke="#e74c3c" stroke-width="8"
+                        stroke-opacity="0.2" />
+                    <path id="path-intestine-vein" d="M 520 400 L 520 300" stroke="#3498db" stroke-width="8"
+                        stroke-opacity="0.2" />
+
+                    <!-- MUSCLE -->
+                    <path id="path-muscle" d="M 700 290 L 850 390" stroke="#e74c3c" stroke-width="8"
+                        stroke-opacity="0.2" />
+                    <path id="path-muscle-vein" d="M 865 390 L 715 290" stroke="#3498db" stroke-width="8"
+                        stroke-opacity="0.2" />
+                </svg>
+
+                <!-- Organs -->
+                <div class="organ brain" id="organ-brain">
+                    <div class="icon">🧠</div>
+                    <div class="label">腦部</div>
+                    <div class="status">持續消耗</div>
+                </div>
+
+                <div class="organ other" id="organ-other">
+                    <div class="icon">🫀</div>
+                    <div class="label">其他器官</div>
+                    <div class="status">基礎代謝</div>
+                </div>
+
+                <div class="organ liver" id="organ-liver">
+                    <div class="icon">🏭</div>
+                    <div class="label">肝臟</div>
+                    <div class="status">肝糖: <span id="liver-glycogen">500</span></div>
+                    <div class="storage-container" id="liver-storage-visual"></div>
+                </div>
+
+                <div class="organ muscle" id="organ-muscle">
+                    <div class="icon">💪</div>
+                    <div class="label">肌肉</div>
+                    <div class="status">消耗/儲存</div>
+                    <div class="status-sub">肝糖: <span id="muscle-glycogen">1000</span></div>
+                    <div class="storage-container" id="muscle-storage-visual"></div>
+                </div>
+
+                <div class="organ intestine" id="organ-intestine">
+                    <div class="icon">🍞</div>
+                    <div class="label">小腸</div>
+                    <div class="status">吸收葡萄糖</div>
+                </div>
+
+                <div class="organ adipose" id="organ-adipose">
+                    <div class="icon">☁️</div>
+                    <div class="label">脂肪組織</div>
+                    <div class="status">脂肪: <span id="fat-storage">1000</span></div>
+                    <div class="storage-container" id="fat-storage-visual"></div>
+                </div>
+
+                <!-- Pancreas (Abstracted as source of Hormones for visual feedback) -->
+                <div class="organ pancreas" id="organ-pancreas">
+                    <div class="icon">💊</div>
+                    <div class="label">胰臟</div>
+                    <div class="status">激素分泌</div>
+                </div>
+            </div>
+
+
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
