@@ -40,12 +40,15 @@
       <input id="endTime" type="time" value="12:00" />
     </div>
     <div class="row">
-      <label for="dwell">每站至少停留 (分)</label>
-      <input id="dwell" type="number" min="0" value="10" />
+      <label for="defaultDwell">每站至少停留 (分)</label>
+      <input id="defaultDwell" type="number" min="0" value="10" />
     </div>
     <div class="row">
       <label>必須造訪</label>
       <div id="mustBox" class="chips"></div>
+    </div>
+    <div class="row" id="mustDwellRow" style="display:none; flex-direction:column; gap:4px; margin-left:128px; margin-top:4px;">
+      <!-- 動態產生每個必訪站的停留時間輸入框 -->
     </div>
     <div class="row">
       <label>排除</label>
@@ -64,6 +67,7 @@
     const startSel = document.getElementById('start');
     const endSel = document.getElementById('end');
     const mustBox = document.getElementById('mustBox');
+    const mustDwellRow = document.getElementById('mustDwellRow');
     const excludeBox = document.getElementById('excludeBox');
 
     let edgesByFrom = {};
@@ -155,6 +159,40 @@
       };
       buildChips(mustBox, 'must');
       buildChips(excludeBox, 'exclude');
+      // 綁定必訪站勾選事件，動態顯示停留時間欄位
+      mustBox.addEventListener('change', updateMustDwellInputs);
+      updateMustDwellInputs();
+    }
+
+    function updateMustDwellInputs() {
+      // 取得所有已勾選的必訪站
+      const checked = Array.from(document.querySelectorAll('input[name="must"]:checked')).map(el => el.value);
+      mustDwellRow.innerHTML = '';
+      if (checked.length === 0) {
+        mustDwellRow.style.display = 'none';
+        return;
+      }
+      mustDwellRow.style.display = '';
+      const defaultDwell = Number(document.getElementById('defaultDwell')?.value || 10);
+      for (const s of checked) {
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.gap = '8px';
+        const label = document.createElement('label');
+        label.textContent = `${s} 至少停留 (分)`;
+        label.style.width = '100px';
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.min = '0';
+        input.value = defaultDwell;
+        input.style.width = '60px';
+        input.className = 'must-dwell-input';
+        input.setAttribute('data-station', s);
+        row.appendChild(label);
+        row.appendChild(input);
+        mustDwellRow.appendChild(row);
+      }
     }
 
     function earliestArrivalWithChoice(src, startTime, dst, dwell) {
@@ -185,7 +223,7 @@
     }
 
     function solve(params) {
-      const { start, end, startTime, endTime, dwell, mustList, excludeList } = params;
+      const { start, end, startTime, endTime, mustList, excludeList, mustDwellMap } = params;
       const allowedSet = new Set(stations.filter((s) => !excludeList.has(s)));
       allowedSet.add(start);
       allowedSet.add(end);
@@ -202,18 +240,31 @@
       const mustMask = mustList.reduce((m, s) => m | (1 << idx.get(s)), 0);
       const allowedMask = Array.from(allowedSet).reduce((m, s) => m | (1 << idx.get(s)), 0);
 
+      // 取得每個必訪站的停留時間，預設 10
+      const getDwell = (station) => (mustDwellMap && mustDwellMap[station] != null ? mustDwellMap[station] : 10);
+
       const returnCache = new Map();
       const key = (st, t) => `${st}|${Math.floor(t / 5) * 5}`;
       const canReturn = (st, t) => {
         const k = key(st, t);
         if (!returnCache.has(k)) {
-          returnCache.set(k, earliestArrivalWithChoice(st, t, end, dwell)?.[0] ?? null);
+          // 回程時，若是必訪站則用該站停留時間，否則 0
+          const dwell = mustList.includes(st) ? getDwell(st) : 0;
+          returnCache.set(k, earliestArrivalWithChoice(st, t + dwell, end, 0)?.[0] ?? null);
         }
         return returnCache.get(k);
       };
 
       function dfs(cur, t, visitedMask, path, arrived) {
-        const ea = canReturn(cur, t + (arrived ? dwell : 0));
+        // 若目前站是必訪站且剛抵達，需停留 mustDwellMap[cur] 分鐘
+        /*
+        let dwell = 0;
+        if (arrived && mustList.includes(cur)) {
+          dwell = getDwell(cur);
+        }
+        */
+        let dwell = arrived ? getDwell(cur) : 0;        
+        const ea = canReturn(cur, t + dwell);
         if (ea !== null && ea <= endTime && (visitedMask & mustMask) === mustMask) {
           const visitedCnt = countBits(visitedMask & allowedMask);
           if (visitedCnt > bestCount) {
@@ -223,7 +274,7 @@
           }
         }
 
-        const ready = arrived ? t + dwell : t;
+        const ready = t + dwell;
         for (const e of edgesByFrom[cur] || []) {
           if (e.dep < ready) continue;
           if (e.arr > endTime) continue;
@@ -231,7 +282,10 @@
           const vIdx = idx.get(e.dest);
           if (vIdx === endIdx && (visitedMask & (1 << endIdx))) continue;
           if (visitedMask & (1 << vIdx)) continue;
-          const ea2 = canReturn(e.dest, e.arr + dwell);
+          // 若下一站是必訪站，抵達後也要停留 mustDwellMap[e.dest]
+          //let nextDwell = mustList.includes(e.dest) ? getDwell(e.dest) : 0;
+          let nextDwell = getDwell(e.dest);
+          const ea2 = canReturn(e.dest, e.arr + nextDwell);
           if (ea2 === null || ea2 > endTime) continue;
           path.push(e);
           dfs(e.dest, e.arr, visitedMask | (1 << vIdx), path, true);
@@ -268,14 +322,20 @@
         return;
       }
       // For return leg info and stay calc
+      // 回程時，若最後一站是必訪站，需加上該站停留時間
+      let lastDwell = 0;
+      if (bestPath.length && params.mustList && params.mustDwellMap) {
+        const last = bestPath[bestPath.length - 1].dest;
+        if (params.mustList.includes(last)) lastDwell = params.mustDwellMap[last] || 10;
+      }
       const retInfo = bestPath.length
         ? earliestArrivalWithChoice(
             bestPath[bestPath.length - 1].dest,
-            bestPath[bestPath.length - 1].arr + params.dwell,
+            bestPath[bestPath.length - 1].arr + lastDwell,
             params.end,
-            params.dwell
+            0
           )
-        : earliestArrivalWithChoice(params.start, params.startTime + params.dwell, params.end, params.dwell);
+        : earliestArrivalWithChoice(params.start, params.startTime, params.end, 0);
 
       const stationWidth = Math.max(...stations.map((s) => s.length)) + 1;
 
@@ -401,7 +461,6 @@
         const end = endSel.value || start;
         const startTime = parseHHMM(document.getElementById('startTime').value || '07:00');
         const endTime = parseHHMM(document.getElementById('endTime').value || '09:30');
-        const dwell = Number(document.getElementById('dwell').value || 1);
         const mustList = Array.from(document.querySelectorAll('input[name="must"]:checked')).map((el) => el.value);
         const excludeList = new Set(
           Array.from(document.querySelectorAll('input[name="exclude"]:checked')).map((el) => el.value)
@@ -425,8 +484,16 @@
           }
         }
 
-        const res = solve({ start, end, startTime, endTime, dwell, mustList, excludeList });
-        renderResult({ start, end, startTime, endTime, dwell }, res);
+        // 取得每個必訪站的停留時間
+        const mustDwellInputs = Array.from(document.querySelectorAll('.must-dwell-input'));
+        const mustDwellMap = {};
+        for (const input of mustDwellInputs) {
+          const st = input.getAttribute('data-station');
+          mustDwellMap[st] = Number(input.value) || 10;
+        }
+
+        const res = solve({ start, end, startTime, endTime, mustList, excludeList, mustDwellMap });
+        renderResult({ start, end, startTime, endTime, mustList, mustDwellMap }, res);
       } catch (err) {
         outputEl.textContent = '錯誤: ' + err.message;
       }
