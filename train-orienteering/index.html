@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>內灣時刻表 Orienteering 求解器</title>
+  <title>一線九驛求解器 Orienteering </title>
   <style>
     body { font-family: Arial, sans-serif; margin: 24px; }
     fieldset { margin-bottom: 16px; }
@@ -17,7 +17,10 @@
   </style>
 </head>
 <body>
-  <h2>內灣時刻表 Orienteering 求解器</h2>
+  <h2>一線九驛求解器</h2>
+  <div style="margin-bottom:18px;color:#333;max-width:700px;line-height:1.7">
+    本工具根據台鐵內灣線時刻表，幫你規劃在指定時段內，從起點出發、盡量多經過不同車站、最後回到終點的最佳搭車路線。你可以自訂必須造訪或排除的車站、每站停留時間等條件，系統會自動搜尋所有可行路徑，呈現最優解。<br>    
+  </div>
   <fieldset>
     <legend>參數</legend>
     <div class="row">
@@ -34,11 +37,11 @@
     </div>
     <div class="row">
       <label for="endTime">截止時間</label>
-      <input id="endTime" type="time" value="09:30" />
+      <input id="endTime" type="time" value="12:00" />
     </div>
     <div class="row">
-      <label for="dwell">最少停留 (分)</label>
-      <input id="dwell" type="number" min="0" value="1" />
+      <label for="dwell">每站至少停留 (分)</label>
+      <input id="dwell" type="number" min="0" value="10" />
     </div>
     <div class="row">
       <label>必須造訪</label>
@@ -51,7 +54,9 @@
     <button id="solveBtn">開始計算</button>
   </fieldset>
   <div id="status"></div>
+
   <pre id="output"></pre>
+  <div id="routeGrid"></div>
 
   <script>
     const statusEl = document.getElementById('status');
@@ -110,7 +115,7 @@
       });
       Object.values(edgesByFrom).forEach((lst) => lst.sort((a, b) => a.dep - b.dep));
       const desiredOrder = [
-        '新竹', '北新竹', '千甲', '新莊', '竹中', '上員', '榮華', '竹東', '橫山', '九讚頭', '合興', '富貴', '內灣',
+        '竹中', '上員', '榮華', '竹東', '橫山', '九讚頭', '合興', '富貴', '內灣',
       ];
       const setArr = Array.from(stationSet);
       const ordered = desiredOrder.filter((s) => stationSet.has(s));
@@ -254,10 +259,12 @@
         .filter(Boolean);
     }
 
+
     function renderResult(params, result) {
       const { bestCount, bestPath, found } = result;
       if (!found) {
         outputEl.textContent = '無法在時窗內涵蓋所有必須造訪的站點。';
+        document.getElementById('routeGrid').innerHTML = '';
         return;
       }
       // For return leg info and stay calc
@@ -304,6 +311,88 @@
         lines.push(`抵達 ${params.end} ${fmtHHMM(retArr)}（截止 ${fmtHHMM(params.endTime)}）`);
       }
       outputEl.textContent = lines.join('\n');
+
+      // --- Grid Visualization ---
+      // Use desiredOrder for station order
+      const desiredOrder = [
+        '竹中', '上員', '榮華', '竹東', '橫山', '九讚頭', '合興', '富貴', '內灣',
+      ];
+      const gridStations = desiredOrder.filter(s => stations.includes(s));
+      const N = gridStations.length;
+      const rowH = 50;
+      const marginT = 50;
+      const marginB = 40;
+      const routeCount = bestPath.length + ((retInfo && retInfo[1] && bestPath.length > 0 && bestPath[bestPath.length-1].dest !== params.end) ? 1 : 0);
+      const W = 60 * (N - 1) + 60;
+      const H = marginT + rowH * Math.max(1, routeCount) + marginB;
+      // Map station name to x position
+      const xMap = {};
+      gridStations.forEach((s, i) => { xMap[s] = 30 + i * 60; });
+      // Draw SVG
+      let svg = `<svg width="${W}" height="${H}" style="background:#fff;">
+        <defs>
+          <marker id="arrow" markerWidth="6" markerHeight="6" refX="6" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L6,3 L0,6 L2,3 Z" fill="#1976d2" />
+          </marker>
+        </defs>`;
+      // Draw stations (empty circles) for each row
+      for (let row = 0; row < Math.max(1, routeCount); row++) {
+        gridStations.forEach((s, i) => {
+          // 預設空心圓
+          svg += `<circle cx="${xMap[s]}" cy="${marginT + row * rowH}" r="8" fill="#fff" stroke="#888" stroke-width="2" />`;
+        });
+      }
+      // Draw station names at bottom
+      gridStations.forEach((s, i) => {
+        svg += `<text x="${xMap[s]}" y="${H-10}" text-anchor="middle" font-size="13">${s}</text>`;
+      });
+      // Draw route arrows, each on its own row
+      let prev = params.start;
+      let prevT = params.startTime;
+      bestPath.forEach((e, idx) => {
+        const rowY = marginT + idx * rowH;
+        if (xMap[e.origin] !== undefined && xMap[e.dest] !== undefined) {
+          // 填色起訖圓圈
+          svg += `<circle cx="${xMap[e.origin]}" cy="${rowY}" r="8" fill="#1976d2" stroke="#1976d2" stroke-width="2" />`;
+          svg += `<circle cx="${xMap[e.dest]}" cy="${rowY}" r="8" fill="#1976d2" stroke="#1976d2" stroke-width="2" />`;
+          // 路線
+          svg += `<line x1="${xMap[e.origin]}" y1="${rowY}" x2="${xMap[e.dest]}" y2="${rowY}" stroke="#1976d2" stroke-width="4" marker-end="url(#arrow)" />`;
+          // 搭車與到站時間
+          svg += `<text x="${xMap[e.origin]}" y="${rowY - 24}" text-anchor="middle" font-size="10" fill="#1976d2">${fmtHHMM(e.dep)}</text>`;
+          svg += `<text x="${xMap[e.dest]}" y="${rowY - 24}" text-anchor="middle" font-size="10" fill="#1976d2">${fmtHHMM(e.arr)}</text>`;
+          // Train label
+          const xm = (xMap[e.origin] + xMap[e.dest]) / 2;
+          svg += `<text x="${xm}" y="${rowY-15}" text-anchor="middle" font-size="12" fill="#1976d2">[${e.train}]</text>`;
+          // 起點站名（圓心正上方）
+          svg += `<text x="${xMap[e.origin]}" y="${rowY - 10}" text-anchor="middle" font-size="12" fill="#333">${e.origin}</text>`;
+          // 終點站名（圓心正上方）
+          svg += `<text x="${xMap[e.dest]}" y="${rowY - 10}" text-anchor="middle" font-size="12" fill="#333">${e.dest}</text>`;
+        }
+        prev = e.dest;
+        prevT = e.arr;
+      });
+      // Draw return leg if exists, on next row
+      if (retInfo && retInfo[1] && xMap[prev] !== undefined && xMap[params.end] !== undefined && prev !== params.end) {
+        const e = retInfo[1];
+        const rowY = marginT + bestPath.length * rowH;
+        // 填色起訖圓圈
+        svg += `<circle cx="${xMap[prev]}" cy="${rowY}" r="8" fill="#1976d2" stroke="#1976d2" stroke-width="2" />`;
+        svg += `<circle cx="${xMap[params.end]}" cy="${rowY}" r="8" fill="#1976d2" stroke="#1976d2" stroke-width="2" />`;
+        // 路線
+        svg += `<line x1="${xMap[prev]}" y1="${rowY}" x2="${xMap[params.end]}" y2="${rowY}" stroke="#1976d2" stroke-width="4" marker-end="url(#arrow)" />`;
+        // 搭車與到站時間
+        svg += `<text x="${xMap[prev]}" y="${rowY - 24}" text-anchor="middle" font-size="10" fill="#1976d2">${fmtHHMM(e.dep)}</text>`;
+        svg += `<text x="${xMap[params.end]}" y="${rowY - 24}" text-anchor="middle" font-size="10" fill="#1976d2">${fmtHHMM(e.arr)}</text>`;
+        // Train label
+        const xm = (xMap[prev] + xMap[params.end]) / 2;
+        svg += `<text x="${xm}" y="${rowY-15}" text-anchor="middle" font-size="12" fill="#1976d2">[${e.train}]</text>`;
+        // 起點站名（圓心正上方）
+        svg += `<text x="${xMap[prev]}" y="${rowY - 10}" text-anchor="middle" font-size="12" fill="#333">${prev}</text>`;
+        // 終點站名（圓心正上方）
+        svg += `<text x="${xMap[params.end]}" y="${rowY - 10}" text-anchor="middle" font-size="12" fill="#333">${params.end}</text>`;
+      }
+      svg += `</svg>`;
+      document.getElementById('routeGrid').innerHTML = svg;
     }
 
     document.getElementById('solveBtn').addEventListener('click', () => {
