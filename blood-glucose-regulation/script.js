@@ -433,7 +433,9 @@ class ParticleManager {
 
     updateMainLoop(level, array, className, scale) {
         // Target based on level (Scale divisor can be tweaked)
-        const targetCount = Math.floor(level / scale);
+        // Fix: Cap max particles to prevent lag (e.g., max 60)
+        let rawCount = Math.floor(level / scale);
+        const targetCount = Math.min(60, rawCount);
         
         // Smooth adjustment: only 1 per frame
         if (array.length < targetCount) {
