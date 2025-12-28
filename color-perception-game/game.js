@@ -28,18 +28,39 @@ class ColorPerceptionGame {
 
     getLevelConfig() {
         const configs = {
-            1: { gridSize: 7, timeLimit: 10, colorDiff: 10, brightnessDiff: 10 },
-            2: { gridSize: 7, timeLimit: 10, colorDiff: 8, brightnessDiff: 8 },
-            3: { gridSize: 7, timeLimit: 8, colorDiff: 6, brightnessDiff: 6 },
-            4: { gridSize: 7, timeLimit: 8, colorDiff: 4, brightnessDiff: 4 },
-            5: { gridSize: 7, timeLimit: 8, colorDiff: 2, brightnessDiff: 2 },
+            1: { gridSize: 8, timeLimit: 10, colorDiff: 6, brightnessDiff: 4 },
+            2: { gridSize: 8, timeLimit: 10, colorDiff: 6, brightnessDiff: 4 },
+            3: { gridSize: 8, timeLimit: 8, colorDiff: 6, brightnessDiff: 4 },
+            4: { gridSize: 8, timeLimit: 8, colorDiff: 4, brightnessDiff: 4 },
+            5: { gridSize: 8, timeLimit: 8, colorDiff: 2, brightnessDiff: 2 },
             6: { gridSize: 8, timeLimit: 6, colorDiff: 2, brightnessDiff: 2 },
             7: { gridSize: 9, timeLimit: 6, colorDiff: 2, brightnessDiff: 2 },
-            8: { gridSize: 10, timeLimit: 5, colorDiff: 1, brightnessDiff: 1 },
-            9: { gridSize: 11, timeLimit: 5, colorDiff: 1, brightnessDiff: 1 },
-            10: { gridSize: 12, timeLimit: 4, colorDiff: 1, brightnessDiff: 1 }
+            8: { gridSize: 10, timeLimit: 6, colorDiff: 1, brightnessDiff: 1 },
+            9: { gridSize: 11, timeLimit: 6, colorDiff: 1, brightnessDiff: 1 },
+            10: { gridSize: 12, timeLimit: 6, colorDiff: 1, brightnessDiff: 1 }
         };
         return configs[this.level] || { gridSize: 8, timeLimit: 4, colorDiff: 3, brightnessDiff: 2 };
+    }
+
+    getPerceptualColorDiff(baseHue, baseDiff) {
+        // 不同色相区域的感知敏感度系数
+        // 黄色/橙色区域 (30-90度) 最敏感，需要更小的差异
+        // 蓝色/紫色区域 (210-330度) 较不敏感，可以有更大的差异
+        
+        const hueRanges = [
+            { min: 30, max: 90, multiplier: 0.6 },   // 黄-橙色 (更敏感)
+            { min: 90, max: 150, multiplier: 0.8 },  // 黄绿-绿色
+            { min: 150, max: 210, multiplier: 1.0 }, // 青色-蓝色
+            { min: 210, max: 270, multiplier: 1.2 }, // 蓝-紫色 (较不敏感)
+            { min: 270, max: 330, multiplier: 1.1 }, // 紫-品红
+            { min: 330, max: 360, multiplier: 0.7 }, // 品红-红色
+            { min: 0, max: 30, multiplier: 0.7 }     // 红-橙色
+        ];
+        
+        const range = hueRanges.find(r => baseHue >= r.min && baseHue < r.max);
+        const multiplier = range ? range.multiplier : 1.0;
+        
+        return baseDiff * multiplier;
     }
 
     generateColors() {
@@ -60,8 +81,18 @@ class ColorPerceptionGame {
 
         // Generate one different color
         const differentIndex = Math.floor(Math.random() * totalSquares);
-        const differentHue = (baseHue + config.colorDiff) % 360;
-        const differentBrightness = Math.max(0, Math.min(100, baseBrightness + config.brightnessDiff));
+        
+        // 根据色相区域调整差异值
+        const adjustedColorDiff = this.getPerceptualColorDiff(baseHue, config.colorDiff);
+        
+        // 随机决定增加或减少色相
+        const hueDirection = Math.random() < 0.5 ? 1 : -1;
+        const differentHue = (baseHue + adjustedColorDiff * hueDirection + 360) % 360;
+        
+        // 随机决定增加或减少亮度
+        const brightnessDirection = Math.random() < 0.5 ? 1 : -1;
+        const differentBrightness = Math.max(0, Math.min(100, baseBrightness + config.brightnessDiff * brightnessDirection));
+        
         colors[differentIndex] = `hsl(${differentHue}, ${baseSaturation}%, ${differentBrightness}%)`;
 
         return { colors, differentIndex };
@@ -110,12 +141,22 @@ class ColorPerceptionGame {
     togglePause() {
         if (this.isPlaying) {
             clearInterval(this.timer);
-            this.pauseButton.textContent = 'Resume';
+            this.pauseButton.textContent = '繼續';
+            this.setBoardColorState(true);
         } else {
             this.startTimer();
-            this.pauseButton.textContent = 'Pause';
+            this.pauseButton.textContent = '暫停';
+            this.setBoardColorState(false);
         }
         this.isPlaying = !this.isPlaying;
+    }
+
+    setBoardColorState(isGrayscale) {
+        // Toggle grayscale to visually indicate paused state
+        const swatches = this.gameBoard.children;
+        for (let i = 0; i < swatches.length; i++) {
+            swatches[i].style.filter = isGrayscale ? 'grayscale(100%) brightness(70%)' : 'none';
+        }
     }
 
     handleClick(index) {
@@ -132,13 +173,20 @@ class ColorPerceptionGame {
         } else {
             // Wrong choice
             this.lives--;
-            swatches[index].style.border = '2px solid red';
+            swatches[index].style.border = '3px solid red';
+            swatches[this.differentIndex].style.border = '3px solid green';
+            swatches[this.differentIndex].style.boxShadow = '0 0 10px green';
+            
             setTimeout(() => {
                 swatches[index].style.border = 'none';
-            }, 500);
+                swatches[this.differentIndex].style.border = 'none';
+                swatches[this.differentIndex].style.boxShadow = 'none';
+            }, 1500);
             
             if (this.lives <= 0) {
-                this.gameOver();
+                setTimeout(() => {
+                    this.gameOver();
+                }, 1500);
             }
         }
     }
@@ -205,7 +253,7 @@ class ColorPerceptionGame {
         this.pauseButton.disabled = true;
         this.hintButton.disabled = true;
         this.slowButton.disabled = true;
-        this.pauseButton.textContent = 'Pause';
+        this.pauseButton.textContent = '暫停';
         alert(`Game Over! Your score: ${this.score}`);
         this.level = 1;
         this.score = 0;

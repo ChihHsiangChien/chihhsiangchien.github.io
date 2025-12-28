@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>色彩錯覺配對遊戲</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: radial-gradient(circle at 20% 20%, #f8f2ff 0%, #e7ecff 35%, #f6f8ff 60%, #f7f3ff 100%);
+      --panel: #101828;
+      --accent: #ff7b2f;
+      --accent-2: #5a62ff;
+      --good: #20c997;
+      --bad: #ff4d6d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      height: 100vh;
+      overflow: hidden;
+      font-family: 'Space Grotesk', 'Noto Sans TC', sans-serif;
+      background: var(--bg);
+      color: #0f172a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 12px;
+      gap: 8px;
+    }
+    h1 {
+      margin: 0;
+      font-weight: 700;
+      font-size: 1.5rem;
+      letter-spacing: 0.02em;
+      text-align: center;
+    }
+    p.lead {
+      margin: 0;
+      opacity: 0.8;
+      text-align: center;
+      max-width: 660px;
+      line-height: 1.3;
+      font-size: 0.9rem;
+    }
+    .topbar {
+      width: min(100%, 960px);
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+    .pill {
+      background: white;
+      border: 1px solid rgba(16, 24, 40, 0.08);
+      border-radius: 12px;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      box-shadow: 0 6px 20px rgba(16, 24, 40, 0.08);
+    }
+    .pill strong { font-size: 11px; opacity: 0.68; }
+    .pill span { font-size: 16px; font-weight: 700; }
+    .controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    button {
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 8px 14px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
+      box-shadow: 0 6px 18px rgba(255, 123, 47, 0.25);
+    }
+    button.secondary { background: var(--accent-2); box-shadow: 0 10px 24px rgba(90, 98, 255, 0.2); }
+    button:active { transform: translateY(1px); filter: saturate(0.92); }
+    #board {
+      position: relative;
+      width: min(96vw, 960px);
+      flex: 1;
+      min-height: 0;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid rgba(16, 24, 40, 0.08);
+      border-radius: 16px;
+      padding: 12px;
+      box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .grid {
+      display: grid;
+      gap: 8px;
+      width: min(100%, calc(100vh - 280px));
+      aspect-ratio: 1;
+    }
+    .cell {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      aspect-ratio: 1;
+      border-radius: 14px;
+      cursor: pointer;
+      overflow: hidden;
+      transition: transform 120ms ease, box-shadow 160ms ease, filter 160ms ease;
+    }
+    .cell:hover { transform: translateY(-2px) scale(1.01); box-shadow: 0 14px 26px rgba(0,0,0,0.12); }
+    .cell.selected { outline: 4px solid rgba(90, 98, 255, 0.8); outline-offset: -4px; box-shadow: 0 0 0 4px rgba(90, 98, 255, 0.15); }
+    .cell.wrong { animation: shake 260ms ease; }
+    .cell .dot {
+      position: absolute;
+      inset: 20%;
+      border-radius: 50%;
+      transition: transform 140ms ease;
+    }
+    .cell:hover .dot { transform: scale(1.02); }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20% { transform: translateX(-4px); }
+      40% { transform: translateX(4px); }
+      60% { transform: translateX(-3px); }
+      80% { transform: translateX(3px); }
+    }
+    .status {
+      margin: 4px 0 0;
+      min-height: 20px;
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+    .status.ok { color: var(--good); }
+    .status.bad { color: var(--bad); }
+    .compare-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      overflow: visible;
+    }
+    .compare-dot {
+      position: absolute;
+      border-radius: 50%;
+      transform: translate(-50%, -50%) scale(1);
+      transition: transform 1000ms ease;
+      box-shadow: 0 8px 18px rgba(0,0,0,0.12);
+    }
+    .compare-mark {
+      position: absolute;
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 28px;
+      color: white;
+      background: rgba(34, 197, 94, 0.9);
+      transform: translate(-50%, -50%) scale(0.5);
+      opacity: 0;
+      transition: opacity 180ms ease, transform 220ms ease;
+      pointer-events: none;
+    }
+    .compare-mark.bad { background: rgba(239, 68, 68, 0.9); }
+    .idle {
+      padding: 20px 18px;
+      text-align: center;
+      color: #475467;
+      font-weight: 600;
+      opacity: 0.7;
+    }
+    .progress {
+      width: 100%;
+      height: 8px;
+      background: rgba(16, 24, 40, 0.08);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .progress-inner {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      width: 100%;
+      transition: width 0.2s ease;
+    }
+    @media (max-width: 640px) {
+      .topbar { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <h1>選出顏色相同的兩個圓形</h1>
+  <p class="lead">每一關有兩個圓點顏色完全一致，限時內選對即可進入下一關，愈後面顏色差異愈微小。</p>
+
+  <div class="topbar">
+    <div class="pill"><strong>關卡</strong><span id="level">-</span></div>
+    <div class="pill"><strong>時間</strong><span id="time">-</span><div class="progress"><div id="timebar" class="progress-inner"></div></div></div>
+    <div class="pill"><strong>分數</strong><span id="score">-</span></div>
+    <div class="pill"><strong>狀態</strong><span id="state">待開始</span></div>
+  </div>
+
+  <div class="controls">
+    <button id="start">開始遊戲</button>
+    <button id="restart" class="secondary">重來</button>
+  </div>
+
+  <div id="board"></div>
+  <div id="status" class="status"></div>
+
+  <script>
+    const board = document.getElementById('board');
+    const levelEl = document.getElementById('level');
+    const timeEl = document.getElementById('time');
+    const timeBar = document.getElementById('timebar');
+    const scoreEl = document.getElementById('score');
+    const stateEl = document.getElementById('state');
+    const statusEl = document.getElementById('status');
+    const startBtn = document.getElementById('start');
+    const restartBtn = document.getElementById('restart');
+
+    // Minimal Web Audio helpers so we avoid asset loading.
+    let audioCtx;
+    function getCtx() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      return audioCtx;
+    }
+    function tone(frequency, duration = 0.16, volume = 0.22, type = 'sine', delay = 0) {
+      const ctx = getCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = type;
+      osc.frequency.value = frequency;
+      gain.gain.value = volume;
+      osc.connect(gain).connect(ctx.destination);
+      const t = ctx.currentTime + delay;
+      osc.start(t);
+      gain.gain.setValueAtTime(volume, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+      osc.stop(t + duration);
+    }
+    function sequence(steps) {
+      steps.forEach(([f, d, v, type, delay], i) => tone(f, d ?? 0.15, v ?? 0.22, type ?? 'sine', (delay ?? 0) + 0.04 * i));
+    }
+
+    // Speed tuning for comparison overlay (px per ms). Higher -> faster; lower -> slower.
+    const compareSpeedPxPerMs = 1.15;
+    const compareMinDurationMs = 180;
+    // Hold time at the overlapped position so players can compare colors.
+    const compareHoldMs = 420;
+
+    const levels = [
+      { grid: 3, delta: 70, time: 60 },
+      { grid: 3, delta: 55, time: 60 },
+      { grid: 4, delta: 40, time: 120 },
+      { grid: 4, delta: 30, time: 120 },
+      { grid: 5, delta: 24, time: 120 },
+      { grid: 6, delta: 18, time: 120 }
+    ];
+
+    let currentLevel = 0;
+    let score = 0;
+    let timer = null;
+    let timeLeft = 0;
+    let targets = new Set();
+    let selections = [];
+    let playing = false;
+
+    startBtn.addEventListener('click', startGame);
+    restartBtn.addEventListener('click', startGame);
+
+    function startGame() {
+      currentLevel = 0;
+      score = 0;
+      playing = true;
+      stateEl.textContent = '進行中';
+      statusEl.textContent = '';
+      sequence([[480, 0.1, 0.22, 'triangle'], [620, 0.12, 0.22, 'triangle'], [760, 0.14, 0.22, 'triangle']]);
+      nextLevel();
+    }
+
+    function nextLevel() {
+      if (currentLevel >= levels.length) {
+        endGame(true);
+        return;
+      }
+      const level = levels[currentLevel];
+      levelEl.textContent = `${currentLevel + 1} / ${levels.length}`;
+      scoreEl.textContent = score;
+      timeLeft = level.time;
+      renderBoard(level);
+      resetTimer(level.time);
+      stateEl.textContent = '找出兩個相同的圓點';
+      selections = [];
+    }
+
+    function resetTimer(seconds) {
+      clearInterval(timer);
+      timeLeft = seconds;
+      updateTimeUI();
+      timer = setInterval(() => {
+        timeLeft -= 0.1;
+        if (timeLeft <= 0) {
+          timeLeft = 0;
+          updateTimeUI();
+          clearInterval(timer);
+          endGame(false);
+        } else {
+          updateTimeUI();
+        }
+      }, 100);
+    }
+
+    function updateTimeUI() {
+      timeEl.textContent = timeLeft.toFixed(1) + ' 秒';
+      const level = levels[currentLevel] || { time: 1 };
+      const pct = Math.max(0, Math.min(100, (timeLeft / level.time) * 100));
+      timeBar.style.width = pct + '%';
+    }
+
+    function renderBoard(level) {
+      const grid = level.grid;
+      const size = grid * grid;
+      const targetColor = randomColor();
+      targets = pickTwoIndices(size);
+
+      const gridEl = document.createElement('div');
+      gridEl.className = 'grid';
+      gridEl.style.gridTemplateColumns = `repeat(${grid}, 1fr)`;
+
+      const cells = [];
+      for (let i = 0; i < size; i++) {
+        const isTarget = targets.has(i);
+        const circleColor = isTarget ? targetColor : similarColor(targetColor, level.delta);
+        const bg = richBackground();
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.dataset.index = i;
+        cell.dataset.isTarget = isTarget ? '1' : '0';
+        cell.style.background = bg;
+
+        const dot = document.createElement('div');
+        dot.className = 'dot';
+        dot.style.background = colorToString(circleColor);
+        cell.appendChild(dot);
+        cell.addEventListener('click', () => handleSelect(cell));
+        cells.push(cell);
+      }
+      board.innerHTML = '';
+      board.appendChild(gridEl);
+      cells.forEach(c => gridEl.appendChild(c));
+    }
+
+    function handleSelect(cell) {
+      if (!playing || timeLeft <= 0) return;
+      const idx = Number(cell.dataset.index);
+      if (selections.includes(idx)) return;
+      selections.push(idx);
+      cell.classList.add('selected');
+      tone(520, 0.08, 0.18, 'square');
+
+      if (selections.length === 2) {
+        const first = selections[0];
+        const second = selections[1];
+        const pickedCells = selections.map(i => document.querySelector(`[data-index="${i}"]`)).filter(Boolean);
+        const ok = targets.has(first) && targets.has(second);
+        if (ok) {
+          score += 120 + Math.round(timeLeft * 6) + currentLevel * 12;
+          scoreEl.textContent = score;
+          statusEl.textContent = '太棒了！進入下一關';
+          statusEl.className = 'status ok';
+          sequence([[820, 0.12, 0.2, 'sine'], [980, 0.14, 0.22, 'sine', 0.02], [1240, 0.16, 0.22, 'triangle', 0.04]]);
+          const animDuration = showComparison(pickedCells, true);
+          currentLevel += 1;
+          setTimeout(() => nextLevel(), Math.max(420, animDuration));
+        } else {
+          timeLeft = Math.max(0, timeLeft - 3.5);
+          updateTimeUI();
+          statusEl.textContent = '再想想！時間 -3.5 秒';
+          statusEl.className = 'status bad';
+          tone(180, 0.18, 0.24, 'sawtooth');
+          const animDuration = showComparison(pickedCells, false);
+          selections.forEach(i => document.querySelector(`[data-index="${i}"]`)?.classList.add('wrong'));
+          setTimeout(() => {
+            document.querySelectorAll('.cell').forEach(el => el.classList.remove('selected', 'wrong'));
+          }, Math.max(720, animDuration));
+          selections = [];
+          if (timeLeft === 0) { endGame(false); }
+          return;
+        }
+      }
+    }
+
+    function endGame(win) {
+      playing = false;
+      clearInterval(timer);
+      stateEl.textContent = win ? '全部破關！' : '時間到';
+      statusEl.textContent = win ? '完成所有關卡！按下重來再挑戰。' : '未及時選出，試著再來一次。';
+      statusEl.className = 'status ' + (win ? 'ok' : 'bad');
+      if (win) {
+        sequence([[620, 0.16, 0.22, 'sine'], [760, 0.18, 0.22, 'triangle', 0.03], [980, 0.2, 0.22, 'triangle', 0.06], [1280, 0.22, 0.2, 'triangle', 0.09]]);
+      } else {
+        tone(140, 0.3, 0.28, 'square');
+      }
+    }
+
+    function pickTwoIndices(max) {
+      const a = Math.floor(Math.random() * max);
+      let b = Math.floor(Math.random() * max);
+      while (b === a) b = Math.floor(Math.random() * max);
+      return new Set([a, b]);
+    }
+
+    function randomColor() {
+      return {
+        r: 60 + Math.floor(Math.random() * 160),
+        g: 60 + Math.floor(Math.random() * 160),
+        b: 60 + Math.floor(Math.random() * 160)
+      };
+    }
+
+    function similarColor(base, delta) {
+      const r = Math.max(0, Math.min(255, base.r + randDelta(delta)));
+      const g = Math.max(0, Math.min(255, base.g + randDelta(delta)));
+      const b = Math.max(0, Math.min(255, base.b + randDelta(delta)));
+      if (r === base.r && g === base.g && b === base.b) {
+        return similarColor(base, delta + 5);
+      }
+      return { r, g, b };
+    }
+
+    function randDelta(delta) {
+      const sign = Math.random() > 0.5 ? 1 : -1;
+      return sign * Math.floor(Math.random() * delta);
+    }
+
+    function colorToString(c) { return `rgb(${c.r}, ${c.g}, ${c.b})`; }
+
+    function showIdleBoard() {
+      board.innerHTML = '<div class="idle">按下「開始遊戲」來挑戰</div>';
+    }
+
+    // Visual overlay to compare two chosen circles; shows check/cross at meet point.
+    function showComparison(selectedCells, isCorrect = false) {
+      if (selectedCells.length !== 2) return 0;
+      const layer = document.createElement('div');
+      layer.className = 'compare-layer';
+      const boardRect = board.getBoundingClientRect();
+      const centers = selectedCells.map(cell => {
+        const dot = cell.querySelector('.dot');
+        const dotRect = dot ? dot.getBoundingClientRect() : cell.getBoundingClientRect();
+        return {
+          x: dotRect.left + dotRect.width / 2 - boardRect.left,
+          y: dotRect.top + dotRect.height / 2 - boardRect.top,
+          size: dotRect.width,
+          color: dot ? dot.style.background : '#fff'
+        };
+      });
+
+      const dots = centers.map(info => {
+        const el = document.createElement('div');
+        el.className = 'compare-dot';
+        el.style.background = info.color;
+        el.style.width = `${info.size}px`;
+        el.style.height = `${info.size}px`;
+        el.style.left = '0';
+        el.style.top = '0';
+        el.style.transform = `translate(${info.x}px, ${info.y}px) translate(-50%, -50%) scale(1)`;
+        layer.appendChild(el);
+        return el;
+      });
+
+      board.appendChild(layer);
+      const meetX = (centers[0].x + centers[1].x) / 2;
+      const meetY = (centers[0].y + centers[1].y) / 2;
+
+      const mark = document.createElement('div');
+      mark.className = 'compare-mark ' + (isCorrect ? 'ok' : 'bad');
+      mark.textContent = isCorrect ? '✓' : '✕';
+      mark.style.left = '0';
+      mark.style.top = '0';
+      mark.style.transform = `translate(${meetX}px, ${meetY}px) translate(-50%, -50%) scale(0.5)`;
+      layer.appendChild(mark);
+
+      const dx = centers[0].x - centers[1].x;
+      const dy = centers[0].y - centers[1].y;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 0.0001;
+      const ux = dx / dist;
+      const uy = dy / dist;
+      const gap = Math.min(centers[0].size, centers[1].size) / 2; // keep centers apart by one radius
+      const offset = gap / 2;
+      const target0 = { x: meetX + ux * offset, y: meetY + uy * offset };
+      const target1 = { x: meetX - ux * offset, y: meetY - uy * offset };
+
+      const halfDistance = dist / 2;
+      const meetTravel = Math.max(0, halfDistance - offset);
+      const meetDuration = Math.max(compareMinDurationMs, meetTravel / compareSpeedPxPerMs);
+      const returnDuration = meetDuration;
+
+      dots.forEach(el => {
+        el.style.transition = `transform ${meetDuration}ms ease`;
+      });
+
+      requestAnimationFrame(() => {
+        dots[0].style.transform = `translate(${target0.x}px, ${target0.y}px) translate(-50%, -50%) scale(1.06)`;
+        dots[1].style.transform = `translate(${target1.x}px, ${target1.y}px) translate(-50%, -50%) scale(1.06)`;
+        requestAnimationFrame(() => {
+          mark.style.opacity = '1';
+          mark.style.transform = `translate(${meetX}px, ${meetY}px) translate(-50%, -50%) scale(1)`;
+        });
+        setTimeout(() => {
+          dots.forEach(el => el.style.transition = `transform ${returnDuration}ms ease`);
+          dots[0].style.transform = `translate(${centers[0].x}px, ${centers[0].y}px) translate(-50%, -50%) scale(1)`;
+          dots[1].style.transform = `translate(${centers[1].x}px, ${centers[1].y}px) translate(-50%, -50%) scale(1)`;
+          setTimeout(() => layer.remove(), returnDuration + 80);
+        }, meetDuration + compareHoldMs);
+      });
+
+      const totalDuration = meetDuration + compareHoldMs + returnDuration + 80;
+      return totalDuration;
+    }
+
+    function richBackground() {
+      const hues = [
+        'linear-gradient(135deg, #ff9a8b, #ff6a88)',
+        'linear-gradient(135deg, #ffd166, #fca311)',
+        'linear-gradient(135deg, #6dd3ff, #1a9ffd)',
+        'linear-gradient(135deg, #ff6f61, #de1b51)',
+        'linear-gradient(135deg, #8ec5fc, #e0c3fc)',
+        'linear-gradient(135deg, #f97316, #fb923c)',
+        'linear-gradient(135deg, #c084fc, #9333ea)',
+        'linear-gradient(135deg, #22d3ee, #06b6d4)',
+        'linear-gradient(135deg, #fcd34d, #fb7185)'
+      ];
+      return hues[Math.floor(Math.random() * hues.length)];
+    }
+
+    // Idle state before starting
+    showIdleBoard();
+    levelEl.textContent = '-';
+    timeEl.textContent = '-';
+    scoreEl.textContent = '0';
+  </script>
+</body>
+</html>
