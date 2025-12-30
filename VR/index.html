@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>360 VR Viewer</title>
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+
+        /* Zoom Control Overlay */
+        #ui-controls {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .zoom-btn {
+            background: rgba(0, 0, 0, 0.6);
+            color: white;
+            border: 2px solid white;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            font-size: 24px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            user-select: none;
+            transition: background 0.2s;
+        }
+
+        .zoom-btn:active {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .instructions {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            color: white;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 8px;
+            font-family: sans-serif;
+            pointer-events: none;
+        }
+
+        /* Scene Info Panel */
+        #scene-info {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            color: white;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-family: sans-serif;
+            font-size: 14px;
+        }
+
+        /* Portal Cursor */
+        #renderCanvas:hover {
+            cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="14" fill="none" stroke="white" stroke-width="2"/><circle cx="16" cy="16" r="4" fill="white"/></svg>') 16 16, auto;
+        }
+
+        /* Portal Hotspot Overlay */
+        .portal-hotspot {
+            position: fixed;
+            width: 60px;
+            height: 60px;
+            border: 2px solid #00ff00;
+            border-radius: 50%;
+            background: rgba(0, 255, 0, 0.1);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            z-index: 500;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+        }
+
+        .portal-hotspot:hover {
+            background: rgba(0, 255, 0, 0.3);
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.8);
+            transform: scale(1.1);
+        }
+
+        .portal-label {
+            position: absolute;
+            color: #00ff00;
+            font-family: sans-serif;
+            font-size: 12px;
+            font-weight: bold;
+            white-space: nowrap;
+            text-shadow: 0 0 5px rgba(0, 0, 0, 0.8);
+            pointer-events: none;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Instructions Overlay -->
+    <div class="instructions">
+        <p><strong>Drag</strong> or <strong>Swipe</strong> to Rotate</p>
+        <p><strong>Scroll</strong> or use <strong>Buttons</strong> to Zoom</p>
+    </div>
+
+    <!-- Scene Info Panel -->
+    <div id="scene-info">現在位置: <span id="scene-name">小腸</span></div>
+
+    <!-- Portal Hotspots Container -->
+    <div id="hotspots-container"></div>
+
+    <!-- Zoom Buttons -->
+    <div id="ui-controls">
+        <div class="zoom-btn" id="zoom-in">+</div>
+        <div class="zoom-btn" id="zoom-out">-</div>
+    </div>
+
+    <!-- Babylon.js 360 球面顯示 -->
+    <canvas id="renderCanvas" style="width:100vw;height:100vh;position:fixed;top:0;left:0;z-index:0;"></canvas>
+
+    <script>
+        // Scene Management
+        let currentScene = 'intestine'; // 'intestine' or 'stomach'
+        let engine, scene, camera, sphere, mat;
+        const canvas = document.getElementById('renderCanvas');
+
+        // Portal Hotspot Definitions
+        const hotspots = {
+            intestine: {
+                name: '小腸',
+                texture: 'small_intestine.png',
+                portals: [
+                    {
+                        name: '進入胃部 →',
+                        // 3D 球面座標（単位球上）
+                        position: new BABYLON.Vector3(1, 0, 0),  // 右側：進入
+                        target: 'stomach'
+                    }
+                ]
+            },
+            stomach: {
+                name: '胃',
+                texture: 'stomach.png',
+                portals: [
+                    {
+                        name: '← 回到小腸',
+                        // 3D 球面座標（単位球上）
+                        position: new BABYLON.Vector3(-1, 0, 0),  // 左側：返回
+                        target: 'intestine'
+                    }
+                ]
+            }
+        };
+
+        // Update Portal Hotspots Display
+        function updateHotspotPositions() {
+            const container = document.getElementById('hotspots-container');
+            const sceneData = hotspots[currentScene];
+            
+            sceneData.portals.forEach((portal, index) => {
+                let hotspot = document.getElementById(`portal-${index}`);
+                
+                if (!hotspot) {
+                    hotspot = document.createElement('div');
+                    hotspot.id = `portal-${index}`;
+                    hotspot.className = 'portal-hotspot';
+                    hotspot.innerHTML = '🔷';
+                    
+                    hotspot.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        switchScene(portal.target);
+                    });
+                    
+                    container.appendChild(hotspot);
+                }
+                
+                // 計算 3D 座標在屏幕上的位置
+                const worldPos = portal.position.scale(500); // 球體半徑 500
+                const screenPos = BABYLON.Vector3.Project(
+                    worldPos,
+                    BABYLON.Matrix.Identity(),
+                    scene.getTransformMatrix(),
+                    camera.viewport.toGlobal(engine.getRenderWidth(), engine.getRenderHeight())
+                );
+                
+                // 只在座標在屏幕內時顯示
+                if (screenPos.z > 0 && screenPos.z < 1 && 
+                    screenPos.x > 0 && screenPos.x < engine.getRenderWidth() &&
+                    screenPos.y > 0 && screenPos.y < engine.getRenderHeight()) {
+                    
+                    hotspot.style.display = 'flex';
+                    hotspot.style.left = screenPos.x + 'px';
+                } else {
+                    hotspot.style.display = 'none';
+                }
+            });
+        }
+
+        // Switch Scene
+        function switchScene(targetScene) {
+            currentScene = targetScene;
+            const sceneData = hotspots[currentScene];
+            
+            // Update scene name
+            document.getElementById('scene-name').textContent = sceneData.name;
+            
+            // Change texture
+            mat.diffuseTexture.dispose();
+            mat.diffuseTexture = new BABYLON.Texture(sceneData.texture, scene);
+            mat.diffuseTexture.uScale = -1;
+            
+            // Update hotspots
+            updateHotspots();
+            
+            console.log('✓ Switched to:', sceneData.name);
+        }
+
+        // Babylon.js 360 球面顯示
+        window.addEventListener('DOMContentLoaded', function () {
+            engine = new BABYLON.Engine(canvas, true);
+            scene = new BABYLON.Scene(engine);
+            
+            // 相機設置
+            camera = new BABYLON.ArcRotateCamera("camera", 0, Math.PI/2, 0.1, BABYLON.Vector3.Zero(), scene);
+            camera.attachControl(canvas, true);
+            camera.fov = Math.PI / 2; // 初始視野
+            
+            // 球體貼圖
+            sphere = BABYLON.MeshBuilder.CreateSphere("sphere", {segments:32, diameter:1000}, scene);
+            sphere.scaling.x = -1; // 內貼圖
+            
+            mat = new BABYLON.StandardMaterial("mat", scene);
+            const sceneData = hotspots[currentScene];
+            mat.diffuseTexture = new BABYLON.Texture(sceneData.texture, scene);
+            mat.diffuseTexture.uScale = -1; // 修正左右
+            mat.backFaceCulling = false;
+            sphere.material = mat;
+
+            // Add ambient light
+            const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+            light.intensity = 1;
+
+            // Zoom 控制
+            let currentFov = camera.fov;
+            const minFov = Math.PI / 8;
+            const maxFov = Math.PI / 1.2;
+            const zoomStep = Math.PI / 36;
+            const updateZoom = (newFov) => {
+                currentFov = Math.max(minFov, Math.min(maxFov, newFov));
+                camera.fov = currentFov;
+            };
+            document.addEventListener('wheel', (e) => {
+                const delta = Math.sign(e.deltaY) * zoomStep;
+                updateZoom(currentFov + delta);
+            });
+            document.getElementById('zoom-in').addEventListener('click', (e) => {
+                e.stopPropagation();
+                updateZoom(currentFov - zoomStep);
+            });
+            document.getElementById('zoom-out').addEventListener('click', (e) => {
+                e.stopPropagation();
+                updateZoom(currentFov + zoomStep);
+            });
+
+            // Initial hotspots
+            updateHotspotPositions();
+
+            // Render loop with hotspot updates
+            engine.runRenderLoop(() => {
+                scene.render();
+                // 每幀更新開口位置，使其跟著旋轉
+                updateHotspotPositions();
+            });
+            window.addEventListener('resize', () => engine.resize());
+        });
+    </script>
+</body>
+
+</html>
