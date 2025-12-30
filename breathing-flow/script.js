@@ -83,6 +83,7 @@ const MODES = {
         description: '延長吐氣並空肺停留，降低體內CO₂濃度，延後呼吸衝動。',
         phases: [
             // Cycle 1
+
             { type: 'inhale', duration: 3, label: '吸氣', levelStart: 0, levelEnd: 0.6 },
             { type: 'exhale', duration: 6, label: '吐氣', levelStart: 0.6, levelEnd: 0 },
             { type: 'hold', duration: 4, label: '空肺停留', levelStart: 0, levelEnd: 0 },
@@ -95,8 +96,9 @@ const MODES = {
             { type: 'exhale', duration: 6, label: '吐氣', levelStart: 0.6, levelEnd: 0 },
             { type: 'hold', duration: 4, label: '空肺停留', levelStart: 0, levelEnd: 0 },
             // The Big Hold
+
             { type: 'inhale', duration: 2.5, label: '吸氣', levelStart: 0, levelEnd: 1 },
-            { type: 'hold', duration: 90, label: '極限憋氣', levelStart: 1, levelEnd: 1, countUp: true } 
+            { type: 'hold', duration: 90, label: '開始憋氣', levelStart: 1, levelEnd: 1, countUp: true } 
         ]
     },
 
@@ -190,6 +192,7 @@ class BreathController {
         this.currentPhase = this.mode.phases[0];
         if (this.onPhaseChange) this.onPhaseChange(this.currentPhase);
         
+        soundEngine.start();
         this.updateBPM();
         bpmDisplay.classList.remove('hidden');
     }
@@ -199,6 +202,7 @@ class BreathController {
         // Reset mode config to default (restore original durations)
         this.setMode(this.mode.id);
         bpmDisplay.classList.add('hidden');
+        soundEngine.stop();
     }
 
     reset() {
@@ -331,105 +335,115 @@ class Visualizer {
         const range = height * 0.25; // Amplitude from center
         const pixelsPerSecond = 100; // Horizontal scroll speed scale
 
-        // Update Global Time Offset for scrolling
+        // Update Global Time Offset
         if (controller.active) {
-            // Speed = 1x real time
-            // We just use performance.now() derived offset passed from outside, 
-            // OR we can accumulate generic "scroll" separate from logic.
-            // Let's use Accumulated scroll to handle smooth stop/start.
-            this.timeOffset += 0.016; // Approx 60fps -> 1s per sec? 
-            // 0.016s per frame matches real time roughly.
+            this.timeOffset += 0.016; 
         } else {
-            this.timeOffset += 0.005; // Slow drift when idle
+            this.timeOffset += 0.005;
         }
 
-        // --- Draw Background Grid / Path ---
-        // We want the "current moment" to be at center X (width/2).
-        // Future is to the Right. Past is to the Left.
-        // The background moves LEFT (Future comes to Now).
+        // --- Calculate Points First ---
+        // We will generate an array of points to draw.
+        const points = [];
+        const stepX = 4; // Smoother
         
-        // We iterate X across screen.
-        // For each X, we calculate "time point" it represents.
-        // T_screen = (x - centerX) / pixelsPerSecond + CurrentPhaseGlobalTime? 
-        // Simpler: T_render = (x / pixelsPerSecond) + ScrollOffset
-        
-        // Actually, to make the dot "ride" the wave:
-        // The wave at CenterX MUST match the current Breath Level.
-        // So, T_at_center = CurrentSessionTime.
-        // But since we loop, we just need T in cycle.
-        
-        // Let's define: BaseTime = this.timeOffset (which keeps growing)
-        // At x = width/2, time = BaseTime.
-        // At x = width/2 + 100, time = BaseTime + 1s.
-        
-        ctx.beginPath();
-        ctx.lineWidth = 3;
-        ctx.strokeStyle = 'rgba(0, 240, 255, 0.5)';
-        ctx.lineJoin = 'round';
-
-        const stepX = 5;
-        let started = false;
-
-        // Calculate "Session Time" derived from controller to sync perfectly?
-        // If we use `this.timeOffset` which is loose, it might drift from `controller` logic.
-        // Better: When active, use `controller.elapsed` concepts? 
-        // But controller resets phases.
-        // Let's use a "Visual Time" that we force-sync to controller when active.
-        
-        // Sync Visual Time to Controller State
-        // Controller gives: Current Phase, Progress.
-        // We know accumulated time of previous phases.
         let currentCycleTime = 0;
         if (controller.active) {
-            // Sum duration of phases before current
             let preDuration = 0;
             for (let i = 0; i < controller.phaseIndex; i++) {
                 preDuration += controller.mode.phases[i].duration;
             }
             currentCycleTime = preDuration + (controller.currentPhase.duration * controller.phaseProgress);
         } else {
-            // Just scrolling IDLE
-            currentCycleTime = this.timeOffset % 10; // Mock 10s cycle
+            currentCycleTime = this.timeOffset % 10;
         }
-        
-        // Draw the line
+
+        // Generate points across screen
         for (let x = -50; x < width + 50; x += stepX) {
-            // Time difference from center
             const timeDelta = (x - width / 2) / pixelsPerSecond;
             const tQuery = currentCycleTime + timeDelta;
-            
-            // Get level (0-1) from Mode Map
-            // If idle, use a default "Relaxation" or simple Sine
             const level = this.getLevelAtCycleTime(tQuery, controller.active ? controller.mode : MODES.relaxation);
-            
-            // Map level to Y (Top is -range, Bottom is +range)
-            // Note: Higher Level = Higher Screen Position (Lower Y value)
-            const y = cy + range - (level * 2 * range); // level 0 -> cy + range (bottom), level 1 -> cy - range (top)
-            
-            if (!started) {
-                ctx.moveTo(x, y);
-                started = true;
-            } else {
-                ctx.lineTo(x, y);
-            }
+            const y = cy + range - (level * 2 * range);
+            points.push({ x, y, level });
+        }
+
+        // --- Pass 1: Base Line (Cyan) ---
+        ctx.beginPath();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(0, 240, 255, 0.4)'; // Lower opacity base
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+
+        if (points.length > 0) ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) {
+            ctx.lineTo(points[i].x, points[i].y);
         }
         ctx.stroke();
-
-        // Warning: Diagonal Lines "Aliasing" look.
-        // Add a "Bloom" or fill below to make it look like a mountain?
-        // Let's Add Fill Below
+        
+        // Base Fill
         ctx.lineTo(width, height);
         ctx.lineTo(0, height);
         ctx.fillStyle = 'rgba(0, 240, 255, 0.05)';
         ctx.fill();
 
+        // --- Pass 2: High Points (Full Lung Hold) ---
+        // Level near 1.0
+        ctx.beginPath();
+        ctx.lineWidth = 6;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)'; // Bright White
+        ctx.shadowBlur = 1;
+        ctx.shadowColor = 'white';
+
+        let drawingHigh = false;
+        for (let i = 0; i < points.length; i++) {
+            const p = points[i];
+            if (p.level >= 0.99) {
+                if (!drawingHigh) {
+                    ctx.moveTo(p.x, p.y);
+                    drawingHigh = true;
+                } else {
+                    ctx.lineTo(p.x, p.y);
+                }
+            } else {
+                drawingHigh = false;
+            }
+        }
+        ctx.stroke();
+        ctx.shadowBlur = 0; // Reset
+
+        // --- Pass 3: Low Points (Empty Lung Hold) ---
+        // Level near 0.0
+        ctx.beginPath();
+        ctx.lineWidth = 6;
+        ctx.strokeStyle = 'rgba(100, 100, 255, 0.8)'; // Deep Purple/Blue
+        // ctx.shadowBlur = 5;
+        // ctx.shadowColor = 'blue';
+
+        let drawingLow = false;
+        for (let i = 0; i < points.length; i++) {
+            const p = points[i];
+            if (p.level <= 0.01) {
+                if (!drawingLow) {
+                    ctx.moveTo(p.x, p.y);
+                    drawingLow = true;
+                } else {
+                    ctx.lineTo(p.x, p.y);
+                }
+            } else {
+                drawingLow = false;
+            }
+        }
+        ctx.stroke();
+
 
         // --- Draw Central Dot ---
-        const dotY = cy + range - (this.getLevelAtCycleTime(currentCycleTime, controller.active ? controller.mode : MODES.relaxation) * 2 * range);
+        // Re-calculate dot level safely (or use points array closer to center?)
+        // Let's re-calc for precision at exact center time.
+        const dotLevel = this.getLevelAtCycleTime(currentCycleTime, controller.active ? controller.mode : MODES.relaxation);
+        const dotY = cy + range - (dotLevel * 2 * range);
         
-        // Glow Effect
         const dotSize = 25;
-        const color = controller.active ? '#00f0ff' : '#aaaaaa';
+        // color unused?
         
         ctx.shadowBlur = 40;
         ctx.shadowColor = 'cyan';
@@ -438,23 +452,25 @@ class Visualizer {
         ctx.beginPath();
         ctx.arc(width / 2, dotY, dotSize, 0, Math.PI * 2);
         ctx.fill();
-        ctx.shadowBlur = 0; // Reset
+        ctx.shadowBlur = 0;
 
         // Draw Vertical Guide Line
+        /*
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
         ctx.setLineDash([5, 5]);
         ctx.beginPath();
-        ctx.moveTo(width / 2, 0); // Full height guide
+        ctx.moveTo(width / 2, 0); 
         ctx.lineTo(width / 2, height);
         ctx.stroke();
         ctx.setLineDash([]);
+        */
         
-        // Draw Reference Horizon Lines (Top/Bottom limits)
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+        // Draw Reference Horizon Lines
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
         ctx.beginPath();
-        ctx.moveTo(0, cy - range); // Max Inhale
+        ctx.moveTo(0, cy - range); 
         ctx.lineTo(width, cy - range);
-        ctx.moveTo(0, cy + range); // Max Exhale
+        ctx.moveTo(0, cy + range); 
         ctx.lineTo(width, cy + range);
         ctx.stroke();
     }
@@ -568,9 +584,27 @@ class SoundEngine {
     toggleMute() {
         this.isMuted = !this.isMuted;
         if(this.masterGain) {
+            this.masterGain.gain.cancelScheduledValues(this.ctx.currentTime);
             this.masterGain.gain.setTargetAtTime(this.isMuted ? 0 : 0.3, this.ctx.currentTime, 0.1);
         }
         return this.isMuted;
+    }
+
+    start() {
+        if (!this.initialized || !this.ctx || this.isMuted) return;
+        this.resume();
+        const now = this.ctx.currentTime;
+        this.masterGain.gain.cancelScheduledValues(now);
+        this.masterGain.gain.setValueAtTime(this.masterGain.gain.value, now);
+        this.masterGain.gain.linearRampToValueAtTime(0.3, now + 1); // Fade in
+    }
+
+    stop() {
+        if (!this.initialized || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        this.masterGain.gain.cancelScheduledValues(now);
+        this.masterGain.gain.setValueAtTime(this.masterGain.gain.value, now);
+        this.masterGain.gain.linearRampToValueAtTime(0, now + 0.5); // Fade out
     }
 
     updateBreath(level, active) {
@@ -729,15 +763,21 @@ function animate() {
             // Count UP (e.g. for long holds)
             const count = Math.floor(elapsed);
             ui.timerText.textContent = count + 's';
+            ui.timerText.classList.add('timer-large');
+            ui.phaseText.style.opacity = 0.5; // Dim phase text slightly?
         } else {
             // Count DOWN (default)
             const remaining = Math.ceil(controller.currentPhase.duration - elapsed);
             // Clamp to 0
             ui.timerText.textContent = Math.max(0, remaining) + 's';
+            ui.timerText.classList.remove('timer-large');
+            ui.phaseText.style.opacity = 1;
         }
     } else {
         ui.phaseText.textContent = "準備";
         ui.timerText.textContent = "00:00";
+        ui.timerText.classList.remove('timer-large');
+        ui.phaseText.style.opacity = 0.9;
     }
 
     // Determine current breath level (reused logic)
