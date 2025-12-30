@@ -75,7 +75,7 @@
             cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="14" fill="none" stroke="white" stroke-width="2"/><circle cx="16" cy="16" r="4" fill="white"/></svg>') 16 16, auto;
         }
 
-        /* Portal Hotspot Overlay */
+        /* Portal Hotspot Overlay - 出口 (進入下一場景) */
         .portal-hotspot {
             position: fixed;
             width: 60px;
@@ -99,15 +99,42 @@
             transform: scale(1.1);
         }
 
+        /* Portal Hotspot Overlay - 入口 (返回上一場景) */
+        .portal-hotspot.entrance {
+            border-color: #0099ff;
+            background: rgba(0, 153, 255, 0.1);
+            box-shadow: 0 0 10px rgba(0, 153, 255, 0.5);
+        }
+
+        .portal-hotspot.entrance:hover {
+            background: rgba(0, 153, 255, 0.3);
+            box-shadow: 0 0 20px rgba(0, 153, 255, 0.8);
+            transform: scale(1.1);
+        }
+
         .portal-label {
             position: absolute;
             color: #00ff00;
-            font-family: sans-serif;
-            font-size: 12px;
+            font-family: 'Microsoft YaHei', 'SimHei', 'Arial Unicode MS', sans-serif;
+            font-size: 14px;
             font-weight: bold;
             white-space: nowrap;
             text-shadow: 0 0 5px rgba(0, 0, 0, 0.8);
             pointer-events: none;
+            bottom: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        /* Exit label (green) */
+        .portal-label {
+            color: #00ff00;
+        }
+
+        /* Entrance label (blue) */
+        .portal-hotspot.entrance ~ .portal-label,
+        .portal-label.entrance {
+            color: #0099ff;
         }
     </style>
 </head>
@@ -121,7 +148,7 @@
     </div>
 
     <!-- Scene Info Panel -->
-    <div id="scene-info">現在位置: <span id="scene-name">小腸</span></div>
+    <div id="scene-info">現在位置: <span id="scene-name">口腔</span></div>
 
     <!-- Portal Hotspots Container -->
     <div id="hotspots-container"></div>
@@ -137,33 +164,111 @@
 
     <script>
         // Scene Management
-        let currentScene = 'intestine'; // 'intestine' or 'stomach'
+        let currentScene = 'mouth'; // 'mouth' -> 'pharynx' -> 'stomach' -> 'stomach2' -> 'stomach3' -> 'eso-stomach' -> 'small_intestine'
         let engine, scene, camera, sphere, mat;
         const canvas = document.getElementById('renderCanvas');
 
-        // Portal Hotspot Definitions
+        // Portal Hotspot Definitions - 消化系統路徑
         const hotspots = {
-            intestine: {
-                name: '小腸',
-                texture: 'small_intestine.png',
+            mouth: {
+                name: '口腔',
+                texture: 'mouth.png',
                 portals: [
                     {
-                        name: '進入胃部 →',
-                        // 3D 球面座標（単位球上）
-                        position: new BABYLON.Vector3(1, 0, 0),  // 右側：進入
-                        target: 'stomach'
+                        name: '進入咽喉 →',
+                        position: new BABYLON.Vector3(0.8, 0.2, 0.15),
+                        target: 'pharynx'
                     }
                 ]
             },
+            pharynx: {
+                name: '咽喉',
+                texture: 'pharynx.png',
+                portals: [
+                    {
+                        name: '← 回到口腔',
+                        position: new BABYLON.Vector3(-0.8, -0.2, -0.15),
+                        target: 'mouth'
+                    },
+                    {
+                        name: '進入食道 →',
+                        position: new BABYLON.Vector3(0.75, 0.3, 0.2),
+                        target: 'esophagus'
+                    }
+                ]
+            },
+            esophagus: {
+                name: '食道',
+                texture: 'esophagus.png',
+                portals: [
+                    {
+                        name: '← 回到咽喉 ',
+                        position: new BABYLON.Vector3(0.75, 0.28, 0.25),
+                        target: 'pharynx'
+                    },
+                    {
+                        name: '進入胃部 →',
+                        position: new BABYLON.Vector3(0.8, -0.15, -0.3),
+                        target: 'stomach'
+                    },                    
+                ]
+            },            
             stomach: {
                 name: '胃',
                 texture: 'stomach.png',
                 portals: [
                     {
-                        name: '← 回到小腸',
-                        // 3D 球面座標（単位球上）
-                        position: new BABYLON.Vector3(-1, 0, 0),  // 左側：返回
-                        target: 'intestine'
+                        name: '← 回到食道',
+                        position: new BABYLON.Vector3(-0.75, -0.3, -0.2),
+                        target: 'esophagus'
+                    },
+                    {
+                        name: '進入胃部2 →',
+                        position: new BABYLON.Vector3(0.7, 0.25, 0.25),
+                        target: 'stomach2'
+                    }
+                ]
+            },
+            stomach2: {
+                name: '胃 (部分2)',
+                texture: 'stomach2.png',
+                portals: [
+                    {
+                        name: '← 回到胃',
+                        position: new BABYLON.Vector3(-0.7, -0.25, -0.25),
+                        target: 'stomach'
+                    },
+                    {
+                        name: '進入胃部3 →',
+                        position: new BABYLON.Vector3(0.65, 0.35, 0.2),
+                        target: 'stomach3'
+                    }
+                ]
+            },
+            stomach3: {
+                name: '胃 (部分3)',
+                texture: 'stomach3.png',
+                portals: [
+                    {
+                        name: '← 回到胃部2',
+                        position: new BABYLON.Vector3(-0.65, -0.35, -0.2),
+                        target: 'stomach2'
+                    },
+                    {
+                        name: '進入小腸 →',
+                        position: new BABYLON.Vector3(0.8, 0.15, 0.3),
+                        target: 'small_intestine'
+                    }
+                ]
+            },
+            small_intestine: {
+                name: '小腸',
+                texture: 'small_intestine.png',
+                portals: [
+                    {
+                        name: '← 回到胃部3',
+                        position: new BABYLON.Vector3(-0.75, -0.28, -0.25),
+                        target: 'stomach3'
                     }
                 ]
             }
@@ -180,8 +285,17 @@
                 if (!hotspot) {
                     hotspot = document.createElement('div');
                     hotspot.id = `portal-${index}`;
-                    hotspot.className = 'portal-hotspot';
-                    hotspot.innerHTML = '🔷';
+                    // 判斷是進入口（返回）還是出口（前進）
+                    const isEntrance = portal.name.includes('←');
+                    hotspot.className = isEntrance ? 'portal-hotspot entrance' : 'portal-hotspot';
+                    // 不同的圖標
+                    hotspot.innerHTML = isEntrance ? '↩️' : '→';
+                    
+                    // 創建label顯示中文名稱
+                    const label = document.createElement('div');
+                    label.className = isEntrance ? 'portal-label entrance' : 'portal-label';
+                    label.textContent = portal.name;
+                    hotspot.appendChild(label);
                     
                     hotspot.addEventListener('click', (e) => {
                         e.stopPropagation();
@@ -191,12 +305,14 @@
                     container.appendChild(hotspot);
                 }
                 
-                // 計算 3D 座標在屏幕上的位置
+                // 計算 3D 座標在屏幕上的位置 (實時跟隨相機)
                 const worldPos = portal.position.scale(500); // 球體半徑 500
+                const viewMatrix = camera.getViewMatrix();
+                const projectionMatrix = camera.getProjectionMatrix();
                 const screenPos = BABYLON.Vector3.Project(
                     worldPos,
                     BABYLON.Matrix.Identity(),
-                    scene.getTransformMatrix(),
+                    viewMatrix.multiply(projectionMatrix),
                     camera.viewport.toGlobal(engine.getRenderWidth(), engine.getRenderHeight())
                 );
                 
@@ -206,7 +322,8 @@
                     screenPos.y > 0 && screenPos.y < engine.getRenderHeight()) {
                     
                     hotspot.style.display = 'flex';
-                    hotspot.style.left = screenPos.x + 'px';
+                    hotspot.style.left = (screenPos.x - 30) + 'px';  // 居中（60/2=30）
+                    hotspot.style.top = (screenPos.y - 30) + 'px';   // 居中（60/2=30）
                 } else {
                     hotspot.style.display = 'none';
                 }
@@ -221,13 +338,18 @@
             // Update scene name
             document.getElementById('scene-name').textContent = sceneData.name;
             
+            // 清空舊的hotspots
+            const container = document.getElementById('hotspots-container');
+            container.innerHTML = '';
+            
             // Change texture
             mat.diffuseTexture.dispose();
             mat.diffuseTexture = new BABYLON.Texture(sceneData.texture, scene);
             mat.diffuseTexture.uScale = -1;
+            mat.diffuseTexture.vScale = -1;
             
             // Update hotspots
-            updateHotspots();
+            updateHotspotPositions();
             
             console.log('✓ Switched to:', sceneData.name);
         }
@@ -245,11 +367,13 @@
             // 球體貼圖
             sphere = BABYLON.MeshBuilder.CreateSphere("sphere", {segments:32, diameter:1000}, scene);
             sphere.scaling.x = -1; // 內貼圖
+            sphere.scaling.y = -1; // 修正上下顛倒
             
             mat = new BABYLON.StandardMaterial("mat", scene);
             const sceneData = hotspots[currentScene];
             mat.diffuseTexture = new BABYLON.Texture(sceneData.texture, scene);
             mat.diffuseTexture.uScale = -1; // 修正左右
+            mat.diffuseTexture.vScale = -1; // 修正上下
             mat.backFaceCulling = false;
             sphere.material = mat;
 
