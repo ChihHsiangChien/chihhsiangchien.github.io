@@ -13,6 +13,7 @@ class VRViewer {
         this.sphere = null;
         this.mat = null;
         this.currentFov = null;
+        this.allowFovAdjustment = true;  // 新增：控制是否允许 FOV 调整
         
         this.canvas = document.getElementById(config.canvasId || 'renderCanvas');
         this.hotspots = config.hotspots || {};
@@ -101,6 +102,9 @@ class VRViewer {
             this.sphere.scaling.x = -1;
             this.sphere.scaling.y = -1;
         }
+        
+        // 应用旋转设置
+        this.applyRotation(sceneData);
         
         // 加载纹理
         console.log(`📸 加载纹理: ${sceneData.texture}`);
@@ -200,19 +204,20 @@ class VRViewer {
      */
     setupZoomControl() {
         this.currentFov = this.camera.fov;
-        const minFov = Math.PI / 8;
-        const maxFov = Math.PI / 2;
+        this.fovMinLimit = Math.PI / 8;
+        this.fovMaxLimit = Math.PI / 2;
         const zoomStep = Math.PI / 36;
         
-        const updateZoom = (newFov) => {
-            this.currentFov = Math.max(minFov, Math.min(maxFov, newFov));
+        // 处理滚轮缩放
+        this.wheelZoomHandler = (e) => {
+            if (!this.allowFovAdjustment) return;
+            
+            const delta = Math.sign(e.deltaY) * zoomStep;
+            this.currentFov = Math.max(this.fovMinLimit, Math.min(this.fovMaxLimit, this.currentFov + delta));
             this.camera.fov = this.currentFov;
         };
         
-        document.addEventListener('wheel', (e) => {
-            const delta = Math.sign(e.deltaY) * zoomStep;
-            updateZoom(this.currentFov + delta);
-        });
+        document.addEventListener('wheel', this.wheelZoomHandler.bind(this));
         
         const zoomInBtn = document.getElementById('zoom-in');
         const zoomOutBtn = document.getElementById('zoom-out');
@@ -220,14 +225,20 @@ class VRViewer {
         if (zoomInBtn) {
             zoomInBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                updateZoom(this.currentFov - zoomStep);
+                if (this.allowFovAdjustment) {
+                    this.currentFov = Math.max(this.fovMinLimit, this.currentFov - zoomStep);
+                    this.camera.fov = this.currentFov;
+                }
             });
         }
         
         if (zoomOutBtn) {
             zoomOutBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                updateZoom(this.currentFov + zoomStep);
+                if (this.allowFovAdjustment) {
+                    this.currentFov = Math.min(this.fovMaxLimit, this.currentFov + zoomStep);
+                    this.camera.fov = this.currentFov;
+                }
             });
         }
     }
@@ -331,6 +342,12 @@ class VRViewer {
             this.currentFov = sceneData.initialFov;
         }
         
+        // 应用旋转设置
+        this.applyRotation(sceneData);
+        
+        // 重新应用 FOV 限制（切换场景时）
+        this.applyFovLimits(sceneData);
+        
         // 更新hotspots
         this.updateHotspotPositions();
         
@@ -427,6 +444,99 @@ class VRViewer {
             if (yEl) yEl.textContent = normalized.y.toFixed(4);
             if (zEl) zEl.textContent = normalized.z.toFixed(4);
         }
+    }
+
+    /**
+     * 应用球体旋转
+     * @param {object} sceneData - 场景数据
+     * 
+     * 旋转配置示例:
+     * rotation: {
+     *     axis: new BABYLON.Vector3(0, 0, 1),  // Z轴
+     *     angle: Math.PI / 4                   // 45度
+     * }
+     */
+    applyRotation(sceneData) {
+        if (!sceneData || !sceneData.rotation) {
+            // 重置旋转
+            this.sphere.rotationQuaternion = BABYLON.Quaternion.Identity();
+            return;
+        }
+        
+        const { axis, angle } = sceneData.rotation;
+        if (!axis || angle === undefined) {
+            this.sphere.rotationQuaternion = BABYLON.Quaternion.Identity();
+            return;
+        }
+        
+        // 使用四元数表示绕指定轴旋转指定角度
+        const normalizedAxis = axis.normalize();
+        const rotation = BABYLON.Quaternion.RotationAxis(normalizedAxis, angle);
+        this.sphere.rotationQuaternion = rotation;
+        
+        // 调试日志
+        console.log(`🔄 应用球体旋转:`, {
+            axis: axis,
+            normalizedAxis: normalizedAxis,
+            angle: angle,
+            angleInDegrees: (angle * 180 / Math.PI).toFixed(2) + '°',
+            quaternion: rotation
+        });
+    }
+
+    /**
+     * 应用 FOV 限制
+     * @param {object} sceneData - 场景数据
+     * 
+     * FOV 配置示例:
+     * fovLimits: {
+     *     min: Math.PI / 6,      // 最小 FOV（30度）
+     *     max: Math.PI / 4,      // 最大 FOV（45度）
+     *     allowAdjustment: false  // 禁用调整（可选，默认允许）
+     * }
+     */
+    applyFovLimits(sceneData) {
+        const defaultMinFov = Math.PI / 8;
+        const defaultMaxFov = Math.PI / 2;
+        
+        let minFov = defaultMinFov;
+        let maxFov = defaultMaxFov;
+        let allowFovAdjustment = true;
+        
+        if (sceneData && sceneData.fovLimits) {
+            minFov = sceneData.fovLimits.min || defaultMinFov;
+            maxFov = sceneData.fovLimits.max || defaultMaxFov;
+            allowFovAdjustment = sceneData.fovLimits.allowAdjustment !== false;
+        }
+        
+        // 更新实例属性
+        this.fovMinLimit = minFov;
+        this.fovMaxLimit = maxFov;
+        this.allowFovAdjustment = allowFovAdjustment;
+        
+        // 如果禁用 FOV 调整，隐藏缩放按钮
+        const zoomInBtn = document.getElementById('zoom-in');
+        const zoomOutBtn = document.getElementById('zoom-out');
+        
+        if (!allowFovAdjustment) {
+            if (zoomInBtn) zoomInBtn.style.display = 'none';
+            if (zoomOutBtn) zoomOutBtn.style.display = 'none';
+        } else {
+            if (zoomInBtn) zoomInBtn.style.display = 'block';
+            if (zoomOutBtn) zoomOutBtn.style.display = 'block';
+        }
+        
+        // 確保當前 FOV 在限制范围內
+        this.currentFov = Math.max(minFov, Math.min(maxFov, this.currentFov));
+        this.camera.fov = this.currentFov;
+        
+        // 调试日志
+        console.log(`📐 应用 FOV 限制:`, {
+            min: (minFov * 180 / Math.PI).toFixed(2) + '°',
+            max: (maxFov * 180 / Math.PI).toFixed(2) + '°',
+            allowAdjustment: allowFovAdjustment,
+            currentFov: (this.currentFov * 180 / Math.PI).toFixed(2) + '°'
+        });
     }
 
     /**

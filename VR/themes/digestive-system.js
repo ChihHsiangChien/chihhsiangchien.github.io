@@ -33,10 +33,14 @@ var DIGESTIVE_SYSTEM_THEME = {
                 vScale: -1
             },
             initialView: {
-                alpha: 2.3746,
-                beta: 1.4383
+                alpha: 3.3160,
+                beta: 1.5731
             },
-            initialFov: 1.6581,
+            initialFov: 0.8727,
+            // FOV 限制：禁止調整
+            fovLimits: {
+                allowAdjustment: false  // 禁止調整 POV
+            },            
             portals: [
                 {
                     name: "咽部",
@@ -55,14 +59,18 @@ var DIGESTIVE_SYSTEM_THEME = {
                 vScale: -1
             },
             initialView: {
-                alpha: 2.3746,
-                beta: 1.5708
+                alpha: 2.8882,
+                beta: 1.3485
             },
             initialFov: 1.5708,
+            // FOV 限制：禁止調整
+            fovLimits: {
+                allowAdjustment: false  // 禁止調整 POV
+            },            
             portals: [
                 {
-                    name: "往嘴巴",
-                    position: new BABYLON.Vector3(-0.8, -0.2, -0.15),
+                    name: "往口腔",
+                    position: new BABYLON.Vector3(-0.8450, -0.0740, 0.5297),
                     target: "mouth"
                 },
                 {
@@ -82,19 +90,30 @@ var DIGESTIVE_SYSTEM_THEME = {
                 vScale: -1
             },
             initialView: {
-                alpha: 2.3746,
-                beta: 1.5708
+                alpha: -1.1032,
+                beta: 1.5480
             },
-            initialFov: 1.5708,
+            initialFov: 1.0472,
+            // 繞軸旋轉
+            rotation: {
+                axis: new BABYLON.Vector3(-0.4679, -0.1453, 0.8718),
+                angle: Math.PI/2,
+            },
+            // FOV 限制：範圍較小
+            fovLimits: {
+                min: Math.PI / 6,      // 30度 (最小)
+                max: Math.PI / 3,      // 60度 (最大)
+                allowAdjustment: true  // 允許調整
+            },
             portals: [
                 {
                     name: "往咽部",
-                    position: new BABYLON.Vector3(0.75, 0.28, 0.25),
+                    position: new BABYLON.Vector3(-0.0836, 0.9903, 0.1109),
                     target: "pharynx"
                 },
                 {
                     name: "往胃",
-                    position: new BABYLON.Vector3(0.8, -0.15, -0.3),
+                    position: new BABYLON.Vector3(-0.4019, -0.0132, 0.9156),
                     target: "stomach"
                 }
             ]
@@ -109,73 +128,24 @@ var DIGESTIVE_SYSTEM_THEME = {
                 vScale: -1
             },
             initialView: {
-                alpha: 2.3746,
-                beta: 1.5708
+                alpha: 1.7703,
+                beta: 1.0296
             },
             initialFov: 1.5708,
+            // 繞軸旋轉
+            rotation: {
+                axis: new BABYLON.Vector3(0.5746, -0.0621, -0.8161),
+                angle: -Math.PI/2,
+            },            
             portals: [
                 {
                     name: "往食道",
-                    position: new BABYLON.Vector3(-0.75, -0.3, -0.2),
+                    position: new BABYLON.Vector3(-0.2199, 0.8513, 0.4763),
                     target: "esophagus"
                 },
                 {
                     name: "往小腸",
-                    position: new BABYLON.Vector3(0.7, 0.25, 0.25),
-                    target: "stomach2"
-                }
-            ]
-        },
-        stomach2: {
-            name: "胃 II",
-            texture: DIGESTIVE_ASSETS.stomach2,
-            direction: {
-                sphereScaleX: -1,
-                sphereScaleY: 1,
-                uScale: -1,
-                vScale: -1
-            },
-            initialView: {
-                alpha: 2.3746,
-                beta: 1.5708
-            },
-            initialFov: 1.5708,
-            portals: [
-                {
-                    name: "往胃",
-                    position: new BABYLON.Vector3(-0.7, -0.25, -0.25),
-                    target: "stomach"
-                },
-                {
-                    name: "往小腸",
-                    position: new BABYLON.Vector3(0.65, 0.35, 0.2),
-                    target: "stomach3"
-                }
-            ]
-        },
-        stomach3: {
-            name: "胃 III",
-            texture: DIGESTIVE_ASSETS.stomach3,
-            direction: {
-                sphereScaleX: -1,
-                sphereScaleY: 1,
-                uScale: -1,
-                vScale: -1
-            },
-            initialView: {
-                alpha: 2.3746,
-                beta: 1.5708
-            },
-            initialFov: 1.5708,
-            portals: [
-                {
-                    name: "往胃",
-                    position: new BABYLON.Vector3(-0.65, -0.35, -0.2),
-                    target: "stomach2"
-                },
-                {
-                    name: "往小腸",
-                    position: new BABYLON.Vector3(0.9624, -0.1107, 0.2482),
+                    position: new BABYLON.Vector3(0.5162, -0.0986, -0.8508),
                     target: "small_intestine"
                 }
             ]
@@ -190,15 +160,24 @@ var DIGESTIVE_SYSTEM_THEME = {
                 vScale: -1
             },
             initialView: {
-                alpha: 2.3746,
-                beta: 1.5708
+                alpha: 0.2131,
+                beta: 2.2110
             },
             initialFov: 1.5708,
+            // 繞軸旋轉
+            rotation: {
+                axis: new BABYLON.Vector3(-0.9902, 0.0039, 0.1394),
+                angle: -Math.PI/2,
+            },
+            // FOV 限制：禁止調整
+            fovLimits: {
+                allowAdjustment: false  // 禁止調整 POV
+            },
             portals: [
                 {
                     name: "往胃",
-                    position: new BABYLON.Vector3(-0.9631, -0.0267, 0.2677),
-                    target: "stomach3"
+                    position: new BABYLON.Vector3(0.9216, 0.3592, -0.1468),
+                    target: "stomach"
                 }
             ]
         }
