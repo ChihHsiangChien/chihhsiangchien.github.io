@@ -24,16 +24,10 @@ const ASSET_CONFIG = (() => {
         // 本地开发环境 - 相对路径
         basePath = 'assets/themes';
     } else if (isGitHubPages) {
-        // GitHub Pages 环境 - 需要完整路径
-        // 从 pathname 推断 repo 路径 (例如: /chihhsiangchien.github.io/VR/...)
-        const pathParts = pathname.split('/').filter(p => p);
-        if (pathParts[0] && pathParts[0].includes('.github.io')) {
-            // 包含完整的 repo 名
-            basePath = `/${pathParts[0]}/VR/assets/themes`;
-        } else {
-            // 备用方案
-            basePath = '/chihhsiangchien.github.io/VR/assets/themes';
-        }
+        // GitHub Pages 环境 - 使用相对路径
+        // 个人 GitHub Pages (chihhsiangchien.github.io) 的路径是 /VR/... (不包含 repo 名)
+        // 项目 GitHub Pages (user.github.io/project) 的路径是 /project/... 
+        basePath = 'assets/themes';
     } else {
         // 其他情况 - 尝试使用相对路径
         basePath = 'assets/themes';
