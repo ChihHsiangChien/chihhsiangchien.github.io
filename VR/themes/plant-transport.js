@@ -37,7 +37,7 @@ var PLANT_TRANSPORT_THEME = {
             portals: [
                 {
                     name: "進入根毛",
-                    position: new BABYLON.Vector3(0, 0, 1),
+                    position: new BABYLON.Vector3(0.8404, 0.3209, -0.4367),
                     target: "xylem"
                 }
             ]
@@ -64,7 +64,7 @@ var PLANT_TRANSPORT_THEME = {
                 },
                 {
                     name: "往葉肉組織",
-                    position: new BABYLON.Vector3(0, 1, 0), // 向上運輸
+                    position: new BABYLON.Vector3(0.6653, 0.7464, -0.0139), // 向上運輸
                     target: "mesophyll"
                 }
             ]
@@ -86,12 +86,12 @@ var PLANT_TRANSPORT_THEME = {
             portals: [
                 {
                     name: "回到導管",
-                    position: new BABYLON.Vector3(0, 1, 0),
+                    position: new BABYLON.Vector3(0.3367, -0.2881, -0.8965),
                     target: "xylem"
                 },
                 {
-                    name: "從氣孔蒸散",
-                    position: new BABYLON.Vector3(0, -1, 0.5), // 向下並向前
+                    name: "往氣孔蒸散",
+                    position: new BABYLON.Vector3(0.7720, -0.6354, -0.0170), // 向下並向前
                     target: "outside_plant"
                 }
             ]
@@ -115,7 +115,13 @@ var PLANT_TRANSPORT_THEME = {
                     name: "回到葉片內部",
                     position: new BABYLON.Vector3(0, 0, -1),
                     target: "mesophyll"
+                },
+                {
+                    name: "回到土壤",
+                    position: new BABYLON.Vector3(-0.8308, -0.5281, -0.1757),
+                    target: "soil_root"
                 }
+
             ]
         }
     }
