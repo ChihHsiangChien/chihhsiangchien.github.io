@@ -12,7 +12,8 @@ var DIGESTIVE_SCENE_NAMES = [
     "stomach", 
     "stomach2", 
     "stomach3", 
-    "small_intestine"
+    "small_intestine",
+    "big_intestine"
 ];
 
 // 使用资源助手生成所有资源路径
@@ -178,6 +179,42 @@ var DIGESTIVE_SYSTEM_THEME = {
                     name: "往胃",
                     position: new BABYLON.Vector3(0.9216, 0.3592, -0.1468),
                     target: "stomach"
+                },
+                {
+                    name: "往大腸",
+                    position: new BABYLON.Vector3(-0.9936, -0.0795, 0.0804),
+                    target: "big_intestine"
+                }
+            ]
+        },
+        big_intestine: {
+            name: "大腸",
+            texture: DIGESTIVE_ASSETS.big_intestine,
+            direction: {
+                sphereScaleX: -1,
+                sphereScaleY: 1,
+                uScale: -1,
+                vScale: -1
+            },
+            initialView: {
+                alpha: 0.6946,
+                beta: 1.6518
+            },
+            initialFov: 1.8708,
+            // FOV 限制：禁止調整
+            // 繞軸旋轉
+            rotation: {
+                axis: new BABYLON.Vector3(-0.2679, -0.0396, -0.9626),
+                angle: -Math.PI/2,
+            },            
+            fovLimits: {
+                allowAdjustment: false  // 禁止調整 POV
+            },
+            portals: [
+                {
+                    name: "往小腸",
+                    position: new BABYLON.Vector3(0.2482, -0.6869, 0.6831),
+                    target: "small_intestine"
                 }
             ]
         }

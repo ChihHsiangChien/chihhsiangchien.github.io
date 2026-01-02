@@ -1,28 +1,28 @@
 /**
- * 植物水分运输主题配置
- * 使用资源助手管理图片路径
+ * 植物水分運輸主題配置
+ * 使用資源助手管理圖片路徑
  */
 
-// 定义主题信息（使用 var 以支持多次加载）
+// 定義主題資訊
 var PLANT_TRANSPORT_THEME_NAME = "plant-transport";
 var PLANT_TRANSPORT_SCENE_NAMES = [
-    "root", 
-    "stem", 
-    "leaf", 
-    "flower"
+    "soil_root", 
+    "xylem", 
+    "mesophyll", 
+    "outside_plant"
 ];
 
-// 使用资源助手生成所有资源路径
+// 使用資源助手生成所有資源路徑
 var PLANT_TRANSPORT_ASSETS = getAssetMap(PLANT_TRANSPORT_THEME_NAME, PLANT_TRANSPORT_SCENE_NAMES);
 
 var PLANT_TRANSPORT_THEME = {
-    name: "Plant Water Transport",
-    initialScene: "root",
+    name: "植物運輸 (水滴之旅)",
+    initialScene: "soil_root",
     canvasId: "renderCanvas",
     hotspots: {
-        root: {
-            name: "根部",
-            texture: PLANT_TRANSPORT_ASSETS.root,
+        soil_root: {
+            name: "土壤與根毛",
+            texture: PLANT_TRANSPORT_ASSETS.soil_root,
             direction: {
                 sphereScaleX: -1,
                 sphereScaleY: 1,
@@ -30,21 +30,21 @@ var PLANT_TRANSPORT_THEME = {
                 vScale: -1
             },
             initialView: {
-                alpha: 2.3746,
-                beta: 1.5708
+                alpha: 0,
+                beta: Math.PI / 2
             },
-            initialFov: 1.5708,
+            initialFov: 1.0,
             portals: [
                 {
-                    name: "往茎部",
-                    position: new BABYLON.Vector3(0.8, 0.2, 0.3),
-                    target: "stem"
+                    name: "進入根毛",
+                    position: new BABYLON.Vector3(0, 0, 1),
+                    target: "xylem"
                 }
             ]
         },
-        stem: {
-            name: "茎部",
-            texture: PLANT_TRANSPORT_ASSETS.stem,
+        xylem: {
+            name: "木質部導管",
+            texture: PLANT_TRANSPORT_ASSETS.xylem,
             direction: {
                 sphereScaleX: -1,
                 sphereScaleY: 1,
@@ -52,26 +52,26 @@ var PLANT_TRANSPORT_THEME = {
                 vScale: -1
             },
             initialView: {
-                alpha: 2.3746,
-                beta: 1.5708
+                alpha: 0,
+                beta: Math.PI / 2
             },
-            initialFov: 1.5708,
+            initialFov: 1.0,
             portals: [
                 {
-                    name: "← 根部",
-                    position: new BABYLON.Vector3(-0.8, -0.2, -0.3),
-                    target: "root"
+                    name: "回到土壤",
+                    position: new BABYLON.Vector3(0, -1, 0),
+                    target: "soil_root"
                 },
                 {
-                    name: "往叶片",
-                    position: new BABYLON.Vector3(0.7, 0.3, 0.2),
-                    target: "leaf"
+                    name: "往葉肉組織",
+                    position: new BABYLON.Vector3(0, 1, 0), // 向上運輸
+                    target: "mesophyll"
                 }
             ]
         },
-        leaf: {
-            name: "叶片",
-            texture: PLANT_TRANSPORT_ASSETS.leaf,
+        mesophyll: {
+            name: "葉肉組織",
+            texture: PLANT_TRANSPORT_ASSETS.mesophyll,
             direction: {
                 sphereScaleX: -1,
                 sphereScaleY: 1,
@@ -79,26 +79,26 @@ var PLANT_TRANSPORT_THEME = {
                 vScale: -1
             },
             initialView: {
-                alpha: 2.3746,
-                beta: 1.5708
+                alpha: 0,
+                beta: Math.PI / 2
             },
-            initialFov: 1.5708,
+            initialFov: 1.0,
             portals: [
                 {
-                    name: "← 茎部",
-                    position: new BABYLON.Vector3(-0.7, -0.3, -0.2),
-                    target: "stem"
+                    name: "回到導管",
+                    position: new BABYLON.Vector3(0, 1, 0),
+                    target: "xylem"
                 },
                 {
-                    name: "往花朵",
-                    position: new BABYLON.Vector3(0.6, 0.4, 0.15),
-                    target: "flower"
+                    name: "從氣孔蒸散",
+                    position: new BABYLON.Vector3(0, -1, 0.5), // 向下並向前
+                    target: "outside_plant"
                 }
             ]
         },
-        flower: {
-            name: "花朵",
-            texture: PLANT_TRANSPORT_ASSETS.flower,
+        outside_plant: {
+            name: "植物外觀 (蒸散完成)",
+            texture: PLANT_TRANSPORT_ASSETS.outside_plant,
             direction: {
                 sphereScaleX: -1,
                 sphereScaleY: 1,
@@ -106,15 +106,15 @@ var PLANT_TRANSPORT_THEME = {
                 vScale: -1
             },
             initialView: {
-                alpha: 2.3746,
-                beta: 1.5708
+                alpha: 0,
+                beta: Math.PI / 2
             },
-            initialFov: 1.5708,
+            initialFov: 1.0,
             portals: [
                 {
-                    name: "← 叶片",
-                    position: new BABYLON.Vector3(-0.6, -0.4, -0.15),
-                    target: "leaf"
+                    name: "回到葉片內部",
+                    position: new BABYLON.Vector3(0, 0, -1),
+                    target: "mesophyll"
                 }
             ]
         }

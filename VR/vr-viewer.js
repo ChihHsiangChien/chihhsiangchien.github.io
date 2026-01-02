@@ -279,6 +279,16 @@ class VRViewer {
      */
     loadScene(sceneKey) {
         this.currentScene = sceneKey;
+        
+        // 更新場景列表UI
+        const sceneBtns = document.querySelectorAll('.scene-btn');
+        sceneBtns.forEach(btn => {
+            if (btn.dataset.scene === sceneKey) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
         const sceneData = this.hotspots[sceneKey];
         
         if (!sceneData) {
