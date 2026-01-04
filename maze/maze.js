@@ -8,6 +8,8 @@ class MazeGame {
         this.visited = [];
         this.playerPos = { x: 1, y: 1 };
         this.foodPos = { x: cols - 2, y: 1 };
+        this.initialPlayerPos = { x: 1, y: 1 };
+        this.initialFoodPos = { x: cols - 2, y: 1 };
         this.timeArray = [];
         this.startTime = 0;
         
@@ -171,6 +173,19 @@ class MazeGame {
         let endY = Math.floor(Math.random() * Math.floor((this.rows - 1) / 2)) * 2 + 1;
         this.foodPos = { x: this.cols - 2, y: endY };
         
+        // 保存初始位置
+        this.initialPlayerPos = { x: this.playerPos.x, y: this.playerPos.y };
+        this.initialFoodPos = { x: this.foodPos.x, y: this.foodPos.y };
+        
+        // 更新視口以跟隨玩家
+        this.updateViewport();
+    }
+
+    // 重置玩家和食物到初始位置
+    resetToInitialPositions() {
+        this.playerPos = { x: this.initialPlayerPos.x, y: this.initialPlayerPos.y };
+        this.foodPos = { x: this.initialFoodPos.x, y: this.initialFoodPos.y };
+        
         // 更新視口以跟隨玩家
         this.updateViewport();
     }
@@ -279,8 +294,8 @@ class MazeGame {
         // 更新統計信息
         this.updateStats();
 
-        // 重新開始
-        this.randomizeStartPositions();
+        // 重置到初始位置，重新玩一遍相同的迷宮
+        this.resetToInitialPositions();
         this.startTime = Date.now();
         this.render();
     }
