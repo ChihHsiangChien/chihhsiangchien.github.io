@@ -521,10 +521,15 @@ class FiddlerCrabGame {
         if (!this.gameRunning) return;
         
         // 更新玩家
+        // 鍵盤控制
         this.player.x += this.keys['arrowleft'] ? -this.player.speed : 0;
         this.player.x += this.keys['arrowright'] ? this.player.speed : 0;
         this.player.z += this.keys['arrowup'] ? -this.player.speed : 0;
         this.player.z += this.keys['arrowdown'] ? this.player.speed : 0;
+        
+        // UI按鈕控制 (Velocity)
+        this.player.x += this.player.vx;
+        this.player.z += this.player.vz;
         
         this.player.x = Math.max(-50, Math.min(50, this.player.x));
         this.player.z = Math.max(-50, Math.min(50, this.player.z));
