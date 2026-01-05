@@ -44,8 +44,8 @@ const ANATOMY = {
     tracheaStart: { x: 780, y: 130 }, // Beak tip
     tracheaSplit: { x: 500, y: 240 },
     posteriorSac: { x: 300, y: 360, r: 45 }, 
-    anteriorSac: { x: 530, y: 220, r: 35 },  
-    lung: { x: 420, y: 280, w: 100, h: 80 }
+    anteriorSac: { x: 570, y: 300, r: 35 },  
+    lung: { x: 400, y: 320, w: 100, h: 80 }
 };
 
 class Particle {
@@ -60,6 +60,8 @@ class Particle {
         this.stage = 0; 
         this.progress = 0;
         this.color = CONFIG.colors.fresh;
+        // Random vertical offset for lung travel (0.1 to 0.9 of lung height)
+        this.laneOffset = 0.1 + Math.random() * 0.8; 
     }
 }
 
@@ -67,7 +69,7 @@ let particles = [];
 for(let i=0; i<CONFIG.particleCount; i++) particles.push(new Particle());
 
 // Path Logic
-function getTargetPosition(stage, t) {
+function getTargetPosition(stage, t, laneOffset = 0.5) {
     // Stage 0: Beak -> Split -> Posterior
     if (stage === 0) {
         if (t < 0.5) {
@@ -86,34 +88,55 @@ function getTargetPosition(stage, t) {
             return quadraticBezier(p0, p1, p2, localT);
         }
     }
+    // Stage 0.5: Inside Posterior Sac (Brownian Motion)
+    else if (stage === 0.5) {
+        // Return center of sac + random noise handled in update loop?
+        // Or specific target? 
+        // Let's just return center, and add jitter in drawing or update.
+        // Actually, let's return a random point within radius based on t (time as seed?)
+        // Better: Keep static center here, add jitter in particle update.
+        return ANATOMY.posteriorSac; 
+    }
     // Stage 1: Posterior -> Lung Entry (Linear)
     else if (stage === 1) {
         let p0 = ANATOMY.posteriorSac;
-        let p1 = {x: ANATOMY.lung.x + 20, y: ANATOMY.lung.y + 70}; // Lung Back-Bottom
+        // Enter at particle's specific lane height
+        let laneY = ANATOMY.lung.y + (ANATOMY.lung.h * laneOffset);
+        let p1 = {x: ANATOMY.lung.x + 10, y: laneY}; 
+        
         return {
             x: p0.x + (p1.x - p0.x) * t,
             y: p0.y + (p1.y - p0.y) * t
         };
     }
-    // Stage 2: Through Lung -> Exit -> Anterior
+    // Stage 2: Through Lung (Horizontal) -> Exit
     else if (stage === 2) {
-        if (t < 0.6) {
-            // Inside Lung (Ladder climb/cross)
-            let localT = t / 0.6;
-            let p0 = {x: ANATOMY.lung.x + 20, y: ANATOMY.lung.y + 70};
-            let p1 = {x: ANATOMY.lung.x + 50, y: ANATOMY.lung.y + 40}; // Mid Lung
-            let p2 = {x: ANATOMY.lung.x + 80, y: ANATOMY.lung.y + 10}; // Exit Top
-            return quadraticBezier(p0, p1, p2, localT);
+        // Move horizontally across lung width at lane height
+        let startX = ANATOMY.lung.x + 10;
+        let endX = ANATOMY.lung.x + ANATOMY.lung.w - 10;
+        let laneY = ANATOMY.lung.y + (ANATOMY.lung.h * laneOffset);
+
+        // If t < 0.8, move across. 
+        if (t < 0.8) {
+            let localT = t / 0.8;
+            return {
+                x: startX + (endX - startX) * localT,
+                y: laneY
+            };
         } else {
-            // Lung Exit -> Anterior
-            let localT = (t - 0.6) / 0.4;
-            let p0 = {x: ANATOMY.lung.x + 80, y: ANATOMY.lung.y + 10};
+            // Short segment from Lung Right -> Anterior Sac
+            let localT = (t - 0.8) / 0.2;
+            let p0 = {x: endX, y: laneY}; 
             let p1 = ANATOMY.anteriorSac;
-             return {
+            return {
                 x: p0.x + (p1.x - p0.x) * localT,
                 y: p0.y + (p1.y - p0.y) * localT
             };
         }
+    }
+    // Stage 2.5: Inside Anterior Sac (Brownian Motion)
+    else if (stage === 2.5) {
+         return ANATOMY.anteriorSac;
     }
     // Stage 3: Anterior -> Split -> Out
     else if (stage === 3) {
@@ -121,7 +144,8 @@ function getTargetPosition(stage, t) {
             // Ant -> Split
             let localT = t * 2;
             let p0 = ANATOMY.anteriorSac;
-            let p1 = {x: 520, y: 220};
+            // Smoother arc upwards to the split
+            let p1 = {x: 550, y: 260}; 
             let p2 = ANATOMY.tracheaSplit;
             return quadraticBezier(p0, p1, p2, localT);
         } else {
@@ -143,6 +167,8 @@ function quadraticBezier(p0, p1, p2, t) {
         y: u * u * p0.y + 2 * u * t * p1.y + t * t * p2.y
     };
 }
+
+// ... (Anatomy constants remain same)
 
 let lastTimestamp = 0;
 
@@ -169,14 +195,41 @@ function update(timestamp) {
     
     let phaseProgress = (state.elapsed % CONFIG.breathDuration) / CONFIG.breathDuration;
 
-    // Spawning
-    if (state.phase === 'INHALE' && Math.random() < 0.1 * CONFIG.speed) {
-        let p = particles.find(p => !p.active);
-        if(!p) { p = new Particle(); particles.push(p); }
-        p.active = true;
-        p.stage = 0;
-        p.progress = 0;
-        p.color = CONFIG.colors.fresh;
+    // Spawning Strategy: Continuous Flow
+    let spawnChance = 0.4 * CONFIG.speed;
+    
+    if (phaseProgress < 0.6 && Math.random() < spawnChance) {
+        if (state.phase === 'INHALE') {
+            let p1 = particles.find(p => !p.active);
+            if(p1) {
+                p1.reset(); // Assigns random lane
+                p1.active = true;
+                p1.stage = 0;
+            }
+            let p2 = particles.find(p => !p.active && p !== p1);
+            if(p2) {
+                p2.reset();
+                p2.active = true;
+                p2.stage = 2;
+                p2.color = CONFIG.colors.fresh;
+            }
+        } 
+        else if (state.phase === 'EXHALE') {
+            let p3 = particles.find(p => !p.active);
+            if(p3) {
+                p3.reset();
+                p3.active = true;
+                p3.stage = 1;
+                p3.color = CONFIG.colors.fresh; 
+            }
+            let p4 = particles.find(p => !p.active && p !== p3);
+            if(p4) {
+                p4.reset();
+                p4.active = true;
+                p4.stage = 3;
+                p4.color = CONFIG.colors.used;
+            }
+        }
     }
 
     // Update Particles
@@ -184,22 +237,69 @@ function update(timestamp) {
         if (!p.active) continue;
 
         let shouldMove = false;
+        // INHALE: Stage 0 (Into Post), Stage 2 (Into Ant)
         if (state.phase === 'INHALE' && (p.stage === 0 || p.stage === 2)) shouldMove = true;
+        // EXHALE: Stage 1 (Post->Lung), Stage 3 (Ant->Out)
         if (state.phase === 'EXHALE' && (p.stage === 1 || p.stage === 3)) shouldMove = true;
+        
+        // Brownian Motion Stages: Always active if in that stage
+        if (p.stage === 0.5 || p.stage === 2.5) shouldMove = true;
 
         if (shouldMove) {
-            p.progress += (dt / CONFIG.breathDuration);
-            if (p.progress >= 1) {
-                p.progress = 0;
-                p.stage++;
-                if (p.stage === 2) p.color = '#5dade2'; 
-                if (p.stage === 3) p.color = CONFIG.colors.used; 
-                if (p.stage > 3) p.active = false;
+            // Normal Travel
+            if (Number.isInteger(p.stage)) {
+                p.progress += (dt / (CONFIG.breathDuration * 0.4));
+                
+                // Color Change Middle Lung
+                if (p.stage === 2) {
+                     p.color = p.progress > 0.3 ? CONFIG.colors.used : CONFIG.colors.fresh;
+                }
+
+                if (p.progress >= 1) {
+                    p.progress = 0;
+                    // Transition Logic
+                    if (p.stage === 0) {
+                        p.stage = 0.5; // Enter Posterior Sac -> Wait
+                    } else if (p.stage === 2) {
+                        p.stage = 2.5; // Enter Anterior Sac -> Wait
+                    } else {
+                        p.active = false; // End of line (1->End or 3->End)
+                    }
+                }
+            } 
+            // Brownian Motion Logic
+            else {
+                // Check if phase changed to release them
+                // Post Sac (0.5) -> Release on EXHALE
+                if (p.stage === 0.5 && state.phase === 'EXHALE') {
+                    p.stage = 1; // Go to lung
+                    p.progress = 0;
+                }
+                // Ant Sac (2.5) -> Release on EXHALE
+                else if (p.stage === 2.5 && state.phase === 'EXHALE') {
+                    p.stage = 3; // Go out
+                    p.progress = 0;
+                }
+                else {
+                    // Just stay alive and jitter in draw()
+                    // Or update x/y here with jitter
+                    let center = p.stage === 0.5 ? ANATOMY.posteriorSac : ANATOMY.anteriorSac;
+                    let r = (p.stage === 0.5 ? ANATOMY.posteriorSac.r : ANATOMY.anteriorSac.r) * 0.7;
+                    // Simple random walk or random position?
+                    // Let's do random position each frame for high energy gas
+                    let angle = Math.random() * Math.PI * 2;
+                    let dist = Math.random() * r;
+                    p.x = center.x + Math.cos(angle) * dist;
+                    p.y = center.y + Math.sin(angle) * dist;
+                    
+                    // Don't call getTargetPosition for these stages
+                    continue; 
+                }
             }
         }
         
         if (p.active) {
-            let pos = getTargetPosition(p.stage, p.progress);
+            let pos = getTargetPosition(p.stage, p.progress, p.laneOffset);
             p.x = pos.x;
             p.y = pos.y;
         }
@@ -218,20 +318,30 @@ function draw() {
     ctx.fillStyle = CONFIG.colors.bodyFill;
     
     ctx.beginPath();
-    // Start at Beak Tip
-    ctx.moveTo(750, 120); 
-    // Top Head
-    ctx.quadraticCurveTo(650, 50, 550, 50); 
+    // Beak Tip
+    ctx.moveTo(780, 130); 
+    
+    // Upper Beak / Forehead / Head Top
+    ctx.lineTo(720, 120);
+    ctx.quadraticCurveTo(680, 50, 600, 50); 
+    
+    // Back of Head / Neck Dip
+    ctx.quadraticCurveTo(550, 60, 520, 120); 
+
     // Back
-    ctx.quadraticCurveTo(200, 100, 100, 350); 
+    ctx.quadraticCurveTo(400, 200, 100, 350); 
+    
     // Tail
-    ctx.lineTo(50, 450); 
+    ctx.lineTo(50, 400); 
     ctx.lineTo(150, 450); 
+    
     // Belly
-    ctx.quadraticCurveTo(350, 480, 550, 400); 
-    // Chest to Neck to Beak Bottom
-    ctx.quadraticCurveTo(650, 350, 680, 200); 
-    ctx.lineTo(750, 120);
+    ctx.quadraticCurveTo(350, 500, 500, 420); 
+    
+    // Breast / Throat / Lower Beak
+    ctx.quadraticCurveTo(650, 300, 720, 150); 
+    ctx.lineTo(780, 130);
+    
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
@@ -256,23 +366,26 @@ function draw() {
     ctx.stroke();
 
     // Path 3: Bronchus to Anterior (Split -> Ant) 
-    // Matches Stage 3 part 1
+    // Matches Stage 3 part 1 (Reverse)
     ctx.beginPath();
     ctx.moveTo(500, 250);
-    ctx.quadraticCurveTo(520, 220, ANATOMY.anteriorSac.x, ANATOMY.anteriorSac.y);
+    // Use the same control point as particle logic (550, 260)
+    ctx.quadraticCurveTo(550, 260, ANATOMY.anteriorSac.x, ANATOMY.anteriorSac.y);
     ctx.stroke();
     
     // Path 4: Mesobronchus (Posterior -> Lung)
     // Matches Stage 1
     ctx.beginPath();
     ctx.moveTo(ANATOMY.posteriorSac.x, ANATOMY.posteriorSac.y);
-    ctx.lineTo(ANATOMY.lung.x + 20, ANATOMY.lung.y + 70); // Enter lung back-bottom
+    // Connect to Lung Left-Middle
+    ctx.lineTo(ANATOMY.lung.x + 10, ANATOMY.lung.y + 40); 
     ctx.stroke();
 
     // Path 5: Connection Lung -> Anterior
-    // Matches Stage 2
+    // Matches Stage 2 Exit
     ctx.beginPath();
-    ctx.moveTo(ANATOMY.lung.x + 80, ANATOMY.lung.y + 10); // Exit lung front-top
+    // Connect from Lung Right-Middle
+    ctx.moveTo(ANATOMY.lung.x + ANATOMY.lung.w - 10, ANATOMY.lung.y + 40); 
     ctx.lineTo(ANATOMY.anteriorSac.x, ANATOMY.anteriorSac.y);
     ctx.stroke();
 
@@ -305,13 +418,14 @@ function draw() {
     ctx.fill();
     ctx.stroke(); // Outline
 
-    // Ladder Rungs (Visualizing Parabronchi)
+    // Ladder Rungs (Visualizing Parabronchi) - Horizontal
     ctx.strokeStyle = '#34495e';
     ctx.lineWidth = 2;
-    for(let i=15; i<ANATOMY.lung.w-10; i+=15) {
+    // Iterate over height instead of width
+    for(let i=15; i<ANATOMY.lung.h-10; i+=15) {
         ctx.beginPath();
-        ctx.moveTo(ANATOMY.lung.x + i, ANATOMY.lung.y + 10);
-        ctx.lineTo(ANATOMY.lung.x + i, ANATOMY.lung.y + ANATOMY.lung.h - 10);
+        ctx.moveTo(ANATOMY.lung.x + 10, ANATOMY.lung.y + i);
+        ctx.lineTo(ANATOMY.lung.x + ANATOMY.lung.w - 10, ANATOMY.lung.y + i);
         ctx.stroke();
     }
     

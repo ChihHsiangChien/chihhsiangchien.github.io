@@ -26,24 +26,7 @@ var ECOSYSTEM_SCENE_NAMES = [
 // 使用資源助手生成所有資源路徑
 var ECOSYSTEM_ASSETS = getAssetMap(ECOSYSTEM_THEME_NAME, ECOSYSTEM_SCENE_NAMES);
 
-// --- 暫時使用 fallback 資源 (因生成額度限制) ---
-// 當對應的圖片不存在時，暫時使用 tundra 作為佔位符，確保程式不會崩潰
-const PLACEHOLDER_TEXTURE = ECOSYSTEM_ASSETS.tundra;
 
-// 輔助函數：如果尚未生成圖片，返回 placeholder
-function getTexture(key) {
-    // 這裡我們假設只有前4個生成成功，其他的暫時指向 placeholder
-    // 實際專案中應該檢查文件是否存在，但這裡是靜態配置
-    const generated = ["tundra", "taiga", "deciduous_forest", "evergreen_forest"];
-    if (generated.includes(key)) {
-        return ECOSYSTEM_ASSETS[key];
-    }
-    // 為了演示方便，我們讓所有未生成的場景暫時顯示 fallback 圖片
-    return ECOSYSTEM_ASSETS[key]; 
-    // 注意：使用者需要手動複製 tundra.png 為其他文件名，或者我們在瀏覽器載入失敗時處理
-    // 更好的方式是在 deploy 階段把 placeholder 複製過去。
-    // 在這裡我們假設 assets/themes/ecosystem 下會有對應文件，即使是副本。
-}
 
 var ECOSYSTEM_THEME = {
     name: "生態系 (Ecosystem)",
