@@ -146,8 +146,8 @@ class FiddlerCrabGame {
         this.scene.background = new THREE.Color(0x1a3a3f);
         this.scene.fog = new THREE.Fog(0x1a3a3f, 150, 300);
         
-        this.camera = new THREE.PerspectiveCamera(100, width / height, 0.1, 1000);
-        this.camera.position.set(0, 1.5, 2); // 稍微抬起相機，以便看到招潮蟹
+        this.camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
+        this.camera.position.set(0, 5, 5); // 稍微抬起相機，以便看到招潮蟹
         this.camera.lookAt(0, 0, 0); // 看向原點
         
         this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -186,7 +186,7 @@ class FiddlerCrabGame {
         // 食物
         this.foodItems = [];
         this.foodMeshes = [];
-        for (let i = 0; i < 15; i++) {
+        for (let i = 0; i < 30; i++) {
             this.spawnFood();
         }
         
@@ -250,15 +250,15 @@ class FiddlerCrabGame {
         const geometry = new THREE.PlaneGeometry(200, 200, 64, 64);
         const material = new THREE.MeshLambertMaterial({ color: 0x4a7a82 });
         
-        // 添加高度變化
+        // 添加高度變化 - 移除，改為平坦
         const positionAttribute = geometry.getAttribute('position');
-        const positions = positionAttribute.array;
-        for (let i = 0; i < positions.length; i += 3) {
-            const x = positions[i];
-            const z = positions[i + 1];
-            positions[i + 2] = Math.sin(x * 0.1) * 0.3 + Math.sin(z * 0.1) * 0.3;
-        }
-        positionAttribute.needsUpdate = true;
+        // const positions = positionAttribute.array;
+        // for (let i = 0; i < positions.length; i += 3) {
+        //     const x = positions[i];
+        //     const z = positions[i + 1];
+        //     positions[i + 2] = Math.sin(x * 0.1) * 0.3 + Math.sin(z * 0.1) * 0.3;
+        // }
+        // positionAttribute.needsUpdate = true;
         geometry.computeVertexNormals();
         
         const terrain = new THREE.Mesh(geometry, material);
@@ -300,14 +300,13 @@ class FiddlerCrabGame {
     createPlayerMesh() {
         const group = new THREE.Group();
         
-        // 身體 - 使用圓柱體替代CapsuleGeometry
-        const bodyGeometry = new THREE.CylinderGeometry(0.35, 0.35, 0.8, 16, 8);
+        // 身體 - 使用球體
+        const bodyGeometry = new THREE.SphereGeometry(0.35, 32, 16);
         const bodyMaterial = new THREE.MeshPhongMaterial({ color: 0x00dd88 });
         const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
         body.castShadow = true;
         body.receiveShadow = true;
-        body.scale.z = 0.6;
-        body.rotation.z = Math.PI / 2; // 橫臥
+        body.scale.set(1, 0.5, 1); // 壓扁成為扁圓形
         group.add(body);
         
         // 眼柄
@@ -326,13 +325,13 @@ class FiddlerCrabGame {
     createCrabMesh(crab) {
         const group = new THREE.Group();
         
-        const bodyGeometry = new THREE.CylinderGeometry(0.25, 0.25, 0.6, 16, 8);
+        // 其他螃蟹：使用球體
+        const bodyGeometry = new THREE.SphereGeometry(0.25, 32, 16);
         const bodyMaterial = new THREE.MeshPhongMaterial({ color: 0x00ff88 });
         const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
         body.castShadow = true;
         body.receiveShadow = true;
-        body.scale.z = 0.5;
-        body.rotation.z = Math.PI / 2; // 橫臥
+        body.scale.set(1, 0.5, 1);
         group.add(body);
         
         this.createEyeStalk(group, -0.1, 0.3, 0x00ff88);
@@ -429,14 +428,64 @@ class FiddlerCrabGame {
             distance: distance
         });
         
-        // 創建天敵視覺 - 紅色三角形
-        const geometry = new THREE.ConeGeometry(1, 2, 8);
-        const material = new THREE.MeshPhongMaterial({ color: 0xff3333, emissive: 0xff0000 });
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.position.set(x, 0.5, z);
-        mesh.castShadow = true;
-        this.scene.add(mesh);
-        this.predatorMeshes.push(mesh);
+        // 創建天敵視覺 - 白鷺鷥 (Egret)
+        const group = new THREE.Group();
+        
+        // 身體 (白色)
+        const bodyGeo = new THREE.SphereGeometry(0.7, 16, 16);
+        const bodyMat = new THREE.MeshPhongMaterial({ color: 0xffffff });
+        const body = new THREE.Mesh(bodyGeo, bodyMat);
+        body.position.y = 2.0;
+        body.scale.set(0.9, 0.8, 1.5); // 拉長
+        group.add(body);
+        
+        // 脖子
+        const neckGeo = new THREE.CylinderGeometry(0.12, 0.15, 1.8, 8);
+        const neck = new THREE.Mesh(neckGeo, bodyMat);
+        neck.position.set(0, 2.7, 0.75);
+        neck.rotation.x = Math.PI / 4; // 向前傾斜 (+Z方向)
+        group.add(neck);
+        
+        // 頭
+        const headGeo = new THREE.SphereGeometry(0.35, 16, 16);
+        const head = new THREE.Mesh(headGeo, bodyMat);
+        head.position.set(0, 3.4, 1.5);
+        group.add(head);
+        
+        // 嘴 (黃色)
+        const beakGeo = new THREE.ConeGeometry(0.08, 1.0, 8);
+        const beakMat = new THREE.MeshPhongMaterial({ color: 0xffcc00 }); // 黃嘴
+        const beak = new THREE.Mesh(beakGeo, beakMat);
+        beak.position.set(0, 3.4, 2.1);
+        beak.rotation.x = Math.PI / 2;
+        group.add(beak);
+        
+        // 腿 (黑色)
+        const legGeo = new THREE.CylinderGeometry(0.06, 0.06, 2.2, 8);
+        const legMat = new THREE.MeshPhongMaterial({ color: 0x111111 });
+        
+        const legL = new THREE.Mesh(legGeo, legMat);
+        legL.position.set(-0.25, 1.1, 0);
+        group.add(legL);
+        
+        const legR = new THREE.Mesh(legGeo, legMat);
+        legR.position.set(0.25, 1.1, 0);
+        group.add(legR);
+        
+        // 設定位置與朝向
+        group.position.set(x, 0, z);
+        group.lookAt(this.player.x, 0, this.player.z);
+        
+        // 陰影
+        group.traverse(obj => {
+            if (obj.isMesh) {
+                obj.castShadow = true;
+                obj.receiveShadow = true;
+            }
+        });
+        
+        this.scene.add(group);
+        this.predatorMeshes.push(group);
     }
 
     setupControls() {
@@ -480,9 +529,14 @@ class FiddlerCrabGame {
         this.player.x = Math.max(-50, Math.min(50, this.player.x));
         this.player.z = Math.max(-50, Math.min(50, this.player.z));
         
+        // 計算高度，避免陷入地形
+        // 加上 0.2 讓身體稍微懸浮於地面，避免底部切齊泥巴
+        this.player.y = this.getTerrainHeight(this.player.x, this.player.z) + 0.2;
+
         if (this.player.mesh) {
             this.player.mesh.position.x = this.player.x;
             this.player.mesh.position.z = this.player.z;
+            this.player.mesh.position.y = this.player.y;
         }
         
         // 更新相機跟隨玩家
@@ -492,6 +546,11 @@ class FiddlerCrabGame {
         // 更新其他招潮蟹
         for (let crab of this.otherCrabs) {
             crab.update(this);
+            // 更新高度
+            crab.y = this.getTerrainHeight(crab.x, crab.z) + 0.2;
+            if (crab.mesh) {
+                crab.mesh.position.y = crab.y;
+            }
         }
         
         // 更新天敵
@@ -546,7 +605,7 @@ class FiddlerCrabGame {
         }
         
         // 補充食物
-        if (this.foodItems.length < 12) {
+        if (this.foodItems.length < 25) {
             this.spawnFood();
         }
         
@@ -624,16 +683,23 @@ class FiddlerCrabGame {
         this.renderer.setSize(width, height);
     }
 
+    getTerrainHeight(x, z) {
+        return 0; // 地形平坦
+    }
+
     animate() {
         requestAnimationFrame(() => this.animate());
         this.update();
         
         // 相機跟隨玩家
         const targetX = this.player.x;
-        const targetZ = this.player.z + 2;
+        const targetZ = this.player.z + 5; // 保持距離
         this.camera.position.x += (targetX - this.camera.position.x) * 0.1;
         this.camera.position.z += (targetZ - this.camera.position.z) * 0.1;
-        this.camera.lookAt(this.player.x, 0.5, this.player.z);
+        
+        // 讓相機看向玩家當前的高度，避免視線被遮擋
+        const lookTargetY = this.player.y || 0;
+        this.camera.lookAt(this.player.x, lookTargetY, this.player.z);
         
         this.renderer.render(this.scene, this.camera);
     }

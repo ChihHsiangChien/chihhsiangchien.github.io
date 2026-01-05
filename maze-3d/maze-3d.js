@@ -652,24 +652,43 @@ class Maze3D {
         });
 
         // 虛擬按鈕控制
+        // 虛擬按鈕控制 (改為長按持續動作)
         document.querySelectorAll('.btn-arrow').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const direction = btn.getAttribute('data-direction');
-                switch (direction) {
-                    case 'up':
-                        this.movePlayer(1); // 前進
-                        break;
-                    case 'down':
-                        this.movePlayer(-1); // 後退
-                        break;
-                    case 'left':
-                        this.rotatePlayer(-1); // 左轉
-                        break;
-                    case 'right':
-                        this.rotatePlayer(1); // 右轉
-                        break;
+            const direction = btn.getAttribute('data-direction');
+            let keyMap = '';
+            
+            // 對應鍵盤按鍵代碼
+            switch (direction) {
+                case 'up': keyMap = 'arrowup'; break;
+                case 'down': keyMap = 'arrowdown'; break;
+                case 'left': keyMap = 'arrowleft'; break;
+                case 'right': keyMap = 'arrowright'; break;
+            }
+
+            const pressHandler = (e) => {
+                e.preventDefault(); // 防止默認行為
+                if (keyMap) {
+                    this.keys[keyMap] = true;
+                    // 觸覺回饋
+                    if (navigator.vibrate) navigator.vibrate(10);
                 }
-            });
+            };
+
+            const releaseHandler = (e) => {
+                // if (e.cancelable) e.preventDefault(); // 取消這行以免影響某些瀏覽器行為
+                if (keyMap) {
+                    this.keys[keyMap] = false;
+                }
+            };
+            
+            // 使用 pointer events 統一處理滑鼠和觸控
+            btn.addEventListener('pointerdown', pressHandler);
+            btn.addEventListener('pointerup', releaseHandler);
+            btn.addEventListener('pointerleave', releaseHandler);
+            btn.addEventListener('pointercancel', releaseHandler);
+            
+            // 禁用右鍵菜單
+            btn.addEventListener('contextmenu', e => e.preventDefault());
         });
 
         // 新遊戲按鈕
@@ -738,6 +757,33 @@ class Maze3D {
 
         this.renderer.domElement.addEventListener('pointerup', endPointerDrag);
         this.renderer.domElement.addEventListener('pointercancel', endPointerDrag);
+
+        // 手機版選單控制
+        const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+        const closeMenuBtn = document.getElementById('close-menu-btn');
+        const sidePanel = document.querySelector('.side-panel');
+
+        if (mobileMenuBtn && sidePanel) {
+            mobileMenuBtn.addEventListener('click', () => {
+                sidePanel.classList.add('active');
+            });
+        }
+
+        if (closeMenuBtn && sidePanel) {
+            closeMenuBtn.addEventListener('click', () => {
+                sidePanel.classList.remove('active');
+            });
+        }
+
+        // 當生成迷宮或開始新遊戲時，自動關閉選單 (優化手機體驗)
+        if (sidePanel) {
+            const autoCloseBtns = sidePanel.querySelectorAll('.btn-generate, .btn-new-game');
+            autoCloseBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    sidePanel.classList.remove('active');
+                });
+            });
+        }
 
         // 視窗大小變化
         window.addEventListener('resize', () => {

@@ -5,28 +5,17 @@ const ctx = canvas.getContext('2d');
 const toggleBtn = document.getElementById('toggleBtn');
 const speedRange = document.getElementById('speedRange');
 const speedValue = document.getElementById('speedValue');
-const stepCards = [
-    document.getElementById('step-1'),
-    document.getElementById('step-3'), // HTML order was 1, 3, 2, 4 visually for grid? Let's fix mapping
-    document.getElementById('step-2'),
-    document.getElementById('step-4')
-];
-// Mapping IDs to Logical Steps
-// Step 1: Inhale (Trachea -> Posterior)
-// Step 2: Exhale (Posterior -> Lung)
-// Step 3: Inhale (Lung -> Anterior)
-// Step 4: Exhale (Anterior -> Out)
 
+// Step Cards Mapping
 const cardMap = {
     1: document.getElementById('step-1'),
-    2: document.getElementById('step-3'), // Exhale 1 is Step 2 logics
-    3: document.getElementById('step-2'), // Inhale 2 is Step 3 logics
+    2: document.getElementById('step-3'), 
+    3: document.getElementById('step-2'), 
     4: document.getElementById('step-4')
 };
 
-
 // Configuration
-canvas.width = 800; // Wider for silhouette
+canvas.width = 800; 
 canvas.height = 500;
 
 const CONFIG = {
@@ -34,30 +23,29 @@ const CONFIG = {
     speed: 1,
     particleCount: 80,
     colors: {
-        lung: '#0077b6',     // Deep Blue
-        sac: '#90e0ef',      // Light Blue
-        fresh: '#48cae4',    // Cyan
-        used: '#03045e',     // Dark Blue
-        silhouette: '#e2e8f0',
-        outline: '#94a3b8'
+        bodyFill: '#e67e22',   // Orange Body
+        bodyOutline: '#000000', // Black Outline
+        organFill: '#ffffff',   // White
+        organOutline: '#34495e',
+        fresh: '#2980b9',       // Blue
+        used: '#8e44ad'         // Purple
     }
 };
 
 // Simulation State
 let state = {
-    phase: 'INHALE', // 'INHALE' or 'EXHALE'
+    phase: 'INHALE', 
     elapsed: 0,
     isPlaying: true
 };
 
-// Anatomy Coordinates (Scaled and Positioned for Profile)
-const OFFSET = { x: 50, y: 50 };
+// Anatomy Coordinates (Updated to match new Detailed Bird Draw)
 const ANATOMY = {
-    tracheaStart: { x: 650, y: 120 }, // Beak area
-    tracheaSplit: { x: 500, y: 250 },
-    posteriorSac: { x: 250, y: 350, r: 50 }, // Tail side
-    anteriorSac: { x: 450, y: 200, r: 40 },  // Chest side
-    lung: { x: 350, y: 250, w: 140, h: 80 }
+    tracheaStart: { x: 780, y: 130 }, // Beak tip
+    tracheaSplit: { x: 500, y: 240 },
+    posteriorSac: { x: 300, y: 360, r: 45 }, 
+    anteriorSac: { x: 530, y: 220, r: 35 },  
+    lung: { x: 420, y: 280, w: 100, h: 80 }
 };
 
 class Particle {
@@ -69,7 +57,7 @@ class Particle {
         this.active = false;
         this.x = 0;
         this.y = 0;
-        this.stage = 0; // 0: Start->Post, 1: Post->Lung, 2: Lung->Ant, 3: Ant->Out
+        this.stage = 0; 
         this.progress = 0;
         this.color = CONFIG.colors.fresh;
     }
@@ -78,58 +66,81 @@ class Particle {
 let particles = [];
 for(let i=0; i<CONFIG.particleCount; i++) particles.push(new Particle());
 
-// Path Logic (Cubic Bezier for smoothness)
-// We need control points for organic flow
+// Path Logic
 function getTargetPosition(stage, t) {
-    // t is 0 to 1
-    
-    // Stage 0: Trachea (650,120) -> Posterior (250,350)
-    // Deep curve down
+    // Stage 0: Beak -> Split -> Posterior
     if (stage === 0) {
-        let p0 = ANATOMY.tracheaStart;
-        let p1 = {x: 550, y: 350}; // Control 1
-        let p2 = {x: 400, y: 380}; // Control 2
-        let p3 = ANATOMY.posteriorSac;
-        return cubicBezier(p0, p1, p2, p3, t);
+        if (t < 0.5) {
+            // Segment 1: Throat -> Split (0 to 0.5 maps to 0 to 1)
+            let localT = t * 2;
+            let p0 = ANATOMY.tracheaStart;
+            let p1 = {x: 650, y: 180}; // Throat Control
+            let p2 = ANATOMY.tracheaSplit;
+            return quadraticBezier(p0, p1, p2, localT);
+        } else {
+            // Segment 2: Split -> Post (0.5 to 1.0 maps to 0 to 1)
+            let localT = (t - 0.5) * 2;
+            let p0 = ANATOMY.tracheaSplit;
+            let p1 = {x: 350, y: 300}; // Control curve down/back
+            let p2 = ANATOMY.posteriorSac;
+            return quadraticBezier(p0, p1, p2, localT);
+        }
     }
-    // Stage 1: Posterior (250,350) -> Lung Back (350, 290)
+    // Stage 1: Posterior -> Lung Entry (Linear)
     else if (stage === 1) {
         let p0 = ANATOMY.posteriorSac;
-        let p1 = {x: 280, y: 250};
-        let p2 = {x: 300, y: 280};
-        let p3 = {x: ANATOMY.lung.x + 20, y: ANATOMY.lung.y + 60}; // Entry at back-bottom
-        return cubicBezier(p0, p1, p2, p3, t);
+        let p1 = {x: ANATOMY.lung.x + 20, y: ANATOMY.lung.y + 70}; // Lung Back-Bottom
+        return {
+            x: p0.x + (p1.x - p0.x) * t,
+            y: p0.y + (p1.y - p0.y) * t
+        };
     }
-    // Stage 2: Lung (Back-Bottom) -> Lung (Front-Top) -> Anterior (450, 200)
+    // Stage 2: Through Lung -> Exit -> Anterior
     else if (stage === 2) {
-        // Through Lung
-        let p0 = {x: ANATOMY.lung.x + 20, y: ANATOMY.lung.y + 60};
-        let p1 = {x: ANATOMY.lung.x + 80, y: ANATOMY.lung.y + 20};
-        let p2 = {x: ANATOMY.lung.x + 120, y: ANATOMY.lung.y + 40};
-        let p3 = ANATOMY.anteriorSac;
-        return cubicBezier(p0, p1, p2, p3, t);
+        if (t < 0.6) {
+            // Inside Lung (Ladder climb/cross)
+            let localT = t / 0.6;
+            let p0 = {x: ANATOMY.lung.x + 20, y: ANATOMY.lung.y + 70};
+            let p1 = {x: ANATOMY.lung.x + 50, y: ANATOMY.lung.y + 40}; // Mid Lung
+            let p2 = {x: ANATOMY.lung.x + 80, y: ANATOMY.lung.y + 10}; // Exit Top
+            return quadraticBezier(p0, p1, p2, localT);
+        } else {
+            // Lung Exit -> Anterior
+            let localT = (t - 0.6) / 0.4;
+            let p0 = {x: ANATOMY.lung.x + 80, y: ANATOMY.lung.y + 10};
+            let p1 = ANATOMY.anteriorSac;
+             return {
+                x: p0.x + (p1.x - p0.x) * localT,
+                y: p0.y + (p1.y - p0.y) * localT
+            };
+        }
     }
-    // Stage 3: Anterior (450, 200) -> Trachea Out (650, 120)
+    // Stage 3: Anterior -> Split -> Out
     else if (stage === 3) {
-        let p0 = ANATOMY.anteriorSac;
-        let p1 = {x: 500, y: 150};
-        let p2 = {x: 550, y: 100};
-        let p3 = ANATOMY.tracheaStart; // Exit same way
-        return cubicBezier(p0, p1, p2, p3, t);
+        if (t < 0.5) {
+            // Ant -> Split
+            let localT = t * 2;
+            let p0 = ANATOMY.anteriorSac;
+            let p1 = {x: 520, y: 220};
+            let p2 = ANATOMY.tracheaSplit;
+            return quadraticBezier(p0, p1, p2, localT);
+        } else {
+             // Split -> Throat -> Beak
+            let localT = (t - 0.5) * 2;
+            let p0 = ANATOMY.tracheaSplit;
+            let p1 = {x: 650, y: 180}; // Reuse control
+            let p2 = ANATOMY.tracheaStart;
+            return quadraticBezier(p0, p1, p2, localT);
+        }
     }
     return {x:0, y:0};
 }
 
-function cubicBezier(p0, p1, p2, p3, t) {
+function quadraticBezier(p0, p1, p2, t) {
     let u = 1 - t;
-    let tt = t * t;
-    let uu = u * u;
-    let uuu = uu * u;
-    let ttt = tt * t;
-
     return {
-        x: uuu * p0.x + 3 * uu * t * p1.x + 3 * u * tt * p2.x + ttt * p3.x,
-        y: uuu * p0.y + 3 * uu * t * p1.y + 3 * u * tt * p2.y + ttt * p3.y
+        x: u * u * p0.x + 2 * u * t * p1.x + t * t * p2.x,
+        y: u * u * p0.y + 2 * u * t * p1.y + t * t * p2.y
     };
 }
 
@@ -147,7 +158,7 @@ function update(timestamp) {
 
     state.elapsed += dt;
     
-    // Cycle Management
+    // Cycle Logic
     let cycleTime = state.elapsed % (CONFIG.breathDuration * 2);
     let newPhase = cycleTime < CONFIG.breathDuration ? 'INHALE' : 'EXHALE';
     
@@ -156,17 +167,12 @@ function update(timestamp) {
         updateUI();
     }
     
-    // Phase Progress 0->1
     let phaseProgress = (state.elapsed % CONFIG.breathDuration) / CONFIG.breathDuration;
 
-    // Spawning (Only Inhale)
-    if (state.phase === 'INHALE' && Math.random() < 0.08 * CONFIG.speed) {
-        // Find inactive particle
+    // Spawning
+    if (state.phase === 'INHALE' && Math.random() < 0.1 * CONFIG.speed) {
         let p = particles.find(p => !p.active);
-        if(!p) {
-             p = new Particle();
-             particles.push(p);
-        }
+        if(!p) { p = new Particle(); particles.push(p); }
         p.active = true;
         p.stage = 0;
         p.progress = 0;
@@ -178,32 +184,20 @@ function update(timestamp) {
         if (!p.active) continue;
 
         let shouldMove = false;
-        // Stages 0 & 2 move during INHALE
-        // Stages 1 & 3 move during EXHALE
         if (state.phase === 'INHALE' && (p.stage === 0 || p.stage === 2)) shouldMove = true;
         if (state.phase === 'EXHALE' && (p.stage === 1 || p.stage === 3)) shouldMove = true;
 
         if (shouldMove) {
             p.progress += (dt / CONFIG.breathDuration);
-            // Slight jitter for realism
-            p.progress += (Math.random() - 0.5) * 0.005;
-
             if (p.progress >= 1) {
                 p.progress = 0;
                 p.stage++;
-                
-                // Color Transition
-                if (p.stage === 2) p.color = '#2563eb'; // Transitioning to used
-                if (p.stage === 3) p.color = CONFIG.colors.used; // Fully used
-
-                // Loop end
-                if (p.stage > 3) {
-                    p.active = false;
-                }
+                if (p.stage === 2) p.color = '#5dade2'; 
+                if (p.stage === 3) p.color = CONFIG.colors.used; 
+                if (p.stage > 3) p.active = false;
             }
         }
         
-        // Calculate Position
         if (p.active) {
             let pos = getTargetPosition(p.stage, p.progress);
             p.x = pos.x;
@@ -218,109 +212,140 @@ function update(timestamp) {
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // 1. Draw Bird Silhouette
-    ctx.strokeStyle = CONFIG.colors.outline;
-    ctx.lineWidth = 3;
-    ctx.fillStyle = '#f8fafc'; // Very light gray fill
+    // 1. Draw Orange Bird Body
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = CONFIG.colors.bodyOutline;
+    ctx.fillStyle = CONFIG.colors.bodyFill;
+    
     ctx.beginPath();
-    // Simple Bird Shape approximation
-    ctx.moveTo(650, 110); // Beak top
-    ctx.quadraticCurveTo(600, 50, 500, 50); // Head top to back
-    ctx.quadraticCurveTo(200, 100, 100, 350); // Back to tail
-    ctx.lineTo(150, 400); // Tail bottom
-    ctx.quadraticCurveTo(300, 450, 450, 400); // Belly
-    ctx.quadraticCurveTo(600, 350, 650, 130); // Chest to beak
+    // Start at Beak Tip
+    ctx.moveTo(750, 120); 
+    // Top Head
+    ctx.quadraticCurveTo(650, 50, 550, 50); 
+    // Back
+    ctx.quadraticCurveTo(200, 100, 100, 350); 
+    // Tail
+    ctx.lineTo(50, 450); 
+    ctx.lineTo(150, 450); 
+    // Belly
+    ctx.quadraticCurveTo(350, 480, 550, 400); 
+    // Chest to Neck to Beak Bottom
+    ctx.quadraticCurveTo(650, 350, 680, 200); 
+    ctx.lineTo(750, 120);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
 
-    // 2. Anatomical Structures (Blue Style)
-    
-    // Trachea
-    ctx.beginPath();
-    ctx.moveTo(ANATOMY.tracheaStart.x, ANATOMY.tracheaStart.y);
-    ctx.quadraticCurveTo(550, 350, 400, 380); // Path to Posterior
-    ctx.lineWidth = 15;
-    ctx.strokeStyle = '#e0f2fe'; // Very light blue tube
+    // 2. White Trachea & Bronchi Visuals matching Particle Paths
+    ctx.lineWidth = 12;
+    ctx.strokeStyle = '#fff';
     ctx.lineCap = 'round';
+    
+    // Path 1: Trachea Main (Beak -> Split)
+    // Matches Stage 0 part 1 and Stage 3 part 2
+    ctx.beginPath();
+    ctx.moveTo(700, 150); // Throat
+    ctx.quadraticCurveTo(620, 200, 500, 250); // Split point
     ctx.stroke();
 
-    // Expansion Breathing
+    // Path 2: Bronchus to Posterior (Split -> Post)
+    // Matches Stage 0 part 2
+    ctx.beginPath();
+    ctx.moveTo(500, 250);
+    ctx.quadraticCurveTo(400, 320, ANATOMY.posteriorSac.x, ANATOMY.posteriorSac.y);
+    ctx.stroke();
+
+    // Path 3: Bronchus to Anterior (Split -> Ant) 
+    // Matches Stage 3 part 1
+    ctx.beginPath();
+    ctx.moveTo(500, 250);
+    ctx.quadraticCurveTo(520, 220, ANATOMY.anteriorSac.x, ANATOMY.anteriorSac.y);
+    ctx.stroke();
+    
+    // Path 4: Mesobronchus (Posterior -> Lung)
+    // Matches Stage 1
+    ctx.beginPath();
+    ctx.moveTo(ANATOMY.posteriorSac.x, ANATOMY.posteriorSac.y);
+    ctx.lineTo(ANATOMY.lung.x + 20, ANATOMY.lung.y + 70); // Enter lung back-bottom
+    ctx.stroke();
+
+    // Path 5: Connection Lung -> Anterior
+    // Matches Stage 2
+    ctx.beginPath();
+    ctx.moveTo(ANATOMY.lung.x + 80, ANATOMY.lung.y + 10); // Exit lung front-top
+    ctx.lineTo(ANATOMY.anteriorSac.x, ANATOMY.anteriorSac.y);
+    ctx.stroke();
+
+    // Expansion
     let expansion = state.phase === 'INHALE' ? 
         Math.sin((state.elapsed % CONFIG.breathDuration)/CONFIG.breathDuration * Math.PI/2) : 
         Math.cos((state.elapsed % CONFIG.breathDuration)/CONFIG.breathDuration * Math.PI/2);
     
-    // Posterior Sac (Left/Tail side) - Yellow/Orange in old plan, now BLUE
+    // 3. White Air Sacs
+    ctx.fillStyle = CONFIG.colors.organFill;
+    
+    // Posterior Sac
     let r1 = ANATOMY.posteriorSac.r * (0.8 + 0.3 * expansion);
-    ctx.fillStyle = CONFIG.colors.sac;
     ctx.beginPath();
-    ctx.ellipse(ANATOMY.posteriorSac.x, ANATOMY.posteriorSac.y, r1*1.2, r1, Math.PI/4, 0, Math.PI*2);
+    ctx.arc(ANATOMY.posteriorSac.x, ANATOMY.posteriorSac.y, r1, 0, Math.PI*2);
     ctx.fill();
+    ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.stroke();
     
-    // Anterior Sac (Right/Chest side) - BLUE
+    // Anterior Sac
     let r2 = ANATOMY.anteriorSac.r * (0.8 + 0.3 * expansion);
-    ctx.fillStyle = CONFIG.colors.sac;
     ctx.beginPath();
-    ctx.ellipse(ANATOMY.anteriorSac.x, ANATOMY.anteriorSac.y, r2, r2*0.8, -Math.PI/4, 0, Math.PI*2);
+    ctx.arc(ANATOMY.anteriorSac.x, ANATOMY.anteriorSac.y, r2, 0, Math.PI*2);
     ctx.fill();
+    ctx.stroke();
 
-    // Lung (Static, Darker Blue)
-    ctx.fillStyle = CONFIG.colors.lung; // solid blue
+    // 4. White Lung (Ladder)
+    ctx.fillStyle = CONFIG.colors.organFill;
     ctx.beginPath();
-    // Organic lung shape
-    ctx.moveTo(ANATOMY.lung.x, ANATOMY.lung.y + 40);
-    ctx.quadraticCurveTo(ANATOMY.lung.x + 20, ANATOMY.lung.y, ANATOMY.lung.x + 70, ANATOMY.lung.y + 10);
-    ctx.quadraticCurveTo(ANATOMY.lung.x + 120, ANATOMY.lung.y, ANATOMY.lung.x + 140, ANATOMY.lung.y + 40);
-    ctx.quadraticCurveTo(ANATOMY.lung.x + 120, ANATOMY.lung.y + 80, ANATOMY.lung.x + 70, ANATOMY.lung.y + 70);
-    ctx.quadraticCurveTo(ANATOMY.lung.x + 20, ANATOMY.lung.y + 80, ANATOMY.lung.x, ANATOMY.lung.y + 40);
+    ctx.roundRect(ANATOMY.lung.x, ANATOMY.lung.y, ANATOMY.lung.w, ANATOMY.lung.h, 15);
     ctx.fill();
-    
-    // Lung Mesh Texture
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 1;
-    ctx.globalAlpha = 0.3;
-    for(let i=0; i<10; i++) {
+    ctx.stroke(); // Outline
+
+    // Ladder Rungs (Visualizing Parabronchi)
+    ctx.strokeStyle = '#34495e';
+    ctx.lineWidth = 2;
+    for(let i=15; i<ANATOMY.lung.w-10; i+=15) {
         ctx.beginPath();
-        ctx.moveTo(ANATOMY.lung.x + 20 + i*10, ANATOMY.lung.y + 10);
-        ctx.lineTo(ANATOMY.lung.x + 10 + i*10, ANATOMY.lung.y + 70);
+        ctx.moveTo(ANATOMY.lung.x + i, ANATOMY.lung.y + 10);
+        ctx.lineTo(ANATOMY.lung.x + i, ANATOMY.lung.y + ANATOMY.lung.h - 10);
         ctx.stroke();
     }
-    ctx.globalAlpha = 1.0;
-
+    
     // Labels
-    ctx.fillStyle = '#1e293b';
-    ctx.font = 'bold 14px Noto Sans TC';
-    ctx.fillText('後氣囊', ANATOMY.posteriorSac.x - 30, ANATOMY.posteriorSac.y);
-    ctx.fillText('前氣囊', ANATOMY.anteriorSac.x - 30, ANATOMY.anteriorSac.y);
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 16px Noto Sans TC';
+    ctx.textAlign = 'center';
+    ctx.fillText('後氣囊', ANATOMY.posteriorSac.x, ANATOMY.posteriorSac.y + 5);
+    ctx.fillText('前氣囊', ANATOMY.anteriorSac.x, ANATOMY.anteriorSac.y + 5);
     ctx.fillText('肺部', ANATOMY.lung.x + 50, ANATOMY.lung.y + 45);
 
-
-    // 3. Draw Particles
+    // 5. Particles
     for (let p of particles) {
-        if (!p.active) continue;
-        ctx.beginPath();
-        // Arrow shape? Dot is better for flow density
-        ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
-        ctx.fillStyle = p.color;
-        ctx.fill();
+         if (!p.active) continue;
+         ctx.beginPath();
+         // Check if particle is roughly on path to decide color or size?
+         // No, just draw
+         ctx.arc(p.x, p.y, 6, 0, Math.PI * 2); 
+         ctx.fillStyle = p.color;
+         ctx.fill();
+         ctx.strokeStyle = '#fff';
+         ctx.lineWidth = 1;
+         ctx.stroke();
     }
 }
 
 function updateUI() {
-    // Highlight active steps
-    // Inhale: Step 1 (Fresh enters Post) & Step 3 (Lung air enters Ant)
-    // Exhale: Step 2 (Post air enters Lung) & Step 4 (Ant air exits)
-    
-    // Reset all
     Object.values(cardMap).forEach(c => c.classList.remove('active'));
-    
     if (state.phase === 'INHALE') {
-        cardMap[1].classList.add('active'); // Step 1
-        cardMap[3].classList.add('active'); // Step 3
+        cardMap[1].classList.add('active'); 
+        cardMap[3].classList.add('active'); 
     } else {
-        cardMap[2].classList.add('active'); // Step 2
-        cardMap[4].classList.add('active'); // Step 4
+        cardMap[2].classList.add('active'); 
+        cardMap[4].classList.add('active'); 
     }
 }
 
@@ -331,14 +356,6 @@ toggleBtn.addEventListener('click', () => {
         lastTimestamp = Date.now();
         update(lastTimestamp);
     }
-});
-
-resetBtn.addEventListener('click', () => {
-    particles.forEach(p => p.active = false);
-    state.elapsed = 0;
-    lastTimestamp = Date.now();
-    state.phase = 'INHALE';
-    updateUI();
 });
 
 speedRange.addEventListener('input', (e) => {
