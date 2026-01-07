@@ -109,7 +109,13 @@ class VRViewer {
         // 加载纹理
         console.log(`📸 加载纹理: ${sceneData.texture}`);
         const texture = new BABYLON.Texture(sceneData.texture, this.scene);
-        this.mat.diffuseTexture = texture;
+        
+        if (this.config.disableLighting) {
+            this.mat.disableLighting = true;
+            this.mat.emissiveTexture = texture;
+        } else {
+            this.mat.diffuseTexture = texture;
+        }
         
         // 添加纹理加载监听器（如果observable可用）
         if (texture.onLoadObservable) {
@@ -123,12 +129,15 @@ class VRViewer {
             });
         }
         
+        // 应用纹理缩放
+        const targetTexture = this.config.disableLighting ? this.mat.emissiveTexture : this.mat.diffuseTexture;
+        
         if (sceneData && sceneData.direction) {
-            this.mat.diffuseTexture.uScale = sceneData.direction.uScale;
-            this.mat.diffuseTexture.vScale = sceneData.direction.vScale;
+            targetTexture.uScale = sceneData.direction.uScale;
+            targetTexture.vScale = sceneData.direction.vScale;
         } else {
-            this.mat.diffuseTexture.uScale = -1;
-            this.mat.diffuseTexture.vScale = -1;
+            targetTexture.uScale = -1;
+            targetTexture.vScale = -1;
         }
         
         this.mat.backFaceCulling = false;
@@ -315,10 +324,17 @@ class VRViewer {
         }
         
         // 更改纹理
-        this.mat.diffuseTexture.dispose();
+        const oldTexture = this.config.disableLighting ? this.mat.emissiveTexture : this.mat.diffuseTexture;
+        if (oldTexture) oldTexture.dispose();
+        
         console.log(`📸 加载纹理: ${sceneData.texture}`);
         const newTexture = new BABYLON.Texture(sceneData.texture, this.scene);
-        this.mat.diffuseTexture = newTexture;
+        
+        if (this.config.disableLighting) {
+            this.mat.emissiveTexture = newTexture;
+        } else {
+            this.mat.diffuseTexture = newTexture;
+        }
         
         // 添加纹理加载监听器（如果observable可用）
         if (newTexture.onLoadObservable) {
@@ -332,12 +348,14 @@ class VRViewer {
             });
         }
         
+        const targetTexture = this.config.disableLighting ? this.mat.emissiveTexture : this.mat.diffuseTexture;
+        
         if (sceneData.direction) {
-            this.mat.diffuseTexture.uScale = sceneData.direction.uScale;
-            this.mat.diffuseTexture.vScale = sceneData.direction.vScale;
+            targetTexture.uScale = sceneData.direction.uScale;
+            targetTexture.vScale = sceneData.direction.vScale;
         } else {
-            this.mat.diffuseTexture.uScale = -1;
-            this.mat.diffuseTexture.vScale = -1;
+            targetTexture.uScale = -1;
+            targetTexture.vScale = -1;
         }
         
         // 应用初始视角

@@ -19,6 +19,7 @@ var PLANT_TRANSPORT_THEME = {
     name: "植物運輸 (水滴之旅)",
     initialScene: "soil_root",
     canvasId: "renderCanvas",
+    disableLighting: true,
     hotspots: {
         soil_root: {
             name: "土壤與根毛",

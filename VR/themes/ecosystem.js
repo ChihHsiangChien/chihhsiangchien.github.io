@@ -32,6 +32,7 @@ var ECOSYSTEM_THEME = {
     name: "生態系 (Ecosystem)",
     initialScene: "tundra",
     canvasId: "renderCanvas",
+    disableLighting: true,
     hotspots: {
         // 1. 凍原
         tundra: {

@@ -23,6 +23,7 @@ var DIGESTIVE_SYSTEM_THEME = {
     name: "Digestive System",
     initialScene: "mouth",
     canvasId: "renderCanvas",
+    disableLighting: true,    
     hotspots: {
         mouth: {
             name: "嘴巴",

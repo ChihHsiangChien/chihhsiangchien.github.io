@@ -21,6 +21,7 @@ var RESPIRATORY_SYSTEM_THEME = {
     name: "呼吸系統",
     initialScene: "nasal_cavity",
     canvasId: "renderCanvas",
+    disableLighting: true,    
     hotspots: {
         nasal_cavity: {
             name: "鼻腔",
