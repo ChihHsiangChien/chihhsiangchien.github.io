@@ -17,6 +17,12 @@ class VRViewer {
         
         this.canvas = document.getElementById(config.canvasId || 'renderCanvas');
         this.hotspots = config.hotspots || {};
+        
+        // Debug mode (default: false)
+        this.debugMode = false;
+        
+        // Expose viewer instance for debugging
+        window.vrViewer = this;
     }
 
     /**
@@ -31,7 +37,14 @@ class VRViewer {
             this.setupLighting();
             this.setupSceneSelector();
             this.setupZoomControl();
-            this.setupClickCopy();
+            
+            if (this.debugMode) {
+                this.setupClickCopy();
+            } else {
+                const debugInfo = document.getElementById('debug-info');
+                if (debugInfo) debugInfo.style.display = 'none';
+            }
+            
             this.loadScene(this.currentScene);
             this.startRenderLoop();
         };
@@ -574,7 +587,9 @@ class VRViewer {
         this.engine.runRenderLoop(() => {
             this.scene.render();
             this.updateHotspotPositions();
-            this.updateDebugInfo();
+            if (this.debugMode) {
+                this.updateDebugInfo();
+            }
         });
         
         window.addEventListener('resize', () => this.engine.resize());
