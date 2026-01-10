@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>腦神經與神經核對照表 (Cranial Nerves vs Nuclei Matrix)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: #0f172a; /* Slate 900 */
+            color: #e2e8f0; /* Slate 200 */
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden; /* Prevent body scroll */
+            margin: 0;
+            padding: 0;
+        }
+        .header-section {
+            padding: 1rem 2rem;
+            flex-shrink: 0;
+        }
+        .matrix-container {
+            flex-grow: 1;
+            overflow: auto; /* Enable both X and Y scrolling */
+            width: 100vw;
+            padding-bottom: 20px;
+        }
+        table {
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: var(--matrix-text-size, 14px);
+        }
+        th, td {
+            border: 1px solid #334155; /* Slate 700 */
+            padding: 12px;
+            vertical-align: top;
+            box-sizing: border-box;
+        }
+        th {
+            background-color: #1e293b; /* Slate 800 */
+            color: #f8fafc; /* Slate 50 */
+            font-weight: 600;
+            position: sticky;
+            z-index: 10;
+        }
+        /* Sticky Top Header (Cranial Nerves) */
+        thead th {
+            top: 0;
+            z-index: 30; /* Higher than row headers */
+        }
+        /* Sticky Left Column (Nuclei) */
+        tbody th {
+            position: sticky;
+            left: 0;
+            background-color: #1e293b;
+            z-index: 20;
+            text-align: left;
+            min-width: 150px;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.2); /* Shadow to separate from content */
+        }
+        /* Top-Left Corner on top of everything */
+        thead th:first-child {
+            left: 0;
+            top: 0;
+            z-index: 40; /* Highest */
+            background-color: #1e293b;
+        }
+        
+        td {
+            background-color: #0f172a;
+            min-width: 220px;
+            transition: background-color 0.2s;
+        }
+        td:hover {
+            background-color: #1e293b;
+        }
+        
+        /* Cell Content Styling */
+        .cell-function {
+            font-weight: 500;
+            color: #38bdf8; /* Sky 400 */
+            margin-bottom: 4px;
+        }
+        .cell-desc {
+            color: #94a3b8; /* Slate 400 */
+            font-size: 0.8rem;
+        }
+        .cell-type {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            margin-top: 6px;
+            background-color: #334155;
+            color: #e2e8f0;
+        }
+        .tag-S { background-color: #065f46; color: #a7f3d0; } /* Green for Sensory */
+        .tag-M { background-color: #7f1d1d; color: #fecaca; } /* Red for Motor */
+        .tag-Both { background-color: #713f12; color: #fef08a; } /* Yellow/Orange */
+
+    </style>
+</head>
+<body>
+    <div class="header-section max-w-7xl flex flex-wrap justify-between items-center gap-4">
+        <h1 class="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400">
+            腦神經 x 神經核 對照表
+        </h1>
+        
+        <div class="flex items-center gap-2 bg-slate-800 px-3 py-1 rounded-full border border-slate-700">
+            <span class="text-xs text-slate-400">Aa</span>
+            <input type="range" min="12" max="24" value="14" class="w-24 accent-blue-500 h-1 bg-slate-600 rounded-lg appearance-none cursor-pointer" 
+                   oninput="document.documentElement.style.setProperty('--matrix-text-size', this.value + 'px')">
+            <span class="text-lg text-slate-400">Aa</span>
+        </div>
+    </div>
+
+    <div id="loading" class="text-center text-xl text-slate-500 py-10">
+      Loading data...
+    </div>
+
+    <div id="matrix-root" class="matrix-container hidden">
+      <!-- Table will be injected here -->
+    </div>
+
+    <script>
+        function parseCSV(csv) {
+            const lines = csv.trim().split("\n");
+            const headers = lines[0].split(",").map((h) => h.trim());
+            const data = [];
+
+            for (let i = 1; i < lines.length; i++) {
+                let rowStr = lines[i];
+                if (!rowStr) continue;
+
+                const row = [];
+                let current = "";
+                let inQuote = false;
+                for (let char of rowStr) {
+                    if (char === '"') {
+                        inQuote = !inQuote;
+                    } else if (char === "," && !inQuote) {
+                        row.push(current.trim().replace(/^"|"$/g, ""));
+                        current = "";
+                    } else {
+                        current += char;
+                    }
+                }
+                row.push(current.trim().replace(/^"|"$/g, ""));
+
+                let obj = {};
+                headers.forEach((h, index) => {
+                    obj[h] = row[index];
+                });
+                data.push(obj);
+            }
+            return data;
+        }
+
+        async function init() {
+            try {
+                // Fetch external CSV
+                const response = await fetch('./cranial_nerves_reference_table.csv');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const csvData = await response.text();
+                
+                const rawData = parseCSV(csvData);
+                console.log("Parsed Data:", rawData);
+
+                // --- State & Helpers ---
+                
+                const romanMap = {
+                    "I": 1, "II": 2, "III": 3, "IV": 4, "V": 5, "VI": 6, 
+                    "VII": 7, "VIII": 8, "IX": 9, "X": 10, "XI": 11, "XII": 12
+                };
+                
+                function getNerveNumber(n) {
+                    const match = n.match(/^([IVX]+)\s/);
+                    return match ? romanMap[match[1]] : 99;
+                }
+
+                // Locations order for sorting
+                const locOrder = ["端腦", "間腦", "中腦", "橋腦", "橋腦/延髓", "延髓", "延髓至頸髓", "上段頸髓"];
+                function getLocIndex(loc) {
+                    const ind = locOrder.indexOf(loc);
+                    return ind === -1 ? 99 : ind;
+                }
+
+                // Prepare Entities
+                const nervesMap = new Map();
+                rawData.forEach(d => {
+                    if(!nervesMap.has(d['腦神經'])) {
+                        nervesMap.set(d['腦神經'], { name: d['腦神經'], number: getNerveNumber(d['腦神經']) });
+                    }
+                });
+                // Initial lists (Source of Truth)
+                let nervesList = Array.from(nervesMap.values()).sort((a,b) => a.number - b.number);
+
+                const nucleiMap = new Map();
+                rawData.forEach(d => {
+                    const name = d['神經核 (Nucleus)'];
+                    if(!nucleiMap.has(name)) {
+                        nucleiMap.set(name, { name: name, location: d['位置層次'] });
+                    }
+                });
+                let nucleiList = Array.from(nucleiMap.values()).sort((a,b) => {
+                     const diff = getLocIndex(a.location) - getLocIndex(b.location);
+                     return diff !== 0 ? diff : a.name.localeCompare(b.name);
+                });
+
+                // Save initial order for reset
+                const initialNervesList = [...nervesList];
+                const initialNucleiList = [...nucleiList];
+
+                // State
+                let state = {
+                    colSort: 'number', 
+                    colSortDir: 1, 
+                    colSortTarget: null,
+
+                    rowSort: 'location', 
+                    rowSortDir: 1,
+                    rowSortTarget: null,
+                    
+                    isManualCol: false,
+                    isManualRow: false
+                };
+
+                // --- Sorting Logic ---
+                function applySort() {
+                    // Sort Nerves (Columns) if NOT manual column order
+                    if (!state.isManualCol) {
+                        nervesList.sort((a, b) => {
+                            if (state.colSort === 'number') {
+                                return (a.number - b.number) * state.colSortDir;
+                            } else if (state.colSort === 'dom-asc' && state.colSortTarget) {
+                                const hasA = rawData.some(d => d['腦神經'] === a.name && d['神經核 (Nucleus)'] === state.colSortTarget);
+                                const hasB = rawData.some(d => d['腦神經'] === b.name && d['神經核 (Nucleus)'] === state.colSortTarget);
+                                if (hasA && !hasB) return -1 * state.colSortDir;
+                                if (!hasA && hasB) return 1 * state.colSortDir;
+                                return (a.number - b.number);
+                            }
+                            return 0;
+                        });
+                    }
+
+                    // Sort Nuclei (Rows) if NOT manual row order
+                    if (!state.isManualRow) {
+                        nucleiList.sort((a, b) => {
+                            if (state.rowSort === 'name') {
+                                return a.name.localeCompare(b.name) * state.rowSortDir;
+                            } else if (state.rowSort === 'location') {
+                                const diff = getLocIndex(a.location) - getLocIndex(b.location);
+                                if (diff !== 0) return diff * state.rowSortDir;
+                                return a.name.localeCompare(b.name);
+                            } else if (state.rowSort === 'dom-asc' && state.rowSortTarget) {
+                                const hasA = rawData.some(d => d['腦神經'] === state.rowSortTarget && d['神經核 (Nucleus)'] === a.name);
+                                const hasB = rawData.some(d => d['腦神經'] === state.rowSortTarget && d['神經核 (Nucleus)'] === b.name);
+                                if (hasA && !hasB) return -1 * state.rowSortDir;
+                                if (!hasA && hasB) return 1 * state.rowSortDir;
+                                return getLocIndex(a.location) - getLocIndex(b.location);
+                            }
+                            return 0;
+                        });
+                    }
+                }
+
+                // --- Drag & Drop Handlers ---
+                let draggedItem = null;
+                let draggedType = null; // 'nerve' or 'nucleus'
+
+                function handleDragStart(e, item, type) {
+                    draggedItem = item;
+                    draggedType = type;
+                    e.dataTransfer.effectAllowed = 'move';
+                }
+
+                function handleDragOver(e) {
+                    e.preventDefault(); // Necessary to allow dropping
+                    e.dataTransfer.dropEffect = 'move';
+                    return false;
+                }
+
+                function handleDrop(e, targetItem, type) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    if (draggedItem === targetItem || draggedType !== type) return;
+
+                    const list = type === 'nerve' ? nervesList : nucleiList;
+                    const fromIndex = list.indexOf(draggedItem);
+                    const toIndex = list.indexOf(targetItem);
+                    
+                    if(fromIndex >= 0 && toIndex >= 0) {
+                        // Move item
+                        list.splice(fromIndex, 1);
+                        list.splice(toIndex, 0, draggedItem);
+                        
+                        // Set specific manual flag
+                        if (type === 'nerve') state.isManualCol = true;
+                        else state.isManualRow = true;
+                    }
+                    
+                    render();
+                    return false;
+                }
+
+                function resetOrder() {
+                    nervesList = [...initialNervesList];
+                    nucleiList = [...initialNucleiList];
+                    state = {
+                        colSort: 'number', colSortDir: 1, colSortTarget: null,
+                        rowSort: 'location', rowSortDir: 1, rowSortTarget: null,
+                        isManualCol: false, isManualRow: false
+                    };
+                    render();
+                }
+
+                // --- Rendering ---
+                const root = document.getElementById('matrix-root');
+
+                function render() {
+                    applySort();
+
+                    const table = document.createElement('table');
+                    const thead = document.createElement('thead');
+                    const tbody = document.createElement('tbody');
+
+                    // Header Row (Columns: Nerves)
+                    const trHead = document.createElement('tr');
+                    
+                    // Corner Cell
+                    const thCorner = document.createElement('th');
+                    thCorner.style.minWidth = "220px";
+                    thCorner.className = "select-none align-bottom pb-2 pl-2";
+                    
+                    const divCorner = document.createElement('div');
+                    divCorner.className = "flex flex-col gap-2";
+                    
+                    // Controls
+                    const rowCtrl = `
+                        <div class="flex items-center cursor-pointer hover:text-blue-400" onclick="document.dispatchEvent(new CustomEvent('toggleRowSort'))">
+                            <span class="text-xs text-slate-500 mr-1">R:</span>
+                            <span>神經核 ${state.isManualRow ? '(自訂)' : (state.rowSort === 'location' ? '(位)' : '(名)')} ${!state.isManualRow ? (state.rowSortDir === 1 ? '↓' : '↑') : ''}</span>
+                        </div>
+                    `;
+                     const colCtrl = `
+                        <div class="flex items-center cursor-pointer hover:text-blue-400" onclick="document.dispatchEvent(new CustomEvent('toggleColSort'))">
+                            <span class="text-xs text-slate-500 mr-1">C:</span>
+                            <span>腦神經 ${state.isManualCol ? '(自訂)' : (state.colSort === 'number' ? '(序)' : '(連)')} ${!state.isManualCol ? (state.colSortDir === 1 ? '→' : '←') : ''}</span>
+                        </div>
+                    `;
+                    
+                    const resetBtn = `
+                        <button onclick="document.dispatchEvent(new CustomEvent('resetMatrix'))" class="text-xs px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-slate-300 mt-1 w-full border border-slate-600">
+                            Reset Order
+                        </button>
+                    `;
+
+                    divCorner.innerHTML = rowCtrl + colCtrl + resetBtn;
+                    thCorner.appendChild(divCorner);
+                    trHead.appendChild(thCorner);
+
+                    // --- Custom Event Helpers ---
+                    window.toggleRowSort = () => {
+                         state.isManualRow = false;
+                         if(state.rowSort === 'location' && state.rowSortDir === 1) state.rowSortDir = -1;
+                         else if(state.rowSort === 'location' && state.rowSortDir === -1) { state.rowSort = 'name'; state.rowSortDir = 1; }
+                         else if(state.rowSort === 'name' && state.rowSortDir === 1) state.rowSortDir = -1;
+                         else { state.rowSort = 'location'; state.rowSortDir = 1; }
+                         render();
+                    };
+                    window.toggleColSort = () => {
+                        state.isManualCol = false;
+                        state.colSort = 'number';
+                        state.colSortDir = state.colSortDir === 1 ? -1 : 1;
+                        render();
+                    };
+                    window.resetMatrix = resetOrder;
+                    
+                    divCorner.querySelectorAll('div')[0].onclick = window.toggleRowSort;
+                    divCorner.querySelectorAll('div')[1].onclick = window.toggleColSort;
+                    divCorner.querySelector('button').onclick = window.resetMatrix;
+
+
+                    // Column Headers (Nerves)
+                    nervesList.forEach(n => {
+                        const th = document.createElement('th');
+                        th.textContent = n.name;
+                        th.draggable = true;
+                        th.className = "cursor-grab active:cursor-grabbing hover:bg-slate-700 transition-colors select-none";
+                        
+                        // Drag Events
+                        th.ondragstart = (e) => handleDragStart(e, n, 'nerve');
+                        th.ondragover = handleDragOver;
+                        th.ondrop = (e) => handleDrop(e, n, 'nerve');
+
+                        // Sort Click (Sorting Rows based on Col)
+                        th.onclick = (e) => {
+                             // Clicking Col header sorts ROWS. So we reset Row Manual, Keep Col Manual.
+                             state.isManualRow = false;
+                             if(state.rowSort === 'dom-asc' && state.rowSortTarget === n.name) {
+                                state.rowSortDir = state.rowSortDir * -1;
+                            } else {
+                                state.rowSort = 'dom-asc'; state.rowSortTarget = n.name; state.rowSortDir = 1;
+                            }
+                            render();
+                        };
+                        
+                        // Highlight active sort (Row sort target)
+                        if(!state.isManualRow && state.rowSort === 'dom-asc' && state.rowSortTarget === n.name) {
+                            th.classList.add('bg-slate-700', 'text-blue-300');
+                        }
+
+                        trHead.appendChild(th);
+                    });
+                    thead.appendChild(trHead);
+                    table.appendChild(thead);
+
+                    // Body Rows (Nuclei)
+                    nucleiList.forEach(n => {
+                        const tr = document.createElement('tr');
+                        
+                        // Row Header (Nucleus)
+                        const thNucleus = document.createElement('th');
+                        thNucleus.innerHTML = `<div>${n.name}</div><div class="text-xs text-slate-500 font-normal mt-1">${n.location}</div>`;
+                        thNucleus.draggable = true;
+                        thNucleus.className = "cursor-grab active:cursor-grabbing hover:bg-slate-700 transition-colors select-none";
+                        
+                        // Drag Events
+                        thNucleus.ondragstart = (e) => handleDragStart(e, n, 'nucleus');
+                        thNucleus.ondragover = handleDragOver;
+                        thNucleus.ondrop = (e) => handleDrop(e, n, 'nucleus');
+
+                        // Sort Click (Sorting Cols based on Row)
+                        thNucleus.onclick = () => {
+                             // Clicking Row header sorts COLS. So we reset Col Manual, Keep Row Manual.
+                             state.isManualCol = false;
+                             if(state.colSort === 'dom-asc' && state.colSortTarget === n.name) {
+                                state.colSortDir = state.colSortDir * -1;
+                            } else {
+                                state.colSort = 'dom-asc'; state.colSortTarget = n.name; state.colSortDir = 1;
+                            }
+                            render();
+                        };
+
+                        // Highlight active sort (Col sort target)
+                        if(!state.isManualCol && state.colSort === 'dom-asc' && state.colSortTarget === n.name) {
+                            thNucleus.classList.add('bg-slate-700', 'text-blue-300');
+                        }
+
+                        tr.appendChild(thNucleus);
+
+                        nervesList.forEach(nerve => {
+                            const td = document.createElement('td');
+                            const match = rawData.find(d => d['腦神經'] === nerve.name && d['神經核 (Nucleus)'] === n.name);
+                            
+                            if (match) {
+                                const divFunc = document.createElement('div');
+                                divFunc.className = 'cell-function';
+                                divFunc.textContent = match['功能類別'];
+                                const divDesc = document.createElement('div');
+                                divDesc.className = 'cell-desc';
+                                divDesc.textContent = match['詳細功能說明'];
+                                const divType = document.createElement('div');
+                                divType.className = 'cell-type';
+                                divType.textContent = match['方向 (廣義)'];
+                                if(match['方向 (廣義)'].includes('感覺')) divType.classList.add('tag-S');
+                                if(match['方向 (廣義)'].includes('運動')) divType.classList.add('tag-M');
+
+                                // Special Highlight for Parasympathetic
+                                if (match['系統性質 (自主 vs 軀體)'] && match['系統性質 (自主 vs 軀體)'].includes('自主')) {
+                                    td.style.backgroundColor = 'rgba(139, 92, 246, 0.15)'; // Violet/Purple tint
+                                    td.style.border = '1px solid rgba(139, 92, 246, 0.4)';
+                                    divFunc.style.color = '#c4b5fd'; // Violet-300
+                                }
+
+                                td.appendChild(divFunc); td.appendChild(divDesc); td.appendChild(divType);
+                            } else {
+                                td.style.backgroundColor = '#0b1221';
+                            }
+                            tr.appendChild(td);
+                        });
+                        tbody.appendChild(tr);
+                    });
+                    table.appendChild(tbody);
+
+                    root.innerHTML = '';
+                    root.appendChild(table);
+                    document.getElementById('loading').classList.add('hidden');
+                    root.classList.remove('hidden');
+                }
+
+                render();
+
+            } catch (error) {
+                console.error("Error loading data:", error);
+                document.getElementById('loading').textContent = "Error loading data. " + error.message;
+            }
+        }
+
+        // Run
+        init();
+    </script>
+  </body>
+</html>
