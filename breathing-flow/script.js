@@ -32,7 +32,7 @@ const MODES = {
         description: '兩次吸氣確保肺泡張開，隨後長吐氣，快速降低壓力。',
         phases: [
             { type: 'inhale', duration: 2.5, label: '深吸氣', levelStart: 0, levelEnd: 1 }, 
-            { type: 'inhale', duration: 1, label: '再吸氣', levelStart: 1, levelEnd: 1.2 }, 
+            { type: 'inhale', duration: 0.5, label: '再吸氣', levelStart: 1, levelEnd: 1.2 }, 
             { type: 'exhale', duration: 6, label: '長吐氣', levelStart: 1.2, levelEnd: 0 }
         ]
     },
@@ -73,7 +73,7 @@ const MODES = {
             { type: 'exhale', duration: 6, label: '吐氣', levelStart: 1, levelEnd: 0 },
             // The Big Hold
             { type: 'inhale', duration: 3, label: '最大吸氣', levelStart: 0, levelEnd: 1 },
-            { type: 'hold', duration: 90, label: '開始憋氣', levelStart: 1, levelEnd: 1, countUp: true }
+            { type: 'hold', duration: 120, label: '開始憋氣', levelStart: 1, levelEnd: 1, countUp: true }
         ]
     },    
     co2_prep: {
@@ -98,7 +98,7 @@ const MODES = {
             // The Big Hold
 
             { type: 'inhale', duration: 2.5, label: '吸氣', levelStart: 0, levelEnd: 1 },
-            { type: 'hold', duration: 90, label: '開始憋氣', levelStart: 1, levelEnd: 1, countUp: true } 
+            { type: 'hold', duration: 120, label: '開始憋氣', levelStart: 1, levelEnd: 1, countUp: true } 
         ]
     },
 
@@ -436,14 +436,82 @@ class Visualizer {
         ctx.stroke();
 
 
+        // --- Draw Ticks (每秒一个刻度) ---
+        // Draw tick marks as dots for every second on the line
+        // Only show ticks in the future (to the right of the center dot)
+        //const pixelsPerSecond = 100; // Same as scroll speed
+        const centerX = width / 2;
+        const tickRadius = 5; // Radius of dot
+        
+        // Calculate absolute elapsed time since breathing started (in seconds)
+        let absoluteElapsedTime = currentCycleTime; // Relative time in current cycle
+        if (controller.active) {
+            // Add time from all completed cycles
+            const cycleDuration = controller.mode.phases.reduce((acc, p) => acc + p.duration, 0);
+            const timeSinceStart = (performance.now() - controller.startTime) / 1000;
+            const completedCycles = Math.floor(timeSinceStart / cycleDuration);
+            absoluteElapsedTime = completedCycles * cycleDuration + currentCycleTime;
+        }
+        
+        // Calculate which second ticks should be visible
+        // Integer seconds from the absolute elapsed time, but only future ones
+        const startSecond = Math.max(0, Math.ceil(absoluteElapsedTime));
+        const endSecond = Math.ceil(absoluteElapsedTime + ((width - centerX) / pixelsPerSecond));
+        
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+        
+        for (let second = startSecond; second <= endSecond; second++) {
+            const timeAtTick = second;
+            const timeDelta = timeAtTick - absoluteElapsedTime;
+            
+            // Only draw ticks that are in the future (timeDelta >= 0)
+            if (timeDelta < 0) continue;
+            
+            const tickX = centerX + (timeDelta * pixelsPerSecond);
+            
+            // Make sure tick is within canvas
+            if (tickX >= 0 && tickX <= width) {
+                // Use modulo to get the time within the current cycle for level calculation
+                const timeInCycle = timeAtTick % (controller.active ? controller.mode.phases.reduce((acc, p) => acc + p.duration, 0) : 10);
+                const level = this.getLevelAtCycleTime(timeInCycle, controller.active ? controller.mode : MODES.relaxation);
+                const tickY = cy + range - (level * 2 * range);
+                
+                // Draw dot
+                ctx.beginPath();
+                ctx.arc(tickX, tickY, tickRadius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
         // --- Draw Central Dot ---
         // Re-calculate dot level safely (or use points array closer to center?)
         // Let's re-calc for precision at exact center time.
         const dotLevel = this.getLevelAtCycleTime(currentCycleTime, controller.active ? controller.mode : MODES.relaxation);
         const dotY = cy + range - (dotLevel * 2 * range);
         
-        const dotSize = 25;
-        // color unused?
+        // Adjust dot size based on breath level (not progress)
+        // This ensures continuous growth during multiple inhale phases
+        const baseSize = 15;
+        const maxSize = 35;
+        let dotSize = baseSize;
+        
+        if (controller.active) {
+            const type = controller.currentPhase.type;
+            
+            if (type === 'inhale') {
+                // Grow based on actual lung level, not progress
+                // This ensures continuous growth even with multiple inhale phases
+                dotSize = baseSize + (maxSize - baseSize) * Math.min(dotLevel, 1);
+            } else if (type === 'exhale') {
+                // Shrink based on actual lung level
+                dotSize = baseSize + (maxSize - baseSize) * Math.max(dotLevel, 0);
+            } else if (type === 'hold') {
+                // Keep size based on current lung level
+                dotSize = baseSize + (maxSize - baseSize) * dotLevel;
+            }
+        } else {
+            dotSize = baseSize;
+        }
         
         ctx.shadowBlur = 40;
         ctx.shadowColor = 'cyan';

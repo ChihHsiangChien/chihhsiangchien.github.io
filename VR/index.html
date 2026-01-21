@@ -1,418 +1,180 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-TW">
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>360 VR Viewer</title>
-    <script src="https://cdn.babylonjs.com/babylon.js"></script>
-    <style>
-        body {
-            margin: 0;
-            overflow: hidden;
-        }
-
-        /* Zoom Control Overlay */
-        #ui-controls {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            z-index: 1000;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .zoom-btn {
-            background: rgba(0, 0, 0, 0.6);
-            color: white;
-            border: 2px solid white;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            font-size: 24px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            user-select: none;
-            transition: background 0.2s;
-        }
-
-        .zoom-btn:active {
-            background: rgba(255, 255, 255, 0.3);
-        }
-
-        .instructions {
-            position: fixed;
-            top: 20px;
-            left: 20px;
-            z-index: 1000;
-            color: white;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 10px;
-            border-radius: 8px;
-            font-family: sans-serif;
-            pointer-events: none;
-        }
-
-        /* Scene Info Panel */
-        #scene-info {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 1000;
-            color: white;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 10px 15px;
-            border-radius: 8px;
-            font-family: sans-serif;
-            font-size: 14px;
-        }
-
-        /* Portal Cursor */
-        #renderCanvas:hover {
-            cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="14" fill="none" stroke="white" stroke-width="2"/><circle cx="16" cy="16" r="4" fill="white"/></svg>') 16 16, auto;
-        }
-
-        /* Portal Hotspot Overlay - 出口 (進入下一場景) */
-        .portal-hotspot {
-            position: fixed;
-            width: 60px;
-            height: 60px;
-            border: 2px solid #00ff00;
-            border-radius: 50%;
-            background: rgba(0, 255, 0, 0.1);
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 20px;
-            z-index: 500;
-            transition: all 0.3s ease;
-            box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
-        }
-
-        .portal-hotspot:hover {
-            background: rgba(0, 255, 0, 0.3);
-            box-shadow: 0 0 20px rgba(0, 255, 0, 0.8);
-            transform: scale(1.1);
-        }
-
-        /* Portal Hotspot Overlay - 入口 (返回上一場景) */
-        .portal-hotspot.entrance {
-            border-color: #0099ff;
-            background: rgba(0, 153, 255, 0.1);
-            box-shadow: 0 0 10px rgba(0, 153, 255, 0.5);
-        }
-
-        .portal-hotspot.entrance:hover {
-            background: rgba(0, 153, 255, 0.3);
-            box-shadow: 0 0 20px rgba(0, 153, 255, 0.8);
-            transform: scale(1.1);
-        }
-
-        .portal-label {
-            position: absolute;
-            color: #00ff00;
-            font-family: 'Microsoft YaHei', 'SimHei', 'Arial Unicode MS', sans-serif;
-            font-size: 14px;
-            font-weight: bold;
-            white-space: nowrap;
-            text-shadow: 0 0 5px rgba(0, 0, 0, 0.8);
-            pointer-events: none;
-            bottom: -30px;
-            left: 50%;
-            transform: translateX(-50%);
-        }
-
-        /* Exit label (green) */
-        .portal-label {
-            color: #00ff00;
-        }
-
-        /* Entrance label (blue) */
-        .portal-hotspot.entrance ~ .portal-label,
-        .portal-label.entrance {
-            color: #0099ff;
-        }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>360° VR 查看器</title>
+    <link rel="stylesheet" href="style-modular.css">
 </head>
 
 <body>
+    <canvas id="renderCanvas"></canvas>
 
-    <!-- Instructions Overlay -->
-    <div class="instructions">
-        <p><strong>Drag</strong> or <strong>Swipe</strong> to Rotate</p>
-        <p><strong>Scroll</strong> or use <strong>Buttons</strong> to Zoom</p>
-    </div>
+    <!-- 场景选择器 -->
+    <div id="scene-selector" class="scene-selector"></div>
 
-    <!-- Scene Info Panel -->
-    <div id="scene-info">現在位置: <span id="scene-name">口腔</span></div>
+    <!-- 场景名称 -->
+    <div id="scene-name" class="scene-name"></div>
 
-    <!-- Portal Hotspots Container -->
+    <!-- Hotspots容器 -->
     <div id="hotspots-container"></div>
 
-    <!-- Zoom Buttons -->
-    <div id="ui-controls">
-        <div class="zoom-btn" id="zoom-in">+</div>
-        <div class="zoom-btn" id="zoom-out">-</div>
+    <!-- 缩放控制 -->
+    <div class="controls">
+        <button id="zoom-in" class="control-btn">+</button>
+        <button id="zoom-out" class="control-btn">−</button>
     </div>
 
-    <!-- Babylon.js 360 球面顯示 -->
-    <canvas id="renderCanvas" style="width:100vw;height:100vh;position:fixed;top:0;left:0;z-index:0;"></canvas>
+    <!-- 调试信息面板 -->
+    <div id="debug-info" class="debug-info">
+        <div>α: <span id="debug-alpha">0</span></div>
+        <div>β: <span id="debug-beta">0</span></div>
+        <div>FOV: <span id="debug-fov">0</span></div>
+        <div>X: <span id="debug-x">0</span></div>
+        <div>Y: <span id="debug-y">0</span></div>
+        <div>Z: <span id="debug-z">0</span></div>
+    </div>
 
+    <!-- Babylon.js库 -->
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+
+    <!-- 资源管理助手 -->
+    <script src="asset-helper.js"></script>
+
+    <!-- VR查看器核心模块 -->
+    <script src="vr-viewer.js"></script>
+
+    <!-- 主题选择器面板 -->
+    <div id="theme-selector-panel" class="theme-selector-panel">
+        <h2>選擇主題</h2>
+        <div id="theme-options" class="theme-options"></div>
+    </div>
+
+    <!-- 主题切换按钮 -->
+    <button id="theme-switcher-btn" class="theme-switcher-btn" title="切換主題">🎨</button>
+
+    <!-- 动态加载主题和初始化 -->
     <script>
-        // Scene Management
-        let currentScene = 'mouth'; // 'mouth' -> 'pharynx' -> 'stomach' -> 'stomach2' -> 'stomach3' -> 'eso-stomach' -> 'small_intestine'
-        let engine, scene, camera, sphere, mat;
-        const canvas = document.getElementById('renderCanvas');
+        // 可用的主题列表
+        const AVAILABLE_THEMES = [
+            { id: 'digestive-system', name: '消化系統', emoji: '🫀' },
+            { id: 'plant-transport', name: '植物運輸', emoji: '🌿' },
+            { id: 'respiratory-system', name: '呼吸系統', emoji: '🫁' },
+            { id: 'ecosystem', name: '生態系', emoji: '🌍' }
+        ];
 
-        // Portal Hotspot Definitions - 消化系統路徑
-        const hotspots = {
-            mouth: {
-                name: '口腔',
-                texture: 'mouth.png',
-                portals: [
-                    {
-                        name: '進入咽喉 →',
-                        position: new BABYLON.Vector3(0.8, 0.2, 0.15),
-                        target: 'pharynx'
-                    }
-                ]
-            },
-            pharynx: {
-                name: '咽喉',
-                texture: 'pharynx.png',
-                portals: [
-                    {
-                        name: '← 回到口腔',
-                        position: new BABYLON.Vector3(-0.8, -0.2, -0.15),
-                        target: 'mouth'
-                    },
-                    {
-                        name: '進入食道 →',
-                        position: new BABYLON.Vector3(0.75, 0.3, 0.2),
-                        target: 'esophagus'
-                    }
-                ]
-            },
-            esophagus: {
-                name: '食道',
-                texture: 'esophagus.png',
-                portals: [
-                    {
-                        name: '← 回到咽喉 ',
-                        position: new BABYLON.Vector3(0.75, 0.28, 0.25),
-                        target: 'pharynx'
-                    },
-                    {
-                        name: '進入胃部 →',
-                        position: new BABYLON.Vector3(0.8, -0.15, -0.3),
-                        target: 'stomach'
-                    },                    
-                ]
-            },            
-            stomach: {
-                name: '胃',
-                texture: 'stomach.png',
-                portals: [
-                    {
-                        name: '← 回到食道',
-                        position: new BABYLON.Vector3(-0.75, -0.3, -0.2),
-                        target: 'esophagus'
-                    },
-                    {
-                        name: '進入胃部2 →',
-                        position: new BABYLON.Vector3(0.7, 0.25, 0.25),
-                        target: 'stomach2'
-                    }
-                ]
-            },
-            stomach2: {
-                name: '胃 (部分2)',
-                texture: 'stomach2.png',
-                portals: [
-                    {
-                        name: '← 回到胃',
-                        position: new BABYLON.Vector3(-0.7, -0.25, -0.25),
-                        target: 'stomach'
-                    },
-                    {
-                        name: '進入胃部3 →',
-                        position: new BABYLON.Vector3(0.65, 0.35, 0.2),
-                        target: 'stomach3'
-                    }
-                ]
-            },
-            stomach3: {
-                name: '胃 (部分3)',
-                texture: 'stomach3.png',
-                portals: [
-                    {
-                        name: '← 回到胃部2',
-                        position: new BABYLON.Vector3(-0.65, -0.35, -0.2),
-                        target: 'stomach2'
-                    },
-                    {
-                        name: '進入小腸 →',
-                        position: new BABYLON.Vector3(0.8, 0.15, 0.3),
-                        target: 'small_intestine'
-                    }
-                ]
-            },
-            small_intestine: {
-                name: '小腸',
-                texture: 'small_intestine.png',
-                portals: [
-                    {
-                        name: '← 回到胃部3',
-                        position: new BABYLON.Vector3(-0.75, -0.28, -0.25),
-                        target: 'stomach3'
-                    }
-                ]
+        let currentViewer = null;
+
+        /**
+         * 动态加载主题并初始化
+         */
+        function loadTheme(themeId) {
+            // 隐藏主题选择器
+            document.getElementById('theme-selector-panel').classList.remove('visible');
+            document.getElementById('theme-switcher-btn').classList.remove('active');
+
+            // 销毁旧的viewer
+            if (currentViewer && currentViewer.engine) {
+                currentViewer.engine.dispose();
             }
-        };
 
-        // Update Portal Hotspots Display
-        function updateHotspotPositions() {
-            const container = document.getElementById('hotspots-container');
-            const sceneData = hotspots[currentScene];
-            
-            sceneData.portals.forEach((portal, index) => {
-                let hotspot = document.getElementById(`portal-${index}`);
-                
-                if (!hotspot) {
-                    hotspot = document.createElement('div');
-                    hotspot.id = `portal-${index}`;
-                    // 判斷是進入口（返回）還是出口（前進）
-                    const isEntrance = portal.name.includes('←');
-                    hotspot.className = isEntrance ? 'portal-hotspot entrance' : 'portal-hotspot';
-                    // 不同的圖標
-                    hotspot.innerHTML = isEntrance ? '↩️' : '→';
-                    
-                    // 創建label顯示中文名稱
-                    const label = document.createElement('div');
-                    label.className = isEntrance ? 'portal-label entrance' : 'portal-label';
-                    label.textContent = portal.name;
-                    hotspot.appendChild(label);
-                    
-                    hotspot.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        switchScene(portal.target);
-                    });
-                    
-                    container.appendChild(hotspot);
-                }
-                
-                // 計算 3D 座標在屏幕上的位置 (實時跟隨相機)
-                const worldPos = portal.position.scale(500); // 球體半徑 500
-                const viewMatrix = camera.getViewMatrix();
-                const projectionMatrix = camera.getProjectionMatrix();
-                const screenPos = BABYLON.Vector3.Project(
-                    worldPos,
-                    BABYLON.Matrix.Identity(),
-                    viewMatrix.multiply(projectionMatrix),
-                    camera.viewport.toGlobal(engine.getRenderWidth(), engine.getRenderHeight())
-                );
-                
-                // 只在座標在屏幕內時顯示
-                if (screenPos.z > 0 && screenPos.z < 1 && 
-                    screenPos.x > 0 && screenPos.x < engine.getRenderWidth() &&
-                    screenPos.y > 0 && screenPos.y < engine.getRenderHeight()) {
-                    
-                    hotspot.style.display = 'flex';
-                    hotspot.style.left = (screenPos.x - 30) + 'px';  // 居中（60/2=30）
-                    hotspot.style.top = (screenPos.y - 30) + 'px';   // 居中（60/2=30）
+            // 清空容器
+            document.getElementById('hotspots-container').innerHTML = '';
+            document.getElementById('scene-selector').innerHTML = '';
+            document.getElementById('scene-name').textContent = '';
+
+            // 移除旧的主题脚本标签
+            const oldScripts = document.querySelectorAll('script[data-theme]');
+            oldScripts.forEach(script => script.remove());
+
+            // 清空主题相关的全局变量
+            const themeVar = themeId.toUpperCase().replace(/-/g, '_') + '_THEME';
+            delete window[themeVar];
+
+            // 动态加载主题脚本
+            const script = document.createElement('script');
+            script.src = `themes/${themeId}.js?t=${Date.now()}`; // 添加时间戳避免缓存
+            script.setAttribute('data-theme', themeId); // 标记为主题脚本
+            script.onload = () => {
+                // 获取主题配置
+                const themeVar = themeId.toUpperCase().replace(/-/g, '_') + '_THEME';
+                const themeConfig = window[themeVar];
+
+                if (themeConfig) {
+                    // 初始化新的viewer
+                    currentViewer = new VRViewer(themeConfig);
+                    currentViewer.init();
+
+                    // 更新URL（方便分享链接）
+                    window.history.replaceState({}, '', `?theme=${themeId}`);
+
+                    console.log(`✓ 已加载主题: ${themeId}`);
                 } else {
-                    hotspot.style.display = 'none';
+                    console.error(`主题常量 ${themeVar} 未找到`);
+                    console.log('可用的全局变量:', Object.keys(window).filter(k => k.includes('THEME')));
+                }
+            };
+            script.onerror = () => {
+                console.error(`无法加载主题脚本: themes/${themeId}.js`);
+            };
+            document.head.appendChild(script);
+        }
+
+        /**
+         * 初始化主题选择器UI
+         */
+        function initThemeSelector() {
+            const optionsContainer = document.getElementById('theme-options');
+            const panel = document.getElementById('theme-selector-panel');
+            const switcher = document.getElementById('theme-switcher-btn');
+
+            // 生成主题选项按钮
+            AVAILABLE_THEMES.forEach(theme => {
+                const btn = document.createElement('button');
+                btn.className = 'theme-option-btn';
+
+                // 创建emoji和文本分开的结构
+                const emojiSpan = document.createElement('span');
+                emojiSpan.className = 'emoji';
+                emojiSpan.textContent = theme.emoji;
+
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'name';
+                nameSpan.textContent = theme.name;
+
+                btn.appendChild(emojiSpan);
+                btn.appendChild(nameSpan);
+                btn.addEventListener('click', () => loadTheme(theme.id));
+                optionsContainer.appendChild(btn);
+            });
+
+            // 主题切换按钮
+            switcher.addEventListener('click', () => {
+                panel.classList.toggle('visible');
+                switcher.classList.toggle('active');
+            });
+
+            // 点击面板外关闭
+            document.addEventListener('click', (e) => {
+                if (!panel.contains(e.target) && !switcher.contains(e.target)) {
+                    panel.classList.remove('visible');
+                    switcher.classList.remove('active');
                 }
             });
         }
 
-        // Switch Scene
-        function switchScene(targetScene) {
-            currentScene = targetScene;
-            const sceneData = hotspots[currentScene];
-            
-            // Update scene name
-            document.getElementById('scene-name').textContent = sceneData.name;
-            
-            // 清空舊的hotspots
-            const container = document.getElementById('hotspots-container');
-            container.innerHTML = '';
-            
-            // Change texture
-            mat.diffuseTexture.dispose();
-            mat.diffuseTexture = new BABYLON.Texture(sceneData.texture, scene);
-            mat.diffuseTexture.uScale = -1;
-            mat.diffuseTexture.vScale = -1;
-            
-            // Update hotspots
-            updateHotspotPositions();
-            
-            console.log('✓ Switched to:', sceneData.name);
-        }
+        /**
+         * 页面加载完成后初始化
+         */
+        window.addEventListener('DOMContentLoaded', () => {
+            initThemeSelector();
 
-        // Babylon.js 360 球面顯示
-        window.addEventListener('DOMContentLoaded', function () {
-            engine = new BABYLON.Engine(canvas, true);
-            scene = new BABYLON.Scene(engine);
-            
-            // 相機設置
-            camera = new BABYLON.ArcRotateCamera("camera", 0, Math.PI/2, 0.1, BABYLON.Vector3.Zero(), scene);
-            camera.attachControl(canvas, true);
-            camera.fov = Math.PI / 2; // 初始視野
-            
-            // 球體貼圖
-            sphere = BABYLON.MeshBuilder.CreateSphere("sphere", {segments:32, diameter:1000}, scene);
-            sphere.scaling.x = -1; // 內貼圖
-            sphere.scaling.y = -1; // 修正上下顛倒
-            
-            mat = new BABYLON.StandardMaterial("mat", scene);
-            const sceneData = hotspots[currentScene];
-            mat.diffuseTexture = new BABYLON.Texture(sceneData.texture, scene);
-            mat.diffuseTexture.uScale = -1; // 修正左右
-            mat.diffuseTexture.vScale = -1; // 修正上下
-            mat.backFaceCulling = false;
-            sphere.material = mat;
+            // 从URL参数读取主题，或使用默认主题
+            const urlParams = new URLSearchParams(window.location.search);
+            const themeId = urlParams.get('theme') || 'digestive-system';
 
-            // Add ambient light
-            const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
-            light.intensity = 1;
-
-            // Zoom 控制
-            let currentFov = camera.fov;
-            const minFov = Math.PI / 8;
-            const maxFov = Math.PI / 1.2;
-            const zoomStep = Math.PI / 36;
-            const updateZoom = (newFov) => {
-                currentFov = Math.max(minFov, Math.min(maxFov, newFov));
-                camera.fov = currentFov;
-            };
-            document.addEventListener('wheel', (e) => {
-                const delta = Math.sign(e.deltaY) * zoomStep;
-                updateZoom(currentFov + delta);
-            });
-            document.getElementById('zoom-in').addEventListener('click', (e) => {
-                e.stopPropagation();
-                updateZoom(currentFov - zoomStep);
-            });
-            document.getElementById('zoom-out').addEventListener('click', (e) => {
-                e.stopPropagation();
-                updateZoom(currentFov + zoomStep);
-            });
-
-            // Initial hotspots
-            updateHotspotPositions();
-
-            // Render loop with hotspot updates
-            engine.runRenderLoop(() => {
-                scene.render();
-                // 每幀更新開口位置，使其跟著旋轉
-                updateHotspotPositions();
-            });
-            window.addEventListener('resize', () => engine.resize());
+            loadTheme(themeId);
         });
     </script>
 </body>
