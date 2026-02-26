@@ -1,4 +1,5 @@
-const MAX_NUMBERS = 25;
+let MAX_NUMBERS = 25;
+let GRID_SIZE = 5;
 let currentTarget = 1;
 let startTime = 0;
 let timerInterval = null;
@@ -76,7 +77,31 @@ function playSound(type) {
     }
 }
 
+const DIFFICULTIES = {
+    'lv1': { size: 3, count: 9 },
+    'lv2': { size: 5, count: 25 },
+    'lv3': { size: 7, count: 49 },
+    'lv4': { size: 9, count: 81 }
+};
+
+let currentDifficulty = 'lv3';
+
+function setupDifficulty() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const diff = urlParams.get('diff');
+    if (diff && DIFFICULTIES[diff]) {
+        currentDifficulty = diff;
+        MAX_NUMBERS = DIFFICULTIES[diff].count;
+        GRID_SIZE = DIFFICULTIES[diff].size;
+        // Auto start
+        setTimeout(startGame, 500);
+    }
+}
+
 function initGame() {
+    // Apply grid size to CSS
+    gameBoard.style.gridTemplateColumns = `repeat(${GRID_SIZE}, 1fr)`;
+    
     // Generate numbers 1 to MAX_NUMBERS
     const numbers = Array.from({ length: MAX_NUMBERS }, (_, i) => i + 1);
     
@@ -95,7 +120,7 @@ function initGame() {
         cell.classList.add('grid-cell');
         cell.textContent = num;
         cell.dataset.number = num;
-        cell.addEventListener('pointerdown', () => handleCardClick(num, cell)); // Use pointerdown for better mobile response
+        cell.addEventListener('pointerdown', () => handleCardClick(num, cell));
         gameBoard.appendChild(cell);
     });
 
@@ -108,8 +133,13 @@ function initGame() {
 }
 
 function startGame() {
-    initAudio(); // Initialize audio context on user gesture
+    initAudio(); 
     initGame();
+    
+    // Update start message dynamically
+    const startMsg = startOverlay.querySelector('p');
+    if (startMsg) startMsg.textContent = `請依序點擊數字 1 到 ${MAX_NUMBERS}，越快越好！`;
+    
     startOverlay.classList.remove('active');
     resultOverlay.classList.remove('active');
     
@@ -140,12 +170,9 @@ function formatTime(ms) {
 
 function handleCardClick(number, cellElement) {
     if (!isGameActive) return;
-
     if (number === currentTarget) {
-        // Correct click
         playSound('correct');
         cellElement.classList.add('completed');
-        
         if (currentTarget === MAX_NUMBERS) {
             endGame();
         } else {
@@ -153,13 +180,9 @@ function handleCardClick(number, cellElement) {
             currentTargetDisplay.textContent = currentTarget;
         }
     } else {
-        // Wrong click
         playSound('wrong');
         cellElement.classList.add('shake');
-        // Remove shake class after animation
-        setTimeout(() => {
-            cellElement.classList.remove('shake');
-        }, 400);
+        setTimeout(() => { cellElement.classList.remove('shake'); }, 400);
     }
 }
 
@@ -175,33 +198,33 @@ function showResult(ms) {
     const timeStr = formatTime(ms);
     const seconds = ms / 1000;
     
+    // Ratio-based rank relative to grid size (Rough estimate)
+    // 3x3 (9) -> 5s S, 10s A, 15s B
+    // 5x5 (25)-> 15s S, 25s A, 40s B
+    const sLimit = (MAX_NUMBERS / 2) + 2; 
+    const aLimit = MAX_NUMBERS + 2;
+    const bLimit = (MAX_NUMBERS * 1.6) + 5;
+
     let rank = 'C';
     let comment = '再接再厲!';
-    let rankClass = '';
 
-    if (seconds < 15) {
+    if (seconds < sLimit) {
         rank = 'S';
         comment = '神級專注力！你是機器人嗎？';
-        rankClass = 'rank-s';
-    } else if (seconds < 25) {
+    } else if (seconds < aLimit) {
         rank = 'A';
         comment = '超凡的專注力！快如閃電。';
-        rankClass = 'rank-a';
-    } else if (seconds < 40) {
+    } else if (seconds < bLimit) {
         rank = 'B';
         comment = '很棒！表現非常穩定。';
-        rankClass = 'rank-b';
     } else {
         rank = 'C';
         comment = '不錯！試著挑戰更快的速度。';
-        rankClass = 'rank-c';
     }
 
     finalTimeDisplay.textContent = timeStr;
     finalRankDisplay.textContent = `等級 ${rank}`;
     resultCommentDisplay.textContent = comment;
-    
-    // Trigger overlay appearance
     resultOverlay.classList.add('active');
 }
 
@@ -209,5 +232,6 @@ function showResult(ms) {
 startBtn.addEventListener('click', startGame);
 restartBtn.addEventListener('click', startGame);
 
-// Initialize board on load (but wait for start)
+// Initialize board on load
+setupDifficulty();
 initGame();

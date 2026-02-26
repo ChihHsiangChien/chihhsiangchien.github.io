@@ -7,7 +7,8 @@ let gameState = {
     correctAnswers: new Set(),
     startTime: null,
     timerInterval: null,
-    currentQuestion: null
+    currentQuestion: null,
+    difficulty: 'lv1' // 預設難度
 };
 
 // 顏色配置
@@ -19,10 +20,42 @@ const COLORS = [
     '#FBE7C6', '#A0E7E5'
 ];
 
+// 區域定義 (用於 LV1, LV2)
+const REGION_MAP = {
+    // LV1: 北、中、南、東、離島 (5大區)
+    lv1: {
+        '北部地區': ['基隆市', '台北市', '新北市', '桃園市', '新竹縣', '新竹市', '宜蘭縣'],
+        '中部地區': ['苗栗縣', '台中市', '彰化縣', '南投縣', '雲林縣'],
+        '南部地區': ['嘉義縣', '嘉義市', '台南市', '高雄市', '屏東縣'],
+        '東部地區': ['花蓮縣', '台東縣'],
+        '離島地區': ['澎湖縣', '金門縣', '連江縣']
+    },
+    // LV2: 稍細一點的劃分 (10區)
+    lv2: {
+        '北北基宜': ['基隆市', '台北市', '新北市', '宜蘭縣'],
+        '桃竹苗': ['桃園市', '新竹縣', '新竹市', '苗栗縣'],
+        '中彰投': ['台中市', '彰化縣', '南投縣'],
+        '雲嘉南': ['雲林縣', '嘉義縣', '嘉義市', '台南市'],
+        '高屏': ['高雄市', '屏東縣'],
+        '花東': ['花蓮縣', '台東縣'],
+        '澎湖': ['澎湖縣'],
+        '金門': ['金門縣'],
+        '馬祖': ['連江縣']
+    }
+};
+
 // 初始化遊戲
 function initGame() {
-    // 將 TopoJSON 轉換為 GeoJSON
-    gameState.geoData = topojson.feature(TAIWAN_TOPOJSON, TAIWAN_TOPOJSON.objects.map);
+    // 解析難度
+    const urlParams = new URLSearchParams(window.location.search);
+    gameState.difficulty = urlParams.get('diff') || 'lv1';
+    
+    // 更新標題顯示難度
+    const diffNames = { lv1: '初級', lv2: '中級', lv3: '高級', lv4: '專業級' };
+    document.querySelector('h1').textContent = `台灣地圖挑戰 (${diffNames[gameState.difficulty]})`;
+
+    // 處理地理資料
+    processMapData();
     
     // 預先生成所有路徑資料並快取
     gameState.pathDataCache.clear();
@@ -40,6 +73,35 @@ function initGame() {
     showQuestion();
     setupEventListeners();
     startTimer();
+}
+
+// 根據難度處理地圖資料
+function processMapData() {
+    if (gameState.difficulty === 'lv1' || gameState.difficulty === 'lv2') {
+        const currentRegionDef = REGION_MAP[gameState.difficulty];
+        const newFeatures = [];
+        const topoObjects = TAIWAN_TOPOJSON.objects.map;
+
+        Object.entries(currentRegionDef).forEach(([regionName, counties], index) => {
+            // 找到對應的 TopoJSON geometries
+            const geometries = topoObjects.geometries.filter(g => counties.includes(g.properties.name));
+            if (geometries.length > 0) {
+                const merged = topojson.merge(TAIWAN_TOPOJSON, geometries);
+                newFeatures.push({
+                    type: 'Feature',
+                    geometry: merged,
+                    properties: {
+                        id: `region-${index}`,
+                        name: regionName
+                    }
+                });
+            }
+        });
+        gameState.geoData = { type: 'FeatureCollection', features: newFeatures };
+    } else {
+        // LV3, LV4 使用原始縣市資料
+        gameState.geoData = topojson.feature(TAIWAN_TOPOJSON, TAIWAN_TOPOJSON.objects.map);
+    }
 }
 
 // 將 GeoJSON 座標轉換為 SVG 路徑
@@ -109,6 +171,9 @@ function renderMiniMap() {
     const svg = document.getElementById('mini-map');
     svg.innerHTML = '';
 
+    // SVG container should always be visible to show content correctly
+    svg.style.opacity = '1';
+
     gameState.geoData.features.forEach((feature, index) => {
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         const pathData = gameState.pathDataCache.get(feature.properties.id);
@@ -119,6 +184,11 @@ function renderMiniMap() {
         path.setAttribute('fill', 'rgba(200, 200, 200, 0.3)');
         path.setAttribute('stroke', '#999');
         path.setAttribute('stroke-width', '1');
+        
+        // LV4 盲拼模式：初始隱藏未完成的路徑
+        if (gameState.difficulty === 'lv4') {
+            path.style.opacity = '0';
+        }
         
         svg.appendChild(path);
     });
@@ -194,11 +264,15 @@ function generateOptions() {
     const correctAnswer = gameState.currentQuestion.properties.name;
     const correctId = gameState.currentQuestion.properties.id;
     
-    // 選擇 5 個干擾選項
+    // 難度越高，干擾項越多
+    let distractorCount = 3;
+    if (gameState.difficulty === 'lv2') distractorCount = 4;
+    if (gameState.difficulty === 'lv3' || gameState.difficulty === 'lv4') distractorCount = 5;
+
     const allCounties = gameState.geoData.features.filter(f => f.properties.id !== correctId);
     const distractors = [];
     
-    while (distractors.length < 5 && distractors.length < allCounties.length) {
+    while (distractors.length < distractorCount && distractors.length < allCounties.length) {
         const random = allCounties[Math.floor(Math.random() * allCounties.length)];
         if (!distractors.find(d => d.properties.id === random.properties.id)) {
             distractors.push(random);
@@ -251,7 +325,7 @@ function checkAnswer(button) {
             showQuestion();
         }, 1500);
     } else {
-        // 答錯
+        // 答對才能顯眼，答錯回饋
         button.classList.add('wrong');
         showFeedback('✗ 答錯了，再試一次！', 'wrong');
         
@@ -274,6 +348,11 @@ function fillMiniMap(countyId) {
         county.setAttribute('stroke', '#333');
         county.setAttribute('stroke-width', '2');
         county.classList.add('completed');
+        
+        // LV4 盲拼模式：完成時才明顯顯示
+        if (gameState.difficulty === 'lv4') {
+            county.style.opacity = '1';
+        }
     }
 }
 
