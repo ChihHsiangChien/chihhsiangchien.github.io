@@ -1,5 +1,6 @@
 class ColorPerceptionGame {
     constructor() {
+        this.baseDifficulty = 'lv2';
         this.level = 1;
         this.score = 0;
         this.lives = 3;
@@ -24,42 +25,58 @@ class ColorPerceptionGame {
         this.pauseButton.addEventListener('click', () => this.togglePause());
         this.hintButton.addEventListener('click', () => this.showHint());
         this.slowButton.addEventListener('click', () => this.slowTime());
+
+        this.initDifficulty();
+    }
+
+    initDifficulty() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const diff = urlParams.get('diff');
+        if (diff) {
+            this.baseDifficulty = diff;
+            // Auto start if parameter present
+            setTimeout(() => this.startGame(), 500);
+        }
     }
 
     getLevelConfig() {
-        const configs = {
-            1: { gridSize: 8, timeLimit: 10, colorDiff: 6, brightnessDiff: 4 },
-            2: { gridSize: 8, timeLimit: 10, colorDiff: 6, brightnessDiff: 4 },
-            3: { gridSize: 8, timeLimit: 8, colorDiff: 6, brightnessDiff: 4 },
-            4: { gridSize: 8, timeLimit: 8, colorDiff: 4, brightnessDiff: 4 },
-            5: { gridSize: 8, timeLimit: 8, colorDiff: 2, brightnessDiff: 2 },
-            6: { gridSize: 8, timeLimit: 6, colorDiff: 2, brightnessDiff: 2 },
-            7: { gridSize: 9, timeLimit: 6, colorDiff: 2, brightnessDiff: 2 },
-            8: { gridSize: 10, timeLimit: 6, colorDiff: 1, brightnessDiff: 1 },
-            9: { gridSize: 11, timeLimit: 6, colorDiff: 1, brightnessDiff: 1 },
-            10: { gridSize: 12, timeLimit: 6, colorDiff: 1, brightnessDiff: 1 }
+        // Base starting point depends on Scouting Level
+        let startGridSize = 2;
+        let diffStep = 10;
+        let time = 15;
+
+        if (this.baseDifficulty === 'lv1') { startGridSize = 2; diffStep = 15; time = 20; }
+        else if (this.baseDifficulty === 'lv2') { startGridSize = 4; diffStep = 10; time = 15; }
+        else if (this.baseDifficulty === 'lv3') { startGridSize = 6; diffStep = 6; time = 12; }
+        else if (this.baseDifficulty === 'lv4') { startGridSize = 8; diffStep = 4; time = 10; }
+
+        // Increase complexity with game level (how many correct answers)
+        const currentGridSize = Math.min(15, startGridSize + Math.floor((this.level - 1) / 3));
+        const currentDiff = Math.max(1, diffStep - Math.floor(this.level / 2));
+        const currentTime = Math.max(3, time - Math.floor(this.level / 5));
+
+        return { 
+            gridSize: currentGridSize, 
+            timeLimit: currentTime, 
+            colorDiff: currentDiff, 
+            brightnessDiff: currentDiff 
         };
-        return configs[this.level] || { gridSize: 8, timeLimit: 4, colorDiff: 3, brightnessDiff: 2 };
     }
 
+    // ... (getPerceptualColorDiff, generateColors, createBoard remain same) ...
+
     getPerceptualColorDiff(baseHue, baseDiff) {
-        // 不同色相区域的感知敏感度系数
-        // 黄色/橙色区域 (30-90度) 最敏感，需要更小的差异
-        // 蓝色/紫色区域 (210-330度) 较不敏感，可以有更大的差异
-        
         const hueRanges = [
-            { min: 30, max: 90, multiplier: 0.6 },   // 黄-橙色 (更敏感)
-            { min: 90, max: 150, multiplier: 0.8 },  // 黄绿-绿色
-            { min: 150, max: 210, multiplier: 1.0 }, // 青色-蓝色
-            { min: 210, max: 270, multiplier: 1.2 }, // 蓝-紫色 (较不敏感)
-            { min: 270, max: 330, multiplier: 1.1 }, // 紫-品红
-            { min: 330, max: 360, multiplier: 0.7 }, // 品红-红色
-            { min: 0, max: 30, multiplier: 0.7 }     // 红-橙色
+            { min: 30, max: 90, multiplier: 0.6 },
+            { min: 90, max: 150, multiplier: 0.8 },
+            { min: 150, max: 210, multiplier: 1.0 },
+            { min: 210, max: 270, multiplier: 1.2 },
+            { min: 270, max: 330, multiplier: 1.1 },
+            { min: 330, max: 360, multiplier: 0.7 },
+            { min: 0, max: 30, multiplier: 0.7 }
         ];
-        
         const range = hueRanges.find(r => baseHue >= r.min && baseHue < r.max);
         const multiplier = range ? range.multiplier : 1.0;
-        
         return baseDiff * multiplier;
     }
 
@@ -70,31 +87,15 @@ class ColorPerceptionGame {
         const baseBrightness = 70 + Math.random() * 20;
         const totalSquares = config.gridSize * config.gridSize;
         const colors = [];
-
-        // Generate base color
         const baseColor = `hsl(${baseHue}, ${baseSaturation}%, ${baseBrightness}%)`;
-        
-        // Generate similar colors
-        for (let i = 0; i < totalSquares; i++) {
-            colors.push(baseColor);
-        }
-
-        // Generate one different color
+        for (let i = 0; i < totalSquares; i++) { colors.push(baseColor); }
         const differentIndex = Math.floor(Math.random() * totalSquares);
-        
-        // 根据色相区域调整差异值
         const adjustedColorDiff = this.getPerceptualColorDiff(baseHue, config.colorDiff);
-        
-        // 随机决定增加或减少色相
         const hueDirection = Math.random() < 0.5 ? 1 : -1;
         const differentHue = (baseHue + adjustedColorDiff * hueDirection + 360) % 360;
-        
-        // 随机决定增加或减少亮度
         const brightnessDirection = Math.random() < 0.5 ? 1 : -1;
         const differentBrightness = Math.max(0, Math.min(100, baseBrightness + config.brightnessDiff * brightnessDirection));
-        
         colors[differentIndex] = `hsl(${differentHue}, ${baseSaturation}%, ${differentBrightness}%)`;
-
         return { colors, differentIndex };
     }
 
@@ -102,10 +103,8 @@ class ColorPerceptionGame {
         const config = this.getLevelConfig();
         this.gameBoard.style.gridTemplateColumns = `repeat(${config.gridSize}, 1fr)`;
         this.gameBoard.innerHTML = '';
-
         const { colors, differentIndex } = this.generateColors();
         this.differentIndex = differentIndex;
-
         colors.forEach((color, index) => {
             const swatch = document.createElement('div');
             swatch.className = 'color-swatch';
@@ -116,7 +115,11 @@ class ColorPerceptionGame {
     }
 
     startGame() {
+        if (this.isPlaying) return;
         this.isPlaying = true;
+        this.score = 0;
+        this.level = 1;
+        this.lives = 3;
         this.timeLeft = this.getLevelConfig().timeLimit;
         this.updateUI();
         this.createBoard();
@@ -152,7 +155,6 @@ class ColorPerceptionGame {
     }
 
     setBoardColorState(isGrayscale) {
-        // Toggle grayscale to visually indicate paused state
         const swatches = this.gameBoard.children;
         for (let i = 0; i < swatches.length; i++) {
             swatches[i].style.filter = isGrayscale ? 'grayscale(100%) brightness(70%)' : 'none';
@@ -161,33 +163,25 @@ class ColorPerceptionGame {
 
     handleClick(index) {
         if (!this.isPlaying) return;
-
-        const swatches = this.gameBoard.children;
         if (index === this.differentIndex) {
-            // Correct choice
             this.score += Math.max(1, this.timeLeft * 2);
             this.level++;
             this.updateUI();
             this.createBoard();
             this.resetTimer();
         } else {
-            // Wrong choice
             this.lives--;
+            const swatches = this.gameBoard.children;
             swatches[index].style.border = '3px solid red';
             swatches[this.differentIndex].style.border = '3px solid green';
-            swatches[this.differentIndex].style.boxShadow = '0 0 10px green';
-            
             setTimeout(() => {
                 swatches[index].style.border = 'none';
                 swatches[this.differentIndex].style.border = 'none';
-                swatches[this.differentIndex].style.boxShadow = 'none';
-            }, 1500);
-            
+            }, 1000);
             if (this.lives <= 0) {
-                setTimeout(() => {
-                    this.gameOver();
-                }, 1500);
+                this.gameOver();
             }
+            this.updateUI();
         }
     }
 
@@ -208,14 +202,10 @@ class ColorPerceptionGame {
             swatches[this.differentIndex].classList.remove('different');
         }, 1000);
         this.hintButton.disabled = true;
-        setTimeout(() => {
-            this.hintButton.disabled = false;
-        }, 5000);
+        setTimeout(() => { this.hintButton.disabled = false; }, 5000);
     }
 
     slowTime() {
-        const originalInterval = 1000;
-        const slowInterval = 2000;
         clearInterval(this.timer);
         this.timer = setInterval(() => {
             if (this.timeLeft > 0) {
@@ -224,7 +214,7 @@ class ColorPerceptionGame {
             } else {
                 this.handleTimeUp();
             }
-        }, slowInterval);
+        }, 2000);
         this.slowButton.disabled = true;
         setTimeout(() => {
             clearInterval(this.timer);
@@ -254,13 +244,9 @@ class ColorPerceptionGame {
         this.hintButton.disabled = true;
         this.slowButton.disabled = true;
         this.pauseButton.textContent = '暫停';
-        alert(`Game Over! Your score: ${this.score}`);
-        this.level = 1;
-        this.score = 0;
-        this.lives = 3;
+        alert(`遊戲結束！您的得分: ${this.score}`);
         this.updateUI();
     }
 }
 
-// Initialize the game
 const game = new ColorPerceptionGame(); 

@@ -5,10 +5,10 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Difficulty Settings
     const DIFFICULTIES = {
-        'easy': { questions: 10, timePerQuestion: 0, scoreMult: 1, label: '入門' },
-        'normal': { questions: 15, timePerQuestion: 20, scoreMult: 1.5, label: '標準' },
-        'hard': { questions: 20, timePerQuestion: 10, scoreMult: 2, label: '困難' },
-        'expert': { questions: 25, timePerQuestion: 5, scoreMult: 3, label: '大師' }
+        'lv1': { questions: 10, timePerQuestion: 0, scoreMult: 1, label: '初級 (入門)' },
+        'lv2': { questions: 15, timePerQuestion: 20, scoreMult: 1.5, label: '中級 (進階)' },
+        'lv3': { questions: 20, timePerQuestion: 15, scoreMult: 2, label: '高級 (困難)' },
+        'lv4': { questions: 25, timePerQuestion: 8, scoreMult: 3, label: '專業級 (大師)' }
     };
 
     // --- Sound Manager ---
@@ -19,42 +19,58 @@ document.addEventListener('DOMContentLoaded', () => {
             this.ctx = new AudioContext();
         },
         play: function(type) {
-            if (!this.ctx) this.init();
+            if (!this.ctx) return;
             if (this.ctx.state === 'suspended') this.ctx.resume();
-
             const osc = this.ctx.createOscillator();
             const gain = this.ctx.createGain();
             osc.connect(gain);
             gain.connect(this.ctx.destination);
-
             const now = this.ctx.currentTime;
-            
             if (type === 'correct') {
-                // High pitched ding
                 osc.type = 'sine';
-                osc.frequency.setValueAtTime(800, now);
+                osc.frequency.setValueAtTime(600, now);
                 osc.frequency.exponentialRampToValueAtTime(1200, now + 0.1);
-                gain.gain.setValueAtTime(0.5, now);
-                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
                 osc.start(now);
-                osc.stop(now + 0.5);
+                osc.stop(now + 0.2);
             } else if (type === 'wrong') {
-                // Low pitched buzz
                 osc.type = 'sawtooth';
-                osc.frequency.setValueAtTime(150, now);
-                osc.frequency.linearRampToValueAtTime(100, now + 0.3);
-                gain.gain.setValueAtTime(0.5, now);
-                gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+                osc.frequency.setValueAtTime(200, now);
+                osc.frequency.linearRampToValueAtTime(150, now + 0.3);
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
                 osc.start(now);
                 osc.stop(now + 0.3);
             }
         }
     };
 
+    // --- DOM Elements ---
+    const ui = {
+        startScreen: document.getElementById('start-screen'),
+        gameScreen: document.getElementById('game-screen'),
+        endScreen: document.getElementById('end-screen'),
+        diffBtns: document.querySelectorAll('.diff-btn'),
+        diffDesc: document.getElementById('diff-desc'),
+        startBtn: document.getElementById('start-btn'),
+        restartBtn: document.getElementById('restart-btn'),
+        idiomText: document.getElementById('idiom-text'),
+        optionsGrid: document.getElementById('options-grid'),
+        timer: document.getElementById('timer-display'),
+        progress: document.getElementById('progress-display'),
+        score: document.getElementById('score-display'),
+        feedback: document.getElementById('feedback-message'),
+        finalScore: document.getElementById('final-score'),
+        correctCount: document.getElementById('correct-count'),
+        totalTime: document.getElementById('total-time'),
+        endMessage: document.getElementById('end-message')
+    };
+
     // --- State ---
     let state = {
         idioms: [],
-        currentDifficulty: 'normal',
+        currentDifficulty: 'lv2',
         currentQuestions: [],
         currentIndex: 0,
         score: 0,
@@ -65,80 +81,98 @@ document.addEventListener('DOMContentLoaded', () => {
         endTime: 0
     };
 
-    // --- Elements ---
-    const screens = {
-        start: document.getElementById('start-screen'),
-        game: document.getElementById('game-screen'),
-        end: document.getElementById('end-screen')
-    };
+    function showScreen(screenId) {
+        // Remove active and add hidden to all
+        [ui.startScreen, ui.gameScreen, ui.endScreen].forEach(s => {
+            s.classList.remove('active');
+            s.classList.add('hidden');
+        });
+        
+        // Show target
+        const target = ui[screenId + 'Screen'];
+        if (target) {
+            target.classList.add('active');
+            target.classList.remove('hidden');
+        }
+    }
 
-    const ui = {
-        diffBtns: document.querySelectorAll('.diff-btn'),
-        diffDesc: document.getElementById('difficulty-description'),
-        startBtn: document.getElementById('start-btn'),
-        restartBtn: document.getElementById('restart-btn'),
-        score: document.getElementById('score-display'),
-        timer: document.getElementById('timer-display'),
-        progress: document.getElementById('progress-display'),
-        idiomText: document.getElementById('idiom-text'),
-        optionsGrid: document.getElementById('options-grid'),
-        feedback: document.getElementById('feedback-message'),
-        finalScore: document.getElementById('final-score'),
-        endMessage: document.getElementById('end-message'),
-        correctCount: document.getElementById('correct-count'),
-        totalTime: document.getElementById('total-time')
-    };
+    function setDifficulty(btn) {
+        ui.diffBtns.forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        state.currentDifficulty = btn.dataset.diff;
+        ui.diffDesc.textContent = btn.dataset.info || DIFFICULTIES[state.currentDifficulty].label;
+    }
 
     // --- Initialization ---
     init();
 
     async function init() {
+        // 解析難度
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlDiff = urlParams.get('diff');
+        if (urlDiff && DIFFICULTIES[urlDiff]) {
+            state.currentDifficulty = urlDiff;
+        }
+
         // Load data
         try {
             const response = await fetch('data.json');
             const data = await response.json();
             state.idioms = data.idioms;
             console.log('Loaded ' + state.idioms.length + ' idioms');
+            
+            // Auto-start if difficulty is in URL
+            if (urlDiff && DIFFICULTIES[urlDiff]) {
+                setTimeout(() => {
+                    if (!soundManager.ctx) soundManager.init();
+                    startGame();
+                }, 500);
+            }
         } catch (error) {
             console.error('Failed to load idioms:', error);
-            alert('無法載入成語資料，請檢查 data.json');
         }
 
         // Event Listeners
         ui.diffBtns.forEach(btn => {
+            const diffKey = btn.dataset.diff;
+            // 如果 URL 有指定難度，自動選中對應按鈕
+            if (diffKey === state.currentDifficulty) {
+                btn.classList.add('selected');
+                ui.diffDesc.textContent = btn.dataset.info || DIFFICULTIES[diffKey].label;
+            }
             btn.addEventListener('click', () => setDifficulty(btn));
         });
 
         ui.startBtn.addEventListener('click', () => {
-            // Init audio context on user interaction
             if (!soundManager.ctx) soundManager.init();
             startGame();
         });
         ui.restartBtn.addEventListener('click', () => showScreen('start'));
     }
 
-    // --- Game Logic ---
-
-    function setDifficulty(btn) {
-        ui.diffBtns.forEach(b => b.classList.remove('selected'));
-        btn.classList.add('selected');
-        state.currentDifficulty = btn.dataset.diff;
-        ui.diffDesc.textContent = btn.dataset.info;
-    }
-
-    function showScreen(screenName) {
-        Object.values(screens).forEach(s => s.classList.remove('active'));
-        screens[screenName].classList.add('active');
-    }
+    // ... (setDifficulty and showScreen remain same) ...
 
     function startGame() {
         if (state.idioms.length === 0) return;
 
         const config = DIFFICULTIES[state.currentDifficulty];
         
-        // Prepare questions
-        const shuffled = [...state.idioms].sort(() => 0.5 - Math.random());
-        // Filter idioms that actually contain at least one number from our list
+        // 根據難度過濾成語
+        let pool = [...state.idioms];
+        
+        if (state.currentDifficulty === 'lv1') {
+            // 初級：限 4 字且常用 (含有 一, 二, 三, 十, 百, 千, 萬)
+            const commonNumbers = ['一', '二', '三', '十', '百', '千', '萬'];
+            pool = pool.filter(i => i.length === 4 && commonNumbers.some(n => i.includes(n)));
+        } else if (state.currentDifficulty === 'lv2') {
+            // 中級：限 4 字
+            pool = pool.filter(i => i.length === 4);
+        } else if (state.currentDifficulty === 'lv3') {
+            // 高級：不限長度
+        } 
+        // 專業級：不變
+
+        const shuffled = pool.sort(() => 0.5 - Math.random());
         const validIdioms = shuffled.filter(idiom => {
              for (let char of idiom) {
                  if (NUMBER_CHARS.includes(char)) return true;
@@ -295,7 +329,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function showFeedback(text, type) {
         ui.feedback.textContent = text;
-        ui.feedback.className = `feedback-message ${type}`; // remove hidden
+        ui.feedback.className = `feedback-message ${type}`; // This removes 'hidden'
+        ui.feedback.classList.remove('hidden');
     }
 
     function animateScore(points) {

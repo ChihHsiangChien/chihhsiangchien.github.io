@@ -36,6 +36,8 @@ function playTone(type) {
     }
 }
 
+// ... (playTone remains same) ...
+
 const game = {
     score: 0,
     time: 60,
@@ -44,31 +46,30 @@ const game = {
     currentLevel: 1,
     currentQuestion: null,
     pool: [],
-    correctlyAnswered: new Set(), // Track correctly answered countries
-    
-    // Config
-    questionsPerRound: Infinity, // or time based? User asked for "Timed competitive", so time based limit is good.
+    correctlyAnswered: new Set(),
     
     start: function(level) {
-        this.currentLevel = level;
+        this.currentLevel = parseInt(level) || 1;
         this.score = 0;
-        this.time = 60; // 60 seconds
+        this.time = 60; 
         this.isPlaying = true;
-        this.correctlyAnswered.clear(); // Reset tracking
+        this.correctlyAnswered.clear();
         
-        // Filter countries by difficulty
-        // For higher levels, include lower levels to make pool bigger but prioritize level
-        // Actually user spec said "Kindergarten degree", etc. strict filtering might be better to match the name.
-        // Let's implement Strict Filtering for pure experience of that level.
-        // But if pool is small (Kindy ~14), we might see repeats. Repeats are okay in speed run.
-        this.pool = countries.filter(c => c.difficulty === level);
+        // 根據難度過濾國家
+        if (this.currentLevel === 1) {
+            this.pool = countries.filter(c => c.difficulty === 1);
+        } else if (this.currentLevel === 2) {
+            this.pool = countries.filter(c => c.difficulty <= 2);
+        } else if (this.currentLevel === 3) {
+            this.pool = countries.filter(c => c.difficulty <= 3);
+        } else {
+            this.pool = countries;
+        }
         
-        // Fallback for empty levels if any
         if (this.pool.length < 4) {
-             this.pool = countries.filter(c => c.difficulty <= level);
+             this.pool = countries; // Fallback
         }
 
-        // GUI updates
         document.getElementById('start-screen').classList.add('hidden');
         document.getElementById('game-screen').classList.remove('hidden');
         document.getElementById('score').innerText = this.score;
@@ -82,140 +83,90 @@ const game = {
         this.timerInterval = setInterval(() => {
             this.time--;
             document.getElementById('time').innerText = this.time;
-            
-            if (this.time <= 10) {
-                 document.getElementById('time').style.color = '#f56565';
-                 if (this.time > 0) playTone('tick');
-            }
-
-            if (this.time <= 0) {
-                this.endGame();
-            }
+            if (this.time <= 5) playTone('tick');
+            if (this.time <= 0) this.endGame();
         }, 1000);
     },
+
     nextQuestion: function() {
-        if (!this.isPlaying) return;
-
-        // Check if all countries have been answered correctly
-        if (this.correctlyAnswered.size === this.pool.length) {
-            // All questions completed! Add time bonus
-            const timeBonus = this.time * 5; // 5 points per remaining second
-            this.score += timeBonus;
-            this.endGame(true); // Pass true to indicate completion
-            return;
-        }
-
-        // Force mode Name -> Flag Options
-        const mode = 'nameToFlag';
+        // Pick a country from pool that hasn't been answered correctly yet
+        const remaining = this.pool.filter(c => !this.correctlyAnswered.has(c.flag));
+        const poolToUse = remaining.length > 0 ? remaining : this.pool;
         
-        // Pick correct answer - prioritize unanswered countries
-        const unanswered = this.pool.filter(c => !this.correctlyAnswered.has(c.name));
-        let correct;
-        
-        if (unanswered.length > 0) {
-            // Pick from unanswered countries
-            correct = unanswered[Math.floor(Math.random() * unanswered.length)];
-        } else {
-            // All answered, pick any
-            correct = this.pool[Math.floor(Math.random() * this.pool.length)];
-        }
-        
-        // Pick 3 distractors
-        const distractors = [];
-        while (distractors.length < 3) {
-            const randomC = this.pool[Math.floor(Math.random() * this.pool.length)];
-            if (randomC.name !== correct.name && !distractors.includes(randomC)) {
-                distractors.push(randomC);
-            }
-        }
-        
-        // Combine and shuffle
-        const options = [...distractors, correct].sort(() => Math.random() - 0.5);
-        
-        this.currentQuestion = { correct, options, mode };
+        this.currentQuestion = poolToUse[Math.floor(Math.random() * poolToUse.length)];
         this.renderQuestion();
     },
 
     renderQuestion: function() {
-        const qArea = document.getElementById('question-area');
-        const oGrid = document.getElementById('options-grid');
-        qArea.innerHTML = '';
-        oGrid.innerHTML = '';
-
-        const { correct, options } = this.currentQuestion;
-
-        // Display Name, Choose Flag
-        qArea.innerHTML = `<div class="name-display fade-in">${correct.name}</div>`;
+        const flagImg = document.getElementById('flag-img');
+        flagImg.src = `https://flagcdn.com/w320/${this.currentQuestion.flag.toLowerCase()}.png`;
+        
+        const optionsContainer = document.getElementById('options');
+        optionsContainer.innerHTML = '';
+        
+        // Generate options (correct + 3 random)
+        const others = countries.filter(c => c.name !== this.currentQuestion.name);
+        const distractors = [];
+        while (distractors.length < 3) {
+            const r = others[Math.floor(Math.random() * others.length)];
+            if (!distractors.includes(r)) distractors.push(r);
+        }
+        
+        const options = [this.currentQuestion, ...distractors].sort(() => Math.random() - 0.5);
         
         options.forEach(opt => {
             const btn = document.createElement('button');
             btn.className = 'option-btn';
-            
-            // Create img element for flag
-            const img = document.createElement('img');
-            img.src = `https://flagcdn.com/h120/${opt.flag.toLowerCase()}.png`;
-            img.alt = opt.name;
-            img.style.width = '100px';
-            img.style.height = 'auto';
-            img.style.borderRadius = '4px';
-            
-            btn.appendChild(img);
-            btn.onclick = () => this.handleAnswer(opt, btn);
-            oGrid.appendChild(btn);
+            btn.innerText = opt.name;
+            btn.onclick = () => this.handleAnswer(opt.name, btn);
+            optionsContainer.appendChild(btn);
         });
     },
 
-    handleAnswer: function(selected, btnElement) {
+    handleAnswer: function(name, btn) {
         if (!this.isPlaying) return;
-
-        const isCorrect = selected.name === this.currentQuestion.correct.name;
-
-        if (isCorrect) {
-            // Mark this country as correctly answered
-            this.correctlyAnswered.add(this.currentQuestion.correct.name);
-            
-            this.score += 10 + (this.currentLevel * 2); // Bonus for difficulty
-            document.getElementById('score').innerText = this.score;
-            btnElement.classList.add('correct');
+        
+        if (name === this.currentQuestion.name) {
             playTone('correct');
-            
-            setTimeout(() => {
-                this.nextQuestion();
-            }, 400); // Quick transition
-        } else {
-            // Wrong answer - remove from correctly answered if it was there
-            this.correctlyAnswered.delete(this.currentQuestion.correct.name);
-            
-            // Penalty?
-            this.score = Math.max(0, this.score - 5);
+            btn.classList.add('correct');
+            this.score += 10;
+            this.correctlyAnswered.add(this.currentQuestion.flag);
             document.getElementById('score').innerText = this.score;
-            btnElement.classList.add('wrong');
-            playTone('wrong');
             
+            // Disable all buttons after choice
+            document.querySelectorAll('.option-btn').forEach(b => b.disabled = true);
+            
+            setTimeout(() => this.nextQuestion(), 1000);
+        } else {
+            playTone('wrong');
+            btn.classList.add('wrong');
+            this.time = Math.max(0, this.time - 5);
+            document.getElementById('time').innerText = this.time;
+            
+            // Temporary disable to prevent double clicking during animation
+            btn.disabled = true;
             setTimeout(() => {
-                this.nextQuestion();
-            }, 600);
+                btn.disabled = false;
+                btn.classList.remove('wrong');
+            }, 500);
         }
     },
 
-    endGame: function(completedAll = false) {
+    endGame: function() {
         this.isPlaying = false;
         clearInterval(this.timerInterval);
-        
         document.getElementById('game-screen').classList.add('hidden');
         document.getElementById('end-screen').classList.remove('hidden');
         document.getElementById('final-score').innerText = this.score;
-        
-        // Custom message
-        const msg = document.getElementById('result-message');
-        if (completedAll) {
-            msg.innerText = "完美通關！全部答對！🎉🏆";
-        } else if (this.score > 200) {
-            msg.innerText = "地理天才！ 🌍";
-        } else if (this.score > 100) {
-            msg.innerText = "做得好！ 👍";
-        } else {
-            msg.innerText = "再接再厲！ 💪";
-        }
     }
 };
+
+// 頁面載入時自動處理難度
+window.addEventListener('DOMContentLoaded', () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const diff = urlParams.get('diff'); // lv1, lv2, lv3, lv4
+    if (diff) {
+        const levelNum = diff.replace('lv', '');
+        setTimeout(() => game.start(levelNum), 500); // 延遲一下確保音訊環境準備
+    }
+});

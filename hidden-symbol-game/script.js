@@ -8,6 +8,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const restartBtn = document.getElementById('restart-btn');
     
     const currentQuestionEl = document.getElementById('current-question');
+    const totalQuestionsEl = document.getElementById('total-questions');
+    const totalQuestionsEndEl = document.getElementById('total-questions-end');
     const num1El = document.getElementById('num1');
     const num2El = document.getElementById('num2');
     const resultEl = document.getElementById('result');
@@ -18,118 +20,212 @@ document.addEventListener('DOMContentLoaded', () => {
     const elapsedTimeEl = document.getElementById('elapsed-time');
     const completionMessageEl = document.getElementById('completion-message');
 
+    // Difficulty Settings
+    const DIFFICULTIES = {
+        'lv1': { ops: ['+', '-'], maxNum: 50, count: 15, time: 45 },
+        'lv2': { ops: ['+', '-', '*', '/'], maxNum: 100, count: 15, time: 40 },
+        'lv3': { ops: ['+', '-', '*', '/'], maxNum: 200, count: 15, time: 40 },
+        'lv4': { ops: ['+', '-', '*', '/'], maxNum: 500, count: 15, time: 30 }
+    };
+
     // Game Variables
+    let currentDifficulty = 'lv2';
     let currentQuestionCount = 0;
-    const totalQuestions = 30;
+    let totalQuestions = 30;
     let score = 0;
     let currentCorrectOp = '';
     let timerInterval = null;
     let timeLeft = 0;
     let startTime = 0;
 
-    // Constants
-    const OPERATORS = ['+', '-', '*', '/'];
-    const TOTAL_TIME = 30; // 30 seconds total for all questions
+    // ... (rest of logic) ...
 
-    // Event Listeners
+    function init() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const diff = urlParams.get('diff');
+        if (diff && DIFFICULTIES[diff]) {
+            currentDifficulty = diff;
+            const config = DIFFICULTIES[currentDifficulty];
+            totalQuestions = config.count;
+            setTimeout(startGame, 500);
+        }
+    }
+
     startBtn.addEventListener('click', startGame);
-    restartBtn.addEventListener('click', startGame);
+    restartBtn.addEventListener('click', () => {
+        window.location.reload(); // Easier than resetting all state
+    });
     
     opButtons.forEach(btn => {
         btn.addEventListener('click', (e) => {
-            const selectedOp = e.target.getAttribute('data-op');
+            const selectedOp = e.currentTarget.getAttribute('data-op');
             checkAnswer(selectedOp);
         });
     });
 
     function startGame() {
+        const config = DIFFICULTIES[currentDifficulty];
         score = 0;
         currentQuestionCount = 0;
+        totalQuestions = config.count;
+        if (totalQuestionsEl) totalQuestionsEl.textContent = totalQuestions;
+        if (totalQuestionsEndEl) totalQuestionsEndEl.textContent = totalQuestions;
         startTime = Date.now();
         showScreen(gameScreen);
-        startTimer();
+        startTimer(config.time);
         nextQuestion();
     }
 
     function showScreen(screen) {
-        // Hide all screens
         [startScreen, gameScreen, endScreen].forEach(s => s.classList.remove('active'));
-        // Show target screen
         screen.classList.add('active');
     }
 
     function nextQuestion() {
         currentQuestionCount++;
-        
         if (currentQuestionCount > totalQuestions) {
             endGame();
             return;
         }
-
         currentQuestionEl.textContent = currentQuestionCount;
         generateQuestion();
     }
 
     function generateQuestion() {
-        // Randomly select operator
-        const op = OPERATORS[Math.floor(Math.random() * OPERATORS.length)];
-        currentCorrectOp = op;
+        const config = DIFFICULTIES[currentDifficulty];
+        let equationHTML = '';
+        let result;
 
-        let a, b, result;
+        if (currentDifficulty === 'lv1' || currentDifficulty === 'lv2') {
+            // Simple logic: A [OP] B = result
+            const ops = config.ops;
+            const op = ops[Math.floor(Math.random() * ops.length)];
+            currentCorrectOp = op;
 
-        switch (op) {
-            case '+':
-                a = getRandomInt(1, 20);
-                b = getRandomInt(1, 20);
+            let a, b;
+            const max = config.maxNum;
+
+            if (op === '+') {
+                a = getRandomInt(1, max);
+                b = getRandomInt(1, max);
                 result = a + b;
-                break;
-            case '-':
-                a = getRandomInt(2, 20);
-                b = getRandomInt(1, a - 1); // Ensure positive result (though negatives are fine, keeping it simple)
+            } else if (op === '-') {
+                a = getRandomInt(1, max);
+                b = getRandomInt(1, a);
                 result = a - b;
-                break;
-            case '*':
+            } else if (op === '*') {
                 a = getRandomInt(2, 12);
-                b = getRandomInt(2, 12); // Keep numbers manageable for mental math
+                b = getRandomInt(2, 12);
                 result = a * b;
-                break;
-            case '/':
-                b = getRandomInt(2, 10);
-                result = getRandomInt(2, 12); // Result is integer
-                a = b * result; // a is multiple of b
-                break;
+            } else if (op === '/') {
+                b = getRandomInt(2, 12);
+                result = getRandomInt(2, 12);
+                a = b * result;
+            }
+
+            equationHTML = `
+                <span class="number">${a}</span>
+                <div class="question-box">?</div>
+                <span class="number">${b}</span>
+                <span class="equals">=</span>
+                <span class="number">${result}</span>
+            `;
+        } else if (currentDifficulty === 'lv3') {
+            // LV3: (A [OP] B) [FIXED_OP] C = result  OR  A [FIXED_OP] (B [OP] C) = result
+            const ops = config.ops;
+            const targetOp = ops[Math.floor(Math.random() * ops.length)];
+            currentCorrectOp = targetOp;
+
+            // Generate a valid 3-part equation
+            // Pattern: (A ? B) + C = Result
+            const extraOps = ['+', '-']; 
+            const fixedOp = extraOps[Math.floor(Math.random() * extraOps.length)];
+            
+            let a, b, c, part1;
+            
+            // To keep it simple but meaningful:
+            a = getRandomInt(5, 20);
+            b = getRandomInt(5, 20);
+            if (targetOp === '+') part1 = a + b;
+            else if (targetOp === '-') { b = getRandomInt(1, a); part1 = a - b; }
+            else if (targetOp === '*') part1 = a * b;
+            else if (targetOp === '/') { b = getRandomInt(2, 10); a = b * getRandomInt(2, 10); part1 = a / b; }
+
+            c = getRandomInt(5, 30);
+            result = (fixedOp === '+') ? part1 + c : part1 - c;
+
+            equationHTML = `
+                <span class="symbol">(</span>
+                <span class="number">${a}</span>
+                <div class="question-box">?</div>
+                <span class="number">${b}</span>
+                <span class="symbol">)</span>
+                <span class="symbol">${fixedOp === '+' ? '+' : '-'}</span>
+                <span class="number">${c}</span>
+                <span class="equals">=</span>
+                <span class="number">${result}</span>
+            `;
+        } else if (currentDifficulty === 'lv4') {
+            // LV4: More complex, potentially negative numbers or mixed priority
+            // Pattern: Result = A * (B ? C) + D
+            const ops = config.ops;
+            const targetOp = ops[Math.floor(Math.random() * ops.length)];
+            currentCorrectOp = targetOp;
+
+            let a = getRandomInt(2, 10);
+            let b = getRandomInt(10, 50);
+            let c = getRandomInt(1, 10);
+            let d = getRandomInt(-20, 50);
+            let subPart;
+
+            if (targetOp === '+') subPart = b + c;
+            else if (targetOp === '-') subPart = b - c;
+            else if (targetOp === '*') subPart = b * c;
+            else if (targetOp === '/') { c = getRandomInt(2, 10); b = c * getRandomInt(2, 10); subPart = b / c; }
+
+            result = a * subPart + d;
+
+            equationHTML = `
+                <span class="number">${a}</span>
+                <span class="symbol">×</span>
+                <span class="symbol">(</span>
+                <span class="number">${b}</span>
+                <div class="question-box">?</div>
+                <span class="number">${c}</span>
+                <span class="symbol">)</span>
+                <span class="symbol">${d >= 0 ? '+' : '-'}</span>
+                <span class="number">${Math.abs(d)}</span>
+                <span class="equals">=</span>
+                <span class="number">${result}</span>
+            `;
         }
 
-        // Update UI
-        num1El.textContent = a;
-        num2El.textContent = b;
-        resultEl.textContent = result;
+        const container = document.querySelector('.equation-container');
+        if (container) container.innerHTML = equationHTML;
     }
 
     function checkAnswer(selectedOp) {
         if (selectedOp === currentCorrectOp) {
             score++;
         }
-        // Whether correct or wrong, move to next question immediately
         nextQuestion();
     }
 
-    function startTimer() {
-        stopTimer(); // Clear any existing timer
-        timeLeft = TOTAL_TIME * 100; // Use centiseconds for smoother animation
+    function startTimer(totalSeconds) {
+        stopTimer();
+        timeLeft = totalSeconds * 100;
         timerBarEl.style.width = '100%';
         
         timerInterval = setInterval(() => {
             timeLeft--;
-            const percentage = (timeLeft / (TOTAL_TIME * 100)) * 100;
+            const percentage = (timeLeft / (totalSeconds * 100)) * 100;
             timerBarEl.style.width = percentage + '%';
             
             if (timeLeft <= 0) {
                 stopTimer();
-                // Time's up, end game
                 endGame(true);
             }
-        }, 10); // Update every 10ms for smooth animation
+        }, 10);
     }
 
     function stopTimer() {
@@ -142,20 +238,15 @@ document.addEventListener('DOMContentLoaded', () => {
     function endGame(timeUp = false) {
         stopTimer();
         const elapsedSeconds = ((Date.now() - startTime) / 1000).toFixed(1);
-        
         finalScoreEl.textContent = score;
         elapsedTimeEl.textContent = elapsedSeconds;
-        
-        if (timeUp) {
-            completionMessageEl.textContent = '時間到！';
-        } else {
-            completionMessageEl.textContent = '全部答完！';
-        }
-        
+        completionMessageEl.textContent = timeUp ? '時間到！' : '全部答完！';
         showScreen(endScreen);
     }
 
     function getRandomInt(min, max) {
         return Math.floor(Math.random() * (max - min + 1)) + min;
     }
+
+    init();
 });

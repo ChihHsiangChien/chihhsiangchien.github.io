@@ -1,16 +1,17 @@
 // Game Configuration
 const LEVELS = {
-    1: { count: 6, label: "Easy" },
-    2: { count: 10, label: "Medium" },
-    3: { count: 15, label: "Hard" },
-    4: { count: 25, label: "Expert" }
+    'lv1': { count: 4, label: "初級 (入門)" },
+    'lv2': { count: 8, label: "中級 (進階)" },
+    'lv3': { count: 12, label: "高級 (挑戰)" },
+    'lv4': { count: 20, label: "專業級 (大師)" }
 };
 
 // State
-let currentLevel = 1;
-let targetColors = []; // The correct sorted order
-let currentColors = []; // The current shuffled order
+let currentDifficulty = 'lv2';
+let targetColors = []; 
+let currentColors = []; 
 let dragSrcEl = null;
+let firstSelectedIdx = null;
 
 // Audio Context
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -45,7 +46,6 @@ const SoundFX = {
     },
     
     playWin: () => {
-        // Simple arpeggio
         const now = audioCtx.currentTime;
         [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
             setTimeout(() => {
@@ -72,16 +72,22 @@ const successModal = document.getElementById('success-modal');
 const levelIndicator = document.getElementById('level-indicator');
 
 // Initialization
+function setupDifficulty() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const diff = urlParams.get('diff');
+    if (diff && LEVELS[diff]) {
+        currentDifficulty = diff;
+        // Auto start
+        setTimeout(() => startGame(diff), 500);
+    }
+}
+
 document.querySelectorAll('.btn-diff').forEach(btn => {
     btn.addEventListener('click', (e) => {
-        // Handle click on button or its children
         const target = e.target.closest('.btn-diff');
-        const level = parseInt(target.dataset.level);
-        // Resume audio context on user gesture
-        if (audioCtx.state === 'suspended') {
-            audioCtx.resume();
-        }
-        startGame(level);
+        const diffKey = target.dataset.id || 'lv2';
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        startGame(diffKey);
     });
 });
 
@@ -93,15 +99,9 @@ document.getElementById('modal-menu-btn').addEventListener('click', () => {
 document.getElementById('reset-btn').addEventListener('click', resetLevel);
 document.getElementById('check-btn').addEventListener('click', checkWin);
 document.getElementById('next-level-btn').addEventListener('click', () => {
-    const next = currentLevel + 1;
-    if (LEVELS[next]) {
-        hideModal();
-        startGame(next);
-    } else {
-        alert("恭喜！你已完成所有關卡！");
-        hideModal();
-        showMenu();
-    }
+    // For specific event, "Next Level" could just re-init current difficulty with different colors
+    hideModal();
+    startGame(currentDifficulty);
 });
 
 function showMenu() {
@@ -109,19 +109,24 @@ function showMenu() {
     menuScreen.classList.remove('hidden');
 }
 
-function startGame(level) {
-    currentLevel = level;
-    levelIndicator.innerText = `${LEVELS[level].label} (Level ${level})`;
+function startGame(diffKey) {
+    currentDifficulty = diffKey;
+    const config = LEVELS[diffKey];
+    levelIndicator.innerText = `${config.label}`;
     
     menuScreen.classList.add('hidden');
     gameScreen.classList.remove('hidden');
     
-    initLevel(LEVELS[level].count);
+    initLevel(config.count);
 }
 
 function resetLevel() {
-    initLevel(LEVELS[currentLevel].count);
+    initLevel(LEVELS[currentDifficulty].count);
 }
+
+// ... (initLevel, hsbToHslString, generateGradient, shuffleArray, renderBoard, DnD handlers remain same) ...
+
+setupDifficulty();
 
 function initLevel(count) {
     // 1. Generate Gradient
@@ -206,80 +211,82 @@ function renderBoard() {
         } else {
             div.draggable = true;
             addDnDHandlers(div);
+            // Also keep click-to-swap for touch/accessibility
+            div.addEventListener('click', (e) => handleBlockInteraction(index, div));
         }
         
         gameBoard.appendChild(div);
     });
 }
 
-// Drag and Drop Logic
 function addDnDHandlers(el) {
-    el.addEventListener('dragstart', handleDragStart, false);
-    el.addEventListener('dragenter', handleDragEnter, false);
-    el.addEventListener('dragover', handleDragOver, false);
-    el.addEventListener('dragleave', handleDragLeave, false);
-    el.addEventListener('drop', handleDrop, false);
-    el.addEventListener('dragend', handleDragEnd, false);
-}
-
-function handleDragStart(e) {
-    dragSrcEl = this;
-    SoundFX.playPick(); // Sound
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/html', this.innerHTML);
-    this.classList.add('dragging');
-}
-
-function handleDragOver(e) {
-    if (e.preventDefault) {
-        e.preventDefault();
-    }
-    e.dataTransfer.dropEffect = 'move';
-    return false;
-}
-
-function handleDragEnter(e) {
-    if (this !== dragSrcEl && !this.classList.contains('fixed')) {
-        this.style.transform = 'scale(1.1)';
-        this.style.zIndex = '100';
-    }
-}
-
-function handleDragLeave(e) {
-    if (this !== dragSrcEl) {
-        this.style.transform = '';
-        this.style.zIndex = '';
-    }
-}
-
-function handleDrop(e) {
-    if (e.stopPropagation) {
-        e.stopPropagation();
-    }
-
-    if (dragSrcEl !== this && !this.classList.contains('fixed')) {
-        SoundFX.playDrop(); // Sound
-        
-        const srcIdx = parseInt(dragSrcEl.dataset.index);
-        const targetIdx = parseInt(this.dataset.index);
-        
-        const temp = currentColors[srcIdx];
-        currentColors[srcIdx] = currentColors[targetIdx];
-        currentColors[targetIdx] = temp;
-        
-        renderBoard();
-    }
-    return false;
-}
-
-function handleDragEnd(e) {
-    this.classList.remove('dragging');
-    document.querySelectorAll('.color-block').forEach(col => {
-        col.style.transform = '';
-        col.style.zIndex = '';
+    el.addEventListener('dragstart', (e) => {
+        dragSrcEl = el;
+        el.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/html', el.innerHTML);
+        SoundFX.playPick();
     });
+
+    el.addEventListener('dragover', (e) => {
+        if (e.preventDefault) e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (!el.classList.contains('fixed')) {
+            el.classList.add('over');
+        }
+        return false;
+    });
+
+    el.addEventListener('dragleave', () => {
+        el.classList.remove('over');
+    });
+
+    el.addEventListener('drop', (e) => {
+        if (e.stopPropagation) e.stopPropagation();
+        
+        if (dragSrcEl !== el && !el.classList.contains('fixed')) {
+            const srcIdx = parseInt(dragSrcEl.dataset.index);
+            const targetIdx = parseInt(el.dataset.index);
+            
+            swapColors(srcIdx, targetIdx);
+            SoundFX.playDrop();
+        }
+        return false;
+    });
+
+    el.addEventListener('dragend', () => {
+        document.querySelectorAll('.color-block').forEach(block => {
+            block.classList.remove('over');
+            block.classList.remove('dragging');
+        });
+    });
+}
+
+function swapColors(idx1, idx2) {
+    const temp = currentColors[idx1];
+    currentColors[idx1] = currentColors[idx2];
+    currentColors[idx2] = temp;
     
+    firstSelectedIdx = null; // Reset click-to-swap state
+    renderBoard();
     checkWinInternal(false);
+}
+
+function handleBlockInteraction(index, el) {
+    if (firstSelectedIdx === null) {
+        // First selection
+        firstSelectedIdx = index;
+        el.classList.add('selected');
+        SoundFX.playPick();
+    } else if (firstSelectedIdx === index) {
+        // Deselect
+        firstSelectedIdx = null;
+        el.classList.remove('selected');
+    } else {
+        // Second selection - SWAP
+        swapColors(firstSelectedIdx, index);
+        SoundFX.playDrop();
+    }
 }
 
 function checkWin() {
@@ -288,7 +295,6 @@ function checkWin() {
 
 function checkWinInternal(showError) {
     let isCorrect = true;
-    
     for (let i = 0; i < currentColors.length; i++) {
         if (currentColors[i].originalIndex !== i) {
             isCorrect = false;
@@ -297,17 +303,14 @@ function checkWinInternal(showError) {
     }
     
     if (isCorrect) {
-        // Prevent multiple calls
         if (successModal.classList.contains('hidden')) {
-            SoundFX.playWin(); // Sound
+            SoundFX.playWin();
             showSuccess();
         }
-    } else {
-        if (showError) {
-            const btn = document.getElementById('check-btn');
-            btn.innerText = "不對喔...";
-            setTimeout(() => btn.innerText = "檢查答案", 1000);
-        }
+    } else if (showError) {
+        const btn = document.getElementById('check-btn');
+        btn.innerText = "不對喔...";
+        setTimeout(() => btn.innerText = "檢查答案", 1000);
     }
 }
 
