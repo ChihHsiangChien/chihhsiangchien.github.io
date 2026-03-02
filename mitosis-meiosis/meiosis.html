@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>減數分裂模擬器</title>
+    <style>
+        :root {
+            --main-bg: #f0f2f5;
+            --canvas-bg: #ffffff;
+            --text-main: #1e293b;
+
+            --membrane-fill: #e2e8f0;
+            --membrane-stroke: #334155;
+
+            --btn-color: #3b82f6;
+            --btn-hover: #2563eb;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--main-bg);
+            color: var(--text-main);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+            padding: 2vmin;
+            box-sizing: border-box;
+            min-height: 100vh;
+        }
+
+        header {
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 22px;
+            letter-spacing: 1px;
+            color: var(--text-main);
+            transition: all 0.3s ease;
+        }
+
+        @media (min-width: 600px) {
+            h1 {
+                font-size: 26px;
+            }
+        }
+
+        /* RWD 響應式畫布：保障在各種平板上的比例與不裁切 */
+        #canvas-container {
+            width: 100%;
+            max-width: min(800px, calc(55vh * 4 / 3));
+            aspect-ratio: 4/3;
+            background-color: var(--canvas-bg);
+            border-radius: 12px;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+            overflow: hidden;
+            position: relative;
+            border: 1px solid #e5e7eb;
+        }
+
+        svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        #instruction-box {
+            width: 100%;
+            max-width: min(800px, calc(55vh * 4 / 3));
+            background-color: #fef08a;
+            color: #854d0e;
+            padding: 14px;
+            border-radius: 8px;
+            margin-top: 15px;
+            font-weight: 800;
+            font-size: 1.05rem;
+            text-align: center;
+            box-sizing: border-box;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease;
+        }
+
+        #controls {
+            margin-top: 15px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            width: 100%;
+            max-width: min(800px, calc(55vh * 4 / 3));
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 1rem;
+            cursor: pointer;
+            border: none;
+            border-radius: 6px;
+            background-color: var(--btn-color);
+            color: white;
+            font-weight: bold;
+            transition: background-color 0.2s, transform 0.1s;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            flex: 1 1 auto;
+            min-width: 90px;
+        }
+
+        button:hover:not(:disabled) {
+            background-color: var(--btn-hover);
+            transform: translateY(-2px);
+        }
+
+        button:disabled {
+            background-color: #cbd5e1;
+            color: #64748b;
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
+        }
+
+        /* 高度過小的平板切換緊湊模式 */
+        @media (max-height: 700px) {
+            header {
+                margin-bottom: 8px;
+            }
+
+            h1 {
+                font-size: 20px;
+            }
+
+            #instruction-box {
+                padding: 8px;
+                margin-top: 8px;
+                font-size: 0.95rem;
+            }
+
+            #controls {
+                margin-top: 8px;
+                gap: 8px;
+            }
+
+            button {
+                padding: 8px 16px;
+                font-size: 0.9rem;
+            }
+        }
+
+        /* 純數學運算路徑的動畫設定 */
+        #cell-membrane {
+            transition: d 1.5s cubic-bezier(0.4, 0, 0.2, 1);
+            fill: var(--membrane-fill);
+            stroke: var(--membrane-stroke);
+            stroke-width: 4px;
+            stroke-linejoin: round;
+        }
+
+        #nucleus {
+            transition: opacity 0.4s ease-out, transform 0.4s ease-out;
+            fill: rgba(56, 189, 248, 0.1);
+            stroke: #0ea5e9;
+            stroke-width: 3px;
+            transform-origin: 400px 300px;
+        }
+
+        /* 最終產生 4 個配子的 4 個細胞核膜 */
+        .nucleus-side {
+            transition: opacity 0.6s ease-in-out, transform 0.6s ease-in-out;
+            fill: rgba(56, 189, 248, 0.1);
+            stroke: #0ea5e9;
+            stroke-width: 3px;
+        }
+
+        #nuc-tl {
+            transform-origin: 200px 160px;
+        }
+
+        #nuc-bl {
+            transform-origin: 200px 440px;
+        }
+
+        #nuc-tr {
+            transform-origin: 600px 160px;
+        }
+
+        #nuc-br {
+            transform-origin: 600px 440px;
+        }
+
+        .chromosome {
+            transition: transform 1.5s ease-in-out;
+        }
+
+        .sister-left,
+        .sister-right {
+            transition: transform 1.5s ease-in-out, opacity 0.5s ease-in-out;
+            transform-origin: 0 0;
+        }
+
+        .gene-text {
+            text-anchor: middle;
+            dominant-baseline: middle;
+            font-weight: 900;
+            font-size: 18px;
+            fill: #111;
+            stroke: var(--canvas-bg);
+            stroke-width: 3px;
+            paint-order: stroke;
+            font-family: monospace;
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <h1>🔬 減數分裂模擬器 </h1>
+    </header>
+
+    <div id="canvas-container">
+        <svg viewBox="0 0 800 600">
+            <defs>
+                <g id="chromatid-long">
+                    <rect x="-12" y="-80" width="24" height="75" rx="12" fill="currentColor" />
+                    <rect x="-12" y="5" width="24" height="75" rx="12" fill="currentColor" />
+                    <rect x="-12" y="-53" width="24" height="18" fill="rgba(255, 255, 255, 0.4)" />
+                    <circle cx="0" cy="0" r="7" fill="#fff" stroke="#999" stroke-width="1" />
+                </g>
+
+                <g id="chromatid-short">
+                    <rect x="-10" y="-45" width="20" height="40" rx="10" fill="currentColor" />
+                    <rect x="-10" y="5" width="20" height="40" rx="10" fill="currentColor" />
+                    <rect x="-10" y="16" width="20" height="14" fill="rgba(255, 255, 255, 0.4)" />
+                    <circle cx="0" cy="0" r="6" fill="#fff" stroke="#999" stroke-width="1" />
+                </g>
+            </defs>
+
+            <!-- 單一/多重純數學路徑演算細胞膜 -->
+            <path id="cell-membrane" />
+
+            <!-- 中央母細胞核 -->
+            <circle id="nucleus" cx="400" cy="300" r="220" />
+
+            <!-- State 5, 6 最終 4 個配子的細胞核 -->
+            <circle id="nuc-tl" class="nucleus-side" cx="200" cy="160" r="105" opacity="0" />
+            <circle id="nuc-bl" class="nucleus-side" cx="200" cy="440" r="105" opacity="0" />
+            <circle id="nuc-tr" class="nucleus-side" cx="600" cy="160" r="105" opacity="0" />
+            <circle id="nuc-br" class="nucleus-side" cx="600" cy="440" r="105" opacity="0" />
+
+            <g id="chromosome-A" class="chromosome">
+                <g class="sister-left">
+                    <use href="#chromatid-long" style="color: #164e9e;" /><text x="0" y="-43" class="gene-text">A</text>
+                </g>
+                <g class="sister-right">
+                    <use href="#chromatid-long" style="color: #164e9e;" /><text x="0" y="-43" class="gene-text">A</text>
+                </g>
+            </g>
+
+            <g id="chromosome-a" class="chromosome">
+                <g class="sister-left">
+                    <use href="#chromatid-long" style="color: #9e1616;" /><text x="0" y="-43" class="gene-text">a</text>
+                </g>
+                <g class="sister-right">
+                    <use href="#chromatid-long" style="color: #9e1616;" /><text x="0" y="-43" class="gene-text">a</text>
+                </g>
+            </g>
+
+            <g id="chromosome-B" class="chromosome">
+                <g class="sister-left">
+                    <use href="#chromatid-short" style="color: #3b82f6;" /><text x="0" y="24" class="gene-text">B</text>
+                </g>
+                <g class="sister-right">
+                    <use href="#chromatid-short" style="color: #3b82f6;" /><text x="0" y="24" class="gene-text">B</text>
+                </g>
+            </g>
+
+            <g id="chromosome-b" class="chromosome">
+                <g class="sister-left">
+                    <use href="#chromatid-short" style="color: #ef4444;" /><text x="0" y="24" class="gene-text">b</text>
+                </g>
+                <g class="sister-right">
+                    <use href="#chromatid-short" style="color: #ef4444;" /><text x="0" y="24" class="gene-text">b</text>
+                </g>
+            </g>
+
+        </svg>
+    </div>
+
+    <div id="instruction-box">載入中...</div>
+
+    <div id="controls">
+        <button id="btn-prev">上一步</button>
+        <button id="btn-next">下一步</button>
+        <button id="btn-reset">重新開始</button>
+    </div>
+
+    <script>
+        let currentState = 0;
+
+        // 全面更新：共 7 個狀態 (0~6)，新增過渡期 State 5
+        const stateData = [
+            {   // State 0
+                infoText: "State 0: 準備期 (4條染色體, 基因型 AaBb)",
+                chrA: { x: 335, y: 245, rot: -25, spread: 0, splitDist: 0 },
+                chra: { x: 460, y: 240, rot: 35, spread: 0, splitDist: 0 },
+                chrB: { x: 350, y: 380, rot: -50, spread: 0, splitDist: 0 },
+                chrb: { x: 480, y: 360, rot: 15, spread: 0, splitDist: 0 }
+            },
+            {   // State 1
+                infoText: "State 1: 染色體複製 (DNA 數量加倍)",
+                chrA: { x: 335, y: 245, rot: -25, spread: 15, splitDist: 0 },
+                chra: { x: 460, y: 240, rot: 35, spread: 15, splitDist: 0 },
+                chrB: { x: 350, y: 380, rot: -50, spread: 15, splitDist: 0 },
+                chrb: { x: 480, y: 360, rot: 15, spread: 15, splitDist: 0 }
+            },
+            {   // State 2
+                infoText: "State 2: 第一次分裂中期 - 同源染色體配對並排列於赤道板",
+                chrA: { x: 360, y: 230, rot: 0, spread: 15, splitDist: 0 },
+                chra: { x: 440, y: 230, rot: 0, spread: 15, splitDist: 0 },
+                chrB: { x: 360, y: 410, rot: 0, spread: 15, splitDist: 0 },
+                chrb: { x: 440, y: 410, rot: 0, spread: 15, splitDist: 0 }
+            },
+            {   // State 3
+                infoText: "State 3: 第一次分裂後期 - 同源染色體分離，移向兩極 (等位基因 A/a 分離)",
+                chrA: { x: 200, y: 230, rot: 0, spread: 15, splitDist: 0 },
+                chra: { x: 600, y: 230, rot: 0, spread: 15, splitDist: 0 },
+                chrB: { x: 200, y: 410, rot: 0, spread: 15, splitDist: 0 },
+                chrb: { x: 600, y: 410, rot: 0, spread: 15, splitDist: 0 }
+            },
+            {   // State 4
+                infoText: "State 4: 第二次分裂中期 - 染色體分別在兩個子細胞中排列 (無同源對)",
+                chrA: { x: 160, y: 300, rot: 0, spread: 15, splitDist: 0 },
+                chrB: { x: 240, y: 300, rot: 0, spread: 15, splitDist: 0 },
+                chra: { x: 560, y: 300, rot: 0, spread: 15, splitDist: 0 },
+                chrb: { x: 640, y: 300, rot: 0, spread: 15, splitDist: 0 }
+            },
+            {   // State 5 (全新過渡期)
+                infoText: "State 5: 第二次分裂後期與末期 - 姊妹染色分體抵達兩極，新核膜開始形成 (細胞質尚未斷裂)",
+                chrA: { x: 160, y: 300, rot: 0, spread: 0, splitDist: 165 },
+                chrB: { x: 240, y: 300, rot: 0, spread: 0, splitDist: 165 },
+                chra: { x: 560, y: 300, rot: 0, spread: 0, splitDist: 165 },
+                chrb: { x: 640, y: 300, rot: 0, spread: 0, splitDist: 165 }
+            },
+            {   // State 6 (最終完成期)
+                infoText: "State 6: 分裂完成！產生 4 個單套 (n) 配子，細胞質與核膜完全成形",
+                chrA: { x: 160, y: 300, rot: 0, spread: 0, splitDist: 165 },
+                chrB: { x: 240, y: 300, rot: 0, spread: 0, splitDist: 165 },
+                chra: { x: 560, y: 300, rot: 0, spread: 0, splitDist: 165 },
+                chrb: { x: 640, y: 300, rot: 0, spread: 0, splitDist: 165 }
+            }
+        ];
+
+        const NUM_POINTS = 80;
+
+        function getMembranePath(state) {
+            if (state === 4) {
+                // State 4: 輸出 2 個正圓圈 (第一次分裂完畢，穩定細胞)
+                let pts1 = [], pts2 = [];
+                for (let i = 0; i < NUM_POINTS; i++) {
+                    let a = (i / NUM_POINTS) * Math.PI * 2;
+                    pts1.push(`${(200 + 180 * Math.cos(a)).toFixed(1)},${(300 + 180 * Math.sin(a)).toFixed(1)}`);
+                    pts2.push(`${(600 + 180 * Math.cos(a)).toFixed(1)},${(300 + 180 * Math.sin(a)).toFixed(1)}`);
+                }
+                return `M ${pts1.join(" L ")} Z M ${pts2.join(" L ")} Z`;
+            } else if (state === 5) {
+                // State 5: 兩個細胞垂直拉長，形成「垂直方向的花生型」
+                // 【修改點】為了配合下方加大的 135 半徑，將花生型的寬度加粗 (180 - 45*cos^2 = 最小半徑 135)
+                let pts1 = [], pts2 = [];
+                for (let i = 0; i < NUM_POINTS; i++) {
+                    let a = (i / NUM_POINTS) * Math.PI * 2;
+                    let r = 180 - 45 * Math.pow(Math.cos(a), 2);
+                    let dx = r * Math.cos(a);
+                    let dy = (r + 95) * Math.sin(a); // 上下完美包覆到 Y=160/440 中心點加上 135 半徑的極限
+                    pts1.push(`${(200 + dx).toFixed(1)},${(300 + dy).toFixed(1)}`);
+                    pts2.push(`${(600 + dx).toFixed(1)},${(300 + dy).toFixed(1)}`);
+                }
+                return `M ${pts1.join(" L ")} Z M ${pts2.join(" L ")} Z`;
+            } else if (state === 6) {
+                // State 6: 瞬間斷裂為 4 個小圓圈 (第二次分裂完畢)
+                // 【修改點】將最終 4 個配子的細胞膜半徑從 115 加大到 135，恢復厚實的細胞質邊距
+                let pts1 = [], pts2 = [], pts3 = [], pts4 = [];
+                for (let i = 0; i < NUM_POINTS; i++) {
+                    let a = (i / NUM_POINTS) * Math.PI * 2;
+                    pts1.push(`${(200 + 135 * Math.cos(a)).toFixed(1)},${(160 + 135 * Math.sin(a)).toFixed(1)}`);
+                    pts2.push(`${(200 + 135 * Math.cos(a)).toFixed(1)},${(440 + 135 * Math.sin(a)).toFixed(1)}`);
+                    pts3.push(`${(600 + 135 * Math.cos(a)).toFixed(1)},${(160 + 135 * Math.sin(a)).toFixed(1)}`);
+                    pts4.push(`${(600 + 135 * Math.cos(a)).toFixed(1)},${(440 + 135 * Math.sin(a)).toFixed(1)}`);
+                }
+                return `M ${pts1.join(" L ")} Z M ${pts2.join(" L ")} Z M ${pts3.join(" L ")} Z M ${pts4.join(" L ")} Z`;
+            } else {
+                // State 0, 1, 2, 3 的單一漸變細胞膜路徑
+                let pts = [];
+                for (let i = 0; i < NUM_POINTS; i++) {
+                    let a = (i / NUM_POINTS) * Math.PI * 2;
+                    let x, y;
+
+                    if (state <= 1) {
+                        x = 400 + 270 * Math.cos(a);
+                        y = 300 + 270 * Math.sin(a);
+                    } else if (state === 2) {
+                        x = 400 + 290 * Math.cos(a);
+                        y = 300 + 270 * Math.sin(a);
+                    } else if (state === 3) {
+                        x = 400 + 370 * Math.cos(a);
+                        y = 300 + 250 * Math.sin(a);
+                    }
+                    pts.push(`${x.toFixed(1)},${y.toFixed(1)}`);
+                }
+                return `M ${pts.join(" L ")} Z`;
+            }
+        }
+
+        function renderState(stateIndex) {
+            const data = stateData[stateIndex];
+
+            document.getElementById('instruction-box').innerText = data.infoText;
+            document.getElementById('cell-membrane').setAttribute('d', getMembranePath(stateIndex));
+
+            // ===================================
+            // 【多重核膜動態演繹】
+            // ===================================
+            const nucleus = document.getElementById('nucleus');
+            const nucTL = document.getElementById('nuc-tl');
+            const nucBL = document.getElementById('nuc-bl');
+            const nucTR = document.getElementById('nuc-tr');
+            const nucBR = document.getElementById('nuc-br');
+
+            // 處理中央母核膜 (State 0, 1 可見)
+            if (stateIndex === 0) {
+                nucleus.style.opacity = "1";
+                nucleus.style.transform = "scale(0.85)";
+                nucleus.style.strokeDasharray = "none";
+            } else if (stateIndex === 1) {
+                nucleus.style.opacity = "1";
+                nucleus.style.transform = "scale(1)";
+                nucleus.style.strokeDasharray = "10 10";
+            } else {
+                nucleus.style.opacity = "0";
+                nucleus.style.transform = "scale(1.1)";
+            }
+
+            // 處理四個配子的新核膜 (State 5 開始組裝，State 6 完備)
+            if (stateIndex <= 4) {
+                // 隱藏狀態
+                [nucTL, nucBL, nucTR, nucBR].forEach(n => {
+                    n.style.opacity = "0";
+                    n.style.transform = "scale(0.7)";
+                });
+            } else if (stateIndex === 5) {
+                // State 5: 新核膜以虛線淡入 (直接以最終大小出現，不再放大)
+                [nucTL, nucBL, nucTR, nucBR].forEach(n => {
+                    n.style.opacity = "1";
+                    n.style.transform = "scale(1)";
+                    n.style.strokeDasharray = "8 8";
+                });
+            } else if (stateIndex === 6) {
+                // State 6: 核膜實線完全成形 (大小保持不變，僅做虛線變實線的切換)
+                [nucTL, nucBL, nucTR, nucBR].forEach(n => {
+                    n.style.opacity = "1";
+                    n.style.transform = "scale(1)";
+                    n.style.strokeDasharray = "none";
+                });
+            }
+
+            // ===================================
+            // 控制染色體位置與狀態
+            // ===================================
+            ['A', 'a', 'B', 'b'].forEach(id => {
+                const chrConf = data['chr' + id];
+                const group = document.getElementById('chromosome-' + id);
+
+                // 染色體統一維持縮小至 85% 防出界
+                group.style.transform = `translate(${chrConf.x}px, ${chrConf.y}px) rotate(${chrConf.rot}deg) scale(0.85)`;
+
+                const sisLeft = group.querySelector('.sister-left');
+                const sisRight = group.querySelector('.sister-right');
+
+                if (stateIndex === 0) {
+                    sisRight.style.opacity = "0";
+                } else {
+                    sisRight.style.opacity = "1";
+                }
+
+                if (chrConf.splitDist > 0) {
+                    // 減數第二次分裂 (State 5 & 6)：姊妹染色分體沿 Y 軸上下分離
+                    sisLeft.style.transform = `translate(0px, -${chrConf.splitDist}px) rotate(0deg)`;
+                    sisRight.style.transform = `translate(0px, ${chrConf.splitDist}px) rotate(0deg)`;
+                } else {
+                    sisLeft.style.transform = `rotate(-${chrConf.spread}deg)`;
+                    sisRight.style.transform = `rotate(${chrConf.spread}deg)`;
+                }
+            });
+
+            document.getElementById('btn-prev').disabled = (stateIndex === 0);
+            document.getElementById('btn-next').disabled = (stateIndex === 6);
+        }
+
+        document.getElementById('btn-prev').addEventListener('click', () => {
+            if (currentState > 0) {
+                currentState--;
+                renderState(currentState);
+            }
+        });
+
+        document.getElementById('btn-next').addEventListener('click', () => {
+            if (currentState < 6) {
+                currentState++;
+                renderState(currentState);
+            }
+        });
+
+        document.getElementById('btn-reset').addEventListener('click', () => {
+            currentState = 0;
+            renderState(currentState);
+        });
+
+        // 初始渲染
+        renderState(currentState);
+    </script>
+</body>
+
+</html>
