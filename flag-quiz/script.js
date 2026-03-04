@@ -136,7 +136,12 @@ const game = {
             // Disable all buttons after choice
             document.querySelectorAll('.option-btn').forEach(b => b.disabled = true);
             
-            setTimeout(() => this.nextQuestion(), 1000);
+            const winTarget = 10;
+            if (this.correctlyAnswered.size >= winTarget) {
+                setTimeout(() => this.endGame(true), 1000);
+            } else {
+                setTimeout(() => this.nextQuestion(), 1000);
+            }
         } else {
             playTone('wrong');
             btn.classList.add('wrong');
@@ -152,12 +157,19 @@ const game = {
         }
     },
 
-    endGame: function() {
+    endGame: function(isWin = false) {
         this.isPlaying = false;
         clearInterval(this.timerInterval);
         document.getElementById('game-screen').classList.add('hidden');
         document.getElementById('end-screen').classList.remove('hidden');
         document.getElementById('final-score').innerText = this.score;
+        if (isWin) {
+            document.querySelector('#end-screen h1').innerText = "挑戰成功！ 🎉";
+            document.getElementById('result-message').innerText = "恭喜達成 10 題國旗辨識！";
+        } else {
+            document.querySelector('#end-screen h1').innerText = "時間到！ ⏰";
+            document.getElementById('result-message').innerText = "再接再厲，下次動作快一點！";
+        }
     }
 };
 
