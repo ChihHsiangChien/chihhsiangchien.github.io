@@ -1,8 +1,8 @@
 const CHROMOSOME_PAIRS_DATA = [
     { name: 'A/a', size: 'long', colors: ['#1e40af', '#991b1b'], linked: ['E/e'] },
     { name: 'B/b', size: 'short', colors: ['#2563eb', '#dc2626'], linked: ['F/f'] },
-    { name: 'C/c', size: 'long', colors: ['#0369a1', '#be123c'] },
-    { name: 'D/d', size: 'short', colors: ['#0284c7', '#dc2626'] }
+    { name: 'C/c', size: 'asym-long', colors: ['#0369a1', '#be123c'] },
+    { name: 'D/d', size: 'asym-short', colors: ['#0284c7', '#dc2626'] }
 ];
 
 class CellDivisionSimulator {
@@ -78,7 +78,10 @@ class CellDivisionSimulator {
                 g.setAttribute("class", `chromosome pair-${i} chr-${j}`);
                 g.id = `${this.mode}-${chrId}`;
 
-                const templateId = pairData.size === 'long' ? '#chromatid-long' : '#chromatid-short';
+                let templateId = '#chromatid-long';
+                if (pairData.size === 'short') templateId = '#chromatid-short';
+                else if (pairData.size === 'asym-long') templateId = '#chromatid-asym-long';
+                else if (pairData.size === 'asym-short') templateId = '#chromatid-asym-short';
                 
                 // Containers
                 const sisLeft = document.createElementNS("http://www.w3.org/2000/svg", "g");
@@ -96,16 +99,35 @@ class CellDivisionSimulator {
                 useRight.style.color = pairData.colors[j];
                 sisRightSide.appendChild(useRight);
                 
+                // Refined Allele Layout logic per chromosome size
+                let primaryY = -53, primaryH = 18, primaryTextY = -44, primaryW = 24;
+                let secondaryY = 27, secondaryH = 18, secondaryTextY = 36, secondaryW = 24;
+
+                if (pairData.size === 'long') {
+                    // Symmetric long
+                    primaryY = -53; primaryH = 18; primaryTextY = -44;
+                    secondaryY = 27; secondaryH = 18; secondaryTextY = 36;
+                } else if (pairData.size === 'short') {
+                    // Symmetric short
+                    primaryY = -35; primaryH = 16; primaryTextY = -27; primaryW = 20;
+                    secondaryY = 15; secondaryH = 14; secondaryTextY = 22; secondaryW = 20;
+                } else if (pairData.size === 'asym-long') {
+                    // Acrocentric long (very short top arm)
+                    primaryY = -23; primaryH = 10; primaryTextY = -18; primaryW = 22;
+                    secondaryY = 45; secondaryH = 18; secondaryTextY = 54; secondaryW = 22;
+                } else if (pairData.size === 'asym-short') {
+                    // Acrocentric short
+                    primaryY = -16; primaryH = 8; primaryTextY = -12; primaryW = 18;
+                    secondaryY = 25; secondaryH = 14; secondaryTextY = 32; secondaryW = 18;
+                }
+
                 // Primary Locus Marker
                 const locusPrimary = document.createElementNS("http://www.w3.org/2000/svg", "rect");
                 locusPrimary.setAttribute("class", "locus-marker locus-primary");
-                if (pairData.size === 'long') {
-                    locusPrimary.setAttribute("x", "-12"); locusPrimary.setAttribute("y", "-53");
-                    locusPrimary.setAttribute("width", "24"); locusPrimary.setAttribute("height", "18");
-                } else {
-                    locusPrimary.setAttribute("x", "-10"); locusPrimary.setAttribute("y", "10");
-                    locusPrimary.setAttribute("width", "20"); locusPrimary.setAttribute("height", "14");
-                }
+                locusPrimary.setAttribute("x", (-primaryW/2).toString()); 
+                locusPrimary.setAttribute("y", primaryY.toString());
+                locusPrimary.setAttribute("width", primaryW.toString()); 
+                locusPrimary.setAttribute("height", primaryH.toString());
                 locusPrimary.setAttribute("fill", "rgba(255, 255, 255, 0.6)");
                 locusPrimary.setAttribute("stroke", "rgba(255, 255, 255, 0.8)");
                 locusPrimary.setAttribute("stroke-width", "1");
@@ -117,15 +139,16 @@ class CellDivisionSimulator {
                 const textLeft = document.createElementNS("http://www.w3.org/2000/svg", "text");
                 textLeft.setAttribute("class", "gene-text");
                 textLeft.setAttribute("x", "0");
-                textLeft.setAttribute("y", pairData.size === 'long' ? "-44" : "17");
+                textLeft.setAttribute("y", primaryTextY.toString());
                 textLeft.textContent = labels[j];
                 sisLeft.appendChild(textLeft);
 
                 const textRight = document.createElementNS("http://www.w3.org/2000/svg", "text");
                 textRight.setAttribute("class", "gene-text");
                 textRight.setAttribute("x", "0");
-                textRight.setAttribute("y", pairData.size === 'long' ? "-44" : "17");
+                textRight.setAttribute("y", primaryTextY.toString());
                 textRight.textContent = labels[j];
+                textRight.setAttribute("transform", "scale(-1, 1)"); // Prevent text mirroring
                 sisRightSide.appendChild(textRight);
 
                 // Linked alleles (Advanced Mode)
@@ -136,13 +159,10 @@ class CellDivisionSimulator {
                     // Secondary Locus Marker
                     const locusSec = document.createElementNS("http://www.w3.org/2000/svg", "rect");
                     locusSec.setAttribute("class", "locus-marker locus-secondary");
-                    if (pairData.size === 'long') {
-                        locusSec.setAttribute("x", "-12"); locusSec.setAttribute("y", "27");
-                        locusSec.setAttribute("width", "24"); locusSec.setAttribute("height", "18");
-                    } else {
-                        locusSec.setAttribute("x", "-10"); locusSec.setAttribute("y", "28");
-                        locusSec.setAttribute("width", "20"); locusSec.setAttribute("height", "14");
-                    }
+                    locusSec.setAttribute("x", (-secondaryW/2).toString());
+                    locusSec.setAttribute("y", secondaryY.toString());
+                    locusSec.setAttribute("width", secondaryW.toString());
+                    locusSec.setAttribute("height", secondaryH.toString());
                     locusSec.setAttribute("fill", "rgba(255, 255, 255, 0.6)");
                     locusSec.setAttribute("stroke", "rgba(255, 255, 255, 0.8)");
                     locusSec.setAttribute("stroke-width", "1");
@@ -151,14 +171,15 @@ class CellDivisionSimulator {
                     const linkedL = document.createElementNS("http://www.w3.org/2000/svg", "text");
                     linkedL.setAttribute("class", "gene-text");
                     linkedL.setAttribute("x", "0");
-                    linkedL.setAttribute("y", pairData.size === 'long' ? "36" : "35");
+                    linkedL.setAttribute("y", secondaryTextY.toString());
                     linkedL.textContent = linkedTag;
                     
                     const linkedR = document.createElementNS("http://www.w3.org/2000/svg", "text");
                     linkedR.setAttribute("class", "gene-text");
                     linkedR.setAttribute("x", "0");
-                    linkedR.setAttribute("y", pairData.size === 'long' ? "36" : "35");
+                    linkedR.setAttribute("y", secondaryTextY.toString());
                     linkedR.textContent = linkedTag;
+                    linkedR.setAttribute("transform", "scale(-1, 1)"); // Prevent text mirroring
 
                     sisLeft.appendChild(locusSec.cloneNode(true));
                     sisLeft.appendChild(linkedL);
@@ -425,18 +446,18 @@ class CellDivisionSimulator {
 
     renderText(state) {
         const mitosisTexts = [
-            "State 0: 準備期 (基因型 AaBb...)",
-            "State 1: 染色體複製 (DNA 加倍，形成 X 型)",
+            "State 0: 準備期",
+            "State 1: 染色體複製 (DNA 加倍)",
             "State 2: 中期 - 所有染色體排列於中央",
             "State 3: 後期 - 著絲點分離，姊妹染色分體移向兩極",
             "State 4: 末期 - 新核膜形成",
             "State 5: 完成！產生 2 個雙套 (2n) 子細胞"
         ];
         const meiosisTexts = [
-            "State 0: 準備期 (基因型 AaBb...)",
+            "State 0: 準備期",
             "State 1: 染色體複製 (DNA 加倍)",
             "State 2: 減 I 中期 - 同源染色體配對排列 (四分體)",
-            "State 3: 減 I 後期 - 同源分離，隨機分配至兩極",
+            "State 3: 減 I 後期 - 同源染色體分離，隨機分配至兩極",
             "State 4: 減 II 中期 - 染色體在子細胞中央排列",
             "State 5: 減 II 後期 - 姊妹染色分體分離移向兩極",
             "State 6: 完成！產生 4 個單套 (n) 配子"
@@ -510,11 +531,12 @@ class CellDivisionSimulator {
             } else if (state === 4) {
                 x = c.meiosisSide ? 200 : 600;
                 const hOffset = (c.pairIndex - pairOffset) * 45;
-                x += hOffset; y = 300; rot = 0; spread = 15;
-            } else if (state >= 5) {
+                x += hOffset; y = 300; rot = 90; spread = 15;
+            } else if (state === 5 || state >= 6) {
                 x = c.meiosisSide ? 200 : 600;
                 const hOffset = (c.pairIndex - pairOffset) * 40;
-                x += hOffset; y = 300; rot = 0; splitDist = 175; 
+                // splitDist 175 * scale 0.8 = 140 visual pixels. Nuclei are at 300 +/- 140.
+                x += hOffset; y = 300; rot = 90; splitDist = 175; 
             }
         }
         return { x, y, rot, spread, splitDist, scale };
@@ -540,31 +562,44 @@ class CellDivisionSimulator {
         c.sisRight.style.opacity = (state === 0) ? "0" : "1";
 
         // Sister Left
+        let localRot = 0;
+        if (this.mode === 'meiosis' && state >= 6) localRot = -90; // Rotate in place to be vertical (90-90=0)
+
         if (c.manualLeft) {
             const dx = (c.manualLeft.x - targetX) / scale;
             const dy = (c.manualLeft.y - targetY) / scale;
-            c.sisLeft.style.transform = `translate(${dx}px, ${dy}px) rotate(0deg)`;
+            c.sisLeft.style.transform = `translate(${dx}px, ${dy}px) rotate(${localRot}deg)`;
         } else if (splitDist > 0) {
             let sx = 0, sy = 0;
-            if (this.mode === 'meiosis' && state >= 5) sy = -splitDist;
-            else sx = -splitDist;
-            c.sisLeft.style.transform = `translate(${sx}px, ${sy}px) rotate(0deg)`;
+            if (this.mode === 'meiosis' && state >= 5) {
+                if (rot === 90) sx = -splitDist;
+                else sy = -splitDist;
+            } else {
+                sx = -splitDist;
+            }
+            c.sisLeft.style.transform = `translate(${sx}px, ${sy}px) rotate(${localRot}deg)`;
         } else {
-            c.sisLeft.style.transform = `rotate(-${spread}deg)`;
+            // Keep template angle strictly oriented (tips to the left)
+            c.sisLeft.style.transform = `rotate(0deg)`;
         }
 
         // Sister Right
         if (c.manualRight) {
-            const dx = (c.manualRight.x - targetX) / scale;
+            const dx = (targetX - c.manualRight.x) / scale;
             const dy = (c.manualRight.y - targetY) / scale;
-            c.sisRight.style.transform = `translate(${dx}px, ${dy}px) rotate(0deg)`;
+            c.sisRight.style.transform = `translate(${dx}px, ${dy}px) rotate(${localRot}deg) scale(-1, 1)`;
         } else if (splitDist > 0) {
             let sx = 0, sy = 0;
-            if (this.mode === 'meiosis' && state >= 5) sy = splitDist;
-            else sx = splitDist;
-            c.sisRight.style.transform = `translate(${sx}px, ${sy}px) rotate(0deg)`;
+            if (this.mode === 'meiosis' && state >= 5) {
+                if (rot === 90) sx = splitDist;
+                else sy = splitDist;
+            } else {
+                sx = splitDist;
+            }
+            c.sisRight.style.transform = `translate(${sx}px, ${sy}px) rotate(${localRot}deg) scale(-1, 1)`;
         } else {
-            c.sisRight.style.transform = `rotate(${spread}deg)`;
+            // Replicated mirror: looks like "<"
+            c.sisRight.style.transform = `rotate(0deg) scale(-1, 1)`;
         }
     }
 
