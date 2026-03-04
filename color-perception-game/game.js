@@ -8,6 +8,7 @@ class ColorPerceptionGame {
         this.isPlaying = false;
         this.timer = null;
         this.differentIndex = -1;
+        this.targetLevel = 10; // WIN condition level
         this.gameBoard = document.getElementById('gameBoard');
         
         // DOM elements
@@ -166,6 +167,10 @@ class ColorPerceptionGame {
         if (index === this.differentIndex) {
             this.score += Math.max(1, this.timeLeft * 2);
             this.level++;
+            if (this.level > this.targetLevel) {
+                this.gameWin();
+                return;
+            }
             this.updateUI();
             this.createBoard();
             this.resetTimer();
@@ -245,6 +250,17 @@ class ColorPerceptionGame {
         this.slowButton.disabled = true;
         this.pauseButton.textContent = '暫停';
         alert(`遊戲結束！您的得分: ${this.score}`);
+        this.updateUI();
+    }
+
+    gameWin() {
+        clearInterval(this.timer);
+        this.isPlaying = false;
+        this.startButton.disabled = false;
+        this.pauseButton.disabled = true;
+        this.hintButton.disabled = true;
+        this.slowButton.disabled = true;
+        alert(`恭喜！你成功完成了 ${this.targetLevel} 關挑戰！得分: ${this.score}`);
         this.updateUI();
     }
 }
