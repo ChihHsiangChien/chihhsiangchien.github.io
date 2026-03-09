@@ -728,9 +728,26 @@ class MendelGame {
     }
 
     spawnOffspring(container, blob) {
+        // Calculate grid position for Z-pattern placement
+        const existingBlobs = container.querySelectorAll('.blob-sprite').length;
         const rect = container.getBoundingClientRect();
-        blob.style.left = Math.random() * (rect.width - 50) + 'px';
-        blob.style.top = Math.random() * (rect.height - 50) + 'px';
+        
+        const cellWidth = 90;
+        const cellHeight = 100;
+        
+        // Calculate max columns based on actual client width of the container
+        const containerWidth = container.clientWidth || rect.width;
+        const cols = Math.max(1, Math.floor((containerWidth - 20) / cellWidth));
+        
+        // Z-pattern grid calculation based on current count
+        const col = existingBlobs % cols;
+        const row = Math.floor(existingBlobs / cols);
+        
+        const offsetX = 10 + (col * cellWidth);
+        const offsetY = 10 + (row * cellHeight);
+
+        blob.style.left = offsetX + 'px';
+        blob.style.top = offsetY + 'px';
         
         blob.classList.add('anim-pop');
         container.appendChild(blob);
@@ -789,21 +806,20 @@ class MendelGame {
     }
 
     clearWorkspace() {
-        // Clear offspring
-        const allBlobs = document.querySelectorAll('.blob-sprite');
-        allBlobs.forEach(blob => {
+        // Clear offspring ONLY from the offspring container
+        const blobsInOffspring = this.containers.offspring.querySelectorAll('.blob-sprite');
+        blobsInOffspring.forEach(blob => {
             if (blob.dataset.isParent !== "true") {
+                if (blob.dataset.id) {
+                    document.querySelectorAll(`.allele-sprite[data-parent-id="${blob.dataset.id}"]`).forEach(a => a.remove());
+                }
                 blob.remove();
             }
         });
 
-        // Clear dragged gametes (non-source alleles)
-        const allAlleles = document.querySelectorAll('.allele-sprite');
-        allAlleles.forEach(allele => {
-            if (allele.dataset.isSource !== "true") {
-                allele.remove();
-            }
-        });
+        // Clear ALL gametes/alleles that are currently within the offspring container
+        const allelesInOffspring = this.containers.offspring.querySelectorAll('.allele-sprite');
+        allelesInOffspring.forEach(allele => allele.remove());
 
         this.updateReproState();
     }
