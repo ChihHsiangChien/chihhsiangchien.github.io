@@ -272,33 +272,17 @@ class MendelGame {
             targetSection.classList.remove('flex');
             document.getElementById('check-btn').classList.remove('hidden');
             
-            // Reinitialize answer buckets
-            buckets.innerHTML = '';
-            if (this.mode === 'pea') {
-                const types = ["TT", "Tt", "tt"];
-                types.forEach(type => {
-                    const slot = document.createElement('div');
-                    slot.className = 'slot p-2 border-2 border-dashed border-gray-300 rounded shadow-inner flex gap-2 w-full min-h-[140px] items-center justify-center relative bg-gray-50 flex-wrap overflow-y-auto';
-                    slot.dataset.genotype = type;
-                    const label = document.createElement('span');
-                    label.className = 'absolute top-1 left-2 font-bold text-gray-400 pointer-events-none text-sm';
-                    label.textContent = type;
-                    slot.appendChild(label);
-                    buckets.appendChild(slot);
-                });
-            } else {
-                const types = ["AA", "AB", "BB"];
-                const displayTypes = ["AA", "Aa", "aa"];
-                types.forEach((type, index) => {
-                    const slot = document.createElement('div');
-                    slot.className = 'slot p-2 border-2 border-dashed border-gray-300 rounded shadow-inner flex flex-wrap gap-2 w-full min-h-[140px] items-center justify-center relative bg-gray-50 overflow-y-auto';
-                    slot.dataset.genotype = type;
-                    const label = document.createElement('span');
-                    label.className = 'absolute top-1 left-2 font-bold text-gray-400 pointer-events-none text-sm';
-                    label.textContent = displayTypes[index];
-                    slot.appendChild(label);
-                    buckets.appendChild(slot);
-                });
+            // Restore answer buckets (instead of recreating them, which breaks drag-drop bounds)
+            if (document.querySelector('#slot-AA .slot-header')) {
+                if (this.mode === 'pea') {
+                    document.querySelector('#slot-AA .slot-header').textContent = "同型顯性 (TT)";
+                    document.querySelector('#slot-AB .slot-header').textContent = "異型 (Tt)";
+                    document.querySelector('#slot-BB .slot-header').textContent = "同型隱性 (tt)";
+                } else {
+                    document.querySelector('#slot-AA .slot-header').textContent = "同型顯性 (AA)";
+                    document.querySelector('#slot-AB .slot-header').textContent = "異型 (Aa)";
+                    document.querySelector('#slot-BB .slot-header').textContent = "同型隱性 (aa)";
+                }
             }
         }
     }
