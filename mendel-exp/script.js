@@ -14,6 +14,7 @@ class MendelGame {
         this.dragOffset = { x: 0, y: 0 };
         this.isMoving = false;
         this.startPos = { x: 0, y: 0 };
+        this.isLevelCompleting = false;
         // Parse URL parameters
         const urlParams = new URLSearchParams(window.location.search);
         this.showHints = urlParams.get('hint') === '1';
@@ -118,7 +119,9 @@ class MendelGame {
                 });
             }
 
-            if (this.mode === 'breed') {
+            if (this.mode === 'sandbox') {
+                this.initialGenes = this.randomizeParentGenes(4, 'A', 'a', true);
+            } else if (this.mode === 'breed') {
                 this.initialGenes = this.randomizeParentGenes(8, 'A', 'B');
                 this.targetGenotype = this.generatePossibleTarget(this.initialGenes);
             } else {
@@ -155,10 +158,28 @@ class MendelGame {
         }
     }
 
-    randomizeParentGenes(count, domLabel = 'A', recLabel = 'B') {
+    randomizeParentGenes(count, domLabel = 'A', recLabel = 'B', isSandbox = false) {
         const genes = [];
         const types = [[domLabel, domLabel], [domLabel, recLabel], [recLabel, recLabel]];
         
+        if (isSandbox) {
+            // Generate `count` parents: 
+            // 2 x "All Dominant" (Adam)
+            // 2 x "All Recessive" (Eve)
+            for (let i = 0; i < count; i++) {
+                const parentGenotype = [];
+                for (let j = 0; j < 10; j++) {
+                    if (i < 2) {
+                        parentGenotype.push([domLabel, domLabel]); // Adam
+                    } else {
+                        parentGenotype.push([recLabel, recLabel]); // Eve
+                    }
+                }
+                genes.push(parentGenotype);
+            }
+            return genes;
+        }
+
         for (let i = 0; i < count - 1; i++) {
             genes.push(types[Math.floor(Math.random() * types.length)]);
         }
@@ -245,11 +266,19 @@ class MendelGame {
 
         const buckets = document.getElementById('genotype-buckets');
         const targetSection = document.getElementById('target-container');
+        const scannerSection = document.getElementById('scanner-container');
 
-        if (this.mode === 'breed') {
+        if (this.mode === 'sandbox') {
+            buckets.classList.add('hidden');
+            targetSection.classList.add('hidden');
+            scannerSection.classList.remove('hidden');
+            document.getElementById('check-btn').classList.add('hidden');
+            
+            document.getElementById('scanner-traits-list').innerHTML = '<div class="text-center text-gray-400 mt-10">請點擊左側精靈以進行掃描</div>';
+        } else if (this.mode === 'breed') {
             buckets.classList.add('hidden');
             targetSection.classList.remove('hidden');
-            targetSection.classList.add('flex');
+            scannerSection.classList.add('hidden');
             document.getElementById('check-btn').classList.add('hidden'); // No manual check needed
             
             const targetDisplay = document.getElementById('target-blob-display');
@@ -269,7 +298,7 @@ class MendelGame {
         } else {
             buckets.classList.remove('hidden');
             targetSection.classList.add('hidden');
-            targetSection.classList.remove('flex');
+            scannerSection.classList.add('hidden');
             document.getElementById('check-btn').classList.remove('hidden');
             
             // Restore answer buckets (instead of recreating them, which breaks drag-drop bounds)
@@ -285,6 +314,47 @@ class MendelGame {
                 }
             }
         }
+    }
+
+    updateScannerPanel(sprite) {
+        if (this.mode !== 'sandbox') return;
+        
+        const display = document.getElementById('scanner-blob-display');
+        const list = document.getElementById('scanner-traits-list');
+        
+        // Update Portrait
+        display.innerHTML = '';
+        const clone = sprite.cloneNode(true);
+        clone.style.left = '50%';
+        clone.style.top = '50%';
+        clone.style.transform = 'translate(-50%, -50%)';
+        clone.style.position = 'absolute';
+        clone.classList.remove('dragging');
+        clone.setAttribute('draggable', 'false');
+        display.appendChild(clone);
+        
+        // Update Traits List
+        list.innerHTML = '';
+        const genes = JSON.parse(sprite.dataset.genes);
+        
+        this.traitPool.forEach((trait, i) => {
+            const genePair = genes[i];
+            const isDom = genePair.includes('A');
+            const phenoName = isDom ? trait.dominant.name : trait.recessive.name;
+            const domChar = String.fromCharCode(65 + i); // A, B, C...
+            const recChar = String.fromCharCode(97 + i); // a, b, c...
+            const internalGeneStr = genePair.join('');
+            const genoStr = internalGeneStr === 'AA' ? domChar + domChar : (internalGeneStr === 'aa' ? recChar + recChar : domChar + recChar);
+            
+            const row = document.createElement('div');
+            row.className = 'trait-row';
+            row.innerHTML = `
+                <div class="trait-name">${trait.label}</div>
+                <div class="trait-pheno">${phenoName}</div>
+                <div class="trait-geno">${genoStr}</div>
+            `;
+            list.appendChild(row);
+        });
     }
 
     createBlob(id, genes) {
@@ -311,13 +381,35 @@ class MendelGame {
                 shortImg.classList.remove('hidden');
             }
         } else {
-            const activeStyles = isDominant ? this.activeTrait.dominant.vars : this.activeTrait.recessive.vars;
-            const combinedStyles = Object.assign({}, this.baseTraits, activeStyles);
+            let combinedStyles = {};
+            let bodyRadius = 18.5; // default
             
-            let bodyRadius = 18.5;
-            if (geneStr === "AA") bodyRadius = 19;
-            else if (geneStr === "AB") bodyRadius = 20;
-            else if (geneStr === "BB") bodyRadius = 19;
+            if (this.mode === 'sandbox') {
+                // genes is an array of 10 gene pairs like [['A','A'], ['b','b'], ...]
+                combinedStyles = Object.assign({}, this.neutralBaseTraits);
+                
+                this.traitPool.forEach((trait, i) => {
+                    const genePair = genes[i];
+                    const isDom = genePair.includes('A');
+                    const activeStyles = isDom ? trait.dominant.vars : trait.recessive.vars;
+                    Object.assign(combinedStyles, activeStyles);
+                    
+                    if (trait.label === "身體顏色") {
+                        if (!isDom) sprite.classList.add('phenotype-recessive');
+                    }
+                });
+            } else {
+                const isDominant = genes.includes('A') || genes.includes('T');
+                const geneStr = genes.join('');
+                const activeStyles = isDominant ? this.activeTrait.dominant.vars : this.activeTrait.recessive.vars;
+                combinedStyles = Object.assign({}, this.baseTraits, activeStyles);
+                
+                if (geneStr === "AA") bodyRadius = 19;
+                else if (geneStr === "AB") bodyRadius = 20;
+                else if (geneStr === "BB") bodyRadius = 19;
+                
+                if (!isDominant) sprite.classList.add('phenotype-recessive');
+            }
             
             sprite.querySelector('.blob-body').setAttribute('r', bodyRadius);
 
@@ -377,27 +469,37 @@ class MendelGame {
                      sprite.style.setProperty(prop, value);
                 }
             }
-            if (!isDominant) sprite.classList.add('phenotype-recessive');
         }
 
         // Map internal labels to display labels
         let displayLabel = "";
-        if (isPeaMode) {
+        
+        if (this.mode === 'sandbox') {
+            displayLabel = "?";
+        } else if (isPeaMode) {
+            const geneStr = genes.join('');
             if (geneStr === "TT") displayLabel = "TT";
             else if (geneStr === "Tt") displayLabel = "Tt";
             else if (geneStr === "tt") displayLabel = "tt";
         } else {
+            const geneStr = genes.join('');
             if (geneStr === "AA") displayLabel = "AA";
             else if (geneStr === "AB") displayLabel = "Aa";
             else if (geneStr === "BB") displayLabel = "aa";
         }
+        
         geneLabel.textContent = displayLabel;
+        if (this.mode === 'sandbox') {
+            geneLabel.classList.add('hidden'); // Hide simple gene label in sandbox mode
+        }
         
         sprite.addEventListener('pointerdown', (e) => this.onPointerDown(e, sprite));
         return sprite;
     }
 
     extractAlleles(parentSprite, genes, visible) {
+        if (this.mode === 'sandbox') return;
+        
         // Find existing alleles for this parent
         const existingAlleles = document.querySelectorAll(`.allele-sprite[data-parent-id="${parentSprite.dataset.id}"]`);
         
@@ -451,6 +553,10 @@ class MendelGame {
     onPointerDown(e, sprite) {
         e.preventDefault();
         
+        if (this.mode === 'sandbox') {
+            this.updateScannerPanel(sprite);
+        }
+        
         this.activeDragElement = sprite;
         this.originalParent = sprite.parentElement; 
         this.isMoving = false;
@@ -487,8 +593,8 @@ class MendelGame {
             if (!this.isMoving) {
                 this.isMoving = true;
                 
-                // Gamete formation logic: If dragging a source allele, leave a copy behind
                 if (this.activeDragElement.classList.contains('allele-sprite') && this.activeDragElement.dataset.isSource === "true") {
+                    // Regular Mode gamete logic
                     const gene = this.activeDragElement.dataset.gene;
                     const parentId = this.activeDragElement.dataset.parentId;
                     
@@ -592,6 +698,12 @@ class MendelGame {
             return;
         }
 
+        // If it was just a click and no drag occurred, don't execute drop logic.
+        if (!this.isMoving) {
+            this.activeDragElement = null;
+            return;
+        }
+
         // Find which zone was dropped into
         let targetZone = null;
         this.allZones.forEach(zone => {
@@ -629,19 +741,28 @@ class MendelGame {
                 return;
             }
 
-            if (targetZone.id === 'reproduction-dropzone' && this.activeDragElement.classList.contains('allele-sprite')) {
-                const inZoneAlleles = targetZone.querySelectorAll('.allele-sprite');
-                if (inZoneAlleles.length >= 2) {
-                    this.returnAllele();
-                    return;
+            if (targetZone.id === 'reproduction-dropzone') {
+                if (this.activeDragElement.classList.contains('blob-sprite')) {
+                    const inZoneBlobs = targetZone.querySelectorAll('.blob-sprite');
+                    if (inZoneBlobs.length >= 2) {
+                        this.returnBlob();
+                        return;
+                    }
+                } else if (this.activeDragElement.classList.contains('allele-sprite')) {
+                    const inZoneAlleles = targetZone.querySelectorAll('.allele-sprite');
+                    if (inZoneAlleles.length >= 2) {
+                        this.returnAllele();
+                        return;
+                    }
                 }
             }
 
             const appRect = document.getElementById('app').getBoundingClientRect();
             const zoneRect = targetZone.getBoundingClientRect();
             
-            const localX = e.clientX - zoneRect.left;
-            const localY = e.clientY - zoneRect.top;
+            // Add scroll offsets because the dropzone (e.g. offspring) might be scrolled!
+            const localX = e.clientX - zoneRect.left + targetZone.scrollLeft;
+            const localY = e.clientY - zoneRect.top + targetZone.scrollTop;
             
             this.activeDragElement.style.left = (localX - this.dragOffset.x) + 'px';
             this.activeDragElement.style.top = (localY - this.dragOffset.y) + 'px';
@@ -695,26 +816,66 @@ class MendelGame {
     }
     
     updateReproState() {
-        const children = Array.from(this.containers.repro.children);
-        const blobs = children.filter(el => el.classList.contains('blob-sprite'));
-        const alleles = children.filter(el => el.classList.contains('allele-sprite'));
+        const reproZone = this.containers.repro;
+        let totalUnits = 0;
+
+        if (this.mode === 'sandbox') {
+            const blobs = reproZone.querySelectorAll('.blob-sprite');
+            totalUnits = blobs.length;
+            this.reproBtn.disabled = totalUnits !== 2;
+        } else {
+            const children = Array.from(reproZone.children);
+            const blobs = children.filter(el => el.classList.contains('blob-sprite'));
+            const alleles = children.filter(el => el.classList.contains('allele-sprite'));
+            
+            // Independent alleles are those whose parent plant is not currently in the reproduction zone
+            const independentAlleles = alleles.filter(a => !blobs.some(b => b.dataset.id === a.dataset.parentId));
+            totalUnits = blobs.length + independentAlleles.length;
+            this.reproBtn.disabled = totalUnits !== 2;
+        }
+
+        const hint = reproZone.querySelector('.drop-hint');
+        if (this.mode === 'sandbox') {
+            hint.textContent = "請拖入兩隻精靈進行繁殖";
+        } else {
+            hint.textContent = "請拖曳生殖單位 (配子/個體) 至此";
+        }
         
-        // Independent alleles are those whose parent plant is not currently in the reproduction zone
-        const independentAlleles = alleles.filter(a => !blobs.some(b => b.dataset.id === a.dataset.parentId));
-        
-        // Total breeding units must be exactly 2 (either 2 plants, 2 alleles, or 1 plant + 1 allele)
-        const totalUnits = blobs.length + independentAlleles.length;
-        
-        this.reproBtn.disabled = totalUnits !== 2;
-        const hint = this.containers.repro.querySelector('.drop-hint');
-        if (totalUnits > 0) hint.classList.add('hidden');
+        const totalElements = reproZone.querySelectorAll('.blob-sprite').length + reproZone.querySelectorAll('.allele-sprite').length;
+        if (totalElements > 0) hint.classList.add('hidden');
         else hint.classList.remove('hidden');
+    }
+
+    crossComplexGenotypes(genes1, genes2) {
+        const offspringGenes = [];
+        for (let i = 0; i < 10; i++) {
+            const p1Allele = genes1[i][Math.floor(Math.random() * 2)];
+            const p2Allele = genes2[i][Math.floor(Math.random() * 2)];
+            offspringGenes.push([p1Allele, p2Allele].sort());
+        }
+        return offspringGenes;
     }
 
     reproduce() {
         const allBlobs = document.querySelectorAll('.blob-sprite');
         if (allBlobs.length >= 100) {
             alert('實驗室空間不足！請先清除部分子代再進行繁育（上限 100 隻）。');
+            return;
+        }
+
+        const targetZone = this.containers.repro;
+
+        if (this.mode === 'sandbox') {
+            const parents = targetZone.querySelectorAll('.blob-sprite');
+            if (parents.length === 2) {
+                const genes1 = JSON.parse(parents[0].dataset.genes);
+                const genes2 = JSON.parse(parents[1].dataset.genes);
+                const offspringGenes = this.crossComplexGenotypes(genes1, genes2);
+                
+                const newId = `f-${++this.idCounter}`;
+                const blob = this.createBlob(newId, offspringGenes);
+                this.spawnOffspring(this.containers.offspring, blob);
+            }
             return;
         }
 
@@ -834,21 +995,22 @@ class MendelGame {
             const geneArr = JSON.parse(blob.dataset.genes);
             const normalizedActual = this.normalizeGenotype(geneArr);
 
-            if (normalizedActual === this.targetGenotype) {
+            if (normalizedActual === this.targetGenotype && !this.isLevelCompleting) {
+                this.isLevelCompleting = true;
                 this.score += 10;
                 blob.classList.add('correct');
                 blob.querySelector('.gene-label').classList.remove('hidden');
                 
                 const toast = document.createElement('div');
-                toast.className = 'absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-green-500 text-white font-bold py-2 px-6 rounded shadow-lg anim-pop z-50 text-xl pointer-events-none';
-                toast.innerHTML = `<svg class="w-8 h-8 mx-auto mb-2 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>培育成功！`;
+                toast.className = 'level-up-toast breed-success-toast';
+                toast.innerHTML = `<span style="font-size: 1.5em; display:block; margin-bottom: 5px;">🧬</span>培育成功！`;
                 document.getElementById('app').appendChild(toast);
                 
                 setTimeout(() => {
                     toast.remove();
                     this.level++;
                     this.nextLevel();
-                }, 2000);
+                }, 1300);
             }
         }
     }
@@ -970,6 +1132,7 @@ class MendelGame {
     }
 
     nextLevel() {
+        this.isLevelCompleting = false;
         // Pick a new random trait
         const rawTrait = this.traitPool[Math.floor(Math.random() * this.traitPool.length)];
         this.activeTrait = JSON.parse(JSON.stringify(rawTrait));
@@ -984,7 +1147,9 @@ class MendelGame {
             });
         }
 
-        if (this.mode === 'breed') {
+        if (this.mode === 'sandbox') {
+            this.initialGenes = this.randomizeParentGenes(4, 'A', 'a', true);
+        } else if (this.mode === 'breed') {
             this.initialGenes = this.randomizeParentGenes(8, 'A', 'B');
             this.targetGenotype = this.generatePossibleTarget(this.initialGenes);
         } else if (this.mode !== 'pea') {
@@ -999,11 +1164,12 @@ class MendelGame {
 
         parentContainer.innerHTML = '';
         offspringContainer.innerHTML = '';
-        reproContainer.innerHTML = '<span class="drop-hint">拖曳兩個個體至此</span>';
+        if (this.mode === 'sandbox') reproContainer.innerHTML = '<span class="drop-hint">請拖入兩隻精靈進行繁殖</span>';
+        else reproContainer.innerHTML = '<span class="drop-hint">請拖曳兩條染色體至此</span>';
+        
         slots.forEach(s => s.innerHTML = '');
 
         // New population
-        this.initialGenes = this.randomizeParentGenes(6, 'A', 'B');
         this.setupInitialPopulation();
         this.displayActiveTrait();
         this.updateReproState();
