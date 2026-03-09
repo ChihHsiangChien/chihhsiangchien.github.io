@@ -479,6 +479,8 @@ class MendelGame {
 
     onPointerMove(e) {
         if (!this.activeDragElement) return;
+        // Prevent default touch actions (like scrolling) during drag
+        if (e.pointerType === 'touch') e.preventDefault();
 
         // Check if user has moved enough to consider it a drag
         if (Math.abs(e.clientX - this.startPos.x) > 5 || Math.abs(e.clientY - this.startPos.y) > 5) {
@@ -505,6 +507,9 @@ class MendelGame {
                 }
 
                 this.activeDragElement.classList.add('dragging');
+                
+                // Clear grid index when a sprite is dragged so its slot can be reused
+                delete this.activeDragElement.dataset.gridIndex;
                 
                 const appRect = document.getElementById('app').getBoundingClientRect();
                 
@@ -567,6 +572,12 @@ class MendelGame {
         if (!this.activeDragElement) return;
 
         const sprite = this.activeDragElement;
+        
+        // Clean up capture strictly (very helpful for mobile Safari/Chrome pointer stability)
+        if (e.pointerId) {
+            sprite.releasePointerCapture(e.pointerId);
+        }
+        
         sprite.classList.remove('dragging');
         
         // Click logic (Extraction)
@@ -599,17 +610,29 @@ class MendelGame {
         }
 
         if (targetZone) {
+            if (targetZone.id === 'trash-zone') {
+                if (this.activeDragElement.dataset.isParent === "true") {
+                    this.returnBlob();
+                    return;
+                }
+                
+                // Discard logic for offspring or stray alleles
+                if (this.activeDragElement.dataset.id) {
+                    document.querySelectorAll(`.allele-sprite[data-parent-id="${this.activeDragElement.dataset.id}"]`).forEach(a => a.remove());
+                }
+                this.activeDragElement.remove();
+                this.activeDragElement = null;
+                this.updateReproState();
+                
+                this.popSound.currentTime = 0;
+                this.popSound.play();
+                return;
+            }
+
             if (targetZone.id === 'reproduction-dropzone' && this.activeDragElement.classList.contains('allele-sprite')) {
                 const inZoneAlleles = targetZone.querySelectorAll('.allele-sprite');
                 if (inZoneAlleles.length >= 2) {
                     this.returnAllele();
-                    return;
-                }
-            }
-
-            if (targetZone.classList.contains('slot-body')) {
-                if (this.activeDragElement.dataset.isParent !== "true") {
-                    this.returnBlob();
                     return;
                 }
             }
@@ -652,22 +675,23 @@ class MendelGame {
     }
 
     returnBlob() {
-        this.originalParent.appendChild(this.activeDragElement);
-        this.activeDragElement.style.left = this.originalPos.left;
-        this.activeDragElement.style.top = this.originalPos.top;
-        this.activeDragElement.classList.remove('dragging');
+        const sprite = this.activeDragElement;
+        this.originalParent.appendChild(sprite);
+        sprite.style.left = this.originalPos.left;
+        sprite.style.top = this.originalPos.top;
+        sprite.classList.remove('dragging');
 
-        // Return alleles to the same parent container
-        if (this.activeDragElement.dataset.id) {
-            const alleles = document.querySelectorAll(`.allele-sprite[data-parent-id="${this.activeDragElement.dataset.id}"]`);
-            const parentRect = this.originalParent.getBoundingClientRect();
-            alleles.forEach(a => {
-                const aRect = a.getBoundingClientRect();
-                a.style.left = (aRect.left - parentRect.left) + 'px';
-                a.style.top = (aRect.top - parentRect.top) + 'px';
+        // Return alleles to the same parent container cleanly
+        if (sprite.dataset.id) {
+            const alleles = document.querySelectorAll(`.allele-sprite[data-parent-id="${sprite.dataset.id}"]`);
+            alleles.forEach((a, idx) => {
                 this.originalParent.appendChild(a);
+                a.style.left = (parseFloat(sprite.style.top) === parseFloat(sprite.style.top) ? parseFloat(sprite.style.left) + (idx * 30) : 0) + 'px';
+                a.style.top = (parseFloat(sprite.style.top) === parseFloat(sprite.style.top) ? parseFloat(sprite.style.top) + 70 : 0) + 'px';
             });
         }
+
+        this.activeDragElement = null;
     }
     
     updateReproState() {
@@ -727,27 +751,56 @@ class MendelGame {
         this.spawnOffspring(container, blob);
     }
 
-    spawnOffspring(container, blob) {
-        // Calculate grid position for Z-pattern placement
-        const existingBlobs = container.querySelectorAll('.blob-sprite').length;
+    getZPatternLayout(container, index) {
         const rect = container.getBoundingClientRect();
-        
         const cellWidth = 90;
         const cellHeight = 100;
         
-        // Calculate max columns based on actual client width of the container
-        const containerWidth = container.clientWidth || rect.width;
-        const cols = Math.max(1, Math.floor((containerWidth - 20) / cellWidth));
+        // Use rect.width for a stable calculation independent of vertical scrollbar presence
+        // Subtract 30 to safely account for standard scrollbar width without triggering jitter
+        const cols = Math.max(1, Math.floor((rect.width - 30) / cellWidth));
         
         // Z-pattern grid calculation based on current count
-        const col = existingBlobs % cols;
-        const row = Math.floor(existingBlobs / cols);
+        const col = index % cols;
+        const row = Math.floor(index / cols);
         
-        const offsetX = 10 + (col * cellWidth);
-        const offsetY = 10 + (row * cellHeight);
+        return {
+            left: 10 + (col * cellWidth),
+            top: 10 + (row * cellHeight)
+        };
+    }
 
-        blob.style.left = offsetX + 'px';
-        blob.style.top = offsetY + 'px';
+    getNextAvailableGridIndex(container) {
+        const blobs = container.querySelectorAll('.blob-sprite');
+        const occupiedIndexes = new Set();
+        blobs.forEach(b => {
+            if (b.dataset.gridIndex !== undefined) {
+                occupiedIndexes.add(parseInt(b.dataset.gridIndex, 10));
+            }
+        });
+        
+        let i = 0;
+        while (occupiedIndexes.has(i)) {
+            i++;
+        }
+        return i;
+    }
+
+    normalizeGenotype(geneArray) {
+        return geneArray.map(g => {
+            if (g === 'T' || g === 'A') return 'A';
+            if (g === 't' || g === 'B') return 'B';
+            return g;
+        }).sort().join('');
+    }
+
+    spawnOffspring(container, blob) {
+        const gridIndex = this.getNextAvailableGridIndex(container);
+        blob.dataset.gridIndex = gridIndex;
+        const pos = this.getZPatternLayout(container, gridIndex);
+
+        blob.style.left = pos.left + 'px';
+        blob.style.top = pos.top + 'px';
         
         blob.classList.add('anim-pop');
         container.appendChild(blob);
@@ -778,13 +831,8 @@ class MendelGame {
         this.updateStats();
 
         if (this.mode === 'breed') {
-            const offspringGenesStr = JSON.parse(blob.dataset.genes).sort().join('');
-            
-            const normalizedActual = offspringGenesStr.split('').map(g => {
-                if (g === 'T' || g === 'A') return 'A';
-                if (g === 't' || g === 'B') return 'B';
-                return g;
-            }).sort().join('');
+            const geneArr = JSON.parse(blob.dataset.genes);
+            const normalizedActual = this.normalizeGenotype(geneArr);
 
             if (normalizedActual === this.targetGenotype) {
                 this.score += 10;
@@ -836,15 +884,38 @@ class MendelGame {
             const blobs = slot.querySelectorAll('.blob-sprite');
             
             blobs.forEach(blob => {
+                if (blob.dataset.isParent !== "true") {
+                    // Non-parent blobs bounced back to child container
+                    blob.classList.add('anim-shake');
+                    setTimeout(() => {
+                        blob.classList.remove('anim-shake');
+                        const container = this.containers.offspring;
+                        const gridIndex = this.getNextAvailableGridIndex(container);
+                        blob.dataset.gridIndex = gridIndex;
+                        const pos = this.getZPatternLayout(container, gridIndex);
+                        
+                        blob.style.left = pos.left + 'px';
+                        blob.style.top = pos.top + 'px';
+                        
+                        container.appendChild(blob);
+                        
+                        if (blob.dataset.id) {
+                            const alleles = document.querySelectorAll(`.allele-sprite[data-parent-id="${blob.dataset.id}"]`);
+                            alleles.forEach(a => {
+                                a.style.left = blob.style.left;
+                                a.style.top = (parseFloat(blob.style.top) - 20) + 'px';
+                                container.appendChild(a);
+                            });
+                        }
+                    }, 600);
+                    return;
+                }
+
                 if (blob.dataset.verified === "true") return; // Skip already scored
 
                 // Robust normalization for comparing with AA/AB/BB slots
                 const geneArr = JSON.parse(blob.dataset.genes);
-                const normalizedActual = geneArr.map(g => {
-                    if (g === 'T' || g === 'A') return 'A';
-                    if (g === 't' || g === 'B') return 'B';
-                    return g;
-                }).sort().join('');
+                const normalizedActual = this.normalizeGenotype(geneArr);
 
                 if (normalizedActual === expected) {
                     correct++;
