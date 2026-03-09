@@ -6,6 +6,7 @@
 class MendelGame {
     constructor() {
         this.score = 0;
+        this.level = 1;
         this.idCounter = 0;
         
         // Drag state
@@ -13,61 +14,131 @@ class MendelGame {
         this.dragOffset = { x: 0, y: 0 };
         this.isMoving = false;
         this.startPos = { x: 0, y: 0 };
-        
-        // Potential traits pool
-        this.traitPool = [
-            {
-                label: "體色 (Body Color)",
-                dominant: { name: "黃色", vars: { '--blob-main-color': '#f0e199' } },
-                recessive: { name: "藍色", vars: { '--blob-main-color': '#a0d8ef' } }
-            },
-            {
-                label: "眼睛大小 (Eye Size)",
-                dominant: { name: "大眼睛", vars: { '--eye-radius': '4.5', '--eye-pupil-radius': '2' } },
-                recessive: { name: "小眼睛", vars: { '--eye-radius': '1.5', '--eye-pupil-radius': '0.8' } }
-            },
-            {
-                label: "耳朵顏色 (Ear Color)",
-                dominant: { name: "與體色相同", vars: { '--ear-fill': 'inherit', '--ear-stroke': 'rgba(0,0,0,0.1)' } },
-                recessive: { name: "紅色耳朵", vars: { '--ear-fill': '#ff6b6b', '--ear-stroke': '#c92a2a' } }
-            },
-            {
-                label: "眼睛位置 (Eye Position)",
-                dominant: { name: "正常位置", vars: { '--eye-y': '16' } },
-                recessive: { name: "高位眼", vars: { '--eye-y': '10' } }
-            }
-        ];
-
         // Parse URL parameters
         const urlParams = new URLSearchParams(window.location.search);
         this.showHints = urlParams.get('hint') === '1';
         this.isFixed = urlParams.get('fixed') === '1';
         this.mode = urlParams.get('mode') || 'blob'; // 'blob' or 'pea'
+        this.isComplex = urlParams.get('complex') === '1';
+        
+        // Potential traits pool
+        const simpleTraits = [
+            {
+                label: "身體顏色",
+                dominant: { name: "黃色", vars: { '--blob-main-color': '#f0e199' } },
+                recessive: { name: "藍色", vars: { '--blob-main-color': '#a0d8ef' } }
+            },
+            {
+                label: "耳朵形狀",
+                dominant: { name: "尖耳朵", vars: { '--ear-d': 'M2 12 Q-4 -4 8 4' } },
+                recessive: { name: "圓耳朵", vars: { '--ear-d': 'M2 12 Q-6 6 2 -2' } }
+            },
+            {
+                label: "瞳孔顏色",
+                dominant: { name: "黑色眼睛", vars: { '--pupil-fill': 'black' } },
+                recessive: { name: "紅色眼睛", vars: { '--pupil-fill': '#d00000' } }
+            },
+            {
+                label: "嘴巴寬度",
+                dominant: { name: "大寬嘴", vars: { '--mouth-d': 'M12 26 Q20 32 28 26' } },
+                recessive: { name: "窄窄嘴", vars: { '--mouth-d': 'M18 28 Q20 30 22 28' } }
+            },
+            {
+                label: "腮紅",
+                dominant: { name: "有粉紅腮紅", vars: { '--blush-fill': '#ff4141ff', '--show-blush': '1' } },
+                recessive: { name: "無腮紅", vars: { '--blush-fill': 'transparent', '--show-blush': '0' } }
+            }
+        ];
+
+        const complexTraits = [
+            {
+                label: "觸角型式",
+                dominant: { name: "捲曲觸角", vars: { '--show-antennas': '1', '--ant-l-d': 'M12 4 Q-5 -15 2 -4', '--ant-r-d': 'M28 4 Q45 -15 38 -4' } },
+                recessive: { name: "直長觸角", vars: { '--show-antennas': '1', '--ant-l-d': 'M12 4 L0 -10', '--ant-r-d': 'M28 4 L40 -10' } }
+            },
+            {
+                label: "觸角末端形狀",
+                dominant: { name: "圓球型", vars: { '--show-antennas': '1', '--ant-l-d': 'M12 4 L0 -10', '--ant-r-d': 'M28 4 L40 -10', '--ant-tip': 'round' } },
+                recessive: { name: "鑽石型", vars: { '--show-antennas': '1', '--ant-l-d': 'M12 4 L0 -10', '--ant-r-d': 'M28 4 L40 -10', '--ant-tip': 'diamond' } }
+            },
+            {
+                label: "身體花紋",
+                dominant: { name: "點狀花紋", vars: { '--show-spots': '1', '--show-stripes': '0', '--pattern-fill': 'rgba(0,0,0,0.15)', '--pattern-stroke': 'transparent' } },
+                recessive: { name: "條狀花紋", vars: { '--show-spots': '0', '--show-stripes': '1', '--pattern-fill': 'transparent', '--pattern-stroke': 'rgba(0,0,0,0.2)' } }
+            },
+            {
+                label: "翅膀樣式",
+                dominant: { name: "精靈翅膀", vars: { '--wing-type': 'fairy' } },
+                recessive: { name: "蝙蝠翅膀", vars: { '--wing-type': 'bat' } }
+            },
+            {
+                label: "尾巴型態",
+                dominant: { name: "捲尾巴", vars: { '--show-tail': '1', '--tail-d': 'M 6 32 C -8 32 -10 46 2 46 C 7 46 10 40 5 36' } },
+                recessive: { name: "直尾巴", vars: { '--show-tail': '1', '--tail-d': 'M 6 32 Q -5 40 -8 46' } }
+            }
+        ];
+
+        this.traitPool = this.isComplex ? [...simpleTraits, ...complexTraits] : simpleTraits;
+
+        this.neutralBaseTraits = {
+            '--blob-main-color': '#f0e199', // Default body color
+            '--ear-d': 'M2 12 Q-6 6 2 -2',  // Default round ear
+            '--pupil-fill': 'black',        // Default black eyes
+            '--mouth-d': 'M18 28 Q20 30 22 28', // Default narrow mouth
+            '--show-blush': '0',
+            '--show-antennas': '0',
+            '--show-spots': '0',
+            '--show-stripes': '0',
+            '--wing-type': 'none',
+            '--ant-tip': 'none',
+            '--show-tail': '0'
+        };
 
         if (this.mode === 'pea') {
             this.activeTrait = {
-                label: "株高 (Plant Height)",
+                label: "株高",
                 dominant: { name: "高莖 (Tall)", vars: { isPea: true, tall: true } },
                 recessive: { name: "矮莖 (Short)", vars: { isPea: true, tall: false } }
             };
             this.initialGenes = this.randomizeParentGenes(6, 'T', 't');
         } else {
-            // Randomly pick a trait for this session
+            // Randomly pick an active trait
             const rawTrait = this.traitPool[Math.floor(Math.random() * this.traitPool.length)];
             this.activeTrait = JSON.parse(JSON.stringify(rawTrait));
-
-            if (!this.isFixed && Math.random() > 0.5) {
-                const temp = this.activeTrait.dominant;
-                this.activeTrait.dominant = this.activeTrait.recessive;
-                this.activeTrait.recessive = temp;
+            
+            // Assign neutral backgrounds, then conditionally randomize if complex mode
+            this.baseTraits = Object.assign({}, this.neutralBaseTraits);
+            
+            if (this.isComplex) {
+                this.traitPool.forEach(trait => {
+                    if (trait.label !== this.activeTrait.label) {
+                        const vars = Math.random() > 0.5 ? trait.dominant.vars : trait.recessive.vars;
+                        Object.assign(this.baseTraits, vars);
+                    }
+                });
             }
-            this.initialGenes = this.randomizeParentGenes(6, 'A', 'B');
+
+            if (this.mode === 'breed') {
+                this.initialGenes = this.randomizeParentGenes(8, 'A', 'B');
+                this.targetGenotype = this.generatePossibleTarget(this.initialGenes);
+            } else {
+                this.initialGenes = this.randomizeParentGenes(6, 'A', 'B');
+            }
         }
         
         // Sound effects
         this.popSound = new Audio('assets/audio/pop.wav');
         
         this.init();
+    }
+
+    generatePossibleTarget(parentsGenes) {
+        let p1 = parentsGenes[Math.floor(Math.random() * parentsGenes.length)];
+        let p2 = parentsGenes[Math.floor(Math.random() * parentsGenes.length)];
+        
+        let a1 = p1[Math.floor(Math.random() * 2)];
+        let a2 = p2[Math.floor(Math.random() * 2)];
+        return [a1, a2].sort().join('');
     }
 
     init() {
@@ -79,7 +150,8 @@ class MendelGame {
 
     displayActiveTrait() {
         if (this.traitLabel) {
-            this.traitLabel.textContent = `當前觀察：${this.activeTrait.label}`;
+            const levelStr = this.mode !== 'pea' ? ` [第 ${this.level} 關]` : '';
+            this.traitLabel.textContent = `觀察：${this.activeTrait.label}${levelStr}`;
         }
     }
 
@@ -146,13 +218,17 @@ class MendelGame {
         const shuffledGenes = [...this.initialGenes].sort(() => Math.random() - 0.5);
         const parentContainer = this.containers.parent;
         
-        // Grid setup: 2 columns, 3 rows
-        const cols = 2;
-        const rows = 3;
-        const cellWidth = 100;
-        const cellHeight = 85;
-        const offsetX = 30; // Center in the zone
-        const offsetY = 20;
+        let cols = 2;
+        let cellWidth = 125;
+        let cellHeight = 115;
+        let offsetX = 15;
+        let offsetY = 25;
+
+        // Adjust for 8 parents
+        if (this.mode === 'breed') {
+            cellHeight = 90; 
+            offsetY = 10;
+        }
 
         shuffledGenes.forEach((genes, index) => {
             const blob = this.createBlob(`p-${++this.idCounter}`, genes);
@@ -162,10 +238,69 @@ class MendelGame {
             const row = Math.floor(index / cols);
             
             blob.style.left = (offsetX + col * cellWidth) + 'px';
-            blob.style.top = (offsetY + row * (this.mode === 'pea' ? 100 : cellHeight)) + 'px';
+            blob.style.top = (offsetY + row * (this.mode === 'pea' ? 150 : cellHeight)) + 'px';
             
             parentContainer.appendChild(blob);
         });
+
+        const buckets = document.getElementById('genotype-buckets');
+        const targetSection = document.getElementById('target-container');
+
+        if (this.mode === 'breed') {
+            buckets.classList.add('hidden');
+            targetSection.classList.remove('hidden');
+            targetSection.classList.add('flex');
+            document.getElementById('check-btn').classList.add('hidden'); // No manual check needed
+            
+            const targetDisplay = document.getElementById('target-blob-display');
+            targetDisplay.innerHTML = '';
+            
+            const targetBlob = this.createBlob('target-blob', this.targetGenotype.split(''));
+            targetBlob.style.position = 'absolute';
+            targetBlob.style.left = '50%';
+            targetBlob.style.top = '50%';
+            targetBlob.style.transform = 'translate(-50%, -50%) scale(1.5)';
+            targetBlob.setAttribute('draggable', 'false');
+            targetBlob.classList.remove('cursor-grab', 'active:cursor-grabbing');
+            
+            const clone = targetBlob.cloneNode(true);
+            clone.querySelector('.gene-label').classList.remove('hidden');
+            targetDisplay.appendChild(clone);
+        } else {
+            buckets.classList.remove('hidden');
+            targetSection.classList.add('hidden');
+            targetSection.classList.remove('flex');
+            document.getElementById('check-btn').classList.remove('hidden');
+            
+            // Reinitialize answer buckets
+            buckets.innerHTML = '';
+            if (this.mode === 'pea') {
+                const types = ["TT", "Tt", "tt"];
+                types.forEach(type => {
+                    const slot = document.createElement('div');
+                    slot.className = 'slot p-2 border-2 border-dashed border-gray-300 rounded shadow-inner flex gap-2 w-full min-h-[140px] items-center justify-center relative bg-gray-50 flex-wrap overflow-y-auto';
+                    slot.dataset.genotype = type;
+                    const label = document.createElement('span');
+                    label.className = 'absolute top-1 left-2 font-bold text-gray-400 pointer-events-none text-sm';
+                    label.textContent = type;
+                    slot.appendChild(label);
+                    buckets.appendChild(slot);
+                });
+            } else {
+                const types = ["AA", "AB", "BB"];
+                const displayTypes = ["AA", "Aa", "aa"];
+                types.forEach((type, index) => {
+                    const slot = document.createElement('div');
+                    slot.className = 'slot p-2 border-2 border-dashed border-gray-300 rounded shadow-inner flex flex-wrap gap-2 w-full min-h-[140px] items-center justify-center relative bg-gray-50 overflow-y-auto';
+                    slot.dataset.genotype = type;
+                    const label = document.createElement('span');
+                    label.className = 'absolute top-1 left-2 font-bold text-gray-400 pointer-events-none text-sm';
+                    label.textContent = displayTypes[index];
+                    slot.appendChild(label);
+                    buckets.appendChild(slot);
+                });
+            }
+        }
     }
 
     createBlob(id, genes) {
@@ -193,6 +328,8 @@ class MendelGame {
             }
         } else {
             const activeStyles = isDominant ? this.activeTrait.dominant.vars : this.activeTrait.recessive.vars;
+            const combinedStyles = Object.assign({}, this.baseTraits, activeStyles);
+            
             let bodyRadius = 18.5;
             if (geneStr === "AA") bodyRadius = 19;
             else if (geneStr === "AB") bodyRadius = 20;
@@ -200,7 +337,7 @@ class MendelGame {
             
             sprite.querySelector('.blob-body').setAttribute('r', bodyRadius);
 
-            for (const [prop, value] of Object.entries(activeStyles)) {
+            for (const [prop, value] of Object.entries(combinedStyles)) {
                 if(prop === '--eye-y') {
                      sprite.querySelectorAll('.eye-outer, .eye-pupil').forEach(eye => eye.setAttribute('cy', value));
                 } else if(prop === '--eye-radius') {
@@ -211,6 +348,47 @@ class MendelGame {
                      sprite.querySelectorAll('.ear').forEach(ear => ear.style.fill = value);
                 } else if(prop === '--ear-stroke') {
                      sprite.querySelectorAll('.ear').forEach(ear => ear.style.stroke = value);
+                } else if(prop === '--blush-fill') {
+                     sprite.querySelectorAll('.blush').forEach(b => b.setAttribute('fill', value));
+                } else if(prop === '--show-blush') {
+                     sprite.querySelectorAll('.blush').forEach(b => b.setAttribute('opacity', value === '1' ? '0.6' : '0'));
+                } else if(prop === '--pupil-fill') {
+                     sprite.querySelectorAll('.eye-pupil').forEach(p => p.setAttribute('fill', value));
+                } else if(prop === '--ear-d') {
+                     sprite.querySelectorAll('.ear').forEach((ear, i) => {
+                         let d = value;
+                         if (i === 1) { // Right ear mirroring
+                            if (d.includes('M2 12 Q-4 -4 8 4')) d = 'M38 12 Q44 -4 32 4';
+                            else if (d.includes('M2 12 Q-6 6 2 -2')) d = 'M38 12 Q46 6 38 -2';
+                         }
+                         ear.setAttribute('d', d);
+                     });
+                } else if(prop === '--show-antennas') {
+                     sprite.querySelector('.antennas').style.display = (value === '1' ? 'block' : 'none');
+                } else if(prop === '--ant-l-d') {
+                     if (value) sprite.querySelector('.left-ant').setAttribute('d', value);
+                } else if(prop === '--ant-r-d') {
+                     if (value) sprite.querySelector('.right-ant').setAttribute('d', value);
+                } else if(prop === '--mouth-d') {
+                     sprite.querySelector('.mouth').setAttribute('d', value);
+                } else if(prop === '--show-spots') {
+                     sprite.querySelector('.spots-group').style.display = (value === '1' ? 'block' : 'none');
+                } else if(prop === '--show-stripes') {
+                     sprite.querySelector('.stripes-group').style.display = (value === '1' ? 'block' : 'none');
+                } else if(prop === '--pattern-fill') {
+                     sprite.querySelectorAll('.pattern-item').forEach(p => p.setAttribute('fill', value));
+                } else if(prop === '--pattern-stroke') {
+                     sprite.querySelectorAll('.pattern-item').forEach(p => p.setAttribute('stroke', value));
+                } else if(prop === '--wing-type') {
+                     sprite.querySelectorAll('.wing').forEach(w => w.style.display = 'none');
+                     if (value !== 'none') sprite.querySelectorAll(`.${value}-wing`).forEach(w => w.style.display = 'block');
+                } else if(prop === '--ant-tip') {
+                     sprite.querySelectorAll('.round-end').forEach(e => e.style.display = (value === 'round' ? 'block' : 'none'));
+                     sprite.querySelectorAll('.diamond-end').forEach(e => e.style.display = (value === 'diamond' ? 'block' : 'none'));
+                } else if(prop === '--show-tail') {
+                     sprite.querySelector('.tail-group').style.display = (value === '1' ? 'block' : 'none');
+                } else if(prop === '--tail-d') {
+                     if (value) sprite.querySelector('.tail').setAttribute('d', value);
                 } else {
                      sprite.style.setProperty(prop, value);
                 }
@@ -254,9 +432,15 @@ class MendelGame {
         genes.forEach((gene, index) => {
             const allele = this.createAllele(gene);
             allele.dataset.parentId = parentSprite.dataset.id;
-            const offset = (index === 0 ? -15 : 15);
-            allele.style.left = (rect.left - appRect.left + rect.width/2 + offset - 15) + 'px';
-            allele.style.top = (rect.top - appRect.top - 20) + 'px';
+            allele.dataset.isSource = "true"; // Mark as the source displayed under plant
+            const offset = (index === 0 ? -22 : 22);
+            allele.style.left = (rect.left - appRect.left + rect.width/2 + offset - 20) + 'px';
+            
+            // For pea plants, place at bottom; for blobs, place at top
+            const isPea = this.mode === 'pea';
+            const topOffset = isPea ? (rect.height - 70) : -20;
+            allele.style.top = (rect.top - appRect.top + topOffset) + 'px';
+            
             document.getElementById('app').appendChild(allele);
         });
     }
@@ -285,27 +469,27 @@ class MendelGame {
         
         this.activeDragElement = sprite;
         this.originalParent = sprite.parentElement; 
-        this.originalPos = { left: sprite.style.left, top: sprite.style.top };
         this.isMoving = false;
         this.startPos = { x: e.clientX, y: e.clientY };
 
         const rect = sprite.getBoundingClientRect();
+        const appRect = document.getElementById('app').getBoundingClientRect();
+        
         this.dragOffset = {
             x: e.clientX - rect.left,
             y: e.clientY - rect.top
         };
         
-        // Store pre-drag position in case we need to return
+        // Store pre-drag position relative to parent or #app
         this.originalPos = {
             left: sprite.style.left,
             top: sprite.style.top
         };
-
-        // Move to #app level
-        sprite.style.left = (rect.left - document.getElementById('app').getBoundingClientRect().left) + 'px';
-        sprite.style.top = (rect.top - document.getElementById('app').getBoundingClientRect().top) + 'px';
-        document.getElementById('app').appendChild(sprite);
         
+        // We also need the absolute position for cloning if it's a source
+        this.originalRect = rect;
+
+        // Defer moving to #app until dragging actually starts to avoid shift on click
         sprite.setPointerCapture(e.pointerId);
     }
 
@@ -316,6 +500,26 @@ class MendelGame {
         if (Math.abs(e.clientX - this.startPos.x) > 5 || Math.abs(e.clientY - this.startPos.y) > 5) {
             if (!this.isMoving) {
                 this.isMoving = true;
+                
+                // Gamete formation logic: If dragging a source allele, leave a copy behind
+                if (this.activeDragElement.classList.contains('allele-sprite') && this.activeDragElement.dataset.isSource === "true") {
+                    const gene = this.activeDragElement.dataset.gene;
+                    const parentId = this.activeDragElement.dataset.parentId;
+                    
+                    const replacement = this.createAllele(gene);
+                    replacement.dataset.parentId = parentId;
+                    replacement.dataset.isSource = "true";
+                    
+                    // Match position
+                    replacement.style.left = this.originalPos.left;
+                    replacement.style.top = this.originalPos.top;
+                    this.originalParent.appendChild(replacement);
+                    
+                    // The one being dragged is now a gamete
+                    delete this.activeDragElement.dataset.isSource;
+                    this.activeDragElement.dataset.isGamete = "true";
+                }
+
                 this.activeDragElement.classList.add('dragging');
                 
                 const appRect = document.getElementById('app').getBoundingClientRect();
@@ -335,6 +539,10 @@ class MendelGame {
                 const pRect = this.activeDragElement.getBoundingClientRect();
                 this.dragOriginX = pRect.left - appRect.left;
                 this.dragOriginY = pRect.top - appRect.top;
+                
+                // Position correctly before/during move to #app
+                this.activeDragElement.style.left = this.dragOriginX + 'px';
+                this.activeDragElement.style.top = this.dragOriginY + 'px';
                 document.getElementById('app').appendChild(this.activeDragElement);
             }
         }
@@ -379,10 +587,12 @@ class MendelGame {
         
         // Click logic (Extraction)
         if (!this.isMoving && this.mode === 'pea' && sprite.classList.contains('pea-sprite')) {
-            const geneLabel = sprite.querySelector('.gene-label');
             const genes = JSON.parse(sprite.dataset.genes);
-            geneLabel.classList.toggle('hidden');
-            this.extractAlleles(sprite, genes, !geneLabel.classList.contains('hidden'));
+            const isVisible = sprite.dataset.allelesVisible === 'true';
+            const nextVisible = !isVisible;
+            sprite.dataset.allelesVisible = nextVisible.toString();
+            
+            this.extractAlleles(sprite, genes, nextVisible);
             this.activeDragElement = null;
             return;
         }
@@ -565,21 +775,58 @@ class MendelGame {
         this.popSound.currentTime = 0;
         this.popSound.play();
         this.updateStats();
+
+        if (this.mode === 'breed') {
+            const offspringGenesStr = JSON.parse(blob.dataset.genes).sort().join('');
+            
+            const normalizedActual = offspringGenesStr.split('').map(g => {
+                if (g === 'T' || g === 'A') return 'A';
+                if (g === 't' || g === 'B') return 'B';
+                return g;
+            }).sort().join('');
+
+            if (normalizedActual === this.targetGenotype) {
+                this.score += 10;
+                blob.classList.add('correct');
+                blob.querySelector('.gene-label').classList.remove('hidden');
+                
+                const toast = document.createElement('div');
+                toast.className = 'absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-green-500 text-white font-bold py-2 px-6 rounded shadow-lg anim-pop z-50 text-xl pointer-events-none';
+                toast.innerHTML = `<svg class="w-8 h-8 mx-auto mb-2 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>培育成功！`;
+                document.getElementById('app').appendChild(toast);
+                
+                setTimeout(() => {
+                    toast.remove();
+                    this.level++;
+                    this.nextLevel();
+                }, 2000);
+            }
+        }
     }
 
     clearWorkspace() {
+        // Clear offspring
         const allBlobs = document.querySelectorAll('.blob-sprite');
-        let count = 0;
         allBlobs.forEach(blob => {
             if (blob.dataset.isParent !== "true") {
                 blob.remove();
-                count++;
             }
         });
+
+        // Clear dragged gametes (non-source alleles)
+        const allAlleles = document.querySelectorAll('.allele-sprite');
+        allAlleles.forEach(allele => {
+            if (allele.dataset.isSource !== "true") {
+                allele.remove();
+            }
+        });
+
         this.updateReproState();
     }
 
     checkAnswers() {
+        if (this.mode === 'breed') return; // Handled in spawnOffspring
+
         let correct = 0;
         let incorrect = 0;
         const slots = document.querySelectorAll('.slot');
@@ -594,9 +841,8 @@ class MendelGame {
                 // Robust normalization for comparing with AA/AB/BB slots
                 const geneArr = JSON.parse(blob.dataset.genes);
                 const normalizedActual = geneArr.map(g => {
-                    const l = g.toUpperCase();
-                    if (l === 'T' || l === 'A') return 'A';
-                    if (l === 'B' || g === 't') return 'B'; // 't' is recessive, 'B' is our internal recessive label
+                    if (g === 'T' || g === 'A') return 'A';
+                    if (g === 't' || g === 'B') return 'B';
                     return g;
                 }).sort().join('');
 
@@ -604,11 +850,28 @@ class MendelGame {
                     correct++;
                     blob.dataset.verified = "true"; // Mark as verified
                     blob.classList.add('correct');
-                    blob.querySelector('.gene-label').classList.remove('hidden');
+                    if (this.mode !== 'pea') {
+                        blob.querySelector('.gene-label').classList.remove('hidden');
+                    }
                 } else {
                     incorrect++;
                     blob.classList.add('anim-shake');
-                    setTimeout(() => blob.remove(), 600);
+                    setTimeout(() => {
+                        if (this.mode === 'pea' && blob.dataset.isParent === "true") {
+                            // Pea Mode: Protect parents, return them to the parent container
+                            blob.classList.remove('anim-shake');
+                            this.originalParent = this.containers.parent;
+                            this.activeDragElement = blob;
+                            this.returnBlob();
+                            this.activeDragElement = null;
+                        } else {
+                            // Default Mode or Offspring: Remove individuals and their alleles
+                            if (blob.dataset.id) {
+                                document.querySelectorAll(`.allele-sprite[data-parent-id="${blob.dataset.id}"]`).forEach(a => a.remove());
+                            }
+                            blob.remove();
+                        }
+                    }, 600);
                 }
             });
         });
@@ -622,10 +885,64 @@ class MendelGame {
         // Win condition: All 6 parents are correctly verified
         const verifiedParents = document.querySelectorAll('.blob-sprite[data-is-parent="true"][data-verified="true"]');
         if (verifiedParents.length === this.initialGenes.length) {
-            document.getElementById('display-final-score').textContent = this.score;
-            this.successOverlay.classList.remove('hidden');
+            if (this.mode === 'pea') {
+                // Pea mode finishes the game
+                document.getElementById('display-final-score').textContent = this.score;
+                this.successOverlay.classList.remove('hidden');
+            } else {
+                // Blob mode goes to next level
+                this.level++;
+                this.nextLevel();
+            }
         }
         this.updateStats();
+    }
+
+    nextLevel() {
+        // Pick a new random trait
+        const rawTrait = this.traitPool[Math.floor(Math.random() * this.traitPool.length)];
+        this.activeTrait = JSON.parse(JSON.stringify(rawTrait));
+
+        this.baseTraits = Object.assign({}, this.neutralBaseTraits);
+        if (this.isComplex) {
+            this.traitPool.forEach(trait => {
+                if (trait.label !== this.activeTrait.label) {
+                    const vars = Math.random() > 0.5 ? trait.dominant.vars : trait.recessive.vars;
+                    Object.assign(this.baseTraits, vars);
+                }
+            });
+        }
+
+        if (this.mode === 'breed') {
+            this.initialGenes = this.randomizeParentGenes(8, 'A', 'B');
+            this.targetGenotype = this.generatePossibleTarget(this.initialGenes);
+        } else if (this.mode !== 'pea') {
+            this.initialGenes = this.randomizeParentGenes(6, 'A', 'B');
+        }
+
+        // Reset the board but keep score and level
+        const parentContainer = this.containers.parent;
+        const offspringContainer = this.containers.offspring;
+        const reproContainer = this.containers.repro;
+        const slots = document.querySelectorAll('.slot-body');
+
+        parentContainer.innerHTML = '';
+        offspringContainer.innerHTML = '';
+        reproContainer.innerHTML = '<span class="drop-hint">拖曳兩個個體至此</span>';
+        slots.forEach(s => s.innerHTML = '');
+
+        // New population
+        this.initialGenes = this.randomizeParentGenes(6, 'A', 'B');
+        this.setupInitialPopulation();
+        this.displayActiveTrait();
+        this.updateReproState();
+        
+        // Success animation or message
+        const hint = document.createElement('div');
+        hint.className = 'level-up-toast';
+        hint.textContent = `太棒了！進入第 ${this.level} 關`;
+        document.body.appendChild(hint);
+        setTimeout(() => hint.remove(), 2000);
     }
 
     updateStats() {
