@@ -100,7 +100,7 @@ class MendelGame {
                 dominant: { name: "高莖 (Tall)", vars: { isPea: true, tall: true } },
                 recessive: { name: "矮莖 (Short)", vars: { isPea: true, tall: false } }
             };
-            this.initialGenes = this.randomizeParentGenes(6, 'T', 't');
+            this.initialGenes = [['T', 'T'], ['T', 'T'], ['T', 'T'], ['t', 't'], ['t', 't'], ['t', 't']];
         } else {
             // Randomly pick an active trait
             const rawTrait = this.traitPool[Math.floor(Math.random() * this.traitPool.length)];
