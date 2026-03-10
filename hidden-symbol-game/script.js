@@ -242,6 +242,12 @@ document.addEventListener('DOMContentLoaded', () => {
         elapsedTimeEl.textContent = elapsedSeconds;
         completionMessageEl.textContent = timeUp ? '時間到！' : '全部答完！';
         showScreen(endScreen);
+        
+        if (timeUp) {
+            window.parent.postMessage({ type: 'scout-game', status: 'lose' }, '*');
+        } else {
+            window.parent.postMessage({ type: 'scout-game', status: 'win' }, '*');
+        }
     }
 
     function getRandomInt(min, max) {

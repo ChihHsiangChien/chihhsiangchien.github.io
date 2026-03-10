@@ -24,20 +24,20 @@ const COLORS = [
 const REGION_MAP = {
     // LV1: 北、中、南、東、離島 (5大區)
     lv1: {
-        '北部地區': ['基隆市', '台北市', '新北市', '桃園市', '新竹縣', '新竹市', '宜蘭縣'],
-        '中部地區': ['苗栗縣', '台中市', '彰化縣', '南投縣', '雲林縣'],
-        '南部地區': ['嘉義縣', '嘉義市', '台南市', '高雄市', '屏東縣'],
-        '東部地區': ['花蓮縣', '台東縣'],
+        '北部地區': ['基隆市', '台北市', '臺北市', '新北市', '桃園市', '新竹縣', '新竹市', '宜蘭縣'],
+        '中部地區': ['苗栗縣', '台中市', '臺中市', '彰化縣', '南投縣', '雲林縣'],
+        '南部地區': ['嘉義縣', '嘉義市', '台南市', '臺南市', '高雄市', '屏東縣'],
+        '東部地區': ['花蓮縣', '台東縣', '臺東縣'],
         '離島地區': ['澎湖縣', '金門縣', '連江縣']
     },
     // LV2: 稍細一點的劃分 (10區)
     lv2: {
-        '北北基宜': ['基隆市', '台北市', '新北市', '宜蘭縣'],
+        '北北基宜': ['基隆市', '台北市', '臺北市', '新北市', '宜蘭縣'],
         '桃竹苗': ['桃園市', '新竹縣', '新竹市', '苗栗縣'],
-        '中彰投': ['台中市', '彰化縣', '南投縣'],
-        '雲嘉南': ['雲林縣', '嘉義縣', '嘉義市', '台南市'],
+        '中彰投': ['台中市', '臺中市', '彰化縣', '南投縣'],
+        '雲嘉南': ['雲林縣', '嘉義縣', '嘉義市', '台南市', '臺南市'],
         '高屏': ['高雄市', '屏東縣'],
-        '花東': ['花蓮縣', '台東縣'],
+        '花東': ['花蓮縣', '台東縣', '臺東縣'],
         '澎湖': ['澎湖縣'],
         '金門': ['金門縣'],
         '馬祖': ['連江縣']
@@ -66,6 +66,14 @@ function initGame() {
     
     // 建立題目列表並隨機排序
     gameState.questions = [...gameState.geoData.features].sort(() => Math.random() - 0.5);
+    
+    // 依據難度設定題數：初級 5 題、中級 7 題、高級 9 題、專業級 11 題
+    const configQuestionCount = { lv1: 5, lv2: 7, lv3: 9, lv4: 11 };
+    const maxQuestions = configQuestionCount[gameState.difficulty];
+    if (gameState.questions.length > maxQuestions) {
+        gameState.questions = gameState.questions.slice(0, maxQuestions);
+    }
+
     gameState.currentIndex = 0;
     gameState.correctAnswers.clear();
     
@@ -184,6 +192,7 @@ function renderMiniMap() {
         path.setAttribute('fill', 'rgba(200, 200, 200, 0.3)');
         path.setAttribute('stroke', '#999');
         path.setAttribute('stroke-width', '1');
+        path.setAttribute('fill-rule', 'evenodd');
         
         // LV4 盲拼模式：初始隱藏未完成的路徑
         if (gameState.difficulty === 'lv4') {
@@ -246,6 +255,7 @@ function showQuestion() {
     path.setAttribute('fill', COLORS[countyIndex % COLORS.length]);
     path.setAttribute('stroke', '#333');
     path.setAttribute('stroke-width', '1');
+    path.setAttribute('fill-rule', 'evenodd');
     
     svg.appendChild(path);
     
@@ -264,10 +274,8 @@ function generateOptions() {
     const correctAnswer = gameState.currentQuestion.properties.name;
     const correctId = gameState.currentQuestion.properties.id;
     
-    // 難度越高，干擾項越多
-    let distractorCount = 3;
-    if (gameState.difficulty === 'lv2') distractorCount = 4;
-    if (gameState.difficulty === 'lv3' || gameState.difficulty === 'lv4') distractorCount = 5;
+    // 初級 (lv1) 3 選 1，其他難度 4 選 1
+    let distractorCount = gameState.difficulty === 'lv1' ? 2 : 3;
 
     const allCounties = gameState.geoData.features.filter(f => f.properties.id !== correctId);
     const distractors = [];
@@ -325,14 +333,19 @@ function checkAnswer(button) {
             showQuestion();
         }, 1500);
     } else {
-        // 答對才能顯眼，答錯回饋
+        // 答對才能顯眼，答錯則隱藏該選項確保過關
         button.classList.add('wrong');
+        button.style.visibility = 'hidden';
         showFeedback('✗ 答錯了，再試一次！', 'wrong');
         
-        // 1 秒後重新啟用按鈕
+        // 1 秒後移除 wrong class 並重新啟用尚未隱藏的按鈕
         setTimeout(() => {
             button.classList.remove('wrong');
-            allButtons.forEach(btn => btn.disabled = false);
+            allButtons.forEach(btn => {
+                if (btn.style.visibility !== 'hidden') {
+                    btn.disabled = false;
+                }
+            });
         }, 1000);
     }
 }
@@ -388,6 +401,7 @@ function showVictoryModal() {
     
     finalTime.textContent = timerText;
     modal.classList.remove('hidden');
+    window.parent.postMessage({ type: 'scout-game', status: 'win' }, '*');
 }
 
 // 計時器

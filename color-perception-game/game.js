@@ -251,6 +251,7 @@ class ColorPerceptionGame {
         this.pauseButton.textContent = '暫停';
         alert(`遊戲結束！您的得分: ${this.score}`);
         this.updateUI();
+        window.parent.postMessage({ type: 'scout-game', status: 'lose' }, '*');
     }
 
     gameWin() {
@@ -262,6 +263,7 @@ class ColorPerceptionGame {
         this.slowButton.disabled = true;
         alert(`恭喜！你成功完成了 ${this.targetLevel} 關挑戰！得分: ${this.score}`);
         this.updateUI();
+        window.parent.postMessage({ type: 'scout-game', status: 'win' }, '*');
     }
 }
 
