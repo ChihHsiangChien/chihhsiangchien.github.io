@@ -5,10 +5,10 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Difficulty Settings
     const DIFFICULTIES = {
-        'lv1': { questions: 10, timePerQuestion: 0, scoreMult: 1, label: '初級 (入門)' },
-        'lv2': { questions: 15, timePerQuestion: 20, scoreMult: 1.5, label: '中級 (進階)' },
-        'lv3': { questions: 20, timePerQuestion: 15, scoreMult: 2, label: '高級 (困難)' },
-        'lv4': { questions: 25, timePerQuestion: 8, scoreMult: 3, label: '專業級 (大師)' }
+        'lv1': { questions: 5, timePerQuestion: 0, scoreMult: 1, label: '初級 (入門)' },
+        'lv2': { questions: 7, timePerQuestion: 0, scoreMult: 1.5, label: '中級 (進階)' },
+        'lv3': { questions: 9, timePerQuestion: 0, scoreMult: 2, label: '高級 (困難)' },
+        'lv4': { questions: 11, timePerQuestion: 0, scoreMult: 3, label: '專業級 (大師)' }
     };
 
     // --- Sound Manager ---
@@ -244,7 +244,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ui.timer.textContent = state.timeLeft;
         if (state.timeLeft <= 0) {
             clearInterval(state.timer);
-            handleAnswer(null, true); // Time out
+            ui.timer.textContent = '時間到';
         }
     }
 
@@ -281,50 +281,55 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleAnswer(selected, isTimeout, btnElement) {
         if (!state.gameActive) return;
         
+        // Timeout ignored now, but if passed manually:
+        if (isTimeout) return;
+
         clearInterval(state.timer);
         
         const q = state.currentQuestions[state.currentIndex];
         const isCorrect = selected === q.answer;
         const config = DIFFICULTIES[state.currentDifficulty];
 
-        // UI Feedback
         const blank = document.getElementById('target-blank');
-        blank.textContent = q.answer;
-        blank.classList.remove('blank');
-        
-        // Disable all options
-        const allBtns = document.querySelectorAll('.option-btn');
-        allBtns.forEach(b => {
-            b.style.pointerEvents = 'none';
-            if (b.textContent === q.answer) {
-                 b.classList.add('correct');
-            } else if (b === btnElement && !isCorrect) {
-                 b.classList.add('wrong');
-            }
-        });
 
         if (isCorrect) {
-            soundManager.play('correct');
+            blank.textContent = q.answer;
+            blank.classList.remove('blank');
             blank.classList.add('filled');
-            // Score calculation
-            // Base score 100. Bonus for speed? 
-            // Simple: 100 * multiplier
+            
+            const allBtns = document.querySelectorAll('.option-btn');
+            allBtns.forEach(b => {
+                b.style.pointerEvents = 'none';
+                if (b.textContent === q.answer) {
+                     b.classList.add('correct');
+                }
+            });
+
+            soundManager.play('correct');
             const points = 100 * config.scoreMult;
             state.score += points;
             state.correctAnswers++;
             showFeedback('正確!', 'correct');
             animateScore(points);
+
+            setTimeout(() => {
+                state.currentIndex++;
+                loadQuestion();
+            }, 1200);
         } else {
             soundManager.play('wrong');
-            blank.style.color = 'var(--error-color)';
-            showFeedback(isTimeout ? '時間到!' : '錯誤!', 'wrong');
+            showFeedback('錯誤!', 'wrong');
+            
+            if (btnElement) {
+                btnElement.style.visibility = 'hidden';
+                btnElement.style.pointerEvents = 'none';
+            }
+            
+            // Restart timer so they can try again (if not already out)
+            if (config.timePerQuestion > 0 && state.timeLeft > 0) {
+                state.timer = setInterval(tickTimer, 1000);
+            }
         }
-
-        // Next Question Delay
-        setTimeout(() => {
-            state.currentIndex++;
-            loadQuestion();
-        }, 1200);
     }
 
     function showFeedback(text, type) {
@@ -338,8 +343,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateStatUI() {
-        const total = state.currentQuestions.length;
-        ui.progress.textContent = `${state.currentIndex + 1} / ${total}`;
+        const config = DIFFICULTIES[state.currentDifficulty];
+        ui.progress.textContent = `第 ${state.currentIndex + 1} 題 / 共 ${config.questions} 題`;
         ui.score.textContent = Math.round(state.score);
     }
 
@@ -361,5 +366,6 @@ document.addEventListener('DOMContentLoaded', () => {
         else ui.endMessage.textContent = '加油，多讀書喔！';
 
         showScreen('end');
+        window.parent.postMessage({ type: 'scout-game', status: 'win' }, '*');
     }
 });

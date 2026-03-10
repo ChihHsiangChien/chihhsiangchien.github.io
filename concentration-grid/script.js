@@ -192,6 +192,7 @@ function endGame() {
     playSound('win');
     const finalTimeMs = Date.now() - startTime;
     showResult(finalTimeMs);
+    window.parent.postMessage({ type: 'scout-game', status: 'win' }, '*');
 }
 
 function showResult(ms) {

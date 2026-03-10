@@ -40,10 +40,9 @@ function playTone(type) {
 
 const game = {
     score: 0,
-    time: 60,
-    timerInterval: null,
     isPlaying: false,
     currentLevel: 1,
+    winTarget: 5,
     currentQuestion: null,
     pool: [],
     correctlyAnswered: new Set(),
@@ -51,9 +50,12 @@ const game = {
     start: function(level) {
         this.currentLevel = parseInt(level) || 1;
         this.score = 0;
-        this.time = 60; 
         this.isPlaying = true;
         this.correctlyAnswered.clear();
+        
+        // 設定題數：初級 5，中級 7，高級 9，專業級 11
+        const targets = { 1: 5, 2: 7, 3: 9, 4: 11 };
+        this.winTarget = targets[this.currentLevel] || 5;
         
         // 根據難度過濾國家
         if (this.currentLevel === 1) {
@@ -73,19 +75,8 @@ const game = {
         document.getElementById('start-screen').classList.add('hidden');
         document.getElementById('game-screen').classList.remove('hidden');
         document.getElementById('score').innerText = this.score;
-        document.getElementById('time').innerText = this.time;
         
         this.nextQuestion();
-        this.startTimer();
-    },
-
-    startTimer: function() {
-        this.timerInterval = setInterval(() => {
-            this.time--;
-            document.getElementById('time').innerText = this.time;
-            if (this.time <= 5) playTone('tick');
-            if (this.time <= 0) this.endGame();
-        }, 1000);
     },
 
     nextQuestion: function() {
@@ -94,6 +85,12 @@ const game = {
         const poolToUse = remaining.length > 0 ? remaining : this.pool;
         
         this.currentQuestion = poolToUse[Math.floor(Math.random() * poolToUse.length)];
+        
+        const progressCount = document.getElementById('progress-count');
+        if (progressCount) {
+            progressCount.innerText = `第 ${this.correctlyAnswered.size + 1} 題 / 共 ${this.winTarget} 題`;
+        }
+        
         this.renderQuestion();
     },
 
@@ -104,10 +101,12 @@ const game = {
         const optionsContainer = document.getElementById('options');
         optionsContainer.innerHTML = '';
         
-        // Generate options (correct + 3 random)
+        // Generate options: 3 選 1 or 4 選 1
+        let requiredDistractors = this.currentLevel === 1 ? 2 : 3;
+        
         const others = countries.filter(c => c.name !== this.currentQuestion.name);
         const distractors = [];
-        while (distractors.length < 3) {
+        while (distractors.length < requiredDistractors) {
             const r = others[Math.floor(Math.random() * others.length)];
             if (!distractors.includes(r)) distractors.push(r);
         }
@@ -136,8 +135,7 @@ const game = {
             // Disable all buttons after choice
             document.querySelectorAll('.option-btn').forEach(b => b.disabled = true);
             
-            const winTarget = 10;
-            if (this.correctlyAnswered.size >= winTarget) {
+            if (this.correctlyAnswered.size >= this.winTarget) {
                 setTimeout(() => this.endGame(true), 1000);
             } else {
                 setTimeout(() => this.nextQuestion(), 1000);
@@ -145,13 +143,12 @@ const game = {
         } else {
             playTone('wrong');
             btn.classList.add('wrong');
-            this.time = Math.max(0, this.time - 5);
-            document.getElementById('time').innerText = this.time;
+            btn.style.visibility = 'hidden';
+            // 不再扣時間，鼓勵學生嘗試
             
             // Temporary disable to prevent double clicking during animation
             btn.disabled = true;
             setTimeout(() => {
-                btn.disabled = false;
                 btn.classList.remove('wrong');
             }, 500);
         }
@@ -159,16 +156,17 @@ const game = {
 
     endGame: function(isWin = false) {
         this.isPlaying = false;
-        clearInterval(this.timerInterval);
         document.getElementById('game-screen').classList.add('hidden');
         document.getElementById('end-screen').classList.remove('hidden');
         document.getElementById('final-score').innerText = this.score;
         if (isWin) {
             document.querySelector('#end-screen h1').innerText = "挑戰成功！ 🎉";
-            document.getElementById('result-message').innerText = "恭喜達成 10 題國旗辨識！";
+            document.getElementById('result-message').innerText = `恭喜達成 ${this.winTarget} 題國旗辨識！`;
+            window.parent.postMessage({ type: 'scout-game', status: 'win' }, '*');
         } else {
-            document.querySelector('#end-screen h1').innerText = "時間到！ ⏰";
-            document.getElementById('result-message').innerText = "再接再厲，下次動作快一點！";
+            document.querySelector('#end-screen h1').innerText = "挑戰結束！";
+            document.getElementById('result-message').innerText = "再接再厲！";
+            window.parent.postMessage({ type: 'scout-game', status: 'lose' }, '*');
         }
     }
 };
