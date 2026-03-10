@@ -1084,10 +1084,9 @@ class MendelGame {
     checkAnswers() {
         if (this.mode === 'breed') return; // Handled in spawnOffspring
 
-        let correct = 0;
-        let incorrect = 0;
         let hasNewErrors = false;
         const slots = document.querySelectorAll('.slot');
+        let unverifiedBlobs = [];
 
         slots.forEach(slot => {
             const expected = slot.dataset.genotype;
@@ -1123,55 +1122,44 @@ class MendelGame {
 
                 if (blob.dataset.verified === "true") return; // Skip already scored
 
-                // Robust normalization for comparing with AA/AB/BB slots
                 const geneArr = JSON.parse(blob.dataset.genes);
                 const normalizedActual = this.normalizeGenotype(geneArr);
 
-                if (normalizedActual === expected) {
-                    correct++;
-                    blob.dataset.verified = "true"; // Mark as verified
-                    blob.classList.add('correct');
-                    if (this.mode !== 'pea') {
-                        blob.querySelector('.gene-label').classList.remove('hidden');
-                    }
-                } else {
-                    incorrect++;
-                    hasNewErrors = true;
-                    blob.classList.add('anim-shake');
-                    setTimeout(() => {
-                        if (blob.dataset.isParent === "true") {
-                            // Protect parents, return them to the parent container
-                            blob.classList.remove('anim-shake');
-                            if (this.errorsLeft > 0) {
-                                this.containers.parent.appendChild(blob);
-                                blob.style.left = blob.dataset.homeX;
-                                blob.style.top = blob.dataset.homeY;
+                unverifiedBlobs.push(blob);
 
-                                if (blob.dataset.id) {
-                                    const alleles = document.querySelectorAll(`.allele-sprite[data-parent-id="${blob.dataset.id}"]`);
-                                    alleles.forEach((a, idx) => {
-                                        this.containers.parent.appendChild(a);
-                                        a.style.left = (parseFloat(blob.style.left) + (idx * 30)) + 'px';
-                                        a.style.top = (parseFloat(blob.style.top) + 70) + 'px';
-                                    });
-                                }
-                            }
-                        } else {
-                            // Default Mode or Offspring: Remove individuals and their alleles
-                            if (blob.dataset.id) {
-                                document.querySelectorAll(`.allele-sprite[data-parent-id="${blob.dataset.id}"]`).forEach(a => a.remove());
-                            }
-                            if (blob.parentElement) blob.remove();
-                        }
-                    }, 600);
+                if (normalizedActual !== expected) {
+                    hasNewErrors = true;
                 }
             });
         });
+
+        if (unverifiedBlobs.length === 0) return; // Nothing new to check
 
         if (hasNewErrors) {
             this.errorsLeft--;
             this.updateErrorDisplay();
             
+            unverifiedBlobs.forEach(blob => {
+                blob.classList.add('anim-shake');
+                setTimeout(() => {
+                    blob.classList.remove('anim-shake');
+                    if (this.errorsLeft > 0) {
+                        this.containers.parent.appendChild(blob);
+                        blob.style.left = blob.dataset.homeX;
+                        blob.style.top = blob.dataset.homeY;
+
+                        if (blob.dataset.id) {
+                            const alleles = document.querySelectorAll(`.allele-sprite[data-parent-id="${blob.dataset.id}"]`);
+                            alleles.forEach((a, idx) => {
+                                this.containers.parent.appendChild(a);
+                                a.style.left = (parseFloat(blob.style.left) + (idx * 30)) + 'px';
+                                a.style.top = (parseFloat(blob.style.top) + 70) + 'px';
+                            });
+                        }
+                    }
+                }, 600);
+            });
+
             if (this.errorsLeft <= 0) {
                 setTimeout(() => {
                     const toast = document.createElement('div');
@@ -1188,12 +1176,22 @@ class MendelGame {
 
                     this.restartLevel();
                 }, 600);
+            } else {
+                this.score -= 2; // minor penalty for a wrong guess attempt
+                if (this.score < 0) this.score = 0;
+                this.scoreDisplay.textContent = this.score;
             }
-        }
-
-        if (this.errorsLeft > 0 || !hasNewErrors) {
-            this.score += (correct * 2) - (incorrect * 2);
-            if (this.score < 0) this.score = 0;
+        } else {
+            // All newly submitted unverified blobs in this batch are CORRECT! Lock them in.
+            unverifiedBlobs.forEach(blob => {
+                blob.dataset.verified = "true";
+                blob.classList.add('correct');
+                if (this.mode !== 'pea') {
+                    blob.querySelector('.gene-label').classList.remove('hidden');
+                }
+            });
+            
+            this.score += (unverifiedBlobs.length * 2);
             this.scoreDisplay.textContent = this.score;
             this.scoreDisplay.classList.add('anim-pop');
             setTimeout(() => this.scoreDisplay.classList.remove('anim-pop'), 400);
@@ -1202,17 +1200,15 @@ class MendelGame {
             const verifiedParents = document.querySelectorAll('.blob-sprite[data-is-parent="true"][data-verified="true"]');
             if (verifiedParents.length === this.initialGenes.length) {
                 if (this.mode === 'pea') {
-                    // Pea mode finishes the game
                     document.getElementById('display-final-score').textContent = this.score;
                     this.successOverlay.classList.remove('hidden');
                 } else {
-                    // Blob mode goes to next level
                     this.level++;
                     this.nextLevel();
                 }
             }
         }
-        
+
         this.updateStats();
     }
 
