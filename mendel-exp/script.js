@@ -8,6 +8,7 @@ class MendelGame {
         this.score = 0;
         this.level = 1;
         this.idCounter = 0;
+        this.errorsLeft = 2;
         
         // Drag state
         this.activeDragElement = null;
@@ -147,6 +148,7 @@ class MendelGame {
     init() {
         this.cacheDOM();
         this.bindEvents();
+        this.updateErrorDisplay();
         this.setupInitialPopulation();
         this.displayActiveTrait();
     }
@@ -211,6 +213,25 @@ class MendelGame {
         this.successOverlay = document.getElementById('success-overlay');
         this.resetBtn = document.getElementById('reset-btn');
         this.traitLabel = document.getElementById('current-trait-label');
+        this.errorAllowanceDisplay = document.getElementById('error-allowance-display');
+    }
+
+    updateErrorDisplay() {
+        if (this.errorAllowanceDisplay) {
+            if (this.mode === 'sandbox' || this.mode === 'breed') {
+                this.errorAllowanceDisplay.style.display = 'none';
+            } else {
+                this.errorAllowanceDisplay.style.display = 'inline';
+                this.errorAllowanceDisplay.textContent = `(剩餘機會: ${this.errorsLeft}次)`;
+                if (this.errorsLeft <= 1) {
+                    this.errorAllowanceDisplay.style.color = '#ff0000';
+                    this.errorAllowanceDisplay.style.fontWeight = 'bold';
+                } else {
+                    this.errorAllowanceDisplay.style.color = '#ff4d4d';
+                    this.errorAllowanceDisplay.style.fontWeight = 'normal';
+                }
+            }
+        }
     }
 
     updateLegendUI() {
@@ -219,7 +240,7 @@ class MendelGame {
 
     bindEvents() {
         this.resetBtn.addEventListener('click', () => {
-            window.location.reload();
+            this.restartLevel();
         });
 
         document.getElementById('restart-game-btn').addEventListener('click', () => {
@@ -260,6 +281,8 @@ class MendelGame {
             
             blob.style.left = (offsetX + col * cellWidth) + 'px';
             blob.style.top = (offsetY + row * (this.mode === 'pea' ? 150 : cellHeight)) + 'px';
+            blob.dataset.homeX = blob.style.left;
+            blob.dataset.homeY = blob.style.top;
             
             parentContainer.appendChild(blob);
         });
@@ -529,6 +552,9 @@ class MendelGame {
             
             document.getElementById('app').appendChild(allele);
         });
+
+        this.popSound.currentTime = 0;
+        this.popSound.play();
     }
 
     createAllele(gene) {
@@ -786,6 +812,11 @@ class MendelGame {
 
         this.activeDragElement = null;
         this.updateReproState();
+        
+        if (targetZone && targetZone.id !== 'trash-zone') {
+            this.popSound.currentTime = 0;
+            this.popSound.play();
+        }
     }
 
     returnAllele() {
@@ -1039,6 +1070,7 @@ class MendelGame {
 
         let correct = 0;
         let incorrect = 0;
+        let hasNewErrors = false;
         const slots = document.querySelectorAll('.slot');
 
         slots.forEach(slot => {
@@ -1088,51 +1120,121 @@ class MendelGame {
                     }
                 } else {
                     incorrect++;
+                    hasNewErrors = true;
                     blob.classList.add('anim-shake');
                     setTimeout(() => {
-                        if (this.mode === 'pea' && blob.dataset.isParent === "true") {
-                            // Pea Mode: Protect parents, return them to the parent container
+                        if (blob.dataset.isParent === "true") {
+                            // Protect parents, return them to the parent container
                             blob.classList.remove('anim-shake');
-                            this.originalParent = this.containers.parent;
-                            this.activeDragElement = blob;
-                            this.returnBlob();
-                            this.activeDragElement = null;
+                            if (this.errorsLeft > 0) {
+                                this.containers.parent.appendChild(blob);
+                                blob.style.left = blob.dataset.homeX;
+                                blob.style.top = blob.dataset.homeY;
+
+                                if (blob.dataset.id) {
+                                    const alleles = document.querySelectorAll(`.allele-sprite[data-parent-id="${blob.dataset.id}"]`);
+                                    alleles.forEach((a, idx) => {
+                                        this.containers.parent.appendChild(a);
+                                        a.style.left = (parseFloat(blob.style.left) + (idx * 30)) + 'px';
+                                        a.style.top = (parseFloat(blob.style.top) + 70) + 'px';
+                                    });
+                                }
+                            }
                         } else {
                             // Default Mode or Offspring: Remove individuals and their alleles
                             if (blob.dataset.id) {
                                 document.querySelectorAll(`.allele-sprite[data-parent-id="${blob.dataset.id}"]`).forEach(a => a.remove());
                             }
-                            blob.remove();
+                            if (blob.parentElement) blob.remove();
                         }
                     }, 600);
                 }
             });
         });
 
-        this.score += (correct * 2) - (incorrect * 2);
-        if (this.score < 0) this.score = 0;
-        this.scoreDisplay.textContent = this.score;
-        this.scoreDisplay.classList.add('anim-pop');
-        setTimeout(() => this.scoreDisplay.classList.remove('anim-pop'), 400);
+        if (hasNewErrors) {
+            this.errorsLeft--;
+            this.updateErrorDisplay();
+            
+            if (this.errorsLeft <= 0) {
+                setTimeout(() => {
+                    const toast = document.createElement('div');
+                    toast.className = 'level-up-toast';
+                    toast.style.background = '#e74c3c';
+                    toast.innerHTML = `驗證錯誤次數過多，基因重新洗牌！`;
+                    document.body.appendChild(toast);
+                    setTimeout(() => toast.remove(), 2500);
 
-        // Win condition: All 6 parents are correctly verified
-        const verifiedParents = document.querySelectorAll('.blob-sprite[data-is-parent="true"][data-verified="true"]');
-        if (verifiedParents.length === this.initialGenes.length) {
-            if (this.mode === 'pea') {
-                // Pea mode finishes the game
-                document.getElementById('display-final-score').textContent = this.score;
-                this.successOverlay.classList.remove('hidden');
-            } else {
-                // Blob mode goes to next level
-                this.level++;
-                this.nextLevel();
+                    this.score -= 10;
+                    if (this.score < 0) this.score = 0;
+                    this.scoreDisplay.textContent = this.score;
+                    this.scoreDisplay.classList.add('anim-pop');
+
+                    this.restartLevel();
+                }, 600);
             }
         }
+
+        if (this.errorsLeft > 0 || !hasNewErrors) {
+            this.score += (correct * 2) - (incorrect * 2);
+            if (this.score < 0) this.score = 0;
+            this.scoreDisplay.textContent = this.score;
+            this.scoreDisplay.classList.add('anim-pop');
+            setTimeout(() => this.scoreDisplay.classList.remove('anim-pop'), 400);
+
+            // Win condition: All 6 parents are correctly verified
+            const verifiedParents = document.querySelectorAll('.blob-sprite[data-is-parent="true"][data-verified="true"]');
+            if (verifiedParents.length === this.initialGenes.length) {
+                if (this.mode === 'pea') {
+                    // Pea mode finishes the game
+                    document.getElementById('display-final-score').textContent = this.score;
+                    this.successOverlay.classList.remove('hidden');
+                } else {
+                    // Blob mode goes to next level
+                    this.level++;
+                    this.nextLevel();
+                }
+            }
+        }
+        
         this.updateStats();
+    }
+
+    restartLevel() {
+        this.isLevelCompleting = false;
+        this.errorsLeft = 2;
+        this.updateErrorDisplay();
+        
+        if (this.mode === 'sandbox') {
+            this.initialGenes = this.randomizeParentGenes(4, 'A', 'a', true);
+        } else if (this.mode === 'breed') {
+            this.initialGenes = this.randomizeParentGenes(8, 'A', 'B');
+            this.targetGenotype = this.generatePossibleTarget(this.initialGenes);
+        } else if (this.mode !== 'pea') {
+            this.initialGenes = this.randomizeParentGenes(6, 'A', 'B');
+        } else {
+            this.initialGenes = [['T', 'T'], ['T', 'T'], ['T', 'T'], ['t', 't'], ['t', 't'], ['t', 't']];
+        }
+
+        const parentContainer = this.containers.parent;
+        const offspringContainer = this.containers.offspring;
+        const reproContainer = this.containers.repro;
+        const slots = document.querySelectorAll('.slot-body');
+
+        parentContainer.innerHTML = '';
+        offspringContainer.innerHTML = '';
+        reproContainer.innerHTML = '';
+        slots.forEach(s => s.innerHTML = '');
+
+        this.setupInitialPopulation();
+        this.displayActiveTrait();
+        this.updateReproState();
     }
 
     nextLevel() {
         this.isLevelCompleting = false;
+        this.errorsLeft = 2;
+        this.updateErrorDisplay();
         // Pick a new random trait
         const rawTrait = this.traitPool[Math.floor(Math.random() * this.traitPool.length)];
         this.activeTrait = JSON.parse(JSON.stringify(rawTrait));
