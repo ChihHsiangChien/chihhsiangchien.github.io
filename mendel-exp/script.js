@@ -246,10 +246,23 @@ class MendelGame {
         document.getElementById('restart-game-btn').addEventListener('click', () => {
             window.location.reload();
         });
+        const bindFastClick = (btn, action) => {
+            if (!btn) return;
+            // Handle touch explicitly to bypass iOS Safari's 300ms delay & zoom
+            btn.addEventListener('touchstart', (e) => {
+                e.preventDefault(); // Kills double-tap zoom entirely
+                action();
+            }, { passive: false });
+            // Handle mouse down for desktop snappiness
+            btn.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                action();
+            });
+        };
 
-        this.reproBtn.addEventListener('click', () => this.reproduce());
-        this.clearBtn.addEventListener('click', () => this.clearWorkspace());
-        this.checkBtn.addEventListener('click', () => this.checkAnswers());
+        bindFastClick(this.reproBtn, () => this.reproduce());
+        bindFastClick(this.clearBtn, () => this.clearWorkspace());
+        bindFastClick(this.checkBtn, () => this.checkAnswers());
 
         // Global pointer move/up for dragging
         window.addEventListener('pointermove', (e) => this.onPointerMove(e));
@@ -261,14 +274,17 @@ class MendelGame {
         const parentContainer = this.containers.parent;
         
         let cols = 2;
-        let cellWidth = 125;
-        let cellHeight = 115;
-        let offsetX = 15;
-        let offsetY = 25;
+        let cellWidth = 85;
+        let cellHeight = 100;
+        let offsetX = 5;
+        let offsetY = 15;
 
         // Adjust for 8 parents
         if (this.mode === 'breed') {
             cellHeight = 90; 
+            offsetY = 10;
+        } else if (this.mode === 'pea') {
+            cellHeight = 125;
             offsetY = 10;
         }
 
@@ -280,7 +296,7 @@ class MendelGame {
             const row = Math.floor(index / cols);
             
             blob.style.left = (offsetX + col * cellWidth) + 'px';
-            blob.style.top = (offsetY + row * (this.mode === 'pea' ? 150 : cellHeight)) + 'px';
+            blob.style.top = (offsetY + row * cellHeight) + 'px';
             blob.dataset.homeX = blob.style.left;
             blob.dataset.homeY = blob.style.top;
             
@@ -945,8 +961,8 @@ class MendelGame {
 
     getZPatternLayout(container, index) {
         const rect = container.getBoundingClientRect();
-        const cellWidth = 90;
-        const cellHeight = 100;
+        const cellWidth = 70;
+        const cellHeight = 90;
         
         // Use rect.width for a stable calculation independent of vertical scrollbar presence
         // Subtract 30 to safely account for standard scrollbar width without triggering jitter
@@ -1291,4 +1307,31 @@ class MendelGame {
 
 document.addEventListener('DOMContentLoaded', () => {
     window.game = new MendelGame();
+});
+
+// Prevent double-tap zoom on tablets/mobile devices (Aggressive method for iOS Safari)
+let lastTouchEnd = 0;
+document.addEventListener('touchend', (event) => {
+    const now = (new Date()).getTime();
+    // If the time between two touches is less than 300ms, it's a double tap
+    if (now - lastTouchEnd <= 300) {
+        event.preventDefault();
+        // Force the click to still register on buttons even though we prevented the zoom
+        if (event.target.tagName === 'BUTTON') {
+            event.target.click();
+        }
+    }
+    lastTouchEnd = now;
+}, { passive: false });
+
+// Prevent multi-touch zoom
+document.addEventListener('touchstart', (event) => {
+    if (event.touches.length > 1) {
+        event.preventDefault();
+    }
+}, { passive: false });
+
+// Prevent pinch-zoom on iOS
+document.addEventListener('gesturestart', (event) => {
+    event.preventDefault();
 });
