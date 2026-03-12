@@ -275,8 +275,10 @@ class IntegratedLab {
 
         // Duplicate visual for second cell
         const clones = group.cloneNode(true);
-        clones.setAttribute('transform', 'translate(100, 0) scale(0.9)');
-        // (Simplified mitosis visual - actually we just want to show they split)
+        clones.setAttribute('transform', 'translate(100, 0)');
+        group.appendChild(clones);
+
+        // Final transition to offspring macro happens in handleFertilization
     }
 
     renderZygote(f, m) {
