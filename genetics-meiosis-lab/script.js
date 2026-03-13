@@ -2,21 +2,37 @@
  * Genetics Lab - Integrated Macro/Micro Logic
  */
 
-const CHROMO_COLORS = {
-    father: ['#3b82f6', '#60a5fa'],
-    mother: ['#ef4444', '#f87171']
-};
+// CHROMO_COLORS[pairIndex].father / .mother
+// Add more pairs here when adding more chromosome pairs
+const CHROMO_COLORS = [
+    { father: '#3b82f6', mother: '#ef4444' },  // Pair 0: blue/red
+    { father: '#10b981', mother: '#f59e0b' },  // Pair 1: green/amber
+    { father: '#8b5cf6', mother: '#ec4899' },  // Pair 2: purple/pink
+];
+
+// Helper: get alleles array from a genotype string and locus
+function genotypeToAlleles(geno) {
+    if (geno === 'AA') return ['A', 'A'];
+    if (geno === 'aa') return ['a', 'a'];
+    return ['A', 'a']; // 'Aa'
+}
 
 class IntegratedLab {
     constructor() {
         this.state = {
+            // genes: array of loci — extend this for multi-chromosome support
+            genes: [
+                { locus: 'A', fatherGeno: 'Aa', motherGeno: 'Aa' },
+                // { locus: 'B', fatherGeno: 'Bb', motherGeno: 'Bb' },  ← add pairs here
+            ],
+            // Legacy convenience props (derived from genes[0]) — kept for backward compat
             father: 'Aa',
             mother: 'Aa',
-            phase: 'setup', // 'setup', 'results', 'fertilizing', 'developing', 'born'
+            phase: 'setup',
             meiosisStep: 0,
-            selectedSperm: null,
-            selectedEgg: null,
-            devStep: 0, // 0-7 steps for fertilization/mitosis/cleavage
+            selectedSperm: null,  // will be { A: 'A' } after gamete selection
+            selectedEgg:   null,  // will be { A: 'a' } after gamete selection
+            devStep: 0,
         };
 
         this.cacheDOM();
@@ -43,14 +59,20 @@ class IntegratedLab {
         document.querySelectorAll('.genotype-selector button').forEach(btn => {
             btn.onclick = () => {
                 if (this.state.phase !== 'setup') return;
-                const parent = btn.dataset.parent;
-                const geno = btn.dataset.genotype;
-                
+                const parent = btn.dataset.parent; // 'father' | 'mother'
+                const geno   = btn.dataset.genotype;
+                const locus  = btn.dataset.locus || 'A'; // default to first locus
+
                 // UI Toggle
                 btn.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
 
+                // Update legacy state prop
                 this.state[parent] = geno;
+                // Update genes array
+                const gene = this.state.genes.find(g => g.locus === locus);
+                if (gene) gene[parent === 'father' ? 'fatherGeno' : 'motherGeno'] = geno;
+
                 this.updateMacro(parent);
                 this.updateMicro(parent);
             };
@@ -117,7 +139,10 @@ class IntegratedLab {
 
     updateMicro(parent) {
         if (!this.sims) this.sims = {};
-        this.sims[parent] = new MeiosisAnimator(`svg-meiosis-${parent}`, parent, this.state[parent]);
+        // Pass genes array to MeiosisAnimator for multi-locus support
+        this.sims[parent] = new MeiosisAnimator(
+            `svg-meiosis-${parent}`, parent, this.state.genes
+        );
         this.sims[parent].render(0);
     }
 
@@ -240,12 +265,13 @@ class IntegratedLab {
         this.phaseText.textContent = "請直接點選下方細胞中的配子 (各選一個)";
         
         // Remove old grid logic, interaction happens inside sim
-        this.sims.father.enableInteraction((allele) => {
-            this.state.selectedSperm = allele;
+        this.sims.father.enableInteraction((alleleMap) => {
+            // alleleMap: { A: 'A' }  (or { A:'A', B:'b' } for multi-locus)
+            this.state.selectedSperm = alleleMap;
             this.checkFertilizationReady();
         });
-        this.sims.mother.enableInteraction((allele) => {
-            this.state.selectedEgg = allele;
+        this.sims.mother.enableInteraction((alleleMap) => {
+            this.state.selectedEgg = alleleMap;
             this.checkFertilizationReady();
         });
     }
@@ -324,9 +350,22 @@ class IntegratedLab {
             zygoteSVG.appendChild(embryoGroup);
         }
 
-        const f = this.state.selectedSperm;
-        const m = this.state.selectedEgg;
-        const childGeno = (f === 'A' && m === 'A') ? 'AA' : ((f === 'a' && m === 'a') ? 'aa' : 'Aa');
+        // Extract alleles from alleleMap objects { A: 'A', B: 'b' }
+        const spermMap = this.state.selectedSperm || {};
+        const eggMap   = this.state.selectedEgg   || {};
+        // Primary locus for backward-compat display (first gene locus)
+        const primaryLocus = this.state.genes[0]?.locus || 'A';
+        const f = spermMap[primaryLocus] || 'A';
+        const m = eggMap[primaryLocus]   || 'a';
+        // Compute child genotype per locus
+        const childGenoMap = Object.fromEntries(
+            this.state.genes.map(g => {
+                const s = spermMap[g.locus] || g.alleles?.[0] || 'A';
+                const e = eggMap[g.locus]   || g.alleles?.[0] || 'a';
+                return [g.locus, [s, e].sort().join('')];
+            })
+        );
+        const childGeno = childGenoMap[primaryLocus] || 'Aa'; // primary locus for blob display
 
         // Textual Description mapping
         const stepDescriptions = [
@@ -402,7 +441,7 @@ class IntegratedLab {
             if (showChromos) {
                 const sz = Math.max(r * 0.18, 7); // chromosome pill height
                 const w = sz * 0.45;               // pill width
-                const colors = [CHROMO_COLORS.father[0], CHROMO_COLORS.mother[0]];
+                const colors = [CHROMO_COLORS[0].father, CHROMO_COLORS[0].mother];
                 const alleles = [f, m];
                 [-1, 1].forEach((dir, i) => {
                     const cx = x + dir * sz * 0.65;
@@ -551,7 +590,7 @@ class IntegratedLab {
                 [sisL, sisR].forEach((sis, j) => {
                     const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
                     use.setAttribute("href", "#chromatid-template");
-                    use.style.color = (i === 0 ? CHROMO_COLORS.father[0] : CHROMO_COLORS.mother[0]);
+                    use.style.color = (i === 0 ? CHROMO_COLORS[0].father : CHROMO_COLORS[0].mother);
                     sis.appendChild(use);
                     const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
                     text.setAttribute("x", "0"); text.setAttribute("y", "-16");
@@ -654,14 +693,25 @@ class IntegratedLab {
 
 
 class MeiosisAnimator {
-    constructor(svgId, type, genotype) {
+    constructor(svgId, type, genes) {
         this.svg = document.getElementById(svgId);
         this.chrGroup = this.svg.querySelector('.chromosome-group');
         this.membrane = this.svg.querySelector('.cell-membrane');
         this.nucleus = this.svg.querySelector('.nucleus');
-        this.type = type;
-        this.alleles = (genotype === 'AA' ? ['A', 'A'] : (genotype === 'Aa' ? ['A', 'a'] : ['a', 'a']));
-        
+        this.type = type;  // 'father' | 'mother'
+
+        // Support both legacy (string) and new (genes array) constructor signature
+        if (typeof genes === 'string') {
+            // Legacy: single genotype string e.g. 'Aa'
+            this.genes = [{ locus: 'A', alleles: genotypeToAlleles(genes) }];
+        } else {
+            // New: genes array [{ locus:'A', fatherGeno:'Aa', motherGeno:'Aa' }, ...]
+            this.genes = genes.map(g => ({
+                locus: g.locus,
+                alleles: genotypeToAlleles(type === 'father' ? g.fatherGeno : g.motherGeno)
+            }));
+        }
+
         this.init();
     }
 
@@ -670,80 +720,107 @@ class MeiosisAnimator {
         this.chrGroup.innerHTML = '';
         this.svg.querySelectorAll('.gamete-cell-interactive').forEach(el => el.remove());
         
-        // Reset membrane to state 0 (One cell)
-        this.membraneClass = this.membrane.getAttribute('class');
+        // Reset membrane
         this.membrane.setAttribute('d', this.getPath(0));
         this.nucleus.style.opacity = "1";
         this.nucleus.style.transform = "scale(0.85)";
 
         this.chromos = [];
-        // Fixed positions: Pairs in the center
-        const getFixedPos = (index) => {
-            const spacing = 40;
-            return {
-                x: 200 + (index === 0 ? -spacing : spacing) * 0.5,
-                y: 150,
-                rot: 0
-            };
-        }
+        // Dynamic positions: n pairs side-by-side
+        const getFixedPos = (index, total) => {
+            const spacing = Math.min(45, 160 / Math.max(total, 2));
+            return { x: 200 + (index - (total - 1) / 2) * spacing, y: 150 };
+        };
 
-        this.alleles.forEach((a, i) => {
-            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-            g.setAttribute("class", "chromosome-interactive");
-            const sisL = document.createElementNS("http://www.w3.org/2000/svg", "g");
-            sisL.setAttribute("class", "sister-chromatid");
-            const sisR = document.createElementNS("http://www.w3.org/2000/svg", "g");
-            sisR.setAttribute("class", "sister-chromatid");
-            
-            [sisL, sisR].forEach((sis, j) => {
-                const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
-                use.setAttribute("href", "#chromatid-template");
-                use.style.color = CHROMO_COLORS[this.type][i];
-                sis.appendChild(use);
-                const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-                text.setAttribute("x", "0"); text.setAttribute("y", "-16");
-                text.setAttribute("class", "gene-text"); text.setAttribute("text-anchor", "middle");
-                text.textContent = a;
-                if (j === 1) text.setAttribute("transform", "scale(-1, 1)");
-                sis.appendChild(text);
+        // Build chromos: for each gene locus, create 2 chromatid groups (one per allele)
+        // alleles[0] = first chromosome, alleles[1] = homolog
+        const totalChromos = this.genes.length * 2;
+        this.genes.forEach((gene, pairIdx) => {
+            gene.alleles.forEach((a, chromoInPair) => {
+                const globalIdx = pairIdx * 2 + chromoInPair;
+                const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+                g.setAttribute("class", "chromosome-interactive");
+                const sisL = document.createElementNS("http://www.w3.org/2000/svg", "g");
+                sisL.setAttribute("class", "sister-chromatid");
+                const sisR = document.createElementNS("http://www.w3.org/2000/svg", "g");
+                sisR.setAttribute("class", "sister-chromatid");
 
-                // Add data for selection
-                sis.dataset.allele = a;
+                [sisL, sisR].forEach((sis, j) => {
+                    const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+                    use.setAttribute("href", "#chromatid-template");
+                    // Use pairIdx for color selection
+                    const colorPair = CHROMO_COLORS[pairIdx] || CHROMO_COLORS[0];
+                    use.style.color = colorPair[this.type];
+                    sis.appendChild(use);
+                    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                    text.setAttribute("x", "0"); text.setAttribute("y", "-16");
+                    text.setAttribute("class", "gene-text"); text.setAttribute("text-anchor", "middle");
+                    text.textContent = a;
+                    if (j === 1) text.setAttribute("transform", "scale(-1, 1)");
+                    sis.appendChild(text);
+                    sis.dataset.allele = a;
+                    sis.dataset.locus  = gene.locus;
+                });
+
+                g.appendChild(sisL); g.appendChild(sisR);
+                this.chrGroup.appendChild(g);
+
+                const pos = getFixedPos(globalIdx, totalChromos);
+                this.chromos.push({
+                    el: g, sisL, sisR, pos,
+                    side: (chromoInPair === 0),   // which homolog: true=first, false=second
+                    pairIndex: pairIdx,
+                    locus: gene.locus,
+                    allele: a
+                });
             });
-
-            g.appendChild(sisL); g.appendChild(sisR);
-            this.chrGroup.appendChild(g);
-
-            const pos = getFixedPos(i);
-            this.chromos.push({ el: g, sisL, sisR, pos, side: (i === 0) });
         });
     }
 
     enableInteraction(onSelect) {
-        // Find or create hit areas for the 4 gamete cells (based on Path definition)
-        // For simplicity, we create 4 invisible circles in the SVG group
+        // 4 gamete cells based on Path definition
         const cells = [
-            { x: 100, y: 75, allele: this.chromos[0].sisL.dataset.allele },
-            { x: 100, y: 225, allele: this.chromos[0].sisR.dataset.allele },
-            { x: 300, y: 75, allele: this.chromos[1].sisL.dataset.allele },
-            { x: 300, y: 225, allele: this.chromos[1].sisR.dataset.allele }
+            { x: 100, y: 75 },
+            { x: 100, y: 225 },
+            { x: 300, y: 75 },
+            { x: 300, y: 225 }
+        ];
+        // Map each cell to its alleleMap {locus: allele} based on which sisL/sisR it gets
+        // Cell top-left and top-right get sisL of chromos[0] and chromos[1]
+        // Cell bottom-left and bottom-right get sisR of chromos[0] and chromos[1]
+        // For simplicity with 1 pair: [0]=chromos[0].sisL, [1]=chromos[0].sisR, [2]=chromos[1].sisL, [3]=chromos[1].sisR
+        // Actually matching the existing 4-cell positions:
+        // x=100,y=75  → chromos[0].sisL (left-top)
+        // x=100,y=225 → chromos[0].sisR (left-bottom)
+        // x=300,y=75  → chromos[1].sisL (right-top)
+        // x=300,y=225 → chromos[1].sisR (right-bottom)
+        // For multi-pair: build alleleMap per gamete cell (each receives one allele per locus)
+        // With 1 pair: 4 gametes as before
+        // With 2 pairs: gamete alleleMap = { A: sisX.allele, B: sisY.allele }
+        const gameteAlleles = [
+            // top-left gamete: first allele from each pair
+            Object.fromEntries(this.genes.map((g, pi) => [g.locus, this.chromos[pi*2].sisL.dataset.allele])),
+            // bottom-left: second allele from each pair (sisR of pair 0, sisL-equivalent of pairs)
+            Object.fromEntries(this.genes.map((g, pi) => [g.locus, this.chromos[pi*2].sisR.dataset.allele])),
+            // top-right: homolog first allele
+            Object.fromEntries(this.genes.map((g, pi) => [g.locus, this.chromos[pi*2+1].sisL.dataset.allele])),
+            // bottom-right: homolog second allele
+            Object.fromEntries(this.genes.map((g, pi) => [g.locus, this.chromos[pi*2+1].sisR.dataset.allele])),
         ];
 
         this.hitAreas = [];
-        cells.forEach(c => {
+        cells.forEach((c, idx) => {
             const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
             circle.setAttribute("cx", c.x); circle.setAttribute("cy", c.y);
-            circle.setAttribute("r", "70"); // Match cell membrane radius
+            circle.setAttribute("r", "70");
             circle.setAttribute("class", "gamete-cell-interactive");
             circle.setAttribute("fill", "rgba(255,255,255,0.01)");
             circle.setAttribute("stroke", "rgba(255,255,255,0.1)");
-            
+
             circle.onclick = () => {
-                // Clear highlights ONLY in THIS SVG (Father or Mother)
                 this.hitAreas.forEach(h => h.classList.remove('gamete-cell-selected'));
-                
                 circle.classList.add('gamete-cell-selected');
-                onSelect(c.allele);
+                onSelect(gameteAlleles[idx]);  // pass alleleMap object
             };
             this.svg.appendChild(circle);
             this.hitAreas.push(circle);
@@ -774,7 +851,7 @@ class MeiosisAnimator {
 
         this.membrane.setAttribute('d', this.getPath(state));
 
-        const totalPairs = 1; // Current implementation uses 1 pair
+        const totalPairs = this.genes.length;
 
         this.chromos.forEach((c, idx) => {
             let x = 200, y = 150, rot = 0, split = 0, scale = 0.8;
