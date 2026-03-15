@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>顯微鏡光學工程模擬器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .font-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 6px;
+            cursor: pointer;
+            background: #e2e8f0;
+            border-radius: 3px;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            height: 18px;
+            width: 18px;
+            border-radius: 50%;
+            background: #2563eb;
+            cursor: pointer;
+            -webkit-appearance: none;
+            margin-top: -6px;
+        }
+
+        #opticsCanvas {
+            cursor: default;
+            touch-action: none;
+            background: #fff;
+            border-radius: 1rem;
+        }
+
+        .viewfinder {
+            position: absolute;
+            top: 1.5rem;
+            right: 1.5rem;
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            border: 4px solid #1e293b;
+            background: #020617;
+            overflow: hidden;
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.6);
+            pointer-events: none;
+            z-index: 50;
+        }
+
+        .active-btn {
+            background-color: #2563eb !important;
+            color: white !important;
+            font-weight: 800 !important;
+            transform: scale(1.02);
+        }
+
+        .btn-focus {
+            background: #10b981;
+            color: white;
+            transition: all 0.2s;
+        }
+
+        .btn-focus:hover {
+            background: #059669;
+            transform: translateY(-1px);
+        }
+
+        .btn-focus:active {
+            transform: translateY(0);
+        }
+    </style>
+</head>
+
+<body class="bg-slate-100 text-slate-800 h-screen overflow-hidden flex flex-col font-sans">
+
+    <header class="bg-white border-b px-6 py-4 shadow-sm flex justify-between items-center shrink-0 z-50">
+        <div>
+            <h1 class="text-xl font-bold text-slate-900 tracking-tight text-blue-600">顯微鏡光學工程模擬 Pro v20.0</h1>
+            <p class="text-xs text-slate-500 uppercase tracking-widest font-black text-emerald-600">課綱規範繪圖法：三主光線與自動對焦系統
+            </p>
+        </div>
+        <div id="modeTag" class="bg-slate-800 text-white px-3 py-1 rounded-full text-[10px] font-black uppercase">
+            Textbook Ray-Tracing Mode
+        </div>
+    </header>
+
+    <main class="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+        <!-- Sidebar -->
+        <div class="w-full md:w-80 bg-white border-r p-6 overflow-y-auto space-y-8 shadow-xl z-40 shrink-0">
+            <section>
+                <label
+                    class="block text-[10px] font-black text-slate-400 mb-3 uppercase tracking-widest text-center">物鏡旋轉盤
+                    (Parfocal)</label>
+                <div class="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl border border-slate-200">
+                    <button id="obj4" class="py-3 text-xs rounded-lg transition-all font-black">4x Low</button>
+                    <button id="obj10" class="py-3 text-xs rounded-lg transition-all font-black active-btn">10x
+                        Mid</button>
+                </div>
+            </section>
+
+            <section class="space-y-6">
+                <h3 class="text-xs font-black text-slate-500 uppercase tracking-wider">光學與對焦控制</h3>
+
+                <button id="btnAutoFocus"
+                    class="w-full py-3 btn-focus rounded-xl font-black text-sm shadow-lg flex items-center justify-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    一鍵自動最佳對焦
+                </button>
+
+                <div class="space-y-4">
+                    <div class="flex justify-between items-center">
+                        <label class="text-xs font-bold text-slate-700 uppercase">載物台位置 (對焦微調)</label>
+                        <span id="focusVal"
+                            class="text-[10px] font-mono bg-slate-100 px-2 py-1 rounded text-blue-600">0.00 mm</span>
+                    </div>
+                    <input type="range" id="inputFocus" min="-5.0" max="5.0" step="0.01" value="0"
+                        class="w-full cursor-pointer">
+                    <p class="text-[9px] text-slate-400 leading-relaxed">
+                        根據物理繪圖法：<br>
+                        紅線：平行主軸過焦點 | 藍線：過中心直行
+                    </p>
+                </div>
+            </section>
+
+            <!-- Dashboard -->
+            <div class="p-5 bg-slate-900 text-white rounded-3xl shadow-xl space-y-4 border border-slate-700">
+                <div>
+                    <p class="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1">物理實時倍率</p>
+                    <div class="flex items-baseline gap-1">
+                        <p id="totalMag" class="text-5xl font-mono font-bold text-yellow-400">0</p>
+                        <span class="text-yellow-400/50 font-bold text-xl">x</span>
+                    </div>
+                </div>
+                <div id="magBreakdown"
+                    class="text-[10px] font-mono text-slate-400 leading-tight border-t border-white/10 pt-4 space-y-1.5">
+                </div>
+            </div>
+        </div>
+
+        <!-- Simulation -->
+        <div class="flex-1 relative bg-slate-200 p-4 md:p-8 flex items-center justify-center overflow-hidden z-10">
+            <div id="canvasContainer"
+                class="w-full h-full bg-white rounded-3xl shadow-2xl border border-slate-300 relative overflow-hidden">
+                <canvas id="opticsCanvas" class="w-full h-full"></canvas>
+
+                <div class="viewfinder shadow-inner border-slate-800">
+                    <canvas id="viewfinderCanvas" width="180" height="180"></canvas>
+                </div>
+
+                <div
+                    class="absolute bottom-6 left-6 right-6 bg-white/90 backdrop-blur-md px-6 py-4 rounded-2xl border border-slate-200 flex justify-between items-center shadow-lg pointer-events-none">
+                    <div id="infoLeft"
+                        class="flex gap-10 text-[10px] font-black text-slate-400 uppercase font-mono tracking-tighter">
+                    </div>
+                    <div id="focusStatus" class="text-[10px] text-blue-600 font-black uppercase">● 系統已鎖定齊焦設計</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const state = {
+            mObj_spec: 10,
+            fEye_mm: 25,
+            distVision_mm: 250,
+            objH_mm: 10,
+            stage_x_offset: 0,
+            scale: 1.35,
+            // 機械基準 (mm)
+            specimen_fixed_x: 0,
+            nosepiece_fixed_x: 45,
+            iip_fixed_x: 205, // 45 + 160
+            eye_lens_fixed_x: 230
+        };
+
+        let ui = {};
+        let canvas, ctx, vfCanvas, vfCtx;
+
+        function init() {
+            canvas = document.getElementById('opticsCanvas');
+            ctx = canvas.getContext('2d');
+            vfCanvas = document.getElementById('viewfinderCanvas');
+            vfCtx = vfCanvas.getContext('2d');
+
+            ui = {
+                obj4: document.getElementById('obj4'),
+                obj10: document.getElementById('obj10'),
+                totalMag: document.getElementById('totalMag'),
+                magBreakdown: document.getElementById('magBreakdown'),
+                infoLeft: document.getElementById('infoLeft'),
+                inputFocus: document.getElementById('inputFocus'),
+                focusVal: document.getElementById('focusVal'),
+                btnAutoFocus: document.getElementById('btnAutoFocus'),
+                focusStatus: document.getElementById('focusStatus'),
+                container: document.getElementById('canvasContainer')
+            };
+
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+
+            ui.obj4.onclick = () => { state.mObj_spec = 4; updateUI(); };
+            ui.obj10.onclick = () => { state.mObj_spec = 10; updateUI(); };
+            ui.btnAutoFocus.onclick = () => { state.stage_x_offset = 0; ui.inputFocus.value = 0; ui.focusVal.innerText = "0.00 mm"; render(); };
+            ui.inputFocus.oninput = (e) => {
+                state.stage_x_offset = parseFloat(e.target.value);
+                ui.focusVal.innerText = (state.stage_x_offset >= 0 ? "+" : "") + state.stage_x_offset.toFixed(2) + " mm";
+                render();
+            };
+
+            updateUI();
+        }
+
+        function resizeCanvas() {
+            canvas.width = ui.container.clientWidth;
+            canvas.height = ui.container.clientHeight;
+            render();
+        }
+
+        function updateUI() {
+            [ui.obj4, ui.obj10].forEach(btn => btn.classList.remove('active-btn', 'bg-white', 'border'));
+            const active = state.mObj_spec === 4 ? ui.obj4 : ui.obj10;
+            active.classList.add('active-btn');
+            render();
+        }
+
+        function render() {
+            const cx = canvas.width / 2 - 180;
+            const cy = canvas.height / 2;
+            const sc = state.scale;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 繪製背景格線
+            ctx.beginPath(); ctx.setLineDash([2, 2]); ctx.strokeStyle = '#f1f5f9';
+            for (let i = 0; i < canvas.width; i += sc * 25) { ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); }
+            ctx.stroke(); ctx.setLineDash([]);
+
+            // 物理數據計算
+            const f_obj = 160 / state.mObj_spec;
+            const f_eye = 25;
+            const u_ideal = 1 / (1 / f_obj - 1 / 160);
+
+            // 組件坐標
+            const specX = cx + (state.specimen_fixed_x + state.stage_x_offset) * sc;
+            const iipTargetX = cx + state.iip_fixed_x * sc;
+            const eyeX = cx + state.eye_lens_fixed_x * sc;
+
+            // 物鏡主平面位置
+            const objMainX_mm = state.specimen_fixed_x + u_ideal;
+            const objMainX = cx + objMainX_mm * sc;
+
+            // 實際成像計算
+            const actual_u = (objMainX - specX) / sc;
+            const actual_v = 1 / (1 / f_obj - 1 / actual_u);
+            const m1 = Math.abs(actual_v / actual_u);
+            const m2 = state.distVision_mm / f_eye;
+            const totalM = m1 * m2;
+
+            const actual_iipX = objMainX + actual_v * sc;
+            const h1 = -state.objH_mm * m1;
+
+            // UI 更新
+            ui.totalMag.innerText = totalM.toFixed(1);
+            ui.magBreakdown.innerHTML = `<div>物鏡: ${m1.toFixed(1)}x</div><div>目鏡: ${m2.toFixed(1)}x</div><div>中間像誤差: ${(actual_v - 160).toFixed(2)}mm</div>`;
+            ui.infoLeft.innerHTML = `<span>物距 u: ${actual_u.toFixed(2)}mm</span><span>像距 v: ${actual_v.toFixed(2)}mm</span>`;
+
+            const focusError = Math.abs(actual_iipX - iipTargetX);
+            ui.focusStatus.innerText = focusError < 1 ? "● 已精確對焦" : "● 對焦調整中...";
+            ui.focusStatus.className = focusError < 1 ? "text-[10px] text-emerald-600 font-black uppercase" : "text-[10px] text-blue-600 font-black uppercase animate-pulse";
+
+            // 1. 繪製機械結構
+            ctx.fillStyle = '#f8fafc'; ctx.strokeStyle = '#cbd5e1';
+            ctx.fillRect(cx + state.nosepiece_fixed_x * sc, cy - 20, (eyeX - (cx + state.nosepiece_fixed_x * sc)), 40);
+            ctx.strokeRect(cx + state.nosepiece_fixed_x * sc, cy - 20, (eyeX - (cx + state.nosepiece_fixed_x * sc)), 40);
+
+            const barrelLen = (objMainX - (cx + state.nosepiece_fixed_x * sc));
+            ctx.fillStyle = '#94a3b8'; ctx.fillRect(cx + state.nosepiece_fixed_x * sc, cy - 18, barrelLen, 36);
+
+            // 固定 IIP 面 (紅色虛線)
+            ctx.beginPath(); ctx.strokeStyle = '#ef4444'; ctx.setLineDash([5, 5]);
+            ctx.moveTo(iipTargetX, cy - 70); ctx.lineTo(iipTargetX, cy + 70); ctx.stroke();
+            ctx.setLineDash([]);
+
+            drawLens(objMainX, cy, 30, '#10b981', `${state.mObj_spec}x`);
+            drawLens(eyeX, cy, 60, '#a855f7', `10x Eye`);
+            drawEye(ctx, eyeX + 45, cy);
+
+            // 焦點標記
+            ctx.fillStyle = '#10b981';
+            ctx.beginPath(); ctx.arc(objMainX - f_obj * sc, cy, 5, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(objMainX + f_obj * sc, cy, 5, 0, Math.PI * 2); ctx.fill();
+
+            ctx.fillStyle = '#a855f7';
+            ctx.beginPath(); ctx.arc(eyeX - f_eye * sc, cy, 5, 0, Math.PI * 2); ctx.fill();
+
+            // 2. 物鏡光路 (三主光線)
+            ctx.strokeStyle = 'rgba(239, 68, 68, 0.6)'; // 紅色平行光
+            ctx.beginPath();
+            ctx.moveTo(specX, cy - state.objH_mm);
+            ctx.lineTo(objMainX, cy - state.objH_mm);
+            ctx.lineTo(actual_iipX, cy - h1);
+            ctx.stroke();
+
+            ctx.strokeStyle = 'rgba(59, 130, 246, 0.6)'; // 藍色過中心光
+            ctx.beginPath();
+            ctx.moveTo(specX, cy - state.objH_mm);
+            ctx.lineTo(actual_iipX, cy - h1);
+            ctx.stroke();
+
+            // 3. 目鏡光路
+            ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)';
+            ctx.beginPath();
+            ctx.moveTo(actual_iipX, cy - h1);
+            ctx.lineTo(eyeX, cy - h1);
+            ctx.lineTo(eyeX + 30, cy - h1 - (30 / f_eye) * h1);
+            ctx.stroke();
+
+            ctx.strokeStyle = 'rgba(59, 130, 246, 0.4)';
+            ctx.beginPath();
+            ctx.moveTo(actual_iipX, cy - h1);
+            ctx.lineTo(eyeX + 30, cy + (30 / ((eyeX - actual_iipX) / sc)) * h1);
+            ctx.stroke();
+
+            // 4. 虛像回溯 (橘色)
+            const finalImgX = eyeX - state.distVision_mm * sc;
+            const finalImgH = h1 * m2 * 0.15;
+            ctx.setLineDash([5, 5]); ctx.strokeStyle = '#f59e0b';
+            ctx.beginPath();
+            ctx.moveTo(eyeX, cy - h1);
+            ctx.lineTo(finalImgX, cy - finalImgH);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(eyeX, cy);
+            ctx.lineTo(finalImgX, cy - finalImgH);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // 繪製各階段成像
+            drawArrow(ctx, specX, cy, state.objH_mm, '#1e293b', '標本');
+            drawArrow(ctx, actual_iipX, cy, h1, '#10b981', '中間實像');
+            ctx.setLineDash([5, 5]);
+            drawArrow(ctx, finalImgX, cy, finalImgH, '#f59e0b', '最終虛像');
+            ctx.setLineDash([]);
+
+            renderViewfinder(totalM, focusError);
+        }
+
+        function renderViewfinder(mag, focusErr) {
+            vfCtx.fillStyle = '#010409'; vfCtx.fillRect(0, 0, 180, 180);
+            const drawSize = Math.max(0.1, Math.min(2.0 * mag, 400));
+            vfCtx.save(); vfCtx.translate(90, 90);
+            vfCtx.rotate(Math.PI);
+            const blur = focusErr * 0.8;
+            vfCtx.filter = `blur(${blur}px)`;
+            vfCtx.beginPath();
+            vfCtx.strokeStyle = 'rgba(52, 211, 153, 0.7)';
+            vfCtx.lineWidth = Math.max(1, mag / 40);
+            vfCtx.arc(0, 0, drawSize, 0, Math.PI * 2);
+            vfCtx.stroke();
+            vfCtx.fillStyle = 'rgba(167, 139, 250, 0.5)';
+            vfCtx.beginPath(); vfCtx.arc(drawSize * 0.1, -drawSize * 0.1, drawSize * 0.3, 0, Math.PI * 2); vfCtx.fill();
+            vfCtx.restore();
+            vfCtx.fillStyle = '#64748b'; vfCtx.font = 'bold 12px JetBrains Mono';
+            vfCtx.fillText(mag.toFixed(0) + 'x', 15, 165);
+        }
+
+        function drawEye(ctx, x, y) {
+            ctx.save(); ctx.translate(x, y);
+            ctx.beginPath(); ctx.strokeStyle = '#64748b'; ctx.lineWidth = 2;
+            ctx.moveTo(-18, 0); ctx.quadraticCurveTo(0, -16, 18, 0); ctx.quadraticCurveTo(0, 16, -18, 0);
+            ctx.stroke(); ctx.beginPath(); ctx.fillStyle = '#3b82f6'; ctx.arc(0, 0, 7, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+        }
+
+        function drawLens(x, y, h, color, label) {
+            ctx.strokeStyle = color; ctx.lineWidth = 5; ctx.lineCap = 'round';
+            ctx.beginPath(); ctx.moveTo(x, y - h); ctx.lineTo(x, y + h); ctx.stroke();
+            ctx.fillStyle = color; ctx.font = 'black 10px Inter'; ctx.fillText(label, x - 25, y - h - 12);
+        }
+
+        function drawArrow(ctx, x, y, h, color, label) {
+            ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 2.5;
+            ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - h); ctx.stroke();
+            const head = h > 0 ? -8 : 8;
+            ctx.beginPath(); ctx.moveTo(x, y - h);
+            ctx.lineTo(x - 5, y - h - head); ctx.lineTo(x + 5, y - h - head); ctx.fill();
+            if (Math.abs(h) > 2) {
+                ctx.font = 'bold 10px Inter'; ctx.fillText(label, x - 25, y - h + (h > 0 ? -15 : 25));
+            }
+        }
+
+        window.onload = init;
+    </script>
+</body>
+
+</html>
