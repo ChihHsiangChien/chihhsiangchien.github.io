@@ -18,12 +18,18 @@ function genotypeToAlleles(geno) {
 
 class IntegratedLab {
     constructor() {
+        // 檢查網址是否有 ?pairs=2 參數
+        const urlParams = new URLSearchParams(window.location.search);
+        const isTwoPairs = urlParams.get('pairs') === '2';
+        
+        const allGenes = [
+            { locus: 'A', fatherGeno: 'Aa', motherGeno: 'Aa' },
+            { locus: 'B', fatherGeno: 'Bb', motherGeno: 'Bb' },
+        ];
+
         this.state = {
             // genes: array of loci — extend this for multi-chromosome support
-            genes: [
-                { locus: 'A', fatherGeno: 'Aa', motherGeno: 'Aa' },
-                { locus: 'B', fatherGeno: 'Bb', motherGeno: 'Bb' },
-            ],
+            genes: isTwoPairs ? allGenes : [allGenes[0]],
             // Legacy convenience props (derived from genes[0]) — kept for backward compat
             father: 'Aa',
             mother: 'Aa',
@@ -98,6 +104,15 @@ class IntegratedLab {
     }
 
     init() {
+        // 根據基因對數決定是否隱藏第二對 (B) 基因的選擇介面
+        if (this.state.genes.length === 1) {
+            document.querySelectorAll('.genotype-row').forEach(row => {
+                if (row.querySelector('[data-locus="B"]')) {
+                    row.classList.add('hidden');
+                }
+            });
+        }
+
         this.updateMacro('father');
         this.updateMacro('mother');
         this.updateMicro('father');
@@ -131,8 +146,11 @@ class IntegratedLab {
     updateMacro(parent) {
         const display = document.getElementById(`macro-${parent}`);
         display.innerHTML = '';
-        const geno = this.state[parent];
-        const blob = this.createBlob(geno);
+        const genoMap = {};
+        this.state.genes.forEach(g => {
+            genoMap[g.locus] = (parent === 'father') ? g.fatherGeno : g.motherGeno;
+        });
+        const blob = this.createBlob(genoMap);
         display.appendChild(blob);
     }
 
@@ -145,12 +163,32 @@ class IntegratedLab {
         this.sims[parent].render(0);
     }
 
-    createBlob(genotype) {
+    createBlob(genoMap) {
+        if (typeof genoMap === 'string') {
+            genoMap = { A: genoMap };
+        }        
         const temp = document.getElementById('blob-template');
         const clone = temp.content.cloneNode(true);
         const sprite = clone.querySelector('.blob-sprite');
-        if (genotype === 'aa') sprite.classList.add('phenotype-aa');
-        clone.querySelector('.gene-label').textContent = genotype;
+        
+        const genoA = genoMap['A'] || 'AA';
+        if (!genoA.includes('A')) sprite.classList.add('phenotype-aa');
+
+        const genoB = genoMap['B'] || 'BB';
+        const leftEar = clone.querySelector('.left-ear');
+        const rightEar = clone.querySelector('.right-ear');
+        
+        if (leftEar && rightEar) {
+            if (genoB.includes('B')) {
+                leftEar.setAttribute('d', 'M2 12 Q-4 -4 8 4');
+                rightEar.setAttribute('d', 'M38 12 Q44 -4 32 4');
+            } else {
+                leftEar.setAttribute('d', 'M2 12 Q-6 6 2 -2');
+                rightEar.setAttribute('d', 'M38 12 Q46 6 38 -2');
+            }
+        }
+        
+        clone.querySelector('.gene-label').textContent = Object.values(genoMap).join('');
         return clone;
     }
 
@@ -476,10 +514,11 @@ class IntegratedLab {
                         embryoGroup.appendChild(dot);
                         
                         if (r > 30) {
+                            const baseSz = Math.max(rFactor, 5); // 取得第一對基準大小以統一字體
                             const lbl = document.createElementNS("http://www.w3.org/2000/svg", "text");
                             lbl.setAttribute("x", finalCx); lbl.setAttribute("y", cy - sz * 0.85);
                             lbl.setAttribute("text-anchor", "middle");
-                            lbl.setAttribute("font-size", sz * 0.85);
+                            lbl.setAttribute("font-size", baseSz * 0.85);
                             lbl.setAttribute("font-weight", "bold");
                             lbl.setAttribute("fill", "white");
                             lbl.setAttribute("opacity", "0.9");
@@ -575,9 +614,14 @@ class IntegratedLab {
                 off.classList.remove('empty-state');
                 const display = document.getElementById('macro-child');
                 display.innerHTML = '';
-                display.appendChild(this.createBlob(childGeno));
-                off.querySelector('.geno-tag').textContent = `基因型: ${childGeno}`;
-                off.querySelector('.pheno-tag').textContent = childGeno.includes('A') ? "顯性表現型" : "隱性表現型";
+                display.appendChild(this.createBlob(childGenoMap));
+                
+                let phenoText = [];
+                if (childGenoMap['A']) phenoText.push(childGenoMap['A'].includes('A') ? "黃色" : "淺藍色");
+                if (childGenoMap['B']) phenoText.push(childGenoMap['B'].includes('B') ? "尖耳朵" : "圓耳朵");
+                
+                off.querySelector('.geno-tag').textContent = `基因型: ${Object.values(childGenoMap).join('')}`;
+                off.querySelector('.pheno-tag').textContent = `表現型: ${phenoText.join(' / ')}`;
                 document.getElementById('dev-step-tools').classList.add('hidden');
                 document.getElementById('btn-reset').classList.remove('hidden');
                 break;
@@ -608,12 +652,27 @@ class IntegratedLab {
                         use.setAttribute("href", "#chromatid-template");
                         use.style.color = (side === 0 ? CHROMO_COLORS[pairIndex].father : CHROMO_COLORS[pairIndex].mother);
                         sis.appendChild(use);
+                        
+                        // 建立群組包含文字與背景框，並對第二對染色體做反向放大 (0.8 / 0.55 ≈ 1.4545)
+                        const labelGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+                        const invScale = pairIndex === 1 ? (0.8 / 0.55) : 1;
+                        let transformStr = "";
+                        if (j === 1) transformStr += "scale(-1, 1) ";
+                        if (invScale !== 1) transformStr += `scale(${invScale}) `;
+                        if (transformStr) labelGroup.setAttribute("transform", transformStr.trim());
+
+                        const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+                        bg.setAttribute("x", "-18"); bg.setAttribute("y", "-40");
+                        bg.setAttribute("width", "36"); bg.setAttribute("height", "26");
+                        bg.setAttribute("fill", "rgba(255,255,255,0.6)"); bg.setAttribute("rx", "6");
+                        labelGroup.appendChild(bg);
+
                         const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
                         text.setAttribute("x", "0"); text.setAttribute("y", "-18");
                         text.setAttribute("class", "gene-text"); text.setAttribute("text-anchor", "middle");
                         text.textContent = a;
-                        if (j === 1) text.setAttribute("transform", "scale(-1, 1)");
-                        sis.appendChild(text);
+                        labelGroup.appendChild(text);
+                        sis.appendChild(labelGroup);
                     });
 
                     el.appendChild(sisL); el.appendChild(sisR);
@@ -656,9 +715,9 @@ class IntegratedLab {
                 x = 200; y = metaY;
                 sisROpacity = 1;
             } else if (stage === 'telophase') {
-                // 子細胞成形，再度將兩對染色體緊密堆疊在中心 (x=100/300 由 split 達成)
-                const tightY = 150 + (i - (totalChromos - 1) / 2) * 20; 
-                x = 200; y = tightY;
+                // 子細胞成形，讓染色體在左右細胞內也能各自有 X 軸的分散避免重疊
+                const telophaseX = 200 + (i - (totalChromos - 1) / 2) * 25; 
+                x = telophaseX; y = startY; // 沿用 startY 讓同對染色體有相近的 Y 座標
                 splitL = 0; splitR = 0;
                 sisROpacity = 1;
             }
@@ -775,12 +834,27 @@ class MeiosisAnimator {
                     const colorPair = CHROMO_COLORS[pairIdx] || CHROMO_COLORS[0];
                     use.style.color = colorPair[this.type];
                     sis.appendChild(use);
+                    
+                    // 建立群組包含文字與背景框，並對第二對染色體做反向放大 (0.8 / 0.55 ≈ 1.4545)
+                    const labelGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+                    const invScale = pairIdx === 1 ? (0.8 / 0.55) : 1;
+                    let transformStr = "";
+                    if (j === 1) transformStr += "scale(-1, 1) ";
+                    if (invScale !== 1) transformStr += `scale(${invScale}) `;
+                    if (transformStr) labelGroup.setAttribute("transform", transformStr.trim());
+
+                    const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+                    bg.setAttribute("x", "-18"); bg.setAttribute("y", "-40");
+                    bg.setAttribute("width", "36"); bg.setAttribute("height", "26");
+                    bg.setAttribute("fill", "rgba(255,255,255,0.6)"); bg.setAttribute("rx", "6");
+                    labelGroup.appendChild(bg);
+
                     const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
                     text.setAttribute("x", "0"); text.setAttribute("y", "-18");
                     text.setAttribute("class", "gene-text"); text.setAttribute("text-anchor", "middle");
                     text.textContent = a;
-                    if (j === 1) text.setAttribute("transform", "scale(-1, 1)");
-                    sis.appendChild(text);
+                    labelGroup.appendChild(text);
+                    sis.appendChild(labelGroup);
                     sis.dataset.allele = a;
                     sis.dataset.locus  = gene.locus;
                 });
