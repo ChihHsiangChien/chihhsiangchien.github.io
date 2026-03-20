@@ -6,15 +6,14 @@
 // Add more pairs here when adding more chromosome pairs
 const CHROMO_COLORS = [
     { father: '#3b82f6', mother: '#ef4444' },  // Pair 0: blue/red
-    { father: '#10b981', mother: '#f59e0b' },  // Pair 1: green/amber
+    { father: '#93c5fd', mother: '#fca5a5' },  // Pair 1: light blue/light red
     { father: '#8b5cf6', mother: '#ec4899' },  // Pair 2: purple/pink
 ];
 
 // Helper: get alleles array from a genotype string and locus
 function genotypeToAlleles(geno) {
-    if (geno === 'AA') return ['A', 'A'];
-    if (geno === 'aa') return ['a', 'a'];
-    return ['A', 'a']; // 'Aa'
+    if (!geno || geno.length !== 2) return ['A', 'a'];
+    return [geno[0], geno[1]]; // 直接將傳入的字串 (如 'Bb') 拆分為 ['B', 'b']
 }
 
 class IntegratedLab {
@@ -23,7 +22,7 @@ class IntegratedLab {
             // genes: array of loci — extend this for multi-chromosome support
             genes: [
                 { locus: 'A', fatherGeno: 'Aa', motherGeno: 'Aa' },
-                // { locus: 'B', fatherGeno: 'Bb', motherGeno: 'Bb' },  ← add pairs here
+                { locus: 'B', fatherGeno: 'Bb', motherGeno: 'Bb' },
             ],
             // Legacy convenience props (derived from genes[0]) — kept for backward compat
             father: 'Aa',
@@ -181,6 +180,13 @@ class IntegratedLab {
         }
 
         this.state.meiosisStep += dir;
+        
+        // 當前進到「階段 2 (同源染色體配對)」時，重新為父母雙方擲骰子
+        if (dir === 1 && this.state.meiosisStep === 2) {
+            this.sims.father.randomizeAssortment();
+            this.sims.mother.randomizeAssortment();
+        }
+
         this.stepLabel.textContent = `階段 ${this.state.meiosisStep}`;
         
         this.sims.father.render(this.state.meiosisStep);
@@ -439,47 +445,55 @@ class IntegratedLab {
             embryoGroup.appendChild(hi);
             // Optional mini chromosome indicators
             if (showChromos) {
-                const sz = Math.max(r * 0.18, 7); // chromosome pill height
-                const w = sz * 0.45;               // pill width
-                const colors = [CHROMO_COLORS[0].father, CHROMO_COLORS[0].mother];
-                const alleles = [f, m];
-                [-1, 1].forEach((dir, i) => {
-                    const cx = x + dir * sz * 0.65;
-                    // Chromosome pill (two arms)
-                    [-1, 1].forEach(arm => {
-                        const pill = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-                        pill.setAttribute("x", cx - w / 2);
-                        pill.setAttribute("y", y + arm * (sz * 0.15));
-                        pill.setAttribute("width", w);
-                        pill.setAttribute("height", sz * 0.7);
-                        pill.setAttribute("rx", w / 2);
-                        pill.setAttribute("fill", colors[i]);
-                        pill.setAttribute("opacity", "0.88");
-                        embryoGroup.appendChild(pill);
+                const rFactor = r * 0.18;
+                const pairOffset = (this.state.genes.length - 1) / 2;
+                this.state.genes.forEach((g, pairIdx) => {
+                    const sz = Math.max(rFactor * (pairIdx === 1 ? 0.7 : 1), 5); // 第二對縮小 0.7 倍
+                    const w = sz * 0.45;
+                    const colors = [CHROMO_COLORS[pairIdx].father, CHROMO_COLORS[pairIdx].mother];
+                    const alleles = [spermMap[g.locus] || g.locus, eggMap[g.locus] || g.locus.toLowerCase()];
+                    const dy = (pairIdx - pairOffset) * (sz * 2.2); // 垂直排開多對染色體
+
+                    [-1, 1].forEach((dir, i) => {
+                        const cy = y + dy;
+                        const finalCx = x + dir * (r * 0.22);
+
+                        [-1, 1].forEach(arm => {
+                            const pill = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+                            pill.setAttribute("x", finalCx - w / 2);
+                            pill.setAttribute("y", cy + arm * (sz * 0.15));
+                            pill.setAttribute("width", w);
+                            pill.setAttribute("height", sz * 0.7);
+                            pill.setAttribute("rx", w / 2);
+                            pill.setAttribute("fill", colors[i]);
+                            pill.setAttribute("opacity", "0.88");
+                            embryoGroup.appendChild(pill);
+                        });
+                        const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                        dot.setAttribute("cx", finalCx); dot.setAttribute("cy", cy);
+                        dot.setAttribute("r", w * 0.55);
+                        dot.setAttribute("fill", "#fff"); dot.setAttribute("opacity", "0.85");
+                        embryoGroup.appendChild(dot);
+                        
+                        if (r > 30) {
+                            const lbl = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                            lbl.setAttribute("x", finalCx); lbl.setAttribute("y", cy - sz * 0.85);
+                            lbl.setAttribute("text-anchor", "middle");
+                            lbl.setAttribute("font-size", sz * 0.85);
+                            lbl.setAttribute("font-weight", "bold");
+                            lbl.setAttribute("fill", "white");
+                            lbl.setAttribute("opacity", "0.9");
+                            lbl.textContent = alleles[i];
+                            embryoGroup.appendChild(lbl);
+                        }
                     });
-                    // Centromere dot
-                    const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-                    dot.setAttribute("cx", cx); dot.setAttribute("cy", y);
-                    dot.setAttribute("r", w * 0.55);
-                    dot.setAttribute("fill", "#fff"); dot.setAttribute("opacity", "0.85");
-                    embryoGroup.appendChild(dot);
-                    // Allele label
-                    const lbl = document.createElementNS("http://www.w3.org/2000/svg", "text");
-                    lbl.setAttribute("x", cx); lbl.setAttribute("y", y - sz * 0.85);
-                    lbl.setAttribute("text-anchor", "middle");
-                    lbl.setAttribute("font-size", sz * 0.85);
-                    lbl.setAttribute("font-weight", "bold");
-                    lbl.setAttribute("fill", "white");
-                    lbl.setAttribute("opacity", "0.9");
-                    lbl.textContent = alleles[i];
-                    embryoGroup.appendChild(lbl);
                 });
             }
         };
 
         switch(step) {
             case 0: // Fertilization — single large cell
-                this.renderZygoteLayers(f, m, 'start');
+                this.renderZygoteLayers(spermMap, eggMap, 'start');
                 // Disable transition so the membrane appears instantly (avoids sliding-in from top-left)
                 membrane.style.transition = "none";
                 membrane.setAttribute('d', "M 200,150 m -135,0 a 135,135 0 1,0 270,0 a 135,135 0 1,0 -270,0");
@@ -488,16 +502,16 @@ class IntegratedLab {
                 requestAnimationFrame(() => { membrane.style.transition = "all 0.6s ease"; });
                 break;
             case 1: // DNA Replication
-                this.renderZygoteLayers(f, m, 'replication');
+                this.renderZygoteLayers(spermMap, eggMap, 'replication');
                 break;
             case 2: // Metaphase
-                this.renderZygoteLayers(f, m, 'metaphase');
+                this.renderZygoteLayers(spermMap, eggMap, 'metaphase');
                 break;
             case 3: // Anaphase
-                this.renderZygoteLayers(f, m, 'anaphase');
+                this.renderZygoteLayers(spermMap, eggMap, 'anaphase');
                 break;
             case 4: // 2-Cell期 — left and right daughter cells (peanut shape)
-                this.renderZygoteLayers(f, m, 'telophase');
+                this.renderZygoteLayers(spermMap, eggMap, 'telophase');
                 // Centers at x=100/300 (distance=200), r=108 → overlap by 16px → peanut shape
                 [100, 300].forEach(x => createCell(x, 150, 108));
                 break;
@@ -570,85 +584,86 @@ class IntegratedLab {
         }
     }
 
-    renderZygoteLayers(f, m, stage = 'start') {
+    renderZygoteLayers(spermMap, eggMap, stage = 'start') {
         const svg = document.getElementById('svg-zygote');
         const group = svg.querySelector('.chromosome-group');
-        const alleles = [f, m];
         
         // Build persistent structure once (mirrors MeiosisAnimator pattern exactly)
         if (!this.zygoteChromos || this.zygoteChromos.length === 0) {
             group.innerHTML = '';
-            this.zygoteChromos = alleles.map((a, i) => {
-                const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-                g.setAttribute("class", "zygote-chromo");
-                
-                const sisL = document.createElementNS("http://www.w3.org/2000/svg", "g");
-                sisL.setAttribute("class", "sister-chromatid");
-                const sisR = document.createElementNS("http://www.w3.org/2000/svg", "g");
-                sisR.setAttribute("class", "sister-chromatid");
+            this.zygoteChromos = [];
+            this.state.genes.forEach((gene, pairIndex) => {
+                const alleles = [spermMap[gene.locus] || gene.locus, eggMap[gene.locus] || gene.locus.toLowerCase()];
+                alleles.forEach((a, side) => {
+                    const el = document.createElementNS("http://www.w3.org/2000/svg", "g");
+                    el.setAttribute("class", "zygote-chromo");
+                    
+                    const sisL = document.createElementNS("http://www.w3.org/2000/svg", "g");
+                    sisL.setAttribute("class", "sister-chromatid");
+                    const sisR = document.createElementNS("http://www.w3.org/2000/svg", "g");
+                    sisR.setAttribute("class", "sister-chromatid");
 
-                [sisL, sisR].forEach((sis, j) => {
-                    const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
-                    use.setAttribute("href", "#chromatid-template");
-                    use.style.color = (i === 0 ? CHROMO_COLORS[0].father : CHROMO_COLORS[0].mother);
-                    sis.appendChild(use);
-                    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-                    text.setAttribute("x", "0"); text.setAttribute("y", "-16");
-                    text.setAttribute("class", "gene-text"); text.setAttribute("text-anchor", "middle");
-                    text.textContent = a;
-                    if (j === 1) text.setAttribute("transform", "scale(-1, 1)");
-                    sis.appendChild(text);
+                    [sisL, sisR].forEach((sis, j) => {
+                        const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+                        use.setAttribute("href", "#chromatid-template");
+                        use.style.color = (side === 0 ? CHROMO_COLORS[pairIndex].father : CHROMO_COLORS[pairIndex].mother);
+                        sis.appendChild(use);
+                        const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                        text.setAttribute("x", "0"); text.setAttribute("y", "-18");
+                        text.setAttribute("class", "gene-text"); text.setAttribute("text-anchor", "middle");
+                        text.textContent = a;
+                        if (j === 1) text.setAttribute("transform", "scale(-1, 1)");
+                        sis.appendChild(text);
+                    });
+
+                    el.appendChild(sisL); el.appendChild(sisR);
+                    group.appendChild(el);
+                    this.zygoteChromos.push({ el, sisL, sisR, allele: a, side, pairIndex });
                 });
-
-                g.appendChild(sisL); g.appendChild(sisR);
-                group.appendChild(g);
-                return { el: g, sisL, sisR, allele: a, side: i };
             });
         }
 
-        // Now viewBox matches meiosis SVG (400×300), center = (200,150)
-        // Same scale as MeiosisAnimator: 0.8 * 1.2 = 0.96
-        const scale = 0.8;
         const ease = "all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)";
         const replicationEase = "all 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)";
 
-        this.zygoteChromos.forEach((c) => {
+        const totalChromos = this.zygoteChromos.length;
+        const pairOffset = (this.state.genes.length - 1) / 2;
+
+        this.zygoteChromos.forEach((c, i) => {
             let x, y, splitL = 0, splitR = 0;
             let sisROpacity = 1;
+            
+            // 第二對染色體等比例縮小為 0.55
+            const baseScale = c.pairIndex === 1 ? 0.55 : 0.8;
+            const scale = baseScale;
+
+            const stackY = 150 + (c.pairIndex - pairOffset) * 45; // 受精與複製時上下排列
+            const metaY = 150 + (i - (totalChromos - 1) / 2) * 35; // 中期所有染色體排成一直線
+            const startY = 150 + (c.pairIndex - pairOffset) * 15; // 階段 0 時較為接近
+            const startXBase = 200 + (c.pairIndex - pairOffset) * 80; // 階段 0 依對數水平分散
 
             if (stage === 'start') {
-                // Fertilization: father left (180), mother right (220), matching meiosis getFixedPos
-                x = c.side === 0 ? 180 : 220; y = 150;
+                x = c.side === 0 ? startXBase - 18 : startXBase + 18; y = startY;
                 sisROpacity = 0;
             } else if (stage === 'replication') {
-                // DNA Replication: centromeres overlap, arms splay ±10°
-                x = c.side === 0 ? 180 : 220; y = 150;
+                x = c.side === 0 ? 180 : 220; y = stackY;
                 sisROpacity = 1;
             } else if (stage === 'metaphase') {
-                // Metaphase: both at center x=200, one above (y=110) one below (y=190)
-                x = 200; y = c.side === 0 ? 110 : 190;
+                x = 200; y = metaY;
                 splitL = -5; splitR = 5;
                 sisROpacity = 1;
             } else if (stage === 'anaphase') {
-                // Anaphase: el STAYS at metaphase y, sisL/sisR separate HORIZONTALLY
-                // Father (y=110) and Mother (y=190) both split their sisters left ← and right →
-                // Left pole: Father's sisL + Mother's sisL
-                // Right pole: Father's sisR + Mother's sisR → each daughter gets Aa ✓
-                x = 200; y = c.side === 0 ? 110 : 190;
+                x = 200; y = metaY;
                 sisROpacity = 1;
             } else if (stage === 'telophase') {
-                // Telophase: offset el.x by ±15 so father/mother land at different X in each cell
-                // Father (side=0): el.x=185 → sisL at 185-100=85, sisR at 185+100=285
-                // Mother (side=1): el.x=215 → sisL at 215-100=115, sisR at 215+100=315
-                // (SVG x = el.x ± splitX × scale = el.x ± 125×0.8 = el.x ± 100)
-                x = c.side === 0 ? 185 : 215; y = 150;
+                // 子細胞成形，再度將兩對染色體緊密堆疊在中心 (x=100/300 由 split 達成)
+                const tightY = 150 + (i - (totalChromos - 1) / 2) * 20; 
+                x = 200; y = tightY;
                 splitL = 0; splitR = 0;
                 sisROpacity = 1;
             }
 
-            // Horizontal split: sisL → LEFT pole, sisR → RIGHT pole
-            // Anaphase = mid-travel, Telophase = fully at daughter cell centers (±125 from x=200)
-            const splitX = (stage === 'anaphase') ? 85 : (stage === 'telophase') ? 125 : 0;
+            const splitX = (stage === 'anaphase') ? 85 : (stage === 'telophase') ? 100 : 0;
 
             // Use the horizontal splitX to override splitL/splitR for anaphase and telophase
             const finalSplitL = (stage === 'anaphase' || stage === 'telophase') ? -splitX : splitL;
@@ -715,6 +730,11 @@ class MeiosisAnimator {
         this.init();
     }
 
+    // 新增：重新擲骰子決定獨立分配方向
+    randomizeAssortment() {
+        this.assortmentFlips = this.genes.map(() => Math.random() < 0.5);
+    }
+
     init() {
         // Clear previous state elements
         this.chrGroup.innerHTML = '';
@@ -724,6 +744,9 @@ class MeiosisAnimator {
         this.membrane.setAttribute('d', this.getPath(0));
         this.nucleus.style.opacity = "1";
         this.nucleus.style.transform = "scale(0.85)";
+
+        // 隨機決定每對同源染色體的分離方向 (為未來的獨立分配定律做準備)
+        this.assortmentFlips = this.genes.map(() => Math.random() < 0.5);
 
         this.chromos = [];
         // Dynamic positions: n pairs side-by-side
@@ -753,7 +776,7 @@ class MeiosisAnimator {
                     use.style.color = colorPair[this.type];
                     sis.appendChild(use);
                     const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-                    text.setAttribute("x", "0"); text.setAttribute("y", "-16");
+                    text.setAttribute("x", "0"); text.setAttribute("y", "-18");
                     text.setAttribute("class", "gene-text"); text.setAttribute("text-anchor", "middle");
                     text.textContent = a;
                     if (j === 1) text.setAttribute("transform", "scale(-1, 1)");
@@ -798,14 +821,26 @@ class MeiosisAnimator {
         // With 1 pair: 4 gametes as before
         // With 2 pairs: gamete alleleMap = { A: sisX.allele, B: sisY.allele }
         const gameteAlleles = [
-            // top-left gamete: first allele from each pair
-            Object.fromEntries(this.genes.map((g, pi) => [g.locus, this.chromos[pi*2].sisL.dataset.allele])),
-            // bottom-left: second allele from each pair (sisR of pair 0, sisL-equivalent of pairs)
-            Object.fromEntries(this.genes.map((g, pi) => [g.locus, this.chromos[pi*2].sisR.dataset.allele])),
-            // top-right: homolog first allele
-            Object.fromEntries(this.genes.map((g, pi) => [g.locus, this.chromos[pi*2+1].sisL.dataset.allele])),
-            // bottom-right: homolog second allele
-            Object.fromEntries(this.genes.map((g, pi) => [g.locus, this.chromos[pi*2+1].sisR.dataset.allele])),
+            // top-left: 分配到左側細胞的染色體的第一條姊妹染色分體
+            Object.fromEntries(this.genes.map((g, pi) => {
+                const leftChromo = this.assortmentFlips[pi] ? this.chromos[pi*2+1] : this.chromos[pi*2];
+                return [g.locus, leftChromo.sisL.dataset.allele];
+            })),
+            // bottom-left: 分配到左側細胞的染色體的第二條姊妹染色分體
+            Object.fromEntries(this.genes.map((g, pi) => {
+                const leftChromo = this.assortmentFlips[pi] ? this.chromos[pi*2+1] : this.chromos[pi*2];
+                return [g.locus, leftChromo.sisR.dataset.allele];
+            })),
+            // top-right: 分配到右側細胞的染色體的第一條姊妹染色分體
+            Object.fromEntries(this.genes.map((g, pi) => {
+                const rightChromo = this.assortmentFlips[pi] ? this.chromos[pi*2] : this.chromos[pi*2+1];
+                return [g.locus, rightChromo.sisL.dataset.allele];
+            })),
+            // bottom-right: 分配到右側細胞的染色體的第二條姊妹染色分體
+            Object.fromEntries(this.genes.map((g, pi) => {
+                const rightChromo = this.assortmentFlips[pi] ? this.chromos[pi*2] : this.chromos[pi*2+1];
+                return [g.locus, rightChromo.sisR.dataset.allele];
+            }))
         ];
 
         this.hitAreas = [];
@@ -854,45 +889,53 @@ class MeiosisAnimator {
         const totalPairs = this.genes.length;
 
         this.chromos.forEach((c, idx) => {
-            let x = 200, y = 150, rot = 0, split = 0, scale = 0.8;
+            let x = 200, y = 150, rot = 0, split = 0;
+            let scale = c.pairIndex === 1 ? 0.55 : 0.8; // 給予第二對染色體較小的比例
             let sisROpacity = 1;
             let sisRScale = 1;
             let localRot = (state >= 6) ? -90 : 0; // Rotate back to vertical at the end
 
+            // 決定此染色體是否往左極移動 (根據獨立分配隨機翻轉)
+            const flip = this.assortmentFlips[c.pairIndex];
+            const goesLeft = flip ? !c.side : c.side;
+
             const pairOffset = (totalPairs - 1) / 2;
-            const stackY = 150 + (0 - pairOffset) * 45; // idx is handled by loop, but for 1 pair it's centered
+            const stackY = 150 + (c.pairIndex - pairOffset) * 45;
+            const stackX = (c.pairIndex - pairOffset) * 35; // 階段4~6 轉向90度時的水平防重疊位移
+            const startY = 150 + (c.pairIndex - pairOffset) * 15; // 階段 0 時較為接近
+            const startXBase = 200 + (c.pairIndex - pairOffset) * 80; // 階段 0 依對數水平分散
 
             if (state === 0) {
-                x = c.side ? 180 : 220; y = stackY; rot = 0;
+                x = c.side ? startXBase - 18 : startXBase + 18; y = startY; rot = 0;
                 sisROpacity = 0; sisRScale = 0;
             } else if (state === 1) {
                 x = c.side ? 180 : 220; y = stackY; rot = 0;
                 sisROpacity = 1; sisRScale = 1;
             } else if (state === 2) {
-                // Tilted Pairing (Tetrad look)
-                x = c.side ? 194 : 206; 
+                // Tilted Pairing (Tetrad look) - 此時表現出隨機排列
+                x = goesLeft ? 194 : 206; 
                 y = stackY; 
-                rot = c.side ? -7 : 7; 
+                rot = goesLeft ? -7 : 7; 
                 sisROpacity = 1;
             } else if (state === 3) {
                 // Separation to sides
-                x = c.side ? 100 : 300; 
+                x = goesLeft ? 100 : 300; 
                 y = stackY; 
                 rot = 0;
             } else if (state === 4) {
                 // Metaphase II
-                x = c.side ? 100 : 300; 
+                x = (goesLeft ? 100 : 300) + stackX; 
                 y = 150; 
                 rot = 90;
             } else if (state === 5) {
                 // Anaphase II
-                x = c.side ? 100 : 300; 
+                x = (goesLeft ? 100 : 300) + stackX; 
                 y = 150; 
                 rot = 90; 
                 split = 65;
             } else if (state >= 6) {
                 // Finished
-                x = c.side ? 100 : 300; 
+                x = (goesLeft ? 100 : 300) + stackX; 
                 y = 150; 
                 rot = 90; 
                 split = 85; 
