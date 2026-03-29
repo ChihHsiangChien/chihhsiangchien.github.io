@@ -19,13 +19,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const timerBarEl = document.getElementById('timer-bar');
     const elapsedTimeEl = document.getElementById('elapsed-time');
     const completionMessageEl = document.getElementById('completion-message');
+    const menuBtn = document.getElementById('menu-btn');
 
     // Difficulty Settings
     const DIFFICULTIES = {
-        'lv1': { ops: ['+', '-'], maxNum: 50, count: 15, time: 45 },
-        'lv2': { ops: ['+', '-', '*', '/'], maxNum: 100, count: 15, time: 40 },
-        'lv3': { ops: ['+', '-', '*', '/'], maxNum: 200, count: 15, time: 40 },
-        'lv4': { ops: ['+', '-', '*', '/'], maxNum: 500, count: 15, time: 30 }
+        'lv1': { name: '初級', ops: ['+', '-'], maxNum: 50, count: 15, time: 45 },
+        'lv2': { name: '中級', ops: ['+', '-', '*', '/'], maxNum: 100, count: 15, time: 40 },
+        'lv3': { name: '高級', ops: ['+', '-', '*', '/'], maxNum: 200, count: 15, time: 40 },
+        'lv4': { name: '專業級', ops: ['+', '-', '*', '/'], maxNum: 500, count: 15, time: 30 }
     };
 
     // Game Variables
@@ -48,13 +49,36 @@ document.addEventListener('DOMContentLoaded', () => {
             const config = DIFFICULTIES[currentDifficulty];
             totalQuestions = config.count;
             setTimeout(startGame, 500);
+        } else {
+            // Setup difficulty buttons
+            const diffButtons = document.querySelectorAll('.diff-btn');
+            diffButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const diff = btn.getAttribute('data-diff');
+                    currentDifficulty = diff;
+                    startGame();
+                });
+            });
         }
     }
 
     startBtn.addEventListener('click', startGame);
     restartBtn.addEventListener('click', () => {
-        window.location.reload(); // Easier than resetting all state
+        startGame(); // Just start again with same difficulty
     });
+    
+    if (menuBtn) {
+        menuBtn.addEventListener('click', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('diff')) {
+                // If it was launched with a param, we can't really go "back" to selection 
+                // unless we clear the param, so let's just reload to base URL
+                window.location.href = window.location.pathname;
+            } else {
+                showScreen(startScreen);
+            }
+        });
+    }
     
     opButtons.forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -68,6 +92,17 @@ document.addEventListener('DOMContentLoaded', () => {
         score = 0;
         currentQuestionCount = 0;
         totalQuestions = config.count;
+        
+        // Update title if needed
+        const h1 = startScreen.querySelector('h1').textContent;
+        const gameH1 = gameScreen.querySelector('h1') || document.createElement('h1');
+        if (!gameScreen.querySelector('h1')) {
+            gameScreen.prepend(gameH1);
+        }
+        gameH1.textContent = `${h1} (${config.name})`;
+        gameH1.style.fontSize = '18px';
+        gameH1.style.marginBottom = '10px';
+
         if (totalQuestionsEl) totalQuestionsEl.textContent = totalQuestions;
         if (totalQuestionsEndEl) totalQuestionsEndEl.textContent = totalQuestions;
         startTime = Date.now();

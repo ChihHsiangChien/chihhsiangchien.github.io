@@ -48,7 +48,29 @@ const REGION_MAP = {
 function initGame() {
     // 解析難度
     const urlParams = new URLSearchParams(window.location.search);
-    gameState.difficulty = urlParams.get('diff') || 'lv1';
+    const diffParam = urlParams.get('diff');
+    
+    if (diffParam) {
+        gameState.difficulty = diffParam;
+        // 如果是外部傳入難度，隱藏返回選單按鈕（因為通常是在 scout2026.html 中使用）
+        document.getElementById('back-to-menu-btn').style.display = 'none';
+        startGame(diffParam);
+    } else {
+        showDifficultyModal();
+    }
+
+    setupEventListeners();
+}
+
+// 顯示難度選擇彈窗
+function showDifficultyModal() {
+    const modal = document.getElementById('difficulty-modal');
+    modal.classList.remove('hidden');
+}
+
+// 開始遊戲
+function startGame(difficulty) {
+    gameState.difficulty = difficulty;
     
     // 更新標題顯示難度
     const diffNames = { lv1: '初級', lv2: '中級', lv3: '高級', lv4: '專業級' };
@@ -79,7 +101,6 @@ function initGame() {
     
     renderMiniMap();
     showQuestion();
-    setupEventListeners();
     startTimer();
 }
 
@@ -428,13 +449,39 @@ function stopTimer() {
 function setupEventListeners() {
     document.getElementById('reset-btn').addEventListener('click', resetGame);
     document.getElementById('play-again-btn').addEventListener('click', resetGame);
+    
+    // 返回選單按鈕
+    const backToMenuBtn = document.getElementById('back-to-menu-btn');
+    const menuBtn = document.getElementById('menu-btn');
+    const modal = document.getElementById('difficulty-modal');
+    
+    const backToMenu = () => {
+        stopTimer();
+        document.getElementById('victory-modal').classList.add('hidden');
+        modal.classList.remove('hidden');
+    };
+    
+    backToMenuBtn.addEventListener('click', backToMenu);
+    menuBtn.addEventListener('click', backToMenu);
+    
+    // 難度選擇按鈕
+    const diffButtons = document.querySelectorAll('.diff-btn');
+    diffButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const diff = btn.getAttribute('data-diff');
+            modal.classList.add('hidden');
+            // 如果是在內部選擇難度，顯示返回選單按鈕
+            document.getElementById('back-to-menu-btn').style.display = 'block';
+            startGame(diff);
+        });
+    });
 }
 
 // 重置遊戲
 function resetGame() {
     stopTimer();
     document.getElementById('victory-modal').classList.add('hidden');
-    initGame();
+    startGame(gameState.difficulty);
 }
 
 // 頁面載入時初始化
