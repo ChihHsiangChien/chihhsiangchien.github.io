@@ -72,23 +72,36 @@ function splitCell(cellElement) {
 
 function adjustCellPositions() {
     let iterations = 0;
-    const maxIterations = 20;
-    const damping = 0.7;
+    const maxIterations = 50;
+    const damping = 0.8;
+    
+    // 緩存容器寬高
+    const containerWidth = container.offsetWidth;
+    const containerHeight = container.offsetHeight;
 
     function resolveCollisions() {
         let movementDetected = false;
         
         for (let i = 0; i < cells.length; i++) {
             for (let j = i + 1; j < cells.length; j++) {
-                const dx = cells[j].x - cells[i].x;
-                const dy = cells[j].y - cells[i].y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
+                let dx = cells[j].x - cells[i].x;
+                let dy = cells[j].y - cells[i].y;
+                let distance = Math.sqrt(dx * dx + dy * dy);
 
+                // 如果距離小於最小距離（甚至可能是0），則執行推擠
                 if (distance < minDistance) {
                     movementDetected = true;
                     
+                    // 如果兩個細胞完全重疊，則隨機生成一個推擠方向
+                    let angle;
+                    if (distance < 0.1) {
+                        angle = Math.random() * Math.PI * 2;
+                        distance = 0.1; // 避免除以 0
+                    } else {
+                        angle = Math.atan2(dy, dx);
+                    }
+
                     const moveDistance = (minDistance - distance) / 2;
-                    const angle = Math.atan2(dy, dx);
                     const moveX = Math.cos(angle) * moveDistance * damping;
                     const moveY = Math.sin(angle) * moveDistance * damping;
 
@@ -96,20 +109,13 @@ function adjustCellPositions() {
                     cells[i].y -= moveY;
                     cells[j].x += moveX;
                     cells[j].y += moveY;
-                    
-                    // 邊界檢查
-                    cells[i].x = Math.max(cellSize/2, Math.min(cells[i].x, container.offsetWidth - cellSize/2));
-                    cells[i].y = Math.max(cellSize/2, Math.min(cells[i].y, container.offsetHeight - cellSize/2));
-                    cells[j].x = Math.max(cellSize/2, Math.min(cells[j].x, container.offsetWidth - cellSize/2));
-                    cells[j].y = Math.max(cellSize/2, Math.min(cells[j].y, container.offsetHeight - cellSize/2));
                 }
             }
-        }
-        
-        // 更新所有細胞的視覺位置
-        for (let i = 0; i < cells.length; i++) {
-            cells[i].element.style.left = `${cells[i].x}px`;
-            cells[i].element.style.top = `${cells[i].y}px`;
+            
+            // 邊界檢查（針對左上角座標進行修正）
+            // 細胞直徑為 cellSize，所以左上角座標範圍是 [0, width-cellSize]
+            cells[i].x = Math.max(0, Math.min(cells[i].x, containerWidth - cellSize));
+            cells[i].y = Math.max(0, Math.min(cells[i].y, containerHeight - cellSize));
         }
         
         return movementDetected;
@@ -120,6 +126,12 @@ function adjustCellPositions() {
         hasCollisions = resolveCollisions();
         iterations++;
     } while (hasCollisions && iterations < maxIterations);
+    
+    // 在所有疊代結束後，統一更新所有細胞的視覺位置
+    for (let i = 0; i < cells.length; i++) {
+        cells[i].element.style.left = `${cells[i].x}px`;
+        cells[i].element.style.top = `${cells[i].y}px`;
+    }
 }
 
 // 窗口大小變化時重新調整細胞位置
