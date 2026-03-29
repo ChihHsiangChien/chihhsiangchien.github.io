@@ -55,6 +55,8 @@ document.addEventListener('DOMContentLoaded', () => {
         diffDesc: document.getElementById('diff-desc'),
         startBtn: document.getElementById('start-btn'),
         restartBtn: document.getElementById('restart-btn'),
+        backToMenuBtn: document.getElementById('back-to-menu-btn'),
+        endMenuBtn: document.getElementById('end-menu-btn'),
         idiomText: document.getElementById('idiom-text'),
         optionsGrid: document.getElementById('options-grid'),
         timer: document.getElementById('timer-display'),
@@ -78,7 +80,8 @@ document.addEventListener('DOMContentLoaded', () => {
         timeLeft: 0,
         gameActive: false,
         startTime: 0,
-        endTime: 0
+        endTime: 0,
+        correctAnswers: 0
     };
 
     function showScreen(screenId) {
@@ -100,7 +103,9 @@ document.addEventListener('DOMContentLoaded', () => {
         ui.diffBtns.forEach(b => b.classList.remove('selected'));
         btn.classList.add('selected');
         state.currentDifficulty = btn.dataset.diff;
-        ui.diffDesc.textContent = btn.dataset.info || DIFFICULTIES[state.currentDifficulty].label;
+        if (ui.diffDesc) {
+            ui.diffDesc.textContent = btn.dataset.info || DIFFICULTIES[state.currentDifficulty].label;
+        }
     }
 
     // --- Initialization ---
@@ -110,6 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // 解析難度
         const urlParams = new URLSearchParams(window.location.search);
         const urlDiff = urlParams.get('diff');
+        
         if (urlDiff && DIFFICULTIES[urlDiff]) {
             state.currentDifficulty = urlDiff;
         }
@@ -123,6 +129,10 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Auto-start if difficulty is in URL
             if (urlDiff && DIFFICULTIES[urlDiff]) {
+                // Hide back to menu if coming from external URL
+                if (ui.backToMenuBtn) ui.backToMenuBtn.style.display = 'none';
+                if (ui.endMenuBtn) ui.endMenuBtn.style.display = 'none';
+                
                 setTimeout(() => {
                     if (!soundManager.ctx) soundManager.init();
                     startGame();
@@ -138,7 +148,9 @@ document.addEventListener('DOMContentLoaded', () => {
             // 如果 URL 有指定難度，自動選中對應按鈕
             if (diffKey === state.currentDifficulty) {
                 btn.classList.add('selected');
-                ui.diffDesc.textContent = btn.dataset.info || DIFFICULTIES[diffKey].label;
+                if (ui.diffDesc) {
+                    ui.diffDesc.textContent = btn.dataset.info || DIFFICULTIES[diffKey].label;
+                }
             }
             btn.addEventListener('click', () => setDifficulty(btn));
         });
@@ -148,9 +160,19 @@ document.addEventListener('DOMContentLoaded', () => {
             startGame();
         });
         ui.restartBtn.addEventListener('click', () => showScreen('start'));
+        
+        if (ui.backToMenuBtn) {
+            ui.backToMenuBtn.addEventListener('click', () => {
+                state.gameActive = false;
+                if (state.timer) clearInterval(state.timer);
+                showScreen('start');
+            });
+        }
+        
+        if (ui.endMenuBtn) {
+            ui.endMenuBtn.addEventListener('click', () => showScreen('start'));
+        }
     }
-
-    // ... (setDifficulty and showScreen remain same) ...
 
     function startGame() {
         if (state.idioms.length === 0) return;
@@ -160,18 +182,6 @@ document.addEventListener('DOMContentLoaded', () => {
         // 根據難度過濾成語
         let pool = [...state.idioms];
         
-        if (state.currentDifficulty === 'lv1') {
-            // 初級：限 4 字且常用 (含有 一, 二, 三, 十, 百, 千, 萬)
-            const commonNumbers = ['一', '二', '三', '十', '百', '千', '萬'];
-            pool = pool.filter(i => i.length === 4 && commonNumbers.some(n => i.includes(n)));
-        } else if (state.currentDifficulty === 'lv2') {
-            // 中級：限 4 字
-            pool = pool.filter(i => i.length === 4);
-        } else if (state.currentDifficulty === 'lv3') {
-            // 高級：不限長度
-        } 
-        // 專業級：不變
-
         const shuffled = pool.sort(() => 0.5 - Math.random());
         const validIdioms = shuffled.filter(idiom => {
              for (let char of idiom) {
@@ -180,7 +190,16 @@ document.addEventListener('DOMContentLoaded', () => {
              return false;
         });
 
-        state.currentQuestions = validIdioms.slice(0, config.questions).map(prepareQuestion);
+        // 根據難度做進一步過濾
+        let filtered = [...validIdioms];
+        if (state.currentDifficulty === 'lv1') {
+            const commonNumbers = ['一', '二', '三', '十', '百', '千', '萬'];
+            filtered = filtered.filter(i => i.length === 4 && commonNumbers.some(n => i.includes(n)));
+        } else if (state.currentDifficulty === 'lv2') {
+            filtered = filtered.filter(i => i.length === 4);
+        }
+
+        state.currentQuestions = filtered.slice(0, config.questions).map(prepareQuestion);
         state.currentIndex = 0;
         state.score = 0;
         state.gameActive = true;
