@@ -1,4 +1,3 @@
-```html
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -375,21 +374,16 @@ Object.defineProperties(window,{vizTop:{get(){var a=document.getElementById("viz
 const { state } = WH.createApp({
     title: "澱粉酶酵素活性模擬 (Amylase Catalysis)",
     params: {
-        temperature: { value: 37, min: 0, max: 100, step: 1, label: "溫度 (°C)" },
-        addStarch: { type: 'button', label: "🌾 添加澱粉", onClick: (s) => { s._addStarchTrigger = (s._addStarchTrigger || 0) + 1; } },
-        addEnzyme: { type: 'button', label: "🧪 添加新酵素", onClick: (s) => { s._addEnzymeTrigger = (s._addEnzymeTrigger || 0) + 1; } },
-        preset0: { type: 'button', label: "🧊 0°C 冰水", onClick: (s) => { s.temperature = 0; } },
-        preset37: { type: 'button', label: "🌡️ 37°C 最適", onClick: (s) => { s.temperature = 37; } },
-        preset50: { type: 'button', label: "🔥 50°C 熱水", onClick: (s) => { s.temperature = 50; } },
-        preset90: { type: 'button', label: "💥 90°C 沸水", onClick: (s) => { s.temperature = 90; } },
-        reset: { type: 'button', label: "🔄 重置反應", onClick: (s) => { s._resetTrigger = (s._resetTrigger || 0) + 1; } }
+        temperature: { value: 37, min: 0, max: 100, step: 1, label: "溫度 (°C)" }
     },
     internal_state: {
         starchCount: 100,
         maltoseCount: 0,
         _resetTrigger: 0,
         _addStarchTrigger: 0,
-        _addEnzymeTrigger: 0
+        _addEnzymeTrigger: 0,
+        _addMaltaseTrigger: 0,
+        _removeEnzymeTrigger: 0
     },
     sizing: { viz: { height: 440 } },
     editorial: {
@@ -418,8 +412,62 @@ for (let t = 0; t <= 100; t++) {
     curveData.push({ temp: t, activity: act });
 }
 
-// --- 2. Observable Plot Chart (Right Panel) ---
-WH.initPlot(vizRight, ({ width, height, state }) => {
+// --- 2. Right Panel: Plot + Custom Buttons ---
+// Build right panel with plot on top and buttons below
+const rightContainer = vizRight;
+rightContainer.style.display = 'flex';
+rightContainer.style.flexDirection = 'column';
+rightContainer.style.overflow = 'hidden';
+
+// Create plot container
+const plotContainer = document.createElement('div');
+plotContainer.id = 'right-plot';
+plotContainer.style.flex = '1 1 auto';
+plotContainer.style.minHeight = '200px';
+plotContainer.style.overflow = 'hidden';
+rightContainer.appendChild(plotContainer);
+
+// Create buttons panel
+const btnPanel = document.createElement('div');
+btnPanel.style.cssText = `
+    flex: 0 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px 16px;
+    background: var(--surface);
+    border-top: 1px solid var(--stroke-default);
+    justify-content: center;
+    align-items: center;
+`;
+
+const buttonDefs = [
+    { label: '🌾 添加澱粉', key: '_addStarchTrigger' },
+    { label: '🧪 添加澱粉酶', key: '_addEnzymeTrigger' },
+    { label: '🔬 添加麥芽糖酶', key: '_addMaltaseTrigger' },
+    { label: '❌ 移除酵素', key: '_removeEnzymeTrigger' },
+    { label: '🔄 重置反應', key: '_resetTrigger' }
+];
+
+buttonDefs.forEach(def => {
+    const btn = document.createElement('button');
+    btn.textContent = def.label;
+    btn.className = 'button';
+    btn.style.cssText = `
+        flex: 1 1 calc(50% - 8px);
+        min-width: 120px;
+        max-width: 200px;
+    `;
+    btn.addEventListener('click', () => {
+        state[def.key] = (state[def.key] || 0) + 1;
+    });
+    btnPanel.appendChild(btn);
+});
+
+rightContainer.appendChild(btnPanel);
+
+// Init plot in the plot sub-container
+WH.initPlot(plotContainer, ({ width, height, state }) => {
     const temp = WH.clamp(state.temperature ?? 37, 0, 100);
     let currentAct = 0;
     if (temp <= 37) {
@@ -443,13 +491,11 @@ WH.initPlot(vizRight, ({ width, height, state }) => {
         x: { label: "溫度 (°C)", domain: [0, 100] },
         y: { label: "酵素相對活性", domain: [0, 1.15] },
         marks: [
-            // Optimal temperature zone shaded green (30°C - 40°C)
             Plot.rectY([{ x1: 30, x2: 40, y1: 0, y2: 1.15 }], {
                 x1: "x1", x2: "x2", y1: "y1", y2: "y2",
                 fill: "var(--positive-surface)",
                 fillOpacity: 0.35
             }),
-            // Denaturation zone shaded red (45°C - 100°C)
             Plot.rectY([{ x1: 45, x2: 100, y1: 0, y2: 1.15 }], {
                 x1: "x1", x2: "x2", y1: "y1", y2: "y2",
                 fill: "var(--negative-surface)",
@@ -457,7 +503,6 @@ WH.initPlot(vizRight, ({ width, height, state }) => {
             }),
             Plot.areaY(curveData, { x: "temp", y: "activity", fill: "var(--primary)", fillOpacity: 0.15 }),
             Plot.lineY(curveData, { x: "temp", y: "activity", stroke: "var(--primary)", strokeWidth: 2.5 }),
-
             Plot.ruleX([37], { stroke: "var(--primary)", strokeDasharray: "4,4", strokeWidth: 1.5 }),
             Plot.ruleX([45], { stroke: "var(--error)", strokeDasharray: "3,3", strokeWidth: 1.5 }),
             Plot.text([{ temp: 37, activity: 1.08 }], { x: "temp", y: "activity", text: () => "最適 37°C", fill: "var(--primary)", fontWeight: "600", fontSize: 11 }),
@@ -481,7 +526,7 @@ WH.initPlot(vizRight, ({ width, height, state }) => {
             })
         ]
     };
-}, { height: 380 });
+}, { height: 280 });
 
 // --- 3. Interactive Canvas Physics Simulation (Left Panel) ---
 class ParticleSpark {
@@ -513,17 +558,21 @@ class ParticleSpark {
 
 WH.initCanvas(vizLeft, ({ width, height }) => {
 
-    let lastResetTrigger = -1;
-    let lastAddStarchTrigger = -1;
-    let lastAddEnzymeTrigger = -1;
+    let lastResetTrigger = 0;
+    let lastAddStarchTrigger = 0;
+    let lastAddEnzymeTrigger = 0;
+    let lastAddMaltaseTrigger = 0;
+    let lastRemoveEnzymeTrigger = 0;
 
     let starchChains = [];
     let maltoses = [];
+    let glucoses = [];
     let enzymes = [];
     let sparks = [];
     let lastHudUpdate = 0;
 
-    const createEnzyme = () => ({
+    const createEnzyme = (type = 'amylase') => ({
+        type,
         x: 40 + Math.random() * (width - 80),
         y: 40 + Math.random() * (height - 80),
         vx: (Math.random() - 0.5) * 45,
@@ -532,7 +581,7 @@ WH.initCanvas(vizLeft, ({ width, height }) => {
         vRot: (Math.random() - 0.5) * 2.5,
         cleaveCooldown: 0,
         esComplexTime: 0,
-        isDenatured: false // Permanent denaturation status flag
+        isDenatured: false
     });
 
     const addStarchChains = (count = 3) => {
@@ -558,14 +607,11 @@ WH.initCanvas(vizLeft, ({ width, height }) => {
     const initSimulation = () => {
         starchChains = [];
         maltoses = [];
+        glucoses = [];
         enzymes = [];
         sparks = [];
 
-        addStarchChains(8); // Start with 8 starch chains (~100 monomers)
-
-        for (let e = 0; e < 5; e++) {
-            enzymes.push(createEnzyme());
-        }
+        addStarchChains(8);
     };
 
     initSimulation();
@@ -585,8 +631,20 @@ WH.initCanvas(vizLeft, ({ width, height }) => {
         if (state._addEnzymeTrigger !== lastAddEnzymeTrigger) {
             lastAddEnzymeTrigger = state._addEnzymeTrigger;
             for (let e = 0; e < 3; e++) {
-                enzymes.push(createEnzyme());
+                enzymes.push(createEnzyme('amylase'));
             }
+        }
+
+        if (state._addMaltaseTrigger !== lastAddMaltaseTrigger) {
+            lastAddMaltaseTrigger = state._addMaltaseTrigger;
+            for (let e = 0; e < 3; e++) {
+                enzymes.push(createEnzyme('maltase'));
+            }
+        }
+
+        if (state._removeEnzymeTrigger !== lastRemoveEnzymeTrigger) {
+            lastRemoveEnzymeTrigger = state._removeEnzymeTrigger;
+            enzymes.length = 0;
         }
 
         const temp = WH.clamp(state.temperature ?? 37, 0, 100);
@@ -598,6 +656,8 @@ WH.initCanvas(vizLeft, ({ width, height }) => {
             });
         }
 
+        const amylaseCount = enzymes.filter(e => e.type === 'amylase' && !e.isDenatured).length;
+        const maltaseCount = enzymes.filter(e => e.type === 'maltase' && !e.isDenatured).length;
         const activeEnzymeCount = enzymes.filter(e => !e.isDenatured).length;
         const denaturedEnzymeCount = enzymes.length - activeEnzymeCount;
 
@@ -679,50 +739,85 @@ WH.initCanvas(vizLeft, ({ width, height }) => {
         // 3. Enzymatic Cleavage (Hydrolysis of Starch into Maltose)
         if (activity > 0) {
             enzymes.forEach(e => {
-                if (e.isDenatured) return; // Denatured enzymes cannot catalyze!
+                if (e.isDenatured) return;
                 if (e.cleaveCooldown > 0) return;
 
-                for (let c = starchChains.length - 1; c >= 0; c--) {
-                    const chain = starchChains[c];
-                    const nodes = chain.nodes;
-                    if (nodes.length < 2) continue;
+                if (e.type === 'amylase') {
+                    // Amylase: cleaves starch into maltose
+                    for (let c = starchChains.length - 1; c >= 0; c--) {
+                        const chain = starchChains[c];
+                        const nodes = chain.nodes;
+                        if (nodes.length < 2) continue;
 
-                    for (let i = 0; i < nodes.length; i++) {
-                        const n = nodes[i];
-                        const dist = Math.hypot(n.x - e.x, n.y - e.y);
+                        for (let i = 0; i < nodes.length; i++) {
+                            const n = nodes[i];
+                            const dist = Math.hypot(n.x - e.x, n.y - e.y);
+
+                            if (dist < 22) {
+                                if (Math.random() < activity * 0.5) {
+                                    e.cleaveCooldown = 0.32;
+                                    e.esComplexTime = 0.25;
+
+                                    if (nodes.length >= 2) {
+                                        const m1 = nodes.pop();
+                                        const m2 = nodes.pop();
+                                        const midX = (m1.x + m2.x) / 2;
+                                        const midY = (m1.y + m2.y) / 2;
+
+                                        maltoses.push({
+                                            x: midX,
+                                            y: midY,
+                                            angle: Math.atan2(m2.y - m1.y, m2.x - m1.x),
+                                            vx: (Math.random() - 0.5) * 30,
+                                            vy: (Math.random() - 0.5) * 30
+                                        });
+
+                                        for (let p = 0; p < 5; p++) {
+                                            sparks.push(new ParticleSpark(midX, midY, WH.getColor('--chart-3')));
+                                        }
+                                    }
+
+                                    if (nodes.length < 2) {
+                                        starchChains.splice(c, 1);
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                        if (e.cleaveCooldown > 0) break;
+                    }
+                } else if (e.type === 'maltase') {
+                    // Maltase: cleaves maltose into 2 glucose
+                    for (let mi = maltoses.length - 1; mi >= 0; mi--) {
+                        const m = maltoses[mi];
+                        const dist = Math.hypot(m.x - e.x, m.y - e.y);
 
                         if (dist < 22) {
                             if (Math.random() < activity * 0.5) {
                                 e.cleaveCooldown = 0.32;
                                 e.esComplexTime = 0.25;
 
-                                if (nodes.length >= 2) {
-                                    const m1 = nodes.pop();
-                                    const m2 = nodes.pop();
-                                    const midX = (m1.x + m2.x) / 2;
-                                    const midY = (m1.y + m2.y) / 2;
+                                // Create 2 glucose from 1 maltose
+                                glucoses.push({
+                                    x: m.x - 4, y: m.y,
+                                    vx: (Math.random() - 0.5) * 40,
+                                    vy: (Math.random() - 0.5) * 40
+                                });
+                                glucoses.push({
+                                    x: m.x + 4, y: m.y,
+                                    vx: (Math.random() - 0.5) * 40,
+                                    vy: (Math.random() - 0.5) * 40
+                                });
 
-                                    maltoses.push({
-                                        x: midX,
-                                        y: midY,
-                                        angle: Math.atan2(m2.y - m1.y, m2.x - m1.x),
-                                        vx: (Math.random() - 0.5) * 30,
-                                        vy: (Math.random() - 0.5) * 30
-                                    });
-
-                                    for (let p = 0; p < 5; p++) {
-                                        sparks.push(new ParticleSpark(midX, midY, WH.getColor('--chart-3')));
-                                    }
+                                for (let p = 0; p < 5; p++) {
+                                    sparks.push(new ParticleSpark(m.x, m.y, WH.getColor('--chart-4')));
                                 }
 
-                                if (nodes.length < 2) {
-                                    starchChains.splice(c, 1);
-                                }
+                                maltoses.splice(mi, 1);
                                 break;
                             }
                         }
                     }
-                    if (e.cleaveCooldown > 0) break;
                 }
             });
         }
@@ -739,10 +834,23 @@ WH.initCanvas(vizLeft, ({ width, height }) => {
             if (m.y > height - margin) { m.y = height - margin; m.vy *= -1; }
         });
 
-        // Compute current remaining starch monomers count & maltose count
+        // 5. Glucose Products Motion
+        glucoses.forEach(g => {
+            g.x += g.vx * (normalSpeedMult || 0.5) * dt;
+            g.y += g.vy * (normalSpeedMult || 0.5) * dt;
+
+            const margin = 10;
+            if (g.x < margin) { g.x = margin; g.vx *= -1; }
+            if (g.x > width - margin) { g.x = width - margin; g.vx *= -1; }
+            if (g.y < margin) { g.y = margin; g.vy *= -1; }
+            if (g.y > height - margin) { g.y = height - margin; g.vy *= -1; }
+        });
+
+        // Compute current remaining starch monomers count & maltose count & glucose count
         let currentStarchCount = 0;
         starchChains.forEach(c => { currentStarchCount += c.nodes.length; });
         const currentMaltoseCount = maltoses.length;
+        const currentGlucoseCount = glucoses.length;
 
         // Update HUD
         if (frameCount - lastHudUpdate > 6) {
@@ -758,8 +866,8 @@ WH.initCanvas(vizLeft, ({ width, height }) => {
 
             ui.setEditorial({
                 hud: [
-                    { label: "酵素狀態", value: `${activeEnzymeCount} 活性 / ${denaturedEnzymeCount} 變性` },
-                    { label: "澱粉與麥芽糖", value: `${currentStarchCount} 澱粉 / ${currentMaltoseCount} 麥芽糖` },
+                    { label: "酵素", value: `${amylaseCount} 澱粉酶 / ${maltaseCount} 麥芽糖酶 / ${denaturedEnzymeCount} 變性` },
+                    { label: "分子", value: `${currentStarchCount} 澱粉 / ${currentMaltoseCount} 麥芽糖 / ${currentGlucoseCount} 葡萄糖` },
                     { label: "催化活性", value: statusText }
                 ]
             });
@@ -821,13 +929,18 @@ WH.initCanvas(vizLeft, ({ width, height }) => {
             ctx.translate(m.x, m.y);
             ctx.rotate(m.angle);
 
-            ctx.beginPath();
-            ctx.arc(-4.5, 0, 4.8, 0, Math.PI * 2);
-            ctx.arc(4.5, 0, 4.8, 0, Math.PI * 2);
             ctx.fillStyle = maltoseColor;
-            ctx.fill();
             ctx.strokeStyle = WH.getColor('--surface');
             ctx.lineWidth = 1.2;
+
+            ctx.beginPath();
+            ctx.arc(-4.5, 0, 4.8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(4.5, 0, 4.8, 0, Math.PI * 2);
+            ctx.fill();
             ctx.stroke();
 
             ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
@@ -840,7 +953,24 @@ WH.initCanvas(vizLeft, ({ width, height }) => {
         // Draw Spark Particles
         sparks.forEach(sp => sp.draw(ctx));
 
-        // Draw Enzymes (澱粉酶)
+        // Draw Glucose (葡萄糖)
+        const glucoseColor = WH.getColor('--chart-4');
+        glucoses.forEach(g => {
+            ctx.fillStyle = glucoseColor;
+            ctx.beginPath();
+            ctx.arc(g.x, g.y, 4.2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = WH.getColor('--surface');
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.beginPath();
+            ctx.arc(g.x - 1.2, g.y - 1.2, 1.3, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        // Draw Enzymes (澱粉酶 & 麥芽糖酶)
         enzymes.forEach(e => {
             ctx.save();
             ctx.translate(e.x, e.y);
@@ -874,25 +1004,53 @@ WH.initCanvas(vizLeft, ({ width, height }) => {
                 if (e.esComplexTime > 0) {
                     ctx.beginPath();
                     ctx.arc(0, 0, 20, 0, Math.PI * 2);
-                    ctx.fillStyle = WH.transparent('--chart-3', 0.4);
+                    ctx.fillStyle = WH.transparent(e.type === 'maltase' ? '--chart-4' : '--chart-3', 0.4);
                     ctx.fill();
                 }
 
-                ctx.fillStyle = WH.getColor('--chart-1');
-                ctx.beginPath();
-                ctx.arc(0, 0, 14, 0.35, Math.PI * 2 - 0.35);
-                ctx.lineTo(0, 0);
-                ctx.closePath();
-                ctx.fill();
+                if (e.type === 'maltase') {
+                    // Maltase: pentagon shape in purple
+                    ctx.fillStyle = WH.getColor('--chart-5');
+                    ctx.beginPath();
+                    for (let i = 0; i < 5; i++) {
+                        const a = (i * 2 * Math.PI / 5) - Math.PI / 2;
+                        const r = 14;
+                        if (i === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+                        else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+                    }
+                    ctx.closePath();
+                    // Cut out active site notch
+                    ctx.moveTo(14, -4);
+                    ctx.lineTo(8, 0);
+                    ctx.lineTo(14, 4);
+                    ctx.fill();
 
-                ctx.strokeStyle = WH.getColor('--surface');
-                ctx.lineWidth = 1.8;
-                ctx.stroke();
+                    ctx.strokeStyle = WH.getColor('--surface');
+                    ctx.lineWidth = 1.8;
+                    ctx.stroke();
 
-                ctx.fillStyle = WH.getColor('--surface');
-                ctx.beginPath();
-                ctx.arc(4.5, 0, 2.5, 0, Math.PI * 2);
-                ctx.fill();
+                    ctx.fillStyle = WH.getColor('--surface');
+                    ctx.beginPath();
+                    ctx.arc(3, 0, 2.5, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    // Amylase: pac-man shape in blue (original)
+                    ctx.fillStyle = WH.getColor('--chart-1');
+                    ctx.beginPath();
+                    ctx.arc(0, 0, 14, 0.35, Math.PI * 2 - 0.35);
+                    ctx.lineTo(0, 0);
+                    ctx.closePath();
+                    ctx.fill();
+
+                    ctx.strokeStyle = WH.getColor('--surface');
+                    ctx.lineWidth = 1.8;
+                    ctx.stroke();
+
+                    ctx.fillStyle = WH.getColor('--surface');
+                    ctx.beginPath();
+                    ctx.arc(4.5, 0, 2.5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
             }
 
             ctx.restore();
@@ -911,7 +1069,7 @@ WH.initCanvas(vizLeft, ({ width, height }) => {
         ctx.stroke();
 
         ctx.fillStyle = WH.getColor('--on-surface-default');
-        ctx.fillText('🧪 唾液澱粉酶反應 (Amylase)', 20, 27);
+        ctx.fillText('🧪 酵素催化反應模擬', 20, 27);
         ctx.restore();
 
         // Educational Overlay Status (Bottom Left)
@@ -921,7 +1079,7 @@ WH.initCanvas(vizLeft, ({ width, height }) => {
             ctx.fillText('🔥 高溫 (>45°C)：蛋白質氫鍵斷裂，酵素發生不可逆變性失活！', 14, height - 14);
         } else if (activeEnzymeCount === 0) {
             ctx.fillStyle = WH.getColor('--error');
-            ctx.fillText('⚠️ 現有酵素全數變性！請降低溫度並點擊「添加新酵素」以繼續反應。', 14, height - 14);
+            ctx.fillText('⚠️ 現有酵素全數變性！請降低溫度並添加新酵素以繼續反應。', 14, height - 14);
         } else if (temp < 20) {
             ctx.fillStyle = WH.getColor('--secondary');
             ctx.fillText('❄️ 低溫環境 (<20°C)：分子熱運動減緩，碰撞反應機率低下', 14, height - 14);
@@ -938,6 +1096,4 @@ WH.initCanvas(vizLeft, ({ width, height }) => {
 
 
 </body>
-</html>
-
-```
+</html>
