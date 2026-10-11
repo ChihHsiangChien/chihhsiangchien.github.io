@@ -134,51 +134,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
     return _debugPanel;
   }
 
-  // speed control UI (always available) — pause/resume + speed slider
+  // speed control UI (integrated in top header, keep empty or legacy guard)
   function createSpeedControlPanel(){
-    const existing = document.getElementById('speed-control-panel');
-    if(existing) return existing;
-    const panel = document.createElement('div');
-    panel.id = 'speed-control-panel';
-    panel.style.position = 'fixed';
-    panel.style.left = '12px';
-    panel.style.bottom = '12px';
-    panel.style.width = '220px';
-    panel.style.background = 'rgba(0,0,0,0.7)';
-    panel.style.color = '#fff';
-    panel.style.fontSize = '12px';
-    panel.style.padding = '8px';
-    panel.style.borderRadius = '8px';
-    panel.style.zIndex = 9999999;
-    panel.style.fontFamily = 'system-ui, sans-serif';
-
-    const header = document.createElement('div');
-    header.style.fontWeight = '600';
-    header.style.marginBottom = '6px';
-    header.textContent = 'Simulation Speed';
-    panel.appendChild(header);
-
-    const row = document.createElement('div');
-    row.style.display = 'flex'; row.style.gap = '8px'; row.style.alignItems = 'center';
-
-    const btn = document.createElement('button');
-    btn.textContent = SIM_PAUSED ? 'Resume' : 'Pause';
-    btn.style.fontSize = '12px';
-    btn.addEventListener('click', ()=>{ SIM_PAUSED = !SIM_PAUSED; btn.textContent = SIM_PAUSED ? 'Resume' : 'Pause'; });
-    row.appendChild(btn);
-
-    const speedWrap = document.createElement('div');
-    speedWrap.style.display='flex'; speedWrap.style.flexDirection='column'; speedWrap.style.flex='1';
-    const slider = document.createElement('input');
-    slider.type = 'range'; slider.min = '0.1'; slider.max = '2.0'; slider.step = '0.05'; slider.value = String(SIM_SPEED);
-    const label = document.createElement('div'); label.style.fontSize='11px'; label.style.marginTop='4px'; label.textContent = `speed: ${SIM_SPEED.toFixed(2)}x`;
-    slider.addEventListener('input', ()=>{ SIM_SPEED = Number(slider.value); label.textContent = `speed: ${SIM_SPEED.toFixed(2)}x`; });
-    speedWrap.appendChild(slider); speedWrap.appendChild(label);
-
-    row.appendChild(speedWrap);
-    panel.appendChild(row);
-    document.body.appendChild(panel);
-    return panel;
+    return null;
   }
 
   function debugLog(...args){
@@ -789,73 +747,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
   };
 
   // create a small control panel for gland emission: manual Emit + Auto toggle
+  // create a small control panel for gland emission (integrated into left panel)
   function createGlandControlPanel(){
-    try{
-      const existing = document.getElementById('gland-control-panel');
-      if(existing) return existing;
-      const panel = document.createElement('div');
-      panel.id = 'gland-control-panel';
-      panel.style.position = 'fixed';
-      panel.style.right = '12px';
-      panel.style.bottom = '80px';
-      panel.style.width = '220px';
-      panel.style.background = 'rgba(0,0,0,0.7)';
-      panel.style.color = '#fff';
-      panel.style.fontSize = '12px';
-      panel.style.padding = '8px';
-      panel.style.borderRadius = '8px';
-      panel.style.zIndex = 9999999;
-      panel.style.fontFamily = 'system-ui, sans-serif';
-
-      const header = document.createElement('div');
-      header.style.fontWeight = '600';
-      header.style.marginBottom = '6px';
-      header.textContent = '消化腺';
-      panel.appendChild(header);
-
-      const glands = [
-        {k:'saliva', label:'唾液'},
-        {k:'gastric', label:'胃液'},
-        {k:'pancreatic', label:'胰液'},
-        {k:'bile', label:'膽汁'},
-        {k:'intestinal', label:'腸液'}
-      ];
-
-      glands.forEach(g=>{
-        const row = document.createElement('div');
-        row.style.display = 'flex'; row.style.gap = '8px'; row.style.alignItems = 'center'; row.style.marginBottom = '6px';
-        const lab = document.createElement('div'); lab.textContent = g.label; lab.style.flex = '1'; lab.style.fontSize='13px';
-        const emitBtn = document.createElement('button'); emitBtn.textContent = '分泌'; emitBtn.style.fontSize='12px';
-        const chk = document.createElement('input'); chk.type = 'checkbox'; chk.id = `gland-auto-${g.k}`;
-        chk.checked = !!(window.__digestEmitters && window.__digestEmitters.enabled && window.__digestEmitters.enabled[g.k]);
-        chk.addEventListener('change', ()=>{ window.__digestEmitters.enabled[g.k] = chk.checked; });
-        emitBtn.addEventListener('click', ()=>{
-          // compute startLen for this gland similar to createGlandEmitters
-          const mouthMid = (typeof mouthStart === 'number' && typeof mouthEnd === 'number') ? (mouthStart + mouthEnd) / 2 : 0;
-          const stomachMid = (typeof stomachStart === 'number' && typeof stomachEnd === 'number') ? (stomachStart + stomachEnd) / 2 : Math.max(0, pathLen * 0.2);
-          const prox = (typeof smallStart === 'number' && typeof smallEnd === 'number') ? (smallStart + Math.min(smallStart + (smallEnd-smallStart)*0.07, smallEnd)) : Math.max(0, pathLen*0.28);
-          if(g.k === 'saliva') emitFluid('saliva', SIZES.fluid.particleCountSaliva, mouthMid, 40);
-          else if(g.k === 'gastric') emitFluid('gastric', SIZES.fluid.particleCountStomach, stomachMid, 50);
-          else if(g.k === 'pancreatic') emitFluid('pancreatic', SIZES.fluid.particleCountPancreas, prox, 36);
-          else if(g.k === 'bile') emitFluid('bile', SIZES.fluid.particleCountLiver, prox + 8, 36);
-          else if(g.k === 'intestinal'){
-            // emit a small cluster along the small intestine
-            const s = (typeof smallStart === 'number' && typeof smallEnd === 'number') ? (smallStart + 0.5*(smallEnd-smallStart)) : (pathLen*0.5);
-            emitFluid('intestinal', SIZES.fluid.particleCountIntestine, s, 26);
-          }
-        });
-        row.appendChild(lab);
-        row.appendChild(emitBtn);
-        const autoWrap = document.createElement('label'); autoWrap.style.display='flex'; autoWrap.style.alignItems='center'; autoWrap.style.gap='4px'; autoWrap.style.fontSize='12px'; autoWrap.appendChild(chk); const txt = document.createElement('span'); txt.textContent='Auto'; autoWrap.appendChild(txt);
-        row.appendChild(autoWrap);
-        panel.appendChild(row);
-      });
-
-      document.body.appendChild(panel);
-      return panel;
-    }catch(e){/*ignore*/}
+    return null;
   }
-  // create gland control panel (non-invasive): users can click to emit or enable Auto
   try{ createGlandControlPanel(); }catch(e){/*ignore*/}
   // helper: create an inline SVG chain of flat-top hexagons
   function createHexChainSVG(count, r = SIZES.hex.r, gap = SIZES.hex.gap, fill = SIZES.hex.fill, stroke = SIZES.hex.stroke){
@@ -1382,6 +1277,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
     // idempotent guard
     if(childEl.dataset._converted) return;
     childEl.dataset._converted = 'toGlucose';
+    if(window.microPanel && window.microPanel.autoSync && window.microPanel.currentNutrient === 'carb'){
+      window.microPanel.setStage(2);
+    }
     const gCount = parseInt(childEl.dataset.glucoseCount||'2',10);
     debugLog('convertChildToGlucose', {gCount, atLen, remainingDuration, dataset: childEl.dataset});
     // create gCount new child tokens (single glucose) and animate them from atLen
@@ -1401,6 +1299,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
   function convertChildToAminoAcids(childEl, atLen, remainingDuration){
     // preserve sequence order stored in dataset.aminoSeq if present
     const seq = childEl.dataset.aminoSeq ? JSON.parse(childEl.dataset.aminoSeq) : new Array(parseInt(childEl.dataset.aminoCount||'2',10)).fill('circle');
+    if(window.microPanel && window.microPanel.autoSync && window.microPanel.currentNutrient === 'protein'){
+      window.microPanel.setStage(2);
+    }
     for(let i=0;i<seq.length;i++){
       const shape = seq[i];
       const aa = createMovingChild(1,'#d85a5a','protein');
@@ -1785,15 +1686,584 @@ document.addEventListener('DOMContentLoaded', ()=>{
     requestAnimationFrame(step);
   }
 
-  // wire up token buttons
-  tokensContainer.querySelectorAll('.token').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
+  // wire up token buttons in header
+  const tokenButtons = document.querySelectorAll('.token-btn, .token');
+  tokenButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
       const type = btn.dataset.type;
-      const label = btn.innerText || type;
+      const label = btn.innerText.trim() || type;
       // durations slightly different per nutrient
       const duration = type==='fat' ? 5200 : (type==='protein' ? 4600 : 3800);
       animateAlongPath(type, duration, label);
+
+      // sync micro panel if auto sync enabled
+      if(window.microPanel && window.microPanel.autoSync){
+        window.microPanel.switchNutrient(type);
+        window.microPanel.setStage(0);
+      }
     });
   });
 
+  // header sim actions
+  const pauseBtn = document.getElementById('sim-pause-btn');
+  if(pauseBtn){
+    pauseBtn.addEventListener('click', ()=>{
+      SIM_PAUSED = !SIM_PAUSED;
+      pauseBtn.textContent = SIM_PAUSED ? '繼續' : '暫停';
+    });
+  }
+
+  const speedSlider = document.getElementById('sim-speed-input');
+  const speedVal = document.getElementById('speed-val');
+  if(speedSlider && speedVal){
+    speedSlider.addEventListener('input', ()=>{
+      SIM_SPEED = Number(speedSlider.value);
+      speedVal.textContent = `${SIM_SPEED.toFixed(1)}x`;
+    });
+  }
+
+  // wire up integrated glands bar
+  document.querySelectorAll('.gland-chip').forEach(chip => {
+    const k = chip.dataset.gland;
+    const emitBtn = chip.querySelector('.g-emit');
+    const chk = chip.querySelector('input[type="checkbox"]');
+    if(chk){
+      chk.checked = !!(window.__digestEmitters && window.__digestEmitters.enabled && window.__digestEmitters.enabled[k]);
+      chk.addEventListener('change', ()=>{
+        if(!window.__digestEmitters) window.__digestEmitters = { enabled: {} };
+        if(!window.__digestEmitters.enabled) window.__digestEmitters.enabled = {};
+        window.__digestEmitters.enabled[k] = chk.checked;
+      });
+    }
+    if(emitBtn){
+      emitBtn.addEventListener('click', ()=>{
+        const mouthMid = (typeof mouthStart === 'number' && typeof mouthEnd === 'number') ? (mouthStart + mouthEnd) / 2 : 0;
+        const stomachMid = (typeof stomachStart === 'number' && typeof stomachEnd === 'number') ? (stomachStart + stomachEnd) / 2 : Math.max(0, pathLen * 0.2);
+        const prox = (typeof smallStart === 'number' && typeof smallEnd === 'number') ? (smallStart + Math.min(smallStart + (smallEnd-smallStart)*0.07, smallEnd)) : Math.max(0, pathLen*0.28);
+        if(k === 'saliva') emitFluid('saliva', SIZES.fluid.particleCountSaliva, mouthMid, 40);
+        else if(k === 'gastric') emitFluid('gastric', SIZES.fluid.particleCountStomach, stomachMid, 50);
+        else if(k === 'pancreatic') emitFluid('pancreatic', SIZES.fluid.particleCountPancreas, prox, 36);
+        else if(k === 'bile') emitFluid('bile', SIZES.fluid.particleCountLiver, prox + 8, 36);
+        else if(k === 'intestinal'){
+          const s = (typeof smallStart === 'number' && typeof smallEnd === 'number') ? (smallStart + 0.5*(smallEnd-smallStart)) : (pathLen*0.5);
+          emitFluid('intestinal', SIZES.fluid.particleCountIntestine, s, 26);
+        }
+      });
+    }
+  });
+
+  // =========================================================================
+  // Microscopic Molecular Showcase Manager
+  // =========================================================================
+  const MICRO_DATA = {
+    carb: {
+      name: '碳水化合物 (澱粉 Starch)',
+      stages: [
+        {
+          title: '澱粉分子 (高分子多醣鏈)',
+          enzyme: '狀態：初始受質 (尚未接觸酵素)',
+          desc: '由數百至數千個葡萄糖分子透過 α-1,4 糖苷鍵相連形成長螺旋鏈。分子龐大無法直接穿過小腸上皮細胞。',
+          render: () => renderMicroHexChain(6, '多醣長鏈 (澱粉)')
+        },
+        {
+          title: '雙醣與寡醣 (麥芽糖 Maltose)',
+          enzyme: '消化腺：唾液腺 & 胰臟 ｜ 酵素：唾液澱粉酶、胰澱粉酶',
+          desc: '澱粉酶水解澱粉內部的糖苷鍵，將長鏈剪切為由 2 個葡萄糖組成的雙醣（麥芽糖）。鍵結被切斷，分子變短。',
+          render: () => renderMicroMaltosePairs()
+        },
+        {
+          title: '單醣小分子 (葡萄糖 Glucose)',
+          enzyme: '消化腺：小腸腺體 ｜ 酵素：腸液雙醣酶 (麥芽糖酶)',
+          desc: '麥芽糖酶水解雙醣鍵，徹底釋出游離的單醣（葡萄糖）。葡萄糖可藉由小腸絨毛細胞主動運輸吸收進微血管。',
+          render: () => renderMicroIndividualGlucose()
+        }
+      ]
+    },
+    protein: {
+      name: '蛋白質 (多肽鏈 Protein)',
+      stages: [
+        {
+          title: '完整蛋白質分子 (摺疊多肽鏈)',
+          enzyme: '狀態：初始受質 (尚未接觸胃液)',
+          desc: '由 20 種不同胺基酸以胜肽鍵串聯並經空間摺疊的大分子。空間結構緻密，需要經胃酸變性並切斷胜肽鍵。',
+          render: () => renderMicroPolypeptideChain(8, '多肽長鏈 (蛋白質)')
+        },
+        {
+          title: '短肽與寡肽 (Polypeptide Fragments)',
+          enzyme: '消化腺：胃腺 & 胰臟 ｜ 酵素：胃蛋白酶、胰蛋白酶',
+          desc: '在胃部與十二指腸中，內肽酶切開胜肽鍵，將大蛋白質切成 2~4 個胺基酸組成的短寡肽鏈。',
+          render: () => renderMicroPeptideFragments()
+        },
+        {
+          title: '單體小分子 (胺基酸 Amino Acids)',
+          enzyme: '消化腺：小腸黏膜 ｜ 酵素：腸肽酶 (Peptidase)',
+          desc: '外肽酶與雙肽酶徹底水解剩餘胜肽鍵，釋出各自獨立的單體胺基酸，經小腸絨毛微血管吸收進入體循環。',
+          render: () => renderMicroIndividualAminoAcids()
+        }
+      ]
+    },
+    fat: {
+      name: '脂質 (三酸甘油酯 Triglyceride)',
+      stages: [
+        {
+          title: '三酸甘油酯大油滴 (Triglyceride)',
+          enzyme: '狀態：初始大油滴 (水不溶性)',
+          desc: '由 1 個甘油骨架經酯鍵連接 3 條長鏈脂肪酸尾巴所組成。大油滴表面積小，水溶性酵素極難接觸分解。',
+          render: () => renderMicroTriglycerideFull()
+        },
+        {
+          title: '乳化微滴 (Emulsification by Bile)',
+          enzyme: '消化腺：肝臟分泌、膽囊儲存 ｜ 作用物質：膽鹽 (非酵素物理乳化)',
+          desc: '膽汁不含消化酵素，但膽鹽具有親水與親脂兩性端，能將大脂肪滴乳化分散成微小油滴，劇增接觸表面積！',
+          render: () => renderMicroEmulsifiedFat()
+        },
+        {
+          title: '水解小分子 (甘油 + 3條游離脂肪酸)',
+          enzyme: '消化腺：胰臟 ｜ 酵素：胰脂肪酶 (Lipase)',
+          desc: '胰脂肪酶切斷甘油與脂肪酸之間的酯鍵，徹底水解為 1 個甘油分子與 3 個游離脂肪酸，由小腸絨毛乳糜管吸收。',
+          render: () => renderMicroHydrolyzedFat()
+        }
+      ]
+    }
+  };
+
+  // Helper renderers for Micro Showcase SVG
+  // 1. CARBOHYDRATE (澱粉 -> 麥芽糖 -> 葡萄糖):
+  // 統一色彩與造型: 葡萄糖單元一律為六角形、經典紫色 (#6f6fe0 ~ #818cf8)
+  function renderMicroHexChain(count, label){
+    const w = 460, h = 140;
+    const r = 20;
+    const sqrt3 = Math.sqrt(3);
+    const spacing = 48;
+    const startX = (w - (count-1)*spacing) / 2;
+    const cy = 60;
+    let svg = `<svg viewBox="0 0 ${w} ${h}" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">`;
+    // draw connecting glycosidic bonds
+    for(let i=0; i<count-1; i++){
+      const x1 = startX + i*spacing;
+      const x2 = startX + (i+1)*spacing;
+      svg += `<line x1="${x1+14}" y1="${cy}" x2="${x2-14}" y2="${cy}" stroke="#a5b4fc" stroke-width="4" stroke-dasharray="2,2"/>`;
+
+    }
+    // draw hexagons with exact identical style and color
+    for(let i=0; i<count; i++){
+      const cx = startX + i*spacing;
+      const pts = [
+        [cx, cy - r],
+        [cx + r*sqrt3/2, cy - r/2],
+        [cx + r*sqrt3/2, cy + r/2],
+        [cx, cy + r],
+        [cx - r*sqrt3/2, cy + r/2],
+        [cx - r*sqrt3/2, cy - r/2]
+      ].map(p=>p.join(',')).join(' ');
+      svg += `<polygon points="${pts}" fill="url(#carbGrad)" stroke="#4338ca" stroke-width="2"/>`;
+      svg += `<text x="${cx}" y="${cy+4}" fill="#fff" font-size="10" font-weight="bold" text-anchor="middle" font-family="sans-serif">葡</text>`;
+    }
+    svg += `<defs>
+      <linearGradient id="carbGrad" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#818cf8"/>
+        <stop offset="100%" stop-color="#6f6fe0"/>
+      </linearGradient>
+    </defs>`;
+    svg += `<text x="${w/2}" y="${h-12}" fill="#94a3b8" font-size="12" text-anchor="middle">${label}</text>`;
+    svg += `</svg>`;
+    return svg;
+  }
+
+  function renderMicroMaltosePairs(){
+    const w = 460, h = 140;
+    const r = 18;
+    const sqrt3 = Math.sqrt(3);
+    let svg = `<svg viewBox="0 0 ${w} ${h}" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">`;
+    const pairs = [[70, 115], [200, 245], [330, 375]];
+    const cy = 60;
+    // scissors indicator
+    svg += `<g opacity="0.85">
+      <text x="157" y="48" fill="#f87171" font-size="10" text-anchor="middle">澱粉酶作用</text>      
+      <text x="287" y="48" fill="#f87171" font-size="10" text-anchor="middle">澱粉酶作用</text>
+    </g>`;
+
+    pairs.forEach((pair, pIdx) => {
+      const [x1, x2] = pair;
+      svg += `<line x1="${x1+12}" y1="${cy}" x2="${x2-12}" y2="${cy}" stroke="#a5b4fc" stroke-width="4"/>`;
+      svg += `<text x="${(x1+x2)/2}" y="${cy+32}" fill="#38bdf8" font-size="11" font-weight="bold" text-anchor="middle">麥芽糖</text>`;
+      [x1, x2].forEach(cx => {
+        const pts = [
+          [cx, cy - r],
+          [cx + r*sqrt3/2, cy - r/2],
+          [cx + r*sqrt3/2, cy + r/2],
+          [cx, cy + r],
+          [cx - r*sqrt3/2, cy + r/2],
+          [cx - r*sqrt3/2, cy - r/2]
+        ].map(p=>p.join(',')).join(' ');
+        svg += `<polygon points="${pts}" fill="url(#carbGrad)" stroke="#4338ca" stroke-width="2"/>`;
+        svg += `<text x="${cx}" y="${cy+4}" fill="#fff" font-size="10" font-weight="bold" text-anchor="middle">葡</text>`;
+      });
+    });
+    svg += `<defs>
+      <linearGradient id="carbGrad" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#818cf8"/>
+        <stop offset="100%" stop-color="#6f6fe0"/>
+      </linearGradient>
+    </defs>`;
+    svg += `<text x="${w/2}" y="${h-10}" fill="#94a3b8" font-size="12" text-anchor="middle">唾液/胰澱粉酶水解產物：雙醣 (麥芽糖)</text>`;
+    svg += `</svg>`;
+    return svg;
+  }
+
+  function renderMicroIndividualGlucose(){
+    const w = 460, h = 140;
+    const r = 18;
+    const sqrt3 = Math.sqrt(3);
+    let svg = `<svg viewBox="0 0 ${w} ${h}" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">`;
+    const xs = [50, 115, 185, 255, 325, 395];
+    const cy = 60;
+    xs.forEach((cx) => {
+      const pts = [
+        [cx, cy - r],
+        [cx + r*sqrt3/2, cy - r/2],
+        [cx + r*sqrt3/2, cy + r/2],
+        [cx, cy + r],
+        [cx - r*sqrt3/2, cy + r/2],
+        [cx - r*sqrt3/2, cy - r/2]
+      ].map(p=>p.join(',')).join(' ');
+      // 保持與大分子時一模一樣的六角形葡萄糖外觀與漸層色
+      svg += `<polygon points="${pts}" fill="url(#carbGrad)" stroke="#4338ca" stroke-width="2"/>`;
+      svg += `<text x="${cx}" y="${cy+4}" fill="#fff" font-size="10" font-weight="bold" text-anchor="middle">葡</text>`;
+      svg += `<text x="${cx}" y="${cy+32}" fill="#a5b4fc" font-size="10" text-anchor="middle" font-weight="bold">葡萄糖</text>`;
+    });
+    svg += `<defs>
+      <linearGradient id="carbGrad" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#818cf8"/>
+        <stop offset="100%" stop-color="#6f6fe0"/>
+      </linearGradient>
+    </defs>`;
+    svg += `<text x="${w/2}" y="${h-8}" fill="#38bdf8" font-size="12" font-weight="bold" text-anchor="middle">最終產物：葡萄糖</text>`;
+    svg += `</svg>`;
+    return svg;
+  }
+
+  // 2. PROTEIN (蛋白質多肽鏈 -> 寡肽片段 -> 個別胺基酸):
+  // 統一圖示形狀與顏色定義: 保持左側相同色彩與幾何對應
+  const AA_PRESETS = [
+    { sh: 'circle', fill: 'hsl(8 60% 50%)', name: '圓形胺基酸' },
+    { sh: 'square', fill: 'hsl(8 75% 44%)', name: '方形胺基酸' },
+    { sh: 'diamond', fill: 'hsl(8 50% 56%)', name: '菱形胺基酸' },
+    { sh: 'triangle', fill: 'hsl(8 85% 40%)', name: '三角形胺基酸' },
+    { sh: 'circle', fill: 'hsl(8 60% 50%)', name: '圓形胺基酸' },
+    { sh: 'square', fill: 'hsl(8 75% 44%)', name: '方形胺基酸' },
+    { sh: 'diamond', fill: 'hsl(8 50% 56%)', name: '菱形胺基酸' },
+    { sh: 'triangle', fill: 'hsl(8 85% 40%)', name: '三角形胺基酸' }
+  ];
+
+  function drawAAShape(sh, cx, cy, fill, size=15){
+    let shapeSvg = '';
+    let textY = cy + 3.5;
+    if(sh === 'circle'){
+      shapeSvg = `<circle cx="${cx}" cy="${cy}" r="${size}" fill="${fill}" stroke="#7f1d1d" stroke-width="2"/>`;
+    }else if(sh === 'square'){
+      shapeSvg = `<rect x="${cx-size*0.9}" y="${cy-size*0.9}" width="${size*1.8}" height="${size*1.8}" rx="3" fill="${fill}" stroke="#7f1d1d" stroke-width="2"/>`;
+    }else if(sh === 'diamond'){
+      shapeSvg = `<polygon points="${cx},${cy-size*1.1} ${cx+size*1.1},${cy} ${cx},${cy+size*1.1} ${cx-size*1.1},${cy}" fill="${fill}" stroke="#7f1d1d" stroke-width="2"/>`;
+    }else{
+      // triangle: 重心微偏下
+      textY = cy + 4.5;
+      shapeSvg = `<polygon points="${cx},${cy-size*1.1} ${cx+size*1.1},${cy+size*0.9} ${cx-size*1.1},${cy+size*0.9}" fill="${fill}" stroke="#7f1d1d" stroke-width="2"/>`;
+    }
+    const textSvg = `<text x="${cx}" y="${textY}" fill="#fff" font-size="10" font-weight="bold" text-anchor="middle" font-family="sans-serif">胺</text>`;
+    return shapeSvg + textSvg;
+  }
+
+  function renderMicroPolypeptideChain(count, label){
+    const w = 460, h = 140;
+    const spacing = 46;
+    const startX = (w - (count-1)*spacing) / 2;
+    const cy = 60;
+    let svg = `<svg viewBox="0 0 ${w} ${h}" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">`;
+    // peptide bond line
+    svg += `<path d="M ${startX} ${cy}`;
+    for(let i=1; i<count; i++){
+      svg += ` L ${startX + i*spacing} ${cy + (i%2===0?-6:6)}`;
+    }
+    svg += `" fill="none" stroke="#d85a5a" stroke-width="4" stroke-dasharray="2,2"/>`;
+
+    for(let i=0; i<count; i++){
+      const cx = startX + i*spacing;
+      const curY = cy + (i%2===0?-6:6);
+      const item = AA_PRESETS[i % AA_PRESETS.length];
+      svg += drawAAShape(item.sh, cx, curY, item.fill, 14);
+
+    }
+    svg += `<text x="${w/2}" y="${h-12}" fill="#94a3b8" font-size="12" text-anchor="middle">${label}</text>`;
+    svg += `</svg>`;
+    return svg;
+  }
+
+  function renderMicroPeptideFragments(){
+    const w = 460, h = 140;
+    let svg = `<svg viewBox="0 0 ${w} ${h}" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">`;
+    svg += `<text x="140" y="44" fill="#f87171" font-size="10" text-anchor="middle">胃蛋白酶水解</text>
+      <text x="290" y="44" fill="#f87171" font-size="10" text-anchor="middle">胰蛋白酶水解</text>`;
+    
+    // Grp 1: Dipeptide
+    svg += `<line x1="50" y1="65" x2="100" y2="65" stroke="#d85a5a" stroke-width="3"/>`;
+    svg += drawAAShape(AA_PRESETS[0].sh, 50, 65, AA_PRESETS[0].fill, 13);
+    svg += drawAAShape(AA_PRESETS[1].sh, 100, 65, AA_PRESETS[1].fill, 13);
+    svg += `<text x="75" y="98" fill="#f87171" font-size="11" font-weight="bold" text-anchor="middle">二肽 (Dipeptide)</text>`;
+
+    // Grp 2: Tripeptide
+    svg += `<path d="M 180 65 L 220 65 L 260 65" stroke="#d85a5a" stroke-width="3"/>`;
+    svg += drawAAShape(AA_PRESETS[2].sh, 180, 65, AA_PRESETS[2].fill, 13);
+    svg += drawAAShape(AA_PRESETS[3].sh, 220, 65, AA_PRESETS[3].fill, 13);
+    svg += drawAAShape(AA_PRESETS[4].sh, 260, 65, AA_PRESETS[4].fill, 13);
+    svg += `<text x="220" y="98" fill="#f87171" font-size="11" font-weight="bold" text-anchor="middle">三肽 (Tripeptide)</text>`;
+
+    // Grp 3: Dipeptide
+    svg += `<line x1="340" y1="65" x2="385" y2="65" stroke="#d85a5a" stroke-width="3"/>`;
+    svg += drawAAShape(AA_PRESETS[5].sh, 340, 65, AA_PRESETS[5].fill, 13);
+    svg += drawAAShape(AA_PRESETS[6].sh, 385, 65, AA_PRESETS[6].fill, 13);
+    svg += `<text x="362" y="98" fill="#f87171" font-size="11" font-weight="bold" text-anchor="middle">二肽 (Dipeptide)</text>`;
+
+    svg += `<text x="${w/2}" y="${h-10}" fill="#94a3b8" font-size="12" text-anchor="middle">多肽片段</text>`;
+    svg += `</svg>`;
+    return svg;
+  }
+
+  function renderMicroIndividualAminoAcids(){
+    const w = 460, h = 140;
+    let svg = `<svg viewBox="0 0 ${w} ${h}" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">`;
+    const xs = [50, 105, 160, 215, 270, 325, 380];
+    xs.forEach((cx, idx) => {
+      const item = AA_PRESETS[idx % AA_PRESETS.length];
+      // 必須與構成大分子時的形狀與顏色完全一樣
+      svg += drawAAShape(item.sh, cx, 60, item.fill, 14);
+      svg += `<text x="${cx}" y="95" fill="#fca5a5" font-size="10" text-anchor="middle" font-weight="bold">胺基酸</text>`;
+    });
+    svg += `<text x="${w/2}" y="${h-10}" fill="#38bdf8" font-size="12" font-weight="bold" text-anchor="middle">最終產物：胺基酸</text>`;
+    svg += `</svg>`;
+    return svg;
+  }
+
+  // 3. LIPID (脂質三酸甘油酯 -> 乳化滴 -> 甘油 + 3脂肪酸):
+  // 統一色彩: 甘油一律為金黃色塊 (hsl(40 70% 55%))，脂肪酸一律為深褐金長條 (hsl(40 65% 45%))
+  function renderMicroTriglycerideFull(){
+    const w = 460, h = 150;
+    let svg = `<svg viewBox="0 0 ${w} ${h}" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">`;
+    // Glycerol block
+    svg += `<rect x="70" y="45" width="60" height="70" rx="8" fill="hsl(40 70% 55%)" stroke="#b45309" stroke-width="2"/>`;
+    svg += `<text x="100" y="84" fill="#fff" font-size="13" font-weight="bold" text-anchor="middle">甘油</text>`;
+
+    // 3 Fatty Acid Chains
+    const ys = [55, 80, 105];
+    ys.forEach((y, i) => {
+      // Ester bond
+      svg += `<line x1="130" y1="${y}" x2="160" y2="${y}" stroke="#fcd34d" stroke-width="4"/>`;
+      svg += `<text x="145" y="${y-5}" fill="#f59e0b" font-size="8" text-anchor="middle">酯鍵</text>`;
+      // Fatty acid tail (zigzag with exact color hsl(40 65% 45%))
+      let tailPath = `M 160 ${y}`;
+      for(let x=175; x<=370; x+=15){
+        tailPath += ` L ${x} ${y + (x%30===0?5:-5)}`;
+      }
+      svg += `<path d="${tailPath}" fill="none" stroke="hsl(40 65% 45%)" stroke-width="6" stroke-linecap="round"/>`;
+      svg += `<text x="395" y="${y+4}" fill="#fcd34d" font-size="11" font-weight="600">脂肪酸 ${i+1}</text>`;
+    });
+
+    svg += `<text x="${w/2}" y="${h-10}" fill="#94a3b8" font-size="12" text-anchor="middle">三酸甘油酯完整分子 (1甘油 + 3長鏈脂肪酸)</text>`;
+    svg += `</svg>`;
+    return svg;
+  }
+
+  function renderMicroEmulsifiedFat(){
+    const w = 460, h = 150;
+    let svg = `<svg viewBox="0 0 ${w} ${h}" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">`;
+    svg += `<circle cx="100" cy="70" r="38" fill="hsl(40 70% 55%)" opacity="0.3"/>`;
+    svg += `<text x="100" y="65" fill="#f59e0b" font-size="12" font-weight="bold" text-anchor="middle">大脂滴</text>`;
+    svg += `<text x="100" y="80" fill="#fcd34d" font-size="9" text-anchor="middle">難以被酵素水解</text>`;
+
+    svg += `<path d="M 160 70 L 210 70" stroke="#a3e635" stroke-width="3" marker-end="url(#arrow)"/>`;
+    svg += `<text x="185" y="58" fill="#a3e635" font-size="11" font-weight="bold" text-anchor="middle">膽鹽乳化</text>`;
+
+    // Emulsified tiny droplets (using identical colors)
+    const drops = [[260, 50, 16], [310, 45, 14], [280, 85, 18], [330, 80, 15], [370, 60, 17], [355, 95, 13]];
+    drops.forEach(([x, y, r]) => {
+      svg += `<circle cx="${x}" cy="${y}" r="${r}" fill="hsl(40 70% 55%)" stroke="#84cc16" stroke-width="2.5"/>`;
+      svg += `<circle cx="${x}" cy="${y}" r="${r-4}" fill="hsl(40 65% 45%)"/>`;
+    });
+
+    svg += `<text x="320" y="128" fill="#bef264" font-size="11" font-weight="bold" text-anchor="middle">乳化微滴 (表面積大幅劇增！)</text>`;
+    svg += `<text x="${w/2}" y="${h-6}" fill="#94a3b8" font-size="11" text-anchor="middle">膽汁乳化為物理變化，不破壞化學鍵</text>`;
+    svg += `</svg>`;
+    return svg;
+  }
+
+  function renderMicroHydrolyzedFat(){
+    const w = 460, h = 150;
+    let svg = `<svg viewBox="0 0 ${w} ${h}" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">`;
+    // Glycerol separated (exact same color hsl(40 70% 55%))
+    svg += `<rect x="50" y="45" width="75" height="55" rx="8" fill="hsl(40 70% 55%)" stroke="#b45309" stroke-width="2"/>`;
+    svg += `<text x="87" y="72" fill="#fff" font-size="12" font-weight="bold" text-anchor="middle">游離甘油</text>`;
+    svg += `<text x="87" y="88" fill="#fef3c7" font-size="9" text-anchor="middle">1 個甘油分子</text>`;
+
+    svg += `<text x="155" y="78" fill="#38bdf8" font-size="24" font-weight="bold">+</text>`;
+
+    // 3 Free Fatty Acids (exact same color hsl(40 65% 45%))
+    const ys = [45, 75, 105];
+    ys.forEach((y, i) => {
+      let tailPath = `M 185 ${y}`;
+      for(let x=200; x<=360; x+=15){
+        tailPath += ` L ${x} ${y + (x%30===0?5:-5)}`;
+      }
+      svg += `<path d="${tailPath}" fill="none" stroke="hsl(40 65% 45%)" stroke-width="6" stroke-linecap="round"/>`;
+      svg += `<text x="395" y="${y+4}" fill="#fcd34d" font-size="10" font-weight="bold">游離脂肪酸 ${i+1}</text>`;
+    });
+
+    svg += `<text x="${w/2}" y="${h-10}" fill="#38bdf8" font-size="12" font-weight="bold" text-anchor="middle">最終產物：1個甘油 + 3個脂肪酸</text>`;
+    svg += `</svg>`;
+    return svg;
+  }
+
+  // Showcase Controller
+  const MicroController = {
+    currentNutrient: 'carb',
+    currentStage: 0,
+    autoSync: true,
+
+    init(){
+      this.cacheDom();
+      this.bindEvents();
+      this.updateView();
+    },
+
+    cacheDom(){
+      this.tabs = document.querySelectorAll('.micro-tab');
+      this.stepNodes = document.querySelectorAll('.step-node');
+      this.enzymeBadge = document.getElementById('micro-enzyme-badge');
+      this.enzymeText = document.getElementById('micro-enzyme-text');
+      this.stageView = document.getElementById('micro-stage-view');
+      this.title = document.getElementById('micro-title');
+      this.desc = document.getElementById('micro-desc');
+      this.prevBtn = document.getElementById('micro-prev-step');
+      this.actionBtn = document.getElementById('micro-step-action');
+      this.resetBtn = document.getElementById('micro-reset-step');
+      this.autoSyncChk = document.getElementById('micro-auto-sync');
+    },
+
+    bindEvents(){
+      this.tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          this.switchNutrient(tab.dataset.target);
+        });
+      });
+
+      this.stepNodes.forEach(node => {
+        node.addEventListener('click', () => {
+          this.setStage(Number(node.dataset.step));
+        });
+      });
+
+      if(this.prevBtn){
+        this.prevBtn.addEventListener('click', () => {
+          if(this.currentStage > 0) this.setStage(this.currentStage - 1);
+        });
+      }
+
+      if(this.actionBtn){
+        this.actionBtn.addEventListener('click', () => {
+          if(this.currentStage < 2) this.setStage(this.currentStage + 1);
+          else this.setStage(0);
+        });
+      }
+
+      if(this.resetBtn){
+        this.resetBtn.addEventListener('click', () => {
+          this.setStage(0);
+        });
+      }
+
+      if(this.autoSyncChk){
+        this.autoSyncChk.addEventListener('change', () => {
+          this.autoSync = this.autoSyncChk.checked;
+        });
+      }
+    },
+
+    switchNutrient(type){
+      if(!MICRO_DATA[type]) return;
+      this.currentNutrient = type;
+      this.currentStage = 0;
+      this.tabs.forEach(t => t.classList.toggle('active', t.dataset.target === type));
+      this.updateView();
+    },
+
+    setStage(stageIdx){
+      this.currentStage = Math.max(0, Math.min(2, stageIdx));
+      this.updateView();
+    },
+
+    updateView(){
+      const nData = MICRO_DATA[this.currentNutrient];
+      const stageData = nData.stages[this.currentStage];
+
+      this.stepNodes.forEach((node, i) => {
+        node.classList.toggle('active', i <= this.currentStage);
+      });
+
+      if(this.title) this.title.textContent = stageData.title;
+      if(this.desc) this.desc.textContent = stageData.desc;
+      if(this.enzymeText) this.enzymeText.textContent = stageData.enzyme;
+      if(this.stageView) this.stageView.innerHTML = stageData.render();
+
+      if(this.actionBtn){
+        if(this.currentStage === 0) this.actionBtn.textContent = '下一步：酵素水解作用';
+        else if(this.currentStage === 1) this.actionBtn.textContent = '下一步：水解為單體分子';
+        else this.actionBtn.textContent = '重新開始觀察 (Step 1)';
+      }
+    }
+  };
+
+  MicroController.init();
+  window.microPanel = MicroController;
+
+  // Enhance macro animation along path to inform micro view
+  const origAnimateAlongPath = animateAlongPath;
+  // wrap mouth / stomach / small conversions
+  const origConvertToMaltose = convertToMaltose;
+  convertToMaltose = function(...args){
+    if(window.microPanel && window.microPanel.autoSync && window.microPanel.currentNutrient === 'carb'){
+      window.microPanel.setStage(1);
+    }
+    return origConvertToMaltose.apply(this, args);
+  };
+
+  const origConvertToGlucose = convertToGlucose;
+  convertToGlucose = function(...args){
+    if(window.microPanel && window.microPanel.autoSync && window.microPanel.currentNutrient === 'carb'){
+      window.microPanel.setStage(2);
+    }
+    return origConvertToGlucose.apply(this, args);
+  };
+
+  const origConvertToPolypeptide = convertToPolypeptide;
+  convertToPolypeptide = function(...args){
+    if(window.microPanel && window.microPanel.autoSync && window.microPanel.currentNutrient === 'protein'){
+      window.microPanel.setStage(1);
+    }
+    return origConvertToPolypeptide.apply(this, args);
+  };
+
+  const origConvertToAminoAcids = convertToAminoAcids;
+  convertToAminoAcids = function(...args){
+    if(window.microPanel && window.microPanel.autoSync && window.microPanel.currentNutrient === 'protein'){
+      window.microPanel.setStage(2);
+    }
+    return origConvertToAminoAcids.apply(this, args);
+  };
+
+  const origConvertToFat = convertToFat;
+  convertToFat = function(...args){
+    if(window.microPanel && window.microPanel.autoSync && window.microPanel.currentNutrient === 'fat'){
+      window.microPanel.setStage(2);
+    }
+    return origConvertToFat.apply(this, args);
+  };
 });
