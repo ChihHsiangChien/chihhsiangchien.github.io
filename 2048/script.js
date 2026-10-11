@@ -4,6 +4,7 @@ const scoreElement = document.getElementById('score');
 
 document.documentElement.style.setProperty('--grid-size', GRID_SIZE);
 gameBoard.style.gridTemplateColumns = `repeat(${GRID_SIZE}, 1fr)`;
+gameBoard.style.gridTemplateRows = `repeat(${GRID_SIZE}, 1fr)`;
 
 let grid = [];
 let score = 0;
@@ -241,6 +242,11 @@ document.addEventListener('touchend', event => {
 
     const diffX = touchEndX - touchStartX;
     const diffY = touchEndY - touchStartY;
+    const minDistance = 20; // 最小滑動距離閾值，避免點擊或輕觸誤觸發滑動
+
+    if (Math.max(Math.abs(diffX), Math.abs(diffY)) < minDistance) {
+        return;
+    }
 
     if (Math.abs(diffX) > Math.abs(diffY)) {
         if (diffX > 0) {
