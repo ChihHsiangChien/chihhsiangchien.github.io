@@ -1,34 +1,199 @@
 /**
- * OmNomNom — Taiwan Wetland Food Chain Board Game
- * Features:
- * - 9 Taiwan wetland organisms across 3 trophic tiers and 3 parallel food chains.
- * - Accessible rules modal dialog (#rulesBtn, #rulesModal, #closeModalBtn).
- * - Animated dice rolling engine with roll-state locking (#diceBtn, #diceResult).
- * - Glowing pawn token moving step-by-step along 9-tile loop (pos + roll) % 9.
- * - Predation and energy events ("Om Nom Nom!"), lap migration bonuses.
- * - Web Audio API synthesized sound effects.
- * - Responsive canvas scaling and scoreboard.
+ * OmNomNom — 台灣濕地食物鏈桌遊（改編自桌遊 Om Nom Nom）
+ *
+ * 規則摘要：
+ *  1. 擲 8 顆骰子，每顆隨機出現 3 種初級消費者或 3 種次級消費者，放到棋盤上。
+ *  2. 每位玩家同時暗出 1 張掠食者卡（次級或高級消費者）。
+ *  3. 每條食物鏈由上往下結算：高級消費者先吃次級（卡牌優先、再吃骰子），
+ *     存活的次級消費者再吃初級骰子；同種掠食者平分，除不盡者剩下。
+ *  4. 每吃 1 隻得 1 分；另以 10% 法則計算同化的能量（kJ）。
+ *  5. 3 季 × 3 回合，每季初手牌補滿 6 張。
+ *
+ * 結構：
+ *  - 第 1 部分：純邏輯引擎（resolveTurn / aiChooseCard），可在 Node 中測試。
+ *  - 第 2 部分：瀏覽器介面（僅在有 document 時執行）。
  */
 
-(function () {
+(function (root) {
     'use strict';
 
-    // -------------------------------------------------------------------------
-    // 1. Web Audio API Sound Synthesizer
-    // -------------------------------------------------------------------------
+    // =========================================================================
+    // 1. 遊戲資料與純邏輯引擎
+    // =========================================================================
+    const SVG_TADPOLE = '<svg viewBox="0 0 64 64" aria-hidden="true"><ellipse cx="22" cy="32" rx="14" ry="11" fill="#3e2723"/><path d="M34 32 C44 22,50 42,62 30" stroke="#3e2723" stroke-width="5" fill="none" stroke-linecap="round"/><circle cx="16" cy="28" r="3" fill="#fff"/></svg>';
+    const SVG_NYMPH = '<svg viewBox="0 0 64 64" aria-hidden="true"><g stroke="#5d4037" stroke-width="3" stroke-linecap="round"><path d="M26 22 L12 15 M26 26 L9 30 M27 30 L14 42 M38 22 L52 15 M38 26 L55 30 M37 30 L50 42"/></g><g fill="#6d4c41"><ellipse cx="32" cy="12" rx="9" ry="7"/><ellipse cx="32" cy="24" rx="7" ry="7"/><ellipse cx="32" cy="45" rx="9" ry="16"/></g><circle cx="27" cy="10" r="2.5" fill="#cddc39"/><circle cx="37" cy="10" r="2.5" fill="#cddc39"/></svg>';
+
+    const SPECIES = {
+        butterfly: { id: 'butterfly', name: '蝶蛾', icon: '🦋', tier: 1, chain: 0, diet: '植物葉片、花蜜' },
+        mosquito:  { id: 'mosquito',  name: '蚊蠅', icon: '🦟', tier: 1, chain: 1, diet: '植物汁液、有機碎屑' },
+        tadpole:   { id: 'tadpole',   name: '蝌蚪', svg: SVG_TADPOLE, tier: 1, chain: 2, diet: '水中藻類' },
+        wasp:      { id: 'wasp',      name: '胡蜂', icon: '🐝', tier: 2, chain: 0, diet: '蝶蛾幼蟲（毛蟲）' },
+        frog:      { id: 'frog',      name: '赤蛙', icon: '🐸', tier: 2, chain: 1, diet: '蚊蠅等小型昆蟲' },
+        nymph:     { id: 'nymph',     name: '水蠆', svg: SVG_NYMPH, tier: 2, chain: 2, diet: '蝌蚪、孑孓' },
+        spider:    { id: 'spider',    name: '蜘蛛', icon: '🕷️', tier: 3, chain: 0, diet: '胡蜂等昆蟲' },
+        rail:      { id: 'rail',      name: '秧雞', icon: '🐦', tier: 3, chain: 1, diet: '赤蛙、昆蟲' },
+        turtle:    { id: 'turtle',    name: '斑龜', icon: '🐢', tier: 3, chain: 2, diet: '水蠆、小魚' }
+    };
+
+    const CHAINS = [
+        { name: '陸生昆蟲鏈', emoji: '🌾', bottom: 'butterfly', mid: 'wasp', top: 'spider' },
+        { name: '濕地飛蟲鏈', emoji: '💧', bottom: 'mosquito', mid: 'frog', top: 'rail' },
+        { name: '池塘水生鏈', emoji: '🫧', bottom: 'tadpole', mid: 'nymph', top: 'turtle' }
+    ];
+
+    const TIER_NAME = { 1: '初級消費者', 2: '次級消費者', 3: '高級消費者' };
+    const DICE_FACES = ['butterfly', 'mosquito', 'tadpole', 'wasp', 'frog', 'nymph'];
+    const CARD_TYPES = ['wasp', 'frog', 'nymph', 'spider', 'rail', 'turtle'];
+    const DICE_COUNT = 8;
+    const SEASONS = 3;
+    const TURNS_PER_SEASON = 3;
+
+    // 10% 法則模型：獵物體內所含能量（kJ），以及傳遞效率
+    const PREY_ENERGY = { 1: 100, 2: 10 };
+    const TRANSFER_RATE = 0.1;
+
+    function shuffle(arr, rng) {
+        const a = arr.slice();
+        for (let i = a.length - 1; i > 0; i--) {
+            const j = Math.floor(rng() * (i + 1));
+            [a[i], a[j]] = [a[j], a[i]];
+        }
+        return a;
+    }
+
+    function rollDiceSet(rng, count) {
+        const dice = {};
+        DICE_FACES.forEach(f => { dice[f] = 0; });
+        for (let i = 0; i < (count || DICE_COUNT); i++) {
+            dice[DICE_FACES[Math.floor(rng() * DICE_FACES.length)]]++;
+        }
+        return dice;
+    }
+
+    /**
+     * 結算一回合。
+     * @param {Object} dice  {speciesId: 數量}
+     * @param {Array}  plays [{player: 玩家索引, card: speciesId}]
+     * @param {Function} rng 亂數（決定平分不盡時哪幾張卡被吃）
+     * @returns {{gains, energy, events, eatenPlays, remaining}}
+     */
+    function resolveTurn(dice, plays, rng) {
+        rng = rng || Math.random;
+        const gains = {};
+        const energy = {};
+        const events = [];
+        const eatenPlays = new Set();
+        const remaining = Object.assign({}, dice);
+
+        plays.forEach(p => { gains[p.player] = 0; energy[p.player] = 0; });
+        const indexed = plays.map((p, i) => ({ player: p.player, card: p.card, i }));
+
+        CHAINS.forEach((ch, c) => {
+            const tops = indexed.filter(p => p.card === ch.top);
+            const mids = shuffle(indexed.filter(p => p.card === ch.mid), rng);
+
+            // (a) 高級消費者先吃次級消費者（卡牌優先，再吃骰子）
+            if (tops.length > 0) {
+                const midDice = remaining[ch.mid] || 0;
+                const preyTotal = mids.length + midDice;
+                const share = Math.floor(preyTotal / tops.length);
+                const totalEaten = share * tops.length;
+                const cardsEaten = Math.min(mids.length, totalEaten);
+                const diceEaten = totalEaten - cardsEaten;
+                const victims = mids.slice(0, cardsEaten);
+
+                victims.forEach(v => eatenPlays.add(v.i));
+                remaining[ch.mid] = midDice - diceEaten;
+                tops.forEach(t => {
+                    gains[t.player] += share;
+                    energy[t.player] += share * PREY_ENERGY[2] * TRANSFER_RATE;
+                });
+                events.push({
+                    type: 'top', chain: c, predator: ch.top, prey: ch.mid,
+                    eaters: tops.map(t => t.player), share,
+                    cardsEaten, diceEaten,
+                    victims: victims.map(v => v.player),
+                    leftover: preyTotal - totalEaten
+                });
+            }
+
+            // (b) 存活的次級消費者吃初級消費者骰子
+            const survivors = mids.filter(m => !eatenPlays.has(m.i));
+            if (survivors.length > 0) {
+                const bottomDice = remaining[ch.bottom] || 0;
+                const share = Math.floor(bottomDice / survivors.length);
+                remaining[ch.bottom] = bottomDice - share * survivors.length;
+                survivors.forEach(s => {
+                    gains[s.player] += share;
+                    energy[s.player] += share * PREY_ENERGY[1] * TRANSFER_RATE;
+                });
+                events.push({
+                    type: 'mid', chain: c, predator: ch.mid, prey: ch.bottom,
+                    eaters: survivors.map(s => s.player), share,
+                    cardsEaten: 0, diceEaten: share * survivors.length,
+                    victims: [],
+                    leftover: bottomDice - share * survivors.length
+                });
+            }
+        });
+
+        return { gains, energy, events, eatenPlays: Array.from(eatenPlays), remaining };
+    }
+
+    /**
+     * 電腦選牌：蒙地卡羅模擬（對手從其手牌中隨機出牌），選期望得分最高的卡。
+     * hands: 每位玩家的手牌陣列。
+     */
+    function aiChooseCard(playerIdx, hands, dice, rng, samples) {
+        rng = rng || Math.random;
+        samples = samples || 150;
+        const myHand = hands[playerIdx];
+        let best = myHand[0];
+        let bestValue = -Infinity;
+
+        myHand.forEach(card => {
+            let total = 0;
+            for (let s = 0; s < samples; s++) {
+                const plays = hands.map((h, i) => ({
+                    player: i,
+                    card: i === playerIdx ? card : h[Math.floor(rng() * h.length)]
+                }));
+                total += resolveTurn(dice, plays, rng).gains[playerIdx];
+            }
+            const value = total / samples + rng() * 0.25; // 少許隨機，避免太好預測
+            if (value > bestValue) {
+                bestValue = value;
+                best = card;
+            }
+        });
+        return best;
+    }
+
+    const Engine = {
+        SPECIES, CHAINS, TIER_NAME, DICE_FACES, CARD_TYPES, DICE_COUNT,
+        SEASONS, TURNS_PER_SEASON, PREY_ENERGY, TRANSFER_RATE,
+        rollDiceSet, resolveTurn, aiChooseCard, shuffle
+    };
+
+    if (typeof module !== 'undefined' && module.exports) {
+        module.exports = Engine;
+    }
+    root.OmNomNomEngine = Engine;
+
+    if (typeof document === 'undefined') return;
+
+    // =========================================================================
+    // 2. 音效（Web Audio API 合成，無需音檔）
+    // =========================================================================
     let audioCtx = null;
     let soundEnabled = true;
 
     function initAudio() {
         if (!audioCtx) {
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            if (AudioContext) {
-                audioCtx = new AudioContext();
-            }
+            const AC = window.AudioContext || window.webkitAudioContext;
+            if (AC) audioCtx = new AC();
         }
-        if (audioCtx && audioCtx.state === 'suspended') {
-            audioCtx.resume();
-        }
+        if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
     }
 
     function playTone(freq, type, duration, delay = 0, gainLevel = 0.15) {
@@ -39,16 +204,12 @@
             const now = audioCtx.currentTime + delay;
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
-
             osc.type = type;
             osc.frequency.setValueAtTime(freq, now);
-
             gain.gain.setValueAtTime(gainLevel, now);
             gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
-
             osc.connect(gain);
             gain.connect(audioCtx.destination);
-
             osc.start(now);
             osc.stop(now + duration);
         } catch (e) {
@@ -57,751 +218,502 @@
     }
 
     function playDiceRattle() {
-        // Multi-frequency rattle sound for dice rolling
-        for (let i = 0; i < 4; i++) {
-            const f = 200 + Math.random() * 250;
-            playTone(f, 'triangle', 0.06, i * 0.07, 0.12);
-        }
+        for (let i = 0; i < 5; i++) playTone(200 + Math.random() * 250, 'triangle', 0.06, i * 0.07, 0.12);
     }
-
-    function playHop(stepIndex = 0) {
-        // Rising pitch blip as pawn hops across tiles
-        const baseFreq = 300 + (stepIndex % 6) * 40;
-        playTone(baseFreq, 'sine', 0.12, 0, 0.2);
-    }
-
+    function playCardFlip() { playTone(520, 'sine', 0.08, 0, 0.15); playTone(780, 'sine', 0.08, 0.06, 0.12); }
     function playEatChime() {
-        // Cheerful C5-E5-G5 bite/arpeggio chime
-        playTone(523.25, 'sine', 0.15, 0, 0.22);    // C5
-        playTone(659.25, 'sine', 0.18, 0.08, 0.25); // E5
-        playTone(783.99, 'sine', 0.25, 0.16, 0.28); // G5
+        playTone(523.25, 'sine', 0.15, 0, 0.22);
+        playTone(659.25, 'sine', 0.18, 0.08, 0.25);
+        playTone(783.99, 'sine', 0.25, 0.16, 0.28);
     }
-
-    function playLapFanfare() {
-        // Migration lap completion arpeggio
-        playTone(392.00, 'triangle', 0.12, 0, 0.2);    // G4
-        playTone(523.25, 'triangle', 0.12, 0.08, 0.22); // C5
-        playTone(659.25, 'triangle', 0.15, 0.16, 0.25); // E5
-        playTone(783.99, 'triangle', 0.3, 0.24, 0.3);   // G5
+    function playEatenSound() { playTone(190, 'sawtooth', 0.12, 0, 0.2); playTone(140, 'sawtooth', 0.22, 0.1, 0.22); }
+    function playSeasonFanfare() {
+        [392.0, 523.25, 659.25, 783.99].forEach((f, i) => playTone(f, 'triangle', 0.15, i * 0.08, 0.22));
     }
-
-    function playHazardSound() {
-        // Warning buzz for predator encounter
-        playTone(190, 'sawtooth', 0.12, 0, 0.2);
-        playTone(140, 'sawtooth', 0.22, 0.1, 0.22);
-    }
-
     function playVictoryChime() {
-        // Triumphant victory fanfare
-        const notes = [523.25, 659.25, 783.99, 1046.50, 1318.51];
-        notes.forEach((freq, idx) => {
-            playTone(freq, 'triangle', 0.3, idx * 0.12, 0.25);
-        });
+        [523.25, 659.25, 783.99, 1046.5, 1318.51].forEach((f, i) => playTone(f, 'triangle', 0.3, i * 0.12, 0.25));
     }
 
-    // -------------------------------------------------------------------------
-    // 2. 9-Tile Ecological Board Path Mapping
-    // -------------------------------------------------------------------------
-    // Coordinates match the 3x3 grid:
-    // col 0: 陸生昆蟲鏈, col 1: 濕地飛蟲鏈, col 2: 池塘水生鏈
-    // row 0: 高級掠食者, row 1: 次級消費者, row 2: 初級消費者
-    const boardPath = [
-        { col: 0, row: 2, name: "蝶蛾", icon: "🦋", trophic: "初級消費者", tier: 1, energy: 15, chain: "陸生昆蟲鏈", desc: "採集花蜜嫩葉" },
-        { col: 1, row: 2, name: "蚊蠅", icon: "🪰", trophic: "初級消費者", tier: 1, energy: 15, chain: "濕地飛蟲鏈", desc: "攝食腐殖有機質" },
-        { col: 2, row: 2, name: "蝌蚪", icon: "🫧", trophic: "初級消費者", tier: 1, energy: 15, chain: "池塘水生鏈", desc: "水中啃食綠藻" },
-        { col: 2, row: 1, name: "水蠆", icon: "🪲", trophic: "次級消費者", tier: 2, energy: 25, chain: "池塘水生鏈", desc: "伏擊捕食蝌蚪" },
-        { col: 1, row: 1, name: "赤蛙", icon: "🐸", trophic: "次級消費者", tier: 2, energy: 25, chain: "濕地飛蟲鏈", desc: "彈舌捕食飛蟲" },
-        { col: 0, row: 1, name: "胡蜂", icon: "🐝", trophic: "次級消費者", tier: 2, energy: 25, chain: "陸生昆蟲鏈", desc: "狩獵毛蟲與幼蟲" },
-        { col: 0, row: 0, name: "蜘蛛", icon: "🕷️", trophic: "高級消費者", tier: 3, energy: 35, chain: "陸生昆蟲鏈", desc: "結網伏擊昆蟲" },
-        { col: 1, row: 0, name: "秧雞", icon: "🦤", trophic: "高級消費者", tier: 3, energy: 35, chain: "濕地飛蟲鏈", desc: "涉水獵食赤蛙" },
-        { col: 2, row: 0, name: "斑龜", icon: "🐢", trophic: "高級消費者", tier: 3, energy: 35, chain: "池塘水生鏈", desc: "水棲頂級掠食" }
-    ];
+    // =========================================================================
+    // 3. 遊戲狀態
+    // =========================================================================
+    const PLAYER_COLORS = ['#1e88e5', '#e53935', '#8e24aa', '#ef6c00'];
+    const PLAYER_NAMES = ['你', '電腦 A', '電腦 B', '電腦 C'];
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-    // Grid definition for backward compatibility and rendering
-    window.grid = [
-        ["蜘蛛", "胡蜂", "蝶蛾"],
-        ["秧雞", "赤蛙", "蚊蠅"],
-        ["斑龜", "水蠆", "蝌蚪"]
-    ];
-
-    // -------------------------------------------------------------------------
-    // 3. Canvas & Game State
-    // -------------------------------------------------------------------------
-    const canvas = document.getElementById("canvas");
-    const ctx = canvas.getContext("2d");
-
-    canvas.width = 700;
-    canvas.height = 600;
-
-    const gridSize = 3;
-    const cellVspace = 14;
-    const cellHspace = 14;
-    const handsHspace = 14;
-    const handsVspace = 14;
-    const handsWidth = 140;
-    const handsHeight = canvas.height - 2 * handsVspace;
-
-    const cellWidth = (canvas.width - handsWidth - (gridSize + 1) * cellHspace) / gridSize;
-    const cellHeight = (canvas.height - (gridSize + 1) * cellVspace) / gridSize;
-
-    // Game Variables
-    let playerPos = 0;       // 0 to 8 on boardPath
-    let playerEnergy = 10;   // starts with 10 energy points
-    const maxEnergy = 100;
-    let lapCount = 1;        // starts at Lap 1
-    const maxLaps = 5;
-    let turnCount = 0;
+    let players = [];
+    let season = 1;
+    let turn = 1;
+    let dice = null;
+    let plays = [];          // 本回合揭曉的出牌
+    let eatenSet = new Set();
+    let selectedCard = null;
+    let phase = 'setup';     // setup | roll | choose | resolve | over
     let isRolling = false;
-    let isMoving = false;
-    let isGameOver = false;
+    let opponentCount = 2;
 
-    // Floating text particle effects on canvas
-    let particles = [];
+    // DOM
+    const $ = id => document.getElementById(id);
+    const setupPanel = $('setupPanel');
+    const gamePanel = $('gamePanel');
+    const startBtn = $('startBtn');
+    const boardEl = $('board');
+    const handEl = $('hand');
+    const diceBtn = $('diceBtn');
+    const revealBtn = $('revealBtn');
+    const diceFace = $('diceFace');
+    const diceResult = $('diceResult');
+    const roundDisplay = $('roundDisplay');
+    const playerScoresEl = $('playerScores');
+    const energyPanel = $('energyPanel');
+    const statusBanner = $('statusBanner');
+    const eventLog = $('eventLog');
+    const rulesBtn = $('rulesBtn');
+    const rulesModal = $('rulesModal');
+    const closeModalBtn = $('closeModalBtn');
+    const modalUnderstoodBtn = $('modalUnderstoodBtn');
+    const victoryModal = $('victoryModal');
+    const playAgainBtn = $('playAgainBtn');
+    const resetBtn = $('resetBtn');
+    const soundBtn = $('soundBtn');
 
-    // DOM Elements
-    const diceBtn = document.getElementById('diceBtn');
-    const diceResult = document.getElementById('diceResult');
-    const diceFace = document.getElementById('diceFace');
-    const energyDisplay = document.getElementById('energyDisplay');
-    const energyMeterBar = document.getElementById('energyMeterBar');
-    const lapDisplay = document.getElementById('lapDisplay');
-    const turnDisplay = document.getElementById('turnDisplay');
-    const currentTileDisplay = document.getElementById('currentTileDisplay');
-    const statusBanner = document.getElementById('statusBanner');
-    const eventLog = document.getElementById('eventLog');
-    const eventCountBadge = document.getElementById('eventCountBadge');
+    function iconHTML(sp, cls) {
+        return `<span class="sp-icon ${cls || ''}">${sp.svg || sp.icon}</span>`;
+    }
+    function playerTag(idx) {
+        const p = players[idx];
+        return `<span class="ptag" style="--pc:${p.color}">${p.name}</span>`;
+    }
+    function names(idxs) { return idxs.map(playerTag).join('、'); }
 
-    // Rules Modal Elements
-    const rulesBtn = document.getElementById('rulesBtn');
-    const rulesModal = document.getElementById('rulesModal');
-    const closeModalBtn = document.getElementById('closeModalBtn');
-    const modalUnderstoodBtn = document.getElementById('modalUnderstoodBtn');
-
-    // Victory Modal Elements
-    const victoryModal = document.getElementById('victoryModal');
-    const playAgainBtn = document.getElementById('playAgainBtn');
-    const resetBtn = document.getElementById('resetBtn');
-    const soundBtn = document.getElementById('soundBtn');
-
-    // -------------------------------------------------------------------------
-    // 4. Scoreboard & Event Log Updates
-    // -------------------------------------------------------------------------
-    function updateScoreboard() {
-        if (energyDisplay) {
-            energyDisplay.innerHTML = `<strong>${playerEnergy}</strong> / ${maxEnergy} 點`;
-        }
-        if (energyMeterBar) {
-            const percent = Math.min(100, Math.max(0, (playerEnergy / maxEnergy) * 100));
-            energyMeterBar.style.width = `${percent}%`;
-            if (percent >= 80) {
-                energyMeterBar.style.background = 'linear-gradient(90deg, #ffb300, #00e676)';
-            } else if (percent <= 20) {
-                energyMeterBar.style.background = 'linear-gradient(90deg, #e53935, #ffb300)';
-            } else {
-                energyMeterBar.style.background = 'linear-gradient(90deg, #43a047, #00e676)';
+    // =========================================================================
+    // 4. 畫面繪製
+    // =========================================================================
+    function buildBoard() {
+        boardEl.innerHTML = '';
+        // 欄標題
+        CHAINS.forEach(ch => {
+            const h = document.createElement('div');
+            h.className = 'chain-header';
+            h.textContent = `${ch.emoji} ${ch.name}`;
+            boardEl.appendChild(h);
+        });
+        // 由上到下：高級、次級、初級
+        ['top', 'mid', 'bottom'].forEach(level => {
+            CHAINS.forEach((ch, c) => {
+                const sp = SPECIES[ch[level]];
+                const cell = document.createElement('div');
+                cell.className = `cell tier-${sp.tier}`;
+                cell.id = `cell-${sp.id}`;
+                cell.innerHTML = `
+                    <div class="cell-head">
+                        ${iconHTML(sp)}
+                        <div class="cell-title">
+                            <strong>${sp.name}</strong>
+                            <small>${TIER_NAME[sp.tier]}・吃${sp.diet}</small>
+                        </div>
+                    </div>
+                    <div class="cell-dice" id="dice-${sp.id}"></div>
+                    <div class="cell-cards" id="cards-${sp.id}"></div>
+                    <div class="cell-badge" id="badge-${sp.id}"></div>`;
+                boardEl.appendChild(cell);
+            });
+            if (level !== 'bottom') {
+                CHAINS.forEach(() => {
+                    const arrow = document.createElement('div');
+                    arrow.className = 'flow-arrow';
+                    arrow.setAttribute('aria-hidden', 'true');
+                    arrow.innerHTML = '▲ <small>能量 10%</small>';
+                    boardEl.appendChild(arrow);
+                });
             }
-        }
-        if (lapDisplay) {
-            lapDisplay.innerHTML = `第 <strong>${lapCount}</strong> / ${maxLaps} 圈`;
-        }
-        if (turnDisplay) {
-            turnDisplay.innerHTML = `第 <strong>${turnCount}</strong> 回合`;
-        }
-        if (currentTileDisplay) {
-            const tile = boardPath[playerPos];
-            currentTileDisplay.textContent = `${tile.icon} ${tile.name} (${tile.trophic.slice(0, 2)})`;
-        }
+        });
     }
 
-    function logEvent(message, type = 'predation') {
-        if (statusBanner) {
-            statusBanner.textContent = message;
-        }
-        if (!eventLog) return;
+    function renderDice() {
+        DICE_FACES.forEach(id => {
+            const el = $(`dice-${id}`);
+            if (!el) return;
+            el.innerHTML = '';
+            const n = dice ? dice[id] : 0;
+            for (let i = 0; i < n; i++) {
+                const d = document.createElement('span');
+                d.className = 'die';
+                d.innerHTML = SPECIES[id].svg || SPECIES[id].icon;
+                el.appendChild(d);
+            }
+        });
+    }
 
+    function renderPlayedCards() {
+        CARD_TYPES.forEach(id => { const el = $(`cards-${id}`); if (el) el.innerHTML = ''; });
+        plays.forEach((p, i) => {
+            const el = $(`cards-${p.card}`);
+            if (!el) return;
+            const card = document.createElement('span');
+            card.className = 'mini-card' + (eatenSet.has(i) ? ' eaten' : '');
+            card.style.setProperty('--pc', players[p.player].color);
+            card.textContent = players[p.player].name;
+            card.title = eatenSet.has(i) ? '這張卡被吃掉了' : '';
+            el.appendChild(card);
+        });
+    }
+
+    function clearBadges() {
+        document.querySelectorAll('.cell-badge').forEach(b => { b.textContent = ''; b.className = 'cell-badge'; });
+        document.querySelectorAll('.cell').forEach(c => c.classList.remove('flash-eat', 'flash-eaten'));
+    }
+
+    function renderHand() {
+        handEl.innerHTML = '';
+        const me = players[0];
+        CARD_TYPES.forEach(id => {
+            const sp = SPECIES[id];
+            const owned = me.hand.includes(id);
+            const btn = document.createElement('button');
+            btn.className = `hand-card tier-${sp.tier}` + (selectedCard === id ? ' selected' : '') + (owned ? '' : ' used');
+            btn.disabled = !owned || phase !== 'choose';
+            btn.setAttribute('aria-pressed', selectedCard === id ? 'true' : 'false');
+            btn.innerHTML = `
+                ${iconHTML(sp, 'big')}
+                <strong>${sp.name}</strong>
+                <small>${TIER_NAME[sp.tier]}</small>
+                <small class="eats">吃：${SPECIES[sp.tier === 3 ? CHAINS[sp.chain].mid : CHAINS[sp.chain].bottom].name}</small>
+                ${owned ? '' : '<span class="used-label">已出</span>'}`;
+            btn.addEventListener('click', () => selectCard(id));
+            handEl.appendChild(btn);
+        });
+    }
+
+    function renderScores() {
+        playerScoresEl.innerHTML = players.map((p, i) => `
+            <div class="score-card player-card" style="--pc:${p.color}">
+                <span class="score-label">${p.isHuman ? '🙋' : '🤖'} ${p.name}</span>
+                <span class="score-value"><strong id="score-${i}">${p.score}</strong> 分</span>
+                <span class="score-sub">同化 ${fmt(p.energy)} kJ ・手牌 ${p.hand.length}</span>
+            </div>`).join('');
+        roundDisplay.textContent = `第 ${season} / ${SEASONS} 季・第 ${turn} / ${TURNS_PER_SEASON} 回合`;
+    }
+
+    function fmt(n) { return Number.isInteger(n) ? String(n) : n.toFixed(1); }
+
+    function logEvent(html, type) {
+        statusBanner.innerHTML = html;
         const item = document.createElement('div');
-        item.className = `log-item log-${type}`;
-        item.innerHTML = `<strong>[第 ${turnCount} 回合]</strong> ${message}`;
+        item.className = `log-item log-${type || 'info'}`;
+        item.innerHTML = `<strong>[${season}-${turn}]</strong> ${html}`;
         eventLog.insertBefore(item, eventLog.firstChild);
+        while (eventLog.children.length > 40) eventLog.removeChild(eventLog.lastChild);
+    }
 
-        // Limit log entries
-        while (eventLog.children.length > 20) {
-            eventLog.removeChild(eventLog.lastChild);
+    function updateButtons() {
+        diceBtn.disabled = isRolling || phase !== 'roll';
+        revealBtn.disabled = phase !== 'choose' || !selectedCard;
+    }
+
+    // =========================================================================
+    // 5. 遊戲流程
+    // =========================================================================
+    function startGame(n) {
+        initAudio();
+        opponentCount = n;
+        players = [];
+        for (let i = 0; i <= n; i++) {
+            players.push({
+                name: PLAYER_NAMES[i], color: PLAYER_COLORS[i], isHuman: i === 0,
+                hand: CARD_TYPES.slice(), score: 0, energy: 0,
+                ateBottom: 0, ateMid: 0, lostCards: 0
+            });
         }
+        season = 1; turn = 1; dice = null; plays = []; eatenSet = new Set();
+        selectedCard = null; phase = 'roll'; isRolling = false;
+
+        setupPanel.hidden = true;
+        gamePanel.hidden = false;
+        victoryModal.style.display = 'none';
+        eventLog.innerHTML = '';
+        energyPanel.innerHTML = '<p class="muted">揭曉後，這裡會計算每次「吃」實際同化了多少能量。</p>';
+        diceFace.textContent = '🎲';
+        diceResult.textContent = '按「擲骰」產生本回合的獵物。';
+
+        buildBoard();
+        renderDice();
+        renderHand();
+        renderScores();
+        updateButtons();
+        logEvent(`遊戲開始！你和 ${n} 位電腦對手在濕地中搶食。`, 'season');
     }
-
-    function addParticle(x, y, text, color = '#2e7d32') {
-        particles.push({
-            x: x,
-            y: y,
-            text: text,
-            color: color,
-            alpha: 1.0,
-            vy: -1.2,
-            life: 45
-        });
-    }
-
-    // -------------------------------------------------------------------------
-    // 5. Board Rendering Engine (Canvas)
-    // -------------------------------------------------------------------------
-    function getTileCenter(col, row) {
-        const x = handsHspace + handsWidth + col * cellWidth + (col + 1) * cellHspace;
-        const y = row * cellHeight + (row + 1) * cellVspace;
-        return {
-            x: x + cellWidth / 2,
-            y: y + cellHeight / 2,
-            left: x,
-            top: y
-        };
-    }
-
-    function drawBoard() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        // 1. Draw Left Hand / Dashboard Column
-        drawHands();
-
-        // 2. Draw Column Zone Backgrounds & Food Web Arrows
-        drawEcologicalZones();
-
-        // 3. Draw 9 Species Cell Cards
-        drawGridCells();
-
-        // 4. Draw Traversal Route Arrows
-        drawRoutePath();
-
-        // 5. Draw Glowing Player Pawn Token
-        drawPlayerPawn();
-
-        // 6. Draw Animated Particles
-        drawParticles();
-    }
-
-    function drawHands() {
-        ctx.save();
-        // Left Column Panel Container
-        const x = handsHspace;
-        const y = handsVspace;
-        const w = handsWidth;
-        const h = handsHeight;
-
-        // Background
-        ctx.fillStyle = "#ffffff";
-        ctx.shadowColor = "rgba(0, 0, 0, 0.08)";
-        ctx.shadowBlur = 8;
-        ctx.beginPath();
-        roundRect(ctx, x, y, w, h, 12);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-
-        // Border
-        ctx.strokeStyle = "#80cbc4";
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        // Header Title
-        ctx.fillStyle = "#004d40";
-        ctx.font = "bold 15px -apple-system, sans-serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "top";
-        ctx.fillText("🌿 濕地生態導覽", x + w / 2, y + 14);
-
-        // Trophic Level Color Badges
-        const badges = [
-            { label: "高級掠食者", color: "#c62828", bg: "#ffebee", y: y + 50 },
-            { label: "次級消費者", color: "#7b1fa2", bg: "#f3e5f5", y: y + 215 },
-            { label: "初級消費者", color: "#2e7d32", bg: "#e8f5e9", y: y + 380 }
-        ];
-
-        badges.forEach(b => {
-            ctx.fillStyle = b.bg;
-            roundRect(ctx, x + 12, b.y, w - 24, 28, 6);
-            ctx.fill();
-            ctx.strokeStyle = b.color;
-            ctx.lineWidth = 1;
-            ctx.stroke();
-
-            ctx.fillStyle = b.color;
-            ctx.font = "bold 12px -apple-system, sans-serif";
-            ctx.fillText(b.label, x + w / 2, b.y + 7);
-        });
-
-        // Instructions
-        ctx.fillStyle = "#546e7a";
-        ctx.font = "11px -apple-system, sans-serif";
-        ctx.fillText("擲骰走訪9大物種", x + w / 2, y + 510);
-        ctx.fillText("累積100點能量獲勝", x + w / 2, y + 528);
-
-        ctx.restore();
-    }
-
-    function drawEcologicalZones() {
-        ctx.save();
-        const colNames = ["陸生昆蟲鏈 🌾", "濕地飛蟲鏈 💧", "池塘水生鏈 🫧"];
-        const colBgColors = ["rgba(255, 248, 225, 0.6)", "rgba(224, 247, 250, 0.6)", "rgba(227, 242, 253, 0.6)"];
-
-        for (let col = 0; col < 3; col++) {
-            const x = handsHspace + handsWidth + col * cellWidth + (col + 1) * cellHspace;
-            const w = cellWidth;
-            const y = cellVspace;
-            const h = canvas.height - 2 * cellVspace;
-
-            ctx.fillStyle = colBgColors[col];
-            roundRect(ctx, x, y, w, h, 10);
-            ctx.fill();
-
-            // Column Header Banner at Top
-            ctx.fillStyle = "rgba(0, 77, 64, 0.75)";
-            ctx.font = "bold 12px -apple-system, sans-serif";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "top";
-            ctx.fillText(colNames[col], x + w / 2, y + 2);
-        }
-        ctx.restore();
-    }
-
-    function drawGridCells() {
-        ctx.save();
-        for (let idx = 0; idx < boardPath.length; idx++) {
-            const tile = boardPath[idx];
-            const coord = getTileCenter(tile.col, tile.row);
-            const x = coord.left;
-            const y = coord.top;
-            const w = cellWidth;
-            const h = cellHeight;
-
-            // Card background based on trophic tier
-            let cardBg = "#ffffff";
-            let borderColor = "#cfd8dc";
-            let trophicBadgeColor = "#2e7d32";
-            let trophicBadgeBg = "#e8f5e9";
-
-            if (tile.tier === 3) {
-                cardBg = "#fff8f8";
-                borderColor = "#ef9a9a";
-                trophicBadgeColor = "#c62828";
-                trophicBadgeBg = "#ffebee";
-            } else if (tile.tier === 2) {
-                cardBg = "#fbf7fd";
-                borderColor = "#ce93d8";
-                trophicBadgeColor = "#7b1fa2";
-                trophicBadgeBg = "#f3e5f5";
-            } else {
-                cardBg = "#f7fbf7";
-                borderColor = "#a5d6a7";
-                trophicBadgeColor = "#2e7d32";
-                trophicBadgeBg = "#e8f5e9";
-            }
-
-            // Draw Card Container
-            ctx.fillStyle = cardBg;
-            ctx.shadowColor = "rgba(0, 0, 0, 0.06)";
-            ctx.shadowBlur = 6;
-            ctx.beginPath();
-            roundRect(ctx, x, y, w, h, 10);
-            ctx.fill();
-            ctx.shadowBlur = 0;
-
-            // Border
-            ctx.strokeStyle = borderColor;
-            ctx.lineWidth = 2;
-            ctx.stroke();
-
-            // Tile Path Index Badge in Top Left
-            ctx.fillStyle = "#78909c";
-            ctx.font = "bold 11px -apple-system, sans-serif";
-            ctx.textAlign = "start";
-            ctx.textBaseline = "top";
-            ctx.fillText(`格位 ${idx}`, x + 8, y + 8);
-
-            // Trophic Badge in Top Right
-            ctx.fillStyle = trophicBadgeBg;
-            roundRect(ctx, x + w - 58, y + 6, 50, 18, 4);
-            ctx.fill();
-            ctx.fillStyle = trophicBadgeColor;
-            ctx.font = "bold 10px -apple-system, sans-serif";
-            ctx.textAlign = "center";
-            ctx.fillText(tile.trophic.slice(0, 2), x + w - 33, y + 8);
-
-            // Large Organism Icon / Emoji
-            ctx.font = "38px -apple-system, sans-serif";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillText(tile.icon, x + w / 2, y + h / 2 - 12);
-
-            // Organism Name
-            ctx.fillStyle = "#263238";
-            ctx.font = "bold 16px -apple-system, sans-serif";
-            ctx.fillText(tile.name, x + w / 2, y + h / 2 + 22);
-
-            // Description / Energy value
-            ctx.fillStyle = "#607d8b";
-            ctx.font = "11px -apple-system, sans-serif";
-            ctx.fillText(`+${tile.energy}⚡ ${tile.desc}`, x + w / 2, y + h - 18);
-        }
-        ctx.restore();
-    }
-
-    function drawRoutePath() {
-        // Draw dotted path lines between successive tiles along the 9-tile loop
-        ctx.save();
-        ctx.strokeStyle = "rgba(0, 150, 136, 0.35)";
-        ctx.lineWidth = 3;
-        ctx.setLineDash([6, 6]);
-
-        ctx.beginPath();
-        for (let i = 0; i < boardPath.length; i++) {
-            const from = getTileCenter(boardPath[i].col, boardPath[i].row);
-            const nextIdx = (i + 1) % boardPath.length;
-            const to = getTileCenter(boardPath[nextIdx].col, boardPath[nextIdx].row);
-
-            if (i === 0) ctx.moveTo(from.x, from.y);
-            ctx.lineTo(to.x, to.y);
-        }
-        ctx.stroke();
-        ctx.restore();
-    }
-
-    function drawPlayerPawn() {
-        ctx.save();
-        const currentTile = boardPath[playerPos];
-        const coord = getTileCenter(currentTile.col, currentTile.row);
-        const px = coord.x;
-        const py = coord.y - 14;
-
-        // Pulsating glowing outer aura
-        const time = Date.now() / 250;
-        const glowRadius = 32 + Math.sin(time) * 4;
-
-        const grad = ctx.createRadialGradient(px, py, 10, px, py, glowRadius);
-        grad.addColorStop(0, "rgba(0, 230, 118, 0.75)");
-        grad.addColorStop(0.6, "rgba(0, 230, 118, 0.3)");
-        grad.addColorStop(1, "rgba(0, 230, 118, 0)");
-
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.arc(px, py, glowRadius, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Inner solid token
-        ctx.fillStyle = "#00c853";
-        ctx.shadowColor = "rgba(0, 0, 0, 0.35)";
-        ctx.shadowBlur = 8;
-        ctx.shadowOffsetY = 3;
-        ctx.beginPath();
-        ctx.arc(px, py, 20, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-
-        // White border
-        ctx.strokeStyle = "#ffffff";
-        ctx.lineWidth = 3;
-        ctx.stroke();
-
-        // Token Icon / Label
-        ctx.fillStyle = "#ffffff";
-        ctx.font = "bold 13px -apple-system, sans-serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText("探險", px, py);
-
-        ctx.restore();
-    }
-
-    function drawParticles() {
-        ctx.save();
-        for (let i = particles.length - 1; i >= 0; i--) {
-            const p = particles[i];
-            p.y += p.vy;
-            p.life--;
-            p.alpha = Math.max(0, p.life / 45);
-
-            ctx.globalAlpha = p.alpha;
-            ctx.fillStyle = p.color;
-            ctx.font = "bold 18px -apple-system, sans-serif";
-            ctx.textAlign = "center";
-            ctx.shadowColor = "rgba(0, 0, 0, 0.3)";
-            ctx.shadowBlur = 4;
-            ctx.fillText(p.text, p.x, p.y);
-
-            if (p.life <= 0) {
-                particles.splice(i, 1);
-            }
-        }
-        ctx.restore();
-    }
-
-    function roundRect(context, x, y, width, height, radius) {
-        context.beginPath();
-        context.moveTo(x + radius, y);
-        context.lineTo(x + width - radius, y);
-        context.quadraticCurveTo(x + width, y, x + width, y + radius);
-        context.lineTo(x + width, y + height - radius);
-        context.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-        context.lineTo(x + radius, y + height);
-        context.quadraticCurveTo(x, y + height, x, y + height - radius);
-        context.lineTo(x, y + radius);
-        context.quadraticCurveTo(x, y, x + radius, y);
-        context.closePath();
-    }
-
-    // Animation loop for continuous smooth pawn glow and floating text
-    function animLoop() {
-        drawBoard();
-        requestAnimationFrame(animLoop);
-    }
-
-    // -------------------------------------------------------------------------
-    // 6. Dice Rolling & Turn Engine
-    // -------------------------------------------------------------------------
-    const diceFaces = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 
     async function rollDice() {
-        if (isRolling || isMoving || isGameOver) return;
-        initAudio();
-
+        if (isRolling || phase !== 'roll') return;
         isRolling = true;
         diceBtn.disabled = true;
-        turnCount++;
-        updateScoreboard();
+        initAudio();
 
-        if (diceFace) diceFace.classList.add('dice-rolling');
-        if (diceResult) diceResult.textContent = '🎲 骰子旋轉中...';
-
+        plays = []; eatenSet = new Set(); selectedCard = null;
+        clearBadges();
+        renderPlayedCards();
         playDiceRattle();
+        diceFace.classList.add('dice-rolling');
+        diceResult.textContent = '🎲 擲骰中...';
 
-        // Animate dice faces over 350ms
-        let finalRoll = 1;
-        const rollDuration = 350;
-        const startTime = Date.now();
-
-        await new Promise(resolve => {
-            const interval = setInterval(() => {
-                const randomFaceIndex = Math.floor(Math.random() * 6);
-                finalRoll = randomFaceIndex + 1;
-                if (diceFace) diceFace.textContent = diceFaces[randomFaceIndex];
-
-                if (Date.now() - startTime >= rollDuration) {
-                    clearInterval(interval);
-                    resolve();
-                }
-            }, 60);
-        });
-
-        if (diceFace) {
-            diceFace.classList.remove('dice-rolling');
-            diceFace.textContent = diceFaces[finalRoll - 1];
+        const faces = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+        for (let k = 0; k < 6; k++) {
+            diceFace.textContent = faces[Math.floor(Math.random() * 6)];
+            dice = rollDiceSet(Math.random);
+            renderDice();
+            await sleep(70);
         }
+        diceFace.classList.remove('dice-rolling');
+        diceFace.textContent = '🎲';
 
-        if (diceResult) {
-            diceResult.textContent = `🎲 擲出 ${finalRoll} 點！探險者前進！`;
-        }
+        const summary = DICE_FACES.filter(f => dice[f] > 0).map(f => `${SPECIES[f].name}×${dice[f]}`).join('、');
+        diceResult.textContent = `擲出：${summary}。請從手牌選 1 張掠食者卡。`;
+        logEvent(`擲骰結果：${summary}`, 'info');
 
         isRolling = false;
-        isMoving = true;
-
-        // Move player forward finalRoll steps
-        await movePlayer(finalRoll);
+        phase = 'choose';
+        renderHand();
+        updateButtons();
     }
 
-    async function movePlayer(steps) {
-        for (let s = 1; s <= steps; s++) {
-            await new Promise(r => setTimeout(r, 220));
+    function selectCard(id) {
+        if (phase !== 'choose' || !players[0].hand.includes(id)) return;
+        selectedCard = selectedCard === id ? null : id;
+        playTone(selectedCard ? 660 : 330, 'sine', 0.06, 0, 0.12);
+        if (selectedCard) diceResult.textContent = `你選了「${SPECIES[id].name}」，按「出牌揭曉」。`;
+        renderHand();
+        updateButtons();
+    }
 
-            const prevPos = playerPos;
-            playerPos = (playerPos + 1) % boardPath.length;
+    async function reveal() {
+        if (phase !== 'choose' || !selectedCard) return;
+        phase = 'resolve';
+        updateButtons();
 
-            playHop(s);
-            updateScoreboard();
+        // 電腦根據「出牌前」的手牌同時決定
+        const handsBefore = players.map(p => p.hand.slice());
+        plays = players.map((p, i) => ({
+            player: i,
+            card: i === 0 ? selectedCard : aiChooseCard(i, handsBefore, dice, Math.random)
+        }));
+        plays.forEach(p => {
+            const h = players[p.player].hand;
+            h.splice(h.indexOf(p.card), 1);
+        });
 
-            // Check Ecological Migration Lap Wrap (from 8 to 0)
-            if (prevPos === 8 && playerPos === 0) {
-                lapCount++;
-                const bonus = 15;
-                playerEnergy += bonus;
-                playLapFanfare();
-                updateScoreboard();
+        playCardFlip();
+        renderPlayedCards();
+        renderHand();
+        logEvent('揭曉：' + plays.map(p => `${playerTag(p.player)} 出 ${SPECIES[p.card].name}`).join('，'), 'info');
+        await sleep(700);
 
-                const coord = getTileCenter(boardPath[playerPos].col, boardPath[playerPos].row);
-                addParticle(coord.x, coord.y - 20, `+${bonus}⚡ 循環獎勵!`, '#ff8f00');
-                logEvent(`🔄 完成第 ${lapCount - 1} 圈濕地生態大循環！獲得 +${bonus} 點遷徙生存能量！`, 'lap');
-            }
+        const result = resolveTurn(dice, plays, Math.random);
+        energyPanel.innerHTML = '';
+
+        if (result.events.length === 0) {
+            energyPanel.innerHTML = '<p class="muted">這回合沒有任何掠食發生。</p>';
         }
 
-        // Settled on tile: trigger predation / ecological interaction
-        await handleTileLanding();
+        for (const ev of result.events) {
+            await showEvent(ev, result);
+            await sleep(750);
+        }
+
+        // 套用分數與統計
+        players.forEach((p, i) => {
+            p.score += result.gains[i] || 0;
+            p.energy += result.energy[i] || 0;
+        });
+        result.events.forEach(ev => {
+            ev.eaters.forEach(i => {
+                if (ev.type === 'top') players[i].ateMid += ev.share; else players[i].ateBottom += ev.share;
+            });
+            ev.victims.forEach(i => { players[i].lostCards++; });
+        });
+        // 出牌但沒吃到東西的提示
+        plays.forEach((p, i) => {
+            if (!result.events.some(ev => ev.eaters.includes(p.player) && ev.predator === p.card) && !eatenSet.has(i)) {
+                logEvent(`${playerTag(p.player)} 的 ${SPECIES[p.card].name} 沒有吃到獵物。`, 'miss');
+            }
+        });
+
+        dice = result.remaining;
+        renderDice();
+        renderScores();
+        nextTurn();
     }
 
-    async function handleTileLanding() {
-        const tile = boardPath[playerPos];
-        const coord = getTileCenter(tile.col, tile.row);
+    async function showEvent(ev, result) {
+        const pred = SPECIES[ev.predator];
+        const prey = SPECIES[ev.prey];
+        const cell = $(`cell-${ev.predator}`);
+        const badge = $(`badge-${ev.predator}`);
 
-        // 20% probability for hazard encounter
-        const isHazard = Math.random() < 0.20;
+        if (ev.type === 'top' && ev.cardsEaten > 0) {
+            result.eatenPlays.forEach(i => {
+                if (plays[i].card === ev.prey) eatenSet.add(i);
+            });
+            renderPlayedCards();
+            const preyCell = $(`cell-${ev.prey}`);
+            if (preyCell) preyCell.classList.add('flash-eaten');
+            playEatenSound();
+        }
 
-        if (isHazard) {
-            const penalty = 5;
-            playerEnergy = Math.max(0, playerEnergy - penalty);
-            playHazardSound();
-            addParticle(coord.x, coord.y - 20, `-${penalty}⚠️ 天敵警戒`, '#c62828');
-            logEvent(`⚠️ 在【${tile.name}】格遭遇天敵巡邏防禦！機敏躲避，消耗 ${penalty} 點耐力。`, 'hazard');
-        } else {
-            const gain = tile.energy;
-            playerEnergy += gain;
+        if (ev.share > 0) {
+            cell.classList.add('flash-eat');
+            badge.textContent = `每位 +${ev.share}`;
+            badge.className = 'cell-badge show';
             playEatChime();
-            addParticle(coord.x, coord.y - 20, `+${gain}⚡ OmNomNom!`, '#2e7d32');
-
-            if (tile.tier === 1) {
-                logEvent(`🌱 停留在初級消費者【${tile.name}】：同化植物與有機碎屑能量，獲得 +${gain} 點能量！`, 'predation');
-            } else if (tile.tier === 2) {
-                logEvent(`🍽️ 停留在次級掠食者【${tile.name}】：大快朵頤（Om Nom Nom!）捕食初級獵物，獲得 +${gain} 點能量！`, 'predation');
-            } else {
-                logEvent(`🦅 停留在頂級掠食者【${tile.name}】：同化高階食物鏈能量，獲得 +${gain} 點能量！`, 'predation');
-            }
+        } else {
+            badge.textContent = '沒吃到';
+            badge.className = 'cell-badge show miss';
         }
 
-        updateScoreboard();
-
-        // Check Victory Condition
-        if (playerEnergy >= maxEnergy || lapCount >= maxLaps) {
-            isGameOver = true;
-            setTimeout(() => {
-                showVictoryModal();
-            }, 600);
+        // 日誌
+        let msg = `${names(ev.eaters)} 的 ${pred.name}`;
+        if (ev.share > 0) {
+            const parts = [];
+            if (ev.cardsEaten) parts.push(`${ev.cardsEaten} 張${prey.name}卡（${names(ev.victims)}）`);
+            if (ev.diceEaten) parts.push(`${ev.diceEaten} 顆${prey.name}骰`);
+            msg += ` 吃掉 ${parts.join(' 和 ')}`;
+            if (ev.eaters.length > 1) msg += `，${ev.eaters.length} 位平分，每位 ${ev.share} 隻`;
+            if (ev.leftover) msg += `，剩 ${ev.leftover} 隻分不完`;
+            msg += '。';
         } else {
-            isMoving = false;
-            diceBtn.disabled = false;
+            msg += ev.leftover
+                ? ` 想吃${prey.name}，但數量不夠平分（${ev.leftover} 隻 ÷ ${ev.eaters.length} 位），全部落空。`
+                : ` 沒有${prey.name}可以吃，餓肚子了。`;
+        }
+        logEvent(msg, ev.cardsEaten ? 'hazard' : 'predation');
+
+        // 能量計算
+        if (ev.share > 0) {
+            const intake = ev.share * PREY_ENERGY[prey.tier];
+            const gain = intake * TRANSFER_RATE;
+            const row = document.createElement('div');
+            row.className = `energy-row tier-${pred.tier}`;
+            row.innerHTML = `
+                <div class="er-title">${iconHTML(pred)} ${pred.name}（${names(ev.eaters)}）每位吃 ${ev.share} 隻${prey.name}</div>
+                <div class="er-calc">攝入 ${ev.share} × ${PREY_ENERGY[prey.tier]} = <b>${intake} kJ</b>
+                → 同化 ≈ <b class="gain">${fmt(gain)} kJ</b>（10%）
+                ，約 ${fmt(intake - gain)} kJ 以熱散失或未被利用</div>`;
+            energyPanel.appendChild(row);
         }
     }
 
-    function showVictoryModal() {
+    function nextTurn() {
+        turn++;
+        if (turn > TURNS_PER_SEASON) {
+            turn = 1;
+            season++;
+            if (season > SEASONS) {
+                season = SEASONS; turn = TURNS_PER_SEASON;
+                phase = 'over';
+                updateButtons();
+                setTimeout(showResults, 900);
+                return;
+            }
+            players.forEach(p => { p.hand = CARD_TYPES.slice(); });
+            playSeasonFanfare();
+            logEvent(`🍂 進入第 ${season} 季，所有人的手牌補滿 6 張！`, 'season');
+        }
+        phase = 'roll';
+        selectedCard = null;
+        diceResult.textContent = `第 ${season} 季第 ${turn} 回合：按「擲骰」繼續。`;
+        renderHand();
+        renderScores();
+        updateButtons();
+    }
+
+    function showResults() {
         playVictoryChime();
-        if (!victoryModal) return;
+        const ranking = players.map((p, i) => ({ p, i }))
+            .sort((a, b) => b.p.score - a.p.score || b.p.energy - a.p.energy);
+        const topScore = ranking[0].p.score;
+        const winners = ranking.filter(r => r.p.score === topScore);
+        const humanWon = winners.some(r => r.i === 0);
 
-        const finalEnergy = document.getElementById('finalEnergy');
-        const finalTurns = document.getElementById('finalTurns');
-        const finalLaps = document.getElementById('finalLaps');
-        const finalTitle = document.getElementById('finalTitle');
+        $('victoryTitle').textContent = humanWon ? '🏆 你是濕地頂級掠食者！' : '🌿 遊戲結束';
+        $('victoryMessage').innerHTML = humanWon
+            ? (winners.length > 1 ? '你與對手同分並列第一！' : '恭喜！你吃到最多獵物，贏得這局。')
+            : `${names(winners.map(w => w.i))} 獲勝，再接再厲！`;
 
-        if (finalEnergy) finalEnergy.textContent = `${playerEnergy} 點`;
-        if (finalTurns) finalTurns.textContent = `${turnCount} 回合`;
-        if (finalLaps) finalLaps.textContent = `${lapCount} 圈`;
+        $('resultTable').innerHTML = `
+            <thead><tr><th>名次</th><th>玩家</th><th>得分<br><small>（吃到隻數）</small></th>
+            <th>吃初級</th><th>吃次級</th><th>卡被吃</th><th>同化能量</th></tr></thead>
+            <tbody>${ranking.map((r, k) => `
+                <tr><td>${k + 1}</td><td>${playerTag(r.i)}</td><td><b>${r.p.score}</b></td>
+                <td>${r.p.ateBottom}</td><td>${r.p.ateMid}</td><td>${r.p.lostCards}</td>
+                <td>${fmt(r.p.energy)} kJ</td></tr>`).join('')}
+            </tbody>`;
 
-        let title = '濕地頂級掠食霸主';
-        if (turnCount <= 8) title = '⚡ 神速生態征服者';
-        else if (playerEnergy >= 120) title = '🏆 超級食物網食力王';
-        else if (lapCount >= 3) title = '🌊 濕地生態守護神';
+        const me = players[0];
+        const intakeBottom = me.ateBottom * PREY_ENERGY[1];
+        const intakeMid = me.ateMid * PREY_ENERGY[2];
+        $('energySummary').innerHTML = `
+            <h3>⚡ 你的能量帳本</h3>
+            <p>當次級消費者吃了 <b>${me.ateBottom}</b> 隻初級消費者：攝入 ${intakeBottom} kJ → 同化 ${fmt(intakeBottom * TRANSFER_RATE)} kJ</p>
+            <p>當高級消費者吃了 <b>${me.ateMid}</b> 隻次級消費者：攝入 ${intakeMid} kJ → 同化 ${fmt(intakeMid * TRANSFER_RATE)} kJ</p>
+            <p class="insight">💡 吃 1 隻獵物都算 1 分，但同化的能量差了 10 倍：每往上一個營養階層，大約只剩 10% 的能量能傳下去。所以高級消費者需要吃大量獵物，數量也最少。</p>`;
 
-        if (finalTitle) finalTitle.textContent = title;
         victoryModal.style.display = 'flex';
     }
 
-    function resetGame() {
-        initAudio();
-        playerPos = 0;
-        playerEnergy = 10;
-        lapCount = 1;
-        turnCount = 0;
-        isRolling = false;
-        isMoving = false;
-        isGameOver = false;
-        particles = [];
-
-        if (diceBtn) diceBtn.disabled = false;
-        if (diceFace) diceFace.textContent = '🎲';
-        if (diceResult) diceResult.textContent = '點擊下方按鈕擲骰出發！';
-        if (victoryModal) victoryModal.style.display = 'none';
-
-        if (eventLog) eventLog.innerHTML = '';
-        logEvent('探險者已重返【蝶蛾】格位，台灣濕地生態循環重新啟動！', 'lap');
-        updateScoreboard();
+    function backToSetup() {
+        phase = 'setup';
+        victoryModal.style.display = 'none';
+        gamePanel.hidden = true;
+        setupPanel.hidden = false;
     }
 
-    // -------------------------------------------------------------------------
-    // 7. Modal Dialogs & Event Listeners
-    // -------------------------------------------------------------------------
-    // Rules Modal Open
-    if (rulesBtn) {
-        rulesBtn.addEventListener('click', () => {
-            initAudio();
-            if (rulesModal) {
-                rulesModal.style.display = 'flex';
-                rulesBtn.setAttribute('aria-expanded', 'true');
-            }
+    // =========================================================================
+    // 6. 事件綁定
+    // =========================================================================
+    document.querySelectorAll('.btn-choice').forEach(b => {
+        b.addEventListener('click', () => {
+            document.querySelectorAll('.btn-choice').forEach(x => x.classList.remove('active'));
+            b.classList.add('active');
+            opponentCount = Number(b.dataset.n);
         });
-    }
+    });
+    startBtn.addEventListener('click', () => startGame(opponentCount));
+    diceBtn.addEventListener('click', rollDice);
+    revealBtn.addEventListener('click', reveal);
+    playAgainBtn.addEventListener('click', () => startGame(opponentCount));
+    resetBtn.addEventListener('click', backToSetup);
 
-    // Rules Modal Close Handlers
+    function openRules() {
+        rulesModal.style.display = 'flex';
+        rulesBtn.setAttribute('aria-expanded', 'true');
+        closeModalBtn.focus();
+    }
     function closeRules() {
-        if (rulesModal) {
-            rulesModal.style.display = 'none';
-            if (rulesBtn) rulesBtn.setAttribute('aria-expanded', 'false');
-        }
+        rulesModal.style.display = 'none';
+        rulesBtn.setAttribute('aria-expanded', 'false');
     }
+    rulesBtn.addEventListener('click', openRules);
+    closeModalBtn.addEventListener('click', closeRules);
+    modalUnderstoodBtn.addEventListener('click', closeRules);
+    rulesModal.addEventListener('click', e => { if (e.target === rulesModal) closeRules(); });
 
-    if (closeModalBtn) closeModalBtn.addEventListener('click', closeRules);
-    if (modalUnderstoodBtn) modalUnderstoodBtn.addEventListener('click', closeRules);
-
-    if (rulesModal) {
-        rulesModal.addEventListener('click', (e) => {
-            if (e.target === rulesModal) closeRules();
-        });
-    }
-
-    // Victory Modal Handlers
-    if (playAgainBtn) playAgainBtn.addEventListener('click', resetGame);
-    if (resetBtn) resetBtn.addEventListener('click', resetGame);
-
-    // Keyboard Spacebar to Roll Dice / Escape to close modal
-    window.addEventListener('keydown', (e) => {
-        if (e.code === 'Space' && !e.repeat) {
-            const activeTag = document.activeElement?.tagName?.toLowerCase();
-            if (activeTag !== 'input' && activeTag !== 'textarea') {
-                e.preventDefault();
-                if (!isRolling && !isMoving && !isGameOver) {
-                    rollDice();
-                }
-            }
-        } else if (e.key === 'Escape') {
-            closeRules();
-            if (victoryModal) victoryModal.style.display = 'none';
-        }
+    soundBtn.addEventListener('click', () => {
+        soundEnabled = !soundEnabled;
+        soundBtn.textContent = soundEnabled ? '🔊 音效: 開' : '🔇 音效: 關';
+        if (soundEnabled) playTone(440, 'sine', 0.1);
     });
 
-    // Sound toggle
-    if (soundBtn) {
-        soundBtn.addEventListener('click', () => {
-            soundEnabled = !soundEnabled;
-            soundBtn.textContent = soundEnabled ? '🔊 音效: 開' : '🔇 音效: 關';
-            soundBtn.style.opacity = soundEnabled ? '1' : '0.6';
-            if (soundEnabled) {
-                initAudio();
-                playTone(440, 'sine', 0.1);
-            }
-        });
-    }
-
-    if (diceBtn) {
-        diceBtn.addEventListener('click', rollDice);
-    }
-
-    // Backward compatibility helper methods
-    window.initGame = function () {
-        resetGame();
-    };
-    window.drawHands = drawHands;
-    window.drawGrid = drawGridCells;
-    window.drawText = () => {};
-
-    // First user gesture listener to unlock Web Audio API
-    document.addEventListener('click', function unlockAudio() {
-        initAudio();
-        document.removeEventListener('click', unlockAudio);
-    }, { once: true });
-
-    // Bootstrapping
-    updateScoreboard();
-    animLoop();
-
-})();
+    window.addEventListener('keydown', e => {
+        if (e.key === 'Escape') { closeRules(); return; }
+        if (rulesModal.style.display === 'flex' || victoryModal.style.display === 'flex') return;
+        const tag = document.activeElement && document.activeElement.tagName;
+        if (e.code === 'Space' && !e.repeat && tag !== 'INPUT' && tag !== 'TEXTAREA') {
+            if (phase === 'roll') { e.preventDefault(); rollDice(); }
+        } else if (e.key === 'Enter' && phase === 'choose' && selectedCard) {
+            e.preventDefault();
+            reveal();
+        } else if (phase === 'choose' && /^[1-6]$/.test(e.key)) {
+            selectCard(CARD_TYPES[Number(e.key) - 1]);
+        }
+    });
+})(typeof window !== 'undefined' ? window : globalThis);

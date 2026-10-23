@@ -395,11 +395,13 @@ class TestTier1Round2FeatureCoverage(TestSuiteBase):
         self.assertEqual(rules_modal.get('role'), 'dialog', "Modal must have role='dialog'")
 
     def test_f19_omnomnom_dice_engine_and_roll_state(self):
-        """F19: Verify OmNomNom dice button, dice face, result text, and roll-lock logic."""
+        """F19: Verify OmNomNom dice button, reveal button, hand area and roll-lock logic."""
         _, _, _, soup = self.fetch('OmNomNom/index.html')
         self.assertIsNotNone(soup.find(id='diceBtn'), "Missing #diceBtn")
         self.assertIsNotNone(soup.find(id='diceFace'), "Missing #diceFace")
         self.assertIsNotNone(soup.find(id='diceResult'), "Missing #diceResult")
+        self.assertIsNotNone(soup.find(id='revealBtn'), "Missing #revealBtn")
+        self.assertIsNotNone(soup.find(id='hand'), "Missing #hand (player hand)")
 
         with open(REPO_ROOT / 'OmNomNom' / 'script.js', 'r', encoding='utf-8') as f:
             js_code = f.read()
@@ -407,28 +409,36 @@ class TestTier1Round2FeatureCoverage(TestSuiteBase):
         self.assertIn("isRolling", js_code, "Must have isRolling state guard")
         self.assertIn("diceBtn.disabled", js_code, "Must disable button while rolling")
 
-    def test_f20_omnomnom_nine_tile_board_structure(self):
-        """F20: Verify 9-tile Taiwan wetland species board configuration and canvas."""
+    def test_f20_omnomnom_nine_species_board_structure(self):
+        """F20: Verify 3x3 food-chain board container and 9-species data file."""
         _, _, _, soup = self.fetch('OmNomNom/index.html')
-        canvas = soup.find(id='canvas')
-        self.assertIsNotNone(canvas, "Missing #canvas in OmNomNom")
-        self.assertEqual(canvas.get('width'), '700')
-        self.assertEqual(canvas.get('height'), '600')
+        self.assertIsNotNone(soup.find(id='board'), "Missing #board in OmNomNom")
+        self.assertIsNotNone(soup.find(id='energyPanel'), "Missing #energyPanel (10% energy flow)")
 
         cards_path = REPO_ROOT / 'OmNomNom' / 'data' / 'cards.json'
         self.assertTrue(cards_path.exists())
         with open(cards_path, 'r', encoding='utf-8') as f:
             tiles = json.load(f)
-        self.assertEqual(len(tiles), 9, "OmNomNom cards.json must define 9 species tiles")
+        self.assertEqual(len(tiles), 9, "OmNomNom cards.json must define 9 species")
 
-    def test_f21_omnomnom_pawn_movement_and_lap_wrap(self):
-        """F21: Verify pawn progression step logic (pos + roll) % 9 and lap wrap bonus."""
-        with open(REPO_ROOT / 'OmNomNom' / 'script.js', 'r', encoding='utf-8') as f:
-            js_code = f.read()
-
-        self.assertIn("(playerPos + 1) % boardPath.length", js_code, "Must use modular path wrap")
-        self.assertIn("lapCount++", js_code, "Must increment lap count on wrap")
-        self.assertIn("playerEnergy +=", js_code, "Must credit energy points")
+    def test_f21_omnomnom_predation_resolution_engine(self):
+        """F21: Verify Om Nom Nom predation rules: top eats mid cards first, split evenly, 10% energy."""
+        node_script = """
+        const E = require(%r);
+        const d = {butterfly:0, mosquito:3, tadpole:0, wasp:0, frog:1, nymph:0};
+        const a = E.resolveTurn(d, [{player:0,card:'frog'},{player:1,card:'frog'}]);
+        const b = E.resolveTurn(d, [{player:0,card:'rail'},{player:1,card:'frog'}]);
+        console.log(JSON.stringify({a:a.gains, left:a.remaining.mosquito, b:b.gains, eaten:b.eatenPlays, eb:b.energy[0], ea:a.energy[0]}));
+        """ % str(REPO_ROOT / 'OmNomNom' / 'script.js')
+        code, stdout, _ = self.run_node(node_script)
+        self.assertEqual(code, 0)
+        r = json.loads(stdout)
+        self.assertEqual(r['a'], {'0': 1, '1': 1})
+        self.assertEqual(r['left'], 1)
+        self.assertEqual(r['b'], {'0': 2, '1': 0})
+        self.assertEqual(r['eaten'], [1])
+        self.assertEqual(r['ea'], 10)   # 1 primary consumer (100 kJ) x 10%
+        self.assertEqual(r['eb'], 2)    # 2 secondary consumers (10 kJ) x 10%
 
     def test_f22_omnomnom_web_audio_sound_synthesis(self):
         """F22: Verify synthesized Web Audio sound effects in OmNomNom without audio file 404s."""
@@ -436,9 +446,9 @@ class TestTier1Round2FeatureCoverage(TestSuiteBase):
             js_code = f.read()
 
         self.assertIn("playDiceRattle", js_code, "Must synthesize dice rattle")
-        self.assertIn("playHop", js_code, "Must synthesize pawn hop")
+        self.assertIn("playCardFlip", js_code, "Must synthesize card flip")
         self.assertIn("playEatChime", js_code, "Must synthesize eat chime")
-        self.assertIn("playLapFanfare", js_code, "Must synthesize lap fanfare")
+        self.assertIn("playSeasonFanfare", js_code, "Must synthesize season fanfare")
 
     # --- F17-F19: Homepage Hub & Links (index.html) ---
     def test_f23_homepage_chapter_sections(self):
@@ -660,36 +670,36 @@ class TestTier2BoundaryCornerCases(TestSuiteBase):
         """B16: Verify OmNomNom rolls lock out consecutive clicks during animation."""
         with open(REPO_ROOT / 'OmNomNom' / 'script.js', 'r', encoding='utf-8') as f:
             js = f.read()
-        self.assertIn("if (isRolling || isMoving || isGameOver) return", js)
+        self.assertIn("if (isRolling || phase !== 'roll') return", js)
 
-    def test_b17_omnomnom_board_wrap_around_indexing(self):
-        """B17: Verify board loop indexing mathematically wraps around from 8 to 0."""
+    def test_b17_omnomnom_uneven_split_leaves_prey(self):
+        """B17: Verify prey that cannot be split evenly is left uneaten (2 predators, 1 prey => 0 each)."""
         node_script = """
-        const pathLen = 9;
-        let pos = 8;
-        const roll = 3;
-        const steps = [];
-        for (let s = 1; s <= roll; s++) {
-            pos = (pos + 1) % pathLen;
-            steps.push(pos);
+        const E = require(%r);
+        const d = {butterfly:0, mosquito:3, tadpole:0, wasp:0, frog:0, nymph:0};
+        const r = E.resolveTurn(d, [{player:0,card:'rail'},{player:1,card:'rail'},{player:2,card:'frog'}]);
+        console.log(JSON.stringify(r.gains));
+        """ % str(REPO_ROOT / 'OmNomNom' / 'script.js')
+        code, stdout, _ = self.run_node(node_script)
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(stdout), {'0': 0, '1': 0, '2': 3})
+
+    def test_b18_omnomnom_dice_never_negative(self):
+        """B18: Verify remaining dice counts never drop below 0 across random turns."""
+        node_script = """
+        const E = require(%r);
+        let ok = true;
+        for (let g = 0; g < 500; g++) {
+            const d = E.rollDiceSet(Math.random);
+            const plays = [0,1,2,3].map(i => ({player:i, card:E.CARD_TYPES[Math.floor(Math.random()*6)]}));
+            const r = E.resolveTurn(d, plays);
+            if (Object.values(r.remaining).some(v => v < 0)) ok = false;
         }
-        console.log(JSON.stringify(steps));
-        """
+        console.log(ok);
+        """ % str(REPO_ROOT / 'OmNomNom' / 'script.js')
         code, stdout, _ = self.run_node(node_script)
         self.assertEqual(code, 0)
-        self.assertEqual(json.loads(stdout), [0, 1, 2])
-
-    def test_b18_omnomnom_energy_depletion_boundary(self):
-        """B18: Verify penalty events do not decrease player energy below 0."""
-        node_script = """
-        let playerEnergy = 2;
-        const penalty = 5;
-        playerEnergy = Math.max(0, playerEnergy - penalty);
-        console.log(playerEnergy);
-        """
-        code, stdout, _ = self.run_node(node_script)
-        self.assertEqual(code, 0)
-        self.assertEqual(stdout.strip(), "0")
+        self.assertEqual(stdout.strip(), "true")
 
     def test_b19_omnomnom_modal_multiple_toggle_and_escape(self):
         """B19: Verify Escape key and backdrop click close the rules modal cleanly."""
@@ -698,8 +708,8 @@ class TestTier2BoundaryCornerCases(TestSuiteBase):
         self.assertIn("e.key === 'Escape'", js)
         self.assertIn("e.target === rulesModal", js)
 
-    def test_b20_omnomnom_responsive_canvas_scaling(self):
-        """B20: Verify style.css in OmNomNom provides responsive canvas rules for mobile devices."""
+    def test_b20_omnomnom_responsive_layout(self):
+        """B20: Verify style.css in OmNomNom provides responsive rules for mobile devices."""
         status, _, css, _ = self.fetch('OmNomNom/style.css')
         self.assertEqual(status, 200)
         self.assertIn("max-width: 100%", css)
@@ -828,7 +838,7 @@ class TestTier3CrossFeatureCombinations(TestSuiteBase):
         self.assertGreater(len(ep_producers), 0)
 
         onn_cards = json.loads((REPO_ROOT / 'OmNomNom' / 'data' / 'cards.json').read_text(encoding='utf-8'))
-        onn_primary = [c for c in onn_cards if c.get('tierLevel') == 1]
+        onn_primary = [c for c in onn_cards if c.get('tier') == 1]
         self.assertGreater(len(onn_primary), 0)
 
     def test_t3_6_responsive_multi_device_meta_viewport_suite(self):
@@ -927,9 +937,9 @@ class TestTier4ClassroomScenarios(TestSuiteBase):
         1. Clicks rules button to review wetland food chains in modal.
         2. Closes modal, clicks dice button (or presses spacebar).
         3. Observes animated dice roll, locked input during rolling.
-        4. Glowing pawn advances step-by-step around 9-tile wetland board.
-        5. Lands on tile, triggers "Om Nom Nom!" predation event, assimilates energy.
-        6. Wraps around from tile 8 to 0, receiving migration lap bonus.
+        4. Rolls prey dice onto the 3x3 food-chain board.
+        5. Secretly picks a predator card from the hand and reveals it with AI opponents.
+        6. Predation resolves (top eats mid, mid eats bottom) and 10% energy is shown.
         """
         status, _, _, soup = self.fetch('OmNomNom/index.html')
         self.assertEqual(status, 200)
@@ -937,8 +947,9 @@ class TestTier4ClassroomScenarios(TestSuiteBase):
         self.assertIsNotNone(soup.find(id='rulesBtn'))
         self.assertIsNotNone(soup.find(id='rulesModal'))
         self.assertIsNotNone(soup.find(id='diceBtn'))
-        self.assertIsNotNone(soup.find(id='canvas'))
-        self.assertIsNotNone(soup.find(id='energyDisplay'))
+        self.assertIsNotNone(soup.find(id='board'))
+        self.assertIsNotNone(soup.find(id='revealBtn'))
+        self.assertIsNotNone(soup.find(id='energyPanel'))
 
         # Check 9 Taiwan wetland organisms
         cards = json.loads((REPO_ROOT / 'OmNomNom' / 'data' / 'cards.json').read_text(encoding='utf-8'))
