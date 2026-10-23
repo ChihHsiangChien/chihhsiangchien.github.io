@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>動脈粥狀硬化斑塊與血栓形成互動模擬 (Atherosclerosis & Plaque Formation)</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="title-group">
+      <h1>🫀 動脈斑塊 (Plaque) 與血栓形成動態互動模擬</h1>
+      <p>探索膽固醇 (LDL) 滲入氧化、免疫細胞吞噬、泡沫細胞堆積、斑塊破裂到血栓阻塞的完整病理機制</p>
+    </div>
+    <div class="header-controls">
+      <button id="btn-auto" class="btn btn-secondary" title="自動依序推進病理階段">🔄 自動演示: 開</button>
+      <button id="btn-pause" class="btn btn-secondary">⏸️ 暫停動畫</button>
+      <button id="btn-reset" class="btn btn-outline">↺ 重置模擬</button>
+    </div>
+  </header>
+
+  <main class="main-layout">
+    <!-- 左側/主要模擬區：階段導覽列、互動畫布、實驗控制列 -->
+    <section class="simulation-section">
+      <!-- 6階段導覽列 -->
+      <nav class="stage-stepper" id="stage-stepper">
+        <button class="step-item active" data-stage="0">
+          <span class="step-num">1</span>
+          <span class="step-label">健康動脈</span>
+        </button>
+        <div class="step-connector"></div>
+        <button class="step-item" data-stage="1">
+          <span class="step-num">2</span>
+          <span class="step-label">內皮受損與膽固醇滲入</span>
+        </button>
+        <div class="step-connector"></div>
+        <button class="step-item" data-stage="2">
+          <span class="step-num">3</span>
+          <span class="step-label">免疫細胞招募與吞噬</span>
+        </button>
+        <div class="step-connector"></div>
+        <button class="step-item" data-stage="3">
+          <span class="step-num">4</span>
+          <span class="step-label">泡沫細胞與纖維斑塊</span>
+        </button>
+        <div class="step-connector"></div>
+        <button class="step-item" data-stage="4">
+          <span class="step-num">5</span>
+          <span class="step-label">斑塊不穩定與破裂</span>
+        </button>
+        <div class="step-connector"></div>
+        <button class="step-item" data-stage="5">
+          <span class="step-num">6</span>
+          <span class="step-label">血小板聚集與血栓形成</span>
+        </button>
+      </nav>
+
+      <!-- 畫布外框 -->
+      <div class="canvas-container" id="canvas-container">
+        <canvas id="sim-canvas" width="920" height="540"></canvas>
+
+        <!-- 頂部浮動狀態與環境控制 -->
+        <div class="canvas-overlay-top">
+          <div class="stage-badge" id="canvas-stage-badge">階段 1：健康動脈與正常血流</div>
+          <div class="env-controls">
+            <div class="slider-group" title="調整血液中壞膽固醇 (LDL) 的濃度">
+              <label for="ldl-slider">🟡 LDL 膽固醇濃度</label>
+              <input type="range" id="ldl-slider" min="1" max="5" step="1" value="2">
+              <span id="ldl-val" class="val-tag">正常</span>
+            </div>
+            <div class="slider-group" title="調整血壓與血流剪應力">
+              <label for="bp-slider">💓 血壓衝擊</label>
+              <input type="range" id="bp-slider" min="0.6" max="2.0" step="0.2" value="1.0">
+              <span id="bp-val" class="val-tag">120/80</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 滑鼠懸停顯微探針提示 -->
+        <div class="micro-tooltip" id="micro-tooltip" style="display: none;">
+          <div class="tooltip-title" id="tooltip-title">角色名稱</div>
+          <div class="tooltip-desc" id="tooltip-desc">角色說明</div>
+        </div>
+
+        <!-- 畫布底部操作提示 -->
+        <div class="canvas-prompt" id="canvas-prompt">
+          💡 提示：將滑鼠移至細胞上可查看「顯微角色圖鑑」；點擊畫面或下方按鈕可投放膽固醇或派遣免疫細胞！
+        </div>
+
+        <!-- 階段自動推進進度條 -->
+        <div class="stage-progress-bar">
+          <div class="stage-progress-fill" id="stage-progress-fill"></div>
+        </div>
+      </div>
+
+      <!-- 互動實驗與階段控制列 -->
+      <div class="action-bar">
+        <button id="btn-prev" class="btn btn-nav" disabled>⬅ 上一階段</button>
+        
+        <div class="interactive-tools">
+          <button id="btn-spawn-ldl" class="btn btn-tool btn-tool-ldl" title="在血液中釋放一波低密度脂蛋白膽固醇 (LDL)">
+            🍔 投入壞膽固醇 (LDL)
+          </button>
+          <button id="btn-spawn-immune" class="btn btn-tool btn-tool-immune" title="派遣單核球進入血管壁轉化為巨噬細胞吞噬氧化膽固醇">
+            🛡️ 召喚免疫細胞 (巨噬細胞)
+          </button>
+          <button id="btn-spawn-hdl" class="btn btn-tool btn-tool-hdl" title="派遣高密度脂蛋白 (HDL) 逆向清除內膜中的膽固醇">
+            🥗 派遣好膽固醇 (HDL清道夫)
+          </button>
+          <button id="btn-stage-action" class="btn btn-primary">
+            ⚡ 造成內皮受損 (進入階段 2)
+          </button>
+        </div>
+
+        <button id="btn-next" class="btn btn-nav">下一階段 ➡</button>
+      </div>
+    </section>
+
+    <!-- 右側：病理學解說、即時血管指標、角色圖鑑 -->
+    <aside class="info-sidebar">
+      <!-- 當前階段詳解卡片 -->
+      <div class="card stage-detail-card">
+        <div class="card-header">
+          <span class="stage-tag" id="info-stage-tag">STAGE 01</span>
+          <h2 id="info-title">健康動脈與正常血流</h2>
+        </div>
+        <p class="info-desc" id="info-desc">
+          健康的動脈管壁由內而外分為內膜（含平滑的內皮細胞）、中膜（富含具彈性的平滑肌細胞）與外膜。血液中的紅血球、少量膽固醇與免疫細胞順暢通過，不會滲入血管壁。
+        </p>
+        <div class="key-events">
+          <h3>🔬 關鍵病理與生理機制</h3>
+          <ul id="info-bullets">
+            <li><strong>完整內皮屏障：</strong>內皮細胞緊密排列，釋放一氧化氮 (NO) 維持血管舒張並防止血球黏附。</li>
+            <li><strong>脂質平衡：</strong>少量 LDL 膽固醇僅在血液中流動供細胞正常使用，不會滯留於內膜下層。</li>
+            <li><strong>免疫巡邏：</strong>單核球（白血球）與血小板處於未活化狀態，隨血液平穩運行。</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- 即時血管生理指標 -->
+      <div class="card metrics-card">
+        <h3>📊 動脈即時病理指標</h3>
+        
+        <div class="metric-row">
+          <div class="metric-label">
+            <span>有效管腔暢通度 (Lumen Patency)</span>
+            <span id="metric-lumen-text">100% (暢通)</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill fill-green" id="metric-lumen-bar" style="width: 100%;"></div>
+          </div>
+        </div>
+
+        <div class="metric-row">
+          <div class="metric-label">
+            <span>內膜脂質與泡沫細胞堆積 (Plaque Size)</span>
+            <span id="metric-plaque-text">0% (無斑塊)</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill fill-amber" id="metric-plaque-bar" style="width: 0%;"></div>
+          </div>
+        </div>
+
+        <div class="metric-row">
+          <div class="metric-label">
+            <span>血管壁發炎與免疫反應 (Inflammation)</span>
+            <span id="metric-inflam-text">極低</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill fill-purple" id="metric-inflam-bar" style="width: 8%;"></div>
+          </div>
+        </div>
+
+        <div class="metric-row">
+          <div class="metric-label">
+            <span>血栓阻塞風險 (Thrombosis Risk)</span>
+            <span id="metric-clot-text">0% (安全)</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill fill-red" id="metric-clot-bar" style="width: 0%;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 互動角色圖鑑 (點擊可高亮或篩選) -->
+      <div class="card legend-card">
+        <div class="legend-header">
+          <h3>🧬 參與角色圖鑑 (點擊聚焦觀察)</h3>
+          <button id="btn-clear-focus" class="btn-tiny" style="display: none;">顯示全部</button>
+        </div>
+        <div class="legend-grid" id="legend-grid">
+          <div class="legend-item" data-role="ldl">
+            <span class="legend-icon icon-ldl"></span>
+            <div class="legend-text">
+              <strong>LDL 低密度膽固醇</strong>
+              <span>滲入內膜並氧化為 ox-LDL</span>
+            </div>
+          </div>
+          <div class="legend-item" data-role="monocyte">
+            <span class="legend-icon icon-monocyte"></span>
+            <div class="legend-text">
+              <strong>單核球 / 巨噬細胞</strong>
+              <span>鑽入血管壁吞噬氧化膽固醇</span>
+            </div>
+          </div>
+          <div class="legend-item" data-role="foam">
+            <span class="legend-icon icon-foam"></span>
+            <div class="legend-text">
+              <strong>泡沫細胞與脂質核心</strong>
+              <span>吞飽脂質的巨噬細胞堆積成斑塊</span>
+            </div>
+          </div>
+          <div class="legend-item" data-role="smc">
+            <span class="legend-icon icon-smc"></span>
+            <div class="legend-text">
+              <strong>平滑肌與纖維帽</strong>
+              <span>分泌膠原蛋白覆蓋斑塊表面</span>
+            </div>
+          </div>
+          <div class="legend-item" data-role="platelet">
+            <span class="legend-icon icon-platelet"></span>
+            <div class="legend-text">
+              <strong>血小板與纖維蛋白血栓</strong>
+              <span>斑塊破裂時瞬間聚集封堵血管</span>
+            </div>
+          </div>
+          <div class="legend-item" data-role="hdl">
+            <span class="legend-icon icon-hdl"></span>
+            <div class="legend-text">
+              <strong>HDL 高密度膽固醇</strong>
+              <span>血管清道夫，逆向運走多餘膽固醇</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>

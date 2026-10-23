@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>血液凝固過程互動展示 (Coagulation Process)</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="title-group">
+      <h1>🩸 血液凝固與傷口癒合互動模擬</h1>
+      <p>從皮膚受損、血管破裂、血小板聚集、纖維蛋白網形成到完全修復的動態生理過程</p>
+    </div>
+    <div class="header-controls">
+      <button id="btn-auto" class="btn btn-secondary" title="開啟/關閉自動推進階段">🔄 自動演示: 開</button>
+      <button id="btn-pause" class="btn btn-secondary">⏸️ 暫停動畫</button>
+      <button id="btn-reset" class="btn btn-outline">↺ 重置</button>
+    </div>
+  </header>
+
+  <main class="main-layout">
+    <!-- 左側/上方：步驟時間軸與Canvas互動區 -->
+    <section class="simulation-section">
+      <!-- 階段導覽列 -->
+      <nav class="stage-stepper" id="stage-stepper">
+        <button class="step-item active" data-stage="0">
+          <span class="step-num">1</span>
+          <span class="step-label">正常狀態</span>
+        </button>
+        <div class="step-connector"></div>
+        <button class="step-item" data-stage="1">
+          <span class="step-num">2</span>
+          <span class="step-label">皮膚與血管破裂</span>
+        </button>
+        <div class="step-connector"></div>
+        <button class="step-item" data-stage="2">
+          <span class="step-num">3</span>
+          <span class="step-label">血管收縮與血小板聚集</span>
+        </button>
+        <div class="step-connector"></div>
+        <button class="step-item" data-stage="3">
+          <span class="step-num">4</span>
+          <span class="step-label">纖維蛋白網與血塊</span>
+        </button>
+        <div class="step-connector"></div>
+        <button class="step-item" data-stage="4">
+          <span class="step-num">5</span>
+          <span class="step-label">結痂與組織修復</span>
+        </button>
+        <div class="step-connector"></div>
+        <button class="step-item" data-stage="5">
+          <span class="step-num">6</span>
+          <span class="step-label">恢復正常</span>
+        </button>
+      </nav>
+
+      <!-- 畫布外框 -->
+      <div class="canvas-container" id="canvas-container">
+        <canvas id="sim-canvas" width="900" height="520"></canvas>
+        
+        <!-- 畫布浮動提示與互動按鈕 -->
+        <div class="canvas-overlay-top">
+          <div class="stage-badge" id="canvas-stage-badge">階段 1：正常生理狀態</div>
+          <div class="speed-control">
+            <label for="speed-slider">血流與反應速度</label>
+            <input type="range" id="speed-slider" min="0.4" max="2.2" step="0.2" value="1.0">
+            <span id="speed-val">1.0x</span>
+          </div>
+        </div>
+
+        <div class="canvas-prompt" id="canvas-prompt">
+          💡 點擊畫面中央皮膚或下方「造成傷口」按鈕，觀察血管破裂與凝血機制！
+        </div>
+
+        <!-- 進度條 -->
+        <div class="stage-progress-bar">
+          <div class="stage-progress-fill" id="stage-progress-fill"></div>
+        </div>
+      </div>
+
+      <!-- 底部互動操作列 -->
+      <div class="action-bar">
+        <button id="btn-prev" class="btn btn-nav" disabled>⬅ 上一階段</button>
+        <button id="btn-action" class="btn btn-primary">🔪 點擊造成傷口 (進入階段 2)</button>
+        <button id="btn-add-platelets" class="btn btn-accent" style="display: none;">✨ 召喚更多血小板支援！</button>
+        <button id="btn-next" class="btn btn-nav">下一階段 ➡</button>
+      </div>
+    </section>
+
+    <!-- 右側：科學解說、即時數據與圖例 -->
+    <aside class="info-sidebar">
+      <!-- 當前階段詳解卡片 -->
+      <div class="card stage-detail-card">
+        <div class="card-header">
+          <span class="stage-tag" id="info-stage-tag">STAGE 01</span>
+          <h2 id="info-title">正常血液循環</h2>
+        </div>
+        <p class="info-desc" id="info-desc">
+          健康的表皮與真皮層完整保護身體。微血管內壁由平滑的「內皮細胞」組成，紅血球、白血球與未活化的血小板在血管內順暢流動，互不黏附。
+        </p>
+        <div class="key-events">
+          <h3>🔬 關鍵生理現象</h3>
+          <ul id="info-bullets">
+            <li>表皮層完整阻隔外界病原體</li>
+            <li>血管內皮釋放一氧化氮 (NO) 與前列環素，防止血小板無故聚集</li>
+            <li>血小板呈平滑圓盤狀，隨血液穩定流動</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- 即時生理指標 -->
+      <div class="card metrics-card">
+        <h3>📊 傷口即時生理指標</h3>
+        <div class="metric-row">
+          <div class="metric-label">
+            <span>血管管徑 (血管收縮度)</span>
+            <span id="metric-vessel-text">100% (正常)</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-bar bar-vessel" id="bar-vessel" style="width: 100%"></div>
+          </div>
+        </div>
+
+        <div class="metric-row">
+          <div class="metric-label">
+            <span>出血速率</span>
+            <span id="metric-bleed-text">0% (無出血)</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-bar bar-bleed" id="bar-bleed" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <div class="metric-row">
+          <div class="metric-label">
+            <span>血小板栓塞與凝血塊完整度</span>
+            <span id="metric-clot-text">0%</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-bar bar-clot" id="bar-clot" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <div class="metric-row">
+          <div class="metric-label">
+            <span>組織與血管壁修復度</span>
+            <span id="metric-heal-text">100%</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-bar bar-heal" id="bar-heal" style="width: 100%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 視覺元素圖例 -->
+      <div class="card legend-card">
+        <h3>🎨 顯微視覺圖例</h3>
+        <div class="legend-grid">
+          <div class="legend-item">
+            <span class="legend-icon icon-rbc"></span>
+            <div class="legend-text">
+              <strong>紅血球 (RBC)</strong>
+              <small>雙凹圓盤狀，負責攜帶氧氣，會被纖維蛋白網攔截形成紅血栓</small>
+            </div>
+          </div>
+          <div class="legend-item">
+            <span class="legend-icon icon-platelet"></span>
+            <div class="legend-text">
+              <strong>血小板 (Platelet)</strong>
+              <small>平時為小橢圓形；遇膠原蛋白後活化伸出偽足(星芒狀)並釋放凝血訊號</small>
+            </div>
+          </div>
+          <div class="legend-item">
+            <span class="legend-icon icon-wbc"></span>
+            <div class="legend-text">
+              <strong>白血球 (WBC)</strong>
+              <small>大型免疫細胞，在受傷處清除細菌與受損細胞碎片</small>
+            </div>
+          </div>
+          <div class="legend-item">
+            <span class="legend-icon icon-fibrin"></span>
+            <div class="legend-text">
+              <strong>纖維蛋白絲 (Fibrin) & 凝血因子</strong>
+              <small>凝血級聯反應生成的金黃色交織網，將鬆散血小板栓加固為穩定血塊</small>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
