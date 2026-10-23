@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>小腸絨毛：酵素分解與養分吸收動態模擬</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- 頂部標題與狀態列 -->
+    <header class="app-header">
+      <div class="header-title">
+        <span class="badge">生物互動教學</span>
+        <h1>小腸絨毛構造與養分吸收動態模擬</h1>
+        <p class="subtitle">觀察大分子養分如何由左方進入腸腔，經腸液與刷狀緣酵素分解為小分子，並分別由<strong>微血管網</strong>與<strong>乳糜管</strong>吸收運送</p>
+      </div>
+      <div class="stats-bar">
+        <div class="stat-pill blood-stat">
+          <span class="stat-dot blood-dot"></span>
+          <span class="stat-label">微血管吸收 (水溶性)</span>
+          <strong id="count-blood">0</strong>
+        </div>
+        <div class="stat-pill lymph-stat">
+          <span class="stat-dot lymph-dot"></span>
+          <span class="stat-label">乳糜管吸收 (脂溶性)</span>
+          <strong id="count-lymph">0</strong>
+        </div>
+      </div>
+    </header>
+
+    <!-- 主內容區：Canvas 畫布 + 右側控制與解說面板 -->
+    <main class="main-layout">
+      <div class="canvas-wrapper" id="canvas-wrapper">
+        <canvas id="sim-canvas"></canvas>
+
+        <!-- 畫布浮動提示 -->
+        <div class="canvas-overlay-top-left">
+          <div class="flow-indicator">
+            <span class="arrow-pulse">➔</span> 食糜與養分由左方流入小腸腔
+          </div>
+        </div>
+
+        <div class="canvas-overlay-bottom-left">
+          <label class="toggle-chip">
+            <input type="checkbox" id="toggle-labels" checked>
+            <span>顯示構造標示線</span>
+          </label>
+          <label class="toggle-chip">
+            <input type="checkbox" id="toggle-enzymes" checked>
+            <span>顯示消化酵素</span>
+          </label>
+          <label class="toggle-chip">
+            <input type="checkbox" id="toggle-rbc" checked>
+            <span>顯示紅血球流動</span>
+          </label>
+        </div>
+
+        <!-- 懸停或點擊構造時的浮動說明小卡 -->
+        <div id="structure-tooltip" class="structure-tooltip hidden"></div>
+      </div>
+
+      <!-- 右側互動控制面板 -->
+      <aside class="control-panel">
+        <!-- 投餵養分控制 -->
+        <section class="panel-card">
+          <h2>1. 投放養分分子 (由左方進入)</h2>
+          <p class="card-desc">點擊按鈕立即從左側腸腔釋放特定大分子養分，或開啟自動連續進食：</p>
+          
+          <div class="nutrient-buttons">
+            <button class="btn-nutrient carb" data-type="carb">
+              <div class="mol-icon carb-icon"></div>
+              <div class="btn-text">
+                <strong>醣類 (雙醣/多醣)</strong>
+                <span>麥芽糖 ➔ 葡萄糖 ➔ 微血管</span>
+              </div>
+              <span class="plus-badge">+投放</span>
+            </button>
+
+            <button class="btn-nutrient protein" data-type="protein">
+              <div class="mol-icon protein-icon"></div>
+              <div class="btn-text">
+                <strong>蛋白質 (多肽鏈)</strong>
+                <span>肽類 ➔ 胺基酸 ➔ 微血管</span>
+              </div>
+              <span class="plus-badge">+投放</span>
+            </button>
+
+            <button class="btn-nutrient lipid" data-type="lipid">
+              <div class="mol-icon lipid-icon"></div>
+              <div class="btn-text">
+                <strong>脂質 (乳化脂肪球)</strong>
+                <span>脂肪酸+甘油 ➔ 乳糜管</span>
+              </div>
+              <span class="plus-badge">+投放</span>
+            </button>
+          </div>
+
+          <div class="auto-controls">
+            <button id="btn-burst" class="btn-action primary">✨ 綜合進食 (一次投入多種養分)</button>
+            <div class="control-row">
+              <label for="auto-spawn" class="switch-label">自動連續流入養分</label>
+              <input type="checkbox" id="auto-spawn" checked>
+            </div>
+            <div class="control-row">
+              <label for="sim-speed">模擬速度：<span id="speed-val">1.0x</span></label>
+              <input type="range" id="sim-speed" min="0.3" max="2.5" step="0.1" value="1.0">
+            </div>
+            <div class="control-row">
+              <label for="enzyme-density">酵素活性/數量：<span id="enzyme-val">正常</span></label>
+              <input type="range" id="enzyme-density" min="1" max="3" step="1" value="2">
+            </div>
+            <div class="btn-group">
+              <button id="btn-pause" class="btn-secondary">⏸ 暫停</button>
+              <button id="btn-clear" class="btn-secondary">↺ 重置畫布</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- 消化與吸收三階段圖解 -->
+        <section class="panel-card">
+          <h2>2. 消化與吸收歷程</h2>
+          <div class="stage-timeline">
+            <div class="stage-item" id="stage-1">
+              <div class="stage-num">1</div>
+              <div class="stage-body">
+                <strong>左方流入與酵素分解</strong>
+                <p>大分子養分從左方進入小腸腔，靠近<strong>絨毛上皮細胞</strong>（刷狀緣）時，被<strong>小腸液酵素／刷狀緣酵素</strong>催化分解為小分子。</p>
+              </div>
+            </div>
+            <div class="stage-item" id="stage-2">
+              <div class="stage-num">2</div>
+              <div class="stage-body">
+                <strong>穿過絨毛上皮細胞吸收</strong>
+                <p>分解後的小分子（葡萄糖、胺基酸、脂肪酸與甘油）穿過單層<strong>絨毛上皮細胞</strong>進入絨毛內部。</p>
+              </div>
+            </div>
+            <div class="stage-item" id="stage-3">
+              <div class="stage-num">3</div>
+              <div class="stage-body">
+                <strong>分流運輸並隨血液/淋巴流動</strong>
+                <p>
+                  <span class="tag-blood">水溶性</span> 葡萄糖、胺基酸進入<strong>微血管</strong> ➔ 匯入<strong>小靜脈</strong>隨血液流走。<br>
+                  <span class="tag-lymph">脂溶性</span> 脂肪酸與甘油重組為乳糜微粒進入中央<strong>乳糜管</strong> ➔ 隨淋巴液流走。
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 構造點擊百科 / 圖例 -->
+        <section class="panel-card">
+          <h2>3. 構造說明 (點擊畫布標示可高亮)</h2>
+          <div id="info-box" class="info-box">
+            <div class="info-title" id="info-title">👆 點擊畫布上的構造名稱或養分粒子</div>
+            <p class="info-desc" id="info-desc">
+              小腸內壁有許多環狀皺褶，上面布滿指狀突起的「<strong>絨毛</strong>」，絨毛表面還有微絨毛，能大幅增加吸收表面積。每根絨毛內部都有豐富的<strong>微血管網</strong>與中央的<strong>乳糜管</strong>。
+            </p>
+          </div>
+          <div class="legend-grid">
+            <div class="legend-item"><span class="dot c-glucose"></span>葡萄糖 (小分子)</div>
+            <div class="legend-item"><span class="dot c-amino"></span>胺基酸 (小分子)</div>
+            <div class="legend-item"><span class="dot c-lipid"></span>脂肪酸/乳糜微粒</div>
+            <div class="legend-item"><span class="dot c-enzyme"></span>消化酵素 (酶)</div>
+            <div class="legend-item"><span class="dot c-rbc"></span>紅血球 (微血管內)</div>
+          </div>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
