@@ -1,3 +1,14 @@
+// Safe audio playback helper
+function playSound(audio) {
+  if (!audio) return;
+  try {
+    var p = audio.play();
+    if (p && typeof p.catch === 'function') {
+      p.catch(function(e) {});
+    }
+  } catch (e) {}
+}
+
 // Start function
 function start() {
   switch (gameType) {
@@ -331,12 +342,19 @@ function clickIfOrder(event) {
   var rect = canvas.getBoundingClientRect();
   var { mouseX, mouseY } = getMouseCoordinates(event, rect);
   var selected = checkClickedCard(mouseX, mouseY); // 找出點到的卡片
+  if (!selected || selectedCards.includes(selected)) return;
+  var correctCount = cards.filter(function (c) {
+    return c.category === correctCategory;
+  }).length;
+  if (selectedCards.length === correctCount) return;
   addToSelectedCards(selected, selectedCards); // 把點到的卡片放進 selectedCards
   preCardIdx = nowCardIdx;
   nowCardIdx = getCardIdx(selected) % cards.length;
   handleOrderingCards();
-  ctx.clearRect(0, 0, canvas.width, canvas.height); // 檢查順序
-  drawCards(cards);
+  if (selectedCards.length !== correctCount) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height); // 檢查順序
+    drawCards(cards);
+  }
 }
 
 // Drag and drop functions
@@ -630,15 +648,15 @@ function checkCardsPlacement() {
 
   // If there are wrong cards, slide them to the middle and allow the user to place them again
   if (wrongcards.length > 0) {
-    wrongSound.play();
+    playSound(wrongSound);
     slideWrongcards(wrongcards);
   } else if (score != 0) {
-    correctSound.play();
+    playSound(correctSound);
   }
 
   // If the score reaches , stop the timer
   if (score === cards.length) {
-    correctSound.play();
+    playSound(correctSound);
     stopTimer();
   }
 }
@@ -655,7 +673,7 @@ function handleMatchingCards() {
       var card2 = selectedCards[1];
 
       if (card1.category === card2.category) {
-          correctSound.play();
+          playSound(correctSound);
           score += correctScore;
           scoreElement.innerText = "score: " + score;
 
@@ -703,7 +721,7 @@ function handleMatchingCards() {
           }, 200); // Delay slightly to show the match
       } else {
           // Not matched
-          wrongSound.play();
+          playSound(wrongSound);
           score -= wrongScore;
           scoreElement.innerText = "score: " + score;
           setTimeout(function () {
@@ -753,8 +771,10 @@ function handleMatchingCards() {
 
 //檢查新加入的selectedCards是否按照順序
 function handleOrderingCards() {
+  if (selectedCards.length === 0) return;
+
   if (selectedCards[selectedCards.length - 1].category != correctCategory) {
-    wrongSound.play();
+    playSound(wrongSound);
     score -= wrongScore;
     scoreElement.innerText = "score: " + score;
     setTimeout(function () {
@@ -766,12 +786,28 @@ function handleOrderingCards() {
     return;
   }
 
-  if (preCardIdx == null || nowCardIdx == (preCardIdx + 1) % cards.length) {
-    correctSound.play();
+  var correctCount = cards.filter(function (c) {
+    return c.category === correctCategory;
+  }).length;
+
+  var isCorrectOrder = false;
+  if (preCardIdx == null) {
+    isCorrectOrder = cards.length > correctCount ? nowCardIdx === 0 : true;
+  } else {
+    isCorrectOrder = nowCardIdx === (preCardIdx + 1) % cards.length;
+  }
+
+  if (isCorrectOrder) {
+    playSound(correctSound);
     score += correctScore;
     scoreElement.innerText = "score: " + score;
+
+    if (selectedCards.length === correctCount) {
+      stopTimer();
+      youWin();
+    }
   } else {
-    wrongSound.play();
+    playSound(wrongSound);
     score -= wrongScore;
     scoreElement.innerText = "score: " + score;
     setTimeout(function () {

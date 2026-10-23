@@ -3,7 +3,7 @@ window.onload = function () {
     let renderer, scene, camera;
     let world;
     let particles = [];
-    const particleCount = 200;
+    let particleCount = 200;
     const particleRadius = 0.5;
     const tubeRadius = 4;
     
@@ -35,6 +35,13 @@ window.onload = function () {
     const resetViewBtn = document.getElementById('reset-view');
     const frontValveStatus = document.getElementById('front-valve-status');
     const backValveStatus = document.getElementById('back-valve-status');
+
+    // Particle quality UI elements
+    const particleSlider = document.getElementById('particle-slider');
+    const particleCountDisplay = document.getElementById('particle-count-display');
+    const qualityLowBtn = document.getElementById('quality-low-btn');
+    const qualityMedBtn = document.getElementById('quality-med-btn');
+    const qualityHighBtn = document.getElementById('quality-high-btn');
 
     function init() {
         // 渲染器
@@ -121,6 +128,24 @@ window.onload = function () {
         resetViewBtn.addEventListener('click', () => {
             resetCamera();
         });
+
+        if (particleSlider) {
+            particleSlider.addEventListener('input', (e) => {
+                setParticleCount(parseInt(e.target.value, 10));
+            });
+            particleSlider.addEventListener('change', (e) => {
+                setParticleCount(parseInt(e.target.value, 10));
+            });
+        }
+        if (qualityLowBtn) {
+            qualityLowBtn.addEventListener('click', () => setParticleCount(80));
+        }
+        if (qualityMedBtn) {
+            qualityMedBtn.addEventListener('click', () => setParticleCount(200));
+        }
+        if (qualityHighBtn) {
+            qualityHighBtn.addEventListener('click', () => setParticleCount(400));
+        }
 
         window.addEventListener('resize', onWindowResize);
     }
@@ -244,8 +269,42 @@ window.onload = function () {
         scene.add(compressionZoneMesh);
     }
 
-    function createParticles() {
-        const particleGeometry = new THREE.SphereGeometry(particleRadius, 16, 16);
+    function clearParticles() {
+        particles.forEach(p => {
+            if (p.mesh) {
+                scene.remove(p.mesh);
+                if (p.mesh.geometry) p.mesh.geometry.dispose();
+                if (p.mesh.material) {
+                    if (Array.isArray(p.mesh.material)) {
+                        p.mesh.material.forEach(m => m.dispose());
+                    } else {
+                        p.mesh.material.dispose();
+                    }
+                }
+            }
+            if (p.body) {
+                world.removeBody(p.body);
+            }
+        });
+        particles = [];
+    }
+
+    function createParticles(count) {
+        if (typeof count === 'number') {
+            particleCount = count;
+        }
+
+        // 行動端與低階裝置適配：依粒子數量動態調整球體網格細分程度
+        let segments = 16;
+        if (particleCount <= 100) {
+            segments = 8;
+        } else if (particleCount <= 250) {
+            segments = 12;
+        } else {
+            segments = 16;
+        }
+
+        const particleGeometry = new THREE.SphereGeometry(particleRadius, segments, segments);
         const particleMaterial = new THREE.MeshLambertMaterial({ color: 0xe74c3c });
 
         for (let i = 0; i < particleCount; i++) {
@@ -274,36 +333,111 @@ window.onload = function () {
             particles.push({ mesh: particleMesh, body: particleBody, hasPulsed: false });
         }
     }
+
+    function setParticleCount(newCount) {
+        newCount = Math.max(20, Math.min(500, parseInt(newCount, 10) || 200));
+        clearParticles();
+        createParticles(newCount);
+
+        if (particleSlider) particleSlider.value = newCount;
+        if (particleCountDisplay) particleCountDisplay.textContent = `${newCount} 顆`;
+
+        const buttons = [qualityLowBtn, qualityMedBtn, qualityHighBtn];
+        buttons.forEach(btn => {
+            if (!btn) return;
+            const countVal = parseInt(btn.dataset.count, 10);
+            if (countVal === newCount) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+
+        if (vesselState === 'compress' || vesselState === 'expand') {
+            particles.forEach(p => { p.hasPulsed = false; });
+        }
+    }
     
     function createValve(position) {
         const valveSize = tubeRadius * 2;
-        // 讓瓣膜顏色明顯
-        const leafMaterial = new THREE.MeshLambertMaterial({ color: 0xff0000, transparent: false, opacity: 1 });
-        const leafGeometry = new THREE.BoxGeometry(tubeRadius * 1.5, valveSize * 0.7, 0.2);
-        // 單片瓣膜
-        const valveLeaf = new THREE.Mesh(leafGeometry, leafMaterial);
-        // 物理剛體：薄片，橫跨血管
+        let zPos;
+        if (position === 'front') {
+            zPos = -compressionLength / 2 - 1;
+        } else if (position === 'back') {
+            zPos = compressionLength / 2 + 1;
+        }
+
+        // 物理剛體：薄片，橫跨血管定位於 zPos
         const valveBody = new CANNON.Body({
             mass: 0,
             shape: new CANNON.Box(new CANNON.Vec3((tubeRadius * 1.5) / 2, (valveSize * 0.7) / 2, 0.1)),
             collisionFilterGroup: 2,
             collisionFilterMask: 1 // 只與血球碰撞
         });
-        let zPos;
+        valveBody.position.set(0, 0, zPos);
+
+        // 解剖擬真靜脈瓣膜 (Bicuspid Valve + Annulus Ring)
+        const valveGroup = new THREE.Group();
+        valveGroup.position.set(0, 0, zPos);
+
+        // 血管壁基部纖維環 (Annulus Fibrosus)
+        const ringGeometry = new THREE.TorusGeometry(tubeRadius * 0.98, 0.18, 12, 32);
+        const ringMaterial = new THREE.MeshLambertMaterial({ color: 0xb71c1c });
+        const ringMesh = new THREE.Mesh(ringGeometry, ringMaterial);
+        valveGroup.add(ringMesh);
+
+        // 擬真葉片材質
+        const cuspMaterial = new THREE.MeshLambertMaterial({
+            color: 0xef4444,
+            side: THREE.DoubleSide
+        });
+
+        // 雙瓣葉片尺寸：適應管徑並覆蓋中央
+        const flapWidth = tubeRadius * 1.6;
+        const flapLength = tubeRadius * 0.85;
+        const flapThickness = 0.16;
+        const cuspGeometry = new THREE.BoxGeometry(flapWidth, flapLength, flapThickness);
+
+        // 上葉片樞紐 (Top Cusp Pivot)
+        const topPivot = new THREE.Group();
+        topPivot.position.set(0, tubeRadius * 0.72, 0);
+        const topCusp = new THREE.Mesh(cuspGeometry, cuspMaterial);
+        topCusp.position.set(0, -flapLength / 2, 0);
+        topPivot.add(topCusp);
+        valveGroup.add(topPivot);
+
+        // 下葉片樞紐 (Bottom Cusp Pivot)
+        const bottomPivot = new THREE.Group();
+        bottomPivot.position.set(0, -tubeRadius * 0.72, 0);
+        const bottomCusp = new THREE.Mesh(cuspGeometry, cuspMaterial);
+        bottomCusp.position.set(0, flapLength / 2, 0);
+        bottomPivot.add(bottomCusp);
+        valveGroup.add(bottomPivot);
+
+        // 初始靜止閉合角度（頂端朝向順流 -Z 方向微傾閉合，呈 V 字型阻止倒流）
+        const restAngle = 0.16;
+        topPivot.rotation.x = restAngle;
+        bottomPivot.rotation.x = -restAngle;
+
+        // 附加動畫與相容性屬性
+        valveGroup.material = cuspMaterial;
+        valveGroup.userData = {
+            topPivot,
+            bottomPivot,
+            currentOpen: 0,
+            zPos,
+            position
+        };
+
         if (position === 'front') {
-            zPos = -compressionLength / 2 - 1;
-            valveLeaf.position.set(0, 0, zPos);
-            valveBody.position.set(0, 0, zPos);
-            frontValveMeshes.push(valveLeaf);
+            frontValveMeshes.push(valveGroup);
             frontValveBodies.push(valveBody);
         } else if (position === 'back') {
-            zPos = compressionLength / 2 + 1;
-            valveLeaf.position.set(0, 0, zPos);
-            valveBody.position.set(0, 0, zPos);
-            backValveMeshes.push(valveLeaf);
+            backValveMeshes.push(valveGroup);
             backValveBodies.push(valveBody);
         }
-        scene.add(valveLeaf);
+
+        scene.add(valveGroup);
         world.addBody(valveBody);
     }
     
@@ -329,7 +463,18 @@ window.onload = function () {
 
     function removeValve(position) {
         if (position === 'front' && frontValveEnabled) {
-            frontValveMeshes.forEach(m => scene.remove(m));
+            frontValveMeshes.forEach(m => {
+                scene.remove(m);
+                if (m.traverse) {
+                    m.traverse(child => {
+                        if (child.geometry) child.geometry.dispose();
+                        if (child.material) {
+                            if (Array.isArray(child.material)) child.material.forEach(mat => mat.dispose());
+                            else child.material.dispose();
+                        }
+                    });
+                }
+            });
             frontValveBodies.forEach(b => world.removeBody(b));
             frontValveMeshes = [];
             frontValveBodies = [];
@@ -340,7 +485,18 @@ window.onload = function () {
             addFrontValveBtn.classList.remove('hidden');
             removeFrontValveBtn.classList.add('hidden');
         } else if (position === 'back' && backValveEnabled) {
-            backValveMeshes.forEach(m => scene.remove(m));
+            backValveMeshes.forEach(m => {
+                scene.remove(m);
+                if (m.traverse) {
+                    m.traverse(child => {
+                        if (child.geometry) child.geometry.dispose();
+                        if (child.material) {
+                            if (Array.isArray(child.material)) child.material.forEach(mat => mat.dispose());
+                            else child.material.dispose();
+                        }
+                    });
+                }
+            });
             backValveBodies.forEach(b => world.removeBody(b));
             backValveMeshes = [];
             backValveBodies = [];
@@ -407,6 +563,11 @@ window.onload = function () {
     }
     
     function updateValves() {
+        const hasFront = frontValveEnabled && frontValveBodies.length > 0;
+        const hasBack = backValveEnabled && backValveBodies.length > 0;
+        const frontZ = hasFront ? frontValveBodies[0].position.z : null;
+        const backZ = hasBack ? backValveBodies[0].position.z : null;
+
         particles.forEach(p => {
             // 確保血球被限制在血管內部
             const r = Math.sqrt(p.body.position.x**2 + p.body.position.y**2);
@@ -415,45 +576,82 @@ window.onload = function () {
                 const normalForce = direction.scale(-1500);
                 p.body.applyForce(normalForce, p.body.position);
             }
-            // 單向閥物理：
-            // z 減少（順流），z 增加是逆流
-            // 前瓣膜zPos = -compressionLength / 2 - 1
-            // 後瓣膜zPos = compressionLength / 2 + 1
-            // particle的postion.z若在兩瓣膜之間，且velocity.z > 0 則後瓣膜阻擋             
-            // particle的postion.z若在兩瓣膜之間，且velocity.z < 0 則前瓣膜阻擋
-            if (frontValveEnabled && backValveEnabled && frontValveBodies.length > 0 && backValveBodies.length > 0) {
-                const frontZ = frontValveBodies[0].position.z;
-                const backZ = backValveBodies[0].position.z;
-                // 在兩瓣膜之間
-                if (p.body.position.z > frontZ && p.body.position.z < backZ) {
-                    // 順流（z 減少）允許，逆流（z 增加）阻擋
-                    if (p.body.velocity.z > 0) { // 逆流，阻擋於後瓣膜
+
+            // 單向瓣膜物理判定：
+            // 順流方向為 -Z，逆流方向為 +Z
+            // 前瓣膜 frontZ = -16，後瓣膜 backZ = +16
+            if (hasFront && hasBack) {
+                // 雙瓣膜模式：
+                // 1. 位於中央壓縮區與後瓣膜處，若血液逆流 (+Z)，阻擋於後瓣膜 backZ，防止逆流回心臟/後方
+                if (p.body.position.z > frontZ && p.body.position.z <= backZ + 0.6) {
+                    if (p.body.velocity.z > 0) {
                         p.body.velocity.z = 0;
-                        p.body.position.z = backZ;
-                    } else if (p.body.velocity.z < 0) { // 順流，檢查前瓣膜
-                        // 不阻擋
+                        p.body.position.z = Math.min(p.body.position.z, backZ);
                     }
                 }
-            } else if (frontValveEnabled && frontValveBodies.length > 0) {
-                const frontZ = frontValveBodies[0].position.z;
-                if (p.body.position.z > frontZ && p.body.velocity.z < 0) {
-                    // 只裝前瓣膜時，z 減少（順流）允許，z 增加（逆流）不會進入這區間
-                    // 不阻擋
+                // 2. 位於前瓣膜下游 (z <= frontZ)，若血液嘗試逆流 (+Z)，前瓣膜緊閉阻擋於 frontZ
+                if (p.body.position.z <= frontZ + 0.6 && p.body.position.z >= frontZ - 8) {
+                    if (p.body.velocity.z > 0) {
+                        p.body.velocity.z = 0;
+                        p.body.position.z = Math.min(p.body.position.z, frontZ);
+                    }
                 }
-                if (p.body.position.z > frontZ && p.body.velocity.z > 0) {
-                    // 逆流，阻擋於前瓣膜外側
+            } else if (hasFront) {
+                // 僅有前瓣膜：任何嘗試逆流 (+Z) 通過 frontZ 的粒子均被阻擋
+                if (p.body.position.z <= frontZ + 0.6 && p.body.velocity.z > 0) {
+                    p.body.velocity.z = 0;
+                    p.body.position.z = Math.min(p.body.position.z, frontZ);
+                } else if (p.body.position.z > frontZ && p.body.position.z <= frontZ + 2 && p.body.velocity.z > 0) {
                     p.body.velocity.z = 0;
                     p.body.position.z = frontZ;
                 }
-            } else if (backValveEnabled && backValveBodies.length > 0) {
-                const backZ = backValveBodies[0].position.z;
-                if (p.body.position.z < backZ && p.body.velocity.z > 0) {
-                    // 逆流，阻擋於後瓣膜內側
+            } else if (hasBack) {
+                // 僅有後瓣膜：位於後瓣膜前側嘗試逆流 (+Z) 的粒子被阻擋於 backZ
+                if (p.body.position.z <= backZ + 0.6 && p.body.velocity.z > 0) {
                     p.body.velocity.z = 0;
-                    p.body.position.z = backZ;
+                    p.body.position.z = Math.min(p.body.position.z, backZ);
                 }
             }
         });
+    }
+
+    // 動態解剖瓣膜開闔動畫：順流 (-Z) 時瓣膜葉片向外偏轉張開，停止或逆流 (+Z) 時緊密閉合
+    function updateValveFlapAnimation(valveMesh, valveZ) {
+        if (!valveMesh || !valveMesh.userData || !valveMesh.userData.topPivot) return;
+        const { topPivot, bottomPivot } = valveMesh.userData;
+
+        // 計算瓣膜附近的血液順流流速 (-Z 方向)
+        let forwardFlowSum = 0;
+        let count = 0;
+        particles.forEach(p => {
+            const dz = p.body.position.z - valveZ;
+            if (Math.abs(dz) < 10) {
+                count++;
+                if (p.body.velocity.z < 0) {
+                    forwardFlowSum += -p.body.velocity.z;
+                }
+            }
+        });
+
+        const avgForwardFlow = count > 0 ? (forwardFlowSum / count) : 0;
+
+        // 當血液順流湧動時動態張開；流速趨緩或逆流時迅速閉合
+        let targetOpen = 0;
+        if (avgForwardFlow > 0.25) {
+            targetOpen = Math.min(1.0, (avgForwardFlow - 0.2) / 4.0);
+        } else {
+            targetOpen = 0.0;
+        }
+
+        // 開啟時自然平滑，閉合時迅速果斷（防止倒流生理特性）
+        const smoothing = targetOpen > valveMesh.userData.currentOpen ? 0.2 : 0.32;
+        valveMesh.userData.currentOpen += (targetOpen - valveMesh.userData.currentOpen) * smoothing;
+
+        const restAngle = 0.16; // 緊密貼合角 (~9 度)
+        const maxTilt = 0.62;   // 最大開啟角 (~35 度)
+
+        topPivot.rotation.x = restAngle + valveMesh.userData.currentOpen * maxTilt;
+        bottomPivot.rotation.x = -restAngle - valveMesh.userData.currentOpen * maxTilt;
     }
     
     function resetCamera() {
@@ -482,11 +680,11 @@ window.onload = function () {
 
         if (frontValveEnabled && frontValveMeshes.length > 0 && frontValveBodies.length > 0) {
             frontValveMeshes[0].position.copy(frontValveBodies[0].position);
-            frontValveMeshes[0].quaternion.copy(frontValveBodies[0].quaternion);
+            updateValveFlapAnimation(frontValveMeshes[0], frontValveBodies[0].position.z);
         }
         if (backValveEnabled && backValveMeshes.length > 0 && backValveBodies.length > 0) {
             backValveMeshes[0].position.copy(backValveBodies[0].position);
-            backValveMeshes[0].quaternion.copy(backValveBodies[0].quaternion);
+            updateValveFlapAnimation(backValveMeshes[0], backValveBodies[0].position.z);
         }
 
         renderer.render(scene, camera);

@@ -485,6 +485,134 @@ function exportCSV() {
   download(name, lines.join('\n'));
 }
 
+function generateSummaryText() {
+  const rows = state.results;
+  if (!rows || !rows.length) return '';
+
+  const summaries = computeSummaryByCondition(rows);
+  const now = new Date();
+  const formatDateTime = now.toLocaleString('zh-TW', { hour12: false });
+
+  let text = '==============================\n';
+  text += '📋 反應時間探究測驗報告\n';
+  text += '==============================\n';
+  text += `受試者代號：${state.participantId || '（未填寫）'}\n`;
+  text += `測驗場次：${state.sessionId || '（無）'}\n`;
+  text += `測驗時間：${formatDateTime}\n`;
+  text += `設備環境：${state.deviceInfo || navigator.userAgent}\n`;
+  text += `視窗解析度：${state.viewport.w} × ${state.viewport.h}\n`;
+  text += `條件順序：${state.order || 'AB'}\n\n`;
+
+  text += '【條件分組摘要數據】\n';
+  for (const s of summaries) {
+    const hitRate = s.n > 0 ? ((s.hits / s.n) * 100).toFixed(1) : '0.0';
+    const faRate = s.n > 0 ? ((s.fa / s.n) * 100).toFixed(1) : '0.0';
+    const missRate = s.n > 0 ? ((s.miss / s.n) * 100).toFixed(1) : '0.0';
+
+    text += `▶ 條件：${s.conditionId}\n`;
+    text += `  • 總試次：${s.n} 試\n`;
+    text += `  • 有效命中數 (Hits)：${s.hits} 次 (${hitRate}%)\n`;
+    text += `  • 平均反應時間 (Mean RT)：${s.rtMean} ms\n`;
+    text += `  • 中位數反應時間 (Median RT)：${s.rtMedian} ms\n`;
+    text += `  • 標準差 (SD)：${s.rtSd} ms\n`;
+    text += `  • 提早誤按 / 虛報 (FA)：${s.fa} 次 (誤按率: ${faRate}%)\n`;
+    text += `  • 逾時漏失 (Miss)：${s.miss} 次 (漏失率: ${missRate}%)\n\n`;
+  }
+
+  // 全體匯總
+  const allHits = rows.filter(r => r.hit && !r.anticipatory && !r.timeout && r.errorType === 'none').map(r => r.rtMs);
+  const totalFA = rows.filter(r => r.errorType === 'FA').length;
+  const totalMiss = rows.filter(r => r.timeout).length;
+  const totalHitRate = rows.length > 0 ? ((allHits.length / rows.length) * 100).toFixed(1) : '0.0';
+  const totalFaRate = rows.length > 0 ? ((totalFA / rows.length) * 100).toFixed(1) : '0.0';
+
+  text += '【整體統計彙總】\n';
+  text += `  • 累計總試次：${rows.length} 試\n`;
+  text += `  • 全體平均反應時間：${Math.round(mean(allHits))} ms\n`;
+  text += `  • 全體中位反應時間：${Math.round(median(allHits))} ms\n`;
+  text += `  • 全體標準差 (SD)：${Math.round(stddev(allHits))} ms\n`;
+  text += `  • 全體命中率：${totalHitRate}%\n`;
+  text += `  • 全體虛報率 (FA Rate)：${totalFaRate}%\n`;
+  text += '==============================\n';
+
+  return text;
+}
+
+function showToast(msg, duration = 2500) {
+  let toast = $('#toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'toast';
+    toast.className = 'toast';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(toast.__timer);
+  toast.__timer = setTimeout(() => {
+    toast.classList.remove('show');
+  }, duration);
+}
+
+async function copySummaryText() {
+  const rows = state.results;
+  if (!rows || !rows.length) {
+    alert('尚無資料可複製，請先完成實驗測驗！');
+    return;
+  }
+
+  const text = generateSummaryText();
+  const copyBtn = $('#btn-copy-summary');
+  const originalText = copyBtn ? copyBtn.textContent : '複製結果文字';
+
+  let copied = false;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      copied = true;
+    } catch (err) {
+      console.warn('Clipboard API 寫入失敗，切換降級相容模式:', err);
+    }
+  }
+
+  if (!copied) {
+    // 降級方案：document.execCommand('copy')
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.top = '-9999px';
+      textarea.style.left = '-9999px';
+      textarea.setAttribute('readonly', '');
+      document.body.appendChild(textarea);
+      textarea.select();
+      textarea.setSelectionRange(0, 99999);
+      copied = document.execCommand('copy');
+      document.body.removeChild(textarea);
+    } catch (fallbackErr) {
+      console.error('降級複製亦失敗:', fallbackErr);
+    }
+  }
+
+  if (copied) {
+    if (copyBtn) {
+      copyBtn.textContent = '✅ 已複製文字！';
+      copyBtn.classList.add('copied');
+      setTimeout(() => {
+        copyBtn.textContent = originalText;
+        copyBtn.classList.remove('copied');
+      }, 2000);
+    }
+    showToast('✅ 測驗結果已成功複製到剪貼簿！');
+  } else {
+    alert('複製失敗，請手動複製下列文字：\n\n' + text);
+  }
+}
+
+// 暴露於 window 供測試與腳本調用
+window.generateSummaryText = generateSummaryText;
+window.copySummaryText = copySummaryText;
+
 function setButtons({ running }) {
   $('#btn-start').disabled = running;
   $('#btn-pause').disabled = !running;
@@ -586,6 +714,8 @@ window.addEventListener('DOMContentLoaded', () => {
   $('#btn-start').addEventListener('click', startExperiment);
   $('#btn-export').addEventListener('click', exportCSV);
   $('#btn-export-2').addEventListener('click', exportCSV);
+  const btnCopy = $('#btn-copy-summary');
+  if (btnCopy) btnCopy.addEventListener('click', copySummaryText);
   $('#btn-clear').addEventListener('click', clearResults);
   $('#btn-fullscreen').addEventListener('click', enterFullscreen);
 

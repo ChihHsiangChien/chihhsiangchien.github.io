@@ -210,6 +210,10 @@ class FiddlerCrabGame {
         
         // 控制
         this.keys = {};
+        this.btnVx = 0;
+        this.btnVz = 0;
+        this.touchVx = 0;
+        this.touchVz = 0;
         this.setupControls();
         
         // 窗口調整
@@ -489,47 +493,159 @@ class FiddlerCrabGame {
     }
 
     setupControls() {
+        // 鍵盤控制 (WASD + 方向鍵)
         window.addEventListener('keydown', (e) => {
-            this.keys[e.key.toLowerCase()] = true;
+            const key = e.key.toLowerCase();
+            this.keys[key] = true;
+            // 避免預設方向鍵及空白鍵滾動頁面
+            if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd', ' '].includes(key)) {
+                e.preventDefault();
+            }
         });
         
         window.addEventListener('keyup', (e) => {
             this.keys[e.key.toLowerCase()] = false;
         });
         
-        // 虛擬按鈕
+        // 虛擬按鈕 - 使用 Pointer Events 徹底修復滑動出界卡死速度 (Stuck Velocity Bug Fix)
+        const activeDirs = new Set();
+        const updateBtnVelocity = () => {
+            let vx = 0;
+            let vz = 0;
+            if (activeDirs.has('left')) vx -= this.player.speed;
+            if (activeDirs.has('right')) vx += this.player.speed;
+            if (activeDirs.has('turn-up') || activeDirs.has('up')) vz -= this.player.speed;
+            if (activeDirs.has('turn-down') || activeDirs.has('down')) vz += this.player.speed;
+            this.btnVx = vx;
+            this.btnVz = vz;
+            // 相容性設定
+            this.player.vx = vx;
+            this.player.vz = vz;
+        };
+
         document.querySelectorAll('.btn-arrow').forEach(btn => {
-            const handlePress = (isPressed) => {
-                const direction = btn.dataset.direction;
-                if (direction === 'left') this.player.vx = isPressed ? -this.player.speed : 0;
-                if (direction === 'right') this.player.vx = isPressed ? this.player.speed : 0;
-                if (direction === 'turn-up') this.player.vz = isPressed ? -this.player.speed : 0;
-                if (direction === 'turn-down') this.player.vz = isPressed ? this.player.speed : 0;
+            const direction = btn.dataset.direction;
+
+            const handlePress = (e) => {
+                activeDirs.add(direction);
+                updateBtnVelocity();
+                if (btn.setPointerCapture && e && e.pointerId !== undefined) {
+                    try { btn.setPointerCapture(e.pointerId); } catch (_) {}
+                }
+                if (e && e.cancelable) e.preventDefault();
             };
-            
-            btn.addEventListener('mousedown', () => handlePress(true));
-            btn.addEventListener('mouseup', () => handlePress(false));
-            btn.addEventListener('touchstart', (e) => { handlePress(true); e.preventDefault(); });
-            btn.addEventListener('touchend', (e) => { handlePress(false); e.preventDefault(); });
+
+            const handleRelease = (e) => {
+                activeDirs.delete(direction);
+                updateBtnVelocity();
+                if (btn.releasePointerCapture && e && e.pointerId !== undefined) {
+                    try { btn.releasePointerCapture(e.pointerId); } catch (_) {}
+                }
+                if (e && e.cancelable) e.preventDefault();
+            };
+
+            btn.addEventListener('pointerdown', handlePress);
+            btn.addEventListener('pointerup', handleRelease);
+            btn.addEventListener('pointercancel', handleRelease);
+            btn.addEventListener('pointerleave', handleRelease);
+            btn.addEventListener('contextmenu', (e) => e.preventDefault());
         });
+
+        // 全域防呆釋放：游標/觸控在視窗任一處釋放或失焦時，強制歸零按鍵速度
+        window.addEventListener('pointerup', () => {
+            activeDirs.clear();
+            updateBtnVelocity();
+        });
+        window.addEventListener('pointercancel', () => {
+            activeDirs.clear();
+            updateBtnVelocity();
+        });
+        window.addEventListener('blur', () => {
+            activeDirs.clear();
+            updateBtnVelocity();
+            this.keys = {};
+            this.touchVx = 0;
+            this.touchVz = 0;
+        });
+
+        // 行動裝置觸控滑動支援 (#canvas-container touch drag / swipe)
+        const container = document.getElementById('canvas-container');
+        if (container) {
+            let touchActive = false;
+            let startX = 0;
+            let startY = 0;
+
+            container.addEventListener('touchstart', (e) => {
+                if (e.touches && e.touches.length > 0) {
+                    touchActive = true;
+                    startX = e.touches[0].clientX;
+                    startY = e.touches[0].clientY;
+                    this.touchVx = 0;
+                    this.touchVz = 0;
+                }
+            }, { passive: false });
+
+            container.addEventListener('touchmove', (e) => {
+                if (!touchActive || !e.touches || e.touches.length === 0) return;
+                const currentX = e.touches[0].clientX;
+                const currentY = e.touches[0].clientY;
+                const dx = currentX - startX;
+                const dy = currentY - startY;
+                const dist = Math.hypot(dx, dy);
+                const deadzone = 8; // 8px deadzone for natural tap vs drag
+
+                if (dist > deadzone) {
+                    const angle = Math.atan2(dy, dx);
+                    const intensity = Math.min((dist - deadzone) / 45, 1);
+                    this.touchVx = Math.cos(angle) * this.player.speed * intensity;
+                    this.touchVz = Math.sin(angle) * this.player.speed * intensity;
+                } else {
+                    this.touchVx = 0;
+                    this.touchVz = 0;
+                }
+                if (e.cancelable) e.preventDefault();
+            }, { passive: false });
+
+            const endTouch = () => {
+                touchActive = false;
+                this.touchVx = 0;
+                this.touchVz = 0;
+            };
+
+            container.addEventListener('touchend', endTouch);
+            container.addEventListener('touchcancel', endTouch);
+        }
         
-        document.getElementById('new-game-btn')?.addEventListener('click', () => location.reload());
-        document.getElementById('restart-btn')?.addEventListener('click', () => location.reload());
+        document.getElementById('new-game-btn')?.addEventListener('click', () => this.resetGame());
+        document.getElementById('restart-btn')?.addEventListener('click', () => this.resetGame());
     }
 
     update() {
         if (!this.gameRunning) return;
         
         // 更新玩家
-        // 鍵盤控制
-        this.player.x += this.keys['arrowleft'] ? -this.player.speed : 0;
-        this.player.x += this.keys['arrowright'] ? this.player.speed : 0;
-        this.player.z += this.keys['arrowup'] ? -this.player.speed : 0;
-        this.player.z += this.keys['arrowdown'] ? this.player.speed : 0;
+        // 鍵盤控制 (WASD + 方向鍵)
+        let moveX = 0;
+        let moveZ = 0;
+        if (this.keys['arrowleft'] || this.keys['a']) moveX -= this.player.speed;
+        if (this.keys['arrowright'] || this.keys['d']) moveX += this.player.speed;
+        if (this.keys['arrowup'] || this.keys['w']) moveZ -= this.player.speed;
+        if (this.keys['arrowdown'] || this.keys['s']) moveZ += this.player.speed;
         
-        // UI按鈕控制 (Velocity)
-        this.player.x += this.player.vx;
-        this.player.z += this.player.vz;
+        // 虛擬按鈕與觸控滑動控制 (Velocity)
+        moveX += this.btnVx + this.touchVx;
+        moveZ += this.btnVz + this.touchVz;
+        
+        // 限制單幀最大合成位移，維持順暢手感
+        const moveDist = Math.hypot(moveX, moveZ);
+        if (moveDist > this.player.speed * 1.5) {
+            const factor = (this.player.speed * 1.5) / moveDist;
+            moveX *= factor;
+            moveZ *= factor;
+        }
+
+        this.player.x += moveX;
+        this.player.z += moveZ;
         
         this.player.x = Math.max(-50, Math.min(50, this.player.x));
         this.player.z = Math.max(-50, Math.min(50, this.player.z));
@@ -566,7 +682,7 @@ class FiddlerCrabGame {
             pred.distance = Math.hypot(this.player.x - pred.x, this.player.z - pred.z);
             
             if (pred.distance < 2) {
-                this.endGame();
+                this.endGame('predator');
             }
             
             // 移除超出範圍的天敵
@@ -629,7 +745,7 @@ class FiddlerCrabGame {
         
         this.player.health -= 0.04;
         if (this.player.health <= 0) {
-            this.endGame();
+            this.endGame('starvation');
         }
         
         this.elapsedTime = Math.floor((Date.now() - this.startTime) / 1000);
@@ -665,15 +781,121 @@ class FiddlerCrabGame {
         healthFill.style.width = Math.max(0, this.player.health) + '%';
     }
 
-    endGame() {
+    endGame(reason = 'predator') {
         this.gameRunning = false;
         this.gameOver = true;
+
+        const minutes = Math.floor(this.elapsedTime / 60);
+        const seconds = this.elapsedTime % 60;
+        const formattedTime = `${minutes}分${seconds < 10 ? '0' : ''}${seconds}秒 (${this.elapsedTime}秒)`;
+
         const gameOverDiv = document.getElementById('game-over');
-        document.getElementById('game-over-title').textContent = '遊戲結束';
-        document.getElementById('game-over-message').textContent = '你被天敵吃掉了！';
-        document.getElementById('final-food').textContent = this.player.food;
-        document.getElementById('final-time').textContent = this.elapsedTime + 's';
-        gameOverDiv.style.display = 'block';
+        const titleElem = document.getElementById('game-over-title');
+        const msgElem = document.getElementById('game-over-message');
+        const causeElem = document.getElementById('game-over-cause');
+        const iconElem = document.getElementById('game-over-icon');
+        const tipElem = document.getElementById('game-over-tip');
+        const finalFoodElem = document.getElementById('final-food');
+        const finalTimeElem = document.getElementById('final-time');
+        const finalTitleElem = document.getElementById('final-title');
+
+        if (finalFoodElem) finalFoodElem.textContent = `${this.player.food} 顆`;
+        if (finalTimeElem) finalTimeElem.textContent = formattedTime;
+
+        let rankTitle = '泥灘迷途蟹';
+        if (this.elapsedTime >= 60 || this.player.food >= 20) {
+            rankTitle = '🌟 招潮蟹生存大師';
+        } else if (this.elapsedTime >= 35 || this.player.food >= 12) {
+            rankTitle = '⚡ 避敵生存能手';
+        } else if (this.elapsedTime >= 15 || this.player.food >= 5) {
+            rankTitle = '🦀 敏捷覓食者';
+        }
+        if (finalTitleElem) finalTitleElem.textContent = rankTitle;
+
+        if (reason === 'predator') {
+            if (titleElem) titleElem.textContent = '遭遇天敵捕食';
+            if (msgElem) msgElem.textContent = '白鷺鷥從天而降抓走了你！';
+            if (causeElem) {
+                causeElem.textContent = '💀 死亡原因：天敵捕食 (白鷺鷥)';
+                causeElem.className = 'game-over-cause-badge cause-predator';
+            }
+            if (iconElem) iconElem.textContent = '🦅';
+            if (tipElem) tipElem.innerHTML = '💡 <strong>生存指引</strong>：看見白鷺鷥靠近時，請立刻快速躲回中央藍色洞穴！';
+        } else {
+            if (titleElem) titleElem.textContent = '體力耗盡';
+            if (msgElem) msgElem.textContent = '招潮蟹缺乏養分餓倒在泥灘上！';
+            if (causeElem) {
+                causeElem.textContent = '🍂 死亡原因：飢餓枯竭 (體力耗盡)';
+                causeElem.className = 'game-over-cause-badge cause-starvation';
+            }
+            if (iconElem) iconElem.textContent = '🍂';
+            if (tipElem) tipElem.innerHTML = '💡 <strong>生存指引</strong>：泥灘上的黃色顆粒是營養豐富的食物，適時進食可回復大量生命值！';
+        }
+
+        if (gameOverDiv) {
+            gameOverDiv.style.display = 'flex';
+        }
+    }
+
+    resetGame() {
+        this.gameRunning = true;
+        this.gameOver = false;
+        this.startTime = Date.now();
+        this.elapsedTime = 0;
+        this.predatorSpawnCounter = 0;
+
+        // 重置玩家
+        this.player.x = 0;
+        this.player.z = 0;
+        this.player.y = 0.2;
+        this.player.health = 100;
+        this.player.food = 0;
+        this.player.alive = true;
+        this.player.vx = 0;
+        this.player.vz = 0;
+        if (this.player.mesh) {
+            this.player.mesh.position.set(0, 0.2, 0);
+        }
+
+        // 清除輸入速度
+        this.btnVx = 0;
+        this.btnVz = 0;
+        this.touchVx = 0;
+        this.touchVz = 0;
+        this.keys = {};
+
+        // 清除現有天敵模型與數據
+        for (let mesh of this.predatorMeshes) {
+            this.scene.remove(mesh);
+        }
+        this.predators = [];
+        this.predatorMeshes = [];
+
+        // 清除食物並重新生成
+        for (let mesh of this.foodMeshes) {
+            this.scene.remove(mesh);
+        }
+        this.foodItems = [];
+        this.foodMeshes = [];
+        for (let i = 0; i < 30; i++) {
+            this.spawnFood();
+        }
+
+        // 重置其他招潮蟹
+        this.otherCrabs.forEach(crab => {
+            crab.health = 100;
+            crab.alive = true;
+            crab.food = 0;
+            crab.state = 'wandering';
+        });
+
+        // 隱藏結算彈窗
+        const gameOverDiv = document.getElementById('game-over');
+        if (gameOverDiv) {
+            gameOverDiv.style.display = 'none';
+        }
+
+        this.updateUI();
     }
 
     onWindowResize() {
@@ -710,7 +932,8 @@ class FiddlerCrabGame {
     }
 }
 
-// 初始化遊戲
+// 導出與初始化遊戲
+window.FiddlerCrabGame = FiddlerCrabGame;
 document.addEventListener('DOMContentLoaded', () => {
-    new FiddlerCrabGame();
+    window.fiddlerCrabGame = new FiddlerCrabGame();
 });

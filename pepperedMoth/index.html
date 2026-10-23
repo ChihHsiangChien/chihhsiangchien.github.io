@@ -64,6 +64,51 @@
             border-radius: 15px;
             font-size: 14px;
         }
+        .tree-container.predator-active {
+            cursor: crosshair;
+        }
+        .tree-container.predator-active::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            border: 2px dashed rgba(239, 68, 68, 0.4);
+            border-radius: 8px;
+            box-shadow: inset 0 0 20px rgba(239, 68, 68, 0.15);
+        }
+        .peck-ripple {
+            position: absolute;
+            width: 44px;
+            height: 44px;
+            border: 3px solid #ef4444;
+            border-radius: 50%;
+            pointer-events: none;
+            transform: translate(-50%, -50%) scale(0.2);
+            opacity: 1;
+            animation: peckRippleAnim 0.38s ease-out forwards;
+            z-index: 40;
+        }
+        @keyframes peckRippleAnim {
+            0% { transform: translate(-50%, -50%) scale(0.2); opacity: 1; }
+            100% { transform: translate(-50%, -50%) scale(1.6); opacity: 0; }
+        }
+        .peck-tag {
+            position: absolute;
+            pointer-events: none;
+            font-size: 13px;
+            font-weight: bold;
+            color: #ef4444;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8), 0 0 5px rgba(255, 255, 255, 0.9);
+            transform: translate(-50%, -100%);
+            animation: peckFloatAnim 0.6s ease-out forwards;
+            z-index: 41;
+            user-select: none;
+            white-space: nowrap;
+        }
+        @keyframes peckFloatAnim {
+            0% { transform: translate(-50%, -10%); opacity: 1; }
+            100% { transform: translate(-50%, -130%); opacity: 0; }
+        }
         @media (max-width: 640px) {
             .tree-container {
                 height: 300px;
@@ -130,13 +175,44 @@
             <div class="mb-4">
                 <div class="tree-container light-bg rounded-lg overflow-hidden" id="treeContainer">
                     <div class="stage-indicator" id="stageIndicator">第1階段: 初始世代</div>
+                    <!-- 15秒捕食計時器 (Predator Mode Countdown) -->
+                    <div id="predatorTimerBadge" class="hidden absolute top-2.5 left-1/2 -translate-x-1/2 bg-gray-900/90 text-white px-3.5 py-1 rounded-full shadow-lg flex items-center space-x-2 border border-red-500/70 z-30 pointer-events-none">
+                        <span class="text-xs font-semibold text-red-200">⏱️ 捕食倒數:</span>
+                        <span id="predatorTimerSec" class="font-mono font-bold text-sm text-yellow-300">15.0s</span>
+                        <div class="w-16 bg-gray-700 h-1.5 rounded-full overflow-hidden">
+                            <div id="predatorTimerBar" class="bg-green-500 h-full w-full transition-all duration-100"></div>
+                        </div>
+                    </div>
                     <div class="population-counter" id="populationCounter">黑蛾: 0 | 白蛾: 0</div>
                 </div>
             </div>
 
             <div class="control-panel p-4 border border-gray-200 rounded-lg">
                 <div id="phase1Controls" class="transition-opacity duration-300">
-                    <h3 class="text-lg font-semibold mb-2">環境設定</h3>
+                    <h3 class="text-lg font-semibold mb-2">模式與環境設定</h3>
+                    
+                    <!-- 模式選擇 (Predator Mode vs Auto Mode) -->
+                    <div class="mb-4">
+                        <label class="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">遊玩模式：</label>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <button type="button" id="modePredatorBtn" class="p-3 border-2 border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-900 dark:text-blue-200 rounded-lg flex items-center space-x-2 text-left focus:outline-none transition">
+                                <span class="text-2xl">🦅</span>
+                                <div>
+                                    <div class="font-bold text-sm">天敵捕食者模式 (推薦)</div>
+                                    <div class="text-xs text-gray-600 dark:text-gray-300">限時 15 秒捕食，考驗眼力與天擇淘汰</div>
+                                </div>
+                            </button>
+                            <button type="button" id="modeAutoBtn" class="p-3 border-2 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg flex items-center space-x-2 text-left focus:outline-none transition">
+                                <span class="text-2xl">⚙️</span>
+                                <div>
+                                    <div class="font-bold text-sm">自然族群模擬模式</div>
+                                    <div class="text-xs text-gray-500 dark:text-gray-400">自由點擊觀察或直接推進演化世代</div>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+
+                    <h4 class="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-1">背景設定：</h4>
                     <div class="flex flex-wrap gap-2 mb-4">
                         <button id="lightBgBtn" class="px-4 py-2 bg-yellow-100 text-yellow-800 rounded hover:bg-yellow-200 focus:outline-none focus:ring-2 focus:ring-yellow-500">
                             淺色背景 (未受污染)
@@ -162,22 +238,30 @@
                 </div>
 
                 <div id="phase2Controls" class="hidden transition-opacity duration-300">
-                    <h3 class="text-lg font-semibold mb-2">捕食模擬</h3>
-                    <p class="mb-4 text-gray-700">現在你是一隻鳥！點擊胡椒蛾來捕食它們。</p>
-                    <div class="flex items-center mb-4">
-                        <div class="mr-4">
-                            <span class="text-gray-700">已捕食:</span>
+                    <div class="flex items-center justify-between mb-2">
+                        <h3 class="text-lg font-semibold">捕食模擬</h3>
+                        <span id="currentModeBadge" class="text-xs px-2.5 py-0.5 rounded-full font-bold bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 border border-red-300 dark:border-red-700">🦅 天敵捕食者模式 (限時15s)</span>
+                    </div>
+                    <p id="phase2Hint" class="mb-4 text-gray-700 dark:text-gray-300">現在你是一隻鳥！在 15 秒倒數內點擊胡椒蛾來捕食它們。</p>
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+                        <div>
+                            <span class="text-gray-700 dark:text-gray-300">已捕食:</span>
                             <span id="capturedBlackMothsCount" class="ml-2 bg-gray-800 text-white px-2 py-1 rounded">0</span>
-                            <span class="ml-1 text-gray-700">黑蛾</span>
+                            <span class="ml-1 text-gray-700 dark:text-gray-300">黑蛾</span>
                             <span id="capturedWhiteMothsCount" class="ml-2 bg-gray-200 text-gray-800 border border-gray-400 px-2 py-1 rounded">0</span>
-                            <span class="ml-1 text-gray-700">白蛾</span>
+                            <span class="ml-1 text-gray-700 dark:text-gray-300">白蛾</span>
                         </div>
-                        <button id="changeBgBtn" class="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 focus:outline-none focus:ring-2 focus:ring-purple-500">
-                            切換背景
-                        </button>
+                        <div class="flex items-center space-x-2">
+                            <button id="restartRoundBtn" class="px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm rounded shadow focus:outline-none hidden">
+                                ↺ 重啟本代15秒
+                            </button>
+                            <button id="changeBgBtn" class="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                                切換背景
+                            </button>
+                        </div>
                     </div>
                     <button id="nextGenerationBtn" class="w-full py-2 bg-green-500 text-white rounded hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500">
-                        下一代
+                        下一代 (或等待倒數結束結算)
                     </button>
                 </div>
 
@@ -252,6 +336,35 @@
                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
                     工業黑化
                 </span>
+        </div>
+
+        <!-- 世代捕食結算彈窗 (Round Settlement Modal) -->
+        <div id="roundSettlementModal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6 text-center transform transition-all border border-gray-200 dark:border-gray-700">
+                <div class="w-14 h-14 bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 rounded-full flex items-center justify-center text-3xl mx-auto mb-2">🦅</div>
+                <h3 id="settlementTitle" class="text-xl font-bold text-gray-900 dark:text-white mb-1">第 1 代 捕食結算</h3>
+                <p id="settlementSubtitle" class="text-xs text-gray-500 dark:text-gray-400 mb-3">15秒捕食時間到！天敵鳥類已完成獵食</p>
+                
+                <div class="grid grid-cols-2 gap-3 mb-3 text-left">
+                    <div class="bg-gray-50 dark:bg-gray-700/50 p-3 rounded-lg border border-gray-200 dark:border-gray-600">
+                        <div class="text-xs font-semibold text-gray-600 dark:text-gray-300">黑蛾族群</div>
+                        <div class="text-sm mt-1">🦅 捕食: <strong id="settleCaughtBlack" class="text-red-600 font-bold">0</strong> 隻</div>
+                        <div class="text-sm">🌿 存活: <strong id="settleSurviveBlack" class="text-green-600 font-bold">0</strong> 隻</div>
+                    </div>
+                    <div class="bg-gray-50 dark:bg-gray-700/50 p-3 rounded-lg border border-gray-200 dark:border-gray-600">
+                        <div class="text-xs font-semibold text-gray-600 dark:text-gray-300">白蛾族群</div>
+                        <div class="text-sm mt-1">🦅 捕食: <strong id="settleCaughtWhite" class="text-red-600 font-bold">0</strong> 隻</div>
+                        <div class="text-sm">🌿 存活: <strong id="settleSurviveWhite" class="text-green-600 font-bold">0</strong> 隻</div>
+                    </div>
+                </div>
+                
+                <div id="settlementAnalysis" class="bg-blue-50 dark:bg-blue-900/30 text-blue-900 dark:text-blue-200 text-xs p-3 rounded-lg text-left mb-4 leading-relaxed border border-blue-200 dark:border-blue-800">
+                    <!-- 依環境填入天擇分析提示 -->
+                </div>
+                
+                <button id="settlementNextBtn" class="w-full py-2.5 px-4 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-md transition focus:outline-none focus:ring-2 focus:ring-green-500">
+                    進入下一代繁衍 ➔
+                </button>
             </div>
         </div>
     </div>
@@ -291,14 +404,140 @@
         const capturedBlackMothsCount = document.getElementById('capturedBlackMothsCount');
         const capturedWhiteMothsCount = document.getElementById('capturedWhiteMothsCount');
 
-        let currentGeneration = 0;
-        let currentBackground = 'light';
-        let blackMoths = [];
-        let whiteMoths = [];
-        let capturedBlackMoths = 0;
-        let capturedWhiteMoths = 0;
-        let generationData = [];
-        let chart = null;
+        // Predator Mode Elements
+        const modePredatorBtn = document.getElementById('modePredatorBtn');
+        const modeAutoBtn = document.getElementById('modeAutoBtn');
+        const currentModeBadge = document.getElementById('currentModeBadge');
+        const phase2Hint = document.getElementById('phase2Hint');
+        const predatorTimerBadge = document.getElementById('predatorTimerBadge');
+        const predatorTimerSec = document.getElementById('predatorTimerSec');
+        const predatorTimerBar = document.getElementById('predatorTimerBar');
+        const restartRoundBtn = document.getElementById('restartRoundBtn');
+        const roundSettlementModal = document.getElementById('roundSettlementModal');
+        const settlementNextBtn = document.getElementById('settlementNextBtn');
+
+        var currentMode = 'predator'; // 'predator' or 'auto'
+        var currentGeneration = 0;
+        var currentBackground = 'light';
+        var blackMoths = [];
+        var whiteMoths = [];
+        var capturedBlackMoths = 0;
+        var capturedWhiteMoths = 0;
+        var generationData = [];
+        var chart = null;
+        var predatorTimer = null;
+        var predatorTimeLeft = 15.0;
+        var isHuntingActive = false;
+        var audioCtx = null;
+
+        // Web Audio Synthesizer (Peck & Round End Sounds)
+        function getAudioContext() {
+            if (!audioCtx) {
+                const AudioClass = window.AudioContext || window.webkitAudioContext;
+                if (AudioClass) {
+                    audioCtx = new AudioClass();
+                }
+            }
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            return audioCtx;
+        }
+
+        function playPeckSound(hit = true) {
+            try {
+                const ctx = getAudioContext();
+                if (!ctx) return;
+                const now = ctx.currentTime;
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                if (hit) {
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(850, now);
+                    osc.frequency.exponentialRampToValueAtTime(140, now + 0.08);
+                    gain.gain.setValueAtTime(0.35, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.09);
+                } else {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(260, now);
+                    osc.frequency.exponentialRampToValueAtTime(80, now + 0.05);
+                    gain.gain.setValueAtTime(0.15, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.06);
+                }
+            } catch (_) {}
+        }
+
+        function playRoundEndSound() {
+            try {
+                const ctx = getAudioContext();
+                if (!ctx) return;
+                const now = ctx.currentTime;
+                [523.25, 659.25, 783.99].forEach((freq, idx) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, now + idx * 0.1);
+                    gain.gain.setValueAtTime(0.2, now + idx * 0.1);
+                    gain.gain.linearRampToValueAtTime(0, now + idx * 0.1 + 0.25);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(now + idx * 0.1);
+                    osc.stop(now + idx * 0.1 + 0.26);
+                });
+            } catch (_) {}
+        }
+
+        function createPeckRipple(x, y, text = null, isHit = true) {
+            const ripple = document.createElement('div');
+            ripple.className = 'peck-ripple';
+            if (!isHit) {
+                ripple.style.borderColor = 'rgba(156, 163, 175, 0.6)';
+            }
+            ripple.style.left = `${x}px`;
+            ripple.style.top = `${y}px`;
+            treeContainer.appendChild(ripple);
+
+            if (text) {
+                const tag = document.createElement('div');
+                tag.className = 'peck-tag';
+                tag.textContent = text;
+                tag.style.left = `${x}px`;
+                tag.style.top = `${y}px`;
+                if (!isHit) {
+                    tag.style.color = '#9ca3af';
+                }
+                treeContainer.appendChild(tag);
+                setTimeout(() => tag.remove(), 600);
+            }
+
+            setTimeout(() => ripple.remove(), 400);
+        }
+
+        // Mode toggle buttons
+        function setGameMode(mode) {
+            currentMode = mode;
+            if (mode === 'predator') {
+                modePredatorBtn.classList.add('border-blue-500', 'bg-blue-50', 'dark:bg-blue-900/30', 'text-blue-900', 'dark:text-blue-200');
+                modePredatorBtn.classList.remove('border-gray-200', 'dark:border-gray-700', 'bg-gray-50', 'dark:bg-gray-800', 'text-gray-700', 'dark:text-gray-300');
+                modeAutoBtn.classList.remove('border-blue-500', 'bg-blue-50', 'dark:bg-blue-900/30', 'text-blue-900', 'dark:text-blue-200');
+                modeAutoBtn.classList.add('border-gray-200', 'dark:border-gray-700', 'bg-gray-50', 'dark:bg-gray-800', 'text-gray-700', 'dark:text-gray-300');
+            } else {
+                modeAutoBtn.classList.add('border-blue-500', 'bg-blue-50', 'dark:bg-blue-900/30', 'text-blue-900', 'dark:text-blue-200');
+                modeAutoBtn.classList.remove('border-gray-200', 'dark:border-gray-700', 'bg-gray-50', 'dark:bg-gray-800', 'text-gray-700', 'dark:text-gray-300');
+                modePredatorBtn.classList.remove('border-blue-500', 'bg-blue-50', 'dark:bg-blue-900/30', 'text-blue-900', 'dark:text-blue-200');
+                modePredatorBtn.classList.add('border-gray-200', 'dark:border-gray-700', 'bg-gray-50', 'dark:bg-gray-800', 'text-gray-700', 'dark:text-gray-300');
+            }
+        }
+        modePredatorBtn?.addEventListener('click', () => setGameMode('predator'));
+        modeAutoBtn?.addEventListener('click', () => setGameMode('auto'));
 
         // Background buttons
         document.getElementById('lightBgBtn').addEventListener('click', () => changeBackground('light'));
@@ -318,7 +557,41 @@
         startSimulationBtn.addEventListener('click', startSimulation);
 
         // Next generation button
-        nextGenerationBtn.addEventListener('click', createNextGeneration);
+        nextGenerationBtn.addEventListener('click', () => {
+            if (currentMode === 'predator' && isHuntingActive) {
+                endPredatorRound();
+            } else {
+                createNextGeneration();
+            }
+        });
+
+        // Restart round button (Predator Mode 15s re-hunt)
+        restartRoundBtn?.addEventListener('click', () => {
+            if (currentMode === 'predator') {
+                startPredatorRound();
+            }
+        });
+
+        // Settlement next button
+        settlementNextBtn?.addEventListener('click', () => {
+            roundSettlementModal.classList.add('hidden');
+            if (currentGeneration >= 5) {
+                moveToAnalysisPhase();
+            } else {
+                createNextGeneration();
+            }
+        });
+
+        // Reticle click on treeContainer directly (miss peck)
+        treeContainer.addEventListener('click', (e) => {
+            if (e.target === treeContainer && isHuntingActive) {
+                const rect = treeContainer.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                playPeckSound(false);
+                createPeckRipple(x, y, '未擊中', false);
+            }
+        });
 
         // Change background button
         changeBgBtn.addEventListener('click', toggleBackground);
@@ -377,6 +650,105 @@
             capturedBlackMoths = 0;
             capturedWhiteMoths = 0;
             updateCapturedCounter();
+
+            // Check game mode
+            if (currentMode === 'predator') {
+                currentModeBadge.textContent = '🦅 天敵捕食者模式 (限時15s)';
+                phase2Hint.textContent = '你是天敵鳥類！限時 15 秒內盡可能點擊發現並捕食胡椒蛾。';
+                predatorTimerBadge.classList.remove('hidden');
+                restartRoundBtn.classList.remove('hidden');
+                startPredatorRound();
+            } else {
+                currentModeBadge.textContent = '⚙️ 自然族群模擬模式';
+                phase2Hint.textContent = '自由觀察模式：可自由點擊捕食，或直接點擊「下一代」推進演化。';
+                predatorTimerBadge.classList.add('hidden');
+                restartRoundBtn.classList.add('hidden');
+                isHuntingActive = true;
+                nextGenerationBtn.textContent = '下一代';
+            }
+        }
+
+        function startPredatorRound() {
+            if (predatorTimer) clearInterval(predatorTimer);
+            predatorTimeLeft = 15.0;
+            isHuntingActive = true;
+            treeContainer.classList.add('predator-active');
+            predatorTimerBadge.classList.remove('hidden');
+            restartRoundBtn.classList.remove('hidden');
+            nextGenerationBtn.textContent = '下一代 (倒數進行中...)';
+            updateTimerUI();
+
+            const startTime = Date.now();
+            const durationMs = 15000;
+
+            predatorTimer = setInterval(() => {
+                const elapsed = Date.now() - startTime;
+                const remaining = Math.max(0, (durationMs - elapsed) / 1000);
+                predatorTimeLeft = remaining;
+                updateTimerUI();
+
+                if (remaining <= 0) {
+                    clearInterval(predatorTimer);
+                    predatorTimer = null;
+                    endPredatorRound();
+                }
+            }, 100);
+        }
+
+        function updateTimerUI() {
+            predatorTimerSec.textContent = `${predatorTimeLeft.toFixed(1)}s`;
+            const pct = (predatorTimeLeft / 15.0) * 100;
+            predatorTimerBar.style.width = `${pct}%`;
+            if (predatorTimeLeft > 7) {
+                predatorTimerBar.className = 'bg-green-500 h-full w-full transition-all duration-100';
+            } else if (predatorTimeLeft > 3) {
+                predatorTimerBar.className = 'bg-yellow-500 h-full w-full transition-all duration-100';
+            } else {
+                predatorTimerBar.className = 'bg-red-500 h-full w-full transition-all duration-100 animate-pulse';
+            }
+        }
+
+        function endPredatorRound() {
+            isHuntingActive = false;
+            treeContainer.classList.remove('predator-active');
+            nextGenerationBtn.textContent = '進入下一代繁衍 ➔';
+            playRoundEndSound();
+
+            const genIdx = currentGeneration - 1;
+            if (generationData[genIdx]) {
+                generationData[genIdx].capturedBlack = capturedBlackMoths;
+                generationData[genIdx].capturedWhite = capturedWhiteMoths;
+                generationData[genIdx].survivingBlack = blackMoths.length;
+                generationData[genIdx].survivingWhite = whiteMoths.length;
+            }
+
+            showRoundSettlementModal();
+        }
+
+        function showRoundSettlementModal() {
+            document.getElementById('settlementTitle').textContent = `第 ${currentGeneration} 代 捕食結算`;
+            document.getElementById('settleCaughtBlack').textContent = capturedBlackMoths;
+            document.getElementById('settleSurviveBlack').textContent = blackMoths.length;
+            document.getElementById('settleCaughtWhite').textContent = capturedWhiteMoths;
+            document.getElementById('settleSurviveWhite').textContent = whiteMoths.length;
+
+            let analysis = '';
+            if (currentBackground === 'light') {
+                analysis = '💡 <strong>天擇觀察</strong>：在未受污染的<strong>淺色樹幹</strong>上，白蛾具有良好的保護色偽裝，而深色黑蛾極度顯眼！鳥類天敵容易發現黑蛾，導致黑蛾遭受大量捕食淘汰，存活並繁衍的白蛾比例顯著佔優。';
+            } else if (currentBackground === 'dark') {
+                analysis = '💡 <strong>天擇觀察</strong>：在煤煙污染的<strong>深色樹幹</strong>上，黑蛾與背景融為一體（保護色），淺色白蛾則因強烈對比極易成為鳥類目標！這就是著名的<strong>工業黑化 (Industrial Melanism)</strong> 現象。';
+            } else {
+                analysis = '💡 <strong>天擇觀察</strong>：在<strong>報紙花紋背景</strong>上，蛾隻的生存機率取決於是否恰好停在與其體色相近的文字區塊或留白區塊，展現了生物適應環境變異的動態平衡。';
+            }
+            document.getElementById('settlementAnalysis').innerHTML = analysis;
+
+            if (currentGeneration >= 5) {
+                settlementNextBtn.textContent = '完成5代模擬！查看實驗反思與數據 ➔';
+            } else {
+                settlementNextBtn.textContent = `進入下一代繁衍 (第 ${currentGeneration + 1} 代) ➔`;
+            }
+
+            roundSettlementModal.classList.remove('hidden');
         }
 
         function clearMoths() {
@@ -440,8 +812,9 @@
                 moth.style.top = `${y}px`;
                 
                 // Add click handler for predation
-                moth.addEventListener('click', () => {
-                    captureMoth(moth, color);
+                moth.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    captureMoth(moth, color, e);
                 });
                 
                 // Add to container and arrays
@@ -475,7 +848,22 @@
             capturedWhiteMothsCount.textContent = capturedWhiteMoths;
         }
 
-        function captureMoth(moth, color) {
+        function captureMoth(moth, color, e) {
+            if (currentMode === 'predator' && !isHuntingActive) return;
+
+            // Play Web Audio peck sound
+            playPeckSound(true);
+
+            // Visual ripple effect
+            const rect = treeContainer.getBoundingClientRect();
+            let rippleX = parseInt(moth.style.left) + 15;
+            let rippleY = parseInt(moth.style.top) + 15;
+            if (e && e.clientX && e.clientY) {
+                rippleX = e.clientX - rect.left;
+                rippleY = e.clientY - rect.top;
+            }
+            createPeckRipple(rippleX, rippleY, color === 'black' ? '+1 黑蛾' : '+1 白蛾', true);
+
             // Add a capture animation effect
             moth.style.transition = "transform 0.3s, opacity 0.3s";
             moth.style.transform = "scale(0.1)";
@@ -483,7 +871,6 @@
             
             // Wait for animation to complete then remove
             setTimeout(() => {
-                // Remove moth from DOM
                 moth.remove();
             }, 300);
             
@@ -501,6 +888,12 @@
         }
 
         function createNextGeneration() {
+            if (predatorTimer) {
+                clearInterval(predatorTimer);
+                predatorTimer = null;
+            }
+            roundSettlementModal.classList.add('hidden');
+
             // Update generation data with captured counts
             generationData[currentGeneration - 1].capturedBlack = capturedBlackMoths;
             generationData[currentGeneration - 1].capturedWhite = capturedWhiteMoths;
@@ -509,9 +902,15 @@
             
             // Calculate next generation
             const reproductionRate = 2; // Each pair produces 2 offspring
-            const nextGenBlackCount = Math.floor(blackMoths.length * reproductionRate);
-            const nextGenWhiteCount = Math.floor(whiteMoths.length * reproductionRate);
+            let nextGenBlackCount = Math.floor(blackMoths.length * reproductionRate);
+            let nextGenWhiteCount = Math.floor(whiteMoths.length * reproductionRate);
             
+            // Prevent extinction deadlock if both reach 0
+            if (nextGenBlackCount === 0 && nextGenWhiteCount === 0) {
+                nextGenBlackCount = 2;
+                nextGenWhiteCount = 2;
+            }
+
             // Increment generation counter
             currentGeneration++;
             
@@ -551,6 +950,13 @@
             capturedBlackMoths = 0;
             capturedWhiteMoths = 0;
             updateCapturedCounter();
+
+            if (currentMode === 'predator') {
+                startPredatorRound();
+            } else {
+                isHuntingActive = true;
+                nextGenerationBtn.textContent = '下一代';
+            }
         }
 
         function toggleBackground() {
@@ -564,6 +970,15 @@
         }
 
         function moveToAnalysisPhase() {
+            if (predatorTimer) {
+                clearInterval(predatorTimer);
+                predatorTimer = null;
+            }
+            isHuntingActive = false;
+            treeContainer.classList.remove('predator-active');
+            predatorTimerBadge.classList.add('hidden');
+            roundSettlementModal.classList.add('hidden');
+
             stageIndicator.textContent = '第5階段: 數據分析與反思';
             
             // Clear moths
@@ -591,46 +1006,78 @@
             const whiteData = generationData.map(data => data.initialWhite);
             const backgrounds = generationData.map(data => data.background);
             
-            // Create new chart
+            // Create new line chart (type: 'line')
             chart = new Chart(ctx, {
-                type: 'bar',
+                type: 'line',
                 data: {
                     labels: labels,
                     datasets: [
                         {
-                            label: '黑蛾數量',
+                            label: '黑蛾數量 (Dark Moth)',
                             data: blackData,
-                            backgroundColor: 'rgba(45, 45, 45, 0.8)',
-                            borderColor: 'rgba(45, 45, 45, 1)',
-                            borderWidth: 1
+                            borderColor: '#1e293b',
+                            backgroundColor: 'rgba(30, 41, 59, 0.12)',
+                            pointBackgroundColor: '#0f172a',
+                            pointBorderColor: '#ffffff',
+                            pointBorderWidth: 2,
+                            pointRadius: 6,
+                            pointHoverRadius: 8,
+                            borderWidth: 3,
+                            tension: 0.35,
+                            fill: false
                         },
                         {
-                            label: '白蛾數量',
+                            label: '白蛾數量 (Light Moth)',
                             data: whiteData,
-                            backgroundColor: 'rgba(240, 240, 240, 0.8)',
-                            borderColor: 'rgba(200, 200, 200, 1)',
-                            borderWidth: 1
+                            borderColor: '#0284c7',
+                            backgroundColor: 'rgba(2, 132, 199, 0.12)',
+                            pointBackgroundColor: '#38bdf8',
+                            pointBorderColor: '#ffffff',
+                            pointBorderWidth: 2,
+                            pointRadius: 6,
+                            pointHoverRadius: 8,
+                            borderWidth: 3,
+                            tension: 0.35,
+                            fill: false
                         }
                     ]
                 },
                 options: {
                     responsive: true,
+                    maintainAspectRatio: true,
                     scales: {
                         y: {
                             beginAtZero: true,
+                            suggestedMax: 30,
                             title: {
                                 display: true,
-                                text: '數量'
+                                text: '個體數量 (隻)',
+                                font: { weight: 'bold', size: 13 }
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.06)'
                             }
                         },
                         x: {
                             title: {
                                 display: true,
-                                text: '世代'
+                                text: '演化世代',
+                                font: { weight: 'bold', size: 13 }
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.06)'
                             }
                         }
                     },
                     plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                font: { size: 13, weight: 'bold' },
+                                usePointStyle: true,
+                                padding: 16
+                            }
+                        },
                         tooltip: {
                             callbacks: {
                                 footer: function(tooltipItems) {
@@ -706,10 +1153,20 @@
         }
 
         function restartSimulation() {
+            if (predatorTimer) {
+                clearInterval(predatorTimer);
+                predatorTimer = null;
+            }
+            isHuntingActive = false;
+            treeContainer.classList.remove('predator-active');
+            predatorTimerBadge.classList.add('hidden');
+            roundSettlementModal.classList.add('hidden');
+
             // Reset to phase 1
             currentGeneration = 0;
             clearMoths();
             phase5Controls.classList.add('hidden');
+            phase2Controls.classList.add('hidden');
             phase1Controls.classList.remove('hidden');
             
             // Reset counters
@@ -730,6 +1187,13 @@
             dataTable.classList.add('hidden');
             exportDataBtn.textContent = '顯示數據表';
         }
+
+        // 導出全局方法以便外部測試與教學互動調用
+        window.startSimulation = startSimulation;
+        window.startPredatorRound = startPredatorRound;
+        window.endPredatorRound = endPredatorRound;
+        window.createNextGeneration = createNextGeneration;
+        window.restartSimulation = restartSimulation;
     </script>
 </body>
 </html>

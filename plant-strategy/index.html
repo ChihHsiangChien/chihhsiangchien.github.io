@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>光合紀元：植物生存策略 (Plant Strategy Game)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Noto+Serif+TC:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=7">
+</head>
+<body>
+  <div id="game-app">
+    <!-- 頂部狀態列 -->
+    <header id="status-bar">
+      <div class="status-group time-badge">
+        <span class="year-label" id="ui-year">第 1 年</span>
+        <span class="month-label" id="ui-month">3月 · 春</span>
+        <span class="turn-counter" id="ui-turn-step">回合 1 / 60</span>
+        <button id="btn-preview-endgame" class="btn-preview-tag" title="隨時預覽當前植物的 5 年標本寫真相片與評分">📷 標本寫真</button>
+      </div>
+
+      <div class="status-group resources">
+        <div class="res-item" title="當前儲備葡萄糖 / 上限 (C6H12O6 實心分子)">
+          <span class="res-icon" style="color: #ffb300; font-size: 16px; text-shadow: 0 0 6px rgba(255,179,0,0.5);">⬢</span>
+          <span class="res-name">葡萄糖</span>
+          <span class="res-val" id="ui-sugar">4 / 8</span>
+        </div>
+        <div class="res-item" title="土壤與植物水分">
+          <span class="res-icon">💧</span>
+          <span class="res-name">水分</span>
+          <span class="res-val" id="ui-water">6 / 10</span>
+        </div>
+        <div class="res-item" title="光照係數">
+          <span class="res-icon">☀️</span>
+          <span class="res-name">日照</span>
+          <span class="res-val" id="ui-sun">1.0x</span>
+        </div>
+        <div class="res-item" title="已成功繁衍的種子數">
+          <span class="res-icon">🌰</span>
+          <span class="res-name">子代種子</span>
+          <span class="res-val highlight" id="ui-seeds">0</span>
+        </div>
+      </div>
+
+      <div class="status-group weather-badge">
+        <span id="ui-weather-icon">🌤️</span>
+        <span id="ui-weather-text">和煦春風</span>
+      </div>
+    </header>
+
+    <!-- 中央核心區：動態植物畫布、環境威脅卡與事件通知 -->
+    <main id="stage-container">
+      <canvas id="plant-canvas"></canvas>
+      
+      <!-- 具象化環境危機看板（可同時展示多張環境敵人卡） -->
+      <div id="crisis-container" class="crisis-deck">
+        <div class="crisis-deck-title">⚠️ 當前環境危機 (<span id="crisis-active-count">0</span>)</div>
+        <div id="crisis-list" class="crisis-list">
+          <!-- 動態渲染多張環境危機卡 -->
+        </div>
+      </div>
+
+      <!-- 浮動事件訊息提示框 -->
+      <div id="log-overlay">
+        <div id="latest-event-msg">春風拂過大地，你是一株剛剛破土的幼苗...</div>
+      </div>
+
+      <!-- 植物生理即時快照標籤 -->
+      <div id="plant-quick-stats">
+        <div>高度: <span id="stat-height">1</span> 級</div>
+        <div>莖粗: <span id="stat-trunk">1</span></div>
+        <div>葉片: <span id="stat-leaves">2</span> 片</div>
+        <div>根深: <span id="stat-root-depth">1</span> 級</div>
+        <div>側根: <span id="stat-root-width">1</span> 級</div>
+        <div>花/果: <span id="stat-flowers">0</span> / <span id="stat-fruits">0</span></div>
+      </div>
+    </main>
+
+    <!-- 卡牌詳細資訊彈窗 (Info Modal) -->
+    <div id="modal-card-info" class="modal-overlay hidden">
+      <div class="card-info-box">
+        <div class="info-header">
+          <h3 id="info-card-name">卡牌名稱</h3>
+          <button id="btn-close-info" class="btn-close-sm">✕</button>
+        </div>
+        <div class="info-badges">
+          <span id="info-card-cat" class="card-type-tag">【根系】</span>
+          <span id="info-card-cost" class="card-cost-badge">⬡2</span>
+        </div>
+        <div class="info-section">
+          <h4>生理功能與數值：</h4>
+          <p id="info-card-desc">詳細效果說明...</p>
+        </div>
+        <div class="info-section">
+          <h4>生態學機制背景：</h4>
+          <p id="info-card-flavor" class="info-flavor-text">背景說明...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 下方卡牌操作台 (手牌集中統一展示) -->
+    <footer id="control-deck">
+      <!-- 集中操作控制列 -->
+      <div class="deck-header">
+        <div class="deck-title-area">
+          <span class="deck-main-title">🌿 植物生理手牌</span>
+          <label class="toggle-unavailable-label">
+            <input type="checkbox" id="toggle-unavailable">
+            <span>顯示暫不可用手牌</span>
+          </label>
+        </div>
+        <button id="btn-end-turn" class="btn-primary-action">
+          <span>結束本月 (進入下個月)</span>
+          <span class="arrow">➔</span>
+        </button>
+      </div>
+
+      <!-- 卡牌容器 -->
+      <div id="cards-wrapper">
+        <div id="cards-container" class="cards-list">
+          <!-- 卡牌將由 JavaScript 動態生成渲染 -->
+        </div>
+      </div>
+    </footer>
+
+    <!-- 結局模態彈窗 (Endgame Modal) -->
+    <div id="modal-endgame" class="modal-overlay hidden">
+      <div class="modal-card botanical-card">
+        <button id="btn-close-endgame-x" class="btn-close-specimen" title="返回遊戲畫面">✕</button>
+        <div class="botanical-frame">
+          <div class="specimen-header">
+            <span class="botanical-tag">HERBARIUM SPECIMEN ARCHIVE · 標本圖鑑典藏</span>
+            <h1 id="end-title" class="specimen-title">林冠統治者·世界樹之影</h1>
+            <p id="end-subtitle" class="specimen-latin">Plantae Aeterna · 演化歷程五年記</p>
+          </div>
+
+          <div class="specimen-body">
+            <div class="specimen-visual">
+              <canvas id="endgame-canvas"></canvas>
+            </div>
+            <div class="specimen-analysis">
+              <h3>五維生態適應性圖譜</h3>
+              <canvas id="radar-canvas" width="260" height="260"></canvas>
+              
+              <div class="score-breakdown">
+                <div class="score-row">
+                  <span>🌰 子代繁衍評分 (Fitness):</span>
+                  <strong id="score-fitness">0</strong>
+                </div>
+                <div class="score-row">
+                  <span>🌳 巨木威儀評分 (Majesty):</span>
+                  <strong id="score-majesty">0</strong>
+                </div>
+                <div class="score-row">
+                  <span>🛡️ 逆境韌性評分 (Resilience):</span>
+                  <strong id="score-resilience">0</strong>
+                </div>
+                <div class="score-total">
+                  <span>總適應度總分:</span>
+                  <span id="score-total" class="big-score">0</span>
+                </div>
+              </div>
+
+              <p id="end-verdict" class="specimen-text">
+                你在這片土地上度過了整整 60 個月的風霜雨雪...
+              </p>
+            </div>
+          </div>
+
+          <div class="specimen-footer">
+            <button id="btn-close-endgame" class="btn-primary-action">🌿 返回遊戲畫面</button>
+            <button id="btn-restart" class="btn-secondary-outline">🌱 開啟新的輪迴</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="game.js?v=8"></script>
+</body>
+</html>

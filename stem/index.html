@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>雙子葉與單子葉維管束構造</title>
+  <meta name="description"
+    content="純 JavaScript 與 Three.js 打造的植物莖部 3D 互動解剖系統，精確呈現雙子葉植物環狀維管束與單子葉植物散生維管束，支援橫切面、縱切面與分層爆炸展開，包含髓、木質部、形成層、韌皮部與樹皮等構造。">
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="src/style.css">
+</head>
+
+<body>
+  <!-- 3D WebGL Canvas Container -->
+  <div id="canvas-container"></div>
+
+  <!-- 3D Hover Tooltip -->
+  <div id="tooltip-3d" class="tooltip-3d">
+    <span id="tooltip-dot" class="badge-dot" style="background-color: #38bdf8;"></span>
+    <span id="tooltip-text">構造名稱</span>
+  </div>
+
+  <!-- UI Overlay -->
+  <div class="ui-layer">
+    <!-- Top Navigation Header -->
+    <header class="top-header">
+      <div class="glass-panel title-badge interactive">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24">
+            <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z" opacity="0.3" />
+            <path d="M17 8C8 10 5.9 16.17 3.82 21.34l1.45.66C7.17 17.27 9 12 17 10V8z" />
+            <path d="M17 8V6a5 5 0 0 0-5 5v1c0 2 2 3 5 4v-2c-2 0-3-.5-3-2V11a3 3 0 0 1 3-3z" />
+          </svg>
+        </div>
+        <div class="title-text">
+          <h1>植物莖部解剖 3D 系統</h1>
+          <p>Plant Stem Anatomy 3D · 雙子葉與單子葉維管束</p>
+        </div>
+      </div>
+
+      <!-- Stem Type & Cell Selector -->
+      <div class="mode-switcher interactive">
+        <button id="btn-mode-dicot" class="switch-btn active" title="觀察雙子葉植物環狀排列維管束 (教科書圖示風格)">
+          雙子葉植物 (環狀維管束)
+        </button>
+        <button id="btn-mode-monocot" class="switch-btn" title="觀察單子葉植物散生維管束">
+          單子葉植物 (散生維管束)
+        </button>
+        <button id="btn-mode-cell" class="switch-btn" title="先建立好韌皮部與木質部的單一細胞微觀構造">
+          單一細胞構造 (韌皮部 & 木質部)
+        </button>
+      </div>
+
+      <!-- Quick Action Buttons -->
+      <div class="quick-tools interactive">
+        <button id="btn-microscope" class="icon-btn" title="單一細胞微觀構造特寫 (韌皮部與木質部)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            <line x1="11" y1="8" x2="11" y2="14"></line>
+            <line x1="8" y1="11" x2="14" y2="11"></line>
+          </svg>
+        </button>
+        <button id="btn-comparison" class="icon-btn" title="雙子葉 vs 單子葉 對比圖表">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+            <polyline points="10 9 9 9 8 9"></polyline>
+          </svg>
+        </button>
+        <button id="btn-reset-view" class="icon-btn" title="重置視角與鏡頭">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+            <polyline points="3 3 3 8 8 8"></polyline>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main HUD Controls & Detail Panels -->
+    <main class="main-hud">
+      <!-- Left Side: View & Slicing Controls -->
+      <aside class="left-controls interactive">
+        <!-- Single Cell Controls (Visible when in Cell Micro Mode) -->
+        <div id="cell-controls-card" class="glass-panel control-card" style="display: none;">
+          <div class="card-title">
+            <span>單一細胞微觀構造 (Cell Micro)</span>
+          </div>
+          <div class="view-grid cell-submode-grid">
+            <button id="cell-view-pair" class="view-btn active" title="外側韌皮部與內側木質部細胞組合 (如教科書圖示)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="8" height="18" rx="2" fill="rgba(245,158,11,0.2)"></rect>
+                <rect x="13" y="3" width="8" height="18" rx="2" fill="rgba(56,189,248,0.2)"></rect>
+                <line x1="12" y1="2" x2="12" y2="22" stroke="#10b981" stroke-width="2" stroke-dasharray="2 2"></line>
+              </svg>
+              <span>外·內 組合對照</span>
+            </button>
+            <button id="cell-view-phloem" class="view-btn" title="韌皮部單一細胞特寫 (篩管與伴細胞)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="5" y="3" width="10" height="18" rx="2" stroke="#f59e0b"></rect>
+                <circle cx="10" cy="7" r="1" fill="#f59e0b"></circle>
+                <circle cx="10" cy="12" r="1" fill="#f59e0b"></circle>
+                <circle cx="10" cy="17" r="1" fill="#f59e0b"></circle>
+                <rect x="15" y="6" width="4" height="12" rx="1" stroke="#f59e0b" fill="rgba(245,158,11,0.2)"></rect>
+              </svg>
+              <span>韌皮部細胞 (外)</span>
+            </button>
+            <button id="cell-view-xylem" class="view-btn" title="木質部單一細胞特寫 (導管與管胞)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="5" y="3" width="14" height="18" rx="2" stroke="#38bdf8"></rect>
+                <ellipse cx="12" cy="7" rx="4" ry="2" stroke="#38bdf8"></ellipse>
+                <circle cx="8" cy="12" r="1" stroke="#38bdf8"></circle>
+                <circle cx="16" cy="12" r="1" stroke="#38bdf8"></circle>
+                <circle cx="8" cy="17" r="1" stroke="#38bdf8"></circle>
+                <circle cx="16" cy="17" r="1" stroke="#38bdf8"></circle>
+              </svg>
+              <span>木質部細胞 (內)</span>
+            </button>
+          </div>
+
+          <div class="toggle-row" style="margin-top: 14px;">
+            <div class="toggle-label">
+              <span class="badge-dot" style="background: #10b981;"></span>
+              <span>縱向剖切透視 (Cutaway)</span>
+            </div>
+            <label class="switch-input">
+              <input type="checkbox" id="toggle-cell-cutaway" checked>
+              <span class="switch-slider"></span>
+            </label>
+          </div>
+
+          <div class="toggle-row">
+            <div class="toggle-label">
+              <span class="badge-dot" style="background: #38bdf8;"></span>
+              <span>微觀構造標籤 (3D Pins)</span>
+            </div>
+            <label class="switch-input">
+              <input type="checkbox" id="toggle-cell-pins" checked>
+              <span class="switch-slider"></span>
+            </label>
+          </div>
+
+          <div class="toggle-row">
+            <div class="toggle-label">
+              <span class="badge-dot" style="background: #f59e0b;"></span>
+              <span>細胞質與水流動態 (Flow)</span>
+            </div>
+            <label class="switch-input">
+              <input type="checkbox" id="toggle-cell-flow" checked>
+              <span class="switch-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Section Views (Stem Mode) -->
+        <div id="stem-section-card" class="glass-panel control-card">
+          <div class="card-title">
+            <span>剖面觀察模式 (Section Views)</span>
+          </div>
+          <div class="view-grid">
+            <button id="view-wedge" class="view-btn active" title="經典 3/4 楔切，同時看橫切+縱切+外表">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path
+                  d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z">
+                </path>
+                <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                <line x1="12" y1="22.08" x2="12" y2="12"></line>
+              </svg>
+              <span>3D 楔形剖面</span>
+            </button>
+            <button id="view-cross" class="view-btn" title="純橫切面 (Transverse Section)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="9"></circle>
+                <circle cx="12" cy="12" r="5"></circle>
+                <circle cx="12" cy="12" r="2"></circle>
+              </svg>
+              <span>橫切面 (俯視)</span>
+            </button>
+            <button id="view-long" class="view-btn" title="純縱切面 (Longitudinal Section)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="5" y="3" width="14" height="18" rx="2"></rect>
+                <line x1="12" y1="3" x2="12" y2="21"></line>
+                <line x1="8" y1="3" x2="8" y2="21"></line>
+                <line x1="16" y1="3" x2="16" y2="21"></line>
+              </svg>
+              <span>縱切面 (側視)</span>
+            </button>
+            <button id="view-full" class="view-btn" title="完整未剖切莖部">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2C6.5 2 4 4 4 6v12c0 2 2.5 4 8 4s8-2 8-4V6c0-2-2.5-4-8-4z"></path>
+                <ellipse cx="12" cy="6" rx="8" ry="4"></ellipse>
+              </svg>
+              <span>完整外觀</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Dynamic Slicers & Exploded View -->
+        <div id="stem-slicers-card" class="glass-panel control-card">
+          <div class="card-title">
+            <span>互動剖切與展開 (Dynamic Slicers)</span>
+          </div>
+
+          <div class="slider-group">
+            <div class="slider-label">
+              <span>橫切深度 (Cross Section Height)</span>
+              <span id="label-slice-y" class="slider-val">100%</span>
+            </div>
+            <input type="range" id="slider-slice-y" min="15" max="100" value="100" step="1">
+          </div>
+
+          <div class="slider-group">
+            <div class="slider-label">
+              <span>3D 剖切開角 (Cutaway Angle)</span>
+              <span id="label-wedge-angle" class="slider-val">90°</span>
+            </div>
+            <input type="range" id="slider-wedge-angle" min="0" max="180" value="90" step="5">
+          </div>
+
+          <div class="slider-group">
+            <div class="slider-label">
+              <span>分層爆炸展開 (Explode Layers)</span>
+              <span id="label-explode" class="slider-val">0.0x</span>
+            </div>
+            <input type="range" id="slider-explode" min="0" max="1" value="0" step="0.02">
+          </div>
+        </div>
+
+        <!-- Simulation & Toggles -->
+        <div class="glass-panel control-card">
+          <div class="card-title">
+            <span>生理動態與特效 (Physiology)</span>
+          </div>
+
+          <div class="toggle-row">
+            <div class="toggle-label">
+              <span class="badge-dot" style="background: #38bdf8;"></span>
+              <span>水分蒸散流 (木質部導管 ↑)</span>
+            </div>
+            <label class="switch-input">
+              <input type="checkbox" id="toggle-water" checked>
+              <span class="switch-slider"></span>
+            </label>
+          </div>
+
+          <div class="toggle-row">
+            <div class="toggle-label">
+              <span class="badge-dot" style="background: #fbbf24;"></span>
+              <span>養分運輸流 (韌皮部篩管 ↕)</span>
+            </div>
+            <label class="switch-input">
+              <input type="checkbox" id="toggle-phloem" checked>
+              <span class="switch-slider"></span>
+            </label>
+          </div>
+
+          <div class="toggle-row">
+            <div class="toggle-label">
+              <span class="badge-dot" style="background: #a855f7;"></span>
+              <span>自動緩慢旋轉 (Auto Rotate)</span>
+            </div>
+            <label class="switch-input">
+              <input type="checkbox" id="toggle-rotate">
+              <span class="switch-slider"></span>
+            </label>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Right Side: Anatomical Structure Detail Inspector -->
+      <section class="right-details interactive">
+        <div id="detail-card" class="glass-panel detail-card">
+          <div id="detail-tag" class="structure-tag">
+            <span class="badge-dot" id="detail-tag-dot" style="background: #34d399;"></span>
+            <span id="detail-tag-text">雙子葉植物草本/木本莖</span>
+          </div>
+          <h2 id="detail-name" class="detail-title">雙子葉植物莖構造</h2>
+          <div id="detail-latin" class="detail-subtitle">Dicotyledonous Stem Anatomy</div>
+          <p id="detail-description" class="detail-desc">
+            雙子葉植物莖的維管束呈「環狀排列」。在木質部與韌皮部之間具有「形成層」，能進行次生生長，使莖逐年加粗。點擊畫面上的組織即可深入探索各層特徵。
+          </p>
+
+          <ul id="detail-features" class="features-list">
+            <li><strong>排列方式：</strong> 環狀排列 (Eustele 真正中柱)</li>
+            <li><strong>形成層：</strong> 具維管束形成層，能不斷向內分裂產生木質部、向外分裂產生韌皮部</li>
+            <li><strong>中央構造：</strong> 具明顯的中央「髓」與放射狀「髓線」</li>
+          </ul>
+
+          <div id="detail-tip" class="highlight-box">
+            <strong>觀察重點：</strong> 旋轉模型觀察頂部橫切面的同心環層次，以及側面縱切面中長條狀導管與篩管的延伸構造。
+          </div>
+        </div>
+
+        <!-- Monocot Monkey Face Feature Card -->
+        <div id="monkey-face-card" class="monkey-face-card">
+          <div class="monkey-face-header">
+            <h4>經典「猴臉/小丑面具」維管束</h4>
+            <span style="font-size: 0.72rem; color: #38bdf8;">單子葉橫切特徵</span>
+          </div>
+          <p style="font-size: 0.78rem; color: #cbd5e1; line-height: 1.5; margin-bottom: 8px;">
+            單子葉植物維管束橫切面非常像一張猴臉：
+          </p>
+          <div style="font-size: 0.74rem; color: #94a3b8; display: flex; flex-direction: column; gap: 4px;">
+            <div>• <strong style="color: #38bdf8;">雙眼：</strong> 兩個大型「後生導管」(Metaxylem Vessels)</div>
+            <div>• <strong style="color: #60a5fa;">鼻子/嘴部：</strong> 原生導管腔 (Protoxylem Lacuna)</div>
+            <div>• <strong style="color: #fbbf24;">額頭處：</strong> 韌皮部篩管與伴細胞 (Phloem)</div>
+            <div>• <strong style="color: #a78bfa;">臉部輪廓：</strong> 厚壁維管束鞘 (Bundle Sheath)</div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Bottom Bar: Color Legend & Controls Hints -->
+    <footer class="bottom-bar">
+      <div class="glass-panel legend-panel interactive" id="legend-panel">
+        <!-- Legend items dynamically generated for current mode -->
+      </div>
+      <div class="glass-panel hint-badge">
+        <span><kbd>左鍵</kbd> 旋轉 · <kbd>右鍵</kbd> 平移 · <kbd>滾輪</kbd> 縮放 · 點擊組織查看解剖構造</span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Comparison Modal -->
+  <div id="modal-comparison" class="modal-overlay">
+    <div class="glass-panel modal-container">
+      <div class="modal-header">
+        <h2>雙子葉植物 vs 單子葉植物 莖部解剖特性比較</h2>
+        <button id="btn-close-modal" class="close-btn" title="關閉">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <table class="comp-table">
+        <thead>
+          <tr>
+            <th>比較項目</th>
+            <th>雙子葉植物莖 (Dicot Stem)</th>
+            <th>單子葉植物莖 (Monocot Stem)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>維管束排列</td>
+            <td><strong>環狀排列 (Ring arrangement)</strong>，整齊環繞髓部</td>
+            <td><strong>散生排列 (Scattered)</strong>，外側密集、內側稀疏</td>
+          </tr>
+          <tr>
+            <td>形成層 (Cambium)</td>
+            <td><strong>有</strong> (具束中與束間形成層，能進行次生加粗生長)</td>
+            <td><strong>無</strong> (無形成層，直徑通常無法無限生長)</td>
+          </tr>
+          <tr>
+            <td>髓 (Pith)</td>
+            <td><strong>有</strong> (位於莖的中心，常發育為大柔細胞組織)</td>
+            <td><strong>無明顯界限</strong> (由基本組織 Ground tissue 填充)</td>
+          </tr>
+          <tr>
+            <td>維管束構造</td>
+            <td>開放型維管束 (Open bundle)，木質部與韌皮部間有形成層</td>
+            <td>封閉型維管束 (Closed bundle)，橫切呈「猴臉形」，具維管束鞘</td>
+          </tr>
+          <tr>
+            <td>樹皮與木材</td>
+            <td>能形成年輪 (生長輪)、心材/邊材與厚樹皮</td>
+            <td>不具年輪與真正樹皮，僅有表皮與下皮厚壁組織</td>
+          </tr>
+          <tr>
+            <td>代表植物</td>
+            <td>向日葵、木棉、樟樹、榕樹、大豆</td>
+            <td>玉米、水稻、小麥、竹子、甘蔗</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Pure JavaScript: Three.js & OrbitControls (Local lib with CDN fallback) -->
+  <script src="lib/three.min.js"></script>
+  <script>
+    if (typeof THREE === 'undefined') {
+      document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>');
+    }
+  </script>
+  <script src="lib/OrbitControls.js"></script>
+  <script>
+    if (typeof THREE.OrbitControls === 'undefined') {
+      document.write('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"><\/script>');
+    }
+  </script>
+  <!-- Application Pure JS (cache-busted) -->
+  <script src="src/app.js?v=18"></script>
+</body>
+
+</html>

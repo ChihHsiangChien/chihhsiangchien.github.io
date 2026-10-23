@@ -1,0 +1,2166 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>雙子葉植物莖：多年次級生長與樹皮木材圖解（Canvas 向量版）</title>
+  <style>
+    :root {
+      --bg-gradient: linear-gradient(135deg, #0b1120 0%, #1e293b 100%);
+      --panel-bg: rgba(30, 41, 59, 0.85);
+      --panel-border: rgba(255, 255, 255, 0.12);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent-phloem: #10b981;
+      --accent-cambium: #38bdf8;
+      --accent-xylem: #f59e0b;
+      --accent-bark: #a855f7;
+      --accent-wood: #eab308;
+      --primary: #3b82f6;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans TC", sans-serif;
+      touch-action: manipulation;
+    }
+
+    html, body {
+      height: 100vh;
+      max-height: 100vh;
+      overflow: hidden; /* 徹底杜絕頁面垂直捲動，一屏內完整呈現全部內容 */
+      touch-action: manipulation;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    body {
+      background: var(--bg-gradient);
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 8px 18px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      background: rgba(15, 23, 42, 0.88);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--panel-border);
+      flex-shrink: 0;
+      z-index: 50;
+    }
+
+    .title-group h1 {
+      font-size: 1.12rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .title-group p {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      margin-top: 1px;
+    }
+
+    .badge-tag {
+      font-size: 0.7rem;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+
+    /* Main Container - Full Width Center Stage within Viewport */
+    .app-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 6px 14px 10px;
+      flex: 1;
+      min-height: 0; /* 關鍵：允許 Flex 子項目在視窗高度受限時自適應收縮 */
+      max-width: 1440px;
+      width: 100%;
+      margin: 0 auto;
+      overflow: hidden;
+    }
+
+    /* Canvas Stage Area */
+    .canvas-card {
+      width: 100%;
+      height: 100%;
+      flex: 1;
+      min-height: 0;
+      background: var(--panel-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      padding: 8px 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+      overflow: hidden;
+    }
+
+    .canvas-wrapper {
+      position: relative;
+      width: 100%;
+      flex: 1;
+      min-height: 160px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: radial-gradient(circle at center, #ffffff 0%, #f8fafc 65%, #e2e8f0 100%);
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: inset 0 2px 10px rgba(0,0,0,0.06);
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: crosshair;
+      touch-action: none; /* 停用畫布預設手勢，確保觸控拖曳放大鏡不引發瀏覽器縮放與捲動 */
+    }
+
+    /* Tooltip */
+    #tooltip {
+      position: absolute;
+      display: none;
+      pointer-events: none;
+      background: rgba(15, 23, 42, 0.94);
+      backdrop-filter: blur(8px);
+      color: #fff;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      line-height: 1.45;
+      border: 1px solid var(--panel-border);
+      box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+      z-index: 100;
+      max-width: 270px;
+      transform: translate(14px, 14px);
+    }
+
+    /* Bottom Control Bar under Canvas */
+    .control-panel {
+      width: 100%;
+      margin-top: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex-shrink: 0; /* 嚴格確保底部時間軸與按鈕永遠不被壓縮切斷 */
+    }
+
+    .timeline-container {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: rgba(15, 23, 42, 0.6);
+      padding: 6px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--panel-border);
+    }
+
+    .timeline-container label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .slider-wrapper {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .range-slider {
+      width: 100%;
+      accent-color: #38bdf8;
+      cursor: pointer;
+      height: 6px;
+      border-radius: 3px;
+      touch-action: manipulation;
+    }
+
+    .slider-ticks {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.66rem;
+      color: var(--text-muted);
+      padding: 0 2px;
+    }
+
+    .time-badge {
+      min-width: 110px;
+      text-align: right;
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: #38bdf8;
+    }
+
+    /* Action Buttons Row */
+    .btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    .btn-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    button.btn {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-main);
+      border: 1px solid var(--panel-border);
+      padding: 5px 11px;
+      border-radius: 6px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s ease;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    button.btn:hover {
+      background: rgba(255, 255, 255, 0.16);
+      border-color: rgba(255, 255, 255, 0.3);
+      transform: translateY(-1px);
+    }
+
+    button.btn.active {
+      background: var(--primary);
+      border-color: #60a5fa;
+      color: #fff;
+      box-shadow: 0 0 12px rgba(59, 130, 246, 0.5);
+    }
+
+    /* Right Sidebar / Educational Panel */
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .info-card {
+      background: var(--panel-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    }
+
+    .info-card h3 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding-bottom: 8px;
+    }
+
+    
+    /* Isolation Mode Button Group & Card Highlights */
+    .isolate-group {
+      display: inline-flex;
+      background: rgba(15, 23, 42, 0.75);
+      padding: 3px;
+      border-radius: 8px;
+      border: 1px solid var(--panel-border);
+      gap: 4px;
+    }
+
+    .isolate-group .btn {
+      padding: 6px 13px;
+      font-size: 0.82rem;
+      font-weight: 600;
+    }
+
+    .zone-box.active-isolate {
+      outline: 2px solid #38bdf8;
+      box-shadow: 0 0 20px rgba(56, 189, 248, 0.45);
+      transform: translateY(-2px);
+    }
+
+    .zone-box.active-isolate.bark {
+      outline-color: #c084fc;
+      box-shadow: 0 0 20px rgba(192, 132, 252, 0.45);
+    }
+
+    .zone-box.active-isolate.wood {
+      outline-color: #f59e0b;
+      box-shadow: 0 0 20px rgba(245, 158, 11, 0.45);
+    }
+
+    /* Bark vs Wood Comparison Box */
+    .compare-container {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .zone-box {
+      border-radius: 10px;
+      padding: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .zone-box:hover {
+      transform: translateY(-2px);
+    }
+
+    .zone-box.bark {
+      background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(168, 85, 247, 0.05));
+      border-color: rgba(168, 85, 247, 0.4);
+    }
+
+    .zone-box.wood {
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(245, 158, 11, 0.05));
+      border-color: rgba(245, 158, 11, 0.4);
+    }
+
+    .zone-box.cambium {
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.18), rgba(56, 189, 248, 0.05));
+      border-color: rgba(56, 189, 248, 0.5);
+    }
+
+    .zone-title {
+      font-size: 0.9rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+
+    .zone-desc {
+      font-size: 0.78rem;
+      color: #cbd5e1;
+      line-height: 1.45;
+    }
+
+    .zone-parts {
+      margin-top: 6px;
+      font-size: 0.74rem;
+      color: var(--text-muted);
+      background: rgba(0,0,0,0.22);
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+
+    /* Structure Legend */
+    .legend-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      font-size: 0.8rem;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 10px;
+      background: rgba(255, 255, 255, 0.04);
+      border-radius: 6px;
+    }
+
+    .legend-color {
+      width: 14px;
+      height: 14px;
+      border-radius: 4px;
+      display: inline-block;
+      margin-right: 8px;
+      border: 1px solid rgba(0,0,0,0.2);
+    }
+
+    .legend-left {
+      display: flex;
+      align-items: center;
+    }
+
+    .legend-role {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+
+    /* Key Metrics */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .stat-card {
+      background: rgba(255, 255, 255, 0.03);
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      text-align: center;
+    }
+
+    .stat-val {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #38bdf8;
+    }
+
+    .stat-lbl {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Header -->
+  <header>
+    <div class="title-group">
+      <h1>
+        雙子葉植物莖：多年次級生長與樹皮木材圖解
+        <span class="badge-tag">Canvas 向量即時繪製</span>
+      </h1>
+      <p>模擬多年年輪增生、形成層分裂動態，並嚴謹區分「樹皮 (Bark)」與「木材 (Wood)」分界</p>
+    </div>
+    <div class="btn-group">
+      <!-- Mode Toggle: 5 Years vs 20 Years -->
+      <button id="btn-mode-5yr" class="btn active" title="切換為 5 年幼樹模式 (間距寬、細節清晰)">
+        5年幼樹模式
+      </button>
+      <button id="btn-mode-20yr" class="btn" title="切換為 20 年成樹模式 (多年輪、顯著增粗)">
+        20年成樹模式
+      </button>
+
+      <!-- Magnifier Toggle -->
+      <button id="btn-toggle-magnifier" class="btn active" title="開關木質部顯微放大鏡 (觀察春材/秋材導管差異)">
+        顯微放大鏡: 開
+      </button>
+
+      <!-- 樹皮與木材獨立顯示按鈕群 -->
+      <div class="isolate-group" title="切換樹皮與木材顯示範圍">
+        <button id="btn-isolate-all" class="btn active" title="顯示完整全莖構造 (樹皮 + 木材)">
+          全部顯示
+        </button>
+        <button id="btn-isolate-bark" class="btn" title="按鈕按下後：只顯示形成層以外的「樹皮」部分">
+          只顯示樹皮
+        </button>
+        <button id="btn-isolate-wood" class="btn" title="按鈕按下後：只顯示形成層以內的「木材」部分">
+          只顯示木材
+        </button>
+      </div>
+      <button id="btn-toggle-labels" class="btn active" title="顯示構造標籤線">
+        構造標註
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="app-container">
+    <!-- Left Stage: Canvas and Controls -->
+    <div class="canvas-card">
+      <div class="canvas-wrapper" id="canvas-container">
+        <canvas id="stemCanvas"></canvas>
+        <div id="tooltip"></div>
+      </div>
+
+      <!-- Controls -->
+      <div class="control-panel">
+        <!-- Timeline Slider -->
+        <div class="timeline-container">
+          <label for="timeSlider">生長時間 / 年輪累積：</label>
+          <div class="slider-wrapper">
+            <input type="range" id="timeSlider" class="range-slider" min="0" max="5" step="0.05" value="5">
+            <div class="slider-ticks" id="sliderTicks">
+              <span>初生期 (0年)</span>
+              <span>形成層環化</span>
+              <span>1年輪</span>
+              <span>2年輪</span>
+              <span>3年輪</span>
+              <span>4年輪</span>
+              <span>5年輪 (幼樹)</span>
+            </div>
+          </div>
+          <div class="time-badge" id="timeDisplay">第 5 年輪 (5.0 年)</div>
+        </div>
+
+        <!-- Buttons Row -->
+        <div class="btn-row">
+          <!-- Playback -->
+          <div class="btn-group">
+            <button id="btn-play" class="btn" title="自動連續播放多年增粗動畫">
+              播放生長動畫
+            </button>
+            <button id="btn-reset" class="btn" title="重設回最初第0年初生構造">
+              重設 (第0年)
+            </button>
+            <button id="btn-loop" class="btn" title="循環播放">
+              循環模式: 開
+            </button>
+          </div>
+
+          <!-- Quick Jumps (5-year default) -->
+          <div class="btn-group" id="quickButtonsGroup">
+            <button class="btn quick-btn" data-year="0">初生期</button>
+            <button class="btn quick-btn" data-year="0.5">形成層環化</button>
+            <button class="btn quick-btn" data-year="1.0">第 1 年</button>
+            <button class="btn quick-btn" data-year="2.0">第 2 年</button>
+            <button class="btn quick-btn" data-year="3.0">第 3 年</button>
+            <button class="btn quick-btn" data-year="4.0">第 4 年</button>
+            <button class="btn quick-btn active" data-year="5.0">第 5 年 (幼樹)</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // --- CANVAS ENGINE FOR STEM GROWTH ---
+    const canvas = document.getElementById('stemCanvas');
+    const ctx = canvas.getContext('2d');
+    const container = document.getElementById('canvas-container');
+    const tooltip = document.getElementById('tooltip');
+
+    // Controls DOM
+    const timeSlider = document.getElementById('timeSlider');
+    const timeDisplay = document.getElementById('timeDisplay');
+    const btnPlay = document.getElementById('btn-play');
+    const btnReset = document.getElementById('btn-reset');
+    const btnLoop = document.getElementById('btn-loop');
+    const btnToggleBarkWood = document.getElementById('btn-toggle-barkwood');
+    const btnToggleLabels = document.getElementById('btn-toggle-labels');
+    const btnToggleMagnifier = document.getElementById('btn-toggle-magnifier');
+    const btnMode5yr = document.getElementById('btn-mode-5yr');
+    const btnMode20yr = document.getElementById('btn-mode-20yr');
+    const sliderTicks = document.getElementById('sliderTicks');
+    const quickButtonsGroup = document.getElementById('quickButtonsGroup');
+    const metricRings = document.getElementById('metric-rings');
+    const metricDia = document.getElementById('metric-dia');
+
+    // State Variables
+    let maxYears = 5; // default 5 years (幼樹模式)
+    let growthTime = 5.0; // default 5.0 (五年幼樹)
+    let isPlaying = false;
+    let isLooping = true;
+    let showBarkWoodRegions = true;
+    let showLabels = true;
+    let showMagnifier = true;
+    let isHoveringXylem = false;
+    let highlightedRegion = null; // 'bark', 'wood', 'cambium', or null
+    let isolationMode = 'all'; // 'all' | 'bark' | 'wood' (只顯示樹皮或木材)
+
+    const btnIsolateAll = document.getElementById('btn-isolate-all');
+    const btnIsolateBark = document.getElementById('btn-isolate-bark');
+    const btnIsolateWood = document.getElementById('btn-isolate-wood');
+
+    function setIsolationMode(mode) {
+      isolationMode = mode;
+
+      if (btnIsolateAll) btnIsolateAll.classList.toggle('active', mode === 'all');
+      if (btnIsolateBark) btnIsolateBark.classList.toggle('active', mode === 'bark');
+      if (btnIsolateWood) btnIsolateWood.classList.toggle('active', mode === 'wood');
+
+      const boxBark = document.getElementById('box-bark');
+      const boxWood = document.getElementById('box-wood');
+      const boxCambium = document.getElementById('box-cambium');
+
+      if (boxBark) boxBark.classList.toggle('active-isolate', mode === 'bark');
+      if (boxWood) boxWood.classList.toggle('active-isolate', mode === 'wood');
+      if (boxCambium) boxCambium.classList.toggle('active-isolate', false);
+
+      render();
+    }
+    let animFrameId = null;
+    let lastTimestamp = 0;
+
+    // Hover detection state
+    let mouseX = -1000;
+    let mouseY = -1000;
+
+    // High-DPI Canvas Resizing
+    function resizeCanvas() {
+      const rect = container.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.resetTransform();
+      ctx.scale(dpr, dpr);
+      if (microAtlasCanvas) {
+        microAtlasPattern = ctx.createPattern(microAtlasCanvas, 'repeat');
+      }
+      render();
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+
+    // Color definitions matching the original diagrams with modern enhancements
+    const COLORS = {
+      phloem: '#00d048',        // 韌皮部 (亮綠)
+      phloemStroke: '#000000',
+      cambium: '#64a6ff',       // 形成層 (天藍)
+      cambiumStroke: '#000000',
+      primaryXylem: '#df9b42',  // 初生木質部 (溫暖焦糖色)
+      primaryXylemStroke: '#000000',
+      xylemEarly: '#f3b463',    // 次生木質部-早材(春材，淡黃褐)
+      xylemLate: '#ba7725',     // 次生木質部-晚材(秋材年輪線，深褐)
+      secondaryPhloem: '#22c55e',// 次生韌皮部 (綠色同心層)
+      stemEdge: '#0f172a',
+      pith: '#ffffff',
+      barkOverlay: 'rgba(168, 85, 247, 0.22)',
+      woodOverlay: 'rgba(245, 158, 11, 0.22)',
+      cambiumDivider: '#0284c7'
+    };
+
+    // --- ACCURATE BIOLOGICAL GEOMETRY CALCULATION ---
+    function getStemGeometry(t) {
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      const cx = w / 2;
+      const cy = h / 2;
+      const maxScreenR = Math.min(w, h) * 0.36;
+
+      // Unscaled world dimensions
+      const rPith = 60;
+      const rBundle0 = 120; // Radius where initial 8 bundles sit
+      const bundleCount = 8;
+
+      // Secondary growth progression (from t = 0.8 to maxYears)
+      const secT = Math.max(0, t - 0.8);
+      const maxSecT = (maxYears === 5) ? 4.2 : 19.2;
+      const progress = Math.min(1.0, secT / maxSecT); // 0.0 to 1.0
+
+      // Radial thicknesses in world units
+      const maxWoodTh = (maxYears === 5) ? 115 : 160;
+      const woodThickness = maxWoodTh * progress;           // Secondary xylem
+      const phloemThickness = (maxYears === 5 ? 26 : 34) * progress;          // Secondary phloem
+      const corkThickness = 26 + (maxYears === 5 ? 16 : 22) * progress;        // Outer bark / cork
+
+      // World radii from inside to outside
+      const worldCambium = rBundle0 + woodThickness;
+      const worldPrimaryPhloem = worldCambium + phloemThickness + 14;
+      const worldOuterStem = worldPrimaryPhloem + corkThickness;
+
+      // Stem expands on screen as it grows (68% or 55% at Year 0 to 100% at maxYears)
+      const minExp = (maxYears === 5) ? 0.68 : 0.55;
+      const visualExpansion = minExp + (1.0 - minExp) * progress;
+      const screenOuterStem = maxScreenR * visualExpansion;
+      const scale = screenOuterStem / worldOuterStem;
+
+      return {
+        cx,
+        cy,
+        bundleCount,
+        secT,
+        progress,
+        scale,
+        rCenterPith: rPith * scale,
+        rInitialCambium: rBundle0 * scale,
+        rCambium: worldCambium * scale,
+        rPhloem: worldPrimaryPhloem * scale,
+        rOuterStem: screenOuterStem
+      };
+    }
+
+    // Helper: Draw egg-shaped bundle (Primary Xylem & Phloem)
+    function drawBundleEgg(ctx, x, y, angle, length, width, fill, stroke) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angle);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, width / 2, length / 2, 0, 0, Math.PI * 2);
+      ctx.fillStyle = fill;
+      ctx.fill();
+      if (stroke) {
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = 2.0;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // Helper: Safe rounded rectangle for cross-browser canvas compatibility
+    function safeRoundRect(ctx, x, y, w, h, r) {
+      if (typeof ctx.roundRect === 'function') {
+        ctx.roundRect(x, y, w, h, r);
+      } else {
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + w - r, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+        ctx.lineTo(x + w, y + h - r);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        ctx.lineTo(x + r, y + h);
+        ctx.quadraticCurveTo(x, y, x + r, y + h - r);
+        ctx.lineTo(x, y + r);
+        ctx.quadraticCurveTo(x, y, x + r, y);
+      }
+    }
+
+    // Main Render Pipeline
+    function render() {
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      ctx.clearRect(0, 0, w, h);
+
+      const geom = getStemGeometry(growthTime);
+      const { cx, cy, rCenterPith, rInitialCambium, rCambium, rPhloem, rOuterStem, bundleCount, secT, scale } = geom;
+
+      // 1. Draw Outermost Stem Boundary & Base (依據「全部 / 只顯示樹皮 / 只顯示木材」動態調整)
+      ctx.save();
+      if (isolationMode === 'bark') {
+        // 【只顯示樹皮】：中心木材部分挖空，僅繪製形成層至外緣樹皮的圓環
+        ctx.beginPath();
+        ctx.arc(cx, cy, rOuterStem, 0, Math.PI * 2);
+        ctx.arc(cx, cy, rCambium, 0, Math.PI * 2, true);
+        ctx.fillStyle = '#f8fafc';
+        ctx.fill();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = COLORS.stemEdge;
+        ctx.stroke();
+
+        // 中心木材隱藏提示區 (中空中柱)
+        ctx.beginPath();
+        ctx.arc(cx, cy, rCambium, 0, Math.PI * 2);
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 2.0;
+        ctx.setLineDash([6, 6]);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.04)';
+        ctx.fill();
+
+        ctx.font = 'bold 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+        ctx.fillStyle = '#64748b';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('木材部分 (形成層以內已隱藏)', cx, cy - 10);
+        ctx.font = '11px -apple-system, sans-serif';
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillText('內側生長分界：維管束形成層', cx, cy + 12);
+      } else if (isolationMode === 'wood') {
+        // 【只顯示木材】：僅繪製中心至形成層的實心圓柱 (外圍樹皮全部隱藏)
+        ctx.beginPath();
+        ctx.arc(cx, cy, rCambium, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = '#0284c7';
+        ctx.stroke();
+
+        // 外緣淡色虛線示意已隱藏的樹皮外廓
+        ctx.beginPath();
+        ctx.arc(cx, cy, rOuterStem, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(192, 132, 252, 0.35)';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([5, 5]);
+        ctx.stroke();
+
+        ctx.font = '11px -apple-system, sans-serif';
+        ctx.fillStyle = '#c084fc';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('樹皮部分 (形成層以外已隱藏)', cx, cy - rOuterStem + 16);
+      } else {
+        // 【完整全莖】：全繪製
+        ctx.beginPath();
+        ctx.arc(cx, cy, rOuterStem, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = COLORS.stemEdge;
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // 2. Secondary Growth: Wood (Secondary Xylem) Rings & Bark Layers
+      if (growthTime > 0.8) {
+        const totalRings = Math.floor(secT);
+        const partialRing = secT - totalRings;
+        const totalWoodThickness = rCambium - rInitialCambium;
+        const activeYears = Math.min(20, Math.ceil(secT));
+
+        // Draw Wood Layers (次生木質部) - 僅在非「只顯示樹皮」模式下繪製
+        if (isolationMode !== 'bark') {
+        for (let yr = 1; yr <= activeYears; yr++) {
+          const isCurrent = (yr === activeYears);
+          const weight = isCurrent ? (partialRing || 1.0) : 1.0;
+          if (weight <= 0) continue;
+
+          const innerR = rInitialCambium + ((yr - 1) / secT) * totalWoodThickness;
+          const outerR = rInitialCambium + (((yr - 1) + weight) / secT) * totalWoodThickness;
+
+          // Heartwood (心材) vs Sapwood (邊材) 分布：
+          // 內側老木質部形成深色心材，外側 3~4 層為活躍邊材
+          const heartwoodBoundary = Math.max(0, activeYears - 4);
+          const isDeepHeartwood = (activeYears >= 10 && yr <= activeYears * 0.4);
+          const isHeartwood = (activeYears >= 5 && yr <= heartwoodBoundary);
+
+          ctx.beginPath();
+          ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
+          ctx.arc(cx, cy, innerR, 0, Math.PI * 2, true);
+          if (isDeepHeartwood) {
+            ctx.fillStyle = (yr % 2 === 0) ? '#b45309' : '#c2410c';
+          } else if (isHeartwood) {
+            ctx.fillStyle = (yr % 2 === 0) ? '#d97706' : '#ea580c';
+          } else {
+            ctx.fillStyle = (yr % 2 === 0) ? '#f59e0b' : '#fbbf24';
+          }
+          ctx.fill();
+
+          // Late wood annual ring boundary line
+          ctx.beginPath();
+          ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
+          ctx.strokeStyle = isDeepHeartwood ? '#7c2d12' : (isHeartwood ? '#9a3412' : '#b45309');
+          ctx.lineWidth = (activeYears > 12) ? 1.2 : 1.6;
+          ctx.stroke();
+        }
+
+        }
+
+        // Draw Secondary Phloem Layers (次生韌皮部) - 僅在非「只顯示木材」模式下繪製
+        if (isolationMode !== 'wood') {
+        // 生物學規律：形成層向外分裂，最新生成的韌皮部「緊靠形成層外側」，較老層層被往外推擠
+        const totalPhloemThickness = rPhloem - rCambium;
+        const unitPhloemTh = totalPhloemThickness / secT;
+        const currentWeight = partialRing || 1.0;
+
+        // 1. 最新生長的一年 (Current newest year - 緊貼形成層外緣)
+        const newestOuterR = rCambium + currentWeight * unitPhloemTh;
+        ctx.beginPath();
+        ctx.arc(cx, cy, newestOuterR, 0, Math.PI * 2);
+        ctx.arc(cx, cy, rCambium, 0, Math.PI * 2, true);
+        ctx.fillStyle = '#4ade80'; // 最嫩綠的新生韌皮部
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, newestOuterR, 0, Math.PI * 2);
+        ctx.strokeStyle = '#059669';
+        ctx.lineWidth = 1.3;
+        ctx.stroke();
+
+        // 2. 過去歷年的舊韌皮部 (由內向外依序為 Year N-1, Year N-2 ... 到最外圈的 Year 1)
+        const pastYears = activeYears - 1;
+        for (let p = 1; p <= pastYears; p++) {
+          const phloemInnerR = rCambium + currentWeight * unitPhloemTh + (p - 1) * unitPhloemTh;
+          const phloemOuterR = phloemInnerR + unitPhloemTh;
+          const yrNum = activeYears - p; // 離形成層越遠，年份越早
+
+          ctx.beginPath();
+          ctx.arc(cx, cy, phloemOuterR, 0, Math.PI * 2);
+          ctx.arc(cx, cy, phloemInnerR, 0, Math.PI * 2, true);
+          // 越外側(年代越久遠)顏色越深/受擠壓
+          ctx.fillStyle = (yrNum % 2 === 0) ? '#10b981' : '#15803d';
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.arc(cx, cy, phloemOuterR, 0, Math.PI * 2);
+          ctx.strokeStyle = '#064e3b';
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
+        }
+      }
+    }
+
+      // 3. Central Pith (髓) - 僅在非「只顯示樹皮」模式下繪製
+      if (isolationMode !== 'bark') {
+        ctx.beginPath();
+        ctx.arc(cx, cy, rCenterPith, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+      }
+
+      // 4. Draw Initial 8 Primary Xylem Bundles (初生木質部) - 僅在非「只顯示樹皮」模式下繪製
+      if (isolationMode !== 'bark') {
+        for (let i = 0; i < bundleCount; i++) {
+          const angle = (i * Math.PI * 2) / bundleCount - Math.PI / 2;
+          const bx = cx + Math.cos(angle) * (rInitialCambium - 16 * scale);
+          const by = cy + Math.sin(angle) * (rInitialCambium - 16 * scale);
+
+          drawBundleEgg(
+            ctx,
+            bx,
+            by,
+            angle + Math.PI / 2,
+            34 * scale,
+            24 * scale,
+            COLORS.primaryXylem,
+            COLORS.primaryXylemStroke
+          );
+        }
+      }
+
+      // 5. Vascular Cambium (維管束形成層)
+      if (growthTime < 0.7) {
+        // Individual bundles with bridging fascicles
+        for (let i = 0; i < bundleCount; i++) {
+          const angle = (i * Math.PI * 2) / bundleCount - Math.PI / 2;
+          const bx = cx + Math.cos(angle) * rInitialCambium;
+          const by = cy + Math.sin(angle) * rInitialCambium;
+
+          // Intrafascicular Cambium (束內形成層)
+          ctx.save();
+          ctx.translate(bx, by);
+          ctx.rotate(angle);
+          ctx.beginPath();
+          ctx.roundRect(-13 * scale, -5 * scale, 26 * scale, 10 * scale, 5 * scale);
+          ctx.fillStyle = COLORS.cambium;
+          ctx.fill();
+          ctx.strokeStyle = COLORS.cambiumStroke;
+          ctx.lineWidth = 2.0;
+          ctx.stroke();
+          ctx.restore();
+
+          // Interfascicular Cambium (束間形成層)
+          if (growthTime > 0.08) {
+            const nextAngle = ((i + 1) * Math.PI * 2) / bundleCount - Math.PI / 2;
+            const midAngle = (angle + nextAngle) / 2;
+            const bridgeProgress = Math.min(1.0, (growthTime - 0.08) / 0.55);
+
+            const span = (nextAngle - angle) * bridgeProgress * 0.72;
+            ctx.beginPath();
+            ctx.arc(cx, cy, rInitialCambium, midAngle - span / 2, midAngle + span / 2);
+            ctx.strokeStyle = COLORS.cambium;
+            ctx.lineWidth = 7 * scale;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 1.8;
+            ctx.stroke();
+          }
+        }
+      } else {
+        // Continuous Cambium Ring
+        ctx.beginPath();
+        ctx.arc(cx, cy, rCambium, 0, Math.PI * 2);
+        ctx.strokeStyle = COLORS.cambium;
+        ctx.lineWidth = 8 * scale;
+        ctx.stroke();
+
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 2.0;
+        ctx.stroke();
+      }
+
+      // 6. Primary Phloem Bundles (初生韌皮部，向外推移) - 僅在非「只顯示木材」模式下繪製
+      if (isolationMode !== 'wood') {
+        for (let i = 0; i < bundleCount; i++) {
+        const angle = (i * Math.PI * 2) / bundleCount - Math.PI / 2;
+        const phloemPush = (growthTime > 0.8) ? (rPhloem - 2 * scale) : (rInitialCambium + 20 * scale);
+        const px = cx + Math.cos(angle) * phloemPush;
+        const py = cy + Math.sin(angle) * phloemPush;
+
+        drawBundleEgg(
+          ctx,
+          px,
+          py,
+          angle + Math.PI / 2,
+          26 * scale,
+          20 * scale,
+          COLORS.phloem,
+          COLORS.phloemStroke
+        );
+      }
+    }
+
+      // 7. Outer Cork / Bark Texture (木栓層) - 僅在非「只顯示木材」模式下繪製
+      if (isolationMode !== 'wood' && growthTime >= 1.5) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(120, 53, 15, 0.45)';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(cx, cy, rOuterStem - 3 * scale, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // 8. BARK VS WOOD VISUAL INSPECTOR OVERLAYS
+      if (isolationMode === 'bark') {
+        // 只顯示樹皮：高亮樹皮圓環外廓
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx, cy, rOuterStem, 0, Math.PI * 2);
+        ctx.arc(cx, cy, rCambium, 0, Math.PI * 2, true);
+        ctx.strokeStyle = '#c084fc';
+        ctx.lineWidth = 3.2;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, rCambium, 0, Math.PI * 2);
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 2.8;
+        ctx.stroke();
+        ctx.restore();
+      } else if (isolationMode === 'wood') {
+        // 只顯示木材：高亮木材圓柱外圈
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx, cy, rCambium, 0, Math.PI * 2);
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 3.2;
+        ctx.stroke();
+        ctx.restore();
+      } else if (showBarkWoodRegions || highlightedRegion) {
+        ctx.save();
+
+        // (A) WOOD ZONE HIGHLIGHT (形成層以內) - 乾淨實線邊界
+        if (!highlightedRegion || highlightedRegion === 'wood') {
+          ctx.beginPath();
+          ctx.arc(cx, cy, rCambium - 2, 0, Math.PI * 2);
+          ctx.fillStyle = COLORS.woodOverlay;
+          ctx.fill();
+
+          ctx.strokeStyle = '#f59e0b';
+          ctx.lineWidth = 2.0;
+          ctx.stroke();
+        }
+
+        // (B) BARK ZONE HIGHLIGHT (形成層以外) - 最外圈樹皮採用平滑實線
+        if (!highlightedRegion || highlightedRegion === 'bark') {
+          ctx.beginPath();
+          ctx.arc(cx, cy, rOuterStem, 0, Math.PI * 2);
+          ctx.arc(cx, cy, rCambium + 2, 0, Math.PI * 2, true);
+          ctx.fillStyle = COLORS.barkOverlay;
+          ctx.fill();
+
+          ctx.strokeStyle = '#c084fc';
+          ctx.lineWidth = 2.0;
+          ctx.stroke();
+        }
+
+        // (C) VASCULAR CAMBIUM HIGHLIGHT (分生分界線) - 乾淨實線
+        ctx.beginPath();
+        ctx.arc(cx, cy, rCambium, 0, Math.PI * 2);
+        ctx.strokeStyle = '#0284c7';
+        ctx.lineWidth = 3.0;
+        ctx.stroke();
+
+        ctx.restore();
+      }
+
+      // 9. LABELS & ANNOTATIONS
+      if (showLabels) {
+        drawAnnotations(ctx, geom);
+      }
+
+      // 10. MICROSCOPIC MAGNIFIER LOUPE (春材與秋材微觀構造放大鏡 - 僅在5年幼樹模式啟用)
+      if (maxYears === 5 && showMagnifier && isHoveringXylem && mouseX > 0 && mouseY > 0) {
+        drawMicroscopeMagnifier(ctx, mouseX, mouseY, geom);
+      }
+    }
+
+    // Helper: Draw Clean Educational Labels with Leader Lines
+    function drawAnnotations(ctx, geom) {
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      const { cx, cy, rCenterPith, rCambium, rOuterStem } = geom;
+      ctx.save();
+      ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+
+      function drawPin(text, targetX, targetY, labelX, labelY, color, subtext) {
+        ctx.beginPath();
+        ctx.moveTo(targetX, targetY);
+        ctx.lineTo(labelX, labelY);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+
+        // Pin target circle
+        ctx.beginPath();
+        ctx.arc(targetX, targetY, 4, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Label Tag Background with safe canvas padding
+        const padX = 8;
+        const metrics = ctx.measureText(text);
+        const boxW = metrics.width + padX * 2;
+        const boxH = subtext ? 34 : 22;
+        const isRight = labelX > cx;
+        const rectX = isRight ? Math.min(w - boxW - 12, labelX) : Math.max(12, labelX - boxW);
+        const rectY = Math.max(12, Math.min(h - boxH - 12, labelY - 14));
+
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        safeRoundRect(ctx, rectX, rectY, boxW, boxH, 6);
+        ctx.fill();
+        ctx.stroke();
+
+        // Text
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(text, rectX + padX, rectY + 14);
+        if (subtext) {
+          ctx.font = '10px -apple-system, sans-serif';
+          ctx.fillStyle = '#94a3b8';
+          ctx.fillText(subtext, rectX + padX, rectY + 27);
+          ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+        }
+      }
+
+      // (1) Bark Label (Top Left) - 僅在非「只看木材」時顯示
+      if (isolationMode !== 'wood') {
+        const barkMidR = (rCambium + rOuterStem) / 2;
+        const barkAngle = -Math.PI * 0.75;
+        drawPin(
+          '樹皮 (Bark)',
+          cx + Math.cos(barkAngle) * barkMidR,
+          cy + Math.sin(barkAngle) * barkMidR,
+          cx - rOuterStem - 24,
+          cy - rOuterStem * 0.55,
+          '#c084fc',
+          (isolationMode === 'bark') ? '目前單獨顯示（形成層以內已隱藏）' : '形成層以外全部組織'
+        );
+      }
+
+      // (2) Wood Label (Bottom Left) - 僅在非「只看樹皮」時顯示
+      if (isolationMode !== 'bark') {
+        const woodMidR = (rCenterPith + rCambium) / 2;
+        const woodAngle = Math.PI * 0.75;
+        drawPin(
+          '木材 (Wood / 年輪)',
+          cx + Math.cos(woodAngle) * woodMidR,
+          cy + Math.sin(woodAngle) * woodMidR,
+          cx - rOuterStem - 24,
+          cy + rOuterStem * 0.55,
+          '#f59e0b',
+          (isolationMode === 'wood') ? '目前單獨顯示（形成層以外已隱藏）' : '形成層以內全部木質部'
+        );
+      }
+
+      // (3) Vascular Cambium (Right Side - Key Boundary)
+      const cambiumSubtext = (isolationMode === 'bark') ? '樹皮內側生長邊界' :
+                            (isolationMode === 'wood') ? '木材外側生長邊界' :
+                            '樹皮與木材的生長分界';
+      drawPin(
+        '維管束形成層 (Cambium)',
+        cx + rCambium,
+        cy,
+        cx + rOuterStem + 18,
+        cy,
+        '#38bdf8',
+        cambiumSubtext
+      );
+
+      // (4) Pith (Center) - 僅在非「只看樹皮」時顯示
+      if (isolationMode !== 'bark') {
+        drawPin(
+          '髓 (Pith)',
+          cx,
+          cy,
+          cx + 38,
+          cy + 50,
+          '#94a3b8',
+          '中心薄壁儲藏組織'
+        );
+      }
+
+      ctx.restore();
+    }
+
+    // --- INTERACTIVE HOVER & TOOLTIP ---
+    function handlePointerMove(e) {
+      const rect = canvas.getBoundingClientRect();
+      mouseX = e.clientX - rect.left;
+      mouseY = e.clientY - rect.top;
+
+      const geom = getStemGeometry(growthTime);
+      const dx = mouseX - geom.cx;
+      const dy = mouseY - geom.cy;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      const wasHovering = isHoveringXylem;
+      // Check if mouse is hovering in xylem (wood) region
+      const inXylem = (dist >= geom.rCenterPith && dist <= geom.rCambium);
+      isHoveringXylem = inXylem;
+
+      if (maxYears === 5 && showMagnifier && isHoveringXylem) {
+        tooltip.style.display = 'none';
+        render();
+        return;
+      }
+
+      // If just exited xylem, re-render to clear microscope loupe
+      if (wasHovering && !isHoveringXylem) {
+        render();
+      }
+
+      if (dist > geom.rOuterStem) {
+        tooltip.style.display = 'none';
+        return;
+      }
+
+      tooltip.style.display = 'block';
+      tooltip.style.left = e.clientX + 'px';
+      tooltip.style.top = e.clientY + 'px';
+
+      // Determine Which Region
+      if (dist < geom.rCenterPith) {
+        tooltip.innerHTML = `<strong>髓 (Pith)</strong><br>位於莖正中央的薄壁細胞組織，負責儲藏養分與水分。`;
+      } else if (dist < geom.rCambium - 6) {
+        const ringCount = Math.max(0, Math.floor(growthTime - 0.8));
+        tooltip.innerHTML = `<strong>木材 / 次生木質部 (Wood)</strong><br>
+          • 歸屬區域：<strong>木材 (Wood)</strong><br>
+          • 分界：維管束形成層以內<br>
+          • 包含：初生木質部 + ${ringCount > 0 ? ringCount + ' 道次生年輪' : '初生維管束木質部'}<br>
+          • 微觀構造：<strong>春材（導管大壁薄）</strong>與<strong>秋材（導管小壁厚）</strong>交替構成年輪。`;
+      } else if (Math.abs(dist - geom.rCambium) <= 7) {
+        tooltip.innerHTML = `<strong>維管束形成層 (Vascular Cambium)</strong><br>
+          • <strong>關鍵分界：樹皮與木材的生長分生組織！</strong><br>
+          • <strong>向內分裂</strong> → 新生木質部（緊貼形成層內側）<br>
+          • <strong>向外分裂</strong> → 新生韌皮部（緊貼形成層外側）<br>
+          • 隨年份不斷增粗推動，為最核心的細胞分裂帶。`;
+      } else {
+        tooltip.innerHTML = `<strong>樹皮 (Bark)</strong><br>
+          • 歸屬區域：<strong>樹皮 (Bark)</strong><br>
+          • 分界：維管束形成層以外的所有組織<br>
+          • <strong>生長順序</strong>：最新韌皮部緊靠形成層外側，較老韌皮部層層被往外推擠至木栓層<br>
+          • 包含：次生韌皮部、初生韌皮部殘跡、皮層、木栓層<br>
+          • 功能：保護樹體、防止水分散失、由韌皮部向下輸送有機養分。`;
+      }
+    }
+
+    function handlePointerLeave() {
+      tooltip.style.display = 'none';
+      if (isHoveringXylem) {
+        isHoveringXylem = false;
+        render();
+      }
+    }
+
+    canvas.addEventListener('mousemove', handlePointerMove);
+    canvas.addEventListener('mouseleave', handlePointerLeave);
+    canvas.addEventListener('pointermove', handlePointerMove);
+    canvas.addEventListener('pointerleave', handlePointerLeave);
+
+    // Tablet touch support for inspecting xylem with microscope loupe
+    function handleCanvasTouch(e) {
+      if (e.touches && e.touches.length > 0) {
+        e.preventDefault();
+        const touch = e.touches[0];
+        handlePointerMove({
+          clientX: touch.clientX,
+          clientY: touch.clientY
+        });
+      }
+    }
+
+    canvas.addEventListener('touchstart', handleCanvasTouch, { passive: false });
+    canvas.addEventListener('touchmove', handleCanvasTouch, { passive: false });
+    canvas.addEventListener('touchend', handlePointerLeave);
+
+    // Tablet double-tap zoom prevention (全面禁止平板快速雙擊觸發瀏覽器縮放)
+    document.addEventListener('dblclick', (e) => {
+      e.preventDefault();
+    }, { passive: false });
+
+    let lastTouchEndTime = 0;
+    document.addEventListener('touchend', (e) => {
+      const now = Date.now();
+      if (now - lastTouchEndTime <= 300) {
+        e.preventDefault();
+      }
+      lastTouchEndTime = now;
+    }, { passive: false });
+    // --- PRE-RENDERED HIGH-RESOLUTION MICROSCOPIC XYLEM ATLAS ---
+    // 事先準備好完整的春材與秋材顯微高解析度繪圖（包含大導管、厚壁小導管、木射線與年輪線），
+    // 放大鏡視窗直接依據游標在木質部中的相對座標與年輪位置進行動態局部取樣觀察。
+    const ATLAS_W = 1000;
+    const RING_HEIGHT = 400; // 每個年輪在微觀切片中的高度
+    const ATLAS_RINGS = 3;   // 重複 3 個循環週期以支援無縫平滑捲動
+    const ATLAS_H = RING_HEIGHT * ATLAS_RINGS;
+
+    let microAtlasCanvas = null;
+    let microAtlasPattern = null;
+
+    function initMicroAtlas() {
+      microAtlasCanvas = document.createElement('canvas');
+      microAtlasCanvas.width = ATLAS_W;
+      microAtlasCanvas.height = ATLAS_H;
+      const mctx = microAtlasCanvas.getContext('2d');
+
+      // Pseudo-random deterministic generator for consistent biological textures
+      let seed = 42;
+      function rnd() {
+        seed = (seed * 9301 + 49297) % 233280;
+        return seed / 233280;
+      }
+
+      for (let r = 0; r < ATLAS_RINGS; r++) {
+        const startY = r * RING_HEIGHT;
+        const springH = RING_HEIGHT * 0.72; // 春材佔 72%
+        const autumnH = RING_HEIGHT * 0.28; // 秋材佔 28%
+        const autumnStartY = startY + springH;
+
+        // 1. 春材 (早材) 背景 - 溫潤明亮的淺金黃木質
+        const springGrad = mctx.createLinearGradient(0, startY, 0, autumnStartY);
+        springGrad.addColorStop(0, '#fffef0');
+        springGrad.addColorStop(0.3, '#fef9c3');
+        springGrad.addColorStop(1, '#fde68a');
+        mctx.fillStyle = springGrad;
+        mctx.fillRect(0, startY, ATLAS_W, springH);
+
+        // 春材薄壁細胞網絡 (Parenchyma / Tracheids)
+        mctx.strokeStyle = 'rgba(217, 119, 6, 0.20)';
+        mctx.lineWidth = 0.8;
+        for (let bx = 0; bx < ATLAS_W; bx += 18) {
+          for (let by = startY; by < autumnStartY; by += 16) {
+            const ox = (by % 32 === 0) ? 9 : 0;
+            mctx.strokeRect(bx + ox, by, 18, 16);
+          }
+        }
+
+        // 春材大導管 (Vessels)：管徑開闊、細胞壁薄、顏色淡
+        // 典型散孔/環孔闊葉樹特徵，導管半徑 16 ~ 26px
+        const vesselPositions = [];
+        for (let i = 0; i < 48; i++) {
+          const vx = (i * 21 + rnd() * 16) % (ATLAS_W - 40) + 20;
+          const vy = startY + 22 + rnd() * (springH - 44);
+          const vr = 15 + rnd() * 11;
+          vesselPositions.push({ x: vx, y: vy, r: vr });
+        }
+
+        vesselPositions.forEach(v => {
+          // 導管大管腔 (Lumen)
+          mctx.beginPath();
+          mctx.arc(v.x, v.y, v.r, 0, Math.PI * 2);
+          mctx.fillStyle = '#ffffff';
+          mctx.fill();
+
+          // 導管薄壁 (Thin Primary/Secondary Wall)
+          mctx.strokeStyle = '#d97706';
+          mctx.lineWidth = 2.0;
+          mctx.stroke();
+
+          // 導管內腔微暈
+          mctx.beginPath();
+          mctx.arc(v.x, v.y, v.r - 2.5, 0, Math.PI * 2);
+          mctx.strokeStyle = 'rgba(245, 158, 11, 0.35)';
+          mctx.lineWidth = 1.0;
+          mctx.stroke();
+        });
+
+        // 2. 秋材 (晚材) 背景 - 深邃濃郁的深紅褐色年輪密實帶
+        const autumnGrad = mctx.createLinearGradient(0, autumnStartY, 0, startY + RING_HEIGHT);
+        autumnGrad.addColorStop(0, '#92400e');
+        autumnGrad.addColorStop(0.4, '#78350f');
+        autumnGrad.addColorStop(1, '#451a03');
+        mctx.fillStyle = autumnGrad;
+        mctx.fillRect(0, autumnStartY, ATLAS_W, autumnH);
+
+        // 秋材小導管與厚壁管胞 (Tracheids & Small Vessels)：
+        // 排列緊密、管徑極小、細胞壁極厚、顏色深沉
+        for (let ax = 8; ax < ATLAS_W; ax += 13) {
+          for (let ay = autumnStartY + 8; ay < startY + RING_HEIGHT - 6; ay += 11) {
+            const shiftX = (ay % 22 === 0) ? 6 : 0;
+            const px = ax + shiftX;
+            const py = ay;
+
+            // 增厚的木質化二次細胞壁 (極厚、顏色深)
+            mctx.beginPath();
+            mctx.arc(px, py, 4.8, 0, Math.PI * 2);
+            mctx.fillStyle = '#290f02';
+            mctx.fill();
+            mctx.strokeStyle = '#180800';
+            mctx.lineWidth = 1.2;
+            mctx.stroke();
+
+            // 狹窄極小的細胞腔 (小導管)
+            mctx.beginPath();
+            mctx.arc(px, py, 1.6, 0, Math.PI * 2);
+            mctx.fillStyle = '#b45309';
+            mctx.fill();
+          }
+        }
+
+        // 3. 年輪分界線 (Annual Ring Boundary)
+        // 深色極厚秋材與次年大管徑春材交界處所形成的鮮明年輪線
+        mctx.beginPath();
+        mctx.moveTo(0, startY + RING_HEIGHT);
+        mctx.lineTo(ATLAS_W, startY + RING_HEIGHT);
+        mctx.strokeStyle = '#1a0500';
+        mctx.lineWidth = 3.5;
+        mctx.stroke();
+
+        // 輔助年輪微觀文字浮雕
+        mctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+        mctx.font = 'bold 12px sans-serif';
+        mctx.fillText(`── 年輪交界線 (Annual Ring Boundary) ──`, 40, startY + RING_HEIGHT - 4);
+      }
+
+      // 4. 木質部射線 (Xylem Rays / 木射線)
+      // 垂直貫穿多年輪的放射狀薄壁細胞帶
+      for (let rx = 70; rx < ATLAS_W; rx += 140) {
+        mctx.fillStyle = 'rgba(245, 158, 11, 0.35)';
+        mctx.fillRect(rx, 0, 14, ATLAS_H);
+
+        mctx.strokeStyle = 'rgba(120, 53, 15, 0.5)';
+        mctx.lineWidth = 1.0;
+        mctx.strokeRect(rx, 0, 14, ATLAS_H);
+
+        // 射線薄壁細胞橫隔 (磚狀細胞)
+        for (let ry = 0; ry < ATLAS_H; ry += 12) {
+          mctx.beginPath();
+          mctx.moveTo(rx, ry);
+          mctx.lineTo(rx + 14, ry);
+          mctx.stroke();
+        }
+      }
+
+      // Create repeating pattern
+      microAtlasPattern = ctx.createPattern(microAtlasCanvas, 'repeat');
+    }
+
+    // --- HELPER: DRAW MICROSCOPIC LOUPE FOR XYLEM (春材大導管 vs 秋材小導管) ---
+    function drawMicroscopeMagnifier(ctx, mx, my, geom) {
+      if (!microAtlasCanvas || !microAtlasPattern) {
+        initMicroAtlas();
+      }
+
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      const R_lens = 175; // 擴大放大鏡視野半徑 (直徑增至 350px，提供更宏大之細胞微觀全景視野)
+
+      // Position loupe comfortably offset from cursor
+      let lx = (mx > geom.cx) ? (mx - R_lens - 35) : (mx + R_lens + 35);
+      let ly = (my > geom.cy) ? (my - R_lens - 15) : (my + R_lens + 15);
+
+      // Clamp inside canvas bounds
+      lx = Math.max(R_lens + 14, Math.min(w - R_lens - 14, lx));
+      ly = Math.max(R_lens + 35, Math.min(h - R_lens - 14, ly));
+
+      // Calculate cursor position relative to xylem anatomy
+      const dx = mx - geom.cx;
+      const dy = my - geom.cy;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const angle = Math.atan2(dy, dx);
+
+      // Determine active rings and ring progress
+      const secT = Math.max(0, growthTime - 0.8);
+      const activeYears = Math.max(1, Math.min(20, Math.ceil(secT)));
+      const woodThickness = Math.max(1, geom.rCambium - geom.rInitialCambium);
+
+      let currentRingFloat = 0;
+      let currentRingIndex = 1;
+      let ringFraction = 0; // 0.0 ~ 1.0 within ring (0 = early spring, 1 = late autumn)
+
+      if (dist < geom.rInitialCambium) {
+        // Near primary xylem / pith boundary
+        currentRingFloat = 0.2;
+        currentRingIndex = 1;
+        ringFraction = 0.2;
+      } else {
+        const woodProgress = Math.min(1.0, Math.max(0, (dist - geom.rInitialCambium) / woodThickness));
+        currentRingFloat = woodProgress * activeYears;
+        currentRingIndex = Math.min(activeYears, Math.floor(currentRingFloat) + 1);
+        ringFraction = currentRingFloat - Math.floor(currentRingFloat);
+      }
+
+      const isAutumnWood = (ringFraction >= 0.70);
+
+      ctx.save();
+
+      // 1. Dotted reticle leader line from cursor to lens center
+      ctx.beginPath();
+      ctx.moveTo(mx, my);
+      ctx.lineTo(lx, ly);
+      ctx.strokeStyle = isAutumnWood ? '#fb923c' : '#38bdf8';
+      ctx.lineWidth = 1.6;
+      ctx.setLineDash([4, 3]);
+      ctx.stroke();
+
+      // Target reticle on cursor
+      ctx.beginPath();
+      ctx.arc(mx, my, 8, 0, Math.PI * 2);
+      ctx.strokeStyle = isAutumnWood ? '#f97316' : '#38bdf8';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([]);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(mx, my, 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = isAutumnWood ? '#ea580c' : '#38bdf8';
+      ctx.fill();
+
+      // 2. Lens Outer Shadow
+      ctx.beginPath();
+      ctx.arc(lx, ly, R_lens + 4, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+      ctx.shadowBlur = 22;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // 3. Real 2D Spatial Microscopic Magnification (二維光學顯微放大，隨游標任意方向移動同動)
+      const M = 8.0; // 提升至 8.0 (800x 超高倍率，呈現極具震撼力之超大細胞與導管管腔)
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(lx, ly, R_lens, 0, Math.PI * 2);
+
+      // 顯微鏡載玻片實體不透明底色 (不可透明，完全遮蔽下方未放大之主畫布)
+      const lensGrad = ctx.createRadialGradient(lx, ly, 0, lx, ly, R_lens);
+      lensGrad.addColorStop(0, '#ffffff');
+      lensGrad.addColorStop(0.75, '#fffdfa');
+      lensGrad.addColorStop(1, '#f1f5f9');
+      ctx.fillStyle = lensGrad;
+      ctx.fill();
+
+      ctx.clip();
+
+      // 將游標所在 (mx, my) 的局部解剖結構縮放並平移對齊到鏡頭中心 (lx, ly)
+      ctx.translate(lx, ly);
+      ctx.scale(M, M);
+      ctx.translate(-mx, -my);
+
+      // --- 繪製位於 (mx, my) 周遭的微觀真實解剖構造 ---
+      const { cx, cy, rCenterPith, rInitialCambium, rCambium, rOuterStem, bundleCount, scale } = geom;
+
+      // (0) 木質部實體不透明基底（確保顯微放大圖全區填滿顏色，完全不透明）
+      ctx.beginPath();
+      ctx.arc(cx, cy, rCambium, 0, Math.PI * 2);
+      ctx.arc(cx, cy, rCenterPith, 0, Math.PI * 2, true);
+      ctx.fillStyle = '#fefce8'; // 實體木質部基底色
+      ctx.fill();
+
+      // (A) 木質部各年輪層與春/秋材微觀構造
+      if (growthTime > 0.8) {
+        const totalWoodThickness = rCambium - rInitialCambium;
+        const activeYears = Math.min(20, Math.ceil(secT));
+        const partialRing = secT - Math.floor(secT);
+
+        for (let yr = 1; yr <= activeYears; yr++) {
+          const weight = (yr === activeYears) ? (partialRing || 1.0) : 1.0;
+          if (weight <= 0) continue;
+
+          const innerR = rInitialCambium + ((yr - 1) / secT) * totalWoodThickness;
+          const outerR = rInitialCambium + (((yr - 1) + weight) / secT) * totalWoodThickness;
+          const ringW = outerR - innerR;
+          const springR = innerR + ringW * 0.70; // 前 70% 為春材
+
+          // 春材區段底色 (淺金黃)
+          ctx.beginPath();
+          ctx.arc(cx, cy, springR, 0, Math.PI * 2);
+          ctx.arc(cx, cy, innerR, 0, Math.PI * 2, true);
+          ctx.fillStyle = '#fef9c3';
+          ctx.fill();
+
+          // 年輪交界線 (Annual Ring Boundary)
+          ctx.beginPath();
+          ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
+          ctx.strokeStyle = '#1a0500';
+          ctx.lineWidth = 2.2 / M;
+          ctx.stroke();
+
+          // --- 春材細胞與導管群 (大薄壁細胞網絡 + 明顯分層大中型導管群) ---
+          const springW = springR - innerR;
+
+          // 1. 春材密集薄壁細胞與管胞網絡 (Parenchyma & Tracheids) - 依周長與層距嚴格計算，互不重疊
+          const springCellStepR = Math.max(2.5, springW * 0.08); // 徑向層距約 2.5px
+          const mouseAngle = Math.atan2(my - cy, mx - cx);
+          const maxViewDist = R_lens / M + 8;
+
+          for (let sr = innerR + springCellStepR * 0.45; sr < springR - 0.3; sr += springCellStepR) {
+            // 每圈半徑動態計算細胞數，中心間距保持約 2.5px，細胞直徑 1.9px，排布整齊、界限分明、絕不重疊
+            const circ = 2 * Math.PI * sr;
+            const fileCount = Math.max(12, Math.round(circ / 2.5));
+            const sStep = (Math.PI * 2) / fileCount;
+
+            const rowIdx = Math.round((sr - innerR) / springCellStepR);
+            const stagger = (rowIdx % 2 === 0) ? (sStep / 2) : 0;
+
+            const angleSpan = Math.min(Math.PI, (maxViewDist / Math.max(10, sr)) * 1.35);
+            const minAngle = mouseAngle - angleSpan;
+            const maxAngle = mouseAngle + angleSpan;
+            const startIdx = Math.floor((minAngle - stagger) / sStep);
+            const endIdx = Math.ceil((maxAngle - stagger) / sStep);
+
+            for (let si = startIdx; si <= endIdx; si++) {
+              const sAngle = si * sStep + stagger;
+              const sx = cx + Math.cos(sAngle) * sr;
+              const sy = cy + Math.sin(sAngle) * sr;
+
+              if (Math.hypot(sx - mx, sy - my) < maxViewDist) {
+                // 薄細胞壁 (淡金黃褐色，直徑約 1.9px，800x放大下約 15px，清晰呈現細胞形貌)
+                ctx.beginPath();
+                ctx.arc(sx, sy, 0.95, 0, Math.PI * 2);
+                ctx.fillStyle = '#fef08a';
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(217, 119, 6, 0.65)';
+                ctx.lineWidth = 0.5 / M;
+                ctx.stroke();
+
+                // 開闊薄壁細胞管腔 (白色空腔，直徑約 1.4px，800x放大下約 11px 寬廣管腔)
+                ctx.beginPath();
+                ctx.arc(sx, sy, 0.70, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffffff';
+                ctx.fill();
+              }
+            }
+          }
+
+          // 2. 春材大導管群 (直徑配合年輪寬度動態自適應，嚴格保證徑向與周向皆有足夠間距，絕對不重疊)
+          const baseVesselR = Math.min(2.7, Math.max(1.5, springW * 0.20));
+          const vesselTiers = (springW >= 8) ? [
+            { fraction: 0.32, circStep: 28, r: baseVesselR, wallW: 1.3 },         // 早春大導管
+            { fraction: 0.70, circStep: 24, r: baseVesselR * 0.65, wallW: 1.1 }   // 盛春/過渡中導管
+          ] : [
+            { fraction: 0.45, circStep: 24, r: baseVesselR * 0.85, wallW: 1.2 }   // 窄年輪單層導管
+          ];
+
+          vesselTiers.forEach((tier, tIdx) => {
+            const vRadiusOnStem = innerR + springW * tier.fraction;
+            const circ = 2 * Math.PI * vRadiusOnStem;
+            const vCount = Math.max(6, Math.round(circ / tier.circStep));
+            const vAngleStep = (Math.PI * 2) / vCount;
+            const vStagger = (tIdx * 0.55) + (yr * 0.35);
+
+            for (let vi = 0; vi < vCount; vi++) {
+              const vAngle = vi * vAngleStep + vStagger;
+              const vx = cx + Math.cos(vAngle) * vRadiusOnStem;
+              const vy = cy + Math.sin(vAngle) * vRadiusOnStem;
+
+              if (Math.hypot(vx - mx, vy - my) < (R_lens / M + 14)) {
+                // 導管大管腔 (明亮開闊巨型孔腔，實體白色遮蔽底層細胞)
+                ctx.beginPath();
+                ctx.arc(vx, vy, tier.r, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffffff';
+                ctx.fill();
+
+                // 導管初生/次生薄壁 (金褐色)
+                ctx.strokeStyle = '#d97706';
+                ctx.lineWidth = tier.wallW / M;
+                ctx.stroke();
+
+                // 導管內部紋孔/同心環紋
+                ctx.beginPath();
+                ctx.arc(vx, vy, tier.r * 0.65, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(245, 158, 11, 0.45)';
+                ctx.lineWidth = 0.8 / M;
+                ctx.stroke();
+              }
+            }
+          });
+
+          // --- 秋材：完全不使用任何底色，純粹以大量「小小厚厚壁」微小細胞緊密排滿構成 ---
+          const autumnStepR = 1.65; // 徑向密排步長
+          const autumnInnerR = springR;
+          const autumnOuterR = outerR;
+
+          // 計算鏡頭在當前年輪徑向所對應的視角範圍 (視錐裁剪加速，保持流暢 60fps)
+          const midAr = (autumnInnerR + autumnOuterR) / 2;
+          const autumnAngleSpan = Math.min(Math.PI, (maxViewDist / Math.max(10, midAr)) * 1.35);
+
+          for (let ar = autumnInnerR + autumnStepR * 0.45; ar < autumnOuterR; ar += autumnStepR) {
+            // 每圈半徑動態計算細胞數，周向中心間距約 2.1px，細胞直徑 1.9px，左右上下完全緊密相連無縫隙且不亂重疊
+            const circ = 2 * Math.PI * ar;
+            const fileCount = Math.round(circ / 2.1);
+            const aStep = (Math.PI * 2) / fileCount;
+
+            const rowIdx = Math.round((ar - autumnInnerR) / autumnStepR);
+            const stagger = (rowIdx % 2 === 0) ? (aStep / 2) : 0;
+
+            const minAngle = mouseAngle - autumnAngleSpan;
+            const maxAngle = mouseAngle + autumnAngleSpan;
+            const startIdx = Math.floor((minAngle - stagger) / aStep);
+            const endIdx = Math.ceil((maxAngle - stagger) / aStep);
+
+            for (let ai = startIdx; ai <= endIdx; ai++) {
+              const aAngle = ai * aStep + stagger;
+              const ax = cx + Math.cos(aAngle) * ar;
+              const ay = cy + Math.sin(aAngle) * ar;
+
+              if (Math.hypot(ax - mx, ay - my) < maxViewDist) {
+                // 小小厚厚壁 (深紅褐色/黑褐色極厚木質化細胞壁，直徑約 1.9px，700x下約 13.5px)
+                ctx.beginPath();
+                ctx.arc(ax, ay, 0.95, 0, Math.PI * 2);
+                ctx.fillStyle = '#260a02';
+                ctx.fill();
+                ctx.strokeStyle = '#120300';
+                ctx.lineWidth = 0.45 / M;
+                ctx.stroke();
+
+                // 極狹窄微小管腔 (管徑約 0.55px，700x下約 4px 微小琥珀孔，厚壁對比強烈)
+                ctx.beginPath();
+                ctx.arc(ax, ay, 0.28, 0, Math.PI * 2);
+                ctx.fillStyle = '#d97706';
+                ctx.fill();
+              }
+            }
+          }
+
+          // 秋材中散佈的少數小導管 (厚壁小導管，700x下直徑約 30px)
+          const autumnVesselCount = Math.floor(10 + yr * 3);
+          for (let avi = 0; avi < autumnVesselCount; avi++) {
+            const avAngle = (avi * Math.PI * 2) / autumnVesselCount + (yr * 0.7);
+            const avx = cx + Math.cos(avAngle) * midAr;
+            const avy = cy + Math.sin(avAngle) * midAr;
+
+            if (Math.hypot(avx - mx, avy - my) < maxViewDist) {
+              ctx.beginPath();
+              ctx.arc(avx, avy, 2.1, 0, Math.PI * 2);
+              ctx.fillStyle = '#1c0500';
+              ctx.fill();
+
+              ctx.beginPath();
+              ctx.arc(avx, avy, 0.7, 0, Math.PI * 2);
+              ctx.fillStyle = '#ea580c';
+              ctx.fill();
+            }
+          }
+        }
+
+        // --- 木質部射線 (Xylem Rays) ---
+        // 放射狀垂直貫穿多年輪的薄壁細胞帶
+        const rayCount = 48;
+        for (let ri = 0; ri < rayCount; ri++) {
+          const rAngle = (ri * Math.PI * 2) / rayCount;
+          const rayCos = Math.cos(rAngle);
+          const raySin = Math.sin(rAngle);
+          const x1 = cx + rayCos * rInitialCambium;
+          const y1 = cy + raySin * rInitialCambium;
+          const x2 = cx + rayCos * rCambium;
+          const y2 = cy + raySin * rCambium;
+
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.strokeStyle = 'rgba(180, 83, 9, 0.55)';
+          ctx.lineWidth = 1.2 / M;
+          ctx.stroke();
+        }
+      }
+
+      // (B) 髓與初生木質部 (若游標靠近髓部時亦可真實看到)
+      ctx.beginPath();
+      ctx.arc(cx, cy, rCenterPith, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+      ctx.strokeStyle = '#94a3b8';
+      ctx.lineWidth = 1.0 / M;
+      ctx.stroke();
+
+      for (let i = 0; i < bundleCount; i++) {
+        const bAngle = (i * Math.PI * 2) / bundleCount - Math.PI / 2;
+        const bx = cx + Math.cos(bAngle) * (rInitialCambium - 16 * scale);
+        const by = cy + Math.sin(bAngle) * (rInitialCambium - 16 * scale);
+        if (Math.hypot(bx - mx, by - my) < (R_lens / M + 20)) {
+          drawBundleEgg(ctx, bx, by, bAngle + Math.PI / 2, 34 * scale, 22 * scale, '#df9b42', '#000000');
+        }
+      }
+
+      // (C) 維管束形成層與樹皮 (若游標靠近外緣時亦可真實看到邊界)
+      ctx.beginPath();
+      ctx.arc(cx, cy, rCambium, 0, Math.PI * 2);
+      ctx.strokeStyle = '#0284c7';
+      ctx.lineWidth = 2.5 / M;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, rOuterStem, 0, Math.PI * 2);
+      ctx.arc(cx, cy, rCambium, 0, Math.PI * 2, true);
+      ctx.fillStyle = '#f3e8ff'; // 實體樹皮底色，完全不透明
+      ctx.fill();
+
+      ctx.restore(); // unclip 2D space
+
+      // 4. Overlaid Optical Reticle and Dynamic Cellular Indicators on Lens
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(lx, ly, R_lens, 0, Math.PI * 2);
+      ctx.clip();
+
+      // Microscopic crosshair
+      ctx.strokeStyle = 'rgba(15, 23, 42, 0.28)';
+      ctx.lineWidth = 1.0;
+      ctx.setLineDash([3, 4]);
+      ctx.beginPath();
+      ctx.moveTo(lx - R_lens, ly);
+      ctx.lineTo(lx + R_lens, ly);
+      ctx.moveTo(lx, ly - R_lens);
+      ctx.lineTo(lx, ly + R_lens);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Center target ring in loupe
+      ctx.beginPath();
+      ctx.arc(lx, ly, 18, 0, Math.PI * 2);
+      ctx.strokeStyle = isAutumnWood ? 'rgba(234, 88, 12, 0.7)' : 'rgba(56, 189, 248, 0.7)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // Scale bar at bottom-right inside lens: 50 µm (800x)
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+      safeRoundRect(ctx, lx + R_lens - 86, ly + R_lens - 34, 76, 20, 4);
+      ctx.fill();
+      ctx.fillStyle = '#f8fafc';
+      ctx.font = 'bold 9px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('|─ 50 µm ─| (800x)', lx + R_lens - 48, ly + R_lens - 20);
+
+      // Top Header Callout Badge inside lens
+      if (isAutumnWood) {
+        // 秋材 (晚材)
+        ctx.fillStyle = 'rgba(69, 26, 3, 0.94)';
+        ctx.strokeStyle = '#fb923c';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        safeRoundRect(ctx, lx - 105, ly - R_lens + 12, 210, 36, 6);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#ffedd5';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('游標定位：秋材 (晚材 / 年輪線)', lx, ly - R_lens + 26);
+
+        ctx.font = '9.5px sans-serif';
+        ctx.fillStyle = '#fdba74';
+        ctx.fillText('小導管・細胞壁極厚・顏色深 (秋冬形成)', lx, ly - R_lens + 41);
+      } else {
+        // 春材 (早材)
+        ctx.fillStyle = 'rgba(20, 83, 45, 0.94)';
+        ctx.strokeStyle = '#4ade80';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        safeRoundRect(ctx, lx - 105, ly - R_lens + 12, 210, 36, 6);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#f0fdf4';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('游標定位：春材 (早材)', lx, ly - R_lens + 26);
+
+        ctx.font = '9.5px sans-serif';
+        ctx.fillStyle = '#86efac';
+        ctx.fillText('大導管・細胞壁薄・管腔開闊 (春夏形成)', lx, ly - R_lens + 41);
+      }
+
+      // Bottom Location Pill: Shows current ring number
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.90)';
+      ctx.strokeStyle = '#94a3b8';
+      ctx.lineWidth = 1.0;
+      ctx.beginPath();
+      safeRoundRect(ctx, lx - 85, ly + R_lens - 34, 170, 22, 5);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#f8fafc';
+      ctx.font = '10px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`第 ${currentRingIndex} 年輪區段 (${(ringFraction * 100).toFixed(0)}%)`, lx, ly + R_lens - 19);
+
+      ctx.restore(); // unclip lens contents
+
+      // 5. Outer Metallic Lens Bezel & Glass Reflection
+      ctx.beginPath();
+      ctx.arc(lx, ly, R_lens, 0, Math.PI * 2);
+      ctx.strokeStyle = isAutumnWood ? '#f97316' : '#38bdf8';
+      ctx.lineWidth = 4.0;
+      ctx.stroke();
+
+      // Topmost Title Pill
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.96)';
+      ctx.strokeStyle = isAutumnWood ? '#f97316' : '#38bdf8';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      safeRoundRect(ctx, lx - 95, ly - R_lens - 25, 190, 24, 6);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = isAutumnWood ? '#fb923c' : '#38bdf8';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('動態顯微放大鏡 (800x 擴大視野)', lx, ly - R_lens - 9);
+
+      ctx.restore();
+    }
+
+    // --- MODE SWITCHER (5-YEAR VS 20-YEAR) ---
+    function setYearMode(mode, force = false) {
+      if (maxYears === mode && !force) return;
+      maxYears = mode;
+
+      btnMode5yr.classList.toggle('active', maxYears === 5);
+      btnMode20yr.classList.toggle('active', maxYears === 20);
+
+      timeSlider.max = maxYears;
+
+      if (maxYears === 5) {
+        // Re-enable Magnifier in 5-year young tree mode
+        btnToggleMagnifier.disabled = false;
+        btnToggleMagnifier.style.opacity = '1';
+        btnToggleMagnifier.style.cursor = 'pointer';
+        btnToggleMagnifier.title = '開關木質部顯微放大鏡 (觀察春材/秋材導管差異)';
+        btnToggleMagnifier.classList.toggle('active', showMagnifier);
+        btnToggleMagnifier.innerText = `顯微放大鏡: ${showMagnifier ? '開' : '關'}`;
+
+        sliderTicks.innerHTML = `
+          <span>初生期 (0年)</span>
+          <span>形成層環化</span>
+          <span>1年輪</span>
+          <span>2年輪</span>
+          <span>3年輪</span>
+          <span>4年輪</span>
+          <span>5年輪 (幼樹)</span>
+        `;
+        quickButtonsGroup.innerHTML = `
+          <button class="btn quick-btn" data-year="0">初生期</button>
+          <button class="btn quick-btn" data-year="0.5">形成層環化</button>
+          <button class="btn quick-btn" data-year="1.0">第 1 年</button>
+          <button class="btn quick-btn" data-year="2.0">第 2 年</button>
+          <button class="btn quick-btn" data-year="3.0">第 3 年</button>
+          <button class="btn quick-btn" data-year="4.0">第 4 年</button>
+          <button class="btn quick-btn" data-year="5.0">第 5 年 (幼樹)</button>
+        `;
+      } else {
+        // Disable Magnifier in 20-year mature tree mode (20年的不需要顯微放大，禁止使用)
+        btnToggleMagnifier.disabled = true;
+        btnToggleMagnifier.style.opacity = '0.45';
+        btnToggleMagnifier.style.cursor = 'not-allowed';
+        btnToggleMagnifier.title = '20年成樹模式僅供宏觀年輪觀察，顯微放大鏡已禁用 (僅限5年幼樹模式)';
+        btnToggleMagnifier.classList.remove('active');
+        btnToggleMagnifier.innerText = '顯微鏡: 禁用(僅幼樹)';
+
+        sliderTicks.innerHTML = `
+          <span>初生期 (0年)</span>
+          <span>1年輪</span>
+          <span>3年輪</span>
+          <span>5年輪</span>
+          <span>10年輪</span>
+          <span>15年輪</span>
+          <span>20年輪 (大樹)</span>
+        `;
+        quickButtonsGroup.innerHTML = `
+          <button class="btn quick-btn" data-year="0">初生期</button>
+          <button class="btn quick-btn" data-year="0.5">形成層環化</button>
+          <button class="btn quick-btn" data-year="1.0">第 1 年</button>
+          <button class="btn quick-btn" data-year="3.0">第 3 年</button>
+          <button class="btn quick-btn" data-year="6.0">第 6 年</button>
+          <button class="btn quick-btn" data-year="10.0">第 10 年</button>
+          <button class="btn quick-btn" data-year="15.0">第 15 年</button>
+          <button class="btn quick-btn" data-year="20.0">第 20 年 (大樹)</button>
+        `;
+      }
+
+      // Re-bind click event for quick buttons
+      quickButtonsGroup.querySelectorAll('.quick-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          stopAnimation();
+          updateGrowth(btn.dataset.year);
+        });
+      });
+
+      if (growthTime > maxYears) {
+        growthTime = maxYears;
+      }
+      updateGrowth(growthTime);
+    }
+
+    btnMode5yr.addEventListener('click', () => setYearMode(5));
+    btnMode20yr.addEventListener('click', () => setYearMode(20));
+
+    btnToggleMagnifier.addEventListener('click', () => {
+      if (maxYears === 20) return; // 20年模式禁止開啟顯微放大
+      showMagnifier = !showMagnifier;
+      btnToggleMagnifier.classList.toggle('active', showMagnifier);
+      btnToggleMagnifier.innerText = `顯微放大鏡: ${showMagnifier ? '開' : '關'}`;
+      render();
+    });
+
+    // --- TIMELINE & CONTROLS BINDING ---
+    function updateGrowth(val) {
+      growthTime = parseFloat(val);
+      timeSlider.value = growthTime;
+
+      // Update Time Display
+      if (growthTime < 0.3) {
+        timeDisplay.innerText = '初生構造';
+      } else if (growthTime < 0.8) {
+        timeDisplay.innerText = '形成層連環';
+      } else {
+        const yr = Math.floor(growthTime - 0.8) + 1;
+        timeDisplay.innerText = `第 ${yr} 年輪 (${growthTime.toFixed(1)} 年)`;
+      }
+
+      // Update Key Metrics
+      const rings = Math.max(0, Math.floor(growthTime - 0.8));
+      if (metricRings) metricRings.innerText = rings;
+      const maxSecT = (maxYears === 5) ? 4.2 : 19.2;
+      const minExp = (maxYears === 5) ? 0.68 : 0.55;
+      const diaMultiplier = (minExp + (1.0 - minExp) * Math.min(1.0, Math.max(0, growthTime - 0.8) / maxSecT) / minExp).toFixed(1) + 'x';
+      if (metricDia) metricDia.innerText = diaMultiplier;
+
+      // Update quick button active state
+      quickButtonsGroup.querySelectorAll('.quick-btn').forEach(btn => {
+        const by = parseFloat(btn.dataset.year);
+        btn.classList.toggle('active', Math.abs(by - growthTime) < 0.2);
+      });
+
+      render();
+    }
+
+    timeSlider.addEventListener('input', (e) => {
+      stopAnimation();
+      updateGrowth(e.target.value);
+    });
+
+    // Initial binding for Quick Jumps
+    quickButtonsGroup.querySelectorAll('.quick-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        stopAnimation();
+        updateGrowth(btn.dataset.year);
+      });
+    });
+
+    // Playback Loop
+    function animationStep(timestamp) {
+      if (!lastTimestamp) lastTimestamp = timestamp;
+      const dt = (timestamp - lastTimestamp) / 1000;
+      lastTimestamp = timestamp;
+
+      const animSpeed = (maxYears === 5) ? 0.8 : 1.8;
+      growthTime += dt * animSpeed;
+
+      if (growthTime > maxYears) {
+        if (isLooping) {
+          growthTime = 0;
+        } else {
+          growthTime = maxYears;
+          stopAnimation();
+          updateGrowth(growthTime);
+          return;
+        }
+      }
+
+      updateGrowth(growthTime);
+      animFrameId = requestAnimationFrame(animationStep);
+    }
+
+    function startAnimation() {
+      if (isPlaying) return;
+      isPlaying = true;
+      lastTimestamp = 0;
+      btnPlay.innerText = '暫停';
+      btnPlay.classList.add('active');
+      animFrameId = requestAnimationFrame(animationStep);
+    }
+
+    function stopAnimation() {
+      isPlaying = false;
+      btnPlay.innerText = '播放生長動畫';
+      btnPlay.classList.remove('active');
+      if (animFrameId) {
+        cancelAnimationFrame(animFrameId);
+        animFrameId = null;
+      }
+    }
+
+    btnPlay.addEventListener('click', () => {
+      if (isPlaying) stopAnimation();
+      else startAnimation();
+    });
+
+    btnReset.addEventListener('click', () => {
+      stopAnimation();
+      updateGrowth(0);
+    });
+
+    btnLoop.addEventListener('click', () => {
+      isLooping = !isLooping;
+      btnLoop.innerText = `循環模式: ${isLooping ? '開' : '關'}`;
+      btnLoop.classList.toggle('active', isLooping);
+    });
+
+    if (btnToggleBarkWood) {
+      btnToggleBarkWood.addEventListener('click', () => {
+        showBarkWoodRegions = !showBarkWoodRegions;
+        btnToggleBarkWood.classList.toggle('active', showBarkWoodRegions);
+        render();
+      });
+    }
+
+    btnToggleLabels.addEventListener('click', () => {
+      showLabels = !showLabels;
+      btnToggleLabels.classList.toggle('active', showLabels);
+      render();
+    });
+
+    // Isolation Header Button Listeners
+    if (btnIsolateAll) {
+      btnIsolateAll.addEventListener('click', () => setIsolationMode('all'));
+    }
+    if (btnIsolateBark) {
+      btnIsolateBark.addEventListener('click', () => {
+        setIsolationMode(isolationMode === 'bark' ? 'all' : 'bark');
+      });
+    }
+    if (btnIsolateWood) {
+      btnIsolateWood.addEventListener('click', () => {
+        setIsolationMode(isolationMode === 'wood' ? 'all' : 'wood');
+      });
+    }
+
+    // Initial Setup
+    btnLoop.classList.add('active');
+    btnToggleLabels.classList.add('active');
+    btnToggleMagnifier.classList.add('active');
+    if (btnToggleBarkWood) btnToggleBarkWood.classList.add('active');
+    initMicroAtlas();
+    resizeCanvas();
+
+    // Support URL parameters for direct state linking (defaults to 5-year mode at Year 5.0)
+    const urlParams = new URLSearchParams(window.location.search);
+    const m = urlParams.has('mode') ? parseInt(urlParams.get('mode')) : 5;
+    setYearMode(m === 20 ? 20 : 5, true);
+
+    const initYear = urlParams.has('year') ? parseFloat(urlParams.get('year')) : 5.0;
+    updateGrowth(isNaN(initYear) ? 5.0 : initYear);
+
+    // Support optional initial hover position (e.g. ?mode=5&year=3&hoverX=480&hoverY=257)
+    if (urlParams.has('hoverX') && urlParams.has('hoverY')) {
+      const hx = parseFloat(urlParams.get('hoverX'));
+      const hy = parseFloat(urlParams.get('hoverY'));
+      const rect = canvas.getBoundingClientRect();
+      handlePointerMove({
+        clientX: rect.left + hx,
+        clientY: rect.top + hy
+      });
+    }
+  </script>
+</body>
+</html>

@@ -1,32 +1,315 @@
 <!DOCTYPE html>
-
+<html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>能量塔遊戲</title>
+    <title>生態系能量塔與10%傳遞法則</title>
     <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
-    <div id="game">
-        <h1>生態系能量塔遊戲</h1>
-        <div id="energyTower">
-            <div id="producers" class="level" style="background-color: lightgreen;">生產者: <span id="producersCount">0</span></div>
-            <div id="primaryConsumers" class="level" style="background-color: lightblue;">初級消費者: <span id="primaryConsumersCount">0</span></div>
-            <div id="secondaryConsumers" class="level" style="background-color: lightcoral;">高級消費者: <span id="secondaryConsumersCount">0</span></div>
+    <header class="app-header">
+        <div class="header-content">
+            <h1>🌿 生態系能量塔（含10%法則計算）</h1>
+            <p class="subtitle">探索生態系營養階層結構、生物量遞減與林德曼 10% 能量傳遞法則</p>
         </div>
-        <div id="controlPanel">
-            <label for="producersInput">生產者: </label>
-            <input type="number" id="producersInput" value="0" min="0">
-            <label for="primaryConsumersInput">初級消費者: </label>
-            <input type="number" id="primaryConsumersInput" value="0" min="0">
-            <label for="secondaryConsumersInput">高級消費者: </label>
-            <input type="number" id="secondaryConsumersInput" value="0" min="0">
-            <button onclick="updateTower()">更新能量塔</button>
+        <div class="header-nav">
+            <button id="navGameBtn" class="tab-btn active" data-tab="tab-game">🧩 營養階層放置挑戰</button>
+            <button id="navCalcBtn" class="tab-btn" data-tab="tab-calc">⚡ 10% 能量傳遞計算器</button>
+            <button id="soundToggleBtn" class="btn btn-sound">🔊 音效: 開</button>
         </div>
-    </div>
+    </header>
+
+    <main class="main-container">
+        <!-- Toast Notification Box -->
+        <div id="toastBox" class="toast-box" aria-live="polite"></div>
+
+        <!-- Section 1: 4-Tier Card Placement Game -->
+        <section id="tab-game" class="tab-section active-section">
+            <div class="game-dashboard">
+                <div class="game-info">
+                    <span class="badge">挑戰模式</span>
+                    <span id="scoreDisplay">已就位: <strong id="placedCount">0</strong> / <span id="totalCardsCount">16</span></span>
+                    <span id="gameStatusText" class="status-tip">💡 點選下方卡牌後點選目標階層，或直接拖曳放置</span>
+                </div>
+                <div class="game-actions">
+                    <button id="resetGameBtn" class="btn btn-secondary">🔄 重新挑戰</button>
+                    <button id="autoHintBtn" class="btn btn-outline">💡 提示規則</button>
+                </div>
+            </div>
+
+            <div class="game-layout">
+                <!-- Stacked 4-Tier Pyramid Target Area -->
+                <div class="pyramid-wrapper">
+                    <h2 class="section-title">生態能量金字塔（由上至下）</h2>
+                    <div id="pyramidTiers" class="pyramid-container">
+                        <!-- Tier 4: Tertiary / Apex Consumers -->
+                        <div id="tier-tertiary" class="pyramid-tier tier-tertiary" data-tier="tertiary">
+                            <div class="tier-label">
+                                <span class="tier-rank">第 4 階</span>
+                                <span class="tier-title">三級 / 頂級消費者</span>
+                                <span class="tier-ratio">(約 0.1% 能量)</span>
+                            </div>
+                            <div class="tier-dropzone" id="dropzone-tertiary">
+                                <div class="drop-hint">拖曳或點選卡牌放置於此</div>
+                            </div>
+                        </div>
+
+                        <!-- Tier 3: Secondary Consumers -->
+                        <div id="tier-secondary" class="pyramid-tier tier-secondary" data-tier="secondary">
+                            <div class="tier-label">
+                                <span class="tier-rank">第 3 階</span>
+                                <span class="tier-title">次級消費者 (肉食/雜食)</span>
+                                <span class="tier-ratio">(約 1% 能量)</span>
+                            </div>
+                            <div class="tier-dropzone" id="dropzone-secondary">
+                                <div class="drop-hint">拖曳或點選卡牌放置於此</div>
+                            </div>
+                        </div>
+
+                        <!-- Tier 2: Primary Consumers -->
+                        <div id="tier-primary" class="pyramid-tier tier-primary" data-tier="primary">
+                            <div class="tier-label">
+                                <span class="tier-rank">第 2 階</span>
+                                <span class="tier-title">初級消費者 (草食/植食)</span>
+                                <span class="tier-ratio">(約 10% 能量)</span>
+                            </div>
+                            <div class="tier-dropzone" id="dropzone-primary">
+                                <div class="drop-hint">拖曳或點選卡牌放置於此</div>
+                            </div>
+                        </div>
+
+                        <!-- Tier 1: Producers -->
+                        <div id="tier-producers" class="pyramid-tier tier-producers" data-tier="producers">
+                            <div class="tier-label">
+                                <span class="tier-rank">第 1 階</span>
+                                <span class="tier-title">生產者 (綠色植物/藻類)</span>
+                                <span class="tier-ratio">(基底 100% 能量)</span>
+                            </div>
+                            <div class="tier-dropzone" id="dropzone-producers">
+                                <div class="drop-hint">拖曳或點選卡牌放置於此</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Organisms Pool & Selection -->
+                <div class="pool-wrapper">
+                    <div class="pool-header">
+                        <h2 class="section-title">物種生態卡牌庫</h2>
+                        <span id="selectedCardTip" class="selected-tip">尚未選取卡牌</span>
+                    </div>
+                    <div id="cardsPool" class="cards-pool">
+                        <!-- Loaded dynamically from data/cards.json -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 2: 10% Energy Transfer Law Calculator -->
+        <section id="tab-calc" class="tab-section">
+            <div class="calc-intro-card">
+                <h2>⚡ 林德曼 10% 能量傳遞法則 (Lindeman's 10% Law)</h2>
+                <p>
+                    在生態系能量流動中，各營養階層所同化的能量，僅有大約 <strong>10%</strong> 能夠傳遞並被下一個較高營養階層利用；
+                    其餘高達 <strong>90%</strong> 的能量則在生命活動（呼吸作用、排泄、運動散熱）中轉化為熱能散失至環境中。
+                </p>
+            </div>
+
+            <div class="calc-grid">
+                <!-- Controls Card -->
+                <div class="calc-controls-card">
+                    <h3>⚙️ 基礎數值設定</h3>
+                    <div class="input-group">
+                        <label for="baseEnergyInput">生產者基底同化能量 ($E_0$):</label>
+                        <div class="input-row">
+                            <input type="number" id="baseEnergyInput" value="10000" min="100" max="10000000" step="500">
+                            <select id="unitSelect" aria-label="能量單位">
+                                <option value="J" selected>焦耳 (J)</option>
+                                <option value="kcal">大卡 (kcal)</option>
+                            </select>
+                        </div>
+                        <input type="range" id="baseEnergySlider" min="1000" max="100000" step="1000" value="10000">
+                        <div class="range-labels">
+                            <span>1,000</span>
+                            <span>50,000</span>
+                            <span>100,000</span>
+                        </div>
+                    </div>
+
+                    <div class="input-group">
+                        <label for="efficiencyInput">傳遞效率 ($\eta$): <span id="effDisplay">10%</span></label>
+                        <input type="range" id="efficiencyInput" min="5" max="20" step="1" value="10">
+                        <div class="range-labels">
+                            <span>5% (低效)</span>
+                            <span>10% (標準)</span>
+                            <span>20% (高溫/高效)</span>
+                        </div>
+                    </div>
+
+                    <div class="summary-stat-box">
+                        <div class="stat-row">
+                            <span>頂級消費者殘存率:</span>
+                            <strong id="apexRemainingPercent">0.1%</strong>
+                        </div>
+                        <div class="stat-row">
+                            <span>累計熱能散失總量:</span>
+                            <strong id="totalHeatLostVal">9,990 J</strong>
+                        </div>
+                        <div class="stat-row">
+                            <span>總能量散失比例:</span>
+                            <strong id="totalLostPercent">99.9%</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Graphical Pyramid Visualization -->
+                <div class="calc-visual-card">
+                    <h3>📊 能量階層動態塔身與熱能散失視覺化</h3>
+                    
+                    <div class="pyramid-graphic-area">
+                        <!-- Apex / Tertiary Bar -->
+                        <div class="graphic-row">
+                            <div class="tier-badge-col">
+                                <span class="badge badge-tertiary">三級消費者</span>
+                            </div>
+                            <div class="bar-container">
+                                <div id="bar-tertiary" class="energy-bar bar-tertiary" style="width: 15%;">
+                                    <span class="bar-val" id="val-tertiary">10 J</span>
+                                </div>
+                            </div>
+                            <div class="heat-arrow-col">
+                                <div class="heat-flow-arrow" title="生命代謝轉化為環境廢熱">
+                                    <span class="arrow-icon">➔ ♨️</span>
+                                    <span class="loss-label">散失: <strong id="loss-tertiary">90 J</strong></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Secondary Bar -->
+                        <div class="graphic-row">
+                            <div class="tier-badge-col">
+                                <span class="badge badge-secondary">次級消費者</span>
+                            </div>
+                            <div class="bar-container">
+                                <div id="bar-secondary" class="energy-bar bar-secondary" style="width: 35%;">
+                                    <span class="bar-val" id="val-secondary">100 J</span>
+                                </div>
+                            </div>
+                            <div class="heat-arrow-col">
+                                <div class="heat-flow-arrow" title="生命代謝轉化為環境廢熱">
+                                    <span class="arrow-icon">➔ ♨️</span>
+                                    <span class="loss-label">散失: <strong id="loss-secondary">900 J</strong></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Primary Bar -->
+                        <div class="graphic-row">
+                            <div class="tier-badge-col">
+                                <span class="badge badge-primary">初級消費者</span>
+                            </div>
+                            <div class="bar-container">
+                                <div id="bar-primary" class="energy-bar bar-primary" style="width: 65%;">
+                                    <span class="bar-val" id="val-primary">1,000 J</span>
+                                </div>
+                            </div>
+                            <div class="heat-arrow-col">
+                                <div class="heat-flow-arrow" title="生命代謝轉化為環境廢熱">
+                                    <span class="arrow-icon">➔ ♨️</span>
+                                    <span class="loss-label">散失: <strong id="loss-primary">9,000 J</strong></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Producer Bar -->
+                        <div class="graphic-row">
+                            <div class="tier-badge-col">
+                                <span class="badge badge-producers">生產者基底</span>
+                            </div>
+                            <div class="bar-container">
+                                <div id="bar-producers" class="energy-bar bar-producers" style="width: 100%;">
+                                    <span class="bar-val" id="val-producers">10,000 J</span>
+                                </div>
+                            </div>
+                            <div class="heat-arrow-col">
+                                <div class="heat-flow-arrow" title="太陽能固定總值">
+                                    <span class="arrow-icon">☀️ 100%</span>
+                                    <span class="loss-label">光合自營</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Flow description table -->
+                    <div class="energy-table-wrapper">
+                        <table class="energy-table">
+                            <thead>
+                                <tr>
+                                    <th>營養階層</th>
+                                    <th>同化獲得能量</th>
+                                    <th>傳遞至下一階層</th>
+                                    <th>生命代謝散失 (熱能)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>🌾 生產者</td>
+                                    <td id="table-val-producers">10,000 J (100%)</td>
+                                    <td id="table-trans-primary">1,000 J</td>
+                                    <td id="table-loss-primary">9,000 J (90%)</td>
+                                </tr>
+                                <tr>
+                                    <td>🦗 初級消費者</td>
+                                    <td id="table-val-primary">1,000 J (10%)</td>
+                                    <td id="table-trans-secondary">100 J</td>
+                                    <td id="table-loss-secondary">900 J (9%)</td>
+                                </tr>
+                                <tr>
+                                    <td>🐸 次級消費者</td>
+                                    <td id="table-val-secondary">100 J (1%)</td>
+                                    <td id="table-trans-tertiary">10 J</td>
+                                    <td id="table-loss-tertiary">90 J (0.9%)</td>
+                                </tr>
+                                <tr>
+                                    <td>🦅 三級消費者</td>
+                                    <td id="table-val-tertiary">10 J (0.1%)</td>
+                                    <td>殘存同化: <span id="table-trans-apex">1 J</span></td>
+                                    <td id="table-loss-apex">9 J (0.09%)</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="insight-box">
+                        <strong>💡 教學核心概念：</strong>
+                        <span>為什麼大自然中的食物鏈長度通常不超過 4 到 5 個營養階層？</span>
+                        <p>因為能量在逐層傳遞過程中，高達 90% 會透過呼吸作用與維持生命活動散失為環境熱能。到達第四或第五階層時，可利用的能量僅剩原本的 0.1% ~ 0.01%，無法支撐足夠數量的頂級掠食者族群繁衍生存！</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Legacy compatibility container (hidden visually) -->
+        <div id="legacyCompatibilityContainer" style="display: none;" aria-hidden="true">
+            <div id="energyTower">
+                <div id="producers" class="level"><span id="producersCount">0</span></div>
+                <div id="primaryConsumers" class="level"><span id="primaryConsumersCount">0</span></div>
+                <div id="secondaryConsumers" class="level"><span id="secondaryConsumersCount">0</span></div>
+                <div id="tertiaryConsumers" class="level"><span id="tertiaryConsumersCount">0</span></div>
+            </div>
+            <div id="controlPanel">
+                <input type="number" id="producersInput" value="10000">
+                <input type="number" id="primaryConsumersInput" value="1000">
+                <input type="number" id="secondaryConsumersInput" value="100">
+                <input type="number" id="tertiaryConsumersInput" value="10">
+            </div>
+        </div>
+    </main>
+
+    <footer class="app-footer">
+        <p>國高中生物學科數位探究實驗教材 ｜ 生態系能量流動與營養階層模擬</p>
+    </footer>
 
     <script src="script.js"></script>
 </body>
-
 </html>
