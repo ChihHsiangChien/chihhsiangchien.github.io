@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>3D 神經元網路與動器控制實驗室：肌肉收縮與腺體分泌 (Interactive 3D Neural Network & Effectors)</title>
+  <link rel="stylesheet" href="style.css" />
+  <!-- Import Map for Three.js (Pure HTML/JS, No Node.js required) -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <!-- 3D Viewport Container -->
+  <div id="canvas-container"></div>
+
+  <!-- Floating 3D Pin Labels Overlay -->
+  <div id="labels-layer"></div>
+
+  <!-- Hover Tooltip -->
+  <div id="hover-tooltip" class="hover-tooltip hidden"></div>
+
+  <!-- Top Navigation & Pathway Scenario Switcher -->
+  <header class="hud-header">
+    <div class="brand-box">
+      <div class="brand-badge">3D 神經生理與動器互動實驗室</div>
+      <h1 class="brand-title">多神經元突觸連結 ✕ 動器控制（骨骼肌與分泌腺體）</h1>
+      <p class="brand-subtitle">觀察「受器 → 感覺神經元 → 聯絡神經元群 → 運動神經元 → 肌肉收縮 / 腺體分泌」之動作電位與突觸傳遞</p>
+    </div>
+
+    <div class="pathway-switcher" role="tablist" aria-label="神經傳導途徑模式">
+      <button class="mode-tab active" data-pathway="dual" role="tab" aria-selected="true">
+        <span class="mode-dot dual-dot"></span>
+        <div class="mode-text">
+          <span class="mode-name">雙動器協同傳導</span>
+          <span class="mode-en">Muscle + Gland Network</span>
+        </div>
+      </button>
+      <button class="mode-tab" data-pathway="reflex" role="tab" aria-selected="false">
+        <span class="mode-dot muscle-dot"></span>
+        <div class="mode-text">
+          <span class="mode-name">體神經反射弧 (骨骼肌)</span>
+          <span class="mode-en">Somatic → Muscle Contraction</span>
+        </div>
+      </button>
+      <button class="mode-tab" data-pathway="autonomic" role="tab" aria-selected="false">
+        <span class="mode-dot gland-dot"></span>
+        <div class="mode-text">
+          <span class="mode-name">自主神經傳導 (腺體)</span>
+          <span class="mode-en">Autonomic → Gland Secretion</span>
+        </div>
+      </button>
+      <button class="mode-tab" data-pathway="synapse" role="tab" aria-selected="false">
+        <span class="mode-dot synapse-dot"></span>
+        <div class="mode-text">
+          <span class="mode-name">突觸與神經肌肉接頭特寫</span>
+          <span class="mode-en">Synaptic Micro-View</span>
+        </div>
+      </button>
+    </div>
+  </header>
+
+  <!-- Panel collapse toggles (maximize 3D view) -->
+  <button class="panel-toggle left" id="toggleLeftPanel" title="收合／展開控制台 ( [ )">◀ 控制台</button>
+  <button class="panel-toggle right" id="toggleRightPanel" title="收合／展開資訊面板 ( ] )">資訊 ▶</button>
+
+  <!-- Left Panel: Neural Network & Effector Trigger Console -->
+  <aside class="control-sidebar" id="controlSidebar" aria-label="神經刺激與動器控制台">
+    <div class="sidebar-header">
+      <span class="sidebar-title">⚡ 神經激發與動器控制台</span>
+      <button class="btn-reset-focus" id="btnOverview" title="回到全網路總覽視角 (Esc)">
+        全覽視角
+      </button>
+    </div>
+
+    <!-- Action Triggers -->
+    <div class="trigger-section">
+      <div class="section-caption">1. 點擊發送神經衝動（亦可直接點擊 3D 模型）</div>
+      <div class="trigger-grid">
+        <button class="trigger-btn primary-trigger" id="btnStimReceptor">
+          <span class="t-icon">🖐️</span>
+          <div class="t-text">
+            <strong>刺激皮膚受器 (完整傳導)</strong>
+            <small>受器 → 感覺 → 聯絡神經網路 → 動器</small>
+          </div>
+        </button>
+
+        <button class="trigger-btn brain-trigger" id="btnStimBrain">
+          <span class="t-icon">🧠</span>
+          <div class="t-text">
+            <strong>中樞聯絡神經元群放電</strong>
+            <small>由脊髓/腦中樞同步往下游運動神經傳遞</small>
+          </div>
+        </button>
+
+        <div class="trigger-pair">
+          <button class="trigger-btn muscle-trigger" id="btnStimMuscle">
+            <span class="t-icon">💪</span>
+            <div class="t-text">
+              <strong>控制肌肉動器</strong>
+              <small>體運動神經 → 肌肉收縮</small>
+            </div>
+          </button>
+
+          <button class="trigger-btn gland-trigger" id="btnStimGland">
+            <span class="t-icon">💧</span>
+            <div class="t-text">
+              <strong>控制腺體動器</strong>
+              <small>自主運動神經 → 腺體分泌</small>
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Effector Status Meters -->
+    <div class="effector-status-box">
+      <div class="section-caption">2. 動器即時生理反應 (Effector Response)</div>
+
+      <!-- Muscle Meter -->
+      <div class="meter-card muscle-card" id="muscleCard">
+        <div class="meter-top">
+          <span class="meter-title">💪 骨骼肌動器 (Skeletal Muscle)</span>
+          <span class="meter-val" id="muscleTensionVal">舒張 (0%)</span>
+        </div>
+        <div class="meter-bar-bg">
+          <div class="meter-bar-fill muscle-fill" id="muscleBarFill" style="width: 0%"></div>
+        </div>
+        <div class="meter-sub">
+          <span id="muscleStateText">肌節長度正常 · 等待乙醯膽鹼 (ACh) 與 Ca²⁺ 釋放</span>
+          <button class="mini-action-btn" id="btnHoldMuscle" title="按住或切換持續強直收縮">持續收縮</button>
+        </div>
+      </div>
+
+      <!-- Gland Meter -->
+      <div class="meter-card gland-card" id="glandCard">
+        <div class="meter-top">
+          <span class="meter-title">💧 外分泌/內分泌腺體 (Secretory Gland)</span>
+          <span class="meter-val" id="glandSecretionVal">基礎 (0%)</span>
+        </div>
+        <div class="meter-bar-bg">
+          <div class="meter-bar-fill gland-fill" id="glandBarFill" style="width: 0%"></div>
+        </div>
+        <div class="meter-sub">
+          <span id="glandStateText">腺泡囊泡待命 · 等待自主神經元訊號觸發胞吐作用</span>
+          <button class="mini-action-btn" id="btnHoldGland" title="切換持續促進腺體分泌">持續分泌</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Anatomical Node Directory -->
+    <div class="node-directory-section">
+      <div class="section-caption">3. 神經元與動器構造導覽（點擊鏡頭對焦）</div>
+      <div class="node-list" id="nodeList">
+        <!-- Populated by app.js -->
+      </div>
+    </div>
+  </aside>
+
+  <!-- Right Panel: Scientific Inspector & Real-time Oscilloscope -->
+  <aside class="info-panel" id="infoPanel">
+    <div class="info-header-row">
+      <span class="info-badge" id="infoBadge">神經傳導網路 · 動器控制</span>
+      <span class="info-status-pill" id="infoConductionPill">⚡ 跳躍傳導已啟用</span>
+    </div>
+    <h2 class="info-title" id="infoTitle">多神經元突觸連結與動器系統</h2>
+    <div class="info-en" id="infoSubtitle">Multi-Neuron Synaptic Network & Effectors</div>
+
+    <p class="info-desc" id="infoDesc">
+      神經系統由多個神經元透過「突觸 (Synapse)」彼此串聯與分流。當受器接受刺激後，感覺神經元將動作電位傳入中樞的聯絡神經元群，經整合後分別透過「體運動神經元」引發骨骼肌收縮，或透過「自主運動神經元」促使腺體分泌。
+    </p>
+
+    <!-- Sub-structure / Key Feature Chips -->
+    <div class="substructure-box" id="substructureBox">
+      <div class="substructure-header">
+        <span>🔬 微細構造與生理機制（點擊於 3D 中高亮標示）</span>
+      </div>
+      <div class="substructure-chips" id="substructureChips">
+        <!-- Populated dynamically -->
+      </div>
+      <div class="substructure-detail" id="substructureDetail">
+        點擊上方標籤或左側導覽項目，可於 3D 空間中閃爍高亮對應構造並查看生理作用。
+      </div>
+    </div>
+
+    <!-- Live Electrophysiology Oscilloscope -->
+    <div class="oscilloscope-box">
+      <div class="osc-header">
+        <span class="osc-title">📈 即時電生理與動器波形儀 (Oscilloscope)</span>
+        <div class="osc-legend">
+          <span class="leg-item"><i class="leg-dot ap-dot"></i>膜電位(mV)</span>
+          <span class="leg-item"><i class="leg-dot mus-dot"></i>肌肉張力</span>
+          <span class="leg-item"><i class="leg-dot gld-dot"></i>腺體分泌</span>
+        </div>
+      </div>
+      <canvas id="oscCanvas" width="340" height="115"></canvas>
+      <div class="osc-readout">
+        <span>膜電位：<strong id="oscVoltage">-70 mV</strong> (靜止電位)</span>
+        <span>全有全無律：<strong id="oscFreqText">頻率編碼強度</strong></span>
+      </div>
+    </div>
+
+    <!-- Anatomical Key Facts -->
+    <div class="feature-card" id="featureCard">
+      <div class="feature-row">
+        <span class="feature-label">訊號類型</span>
+        <span class="feature-val" id="infoSignalType">神經元內：電訊號（動作電位）／ 突觸間：化學訊號（神經傳遞物質）</span>
+      </div>
+      <div class="feature-row">
+        <span class="feature-label">神經傳遞物質</span>
+        <span class="feature-val" id="infoTransmitter">乙醯膽鹼 (ACh)、麩胺酸 (Glutamate)、正腎上腺素 (NE)</span>
+      </div>
+      <div class="feature-row">
+        <span class="feature-label">動器反應</span>
+        <span class="feature-val" id="infoEffectorRole">骨骼肌：肌動蛋白與肌凝蛋白滑動收縮 ／ 腺體：分泌囊泡胞吐釋放</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Bottom Interactive Biophysics & Pharmacology Bar -->
+  <section class="bottom-bar">
+    <div class="controls-row">
+      <!-- Stimulus Frequency / Auto Pulse -->
+      <div class="control-group slider-group">
+        <div class="slider-header">
+          <span class="group-label">刺激頻率 / 連續脈衝 (Hz)</span>
+          <span class="slider-val" id="freqLabel">單次手動 (0 Hz)</span>
+        </div>
+        <input
+          type="range"
+          id="freqSlider"
+          class="cut-slider"
+          min="0"
+          max="10"
+          step="1"
+          value="0"
+          aria-label="連續刺激頻率滑桿"
+        />
+      </div>
+
+      <!-- Myelin & Saltatory Conduction Speed -->
+      <div class="control-group">
+        <span class="group-label">髓鞘與傳導速率</span>
+        <div class="btn-segmented" id="myelinGroup">
+          <button class="seg-btn active" data-myelin="myelinated" title="具有許旺細胞髓鞘與郎氏結，動作電位進行快速跳躍傳導">⚡ 有髓鞘 (跳躍傳導)</button>
+          <button class="seg-btn" data-myelin="unmyelinated" title="模擬脫髓鞘或無髓鞘神經纖維，傳導速度明顯減慢">🐢 無髓鞘 (連續慢速)</button>
+        </div>
+      </div>
+
+      <!-- Synaptic Pathway Gate / Pharmacology Simulator -->
+      <div class="control-group highlight-group">
+        <span class="group-label">突觸開關與藥理阻斷實驗</span>
+        <div class="btn-segmented" id="synapseGateGroup">
+          <button class="seg-btn active" data-gate="normal" title="所有突觸正常釋放神經傳遞物質">✅ 正常傳導</button>
+          <button class="seg-btn" data-gate="block-muscle" title="模擬肉毒桿菌毒素/箭毒：阻斷神經肌肉接頭 ACh，僅腺體有反應">🚫 阻斷肌肉突觸</button>
+          <button class="seg-btn" data-gate="block-gland" title="模擬阿托品(Atropine)：阻斷自主神經腺體受體，僅肌肉會收縮">🚫 阻斷腺體突觸</button>
+          <button class="seg-btn" data-gate="inhibit-cns" title="啟動中樞抑制性聯絡神經元 (GABA)，攔截下游運動訊號">🛑 中樞抑制 (GABA)</button>
+        </div>
+      </div>
+
+      <!-- View Toggles -->
+      <div class="control-group toggles-group">
+        <button class="toggle-btn active" id="btnToggleLabels" title="顯示或隱藏 3D 空間構造標籤 (L)">
+          🏷️ 3D 標籤
+        </button>
+        <button class="toggle-btn" id="btnToggleRotate" title="自動緩慢環繞展示 (R)">
+          🔄 自動環繞
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

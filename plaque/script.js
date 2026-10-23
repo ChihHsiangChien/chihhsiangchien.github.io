@@ -1,6 +1,6 @@
 /**
- * 動脈粥狀硬化斑塊 (Plaque) 與血栓形成動態互動模擬
- * Pure Vanilla JS + HTML5 Canvas (No Node.js required)
+ * 動脈粥狀硬化斑塊 (Plaque)、血栓形成與支架治療動態互動模擬
+ * Pure Vanilla JS + HTML5 Canvas (無須 Node.js，支援觸控平板與桌面滑鼠)
  */
 
 (() => {
@@ -17,6 +17,7 @@
   const microTooltip = document.getElementById('micro-tooltip');
   const tooltipTitle = document.getElementById('tooltip-title');
   const tooltipDesc = document.getElementById('tooltip-desc');
+  const tooltipClose = document.getElementById('tooltip-close');
 
   const btnAuto = document.getElementById('btn-auto');
   const btnPause = document.getElementById('btn-pause');
@@ -27,6 +28,8 @@
   const btnSpawnLDL = document.getElementById('btn-spawn-ldl');
   const btnSpawnImmune = document.getElementById('btn-spawn-immune');
   const btnSpawnHDL = document.getElementById('btn-spawn-hdl');
+  const btnStentTherapy = document.getElementById('btn-stent-therapy');
+  const btnStatinTherapy = document.getElementById('btn-statin-therapy');
 
   const ldlSlider = document.getElementById('ldl-slider');
   const ldlVal = document.getElementById('ldl-val');
@@ -50,7 +53,23 @@
   const legendItems = document.querySelectorAll('.legend-item');
   const btnClearFocus = document.getElementById('btn-clear-focus');
 
-  // 6個病理階段資料定義
+  // 跨瀏覽器相容圓角矩形繪製 (避免舊版 iPad Safari 不支援 ctx.roundRect 報錯)
+  function drawRoundedRectPath(context, x, y, w, h, r) {
+    const rad = Math.min(r, w * 0.5, h * 0.5);
+    context.beginPath();
+    context.moveTo(x + rad, y);
+    context.lineTo(x + w - rad, y);
+    context.quadraticCurveTo(x + w, y, x + w, y + rad);
+    context.lineTo(x + w, y + h - rad);
+    context.quadraticCurveTo(x + w, y + h, x + w - rad, y + h);
+    context.lineTo(x + rad, y + h);
+    context.quadraticCurveTo(x, y + h, x, y + h - rad);
+    context.lineTo(x, y + rad);
+    context.quadraticCurveTo(x, y, x + rad, y);
+    context.closePath();
+  }
+
+  // 7個病理與治療階段資料定義
   const STAGES = [
     {
       tag: 'STAGE 01',
@@ -63,7 +82,7 @@
         '<strong>平滑肌彈性：</strong>中膜平滑肌隨心臟搏動規律舒張，維持穩定血壓。'
       ],
       actionText: '⚡ 造成內皮受損與高膽固醇 (進入階段 2)',
-      prompt: '💡 觀察平穩流動的紅血球與少量黃色 LDL。點擊「造成內皮受損」或調高 LDL 滑桿開始病變！',
+      prompt: '👆 點選畫布中的細胞可查看顯微說明；點擊下方按鈕或調高 LDL 滑桿開始病變！',
       targetPlaqueHeight: 0,
       duration: 13
     },
@@ -73,12 +92,12 @@
       title: '內皮受損與 LDL 膽固醇滲入氧化',
       desc: '高血壓、吸菸、高血糖或氧化壓力會損傷血管內皮細胞，使其間隙變大。血液中過多的低密度脂蛋白膽固醇 (LDL) 趁機鑽入內膜下層 (Intima)，並被自由基氧化成「氧化型膽固醇 (ox-LDL)」。',
       bullets: [
-        '<strong>內皮功能障礙：</strong>受損內皮細胞間隙擴大，並開始在表面表現黏附分子 (VCAM-1)。',
+        '<strong>內皮功能障礙：</strong>受損內皮細胞間隙擴大，並在表面表現黏附分子 (VCAM-1)。',
         '<strong>LDL 滲入滯留：</strong>黃色 LDL 顆粒穿過內皮縫隙，卡在內膜下層的細胞外基質中。',
-        '<strong>脂質氧化 (ox-LDL)：</strong>活性氧自由基將 LDL 氧化為深橘紅色的 ox-LDL，刺激內皮發出強烈發炎訊號。'
+        '<strong>脂質氧化 (ox-LDL)：</strong>活性氧自由基將 LDL 氧化為深橘紅色的 ox-LDL，刺激內皮發出發炎求救訊號。'
       ],
       actionText: '🛡️ 招募免疫單核球吞噬 (進入階段 3)',
-      prompt: '💡 黃色 LDL 正穿過受損內皮並氧化成深橘色 ox-LDL！點擊「召喚免疫細胞」觀察白血球反應。',
+      prompt: '💡 黃色 LDL 正穿過受損內皮並氧化成深橘色 ox-LDL！點選「召喚免疫巨噬細胞」觀察白血球反應。',
       targetPlaqueHeight: 28,
       duration: 15
     },
@@ -93,7 +112,7 @@
         '<strong>發炎正回饋：</strong>巨噬細胞吞噬脂質後釋放細胞激素 (Cytokines)，召集更多免疫細胞前來。'
       ],
       actionText: '🫧 形成泡沫細胞與纖維帽 (進入階段 4)',
-      prompt: '💡 紫色巨噬細胞正在內膜中追逐並吞噬氧化膽固醇！可點擊「派遣好膽固醇 (HDL)」幫忙清除。',
+      prompt: '💡 紫色巨噬細胞正在內膜中追逐並吞噬氧化膽固醇！可點選「派遣好膽固醇 (HDL)」幫忙清除。',
       targetPlaqueHeight: 62,
       duration: 16
     },
@@ -105,10 +124,10 @@
       bullets: [
         '<strong>泡沫細胞與脂質核心：</strong>吞飽膽固醇的巨噬細胞無法代謝脂質，死亡後釋出膽固醇結晶形成粥狀核心。',
         '<strong>平滑肌遷移與纖維帽：</strong>中膜平滑肌細胞移至斑塊頂部形成白色纖維帽，試圖封住脂質核心。',
-        '<strong>動脈管腔狹窄：</strong>隆起的斑塊壓迫血管通道，導致血流加速、產生湍流，下游器官供血受限（心絞痛）。'
+        '<strong>動脈管腔狹窄：</strong>隆起的斑塊壓迫血管通道，導致血流加速與湍流，下游器官供血受限（心絞痛）。'
       ],
       actionText: '💥 削弱纖維帽並觸發斑塊破裂 (進入階段 5)',
-      prompt: '💡 泡沫細胞已堆積成大型粥狀斑塊並覆蓋纖維帽，管腔明顯狹窄！點擊下方按鈕模擬斑塊破裂。',
+      prompt: '💡 泡沫細胞已堆積成大型粥狀斑塊並覆蓋纖維帽，管腔明顯狹窄！點選下方按鈕模擬斑塊破裂。',
       targetPlaqueHeight: 112,
       duration: 16
     },
@@ -135,12 +154,27 @@
       bullets: [
         '<strong>血小板活化聚集：</strong>血小板接觸破裂處膠原蛋白後變為星芒狀，釋放 ADP 與血栓素 A2 召集同伴。',
         '<strong>纖維蛋白血栓 (Thrombus)：</strong>凝血酶將纖維蛋白原轉為堅固網狀結構，困住紅血球形成紅色血栓。',
-        '<strong>急性缺血危機：</strong>血管通道幾乎完全堵死，若發生在冠狀動脈即導致「心肌梗塞」，在腦血管則導致「腦中風」。'
+        '<strong>急性缺血危機：</strong>血管通道幾乎堵死（心肌梗塞或腦中風），請立即點擊下方「氣球擴張與支架」或「降脂藥 + 溶栓」進行搶救！'
       ],
-      actionText: '💉 施打溶栓藥物 (tPA) 清除血栓',
-      prompt: '🚨 緊急狀態：血栓已阻塞動脈導致下游缺血！點擊「施打溶栓藥物」或「派遣 HDL」觀察醫療救援效果。',
+      actionText: '🎈 進行心導管支架與溶栓搶救 (進入階段 7)',
+      prompt: '🚨 血管急性阻塞！請點選下方發光的「🎈 氣球擴張與血管支架」或「💊 降脂藥穩定斑塊 + 溶栓」搶救血管！',
       targetPlaqueHeight: 126,
-      duration: 20
+      duration: 18
+    },
+    {
+      tag: 'STAGE 07',
+      badge: '階段 7：醫療介入：溶栓、氣球擴張與血管支架 (Stent)',
+      title: '末期斑塊之醫療搶救：支架擴張與斑塊穩定化',
+      desc: '末期鈣化與纖維化的斑塊雖無法 100% 憑空消失，但可透過：(1) 溶栓劑 (tPA) 溶解血栓；(2) 心導管氣球擴張術將斑塊壓平，並置放「金屬網狀支架 (Stent)」永久撐開血管；(3) 強效降脂藥 (Statin) 搭配 HDL 縮小脂質核心並加厚纖維帽，使斑塊轉為安全穩定狀態！',
+      bullets: [
+        '<strong>心導管氣球擴張與支架 (PCI & Stent)：</strong>導管氣球充氣將隆起斑塊物理壓平，金屬支架永久支撐血管壁防止回彈。',
+        '<strong>斑塊穩定與部分消退 (Statin + HDL)：</strong>極低 LDL 環境下，HDL 抽走部分膽固醇，泡沫細胞減少約 10~15%，纖維帽重新加厚不再破裂。',
+        '<strong>可重複操作實驗：</strong>您可隨時點選下方「🎈 氣球擴張與血管支架」或「💊 降脂藥穩定斑塊 + 溶栓」觀察不同治療機制的動態過程！'
+      ],
+      actionText: '🎈 重新執行氣球擴張與支架置放手術',
+      prompt: '✅ 醫療搶救階段：可隨時點選「🎈 氣球擴張與血管支架」或「💊 降脂藥穩定斑塊 + 溶栓」比較兩種治療效果！',
+      targetPlaqueHeight: 42,
+      duration: 24
     }
   ];
 
@@ -149,57 +183,83 @@
   let stageTimer = 0;
   let isAutoPlay = true;
   let isPaused = false;
-  let focusedRole = null; // 'ldl' | 'monocyte' | 'foam' | 'smc' | 'platelet' | 'hdl' | null
+  let focusedRole = null;
   let simTime = 0;
 
-  // 生理環境參數
-  let ldlLevel = 2;      // 1~5
-  let bpMultiplier = 1.0; // 0.6~2.0
-  let plaqueHeight = 0;  // 當前內膜斑塊隆起高度 (0 ~ 135)
-  let capThickness = 0;  // 纖維帽厚度 (0 ~ 1)
-  let ruptureState = 0;  // 破裂程度 (0 ~ 1)
-  let thrombusSize = 0;  // 血栓大小 (0 ~ 1)
-  let clotBusterActive = 0; // 溶栓藥物倒數
+  // 生理環境與醫療介入參數
+  let ldlLevel = 2;
+  let bpMultiplier = 1.0;
+  let plaqueHeight = 0;
+  let capThickness = 0;
+  let ruptureState = 0;
+  let thrombusSize = 0;
+  let clotBusterActive = 0;
+  let statinStabilized = false;
+  let statinPulseTimer = 0;
+
+  // 畫布頂部動態治療狀態橫幅
+  let procedureBanner = {
+    text: '',
+    color: '#38bdf8',
+    timer: 0
+  };
+
+  // 心導管氣球擴張與血管支架 (Catheter Balloon & Stent) 動畫狀態
+  let stentDeployed = false;
+  let stentExpandRatio = 0;
+  let catheterState = 'none'; // 'none' | 'entering' | 'inflating' | 'deflating' | 'withdrawing'
+  let catheterX = -200;
+  let balloonInflate = 0;
+  let catheterTimer = 0;
 
   // 幾何基準座標
-  const WALL_TOP_Y = 105;     // 上血管壁內皮基準線
-  const WALL_BOT_BASE_Y = 395; // 下血管壁健康內皮基準線 (斑塊會使此線向上隆起)
-  const INTIMA_FLOOR_Y = 445;  // 內膜與中膜交界底線 (Internal Elastic Lamina)
-  const PLAQUE_CENTER_X = 480; // 斑塊中心 X 座標
-  const PLAQUE_HALF_W = 235;   // 斑塊影響半寬
+  const WALL_TOP_Y = 105;
+  const WALL_BOT_BASE_Y = 395;
+  const INTIMA_FLOOR_Y = 445;
+  const PLAQUE_CENTER_X = 480;
+  const PLAQUE_HALF_W = 235;
 
-  // 粒子陣列
-  let rbcs = [];         // 紅血球
-  let ldls = [];         // LDL / ox-LDL 膽固醇顆粒
-  let hdls = [];         // HDL 清道夫顆粒
-  let immuneCells = [];  // 單核球 (血液中) / 巨噬細胞 (內膜中)
-  let foamCells = [];    // 泡沫細胞 (沉積於斑塊核心)
-  let smcCells = [];     // 平滑肌細胞 (中膜與遷移至纖維帽)
-  let platelets = [];    // 血小板 (血液中與聚集於血栓)
-  let trappedRbcs = [];  // 被血栓纖維蛋白網困住的紅血球
-  let ruptureDebris = []; // 斑塊破裂噴出的脂質碎片與組織因子
-  let floatingTextFX = []; // 畫布動態文字特效 (如 "氧化!", "吞噬!", "HDL清除!")
+  // 粒子陣列與特效
+  let rbcs = [];
+  let ldls = [];
+  let hdls = [];
+  let immuneCells = [];
+  let foamCells = [];
+  let smcCells = [];
+  let platelets = [];
+  let trappedRbcs = [];
+  let ruptureDebris = [];
+  let drugParticles = []; // 💊 溶栓劑 (tPA) 與降脂藥 (Statin) 藥物微粒動畫
+  let floatingTextFX = [];
+  let touchRipples = [];
+  let selectedEntity = null;
 
-  // 計算特定 X 座標處的下血管壁內皮 Y 座標 (含斑塊隆起與心跳搏動)
+  function showProcedureBanner(text, color = '#38bdf8', duration = 4.5) {
+    procedureBanner.text = text;
+    procedureBanner.color = color;
+    procedureBanner.timer = duration;
+  }
+
   function getLowerEndotheliumY(x, includePulse = true) {
-    const pulse = includePulse ? Math.sin(simTime * 5.2 * bpMultiplier) * (3.2 * bpMultiplier) : 0;
+    const inStentZone = stentDeployed && stentExpandRatio > 0.5 && Math.abs(x - PLAQUE_CENTER_X) < 135;
+    const pulseAmp = inStentZone ? 1.0 : 3.2 * bpMultiplier;
+    const pulse = includePulse ? Math.sin(simTime * 5.2 * bpMultiplier) * pulseAmp : 0;
     const dist = Math.abs(x - PLAQUE_CENTER_X);
     let bulge = 0;
     if (dist < PLAQUE_HALF_W) {
-      // 平滑餘弦鐘形曲線形成斑塊隆起
       const norm = dist / PLAQUE_HALF_W;
       bulge = plaqueHeight * Math.pow(Math.cos(norm * Math.PI * 0.5), 1.8);
     }
     return WALL_BOT_BASE_Y - bulge + pulse * 0.5;
   }
 
-  // 計算特定 X 座標處的上血管壁內皮 Y 座標
   function getUpperEndotheliumY(x, includePulse = true) {
-    const pulse = includePulse ? Math.sin(simTime * 5.2 * bpMultiplier) * (3.8 * bpMultiplier) : 0;
+    const inStentZone = stentDeployed && stentExpandRatio > 0.5 && Math.abs(x - PLAQUE_CENTER_X) < 135;
+    const pulseAmp = inStentZone ? 1.2 : 3.8 * bpMultiplier;
+    const pulse = includePulse ? Math.sin(simTime * 5.2 * bpMultiplier) * pulseAmp : 0;
     return WALL_TOP_Y - pulse;
   }
 
-  // 取得斑塊頂點座標
   function getPlaqueApex() {
     return {
       x: PLAQUE_CENTER_X,
@@ -207,7 +267,6 @@
     };
   }
 
-  // 新增浮動特效文字
   function addFloatingFX(x, y, text, color = '#fde047') {
     if (floatingTextFX.length > 18) floatingTextFX.shift();
     floatingTextFX.push({
@@ -218,6 +277,10 @@
       life: 1.0,
       vy: -0.65
     });
+  }
+
+  function addTouchRipple(x, y, color = 'rgba(250, 204, 21, 0.75)') {
+    touchRipples.push({ x, y, r: 4, maxR: 34, alpha: 0.9, color });
   }
 
   // 初始化所有粒子與組織細胞
@@ -231,35 +294,27 @@
     platelets = [];
     trappedRbcs = [];
     ruptureDebris = [];
+    drugParticles = [];
     floatingTextFX = [];
+    touchRipples = [];
+    selectedEntity = null;
+    stentDeployed = false;
+    stentExpandRatio = 0;
+    catheterState = 'none';
+    balloonInflate = 0;
+    statinStabilized = false;
+    statinPulseTimer = 0;
+    procedureBanner.timer = 0;
 
-    // 1. 紅血球 (RBC)
-    for (let i = 0; i < 48; i++) {
-      rbcs.push(createRBC(Math.random() * W));
-    }
+    for (let i = 0; i < 48; i++) rbcs.push(createRBC(Math.random() * W));
 
-    // 2. 初始 LDL 膽固醇
     const initLDLCount = 12 + ldlLevel * 6;
-    for (let i = 0; i < initLDLCount; i++) {
-      ldls.push(createLDL(Math.random() * W));
-    }
+    for (let i = 0; i < initLDLCount; i++) ldls.push(createLDL(Math.random() * W));
 
-    // 3. 初始 HDL 好膽固醇
-    for (let i = 0; i < 6; i++) {
-      hdls.push(createHDL(Math.random() * W));
-    }
+    for (let i = 0; i < 6; i++) hdls.push(createHDL(Math.random() * W));
+    for (let i = 0; i < 6; i++) immuneCells.push(createMonocyte(Math.random() * W));
+    for (let i = 0; i < 20; i++) platelets.push(createPlatelet(Math.random() * W));
 
-    // 4. 初始血液單核球 (Monocytes)
-    for (let i = 0; i < 6; i++) {
-      immuneCells.push(createMonocyte(Math.random() * W));
-    }
-
-    // 5. 初始血小板 (Platelets)
-    for (let i = 0; i < 20; i++) {
-      platelets.push(createPlatelet(Math.random() * W));
-    }
-
-    // 6. 中膜平滑肌細胞 (Smooth Muscle Cells)
     for (let i = 0; i < 24; i++) {
       const x = 60 + (i / 23) * (W - 120);
       smcCells.push({
@@ -296,7 +351,7 @@
       : topY + Math.random() * Math.max(30, botY - topY);
     return {
       type: 'ldl',
-      state: 'blood', // 'blood' | 'infiltrating' | 'intima' | 'oxidized'
+      state: 'blood',
       x: x ?? -15,
       y: y,
       vx: 1.8 + Math.random() * 1.1,
@@ -313,7 +368,7 @@
     const botY = WALL_BOT_BASE_Y - 25;
     return {
       type: 'hdl',
-      state: 'blood', // 'blood' | 'scavenging' | 'leaving'
+      state: 'blood',
       x: x ?? -15,
       y: topY + Math.random() * (botY - topY),
       vx: 2.3 + Math.random() * 1.0,
@@ -328,7 +383,7 @@
     const botY = WALL_BOT_BASE_Y - 18;
     return {
       type: 'monocyte',
-      state: 'blood', // 'blood' | 'rolling' | 'diapedesis' | 'macrophage'
+      state: 'blood',
       x: x ?? -25,
       y: botY - Math.random() * 75,
       vx: 1.5 + Math.random() * 0.8,
@@ -347,7 +402,7 @@
     const botY = WALL_BOT_BASE_Y - 18;
     return {
       type: 'platelet',
-      state: 'blood', // 'blood' | 'homing' | 'activated'
+      state: 'blood',
       x: x ?? -15,
       y: topY + Math.random() * (botY - topY),
       vx: 2.5 + Math.random() * 1.2,
@@ -359,39 +414,56 @@
     };
   }
 
-  // 切換至指定階段並佈置對應病理場景
-  function setStage(stageIdx) {
-    currentStage = Math.max(0, Math.min(STAGES.length - 1, stageIdx));
-    stageTimer = 0;
-    clotBusterActive = 0;
-
+  // 更新UI按鈕與標籤（不強制重置正在進行的治療動畫）
+  function syncStageUI() {
     const st = STAGES[currentStage];
 
-    // 更新導覽列按鈕狀態
     stepButtons.forEach((btn, idx) => {
-      btn.classList.toggle('active', idx === currentStage);
+      const isAct = idx === currentStage;
+      btn.classList.toggle('active', isAct);
       btn.classList.toggle('completed', idx < currentStage);
+      if (isAct && btn.scrollIntoView) {
+        btn.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+      }
     });
 
-    // 更新右側說明與畫布標籤
     stageBadge.textContent = st.badge;
     infoStageTag.textContent = st.tag;
     infoTitle.textContent = st.title;
     infoDesc.textContent = st.desc;
     infoBullets.innerHTML = st.bullets.map(b => `<li>${b}</li>`).join('');
     btnStageAction.textContent = st.actionText;
+    btnStageAction.classList.toggle('rescue-mode', currentStage >= 5);
     canvasPrompt.textContent = st.prompt;
+
+    // 在末期階段 (階段 5/6/7) 高亮提示兩個醫療搶救按鈕
+    const isLateStage = currentStage >= 4;
+    btnStentTherapy.classList.toggle('btn-recommend-rescue', isLateStage);
+    btnStatinTherapy.classList.toggle('btn-recommend-rescue', isLateStage);
 
     btnPrev.disabled = currentStage === 0;
     btnNext.disabled = currentStage === STAGES.length - 1;
+  }
 
-    // 根據階段調整環境預設與場景物件，確保跳轉階段時能立即看到該階段代表性現象
+  // 切換至指定階段
+  function setStage(stageIdx) {
+    currentStage = Math.max(0, Math.min(STAGES.length - 1, stageIdx));
+    stageTimer = 0;
+    syncStageUI();
     setupStageEntities(currentStage);
   }
 
   function setupStageEntities(stageIdx) {
+    if (stageIdx < 6) {
+      stentDeployed = false;
+      stentExpandRatio = 0;
+      catheterState = 'none';
+      balloonInflate = 0;
+      statinStabilized = false;
+      drugParticles = [];
+    }
+
     if (stageIdx === 0) {
-      // 階段 1：健康動脈
       plaqueHeight = 0;
       capThickness = 0;
       ruptureState = 0;
@@ -399,7 +471,6 @@
       foamCells = [];
       trappedRbcs = [];
       ruptureDebris = [];
-      // 清除內膜中的 LDL 與巨噬細胞
       ldls.forEach(l => { l.state = 'blood'; l.y = WALL_TOP_Y + 30 + Math.random() * 200; });
       immuneCells = immuneCells.slice(0, 6);
       immuneCells.forEach(m => {
@@ -411,7 +482,6 @@
       platelets.forEach(p => { p.state = 'blood'; });
       smcCells.forEach(s => { s.inCap = false; });
     } else if (stageIdx === 1) {
-      // 階段 2：內皮受損與 LDL 滲入氧化
       if (ldlLevel < 3) {
         ldlSlider.value = 4;
         updateSlidersUI();
@@ -422,7 +492,6 @@
       ruptureDebris = [];
       platelets.forEach(p => { p.state = 'blood'; });
 
-      // 確保內膜中有數顆正在滲入與已氧化的 LDL
       let intimaCount = ldls.filter(l => l.state !== 'blood').length;
       for (let i = intimaCount; i < 14; i++) {
         const l = createLDL(PLAQUE_CENTER_X + (Math.random() - 0.5) * 240, true);
@@ -433,14 +502,12 @@
         ldls.push(l);
       }
     } else if (stageIdx === 2) {
-      // 階段 3：免疫細胞招募與吞噬
       ruptureState = 0;
       thrombusSize = 0;
       trappedRbcs = [];
       ruptureDebris = [];
       platelets.forEach(p => { p.state = 'blood'; });
 
-      // 補充內膜 ox-LDL 供吞噬
       let oxCount = ldls.filter(l => l.state !== 'blood').length;
       for (let i = oxCount; i < 18; i++) {
         const l = createLDL(PLAQUE_CENTER_X + (Math.random() - 0.5) * 250, true);
@@ -451,7 +518,6 @@
         ldls.push(l);
       }
 
-      // 確保有巨噬細胞在內膜活動與單核球正在穿出
       let macCount = immuneCells.filter(m => m.state === 'macrophage' || m.state === 'diapedesis').length;
       for (let i = macCount; i < 5; i++) {
         const m = createMonocyte(PLAQUE_CENTER_X + (Math.random() - 0.5) * 200);
@@ -461,7 +527,6 @@
         immuneCells.push(m);
       }
     } else if (stageIdx === 3) {
-      // 階段 4：泡沫細胞堆積與纖維帽斑塊
       ruptureState = 0;
       thrombusSize = 0;
       trappedRbcs = [];
@@ -469,40 +534,148 @@
       platelets.forEach(p => { p.state = 'blood'; });
       ensureFoamAndCap(14);
     } else if (stageIdx === 4) {
-      // 階段 5：斑塊不穩定與破裂
       ensureFoamAndCap(18);
-      ruptureState = Math.max(ruptureState, 0.35);
+      ruptureState = Math.max(ruptureState, 0.45);
       thrombusSize = 0;
       trappedRbcs = [];
       spawnRuptureDebris();
     } else if (stageIdx === 5) {
-      // 階段 6：血小板聚集與血栓形成
       ensureFoamAndCap(18);
+      plaqueHeight = Math.max(plaqueHeight, 122);
       ruptureState = 1.0;
-      thrombusSize = Math.max(thrombusSize, 0.25);
+      thrombusSize = Math.max(thrombusSize, 0.65);
       spawnRuptureDebris();
-      // 讓部分血小板立即進入活化聚集狀態
-      const apex = getPlaqueApex();
-      let actCount = 0;
-      platelets.forEach(p => {
-        if (actCount < 14) {
-          p.state = 'activated';
-          p.targetX = apex.x + (Math.random() - 0.45) * 85;
-          p.targetY = apex.y - 8 - Math.random() * 55;
-          p.x = p.targetX + (Math.random() - 0.5) * 20;
-          p.y = p.targetY + (Math.random() - 0.5) * 20;
-          actCount++;
-        }
+      populateThrombus(16);
+    } else if (stageIdx === 6) {
+      // 階段 7：醫療介入（氣球擴張支架 + 溶栓）
+      startStentAndMedicalRescue();
+    }
+  }
+
+  function populateThrombus(count = 15) {
+    const apex = getPlaqueApex();
+    let actCount = 0;
+    platelets.forEach(p => {
+      if (actCount < count) {
+        p.state = 'activated';
+        p.targetX = apex.x + (Math.random() - 0.45) * 85;
+        p.targetY = apex.y - 8 - Math.random() * 55;
+        p.x = p.targetX + (Math.random() - 0.5) * 16;
+        p.y = p.targetY + (Math.random() - 0.5) * 16;
+        actCount++;
+      }
+    });
+    while (trappedRbcs.length < 12) {
+      trappedRbcs.push({
+        x: apex.x + (Math.random() - 0.5) * 78,
+        y: apex.y - 12 - Math.random() * 65,
+        r: 10.5,
+        angle: Math.random() * Math.PI
       });
     }
   }
 
+  // ==================== 🎈 醫療介入 1：心導管氣球擴張與血管支架 (PCI & Stent) ====================
+  function startStentAndMedicalRescue() {
+    // 若使用者正在自動播放中手動點選治療，延長本階段時間避免瞬間跳走
+    stageTimer = 0;
+    currentStage = 6;
+    syncStageUI();
+
+    // 確保有一個明顯隆起的末期斑塊讓氣球壓平（這樣每次點擊都能清楚看到壓平與支架撐開過程！）
+    ensureFoamAndCap(16);
+    plaqueHeight = 122;
+    foamCells.forEach((fc, idx) => {
+      const distRatio = Math.abs(fc.offsetX) / 145;
+      fc.offsetY = 18 + (idx % 5) * 13 * Math.max(0.25, 1 - distRatio * distRatio);
+    });
+
+    // 重置支架展開比例，從頭播放導管進入 -> 氣球充氣 -> 支架撐開鎖定 -> 氣球退出
+    stentDeployed = true;
+    stentExpandRatio = 0.08;
+    catheterState = 'entering';
+    catheterX = -180;
+    balloonInflate = 0;
+    catheterTimer = 0;
+
+    // 同步啟動溶栓與穩定化
+    clotBusterActive = 5.5;
+    statinStabilized = true;
+    ldlSlider.value = 1;
+    bpSlider.value = 1.0;
+    updateSlidersUI();
+
+    showProcedureBanner('🎈 [1/3] 心導管與氣球進入狹窄動脈，準備擴張斑塊並置放支架...', '#38bdf8', 5.5);
+    const apex = getPlaqueApex();
+    addFloatingFX(apex.x, apex.y - 42, '🎈 心導管氣球進入！', '#60a5fa');
+  }
+
+  // ==================== 💊 醫療介入 2：強效降脂藥 (Statin) + 溶栓劑 (tPA) ====================
+  function triggerStatinAndThrombolysis() {
+    stageTimer = 0;
+    // 若在早期階段按下，自動佈置末期斑塊與血栓場景，讓使用者能清楚看到藥物溶栓與穩定斑塊的完整效果
+    if (currentStage < 3) {
+      currentStage = 5;
+      syncStageUI();
+    }
+
+    ensureFoamAndCap(16);
+    // 若當前已經沒有血栓且斑塊已被支架壓平，恢復部分血栓與斑塊高度以便清楚展示藥物作用
+    if (thrombusSize < 0.25 && (!stentDeployed || currentStage === 5)) {
+      plaqueHeight = Math.max(plaqueHeight, 115);
+      ruptureState = 0.85;
+      thrombusSize = 0.72;
+      populateThrombus(14);
+    }
+
+    clotBusterActive = 6.0;
+    statinStabilized = true;
+    statinPulseTimer = 4.5;
+    ldlSlider.value = 1;
+    updateSlidersUI();
+
+    // 產生 28 顆發光藥物微粒 (半數為青白色 tPA 溶栓酶，半數為翠綠色 Statin 降脂分子)
+    drugParticles = [];
+    const apex = getPlaqueApex();
+    for (let i = 0; i < 28; i++) {
+      const isTPA = i % 2 === 0;
+      const targetX = isTPA
+        ? apex.x + (Math.random() - 0.5) * 90
+        : PLAQUE_CENTER_X + (Math.random() - 0.5) * 220;
+      const targetY = isTPA
+        ? apex.y - 12 - Math.random() * 55
+        : getLowerEndotheliumY(targetX, false) + 10 + Math.random() * 25;
+
+      drugParticles.push({
+        kind: isTPA ? 'tpa' : 'statin',
+        x: -10 - Math.random() * 220,
+        y: WALL_TOP_Y + 30 + Math.random() * (WALL_BOT_BASE_Y - WALL_TOP_Y - 60),
+        targetX,
+        targetY,
+        vx: 4.5 + Math.random() * 2.2,
+        r: isTPA ? 5.5 : 6.0,
+        arrived: false,
+        life: 1.0
+      });
+    }
+
+    // 同時派遣 6 顆 HDL 清道夫進入內膜抽走膽固醇
+    for (let i = 0; i < 6; i++) {
+      const h = createHDL(PLAQUE_CENTER_X - 240 - i * 32);
+      h.state = 'scavenging';
+      hdls.push(h);
+    }
+
+    showProcedureBanner('💊 正在施打 tPA 溶栓劑與 Statin 降脂藥：溶解血栓網、清除氧化脂質並加厚穩定纖維帽！', '#34d399', 5.5);
+    addFloatingFX(apex.x, apex.y - 48, '💉 藥物微粒湧入！溶解血栓 & 加厚纖維帽', '#34d399');
+  }
+
   function ensureFoamAndCap(targetFoamCount) {
-    if (plaqueHeight < 65) plaqueHeight = 75;
+    if (plaqueHeight < 65 && currentStage < 6) plaqueHeight = 75;
     while (foamCells.length < targetFoamCount) {
       const spreadX = (Math.random() - 0.5) * 250;
       const distRatio = Math.abs(spreadX) / 145;
-      const maxH = Math.max(12, (1 - distRatio * distRatio) * 78);
+      const maxH = Math.max(12, (1 - distRatio * distRatio) * 75);
       foamCells.push({
         type: 'foam',
         offsetX: spreadX,
@@ -512,7 +685,6 @@
         phase: Math.random() * Math.PI * 2
       });
     }
-    // 遷移部分平滑肌細胞至纖維帽
     smcCells.forEach((s, idx) => {
       if (idx % 3 === 0) s.inCap = true;
     });
@@ -533,10 +705,9 @@
     addFloatingFX(apex.x, apex.y - 24, '💥 纖維帽破裂！組織因子暴露', '#f87171');
   }
 
-  // 更新環境滑桿與數值顯示
   function updateSlidersUI() {
     ldlLevel = parseInt(ldlSlider.value, 10);
-    const ldlLabels = ['極低', '正常', '偏高', '高血脂', '極危險'];
+    const ldlLabels = ['極低(藥物控制)', '正常', '偏高', '高血脂', '極危險'];
     ldlVal.textContent = ldlLabels[ldlLevel - 1] || '正常';
 
     bpMultiplier = parseFloat(bpSlider.value);
@@ -545,12 +716,19 @@
     bpVal.textContent = `${sys}/${dia}`;
   }
 
-  // 主更新迴圈 (物理與生物行為)
+  // 主更新迴圈
   function updateSimulation(dt) {
     simTime += dt;
 
-    // 自動階段推進計時
-    if (isAutoPlay) {
+    if (procedureBanner.timer > 0) {
+      procedureBanner.timer = Math.max(0, procedureBanner.timer - dt);
+    }
+    if (statinPulseTimer > 0) {
+      statinPulseTimer = Math.max(0, statinPulseTimer - dt);
+    }
+
+    // 自動階段推進計時 (在階段 6 血栓阻塞若正在施打藥物則暫緩跳轉，讓使用者看清楚效果)
+    if (isAutoPlay && catheterState === 'none' && drugParticles.length === 0) {
       const stageDur = STAGES[currentStage].duration;
       stageTimer += dt;
       const pct = Math.min(100, (stageTimer / stageDur) * 100);
@@ -562,24 +740,107 @@
           stageTimer = stageDur;
         }
       }
-    } else {
+    } else if (!isAutoPlay) {
       stageProgressFill.style.width = '0%';
+    }
+
+    // 更新心導管氣球與血管支架動畫狀態機
+    if (catheterState === 'entering') {
+      catheterX += (PLAQUE_CENTER_X - catheterX) * 0.12;
+      if (Math.abs(PLAQUE_CENTER_X - catheterX) < 3) {
+        catheterX = PLAQUE_CENTER_X;
+        catheterState = 'inflating';
+        catheterTimer = 0;
+        showProcedureBanner('🎈 [2/3] 氣球高壓充氣擴張！物理壓平末期斑塊並撐開金屬網狀支架...', '#38bdf8', 4.0);
+        addFloatingFX(PLAQUE_CENTER_X, WALL_TOP_Y + 95, '🎈 氣球充氣擴張！壓平斑塊並撐開支架', '#38bdf8');
+      }
+    } else if (catheterState === 'inflating') {
+      catheterTimer += dt;
+      balloonInflate = Math.min(1.0, balloonInflate + dt * 0.72);
+      stentExpandRatio = Math.max(stentExpandRatio, balloonInflate);
+      // 氣球充氣物理壓平斑塊與泡沫細胞高度
+      plaqueHeight += (40 - plaqueHeight) * dt * 2.8;
+      foamCells.forEach(fc => {
+        if (fc.offsetY > 26) fc.offsetY += (20 - fc.offsetY) * dt * 3.0;
+      });
+      if (catheterTimer > 2.6) {
+        catheterState = 'deflating';
+        catheterTimer = 0;
+        showProcedureBanner('✅ [3/3] 血管支架 (Stent) 永久固定完成！氣球洩氣撤出，恢復 85% 以上順暢血流！', '#34d399', 5.0);
+        addFloatingFX(PLAQUE_CENTER_X, WALL_TOP_Y + 95, '✨ 血管支架鎖定完成！氣球洩氣退出', '#34d399');
+      }
+    } else if (catheterState === 'deflating') {
+      balloonInflate = Math.max(0, balloonInflate - dt * 1.4);
+      if (balloonInflate <= 0.02) {
+        catheterState = 'withdrawing';
+      }
+    } else if (catheterState === 'withdrawing') {
+      catheterX -= 420 * dt;
+      if (catheterX < -200) {
+        catheterState = 'none';
+      }
+    }
+
+    // 更新 💊 藥物微粒 (tPA 溶栓酶 & Statin 降脂分子)
+    for (let i = drugParticles.length - 1; i >= 0; i--) {
+      const dp = drugParticles[i];
+      if (!dp.arrived) {
+        const dx = dp.targetX - dp.x;
+        const dy = dp.targetY - dp.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist < 14) {
+          dp.arrived = true;
+          addTouchRipple(dp.x, dp.y, dp.kind === 'tpa' ? 'rgba(56, 189, 248, 0.85)' : 'rgba(52, 211, 153, 0.85)');
+          if (dp.kind === 'tpa') {
+            thrombusSize = Math.max(0, thrombusSize - 0.06);
+            if (trappedRbcs.length > 0 && Math.random() < 0.45) {
+              trappedRbcs.pop();
+            }
+          } else {
+            // Statin 清除內膜游離氧化膽固醇並縮小部分泡沫細胞
+            const oxIdx = ldls.findIndex(l => l.state !== 'blood');
+            if (oxIdx !== -1) ldls.splice(oxIdx, 1);
+            else if (foamCells.length > 7 && Math.random() < 0.35) foamCells.pop();
+          }
+        } else {
+          dp.x += (dx / dist) * dp.vx;
+          dp.y += (dy / dist) * dp.vx;
+        }
+      } else {
+        dp.life -= dt * 1.4;
+        if (dp.life <= 0) {
+          drugParticles.splice(i, 1);
+        }
+      }
     }
 
     // 計算目標斑塊高度並平滑過渡
     let targetH = STAGES[currentStage].targetPlaqueHeight;
-    // 泡沫細胞數量也會微調斑塊高度
-    if (currentStage >= 1) {
-      targetH = Math.max(targetH, Math.min(130, foamCells.length * 4.5 + (currentStage >= 1 ? 18 : 0)));
+    if (stentDeployed && stentExpandRatio > 0.5) {
+      targetH = 40;
+    } else if (statinStabilized && currentStage >= 3) {
+      targetH = Math.min(targetH, 76); // 藥物讓斑塊部分消退並穩定
+    } else if (currentStage >= 1 && currentStage < 6) {
+      targetH = Math.max(targetH, Math.min(130, foamCells.length * 4.5 + 18));
     }
     plaqueHeight += (targetH - plaqueHeight) * dt * 1.4;
 
     // 纖維帽厚度演變
-    const targetCap = currentStage === 3 ? 1.0 : currentStage >= 4 ? 0.45 : currentStage === 2 ? 0.35 : 0;
+    const targetCap = statinStabilized
+      ? 1.2
+      : currentStage === 3
+      ? 1.0
+      : currentStage >= 4 && currentStage <= 5
+      ? 0.42
+      : currentStage === 2
+      ? 0.35
+      : 0;
     capThickness += (targetCap - capThickness) * dt * 1.5;
 
     // 破裂狀態演變
-    if (currentStage === 4) {
+    if (statinStabilized || currentStage === 6) {
+      ruptureState = Math.max(0, ruptureState - dt * 2.2);
+    } else if (currentStage === 4) {
       ruptureState = Math.min(1.0, ruptureState + dt * 0.25);
     } else if (currentStage === 5) {
       ruptureState = 1.0;
@@ -587,39 +848,35 @@
       ruptureState = Math.max(0, ruptureState - dt * 2.0);
     }
 
-    // 血栓大小演變 (Stage 6 或施打溶栓劑)
-    if (clotBusterActive > 0) {
+    // 血栓大小演變
+    if (clotBusterActive > 0 || currentStage === 6) {
       clotBusterActive = Math.max(0, clotBusterActive - dt);
-      thrombusSize = Math.max(0, thrombusSize - dt * 0.45);
+      thrombusSize = Math.max(0, thrombusSize - dt * 0.55);
       if (thrombusSize < 0.15 && trappedRbcs.length > 0) {
         trappedRbcs = [];
       }
-    } else if (currentStage === 5) {
+    } else if (currentStage === 5 && !statinStabilized) {
       const activatedCount = platelets.filter(p => p.state === 'activated').length;
       const targetThrombus = Math.min(0.95, 0.25 + activatedCount * 0.035);
       thrombusSize += (targetThrombus - thrombusSize) * dt * 0.85;
-    } else {
+    } else if (currentStage < 5) {
       thrombusSize = Math.max(0, thrombusSize - dt * 1.8);
     }
 
     const apex = getPlaqueApex();
-
-    // 計算管腔狹窄流速加成 (Bernoulli / Venturi 效應與阻塞效應)
-    const minGap = Math.max(24, (apex.y - WALL_TOP_Y) * (1 - thrombusSize * 0.78));
     const blockageFactor = thrombusSize > 0.55 ? Math.max(0.18, 1 - thrombusSize * 0.82) : 1.0;
 
     // 1. 更新紅血球 (RBCs)
     rbcs.forEach(rbc => {
-      const upperY = getUpperEndotheliumY(rbc.x) + rbc.r + 4;
-      let lowerY = getLowerEndotheliumY(rbc.x) - rbc.r - 4;
+      const upperY = getUpperEndotheliumY(rbc.x) + rbc.r + 6;
+      let lowerY = getLowerEndotheliumY(rbc.x) - rbc.r - 6;
 
-      // 若有血栓，血栓區域也會阻擋紅血球
       if (thrombusSize > 0.05 && Math.abs(rbc.x - apex.x) < 75 * thrombusSize) {
         const clotTopY = apex.y - thrombusSize * 115;
-        // 機率性被纖維蛋白網困住成為血栓一部分
         if (
           currentStage === 5 &&
           clotBusterActive <= 0 &&
+          !statinStabilized &&
           trappedRbcs.length < 22 &&
           rbc.y > clotTopY - 12 &&
           Math.random() < 0.08
@@ -636,15 +893,13 @@
         lowerY = Math.min(lowerY, clotTopY);
       }
 
-      // 局部狹窄處加速，但若嚴重血栓則上游減速壅塞
       const inNarrow = Math.abs(rbc.x - PLAQUE_CENTER_X) < 130;
-      const venturiBoost = inNarrow && thrombusSize < 0.4 ? 1 + (plaqueHeight / 140) * 0.9 : 1.0;
+      const venturiBoost = inNarrow && thrombusSize < 0.4 ? 1 + (plaqueHeight / 140) * 0.85 : 1.0;
       const upstreamSlow = rbc.x < PLAQUE_CENTER_X - 40 && thrombusSize > 0.5 ? 0.35 : 1.0;
 
       rbc.x += rbc.vx * bpMultiplier * venturiBoost * blockageFactor * upstreamSlow;
       rbc.angle += rbc.spin * bpMultiplier;
 
-      // 順著血管壁與斑塊弧度平滑導流
       if (rbc.y > lowerY) {
         rbc.y = lowerY;
         rbc.vy = -Math.abs(rbc.vy) * 0.5 - 0.6;
@@ -652,12 +907,10 @@
         rbc.y = upperY;
         rbc.vy = Math.abs(rbc.vy) * 0.5 + 0.6;
       } else {
-        // 接近斑塊斜坡時自然向上偏折
         if (rbc.x > PLAQUE_CENTER_X - PLAQUE_HALF_W && rbc.x < PLAQUE_CENTER_X && rbc.y > lowerY - 35) {
           rbc.vy -= 0.14 * (plaqueHeight / 90);
         } else if (rbc.x > PLAQUE_CENTER_X && rbc.x < PLAQUE_CENTER_X + PLAQUE_HALF_W && plaqueHeight > 30) {
-          // 斑塊下游微幅渦流 (Turbulence)
-          rbc.vy += Math.sin(simTime * 8 + rbc.x * 0.05) * 0.09;
+          rbc.vy += Math.sin(simTime * 8 + rbc.x * 0.05) * 0.08;
         }
         rbc.y += rbc.vy;
         rbc.vy *= 0.94;
@@ -669,11 +922,11 @@
       }
     });
 
-    // 2. 動態補充與更新 LDL 膽固醇
-    const desiredBloodLDL = 8 + ldlLevel * 7;
+    // 2. 更新 LDL 膽固醇
+    const desiredBloodLDL = 6 + ldlLevel * 7;
     const currentBloodLDL = ldls.filter(l => l.state === 'blood').length;
     if (currentBloodLDL < desiredBloodLDL && Math.random() < 0.25) {
-      ldls.push(createLDL(-15, currentStage >= 1 && Math.random() < 0.55));
+      ldls.push(createLDL(-15, currentStage >= 1 && currentStage <= 5 && Math.random() < 0.55));
     }
 
     for (let i = ldls.length - 1; i >= 0; i--) {
@@ -687,11 +940,12 @@
         const upperY = getUpperEndotheliumY(l.x) + 10;
         if (l.y < upperY) l.y = upperY;
 
-        // 在階段 2+，當 LDL 靠近受損內皮區域時，滲入內膜下層 (Intima)
         const inDamagedZone = Math.abs(l.x - PLAQUE_CENTER_X) < 185;
         const intimaLDLCount = ldls.filter(item => item.state !== 'blood').length;
         if (
           currentStage >= 1 &&
+          currentStage <= 5 &&
+          !statinStabilized &&
           inDamagedZone &&
           l.y > wallY - 26 &&
           intimaLDLCount < 28 &&
@@ -714,7 +968,6 @@
           }
         }
       } else if (l.state === 'infiltrating') {
-        // 穿過受損內皮縫隙進入內膜
         l.x += (l.targetX - l.x) * 0.08;
         l.y += (l.targetY - l.y) * 0.08;
         if (Math.hypot(l.targetX - l.x, l.targetY - l.y) < 4) {
@@ -722,10 +975,8 @@
           l.oxTimer = 0;
         }
       } else if (l.state === 'intima') {
-        // 在內膜下層逐漸被自由基氧化成 ox-LDL
         l.oxTimer += dt * 0.55;
         l.x += Math.sin(simTime * 2 + i) * 0.12;
-        // 確保留在內膜範圍內
         const minIntimaY = getLowerEndotheliumY(l.x, false) + 10;
         if (l.y < minIntimaY) l.y = minIntimaY;
         if (l.y > INTIMA_FLOOR_Y - 8) l.y = INTIMA_FLOOR_Y - 8;
@@ -737,7 +988,6 @@
           }
         }
       } else if (l.state === 'oxidized') {
-        // 氧化膽固醇在內膜中微微顫動並釋放發炎訊號
         l.x += Math.sin(simTime * 4 + i) * 0.15;
         const minIntimaY = getLowerEndotheliumY(l.x, false) + 10;
         if (l.y < minIntimaY) l.y = minIntimaY;
@@ -745,7 +995,7 @@
       }
     }
 
-    // 3. 更新免疫細胞 (單核球 Monocyte -> 巨噬細胞 Macrophage -> 泡沫細胞 Foam Cell)
+    // 3. 更新免疫細胞
     const macInIntima = immuneCells.filter(m => m.state === 'macrophage' || m.state === 'diapedesis').length;
     for (let i = immuneCells.length - 1; i >= 0; i--) {
       const m = immuneCells[i];
@@ -756,9 +1006,8 @@
         m.x += m.vx * bpMultiplier * blockageFactor;
         m.y += Math.sin(m.phase) * 0.3;
 
-        // 階段 3+：受發炎訊號吸引，靠近受損內皮並開始黏附滾動 (Rolling & Adhesion)
         const inInflamedZone = Math.abs(m.x - PLAQUE_CENTER_X) < 170;
-        if (currentStage >= 2 && inInflamedZone && macInIntima < 7) {
+        if (currentStage >= 2 && currentStage <= 5 && !statinStabilized && inInflamedZone && macInIntima < 7) {
           m.y += (wallY - 12 - m.y) * 0.045;
           if (Math.abs(m.y - (wallY - 12)) < 10) {
             m.state = 'rolling';
@@ -772,7 +1021,6 @@
           m.y = WALL_BOT_BASE_Y - 30 - Math.random() * 140;
         }
       } else if (m.state === 'rolling') {
-        // 沿著受損內皮緩慢滾動，準備穿出內皮 (Diapedesis)
         m.x += 0.45;
         m.y = getLowerEndotheliumY(m.x, false) - 10;
         if (Math.random() < 0.04 || Math.abs(m.x - PLAQUE_CENTER_X) < 60) {
@@ -782,7 +1030,6 @@
           addFloatingFX(m.x, m.y - 14, '免疫細胞鑽入內膜', '#c084fc');
         }
       } else if (m.state === 'diapedesis') {
-        // 變形鑽入內膜下層，轉化為巨噬細胞
         m.x += (m.targetX - m.x) * 0.06;
         m.y += (m.targetY - m.y) * 0.06;
         if (Math.hypot(m.targetX - m.x, m.targetY - m.y) < 5) {
@@ -790,7 +1037,6 @@
           m.r = 15.5;
         }
       } else if (m.state === 'macrophage') {
-        // 在內膜中搜尋最近的 ox-LDL 或 intima LDL 並吞噬
         let nearestLDL = null;
         let minDist = 9999;
         let nearestIdx = -1;
@@ -813,14 +1059,12 @@
           m.x += (dx / dist) * 1.15;
           m.y += (dy / dist) * 1.15;
 
-          // 吞噬接觸到的氧化膽固醇
           if (dist < m.r + nearestLDL.r) {
             ldls.splice(nearestIdx, 1);
             m.engulfCount++;
             m.r += 1.2;
             addFloatingFX(m.x, m.y - 12, '吞噬 ox-LDL!', '#e879f9');
 
-            // 吞飽膽固醇後轉化為泡沫細胞 (Foam Cell)
             if (m.engulfCount >= m.maxEngulf) {
               if (foamCells.length < 28) {
                 foamCells.push({
@@ -833,19 +1077,16 @@
                 });
               }
               addFloatingFX(m.x, m.y - 16, '🫧 轉化為泡沫細胞!', '#facc15');
-              // 補充一顆新的血液單核球維持循環
               immuneCells.splice(i, 1);
               immuneCells.push(createMonocyte(-25));
               continue;
             }
           }
         } else {
-          // 隨機巡邏於內膜斑塊區
           m.x += Math.cos(m.phase * 0.7) * 0.4;
           m.y += Math.sin(m.phase * 0.9) * 0.3;
         }
 
-        // 限制巨噬細胞在內膜下層邊界內
         const minM = getLowerEndotheliumY(m.x, false) + m.r + 3;
         if (m.y < minM) m.y = minM;
         if (m.y > INTIMA_FLOOR_Y - m.r) m.y = INTIMA_FLOOR_Y - m.r;
@@ -854,7 +1095,7 @@
       }
     }
 
-    // 4. 更新 HDL 好膽固醇 (清道夫逆向膽固醇運輸)
+    // 4. 更新 HDL 清道夫
     for (let i = hdls.length - 1; i >= 0; i--) {
       const h = hdls[i];
       const wallY = getLowerEndotheliumY(h.x, false);
@@ -875,23 +1116,21 @@
           }
         }
       } else if (h.state === 'scavenging') {
-        // 主動深入內膜吸走 ox-LDL 或縮小泡沫細胞
         const targetX = PLAQUE_CENTER_X + (Math.sin(i * 3.1) * 110);
         const targetY = wallY + 22;
-        h.x += (targetX - h.x) * 0.05;
-        h.y += (targetY - h.y) * 0.05;
+        h.x += (targetX - h.x) * 0.055;
+        h.y += (targetY - h.y) * 0.055;
 
         if (Math.hypot(targetX - h.x, targetY - h.y) < 18) {
-          // 優先移除一顆內膜中的 LDL / ox-LDL
           const oxIdx = ldls.findIndex(l => l.state !== 'blood');
           if (oxIdx !== -1) {
             ldls.splice(oxIdx, 1);
             h.hasCargo = true;
             addFloatingFX(h.x, h.y - 10, '✨ HDL 帶走膽固醇!', '#22d3ee');
-          } else if (foamCells.length > 0 && Math.random() < 0.45) {
+          } else if (foamCells.length > 4 && Math.random() < 0.5) {
             foamCells.pop();
             h.hasCargo = true;
-            addFloatingFX(h.x, h.y - 10, '✨ HDL 減少泡沫細胞!', '#22d3ee');
+            addFloatingFX(h.x, h.y - 10, '✨ HDL 縮小脂質核心!', '#22d3ee');
           }
           h.state = 'leaving';
         }
@@ -904,9 +1143,9 @@
       }
     }
 
-    // 5. 更新平滑肌細胞 (SMC) 位置
+    // 5. 更新平滑肌細胞位置
     smcCells.forEach(s => {
-      if (s.inCap && plaqueHeight > 35) {
+      if (s.inCap && plaqueHeight > 25) {
         const targetX = PLAQUE_CENTER_X + s.capOffset * 0.65;
         const targetY = getLowerEndotheliumY(targetX, false) + 11;
         s.x += (targetX - s.x) * 0.06;
@@ -917,7 +1156,7 @@
       }
     });
 
-    // 6. 更新血小板 (Platelets) 與血栓聚集
+    // 6. 更新血小板
     platelets.forEach(p => {
       const wallY = getLowerEndotheliumY(p.x);
       if (p.state === 'blood') {
@@ -927,10 +1166,11 @@
         if (p.y > wallY - 10) p.y = wallY - 10;
         if (p.y < WALL_TOP_Y + 12) p.y = WALL_TOP_Y + 12;
 
-        // 若斑塊已破裂 (Stage 5/6) 且未施打溶栓劑，靠近裂口的血小板會被召集活化
         if (
           ruptureState > 0.35 &&
           clotBusterActive <= 0 &&
+          !statinStabilized &&
+          currentStage <= 5 &&
           Math.abs(p.x - apex.x) < 130 &&
           platelets.filter(item => item.state !== 'blood').length < 24 &&
           (currentStage === 5 || (currentStage === 4 && Math.random() < 0.03))
@@ -954,17 +1194,16 @@
           p.state = 'blood';
         }
       } else if (p.state === 'activated') {
-        // 活化血小板固定於血栓處並隨搏動微幅位移
         p.x += (p.targetX - p.x) * 0.1;
         p.y += (p.targetY - p.y) * 0.1;
-        if (clotBusterActive > 0 && Math.random() < 0.12) {
+        if ((clotBusterActive > 0 || currentStage === 6) && Math.random() < 0.14) {
           p.state = 'blood';
           p.vx = 3.2;
         }
       }
     });
 
-    // 7. 更新斑塊破裂噴出物與浮動文字
+    // 7. 更新破裂碎片、浮動文字與觸控漣漪
     for (let i = ruptureDebris.length - 1; i >= 0; i--) {
       const d = ruptureDebris[i];
       d.x += d.vx;
@@ -981,7 +1220,13 @@
       if (fx.life <= 0) floatingTextFX.splice(i, 1);
     }
 
-    // 定期在破裂狀態下產生少量脂質碎片提示
+    for (let i = touchRipples.length - 1; i >= 0; i--) {
+      const rp = touchRipples[i];
+      rp.r += (rp.maxR - rp.r) * 0.18;
+      rp.alpha -= dt * 1.8;
+      if (rp.alpha <= 0) touchRipples.splice(i, 1);
+    }
+
     if (ruptureState > 0.5 && Math.random() < 0.08 && ruptureDebris.length < 10) {
       ruptureDebris.push({
         x: apex.x + (Math.random() - 0.5) * 26,
@@ -996,7 +1241,6 @@
     updateMetricsUI();
   }
 
-  // 更新右側即時生理指標進度條
   function updateMetricsUI() {
     const baseLumen = WALL_BOT_BASE_Y - WALL_TOP_Y;
     const plaqueRatio = Math.min(0.68, plaqueHeight / baseLumen);
@@ -1004,7 +1248,9 @@
     const patency = Math.max(5, Math.round((1 - plaqueRatio - clotRatio) * 100));
 
     metricLumenBar.style.width = `${patency}%`;
-    if (patency > 75) {
+    if (stentDeployed && patency >= 75) {
+      metricLumenText.textContent = `${patency}% (支架撐開暢通)`;
+    } else if (patency > 75) {
       metricLumenText.textContent = `${patency}% (暢通)`;
     } else if (patency > 40) {
       metricLumenText.textContent = `${patency}% (中度狹窄)`;
@@ -1014,22 +1260,43 @@
 
     const plaquePct = Math.min(100, Math.round((plaqueHeight / 130) * 100));
     metricPlaqueBar.style.width = `${plaquePct}%`;
-    metricPlaqueText.textContent = plaquePct === 0 ? '0% (無斑塊)' : `${plaquePct}% (${foamCells.length} 泡沫細胞)`;
+    if (stentDeployed && stentExpandRatio > 0.6) {
+      metricPlaqueText.textContent = `${plaquePct}% (已被支架壓平穩定)`;
+    } else if (statinStabilized && plaquePct > 0) {
+      metricPlaqueText.textContent = `${plaquePct}% (藥物穩定消退斑塊)`;
+    } else {
+      metricPlaqueText.textContent = plaquePct === 0 ? '0% (無斑塊)' : `${plaquePct}% (${foamCells.length} 泡沫細胞)`;
+    }
 
     const oxCount = ldls.filter(l => l.state !== 'blood').length;
     const macCount = immuneCells.filter(m => m.state !== 'blood').length;
-    const inflamScore = Math.min(100, Math.round(currentStage * 12 + oxCount * 1.8 + macCount * 6));
+    const inflamScore = statinStabilized
+      ? Math.max(8, Math.round(oxCount * 1.2 + macCount * 2.5))
+      : Math.min(100, Math.round(currentStage * 12 + oxCount * 1.8 + macCount * 6));
     metricInflamBar.style.width = `${inflamScore}%`;
     metricInflamText.textContent =
-      inflamScore < 20 ? '極低' : inflamScore < 50 ? '輕中度發炎' : inflamScore < 80 ? '高度發炎反應' : '劇烈發炎 (纖維帽脆弱)';
+      statinStabilized
+        ? '已受藥物抑制 (穩定)'
+        : inflamScore < 20
+        ? '極低'
+        : inflamScore < 50
+        ? '輕中度發炎'
+        : inflamScore < 80
+        ? '高度發炎反應'
+        : '劇烈發炎 (纖維帽脆弱)';
 
     const clotPct = Math.min(100, Math.round(thrombusSize * 100 + (ruptureState > 0.3 ? 15 : 0)));
     metricClotBar.style.width = `${clotPct}%`;
     metricClotText.textContent =
-      clotPct === 0 ? '0% (安全)' : clotPct < 35 ? `${clotPct}% (斑塊破裂高危)` : `${clotPct}% (急性血栓形成!)`;
+      clotPct === 0
+        ? statinStabilized || stentDeployed
+          ? '0% (已解除血栓危機)'
+          : '0% (安全)'
+        : clotPct < 35
+        ? `${clotPct}% (斑塊破裂高危)`
+        : `${clotPct}% (急性血栓形成!)`;
   }
 
-  // 輔助判斷某角色是否被圖鑑聚焦
   function getRoleAlpha(roleName) {
     if (!focusedRole) return 1.0;
     return focusedRole === roleName ? 1.0 : 0.16;
@@ -1039,43 +1306,24 @@
   function renderSimulation() {
     ctx.clearRect(0, 0, W, H);
 
-    // 1. 繪製動脈外膜與深層背景
     drawArteryWallsAndPlaqueZone();
-
-    // 2. 繪製管腔內血流流線 (Streamlines)
     drawBloodStreamlines();
-
-    // 3. 繪製內膜下層：粥狀脂質壞死核心與泡沫細胞 (Foam Cells)
     drawLipidCoreAndFoamCells();
-
-    // 4. 繪製中膜與纖維帽平滑肌細胞 (SMC & Fibrous Cap)
     drawSmoothMuscleAndFibrousCap();
-
-    // 5. 繪製上下血管內皮細胞層 (Endothelial Cells) 與受損/破裂缺口
     drawEndothelialCells();
-
-    // 6. 繪製紅血球 (RBCs)
     drawRBCs();
-
-    // 7. 繪製膽固醇顆粒 (LDL & ox-LDL) 與好膽固醇 (HDL)
     drawCholesterolParticles();
-
-    // 8. 繪製免疫細胞 (單核球與巨噬細胞)
     drawImmuneCells();
-
-    // 9. 繪製斑塊破裂噴出物、纖維蛋白血栓網與血小板
     drawThrombusAndPlatelets();
-
-    // 10. 繪製解剖層次標示與浮動特效文字
+    drawDrugParticles();
+    drawCatheterAndStent();
     drawAnatomicalLabelsAndFX();
   }
 
   function drawArteryWallsAndPlaqueZone() {
-    // 外膜背景
     ctx.fillStyle = '#140c14';
     ctx.fillRect(0, 0, W, H);
 
-    // 上血管壁中膜/外膜漸層
     const topWallGrad = ctx.createLinearGradient(0, 0, 0, WALL_TOP_Y);
     topWallGrad.addColorStop(0, '#2b121c');
     topWallGrad.addColorStop(0.65, '#4c1828');
@@ -1090,7 +1338,6 @@
     ctx.closePath();
     ctx.fill();
 
-    // 動脈管腔 (Lumen) 血液深紅漸層背景
     const lumenGrad = ctx.createLinearGradient(0, WALL_TOP_Y, 0, WALL_BOT_BASE_Y);
     lumenGrad.addColorStop(0, '#3a0a14');
     lumenGrad.addColorStop(0.5, '#590d1b');
@@ -1098,7 +1345,6 @@
     ctx.fillStyle = lumenGrad;
     ctx.fillRect(0, WALL_TOP_Y - 15, W, WALL_BOT_BASE_Y - WALL_TOP_Y + 35);
 
-    // 下血管壁：內膜下層 (Subendothelial Intima - 斑塊生長空間)
     const intimaGrad = ctx.createLinearGradient(0, WALL_BOT_BASE_Y - plaqueHeight, 0, INTIMA_FLOOR_Y);
     intimaGrad.addColorStop(0, currentStage >= 3 ? '#5c3c1e' : '#4a1c28');
     intimaGrad.addColorStop(1, '#3b1522');
@@ -1112,7 +1358,6 @@
     ctx.closePath();
     ctx.fill();
 
-    // 下血管壁：中膜層 (Tunica Media) 與外膜 (Adventitia)
     const mediaGrad = ctx.createLinearGradient(0, INTIMA_FLOOR_Y, 0, H);
     mediaGrad.addColorStop(0, '#591a2b');
     mediaGrad.addColorStop(0.55, '#3d111e');
@@ -1120,7 +1365,6 @@
     ctx.fillStyle = mediaGrad;
     ctx.fillRect(0, INTIMA_FLOOR_Y, W, H - INTIMA_FLOOR_Y);
 
-    // 內彈性膜 (Internal Elastic Lamina) 分隔內膜與中膜
     ctx.strokeStyle = 'rgba(244, 114, 182, 0.35)';
     ctx.lineWidth = 2.5;
     ctx.setLineDash([8, 4]);
@@ -1155,9 +1399,7 @@
     ctx.save();
     ctx.globalAlpha = getRoleAlpha('foam');
 
-    // 若斑塊高度明顯，先繪製底部黃色粥狀脂質壞死核心 (Lipid/Necrotic Core)
-    if (plaqueHeight > 22) {
-      const apex = getPlaqueApex();
+    if (plaqueHeight > 18) {
       const coreGrad = ctx.createRadialGradient(
         PLAQUE_CENTER_X,
         INTIMA_FLOOR_Y - plaqueHeight * 0.38,
@@ -1181,13 +1423,12 @@
       ctx.closePath();
       ctx.fill();
 
-      // 繪製膽固醇結晶針 (Cholesterol Crystals) 在階段 4+
       if (currentStage >= 3) {
         ctx.strokeStyle = 'rgba(254, 240, 138, 0.55)';
         ctx.lineWidth = 1.6;
         for (let c = -3; c <= 3; c++) {
           const cx = PLAQUE_CENTER_X + c * 28;
-          const cy = INTIMA_FLOOR_Y - 18 - (3 - Math.abs(c)) * 11;
+          const cy = INTIMA_FLOOR_Y - 12 - (3 - Math.abs(c)) * 6;
           ctx.beginPath();
           ctx.moveTo(cx - 8, cy - 3);
           ctx.lineTo(cx + 8, cy + 3);
@@ -1198,15 +1439,13 @@
       }
     }
 
-    // 繪製泡沫細胞 (Foam Cells)
     foamCells.forEach(fc => {
       const fx = PLAQUE_CENTER_X + fc.offsetX;
       const minEndoY = getLowerEndotheliumY(fx, false) + fc.r + 6;
-      const fy = Math.max(minEndoY, INTIMA_FLOOR_Y - fc.offsetY);
+      const fy = Math.min(INTIMA_FLOOR_Y - fc.r - 2, Math.max(minEndoY, INTIMA_FLOOR_Y - fc.offsetY));
       fc.renderX = fx;
       fc.renderY = fy;
 
-      // 泡沫細胞外膜
       const grad = ctx.createRadialGradient(fx - 3, fy - 3, 2, fx, fy, fc.r);
       grad.addColorStop(0, '#fef08a');
       grad.addColorStop(0.65, '#d97706');
@@ -1220,7 +1459,6 @@
       ctx.lineWidth = 1.2;
       ctx.stroke();
 
-      // 內部滿滿的黃色脂質油滴 (泡沫狀外觀)
       ctx.fillStyle = '#fef9c3';
       for (let d = 0; d < fc.droplets; d++) {
         const ang = (d / fc.droplets) * Math.PI * 2 + fc.phase;
@@ -1230,7 +1468,6 @@
         ctx.fill();
       }
 
-      // 被擠到邊緣的暗紫色細胞核
       ctx.fillStyle = '#581c87';
       ctx.beginPath();
       ctx.arc(fx, fy, 4.2, 0, Math.PI * 2);
@@ -1244,15 +1481,18 @@
     ctx.save();
     ctx.globalAlpha = getRoleAlpha('smc');
 
-    // 1. 若有纖維帽 (Stage 3+)，繪製覆蓋在斑塊頂部內皮下方的膠原蛋白纖維帽 (Fibrous Cap)
-    if (capThickness > 0.05 && plaqueHeight > 25) {
-      const apex = getPlaqueApex();
-      ctx.strokeStyle = currentStage >= 4
-        ? `rgba(253, 164, 175, ${0.42 * capThickness})` // 薄化脆弱
-        : `rgba(254, 226, 226, ${0.75 * capThickness})`;
-      ctx.lineWidth = currentStage >= 4 ? 3.5 : 7.5 * capThickness;
+    if (capThickness > 0.05 && plaqueHeight > 22) {
+      if (statinStabilized) {
+        ctx.shadowColor = '#10b981';
+        ctx.shadowBlur = statinPulseTimer > 0 ? 14 : 6;
+      }
+      ctx.strokeStyle = statinStabilized
+        ? 'rgba(110, 231, 183, 0.92)' // 經降脂藥穩定加厚後的堅固膠原纖維帽
+        : currentStage >= 4 && currentStage <= 5
+        ? `rgba(253, 164, 175, ${0.42 * capThickness})`
+        : `rgba(254, 226, 226, ${0.78 * capThickness})`;
+      ctx.lineWidth = statinStabilized ? 10.5 : currentStage >= 4 && currentStage <= 5 ? 3.5 : 7.5 * capThickness;
 
-      // 左半側纖維帽
       ctx.beginPath();
       for (let x = PLAQUE_CENTER_X - PLAQUE_HALF_W * 0.85; x <= PLAQUE_CENTER_X - (ruptureState > 0.2 ? 22 : 0); x += 8) {
         const y = getLowerEndotheliumY(x) + 8;
@@ -1261,7 +1501,6 @@
       }
       ctx.stroke();
 
-      // 右半側纖維帽 (若破裂則中間留出裂口)
       if (ruptureState > 0.2) {
         ctx.beginPath();
         for (let x = PLAQUE_CENTER_X + 22; x <= PLAQUE_CENTER_X + PLAQUE_HALF_W * 0.85; x += 8) {
@@ -1271,13 +1510,12 @@
         }
         ctx.stroke();
       }
+      ctx.shadowBlur = 0;
     }
 
-    // 2. 繪製平滑肌細胞 (紡錘形 Spindle-shaped cells)
     smcCells.forEach(s => {
       ctx.save();
       ctx.translate(s.x, s.y);
-      // 計算順應血管壁的切線角度
       if (s.inCap) {
         const dy = getLowerEndotheliumY(s.x + 10, false) - getLowerEndotheliumY(s.x - 10, false);
         ctx.rotate(Math.atan2(dy, 20));
@@ -1291,7 +1529,6 @@
       ctx.fill();
       ctx.stroke();
 
-      // 紡錘形細胞核
       ctx.fillStyle = '#881337';
       ctx.beginPath();
       ctx.ellipse(0, 0, 6, 2.2, 0, 0, Math.PI * 2);
@@ -1306,7 +1543,6 @@
     const cellWidth = 34;
     const count = Math.ceil(W / cellWidth);
 
-    // 上排健康內皮細胞
     for (let i = 0; i < count; i++) {
       const cx = i * cellWidth + cellWidth * 0.5;
       const cy = getUpperEndotheliumY(cx);
@@ -1319,18 +1555,16 @@
       ctx.stroke();
     }
 
-    // 下排內皮細胞 (包含斑塊區受損、間隙變大與破裂缺口)
     for (let i = 0; i < count; i++) {
       const cx = i * cellWidth + cellWidth * 0.5;
       const cy = getLowerEndotheliumY(cx);
       const distFromPlaque = Math.abs(cx - PLAQUE_CENTER_X);
 
-      // 若斑塊已破裂 (Stage 5/6)，頂點處內皮與纖維帽斷裂分開
       if (ruptureState > 0.25 && distFromPlaque < 26 * ruptureState) {
         continue;
       }
 
-      const isDamaged = currentStage >= 1 && distFromPlaque < 185;
+      const isDamaged = currentStage >= 1 && currentStage <= 5 && !statinStabilized && distFromPlaque < 185;
       const dy = getLowerEndotheliumY(cx + 8) - getLowerEndotheliumY(cx - 8);
       const angle = Math.atan2(dy, 16);
 
@@ -1338,7 +1572,6 @@
       ctx.translate(cx, cy + 3);
       ctx.rotate(angle);
 
-      // 受損內皮細胞會縮小使細胞間隙 (Gap) 變寬，並呈現發炎暗橘紅色
       const radiusX = isDamaged ? cellWidth * 0.35 : cellWidth * 0.47;
       ctx.fillStyle = isDamaged ? '#ea580c' : '#f43f5e';
       ctx.strokeStyle = isDamaged ? '#fdba74' : '#fda4af';
@@ -1349,7 +1582,6 @@
       ctx.fill();
       ctx.stroke();
 
-      // 受損內皮表面表現 VCAM-1 黏附分子受體 (供單核球識別黏附)
       if (isDamaged && currentStage >= 1) {
         ctx.strokeStyle = '#fde047';
         ctx.lineWidth = 1.4;
@@ -1374,7 +1606,6 @@
       ctx.translate(rbc.x, rbc.y);
       ctx.rotate(rbc.angle);
 
-      // 雙凹圓盤狀紅血球
       const grad = ctx.createRadialGradient(0, 0, rbc.r * 0.15, 0, 0, rbc.r);
       grad.addColorStop(0, '#991b1b');
       grad.addColorStop(0.55, '#ef4444');
@@ -1395,7 +1626,6 @@
   }
 
   function drawCholesterolParticles() {
-    // 1. 繪製 LDL 與 ox-LDL
     ctx.save();
     ctx.globalAlpha = getRoleAlpha('ldl');
 
@@ -1405,7 +1635,6 @@
       ctx.translate(l.x, l.y);
 
       if (isOx) {
-        // 氧化型低密度脂蛋白 (ox-LDL)：深橘紅發光並帶有自由基刺狀光暈
         ctx.shadowColor = '#f97316';
         ctx.shadowBlur = 8;
         ctx.fillStyle = '#ea580c';
@@ -1416,7 +1645,6 @@
         ctx.fill();
         ctx.stroke();
       } else {
-        // 一般 LDL 膽固醇：亮金黃色微粒
         const grad = ctx.createRadialGradient(-1.5, -1.5, 1, 0, 0, l.r);
         grad.addColorStop(0, '#fef9c3');
         grad.addColorStop(0.6, '#facc15');
@@ -1430,7 +1658,6 @@
     });
     ctx.restore();
 
-    // 2. 繪製 HDL 好膽固醇 (血管清道夫)
     ctx.save();
     ctx.globalAlpha = getRoleAlpha('hdl');
 
@@ -1449,7 +1676,6 @@
       ctx.arc(0, 0, h.r, 0, Math.PI * 2);
       ctx.fill();
 
-      // 若已裝載清除的膽固醇，中心顯示小黃點
       if (h.hasCargo) {
         ctx.fillStyle = '#fde047';
         ctx.beginPath();
@@ -1470,8 +1696,6 @@
       ctx.translate(m.x, m.y);
 
       const isMac = m.state === 'macrophage' || m.state === 'diapedesis';
-
-      // 細胞本體 (巨噬細胞帶有變形蟲偽足波浪邊緣)
       ctx.fillStyle = isMac ? 'rgba(168, 85, 247, 0.88)' : 'rgba(147, 51, 234, 0.88)';
       ctx.strokeStyle = '#f3e8ff';
       ctx.lineWidth = 1.6;
@@ -1493,13 +1717,11 @@
       ctx.fill();
       ctx.stroke();
 
-      // 腎形/馬蹄形細胞核 (單核球與巨噬細胞特徵)
       ctx.fillStyle = '#4c1d95';
       ctx.beginPath();
       ctx.arc(-1.5, 0, m.r * 0.42, 0.4, Math.PI * 1.75);
       ctx.fill();
 
-      // 已吞噬的黃色膽固醇油滴
       for (let c = 0; c < m.engulfCount; c++) {
         const cAng = c * 2.1 + 0.5;
         ctx.fillStyle = '#facc15';
@@ -1520,7 +1742,6 @@
 
     const apex = getPlaqueApex();
 
-    // 1. 繪製斑塊破裂噴出的致凝血脂質碎片
     ruptureDebris.forEach(d => {
       ctx.fillStyle = `rgba(251, 146, 60, ${d.life})`;
       ctx.beginPath();
@@ -1528,7 +1749,6 @@
       ctx.fill();
     });
 
-    // 2. 繪製破裂裂口閃光警示
     if (ruptureState > 0.25) {
       const glow = ctx.createRadialGradient(apex.x, apex.y, 4, apex.x, apex.y, 38 * ruptureState);
       glow.addColorStop(0, 'rgba(248, 113, 113, 0.75)');
@@ -1539,9 +1759,7 @@
       ctx.fill();
     }
 
-    // 3. 繪製被血栓困住的紅血球與纖維蛋白網 (Fibrin Mesh)
     if (thrombusSize > 0.05) {
-      // 被困住的紅血球團塊
       trappedRbcs.forEach(tr => {
         ctx.save();
         ctx.translate(tr.x, tr.y);
@@ -1556,7 +1774,6 @@
         ctx.restore();
       });
 
-      // 交織的金白纖維蛋白網 (Fibrin Strands)
       const activatedPlatelets = platelets.filter(p => p.state === 'activated');
       ctx.strokeStyle = 'rgba(254, 243, 199, 0.75)';
       ctx.lineWidth = 1.6;
@@ -1576,13 +1793,11 @@
       ctx.stroke();
     }
 
-    // 4. 繪製血小板 (未活化呈小橢圓盤，活化呈星芒偽足狀)
     platelets.forEach(p => {
       ctx.save();
       ctx.translate(p.x, p.y);
 
       if (p.state === 'activated' || p.state === 'homing') {
-        // 活化星芒狀血小板
         ctx.fillStyle = '#fef08a';
         ctx.strokeStyle = '#f59e0b';
         ctx.lineWidth = 1.2;
@@ -1600,7 +1815,6 @@
         ctx.fill();
         ctx.stroke();
       } else {
-        // 未活化平滑血小板
         ctx.fillStyle = '#fde68a';
         ctx.beginPath();
         ctx.ellipse(0, 0, p.r, p.r * 0.65, p.angle, 0, Math.PI * 2);
@@ -1613,11 +1827,131 @@
     ctx.restore();
   }
 
+  // 繪製 💊 藥物微粒 (tPA 溶栓酶 & Statin 降脂分子)
+  function drawDrugParticles() {
+    if (drugParticles.length === 0) return;
+    ctx.save();
+    drugParticles.forEach(dp => {
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, dp.life);
+      ctx.translate(dp.x, dp.y);
+
+      if (dp.kind === 'tpa') {
+        // tPA 溶栓酶：亮藍白十字星芒微粒
+        ctx.shadowColor = '#38bdf8';
+        ctx.shadowBlur = 10;
+        ctx.fillStyle = '#e0f2fe';
+        ctx.strokeStyle = '#0284c7';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.arc(0, 0, dp.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        // Statin 降脂穩定分子：翠綠膠囊微粒
+        ctx.shadowColor = '#10b981';
+        ctx.shadowBlur = 10;
+        ctx.fillStyle = '#6ee7b7';
+        ctx.strokeStyle = '#047857';
+        ctx.lineWidth = 1.4;
+        drawRoundedRectPath(ctx, -dp.r * 1.3, -dp.r * 0.7, dp.r * 2.6, dp.r * 1.4, dp.r * 0.7);
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.restore();
+    });
+    ctx.restore();
+  }
+
+  // 繪製心導管氣球與永久金屬網狀支架 (Balloon Angioplasty & Coronary Stent)
+  function drawCatheterAndStent() {
+    if (!stentDeployed && catheterState === 'none') return;
+
+    ctx.save();
+    ctx.globalAlpha = getRoleAlpha('stent');
+
+    const stentLeft = PLAQUE_CENTER_X - 125;
+    const stentRight = PLAQUE_CENTER_X + 125;
+    const centerTopY = WALL_TOP_Y + 8;
+    const centerBotY = getLowerEndotheliumY(PLAQUE_CENTER_X, false) - 4;
+    const midY = (centerTopY + centerBotY) * 0.5;
+
+    // 1. 若導管仍在血管內，繪製導引鋼絲 (Guidewire) 與充氣氣球 (Angioplasty Balloon)
+    if (catheterState !== 'none') {
+      ctx.strokeStyle = '#94a3b8';
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(0, midY);
+      ctx.lineTo(Math.min(W, catheterX + 165), midY);
+      ctx.stroke();
+
+      const bHalfH = Math.max(12, 14 + balloonInflate * ((centerBotY - centerTopY) * 0.46 - 12));
+      const bGrad = ctx.createLinearGradient(catheterX, midY - bHalfH, catheterX, midY + bHalfH);
+      bGrad.addColorStop(0, 'rgba(56, 189, 248, 0.5)');
+      bGrad.addColorStop(0.5, 'rgba(224, 242, 254, 0.78)');
+      bGrad.addColorStop(1, 'rgba(56, 189, 248, 0.5)');
+
+      ctx.fillStyle = bGrad;
+      ctx.strokeStyle = 'rgba(125, 211, 252, 0.95)';
+      ctx.lineWidth = 2.0;
+      drawRoundedRectPath(ctx, catheterX - 115, midY - bHalfH, 230, bHalfH * 2, 22);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // 2. 繪製金屬網狀支架 (Metallic Diamond-Mesh Stent)
+    if (stentDeployed) {
+      const currentHalfH = Math.max(14, 16 + stentExpandRatio * ((centerBotY - centerTopY) * 0.48 - 14));
+      const topY = midY - currentHalfH;
+      const botY = midY + currentHalfH;
+
+      ctx.strokeStyle = 'rgba(226, 232, 240, 0.95)';
+      ctx.lineWidth = 2.2;
+      ctx.shadowColor = '#38bdf8';
+      ctx.shadowBlur = 7;
+
+      const cols = 10;
+      const cellW = (stentRight - stentLeft) / cols;
+      const rows = 3;
+      const cellH = (botY - topY) / rows;
+
+      ctx.beginPath();
+      for (let c = 0; c < cols; c++) {
+        const x1 = stentLeft + c * cellW;
+        const x2 = x1 + cellW * 0.5;
+        const x3 = x1 + cellW;
+
+        for (let r = 0; r < rows; r++) {
+          const y1 = topY + r * cellH;
+          const y2 = y1 + cellH * 0.5;
+          const y3 = y1 + cellH;
+
+          ctx.moveTo(x1, y2);
+          ctx.lineTo(x2, y1);
+          ctx.lineTo(x3, y2);
+          ctx.lineTo(x2, y3);
+          ctx.closePath();
+        }
+      }
+      ctx.stroke();
+
+      ctx.fillStyle = '#38bdf8';
+      for (let c = 0; c <= cols; c++) {
+        const x = stentLeft + c * cellW;
+        ctx.beginPath();
+        ctx.arc(x, topY, 2.6, 0, Math.PI * 2);
+        ctx.arc(x, botY, 2.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    ctx.restore();
+  }
+
   function drawAnatomicalLabelsAndFX() {
     ctx.save();
     ctx.font = '600 12px -apple-system, BlinkMacSystemFont, "Noto Sans TC", sans-serif';
 
-    // 左側解剖構造標籤
     ctx.fillStyle = 'rgba(254, 202, 202, 0.72)';
     ctx.fillText('動脈管腔 (Arterial Lumen) ── 血流方向 ➔', 18, WALL_TOP_Y + 32);
 
@@ -1630,25 +1964,75 @@
     ctx.fillStyle = 'rgba(244, 114, 182, 0.8)';
     ctx.fillText('中膜平滑肌層 (Tunica Media - 平滑肌細胞)', 18, INTIMA_FLOOR_Y + 34);
 
-    // 斑塊區動態標示
     const apex = getPlaqueApex();
-    if (plaqueHeight > 32) {
+    if (plaqueHeight > 26) {
       ctx.textAlign = 'center';
       ctx.fillStyle = '#fef08a';
-      ctx.fillText('▲ 粥狀脂質核心與泡沫細胞 (Atheromatous Plaque)', PLAQUE_CENTER_X, INTIMA_FLOOR_Y - 10);
+      ctx.fillText(
+        stentDeployed && stentExpandRatio > 0.5
+          ? '▲ 已被金屬支架壓平並穩定的末期斑塊'
+          : '▲ 粥狀脂質核心與泡沫細胞 (Atheromatous Plaque)',
+        PLAQUE_CENTER_X,
+        INTIMA_FLOOR_Y - 8
+      );
 
       if (capThickness > 0.3 && ruptureState < 0.3) {
-        ctx.fillStyle = '#fecdd3';
-        ctx.fillText('── 纖維帽 (Fibrous Cap) ──', apex.x, apex.y + 22);
+        ctx.fillStyle = statinStabilized ? '#6ee7b7' : '#fecdd3';
+        ctx.fillText(
+          statinStabilized ? '── 💊 藥物加厚穩定纖維帽 (Stable Fibrous Cap) ──' : '── 纖維帽 (Fibrous Cap) ──',
+          apex.x,
+          apex.y + 22
+        );
       }
     }
 
-    if (thrombusSize > 0.25) {
+    if (stentDeployed && stentExpandRatio > 0.7) {
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#7dd3fc';
+      ctx.font = '700 13px -apple-system, BlinkMacSystemFont, "Noto Sans TC", sans-serif';
+      ctx.fillText('🛡️ 血管支架 (Coronary Stent) 永久支撐血管暢通', PLAQUE_CENTER_X, WALL_TOP_Y + 28);
+    } else if (thrombusSize > 0.25) {
       ctx.textAlign = 'center';
       ctx.fillStyle = '#fca5a5';
       ctx.font = '700 13px -apple-system, BlinkMacSystemFont, "Noto Sans TC", sans-serif';
       ctx.fillText('🚨 血栓形成 (Thrombus) 阻塞血流', apex.x, apex.y - 58 * thrombusSize - 12);
     }
+
+    // 繪製醫療介入即時進度橫幅 (Procedure Toast Banner)
+    if (procedureBanner.timer > 0) {
+      ctx.save();
+      const alpha = Math.min(1, procedureBanner.timer * 1.2);
+      ctx.globalAlpha = alpha;
+      const bw = 620;
+      const bh = 36;
+      const bx = (W - bw) * 0.5;
+      const by = 52;
+
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+      ctx.strokeStyle = procedureBanner.color;
+      ctx.lineWidth = 2;
+      drawRoundedRectPath(ctx, bx, by, bw, bh, 18);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#f8fafc';
+      ctx.textAlign = 'center';
+      ctx.font = '700 13.5px -apple-system, BlinkMacSystemFont, "Noto Sans TC", sans-serif';
+      ctx.fillText(procedureBanner.text, W * 0.5, by + 23);
+      ctx.restore();
+    }
+
+    // 繪製觸控漣漪回饋
+    touchRipples.forEach(rp => {
+      ctx.save();
+      ctx.strokeStyle = rp.color;
+      ctx.globalAlpha = Math.max(0, rp.alpha);
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(rp.x, rp.y, rp.r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    });
 
     // 繪製浮動事件特效文字
     ctx.textAlign = 'center';
@@ -1662,36 +2046,96 @@
     ctx.restore();
   }
 
-  // ==================== 滑鼠互動：顯微探針與點擊投放 ====================
-  canvas.addEventListener('mousemove', e => {
+  // ==================== 觸控平板與滑鼠統一互動 (Pointer Events) ====================
+  function getCanvasCoords(e) {
     const rect = canvas.getBoundingClientRect();
     const scaleX = W / rect.width;
     const scaleY = H / rect.height;
-    const mx = (e.clientX - rect.left) * scaleX;
-    const my = (e.clientY - rect.top) * scaleY;
+    return {
+      mx: (e.clientX - rect.left) * scaleX,
+      my: (e.clientY - rect.top) * scaleY,
+      clientX: e.clientX - rect.left,
+      clientY: e.clientY - rect.top,
+      rectW: rect.width,
+      rectH: rect.height
+    };
+  }
 
+  function showTooltipAt(hit, clientX, clientY, rectW, rectH) {
+    microTooltip.style.display = 'block';
+    const tipX = Math.min(rectW - 275, Math.max(10, clientX - 40));
+    const tipY = Math.min(rectH - 110, Math.max(52, clientY - 85));
+    microTooltip.style.left = `${tipX}px`;
+    microTooltip.style.top = `${tipY}px`;
+    tooltipTitle.textContent = hit.title;
+    tooltipDesc.textContent = hit.desc;
+  }
+
+  canvas.addEventListener('pointermove', e => {
+    if (e.pointerType === 'touch') return;
+    const { mx, my, clientX, clientY, rectW, rectH } = getCanvasCoords(e);
     const hit = findHoveredEntity(mx, my);
     if (hit) {
-      microTooltip.style.display = 'block';
-      const tipX = Math.min(rect.width - 260, Math.max(10, e.clientX - rect.left));
-      const tipY = Math.max(45, e.clientY - rect.top - 18);
-      microTooltip.style.left = `${tipX}px`;
-      microTooltip.style.top = `${tipY}px`;
-      tooltipTitle.textContent = hit.title;
-      tooltipDesc.textContent = hit.desc;
-    } else {
+      showTooltipAt(hit, clientX, clientY, rectW, rectH);
+    } else if (!selectedEntity) {
       microTooltip.style.display = 'none';
     }
   });
 
-  canvas.addEventListener('mouseleave', () => {
+  canvas.addEventListener('pointerleave', e => {
+    if (e.pointerType !== 'touch' && !selectedEntity) {
+      microTooltip.style.display = 'none';
+    }
+  });
+
+  canvas.addEventListener('pointerdown', e => {
+    const { mx, my, clientX, clientY, rectW, rectH } = getCanvasCoords(e);
+    addTouchRipple(mx, my);
+
+    const touchTolerance = e.pointerType === 'touch' ? 14 : 6;
+    const hit = findHoveredEntity(mx, my, touchTolerance);
+    if (hit) {
+      selectedEntity = hit;
+      showTooltipAt(hit, clientX, clientY, rectW, rectH);
+      return;
+    }
+
+    selectedEntity = null;
+    microTooltip.style.display = 'none';
+
+    const wallY = getLowerEndotheliumY(mx, false);
+    if (my >= wallY - 12 && my <= INTIMA_FLOOR_Y) {
+      spawnImmuneAction(mx);
+    } else if (my > WALL_TOP_Y && my < wallY) {
+      for (let i = 0; i < 4; i++) {
+        const l = createLDL(mx + (Math.random() - 0.5) * 30, true);
+        l.y = my + (Math.random() - 0.5) * 24;
+        ldls.push(l);
+      }
+      addFloatingFX(mx, my - 10, '+ 投放 LDL 膽固醇', '#fde047');
+    }
+  });
+
+  tooltipClose.addEventListener('click', e => {
+    e.stopPropagation();
+    selectedEntity = null;
     microTooltip.style.display = 'none';
   });
 
-  function findHoveredEntity(mx, my) {
-    // 1. 檢查泡沫細胞
+  function findHoveredEntity(mx, my, extraRadius = 6) {
+    if (stentDeployed && Math.abs(mx - PLAQUE_CENTER_X) < 125) {
+      const topY = WALL_TOP_Y + 8;
+      const botY = getLowerEndotheliumY(mx, false);
+      if (Math.abs(my - topY) < 18 + extraRadius || Math.abs(my - botY) < 18 + extraRadius || catheterState !== 'none') {
+        return {
+          title: '🎈 血管支架 (Coronary Stent) 與氣球擴張術',
+          desc: '透過心導管氣球充氣將末期硬化的斑塊向外壓平，並留下金屬網狀支架永久支撐血管壁，恢復 85% 以上血流暢通！'
+        };
+      }
+    }
+
     for (const fc of foamCells) {
-      if (fc.renderX && Math.hypot(mx - fc.renderX, my - fc.renderY) < fc.r + 4) {
+      if (fc.renderX && Math.hypot(mx - fc.renderX, my - fc.renderY) < fc.r + extraRadius) {
         return {
           title: '🫧 泡沫細胞 (Foam Cell)',
           desc: '吞噬了過量氧化膽固醇 (ox-LDL) 的巨噬細胞，內部塞滿脂質油滴，堆積形成粥狀斑塊的核心。'
@@ -1699,9 +2143,8 @@
       }
     }
 
-    // 2. 檢查免疫細胞 (單核球 / 巨噬細胞)
     for (const m of immuneCells) {
-      if (Math.hypot(mx - m.x, my - m.y) < m.r + 5) {
+      if (Math.hypot(mx - m.x, my - m.y) < m.r + extraRadius) {
         if (m.state === 'macrophage' || m.state === 'diapedesis') {
           return {
             title: '🛡️ 巨噬細胞 (Macrophage)',
@@ -1715,13 +2158,12 @@
       }
     }
 
-    // 3. 檢查血小板
     for (const p of platelets) {
-      if (Math.hypot(mx - p.x, my - p.y) < p.r + 7) {
+      if (Math.hypot(mx - p.x, my - p.y) < p.r + extraRadius + 2) {
         if (p.state === 'activated') {
           return {
             title: '🩸 活化血小板與纖維蛋白血栓 (Thrombus)',
-            desc: '接觸斑塊破裂處後伸出偽足活化，與纖維蛋白網交織困住紅血球，造成急性血管阻塞。'
+            desc: '接觸斑塊破裂處後伸出偽足活化，與纖維蛋白網交織困住紅血球，造成急性血管阻塞。可用溶栓劑 (tPA) 溶解。'
           };
         }
         return {
@@ -1731,19 +2173,17 @@
       }
     }
 
-    // 4. 檢查 HDL 好膽固醇
     for (const h of hdls) {
-      if (Math.hypot(mx - h.x, my - h.y) < h.r + 6) {
+      if (Math.hypot(mx - h.x, my - h.y) < h.r + extraRadius) {
         return {
           title: '🥗 高密度脂蛋白 (HDL - 好膽固醇)',
-          desc: '血管清道夫！能進入受損內膜將多餘膽固醇逆向運回肝臟代謝，減緩斑塊惡化。'
+          desc: '血管清道夫！能進入受損內膜將多餘膽固醇逆向運回肝臟代謝，搭配降脂藥可使斑塊部分消退並穩定。'
         };
       }
     }
 
-    // 5. 檢查 LDL 與 ox-LDL
     for (const l of ldls) {
-      if (Math.hypot(mx - l.x, my - l.y) < l.r + 6) {
+      if (Math.hypot(mx - l.x, my - l.y) < l.r + extraRadius) {
         if (l.state === 'oxidized') {
           return {
             title: '🔥 氧化型低密度脂蛋白 (ox-LDL)',
@@ -1757,13 +2197,12 @@
       }
     }
 
-    // 6. 檢查平滑肌細胞
     for (const s of smcCells) {
-      if (Math.hypot(mx - s.x, my - s.y) < 16) {
+      if (Math.hypot(mx - s.x, my - s.y) < 14 + extraRadius) {
         return {
-          title: '🧬 血管平滑肌細胞 (Smooth Muscle Cell)',
+          title: '🧬 血管平滑肌細胞與纖維帽',
           desc: s.inCap
-            ? '已遷移至斑塊頂部，分泌膠原蛋白構築「纖維帽」以覆蓋脂質核心。'
+            ? '已遷移至斑塊頂部，分泌膠原蛋白構築「纖維帽」封住脂質核心，防止斑塊破裂。'
             : '位於動脈中膜層，負責維持血管壁彈性與收縮舒張。'
         };
       }
@@ -1772,29 +2211,9 @@
     return null;
   }
 
-  // 點擊畫布：依點擊位置投放膽固醇或召喚免疫細胞
-  canvas.addEventListener('click', e => {
-    const rect = canvas.getBoundingClientRect();
-    const mx = (e.clientX - rect.left) * (W / rect.width);
-    const my = (e.clientY - rect.top) * (H / rect.height);
-
-    const wallY = getLowerEndotheliumY(mx, false);
-    if (my >= wallY - 12 && my <= INTIMA_FLOOR_Y) {
-      // 點擊斑塊/內膜區：直接召喚一顆單核球鑽入內膜吞噬
-      spawnImmuneAction(mx);
-    } else if (my > WALL_TOP_Y && my < wallY) {
-      // 點擊血管腔：在點擊處投放數顆 LDL 膽固醇
-      for (let i = 0; i < 4; i++) {
-        const l = createLDL(mx + (Math.random() - 0.5) * 30, true);
-        l.y = my + (Math.random() - 0.5) * 24;
-        ldls.push(l);
-      }
-      addFloatingFX(mx, my - 10, '+ 投放 LDL 膽固醇', '#fde047');
-    }
-  });
-
   // ==================== 工具列按鈕與事件綁定 ====================
   function spawnLDLAction() {
+    statinStabilized = false;
     for (let i = 0; i < 7; i++) {
       const x = PLAQUE_CENTER_X - 240 + Math.random() * 200;
       const l = createLDL(x, true);
@@ -1832,14 +2251,21 @@
   btnSpawnImmune.addEventListener('click', () => spawnImmuneAction());
   btnSpawnHDL.addEventListener('click', spawnHDLAction);
 
+  // 🎈 點擊「氣球擴張與血管支架」：不論目前在哪個階段（包含已在最後階段），都重新完整執行一次氣球擴張與支架置放動畫！
+  btnStentTherapy.addEventListener('click', () => {
+    startStentAndMedicalRescue();
+  });
+
+  // 💊 點擊「降脂藥穩定斑塊 + 溶栓」：立即發射可見的 tPA 與 Statin 藥物微粒並顯示治療進度橫幅！
+  btnStatinTherapy.addEventListener('click', () => {
+    triggerStatinAndThrombolysis();
+  });
+
   btnStageAction.addEventListener('click', () => {
     if (currentStage < STAGES.length - 1) {
       setStage(currentStage + 1);
     } else {
-      // 在階段 6 點擊「施打溶栓藥物 (tPA)」
-      clotBusterActive = 4.5;
-      const apex = getPlaqueApex();
-      addFloatingFX(apex.x, apex.y - 45, '💉 施打溶栓劑 (tPA)！溶解纖維蛋白血栓中...', '#34d399');
+      startStentAndMedicalRescue();
     }
   });
 
@@ -1875,7 +2301,7 @@
   ldlSlider.addEventListener('input', updateSlidersUI);
   bpSlider.addEventListener('input', updateSlidersUI);
 
-  // 角色圖鑑點擊聚焦篩選
+  // 角色圖鑑點選聚焦篩選
   legendItems.forEach(item => {
     item.addEventListener('click', () => {
       const role = item.getAttribute('data-role');
@@ -1883,6 +2309,9 @@
         focusedRole = null;
       } else {
         focusedRole = role;
+        if (role === 'stent' && !stentDeployed) {
+          startStentAndMedicalRescue();
+        }
       }
       legendItems.forEach(el => {
         el.classList.toggle('active-role', el.getAttribute('data-role') === focusedRole);

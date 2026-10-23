@@ -120,8 +120,10 @@ function createPhagocyte(x, y, inVessel = false) {
     vy: (Math.random() - 0.5) * 1.2,
     r: 16,
     inVessel,
-    diapedesis: false, // 是否正在變形穿越微血管壁
-    carryingStrain: null, // 吞噬後準備呈獻給淋巴結 T 細胞的抗原
+    diapedesis: false,      // 是否正在變形「穿出」微血管壁 (血管 -> 組織)
+    returningVessel: false, // 是否正在變形「返回」微血管/淋巴管 (組織 -> 血管)
+    idleTicks: 0,           // 組織內無病原體的閒置時間，過久時多餘白血球會鑽回血管巡邏
+    carryingStrain: null,   // 吞噬後準備呈獻給淋巴結 T 細胞的抗原
     presentingTimer: 0,
     engulfCount: 0,
     wobbleSeed: Math.random() * 100
@@ -395,28 +397,50 @@ function updateSimulation() {
     if (rbc.x > W + 20) rbc.x = -20;
   });
 
-  // 6. 更新吞噬細胞（巨噬細胞 / 白血球）
-  state.phagocytes.forEach(cell => {
+  // 6. 更新吞噬細胞（巨噬細胞 / 白血球）：支援變形「穿出微血管」與「返回微血管/淋巴」
+  const tissuePhagocyteCount = state.phagocytes.filter(c => !c.inVessel && !c.returningVessel).length;
+
+  state.phagocytes.forEach((cell, cellIdx) => {
     cell.wobbleSeed += 0.08;
 
     if (cell.inVessel) {
       // 在微血管中隨血液向右流動
       cell.x += 1.4;
+      cell.y = ZONE.VESSEL_TOP + 27 + Math.sin(cell.wobbleSeed) * 3;
       if (cell.x > W + 25) cell.x = -25;
 
-      // 若組織有發炎或抗原入侵，白血球變形穿越微血管壁 (Diapedesis)
-      if ((state.inflammationLevel > 15 || allTissueAntigens.length > 0) && cell.x > 120 && cell.x < W - 120) {
-        if (Math.random() < 0.035) {
+      // 若組織有發炎或抗原入侵，白血球從微血管內皮細胞縫隙「變形穿出」(Diapedesis)
+      if ((state.inflammationLevel > 15 || allTissueAntigens.length > 0) && cell.x > 100 && cell.x < W - 100) {
+        if (Math.random() < 0.045) {
           cell.inVessel = false;
           cell.diapedesis = true;
-          addFloatingLabel(cell.x, ZONE.VESSEL_TOP, '⚪ 白血球變形穿出微血管', '#fde047');
+          cell.returningVessel = false;
+          cell.idleTicks = 0;
+          addFloatingLabel(cell.x, ZONE.VESSEL_TOP - 6, '⬆️ 白血球變形鑽出微血管壁！', '#fde047');
         }
       }
     } else if (cell.diapedesis) {
-      // 向上鑽出微血管壁進入皮下組織
-      cell.y -= 1.5;
+      // 正在從微血管壁縫隙向上擠壓鑽入皮下組織
+      cell.y -= 1.1;
+      cell.x += Math.sin(cell.wobbleSeed * 2) * 0.4;
       if (cell.y <= ZONE.VESSEL_TOP - 22) {
         cell.diapedesis = false;
+      }
+    } else if (cell.returningVessel) {
+      // 感染平息或攜帶抗原返回微血管/淋巴系統
+      if (allTissueAntigens.length > 0) {
+        // 若途中又有新病原體入侵，立刻掉頭回組織作戰
+        cell.returningVessel = false;
+        cell.diapedesis = true;
+        return;
+      }
+      cell.y += 1.05;
+      cell.x += Math.sin(cell.wobbleSeed * 2) * 0.4;
+      if (cell.y >= ZONE.VESSEL_TOP + 26) {
+        cell.returningVessel = false;
+        cell.inVessel = true;
+        cell.idleTicks = 0;
+        addFloatingLabel(cell.x, ZONE.VESSEL_TOP + 12, '⬇️ 白血球穿過血管壁返回血液循環', '#38bdf8');
       }
     } else {
       // 在皮下組織中尋找病原體或疫苗抗原
@@ -434,6 +458,7 @@ function updateSimulation() {
       });
 
       if (target) {
+        cell.idleTicks = 0;
         const dx = target.x - cell.x;
         const dy = target.y - cell.y;
         const dist = Math.hypot(dx, dy) || 1;
@@ -448,7 +473,7 @@ function updateSimulation() {
             state.pathogens.splice(idx, 1);
             cell.engulfCount++;
             cell.carryingStrain = target.strain;
-            cell.presentingTimer = 110;
+            cell.presentingTimer = 130;
 
             // 推進該株系的抗原呈獻與第三道防線辨識進度！
             advanceImmuneRecognition(target.strain, target.isVaccine ? 26 : 18);
@@ -462,13 +487,24 @@ function updateSimulation() {
           }
         }
       } else {
-        // 組織內無病原體時自由巡邏
-        cell.vx += (Math.random() - 0.5) * 0.25;
-        cell.vy += (Math.random() - 0.5) * 0.25;
-        const mag = Math.hypot(cell.vx, cell.vy) || 1;
-        if (mag > 0.9) {
-          cell.vx = (cell.vx / mag) * 0.9;
-          cell.vy = (cell.vy / mag) * 0.9;
+        // 組織內無病原體時自由巡邏，若增援的白血球閒置一段時間，會變形鑽回微血管/淋巴管！
+        cell.idleTicks++;
+        if (tissuePhagocyteCount > 2 && cell.idleTicks > 140 && cellIdx >= 2) {
+          // 朝下方微血管壁移動並準備穿入血管
+          cell.vx *= 0.8;
+          cell.vy = 1.25;
+          if (cell.y >= ZONE.VESSEL_TOP - 22) {
+            cell.returningVessel = true;
+            addFloatingLabel(cell.x, ZONE.VESSEL_TOP - 10, '⬇️ 任務完成，變形鑽回微血管/淋巴', '#a5f3fc');
+          }
+        } else {
+          cell.vx += (Math.random() - 0.5) * 0.25;
+          cell.vy += (Math.random() - 0.5) * 0.25;
+          const mag = Math.hypot(cell.vx, cell.vy) || 1;
+          if (mag > 0.9) {
+            cell.vx = (cell.vx / mag) * 0.9;
+            cell.vy = (cell.vy / mag) * 0.9;
+          }
         }
       }
 
@@ -479,7 +515,10 @@ function updateSimulation() {
       if (cell.x < 25) { cell.x = 25; cell.vx *= -1; }
       if (cell.x > W - 25) { cell.x = W - 25; cell.vx *= -1; }
       if (cell.y < ZONE.SKIN_BOTTOM + 20) { cell.y = ZONE.SKIN_BOTTOM + 20; cell.vy *= -1; }
-      if (cell.y > ZONE.VESSEL_TOP - 18) { cell.y = ZONE.VESSEL_TOP - 18; cell.vy *= -1; }
+      if (!cell.returningVessel && cell.y > ZONE.VESSEL_TOP - 18) {
+        cell.y = ZONE.VESSEL_TOP - 18;
+        cell.vy *= -1;
+      }
 
       if (cell.presentingTimer > 0) cell.presentingTimer--;
     }
@@ -958,19 +997,35 @@ function drawPhagocytes() {
     ctx.save();
     ctx.translate(cell.x, cell.y);
 
-    // 繪製變形蟲偽足外型
-    ctx.fillStyle = 'rgba(226, 232, 240, 0.88)';
-    ctx.strokeStyle = '#38bdf8';
+    const isSqueezing = cell.diapedesis || cell.returningVessel;
+
+    // 若正在穿越微血管壁（鑽出或鑽入），繪製發光孔道特效
+    if (isSqueezing) {
+      ctx.save();
+      ctx.strokeStyle = cell.diapedesis ? '#fde047' : '#38bdf8';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 12, 24, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // 繪製變形蟲偽足外型（穿越微血管壁縫隙時呈沙漏細長擠壓變形）
+    ctx.fillStyle = isSqueezing ? 'rgba(254, 240, 138, 0.92)' : 'rgba(226, 232, 240, 0.88)';
+    ctx.strokeStyle = isSqueezing ? '#f59e0b' : '#38bdf8';
     ctx.lineWidth = 2;
     ctx.beginPath();
     const steps = 12;
     for (let i = 0; i < steps; i++) {
       const angle = (i / steps) * Math.PI * 2;
-      const deform = cell.diapedesis ? (i % 2 === 0 ? 0.65 : 1.25) : 1;
       const rOffset = Math.sin(cell.wobbleSeed + i * 1.7) * 2.5;
-      const rad = (cell.r + rOffset) * deform;
-      const px = Math.cos(angle) * rad;
-      const py = Math.sin(angle) * rad;
+      const baseR = cell.r + rOffset;
+      // 穿越血管壁時左右擠壓變窄 (0.55x)、上下拉長 (1.45x)
+      const scaleX = isSqueezing ? 0.55 : 1.0;
+      const scaleY = isSqueezing ? 1.45 : 1.0;
+      const px = Math.cos(angle) * baseR * scaleX;
+      const py = Math.sin(angle) * baseR * scaleY;
       if (i === 0) ctx.moveTo(px, py);
       else ctx.lineTo(px, py);
     }
@@ -981,12 +1036,28 @@ function drawPhagocytes() {
     // 多葉細胞核
     ctx.fillStyle = '#475569';
     ctx.beginPath();
-    ctx.arc(-4, -2, 4.5, 0, Math.PI * 2);
-    ctx.arc(4, 2, 4, 0, Math.PI * 2);
+    if (isSqueezing) {
+      ctx.arc(0, -5, 4, 0, Math.PI * 2);
+      ctx.arc(0, 5, 3.8, 0, Math.PI * 2);
+    } else {
+      ctx.arc(-4, -2, 4.5, 0, Math.PI * 2);
+      ctx.arc(4, 2, 4, 0, Math.PI * 2);
+    }
     ctx.fill();
 
-    // 若剛吞噬完正在呈獻抗原，頭頂舉出該抗原旗幟
-    if (cell.carryingStrain && cell.presentingTimer > 0) {
+    // 顯示穿出或鑽回血管的狀態標籤
+    if (cell.diapedesis) {
+      ctx.fillStyle = '#fde047';
+      ctx.font = 'bold 10.5px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('⬆️ 變形鑽出血管', 0, -cell.r - 10);
+    } else if (cell.returningVessel) {
+      ctx.fillStyle = '#38bdf8';
+      ctx.font = 'bold 10.5px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('⬇️ 鑽回血管/淋巴', 0, -cell.r - 10);
+    } else if (cell.carryingStrain && cell.presentingTimer > 0) {
+      // 若剛吞噬完正在呈獻抗原，頭頂舉出該抗原旗幟
       const sInfo = STRAINS[cell.carryingStrain];
       ctx.fillStyle = sInfo.color;
       ctx.font = 'bold 11px sans-serif';
@@ -1249,32 +1320,23 @@ function updateWoundButtonUI() {
   }
 }
 
-// ==================== 事件綁定與實驗劇本 ====================
+// ==================== 事件綁定與實驗劇本（支援觸控平板與滑鼠） ====================
 
-// 選擇病原體株系 (A / B / C)
-document.querySelectorAll('.strain-btn').forEach(btn => {
+function setActiveStrain(strain) {
+  state.selectedStrain = strain;
+  document.querySelectorAll('.strain-btn, .quick-strain-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.strain === strain);
+  });
+}
+
+// 選擇病原體株系 (A / B / C) - 同步左側面板與下方觸控快捷列
+document.querySelectorAll('.strain-btn, .quick-strain-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.strain-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    state.selectedStrain = btn.dataset.strain;
+    setActiveStrain(btn.dataset.strain);
   });
 });
 
-// 三大操作按鈕
-document.getElementById('btn-drop-external').addEventListener('click', () => {
-  dropExternalPathogens(state.selectedStrain, 10);
-});
-
-document.getElementById('btn-inject-tissue').addEventListener('click', () => {
-  injectTissuePathogens(state.selectedStrain, 8);
-});
-
-document.getElementById('btn-inject-vaccine').addEventListener('click', () => {
-  injectVaccine(state.selectedStrain);
-});
-
-// 第一道防線切換
-document.getElementById('btn-toggle-wound').addEventListener('click', () => {
+function toggleWoundState() {
   state.hasWound = !state.hasWound;
   updateWoundButtonUI();
   if (state.hasWound) {
@@ -1282,40 +1344,117 @@ document.getElementById('btn-toggle-wound').addEventListener('click', () => {
   } else {
     addLog('✨ 皮膚傷口已癒合，第一道防線恢復完整阻擋能力。', 'line1');
   }
-});
+}
 
-document.getElementById('btn-trigger-mucus').addEventListener('click', () => {
-  triggerMucusSweep();
-});
+function triggerWhiteBloodCellDiapedesis(targetX = null) {
+  state.inflammationLevel = Math.max(state.inflammationLevel, 65);
+  let squeezedOut = 0;
+  state.phagocytes.forEach(cell => {
+    if (cell.inVessel && squeezedOut < 2) {
+      cell.x = targetX ? targetX + (Math.random() - 0.5) * 60 : Math.max(140, Math.min(W - 140, cell.x));
+      cell.inVessel = false;
+      cell.diapedesis = true;
+      cell.returningVessel = false;
+      cell.idleTicks = 0;
+      squeezedOut++;
+    }
+  });
+  if (squeezedOut === 0) {
+    const spawnX = targetX || (320 + Math.random() * 260);
+    const newCell = createPhagocyte(spawnX, ZONE.VESSEL_TOP + 22, false);
+    newCell.diapedesis = true;
+    state.phagocytes.push(newCell);
+  }
+  addFloatingLabel(targetX || 450, ZONE.VESSEL_TOP - 12, '⬆️ 微血管通透性增加，白血球變形擠出血管壁！', '#fde047');
+  addLog('⚪ 白血球進出血管展示：微血管內皮細胞間隙擴大，白血球（吞噬細胞）作變形蟲運動穿出微血管進入組織；待病原體清除後將再次鑽回血管/淋巴！', 'line2');
+}
 
-document.getElementById('btn-reset').addEventListener('click', () => {
-  initSimulation();
+// 左側面板按鈕
+document.getElementById('btn-drop-external').addEventListener('click', () => {
+  dropExternalPathogens(state.selectedStrain, 10);
 });
+document.getElementById('btn-inject-tissue').addEventListener('click', () => {
+  injectTissuePathogens(state.selectedStrain, 8);
+});
+document.getElementById('btn-inject-vaccine').addEventListener('click', () => {
+  injectVaccine(state.selectedStrain);
+});
+document.getElementById('btn-toggle-wound').addEventListener('click', toggleWoundState);
+document.getElementById('btn-trigger-mucus').addEventListener('click', triggerMucusSweep);
+document.getElementById('btn-trigger-diapedesis').addEventListener('click', () => triggerWhiteBloodCellDiapedesis());
+document.getElementById('btn-reset').addEventListener('click', initSimulation);
 
-// 畫布直接點擊互動
-simCanvas.addEventListener('click', e => {
+// 畫布下方「平板觸控快捷列」按鈕綁定
+document.getElementById('q-drop-ext').addEventListener('click', () => dropExternalPathogens(state.selectedStrain, 10));
+document.getElementById('q-inject-tis').addEventListener('click', () => injectTissuePathogens(state.selectedStrain, 8));
+document.getElementById('q-vaccine').addEventListener('click', () => injectVaccine(state.selectedStrain));
+document.getElementById('q-wound').addEventListener('click', toggleWoundState);
+document.getElementById('q-wbc').addEventListener('click', () => triggerWhiteBloodCellDiapedesis());
+document.getElementById('q-reset').addEventListener('click', initSimulation);
+
+// 畫布 Pointer Events 觸控與手勢互動（支援平板點擊、單指滑動連續撒播病原體）
+let isPointerDown = false;
+let lastDragSpawnTime = 0;
+
+function getCanvasCoords(e) {
   const rect = simCanvas.getBoundingClientRect();
   const scaleX = simCanvas.width / rect.width;
   const scaleY = simCanvas.height / rect.height;
-  const x = (e.clientX - rect.left) * scaleX;
-  const y = (e.clientY - rect.top) * scaleY;
+  return {
+    x: (e.clientX - rect.left) * scaleX,
+    y: (e.clientY - rect.top) * scaleY
+  };
+}
+
+simCanvas.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  isPointerDown = true;
+  const { x, y } = getCanvasCoords(e);
 
   if (y < ZONE.SKIN_TOP) {
-    // 點擊體表上方：投放 4 隻選定的病原體
+    // 觸控體表上方：投放病原體
     for (let i = 0; i < 4; i++) {
       spawnPathogen(x + (Math.random() - 0.5) * 30, y + (Math.random() - 0.5) * 15, state.selectedStrain, false, 'external');
     }
   } else if (y >= ZONE.SKIN_TOP && y <= ZONE.SKIN_BOTTOM) {
-    // 點擊皮膚層：切換傷口狀態
-    state.hasWound = !state.hasWound;
-    updateWoundButtonUI();
+    // 觸控皮膚層：切換傷口破皮/癒合
+    toggleWoundState();
   } else if (y > ZONE.SKIN_BOTTOM && y < ZONE.VESSEL_TOP) {
-    // 點擊皮下組織：直接注入病原體並觸發發炎
+    // 觸控皮下組織：直接注入病原體並觸發發炎
     for (let i = 0; i < 4; i++) {
       spawnPathogen(x + (Math.random() - 0.5) * 30, y + (Math.random() - 0.5) * 20, state.selectedStrain, false, 'tissue');
     }
     triggerInflammation(x, y);
+  } else if (y >= ZONE.VESSEL_TOP && y <= ZONE.VESSEL_BOTTOM) {
+    // 觸控微血管區：立即在手指點選位置召喚白血球變形穿出微血管！
+    triggerWhiteBloodCellDiapedesis(x);
+  } else if (y > ZONE.LYMPH_TOP) {
+    // 觸控下方淋巴組織區：切換對應株系 (左 A / 中 B / 右 C) 並接種疫苗
+    const clickedStrain = x < 340 ? 'A' : x < 580 ? 'B' : 'C';
+    setActiveStrain(clickedStrain);
+    injectVaccine(clickedStrain);
   }
+});
+
+simCanvas.addEventListener('pointermove', e => {
+  if (!isPointerDown) return;
+  const now = performance.now();
+  if (now - lastDragSpawnTime < 90) return; // 節流：每 90ms 隨手指軌跡生成一次
+  lastDragSpawnTime = now;
+
+  const { x, y } = getCanvasCoords(e);
+  if (y < ZONE.SKIN_TOP) {
+    spawnPathogen(x, y, state.selectedStrain, false, 'external');
+  } else if (y > ZONE.SKIN_BOTTOM && y < ZONE.VESSEL_TOP) {
+    spawnPathogen(x, y, state.selectedStrain, false, 'tissue');
+  }
+});
+
+window.addEventListener('pointerup', () => {
+  isPointerDown = false;
+});
+window.addEventListener('pointercancel', () => {
+  isPointerDown = false;
 });
 
 // 四大教學實驗劇本

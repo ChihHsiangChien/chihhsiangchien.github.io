@@ -1,694 +1,2591 @@
-    
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <!-- 關鍵：禁止縮放、適配安全區域、禁止手勢縮放 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>免疫防線：平板多人版</title>
-    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <title>免疫防線：細胞保衛戰 (完整進化版)</title>
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <style>
-        /* --- 基礎設定 --- */
-        body { 
-            margin: 0; overflow: hidden; 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            background-color: #220000; color: white;
-            touch-action: none; /* 禁止瀏覽器預設觸控行為(捲動/縮放) */
-            user-select: none; /* 禁止選取文字 */
+        :root {
+            --bg-dark: #140206;
+            --bg-mid: #2b0610;
+            --accent: #ff4757;
+            --accent-hover: #ff6b81;
+            --panel-bg: rgba(18, 4, 10, 0.92);
+            --border-glow: rgba(255, 107, 129, 0.4);
+            --text-main: #f8f9fa;
+            --text-muted: #ced4da;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
             -webkit-user-select: none;
+            -webkit-touch-callout: none;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: 'Segoe UI', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            touch-action: none;
+            width: 100vw;
+            height: 100vh;
         }
 
         /* --- 遊戲畫布 --- */
-        #game-svg { 
-            width: 100vw; height: 100vh; display: block; 
-            background: radial-gradient(circle, #4a0000 0%, #1a0000 100%); 
+        #game-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: block;
+            z-index: 1;
+            cursor: crosshair;
         }
 
-        /* --- UI 通用 --- */
-        #ui-layer { 
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-            pointer-events: none; /* 讓點擊穿透到下方控制器 */
-            display: flex; flex-direction: column; align-items: center; justify-content: center; 
-            z-index: 20; 
-        }
-        
-        /* 選單面板 (加大尺寸) */
-        .panel { 
-            background: rgba(0, 0, 0, 0.9); padding: 30px; border-radius: 15px; 
-            border: 2px solid #777; pointer-events: auto; text-align: center; 
-            width: 80%; max-width: 500px;
-        }
-        
-        h1 { margin: 0 0 15px 0; font-size: 2rem; color: #ff6b6b; }
-        
-        button { 
-            background: #e74c3c; border: none; color: white; 
-            padding: 15px 30px; margin: 10px; cursor: pointer; border-radius: 8px; 
-            font-size: 1.2rem; font-weight: bold; min-width: 150px;
-            touch-action: manipulation;
-        }
-        button:active { background: #c0392b; transform: scale(0.95); }
-        
-        input, select { 
-            padding: 15px; margin: 10px; border-radius: 8px; border: none; 
-            font-size: 1.2rem; width: 80%; text-align: center;
-        }
-
-        .hidden { display: none !important; }
-
-        /* --- 遊戲內 HUD --- */
-        #status { 
-            position: absolute; top: 20px; left: 20px; 
-            background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; font-size: 1rem;
+        /* --- 頂部 HUD --- */
+        #hud-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 10px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
             pointer-events: none;
-        }
-        #health-bar { 
-            position: absolute; top: 20px; right: 20px; width: 200px; height: 25px; 
-            background: #333; border: 2px solid white; border-radius: 4px;
-            pointer-events: none;
-        }
-        #health-fill { width: 100%; height: 100%; background: lime; transition: width 0.2s; }
-
-        /* --- 虛擬控制器 (Touch Controls) --- */
-        #controls-layer {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none; z-index: 15;
+            z-index: 10;
+            gap: 10px;
+            flex-wrap: wrap;
         }
 
-        /* 搖桿區域 */
-        #joystick-zone {
-            position: absolute; bottom: 50px; left: 50px;
-            width: 150px; height: 150px;
+        .hud-box {
+            background: rgba(15, 4, 8, 0.82);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--border-glow);
+            border-radius: 12px;
+            padding: 8px 14px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.45);
+        }
+
+        #hud-left {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            min-width: 165px;
+        }
+
+        .hud-stat {
+            font-size: 0.88rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .hud-stat span.val {
+            color: #ffd43b;
+            font-family: monospace;
+            font-size: 1.08rem;
+        }
+
+        #hud-center {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex: 1;
+            max-width: 440px;
+            min-width: 220px;
+        }
+
+        .bar-label {
+            font-size: 0.82rem;
+            font-weight: bold;
+            margin-bottom: 4px;
+            letter-spacing: 0.5px;
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 15px;
+            background: rgba(255, 255, 255, 0.12);
+            border: 1.5px solid rgba(255, 255, 255, 0.65);
+            border-radius: 99px;
+            overflow: hidden;
+            box-shadow: 0 0 10px rgba(255, 71, 87, 0.35);
+        }
+
+        #health-fill {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, #2ed573, #7bed9f);
+            transition: width 0.15s ease-out, background 0.3s;
+        }
+
+        .xp-bar {
+            width: 100%;
+            height: 8px;
             background: rgba(255, 255, 255, 0.1);
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            pointer-events: auto; /* 允許接收觸控 */
-        }
-        
-        #joystick-knob {
-            position: absolute; top: 50%; left: 50%;
-            width: 60px; height: 60px;
-            background: rgba(255, 255, 255, 0.5);
-            border-radius: 50%;
-            transform: translate(-50%, -50%);
-            pointer-events: none; /* 讓事件穿透給 zone */
-            transition: transform 0.1s;
+            border-radius: 99px;
+            overflow: hidden;
+            margin-top: 6px;
+            border: 1px solid rgba(112, 161, 255, 0.5);
         }
 
-        /* 攻擊按鈕 */
-        #attack-btn {
-            position: absolute; bottom: 50px; right: 50px;
-            width: 100px; height: 100px;
-            background: rgba(255, 0, 0, 0.4);
-            border: 4px solid rgba(255, 100, 100, 0.8);
+        #xp-fill {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #1e90ff, #70a1ff);
+            transition: width 0.15s ease-out;
+        }
+
+        #hud-right {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            pointer-events: auto;
+            justify-content: flex-end;
+        }
+
+        .icon-btn {
+            background: rgba(20, 5, 12, 0.85);
+            border: 1px solid var(--border-glow);
+            color: white;
+            padding: 7px 11px;
+            border-radius: 10px;
+            font-size: 0.82rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .icon-btn:hover {
+            background: rgba(255, 71, 87, 0.32);
+            border-color: var(--accent);
+        }
+
+        .icon-btn.active-toggle {
+            background: rgba(46, 213, 115, 0.28);
+            border-color: #2ed573;
+            color: #7bed9f;
+        }
+
+        /* --- 科普跑馬燈與波次提示橫幅 --- */
+        #edu-banner {
+            position: absolute;
+            top: 88px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(16, 28, 48, 0.88);
+            border: 1px solid rgba(72, 219, 251, 0.6);
+            color: #dff9fb;
+            padding: 8px 20px;
+            border-radius: 99px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            pointer-events: none;
+            z-index: 12;
+            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
+            transition: opacity 0.4s, transform 0.4s;
+            text-align: center;
+            max-width: 90vw;
+        }
+
+        #edu-banner.fade-out {
+            opacity: 0;
+            transform: translate(-50%, -10px);
+        }
+
+        /* --- 升級三選一非阻斷式浮動卡片 --- */
+        #upgrade-drawer {
+            position: absolute;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 18;
+            background: rgba(18, 6, 16, 0.94);
+            border: 2px solid #ffd43b;
+            border-radius: 18px;
+            padding: 14px 18px;
+            box-shadow: 0 10px 35px rgba(0, 0, 0, 0.8), 0 0 25px rgba(255, 212, 59, 0.35);
+            pointer-events: auto;
+            max-width: 94vw;
+            width: 640px;
+            text-align: center;
+            animation: popUp 0.25s ease-out;
+        }
+
+        @keyframes popUp {
+            from { transform: translate(-50%, 30px) scale(0.95); opacity: 0; }
+            to { transform: translate(-50%, 0) scale(1); opacity: 1; }
+        }
+
+        .upgrade-title {
+            color: #ffd43b;
+            font-weight: bold;
+            font-size: 1rem;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .upgrade-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+
+        .upgrade-card {
+            background: rgba(255, 255, 255, 0.07);
+            border: 1.5px solid rgba(255, 212, 59, 0.4);
+            border-radius: 12px;
+            padding: 10px 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .upgrade-card:hover {
+            background: rgba(255, 212, 59, 0.2);
+            border-color: #ffd43b;
+            transform: translateY(-3px);
+        }
+
+        .upgrade-key {
+            font-size: 0.7rem;
+            background: rgba(255, 212, 59, 0.25);
+            color: #ffd43b;
+            padding: 1px 7px;
+            border-radius: 99px;
+            font-weight: bold;
+        }
+
+        /* --- 觸控控制器 --- */
+        #controls-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 15;
+        }
+
+        #joystick-zone {
+            position: absolute;
+            bottom: 32px;
+            left: 32px;
+            width: 145px;
+            height: 145px;
+            background: radial-gradient(circle, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 100%);
+            border: 2px solid rgba(255, 255, 255, 0.28);
             border-radius: 50%;
             pointer-events: auto;
-            display: flex; align-items: center; justify-content: center;
-            font-weight: bold; font-size: 1.2rem; user-select: none;
+            touch-action: none;
         }
-        #attack-btn:active { background: rgba(255, 0, 0, 0.7); transform: scale(0.95); }
 
-        /* 橫屏提示 */
-        #portrait-warning {
-            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: #000; z-index: 999; color: white;
-            align-items: center; justify-content: center; text-align: center;
+        #joystick-knob {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 58px;
+            height: 58px;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.85), rgba(255, 180, 190, 0.55));
+            border: 2px solid white;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        }
+
+        .action-btns {
+            position: absolute;
+            bottom: 32px;
+            right: 32px;
+            display: flex;
+            align-items: flex-end;
+            gap: 16px;
+            pointer-events: auto;
+        }
+
+        #attack-btn {
+            width: 100px;
+            height: 100px;
+            background: radial-gradient(circle, rgba(255, 71, 87, 0.7), rgba(192, 57, 43, 0.5));
+            border: 3px solid rgba(255, 160, 160, 0.9);
+            border-radius: 50%;
+            display: flex;
             flex-direction: column;
-        }
-        
-        @media screen and (orientation: portrait) {
-            #portrait-warning { display: flex; }
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.1rem;
+            color: #fff;
+            box-shadow: 0 0 20px rgba(255, 71, 87, 0.5);
+            touch-action: none;
+            cursor: pointer;
         }
 
-        /* SVG 元素樣式 */
-        .player-circle { transition: cx 0.1s linear, cy 0.1s linear; }
-        .antibody { fill: yellow; }
-        .enemy { fill: #00ff00; stroke: white; stroke-width: 1; animation: pulse 1s infinite; }
-        @keyframes pulse { 0% { opacity: 0.8; } 50% { opacity: 1; } 100% { opacity: 0.8; } }
-        .vein-bg { fill: none; stroke: rgba(255, 100, 100, 0.1); stroke-width: 20; }
+        #attack-btn.active {
+            background: radial-gradient(circle, rgba(255, 107, 129, 0.95), rgba(231, 76, 60, 0.85));
+            transform: scale(0.93);
+        }
+
+        #skill-btn {
+            width: 72px;
+            height: 72px;
+            background: radial-gradient(circle, rgba(52, 152, 219, 0.7), rgba(41, 128, 185, 0.5));
+            border: 3px solid rgba(130, 204, 221, 0.9);
+            border-radius: 50%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.88rem;
+            color: #fff;
+            box-shadow: 0 0 16px rgba(52, 152, 219, 0.5);
+            touch-action: none;
+            cursor: pointer;
+        }
+
+        #skill-btn:active {
+            transform: scale(0.93);
+        }
+
+        .btn-sub {
+            font-size: 0.65rem;
+            opacity: 0.85;
+            font-weight: normal;
+            margin-top: 2px;
+        }
+
+        /* --- UI 彈窗層 --- */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+            padding: 14px;
+        }
+
+        .panel {
+            background: var(--panel-bg);
+            backdrop-filter: blur(14px);
+            padding: 24px;
+            border-radius: 20px;
+            border: 1px solid var(--border-glow);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.78);
+            pointer-events: auto;
+            text-align: center;
+            width: 100%;
+            max-width: 680px;
+            max-height: 92vh;
+            overflow-y: auto;
+        }
+
+        h1 {
+            margin: 0 0 6px 0;
+            font-size: 1.8rem;
+            color: #ff6b81;
+            text-shadow: 0 0 15px rgba(255, 107, 129, 0.4);
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-bottom: 14px;
+        }
+
+        /* 4大職業選擇卡片 */
+        .role-cards {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        .role-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid rgba(255, 255, 255, 0.12);
+            border-radius: 14px;
+            padding: 10px 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-align: left;
+        }
+
+        .role-card:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .role-card.selected {
+            border-color: #ff6b81;
+            background: rgba(255, 107, 129, 0.16);
+            box-shadow: 0 0 16px rgba(255, 107, 129, 0.3);
+        }
+
+        .role-icon {
+            width: 42px;
+            height: 42px;
+            flex-shrink: 0;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.1rem;
+            box-shadow: inset 0 0 8px rgba(255,255,255,0.5);
+        }
+
+        .role-name {
+            font-weight: bold;
+            font-size: 0.95rem;
+            margin-bottom: 2px;
+        }
+
+        .role-desc {
+            font-size: 0.74rem;
+            color: var(--text-muted);
+            line-height: 1.3;
+        }
+
+        /* 遊戲模式設定列 */
+        .mode-selector {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 14px;
+            flex-wrap: wrap;
+        }
+
+        .mode-pill {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: var(--text-muted);
+            padding: 6px 14px;
+            border-radius: 99px;
+            font-size: 0.82rem;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .mode-pill.selected {
+            background: rgba(72, 219, 251, 0.22);
+            border-color: #48dbfb;
+            color: #fff;
+        }
+
+        /* 按鈕與輸入框 */
+        .btn-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 8px;
+        }
+
+        button.primary-btn {
+            background: linear-gradient(135deg, #ff4757, #e84118);
+            border: none;
+            color: white;
+            padding: 12px 22px;
+            cursor: pointer;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: bold;
+            transition: transform 0.12s, filter 0.2s;
+            box-shadow: 0 4px 14px rgba(232, 65, 24, 0.4);
+            touch-action: manipulation;
+        }
+
+        button.primary-btn:hover {
+            filter: brightness(1.1);
+        }
+
+        button.primary-btn:active {
+            transform: scale(0.96);
+        }
+
+        button.solo-btn {
+            background: linear-gradient(135deg, #2ed573, #1eae55);
+            box-shadow: 0 4px 14px rgba(46, 213, 115, 0.35);
+            flex: 1;
+            min-width: 200px;
+            font-size: 1.1rem;
+            padding: 14px;
+        }
+
+        button.secondary-btn {
+            background: rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            color: white;
+            padding: 10px 18px;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        button.secondary-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        input.room-input {
+            padding: 10px 14px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            background: rgba(0, 0, 0, 0.45);
+            color: white;
+            font-size: 1.05rem;
+            text-align: center;
+            letter-spacing: 2px;
+            font-weight: bold;
+            width: 175px;
+            text-transform: uppercase;
+            user-select: text;
+            -webkit-user-select: text;
+        }
+
+        .divider {
+            border-top: 1px solid rgba(255, 255, 255, 0.12);
+            margin: 14px 0;
+            padding-top: 12px;
+        }
+
+        .help-box {
+            margin-top: 12px;
+            font-size: 0.76rem;
+            line-height: 1.5;
+            text-align: left;
+            color: var(--text-muted);
+            background: rgba(0, 0, 0, 0.35);
+            padding: 10px 14px;
+            border-radius: 10px;
+        }
+
+        .encyclo-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            text-align: left;
+            margin: 12px 0;
+        }
+
+        .encyclo-item {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
+            padding: 10px;
+            font-size: 0.8rem;
+            line-height: 1.4;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        #qr-code {
+            background: #fff;
+            padding: 10px;
+            display: inline-block;
+            border-radius: 12px;
+            margin: 8px 0;
+        }
+
+        .room-tag {
+            font-family: monospace;
+            font-size: 1.7rem;
+            letter-spacing: 4px;
+            color: #ffd43b;
+            background: rgba(255, 212, 59, 0.12);
+            border: 1px dashed #ffd43b;
+            padding: 6px 18px;
+            border-radius: 12px;
+            display: inline-block;
+            margin: 6px 0;
+            user-select: text;
+            -webkit-user-select: text;
+        }
+
+        @media (max-width: 640px) {
+            .role-cards, .encyclo-grid, .upgrade-grid {
+                grid-template-columns: 1fr;
+            }
+            .panel {
+                padding: 16px;
+            }
+            #joystick-zone {
+                bottom: 18px;
+                left: 18px;
+                width: 125px;
+                height: 125px;
+            }
+            .action-btns {
+                bottom: 18px;
+                right: 18px;
+            }
+        }
     </style>
 </head>
 <body>
 
-    <!-- 橫屏警告 -->
-    <div id="portrait-warning">
-        <h1>請旋轉螢幕</h1>
-        <p>此遊戲建議在橫向模式下遊玩</p>
+    <!-- 遊戲畫布 -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- 頂部狀態與血量 HUD -->
+    <div id="hud-layer">
+        <div id="hud-left" class="hud-box">
+            <div class="hud-stat"><span>模式</span><span id="status-text" style="color:#7bed9f">準備中</span></div>
+            <div class="hud-stat"><span>波數 (Wave)</span><span id="wave-val" class="val">1</span></div>
+            <div class="hud-stat"><span>消滅病原體</span><span id="score-val" class="val">0</span></div>
+            <div class="hud-stat" id="timer-row" style="display:none;"><span>剩餘時間</span><span id="timer-val" class="val">03:00</span></div>
+        </div>
+
+        <div id="hud-center" class="hud-box">
+            <div class="bar-label">
+                <span>❤️ 核心組織健康度</span>
+                <span id="hp-text">100%</span>
+            </div>
+            <div class="progress-bar"><div id="health-fill"></div></div>
+            <div class="bar-label" style="margin-top:6px; font-size:0.75rem; color:#70a1ff;">
+                <span id="lvl-text">🧬 免疫記憶 Lv.1</span>
+                <span id="xp-text">0 / 100 EXP</span>
+            </div>
+            <div class="xp-bar"><div id="xp-fill"></div></div>
+        </div>
+
+        <div id="hud-right">
+            <button id="aim-toggle-btn" class="icon-btn" onclick="toggleAutoAim()" title="快速鍵: Tab">🎯 滑鼠瞄準</button>
+            <button id="sound-toggle-btn" class="icon-btn active-toggle" onclick="toggleSound()">🔊 音效</button>
+            <button id="switch-role-btn" class="icon-btn hidden" onclick="cycleRoleInGame()" title="快速鍵: R">🔄 換細胞</button>
+            <button id="encyclo-hud-btn" class="icon-btn" onclick="toggleEncyclopedia(true)">📖 圖鑑</button>
+            <button id="invite-hud-btn" class="icon-btn hidden" onclick="toggleInvitePanel()">🔗 邀請</button>
+        </div>
     </div>
 
-    <!-- 遊戲畫布 -->
-    <svg id="game-svg">
-        <defs>
-            <filter id="glow">
-                <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
-                <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
-            </filter>
-        </defs>
-        <g id="background-layer"></g>
-        <g id="game-layer"></g>
-    </svg>
+    <!-- 生物科普與波次橫幅 -->
+    <div id="edu-banner" class="fade-out">🧬 歡迎來到免疫防線！保護中央組織核心免受病原體入侵！</div>
 
-    <!-- 狀態與血量 -->
-    <div id="status">狀態: 準備中</div>
-    <div id="health-bar"><div id="health-fill"></div></div>
+    <!-- 升級三選一抽屜 (不強制暫停多人遊戲，亦可按 1 / 2 / 3 快速選擇) -->
+    <div id="upgrade-drawer" class="hidden">
+        <div class="upgrade-title">✨ 免疫記憶進化！請選擇一項強化 (或按鍵盤 1 / 2 / 3)：</div>
+        <div class="upgrade-grid" id="upgrade-options"></div>
+    </div>
 
-    <!-- 觸控控制器 (遊戲開始後顯示) -->
+    <!-- 觸控控制器 -->
     <div id="controls-layer" class="hidden">
         <div id="joystick-zone">
             <div id="joystick-knob"></div>
         </div>
-        <div id="attack-btn">攻擊</div>
+        <div class="action-btns">
+            <div id="skill-btn">
+                <span>技能</span>
+                <span class="btn-sub">[E / 右鍵]</span>
+            </div>
+            <div id="attack-btn">
+                <span>攻擊</span>
+                <span class="btn-sub">[空白鍵/左鍵]</span>
+            </div>
+        </div>
     </div>
 
-    <!-- 選單 UI -->
+    <!-- 選單與彈窗 UI -->
     <div id="ui-layer">
+        <!-- 主選單 -->
         <div id="menu-panel" class="panel">
-            <h1>免疫防線 (平板版)</h1>
-            <p>請選擇細胞類型</p>
-            <select id="role-select">
-                <option value="macrophage">巨噬細胞 (坦克/近戰)</option>
-                <option value="b_cell">B細胞 (射手/遠程)</option>
-                <option value="t_cell">T細胞 (刺客/高傷)</option>
-            </select>
-            <br><br>
-            <div style="border-top: 1px solid #555; padding-top: 15px;">
-                <button onclick="startGame(true)">我是房主 (Host)</button>
-                <br>
-                <span style="font-size:0.9rem; color:#aaa;">(建議性能較好的平板擔任)</span>
+            <h1>🛡️ 免疫防線：細胞保衛戰</h1>
+            <div class="subtitle">結合生物免疫學的動作防衛遊戲 —— 選擇你的免疫細胞，對抗病毒與突變細菌！</div>
+
+            <!-- 遊戲時長模式 -->
+            <div class="mode-selector">
+                <div class="mode-pill selected" data-mode="endless" onclick="selectGameMode('endless')">♾️ 無盡生存模式</div>
+                <div class="mode-pill" data-mode="timed" onclick="selectGameMode('timed')">⏱️ 課堂 3 分鐘挑戰賽</div>
             </div>
-            <div style="margin-top: 15px; border-top: 1px solid #555; padding-top: 15px;">
-                <input type="text" id="host-id-input" placeholder="輸入房主 ID">
-                <br>
-                <button onclick="startGame(false)">加入遊戲</button>
+
+            <!-- 4 大免疫細胞角色卡 -->
+            <div class="role-cards" id="role-cards">
+                <div class="role-card selected" data-role="macrophage" onclick="selectRole('macrophage')">
+                    <div class="role-icon" style="background:#ff9ff3; color:#222;">巨</div>
+                    <div>
+                        <div class="role-name">巨噬細胞 (坦克 / 吞噬)</div>
+                        <div class="role-desc">高體型高血量，接觸病原體自動吞噬並修復組織。普攻釋放擊退震波；技能大範圍吸引吞噬。</div>
+                    </div>
+                </div>
+                <div class="role-card" data-role="b_cell" onclick="selectRole('b_cell')">
+                    <div class="role-icon" style="background:#48dbfb; color:#222;">B</div>
+                    <div>
+                        <div class="role-name">B 細胞 (遠程 / 抗體)</div>
+                        <div class="role-desc">專司體液免疫，高速發射 Y 型特異性抗體。技能可瞬間釋放 16 方向高傷抗體彈幕。</div>
+                    </div>
+                </div>
+                <div class="role-card" data-role="t_cell" onclick="selectRole('t_cell')">
+                    <div class="role-icon" style="background:#feca57; color:#222;">T</div>
+                    <div>
+                        <div class="role-name">殺手 T 細胞 (刺客 / 穿孔素)</div>
+                        <div class="role-desc">極高移速與近戰爆發。普攻揮出穿孔素刀光；技能可朝準星瞬間突進斬擊整排病原體。</div>
+                    </div>
+                </div>
+                <div class="role-card" data-role="dc_cell" onclick="selectRole('dc_cell')">
+                    <div class="role-icon" style="background:#1dd1a1; color:#222;">樹</div>
+                    <div>
+                        <div class="role-name">樹突細胞 (控場 / 補體輔助)</div>
+                        <div class="role-desc">發射緩速干擾素。技能展開「補體減速力場」大幅緩速範圍敵人並持續治療核心與隊友！</div>
+                    </div>
+                </div>
             </div>
-            <div style="margin-top: 15px; border-top:1px solid #555; padding-top:15px;">
-                <button style="background:#27ae60" onclick="startSolo()">單人遊玩 (離線)</button>
-                <p style="font-size:0.75rem; color:#888; margin-top:6px;">不建立連線，僅自己練習防守。</p>
+
+            <!-- 單人與圖鑑按鈕 -->
+            <div class="btn-group">
+                <button class="primary-btn solo-btn" onclick="startSolo()">🚀 立即單人遊玩 (離線)</button>
+                <button class="secondary-btn" onclick="toggleEncyclopedia(true)">📖 免疫百科圖鑑</button>
             </div>
-            <div id="kbd-help" style="display:none; margin-top:10px; font-size:0.75rem; line-height:1.4; text-align:left; color:#ccc; border-top:1px solid #555; padding-top:10px;">
-                <strong>鍵盤滑鼠操作說明：</strong><br>
-                移動：W / A / S / D 或 方向鍵<br>
-                滑鼠：指向位置自動靠近；左鍵攻擊<br>
-                攻擊：滑鼠左鍵或 Space 空白鍵<br>
-                觸控仍可使用原搖桿與攻擊按鈕。
+
+            <!-- 多人連線 -->
+            <div class="divider">
+                <div style="font-size: 0.88rem; font-weight: bold; margin-bottom: 6px; color: #ff9ff3;">🌐 多人合作連線 (P2P 即時連線)</div>
+                <div class="btn-group">
+                    <button class="primary-btn" onclick="startGame(true)">👑 建立房間 (擔任房主)</button>
+                    <input type="text" id="host-id-input" class="room-input" placeholder="輸入6碼房號" maxlength="12">
+                    <button class="secondary-btn" onclick="startGame(false)">🤝 加入房間</button>
+                </div>
+            </div>
+
+            <div class="help-box">
+                <strong>💡 操作指南：</strong><br>
+                • <strong>移動</strong>：鍵盤 <code>WASD</code> / <code>方向鍵</code>，或平板左下角虛擬搖桿。<br>
+                • <strong>瞄準與發射</strong>：電腦預設朝<strong>滑鼠準星</strong>發射（按 <code>Tab</code> 或右上角按鈕可切換<strong>自動瞄準最近敵人</strong>）；按 <code>左鍵</code> 或 <code>空白鍵</code> 普攻，<code>右鍵</code> 或 <code>E</code> 施放技能，<code>R</code> 鍵可隨時切換細胞種類！
             </div>
         </div>
 
+        <!-- 房間邀請面板 -->
         <div id="copy-panel" class="panel hidden">
-            <h3>等待隊友...</h3>
-            <p>請將此 ID 分享給隊友：</p>
-            <input type="text" id="my-peer-id" readonly onclick="this.select()">
-            <br>
-            <button onclick="copyId()">複製 ID</button>
-            <p id="waiting-msg" style="color: yellow;">正在建立連線...</p>
-            <div id="qr-wrapper" style="margin-top:15px;">
-                <p style="font-size:0.85rem; color:#ccc; margin:6px 0 4px;">掃描 QR Code 直接開啟此遊戲頁面</p>
-                <div id="qr-code" style="background:#fff; padding:8px; display:inline-block; border-radius:8px;"></div>
-                <button id="qr-refresh-btn" style="margin-top:10px; padding:10px 20px; font-size:1rem;">更新 QRCode</button>
-                <p id="qr-local-warning" style="display:none; color:#ffae00; font-size:0.75rem; margin-top:8px;">偵測到本機或局域網址，其他裝置可能無法存取，請使用正式部署網址。</p>
+            <h2>📡 房間已建立</h2>
+            <p class="subtitle" id="waiting-msg">等待隊友連線加入... 您也可以先進入戰場開始防守！</p>
+
+            <div>房間代碼 (Room ID)：</div>
+            <div id="my-peer-id" class="room-tag">------</div>
+            <div class="btn-group">
+                <button class="secondary-btn" onclick="copyId()">📋 複製房間代碼</button>
+                <button class="secondary-btn" onclick="copyShareLink()">🔗 複製邀請連結</button>
+            </div>
+
+            <div id="qr-wrapper" style="margin-top: 12px;">
+                <div style="font-size: 0.8rem; color: var(--text-muted);">讓隊友掃描 QR Code 直接加入此房間：</div>
+                <div id="qr-code"></div>
+                <p id="qr-local-warning" style="display:none; color:#ffae00; font-size:0.75rem; margin:4px 0;">
+                    ⚠️ 偵測到本機網址，其他裝置需在同一區網並使用區網 IP 才能連線。
+                </p>
+            </div>
+
+            <div class="btn-group" style="margin-top: 12px;">
+                <button class="primary-btn" onclick="toggleInvitePanel(false)">⚔️ 進入戰場 (背景等待隊友)</button>
+            </div>
+        </div>
+
+        <!-- 免疫學小百科圖鑑面板 -->
+        <div id="encyclo-panel" class="panel hidden">
+            <h2>📖 人體免疫防衛圖鑑</h2>
+            <p class="subtitle">認識保護我們身體的免疫細胞軍團與常見入侵病原體</p>
+            <div class="encyclo-grid">
+                <div class="encyclo-item">
+                    <strong style="color:#ff9ff3;">🟣 巨噬細胞 (Macrophage)</strong><br>
+                    先天免疫系統的主力吞噬細胞，能像變形蟲一樣伸出偽足吞噬並分解細菌、病毒與受損細胞碎片。
+                </div>
+                <div class="encyclo-item">
+                    <strong style="color:#48dbfb;">🔵 B 淋巴細胞 (B Cell)</strong><br>
+                    負責「體液免疫」，活化為漿細胞後能大量分泌 Y 型「抗體 (Antibody)」，精準結合抗原使病原體失去感染力。
+                </div>
+                <div class="encyclo-item">
+                    <strong style="color:#feca57;">🟡 胞毒 T 細胞 (Killer T Cell)</strong><br>
+                    負責「細胞免疫」，能辨識受感染的細胞或病原，釋放穿孔素與顆粒酶直接將目標瓦解。
+                </div>
+                <div class="encyclo-item">
+                    <strong style="color:#1dd1a1;">🟢 樹突細胞 (Dendritic Cell)</strong><br>
+                    最強的「抗原呈現細胞 (APC)」，能捕捉病原資訊並分泌干擾素與細胞激素，協調全體免疫反應。
+                </div>
+                <div class="encyclo-item">
+                    <strong style="color:#2ed573;">🦠 病毒與突變株 (Virus)</strong><br>
+                    體積微小、移動迅速，必須侵入宿主核心組織才能大量複製，每 5 波更會出現巨型「變異冠狀病毒王 (Boss)」。
+                </div>
+                <div class="encyclo-item">
+                    <strong style="color:#a55eea;">🟣 抗藥性分裂菌 (Super Bacteria)</strong><br>
+                    擁有厚重細胞壁的細菌，被擊破時會進行「二分裂」產生兩隻小型子代細菌，需配合範圍攻擊徹底清除！
+                </div>
+            </div>
+            <div class="btn-group">
+                <button class="primary-btn" onclick="toggleEncyclopedia(false)">關閉圖鑑</button>
+            </div>
+        </div>
+
+        <!-- 遊戲結算面板 -->
+        <div id="gameover-panel" class="panel hidden">
+            <h1 id="end-title" style="color: #ff4757;">⚠️ 核心組織已受損壞死</h1>
+            <p class="subtitle" id="end-subtitle">病原體突破了免疫防線，但你們展現了頑強的抵抗！</p>
+            <div style="background: rgba(0,0,0,0.4); padding: 16px; border-radius: 12px; margin: 14px 0;">
+                <div style="font-size: 1.05rem; margin-bottom: 6px;">防守波數：<strong id="final-wave" style="color:#ffd43b; font-size:1.35rem;">1</strong></div>
+                <div style="font-size: 1.05rem; margin-bottom: 6px;">消滅病原體總分：<strong id="final-score" style="color:#7bed9f; font-size:1.35rem;">0</strong></div>
+                <div style="font-size: 1.05rem;">免疫記憶等級：<strong id="final-lvl" style="color:#70a1ff; font-size:1.35rem;">Lv.1</strong></div>
+            </div>
+            <div class="btn-group">
+                <button class="primary-btn solo-btn" onclick="restartGame()">🔄 再次挑戰</button>
+                <button class="secondary-btn" onclick="backToMenu()">🏠 返回主選單</button>
             </div>
         </div>
     </div>
 
 <script>
-    // --- 遊戲設定 ---
-    const CONFIG = {
-        roles: {
-            macrophage: { r: 30, color: '#ffccdd', speed: 2, type: 'tank', hp: 100, damage: 5 },
-            b_cell:     { r: 18, color: '#33ccff', speed: 4, type: 'range', hp: 50, cd: 20 },
-            t_cell:     { r: 15, color: '#ffaa00', speed: 6, type: 'melee', hp: 60, damage: 10 }
+    // =========================================================================
+    // 1. Web Audio API 合成音效引擎 (免外部音檔、零延遲)
+    // =========================================================================
+    const SFX = {
+        ctx: null,
+        enabled: true,
+        init() {
+            if (!this.ctx) {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (AudioCtx) this.ctx = new AudioCtx();
+            }
+            if (this.ctx && this.ctx.state === 'suspended') {
+                this.ctx.resume().catch(() => {});
+            }
         },
-        enemySpawnRate: 60,
-        antibodySpeed: 10
+        play(type) {
+            if (!this.enabled) return;
+            this.init();
+            if (!this.ctx) return;
+
+            const now = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+
+            if (type === 'shoot') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(580, now);
+                osc.frequency.exponentialRampToValueAtTime(180, now + 0.08);
+                gain.gain.setValueAtTime(0.12, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.08);
+                osc.start(now);
+                osc.stop(now + 0.08);
+            } else if (type === 'slash') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(260, now);
+                osc.frequency.exponentialRampToValueAtTime(90, now + 0.11);
+                gain.gain.setValueAtTime(0.16, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.11);
+                osc.start(now);
+                osc.stop(now + 0.11);
+            } else if (type === 'pop') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(320, now);
+                osc.frequency.exponentialRampToValueAtTime(680, now + 0.07);
+                gain.gain.setValueAtTime(0.12, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.07);
+                osc.start(now);
+                osc.stop(now + 0.07);
+            } else if (type === 'skill') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(240, now);
+                osc.frequency.exponentialRampToValueAtTime(840, now + 0.22);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.22);
+                osc.start(now);
+                osc.stop(now + 0.22);
+            } else if (type === 'levelup') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(440, now);
+                osc.frequency.setValueAtTime(554, now + 0.08);
+                osc.frequency.setValueAtTime(659, now + 0.16);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.32);
+                osc.start(now);
+                osc.stop(now + 0.32);
+            } else if (type === 'hurt') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(140, now);
+                osc.frequency.linearRampToValueAtTime(70, now + 0.18);
+                gain.gain.setValueAtTime(0.22, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.18);
+                osc.start(now);
+                osc.stop(now + 0.18);
+            }
+        }
     };
 
+    function toggleSound() {
+        SFX.enabled = !SFX.enabled;
+        const btn = document.getElementById('sound-toggle-btn');
+        btn.innerText = SFX.enabled ? '🔊 音效' : '🔇 靜音';
+        btn.classList.toggle('active-toggle', SFX.enabled);
+    }
+
+    // =========================================================================
+    // 2. 遊戲核心常數與設定
+    // =========================================================================
+    const WORLD_W = 1600;
+    const WORLD_H = 1000;
+    const CORE_X = WORLD_W / 2;
+    const CORE_Y = WORLD_H / 2;
+    const CORE_R = 68;
+
+    const ROLE_KEYS = ['macrophage', 'b_cell', 't_cell', 'dc_cell'];
+
+    const CONFIG = {
+        roles: {
+            macrophage: {
+                name: '巨噬細胞',
+                r: 34,
+                color: '#ff9ff3',
+                stroke: '#f368e0',
+                speed: 4.1,
+                hp: 160,
+                cd: 36,
+                skillCd: 230,
+                damage: 28
+            },
+            b_cell: {
+                name: 'B 細胞',
+                r: 22,
+                color: '#48dbfb',
+                stroke: '#0abde3',
+                speed: 5.5,
+                hp: 95,
+                cd: 11,
+                skillCd: 200,
+                damage: 16
+            },
+            t_cell: {
+                name: '殺手 T 細胞',
+                r: 20,
+                color: '#feca57',
+                stroke: '#ff9f43',
+                speed: 7.3,
+                hp: 115,
+                cd: 15,
+                skillCd: 140,
+                damage: 36
+            },
+            dc_cell: {
+                name: '樹突細胞',
+                r: 25,
+                color: '#1dd1a1',
+                stroke: '#10ac84',
+                speed: 5.2,
+                hp: 120,
+                cd: 16,
+                skillCd: 240,
+                damage: 14
+            }
+        },
+        enemyTypes: {
+            virus: {
+                name: '一般病毒',
+                r: 15,
+                hp: 28,
+                speed: 2.1,
+                color: '#2ed573',
+                spikes: 7,
+                score: 12,
+                xp: 12,
+                coreDmg: 5
+            },
+            fast_virus: {
+                name: '突變流感病毒',
+                r: 11,
+                hp: 18,
+                speed: 3.7,
+                color: '#ffd43b',
+                spikes: 5,
+                score: 16,
+                xp: 15,
+                coreDmg: 4
+            },
+            bacteria: {
+                name: '抗藥性分裂菌',
+                r: 26,
+                hp: 95,
+                speed: 1.3,
+                color: '#a55eea',
+                spikes: 10,
+                score: 30,
+                xp: 25,
+                coreDmg: 12,
+                splits: true
+            },
+            mini_bacteria: {
+                name: '分裂子菌',
+                r: 14,
+                hp: 30,
+                speed: 2.5,
+                color: '#d980fa',
+                spikes: 6,
+                score: 10,
+                xp: 8,
+                coreDmg: 4
+            },
+            boss_virus: {
+                name: '⚠️ 變異冠狀病毒王 (BOSS)',
+                r: 52,
+                hp: 680,
+                speed: 0.85,
+                color: '#ff4757',
+                spikes: 14,
+                score: 150,
+                xp: 120,
+                coreDmg: 30,
+                isBoss: true
+            }
+        },
+        upgrades: [
+            { id: 'dmg', icon: '⚔️', name: '抗體親和力成熟', desc: '全體免疫攻擊傷害 +25%' },
+            { id: 'speed', icon: '⚡', name: '趨化因子加速', desc: '細胞移動速度 +18% 且技能冷卻縮短 15%' },
+            { id: 'multishot', icon: '🔱', name: '多株抗體增殖', desc: '發射物數量 +1 並擴大近戰與震波範圍 +20%' },
+            { id: 'heal', icon: '💖', name: '組織幹細胞修復', desc: '立即修復核心組織 +30% 健康度並提升回血效率' },
+            { id: 'fever', icon: '🔥', name: '發燒免疫活化', desc: '觸發 8 秒發燒狀態：全場敵人減速並持續灼傷！' }
+        ],
+        eduTips: [
+            "🧬 科普：巨噬細胞能吞噬入侵的細菌，並將抗原訊息傳遞給淋巴細胞！",
+            "🧬 科普：B 細胞活化後會分泌大量 Y 型抗體，精準結合病毒使其失去感染力！",
+            "🧬 科普：殺手 T 細胞能釋放「穿孔素」，直接破壞受感染細胞與病原體！",
+            "🧬 科普：樹突細胞是免疫系統的聯絡官，能釋放干擾素抑制病毒複製並召集支援！",
+            "🧬 科普：適度發燒能提升免疫細胞活性，並抑制病原體的繁殖速度！",
+            "🧬 科普：免疫系統擊退病原後會留下「記憶細胞」，下次遇到相同敵人時反應更快更強！"
+        ],
+        antibodySpeed: 14.0
+    };
+
+    // --- 狀態變數 ---
+    let selectedRole = 'macrophage';
+    let selectedGameMode = 'endless'; // 'endless' | 'timed'
     let peer = null;
     let conn = null;
     let connections = [];
     let isHost = false;
-    let soloMode = false; // 單人模式標記
-    let keyboardData = { active:false, dx:0, dy:0, angle:0 };
-    let lastMousePos = { x: window.innerWidth/2, y: window.innerHeight/2 };
-    let useMouseAim = true;
+    let soloMode = false;
+    let gameRunning = false;
     let myId = null;
-    let gameState = { players: {}, enemies: [], projectiles: [], tissueHealth: 100, score: 0 };
-    
-    // --- 觸控邏輯變數 ---
-    let localInput = { x: 0, y: 0, mouseDown: false, width: window.innerWidth, height: window.innerHeight };
-    let joystickData = { active: false, dx: 0, dy: 0, angle: 0 }; // dx, dy 範圍 -1 ~ 1
-    let lastKnownMyPos = { x: window.innerWidth/2, y: window.innerHeight/2 }; // 用於計算相對位移
 
-    // --- DOM ---
-    const svgLayer = document.getElementById('game-layer');
-    const statusDiv = document.getElementById('status');
+    let gameState = createInitialState();
+    let clientInputs = {};
+    let pendingUpgrades = 0;
+    let currentUpgradeChoices = [];
+
+    // 視覺輔助陣列
+    let bgCells = [];
+    let lastWaveAnnounced = 1;
+
+    // 畫布與視口轉換參數
+    const canvas = document.getElementById('game-canvas');
+    const ctx = canvas.getContext('2d');
+    let viewScale = 1;
+    let viewOffsetX = 0;
+    let viewOffsetY = 0;
+
+    // 本地輸入狀態
+    let localInput = {
+        vx: 0,
+        vy: 0,
+        aimAngle: 0,
+        attack: false,
+        skill: false
+    };
+
+    let autoAimMode = false; // 電腦可切換滑鼠瞄準或自動瞄準
+    let joystickData = { active: false, touchId: null, dx: 0, dy: 0, angle: 0 };
+    let keyState = {};
+    let mouseScreenPos = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+    let usingTouch = false;
+
+    // --- DOM 元素 ---
+    const statusText = document.getElementById('status-text');
+    const waveVal = document.getElementById('wave-val');
+    const scoreVal = document.getElementById('score-val');
+    const timerRow = document.getElementById('timer-row');
+    const timerVal = document.getElementById('timer-val');
+    const hpText = document.getElementById('hp-text');
     const healthFill = document.getElementById('health-fill');
+    const lvlText = document.getElementById('lvl-text');
+    const xpText = document.getElementById('xp-text');
+    const xpFill = document.getElementById('xp-fill');
+    const controlsLayer = document.getElementById('controls-layer');
     const joystickZone = document.getElementById('joystick-zone');
     const joystickKnob = document.getElementById('joystick-knob');
     const attackBtn = document.getElementById('attack-btn');
-    const controlsLayer = document.getElementById('controls-layer');
+    const skillBtn = document.getElementById('skill-btn');
+    const inviteHudBtn = document.getElementById('invite-hud-btn');
+    const switchRoleBtn = document.getElementById('switch-role-btn');
+    const aimToggleBtn = document.getElementById('aim-toggle-btn');
+    const eduBanner = document.getElementById('edu-banner');
+    const upgradeDrawer = document.getElementById('upgrade-drawer');
+    const upgradeOptions = document.getElementById('upgrade-options');
 
-    // --- PeerJS 連線 (與 PC 版邏輯相同，增加錯誤處理) ---
+    // --- 初始化背景漂浮紅血球 ---
+    function initBackground() {
+        bgCells = [];
+        for (let i = 0; i < 30; i++) {
+            bgCells.push({
+                x: Math.random() * WORLD_W,
+                y: Math.random() * WORLD_H,
+                r: 16 + Math.random() * 26,
+                vx: (Math.random() - 0.5) * 0.45,
+                vy: (Math.random() - 0.5) * 0.45,
+                alpha: 0.05 + Math.random() * 0.08
+            });
+        }
+    }
+    initBackground();
+
+    function createInitialState() {
+        return {
+            players: {},
+            enemies: [],
+            projectiles: [],
+            fields: [],      // 樹突細胞補體力場
+            effects: [],
+            dmgTexts: [],    // 浮動傷害數字
+            pickups: [],
+            tissueHealth: 100,
+            score: 0,
+            wave: 1,
+            bossSpawnedForWave: 0,
+            xp: 0,
+            maxXp: 100,
+            level: 1,
+            feverTimer: 0,   // 發燒時間
+            timeLeft: 180 * 60, // 3分鐘挑戰模式倒數 (ticks)
+            gameMode: selectedGameMode,
+            tick: 0
+        };
+    }
+
+    // --- 視窗縮放與世界座標轉換 ---
+    function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        const scaleX = canvas.width / WORLD_W;
+        const scaleY = canvas.height / WORLD_H;
+        viewScale = Math.min(scaleX, scaleY);
+        viewOffsetX = (canvas.width - WORLD_W * viewScale) / 2;
+        viewOffsetY = (canvas.height - WORLD_H * viewScale) / 2;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    function screenToWorld(sx, sy) {
+        return {
+            x: (sx - viewOffsetX) / viewScale,
+            y: (sy - viewOffsetY) / viewScale
+        };
+    }
+
+    // --- 科普橫幅推播 ---
+    let bannerTimeout = null;
+    function showEduBanner(msg, duration = 5500) {
+        eduBanner.innerText = msg;
+        eduBanner.classList.remove('fade-out');
+        if (bannerTimeout) clearTimeout(bannerTimeout);
+        bannerTimeout = setTimeout(() => {
+            eduBanner.classList.add('fade-out');
+        }, duration);
+    }
+
+    // --- 選單與設定切換 ---
+    function selectRole(roleKey) {
+        selectedRole = roleKey;
+        document.querySelectorAll('.role-card').forEach(card => {
+            card.classList.toggle('selected', card.dataset.role === roleKey);
+        });
+    }
+
+    function selectGameMode(mode) {
+        selectedGameMode = mode;
+        document.querySelectorAll('.mode-pill').forEach(pill => {
+            pill.classList.toggle('selected', pill.dataset.mode === mode);
+        });
+    }
+
+    function toggleAutoAim() {
+        autoAimMode = !autoAimMode;
+        aimToggleBtn.innerText = autoAimMode ? '🤖 自動瞄準' : '🎯 滑鼠瞄準';
+        aimToggleBtn.classList.toggle('active-toggle', autoAimMode);
+    }
+
+    function toggleEncyclopedia(show) {
+        const panel = document.getElementById('encyclo-panel');
+        panel.classList.toggle('hidden', !show);
+    }
+
+    function cycleRoleInGame() {
+        if (!gameRunning) return;
+        const idx = (ROLE_KEYS.indexOf(selectedRole) + 1) % ROLE_KEYS.length;
+        selectedRole = ROLE_KEYS[idx];
+        SFX.play('levelup');
+        if (isHost) {
+            applyRoleChange(myId, selectedRole);
+        } else if (conn && conn.open) {
+            conn.send({ type: 'CHANGE_ROLE', role: selectedRole });
+        }
+        showEduBanner(`🔄 已切換為【${CONFIG.roles[selectedRole].name}】！`, 3000);
+    }
+
+    function applyRoleChange(playerId, newRole) {
+        const p = gameState.players[playerId];
+        const cfg = CONFIG.roles[newRole];
+        if (p && cfg) {
+            p.role = newRole;
+            p.color = cfg.color;
+            p.stroke = cfg.stroke;
+            p.r = cfg.r;
+            p.maxHp = cfg.hp;
+            p.hp = cfg.hp;
+        }
+    }
+
+    function showPanel(id) {
+        ['menu-panel', 'copy-panel', 'gameover-panel', 'encyclo-panel'].forEach(p => {
+            document.getElementById(p).classList.add('hidden');
+        });
+        if (id) document.getElementById(id).classList.remove('hidden');
+    }
+
+    function toggleInvitePanel(forceShow) {
+        const panel = document.getElementById('copy-panel');
+        if (typeof forceShow === 'boolean') {
+            panel.classList.toggle('hidden', !forceShow);
+        } else {
+            panel.classList.toggle('hidden');
+        }
+    }
+
+    function backToMenu() {
+        gameRunning = false;
+        upgradeDrawer.classList.add('hidden');
+        controlsLayer.classList.add('hidden');
+        switchRoleBtn.classList.add('hidden');
+        showPanel('menu-panel');
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        const params = new URLSearchParams(window.location.search);
+        const roomParam = params.get('room');
+        if (roomParam) {
+            document.getElementById('host-id-input').value = roomParam.trim();
+        }
+        requestAnimationFrame(masterLoop);
+    });
+
+    // --- 啟動遊戲 ---
+    function startSolo() {
+        SFX.init();
+        tryFullscreen();
+        soloMode = true;
+        isHost = true;
+        myId = 'solo-player';
+        gameState = createInitialState();
+        pendingUpgrades = 0;
+        upgradeDrawer.classList.add('hidden');
+        addPlayer(myId, selectedRole, '我');
+        showPanel(null);
+        controlsLayer.classList.remove('hidden');
+        switchRoleBtn.classList.remove('hidden');
+        inviteHudBtn.classList.add('hidden');
+        timerRow.style.display = selectedGameMode === 'timed' ? 'flex' : 'none';
+        statusText.innerText = selectedGameMode === 'timed' ? '3分鐘挑戰' : '單人無盡';
+        gameRunning = true;
+        lastWaveAnnounced = 1;
+        showEduBanner(CONFIG.eduTips[0]);
+    }
+
+    function startGame(hosting) {
+        SFX.init();
+        tryFullscreen();
+        soloMode = false;
+        isHost = hosting;
+
+        if (!hosting) {
+            const hostId = document.getElementById('host-id-input').value.trim().toUpperCase();
+            if (!hostId) {
+                alert('請先輸入房主代碼！');
+                return;
+            }
+        }
+
+        statusText.innerText = '連線準備中...';
+        initPeer(hosting);
+    }
+
+    function restartGame() {
+        if (soloMode || isHost) {
+            const oldPlayers = gameState.players;
+            gameState = createInitialState();
+            pendingUpgrades = 0;
+            upgradeDrawer.classList.add('hidden');
+            Object.values(oldPlayers).forEach((p, idx) => {
+                addPlayer(p.id, p.role, p.label || (p.id === myId ? '我' : `隊友 ${idx}`));
+            });
+            showPanel(null);
+            gameRunning = true;
+            lastWaveAnnounced = 1;
+            showEduBanner("⚔️ 新一輪免疫防衛開始！保護中央組織核心！");
+        } else {
+            location.reload();
+        }
+    }
+
+    function tryFullscreen() {
+        if (document.documentElement.requestFullscreen && window.innerWidth < 1024) {
+            document.documentElement.requestFullscreen().catch(() => {});
+        }
+    }
+
+    // --- PeerJS 多人連線管理 ---
+    function generateShortId() {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        let code = '';
+        for (let i = 0; i < 6; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
+        return code;
+    }
+
     function initPeer(hosting) {
-        peer = new Peer(); 
+        if (peer) peer.destroy();
+
+        const customId = hosting ? 'IMMUNE-' + generateShortId() : undefined;
+        peer = customId ? new Peer(customId) : new Peer();
 
         peer.on('open', (id) => {
             myId = id;
             if (hosting) {
+                const displayCode = id.replace(/^IMMUNE-/, '');
+                document.getElementById('my-peer-id').innerText = displayCode;
                 showPanel('copy-panel');
-                document.getElementById('my-peer-id').value = id;
-                document.getElementById('waiting-msg').innerText = "等待玩家加入...";
-                addPlayer(myId, document.getElementById('role-select').value);
-                requestAnimationFrame(gameLoopHost);
-                controlsLayer.classList.remove('hidden'); // 房主也要顯示操作
-                generateQr(); // 建立 QRCode 供分享
+                inviteHudBtn.classList.remove('hidden');
+                switchRoleBtn.classList.remove('hidden');
+                gameState = createInitialState();
+                addPlayer(myId, selectedRole, '房主');
+                controlsLayer.classList.remove('hidden');
+                timerRow.style.display = selectedGameMode === 'timed' ? 'flex' : 'none';
+                statusText.innerText = '房主 (1人)';
+                gameRunning = true;
+                generateQr(displayCode);
             } else {
-                const hostId = document.getElementById('host-id-input').value;
-                if(!hostId) return alert("請輸入房主 ID");
-                connectToHost(hostId);
+                let rawCode = document.getElementById('host-id-input').value.trim().toUpperCase();
+                const fullHostId = rawCode.startsWith('IMMUNE-') ? rawCode : 'IMMUNE-' + rawCode;
+                connectToHost(fullHostId);
             }
         });
 
         peer.on('connection', (c) => {
-            if (isHost) {
-                connections.push(c);
-                statusDiv.innerText = `隊友: ${connections.length} 人`;
-                document.getElementById('waiting-msg').innerText = `${connections.length} 人已連線!`;
-                // 3秒後自動隱藏等待面板
-                setTimeout(() => document.getElementById('copy-panel').classList.add('hidden'), 1000);
-                
-                c.on('open', () => c.send({ type: 'REQUEST_INFO' }));
-                c.on('data', (data) => handleDataFromClient(c.peer, data));
-                c.on('close', () => removePlayer(c.peer));
-            }
+            if (!isHost) return;
+            connections.push(c);
+            updateHostPlayerCount();
+
+            c.on('open', () => {
+                c.send({ type: 'REQUEST_INFO' });
+            });
+
+            c.on('data', (data) => {
+                handleDataFromClient(c.peer, data);
+            });
+
+            c.on('close', () => {
+                removePlayer(c.peer);
+                updateHostPlayerCount();
+            });
         });
-        peer.on('error', (err) => alert("連線錯誤: " + err.type));
+
+        peer.on('error', (err) => {
+            console.error(err);
+            alert('連線發生問題 (' + err.type + ')，請確認房間代碼是否正確，或改用單人模式遊玩。');
+            statusText.innerText = '連線失敗';
+        });
+    }
+
+    function updateHostPlayerCount() {
+        const total = connections.length + 1;
+        statusText.innerText = `合作中 (${total}人)`;
+        const msg = document.getElementById('waiting-msg');
+        if (msg) msg.innerText = `目前已有 ${total} 名免疫細胞加入戰場！`;
     }
 
     function connectToHost(hostId) {
-        conn = peer.connect(hostId);
+        conn = peer.connect(hostId, { reliable: true });
+
         conn.on('open', () => {
-            showPanel(null); // 隱藏所有面板
-            statusDiv.innerText = "已連線";
+            showPanel(null);
+            statusText.innerText = '已連線合作';
             isHost = false;
-            controlsLayer.classList.remove('hidden'); // 顯示控制器
+            gameRunning = true;
+            controlsLayer.classList.remove('hidden');
+            switchRoleBtn.classList.remove('hidden');
+            conn.send({
+                type: 'JOIN_INFO',
+                role: selectedRole
+            });
         });
 
         conn.on('data', (data) => {
             if (data.type === 'UPDATE') {
-                gameState = data.state; // 更新本地狀態
-                renderGame(data.state);
-                
-                // 更新我自己的位置記錄 (為了 Joystick 計算)
-                if (gameState.players[myId]) {
-                    lastKnownMyPos.x = gameState.players[myId].x;
-                    lastKnownMyPos.y = gameState.players[myId].y;
+                gameState = data.state;
+                timerRow.style.display = gameState.gameMode === 'timed' ? 'flex' : 'none';
+                if (gameState.wave > lastWaveAnnounced) {
+                    lastWaveAnnounced = gameState.wave;
+                    showEduBanner(CONFIG.eduTips[gameState.wave % CONFIG.eduTips.length]);
                 }
-                
-                healthFill.style.width = Math.max(0, data.state.tissueHealth) + "%";
-                if(data.state.tissueHealth <= 0) gameOver();
+                if ((gameState.tissueHealth <= 0 || (gameState.gameMode === 'timed' && gameState.timeLeft <= 0)) && gameRunning) {
+                    triggerGameOver(gameState.tissueHealth > 0);
+                }
             } else if (data.type === 'REQUEST_INFO') {
                 conn.send({
                     type: 'JOIN_INFO',
-                    role: document.getElementById('role-select').value,
-                    w: window.innerWidth, h: window.innerHeight
+                    role: selectedRole
                 });
+            }
+        });
+
+        conn.on('close', () => {
+            alert('與房主的連線已中斷！');
+            location.reload();
+        });
+    }
+
+    // --- 玩家與升級強化管理 ---
+    function addPlayer(id, roleKey, label = '隊友') {
+        const role = CONFIG.roles[roleKey] || CONFIG.roles.macrophage;
+        const angle = Math.random() * Math.PI * 2;
+        gameState.players[id] = {
+            id: id,
+            role: roleKey,
+            label: label,
+            x: CORE_X + Math.cos(angle) * 110,
+            y: CORE_Y + Math.sin(angle) * 110,
+            aimAngle: 0,
+            hp: role.hp,
+            maxHp: role.hp,
+            cdTimer: 0,
+            skillTimer: 0,
+            color: role.color,
+            stroke: role.stroke,
+            r: role.r,
+            // 升級倍率屬性
+            dmgMult: 1,
+            speedMult: 1,
+            cdMult: 1,
+            bonusProj: 0,
+            areaMult: 1
+        };
+        clientInputs[id] = { vx: 0, vy: 0, aimAngle: 0, attack: false, skill: false };
+    }
+
+    function removePlayer(id) {
+        delete gameState.players[id];
+        delete clientInputs[id];
+        connections = connections.filter(c => c.peer !== id);
+    }
+
+    function handleDataFromClient(playerId, data) {
+        if (data.type === 'INPUT') {
+            clientInputs[playerId] = {
+                vx: data.vx || 0,
+                vy: data.vy || 0,
+                aimAngle: data.aimAngle || 0,
+                attack: !!data.attack,
+                skill: !!data.skill
+            };
+        } else if (data.type === 'JOIN_INFO') {
+            const idx = Object.keys(gameState.players).length;
+            addPlayer(playerId, data.role, `隊友 ${idx}`);
+        } else if (data.type === 'CHANGE_ROLE') {
+            applyRoleChange(playerId, data.role);
+        } else if (data.type === 'PICK_UPGRADE') {
+            applyUpgradeToAll(data.upgradeId);
+        }
+    }
+
+    // 觸發升級三選一抽屜
+    function offerUpgrades() {
+        SFX.play('levelup');
+        const shuffled = [...CONFIG.upgrades].sort(() => Math.random() - 0.5);
+        currentUpgradeChoices = shuffled.slice(0, 3);
+        upgradeOptions.innerHTML = '';
+
+        currentUpgradeChoices.forEach((up, idx) => {
+            const card = document.createElement('div');
+            card.className = 'upgrade-card';
+            card.onclick = () => selectUpgradeOption(idx);
+            card.innerHTML = `
+                <span class="upgrade-key">按鍵 ${idx + 1}</span>
+                <div style="font-size:1.5rem;">${up.icon}</div>
+                <div style="font-weight:bold; font-size:0.9rem; color:#ffd43b;">${up.name}</div>
+                <div style="font-size:0.74rem; color:#ced4da;">${up.desc}</div>
+            `;
+            upgradeOptions.appendChild(card);
+        });
+
+        upgradeDrawer.classList.remove('hidden');
+    }
+
+    function selectUpgradeOption(index) {
+        if (upgradeDrawer.classList.contains('hidden')) return;
+        const chosen = currentUpgradeChoices[index];
+        if (!chosen) return;
+
+        SFX.play('skill');
+        if (isHost) {
+            applyUpgradeToAll(chosen.id);
+        } else if (conn && conn.open) {
+            conn.send({ type: 'PICK_UPGRADE', upgradeId: chosen.id });
+        }
+
+        pendingUpgrades = Math.max(0, pendingUpgrades - 1);
+        if (pendingUpgrades > 0) {
+            offerUpgrades();
+        } else {
+            upgradeDrawer.classList.add('hidden');
+        }
+    }
+
+    function applyUpgradeToAll(upgradeId) {
+        Object.values(gameState.players).forEach(p => {
+            if (upgradeId === 'dmg') {
+                p.dmgMult = (p.dmgMult || 1) * 1.25;
+            } else if (upgradeId === 'speed') {
+                p.speedMult = (p.speedMult || 1) * 1.18;
+                p.cdMult = (p.cdMult || 1) * 0.85;
+            } else if (upgradeId === 'multishot') {
+                p.bonusProj = (p.bonusProj || 0) + 1;
+                p.areaMult = (p.areaMult || 1) * 1.2;
+            } else if (upgradeId === 'heal') {
+                gameState.tissueHealth = Math.min(100, gameState.tissueHealth + 30);
+                addEffect('ring', CORE_X, CORE_Y, '#2ed573', CORE_R + 90, 24);
+            } else if (upgradeId === 'fever') {
+                gameState.feverTimer = 480; // 8 秒發燒時間
+                showEduBanner("🔥 發燒反應啟動！全體免疫細胞亢進，所有病原體遭受高溫緩速與灼傷！", 5000);
             }
         });
     }
 
-    // --- 搖桿與觸控邏輯 (核心修改) ---
-    
-    // 搖桿事件
-    joystickZone.addEventListener('touchstart', handleJoystickStart, {passive: false});
-    joystickZone.addEventListener('touchmove', handleJoystickMove, {passive: false});
-    joystickZone.addEventListener('touchend', handleJoystickEnd, {passive: false});
+    // --- 多點觸控搖桿與按鈕事件 ---
+    let joystickCenter = { x: 0, y: 0 };
+    const MAX_JOYSTICK_RADIUS = 45;
 
-    // 攻擊按鈕事件
-    attackBtn.addEventListener('touchstart', (e) => {
-        e.preventDefault(); 
-        localInput.mouseDown = true; 
-        updateInputAndSend();
-        attackBtn.style.background = 'rgba(255,0,0,0.8)';
-    }, {passive: false});
-    
-    attackBtn.addEventListener('touchend', (e) => {
-        e.preventDefault(); 
-        localInput.mouseDown = false; 
-        updateInputAndSend();
-        attackBtn.style.background = 'rgba(255,0,0,0.4)';
-    }, {passive: false});
-
-    let joystickCenter = {x:0, y:0};
-    const MAX_JOYSTICK_RADIUS = 35; // 搖桿移動半徑
-
-    function handleJoystickStart(e) {
+    joystickZone.addEventListener('touchstart', (e) => {
         e.preventDefault();
+        usingTouch = true;
         const touch = e.changedTouches[0];
+        joystickData.touchId = touch.identifier;
         const rect = joystickZone.getBoundingClientRect();
-        // 設定中心點為圓心
-        joystickCenter = { x: rect.left + rect.width/2, y: rect.top + rect.height/2 };
+        joystickCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
         updateJoystick(touch.clientX, touch.clientY);
-    }
+    }, { passive: false });
 
-    function handleJoystickMove(e) {
+    joystickZone.addEventListener('touchmove', (e) => {
         e.preventDefault();
-        const touch = e.changedTouches[0];
-        updateJoystick(touch.clientX, touch.clientY);
-    }
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === joystickData.touchId) {
+                updateJoystick(e.changedTouches[i].clientX, e.changedTouches[i].clientY);
+                break;
+            }
+        }
+    }, { passive: false });
 
-    function handleJoystickEnd(e) {
-        e.preventDefault();
-        joystickData.active = false;
-        joystickData.dx = 0;
-        joystickData.dy = 0;
-        joystickKnob.style.transform = `translate(-50%, -50%)`; // 回歸中心
-        updateInputAndSend();
+    function endJoystickTouch(e) {
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === joystickData.touchId) {
+                joystickData.active = false;
+                joystickData.touchId = null;
+                joystickData.dx = 0;
+                joystickData.dy = 0;
+                joystickKnob.style.transform = `translate(-50%, -50%)`;
+                break;
+            }
+        }
     }
+    joystickZone.addEventListener('touchend', endJoystickTouch, { passive: false });
+    joystickZone.addEventListener('touchcancel', endJoystickTouch, { passive: false });
 
-    function updateJoystick(touchX, touchY) {
-        let dx = touchX - joystickCenter.x;
-        let dy = touchY - joystickCenter.y;
-        const distance = Math.sqrt(dx*dx + dy*dy);
-        
-        // 限制旋鈕移動範圍
+    function updateJoystick(clientX, clientY) {
+        let dx = clientX - joystickCenter.x;
+        let dy = clientY - joystickCenter.y;
+        const distance = Math.hypot(dx, dy);
+
         if (distance > MAX_JOYSTICK_RADIUS) {
             const ratio = MAX_JOYSTICK_RADIUS / distance;
             dx *= ratio;
             dy *= ratio;
         }
 
-        // 移動視覺旋鈕
         joystickKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
 
-        // 正規化輸出 (-1 ~ 1)
-        joystickData.active = true;
+        joystickData.active = distance > 4;
         joystickData.dx = dx / MAX_JOYSTICK_RADIUS;
         joystickData.dy = dy / MAX_JOYSTICK_RADIUS;
-        
-        // 記錄角度 (如果玩家停止移動，我們仍然需要知道攻擊方向)
-        if (Math.abs(joystickData.dx) > 0.1 || Math.abs(joystickData.dy) > 0.1) {
-             joystickData.angle = Math.atan2(joystickData.dy, joystickData.dx);
-        }
 
-        updateInputAndSend();
+        if (distance > 6) {
+            joystickData.angle = Math.atan2(dy, dx);
+        }
     }
 
-    // 將搖桿資料轉換為遊戲輸入座標
-    function updateInputAndSend() {
-        // 技巧：遊戲邏輯是 "往滑鼠座標移動"。
-        // 所以我們創建一個 "虛擬滑鼠點"，它永遠在玩家角色的前方。
-        let targetAngle = joystickData.angle;
-        let dist = 0;
-        // Joystick 優先
-        if (joystickData.active) {
-            targetAngle = Math.atan2(joystickData.dy, joystickData.dx);
-            dist = 100;
-            localInput.x = lastKnownMyPos.x + Math.cos(targetAngle) * dist;
-            localInput.y = lastKnownMyPos.y + Math.sin(targetAngle) * dist;
-        } else if (keyboardData.active) {
-            targetAngle = Math.atan2(keyboardData.dy, keyboardData.dx);
-            dist = 100;
-            localInput.x = lastKnownMyPos.x + Math.cos(targetAngle) * dist;
-            localInput.y = lastKnownMyPos.y + Math.sin(targetAngle) * dist;
-        } else if (useMouseAim) {
-            // 直接朝滑鼠位置移動
-            localInput.x = lastMousePos.x;
-            localInput.y = lastMousePos.y;
+    attackBtn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        usingTouch = true;
+        localInput.attack = true;
+        attackBtn.classList.add('active');
+    }, { passive: false });
+
+    attackBtn.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        localInput.attack = false;
+        attackBtn.classList.remove('active');
+    }, { passive: false });
+
+    skillBtn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        usingTouch = true;
+        localInput.skill = true;
+    }, { passive: false });
+
+    skillBtn.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        localInput.skill = false;
+    }, { passive: false });
+
+    // --- 鍵盤與滑鼠支援 ---
+    window.addEventListener('keydown', (e) => {
+        const k = e.key.toLowerCase();
+        keyState[k] = true;
+        if (k === ' ') localInput.attack = true;
+        if (k === 'e' || k === 'shift') localInput.skill = true;
+        if (k === 'tab') {
+            e.preventDefault();
+            toggleAutoAim();
         }
-        
-        // 如果是房主，直接處理；如果是 Client，發送
-        if (isHost || soloMode) {
-            handleDataFromClient(myId, localInput);
+        if (k === 'r' && gameRunning) {
+            cycleRoleInGame();
+        }
+        if (['1', '2', '3'].includes(k) && !upgradeDrawer.classList.contains('hidden')) {
+            selectUpgradeOption(parseInt(k, 10) - 1);
+        }
+    });
+
+    window.addEventListener('keyup', (e) => {
+        const k = e.key.toLowerCase();
+        keyState[k] = false;
+        if (k === ' ') localInput.attack = false;
+        if (k === 'e' || k === 'shift') localInput.skill = false;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        usingTouch = false;
+        mouseScreenPos.x = e.clientX;
+        mouseScreenPos.y = e.clientY;
+    });
+
+    window.addEventListener('mousedown', (e) => {
+        if (e.target.closest('.panel') || e.target.closest('#hud-right') || e.target.closest('#controls-layer') || e.target.closest('#upgrade-drawer')) return;
+        usingTouch = false;
+        SFX.init();
+        if (e.button === 0) localInput.attack = true;
+        if (e.button === 2) localInput.skill = true;
+    });
+
+    window.addEventListener('mouseup', (e) => {
+        if (e.button === 0) localInput.attack = false;
+        if (e.button === 2) localInput.skill = false;
+    });
+
+    window.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    // 每幀整合本地輸入並同步
+    function sampleLocalInput() {
+        let vx = 0;
+        let vy = 0;
+
+        if (joystickData.active) {
+            vx = joystickData.dx;
+            vy = joystickData.dy;
+        } else {
+            const left = (keyState['a'] || keyState['arrowleft']) ? -1 : 0;
+            const right = (keyState['d'] || keyState['arrowright']) ? 1 : 0;
+            const up = (keyState['w'] || keyState['arrowup']) ? -1 : 0;
+            const down = (keyState['s'] || keyState['arrowdown']) ? 1 : 0;
+            vx = left + right;
+            vy = up + down;
+            const mag = Math.hypot(vx, vy);
+            if (mag > 0) {
+                vx /= mag;
+                vy /= mag;
+            }
+        }
+
+        const me = gameState.players[myId];
+        if (me) {
+            if (usingTouch || autoAimMode) {
+                const nearest = findNearestEnemy(me.x, me.y, 700);
+                if (nearest) {
+                    localInput.aimAngle = Math.atan2(nearest.y - me.y, nearest.x - me.x);
+                } else if (Math.hypot(vx, vy) > 0.1) {
+                    localInput.aimAngle = Math.atan2(vy, vx);
+                }
+            } else {
+                const worldMouse = screenToWorld(mouseScreenPos.x, mouseScreenPos.y);
+                localInput.aimAngle = Math.atan2(worldMouse.y - me.y, worldMouse.x - me.x);
+            }
+        }
+
+        localInput.vx = vx;
+        localInput.vy = vy;
+
+        if (isHost) {
+            clientInputs[myId] = { ...localInput };
         } else if (conn && conn.open) {
             conn.send({ type: 'INPUT', ...localInput });
         }
     }
 
-    // --- 遊戲邏輯 (Host) ---
-    // (這部分與 PC 版幾乎相同，確保核心邏輯一致)
-    function addPlayer(id, roleKey) {
-        const role = CONFIG.roles[roleKey];
-        gameState.players[id] = {
-            id: id, role: roleKey,
-            x: window.innerWidth / 2, y: window.innerHeight / 2,
-            hp: role.hp, maxHp: role.hp, cdTimer: 0, color: role.color, r: role.r
-        };
-    }
-    
-    function removePlayer(id) { delete gameState.players[id]; connections = connections.filter(c => c.peer !== id); }
-
-    function handleDataFromClient(playerId, data) {
-        if (data.type === 'INPUT') {
-            const p = gameState.players[playerId];
-            if (p) {
-                // 移動邏輯
-                const dx = data.x - p.x;
-                const dy = data.y - p.y;
-                const dist = Math.sqrt(dx*dx + dy*dy);
-                const speed = CONFIG.roles[p.role].speed;
-                
-                // 只有當虛擬目標距離大於閾值時才移動 (避免抖動)
-                if (dist > 10) {
-                    p.x += (dx / dist) * speed;
-                    p.y += (dy / dist) * speed;
-                    // 邊界檢查
-                    p.x = Math.max(p.r, Math.min(window.innerWidth - p.r, p.x));
-                    p.y = Math.max(p.r, Math.min(window.innerHeight - p.r, p.y));
-                }
-                
-                if (data.mouseDown) handleAttack(p, data.x, data.y);
+    function findNearestEnemy(x, y, maxDist) {
+        let best = null;
+        let bestDist = maxDist;
+        for (const e of gameState.enemies) {
+            const d = Math.hypot(e.x - x, e.y - y);
+            if (d < bestDist) {
+                bestDist = d;
+                best = e;
             }
-        } else if (data.type === 'JOIN_INFO') {
-            addPlayer(playerId, data.role);
         }
+        return best;
     }
 
-    function handleAttack(player, targetX, targetY) {
-        if (player.cdTimer > 0) return;
-        const roleStats = CONFIG.roles[player.role];
+    // =========================================================================
+    // 3. 遊戲核心邏輯 (Host 運算)
+    // =========================================================================
+    function updateHostGame() {
+        gameState.tick++;
 
-        if (player.role === 'b_cell') {
-            const angle = Math.atan2(targetY - player.y, targetX - player.x);
-            gameState.projectiles.push({
-                x: player.x, y: player.y,
-                dx: Math.cos(angle) * CONFIG.antibodySpeed,
-                dy: Math.sin(angle) * CONFIG.antibodySpeed,
-                life: 60
-            });
-            player.cdTimer = roleStats.cd;
-        } else if (player.role === 't_cell') {
-            player.cdTimer = 15;
-            gameState.enemies.forEach(e => {
-                if (Math.hypot(e.x - player.x, e.y - player.y) < roleStats.r + 40) {
-                    e.hp -= roleStats.damage;
-                }
-            });
+        // 課堂限時挑戰模式倒數
+        if (gameState.gameMode === 'timed') {
+            gameState.timeLeft = Math.max(0, gameState.timeLeft - 1);
+            if (gameState.timeLeft <= 0 && gameRunning) {
+                triggerGameOver(true);
+                return;
+            }
         }
-    }
 
-    function gameLoopHost() {
-        // 主循環與 PC 版相同，略去重複代碼，保留核心更新...
-        // 1. CD更新
+        // 發燒狀態處理
+        if (gameState.feverTimer > 0) {
+            gameState.feverTimer--;
+            if (gameState.tick % 20 === 0) {
+                gameState.enemies.forEach(e => damageEnemy(e, 4));
+            }
+        }
+
+        // 波數進度與科普提示、Boss 生成
+        const newWave = 1 + Math.floor(gameState.score / 130);
+        if (newWave > gameState.wave) {
+            gameState.wave = newWave;
+            lastWaveAnnounced = newWave;
+            showEduBanner(CONFIG.eduTips[newWave % CONFIG.eduTips.length]);
+        }
+
+        // 每 5 波生成一隻變異病毒王 Boss
+        if (gameState.wave % 5 === 0 && gameState.bossSpawnedForWave !== gameState.wave) {
+            gameState.bossSpawnedForWave = gameState.wave;
+            spawnEnemy('boss_virus');
+            showEduBanner(`🚨 警告！第 ${gameState.wave} 波出現【變異冠狀病毒王 (BOSS)】，請集中火力消滅！`, 6500);
+            SFX.play('hurt');
+        }
+
+        // 1. 更新所有玩家移動、攻擊與技能
         Object.values(gameState.players).forEach(p => {
-            if(p.cdTimer > 0) p.cdTimer--;
-            if(p.role === 'macrophage') {
+            const roleCfg = CONFIG.roles[p.role] || CONFIG.roles.macrophage;
+            const inp = clientInputs[p.id] || { vx: 0, vy: 0, aimAngle: p.aimAngle, attack: false, skill: false };
+
+            if (p.cdTimer > 0) p.cdTimer--;
+            if (p.skillTimer > 0) p.skillTimer--;
+
+            p.aimAngle = inp.aimAngle;
+            const effectiveSpeed = roleCfg.speed * (p.speedMult || 1) * (gameState.feverTimer > 0 ? 1.2 : 1);
+            p.x += inp.vx * effectiveSpeed;
+            p.y += inp.vy * effectiveSpeed;
+
+            p.x = Math.max(p.r, Math.min(WORLD_W - p.r, p.x));
+            p.y = Math.max(p.r, Math.min(WORLD_H - p.r, p.y));
+
+            // 巨噬細胞被動：接觸吞噬傷害與組織修復
+            if (p.role === 'macrophage') {
                 gameState.enemies.forEach(e => {
-                    if (Math.hypot(e.x - p.x, e.y - p.y) < p.r + e.r) {
-                        e.hp -= 2; p.hp = Math.min(p.maxHp, p.hp + 0.1);
+                    const dist = Math.hypot(e.x - p.x, e.y - p.y);
+                    if (dist < p.r * (p.areaMult || 1) + e.r + 6) {
+                        damageEnemy(e, 1.0 * (p.dmgMult || 1));
+                        gameState.tissueHealth = Math.min(100, gameState.tissueHealth + 0.018);
+                    }
+                });
+            }
+
+            if (inp.attack && p.cdTimer <= 0) {
+                performAttack(p, roleCfg);
+            }
+
+            if (inp.skill && p.skillTimer <= 0) {
+                performSkill(p, roleCfg);
+            }
+        });
+
+        // 2. 更新樹突細胞的「補體減速治療力場」
+        gameState.fields.forEach(f => {
+            f.life--;
+            if (f.life % 30 === 0) {
+                gameState.tissueHealth = Math.min(100, gameState.tissueHealth + 1.2);
+                gameState.enemies.forEach(e => {
+                    if (Math.hypot(e.x - f.x, e.y - f.y) < f.r) {
+                        damageEnemy(e, 6);
                     }
                 });
             }
         });
+        gameState.fields = gameState.fields.filter(f => f.life > 0);
 
-        // 2. 生成敵人
-        if (Math.random() < 1 / CONFIG.enemySpawnRate * (1 + gameState.score/100)) {
+        // 3. 生成病原體敵人
+        const playerCount = Math.max(1, Object.keys(gameState.players).length);
+        const spawnInterval = Math.max(15, Math.floor(66 - gameState.wave * 3.8 - (playerCount - 1) * 6));
+        if (gameState.tick % spawnInterval === 0) {
+            spawnEnemy();
+        }
+
+        // 隨機生成組織修復包 (ATP 營養球)
+        if (gameState.tick % 420 === 0 && gameState.pickups.length < 3) {
             const angle = Math.random() * Math.PI * 2;
-            const R = Math.max(window.innerWidth, window.innerHeight)/2 + 50;
-            gameState.enemies.push({
-                id: Math.random(),
-                x: window.innerWidth/2 + Math.cos(angle)*R, y: window.innerHeight/2 + Math.sin(angle)*R,
-                hp: 20, r: 10, speed: 1.5, type: 'virus'
+            const dist = 150 + Math.random() * 280;
+            gameState.pickups.push({
+                x: CORE_X + Math.cos(angle) * dist,
+                y: CORE_Y + Math.sin(angle) * dist,
+                r: 15,
+                life: 600
             });
         }
 
-        // 3. 移動敵人 & 4. 子彈
-        const centerX = window.innerWidth/2, centerY = window.innerHeight/2;
+        // 4. 更新敵人移動與核心碰撞
         gameState.enemies.forEach(e => {
-            const angle = Math.atan2(centerY - e.y, centerX - e.x);
-            e.x += Math.cos(angle) * e.speed;
-            e.y += Math.sin(angle) * e.speed;
-            if (Math.hypot(centerX - e.x, centerY - e.y) < 50) {
-                gameState.tissueHealth -= 0.5; e.hp = 0;
+            const angle = Math.atan2(CORE_Y - e.y, CORE_X - e.x);
+            let slowFactor = gameState.feverTimer > 0 ? 0.65 : 1.0;
+            if (e.slowTimer > 0) {
+                e.slowTimer--;
+                slowFactor *= 0.5;
+            }
+            for (const f of gameState.fields) {
+                if (Math.hypot(e.x - f.x, e.y - f.y) < f.r) {
+                    slowFactor *= 0.42;
+                    break;
+                }
+            }
+
+            e.x += Math.cos(angle) * e.speed * slowFactor;
+            e.y += Math.sin(angle) * e.speed * slowFactor;
+
+            // Boss 每隔一段時間召喚小病毒
+            if (e.isBoss && gameState.tick % 150 === 0) {
+                spawnChildEnemy('fast_virus', e.x + (Math.random() - 0.5) * 60, e.y + (Math.random() - 0.5) * 60);
+            }
+
+            // 撞擊組織核心
+            if (Math.hypot(CORE_X - e.x, CORE_Y - e.y) < CORE_R + e.r - 4) {
+                gameState.tissueHealth = Math.max(0, gameState.tissueHealth - e.coreDmg);
+                e.hp = 0;
+                SFX.play('hurt');
+                addEffect('ring', CORE_X, CORE_Y, '#ff4757', CORE_R + 40, 16);
             }
         });
-        
-        gameState.projectiles.forEach(p => {
-            p.x += p.dx; p.y += p.dy; p.life--;
-            gameState.enemies.forEach(e => {
-                if (Math.hypot(e.x - p.x, e.y - p.y) < e.r + 5) {
-                    e.hp -= 10; p.life = 0;
+
+        // 5. 更新投射物 (Y 型抗體與樹突干擾素)
+        gameState.projectiles.forEach(proj => {
+            proj.x += proj.dx;
+            proj.y += proj.dy;
+            proj.life--;
+
+            for (const e of gameState.enemies) {
+                if (e.hp > 0 && Math.hypot(e.x - proj.x, e.y - proj.y) < e.r + 9) {
+                    damageEnemy(e, proj.damage || 16);
+                    if (proj.slow) e.slowTimer = 90;
+                    proj.life = 0;
+                    addEffect('hit', proj.x, proj.y, proj.color || '#48dbfb', 18, 10);
+                    break;
                 }
-            });
+            }
         });
 
+        // 6. 更新拾取物 (ATP 修復組織)
+        gameState.pickups.forEach(pk => {
+            pk.life--;
+            for (const p of Object.values(gameState.players)) {
+                if (Math.hypot(p.x - pk.x, p.y - pk.y) < p.r + pk.r) {
+                    gameState.tissueHealth = Math.min(100, gameState.tissueHealth + 10);
+                    gainXp(25);
+                    pk.life = 0;
+                    SFX.play('levelup');
+                    addEffect('ring', pk.x, pk.y, '#7bed9f', 58, 18);
+                    break;
+                }
+            }
+        });
+
+        // 7. 清理死亡物件與更新特效
         gameState.enemies = gameState.enemies.filter(e => e.hp > 0);
         gameState.projectiles = gameState.projectiles.filter(p => p.life > 0);
+        gameState.pickups = gameState.pickups.filter(pk => pk.life > 0);
+        gameState.effects.forEach(ef => ef.life--);
+        gameState.effects = gameState.effects.filter(ef => ef.life > 0);
+        gameState.dmgTexts.forEach(dt => { dt.y -= 0.8; dt.life--; });
+        gameState.dmgTexts = gameState.dmgTexts.filter(dt => dt.life > 0);
 
-        // 廣播
-        const updatePacket = { type: 'UPDATE', state: gameState };
-        connections.forEach(c => c.send(updatePacket));
-        renderGame(gameState);
-        
-        // Host 本地更新自己位置給輸入邏輯
-        if (gameState.players[myId]) {
-            lastKnownMyPos.x = gameState.players[myId].x;
-            lastKnownMyPos.y = gameState.players[myId].y;
+        // 廣播狀態給所有連線隊友
+        if (!soloMode && connections.length > 0) {
+            const packet = { type: 'UPDATE', state: gameState };
+            connections.forEach(c => {
+                if (c.open) c.send(packet);
+            });
         }
-        
-        healthFill.style.width = Math.max(0, gameState.tissueHealth) + "%";
 
-        if (gameState.tissueHealth > 0) requestAnimationFrame(gameLoopHost);
-        else gameOver();
+        if (gameState.tissueHealth <= 0 && gameRunning) {
+            triggerGameOver(false);
+        }
     }
 
-    function renderGame(state) {
-        // 簡單優化：不清空，如果數量沒變就不重繪 (這裡為了穩定仍使用清空，可根據需求優化)
-        svgLayer.innerHTML = ''; 
+    function performAttack(player, roleCfg) {
+        player.cdTimer = Math.max(4, Math.round(roleCfg.cd * (player.cdMult || 1)));
+        const dmg = roleCfg.damage * (player.dmgMult || 1);
+        const bonusProj = player.bonusProj || 0;
+        const areaMult = player.areaMult || 1;
 
-        // 核心
-        const core = createSVG('circle', { cx: window.innerWidth/2, cy: window.innerHeight/2, r: 50, fill: 'rgba(100,0,0,0.3)', stroke: 'red', 'stroke-dasharray': '5,5' });
-        svgLayer.appendChild(core);
+        if (player.role === 'b_cell') {
+            SFX.play('shoot');
+            const totalShots = 2 + bonusProj;
+            const spreadStep = 0.11;
+            for (let i = 0; i < totalShots; i++) {
+                const offset = (i - (totalShots - 1) / 2) * spreadStep;
+                const a = player.aimAngle + offset;
+                gameState.projectiles.push({
+                    x: player.x + Math.cos(a) * player.r,
+                    y: player.y + Math.sin(a) * player.r,
+                    dx: Math.cos(a) * CONFIG.antibodySpeed,
+                    dy: Math.sin(a) * CONFIG.antibodySpeed,
+                    angle: a,
+                    damage: dmg,
+                    color: '#fff200',
+                    life: 65
+                });
+            }
+        } else if (player.role === 'dc_cell') {
+            // 樹突細胞：發射扇形緩速干擾素
+            SFX.play('shoot');
+            const totalShots = 3 + bonusProj;
+            const spreadStep = 0.18;
+            for (let i = 0; i < totalShots; i++) {
+                const offset = (i - (totalShots - 1) / 2) * spreadStep;
+                const a = player.aimAngle + offset;
+                gameState.projectiles.push({
+                    x: player.x + Math.cos(a) * player.r,
+                    y: player.y + Math.sin(a) * player.r,
+                    dx: Math.cos(a) * (CONFIG.antibodySpeed * 0.85),
+                    dy: Math.sin(a) * (CONFIG.antibodySpeed * 0.85),
+                    angle: a,
+                    damage: dmg,
+                    slow: true,
+                    color: '#1dd1a1',
+                    life: 58
+                });
+            }
+        } else if (player.role === 't_cell') {
+            SFX.play('slash');
+            const slashRange = 98 * areaMult;
+            const hitX = player.x + Math.cos(player.aimAngle) * 40;
+            const hitY = player.y + Math.sin(player.aimAngle) * 40;
+            addEffect('slash', hitX, hitY, '#feca57', 55 * areaMult, 12, player.aimAngle);
 
-        // 子彈
-        state.projectiles.forEach(p => svgLayer.appendChild(createSVG('circle', {cx: p.x, cy: p.y, r: 3, class: 'antibody'})));
+            gameState.enemies.forEach(e => {
+                if (Math.hypot(e.x - hitX, e.y - hitY) < slashRange + e.r) {
+                    damageEnemy(e, dmg);
+                }
+            });
+        } else if (player.role === 'macrophage') {
+            SFX.play('slash');
+            const waveRadius = 118 * areaMult;
+            addEffect('ring', player.x, player.y, '#ff9ff3', waveRadius, 16);
 
-        // 敵人
-        state.enemies.forEach(e => {
-            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-            g.appendChild(createSVG('circle', {cx: e.x, cy: e.y, r: e.r, class: 'enemy'}));
-            svgLayer.appendChild(g);
+            gameState.enemies.forEach(e => {
+                const dist = Math.hypot(e.x - player.x, e.y - player.y);
+                if (dist < waveRadius + e.r) {
+                    damageEnemy(e, dmg);
+                    const pushAngle = Math.atan2(e.y - player.y, e.x - player.x);
+                    e.x += Math.cos(pushAngle) * 30;
+                    e.y += Math.sin(pushAngle) * 30;
+                }
+            });
+        }
+    }
+
+    function performSkill(player, roleCfg) {
+        player.skillTimer = Math.max(40, Math.round(roleCfg.skillCd * (player.cdMult || 1)));
+        const dmg = roleCfg.damage * (player.dmgMult || 1);
+        const areaMult = player.areaMult || 1;
+        SFX.play('skill');
+
+        if (player.role === 'b_cell') {
+            const count = 16 + (player.bonusProj || 0) * 4;
+            for (let i = 0; i < count; i++) {
+                const a = (Math.PI * 2 / count) * i;
+                gameState.projectiles.push({
+                    x: player.x,
+                    y: player.y,
+                    dx: Math.cos(a) * CONFIG.antibodySpeed,
+                    dy: Math.sin(a) * CONFIG.antibodySpeed,
+                    angle: a,
+                    damage: dmg * 1.3,
+                    color: '#fff200',
+                    life: 75
+                });
+            }
+            addEffect('ring', player.x, player.y, '#48dbfb', 95, 18);
+        } else if (player.role === 't_cell') {
+            const dashDist = 225;
+            const startX = player.x;
+            const startY = player.y;
+            player.x = Math.max(player.r, Math.min(WORLD_W - player.r, player.x + Math.cos(player.aimAngle) * dashDist));
+            player.y = Math.max(player.r, Math.min(WORLD_H - player.r, player.y + Math.sin(player.aimAngle) * dashDist));
+
+            addEffect('dash', startX, startY, '#feca57', 0, 16, player.aimAngle, player.x, player.y);
+
+            gameState.enemies.forEach(e => {
+                const d = distToSegment(e.x, e.y, startX, startY, player.x, player.y);
+                if (d < e.r + 48 * areaMult) {
+                    damageEnemy(e, dmg * 2.2);
+                }
+            });
+        } else if (player.role === 'macrophage') {
+            const pullRadius = 230 * areaMult;
+            addEffect('ring', player.x, player.y, '#ff9ff3', pullRadius, 22);
+            gameState.tissueHealth = Math.min(100, gameState.tissueHealth + 8);
+
+            gameState.enemies.forEach(e => {
+                const dist = Math.hypot(e.x - player.x, e.y - player.y);
+                if (dist < pullRadius) {
+                    damageEnemy(e, dmg * 1.6);
+                    const pullAngle = Math.atan2(player.y - e.y, player.x - e.x);
+                    e.x += Math.cos(pullAngle) * 45;
+                    e.y += Math.sin(pullAngle) * 45;
+                }
+            });
+        } else if (player.role === 'dc_cell') {
+            // 樹突細胞技能：部署補體減速與修復力場
+            gameState.fields.push({
+                x: player.x,
+                y: player.y,
+                r: 175 * areaMult,
+                life: 300
+            });
+            addEffect('ring', player.x, player.y, '#1dd1a1', 175 * areaMult, 20);
+        }
+    }
+
+    function damageEnemy(enemy, dmg) {
+        if (enemy.hp <= 0) return;
+        enemy.hp -= dmg;
+
+        if (dmg >= 5 && gameState.dmgTexts.length < 30) {
+            gameState.dmgTexts.push({
+                x: enemy.x + (Math.random() - 0.5) * 14,
+                y: enemy.y - enemy.r,
+                text: Math.round(dmg),
+                life: 22
+            });
+        }
+
+        if (enemy.hp <= 0) {
+            SFX.play('pop');
+            gameState.score += enemy.score || 10;
+            gainXp(enemy.xp || 10);
+            addEffect('burst', enemy.x, enemy.y, enemy.color, enemy.r * 1.8, 14);
+
+            // 抗藥性分裂菌死亡時分裂為 2 隻子菌
+            if (enemy.splits) {
+                spawnChildEnemy('mini_bacteria', enemy.x - 16, enemy.y - 12);
+                spawnChildEnemy('mini_bacteria', enemy.x + 16, enemy.y + 12);
+            }
+        }
+    }
+
+    function gainXp(amount) {
+        gameState.xp += amount;
+        while (gameState.xp >= gameState.maxXp) {
+            gameState.xp -= gameState.maxXp;
+            gameState.level++;
+            gameState.maxXp = Math.round(gameState.maxXp * 1.35);
+            pendingUpgrades++;
+            if (upgradeDrawer.classList.contains('hidden')) {
+                offerUpgrades();
+            }
+        }
+    }
+
+    function spawnEnemy(forcedType) {
+        const angle = Math.random() * Math.PI * 2;
+        const R = Math.hypot(WORLD_W / 2, WORLD_H / 2) + 40;
+        const x = CORE_X + Math.cos(angle) * R;
+        const y = CORE_Y + Math.sin(angle) * R;
+
+        let typeKey = forcedType || 'virus';
+        if (!forcedType) {
+            const rand = Math.random();
+            if (gameState.wave >= 3 && rand < 0.22) {
+                typeKey = 'bacteria';
+            } else if (gameState.wave >= 2 && rand < 0.52) {
+                typeKey = 'fast_virus';
+            }
+        }
+
+        spawnChildEnemy(typeKey, x, y);
+    }
+
+    function spawnChildEnemy(typeKey, x, y) {
+        const tpl = CONFIG.enemyTypes[typeKey] || CONFIG.enemyTypes.virus;
+        const hpScale = 1 + (gameState.wave - 1) * 0.15;
+
+        gameState.enemies.push({
+            id: Math.random().toString(36).slice(2, 9),
+            typeKey: typeKey,
+            name: tpl.name,
+            x: x,
+            y: y,
+            hp: tpl.hp * hpScale,
+            maxHp: tpl.hp * hpScale,
+            r: tpl.r,
+            speed: tpl.speed * (1 + Math.min(0.4, (gameState.wave - 1) * 0.03)),
+            color: tpl.color,
+            spikes: tpl.spikes,
+            score: tpl.score,
+            xp: tpl.xp,
+            coreDmg: tpl.coreDmg,
+            splits: !!tpl.splits,
+            isBoss: !!tpl.isBoss,
+            slowTimer: 0
+        });
+    }
+
+    function addEffect(type, x, y, color, radius, maxLife, angle = 0, tx = 0, ty = 0) {
+        gameState.effects.push({
+            type, x, y, color, radius, life: maxLife, maxLife, angle, tx, ty
+        });
+    }
+
+    function distToSegment(px, py, x1, y1, x2, y2) {
+        const l2 = (x2 - x1) ** 2 + (y2 - y1) ** 2;
+        if (l2 === 0) return Math.hypot(px - x1, py - y1);
+        let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
+        t = Math.max(0, Math.min(1, t));
+        return Math.hypot(px - (x1 + t * (x2 - x1)), py - (y1 + t * (y2 - y1)));
+    }
+
+    function triggerGameOver(isVictory) {
+        gameRunning = false;
+        upgradeDrawer.classList.add('hidden');
+        const endTitle = document.getElementById('end-title');
+        const endSub = document.getElementById('end-subtitle');
+        if (isVictory) {
+            endTitle.innerText = '🎉 免疫防禦成功！';
+            endTitle.style.color = '#2ed573';
+            endSub.innerText = '你們成功守護了人體組織核心，撐過了完整的挑戰時間！';
+            SFX.play('levelup');
+        } else {
+            endTitle.innerText = '⚠️ 核心組織已受損壞死';
+            endTitle.style.color = '#ff4757';
+            endSub.innerText = '病原體突破了免疫防線，但你們展現了頑強的抵抗！';
+            SFX.play('hurt');
+        }
+        document.getElementById('final-wave').innerText = gameState.wave;
+        document.getElementById('final-score').innerText = gameState.score;
+        document.getElementById('final-lvl').innerText = 'Lv.' + gameState.level;
+        showPanel('gameover-panel');
+    }
+
+    // =========================================================================
+    // 4. 渲染系統 (HTML5 Canvas 60FPS + 準星輔助 + Boss 邊緣預警)
+    // =========================================================================
+    function renderScene() {
+        // 1. 背景漸層 (發燒時轉為熾熱橘紅)
+        const grad = ctx.createRadialGradient(
+            canvas.width / 2, canvas.height / 2, 50,
+            canvas.width / 2, canvas.height / 2, Math.max(canvas.width, canvas.height) * 0.75
+        );
+        if (gameState.feverTimer > 0) {
+            grad.addColorStop(0, '#5c1608');
+            grad.addColorStop(1, '#1f0402');
+        } else {
+            grad.addColorStop(0, '#3b0816');
+            grad.addColorStop(1, '#120206');
+        }
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.save();
+        ctx.translate(viewOffsetX, viewOffsetY);
+        ctx.scale(viewScale, viewScale);
+
+        // 2. 繪製世界邊界與漂浮紅血球背景
+        ctx.strokeStyle = 'rgba(255, 100, 120, 0.14)';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(0, 0, WORLD_W, WORLD_H);
+
+        bgCells.forEach(c => {
+            c.x = (c.x + c.vx + WORLD_W) % WORLD_W;
+            c.y = (c.y + c.vy + WORLD_H) % WORLD_H;
+            ctx.beginPath();
+            ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(220, 40, 60, ${c.alpha})`;
+            ctx.fill();
         });
 
-        // 玩家
-        Object.values(state.players).forEach(p => {
-            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-            const c = createSVG('circle', { cx: p.x, cy: p.y, r: p.r, fill: p.color, stroke: 'white', 'stroke-width': 2, class: 'player-circle', filter: 'url(#glow)' });
-            
-            // 角色方向指示 (B細胞顯示箭頭)
-            if(p.role === 'b_cell') {
-               // 簡單畫一個小點代表面向
+        // 3. 繪製樹突細胞的補體力場
+        gameState.fields.forEach(f => {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(29, 209, 161, 0.12)';
+            ctx.fill();
+            ctx.lineWidth = 2.5;
+            ctx.strokeStyle = 'rgba(29, 209, 161, 0.6)';
+            ctx.setLineDash([8, 6]);
+            ctx.stroke();
+            ctx.restore();
+        });
+
+        // 4. 繪製中央組織核心
+        const pulse = Math.sin(Date.now() * 0.005) * 4;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(CORE_X, CORE_Y, CORE_R + pulse, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 71, 87, 0.22)';
+        ctx.fill();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = '#ff6b81';
+        ctx.setLineDash([10, 6]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.beginPath();
+        ctx.arc(CORE_X, CORE_Y, CORE_R * 0.65, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 107, 129, 0.45)';
+        ctx.fill();
+
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 16px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('組織核心', CORE_X, CORE_Y);
+        ctx.restore();
+
+        // 5. 繪製 ATP 能量修復球
+        gameState.pickups.forEach(pk => {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(pk.x, pk.y, pk.r, 0, Math.PI * 2);
+            ctx.fillStyle = '#7bed9f';
+            ctx.shadowColor = '#2ed573';
+            ctx.shadowBlur = 12;
+            ctx.fill();
+            ctx.fillStyle = '#111';
+            ctx.font = 'bold 11px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('ATP', pk.x, pk.y);
+            ctx.restore();
+        });
+
+        // 6. 繪製特效 (震波、斬擊、衝刺軌跡)
+        gameState.effects.forEach(ef => {
+            const ratio = ef.life / ef.maxLife;
+            ctx.save();
+            if (ef.type === 'ring' || ef.type === 'burst') {
+                const currentR = ef.radius * (1.15 - ratio * 0.6);
+                ctx.beginPath();
+                ctx.arc(ef.x, ef.y, Math.max(2, currentR), 0, Math.PI * 2);
+                ctx.strokeStyle = ef.color;
+                ctx.globalAlpha = ratio;
+                ctx.lineWidth = 4;
+                ctx.stroke();
+            } else if (ef.type === 'slash') {
+                ctx.translate(ef.x, ef.y);
+                ctx.rotate(ef.angle);
+                ctx.beginPath();
+                ctx.arc(0, 0, ef.radius, -Math.PI * 0.45, Math.PI * 0.45);
+                ctx.strokeStyle = ef.color;
+                ctx.globalAlpha = ratio;
+                ctx.lineWidth = 8;
+                ctx.stroke();
+            } else if (ef.type === 'dash') {
+                ctx.beginPath();
+                ctx.moveTo(ef.x, ef.y);
+                ctx.lineTo(ef.tx, ef.ty);
+                ctx.strokeStyle = ef.color;
+                ctx.globalAlpha = ratio;
+                ctx.lineWidth = 14 * ratio;
+                ctx.lineCap = 'round';
+                ctx.stroke();
+            } else if (ef.type === 'hit') {
+                ctx.beginPath();
+                ctx.arc(ef.x, ef.y, ef.radius * (1 - ratio), 0, Math.PI * 2);
+                ctx.fillStyle = ef.color;
+                ctx.globalAlpha = ratio;
+                ctx.fill();
+            }
+            ctx.restore();
+        });
+
+        // 7. 繪製 Y 型抗體與干擾素投射物
+        gameState.projectiles.forEach(p => {
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            ctx.rotate(p.angle || Math.atan2(p.dy, p.dx));
+            ctx.strokeStyle = p.color || '#fff200';
+            ctx.lineWidth = 3;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(-7, 0);
+            ctx.lineTo(2, 0);
+            ctx.lineTo(8, -5);
+            ctx.moveTo(2, 0);
+            ctx.lineTo(8, 5);
+            ctx.stroke();
+            ctx.restore();
+        });
+
+        // 8. 繪製敵人 (帶有棘突的病毒/細菌與血條)
+        gameState.enemies.forEach(e => {
+            ctx.save();
+            ctx.translate(e.x, e.y);
+
+            const spikes = e.spikes || 7;
+            ctx.strokeStyle = e.slowTimer > 0 ? '#48dbfb' : e.color;
+            ctx.lineWidth = e.isBoss ? 5 : 3;
+            for (let i = 0; i < spikes; i++) {
+                const a = (Math.PI * 2 / spikes) * i + (gameState.tick * 0.02);
+                ctx.beginPath();
+                ctx.moveTo(Math.cos(a) * (e.r - 2), Math.sin(a) * (e.r - 2));
+                ctx.lineTo(Math.cos(a) * (e.r + (e.isBoss ? 12 : 6)), Math.sin(a) * (e.r + (e.isBoss ? 12 : 6)));
+                ctx.stroke();
             }
 
-            const t = createSVG('text', { x: p.x, y: p.y - p.r - 10, fill: 'white', 'text-anchor': 'middle', 'font-size': 14, 'font-weight': 'bold' });
-            t.textContent = p.id === myId ? "我" : "隊友";
-            g.appendChild(c); g.appendChild(t);
-            svgLayer.appendChild(g);
+            ctx.beginPath();
+            ctx.arc(0, 0, e.r, 0, Math.PI * 2);
+            ctx.fillStyle = e.color;
+            ctx.fill();
+            ctx.lineWidth = e.isBoss ? 3.5 : 2;
+            ctx.strokeStyle = e.slowTimer > 0 ? '#48dbfb' : '#ffffff';
+            ctx.stroke();
+
+            if (e.isBoss || e.hp < e.maxHp) {
+                const bw = Math.max(36, e.r * 2.2);
+                ctx.fillStyle = 'rgba(0,0,0,0.65)';
+                ctx.fillRect(-bw / 2, -e.r - 14, bw, 6);
+                ctx.fillStyle = e.isBoss ? '#ffd43b' : '#ff4757';
+                ctx.fillRect(-bw / 2, -e.r - 14, bw * Math.max(0, e.hp / e.maxHp), 6);
+            }
+            if (e.isBoss) {
+                ctx.fillStyle = '#ffd43b';
+                ctx.font = 'bold 13px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('BOSS 變異病毒王', 0, -e.r - 20);
+            }
+            ctx.restore();
         });
-    }
 
-    function createSVG(type, attrs) {
-        const el = document.createElementNS("http://www.w3.org/2000/svg", type);
-        for (let k in attrs) el.setAttribute(k, attrs[k]);
-        return el;
-    }
+        // 9. 繪製免疫細胞玩家與電腦瞄準虛線準星
+        Object.values(gameState.players).forEach(p => {
+            ctx.save();
+            ctx.translate(p.x, p.y);
 
-    function showPanel(id) {
-        ['menu-panel', 'copy-panel'].forEach(p => document.getElementById(p).classList.add('hidden'));
-        if(id) document.getElementById(id).classList.remove('hidden');
-    }
+            // 如果是本地玩家，繪製清楚的發射方向瞄準輔助虛線與準星
+            if (p.id === myId && gameRunning) {
+                const aimDist = 140;
+                const targetX = Math.cos(p.aimAngle) * aimDist;
+                const targetY = Math.sin(p.aimAngle) * aimDist;
 
-    function startGame(hosting) {
-        // 嘗試進入全螢幕
-        if (document.documentElement.requestFullscreen) {
-            document.documentElement.requestFullscreen().catch(e => console.log(e));
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(Math.cos(p.aimAngle) * (p.r + 6), Math.sin(p.aimAngle) * (p.r + 6));
+                ctx.lineTo(targetX, targetY);
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([6, 6]);
+                ctx.stroke();
+
+                // 準星圓環
+                ctx.setLineDash([]);
+                ctx.beginPath();
+                ctx.arc(targetX, targetY, 8, 0, Math.PI * 2);
+                ctx.strokeStyle = autoAimMode ? '#7bed9f' : '#ffd43b';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // 瞄準方向指示器
+            const aimX = Math.cos(p.aimAngle) * (p.r + 10);
+            const aimY = Math.sin(p.aimAngle) * (p.r + 10);
+            ctx.beginPath();
+            ctx.arc(aimX, aimY, 5, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+
+            // 細胞主體與光暈
+            ctx.beginPath();
+            ctx.arc(0, 0, p.r, 0, Math.PI * 2);
+            ctx.fillStyle = p.color;
+            ctx.shadowColor = p.color;
+            ctx.shadowBlur = 15;
+            ctx.fill();
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = '#ffffff';
+            ctx.stroke();
+
+            // 細胞核裝飾
+            ctx.beginPath();
+            ctx.arc(-p.r * 0.2, -p.r * 0.15, p.r * 0.38, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.18)';
+            ctx.fill();
+
+            // 技能冷卻環
+            const roleCfg = CONFIG.roles[p.role];
+            if (roleCfg && p.skillTimer > 0) {
+                const maxSkillCd = roleCfg.skillCd * (p.cdMult || 1);
+                const cdRatio = Math.min(1, p.skillTimer / maxSkillCd);
+                ctx.beginPath();
+                ctx.arc(0, 0, p.r + 6, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - cdRatio));
+                ctx.strokeStyle = '#70a1ff';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+            }
+
+            // 玩家標籤
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 14px sans-serif';
+            ctx.textAlign = 'center';
+            const tag = p.id === myId ? `★ 我 (${roleCfg ? roleCfg.name : ''})` : (p.label || '隊友');
+            ctx.fillText(tag, 0, -p.r - 12);
+
+            ctx.restore();
+        });
+
+        // 10. 繪製浮動傷害數字
+        gameState.dmgTexts.forEach(dt => {
+            ctx.save();
+            ctx.fillStyle = '#ffd43b';
+            ctx.font = 'bold 14px monospace';
+            ctx.globalAlpha = dt.life / 22;
+            ctx.textAlign = 'center';
+            ctx.fillText('-' + dt.text, dt.x, dt.y);
+            ctx.restore();
+        });
+
+        ctx.restore();
+
+        // 更新頂部 HUD 數值
+        const hpPct = Math.max(0, Math.round(gameState.tissueHealth));
+        hpText.innerText = hpPct + '%';
+        healthFill.style.width = hpPct + '%';
+        if (hpPct > 50) {
+            healthFill.style.background = 'linear-gradient(90deg, #2ed573, #7bed9f)';
+        } else if (hpPct > 25) {
+            healthFill.style.background = 'linear-gradient(90deg, #ffa502, #ffccc6)';
+        } else {
+            healthFill.style.background = 'linear-gradient(90deg, #ff4757, #ff6b81)';
         }
-        isHost = hosting;
-        initPeer(hosting);
+
+        waveVal.innerText = gameState.wave;
+        scoreVal.innerText = gameState.score;
+        lvlText.innerText = `🧬 免疫記憶 Lv.${gameState.level}`;
+        xpText.innerText = `${gameState.xp} / ${gameState.maxXp} EXP`;
+        xpFill.style.width = Math.min(100, Math.round((gameState.xp / gameState.maxXp) * 100)) + '%';
+
+        if (gameState.gameMode === 'timed') {
+            const totalSec = Math.ceil(gameState.timeLeft / 60);
+            const m = String(Math.floor(totalSec / 60)).padStart(2, '0');
+            const s = String(totalSec % 60).padStart(2, '0');
+            timerVal.innerText = `${m}:${s}`;
+        }
     }
 
-    // 單人模式：不初始化 Peer，只建立本地玩家並啟動主循環
-    function startSolo() {
-        if (document.documentElement.requestFullscreen) {
-            document.documentElement.requestFullscreen().catch(e => console.log(e));
+    // --- 主循環 ---
+    function masterLoop() {
+        if (gameRunning) {
+            sampleLocalInput();
+            if (isHost) {
+                updateHostGame();
+            }
         }
-        soloMode = true;
-        isHost = false; // soloMode 用 isHost 流程的核心邏輯但不廣播
-        myId = 'solo-' + Math.random().toString(16).slice(2,8);
-        addPlayer(myId, document.getElementById('role-select').value);
-        showPanel(null);
-        controlsLayer.classList.remove('hidden');
-        statusDiv.innerText = '單人模式';
-        requestAnimationFrame(gameLoopHost); // 使用同一套迴圈 (connections 為空)
-        generateQr(); // 仍可產生 QR 供自己分享頁面
-        const help = document.getElementById('kbd-help'); if(help) help.style.display='block';
+        renderScene();
+        requestAnimationFrame(masterLoop);
+    }
+
+    // --- 分享與 QR Code 功能 ---
+    function getShareUrl(roomCode) {
+        const baseUrl = window.location.href.split('?')[0].split('#')[0];
+        return roomCode ? `${baseUrl}?room=${encodeURIComponent(roomCode)}` : baseUrl;
     }
 
     function copyId() {
-        const copyText = document.getElementById("my-peer-id");
-        copyText.select();
-        copyText.setSelectionRange(0, 99999); // Mobile
-        navigator.clipboard.writeText(copyText.value).then(() => {
-            alert("ID 已複製！");
+        const code = document.getElementById('my-peer-id').innerText.trim();
+        navigator.clipboard.writeText(code).then(() => {
+            alert('已複製房間代碼：' + code);
+        }).catch(() => {
+            prompt('請手動複製房間代碼：', code);
         });
     }
 
-    function gameOver() {
-        alert("組織已壞死！重新載入...");
-        location.reload();
-    }
-    
-    // 背景
-    for(let i=0; i<4; i++) {
-        let path = `M0 ${Math.random()*window.innerHeight} Q${window.innerWidth/2} ${Math.random()*window.innerHeight} ${window.innerWidth} ${Math.random()*window.innerHeight}`;
-        document.getElementById('background-layer').appendChild(createSVG('path', {d:path, class:'vein-bg'}));
+    function copyShareLink() {
+        const code = document.getElementById('my-peer-id').innerText.trim();
+        const url = getShareUrl(code);
+        navigator.clipboard.writeText(url).then(() => {
+            alert('已複製邀請連結！傳給朋友即可直接加入房間。');
+        }).catch(() => {
+            prompt('請手動複製邀請連結：', url);
+        });
     }
 
-    // --- 鍵盤與滑鼠事件 ---
-    const keyState = {};
-    function recomputeKeyboardVector(){
-        const left = keyState['a']||keyState['ArrowLeft'] ? -1 : 0;
-        const right = keyState['d']||keyState['ArrowRight'] ? 1 : 0;
-        const up = keyState['w']||keyState['ArrowUp'] ? -1 : 0;
-        const down = keyState['s']||keyState['ArrowDown'] ? 1 : 0;
-        const dx = left + right;
-        const dy = up + down;
-        if (dx!==0 || dy!==0) {
-            const mag = Math.sqrt(dx*dx + dy*dy);
-            keyboardData.active = true;
-            keyboardData.dx = dx / mag;
-            keyboardData.dy = dy / mag;
-            keyboardData.angle = Math.atan2(keyboardData.dy, keyboardData.dx);
-        } else {
-            keyboardData.active = false;
-        }
-        updateInputAndSend();
-    }
-    window.addEventListener('keydown', (e)=>{
-        keyState[e.key] = true;
-        if(e.key === ' '){ localInput.mouseDown = true; updateInputAndSend(); }
-        recomputeKeyboardVector();
-    });
-    window.addEventListener('keyup', (e)=>{
-        keyState[e.key] = false;
-        if(e.key === ' '){ localInput.mouseDown = false; updateInputAndSend(); }
-        recomputeKeyboardVector();
-    });
-    window.addEventListener('mousemove', (e)=>{
-        lastMousePos.x = e.clientX; lastMousePos.y = e.clientY;
-        if(!joystickData.active && !keyboardData.active){ updateInputAndSend(); }
-    });
-    window.addEventListener('mousedown', (e)=>{ if(e.button===0){ localInput.mouseDown=true; updateInputAndSend(); }});
-    window.addEventListener('mouseup', (e)=>{ if(e.button===0){ localInput.mouseDown=false; updateInputAndSend(); }});
-
-    // --- QRCode 相關函式 ---
-    function generateQr() {
+    function generateQr(roomCode) {
         const qrContainer = document.getElementById('qr-code');
         if (!qrContainer) return;
         qrContainer.innerHTML = '';
-        let url = window.location.href.split('#')[0];
+        const url = getShareUrl(roomCode);
         const localWarn = document.getElementById('qr-local-warning');
-        if (/^file:/i.test(url) || /localhost|127\.0\.0\.1|192\.168\./.test(url)) {
+        if (/^file:/i.test(url) || /localhost|127\.0\.0\.1/.test(url)) {
             if (localWarn) localWarn.style.display = 'block';
         } else if (localWarn) {
             localWarn.style.display = 'none';
@@ -696,17 +2593,14 @@
         try {
             new QRCode(qrContainer, {
                 text: url,
-                width: 180,
-                height: 180,
-                correctLevel: QRCode.CorrectLevel.H
+                width: 165,
+                height: 165,
+                correctLevel: QRCode.CorrectLevel.M
             });
-        } catch(e) {
+        } catch (e) {
             qrContainer.innerHTML = '<span style="color:#f66">QRCode 產生失敗</span>';
         }
     }
-    const qrBtn = document.getElementById('qr-refresh-btn');
-    if (qrBtn) qrBtn.addEventListener('click', generateQr);
-
 </script>
 </body>
 </html>

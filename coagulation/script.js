@@ -1,9 +1,10 @@
-// 血液凝固與傷口癒合互動模擬 (Pure HTML5 Canvas + Vanilla JS)
+// 血液凝固與傷口癒合互動模擬 (Pure HTML5 Canvas + Vanilla JS · 平板觸控優化版)
 
 const canvas = document.getElementById('sim-canvas');
 const ctx = canvas.getContext('2d');
 
 // UI Elements
+const stageStepper = document.getElementById('stage-stepper');
 const stageStepperButtons = document.querySelectorAll('.step-item');
 const canvasStageBadge = document.getElementById('canvas-stage-badge');
 const canvasPrompt = document.getElementById('canvas-prompt');
@@ -12,6 +13,7 @@ const stageProgressFill = document.getElementById('stage-progress-fill');
 const btnAuto = document.getElementById('btn-auto');
 const btnPause = document.getElementById('btn-pause');
 const btnReset = document.getElementById('btn-reset');
+const btnFullscreen = document.getElementById('btn-fullscreen');
 const btnPrev = document.getElementById('btn-prev');
 const btnAction = document.getElementById('btn-action');
 const btnAddPlatelets = document.getElementById('btn-add-platelets');
@@ -46,9 +48,9 @@ const STAGES = [
       '紅血球、白血球與圓盤狀血小板在血管內穩定流動',
       '血管內壁平滑，膠原蛋白未暴露於血液中'
     ],
-    prompt: '💡 點擊畫面中央皮膚或下方「造成傷口」按鈕，觀察皮膚受損與血管破裂！',
-    actionText: '🔪 點擊造成傷口 (進入血管破裂)',
-    duration: 999999 // 階段0等待使用者觸發或自動切換
+    prompt: '👆 用手指在中央皮膚「向下劃過」或「輕點」，切開皮膚觀察血管破裂！',
+    actionText: '🔪 劃開皮膚造成傷口 (進入階段 2)',
+    duration: 999999
   },
   {
     id: 1,
@@ -61,7 +63,7 @@ const STAGES = [
       '紅血球與血漿從破裂處大量外溢（出血現象）',
       '血管壁受損處暴露出膠原蛋白，發出凝血求救訊號'
     ],
-    prompt: '⚠️ 血管正在出血！觀察紅血球外溢，或點擊畫布加速進入「初級止血（血小板聚集）」',
+    prompt: '⚠️ 血管正在出血！輕觸傷口或等待自動進入「血管收縮與血小板聚集」',
     actionText: '🛡️ 啟動血管收縮與血小板聚集',
     duration: 9.0
   },
@@ -76,7 +78,7 @@ const STAGES = [
       '血小板黏附於受損膠原蛋白並伸出偽足（棘狀突起）',
       '活化血小板釋放化學訊號（黃色光點），召喚更多血小板聚集堵住破口'
     ],
-    prompt: '✨ 點擊畫布傷口處或「召喚更多血小板」按鈕，可手動派遣血小板加速堵住破口！',
+    prompt: '👆 用手指「連續輕點或按住傷口」，手動召喚更多活化血小板加速堵住破口！',
     actionText: '🕸️ 啟動凝血級聯與纖維蛋白網',
     duration: 12.0
   },
@@ -91,7 +93,7 @@ const STAGES = [
       '纖維蛋白網緊密纏繞血小板與紅血球，形成穩固紅血栓',
       '傷口出血完全停止，防止體液流失與病原體入侵'
     ],
-    prompt: '🕸️ 觀察金黃色纖維蛋白絲交織成網，將血小板與紅血球牢牢固定！',
+    prompt: '👆 用手指在傷口血塊上「左右來回塗抹」，親手編織金黃色纖維蛋白網！',
     actionText: '🩹 進入血塊收縮與組織修復',
     duration: 11.0
   },
@@ -106,7 +108,7 @@ const STAGES = [
       '白血球聚集至傷口區清除壞死組織與外來物',
       '血管內皮細胞逐漸癒合，纖溶酶 (Plasmin) 開始緩慢溶解多餘血栓'
     ],
-    prompt: '🩹 痂皮正在保護傷口，下方血管內皮細胞與真皮組織正在再生修復！',
+    prompt: '👆 用手指輕觸或撫過傷口，釋放生長因子加速組織與血管內皮再生！',
     actionText: '✨ 完成癒合並恢復正常',
     duration: 11.0
   },
@@ -121,7 +123,7 @@ const STAGES = [
       '表皮與血管內皮100%癒合，外層痂皮脫落',
       '血液循環重回順暢穩定狀態'
     ],
-    prompt: '🎉 傷口已完全癒合！點擊「重新模擬」或任一階段按鈕可再次觀察各細節。',
+    prompt: '🎉 傷口已完全癒合！輕點畫面或下方按鈕可重新體驗完整凝血過程。',
     actionText: '🔄 重新開始完整凝血模擬',
     duration: 999999
   }
@@ -136,8 +138,8 @@ const DERMIS_TOP = 125;
 const VESSEL_TOP_BASE = 275;
 const VESSEL_BOTTOM_BASE = 415;
 const WOUND_X = 450;
-const WOUND_HALF_W = 82; // 傷口在表皮的半寬
-const VESSEL_BREACH_HALF_W = 58; // 血管破口半寬
+const WOUND_HALF_W = 82;
+const VESSEL_BREACH_HALF_W = 58;
 
 // 模擬狀態變數
 let currentStage = 0;
@@ -148,31 +150,32 @@ let simSpeed = 1.0;
 
 // 動態過渡插值狀態 (0.0 ~ 1.0)
 let state = {
-  woundOpen: 0,         // 皮膚與血管破口開啟度
-  constriction: 0,      // 血管收縮程度 (0 = 正常, 1 = 最大收縮)
-  bleedIntensity: 0,    // 出血強度
-  plugProgress: 0,      // 血小板聚集程度 (0 ~ 1)
-  fibrinProgress: 0,    // 纖維蛋白網形成度 (0 ~ 1)
-  scabProgress: 0,      // 結痂程度 (0 ~ 1)
-  healProgress: 0,      // 血管內皮與皮膚癒合度 (0 ~ 1)
-  bladeAnim: 0          // 切割刀片動畫 (0 ~ 1)
+  woundOpen: 0,
+  constriction: 0,
+  bleedIntensity: 0,
+  plugProgress: 0,
+  fibrinProgress: 0,
+  scabProgress: 0,
+  healProgress: 0,
+  bladeAnim: 0
 };
 
-// 粒子陣列
+// 粒子與觸控視覺特效陣列
 let rbcs = [];
 let platelets = [];
 let wbcs = [];
-let signals = [];       // ADP / TXA2 化學活化訊號波與微粒
-let plugNodes = [];     // 已經固定在傷口處的血小板節點
-let fibrinStrands = []; // 纖維蛋白絲連線
-let fibroblasts = [];   // 修復階段的成纖維細胞光點
+let signals = [];
+let plugNodes = [];
+let fibrinStrands = [];
+let fibroblasts = [];
+let touchRipples = []; // 平板觸控水波紋特效
+let swipeTrail = [];   // 手指滑動軌跡點
 
 // 初始化固定在傷口處的目標血小板栓座標與纖維蛋白網拓撲
 function buildClotTopology() {
   plugNodes = [];
   fibrinStrands = [];
 
-  // 在血管破口與傷口下半部產生約 38 個交錯錨點
   const rows = 5;
   for (let r = 0; r < rows; r++) {
     const yRatio = r / (rows - 1);
@@ -188,17 +191,15 @@ function buildClotTopology() {
         y,
         filled: false,
         fillTime: 0,
-        hasRBC: Math.random() < 0.42, // 部分網眼夾帶紅血球形成紅血栓
+        hasRBC: Math.random() < 0.42,
         rbcAngle: Math.random() * Math.PI,
         seedOrder: Math.abs(xRatio) * 0.45 + yRatio * 0.55 + Math.random() * 0.15
       });
     }
   }
 
-  // 依據破口邊緣由外往內、由下往上排序，讓聚集更自然
   plugNodes.sort((a, b) => a.seedOrder - b.seedOrder);
 
-  // 建立纖維蛋白網連線 (連接相鄰節點與血管破口邊緣)
   for (let i = 0; i < plugNodes.length; i++) {
     for (let j = i + 1; j < plugNodes.length; j++) {
       const dx = plugNodes[i].x - plugNodes[j].x;
@@ -220,7 +221,6 @@ function buildClotTopology() {
 // 取得特定 X 座標處的血管上下壁 Y 座標 (考慮血管痙攣收縮)
 function getVesselWalls(x) {
   const distFromWound = Math.abs(x - WOUND_X);
-  // 傷口附近血管平滑肌反射性收縮
   const localFactor = Math.exp(-(distFromWound * distFromWound) / (2 * 165 * 165));
   const pinch = state.constriction * 26 * localFactor;
   return {
@@ -229,7 +229,6 @@ function getVesselWalls(x) {
   };
 }
 
-// 生成單顆紅血球
 function createRBC(x = -30) {
   const walls = getVesselWalls(x);
   const margin = 16;
@@ -248,7 +247,6 @@ function createRBC(x = -30) {
   };
 }
 
-// 生成單顆血小板
 function createPlatelet(x = -20, forcedActive = false) {
   const walls = getVesselWalls(x);
   const y = walls.top + 10 + Math.random() * (walls.bottom - walls.top - 20);
@@ -264,7 +262,6 @@ function createPlatelet(x = -20, forcedActive = false) {
   };
 }
 
-// 生成單顆白血球
 function createWBC(x = -35) {
   const walls = getVesselWalls(x);
   const y = walls.top + 22 + Math.random() * (walls.bottom - walls.top - 44);
@@ -281,13 +278,14 @@ function createWBC(x = -35) {
   };
 }
 
-// 初始化所有血液粒子
 function initParticles() {
   rbcs = [];
   platelets = [];
   wbcs = [];
   signals = [];
   fibroblasts = [];
+  touchRipples = [];
+  swipeTrail = [];
 
   for (let i = 0; i < 55; i++) {
     rbcs.push(createRBC(Math.random() * W));
@@ -313,7 +311,6 @@ function setStage(stageIndex) {
   currentStage = Math.max(0, Math.min(STAGES.length - 1, stageIndex));
   stageTime = 0;
 
-  // 若切換到不同階段，設定符合該階段起點的基礎狀態，讓使用者也能直接跳轉觀看
   if (currentStage === 0) {
     state.woundOpen = 0;
     state.constriction = 0;
@@ -324,11 +321,10 @@ function setStage(stageIndex) {
     state.healProgress = 0;
     state.bladeAnim = 0;
     buildClotTopology();
-    // 清除外溢粒子
     rbcs.forEach(r => { r.escaped = false; r.trapped = false; });
     wbcs.forEach(w => { w.inTissue = false; });
   } else if (currentStage === 1) {
-    state.bladeAnim = 0.01; // 觸發刀片劃過動畫
+    state.bladeAnim = 0.01;
     state.woundOpen = Math.max(state.woundOpen, 0.2);
     state.constriction = 0.1;
     state.plugProgress = 0;
@@ -360,7 +356,6 @@ function setStage(stageIndex) {
     state.fibrinProgress = 1;
     state.healProgress = Math.min(state.healProgress, 0.2);
     updatePlugNodesFromProgress();
-    // 讓幾顆白血球進入組織清理
     wbcs.forEach((w, idx) => {
       if (idx < 4) w.inTissue = true;
     });
@@ -383,13 +378,17 @@ function updatePlugNodesFromProgress() {
   });
 }
 
-// 更新右側與底部 UI
 function updateUIForStage() {
   const st = STAGES[currentStage];
 
   stageStepperButtons.forEach((btn, idx) => {
-    btn.classList.toggle('active', idx === currentStage);
+    const isActive = idx === currentStage;
+    btn.classList.toggle('active', isActive);
     btn.classList.toggle('completed', idx < currentStage);
+    // 在平板較窄寬度下自動將當前階段滾動至導覽列視野中央
+    if (isActive && stageStepper) {
+      btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
   });
 
   canvasStageBadge.textContent = st.badge;
@@ -410,45 +409,40 @@ function updateUIForStage() {
   btnNext.disabled = currentStage === STAGES.length - 1;
   btnAction.textContent = st.actionText;
 
-  // 在階段 2 (血小板聚集) 顯示「召喚更多血小板」互動按鈕
   btnAddPlatelets.style.display = currentStage === 2 ? 'inline-flex' : 'none';
 }
 
-// 觸發額外血小板支援 (使用者互動)
+// 觸發額外血小板支援 (使用者觸控或點擊)
 function spawnReinforcementPlatelets(targetX = WOUND_X, targetY = VESSEL_TOP_BASE) {
-  // 釋放一波活化訊號光環
   signals.push({
     x: targetX,
     y: targetY,
     r: 6,
     maxR: 135,
-    alpha: 0.95
+    alpha: 0.95,
+    color: '250, 204, 21'
   });
 
-  // 從左側血管上游湧入 8 顆已活化的血小板直奔破口
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 6; i++) {
     const p = createPlatelet(WOUND_X - 180 - Math.random() * 90, true);
-    p.vx = 210 + Math.random() * 60;
+    p.vx = 215 + Math.random() * 60;
     platelets.push(p);
   }
 
-  // 直接推進一點血小板栓塞進度
   if (currentStage === 2) {
-    state.plugProgress = Math.min(1, state.plugProgress + 0.14);
+    state.plugProgress = Math.min(1, state.plugProgress + 0.09);
     updatePlugNodesFromProgress();
   }
 }
 
 // 更新生理指標儀表板
 function updateMetricsUI() {
-  // 血管管徑 (100% -> 65% 收縮)
   const vesselPct = Math.round(100 - state.constriction * 35);
   metricVesselText.textContent = state.constriction > 0.15
     ? `${vesselPct}% (反射性血管收縮)`
     : `${vesselPct}% (正常管徑)`;
   barVessel.style.width = `${vesselPct}%`;
 
-  // 出血速率
   const bleedPct = Math.round(state.bleedIntensity * 100);
   if (bleedPct === 0) {
     metricBleedText.textContent = '0% (無出血)';
@@ -459,7 +453,6 @@ function updateMetricsUI() {
   }
   barBleed.style.width = `${bleedPct}%`;
 
-  // 凝血塊完整度 (血小板栓佔 50%，纖維蛋白網佔 50%)
   const clotRaw = (state.plugProgress * 0.5 + state.fibrinProgress * 0.5) * (1 - (currentStage === 5 ? state.healProgress * 0.9 : 0));
   const clotPct = Math.round(clotRaw * 100);
   if (currentStage === 5 && state.healProgress > 0.85) {
@@ -473,7 +466,6 @@ function updateMetricsUI() {
   }
   barClot.style.width = `${clotPct}%`;
 
-  // 組織與血管修復度
   let healPct = 100;
   if (currentStage === 0) {
     healPct = 100;
@@ -501,7 +493,6 @@ function updateSimulation(dt) {
     stageProgressFill.style.width = currentStage === 5 ? '100%' : '0%';
   }
 
-  // 根據當前階段平滑更新各項生理參數
   if (currentStage === 0) {
     state.woundOpen = 0;
     state.constriction = 0;
@@ -511,7 +502,6 @@ function updateSimulation(dt) {
     state.scabProgress = 0;
     state.healProgress = 1;
   } else if (currentStage === 1) {
-    // 刀片劃過與傷口裂開
     if (state.bladeAnim > 0 && state.bladeAnim < 1) {
       state.bladeAnim = Math.min(1, state.bladeAnim + scaledDt * 1.8);
     }
@@ -520,32 +510,29 @@ function updateSimulation(dt) {
     state.bleedIntensity = state.woundOpen * 0.95;
     state.healProgress = 0;
   } else if (currentStage === 2) {
-    // 血管收縮 + 血小板聚集
     state.woundOpen = 1;
     state.constriction = Math.min(0.95, state.constriction + scaledDt * 0.35);
     state.plugProgress = Math.min(1, state.plugProgress + scaledDt * 0.085);
     updatePlugNodesFromProgress();
     state.bleedIntensity = Math.max(0.08, (1 - state.plugProgress * 0.9) * 0.75);
 
-    // 定期釋放 ADP / TXA2 化學吸引訊號波
     if (Math.random() < scaledDt * 2.2) {
       signals.push({
         x: WOUND_X + (Math.random() - 0.5) * 50,
         y: VESSEL_TOP_BASE + 12,
         r: 5,
         maxR: 95,
-        alpha: 0.85
+        alpha: 0.85,
+        color: '250, 204, 21'
       });
     }
   } else if (currentStage === 3) {
-    // 纖維蛋白網形成，完全止血
     state.plugProgress = 1;
     updatePlugNodesFromProgress();
     state.constriction = Math.max(0.65, state.constriction - scaledDt * 0.05);
     state.fibrinProgress = Math.min(1, state.fibrinProgress + scaledDt * 0.11);
     state.bleedIntensity = Math.max(0, (1 - state.fibrinProgress * 2.5) * 0.1);
   } else if (currentStage === 4) {
-    // 結痂與內皮組織修復
     state.plugProgress = 1;
     state.fibrinProgress = 1;
     state.bleedIntensity = 0;
@@ -553,7 +540,6 @@ function updateSimulation(dt) {
     state.scabProgress = Math.min(1, state.scabProgress + scaledDt * 0.18);
     state.healProgress = Math.min(0.75, state.healProgress + scaledDt * 0.07);
   } else if (currentStage === 5) {
-    // 纖溶作用分解血塊，完全恢復正常
     state.bleedIntensity = 0;
     state.constriction = Math.max(0, state.constriction - scaledDt * 0.15);
     state.healProgress = Math.min(1, state.healProgress + scaledDt * 0.12);
@@ -570,13 +556,24 @@ function updateSimulation(dt) {
     }
   }
 
+  // 更新觸控漣漪與滑動軌跡 (即使暫停動畫也淡出)
+  for (let i = touchRipples.length - 1; i >= 0; i--) {
+    const rp = touchRipples[i];
+    rp.r += dt * 90;
+    rp.alpha -= dt * 1.6;
+    if (rp.alpha <= 0) touchRipples.splice(i, 1);
+  }
+  for (let i = swipeTrail.length - 1; i >= 0; i--) {
+    swipeTrail[i].alpha -= dt * 2.8;
+    if (swipeTrail[i].alpha <= 0) swipeTrail.splice(i, 1);
+  }
+
   // 更新紅血球 (RBCs)
   const breachOpen = state.woundOpen > 0.3 && state.bleedIntensity > 0.05;
   for (let i = 0; i < rbcs.length; i++) {
     const r = rbcs[i];
 
     if (r.trapped) {
-      // 在階段 5 隨纖溶作用釋放或淡出
       if (currentStage === 5 && state.healProgress > 0.85) {
         r.trapped = false;
         r.escaped = false;
@@ -586,12 +583,10 @@ function updateSimulation(dt) {
     }
 
     if (r.escaped) {
-      // 已流到傷口腔室或皮膚表面的紅血球
       r.x += r.vx * scaledDt * 0.25;
       r.y += r.vy * scaledDt;
       r.angle += r.vAngle * scaledDt * 0.3;
 
-      // 在傷口槽內堆積或慢慢凝結
       if (r.y < SKIN_TOP + 12) {
         r.vy = Math.max(0, r.vy);
       }
@@ -599,7 +594,6 @@ function updateSimulation(dt) {
         r.vx *= 0.92;
         r.vy *= 0.92;
       }
-      // 階段 4~5 被巨噬細胞清除與結痂吸收
       if (currentStage >= 4) {
         r.alpha = Math.max(0, r.alpha - scaledDt * 0.25);
         if (r.alpha <= 0) {
@@ -609,14 +603,12 @@ function updateSimulation(dt) {
       continue;
     }
 
-    // 血管內正常流動
     const walls = getVesselWalls(r.x);
-    const speedFactor = 1 + state.constriction * 0.35; // 管徑變窄時流速略快
+    const speedFactor = 1 + state.constriction * 0.35;
     r.x += r.vx * speedFactor * scaledDt;
     r.y += r.vy * scaledDt;
     r.angle += r.vAngle * scaledDt;
 
-    // 破口處外溢判定 (Stage 1 & Stage 2 未完全堵住前)
     const inBreachX = Math.abs(r.x - WOUND_X) < VESSEL_BREACH_HALF_W * 0.85;
     if (breachOpen && inBreachX && r.y < walls.top + 38) {
       if (Math.random() < state.bleedIntensity * 0.16) {
@@ -627,7 +619,6 @@ function updateSimulation(dt) {
       }
     }
 
-    // 血管上下壁邊界反彈
     if (r.y - r.radius < walls.top + 4) {
       r.y = walls.top + 4 + r.radius;
       r.vy = Math.abs(r.vy) * 0.6;
@@ -647,11 +638,9 @@ function updateSimulation(dt) {
     const p = platelets[i];
     const walls = getVesselWalls(p.x);
 
-    // 階段 2 & 3：靠近傷口時被膠原蛋白與化學訊號活化並吸引至破口節點
     if ((currentStage === 2 || currentStage === 3) && Math.abs(p.x - WOUND_X) < 160) {
       p.activated = true;
 
-      // 尋找尚未填滿的血小板栓節點
       if (!p.targetNode) {
         const emptyNode = plugNodes.find(n => !n.filled);
         if (emptyNode && Math.random() < 0.35) {
@@ -665,7 +654,6 @@ function updateSimulation(dt) {
         const dist = Math.hypot(dx, dy);
         if (dist < 12) {
           p.targetNode.filled = true;
-          // 補一顆新血小板從左側進入
           platelets[i] = createPlatelet(-20);
           continue;
         } else {
@@ -702,7 +690,6 @@ function updateSimulation(dt) {
     const w = wbcs[i];
     w.wobblePhase += scaledDt * 3;
 
-    // 階段 3~4 部分白血球穿出血管進入受損真皮層清除碎片
     if ((currentStage === 3 || currentStage === 4) && !w.inTissue && Math.abs(w.x - WOUND_X) < 45 && i < 4) {
       w.inTissue = true;
     }
@@ -745,16 +732,13 @@ function updateSimulation(dt) {
 
 // ==================== 繪圖函式 ====================
 
-// 1. 繪製背景、表皮層、真皮層與血管外部組織
 function drawTissueAndSkin() {
-  // 體外空氣背景 (上方)
   const skyGrad = ctx.createLinearGradient(0, 0, 0, SKIN_TOP);
   skyGrad.addColorStop(0, '#090d16');
   skyGrad.addColorStop(1, '#131c2e');
   ctx.fillStyle = skyGrad;
   ctx.fillRect(0, 0, W, SKIN_TOP);
 
-  // 真皮層與皮下組織底色
   const dermisGrad = ctx.createLinearGradient(0, DERMIS_TOP, 0, H);
   dermisGrad.addColorStop(0, '#fca5a5');
   dermisGrad.addColorStop(0.32, '#f87171');
@@ -763,7 +747,6 @@ function drawTissueAndSkin() {
   ctx.fillStyle = dermisGrad;
   ctx.fillRect(0, DERMIS_TOP, W, H - DERMIS_TOP);
 
-  // 真皮層膠原蛋白纖維網紋理 (Collagen Fibers)
   ctx.save();
   ctx.strokeStyle = 'rgba(254, 226, 226, 0.22)';
   ctx.lineWidth = 2;
@@ -778,7 +761,6 @@ function drawTissueAndSkin() {
   }
   ctx.restore();
 
-  // 表皮層 (Epidermis)
   const epiGrad = ctx.createLinearGradient(0, SKIN_TOP, 0, EPIDERMIS_BOTTOM);
   epiGrad.addColorStop(0, '#fdba74');
   epiGrad.addColorStop(0.25, '#fed7aa');
@@ -786,7 +768,6 @@ function drawTissueAndSkin() {
   ctx.fillStyle = epiGrad;
   ctx.fillRect(0, SKIN_TOP, W, EPIDERMIS_BOTTOM - SKIN_TOP);
 
-  // 表皮與真皮交界處的波浪狀基底膜 (Dermal Papillae)
   ctx.fillStyle = '#fca5a5';
   ctx.beginPath();
   ctx.moveTo(0, EPIDERMIS_BOTTOM);
@@ -799,7 +780,6 @@ function drawTissueAndSkin() {
   ctx.closePath();
   ctx.fill();
 
-  // 表皮最外層角質線條
   ctx.strokeStyle = '#ea580c';
   ctx.lineWidth = 3;
   ctx.beginPath();
@@ -807,7 +787,6 @@ function drawTissueAndSkin() {
   ctx.lineTo(W, SKIN_TOP);
   ctx.stroke();
 
-  // 組織分層標籤 (左側半透明標示)
   ctx.save();
   ctx.font = '600 12px sans-serif';
   ctx.fillStyle = 'rgba(15, 23, 42, 0.65)';
@@ -819,15 +798,12 @@ function drawTissueAndSkin() {
   ctx.restore();
 }
 
-// 2. 繪製微血管通道與內皮細胞牆
 function drawBloodVessel() {
   const step = 15;
-  // 取得修復後的有效破口寬度
   const effectiveHeal = currentStage >= 4 ? state.healProgress : 0;
   const currentWoundFactor = state.woundOpen * (1 - effectiveHeal);
   const currentBreachHalfW = VESSEL_BREACH_HALF_W * currentWoundFactor;
 
-  // 繪製血管內部深暗紅腔室背景
   ctx.save();
   ctx.beginPath();
   for (let x = 0; x <= W; x += step) {
@@ -849,7 +825,6 @@ function drawBloodVessel() {
   ctx.fill();
   ctx.restore();
 
-  // 繪製血管內皮細胞磚塊 (Endothelial Cells)
   const cellLen = 36;
   const cellThick = 11;
 
@@ -857,17 +832,14 @@ function drawBloodVessel() {
     const centerX = x + cellLen * 0.5;
     const walls = getVesselWalls(centerX);
 
-    // 下壁內皮細胞 (始終完整)
     drawEndothelialCell(centerX, walls.bottom, cellLen - 3, cellThick);
 
-    // 上壁內皮細胞 (若位於血管破口區則斷裂缺損)
     const distFromWound = Math.abs(centerX - WOUND_X);
     if (distFromWound > currentBreachHalfW) {
       drawEndothelialCell(centerX, walls.top, cellLen - 3, cellThick);
     }
   }
 
-  // 若血管有破口，在破口兩側繪製暴露的亮黃色「受損膠原蛋白纖維 (Exposed Collagen)」
   if (currentBreachHalfW > 6 && currentStage >= 1 && currentStage <= 4) {
     const leftEdge = WOUND_X - currentBreachHalfW;
     const rightEdge = WOUND_X + currentBreachHalfW;
@@ -893,7 +865,6 @@ function drawBloodVessel() {
       }
     }
 
-    // 標示暴露的膠原蛋白 (階段 1 & 2)
     if (currentStage === 1 || currentStage === 2) {
       ctx.font = 'bold 11px sans-serif';
       ctx.fillStyle = '#fef08a';
@@ -902,7 +873,6 @@ function drawBloodVessel() {
     ctx.restore();
   }
 
-  // 血管標籤
   ctx.save();
   ctx.font = '600 12px sans-serif';
   ctx.fillStyle = 'rgba(15, 23, 42, 0.65)';
@@ -922,7 +892,6 @@ function drawEndothelialCell(cx, cy, w, h) {
   ctx.fill();
   ctx.stroke();
 
-  // 內皮細胞核
   ctx.fillStyle = '#7f1d1d';
   ctx.beginPath();
   ctx.ellipse(cx, cy, 5, 2.2, 0, 0, Math.PI * 2);
@@ -930,11 +899,9 @@ function drawEndothelialCell(cx, cy, w, h) {
   ctx.restore();
 }
 
-// 3. 繪製皮膚與真皮層的 V 型受損傷口裂谷
 function drawWoundCavity() {
   if (state.woundOpen <= 0.01) return;
 
-  // 隨階段 4~5 組織癒合，傷口深度與寬度由下往上收合
   const heal = currentStage >= 4 ? state.healProgress : 0;
   const openRatio = state.woundOpen * (1 - heal * 0.92);
   if (openRatio <= 0.02) return;
@@ -952,7 +919,6 @@ function drawWoundCavity() {
   ctx.lineTo(WOUND_X + topHalfW, SKIN_TOP - 2);
   ctx.closePath();
 
-  // 傷口內部陰影與出血色澤
   const woundGrad = ctx.createLinearGradient(0, SKIN_TOP, 0, bottomY);
   if (currentStage === 1 || currentStage === 2) {
     woundGrad.addColorStop(0, '#450a0a');
@@ -966,13 +932,11 @@ function drawWoundCavity() {
   ctx.fillStyle = woundGrad;
   ctx.fill();
 
-  // 傷口兩側受損不規則邊緣線
   ctx.strokeStyle = '#7f1d1d';
   ctx.lineWidth = 2.5;
   ctx.stroke();
   ctx.restore();
 
-  // 若在階段 1 刀片剛切下，繪製鋒利刀片動畫
   if (state.bladeAnim > 0 && state.bladeAnim < 0.95) {
     const bladeY = SKIN_TOP - 40 + Math.sin(state.bladeAnim * Math.PI) * 265;
     ctx.save();
@@ -993,13 +957,12 @@ function drawWoundCavity() {
   }
 }
 
-// 4. 繪製紅血球、白血球與流動血小板
 function drawBloodCells() {
-  // 繪製化學活化訊號波 (ADP / 血栓素 A2)
   signals.forEach(s => {
     ctx.save();
-    ctx.strokeStyle = `rgba(250, 204, 21, ${s.alpha})`;
-    ctx.lineWidth = 2;
+    const rgb = s.color || '250, 204, 21';
+    ctx.strokeStyle = `rgba(${rgb}, ${s.alpha})`;
+    ctx.lineWidth = 2.2;
     ctx.setLineDash([4, 4]);
     ctx.beginPath();
     ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
@@ -1007,14 +970,12 @@ function drawBloodCells() {
     ctx.restore();
   });
 
-  // 繪製紅血球 (RBCs)
   rbcs.forEach(r => {
     ctx.save();
     ctx.globalAlpha = r.alpha;
     ctx.translate(r.x, r.y);
     ctx.rotate(r.angle);
 
-    // 雙凹圓盤外圈
     ctx.fillStyle = '#ef4444';
     ctx.strokeStyle = '#b91c1c';
     ctx.lineWidth = 1.5;
@@ -1023,7 +984,6 @@ function drawBloodCells() {
     ctx.fill();
     ctx.stroke();
 
-    // 雙凹圓盤中央凹陷暗區
     ctx.fillStyle = '#991b1b';
     ctx.beginPath();
     ctx.ellipse(0, 0, r.radius * 0.48, r.radius * 0.32, 0, 0, Math.PI * 2);
@@ -1031,7 +991,6 @@ function drawBloodCells() {
     ctx.restore();
   });
 
-  // 繪製白血球 (WBCs)
   wbcs.forEach(w => {
     ctx.save();
     ctx.translate(w.x, w.y);
@@ -1045,7 +1004,6 @@ function drawBloodCells() {
     ctx.fill();
     ctx.stroke();
 
-    // 多葉細胞核
     ctx.fillStyle = '#0284c7';
     ctx.beginPath();
     ctx.arc(-4, -2, 4.5, 0, Math.PI * 2);
@@ -1055,13 +1013,11 @@ function drawBloodCells() {
     ctx.restore();
   });
 
-  // 繪製流動中的血小板 (Platelets)
   platelets.forEach(p => {
     drawSinglePlatelet(p.x, p.y, p.angle, p.activated);
   });
 }
 
-// 繪製單顆血小板 (未活化為平滑小橢圓，活化後伸出星芒狀偽足)
 function drawSinglePlatelet(x, y, angle, activated, scale = 1) {
   ctx.save();
   ctx.translate(x, y);
@@ -1077,7 +1033,6 @@ function drawSinglePlatelet(x, y, angle, activated, scale = 1) {
     ctx.fill();
     ctx.stroke();
   } else {
-    // 活化血小板：亮黃色星芒狀帶有偽足 (Spiky pseudopods)
     ctx.fillStyle = '#fde047';
     ctx.strokeStyle = '#d97706';
     ctx.lineWidth = 1.3;
@@ -1100,11 +1055,9 @@ function drawSinglePlatelet(x, y, angle, activated, scale = 1) {
   ctx.restore();
 }
 
-// 5. 繪製傷口處聚集的「血小板栓」與「纖維蛋白網 (Fibrin Mesh)」
 function drawClotAndFibrin() {
   if (currentStage === 0) return;
 
-  // 在階段 5 (纖溶作用)，血塊隨修復完成逐漸消退
   const fibrinolysisFade = currentStage === 5
     ? Math.max(0, 1 - (state.healProgress - 0.65) * 3.0)
     : 1;
@@ -1116,7 +1069,6 @@ function drawClotAndFibrin() {
   ctx.save();
   ctx.globalAlpha = fibrinolysisFade;
 
-  // 先畫被攔截在血塊中的紅血球與活化血小板節點
   plugNodes.forEach((node, idx) => {
     if (!node.filled) return;
     const ny = node.y + pinchOffset * 0.7;
@@ -1138,7 +1090,6 @@ function drawClotAndFibrin() {
     drawSinglePlatelet(node.x, ny, idx * 0.7, true, 1.05);
   });
 
-  // 階段 3~5：繪製金黃色交織的「纖維蛋白網 (Fibrin Mesh)」
   if (state.fibrinProgress > 0.01) {
     ctx.save();
     ctx.strokeStyle = '#f59e0b';
@@ -1161,7 +1112,6 @@ function drawClotAndFibrin() {
       }
     });
 
-    // 橫跨血管破口基底的主纖維蛋白加固索
     const spanW = VESSEL_BREACH_HALF_W * 1.1;
     for (let k = 0; k < 6; k++) {
       if (state.fibrinProgress > k * 0.15) {
@@ -1178,9 +1128,7 @@ function drawClotAndFibrin() {
   ctx.restore();
 }
 
-// 6. 繪製階段 4~5 的表面結痂 (Scab) 與成纖維細胞修復特效
 function drawScabAndHealing() {
-  // 繪製成纖維細胞與新生組織微光 (Stage 4 & 5)
   if (currentStage === 4 || currentStage === 5) {
     ctx.save();
     fibroblasts.forEach(f => {
@@ -1193,10 +1141,8 @@ function drawScabAndHealing() {
     ctx.restore();
   }
 
-  // 繪製皮膚表面的暗紅褐色硬痂 (Scab)
   if (state.scabProgress > 0.02) {
     ctx.save();
-    // 在階段 5 尾聲，痂皮向上微浮並淡出脫落
     const liftY = currentStage === 5 && state.healProgress > 0.75
       ? -(state.healProgress - 0.75) * 90
       : 0;
@@ -1217,7 +1163,6 @@ function drawScabAndHealing() {
     ctx.fill();
     ctx.stroke();
 
-    // 痂皮標籤
     ctx.font = 'bold 12px sans-serif';
     ctx.fillStyle = '#fca5a5';
     ctx.textAlign = 'center';
@@ -1226,28 +1171,64 @@ function drawScabAndHealing() {
   }
 }
 
-// 7. 繪製畫布上的即時生理動態指示標籤 (Annotations)
+// 繪製平板觸控波紋與手指滑動軌跡
+function drawTouchFeedback() {
+  if (swipeTrail.length > 1) {
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (let i = 1; i < swipeTrail.length; i++) {
+      const p0 = swipeTrail[i - 1];
+      const p1 = swipeTrail[i];
+      ctx.strokeStyle = `rgba(253, 224, 71, ${p1.alpha * 0.75})`;
+      ctx.lineWidth = 6 * p1.alpha;
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  touchRipples.forEach(rp => {
+    ctx.save();
+    ctx.strokeStyle = `rgba(255, 255, 255, ${rp.alpha})`;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(rp.x, rp.y, rp.r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  });
+}
+
 function drawCanvasAnnotations() {
   ctx.save();
   ctx.textAlign = 'center';
 
   if (currentStage === 0) {
-    // 提示點擊皮膚造成傷口
     const pulse = Math.sin(stageTime * 4) * 4;
-    ctx.fillStyle = 'rgba(239, 68, 68, 0.9)';
-    ctx.font = 'bold 13px sans-serif';
-    ctx.fillText('👇 點擊此處皮膚造成創傷 👇', WOUND_X, SKIN_TOP - 16 + pulse);
+    ctx.fillStyle = 'rgba(239, 68, 68, 0.95)';
+    ctx.font = 'bold 14px sans-serif';
+    ctx.fillText('👇 用手指在皮膚向下劃開（或輕點）造成創傷 👇', WOUND_X, SKIN_TOP - 16 + pulse);
+
+    // 繪製手指劃動虛線導引線
+    ctx.strokeStyle = 'rgba(248, 113, 113, 0.55)';
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([6, 6]);
+    ctx.beginPath();
+    ctx.moveTo(WOUND_X, SKIN_TOP - 6);
+    ctx.lineTo(WOUND_X, VESSEL_TOP_BASE + 10);
+    ctx.stroke();
   } else if (currentStage === 1) {
     ctx.fillStyle = '#fecaca';
     ctx.font = 'bold 13px sans-serif';
-    ctx.fillText('🩸 血管內皮破裂，紅血球外溢出血', WOUND_X, SKIN_TOP - 16);
+    ctx.fillText('🩸 血管內皮破裂，紅血球外溢出血 (輕點畫面啟動止血)', WOUND_X, SKIN_TOP - 16);
   } else if (currentStage === 2) {
     const centerWalls = getVesselWalls(WOUND_X);
     ctx.fillStyle = '#fde047';
     ctx.font = 'bold 13px sans-serif';
-    ctx.fillText('✨ 血小板接觸膠原蛋白活化並聚集 (點擊傷口可加速支援)', WOUND_X, SKIN_TOP - 16);
+    ctx.fillText('✨ 血小板接觸膠原蛋白活化並聚集 (手指按住或輕點傷口加速支援)', WOUND_X, SKIN_TOP - 16);
 
-    // 血管收縮雙箭頭標示
     ctx.fillStyle = '#38bdf8';
     ctx.font = 'bold 12px sans-serif';
     ctx.fillText('⬇ 血管反射性收縮 (Vasospasm) ⬇', WOUND_X - 150, centerWalls.top - 12);
@@ -1255,11 +1236,11 @@ function drawCanvasAnnotations() {
   } else if (currentStage === 3) {
     ctx.fillStyle = '#fbbf24';
     ctx.font = 'bold 13px sans-serif';
-    ctx.fillText('🕸️ 凝血酶將纖維蛋白原轉為「纖維蛋白網」，穩固血栓', WOUND_X, SKIN_TOP - 16);
+    ctx.fillText('🕸️ 手指在傷口處左右滑動，加速編織金黃色「纖維蛋白網」', WOUND_X, SKIN_TOP - 16);
   } else if (currentStage === 4) {
     ctx.fillStyle = '#6ee7b7';
     ctx.font = 'bold 13px sans-serif';
-    ctx.fillText('🩹 白血球清理碎片，血管內皮與真皮組織由下往上再生', WOUND_X, DERMIS_TOP + 22);
+    ctx.fillText('🩹 手指輕撫傷口促進再生，白血球清理碎片，血管由下往上修復', WOUND_X, DERMIS_TOP + 22);
   } else if (currentStage === 5 && state.healProgress > 0.85) {
     ctx.fillStyle = '#34d399';
     ctx.font = 'bold 14px sans-serif';
@@ -1286,14 +1267,130 @@ function renderLoop(timestamp) {
   drawBloodCells();
   drawClotAndFibrin();
   drawScabAndHealing();
+  drawTouchFeedback();
   drawCanvasAnnotations();
 
   requestAnimationFrame(renderLoop);
 }
 
-// ==================== 事件綁定 ====================
+// ==================== 平板觸控與滑鼠統一 Pointer 事件 ====================
 
-// 階段導覽列點擊切換
+let isPointerDown = false;
+let pointerStartPos = null;
+let lastInteractTime = 0;
+
+function getCanvasCoords(e) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  return {
+    x: (e.clientX - rect.left) * scaleX,
+    y: (e.clientY - rect.top) * scaleY
+  };
+}
+
+function handleCanvasInteraction(pt, isDrag = false) {
+  const now = performance.now();
+  swipeTrail.push({ x: pt.x, y: pt.y, alpha: 1.0 });
+
+  if (!isDrag) {
+    touchRipples.push({ x: pt.x, y: pt.y, r: 6, alpha: 0.9 });
+  }
+
+  // 依照各階段提供直覺的觸控手勢回饋
+  if (currentStage === 0) {
+    // 階段 1：輕點或手指劃過皮膚即切開傷口
+    if (!isDrag) {
+      setStage(1);
+    }
+  } else if (currentStage === 1) {
+    if (!isDrag) {
+      setStage(2);
+    }
+  } else if (currentStage === 2) {
+    // 階段 3：輕點或按住拖曳持續召喚血小板
+    if (!isDrag || now - lastInteractTime > 140) {
+      spawnReinforcementPlatelets(pt.x, pt.y);
+      lastInteractTime = now;
+    }
+  } else if (currentStage === 3) {
+    // 階段 4：手指在傷口處來回塗抹加速編織纖維蛋白網
+    if (!isDrag || now - lastInteractTime > 90) {
+      state.fibrinProgress = Math.min(1, state.fibrinProgress + 0.08);
+      signals.push({
+        x: pt.x,
+        y: pt.y,
+        r: 4,
+        maxR: 60,
+        alpha: 0.85,
+        color: '245, 158, 11'
+      });
+      lastInteractTime = now;
+      if (state.fibrinProgress >= 1 && !isDrag) {
+        setStage(4);
+      }
+    }
+  } else if (currentStage === 4) {
+    // 階段 5：手指輕撫傷口釋放綠色生長因子，加速組織修復
+    if (!isDrag || now - lastInteractTime > 90) {
+      state.scabProgress = Math.min(1, state.scabProgress + 0.08);
+      state.healProgress = Math.min(0.75, state.healProgress + 0.05);
+      signals.push({
+        x: pt.x,
+        y: pt.y,
+        r: 5,
+        maxR: 65,
+        alpha: 0.85,
+        color: '52, 211, 153'
+      });
+      lastInteractTime = now;
+      if (state.healProgress >= 0.74 && !isDrag) {
+        setStage(5);
+      }
+    }
+  } else if (currentStage === 5) {
+    if (!isDrag) {
+      setStage(0);
+    }
+  }
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  canvas.setPointerCapture(e.pointerId);
+  isPointerDown = true;
+  const pt = getCanvasCoords(e);
+  pointerStartPos = pt;
+  handleCanvasInteraction(pt, false);
+});
+
+canvas.addEventListener('pointermove', (e) => {
+  if (!isPointerDown) return;
+  e.preventDefault();
+  const pt = getCanvasCoords(e);
+
+  // 若在階段 0 用手指滑動距離超過 30px，立即觸發切割傷口
+  if (currentStage === 0 && pointerStartPos) {
+    const dist = Math.hypot(pt.x - pointerStartPos.x, pt.y - pointerStartPos.y);
+    if (dist > 30) {
+      setStage(1);
+    }
+  } else {
+    handleCanvasInteraction(pt, true);
+  }
+});
+
+function endPointer(e) {
+  if (!isPointerDown) return;
+  isPointerDown = false;
+  pointerStartPos = null;
+}
+
+canvas.addEventListener('pointerup', endPointer);
+canvas.addEventListener('pointercancel', endPointer);
+
+// ==================== 按鈕事件綁定 ====================
+
 stageStepperButtons.forEach(btn => {
   btn.addEventListener('click', () => {
     const targetStage = parseInt(btn.getAttribute('data-stage'), 10);
@@ -1301,7 +1398,6 @@ stageStepperButtons.forEach(btn => {
   });
 });
 
-// 上一階段 / 下一階段
 btnPrev.addEventListener('click', () => {
   if (currentStage > 0) setStage(currentStage - 1);
 });
@@ -1310,7 +1406,6 @@ btnNext.addEventListener('click', () => {
   if (currentStage < STAGES.length - 1) setStage(currentStage + 1);
 });
 
-// 主動作按鈕
 btnAction.addEventListener('click', () => {
   if (currentStage < STAGES.length - 1) {
     setStage(currentStage + 1);
@@ -1319,52 +1414,41 @@ btnAction.addEventListener('click', () => {
   }
 });
 
-// 階段 2 專屬互動：手動召喚更多血小板支援
 btnAddPlatelets.addEventListener('click', () => {
   spawnReinforcementPlatelets(WOUND_X, VESSEL_TOP_BASE);
 });
 
-// 點擊畫布互動
-canvas.addEventListener('click', (e) => {
-  const rect = canvas.getBoundingClientRect();
-  const scaleX = canvas.width / rect.width;
-  const scaleY = canvas.height / rect.height;
-  const clickX = (e.clientX - rect.left) * scaleX;
-  const clickY = (e.clientY - rect.top) * scaleY;
-
-  if (currentStage === 0) {
-    setStage(1);
-  } else if (currentStage === 2) {
-    spawnReinforcementPlatelets(clickX, clickY);
-  } else if (currentStage < STAGES.length - 1) {
-    setStage(currentStage + 1);
-  } else {
-    setStage(0);
-  }
-});
-
-// 自動演示開關
 btnAuto.addEventListener('click', () => {
   autoPlay = !autoPlay;
   btnAuto.textContent = autoPlay ? '🔄 自動演示: 開' : '🔄 自動演示: 關';
   btnAuto.classList.toggle('btn-Secondary-active', autoPlay);
 });
 
-// 暫停 / 繼續動畫
 btnPause.addEventListener('click', () => {
   isPaused = !isPaused;
-  btnPause.textContent = isPaused ? '▶️ 繼續動畫' : '⏸️ 暫停動畫';
+  btnPause.textContent = isPaused ? '▶️ 繼續' : '⏸️ 暫停';
 });
 
-// 重置模擬
 btnReset.addEventListener('click', () => {
   isPaused = false;
-  btnPause.textContent = '⏸️ 暫停動畫';
+  btnPause.textContent = '⏸️ 暫停';
   initParticles();
   setStage(0);
 });
 
-// 速度滑桿
+// 全螢幕切換 (平板教學展示友善)
+if (btnFullscreen) {
+  btnFullscreen.addEventListener('click', () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+      btnFullscreen.textContent = '🗗 退出全螢幕';
+    } else {
+      document.exitFullscreen().catch(() => {});
+      btnFullscreen.textContent = '⛶ 全螢幕';
+    }
+  });
+}
+
 speedSlider.addEventListener('input', (e) => {
   simSpeed = parseFloat(e.target.value);
   speedVal.textContent = `${simSpeed.toFixed(1)}x`;

@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>3D 細胞立體構造探索：動物細胞與植物細胞 (Interactive 3D Cell Explorer)</title>
+  <link rel="stylesheet" href="style.css" />
+  <!-- Classic UMD Scripts for Three.js (Works directly via file:// without CORS or Node.js) -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+  <!-- 3D Viewport Container -->
+  <div id="canvas-container"></div>
+
+  <!-- Floating 3D Pin Labels Overlay -->
+  <div id="labels-layer"></div>
+
+  <!-- Hover Tooltip -->
+  <div id="hover-tooltip" class="hover-tooltip hidden"></div>
+
+  <!-- Top Navigation & Mode Switcher -->
+  <header class="hud-header">
+    <div class="brand-box">
+      <div class="brand-badge">3D 生物顯微解剖實驗室</div>
+      <h1 class="brand-title">動物細胞與植物細胞立體構造</h1>
+      <p class="brand-subtitle">支援外殼與雙層膜胞器（粒線體、葉綠體、細胞核）立體剖面觀察</p>
+    </div>
+
+    <div class="cell-mode-switcher" role="tablist" aria-label="細胞類型切換">
+      <button class="mode-tab active" id="tabAnimal" data-mode="animal" role="tab" aria-selected="true">
+        <span class="mode-dot animal-dot"></span>
+        <div class="mode-text">
+          <span class="mode-name">動物細胞</span>
+          <span class="mode-en">Animal Cell</span>
+        </div>
+      </button>
+      <button class="mode-tab" id="tabPlant" data-mode="plant" role="tab" aria-selected="false">
+        <span class="mode-dot plant-dot"></span>
+        <div class="mode-text">
+          <span class="mode-name">植物細胞</span>
+          <span class="mode-en">Plant Cell</span>
+        </div>
+      </button>
+      <button class="mode-tab" id="tabCompare" data-mode="compare" role="tab" aria-selected="false">
+        <span class="mode-dot compare-dot"></span>
+        <div class="mode-text">
+          <span class="mode-name">並排比較</span>
+          <span class="mode-en">Side-by-Side</span>
+        </div>
+      </button>
+    </div>
+  </header>
+
+  <!-- Left Organelle Focus & Highlight Directory -->
+  <aside class="organelle-sidebar" id="organelleSidebar" aria-label="胞器導覽清單">
+    <div class="sidebar-header">
+      <span class="sidebar-title">🔬 胞器列表</span>
+      <div class="sidebar-header-btns">
+        <button class="btn-reset-focus" id="btnOverview" title="回到全細胞總覽 (Esc)">
+          全覽視角
+        </button>
+        <button class="btn-collapse" id="btnCollapseLeft" title="收合/展開左側面板">
+          ◀
+        </button>
+      </div>
+    </div>
+    <div class="sidebar-hint">點擊項目可拉近對焦、發光強調並切開觀察</div>
+    <div class="organelle-list" id="organelleList">
+      <!-- Dynamically populated by app.js -->
+    </div>
+  </aside>
+  <!-- Mini trigger when left sidebar is collapsed -->
+  <button class="panel-trigger trigger-left hidden" id="btnTriggerLeft" title="展開胞器列表">
+    🔬 胞器列表 ▶
+  </button>
+
+  <!-- Right Scientific Info & Deep Anatomy Panel -->
+  <aside class="info-panel" id="infoPanel">
+    <div class="info-header-row">
+      <span class="info-badge" id="infoBadge">真核生物 · 動物細胞</span>
+      <div class="info-header-right">
+        <span class="info-status-pill" id="infoCutStatus">🔪 剖面中</span>
+        <button class="btn-collapse" id="btnCollapseRight" title="收合/展開解說面板">
+          ▶
+        </button>
+      </div>
+    </div>
+    <h2 class="info-title" id="infoTitle">動物細胞總覽</h2>
+    <div class="info-en" id="infoSubtitle">Eukaryotic Animal Cell</div>
+
+    <p class="info-desc" id="infoDesc">
+      動物細胞具有柔軟的脂質雙層細胞膜，無細胞壁與葉綠體，因此形狀較為圓潤且具可塑性。內含細胞核、粒線體、內質網、高基氏體、溶體及中心體等豐富胞器。
+    </p>
+
+    <!-- Sub-structure Interactive Inspector (Especially for Mitochondria, Chloroplast, Nucleus, etc.) -->
+    <div class="substructure-box" id="substructureBox">
+      <div class="substructure-header">
+        <span>🔍 內部微細構造解析 (點擊於 3D 中閃爍標示)</span>
+      </div>
+      <div class="substructure-chips" id="substructureChips">
+        <!-- Populated dynamically -->
+      </div>
+      <div class="substructure-detail" id="substructureDetail">
+        點擊上方微細構造標籤，可於 3D 剖面模型中單獨閃爍高亮該層結構並查看說明。
+      </div>
+    </div>
+
+    <!-- Comparison / Key Takeaways Table -->
+    <div class="feature-card" id="featureCard">
+      <div class="feature-row">
+        <span class="feature-label">分布位置</span>
+        <span class="feature-val" id="infoDistribution">動物與植物細胞皆有</span>
+      </div>
+      <div class="feature-row">
+        <span class="feature-label">膜層構造</span>
+        <span class="feature-val" id="infoMembrane">雙層膜 / 單層膜 / 無膜</span>
+      </div>
+      <div class="feature-row">
+        <span class="feature-label">核心功能</span>
+        <span class="feature-val" id="infoFunction">能量轉換、遺傳控制、物質合成與運輸</span>
+      </div>
+    </div>
+  </aside>
+  <!-- Mini trigger when right panel is collapsed -->
+  <button class="panel-trigger trigger-right hidden" id="btnTriggerRight" title="展開構造解析與解說面板">
+    ◀ 📖 構造解說
+  </button>
+
+  <!-- Bottom Interactive Cutaway & View Controls -->
+  <section class="bottom-bar" id="bottomBar">
+    <div class="bottom-bar-header">
+      <span class="bottom-bar-title">⚙️ 控制工具列</span>
+      <button class="btn-collapse btn-collapse-bottom" id="btnCollapseBottom" title="收合/展開底端控制列">
+        ▼ 收合工具列
+      </button>
+    </div>
+    <div class="controls-row">
+      <!-- Cell Cutaway Controls -->
+      <div class="control-group">
+        <span class="group-label">細胞外殼剖面</span>
+        <div class="btn-segmented" id="cellCutGroup">
+          <button class="seg-btn" data-cell-cut="full" title="完整閉合的細胞外觀">完整外觀</button>
+          <button class="seg-btn active" data-cell-cut="wedge" title="1/4 立體切開剖面，清晰看見內部胞器分布">1/4 剖面</button>
+          <button class="seg-btn" data-cell-cut="half" title="半切橫縱剖面">半剖面</button>
+        </div>
+      </div>
+
+      <!-- Organelle Internal Cutaway Controls (Mitochondria / Chloroplast / Nucleus) -->
+      <div class="control-group highlight-group">
+        <span class="group-label">粒線體 / 葉綠體 / 細胞核 內部解剖</span>
+        <div class="btn-segmented" id="orgCutGroup">
+          <button class="seg-btn" data-org-cut="full" title="保留胞器完整外膜">完整外膜</button>
+          <button class="seg-btn active" data-org-cut="cut" title="切開粒線體、葉綠體與細胞核，露出皺摺(Cristae)、類囊體(Grana)與核仁">切開看立體內部</button>
+        </div>
+      </div>
+
+      <!-- Continuous Cut Depth Slider -->
+      <div class="control-group slider-group">
+        <div class="slider-header">
+          <span class="group-label">剖面切開程度</span>
+          <span class="slider-val" id="cutRatioLabel">100%</span>
+        </div>
+        <input
+          type="range"
+          id="cutSlider"
+          class="cut-slider"
+          min="0"
+          max="100"
+          step="1"
+          value="100"
+          aria-label="剖面切開程度滑桿"
+        />
+      </div>
+
+      <!-- View Toggles -->
+      <div class="control-group toggles-group">
+        <button class="toggle-btn active" id="btnToggleLabels" title="顯示或隱藏 3D 空間構造標籤 (L)">
+          🏷️ 3D 標籤
+        </button>
+        <button class="toggle-btn" id="btnToggleRotate" title="自動緩慢旋轉展示 (R)">
+          🔄 自動旋轉
+        </button>
+        <button class="toggle-btn" id="btnToggleSecondary" title="切換顯示/隱藏 次要構造（內質網 ER、高基氏體、核糖體）">
+          👁️ 顯示 ER / 高基氏體 / 核糖體
+        </button>
+        <button class="toggle-btn" id="btnQuickMito" title="直接拉近並切開觀察粒線體立體內部構造">
+          ⚡ 剖析粒線體
+        </button>
+        <button class="toggle-btn" id="btnQuickChloro" title="切換至植物細胞並直接拉近切開觀察葉綠體內部類囊體">
+          🌿 剖析葉綠體
+        </button>
+      </div>
+    </div>
+  </section>
+  <!-- Mini trigger when bottom bar is collapsed -->
+  <button class="panel-trigger trigger-bottom hidden" id="btnTriggerBottom" title="展開控制面板">
+    ▲ ⚙️ 剖面與視角控制
+  </button>
+
+  <script src="app.js"></script>
+</body>
+</html>

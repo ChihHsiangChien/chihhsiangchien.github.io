@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>心臟收縮舒張、瓣膜開闔與心動週期</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="stage-container">
+    <!-- 頂部狀態列 -->
+    <div class="top-bar">
+      <div class="phase-pill" id="phaseTitle">① 心房收縮期 (0.0 ~ 0.1s)</div>
+      <div class="valve-pills">
+        <span class="v-pill" id="avPill">房室瓣：開啟</span>
+        <span class="v-pill" id="slPill">動脈瓣(半月瓣)：關閉</span>
+      </div>
+    </div>
+
+    <!-- 核心心臟動態畫布 (全新繪製：底圖零靜態瓣膜、管腔與管壁清楚分明) -->
+    <div class="canvas-box">
+      <svg id="heartSvg" viewBox="0 0 600 580" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <!-- 右心減氧血漸層 -->
+          <linearGradient id="deoxChamberGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#60a5fa" stop-opacity="0.35" />
+            <stop offset="100%" stop-color="#2563eb" stop-opacity="0.55" />
+          </linearGradient>
+          <!-- 左心充氧血漸層 -->
+          <linearGradient id="oxChamberGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#f87171" stop-opacity="0.35" />
+            <stop offset="100%" stop-color="#dc2626" stop-opacity="0.55" />
+          </linearGradient>
+
+          <!-- 血流方向箭頭標記 -->
+          <marker id="arrowBlue" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse">
+            <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#1d4ed8" />
+          </marker>
+          <marker id="arrowRed" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse">
+            <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#b91c1c" />
+          </marker>
+        </defs>
+
+        <!-- ==================== 1. 大血管固定層 (管壁與管腔分明) ==================== -->
+        <g id="greatVesselsLayer">
+          <!-- 【上大靜脈】從頂部 (155, 45) 向下匯入右心房頂部 (155, 195) -->
+          <path d="M 155 45 L 155 198" stroke="#334155" stroke-width="46" stroke-linecap="butt" fill="none" />
+          <path d="M 155 45 L 155 202" stroke="#dbeafe" stroke-width="34" stroke-linecap="butt" fill="none" />
+
+          <!-- 【下大靜脈】從底部 (135, 515) 向上彎入右心房底部 (155, 295) -->
+          <path d="M 135 515 C 122 440, 126 360, 152 292" stroke="#334155" stroke-width="46" stroke-linecap="butt" fill="none" />
+          <path d="M 135 515 C 122 440, 126 360, 152 296" stroke="#dbeafe" stroke-width="34" stroke-linecap="butt" fill="none" />
+
+          <!-- 【肺靜脈】從右側 (545, 165) 及 (552, 225) 匯入左心房右側 (448, 215) -->
+          <path d="M 548 160 C 510 175, 475 188, 435 198" stroke="#334155" stroke-width="32" stroke-linecap="butt" fill="none" />
+          <path d="M 555 220 C 515 225, 475 228, 435 228" stroke="#334155" stroke-width="32" stroke-linecap="butt" fill="none" />
+          <path d="M 548 160 C 510 175, 475 188, 432 198" stroke="#fee2e2" stroke-width="22" stroke-linecap="butt" fill="none" />
+          <path d="M 555 220 C 515 225, 475 228, 432 228" stroke="#fee2e2" stroke-width="22" stroke-linecap="butt" fill="none" />
+
+          <!-- 【主動脈 (Aorta)】單一清晰大管道：從左心室出口 (318, 245) 往左上延伸至頂部 (235, 35) -->
+          <path d="M 318 248 C 304 185, 274 115, 235 35" stroke="#334155" stroke-width="50" stroke-linecap="butt" fill="none" />
+          <path d="M 318 252 C 304 185, 274 115, 235 35" stroke="#fee2e2" stroke-width="38" stroke-linecap="butt" fill="none" />
+        </g>
+
+        <!-- ==================== 2. 心房獨立收縮層 (左、右心房同步收縮/舒張，與心室錯開) ==================== -->
+        <g id="atriaLayer">
+          <!-- 右心房 (Right Atrium) 外壁與內腔 -->
+          <g id="rightAtriumGroup">
+            <!-- 心房心肌壁 -->
+            <path d="M 155 182
+                     C 105 182, 88 228, 102 275
+                     C 112 308, 138 322, 162 322
+                     L 222 302
+                     L 222 252
+                     C 218 205, 192 182, 155 182 Z"
+                  fill="#94a3b8" stroke="#334155" stroke-width="4" stroke-linejoin="round" />
+            <!-- 右心房腔室 (減氧血) -->
+            <path d="M 156 196
+                     C 118 196, 104 232, 116 270
+                     C 124 296, 145 308, 165 308
+                     L 214 294
+                     L 214 252
+                     C 210 214, 186 196, 156 196 Z"
+                  fill="#dbeafe" />
+            <path d="M 156 196
+                     C 118 196, 104 232, 116 270
+                     C 124 296, 145 308, 165 308
+                     L 214 294
+                     L 214 252
+                     C 210 214, 186 196, 156 196 Z"
+                  fill="url(#deoxChamberGrad)" />
+            <!-- 上、下大靜脈匯入右心房的開口 -->
+            <ellipse cx="155" cy="216" rx="16" ry="10" fill="#bfdbfe" stroke="#334155" stroke-width="2.5" />
+            <ellipse cx="152" cy="282" rx="16" ry="10" transform="rotate(20 152 282)" fill="#bfdbfe" stroke="#334155" stroke-width="2.5" />
+          </g>
+
+          <!-- 左心房 (Left Atrium) 外壁與內腔 -->
+          <g id="leftAtriumGroup">
+            <!-- 心房心肌壁 -->
+            <path d="M 412 162
+                     C 455 162, 476 198, 466 245
+                     C 458 278, 436 296, 412 300
+                     L 354 278
+                     L 354 228
+                     C 362 185, 382 162, 412 162 Z"
+                  fill="#94a3b8" stroke="#334155" stroke-width="4" stroke-linejoin="round" />
+            <!-- 左心房腔室 (充氧血) -->
+            <path d="M 410 176
+                     C 444 176, 460 205, 452 242
+                     C 445 268, 428 282, 408 286
+                     L 362 270
+                     L 362 228
+                     C 368 192, 385 176, 410 176 Z"
+                  fill="#fee2e2" />
+            <path d="M 410 176
+                     C 444 176, 460 205, 452 242
+                     C 445 268, 428 282, 408 286
+                     L 362 270
+                     L 362 228
+                     C 368 192, 385 176, 410 176 Z"
+                  fill="url(#oxChamberGrad)" />
+          </g>
+        </g>
+
+        <!-- ==================== 3. 心室獨立收縮層 (左、右心室同步收縮/舒張，與心房錯開) ==================== -->
+        <g id="ventriclesLayer">
+          <!-- 心室厚實心肌外壁與心室中隔 (左心室壁明顯比右心室壁厚) -->
+          <path id="ventricleMyocardium"
+                d="M 155 314
+                   C 162 395, 206 485, 285 528
+                   C 318 545, 352 536, 376 502
+                   C 418 442, 434 358, 422 292
+                   L 354 268
+                   L 304 242
+                   L 272 242
+                   L 222 292 Z"
+                fill="#94a3b8" stroke="#334155" stroke-width="4.5" stroke-linejoin="round" />
+
+          <!-- 右心室內腔 (減氧血：左上連接房室口，右上連接肺動脈口 252,248) -->
+          <path id="rightVentricleLumen"
+                d="M 168 308
+                   L 214 290
+                   L 228 248
+                   L 268 248
+                   C 265 325, 272 410, 288 475
+                   C 292 490, 278 496, 262 482
+                   C 214 442, 182 375, 168 308 Z"
+                fill="#dbeafe" stroke="#334155" stroke-width="3" stroke-linejoin="round" />
+          <path d="M 168 308
+                   L 214 290
+                   L 228 248
+                   L 268 248
+                   C 265 325, 272 410, 288 475
+                   C 292 490, 278 496, 262 482
+                   C 214 442, 182 375, 168 308 Z"
+                fill="url(#deoxChamberGrad)" />
+
+          <!-- 左心室內腔 (充氧血：右上連接房室口，左上連接主動脈口 318,248) -->
+          <path id="leftVentricleLumen"
+                d="M 298 248
+                   L 338 248
+                   L 358 268
+                   L 404 286
+                   C 406 348, 390 422, 355 478
+                   C 342 496, 326 495, 318 474
+                   C 302 412, 296 325, 298 248 Z"
+                fill="#fee2e2" stroke="#334155" stroke-width="3" stroke-linejoin="round" />
+          <path d="M 298 248
+                   L 338 248
+                   L 358 268
+                   L 404 286
+                   C 406 348, 390 422, 355 478
+                   C 342 496, 326 495, 318 474
+                   C 302 412, 296 325, 298 248 Z"
+                fill="url(#oxChamberGrad)" />
+        </g>
+
+        <!-- ==================== 4. 肺動脈前跨層 (由右心室出口 248,248 往右上方延伸至 385,42) ==================== -->
+        <g id="pulmonaryArteryLayer">
+          <!-- 肺動脈管壁 -->
+          <path d="M 248 250 C 266 185, 315 112, 385 42" stroke="#334155" stroke-width="48" stroke-linecap="butt" fill="none" />
+          <!-- 肺動脈管腔內部 (減氧血通道，絕不流進管壁) -->
+          <path d="M 248 254 C 266 185, 315 112, 385 42" stroke="#dbeafe" stroke-width="36" stroke-linecap="butt" fill="none" />
+        </g>
+
+        <!-- ==================== 5. 統一顏色動態瓣膜層 (Valves Layer — 底圖無殘影，100% 動態連動) ==================== -->
+        <!-- 所有瓣膜皆使用一致的象牙白/深褐邊框色 (#fef3c7 / #78350f)，避免紅綠變色造成視覺錯亂 -->
+        <g id="valvesLayer">
+          <!-- ① 右房室瓣 (三尖瓣：位於右心房與右心室交界口 165,308 ~ 214,290) -->
+          <g id="valve-tricuspid">
+            <path id="tri-leaf-left" class="valve-leaflet" d="M 166 308 Q 178 328 182 348" />
+            <path id="tri-leaf-right" class="valve-leaflet" d="M 214 290 Q 212 315 210 338" />
+            <circle cx="166" cy="308" r="4.5" class="valve-hinge" />
+            <circle cx="214" cy="290" r="4.5" class="valve-hinge" />
+          </g>
+
+          <!-- ② 左房室瓣 (二尖瓣：位於左心房與左心室交界口 358,268 ~ 404,286) -->
+          <g id="valve-mitral">
+            <path id="mitral-leaf-left" class="valve-leaflet" d="M 358 268 Q 360 295 362 318" />
+            <path id="mitral-leaf-right" class="valve-leaflet" d="M 404 286 Q 392 310 388 332" />
+            <circle cx="358" cy="268" r="4.5" class="valve-hinge" />
+            <circle cx="404" cy="286" r="4.5" class="valve-hinge" />
+          </g>
+
+          <!-- ③ 肺動脈瓣 (半月瓣：位於右心室與肺動脈交界口 230,248 ~ 266,248) -->
+          <g id="valve-pulmonary">
+            <path id="pulm-leaf-left" class="valve-leaflet" d="M 230 248 Q 239 254 248 248" />
+            <path id="pulm-leaf-right" class="valve-leaflet" d="M 266 248 Q 257 254 248 248" />
+            <circle cx="230" cy="248" r="4.5" class="valve-hinge" />
+            <circle cx="266" cy="248" r="4.5" class="valve-hinge" />
+          </g>
+
+          <!-- ④ 主動脈瓣 (半月瓣：位於左心室與主動脈交界口 300,248 ~ 336,248) -->
+          <g id="valve-aortic">
+            <path id="aortic-leaf-left" class="valve-leaflet" d="M 300 248 Q 309 254 318 248" />
+            <path id="aortic-leaf-right" class="valve-leaflet" d="M 336 248 Q 327 254 318 248" />
+            <circle cx="300" cy="248" r="4.5" class="valve-hinge" />
+            <circle cx="336" cy="248" r="4.5" class="valve-hinge" />
+          </g>
+        </g>
+
+        <!-- ==================== 6. 血流方向箭頭與粒子層 (嚴格行走於管腔正中央) ==================== -->
+        <g id="bloodFlowArrows">
+          <!-- 靜脈回心箭頭 (上、下大靜脈 -> 右心房；肺靜脈 -> 左心房) -->
+          <path id="arrow-vein-svc" class="flow-arrow" d="M 155 70 L 155 175"
+                fill="none" stroke="#1d4ed8" stroke-width="3" stroke-dasharray="6 4" marker-end="url(#arrowBlue)" />
+          <path id="arrow-vein-ivc" class="flow-arrow" d="M 134 480 C 125 420, 128 360, 148 305"
+                fill="none" stroke="#1d4ed8" stroke-width="3" stroke-dasharray="6 4" marker-end="url(#arrowBlue)" />
+          <path id="arrow-vein-pv1" class="flow-arrow" d="M 530 167 C 498 179, 468 190, 435 198"
+                fill="none" stroke="#b91c1c" stroke-width="3" stroke-dasharray="6 4" marker-end="url(#arrowRed)" />
+          <path id="arrow-vein-pv2" class="flow-arrow" d="M 535 221 C 502 225, 468 228, 435 228"
+                fill="none" stroke="#b91c1c" stroke-width="3" stroke-dasharray="6 4" marker-end="url(#arrowRed)" />
+
+          <!-- 心房 -> 心室 充血箭頭 (房室瓣開啟時顯示) -->
+          <path id="arrow-ra-rv" class="flow-arrow"
+                d="M 168 255 C 188 310, 212 375, 246 435"
+                fill="none" stroke="#1d4ed8" stroke-width="3.5" marker-end="url(#arrowBlue)" />
+          <path id="arrow-la-lv" class="flow-arrow"
+                d="M 402 240 C 382 300, 362 370, 342 435"
+                fill="none" stroke="#b91c1c" stroke-width="3.5" marker-end="url(#arrowRed)" />
+
+          <!-- 心室 -> 動脈 噴射箭頭 (心室收縮、半月瓣開啟時顯示，100% 沿管道正中心射出，不分叉、不偏入管壁) -->
+          <!-- 右心室 -> 肺動脈正中央 -->
+          <path id="arrow-rv-pa" class="flow-arrow hidden-arrow"
+                d="M 255 430 C 245 360, 242 295, 248 248 C 266 185, 315 112, 372 55"
+                fill="none" stroke="#1d4ed8" stroke-width="4" stroke-dasharray="7 4" marker-end="url(#arrowBlue)" />
+
+          <!-- 左心室 -> 主動脈正中央 (單一主幹往左上射出) -->
+          <path id="arrow-lv-aorta" class="flow-arrow hidden-arrow"
+                d="M 332 430 C 322 360, 322 295, 318 248 C 304 185, 274 115, 242 50"
+                fill="none" stroke="#b91c1c" stroke-width="4" stroke-dasharray="7 4" marker-end="url(#arrowRed)" />
+        </g>
+
+        <!-- 動態血液粒子容器 -->
+        <g id="bloodParticlesLayer"></g>
+      </svg>
+
+      <!-- 畫布底部極簡圖例 -->
+      <div class="mini-legend">
+        <span><i class="dot dot-blue"></i> 減氧血 (大靜脈 → 右心房 → 右心室 → 肺動脈)</span>
+        <span><i class="dot dot-red"></i> 充氧血 (肺靜脈 → 左心房 → 左心室 → 主動脈)</span>
+        <span><i class="dot dot-valve"></i> 瓣膜 (Value / Valve)</span>
+      </div>
+    </div>
+
+    <!-- 底部心動週期與播放控制列 -->
+    <div class="bottom-controls">
+      <div class="ctrl-row">
+        <div class="btn-group">
+          <button id="playPauseBtn" class="btn-primary">⏸️ 暫停</button>
+          <button id="stepPhaseBtn" class="btn-secondary">⏭️ 下一階段</button>
+        </div>
+
+        <div class="phase-tabs">
+          <button class="phase-tab active" data-phase="atrial" data-time="0.06">① 心房收縮 / 心室舒張 (0.1s)</button>
+          <button class="phase-tab" data-phase="ventricular" data-time="0.22">② 心室收縮 / 心房舒張 (0.3s)</button>
+          <button class="phase-tab" data-phase="diastole" data-time="0.60">③ 全心舒張 (0.4s)</button>
+        </div>
+
+        <div class="speed-box">
+          <label for="speedSelect">速度</label>
+          <select id="speedSelect">
+            <option value="0.25">0.25x</option>
+            <option value="0.4" selected>0.4x</option>
+            <option value="0.8">0.8x</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="slider-row">
+        <input type="range" id="cycleSlider" min="0" max="0.8" step="0.005" value="0.05">
+        <span class="time-readout"><strong id="cycleTimeText">0.05</strong>s / 0.80s</span>
+      </div>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

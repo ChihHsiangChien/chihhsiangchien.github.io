@@ -2,18 +2,18 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>動脈粥狀硬化斑塊與血栓形成互動模擬 (Atherosclerosis & Plaque Formation)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>動脈粥狀硬化斑塊、血栓與支架治療互動模擬 (Atherosclerosis & Stent Therapy)</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="app-header">
     <div class="title-group">
-      <h1>🫀 動脈斑塊 (Plaque) 與血栓形成動態互動模擬</h1>
-      <p>探索膽固醇 (LDL) 滲入氧化、免疫細胞吞噬、泡沫細胞堆積、斑塊破裂到血栓阻塞的完整病理機制</p>
+      <h1>🫀 動脈斑塊 (Plaque)、血栓形成與支架治療互動模擬</h1>
+      <p>從膽固醇滲入氧化、免疫細胞吞噬、斑塊破裂血栓，到末期溶栓、氣球擴張與血管支架 (Stent) 的完整動態過程</p>
     </div>
     <div class="header-controls">
-      <button id="btn-auto" class="btn btn-secondary" title="自動依序推進病理階段">🔄 自動演示: 開</button>
+      <button id="btn-auto" class="btn btn-secondary active-toggle" title="自動依序推進病理與治療階段">🔄 自動演示: 開</button>
       <button id="btn-pause" class="btn btn-secondary">⏸️ 暫停動畫</button>
       <button id="btn-reset" class="btn btn-outline">↺ 重置模擬</button>
     </div>
@@ -22,8 +22,8 @@
   <main class="main-layout">
     <!-- 左側/主要模擬區：階段導覽列、互動畫布、實驗控制列 -->
     <section class="simulation-section">
-      <!-- 6階段導覽列 -->
-      <nav class="stage-stepper" id="stage-stepper">
+      <!-- 7階段導覽列 (支援觸控滑動與大按鈕點擊) -->
+      <nav class="stage-stepper" id="stage-stepper" aria-label="病理與治療階段">
         <button class="step-item active" data-stage="0">
           <span class="step-num">1</span>
           <span class="step-label">健康動脈</span>
@@ -31,27 +31,32 @@
         <div class="step-connector"></div>
         <button class="step-item" data-stage="1">
           <span class="step-num">2</span>
-          <span class="step-label">內皮受損與膽固醇滲入</span>
+          <span class="step-label">膽固醇滲入氧化</span>
         </button>
         <div class="step-connector"></div>
         <button class="step-item" data-stage="2">
           <span class="step-num">3</span>
-          <span class="step-label">免疫細胞招募與吞噬</span>
+          <span class="step-label">免疫吞噬作用</span>
         </button>
         <div class="step-connector"></div>
         <button class="step-item" data-stage="3">
           <span class="step-num">4</span>
-          <span class="step-label">泡沫細胞與纖維斑塊</span>
+          <span class="step-label">泡沫細胞與斑塊</span>
         </button>
         <div class="step-connector"></div>
         <button class="step-item" data-stage="4">
           <span class="step-num">5</span>
-          <span class="step-label">斑塊不穩定與破裂</span>
+          <span class="step-label">斑塊不穩與破裂</span>
         </button>
         <div class="step-connector"></div>
         <button class="step-item" data-stage="5">
           <span class="step-num">6</span>
-          <span class="step-label">血小板聚集與血栓形成</span>
+          <span class="step-label">血小板與血栓阻塞</span>
+        </button>
+        <div class="step-connector"></div>
+        <button class="step-item step-item-rescue" data-stage="6">
+          <span class="step-num">7</span>
+          <span class="step-label">支架擴張與逆轉修復</span>
         </button>
       </nav>
 
@@ -64,7 +69,7 @@
           <div class="stage-badge" id="canvas-stage-badge">階段 1：健康動脈與正常血流</div>
           <div class="env-controls">
             <div class="slider-group" title="調整血液中壞膽固醇 (LDL) 的濃度">
-              <label for="ldl-slider">🟡 LDL 膽固醇濃度</label>
+              <label for="ldl-slider">🟡 LDL 濃度</label>
               <input type="range" id="ldl-slider" min="1" max="5" step="1" value="2">
               <span id="ldl-val" class="val-tag">正常</span>
             </div>
@@ -76,15 +81,18 @@
           </div>
         </div>
 
-        <!-- 滑鼠懸停顯微探針提示 -->
+        <!-- 觸控點擊 / 滑鼠懸停顯微探針提示 -->
         <div class="micro-tooltip" id="micro-tooltip" style="display: none;">
-          <div class="tooltip-title" id="tooltip-title">角色名稱</div>
+          <div class="tooltip-header">
+            <div class="tooltip-title" id="tooltip-title">角色名稱</div>
+            <button class="tooltip-close" id="tooltip-close" aria-label="關閉說明">✕</button>
+          </div>
           <div class="tooltip-desc" id="tooltip-desc">角色說明</div>
         </div>
 
         <!-- 畫布底部操作提示 -->
         <div class="canvas-prompt" id="canvas-prompt">
-          💡 提示：將滑鼠移至細胞上可查看「顯微角色圖鑑」；點擊畫面或下方按鈕可投放膽固醇或派遣免疫細胞！
+          👆 點擊/觸碰畫布中的細胞可查看「顯微角色圖鑑」；點選下方按鈕可投放膽固醇、召喚免疫細胞或進行支架治療！
         </div>
 
         <!-- 階段自動推進進度條 -->
@@ -93,30 +101,37 @@
         </div>
       </div>
 
-      <!-- 互動實驗與階段控制列 -->
+      <!-- 互動實驗與階段控制列 (平板大尺寸觸控按鈕) -->
       <div class="action-bar">
-        <button id="btn-prev" class="btn btn-nav" disabled>⬅ 上一階段</button>
-        
-        <div class="interactive-tools">
-          <button id="btn-spawn-ldl" class="btn btn-tool btn-tool-ldl" title="在血液中釋放一波低密度脂蛋白膽固醇 (LDL)">
-            🍔 投入壞膽固醇 (LDL)
-          </button>
-          <button id="btn-spawn-immune" class="btn btn-tool btn-tool-immune" title="派遣單核球進入血管壁轉化為巨噬細胞吞噬氧化膽固醇">
-            🛡️ 召喚免疫細胞 (巨噬細胞)
-          </button>
-          <button id="btn-spawn-hdl" class="btn btn-tool btn-tool-hdl" title="派遣高密度脂蛋白 (HDL) 逆向清除內膜中的膽固醇">
-            🥗 派遣好膽固醇 (HDL清道夫)
-          </button>
+        <div class="nav-btn-group">
+          <button id="btn-prev" class="btn btn-nav" disabled>⬅ 上一階段</button>
           <button id="btn-stage-action" class="btn btn-primary">
             ⚡ 造成內皮受損 (進入階段 2)
           </button>
+          <button id="btn-next" class="btn btn-nav">下一階段 ➡</button>
         </div>
-
-        <button id="btn-next" class="btn btn-nav">下一階段 ➡</button>
+        
+        <div class="interactive-tools">
+          <button id="btn-spawn-ldl" class="btn btn-tool btn-tool-ldl">
+            🍔 投入壞膽固醇 (LDL)
+          </button>
+          <button id="btn-spawn-immune" class="btn btn-tool btn-tool-immune">
+            🛡️ 召喚免疫巨噬細胞
+          </button>
+          <button id="btn-spawn-hdl" class="btn btn-tool btn-tool-hdl">
+            🥗 派遣好膽固醇 (HDL)
+          </button>
+          <button id="btn-stent-therapy" class="btn btn-tool btn-tool-stent">
+            🎈 氣球擴張與血管支架
+          </button>
+          <button id="btn-statin-therapy" class="btn btn-tool btn-tool-statin">
+            💊 降脂藥穩定斑塊 + 溶栓
+          </button>
+        </div>
       </div>
     </section>
 
-    <!-- 右側：病理學解說、即時血管指標、角色圖鑑 -->
+    <!-- 右側/下方：病理學解說、即時血管指標、角色圖鑑 -->
     <aside class="info-sidebar">
       <!-- 當前階段詳解卡片 -->
       <div class="card stage-detail-card">
@@ -139,7 +154,7 @@
 
       <!-- 即時血管生理指標 -->
       <div class="card metrics-card">
-        <h3>📊 動脈即時病理指標</h3>
+        <h3>📊 動脈即時病理與恢復指標</h3>
         
         <div class="metric-row">
           <div class="metric-label">
@@ -153,7 +168,7 @@
 
         <div class="metric-row">
           <div class="metric-label">
-            <span>內膜脂質與泡沫細胞堆積 (Plaque Size)</span>
+            <span>內膜斑塊隆起度 (Plaque Stenosis)</span>
             <span id="metric-plaque-text">0% (無斑塊)</span>
           </div>
           <div class="progress-track">
@@ -163,7 +178,7 @@
 
         <div class="metric-row">
           <div class="metric-label">
-            <span>血管壁發炎與免疫反應 (Inflammation)</span>
+            <span>血管壁發炎與不穩定度 (Inflammation)</span>
             <span id="metric-inflam-text">極低</span>
           </div>
           <div class="progress-track">
@@ -182,10 +197,10 @@
         </div>
       </div>
 
-      <!-- 互動角色圖鑑 (點擊可高亮或篩選) -->
+      <!-- 互動角色圖鑑 (點擊/觸控可高亮或篩選) -->
       <div class="card legend-card">
         <div class="legend-header">
-          <h3>🧬 參與角色圖鑑 (點擊聚焦觀察)</h3>
+          <h3>🧬 參與角色圖鑑 (點選聚焦觀察)</h3>
           <button id="btn-clear-focus" class="btn-tiny" style="display: none;">顯示全部</button>
         </div>
         <div class="legend-grid" id="legend-grid">
@@ -214,7 +229,7 @@
             <span class="legend-icon icon-smc"></span>
             <div class="legend-text">
               <strong>平滑肌與纖維帽</strong>
-              <span>分泌膠原蛋白覆蓋斑塊表面</span>
+              <span>分泌膠原蛋白覆蓋並穩定斑塊</span>
             </div>
           </div>
           <div class="legend-item" data-role="platelet">
@@ -227,8 +242,15 @@
           <div class="legend-item" data-role="hdl">
             <span class="legend-icon icon-hdl"></span>
             <div class="legend-text">
-              <strong>HDL 高密度膽固醇</strong>
-              <span>血管清道夫，逆向運走多餘膽固醇</span>
+              <strong>HDL 好膽固醇清道夫</strong>
+              <span>逆向運走膽固醇，協助斑塊消退</span>
+            </div>
+          </div>
+          <div class="legend-item" data-role="stent">
+            <span class="legend-icon icon-stent"></span>
+            <div class="legend-text">
+              <strong>氣球導管與血管支架 (Stent)</strong>
+              <span>物理壓平末期斑塊並永久支撐血管</span>
             </div>
           </div>
         </div>
