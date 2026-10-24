@@ -1,0 +1,2186 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>人體全方位循環與物質運輸模擬系統 (體循環・肺循環・肝門循環)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #090d16;
+      --bg-panel: #111827;
+      --bg-card: #1f2937;
+      --bg-input: #374151;
+      --border: #374151;
+      --border-focus: #38bdf8;
+      --text: #f3f4f6;
+      --text-dim: #9ca3af;
+      --text-muted: #6b7280;
+      --artery-red: #ef4444;
+      --vein-blue: #3b82f6;
+      --portal-purple: #8b5cf6;
+      --glucose-gold: #fbbf24;
+      --o2-high: #ef4444;
+      --o2-low: #818cf8;
+      --excretion-gray: #94a3b8;
+      --accent: #38bdf8;
+      --font-main: 'Noto Sans TC', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg-dark);
+      color: var(--text);
+      font-family: var(--font-main);
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: var(--bg-panel);
+      border-bottom: 1px solid var(--border);
+      padding: 7px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      z-index: 30;
+      flex-wrap: wrap;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .brand h1 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.01em;
+    }
+    .badge {
+      font-size: 0.72rem;
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--accent);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 4px 10px;
+      border-radius: 5px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s ease;
+      font-family: var(--font-main);
+    }
+    .btn:hover {
+      background: #374151;
+      border-color: #4b5563;
+      color: #fff;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary { background: #0284c7; border-color: #0369a1; color: #fff; }
+    .btn-primary:hover { background: #0369a1; }
+    .btn-warn { background: #7c2d12; border-color: #9a3412; color: #ffedd5; }
+    .btn-warn:hover { background: #9a3412; }
+    .btn.active {
+      background: rgba(56, 189, 248, 0.2);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .speed-group {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: rgba(0, 0, 0, 0.35);
+      padding: 2px 7px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      font-size: 0.76rem;
+    }
+
+    .main-workspace {
+      display: flex;
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .sidebar {
+      background: var(--bg-panel);
+      width: 320px;
+      min-width: 320px;
+      max-width: 320px;
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      z-index: 20;
+      transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .sidebar.collapsed {
+      margin-left: -320px;
+    }
+
+    .right-sidebar {
+      background: var(--bg-panel);
+      width: 310px;
+      min-width: 310px;
+      max-width: 310px;
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      z-index: 20;
+      transition: margin-right 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .right-sidebar.collapsed {
+      margin-right: -310px;
+    }
+
+    .section-card {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #e5e7eb;
+    }
+
+    .control-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-bottom: 10px;
+    }
+    .control-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.78rem;
+      color: var(--text-dim);
+    }
+    .control-label span.val {
+      font-family: var(--font-mono);
+      font-weight: 600;
+      color: var(--accent);
+    }
+    input[type="range"] {
+      width: 100%;
+      height: 5px;
+      background: var(--bg-input);
+      border-radius: 3px;
+      outline: none;
+      -webkit-appearance: none;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      box-shadow: 0 0 5px rgba(56, 189, 248, 0.5);
+    }
+
+    .toggle-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .toggle-chip {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      padding: 5px 8px;
+      border-radius: 5px;
+      font-size: 0.74rem;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .toggle-chip input { cursor: pointer; }
+    .toggle-chip:hover { border-color: #64748b; color: #fff; }
+
+    .canvas-stage {
+      flex: 1;
+      position: relative;
+      background: #060913;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .stage-overlay-top {
+      position: absolute;
+      top: 10px;
+      left: 14px;
+      right: 14px;
+      display: flex;
+      justify-content: space-between;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .status-banner {
+      background: rgba(17, 24, 39, 0.88);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(8px);
+      padding: 6px 12px;
+      border-radius: 7px;
+      font-size: 0.8rem;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      pointer-events: auto;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+
+    .legend-bar {
+      position: absolute;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(17, 24, 39, 0.92);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(8px);
+      padding: 6px 14px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-size: 0.74rem;
+      pointer-events: auto;
+      z-index: 10;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text-dim);
+    }
+    .legend-color {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+    }
+
+    .meter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .meter-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 10px;
+    }
+    .meter-title {
+      font-size: 0.76rem;
+      color: var(--text-dim);
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 5px;
+    }
+    .meter-val {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      color: #fff;
+    }
+    .meter-bar-bg {
+      height: 7px;
+      background: rgba(0, 0, 0, 0.4);
+      border-radius: 3px;
+      overflow: hidden;
+      position: relative;
+    }
+    .meter-bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.15s ease-out;
+    }
+
+    .tracker-box {
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-radius: 7px;
+      padding: 10px 12px;
+      font-size: 0.82rem;
+      line-height: 1.6;
+    }
+
+    .path-filter-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 5px;
+    }
+    .path-chip-btn {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      padding: 4px;
+      border-radius: 4px;
+      font-size: 0.72rem;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s;
+    }
+    .path-chip-btn:hover { border-color: #64748b; color: #fff; }
+    .path-chip-btn.active {
+      background: rgba(56, 189, 248, 0.2);
+      border-color: var(--accent);
+      color: #fff;
+      font-weight: 700;
+    }
+
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: var(--bg-dark); }
+    ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+  </style>
+</head>
+<body>
+
+  <!-- 頂部主要控制列 -->
+  <header>
+    <div class="brand">
+      <button class="btn" id="btnToggleLeft" title="展開/收合左側面板">◀ 控制面板</button>
+      <h1>人體全方位循環與物質運輸模擬系統</h1>
+      <span class="badge">體循環・肺循環・肝門循環</span>
+    </div>
+
+    <div class="header-controls">
+      <button class="btn btn-primary" id="btnPlayPause">暫停動畫</button>
+      <button class="btn" id="btnStepFwd" title="單步前進 0.05 秒">單步前進</button>
+      <button class="btn btn-warn" id="btnReset" title="重設所有生理參數回預設基準">預設重設</button>
+
+      <div class="speed-group">
+        <span>速度：</span>
+        <button class="btn speed-preset active" data-speed="1">1.0x</button>
+        <button class="btn speed-preset" data-speed="2">2.0x</button>
+        <button class="btn speed-preset" data-speed="3">3.0x</button>
+        <button class="btn speed-preset" data-speed="5">5.0x (極速)</button>
+        <input type="range" id="speedSlider" min="0.5" max="5.0" step="0.25" value="1" style="width:75px;" title="調節模擬移動流速 (0.5x ~ 5.0x)">
+        <span id="speedText" style="color:#fff;font-weight:700;min-width:36px;font-family:var(--font-mono);">1.0x</span>
+      </div>
+
+      <button class="btn" id="btnToggleRight" title="展開/收合右側觀察卡片">生理觀測 ▶</button>
+    </div>
+  </header>
+
+  <!-- 工作區：左側抽屜 + 中央 Canvas + 右側抽屜 -->
+  <div class="main-workspace">
+
+    <!-- 左側面板：生理條件調節與標籤過濾 -->
+    <aside class="sidebar" id="leftSidebar">
+      
+      <!-- 生理調節控制項 -->
+      <div class="section-card">
+        <div class="section-header">
+          <span>生理狀態與運動調節</span>
+          <span style="font-size:0.75rem;color:var(--accent);">動態平衡 ODE</span>
+        </div>
+
+        <div class="control-row">
+          <div class="control-label">
+            <span>心搏速率 (Heart Rate)</span>
+            <span class="val" id="lblHeartRate">75 BPM</span>
+          </div>
+          <input type="range" id="slHeartRate" min="45" max="180" step="1" value="75">
+        </div>
+
+        <div class="control-row">
+          <div class="control-label">
+            <span>全身運動代謝強度 (Exercise)</span>
+            <span class="val" id="lblExercise">100% (基準)</span>
+          </div>
+          <input type="range" id="slExercise" min="50" max="250" step="5" value="100">
+        </div>
+
+        <div class="control-row">
+          <div class="control-label">
+            <span>膳食葡萄糖輸入量 (Dietary Glucose)</span>
+            <span class="val" id="lblDietGlucose">100%</span>
+          </div>
+          <input type="range" id="slDietGlucose" min="0" max="250" step="10" value="100">
+        </div>
+
+        <div class="control-row">
+          <div class="control-label">
+            <span>肺部通氣換氣率 (Alveolar Vent.)</span>
+            <span class="val" id="lblVentilation">100%</span>
+          </div>
+          <input type="range" id="slVentilation" min="40" max="200" step="5" value="100">
+        </div>
+
+        <div class="control-row">
+          <div class="control-label">
+            <span>腎絲球濾過率 (GFR)</span>
+            <span class="val" id="lblGfr">100%</span>
+          </div>
+          <input type="range" id="slGfr" min="20" max="180" step="5" value="100">
+        </div>
+      </div>
+
+      <!-- 畫面標籤顯示控制 -->
+      <div class="section-card">
+        <div class="section-header">
+          <span>畫面標籤與資訊開關</span>
+        </div>
+        <div class="toggle-group">
+          <label class="toggle-chip"><input type="checkbox" id="chkOrgans" checked> 器官名稱</label>
+          <label class="toggle-chip"><input type="checkbox" id="chkFunctions" checked> 器官功能說明</label>
+          <label class="toggle-chip"><input type="checkbox" id="chkMeters" checked> 器官內部量表</label>
+          <label class="toggle-chip"><input type="checkbox" id="chkValves" checked> 心臟瓣膜動態</label>
+          <label class="toggle-chip"><input type="checkbox" id="chkOxygenSat" checked> 血球含氧飽和度</label>
+          <label class="toggle-chip"><input type="checkbox" id="chkPaths" checked> 血管名稱流向</label>
+        </div>
+      </div>
+
+      <!-- 循環路徑突顯複選 -->
+      <div class="section-card" style="flex:1;">
+        <div class="section-header">
+          <span>循環路徑突顯 (支援複選)</span>
+          <button class="btn" id="btnClearHighlight" style="padding:2px 8px;font-size:0.72rem;">清除突顯</button>
+        </div>
+        <div class="path-filter-grid">
+          <button class="path-chip-btn" data-hl="CIRCUIT_PULMONARY">肺循環</button>
+          <button class="path-chip-btn" data-hl="CIRCUIT_SYSTEMIC">體循環</button>
+          <button class="path-chip-btn" data-hl="CIRCUIT_PORTAL">肝門循環</button>
+          <button class="path-chip-btn" data-hl="ORGAN_BRAIN">腦部灌流</button>
+          <button class="path-chip-btn" data-hl="ORGAN_LIMBS">四肢灌流</button>
+          <button class="path-chip-btn" data-hl="ORGAN_KIDNEY">腎臟排泄</button>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- 中央動畫畫布 -->
+    <main class="canvas-stage">
+      
+      <!-- 畫布頂部浮動橫幅 -->
+      <div class="stage-overlay-top">
+        <div class="status-banner">
+          <span><strong>操作提示：</strong>可點擊畫布上的微粒、器官或血管路徑進行鎖定追蹤。</span>
+        </div>
+        <div class="status-banner">
+          <button class="btn" id="btnTrackRandom" style="padding:3px 10px;font-size:0.78rem;">隨機鎖定一粒紅血球</button>
+          <button class="btn" id="btnStopTrack" style="padding:3px 10px;font-size:0.78rem;display:none;border-color:#f87171;color:#f87171;">結束追蹤</button>
+          <label style="display:inline-flex;align-items:center;gap:4px;font-size:0.78rem;color:#cbd5e1;cursor:pointer;margin-left:6px;" title="勾選時，微粒抵達周邊器官或回心後自動接續下一段生理循環；僅在進入尿液排泄端時結束旅程。未勾選時抵達任一器官終點即結束。">
+            <input type="checkbox" id="chkContinuousCycle" checked> 除尿液排泄端外，其他節點持續循環
+          </label>
+        </div>
+      </div>
+
+      <canvas id="simCanvas"></canvas>
+
+      <!-- 畫布底部固定圖例 -->
+      <div class="legend-bar">
+        <div class="legend-item">
+          <div class="legend-color" style="background:#ef4444;"></div>
+          <span>高含氧動脈血 (O₂ 95~99%)</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background:#3b82f6;"></div>
+          <span>低含氧靜脈血 (O₂ 70~75%)</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background:#8b5cf6;"></div>
+          <span>肝門靜脈 (富含營養葡萄糖)</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background:#fbbf24;transform:rotate(45deg);width:9px;height:9px;"></div>
+          <span>葡萄糖分子 (Glucose)</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background:#94a3b8;border-radius:50%;"></div>
+          <span>尿素代謝物 (Urea)</span>
+        </div>
+      </div>
+
+    </main>
+
+    <!-- 右側面板：單一粒子即時追蹤 + 系統血液動態指標 -->
+    <aside class="right-sidebar" id="rightSidebar">
+      
+      <!-- 微粒即時追蹤狀態卡片 -->
+      <div class="section-card">
+        <div class="section-header">
+          <span>微粒追蹤與即時觀測</span>
+          <span style="font-size:0.75rem;color:var(--accent);">Live Telemetry</span>
+        </div>
+        <div class="tracker-box" id="trackerInfoBox">
+          點擊畫布上的血球、分子，或點選頂部「隨機追蹤」即可在此檢視其即時生理動態與路徑進度。
+        </div>
+      </div>
+
+      <!-- 心血管與新陳代謝實時量表 -->
+      <div class="section-card" style="flex:1;">
+        <div class="section-header">
+          <span>血液動態與代謝指標</span>
+        </div>
+
+        <div class="meter-group">
+          <div class="meter-card">
+            <div class="meter-title">
+              <span>心輸出量 (Cardiac Output)</span>
+              <span class="meter-val" id="lblCardiacOutput">5.2 L/min</span>
+            </div>
+            <div class="meter-bar-bg">
+              <div class="meter-bar-fill" id="barCardiacOutput" style="width:52%;background:#ef4444;"></div>
+            </div>
+          </div>
+
+          <div class="meter-card">
+            <div class="meter-title">
+              <span>動脈血氧飽和度 (SpO₂)</span>
+              <span class="meter-val" id="lblSpO2">98.5 %</span>
+            </div>
+            <div class="meter-bar-bg">
+              <div class="meter-bar-fill" id="barSpO2" style="width:98.5%;background:#38bdf8;"></div>
+            </div>
+          </div>
+
+          <div class="meter-card">
+            <div class="meter-title">
+              <span>靜脈血氧飽和度 (SvO₂)</span>
+              <span class="meter-val" id="lblSvO2">73.2 %</span>
+            </div>
+            <div class="meter-bar-bg">
+              <div class="meter-bar-fill" id="barSvO2" style="width:73.2%;background:#818cf8;"></div>
+            </div>
+          </div>
+
+          <div class="meter-card">
+            <div class="meter-title">
+              <span>全身平均血糖濃度 (Blood Glucose)</span>
+              <span class="meter-val" id="lblBloodGlucose">95 mg/dL</span>
+            </div>
+            <div class="meter-bar-bg">
+              <div class="meter-bar-fill" id="barBloodGlucose" style="width:48%;background:#fbbf24;"></div>
+            </div>
+          </div>
+
+          <div class="meter-card">
+            <div class="meter-title">
+              <span>肝糖儲備量 (Liver Glycogen)</span>
+              <span class="meter-val" id="lblLiverGlycogen">82 %</span>
+            </div>
+            <div class="meter-bar-bg">
+              <div class="meter-bar-fill" id="barLiverGlycogen" style="width:82%;background:#f97316;"></div>
+            </div>
+          </div>
+
+          <div class="meter-card">
+            <div class="meter-title">
+              <span>尿液代謝物累積量 (Cumulative Excreted)</span>
+              <span class="meter-val" id="lblUrineOutput">142 mL</span>
+            </div>
+            <div class="meter-bar-bg">
+              <div class="meter-bar-fill" id="barUrineOutput" style="width:35%;background:#94a3b8;"></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </aside>
+
+  </div>
+
+<script>
+// ==========================================
+// 1. 生理參數、基準與狀態常數
+// ==========================================
+const DEFAULT_PARAMS = {
+  heartRate: 75,        // 心率 BPM
+  exercise: 100,        // 運動強度 %
+  dietGlucose: 100,     // 膳食葡萄糖輸入量 %
+  ventilation: 100,     // 肺換氣通氣率 %
+  gfr: 100,             // 腎絲球濾過率 %
+  continuousCycle: true // 除尿液排出端外，其他節點持續循環
+};
+
+let params = { ...DEFAULT_PARAMS };
+
+// 標籤與視覺開關
+const labelState = {
+  organs: true,
+  organFunctions: true,
+  meters: true,
+  valves: true,
+  oxygenSat: true,
+  paths: true
+};
+
+// 時間與播放控制
+let isPlaying = true;
+let simSpeed = 1.0;
+let simTime = 0;
+let lastTimestamp = performance.now();
+let uiRefreshTimer = 0;
+
+// 動態隔室庫存數值 (ODE 狀態變數)
+let stocks = {
+  bloodGlucose: 95,     // 血糖 mg/dL
+  liverGlycogen: 82,    // 肝糖儲備量 %
+  spO2: 98.5,           // 動脈血氧 %
+  svO2: 73.2,           // 靜脈血氧 %
+  cardiacOutput: 5.2,   // 心輸出量 L/min
+  urineAccumulated: 142 // 尿液累積 mL
+};
+
+// 突顯與追蹤控制
+let activeHighlights = new Set();
+let trackedParticle = null;
+
+function setTrackedParticle(p) {
+  if (trackedParticle && trackedParticle !== p) {
+    trackedParticle.trail = [];
+  }
+  trackedParticle = p;
+  const btnTrack = document.getElementById('btnTrackRandom');
+  const btnStop = document.getElementById('btnStopTrack');
+  if (trackedParticle) {
+    trackedParticle.trail = [{ x: trackedParticle.x, y: trackedParticle.y }];
+    if (btnTrack) {
+      btnTrack.style.borderColor = '#38bdf8';
+      btnTrack.style.color = '#38bdf8';
+      btnTrack.style.background = 'rgba(56, 189, 248, 0.15)';
+    }
+    if (btnStop) {
+      btnStop.style.display = 'inline-flex';
+    }
+  } else {
+    if (btnTrack) {
+      btnTrack.style.borderColor = '';
+      btnTrack.style.color = '';
+      btnTrack.style.background = '';
+    }
+    if (btnStop) {
+      btnStop.style.display = 'none';
+    }
+  }
+  updateTrackerCardDOM();
+}
+
+// ==========================================
+// 2. 幾何座標系與解剖節點定義 (1600 × 920)
+// ==========================================
+const LOGICAL_W = 1600;
+const LOGICAL_H = 920;
+
+const ORGANS = {
+  BRAIN: {
+    id: 'BRAIN',
+    name: '腦部與頭部微血管',
+    sub: '恆定高耗氧 (20%) 與專一消耗葡萄糖',
+    x: 800, y: 65, w: 240, h: 65,
+    color: '#1e1b4b', border: '#818cf8',
+    circuit: 'CIRCUIT_SYSTEMIC'
+  },
+  LUNGS: {
+    id: 'LUNGS',
+    name: '肺臟／肺泡毛細血管網',
+    sub: '氣體交換：血紅素結合氧氣 (鮮紅)・排出二氧化碳',
+    x: 800, y: 185, w: 270, h: 80,
+    color: '#083344', border: '#06b6d4',
+    circuit: 'CIRCUIT_PULMONARY'
+  },
+  // 心臟四腔室解剖獨立節點 (橫向展開佈局，心室射血朝上直達動脈幹，絕不跨越心房)
+  HEART_RA: {
+    id: 'HEART_RA',
+    name: '右心房 (RA)',
+    sub: '接收體循環靜脈回流 (外側流入)',
+    x: 605, y: 375, w: 125, h: 76,
+    color: '#1e3a8a', border: '#3b82f6',
+    circuit: 'CIRCUIT_SYSTEMIC'
+  },
+  HEART_RV: {
+    id: 'HEART_RV',
+    name: '右心室 (RV)',
+    sub: '經三尖瓣充盈・直射肺動脈',
+    x: 735, y: 400, w: 125, h: 86,
+    color: '#172554', border: '#2563eb',
+    circuit: 'CIRCUIT_PULMONARY'
+  },
+  HEART_LV: {
+    id: 'HEART_LV',
+    name: '左心室 (LV)',
+    sub: '經二尖瓣充盈・直射主動脈弓',
+    x: 865, y: 400, w: 125, h: 86,
+    color: '#881337', border: '#ef4444',
+    circuit: 'CIRCUIT_SYSTEMIC'
+  },
+  HEART_LA: {
+    id: 'HEART_LA',
+    name: '左心房 (LA)',
+    sub: '接收肺靜脈充氧動脈血 (外側流入)',
+    x: 995, y: 375, w: 125, h: 76,
+    color: '#831843', border: '#f43f5e',
+    circuit: 'CIRCUIT_PULMONARY'
+  },
+  ARM_L: {
+    id: 'ARM_L',
+    name: '左手組織毛細血管',
+    sub: '上肢肌肉與組織攝取葡萄糖與釋氧供能',
+    x: 350, y: 260, w: 180, h: 80,
+    color: '#3b0764', border: '#a855f7',
+    circuit: 'ORGAN_LIMBS'
+  },
+  ARM_R: {
+    id: 'ARM_R',
+    name: '右手組織毛細血管',
+    sub: '上肢肌肉與組織攝取葡萄糖與釋氧供能',
+    x: 1270, y: 260, w: 180, h: 80,
+    color: '#3b0764', border: '#a855f7',
+    circuit: 'ORGAN_LIMBS'
+  },
+  GUT: {
+    id: 'GUT',
+    name: '胃腸道 (膳食吸收端)',
+    sub: '吸收膳食葡萄糖經肝門靜脈直送肝臟',
+    x: 1160, y: 550, w: 220, h: 100,
+    color: '#451a03', border: '#f59e0b',
+    circuit: 'CIRCUIT_PORTAL'
+  },
+  LIVER: {
+    id: 'LIVER',
+    name: '肝臟 (代謝與肝糖調控)',
+    sub: '雙重血供：接收門脈高糖・經肝動脈供氧',
+    x: 800, y: 560, w: 250, h: 105,
+    color: '#7c2d12', border: '#f97316',
+    circuit: 'CIRCUIT_PORTAL'
+  },
+  KIDNEY: {
+    id: 'KIDNEY',
+    name: '腎臟 (濾過排泄中樞)',
+    sub: '腎絲球濾過血液・清除尿素與水份形成尿液',
+    x: 440, y: 550, w: 190, h: 90,
+    color: '#4c0519', border: '#fb7185',
+    circuit: 'ORGAN_KIDNEY'
+  },
+  URINE_END: {
+    id: 'URINE_END',
+    name: '膀胱／尿液排出端',
+    sub: '體外排泄終點 (抵達此處微粒即排出結束旅程)',
+    x: 440, y: 700, w: 200, h: 60,
+    color: '#1e293b', border: '#94a3b8',
+    circuit: 'ORGAN_KIDNEY'
+  },
+  LEG_L: {
+    id: 'LEG_L',
+    name: '左腳組織毛細血管',
+    sub: '下肢肌肉耗氧代謝・運動時顯著增加糖利用',
+    x: 620, y: 815, w: 185, h: 85,
+    color: '#3b0764', border: '#a855f7',
+    circuit: 'ORGAN_LIMBS'
+  },
+  LEG_R: {
+    id: 'LEG_R',
+    name: '右腳組織毛細血管',
+    sub: '下肢肌肉耗氧代謝・運動時顯著增加糖利用',
+    x: 980, y: 815, w: 185, h: 85,
+    color: '#3b0764', border: '#a855f7',
+    circuit: 'ORGAN_LIMBS'
+  }
+};
+
+// ==========================================
+// 3. 血管網絡拓撲折線定義
+// ==========================================
+const PATHWAYS = {
+  // === 心內與肺循環管道 (四腔室橫向無阻佈局：心房在兩翼，心室在中央，動脈垂直直射向上) ===
+  // 1. 右心房至右心室 (橫向跨越三尖瓣)
+  PATH_RA_TO_RV: {
+    id: 'PATH_RA_TO_RV', code: 'RA_TO_RV',
+    name: '三尖瓣血流 (RA → RV，橫向充盈)',
+    color: '#3b82f6', lineStyle: 'solid', width: 5,
+    circuit: 'CIRCUIT_PULMONARY',
+    pts: [{x: 605, y: 375}, {x: 670, y: 375}, {x: 735, y: 375}]
+  },
+
+  // 2. 右心室至肺臟 (經肺動脈瓣，直接垂直向上射向肺臟，完全不跨越任何心房)
+  PATH_RV_TO_PULM: {
+    id: 'PATH_RV_TO_PULM', code: 'RV_TO_PULM',
+    name: '肺動脈幹 (RV → 肺泡，垂直向上)',
+    color: '#3b82f6', lineStyle: 'solid', width: 5,
+    circuit: 'CIRCUIT_PULMONARY',
+    pts: [{x: 735, y: 375}, {x: 735, y: 315}, {x: 735, y: 228}]
+  },
+
+  // 3. 肺泡毛細血管微循環 (氣體交換：血氧由 71% 躍升至 99%，在肺臟內部進行)
+  PULM_CAPILLARY: {
+    id: 'PULM_CAPILLARY', code: 'PULM_CAPILLARY',
+    name: '肺泡微血管網 (氧氣結合與排出CO₂)',
+    color: '#06b6d4', lineStyle: 'solid', width: 5,
+    circuit: 'CIRCUIT_PULMONARY',
+    pts: [{x: 735, y: 228}, {x: 735, y: 185}, {x: 995, y: 185}, {x: 995, y: 228}]
+  },
+
+  // 4. 肺臟至左心房 (肺靜脈流向右側左心房頂端)
+  PULM_VEIN: {
+    id: 'PULM_VEIN', code: 'PULM_VEIN',
+    name: '肺靜脈 (肺泡 → LA 外側流入)',
+    color: '#ef4444', lineStyle: 'solid', width: 5,
+    circuit: 'CIRCUIT_PULMONARY',
+    pts: [{x: 995, y: 228}, {x: 995, y: 290}, {x: 995, y: 375}]
+  },
+
+  // 5. 左心房至左心室 (橫向跨越二尖瓣)
+  PATH_LA_TO_LV: {
+    id: 'PATH_LA_TO_LV', code: 'LA_TO_LV',
+    name: '二尖瓣血流 (LA → LV，橫向充盈)',
+    color: '#ef4444', lineStyle: 'solid', width: 5,
+    circuit: 'CIRCUIT_SYSTEMIC',
+    pts: [{x: 995, y: 375}, {x: 930, y: 375}, {x: 865, y: 375}]
+  },
+
+  // 6. 左心室至主動脈弓 (經主動脈瓣，直接垂直向上射向主動脈弓，完全不跨越任何心房)
+  PATH_LV_TO_AORTA: {
+    id: 'PATH_LV_TO_AORTA', code: 'LV_TO_AORTA',
+    name: '主動脈射血 (LV → 主動脈弓，垂直向上)',
+    color: '#ef4444', lineStyle: 'solid', width: 5.5,
+    circuit: 'CIRCUIT_SYSTEMIC',
+    pts: [{x: 865, y: 375}, {x: 865, y: 315}, {x: 865, y: 210}]
+  },
+
+  // === 體循環動脈分支 (始於主動脈弓 865, 210，完全繞開肺臟外圍與心房) ===
+  SYS_AORTA_BRAIN: {
+    id: 'SYS_AORTA_BRAIN', code: 'BRAIN_IN',
+    name: '頸總動脈 (主動脈弓 → 頸部右側高空外廊道 → 腦部)',
+    color: '#ef4444', lineStyle: 'solid', width: 4.5,
+    circuit: 'ORGAN_BRAIN',
+    pts: [{x: 865, y: 210}, {x: 1040, y: 210}, {x: 1040, y: 100}, {x: 850, y: 70},{x: 750, y: 97.5}]
+  },
+  SYS_AORTA_ARM_L: {
+    id: 'SYS_AORTA_ARM_L', code: 'ARM_L_IN',
+    name: '左鎖骨下動脈 (主動脈弓 → 左手)',
+    color: '#ef4444', lineStyle: 'solid', width: 4,
+    circuit: 'ORGAN_LIMBS',
+    pts: [{x: 865, y: 210}, {x: 800, y: 235}, {x: 600, y: 245}, {x: 350, y: 245}, {x: 320, y: 260}, {x: 320, y: 290}]
+  },
+  SYS_AORTA_ARM_R: {
+    id: 'SYS_AORTA_ARM_R', code: 'ARM_R_IN',
+    name: '右鎖骨下動脈 (主動脈弓 → 右手)',
+    color: '#ef4444', lineStyle: 'solid', width: 4,
+    circuit: 'ORGAN_LIMBS',
+    pts: [{x: 865, y: 210}, {x: 950, y: 235}, {x: 1150, y: 245}, {x: 1350, y: 245}, {x: 1380, y: 260}, {x: 1380, y: 290}]
+  },
+
+  // 下半身體動脈 (降主動脈從心臟右側 1080 廊道直下，完全避開心腔與肝臟)
+  SYS_AORTA_GUT: {
+    id: 'SYS_AORTA_GUT', code: 'GUT_IN',
+    name: '腸系膜上動脈 (降主動脈 → 胃腸)',
+    color: '#ef4444', lineStyle: 'solid', width: 4,
+    circuit: 'CIRCUIT_PORTAL',
+    pts: [{x: 865, y: 210}, {x: 960, y: 235}, {x: 1080, y: 265}, {x: 1080, y: 470}, {x: 1120, y: 520}, {x: 1160, y: 550}, {x: 1160, y: 580}]
+  },
+  SYS_AORTA_LIVER: {
+    id: 'SYS_AORTA_LIVER', code: 'LIVER_ART_IN',
+    name: '肝固有動脈 (降主動脈 → 肝臟供氧)',
+    color: '#ef4444', lineStyle: 'solid', width: 3.5,
+    circuit: 'CIRCUIT_PORTAL',
+    pts: [{x: 865, y: 210}, {x: 960, y: 235}, {x: 1080, y: 265}, {x: 1080, y: 470}, {x: 980, y: 500}, {x: 925, y: 520}, {x: 800, y: 560}]
+  },
+  SYS_AORTA_KIDNEY: {
+    id: 'SYS_AORTA_KIDNEY', code: 'KIDNEY_IN',
+    name: '腎動脈 (降主動脈 → 跨越心下廊道 → 腎臟)',
+    color: '#ef4444', lineStyle: 'solid', width: 4,
+    circuit: 'ORGAN_KIDNEY',
+    pts: [{x: 865, y: 210}, {x: 960, y: 235}, {x: 1080, y: 265}, {x: 1080, y: 470}, {x: 800, y: 480}, {x: 580, y: 510}, {x: 500, y: 530}, {x: 440, y: 550}, {x: 440, y: 575}]
+  },
+  SYS_AORTA_LEG_L: {
+    id: 'SYS_AORTA_LEG_L', code: 'LEG_L_IN',
+    name: '左髂總動脈 (降主動脈經肝臟下方 → 左腳)',
+    color: '#ef4444', lineStyle: 'solid', width: 4,
+    circuit: 'ORGAN_LIMBS',
+    pts: [{x: 865, y: 210}, {x: 960, y: 235}, {x: 1080, y: 265}, {x: 1080, y: 470}, {x: 1080, y: 640}, {x: 800, y: 680}, {x: 660, y: 750}, {x: 620, y: 815}]
+  },
+  SYS_AORTA_LEG_R: {
+    id: 'SYS_AORTA_LEG_R', code: 'LEG_R_IN',
+    name: '右髂總動脈 (降主動脈經肝臟下方 → 右腳)',
+    color: '#ef4444', lineStyle: 'solid', width: 4,
+    circuit: 'ORGAN_LIMBS',
+    pts: [{x: 865, y: 210}, {x: 960, y: 235}, {x: 1080, y: 265}, {x: 1080, y: 470}, {x: 1080, y: 640}, {x: 1020, y: 720}, {x: 980, y: 815}]
+  },
+
+  // === 肝門靜脈 (高養分/紫色雙線，胃腸 → 肝臟) ===
+  PORTAL_VEIN: {
+    id: 'PORTAL_VEIN', code: 'PORTAL_VEIN',
+    name: '肝門靜脈 (胃腸 → 肝臟門脈裂)',
+    color: '#8b5cf6', lineStyle: 'double', width: 6,
+    circuit: 'CIRCUIT_PORTAL',
+    pts: [{x: 1160, y: 580}, {x: 1020, y: 580}, {x: 925, y: 580}, {x: 800, y: 560}]
+  },
+  HEPATIC_VEIN: {
+    id: 'HEPATIC_VEIN', code: 'HEPATIC_VEIN',
+    name: '肝靜脈 (肝臟 → 下腔靜脈廊道 → RA)',
+    color: '#3b82f6', lineStyle: 'solid', width: 4.5,
+    circuit: 'CIRCUIT_PORTAL',
+    pts: [{x: 800, y: 560}, {x: 675, y: 540}, {x: 580, y: 540}, {x: 580, y: 420}, {x: 605, y: 375}]
+  },
+
+  // === 體靜脈回流 (全部經上腔／下腔靜脈專屬左側廊道 580 直達右心房 RA 605, 375，不穿透心室或肝臟) ===
+  SYS_VEIN_BRAIN: {
+    id: 'SYS_VEIN_BRAIN', code: 'BRAIN_OUT',
+    name: '頸內靜脈 (腦部 → 頸部左側高空外廊道 → 上腔靜脈 → RA)',
+    color: '#3b82f6', lineStyle: 'solid', width: 4,
+    circuit: 'ORGAN_BRAIN',
+    pts: [{x: 750, y: 97.5}, {x: 560, y: 100}, {x: 560, y: 260}, {x: 605, y: 310}, {x: 605, y: 375}]
+  },
+  SYS_VEIN_ARM_L: {
+    id: 'SYS_VEIN_ARM_L', code: 'ARM_L_OUT',
+    name: '左上肢靜脈 (左手 → 上腔靜脈 → RA)',
+    color: '#3b82f6', lineStyle: 'solid', width: 4,
+    circuit: 'ORGAN_LIMBS',
+    pts: [{x: 320, y: 290}, {x: 450, y: 310}, {x: 540, y: 340}, {x: 605, y: 375}]
+  },
+  SYS_VEIN_ARM_R: {
+    id: 'SYS_VEIN_ARM_R', code: 'ARM_R_OUT',
+    name: '右上肢靜脈 (右手 → 橫向回流 → RA)',
+    color: '#3b82f6', lineStyle: 'solid', width: 4,
+    circuit: 'ORGAN_LIMBS',
+    pts: [{x: 1380, y: 290}, {x: 1220, y: 310}, {x: 1080, y: 310}, {x: 800, y: 310}, {x: 650, y: 340}, {x: 605, y: 375}]
+  },
+  SYS_VEIN_KIDNEY: {
+    id: 'SYS_VEIN_KIDNEY', code: 'KIDNEY_OUT',
+    name: '腎靜脈 (腎臟 → 下腔靜脈廊道 → RA)',
+    color: '#3b82f6', lineStyle: 'solid', width: 4,
+    circuit: 'ORGAN_KIDNEY',
+    pts: [{x: 440, y: 575}, {x: 535, y: 560}, {x: 580, y: 560}, {x: 580, y: 420}, {x: 605, y: 375}]
+  },
+  SYS_VEIN_LEG_L: {
+    id: 'SYS_VEIN_LEG_L', code: 'LEG_L_OUT',
+    name: '左下肢靜脈 (左腳 → 下腔靜脈廊道，避開肝臟 → RA)',
+    color: '#3b82f6', lineStyle: 'solid', width: 4,
+    circuit: 'ORGAN_LIMBS',
+    pts: [{x: 620, y: 815}, {x: 580, y: 750}, {x: 580, y: 660}, {x: 580, y: 420}, {x: 605, y: 375}]
+  },
+  SYS_VEIN_LEG_R: {
+    id: 'SYS_VEIN_LEG_R', code: 'LEG_R_OUT',
+    name: '右下肢靜脈 (右腳 → 下腔靜脈廊道，避開肝臟 → RA)',
+    color: '#3b82f6', lineStyle: 'solid', width: 4,
+    circuit: 'ORGAN_LIMBS',
+    pts: [{x: 980, y: 815}, {x: 940, y: 750}, {x: 780, y: 680}, {x: 580, y: 660}, {x: 580, y: 420}, {x: 605, y: 375}]
+  },
+
+  // === 體外排泄端管道 ===
+  EXCRETION_URINE: {
+    id: 'EXCRETION_URINE', code: 'URINE_PATH',
+    name: '輸尿管 (腎臟 → 膀胱尿液)',
+    color: '#94a3b8', lineStyle: 'dashed', width: 3.5,
+    circuit: 'ORGAN_KIDNEY',
+    pts: [{x: 440, y: 595}, {x: 440, y: 670}]
+  }
+};
+
+// 預先計算各血管路徑總長度 (用於物理真實血流速歸一化，防止短路徑停滯過久)
+for (const k in PATHWAYS) {
+  let len = 0;
+  const pts = PATHWAYS[k].pts;
+  for (let i = 0; i < pts.length - 1; i++) {
+    len += Math.hypot(pts[i+1].x - pts[i].x, pts[i+1].y - pts[i].y);
+  }
+  PATHWAYS[k].len = Math.max(1, len);
+}
+
+// ==========================================
+// 4. 微粒與載體系統 (RBC, Glucose, Urea)
+// ==========================================
+let particles = [];
+let nextParticleId = 1;
+
+/**
+ * 建立微粒
+ * type:
+ *  - 'RBC': 紅血球載體 (雙凹圓盤，攜帶氧分子與二氧化碳，根據 o2Sat 漸變色)
+ *  - 'GLUCOSE': 葡萄糖晶體 (金黃六角形)
+ *  - 'UREA': 尿素分子 (灰藍色小球)
+ */
+function spawnParticle(type, pathKey, startProgress = 0, initialO2 = 98) {
+  const pObj = PATHWAYS[pathKey];
+  if (!pObj) return null;
+  const p = {
+    id: nextParticleId++,
+    type,
+    pathKey,
+    progress: startProgress,
+    speedFactor: 0.24 + Math.random() * 0.08,
+    o2Sat: initialO2, // 氧氣飽和度 %
+    hasGlucose: false,
+    x: 0,
+    y: 0,
+    trail: []
+  };
+  updateParticlePosition(p);
+  particles.push(p);
+  return p;
+}
+
+function getPointOnPolyline(pts, t) {
+  const clamped = Math.max(0, Math.min(1, t));
+  let totalLen = 0;
+  const segLens = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const l = Math.hypot(pts[i+1].x - pts[i].x, pts[i+1].y - pts[i].y);
+    segLens.push(l);
+    totalLen += l;
+  }
+  if (totalLen === 0) return { x: pts[0].x, y: pts[0].y };
+
+  const targetDist = totalLen * clamped;
+  let acc = 0;
+  for (let i = 0; i < segLens.length; i++) {
+    if (acc + segLens[i] >= targetDist || i === segLens.length - 1) {
+      const segT = segLens[i] === 0 ? 0 : (targetDist - acc) / segLens[i];
+      return {
+        x: pts[i].x + (pts[i+1].x - pts[i].x) * segT,
+        y: pts[i].y + (pts[i+1].y - pts[i].y) * segT
+      };
+    }
+    acc += segLens[i];
+  }
+  return { x: pts[pts.length - 1].x, y: pts[pts.length - 1].y };
+}
+
+function updateParticlePosition(p) {
+  const pObj = PATHWAYS[p.pathKey];
+  if (!pObj) return;
+  const pos = getPointOnPolyline(pObj.pts, p.progress);
+  p.x = pos.x;
+  p.y = pos.y;
+}
+
+// 隨機分流選擇體動脈分支
+function selectRandomSystemicArtery() {
+  const r = Math.random();
+  if (r < 0.20) return 'SYS_AORTA_BRAIN';
+  if (r < 0.35) return 'SYS_AORTA_ARM_L';
+  if (r < 0.50) return 'SYS_AORTA_ARM_R';
+  if (r < 0.65) return 'SYS_AORTA_GUT';
+  if (r < 0.75) return 'SYS_AORTA_LIVER';
+  if (r < 0.85) return 'SYS_AORTA_KIDNEY';
+  if (r < 0.93) return 'SYS_AORTA_LEG_L';
+  return 'SYS_AORTA_LEG_R';
+}
+
+function seedInitialParticles() {
+  particles = [];
+  // 1. 心內與肺循環腔室初始血球 (確保四腔室與動態瓣膜在啟動時即有血球流動)
+  spawnParticle('RBC', 'PATH_RA_TO_RV', 0.5, 71);
+  spawnParticle('RBC', 'PATH_RV_TO_PULM', 0.5, 71);
+  spawnParticle('RBC', 'PULM_CAPILLARY', 0.5, 88);
+  spawnParticle('RBC', 'PULM_VEIN', 0.5, 98.8);
+  spawnParticle('RBC', 'PATH_LA_TO_LV', 0.5, 98.8);
+  spawnParticle('RBC', 'PATH_LV_TO_AORTA', 0.5, 98.8);
+
+  // 2. 體循環各動脈分支 (鮮紅充氧血)
+  const artKeys = ['SYS_AORTA_BRAIN', 'SYS_AORTA_ARM_L', 'SYS_AORTA_ARM_R', 'SYS_AORTA_GUT', 'SYS_AORTA_LIVER', 'SYS_AORTA_KIDNEY', 'SYS_AORTA_LEG_L', 'SYS_AORTA_LEG_R'];
+  artKeys.forEach(k => {
+    spawnParticle('RBC', k, 0.25, 98.5);
+    spawnParticle('RBC', k, 0.75, 98.5);
+  });
+
+  // 3. 體靜脈各回流分支 (暗紅/低氧血)
+  const veinKeys = ['SYS_VEIN_BRAIN', 'SYS_VEIN_ARM_L', 'SYS_VEIN_ARM_R', 'SYS_VEIN_KIDNEY', 'SYS_VEIN_LEG_L', 'SYS_VEIN_LEG_R', 'HEPATIC_VEIN'];
+  veinKeys.forEach(k => {
+    spawnParticle('RBC', k, 0.3, 72);
+    spawnParticle('RBC', k, 0.8, 72);
+  });
+
+  // 4. 肝門靜脈葡萄糖分子
+  spawnParticle('GLUCOSE', 'PORTAL_VEIN', 0.25);
+  spawnParticle('GLUCOSE', 'PORTAL_VEIN', 0.75);
+
+  // 5. 腎臟尿液排泄尿素
+  spawnParticle('UREA', 'EXCRETION_URINE', 0.35);
+}
+
+// 推進所有微粒進度與狀態機
+function updateParticles(dt) {
+  // 自動依進食與代謝生成新葡萄糖與尿素分子
+  if (Math.random() < 0.08 * (params.dietGlucose / 100)) {
+    spawnParticle('GLUCOSE', 'PORTAL_VEIN', 0);
+  }
+  if (Math.random() < 0.05 * (params.gfr / 100)) {
+    spawnParticle('UREA', 'EXCRETION_URINE', 0);
+  }
+
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    const pObj = PATHWAYS[p.pathKey];
+    const pathLen = (pObj && pObj.len) ? pObj.len : 260;
+
+    // 根據解剖血管類型調整物理流速 (允許更快速移動，整體節奏明快自然)
+    let flowVelocity = 180; // 基準像素速度 px/sec
+    if (p.pathKey === 'PATH_LV_TO_AORTA' || p.pathKey === 'PATH_RV_TO_PULM') {
+      flowVelocity = 260; // 心室強勁高壓射血
+    } else if (p.pathKey === 'PULM_CAPILLARY') {
+      flowVelocity = 110; // 肺泡微血管氣體交換
+    } else if (p.pathKey.startsWith('PATH_')) {
+      flowVelocity = 165; // 心房室瓣血流
+    }
+
+    p.progress += (flowVelocity * p.speedFactor * dt * (params.heartRate / 75)) / pathLen;
+
+    // 氣體交換動態在途演變 (肺泡微血管充氧 vs 組織末梢毛細血管釋氧)
+    if (p.pathKey === 'PULM_CAPILLARY' && p.type === 'RBC') {
+      p.o2Sat = Math.min(99, p.o2Sat + 65 * dt * (params.ventilation / 100));
+    } else if (p.pathKey.startsWith('SYS_AORTA_') && p.type === 'RBC' && p.progress > 0.55) {
+      // 組織毛細血管釋放氧氣供周邊代謝
+      p.o2Sat = Math.max(68, p.o2Sat - 45 * dt * (params.exercise / 100));
+    }
+
+    if (p.progress >= 1.0) {
+      handleParticleTransition(p, i);
+    } else {
+      updateParticlePosition(p);
+      if (p === trackedParticle) {
+        if (!p.trail) p.trail = [];
+        p.trail.push({ x: p.x, y: p.y });
+        if (p.trail.length > 28) p.trail.shift();
+      }
+    }
+  }
+
+  // 控管分子上限避免過載 (優先清除游離分子，保留紅血球在封閉循環中)
+  if (particles.length > 120) {
+    const idx = particles.findIndex(pt => pt !== trackedParticle && pt.type !== 'RBC');
+    if (idx !== -1) particles.splice(idx, 1);
+  }
+}
+
+// 生理微粒生命週期轉換與閉鎖式紅血球循環
+function handleParticleTransition(p, index) {
+  // 1. 體外尿液排泄端 (EXCRETION_URINE) -> 代謝廢物排出體外，在此銷毀結束旅程！
+  if (p.pathKey === 'EXCRETION_URINE') {
+    stocks.urineAccumulated += 1.5;
+    if (p === trackedParticle) {
+      setTrackedParticle(null);
+    }
+    particles.splice(index, 1);
+    return;
+  }
+
+  // 2. 葡萄糖分子進入肝臟 (PORTAL_VEIN) -> 轉化為肝糖儲存
+  if (p.type === 'GLUCOSE') {
+    if (p.pathKey === 'PORTAL_VEIN') {
+      stocks.liverGlycogen = Math.min(100, stocks.liverGlycogen + 0.6);
+      if (p === trackedParticle) setTrackedParticle(null);
+      particles.splice(index, 1);
+      return;
+    }
+  }
+
+  // 3. 紅血球 (RBC) 閉鎖式恆定循環：全四腔室與體／肺／肝門循環無縫交接，絕不消失！
+  if (p.type === 'RBC') {
+    // 檢查追蹤微粒之「單次終點 vs 持續循環」開關
+    if (p === trackedParticle && !params.continuousCycle) {
+      setTrackedParticle(null);
+    }
+
+    if (p.trail) p.trail = [];
+
+    // [Step 1] 所有體靜脈抵達 右心房 (HEART_RA) -> 跨三尖瓣進入右心室 (PATH_RA_TO_RV)
+    if (p.pathKey.startsWith('SYS_VEIN_') || p.pathKey === 'HEPATIC_VEIN') {
+      p.pathKey = 'PATH_RA_TO_RV';
+      p.progress = 0;
+      updateParticlePosition(p);
+      return;
+    }
+
+    // [Step 2] 三尖瓣血流抵達 右心室 (HEART_RV) -> 經肺動脈瓣泵向肺動脈幹 (PATH_RV_TO_PULM)
+    if (p.pathKey === 'PATH_RA_TO_RV') {
+      p.pathKey = 'PATH_RV_TO_PULM';
+      p.progress = 0;
+      updateParticlePosition(p);
+      return;
+    }
+
+    // [Step 3] 肺動脈幹抵達 肺臟 (LUNGS) -> 進入肺泡微血管網進行充氧氣體交換 (PULM_CAPILLARY)
+    if (p.pathKey === 'PATH_RV_TO_PULM') {
+      p.pathKey = 'PULM_CAPILLARY';
+      p.progress = 0;
+      p.o2Sat = 72; // 開始充氧
+      updateParticlePosition(p);
+      return;
+    }
+
+    // [Step 4] 肺泡充氧完成 (飽和度達 99% 鮮紅) -> 進入肺靜脈回流左心房 (PULM_VEIN)
+    if (p.pathKey === 'PULM_CAPILLARY') {
+      p.pathKey = 'PULM_VEIN';
+      p.progress = 0;
+      p.o2Sat = 98.8; // 充氧鮮紅
+      updateParticlePosition(p);
+      return;
+    }
+
+    // [Step 5] 肺靜脈抵達 左心房 (HEART_LA) -> 跨二尖瓣／僧帽瓣進入左心室 (PATH_LA_TO_LV)
+    if (p.pathKey === 'PULM_VEIN') {
+      p.pathKey = 'PATH_LA_TO_LV';
+      p.progress = 0;
+      updateParticlePosition(p);
+      return;
+    }
+
+    // [Step 6] 二尖瓣血流抵達 左心室 (HEART_LV) -> 經主動脈瓣高壓射血至主動脈弓 (PATH_LV_TO_AORTA)
+    if (p.pathKey === 'PATH_LA_TO_LV') {
+      p.pathKey = 'PATH_LV_TO_AORTA';
+      p.progress = 0;
+      updateParticlePosition(p);
+      return;
+    }
+
+    // [Step 7] 主動脈射血抵達 主動脈弓 (AORTA ARCH) -> 分流至全身 8 大體動脈分支
+    if (p.pathKey === 'PATH_LV_TO_AORTA') {
+      p.pathKey = selectRandomSystemicArtery();
+      p.progress = 0;
+      p.o2Sat = 98.5;
+      updateParticlePosition(p);
+      return;
+    }
+
+    // [Step 8] 胃腸道動脈分支 -> 進入腸道毛細血管網，吸收葡萄糖進入肝門靜脈
+    if (p.pathKey === 'SYS_AORTA_GUT') {
+      p.pathKey = 'PORTAL_VEIN';
+      p.progress = 0;
+      p.o2Sat = 74;
+      p.hasGlucose = true;
+      updateParticlePosition(p);
+      return;
+    }
+
+    // [Step 9] 肝門靜脈抵達肝臟 -> 進入肝靜脈匯入下腔靜脈回心
+    if (p.pathKey === 'PORTAL_VEIN') {
+      p.pathKey = 'HEPATIC_VEIN';
+      p.progress = 0;
+      p.hasGlucose = false;
+      updateParticlePosition(p);
+      return;
+    }
+
+    // [Step 10] 上半身體動脈 (腦、左手、右手) -> 組織釋氧，轉為上腔靜脈回流
+    if (p.pathKey === 'SYS_AORTA_BRAIN') {
+      p.pathKey = 'SYS_VEIN_BRAIN';
+      p.progress = 0;
+      p.o2Sat = 72;
+      updateParticlePosition(p);
+      return;
+    }
+    if (p.pathKey === 'SYS_AORTA_ARM_L') {
+      p.pathKey = 'SYS_VEIN_ARM_L';
+      p.progress = 0;
+      p.o2Sat = 72;
+      updateParticlePosition(p);
+      return;
+    }
+    if (p.pathKey === 'SYS_AORTA_ARM_R') {
+      p.pathKey = 'SYS_VEIN_ARM_R';
+      p.progress = 0;
+      p.o2Sat = 72;
+      updateParticlePosition(p);
+      return;
+    }
+
+    // [Step 11] 下半身體動脈 (腎臟、肝固有動脈、左腳、右腳) -> 組織釋氧，轉為下腔靜脈回流
+    if (p.pathKey === 'SYS_AORTA_KIDNEY') {
+      p.pathKey = 'SYS_VEIN_KIDNEY';
+      p.progress = 0;
+      p.o2Sat = 73;
+      updateParticlePosition(p);
+      return;
+    }
+    if (p.pathKey === 'SYS_AORTA_LIVER') {
+      p.pathKey = 'HEPATIC_VEIN';
+      p.progress = 0;
+      p.o2Sat = 73;
+      updateParticlePosition(p);
+      return;
+    }
+    if (p.pathKey === 'SYS_AORTA_LEG_L') {
+      p.pathKey = 'SYS_VEIN_LEG_L';
+      p.progress = 0;
+      p.o2Sat = 71;
+      updateParticlePosition(p);
+      return;
+    }
+    if (p.pathKey === 'SYS_AORTA_LEG_R') {
+      p.pathKey = 'SYS_VEIN_LEG_R';
+      p.progress = 0;
+      p.o2Sat = 71;
+      updateParticlePosition(p);
+      return;
+    }
+  }
+
+  // 其他非紅血球微粒抵達終點時銷毀
+  if (p === trackedParticle) {
+    setTrackedParticle(null);
+  }
+  particles.splice(index, 1);
+}
+
+// ==========================================
+// 5. 隔室動態模型 (ODE Numerical Integration)
+// ==========================================
+function updateSimulationModel(dt) {
+  // 1. 心輸出量 (Cardiac Output = Stroke Volume × Heart Rate)
+  const targetCO = (70 * params.heartRate * (params.exercise / 100)) / 1000;
+  stocks.cardiacOutput += (targetCO - stocks.cardiacOutput) * (1 - Math.exp(-dt * 2));
+
+  // 2. 氧氣飽和度 (SpO2 & SvO2)
+  const targetSpO2 = clamp(94 + 5 * (params.ventilation / 100) - 2 * (params.exercise / 100 - 1), 85, 99.8);
+  stocks.spO2 += (targetSpO2 - stocks.spO2) * (1 - Math.exp(-dt * 1.5));
+  const targetSvO2 = clamp(75 - 18 * (params.exercise / 100 - 1), 45, 80);
+  stocks.svO2 += (targetSvO2 - stocks.svO2) * (1 - Math.exp(-dt * 1.5));
+
+  // 3. 血糖與肝糖平衡
+  const gutGlucoseInput = 0.8 * (params.dietGlucose / 100);
+  const muscleGlucoseUse = 0.5 * (params.exercise / 100);
+  const brainGlucoseUse = 0.3; // 腦部恆定消耗
+  const netGlucoseFlow = gutGlucoseInput - muscleGlucoseUse - brainGlucoseUse;
+
+  // 肝臟緩衝調節
+  stocks.bloodGlucose += netGlucoseFlow * dt * 8;
+  stocks.bloodGlucose = clamp(stocks.bloodGlucose, 65, 180);
+
+  // 肝糖反向回補或吸收
+  if (stocks.bloodGlucose > 105) {
+    stocks.liverGlycogen = Math.min(100, stocks.liverGlycogen + 1.2 * dt);
+  } else if (stocks.bloodGlucose < 85) {
+    stocks.liverGlycogen = Math.max(10, stocks.liverGlycogen - 1.5 * dt);
+  }
+}
+
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
+}
+
+// ==========================================
+// 6. Canvas 視覺渲染引擎
+// ==========================================
+const canvas = document.getElementById('simCanvas');
+const ctx = canvas.getContext('2d');
+let scaleRatio = 1;
+let offsetX = 0;
+let offsetY = 0;
+
+function resizeCanvas() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const scaleX = rect.width / LOGICAL_W;
+  const scaleY = rect.height / LOGICAL_H;
+  scaleRatio = Math.min(scaleX, scaleY);
+  offsetX = (rect.width - LOGICAL_W * scaleRatio) / 2;
+  offsetY = (rect.height - LOGICAL_H * scaleRatio) / 2;
+}
+
+function roundRect(ctx, x, y, w, h, r, fill, stroke) {
+  if (typeof r === 'number') r = { tl: r, tr: r, br: r, bl: r };
+  ctx.beginPath();
+  ctx.moveTo(x + r.tl, y);
+  ctx.lineTo(x + w - r.tr, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r.tr);
+  ctx.lineTo(x + w, y + h - r.br);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r.br, y + h);
+  ctx.lineTo(x + r.bl, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r.bl);
+  ctx.lineTo(x, y + r.tl);
+  ctx.quadraticCurveTo(x, y, x + r.tl, y);
+  ctx.closePath();
+  if (fill) ctx.fill();
+  if (stroke) ctx.stroke();
+}
+
+function isPathHighlighted(pKey) {
+  if (trackedParticle && (trackedParticle.pathKey === pKey || PATHWAYS[pKey]?.code === pKey)) {
+    return true;
+  }
+  if (activeHighlights.size === 0) return true;
+  const pObj = PATHWAYS[pKey];
+  if (!pObj) return false;
+  return activeHighlights.has(pObj.circuit) || activeHighlights.has(pKey);
+}
+
+function renderScene() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  ctx.clearRect(0, 0, rect.width, rect.height);
+
+  ctx.save();
+  ctx.translate(offsetX, offsetY);
+  ctx.scale(scaleRatio, scaleRatio);
+
+  // 1. 繪製三大子循環分區虛線底框
+  drawCircuitZones();
+
+  // 2. 繪製心臟整體外包膜 (心包膜 Pericardium 與中隔腔室架構)
+  drawHeartPericardium();
+
+  // 3. 繪製所有解剖器官節點 (包含心臟四腔室 RA, RV, LA, LV)
+  // 先畫器官節點底框，確保血管線條永不被器官矩形遮蔽在背後
+  for (const k in ORGANS) {
+    drawOrganNode(ORGANS[k]);
+  }
+
+  // 4. 繪製所有血管折線管道 (在器官節點之上清晰連結)
+  for (const k in PATHWAYS) {
+    drawVascularPath(PATHWAYS[k]);
+  }
+
+  // 5. 繪製心臟四組動態瓣膜與心動週期狀態徽章 (置頂於腔室與血管之上以清晰觀察)
+  drawHeartValvesAndPhase();
+
+  // 6. 繪製微粒 (背景粒子先畫，追蹤粒子置頂)
+  if (trackedParticle) {
+    drawParticleTrail(trackedParticle);
+  }
+  particles.forEach(p => {
+    if (p === trackedParticle) return;
+    drawParticle(p);
+  });
+  if (trackedParticle) {
+    drawParticle(trackedParticle);
+  }
+
+  ctx.restore();
+}
+
+// 繪製三大子系統分區框
+function drawCircuitZones() {
+  ctx.save();
+  // 肺循環分區 (上方)
+  ctx.strokeStyle = 'rgba(6, 182, 212, 0.22)';
+  ctx.fillStyle = 'rgba(6, 182, 212, 0.02)';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([8, 6]);
+  roundRect(ctx, 600, 135, 400, 115, 12, true, true);
+
+  // 肝門循環分區 (腹腔右下方)
+  ctx.strokeStyle = 'rgba(139, 92, 246, 0.22)';
+  ctx.fillStyle = 'rgba(139, 92, 246, 0.02)';
+  roundRect(ctx, 660, 485, 625, 145, 12, true, true);
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+// 繪製心臟整體外包膜 (Pericardium) 與心肌收縮律動
+function drawHeartPericardium() {
+  ctx.save();
+  // 外圍心包膜整體包絡 (橫向排列包絡 RA, RV, LV, LA)
+  const hx = 525, hy = 295, hw = 550, hh = 168;
+
+  // 計算心動週期 (Cardiac Cycle)
+  const cardiacCycle = 60 / params.heartRate; // 例如 75 BPM 時為 0.8 秒
+  const cyclePhase = (simTime % cardiacCycle) / cardiacCycle; // 0.0 ~ 1.0
+  const isVentricularSystole = (cyclePhase >= 0.15 && cyclePhase < 0.45);
+  const isAtrialSystole = (cyclePhase < 0.15);
+
+  // 心肌收縮跳動幅度微調 (搏動感)
+  let pulseScale = 1.0;
+  if (isVentricularSystole) {
+    pulseScale = 1.018 - 0.022 * Math.sin(((cyclePhase - 0.15) / 0.3) * Math.PI);
+  } else if (isAtrialSystole) {
+    pulseScale = 1.012 - 0.016 * Math.sin((cyclePhase / 0.15) * Math.PI);
+  }
+
+  ctx.translate(800, 375);
+  ctx.scale(pulseScale, pulseScale);
+  ctx.translate(-800, -375);
+
+  // 心包膜底色漸層 (深色底襯托四腔室)
+  const grad = ctx.createRadialGradient(800, 375, 30, 800, 375, hw * 0.55);
+  grad.addColorStop(0, 'rgba(80, 7, 36, 0.45)');
+  grad.addColorStop(1, 'rgba(15, 23, 42, 0.75)');
+  ctx.fillStyle = grad;
+  ctx.strokeStyle = isVentricularSystole ? '#ef4444' : 'rgba(244, 63, 94, 0.45)';
+  ctx.lineWidth = isVentricularSystole ? 2.5 : 1.8;
+  roundRect(ctx, hx, hy, hw, hh, 18, true, true);
+
+  // 室中隔線 (Interventricular Septum) - 位於 RV(x:735) 與 LV(x:865) 正中央 (x=800)
+  ctx.strokeStyle = 'rgba(244, 63, 94, 0.4)';
+  ctx.lineWidth = 3;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.moveTo(800, 325);
+  ctx.lineTo(800, 425);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // 心包膜外側總標題
+  if (labelState.organs) {
+    ctx.fillStyle = '#fecdd3';
+    ctx.font = 'bold 12.5px "Noto Sans TC", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('心臟四腔室與瓣膜結構 (HEART - 體肺雙循環樞紐)', 800, 313);
+  }
+
+  ctx.restore();
+}
+
+// 繪製單條血管折線
+function drawVascularPath(pObj) {
+  const hl = isPathHighlighted(pObj.id);
+  ctx.save();
+  ctx.globalAlpha = hl ? 0.95 : 0.16;
+  ctx.strokeStyle = pObj.color;
+  ctx.lineWidth = hl && activeHighlights.size > 0 ? pObj.width + 1.5 : pObj.width;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  if (pObj.lineStyle === 'dashed') {
+    ctx.setLineDash([8, 6]);
+  } else if (pObj.lineStyle === 'double') {
+    // 肝門靜脈雙管視覺
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    pObj.pts.forEach((pt, i) => { if (i===0) ctx.moveTo(pt.x, pt.y); else ctx.lineTo(pt.x, pt.y); });
+    ctx.stroke();
+    ctx.strokeStyle = '#c4b5fd';
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([6, 6]);
+  }
+
+  ctx.beginPath();
+  pObj.pts.forEach((pt, i) => {
+    if (i === 0) ctx.moveTo(pt.x, pt.y);
+    else ctx.lineTo(pt.x, pt.y);
+  });
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+// 繪製解剖器官節點 (支援心臟四腔室收縮與動態瓣膜)
+function drawOrganNode(org) {
+  ctx.save();
+  const rx = org.x - org.w / 2;
+  const ry = org.y - org.h / 2;
+
+  // 判斷是否為心臟四腔室
+  const isHeartChamber = org.id.startsWith('HEART_');
+
+  // 節點底色與外框
+  ctx.fillStyle = org.color;
+  ctx.strokeStyle = org.border;
+  ctx.lineWidth = isHeartChamber ? 2.2 : 2.0;
+
+  // 心室收縮期給心室額外外發光
+  if (isHeartChamber) {
+    const cardiacCycle = 60 / params.heartRate;
+    const cyclePhase = (simTime % cardiacCycle) / cardiacCycle;
+    const isVentricularSystole = (cyclePhase >= 0.15 && cyclePhase < 0.45);
+    const isAtrialSystole = (cyclePhase < 0.15);
+
+    if (isVentricularSystole && (org.id === 'HEART_LV' || org.id === 'HEART_RV')) {
+      ctx.strokeStyle = (org.id === 'HEART_LV') ? '#f43f5e' : '#60a5fa';
+      ctx.lineWidth = 3.2;
+    } else if (isAtrialSystole && (org.id === 'HEART_LA' || org.id === 'HEART_RA')) {
+      ctx.strokeStyle = '#c084fc';
+      ctx.lineWidth = 2.8;
+    }
+  }
+
+  roundRect(ctx, rx, ry, org.w, org.h, 10, true, true);
+
+  // 第一行：器官名稱
+  if (labelState.organs) {
+    ctx.fillStyle = '#ffffff';
+    ctx.font = isHeartChamber ? 'bold 13.5px "Noto Sans TC", sans-serif' : 'bold 15px "Noto Sans TC", sans-serif';
+    ctx.textAlign = 'center';
+    const titleY = isHeartChamber ? (ry + 18) : (labelState.organFunctions ? (ry + 23) : (ry + org.h / 2 + 5));
+    ctx.fillText(org.name, org.x, titleY);
+  }
+
+  // 第二行：功能說明文字
+  if (labelState.organFunctions) {
+    ctx.fillStyle = '#cbd5e1';
+    ctx.font = isHeartChamber ? '10.5px "Noto Sans TC", sans-serif' : '12px "Noto Sans TC", sans-serif';
+    ctx.textAlign = 'center';
+    const subY = isHeartChamber ? (ry + 33) : (ry + 42);
+    ctx.fillText(org.sub, org.x, subY);
+  }
+
+  // 第三行：節點內部即時小量表 (Mini-bars)
+  if (labelState.meters) {
+    const baseMeterY = isHeartChamber ? (ry + 49) : (labelState.organFunctions ? (ry + 66) : (ry + 48));
+    drawNodeInternalMeters(org, rx, ry, baseMeterY);
+  }
+
+  ctx.restore();
+}
+
+// 心臟四組動態瓣膜與心動週期狀態徽章
+function drawHeartValvesAndPhase() {
+  if (!labelState.valves) return;
+  ctx.save();
+
+  // 計算心動週期 (Cardiac Cycle)
+  const cardiacCycle = 60 / params.heartRate;
+  const cyclePhase = (simTime % cardiacCycle) / cardiacCycle; // 0.0 ~ 1.0
+
+  const isAtrialSystole = cyclePhase < 0.15;
+  const isVentricularSystole = cyclePhase >= 0.15 && cyclePhase < 0.45;
+  const isDiastole = cyclePhase >= 0.45;
+
+  // 1. 三尖瓣 (Tricuspid Valve: RA -> RV 橫向充盈) at (670, 375)
+  drawVerticalValve(670, 375, !isVentricularSystole, true, '三尖瓣');
+
+  // 2. 二尖瓣／僧帽瓣 (Bicuspid/Mitral Valve: LA -> LV 橫向充盈) at (930, 375)
+  drawVerticalValve(930, 375, !isVentricularSystole, false, '二尖瓣');
+
+  // 3. 肺動脈瓣 (Pulmonary Semilunar: RV -> 肺動脈幹 垂直向上射血) at (735, 315)
+  drawSemilunarValve(735, 315, isVentricularSystole, '肺動脈瓣');
+
+  // 4. 主動脈瓣 (Aortic Semilunar: LV -> 主動脈弓 垂直向上射血) at (865, 315)
+  drawSemilunarValve(865, 315, isVentricularSystole, '主動脈瓣');
+
+  // 瓣膜文字小標籤 (防重疊)
+  ctx.font = 'bold 10px "Noto Sans TC", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = !isVentricularSystole ? '#38bdf8' : '#fbbf24';
+  ctx.fillText('三尖瓣', 670, 350);
+  ctx.fillStyle = !isVentricularSystole ? '#38bdf8' : '#fbbf24';
+  ctx.fillText('二尖瓣', 930, 350);
+
+  ctx.fillStyle = isVentricularSystole ? '#4ade80' : '#f87171';
+  ctx.fillText('肺動脈瓣', 735, 298);
+  ctx.fillText('主動脈瓣', 865, 298);
+
+  // 心動週期動態狀態徽章 (置於心臟正下方)
+  let phaseText = '全心舒張 (房室微開・全心充盈)';
+  let phaseColor = '#38bdf8';
+  if (isAtrialSystole) {
+    phaseText = '心房收縮 (房室瓣開・充盈心室)';
+    phaseColor = '#c084fc';
+  } else if (isVentricularSystole) {
+    phaseText = '心室收縮 (動脈瓣開・強勁射血)';
+    phaseColor = '#ef4444';
+  }
+
+  const badgeX = 800, badgeY = 445;
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+  ctx.strokeStyle = phaseColor;
+  ctx.lineWidth = 1.2;
+  roundRect(ctx, badgeX - 110, badgeY - 11, 220, 22, 6, true, true);
+  ctx.fillStyle = phaseColor;
+  ctx.font = 'bold 11px "Noto Sans TC", sans-serif';
+  ctx.fillText(phaseText, badgeX, badgeY + 4);
+
+  ctx.restore();
+}
+
+// 房室瓣繪製 (二尖瓣/三尖瓣 - 橫向血流開閉)
+function drawVerticalValve(x, y, isOpen, pointsRight, name) {
+  ctx.save();
+  ctx.strokeStyle = isOpen ? '#38bdf8' : '#fbbf24';
+  ctx.lineWidth = 2.8;
+  ctx.beginPath();
+  const dir = pointsRight ? 1 : -1;
+  if (isOpen) {
+    // 瓣膜向右(或向左)被血流推開進入心室
+    ctx.moveTo(x, y - 16);
+    ctx.lineTo(x + dir * 8, y - 4);
+    ctx.moveTo(x, y + 16);
+    ctx.lineTo(x + dir * 8, y + 4);
+  } else {
+    // 瓣膜垂直閉合 (緊貼防逆流)
+    ctx.moveTo(x, y - 16);
+    ctx.lineTo(x, y + 16);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+// 舊房室瓣繪製保留向下相容 (若有其他地方調用)
+function drawValve(x, y, isOpen, name) {
+  drawVerticalValve(x, y, isOpen, true, name);
+}
+
+// 半月瓣繪製 (主動脈瓣/肺動脈瓣)
+function drawSemilunarValve(x, y, isOpen, name) {
+  ctx.save();
+  ctx.strokeStyle = isOpen ? '#4ade80' : '#f87171';
+  ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  if (isOpen) {
+    // 射血時被血液推開向上
+    ctx.moveTo(x - 10, y + 4);
+    ctx.lineTo(x - 4, y - 5);
+    ctx.moveTo(x + 10, y + 4);
+    ctx.lineTo(x + 4, y - 5);
+  } else {
+    // 閉合防止動脈血逆流回心室
+    ctx.moveTo(x - 10, y);
+    ctx.lineTo(x, y + 4);
+    ctx.lineTo(x + 10, y);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+// 節點內部即時小量表 (無文字重疊保護)
+function drawNodeInternalMeters(org, rx, ry, baseMeterY) {
+  ctx.save();
+  ctx.font = 'bold 10px "Noto Sans TC", sans-serif';
+  ctx.textAlign = 'left';
+
+  if (org.id === 'HEART_RA') {
+    drawMiniBar(rx + 12, baseMeterY, 96, 'CVP 靜脈壓 5 mmHg', 50, '#60a5fa');
+  } else if (org.id === 'HEART_RV') {
+    drawMiniBar(rx + 12, baseMeterY, 96, 'PAP 肺動脈壓 22 mmHg', 60, '#3b82f6');
+  } else if (org.id === 'HEART_LA') {
+    drawMiniBar(rx + 12, baseMeterY, 96, 'PCWP 楔壓 9 mmHg', 55, '#f43f5e');
+  } else if (org.id === 'HEART_LV') {
+    drawMiniBar(rx + 12, baseMeterY, 96, 'BP 射血壓 120 mmHg', 80, '#ef4444');
+  } else if (org.id === 'LUNGS') {
+    drawMiniBar(rx + 20, baseMeterY, 130, '肺泡氣體交換率', stocks.spO2, '#06b6d4');
+    drawMiniBar(rx + 170, baseMeterY, 130, 'CO₂ 排出效率', 100 * (params.ventilation / 100), '#38bdf8');
+  } else if (org.id === 'BRAIN') {
+    drawMiniBar(rx + 15, baseMeterY, 230, '腦部葡萄糖穩定消耗', 98, '#818cf8');
+  } else if (org.id === 'ARM_L' || org.id === 'ARM_R') {
+    drawMiniBar(rx + 15, baseMeterY, 150, '肌肉代謝消耗程度', 100 * (params.exercise / 100), '#a855f7');
+  } else if (org.id === 'GUT') {
+    drawMiniBar(rx + 20, baseMeterY, 190, '腸道葡萄糖吸收通量', 100 * (params.dietGlucose / 100), '#f59e0b');
+  } else if (org.id === 'LIVER') {
+    drawMiniBar(rx + 18, baseMeterY, 108, '肝糖儲備量', stocks.liverGlycogen, '#f97316');
+    drawMiniBar(rx + 138, baseMeterY, 108, '血糖調節動態', stocks.bloodGlucose / 1.5, '#fbbf24');
+  } else if (org.id === 'KIDNEY') {
+    drawMiniBar(rx + 16, baseMeterY, 168, '腎絲球濾過率 (GFR)', 100 * (params.gfr / 100), '#fb7185');
+  } else if (org.id === 'URINE_END') {
+    drawMiniBar(rx + 16, baseMeterY, 178, '尿液代謝廢物累積', Math.min(100, stocks.urineAccumulated / 2.5), '#94a3b8');
+  } else if (org.id === 'LEG_L' || org.id === 'LEG_R') {
+    drawMiniBar(rx + 16, baseMeterY, 152, '下肢肌肉耗氧強度', 100 * (params.exercise / 100), '#a855f7');
+  }
+  ctx.restore();
+}
+
+function drawMiniBar(x, y, w, label, val, color) {
+  ctx.fillStyle = '#e2e8f0';
+  ctx.fillText(`${label}`, x, y);
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+  roundRect(ctx, x, y + 4, w, 6, 2, true, false);
+  ctx.fillStyle = color;
+  roundRect(ctx, x, y + 4, Math.max(3, (w * clamp(val, 0, 100)) / 100), 6, 2, true, false);
+}
+
+// 繪製運動拖尾光束
+function drawParticleTrail(p) {
+  if (!p || !p.trail || p.trail.length < 2) return;
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  for (let i = 0; i < p.trail.length - 1; i++) {
+    const ratio = (i + 1) / p.trail.length;
+    const alpha = ratio * 0.75;
+    const width = 2.0 + ratio * 4.5;
+    ctx.strokeStyle = `rgba(56, 189, 248, ${alpha})`;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(p.trail[i].x, p.trail[i].y);
+    ctx.lineTo(p.trail[i + 1].x, p.trail[i + 1].y);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// 繪製血球與微粒 (含準心雷達光環，不附帶多餘 #ID 標籤)
+function drawParticle(p) {
+  const hl = isPathHighlighted(p.pathKey);
+  const isTracked = (p === trackedParticle);
+
+  ctx.save();
+  if (trackedParticle) {
+    ctx.globalAlpha = isTracked ? 1.0 : (hl ? 0.22 : 0.08);
+  } else {
+    ctx.globalAlpha = hl ? 0.96 : 0.15;
+  }
+  ctx.translate(p.x, p.y);
+
+  // 追蹤微粒聲納脈衝環與準心
+  if (isTracked) {
+    ctx.save();
+    // 1. 動態光芒底暈
+    const glow = ctx.createRadialGradient(0, 0, 4, 0, 0, 36);
+    glow.addColorStop(0, 'rgba(56, 189, 248, 0.65)');
+    glow.addColorStop(0.55, 'rgba(56, 189, 248, 0.25)');
+    glow.addColorStop(1, 'rgba(56, 189, 248, 0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(0, 0, 36, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 2. 向外擴散之動態脈衝波
+    const wave = (simTime * 2.2) % 1.0;
+    const waveR = 15 + wave * 25;
+    ctx.strokeStyle = `rgba(56, 189, 248, ${(1 - wave) * 0.9})`;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, waveR, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // 3. 雙層鎖定準心環與十字標記
+    const rRing = 22;
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    ctx.arc(0, 0, rRing, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 4 個準心刻度
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(0, -rRing - 5); ctx.lineTo(0, -rRing + 1);
+    ctx.moveTo(0, rRing - 1); ctx.lineTo(0, rRing + 5);
+    ctx.moveTo(-rRing - 5, 0); ctx.lineTo(-rRing + 1, 0);
+    ctx.moveTo(rRing - 1, 0); ctx.lineTo(rRing + 5, 0);
+    ctx.stroke();
+    ctx.restore();
+
+    // 放大粒子本身 1.35 倍
+    ctx.scale(1.35, 1.35);
+  }
+
+  // 微粒具體本體型態
+  if (p.type === 'RBC') {
+    // 依據含氧飽和度動態呈現鮮紅 (高氧) vs 暗紅/紫青 (低氧)
+    const o2Ratio = (p.o2Sat - 65) / 35; // 0.0 ~ 1.0
+    const rCol = Math.round(120 + 135 * o2Ratio);
+    const gCol = Math.round(20 + 35 * o2Ratio);
+    const bCol = Math.round(180 - 150 * o2Ratio);
+    const rbcColor = `rgb(${rCol}, ${gCol}, ${bCol})`;
+
+    // 雙凹圓盤血球輪廓
+    ctx.fillStyle = rbcColor;
+    ctx.strokeStyle = o2Ratio > 0.5 ? '#b91c1c' : '#3b82f6';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.arc(0, 0, 7.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // 內部氧氣分子或二氧化碳標記
+    ctx.fillStyle = o2Ratio > 0.5 ? '#fef08a' : '#93c5fd';
+    ctx.beginPath();
+    ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 若附載葡萄糖 (經肝門靜脈)
+    if (p.hasGlucose) {
+      drawHexagon(5, -6, 3.5, '#fbbf24');
+    }
+
+    if (labelState.oxygenSat) {
+      ctx.font = 'bold 9.5px var(--font-mono)';
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${Math.round(p.o2Sat)}%`, 0, -11);
+    }
+  } else if (p.type === 'GLUCOSE') {
+    // 游離葡萄糖分子：金黃六角形晶體
+    drawHexagon(0, 0, 5.5, '#fbbf24');
+  } else if (p.type === 'UREA') {
+    // 尿素分子：灰藍色球體
+    ctx.fillStyle = '#cbd5e1';
+    ctx.strokeStyle = '#64748b';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(0, 0, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function drawHexagon(x, y, r, color) {
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.strokeStyle = '#d97706';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const angle = (Math.PI / 3) * i;
+    const hx = x + r * Math.cos(angle);
+    const hy = y + r * Math.sin(angle);
+    if (i === 0) ctx.moveTo(hx, hy);
+    else ctx.lineTo(hx, hy);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
+// ==========================================
+// 7. 介面互動與事件監聽
+// ==========================================
+function updateTrackerCardDOM() {
+  const box = document.getElementById('trackerInfoBox');
+  if (trackedParticle) {
+    const pObj = PATHWAYS[trackedParticle.pathKey];
+    const typeDesc = {
+      'RBC': `紅血球微粒（含氧飽和度: ${Math.round(trackedParticle.o2Sat)}%，${trackedParticle.o2Sat > 85 ? '鮮紅動脈血' : '暗紅靜脈血'}）`,
+      'GLUCOSE': '葡萄糖分子（膳食吸收／肝糖分解轉化之能量受體）',
+      'UREA': '尿素代謝物（肝臟蛋白質代謝合成，專由腎臟濾過排泄）'
+    }[trackedParticle.type] || trackedParticle.type;
+
+    box.innerHTML = `
+      • <strong>身分與載貨：</strong>${typeDesc}<br>
+      • <strong>目前所在血管：</strong>${pObj ? pObj.name : trackedParticle.pathKey}<br>
+      • <strong>路徑進度：</strong><span style="color:#38bdf8; font-weight:bold;">${Math.round(trackedParticle.progress * 100)}%</span><br>
+      • <strong>循環模式：</strong><span style="color:${params.continuousCycle ? '#38bdf8' : '#94a3b8'};">${params.continuousCycle ? '持續循環中（除尿液排出端外）' : '單次終點即結束'}</span>
+    `;
+    return;
+  }
+
+  box.innerHTML = `
+    點擊畫布上的血球、分子，或點選頂部「隨機追蹤」即可在此檢視其即時生理動態與路徑進度。
+  `;
+}
+
+function updateMetersDOM() {
+  document.getElementById('lblCardiacOutput').textContent = stocks.cardiacOutput.toFixed(1) + ' L/min';
+  document.getElementById('barCardiacOutput').style.width = Math.min(100, (stocks.cardiacOutput / 10) * 100) + '%';
+
+  document.getElementById('lblSpO2').textContent = stocks.spO2.toFixed(1) + ' %';
+  document.getElementById('barSpO2').style.width = stocks.spO2 + '%';
+
+  document.getElementById('lblSvO2').textContent = stocks.svO2.toFixed(1) + ' %';
+  document.getElementById('barSvO2').style.width = stocks.svO2 + '%';
+
+  document.getElementById('lblBloodGlucose').textContent = Math.round(stocks.bloodGlucose) + ' mg/dL';
+  document.getElementById('barBloodGlucose').style.width = Math.min(100, (stocks.bloodGlucose / 180) * 100) + '%';
+
+  document.getElementById('lblLiverGlycogen').textContent = Math.round(stocks.liverGlycogen) + ' %';
+  document.getElementById('barLiverGlycogen').style.width = stocks.liverGlycogen + '%';
+
+  document.getElementById('lblUrineOutput').textContent = Math.round(stocks.urineAccumulated) + ' mL';
+  document.getElementById('barUrineOutput').style.width = Math.min(100, (stocks.urineAccumulated / 400) * 100) + '%';
+}
+
+// 綁定滑桿控制項
+document.getElementById('slHeartRate').addEventListener('input', e => {
+  params.heartRate = parseInt(e.target.value);
+  document.getElementById('lblHeartRate').textContent = params.heartRate + ' BPM';
+});
+document.getElementById('slExercise').addEventListener('input', e => {
+  params.exercise = parseInt(e.target.value);
+  document.getElementById('lblExercise').textContent = params.exercise + '%';
+});
+document.getElementById('slDietGlucose').addEventListener('input', e => {
+  params.dietGlucose = parseInt(e.target.value);
+  document.getElementById('lblDietGlucose').textContent = params.dietGlucose + '%';
+});
+document.getElementById('slVentilation').addEventListener('input', e => {
+  params.ventilation = parseInt(e.target.value);
+  document.getElementById('lblVentilation').textContent = params.ventilation + '%';
+});
+document.getElementById('slGfr').addEventListener('input', e => {
+  params.gfr = parseInt(e.target.value);
+  document.getElementById('lblGfr').textContent = params.gfr + '%';
+});
+
+// 標籤切換
+document.getElementById('chkOrgans').addEventListener('change', e => { labelState.organs = e.target.checked; renderScene(); });
+document.getElementById('chkFunctions').addEventListener('change', e => { labelState.organFunctions = e.target.checked; renderScene(); });
+document.getElementById('chkMeters').addEventListener('change', e => { labelState.meters = e.target.checked; renderScene(); });
+document.getElementById('chkValves').addEventListener('change', e => { labelState.valves = e.target.checked; renderScene(); });
+document.getElementById('chkOxygenSat').addEventListener('change', e => { labelState.oxygenSat = e.target.checked; renderScene(); });
+document.getElementById('chkPaths').addEventListener('change', e => { labelState.paths = e.target.checked; renderScene(); });
+
+// 持續循環勾選開關
+document.getElementById('chkContinuousCycle').addEventListener('change', e => {
+  params.continuousCycle = e.target.checked;
+  updateTrackerCardDOM();
+});
+
+// 追蹤紅血球按鈕 (優先挑選紅血球，若無則生成一粒並立即鎖定)
+document.getElementById('btnTrackRandom').addEventListener('click', () => {
+  const rbcs = particles.filter(p => p.type === 'RBC');
+  if (rbcs.length > 0) {
+    const target = rbcs[Math.floor(Math.random() * rbcs.length)];
+    setTrackedParticle(target);
+  } else {
+    const p = spawnParticle('RBC', 'PATH_LV_TO_AORTA', 0, 99);
+    setTrackedParticle(p);
+  }
+  renderScene();
+});
+document.getElementById('btnStopTrack').addEventListener('click', () => {
+  setTrackedParticle(null);
+  renderScene();
+});
+
+// 路徑複選按鈕
+const pathChips = document.querySelectorAll('.path-chip-btn');
+pathChips.forEach(btn => {
+  btn.addEventListener('click', () => {
+    const hl = btn.dataset.hl;
+    if (activeHighlights.has(hl)) {
+      activeHighlights.delete(hl);
+      btn.classList.remove('active');
+    } else {
+      activeHighlights.add(hl);
+      btn.classList.add('active');
+    }
+    renderScene();
+  });
+});
+document.getElementById('btnClearHighlight').addEventListener('click', () => {
+  activeHighlights.clear();
+  pathChips.forEach(b => b.classList.remove('active'));
+  renderScene();
+});
+
+// 面板收合按鈕
+document.getElementById('btnToggleLeft').addEventListener('click', () => {
+  const sb = document.getElementById('leftSidebar');
+  sb.classList.toggle('collapsed');
+  setTimeout(resizeCanvas, 280);
+});
+document.getElementById('btnToggleRight').addEventListener('click', () => {
+  const rsb = document.getElementById('rightSidebar');
+  rsb.classList.toggle('collapsed');
+  setTimeout(resizeCanvas, 280);
+});
+
+// 動畫速度控制
+document.querySelectorAll('.speed-preset').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.speed-preset').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    simSpeed = parseFloat(b.dataset.speed);
+    document.getElementById('speedSlider').value = simSpeed;
+    document.getElementById('speedText').textContent = simSpeed.toFixed(2) + 'x';
+  });
+});
+document.getElementById('speedSlider').addEventListener('input', e => {
+  simSpeed = parseFloat(e.target.value);
+  document.getElementById('speedText').textContent = simSpeed.toFixed(2) + 'x';
+});
+
+// 播放與單步前進
+document.getElementById('btnPlayPause').addEventListener('click', () => {
+  isPlaying = !isPlaying;
+  document.getElementById('btnPlayPause').textContent = isPlaying ? '暫停動畫' : '繼續播放';
+});
+document.getElementById('btnStepFwd').addEventListener('click', () => {
+  updateSimulationModel(0.05);
+  updateParticles(0.05);
+  renderScene();
+});
+
+// 預設重設
+document.getElementById('btnReset').addEventListener('click', () => {
+  params = { ...DEFAULT_PARAMS };
+  stocks = { bloodGlucose: 95, liverGlycogen: 82, spO2: 98.5, svO2: 73.2, cardiacOutput: 5.2, urineAccumulated: 142 };
+  setTrackedParticle(null);
+  activeHighlights.clear();
+  pathChips.forEach(b => b.classList.remove('active'));
+  document.getElementById('slHeartRate').value = 75; document.getElementById('lblHeartRate').textContent = '75 BPM';
+  document.getElementById('slExercise').value = 100; document.getElementById('lblExercise').textContent = '100%';
+  document.getElementById('slDietGlucose').value = 100; document.getElementById('lblDietGlucose').textContent = '100%';
+  document.getElementById('slVentilation').value = 100; document.getElementById('lblVentilation').textContent = '100%';
+  document.getElementById('slGfr').value = 100; document.getElementById('lblGfr').textContent = '100%';
+  document.getElementById('chkContinuousCycle').checked = true;
+  seedInitialParticles();
+  updateMetersDOM();
+  updateTrackerCardDOM();
+  renderScene();
+});
+
+// 畫布點選微粒進行追蹤
+canvas.addEventListener('click', e => {
+  const rect = canvas.getBoundingClientRect();
+  const lx = (e.clientX - rect.left - offsetX) / scaleRatio;
+  const ly = (e.clientY - rect.top - offsetY) / scaleRatio;
+
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    if (Math.hypot(p.x - lx, p.y - ly) <= 18) {
+      setTrackedParticle(p);
+      renderScene();
+      return;
+    }
+  }
+});
+
+// 主迴圈
+function mainLoop(now) {
+  const rawDt = Math.min(0.08, (now - lastTimestamp) / 1000);
+  lastTimestamp = now;
+
+  if (isPlaying) {
+    const scaledDt = rawDt * simSpeed;
+    simTime += scaledDt;
+    updateSimulationModel(scaledDt);
+    updateParticles(scaledDt);
+  }
+
+  uiRefreshTimer += rawDt;
+  if (uiRefreshTimer >= 0.15) {
+    uiRefreshTimer = 0;
+    updateMetersDOM();
+    if (trackedParticle) {
+      updateTrackerCardDOM();
+    }
+  }
+
+  renderScene();
+  requestAnimationFrame(mainLoop);
+}
+
+// 啟動程序
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+seedInitialParticles();
+updateMetersDOM();
+requestAnimationFrame(mainLoop);
+</script>
+</body>
+</html>
