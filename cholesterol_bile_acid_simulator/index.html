@@ -1,0 +1,2697 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>膽固醇、肝臟與膽汁酸循環互動模擬器 (教學版)</title>
+<style>
+:root {
+  --bg-dark: #0f172a;
+  --bg-panel: #1e293b;
+  --bg-card: #334155;
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --accent: #38bdf8;
+  --accent-hover: #0284c7;
+  --border-color: #475569;
+  
+  /* 物質顏色 (載貨與膽汁酸) */
+  --col-chol: #fbbf24;      /* 膽固醇: 琥珀金 (六角形) */
+  --col-tg: #38bdf8;        /* 三酸甘油酯: 亮藍 (正三角形) */
+  --col-ba: #4ade80;        /* 膽汁酸: 翠綠 (菱形星) */
+  
+  /* 載體與路徑顏色 */
+  --col-vldl: #a855f7;      /* VLDL: 紫色 */
+  --col-idl: #d946ef;       /* IDL: 洋紅 */
+  --col-ldl: #f97316;       /* LDL: 橘紅 */
+  --col-hdl: #06b6d4;       /* HDL: 青色 */
+  --col-cm: #eab308;        /* 乳糜微粒: 黃綠 */
+  --col-blood: #ef4444;     /* 體循環動脈/微血管 */
+  --col-portal: #8b5cf6;    /* 肝門靜脈 */
+  --col-bile: #22c55e;      /* 膽道系統 */
+  --col-lymph: #cbd5e1;     /* 淋巴路徑 */
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+  font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+}
+
+body {
+  background-color: var(--bg-dark);
+  color: var(--text-main);
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 頂部導航與全域播放控制列 */
+header {
+  height: 58px;
+  background-color: var(--bg-panel);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  flex-shrink: 0;
+  z-index: 20;
+}
+
+.brand-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-title h1 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #fff;
+}
+
+.badge-disclaimer {
+  background: rgba(251, 191, 36, 0.15);
+  border: 1px solid var(--col-chol);
+  color: var(--col-chol);
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 500;
+}
+
+.playback-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-dark);
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.btn {
+  background: var(--bg-card);
+  color: var(--text-main);
+  border: 1px solid var(--border-color);
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.btn:hover {
+  background: #475569;
+  border-color: #64748b;
+}
+
+.btn.active, .btn-primary {
+  background: var(--accent);
+  color: #0f172a;
+  border-color: var(--accent);
+}
+
+.btn-primary:hover {
+  background: var(--accent-hover);
+  color: #fff;
+}
+
+.btn-warn {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: #ef4444;
+  color: #fca5a5;
+}
+
+.btn-warn:hover {
+  background: #ef4444;
+  color: #fff;
+}
+
+.speed-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-left: 1px solid var(--border-color);
+  padding-left: 10px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.speed-note {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  max-width: 150px;
+  line-height: 1.1;
+}
+
+/* 主體三欄式佈局 */
+.main-workspace {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+}
+
+/* 左側與右側控制面板 */
+.side-panel {
+  width: 320px;
+  background-color: var(--bg-panel);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  flex-shrink: 0;
+  z-index: 10;
+  transition: width 0.25s ease, padding 0.25s ease, margin 0.25s ease;
+}
+
+.side-panel.collapsed {
+  width: 0 !important;
+  min-width: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  overflow: hidden !important;
+  visibility: hidden;
+}
+
+.side-panel.right-panel {
+  width: 340px;
+  border-right: none;
+  border-left: 1px solid var(--border-color);
+}
+
+/* 懸浮收折/展開按鈕 */
+.panel-toggle-btn {
+  position: absolute;
+  top: 14px;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid var(--border-color);
+  color: var(--accent);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  z-index: 15;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  transition: background 0.15s, color 0.15s;
+}
+
+.panel-toggle-btn:hover {
+  background: var(--bg-card);
+  color: #fff;
+}
+
+#btnToggleLeft {
+  left: 14px;
+}
+
+#btnToggleRight {
+  right: 14px;
+}
+
+.panel-section {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.section-header {
+  font-size: 0.96rem;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* 控制項樣式 */
+.control-item {
+  margin-bottom: 10px;
+}
+
+.control-item:last-child {
+  margin-bottom: 0;
+}
+
+.control-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.88rem;
+  margin-bottom: 4px;
+  color: #e2e8f0;
+}
+
+.control-val {
+  color: var(--col-chol);
+  font-weight: 700;
+  font-family: monospace;
+}
+
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+  height: 6px;
+  background: var(--bg-dark);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.toggle-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.84rem;
+  background: rgba(15, 23, 42, 0.5);
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.checkbox-label:hover {
+  border-color: var(--border-color);
+}
+
+.checkbox-label input {
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+}
+
+/* 進食切換開關 */
+.meal-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.meal-btn {
+  padding: 8px;
+  text-align: center;
+  border-radius: 6px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+  background: var(--bg-dark);
+  color: var(--text-muted);
+  transition: all 0.2s;
+}
+
+.meal-btn.active.fed {
+  background: rgba(34, 197, 94, 0.2);
+  border-color: #22c55e;
+  color: #4ade80;
+}
+
+.meal-btn.active.fasting {
+  background: rgba(251, 191, 36, 0.2);
+  border-color: #fbbf24;
+  color: #fde047;
+}
+
+/* 進階控制收納 */
+details.adv-details {
+  background: rgba(15, 23, 42, 0.45);
+  border-radius: 6px;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  margin-top: 8px;
+}
+
+details.adv-details summary {
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: #cbd5e1;
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+details.adv-details summary::after {
+  content: "▼";
+  font-size: 0.7rem;
+  transition: transform 0.2s;
+}
+
+details.adv-details[open] summary::after {
+  transform: rotate(180deg);
+}
+
+.adv-body {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border-color);
+}
+
+/* 中央畫布區 */
+.canvas-stage {
+  flex: 1;
+  position: relative;
+  background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#simCanvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: grab;
+}
+
+#simCanvas:active {
+  cursor: grabbing;
+}
+
+/* 畫布頂部懸浮提示列 */
+.stage-overlay-top {
+  position: absolute;
+  top: 10px;
+  left: 100px;
+  right: 100px;
+  display: flex;
+  justify-content: space-between;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.status-banner {
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid var(--border-color);
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.86rem;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: auto;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+
+/* 畫布底部圖例列 */
+.legend-bar {
+  position: absolute;
+  bottom: 10px;
+  left: 12px;
+  right: 12px;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 7px 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.82rem;
+  z-index: 5;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+
+.legend-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #e2e8f0;
+}
+
+.shape-icon {
+  width: 15px;
+  height: 15px;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+/* 路徑高亮快速按鈕清單 */
+.path-btn-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.path-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.path-chip-btn {
+  padding: 5px 2px;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-align: center;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border-color);
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.path-chip-btn:hover {
+  background: #334155;
+  border-color: #64748b;
+}
+
+.path-chip-btn.active {
+  background: rgba(56, 189, 248, 0.25);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.path-btn {
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 0.83rem;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border-color);
+  color: #e2e8f0;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.path-btn:hover {
+  background: #334155;
+}
+
+.path-btn.active {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 700;
+}
+
+.path-tag {
+  font-family: monospace;
+  font-size: 0.76rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg-card);
+  color: var(--accent);
+}
+
+/* 右側庫存與流量量表 */
+.meter-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.meter-row {
+  background: rgba(15, 23, 42, 0.5);
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(71, 85, 105, 0.5);
+}
+
+.meter-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.84rem;
+  margin-bottom: 4px;
+}
+
+.meter-name {
+  color: #cbd5e1;
+  font-weight: 600;
+}
+
+.meter-status {
+  font-size: 0.78rem;
+  font-family: monospace;
+}
+
+.meter-track {
+  position: relative;
+  height: 8px;
+  background: #0f172a;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.meter-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.25s ease-out;
+}
+
+.meter-baseline-mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #fff;
+  z-index: 2;
+  opacity: 0.85;
+  display: none;
+}
+
+.show-baseline .meter-baseline-mark {
+  display: block;
+}
+
+/* 粒子追蹤資訊卡 */
+.tracker-box {
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  color: #e2e8f0;
+}
+
+.tracker-box strong {
+  color: var(--col-chol);
+}
+
+/* 科學守則提示卡 */
+.science-card {
+  background: rgba(15, 23, 42, 0.65);
+  border-left: 3px solid var(--col-chol);
+  padding: 8px 10px;
+  font-size: 0.82rem;
+  color: #cbd5e1;
+  line-height: 1.5;
+  margin-top: 6px;
+  border-radius: 0 6px 6px 0;
+}
+
+/* 自訂捲軸 */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-dark);
+}
+::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 3px;
+}
+</style>
+</head>
+<body>
+
+<!-- 頂部全域控制列 -->
+<header>
+  <div class="brand-title">
+    <h1>膽固醇、肝臟與膽汁酸循環動態模擬器</h1>
+    <span class="badge-disclaimer">教學相對量模型・非臨床診斷或檢驗數值</span>
+  </div>
+
+  <!-- 8.1 全域模擬控制 (與生理變因完全分離) -->
+  <div class="playback-bar">
+    <button class="btn btn-primary" id="btnPlayPause" title="播放或暫停模擬並保留狀態">暫停</button>
+    <button class="btn" id="btnStepBack" title="單步後退 (約 0.5 秒快照)">單步後退</button>
+    <button class="btn" id="btnStepFwd" title="單步前進">單步前進</button>
+    <button class="btn btn-warn" id="btnReset" title="重設所有生理條件與庫存回一致的初始狀態">預設重設</button>
+
+    <div class="speed-group">
+      <span>動畫速度：</span>
+      <button class="btn speed-preset" data-speed="0.5">慢 0.5x</button>
+      <button class="btn speed-preset active" data-speed="1">正常 1x</button>
+      <button class="btn speed-preset" data-speed="2">快 2x</button>
+      <input type="range" id="speedSlider" min="0.25" max="2.5" step="0.25" value="1" style="width:70px;">
+      <span id="speedText" style="color:#fff;font-weight:700;min-width:34px;">1.0x</span>
+      <span class="speed-note">僅改變動畫時間尺度，不改變生理平衡與流量結果</span>
+    </div>
+  </div>
+</header>
+
+<!-- 主工作區 -->
+<div class="main-workspace">
+
+  <!-- 左側面板：標籤顯示控制 + 生理條件控制 -->
+  <aside class="side-panel" id="leftControlPanel">
+    
+    <!-- 8.2 標籤顯示控制 -->
+    <div class="panel-section">
+      <div class="section-header">
+        <span>標籤顯示控制 (不影響模擬)</span>
+        <button class="btn" id="btnMasterLabel" style="padding:2px 8px;font-size:0.75rem;">全部隱藏</button>
+      </div>
+      <div class="toggle-grid">
+        <label class="checkbox-label"><input type="checkbox" class="lbl-toggle" data-key="organs" checked>器官名稱標籤</label>
+        <label class="checkbox-label"><input type="checkbox" class="lbl-toggle" data-key="organFunctions" checked>器官功能說明</label>
+        <label class="checkbox-label"><input type="checkbox" class="lbl-toggle" data-key="meters" checked>畫面相對量表</label>
+        <label class="checkbox-label"><input type="checkbox" class="lbl-toggle" data-key="receptors" checked>細胞與受體標籤</label>
+
+        <label class="checkbox-label"><input type="checkbox" class="lbl-toggle" data-key="lipoproteins" checked>脂蛋白載體標籤</label>
+        <label class="checkbox-label"><input type="checkbox" class="lbl-toggle" data-key="substances" checked>攜帶物質標籤</label>
+        <label class="checkbox-label" style="grid-column: span 2;"><input type="checkbox" class="lbl-toggle" data-key="paths" checked>路徑箭頭指示</label>
+      </div>
+    </div>
+
+    <!-- 8.3 生理條件控制 (核心控制) -->
+    <div class="panel-section">
+      <div class="section-header">
+        <span>生理條件控制 (核心變因)</span>
+      </div>
+
+      <!-- 進食 / 未進食狀態 -->
+      <div class="control-label"><span>生理進食情境：</span><span id="mealStateLabel" class="control-val">進食狀態 (膽囊收縮)</span></div>
+      <div class="meal-switch">
+        <div class="meal-btn active fed" id="btnMealFed">進食狀態</div>
+        <div class="meal-btn fasting" id="btnMealFast">未進食 (空腹儲存)</div>
+      </div>
+
+      <!-- 膳食脂質輸入量 -->
+      <div class="control-item">
+        <div class="control-label">
+          <span>膳食脂質輸入量 (小腸 → 乳糜微粒)</span>
+          <span class="control-val" id="val_dietLipid">100%</span>
+        </div>
+        <input type="range" class="phys-slider" id="sl_dietLipid" min="0" max="200" step="10" value="100">
+      </div>
+
+      <!-- 肝臟 VLDL 輸出 -->
+      <div class="control-item">
+        <div class="control-label">
+          <span>肝臟 VLDL 輸出速率 (P1)</span>
+          <span class="control-val" id="val_vldlOut">100%</span>
+        </div>
+        <input type="range" class="phys-slider" id="sl_vldlOut" min="20" max="200" step="10" value="100">
+      </div>
+
+      <!-- 肝臟 LDL 接收效率 -->
+      <div class="control-item">
+        <div class="control-label">
+          <span>肝臟 LDL 受體接收效率 (P4)</span>
+          <span class="control-val" id="val_ldlLiver">100%</span>
+        </div>
+        <input type="range" class="phys-slider" id="sl_ldlLiver" min="10" max="200" step="10" value="100">
+      </div>
+
+      <!-- 小腸膽汁酸回收程度 -->
+      <div class="control-item">
+        <div class="control-label">
+          <span>小腸末段膽汁酸再吸收程度 (P8)</span>
+          <span class="control-val" id="val_baRecycle">85%</span>
+        </div>
+        <input type="range" class="phys-slider" id="sl_baRecycle" min="10" max="98" step="2" value="85">
+      </div>
+
+      <!-- 進階控制收納 -->
+      <details class="adv-details">
+        <summary>展開進階生理控制與次要路徑設定</summary>
+        <div class="adv-body">
+          <div class="control-item">
+            <div class="control-label">
+              <span>周邊細胞 LDL 接收程度 (P3)</span>
+              <span class="control-val" id="val_ldlPeriph">100%</span>
+            </div>
+            <input type="range" class="phys-slider" id="sl_ldlPeriph" min="20" max="200" step="10" value="100">
+          </div>
+
+          <div class="control-item">
+            <div class="control-label">
+              <span>周邊膽固醇 HDL 回運程度 (P5)</span>
+              <span class="control-val" id="val_hdlReturn">100%</span>
+            </div>
+            <input type="range" class="phys-slider" id="sl_hdlReturn" min="20" max="200" step="10" value="100">
+          </div>
+
+          <div class="control-item">
+            <div class="control-label">
+              <span>膽囊排出程度 (P7 手動微調)</span>
+              <span class="control-val" id="val_gbEmpty">100%</span>
+            </div>
+            <input type="range" class="phys-slider" id="sl_gbEmpty" min="10" max="200" step="10" value="100">
+          </div>
+
+          <div class="control-item">
+            <div class="control-label">
+              <span>膽汁酸腸道流失倍數 (P9 排泄連動)</span>
+              <span class="control-val" id="val_baLoss">100%</span>
+            </div>
+            <input type="range" class="phys-slider" id="sl_baLoss" min="20" max="250" step="10" value="100">
+          </div>
+
+          <label class="checkbox-label" style="margin-top:8px;">
+            <input type="checkbox" id="chkShowChyloPath" checked>
+            顯示膳食乳糜微粒／淋巴路徑 (P6)
+          </label>
+        </div>
+      </details>
+    </div>
+
+    <!-- 8.4 教師觀察與路徑突顯控制 -->
+    <div class="panel-section">
+      <div class="section-header">
+        <span>路徑與對比突顯 (支援複選)</span>
+        <button class="btn" id="btnClearHighlight" style="padding:2px 8px;font-size:0.74rem;">清除突顯</button>
+      </div>
+
+      <div style="font-size:0.75rem;color:#94a3b8;margin-bottom:4px;">各路徑獨立複選 (P1 ~ P10)：</div>
+      <div class="path-filter-grid">
+        <button class="path-chip-btn" data-hl="P1">P1</button>
+        <button class="path-chip-btn" data-hl="P2">P2</button>
+        <button class="path-chip-btn" data-hl="P3">P3</button>
+        <button class="path-chip-btn" data-hl="P4">P4</button>
+        <button class="path-chip-btn" data-hl="P5">P5</button>
+        <button class="path-chip-btn" data-hl="P6">P6</button>
+        <button class="path-chip-btn" data-hl="P7">P7</button>
+        <button class="path-chip-btn" data-hl="P8">P8</button>
+        <button class="path-chip-btn" data-hl="P9">P9</button>
+        <button class="path-chip-btn" data-hl="P10">P10</button>
+      </div>
+
+      <div style="font-size:0.75rem;color:#94a3b8;margin:8px 0 4px 0;">教學組合情境複選：</div>
+      <div class="path-btn-list">
+        <button class="path-btn" data-hl="COMPARE_RETURN">
+          <span>對比：周邊膽固醇回肝 vs 膽汁酸回肝</span>
+          <span class="path-tag">P4/P5 vs P8</span>
+        </button>
+        <button class="path-btn" data-hl="P1_P2">
+          <span>肝臟輸出 VLDL → IDL → LDL 代謝</span>
+          <span class="path-tag">P1+P2</span>
+        </button>
+        <button class="path-btn" data-hl="P3_P4">
+          <span>LDL 去向分流：周邊細胞 vs 肝臟受體</span>
+          <span class="path-tag">P3+P4</span>
+        </button>
+        <button class="path-btn" data-hl="P5">
+          <span>周邊膽固醇經 HDL 回運肝臟 (體循環)</span>
+          <span class="path-tag">P5</span>
+        </button>
+        <button class="path-btn" data-hl="P6">
+          <span>膳食脂質 → 乳糜微粒 → 淋巴 → 血液 → 殘粒回肝</span>
+          <span class="path-tag">P6</span>
+        </button>
+        <button class="path-btn" data-hl="P7_P8_P9_P10">
+          <span>完整膽汁酸腸肝循環與肝門靜脈回流</span>
+          <span class="path-tag">P7~P10</span>
+        </button>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- 中央畫布區 -->
+  <main class="canvas-stage">
+    <button class="panel-toggle-btn" id="btnToggleLeft" title="收折/展開左側控制面板">◀ 左側面板</button>
+    <button class="panel-toggle-btn" id="btnToggleRight" title="收折/展開右側觀察面板">右側面板 ▶</button>
+
+    <div class="stage-overlay-top">
+      <div class="status-banner" id="interactionBanner">
+        <span><strong>教師操作提示：</strong>可點擊畫布上的「器官節點」、「路徑」或「單顆粒子」進行突顯與來源去向追蹤。</span>
+      </div>
+      <div class="status-banner">
+        <button class="btn" id="btnTrackRandom" style="padding:3px 10px;font-size:0.78rem;">隨機追蹤一顆載體／粒子</button>
+        <button class="btn" id="btnStopTrack" style="padding:3px 10px;font-size:0.78rem;display:none;">結束追蹤</button>
+        <label style="display:inline-flex;align-items:center;gap:4px;font-size:0.78rem;color:#cbd5e1;cursor:pointer;margin-left:6px;" title="勾選時，微粒抵達周邊或回肝後自動接續下一段生理循環；僅在進入腸道下游排出端時結束旅程。未勾選時抵達任一器官終點即結束。">
+          <input type="checkbox" id="chkContinuousCycle" checked> 除腸道排出端外，其他節點持續循環
+        </label>
+      </div>
+    </div>
+
+    <canvas id="simCanvas"></canvas>
+
+    <!-- 底部固定圖例 (區分載體外框與內部載貨形狀) -->
+    <div class="legend-bar">
+      <div class="legend-group">
+        <strong style="color:#fff;">載貨與物質 (形狀區分)：</strong>
+        <span class="legend-item">
+          <svg class="shape-icon" viewBox="0 0 20 20"><polygon points="10,2 17,6 17,14 10,18 3,14 3,6" fill="#fbbf24" stroke="#fff" stroke-width="1.5"/></svg>
+          膽固醇 (六角形)
+        </span>
+        <span class="legend-item">
+          <svg class="shape-icon" viewBox="0 0 20 20"><polygon points="10,2 18,16 2,16" fill="#38bdf8" stroke="#fff" stroke-width="1.5"/></svg>
+          三酸甘油酯 TG (三角形)
+        </span>
+        <span class="legend-item">
+          <svg class="shape-icon" viewBox="0 0 20 20"><polygon points="10,1 19,10 10,19 1,10" fill="#4ade80" stroke="#052e16" stroke-width="1.5"/></svg>
+          膽汁酸／膽鹽 (菱形・非膽固醇)
+        </span>
+      </div>
+
+      <div class="legend-group">
+        <strong style="color:#fff;">脂蛋白載體 (外環包裹載貨)：</strong>
+        <span class="legend-item"><span style="color:#a855f7;font-weight:900;">◯</span> VLDL (富含TG+膽固醇)</span>
+        <span class="legend-item"><span style="color:#d946ef;font-weight:900;">◯</span> IDL (中間代謝)</span>
+        <span class="legend-item"><span style="color:#f97316;font-weight:900;">◯</span> LDL (富含膽固醇)</span>
+        <span class="legend-item"><span style="color:#06b6d4;font-weight:900;">▢</span> HDL (回運膽固醇載體)</span>
+        <span class="legend-item"><span style="color:#eab308;font-weight:900;">⎔</span> 乳糜微粒/殘粒 (膳食脂質)</span>
+      </div>
+
+      <div class="legend-group">
+        <strong style="color:#fff;">專用管路：</strong>
+        <span class="legend-item"><span style="color:#ef4444;font-weight:700;">━━▶</span> 體循環血液</span>
+        <span class="legend-item"><span style="color:#22c55e;font-weight:700;">┅┅▶</span> 膽道分泌流出</span>
+        <span class="legend-item"><span style="color:#8b5cf6;font-weight:700;">══▶</span> 肝門靜脈回流</span>
+        <span class="legend-item"><span style="color:#cbd5e1;font-weight:700;">┈┈▶</span> 淋巴管路</span>
+      </div>
+    </div>
+  </main>
+
+  <!-- 右側面板：粒子追蹤資訊 + 庫存狀態(9.1) + 流量狀態(9.2) -->
+  <aside class="side-panel right-panel" id="rightMetricsPanel">
+    
+    <!-- 單一粒子追蹤器與教學提問面板 -->
+    <div class="panel-section">
+      <div class="section-header">
+        <span>粒子追蹤與系統觀察狀態</span>
+        <label class="checkbox-label" style="padding:2px 6px;font-size:0.74rem;">
+          <input type="checkbox" id="chkCompareBase" checked>對比基準線(白線)
+        </label>
+      </div>
+      <div class="tracker-box" id="trackerInfoBox">
+        目前檢視：<strong>整體系統視圖</strong><br>
+        • 點擊畫布中移動的<strong>脂蛋白載體或膽汁酸粒子</strong>可即時鎖定並顯示其來源、載貨與目的地。<br>
+        • 調整左側生理滑桿前，可先請學生預測庫存與流量變化。
+      </div>
+    </div>
+
+    <!-- 9.1 庫存狀態 (相對示意量) -->
+    <div class="panel-section show-baseline" id="stockSection">
+      <div class="section-header">
+        <span>9.1 節點相對庫存狀態 (非臨床單位)</span>
+        <span style="font-size:0.7rem;color:#94a3b8;">白線=初始基準</span>
+      </div>
+      <div class="meter-list" id="stockMeters"></div>
+    </div>
+
+    <!-- 9.2 流量狀態 (相對示意流量) -->
+    <div class="panel-section show-baseline" id="flowSection">
+      <div class="section-header">
+        <span>9.2 路徑相對流量狀態 (隨時間連動)</span>
+      </div>
+      <div class="meter-list" id="flowMeters"></div>
+    </div>
+
+  </aside>
+</div>
+
+<script>
+/**
+ * 膽固醇、肝臟與膽汁酸循環動態模擬器
+ * 嚴格遵循規格書第 1~14 節所有系統邊界、科學限制、視覺編碼與互動要求
+ */
+
+// ==========================================
+// 1. 系統參數與狀態定義
+// ==========================================
+const DEFAULT_PARAMS = {
+  isFed: true,          // 進食狀態 (true: 進食, false: 未進食)
+  dietLipid: 100,       // 膳食脂質輸入量 (%)
+  vldlOut: 100,         // 肝臟 VLDL 輸出 (%)
+  ldlLiver: 100,        // 肝臟 LDL 接收效率 (%)
+  baRecycle: 85,        // 小腸膽汁酸回收率 (%)
+  ldlPeriph: 100,       // 周邊細胞 LDL 接收程度 (%)
+  hdlReturn: 100,       // 周邊膽固醇回運程度 (%)
+  gbEmpty: 100,         // 膽囊排出程度 (%)
+  baLoss: 100,          // 膽汁酸腸道流失調整 (%)
+  showChyloPath: true,  // 是否顯示乳糜微粒/淋巴路徑
+  continuousCycle: true // 除腸道排出端外，其他節點持續循環
+};
+
+let params = { ...DEFAULT_PARAMS };
+
+// 標籤顯示狀態 (8.2)
+const labelState = {
+  organs: true,
+  organFunctions: true,
+  lipoproteins: true,
+  substances: true,
+  paths: true,
+  receptors: true,
+  meters: true
+};
+
+// 播放與時間控制 (8.1: 速度只改變 dt，絕不影響生理平衡終態)
+let isPlaying = true;
+let simSpeed = 1.0;
+let simTime = 0;
+
+// 9.1 庫存狀態 (平滑演進的相對指數 0 ~ 100，基準約為 50)
+const BASELINE_STOCKS = {
+  liverChol: 55,        // 肝臟可用膽固醇示意量
+  liverBA: 50,          // 肝臟內膽汁酸示意量
+  bloodVLDL: 45,        // 血液 VLDL/IDL 相對量
+  bloodLDL: 45,         // 血液 LDL 相對量
+  bloodHDL: 50,         // 血液 HDL 相對載貨量
+  periphChol: 50,       // 周邊組織膽固醇示意量
+  gbBile: 45,           // 膽囊膽汁儲存量
+  gutBA: 55,            // 小腸腔內膽汁酸量 (含待回收)
+  recycledBA: 55,       // 已回收經肝門靜脈膽汁酸量
+  unrecycledBA: 25,     // 未回收往腸道下游膽汁酸量
+  gutChylo: 50          // 小腸膳食脂質／乳糜微粒示意量
+};
+
+// 9.2 流量狀態 (相對流量 0 ~ 100)
+const BASELINE_FLOWS = {
+  f_vldlOut: 50,        // 肝臟 VLDL 輸出
+  f_ldlLiver: 50,       // 肝臟 LDL 接收
+  f_ldlPeriph: 50,      // LDL 周邊接收
+  f_hdlReturn: 50,      // 周邊膽固醇回運
+  f_chyloFlow: 50,      // 乳糜微粒進入淋巴/血液及殘粒回肝
+  f_bileSecrete: 50,    // 肝臟膽汁／膽汁酸分泌
+  f_gbRelease: 60,      // 膽囊排出
+  f_baReabsorb: 65,     // 小腸膽汁酸回收 / 肝門靜脈回流
+  f_baExcrete: 25,      // 膽汁酸腸道流失
+  f_baSynth: 35         // 肝臟膽汁酸補充合成 (P10)
+};
+
+let stocks = { ...BASELINE_STOCKS };
+let flows = { ...BASELINE_FLOWS };
+
+// 用於「單步後退」的狀態快照
+let historyBuffer = []; // 儲存最近數秒的狀態供單步後退
+
+// 教師觀察突顯與追蹤控制 (8.4)
+let activeHighlights = new Set(); // 支援多選突顯：'ORG_xxx' | 'P1_P2' | 'COMPARE_RETURN' ...
+let trackedParticle = null;
+
+function setTrackedParticle(p) {
+  if (trackedParticle && trackedParticle !== p) {
+    trackedParticle.trail = [];
+  }
+  trackedParticle = p;
+  const btnTrack = document.getElementById('btnTrackRandom');
+  const btnStop = document.getElementById('btnStopTrack');
+  if (trackedParticle) {
+    trackedParticle.trail = [{ x: trackedParticle.x, y: trackedParticle.y }];
+    if (btnTrack) {
+      btnTrack.style.borderColor = '#38bdf8';
+      btnTrack.style.color = '#38bdf8';
+      btnTrack.style.background = 'rgba(56, 189, 248, 0.15)';
+    }
+    if (btnStop) {
+      btnStop.style.display = 'inline-flex';
+      btnStop.style.borderColor = '#f87171';
+      btnStop.style.color = '#f87171';
+    }
+  } else {
+    if (btnTrack) {
+      btnTrack.style.borderColor = '';
+      btnTrack.style.color = '';
+      btnTrack.style.background = '';
+    }
+    if (btnStop) {
+      btnStop.style.display = 'none';
+    }
+  }
+  updateTrackerCardDOM();
+}
+
+// ==========================================
+// 2. 畫面節點與路徑幾何定義 (以 1200x760 邏輯座標系設計，自動縮放適應投影)
+// ==========================================
+const LOGICAL_W = 1360;
+const LOGICAL_H = 760;
+
+const ORGANS = {
+  LIVER: {
+    id: 'LIVER',
+    name: '肝臟／肝細胞',
+    sub: '合成膽固醇與VLDL・LDL受體接收・膽固醇轉化合成膽汁酸',
+    x: 430, y: 205, w: 300, h: 175,
+    color: '#7c2d12', border: '#f97316',
+    paths: ['P1', 'P4', 'P5', 'P6_REM', 'P7', 'P8', 'P10']
+  },
+  BLOOD_HUB: {
+    id: 'BLOOD_HUB',
+    name: '全身血液循環 (體循環)',
+    sub: '運送 VLDL → IDL → LDL 及 HDL、乳糜微粒',
+    x: 880, y: 125, w: 260, h: 120,
+    color: '#450a0a', border: '#ef4444',
+    paths: ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P6_REM']
+  },
+  MUSCLE_ADIPOSE: {
+    id: 'MUSCLE_ADIPOSE',
+    name: '肌肉與脂肪組織',
+    sub: '接收 VLDL 代謝釋出之三酸甘油酯(TG)',
+    x: 1225, y: 125, w: 220, h: 110,
+    color: '#3b0764', border: '#a855f7',
+    paths: ['P1', 'P2']
+  },
+  PERIPH_CELL: {
+    id: 'PERIPH_CELL',
+    name: '周邊組織／細胞',
+    sub: '接收 LDL 所載膽固醇・多餘膽固醇由 HDL 回運',
+    x: 880, y: 475, w: 260, h: 115,
+    color: '#164e63', border: '#06b6d4',
+    paths: ['P3', 'P5']
+  },
+  BILE_DUCT: {
+    id: 'BILE_DUCT',
+    name: '膽管／膽道',
+    sub: '運送肝臟分泌之膽汁',
+    x: 420, y: 365, w: 120, h: 52,
+    color: '#052e16', border: '#22c55e',
+    paths: ['P7']
+  },
+  GALLBLADDER: {
+    id: 'GALLBLADDER',
+    name: '膽囊',
+    sub: '儲存與濃縮膽汁 (進食排出)',
+    x: 240, y: 390, w: 160, h: 100,
+    color: '#064e3b', border: '#10b981',
+    paths: ['P7']
+  },
+  DUODENUM: {
+    id: 'DUODENUM',
+    name: '十二指腸／小腸前段',
+    sub: '膽汁酸乳化協助膳食脂質消化吸收',
+    x: 335, y: 525, w: 225, h: 102,
+    color: '#3f3f46', border: '#eab308',
+    paths: ['P6', 'P7', 'P8']
+  },
+  ILEUM: {
+    id: 'ILEUM',
+    name: '小腸末段 (迴腸) 與腸壁',
+    sub: '大部分膽汁酸穿過腸壁再吸收',
+    x: 615, y: 535, w: 220, h: 102,
+    color: '#1e1b4b', border: '#8b5cf6',
+    paths: ['P8', 'P9']
+  },
+  PORTAL_VEIN: {
+    id: 'PORTAL_VEIN',
+    name: '肝門靜脈',
+    sub: '專責回收膽汁酸回肝 (非脂蛋白路徑)',
+    x: 600, y: 385, w: 165, h: 68,
+    color: '#2e1065', border: '#a78bfa',
+    paths: ['P8']
+  },
+  LYMPH: {
+    id: 'LYMPH',
+    name: '淋巴路徑 (乳糜管→胸管)',
+    sub: '膳食乳糜微粒經淋巴入血液',
+    x: 115, y: 260, w: 165, h: 95,
+    color: '#1e293b', border: '#cbd5e1',
+    paths: ['P6']
+  },
+  COLON_EXCRETE: {
+    id: 'COLON_EXCRETE',
+    name: '腸道下游／排出端',
+    sub: '少部分未回收膽汁酸隨糞便排出',
+    x: 625, y: 676, w: 220, h: 76,
+    color: '#27272a', border: '#71717a',
+    paths: ['P9']
+  }
+};
+
+// 路徑定義 (第 7 節 P1 ~ P10)
+const PATHWAYS = {
+  P1: {
+    id: 'P1', code: 'P1',
+    name: 'P1 肝臟輸出 VLDL 經血液至肌肉/脂肪',
+    procLabel: '肝分泌 VLDL 經血液至肌肉/脂肪釋出 TG',
+    color: '#a855f7', lineStyle: 'solid', width: 4,
+    labelPos: { x: 665, y: 105 },
+    pts: [{x: 580, y: 150}, {x: 690, y: 105}, {x: 770, y: 105}, {x: 1020, y: 105}, {x: 1115, y: 105}]
+  },
+  P2: {
+    id: 'P2', code: 'P2',
+    name: 'P2 肌肉/脂肪釋出 TG 後轉為 IDL → LDL 回血流',
+    procLabel: '微血管 LPL 作用：VLDL→IDL→LDL 回血流',
+    color: '#d946ef', lineStyle: 'solid', width: 4,
+    labelPos: { x: 1062, y: 170 },
+    pts: [{x: 1115, y: 145}, {x: 1050, y: 145}, {x: 890, y: 145}]
+  },
+  P3: {
+    id: 'P3', code: 'P3',
+    name: 'P3 全身血液 LDL 經受體分流至周邊細胞',
+    procLabel: '周邊受體接收血液 LDL 膽固醇',
+    color: '#f97316', lineStyle: 'solid', width: 4,
+    labelPos: { x: 975, y: 285 },
+    pts: [{x: 890, y: 155}, {x: 915, y: 182}, {x: 915, y: 300}, {x: 915, y: 418}]
+  },
+  P4: {
+    id: 'P4', code: 'P4',
+    name: 'P4 全身血液 LDL 經體循環回肝受體清除',
+    procLabel: '肝細胞 LDL 受體清除體循環 LDL',
+    color: '#fb923c', lineStyle: 'solid', width: 4.5,
+    labelPos: { x: 665, y: 165 },
+    pts: [{x: 890, y: 155}, {x: 750, y: 160}, {x: 670, y: 175}, {x: 580, y: 185}]
+  },
+  P5: {
+    id: 'P5', code: 'P5',
+    name: 'P5 周邊細胞膽固醇經 HDL 逆向轉運回肝 (經血液循環)',
+    procLabel: 'HDL 逆向回運膽固醇 (經血液循環回肝)',
+    color: '#06b6d4', lineStyle: 'solid', width: 4,
+    labelPos: { x: 785, y: 250 },
+    pts: [{x: 845, y: 418}, {x: 845, y: 300}, {x: 845, y: 182}, {x: 780, y: 182}, {x: 580, y: 205}]
+  },
+  P6: {
+    id: 'P6', code: 'P6',
+    name: 'P6 小腸乳糜微粒 → 淋巴 → 全身血液',
+    procLabel: '乳糜微粒經淋巴入血 (不經肝門靜脈)',
+    color: '#cbd5e1', lineStyle: 'dotted', width: 4,
+    labelPos: { x: 145, y: 200 },
+    pts: [{x: 230, y: 525}, {x: 115, y: 430}, {x: 115, y: 260}, {x: 115, y: 72}, {x: 520, y: 62}, {x: 770, y: 90}]
+  },
+  P6_REM: {
+    id: 'P6_REM', code: 'P6',
+    name: 'P6 乳糜微粒釋出 TG 後殘粒由肝臟接收',
+    procLabel: '乳糜微粒殘粒回肝接收',
+    color: '#eab308', lineStyle: 'dashed', width: 3.5,
+    labelPos: { x: 670, y: 135 },
+    pts: [{x: 820, y: 125}, {x: 680, y: 135}, {x: 580, y: 165}]
+  },
+  P7_HEP_GB: {
+    id: 'P7_HEP_GB', code: 'P7',
+    name: 'P7 肝臟分泌膽汁 → 膽道 → 膽囊儲存濃縮',
+    procLabel: '膽汁分泌與膽囊儲存',
+    color: '#22c55e', lineStyle: 'dashed', width: 4,
+    labelPos: { x: 350, y: 360 },
+    pts: [{x: 410, y: 280}, {x: 410, y: 365}, {x: 280, y: 390}]
+  },
+  P7_TO_DUO: {
+    id: 'P7_TO_DUO', code: 'P7',
+    name: 'P7 膽囊與膽道排出膽汁至十二指腸',
+    procLabel: '進食膽囊收縮排出膽汁',
+    color: '#10b981', lineStyle: 'dashed', width: 4.5,
+    labelPos: { x: 275, y: 475 },
+    pts: [{x: 280, y: 440}, {x: 345, y: 475}, {x: 345, y: 510}]
+  },
+  P8_LUMEN: {
+    id: 'P8_LUMEN', code: 'P8',
+    name: 'P8 膽汁酸由十二指腸移至小腸末段(迴腸)',
+    procLabel: '協助消化後移往迴腸',
+    color: '#4ade80', lineStyle: 'dashed', width: 4,
+    labelPos: { x: 520, y: 532 },
+    pts: [{x: 440, y: 530}, {x: 600, y: 535}]
+  },
+  P8_PORTAL: {
+    id: 'P8_PORTAL', code: 'P8',
+    name: 'P8 迴腸穿過腸壁再吸收 → 肝門靜脈 → 肝臟',
+    procLabel: '膽汁酸經肝門靜脈回流肝臟 (約85~95%)',
+    color: '#8b5cf6', lineStyle: 'double', width: 6,
+    labelPos: { x: 550, y: 325 },
+    pts: [{x: 615, y: 495}, {x: 605, y: 390}, {x: 525, y: 280}]
+  },
+  P9: {
+    id: 'P9', code: 'P9',
+    name: 'P9 未回收膽汁酸往腸道下游排出',
+    procLabel: '少部分未回收排出',
+    color: '#94a3b8', lineStyle: 'dashed', width: 3.5,
+    labelPos: { x: 675, y: 612 },
+    pts: [{x: 625, y: 586}, {x: 625, y: 638}]
+  },
+  P10: {
+    id: 'P10', code: 'P10',
+    name: 'P10 肝臟內膽固醇轉化合成膽汁酸',
+    procLabel: '膽固醇轉化補充膽汁酸',
+    color: '#fbbf24', lineStyle: 'solid', width: 3.5,
+    labelPos: { x: 345, y: 215 },
+    pts: [{x: 345, y: 175}, {x: 345, y: 245}, {x: 405, y: 265}]
+  }
+};
+
+// ==========================================
+// 3. 粒子與載體系統 (第 6 節)
+// ==========================================
+let particles = [];
+let nextParticleId = 1;
+
+/**
+ * 建立一顆粒子或脂蛋白載體
+ * type:
+ *  - 'VLDL' (紫圓載體，內含 3 顆 TG 三角形 + 1 顆膽固醇六角形)
+ *  - 'IDL'  (洋紅載體，內含 1 顆 TG + 1 顆膽固醇)
+ *  - 'LDL'  (橘紅載體，內含 2 顆膽固醇六角形)
+ *  - 'HDL'  (青色圓角方框載體，內含回運膽固醇六角形)
+ *  - 'CM'   (黃綠多邊形乳糜微粒，富含膳食 TG + 少量膽固醇)
+ *  - 'CM_REM' (乳糜微粒殘粒)
+ *  - 'BA'   (翠綠菱形膽汁酸粒子，絕不與膽固醇混用)
+ *  - 'CHOL_RAW' (肝內轉化中之膽固醇原料 -> 轉為膽汁酸)
+ */
+function spawnParticle(type, pathKey, startProgress = 0) {
+  const pathObj = PATHWAYS[pathKey];
+  if (!pathObj) return null;
+  const p = {
+    id: nextParticleId++,
+    type,
+    pathKey,
+    progress: startProgress,
+    speedFactor: 0.22 + Math.random() * 0.06,
+    x: 0,
+    y: 0
+  };
+  updateParticlePosition(p);
+  particles.push(p);
+  return p;
+}
+
+function getPointOnPolyline(pts, t) {
+  const clamped = Math.max(0, Math.min(1, t));
+  let totalLen = 0;
+  const segLens = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const dx = pts[i+1].x - pts[i].x;
+    const dy = pts[i+1].y - pts[i].y;
+    const l = Math.hypot(dx, dy);
+    segLens.push(l);
+    totalLen += l;
+  }
+  let target = clamped * totalLen;
+  for (let i = 0; i < segLens.length; i++) {
+    if (target <= segLens[i] || i === segLens.length - 1) {
+      const ratio = segLens[i] === 0 ? 0 : target / segLens[i];
+      return {
+        x: pts[i].x + (pts[i+1].x - pts[i].x) * ratio,
+        y: pts[i].y + (pts[i+1].y - pts[i].y) * ratio
+      };
+    }
+    target -= segLens[i];
+  }
+  return { x: pts[0].x, y: pts[0].y };
+}
+
+function updateParticlePosition(p) {
+  const pathObj = PATHWAYS[p.pathKey];
+  if (!pathObj) return;
+  const pos = getPointOnPolyline(pathObj.pts, p.progress);
+  p.x = pos.x;
+  p.y = pos.y;
+}
+
+// 初始化預設粒子群，使畫面一開始就有平滑運作的生理循環
+function seedInitialParticles() {
+  particles = [];
+  const initSeeds = [
+    ['VLDL', 'P1', 0.15], ['VLDL', 'P1', 0.55], ['VLDL', 'P1', 0.85],
+    ['IDL', 'P2', 0.35], ['LDL', 'P2', 0.80],
+    ['LDL', 'P3', 0.25], ['LDL', 'P3', 0.70],
+    ['LDL', 'P4', 0.20], ['LDL', 'P4', 0.60], ['LDL', 'P4', 0.90],
+    ['HDL', 'P5', 0.25], ['HDL', 'P5', 0.65],
+    ['CM', 'P6', 0.18], ['CM', 'P6', 0.52], ['CM', 'P6', 0.85],
+    ['CM_REM', 'P6_REM', 0.45],
+    ['BA', 'P7_HEP_GB', 0.4], ['BA', 'P7_HEP_GB', 0.8],
+    ['BA', 'P7_TO_DUO', 0.3], ['BA', 'P7_TO_DUO', 0.75],
+    ['BA', 'P8_LUMEN', 0.25], ['BA', 'P8_LUMEN', 0.70],
+    ['BA', 'P8_PORTAL', 0.15], ['BA', 'P8_PORTAL', 0.45], ['BA', 'P8_PORTAL', 0.75],
+    ['BA', 'P9', 0.50],
+    ['CHOL_RAW', 'P10', 0.45]
+  ];
+  initSeeds.forEach(([t, pk, pr]) => spawnParticle(t, pk, pr));
+}
+
+// ==========================================
+// 4. 生理數學模型與連動更新 (第 9 & 10 節)
+// ==========================================
+let spawnTimers = {
+  P1: 0, P5: 0, P6: 0, P7_HEP: 0, P7_OUT: 0, P10: 0
+};
+
+function updateSimulationModel(dt) {
+  // 計算目標流量 (Flows 0 ~ 100)
+  const fedFactor = params.isFed ? 1.0 : 0.22;
+  const effectiveDiet = params.isFed ? (params.dietLipid / 100) : (params.dietLipid * 0.15 / 100);
+
+  const targetFlows = {
+    f_vldlOut: Math.min(100, 50 * (params.vldlOut / 100) * (0.7 + 0.3 * (stocks.liverChol / 55))),
+    f_chyloFlow: params.showChyloPath ? Math.min(100, 50 * effectiveDiet) : 0,
+    f_ldlLiver: Math.min(100, 50 * (params.ldlLiver / 100) * (stocks.bloodLDL / 45)),
+    f_ldlPeriph: Math.min(100, 50 * (params.ldlPeriph / 100) * (stocks.bloodLDL / 45)),
+    f_hdlReturn: Math.min(100, 50 * (params.hdlReturn / 100) * (stocks.periphChol / 50)),
+    f_bileSecrete: Math.min(100, 50 + (55 - stocks.recycledBA) * 0.35),
+    f_gbRelease: Math.min(100, 60 * fedFactor * (params.gbEmpty / 100) * (stocks.gbBile / 45)),
+    f_baReabsorb: Math.min(100, 65 * (stocks.gutBA / 55) * (params.baRecycle / 85)),
+    f_baExcrete: Math.min(100, 25 * (stocks.gutBA / 55) * ((100 - params.baRecycle) / 15) * (params.baLoss / 100)),
+    f_baSynth: 0
+  };
+
+  // 肝臟補充合成膽汁酸需求：當腸道流失上升或回收下降時，肝臟動用膽固醇合成膽汁酸增加
+  targetFlows.f_baSynth = Math.min(100, Math.max(10, 35 + (targetFlows.f_baExcrete - 25) * 0.9 + (65 - targetFlows.f_baReabsorb) * 0.45));
+
+  // 平滑插值更新流量 (符合第10節：逐步呈現，不瞬間跳變)
+  const flowLerp = Math.min(1, dt * 2.2);
+  for (const k in flows) {
+    flows[k] += (targetFlows[k] - flows[k]) * flowLerp;
+  }
+
+  // 計算目標庫存平衡點 (Stocks 5 ~ 98)
+  const ldlClearance = (params.ldlLiver * 0.65 + params.ldlPeriph * 0.35) / 100;
+  const targetStocks = {
+    liverChol: clamp(55 - (flows.f_vldlOut - 50) * 0.35 + (flows.f_ldlLiver - 50) * 0.3 + (flows.f_hdlReturn - 50) * 0.25 + (flows.f_chyloFlow - 50) * 0.2 - (flows.f_baSynth - 35) * 0.45, 12, 95),
+    liverBA: clamp(50 + (flows.f_baReabsorb - 65) * 0.35 + (flows.f_baSynth - 35) * 0.3 - (flows.f_bileSecrete - 50) * 0.25, 15, 95),
+    bloodVLDL: clamp(45 * (params.vldlOut / 100), 10, 95),
+    bloodLDL: clamp(45 * (params.vldlOut / 100) / Math.max(0.28, ldlClearance), 10, 98),
+    bloodHDL: clamp(50 * (params.hdlReturn / 100), 10, 95),
+    periphChol: clamp(50 + (flows.f_ldlPeriph - 50) * 0.45 - (flows.f_hdlReturn - 50) * 0.35, 12, 95),
+    gbBile: clamp(params.isFed ? (45 * (100 / Math.max(30, params.gbEmpty))) : 82, 12, 95),
+    gutBA: clamp(25 + flows.f_gbRelease * 0.5, 10, 95),
+    recycledBA: clamp(flows.f_baReabsorb * (55 / 65), 8, 96),
+    unrecycledBA: clamp(flows.f_baExcrete * (25 / 25), 5, 96),
+    gutChylo: clamp(flows.f_chyloFlow * 1.0, 0, 96)
+  };
+
+  const stockLerp = Math.min(1, dt * 1.1);
+  for (const k in stocks) {
+    stocks[k] += (targetStocks[k] - stocks[k]) * stockLerp;
+  }
+
+  // 根據流量生成與推進粒子
+  updateParticlesByFlows(dt);
+}
+
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
+}
+
+function updateParticlesByFlows(dt) {
+  // 1. 產生新粒子 (間距隨流量反比調整)
+  spawnTimers.P1 += dt * (flows.f_vldlOut / 50);
+  if (spawnTimers.P1 >= 1.5) {
+    spawnTimers.P1 = 0;
+    spawnParticle('VLDL', 'P1', 0);
+  }
+
+  spawnTimers.P5 += dt * (flows.f_hdlReturn / 50);
+  if (spawnTimers.P5 >= 1.8) {
+    spawnTimers.P5 = 0;
+    spawnParticle('HDL', 'P5', 0);
+  }
+
+  if (params.showChyloPath && flows.f_chyloFlow > 5) {
+    spawnTimers.P6 += dt * (flows.f_chyloFlow / 45);
+    if (spawnTimers.P6 >= 1.9) {
+      spawnTimers.P6 = 0;
+      spawnParticle('CM', 'P6', 0);
+    }
+  }
+
+  spawnTimers.P7_HEP += dt * (flows.f_bileSecrete / 50);
+  if (spawnTimers.P7_HEP >= 1.7) {
+    spawnTimers.P7_HEP = 0;
+    spawnParticle('BA', 'P7_HEP_GB', 0);
+  }
+
+  spawnTimers.P7_OUT += dt * (flows.f_gbRelease / 50);
+  if (spawnTimers.P7_OUT >= 1.35) {
+    spawnTimers.P7_OUT = 0;
+    spawnParticle('BA', 'P7_TO_DUO', 0);
+  }
+
+  spawnTimers.P10 += dt * (flows.f_baSynth / 35);
+  if (spawnTimers.P10 >= 2.1) {
+    spawnTimers.P10 = 0;
+    spawnParticle('CHOL_RAW', 'P10', 0);
+  }
+
+  // 2. 推進現有粒子並處理路徑分流與載體轉化 (無瞬移，沿線連續移動)
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.progress += p.speedFactor * dt;
+
+    // P2 中途由 IDL 轉為 LDL
+    if (p.pathKey === 'P2' && p.progress > 0.55 && p.type === 'IDL') {
+      p.type = 'LDL';
+    }
+    // P10 肝內膽固醇原料轉化為膽汁酸菱形粒子
+    if (p.pathKey === 'P10' && p.progress > 0.65 && p.type === 'CHOL_RAW') {
+      p.type = 'BA';
+    }
+
+    if (p.progress >= 1.0) {
+      // 到達路徑終點，根據生理分流規則銜接下一段路徑
+      handleParticleTransition(p, i);
+    } else {
+      updateParticlePosition(p);
+      if (p === trackedParticle) {
+        if (!p.trail) p.trail = [];
+        p.trail.push({ x: p.x, y: p.y });
+        if (p.trail.length > 22) p.trail.shift();
+      }
+    }
+  }
+
+  // 控管粒子上限避免過載，同時維持血液 LDL 庫存視覺密度
+  if (particles.length > 95) {
+    const idx = particles.findIndex(pt => pt !== trackedParticle);
+    if (idx !== -1) particles.splice(idx, 1);
+  }
+}
+
+function handleParticleTransition(p, index) {
+  if (p.pathKey === 'P1') {
+    // VLDL 在肌肉與脂肪釋出 TG 後，轉為 IDL 進入 P2
+    p.type = 'IDL';
+    p.pathKey = 'P2';
+    p.progress = 0;
+    if (p.trail) p.trail = [];
+    updateParticlePosition(p);
+    return;
+  }
+
+  if (p.pathKey === 'P2') {
+    // LDL 分流：依肝臟接收效率 (P4) 與周邊接收程度 (P3) 決定去向
+    const wLiver = params.ldlLiver;
+    const wPeriph = params.ldlPeriph;
+    const totalW = Math.max(1, wLiver + wPeriph);
+    const goLiver = Math.random() < (wLiver / totalW);
+    p.type = 'LDL';
+    p.pathKey = goLiver ? 'P4' : 'P3';
+    p.progress = 0;
+    if (p.trail) p.trail = [];
+    updateParticlePosition(p);
+    return;
+  }
+
+  if (p.pathKey === 'P6') {
+    // 乳糜微粒經淋巴入血釋出部分脂質後，形成乳糜微粒殘粒回肝 (P6_REM)
+    p.type = 'CM_REM';
+    p.pathKey = 'P6_REM';
+    p.progress = 0;
+    if (p.trail) p.trail = [];
+    updateParticlePosition(p);
+    return;
+  }
+
+  if (p.pathKey === 'P7_TO_DUO') {
+    // 膽汁酸進入十二指腸後移往小腸末段迴腸 (P8_LUMEN)
+    p.pathKey = 'P8_LUMEN';
+    p.progress = 0;
+    if (p.trail) p.trail = [];
+    updateParticlePosition(p);
+    return;
+  }
+
+  if (p.pathKey === 'P8_LUMEN') {
+    // 小腸末段分流：大部分再吸收經肝門靜脈回肝 (P8_PORTAL)，少部分往腸道下游排出 (P9)
+    const recycleProb = clamp((params.baRecycle / 100) / ((params.baRecycle / 100) + ((100 - params.baRecycle) / 100) * (params.baLoss / 100)), 0.08, 0.98);
+    p.pathKey = (Math.random() < recycleProb) ? 'P8_PORTAL' : 'P9';
+    p.progress = 0;
+    if (p.trail) p.trail = [];
+    updateParticlePosition(p);
+    return;
+  }
+
+  // 腸道下游排出端 (P9)：隨糞便排出體外，無論是否勾選持續循環，皆在此處結束旅程
+  if (p.pathKey === 'P9') {
+    if (p === trackedParticle) {
+      setTrackedParticle(null);
+    }
+    particles.splice(index, 1);
+    return;
+  }
+
+  // 追蹤微粒若啟用「非排出端節點持續循環」，在到達其他器官節點終點時接續下一階段循環
+  if (p === trackedParticle && params.continuousCycle) {
+    p.trail = [];
+    if (p.pathKey === 'P3') {
+      // LDL 被周邊細胞接收，多餘膽固醇由 HDL 逆向轉運回肝 (P5)
+      p.type = 'HDL';
+      p.pathKey = 'P5';
+      p.progress = 0;
+      updateParticlePosition(p);
+      return;
+    } else if (p.pathKey === 'P4' || p.pathKey === 'P5' || p.pathKey === 'P6_REM') {
+      // 膽固醇回到肝臟：50% 轉為 VLDL 輸出 (P1)，50% 進入轉化合成膽汁酸 (P10)
+      if (Math.random() < 0.5) {
+        p.type = 'VLDL';
+        p.pathKey = 'P1';
+      } else {
+        p.type = 'CHOL_RAW';
+        p.pathKey = 'P10';
+      }
+      p.progress = 0;
+      updateParticlePosition(p);
+      return;
+    } else if (p.pathKey === 'P7_HEP_GB') {
+      // 膽汁在膽囊儲存濃縮後，由進食收縮排出至十二指腸 (P7_TO_DUO)
+      p.pathKey = 'P7_TO_DUO';
+      p.progress = 0;
+      updateParticlePosition(p);
+      return;
+    } else if (p.pathKey === 'P10') {
+      // 肝內膽固醇轉化為膽汁酸，分泌進入膽囊 (P7_HEP_GB)
+      p.type = 'BA';
+      p.pathKey = 'P7_HEP_GB';
+      p.progress = 0;
+      updateParticlePosition(p);
+      return;
+    } else if (p.pathKey === 'P8_PORTAL') {
+      // 經肝門靜脈回收之膽汁酸，重新分泌至膽道/膽囊 (P7_HEP_GB) 完成腸肝循環
+      p.pathKey = 'P7_HEP_GB';
+      p.progress = 0;
+      updateParticlePosition(p);
+      return;
+    }
+  }
+
+  // 未啟用持續循環或一般背景微粒抵達器官節點終點：結束旅程並移除微粒
+  if (p === trackedParticle) {
+    setTrackedParticle(null);
+  }
+  particles.splice(index, 1);
+}
+
+// ==========================================
+// 5. Canvas 視覺渲染引擎
+// ==========================================
+const canvas = document.getElementById('simCanvas');
+const ctx = canvas.getContext('2d');
+let scaleRatio = 1;
+let offsetX = 0;
+let offsetY = 0;
+
+function resizeCanvas() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const availW = rect.width;
+  const availH = rect.height - 46; // 預留底部圖例空間
+  scaleRatio = Math.min(availW / LOGICAL_W, availH / LOGICAL_H) * 0.96;
+  offsetX = (availW - LOGICAL_W * scaleRatio) / 2;
+  offsetY = (availH - LOGICAL_H * scaleRatio) / 2 + 12;
+}
+window.addEventListener('resize', resizeCanvas);
+
+// 檢查某路徑或器官是否處於高亮狀態 (支援多選)
+function isPathHighlighted(pathKey) {
+  if (trackedParticle && (trackedParticle.pathKey === pathKey || PATHWAYS[trackedParticle.pathKey]?.code === pathKey)) {
+    return true;
+  }
+  if (activeHighlights.size === 0) return true;
+  const code = PATHWAYS[pathKey]?.code || pathKey;
+
+  for (const hl of activeHighlights) {
+    if (hl === 'COMPARE_RETURN') {
+      if (['P4', 'P5', 'P8'].includes(code)) return true;
+    } else if (hl === 'P1_P2') {
+      if (['P1', 'P2'].includes(code)) return true;
+    } else if (hl === 'P3_P4') {
+      if (['P3', 'P4'].includes(code)) return true;
+    } else if (hl === 'P7_P8_P9_P10') {
+      if (['P7', 'P8', 'P9', 'P10'].includes(code)) return true;
+    } else if (['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10'].includes(hl)) {
+      if (code === hl || pathKey === hl) return true;
+    } else if (hl.startsWith('ORG_')) {
+      const orgId = hl.replace('ORG_', '');
+      const org = ORGANS[orgId];
+      if (org && (org.paths.includes(code) || org.paths.includes(pathKey))) return true;
+    } else if (hl.startsWith('PATH_')) {
+      const targetKey = hl.replace('PATH_', '');
+      if (pathKey === targetKey || code === targetKey) return true;
+    }
+  }
+  return false;
+}
+
+function isOrganHighlighted(orgId) {
+  if (activeHighlights.size === 0) return true;
+  if (activeHighlights.has('ORG_' + orgId)) return true;
+  const org = ORGANS[orgId];
+  if (!org) return false;
+  return org.paths.some(pk => isPathHighlighted(pk));
+}
+
+function renderScene() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  ctx.clearRect(0, 0, rect.width, rect.height);
+
+  ctx.save();
+  ctx.translate(offsetX, offsetY);
+  ctx.scale(scaleRatio, scaleRatio);
+
+  // 1. 繪製兩大子系統分區底框
+  drawSubsystemZones();
+
+  // 2. 繪製所有路徑連線 (P1 ~ P10)
+  for (const key in PATHWAYS) {
+    if ((key === 'P6' || key === 'P6_REM') && !params.showChyloPath) continue;
+    drawPathway(PATHWAYS[key]);
+  }
+
+  // 3. 繪製所有器官節點
+  for (const orgKey in ORGANS) {
+    if (orgKey === 'LYMPH' && !params.showChyloPath) continue;
+    drawOrganNode(ORGANS[orgKey]);
+  }
+
+  // 4. 繪製路徑流向箭頭
+  for (const key in PATHWAYS) {
+    if ((key === 'P6' || key === 'P6_REM') && !params.showChyloPath) continue;
+    drawPathwayOverlay(PATHWAYS[key]);
+  }
+
+  // 5. 繪製肝細胞 LDL 受體與腸壁吸收結構 (6.1)
+  drawSpecialReceptors();
+
+  // 6. 繪製移動中的載體與粒子 (追蹤粒子置頂並繪製運動軌跡光束)
+  if (trackedParticle) {
+    drawParticleTrail(trackedParticle);
+  }
+  particles.forEach(p => {
+    if (p === trackedParticle) return;
+    if ((p.pathKey === 'P6' || p.pathKey === 'P6_REM') && !params.showChyloPath) return;
+    drawParticle(p);
+  });
+  if (trackedParticle) {
+    drawParticle(trackedParticle);
+  }
+
+  ctx.restore();
+}
+
+function drawSubsystemZones() {
+  ctx.save();
+  // 右側：4.1 脂蛋白與膽固醇運送系統
+  ctx.strokeStyle = 'rgba(249, 115, 22, 0.22)';
+  ctx.fillStyle = 'rgba(249, 115, 22, 0.03)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([8, 6]);
+  roundRect(ctx, 730, 42, 615, 580, 16, true, true);
+
+  // 左下：4.2 膽汁與膽汁酸腸肝循環系統
+  ctx.strokeStyle = 'rgba(34, 197, 94, 0.22)';
+  ctx.fillStyle = 'rgba(34, 197, 94, 0.03)';
+  roundRect(ctx, 150, 330, 600, 400, 16, true, true);
+  ctx.setLineDash([]);
+
+  if (labelState.organs) {
+    ctx.font = 'bold 15px "Noto Sans TC", sans-serif';
+    ctx.fillStyle = '#fdba74';
+    ctx.fillText('【子系統一】脂蛋白與膽固醇體循環運送系統', 750, 66);
+    ctx.fillStyle = '#86efac';
+    ctx.fillText('【子系統二】膽汁與膽汁酸腸肝循環系統 (肝門靜脈回流)', 170, 720);
+  }
+  ctx.restore();
+}
+
+function drawPathway(pObj) {
+  const hl = isPathHighlighted(pObj.id);
+  ctx.save();
+  ctx.globalAlpha = hl ? 0.92 : 0.14;
+  ctx.strokeStyle = pObj.color;
+  ctx.lineWidth = hl && activeHighlights.size > 0 ? pObj.width + 1.5 : pObj.width;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  if (pObj.lineStyle === 'dashed') {
+    ctx.setLineDash([10, 6]);
+  } else if (pObj.lineStyle === 'dotted') {
+    ctx.setLineDash([4, 6]);
+  } else {
+    ctx.setLineDash([]);
+  }
+
+  // 繪製路徑主線 (肝門靜脈 P8_PORTAL 採用雙線管道視覺與其他路徑明確區隔)
+  ctx.beginPath();
+  pObj.pts.forEach((pt, idx) => {
+    if (idx === 0) ctx.moveTo(pt.x, pt.y);
+    else ctx.lineTo(pt.x, pt.y);
+  });
+  ctx.stroke();
+
+  if (pObj.lineStyle === 'double') {
+    ctx.strokeStyle = '#ddd6fe';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 6]);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+function drawPathwayOverlay(pObj) {
+  if (!labelState.paths) return;
+  const hl = isPathHighlighted(pObj.id);
+  ctx.save();
+  ctx.globalAlpha = hl ? 0.98 : 0.2;
+
+  // 繪製方向箭頭
+  const midPos = getPointOnPolyline(pObj.pts, 0.52);
+  const nextPos = getPointOnPolyline(pObj.pts, 0.58);
+  const angle = Math.atan2(nextPos.y - midPos.y, nextPos.x - midPos.x);
+  ctx.save();
+  ctx.translate(midPos.x, midPos.y);
+  ctx.rotate(angle);
+  ctx.fillStyle = pObj.color;
+  ctx.beginPath();
+  ctx.moveTo(10, 0);
+  ctx.lineTo(-7, -7);
+  ctx.lineTo(-7, 7);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  ctx.restore();
+}
+
+function drawOrganNode(org) {
+  const hl = isOrganHighlighted(org.id);
+  ctx.save();
+  ctx.globalAlpha = hl ? 1.0 : 0.22;
+
+  const rx = org.x - org.w / 2;
+  const ry = org.y - org.h / 2;
+
+  // 膽囊依據庫存大小動態微調視覺飽滿度
+  let scaleGB = 1.0;
+  if (org.id === 'GALLBLADDER') {
+    scaleGB = 0.85 + (stocks.gbBile / 100) * 0.28;
+  }
+
+  ctx.save();
+  if (org.id === 'GALLBLADDER') {
+    ctx.translate(org.x, org.y);
+    ctx.scale(scaleGB, scaleGB);
+    ctx.translate(-org.x, -org.y);
+  }
+
+  // 節點外框與底色
+  ctx.fillStyle = org.color;
+  ctx.strokeStyle = org.border;
+  ctx.lineWidth = activeHighlights.has('ORG_' + org.id) ? 3.5 : 2;
+  roundRect(ctx, rx, ry, org.w, org.h, 12, true, true);
+
+  const hasTitle = labelState.organs;
+  const hasSub = labelState.organFunctions;
+
+  // 器官名稱標籤 (第一行)
+  if (hasTitle) {
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 16px "Noto Sans TC", sans-serif';
+    ctx.textAlign = 'center';
+    let titleY = ry + 24;
+    if (org.id === 'COLON_EXCRETE' && hasSub) {
+      titleY = ry + 20;
+    } else if (!hasSub && !labelState.meters) {
+      titleY = ry + org.h / 2 + 5;
+    }
+    ctx.fillText(org.name, org.x, titleY);
+  }
+
+  // 器官功能說明標籤 (第二行)
+  if (hasSub) {
+    ctx.fillStyle = '#cbd5e1';
+    ctx.font = (org.id === 'COLON_EXCRETE' || org.id === 'BILE_DUCT') ? '11.5px "Noto Sans TC", sans-serif' : '12px "Noto Sans TC", sans-serif';
+    ctx.textAlign = 'center';
+    let subY = hasTitle ? (ry + 43) : (ry + 24);
+    if (org.id === 'COLON_EXCRETE' && hasTitle) {
+      subY = ry + 37;
+    }
+    ctx.fillText(org.sub, org.x, subY);
+  }
+
+  // 節點內相對庫存小量表 (8.2 相對流量/庫存提示)
+  if (labelState.meters) {
+    drawNodeInternalMeters(org, rx, ry);
+  }
+
+  ctx.restore();
+  ctx.restore();
+}
+
+function drawNodeInternalMeters(org, rx, ry) {
+  ctx.save();
+  ctx.font = 'bold 11.5px "Noto Sans TC", sans-serif';
+  ctx.textAlign = 'left';
+
+  const hasSub = labelState.organFunctions;
+  const hasTitle = labelState.organs;
+  const baseMeterY = hasSub ? (ry + 68) : (hasTitle ? (ry + 50) : (ry + 30));
+
+  if (org.id === 'LIVER') {
+    drawMiniBar(rx + 18, ry + 130, 125, '肝可用膽固醇', stocks.liverChol, '#fbbf24');
+    drawMiniBar(rx + 158, ry + 130, 125, '肝內膽汁酸量', stocks.liverBA, '#4ade80');
+  } else if (org.id === 'BLOOD_HUB') {
+    const row1Y = hasSub ? (ry + 65) : (hasTitle ? (ry + 48) : (ry + 28));
+    const row2Y = hasSub ? (ry + 92) : (hasTitle ? (ry + 74) : (ry + 54));
+    drawMiniBar(rx + 15, row1Y, 108, 'VLDL/IDL量', stocks.bloodVLDL, '#a855f7');
+    drawMiniBar(rx + 135, row1Y, 110, '血液LDL庫存', stocks.bloodLDL, '#f97316');
+    drawMiniBar(rx + 15, row2Y, 230, '血液HDL載量', stocks.bloodHDL, '#06b6d4');
+  } else if (org.id === 'MUSCLE_ADIPOSE') {
+    drawMiniBar(rx + 20, baseMeterY, 180, 'TG 能量消耗與儲存相對量', flows.f_vldlOut, '#a855f7');
+  } else if (org.id === 'GALLBLADDER') {
+    drawMiniBar(rx + 18, baseMeterY, 124, params.isFed ? '膽汁排出中' : '膽汁濃縮儲存', stocks.gbBile, '#10b981');
+  } else if (org.id === 'PERIPH_CELL') {
+    drawMiniBar(rx + 25, baseMeterY, 205, '周邊細胞膽固醇庫存', stocks.periphChol, '#fbbf24');
+  } else if (org.id === 'DUODENUM') {
+    drawMiniBar(rx + 20, baseMeterY, 185, '小腸膳食脂質/乳糜微粒', stocks.gutChylo, '#eab308');
+  } else if (org.id === 'ILEUM') {
+    drawMiniBar(rx + 20, baseMeterY, 180, `迴腸回收率設定: ${params.baRecycle}%`, stocks.recycledBA, '#8b5cf6');
+  } else if (org.id === 'COLON_EXCRETE') {
+    const colonMeterY = hasSub ? (ry + 56) : (hasTitle ? (ry + 46) : (ry + 30));
+    drawMiniBar(rx + 20, colonMeterY, 180, '未回收排出量', stocks.unrecycledBA, '#94a3b8');
+  }
+  ctx.restore();
+}
+
+function drawMiniBar(x, y, w, label, val, color) {
+  ctx.fillStyle = '#e2e8f0';
+  ctx.fillText(`${label}`, x, y);
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+  roundRect(ctx, x, y + 4, w, 7, 3, true, false);
+  ctx.fillStyle = color;
+  roundRect(ctx, x, y + 4, Math.max(4, (w * clamp(val, 0, 100)) / 100), 7, 3, true, false);
+}
+
+// 繪製肝細胞 LDL 受體與腸壁再吸收結構 (6.1 & 8.2)
+function drawSpecialReceptors() {
+  if (!labelState.receptors) return;
+
+  // 1. 肝臟右側邊緣：LDL 受體入口 (專屬於 P4 接收路徑)
+  const hlLiverRec = isPathHighlighted('P4');
+  ctx.save();
+  ctx.globalAlpha = hlLiverRec ? 0.98 : 0.15;
+  const recX = 576, recY = 185;
+  ctx.strokeStyle = '#fb923c';
+  ctx.lineWidth = hlLiverRec && activeHighlights.size > 0 ? 3.5 : 2.5;
+  ctx.beginPath();
+  ctx.moveTo(recX - 8, recY - 7);
+  ctx.lineTo(recX, recY);
+  ctx.lineTo(recX - 8, recY + 7);
+  ctx.moveTo(recX, recY);
+  ctx.lineTo(recX + 9, recY);
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+  ctx.strokeStyle = '#fb923c';
+  ctx.lineWidth = 1;
+  roundRect(ctx, recX - 105, recY - 26, 118, 18, 4, true, true);
+  ctx.fillStyle = '#fed7aa';
+  ctx.font = 'bold 11.5px "Noto Sans TC", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(`肝細胞 LDL 受體 (${params.ldlLiver}%)`, recX - 46, recY - 13);
+  ctx.restore();
+
+  // 2. 周邊細胞頂部：周邊 LDL 受體 (專屬於 P3 接收路徑)
+  const hlPeriphRec = isPathHighlighted('P3');
+  ctx.save();
+  ctx.globalAlpha = hlPeriphRec ? 0.98 : 0.15;
+  const pRecX = 915, pRecY = 420;
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+  ctx.strokeStyle = '#f97316';
+  ctx.lineWidth = hlPeriphRec && activeHighlights.size > 0 ? 2 : 1;
+  roundRect(ctx, pRecX - 58, pRecY - 10, 116, 18, 4, true, true);
+  ctx.fillStyle = '#fed7aa';
+  ctx.font = 'bold 11.5px "Noto Sans TC", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('周邊細胞 LDL 受體', pRecX, pRecY + 3);
+  ctx.restore();
+
+  // 3. 迴腸頂部：腸壁轉運通道 (專屬於 P8 再吸收路徑)
+  const hlGutRec = isPathHighlighted('P8_PORTAL') || isPathHighlighted('P8_LUMEN') || isPathHighlighted('P8');
+  ctx.save();
+  ctx.globalAlpha = hlGutRec ? 0.98 : 0.15;
+  const gutWallX = 615, gutWallY = 484;
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+  ctx.strokeStyle = '#a78bfa';
+  ctx.lineWidth = hlGutRec && activeHighlights.size > 0 ? 2 : 1;
+  roundRect(ctx, gutWallX - 55, gutWallY - 9, 110, 18, 4, true, true);
+  ctx.fillStyle = '#ddd6fe';
+  ctx.font = 'bold 11.5px "Noto Sans TC", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('迴腸腸壁再吸收通道', gutWallX, gutWallY + 4);
+  ctx.restore();
+}
+
+function drawParticleTrail(p) {
+  if (!p || !p.trail || p.trail.length < 2) return;
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  for (let i = 0; i < p.trail.length - 1; i++) {
+    const ratio = (i + 1) / p.trail.length;
+    const alpha = ratio * 0.75;
+    const width = 2.0 + ratio * 4.5;
+    ctx.strokeStyle = `rgba(56, 189, 248, ${alpha})`;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(p.trail[i].x, p.trail[i].y);
+    ctx.lineTo(p.trail[i + 1].x, p.trail[i + 1].y);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// 繪製載體與內部貨物粒子 (嚴格區分載體外框與內部膽固醇六角形、TG三角形、膽汁酸菱形)
+function drawParticle(p) {
+  const hl = isPathHighlighted(p.pathKey);
+  const isTracked = (p === trackedParticle);
+
+  ctx.save();
+  // 當有粒子被鎖定追蹤時，大幅調暗背景粒子，讓被追蹤粒子強烈突顯
+  if (trackedParticle) {
+    ctx.globalAlpha = isTracked ? 1.0 : (hl ? 0.22 : 0.08);
+  } else {
+    ctx.globalAlpha = hl ? 0.96 : 0.15;
+  }
+  ctx.translate(p.x, p.y);
+
+  // 若為目前鎖定追蹤的粒子，繪製全套強烈突顯特效 (光暈、脈衝雷達、瞄準準心、浮動標籤)
+  if (isTracked) {
+    ctx.save();
+    // 1. 動態光芒底暈 (Radial glow halo)
+    const glow = ctx.createRadialGradient(0, 0, 4, 0, 0, 36);
+    glow.addColorStop(0, 'rgba(56, 189, 248, 0.65)');
+    glow.addColorStop(0.55, 'rgba(56, 189, 248, 0.25)');
+    glow.addColorStop(1, 'rgba(56, 189, 248, 0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(0, 0, 36, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 2. 向外擴散之動態脈衝波 (Expanding radar pulse)
+    const wave = (simTime * 2.2) % 1.0;
+    const waveR = 15 + wave * 25;
+    ctx.strokeStyle = `rgba(56, 189, 248, ${(1 - wave) * 0.9})`;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, waveR, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // 3. 雙層鎖定準心環與十字標記 (Targeting Reticle)
+    const rRing = 22;
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    ctx.arc(0, 0, rRing, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 4 個準心刻度 (十字準心)
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(0, -rRing - 5); ctx.lineTo(0, -rRing + 1);
+    ctx.moveTo(0, rRing - 1); ctx.lineTo(0, rRing + 5);
+    ctx.moveTo(-rRing - 5, 0); ctx.lineTo(-rRing + 1, 0);
+    ctx.moveTo(rRing - 1, 0); ctx.lineTo(rRing + 5, 0);
+    ctx.stroke();
+    ctx.restore();
+
+    // 放大粒子本身 1.35 倍，便於觀察內部 TG 三角形與膽固醇六角形貨物
+    ctx.scale(1.35, 1.35);
+  }
+
+  if (p.type === 'VLDL') {
+    // 紫色圓形載體外環 + 內部 2個TG(藍三角) + 1個膽固醇(金六角)
+    drawCarrierCircle(13, '#a855f7', 'rgba(168, 85, 247, 0.25)');
+    drawCargoTG(-4, -3, 4.2);
+    drawCargoTG(4, -3, 4.2);
+    drawCargoChol(0, 4.5, 4.2);
+    drawParticleLabel('VLDL', 'TG+膽固醇', '#e9d5ff');
+  } else if (p.type === 'IDL') {
+    drawCarrierCircle(11, '#d946ef', 'rgba(217, 70, 239, 0.25)');
+    drawCargoTG(-3.5, 0, 3.8);
+    drawCargoChol(3.5, 0, 4.0);
+    drawParticleLabel('IDL', 'TG減少', '#f5d0fe');
+  } else if (p.type === 'LDL') {
+    // 橘紅載體外環 + 內部 2顆膽固醇六角形
+    drawCarrierCircle(10.5, '#f97316', 'rgba(249, 115, 22, 0.28)');
+    drawCargoChol(-3, -1, 4.2);
+    drawCargoChol(3, 2, 4.2);
+    drawParticleLabel('LDL', '膽固醇載體', '#ffedd5');
+  } else if (p.type === 'HDL') {
+    // 青色圓角矩形載體 + 內部膽固醇六角形
+    ctx.fillStyle = 'rgba(6, 182, 212, 0.28)';
+    ctx.strokeStyle = '#06b6d4';
+    ctx.lineWidth = 2.2;
+    roundRect(ctx, -10, -8, 20, 16, 5, true, true);
+    drawCargoChol(0, 0, 4.5);
+    drawParticleLabel('HDL', '回運膽固醇', '#cffafe');
+  } else if (p.type === 'CM' || p.type === 'CM_REM') {
+    // 乳糜微粒 / 殘粒
+    const r = p.type === 'CM' ? 13 : 9.5;
+    ctx.fillStyle = 'rgba(234, 179, 8, 0.25)';
+    ctx.strokeStyle = '#eab308';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    drawCargoTG(-3, -2, 4);
+    if (p.type === 'CM') drawCargoTG(3, -2, 4);
+    drawCargoChol(0, 3.5, 3.8);
+    drawParticleLabel(p.type === 'CM' ? '乳糜微粒' : '乳糜殘粒', '膳食脂質', '#fef08a');
+  } else if (p.type === 'BA') {
+    // 膽汁酸：翠綠菱形 (絕不使用六角形，明確區分膽汁酸 ≠ 膽固醇)
+    drawBileAcidDiamond(0, 0, 7.5);
+    if (labelState.substances) {
+      ctx.font = 'bold 11px "Noto Sans TC", sans-serif';
+      ctx.fillStyle = '#86efac';
+      ctx.textAlign = 'center';
+      ctx.fillText('膽汁酸', 0, -11);
+    }
+  } else if (p.type === 'CHOL_RAW') {
+    // 肝臟內作為原料的膽固醇六角形
+    drawCargoChol(0, 0, 6.5);
+    if (labelState.substances) {
+      ctx.font = 'bold 11px "Noto Sans TC", sans-serif';
+      ctx.fillStyle = '#fde047';
+      ctx.textAlign = 'center';
+      ctx.fillText('膽固醇原料', 0, -11);
+    }
+  }
+
+  ctx.restore();
+}
+
+function drawCarrierCircle(r, strokeCol, fillCol) {
+  ctx.fillStyle = fillCol;
+  ctx.strokeStyle = strokeCol;
+  ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+}
+
+// 繪製膽固醇載貨：琥珀金六角形
+function drawCargoChol(cx, cy, r) {
+  ctx.fillStyle = '#fbbf24';
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const ang = (Math.PI / 3) * i - Math.PI / 6;
+    const vx = cx + r * Math.cos(ang);
+    const vy = cy + r * Math.sin(ang);
+    if (i === 0) ctx.moveTo(vx, vy);
+    else ctx.lineTo(vx, vy);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+}
+
+// 繪製三酸甘油酯 (TG) 載貨：亮藍正三角形
+function drawCargoTG(cx, cy, r) {
+  ctx.fillStyle = '#38bdf8';
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - r);
+  ctx.lineTo(cx + r * 0.9, cy + r * 0.75);
+  ctx.lineTo(cx - r * 0.9, cy + r * 0.75);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+}
+
+// 繪製膽汁酸粒子：翠綠菱形
+function drawBileAcidDiamond(cx, cy, r) {
+  ctx.fillStyle = '#4ade80';
+  ctx.strokeStyle = '#052e16';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - r);
+  ctx.lineTo(cx + r, cy);
+  ctx.lineTo(cx, cy + r);
+  ctx.lineTo(cx - r, cy);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+}
+
+function drawParticleLabel(carrierName, cargoName, color) {
+  if (!labelState.lipoproteins && !labelState.substances) return;
+  ctx.font = 'bold 11px "Noto Sans TC", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = color;
+  let txt = '';
+  if (labelState.lipoproteins && labelState.substances) {
+    txt = `${carrierName}(${cargoName})`;
+  } else if (labelState.lipoproteins) {
+    txt = carrierName;
+  } else {
+    txt = cargoName;
+  }
+  ctx.fillText(txt, 0, -15);
+}
+
+// 教學情境視窗資料設定
+const SCENARIO_CALLOUTS = {
+  COMPARE_RETURN: {
+    title: '兩條回肝路徑完全不同（不可混用）：',
+    color: '#38bdf8',
+    lines: [
+      { prefix: '① 周邊膽固醇回肝 (P4/P5)：', text: '   由血液脂蛋白載體 (HDL / LDL) 經體循環回肝。', pCol: '#67e8f9' },
+      { prefix: '② 膽汁酸回肝 (P8 腸肝循環)：', text: '   由迴腸再吸收後，專走「肝門靜脈」回肝再利用。', pCol: '#c4b5fd' }
+    ]
+  },
+  P1_P2: {
+    title: '肝臟輸出 VLDL 與微血管脂肪分解 (P1+P2)：',
+    color: '#d946ef',
+    lines: [
+      { prefix: '① 肝分泌富含TG之 VLDL (P1)：', text: '   經全身血液循環巡航至肌肉與脂肪組織微血管。', pCol: '#c084fc' },
+      { prefix: '② 微血管內皮 LPL 催化代謝 (P2)：', text: '   釋出脂肪酸供能與儲存，VLDL 轉化為 IDL 與 LDL 回流。', pCol: '#f472b6' }
+    ]
+  },
+  P3_P4: {
+    title: '體循環 LDL 兩大去向分流機制 (P3+P4)：',
+    color: '#fb923c',
+    lines: [
+      { prefix: '① 分支一・周邊組織受體利用 (P3)：', text: '   提供細胞膜修補與類固醇荷爾蒙合成所需膽固醇。', pCol: '#fdba74' },
+      { prefix: '② 分支二・肝細胞受體回收清除 (P4)：', text: '   體循環 70~80% LDL 由肝受體內吞，維持血膽固醇衡定。', pCol: '#fca5a5' }
+    ]
+  },
+  P5: {
+    title: '周邊膽固醇逆向轉運機制 RCT (P5)：',
+    color: '#06b6d4',
+    lines: [
+      { prefix: '① 周邊多餘膽固醇交由 HDL 載體：', text: '   細胞不具分解膽固醇能力，必須依賴 HDL 回收。', pCol: '#67e8f9' },
+      { prefix: '② 匯入體循環靜脈送回肝臟：', text: '   經肝竇受體接收後，轉化為膽汁酸或隨膽汁排出。', pCol: '#bae6fd' }
+    ]
+  },
+  P6: {
+    title: '膳食外源性脂質淋巴吸收途徑 (P6)：',
+    color: '#eab308',
+    lines: [
+      { prefix: '① 小腸乳糜微粒經淋巴入血：', text: '   經乳糜管與胸管進入體循環，完全不經肝門靜脈。', pCol: '#fde047' },
+      { prefix: '② 釋出部分 TG 後殘粒由肝接收：', text: '   微血管釋出 TG 後形成殘粒，由肝臟 ApoE 受體清除。', pCol: '#cbd5e1' }
+    ]
+  },
+  P7_P8_P9_P10: {
+    title: '完整膽汁酸腸肝循環與負回饋 (P7~P10)：',
+    color: '#4ade80',
+    lines: [
+      { prefix: '① 膽道分泌與進食排空 (P7)：', text: '   膽囊收縮將膽汁排入十二指腸乳化脂質。', pCol: '#86efac' },
+      { prefix: '② 迴腸再吸收經肝門靜脈回肝 (P8)：', text: '   約 85~95% 膽汁酸由門靜脈高效回肝再利用。', pCol: '#c084fc' },
+      { prefix: '③ 未回收排出 (P9) 與肝內補償合成 (P10)：', text: '   排泄流失促使肝臟動用膽固醇轉化合成補充 (P10)。', pCol: '#fde047' }
+    ]
+  }
+};
+
+function roundRect(ctx, x, y, w, h, r, fill, stroke) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+  if (fill) ctx.fill();
+  if (stroke) ctx.stroke();
+}
+
+// ==========================================
+// 6. 右側庫存與流量儀表板建構與更新
+// ==========================================
+const STOCK_META = [
+  { key: 'liverChol', name: '肝臟可用膽固醇示意量', color: '#fbbf24' },
+  { key: 'liverBA', name: '肝臟內膽汁酸示意量', color: '#4ade80' },
+  { key: 'bloodVLDL', name: '血液 VLDL / IDL 相對量', color: '#a855f7' },
+  { key: 'bloodLDL', name: '血液 LDL 相對庫存', color: '#f97316' },
+  { key: 'bloodHDL', name: '血液 HDL 相對載貨量', color: '#06b6d4' },
+  { key: 'periphChol', name: '周邊組織膽固醇示意量', color: '#38bdf8' },
+  { key: 'gbBile', name: '膽囊膽汁儲存量', color: '#10b981' },
+  { key: 'recycledBA', name: '小腸已回收膽汁酸量 (P8)', color: '#8b5cf6' },
+  { key: 'unrecycledBA', name: '腸道未回收排出膽汁酸量 (P9)', color: '#94a3b8' },
+  { key: 'gutChylo', name: '小腸膳食脂質／乳糜微粒量', color: '#eab308' }
+];
+
+const FLOW_META = [
+  { key: 'f_vldlOut', name: '肝臟 VLDL 輸出流量 (P1)', color: '#a855f7' },
+  { key: 'f_ldlLiver', name: '肝臟 LDL 受體接收流量 (P4)', color: '#fb923c' },
+  { key: 'f_ldlPeriph', name: 'LDL 周邊細胞接收流量 (P3)', color: '#f97316' },
+  { key: 'f_hdlReturn', name: '周邊膽固醇 HDL 回運流量 (P5)', color: '#06b6d4' },
+  { key: 'f_chyloFlow', name: '乳糜微粒淋巴入血與殘粒回肝 (P6)', color: '#eab308' },
+  { key: 'f_gbRelease', name: '膽囊膽汁排出流量 (P7)', color: '#10b981' },
+  { key: 'f_baReabsorb', name: '迴腸回收與肝門靜脈回流 (P8)', color: '#8b5cf6' },
+  { key: 'f_baExcrete', name: '膽汁酸腸道流失流量 (P9)', color: '#94a3b8' },
+  { key: 'f_baSynth', name: '肝臟膽固醇補充合成膽汁酸 (P10)', color: '#4ade80' }
+];
+
+function initMetersDOM() {
+  const stockContainer = document.getElementById('stockMeters');
+  stockContainer.innerHTML = STOCK_META.map(m => `
+    <div class="meter-row">
+      <div class="meter-head">
+        <span class="meter-name">${m.name}</span>
+        <span class="meter-status" id="st_txt_${m.key}">基準</span>
+      </div>
+      <div class="meter-track">
+        <div class="meter-baseline-mark" style="left:${BASELINE_STOCKS[m.key]}%;"></div>
+        <div class="meter-fill" id="st_bar_${m.key}" style="width:${BASELINE_STOCKS[m.key]}%;background:${m.color};"></div>
+      </div>
+    </div>
+  `).join('');
+
+  const flowContainer = document.getElementById('flowMeters');
+  flowContainer.innerHTML = FLOW_META.map(m => `
+    <div class="meter-row">
+      <div class="meter-head">
+        <span class="meter-name">${m.name}</span>
+        <span class="meter-status" id="fl_txt_${m.key}">基準</span>
+      </div>
+      <div class="meter-track">
+        <div class="meter-baseline-mark" style="left:${BASELINE_FLOWS[m.key]}%;"></div>
+        <div class="meter-fill" id="fl_bar_${m.key}" style="width:${BASELINE_FLOWS[m.key]}%;background:${m.color};"></div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function getRelativeTrendText(current, base) {
+  const diff = current - base;
+  if (Math.abs(diff) < 4) return '<span style="color:#94a3b8;">≈ 基準相當</span>';
+  if (diff >= 18) return '<span style="color:#fbbf24;">▲▲ 顯著增加</span>';
+  if (diff > 0) return '<span style="color:#fde047;">▲ 相對增加</span>';
+  if (diff <= -18) return '<span style="color:#38bdf8;">▼▼ 顯著減少</span>';
+  return '<span style="color:#7dd3fc;">▼ 相對減少</span>';
+}
+
+function updateMetersDOM() {
+  STOCK_META.forEach(m => {
+    const val = Math.round(stocks[m.key]);
+    const bar = document.getElementById('st_bar_' + m.key);
+    const txt = document.getElementById('st_txt_' + m.key);
+    if (bar) bar.style.width = `${clamp(val, 2, 100)}%`;
+    if (txt) txt.innerHTML = getRelativeTrendText(val, BASELINE_STOCKS[m.key]);
+  });
+
+  FLOW_META.forEach(m => {
+    const val = Math.round(flows[m.key]);
+    const bar = document.getElementById('fl_bar_' + m.key);
+    const txt = document.getElementById('fl_txt_' + m.key);
+    if (bar) bar.style.width = `${clamp(val, 2, 100)}%`;
+    if (txt) txt.innerHTML = getRelativeTrendText(val, BASELINE_FLOWS[m.key]);
+  });
+
+  updateTrackerCardDOM();
+}
+
+function updateTrackerCardDOM() {
+  const box = document.getElementById('trackerInfoBox');
+  if (trackedParticle) {
+    const pObj = PATHWAYS[trackedParticle.pathKey];
+    const typeDesc = {
+      'VLDL': 'VLDL 脂蛋白載體（內載三酸甘油酯 TG 與膽固醇）',
+      'IDL': 'IDL 中間密度脂蛋白載體（已釋出部分 TG）',
+      'LDL': 'LDL 低密度脂蛋白載體（主要攜帶膽固醇）',
+      'HDL': 'HDL 高密度脂蛋白載體（執行周邊膽固醇逆向回運）',
+      'CM': '乳糜微粒載體（運送小腸吸收之膳食脂質，經淋巴入血）',
+      'CM_REM': '乳糜微粒殘粒（釋出膳食 TG 後回肝臟接收）',
+      'BA': '膽汁酸／膽鹽粒子（由膽固醇轉化而成，協助消化並經肝門靜脈回收）',
+      'CHOL_RAW': '肝內膽固醇原料（正轉化合成為膽汁酸以補充流失）'
+    }[trackedParticle.type] || trackedParticle.type;
+
+    box.innerHTML = `
+      • <strong>身分與載貨：</strong>${typeDesc}<br>
+      • <strong>目前所在路徑：</strong>${pObj ? pObj.name : trackedParticle.pathKey}<br>
+      • <strong>路徑進度：</strong><span style="color:#38bdf8; font-weight:bold;">${Math.round(trackedParticle.progress * 100)}%</span><br>
+      • <strong>循環模式：</strong><span style="color:${params.continuousCycle ? '#38bdf8' : '#94a3b8'};">${params.continuousCycle ? '持續循環中（除腸道排出端外）' : '單次終點即結束'}</span>
+    `;
+    return;
+  }
+
+  if (activeHighlights.size > 0) {
+    let notes = [];
+    for (const key of Object.keys(SCENARIO_CALLOUTS)) {
+      if (activeHighlights.has(key)) {
+        const sc = SCENARIO_CALLOUTS[key];
+        const linesHtml = sc.lines.map(l => `• <strong>${l.prefix}</strong><br>${l.text}`).join('<br>');
+        notes.push(`<strong>${sc.title}</strong><br>${linesHtml}`);
+      }
+    }
+    const orgs = [];
+    const paths = [];
+    for (const hl of activeHighlights) {
+      if (hl.startsWith('ORG_')) {
+        const org = ORGANS[hl.replace('ORG_', '')];
+        if (org) orgs.push(org.name);
+      } else if (hl.startsWith('PATH_')) {
+        const code = hl.replace('PATH_', '');
+        const pObj = Object.values(PATHWAYS).find(p => p.code === code);
+        paths.push(pObj ? `<strong>${pObj.code}</strong> (${pObj.procLabel})` : code);
+      } else if (!SCENARIO_CALLOUTS[hl]) {
+        const pObj = Object.values(PATHWAYS).find(p => p.code === hl || p.id === hl);
+        paths.push(pObj ? `<strong>${pObj.code}</strong> (${pObj.procLabel})` : hl);
+      }
+    }
+    if (orgs.length > 0) {
+      notes.push(`<strong>突顯器官（可多選）：</strong>${orgs.join('、')}`);
+    }
+    if (paths.length > 0) {
+      notes.push(`<strong>突顯路徑與流程（可多選）：</strong><br>• ${paths.join('<br>• ')}`);
+    }
+    if (notes.length > 0) {
+      box.innerHTML = notes.join('<div style="margin:6px 0;border-top:1px dashed rgba(255,255,255,0.18);"></div>');
+      return;
+    }
+  }
+
+  box.innerHTML = `
+    目前檢視：<strong>整體系統視圖</strong><br>
+    • 點擊畫布中移動的<strong>脂蛋白載體或膽汁酸粒子</strong>可即時鎖定並顯示其來源、載貨與目的地。<br>
+    • 左側「路徑與對比突顯」支援<strong>多選複選</strong>，點選多項可同時高亮比對。
+  `;
+}
+
+// ==========================================
+// 7. 互動與控制項事件綁定 (第 8 節)
+// ==========================================
+
+// 8.0 左右側面板隱藏/展開切換
+const leftPanel = document.getElementById('leftControlPanel');
+const rightPanel = document.getElementById('rightMetricsPanel');
+const btnToggleLeft = document.getElementById('btnToggleLeft');
+const btnToggleRight = document.getElementById('btnToggleRight');
+
+function toggleLeftPanel() {
+  const isCollapsed = leftPanel.classList.toggle('collapsed');
+  btnToggleLeft.textContent = isCollapsed ? '▶ 展開左側' : '◀ 左側面板';
+  setTimeout(resizeCanvas, 260);
+}
+
+function toggleRightPanel() {
+  const isCollapsed = rightPanel.classList.toggle('collapsed');
+  btnToggleRight.textContent = isCollapsed ? '◀ 展開右側' : '右側面板 ▶';
+  setTimeout(resizeCanvas, 260);
+}
+
+btnToggleLeft.addEventListener('click', toggleLeftPanel);
+btnToggleRight.addEventListener('click', toggleRightPanel);
+
+// 8.1 播放 / 暫停 / 速度 / 單步 / 重播 / 重設
+const btnPlayPause = document.getElementById('btnPlayPause');
+btnPlayPause.addEventListener('click', () => {
+  isPlaying = !isPlaying;
+  btnPlayPause.textContent = isPlaying ? '暫停' : '播放';
+  btnPlayPause.classList.toggle('btn-primary', isPlaying);
+});
+
+document.getElementById('btnStepFwd').addEventListener('click', () => {
+  isPlaying = false;
+  btnPlayPause.textContent = '播放';
+  btnPlayPause.classList.remove('btn-primary');
+  saveHistorySnapshot();
+  updateSimulationModel(0.35);
+  updateMetersDOM();
+  renderScene();
+});
+
+document.getElementById('btnStepBack').addEventListener('click', () => {
+  isPlaying = false;
+  btnPlayPause.textContent = '播放';
+  btnPlayPause.classList.remove('btn-primary');
+  if (historyBuffer.length > 0) {
+    const snap = historyBuffer.pop();
+    stocks = { ...snap.stocks };
+    flows = { ...snap.flows };
+    particles = snap.particles.map(pt => ({ ...pt }));
+    setTrackedParticle(null);
+    updateMetersDOM();
+    renderScene();
+  }
+});
+
+// 重設為一致的初始狀態 (第 13.10 節)
+document.getElementById('btnReset').addEventListener('click', () => {
+  params = { ...DEFAULT_PARAMS };
+  stocks = { ...BASELINE_STOCKS };
+  flows = { ...BASELINE_FLOWS };
+  activeHighlights.clear();
+  setTrackedParticle(null);
+  syncControlsFromParams();
+  seedInitialParticles();
+  updateMetersDOM();
+  renderScene();
+});
+
+// 動畫速度滑桿與預設按鈕 (8.1: 只改變動畫播放速度，不改變生理參數與結果)
+const speedSlider = document.getElementById('speedSlider');
+const speedText = document.getElementById('speedText');
+const speedPresets = document.querySelectorAll('.speed-preset');
+
+function setSimSpeed(val) {
+  simSpeed = parseFloat(val);
+  speedSlider.value = simSpeed;
+  speedText.textContent = simSpeed.toFixed(1) + 'x';
+  speedPresets.forEach(b => {
+    b.classList.toggle('active', Math.abs(parseFloat(b.dataset.speed) - simSpeed) < 0.05);
+  });
+}
+
+speedSlider.addEventListener('input', e => setSimSpeed(e.target.value));
+speedPresets.forEach(btn => {
+  btn.addEventListener('click', () => setSimSpeed(btn.dataset.speed));
+});
+
+// 8.2 標籤顯示控制 (切換時絕不暫停或改變模擬狀態)
+const lblToggles = document.querySelectorAll('.lbl-toggle');
+const btnMasterLabel = document.getElementById('btnMasterLabel');
+let allLabelsOn = true;
+
+lblToggles.forEach(chk => {
+  chk.addEventListener('change', e => {
+    labelState[e.target.dataset.key] = e.target.checked;
+    renderScene();
+  });
+});
+
+btnMasterLabel.addEventListener('click', () => {
+  allLabelsOn = !allLabelsOn;
+  btnMasterLabel.textContent = allLabelsOn ? '全部隱藏' : '全部顯示';
+  lblToggles.forEach(chk => {
+    chk.checked = allLabelsOn;
+    labelState[chk.dataset.key] = allLabelsOn;
+  });
+  renderScene();
+});
+
+// 8.3 生理條件控制綁定
+const btnMealFed = document.getElementById('btnMealFed');
+const btnMealFast = document.getElementById('btnMealFast');
+const mealStateLabel = document.getElementById('mealStateLabel');
+
+function setMealState(fed) {
+  params.isFed = fed;
+  btnMealFed.classList.toggle('active', fed);
+  btnMealFast.classList.toggle('active', !fed);
+  mealStateLabel.textContent = fed ? '進食狀態 (膽囊收縮排出)' : '未進食 (膽汁儲存於膽囊)';
+}
+
+btnMealFed.addEventListener('click', () => setMealState(true));
+btnMealFast.addEventListener('click', () => setMealState(false));
+
+const SLIDER_MAP = [
+  ['sl_dietLipid', 'val_dietLipid', 'dietLipid'],
+  ['sl_vldlOut', 'val_vldlOut', 'vldlOut'],
+  ['sl_ldlLiver', 'val_ldlLiver', 'ldlLiver'],
+  ['sl_baRecycle', 'val_baRecycle', 'baRecycle'],
+  ['sl_ldlPeriph', 'val_ldlPeriph', 'ldlPeriph'],
+  ['sl_hdlReturn', 'val_hdlReturn', 'hdlReturn'],
+  ['sl_gbEmpty', 'val_gbEmpty', 'gbEmpty'],
+  ['sl_baLoss', 'val_baLoss', 'baLoss']
+];
+
+SLIDER_MAP.forEach(([slId, valId, paramKey]) => {
+  const sl = document.getElementById(slId);
+  const vl = document.getElementById(valId);
+  sl.addEventListener('input', e => {
+    params[paramKey] = parseFloat(e.target.value);
+    vl.textContent = params[paramKey] + '%';
+  });
+});
+
+document.getElementById('chkShowChyloPath').addEventListener('change', e => {
+  params.showChyloPath = e.target.checked;
+  renderScene();
+});
+
+function syncControlsFromParams() {
+  setMealState(params.isFed);
+  SLIDER_MAP.forEach(([slId, valId, paramKey]) => {
+    document.getElementById(slId).value = params[paramKey];
+    document.getElementById(valId).textContent = params[paramKey] + '%';
+  });
+  document.getElementById('chkShowChyloPath').checked = params.showChyloPath;
+  const chkCycle = document.getElementById('chkContinuousCycle');
+  if (chkCycle) chkCycle.checked = params.continuousCycle;
+  document.querySelectorAll('.path-btn, .path-chip-btn').forEach(b => b.classList.remove('active'));
+}
+
+// 8.4 路徑突顯與基準比較控制 (支援多選/複選)
+const pathBtns = document.querySelectorAll('.path-btn, .path-chip-btn');
+pathBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    const target = btn.dataset.hl;
+    if (activeHighlights.has(target)) {
+      activeHighlights.delete(target);
+      btn.classList.remove('active');
+    } else {
+      activeHighlights.add(target);
+      btn.classList.add('active');
+    }
+    updateTrackerCardDOM();
+    renderScene();
+  });
+});
+
+document.getElementById('btnClearHighlight').addEventListener('click', () => {
+  activeHighlights.clear();
+  setTrackedParticle(null);
+  pathBtns.forEach(b => b.classList.remove('active'));
+  updateTrackerCardDOM();
+  renderScene();
+});
+
+document.getElementById('chkCompareBase').addEventListener('change', e => {
+  document.getElementById('stockSection').classList.toggle('show-baseline', e.target.checked);
+  document.getElementById('flowSection').classList.toggle('show-baseline', e.target.checked);
+});
+
+document.getElementById('chkContinuousCycle').addEventListener('change', e => {
+  params.continuousCycle = e.target.checked;
+  updateTrackerCardDOM();
+});
+
+// 隨機追蹤一顆粒子按鈕
+document.getElementById('btnTrackRandom').addEventListener('click', () => {
+  if (particles.length > 0) {
+    const target = particles[Math.floor(Math.random() * particles.length)];
+    setTrackedParticle(target);
+    renderScene();
+  }
+});
+
+document.getElementById('btnStopTrack').addEventListener('click', () => {
+  setTrackedParticle(null);
+  renderScene();
+});
+
+// 畫布點擊偵測：1. 優先偵測點擊粒子 -> 2. 偵測點擊器官節點 -> 3. 偵測點擊路徑
+canvas.addEventListener('click', e => {
+  const rect = canvas.getBoundingClientRect();
+  const lx = (e.clientX - rect.left - offsetX) / scaleRatio;
+  const ly = (e.clientY - rect.top - offsetY) / scaleRatio;
+
+  // 1. 檢查是否點選到某顆粒子
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    if (Math.hypot(p.x - lx, p.y - ly) <= 18) {
+      setTrackedParticle(p);
+      renderScene();
+      return;
+    }
+  }
+
+  // 2. 檢查是否點選到某個器官節點 (支援切換加入/移除多選)
+  for (const orgKey in ORGANS) {
+    const org = ORGANS[orgKey];
+    if (orgKey === 'LYMPH' && !params.showChyloPath) continue;
+    if (lx >= org.x - org.w / 2 && lx <= org.x + org.w / 2 &&
+        ly >= org.y - org.h / 2 && ly <= org.y + org.h / 2) {
+      const targetHl = 'ORG_' + org.id;
+      if (activeHighlights.has(targetHl)) {
+        activeHighlights.delete(targetHl);
+      } else {
+        activeHighlights.add(targetHl);
+      }
+      updateTrackerCardDOM();
+      renderScene();
+      return;
+    }
+  }
+
+  // 3. 檢查是否點選到某條路徑連線附近 (支援切換加入/移除多選)
+  for (const pk in PATHWAYS) {
+    const pObj = PATHWAYS[pk];
+    for (let s = 0; s <= 10; s++) {
+      const pt = getPointOnPolyline(pObj.pts, s / 10);
+      if (Math.hypot(pt.x - lx, pt.y - ly) <= 16) {
+        const targetHl = 'PATH_' + pObj.code;
+        if (activeHighlights.has(targetHl)) {
+          activeHighlights.delete(targetHl);
+        } else {
+          activeHighlights.add(targetHl);
+        }
+        updateTrackerCardDOM();
+        renderScene();
+        return;
+      }
+    }
+  }
+});
+
+// ==========================================
+// 8. 主動畫迴圈
+// ==========================================
+let lastTimestamp = performance.now();
+let historyTimer = 0;
+let uiRefreshTimer = 0;
+
+function saveHistorySnapshot() {
+  historyBuffer.push({
+    stocks: { ...stocks },
+    flows: { ...flows },
+    particles: particles.map(pt => ({ ...pt }))
+  });
+  if (historyBuffer.length > 25) historyBuffer.shift();
+}
+
+function mainLoop(now) {
+  const rawDt = Math.min(0.08, (now - lastTimestamp) / 1000);
+  lastTimestamp = now;
+
+  if (isPlaying) {
+    const scaledDt = rawDt * simSpeed;
+    simTime += scaledDt;
+    historyTimer += scaledDt;
+    if (historyTimer >= 0.5) {
+      historyTimer = 0;
+      saveHistorySnapshot();
+    }
+    updateSimulationModel(scaledDt);
+  }
+
+  uiRefreshTimer += rawDt;
+  if (uiRefreshTimer >= 0.15) {
+    uiRefreshTimer = 0;
+    updateMetersDOM();
+    if (trackedParticle) {
+      updateTrackerCardDOM();
+    }
+  }
+
+  renderScene();
+  requestAnimationFrame(mainLoop);
+}
+
+// 啟動模擬器
+resizeCanvas();
+initMetersDOM();
+seedInitialParticles();
+updateMetersDOM();
+requestAnimationFrame(mainLoop);
+</script>
+</body>
+</html>
