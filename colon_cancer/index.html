@@ -1,0 +1,1080 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>大腸癌演變與息肉切除互動模擬器</title>
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --accent-color: #e74c3c;
+            --med-blue: #3498db;
+            --med-green: #2ecc71;
+            --bg-light: #f5f7fa;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: "Microsoft JhengHei", "PingFang TC", sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-light);
+            color: var(--primary-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 20px;
+            max-width: 900px;
+            width: 100%;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            color: var(--primary-color);
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 0.95rem;
+        }
+
+        .main-container {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+            max-width: 950px;
+            width: 100%;
+            overflow: hidden;
+            display: grid;
+            grid-template-columns: 1fr 320px;
+        }
+
+        /* 畫布區域 */
+        .canvas-wrapper {
+            position: relative;
+            background: #2b0909;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            /* 需容納右側面板內容（約 472px），避免面板長出內部捲軸造成寬度變化 */
+            min-height: 480px;
+        }
+
+        canvas {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .layer-labels {
+            position: absolute;
+            left: 10px;
+            bottom: 10px;
+            pointer-events: none;
+            background: rgba(0, 0, 0, 0.6);
+            color: #fff;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            line-height: 1.6;
+        }
+
+        .layer-dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+
+        /* 控制與資訊面板 */
+        .control-panel {
+            /* 讓面板高度完全由左側畫布決定，內容變動不會撐高版面造成畫面跳動 */
+            position: relative;
+            min-height: 0;
+            background: #ffffff;
+            border-left: 1px solid #eee;
+        }
+
+        .panel-body {
+            position: absolute;
+            inset: 0;
+            padding: 20px 25px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            overflow-y: auto;
+        }
+
+        .mode-tabs {
+            display: flex;
+            background: #eee;
+            border-radius: 8px;
+            padding: 4px;
+            margin-bottom: 20px;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            border-radius: 6px;
+            font-weight: bold;
+            color: #666;
+            transition: all 0.3s;
+        }
+
+        .tab-btn.active {
+            background: white;
+            color: var(--med-blue);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        }
+
+        .info-box {
+            background: var(--bg-light);
+            padding: 15px;
+            border-radius: 10px;
+            border-left: 4px solid var(--med-blue);
+            margin-bottom: 20px;
+            flex-grow: 1;
+        }
+
+        .stage-title {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: var(--primary-color);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .badge {
+            font-size: 0.75rem;
+            padding: 3px 8px;
+            border-radius: 12px;
+            color: white;
+            background: var(--med-green);
+        }
+
+        .stage-desc {
+            font-size: 0.9rem;
+            line-height: 1.6;
+            color: #444;
+        }
+
+        /* 控制項 */
+        .controls-section {
+            margin-top: auto;
+        }
+
+        .slider-container {
+            margin-bottom: 15px;
+        }
+
+        .slider-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: #888;
+            margin-bottom: 5px;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 8px;
+            border-radius: 4px;
+            background: #ddd;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: var(--med-blue);
+            cursor: pointer;
+            border: 3px solid white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+
+        .btn-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .action-btn {
+            padding: 12px 15px;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--med-blue);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #2980b9;
+        }
+
+        .btn-danger {
+            background: var(--accent-color);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c0392b;
+        }
+
+        .btn-success {
+            background: var(--med-green);
+            color: white;
+        }
+
+        /* 顯示/隱藏時不要有過渡延遲（版面空間已預留） */
+        #goSurgeryBtn {
+            transition: background-color 0.2s;
+        }
+
+        .action-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .step-indicator {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+        }
+
+        .step-dot {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: #eee;
+            color: #888;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+
+        .step-dot.active {
+            background: var(--med-blue);
+            color: white;
+        }
+
+        .step-dot.done {
+            background: var(--med-green);
+            color: white;
+        }
+
+        /* 手機版（單欄）改回一般流向，避免面板內容被裁切 */
+        @media (max-width: 768px) {
+            .main-container {
+                grid-template-columns: 1fr;
+            }
+
+            .control-panel {
+                position: static;
+                min-height: 0;
+            }
+
+            /* 手機版面板在畫布下方，畫布區不需要預留額外高度 */
+            .canvas-wrapper {
+                min-height: 450px;
+            }
+
+            .panel-body {
+                position: static;
+                overflow: visible;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>🔬 大腸癌演變與大腸鏡息肉切除模擬器</h1>
+        <p class="subtitle">透過互動動畫了解「腺瘤-癌序列 (Adenoma-Carcinoma Sequence)」及內視鏡預防原理</p>
+    </header>
+
+    <div class="main-container">
+        <!-- 左側 Canvas 動畫區 -->
+        <div class="canvas-wrapper">
+            <canvas id="simCanvas" width="600" height="450"></canvas>
+            <div class="layer-labels">
+                <div><span class="layer-dot" style="background: #ff9a9e;"></span>黏膜層 (Mucosa)</div>
+                <div><span class="layer-dot" style="background: #fecfef;"></span>黏膜下層 (含血管/淋巴)</div>
+                <div><span class="layer-dot" style="background: #c75b67;"></span>肌肉層 (Muscularis)</div>
+            </div>
+        </div>
+
+        <!-- 右側控制區 -->
+        <div class="control-panel">
+            <div class="panel-body">
+                <div>
+                    <div class="mode-tabs">
+                        <button class="tab-btn active" onclick="switchMode('evolution')">1. 病變發展</button>
+                        <button class="tab-btn" onclick="switchMode('surgery')">2. 大腸鏡切除</button>
+                    </div>
+
+                    <div class="info-box" id="infoBox">
+                        <div class="stage-title">
+                            <span id="stageTitle">正常大腸黏膜</span>
+                            <span class="badge" id="riskBadge">無風險</span>
+                        </div>
+                        <p class="stage-desc" id="stageDesc">
+                            大腸內壁由健康的黏膜上皮細胞組成，表面平滑，細胞分裂受到嚴格調控，負責吸收水分與電解質。
+                        </p>
+                    </div>
+                </div>
+
+                <!-- 發展模式控制項 -->
+                <div class="controls-section" id="evolutionControls">
+                    <div class="slider-container">
+                        <div class="slider-labels">
+                            <span>正常</span>
+                            <span>增生</span>
+                            <span>腺瘤息肉</span>
+                            <span>原位癌</span>
+                            <span>侵襲癌</span>
+                        </div>
+                        <input type="range" id="growthSlider" min="0" max="100" value="0">
+                    </div>
+                    <div class="btn-group">
+                        <button class="action-btn btn-primary" id="autoPlayBtn" onclick="toggleAutoPlay()">
+                            ▶ 自動演示演變過程 (約5-10年)
+                        </button>
+                        <!-- 以 visibility 隱藏，保留按鈕空間，出現時版面不會跳動 -->
+                        <button class="action-btn btn-success" id="goSurgeryBtn" onclick="switchMode('surgery')" style="visibility:hidden;">
+                            🩺 趁現在進行大腸鏡切除！
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 手術模式控制項 -->
+                <div class="controls-section" id="surgeryControls" style="display: none;">
+                    <div class="step-indicator">
+                        <div class="step-dot active" id="dot0">1</div>
+                        <div class="step-dot" id="dot1">2</div>
+                        <div class="step-dot" id="dot2">3</div>
+                        <div class="step-dot" id="dot3">4</div>
+                        <div class="step-dot" id="dot4">✓</div>
+                    </div>
+                    <div class="btn-group">
+                        <button class="action-btn btn-primary" id="surgeryStepBtn" onclick="nextSurgeryStep()">
+                            下一步：伸入大腸鏡
+                        </button>
+                        <button class="action-btn" style="background:#eee; color:#555;" onclick="resetSurgery()">
+                            ↺ 重新模擬手術
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    const canvas = document.getElementById('simCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // 狀態變數
+    let currentMode = 'evolution'; // 'evolution' or 'surgery'
+    let growthProgress = 0; // 0 to 100
+    let isAutoPlaying = false;
+    let animationFrameId;
+    let timeTick = 0;
+
+    // 手術狀態變數
+    let surgeryStep = 0; 
+    // 0: 準備, 1: 內視鏡進場, 2: 套圈張開套住, 3: 收緊通電切除, 4: 夾取回收與完成
+    let scopeX = -150;
+    let snareLoopSize = 0;
+    let isElectrocautery = false;
+    let polypDetached = false;
+    let polypPos = { x: 300, y: 210 };
+    let sparkParticles = [];
+    let bloodCells = [];
+
+    // 初始化紅血球裝飾
+    for(let i = 0; i < 12; i++) {
+        bloodCells.push({
+            x: Math.random() * 600,
+            y: 365 + (Math.random() * 8 - 4),
+            speed: 0.8 + Math.random() * 0.5,
+            isCancer: false
+        });
+    }
+
+    // 病變階段說明資料
+    const stageData = [
+        {
+            max: 15,
+            title: "正常大腸黏膜",
+            badge: "健康狀態",
+            badgeColor: "#2ecc71",
+            desc: "大腸內壁由健康的黏膜上皮細胞組成，表面平滑。細胞的新陳代謝與分裂受到基因（如 APC 基因）嚴格調控。"
+        },
+        {
+            max: 40,
+            title: "小型增生 / 初期息肉",
+            badge: "良性變化",
+            badgeColor: "#3498db",
+            desc: "由於基因突變或環境刺激，局部黏膜細胞開始異常增生，向腸腔內突起形成小肉芽（小型息肉）。此時多無任何症狀。"
+        },
+        {
+            max: 68,
+            title: "腺瘤性息肉 (Adenoma)",
+            badge: "黃金切除期",
+            badgeColor: "#f39c12",
+            desc: "息肉持續長大並形成明顯的「蒂（Stalk）」。腺瘤性息肉屬於「癌前病變」，若在此階段透過大腸鏡切除，可接近 100% 預防大腸癌！"
+        },
+        {
+            max: 85,
+            title: "原位癌 (Stage 0)",
+            badge: "早期惡性",
+            badgeColor: "#e67e22",
+            desc: "息肉頂端的細胞進一步突變（如 KRAS、p53 基因），轉變為惡性癌細胞（深暗色部分），但尚未突破黏膜下層基底膜。"
+        },
+        {
+            max: 100,
+            title: "侵襲性大腸癌 (Invasive Cancer)",
+            badge: "高危險期",
+            badgeColor: "#e74c3c",
+            desc: "癌細胞突破黏膜肌層，向下侵襲至富含血管與淋巴管的「黏膜下層」與「肌肉層」。癌細胞開始進入血液循環，具轉移風險，需外科手術治療。"
+        }
+    ];
+
+    // 手術步驟說明資料
+    const surgeryData = [
+        {
+            title: "發現腺瘤性息肉",
+            badge: "準備檢查",
+            badgeColor: "#3498db",
+            desc: "患者進行大腸鏡檢查。鏡頭在腸腔內發現一顆有蒂的腺瘤性息肉（約 1.2 公分）。準備使用內視鏡進行無痛切除。",
+            btnText: "1. 伸入大腸鏡"
+        },
+        {
+            title: "大腸鏡定位與照明",
+            badge: "步驟 1/4",
+            badgeColor: "#3498db",
+            desc: "大腸鏡前端到達息肉旁，開啟冷光源照亮病灶，並充氣撐開腸道，清楚觀察息肉的根部（蒂部）位置。",
+            btnText: "2. 伸出金屬套圈 (Snare)"
+        },
+        {
+            title: "套圈套住息肉根部",
+            badge: "步驟 2/4",
+            badgeColor: "#f39c12",
+            desc: "從大腸鏡的工作通道伸出「息肉切除套圈（Snare）」，精準地將金屬線圈套在息肉的根部（蒂部）。",
+            btnText: "3. 收緊並通電切除 (電燒)"
+        },
+        {
+            title: "高頻電流切除與止血",
+            badge: "步驟 3/4",
+            badgeColor: "#e74c3c",
+            desc: "收緊套圈，同時通以高頻率電流（電燒）。瞬間的高溫能將息肉切斷，同時將根部微小血管燒灼封閉，達到止血效果！",
+            btnText: "4. 回收息肉送檢"
+        },
+        {
+            title: "息肉回收與病理化驗",
+            badge: "手術完成",
+            badgeColor: "#2ecc71",
+            desc: "切下的息肉被器械收回體外，送交病理科化驗確認良惡性。腸壁僅留下微小焦痂傷口（約一週癒合），成功阻斷大腸癌發生！",
+            btnText: "✓ 已完成切除"
+        }
+    ];
+
+    // 監聽滑桿
+    const slider = document.getElementById('growthSlider');
+    slider.addEventListener('input', (e) => {
+        if (isAutoPlaying) toggleAutoPlay();
+        growthProgress = parseFloat(e.target.value);
+        updateEvolutionUI();
+    });
+
+    function switchMode(mode) {
+        if (isAutoPlaying) toggleAutoPlay();
+        currentMode = mode;
+        
+        const tabs = document.querySelectorAll('.tab-btn');
+        tabs[0].classList.toggle('active', mode === 'evolution');
+        tabs[1].classList.toggle('active', mode === 'surgery');
+
+        document.getElementById('evolutionControls').style.display = mode === 'evolution' ? 'block' : 'none';
+        document.getElementById('surgeryControls').style.display = mode === 'surgery' ? 'block' : 'none';
+
+        if (mode === 'evolution') {
+            updateEvolutionUI();
+        } else {
+            // 強制設定息肉為適合切除的大小 (Progress = 55)
+            growthProgress = 55;
+            resetSurgery();
+        }
+    }
+
+    function updateEvolutionUI() {
+        slider.value = growthProgress;
+        let currentStage = stageData[0];
+        for (let s of stageData) {
+            if (growthProgress <= s.max) {
+                currentStage = s;
+                break;
+            }
+        }
+
+        document.getElementById('stageTitle').innerText = currentStage.title;
+        const badge = document.getElementById('riskBadge');
+        badge.innerText = currentStage.badge;
+        badge.style.background = currentStage.badgeColor;
+        document.getElementById('stageDesc').innerText = currentStage.desc;
+
+        // 在腺瘤階段顯示跳轉手術的提示按鈕（以 visibility 切換，保留版面空間避免畫面跳動）
+        const goBtn = document.getElementById('goSurgeryBtn');
+        if (growthProgress >= 35 && growthProgress <= 75) {
+            goBtn.style.visibility = 'visible';
+        } else {
+            goBtn.style.visibility = 'hidden';
+        }
+    }
+
+    function toggleAutoPlay() {
+        isAutoPlaying = !isAutoPlaying;
+        const btn = document.getElementById('autoPlayBtn');
+        if (isAutoPlaying) {
+            if (growthProgress >= 100) growthProgress = 0;
+            btn.innerText = "⏸ 暫停演示";
+            btn.classList.replace('btn-primary', 'btn-danger');
+        } else {
+            btn.innerText = "▶ 自動演示演變過程 (約5-10年)";
+            btn.classList.replace('btn-danger', 'btn-primary');
+        }
+    }
+
+    // 手術控制邏輯
+    function resetSurgery() {
+        surgeryStep = 0;
+        scopeX = -150;
+        snareLoopSize = 0;
+        isElectrocautery = false;
+        polypDetached = false;
+        polypPos = { x: 300, y: 215 };
+        updateSurgeryUI();
+    }
+
+    function nextSurgeryStep() {
+        if (surgeryStep < 4) {
+            surgeryStep++;
+            if (surgeryStep === 3) {
+                // 觸發電燒特效
+                isElectrocautery = true;
+                createSparks(300, 275);
+                setTimeout(() => {
+                    isElectrocautery = false;
+                    polypDetached = true;
+                }, 900);
+            }
+            updateSurgeryUI();
+        }
+    }
+
+    function updateSurgeryUI() {
+        const data = surgeryData[surgeryStep];
+        document.getElementById('stageTitle').innerText = data.title;
+        const badge = document.getElementById('riskBadge');
+        badge.innerText = data.badge;
+        badge.style.background = data.badgeColor;
+        document.getElementById('stageDesc').innerText = data.desc;
+
+        const stepBtn = document.getElementById('surgeryStepBtn');
+        stepBtn.innerText = data.btnText;
+        stepBtn.disabled = (surgeryStep === 4);
+
+        for (let i = 0; i <= 4; i++) {
+            const dot = document.getElementById('dot' + i);
+            dot.className = 'step-dot';
+            if (i < surgeryStep) dot.classList.add('done');
+            if (i === surgeryStep) dot.classList.add('active');
+        }
+    }
+
+    function createSparks(x, y) {
+        sparkParticles = [];
+        for (let i = 0; i < 35; i++) {
+            sparkParticles.push({
+                x: x + (Math.random() * 20 - 10),
+                y: y,
+                vx: (Math.random() - 0.5) * 6,
+                vy: (Math.random() - 0.8) * 6,
+                life: 1.0,
+                color: Math.random() > 0.5 ? '#fff200' : '#ff9f1a'
+            });
+        }
+    }
+
+    // ================= 繪圖核心函數 =================
+
+    function drawColonBackground() {
+        // 1. 腸腔深處背景 (Lumen)
+        let bgGrad = ctx.createRadialGradient(300, 150, 50, 300, 150, 400);
+        bgGrad.addColorStop(0, '#591818');
+        bgGrad.addColorStop(1, '#240707');
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // 繪製腸道環狀皺襞 (Haustra) 增加立體感
+        ctx.strokeStyle = 'rgba(120, 30, 30, 0.35)';
+        ctx.lineWidth = 18;
+        for (let i = 1; i <= 3; i++) {
+            ctx.beginPath();
+            ctx.arc(300, 180, 100 * i, Math.PI * 1.1, Math.PI * 1.9);
+            ctx.stroke();
+        }
+
+        // 2. 肌肉層 (Muscularis propria) - 最底層
+        ctx.fillStyle = '#c75b67';
+        ctx.fillRect(0, 390, canvas.width, 60);
+        // 肌肉紋理
+        ctx.strokeStyle = '#b04652';
+        ctx.lineWidth = 2;
+        for (let y = 400; y < 450; y += 12) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(canvas.width, y);
+            ctx.stroke();
+        }
+
+        // 3. 黏膜下層 (Submucosa) - 中間層
+        ctx.fillStyle = '#fecfef';
+        ctx.fillRect(0, 330, canvas.width, 60);
+
+        // 繪製黏膜下層的血管
+        ctx.fillStyle = '#d63031';
+        ctx.fillRect(0, 358, canvas.width, 14);
+        ctx.strokeStyle = '#ff7675';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(-5, 358, canvas.width + 10, 14);
+
+        // 繪製流動的紅血球與癌細胞
+        bloodCells.forEach(cell => {
+            cell.x += cell.speed;
+            if (cell.x > canvas.width + 10) {
+                cell.x = -10;
+                // 如果處於晚期癌症，有機率生成血液中的轉移癌細胞
+                cell.isCancer = (currentMode === 'evolution' && growthProgress > 88 && Math.random() < 0.35);
+            }
+
+            ctx.beginPath();
+            if (cell.isCancer) {
+                ctx.fillStyle = '#4a154b';
+                ctx.arc(cell.x, cell.y, 5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#a29bfe';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            } else {
+                ctx.fillStyle = '#ff4d4d';
+                ctx.ellipse(cell.x, cell.y, 5, 3.5, 0, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        });
+
+        // 4. 黏膜層 (Mucosa) - 最上層
+        ctx.fillStyle = '#ff9a9e';
+        ctx.beginPath();
+        ctx.moveTo(0, 330);
+        ctx.lineTo(0, 290);
+        // 繪製平滑的黏膜表面微絨毛波浪
+        for (let x = 0; x <= canvas.width; x += 20) {
+            ctx.quadraticCurveTo(x + 10, 286, x + 20, 290);
+        }
+        ctx.lineTo(canvas.width, 330);
+        ctx.closePath();
+        ctx.fill();
+
+        // 黏膜腺體隱窩 (Crypts) 紋理
+        ctx.strokeStyle = 'rgba(214, 100, 110, 0.5)';
+        ctx.lineWidth = 3;
+        for (let x = 10; x < canvas.width; x += 15) {
+            if (Math.abs(x - 300) < 25 && growthProgress > 10) continue; // 避開息肉根部
+            ctx.beginPath();
+            ctx.moveTo(x, 292);
+            ctx.lineTo(x, 322);
+            ctx.stroke();
+        }
+    }
+
+    // 繪製演變過程中的息肉與腫瘤
+    function drawEvolutionPolyp(progress) {
+        if (progress <= 2) return;
+
+        const baseX = 300;
+        const baseY = 292;
+
+        ctx.save();
+
+        // 階段 1: 初期突起 (2 - 35)
+        if (progress <= 35) {
+            let p = (progress - 2) / 33; // 0 to 1
+            let width = 15 + p * 25;
+            let height = 5 + p * 35;
+
+            ctx.fillStyle = '#ff8086';
+            ctx.beginPath();
+            ctx.moveTo(baseX - width, baseY);
+            ctx.quadraticCurveTo(baseX, baseY - height * 1.8, baseX + width, baseY);
+            ctx.closePath();
+            ctx.fill();
+        } 
+        // 階段 2~4: 有蒂息肉與癌變 (35 - 100)
+        else {
+            let stalkFactor = Math.min(1, (progress - 35) / 25); // 35~60 長出蒂與頭部
+            let stalkWidth = 12 + (progress > 75 ? (progress - 75) * 0.6 : 0);
+            let stalkHeight = 25 + stalkFactor * 35;
+            let headRadius = 22 + stalkFactor * 16 + (progress > 60 ? (progress - 60) * 0.3 : 0);
+            let headCenterY = baseY - stalkHeight - headRadius * 0.7;
+
+            // 繪製息肉的蒂 (Stalk)
+            ctx.fillStyle = '#ff7b82';
+            ctx.beginPath();
+            ctx.moveTo(baseX - stalkWidth - 6, baseY);
+            ctx.quadraticCurveTo(baseX - stalkWidth, baseY - stalkHeight / 2, baseX - stalkWidth * 0.8, headCenterY + 10);
+            ctx.lineTo(baseX + stalkWidth * 0.8, headCenterY + 10);
+            ctx.quadraticCurveTo(baseX + stalkWidth, baseY - stalkHeight / 2, baseX + stalkWidth + 6, baseY);
+            ctx.closePath();
+            ctx.fill();
+
+            // 繪製息肉內部的滋養血管
+            ctx.strokeStyle = '#d63031';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.moveTo(baseX, 358);
+            ctx.quadraticCurveTo(baseX + 3, baseY - stalkHeight / 2, baseX, headCenterY);
+            ctx.stroke();
+
+            // 繪製息肉頭部 (花椰菜分葉狀)
+            ctx.fillStyle = '#ff6b72';
+            ctx.beginPath();
+            const lobes = 9;
+            for (let i = 0; i < lobes; i++) {
+                let angle = (i / lobes) * Math.PI * 2;
+                let lx = baseX + Math.cos(angle) * (headRadius * 0.65);
+                let ly = headCenterY + Math.sin(angle) * (headRadius * 0.6);
+                ctx.moveTo(lx, ly);
+                ctx.arc(lx, ly, headRadius * 0.48, 0, Math.PI * 2);
+            }
+            ctx.fill();
+
+            // 表面高光與腦迴紋理
+            ctx.strokeStyle = 'rgba(255, 200, 200, 0.4)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(baseX - 8, headCenterY - 8, headRadius * 0.4, 0.5, 2.5);
+            ctx.stroke();
+
+            // 階段 3 & 4: 癌細胞生成與向下侵襲 (Progress > 68)
+            if (progress > 68) {
+                let cancerProgress = (progress - 68) / 32; // 0 to 1
+                
+                // 頭部惡性腫瘤斑塊 (暗紫褐色，不規則)
+                ctx.fillStyle = '#5c193d';
+                ctx.beginPath();
+                let numCancerLobes = Math.floor(3 + cancerProgress * 8);
+                for (let i = 0; i < numCancerLobes; i++) {
+                    let angle = i * 1.1;
+                    let dist = (i % 2 === 0 ? 0.3 : 0.6) * headRadius * Math.min(1, cancerProgress * 1.3);
+                    let cx = baseX + Math.cos(angle) * dist;
+                    let cy = headCenterY - 5 + Math.sin(angle) * dist;
+                    ctx.moveTo(cx, cy);
+                    ctx.arc(cx, cy, 8 + cancerProgress * 8, 0, Math.PI * 2);
+                }
+                ctx.fill();
+
+                // 階段 4: 突破基底膜，向下侵襲至黏膜下層與肌肉層 (Progress > 82)
+                if (progress > 82) {
+                    let invadeP = (progress - 82) / 18; // 0 to 1
+                    let maxDepth = baseY + invadeP * 115; // 深入到 Y=407 (肌肉層)
+
+                    // 繪製向下蔓延的癌組織根鬚
+                    ctx.fillStyle = '#4a1230';
+                    ctx.beginPath();
+                    ctx.moveTo(baseX - 10, headCenterY);
+                    ctx.lineTo(baseX + 10, headCenterY);
+                    ctx.lineTo(baseX + 18 * invadeP, baseY);
+                    ctx.lineTo(baseX + 28 * invadeP, baseY + 50 * invadeP);
+                    ctx.lineTo(baseX + 8 * invadeP, maxDepth);
+                    ctx.lineTo(baseX - 15 * invadeP, maxDepth - 10);
+                    ctx.lineTo(baseX - 25 * invadeP, baseY + 40 * invadeP);
+                    ctx.lineTo(baseX - 18 * invadeP, baseY);
+                    ctx.closePath();
+                    ctx.fill();
+
+                    // 侵襲組織邊緣發炎反應紅暈
+                    ctx.strokeStyle = 'rgba(231, 76, 60, 0.7)';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                }
+            }
+        }
+        ctx.restore();
+    }
+
+    // 繪製手術模式的息肉與大腸鏡器械
+    function drawSurgeryScene() {
+        const baseX = 300;
+        const baseY = 292;
+        const cutY = 272; // 電燒切除的高度
+
+        // 1. 若已切除，先畫底部的留存蒂部與白色焦痂 (Eschar)
+        if (polypDetached) {
+            // 殘留蒂部底座
+            ctx.fillStyle = '#ff7b82';
+            ctx.beginPath();
+            ctx.moveTo(baseX - 16, baseY);
+            ctx.lineTo(baseX - 10, cutY);
+            ctx.lineTo(baseX + 10, cutY);
+            ctx.lineTo(baseX + 16, baseY);
+            ctx.closePath();
+            ctx.fill();
+
+            // 電燒止血後的白色焦痂 (Cauterized scar)
+            ctx.fillStyle = '#f5f6fa';
+            ctx.beginPath();
+            ctx.ellipse(baseX, cutY, 11, 4, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#7f8fa6';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+        }
+
+        // 2. 繪製息肉本體
+        ctx.save();
+        if (!polypDetached) {
+            // 未切斷的完整息肉
+            ctx.fillStyle = '#ff7b82';
+            ctx.beginPath();
+            ctx.moveTo(baseX - 16, baseY);
+            ctx.quadraticCurveTo(baseX - 11, 250, baseX - 9, 220);
+            ctx.lineTo(baseX + 9, 220);
+            ctx.quadraticCurveTo(baseX + 11, 250, baseX + 16, baseY);
+            ctx.closePath();
+            ctx.fill();
+        } else {
+            // 切斷後的息肉蒂部下半截跟著移動
+            ctx.fillStyle = '#e06c75'; // 斷掉缺血顏色稍暗
+            ctx.beginPath();
+            ctx.moveTo(polypPos.x - 9, polypPos.y + 5);
+            ctx.lineTo(polypPos.x - 9, polypPos.y + 50);
+            ctx.lineTo(polypPos.x + 9, polypPos.y + 50);
+            ctx.lineTo(polypPos.x + 9, polypPos.y + 5);
+            ctx.closePath();
+            ctx.fill();
+            // 斷面焦黑
+            ctx.fillStyle = '#dcdde1';
+            ctx.beginPath();
+            ctx.ellipse(polypPos.x, polypPos.y + 50, 9, 3, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // 繪製息肉頭部 (花椰菜狀)
+        let headX = polypDetached ? polypPos.x : baseX;
+        let headY = polypDetached ? polypPos.y : 215;
+        let headRadius = 34;
+
+        ctx.fillStyle = polypDetached ? '#eb5e66' : '#ff6b72';
+        ctx.beginPath();
+        const lobes = 9;
+        for (let i = 0; i < lobes; i++) {
+            let angle = (i / lobes) * Math.PI * 2;
+            let lx = headX + Math.cos(angle) * (headRadius * 0.62);
+            let ly = headY + Math.sin(angle) * (headRadius * 0.55);
+            ctx.moveTo(lx, ly);
+            ctx.arc(lx, ly, headRadius * 0.45, 0, Math.PI * 2);
+        }
+        ctx.fill();
+        ctx.restore();
+
+        // 3. 處理大腸鏡與套圈的動畫座標
+        let targetScopeX = -150;
+        if (surgeryStep >= 1 && surgeryStep <= 3) targetScopeX = 95;
+        if (surgeryStep === 4) targetScopeX = -160; // 回收退出
+
+        scopeX += (targetScopeX - scopeX) * 0.08;
+
+        // 若在步驟4，讓切下的息肉跟著大腸鏡一起被拉出畫面
+        if (surgeryStep === 4 && polypDetached) {
+            polypPos.x += (scopeX + 60 - polypPos.x) * 0.08;
+            polypPos.y += (185 - polypPos.y) * 0.08;
+        }
+
+        // 4. 繪製大腸鏡照明光束
+        if (scopeX > -100) {
+            ctx.save();
+            let lightGrad = ctx.createLinearGradient(scopeX, 190, scopeX + 350, 250);
+            lightGrad.addColorStop(0, 'rgba(255, 255, 220, 0.45)');
+            lightGrad.addColorStop(1, 'rgba(255, 255, 220, 0)');
+            ctx.fillStyle = lightGrad;
+            ctx.beginPath();
+            ctx.moveTo(scopeX, 175);
+            ctx.lineTo(scopeX + 380, 90);
+            ctx.lineTo(scopeX + 380, 320);
+            ctx.lineTo(scopeX, 205);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
+
+        // 5. 繪製金屬套圈 (Snare) 與導管
+        if (surgeryStep >= 2) {
+            let catheterTipX = (surgeryStep === 4) ? scopeX + 45 : 230;
+            let catheterTipY = (surgeryStep === 4) ? 215 : cutY;
+
+            // 白色塑膠護套導管 (Catheter sheath)
+            ctx.strokeStyle = '#dfe6e9';
+            ctx.lineWidth = 6;
+            ctx.beginPath();
+            ctx.moveTo(scopeX - 5, 198);
+            ctx.quadraticCurveTo(scopeX + 60, 200, catheterTipX, catheterTipY);
+            ctx.stroke();
+
+            // 金屬線圈 (Wire loop)
+            if (surgeryStep === 2) {
+                // 張開套住息肉根部
+                ctx.strokeStyle = '#00d2d3';
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.ellipse(baseX, cutY, 72, 12, 0, 0, Math.PI * 2);
+                ctx.stroke();
+            } else if (surgeryStep === 3) {
+                // 收緊通電中
+                ctx.strokeStyle = isElectrocautery ? '#fff200' : '#00d2d3';
+                ctx.lineWidth = isElectrocautery ? 3.5 : 2.5;
+                ctx.beginPath();
+                ctx.moveTo(catheterTipX, cutY);
+                ctx.lineTo(baseX, cutY);
+                ctx.stroke();
+
+                if (!polypDetached) {
+                    ctx.beginPath();
+                    ctx.ellipse(baseX, cutY, 12, 4, 0, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+            } else if (surgeryStep === 4) {
+                // 夾住息肉回收
+                ctx.strokeStyle = '#00d2d3';
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.moveTo(catheterTipX, catheterTipY);
+                ctx.lineTo(polypPos.x, polypPos.y + 35);
+                ctx.stroke();
+            }
+        }
+
+        // 6. 繪製大腸鏡黑色管身 (Endoscope Tube)
+        ctx.save();
+        ctx.fillStyle = '#2d3436';
+        ctx.strokeStyle = '#636e72';
+        ctx.lineWidth = 2;
+        
+        // 管身圓角矩形
+        ctx.beginPath();
+        ctx.roundRect(scopeX - 250, 170, 255, 38, 8);
+        ctx.fill();
+        ctx.stroke();
+
+        // 管身上的刻度環
+        ctx.fillStyle = '#dfe6e9';
+        for (let m = 30; m < 220; m += 40) {
+            ctx.fillRect(scopeX - m, 170, 4, 38);
+        }
+
+        // 鏡頭前端金屬環與發光 LED
+        ctx.fillStyle = '#b2bec3';
+        ctx.fillRect(scopeX, 172, 6, 34);
+        ctx.fillStyle = '#fff9c4';
+        ctx.beginPath();
+        ctx.arc(scopeX + 4, 182, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        // 7. 繪製電燒火花與煙霧特效
+        if (sparkParticles.length > 0) {
+            for (let i = sparkParticles.length - 1; i >= 0; i--) {
+                let p = sparkParticles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 0.03;
+
+                if (p.life <= 0) {
+                    sparkParticles.splice(i, 1);
+                    continue;
+                }
+
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = p.life;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1.0;
+            }
+        }
+    }
+
+    // 主動畫迴圈
+    function animate() {
+        timeTick += 0.05;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // 1. 繪製大腸分層背景
+        drawColonBackground();
+
+        // 2. 根據模式繪製前景
+        if (currentMode === 'evolution') {
+            if (isAutoPlaying) {
+                growthProgress += 0.18;
+                if (growthProgress >= 100) {
+                    growthProgress = 100;
+                    toggleAutoPlay();
+                }
+                updateEvolutionUI();
+            }
+            drawEvolutionPolyp(growthProgress);
+        } else {
+            drawSurgeryScene();
+        }
+
+        animationFrameId = requestAnimationFrame(animate);
+    }
+
+    // 啟動模擬器
+    updateEvolutionUI();
+    animate();
+
+</script>
+</body>
+</html>

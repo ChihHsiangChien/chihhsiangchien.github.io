@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>人類歷史人口擴張動態地圖 (50,000 BCE - 2025 CE)</title>
+    
+    <!-- 引入 Leaflet CSS (地圖套件) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        /* 頂部資訊列 */
+        #header {
+            background-color: #1e1e1e;
+            padding: 15px 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #333;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+        }
+        .title-group h1 {
+            font-size: 1.4rem;
+            color: #ff9800;
+            margin-bottom: 5px;
+        }
+        .title-group p {
+            font-size: 0.9rem;
+            color: #aaa;
+        }
+        .stats-group {
+            text-align: right;
+        }
+        #year-display {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #00e676;
+        }
+        #pop-display {
+            font-size: 1.2rem;
+            color: #fff;
+        }
+        #era-desc {
+            font-size: 0.9rem;
+            color: #ffeb3b;
+            margin-top: 4px;
+            max-width: 650px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* 主要內容區 */
+        #main-container {
+            display: flex;
+            flex: 1;
+            position: relative;
+        }
+        #map {
+            flex: 7;
+            height: 100%;
+            background-color: #222327;
+        }
+
+        /* Leaflet 控制項深色風格 */
+        .leaflet-bar a {
+            background-color: #2c2c2c !important;
+            color: #fff !important;
+            border-bottom: 1px solid #444 !important;
+        }
+        .leaflet-bar a:hover {
+            background-color: #ff9800 !important;
+            color: #000 !important;
+        }
+        .leaflet-control-attribution {
+            background: rgba(20, 20, 20, 0.7) !important;
+            color: #888 !important;
+        }
+        .leaflet-control-attribution a {
+            color: #aaa !important;
+        }
+
+        #chart-container {
+            flex: 3;
+            background-color: #181818;
+            border-left: 1px solid #333;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        /* 底部控制列 */
+        #controls {
+            background-color: #1e1e1e;
+            padding: 15px 25px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            border-top: 1px solid #333;
+            z-index: 1000;
+        }
+        button {
+            background-color: #ff9800;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            font-size: 1rem;
+            font-weight: bold;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.2s;
+            min-width: 100px;
+        }
+        button:hover {
+            background-color: #ffa726;
+        }
+        #time-slider {
+            flex: 1;
+            cursor: pointer;
+            accent-color: #ff9800;
+            height: 8px;
+        }
+
+        /* 彈出視窗樣式 */
+        .leaflet-popup-content-wrapper, .leaflet-popup-tip {
+            background-color: #2c2c2c;
+            color: #fff;
+            border: 1px solid #ff9800;
+        }
+        
+        @media (max-width: 900px) {
+            #main-container { flex-direction: column; }
+            #map { flex: 6; }
+            #chart-container { flex: 4; border-left: none; border-top: 1px solid #333; }
+            #header { flex-direction: column; align-items: flex-start; gap: 10px; }
+            .stats-group { text-align: left; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="header">
+        <div class="title-group">
+            <h1>人類歷史人口擴張動態地圖</h1>
+            <p>數據來源：HYDE 3.2, Maddison Project, UN Population Division (支援拖曳平移、滾輪縮放、點擊圓圈查看人口)</p>
+            <div id="era-desc">載入中...</div>
+        </div>
+        <div class="stats-group">
+            <div id="year-display">50,000 BCE</div>
+            <div id="pop-display">全球總人口: 100 萬</div>
+        </div>
+    </div>
+
+    <div id="main-container">
+        <div id="map"></div>
+        <div id="chart-container">
+            <canvas id="popChart"></canvas>
+        </div>
+    </div>
+
+    <div id="controls">
+        <button id="play-btn">▶ 播放</button>
+        <!-- step 設為 any，徹底避免浮點數截斷導致暫停 -->
+        <input type="range" id="time-slider" min="0" max="17" value="0" step="any">
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+        // 歷史核心區域
+        const regions = [
+            { id: 'e_africa', name: '東非 (人類搖籃)', lat: 3.0, lng: 37.0 },
+            { id: 's_africa', name: '南非與西非', lat: -10.0, lng: 20.0 },
+            { id: 'n_africa', name: '北非 (尼羅河流域)', lat: 26.0, lng: 30.0 },
+            { id: 'm_east', name: '中東 (兩河流域/肥沃月彎)', lat: 33.0, lng: 44.0 },
+            { id: 'europe', name: '歐洲', lat: 48.0, lng: 15.0 },
+            { id: 'n_asia', name: '北亞與中亞', lat: 55.0, lng: 75.0 },
+            { id: 's_asia', name: '南亞 (印度河/恆河流域)', lat: 24.0, lng: 78.0 },
+            { id: 'e_asia', name: '東亞 (黃河/長江流域)', lat: 34.0, lng: 112.0 },
+            { id: 'se_asia', name: '東南亞', lat: 10.0, lng: 105.0 },
+            { id: 'oceania', name: '大洋洲', lat: -25.0, lng: 135.0 },
+            { id: 'n_america', name: '北美洲', lat: 38.0, lng: -95.0 },
+            { id: 'c_america', name: '中美洲 (瑪雅/阿茲特克核心)', lat: 19.0, lng: -99.0 },
+            { id: 's_america', name: '南美洲 (安地斯核心)', lat: -12.0, lng: -75.0 }
+        ];
+
+        // 歷史關鍵時期數據 (百萬人)
+        const timeData = [
+            { year: -50000, label: "50,000 BCE", total: 1.0, desc: "【舊石器時代晚期】智人走出非洲，開始向歐亞大陸與澳洲遷徙，全球僅約百萬人。", dist: { e_africa: 0.5, s_africa: 0.2, n_africa: 0.1, m_east: 0.1, s_asia: 0.05, se_asia: 0.03, oceania: 0.02, europe: 0, n_asia: 0, e_asia: 0, n_america: 0, c_america: 0, s_america: 0 } },
+            { year: -30000, label: "30,000 BCE", total: 2.5, desc: "【冰河時期】現代人類擴散至歐洲與東亞，尼安德塔人滅絕。人類學會製作更精密的禦寒工具。", dist: { e_africa: 0.5, s_africa: 0.3, n_africa: 0.2, m_east: 0.3, europe: 0.2, n_asia: 0.1, s_asia: 0.4, e_asia: 0.3, se_asia: 0.1, oceania: 0.1, n_america: 0, c_america: 0, s_america: 0 } },
+            { year: -15000, label: "15,000 BCE", total: 3.5, desc: "【跨過白令陸橋】海平面下降，人類透過白令陸橋首次進入美洲大陸並快速南遷。", dist: { e_africa: 0.5, s_africa: 0.3, n_africa: 0.3, m_east: 0.4, europe: 0.4, n_asia: 0.1, s_asia: 0.6, e_asia: 0.5, se_asia: 0.2, oceania: 0.1, n_america: 0.1, c_america: 0, s_america: 0 } },
+            { year: -10000, label: "10,000 BCE", total: 4.0, desc: "【農業革命前夕】最後一次冰河期結束，人類散布至除南極外所有大陸，準備定居農耕。", dist: { e_africa: 0.4, s_africa: 0.3, n_africa: 0.4, m_east: 0.6, europe: 0.5, n_asia: 0.1, s_asia: 0.6, e_asia: 0.5, se_asia: 0.2, oceania: 0.1, n_america: 0.1, c_america: 0.1, s_america: 0.1 } },
+            { year: -5000, label: "5,000 BCE", total: 18.0, desc: "【新石器時代】肥沃月彎、長江黃河、中美洲獨立發展農業，糧食穩定使人口顯著上升。", dist: { e_africa: 0.8, s_africa: 0.7, n_africa: 1.5, m_east: 4.0, europe: 2.5, n_asia: 0.3, s_asia: 3.5, e_asia: 3.0, se_asia: 0.7, oceania: 0.2, n_america: 0.2, c_america: 0.3, s_america: 0.3 } },
+            { year: -3000, label: "3,000 BCE", total: 45.0, desc: "【青銅時代】蘇美、古埃及、印度河流域文明興起，早期城市與國家誕生。", dist: { e_africa: 1.5, s_africa: 1.5, n_africa: 4.0, m_east: 8.0, europe: 5.0, n_asia: 0.5, s_asia: 10.0, e_asia: 9.0, se_asia: 2.0, oceania: 0.3, n_america: 0.5, c_america: 1.5, s_america: 1.2 } },
+            { year: -1000, label: "1,000 BCE", total: 100.0, desc: "【鐵器時代】鐵器農具普及大幅提升產量，全球人口首次突破 1 億大關。", dist: { e_africa: 3.0, s_africa: 4.0, n_africa: 7.0, m_east: 15.0, europe: 12.0, n_asia: 1.0, s_asia: 25.0, e_asia: 23.0, se_asia: 3.5, oceania: 0.5, n_america: 0.8, c_america: 2.7, s_america: 2.5 } },
+            { year: 1, label: "1 CE", total: 230.0, desc: "【古典帝國時代】羅馬帝國、中國漢朝、印度貴霜帝國並立，歐亞人口高度集中。", dist: { e_africa: 4.0, s_africa: 6.0, n_africa: 12.0, m_east: 22.0, europe: 34.0, n_asia: 2.0, s_asia: 65.0, e_asia: 65.0, se_asia: 6.0, oceania: 0.8, n_america: 1.2, c_america: 6.0, s_america: 6.0 } },
+            { year: 500, label: "500 CE", total: 210.0, desc: "【中世紀早期】羅馬帝國崩潰、中國魏晉南北朝戰亂與查士丁尼瘟疫，全球人口衰退。", dist: { e_africa: 5.0, s_africa: 8.0, n_africa: 8.0, m_east: 18.0, europe: 26.0, n_asia: 2.5, s_asia: 65.0, e_asia: 52.0, se_asia: 7.0, oceania: 1.0, n_america: 1.5, c_america: 8.0, s_america: 8.0 } },
+            { year: 1000, label: "1000 CE", total: 310.0, desc: "【中世紀溫暖期】宋朝農業技術突破（占城稻），全球人口突破 3 億。", dist: { e_africa: 7.0, s_africa: 15.0, n_africa: 11.0, m_east: 22.0, europe: 42.0, n_asia: 3.5, s_asia: 78.0, e_asia: 88.0, se_asia: 11.0, oceania: 1.2, n_america: 2.0, c_america: 15.0, s_america: 14.3 } },
+            { year: 1500, label: "1500 CE", total: 460.0, desc: "【大航海時代】黑死病後人口復甦；哥倫布發現新大陸前夕，美洲文明處於巔峰。", dist: { e_africa: 12.0, s_africa: 24.0, n_africa: 10.0, m_east: 20.0, europe: 78.0, n_asia: 5.0, s_asia: 110.0, e_asia: 130.0, se_asia: 18.0, oceania: 2.0, n_america: 3.0, c_america: 24.0, s_america: 24.0 } },
+            { year: 1700, label: "1700 CE", total: 610.0, desc: "【哥倫布大交換】美洲高產作物傳入歐亞促進增長；舊大陸傳染病導致美洲原住民銳減。", dist: { e_africa: 15.0, s_africa: 35.0, n_africa: 11.0, m_east: 22.0, europe: 110.0, n_asia: 12.0, s_asia: 165.0, e_asia: 200.0, se_asia: 25.0, oceania: 2.0, n_america: 1.5, c_america: 6.5, s_america: 5.0 } },
+            { year: 1800, label: "1800 CE", total: 1000.0, desc: "【工業革命】英國工業革命展開，全球總人口歷史性突破 10 億大關！", dist: { e_africa: 18.0, s_africa: 42.0, n_africa: 14.0, m_east: 26.0, europe: 180.0, n_asia: 18.0, s_asia: 200.0, e_asia: 380.0, se_asia: 35.0, oceania: 2.0, n_america: 7.0, c_america: 10.0, s_america: 8.0 } },
+            { year: 1900, label: "1900 CE", total: 1650.0, desc: "【現代化與移民潮】歐洲人口大爆發並移民北美；公共衛生改善，全球達 16.5 億。", dist: { e_africa: 25.0, s_africa: 60.0, n_africa: 25.0, m_east: 35.0, europe: 390.0, n_asia: 35.0, s_asia: 290.0, e_asia: 480.0, se_asia: 80.0, oceania: 6.0, n_america: 82.0, c_america: 20.0, s_america: 38.0 } },
+            { year: 1950, label: "1950 CE", total: 2530.0, desc: "【二戰結束與抗生素】盤尼西林與疫苗普及，全球死亡率驟降，人口達 25 億。", dist: { e_africa: 65.0, s_africa: 110.0, n_africa: 53.0, m_east: 65.0, europe: 510.0, n_asia: 65.0, s_asia: 490.0, e_asia: 670.0, se_asia: 165.0, oceania: 13.0, n_america: 172.0, c_america: 38.0, s_america: 114.0 } },
+            { year: 1980, label: "1980 CE", total: 4440.0, desc: "【綠色革命】高產量農作物與化肥拯救數十億人免於飢荒，亞非拉人口指數級暴增。", dist: { e_africa: 145.0, s_africa: 240.0, n_africa: 95.0, m_east: 135.0, europe: 640.0, n_asia: 105.0, s_asia: 950.0, e_asia: 1180.0, se_asia: 360.0, oceania: 23.0, n_america: 254.0, c_america: 92.0, s_america: 240.0 } },
+            { year: 2000, label: "2000 CE", total: 6140.0, desc: "【千禧年】全球化時代，世界人口突破 60 億，亞洲佔六成，非洲進入高速增長期。", dist: { e_africa: 260.0, s_africa: 410.0, n_africa: 140.0, m_east: 215.0, europe: 675.0, n_asia: 110.0, s_asia: 1450.0, e_asia: 1490.0, se_asia: 525.0, oceania: 31.0, n_america: 313.0, c_america: 138.0, s_america: 348.0 } },
+            { year: 2025, label: "2025 CE", total: 8100.0, desc: "【當代世界】全球人口突破 80 億！印度成為第一人口大國，非洲成為增長核心。", dist: { e_africa: 490.0, s_africa: 770.0, n_africa: 215.0, m_east: 330.0, europe: 680.0, n_asia: 120.0, s_asia: 2040.0, e_asia: 1650.0, se_asia: 690.0, oceania: 46.0, n_america: 380.0, c_america: 185.0, s_america: 440.0 } }
+        ];
+
+        // 初始化地圖 (Esri 暗色底圖)
+        const map = L.map('map', {
+            center: [25, 20],
+            zoom: 2,
+            minZoom: 2,
+            maxZoom: 8,
+            worldCopyJump: true
+        });
+
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri',
+            maxZoom: 16
+        }).addTo(map);
+
+        const regionCircles = {};
+        const regionCores = {};
+        // 紀錄當前各區域即時人口數，供點擊彈窗使用
+        const currentRegionPop = {};
+        let currentGlobalTotal = 1.0;
+
+        // 建立區域視覺圖層
+        regions.forEach(reg => {
+            const circle = L.circle([reg.lat, reg.lng], {
+                color: '#ff9800',
+                weight: 1,
+                fillColor: '#ff5722',
+                fillOpacity: 0.4,
+                radius: 0
+            }).addTo(map);
+
+            const core = L.circleMarker([reg.lat, reg.lng], {
+                radius: 3,
+                color: '#fff',
+                fillColor: '#ffeb3b',
+                fillOpacity: 0.9,
+                weight: 1
+            }).addTo(map);
+
+            // 點擊事件：點擊時才動態建立 Popup，徹底避免動畫中重複綁定造成的崩潰
+            const showPopup = (e) => {
+                const pop = currentRegionPop[reg.id] || 0;
+                if (pop > 0.005) {
+                    L.popup()
+                        .setLatLng(e.latlng || [reg.lat, reg.lng])
+                        .setContent(`
+                            <div style="text-align:center;">
+                                <h3 style="color:#ff9800; margin-bottom:5px;">${reg.name}</h3>
+                                <p style="margin:0; font-size:1.1em;">預估人口: <b>${formatPop(pop)}</b></p>
+                                <p style="margin:2px 0 0 0; font-size:0.85em; color:#aaa;">佔全球比例: ${((pop/currentGlobalTotal)*100).toFixed(1)}%</p>
+                            </div>
+                        `)
+                        .openOn(map);
+                }
+            };
+
+            circle.on('click', showPopup);
+            core.on('click', showPopup);
+
+            regionCircles[reg.id] = circle;
+            regionCores[reg.id] = core;
+        });
+
+        // 初始化圖表
+        const ctx = document.getElementById('popChart').getContext('2d');
+        const chartLabels = timeData.map(d => d.label);
+        const chartPopData = timeData.map(d => d.total);
+
+        const popChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: chartLabels,
+                datasets: [{
+                    label: '全球總人口 (百萬)',
+                    data: chartPopData,
+                    borderColor: '#00e676',
+                    backgroundColor: 'rgba(0, 230, 118, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.3,
+                    pointBackgroundColor: chartLabels.map((_, i) => i === 0 ? '#ff9800' : '#00e676'),
+                    pointRadius: chartLabels.map((_, i) => i === 0 ? 6 : 3),
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { labels: { color: '#fff' } },
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => ` 人口: ${formatPop(context.raw)}`
+                        }
+                    }
+                },
+                scales: {
+                    x: { ticks: { color: '#888', maxRotation: 45, minRotation: 45 }, grid: { color: '#222' } },
+                    y: {
+                        type: 'logarithmic',
+                        ticks: {
+                            color: '#888',
+                            callback: (v) => [1, 10, 100, 1000, 8000].includes(v) ? v + 'M' : null
+                        },
+                        grid: { color: '#222' },
+                        title: { display: true, text: '人口數 (對數刻度 - 百萬)', color: '#aaa' }
+                    }
+                }
+            }
+        });
+
+        function formatPop(million) {
+            if (million < 1) return Math.round(million * 100) + " 萬人";
+            if (million < 100) return (million * 100).toLocaleString('zh-TW', {maximumFractionDigits: 0}) + " 萬人";
+            return (million / 100).toFixed(2) + " 億人 (" + Math.round(million).toLocaleString() + " 百萬)";
+        }
+
+        function formatYear(year) {
+            return year < 0 ? Math.abs(Math.round(year)).toLocaleString() + " BCE" : Math.round(year) + " CE";
+        }
+
+        function calcRadius(popInMillions) {
+            if (popInMillions <= 0.001) return 0;
+            return 120000 + Math.pow(popInMillions, 0.42) * 110000;
+        }
+
+        // 更新畫面函數
+        function updateVisualization(sliderVal) {
+            const maxIdx = timeData.length - 1;
+            const safeVal = Math.max(0, Math.min(sliderVal, maxIdx));
+            const index = Math.min(Math.floor(safeVal), maxIdx - 1);
+            const ratio = safeVal - index;
+
+            const t1 = timeData[index];
+            const t2 = timeData[index + 1];
+
+            const currentYear = t1.year + (t2.year - t1.year) * ratio;
+            currentGlobalTotal = t1.total + (t2.total - t1.total) * ratio;
+
+            document.getElementById('year-display').innerText = formatYear(currentYear);
+            document.getElementById('pop-display').innerText = "全球總人口: " + formatPop(currentGlobalTotal);
+            document.getElementById('era-desc').innerText = ratio < 0.5 ? t1.desc : t2.desc;
+
+            regions.forEach(reg => {
+                const pop1 = t1.dist[reg.id] || 0;
+                const pop2 = t2.dist[reg.id] || 0;
+                const currentPop = pop1 + (pop2 - pop1) * ratio;
+                currentRegionPop[reg.id] = currentPop;
+
+                const circle = regionCircles[reg.id];
+                const core = regionCores[reg.id];
+
+                if (currentPop > 0.005) {
+                    circle.setRadius(calcRadius(currentPop));
+                    const intensity = Math.min(1, Math.log10(currentPop + 1) / 3.3);
+                    circle.setStyle({ fillOpacity: 0.25 + intensity * 0.45, opacity: 0.8 });
+                    core.setStyle({ opacity: 1, fillOpacity: 0.9 });
+                } else {
+                    circle.setRadius(0);
+                    circle.setStyle({ fillOpacity: 0, opacity: 0 });
+                    core.setStyle({ opacity: 0, fillOpacity: 0 });
+                }
+            });
+
+            // 更新圖表重點提示 (節流更新)
+            const activeIndex = Math.round(safeVal);
+            if (popChart._lastActive !== activeIndex) {
+                popChart._lastActive = activeIndex;
+                popChart.data.datasets[0].pointBackgroundColor = chartLabels.map((_, i) => i === activeIndex ? '#ff9800' : '#00e676');
+                popChart.data.datasets[0].pointRadius = chartLabels.map((_, i) => i === activeIndex ? 7 : 3);
+                popChart.update('none');
+            }
+        }
+
+        // 控制邏輯：使用獨立的 progress 變數避免 DOM 讀取精確度誤差
+        const slider = document.getElementById('time-slider');
+        const playBtn = document.getElementById('play-btn');
+        let isPlaying = false;
+        let progress = 0;
+        let animationFrameId = null;
+
+        slider.addEventListener('input', (e) => {
+            progress = parseFloat(e.target.value);
+            updateVisualization(progress);
+        });
+
+        function togglePlay() {
+            isPlaying = !isPlaying;
+            if (isPlaying) {
+                playBtn.innerText = "⏸ 暫停";
+                playBtn.style.backgroundColor = "#f44336";
+                playBtn.style.color = "#fff";
+                
+                // 若到底了重新播放
+                if (progress >= 17) {
+                    progress = 0;
+                }
+                animate();
+            } else {
+                playBtn.innerText = "▶ 播放";
+                playBtn.style.backgroundColor = "#ff9800";
+                playBtn.style.color = "#000";
+                cancelAnimationFrame(animationFrameId);
+            }
+        }
+
+        function animate() {
+            if (!isPlaying) return;
+            
+            if (progress < 17) {
+                progress += 0.02; // 平滑平穩前進
+                slider.value = progress;
+                updateVisualization(progress);
+                animationFrameId = requestAnimationFrame(animate);
+            } else {
+                progress = 17;
+                slider.value = 17;
+                updateVisualization(17);
+                togglePlay();
+            }
+        }
+
+        playBtn.addEventListener('click', togglePlay);
+
+        // 初始載入
+        updateVisualization(0);
+    </script>
+</body>
+</html>
