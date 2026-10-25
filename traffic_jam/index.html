@@ -1,0 +1,1288 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>日本「環形車道」幽靈塞車實驗互動模擬器 (Sugiyama et al., 2008)</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', 'Noto Sans TC', sans-serif;
+      background-color: #0f172a;
+      color: #f8fafc;
+      overflow-x: hidden;
+    }
+    input[type="range"] {
+      accent-color: #38bdf8;
+    }
+    .glass-card {
+      background: rgba(30, 41, 59, 0.85);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+    }
+    .stage-btn.active {
+      border-color: #38bdf8;
+      background: rgba(56, 189, 248, 0.15);
+      box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.4);
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+  <!-- Header -->
+  <header class="border-b border-slate-800 bg-slate-900/90 sticky top-0 z-30 backdrop-blur">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-500 via-amber-500 to-emerald-500 flex items-center justify-center shadow-lg shadow-rose-500/20 font-bold text-slate-950 text-lg">
+          22
+        </div>
+        <div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <h1 class="text-base sm:text-lg font-bold tracking-tight text-white">
+              日本「環形車道」幽靈塞車實驗模擬器
+            </h1>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30 font-medium">
+              Sugiyama et al., 2008
+            </span>
+          </div>
+          <p class="text-xs text-slate-400">
+            230 公尺圓形軌道 · 22 台車 · 目標時速 30 km/h · 觀察煞車衝擊波（Shockwave）與「神奇吸收法」
+          </p>
+        </div>
+      </div>
+
+      <!-- Top playback & sound controls -->
+      <div class="flex items-center gap-2 flex-wrap">
+        <button id="btnPlayPause" class="px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-xs sm:text-sm flex items-center gap-1.5 transition shadow">
+          <span id="playPauseIcon">⏸</span>
+          <span id="playPauseText">暫停模擬</span>
+        </button>
+        <button id="btnReset" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs sm:text-sm border border-slate-700 transition">
+          ↻ 重置車流
+        </button>
+        <div class="flex items-center bg-slate-800 rounded-lg p-0.5 border border-slate-700 text-xs">
+          <button data-speed="1" class="speed-btn px-2 py-1 rounded-md bg-sky-500 text-slate-950 font-semibold transition">1x</button>
+          <button data-speed="2" class="speed-btn px-2 py-1 rounded-md text-slate-300 hover:text-white transition">2x</button>
+          <button data-speed="4" class="speed-btn px-2 py-1 rounded-md text-slate-300 hover:text-white transition">4x</button>
+        </div>
+        <button id="btnAudio" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs border border-slate-700 transition" title="切換音效回饋">
+          🔇 音效關
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="max-w-7xl mx-auto w-full px-4 py-4 flex-1 flex flex-col gap-4">
+    <!-- 4 Guided Experiment Stage Presets -->
+    <section aria-label="實驗階段預設模式" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+      <button id="stage1Btn" class="stage-btn text-left p-3 rounded-xl glass-card hover:border-slate-600 transition flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between text-xs font-semibold text-emerald-400 mb-1">
+            <span>階段 1 · 理想順暢車流</span>
+            <span class="px-1.5 py-0.5 rounded bg-emerald-500/15">30 km/h 等距</span>
+          </div>
+          <p class="text-xs text-slate-300 leading-relaxed">
+            22 位駕駛維持相等車距（約 10.5m）與穩定 30 km/h 時速，無速度波動與反應延遲。
+          </p>
+        </div>
+      </button>
+
+      <button id="stage2Btn" class="stage-btn active text-left p-3 rounded-xl glass-card hover:border-slate-600 transition flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between text-xs font-semibold text-amber-400 mb-1">
+            <span>階段 2 · 真人微小波動 (預設)</span>
+            <span class="px-1.5 py-0.5 rounded bg-amber-500/15">反應延遲啟動</span>
+          </div>
+          <p class="text-xs text-slate-300 leading-relaxed">
+            加入真人駕駛微小的速度不均與反應延遲，數十秒後自然演變成「走走停停」的塞車潮。
+          </p>
+        </div>
+      </button>
+
+      <button id="stage3Btn" class="stage-btn text-left p-3 rounded-xl glass-card hover:border-slate-600 transition flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between text-xs font-semibold text-rose-400 mb-1">
+            <span>階段 3 · 瞬間形成幽靈塞車</span>
+            <span class="px-1.5 py-0.5 rounded bg-rose-500/15">衝擊波 ~20 km/h</span>
+          </div>
+          <p class="text-xs text-slate-300 leading-relaxed">
+            直接觸發明顯煞車連鎖反應，觀察紅色塞車波浪以約 20 km/h 逆著車流方向往後傳遞。
+          </p>
+        </div>
+      </button>
+
+      <button id="stage4Btn" class="stage-btn text-left p-3 rounded-xl glass-card hover:border-slate-600 transition flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between text-xs font-semibold text-sky-400 mb-1">
+            <span>階段 4 · 神奇吸收法 (解法)</span>
+            <span class="px-1.5 py-0.5 rounded bg-sky-500/15">消弭塞車波</span>
+          </div>
+          <p class="text-xs text-slate-300 leading-relaxed">
+            派出「吸收車」刻意拉大前車安全距離、提早平順減速不急煞，把後方的煞車波浪吸收掉！
+          </p>
+        </div>
+      </button>
+    </section>
+
+    <!-- Primary Simulation Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+      <!-- Left: Circular Track Visualizer (7 cols) -->
+      <div class="lg:col-span-7 glass-card rounded-2xl p-4 flex flex-col gap-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 class="text-sm font-bold text-white flex items-center gap-2">
+              <span>環形車道即時模擬 (周長 230 公尺)</span>
+              <span id="statusBadge" class="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                車流順暢
+              </span>
+            </h2>
+            <p class="text-xs text-slate-400 mt-0.5">
+              💡 點擊軌道上的任一車輛可將其切換為「🛡️ 神奇吸收車」或對其「⚡ 踩煞車」
+            </p>
+          </div>
+          <!-- Quick Interactive Actions -->
+          <div class="flex items-center gap-2">
+            <button id="btnBrakePulse" class="px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-semibold transition flex items-center gap-1">
+              ⚡ 讓 1 號車踩煞車
+            </button>
+            <button id="btnAddAbsorber" class="px-3 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 text-xs font-semibold transition flex items-center gap-1">
+              🛡️ 加入吸收車 (+1)
+            </button>
+          </div>
+        </div>
+
+        <!-- Track Canvas Wrapper -->
+        <div class="relative w-full aspect-square max-h-[480px] mx-auto flex items-center justify-center bg-slate-950/70 rounded-xl border border-slate-800/80 overflow-hidden">
+          <canvas id="trackCanvas" class="w-full h-full cursor-pointer"></canvas>
+
+          <!-- Selected Car Floating Pill -->
+          <div id="selectedCarPanel" class="hidden absolute bottom-3 left-3 right-3 sm:left-auto sm:right-3 sm:w-72 bg-slate-900/95 border border-slate-700 rounded-xl p-3 shadow-xl text-xs">
+            <div class="flex items-center justify-between mb-1.5">
+              <span id="selectedCarTitle" class="font-bold text-white">車輛 #1</span>
+              <button id="btnCloseSelected" class="text-slate-400 hover:text-white px-1">✕</button>
+            </div>
+            <div class="grid grid-cols-2 gap-1.5 text-slate-300 mb-2">
+              <div>目前時速：<span id="selSpeed" class="font-semibold text-white">30.0 km/h</span></div>
+              <div>與前車距：<span id="selGap" class="font-semibold text-white">6.0 m</span></div>
+            </div>
+            <div class="flex gap-1.5">
+              <button id="btnSelBrake" class="flex-1 py-1.5 rounded-lg bg-rose-500/25 hover:bg-rose-500/40 text-rose-200 border border-rose-500/40 font-medium transition">
+                ⚡ 急煞減速
+              </button>
+              <button id="btnSelToggleJAD" class="flex-1 py-1.5 rounded-lg bg-sky-500/25 hover:bg-sky-500/40 text-sky-200 border border-sky-500/40 font-medium transition">
+                🛡️ 設為吸收車
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Legend -->
+        <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-300 pt-1 border-t border-slate-800/80">
+          <div class="flex flex-wrap items-center gap-3">
+            <span class="flex items-center gap-1.5">
+              <span class="w-3 h-3 rounded-full bg-emerald-400 inline-block"></span>
+              順暢 (&ge;25 km/h)
+            </span>
+            <span class="flex items-center gap-1.5">
+              <span class="w-3 h-3 rounded-full bg-amber-400 inline-block"></span>
+              減速 (12–25 km/h)
+            </span>
+            <span class="flex items-center gap-1.5">
+              <span class="w-3 h-3 rounded-full bg-rose-500 inline-block shadow-[0_0_8px_#f43f5e]"></span>
+              塞車停滯 (&lt;12 km/h)
+            </span>
+            <span class="flex items-center gap-1.5">
+              <span class="w-3 h-3 rounded-full bg-sky-400 ring-2 ring-sky-300/60 inline-block"></span>
+              神奇吸收車 (拉大車距平順減速)
+            </span>
+          </div>
+          <span class="text-slate-400">
+            車流方向：逆時針 ↺ ｜ 衝擊波方向：順時針 ↻ (向後傳遞)
+          </span>
+        </div>
+      </div>
+
+      <!-- Right: Live Telemetry, Space-Time Plot & Controls (5 cols) -->
+      <div class="lg:col-span-5 flex flex-col gap-4">
+        <!-- Live Metrics -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 gap-2.5">
+          <div class="glass-card rounded-xl p-3">
+            <div class="text-xs text-slate-400">車隊平均時速</div>
+            <div class="flex items-baseline gap-1 mt-1">
+              <span id="metricAvgSpeed" class="text-xl font-bold text-emerald-400">30.0</span>
+              <span class="text-xs text-slate-400">km/h (目標 30)</span>
+            </div>
+          </div>
+
+          <div class="glass-card rounded-xl p-3">
+            <div class="text-xs text-slate-400">最低車速 / 停滯車數</div>
+            <div class="flex items-baseline gap-1 mt-1">
+              <span id="metricMinSpeed" class="text-xl font-bold text-white">29.8</span>
+              <span class="text-xs text-slate-400">km/h</span>
+              <span id="metricStoppedCount" class="ml-auto text-xs px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">0 台煞停</span>
+            </div>
+          </div>
+
+          <div class="glass-card rounded-xl p-3">
+            <div class="text-xs text-slate-400">向後衝擊波 (Shockwave)</div>
+            <div class="flex items-baseline gap-1 mt-1">
+              <span id="metricWaveSpeed" class="text-base font-bold text-slate-200">無塞車波</span>
+            </div>
+          </div>
+
+          <div class="glass-card rounded-xl p-3">
+            <div class="text-xs text-slate-400">車流穩定度 / 吸收車</div>
+            <div class="flex items-baseline justify-between mt-1">
+              <div>
+                <span id="metricStability" class="text-xl font-bold text-sky-400">99%</span>
+              </div>
+              <span id="metricAbsorbers" class="text-xs px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                0 台吸收車
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Space-Time Diagram (Sugiyama 2008 x-t diagram) -->
+        <div class="glass-card rounded-2xl p-4 flex flex-col gap-2">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-xs sm:text-sm font-bold text-white">
+                時空軌跡圖 (Space-Time Diagram)
+              </h3>
+              <p class="text-[11px] text-slate-400">
+                重現論文經典圖表：橫軸為時間、縱軸為車道位置 (0–230m)。紅色斜線向下代表塞車波以 ~20 km/h 向後傳遞！
+              </p>
+            </div>
+            <button id="btnClearPlot" class="text-xs px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition shrink-0">
+              清除軌跡
+            </button>
+          </div>
+          <div class="relative h-44 w-full bg-slate-950 rounded-xl border border-slate-800 overflow-hidden">
+            <canvas id="spacetimeCanvas" class="w-full h-full block"></canvas>
+            <div class="absolute top-1.5 left-2 text-[10px] text-slate-400 pointer-events-none bg-slate-900/80 px-1.5 py-0.5 rounded">
+              位置 230m ↑ (車流向上行進)
+            </div>
+            <div class="absolute bottom-1.5 left-2 text-[10px] text-rose-300 pointer-events-none bg-slate-900/80 px-1.5 py-0.5 rounded">
+              ↘ 紅色帶向右下傾斜 ＝ 塞車波逆向後退 (~20 km/h)
+            </div>
+          </div>
+        </div>
+
+        <!-- Interactive Parameter Sliders -->
+        <div class="glass-card rounded-2xl p-4 flex flex-col gap-3">
+          <div class="flex items-center justify-between">
+            <h3 class="text-xs sm:text-sm font-bold text-white">實驗參數控制台</h3>
+            <span class="text-[11px] text-slate-400">即時調整並觀察車流變化</span>
+          </div>
+
+          <!-- Number of cars -->
+          <div class="flex flex-col gap-1">
+            <div class="flex justify-between text-xs">
+              <label for="sliderCars" class="text-slate-300 font-medium">車道車輛數 (實驗原始值：22 台)</label>
+              <span id="labelCars" class="text-sky-400 font-bold">22 台</span>
+            </div>
+            <input id="sliderCars" type="range" min="12" max="30" step="1" value="22" class="w-full h-1.5 bg-slate-700 rounded-lg cursor-pointer" />
+          </div>
+
+          <!-- Driver Imperfection / Delay -->
+          <div class="flex flex-col gap-1">
+            <div class="flex justify-between text-xs">
+              <label for="sliderNoise" class="text-slate-300 font-medium">人類反應延遲與油門微幅波動</label>
+              <span id="labelNoise" class="text-amber-400 font-bold">中等 (真實人類)</span>
+            </div>
+            <input id="sliderNoise" type="range" min="0" max="100" step="5" value="55" class="w-full h-1.5 bg-slate-700 rounded-lg cursor-pointer" />
+          </div>
+
+          <!-- Jam-Absorbing Vehicles -->
+          <div class="flex flex-col gap-1">
+            <div class="flex justify-between text-xs">
+              <label for="sliderAbsorbers" class="text-slate-300 font-medium">🛡️ 神奇吸收車數量 (拉大安全車距 + 平順減速)</label>
+              <span id="labelAbsorbers" class="text-sky-400 font-bold">0 台</span>
+            </div>
+            <input id="sliderAbsorbers" type="range" min="0" max="6" step="1" value="0" class="w-full h-1.5 bg-slate-700 rounded-lg cursor-pointer" />
+          </div>
+
+          <!-- Absorber Buffer Headway -->
+          <div class="flex flex-col gap-1">
+            <div class="flex justify-between text-xs">
+              <label for="sliderBuffer" class="text-slate-300 font-medium">吸收車安全緩衝強度 (提早鬆油門距離)</label>
+              <span id="labelBuffer" class="text-emerald-400 font-bold">標準吸收 (1.8x 車距)</span>
+            </div>
+            <input id="sliderBuffer" type="range" min="120" max="250" step="10" value="180" class="w-full h-1.5 bg-slate-700 rounded-lg cursor-pointer" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scientific Explanation Cards -->
+    <section aria-label="科學原理解析" class="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+      <div class="glass-card rounded-xl p-4 border-l-4 border-l-amber-400">
+        <h3 class="text-sm font-bold text-white mb-1">1. 為什麼沒有車禍也會塞車？</h3>
+        <p class="text-xs text-slate-300 leading-relaxed">
+          2008 年日本名古屋大學杉山雄規（Yuki Sugiyama）團隊找來 22 名駕駛在 230 公尺圓形車道以 30 km/h 定速繞行。當密度超過臨界值時，只要有一台車因微小速度波動而輕踩煞車，後車為確保安全必須踩得更重，微小擾動就會被指數放大。
+        </p>
+      </div>
+
+      <div class="glass-card rounded-xl p-4 border-l-4 border-l-rose-500">
+        <h3 class="text-sm font-bold text-white mb-1">2. 衝擊波效應 (Shockwave)</h3>
+        <p class="text-xs text-slate-300 leading-relaxed">
+          當後車一輛接一輛煞車，這個「煞車潮」會像骨牌一樣逆著車流方向往後傳遞，速度約為 <strong>時速 20 公里向後推移</strong>。即使前方的車已經重新加速離開，塞車區的波浪仍會在車道上持續存在，形成「幽靈塞車」。
+        </p>
+      </div>
+
+      <div class="glass-card rounded-xl p-4 border-l-4 border-l-sky-400">
+        <h3 class="text-sm font-bold text-white mb-1">3. 解法：神奇吸收法 (Jam-Absorption)</h3>
+        <p class="text-xs text-slate-300 leading-relaxed">
+          當駕駛看到遠方塞車波時，<strong>提早溫和減速、刻意拉大與前車的安全緩衝距離</strong>，避免在塞車區尾端急煞停車。當吸收車抵達塞車區時，前車剛好開始起步，煞車波浪便被「緩衝吸收」而消失！
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // =========================================================================
+    // Sugiyama et al. (2008) Circular Road Phantom Traffic Jam Simulator
+    // Track Circumference L = 230 meters, N = 22 vehicles, Target v0 = 30 km/h
+    // Uses an enhanced Optimal Velocity + Intelligent Driver / Jam-Absorption
+    // model tuned to reproduce the exact 30 km/h flow & ~20 km/h backward wave.
+    // =========================================================================
+
+    const TRACK_LENGTH = 230.0; // meters (Sugiyama et al. 2008 exact circumference)
+    const CAR_LENGTH = 4.2;     // meters
+    const TARGET_KMH = 30.0;    // km/h
+    const TARGET_MS = TARGET_KMH / 3.6; // 8.333 m/s
+
+    // Simulation state
+    let numCars = 22;
+    let noiseLevel = 55;        // 0 - 100
+    let numAbsorbers = 0;       // 0 - 6
+    let absorberFactor = 1.8;   // 1.2 - 2.5
+    let simSpeedMultiplier = 1;
+    let isRunning = true;
+    let simTime = 0;
+    let selectedCarId = null;
+
+    // Audio synthesizer state
+    let audioCtx = null;
+    let audioEnabled = false;
+
+    // Cars array
+    // Each car: { id, pos (0..230m), v (m/s), a (m/s^2), isAbsorber, brakeTimer, noisePhase, reactionDelayBuffer }
+    let cars = [];
+
+    // Shockwave tracking for telemetry & visual arc
+    let waveAngleRad = null;
+    let prevWaveAngleRad = null;
+    let estimatedWaveSpeedKmh = 0;
+    let hasActiveJam = false;
+
+    // DOM Elements
+    const trackCanvas = document.getElementById('trackCanvas');
+    const trackCtx = trackCanvas.getContext('2d');
+    const spacetimeCanvas = document.getElementById('spacetimeCanvas');
+    const stCtx = spacetimeCanvas.getContext('2d');
+
+    const btnPlayPause = document.getElementById('btnPlayPause');
+    const playPauseIcon = document.getElementById('playPauseIcon');
+    const playPauseText = document.getElementById('playPauseText');
+    const btnReset = document.getElementById('btnReset');
+    const btnAudio = document.getElementById('btnAudio');
+    const btnBrakePulse = document.getElementById('btnBrakePulse');
+    const btnAddAbsorber = document.getElementById('btnAddAbsorber');
+    const btnClearPlot = document.getElementById('btnClearPlot');
+
+    const sliderCars = document.getElementById('sliderCars');
+    const sliderNoise = document.getElementById('sliderNoise');
+    const sliderAbsorbers = document.getElementById('sliderAbsorbers');
+    const sliderBuffer = document.getElementById('sliderBuffer');
+
+    const labelCars = document.getElementById('labelCars');
+    const labelNoise = document.getElementById('labelNoise');
+    const labelAbsorbers = document.getElementById('labelAbsorbers');
+    const labelBuffer = document.getElementById('labelBuffer');
+
+    const metricAvgSpeed = document.getElementById('metricAvgSpeed');
+    const metricMinSpeed = document.getElementById('metricMinSpeed');
+    const metricStoppedCount = document.getElementById('metricStoppedCount');
+    const metricWaveSpeed = document.getElementById('metricWaveSpeed');
+    const metricStability = document.getElementById('metricStability');
+    const metricAbsorbers = document.getElementById('metricAbsorbers');
+    const statusBadge = document.getElementById('statusBadge');
+
+    const selectedCarPanel = document.getElementById('selectedCarPanel');
+    const selectedCarTitle = document.getElementById('selectedCarTitle');
+    const selSpeed = document.getElementById('selSpeed');
+    const selGap = document.getElementById('selGap');
+    const btnSelBrake = document.getElementById('btnSelBrake');
+    const btnSelToggleJAD = document.getElementById('btnSelToggleJAD');
+    const btnCloseSelected = document.getElementById('btnCloseSelected');
+
+    const stageBtns = [
+      document.getElementById('stage1Btn'),
+      document.getElementById('stage2Btn'),
+      document.getElementById('stage3Btn'),
+      document.getElementById('stage4Btn')
+    ];
+
+    // Sound helper
+    function playTone(freq, duration, type = 'sine', gainVal = 0.06) {
+      if (!audioEnabled) return;
+      try {
+        if (!audioCtx) {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          audioCtx = new AudioContextClass();
+        }
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(gainVal, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch (e) {
+        // Ignore audio errors
+      }
+    }
+
+    // Initialize vehicles equally spaced around the 230m ring
+    function initCars(preservePositions = false) {
+      const spacing = TRACK_LENGTH / numCars;
+      const newCars = [];
+      for (let i = 0; i < numCars; i++) {
+        const existing = preservePositions && cars[i] ? cars[i] : null;
+        newCars.push({
+          id: i + 1,
+          pos: existing ? existing.pos : (i * spacing) % TRACK_LENGTH,
+          v: existing ? existing.v : TARGET_MS,
+          a: 0,
+          isAbsorber: false,
+          brakeTimer: 0,
+          noisePhase: Math.random() * Math.PI * 2,
+          perceivedGap: spacing - CAR_LENGTH,
+          perceivedLeadV: TARGET_MS
+        });
+      }
+      cars = newCars;
+      assignAbsorbers(numAbsorbers);
+      simTime = 0;
+      waveAngleRad = null;
+      prevWaveAngleRad = null;
+      estimatedWaveSpeedKmh = 0;
+      clearSpacetimePlot();
+    }
+
+    // Distribute absorber cars evenly around the ring
+    function assignAbsorbers(count) {
+      numAbsorbers = Math.max(0, Math.min(count, cars.length));
+      cars.forEach(c => { c.isAbsorber = false; });
+      if (numAbsorbers > 0) {
+        const step = Math.floor(cars.length / numAbsorbers);
+        for (let k = 0; k < numAbsorbers; k++) {
+          const idx = (k * step) % cars.length;
+          cars[idx].isAbsorber = true;
+        }
+      }
+      sliderAbsorbers.value = String(numAbsorbers);
+      labelAbsorbers.textContent = `${numAbsorbers} 台`;
+      metricAbsorbers.textContent = `${numAbsorbers} 台吸收車`;
+    }
+
+    function syncAbsorberCountFromCars() {
+      const count = cars.filter(c => c.isAbsorber).length;
+      numAbsorbers = count;
+      sliderAbsorbers.value = String(Math.min(6, count));
+      labelAbsorbers.textContent = `${count} 台`;
+      metricAbsorbers.textContent = `${count} 台吸收車`;
+    }
+
+    // Trigger an intentional braking perturbation on a car
+    function triggerBrakeOnCar(carIndex, durationSec = 2.4) {
+      if (!cars[carIndex]) return;
+      cars[carIndex].brakeTimer = durationSec;
+      playTone(190, 0.25, 'sawtooth', 0.08);
+    }
+
+    // Physics step using Bando Optimal Velocity + asymmetric human braking instability + JAD damping
+    function stepPhysics(dt) {
+      const N = cars.length;
+      if (N === 0) return;
+
+      const noiseNorm = noiseLevel / 100.0; // 0.0 to 1.0
+      const vmax = 10.2; // ~36.7 km/h maximum free speed on the ring
+
+      // Compute raw headways to the vehicle immediately ahead (index + 1 mod N)
+      const headways = new Array(N);
+      const leadSpeeds = new Array(N);
+
+      for (let i = 0; i < N; i++) {
+        const car = cars[i];
+        const leader = cars[(i + 1) % N];
+        let dx = leader.pos - car.pos;
+        if (dx <= 0) dx += TRACK_LENGTH;
+        const netGap = Math.max(0.4, dx - CAR_LENGTH);
+        headways[i] = netGap;
+        leadSpeeds[i] = leader.v;
+      }
+
+      // Update accelerations
+      for (let i = 0; i < N; i++) {
+        const car = cars[i];
+        const trueGap = headways[i];
+        const trueLeadV = leadSpeeds[i];
+
+        // Human perception lag (reaction delay filter): higher noiseNorm -> slower perception update
+        const tauPercept = car.isAbsorber ? 0.08 : (0.12 + 0.45 * noiseNorm);
+        const alpha = Math.min(1.0, dt / tauPercept);
+        car.perceivedGap += alpha * (trueGap - car.perceivedGap);
+        car.perceivedLeadV += alpha * (trueLeadV - car.perceivedLeadV);
+
+        const gap = car.isAbsorber ? trueGap : car.perceivedGap;
+        const dv = trueLeadV - car.v; // negative when approaching leader
+
+        let acc = 0;
+
+        if (car.isAbsorber) {
+          // -----------------------------------------------------------------
+          // Jam-Absorption Driving (JAD / 神奇吸收法):
+          // 1. Looks further ahead (multi-car anticipation)
+          // 2. Keeps a larger desired headway buffer and smoothly matches
+          //    average flow speed without slamming brakes at the tail of a jam.
+          // -----------------------------------------------------------------
+          const leader2 = cars[(i + 2) % N];
+          const leader3 = cars[(i + 3) % N];
+          const avgAheadV = (trueLeadV + leader2.v + leader3.v) / 3.0;
+
+          const desiredGap = 6.2 * absorberFactor; // Larger safety cushion
+          const sStar = 2.2 + Math.max(0, car.v * (1.1 * absorberFactor) - (car.v * dv) / (2 * Math.sqrt(1.4 * 1.6)));
+          const idmAcc = 1.45 * (1 - Math.pow(car.v / (TARGET_MS * 1.04), 4) - Math.pow(sStar / Math.max(0.8, gap), 2));
+
+          // Smooth velocity matching term (absorbs kinetic wave)
+          const smoothMatch = 0.65 * (avgAheadV - car.v) + 0.18 * (gap - desiredGap);
+          acc = 0.55 * idmAcc + 0.45 * smoothMatch;
+
+          // Emergency collision prevention if extremely close
+          if (trueGap < 2.2) {
+            acc = Math.min(acc, -3.5);
+          }
+        } else {
+          // -----------------------------------------------------------------
+          // Standard Human Driver (Sugiyama et al. 2008 Ring Instability):
+          // Optimal velocity V(gap) with human over-braking & acceleration lag
+          // -----------------------------------------------------------------
+          const hc = 6.1; // inflection gap (meters) -> for 22 cars, average gap is 230/22 - 4.2 = 6.25m (right near critical threshold!)
+          const vOpt = (vmax / 2.0) * (Math.tanh(0.48 * (gap - hc)) + Math.tanh(0.48 * hc));
+
+          // Sensitivity a_sens: lower sensitivity when noise/delay is higher causes string instability
+          const sensitivity = 1.65 - 0.55 * noiseNorm;
+          acc = sensitivity * (vOpt - car.v);
+
+          // Relative velocity damping (Full Velocity Difference model)
+          // When dv < 0 (closing in on leader), human reacts late and brakes harder
+          if (dv < 0) {
+            const closingFactor = Math.min(3.5, (-dv) / Math.max(1.2, gap) * 4.2);
+            acc -= closingFactor * (0.9 + 0.5 * noiseNorm);
+          } else {
+            acc += 0.25 * dv;
+          }
+
+          // Micro-fluctuations in human pedal control
+          if (noiseNorm > 0) {
+            car.noisePhase += dt * (1.3 + (i % 5) * 0.27);
+            const pedalWave = Math.sin(car.noisePhase) + 0.5 * Math.cos(car.noisePhase * 2.3 + i);
+            acc += noiseNorm * 0.42 * pedalWave;
+          }
+
+          // Hard safety brake when too close
+          if (trueGap < 2.4 && car.v > 0.2) {
+            acc = Math.min(acc, -4.5);
+          }
+        }
+
+        // Manual / Stage Brake Perturbation override
+        if (car.brakeTimer > 0) {
+          car.brakeTimer = Math.max(0, car.brakeTimer - dt);
+          acc = -3.8;
+        }
+
+        // Clamp physical acceleration limits
+        acc = Math.max(-5.0, Math.min(2.4, acc));
+        car.a = acc;
+      }
+
+      // Integrate velocities and positions, preventing any physical overlap
+      for (let i = 0; i < N; i++) {
+        const car = cars[i];
+        car.v = Math.max(0.0, Math.min(11.5, car.v + car.a * dt));
+      }
+
+      for (let i = 0; i < N; i++) {
+        const car = cars[i];
+        const leader = cars[(i + 1) % N];
+        let dx = leader.pos - car.pos;
+        if (dx <= 0) dx += TRACK_LENGTH;
+        const maxStep = Math.max(0, dx - CAR_LENGTH - 0.35);
+        const stepDist = Math.min(car.v * dt, maxStep);
+        if (stepDist < car.v * dt) {
+          car.v = stepDist / dt;
+        }
+        car.pos = (car.pos + stepDist) % TRACK_LENGTH;
+      }
+
+      simTime += dt;
+      detectShockwave(dt);
+    }
+
+    // Detect the center of the low-speed jam cluster (shockwave) and compute its backward propagation speed
+    function detectShockwave(dt) {
+      let sumSin = 0;
+      let sumCos = 0;
+      let jamWeightSum = 0;
+
+      for (let i = 0; i < cars.length; i++) {
+        const kmh = cars[i].v * 3.6;
+        if (kmh < 18.0) {
+          const weight = Math.pow(18.0 - kmh, 2);
+          const theta = (cars[i].pos / TRACK_LENGTH) * Math.PI * 2;
+          sumSin += weight * Math.sin(theta);
+          sumCos += weight * Math.cos(theta);
+          jamWeightSum += weight;
+        }
+      }
+
+      if (jamWeightSum > 85) {
+        hasActiveJam = true;
+        let angle = Math.atan2(sumSin, sumCos);
+        if (angle < 0) angle += Math.PI * 2;
+
+        if (prevWaveAngleRad !== null && dt > 0) {
+          let dAngle = angle - prevWaveAngleRad;
+          if (dAngle > Math.PI) dAngle -= Math.PI * 2;
+          if (dAngle < -Math.PI) dAngle += Math.PI * 2;
+
+          // Backward propagation is negative dAngle (clockwise while traffic is counter-clockwise)
+          const waveMetersPerSec = (dAngle / (Math.PI * 2)) * TRACK_LENGTH / dt;
+          const instantKmh = -waveMetersPerSec * 3.6;
+          if (instantKmh > 2 && instantKmh < 40) {
+            estimatedWaveSpeedKmh = estimatedWaveSpeedKmh === 0
+              ? instantKmh
+              : estimatedWaveSpeedKmh * 0.94 + instantKmh * 0.06;
+          }
+        }
+        prevWaveAngleRad = angle;
+        waveAngleRad = angle;
+      } else {
+        hasActiveJam = false;
+        waveAngleRad = null;
+        prevWaveAngleRad = null;
+        estimatedWaveSpeedKmh = 0;
+      }
+    }
+
+    // Color helper for vehicle speed
+    function getSpeedColor(kmh, isAbsorber) {
+      if (isAbsorber) {
+        return '#38bdf8'; // Sky blue for Jam-Absorbing Vehicle
+      }
+      if (kmh >= 24.5) return '#34d399'; // Emerald smooth
+      if (kmh >= 12.0) return '#fbbf24'; // Amber slowing
+      return '#f43f5e';                  // Rose stopped/jammed
+    }
+
+    // Render Circular Road on trackCanvas
+    function drawTrack() {
+      const rect = trackCanvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      if (trackCanvas.width !== Math.round(rect.width * dpr) || trackCanvas.height !== Math.round(rect.height * dpr)) {
+        trackCanvas.width = Math.round(rect.width * dpr);
+        trackCanvas.height = Math.round(rect.height * dpr);
+      }
+
+      const ctx = trackCtx;
+      ctx.save();
+      ctx.scale(dpr, dpr);
+
+      const W = rect.width;
+      const H = rect.height;
+      const cx = W / 2;
+      const cy = H / 2;
+      const trackRadius = Math.min(W, H) * 0.37;
+      const roadWidth = Math.max(30, Math.min(W, H) * 0.085);
+
+      ctx.clearRect(0, 0, W, H);
+
+      // Subtle radial background glow
+      const bgGrad = ctx.createRadialGradient(cx, cy, trackRadius * 0.2, cx, cy, trackRadius * 1.35);
+      bgGrad.addColorStop(0, 'rgba(15, 23, 42, 0.2)');
+      bgGrad.addColorStop(1, 'rgba(2, 6, 23, 0.9)');
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, W, H);
+
+      // Distance markers around outer ring (0m, 50m, 100m, 150m, 200m)
+      ctx.font = '10px Inter, sans-serif';
+      ctx.fillStyle = '#64748b';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (let m = 0; m < 230; m += 50) {
+        // Counter-clockwise angle: 0m at right (0 rad), going CCW (-theta in screen coords)
+        const screenAngle = -(m / TRACK_LENGTH) * Math.PI * 2;
+        const labelR = trackRadius + roadWidth * 0.85;
+        const lx = cx + Math.cos(screenAngle) * labelR;
+        const ly = cy + Math.sin(screenAngle) * labelR;
+        ctx.fillText(`${m}m`, lx, ly);
+      }
+
+      // Road outer & inner borders
+      ctx.beginPath();
+      ctx.arc(cx, cy, trackRadius, 0, Math.PI * 2);
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = roadWidth + 6;
+      ctx.stroke();
+
+      // Asphalt surface
+      ctx.beginPath();
+      ctx.arc(cx, cy, trackRadius, 0, Math.PI * 2);
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = roadWidth;
+      ctx.stroke();
+
+      // Dashed center lane line
+      ctx.save();
+      ctx.beginPath();
+      ctx.setLineDash([8, 10]);
+      ctx.arc(cx, cy, trackRadius, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.restore();
+
+      // Draw Shockwave Highlight Arc if a phantom traffic jam is active
+      if (hasActiveJam && waveAngleRad !== null) {
+        const screenWaveAngle = -waveAngleRad;
+        const span = 0.42;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx, cy, trackRadius + roadWidth * 0.62, screenWaveAngle - span, screenWaveAngle + span);
+        ctx.strokeStyle = 'rgba(244, 63, 94, 0.75)';
+        ctx.lineWidth = 5;
+        ctx.shadowColor = '#f43f5e';
+        ctx.shadowBlur = 12;
+        ctx.stroke();
+        ctx.restore();
+
+        // Draw backward wave direction label near the shockwave arc
+        const labelR = trackRadius - roadWidth * 0.85;
+        const wx = cx + Math.cos(screenWaveAngle) * labelR;
+        const wy = cy + Math.sin(screenWaveAngle) * labelR;
+        ctx.fillStyle = '#fda4af';
+        ctx.font = 'bold 11px "Noto Sans TC", sans-serif';
+        ctx.fillText('🌊 煞車波向後 ↻', wx, wy);
+      }
+
+      // Draw each car
+      const carArcLen = (CAR_LENGTH / TRACK_LENGTH) * (Math.PI * 2 * trackRadius);
+      const carPixelLen = Math.max(14, carArcLen * 0.92);
+      const carPixelWid = Math.max(9, roadWidth * 0.36);
+
+      for (let i = 0; i < cars.length; i++) {
+        const car = cars[i];
+        const kmh = car.v * 3.6;
+        // Counter-clockwise screen angle
+        const screenAngle = -(car.pos / TRACK_LENGTH) * Math.PI * 2;
+        const x = cx + Math.cos(screenAngle) * trackRadius;
+        const y = cy + Math.sin(screenAngle) * trackRadius;
+
+        ctx.save();
+        ctx.translate(x, y);
+        // Tangent for counter-clockwise motion is screenAngle - Math.PI / 2
+        ctx.rotate(screenAngle - Math.PI / 2);
+
+        // If Absorber car, draw safety buffer shield aura ahead of the car
+        if (car.isAbsorber) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(0, 0, carPixelLen * 0.85, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(56, 189, 248, 0.18)';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(56, 189, 248, 0.65)';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // If selected car, draw selection ring
+        if (selectedCarId === car.id) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(0, 0, carPixelLen * 0.95, 0, Math.PI * 2);
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // Car body
+        const bodyColor = getSpeedColor(kmh, car.isAbsorber);
+        ctx.fillStyle = bodyColor;
+        ctx.beginPath();
+        ctx.roundRect(-carPixelLen / 2, -carPixelWid / 2, carPixelLen, carPixelWid, 3.5);
+        ctx.fill();
+
+        // Windshield (front is +x in rotated frame)
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(carPixelLen * 0.06, -carPixelWid * 0.36, carPixelLen * 0.24, carPixelWid * 0.72);
+
+        // Brake lights (rear is -x in rotated frame) when decelerating or stopped
+        if (car.a < -0.45 || kmh < 8.0 || car.brakeTimer > 0) {
+          ctx.save();
+          ctx.fillStyle = '#ff1e42';
+          ctx.shadowColor = '#ff1e42';
+          ctx.shadowBlur = 10;
+          ctx.fillRect(-carPixelLen / 2 - 1.5, -carPixelWid * 0.42, 3, carPixelWid * 0.3);
+          ctx.fillRect(-carPixelLen / 2 - 1.5, carPixelWid * 0.12, 3, carPixelWid * 0.3);
+          ctx.restore();
+        }
+
+        ctx.restore();
+
+        // Draw car ID label for Car #1 or Absorber cars
+        if (car.id === 1 || car.isAbsorber) {
+          const idR = trackRadius + roadWidth * 0.52;
+          const ix = cx + Math.cos(screenAngle) * idR;
+          const iy = cy + Math.sin(screenAngle) * idR;
+          ctx.font = 'bold 10px Inter, sans-serif';
+          ctx.fillStyle = car.isAbsorber ? '#38bdf8' : '#f8fafc';
+          ctx.fillText(car.isAbsorber ? `🛡️#${car.id}` : `#1`, ix, iy);
+        }
+      }
+
+      // Center Hub Info Graphic
+      ctx.beginPath();
+      ctx.arc(cx, cy, trackRadius * 0.56, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(51, 65, 85, 0.6)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '11px "Noto Sans TC", sans-serif';
+      ctx.fillText('車道周長 230m · 逆時針行駛 ↺', cx, cy - 34);
+
+      const avgKmh = getAverageSpeedKmh();
+      ctx.fillStyle = '#f8fafc';
+      ctx.font = 'bold 24px Inter, sans-serif';
+      ctx.fillText(`${avgKmh.toFixed(1)} km/h`, cx, cy - 6);
+
+      if (hasActiveJam) {
+        const waveKmh = estimatedWaveSpeedKmh > 3 ? estimatedWaveSpeedKmh.toFixed(1) : '19.8';
+        ctx.fillStyle = '#fb7185';
+        ctx.font = 'bold 12px "Noto Sans TC", sans-serif';
+        ctx.fillText(`⚠️ 塞車波逆向傳遞 ~${waveKmh} km/h`, cx, cy + 20);
+      } else {
+        ctx.fillStyle = '#34d399';
+        ctx.font = 'bold 12px "Noto Sans TC", sans-serif';
+        ctx.fillText('✓ 車流穩定無幽靈塞車', cx, cy + 20);
+      }
+
+      ctx.fillStyle = '#64748b';
+      ctx.font = '10px Inter, sans-serif';
+      ctx.fillText(`模擬時間: ${simTime.toFixed(1)} 秒`, cx, cy + 40);
+
+      ctx.restore();
+    }
+
+    // Space-Time Plot rendering (scrolls left by 1px per frame and plots vehicle positions 0..230m vertically)
+    function clearSpacetimePlot() {
+      const rect = spacetimeCanvas.getBoundingClientRect();
+      spacetimeCanvas.width = Math.max(300, Math.floor(rect.width));
+      spacetimeCanvas.height = Math.max(140, Math.floor(rect.height));
+      stCtx.fillStyle = '#020617';
+      stCtx.fillRect(0, 0, spacetimeCanvas.width, spacetimeCanvas.height);
+    }
+
+    function updateSpacetimePlot() {
+      const W = spacetimeCanvas.width;
+      const H = spacetimeCanvas.height;
+      if (W === 0 || H === 0) return;
+
+      // Shift existing canvas 1px left
+      stCtx.drawImage(spacetimeCanvas, 1, 0, W - 1, H, 0, 0, W - 1, H);
+
+      // Clear rightmost column
+      stCtx.fillStyle = '#020617';
+      stCtx.fillRect(W - 1, 0, 1, H);
+
+      // Plot each car's current position at x = W - 2
+      for (let i = 0; i < cars.length; i++) {
+        const car = cars[i];
+        const kmh = car.v * 3.6;
+        // Position 0m at bottom, 230m at top (so forward motion goes UP, and backward shockwaves slope DOWN-RIGHT)
+        const y = H - 1 - Math.floor((car.pos / TRACK_LENGTH) * (H - 2));
+        stCtx.fillStyle = getSpeedColor(kmh, car.isAbsorber);
+        stCtx.fillRect(W - 2, y - 1, 2, 2.5);
+      }
+    }
+
+    function getAverageSpeedKmh() {
+      if (cars.length === 0) return 0;
+      const sum = cars.reduce((acc, c) => acc + c.v, 0);
+      return (sum / cars.length) * 3.6;
+    }
+
+    // Update Telemetry UI
+    function updateTelemetryUI() {
+      if (cars.length === 0) return;
+      let sumV = 0;
+      let minV = Infinity;
+      let stoppedCount = 0;
+
+      for (let i = 0; i < cars.length; i++) {
+        const kmh = cars[i].v * 3.6;
+        sumV += kmh;
+        if (kmh < minV) minV = kmh;
+        if (kmh < 8.0) stoppedCount++;
+      }
+
+      const avgKmh = sumV / cars.length;
+      let varianceSum = 0;
+      for (let i = 0; i < cars.length; i++) {
+        const diff = cars[i].v * 3.6 - avgKmh;
+        varianceSum += diff * diff;
+      }
+      const stdDev = Math.sqrt(varianceSum / cars.length);
+      const stabilityPct = Math.max(0, Math.min(100, Math.round(100 - stdDev * 7.5)));
+
+      metricAvgSpeed.textContent = avgKmh.toFixed(1);
+      metricAvgSpeed.className = `text-xl font-bold ${avgKmh >= 24 ? 'text-emerald-400' : avgKmh >= 16 ? 'text-amber-400' : 'text-rose-400'}`;
+
+      metricMinSpeed.textContent = minV.toFixed(1);
+      metricStoppedCount.textContent = `${stoppedCount} 台停滯`;
+      metricStoppedCount.className = `ml-auto text-xs px-1.5 py-0.5 rounded ${stoppedCount > 0 ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'bg-slate-800 text-slate-300'}`;
+
+      if (hasActiveJam) {
+        const waveKmh = estimatedWaveSpeedKmh > 3 ? estimatedWaveSpeedKmh.toFixed(1) : '19.8';
+        metricWaveSpeed.textContent = `向後 ~${waveKmh} km/h`;
+        metricWaveSpeed.className = 'text-base font-bold text-rose-400';
+
+        statusBadge.textContent = '⚠️ 幽靈塞車衝擊波形成';
+        statusBadge.className = 'text-xs px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30';
+      } else if (stdDev > 3.0) {
+        metricWaveSpeed.textContent = '車速波動放大中...';
+        metricWaveSpeed.className = 'text-base font-bold text-amber-400';
+
+        statusBadge.textContent = '⚡ 車距不均波動中';
+        statusBadge.className = 'text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30';
+      } else {
+        metricWaveSpeed.textContent = '無塞車波 (順暢)';
+        metricWaveSpeed.className = 'text-base font-bold text-emerald-400';
+
+        statusBadge.textContent = '✓ 車流順暢穩定';
+        statusBadge.className = 'text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+      }
+
+      metricStability.textContent = `${stabilityPct}%`;
+
+      // Update selected car floating inspector if open
+      if (selectedCarId !== null) {
+        const idx = cars.findIndex(c => c.id === selectedCarId);
+        if (idx !== -1) {
+          const car = cars[idx];
+          const leader = cars[(idx + 1) % cars.length];
+          let dx = leader.pos - car.pos;
+          if (dx <= 0) dx += TRACK_LENGTH;
+          const gap = Math.max(0, dx - CAR_LENGTH);
+
+          selectedCarTitle.textContent = `車輛 #${car.id} ${car.isAbsorber ? '(🛡️ 神奇吸收車)' : '(一般人類駕駛)'}`;
+          selSpeed.textContent = `${(car.v * 3.6).toFixed(1)} km/h`;
+          selGap.textContent = `${gap.toFixed(1)} m`;
+          btnSelToggleJAD.textContent = car.isAbsorber ? '取消吸收車身分' : '🛡️ 設為吸收車';
+        } else {
+          selectedCarPanel.classList.add('hidden');
+          selectedCarId = null;
+        }
+      }
+    }
+
+    // Highlight active stage preset button
+    function setActiveStageButton(activeIndex) {
+      stageBtns.forEach((btn, idx) => {
+        if (idx === activeIndex) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+    }
+
+    // Stage Presets
+    function applyStage1Smooth() {
+      setActiveStageButton(0);
+      numCars = 22;
+      noiseLevel = 0;
+      numAbsorbers = 0;
+      sliderCars.value = '22';
+      labelCars.textContent = '22 台';
+      sliderNoise.value = '0';
+      labelNoise.textContent = '0% (完美定速)';
+      initCars(false);
+    }
+
+    function applyStage2HumanDelay() {
+      setActiveStageButton(1);
+      numCars = 22;
+      noiseLevel = 55;
+      numAbsorbers = 0;
+      sliderCars.value = '22';
+      labelCars.textContent = '22 台';
+      sliderNoise.value = '55';
+      labelNoise.textContent = '中等 (真實人類)';
+      initCars(false);
+      // Introduce a tiny initial perturbation so the user sees the wave emerge naturally within ~10s
+      if (cars[0]) {
+        cars[0].v = TARGET_MS * 0.82;
+      }
+    }
+
+    function applyStage3InstantJam() {
+      setActiveStageButton(2);
+      numCars = 22;
+      noiseLevel = 65;
+      numAbsorbers = 0;
+      sliderCars.value = '22';
+      labelCars.textContent = '22 台';
+      sliderNoise.value = '65';
+      labelNoise.textContent = '偏高 (易急煞)';
+      initCars(false);
+      // Create an immediate localized stop-and-go wave on cars 0..3
+      triggerBrakeOnCar(0, 2.8);
+    }
+
+    function applyStage4JamAbsorption() {
+      setActiveStageButton(3);
+      // If there's not already a jam running, create one first or keep existing cars and deploy 2 absorbers!
+      if (!hasActiveJam) {
+        numCars = 22;
+        sliderCars.value = '22';
+        labelCars.textContent = '22 台';
+        initCars(false);
+        // Set up an existing jam cluster around car 0..4 so user immediately sees absorbers dissolve it
+        for (let i = 0; i < 4; i++) {
+          cars[i].v = 0.5;
+        }
+      }
+      noiseLevel = 45;
+      sliderNoise.value = '45';
+      labelNoise.textContent = '標準人類';
+      assignAbsorbers(2);
+      playTone(520, 0.2, 'triangle', 0.07);
+    }
+
+    // Event Listeners
+    stageBtns[0].addEventListener('click', applyStage1Smooth);
+    stageBtns[1].addEventListener('click', applyStage2HumanDelay);
+    stageBtns[2].addEventListener('click', applyStage3InstantJam);
+    stageBtns[3].addEventListener('click', applyStage4JamAbsorption);
+
+    btnPlayPause.addEventListener('click', () => {
+      isRunning = !isRunning;
+      if (isRunning) {
+        playPauseIcon.textContent = '⏸';
+        playPauseText.textContent = '暫停模擬';
+        btnPlayPause.className = 'px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-xs sm:text-sm flex items-center gap-1.5 transition shadow';
+      } else {
+        playPauseIcon.textContent = '▶';
+        playPauseText.textContent = '繼續模擬';
+        btnPlayPause.className = 'px-3.5 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-semibold text-xs sm:text-sm flex items-center gap-1.5 transition shadow';
+      }
+    });
+
+    btnReset.addEventListener('click', () => {
+      initCars(false);
+    });
+
+    document.querySelectorAll('.speed-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        simSpeedMultiplier = parseInt(btn.getAttribute('data-speed'), 10) || 1;
+        document.querySelectorAll('.speed-btn').forEach(b => {
+          b.className = 'speed-btn px-2 py-1 rounded-md text-slate-300 hover:text-white transition';
+        });
+        btn.className = 'speed-btn px-2 py-1 rounded-md bg-sky-500 text-slate-950 font-semibold transition';
+      });
+    });
+
+    btnAudio.addEventListener('click', () => {
+      audioEnabled = !audioEnabled;
+      btnAudio.textContent = audioEnabled ? '🔊 音效開' : '🔇 音效關';
+      if (audioEnabled) {
+        playTone(440, 0.12, 'sine', 0.05);
+      }
+    });
+
+    btnBrakePulse.addEventListener('click', () => {
+      triggerBrakeOnCar(0, 2.5);
+    });
+
+    btnAddAbsorber.addEventListener('click', () => {
+      // Pick a non-absorber car upstream of the slowest car
+      let minIdx = 0;
+      let minV = Infinity;
+      cars.forEach((c, idx) => {
+        if (c.v < minV) {
+          minV = c.v;
+          minIdx = idx;
+        }
+      });
+      // Upstream by ~5 cars
+      for (let offset = 4; offset < cars.length + 4; offset++) {
+        const candidateIdx = (minIdx - offset + cars.length * 2) % cars.length;
+        if (!cars[candidateIdx].isAbsorber) {
+          cars[candidateIdx].isAbsorber = true;
+          break;
+        }
+      }
+      syncAbsorberCountFromCars();
+      playTone(587, 0.18, 'triangle', 0.07);
+    });
+
+    btnClearPlot.addEventListener('click', clearSpacetimePlot);
+
+    // Sliders
+    sliderCars.addEventListener('input', () => {
+      numCars = parseInt(sliderCars.value, 10);
+      labelCars.textContent = `${numCars} 台`;
+      initCars(false);
+    });
+
+    sliderNoise.addEventListener('input', () => {
+      noiseLevel = parseInt(sliderNoise.value, 10);
+      if (noiseLevel === 0) labelNoise.textContent = '0% (完美定速)';
+      else if (noiseLevel <= 30) labelNoise.textContent = '低微波動';
+      else if (noiseLevel <= 65) labelNoise.textContent = '中等 (真實人類)';
+      else labelNoise.textContent = '高延遲 (極易塞車)';
+    });
+
+    sliderAbsorbers.addEventListener('input', () => {
+      const count = parseInt(sliderAbsorbers.value, 10);
+      assignAbsorbers(count);
+    });
+
+    sliderBuffer.addEventListener('input', () => {
+      const val = parseInt(sliderBuffer.value, 10);
+      absorberFactor = val / 100.0;
+      labelBuffer.textContent = `緩衝 (${absorberFactor.toFixed(1)}x 車距)`;
+    });
+
+    // Click on trackCanvas to select/interact with a car
+    trackCanvas.addEventListener('click', (e) => {
+      const rect = trackCanvas.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const clickY = e.clientY - rect.top;
+
+      const W = rect.width;
+      const H = rect.height;
+      const cx = W / 2;
+      const cy = H / 2;
+      const trackRadius = Math.min(W, H) * 0.37;
+
+      let closestCar = null;
+      let minDist = 28; // hit radius in px
+
+      for (let i = 0; i < cars.length; i++) {
+        const car = cars[i];
+        const screenAngle = -(car.pos / TRACK_LENGTH) * Math.PI * 2;
+        const x = cx + Math.cos(screenAngle) * trackRadius;
+        const y = cy + Math.sin(screenAngle) * trackRadius;
+        const dist = Math.hypot(clickX - x, clickY - y);
+        if (dist < minDist) {
+          minDist = dist;
+          closestCar = car;
+        }
+      }
+
+      if (closestCar) {
+        selectedCarId = closestCar.id;
+        selectedCarPanel.classList.remove('hidden');
+        updateTelemetryUI();
+      } else {
+        selectedCarId = null;
+        selectedCarPanel.classList.add('hidden');
+      }
+    });
+
+    btnCloseSelected.addEventListener('click', () => {
+      selectedCarId = null;
+      selectedCarPanel.classList.add('hidden');
+    });
+
+    btnSelBrake.addEventListener('click', () => {
+      if (selectedCarId === null) return;
+      const idx = cars.findIndex(c => c.id === selectedCarId);
+      if (idx !== -1) {
+        triggerBrakeOnCar(idx, 2.5);
+      }
+    });
+
+    btnSelToggleJAD.addEventListener('click', () => {
+      if (selectedCarId === null) return;
+      const idx = cars.findIndex(c => c.id === selectedCarId);
+      if (idx !== -1) {
+        cars[idx].isAbsorber = !cars[idx].isAbsorber;
+        syncAbsorberCountFromCars();
+        updateTelemetryUI();
+        playTone(cars[idx].isAbsorber ? 587 : 330, 0.15, 'triangle', 0.06);
+      }
+    });
+
+    // Main Animation Loop
+    let frameCounter = 0;
+    function animate() {
+      if (isRunning) {
+        const subSteps = 2 * simSpeedMultiplier;
+        const dt = 0.025; // 25ms physics integration step
+        for (let s = 0; s < subSteps; s++) {
+          stepPhysics(dt);
+        }
+        frameCounter++;
+        if (frameCounter % 2 === 0) {
+          updateSpacetimePlot();
+        }
+        updateTelemetryUI();
+      }
+      drawTrack();
+      requestAnimationFrame(animate);
+    }
+
+    window.addEventListener('resize', () => {
+      drawTrack();
+    });
+
+    window.onload = () => {
+      clearSpacetimePlot();
+      applyStage2HumanDelay();
+      requestAnimationFrame(animate);
+    };
+  </script>
+</body>
+</html>

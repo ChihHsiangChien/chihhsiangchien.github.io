@@ -1,0 +1,1142 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>粒線體：電子傳遞鏈與ATP合成互動模擬器</title>
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --panel-bg: #1e293b;
+            --text-main: #f8fafc;
+            --text-sub: #94a3b8;
+            --ims-color: #1e1b4b;      /* 膜間腔顏色 */
+            --membrane-color: #334155; /* 內膜顏色 */
+            --matrix-color: #0f2942;   /* 基質顏色 */
+            --accent-blue: #38bdf8;
+            --accent-yellow: #facc15;
+            --accent-pink: #f472b6;
+            --accent-green: #4ade80;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* 頂部標題與狀態列 */
+        header {
+            background-color: var(--panel-bg);
+            padding: 12px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #334155;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        .title-group h1 {
+            font-size: 1.4rem;
+            color: var(--accent-blue);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .title-group p {
+            font-size: 0.85rem;
+            color: var(--text-sub);
+        }
+
+        .stats-bar {
+            display: flex;
+            gap: 16px;
+        }
+
+        .stat-box {
+            background: rgba(15, 23, 42, 0.7);
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: 1px solid #475569;
+            text-align: center;
+            min-width: 110px;
+        }
+
+        .stat-box .label {
+            font-size: 0.75rem;
+            color: var(--text-sub);
+            display: block;
+        }
+
+        .stat-box .value {
+            font-size: 1.3rem;
+            font-weight: bold;
+        }
+
+        .val-h { color: var(--accent-pink); }
+        .val-atp { color: var(--accent-yellow); }
+        .val-h2o { color: var(--accent-blue); }
+
+        /* 主內容區 */
+        .main-container {
+            display: flex;
+            flex: 1;
+            padding: 16px;
+            gap: 16px;
+            max-width: 1600px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        /* 左側畫布區 */
+        .canvas-wrapper {
+            flex: 3;
+            background: var(--panel-bg);
+            border-radius: 12px;
+            overflow: hidden;
+            position: relative;
+            border: 1px solid #334155;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            display: flex;
+            flex-direction: column;
+        }
+
+        canvas {
+            width: 100%;
+            height: 540px;
+            display: block;
+            cursor: pointer;
+        }
+
+        .legend-bar {
+            background: #0f172a;
+            padding: 10px 20px;
+            display: flex;
+            gap: 20px;
+            font-size: 0.85rem;
+            border-top: 1px solid #334155;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        /* 右側控制與解說面板 */
+        .side-panel {
+            flex: 1;
+            min-width: 340px;
+            max-width: 400px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .card {
+            background: var(--panel-bg);
+            border-radius: 12px;
+            padding: 16px;
+            border: 1px solid #334155;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        .card h2 {
+            font-size: 1.1rem;
+            color: var(--accent-blue);
+            margin-bottom: 12px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #334155;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* 粒線體小地圖 */
+        .mito-map {
+            background: #0f172a;
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
+            margin-bottom: 8px;
+        }
+
+        /* 控制按鈕 */
+        .controls-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 12px 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #0f172a;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            filter: brightness(1.1);
+        }
+
+        .btn:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-nadh { background: linear-gradient(135deg, #38bdf8, #0284c7); color: white; }
+        .btn-fadh2 { background: linear-gradient(135deg, #a855f7, #7e22ce); color: white; }
+        .btn-atp { background: linear-gradient(135deg, #facc15, #eab308); color: #0f172a; }
+        .btn-auto { background: #334155; color: white; border: 1px solid #64748b; }
+        .btn-auto.active { background: #16a34a; border-color: #4ade80; }
+
+        .btn-badge {
+            background: rgba(0,0,0,0.25);
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+        }
+
+        /* 解說區 */
+        .info-box {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .info-title {
+            font-size: 1.05rem;
+            font-weight: bold;
+            color: var(--accent-yellow);
+            margin-bottom: 8px;
+        }
+
+        .info-content {
+            font-size: 0.92rem;
+            line-height: 1.6;
+            color: #cbd5e1;
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .step-guide {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px dashed #475569;
+            font-size: 0.85rem;
+            color: var(--accent-green);
+        }
+
+        @media (max-width: 1024px) {
+            .main-container {
+                flex-direction: column;
+            }
+            .side-panel {
+                max-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="title-group">
+            <h1>🔬 粒線體發電廠：電子傳遞鏈與化學滲透 (ETC & Chemiosmosis)</h1>
+            <p>互動式生物化學模擬器 — 點擊右側按鈕投入電子載體，或點擊圖中複合體查看詳情</p>
+        </div>
+        <div class="stats-bar">
+            <div class="stat-box">
+                <span class="label">膜間腔 H⁺ 梯度</span>
+                <span class="value val-h" id="stat-h">4</span>
+            </div>
+            <div class="stat-box">
+                <span class="label">已生成水 (H₂O)</span>
+                <span class="value val-h2o" id="stat-h2o">0</span>
+            </div>
+            <div class="stat-box">
+                <span class="label">總產出 ATP</span>
+                <span class="value val-atp" id="stat-atp">0</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <!-- 左側互動畫布 -->
+        <div class="canvas-wrapper">
+            <canvas id="etcCanvas" width="1000" height="540"></canvas>
+            <div class="legend-bar">
+                <div class="legend-item"><span class="dot" style="background: #facc15; box-shadow: 0 0 8px #facc15;"></span> 高能電子 (e⁻)</div>
+                <div class="legend-item"><span class="dot" style="background: #f472b6;"></span> 氫離子 / 質子 (H⁺)</div>
+                <div class="legend-item"><span class="dot" style="background: #38bdf8;"></span> 氧氣 (O₂) 與 水 (H₂O)</div>
+                <div class="legend-item"><span class="dot" style="background: #f97316;"></span> 輔酶 Q (Ubiquinone)</div>
+                <div class="legend-item"><span class="dot" style="background: #ec4899;"></span> 細胞色素 c (Cyt c)</div>
+                <div class="legend-item" style="margin-left: auto; color: #94a3b8;">💡 提示：點擊畫布上的蛋白質複合體可閱讀詳細機制</div>
+            </div>
+        </div>
+
+        <!-- 右側控制與解說 -->
+        <div class="side-panel">
+            <!-- 粒線體位置示意圖 -->
+            <div class="card">
+                <h2>📍 發生位置：粒線體內膜</h2>
+                <div class="mito-map">
+                    <svg width="260" height="90" viewBox="0 0 260 90">
+                        <!-- 外膜 -->
+                        <ellipse cx="130" cy="45" rx="115" ry="38" fill="#1e1b4b" stroke="#64748b" stroke-width="3"/>
+                        <!-- 內膜皺褶 (Cristae) -->
+                        <path d="M 35 45 C 35 20, 65 20, 65 38 C 65 55, 85 55, 85 35 C 85 15, 115 15, 115 40 C 115 65, 145 65, 145 35 C 145 15, 175 15, 175 40 C 175 60, 200 60, 200 35 C 200 20, 225 25, 225 45 C 225 68, 195 68, 185 52 C 175 35, 155 70, 135 68 C 115 65, 95 35, 80 62 C 65 75, 35 68, 35 45 Z" fill="#0f2942" stroke="#38bdf8" stroke-width="2.5"/>
+                        <!-- 放大框 -->
+                        <rect x="100" y="15" width="45" height="30" fill="none" stroke="#facc15" stroke-width="2" stroke-dasharray="3,2"/>
+                        <text x="130" y="48" fill="#94a3b8" font-size="11" text-anchor="middle">基質 (Matrix)</text>
+                        <text x="200" y="16" fill="#facc15" font-size="11" font-weight="bold">◀ 放大區域</text>
+                    </svg>
+                    <div style="font-size: 0.78rem; color: #94a3b8;">
+                        粒線體內膜向內皺褶形成「嵴 (Cristae)」，大幅增加表面積以容納更多電子傳遞鏈複合體。
+                    </div>
+                </div>
+            </div>
+
+            <!-- 互動控制區 -->
+            <div class="card">
+                <h2>⚡ 步驟操作控制台</h2>
+                <div class="controls-grid">
+                    <button class="btn btn-nadh" id="btn-nadh" onclick="sim.injectNADH()">
+                        <span>1A. 投入 NADH (從複合體 I)</span>
+                        <span class="btn-badge">泵出較多 H⁺</span>
+                    </button>
+                    <button class="btn btn-fadh2" id="btn-fadh2" onclick="sim.injectFADH2()">
+                        <span>1B. 投入 FADH₂ (從複合體 II)</span>
+                        <span class="btn-badge">跳過複合體 I</span>
+                    </button>
+                    <button class="btn btn-atp" id="btn-atp" onclick="sim.triggerATP()">
+                        <span>2. 驅動 ATP 合成酶 (化學滲透)</span>
+                        <span class="btn-badge" id="atp-badge">需 3 個 H⁺</span>
+                    </button>
+                    <div style="display: flex; gap: 8px; margin-top: 4px;">
+                        <button class="btn btn-auto" id="btn-auto" style="flex: 2; justify-content: center;" onclick="sim.toggleAuto()">
+                            ▶️ 開啟自動連續呼吸作用
+                        </button>
+                        <button class="btn btn-auto" style="flex: 1; justify-content: center;" onclick="sim.reset()">
+                            🔄 重置
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 動態解說卡片 -->
+            <div class="card info-box">
+                <h2>📖 生物化學機制解說</h2>
+                <div class="info-title" id="info-title">歡迎來到粒線體能量工廠！</div>
+                <div class="info-content" id="info-desc">
+                    糖解作用與克氏循環（檸檬酸循環）分解葡萄糖後，將高能量儲存在電子載體 <b>NADH</b> 與 <b>FADH₂</b> 中。<br><br>
+                    在這裡（粒線體內膜），這些高能電子將經歷一連串「下坡」傳遞，釋放的能量會用來把質子 (H⁺) 抽到膜間腔，最後利用質子回流的動力轉動分子馬達，合成細胞的能量貨幣 <b>ATP</b>！
+                </div>
+                <div class="step-guide" id="step-guide">
+                    👉 請點擊上方「投入 NADH」按鈕開始觀察電子傳遞過程！
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+/**
+ * 粒線體電子傳遞鏈互動模擬器核心腳本
+ */
+const canvas = document.getElementById('etcCanvas');
+const ctx = canvas.getContext('2d');
+
+// 知識庫資料 (點擊複合體或執行動作時顯示)
+const KNOWLEDGE = {
+    default: {
+        title: "電子傳遞鏈 (Electron Transport Chain)",
+        desc: "由鑲嵌在粒線體內膜上的四個蛋白質複合體（I ~ IV）與兩個可移動的電子載體（輔酶 Q、細胞色素 c）組成。<br><br>電子在傳遞過程中逐步釋放自由能，將基質的 H⁺ 逆濃度梯度主動運輸至膜間腔，建立電化學質子梯度（質子動勢）。",
+        guide: "👉 點擊「投入 NADH」或點擊畫面中的任一複合體深入了解。"
+    },
+    c1: {
+        title: "複合體 I：NADH 脫氫酶 (NADH Dehydrogenase)",
+        desc: "<b>功能：</b>接收來自克氏循環與糖解作用的 <b>NADH</b> 所攜帶的 2 個高能電子，使 NADH 氧化變回 NAD⁺。<br><br><b>質子泵出：</b>電子傳遞給輔酶 Q (CoQ) 的過程中釋放能量，複合體 I 構形改變，將 <b>4 個 H⁺</b> 從基質泵入膜間腔。",
+        guide: "💡 觀察重點：NADH 在複合體 I 釋放黃色高能電子，同時觸發粉紅色 H⁺ 往上衝入膜間腔！"
+    },
+    c2: {
+        title: "複合體 II：琥珀酸脫氫酶 (Succinate Dehydrogenase)",
+        desc: "<b>功能：</b>克氏循環唯一直接鑲嵌在內膜上的酵素。它接收 <b>FADH₂</b> 的電子（氧化成 FAD），並將電子傳給輔酶 Q (CoQ)。<br><br><b>注意：</b>複合體 II 釋放的能量不足以跨膜泵出質子（<b>0 個 H⁺</b>），因此 1 分子 FADH₂ 所能產生的 ATP 比 NADH 少（約 1.5 vs 2.5 個 ATP）。",
+        guide: "💡 觀察重點：FADH₂ 從複合體 II 進入時，不會有 H⁺ 從這裡被泵出。"
+    },
+    coq: {
+        title: "輔酶 Q (Coenzyme Q / Ubiquinone)",
+        desc: "<b>功能：</b>一種脂溶性的小分子，能在磷脂雙層膜內部自由穿梭移動。<br><br>它像一台「接駁車」，負責收集來自<b>複合體 I</b> 或<b>複合體 II</b> 的電子，並將它們運送到<b>複合體 III</b>。",
+        guide: "💡 觀察重點：內膜中央的橘色圓球 Q 會左右移動接送電子。"
+    },
+    c3: {
+        title: "複合體 III：細胞色素 bc₁ 複合體",
+        desc: "<b>功能：</b>接收來自輔酶 Q 的電子，透過「Q 循環 (Q cycle)」機制，將電子一個一個轉移給位於膜間腔側的水溶性蛋白質——<b>細胞色素 c (Cyt c)</b>。<br><br><b>質子泵出：</b>每次傳遞一對電子，會將 <b>4 個 H⁺</b> 釋放到膜間腔中。",
+        guide: "💡 觀察重點：電子抵達複合體 III 時，會再次把 H⁺ 抽往膜間腔，並交棒給粉紫色的 Cyt c。"
+    },
+    cytc: {
+        title: "細胞色素 c (Cytochrome c)",
+        desc: "<b>功能：</b>位於內膜外側（膜間腔側）的水溶性周邊蛋白。<br><br>它每次攜帶 1 個電子，在複合體 III 與複合體 IV 之間來回移動傳遞電子。",
+        guide: "💡 觀察重點：附著在內膜上緣的 Cyt c 會在複合體 III 和 IV 之間滑動。"
+    },
+    c4: {
+        title: "複合體 IV：細胞色素 c 氧化酶",
+        desc: "<b>功能：</b>電子傳遞鏈的終點站！它將電子從細胞色素 c 傳遞給最終電子接受者——<b>氧氣 (O₂)</b>。<br><br><b>產生水與泵出質子：</b>電子、氧氣與基質中的 H⁺ 結合生成 <b>水 (H₂O)</b>（這就是我們呼吸需要氧氣的原因！）。同時再將 <b>2 個 H⁺</b> 泵入膜間腔。",
+        guide: "💡 沒有氧氣時，整個電子傳遞鏈會堵塞停擺，導致細胞缺氧無法產生足夠 ATP！"
+    },
+    atp: {
+        title: "複合體 V：ATP 合成酶 (ATP Synthase)",
+        desc: "<b>化學滲透 (Chemiosmosis)：</b>當膜間腔累積高濃度的 H⁺（高質子動勢），H⁺ 會順著濃度梯度通過 ATP 合成酶的通道衝回基質。<br><br><b>分子旋轉馬達：</b>H⁺ 流過時會推動 F₀ 轉子高速旋轉，帶動 F₁ 催化頭構形改變，將 <b>ADP + Pi</b> 壓合形成高能的 <b>ATP</b>！",
+        guide: "🌟 這是一台真正的奈米級水力發電機！質子流過就是水流，旋轉馬達產生電力 (ATP)。"
+    }
+};
+
+class Simulation {
+    constructor() {
+        // 區域高度定義
+        this.IMS_Y = 185;      // 膜間腔底部 (內膜上緣)
+        this.MEM_Y = 325;      // 內膜底部 (基質上緣)
+        
+        // 統計數據
+        this.hCount = 4;       // 膜間腔 H+ 數量
+        this.h2oCount = 0;
+        this.atpCount = 0;
+        this.autoMode = false;
+        this.autoTimer = 0;
+
+        // 複合體座標與狀態
+        this.complexes = {
+            c1: { x: 130, y: 255, w: 85, h: 170, color: '#3b82f6', name: '複合體 I', sub: 'NADH 脫氫酶' },
+            c2: { x: 265, y: 295, w: 70, h: 105, color: '#8b5cf6', name: '複合體 II', sub: '琥珀酸脫氫酶' },
+            c3: { x: 450, y: 255, w: 85, h: 170, color: '#ec4899', name: '複合體 III', sub: 'Cyt bc₁' },
+            c4: { x: 640, y: 255, w: 85, h: 170, color: '#10b981', name: '複合體 IV', sub: 'Cyt c 氧化酶' },
+            atp: { x: 865, y: 280, w: 100, h: 210, color: '#eab308', name: 'ATP 合成酶', sub: '分子旋轉馬達' }
+        };
+
+        // 移動載體
+        this.coQ = { x: 355, y: 255, targetX: 355, hasElectron: false };
+        this.cytC = { x: 545, y: 178, targetX: 545, hasElectron: false };
+
+        // ATP 合成酶旋轉角度與速度
+        this.rotorAngle = 0;
+        this.rotorSpeed = 0.015;
+
+        // 粒子陣列
+        this.imsProtons = [];      // 膜間腔自由漂浮的 H+
+        this.matrixProtons = [];   // 基質自由漂浮的 H+
+        this.animatedProtons = []; // 正在跨膜移動的 H+
+        this.electronPackets = []; // 電子傳遞包裹
+        this.molecules = [];       // NADH, FADH2, O2, H2O, ATP 特效
+
+        this.selectedKey = 'default';
+        this.initParticles();
+        this.bindEvents();
+    }
+
+    initParticles() {
+        this.imsProtons = [];
+        this.matrixProtons = [];
+        // 初始膜間腔 H+
+        for (let i = 0; i < this.hCount; i++) {
+            this.imsProtons.push(this.createFloatingProton('ims'));
+        }
+        // 初始基質 H+
+        for (let i = 0; i < 12; i++) {
+            this.matrixProtons.push(this.createFloatingProton('matrix'));
+        }
+    }
+
+    createFloatingProton(zone, customX, customY) {
+        const isIMS = zone === 'ims';
+        return {
+            x: customX || (Math.random() * 940 + 30),
+            y: customY || (isIMS ? (Math.random() * 120 + 35) : (Math.random() * 150 + 360)),
+            vx: (Math.random() - 0.5) * 1.4,
+            vy: (Math.random() - 0.5) * 1.4,
+            zone: zone
+        };
+    }
+
+    bindEvents() {
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const mx = (e.clientX - rect.left) * scaleX;
+            const my = (e.clientY - rect.top) * scaleY;
+
+            // 檢查是否點擊 CoQ 或 Cyt c
+            if (Math.hypot(mx - this.coQ.x, my - this.coQ.y) < 25) {
+                this.showInfo('coq');
+                return;
+            }
+            if (Math.hypot(mx - this.cytC.x, my - this.cytC.y) < 22) {
+                this.showInfo('cytc');
+                return;
+            }
+
+            // 檢查複合體點擊
+            for (const [key, c] of Object.entries(this.complexes)) {
+                if (mx >= c.x - c.w/2 && mx <= c.x + c.w/2 &&
+                    my >= c.y - c.h/2 && my <= c.y + c.h/2) {
+                    this.showInfo(key);
+                    return;
+                }
+            }
+        });
+    }
+
+    showInfo(key) {
+        this.selectedKey = key;
+        const data = KNOWLEDGE[key] || KNOWLEDGE.default;
+        document.getElementById('info-title').innerHTML = data.title;
+        document.getElementById('info-desc').innerHTML = data.desc;
+        document.getElementById('step-guide').innerHTML = data.guide;
+    }
+
+    // 投入 NADH (從複合體 I 開始)
+    injectNADH() {
+        this.showInfo('c1');
+        // 建立 NADH 分子動畫進入複合體 I
+        this.molecules.push({
+            type: 'NADH',
+            x: 130, y: 490,
+            targetX: 130, targetY: 360,
+            progress: 0,
+            speed: 0.03,
+            onArrive: () => {
+                // 產生 NAD+ 離開
+                this.molecules.push({
+                    type: 'NAD+', x: 130, y: 360, targetX: 70, targetY: 480, progress: 0, speed: 0.025
+                });
+                // 啟動電子路徑: C1 -> CoQ -> C3 -> CytC -> C4
+                this.startElectronJourney('NADH');
+            }
+        });
+    }
+
+    // 投入 FADH2 (從複合體 II 開始)
+    injectFADH2() {
+        this.showInfo('c2');
+        this.molecules.push({
+            type: 'FADH₂',
+            x: 265, y: 490,
+            targetX: 265, targetY: 360,
+            progress: 0,
+            speed: 0.03,
+            onArrive: () => {
+                this.molecules.push({
+                    type: 'FAD', x: 265, y: 360, targetX: 220, targetY: 480, progress: 0, speed: 0.025
+                });
+                this.startElectronJourney('FADH2');
+            }
+        });
+    }
+
+    startElectronJourney(source) {
+        const waypoints = [];
+        if (source === 'NADH') {
+            waypoints.push(
+                { x: 130, y: 330 },
+                { x: 130, y: 255, action: () => this.pumpProtons(130, 2) }, // C1 泵出質子
+                { x: 355, y: 255, carrier: 'coQ' }
+            );
+        } else {
+            waypoints.push(
+                { x: 265, y: 330 },
+                { x: 265, y: 275 }, // C2 不泵出質子
+                { x: 355, y: 255, carrier: 'coQ' }
+            );
+        }
+
+        // 後續共同路徑: CoQ -> C3 -> CytC -> C4 -> O2
+        waypoints.push(
+            { x: 450, y: 255, action: () => this.pumpProtons(450, 2) }, // C3 泵出質子
+            { x: 545, y: 178, carrier: 'cytC' },
+            { x: 640, y: 255, action: () => this.pumpProtons(640, 1) }, // C4 泵出質子
+            { x: 640, y: 335, action: () => this.formWater() }          // C4 底部與 O2 合成水
+        );
+
+        this.electronPackets.push({
+            waypoints: waypoints,
+            currentIndex: 0,
+            x: waypoints[0].x,
+            y: waypoints[0].y,
+            progress: 0,
+            speed: 0.028
+        });
+    }
+
+    // 跨膜泵出 H+ 動畫
+    pumpProtons(complexX, count) {
+        for (let i = 0; i < count; i++) {
+            setTimeout(() => {
+                this.animatedProtons.push({
+                    x: complexX + (Math.random() * 20 - 10),
+                    y: 380,
+                    targetX: complexX + (Math.random() * 40 - 20),
+                    targetY: 110,
+                    progress: 0,
+                    speed: 0.025,
+                    type: 'pump',
+                    onFinish: (px, py) => {
+                        this.imsProtons.push(this.createFloatingProton('ims', px, py));
+                        this.hCount++;
+                        this.updateUI();
+                    }
+                });
+            }, i * 220);
+        }
+    }
+
+    // 在複合體 IV 消耗 O2 與 H+ 產生 H2O
+    formWater() {
+        this.h2oCount++;
+        this.updateUI();
+        this.molecules.push({
+            type: 'H₂O',
+            x: 640, y: 355,
+            targetX: 710, targetY: 470,
+            progress: 0,
+            speed: 0.02
+        });
+    }
+
+    // 觸發化學滲透與 ATP 合成
+    triggerATP() {
+        if (this.hCount < 3) {
+            this.showInfo('atp');
+            document.getElementById('step-guide').innerHTML = "⚠️ 膜間腔的 H⁺ 濃度還不夠高！請先投入 NADH 或 FADH₂ 來泵出更多 H⁺（至少需要 3 個 H⁺）。";
+            return;
+        }
+
+        this.showInfo('atp');
+        this.hCount -= 3;
+        this.updateUI();
+
+        // 從膜間腔移除 3 個 H+ 並轉為衝入 ATP 合成酶的動畫
+        for (let i = 0; i < 3; i++) {
+            const p = this.imsProtons.pop() || { x: 865, y: 100 };
+            setTimeout(() => {
+                this.animatedProtons.push({
+                    x: p.x,
+                    y: p.y,
+                    targetX: 865,
+                    targetY: 420,
+                    progress: 0,
+                    speed: 0.032,
+                    type: 'synth',
+                    onFinish: () => {
+                        // 加速馬達旋轉
+                        this.rotorSpeed = 0.28;
+                        if (i === 2) {
+                            this.atpCount++;
+                            this.updateUI();
+                            // 產生發光 ATP 分子
+                            this.molecules.push({
+                                type: 'ATP',
+                                x: 865, y: 410,
+                                targetX: 770 + Math.random() * 80,
+                                targetY: 490,
+                                progress: 0,
+                                speed: 0.02
+                            });
+                        }
+                    }
+                });
+            }, i * 180);
+        }
+    }
+
+    toggleAuto() {
+        this.autoMode = !this.autoMode;
+        const btn = document.getElementById('btn-auto');
+        if (this.autoMode) {
+            btn.classList.add('active');
+            btn.innerHTML = '⏸️ 暫停自動呼吸作用';
+            this.injectNADH();
+        } else {
+            btn.classList.remove('active');
+            btn.innerHTML = '▶️ 開啟自動連續呼吸作用';
+        }
+    }
+
+    reset() {
+        this.autoMode = false;
+        const btn = document.getElementById('btn-auto');
+        btn.classList.remove('active');
+        btn.innerHTML = '▶️ 開啟自動連續呼吸作用';
+
+        this.hCount = 4;
+        this.h2oCount = 0;
+        this.atpCount = 0;
+        this.electronPackets = [];
+        this.animatedProtons = [];
+        this.molecules = [];
+        this.initParticles();
+        this.updateUI();
+        this.showInfo('default');
+    }
+
+    updateUI() {
+        document.getElementById('stat-h').innerText = this.hCount;
+        document.getElementById('stat-h2o').innerText = this.h2oCount;
+        document.getElementById('stat-atp').innerText = this.atpCount;
+
+        const atpBtn = document.getElementById('btn-atp');
+        const badge = document.getElementById('atp-badge');
+        if (this.hCount >= 3) {
+            atpBtn.style.boxShadow = '0 0 15px rgba(250, 204, 21, 0.7)';
+            badge.innerText = '梯度充足！點擊合成';
+        } else {
+            atpBtn.style.boxShadow = 'none';
+            badge.innerText = `需 3 個 H⁺ (目前 ${this.hCount})`;
+        }
+    }
+
+    update() {
+        // 自動模式計時器
+        if (this.autoMode) {
+            this.autoTimer++;
+            if (this.autoTimer % 150 === 0) {
+                Math.random() > 0.35 ? this.injectNADH() : this.injectFADH2();
+            }
+            if (this.autoTimer % 110 === 0 && this.hCount >= 5) {
+                this.triggerATP();
+            }
+        }
+
+        // 更新自由漂浮的 H+
+        const updateFloating = (list, minY, maxY) => {
+            list.forEach(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                if (p.x < 20 || p.x > 980) p.vx *= -1;
+                if (p.y < minY || p.y > maxY) p.vy *= -1;
+            });
+        };
+        updateFloating(this.imsProtons, 25, this.IMS_Y - 20);
+        updateFloating(this.matrixProtons, this.MEM_Y + 25, 520);
+
+        // 更新跨膜動畫 H+
+        for (let i = this.animatedProtons.length - 1; i >= 0; i--) {
+            const p = this.animatedProtons[i];
+            p.progress += p.speed;
+            if (p.type === 'synth' && p.progress < 0.4) {
+                // 先匯聚到合成酶入口
+                p.x += (865 - p.x) * 0.15;
+                p.y += (170 - p.y) * 0.15;
+            } else {
+                p.x = p.x + (p.targetX - p.x) * p.speed * 2.5;
+                p.y = p.y + (p.targetY - p.y) * p.speed * 2.5;
+            }
+
+            if (p.progress >= 1) {
+                if (p.onFinish) p.onFinish(p.targetX, p.targetY);
+                this.animatedProtons.splice(i, 1);
+            }
+        }
+
+        // 更新電子包裹與載體移動
+        this.coQ.targetX = 355;
+        this.cytC.targetX = 545;
+
+        for (let i = this.electronPackets.length - 1; i >= 0; i--) {
+            const ep = this.electronPackets[i];
+            const start = ep.waypoints[ep.currentIndex];
+            const end = ep.waypoints[ep.currentIndex + 1];
+
+            if (!end) {
+                this.electronPackets.splice(i, 1);
+                continue;
+            }
+
+            ep.progress += ep.speed;
+            ep.x = start.x + (end.x - start.x) * ep.progress;
+            ep.y = start.y + (end.y - start.y) * ep.progress;
+
+            // 載體跟隨特效
+            if (start.carrier === 'coQ' || end.carrier === 'coQ') {
+                this.coQ.targetX = ep.x;
+            }
+            if (start.carrier === 'cytC' || end.carrier === 'cytC') {
+                this.cytC.targetX = ep.x;
+            }
+
+            if (ep.progress >= 1) {
+                if (end.action) end.action();
+                ep.currentIndex++;
+                ep.progress = 0;
+            }
+        }
+
+        this.coQ.x += (this.coQ.targetX - this.coQ.x) * 0.15;
+        this.cytC.x += (this.cytC.targetX - this.cytC.x) * 0.15;
+
+        // 更新分子動畫 (NADH, FADH2, H2O, ATP)
+        for (let i = this.molecules.length - 1; i >= 0; i--) {
+            const m = this.molecules[i];
+            m.progress += m.speed;
+            m.x = m.x + (m.targetX - m.x) * 0.08;
+            m.y = m.y + (m.targetY - m.y) * 0.08;
+            if (m.progress >= 1) {
+                if (m.onArrive) m.onArrive();
+                this.molecules.splice(i, 1);
+            }
+        }
+
+        // 更新 ATP 馬達轉速衰減
+        this.rotorAngle += this.rotorSpeed;
+        if (this.rotorSpeed > 0.015) {
+            this.rotorSpeed *= 0.97;
+        }
+    }
+
+    draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // 1. 繪製三大背景區域
+        // 膜間腔 (IMS)
+        const imsGrad = ctx.createLinearGradient(0, 0, 0, this.IMS_Y);
+        imsGrad.addColorStop(0, '#2e1065');
+        imsGrad.addColorStop(1, '#1e1b4b');
+        ctx.fillStyle = imsGrad;
+        ctx.fillRect(0, 0, canvas.width, this.IMS_Y);
+
+        // 粒線體內膜 (Inner Membrane)
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(0, this.IMS_Y, canvas.width, this.MEM_Y - this.IMS_Y);
+
+        // 粒線體基質 (Matrix)
+        const matGrad = ctx.createLinearGradient(0, this.MEM_Y, 0, canvas.height);
+        matGrad.addColorStop(0, '#0f2942');
+        matGrad.addColorStop(1, '#081420');
+        ctx.fillStyle = matGrad;
+        ctx.fillRect(0, this.MEM_Y, canvas.width, canvas.height - this.MEM_Y);
+
+        // 區域文字標示
+        ctx.fillStyle = 'rgba(255,255,255,0.22)';
+        ctx.font = 'bold 16px "Microsoft JhengHei"';
+        ctx.fillText('膜間腔 (Intermembrane Space) — 高 H⁺ 濃度區 (低 pH)', 20, 32);
+        ctx.fillText('粒線體內膜 (Inner Mitochondrial Membrane) — 磷脂雙層', 20, 212);
+        ctx.fillText('粒線體基質 (Mitochondrial Matrix) — 低 H⁺ 濃度區 (高 pH)', 20, 520);
+
+        // 2. 繪製磷脂雙層細節
+        this.drawPhospholipids();
+
+        // 3. 繪製電子傳遞路徑虛線
+        ctx.save();
+        ctx.strokeStyle = 'rgba(250, 204, 21, 0.3)';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([6, 6]);
+        ctx.beginPath();
+        ctx.moveTo(130, 330);
+        ctx.lineTo(130, 255);
+        ctx.lineTo(355, 255);
+        ctx.lineTo(450, 255);
+        ctx.lineTo(545, 178);
+        ctx.lineTo(640, 255);
+        ctx.lineTo(640, 340);
+        ctx.stroke();
+        ctx.restore();
+
+        // 4. 繪製蛋白質複合體 I ~ IV 與 ATP 合成酶
+        this.drawComplexes();
+
+        // 5. 繪製移動載體 CoQ 與 Cyt c
+        this.drawCarriers();
+
+        // 6. 繪製反應方程式提示 (在 C4 與 ATP 合成酶下方)
+        this.drawReactionHints();
+
+        // 7. 繪製所有 H+ 質子
+        [...this.imsProtons, ...this.matrixProtons].forEach(p => this.drawProton(p.x, p.y, false));
+        this.animatedProtons.forEach(p => this.drawProton(p.x, p.y, true));
+
+        // 8. 繪製高能電子包裹 (e-)
+        this.electronPackets.forEach(ep => this.drawElectron(ep.x, ep.y));
+
+        // 9. 繪製分子特效 (NADH, FADH2, H2O, ATP)
+        this.molecules.forEach(m => this.drawMolecule(m));
+    }
+
+    drawPhospholipids() {
+        ctx.fillStyle = '#475569';
+        ctx.strokeStyle = '#334155';
+        ctx.lineWidth = 1.5;
+        for (let x = 10; x < canvas.width; x += 18) {
+            // 避開複合體的位置
+            let skip = false;
+            for (const c of Object.values(this.complexes)) {
+                if (x > c.x - c.w/2 + 5 && x < c.x + c.w/2 - 5) skip = true;
+            }
+            if (skip) continue;
+
+            // 上層磷脂頭與尾部
+            ctx.beginPath();
+            ctx.arc(x, this.IMS_Y + 6, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(x - 2, this.IMS_Y + 11); ctx.lineTo(x - 2, this.IMS_Y + 48);
+            ctx.moveTo(x + 2, this.IMS_Y + 11); ctx.lineTo(x + 2, this.IMS_Y + 48);
+            ctx.stroke();
+
+            // 下層磷脂頭與尾部
+            ctx.beginPath();
+            ctx.arc(x, this.MEM_Y - 6, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(x - 2, this.MEM_Y - 11); ctx.lineTo(x - 2, this.MEM_Y - 48);
+            ctx.moveTo(x + 2, this.MEM_Y - 11); ctx.lineTo(x + 2, this.MEM_Y - 48);
+            ctx.stroke();
+        }
+    }
+
+    drawComplexes() {
+        for (const [key, c] of Object.entries(this.complexes)) {
+            ctx.save();
+            const isSelected = this.selectedKey === key;
+
+            if (key === 'atp') {
+                this.drawATPSynthase(c, isSelected);
+                ctx.restore();
+                continue;
+            }
+
+            // 發光外框
+            if (isSelected) {
+                ctx.shadowColor = '#facc15';
+                ctx.shadowBlur = 18;
+            }
+
+            // 繪製圓角膠囊狀蛋白質複合體
+            ctx.fillStyle = c.color;
+            ctx.strokeStyle = isSelected ? '#facc15' : '#e2e8f0';
+            ctx.lineWidth = isSelected ? 3 : 1.5;
+
+            ctx.beginPath();
+            ctx.roundRect(c.x - c.w/2, c.y - c.h/2, c.w, c.h, 28);
+            ctx.fill();
+            ctx.stroke();
+
+            // 內部質子通道紋理 (C1, C3, C4)
+            if (key !== 'c2') {
+                ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+                ctx.lineWidth = 6;
+                ctx.beginPath();
+                ctx.moveTo(c.x, c.y + c.h/2 - 15);
+                ctx.lineTo(c.x, c.y - c.h/2 + 15);
+                ctx.stroke();
+            }
+
+            // 標籤文字
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 14px "Microsoft JhengHei"';
+            ctx.textAlign = 'center';
+            ctx.fillText(c.name, c.x, c.y - 5);
+            ctx.font = '11px "Microsoft JhengHei"';
+            ctx.fillStyle = 'rgba(255,255,255,0.85)';
+            ctx.fillText(c.sub, c.x, c.y + 14);
+
+            ctx.restore();
+        }
+    }
+
+    drawATPSynthase(c, isSelected) {
+        const x = c.x;
+        if (isSelected) {
+            ctx.shadowColor = '#facc15';
+            ctx.shadowBlur = 18;
+        }
+
+        // F0 跨膜通道基座
+        ctx.fillStyle = '#ca8a04';
+        ctx.strokeStyle = isSelected ? '#ffffff' : '#fef08a';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(x - 32, this.IMS_Y - 10, 64, 150, 16);
+        ctx.fill();
+        ctx.stroke();
+
+        // 轉軸 (Stalk)
+        ctx.fillStyle = '#fde047';
+        ctx.fillRect(x - 8, 320, 16, 45);
+
+        // F1 旋轉馬達頭 (位於基質側)
+        ctx.save();
+        ctx.translate(x, 395);
+        ctx.rotate(this.rotorAngle);
+        for (let i = 0; i < 6; i++) {
+            ctx.rotate(Math.PI / 3);
+            ctx.fillStyle = i % 2 === 0 ? '#facc15' : '#eab308';
+            ctx.beginPath();
+            ctx.ellipse(0, 22, 14, 22, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+        }
+        ctx.restore();
+
+        // 中心軸心與標籤
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#713f12';
+        ctx.beginPath();
+        ctx.arc(x, 395, 14, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 14px "Microsoft JhengHei"';
+        ctx.textAlign = 'center';
+        ctx.fillText('ATP 合成酶', x, 250);
+        ctx.font = '11px "Microsoft JhengHei"';
+        ctx.fillText('(F₀ - F₁ 馬達)', x, 268);
+    }
+
+    drawCarriers() {
+        // 輔酶 Q (Ubiquinone)
+        ctx.save();
+        ctx.fillStyle = '#f97316';
+        ctx.strokeStyle = '#ffedd5';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(this.coQ.x, this.coQ.y, 20, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 13px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('CoQ', this.coQ.x, this.coQ.y + 4);
+        ctx.restore();
+
+        // 細胞色素 c (Cyt c)
+        ctx.save();
+        ctx.fillStyle = '#db2777';
+        ctx.strokeStyle = '#fce7f3';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(this.cytC.x, this.cytC.y, 19, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Cyt c', this.cytC.x, this.cytC.y + 4);
+        ctx.restore();
+    }
+
+    drawReactionHints() {
+        ctx.save();
+        ctx.font = '12px "Microsoft JhengHei"';
+        ctx.fillStyle = '#94a3b8';
+        ctx.textAlign = 'center';
+        // C4 下方氧氣提示
+        ctx.fillText('½ O₂ + 2H⁺ + 2e⁻ ➔ H₂O', 640, 375);
+        // ATP 下方合成提示
+        ctx.fillText('ADP + Pi ➔ ATP', 865, 455);
+        ctx.restore();
+    }
+
+    drawProton(x, y, isGlowing) {
+        ctx.save();
+        if (isGlowing) {
+            ctx.shadowColor = '#f472b6';
+            ctx.shadowBlur = 12;
+        }
+        ctx.fillStyle = '#ec4899';
+        ctx.beginPath();
+        ctx.arc(x, y, 9, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('H⁺', x, y + 3.5);
+        ctx.restore();
+    }
+
+    drawElectron(x, y) {
+        ctx.save();
+        ctx.shadowColor = '#facc15';
+        ctx.shadowBlur = 16;
+        ctx.fillStyle = '#facc15';
+        ctx.beginPath();
+        ctx.arc(x, y, 11, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#0f172a';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('2e⁻', x, y + 4);
+        ctx.restore();
+    }
+
+    drawMolecule(m) {
+        ctx.save();
+        ctx.textAlign = 'center';
+        let bg = '#38bdf8', fg = '#fff', radius = 22;
+
+        if (m.type === 'NADH') { bg = '#0284c7'; }
+        else if (m.type === 'NAD+') { bg = '#475569'; radius = 18; }
+        else if (m.type === 'FADH₂') { bg = '#7e22ce'; }
+        else if (m.type === 'FAD') { bg = '#475569'; radius = 18; }
+        else if (m.type === 'H₂O') { bg = '#0ea5e9'; radius = 19; }
+        else if (m.type === 'ATP') {
+            bg = '#facc15'; fg = '#0f172a'; radius = 25;
+            ctx.shadowColor = '#facc15';
+            ctx.shadowBlur = 20;
+        }
+
+        ctx.fillStyle = bg;
+        ctx.beginPath();
+        ctx.arc(m.x, m.y, radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = fg;
+        ctx.font = 'bold 12px sans-serif';
+        ctx.fillText(m.type, m.x, m.y + 4);
+        ctx.restore();
+    }
+}
+
+const sim = new Simulation();
+
+function animate() {
+    sim.update();
+    sim.draw();
+    requestAnimationFrame(animate);
+}
+
+animate();
+</script>
+</body>
+</html>

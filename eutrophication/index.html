@@ -1,0 +1,2092 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>水體優養化與湖泊自然演替動態模擬器</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Noto Sans TC', 'Inter', sans-serif;
+      background-color: #0f172a;
+      color: #f8fafc;
+      overflow-x: hidden;
+    }
+    .glass-panel {
+      background: rgba(30, 41, 59, 0.85);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(148, 163, 184, 0.15);
+    }
+    input[type="range"] {
+      accent-color: #10b981;
+    }
+    .stage-btn-active {
+      background: linear-gradient(135deg, #059669, #10b981);
+      color: white;
+      border-color: #34d399;
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+    }
+    .tab-active {
+      background: linear-gradient(135deg, #0284c7, #0ea5e9);
+      color: white;
+      box-shadow: 0 4px 15px rgba(14, 165, 233, 0.35);
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- Header & Navigation Tabs -->
+  <header class="border-b border-slate-800 bg-slate-900/90 sticky top-0 z-30 backdrop-blur-md">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-cyan-500 flex items-center justify-center text-xl shadow-lg shadow-emerald-500/20">
+          🌊
+        </div>
+        <div>
+          <h1 class="text-lg sm:text-xl font-bold tracking-tight text-white">水體優養化與自然演替動態模擬器</h1>
+          <p class="text-xs text-slate-400">互動式生態系統模擬：農業肥料逕流、藻華爆發、水下缺氧與千百年湖泊演替</p>
+        </div>
+      </div>
+
+      <!-- Main Tabs -->
+      <nav class="flex bg-slate-800/90 p-1 rounded-xl border border-slate-700/70 self-start sm:self-auto">
+        <button id="tabBtnSim" class="px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all tab-active flex items-center gap-1.5">
+          <span>🧪</span>
+          <span>優養化動態模擬（人為加速）</span>
+        </button>
+        <button id="tabBtnSucc" class="px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold text-slate-300 hover:text-white transition-all flex items-center gap-1.5">
+          <span>⏳</span>
+          <span>自然水體演替過程（地質時間）</span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 py-5">
+
+    <!-- ==================== TAB 1: EUTROPHICATION SIMULATOR ==================== -->
+    <section id="viewSimulator" class="space-y-5">
+
+      <!-- Stage Progress Bar (5 Key Stages) -->
+      <div class="glass-panel rounded-2xl p-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" id="currentStageBadge">階段 1：清澈貧養水體</span>
+            <span class="text-xs text-slate-400">點擊下方階段可快速載入預設情境，或直接調整右側滑桿自由探索</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="btnAutoStory" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 transition flex items-center gap-1.5">
+              <span id="autoStoryIcon">▶</span>
+              <span id="autoStoryText">自動演示完整發生過程</span>
+            </button>
+            <button id="btnResetSim" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-700/70 hover:bg-slate-700 text-slate-200 border border-slate-600 transition">
+              ↺ 重置為清澈水體
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
+          <button data-preset="1" class="preset-stage-btn stage-btn-active text-left p-2.5 rounded-xl border border-slate-700/80 bg-slate-800/60 hover:bg-slate-800 transition">
+            <div class="text-xs font-bold">① 初始清澈期</div>
+            <div class="text-[11px] opacity-80 mt-0.5">陽光充足・溶氧均衡</div>
+          </button>
+          <button data-preset="2" class="preset-stage-btn text-left p-2.5 rounded-xl border border-slate-700/80 bg-slate-800/60 hover:bg-slate-800 transition text-slate-300">
+            <div class="text-xs font-bold">② 農業施肥與降雨</div>
+            <div class="text-[11px] opacity-80 mt-0.5">氮磷營養鹽沖刷入河</div>
+          </button>
+          <button data-preset="3" class="preset-stage-btn text-left p-2.5 rounded-xl border border-slate-700/80 bg-slate-800/60 hover:bg-slate-800 transition text-slate-300">
+            <div class="text-xs font-bold">③ 藻類過度繁殖</div>
+            <div class="text-[11px] opacity-80 mt-0.5">水華遮蔽陽光・水草萎縮</div>
+          </button>
+          <button data-preset="4" class="preset-stage-btn text-left p-2.5 rounded-xl border border-slate-700/80 bg-slate-800/60 hover:bg-slate-800 transition text-slate-300">
+            <div class="text-xs font-bold">④ 細菌分解與耗氧</div>
+            <div class="text-[11px] opacity-80 mt-0.5">藻屍沉底・好氧菌大量耗氧</div>
+          </button>
+          <button data-preset="5" class="preset-stage-btn col-span-2 sm:col-span-1 text-left p-2.5 rounded-xl border border-slate-700/80 bg-slate-800/60 hover:bg-slate-800 transition text-slate-300">
+            <div class="text-xs font-bold">⑤ 缺氧死亡區</div>
+            <div class="text-[11px] opacity-80 mt-0.5">魚蝦窒息・生態系崩潰</div>
+          </button>
+        </div>
+      </div>
+
+      <!-- Main Simulator Grid: Canvas Left + Controls Right -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+        <!-- Left 8 Cols: Interactive Ecosystem Canvas + Live Explanation Banner -->
+        <div class="lg:col-span-8 space-y-4">
+          <div class="glass-panel rounded-2xl overflow-hidden border border-slate-700/80 shadow-xl">
+            <!-- Canvas Top Status Bar -->
+            <div class="px-4 py-2.5 bg-slate-900/90 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div class="flex items-center gap-3">
+                <span class="font-semibold text-slate-200 flex items-center gap-1.5">
+                  <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" id="simStatusDot"></span>
+                  <span id="simStatusTitle">生態系即時橫切面（農田 → 逕流 → 湖泊水體）</span>
+                </span>
+              </div>
+              <div class="flex items-center gap-3 text-[11px] text-slate-300">
+                <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-full bg-amber-400"></span>氮磷營養鹽 (N/P)</span>
+                <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-full bg-lime-400"></span>浮游藻類</span>
+                <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-full bg-sky-300"></span>水中溶氧 (O₂)</span>
+                <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-full bg-rose-400"></span>好氧分解菌</span>
+              </div>
+            </div>
+
+            <!-- Interactive Canvas Wrapper -->
+            <div class="relative w-full h-[380px] sm:h-[430px] bg-slate-950" id="simCanvasContainer">
+              <canvas id="ecoCanvas" class="w-full h-full"></canvas>
+
+              <!-- Floating Instant Trigger Buttons on Canvas -->
+              <div class="absolute top-3 left-3 flex flex-wrap gap-2">
+                <button id="btnAddFertilizerBurst" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-500/90 hover:bg-amber-400 text-slate-950 shadow-lg transition flex items-center gap-1">
+                  🌾 立即播撒化學肥料 (+N, P)
+                </button>
+                <button id="btnTriggerRainstorm" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-sky-500/90 hover:bg-sky-400 text-slate-950 shadow-lg transition flex items-center gap-1">
+                  🌧️ 觸發暴雨沖刷逕流
+                </button>
+              </div>
+            </div>
+
+            <!-- Real-time Mechanism Callout Bar -->
+            <div class="p-4 bg-slate-900/95 border-t border-slate-800/90">
+              <div class="flex items-start gap-3">
+                <div class="text-2xl mt-0.5" id="mechanismEmoji">🌿</div>
+                <div class="flex-1">
+                  <div class="flex items-center gap-2">
+                    <h3 class="text-sm font-bold text-white" id="mechanismHeading">目前生態機制：營養鹽低，陽光直達水底，水草與魚類共生穩定</h3>
+                  </div>
+                  <p class="text-xs text-slate-300 mt-1 leading-relaxed" id="mechanismDesc">
+                    水中氮（N）、磷（P）濃度處於自然低水平，浮游藻類數量受限，水體清澈。陽光可穿透至湖底供沉水植物（水草）進行光合作用並釋放氧氣（DO > 8 mg/L），魚類與底棲蝦蟹擁有充足溶氧與棲地。
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Real-Time Chart & Mechanism Chain -->
+          <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+            <div class="md:col-span-7 glass-panel rounded-2xl p-4">
+              <div class="flex items-center justify-between mb-2">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-slate-300">📈 水質與生物指標時間序列趨勢</h3>
+                <span class="text-[11px] text-slate-400">即時動態紀錄</span>
+              </div>
+              <div class="relative h-56">
+                <canvas id="trendChart"></canvas>
+              </div>
+            </div>
+
+            <!-- Causal Chain Breakdown Card -->
+            <div class="md:col-span-5 glass-panel rounded-2xl p-4 flex flex-col justify-between">
+              <div>
+                <h3 class="text-xs font-bold uppercase tracking-wider text-slate-300 mb-2.5">🔗 優養化連鎖因果關係（即時燈號）</h3>
+                <div class="space-y-2 text-xs" id="causalChainList">
+                  <div id="chainStep1" class="p-2 rounded-lg border border-slate-700/80 bg-slate-800/50 flex items-center justify-between">
+                    <span>1. 農田過量施肥（氮肥 NO₃⁻、磷肥 PO₄³⁻）</span>
+                    <span class="chain-status px-2 py-0.5 rounded text-[10px] font-bold bg-slate-700 text-slate-300">低風險</span>
+                  </div>
+                  <div id="chainStep2" class="p-2 rounded-lg border border-slate-700/80 bg-slate-800/50 flex items-center justify-between">
+                    <span>2. 降雨地表逕流沖刷進入水體</span>
+                    <span class="chain-status px-2 py-0.5 rounded text-[10px] font-bold bg-slate-700 text-slate-300">平緩</span>
+                  </div>
+                  <div id="chainStep3" class="p-2 rounded-lg border border-slate-700/80 bg-slate-800/50 flex items-center justify-between">
+                    <span>3. 表面藻華爆發、遮蔽底層陽光</span>
+                    <span class="chain-status px-2 py-0.5 rounded text-[10px] font-bold bg-slate-700 text-slate-300">清澈</span>
+                  </div>
+                  <div id="chainStep4" class="p-2 rounded-lg border border-slate-700/80 bg-slate-800/50 flex items-center justify-between">
+                    <span>4. 底層水草枯死、好氧細菌分解耗氧</span>
+                    <span class="chain-status px-2 py-0.5 rounded text-[10px] font-bold bg-slate-700 text-slate-300">微弱</span>
+                  </div>
+                  <div id="chainStep5" class="p-2 rounded-lg border border-slate-700/80 bg-slate-800/50 flex items-center justify-between">
+                    <span>5. 水中溶氧耗盡（缺氧區）→ 魚蝦窒息</span>
+                    <span class="chain-status px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300">正常存活</span>
+                  </div>
+                </div>
+              </div>
+              <div class="mt-3 pt-2.5 border-t border-slate-700/60 text-[11px] text-slate-400">
+                💡 <strong>關鍵迷思澄清：</strong>藻類白天雖會行光合作用產氧，但僅限水表；真正造成全水層缺氧的主因是<strong>「水草因無光死亡」</strong>加上<strong>「大量藻類死後被好氧菌分解耗盡溶氧」</strong>。
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right 4 Cols: Environmental Parameter Sliders & Real-time Gauges -->
+        <div class="lg:col-span-4 space-y-4">
+
+          <!-- Parameter Controls Card -->
+          <div class="glass-panel rounded-2xl p-4 space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-700/70 pb-2.5">
+              <h2 class="text-sm font-bold text-white flex items-center gap-1.5">
+                <span>🎛️</span>
+                <span>環境與農業控制參數</span>
+              </h2>
+              <button id="btnPauseResume" class="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 transition">
+                ⏸ 暫停時間
+              </button>
+            </div>
+
+            <!-- Slider 1: Fertilizer Usage -->
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <label for="sliderFertilizer" class="font-medium text-amber-300">🌾 農業化學肥料施用量 (氮 N / 磷 P)</label>
+                <span id="valFertilizer" class="font-bold text-amber-400">15% (適量)</span>
+              </div>
+              <input id="sliderFertilizer" type="range" min="0" max="100" value="15" class="w-full h-2 bg-slate-700 rounded-lg cursor-pointer">
+              <p class="text-[11px] text-slate-400 mt-1">合成氮肥與磷肥施用過量時，土壤無法完全吸附，成為水體優養化的主要營養來源。</p>
+            </div>
+
+            <!-- Slider 2: Rainfall & Surface Runoff -->
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <label for="sliderRain" class="font-medium text-sky-300">🌧️ 降雨強度與地表逕流 (Runoff)</label>
+                <span id="valRain" class="font-bold text-sky-400">20% (微雨)</span>
+              </div>
+              <input id="sliderRain" type="range" min="0" max="100" value="20" class="w-full h-2 bg-slate-700 rounded-lg cursor-pointer">
+              <p class="text-[11px] text-slate-400 mt-1">降雨將農田表土的硝酸鹽與磷酸鹽沖刷進溝渠、河川與湖泊（非點源污染）。</p>
+            </div>
+
+            <!-- Slider 3: Water Temperature -->
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <label for="sliderTemp" class="font-medium text-orange-300">🌡️ 水溫與日照強度 (Temperature)</label>
+                <span id="valTemp" class="font-bold text-orange-400">22°C</span>
+              </div>
+              <input id="sliderTemp" type="range" min="10" max="36" value="22" class="w-full h-2 bg-slate-700 rounded-lg cursor-pointer">
+              <p class="text-[11px] text-slate-400 mt-1">水溫升高會加速藍綠藻分裂繁殖，同時降低氧氣在水中的物理溶解度。</p>
+            </div>
+
+            <!-- Slider 4: Riparian Buffer / Wastewater Treatment -->
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <label for="sliderBuffer" class="font-medium text-emerald-300">🌳 河岸植生緩衝帶與污水攔截率</label>
+                <span id="valBuffer" class="font-bold text-emerald-400">60% (良好)</span>
+              </div>
+              <input id="sliderBuffer" type="range" min="0" max="90" value="60" class="w-full h-2 bg-slate-700 rounded-lg cursor-pointer">
+              <p class="text-[11px] text-slate-400 mt-1">河岸濕地與植生緩衝帶可在肥料流入湖泊前吸收並攔截部分氮、磷營養鹽。</p>
+            </div>
+          </div>
+
+          <!-- Real-Time Ecosystem Metrics Card -->
+          <div class="glass-panel rounded-2xl p-4 space-y-3">
+            <h2 class="text-sm font-bold text-white border-b border-slate-700/70 pb-2 flex items-center justify-between">
+              <span>📊 水體生態即時監測數據</span>
+              <span id="trophicStateBadge" class="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">貧養 (Oligotrophic)</span>
+            </h2>
+
+            <!-- Metric 1: Nutrient N/P -->
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-slate-300">水中氮磷營養鹽濃度 (N & P)</span>
+                <span id="metricNutrients" class="font-mono font-bold text-amber-400">0.18 mg/L</span>
+              </div>
+              <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                <div id="barNutrients" class="h-full bg-amber-400 transition-all duration-300" style="width: 12%"></div>
+              </div>
+            </div>
+
+            <!-- Metric 2: Surface Algae Biomass -->
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-slate-300">浮游藻類密度 (葉綠素 Chl-a)</span>
+                <span id="metricAlgae" class="font-mono font-bold text-lime-400">4.2 μg/L</span>
+              </div>
+              <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                <div id="barAlgae" class="h-full bg-lime-400 transition-all duration-300" style="width: 8%"></div>
+              </div>
+            </div>
+
+            <!-- Metric 3: Sunlight Penetration -->
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-slate-300">底層透光度 (Secchi 水深透光率)</span>
+                <span id="metricLight" class="font-mono font-bold text-yellow-300">92%</span>
+              </div>
+              <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                <div id="barLight" class="h-full bg-yellow-300 transition-all duration-300" style="width: 92%"></div>
+              </div>
+            </div>
+
+            <!-- Metric 4: Aerobic Decomposer Bacteria -->
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-slate-300">底層好氧分解菌活性 (BOD 耗氧)</span>
+                <span id="metricBacteria" class="font-mono font-bold text-rose-400">低 (12%)</span>
+              </div>
+              <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                <div id="barBacteria" class="h-full bg-rose-500 transition-all duration-300" style="width: 12%"></div>
+              </div>
+            </div>
+
+            <!-- Metric 5: Dissolved Oxygen (DO) -->
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <span class="text-slate-300">水中溶氧量 (Dissolved Oxygen)</span>
+                <span id="metricDO" class="font-mono font-bold text-sky-300">8.8 mg/L</span>
+              </div>
+              <div class="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden relative">
+                <div id="barDO" class="h-full bg-sky-400 transition-all duration-300" style="width: 88%"></div>
+              </div>
+              <div class="flex justify-between text-[10px] text-slate-400 mt-0.5">
+                <span>0 mg/L (無氧死區)</span>
+                <span class="text-rose-400">4 mg/L (警戒)</span>
+                <span>10 mg/L (飽和高氧)</span>
+              </div>
+            </div>
+
+            <!-- Metric 6: Fish & Aquatic Survival -->
+            <div class="pt-1 border-t border-slate-800 flex items-center justify-between text-xs">
+              <span class="text-slate-300">🐟 水生生物（魚類/蝦蟹/水草）健康度</span>
+              <span id="metricBiodiversity" class="font-bold text-emerald-400">96% 蓬勃穩定</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 2: NATURAL LAKE SUCCESSION ==================== -->
+    <section id="viewSuccession" class="hidden space-y-6">
+
+      <!-- Top Banner Explaining Natural vs Cultural Eutrophication -->
+      <div class="glass-panel rounded-2xl p-5 border border-sky-500/30">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
+          <div class="lg:col-span-8 space-y-2">
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-500/20 text-sky-300 text-xs font-bold border border-sky-500/30">
+              <span>🌍 生態學核心觀念</span>
+              <span>優養化也是「自然水體演替（Hydrarch Succession）」的一部分</span>
+            </div>
+            <h2 class="text-lg sm:text-xl font-bold text-white">為什麼說「優養化」原本是湖泊老化的自然演替過程？</h2>
+            <p class="text-xs sm:text-sm text-slate-300 leading-relaxed">
+              在沒有人類干擾的自然界中，任何新形成的湖泊（如冰蝕湖、構造湖或火山口湖）剛誕生時都是水深、冰冷且缺乏養分的<strong>「貧養湖（Oligotrophic lake）」</strong>。隨著數千年至數萬年的歲月流逝，周圍集水區的岩石風化、落葉與土壤礦物質隨溪流緩慢匯入湖中，加上湖內動植物遺骸年復一年沉積於湖底，水體養分自然增加、湖盆逐漸變淺，最終演替為<strong>沼澤（Swamp/Marsh）</strong>甚至<strong>陸地森林（Climax Forest）</strong>。
+            </p>
+          </div>
+          <div class="lg:col-span-4 bg-slate-900/90 p-4 rounded-xl border border-slate-700/80 space-y-2 text-xs">
+            <div class="font-bold text-white text-sm mb-1">⚡ 自然優養化 vs. 人為（文化）優養化</div>
+            <div class="p-2 rounded-lg bg-emerald-950/60 border border-emerald-700/50">
+              <span class="font-bold text-emerald-300">⏳ 自然優養化 (Natural Eutrophication)：</span>
+              <p class="text-slate-300 mt-0.5">耗時<strong>數千年至數萬年</strong>，生物群落有充足時間適應與演替（冷水性魚類 → 溫水性魚類 → 濕地兩棲與水鳥）。</p>
+            </div>
+            <div class="p-2 rounded-lg bg-rose-950/60 border border-rose-700/50">
+              <span class="font-bold text-rose-300">🚜 人為優養化 (Cultural Eutrophication)：</span>
+              <p class="text-slate-300 mt-0.5">因農業肥料、畜牧廢水與家庭污水排入，在<strong>數週至數十年內</strong>暴衝完成，導致生態系來不及演替即崩潰缺氧。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Interactive Geological Timeline Simulator -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+        <!-- Left 8 Cols: Succession Cross-Section Canvas & Timeline Slider -->
+        <div class="lg:col-span-8 space-y-4">
+          <div class="glass-panel rounded-2xl overflow-hidden border border-slate-700/80 shadow-xl">
+            <div class="px-4 py-3 bg-slate-900/90 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30" id="succStageBadge">演替階段 1 / 5：年輕貧養湖</span>
+                <span class="text-xs text-slate-300 font-mono" id="succTimeLabel">地質時間：距今約 0 ~ 500 年</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <button id="btnPlaySuccession" class="px-3 py-1 rounded-lg text-xs font-semibold bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 transition">
+                  ▶ 自動播放萬年演替
+                </button>
+              </div>
+            </div>
+
+            <!-- Geological Cross-Section Canvas -->
+            <div class="relative w-full h-[360px] sm:h-[400px] bg-slate-950" id="succCanvasContainer">
+              <canvas id="succCanvas" class="w-full h-full"></canvas>
+            </div>
+
+            <!-- Interactive Time Scrubbing Bar -->
+            <div class="p-4 bg-slate-900/95 border-t border-slate-800 space-y-3">
+              <div class="flex items-center justify-between text-xs">
+                <span class="font-bold text-sky-300">🕰️ 拖曳時間軸：觀察湖泊歷經 10,000 年的自然填平與生態演替</span>
+                <span id="succYearDisplay" class="font-mono font-bold text-sm text-amber-300">第 0 年（初始深水湖盆）</span>
+              </div>
+              <input id="sliderSuccessionYear" type="range" min="0" max="10000" step="50" value="0" class="w-full h-2.5 bg-slate-700 rounded-lg cursor-pointer">
+
+              <!-- Quick Stage Jump Buttons -->
+              <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1">
+                <button data-succ-year="200" class="succ-jump-btn stage-btn-active text-left p-2 rounded-xl border border-slate-700 text-xs transition">
+                  <div class="font-bold">① 貧養湖期</div>
+                  <div class="text-[10px] opacity-80">0 ~ 1,500 年</div>
+                </button>
+                <button data-succ-year="2800" class="succ-jump-btn text-left p-2 rounded-xl border border-slate-700 bg-slate-800/70 text-slate-300 text-xs transition">
+                  <div class="font-bold">② 中養湖期</div>
+                  <div class="text-[10px] opacity-80">1,500 ~ 4,000 年</div>
+                </button>
+                <button data-succ-year="5500" class="succ-jump-btn text-left p-2 rounded-xl border border-slate-700 bg-slate-800/70 text-slate-300 text-xs transition">
+                  <div class="font-bold">③ 自然優養湖</div>
+                  <div class="text-[10px] opacity-80">4,000 ~ 7,000 年</div>
+                </button>
+                <button data-succ-year="8000" class="succ-jump-btn text-left p-2 rounded-xl border border-slate-700 bg-slate-800/70 text-slate-300 text-xs transition">
+                  <div class="font-bold">④ 蘆葦沼澤濕地</div>
+                  <div class="text-[10px] opacity-80">7,000 ~ 9,000 年</div>
+                </button>
+                <button data-succ-year="9800" class="succ-jump-btn col-span-2 sm:col-span-1 text-left p-2 rounded-xl border border-slate-700 bg-slate-800/70 text-slate-300 text-xs transition">
+                  <div class="font-bold">⑤ 陸化森林群落</div>
+                  <div class="text-[10px] opacity-80">9,000 ~ 10,000+ 年</div>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right 4 Cols: Detailed Ecological Stage Info & Comparison Table -->
+        <div class="lg:col-span-4 space-y-4">
+          <div class="glass-panel rounded-2xl p-4 space-y-3">
+            <h3 class="text-sm font-bold text-white border-b border-slate-700/80 pb-2" id="succDetailTitle">
+              🏔️ 階段一：貧養湖 (Oligotrophic Lake)
+            </h3>
+            <p class="text-xs text-slate-300 leading-relaxed" id="succDetailText">
+              剛由地殼構造或冰川作用形成的深水湖泊。湖底皆為堅硬岩床與礫石，有機沉積物極少。水體透明度極高，陽光可深達十餘公尺，表層至底層皆富含溶氧。
+            </p>
+
+            <div class="space-y-2.5 pt-2 border-t border-slate-800 text-xs">
+              <div>
+                <div class="flex justify-between mb-1">
+                  <span class="text-slate-400">平均剩餘水深</span>
+                  <span id="succDepthVal" class="font-mono font-bold text-sky-300">24.5 公尺</span>
+                </div>
+                <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                  <div id="succBarDepth" class="h-full bg-sky-400 transition-all" style="width: 98%"></div>
+                </div>
+              </div>
+
+              <div>
+                <div class="flex justify-between mb-1">
+                  <span class="text-slate-400">湖底有機腐殖質與泥沙淤積厚度</span>
+                  <span id="succSedimentVal" class="font-mono font-bold text-amber-400">0.5 公尺 (極薄)</span>
+                </div>
+                <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                  <div id="succBarSediment" class="h-full bg-amber-500 transition-all" style="width: 2%"></div>
+                </div>
+              </div>
+
+              <div>
+                <div class="flex justify-between mb-1">
+                  <span class="text-slate-400">水生與濕地植物覆蓋度</span>
+                  <span id="succPlantVal" class="font-mono font-bold text-emerald-400">12% (零星深水苔蘚)</span>
+                </div>
+                <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                  <div id="succBarPlant" class="h-full bg-emerald-500 transition-all" style="width: 12%"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="p-3 rounded-xl bg-slate-900/90 border border-slate-700/70 space-y-1.5 text-xs">
+              <div class="font-bold text-emerald-300">🌱 代表性植物群落演替：</div>
+              <div id="succFloraText" class="text-slate-300">矽藻、深水輪藻（少數耐貧養植物）</div>
+              <div class="font-bold text-sky-300 pt-1">🐟 代表性動物群落演替：</div>
+              <div id="succFaunaText" class="text-slate-300">櫻花鉤吻鮭、鱒魚等需高溶氧、冷水性的深水魚類</div>
+            </div>
+          </div>
+
+          <!-- Comparison Table Card -->
+          <div class="glass-panel rounded-2xl p-4">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-300 mb-3">📋 自然水體演替 vs. 農業肥料優養化比較表</h3>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr class="border-b border-slate-700 text-slate-300">
+                    <th class="py-2 pr-2">比較項目</th>
+                    <th class="py-2 px-2 text-emerald-300">自然水體演替</th>
+                    <th class="py-2 pl-2 text-rose-300">人為農業優養化</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800 text-slate-300 text-[11px]">
+                  <tr>
+                    <td class="py-2 pr-2 font-semibold text-white">時間尺度</td>
+                    <td class="py-2 px-2">數千年 ～ 數萬年</td>
+                    <td class="py-2 pl-2">數週 ～ 數十年</td>
+                  </tr>
+                  <tr>
+                    <td class="py-2 pr-2 font-semibold text-white">主要養分來源</td>
+                    <td class="py-2 px-2">岩石自然風化、森林落葉腐殖質</td>
+                    <td class="py-2 pl-2">化學氮磷肥逕流、畜牧與生活污水</td>
+                  </tr>
+                  <tr>
+                    <td class="py-2 pr-2 font-semibold text-white">水深與底泥變化</td>
+                    <td class="py-2 px-2">泥沙與有機質緩慢填平湖盆→濕地</td>
+                    <td class="py-2 pl-2">藻屍大量沉積發臭，底泥快速厭氧黑化</td>
+                  </tr>
+                  <tr>
+                    <td class="py-2 pr-2 font-semibold text-white">生物多樣性</td>
+                    <td class="py-2 px-2">隨棲地轉變而更替（魚類→兩棲→陸生）</td>
+                    <td class="py-2 pl-2">單一毒藻壟斷，魚蝦因缺氧集體暴斃</td>
+                  </tr>
+                  <tr>
+                    <td class="py-2 pr-2 font-semibold text-white">可逆性與管理</td>
+                    <td class="py-2 px-2">地質與生態自然演進趨勢</td>
+                    <td class="py-2 pl-2">可透過精準施肥、植生緩衝帶與污水處理逆轉</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    // =========================================================================
+    // TAB SWITCHING LOGIC
+    // =========================================================================
+    const tabBtnSim = document.getElementById('tabBtnSim');
+    const tabBtnSucc = document.getElementById('tabBtnSucc');
+    const viewSimulator = document.getElementById('viewSimulator');
+    const viewSuccession = document.getElementById('viewSuccession');
+
+    let activeTab = 'sim';
+
+    function switchTab(tab) {
+      activeTab = tab;
+      if (tab === 'sim') {
+        viewSimulator.classList.remove('hidden');
+        viewSuccession.classList.add('hidden');
+        tabBtnSim.classList.add('tab-active');
+        tabBtnSim.classList.remove('text-slate-300');
+        tabBtnSucc.classList.remove('tab-active');
+        tabBtnSucc.classList.add('text-slate-300');
+        resizeSimCanvas();
+      } else {
+        viewSimulator.classList.add('hidden');
+        viewSuccession.classList.remove('hidden');
+        tabBtnSucc.classList.add('tab-active');
+        tabBtnSucc.classList.remove('text-slate-300');
+        tabBtnSim.classList.remove('tab-active');
+        tabBtnSim.classList.add('text-slate-300');
+        resizeSuccCanvas();
+      }
+    }
+
+    tabBtnSim.addEventListener('click', () => switchTab('sim'));
+    tabBtnSucc.addEventListener('click', () => switchTab('succ'));
+
+    // =========================================================================
+    // PART 1: EUTROPHICATION DYNAMIC ECOSYSTEM SIMULATOR
+    // =========================================================================
+    const simState = {
+      paused: false,
+      autoStory: false,
+      autoStoryTimer: 0,
+      autoStoryStep: 1,
+      // User controls
+      fertilizerInput: 15, // 0 - 100
+      rainInput: 20,       // 0 - 100
+      tempInput: 22,       // 10 - 36 C
+      bufferInput: 60,     // 0 - 90 %
+      // Dynamic ecological variables (0 - 100 scale internal, mapped to real units)
+      soilNutrientPool: 18,
+      waterNutrients: 12,  // N & P in water (0 - 100)
+      algaeBiomass: 8,     // Surface phytoplankton bloom (0 - 100)
+      sunlightBottom: 92,  // Light reaching bottom macrophytes (0 - 100)
+      macrophytesHealth: 95, // Bottom seagrass/waterweeds (0 - 100)
+      organicDetritus: 8,  // Dead algae & dead plant matter sinking (0 - 100)
+      bacteriaActivity: 10,// Aerobic decomposer bacteria (0 - 100)
+      dissolvedOxygen: 8.8,// DO in mg/L (0.0 - 10.5)
+      fishHealth: 96       // Aquatic survival index (0 - 100)
+    };
+
+    // Controls DOM Elements
+    const sliderFertilizer = document.getElementById('sliderFertilizer');
+    const sliderRain = document.getElementById('sliderRain');
+    const sliderTemp = document.getElementById('sliderTemp');
+    const sliderBuffer = document.getElementById('sliderBuffer');
+
+    const valFertilizer = document.getElementById('valFertilizer');
+    const valRain = document.getElementById('valRain');
+    const valTemp = document.getElementById('valTemp');
+    const valBuffer = document.getElementById('valBuffer');
+
+    function updateControlLabels() {
+      const f = simState.fertilizerInput;
+      let fLabel = f < 25 ? '適量' : f < 60 ? '偏高' : '嚴重過量';
+      valFertilizer.textContent = `${f}% (${fLabel})`;
+
+      const r = simState.rainInput;
+      let rLabel = r < 20 ? '乾燥/微雨' : r < 55 ? '中雨逕流' : '豪雨沖刷';
+      valRain.textContent = `${r}% (${rLabel})`;
+
+      valTemp.textContent = `${simState.tempInput}°C`;
+
+      const b = simState.bufferInput;
+      let bLabel = b < 25 ? '缺乏攔截' : b < 60 ? '中等緩衝' : '良好攔截';
+      valBuffer.textContent = `${b}% (${bLabel})`;
+    }
+
+    sliderFertilizer.addEventListener('input', (e) => {
+      simState.fertilizerInput = Number(e.target.value);
+      stopAutoStory();
+      updateControlLabels();
+    });
+    sliderRain.addEventListener('input', (e) => {
+      simState.rainInput = Number(e.target.value);
+      stopAutoStory();
+      updateControlLabels();
+    });
+    sliderTemp.addEventListener('input', (e) => {
+      simState.tempInput = Number(e.target.value);
+      stopAutoStory();
+      updateControlLabels();
+    });
+    sliderBuffer.addEventListener('input', (e) => {
+      simState.bufferInput = Number(e.target.value);
+      stopAutoStory();
+      updateControlLabels();
+    });
+
+    // Preset Stages (1 to 5)
+    const presetButtons = document.querySelectorAll('.preset-stage-btn');
+    function applyPresetStage(stageNum, fromAutoStory = false) {
+      if (!fromAutoStory) stopAutoStory();
+
+      presetButtons.forEach(btn => {
+        if (Number(btn.dataset.preset) === stageNum) {
+          btn.classList.add('stage-btn-active');
+          btn.classList.remove('text-slate-300');
+        } else {
+          btn.classList.remove('stage-btn-active');
+          btn.classList.add('text-slate-300');
+        }
+      });
+
+      if (stageNum === 1) {
+        // Clean Oligotrophic State
+        simState.fertilizerInput = 12;
+        simState.rainInput = 18;
+        simState.tempInput = 20;
+        simState.bufferInput = 70;
+        simState.soilNutrientPool = 15;
+        simState.waterNutrients = 10;
+        simState.algaeBiomass = 7;
+        simState.organicDetritus = 6;
+        simState.bacteriaActivity = 9;
+        simState.dissolvedOxygen = 9.0;
+        simState.macrophytesHealth = 96;
+        simState.fishHealth = 98;
+      } else if (stageNum === 2) {
+        // Agricultural Fertilizer & Runoff Surge
+        simState.fertilizerInput = 85;
+        simState.rainInput = 80;
+        simState.tempInput = 25;
+        simState.bufferInput = 15;
+        simState.soilNutrientPool = 80;
+        simState.waterNutrients = 68;
+        simState.algaeBiomass = 28;
+        simState.organicDetritus = 15;
+        simState.bacteriaActivity = 20;
+        simState.dissolvedOxygen = 7.4;
+        simState.macrophytesHealth = 82;
+        simState.fishHealth = 88;
+        spawnRunoffParticles(35);
+      } else if (stageNum === 3) {
+        // Algal Bloom & Sunlight Blockage
+        simState.fertilizerInput = 85;
+        simState.rainInput = 65;
+        simState.tempInput = 30;
+        simState.bufferInput = 10;
+        simState.soilNutrientPool = 75;
+        simState.waterNutrients = 82;
+        simState.algaeBiomass = 88;
+        simState.organicDetritus = 42;
+        simState.bacteriaActivity = 45;
+        simState.dissolvedOxygen = 5.2;
+        simState.macrophytesHealth = 35;
+        simState.fishHealth = 62;
+      } else if (stageNum === 4) {
+        // Detritus Decomposition & Bacterial O2 Depletion
+        simState.fertilizerInput = 80;
+        simState.rainInput = 55;
+        simState.tempInput = 31;
+        simState.bufferInput = 10;
+        simState.soilNutrientPool = 70;
+        simState.waterNutrients = 78;
+        simState.algaeBiomass = 85;
+        simState.organicDetritus = 86;
+        simState.bacteriaActivity = 90;
+        simState.dissolvedOxygen = 2.6;
+        simState.macrophytesHealth = 14;
+        simState.fishHealth = 30;
+      } else if (stageNum === 5) {
+        // Hypoxic Dead Zone
+        simState.fertilizerInput = 90;
+        simState.rainInput = 70;
+        simState.tempInput = 33;
+        simState.bufferInput = 5;
+        simState.soilNutrientPool = 85;
+        simState.waterNutrients = 92;
+        simState.algaeBiomass = 95;
+        simState.organicDetritus = 95;
+        simState.bacteriaActivity = 96;
+        simState.dissolvedOxygen = 0.8;
+        simState.macrophytesHealth = 4;
+        simState.fishHealth = 5;
+      }
+
+      sliderFertilizer.value = simState.fertilizerInput;
+      sliderRain.value = simState.rainInput;
+      sliderTemp.value = simState.tempInput;
+      sliderBuffer.value = simState.bufferInput;
+      updateControlLabels();
+      updateDashboardUI();
+    }
+
+    presetButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        applyPresetStage(Number(btn.dataset.preset), false);
+      });
+    });
+
+    // Instant Action Buttons on Canvas
+    document.getElementById('btnAddFertilizerBurst').addEventListener('click', () => {
+      simState.fertilizerInput = Math.min(100, simState.fertilizerInput + 30);
+      simState.soilNutrientPool = Math.min(100, simState.soilNutrientPool + 35);
+      sliderFertilizer.value = simState.fertilizerInput;
+      updateControlLabels();
+      spawnFertilizerGranules(30);
+    });
+
+    document.getElementById('btnTriggerRainstorm').addEventListener('click', () => {
+      simState.rainInput = Math.min(100, Math.max(75, simState.rainInput + 35));
+      sliderRain.value = simState.rainInput;
+      updateControlLabels();
+      spawnRunoffParticles(40);
+    });
+
+    document.getElementById('btnResetSim').addEventListener('click', () => {
+      applyPresetStage(1, false);
+    });
+
+    const btnPauseResume = document.getElementById('btnPauseResume');
+    btnPauseResume.addEventListener('click', () => {
+      simState.paused = !simState.paused;
+      btnPauseResume.textContent = simState.paused ? '▶ 繼續模擬' : '⏸ 暫停時間';
+    });
+
+    // Auto Story Mode
+    const btnAutoStory = document.getElementById('btnAutoStory');
+    const autoStoryIcon = document.getElementById('autoStoryIcon');
+    const autoStoryText = document.getElementById('autoStoryText');
+
+    function stopAutoStory() {
+      if (simState.autoStory) {
+        simState.autoStory = false;
+        autoStoryIcon.textContent = '▶';
+        autoStoryText.textContent = '自動演示完整發生過程';
+      }
+    }
+
+    btnAutoStory.addEventListener('click', () => {
+      if (simState.autoStory) {
+        stopAutoStory();
+      } else {
+        simState.autoStory = true;
+        simState.paused = false;
+        btnPauseResume.textContent = '⏸ 暫停時間';
+        simState.autoStoryStep = 1;
+        simState.autoStoryTimer = 0;
+        autoStoryIcon.textContent = '⏹';
+        autoStoryText.textContent = '停止自動演示 (階段 1/5)';
+        applyPresetStage(1, true);
+      }
+    });
+
+    // =========================================================================
+    // CHART.JS REAL-TIME TIME SERIES
+    // =========================================================================
+    const ctxChart = document.getElementById('trendChart').getContext('2d');
+    const maxDataPoints = 40;
+    const initialLabels = Array.from({ length: maxDataPoints }, (_, i) => '');
+
+    const trendChart = new Chart(ctxChart, {
+      type: 'line',
+      data: {
+        labels: [...initialLabels],
+        datasets: [
+          {
+            label: '氮磷營養鹽 (%)',
+            data: Array(maxDataPoints).fill(12),
+            borderColor: '#fbbf24',
+            backgroundColor: 'rgba(251, 191, 36, 0.1)',
+            borderWidth: 2,
+            tension: 0.35,
+            pointRadius: 0
+          },
+          {
+            label: '浮游藻類密度 (%)',
+            data: Array(maxDataPoints).fill(8),
+            borderColor: '#a3e635',
+            backgroundColor: 'rgba(163, 230, 53, 0.1)',
+            borderWidth: 2,
+            tension: 0.35,
+            pointRadius: 0
+          },
+          {
+            label: '水中溶氧 DO (x10%)',
+            data: Array(maxDataPoints).fill(88),
+            borderColor: '#38bdf8',
+            backgroundColor: 'rgba(56, 189, 248, 0.1)',
+            borderWidth: 2.5,
+            tension: 0.35,
+            pointRadius: 0
+          },
+          {
+            label: '魚蝦水草存活率 (%)',
+            data: Array(maxDataPoints).fill(96),
+            borderColor: '#34d399',
+            borderDash: [4, 3],
+            borderWidth: 2,
+            tension: 0.35,
+            pointRadius: 0
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: {
+            labels: { color: '#cbd5e1', font: { size: 10 }, boxWidth: 10, padding: 8 }
+          }
+        },
+        scales: {
+          x: { display: false },
+          y: {
+            min: 0,
+            max: 100,
+            grid: { color: 'rgba(148, 163, 184, 0.1)' },
+            ticks: { color: '#94a3b8', font: { size: 10 }, stepSize: 25 }
+          }
+        }
+      }
+    });
+
+    function pushChartData() {
+      const ds = trendChart.data.datasets;
+      ds[0].data.push(Math.round(simState.waterNutrients));
+      ds[0].data.shift();
+
+      ds[1].data.push(Math.round(simState.algaeBiomass));
+      ds[1].data.shift();
+
+      ds[2].data.push(Math.round(simState.dissolvedOxygen * 10));
+      ds[2].data.shift();
+
+      ds[3].data.push(Math.round(simState.fishHealth));
+      ds[3].data.shift();
+
+      trendChart.update();
+    }
+
+    // =========================================================================
+    // ECOLOGICAL DIFFERENTIAL EQUATION STEPPER
+    // =========================================================================
+    let simTickCounter = 0;
+
+    function updateEcologicalPhysics(dt) {
+      if (simState.paused) return;
+
+      // Auto story progression every ~4.5 seconds
+      if (simState.autoStory) {
+        simState.autoStoryTimer += dt;
+        if (simState.autoStoryTimer > 4.5) {
+          simState.autoStoryTimer = 0;
+          simState.autoStoryStep++;
+          if (simState.autoStoryStep > 5) {
+            simState.autoStoryStep = 1;
+          }
+          autoStoryText.textContent = `停止自動演示 (階段 ${simState.autoStoryStep}/5)`;
+          applyPresetStage(simState.autoStoryStep, true);
+        }
+      }
+
+      // 1. Soil nutrient accumulation from fertilizer application
+      const targetSoil = simState.fertilizerInput;
+      simState.soilNutrientPool += (targetSoil - simState.soilNutrientPool) * 0.6 * dt;
+
+      // 2. Runoff transport from farmland soil to lake water, mitigated by riparian buffer
+      const bufferFactor = 1 - (simState.bufferInput / 100) * 0.85;
+      const runoffFlux = (simState.soilNutrientPool * (simState.rainInput / 100) * bufferFactor);
+      const naturalDecay = simState.waterNutrients * 0.18;
+      const algaeUptake = simState.algaeBiomass * 0.08;
+      const targetWaterNutrients = Math.min(100, Math.max(4, runoffFlux * 1.35));
+      simState.waterNutrients += (targetWaterNutrients - simState.waterNutrients - naturalDecay * 0.05 - algaeUptake * 0.02) * 0.45 * dt;
+      simState.waterNutrients = Math.max(2, Math.min(100, simState.waterNutrients));
+
+      // 3. Phytoplankton (Algae) growth driven by Water Nutrients + Water Temperature
+      const tempMultiplier = 0.55 + ((simState.tempInput - 10) / 26) * 0.95; // warmer = faster algal bloom
+      const targetAlgae = Math.min(100, Math.pow(simState.waterNutrients / 100, 1.15) * 105 * tempMultiplier);
+      simState.algaeBiomass += (targetAlgae - simState.algaeBiomass) * 0.38 * dt;
+      simState.algaeBiomass = Math.max(3, Math.min(100, simState.algaeBiomass));
+
+      // 4. Sunlight Penetration to bottom (blocked exponentially by surface algal bloom)
+      simState.sunlightBottom = Math.max(2, Math.min(98, 100 - simState.algaeBiomass * 0.94));
+
+      // 5. Bottom Macrophytes (Seagrass/Waterweeds) health depends on bottom sunlight
+      const targetMacrophytes = simState.sunlightBottom > 35
+        ? Math.min(100, simState.sunlightBottom * 1.05)
+        : Math.max(2, simState.sunlightBottom * 0.45);
+      simState.macrophytesHealth += (targetMacrophytes - simState.macrophytesHealth) * 0.35 * dt;
+
+      // 6. Organic Detritus (dead algae + dying macrophytes sinking to sediment)
+      const targetDetritus = Math.min(100, simState.algaeBiomass * 0.72 + (100 - simState.macrophytesHealth) * 0.38);
+      simState.organicDetritus += (targetDetritus - simState.organicDetritus) * 0.32 * dt;
+
+      // 7. Aerobic Decomposer Bacteria Activity (feeds on detritus, accelerated by warm temp)
+      const targetBacteria = Math.min(100, simState.organicDetritus * (0.75 + (simState.tempInput - 10) / 65));
+      simState.bacteriaActivity += (targetBacteria - simState.bacteriaActivity) * 0.4 * dt;
+
+      // 8. Dissolved Oxygen (DO in mg/L)
+      // Oxygen saturation decreases with temperature, macrophytes add O2, bacterial decomposition consumes O2 heavily
+      const tempMaxDO = 10.2 - ((simState.tempInput - 10) / 26) * 2.4;
+      const macrophyteO2Contribution = (simState.macrophytesHealth / 100) * 1.8;
+      const bacterialO2Consumption = Math.pow(simState.bacteriaActivity / 100, 1.2) * 8.8;
+      const targetDO = Math.max(0.3, Math.min(10.0, tempMaxDO + macrophyteO2Contribution - bacterialO2Consumption));
+      simState.dissolvedOxygen += (targetDO - simState.dissolvedOxygen) * 0.42 * dt;
+
+      // 9. Fish & Benthic Invertebrates Health (collapses when DO < 4.0 mg/L)
+      let targetFish = 98;
+      if (simState.dissolvedOxygen >= 5.5) {
+        targetFish = 85 + (simState.dissolvedOxygen - 5.5) * 3;
+      } else if (simState.dissolvedOxygen >= 3.0) {
+        targetFish = 35 + ((simState.dissolvedOxygen - 3.0) / 2.5) * 50;
+      } else {
+        targetFish = Math.max(2, (simState.dissolvedOxygen / 3.0) * 32);
+      }
+      simState.fishHealth += (targetFish - simState.fishHealth) * 0.45 * dt;
+      simState.fishHealth = Math.max(2, Math.min(100, simState.fishHealth));
+
+      simTickCounter++;
+      if (simTickCounter % 15 === 0) {
+        updateDashboardUI();
+      }
+      if (simTickCounter % 35 === 0) {
+        pushChartData();
+      }
+    }
+
+    // =========================================================================
+    // UI DASHBOARD & CAUSAL CHAIN UPDATER
+    // =========================================================================
+    function setChainStepBadge(elementId, statusText, colorType) {
+      const container = document.getElementById(elementId);
+      const badge = container.querySelector('.chain-status');
+      badge.textContent = statusText;
+      badge.className = 'chain-status px-2 py-0.5 rounded text-[10px] font-bold ';
+      if (colorType === 'good') {
+        badge.className += 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+      } else if (colorType === 'warn') {
+        badge.className += 'bg-amber-500/20 text-amber-300 border border-amber-500/30';
+      } else {
+        badge.className += 'bg-rose-500/25 text-rose-300 border border-rose-500/40';
+      }
+    }
+
+    function updateDashboardUI() {
+      // Metrics text & progress bars
+      const npConcentration = (simState.waterNutrients * 0.035).toFixed(2);
+      document.getElementById('metricNutrients').textContent = `${npConcentration} mg/L`;
+      document.getElementById('barNutrients').style.width = `${simState.waterNutrients}%`;
+
+      const chla = (simState.algaeBiomass * 1.4).toFixed(1);
+      document.getElementById('metricAlgae').textContent = `${chla} μg/L`;
+      document.getElementById('barAlgae').style.width = `${simState.algaeBiomass}%`;
+
+      const lightPct = Math.round(simState.sunlightBottom);
+      document.getElementById('metricLight').textContent = `${lightPct}%`;
+      document.getElementById('barLight').style.width = `${lightPct}%`;
+
+      const bactPct = Math.round(simState.bacteriaActivity);
+      const bactLabel = bactPct < 30 ? '低' : bactPct < 65 ? '中度耗氧' : '劇烈耗氧';
+      document.getElementById('metricBacteria').textContent = `${bactLabel} (${bactPct}%)`;
+      document.getElementById('barBacteria').style.width = `${bactPct}%`;
+
+      const doVal = simState.dissolvedOxygen.toFixed(1);
+      const metricDO = document.getElementById('metricDO');
+      const barDO = document.getElementById('barDO');
+      metricDO.textContent = `${doVal} mg/L`;
+      barDO.style.width = `${Math.min(100, simState.dissolvedOxygen * 10)}%`;
+
+      if (simState.dissolvedOxygen < 2.5) {
+        metricDO.className = 'font-mono font-bold text-rose-400';
+        barDO.className = 'h-full bg-rose-500 transition-all duration-300';
+      } else if (simState.dissolvedOxygen < 5.0) {
+        metricDO.className = 'font-mono font-bold text-amber-400';
+        barDO.className = 'h-full bg-amber-400 transition-all duration-300';
+      } else {
+        metricDO.className = 'font-mono font-bold text-sky-300';
+        barDO.className = 'h-full bg-sky-400 transition-all duration-300';
+      }
+
+      const fishPct = Math.round(simState.fishHealth);
+      const bioEl = document.getElementById('metricBiodiversity');
+      if (fishPct > 75) {
+        bioEl.textContent = `${fishPct}% 蓬勃穩定`;
+        bioEl.className = 'font-bold text-emerald-400';
+      } else if (fishPct > 35) {
+        bioEl.textContent = `${fishPct}% 呼吸窘迫・浮頭`;
+        bioEl.className = 'font-bold text-amber-400';
+      } else {
+        bioEl.textContent = `${fishPct}% 嚴重缺氧・大量翻肚死亡`;
+        bioEl.className = 'font-bold text-rose-400';
+      }
+
+      // Trophic State Badge & Mechanism Explanation
+      const trophicBadge = document.getElementById('trophicStateBadge');
+      const stageBadge = document.getElementById('currentStageBadge');
+      const mechEmoji = document.getElementById('mechanismEmoji');
+      const mechHeading = document.getElementById('mechanismHeading');
+      const mechDesc = document.getElementById('mechanismDesc');
+
+      if (simState.dissolvedOxygen < 2.5) {
+        trophicBadge.textContent = '重度優養 / 缺氧死區 (Hypoxic Dead Zone)';
+        trophicBadge.className = 'text-[11px] px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40';
+        stageBadge.textContent = '階段 5：嚴重缺氧與水生生物窒息死亡';
+        stageBadge.className = 'text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40';
+        mechEmoji.textContent = '💀';
+        mechHeading.textContent = '目前生態機制：水中溶氧耗盡 (< 2 mg/L)，魚蝦窒息翻肚，形成水下死亡區';
+        mechDesc.textContent = '沉積在湖底的龐大藻類屍體與枯萎水草，被好氧性細菌分解時消耗了幾乎所有水中溶氧。魚類、蝦蟹等水生動物因缺氧窒息死亡，厭氧菌接手分解並釋放硫化氫（H₂S）與沼氣，水體發黑發臭。';
+      } else if (simState.bacteriaActivity > 55) {
+        trophicBadge.textContent = '優養化惡化期 (Deoxygenation)';
+        trophicBadge.className = 'text-[11px] px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-300 border border-orange-500/40';
+        stageBadge.textContent = '階段 4：藻屍沉底與細菌大量耗氧';
+        stageBadge.className = 'text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-orange-500/20 text-orange-300 border border-orange-500/40';
+        mechEmoji.textContent = '🦠';
+        mechHeading.textContent = '目前生態機制：底層水草枯死，好氧分解菌大量繁殖並急速抽乾水中溶氧';
+        mechDesc.textContent = '表面藻類生命週期短，大量死亡後與枯死的水草一同沉入湖底（有機碎屑暴增）。底層好氧細菌（Aerobic bacteria）分解這些有機物時大量消耗氧氣（生化需氧量 BOD 飆升），導致水底溶氧急遽下滑，魚群被迫浮上水面呼吸（浮頭現象）。';
+      } else if (simState.algaeBiomass > 48) {
+        trophicBadge.textContent = '優養化藻華期 (Algal Bloom)';
+        trophicBadge.className = 'text-[11px] px-2 py-0.5 rounded-full bg-lime-500/20 text-lime-300 border border-lime-500/40';
+        stageBadge.textContent = '階段 3：藻類過度繁殖（水華遮蔽陽光）';
+        stageBadge.className = 'text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-lime-500/20 text-lime-300 border border-lime-500/40';
+        mechEmoji.textContent = '🦠';
+        mechHeading.textContent = '目前生態機制：高濃度氮磷刺激浮游藻類爆發，形成綠色「水華」阻斷陽光';
+        mechDesc.textContent = '豐富的硝酸鹽（N）與磷酸鹽（P）加上溫暖水溫，使微囊藻、綠藻等浮游藻類呈指數級繁殖，覆蓋整個水面。水面宛如濃綠地毯，阻擋陽光穿透至水底，導致原本負責水下供氧的沉水植物（水草）無法行光合作用而開始萎縮死亡。';
+      } else if (simState.waterNutrients > 32) {
+        trophicBadge.textContent = '中養至優養過渡期 (Mesotrophic)';
+        trophicBadge.className = 'text-[11px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40';
+        stageBadge.textContent = '階段 2：農業肥料流失與營養鹽累積';
+        stageBadge.className = 'text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40';
+        mechEmoji.textContent = '🌧️';
+        mechHeading.textContent = '目前生態機制：雨水沖刷農田土壤，將過量氮、磷肥料帶入水體';
+        mechDesc.textContent = '農田施用的化學肥料（含氮 NO₃⁻、NH₄⁺ 與磷 PO₄³⁻）超出作物吸收能力，遇降雨形成地表逕流。若缺乏足夠的河岸植生緩衝帶攔截，高濃度營養鹽便直接匯入湖泊，為接下來的藻類爆發埋下導火線。';
+      } else {
+        trophicBadge.textContent = '清澈貧養 (Oligotrophic)';
+        trophicBadge.className = 'text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+        stageBadge.textContent = '階段 1：清澈貧養水體（生態平衡）';
+        stageBadge.className = 'text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+        mechEmoji.textContent = '🌿';
+        mechHeading.textContent = '目前生態機制：營養鹽低，陽光直達水底，水草與魚類共生穩定';
+        mechDesc.textContent = '水中氮（N）、磷（P）濃度處於自然低水平，浮游藻類數量受限，水體清澈。陽光可穿透至湖底供沉水植物（水草）進行光合作用並釋放氧氣（DO > 8 mg/L），魚類與底棲蝦蟹擁有充足溶氧與棲地。';
+      }
+
+      // Update Causal Chain Badges
+      setChainStepBadge('chainStep1',
+        simState.fertilizerInput < 30 ? '適量施肥' : simState.fertilizerInput < 65 ? '偏高殘留' : '嚴重過量',
+        simState.fertilizerInput < 30 ? 'good' : simState.fertilizerInput < 65 ? 'warn' : 'danger'
+      );
+      setChainStepBadge('chainStep2',
+        simState.waterNutrients < 28 ? '微量匯入' : simState.waterNutrients < 60 ? '營養鹽升高' : '高濃度湧入',
+        simState.waterNutrients < 28 ? 'good' : simState.waterNutrients < 60 ? 'warn' : 'danger'
+      );
+      setChainStepBadge('chainStep3',
+        simState.algaeBiomass < 30 ? '水體清澈' : simState.algaeBiomass < 65 ? '水色轉綠' : '濃密藻華遮光',
+        simState.algaeBiomass < 30 ? 'good' : simState.algaeBiomass < 65 ? 'warn' : 'danger'
+      );
+      setChainStepBadge('chainStep4',
+        simState.bacteriaActivity < 30 ? '自然代謝' : simState.bacteriaActivity < 65 ? '水草萎縮/耗氧增' : '細菌劇烈耗氧',
+        simState.bacteriaActivity < 30 ? 'good' : simState.bacteriaActivity < 65 ? 'warn' : 'danger'
+      );
+      setChainStepBadge('chainStep5',
+        simState.dissolvedOxygen >= 5.5 ? '溶氧充足' : simState.dissolvedOxygen >= 2.8 ? '低氧警戒' : '缺氧窒息死區',
+        simState.dissolvedOxygen >= 5.5 ? 'good' : simState.dissolvedOxygen >= 2.8 ? 'warn' : 'danger'
+      );
+    }
+
+    // =========================================================================
+    // CANVAS RENDERING FOR TAB 1 (ECOSYSTEM CROSS-SECTION)
+    // =========================================================================
+    const ecoCanvas = document.getElementById('ecoCanvas');
+    const ecoCtx = ecoCanvas.getContext('2d');
+
+    function resizeSimCanvas() {
+      const container = document.getElementById('simCanvasContainer');
+      const rect = container.getBoundingClientRect();
+      ecoCanvas.width = rect.width * window.devicePixelRatio;
+      ecoCanvas.height = rect.height * window.devicePixelRatio;
+      ecoCtx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
+    }
+
+    // Visual Particle Pools
+    const rainDrops = Array.from({ length: 70 }, () => ({
+      x: Math.random() * 900,
+      y: Math.random() * 200,
+      speed: 4 + Math.random() * 4
+    }));
+
+    const fertilizerGranules = [];
+    function spawnFertilizerGranules(count) {
+      for (let i = 0; i < count; i++) {
+        fertilizerGranules.push({
+          x: 20 + Math.random() * 170,
+          y: 110 + Math.random() * 45,
+          vx: (Math.random() - 0.5) * 0.6,
+          vy: 0.8 + Math.random() * 1.2,
+          life: 1.0,
+          type: Math.random() > 0.5 ? 'N' : 'P'
+        });
+      }
+    }
+
+    const runoffParticles = [];
+    function spawnRunoffParticles(count) {
+      for (let i = 0; i < count; i++) {
+        runoffParticles.push({
+          progress: Math.random() * 0.4,
+          speed: 0.004 + Math.random() * 0.006,
+          offsetY: (Math.random() - 0.5) * 8,
+          type: Math.random() > 0.45 ? 'N' : 'P'
+        });
+      }
+    }
+
+    const waterNutrientDots = Array.from({ length: 65 }, () => ({
+      xRatio: 0.34 + Math.random() * 0.62,
+      yRatio: 0.38 + Math.random() * 0.48,
+      vx: (Math.random() - 0.5) * 0.3,
+      vy: (Math.random() - 0.5) * 0.25,
+      type: Math.random() > 0.5 ? 'N' : 'P'
+    }));
+
+    const algaeParticles = Array.from({ length: 110 }, () => ({
+      xRatio: 0.32 + Math.random() * 0.65,
+      yRatio: 0.34 + Math.random() * 0.16,
+      radius: 2.5 + Math.random() * 4,
+      phase: Math.random() * Math.PI * 2
+    }));
+
+    const detritusParticles = Array.from({ length: 60 }, () => ({
+      xRatio: 0.35 + Math.random() * 0.60,
+      yRatio: 0.40 + Math.random() * 0.48,
+      speedY: 0.15 + Math.random() * 0.35,
+      size: 2 + Math.random() * 2.5
+    }));
+
+    const oxygenBubbles = Array.from({ length: 55 }, () => ({
+      xRatio: 0.36 + Math.random() * 0.58,
+      yRatio: 0.42 + Math.random() * 0.45,
+      speedY: 0.25 + Math.random() * 0.45,
+      r: 2 + Math.random() * 2.5
+    }));
+
+    const fishes = [
+      { xRatio: 0.48, yRatio: 0.58, dir: 1, speed: 0.0008, size: 16, color: '#fb923c', phase: 0 },
+      { xRatio: 0.65, yRatio: 0.68, dir: -1, speed: 0.0007, size: 15, color: '#38bdf8', phase: 1.5 },
+      { xRatio: 0.78, yRatio: 0.54, dir: -1, speed: 0.0009, size: 14, color: '#f472b6', phase: 3.1 },
+      { xRatio: 0.55, yRatio: 0.76, dir: 1, speed: 0.0006, size: 17, color: '#facc15', phase: 4.2 },
+      { xRatio: 0.84, yRatio: 0.70, dir: 1, speed: 0.00075, size: 13, color: '#a78bfa', phase: 2.2 }
+    ];
+
+    function drawFish(ctx, x, y, size, dir, color, isDead, isGasping, time) {
+      ctx.save();
+      ctx.translate(x, y);
+      if (dir < 0) ctx.scale(-1, 1);
+      if (isDead) {
+        ctx.scale(1, -1); // upside down belly-up
+      } else if (isGasping) {
+        ctx.rotate(-0.38); // angled up toward surface gasping
+      }
+
+      // Tail wag
+      const wag = isDead ? 0 : Math.sin(time * 6) * 3;
+      ctx.fillStyle = isDead ? '#94a3b8' : color;
+      ctx.beginPath();
+      ctx.moveTo(-size * 0.7, 0);
+      ctx.lineTo(-size * 1.25, -size * 0.45 + wag);
+      ctx.lineTo(-size * 1.25, size * 0.45 + wag);
+      ctx.closePath();
+      ctx.fill();
+
+      // Body
+      ctx.beginPath();
+      ctx.ellipse(0, 0, size * 0.85, size * 0.48, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Eye
+      ctx.fillStyle = '#0f172a';
+      if (isDead) {
+        // X eye
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(size * 0.35 - 2, -2);
+        ctx.lineTo(size * 0.35 + 2, 2);
+        ctx.moveTo(size * 0.35 + 2, -2);
+        ctx.lineTo(size * 0.35 - 2, 2);
+        ctx.stroke();
+      } else {
+        ctx.beginPath();
+        ctx.arc(size * 0.4, -size * 0.1, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function renderEcoCanvas(time) {
+      const w = ecoCanvas.width / window.devicePixelRatio;
+      const h = ecoCanvas.height / window.devicePixelRatio;
+      if (!w || !h) return;
+
+      ecoCtx.clearRect(0, 0, w, h);
+
+      const waterSurfaceY = h * 0.34;
+      const bankSlopeStartX = w * 0.24;
+      const bankSlopeEndX = w * 0.36;
+      const lakeBottomY = h * 0.88;
+
+      // 1. Sky Background (darkens slightly when heavy rain)
+      const rainRatio = simState.rainInput / 100;
+      const skyGrad = ecoCtx.createLinearGradient(0, 0, 0, waterSurfaceY);
+      skyGrad.addColorStop(0, rainRatio > 0.5 ? '#1e293b' : '#0284c7');
+      skyGrad.addColorStop(1, rainRatio > 0.5 ? '#475569' : '#bae6fd');
+      ecoCtx.fillStyle = skyGrad;
+      ecoCtx.fillRect(0, 0, w, waterSurfaceY);
+
+      // 2. Sun & Sunlight Rays into the Water
+      const sunX = w * 0.72;
+      const sunY = h * 0.11;
+      const sunHeatRatio = (simState.tempInput - 10) / 26;
+      ecoCtx.save();
+      ecoCtx.fillStyle = `rgba(253, 224, 71, ${0.9 - rainRatio * 0.4})`;
+      ecoCtx.beginPath();
+      ecoCtx.arc(sunX, sunY, 20 + sunHeatRatio * 6, 0, Math.PI * 2);
+      ecoCtx.fill();
+      ecoCtx.restore();
+
+      // 3. Water Body Color (shifts from crystal blue -> murky olive/green -> dark anoxic brown/black)
+      const algaeRatio = simState.algaeBiomass / 100;
+      const hypoxiaRatio = Math.max(0, Math.min(1, (4.5 - simState.dissolvedOxygen) / 4.0));
+
+      const topR = Math.round(14 + algaeRatio * 55);
+      const topG = Math.round(116 + algaeRatio * 40 - hypoxiaRatio * 50);
+      const topB = Math.round(144 - algaeRatio * 105);
+
+      const botR = Math.round(12 + hypoxiaRatio * 28);
+      const botG = Math.round(55 - hypoxiaRatio * 35);
+      const botB = Math.round(85 - algaeRatio * 55 - hypoxiaRatio * 20);
+
+      const waterGrad = ecoCtx.createLinearGradient(0, waterSurfaceY, 0, lakeBottomY);
+      waterGrad.addColorStop(0, `rgb(${topR}, ${topG}, ${topB})`);
+      waterGrad.addColorStop(1, `rgb(${botR}, ${botG}, ${botB})`);
+      ecoCtx.fillStyle = waterGrad;
+      ecoCtx.fillRect(bankSlopeStartX, waterSurfaceY, w - bankSlopeStartX, lakeBottomY - waterSurfaceY);
+
+      // 4. Sunlight Beams Penetrating Water (attenuated by surface algae)
+      const lightReachRatio = simState.sunlightBottom / 100;
+      ecoCtx.save();
+      for (let i = 0; i < 4; i++) {
+        const rayX = w * (0.45 + i * 0.12);
+        const rayDepth = (lakeBottomY - waterSurfaceY) * (0.22 + lightReachRatio * 0.78);
+        const rayGrad = ecoCtx.createLinearGradient(rayX, waterSurfaceY, rayX - 25, waterSurfaceY + rayDepth);
+        rayGrad.addColorStop(0, `rgba(254, 240, 138, ${0.26 * lightReachRatio})`);
+        rayGrad.addColorStop(1, 'rgba(254, 240, 138, 0)');
+        ecoCtx.fillStyle = rayGrad;
+        ecoCtx.beginPath();
+        ecoCtx.moveTo(rayX - 18, waterSurfaceY);
+        ecoCtx.lineTo(rayX + 18, waterSurfaceY);
+        ecoCtx.lineTo(rayX - 5, waterSurfaceY + rayDepth);
+        ecoCtx.lineTo(rayX - 45, waterSurfaceY + rayDepth);
+        ecoCtx.closePath();
+        ecoCtx.fill();
+      }
+      ecoCtx.restore();
+
+      // 5. Farmland Slope & Lake Bed Polygon
+      ecoCtx.fillStyle = '#3f2e21';
+      ecoCtx.beginPath();
+      ecoCtx.moveTo(0, h * 0.25);
+      ecoCtx.lineTo(bankSlopeStartX, waterSurfaceY - 4);
+      ecoCtx.lineTo(bankSlopeEndX, lakeBottomY);
+      ecoCtx.lineTo(w, lakeBottomY);
+      ecoCtx.lineTo(w, h);
+      ecoCtx.lineTo(0, h);
+      ecoCtx.closePath();
+      ecoCtx.fill();
+
+      // Topsoil green/brown agricultural field strip
+      ecoCtx.fillStyle = '#4d7c0f';
+      ecoCtx.beginPath();
+      ecoCtx.moveTo(0, h * 0.23);
+      ecoCtx.lineTo(bankSlopeStartX, waterSurfaceY - 4);
+      ecoCtx.lineTo(bankSlopeStartX, waterSurfaceY + 5);
+      ecoCtx.lineTo(0, h * 0.27);
+      ecoCtx.closePath();
+      ecoCtx.fill();
+
+      // Draw Crops on Farmland (Left Side)
+      for (let i = 0; i < 6; i++) {
+        const cx = 18 + i * ((bankSlopeStartX - 45) / 6);
+        const cy = h * 0.235 + (cx / bankSlopeStartX) * (waterSurfaceY - h * 0.24);
+        ecoCtx.strokeStyle = '#84cc16';
+        ecoCtx.lineWidth = 2.5;
+        ecoCtx.beginPath();
+        ecoCtx.moveTo(cx, cy);
+        ecoCtx.lineTo(cx, cy - 15);
+        ecoCtx.moveTo(cx, cy - 7);
+        ecoCtx.lineTo(cx - 5, cy - 13);
+        ecoCtx.moveTo(cx, cy - 9);
+        ecoCtx.lineTo(cx + 5, cy - 14);
+        ecoCtx.stroke();
+      }
+
+      // Draw Riparian Buffer Zone (trees/reeds at water edge based on bufferInput)
+      const bufferCount = Math.round((simState.bufferInput / 100) * 6);
+      for (let i = 0; i < bufferCount; i++) {
+        const bx = bankSlopeStartX - 24 + i * 5;
+        const by = waterSurfaceY - 3;
+        ecoCtx.strokeStyle = '#10b981';
+        ecoCtx.lineWidth = 2;
+        ecoCtx.beginPath();
+        ecoCtx.moveTo(bx, by);
+        ecoCtx.lineTo(bx + Math.sin(time * 2 + i) * 2, by - 18 - (i % 2) * 5);
+        ecoCtx.stroke();
+      }
+
+      // 6. Fertilizer Granules on Soil (Yellow/Orange N & P dots)
+      const soilDotCount = Math.round((simState.soilNutrientPool / 100) * 28);
+      for (let i = 0; i < soilDotCount; i++) {
+        const fx = 12 + ((i * 37) % Math.max(30, bankSlopeStartX - 35));
+        const fy = h * 0.255 + (fx / bankSlopeStartX) * (waterSurfaceY - h * 0.25) + (i % 3) * 3;
+        ecoCtx.fillStyle = i % 2 === 0 ? '#fbbf24' : '#f97316';
+        ecoCtx.beginPath();
+        ecoCtx.arc(fx, fy, 2.5, 0, Math.PI * 2);
+        ecoCtx.fill();
+      }
+
+      // Burst Fertilizer Granules Animation
+      for (let i = fertilizerGranules.length - 1; i >= 0; i--) {
+        const g = fertilizerGranules[i];
+        g.x += g.vx;
+        g.y += g.vy;
+        g.life -= 0.02;
+        if (g.life <= 0) {
+          fertilizerGranules.splice(i, 1);
+          continue;
+        }
+        ecoCtx.fillStyle = g.type === 'N' ? '#fde047' : '#fb923c';
+        ecoCtx.beginPath();
+        ecoCtx.arc(g.x, g.y, 3, 0, Math.PI * 2);
+        ecoCtx.fill();
+      }
+
+      // 7. Raindrops & Surface Runoff Stream carrying N/P into Lake
+      if (simState.rainInput > 8) {
+        const activeRainCount = Math.floor((simState.rainInput / 100) * rainDrops.length);
+        ecoCtx.strokeStyle = 'rgba(186, 230, 253, 0.55)';
+        ecoCtx.lineWidth = 1.2;
+        for (let i = 0; i < activeRainCount; i++) {
+          const drop = rainDrops[i];
+          if (!simState.paused) {
+            drop.y += drop.speed;
+            drop.x += 1.2;
+            if (drop.y > waterSurfaceY) {
+              drop.y = -10;
+              drop.x = Math.random() * w;
+            }
+          }
+          ecoCtx.beginPath();
+          ecoCtx.moveTo(drop.x, drop.y);
+          ecoCtx.lineTo(drop.x - 3, drop.y - 9);
+          ecoCtx.stroke();
+        }
+      }
+
+      // Auto-spawn runoff particles when rain & soil nutrients exist
+      if (!simState.paused && Math.random() < (simState.rainInput / 100) * (simState.soilNutrientPool / 100) * 0.85) {
+        runoffParticles.push({
+          progress: 0,
+          speed: 0.008 + (simState.rainInput / 100) * 0.012,
+          offsetY: (Math.random() - 0.5) * 5,
+          type: Math.random() > 0.5 ? 'N' : 'P'
+        });
+      }
+
+      for (let i = runoffParticles.length - 1; i >= 0; i--) {
+        const rp = runoffParticles[i];
+        if (!simState.paused) rp.progress += rp.speed;
+        if (rp.progress >= 1) {
+          runoffParticles.splice(i, 1);
+          continue;
+        }
+        const rx = rp.progress * (bankSlopeStartX + 35);
+        const ry = h * 0.24 + rp.progress * (waterSurfaceY - h * 0.23) + rp.offsetY;
+        ecoCtx.fillStyle = rp.type === 'N' ? '#fbbf24' : '#fb923c';
+        ecoCtx.beginPath();
+        ecoCtx.arc(rx, ry, 3.2, 0, Math.PI * 2);
+        ecoCtx.fill();
+      }
+
+      // 8. Submerged Macrophytes (Seagrass at lake bottom)
+      const macroHealth = simState.macrophytesHealth / 100;
+      const weedClusters = 9;
+      for (let i = 0; i < weedClusters; i++) {
+        const wx = bankSlopeEndX + 25 + i * ((w - bankSlopeEndX - 50) / weedClusters);
+        const wy = lakeBottomY;
+        const maxBladeH = 14 + macroHealth * 52;
+        // Color shifts from vibrant emerald to wilted brown
+        const rCol = Math.round(16 + (1 - macroHealth) * 110);
+        const gCol = Math.round(185 * macroHealth + 75 * (1 - macroHealth));
+        const bCol = Math.round(129 * macroHealth + 30 * (1 - macroHealth));
+        ecoCtx.strokeStyle = `rgb(${rCol}, ${gCol}, ${bCol})`;
+        ecoCtx.lineWidth = 3;
+
+        for (let b = -1; b <= 1; b++) {
+          const sway = Math.sin(time * 2 + i + b) * (4 * macroHealth);
+          ecoCtx.beginPath();
+          ecoCtx.moveTo(wx + b * 4, wy);
+          ecoCtx.quadraticCurveTo(wx + b * 6 + sway * 0.5, wy - maxBladeH * 0.5, wx + b * 5 + sway, wy - maxBladeH);
+          ecoCtx.stroke();
+        }
+      }
+
+      // 9. Organic Detritus & Anoxic Dark Sludge Layer on Bottom
+      const detritusRatio = simState.organicDetritus / 100;
+      if (detritusRatio > 0.15) {
+        ecoCtx.fillStyle = `rgba(24, 24, 27, ${Math.min(0.85, detritusRatio * 0.9)})`;
+        ecoCtx.beginPath();
+        ecoCtx.moveTo(bankSlopeEndX - 10, lakeBottomY);
+        ecoCtx.lineTo(w, lakeBottomY);
+        ecoCtx.lineTo(w, lakeBottomY - detritusRatio * 24);
+        ecoCtx.lineTo(bankSlopeEndX - 10, lakeBottomY - detritusRatio * 18);
+        ecoCtx.closePath();
+        ecoCtx.fill();
+      }
+
+      // Falling detritus particles + Bottom Aerobic Decomposer Bacteria (Red/Pink glowing dots)
+      const activeDetritusCount = Math.floor(detritusRatio * detritusParticles.length);
+      for (let i = 0; i < activeDetritusCount; i++) {
+        const dp = detritusParticles[i];
+        if (!simState.paused) {
+          dp.yRatio += dp.speedY * 0.0025;
+          if (dp.yRatio > 0.87) dp.yRatio = 0.37;
+        }
+        ecoCtx.fillStyle = 'rgba(163, 163, 163, 0.75)';
+        ecoCtx.beginPath();
+        ecoCtx.arc(dp.xRatio * w, dp.yRatio * h, dp.size, 0, Math.PI * 2);
+        ecoCtx.fill();
+      }
+
+      // Decomposer Bacteria Swarm near bottom sediment
+      const bactCount = Math.floor((simState.bacteriaActivity / 100) * 50);
+      for (let i = 0; i < bactCount; i++) {
+        const bx = bankSlopeEndX + ((i * 53) % Math.max(50, w - bankSlopeEndX - 20)) + Math.sin(time * 4 + i) * 5;
+        const by = lakeBottomY - 4 - (i % 5) * 4 + Math.cos(time * 3 + i) * 2;
+        ecoCtx.fillStyle = 'rgba(251, 113, 133, 0.85)';
+        ecoCtx.beginPath();
+        ecoCtx.arc(bx, by, 2.5, 0, Math.PI * 2);
+        ecoCtx.fill();
+      }
+
+      // 10. Water Nutrient Dots (N/P inside water column)
+      const activeWaterNP = Math.floor((simState.waterNutrients / 100) * waterNutrientDots.length);
+      for (let i = 0; i < activeWaterNP; i++) {
+        const nd = waterNutrientDots[i];
+        if (!simState.paused) {
+          nd.xRatio += nd.vx * 0.001;
+          nd.yRatio += nd.vy * 0.001;
+          if (nd.xRatio < 0.35 || nd.xRatio > 0.96) nd.vx *= -1;
+          if (nd.yRatio < 0.37 || nd.yRatio > 0.84) nd.vy *= -1;
+        }
+        ecoCtx.fillStyle = nd.type === 'N' ? 'rgba(251, 191, 36, 0.8)' : 'rgba(249, 115, 22, 0.8)';
+        ecoCtx.beginPath();
+        ecoCtx.arc(nd.xRatio * w, nd.yRatio * h, 2.3, 0, Math.PI * 2);
+        ecoCtx.fill();
+      }
+
+      // 11. Dissolved Oxygen Bubbles (Sky-blue bubbles rising)
+      const activeO2Count = Math.floor((simState.dissolvedOxygen / 10) * oxygenBubbles.length);
+      for (let i = 0; i < activeO2Count; i++) {
+        const ob = oxygenBubbles[i];
+        if (!simState.paused) {
+          ob.yRatio -= ob.speedY * 0.0018;
+          if (ob.yRatio < 0.36) ob.yRatio = 0.85;
+        }
+        ecoCtx.strokeStyle = 'rgba(125, 211, 252, 0.85)';
+        ecoCtx.fillStyle = 'rgba(186, 230, 253, 0.35)';
+        ecoCtx.lineWidth = 1;
+        ecoCtx.beginPath();
+        ecoCtx.arc(ob.xRatio * w, ob.yRatio * h, ob.r, 0, Math.PI * 2);
+        ecoCtx.fill();
+        ecoCtx.stroke();
+      }
+
+      // 12. Surface Algal Bloom Mat & Floating Phytoplankton
+      const bloomThickness = (simState.algaeBiomass / 100) * 26;
+      if (bloomThickness > 1.5) {
+        const bloomGrad = ecoCtx.createLinearGradient(0, waterSurfaceY - 2, 0, waterSurfaceY + bloomThickness);
+        bloomGrad.addColorStop(0, `rgba(132, 204, 22, ${Math.min(0.95, 0.25 + algaeRatio * 0.75)})`);
+        bloomGrad.addColorStop(1, 'rgba(77, 124, 15, 0)');
+        ecoCtx.fillStyle = bloomGrad;
+        ecoCtx.fillRect(bankSlopeStartX, waterSurfaceY - 2, w - bankSlopeStartX, bloomThickness + 4);
+      }
+
+      const activeAlgaeParticles = Math.floor(algaeRatio * algaeParticles.length);
+      for (let i = 0; i < activeAlgaeParticles; i++) {
+        const ap = algaeParticles[i];
+        const ax = ap.xRatio * w + Math.sin(time * 1.5 + ap.phase) * 4;
+        const ay = waterSurfaceY + (ap.yRatio - 0.34) * h * (0.4 + algaeRatio * 0.9);
+        ecoCtx.fillStyle = 'rgba(163, 230, 53, 0.85)';
+        ecoCtx.beginPath();
+        ecoCtx.arc(ax, ay, ap.radius * (0.6 + algaeRatio * 0.6), 0, Math.PI * 2);
+        ecoCtx.fill();
+      }
+
+      // 13. Fish Swimming / Gasping at Surface / Floating Belly-up Dead
+      const isDeadZone = simState.dissolvedOxygen < 2.2;
+      const isHypoxicStress = simState.dissolvedOxygen >= 2.2 && simState.dissolvedOxygen < 4.8;
+
+      fishes.forEach((f, idx) => {
+        const thisFishDead = isDeadZone || (simState.dissolvedOxygen < 3.2 && idx % 2 === 0);
+        if (!simState.paused) {
+          if (thisFishDead) {
+            // Float slowly up to surface belly-up
+            f.yRatio += (0.37 - f.yRatio) * 0.03;
+          } else if (isHypoxicStress) {
+            // Swim near top surface gasping for air
+            f.yRatio += (0.41 + (idx * 0.02) - f.yRatio) * 0.04;
+            f.xRatio += f.dir * f.speed * 0.55;
+          } else {
+            // Normal mid-to-deep swimming
+            const homeY = 0.52 + idx * 0.06;
+            f.yRatio += (homeY - f.yRatio) * 0.02 + Math.sin(time * 2 + f.phase) * 0.0008;
+            f.xRatio += f.dir * f.speed;
+          }
+
+          if (f.xRatio > 0.93) f.dir = -1;
+          if (f.xRatio < 0.40) f.dir = 1;
+        }
+
+        drawFish(
+          ecoCtx,
+          f.xRatio * w,
+          f.yRatio * h,
+          f.size,
+          f.dir,
+          f.color,
+          thisFishDead,
+          !thisFishDead && isHypoxicStress,
+          time + f.phase
+        );
+      });
+
+      // 14. On-Canvas Explanatory Callout Labels
+      ecoCtx.font = 'bold 11px "Noto Sans TC", sans-serif';
+      // Label: Farmland
+      ecoCtx.fillStyle = 'rgba(15, 23, 42, 0.78)';
+      ecoCtx.fillRect(10, h * 0.28, 128, 22);
+      ecoCtx.fillStyle = '#fde047';
+      ecoCtx.fillText('🌾 農田施肥 (氮 N・磷 P)', 16, h * 0.28 + 15);
+
+      // Label: Algal Bloom status on water surface
+      if (simState.algaeBiomass > 45) {
+        ecoCtx.fillStyle = 'rgba(20, 83, 45, 0.88)';
+        ecoCtx.fillRect(w * 0.46, waterSurfaceY + 6, 195, 22);
+        ecoCtx.fillStyle = '#bef264';
+        ecoCtx.fillText('🦠 藻華覆蓋水面・阻斷陽光穿透', w * 0.46 + 8, waterSurfaceY + 21);
+      }
+
+      // Label: Bottom Bacteria & Hypoxia
+      if (simState.bacteriaActivity > 50) {
+        ecoCtx.fillStyle = 'rgba(136, 19, 55, 0.88)';
+        ecoCtx.fillRect(w * 0.46, lakeBottomY - 30, 225, 22);
+        ecoCtx.fillStyle = '#fda4af';
+        ecoCtx.fillText('🦠 好氧菌分解藻屍・抽乾底層溶氧 (O₂↓)', w * 0.46 + 8, lakeBottomY - 15);
+      }
+    }
+
+    // =========================================================================
+    // PART 2: NATURAL LAKE SUCCESSION SIMULATOR (TAB 2)
+    // =========================================================================
+    const succCanvas = document.getElementById('succCanvas');
+    const succCtx = succCanvas.getContext('2d');
+    const sliderSuccessionYear = document.getElementById('sliderSuccessionYear');
+    const btnPlaySuccession = document.getElementById('btnPlaySuccession');
+    const succJumpBtns = document.querySelectorAll('.succ-jump-btn');
+
+    let successionYear = 0; // 0 to 10,000 years
+    let isPlayingSuccession = false;
+
+    function resizeSuccCanvas() {
+      const container = document.getElementById('succCanvasContainer');
+      const rect = container.getBoundingClientRect();
+      succCanvas.width = rect.width * window.devicePixelRatio;
+      succCanvas.height = rect.height * window.devicePixelRatio;
+      succCtx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
+    }
+
+    const successionStagesData = [
+      {
+        maxYear: 1500,
+        badge: '演替階段 1 / 5：年輕貧養湖 (Oligotrophic Lake)',
+        timeRange: '地質時間：約 0 ~ 1,500 年',
+        title: '🏔️ 階段一：年輕貧養湖 (Oligotrophic Lake)',
+        desc: '剛由地殼斷層或冰川退卻形成的深水湖盆。集水區流入的氮磷極少，湖底皆為裸露岩床與礫石，水體清澈湛藍，全水層溶氧充足。',
+        flora: '矽藻、深水輪藻（耐貧養、需高透光植物）',
+        fauna: '鱒魚、鮭魚等高溶氧需求的冷水性深水魚類'
+      },
+      {
+        maxYear: 4000,
+        badge: '演替階段 2 / 5：中養湖 (Mesotrophic Lake)',
+        timeRange: '地質時間：約 1,500 ~ 4,000 年',
+        title: '🌿 階段二：中養湖 (Mesotrophic Lake)',
+        desc: '歷經數千年溪流沖刷，腐殖質與泥沙沿著湖盆底部與兩側岸坡呈「U型」堆積。因為岸邊坡面率先淤積變淺，挺水植物（蘆葦、香蒲）與浮葉植物開始從兩側岸邊向水體內部進駐。',
+        flora: '眼子菜、金魚藻、苦草等沉水植物大量繁衍',
+        fauna: '鱸魚、鯉魚、淡水螺類與豐富的水生昆蟲幼蟲'
+      },
+      {
+        maxYear: 7000,
+        badge: '演替階段 3 / 5：自然優養湖 (Eutrophic Lake)',
+        timeRange: '地質時間：約 4,000 ~ 7,000 年',
+        title: '🪷 階段三：自然優養湖 (Natural Eutrophic Lake)',
+        desc: '數千年的動植物遺骸與泥沙沉積使湖水大幅變淺，水中天然養分豐富。夏季水溫較高，浮葉植物（睡蓮、萍蓬草）與挺水植物（香蒲、蘆葦）由岸邊向湖心擴張。',
+        flora: '睡蓮、浮萍（浮葉植物）與蘆葦、香蒲（挺水植物）',
+        fauna: '吳郭魚、鯰魚、泥鰍等耐低氧魚類，以及青蛙、水鳥與龜類'
+      },
+      {
+        maxYear: 9000,
+        badge: '演替階段 4 / 5：沼澤與泥炭濕地 (Swamp / Marsh)',
+        timeRange: '地質時間：約 7,000 ~ 9,000 年',
+        title: '🌾 階段四：蘆葦沼澤與濕地 (Marsh & Peat Bog)',
+        desc: '有機泥炭與泥沙幾乎填滿整個湖盆，開放水域僅剩中央淺水窪地。蘆葦、莎草與水生灌木密布，水體演替為高固碳能力的泥炭沼澤濕地。',
+        flora: '蘆葦群落、莎草、燈心草、水柳等濕生灌木',
+        fauna: '鷺科水鳥、雁鴨、兩棲蛙類、蜻蜓與濕地小型哺乳類'
+      },
+      {
+        maxYear: 10001,
+        badge: '演替階段 5 / 5：陸化極相森林 (Climax Forest)',
+        timeRange: '地質時間：約 9,000 ~ 10,000+ 年',
+        title: '🌲 階段五：陸化肥沃平原與森林 (Terrestrial Climax Forest)',
+        desc: '昔日的湖泊完全被深厚的腐殖質土壤填平，水分蒸發與排水後轉為肥沃的陸地土壤。耐陰喬木與森林灌木取代濕生植物，完成「水生演替（Hydrarch succession）」的最終極相。',
+        flora: '赤楊、楓香、樟樹與楠木等陸生喬木與森林底層蕨類',
+        fauna: '山羌、松鼠、森林鳴禽與陸生昆蟲生態系'
+      }
+    ];
+
+    function updateSuccessionUI() {
+      const progress = successionYear / 10000; // 0.0 to 1.0
+      document.getElementById('succYearDisplay').textContent = `第 ${successionYear.toLocaleString()} 年`;
+
+      const stageObj = successionStagesData.find(s => successionYear <= s.maxYear) || successionStagesData[4];
+      document.getElementById('succStageBadge').textContent = stageObj.badge;
+      document.getElementById('succTimeLabel').textContent = stageObj.timeRange;
+      document.getElementById('succDetailTitle').textContent = stageObj.title;
+      document.getElementById('succDetailText').textContent = stageObj.desc;
+      document.getElementById('succFloraText').textContent = stageObj.flora;
+      document.getElementById('succFaunaText').textContent = stageObj.fauna;
+
+      // Highlight jump button
+      const stageIdx = successionStagesData.indexOf(stageObj);
+      succJumpBtns.forEach((btn, idx) => {
+        if (idx === stageIdx) {
+          btn.classList.add('stage-btn-active');
+          btn.classList.remove('bg-slate-800/70', 'text-slate-300');
+        } else {
+          btn.classList.remove('stage-btn-active');
+          btn.classList.add('bg-slate-800/70', 'text-slate-300');
+        }
+      });
+
+      // Depth & Sediment bars
+      const depthMeters = Math.max(0, (25 * (1 - Math.pow(progress, 0.92)))).toFixed(1);
+      const sedimentMeters = (25 - Number(depthMeters)).toFixed(1);
+      const plantPct = Math.min(100, Math.round(12 + progress * 88));
+
+      document.getElementById('succDepthVal').textContent = `${depthMeters} 公尺`;
+      document.getElementById('succBarDepth').style.width = `${(Number(depthMeters) / 25) * 100}%`;
+
+      document.getElementById('succSedimentVal').textContent = `${sedimentMeters} 公尺`;
+      document.getElementById('succBarSediment').style.width = `${(Number(sedimentMeters) / 25) * 100}%`;
+
+      document.getElementById('succPlantVal').textContent = `${plantPct}%`;
+      document.getElementById('succBarPlant').style.width = `${plantPct}%`;
+    }
+
+    sliderSuccessionYear.addEventListener('input', (e) => {
+      successionYear = Number(e.target.value);
+      isPlayingSuccession = false;
+      btnPlaySuccession.textContent = '▶ 自動播放萬年演替';
+      updateSuccessionUI();
+    });
+
+    succJumpBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        successionYear = Number(btn.dataset.succYear);
+        sliderSuccessionYear.value = successionYear;
+        isPlayingSuccession = false;
+        btnPlaySuccession.textContent = '▶ 自動播放萬年演替';
+        updateSuccessionUI();
+      });
+    });
+
+    btnPlaySuccession.addEventListener('click', () => {
+      isPlayingSuccession = !isPlayingSuccession;
+      if (isPlayingSuccession && successionYear >= 9900) {
+        successionYear = 0;
+      }
+      btnPlaySuccession.textContent = isPlayingSuccession ? '⏸ 暫停萬年演替' : '▶ 自動播放萬年演替';
+    });
+
+    function renderSuccCanvas(time) {
+      const w = succCanvas.width / window.devicePixelRatio;
+      const h = succCanvas.height / window.devicePixelRatio;
+      if (!w || !h) return;
+
+      succCtx.clearRect(0, 0, w, h);
+
+      const p = successionYear / 10000; // 0.0 -> 1.0
+      const skyBottomY = h * 0.35;
+      const maxBasinBottomY = h * 0.90;
+
+      // 1. Sky Gradient
+      const skyGrad = succCtx.createLinearGradient(0, 0, 0, skyBottomY);
+      skyGrad.addColorStop(0, '#0369a1');
+      skyGrad.addColorStop(1, '#e0f2fe');
+      succCtx.fillStyle = skyGrad;
+      succCtx.fillRect(0, 0, w, skyBottomY);
+
+      // Distant Mountains
+      succCtx.fillStyle = '#64748b';
+      succCtx.beginPath();
+      succCtx.moveTo(0, skyBottomY);
+      succCtx.lineTo(w * 0.18, h * 0.14);
+      succCtx.lineTo(w * 0.38, skyBottomY);
+      succCtx.lineTo(w * 0.68, h * 0.16);
+      succCtx.lineTo(w * 0.88, h * 0.10);
+      succCtx.lineTo(w, skyBottomY);
+      succCtx.closePath();
+      succCtx.fill();
+
+      // 2. Smooth U-Shaped Bedrock Basin & U-Shaped Littoral-to-Center Sediment Geometry
+      const leftBankX = w * 0.13;
+      const rightBankX = w * 0.87;
+      const basinWidth = rightBankX - leftBankX;
+      const maxDepthPx = maxBasinBottomY - skyBottomY;
+      const N_SAMPLES = 80;
+
+      // Bedrock U-shaped profile: normalized u in [-1, 1] -> depth ratio (1 - u^4)
+      function getBedrockY(x) {
+        if (x <= leftBankX || x >= rightBankX) return skyBottomY;
+        const u = ((x - leftBankX) / basinWidth) * 2 - 1; // -1 at left bank, 0 at center, +1 at right bank
+        const depthFactor = Math.max(0, 1 - Math.pow(Math.abs(u), 3.6));
+        return skyBottomY + maxDepthPx * depthFactor;
+      }
+
+      // U-Shaped Sediment & Humus Accumulation:
+      // Sediment deposits BOTH along the littoral shore slopes (forming shallow littoral benches that advance inward)
+      // AND at the bottom, so the top surface of the humus/sediment forms a smooth U-shaped basin that narrows and shallows over time!
+      function getSedimentTopYAtProg(x, prog) {
+        if (x <= leftBankX || x >= rightBankX) return skyBottomY;
+        const bedrockY = getBedrockY(x);
+        if (prog <= 0.001) return bedrockY;
+
+        const u = Math.abs(((x - leftBankX) / basinWidth) * 2 - 1); // 0 at center, 1 at shore
+        // Shore littoral bench advances inward from u=1 toward u=0 as prog increases
+        const shoreTerraceReach = Math.pow(prog, 0.72) * 0.92; // fraction of half-basin filled to near-surface from shore
+        // Center open-water depth shrinks as U-shaped humus thickens on both sides and bottom
+        const centerFillRatio = Math.pow(prog, 1.05);
+
+        // Smooth U-shaped remaining water cavity in the middle
+        let remainingWaterRatio = 0;
+        if (u < 1 - shoreTerraceReach * 0.78) {
+          const normalizedInnerU = u / Math.max(0.05, 1 - shoreTerraceReach * 0.78);
+          // Concave U-curve for open water depth
+          const uCurve = Math.pow(Math.max(0, 1 - Math.pow(normalizedInnerU, 2.2)), 1.35);
+          remainingWaterRatio = (1 - centerFillRatio) * uCurve;
+        }
+
+        // Also ensure shore slopes accumulate humus early (U-shaped littoral wedge)
+        const targetY = skyBottomY + maxDepthPx * remainingWaterRatio;
+        return Math.min(bedrockY, Math.max(skyBottomY, targetY));
+      }
+
+      function getSedimentTopY(x) {
+        return getSedimentTopYAtProg(x, p);
+      }
+
+      // Draw Water Body first inside the U-shaped basin (above sediment)
+      if (p < 0.96) {
+        const waterR = Math.round(14 + p * 45);
+        const waterG = Math.round(116 + p * 30);
+        const waterB = Math.round(180 - p * 110);
+        succCtx.fillStyle = `rgb(${waterR}, ${waterG}, ${waterB})`;
+        succCtx.beginPath();
+        succCtx.moveTo(leftBankX, skyBottomY);
+        succCtx.lineTo(rightBankX, skyBottomY);
+        for (let i = N_SAMPLES; i >= 0; i--) {
+          const x = leftBankX + (i / N_SAMPLES) * basinWidth;
+          succCtx.lineTo(x, getSedimentTopY(x));
+        }
+        succCtx.closePath();
+        succCtx.fill();
+      }
+
+      // Draw U-Shaped Organic Humus & Sediment Layer (thick on shore slopes & bottom, forming a U-cup)
+      if (p > 0.005) {
+        const sedGrad = succCtx.createLinearGradient(0, skyBottomY, 0, maxBasinBottomY);
+        sedGrad.addColorStop(0, p > 0.85 ? '#365314' : '#854d0e');
+        sedGrad.addColorStop(0.5, '#713f12');
+        sedGrad.addColorStop(1, '#451a03');
+        succCtx.fillStyle = sedGrad;
+        succCtx.beginPath();
+        // Top U-shaped contour of the sediment (from left bank to right bank)
+        for (let i = 0; i <= N_SAMPLES; i++) {
+          const x = leftBankX + (i / N_SAMPLES) * basinWidth;
+          const y = getSedimentTopY(x);
+          if (i === 0) succCtx.moveTo(x, y);
+          else succCtx.lineTo(x, y);
+        }
+        // Bottom U-shaped bedrock contour (from right bank back to left bank)
+        for (let i = N_SAMPLES; i >= 0; i--) {
+          const x = leftBankX + (i / N_SAMPLES) * basinWidth;
+          succCtx.lineTo(x, getBedrockY(x));
+        }
+        succCtx.closePath();
+        succCtx.fill();
+
+        // Highlight Top U-Shaped Humus Surface Line
+        succCtx.strokeStyle = p > 0.85 ? '#65a30d' : '#ca8a04';
+        succCtx.lineWidth = 2;
+        succCtx.beginPath();
+        for (let i = 0; i <= N_SAMPLES; i++) {
+          const x = leftBankX + (i / N_SAMPLES) * basinWidth;
+          const y = getSedimentTopY(x);
+          if (i === 0) succCtx.moveTo(x, y);
+          else succCtx.lineTo(x, y);
+        }
+        succCtx.stroke();
+
+        // Draw U-Shaped Geological Stratification Lines (historical U-shaped deposition layers)
+        succCtx.strokeStyle = 'rgba(253, 224, 71, 0.25)';
+        succCtx.lineWidth = 1.2;
+        const strataSteps = [0.15, 0.32, 0.50, 0.68, 0.84];
+        strataSteps.forEach(histP => {
+          if (p > histP + 0.04) {
+            succCtx.beginPath();
+            for (let i = 0; i <= N_SAMPLES; i++) {
+              const x = leftBankX + (i / N_SAMPLES) * basinWidth;
+              const y = getSedimentTopYAtProg(x, histP);
+              if (i === 0) succCtx.moveTo(x, y);
+              else succCtx.lineTo(x, y);
+            }
+            succCtx.stroke();
+          }
+        });
+      }
+
+      // Draw Bedrock surrounding the U-shaped basin
+      succCtx.fillStyle = '#334155';
+      succCtx.beginPath();
+      succCtx.moveTo(0, skyBottomY);
+      succCtx.lineTo(leftBankX, skyBottomY);
+      for (let i = 0; i <= N_SAMPLES; i++) {
+        const x = leftBankX + (i / N_SAMPLES) * basinWidth;
+        succCtx.lineTo(x, getBedrockY(x));
+      }
+      succCtx.lineTo(rightBankX, skyBottomY);
+      succCtx.lineTo(w, skyBottomY);
+      succCtx.lineTo(w, h);
+      succCtx.lineTo(0, h);
+      succCtx.closePath();
+      succCtx.fill();
+
+      // 4. Plant & Tree Succession Rooted Directly on the U-Shaped Shore Humus Slope!
+      function drawTree(x, y, scale, isConifer) {
+        succCtx.save();
+        succCtx.translate(x, y);
+        succCtx.scale(scale, scale);
+        succCtx.fillStyle = '#78350f';
+        succCtx.fillRect(-3, -18, 6, 18);
+        succCtx.fillStyle = isConifer ? '#15803d' : '#16a34a';
+        if (isConifer) {
+          succCtx.beginPath();
+          succCtx.moveTo(0, -52);
+          succCtx.lineTo(-16, -16);
+          succCtx.lineTo(16, -16);
+          succCtx.closePath();
+          succCtx.fill();
+          succCtx.beginPath();
+          succCtx.moveTo(0, -65);
+          succCtx.lineTo(-12, -34);
+          succCtx.lineTo(12, -34);
+          succCtx.closePath();
+          succCtx.fill();
+        } else {
+          succCtx.beginPath();
+          succCtx.arc(0, -34, 16, 0, Math.PI * 2);
+          succCtx.arc(-10, -28, 12, 0, Math.PI * 2);
+          succCtx.arc(10, -28, 12, 0, Math.PI * 2);
+          succCtx.fill();
+        }
+        succCtx.restore();
+      }
+
+      // Permanent trees on outer banks
+      drawTree(w * 0.04, skyBottomY, 0.85, true);
+      drawTree(w * 0.09, skyBottomY, 0.75, false);
+      drawTree(w * 0.91, skyBottomY, 0.80, false);
+      drawTree(w * 0.96, skyBottomY, 0.90, true);
+
+      // Vegetation zones colonizing inward as the U-shaped littoral humus builds up on both shores:
+      // - Emergent plants (reeds/cattails) root where local water depth is shallow (0.5m < depth <= 4.5m)
+      // - Floating-leaved & submerged macrophytes root on deeper U-slope where depth is 3.5m ~ 11m
+      // - Terrestrial shrubs & climax trees root where shore sediment has nearly reached the surface (depth <= 1.2m)
+      const numPlantSlots = 36;
+      for (let i = 1; i < numPlantSlots; i++) {
+        const x = leftBankX + (i / numPlantSlots) * basinWidth;
+        const sedY = getSedimentTopY(x);
+        const bedrockY = getBedrockY(x);
+        const humusThicknessPx = bedrockY - sedY;
+        const localWaterDepthPx = sedY - skyBottomY;
+
+        // Plants only colonize where humus/sediment has accumulated on the U-slope
+        if (humusThicknessPx < 4) continue;
+
+        const sway = Math.sin(time * 2.2 + i * 0.9) * 2.5;
+
+        // Zone A: Emergent Reeds / Cattails (蘆葦、香蒲) rooted on shallow U-shaped shore humus
+        if (localWaterDepthPx >= 2 && localWaterDepthPx <= 42 && p < 0.96) {
+          const stemTopY = skyBottomY - 18 - (i % 3) * 5;
+          succCtx.strokeStyle = '#65a30d';
+          succCtx.lineWidth = 2.2;
+          succCtx.beginPath();
+          succCtx.moveTo(x, sedY); // Rooted directly in the U-shaped littoral humus!
+          succCtx.lineTo(x + sway, stemTopY);
+          succCtx.stroke();
+
+          // Cattail spike head above water
+          if (i % 2 === 0) {
+            succCtx.fillStyle = '#713f12';
+            succCtx.fillRect(x + sway - 2, stemTopY + 3, 4, 8);
+          }
+        }
+        // Zone B: Submerged & Floating-leaved Plants (水草、睡蓮) further down the U-slope
+        else if (localWaterDepthPx > 42 && localWaterDepthPx <= 115 && p < 0.88) {
+          const bladeH = Math.min(38, localWaterDepthPx * 0.65);
+          succCtx.strokeStyle = '#10b981';
+          succCtx.lineWidth = 2.2;
+          succCtx.beginPath();
+          succCtx.moveTo(x, sedY);
+          succCtx.quadraticCurveTo(x + sway * 1.4, sedY - bladeH * 0.5, x + sway * 0.6, sedY - bladeH);
+          succCtx.stroke();
+
+          // Floating lily pads near the inner edge of emergent zone
+          if (localWaterDepthPx < 68 && i % 2 === 1) {
+            succCtx.strokeStyle = 'rgba(132, 204, 22, 0.55)';
+            succCtx.lineWidth = 1;
+            succCtx.beginPath();
+            succCtx.moveTo(x, sedY);
+            succCtx.lineTo(x + sway, skyBottomY);
+            succCtx.stroke();
+            succCtx.fillStyle = '#4d7c0f';
+            succCtx.beginPath();
+            succCtx.ellipse(x + sway, skyBottomY, 6, 2.2, 0, 0, Math.PI * 2);
+            succCtx.fill();
+          }
+        }
+      }
+
+      // Zone C: Terrestrial Trees & Swamp Shrubs advancing from both shores inward as U-bench fills to surface
+      const treeCandidateSlots = [0.17, 0.23, 0.29, 0.36, 0.43, 0.50, 0.57, 0.64, 0.71, 0.77, 0.83];
+      treeCandidateSlots.forEach((slotRatio, idx) => {
+        const tx = w * slotRatio;
+        const sedY = getSedimentTopY(tx);
+        const localWaterDepthPx = sedY - skyBottomY;
+        // Once shore humus builds up close to water surface (depth < 14px), shrubs & trees colonize inward!
+        if (localWaterDepthPx < 14 && p > 0.25) {
+          const maturity = Math.min(0.95, Math.max(0.28, (14 - localWaterDepthPx) / 14 * (0.45 + p * 0.55)));
+          drawTree(tx, sedY + 2, maturity, idx % 2 === 0);
+        }
+      });
+
+      // Fish in the central open water cavity of the U-basin
+      const centerSedY = getSedimentTopY(w * 0.5);
+      const centerWaterDepthPx = centerSedY - skyBottomY;
+      if (centerWaterDepthPx > 28) {
+        const fishCount = p < 0.45 ? 4 : p < 0.72 ? 2 : 1;
+        const openHalfSpan = Math.max(20, basinWidth * (1 - Math.pow(p, 0.75)) * 0.28);
+        for (let i = 0; i < fishCount; i++) {
+          const offset = ((i - (fishCount - 1) / 2) * openHalfSpan * 0.7) + Math.sin(time * 1.5 + i * 2) * (openHalfSpan * 0.25);
+          const fx = w * 0.5 + offset;
+          const fy = skyBottomY + centerWaterDepthPx * (0.38 + (i % 2) * 0.25);
+          const fColor = p < 0.25 ? '#38bdf8' : p < 0.55 ? '#fb923c' : '#a3e635';
+          drawFish(succCtx, fx, fy, 12, Math.cos(time * 1.5 + i * 2) >= 0 ? 1 : -1, fColor, false, false, time + i);
+        }
+      }
+
+      // Labels on Succession Canvas
+      succCtx.font = 'bold 12px "Noto Sans TC", sans-serif';
+      if (p > 0.06) {
+        const labelY = Math.min(maxBasinBottomY - 18, (centerSedY + maxBasinBottomY) / 2);
+        succCtx.fillStyle = 'rgba(15, 23, 42, 0.84)';
+        succCtx.fillRect(w * 0.5 - 135, labelY - 13, 270, 24);
+        succCtx.fillStyle = '#fbbf24';
+        succCtx.fillText(`U型有機腐殖質與岸邊淤積層 (中心厚 ${(25 * Math.pow(p, 0.92)).toFixed(1)}m)`, w * 0.5 - 125, labelY + 3);
+      }
+    }
+
+    // =========================================================================
+    // MAIN ANIMATION LOOP
+    // =========================================================================
+    let lastTime = performance.now();
+
+    function animate(now) {
+      const dt = Math.min(0.1, (now - lastTime) / 1000);
+      lastTime = now;
+      const elapsedSec = now / 1000;
+
+      if (activeTab === 'sim') {
+        updateEcologicalPhysics(dt);
+        renderEcoCanvas(elapsedSec);
+      } else {
+        if (isPlayingSuccession) {
+          successionYear += dt * 1100; // ~9 seconds for 10,000 years
+          if (successionYear >= 10000) {
+            successionYear = 10000;
+            isPlayingSuccession = false;
+            btnPlaySuccession.textContent = '▶ 重新播放萬年演替';
+          }
+          sliderSuccessionYear.value = Math.round(successionYear);
+          updateSuccessionUI();
+        }
+        renderSuccCanvas(elapsedSec);
+      }
+
+      requestAnimationFrame(animate);
+    }
+
+    window.addEventListener('resize', () => {
+      if (activeTab === 'sim') resizeSimCanvas();
+      else resizeSuccCanvas();
+    });
+
+    window.onload = () => {
+      resizeSimCanvas();
+      resizeSuccCanvas();
+      updateControlLabels();
+      updateDashboardUI();
+      updateSuccessionUI();
+      requestAnimationFrame(animate);
+    };
+  </script>
+</body>
+</html>

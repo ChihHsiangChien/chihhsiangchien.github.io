@@ -1,0 +1,2764 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>抗生素作用機制與抗藥性演化互動模擬器</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Noto Sans TC', 'Inter', sans-serif;
+      background-color: #0b1120;
+      color: #f1f5f9;
+      overflow-x: hidden;
+    }
+    .petri-grid {
+      background-image: 
+        radial-gradient(circle at center, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.95) 100%),
+        linear-gradient(to right, rgba(148, 163, 184, 0.06) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(148, 163, 184, 0.06) 1px, transparent 1px);
+      background-size: 100% 100%, 24px 24px, 24px 24px;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(71, 85, 105, 0.8);
+      border-radius: 3px;
+    }
+    input[type="range"] {
+      accent-color: #38bdf8;
+    }
+    @keyframes pulse-slow {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.75; transform: scale(1.03); }
+    }
+    .animate-pulse-slow {
+      animation: pulse-slow 2.4s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col bg-slate-950 text-slate-100 selection:bg-sky-500 selection:text-white">
+
+  <!-- Top Header & Navigation Tabs -->
+  <header class="border-b border-slate-800/80 bg-slate-900/90 backdrop-blur sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-500 to-emerald-500 flex items-center justify-center shadow-lg shadow-sky-500/20 shrink-0">
+          <svg class="w-6 h-6 text-slate-950" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-lg sm:text-xl font-bold tracking-tight text-white flex items-center gap-2">
+            抗生素分子作用原理與抗藥性演化模擬器
+            <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/30">Molecular BioLab v2</span>
+          </h1>
+          <p class="text-xs text-slate-400">微觀拆解「藥物如何卡死細菌五大生化產線」並連動觀察「錯誤用藥如何篩選出抗藥性超級細菌」</p>
+        </div>
+      </div>
+
+      <!-- Main Tab Switcher -->
+      <nav class="flex bg-slate-950/90 p-1 rounded-xl border border-slate-800 self-start md:self-auto" aria-label="模擬器分頁">
+        <button id="tabBtnMech" type="button" class="px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 bg-sky-500 text-slate-950 shadow-md shadow-sky-500/20">
+          <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+          </svg>
+          <span>1. 各類抗生素作用機制</span>
+        </button>
+        <button id="tabBtnRes" type="button" class="px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 text-slate-400 hover:text-slate-200">
+          <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+          </svg>
+          <span>2. 錯誤用藥與抗藥性演化</span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main Workspace Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-5">
+
+    <!-- ========================================== -->
+    <!-- TAB 1: ANTIBIOTIC MECHANISMS & GROWTH SIM  -->
+    <!-- ========================================== -->
+    <section id="panelMech" class="space-y-5">
+
+      <!-- Top Row: Left Drug & Step Selector (4 cols) + Right Giant Molecular Workbench (8 cols) -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        
+        <!-- Left Column: Antibiotic Selector & Causal Mechanism Steps (4 cols) -->
+        <div class="lg:col-span-4 flex flex-col gap-4">
+          
+          <!-- Antibiotic Selector Panel -->
+          <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl">
+            <div class="flex items-center justify-between mb-2.5">
+              <h2 class="text-sm font-bold text-slate-100 flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-sky-400"></span>
+                步驟 1：點選抗生素（或直接點擊右圖標靶）
+              </h2>
+              <span id="mechCategoryBadge" class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                殺菌性
+              </span>
+            </div>
+
+            <div id="antibioticCardGrid" class="grid grid-cols-2 gap-2">
+              <!-- Populated dynamically by JS -->
+            </div>
+
+            <!-- Selected Drug Mechanism Summary & Selective Toxicity -->
+            <div id="mechDetailBox" class="mt-3 p-3.5 rounded-xl bg-slate-950/90 border border-slate-800 space-y-2 text-xs">
+              <div class="flex items-center justify-between gap-2">
+                <span id="mechTargetTitle" class="font-bold text-sky-400 text-sm">青黴素 — 抑制細胞壁肽聚醣交聯</span>
+                <span id="mechSpectrumBadge" class="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px] shrink-0">對 G+ 強效</span>
+              </div>
+              <p id="mechDescription" class="text-slate-200 leading-relaxed">
+                細菌在分裂時必須先剪開舊細胞壁、補上新磚塊（肽聚醣）。青黴素的 β-內醯胺環偽裝成胜肽原料，直接卡死負責「焊接磚塊」的轉肽酶 (PBP)。
+              </p>
+              <div class="p-2.5 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-[11px] text-emerald-200 leading-relaxed">
+                <strong class="text-emerald-400">💡 為什麼只殺細菌不傷人體？(選擇性毒性)：</strong>
+                <span id="mechSelectiveToxicity">人類細胞沒有「肽聚醣細胞壁」也沒有 PBP 轉肽酶，因此青黴素對人體細胞完全無害。</span>
+              </div>
+              <div class="pt-0.5 flex items-center gap-1.5 text-[11px] text-slate-400">
+                <span class="font-semibold text-slate-300">培養皿表徵：</span>
+                <span id="mechVisualCue">細菌因內部高滲透壓湧入水分而像氣球般脹破裂解</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Environment & Dosing Controls -->
+          <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3.5">
+            <h2 class="text-sm font-bold text-slate-100 flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+              步驟 2：切換菌種外膜與藥物濃度
+            </h2>
+
+            <!-- Bacteria Type Selector -->
+            <div>
+              <div class="flex justify-between text-xs mb-1.5">
+                <span class="text-slate-300 font-medium">細菌包膜構造 (決定藥物能否穿過外膜到達標靶)</span>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <button id="btnGramPos" type="button" class="px-3 py-2 rounded-xl text-xs font-semibold border transition-all text-left flex flex-col gap-0.5 bg-sky-500/15 border-sky-500/60 text-sky-200">
+                  <span>革蘭氏陽性菌 (G+)</span>
+                  <span class="text-[10px] text-slate-400 font-normal">厚肽聚醣壁・無外脂質膜</span>
+                </button>
+                <button id="btnGramNeg" type="button" class="px-3 py-2 rounded-xl text-xs font-semibold border transition-all text-left flex flex-col gap-0.5 bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200">
+                  <span>革蘭氏陰性菌 (G-)</span>
+                  <span class="text-[10px] text-slate-400 font-normal">薄細胞壁・具外膜屏障</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Concentration Slider -->
+            <div>
+              <div class="flex justify-between items-center text-xs mb-1">
+                <label for="sliderMechConc" class="text-slate-300 font-medium">投藥濃度 (相對於最小抑菌濃度 MIC)</label>
+                <span id="labelMechConc" class="font-mono font-bold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/20">2.0x MIC</span>
+              </div>
+              <input id="sliderMechConc" type="range" min="0.2" max="4.0" step="0.2" value="2.0" class="w-full h-2 bg-slate-800 rounded-lg cursor-pointer">
+              <div class="flex justify-between text-[10px] text-slate-500 mt-1">
+                <span>0.2x (濃度不足)</span>
+                <span class="text-amber-400/90">1.0x MIC (有效門檻)</span>
+                <span>4.0x (強效飽和)</span>
+              </div>
+            </div>
+
+            <!-- Host Immune System & Simulation Speed -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <label class="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/70 border border-slate-800 cursor-pointer hover:border-slate-700 transition">
+                <div>
+                  <div class="text-xs font-semibold text-slate-200">免疫白血球吞噬</div>
+                  <div class="text-[10px] text-slate-400">抑菌藥需靠白血球清菌</div>
+                </div>
+                <input id="toggleImmuneMech" type="checkbox" checked class="w-4 h-4 accent-emerald-500 rounded cursor-pointer">
+              </label>
+
+              <div class="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/70 border border-slate-800">
+                <span class="text-xs font-semibold text-slate-200">動畫速度</span>
+                <div class="flex gap-1">
+                  <button id="speedMech1" type="button" class="px-2 py-1 rounded text-xs font-bold bg-sky-500 text-slate-950">1x</button>
+                  <button id="speedMech2" type="button" class="px-2 py-1 rounded text-xs font-bold bg-slate-800 text-slate-300 hover:bg-slate-700">2x</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex flex-wrap gap-2">
+              <button id="btnMechDoseNow" type="button" class="flex-1 py-2.5 px-3 rounded-xl font-bold text-xs bg-gradient-to-r from-sky-500 to-cyan-400 text-slate-950 hover:brightness-110 shadow-lg shadow-sky-500/20 transition flex items-center justify-center gap-1.5">
+                <span>立即投予抗生素</span>
+              </button>
+              <button id="btnMechPause" type="button" class="py-2.5 px-3 rounded-xl font-semibold text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition">
+                暫停
+              </button>
+              <button id="btnMechReset" type="button" class="py-2.5 px-3 rounded-xl font-semibold text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition">
+                重置培養皿
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Right Column: GIANT Interactive Molecular Mechanism Stage + Biochemical Gauges (8 cols) -->
+        <div class="lg:col-span-8 flex flex-col gap-4">
+          
+          <!-- Main Molecular Dissection Stage -->
+          <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-col gap-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/40 text-xs font-bold">互動式細菌分子解剖台</span>
+                  <h3 class="text-sm sm:text-base font-bold text-white">細菌內部五大生化產線 vs. 抗生素攻擊標靶（可直接點擊圖中胞器切換）</h3>
+                </div>
+                <p id="zoomSubtitle" class="text-xs text-slate-400 mt-0.5">
+                  觀察藍色抗生素分子如何進入菌體、鎖定特定酵素或核糖體，並比較下方五個生化產線儀表的即時崩潰過程
+                </p>
+              </div>
+              <span id="zoomActionType" class="text-xs px-3 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 font-bold">
+                殺菌性 (Bactericidal)
+              </span>
+            </div>
+
+            <!-- Interactive 4-Step Mechanism Breakdown Selector -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-950/90 p-2 rounded-xl border border-slate-800">
+              <button id="stepBtn0" type="button" class="p-2 rounded-lg text-left border transition-all bg-sky-500/20 border-sky-400 text-white">
+                <div class="text-[10px] font-bold text-sky-300">全程動態連播</div>
+                <div class="text-xs font-semibold truncate">⚡ 自動連續演示</div>
+              </button>
+              <button id="stepBtn1" type="button" class="p-2 rounded-lg text-left border transition-all bg-slate-900/70 border-slate-800 text-slate-300 hover:border-slate-700">
+                <div class="text-[10px] font-bold text-emerald-400">階段 ①：穿透與結合</div>
+                <div id="stepLabel1" class="text-xs font-semibold truncate">穿透壁膜結合 PBP</div>
+              </button>
+              <button id="stepBtn2" type="button" class="p-2 rounded-lg text-left border transition-all bg-slate-900/70 border-slate-800 text-slate-300 hover:border-slate-700">
+                <div class="text-[10px] font-bold text-amber-400">階段 ②：阻斷生化反應</div>
+                <div id="stepLabel2" class="text-xs font-semibold truncate">肽聚醣無法交聯搭橋</div>
+              </button>
+              <button id="stepBtn3" type="button" class="p-2 rounded-lg text-left border transition-all bg-slate-900/70 border-slate-800 text-slate-300 hover:border-slate-700">
+                <div class="text-[10px] font-bold text-rose-400">階段 ③：最終生理後果</div>
+                <div id="stepLabel3" class="text-xs font-semibold truncate">水分湧入滲透脹破</div>
+              </button>
+            </div>
+
+            <!-- Enlarged High-Detail Molecular Mechanism Canvas -->
+            <div class="relative w-full h-[350px] sm:h-[385px] rounded-xl bg-slate-950 border border-slate-800 overflow-hidden shadow-inner">
+              <canvas id="canvasMechCellZoom" class="w-full h-full block cursor-pointer" title="點擊細菌內的不同胞器可直接切換對應抗生素"></canvas>
+            </div>
+
+            <!-- Live Intracellular Biochemical Process Gauges (5 Factory Meters) -->
+            <div class="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-1">
+              <div id="gaugeCardWall" class="p-2.5 rounded-xl bg-slate-950/90 border border-slate-800 cursor-pointer" onclick="selectAntibiotic('penicillin', true)">
+                <div class="flex justify-between items-center text-[11px] mb-1">
+                  <span class="text-slate-300 font-semibold">🧱 細胞壁交聯度</span>
+                  <span id="gaugeValWall" class="font-mono font-bold text-emerald-400">100%</span>
+                </div>
+                <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                  <div id="gaugeBarWall" class="h-full bg-emerald-400 transition-all duration-200" style="width: 100%"></div>
+                </div>
+                <div id="gaugeNoteWall" class="text-[10px] text-slate-400 mt-1 truncate">PBP 轉肽酶正常運作</div>
+              </div>
+
+              <div id="gaugeCardMem" class="p-2.5 rounded-xl bg-slate-950/90 border border-slate-800 cursor-pointer" onclick="selectAntibiotic('polymyxin', true)">
+                <div class="flex justify-between items-center text-[11px] mb-1">
+                  <span class="text-slate-300 font-semibold">🛡️ 細胞膜密封性</span>
+                  <span id="gaugeValMem" class="font-mono font-bold text-emerald-400">100%</span>
+                </div>
+                <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                  <div id="gaugeBarMem" class="h-full bg-emerald-400 transition-all duration-200" style="width: 100%"></div>
+                </div>
+                <div id="gaugeNoteMem" class="text-[10px] text-slate-400 mt-1 truncate">磷脂雙層無穿孔外洩</div>
+              </div>
+
+              <div id="gaugeCardProt" class="p-2.5 rounded-xl bg-slate-950/90 border border-slate-800 cursor-pointer" onclick="selectAntibiotic('tetracycline', true)">
+                <div class="flex justify-between items-center text-[11px] mb-1">
+                  <span class="text-slate-300 font-semibold">⚙️ 核糖體轉譯蛋白</span>
+                  <span id="gaugeValProt" class="font-mono font-bold text-emerald-400">100%</span>
+                </div>
+                <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                  <div id="gaugeBarProt" class="h-full bg-emerald-400 transition-all duration-200" style="width: 100%"></div>
+                </div>
+                <div id="gaugeNoteProt" class="text-[10px] text-slate-400 mt-1 truncate">30S/50S 持續合成蛋白</div>
+              </div>
+
+              <div id="gaugeCardDna" class="p-2.5 rounded-xl bg-slate-950/90 border border-slate-800 cursor-pointer" onclick="selectAntibiotic('ciprofloxacin', true)">
+                <div class="flex justify-between items-center text-[11px] mb-1">
+                  <span class="text-slate-300 font-semibold">🧬 DNA 解旋複製</span>
+                  <span id="gaugeValDna" class="font-mono font-bold text-emerald-400">100%</span>
+                </div>
+                <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                  <div id="gaugeBarDna" class="h-full bg-emerald-400 transition-all duration-200" style="width: 100%"></div>
+                </div>
+                <div id="gaugeNoteDna" class="text-[10px] text-slate-400 mt-1 truncate">旋轉酶正常解開超螺旋</div>
+              </div>
+
+              <div id="gaugeCardFolate" class="p-2.5 rounded-xl bg-slate-950/90 border border-slate-800 col-span-2 sm:col-span-1 cursor-pointer" onclick="selectAntibiotic('sulfonamide', true)">
+                <div class="flex justify-between items-center text-[11px] mb-1">
+                  <span class="text-slate-300 font-semibold">🧪 葉酸與核苷酸庫</span>
+                  <span id="gaugeValFolate" class="font-mono font-bold text-emerald-400">100%</span>
+                </div>
+                <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                  <div id="gaugeBarFolate" class="h-full bg-emerald-400 transition-all duration-200" style="width: 100%"></div>
+                </div>
+                <div id="gaugeNoteFolate" class="text-[10px] text-slate-400 mt-1 truncate">PABA 正常轉化為葉酸</div>
+              </div>
+            </div>
+
+            <!-- Live Causal Explanation Banner -->
+            <div class="p-3 rounded-xl bg-slate-950/90 border border-sky-500/30 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div class="leading-relaxed">
+                <strong class="text-sky-400">🔍 因果機制總結：</strong>
+                <span id="mechClinicalTip" class="text-slate-200">
+                  青黴素卡死轉肽酶 (PBP) → 肽聚醣無法交聯 → 細菌內部高滲透壓吸入大量水分 → 細胞膜從細胞壁缺口鼓出並直接爆裂死亡（殺菌性）！
+                </span>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Bottom Sub-Row: Macro Colony Petri Dish (6 cols) + Population Growth Curve (6 cols) -->
+          <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+            
+            <!-- Petri Dish Colony Viewport -->
+            <div class="md:col-span-6 bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 shadow-xl flex flex-col">
+              <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-bold text-slate-200">宏觀培養皿菌落反應</span>
+                  <span id="mechDrugStatusPill" class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                    培養中
+                  </span>
+                </div>
+                <span id="mechTimeLabel" class="text-xs font-mono text-slate-400">時間: 0.0 hr</span>
+              </div>
+
+              <div class="relative w-full h-56 rounded-xl overflow-hidden border border-slate-800 petri-grid shadow-inner">
+                <canvas id="canvasMechPetri" class="w-full h-full block"></canvas>
+                
+                <!-- Floating Legend inside Petri Dish -->
+                <div class="absolute bottom-1.5 left-1.5 right-1.5 flex flex-wrap items-center justify-between gap-1 bg-slate-950/85 backdrop-blur px-2.5 py-1 rounded-lg border border-slate-800/80 text-[11px]">
+                  <div class="flex items-center gap-2.5">
+                    <span class="flex items-center gap-1 text-emerald-300">
+                      <span class="w-2 h-2 rounded-full bg-emerald-400 inline-block"></span>活菌:<strong id="statMechAlive" class="font-mono">24</strong>
+                    </span>
+                    <span class="flex items-center gap-1 text-amber-300">
+                      <span class="w-2 h-2 rounded-full bg-amber-400 inline-block"></span>受抑:<strong id="statMechInhibited" class="font-mono">0</strong>
+                    </span>
+                    <span class="flex items-center gap-1 text-rose-300">
+                      <span class="w-2 h-2 rounded-full bg-rose-500 inline-block"></span>裂解:<strong id="statMechDead" class="font-mono">0</strong>
+                    </span>
+                  </div>
+                  <span class="text-sky-300 font-mono">濃度:<strong id="statMechDrugConc">2.0x</strong></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Real-Time Population Growth Curve Chart -->
+            <div class="md:col-span-6 bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 shadow-xl flex flex-col">
+              <div class="flex flex-wrap items-center justify-between gap-1 mb-2">
+                <div>
+                  <h3 class="text-xs font-bold text-slate-200">細菌數量消長曲線 (殺菌 vs 抑菌差異)</h3>
+                  <p class="text-[10px] text-slate-400">殺菌藥使紅線(裂解)飆升；抑菌藥使黃線(休眠)持平</p>
+                </div>
+                <div class="flex items-center gap-2 text-[10px]">
+                  <span class="text-emerald-400 font-semibold">●活菌</span>
+                  <span class="text-amber-400 font-semibold">●受抑</span>
+                  <span class="text-rose-400 font-semibold">●死亡</span>
+                  <span class="text-sky-400 font-semibold">---濃度</span>
+                </div>
+              </div>
+              <div class="relative h-56 w-full bg-slate-950/70 rounded-xl border border-slate-800/80 p-2">
+                <canvas id="canvasMechChart" class="w-full h-full block"></canvas>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Comparison Reference Table for Mechanisms -->
+      <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl">
+        <h3 class="text-sm font-bold text-slate-200 mb-3 flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+          五大類抗生素分子作用原理與選擇性毒性總整理 (點擊任一列可直接切換上方微觀動畫)
+        </h3>
+        <div class="overflow-x-auto custom-scrollbar">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="border-b border-slate-800 text-slate-400 bg-slate-950/60">
+                <th class="py-2.5 px-3 font-semibold">抗生素代表藥物</th>
+                <th class="py-2.5 px-3 font-semibold">結合標靶與阻斷的生化反應</th>
+                <th class="py-2.5 px-3 font-semibold">殺菌 / 抑菌性質</th>
+                <th class="py-2.5 px-3 font-semibold">對 G+ / G- 效果差異原因</th>
+                <th class="py-2.5 px-3 font-semibold">為什麼不傷人類細胞？(選擇性毒性)</th>
+              </tr>
+            </thead>
+            <tbody id="mechComparisonTableBody" class="divide-y divide-slate-800/70">
+              <!-- Populated by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ==================================================== -->
+    <!-- TAB 2: ANTIBIOTIC MISUSE & RESISTANCE EVOLUTION SIM  -->
+    <!-- ==================================================== -->
+    <section id="panelRes" class="space-y-5 hidden">
+      
+      <!-- Top Scenario Banner & Clinical Presets -->
+      <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-3">
+          <div>
+            <h2 class="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span>
+              為什麼錯誤使用抗生素會造成抗藥性增加？（分子抗藥機制 × 達爾文天擇篩選）
+            </h2>
+            <p class="text-xs text-slate-300 mt-0.5">
+              關鍵原理：<strong>抗生素不會「無中生有」製造突變，但錯誤用藥（劑量不足、提早停藥）會殺光佔 92% 的敏感菌，幫原本少數的「抗藥突變菌」清空生存競爭對手！</strong>
+            </p>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <button id="btnResPause" type="button" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition">
+              暫停模擬
+            </button>
+            <button id="btnResReset" type="button" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 transition">
+              重置演化實驗
+            </button>
+          </div>
+        </div>
+
+        <!-- 4 Preset Scenarios -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <button id="presetStandard" type="button" class="p-3 rounded-xl border text-left transition-all flex flex-col justify-between bg-emerald-500/15 border-emerald-500/60 text-emerald-100">
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-xs font-bold text-emerald-300">情境 A：標準完整療程</span>
+                <span class="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-semibold">正確用藥</span>
+              </div>
+              <p class="text-[11px] text-slate-300 leading-relaxed">
+                準時投予足量抗生素，使血中濃度高於「防突變濃度 (MPC >= 3.0)」，連同初級突變菌一併壓制消滅。
+              </p>
+            </div>
+            <div class="mt-2 pt-1.5 border-t border-emerald-500/20 text-[10px] text-emerald-300 font-medium">
+              結果：敏感菌與中度耐受菌雙雙被根除，不留抗藥後代
+            </div>
+          </button>
+
+          <button id="presetEarlyStop" type="button" class="p-3 rounded-xl border text-left transition-all flex flex-col justify-between bg-slate-950/70 border-slate-800 hover:border-amber-500/50 text-slate-200">
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-xs font-bold text-amber-300">情境 B：症狀好轉即自行停藥</span>
+                <span class="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-semibold">錯誤 1：提早停藥</span>
+              </div>
+              <p class="text-[11px] text-slate-400 leading-relaxed">
+                服藥 1.5 天後，佔多數的綠色敏感菌死光、退燒好轉，患者自行停藥，留下少數尚未死透的橘色耐受菌。
+              </p>
+            </div>
+            <div class="mt-2 pt-1.5 border-t border-slate-800 text-[10px] text-amber-400 font-medium">
+              結果：殘存耐受菌失去壓制並獨享空間，復發時全數具抗藥性！
+            </div>
+          </button>
+
+          <button id="presetSubDose" type="button" class="p-3 rounded-xl border text-left transition-all flex flex-col justify-between bg-slate-950/70 border-slate-800 hover:border-rose-500/50 text-slate-200">
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-xs font-bold text-rose-300">情境 C：劑量減半 / 吃吃停停</span>
+                <span class="text-[10px] px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 font-semibold">錯誤 2：劑量不足</span>
+              </div>
+              <p class="text-[11px] text-slate-400 leading-relaxed">
+                擅自減半藥量，使濃度長期卡在 1.0~3.0 的「突變選擇窗 (MSW)」：剛好殺死敏感菌，卻完全傷不到耐受菌。
+              </p>
+            </div>
+            <div class="mt-2 pt-1.5 border-t border-slate-800 text-[10px] text-rose-400 font-medium">
+              結果：幫耐受菌掃除綠色競爭對手（競爭性釋放），加速篩選超級細菌
+            </div>
+          </button>
+
+          <button id="presetHGT" type="button" class="p-3 rounded-xl border text-left transition-all flex flex-col justify-between bg-slate-950/70 border-slate-800 hover:border-purple-500/50 text-slate-200">
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-xs font-bold text-purple-300">情境 D：濫用抗生素 + 質體轉移</span>
+                <span class="text-[10px] px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 font-semibold">錯誤 3：基因擴散</span>
+              </div>
+              <p class="text-[11px] text-slate-400 leading-relaxed">
+                隨意服用低劑量抗生素，加上抗藥菌透過「性線毛接合 (Conjugation)」把抗藥質體 (R-Plasmid) 複製給鄰居。
+              </p>
+            </div>
+            <div class="mt-2 pt-1.5 border-t border-slate-800 text-[10px] text-purple-400 font-medium">
+              結果：敏感菌不用靠自己突變，直接接收質體瞬間升級成超級細菌！
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <!-- Interactive Molecular Resistance Mechanism Visualizer (How Superbugs Defeat Drugs!) -->
+      <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-3">
+          <div>
+            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+              <span class="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40 text-xs">微觀抗藥原理</span>
+              抗藥性細菌到底改變了什麼構造，才能在抗生素中存活？（點擊切換四大分子抗藥機制）
+            </h3>
+          </div>
+          <div class="flex flex-wrap gap-1.5">
+            <button id="resMechBtn0" type="button" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-500 text-white">1. 分解酵素 (β-內醯胺酶)</button>
+            <button id="resMechBtn1" type="button" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800 text-slate-300 hover:bg-slate-700">2. 外排幫浦 (主動吐藥)</button>
+            <button id="resMechBtn2" type="button" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800 text-slate-300 hover:bg-slate-700">3. 標靶構型突變 (無法結合)</button>
+            <button id="resMechBtn3" type="button" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800 text-slate-300 hover:bg-slate-700">4. 關閉外膜通道 (拒絕進入)</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
+          <div class="lg:col-span-8 h-52 rounded-xl bg-slate-950 border border-slate-800 overflow-hidden relative">
+            <canvas id="canvasResMolecular" class="w-full h-full block"></canvas>
+          </div>
+          <div class="lg:col-span-4 p-3.5 rounded-xl bg-slate-950/90 border border-slate-800 space-y-2 text-xs">
+            <div id="resMolTitle" class="text-sm font-bold text-rose-400">機制 1：分泌「β-內醯胺酶」剪斷抗生素</div>
+            <p id="resMolDesc" class="text-slate-200 leading-relaxed">
+              抗藥菌獲得 R-質體基因後，會在細胞壁周圍大量製造「β-內醯胺酶（猶如分子剪刀）」。當青黴素靠近時，還沒碰到 PBP 轉肽酶就被酵素剪開核心環而徹底失效！
+            </p>
+            <div class="p-2 rounded-lg bg-slate-900 border border-slate-800 text-[11px] text-amber-300">
+              <strong>為什麼低劑量用藥會助長此機制？</strong>
+              <span id="resMolWhyMisuse">低劑量抗生素殺死了沒有剪刀酵素的綠色敏感菌，讓少數擁有酵素基因的突變菌獨佔所有養分並透過質體傳給其他細菌。</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Simulation Grid for Tab 2 -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        
+        <!-- Left Column: Manual Dosing Console & Evolutionary Status (5 cols) -->
+        <div class="lg:col-span-5 flex flex-col gap-4">
+          
+          <!-- Manual Medication & Evolution Controls -->
+          <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-4">
+            <div class="flex items-center justify-between">
+              <h3 class="text-sm font-bold text-slate-200 flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                手動服藥與演化參數控制台
+              </h3>
+              <span id="resAutoScheduleBadge" class="text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-semibold">
+                自動療程：標準完整療程
+              </span>
+            </div>
+
+            <!-- Manual Dose Trigger Buttons -->
+            <div class="space-y-2">
+              <div class="text-xs text-slate-400 font-medium">隨時手動介入服藥（點擊將切換為手動控制模式）：</div>
+              <div class="grid grid-cols-2 gap-2">
+                <button id="btnManualFullDose" type="button" class="py-2.5 px-3 rounded-xl font-bold text-xs bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 transition flex items-center justify-center gap-1.5">
+                  <span>💊 服用標準足量 (+3.6)</span>
+                </button>
+                <button id="btnManualSubDose" type="button" class="py-2.5 px-3 rounded-xl font-bold text-xs bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 transition flex items-center justify-center gap-1.5">
+                  <span>⚠️ 服用減半低劑量 (+1.4)</span>
+                </button>
+              </div>
+              <button id="btnManualStopAuto" type="button" class="w-full py-2 px-3 rounded-xl font-semibold text-xs bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 transition">
+                🛑 立即自行停藥（停止後續自動服藥排程）
+              </button>
+            </div>
+
+            <!-- Biological Evolution Toggles -->
+            <div class="space-y-3 pt-2 border-t border-slate-800">
+              <div>
+                <div class="flex justify-between text-xs mb-1">
+                  <label for="sliderMutationRate" class="text-slate-300 font-medium">細菌分裂自發突變率 (Mutation Rate)</label>
+                  <span id="labelMutationRate" class="font-mono text-amber-400 font-bold">中 (3.5%)</span>
+                </div>
+                <input id="sliderMutationRate" type="range" min="0" max="10" step="0.5" value="3.5" class="w-full h-2 bg-slate-800 rounded-lg cursor-pointer">
+              </div>
+
+              <label class="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/70 border border-slate-800 cursor-pointer hover:border-slate-700 transition">
+                <div>
+                  <div class="text-xs font-semibold text-purple-300">水平基因轉移 (質體接合 Conjugation)</div>
+                  <div class="text-[10px] text-slate-400">超級抗藥菌接觸鄰近細菌時可傳遞抗藥質體 (R-plasmid)</div>
+                </div>
+                <input id="toggleResHGT" type="checkbox" checked class="w-4 h-4 accent-purple-500 rounded cursor-pointer">
+              </label>
+            </div>
+
+            <!-- Live Resistance Metrics Meter -->
+            <div class="p-3.5 rounded-xl bg-slate-950/90 border border-slate-800 space-y-3">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-300">菌群平均最小抑菌濃度 (Average MIC)</span>
+                <span id="resAvgMicValue" class="text-sm font-mono font-bold text-emerald-400">1.08 ug/mL</span>
+              </div>
+              <!-- MIC Progress Bar -->
+              <div class="w-full h-3 bg-slate-900 rounded-full overflow-hidden border border-slate-800 p-0.5">
+                <div id="resMicBar" class="h-full rounded-full bg-gradient-to-r from-emerald-400 via-amber-400 to-rose-500 transition-all duration-300" style="width: 22%"></div>
+              </div>
+              <div class="grid grid-cols-3 gap-2 pt-1 text-center">
+                <div class="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                  <div class="text-[10px] text-emerald-300">高敏感菌 (綠)</div>
+                  <div id="countResSus" class="text-sm font-mono font-bold text-emerald-400">36</div>
+                  <div class="text-[9px] text-slate-400">MIC: 1.0 (無抗藥)</div>
+                </div>
+                <div class="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                  <div class="text-[10px] text-amber-300">中度耐受菌 (橘)</div>
+                  <div id="countResInt" class="text-sm font-mono font-bold text-amber-400">3</div>
+                  <div class="text-[9px] text-slate-400">MIC: 2.2 (輕度突變)</div>
+                </div>
+                <div class="p-2 rounded-lg bg-rose-500/10 border border-rose-500/20">
+                  <div class="text-[10px] text-rose-300">超級抗藥菌 (紅)</div>
+                  <div id="countResSuper" class="text-sm font-mono font-bold text-rose-400">0</div>
+                  <div class="text-[9px] text-slate-400">MIC: 4.6 (多重抗藥)</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Dynamic Clinical Diagnosis Alert Box -->
+            <div id="resDiagnosisBox" class="p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-xs space-y-1">
+              <div class="font-bold text-emerald-300 flex items-center gap-1.5">
+                <span id="resDiagnosisTitle">臨床監測：療程進行中</span>
+              </div>
+              <p id="resDiagnosisDesc" class="text-slate-300 leading-relaxed">
+                目前血中藥物濃度高於防突變濃度 (MPC >= 3.0)，無論是敏感菌或少數初級突變菌皆無法繁殖。
+              </p>
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- Right Column: Evolution Petri Dish + MSW & Population Charts (7 cols) -->
+        <div class="lg:col-span-7 flex flex-col gap-4">
+          
+          <!-- Evolution Petri Dish Canvas -->
+          <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+              <div class="flex items-center gap-2">
+                <h3 class="text-sm font-bold text-slate-200">細菌群體天擇篩選與質體轉移培養皿</h3>
+                <span id="resZoneBadge" class="text-[11px] px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-semibold">
+                  無藥物狀態
+                </span>
+              </div>
+              <span id="resDayLabel" class="text-xs font-mono text-slate-400">療程時間: 第 0.0 天</span>
+            </div>
+
+            <div class="relative w-full h-72 sm:h-80 rounded-2xl overflow-hidden border border-slate-800 petri-grid shadow-inner">
+              <canvas id="canvasResPetri" class="w-full h-full block"></canvas>
+
+              <!-- Overlay Legend -->
+              <div class="absolute top-2.5 left-2.5 flex flex-wrap gap-2 bg-slate-950/80 backdrop-blur px-2.5 py-1.5 rounded-lg border border-slate-800 text-[11px]">
+                <span class="flex items-center gap-1 text-emerald-300">
+                  <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block"></span>敏感菌 (MIC=1.0)
+                </span>
+                <span class="flex items-center gap-1 text-amber-300">
+                  <span class="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block"></span>耐受突變菌 (MIC=2.2)
+                </span>
+                <span class="flex items-center gap-1 text-rose-300">
+                  <span class="w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-purple-400 inline-block"></span>超級抗藥菌 (MIC=4.6)
+                </span>
+              </div>
+
+              <!-- Current Drug Level Indicator in Corner -->
+              <div class="absolute bottom-2.5 right-2.5 bg-slate-950/85 backdrop-blur px-3 py-1.5 rounded-lg border border-slate-800 text-xs font-mono">
+                體內藥物濃度: <strong id="resCurrentDrugText" class="text-sky-400">0.00</strong> ug/mL
+              </div>
+            </div>
+          </div>
+
+          <!-- Dual Charts: 1) Drug Conc & Mutant Selection Window, 2) Strain Composition Evolution -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            
+            <!-- Chart 1: Pharmacokinetics & Mutant Selection Window (MSW) -->
+            <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 shadow-xl flex flex-col">
+              <div class="mb-2">
+                <div class="flex items-center justify-between">
+                  <h4 class="text-xs font-bold text-slate-200">血中藥物濃度 vs. 突變選擇窗 (MSW)</h4>
+                  <span class="text-[10px] text-amber-400 font-semibold">黃色區間 = 專殺綠菌、養肥橘紅菌</span>
+                </div>
+                <p class="text-[11px] text-slate-400">濃度介於 1.0 與 3.0 之間時，敏感菌死光而耐受菌存活</p>
+              </div>
+              <div class="relative h-44 w-full bg-slate-950/70 rounded-xl border border-slate-800/80 p-1.5">
+                <canvas id="canvasResMswChart" class="w-full h-full block"></canvas>
+              </div>
+            </div>
+
+            <!-- Chart 2: Bacterial Strain Composition Over Time -->
+            <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 shadow-xl flex flex-col">
+              <div class="mb-2">
+                <div class="flex items-center justify-between">
+                  <h4 class="text-xs font-bold text-slate-200">各類菌株數量消長曲線 (競爭性釋放)</h4>
+                  <div class="flex items-center gap-2 text-[10px]">
+                    <span class="text-emerald-400">● 敏感</span>
+                    <span class="text-amber-400">● 耐受</span>
+                    <span class="text-rose-400">● 抗藥</span>
+                  </div>
+                </div>
+                <p class="text-[11px] text-slate-400">觀察錯誤停藥或減量時，綠線歸零卻換來橘線與紅線全面取代</p>
+              </div>
+              <div class="relative h-44 w-full bg-slate-950/70 rounded-xl border border-slate-800/80 p-1.5">
+                <canvas id="canvasResPopChart" class="w-full h-full block"></canvas>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <script>
+    // =========================================================================
+    // DETAILED ANTIBIOTIC DATA DEFINITIONS (TAB 1)
+    // =========================================================================
+    const ANTIBIOTICS = [
+      {
+        id: 'penicillin',
+        name: '青黴素 (Penicillin)',
+        shortName: '🧱 青黴素 (破壞細胞壁)',
+        target: '卡死 PBP 轉肽酶・阻斷肽聚醣細胞壁交聯',
+        type: 'bactericidal',
+        typeLabel: '殺菌性 (直接脹破)',
+        badgeClass: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
+        spectrum: '對 G+ 強效 / G- 受外膜阻擋',
+        gPosEff: 1.25,
+        gNegEff: 0.42,
+        desc: '細菌生長分裂時需由「轉肽酶 (PBP)」將肽聚醣磚塊焊接成堅固網狀細胞壁。青黴素的 β-內醯胺環會共價卡死 PBP 酵素，導致細胞壁出現大缺口，無法承受細菌內部極高的滲透壓，水分湧入使細菌像氣球般膨脹爆裂！',
+        selective: '人類細胞只有細胞膜、完全沒有「肽聚醣細胞壁」與 PBP 轉肽酶，因此青黴素對人體細胞完全無作用。',
+        visualCue: '細胞壁交聯斷裂 → 水分 H₂O 湧入 → 細胞膜鼓出並滲透裂解爆炸',
+        clinicalTip: '青黴素必須在細菌「正在分裂合成新細胞壁」時才能發揮最大殺菌力；革蘭氏陰性菌因外層多了脂多醣外膜 (LPS)，傳統青黴素不易進入。',
+        steps: [
+          '青黴素穿透至細胞壁並鎖定 PBP 轉肽酶',
+          '胜肽橋無法焊接，肽聚醣網出現結構裂縫',
+          '外部水分因高滲透壓湧入，細胞膨脹爆裂'
+        ]
+      },
+      {
+        id: 'tetracycline',
+        name: '四環黴素 (Tetracycline)',
+        shortName: '⚙️ 四環黴素 (鎖定核糖體)',
+        target: '佔據 30S 核糖體 A位點・阻斷 tRNA 合成蛋白質',
+        type: 'bacteriostatic',
+        typeLabel: '抑菌性 (凍結生長)',
+        badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+        spectrum: '廣效型 (G+ 與 G- 皆有效)',
+        gPosEff: 1.0,
+        gNegEff: 0.95,
+        desc: '細菌需要「70S 核糖體 (30S+50S)」讀取 mRNA 並由 tRNA 搬運胺基酸來製造蛋白質。四環黴素直接塞進 30S 次單元的 A-位點，讓攜帶胺基酸的 tRNA 進不去，蛋白質產線瞬間停擺，細菌無法長大也無法分裂。',
+        selective: '細菌核糖體為 70S (30S+50S)，而人類細胞質核糖體為 80S (40S+60S)，結構尺寸不同，因此四環黴素專挑細菌 30S 結合。',
+        visualCue: '藥物塞住 30S 核糖體 → tRNA 被彈開 → 胜肽鏈停止延伸、細菌凍結休眠',
+        clinicalTip: '四環黴素是「抑菌藥」，只會讓細菌卡住不動而不會直接爆裂；必須仰賴宿主免疫白血球把被凍結的細菌吞噬清除。',
+        steps: [
+          '四環黴素進入菌體並嵌入 30S 核糖體 A位點',
+          '攜帶胺基酸的 tRNA 撞上藥物而被彈開',
+          '蛋白質合成歸零，細菌停止生長與分裂'
+        ]
+      },
+      {
+        id: 'ciprofloxacin',
+        name: '環丙沙星 (Ciprofloxacin)',
+        shortName: '🧬 環丙沙星 (切斷 DNA)',
+        target: '卡死 DNA 旋轉酶 (Gyrase)・造成染色體雙股斷裂',
+        type: 'bactericidal',
+        typeLabel: '殺菌性 (DNA斷裂)',
+        badgeClass: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
+        spectrum: '廣效型 (對 G- 桿菌極強)',
+        gPosEff: 0.95,
+        gNegEff: 1.35,
+        desc: '細菌環狀 DNA 複製時會產生嚴重纏繞（正超螺旋），必須靠「DNA 旋轉酶」先剪開雙股、釋放扭力再黏合。環丙沙星像楔子一樣卡在「剪開卻還沒黏合」的旋轉酶複合體中，導致複製叉撞上後發生致命的雙股 DNA 斷裂！',
+        selective: '細菌使用特有的第 II 型拓撲異構酶（DNA 旋轉酶 Gyrase），與人類真核細胞的拓撲異構酶結構差異極大，藥物對細菌旋轉酶親和力高上千倍。',
+        visualCue: '旋轉酶被藥物鎖死 → 複製叉撞擊斷裂 → 細菌無法分裂而拉長成絲狀並凋亡',
+        clinicalTip: '當 DNA 雙股斷裂無法修復時，細菌會啟動 SOS 反應停止細胞分裂（外觀拉長成絲狀體），最終染色體瓦解死亡。',
+        steps: [
+          '環丙沙星穿過孔蛋白進入細胞核區',
+          '卡死正在切開超螺旋的 DNA 旋轉酶複合體',
+          'DNA 雙股徹底斷裂，菌體異常拉長後死亡'
+        ]
+      },
+      {
+        id: 'polymyxin',
+        name: '多黏菌素 B (Polymyxin B)',
+        shortName: '🛡️ 多黏菌素 (穿孔細胞膜)',
+        target: '陽離子界面活性劑效應・在細胞膜打出物理孔洞',
+        type: 'bactericidal',
+        typeLabel: '殺菌性 (穿孔漏液)',
+        badgeClass: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
+        spectrum: '專攻革蘭氏陰性菌 (G-)',
+        gPosEff: 0.22,
+        gNegEff: 1.45,
+        desc: '多黏菌素同時帶有「正電環肽」與「親脂性脂肪酸尾巴」。它先受靜電吸引結合革蘭氏陰性菌帶負電的外膜脂多醣 (LPS)，接著脂肪酸尾巴像清潔劑一樣插入磷脂雙分子層，把細胞膜撐開破洞，讓 K⁺ 離子、ATP 與細胞質瞬間漏光！',
+        selective: '細菌外膜含有大量帶強負電的脂多醣 (LPS) 與酸性磷脂，而人類細胞膜外層主要為電中性的磷脂醯膽鹼與膽固醇。',
+        visualCue: '藥物插入外膜與細胞膜 → 形成貫穿孔洞 → 內部 ATP 與離子外洩殆盡',
+        clinicalTip: '多黏菌素不需等細菌分裂就能直接把膜戳破（如同戳破水球），但對沒有外膜 LPS 的革蘭氏陽性菌效果很差。',
+        steps: [
+          '帶正電藥物吸附革蘭氏陰性菌外膜 LPS',
+          '親脂尾巴插入磷脂雙分子層形成跨膜孔洞',
+          '細胞質 K⁺ 與 ATP 大量外洩，細菌迅速萎縮死亡'
+        ]
+      },
+      {
+        id: 'sulfonamide',
+        name: '磺胺類 (Sulfonamides)',
+        shortName: '🧪 磺胺藥 (假冒葉酸原料)',
+        target: '假冒 PABA 原料・競爭性抑制二氫葉酸合成酶',
+        type: 'bacteriostatic',
+        typeLabel: '抑菌性 (斷絕原料)',
+        badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+        spectrum: '廣效抑菌 (G+ 與 G- 皆可)',
+        gPosEff: 0.9,
+        gNegEff: 0.85,
+        desc: '細菌無法從環境吸收葉酸，必須用原料「PABA（對胺基苯甲酸）」透過 DHPS 酵素自己合成葉酸，進而製造 DNA 所需的胸腺嘧啶核苷酸。磺胺藥長得跟 PABA 幾乎一模一樣，能搶先塞進 DHPS 酵素活性位點，讓葉酸生產線斷炊！',
+        selective: '人類細胞沒有 DHPS 酵素，我們直接從蔬菜飲食攝取現成葉酸；細菌則無法吸收外界葉酸、非自己合成不可，堪稱最經典的代謝選擇性標靶！',
+        visualCue: '磺胺假分子塞滿 DHPS 酵素 → 真原料 PABA 被擋在門外 → 葉酸與核苷酸耗盡',
+        clinicalTip: '因為細菌體內原本還有少量葉酸存貨，磺胺藥投予後會有短暫延遲，等存貨用光後細菌便完全停止分裂。',
+        steps: [
+          '磺胺分子憑藉結構相似性搶佔 DHPS 酵素',
+          '真正的原料 PABA 無法進入活性位點',
+          '葉酸與 dTTP 核苷酸枯竭，DNA 無法合成'
+        ]
+      },
+      {
+        id: 'control',
+        name: '無抗生素 (正常生理對照)',
+        shortName: '🌱 無抗生素 (正常對照)',
+        target: '五大生化產線全速運轉・進行二分裂增殖',
+        type: 'control',
+        typeLabel: '正常生長對照',
+        badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
+        spectrum: '所有菌種正常生長',
+        gPosEff: 0,
+        gNegEff: 0,
+        desc: '在未投藥狀態下：1) PBP 轉肽酶持續交聯肽聚醣細胞壁；2) 細胞膜維持離子梯度；3) 30S/50S 核糖體高速轉譯蛋白質；4) DNA 旋轉酶解旋複製染色體；5) PABA 順暢合成葉酸與核苷酸。',
+        selective: '對照組展示細菌在沒有抗生素干擾時的完整生命週期與二分裂生殖。',
+        visualCue: '五大生化產線皆為 100% 綠燈，細菌穩定伸長並一分為二',
+        clinicalTip: '點擊左側任一種抗生素（或直接點擊右圖中的細菌構造），即可直接對比哪一條生化產線被藥物精準摧毀！',
+        steps: [
+          '養分與原料 PABA 順暢進入細菌體內',
+          '核糖體合成蛋白質、旋轉酶複製環狀 DNA',
+          'PBP 轉肽酶建構新細胞壁，完成二分裂生殖'
+        ]
+      }
+    ];
+
+    // =========================================================================
+    // MOLECULAR RESISTANCE MECHANISMS DATA (TAB 2)
+    // =========================================================================
+    const RES_MOLECULAR_MECHS = [
+      {
+        id: 0,
+        title: '機制 1：分泌「分解酵素 (如 β-內醯胺酶)」直接剪碎抗生素',
+        desc: '抗藥菌取得 R-質體上的 bla 基因後，會製造大量的「β-內醯胺酶（分子剪刀）」。當青黴素或頭孢子菌素靠近時，還沒碰到 PBP 轉肽酶，其核心四元環就被酵素切開水解，瞬間變成無效碎片！',
+        whyMisuse: '低劑量或提早停藥時，沒有酵素的綠色敏感菌先死光，留下少數會分泌剪刀酵素的突變菌大量繁殖，甚至透過質體把酵素基因傳給整群細菌。'
+      },
+      {
+        id: 1,
+        title: '機制 2：啟動「外排幫浦 (Efflux Pump)」把進入的藥物主動吐出去',
+        desc: '抗藥菌在細胞膜上大量表現「外排幫浦蛋白（如 TetA 或 AcrAB-TolC）」。當四環黴素或環丙沙星好不容易穿過細胞膜進入菌體，幫浦立刻消耗能量把藥物分子抓起來直接噴回細胞外，使菌體內藥物濃度永遠達不到抑菌門檻！',
+        whyMisuse: '當患者擅自將藥量減半（處於突變選擇窗 MSW），外排幫浦剛好來得及把低濃度的藥物全部抽乾；只有足量高濃度投藥才能壓倒幫浦的抽水速度！'
+      },
+      {
+        id: 2,
+        title: '機制 3：「作用標靶構型突變」讓抗生素找不到鑰匙孔結合',
+        desc: '細菌透過染色體點突變，稍微改變了 30S 核糖體、DNA 旋轉酶 (gyrA 突變) 或製造出低親和力的 PBP2a（如 MRSA 超級金黃色葡萄球菌）。細菌自己的生化產線照常運作，但抗生素卻因為「形狀不合」直接彈開！',
+        whyMisuse: '這類自發突變菌原本在菌群中不到 1%。若未完成完整療程，99% 正常標靶的細菌死去後，這 1% 標靶突變菌就會接管整個感染部位。'
+      },
+      {
+        id: 3,
+        title: '機制 4：「關閉外膜孔蛋白通道 (Porin Loss)」把抗生素擋在門外',
+        desc: '革蘭氏陰性菌可透過突變減少或縮小外膜上的「水孔蛋白通道 (OmpF/OmpC)」，或者加厚脂多醣外膜。水溶性的 β-內醯胺類與氟喹諾酮類抗生素連大門都進不去，只能在細菌外面徘徊！',
+        whyMisuse: '長期濫用廣效抗生素會持續篩選出外膜通道最狹窄的菌株，導致後續即使換藥也難以穿透細菌外膜。'
+      }
+    ];
+
+    // =========================================================================
+    // STATE VARIABLES — TAB 1 (MECHANISM SIMULATOR)
+    // =========================================================================
+    let activeTab = 'mech';
+    let selectedDrugId = 'penicillin';
+    let gramType = 'pos';
+    let mechTargetDose = 2.0;
+    let mechCurrentDrugConc = 2.0;
+    let mechImmuneEnabled = true;
+    let mechSpeed = 1;
+    let mechPaused = false;
+    let mechSimTime = 0;
+    let mechTotalLysed = 0;
+    let mechStepMode = 0;
+
+    let gauges = {
+      wall: 100,
+      mem: 100,
+      prot: 100,
+      dna: 100,
+      folate: 100
+    };
+
+    let mechBacteria = [];
+    let mechParticles = [];
+    let mechMacrophages = [];
+    let mechChartHistory = [];
+    let mechChartTimer = 0;
+
+    // =========================================================================
+    // STATE VARIABLES — TAB 2 (RESISTANCE EVOLUTION SIMULATOR)
+    // =========================================================================
+    let resScenario = 'standard';
+    let resPaused = false;
+    let resSimDays = 0;
+    let resDrugConc = 0;
+    let resMutationRate = 0.035;
+    let resHgtEnabled = true;
+    let resBacteria = [];
+    let resPlasmids = [];
+    let resHistory = [];
+    let resChartTimer = 0;
+    let resLastAutoDoseSlot = -1;
+    let activeResMolMech = 0;
+
+    // =========================================================================
+    // DOM ELEMENTS Initialization
+    // =========================================================================
+    const tabBtnMech = document.getElementById('tabBtnMech');
+    const tabBtnRes = document.getElementById('tabBtnRes');
+    const panelMech = document.getElementById('panelMech');
+    const panelRes = document.getElementById('panelRes');
+
+    const canvasMechPetri = document.getElementById('canvasMechPetri');
+    const ctxMechPetri = canvasMechPetri.getContext('2d');
+    const canvasMechCellZoom = document.getElementById('canvasMechCellZoom');
+    const ctxMechCellZoom = canvasMechCellZoom.getContext('2d');
+    const canvasMechChart = document.getElementById('canvasMechChart');
+    const ctxMechChart = canvasMechChart.getContext('2d');
+
+    const canvasResPetri = document.getElementById('canvasResPetri');
+    const ctxResPetri = canvasResPetri.getContext('2d');
+    const canvasResMswChart = document.getElementById('canvasResMswChart');
+    const ctxResMswChart = canvasResMswChart.getContext('2d');
+    const canvasResPopChart = document.getElementById('canvasResPopChart');
+    const ctxResPopChart = canvasResPopChart.getContext('2d');
+    const canvasResMolecular = document.getElementById('canvasResMolecular');
+
+    // =========================================================================
+    // HELPER: HIGH-DPI CANVAS RESIZING
+    // =========================================================================
+    function resizeCanvasToDisplaySize(canvas) {
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return false;
+      const dpr = window.devicePixelRatio || 1;
+      const targetW = Math.round(rect.width * dpr);
+      const targetH = Math.round(rect.height * dpr);
+      if (canvas.width !== targetW || canvas.height !== targetH) {
+        canvas.width = targetW;
+        canvas.height = targetH;
+        return true;
+      }
+      return false;
+    }
+
+    // =========================================================================
+    // BUILD UI FOR TAB 1 (CARDS, STEP BUTTONS & COMPARISON TABLE)
+    // =========================================================================
+    function renderAntibioticUI() {
+      const cardGrid = document.getElementById('antibioticCardGrid');
+      const tableBody = document.getElementById('mechComparisonTableBody');
+      cardGrid.innerHTML = '';
+      tableBody.innerHTML = '';
+
+      ANTIBIOTICS.forEach((drug) => {
+        const isSelected = drug.id === selectedDrugId;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between ${
+          isSelected
+            ? 'bg-sky-500/20 border-sky-400 text-white shadow-md shadow-sky-500/10'
+            : 'bg-slate-950/60 border-slate-800/90 text-slate-300 hover:border-slate-700 hover:bg-slate-900'
+        }`;
+        btn.innerHTML = `
+          <div class="flex items-center justify-between gap-1 w-full mb-1">
+            <span class="text-xs font-bold truncate">${drug.shortName}</span>
+            <span class="w-2 h-2 rounded-full shrink-0 ${
+              drug.type === 'bactericidal' ? 'bg-rose-400' : drug.type === 'bacteriostatic' ? 'bg-amber-400' : 'bg-emerald-400'
+            }"></span>
+          </div>
+          <div class="text-[10px] text-slate-400 line-clamp-1">${drug.target}</div>
+        `;
+        btn.addEventListener('click', () => {
+          selectAntibiotic(drug.id, true);
+        });
+        cardGrid.appendChild(btn);
+
+        const tr = document.createElement('tr');
+        tr.className = `cursor-pointer transition ${
+          isSelected ? 'bg-sky-500/15 text-white' : 'hover:bg-slate-800/40 text-slate-300'
+        }`;
+        tr.innerHTML = `
+          <td class="py-2.5 px-3 font-bold text-sky-300 whitespace-nowrap">${drug.name}</td>
+          <td class="py-2.5 px-3">${drug.target}</td>
+          <td class="py-2.5 px-3 whitespace-nowrap">
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold border ${drug.badgeClass}">${drug.typeLabel}</span>
+          </td>
+          <td class="py-2.5 px-3 text-slate-300">${drug.spectrum}</td>
+          <td class="py-2.5 px-3 text-emerald-300">${drug.selective}</td>
+        `;
+        tr.addEventListener('click', () => {
+          selectAntibiotic(drug.id, true);
+        });
+        tableBody.appendChild(tr);
+      });
+
+      const current = ANTIBIOTICS.find((d) => d.id === selectedDrugId) || ANTIBIOTICS[0];
+      const badge = document.getElementById('mechCategoryBadge');
+      badge.textContent = current.typeLabel;
+      badge.className = `text-xs font-semibold px-2.5 py-0.5 rounded-full border ${current.badgeClass}`;
+
+      document.getElementById('mechTargetTitle').textContent = `${current.name} — ${current.target}`;
+      document.getElementById('mechSpectrumBadge').textContent = current.spectrum;
+      document.getElementById('mechDescription').textContent = current.desc;
+      document.getElementById('mechSelectiveToxicity').textContent = current.selective;
+      document.getElementById('mechVisualCue').textContent = current.visualCue;
+      document.getElementById('mechClinicalTip').textContent = current.clinicalTip;
+
+      const zoomBadge = document.getElementById('zoomActionType');
+      zoomBadge.textContent = current.typeLabel;
+      zoomBadge.className = `text-xs px-3 py-1 rounded-full border font-bold ${current.badgeClass}`;
+
+      document.getElementById('stepLabel1').textContent = current.steps[0];
+      document.getElementById('stepLabel2').textContent = current.steps[1];
+      document.getElementById('stepLabel3').textContent = current.steps[2];
+
+      const mapTargetGauge = {
+        penicillin: 'gaugeCardWall',
+        polymyxin: 'gaugeCardMem',
+        tetracycline: 'gaugeCardProt',
+        ciprofloxacin: 'gaugeCardDna',
+        sulfonamide: 'gaugeCardFolate'
+      };
+      ['gaugeCardWall', 'gaugeCardMem', 'gaugeCardProt', 'gaugeCardDna', 'gaugeCardFolate'].forEach((id) => {
+        const el = document.getElementById(id);
+        const extraCol = id === 'gaugeCardFolate' ? ' col-span-2 sm:col-span-1' : '';
+        if (mapTargetGauge[selectedDrugId] === id) {
+          el.className = `p-2.5 rounded-xl bg-rose-950/40 border-2 border-rose-500/80 shadow-md shadow-rose-500/10 cursor-pointer${extraCol}`;
+        } else {
+          el.className = `p-2.5 rounded-xl bg-slate-950/90 border border-slate-800 cursor-pointer hover:border-slate-700${extraCol}`;
+        }
+      });
+    }
+
+    function setMechStepMode(stepIdx) {
+      mechStepMode = stepIdx;
+      for (let i = 0; i <= 3; i++) {
+        const btn = document.getElementById(`stepBtn${i}`);
+        if (i === stepIdx) {
+          btn.className = 'p-2 rounded-lg text-left border transition-all bg-sky-500/20 border-sky-400 text-white shadow';
+        } else {
+          btn.className = 'p-2 rounded-lg text-left border transition-all bg-slate-900/70 border-slate-800 text-slate-300 hover:border-slate-700';
+        }
+      }
+    }
+
+    function selectAntibiotic(drugId, autoAdminister = false) {
+      selectedDrugId = drugId;
+      renderAntibioticUI();
+      if (drugId === 'control') {
+        mechCurrentDrugConc = 0;
+        mechBacteria.forEach((b) => {
+          b.inhibited = false;
+          b.damage = 0;
+          b.swelling = 0;
+          b.filament = 0;
+          b.membraneLeak = 0;
+        });
+      } else if (autoAdminister) {
+        if (mechBacteria.length < 10) {
+          initMechSimulation();
+        } else {
+          administerMechDrug();
+        }
+      }
+    }
+
+    function administerMechDrug() {
+      if (selectedDrugId === 'control') {
+        mechCurrentDrugConc = 0;
+        return;
+      }
+      mechCurrentDrugConc = mechTargetDose;
+      for (let i = 0; i < 28; i++) {
+        mechParticles.push({
+          x: Math.random(),
+          y: Math.random(),
+          vx: (Math.random() - 0.5) * 0.004,
+          vy: (Math.random() - 0.5) * 0.004,
+          r: 2 + Math.random() * 2,
+          color: '#38bdf8',
+          alpha: 0.9,
+          type: 'drug'
+        });
+      }
+    }
+
+    // =========================================================================
+    // TAB 1: INITIALIZE & UPDATE PETRI DISH + BIOCHEMICAL GAUGES
+    // =========================================================================
+    function initMechSimulation() {
+      mechSimTime = 0;
+      mechTotalLysed = 0;
+      mechCurrentDrugConc = selectedDrugId === 'control' ? 0 : mechTargetDose;
+      mechBacteria = [];
+      mechParticles = [];
+      mechMacrophages = [];
+      mechChartHistory = [];
+      mechChartTimer = 0;
+      gauges = { wall: 100, mem: 100, prot: 100, dna: 100, folate: 100 };
+
+      for (let i = 0; i < 24; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = Math.random() * 0.32;
+        mechBacteria.push(createMechBacterium(0.5 + Math.cos(angle) * dist, 0.5 + Math.sin(angle) * dist));
+      }
+
+      for (let i = 0; i < 3; i++) {
+        mechMacrophages.push({
+          x: 0.15 + Math.random() * 0.7,
+          y: 0.15 + Math.random() * 0.7,
+          vx: (Math.random() - 0.5) * 0.002,
+          vy: (Math.random() - 0.5) * 0.002,
+          radius: 0.042,
+          engulfTimer: 0
+        });
+      }
+
+      recordMechChartPoint();
+    }
+
+    function createMechBacterium(x, y) {
+      return {
+        x: Math.max(0.08, Math.min(0.92, x)),
+        y: Math.max(0.08, Math.min(0.92, y)),
+        angle: Math.random() * Math.PI * 2,
+        vx: (Math.random() - 0.5) * 0.002,
+        vy: (Math.random() - 0.5) * 0.002,
+        length: 0.026 + Math.random() * 0.008,
+        growth: Math.random() * 0.5,
+        inhibited: false,
+        damage: 0,
+        swelling: 0,
+        filament: 0,
+        membraneLeak: 0
+      };
+    }
+
+    function updateBiochemicalGauges(dt, effectivePotency) {
+      const target = { wall: 100, mem: 100, prot: 100, dna: 100, folate: 100 };
+      const blockedByOuterMem = gramType === 'neg' && selectedDrugId === 'penicillin' && mechCurrentDrugConc < 2.2;
+
+      if (selectedDrugId !== 'control' && effectivePotency > 0.2) {
+        const drop = Math.min(96, effectivePotency * 48);
+        if (selectedDrugId === 'penicillin') {
+          target.wall = Math.max(4, 100 - drop);
+          target.mem = Math.max(18, 100 - drop * 0.68);
+        } else if (selectedDrugId === 'polymyxin') {
+          target.mem = Math.max(4, 100 - drop * 1.1);
+        } else if (selectedDrugId === 'tetracycline') {
+          target.prot = Math.max(4, 100 - drop);
+        } else if (selectedDrugId === 'ciprofloxacin') {
+          target.dna = Math.max(4, 100 - drop);
+        } else if (selectedDrugId === 'sulfonamide') {
+          target.folate = Math.max(4, 100 - drop);
+          target.dna = Math.max(15, 100 - drop * 0.78);
+        }
+      }
+
+      const lerpSpeed = dt * 3.5;
+      ['wall', 'mem', 'prot', 'dna', 'folate'].forEach((k) => {
+        gauges[k] += (target[k] - gauges[k]) * Math.min(1, lerpSpeed);
+      });
+
+      const updateGaugeDOM = (key, valId, barId, noteId, normalNote, damagedNote) => {
+        const v = Math.round(gauges[key]);
+        const valEl = document.getElementById(valId);
+        const barEl = document.getElementById(barId);
+        const noteEl = document.getElementById(noteId);
+        valEl.textContent = `${v}%`;
+        barEl.style.width = `${v}%`;
+        if (v < 45) {
+          valEl.className = 'font-mono font-bold text-rose-400';
+          barEl.className = 'h-full bg-rose-500 transition-all duration-150';
+          noteEl.textContent = damagedNote;
+          noteEl.className = 'text-[10px] text-rose-300 font-semibold mt-1 truncate';
+        } else if (v < 80) {
+          valEl.className = 'font-mono font-bold text-amber-400';
+          barEl.className = 'h-full bg-amber-400 transition-all duration-150';
+          noteEl.textContent = blockedByOuterMem ? '外膜阻擋部分藥效' : damagedNote;
+          noteEl.className = 'text-[10px] text-amber-300 mt-1 truncate';
+        } else {
+          valEl.className = 'font-mono font-bold text-emerald-400';
+          barEl.className = 'h-full bg-emerald-400 transition-all duration-150';
+          noteEl.textContent = normalNote;
+          noteEl.className = 'text-[10px] text-slate-400 mt-1 truncate';
+        }
+      };
+
+      updateGaugeDOM('wall', 'gaugeValWall', 'gaugeBarWall', 'gaugeNoteWall', 'PBP 轉肽酶正常交聯', '❌ PBP 卡死・細胞壁破裂');
+      updateGaugeDOM('mem', 'gaugeValMem', 'gaugeBarMem', 'gaugeNoteMem', '磷脂雙層完整無漏液', selectedDrugId === 'penicillin' ? '⚠️ 滲透壓過高脹破膜' : '❌ 膜穿孔・K+/ATP 外洩');
+      updateGaugeDOM('prot', 'gaugeValProt', 'gaugeBarProt', 'gaugeNoteProt', '30S/50S 正常合成蛋白', '❌ 30S A位點鎖死停擺');
+      updateGaugeDOM('dna', 'gaugeValDna', 'gaugeBarDna', 'gaugeNoteDna', '旋轉酶正常解旋複製', selectedDrugId === 'sulfonamide' ? '⚠️ 缺乏核苷酸原料停滯' : '❌ 旋轉酶卡死・雙股斷裂');
+      updateGaugeDOM('folate', 'gaugeValFolate', 'gaugeBarFolate', 'gaugeNoteFolate', 'PABA 順暢合成葉酸', '❌ 磺胺假原料塞死 DHPS');
+    }
+
+    function recordMechChartPoint() {
+      let alive = 0;
+      let inhibited = 0;
+      mechBacteria.forEach((b) => {
+        if (b.inhibited) inhibited++;
+        else alive++;
+      });
+      mechChartHistory.push({
+        t: mechSimTime,
+        alive,
+        inhibited,
+        dead: mechTotalLysed,
+        conc: mechCurrentDrugConc
+      });
+      if (mechChartHistory.length > 90) {
+        mechChartHistory.shift();
+      }
+    }
+
+    function updateMechSimulation(dt) {
+      if (mechPaused) return;
+      const scaledDt = dt * mechSpeed;
+      mechSimTime += scaledDt * 0.6;
+
+      const currentDrug = ANTIBIOTICS.find((d) => d.id === selectedDrugId) || ANTIBIOTICS[0];
+      const susceptibility = gramType === 'pos' ? currentDrug.gPosEff : currentDrug.gNegEff;
+
+      if (selectedDrugId !== 'control' && mechCurrentDrugConc > 0) {
+        mechCurrentDrugConc = Math.max(0, mechCurrentDrugConc - scaledDt * 0.012);
+      }
+
+      const effectivePotency = mechCurrentDrugConc * susceptibility;
+      updateBiochemicalGauges(scaledDt, effectivePotency);
+
+      const carryingCapacity = 95;
+      const totalPop = mechBacteria.length;
+      const newBacteria = [];
+      const survivingBacteria = [];
+
+      for (let i = 0; i < mechBacteria.length; i++) {
+        const b = mechBacteria[i];
+
+        if (selectedDrugId === 'control' || effectivePotency < 0.35) {
+          b.inhibited = false;
+          b.swelling = Math.max(0, b.swelling - scaledDt * 0.5);
+          b.membraneLeak = Math.max(0, b.membraneLeak - scaledDt * 0.5);
+        } else if (currentDrug.type === 'bacteriostatic') {
+          const inhibitProb = Math.min(0.96, effectivePotency * 0.55);
+          if (Math.random() < inhibitProb * scaledDt * 2.2 || effectivePotency >= 1.1) {
+            b.inhibited = true;
+          }
+        } else if (currentDrug.type === 'bactericidal') {
+          b.inhibited = false;
+          if (selectedDrugId === 'penicillin') {
+            b.swelling += scaledDt * effectivePotency * 0.45;
+            b.damage += scaledDt * effectivePotency * 0.42;
+          } else if (selectedDrugId === 'ciprofloxacin') {
+            b.filament = Math.min(0.035, b.filament + scaledDt * effectivePotency * 0.012);
+            b.damage += scaledDt * effectivePotency * 0.44;
+          } else if (selectedDrugId === 'polymyxin') {
+            b.membraneLeak += scaledDt * effectivePotency * 0.6;
+            b.damage += scaledDt * effectivePotency * 0.55;
+          }
+        }
+
+        const moveFactor = b.inhibited ? 0.15 : 1.0;
+        b.vx += (Math.random() - 0.5) * 0.0008 * moveFactor;
+        b.vy += (Math.random() - 0.5) * 0.0008 * moveFactor;
+        b.vx *= 0.95;
+        b.vy *= 0.95;
+        b.x += b.vx * mechSpeed;
+        b.y += b.vy * mechSpeed;
+        b.angle += (Math.random() - 0.5) * 0.08 * moveFactor;
+
+        const dx = b.x - 0.5;
+        const dy = b.y - 0.5;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > 0.43) {
+          const normX = dx / dist;
+          const normY = dy / dist;
+          b.x = 0.5 + normX * 0.425;
+          b.y = 0.5 + normY * 0.425;
+          b.vx *= -0.6;
+          b.vy *= -0.6;
+        }
+
+        if (b.damage >= 1.0) {
+          mechTotalLysed++;
+          spawnLysisDebris(b.x, b.y, selectedDrugId);
+          continue;
+        }
+
+        if (!b.inhibited && totalPop + newBacteria.length < carryingCapacity) {
+          const logisticFactor = Math.max(0.1, 1 - totalPop / carryingCapacity);
+          const ciproBlock = selectedDrugId === 'ciprofloxacin' && effectivePotency >= 0.8 ? 0.1 : 1.0;
+          b.growth += scaledDt * 0.38 * logisticFactor * ciproBlock;
+
+          if (b.growth >= 1.0) {
+            if (selectedDrugId === 'penicillin' && effectivePotency >= 0.75 && Math.random() < Math.min(0.95, effectivePotency * 0.6)) {
+              mechTotalLysed++;
+              spawnLysisDebris(b.x, b.y, 'penicillin');
+              continue;
+            }
+            b.growth = 0;
+            const offset = 0.015;
+            const child = createMechBacterium(
+              b.x + Math.cos(b.angle) * offset,
+              b.y + Math.sin(b.angle) * offset
+            );
+            child.angle = b.angle + (Math.random() - 0.5) * 0.3;
+            newBacteria.push(child);
+          }
+        }
+
+        survivingBacteria.push(b);
+      }
+
+      mechBacteria = survivingBacteria.concat(newBacteria);
+
+      if (mechImmuneEnabled) {
+        mechMacrophages.forEach((mac) => {
+          let nearest = null;
+          let minDist = 999;
+          for (let i = 0; i < mechBacteria.length; i++) {
+            const b = mechBacteria[i];
+            const d = Math.hypot(b.x - mac.x, b.y - mac.y);
+            const weight = b.inhibited || b.damage > 0.2 ? d * 0.65 : d;
+            if (weight < minDist) {
+              minDist = weight;
+              nearest = b;
+            }
+          }
+
+          if (nearest) {
+            const angle = Math.atan2(nearest.y - mac.y, nearest.x - mac.x);
+            mac.vx += Math.cos(angle) * 0.00045;
+            mac.vy += Math.sin(angle) * 0.00045;
+          } else {
+            mac.vx += (Math.random() - 0.5) * 0.0004;
+            mac.vy += (Math.random() - 0.5) * 0.0004;
+          }
+
+          mac.vx *= 0.92;
+          mac.vy *= 0.92;
+          mac.x += mac.vx * mechSpeed;
+          mac.y += mac.vy * mechSpeed;
+
+          const dCenter = Math.hypot(mac.x - 0.5, mac.y - 0.5);
+          if (dCenter > 0.41) {
+            mac.x = 0.5 + ((mac.x - 0.5) / dCenter) * 0.41;
+            mac.y = 0.5 + ((mac.y - 0.5) / dCenter) * 0.41;
+          }
+
+          mac.engulfTimer = Math.max(0, mac.engulfTimer - scaledDt);
+          if (mac.engulfTimer <= 0 && mechBacteria.length > 0) {
+            for (let i = mechBacteria.length - 1; i >= 0; i--) {
+              const b = mechBacteria[i];
+              const d = Math.hypot(b.x - mac.x, b.y - mac.y);
+              if (d < mac.radius * 0.85) {
+                const canEat = b.inhibited || b.damage > 0.2 || selectedDrugId !== 'control' || Math.random() < 0.25;
+                if (canEat) {
+                  mechBacteria.splice(i, 1);
+                  mechTotalLysed++;
+                  mac.engulfTimer = b.inhibited ? 0.35 : 0.85;
+                  spawnLysisDebris(b.x, b.y, 'immune');
+                  break;
+                }
+              }
+            }
+          }
+        });
+      }
+
+      for (let i = mechParticles.length - 1; i >= 0; i--) {
+        const p = mechParticles[i];
+        p.x += p.vx * mechSpeed;
+        p.y += p.vy * mechSpeed;
+        p.alpha -= scaledDt * 0.65;
+        if (p.alpha <= 0) {
+          mechParticles.splice(i, 1);
+        }
+      }
+
+      mechChartTimer += scaledDt;
+      if (mechChartTimer >= 0.35) {
+        mechChartTimer = 0;
+        recordMechChartPoint();
+      }
+
+      let aliveCount = 0;
+      let inhibCount = 0;
+      mechBacteria.forEach((b) => {
+        if (b.inhibited) inhibCount++;
+        else aliveCount++;
+      });
+
+      document.getElementById('statMechAlive').textContent = aliveCount;
+      document.getElementById('statMechInhibited').textContent = inhibCount;
+      document.getElementById('statMechDead').textContent = mechTotalLysed;
+      document.getElementById('statMechDrugConc').textContent = `${mechCurrentDrugConc.toFixed(1)}x`;
+      document.getElementById('mechTimeLabel').textContent = `時間: ${mechSimTime.toFixed(1)} hr`;
+
+      const statusPill = document.getElementById('mechDrugStatusPill');
+      if (mechBacteria.length === 0) {
+        statusPill.textContent = '細菌已完全清除';
+        statusPill.className = 'text-[10px] px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/40';
+      } else if (selectedDrugId === 'control') {
+        statusPill.textContent = '無藥物增殖中';
+        statusPill.className = 'text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30';
+      } else if (effectivePotency < 0.7) {
+        statusPill.textContent = gramType === 'neg' && currentDrug.gNegEff < 0.5 ? '外膜阻擋・藥效受限' : '劑量過低・抑菌不足';
+        statusPill.className = 'text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40';
+      } else {
+        statusPill.textContent = currentDrug.type === 'bactericidal' ? '殺菌裂解作用中' : '抑菌凍結繁殖中';
+        statusPill.className = 'text-[10px] px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40';
+      }
+    }
+
+    function spawnLysisDebris(x, y, reason) {
+      const color = reason === 'immune' ? '#a78bfa' : reason === 'polymyxin' ? '#38bdf8' : '#fb7185';
+      for (let i = 0; i < 8; i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const spd = 0.0015 + Math.random() * 0.003;
+        mechParticles.push({
+          x,
+          y,
+          vx: Math.cos(ang) * spd,
+          vy: Math.sin(ang) * spd,
+          r: 1.5 + Math.random() * 2,
+          color,
+          alpha: 0.95,
+          type: 'debris'
+        });
+      }
+    }
+
+    // =========================================================================
+    // TAB 1: GIANT INTERACTIVE MOLECULAR WORKBENCH RENDERER
+    // =========================================================================
+    function drawMechCellZoom() {
+      resizeCanvasToDisplaySize(canvasMechCellZoom);
+      const w = canvasMechCellZoom.width;
+      const h = canvasMechCellZoom.height;
+      const ctx = ctxMechCellZoom;
+      ctx.clearRect(0, 0, w, h);
+
+      const dpr = window.devicePixelRatio || 1;
+      const t = performance.now() * 0.0025;
+      const activePhase = mechStepMode === 0 ? Math.floor((t * 0.45) % 3) + 1 : mechStepMode;
+
+      const cx = w * 0.5;
+      const cy = h * 0.54;
+      const cellW = Math.min(w * 0.8, 560 * dpr);
+      const cellH = Math.min(h * 0.6, 210 * dpr);
+
+      const currentDrug = ANTIBIOTICS.find((d) => d.id === selectedDrugId) || ANTIBIOTICS[0];
+      const susceptibility = gramType === 'pos' ? currentDrug.gPosEff : currentDrug.gNegEff;
+      const drugActive = selectedDrugId !== 'control' && mechCurrentDrugConc * susceptibility >= 0.55;
+      const outerMemBlocked = gramType === 'neg' && selectedDrugId === 'penicillin' && mechCurrentDrugConc < 2.5;
+
+      // Top Step Progress Banner drawn on canvas
+      ctx.save();
+      ctx.font = `bold ${Math.round(12 * dpr)}px "Noto Sans TC", sans-serif`;
+      ctx.textAlign = 'left';
+      const phaseNames = [
+        '',
+        `▶ 正在演示【階段 ①】：${currentDrug.steps[0]}`,
+        `▶ 正在演示【階段 ②】：${currentDrug.steps[1]}`,
+        `▶ 正在演示【階段 ③】：${currentDrug.steps[2]}`
+      ];
+      ctx.fillStyle = '#38bdf8';
+      ctx.fillText(phaseNames[activePhase], 16 * dpr, 24 * dpr);
+
+      if (outerMemBlocked) {
+        ctx.fillStyle = '#fbbf24';
+        ctx.textAlign = 'right';
+        ctx.fillText('🛡️ 革蘭氏陰性菌「外膜 (LPS)」阻擋了青黴素進入！', w - 16 * dpr, 24 * dpr);
+      } else {
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = `${Math.round(10.5 * dpr)}px "Noto Sans TC", sans-serif`;
+        ctx.textAlign = 'right';
+        ctx.fillText('💡 點擊圖中任一構造可直接切換對應抗生素', w - 16 * dpr, 24 * dpr);
+      }
+      ctx.restore();
+
+      ctx.save();
+      ctx.translate(cx, cy);
+
+      // -----------------------------------------------------------------------
+      // LAYER 1: GRAM-NEGATIVE OUTER MEMBRANE (if G- selected)
+      // -----------------------------------------------------------------------
+      if (gramType === 'neg') {
+        const polyHit = selectedDrugId === 'polymyxin' && drugActive;
+        ctx.strokeStyle = polyHit ? '#f43f5e' : '#38bdf8';
+        ctx.lineWidth = 3 * dpr;
+        if (polyHit && activePhase >= 2) {
+          ctx.setLineDash([8 * dpr, 7 * dpr]);
+        }
+        drawCapsule(ctx, cellW + 30 * dpr, cellH + 30 * dpr);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = `bold ${Math.round(10 * dpr)}px "Noto Sans TC", sans-serif`;
+        ctx.textAlign = 'right';
+        ctx.fillText('外脂質膜 (LPS 屏障)', cellW * 0.48, -cellH * 0.5 - 20 * dpr);
+      }
+
+      // -----------------------------------------------------------------------
+      // LAYER 2: PEPTIDOGLYCAN CELL WALL (Brick-and-crossbridge structure)
+      // -----------------------------------------------------------------------
+      const penHit = selectedDrugId === 'penicillin' && drugActive && !outerMemBlocked;
+      const swell = penHit && activePhase === 3 ? Math.sin(t * 4) * 8 * dpr + 8 * dpr : 0;
+
+      ctx.strokeStyle = penHit ? '#fb7185' : '#34d399';
+      ctx.lineWidth = (gramType === 'pos' ? 7 : 3.5) * dpr;
+      if (penHit && activePhase >= 2) {
+        ctx.setLineDash([10 * dpr, 9 * dpr]);
+      }
+      drawCapsule(ctx, cellW + 14 * dpr + swell, cellH + 14 * dpr + swell);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Draw PBP Transpeptidase Enzymes along top wall
+      const pbpPositions = [-cellW * 0.25, 0, cellW * 0.25];
+      pbpPositions.forEach((px, idx) => {
+        const py = -cellH * 0.5 - 7 * dpr - swell * 0.5;
+        ctx.fillStyle = penHit ? '#f43f5e' : '#10b981';
+        ctx.beginPath();
+        ctx.arc(px, py, 7.5 * dpr, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = 1.5 * dpr;
+        ctx.stroke();
+
+        // Incoming Penicillin pill docking onto PBP
+        if (selectedDrugId === 'penicillin' && mechCurrentDrugConc > 0) {
+          const prog = outerMemBlocked ? 0.35 : Math.min(1, (t * 0.8 + idx * 0.3) % 1.2);
+          const startY = -cellH * 0.5 - 52 * dpr;
+          const curY = startY + prog * (py - startY);
+          ctx.fillStyle = '#38bdf8';
+          ctx.beginPath();
+          ctx.arc(px, curY, 4.5 * dpr, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        if (idx === 1) {
+          ctx.fillStyle = penHit ? '#fda4af' : '#a7f3d0';
+          ctx.font = `bold ${Math.round(10.5 * dpr)}px "Noto Sans TC", sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.fillText(
+            penHit ? '🔒 PBP轉肽酶被青黴素卡死 (無法焊接細胞壁)' : '🧱 PBP轉肽酶 (焊接細胞壁肽聚醣)',
+            px,
+            py - 12 * dpr
+          );
+        }
+      });
+
+      if (penHit && activePhase >= 2) {
+        for (let i = -1; i <= 1; i += 2) {
+          const arrowX = i * cellW * 0.36;
+          const arrowY = -cellH * 0.52;
+          ctx.fillStyle = '#38bdf8';
+          ctx.font = `bold ${Math.round(11 * dpr)}px "Noto Sans TC", sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.fillText('💧H₂O 滲透湧入↓', arrowX, arrowY - 12 * dpr);
+        }
+        if (activePhase === 3) {
+          ctx.fillStyle = 'rgba(244, 63, 94, 0.32)';
+          ctx.strokeStyle = '#fb7185';
+          ctx.lineWidth = 2.2 * dpr;
+          ctx.beginPath();
+          ctx.arc(0, -cellH * 0.5 - 6 * dpr, (20 + Math.sin(t * 6) * 5) * dpr, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = '#ffe4e6';
+          ctx.font = `bold ${Math.round(11.5 * dpr)}px "Noto Sans TC", sans-serif`;
+          ctx.fillText('💥 滲透壓脹破裂解！', 0, -cellH * 0.5 + 18 * dpr);
+        }
+      }
+
+      // -----------------------------------------------------------------------
+      // LAYER 3: INNER CYTOPLASMIC MEMBRANE (Phospholipid bilayer)
+      // -----------------------------------------------------------------------
+      const polyInnerHit = selectedDrugId === 'polymyxin' && drugActive;
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
+      ctx.strokeStyle = polyInnerHit ? '#38bdf8' : '#fbbf24';
+      ctx.lineWidth = 2.5 * dpr;
+      if (polyInnerHit && activePhase >= 2) {
+        ctx.setLineDash([6 * dpr, 8 * dpr]);
+      }
+      drawCapsule(ctx, cellW + swell * 0.7, cellH + swell * 0.7);
+      ctx.fill();
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Bottom Membrane Label & Polymyxin Pore Animation
+      const memLabelY = cellH * 0.5 + 22 * dpr;
+      ctx.fillStyle = polyInnerHit ? '#38bdf8' : '#fcd34d';
+      ctx.font = `bold ${Math.round(10 * dpr)}px "Noto Sans TC", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText(
+        polyInnerHit ? '🛡️ 多黏菌素插入磷脂層打出孔洞 → K⁺ 與 ATP 外洩！' : '🛡️ 細胞膜磷脂雙分子層 (維持內部 K⁺ 與 ATP 離子梯度)',
+        0,
+        memLabelY
+      );
+
+      if (polyInnerHit) {
+        const leakPositions = [-cellW * 0.22, 0, cellW * 0.22];
+        leakPositions.forEach((lx) => {
+          const ly = cellH * 0.5;
+          ctx.fillStyle = '#38bdf8';
+          ctx.beginPath();
+          ctx.moveTo(lx - 6 * dpr, ly + 9 * dpr);
+          ctx.lineTo(lx + 6 * dpr, ly + 9 * dpr);
+          ctx.lineTo(lx, ly - 6 * dpr);
+          ctx.closePath();
+          ctx.fill();
+
+          if (activePhase >= 2) {
+            const dropOffset = ((t * 24) % 22) * dpr;
+            ctx.fillStyle = '#fde047';
+            ctx.font = `bold ${Math.round(9.5 * dpr)}px monospace`;
+            ctx.textAlign = 'center';
+            ctx.fillText('K⁺/ATP↓', lx, ly + 12 * dpr + dropOffset);
+          }
+        });
+      }
+
+      // -----------------------------------------------------------------------
+      // FACTORY A (LEFT): 30S + 50S RIBOSOME & PROTEIN SYNTHESIS
+      // -----------------------------------------------------------------------
+      const riboX = -cellW * 0.27;
+      const riboY = -cellH * 0.06;
+      const tetHit = selectedDrugId === 'tetracycline' && drugActive;
+
+      // Spotlight halo if tetracycline selected
+      if (selectedDrugId === 'tetracycline') {
+        ctx.fillStyle = 'rgba(245, 158, 11, 0.14)';
+        ctx.beginPath();
+        ctx.arc(riboX, riboY, 54 * dpr, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // mRNA strand
+      ctx.strokeStyle = '#94a3b8';
+      ctx.lineWidth = 2 * dpr;
+      ctx.beginPath();
+      ctx.moveTo(riboX - 48 * dpr, riboY);
+      ctx.lineTo(riboX + 48 * dpr, riboY);
+      ctx.stroke();
+
+      // 50S & 30S Subunits
+      ctx.fillStyle = '#334155';
+      ctx.strokeStyle = '#cbd5e1';
+      ctx.lineWidth = 1.5 * dpr;
+      ctx.beginPath();
+      ctx.ellipse(riboX, riboY - 12 * dpr, 24 * dpr, 13 * dpr, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = tetHit ? 'rgba(245, 158, 11, 0.4)' : '#475569';
+      ctx.strokeStyle = tetHit ? '#fbbf24' : '#cbd5e1';
+      ctx.beginPath();
+      ctx.ellipse(riboX, riboY + 9 * dpr, 20 * dpr, 9 * dpr, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#e2e8f0';
+      ctx.font = `bold ${Math.round(9.5 * dpr)}px "Noto Sans TC", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText('50S', riboX, riboY - 9 * dpr);
+      ctx.fillText('30S 核糖體', riboX, riboY + 12 * dpr);
+
+      if (tetHit) {
+        ctx.fillStyle = '#f59e0b';
+        ctx.beginPath();
+        ctx.arc(riboX + 10 * dpr, riboY + 2 * dpr, 6 * dpr, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fef08a';
+        ctx.fillText('🔒四環黴素塞死30S', riboX, riboY + 28 * dpr);
+        const bounceX = riboX + 30 * dpr + Math.abs(Math.sin(t * 3)) * 12 * dpr;
+        ctx.fillStyle = '#fb7185';
+        ctx.fillText('tRNA彈開❌', bounceX, riboY - 5 * dpr);
+      } else {
+        ctx.strokeStyle = '#34d399';
+        ctx.lineWidth = 2.5 * dpr;
+        ctx.beginPath();
+        for (let k = 0; k < 5; k++) {
+          const px = riboX - 6 * dpr + Math.sin(t * 2 + k) * 5 * dpr;
+          const py = riboY - 24 * dpr - k * 5 * dpr;
+          if (k === 0) ctx.moveTo(riboX, riboY - 22 * dpr);
+          else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+        ctx.fillStyle = '#6ee7b7';
+        ctx.fillText('⚙️ 轉譯合成蛋白質✓', riboX, riboY + 28 * dpr);
+      }
+
+      // -----------------------------------------------------------------------
+      // FACTORY B (CENTER): DNA DOUBLE HELIX & DNA GYRASE
+      // -----------------------------------------------------------------------
+      const dnaX = 0;
+      const dnaY = -cellH * 0.06;
+      const ciproHit = selectedDrugId === 'ciprofloxacin' && drugActive;
+
+      if (selectedDrugId === 'ciprofloxacin') {
+        ctx.fillStyle = 'rgba(244, 63, 94, 0.14)';
+        ctx.beginPath();
+        ctx.arc(dnaX, dnaY, 54 * dpr, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      for (let strand = 0; strand < 2; strand++) {
+        ctx.strokeStyle = ciproHit ? '#f43f5e' : strand === 0 ? '#a78bfa' : '#38bdf8';
+        ctx.lineWidth = 2.2 * dpr;
+        ctx.beginPath();
+        for (let dx = -42; dx <= 42; dx += 3) {
+          if (ciproHit && activePhase >= 2 && Math.abs(dx) < 11) continue;
+          const angle = dx * 0.14 - t * (ciproHit ? 0.2 : 2.5) + strand * Math.PI;
+          const py = dnaY + Math.sin(angle) * 11 * dpr;
+          if (dx === -42 || (ciproHit && activePhase >= 2 && dx === 12)) {
+            ctx.moveTo(dnaX + dx * dpr, py);
+          } else {
+            ctx.lineTo(dnaX + dx * dpr, py);
+          }
+        }
+        ctx.stroke();
+      }
+
+      ctx.strokeStyle = ciproHit ? '#fb7185' : '#c084fc';
+      ctx.lineWidth = 2.5 * dpr;
+      ctx.beginPath();
+      ctx.arc(dnaX, dnaY, 13 * dpr, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.fillStyle = ciproHit ? '#fda4af' : '#d8b4fe';
+      ctx.font = `bold ${Math.round(9.5 * dpr)}px "Noto Sans TC", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText(
+        ciproHit ? '✂️ 旋轉酶卡死→DNA斷裂！' : '🧬 DNA旋轉酶 (解旋複製)',
+        dnaX,
+        dnaY + 28 * dpr
+      );
+
+      // -----------------------------------------------------------------------
+      // FACTORY C (RIGHT): FOLATE PATHWAY (PABA -> DHPS Enzyme -> Folate -> DNA)
+      // -----------------------------------------------------------------------
+      const folX = cellW * 0.27;
+      const folY = -cellH * 0.06;
+      const sulfaHit = selectedDrugId === 'sulfonamide' && drugActive;
+
+      if (selectedDrugId === 'sulfonamide') {
+        ctx.fillStyle = 'rgba(245, 158, 11, 0.14)';
+        ctx.beginPath();
+        ctx.arc(folX, folY, 54 * dpr, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.fillStyle = sulfaHit ? 'rgba(245, 158, 11, 0.32)' : 'rgba(16, 185, 129, 0.2)';
+      ctx.strokeStyle = sulfaHit ? '#f59e0b' : '#10b981';
+      ctx.lineWidth = 2 * dpr;
+      ctx.beginPath();
+      ctx.roundRect(folX - 38 * dpr, folY - 15 * dpr, 76 * dpr, 30 * dpr, 8 * dpr);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#f8fafc';
+      ctx.font = `bold ${Math.round(9.5 * dpr)}px "Noto Sans TC", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText('DHPS 葉酸合成酶', folX, folY + 4 * dpr);
+
+      if (sulfaHit) {
+        ctx.fillStyle = '#fbbf24';
+        ctx.fillText('🛑 磺胺假冒PABA塞死酵素', folX, folY - 21 * dpr);
+        ctx.fillStyle = '#fda4af';
+        ctx.fillText('葉酸與核苷酸斷炊 (0%)', folX, folY + 28 * dpr);
+      } else {
+        ctx.fillStyle = '#6ee7b7';
+        ctx.fillText('🧪 PABA → 合成葉酸✓', folX, folY - 21 * dpr);
+        ctx.fillStyle = '#93c5fd';
+        ctx.fillText('供應 dTTP 給 DNA', folX, folY + 28 * dpr);
+      }
+
+      ctx.restore();
+    }
+
+    // Allow clicking directly on organelles inside canvasMechCellZoom to select the antibiotic!
+    canvasMechCellZoom.addEventListener('click', (e) => {
+      const rect = canvasMechCellZoom.getBoundingClientRect();
+      const nx = (e.clientX - rect.left) / rect.width;
+      const ny = (e.clientY - rect.top) / rect.height;
+
+      if (ny < 0.28) {
+        selectAntibiotic('penicillin', true);
+      } else if (ny > 0.76) {
+        selectAntibiotic('polymyxin', true);
+      } else if (nx < 0.38) {
+        selectAntibiotic('tetracycline', true);
+      } else if (nx > 0.62) {
+        selectAntibiotic('sulfonamide', true);
+      } else {
+        selectAntibiotic('ciprofloxacin', true);
+      }
+    });
+
+    // =========================================================================
+    // TAB 1: RENDER MACRO PETRI DISH & GROWTH CHART
+    // =========================================================================
+    function drawMechPetri() {
+      resizeCanvasToDisplaySize(canvasMechPetri);
+      const w = canvasMechPetri.width;
+      const h = canvasMechPetri.height;
+      const minDim = Math.min(w, h);
+      ctxMechPetri.clearRect(0, 0, w, h);
+
+      const cx = w / 2;
+      const cy = h / 2;
+      const dishR = minDim * 0.45;
+
+      if (mechCurrentDrugConc > 0 && selectedDrugId !== 'control') {
+        const grad = ctxMechPetri.createRadialGradient(cx, cy, dishR * 0.1, cx, cy, dishR);
+        grad.addColorStop(0, `rgba(56, 189, 248, ${Math.min(0.22, mechCurrentDrugConc * 0.05)})`);
+        grad.addColorStop(1, 'rgba(15, 23, 42, 0)');
+        ctxMechPetri.fillStyle = grad;
+        ctxMechPetri.beginPath();
+        ctxMechPetri.arc(cx, cy, dishR, 0, Math.PI * 2);
+        ctxMechPetri.fill();
+      }
+
+      ctxMechPetri.strokeStyle = 'rgba(148, 163, 184, 0.28)';
+      ctxMechPetri.lineWidth = Math.max(2, minDim * 0.008);
+      ctxMechPetri.beginPath();
+      ctxMechPetri.arc(cx, cy, dishR, 0, Math.PI * 2);
+      ctxMechPetri.stroke();
+
+      if (mechImmuneEnabled) {
+        mechMacrophages.forEach((mac) => {
+          const mx = mac.x * w;
+          const my = mac.y * h;
+          const mr = mac.radius * minDim;
+          ctxMechPetri.save();
+          ctxMechPetri.translate(mx, my);
+          ctxMechPetri.fillStyle = 'rgba(167, 139, 250, 0.18)';
+          ctxMechPetri.strokeStyle = 'rgba(196, 181, 253, 0.65)';
+          ctxMechPetri.lineWidth = 1.8;
+          ctxMechPetri.beginPath();
+          for (let a = 0; a < Math.PI * 2; a += 0.4) {
+            const wave = mr + Math.sin(a * 5 + mechSimTime * 6) * (mr * 0.12);
+            const px = Math.cos(a) * wave;
+            const py = Math.sin(a) * wave;
+            if (a === 0) ctxMechPetri.moveTo(px, py);
+            else ctxMechPetri.lineTo(px, py);
+          }
+          ctxMechPetri.closePath();
+          ctxMechPetri.fill();
+          ctxMechPetri.stroke();
+
+          ctxMechPetri.fillStyle = 'rgba(139, 92, 246, 0.5)';
+          ctxMechPetri.beginPath();
+          ctxMechPetri.arc(0, 0, mr * 0.38, 0, Math.PI * 2);
+          ctxMechPetri.fill();
+          ctxMechPetri.restore();
+        });
+      }
+
+      mechBacteria.forEach((b) => {
+        const bx = b.x * w;
+        const by = b.y * h;
+        const baseLen = (b.length + b.growth * 0.014 + b.filament) * minDim;
+        const baseThick = (0.014 + b.swelling * 0.012) * minDim;
+
+        ctxMechPetri.save();
+        ctxMechPetri.translate(bx, by);
+        ctxMechPetri.rotate(b.angle);
+
+        let fillCol = gramType === 'pos' ? '#34d399' : '#2dd4bf';
+        let strokeCol = gramType === 'pos' ? '#a7f3d0' : '#99f6e4';
+
+        if (b.inhibited) {
+          fillCol = '#f59e0b';
+          strokeCol = '#fde68a';
+        } else if (b.damage > 0.25) {
+          fillCol = '#fb7185';
+          strokeCol = '#fecdd3';
+        }
+
+        if (gramType === 'neg') {
+          ctxMechPetri.strokeStyle = 'rgba(56, 189, 248, 0.45)';
+          ctxMechPetri.lineWidth = Math.max(1.5, minDim * 0.004);
+          drawCapsule(ctxMechPetri, baseLen + 5, baseThick + 5);
+          ctxMechPetri.stroke();
+        }
+
+        ctxMechPetri.fillStyle = fillCol;
+        ctxMechPetri.strokeStyle = strokeCol;
+        ctxMechPetri.lineWidth = gramType === 'pos' ? Math.max(2, minDim * 0.006) : 1.2;
+        if (b.swelling > 0.2 || b.membraneLeak > 0.2) {
+          ctxMechPetri.setLineDash([3, 2]);
+        }
+        drawCapsule(ctxMechPetri, baseLen, baseThick);
+        ctxMechPetri.fill();
+        ctxMechPetri.stroke();
+        ctxMechPetri.setLineDash([]);
+
+        if (b.inhibited) {
+          ctxMechPetri.strokeStyle = 'rgba(251, 191, 36, 0.85)';
+          ctxMechPetri.lineWidth = 1.5;
+          ctxMechPetri.beginPath();
+          ctxMechPetri.arc(0, 0, baseThick * 0.9, 0, Math.PI * 2);
+          ctxMechPetri.stroke();
+        }
+
+        ctxMechPetri.restore();
+      });
+
+      mechParticles.forEach((p) => {
+        ctxMechPetri.save();
+        ctxMechPetri.globalAlpha = Math.max(0, p.alpha);
+        ctxMechPetri.fillStyle = p.color;
+        ctxMechPetri.beginPath();
+        ctxMechPetri.arc(p.x * w, p.y * h, p.r * (minDim / 300), 0, Math.PI * 2);
+        ctxMechPetri.fill();
+        ctxMechPetri.restore();
+      });
+    }
+
+    function drawCapsule(ctx, length, thickness) {
+      const r = thickness / 2;
+      const halfL = Math.max(0, length / 2 - r);
+      ctx.beginPath();
+      ctx.arc(-halfL, 0, r, Math.PI / 2, (Math.PI * 3) / 2);
+      ctx.arc(halfL, 0, r, -Math.PI / 2, Math.PI / 2);
+      ctx.closePath();
+    }
+
+    function drawMechChart() {
+      resizeCanvasToDisplaySize(canvasMechChart);
+      const w = canvasMechChart.width;
+      const h = canvasMechChart.height;
+      ctxMechChart.clearRect(0, 0, w, h);
+
+      const padL = 36;
+      const padR = 16;
+      const padT = 14;
+      const padB = 22;
+      const plotW = w - padL - padR;
+      const plotH = h - padT - padB;
+
+      ctxMechChart.strokeStyle = 'rgba(51, 65, 85, 0.5)';
+      ctxMechChart.lineWidth = 1;
+      const maxPop = 100;
+      for (let i = 0; i <= 4; i++) {
+        const y = padT + (plotH * i) / 4;
+        ctxMechChart.beginPath();
+        ctxMechChart.moveTo(padL, y);
+        ctxMechChart.lineTo(w - padR, y);
+        ctxMechChart.stroke();
+
+        ctxMechChart.fillStyle = '#64748b';
+        ctxMechChart.font = `${Math.max(9, Math.round(h * 0.055))}px monospace`;
+        ctxMechChart.textAlign = 'right';
+        ctxMechChart.fillText(Math.round(maxPop * (1 - i / 4)), padL - 6, y + 3);
+      }
+
+      if (mechChartHistory.length < 2) return;
+
+      const drawSeries = (key, color, dashed = false, scaleMax = maxPop) => {
+        ctxMechChart.save();
+        ctxMechChart.strokeStyle = color;
+        ctxMechChart.lineWidth = 2.2;
+        if (dashed) ctxMechChart.setLineDash([4, 4]);
+        ctxMechChart.beginPath();
+        mechChartHistory.forEach((pt, idx) => {
+          const x = padL + (idx / Math.max(1, mechChartHistory.length - 1)) * plotW;
+          const val = Math.min(scaleMax, pt[key]);
+          const y = padT + plotH * (1 - val / scaleMax);
+          if (idx === 0) ctxMechChart.moveTo(x, y);
+          else ctxMechChart.lineTo(x, y);
+        });
+        ctxMechChart.stroke();
+        ctxMechChart.restore();
+      };
+
+      drawSeries('alive', '#34d399');
+      drawSeries('inhibited', '#fbbf24');
+      drawSeries('dead', '#fb7185');
+      drawSeries('conc', '#38bdf8', true, 4.5);
+    }
+
+    // =========================================================================
+    // TAB 2: MOLECULAR RESISTANCE MECHANISM ANIMATION
+    // =========================================================================
+    function selectResMolecularMech(idx) {
+      activeResMolMech = idx;
+      for (let i = 0; i < 4; i++) {
+        const btn = document.getElementById(`resMechBtn${i}`);
+        if (i === idx) {
+          btn.className = 'px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-500 text-white shadow';
+        } else {
+          btn.className = 'px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800 text-slate-300 hover:bg-slate-700';
+        }
+      }
+      const m = RES_MOLECULAR_MECHS[idx];
+      document.getElementById('resMolTitle').textContent = m.title;
+      document.getElementById('resMolDesc').textContent = m.desc;
+      document.getElementById('resMolWhyMisuse').textContent = m.whyMisuse;
+    }
+
+    function drawResMolecularCanvas() {
+      resizeCanvasToDisplaySize(canvasResMolecular);
+      const w = canvasResMolecular.width;
+      const h = canvasResMolecular.height;
+      const ctx = canvasResMolecular.getContext('2d');
+      ctx.clearRect(0, 0, w, h);
+
+      const dpr = window.devicePixelRatio || 1;
+      const t = performance.now() * 0.003;
+
+      const midX = w * 0.5;
+      ctx.strokeStyle = 'rgba(51, 65, 85, 0.8)';
+      ctx.lineWidth = 1.5 * dpr;
+      ctx.beginPath();
+      ctx.moveTo(midX, 10 * dpr);
+      ctx.lineTo(midX, h - 10 * dpr);
+      ctx.stroke();
+
+      ctx.font = `bold ${Math.round(11.5 * dpr)}px "Noto Sans TC", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#34d399';
+      ctx.fillText('🟢 一般敏感菌 (MIC = 1.0)：無防禦，遭抗生素摧毀', w * 0.25, 22 * dpr);
+      ctx.fillStyle = '#fb7185';
+      ctx.fillText('🔴 抗藥突變菌 (MIC = 4.6)：啟動抗藥機制，毫髮無傷！', w * 0.75, 22 * dpr);
+
+      const leftCx = w * 0.25;
+      const cellCy = h * 0.58;
+      const cW = Math.min(w * 0.36, 220 * dpr);
+      const cH = Math.min(h * 0.52, 95 * dpr);
+
+      ctx.save();
+      ctx.translate(leftCx, cellCy);
+      ctx.fillStyle = 'rgba(16, 185, 129, 0.12)';
+      ctx.strokeStyle = '#34d399';
+      ctx.lineWidth = 2.5 * dpr;
+      ctx.setLineDash([6 * dpr, 4 * dpr]);
+      drawCapsule(ctx, cW, cH);
+      ctx.fill();
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      const drugProg = (t * 0.7) % 1;
+      const drugY = -cH * 0.75 + drugProg * (cH * 0.75);
+      ctx.fillStyle = '#38bdf8';
+      ctx.beginPath();
+      ctx.arc(0, drugY, 5 * dpr, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#fda4af';
+      ctx.font = `bold ${Math.round(10 * dpr)}px "Noto Sans TC", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText('🎯 標靶被鎖死 → 細菌死亡', 0, 6 * dpr);
+      ctx.restore();
+
+      const rightCx = w * 0.75;
+      ctx.save();
+      ctx.translate(rightCx, cellCy);
+      ctx.fillStyle = 'rgba(244, 63, 94, 0.15)';
+      ctx.strokeStyle = '#f43f5e';
+      ctx.lineWidth = 3 * dpr;
+      drawCapsule(ctx, cW, cH);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.strokeStyle = '#fde047';
+      ctx.lineWidth = 1.8 * dpr;
+      ctx.beginPath();
+      ctx.arc(-cW * 0.25, 0, 12 * dpr, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = '#fde047';
+      ctx.font = `${Math.round(8.5 * dpr)}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.fillText('R-質體', -cW * 0.25, 3 * dpr);
+
+      ctx.font = `bold ${Math.round(10 * dpr)}px "Noto Sans TC", sans-serif`;
+      if (activeResMolMech === 0) {
+        ctx.fillStyle = '#fbbf24';
+        ctx.fillText('✂️ β-內醯胺酶在牆外剪碎藥物！', 0, -cH * 0.62);
+        ctx.fillStyle = '#6ee7b7';
+        ctx.fillText('內部標靶完好無損 ✓', 15 * dpr, 6 * dpr);
+      } else if (activeResMolMech === 1) {
+        ctx.fillStyle = '#c084fc';
+        ctx.fillRect(-10 * dpr, -cH * 0.5 - 6 * dpr, 20 * dpr, 12 * dpr);
+        const ejectY = -cH * 0.5 - ((t * 30) % 28) * dpr;
+        ctx.fillStyle = '#38bdf8';
+        ctx.beginPath();
+        ctx.arc(0, ejectY, 5 * dpr, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#e879f9';
+        ctx.fillText('🚀 外排幫浦將藥物噴出體外！', 0, 10 * dpr);
+      } else if (activeResMolMech === 2) {
+        ctx.fillStyle = '#fde047';
+        ctx.fillText('🛡️ 標靶構型改變，藥物彈開無法結合！', 10 * dpr, 6 * dpr);
+      } else {
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 2.5 * dpr;
+        drawCapsule(ctx, cW + 14 * dpr, cH + 14 * dpr);
+        ctx.stroke();
+        ctx.fillStyle = '#93c5fd';
+        ctx.fillText('🚪 外膜孔蛋白關閉，藥物無法進入！', 0, 6 * dpr);
+      }
+      ctx.restore();
+    }
+
+    // =========================================================================
+    // TAB 2: INITIALIZE & UPDATE RESISTANCE EVOLUTION SIMULATION
+    // =========================================================================
+    function initResSimulation(scenario = resScenario) {
+      resScenario = scenario;
+      resSimDays = 0;
+      resLastAutoDoseSlot = -1;
+      resBacteria = [];
+      resPlasmids = [];
+      resHistory = [];
+      resChartTimer = 0;
+
+      const presetMap = {
+        standard: 'presetStandard',
+        earlyStop: 'presetEarlyStop',
+        subDose: 'presetSubDose',
+        hgt: 'presetHGT'
+      };
+      Object.entries(presetMap).forEach(([key, btnId]) => {
+        const el = document.getElementById(btnId);
+        if (key === scenario) {
+          el.className = 'p-3 rounded-xl border text-left transition-all flex flex-col justify-between bg-sky-500/15 border-sky-400 text-white shadow-lg shadow-sky-500/10';
+        } else {
+          el.className = 'p-3 rounded-xl border text-left transition-all flex flex-col justify-between bg-slate-950/70 border-slate-800 hover:border-slate-700 text-slate-300';
+        }
+      });
+
+      if (scenario === 'hgt') {
+        resHgtEnabled = true;
+        document.getElementById('toggleResHGT').checked = true;
+      }
+
+      for (let i = 0; i < 36; i++) {
+        resBacteria.push(createResBacterium('sus'));
+      }
+      for (let i = 0; i < 3; i++) {
+        resBacteria.push(createResBacterium('int'));
+      }
+      if (scenario === 'hgt') {
+        resBacteria.push(createResBacterium('super'));
+      }
+
+      resDrugConc = 0;
+      updateResScenarioBadge();
+      checkAutoDosingSchedule();
+      recordResHistoryPoint();
+    }
+
+    function createResBacterium(strain, x, y) {
+      const mic = strain === 'sus' ? 1.0 : strain === 'int' ? 2.2 : 4.6;
+      return {
+        x: x !== undefined ? x : 0.12 + Math.random() * 0.76,
+        y: y !== undefined ? y : 0.14 + Math.random() * 0.72,
+        vx: (Math.random() - 0.5) * 0.0022,
+        vy: (Math.random() - 0.5) * 0.0022,
+        angle: Math.random() * Math.PI * 2,
+        strain,
+        mic,
+        growth: Math.random() * 0.6,
+        stress: 0,
+        hgtCooldown: 0
+      };
+    }
+
+    function updateResScenarioBadge() {
+      const badge = document.getElementById('resAutoScheduleBadge');
+      const labels = {
+        standard: '自動排程：標準完整療程 (足量連續)',
+        earlyStop: '自動排程：第 1.5 天好轉後擅自停藥',
+        subDose: '自動排程：劑量減半 (落入突變選擇窗)',
+        hgt: '自動排程：低劑量濫用 + 質體水平轉移',
+        manual: '手動服藥控制模式'
+      };
+      badge.textContent = labels[resScenario] || labels.manual;
+    }
+
+    function checkAutoDosingSchedule() {
+      if (resScenario === 'manual') return;
+      const slot = Math.floor(resSimDays / 0.5);
+      if (slot > resLastAutoDoseSlot && slot <= 12) {
+        resLastAutoDoseSlot = slot;
+        if (resScenario === 'standard') {
+          resDrugConc = Math.min(4.8, resDrugConc + 3.6);
+        } else if (resScenario === 'earlyStop') {
+          if (slot <= 2) {
+            resDrugConc = Math.min(4.8, resDrugConc + 3.4);
+          }
+        } else if (resScenario === 'subDose') {
+          resDrugConc = Math.min(2.4, resDrugConc + 1.45);
+        } else if (resScenario === 'hgt') {
+          if (slot % 2 === 0) {
+            resDrugConc = Math.min(2.2, resDrugConc + 1.35);
+          }
+        }
+      }
+    }
+
+    function updateResSimulation(dt) {
+      if (resPaused) return;
+      const dayStep = dt * 0.35;
+      resSimDays += dayStep;
+
+      checkAutoDosingSchedule();
+      resDrugConc = Math.max(0, resDrugConc - dayStep * 1.45);
+
+      const carryingCap = 90;
+      const totalPop = resBacteria.length;
+      const newBorn = [];
+      const survivors = [];
+
+      for (let i = 0; i < resBacteria.length; i++) {
+        const b = resBacteria[i];
+        b.hgtCooldown = Math.max(0, b.hgtCooldown - dt);
+
+        b.vx += (Math.random() - 0.5) * 0.0009;
+        b.vy += (Math.random() - 0.5) * 0.0009;
+        b.vx *= 0.94;
+        b.vy *= 0.94;
+        b.x = Math.max(0.05, Math.min(0.95, b.x + b.vx));
+        b.y = Math.max(0.08, Math.min(0.92, b.y + b.vy));
+        b.angle += (Math.random() - 0.5) * 0.06;
+
+        if (resDrugConc >= b.mic) {
+          const excess = resDrugConc - b.mic;
+          b.stress += dt * (0.55 + excess * 0.65);
+        } else {
+          b.stress = Math.max(0, b.stress - dt * 0.4);
+        }
+
+        if (resDrugConc >= 3.0 && totalPop <= 6 && b.strain !== 'super') {
+          b.stress += dt * 0.5;
+        }
+
+        if (b.stress >= 1.0) {
+          continue;
+        }
+
+        if (resDrugConc < b.mic * 0.95 && totalPop + newBorn.length < carryingCap) {
+          const spaceFactor = Math.max(0.12, 1 - totalPop / carryingCap);
+          const fitness = b.strain === 'sus' ? 1.0 : b.strain === 'int' ? 0.92 : 0.86;
+          b.growth += dt * 0.45 * spaceFactor * fitness;
+
+          if (b.growth >= 1.0) {
+            b.growth = 0;
+            let childStrain = b.strain;
+            if (Math.random() < resMutationRate) {
+              if (b.strain === 'sus') childStrain = 'int';
+              else if (b.strain === 'int') childStrain = 'super';
+            }
+            newBorn.push(
+              createResBacterium(
+                childStrain,
+                Math.max(0.06, Math.min(0.94, b.x + (Math.random() - 0.5) * 0.03)),
+                Math.max(0.08, Math.min(0.92, b.y + (Math.random() - 0.5) * 0.03))
+              )
+            );
+          }
+        }
+
+        survivors.push(b);
+      }
+
+      resBacteria = survivors.concat(newBorn);
+
+      if (resHgtEnabled && resBacteria.length > 1) {
+        for (let i = 0; i < resBacteria.length; i++) {
+          const donor = resBacteria[i];
+          if ((donor.strain === 'super' || donor.strain === 'int') && donor.hgtCooldown <= 0) {
+            for (let j = 0; j < resBacteria.length; j++) {
+              if (i === j) continue;
+              const recipient = resBacteria[j];
+              if (recipient.strain === 'sus' || (donor.strain === 'super' && recipient.strain === 'int')) {
+                const dist = Math.hypot(donor.x - recipient.x, donor.y - recipient.y);
+                if (dist < 0.065 && Math.random() < dt * 1.6) {
+                  recipient.strain = donor.strain;
+                  recipient.mic = donor.mic;
+                  donor.hgtCooldown = 1.8;
+                  resPlasmids.push({
+                    x1: donor.x,
+                    y1: donor.y,
+                    x2: recipient.x,
+                    y2: recipient.y,
+                    alpha: 1.0
+                  });
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      for (let i = resPlasmids.length - 1; i >= 0; i--) {
+        resPlasmids[i].alpha -= dt * 1.4;
+        if (resPlasmids[i].alpha <= 0) resPlasmids.splice(i, 1);
+      }
+
+      resChartTimer += dt;
+      if (resChartTimer >= 0.3) {
+        resChartTimer = 0;
+        recordResHistoryPoint();
+      }
+
+      updateResUIStats();
+    }
+
+    function recordResHistoryPoint() {
+      let sus = 0;
+      let intCount = 0;
+      let sup = 0;
+      resBacteria.forEach((b) => {
+        if (b.strain === 'sus') sus++;
+        else if (b.strain === 'int') intCount++;
+        else sup++;
+      });
+      resHistory.push({
+        day: resSimDays,
+        conc: resDrugConc,
+        sus,
+        int: intCount,
+        sup
+      });
+      if (resHistory.length > 95) {
+        resHistory.shift();
+      }
+    }
+
+    function updateResUIStats() {
+      let sus = 0;
+      let intCount = 0;
+      let sup = 0;
+      let micSum = 0;
+      resBacteria.forEach((b) => {
+        if (b.strain === 'sus') sus++;
+        else if (b.strain === 'int') intCount++;
+        else sup++;
+        micSum += b.mic;
+      });
+
+      const total = resBacteria.length;
+      const avgMic = total > 0 ? micSum / total : 0;
+
+      document.getElementById('countResSus').textContent = sus;
+      document.getElementById('countResInt').textContent = intCount;
+      document.getElementById('countResSuper').textContent = sup;
+      document.getElementById('resAvgMicValue').textContent = total > 0 ? `${avgMic.toFixed(2)} ug/mL` : '已清除 (0.00)';
+      document.getElementById('resCurrentDrugText').textContent = resDrugConc.toFixed(2);
+      document.getElementById('resDayLabel').textContent = `療程時間: 第 ${resSimDays.toFixed(1)} 天`;
+
+      const micPercent = Math.min(100, Math.round((avgMic / 4.6) * 100));
+      document.getElementById('resMicBar').style.width = `${micPercent}%`;
+
+      const zoneBadge = document.getElementById('resZoneBadge');
+      if (resDrugConc >= 3.0) {
+        zoneBadge.textContent = '濃度 > MPC (3.0)：全面壓制敏感與突變菌';
+        zoneBadge.className = 'text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold';
+      } else if (resDrugConc >= 1.0) {
+        zoneBadge.textContent = '⚠️ 處於突變選擇窗 (MSW 1.0~3.0)：正篩選出抗藥菌！';
+        zoneBadge.className = 'text-[11px] px-2.5 py-0.5 rounded-full bg-amber-500/25 text-amber-300 border border-amber-500/50 font-semibold';
+      } else {
+        zoneBadge.textContent = '次抑菌/無藥區 (< 1.0)：殘存細菌自由增殖';
+        zoneBadge.className = 'text-[11px] px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-semibold';
+      }
+
+      const diagBox = document.getElementById('resDiagnosisBox');
+      const diagTitle = document.getElementById('resDiagnosisTitle');
+      const diagDesc = document.getElementById('resDiagnosisDesc');
+
+      if (total === 0) {
+        diagBox.className = 'p-3.5 rounded-xl bg-emerald-950/50 border border-emerald-500/50 text-xs space-y-1';
+        diagTitle.className = 'font-bold text-emerald-300';
+        diagTitle.textContent = '✅ 感染完全根除 (Cure Achieved)';
+        diagDesc.textContent = '足量且完整的抗生素療程成功將敏感菌與少數突變耐受菌一併消滅，未留下任何抗藥性後代！';
+      } else if (sup + intCount > sus && total > 15) {
+        diagBox.className = 'p-3.5 rounded-xl bg-rose-950/50 border border-rose-500/50 text-xs space-y-1';
+        diagTitle.className = 'font-bold text-rose-300';
+        diagTitle.textContent = '🚨 抗藥性菌株全面取代敏感菌 (天擇篩選完成)';
+        diagDesc.textContent = `因為綠色敏感菌被藥物清空，原本佔少數的耐受/抗藥菌獲得全部營養空間（目前佔比 ${Math.round(((sup + intCount) / total) * 100)}%），一般劑量已徹底失效！`;
+      } else if (resDrugConc >= 1.0 && resDrugConc < 3.0) {
+        diagBox.className = 'p-3.5 rounded-xl bg-amber-950/50 border border-amber-500/50 text-xs space-y-1';
+        diagTitle.className = 'font-bold text-amber-300';
+        diagTitle.textContent = '⚠️ 危險：藥物濃度落入「突變選擇窗 (MSW)」';
+        diagDesc.textContent = '此濃度只能殺死綠色敏感菌 (MIC=1.0)，卻殺不死橘色耐受菌 (MIC=2.2)，正在替抗藥菌清除生存競爭對手！';
+      } else {
+        diagBox.className = 'p-3.5 rounded-xl bg-slate-900 border border-slate-700 text-xs space-y-1';
+        diagTitle.className = 'font-bold text-sky-300';
+        diagTitle.textContent = '🔬 臨床即時監測中';
+        diagDesc.textContent = '觀察右側「藥物濃度 vs 突變選擇窗」與「各類菌株消長曲線」，比較標準療程與錯誤停藥的差異。';
+      }
+    }
+
+    // =========================================================================
+    // TAB 2: RENDER EVOLUTION PETRI DISH & DUAL CHARTS
+    // =========================================================================
+    function drawResPetri() {
+      resizeCanvasToDisplaySize(canvasResPetri);
+      const w = canvasResPetri.width;
+      const h = canvasResPetri.height;
+      ctxResPetri.clearRect(0, 0, w, h);
+
+      if (resDrugConc > 0.1) {
+        const isMSW = resDrugConc >= 1.0 && resDrugConc < 3.0;
+        ctxResPetri.fillStyle = isMSW
+          ? `rgba(245, 158, 11, ${Math.min(0.14, resDrugConc * 0.04)})`
+          : `rgba(56, 189, 248, ${Math.min(0.16, resDrugConc * 0.035)})`;
+        ctxResPetri.fillRect(0, 0, w, h);
+      }
+
+      resPlasmids.forEach((p) => {
+        ctxResPetri.save();
+        ctxResPetri.strokeStyle = `rgba(192, 132, 252, ${p.alpha})`;
+        ctxResPetri.lineWidth = 2.5;
+        ctxResPetri.beginPath();
+        ctxResPetri.moveTo(p.x1 * w, p.y1 * h);
+        ctxResPetri.lineTo(p.x2 * w, p.y2 * h);
+        ctxResPetri.stroke();
+
+        const mx = ((p.x1 + p.x2) / 2) * w;
+        const my = ((p.y1 + p.y2) / 2) * h;
+        ctxResPetri.fillStyle = `rgba(232, 121, 249, ${p.alpha})`;
+        ctxResPetri.beginPath();
+        ctxResPetri.arc(mx, my, 4, 0, Math.PI * 2);
+        ctxResPetri.fill();
+        ctxResPetri.restore();
+      });
+
+      const minDim = Math.min(w, h);
+      resBacteria.forEach((b) => {
+        const bx = b.x * w;
+        const by = b.y * h;
+        const len = (0.032 + b.growth * 0.012) * minDim;
+        const thick = 0.016 * minDim;
+
+        ctxResPetri.save();
+        ctxResPetri.translate(bx, by);
+        ctxResPetri.rotate(b.angle);
+
+        let fill = '#34d399';
+        let stroke = '#a7f3d0';
+        if (b.strain === 'int') {
+          fill = '#f59e0b';
+          stroke = '#fde68a';
+        } else if (b.strain === 'super') {
+          fill = '#f43f5e';
+          stroke = '#e879f9';
+        }
+
+        if (b.stress > 0.35) {
+          ctxResPetri.globalAlpha = Math.max(0.35, 1 - b.stress * 0.6);
+        }
+
+        ctxResPetri.fillStyle = fill;
+        ctxResPetri.strokeStyle = stroke;
+        ctxResPetri.lineWidth = b.strain === 'super' ? 2.4 : 1.5;
+        drawCapsule(ctxResPetri, len, thick);
+        ctxResPetri.fill();
+        ctxResPetri.stroke();
+
+        if (b.strain === 'super') {
+          ctxResPetri.strokeStyle = '#fde047';
+          ctxResPetri.lineWidth = 1.4;
+          ctxResPetri.beginPath();
+          ctxResPetri.arc(0, 0, thick * 0.28, 0, Math.PI * 2);
+          ctxResPetri.stroke();
+        }
+
+        ctxResPetri.restore();
+      });
+    }
+
+    function drawResMswChart() {
+      resizeCanvasToDisplaySize(canvasResMswChart);
+      const w = canvasResMswChart.width;
+      const h = canvasResMswChart.height;
+      ctxResMswChart.clearRect(0, 0, w, h);
+
+      const padL = 34;
+      const padR = 12;
+      const padT = 12;
+      const padB = 20;
+      const plotW = w - padL - padR;
+      const plotH = h - padT - padB;
+      const maxConc = 5.0;
+
+      const yForConc = (c) => padT + plotH * (1 - Math.min(maxConc, c) / maxConc);
+
+      const yMpc = yForConc(3.0);
+      const yMic = yForConc(1.0);
+      ctxResMswChart.fillStyle = 'rgba(245, 158, 11, 0.14)';
+      ctxResMswChart.fillRect(padL, yMpc, plotW, yMic - yMpc);
+
+      ctxResMswChart.strokeStyle = 'rgba(244, 63, 94, 0.65)';
+      ctxResMswChart.setLineDash([4, 3]);
+      ctxResMswChart.beginPath();
+      ctxResMswChart.moveTo(padL, yMpc);
+      ctxResMswChart.lineTo(w - padR, yMpc);
+      ctxResMswChart.stroke();
+
+      ctxResMswChart.strokeStyle = 'rgba(52, 211, 153, 0.65)';
+      ctxResMswChart.beginPath();
+      ctxResMswChart.moveTo(padL, yMic);
+      ctxResMswChart.lineTo(w - padR, yMic);
+      ctxResMswChart.stroke();
+      ctxResMswChart.setLineDash([]);
+
+      ctxResMswChart.fillStyle = '#fda4af';
+      ctxResMswChart.font = '10px monospace';
+      ctxResMswChart.textAlign = 'left';
+      ctxResMswChart.fillText('MPC (3.0 防突變線)', padL + 4, yMpc - 3);
+
+      ctxResMswChart.fillStyle = '#6ee7b7';
+      ctxResMswChart.fillText('MIC (1.0 敏感菌抑菌線)', padL + 4, yMic - 3);
+
+      ctxResMswChart.fillStyle = '#64748b';
+      ctxResMswChart.textAlign = 'right';
+      [0, 1, 3, 5].forEach((val) => {
+        ctxResMswChart.fillText(val.toFixed(1), padL - 5, yForConc(val) + 3);
+      });
+
+      if (resHistory.length < 2) return;
+
+      ctxResMswChart.strokeStyle = '#38bdf8';
+      ctxResMswChart.lineWidth = 2.4;
+      ctxResMswChart.beginPath();
+      resHistory.forEach((pt, idx) => {
+        const x = padL + (idx / Math.max(1, resHistory.length - 1)) * plotW;
+        const y = yForConc(pt.conc);
+        if (idx === 0) ctxResMswChart.moveTo(x, y);
+        else ctxResMswChart.lineTo(x, y);
+      });
+      ctxResMswChart.stroke();
+    }
+
+    function drawResPopChart() {
+      resizeCanvasToDisplaySize(canvasResPopChart);
+      const w = canvasResPopChart.width;
+      const h = canvasResPopChart.height;
+      ctxResPopChart.clearRect(0, 0, w, h);
+
+      const padL = 34;
+      const padR = 12;
+      const padT = 12;
+      const padB = 20;
+      const plotW = w - padL - padR;
+      const plotH = h - padT - padB;
+      const maxPop = 95;
+
+      ctxResPopChart.strokeStyle = 'rgba(51, 65, 85, 0.5)';
+      ctxResPopChart.lineWidth = 1;
+      for (let i = 0; i <= 3; i++) {
+        const y = padT + (plotH * i) / 3;
+        ctxResPopChart.beginPath();
+        ctxResPopChart.moveTo(padL, y);
+        ctxResPopChart.lineTo(w - padR, y);
+        ctxResPopChart.stroke();
+
+        ctxResPopChart.fillStyle = '#64748b';
+        ctxResPopChart.font = '10px monospace';
+        ctxResPopChart.textAlign = 'right';
+        ctxResPopChart.fillText(Math.round(maxPop * (1 - i / 3)), padL - 5, y + 3);
+      }
+
+      if (resHistory.length < 2) return;
+
+      const drawStrainLine = (key, color) => {
+        ctxResPopChart.strokeStyle = color;
+        ctxResPopChart.lineWidth = 2.3;
+        ctxResPopChart.beginPath();
+        resHistory.forEach((pt, idx) => {
+          const x = padL + (idx / Math.max(1, resHistory.length - 1)) * plotW;
+          const y = padT + plotH * (1 - Math.min(maxPop, pt[key]) / maxPop);
+          if (idx === 0) ctxResPopChart.moveTo(x, y);
+          else ctxResPopChart.lineTo(x, y);
+        });
+        ctxResPopChart.stroke();
+      };
+
+      drawStrainLine('sus', '#34d399');
+      drawStrainLine('int', '#f59e0b');
+      drawStrainLine('sup', '#f43f5e');
+    }
+
+    // =========================================================================
+    // EVENT LISTENERS
+    // =========================================================================
+    function switchTab(tab) {
+      activeTab = tab;
+      if (tab === 'mech') {
+        panelMech.classList.remove('hidden');
+        panelRes.classList.add('hidden');
+        tabBtnMech.className = 'px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 bg-sky-500 text-slate-950 shadow-md shadow-sky-500/20';
+        tabBtnRes.className = 'px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 text-slate-400 hover:text-slate-200';
+      } else {
+        panelMech.classList.add('hidden');
+        panelRes.classList.remove('hidden');
+        tabBtnRes.className = 'px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 bg-rose-500 text-white shadow-md shadow-rose-500/20';
+        tabBtnMech.className = 'px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 text-slate-400 hover:text-slate-200';
+      }
+    }
+
+    tabBtnMech.addEventListener('click', () => switchTab('mech'));
+    tabBtnRes.addEventListener('click', () => switchTab('res'));
+
+    for (let i = 0; i <= 3; i++) {
+      document.getElementById(`stepBtn${i}`).addEventListener('click', () => setMechStepMode(i));
+    }
+
+    for (let i = 0; i < 4; i++) {
+      document.getElementById(`resMechBtn${i}`).addEventListener('click', () => selectResMolecularMech(i));
+    }
+
+    document.getElementById('btnGramPos').addEventListener('click', () => {
+      gramType = 'pos';
+      document.getElementById('btnGramPos').className = 'px-3 py-2 rounded-xl text-xs font-semibold border transition-all text-left flex flex-col gap-0.5 bg-sky-500/15 border-sky-500/60 text-sky-200';
+      document.getElementById('btnGramNeg').className = 'px-3 py-2 rounded-xl text-xs font-semibold border transition-all text-left flex flex-col gap-0.5 bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200';
+    });
+
+    document.getElementById('btnGramNeg').addEventListener('click', () => {
+      gramType = 'neg';
+      document.getElementById('btnGramNeg').className = 'px-3 py-2 rounded-xl text-xs font-semibold border transition-all text-left flex flex-col gap-0.5 bg-sky-500/15 border-sky-500/60 text-sky-200';
+      document.getElementById('btnGramPos').className = 'px-3 py-2 rounded-xl text-xs font-semibold border transition-all text-left flex flex-col gap-0.5 bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200';
+    });
+
+    document.getElementById('sliderMechConc').addEventListener('input', (e) => {
+      mechTargetDose = parseFloat(e.target.value);
+      document.getElementById('labelMechConc').textContent = `${mechTargetDose.toFixed(1)}x MIC`;
+      if (selectedDrugId !== 'control') {
+        mechCurrentDrugConc = mechTargetDose;
+      }
+    });
+
+    document.getElementById('toggleImmuneMech').addEventListener('change', (e) => {
+      mechImmuneEnabled = e.target.checked;
+    });
+
+    document.getElementById('speedMech1').addEventListener('click', () => {
+      mechSpeed = 1;
+      document.getElementById('speedMech1').className = 'px-2 py-1 rounded text-xs font-bold bg-sky-500 text-slate-950';
+      document.getElementById('speedMech2').className = 'px-2 py-1 rounded text-xs font-bold bg-slate-800 text-slate-300 hover:bg-slate-700';
+    });
+
+    document.getElementById('speedMech2').addEventListener('click', () => {
+      mechSpeed = 2;
+      document.getElementById('speedMech2').className = 'px-2 py-1 rounded text-xs font-bold bg-sky-500 text-slate-950';
+      document.getElementById('speedMech1').className = 'px-2 py-1 rounded text-xs font-bold bg-slate-800 text-slate-300 hover:bg-slate-700';
+    });
+
+    document.getElementById('btnMechDoseNow').addEventListener('click', () => {
+      if (selectedDrugId === 'control') {
+        selectAntibiotic('penicillin', true);
+      } else {
+        if (mechBacteria.length < 8) initMechSimulation();
+        else administerMechDrug();
+      }
+    });
+
+    document.getElementById('btnMechPause').addEventListener('click', (e) => {
+      mechPaused = !mechPaused;
+      e.currentTarget.textContent = mechPaused ? '繼續' : '暫停';
+    });
+
+    document.getElementById('btnMechReset').addEventListener('click', () => {
+      initMechSimulation();
+    });
+
+    document.getElementById('presetStandard').addEventListener('click', () => initResSimulation('standard'));
+    document.getElementById('presetEarlyStop').addEventListener('click', () => initResSimulation('earlyStop'));
+    document.getElementById('presetSubDose').addEventListener('click', () => initResSimulation('subDose'));
+    document.getElementById('presetHGT').addEventListener('click', () => initResSimulation('hgt'));
+
+    document.getElementById('btnManualFullDose').addEventListener('click', () => {
+      resScenario = 'manual';
+      updateResScenarioBadge();
+      resDrugConc = Math.min(5.0, resDrugConc + 3.6);
+    });
+
+    document.getElementById('btnManualSubDose').addEventListener('click', () => {
+      resScenario = 'manual';
+      updateResScenarioBadge();
+      resDrugConc = Math.min(5.0, resDrugConc + 1.4);
+    });
+
+    document.getElementById('btnManualStopAuto').addEventListener('click', () => {
+      resScenario = 'manual';
+      updateResScenarioBadge();
+    });
+
+    document.getElementById('sliderMutationRate').addEventListener('input', (e) => {
+      const val = parseFloat(e.target.value);
+      resMutationRate = val / 100;
+      const level = val === 0 ? '無' : val < 3 ? '低' : val < 6 ? '中' : '高';
+      document.getElementById('labelMutationRate').textContent = `${level} (${val.toFixed(1)}%)`;
+    });
+
+    document.getElementById('toggleResHGT').addEventListener('change', (e) => {
+      resHgtEnabled = e.target.checked;
+    });
+
+    document.getElementById('btnResPause').addEventListener('click', (e) => {
+      resPaused = !resPaused;
+      e.currentTarget.textContent = resPaused ? '繼續模擬' : '暫停模擬';
+    });
+
+    document.getElementById('btnResReset').addEventListener('click', () => {
+      initResSimulation(resScenario === 'manual' ? 'standard' : resScenario);
+    });
+
+    // =========================================================================
+    // MAIN ANIMATION LOOP
+    // =========================================================================
+    let lastFrameTime = performance.now();
+    function mainLoop(now) {
+      const dt = Math.min(0.08, (now - lastFrameTime) / 1000);
+      lastFrameTime = now;
+
+      if (activeTab === 'mech') {
+        updateMechSimulation(dt);
+        drawMechCellZoom();
+        drawMechPetri();
+        drawMechChart();
+      } else {
+        updateResSimulation(dt);
+        drawResMolecularCanvas();
+        drawResPetri();
+        drawResMswChart();
+        drawResPopChart();
+      }
+
+      requestAnimationFrame(mainLoop);
+    }
+
+    window.addEventListener('load', () => {
+      renderAntibioticUI();
+      initMechSimulation();
+      initResSimulation('standard');
+      requestAnimationFrame(mainLoop);
+    });
+  </script>
+</body>
+</html>

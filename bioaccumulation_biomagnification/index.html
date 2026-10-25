@@ -1,0 +1,1771 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>生物累積與生物放大互動動態模擬器 | 海洋毒理實驗室</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter & Noto Sans TC -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'Noto Sans TC', 'sans-serif'],
+                    },
+                    colors: {
+                        ocean: {
+                            950: '#040b16',
+                            900: '#081426',
+                            800: '#0f2542',
+                            700: '#193961',
+                        },
+                        toxin: {
+                            light: '#ff4d79',
+                            DEFAULT: '#ff0055',
+                            dark: '#990033',
+                            purple: '#b829ff'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background: radial-gradient(circle at 50% 0%, #0f2542 0%, #040b16 80%);
+            color: #e2e8f0;
+            overflow-x: hidden;
+        }
+        /* 毛玻璃面板特效 */
+        .glass-panel {
+            background: rgba(15, 37, 66, 0.55);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(148, 163, 184, 0.15);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+        .glass-card {
+            background: rgba(8, 20, 38, 0.65);
+            border: 1px solid rgba(56, 189, 248, 0.15);
+        }
+        /* 捲軸美化 */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #040b16;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1e3a5f;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #38bdf8;
+        }
+        /* 滑桿美化 */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 6px;
+            cursor: pointer;
+            background: #1e293b;
+            border-radius: 999px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        input[type=range]::-webkit-slider-thumb {
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #38bdf8;
+            cursor: pointer;
+            -webkit-appearance: none;
+            margin-top: -6px;
+            box-shadow: 0 0 10px rgba(56, 189, 248, 0.8);
+            transition: transform 0.15s ease;
+        }
+        input[type=range]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+        /* 發光動畫 */
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 12px rgba(255, 0, 85, 0.4); }
+            50% { box-shadow: 0 0 22px rgba(255, 0, 85, 0.8); }
+        }
+        .toxin-glow {
+            animation: pulse-glow 2s infinite;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between selection:bg-cyan-500 selection:text-white">
+
+    <!-- 頂部導航與標題列 -->
+    <header class="glass-panel sticky top-0 z-30 px-4 py-3 border-b border-slate-700/50">
+        <div class="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+                    <i class="fa-solid fa-microscope text-white text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg md:text-xl font-bold tracking-wide text-white flex items-center gap-2">
+                        生物累積與生物放大互動模擬器
+                        <span class="hidden sm:inline-block text-xs font-normal px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                            EcoTox Lab v2.4
+                        </span>
+                    </h1>
+                    <p class="text-xs text-slate-400">Bioaccumulation & Biomagnification Interactive Simulator</p>
+                </div>
+            </div>
+
+            <!-- 雙模式切換按鈕 -->
+            <div class="flex items-center bg-ocean-950/90 p-1 rounded-xl border border-slate-700/60">
+                <button id="btnModeEco" onclick="switchMode('ecosystem')" class="flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-all bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md">
+                    <i class="fa-solid fa-water"></i>
+                    <span>食物鏈生態模擬 (放大+累積)</span>
+                </button>
+                <button id="btnModeSingle" onclick="switchMode('single')" class="flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-all text-slate-400 hover:text-white">
+                    <i class="fa-solid fa-fish-fins"></i>
+                    <span>單一生物聚焦 (生物累積專題)</span>
+                </button>
+            </div>
+
+            <!-- 快速控制與教學按鈕 -->
+            <div class="flex items-center gap-2">
+                <button onclick="toggleLabels()" id="btnToggleLabels" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800/80 hover:bg-slate-700 text-cyan-300 border border-slate-600/50 transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-tag"></i> <span id="labelToggleText">顯示數值標籤: 開</span>
+                </button>
+                <button onclick="toggleConceptModal()" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-lightbulb"></i> <span>觀念比較卡</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主內容區 (三欄式響應式佈局) -->
+    <main class="max-w-[1600px] w-full mx-auto flex-1 p-3 md:p-4 grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+        
+        <!-- 左側：即時控制面板 (佔 3 欄) -->
+        <section class="lg:col-span-3 flex flex-col gap-4 order-2 lg:order-1">
+            
+            <!-- 汙染源類型預設組 -->
+            <div class="glass-panel rounded-2xl p-4">
+                <h2 class="text-sm font-bold text-cyan-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-flask-vial"></i> 1. 選擇環境汙染物類型
+                </h2>
+                <div class="grid grid-cols-1 gap-2">
+                    <button onclick="selectPollutant('mercury')" id="pol-mercury" class="pollutant-btn text-left p-2.5 rounded-xl border transition-all bg-rose-950/50 border-rose-500/60 text-white shadow-lg shadow-rose-950/30">
+                        <div class="flex items-center justify-between">
+                            <span class="font-bold text-sm text-rose-300 flex items-center gap-1.5">
+                                <span class="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block animate-ping"></span>
+                                甲基汞 (Methylmercury)
+                            </span>
+                            <span class="text-[11px] px-2 py-0.5 rounded bg-rose-500/20 text-rose-300">極高風險</span>
+                        </div>
+                        <p class="text-xs text-slate-300 mt-1">重金屬神經毒素。脂溶性且與蛋白質緊密結合，極難代謝排出 (代謝率 ≈ 1%)，放大倍率極顯著。</p>
+                    </button>
+
+                    <button onclick="selectPollutant('ddt')" id="pol-ddt" class="pollutant-btn text-left p-2.5 rounded-xl border transition-all bg-slate-900/50 border-slate-700/60 text-slate-300 hover:bg-slate-800/50">
+                        <div class="flex items-center justify-between">
+                            <span class="font-bold text-sm text-purple-300 flex items-center gap-1.5">
+                                <span class="w-2.5 h-2.5 rounded-full bg-purple-500 inline-block"></span>
+                                DDT 殺蟲劑 / 戴奧辛
+                            </span>
+                            <span class="text-[11px] px-2 py-0.5 rounded bg-purple-500/20 text-purple-300">高脂溶性</span>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-1">持久性有機汙染物 (POPs)。易溶於生物脂肪組織中，難以隨尿液排出 (代謝率 ≈ 3%)。</p>
+                    </button>
+
+                    <button onclick="selectPollutant('organic')" id="pol-organic" class="pollutant-btn text-left p-2.5 rounded-xl border transition-all bg-slate-900/50 border-slate-700/60 text-slate-300 hover:bg-slate-800/50">
+                        <div class="flex items-center justify-between">
+                            <span class="font-bold text-sm text-emerald-300 flex items-center gap-1.5">
+                                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block"></span>
+                                一般可代謝有機物 (對照組)
+                            </span>
+                            <span class="text-[11px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300">水溶性高</span>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-1">生物體可透過肝腎快速分解排出 (代謝率 ≈ 40%)，不會產生明顯生物放大。</p>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 自訂參數滑桿 -->
+            <div class="glass-panel rounded-2xl p-4 flex flex-col gap-3.5">
+                <h2 class="text-sm font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-2">
+                    <i class="fa-solid fa-sliders"></i> 2. 環境與生理參數調控
+                </h2>
+
+                <!-- 排汙速率 -->
+                <div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <span class="text-slate-300">環境排汙速率 (水中毒素生成)</span>
+                        <span id="valPollutionRate" class="font-mono font-bold text-rose-400">中 (5/秒)</span>
+                    </div>
+                    <input type="range" id="sliderPollution" min="0" max="15" step="1" value="5" oninput="updateSliders()">
+                    <div class="flex justify-between text-[10px] text-slate-500 mt-0.5">
+                        <span>無新汙染</span>
+                        <span>中度排放</span>
+                        <span>重度工業排汙</span>
+                    </div>
+                </div>
+
+                <!-- 生物代謝率 -->
+                <div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <span class="text-slate-300">毒素生物排出/代謝率 (Excretion)</span>
+                        <span id="valExcretionRate" class="font-mono font-bold text-cyan-400">1% / 週期</span>
+                    </div>
+                    <input type="range" id="sliderExcretion" min="0" max="50" step="1" value="1" oninput="updateSliders()">
+                    <div class="flex justify-between text-[10px] text-slate-500 mt-0.5">
+                        <span>0% (完全累積)</span>
+                        <span>25%</span>
+                        <span>50% (快速排出)</span>
+                    </div>
+                </div>
+
+                <!-- 模擬速度 -->
+                <div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <span class="text-slate-300">模擬時間流速</span>
+                        <span id="valSimSpeed" class="font-mono font-bold text-amber-400">1.0x</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 mt-1">
+                        <button onclick="setSimSpeed(0.5)" id="speed-0.5" class="speed-btn py-1 rounded-lg text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700 hover:text-white">0.5x 慢動作</button>
+                        <button onclick="setSimSpeed(1)" id="speed-1" class="speed-btn py-1 rounded-lg text-xs font-medium bg-cyan-600 text-white border border-cyan-400 shadow">1.0x 正常</button>
+                        <button onclick="setSimSpeed(2)" id="speed-2" class="speed-btn py-1 rounded-lg text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700 hover:text-white">2.0x 快轉</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 互動操作按鈕 -->
+            <div class="glass-panel rounded-2xl p-4 flex flex-col gap-2.5">
+                <h2 class="text-sm font-bold text-cyan-400 uppercase tracking-wider mb-1 flex items-center gap-2">
+                    <i class="fa-solid fa-hand-pointer"></i> 3. 生態系干預操作
+                </h2>
+                
+                <button onclick="triggerPollutionBurst()" class="w-full py-2.5 px-3 rounded-xl font-bold text-xs md:text-sm bg-gradient-to-r from-rose-600 to-purple-600 hover:from-rose-500 hover:to-purple-500 text-white shadow-lg shadow-rose-600/30 flex items-center justify-center gap-2 transition transform active:scale-95">
+                    <i class="fa-solid fa-biohazard text-base animate-pulse"></i>
+                    <span>投放大量汙染物 (突發排汙事件)</span>
+                </button>
+
+                <button onclick="replenishOrganisms()" id="btnReplenish" class="w-full py-2 px-3 rounded-xl font-medium text-xs bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-200 border border-emerald-500/40 flex items-center justify-center gap-2 transition">
+                    <i class="fa-solid fa-seedling"></i>
+                    <span>投入生物 (補充各營養階層數量)</span>
+                </button>
+
+                <div class="grid grid-cols-2 gap-2 mt-1">
+                    <button onclick="togglePause()" id="btnPause" class="py-2 px-3 rounded-xl font-medium text-xs bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 flex items-center justify-center gap-1.5 transition">
+                        <i class="fa-solid fa-pause" id="iconPause"></i>
+                        <span id="textPause">暫停模擬</span>
+                    </button>
+                    <button onclick="resetSimulation()" class="py-2 px-3 rounded-xl font-medium text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-600 flex items-center justify-center gap-1.5 transition">
+                        <i class="fa-solid fa-rotate-right"></i>
+                        <span>重置生態系</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 核心觀念比較小卡 (常駐精簡版) -->
+            <div class="glass-panel rounded-2xl p-4 border-l-4 border-l-amber-400">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-xs font-bold text-amber-300 uppercase flex items-center gap-1.5">
+                        <i class="fa-solid fa-graduation-cap"></i> 核心觀念快速對比
+                    </h3>
+                    <button onclick="toggleConceptModal()" class="text-[11px] text-cyan-400 hover:underline">展開詳情</button>
+                </div>
+                <div class="space-y-2 text-xs">
+                    <div class="p-2 rounded-lg bg-ocean-950/70 border border-slate-800">
+                        <span class="font-bold text-cyan-300">● 生物累積 (Bioaccumulation)：</span>
+                        <p class="text-slate-300 mt-0.5 leading-relaxed">發生在<strong class="text-white underline decoration-cyan-500">同一個體</strong>內。因攝入毒素速率 ＞ 代謝排出速率，年齡越大、體內毒素濃度越高。</p>
+                    </div>
+                    <div class="p-2 rounded-lg bg-ocean-950/70 border border-slate-800">
+                        <span class="font-bold text-rose-400">▲ 生物放大 (Biomagnification)：</span>
+                        <p class="text-slate-300 mt-0.5 leading-relaxed">發生在<strong class="text-white underline decoration-rose-500">不同營養階層</strong>間。高階掠食者吃下大量低階獵物，毒素 100% 向上集中，使頂級掠食者濃度呈指數級倍增。</p>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- 中央：動態模擬畫布與生物檢視器 (佔 6 欄) -->
+        <section class="lg:col-span-6 flex flex-col gap-4 order-1 lg:order-2">
+            
+            <!-- Canvas 容器 -->
+            <div class="glass-panel rounded-2xl p-1.5 relative overflow-hidden flex flex-col">
+                <!-- 畫布頂部狀態覆蓋列 -->
+                <div class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-ocean-950/80 rounded-t-xl border-b border-slate-800 text-xs">
+                    <div class="flex items-center gap-3">
+                        <span class="flex items-center gap-1.5 font-medium text-cyan-300" id="canvasModeTitle">
+                            <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+                            模式：食物鏈生態池 (點擊池中生物可檢視個體數據)
+                        </span>
+                    </div>
+                    <div class="flex items-center gap-3 text-[11px] font-mono">
+                        <span class="text-slate-400">模擬時間: <strong id="statTime" class="text-white">0.0</strong> 年</span>
+                        <span class="text-slate-400">水中游離毒素: <strong id="statWaterToxins" class="text-rose-400">0</strong> 顆</span>
+                    </div>
+                </div>
+
+                <!-- 互動模擬 Canvas -->
+                <div class="relative w-full h-[420px] sm:h-[480px] bg-gradient-to-b from-[#071930] via-[#051020] to-[#02060d] rounded-b-xl overflow-hidden cursor-crosshair" id="canvasContainer">
+                    <canvas id="simCanvas" class="w-full h-full block"></canvas>
+
+                    <!-- 生態池數量圖例列 (僅在生態池模式顯示) -->
+                    <div id="ecoLegendBar" class="absolute bottom-2.5 left-2.5 right-2.5 flex flex-wrap items-center justify-between gap-1.5 px-3 py-1.5 rounded-xl bg-ocean-950/85 backdrop-blur-md border border-slate-700/60 text-[11px] pointer-events-none">
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-[0_0_8px_#f43f5e]"></span>
+                            <span class="text-slate-300">環境毒素</span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                            <span class="text-slate-300">1階:浮游植物 (<strong id="countT1" class="text-emerald-300">0</strong>)</span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-sky-300"></span>
+                            <span class="text-slate-300">2階:小蝦 (<strong id="countT2" class="text-sky-300">0</strong>)</span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+                            <span class="text-slate-300">3階:小魚 (<strong id="countT3" class="text-amber-300">0</strong>)</span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-indigo-400"></span>
+                            <span class="text-slate-300">4階:掠食魚 (<strong id="countT4" class="text-indigo-300">0</strong>)</span>
+                        </div>
+                    </div>
+
+                    <!-- 單一生物聚焦模式控制覆蓋層 (預設隱藏) -->
+                    <div id="singleModeControls" class="hidden absolute bottom-3 left-3 right-3 flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 rounded-xl bg-ocean-950/90 backdrop-blur-md border border-cyan-500/40 text-xs">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-circle-info text-cyan-400"></i>
+                            <span class="text-slate-200">觀察單一魚隻從幼魚到成魚，持續進食含毒餌料與鰓部呼吸的體內累積過程。</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button onclick="feedSingleFish(5)" class="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-medium transition shadow">
+                                <i class="fa-solid fa-shrimp"></i> 手動餵食受汙染小蝦 (+5)
+                            </button>
+                            <button onclick="resetSingleMode()" class="px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 transition">
+                                重新培育幼魚
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 點擊生物個體檢視器 (Inspector Panel) -->
+            <div class="glass-panel rounded-2xl p-4">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-sm font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-2">
+                        <i class="fa-solid fa-crosshairs"></i> 生物個體毒理檢視器 (Organism Inspector)
+                    </h2>
+                    <span id="inspectorStatusBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                        已自動鎖定追蹤目標
+                    </span>
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+                    <div class="glass-card p-3 rounded-xl flex flex-col justify-between">
+                        <span class="text-[11px] text-slate-400">物種與營養階層</span>
+                        <div class="font-bold text-sm text-white mt-1 flex items-center gap-1.5" id="inspSpecies">
+                            <i class="fa-solid fa-fish text-indigo-400"></i> 大型掠食魚 (T4)
+                        </div>
+                    </div>
+                    <div class="glass-card p-3 rounded-xl flex flex-col justify-between">
+                        <span class="text-[11px] text-slate-400">存活年齡 / 體型</span>
+                        <div class="font-mono font-bold text-sm text-amber-300 mt-1" id="inspAge">
+                            1.2 年 (成體)
+                        </div>
+                    </div>
+                    <div class="glass-card p-3 rounded-xl flex flex-col justify-between">
+                        <span class="text-[11px] text-slate-400">已攝食獵物總數</span>
+                        <div class="font-mono font-bold text-sm text-emerald-300 mt-1" id="inspEaten">
+                            0 隻
+                        </div>
+                    </div>
+                    <div class="glass-card p-3 rounded-xl flex flex-col justify-between">
+                        <span class="text-[11px] text-slate-400">體內累積毒素總量</span>
+                        <div class="font-mono font-bold text-sm text-rose-300 mt-1" id="inspToxinLoad">
+                            0.00 μg
+                        </div>
+                    </div>
+                    <div class="glass-card p-3 rounded-xl flex flex-col justify-between col-span-2 sm:col-span-1 border-rose-500/40 bg-rose-950/30">
+                        <span class="text-[11px] text-rose-300">體內毒素濃度 (ppm)</span>
+                        <div class="font-mono font-bold text-base text-rose-400 mt-1" id="inspPpm">
+                            0.00 ppm
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- 右側：即時數據圖表與科學儀表板 (佔 3 欄) -->
+        <section class="lg:col-span-3 flex flex-col gap-4 order-3">
+            
+            <!-- 圖表 1：生物放大金字塔 (Biomagnification Pyramid) -->
+            <div class="glass-panel rounded-2xl p-4 flex flex-col">
+                <div class="flex items-center justify-between mb-1">
+                    <h2 class="text-sm font-bold text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <i class="fa-solid fa-layer-group"></i> 生物放大金字塔 (各階層濃度)
+                    </h2>
+                    <span class="text-[10px] text-slate-400 font-mono">單位: ppm</span>
+                </div>
+                <p class="text-[11px] text-slate-400 mb-3">
+                    展示不同營養階層的平均毒素濃度，越往食物鏈頂端呈指數級放大。
+                </p>
+
+                <!-- 視覺化階層長條與金字塔 -->
+                <div class="space-y-2.5 my-1">
+                    <!-- 第 4 階 -->
+                    <div class="p-2.5 rounded-xl bg-ocean-950/80 border border-slate-800 relative overflow-hidden">
+                        <div class="flex justify-between items-center text-xs mb-1 relative z-10">
+                            <span class="font-bold text-indigo-300 flex items-center gap-1.5">
+                                <span class="px-1.5 py-0.2 bg-indigo-500/20 rounded text-[10px]">T4 頂級掠食者</span> 大型魚/海鳥
+                            </span>
+                            <span id="ppmT4" class="font-mono font-bold text-rose-400">0.00 ppm</span>
+                        </div>
+                        <div class="w-full h-3 bg-slate-900 rounded-full overflow-hidden">
+                            <div id="barT4" class="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-rose-500 rounded-full transition-all duration-300" style="width: 5%"></div>
+                        </div>
+                        <div class="flex justify-between text-[10px] text-slate-400 mt-1">
+                            <span>生物放大倍率 (BMF):</span>
+                            <span id="bmfT4" class="font-mono text-amber-300 font-semibold">1.0x 水體</span>
+                        </div>
+                    </div>
+
+                    <!-- 第 3 階 -->
+                    <div class="p-2.5 rounded-xl bg-ocean-950/80 border border-slate-800 relative overflow-hidden">
+                        <div class="flex justify-between items-center text-xs mb-1 relative z-10">
+                            <span class="font-bold text-amber-300 flex items-center gap-1.5">
+                                <span class="px-1.5 py-0.2 bg-amber-500/20 rounded text-[10px]">T3 次級消費者</span> 食肉小魚
+                            </span>
+                            <span id="ppmT3" class="font-mono font-bold text-amber-300">0.00 ppm</span>
+                        </div>
+                        <div class="w-full h-3 bg-slate-900 rounded-full overflow-hidden">
+                            <div id="barT3" class="h-full bg-gradient-to-r from-amber-500 to-rose-500 rounded-full transition-all duration-300" style="width: 3%"></div>
+                        </div>
+                    </div>
+
+                    <!-- 第 2 階 -->
+                    <div class="p-2.5 rounded-xl bg-ocean-950/80 border border-slate-800 relative overflow-hidden">
+                        <div class="flex justify-between items-center text-xs mb-1 relative z-10">
+                            <span class="font-bold text-sky-300 flex items-center gap-1.5">
+                                <span class="px-1.5 py-0.2 bg-sky-500/20 rounded text-[10px]">T2 初級消費者</span> 浮游動物/小蝦
+                            </span>
+                            <span id="ppmT2" class="font-mono font-bold text-sky-300">0.00 ppm</span>
+                        </div>
+                        <div class="w-full h-3 bg-slate-900 rounded-full overflow-hidden">
+                            <div id="barT2" class="h-full bg-gradient-to-r from-sky-400 to-purple-500 rounded-full transition-all duration-300" style="width: 2%"></div>
+                        </div>
+                    </div>
+
+                    <!-- 第 1 階 -->
+                    <div class="p-2.5 rounded-xl bg-ocean-950/80 border border-slate-800 relative overflow-hidden">
+                        <div class="flex justify-between items-center text-xs mb-1 relative z-10">
+                            <span class="font-bold text-emerald-300 flex items-center gap-1.5">
+                                <span class="px-1.5 py-0.2 bg-emerald-500/20 rounded text-[10px]">T1 生產者</span> 浮游植物 (藻類)
+                            </span>
+                            <span id="ppmT1" class="font-mono font-bold text-emerald-300">0.00 ppm</span>
+                        </div>
+                        <div class="w-full h-3 bg-slate-900 rounded-full overflow-hidden">
+                            <div id="barT1" class="h-full bg-gradient-to-r from-emerald-400 to-cyan-500 rounded-full transition-all duration-300" style="width: 1%"></div>
+                        </div>
+                    </div>
+
+                    <!-- 水體環境基準 -->
+                    <div class="px-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 flex justify-between items-center text-[11px]">
+                        <span class="text-slate-400"><i class="fa-solid fa-droplet text-cyan-400 mr-1"></i>周圍水體環境基準濃度</span>
+                        <span id="ppmWater" class="font-mono text-cyan-300">0.0005 ppm</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 圖表 2：生物累積時間折線圖 (Bioaccumulation Curve) -->
+            <div class="glass-panel rounded-2xl p-4 flex flex-col flex-1">
+                <div class="flex items-center justify-between mb-1">
+                    <h2 class="text-sm font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <i class="fa-solid fa-chart-line"></i> 生物累積時間趨勢圖
+                    </h2>
+                    <span class="text-[10px] text-slate-400">濃度隨時間變化</span>
+                </div>
+                <p class="text-[11px] text-slate-400 mb-2" id="chartSubtitle">
+                    即時追蹤四個營養階層隨時間推進，體內平均毒素濃度 (ppm) 的累積曲線。
+                </p>
+
+                <!-- 折線圖 Canvas -->
+                <div class="relative w-full h-[210px] bg-ocean-950/90 rounded-xl border border-slate-800 p-2">
+                    <canvas id="chartCanvas" class="w-full h-full block"></canvas>
+                </div>
+
+                <!-- 圖例 -->
+                <div class="grid grid-cols-2 gap-1.5 mt-2.5 text-[11px]">
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-3 h-1 bg-rose-500 rounded"></span>
+                        <span class="text-slate-300">T4 掠食魚 (最高放大)</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-3 h-1 bg-amber-400 rounded"></span>
+                        <span class="text-slate-300">T3 食肉小魚</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-3 h-1 bg-sky-400 rounded"></span>
+                        <span class="text-slate-300">T2 浮游動物/小蝦</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-3 h-1 bg-emerald-400 rounded"></span>
+                        <span class="text-slate-300">T1 浮游植物</span>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- 觀念比較詳細教學彈窗 (Modal) -->
+    <div id="conceptModal" class="fixed inset-0 z-50 hidden bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="glass-panel max-w-3xl w-full rounded-2xl border border-cyan-500/40 overflow-hidden shadow-2xl animate-fadeIn">
+            <div class="px-6 py-4 bg-ocean-950 border-b border-slate-700 flex items-center justify-between">
+                <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-book-open-reader text-amber-400"></i>
+                    科學核心觀念解析：生物累積 vs. 生物放大
+                </h3>
+                <button onclick="toggleConceptModal()" class="text-slate-400 hover:text-white text-lg">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div class="p-6 space-y-5 max-h-[80vh] overflow-y-auto text-sm leading-relaxed">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- 生物累積 -->
+                    <div class="p-4 rounded-xl bg-cyan-950/40 border border-cyan-500/40">
+                        <div class="text-base font-bold text-cyan-300 mb-2 flex items-center gap-2">
+                            <i class="fa-solid fa-clock-rotate-left"></i>
+                            生物累積 (Bioaccumulation)
+                        </div>
+                        <ul class="space-y-2 text-slate-200 text-xs">
+                            <li><strong>發生層次：</strong><span class="text-cyan-300">同一個生物個體內</span>（隨年齡與時間增長）。</li>
+                            <li><strong>形成機制：</strong>生物從環境（呼吸、皮膚接觸）或食物中<strong>攝入毒素的速率 ＞ 體內代謝與排泄的速率</strong>。</li>
+                            <li><strong>模擬器觀察重點：</strong>切換至「單一生物聚焦」模式，觀察同一條魚從幼魚長成老魚時，體內毒素隨時間不斷往上累加。</li>
+                        </ul>
+                    </div>
+
+                    <!-- 生物放大 -->
+                    <div class="p-4 rounded-xl bg-rose-950/40 border border-rose-500/40">
+                        <div class="text-base font-bold text-rose-300 mb-2 flex items-center gap-2">
+                            <i class="fa-solid fa-sitemap"></i>
+                            生物放大 (Biomagnification)
+                        </div>
+                        <ul class="space-y-2 text-slate-200 text-xs">
+                            <li><strong>發生層次：</strong><span class="text-rose-300">不同營養階層之間</span>（隨食物鏈向上傳遞）。</li>
+                            <li><strong>形成機制：</strong>因為能量在食物鏈傳遞時遵循 10% 定律，高階掠食者必須吃下<strong>數量龐大的低階獵物</strong>才能生存；而難分解毒素卻近乎 <strong>100% 轉移</strong>並儲存在掠食者脂肪中。</li>
+                            <li><strong>模擬器觀察重點：</strong>觀察右側「生物放大金字塔」，水體濃度極低，但到了第 4 階掠食魚體內卻高達數十至數百 ppm！</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- 為什麼有些物質特別嚴重？ -->
+                <div class="p-4 rounded-xl bg-ocean-950/80 border border-slate-700">
+                    <h4 class="font-bold text-amber-300 mb-2 text-xs uppercase tracking-wider">
+                        <i class="fa-solid fa-triangle-exclamation mr-1"></i> 為什麼重金屬(甲基汞)與DDT會造成嚴重的生物放大？
+                    </h4>
+                    <p class="text-xs text-slate-300">
+                        一般水溶性營養物質或毒素可以隨尿液或汗液快速排出體外（如同模擬器中的「一般可代謝有機物」對照組）。但<strong>甲基汞、DDT、戴奧辛、多氯聯苯 (PCBs)</strong> 具有<strong>高脂溶性（Lipophilic）</strong>與<strong>極高的化學穩定性</strong>，一旦進入生物體內就會儲存在脂肪組織或與蛋白質結合，無法被肝腎分解排出，最終導致頂級掠食者（包含人類、海豚、老鷹）面臨嚴重中毒風險。
+                    </p>
+                </div>
+            </div>
+            <div class="px-6 py-3 bg-ocean-950 border-t border-slate-800 flex justify-end">
+                <button onclick="toggleConceptModal()" class="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition">
+                    了解，返回實驗室
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript 模擬核心邏輯 -->
+    <script>
+        // ==========================================
+        // 1. 全域狀態與預設參數定義
+        // ==========================================
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+        const chartCanvas = document.getElementById('chartCanvas');
+        const chartCtx = chartCanvas.getContext('2d');
+
+        let currentMode = 'ecosystem'; // 'ecosystem' | 'single'
+        let isPaused = false;
+        let showLabels = true;
+        let simSpeed = 1.0;
+        let simTimeYears = 0;
+        let frameCount = 0;
+
+        // 汙染物預設組
+        const POLLUTANT_PRESETS = {
+            mercury: { name: '甲基汞', pollutionRate: 5, excretionRate: 1, color: '#ff0055', glow: '#ff4d79' },
+            ddt:     { name: 'DDT 殺蟲劑', pollutionRate: 5, excretionRate: 3, color: '#c026d3', glow: '#e879f9' },
+            organic: { name: '可代謝有機物', pollutionRate: 6, excretionRate: 40, color: '#10b981', glow: '#34d399' }
+        };
+        let currentPollutant = 'mercury';
+        let pollutionSpawnRate = 5; // 每秒生成幾顆毒素
+        let excretionRatePercent = 1; // 每週期代謝百分比 (0~50%)
+
+        // 生態池物件陣列
+        let waterToxins = [];
+        let organisms = [];
+        let transferParticles = []; // 吞食時的毒素轉移粒子特效
+        let bubbles = [];
+        let selectedOrganism = null;
+
+        // 單一生物聚焦模式專用狀態
+        let singleFish = {
+            age: 0.2,       // 年齡 (0.2 ~ 8.0 歲)
+            mass: 2.0,      // 體重
+            toxinLoad: 2.0, // 體內累積毒素總量
+            eatenCount: 0,
+            excretedCount: 0,
+            x: 0,
+            y: 0,
+            foodItems: [],
+            internalDots: [],
+            excretedDots: []
+        };
+
+        // 營養階層設定 (Trophic Levels 1 ~ 4)
+        const TROPHIC_CONFIG = {
+            1: {
+                name: '浮游植物 (藻類)',
+                shortName: '浮游植物',
+                level: 1,
+                mass: 0.12,        // 生物質量 (影響 ppm = toxinLoad / mass)
+                radius: 4.5,
+                speed: 0.35,
+                baseColor: '#10b981', // 翠綠
+                maxCount: 75,
+                preyLevel: 0       // 吸收水體游離毒素
+            },
+            2: {
+                name: '浮游動物 / 小蝦',
+                shortName: '小蝦',
+                level: 2,
+                mass: 0.55,
+                radius: 8,
+                speed: 1.15,
+                baseColor: '#38bdf8', // 天藍
+                maxCount: 28,
+                preyLevel: 1
+            },
+            3: {
+                name: '次級消費者 (食肉小魚)',
+                shortName: '小魚',
+                level: 3,
+                mass: 2.2,
+                radius: 14,
+                speed: 1.65,
+                baseColor: '#fbbf24', // 琥珀黃
+                maxCount: 11,
+                preyLevel: 2
+            },
+            4: {
+                name: '頂級掠食者 (大型掠食魚)',
+                shortName: '大型掠食魚',
+                level: 4,
+                mass: 7.5,
+                radius: 25,
+                speed: 2.0,
+                baseColor: '#818cf8', // 靛藍
+                maxCount: 3,
+                preyLevel: 3
+            }
+        };
+
+        // 圖表歷史數據
+        let chartHistory = {
+            t1: [],
+            t2: [],
+            t3: [],
+            t4: [],
+            single: []
+        };
+        const MAX_CHART_POINTS = 90;
+
+        // ==========================================
+        // 2. 畫布自適應大小與初始化
+        // ==========================================
+        function resizeCanvases() {
+            const container = document.getElementById('canvasContainer');
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+
+            const chartParent = chartCanvas.parentElement;
+            chartCanvas.width = chartParent.clientWidth - 16;
+            chartCanvas.height = chartParent.clientHeight - 16;
+
+            singleFish.x = canvas.width * 0.5;
+            singleFish.y = canvas.height * 0.48;
+        }
+
+        window.addEventListener('resize', resizeCanvases);
+
+        // ==========================================
+        // 3. 類別定義：毒素微粒、生物個體、特效粒子
+        // ==========================================
+        class WaterToxin {
+            constructor(x, y) {
+                this.x = x ?? Math.random() * (canvas.width - 20) + 10;
+                this.y = y ?? Math.random() * (canvas.height - 60) + 20;
+                this.vx = (Math.random() - 0.5) * 0.4;
+                this.vy = (Math.random() - 0.5) * 0.4 + 0.1; // 微幅下沉
+                this.amount = 0.25; // 每顆毒素微粒代表的微克數
+                this.radius = 2.6;
+                this.phase = Math.random() * Math.PI * 2;
+            }
+
+            update() {
+                this.x += this.vx * simSpeed;
+                this.y += this.vy * simSpeed;
+                this.phase += 0.08 * simSpeed;
+
+                if (this.x < 10 || this.x > canvas.width - 10) this.vx *= -1;
+                if (this.y < 15) this.vy = Math.abs(this.vy);
+                if (this.y > canvas.height - 45) this.vy = -Math.abs(this.vy) * 0.8;
+            }
+
+            draw() {
+                const preset = POLLUTANT_PRESETS[currentPollutant];
+                const pulse = Math.sin(this.phase) * 0.8;
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius + pulse * 0.3, 0, Math.PI * 2);
+                ctx.fillStyle = preset.color;
+                ctx.shadowColor = preset.glow;
+                ctx.shadowBlur = 8;
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        class Organism {
+            constructor(level, x, y) {
+                const cfg = TROPHIC_CONFIG[level];
+                this.id = Math.random().toString(36).substring(2, 9);
+                this.level = level;
+                this.name = cfg.name;
+                this.shortName = cfg.shortName;
+                this.mass = cfg.mass;
+                this.baseRadius = cfg.radius;
+                this.speed = cfg.speed * (0.9 + Math.random() * 0.25);
+                this.baseColor = cfg.baseColor;
+
+                this.x = x ?? Math.random() * (canvas.width - 60) + 30;
+                this.y = y ?? Math.random() * (canvas.height - 100) + 35;
+                const angle = Math.random() * Math.PI * 2;
+                this.vx = Math.cos(angle) * this.speed;
+                this.vy = Math.sin(angle) * this.speed;
+
+                this.toxinLoad = 0; // 體內累積毒素總量 (μg)
+                this.eatenCount = 0;
+                this.age = 0.1 + Math.random() * 0.3; // 初始年齡
+                this.tailPhase = Math.random() * Math.PI * 2;
+                this.eatCooldown = 0;
+            }
+
+            get ppm() {
+                return this.toxinLoad / this.mass;
+            }
+
+            get radius() {
+                // 隨年齡微幅長大
+                const growth = Math.min(1.25, 0.9 + this.age * 0.15);
+                return this.baseRadius * growth;
+            }
+
+            update() {
+                this.age += 0.0008 * simSpeed;
+                this.tailPhase += 0.18 * simSpeed * (this.speed * 0.8);
+                if (this.eatCooldown > 0) this.eatCooldown -= simSpeed;
+
+                // 生理代謝排出毒素 (依據設定的代謝率)
+                if (this.toxinLoad > 0 && excretionRatePercent > 0) {
+                    const decayFactor = (excretionRatePercent / 100) * 0.005 * simSpeed;
+                    this.toxinLoad = Math.max(0, this.toxinLoad * (1 - decayFactor));
+                }
+
+                // 浮游植物直接從水體吸收周圍游離毒素並緩慢漂浮
+                if (this.level === 1) {
+                    for (let i = waterToxins.length - 1; i >= 0; i--) {
+                        const wt = waterToxins[i];
+                        const dx = wt.x - this.x;
+                        const dy = wt.y - this.y;
+                        const distSq = dx * dx + dy * dy;
+                        if (distSq < 480) { // 吸收半徑
+                            // 吸引靠近
+                            wt.x -= dx * 0.12 * simSpeed;
+                            wt.y -= dy * 0.12 * simSpeed;
+                            if (distSq < 90) {
+                                this.toxinLoad += wt.amount;
+                                this.eatenCount++;
+                                waterToxins.splice(i, 1);
+                            }
+                        }
+                    }
+                } else {
+                    // 消費者 (Level 2, 3, 4) 尋找下一階層獵物
+                    this.huntPrey();
+                    // 同時透過鰓呼吸微量吸收水體毒素
+                    if (waterToxins.length > 0 && Math.random() < 0.008 * simSpeed) {
+                        const idx = Math.floor(Math.random() * waterToxins.length);
+                        const wt = waterToxins[idx];
+                        if (Math.hypot(wt.x - this.x, wt.y - this.y) < this.radius * 2) {
+                            this.toxinLoad += wt.amount;
+                            waterToxins.splice(idx, 1);
+                        }
+                    }
+                }
+
+                // 移動與邊界反彈
+                this.x += this.vx * simSpeed;
+                this.y += this.vy * simSpeed;
+
+                const margin = this.radius + 8;
+                const bottomMargin = 48 + this.radius;
+                if (this.x < margin) { this.x = margin; this.vx = Math.abs(this.vx); }
+                if (this.x > canvas.width - margin) { this.x = canvas.width - margin; this.vx = -Math.abs(this.vx); }
+                if (this.y < margin) { this.y = margin; this.vy = Math.abs(this.vy); }
+                if (this.y > canvas.height - bottomMargin) { this.y = canvas.height - bottomMargin; this.vy = -Math.abs(this.vy); }
+            }
+
+            huntPrey() {
+                if (this.eatCooldown > 0) return;
+
+                let nearestPrey = null;
+                let minDist = 170 + this.level * 30; // 偵測視野範圍
+
+                for (let other of organisms) {
+                    if (other.level === this.level - 1) {
+                        const d = Math.hypot(other.x - this.x, other.y - this.y);
+                        if (d < minDist) {
+                            minDist = d;
+                            nearestPrey = other;
+                        }
+                    }
+                }
+
+                if (nearestPrey) {
+                    const angle = Math.atan2(nearestPrey.y - this.y, nearestPrey.x - this.x);
+                    const turnRate = 0.08 * simSpeed;
+                    const targetVx = Math.cos(angle) * this.speed * 1.15;
+                    const targetVy = Math.sin(angle) * this.speed * 1.15;
+                    this.vx += (targetVx - this.vx) * turnRate;
+                    this.vy += (targetVy - this.vy) * turnRate;
+
+                    // 捕食判定：低階生物體內毒素 100% 轉移至高階生物
+                    if (minDist < this.radius + nearestPrey.radius * 0.6) {
+                        this.consume(nearestPrey);
+                    }
+                } else {
+                    // 隨機巡游保持速度穩定
+                    const currentSpeed = Math.hypot(this.vx, this.vy) || 0.1;
+                    this.vx = (this.vx / currentSpeed) * this.speed;
+                    this.vy = (this.vy / currentSpeed) * this.speed;
+                }
+            }
+
+            consume(prey) {
+                // 100% 轉移獵物體內的所有毒素 + 獵物可能附帶的微量環境基底毒素
+                const transferredToxin = prey.toxinLoad;
+                this.toxinLoad += transferredToxin;
+                this.eatenCount += 1;
+                this.eatCooldown = 28; // 消化冷卻幀數
+
+                // 產生吞食與毒素轉移粒子動畫特效
+                spawnTransferParticles(prey.x, prey.y, this, transferredToxin);
+
+                // 如果被吃掉的生物剛好是被選中的檢視目標，自動將焦點轉移給捕食者！
+                if (selectedOrganism && selectedOrganism.id === prey.id) {
+                    selectedOrganism = this;
+                }
+
+                // 從陣列移除獵物
+                const idx = organisms.indexOf(prey);
+                if (idx !== -1) organisms.splice(idx, 1);
+            }
+
+            // 根據毒素濃度計算體色與警示發光程度 (0.0 ~ 1.0)
+            getToxicityRatio() {
+                // 對數比例尺讓視覺漸層更明顯
+                const p = this.ppm;
+                if (p <= 0.05) return 0;
+                return Math.min(1, Math.log10(p * 10 + 1) / 2.2);
+            }
+
+            draw() {
+                const toxRatio = this.getToxicityRatio();
+                const bodyColor = interpolateColor(this.baseColor, '#ff0055', toxRatio);
+                const angle = Math.atan2(this.vy, this.vx);
+                const facingLeft = Math.abs(angle) > Math.PI / 2;
+
+                ctx.save();
+                ctx.translate(this.x, this.y);
+
+                // 若為被選取的生物，繪製鎖定外框
+                if (selectedOrganism && selectedOrganism.id === this.id) {
+                    ctx.beginPath();
+                    ctx.arc(0, 0, this.radius + 9, 0, Math.PI * 2);
+                    ctx.strokeStyle = '#38bdf8';
+                    ctx.lineWidth = 1.8;
+                    ctx.setLineDash([4, 3]);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+
+                // 毒素外圍霓虹警示光暈
+                if (toxRatio > 0.12) {
+                    ctx.shadowColor = toxRatio > 0.6 ? '#ff0055' : '#e879f9';
+                    ctx.shadowBlur = 6 + toxRatio * 18;
+                }
+
+                // 繪製不同營養階層的外觀
+                if (this.level === 1) {
+                    // 第一階：浮游植物 (發光微藻細胞)
+                    ctx.beginPath();
+                    ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = bodyColor;
+                    ctx.fill();
+                    ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                } else if (this.level === 2) {
+                    // 第二階：浮游動物 / 小蝦
+                    ctx.save();
+                    if (facingLeft) ctx.scale(-1, 1);
+                    const r = this.radius;
+                    const wag = Math.sin(this.tailPhase) * 2;
+                    // 蝦身
+                    ctx.beginPath();
+                    ctx.ellipse(0, 0, r * 1.1, r * 0.65, -0.15, 0, Math.PI * 2);
+                    ctx.fillStyle = bodyColor;
+                    ctx.fill();
+                    // 蝦尾與觸鬚
+                    ctx.beginPath();
+                    ctx.moveTo(-r * 0.9, 0);
+                    ctx.lineTo(-r * 1.5, -r * 0.5 + wag);
+                    ctx.lineTo(-r * 1.5, r * 0.5 + wag);
+                    ctx.closePath();
+                    ctx.fill();
+                    // 眼睛
+                    ctx.fillStyle = '#0f172a';
+                    ctx.beginPath();
+                    ctx.arc(r * 0.6, -r * 0.2, 1.5, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                } else {
+                    // 第三階 & 第四階：魚類 (含擺動尾鰭與內部毒素亮點)
+                    ctx.save();
+                    if (facingLeft) {
+                        ctx.scale(-1, 1);
+                        ctx.rotate(-angle + Math.PI);
+                    } else {
+                        ctx.rotate(angle);
+                    }
+
+                    const r = this.radius;
+                    const tailSwing = Math.sin(this.tailPhase) * (r * 0.25);
+
+                    // 尾鰭
+                    ctx.beginPath();
+                    ctx.moveTo(-r * 0.85, 0);
+                    ctx.lineTo(-r * 1.55, -r * 0.65 + tailSwing);
+                    ctx.lineTo(-r * 1.35, 0 + tailSwing * 0.5);
+                    ctx.lineTo(-r * 1.55, r * 0.65 + tailSwing);
+                    ctx.closePath();
+                    ctx.fillStyle = bodyColor;
+                    ctx.fill();
+
+                    // 背鰭 (第4階大型掠食魚更有氣勢)
+                    if (this.level === 4) {
+                        ctx.beginPath();
+                        ctx.moveTo(-r * 0.3, -r * 0.5);
+                        ctx.lineTo(r * 0.2, -r * 0.95);
+                        ctx.lineTo(r * 0.4, -r * 0.45);
+                        ctx.fillStyle = bodyColor;
+                        ctx.fill();
+                    }
+
+                    // 魚身流線橢圓
+                    ctx.beginPath();
+                    ctx.ellipse(0, 0, r * 1.15, r * 0.62, 0, 0, Math.PI * 2);
+                    ctx.fillStyle = bodyColor;
+                    ctx.fill();
+                    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+                    ctx.lineWidth = 1.2;
+                    ctx.stroke();
+
+                    // 繪製體內累積的紅紫毒素微粒斑點
+                    const dotCount = Math.min(10, Math.floor(this.ppm * 1.5));
+                    ctx.fillStyle = '#ff0055';
+                    for (let d = 0; d < dotCount; d++) {
+                        const dx = ((d * 37) % 10 - 5) * (r * 0.12);
+                        const dy = ((d * 23) % 6 - 3) * (r * 0.1);
+                        ctx.beginPath();
+                        ctx.arc(dx, dy, 1.8, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+
+                    // 魚眼
+                    ctx.fillStyle = '#ffffff';
+                    ctx.beginPath();
+                    ctx.arc(r * 0.65, -r * 0.18, r * 0.18, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#020617';
+                    ctx.beginPath();
+                    ctx.arc(r * 0.7, -r * 0.18, r * 0.09, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    ctx.restore();
+                }
+
+                // 頭頂毒素濃度數值標籤 (可切換顯示)
+                if (showLabels && (this.level >= 2 || this.ppm > 0.5)) {
+                    ctx.shadowBlur = 0;
+                    const labelText = `${this.ppm.toFixed(1)} ppm`;
+                    ctx.font = '600 10px Inter, sans-serif';
+                    const textWidth = ctx.measureText(labelText).width;
+                    
+                    ctx.fillStyle = 'rgba(4, 11, 22, 0.78)';
+                    ctx.beginPath();
+                    ctx.roundRect(-textWidth / 2 - 4, -this.radius - 18, textWidth + 8, 14, 4);
+                    ctx.fill();
+
+                    ctx.fillStyle = toxRatio > 0.45 ? '#fda4af' : '#e2e8f0';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(labelText, 0, -this.radius - 8);
+                }
+
+                ctx.restore();
+            }
+        }
+
+        // 吞食時毒素 100% 轉移特效粒子
+        function spawnTransferParticles(fromX, fromY, predator, toxinAmount) {
+            const count = Math.min(14, Math.max(4, Math.ceil(toxinAmount * 3)));
+            for (let i = 0; i < count; i++) {
+                transferParticles.push({
+                    x: fromX + (Math.random() - 0.5) * 14,
+                    y: fromY + (Math.random() - 0.5) * 14,
+                    target: predator,
+                    progress: 0,
+                    speed: 0.05 + Math.random() * 0.04,
+                    text: i === 0 && toxinAmount > 0.1 ? `+${toxinAmount.toFixed(2)}μg (100%轉移)` : null
+                });
+            }
+        }
+
+        // ==========================================
+        // 4. 生態系初始化與控制函式
+        // ==========================================
+        function initEcosystem() {
+            waterToxins = [];
+            organisms = [];
+            transferParticles = [];
+            simTimeYears = 0;
+            chartHistory = { t1: [], t2: [], t3: [], t4: [], single: [] };
+
+            // 初始水體毒素
+            for (let i = 0; i < 45; i++) {
+                waterToxins.push(new WaterToxin());
+            }
+
+            // 建立 4 個營養階層的初始族群
+            for (let i = 0; i < 48; i++) organisms.push(new Organism(1));
+            for (let i = 0; i < 18; i++) organisms.push(new Organism(2));
+            for (let i = 0; i < 7; i++) organisms.push(new Organism(3));
+            for (let i = 0; i < 2; i++) organisms.push(new Organism(4));
+
+            // 預設選取一隻頂級掠食魚供使用者觀察
+            selectedOrganism = organisms.find(o => o.level === 4) || organisms[0];
+
+            // 初始化背景氣泡
+            bubbles = Array.from({ length: 18 }, () => ({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                r: 1 + Math.random() * 2.5,
+                speed: 0.3 + Math.random() * 0.5
+            }));
+
+            resetSingleMode();
+        }
+
+        function resetSingleMode() {
+            singleFish = {
+                age: 0.2,
+                mass: 1.5,
+                toxinLoad: 0.5,
+                eatenCount: 0,
+                excretedCount: 0,
+                x: canvas.width * 0.5,
+                y: canvas.height * 0.45,
+                foodItems: [],
+                internalDots: [{ r: 0.2, a: 0.5 }],
+                excretedDots: []
+            };
+            chartHistory.single = [];
+        }
+
+        // 切換汙染物預設參數
+        function selectPollutant(type) {
+            currentPollutant = type;
+            const preset = POLLUTANT_PRESETS[type];
+
+            document.getElementById('sliderPollution').value = preset.pollutionRate;
+            document.getElementById('sliderExcretion').value = preset.excretionRate;
+            updateSliders();
+
+            // 更新按鈕視覺樣式
+            document.querySelectorAll('.pollutant-btn').forEach(btn => {
+                btn.className = 'pollutant-btn text-left p-2.5 rounded-xl border transition-all bg-slate-900/50 border-slate-700/60 text-slate-300 hover:bg-slate-800/50';
+            });
+            const activeBtn = document.getElementById(`pol-${type}`);
+            if (type === 'mercury') {
+                activeBtn.className = 'pollutant-btn text-left p-2.5 rounded-xl border transition-all bg-rose-950/50 border-rose-500/60 text-white shadow-lg shadow-rose-950/30';
+            } else if (type === 'ddt') {
+                activeBtn.className = 'pollutant-btn text-left p-2.5 rounded-xl border transition-all bg-purple-950/50 border-purple-500/60 text-white shadow-lg shadow-purple-950/30';
+            } else {
+                activeBtn.className = 'pollutant-btn text-left p-2.5 rounded-xl border transition-all bg-emerald-950/50 border-emerald-500/60 text-white shadow-lg shadow-emerald-950/30';
+            }
+        }
+
+        function updateSliders() {
+            pollutionSpawnRate = parseInt(document.getElementById('sliderPollution').value, 10);
+            excretionRatePercent = parseInt(document.getElementById('sliderExcretion').value, 10);
+
+            let polDesc = '無 (0/秒)';
+            if (pollutionSpawnRate > 0 && pollutionSpawnRate <= 4) polDesc = `低 (${pollutionSpawnRate}/秒)`;
+            else if (pollutionSpawnRate <= 9) polDesc = `中 (${pollutionSpawnRate}/秒)`;
+            else if (pollutionSpawnRate > 9) polDesc = `高 (${pollutionSpawnRate}/秒)`;
+
+            document.getElementById('valPollutionRate').textContent = polDesc;
+            document.getElementById('valExcretionRate').textContent = `${excretionRatePercent}% / 週期`;
+        }
+
+        function setSimSpeed(speed) {
+            simSpeed = speed;
+            document.getElementById('valSimSpeed').textContent = `${speed.toFixed(1)}x`;
+            document.querySelectorAll('.speed-btn').forEach(btn => {
+                btn.className = 'speed-btn py-1 rounded-lg text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700 hover:text-white';
+            });
+            const active = document.getElementById(`speed-${speed}`);
+            if (active) {
+                active.className = 'speed-btn py-1 rounded-lg text-xs font-medium bg-cyan-600 text-white border border-cyan-400 shadow';
+            }
+        }
+
+        // 突發排汙事件按鈕
+        function triggerPollutionBurst() {
+            if (currentMode === 'single') {
+                feedSingleFish(8);
+                return;
+            }
+            for (let i = 0; i < 75; i++) {
+                const x = canvas.width * (0.15 + Math.random() * 0.7);
+                const y = 15 + Math.random() * 60;
+                waterToxins.push(new WaterToxin(x, y));
+            }
+        }
+
+        // 補充各營養階層生物
+        function replenishOrganisms() {
+            if (currentMode === 'single') {
+                feedSingleFish(5);
+                return;
+            }
+            const counts = getLevelCounts();
+            if (counts[1] < TROPHIC_CONFIG[1].maxCount) {
+                for (let i = 0; i < 25; i++) organisms.push(new Organism(1));
+            }
+            if (counts[2] < TROPHIC_CONFIG[2].maxCount) {
+                for (let i = 0; i < 10; i++) organisms.push(new Organism(2));
+            }
+            if (counts[3] < TROPHIC_CONFIG[3].maxCount) {
+                for (let i = 0; i < 4; i++) organisms.push(new Organism(3));
+            }
+            if (counts[4] < TROPHIC_CONFIG[4].maxCount) {
+                organisms.push(new Organism(4));
+            }
+        }
+
+        function togglePause() {
+            isPaused = !isPaused;
+            const icon = document.getElementById('iconPause');
+            const text = document.getElementById('textPause');
+            if (isPaused) {
+                icon.className = 'fa-solid fa-play';
+                text.textContent = '繼續模擬';
+            } else {
+                icon.className = 'fa-solid fa-pause';
+                text.textContent = '暫停模擬';
+            }
+        }
+
+        function resetSimulation() {
+            initEcosystem();
+        }
+
+        function toggleLabels() {
+            showLabels = !showLabels;
+            document.getElementById('labelToggleText').textContent = `顯示數值標籤: ${showLabels ? '開' : '關'}`;
+        }
+
+        function toggleConceptModal() {
+            const modal = document.getElementById('conceptModal');
+            modal.classList.toggle('hidden');
+        }
+
+        function switchMode(mode) {
+            currentMode = mode;
+            const btnEco = document.getElementById('btnModeEco');
+            const btnSingle = document.getElementById('btnModeSingle');
+            const ecoLegend = document.getElementById('ecoLegendBar');
+            const singleControls = document.getElementById('singleModeControls');
+            const modeTitle = document.getElementById('canvasModeTitle');
+            const chartSubtitle = document.getElementById('chartSubtitle');
+
+            if (mode === 'ecosystem') {
+                btnEco.className = 'flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-all bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md';
+                btnSingle.className = 'flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-all text-slate-400 hover:text-white';
+                ecoLegend.classList.remove('hidden');
+                singleControls.classList.add('hidden');
+                modeTitle.innerHTML = `<span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span> 模式：食物鏈生態池 (點擊池中生物可檢視個體數據)`;
+                chartSubtitle.textContent = '即時追蹤四個營養階層隨時間推進，體內平均毒素濃度 (ppm) 的累積曲線。';
+            } else {
+                btnSingle.className = 'flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-all bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md';
+                btnEco.className = 'flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs md:text-sm font-medium transition-all text-slate-400 hover:text-white';
+                ecoLegend.classList.add('hidden');
+                singleControls.classList.remove('hidden');
+                modeTitle.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span> 專題模式：單一生物體內聚焦 (觀察隨年齡增長的生物累積)`;
+                chartSubtitle.textContent = '專題追蹤：單一條魚隨年齡增長，體內毒素因「攝入速率 > 代謝速率」的累積曲線。';
+            }
+        }
+
+        // ==========================================
+        // 5. 點擊畫布選取生物個體
+        // ==========================================
+        canvas.addEventListener('pointerdown', (e) => {
+            if (currentMode !== 'ecosystem') {
+                feedSingleFish(2);
+                return;
+            }
+            const rect = canvas.getBoundingClientRect();
+            const clickX = (e.clientX - rect.left) * (canvas.width / rect.width);
+            const clickY = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+            let bestMatch = null;
+            let bestDist = 45; // 點擊容許範圍
+
+            for (let org of organisms) {
+                const d = Math.hypot(org.x - clickX, org.y - clickY);
+                if (d < org.radius + 18 && d < bestDist) {
+                    bestDist = d;
+                    bestMatch = org;
+                }
+            }
+
+            if (bestMatch) {
+                selectedOrganism = bestMatch;
+                const badge = document.getElementById('inspectorStatusBadge');
+                badge.textContent = `已鎖定：${bestMatch.shortName}`;
+                badge.className = 'text-xs px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40';
+            }
+        });
+
+        // ==========================================
+        // 6. 單一生物聚焦模式 (Bioaccumulation Focus) 邏輯与繪製
+        // ==========================================
+        function feedSingleFish(count = 1) {
+            for (let i = 0; i < count; i++) {
+                singleFish.foodItems.push({
+                    x: 40 + Math.random() * 80,
+                    y: canvas.height * 0.25 + Math.random() * (canvas.height * 0.45),
+                    toxin: 1.4
+                });
+            }
+        }
+
+        function updateAndDrawSingleMode() {
+            const f = singleFish;
+            f.x = canvas.width * 0.52;
+            f.y = canvas.height * 0.44;
+
+            if (!isPaused) {
+                // 隨時間年齡成長
+                f.age = Math.min(10, f.age + 0.004 * simSpeed);
+                f.mass = 1.5 + f.age * 0.45; // 隨年齡長大，但毒素累積更快
+
+                // 自動定期產生受汙染食物流向魚口
+                if (Math.random() < (0.04 + pollutionSpawnRate * 0.008) * simSpeed) {
+                    feedSingleFish(1);
+                }
+
+                // 代謝排出計算
+                if (f.toxinLoad > 0 && excretionRatePercent > 0) {
+                    const excreted = f.toxinLoad * (excretionRatePercent / 100) * 0.008 * simSpeed;
+                    f.toxinLoad = Math.max(0, f.toxinLoad - excreted);
+
+                    if (Math.random() < (excretionRatePercent / 100) * 0.3 * simSpeed) {
+                        f.excretedDots.push({
+                            x: f.x - 55,
+                            y: f.y + 15,
+                            vx: -1.5 - Math.random(),
+                            vy: 0.8 + Math.random(),
+                            alpha: 1.0
+                        });
+                    }
+                }
+            }
+
+            // 繪製流速背景線與解說標籤
+            const fishRadius = Math.min(82, 36 + f.age * 5.5);
+            const ppm = f.toxinLoad / f.mass;
+            const toxRatio = Math.min(1, ppm / 18);
+            const bodyColor = interpolateColor('#38bdf8', '#ff0055', toxRatio);
+
+            // 更新並繪製流向魚口的受汙染食物
+            for (let i = f.foodItems.length - 1; i >= 0; i--) {
+                const item = f.foodItems[i];
+                if (!isPaused) {
+                    const mouthX = f.x + fishRadius * 0.95;
+                    const mouthY = f.y;
+                    item.x += (mouthX - item.x) * 0.06 * simSpeed;
+                    item.y += (mouthY - item.y) * 0.06 * simSpeed;
+
+                    if (Math.hypot(mouthX - item.x, mouthY - item.y) < 18) {
+                        f.toxinLoad += item.toxin;
+                        f.eatenCount++;
+                        if (f.internalDots.length < 65) {
+                            f.internalDots.push({
+                                r: Math.random() * 0.65,
+                                a: Math.random() * Math.PI * 2
+                            });
+                        }
+                        f.foodItems.splice(i, 1);
+                        continue;
+                    }
+                }
+
+                // 繪製含毒小蝦餌料
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(item.x, item.y, 5, 0, Math.PI * 2);
+                ctx.fillStyle = '#ff0055';
+                ctx.shadowColor = '#ff4d79';
+                ctx.shadowBlur = 10;
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // 更新並繪製代謝排出的微粒
+            for (let i = f.excretedDots.length - 1; i >= 0; i--) {
+                const ed = f.excretedDots[i];
+                if (!isPaused) {
+                    ed.x += ed.vx * simSpeed;
+                    ed.y += ed.vy * simSpeed;
+                    ed.alpha -= 0.018 * simSpeed;
+                }
+                if (ed.alpha <= 0) {
+                    f.excretedDots.splice(i, 1);
+                    continue;
+                }
+                ctx.save();
+                ctx.globalAlpha = ed.alpha;
+                ctx.fillStyle = '#34d399';
+                ctx.beginPath();
+                ctx.arc(ed.x, ed.y, 3.5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // 繪製放大版特寫魚隻 (朝右迎接食物流)
+            ctx.save();
+            ctx.translate(f.x, f.y);
+
+            if (toxRatio > 0.1) {
+                ctx.shadowColor = '#ff0055';
+                ctx.shadowBlur = 12 + toxRatio * 25;
+            }
+
+            const swing = Math.sin(frameCount * 0.1) * 10;
+            // 尾鰭
+            ctx.beginPath();
+            ctx.moveTo(-fishRadius * 0.85, 0);
+            ctx.lineTo(-fishRadius * 1.5, -fishRadius * 0.65 + swing);
+            ctx.lineTo(-fishRadius * 1.3, swing * 0.4);
+            ctx.lineTo(-fishRadius * 1.5, fishRadius * 0.65 + swing);
+            ctx.closePath();
+            ctx.fillStyle = bodyColor;
+            ctx.fill();
+
+            // 魚身
+            ctx.beginPath();
+            ctx.ellipse(0, 0, fishRadius * 1.15, fishRadius * 0.62, 0, 0, Math.PI * 2);
+            ctx.fillStyle = bodyColor;
+            ctx.fill();
+            ctx.lineWidth = 2.5;
+            ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+            ctx.stroke();
+
+            // 透視魚體內部脂肪組織累積的毒素紅點
+            ctx.shadowBlur = 6;
+            ctx.shadowColor = '#ff0055';
+            ctx.fillStyle = '#ff0055';
+            const visibleDots = Math.min(60, Math.floor(f.toxinLoad * 1.5));
+            for (let i = 0; i < visibleDots; i++) {
+                const d = f.internalDots[i % f.internalDots.length] || { r: 0.3, a: i };
+                const px = Math.cos(d.a + i) * (fishRadius * 0.75 * d.r);
+                const py = Math.sin(d.a + i) * (fishRadius * 0.42 * d.r);
+                ctx.beginPath();
+                ctx.arc(px, py, 3.2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // 魚眼
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(fishRadius * 0.65, -fishRadius * 0.18, fishRadius * 0.14, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#0f172a';
+            ctx.beginPath();
+            ctx.arc(fishRadius * 0.69, -fishRadius * 0.18, fishRadius * 0.07, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+
+            // 繪製科學圖解指標文字
+            ctx.save();
+            ctx.font = 'bold 13px "Noto Sans TC", sans-serif';
+            ctx.fillStyle = '#fda4af';
+            ctx.fillText(`→ 攝入速率 (進食+呼吸吸收)`, 28, 42);
+            ctx.fillStyle = '#6ee7b7';
+            ctx.fillText(`← 代謝排出速率 (${excretionRatePercent}%)`, 28, 64);
+
+            ctx.textAlign = 'center';
+            ctx.font = 'bold 14px Inter, "Noto Sans TC", sans-serif';
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(`個體年齡: ${f.age.toFixed(1)} 歲  |  體內毒素濃度: ${ppm.toFixed(2)} ppm`, f.x, f.y - fishRadius - 22);
+            ctx.restore();
+
+            // 同步更新下方檢視器面版
+            document.getElementById('inspSpecies').innerHTML = `<i class="fa-solid fa-fish-fins text-cyan-400"></i> 專題觀察魚個體`;
+            document.getElementById('inspAge').textContent = `${f.age.toFixed(1)} 歲 (隨時間成長)`;
+            document.getElementById('inspEaten').textContent = `${f.eatenCount} 次進食`;
+            document.getElementById('inspToxinLoad').textContent = `${f.toxinLoad.toFixed(2)} μg`;
+            document.getElementById('inspPpm').textContent = `${ppm.toFixed(2)} ppm`;
+        }
+
+        // ==========================================
+        // 7. 主迴圈與統計儀表板更新
+        // ==========================================
+        function getLevelCounts() {
+            const counts = { 1: 0, 2: 0, 3: 0, 4: 0 };
+            for (let o of organisms) counts[o.level]++;
+            return counts;
+        }
+
+        function animate() {
+            frameCount++;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 繪製深海光束與背景氣泡
+            drawOceanBackground();
+
+            if (currentMode === 'ecosystem') {
+                if (!isPaused) {
+                    simTimeYears += 0.002 * simSpeed;
+
+                    // 1. 根據排汙速率持續在水中產生游離毒素
+                    if (waterToxins.length < 220 && Math.random() < (pollutionSpawnRate / 60) * simSpeed) {
+                        waterToxins.push(new WaterToxin(Math.random() * (canvas.width - 40) + 20, 18));
+                    }
+
+                    // 2. 生態平衡自動補充機制：確保浮游植物與基層生物不會完全滅絕
+                    const counts = getLevelCounts();
+                    if (counts[1] < 42 && Math.random() < 0.18 * simSpeed) {
+                        organisms.push(new Organism(1));
+                    }
+                    if (counts[2] < 12 && Math.random() < 0.04 * simSpeed) {
+                        organisms.push(new Organism(2));
+                    }
+                    if (counts[3] < 4 && Math.random() < 0.015 * simSpeed) {
+                        organisms.push(new Organism(3));
+                    }
+                    if (counts[4] < 2 && Math.random() < 0.01 * simSpeed) {
+                        organisms.push(new Organism(4));
+                    }
+
+                    // 3. 更新水體毒素與所有生物
+                    for (let wt of waterToxins) wt.update();
+                    for (let org of organisms) org.update();
+                }
+
+                // 繪製水體毒素与生物 (依階層排序繪製讓大魚在上層)
+                for (let wt of waterToxins) wt.draw();
+                organisms.sort((a, b) => a.level - b.level);
+                for (let org of organisms) org.draw();
+
+                // 更新並繪製吞食 100% 轉移特效粒子
+                updateAndDrawTransferParticles();
+
+                // 更新檢視器面板
+                updateInspectorPanel();
+            } else {
+                if (!isPaused) simTimeYears += 0.002 * simSpeed;
+                updateAndDrawSingleMode();
+            }
+
+            // 定期更新統計數據與折線圖
+            if (frameCount % 15 === 0) {
+                updateDashboardStats();
+                drawRealtimeChart();
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        function drawOceanBackground() {
+            // 繪製頂部陽光折射光束
+            const grad = ctx.createLinearGradient(0, 0, 0, canvas.height * 0.6);
+            grad.addColorStop(0, 'rgba(56, 189, 248, 0.07)');
+            grad.addColorStop(1, 'rgba(56, 189, 248, 0)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height * 0.6);
+
+            // 上升微小氣泡
+            ctx.fillStyle = 'rgba(148, 163, 184, 0.18)';
+            for (let b of bubbles) {
+                if (!isPaused) {
+                    b.y -= b.speed * simSpeed;
+                    if (b.y < 0) {
+                        b.y = canvas.height;
+                        b.x = Math.random() * canvas.width;
+                    }
+                }
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function updateAndDrawTransferParticles() {
+            for (let i = transferParticles.length - 1; i >= 0; i--) {
+                const p = transferParticles[i];
+                if (!isPaused) p.progress += p.speed * simSpeed;
+                if (p.progress >= 1 || !p.target) {
+                    transferParticles.splice(i, 1);
+                    continue;
+                }
+
+                const curX = p.x + (p.target.x - p.x) * p.progress;
+                const curY = p.y + (p.target.y - p.y) * p.progress;
+
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(curX, curY, 3, 0, Math.PI * 2);
+                ctx.fillStyle = '#ff0055';
+                ctx.shadowColor = '#ff0055';
+                ctx.shadowBlur = 10;
+                ctx.fill();
+
+                if (p.text) {
+                    ctx.font = 'bold 11px Inter, sans-serif';
+                    ctx.fillStyle = '#fda4af';
+                    ctx.fillText(p.text, curX + 8, curY - 6);
+                }
+                ctx.restore();
+            }
+        }
+
+        function updateInspectorPanel() {
+            if (!selectedOrganism || !organisms.includes(selectedOrganism)) {
+                selectedOrganism = organisms.find(o => o.level === 4) || organisms[0];
+            }
+            if (!selectedOrganism) return;
+
+            const iconMap = {
+                1: '<i class="fa-solid fa-bacterium text-emerald-400"></i>',
+                2: '<i class="fa-solid fa-shrimp text-sky-400"></i>',
+                3: '<i class="fa-solid fa-fish text-amber-400"></i>',
+                4: '<i class="fa-solid fa-fish-fins text-indigo-400"></i>'
+            };
+
+            document.getElementById('inspSpecies').innerHTML = `${iconMap[selectedOrganism.level]} ${selectedOrganism.shortName} (T${selectedOrganism.level})`;
+            document.getElementById('inspAge').textContent = `${selectedOrganism.age.toFixed(1)} 年`;
+            document.getElementById('inspEaten').textContent = `${selectedOrganism.eatenCount} 個單位`;
+            document.getElementById('inspToxinLoad').textContent = `${selectedOrganism.toxinLoad.toFixed(2)} μg`;
+            document.getElementById('inspPpm').textContent = `${selectedOrganism.ppm.toFixed(2)} ppm`;
+        }
+
+        function updateDashboardStats() {
+            document.getElementById('statTime').textContent = simTimeYears.toFixed(1);
+            document.getElementById('statWaterToxins').textContent = waterToxins.length;
+
+            // 計算各營養階層數量與平均 ppm
+            const sums = { 1: 0, 2: 0, 3: 0, 4: 0 };
+            const counts = { 1: 0, 2: 0, 3: 0, 4: 0 };
+
+            for (let o of organisms) {
+                sums[o.level] += o.ppm;
+                counts[o.level]++;
+            }
+
+            document.getElementById('countT1').textContent = counts[1];
+            document.getElementById('countT2').textContent = counts[2];
+            document.getElementById('countT3').textContent = counts[3];
+            document.getElementById('countT4').textContent = counts[4];
+
+            const avg1 = counts[1] ? sums[1] / counts[1] : 0;
+            const avg2 = counts[2] ? sums[2] / counts[2] : 0;
+            const avg3 = counts[3] ? sums[3] / counts[3] : 0;
+            const avg4 = counts[4] ? sums[4] / counts[4] : 0;
+
+            const waterPpm = Math.max(0.0001, (waterToxins.length * 0.00005));
+            document.getElementById('ppmWater').textContent = `${waterPpm.toFixed(4)} ppm`;
+
+            document.getElementById('ppmT1').textContent = `${avg1.toFixed(2)} ppm`;
+            document.getElementById('ppmT2').textContent = `${avg2.toFixed(2)} ppm`;
+            document.getElementById('ppmT3').textContent = `${avg3.toFixed(2)} ppm`;
+            document.getElementById('ppmT4').textContent = `${avg4.toFixed(2)} ppm`;
+
+            // 計算頂級掠食者相對於水體的生物放大倍率 (BMF)
+            const bmf = avg4 > 0 ? Math.round(avg4 / waterPpm) : 1;
+            document.getElementById('bmfT4').textContent = `${bmf.toLocaleString()}x 水體濃度`;
+
+            // 更新長條圖寬度 (以最高值或固定上限做視覺比例)
+            const maxRef = Math.max(8, avg4 * 1.15);
+            document.getElementById('barT1').style.width = `${Math.min(100, Math.max(3, (avg1 / maxRef) * 100))}%`;
+            document.getElementById('barT2').style.width = `${Math.min(100, Math.max(5, (avg2 / maxRef) * 100))}%`;
+            document.getElementById('barT3').style.width = `${Math.min(100, Math.max(7, (avg3 / maxRef) * 100))}%`;
+            document.getElementById('barT4').style.width = `${Math.min(100, Math.max(10, (avg4 / maxRef) * 100))}%`;
+
+            // 紀錄歷史數據供折線圖繪製
+            if (!isPaused) {
+                chartHistory.t1.push(avg1);
+                chartHistory.t2.push(avg2);
+                chartHistory.t3.push(avg3);
+                chartHistory.t4.push(avg4);
+                chartHistory.single.push(singleFish.toxinLoad / singleFish.mass);
+
+                if (chartHistory.t1.length > MAX_CHART_POINTS) {
+                    chartHistory.t1.shift();
+                    chartHistory.t2.shift();
+                    chartHistory.t3.shift();
+                    chartHistory.t4.shift();
+                }
+                if (chartHistory.single.length > MAX_CHART_POINTS) {
+                    chartHistory.single.shift();
+                }
+            }
+        }
+
+        // ==========================================
+        // 8. 繪製即時科學折線圖 (Chart Canvas)
+        // ==========================================
+        function drawRealtimeChart() {
+            const w = chartCanvas.width;
+            const h = chartCanvas.height;
+            chartCtx.clearRect(0, 0, w, h);
+
+            const padLeft = 34;
+            const padBottom = 18;
+            const padTop = 10;
+            const padRight = 10;
+            const plotW = w - padLeft - padRight;
+            const plotH = h - padTop - padBottom;
+
+            // 決定 Y 軸最大值
+            let maxY = 5;
+            if (currentMode === 'ecosystem') {
+                const allVals = [...chartHistory.t1, ...chartHistory.t2, ...chartHistory.t3, ...chartHistory.t4];
+                if (allVals.length > 0) maxY = Math.max(5, Math.max(...allVals) * 1.15);
+            } else {
+                if (chartHistory.single.length > 0) maxY = Math.max(5, Math.max(...chartHistory.single) * 1.15);
+            }
+
+            // 繪製格線與 Y 軸刻度
+            chartCtx.strokeStyle = 'rgba(148, 163, 184, 0.12)';
+            chartCtx.fillStyle = '#64748b';
+            chartCtx.font = '10px Inter, monospace';
+            chartCtx.textAlign = 'right';
+
+            for (let i = 0; i <= 3; i++) {
+                const y = padTop + (plotH / 3) * i;
+                const val = maxY * (1 - i / 3);
+                chartCtx.beginPath();
+                chartCtx.moveTo(padLeft, y);
+                chartCtx.lineTo(w - padRight, y);
+                chartCtx.stroke();
+                chartCtx.fillText(val.toFixed(1), padLeft - 4, y + 3);
+            }
+
+            // 繪製折線輔助函式
+            function drawLineSeries(data, color, lineWidth = 2) {
+                if (data.length < 2) return;
+                chartCtx.save();
+                chartCtx.beginPath();
+                for (let i = 0; i < data.length; i++) {
+                    const x = padLeft + (i / (MAX_CHART_POINTS - 1)) * plotW;
+                    const y = padTop + plotH - Math.min(1, data[i] / maxY) * plotH;
+                    if (i === 0) chartCtx.moveTo(x, y);
+                    else chartCtx.lineTo(x, y);
+                }
+                chartCtx.strokeStyle = color;
+                chartCtx.lineWidth = lineWidth;
+                chartCtx.stroke();
+                chartCtx.restore();
+            }
+
+            if (currentMode === 'ecosystem') {
+                drawLineSeries(chartHistory.t1, '#34d399', 1.5);
+                drawLineSeries(chartHistory.t2, '#38bdf8', 1.8);
+                drawLineSeries(chartHistory.t3, '#fbbf24', 2.0);
+                drawLineSeries(chartHistory.t4, '#ff0055', 2.6);
+            } else {
+                drawLineSeries(chartHistory.single, '#ff0055', 2.8);
+            }
+
+            // X 軸標籤
+            chartCtx.fillStyle = '#64748b';
+            chartCtx.textAlign = 'center';
+            chartCtx.fillText('模擬時間推進 (Time / Age) ➔', padLeft + plotW / 2, h - 3);
+        }
+
+        // 顏色線性插值輔助函式 (HEX to RGB)
+        function interpolateColor(hex1, hex2, factor) {
+            const c1 = parseInt(hex1.slice(1), 16);
+            const c2 = parseInt(hex2.slice(1), 16);
+            const r1 = (c1 >> 16) & 255, g1 = (c1 >> 8) & 255, b1 = c1 & 255;
+            const r2 = (c2 >> 16) & 255, g2 = (c2 >> 8) & 255, b2 = c2 & 255;
+            const r = Math.round(r1 + factor * (r2 - r1));
+            const g = Math.round(g1 + factor * (g2 - g1));
+            const b = Math.round(b1 + factor * (b2 - b1));
+            return `rgb(${r}, ${g}, ${b})`;
+        }
+
+        // ==========================================
+        // 9. 啟動應用程式
+        // ==========================================
+        window.onload = function () {
+            resizeCanvases();
+            initEcosystem();
+            updateSliders();
+            animate();
+        };
+    </script>
+</body>
+</html>

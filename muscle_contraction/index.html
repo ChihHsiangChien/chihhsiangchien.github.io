@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>肌肉收縮機制動態模擬器 (肌纖維 -> 肌原纖維 -> 肌節)</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --bg: #f8fafc;
+            --panel: #ffffff;
+            --text: #1e293b;
+            --actin: #3b82f6;
+            --myosin: #ef4444;
+            --zline: #10b981;
+        }
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { margin: 0; padding: 20px; background-color: var(--bg); color: var(--text); display: flex; flex-direction: column; align-items: center; }
+        .container { max-width: 960px; width: 100%; background: var(--panel); border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); overflow: hidden; }
+        
+        /* Header */
+        header { background: var(--primary); color: white; padding: 16px 24px; text-align: center; }
+        header h1 { margin: 0; font-size: 1.5rem; }
+        header p { margin: 5px 0 0; opacity: 0.9; font-size: 0.9rem; }
+
+        /* Tabs */
+        .tabs { display: flex; background: #e2e8f0; border-bottom: 2px solid #cbd5e1; }
+        .tab-btn { flex: 1; padding: 14px; border: none; background: none; font-size: 1rem; font-weight: 600; color: #475569; cursor: pointer; transition: all 0.2s; }
+        .tab-btn:hover { background: #cbd5e1; }
+        .tab-btn.active { background: var(--panel); color: var(--primary); border-bottom: 3px solid var(--primary); }
+
+        /* Controls */
+        .controls { padding: 16px 24px; background: #f1f5f9; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; border-bottom: 1px solid #e2e8f0; }
+        .slider-group { flex: 1; display: flex; align-items: center; gap: 12px; min-width: 250px; }
+        input[type="range"] { flex: 1; cursor: pointer; accent-color: var(--primary); height: 8px; }
+        .btn { padding: 8px 16px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .btn-play { background: var(--primary); color: white; }
+        .btn-play:hover { background: #1d4ed8; }
+        .status-badge { padding: 6px 12px; border-radius: 20px; font-weight: bold; font-size: 0.9rem; background: #e2e8f0; min-width: 100px; text-align: center; }
+
+        /* Canvas Area */
+        .canvas-container { position: relative; width: 100%; height: 420px; display: flex; justify-content: center; align-items: center; background: #ffffff; }
+        canvas { border: 1px solid #f1f5f9; max-width: 100%; }
+
+        /* Info & Legend */
+        .info-panel { padding: 20px 24px; background: #ffffff; border-top: 1px solid #e2e8f0; }
+        .legend { display: flex; gap: 20px; margin-bottom: 12px; flex-wrap: wrap; font-size: 0.9rem; font-weight: 600; }
+        .legend-item { display: flex; align-items: center; gap: 8px; }
+        .color-box { width: 16px; height: 16px; border-radius: 4px; }
+        .desc-box { line-height: 1.6; color: #334155; background: #f8fafc; padding: 12px 16px; border-radius: 8px; border-left: 4px solid var(--primary); }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>肌肉收縮機制動態模擬器</h1>
+        <p>階層展示：肌纖維 (Muscle Fiber) ➔ 肌原纖維 (Myofibril) ➔ 肌節與肌絲滑動 (Sarcomere & Filaments)</p>
+    </header>
+
+    <!-- 分頁導覽 -->
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab(0)">1. 宏觀：肌纖維與肌原纖維</button>
+        <button class="tab-btn" onclick="switchTab(1)">2. 中觀：肌原纖維中的多個肌節</button>
+        <button class="tab-btn" onclick="switchTab(2)">3. 微觀：單一肌節與肌絲滑動</button>
+    </div>
+
+    <!-- 全域控制區 -->
+    <div class="controls">
+        <button id="playBtn" class="btn btn-play" onclick="togglePlay()">⏸ 暫停自動收縮</button>
+        <div class="slider-group">
+            <span>舒張 (0%)</span>
+            <input type="range" id="contractionSlider" min="0" max="1" step="0.01" value="0" oninput="manualSlide(this.value)">
+            <span>收縮 (100%)</span>
+        </div>
+        <div id="statusBadge" class="status-badge">舒張狀態</div>
+    </div>
+
+    <!-- 畫布區 -->
+    <div class="canvas-container">
+        <canvas id="simCanvas" width="900" height="400"></canvas>
+    </div>
+
+    <!-- 說明與圖例 -->
+    <div class="info-panel">
+        <div class="legend">
+            <div class="legend-item"><div class="color-box" style="background: #10b981;"></div>Z線 (Z-disc / 肌節邊界)</div>
+            <div class="legend-item"><div class="color-box" style="background: #3b82f6;"></div>細肌絲 (Actin 肌動蛋白)</div>
+            <div class="legend-item"><div class="color-box" style="background: #ef4444;"></div>粗肌絲 (Myosin 肌凝蛋白)</div>
+            <div class="legend-item"><div class="color-box" style="background: #8b5cf6;"></div>M線 (M-line 中心支撐)</div>
+        </div>
+        <div id="descText" class="desc-box">
+            載入中...
+        </div>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('simCanvas');
+    const ctx = canvas.getContext('2d');
+    const slider = document.getElementById('contractionSlider');
+    const playBtn = document.getElementById('playBtn');
+    const statusBadge = document.getElementById('statusBadge');
+    const descText = document.getElementById('descText');
+    const tabBtns = document.querySelectorAll('.tab-btn');
+
+    let currentTab = 0; // 0: 肌纖維, 1: 肌原纖維, 2: 單一肌節
+    let contraction = 0; // 0.0 (完全舒張) ~ 1.0 (完全收縮)
+    let isPlaying = true;
+    let time = 0;
+
+    const descriptions = [
+        "<strong>【分頁 1：肌纖維 (Muscle Fiber)】</strong><br>一條<strong>肌纖維</strong>（單一肌肉細胞，外圍粉紅色膜為肌膜）內部包含了成百上千條平行排列的圓柱狀<strong>肌原纖維 (Myofibrils)</strong>。每條肌原纖維都由重複排列的「肌節」組成。因為所有肌原纖維的明帶(I band)與暗帶(A band)對齊，使整條肌纖維在顯微鏡下呈現「橫紋」外觀。當所有肌節同步縮短時，整條肌纖維便產生收縮。",
+        "<strong>【分頁 2：肌原纖維 (Myofibril)】</strong><br>將其中一條<strong>肌原纖維</strong>放大，可以看到它就像一列火車，由多個<strong>肌節 (Sarcomeres)</strong> 頭尾相連串聯而成（Z線到Z線之間為一個肌節）。請觀察當收縮發生時，雖然單一肌節縮短的距離有限，但多個肌節「串聯累加」的效應，會讓整條肌原纖維產生明顯的長度變化。",
+        "<strong>【分頁 3：單一肌節 (Single Sarcomere) - 肌絲滑動學說】</strong><br>這是肌肉收縮的最小功能單位！請注意觀察：<br>1. <strong>粗肌絲(紅)與細肌絲(藍)本身的長度完全沒有改變！</strong><br>2. 收縮時，粗肌絲上的橫橋 (Cross-bridges) 抓住細肌絲並向中心(M線)拉動。<br>3. 細肌絲向中央滑動，拉動兩側的 <strong>Z線 (綠) 互相靠近</strong>，導致 <strong>I帶 (明帶) 與 H區 變窄甚至消失</strong>，而 <strong>A帶 (暗帶) 寬度保持不變</strong>。"
+    ];
+
+    function switchTab(index) {
+        currentTab = index;
+        tabBtns.forEach((btn, i) => btn.classList.toggle('active', i === index));
+        descText.innerHTML = descriptions[index];
+    }
+
+    function togglePlay() {
+        isPlaying = !isPlaying;
+        playBtn.textContent = isPlaying ? "⏸ 暫停自動收縮" : "▶ 自動播放收縮";
+        playBtn.style.background = isPlaying ? "#2563eb" : "#10b981";
+    }
+
+    function manualSlide(val) {
+        if (isPlaying) togglePlay();
+        contraction = parseFloat(val);
+        updateUI();
+    }
+
+    function updateUI() {
+        slider.value = contraction;
+        const pct = Math.round(contraction * 100);
+        if (pct < 20) {
+            statusBadge.textContent = `舒張 (${pct}%)`;
+            statusBadge.style.background = "#dbeafe";
+            statusBadge.style.color = "#1e40af";
+        } else if (pct > 80) {
+            statusBadge.textContent = `完全收縮 (${pct}%)`;
+            statusBadge.style.background = "#fee2e2";
+            statusBadge.style.color = "#991b1b";
+        } else {
+            statusBadge.textContent = `收縮中 (${pct}%)`;
+            statusBadge.style.background = "#fef3c7";
+            statusBadge.style.color = "#92400e";
+        }
+    }
+
+    // ==================== 繪圖核心邏輯 ====================
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        if (isPlaying) {
+            time += 0.025;
+            contraction = (Math.sin(time) + 1) / 2; // 0 ~ 1 平滑震盪
+            updateUI();
+        }
+
+        if (currentTab === 0) drawTab1_MuscleFiber();
+        else if (currentTab === 1) drawTab2_Myofibril();
+        else if (currentTab === 2) drawTab3_SingleSarcomere();
+
+        requestAnimationFrame(draw);
+    }
+
+    // 分頁 1：肌纖維與多條肌原纖維
+    function drawTab1_MuscleFiber() {
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2 + 15;
+        const numSarcomeres = 7;
+        const sarcWidth = 105 - contraction * 35; // 每個肌節寬度隨收縮變窄
+        const totalWidth = numSarcomeres * sarcWidth;
+        const fiberHeight = 240;
+
+        // 標題提示
+        ctx.fillStyle = "#334155";
+        ctx.font = "bold 16px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("單一肌纖維 (Muscle Fiber) 內部包含多條平行的肌原纖維", cx, 35);
+
+        // 畫肌膜 (Sarcolemma 外殼)
+        ctx.fillStyle = "#ffe4e6";
+        ctx.strokeStyle = "#f43f5e";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.roundRect(cx - totalWidth/2 - 15, cy - fiberHeight/2 - 20, totalWidth + 30, fiberHeight + 40, 20);
+        ctx.fill();
+        ctx.stroke();
+
+        // 畫細胞核 (肌纖維為多核細胞)
+        ctx.fillStyle = "#be123c";
+        [-1, 1].forEach(dir => {
+            ctx.beginPath();
+            ctx.ellipse(cx + dir * (totalWidth * 0.25), cy - fiberHeight/2 - 10, 25, 6, 0, 0, Math.PI * 2);
+            ctx.fill();
+        });
+        ctx.font = "12px sans-serif";
+        ctx.fillText("肌膜 (Sarcolemma) 與 細胞核", cx, cy - fiberHeight/2 - 28);
+
+        // 畫內部的 4 條肌原纖維
+        const numFibrils = 4;
+        const fibrilHeight = 42;
+        const gap = 14;
+        const startY = cy - ((numFibrils * fibrilHeight + (numFibrils - 1) * gap) / 2);
+
+        for (let f = 0; f < numFibrils; f++) {
+            const fy = startY + f * (fibrilHeight + gap);
+            
+            // 肌原纖維底色
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(cx - totalWidth/2, fy, totalWidth, fibrilHeight);
+
+            // 畫肌原纖維內的每個肌節
+            for (let s = 0; s < numSarcomeres; s++) {
+                const sx = (cx - totalWidth/2) + s * sarcWidth;
+                drawMiniSarcomere(sx, fy, sarcWidth, fibrilHeight, false);
+            }
+
+            // 肌原纖維外框
+            ctx.strokeStyle = "#94a3b8";
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(cx - totalWidth/2, fy, totalWidth, fibrilHeight);
+
+            // 標示第一條肌原纖維
+            if (f === 0) {
+                ctx.fillStyle = "#0f172a";
+                ctx.font = "bold 13px sans-serif";
+                ctx.textAlign = "left";
+                ctx.fillText("◀ 肌原纖維 #1 (Myofibril)", cx + totalWidth/2 + 22, fy + fibrilHeight/2 + 4);
+            }
+        }
+    }
+
+    // 分頁 2：單一肌原纖維上的多個肌節串聯
+    function drawTab2_Myofibril() {
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2 + 10;
+        const numSarcomeres = 4;
+        const sarcWidth = 190 - contraction * 65; // 隨收縮改變
+        const totalWidth = numSarcomeres * sarcWidth;
+        const height = 140;
+
+        ctx.fillStyle = "#334155";
+        ctx.font = "bold 16px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("單一肌原纖維放大：由多個「肌節 (Sarcomere)」串聯組成", cx, 40);
+
+        // 顯示總長度變化指標
+        ctx.strokeStyle = "#64748b";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(cx - totalWidth/2, cy - height/2 - 35);
+        ctx.lineTo(cx + totalWidth/2, cy - height/2 - 35);
+        ctx.stroke();
+        ctx.fillText(`4 個肌節串聯總長度 (隨收縮累加縮短)`, cx, cy - height/2 - 45);
+
+        // 繪製 4 個肌節
+        for (let s = 0; s < numSarcomeres; s++) {
+            const sx = (cx - totalWidth/2) + s * sarcWidth;
+            drawMiniSarcomere(sx, cy - height/2, sarcWidth, height, true);
+
+            // 下方肌節編號大括號
+            ctx.strokeStyle = "#0f172a";
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(sx + 4, cy + height/2 + 15);
+            ctx.lineTo(sx + 4, cy + height/2 + 25);
+            ctx.lineTo(sx + sarcWidth - 4, cy + height/2 + 25);
+            ctx.lineTo(sx + sarcWidth - 4, cy + height/2 + 15);
+            ctx.stroke();
+
+            ctx.fillStyle = "#1e293b";
+            ctx.font = "bold 14px sans-serif";
+            ctx.fillText(`肌節 #${s+1}`, sx + sarcWidth/2, cy + height/2 + 45);
+        }
+    }
+
+    // 輔助函式：繪製簡化版肌節 (給 Tab 1 & Tab 2 使用)
+    function drawMiniSarcomere(x, y, w, h, detailed) {
+        const scx = x + w / 2;
+        const myosinLen = w * 0.55; // 固定比例代表A帶視覺
+        const fixedMyosin = detailed ? 100 : 55; // 粗肌絲絕對長度不變
+        const fixedActin = detailed ? 68 : 38;   // 細肌絲絕對長度不變
+
+        // 畫明暗帶背景 (A band 為暗帶)
+        ctx.fillStyle = "#f1f5f9";
+        ctx.fillRect(x, y, w, h);
+        ctx.fillStyle = "#e2e8f0";
+        ctx.fillRect(scx - fixedMyosin/2, y, fixedMyosin, h);
+
+        const rows = detailed ? 4 : 2;
+        const rowStep = h / (rows + 1);
+
+        // 畫M線
+        ctx.strokeStyle = "#8b5cf6";
+        ctx.lineWidth = detailed ? 3 : 1.5;
+        ctx.beginPath();
+        ctx.moveTo(scx, y); ctx.lineTo(scx, y + h);
+        ctx.stroke();
+
+        // 畫細肌絲 (Actin) - 連在兩側 Z 線
+        ctx.strokeStyle = "#3b82f6";
+        ctx.lineWidth = detailed ? 3 : 2;
+        for (let r = 0; r <= rows; r++) {
+            const ry = y + (r + 0.5) * (h / (rows + 1));
+            ctx.beginPath();
+            ctx.moveTo(x, ry); ctx.lineTo(x + fixedActin, ry);
+            ctx.moveTo(x + w, ry); ctx.lineTo(x + w - fixedActin, ry);
+            ctx.stroke();
+        }
+
+        // 畫粗肌絲 (Myosin) - 位於中央
+        ctx.strokeStyle = "#ef4444";
+        ctx.lineWidth = detailed ? 5 : 3;
+        for (let r = 1; r <= rows; r++) {
+            const ry = y + r * rowStep;
+            ctx.beginPath();
+            ctx.moveTo(scx - fixedMyosin/2, ry);
+            ctx.lineTo(scx + fixedMyosin/2, ry);
+            ctx.stroke();
+        }
+
+        // 畫左右 Z 線
+        ctx.strokeStyle = "#10b981";
+        ctx.lineWidth = detailed ? 5 : 3;
+        ctx.beginPath();
+        ctx.moveTo(x, y); ctx.lineTo(x, y + h);
+        ctx.moveTo(x + w, y); ctx.lineTo(x + w, y + h);
+        ctx.stroke();
+    }
+
+    // 分頁 3：單一肌節與微觀肌絲滑動 (重點展示)
+    function drawTab3_SingleSarcomere() {
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2 - 15;
+        
+        // 關鍵幾何參數 (長度固定，只有Z線距離改變！)
+        const sarcWidth = 640 - contraction * 230; // Z線間距：640px (舒張) -> 410px (收縮)
+        const myosinLength = 340;                  // 粗肌絲長度 (固定不變！)
+        const actinLength = 230;                   // 單側細肌絲長度 (固定不變！)
+        
+        const leftZ = cx - sarcWidth / 2;
+        const rightZ = cx + sarcWidth / 2;
+        const topY = cy - 110;
+        const bottomY = cy + 110;
+        const height = bottomY - topY;
+
+        // 1. 畫區域背景 (A帶、I帶、H區)
+        // A帶底色
+        ctx.fillStyle = "#f1f5f9";
+        ctx.fillRect(cx - myosinLength/2, topY, myosinLength, height);
+        
+        // H區底色 (兩側細肌絲尾端之間的區域)
+        const leftActinTip = leftZ + actinLength;
+        const rightActinTip = rightZ - actinLength;
+        const hZoneWidth = Math.max(0, rightActinTip - leftActinTip);
+        if (hZoneWidth > 0) {
+            ctx.fillStyle = "#e2e8f0";
+            ctx.fillRect(cx - hZoneWidth/2, topY, hZoneWidth, height);
+        }
+
+        // 2. 畫 M 線 (中央支撐線)
+        ctx.strokeStyle = "#8b5cf6";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(cx, topY);
+        ctx.lineTo(cx, bottomY);
+        ctx.stroke();
+
+        // 3. 畫多條肌絲 (5條細肌絲 與 4條粗肌絲 交錯排列)
+        const numActin = 5;
+        const stepY = height / (numActin - 1);
+
+        // 畫細肌絲 (Actin - 藍色)
+        ctx.strokeStyle = "#3b82f6";
+        ctx.lineWidth = 5;
+        ctx.lineCap = "round";
+        for (let i = 0; i < numActin; i++) {
+            const ay = topY + i * stepY;
+            // 左側細肌絲 (固定在左Z線)
+            ctx.beginPath();
+            ctx.moveTo(leftZ, ay);
+            ctx.lineTo(leftZ + actinLength, ay);
+            ctx.stroke();
+            // 右側細肌絲 (固定在右Z線)
+            ctx.beginPath();
+            ctx.moveTo(rightZ, ay);
+            ctx.lineTo(rightZ - actinLength, ay);
+            ctx.stroke();
+        }
+
+        // 畫粗肌絲 (Myosin - 紅色) 與 橫橋 (Cross-bridges)
+        for (let i = 0; i < numActin - 1; i++) {
+            const my = topY + (i + 0.5) * stepY;
+            
+            // 粗肌絲主幹
+            ctx.strokeStyle = "#ef4444";
+            ctx.lineWidth = 10;
+            ctx.beginPath();
+            ctx.moveTo(cx - myosinLength/2, my);
+            ctx.lineTo(cx + myosinLength/2, my);
+            ctx.stroke();
+
+            // 畫橫橋 (Myosin Heads) - 隨著收縮角度會擺動拉扯細肌絲
+            ctx.strokeStyle = "#dc2626";
+            ctx.lineWidth = 2.5;
+            const headSpacing = 22;
+            // 橫橋擺動角度：收縮時往中心(M線)傾斜
+            const tilt = 4 - contraction * 14; 
+
+            for (let hx = 25; hx < myosinLength / 2 - 10; hx += headSpacing) {
+                // 右半邊橫橋 (往左拉)
+                drawCrossBridge(cx + hx, my, -tilt, stepY * 0.42);
+                // 左半邊橫橋 (往右拉)
+                drawCrossBridge(cx - hx, my, tilt, stepY * 0.42);
+            }
+        }
+
+        // 4. 畫左右 Z 線 (綠色鋸齒構造感)
+        drawZLine(leftZ, topY, bottomY, "Z線 (Z-disc)");
+        drawZLine(rightZ, topY, bottomY, "Z線 (Z-disc)");
+
+        // 5. 繪製解剖學標記尺 (A帶、I帶、H區)
+        drawAnatomicalMarkers(cx, leftZ, rightZ, myosinLength, hZoneWidth, bottomY);
+    }
+
+    // 繪製橫橋小頭
+    function drawCrossBridge(x, y, tiltX, reachY) {
+        // 往上的頭
+        ctx.beginPath();
+        ctx.moveTo(x, y - 4);
+        ctx.lineTo(x + tiltX, y - reachY);
+        ctx.stroke();
+        ctx.fillStyle = "#b91c1c";
+        ctx.beginPath();
+        ctx.arc(x + tiltX, y - reachY, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 往下的頭
+        ctx.beginPath();
+        ctx.moveTo(x, y + 4);
+        ctx.lineTo(x + tiltX, y + reachY);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(x + tiltX, y + reachY, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // 繪製 Z 線與移動箭頭
+    function drawZLine(x, topY, bottomY, label) {
+        ctx.strokeStyle = "#10b981";
+        ctx.lineWidth = 8;
+        ctx.beginPath();
+        ctx.moveTo(x, topY - 10);
+        ctx.lineTo(x, bottomY + 10);
+        ctx.stroke();
+
+        // 標示文字
+        ctx.fillStyle = "#047857";
+        ctx.font = "bold 14px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(label, x, topY - 22);
+    }
+
+    // 繪製下方 A帶、I帶、H區 的動態標尺
+    function drawAnatomicalMarkers(cx, leftZ, rightZ, myosinLen, hZoneW, bottomY) {
+        const y1 = bottomY + 35;
+        const y2 = bottomY + 70;
+        const aLeft = cx - myosinLen / 2;
+        const aRight = cx + myosinLen / 2;
+
+        ctx.font = "bold 13px sans-serif";
+        ctx.textAlign = "center";
+
+        // H區標尺
+        if (hZoneW > 15) {
+            drawBracket(cx - hZoneW/2, cx + hZoneW/2, y1, "#475569", `H區 (隨收縮變窄)`);
+        } else {
+            ctx.fillStyle = "#ef4444";
+            ctx.fillText("H區已重疊消失", cx, y1 + 15);
+        }
+
+        // 左 I 帶標尺
+        if (aLeft - leftZ > 25) {
+            drawBracket(leftZ, aLeft, y1, "#3b82f6", "1/2 I帶 (變窄)");
+            drawBracket(rightZ, aRight, y1, "#3b82f6", "1/2 I帶 (變窄)");
+        }
+
+        // A 帶標尺 (永遠不變)
+        drawBracket(aLeft, aRight, y2, "#ef4444", `A帶 / 暗帶 (粗肌絲長度：固定不變！)`);
+    }
+
+    function drawBracket(x1, x2, y, color, text) {
+        const left = Math.min(x1, x2);
+        const right = Math.max(x1, x2);
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(left, y - 5);
+        ctx.lineTo(left, y);
+        ctx.lineTo(right, y);
+        ctx.lineTo(right, y - 5);
+        ctx.stroke();
+        ctx.fillText(text, (left + right) / 2, y + 18);
+    }
+
+    // 初始化啟動
+    switchTab(2); // 預設先打開最精彩的微觀肌節分頁，使用者可隨時切換至 1 或 2
+    draw();
+</script>
+
+</body>
+</html>

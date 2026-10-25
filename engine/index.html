@@ -1,0 +1,1251 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>四行程與二行程引擎互動模擬器 (含機油潤滑系統)</title>
+    <style>
+        :root {
+            --bg-dark: #12151a;
+            --panel-bg: #1e232b;
+            --text-main: #e2e8f0;
+            --text-muted: #94a3b8;
+            --accent-blue: #38bdf8;
+            --accent-orange: #fb923c;
+            --accent-green: #4ade80;
+            --accent-red: #f87171;
+            --oil-gold: #eab308;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            padding: 15px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #334155;
+        }
+
+        header h1 {
+            font-size: 1.6rem;
+            color: var(--accent-blue);
+            margin-bottom: 4px;
+        }
+
+        header p {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        .main-container {
+            display: grid;
+            grid-template-columns: 320px 1fr 340px;
+            gap: 15px;
+            max-width: 1440px;
+            margin: 0 auto;
+            width: 100%;
+            flex: 1;
+        }
+
+        @media (max-width: 1100px) {
+            .main-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background-color: var(--panel-bg);
+            border-radius: 12px;
+            padding: 18px;
+            border: 1px solid #2dd4bf22;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .panel-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #fff;
+            border-left: 4px solid var(--accent-blue);
+            padding-left: 10px;
+            margin-bottom: 4px;
+        }
+
+        /* 控制項樣式 */
+        .btn-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        button {
+            flex: 1;
+            padding: 10px 12px;
+            border: 1px solid #475569;
+            background-color: #334155;
+            color: #fff;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            background-color: #475569;
+        }
+
+        button.active {
+            background-color: var(--accent-blue);
+            color: #0f172a;
+            border-color: var(--accent-blue);
+        }
+
+        button.danger {
+            background-color: #7f1d1d;
+            border-color: var(--accent-red);
+        }
+        button.danger:hover {
+            background-color: #991b1b;
+        }
+
+        .control-item {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .control-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9rem;
+        }
+
+        .control-label span.val {
+            color: var(--accent-blue);
+            font-weight: bold;
+            font-family: monospace;
+            font-size: 1rem;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            accent-color: var(--accent-blue);
+            cursor: pointer;
+        }
+
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            user-select: none;
+        }
+
+        /* 畫布區域 */
+        .canvas-wrapper {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: radial-gradient(circle at center, #262c36 0%, #15181e 100%);
+            border-radius: 12px;
+            border: 1px solid #334155;
+            overflow: hidden;
+            min-height: 560px;
+        }
+
+        canvas {
+            max-width: 100%;
+            height: auto;
+        }
+
+        /* 狀態與儀表板 */
+        .stroke-badge {
+            text-align: center;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 1.3rem;
+            font-weight: bold;
+            background-color: #0f172a;
+            border: 2px solid #334155;
+            transition: all 0.15s;
+        }
+
+        .gauge-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            background: #151921;
+            padding: 12px;
+            border-radius: 8px;
+        }
+
+        .bar-wrap {
+            width: 100%;
+            height: 10px;
+            background-color: #334155;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            height: 100%;
+            width: 50%;
+            transition: width 0.2s, background-color 0.2s;
+        }
+
+        .info-box {
+            background-color: #151921;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 0.88rem;
+            line-height: 1.5;
+            color: #cbd5e1;
+            border-left: 3px solid var(--oil-gold);
+        }
+
+        .info-box h4 {
+            color: var(--oil-gold);
+            margin-bottom: 4px;
+            font-size: 0.95rem;
+        }
+
+        .legend-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            font-size: 0.82rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .warning-overlay {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(220, 38, 38, 0.9);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: bold;
+            display: none;
+            animation: blink 0.8s infinite;
+            pointer-events: none;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>⚙️ 內燃機動態模擬器：四行程 vs 二行程</h1>
+        <p>互動式機械原理、氣體流向、機油潤滑與熱力學狀態模擬</p>
+    </header>
+
+    <div class="main-container">
+        <!-- 左側控制面板 -->
+        <div class="panel">
+            <div class="panel-title">引擎模式選擇</div>
+            <div class="btn-group">
+                <button id="btn4Stroke" class="active" onclick="setEngineType(4)">四行程引擎</button>
+                <button id="btn2Stroke" onclick="setEngineType(2)">二行程引擎</button>
+            </div>
+
+            <div class="panel-title">運轉與正時控制</div>
+            <div class="btn-group">
+                <button id="btnPlayPause" onclick="togglePlay()">⏸ 暫停</button>
+                <button onclick="stepAngle(15)">⏭ 步進 +15°</button>
+                <button id="btnReset" class="danger" onclick="resetEngine()">🔄 重置/修復</button>
+            </div>
+
+            <div class="control-item">
+                <div class="control-label">
+                    <span>目標轉速 (RPM)</span>
+                    <span class="val" id="rpmVal">1200 RPM</span>
+                </div>
+                <input type="range" id="rpmSlider" min="60" max="4500" step="60" value="1200">
+            </div>
+
+            <div class="control-item">
+                <div class="control-label">
+                    <span>節氣門開度 (油門負載)</span>
+                    <span class="val" id="throttleVal">70 %</span>
+                </div>
+                <input type="range" id="throttleSlider" min="10" max="100" step="5" value="70">
+            </div>
+
+            <div class="panel-title">🛢️ 機油與潤滑系統</div>
+            <div class="control-item">
+                <div class="control-label">
+                    <span id="oilLabelText">機油油位 (油底殼)</span>
+                    <span class="val" id="oilVal" style="color: var(--oil-gold);">85 %</span>
+                </div>
+                <input type="range" id="oilSlider" min="0" max="100" step="5" value="85" style="accent-color: var(--oil-gold);">
+                <small style="color: var(--text-muted); font-size: 0.78rem;" id="oilHint">
+                    試著將機油調低至 15% 以下，觀察溫度、摩擦火花與縮缸現象！
+                </small>
+            </div>
+
+            <div class="panel-title">視覺化輔助</div>
+            <label class="checkbox-label">
+                <input type="checkbox" id="chkParticles" checked> 顯示氣體與機油飛濺粒子
+            </label>
+            <label class="checkbox-label">
+                <input type="checkbox" id="chkVectors" checked> 顯示氣流方向箭頭與油膜
+            </label>
+            <label class="checkbox-label">
+                <input type="checkbox" id="chkSlowMo"> 慢動作觀察模式 (1/10 速度)
+            </label>
+        </div>
+
+        <!-- 中央 Canvas 繪圖區 -->
+        <div class="canvas-wrapper">
+            <div id="seizeWarning" class="warning-overlay">⚠️ 機油不足過熱！引擎已縮缸咬死 (請按重置)</div>
+            <canvas id="engineCanvas" width="560" height="580"></canvas>
+        </div>
+
+        <!-- 右側儀表與解說面板 -->
+        <div class="panel">
+            <div class="panel-title">即時工況與行程</div>
+            <div id="strokeBadge" class="stroke-badge">進氣行程 (Intake)</div>
+
+            <div class="gauge-container">
+                <div class="control-item">
+                    <div class="control-label">
+                        <span>曲軸轉角 (Crank Angle)</span>
+                        <span class="val" id="angleVal">0° / 720°</span>
+                    </div>
+                </div>
+
+                <div class="control-item">
+                    <div class="control-label">
+                        <span>汽缸工作溫度</span>
+                        <span class="val" id="tempVal">88 °C</span>
+                    </div>
+                    <div class="bar-wrap">
+                        <div id="tempBar" class="bar-fill" style="width: 35%; background-color: var(--accent-green);"></div>
+                    </div>
+                </div>
+
+                <div class="control-item">
+                    <div class="control-label">
+                        <span>缸壁油膜保護度</span>
+                        <span class="val" id="lubeVal">90 %</span>
+                    </div>
+                    <div class="bar-wrap">
+                        <div id="lubeBar" class="bar-fill" style="width: 90%; background-color: var(--oil-gold);"></div>
+                    </div>
+                </div>
+
+                <div class="control-item">
+                    <div class="control-label">
+                        <span>引擎缸體健康度 (未磨損)</span>
+                        <span class="val" id="healthVal">100 %</span>
+                    </div>
+                    <div class="bar-wrap">
+                        <div id="healthBar" class="bar-fill" style="width: 100%; background-color: var(--accent-blue);"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="info-box" id="dynamicDescBox">
+                <h4>行程原理解析</h4>
+                <p id="strokeDesc">活塞由上死點(TDC)往下死點(BDC)移動，進氣門開啟，新鮮油氣被吸入汽缸內。</p>
+            </div>
+
+            <div class="info-box" id="oilDescBox">
+                <h4>🛢️ 機油潤滑機制</h4>
+                <p id="oilSystemDesc">
+                    <strong>四行程：濕式油底殼飛濺潤滑</strong><br>
+                    曲軸箱底部儲有專用機油。當曲軸高速旋轉時，平衡錘會拍打油面，將機油飛濺至汽缸壁背面與活塞銷，並由活塞的「刮油環」均勻塗抹形成油膜。
+                </p>
+            </div>
+
+            <div class="panel-title">圖例說明</div>
+            <div class="legend-grid">
+                <div class="legend-item"><span class="dot" style="background:#38bdf8;"></span>新鮮空氣/油氣</div>
+                <div class="legend-item"><span class="dot" style="background:#eab308;"></span>機油 (飛濺/油膜)</div>
+                <div class="legend-item"><span class="dot" style="background:#fb923c;"></span>點火爆炸燃燒</div>
+                <div class="legend-item"><span class="dot" style="background:#94a3b8;"></span>燃燒廢氣 / 白煙</div>
+                <div class="legend-item"><span class="dot" style="background:#22d3ee;"></span>水冷卻水道/散熱片</div>
+                <div class="legend-item"><span class="dot" style="background:#ef4444;"></span>乾摩擦金屬火花</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('engineCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // 引擎幾何常數設定
+        const GEO = {
+            cx: 280,            // 汽缸中心 X
+            crankY: 425,        // 曲軸中心 Y
+            crankR: 52,         // 曲軸銷半徑 (衝程 = 2 * 52 = 104)
+            rodL: 155,          // 連桿長度
+            bore: 136,          // 汽缸內徑 (半徑 68)
+            pistonH: 68,        // 活塞高度
+            pinOffset: 22,      // 活塞銷距離活塞頂部的距離
+            headY: 185          // 汽缸蓋底部 (燃燒室頂部平面)
+        };
+        // TDC (上死點) 活塞頂部 Y = 425 - 52 - 155 - 22 = 196
+        // BDC (下死點) 活塞頂部 Y = 425 + 52 - 155 - 22 = 300
+
+        // 模擬狀態變數
+        let state = {
+            engineType: 4,      // 4 = 四行程, 2 = 二行程
+            playing: true,
+            seized: false,      // 是否縮缸咬死
+            angle: 0,           // 曲軸角度 (4行程: 0~720, 2行程: 0~360)
+            rpm: 1200,
+            throttle: 70,       // 節氣門 %
+            oilLevel: 85,       // 機油量 %
+            temp: 85,           // 引擎溫度 °C
+            oilFilm: 90,        // 缸壁油膜保護度 %
+            health: 100,        // 引擎健康度 %
+            lastTime: performance.now()
+        };
+
+        // 粒子系統陣列
+        let gasParticles = [];      // 燃燒室氣體粒子
+        let crankcaseParticles = [];// 曲軸箱粒子 (4行程機油滴 / 2行程預混油氣)
+        let exhaustParticles = [];  // 排氣管廢氣粒子
+        let sparkParticles = [];    // 乾摩擦火花粒子
+
+        // UI 元素綁定
+        const rpmSlider = document.getElementById('rpmSlider');
+        const throttleSlider = document.getElementById('throttleSlider');
+        const oilSlider = document.getElementById('oilSlider');
+        const chkParticles = document.getElementById('chkParticles');
+        const chkVectors = document.getElementById('chkVectors');
+        const chkSlowMo = document.getElementById('chkSlowMo');
+
+        // 初始化粒子
+        function initParticles() {
+            gasParticles = [];
+            crankcaseParticles = [];
+            exhaustParticles = [];
+            sparkParticles = [];
+
+            for (let i = 0; i < 45; i++) {
+                gasParticles.push({
+                    rx: (Math.random() - 0.5) * (GEO.bore - 16),
+                    ry: Math.random(), // 0 ~ 1 相對活塞與缸頭之間的高度
+                    vx: (Math.random() - 0.5) * 30,
+                    vy: (Math.random() - 0.5) * 30,
+                    size: 2.5 + Math.random() * 2.5
+                });
+            }
+        }
+
+        // 切換引擎類型
+        function setEngineType(type) {
+            state.engineType = type;
+            state.angle = 0;
+            document.getElementById('btn4Stroke').classList.toggle('active', type === 4);
+            document.getElementById('btn2Stroke').classList.toggle('active', type === 2);
+
+            const oilLabel = document.getElementById('oilLabelText');
+            const oilSysDesc = document.getElementById('oilSystemDesc');
+
+            if (type === 4) {
+                oilLabel.textContent = '機油油位 (油底殼儲油)';
+                oilSysDesc.innerHTML = `
+                    <strong>四行程：濕式油底殼飛濺潤滑</strong><br>
+                    曲軸箱底部裝有滿滿的機油。曲軸旋轉時拍打油面，將金黃色機油飛濺至汽缸壁，並由活塞第3道「刮油環」控制油膜厚度，機油不參與燃燒。
+                `;
+            } else {
+                oilLabel.textContent = '二行程機油預混比例';
+                oilSysDesc.innerHTML = `
+                    <strong>二行程：預混機油潤滑 (Pre-mix)</strong><br>
+                    因為曲軸箱需用來壓縮新鮮油氣，底部不能裝滿機油！必須將「二行程機油」混入汽油中，隨氣流進入曲軸箱與汽缸潤滑，最後隨廢氣一起燒掉（排氣會冒藍白煙）。
+                `;
+            }
+            initParticles();
+        }
+
+        function togglePlay() {
+            if (state.seized) return;
+            state.playing = !state.playing;
+            document.getElementById('btnPlayPause').textContent = state.playing ? '⏸ 暫停' : '▶ 播放';
+        }
+
+        function stepAngle(deg) {
+            if (state.seized) return;
+            state.playing = false;
+            document.getElementById('btnPlayPause').textContent = '▶ 播放';
+            const maxAngle = state.engineType === 4 ? 720 : 360;
+            state.angle = (state.angle + deg) % maxAngle;
+        }
+
+        function resetEngine() {
+            state.seized = false;
+            state.health = 100;
+            state.temp = 85;
+            state.oilFilm = Math.max(state.oilLevel, 50);
+            state.playing = true;
+            document.getElementById('btnPlayPause').textContent = '⏸ 暫停';
+            document.getElementById('seizeWarning').style.display = 'none';
+            initParticles();
+        }
+
+        // 事件監聽
+        rpmSlider.addEventListener('input', e => {
+            state.rpm = parseInt(e.target.value);
+            document.getElementById('rpmVal').textContent = `${state.rpm} RPM`;
+        });
+        throttleSlider.addEventListener('input', e => {
+            state.throttle = parseInt(e.target.value);
+            document.getElementById('throttleVal').textContent = `${state.throttle} %`;
+        });
+        oilSlider.addEventListener('input', e => {
+            state.oilLevel = parseInt(e.target.value);
+            document.getElementById('oilVal').textContent = `${state.oilLevel} %`;
+        });
+
+        // 計算活塞與連桿幾何位置
+        function getKinematics(angleDeg) {
+            const rad = angleDeg * Math.PI / 180;
+            // 0度 = TDC (曲軸銷在最上方 -cos)
+            const pinX = GEO.cx + GEO.crankR * Math.sin(rad);
+            const pinY = GEO.crankY - GEO.crankR * Math.cos(rad);
+
+            // 畢氏定理求活塞銷 Y
+            const dx = pinX - GEO.cx;
+            const dy = Math.sqrt(GEO.rodL * GEO.rodL - dx * dx);
+            const wristPinY = pinY - dy;
+            const pistonTopY = wristPinY - GEO.pinOffset;
+
+            return { rad, pinX, pinY, wristPinY, pistonTopY };
+        }
+
+        // 計算氣門開度 (0 ~ 1)
+        function getValveLifts(angle) {
+            if (state.engineType === 2) return { intake: 0, exhaust: 0 };
+            let intake = 0, exhaust = 0;
+            // 進氣行程 0 ~ 195度開啟
+            if (angle >= 0 && angle <= 195) {
+                intake = Math.sin((angle / 195) * Math.PI);
+            }
+            // 排氣行程 525 ~ 720度開啟
+            if (angle >= 525 && angle <= 720) {
+                exhaust = Math.sin(((angle - 525) / 195) * Math.PI);
+            }
+            return { intake, exhaust };
+        }
+
+        // 更新物理、熱力學與粒子狀態
+        function updatePhysics(dt) {
+            if (state.playing && !state.seized) {
+                // 為了視覺看清楚，將真實 RPM 視覺降速 (例如 1200 RPM 在畫面上約每秒 2.2 轉)
+                let visualRPS = (state.rpm / 60) * 0.11;
+                if (chkSlowMo.checked) visualRPS *= 0.15;
+
+                const maxAngle = state.engineType === 4 ? 720 : 360;
+                state.angle = (state.angle + visualRPS * 360 * dt) % maxAngle;
+            }
+
+            // 更新油膜保護度 (漸近線趨近於當前機油油位)
+            const targetFilm = state.oilLevel;
+            state.oilFilm += (targetFilm - state.oilFilm) * dt * 1.5;
+
+            // 更新溫度與磨損
+            if (state.playing && !state.seized) {
+                const loadHeat = (state.rpm / 4500) * (state.throttle / 100) * 65;
+                const frictionHeat = Math.max(0, (35 - state.oilFilm) * 4.5); // 缺機油劇烈升溫
+                const targetTemp = 75 + loadHeat + frictionHeat;
+
+                state.temp += (targetTemp - state.temp) * dt * 0.6;
+
+                // 機油過低產生磨損與火花
+                if (state.oilFilm < 22) {
+                    const wearRate = (22 - state.oilFilm) * (state.rpm / 1200) * 0.6;
+                    state.health = Math.max(0, state.health - wearRate * dt);
+
+                    // 產生缸壁乾摩擦金屬火花
+                    const kin = getKinematics(state.angle);
+                    if (Math.random() < 0.65) {
+                        const side = Math.random() < 0.5 ? -1 : 1;
+                        sparkParticles.push({
+                            x: GEO.cx + side * (GEO.bore / 2 - 2),
+                            y: kin.pistonTopY + 10 + Math.random() * 40,
+                            vx: -side * (15 + Math.random() * 35),
+                            vy: (Math.random() - 0.5) * 60,
+                            life: 1.0
+                        });
+                    }
+                }
+
+                if (state.health <= 0) {
+                    state.seized = true;
+                    state.playing = false;
+                    document.getElementById('seizeWarning').style.display = 'block';
+                    document.getElementById('btnPlayPause').textContent = '⚠️ 已縮缸';
+                }
+            }
+
+            // 更新粒子動態
+            if (!chkParticles.checked) return;
+            const kin = getKinematics(state.angle);
+
+            // 1. 曲軸箱粒子 (4行程飛濺機油 vs 2行程預混氣)
+            if (state.playing && !state.seized) {
+                if (state.engineType === 4) {
+                    // 飛濺機油滴產生
+                    const spawnChance = (state.oilLevel / 100) * (state.rpm / 1500) * 0.8;
+                    if (Math.random() < spawnChance && crankcaseParticles.length < 70) {
+                        const tangAngle = kin.rad + Math.PI / 2;
+                        const speed = 70 + Math.random() * 80;
+                        crankcaseParticles.push({
+                            x: kin.pinX + (Math.random() - 0.5) * 20,
+                            y: Math.max(kin.pinY, GEO.crankY + 20),
+                            vx: Math.cos(tangAngle) * speed * 0.6 + (Math.random() - 0.5) * 40,
+                            vy: -Math.abs(Math.sin(tangAngle) * speed) - 40,
+                            type: 'oil',
+                            life: 1.0
+                        });
+                    }
+                } else {
+                    // 二行程曲軸箱預混油氣 + 機油微粒
+                    if (crankcaseParticles.length < 55) {
+                        const isOilDrop = Math.random() < (state.oilLevel / 160);
+                        crankcaseParticles.push({
+                            x: GEO.cx + (Math.random() - 0.5) * 130,
+                            y: GEO.crankY + (Math.random() - 0.5) * 90,
+                            vx: (Math.random() - 0.5) * 50,
+                            vy: (Math.random() - 0.5) * 50,
+                            type: isOilDrop ? 'oil' : 'fuel',
+                            life: 0.8 + Math.random() * 0.5
+                        });
+                    }
+                }
+            }
+
+            for (let i = crankcaseParticles.length - 1; i >= 0; i--) {
+                let p = crankcaseParticles[i];
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                if (state.engineType === 4) p.vy += 180 * dt; // 重力落下
+                p.life -= dt * 0.65;
+
+                // 邊界反彈
+                const dist = Math.hypot(p.x - GEO.cx, p.y - GEO.crankY);
+                if (dist > 82) {
+                    p.vx *= -0.5;
+                    p.vy *= -0.5;
+                }
+                if (p.life <= 0) crankcaseParticles.splice(i, 1);
+            }
+
+            // 2. 排氣廢氣粒子
+            const isExhausting = (state.engineType === 4 && state.angle >= 530 && state.angle <= 720) ||
+                                 (state.engineType === 2 && state.angle >= 115 && state.angle <= 245);
+
+            if (state.playing && !state.seized && isExhausting && Math.random() < 0.7) {
+                const startX = state.engineType === 4 ? GEO.cx + 55 : GEO.cx + GEO.bore / 2 + 10;
+                const startY = state.engineType === 4 ? GEO.headY - 25 : 275;
+                exhaustParticles.push({
+                    x: startX,
+                    y: startY + (Math.random() - 0.5) * 10,
+                    vx: 70 + Math.random() * 50,
+                    vy: (state.engineType === 4 ? -20 : 0) + (Math.random() - 0.5) * 20,
+                    size: 4 + Math.random() * 5,
+                    // 二行程機油越多，排氣越偏向藍白煙
+                    isBlueSmoke: state.engineType === 2 && (Math.random() < state.oilLevel / 90),
+                    life: 1.0
+                });
+            }
+
+            for (let i = exhaustParticles.length - 1; i >= 0; i--) {
+                let ep = exhaustParticles[i];
+                ep.x += ep.vx * dt;
+                ep.y += ep.vy * dt;
+                ep.size += dt * 12;
+                ep.life -= dt * 0.9;
+                if (ep.life <= 0) exhaustParticles.splice(i, 1);
+            }
+
+            // 3. 摩擦火花粒子
+            for (let i = sparkParticles.length - 1; i >= 0; i--) {
+                let sp = sparkParticles[i];
+                sp.x += sp.vx * dt;
+                sp.y += sp.vy * dt;
+                sp.vy += 200 * dt;
+                sp.life -= dt * 2.5;
+                if (sp.life <= 0) sparkParticles.splice(i, 1);
+            }
+        }
+
+        // 取得當前行程資訊與氣體顏色
+        function getStrokeState() {
+            const a = state.angle;
+            if (state.engineType === 4) {
+                if (a < 180) {
+                    return {
+                        name: '1. 進氣行程 (Intake)',
+                        color: '#38bdf8',
+                        gasColor: `rgba(56, 189, 248, ${0.25 + (state.throttle/200)})`,
+                        desc: '進氣門開啟，活塞向下移動產生負壓，將新鮮空氣與燃油霧化混合氣吸入汽缸內。'
+                    };
+                } else if (a < 360) {
+                    const p = (a - 180) / 180;
+                    return {
+                        name: '2. 壓縮行程 (Compression)',
+                        color: '#60a5fa',
+                        gasColor: `rgba(96, 165, 250, ${0.35 + p * 0.4})`,
+                        desc: '進排氣門皆關閉，活塞向上移動壓縮油氣，使其溫度與壓力大幅升高，準備點火。'
+                    };
+                } else if (a < 540) {
+                    const p = (a - 360) / 180;
+                    const r = Math.floor(251 - p * 120);
+                    const g = Math.floor(146 - p * 40);
+                    const b = Math.floor(60 + p * 60);
+                    return {
+                        name: '3. 動力/爆炸行程 (Power)',
+                        color: '#fb923c',
+                        gasColor: `rgba(${r}, ${g}, ${b}, ${0.85 - p * 0.3})`,
+                        desc: '火星塞在接近上死點時點火引爆高壓油氣！高溫高壓氣體猛烈向下推動活塞，這是引擎唯一產生動力的行程。'
+                    };
+                } else {
+                    return {
+                        name: '4. 排氣行程 (Exhaust)',
+                        color: '#94a3b8',
+                        gasColor: 'rgba(148, 163, 184, 0.45)',
+                        desc: '排氣門開啟，活塞向上移動將燃燒後的廢氣推出汽缸外，準備進入下一個循環。'
+                    };
+                }
+            } else {
+                // 二行程 (0 ~ 360度完成一次動力循環)
+                if (a < 115) {
+                    const p = a / 115;
+                    return {
+                        name: '動力行程 + 曲軸箱預壓縮',
+                        color: '#fb923c',
+                        gasColor: `rgba(251, 146, 60, ${0.85 - p * 0.35})`,
+                        desc: '火星塞點火爆炸推動活塞向下；同時活塞下方正在壓縮曲軸箱內的「新鮮油氣 + 二行程機油」。'
+                    };
+                } else if (a < 245) {
+                    return {
+                        name: '排氣與掃氣 (Exhaust & Scavenging)',
+                        color: '#38bdf8',
+                        gasColor: 'rgba(100, 180, 220, 0.5)',
+                        desc: '活塞下行露出「排氣口」與「掃氣通道」，曲軸箱內被壓縮的新鮮預混油氣衝入汽缸，將廢氣擠出排氣口。'
+                    };
+                } else {
+                    const p = (a - 245) / 115;
+                    return {
+                        name: '壓縮行程 + 曲軸箱進氣',
+                        color: '#60a5fa',
+                        gasColor: `rgba(56, 189, 248, ${0.4 + p * 0.35})`,
+                        desc: '活塞向上封閉掃氣口與排氣口並開始壓縮油氣；同時曲軸箱產生真空，由下方進氣口吸入新鮮預混油氣与機油。'
+                    };
+                }
+            }
+        }
+
+        // 繪製流向箭頭輔助函式
+        function drawArrow(x1, y1, x2, y2, color) {
+            ctx.save();
+            ctx.strokeStyle = color;
+            ctx.fillStyle = color;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+
+            const angle = Math.atan2(y2 - y1, x2 - x1);
+            ctx.beginPath();
+            ctx.moveTo(x2, y2);
+            ctx.lineTo(x2 - 10 * Math.cos(angle - Math.PI / 6), y2 - 10 * Math.sin(angle - Math.PI / 6));
+            ctx.lineTo(x2 - 10 * Math.cos(angle + Math.PI / 6), y2 - 10 * Math.sin(angle + Math.PI / 6));
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
+
+        // 主繪圖函式
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const kin = getKinematics(state.angle);
+            const strokeInfo = getStrokeState();
+            const valves = getValveLifts(state.angle);
+            const halfBore = GEO.bore / 2;
+
+            // ==========================================
+            // 1. 繪製引擎本體外殼與管道背景
+            // ==========================================
+            ctx.save();
+            ctx.fillStyle = '#334155';
+            ctx.strokeStyle = '#64748b';
+            ctx.lineWidth = 3;
+
+            // 汽缸體外壁
+            ctx.fillRect(GEO.cx - halfBore - 28, GEO.headY - 40, GEO.bore + 56, 200);
+
+            // 曲軸箱圓形外殼
+            ctx.beginPath();
+            ctx.arc(GEO.cx, GEO.crankY, 96, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            // 汽缸內部中空與曲軸箱內部中空
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(GEO.cx - halfBore, GEO.headY, GEO.bore, 230);
+            ctx.beginPath();
+            ctx.arc(GEO.cx, GEO.crankY, 84, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 繪製散熱片 / 水冷卻通道
+            for (let y = GEO.headY + 10; y < GEO.headY + 130; y += 22) {
+                if (state.engineType === 4) {
+                    // 四行程水冷卻水道 (青藍色)
+                    ctx.fillStyle = state.temp > 115 ? '#ef4444' : '#06b6d4';
+                    ctx.fillRect(GEO.cx - halfBore - 20, y, 10, 12);
+                    ctx.fillRect(GEO.cx + halfBore + 10, y, 10, 12);
+                } else {
+                    // 二行程氣冷散熱鰭片
+                    ctx.fillStyle = '#475569';
+                    ctx.fillRect(GEO.cx - halfBore - 42, y, 16, 8);
+                    ctx.fillRect(GEO.cx + halfBore + 26, y, 16, 8);
+                }
+            }
+            ctx.restore();
+
+            // ==========================================
+            // 2. 繪製二行程專屬通道 (掃氣道、進氣口、排氣口)
+            // ==========================================
+            if (state.engineType === 2) {
+                ctx.save();
+                ctx.strokeStyle = '#64748b';
+                ctx.lineWidth = 3;
+                ctx.fillStyle = '#1e293b';
+
+                // 左側掃氣通道 (Transfer Port: 連接曲軸箱與汽缸中段)
+                ctx.beginPath();
+                ctx.moveTo(GEO.cx - halfBore, 282);
+                ctx.lineTo(GEO.cx - halfBore - 28, 282);
+                ctx.lineTo(GEO.cx - halfBore - 28, 385);
+                ctx.lineTo(GEO.cx - 65, 385);
+                ctx.lineTo(GEO.cx - 65, 360);
+                ctx.lineTo(GEO.cx - halfBore - 12, 360);
+                ctx.lineTo(GEO.cx - halfBore - 12, 300);
+                ctx.lineTo(GEO.cx - halfBore, 300);
+                ctx.fill();
+                ctx.stroke();
+
+                // 右側排氣口 (Exhaust Port: 高度略高於掃氣口)
+                ctx.fillStyle = '#0f172a';
+                ctx.fillRect(GEO.cx + halfBore - 2, 265, 65, 28);
+                ctx.strokeRect(GEO.cx + halfBore, 265, 65, 28);
+
+                // 右下曲軸箱進氣口 (Reed Valve 簧片閥進氣口)
+                ctx.fillRect(GEO.cx + 68, 395, 65, 24);
+                ctx.strokeRect(GEO.cx + 68, 395, 65, 24);
+
+                // 繪製流動方向箭頭
+                if (chkVectors.checked) {
+                    if (state.angle >= 120 && state.angle <= 240) {
+                        // 掃氣與排氣箭頭
+                        drawArrow(GEO.cx - halfBore - 20, 365, GEO.cx - halfBore - 20, 290, '#38bdf8');
+                        drawArrow(GEO.cx - halfBore - 15, 290, GEO.cx - 25, 250, '#38bdf8');
+                        drawArrow(GEO.cx + 20, 278, GEO.cx + halfBore + 50, 278, '#94a3b8');
+                    } else if (state.angle > 245) {
+                        // 曲軸箱進氣箭頭 (藍氣 + 黃機油)
+                        drawArrow(GEO.cx + 125, 407, GEO.cx + 65, 407, '#38bdf8');
+                    }
+                }
+                ctx.restore();
+            }
+
+            // ==========================================
+            // 3. 繪製燃燒室氣體與氣體粒子
+            // ==========================================
+            ctx.save();
+            const chamberH = Math.max(4, kin.pistonTopY - GEO.headY);
+            ctx.fillStyle = strokeInfo.gasColor;
+            ctx.fillRect(GEO.cx - halfBore, GEO.headY, GEO.bore, chamberH);
+
+            if (chkParticles.checked) {
+                for (let p of gasParticles) {
+                    p.rx += p.vx * 0.016;
+                    if (p.rx < -halfBore + 8 || p.rx > halfBore - 8) p.vx *= -1;
+                    const py = GEO.headY + 6 + p.ry * (chamberH - 12);
+
+                    ctx.beginPath();
+                    ctx.arc(GEO.cx + p.rx, py, p.size, 0, Math.PI * 2);
+                    // 若為二行程，氣體中混有金黃色機油微粒
+                    if (state.engineType === 2 && p.size > 4.2 && state.oilLevel > 20) {
+                        ctx.fillStyle = '#eab308';
+                    } else {
+                        ctx.fillStyle = strokeInfo.color;
+                    }
+                    ctx.fill();
+                }
+            }
+            ctx.restore();
+
+            // ==========================================
+            // 4. 繪製缸壁機油油膜 (關鍵視覺元素)
+            // ==========================================
+            if (chkVectors.checked) {
+                ctx.save();
+                const filmAlpha = Math.min(0.95, (state.oilFilm / 100) * 0.9);
+                const filmWidth = 2 + (state.oilFilm / 100) * 4;
+                ctx.fillStyle = `rgba(234, 179, 8, ${filmAlpha})`;
+
+                // 左右汽缸壁黃金油膜
+                ctx.fillRect(GEO.cx - halfBore, GEO.headY + 5, filmWidth, 215);
+                ctx.fillRect(GEO.cx + halfBore - filmWidth, GEO.headY + 5, filmWidth, 215);
+                ctx.restore();
+            }
+
+            // ==========================================
+            // 5. 繪製四行程氣門機構與歧管
+            // ==========================================
+            if (state.engineType === 4) {
+                ctx.save();
+                // 進氣道 (左) 與 排氣道 (右)
+                ctx.strokeStyle = '#64748b';
+                ctx.lineWidth = 3;
+                ctx.fillStyle = '#0f172a';
+
+                // 左進氣歧管
+                ctx.fillRect(GEO.cx - halfBore - 55, GEO.headY - 36, 75, 24);
+                ctx.strokeRect(GEO.cx - halfBore - 55, GEO.headY - 36, 75, 24);
+                // 右排氣歧管
+                ctx.fillRect(GEO.cx + halfBore - 20, GEO.headY - 36, 75, 24);
+                ctx.strokeRect(GEO.cx + halfBore - 20, GEO.headY - 36, 75, 24);
+
+                // 進氣門 (左)
+                const inLift = valves.intake * 14;
+                ctx.strokeStyle = '#38bdf8';
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.moveTo(GEO.cx - 34, GEO.headY - 45 + inLift);
+                ctx.lineTo(GEO.cx - 34, GEO.headY + inLift);
+                ctx.moveTo(GEO.cx - 48, GEO.headY + inLift);
+                ctx.lineTo(GEO.cx - 20, GEO.headY + inLift);
+                ctx.stroke();
+
+                // 排氣門 (右)
+                const exLift = valves.exhaust * 14;
+                ctx.strokeStyle = '#f87171';
+                ctx.beginPath();
+                ctx.moveTo(GEO.cx + 34, GEO.headY - 45 + exLift);
+                ctx.lineTo(GEO.cx + 34, GEO.headY + exLift);
+                ctx.moveTo(GEO.cx + 20, GEO.headY + exLift);
+                ctx.lineTo(GEO.cx + 48, GEO.headY + exLift);
+                ctx.stroke();
+
+                // 氣門流向箭頭
+                if (chkVectors.checked) {
+                    if (valves.intake > 0.2) {
+                        drawArrow(GEO.cx - 95, GEO.headY - 24, GEO.cx - 45, GEO.headY - 24, '#38bdf8');
+                        drawArrow(GEO.cx - 34, GEO.headY - 5, GEO.cx - 25, GEO.headY + 35, '#38bdf8');
+                    }
+                    if (valves.exhaust > 0.2) {
+                        drawArrow(GEO.cx + 25, GEO.headY + 35, GEO.cx + 34, GEO.headY - 5, '#94a3b8');
+                        drawArrow(GEO.cx + 45, GEO.headY - 24, GEO.cx + 95, GEO.headY - 24, '#94a3b8');
+                    }
+                }
+                ctx.restore();
+            }
+
+            // ==========================================
+            // 6. 繪製火星塞與點火閃光
+            // ==========================================
+            ctx.save();
+            // 火星塞本體
+            ctx.fillStyle = '#f8fafc';
+            ctx.fillRect(GEO.cx - 7, GEO.headY - 38, 14, 26);
+            ctx.fillStyle = '#94a3b8';
+            ctx.fillRect(GEO.cx - 9, GEO.headY - 14, 18, 14);
+            // 電極
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(GEO.cx, GEO.headY);
+            ctx.lineTo(GEO.cx, GEO.headY + 6);
+            ctx.stroke();
+
+            // 點火判定 (四行程在 352~385度；二行程在 352~360 或 0~25度)
+            const isFiring = (state.engineType === 4 && state.angle >= 352 && state.angle <= 388) ||
+                             (state.engineType === 2 && (state.angle >= 352 || state.angle <= 26));
+
+            if (isFiring) {
+                const glow = ctx.createRadialGradient(GEO.cx, GEO.headY + 8, 2, GEO.cx, GEO.headY + 8, 38);
+                glow.addColorStop(0, '#ffffff');
+                glow.addColorStop(0.3, '#fde047');
+                glow.addColorStop(0.7, 'rgba(251, 146, 60, 0.7)');
+                glow.addColorStop(1, 'rgba(251, 146, 60, 0)');
+                ctx.fillStyle = glow;
+                ctx.beginPath();
+                ctx.arc(GEO.cx, GEO.headY + 8, 38, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 電弧閃電
+                ctx.strokeStyle = '#fef08a';
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.moveTo(GEO.cx, GEO.headY + 4);
+                ctx.lineTo(GEO.cx - 6, GEO.headY + 12);
+                ctx.lineTo(GEO.cx + 6, GEO.headY + 16);
+                ctx.lineTo(GEO.cx, GEO.headY + 24);
+                ctx.stroke();
+            }
+            ctx.restore();
+
+            // ==========================================
+            // 7. 繪製連桿與曲軸平衡錘
+            // ==========================================
+            ctx.save();
+            // 曲軸平衡錘 (大扇形旋轉輪)
+            ctx.translate(GEO.cx, GEO.crankY);
+            ctx.rotate(kin.rad);
+            ctx.fillStyle = '#475569';
+            ctx.strokeStyle = '#94a3b8';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(0, 0, 32, -Math.PI * 0.25, Math.PI * 1.25);
+            ctx.arc(0, 0, 66, Math.PI * 1.25, -Math.PI * 0.25, true);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+
+            // 連桿 (Connecting Rod)
+            ctx.save();
+            ctx.strokeStyle = '#94a3b8';
+            ctx.lineWidth = 14;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(GEO.cx, kin.wristPinY);
+            ctx.lineTo(kin.pinX, kin.pinY);
+            ctx.stroke();
+
+            ctx.strokeStyle = '#64748b';
+            ctx.lineWidth = 6;
+            ctx.beginPath();
+            ctx.moveTo(GEO.cx, kin.wristPinY);
+            ctx.lineTo(kin.pinX, kin.pinY);
+            ctx.stroke();
+            ctx.restore();
+
+            // ==========================================
+            // 8. 繪製活塞與活塞環 (含刮油環)
+            // ==========================================
+            ctx.save();
+            const pLeft = GEO.cx - halfBore + 3;
+            const pWidth = GEO.bore - 6;
+
+            // 活塞本體 (若過熱則泛紅)
+            const heatTint = Math.max(0, Math.min(1, (state.temp - 110) / 80));
+            const pr = Math.floor(148 + heatTint * 90);
+            const pg = Math.floor(163 - heatTint * 80);
+            const pb = Math.floor(184 - heatTint * 80);
+            ctx.fillStyle = `rgb(${pr}, ${pg}, ${pb})`;
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 2;
+
+            ctx.fillRect(pLeft, kin.pistonTopY, pWidth, GEO.pistonH);
+            ctx.strokeRect(pLeft, kin.pistonTopY, pWidth, GEO.pistonH);
+
+            // 活塞環：第1,2道氣環 (銀白)，第3道刮油環 (金黃色)
+            ctx.fillStyle = '#f8fafc';
+            ctx.fillRect(pLeft - 2, kin.pistonTopY + 7, pWidth + 4, 3);
+            ctx.fillRect(pLeft - 2, kin.pistonTopY + 14, pWidth + 4, 3);
+
+            // 第3道：機油刮油環 (Oil Control Ring)
+            ctx.fillStyle = '#eab308';
+            ctx.fillRect(pLeft - 2, kin.pistonTopY + 21, pWidth + 4, 4);
+
+            // 活塞銷 (Wrist Pin)
+            ctx.beginPath();
+            ctx.arc(GEO.cx, kin.wristPinY, 10, 0, Math.PI * 2);
+            ctx.fillStyle = '#334155';
+            ctx.fill();
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = '#eab308'; // 活塞銷機油潤滑圈
+            ctx.stroke();
+
+            // 曲軸主軸承與曲軸銷
+            ctx.beginPath();
+            ctx.arc(GEO.cx, GEO.crankY, 12, 0, Math.PI * 2);
+            ctx.fillStyle = '#1e293b';
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(kin.pinX, kin.pinY, 10, 0, Math.PI * 2);
+            ctx.fillStyle = '#e2e8f0';
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+
+            // ==========================================
+            // 9. 繪製四行程機油油底殼液面 & 飛濺粒子
+            // ==========================================
+            ctx.save();
+            // 曲軸箱粒子繪製
+            if (chkParticles.checked) {
+                for (let cp of crankcaseParticles) {
+                    ctx.beginPath();
+                    ctx.arc(cp.x, cp.y, cp.type === 'oil' ? 3.5 : 3, 0, Math.PI * 2);
+                    ctx.fillStyle = cp.type === 'oil'
+                        ? `rgba(234, 179, 8, ${cp.life})`
+                        : `rgba(56, 189, 248, ${cp.life * 0.7})`;
+                    ctx.fill();
+                }
+
+                // 排氣粒子繪製
+                for (let ep of exhaustParticles) {
+                    ctx.beginPath();
+                    ctx.arc(ep.x, ep.y, ep.size, 0, Math.PI * 2);
+                    // 二行程燃燒機油會產生明顯藍白煙
+                    ctx.fillStyle = ep.isBlueSmoke
+                        ? `rgba(186, 230, 253, ${ep.life * 0.65})`
+                        : `rgba(148, 163, 184, ${ep.life * 0.5})`;
+                    ctx.fill();
+                }
+
+                // 乾摩擦火花繪製
+                for (let sp of sparkParticles) {
+                    ctx.fillStyle = `rgba(239, 68, 68, ${sp.life})`;
+                    ctx.fillRect(sp.x - 2, sp.y - 2, 4, 4);
+                }
+            }
+
+            // 四行程底部機油池 (Oil Sump)
+            if (state.engineType === 4 && state.oilLevel > 0) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(GEO.cx, GEO.crankY, 83, 0, Math.PI * 2);
+                ctx.clip(); // 裁切在曲軸箱內
+
+                const maxOilHeight = 68;
+                const currentOilH = (state.oilLevel / 100) * maxOilHeight;
+                const oilSurfaceY = (GEO.crankY + 83) - currentOilH;
+
+                // 動態油面波浪
+                ctx.fillStyle = 'rgba(234, 179, 8, 0.78)';
+                ctx.beginPath();
+                ctx.moveTo(GEO.cx - 90, GEO.crankY + 90);
+                for (let x = GEO.cx - 90; x <= GEO.cx + 90; x += 10) {
+                    const wave = Math.sin((x * 0.08) + (state.angle * 0.06)) * (state.playing ? 4 : 0.5);
+                    ctx.lineTo(x, oilSurfaceY + wave);
+                }
+                ctx.lineTo(GEO.cx + 90, GEO.crankY + 90);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.restore();
+            }
+            ctx.restore();
+
+            // ==========================================
+            // 10. 畫布標籤文字疊加
+            // ==========================================
+            ctx.save();
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '12px sans-serif';
+            ctx.fillText('TDC 上死點', GEO.cx - halfBore - 95, 198);
+            ctx.fillText('BDC 下死點', GEO.cx - halfBore - 95, 302);
+
+            if (state.engineType === 4) {
+                ctx.fillStyle = '#eab308';
+                ctx.fillText(`🛢️ 曲軸箱油底殼 (機油液位: ${state.oilLevel}%)`, GEO.cx - 85, GEO.crankY + 115);
+            } else {
+                ctx.fillStyle = '#38bdf8';
+                ctx.fillText(`🌪️ 密閉曲軸箱 (預混氣壓縮室 + 機油微粒)`, GEO.cx - 105, GEO.crankY + 115);
+            }
+            ctx.restore();
+        }
+
+        // 更新右側儀表板 UI
+        function updateUI() {
+            const strokeInfo = getStrokeState();
+            const badge = document.getElementById('strokeBadge');
+            badge.textContent = strokeInfo.name;
+            badge.style.color = strokeInfo.color;
+            badge.style.borderColor = strokeInfo.color;
+
+            document.getElementById('strokeDesc').textContent = strokeInfo.desc;
+
+            const maxAngle = state.engineType === 4 ? 720 : 360;
+            document.getElementById('angleVal').textContent = `${Math.floor(state.angle)}° / ${maxAngle}°`;
+
+            // 溫度條
+            const tempInt = Math.round(state.temp);
+            document.getElementById('tempVal').textContent = `${tempInt} °C`;
+            const tempPct = Math.min(100, Math.max(10, ((state.temp - 50) / 160) * 100));
+            const tempBar = document.getElementById('tempBar');
+            tempBar.style.width = `${tempPct}%`;
+            tempBar.style.backgroundColor = tempInt > 125 ? 'var(--accent-red)' : (tempInt > 105 ? 'var(--accent-orange)' : 'var(--accent-green)');
+
+            // 油膜保護度條
+            const lubeInt = Math.round(state.oilFilm);
+            document.getElementById('lubeVal').textContent = `${lubeInt} %`;
+            const lubeBar = document.getElementById('lubeBar');
+            lubeBar.style.width = `${lubeInt}%`;
+            lubeBar.style.backgroundColor = lubeInt < 25 ? 'var(--accent-red)' : 'var(--oil-gold)';
+
+            // 健康度條
+            const healthInt = Math.round(state.health);
+            document.getElementById('healthVal').textContent = `${healthInt} %`;
+            const healthBar = document.getElementById('healthBar');
+            healthBar.style.width = `${healthInt}%`;
+            healthBar.style.backgroundColor = healthInt < 40 ? 'var(--accent-red)' : 'var(--accent-blue)';
+        }
+
+        // 動畫主迴圈
+        function loop(now) {
+            const dt = Math.min(0.05, (now - state.lastTime) / 1000);
+            state.lastTime = now;
+
+            updatePhysics(dt);
+            render();
+            updateUI();
+
+            requestAnimationFrame(loop);
+        }
+
+        // 啟動模擬器
+        initParticles();
+        requestAnimationFrame(loop);
+    </script>
+</body>
+</html>

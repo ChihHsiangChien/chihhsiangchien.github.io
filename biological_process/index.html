@@ -1,0 +1,2373 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>水中生命現象與生存四要素互動模擬器 — 單細胞與多細胞生物生態實驗室</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Noto Sans TC', 'Inter', sans-serif;
+      background-color: #0b1528;
+      color: #f1f5f9;
+      overflow-x: hidden;
+    }
+    /* Custom range sliders */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      height: 8px;
+      border-radius: 999px;
+      outline: none;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #ffffff;
+      border: 2px solid #38bdf8;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+      transition: transform 0.15s ease;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+    }
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.82);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+    }
+    .tool-btn.active {
+      background: linear-gradient(135deg, #0284c7, #0ea5e9);
+      color: #fff;
+      border-color: #7dd3fc;
+      box-shadow: 0 0 14px rgba(56, 189, 248, 0.45);
+    }
+    .filter-tab.active {
+      background-color: #0ea5e9;
+      color: #ffffff;
+      font-weight: 600;
+    }
+    .phenomenon-card {
+      transition: all 0.25s ease;
+    }
+    .phenomenon-card.highlight {
+      border-color: #38bdf8;
+      box-shadow: 0 0 15px rgba(56, 189, 248, 0.35);
+      transform: translateY(-2px);
+    }
+    canvas {
+      touch-action: none;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col selection:bg-sky-500 selection:text-white">
+
+  <!-- Header -->
+  <header class="glass-panel sticky top-0 z-30 px-4 py-2.5 border-b border-slate-800/80">
+    <div class="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20 text-xl font-bold">
+          🔬
+        </div>
+        <div>
+          <h1 class="text-base sm:text-lg font-bold tracking-tight text-white flex items-center gap-2">
+            水中生物與生命現象互動模擬器
+            <span class="hidden md:inline-block text-xs font-medium px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+              單細胞 vs 多細胞・五大生命現象・生存四要素
+            </span>
+          </h1>
+          <p class="text-xs text-slate-400">觀察草履蟲、眼蟲、變形蟲與水草、水蚤、水螅、小魚如何表現生長、生殖、感應、代謝與運動</p>
+        </div>
+      </div>
+
+      <!-- Top Quick Controls -->
+      <div class="flex flex-wrap items-center gap-2">
+        <div class="flex items-center bg-slate-900/90 p-1 rounded-lg border border-slate-700/70 text-xs">
+          <button id="viewAllBtn" class="filter-tab active px-2.5 py-1 rounded-md transition">全部生物</button>
+          <button id="viewUniBtn" class="filter-tab px-2.5 py-1 rounded-md text-slate-300 hover:text-white transition">單細胞生物</button>
+          <button id="viewMultiBtn" class="filter-tab px-2.5 py-1 rounded-md text-slate-300 hover:text-white transition">多細胞生物</button>
+        </div>
+
+        <button id="toggleMetabolismParticlesBtn" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-600/50 transition flex items-center gap-1.5">
+          <span>⚡</span> <span id="metabolismToggleText">代謝粒子：顯示中</span>
+        </button>
+
+        <button id="playPauseBtn" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-sky-600 hover:bg-sky-500 text-white transition flex items-center gap-1.5 shadow">
+          <span id="playPauseIcon">⏸️</span> <span id="playPauseText">暫停</span>
+        </button>
+
+        <button id="speedBtn" class="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition">
+          1x 速度
+        </button>
+
+        <button id="muteBtn" class="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition" title="切換實驗室音效">
+          🔊 音效
+        </button>
+
+        <button id="resetBtn" class="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-rose-950/70 hover:bg-rose-900/80 text-rose-200 border border-rose-700/50 transition">
+          🔄 重置生態池
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="flex-1 max-w-[1600px] w-full mx-auto p-3 sm:p-4 grid grid-cols-1 lg:grid-cols-12 gap-4">
+
+    <!-- Left Column: Survival 4 Elements + Spawn & Presets (3 cols on lg) -->
+    <section class="lg:col-span-3 flex flex-col gap-3.5 order-2 lg:order-1">
+
+      <!-- 4 Essential Elements of Life -->
+      <div class="glass-panel rounded-2xl p-4 shadow-xl">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm font-bold text-white flex items-center gap-1.5">
+            <span>🌍</span> 生命生存四要素調控
+          </h2>
+          <span id="ecosystemHealthBadge" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+            生態穩定
+          </span>
+        </div>
+        <p class="text-[11px] text-slate-400 mb-3 leading-relaxed">
+          調整下方四項生存要素，觀察單細胞與多細胞生物在充足或缺乏時的代謝、生長與存活變化：
+        </p>
+
+        <div class="space-y-3.5">
+          <!-- Sunlight -->
+          <div class="bg-slate-900/75 p-2.5 rounded-xl border border-slate-800">
+            <div class="flex justify-between items-center text-xs mb-1">
+              <label for="sunlightSlider" class="font-semibold text-amber-300 flex items-center gap-1.5">
+                ☀️ 陽光 (Sunlight)
+              </label>
+              <span id="sunlightVal" class="font-mono text-amber-200 font-bold">85%</span>
+            </div>
+            <input id="sunlightSlider" type="range" min="0" max="100" value="85" class="w-full bg-gradient-to-r from-slate-700 via-amber-500 to-yellow-300" />
+            <div class="flex justify-between text-[11px] text-slate-400 mt-1">
+              <span>驅動水草與眼蟲光合作用</span>
+              <span id="sunlightStatus" class="text-amber-300">光照充足</span>
+            </div>
+          </div>
+
+          <!-- Air (Dissolved Oxygen & CO2) -->
+          <div class="bg-slate-900/75 p-2.5 rounded-xl border border-slate-800">
+            <div class="flex justify-between items-center text-xs mb-1">
+              <label for="airSlider" class="font-semibold text-cyan-300 flex items-center gap-1.5">
+                🫧 空氣 / 溶氧與氣體 (Air)
+              </label>
+              <span id="airVal" class="font-mono text-cyan-200 font-bold">80%</span>
+            </div>
+            <input id="airSlider" type="range" min="0" max="100" value="80" class="w-full bg-gradient-to-r from-slate-700 via-cyan-500 to-sky-300" />
+            <div class="flex justify-between items-center text-[11px] text-slate-400 mt-1">
+              <span>提供呼吸作用所需 O₂ 與 CO₂</span>
+              <button id="airPumpBtn" class="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/30 transition">
+                打氣機：開
+              </button>
+            </div>
+          </div>
+
+          <!-- Nutrients -->
+          <div class="bg-slate-900/75 p-2.5 rounded-xl border border-slate-800">
+            <div class="flex justify-between items-center text-xs mb-1">
+              <label for="nutrientSlider" class="font-semibold text-emerald-300 flex items-center gap-1.5">
+                🧪 養分 (Nutrients)
+              </label>
+              <span id="nutrientVal" class="font-mono text-emerald-200 font-bold">75%</span>
+            </div>
+            <input id="nutrientSlider" type="range" min="0" max="100" value="75" class="w-full bg-gradient-to-r from-slate-700 via-emerald-500 to-lime-300" />
+            <div class="flex justify-between items-center text-[11px] text-slate-400 mt-1">
+              <span>合成細胞質、生長與生殖能量</span>
+              <button id="feedBurstBtn" class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 transition">
+                + 投放養分微粒
+              </button>
+            </div>
+          </div>
+
+          <!-- Water -->
+          <div class="bg-slate-900/75 p-2.5 rounded-xl border border-slate-800">
+            <div class="flex justify-between items-center text-xs mb-1">
+              <label for="waterSlider" class="font-semibold text-blue-300 flex items-center gap-1.5">
+                💧 水量與水質 (Water)
+              </label>
+              <span id="waterVal" class="font-mono text-blue-200 font-bold">90%</span>
+            </div>
+            <input id="waterSlider" type="range" min="15" max="100" value="90" class="w-full bg-gradient-to-r from-amber-800 via-blue-600 to-blue-400" />
+            <div class="flex justify-between items-center text-[11px] text-slate-400 mt-1">
+              <span>生化反應溶劑與運動棲息介質</span>
+              <button id="cleanWaterBtn" class="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/40 hover:bg-blue-500/30 transition">
+                淨化換水
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Scenario Presets -->
+        <div class="mt-3.5 pt-3 border-t border-slate-800">
+          <div class="text-xs font-semibold text-slate-300 mb-2">🧪 快速實驗情境預設：</div>
+          <div class="grid grid-cols-2 gap-1.5 text-xs">
+            <button id="presetBalanced" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700 text-left transition">
+              🌿 理想平衡生態
+            </button>
+            <button id="presetNoSun" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 text-left transition">
+              🌑 黑暗無光實驗
+            </button>
+            <button id="presetNoAir" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 text-left transition">
+              🫧 缺氧窒息危機
+            </button>
+            <button id="presetDrought" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-rose-300 border border-slate-700 text-left transition">
+              🏜️ 水池乾涸危機
+            </button>
+            <button id="presetBoom" class="col-span-2 px-2.5 py-1.5 rounded-lg bg-indigo-950/80 hover:bg-indigo-900/80 text-indigo-200 border border-indigo-700/50 text-center transition font-medium">
+              🚀 養分陽光充沛（觀察快速生長與生殖爆發）
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Organism Spawner & Population Counter -->
+      <div class="glass-panel rounded-2xl p-4 shadow-xl">
+        <h2 class="text-sm font-bold text-white flex items-center justify-between mb-2.5">
+          <span class="flex items-center gap-1.5"><span>🧬</span> 水中生物族群與培育</span>
+          <span class="text-[11px] text-slate-400 font-normal">點擊按鈕新增個體</span>
+        </h2>
+
+        <!-- Unicellular Group -->
+        <div class="mb-3">
+          <div class="text-xs font-semibold text-fuchsia-300 mb-1.5 flex items-center justify-between">
+            <span>🔹 單細胞生物（1個細胞完成所有生命現象）</span>
+            <span id="uniTotalCount" class="font-mono text-fuchsia-200">0</span>
+          </div>
+          <div class="grid grid-cols-3 gap-1.5 text-xs">
+            <button data-spawn="paramecium" class="spawn-btn p-2 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-fuchsia-500/30 flex flex-col items-center gap-1 transition">
+              <span class="text-base">🦠</span>
+              <span class="font-medium text-slate-200">草履蟲</span>
+              <span id="count-paramecium" class="text-[10px] font-mono px-1.5 py-0.2 rounded bg-fuchsia-500/20 text-fuchsia-300">0</span>
+            </button>
+            <button data-spawn="euglena" class="spawn-btn p-2 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-emerald-500/30 flex flex-col items-center gap-1 transition">
+              <span class="text-base">🌱</span>
+              <span class="font-medium text-slate-200">眼蟲</span>
+              <span id="count-euglena" class="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300">0</span>
+            </button>
+            <button data-spawn="amoeba" class="spawn-btn p-2 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-purple-500/30 flex flex-col items-center gap-1 transition">
+              <span class="text-base">🫧</span>
+              <span class="font-medium text-slate-200">變形蟲</span>
+              <span id="count-amoeba" class="text-[10px] font-mono px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300">0</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Multicellular Group -->
+        <div>
+          <div class="text-xs font-semibold text-sky-300 mb-1.5 flex items-center justify-between">
+            <span>🔸 多細胞生物（細胞分工合作構成組織器官）</span>
+            <span id="multiTotalCount" class="font-mono text-sky-200">0</span>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 gap-1.5 text-xs">
+            <button data-spawn="elodea" class="spawn-btn p-2 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-green-500/30 flex items-center justify-between transition">
+              <span class="flex items-center gap-1.5"><span>🌿</span> <span class="text-slate-200 font-medium">水蘊草</span></span>
+              <span id="count-elodea" class="text-[10px] font-mono px-1.5 rounded bg-green-500/20 text-green-300">0</span>
+            </button>
+            <button data-spawn="daphnia" class="spawn-btn p-2 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-amber-500/30 flex items-center justify-between transition">
+              <span class="flex items-center gap-1.5"><span>🦐</span> <span class="text-slate-200 font-medium">水蚤</span></span>
+              <span id="count-daphnia" class="text-[10px] font-mono px-1.5 rounded bg-amber-500/20 text-amber-300">0</span>
+            </button>
+            <button data-spawn="hydra" class="spawn-btn p-2 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-teal-500/30 flex items-center justify-between transition">
+              <span class="flex items-center gap-1.5"><span>🌴</span> <span class="text-slate-200 font-medium">水螅</span></span>
+              <span id="count-hydra" class="text-[10px] font-mono px-1.5 rounded bg-teal-500/20 text-teal-300">0</span>
+            </button>
+            <button data-spawn="fish" class="spawn-btn p-2 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-orange-500/30 flex items-center justify-between transition">
+              <span class="flex items-center gap-1.5"><span>🐠</span> <span class="text-slate-200 font-medium">孔雀魚</span></span>
+              <span id="count-fish" class="text-[10px] font-mono px-1.5 rounded bg-orange-500/20 text-orange-300">0</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Center Column: Interactive Aquarium Canvas & 5 Life Phenomena Bar (6 cols on lg) -->
+    <section class="lg:col-span-6 flex flex-col gap-3.5 order-1 lg:order-2">
+
+      <!-- Interactive Cursor Tool Bar -->
+      <div class="glass-panel rounded-2xl p-2.5 flex flex-wrap items-center justify-between gap-2">
+        <div class="flex items-center gap-1.5 text-xs font-semibold text-slate-300 pl-1">
+          <span>👆 實驗互動工具：</span>
+        </div>
+        <div class="flex flex-wrap items-center gap-1.5 flex-1 justify-end">
+          <button data-tool="inspect" class="tool-btn active px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-800/90 text-slate-200 border border-slate-700 transition flex items-center gap-1">
+            🔍 顯微選取觀察
+          </button>
+          <button data-tool="feed" class="tool-btn px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-800/90 text-slate-200 border border-slate-700 transition flex items-center gap-1">
+            🍞 點擊投餵養分
+          </button>
+          <button data-tool="light" class="tool-btn px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-800/90 text-slate-200 border border-slate-700 transition flex items-center gap-1">
+            🔦 聚光燈（測趨光感應）
+          </button>
+          <button data-tool="poke" class="tool-btn px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-800/90 text-slate-200 border border-slate-700 transition flex items-center gap-1">
+            ⚡ 機械/酸鹼刺激（測避敵感應）
+          </button>
+          <button data-tool="divide" class="tool-btn px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-800/90 text-slate-200 border border-slate-700 transition flex items-center gap-1">
+            🧬 催化生殖
+          </button>
+        </div>
+      </div>
+
+      <!-- Main Simulation Canvas Container -->
+      <div class="relative rounded-2xl overflow-hidden border border-slate-700/80 shadow-2xl bg-slate-950 h-[420px] sm:h-[500px]">
+        <canvas id="aquariumCanvas" class="w-full h-full block cursor-crosshair"></canvas>
+
+        <!-- Floating Overlay Status Badges -->
+        <div class="absolute top-3 left-3 pointer-events-none flex flex-wrap gap-1.5">
+          <div class="px-2.5 py-1 rounded-lg bg-slate-900/80 backdrop-blur-md border border-slate-700/70 text-[11px] flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+            <span>水中溶氧 O₂：<strong id="hudO2" class="font-mono text-cyan-300">80%</strong></span>
+          </div>
+          <div class="px-2.5 py-1 rounded-lg bg-slate-900/80 backdrop-blur-md border border-slate-700/70 text-[11px] flex items-center gap-1.5">
+            <span>二氧化碳 CO₂：<strong id="hudCO2" class="font-mono text-amber-300">35%</strong></span>
+          </div>
+          <div class="px-2.5 py-1 rounded-lg bg-slate-900/80 backdrop-blur-md border border-slate-700/70 text-[11px] flex items-center gap-1.5">
+            <span>水質純淨度：<strong id="hudWaterQuality" class="font-mono text-blue-300">96%</strong></span>
+          </div>
+        </div>
+
+        <!-- Warning Banner when an essential element is critically low -->
+        <div id="criticalAlertBanner" class="hidden absolute top-12 left-1/2 -translate-x-1/2 pointer-events-none px-4 py-1.5 rounded-full bg-rose-600/90 text-white text-xs font-bold shadow-lg border border-rose-300/50 animate-bounce">
+          ⚠️ 生存要素不足警告：請補充陽光、空氣、養分或水量！
+        </div>
+
+        <!-- Legend Overlay at Bottom Left -->
+        <div class="absolute bottom-2.5 left-3 pointer-events-none flex flex-wrap items-center gap-2 text-[11px] bg-slate-950/75 px-2.5 py-1 rounded-lg border border-slate-800/80 text-slate-300">
+          <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-full bg-cyan-300"></span>O₂ 氧氣泡</span>
+          <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-full bg-amber-400"></span>養分微粒</span>
+          <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-full bg-purple-400"></span>CO₂/代謝物</span>
+          <span class="text-slate-400 hidden sm:inline">｜單細胞生物以放大顯微視圈標示</span>
+        </div>
+      </div>
+
+      <!-- Five Life Phenomena Real-Time Monitor Cards -->
+      <div class="glass-panel rounded-2xl p-3.5 shadow-xl">
+        <div class="flex items-center justify-between mb-2.5">
+          <h2 class="text-sm font-bold text-white flex items-center gap-1.5">
+            <span>✨</span> 五大生命現象即時監測（點擊卡片可在畫面上高光標示該現象）
+          </h2>
+          <span class="text-[11px] text-sky-300" id="activePhenomenonHint">目前顯示：全部生命現象</span>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
+          <!-- Metabolism -->
+          <button data-phenom="metabolism" class="phenomenon-card text-left p-2.5 rounded-xl bg-slate-900/85 border border-slate-800 hover:border-emerald-500/60">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs font-bold text-emerald-300">⚡ 代謝</span>
+              <span id="statMetabolism" class="text-[11px] font-mono bg-emerald-500/20 text-emerald-300 px-1.5 rounded">活躍</span>
+            </div>
+            <p class="text-[11px] text-slate-400 leading-tight">光合作用、呼吸耗氧、攝食消化與排泄</p>
+          </button>
+
+          <!-- Growth -->
+          <button data-phenom="growth" class="phenomenon-card text-left p-2.5 rounded-xl bg-slate-900/85 border border-slate-800 hover:border-sky-500/60">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs font-bold text-sky-300">🌱 生長</span>
+              <span id="statGrowth" class="text-[11px] font-mono bg-sky-500/20 text-sky-300 px-1.5 rounded">0 次</span>
+            </div>
+            <p class="text-[11px] text-slate-400 leading-tight">吸收養分與水，幼體發育成熟、體積增大</p>
+          </button>
+
+          <!-- Sensitivity -->
+          <button data-phenom="sensitivity" class="phenomenon-card text-left p-2.5 rounded-xl bg-slate-900/85 border border-slate-800 hover:border-amber-500/60">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs font-bold text-amber-300">📡 感應</span>
+              <span id="statSensitivity" class="text-[11px] font-mono bg-amber-500/20 text-amber-300 px-1.5 rounded">0 次</span>
+            </div>
+            <p class="text-[11px] text-slate-400 leading-tight">眼蟲趨光、草履蟲與魚趨向養分、受驚收縮閃避</p>
+          </button>
+
+          <!-- Movement -->
+          <button data-phenom="movement" class="phenomenon-card text-left p-2.5 rounded-xl bg-slate-900/85 border border-slate-800 hover:border-indigo-500/60">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs font-bold text-indigo-300">🏊 運動</span>
+              <span id="statMovement" class="text-[11px] font-mono bg-indigo-500/20 text-indigo-300 px-1.5 rounded">正常</span>
+            </div>
+            <p class="text-[11px] text-slate-400 leading-tight">纖毛、鞭毛、偽足流動、擺尾游動與觸手捕食</p>
+          </button>
+
+          <!-- Reproduction -->
+          <button data-phenom="reproduction" class="phenomenon-card col-span-2 sm:col-span-1 text-left p-2.5 rounded-xl bg-slate-900/85 border border-slate-800 hover:border-pink-500/60">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs font-bold text-pink-300">🧬 生殖</span>
+              <span id="statReproduction" class="text-[11px] font-mono bg-pink-500/20 text-pink-300 px-1.5 rounded">0 次</span>
+            </div>
+            <p class="text-[11px] text-slate-400 leading-tight">單細胞二分裂、水螅出芽生殖、魚與水蚤繁衍</p>
+          </button>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Right Column: Microscope Inspector + Comparison & Live Event Feed (3 cols on lg) -->
+    <section class="lg:col-span-3 flex flex-col gap-3.5 order-3">
+
+      <!-- Microscope & Single/Multi-cellular Inspector -->
+      <div class="glass-panel rounded-2xl p-4 shadow-xl">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-sm font-bold text-white flex items-center gap-1.5">
+            <span>🔬</span> 生物顯微構造與生理透視
+          </h2>
+          <span id="inspectorCellBadge" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30">
+            單細胞生物
+          </span>
+        </div>
+
+        <!-- Zoomed Microscope Canvas -->
+        <div class="relative rounded-xl overflow-hidden bg-slate-950 border border-slate-800 h-40 mb-3 flex items-center justify-center">
+          <canvas id="microscopeCanvas" class="w-full h-full block"></canvas>
+          <div class="absolute top-2 left-2.5 text-[11px] font-semibold text-cyan-300 bg-slate-900/80 px-2 py-0.5 rounded border border-slate-700" id="inspectorName">
+            草履蟲 (Paramecium)
+          </div>
+          <div class="absolute bottom-2 right-2.5 text-[10px] font-mono text-slate-400 bg-slate-900/80 px-2 py-0.5 rounded">
+            400x 光學顯微視野
+          </div>
+        </div>
+
+        <!-- Organism Vital Bars -->
+        <div class="space-y-2 text-xs mb-3">
+          <div>
+            <div class="flex justify-between text-[11px] mb-0.5">
+              <span class="text-slate-400">⚡ 代謝能量儲備 (ATP)</span>
+              <span id="inspEnergyText" class="font-mono text-emerald-300">88%</span>
+            </div>
+            <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+              <div id="inspEnergyBar" class="h-full bg-emerald-400 transition-all duration-200" style="width: 88%"></div>
+            </div>
+          </div>
+
+          <div>
+            <div class="flex justify-between text-[11px] mb-0.5">
+              <span class="text-slate-400">🌱 生長成熟度 (Growth)</span>
+              <span id="inspGrowthText" class="font-mono text-sky-300">72% (成體)</span>
+            </div>
+            <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+              <div id="inspGrowthBar" class="h-full bg-sky-400 transition-all duration-200" style="width: 72%"></div>
+            </div>
+          </div>
+
+          <div>
+            <div class="flex justify-between text-[11px] mb-0.5">
+              <span class="text-slate-400">🧬 生殖準備度 (Reproduction)</span>
+              <span id="inspReproText" class="font-mono text-pink-300">65%</span>
+            </div>
+            <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+              <div id="inspReproBar" class="h-full bg-pink-400 transition-all duration-200" style="width: 65%"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Detailed Trait Breakdown -->
+        <div class="bg-slate-900/85 rounded-xl p-2.5 border border-slate-800 space-y-1.5 text-[11px]">
+          <div class="flex justify-between">
+            <span class="text-slate-400">細胞構造：</span>
+            <span id="inspStructure" class="text-slate-200 font-medium text-right">單一細胞具纖毛、口溝、伸縮泡、大核小核</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-400">運動方式：</span>
+            <span id="inspMovement" class="text-indigo-300 font-medium text-right">全身纖毛規律擺動螺旋前進</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-400">感應表現：</span>
+            <span id="inspSensitivity" class="text-amber-300 font-medium text-right">趨向養分與適溫，遇刺激釋放絲泡逃離</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-400">代謝與生殖：</span>
+            <span id="inspMetaRepro" class="text-emerald-300 font-medium text-right">食泡消化細菌，橫裂（二分裂）無性生殖</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Unicellular vs Multicellular Concept Comparison Tab -->
+      <div class="glass-panel rounded-2xl p-4 shadow-xl flex-1 flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <h2 class="text-sm font-bold text-white flex items-center gap-1.5">
+              <span>📋</span> 觀念對照與生態即時日誌
+            </h2>
+            <div class="flex bg-slate-900 rounded-lg p-0.5 border border-slate-800 text-[11px]">
+              <button id="tabLogBtn" class="px-2 py-0.5 rounded bg-sky-600 text-white font-medium">生命現象日誌</button>
+              <button id="tabCompareBtn" class="px-2 py-0.5 rounded text-slate-400 hover:text-white">單/多細胞比較</button>
+            </div>
+          </div>
+
+          <!-- Live Event Log View -->
+          <div id="logPanelView" class="space-y-1.5 max-h-48 overflow-y-auto pr-1 text-[11px]">
+            <!-- Populated dynamically by JS -->
+          </div>
+
+          <!-- Comparison Table View (Hidden by default) -->
+          <div id="comparePanelView" class="hidden text-[11px] space-y-2">
+            <div class="p-2.5 rounded-xl bg-fuchsia-950/30 border border-fuchsia-500/30">
+              <div class="font-bold text-fuchsia-300 mb-1">🔹 單細胞生物（草履蟲、眼蟲、變形蟲）</div>
+              <ul class="list-disc list-inside text-slate-300 space-y-0.5">
+                <li><strong>構造層次：</strong>僅由 1 個細胞構成，無組織與器官分化。</li>
+                <li><strong>細胞分工：</strong>單一細胞內的胞器同時負責攝食、呼吸、排泄、運動、感應與生殖。</li>
+                <li><strong>生長與生殖：</strong>細胞體積長大到極限後，直接進行細胞分裂產生新個體（細胞分裂＝繁殖）。</li>
+              </ul>
+            </div>
+            <div class="p-2.5 rounded-xl bg-sky-950/30 border border-sky-500/30">
+              <div class="font-bold text-sky-300 mb-1">🔸 多細胞生物（水蘊草、水蚤、水螅、魚）</div>
+              <ul class="list-disc list-inside text-slate-300 space-y-0.5">
+                <li><strong>構造層次：</strong>由許多細胞組成，具有細胞分化（如表皮、肌肉、葉肉、神經等）。</li>
+                <li><strong>細胞分工：</strong>不同細胞各司其職、合作完成生命現象，單一細胞離開生物體無法獨立生存。</li>
+                <li><strong>生長與生殖：</strong>細胞分裂使細胞數目增多（個體生長），並透過出芽或配子結合繁衍後代。</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-3 pt-2.5 border-t border-slate-800/80 text-[11px] text-slate-400 flex items-center justify-between">
+          <span>💡 提示：點擊水池中任一生物可鎖定追蹤</span>
+          <button id="selectRandomBtn" class="text-sky-400 hover:text-sky-300 font-medium underline">切換觀察對象</button>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <script>
+    // =========================================================================
+    // 水中單細胞與多細胞生物・五大生命現象與生存四要素互動模擬器
+    // =========================================================================
+
+    // --- Web Audio API Synthesizer for Immersive Science Lab Feedback ---
+    class SoundEffects {
+      constructor() {
+        this.ctx = null;
+        this.muted = false;
+      }
+      init() {
+        if (!this.ctx) {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          if (AudioCtx) this.ctx = new AudioCtx();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+      playBubble(freq = 520) {
+        if (this.muted) return;
+        this.init();
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now);
+        osc.frequency.exponentialRampToValueAtTime(freq * 1.6, now + 0.09);
+        gain.gain.setValueAtTime(0.06, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.1);
+      }
+      playDivide() {
+        if (this.muted) return;
+        this.init();
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(380, now);
+        osc.frequency.exponentialRampToValueAtTime(760, now + 0.18);
+        gain.gain.setValueAtTime(0.07, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.2);
+      }
+      playStimulus() {
+        if (this.muted) return;
+        this.init();
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(320, now);
+        osc.frequency.exponentialRampToValueAtTime(140, now + 0.15);
+        gain.gain.setValueAtTime(0.05, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.16);
+      }
+    }
+
+    const sfx = new SoundEffects();
+
+    // --- Species Metadata Database ---
+    const SPECIES_INFO = {
+      paramecium: {
+        name: '草履蟲 (Paramecium)',
+        category: 'unicellular',
+        badgeText: '單細胞生物・原生動物',
+        structure: '單一細胞具纖毛、口溝、食泡、伸縮泡（排泄水分）、大核與小核',
+        movement: '全身數千根纖毛協調擺動，呈螺旋狀旋轉前進',
+        sensitivity: '正向趨向養分與適溫區；遇障礙或酸鹼刺激立即倒退轉向',
+        metaRepro: '口溝吞噬有機碎屑形成食泡消化；成熟後進行橫二分裂無性生殖',
+        baseSize: 16,
+        maxSize: 25,
+        speed: 1.55
+      },
+      euglena: {
+        name: '眼蟲 (Euglena)',
+        category: 'unicellular',
+        badgeText: '單細胞生物・原生生物',
+        structure: '單一紡錘形細胞，前端具鞭毛、紅色眼點（感光）與葉綠體',
+        movement: '前端單根長鞭毛像螺旋槳般擺動拉動細胞前進，亦可變形蠕動',
+        sensitivity: '具明顯正向趨光性！紅色眼點感應陽光方向，游向光源處',
+        metaRepro: '有陽光時行光合作用自製養分並釋放O₂；無光時吸收水中養分；縱二分裂生殖',
+        baseSize: 14,
+        maxSize: 22,
+        speed: 1.35
+      },
+      amoeba: {
+        name: '變形蟲 (Amoeba)',
+        category: 'unicellular',
+        badgeText: '單細胞生物・原生動物',
+        structure: '單一細胞無固定形狀，由細胞質外質與內質流動形成偽足',
+        movement: '細胞質向特定方向流動伸出「偽足」（變形運動），緩慢爬行或懸浮',
+        sensitivity: '偽足感應養分微粒並伸出包圍；具負趨光性，避開強光與劇烈刺激',
+        metaRepro: '以偽足吞噬養分形成食泡消化，伸縮泡排出多餘水分；二分裂生殖',
+        baseSize: 17,
+        maxSize: 27,
+        speed: 0.65
+      },
+      elodea: {
+        name: '水蘊草 (Elodea)',
+        category: 'multicellular',
+        badgeText: '多細胞生物・水生植物',
+        structure: '多細胞分化為葉片細胞（含大量葉綠體）、莖維管束與假根細胞',
+        movement: '固著於水底隨水流搖曳，莖葉細胞向光源方向彎曲生長（向光性運動）',
+        sensitivity: '感應陽光強度調整葉綠體排列與光合作用速率',
+        metaRepro: '吸收陽光、水與CO₂行光合作用釋放氧氣泡（生產者）；頂芽生長與側枝營養繁殖',
+        baseSize: 55,
+        maxSize: 125,
+        speed: 0
+      },
+      daphnia: {
+        name: '水蚤 (Daphnia)',
+        category: 'multicellular',
+        badgeText: '多細胞生物・節肢動物',
+        structure: '半透明幾丁質外殼，具複眼、游泳觸角、跳動心臟、腸道與育兒囊',
+        movement: '藉由發達的第二對分枝狀大觸角規律划水，呈現跳躍式游動',
+        sensitivity: '單眼與複眼具弱光趨性，感應水中藻類與溶氧濃度，遇魚類靠近急速跳離',
+        metaRepro: '胸肢濾食單細胞藻類與有機養分，心臟快速搏動運輸養分；育兒囊孵育幼蚤',
+        baseSize: 15,
+        maxSize: 24,
+        speed: 1.4
+      },
+      hydra: {
+        name: '水螅 (Hydra)',
+        category: 'multicellular',
+        badgeText: '多細胞生物・刺絲胞動物',
+        structure: '由內外兩層細胞構成圓筒狀身體，基盤固著，頂端口部周圍有6條觸手與刺絲胞',
+        movement: '觸手隨水流伸展擺動探索獵物，受驚時全身肌原纖維收縮成小球狀',
+        sensitivity: '神經網連接全身感覺細胞，觸手碰到獵物或機械刺激瞬間收縮反應',
+        metaRepro: '觸手捕食水蚤或養分送入消化腔分解；養分充足時體側長出「芽體」行出芽生殖',
+        baseSize: 38,
+        maxSize: 64,
+        speed: 0
+      },
+      fish: {
+        name: '孔雀魚 (Guppy)',
+        category: 'multicellular',
+        badgeText: '多細胞生物・脊椎動物',
+        structure: '具完整器官系統（大腦與神經、眼睛、鰓、心臟血管、消化道、骨骼肌肉與魚鰭）',
+        movement: '骨骼肌收縮帶動尾鰭與胸鰭協調擺動，可在水中快速巡航、轉向與衝刺',
+        sensitivity: '視覺與側線系統高度發達，敏銳感應食物掉落、光線變化、缺氧浮頭與威脅閃避',
+        metaRepro: '以鰓吸收水中溶氧(O₂)、攝食水蚤與養分顆粒，排出代謝廢物；成魚有性生殖產下幼魚',
+        baseSize: 26,
+        maxSize: 46,
+        speed: 2.1
+      }
+    };
+
+    // --- Global Simulation State ---
+    const state = {
+      running: true,
+      speedMultiplier: 1,
+      viewFilter: 'all', // 'all', 'unicellular', 'multicellular'
+      showMetabolismParticles: true,
+      activeTool: 'inspect', // 'inspect', 'feed', 'light', 'poke', 'divide'
+      highlightPhenomenon: null, // null or 'metabolism'|'growth'|'sensitivity'|'movement'|'reproduction'
+
+      // 4 Essential Elements of Life
+      sunlight: 85,      // 0 - 100
+      air: 80,           // 0 - 100 (target aeration)
+      dissolvedO2: 80,   // actual dynamic O2 in water
+      dissolvedCO2: 35,  // actual dynamic CO2 in water
+      nutrients: 75,     // 0 - 100
+      waterLevel: 90,    // 15 - 100
+      waterQuality: 96,  // 0 - 100
+      airPumpOn: true,
+
+      // Interactive pointer state
+      pointer: {
+        x: 0,
+        y: 0,
+        active: false,
+        down: false
+      },
+
+      // Entities
+      organisms: [],
+      particles: [], // { x, y, vx, vy, type: 'food'|'o2'|'co2'|'atp'|'waste', life, size }
+      stimuliWaves: [], // { x, y, radius, maxRadius, color, type }
+      floatingLabels: [], // { x, y, text, color, alpha, vy }
+
+      // Counters for 5 life phenomena
+      counts: {
+        growthEvents: 0,
+        sensitivityEvents: 0,
+        reproductionEvents: 0
+      },
+
+      selectedOrganismId: null,
+      nextId: 1,
+      tick: 0
+    };
+
+    // --- DOM Elements ---
+    const aquariumCanvas = document.getElementById('aquariumCanvas');
+    const ctx = aquariumCanvas.getContext('2d');
+    const microscopeCanvas = document.getElementById('microscopeCanvas');
+    const mCtx = microscopeCanvas.getContext('2d');
+
+    // --- Helper Utilities ---
+    function rand(min, max) {
+      return Math.random() * (max - min) + min;
+    }
+
+    function clamp(val, min, max) {
+      return Math.max(min, Math.min(max, val));
+    }
+
+    function addEventLog(categoryIcon, title, detail, colorClass = 'text-sky-300') {
+      const logPanel = document.getElementById('logPanelView');
+      if (!logPanel) return;
+      const item = document.createElement('div');
+      item.className = 'p-2 rounded-lg bg-slate-900/90 border border-slate-800/90 flex items-start gap-2 animate-fadeIn';
+      const timeStr = new Date().toLocaleTimeString('zh-TW', { hour12: false, minute: '2-digit', second: '2-digit' });
+      item.innerHTML = `
+        <span class="text-sm leading-none mt-0.5">${categoryIcon}</span>
+        <div class="flex-1 min-w-0">
+          <div class="flex justify-between items-center">
+            <span class="font-semibold ${colorClass}">${title}</span>
+            <span class="text-[10px] font-mono text-slate-500">${timeStr}</span>
+          </div>
+          <p class="text-slate-300 text-[11px] leading-snug">${detail}</p>
+        </div>
+      `;
+      logPanel.prepend(item);
+      while (logPanel.children.length > 22) {
+        logPanel.removeChild(logPanel.lastChild);
+      }
+    }
+
+    function addFloatingLabel(x, y, text, color = '#38bdf8') {
+      state.floatingLabels.push({
+        x,
+        y,
+        text,
+        color,
+        alpha: 1.0,
+        vy: -0.7
+      });
+    }
+
+    // --- Water Surface Calculation ---
+    function getWaterSurfaceY(canvasHeight) {
+      // waterLevel 100% -> surface at 10% from top; waterLevel 15% -> surface at 78% from top
+      const ratio = (100 - state.waterLevel) / 85;
+      return canvasHeight * (0.10 + ratio * 0.66);
+    }
+
+    // --- Create Organism Factory ---
+    function createOrganism(species, x, y, isOffspring = false) {
+      const info = SPECIES_INFO[species];
+      const w = aquariumCanvas.width || 800;
+      const h = aquariumCanvas.height || 480;
+      const surfaceY = getWaterSurfaceY(h);
+      const bottomY = h - 24;
+
+      let spawnX = x !== undefined ? x : rand(50, w - 50);
+      let spawnY = y !== undefined ? y : rand(surfaceY + 35, bottomY - 35);
+
+      if (species === 'elodea' || species === 'hydra') {
+        spawnY = bottomY - rand(2, 10);
+      }
+
+      const startMaturity = isOffspring ? 0.15 : rand(0.35, 0.78);
+      const size = info.baseSize + (info.maxSize - info.baseSize) * startMaturity;
+
+      const org = {
+        id: state.nextId++,
+        species,
+        category: info.category,
+        x: clamp(spawnX, 30, w - 30),
+        y: clamp(spawnY, surfaceY + 20, bottomY),
+        vx: rand(-1, 1) * info.speed,
+        vy: rand(-0.6, 0.6) * info.speed,
+        angle: rand(0, Math.PI * 2),
+        size,
+        maturity: startMaturity, // 0.0 -> 1.0 (Growth phenomenon)
+        GrownAdultLogged: startMaturity >= 0.85,
+        energy: isOffspring ? 72 : rand(70, 95), // 0 -> 100 (Metabolism)
+        reproProgress: isOffspring ? 0 : rand(15, 65), // 0 -> 100 (Reproduction)
+        phase: rand(0, Math.PI * 2),
+        senseState: '巡游覓食中', // Current sensitivity reaction description
+        senseTimer: 0,
+        contracted: 0, // For Hydra contraction on stimulus (0 = normal, 1 = contracted)
+        dividingTimer: 0, // > 0 when actively undergoing binary fission or budding
+        amoebaLobes: [rand(0.8, 1.2), rand(0.8, 1.2), rand(0.8, 1.2), rand(0.8, 1.2), rand(0.8, 1.2), rand(0.8, 1.2)],
+        colorHue: species === 'fish' ? rand(15, 45) : 0
+      };
+
+      state.organisms.push(org);
+      return org;
+    }
+
+    // --- Initialize Ecosystem ---
+    function initEcosystem() {
+      state.organisms = [];
+      state.particles = [];
+      state.stimuliWaves = [];
+      state.floatingLabels = [];
+      state.counts = { growthEvents: 0, sensitivityEvents: 0, reproductionEvents: 0 };
+
+      const w = aquariumCanvas.width || 800;
+
+      // Spawn Multicellular Plants (Elodea)
+      for (let i = 0; i < 5; i++) {
+        createOrganism('elodea', rand(60, w - 60));
+      }
+      // Spawn Hydra on floor
+      for (let i = 0; i < 3; i++) {
+        createOrganism('hydra', rand(90, w - 90));
+      }
+      // Spawn Unicellular Organisms
+      for (let i = 0; i < 5; i++) createOrganism('paramecium');
+      for (let i = 0; i < 5; i++) createOrganism('euglena');
+      for (let i = 0; i < 4; i++) createOrganism('amoeba');
+
+      // Spawn Multicellular Animals
+      for (let i = 0; i < 5; i++) createOrganism('daphnia');
+      for (let i = 0; i < 3; i++) createOrganism('fish');
+
+      // Initial Nutrient particles
+      for (let i = 0; i < 20; i++) {
+        spawnFoodParticle();
+      }
+
+      if (state.organisms.length > 0) {
+        state.selectedOrganismId = state.organisms[0].id;
+      }
+
+      updatePopulationCounters();
+      addEventLog('🌊', '生態池初始化完成', '單細胞生物（草履蟲、眼蟲、變形蟲）與多細胞生物（水蘊草、水蚤、水螅、孔雀魚）已進入水中生態池。', 'text-cyan-300');
+    }
+
+    function spawnFoodParticle(x, y) {
+      const w = aquariumCanvas.width || 800;
+      const h = aquariumCanvas.height || 480;
+      const surfaceY = getWaterSurfaceY(h);
+      state.particles.push({
+        x: x !== undefined ? x : rand(30, w - 30),
+        y: y !== undefined ? y : rand(surfaceY + 10, h - 25),
+        vx: rand(-0.25, 0.25),
+        vy: rand(0.15, 0.45),
+        type: 'food',
+        size: rand(2.5, 4.2),
+        life: 600
+      });
+    }
+
+    // --- Trigger Reproduction for an Organism ---
+    function triggerReproduction(org, forced = false) {
+      const info = SPECIES_INFO[org.species];
+      if (!forced && state.organisms.filter(o => o.species === org.species).length >= 16) {
+        org.reproProgress = 50;
+        return;
+      }
+
+      org.reproProgress = 0;
+      org.energy = Math.max(45, org.energy - 22);
+      org.dividingTimer = 45;
+      state.counts.reproductionEvents++;
+
+      const offsetX = org.species === 'elodea' ? rand(-35, 35) : rand(-18, 18);
+      const offsetY = (org.species === 'elodea' || org.species === 'hydra') ? 0 : rand(-15, 15);
+      const child = createOrganism(org.species, org.x + offsetX, org.y + offsetY, true);
+
+      sfx.playDivide();
+
+      if (org.category === 'unicellular') {
+        addFloatingLabel(org.x, org.y - 16, '🧬 二分裂生殖！', '#f472b6');
+        addEventLog('🧬', `${info.name} 進行二分裂生殖`, '單細胞生物成熟後直接由一個細胞分裂為兩個新個體！', 'text-pink-300');
+      } else if (org.species === 'hydra') {
+        addFloatingLabel(org.x, org.y - 28, '🌱 出芽生殖！', '#2dd4bf');
+        addEventLog('🌱', `${info.name} 出芽生殖`, '多細胞水螅體側長出芽體，發育完成後脫落成為獨立新個體。', 'text-teal-300');
+      } else if (org.species === 'elodea') {
+        addFloatingLabel(org.x, org.y - 35, '🌿 側枝營養繁殖！', '#4ade80');
+        addEventLog('🌿', `${info.name} 營養繁殖`, '水蘊草吸收充足陽光與養分，分生組織分裂長出新植株。', 'text-green-300');
+      } else {
+        addFloatingLabel(org.x, org.y - 20, '🥚 繁衍幼體！', '#fb923c');
+        addEventLog('🥚', `${info.name} 繁衍後代`, '多細胞動物透過生殖細胞結合，孵育出幼體投入水池。', 'text-orange-300');
+      }
+
+      updatePopulationCounters();
+      return child;
+    }
+
+    // --- Simulation Physics & Biology Update Step ---
+    function updateSimulation() {
+      state.tick++;
+      const w = aquariumCanvas.width;
+      const h = aquariumCanvas.height;
+      const surfaceY = getWaterSurfaceY(h);
+      const bottomY = h - 22;
+
+      // 1. Update Environment Chemistry (Sunlight, Air, Nutrients, Water interaction)
+      const elodeaCount = state.organisms.filter(o => o.species === 'elodea').length;
+      const euglenaCount = state.organisms.filter(o => o.species === 'euglena').length;
+      const consumerCount = state.organisms.length - elodeaCount;
+
+      // Photosynthesis O2 generation based on Sunlight & Water
+      const photoRate = (state.sunlight / 100) * (state.waterLevel / 100) * (elodeaCount * 0.08 + euglenaCount * 0.03);
+      // Aeration from Air slider & pump
+      const aerationTarget = state.airPumpOn ? state.air : state.air * 0.35;
+      const respirationDrain = consumerCount * 0.018;
+
+      state.dissolvedO2 = clamp(
+        state.dissolvedO2 + (aerationTarget - state.dissolvedO2) * 0.03 + photoRate - respirationDrain,
+        2,
+        100
+      );
+
+      state.dissolvedCO2 = clamp(
+        20 + consumerCount * 1.4 - photoRate * 18 + (100 - state.air) * 0.2,
+        5,
+        100
+      );
+
+      // Water quality slowly degrades if water level is very low or too many waste particles, recovers if water level is high
+      const waterStress = state.waterLevel < 40 ? (40 - state.waterLevel) * 0.015 : -0.02;
+      state.waterQuality = clamp(state.waterQuality - waterStress, 15, 100);
+
+      // Spawn ambient bubbles from Air Pump
+      if (state.airPumpOn && state.air > 15 && state.tick % Math.max(4, Math.floor(22 - state.air * 0.18)) === 0) {
+        state.particles.push({
+          x: w - 42 + rand(-8, 8),
+          y: bottomY - 10,
+          vx: rand(-0.2, 0.2),
+          vy: rand(-1.8, -1.1),
+          type: 'o2',
+          size: rand(2.5, 5),
+          life: 240
+        });
+      }
+
+      // Automatically maintain nutrient particles proportional to state.nutrients slider
+      const currentFoodCount = state.particles.filter(p => p.type === 'food').length;
+      const targetFoodCount = Math.floor((state.nutrients / 100) * 36);
+      if (currentFoodCount < targetFoodCount && Math.random() < 0.35) {
+        spawnFoodParticle();
+      }
+
+      // 2. Update Particles
+      for (let i = state.particles.length - 1; i >= 0; i--) {
+        const p = state.particles[i];
+        p.x += p.vx * state.speedMultiplier;
+        p.y += p.vy * state.speedMultiplier;
+        p.life -= state.speedMultiplier;
+
+        if (p.type === 'food') {
+          // Food settles gently on bottom
+          if (p.y > bottomY - 4) {
+            p.y = bottomY - 4;
+            p.vy = 0;
+            p.vx *= 0.9;
+          }
+          if (p.y < surfaceY + 4) {
+            p.y = surfaceY + 4;
+          }
+        } else if (p.type === 'o2' || p.type === 'co2') {
+          p.x += Math.sin(state.tick * 0.08 + i) * 0.25;
+          if (p.y <= surfaceY) {
+            state.particles.splice(i, 1);
+            continue;
+          }
+        }
+
+        if (p.life <= 0 || p.x < 0 || p.x > w) {
+          state.particles.splice(i, 1);
+        }
+      }
+
+      // 3. Update Stimulus Waves
+      for (let i = state.stimuliWaves.length - 1; i >= 0; i--) {
+        const wave = state.stimuliWaves[i];
+        wave.radius += 3.5 * state.speedMultiplier;
+        if (wave.radius >= wave.maxRadius) {
+          state.stimuliWaves.splice(i, 1);
+        }
+      }
+
+      // 4. Update Floating Labels
+      for (let i = state.floatingLabels.length - 1; i >= 0; i--) {
+        const lbl = state.floatingLabels[i];
+        lbl.y += lbl.vy * state.speedMultiplier;
+        lbl.alpha -= 0.018 * state.speedMultiplier;
+        if (lbl.alpha <= 0) {
+          state.floatingLabels.splice(i, 1);
+        }
+      }
+
+      // 5. Update Every Organism (Metabolism, Growth, Sensitivity, Movement, Reproduction)
+      const waterFactor = clamp((state.waterLevel - 10) / 50, 0.2, 1.0);
+      const o2Factor = clamp(state.dissolvedO2 / 55, 0.15, 1.15);
+      const sunFactor = state.sunlight / 100;
+      const nutrientFactor = state.nutrients / 100;
+
+      for (let i = state.organisms.length - 1; i >= 0; i--) {
+        const org = state.organisms[i];
+        const info = SPECIES_INFO[org.species];
+
+        org.phase += 0.12 * state.speedMultiplier * waterFactor;
+        if (org.dividingTimer > 0) org.dividingTimer -= state.speedMultiplier;
+        if (org.senseTimer > 0) org.senseTimer -= state.speedMultiplier;
+        if (org.contracted > 0) org.contracted = Math.max(0, org.contracted - 0.02 * state.speedMultiplier);
+
+        // --- A. METABOLISM (代謝) ---
+        const isPhotosynthetic = (org.species === 'elodea' || org.species === 'euglena');
+        if (isPhotosynthetic) {
+          // Absorb sunlight + CO2 + water + nutrients -> gain energy & emit O2 bubble
+          const photoGain = sunFactor * waterFactor * (0.08 + nutrientFactor * 0.06);
+          const basalCost = 0.035 + (org.species === 'euglena' && sunFactor < 0.2 ? -nutrientFactor * 0.03 : 0);
+          org.energy = clamp(org.energy + (photoGain - basalCost) * state.speedMultiplier, 5, 100);
+
+          // Release O2 bubble visually when sunlight is sufficient
+          if (state.sunlight > 30 && Math.random() < 0.025 * sunFactor * state.speedMultiplier) {
+            state.particles.push({
+              x: org.x + rand(-8, 8),
+              y: org.y - (org.species === 'elodea' ? org.size * 0.6 : 5),
+              vx: rand(-0.15, 0.15),
+              vy: rand(-1.2, -0.7),
+              type: 'o2',
+              size: rand(2, 3.8),
+              life: 180
+            });
+          }
+        } else {
+          // Heterotrophic respiration & metabolism
+          const o2Penalty = state.dissolvedO2 < 25 ? (25 - state.dissolvedO2) * 0.004 : 0;
+          const droughtPenalty = state.waterLevel < 30 ? 0.05 : 0;
+          const ambientNutrientAbsorb = nutrientFactor * 0.028 * o2Factor;
+          org.energy = clamp(
+            org.energy + (ambientNutrientAbsorb - 0.035 - o2Penalty - droughtPenalty) * state.speedMultiplier,
+            5,
+            100
+          );
+
+          // Occasional CO2 / metabolic waste particle
+          if (state.showMetabolismParticles && Math.random() < 0.012 * state.speedMultiplier) {
+            state.particles.push({
+              x: org.x,
+              y: org.y,
+              vx: rand(-0.2, 0.2),
+              vy: rand(-0.8, -0.4),
+              type: 'co2',
+              size: 2.2,
+              life: 95
+            });
+          }
+        }
+
+        // --- B. SENSITIVITY & MOVEMENT (感應與運動) ---
+        if (org.species === 'elodea') {
+          // Stationary on bottom, bends toward spotlight or sunlight
+          org.y = bottomY - 2;
+          if (state.activeTool === 'light' && state.pointer.active) {
+            const dx = state.pointer.x - org.x;
+            org.angle = clamp(dx * 0.0015, -0.35, 0.35);
+            org.senseState = '感應聚光燈（正向光性彎曲）';
+          } else {
+            org.angle = Math.sin(org.phase * 0.4) * 0.08;
+            org.senseState = state.sunlight > 35 ? '感應陽光行光合作用釋放 O₂' : '光照不足，光合作用減緩';
+          }
+        } else if (org.species === 'hydra') {
+          // Hydra anchored to bottom, waves tentacles, contracts when poked, grabs nearby Daphnia/food
+          org.y = bottomY - 2;
+          if (org.contracted > 0.2) {
+            org.senseState = '⚡ 感應刺激！神經網觸發全身收縮防禦';
+          } else {
+            // Check for nearby food particle or daphnia within tentacle reach
+            let caughtFood = false;
+            for (let j = state.particles.length - 1; j >= 0; j--) {
+              const p = state.particles[j];
+              if (p.type === 'food') {
+                const dist = Math.hypot(p.x - org.x, p.y - (org.y - org.size * 0.75));
+                if (dist < 28) {
+                  state.particles.splice(j, 1);
+                  org.energy = Math.min(100, org.energy + 14);
+                  org.reproProgress += 12;
+                  org.senseState = '🎯 觸手刺絲胞感應並捕獲養分！';
+                  org.senseTimer = 50;
+                  state.counts.sensitivityEvents++;
+                  caughtFood = true;
+                  break;
+                }
+              }
+            }
+            if (!caughtFood && org.senseTimer <= 0) {
+              org.senseState = '觸手伸展感應水流與獵物';
+            }
+          }
+        } else {
+          // Free-swimming Unicellular & Multicellular organisms
+          let targetX = null;
+          let targetY = null;
+          let speedBoost = 1.0;
+
+          // 1) Spotlight Phototaxis check
+          if (state.activeTool === 'light' && state.pointer.active) {
+            const dLight = Math.hypot(state.pointer.x - org.x, state.pointer.y - org.y);
+            if (dLight < 220) {
+              if (org.species === 'euglena' || org.species === 'daphnia') {
+                // Positive phototaxis!
+                targetX = state.pointer.x;
+                targetY = state.pointer.y;
+                org.senseState = '☀️ 眼點正向趨光性：游向光源！';
+                if (state.tick % 35 === 0) state.counts.sensitivityEvents++;
+              } else if (org.species === 'amoeba') {
+                // Negative phototaxis! Amoeba avoids strong light
+                targetX = org.x - (state.pointer.x - org.x);
+                targetY = org.y - (state.pointer.y - org.y);
+                org.senseState = '🌑 負趨光感應：偽足避開強光刺激';
+                if (state.tick % 35 === 0) state.counts.sensitivityEvents++;
+              }
+            }
+          }
+
+          // 2) Euglena natural upward phototaxis when sunlight is high
+          if (!targetX && org.species === 'euglena' && state.sunlight > 45) {
+            if (org.y > surfaceY + (bottomY - surfaceY) * 0.45) {
+              targetX = org.x + Math.sin(org.phase) * 40;
+              targetY = surfaceY + 45;
+              org.senseState = '☀️ 感應上方陽光，鞭毛擺動游向透光層';
+            } else if (org.senseTimer <= 0) {
+              org.senseState = '☀️ 葉綠體於透光層進行光合作用';
+            }
+          }
+
+          // 3) Low Oxygen Surface Gasping for Fish & Paramecium
+          if (!targetX && state.dissolvedO2 < 32 && (org.species === 'fish' || org.species === 'paramecium')) {
+            targetX = org.x + rand(-30, 30);
+            targetY = surfaceY + 22;
+            org.senseState = '🫧 感應水中缺氧！游向水面呼吸空氣';
+          }
+
+          // 4) Chemotaxis toward nearest Food Particle
+          if (!targetX && org.species !== 'euglena') {
+            let nearestFood = null;
+            let minDist = org.species === 'fish' ? 190 : 120;
+            for (let j = 0; j < state.particles.length; j++) {
+              const p = state.particles[j];
+              if (p.type === 'food') {
+                const d = Math.hypot(p.x - org.x, p.y - org.y);
+                if (d < minDist) {
+                  minDist = d;
+                  nearestFood = p;
+                }
+              }
+            }
+            if (nearestFood) {
+              targetX = nearestFood.x;
+              targetY = nearestFood.y;
+              speedBoost = 1.25;
+              org.senseState = '🧪 化學感應：偵測並趨向水中養分微粒';
+
+              // Eat food if close enough
+              if (minDist < org.size * 0.85 + 6) {
+                const idx = state.particles.indexOf(nearestFood);
+                if (idx !== -1) state.particles.splice(idx, 1);
+                org.energy = Math.min(100, org.energy + 16);
+                org.maturity = Math.min(1.0, org.maturity + 0.08);
+                org.reproProgress += 16;
+                org.senseState = '🍽️ 攝食養分並進行細胞內/消化道代謝';
+                org.senseTimer = 45;
+                state.counts.sensitivityEvents++;
+                if (state.showMetabolismParticles) {
+                  addFloatingLabel(org.x, org.y - 12, '+ATP 養分代謝', '#34d399');
+                }
+              }
+            } else if (org.senseTimer <= 0) {
+              org.senseState = '自由運動巡游中';
+            }
+          }
+
+          // Apply Steering toward target if any
+          const effectiveSpeed = info.speed * waterFactor * o2Factor * speedBoost;
+          if (targetX !== null && targetY !== null) {
+            const angleToTarget = Math.atan2(targetY - org.y, targetX - org.x);
+            org.vx += Math.cos(angleToTarget) * 0.16 * effectiveSpeed;
+            org.vy += Math.sin(angleToTarget) * 0.16 * effectiveSpeed;
+          } else {
+            // Natural wandering motion
+            org.vx += rand(-0.08, 0.08) * effectiveSpeed;
+            org.vy += rand(-0.06, 0.06) * effectiveSpeed;
+          }
+
+          // Daphnia characteristic hop motion
+          if (org.species === 'daphnia' && state.tick % 24 === 0) {
+            org.vy -= 0.9 * waterFactor;
+            org.vx += rand(-0.6, 0.6);
+          }
+
+          // Limit velocity
+          const currentVel = Math.hypot(org.vx, org.vy);
+          const maxVel = Math.max(0.25, effectiveSpeed * 1.45);
+          if (currentVel > maxVel) {
+            org.vx = (org.vx / currentVel) * maxVel;
+            org.vy = (org.vy / currentVel) * maxVel;
+          }
+
+          // Move organism
+          org.x += org.vx * state.speedMultiplier;
+          org.y += org.vy * state.speedMultiplier;
+
+          // Keep inside water boundaries
+          const pad = org.size * 0.7 + 8;
+          if (org.x < pad) { org.x = pad; org.vx = Math.abs(org.vx); }
+          if (org.x > w - pad) { org.x = w - pad; org.vx = -Math.abs(org.vx); }
+          if (org.y < surfaceY + pad) { org.y = surfaceY + pad; org.vy = Math.abs(org.vy) * 0.6; }
+          if (org.y > bottomY - pad * 0.6) { org.y = bottomY - pad * 0.6; org.vy = -Math.abs(org.vy) * 0.6; }
+
+          org.angle = Math.atan2(org.vy, org.vx);
+        }
+
+        // --- C. GROWTH (生長) ---
+        if (org.energy > 55 && state.nutrients > 20 && state.waterLevel > 25) {
+          const prevMaturity = org.maturity;
+          const growthRate = 0.0007 * (state.nutrients / 75) * waterFactor * state.speedMultiplier;
+          org.maturity = Math.min(1.0, org.maturity + growthRate);
+          org.size = info.baseSize + (info.maxSize - info.baseSize) * org.maturity;
+
+          if (!org.GrownAdultLogged && prevMaturity < 0.85 && org.maturity >= 0.85) {
+            org.GrownAdultLogged = true;
+            state.counts.growthEvents++;
+            addFloatingLabel(org.x, org.y - 14, '🌱 生長成熟！', '#38bdf8');
+            addEventLog('🌱', `${info.name} 發育成熟`, `吸收水中養分與水分，體型由幼體長大為成熟個體。`, 'text-sky-300');
+          }
+        }
+
+        // --- D. REPRODUCTION (生殖) ---
+        if (org.maturity >= 0.78 && org.energy > 65 && state.nutrients > 30 && state.waterLevel > 30 && state.dissolvedO2 > 30) {
+          const reproRate = 0.065 * (state.nutrients / 70) * (state.sunlight / 75 + 0.3) * state.speedMultiplier;
+          org.reproProgress += reproRate;
+          if (org.reproProgress >= 100) {
+            triggerReproduction(org, false);
+          }
+        }
+      }
+
+      updateHUDAndInspector();
+    }
+
+    // --- Drawing Helpers for Organisms ---
+    function drawOrganism(targetCtx, org, x, y, scale = 1, isMicroscope = false) {
+      const s = org.size * scale;
+      targetCtx.save();
+      targetCtx.translate(x, y);
+
+      // Draw Unicellular Microscope Ring in main tank so small single cells are easy to spot
+      if (!isMicroscope && org.category === 'unicellular') {
+        targetCtx.save();
+        targetCtx.strokeStyle = org.id === state.selectedOrganismId ? 'rgba(56, 189, 248, 0.9)' : 'rgba(232, 121, 249, 0.38)';
+        targetCtx.lineWidth = org.id === state.selectedOrganismId ? 2 : 1.2;
+        targetCtx.setLineDash([4, 3]);
+        targetCtx.beginPath();
+        targetCtx.arc(0, 0, s + 8, 0, Math.PI * 2);
+        targetCtx.stroke();
+        targetCtx.restore();
+      } else if (!isMicroscope && org.id === state.selectedOrganismId) {
+        targetCtx.save();
+        targetCtx.strokeStyle = 'rgba(56, 189, 248, 0.9)';
+        targetCtx.lineWidth = 2;
+        targetCtx.setLineDash([5, 3]);
+        targetCtx.beginPath();
+        targetCtx.arc(0, org.species === 'elodea' || org.species === 'hydra' ? -s * 0.45 : 0, s * 0.85 + 8, 0, Math.PI * 2);
+        targetCtx.stroke();
+        targetCtx.restore();
+      }
+
+      // Highlight Aura if user clicked one of the 5 Phenomenon Cards
+      if (!isMicroscope && state.highlightPhenomenon) {
+        let auraColor = null;
+        if (state.highlightPhenomenon === 'metabolism' && org.energy > 50) auraColor = 'rgba(52, 211, 153, 0.35)';
+        if (state.highlightPhenomenon === 'growth' && org.maturity < 0.95) auraColor = 'rgba(56, 189, 248, 0.4)';
+        if (state.highlightPhenomenon === 'sensitivity' && (org.senseTimer > 0 || org.senseState.includes('感應') || org.senseState.includes('趨'))) auraColor = 'rgba(251, 191, 36, 0.45)';
+        if (state.highlightPhenomenon === 'movement' && org.species !== 'elodea') auraColor = 'rgba(129, 140, 248, 0.35)';
+        if (state.highlightPhenomenon === 'reproduction' && (org.reproProgress > 60 || org.dividingTimer > 0)) auraColor = 'rgba(244, 114, 182, 0.5)';
+
+        if (auraColor) {
+          targetCtx.save();
+          targetCtx.fillStyle = auraColor;
+          targetCtx.beginPath();
+          targetCtx.arc(0, org.species === 'elodea' || org.species === 'hydra' ? -s * 0.4 : 0, s + 12, 0, Math.PI * 2);
+          targetCtx.fill();
+          targetCtx.restore();
+        }
+      }
+
+      // Binary fission visual pinch effect
+      if (org.dividingTimer > 0 && org.category === 'unicellular') {
+        const splitFactor = 1 + (45 - org.dividingTimer) * 0.012;
+        targetCtx.scale(splitFactor, 1 / splitFactor);
+      }
+
+      // Species-specific rendering
+      if (org.species === 'paramecium') {
+        targetCtx.rotate(org.angle);
+        // Cilia around slipper body
+        targetCtx.strokeStyle = 'rgba(240, 171, 252, 0.65)';
+        targetCtx.lineWidth = 1.2 * scale;
+        const ciliaCount = 24;
+        for (let c = 0; c < ciliaCount; c++) {
+          const a = (c / ciliaCount) * Math.PI * 2;
+          const rx = Math.cos(a) * s * 0.95;
+          const ry = Math.sin(a) * s * 0.48;
+          const wave = Math.sin(org.phase * 3 + c) * 3 * scale;
+          targetCtx.beginPath();
+          targetCtx.moveTo(rx, ry);
+          targetCtx.lineTo(rx * 1.22 + wave, ry * 1.22 + wave);
+          targetCtx.stroke();
+        }
+        // Slipper cell membrane
+        targetCtx.fillStyle = 'rgba(217, 70, 239, 0.38)';
+        targetCtx.strokeStyle = '#f0abfc';
+        targetCtx.lineWidth = 1.8 * scale;
+        targetCtx.beginPath();
+        targetCtx.ellipse(0, 0, s, s * 0.5, 0, 0, Math.PI * 2);
+        targetCtx.fill();
+        targetCtx.stroke();
+
+        // Macronucleus & Micronucleus
+        targetCtx.fillStyle = '#a21caf';
+        targetCtx.beginPath();
+        targetCtx.ellipse(-s * 0.1, 0, s * 0.28, s * 0.18, 0.2, 0, Math.PI * 2);
+        targetCtx.fill();
+
+        // Contractile vacuoles (star/circle) & food vacuoles
+        const vacPulse = (Math.sin(org.phase * 2) * 0.5 + 0.5) * s * 0.14 + 1.5;
+        targetCtx.fillStyle = '#bae6fd';
+        targetCtx.beginPath();
+        targetCtx.arc(-s * 0.55, 0, vacPulse, 0, Math.PI * 2);
+        targetCtx.arc(s * 0.55, 0, s * 0.16 - vacPulse * 0.5, 0, Math.PI * 2);
+        targetCtx.fill();
+
+        // Food vacuoles
+        targetCtx.fillStyle = '#4ade80';
+        targetCtx.beginPath();
+        targetCtx.arc(s * 0.2, s * 0.15, s * 0.1, 0, Math.PI * 2);
+        targetCtx.arc(-s * 0.25, -s * 0.18, s * 0.08, 0, Math.PI * 2);
+        targetCtx.fill();
+
+      } else if (org.species === 'euglena') {
+        targetCtx.rotate(org.angle);
+        // Flagellum at front (+x)
+        targetCtx.strokeStyle = '#a7f3d0';
+        targetCtx.lineWidth = 1.5 * scale;
+        targetCtx.beginPath();
+        targetCtx.moveTo(s, 0);
+        for (let f = 1; f <= 10; f++) {
+          const fx = s + f * (s * 0.09);
+          const fy = Math.sin(org.phase * 3.5 - f * 0.6) * (3.5 * scale);
+          targetCtx.lineTo(fx, fy);
+        }
+        targetCtx.stroke();
+
+        // Spindle body
+        targetCtx.fillStyle = 'rgba(16, 185, 129, 0.55)';
+        targetCtx.strokeStyle = '#6ee7b7';
+        targetCtx.lineWidth = 1.8 * scale;
+        targetCtx.beginPath();
+        targetCtx.ellipse(0, 0, s * 1.05, s * 0.42, 0, 0, Math.PI * 2);
+        targetCtx.fill();
+        targetCtx.stroke();
+
+        // Chloroplasts (green rods)
+        targetCtx.fillStyle = '#059669';
+        for (let k = -2; k <= 2; k++) {
+          targetCtx.beginPath();
+          targetCtx.ellipse(k * s * 0.22, (k % 2) * s * 0.12, s * 0.16, s * 0.07, 0.3, 0, Math.PI * 2);
+          targetCtx.fill();
+        }
+
+        // Nucleus
+        targetCtx.fillStyle = '#065f46';
+        targetCtx.beginPath();
+        targetCtx.arc(-s * 0.35, 0, s * 0.18, 0, Math.PI * 2);
+        targetCtx.fill();
+
+        // Red Eyespot (Stigma - senses light!)
+        targetCtx.fillStyle = '#ef4444';
+        targetCtx.beginPath();
+        targetCtx.arc(s * 0.62, -s * 0.12, s * 0.13, 0, Math.PI * 2);
+        targetCtx.fill();
+
+      } else if (org.species === 'amoeba') {
+        // Pseudopodia (false feet) dynamic blob
+        targetCtx.fillStyle = 'rgba(168, 85, 247, 0.42)';
+        targetCtx.strokeStyle = '#d8b4fe';
+        targetCtx.lineWidth = 2 * scale;
+        targetCtx.beginPath();
+        const lobes = 12;
+        for (let l = 0; l <= lobes; l++) {
+          const a = (l / lobes) * Math.PI * 2;
+          const rWave = s * (0.75 + 0.32 * Math.sin(org.phase * 1.4 + l * 1.7) + 0.15 * Math.cos(org.phase * 0.9 - l * 2.3));
+          const px = Math.cos(a) * rWave;
+          const py = Math.sin(a) * rWave;
+          if (l === 0) targetCtx.moveTo(px, py);
+          else targetCtx.lineTo(px, py);
+        }
+        targetCtx.closePath();
+        targetCtx.fill();
+        targetCtx.stroke();
+
+        // Nucleus & Food Vacuoles inside Amoeba
+        targetCtx.fillStyle = '#7e22ce';
+        targetCtx.beginPath();
+        targetCtx.arc(Math.sin(org.phase) * 2, Math.cos(org.phase) * 2, s * 0.26, 0, Math.PI * 2);
+        targetCtx.fill();
+
+        targetCtx.fillStyle = '#facc15';
+        targetCtx.beginPath();
+        targetCtx.arc(s * 0.28, -s * 0.2, s * 0.11, 0, Math.PI * 2);
+        targetCtx.arc(-s * 0.25, s * 0.22, s * 0.13, 0, Math.PI * 2);
+        targetCtx.fill();
+
+      } else if (org.species === 'elodea') {
+        // Multicellular aquatic plant (stem + whorls of leaves)
+        const height = isMicroscope ? s * 0.9 : s;
+        const startY = isMicroscope ? height * 0.45 : 0;
+        targetCtx.translate(0, startY);
+
+        targetCtx.strokeStyle = '#16a34a';
+        targetCtx.lineWidth = 3.5 * scale;
+        targetCtx.lineCap = 'round';
+        targetCtx.beginPath();
+        targetCtx.moveTo(0, 0);
+
+        const segments = 6;
+        for (let seg = 1; seg <= segments; seg++) {
+          const ratio = seg / segments;
+          const sway = Math.sin(org.phase * 0.8 + seg * 0.5) * (6 * scale * ratio) + org.angle * (height * ratio);
+          const sy = -ratio * height;
+          targetCtx.lineTo(sway, sy);
+        }
+        targetCtx.stroke();
+
+        // Draw leaf whorls along stem
+        for (let seg = 1; seg <= segments; seg++) {
+          const ratio = seg / segments;
+          const sway = Math.sin(org.phase * 0.8 + seg * 0.5) * (6 * scale * ratio) + org.angle * (height * ratio);
+          const sy = -ratio * height;
+          const leafLen = (13 - seg * 0.8) * scale;
+
+          targetCtx.fillStyle = state.sunlight > 25 ? '#22c55e' : '#ca8a04';
+          // Left leaf
+          targetCtx.beginPath();
+          targetCtx.ellipse(sway - leafLen * 0.7, sy - 2, leafLen, 3.2 * scale, -0.35, 0, Math.PI * 2);
+          targetCtx.fill();
+          // Right leaf
+          targetCtx.beginPath();
+          targetCtx.ellipse(sway + leafLen * 0.7, sy - 2, leafLen, 3.2 * scale, 0.35, 0, Math.PI * 2);
+          targetCtx.fill();
+        }
+
+      } else if (org.species === 'daphnia') {
+        // Multicellular Water Flea (translucent carapace, beating heart, compound eye, antennae)
+        const facing = org.vx >= 0 ? 1 : -1;
+        targetCtx.scale(facing, 1);
+
+        // Translucent carapace
+        targetCtx.fillStyle = 'rgba(251, 191, 36, 0.32)';
+        targetCtx.strokeStyle = '#fcd34d';
+        targetCtx.lineWidth = 1.6 * scale;
+        targetCtx.beginPath();
+        targetCtx.ellipse(0, 0, s * 0.75, s * 0.95, 0.15, 0, Math.PI * 2);
+        targetCtx.fill();
+        targetCtx.stroke();
+
+        // Compound Eye
+        targetCtx.fillStyle = '#0f172a';
+        targetCtx.beginPath();
+        targetCtx.arc(s * 0.35, -s * 0.55, s * 0.18, 0, Math.PI * 2);
+        targetCtx.fill();
+
+        // Beating Heart (dorsal side)
+        const heartSize = (Math.sin(org.phase * 5) * 0.3 + 0.8) * s * 0.15;
+        targetCtx.fillStyle = '#fb7185';
+        targetCtx.beginPath();
+        targetCtx.arc(-s * 0.22, -s * 0.35, heartSize, 0, Math.PI * 2);
+        targetCtx.fill();
+
+        // Digestive tract (greenish from algae)
+        targetCtx.strokeStyle = '#4ade80';
+        targetCtx.lineWidth = 2.5 * scale;
+        targetCtx.beginPath();
+        targetCtx.arc(0, 0, s * 0.35, -Math.PI * 0.4, Math.PI * 0.5);
+        targetCtx.stroke();
+
+        // Branched swimming antennae
+        const strokeAngle = Math.sin(org.phase * 3.5) * 0.5;
+        targetCtx.strokeStyle = '#fde68a';
+        targetCtx.lineWidth = 1.5 * scale;
+        targetCtx.beginPath();
+        targetCtx.moveTo(s * 0.4, -s * 0.4);
+        targetCtx.lineTo(s * 0.95, -s * 0.8 + strokeAngle * s);
+        targetCtx.moveTo(s * 0.4, -s * 0.4);
+        targetCtx.lineTo(s * 0.95, -s * 0.2 + strokeAngle * s);
+        targetCtx.stroke();
+
+      } else if (org.species === 'hydra') {
+        // Multicellular Hydra: tubular body + 6 waving tentacles + optional bud (出芽生殖)
+        const contractScale = 1 - org.contracted * 0.62;
+        const hLen = (isMicroscope ? s * 0.85 : s) * contractScale;
+        const baseOffset = isMicroscope ? hLen * 0.5 : 0;
+        targetCtx.translate(0, baseOffset);
+
+        const topX = Math.sin(org.phase * 0.7) * 5 * scale * contractScale;
+        const topY = -hLen;
+
+        // Stalk body
+        targetCtx.strokeStyle = '#2dd4bf';
+        targetCtx.lineWidth = (7 + org.contracted * 5) * scale;
+        targetCtx.lineCap = 'round';
+        targetCtx.beginPath();
+        targetCtx.moveTo(0, 0);
+        targetCtx.quadraticCurveTo(topX * 0.5, topY * 0.5, topX, topY);
+        targetCtx.stroke();
+
+        // If reproProgress > 55, draw a visible Bud on the side (出芽生殖)
+        if (org.reproProgress > 50) {
+          const budScale = (org.reproProgress - 50) / 50;
+          const budX = topX * 0.5 + 10 * scale * budScale;
+          const budY = topY * 0.45 - 8 * scale * budScale;
+          targetCtx.lineWidth = 4 * scale;
+          targetCtx.beginPath();
+          targetCtx.moveTo(topX * 0.45, topY * 0.45);
+          targetCtx.lineTo(budX, budY);
+          targetCtx.stroke();
+          // Mini tentacles on bud
+          targetCtx.lineWidth = 1.5 * scale;
+          for (let bt = -1; bt <= 1; bt++) {
+            targetCtx.beginPath();
+            targetCtx.moveTo(budX, budY);
+            targetCtx.lineTo(budX + (6 + bt * 3) * scale * budScale, budY - 7 * scale * budScale);
+            targetCtx.stroke();
+          }
+        }
+
+        // 6 Tentacles at oral end
+        targetCtx.lineWidth = 2.2 * scale;
+        targetCtx.strokeStyle = '#5eead4';
+        for (let t = 0; t < 6; t++) {
+          const spread = (t - 2.5) * 0.38;
+          const tLen = hLen * 0.65 * contractScale;
+          const tx = topX + Math.sin(spread + Math.sin(org.phase * 1.3 + t) * 0.35) * tLen;
+          const ty = topY - Math.cos(spread) * tLen + Math.cos(org.phase * 1.5 + t) * 3 * scale;
+          targetCtx.beginPath();
+          targetCtx.moveTo(topX, topY);
+          targetCtx.quadraticCurveTo(topX + (tx - topX) * 0.5, topY - tLen * 0.5, tx, ty);
+          targetCtx.stroke();
+        }
+
+      } else if (org.species === 'fish') {
+        // Multicellular Guppy Fish
+        const facing = Math.cos(org.angle) >= 0 ? 1 : -1;
+        const pitch = Math.sin(org.angle) * 0.35;
+        targetCtx.scale(facing, 1);
+        targetCtx.rotate(pitch);
+
+        const tailWag = Math.sin(org.phase * 3.8) * s * 0.26;
+
+        // Tail fin
+        targetCtx.fillStyle = `hsla(${org.colorHue}, 90%, 60%, 0.85)`;
+        targetCtx.beginPath();
+        targetCtx.moveTo(-s * 0.65, 0);
+        targetCtx.lineTo(-s * 1.25, -s * 0.48 + tailWag);
+        targetCtx.lineTo(-s * 1.1, tailWag * 0.4);
+        targetCtx.lineTo(-s * 1.25, s * 0.48 + tailWag);
+        targetCtx.closePath();
+        targetCtx.fill();
+
+        // Dorsal fin
+        targetCtx.fillStyle = `hsla(${org.colorHue + 20}, 85%, 65%, 0.75)`;
+        targetCtx.beginPath();
+        targetCtx.moveTo(-s * 0.3, -s * 0.35);
+        targetCtx.quadraticCurveTo(0, -s * 0.7, s * 0.2, -s * 0.32);
+        targetCtx.closePath();
+        targetCtx.fill();
+
+        // Streamlined body
+        const bodyGrad = targetCtx.createLinearGradient(-s * 0.7, 0, s * 0.8, 0);
+        bodyGrad.addColorStop(0, `hsl(${org.colorHue}, 88%, 56%)`);
+        bodyGrad.addColorStop(0.6, '#fbbf24');
+        bodyGrad.addColorStop(1, '#fde68a');
+        targetCtx.fillStyle = bodyGrad;
+        targetCtx.beginPath();
+        targetCtx.ellipse(0, 0, s * 0.78, s * 0.38, 0, 0, Math.PI * 2);
+        targetCtx.fill();
+
+        // Gill operculum (moves with breathing!)
+        const gillMove = Math.sin(org.phase * 3) * 1.2 * scale;
+        targetCtx.strokeStyle = 'rgba(180, 83, 9, 0.7)';
+        targetCtx.lineWidth = 1.6 * scale;
+        targetCtx.beginPath();
+        targetCtx.arc(s * 0.28 + gillMove, 0, s * 0.22, Math.PI * 0.65, Math.PI * 1.35);
+        targetCtx.stroke();
+
+        // Eye
+        targetCtx.fillStyle = '#ffffff';
+        targetCtx.beginPath();
+        targetCtx.arc(s * 0.48, -s * 0.08, s * 0.13, 0, Math.PI * 2);
+        targetCtx.fill();
+        targetCtx.fillStyle = '#0f172a';
+        targetCtx.beginPath();
+        targetCtx.arc(s * 0.51, -s * 0.08, s * 0.07, 0, Math.PI * 2);
+        targetCtx.fill();
+      }
+
+      targetCtx.restore();
+
+      // Draw species tag & mini status bar on main canvas if selected or hovered
+      if (!isMicroscope) {
+        const isSelected = org.id === state.selectedOrganismId;
+        if (isSelected) {
+          targetCtx.save();
+          targetCtx.font = 'bold 11px "Noto Sans TC", sans-serif';
+          const label = `${SPECIES_INFO[org.species].name.split(' ')[0]} (${Math.round(org.maturity * 100)}%)`;
+          const textW = targetCtx.measureText(label).width;
+          const boxY = (org.species === 'elodea' || org.species === 'hydra') ? y - s - 24 : y - s - 22;
+
+          targetCtx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+          targetCtx.strokeStyle = '#38bdf8';
+          targetCtx.lineWidth = 1;
+          targetCtx.beginPath();
+          targetCtx.roundRect(x - textW / 2 - 6, boxY - 12, textW + 12, 18, 5);
+          targetCtx.fill();
+          targetCtx.stroke();
+
+          targetCtx.fillStyle = '#e0f2fe';
+          targetCtx.textAlign = 'center';
+          targetCtx.fillText(label, x, boxY + 1);
+          targetCtx.restore();
+        }
+      }
+    }
+
+    // --- Render Main Aquarium Canvas ---
+    function renderAquarium() {
+      const w = aquariumCanvas.width;
+      const h = aquariumCanvas.height;
+      const surfaceY = getWaterSurfaceY(h);
+      const bottomY = h - 22;
+
+      ctx.clearRect(0, 0, w, h);
+
+      // 1. Sky / Air Zone above water surface
+      const skyBrightness = Math.round(15 + (state.sunlight / 100) * 45);
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, surfaceY);
+      skyGrad.addColorStop(0, `rgb(${skyBrightness}, ${skyBrightness + 18}, ${skyBrightness + 42})`);
+      skyGrad.addColorStop(1, `rgb(${skyBrightness + 15}, ${skyBrightness + 38}, ${skyBrightness + 68})`);
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, w, surfaceY);
+
+      // Draw Sun / Light Rays if Sunlight > 5%
+      if (state.sunlight > 5) {
+        const sunAlpha = (state.sunlight / 100) * 0.22;
+        ctx.save();
+        for (let r = 0; r < 6; r++) {
+          const rayX = (w * 0.12) + r * (w * 0.16) + Math.sin(state.tick * 0.01 + r) * 15;
+          const rayGrad = ctx.createLinearGradient(rayX, surfaceY, rayX + 70, bottomY);
+          rayGrad.addColorStop(0, `rgba(253, 224, 71, ${sunAlpha})`);
+          rayGrad.addColorStop(1, 'rgba(253, 224, 71, 0)');
+          ctx.fillStyle = rayGrad;
+          ctx.beginPath();
+          ctx.moveTo(rayX - 25, surfaceY);
+          ctx.lineTo(rayX + 35, surfaceY);
+          ctx.lineTo(rayX + 115, bottomY);
+          ctx.lineTo(rayX - 5, bottomY);
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      // 2. Water Body with Dynamic Color based on Sunlight, Nutrients & Water Quality
+      const waterGrad = ctx.createLinearGradient(0, surfaceY, 0, h);
+      const greenTint = Math.round((state.nutrients / 100) * 28 + (100 - state.waterQuality) * 0.4);
+      const lightBoost = Math.round((state.sunlight / 100) * 25);
+      waterGrad.addColorStop(0, `rgba(${12 + lightBoost}, ${58 + lightBoost + greenTint}, ${105 + lightBoost}, 0.92)`);
+      waterGrad.addColorStop(1, `rgba(6, ${24 + Math.round(greenTint * 0.5)}, 52, 0.98)`);
+      ctx.fillStyle = waterGrad;
+      ctx.fillRect(0, surfaceY, w, h - surfaceY);
+
+      // Water surface wave line
+      ctx.strokeStyle = 'rgba(125, 211, 252, 0.75)';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      for (let wx = 0; wx <= w; wx += 20) {
+        const wy = surfaceY + Math.sin(wx * 0.025 + state.tick * 0.06) * 3;
+        if (wx === 0) ctx.moveTo(wx, wy);
+        else ctx.lineTo(wx, wy);
+      }
+      ctx.stroke();
+
+      // 3. Spotlight Tool Beam (if active)
+      if (state.activeTool === 'light' && state.pointer.active) {
+        const radGrad = ctx.createRadialGradient(
+          state.pointer.x, state.pointer.y, 10,
+          state.pointer.x, state.pointer.y, 190
+        );
+        radGrad.addColorStop(0, 'rgba(254, 240, 138, 0.42)');
+        radGrad.addColorStop(0.5, 'rgba(253, 224, 71, 0.16)');
+        radGrad.addColorStop(1, 'rgba(253, 224, 71, 0)');
+        ctx.fillStyle = radGrad;
+        ctx.beginPath();
+        ctx.arc(state.pointer.x, state.pointer.y, 190, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // 4. Air Pump Diffuser Stone on bottom right
+      ctx.save();
+      ctx.fillStyle = '#334155';
+      ctx.strokeStyle = '#64748b';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(w - 58, bottomY - 12, 32, 12, 4);
+      ctx.fill();
+      ctx.stroke();
+      // Air tube going up
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.45)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(w - 28, bottomY - 6);
+      ctx.lineTo(w - 14, bottomY - 6);
+      ctx.lineTo(w - 14, 0);
+      ctx.stroke();
+      ctx.restore();
+
+      // 5. Sandy Substrate Floor
+      const sandGrad = ctx.createLinearGradient(0, bottomY, 0, h);
+      sandGrad.addColorStop(0, '#475569');
+      sandGrad.addColorStop(1, '#1e293b');
+      ctx.fillStyle = sandGrad;
+      ctx.fillRect(0, bottomY, w, h - bottomY);
+
+      // 6. Draw Particles (O2, CO2, Food Nutrients)
+      for (let i = 0; i < state.particles.length; i++) {
+        const p = state.particles[i];
+        ctx.save();
+        if (p.type === 'o2') {
+          ctx.strokeStyle = 'rgba(125, 211, 252, 0.85)';
+          ctx.fillStyle = 'rgba(186, 230, 253, 0.28)';
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        } else if (p.type === 'co2') {
+          if (state.showMetabolismParticles) {
+            ctx.fillStyle = 'rgba(192, 132, 252, 0.65)';
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        } else if (p.type === 'food') {
+          ctx.fillStyle = '#fbbf24';
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      // 7. Draw Organisms (filtered by viewFilter)
+      for (let i = 0; i < state.organisms.length; i++) {
+        const org = state.organisms[i];
+        if (state.viewFilter === 'unicellular' && org.category !== 'unicellular') {
+          ctx.save();
+          ctx.globalAlpha = 0.14;
+          drawOrganism(ctx, org, org.x, org.y, 1, false);
+          ctx.restore();
+        } else if (state.viewFilter === 'multicellular' && org.category !== 'multicellular') {
+          ctx.save();
+          ctx.globalAlpha = 0.14;
+          drawOrganism(ctx, org, org.x, org.y, 1, false);
+          ctx.restore();
+        } else {
+          drawOrganism(ctx, org, org.x, org.y, 1, false);
+        }
+      }
+
+      // 8. Draw Stimulus Waves
+      for (let i = 0; i < state.stimuliWaves.length; i++) {
+        const wave = state.stimuliWaves[i];
+        const alpha = 1 - wave.radius / wave.maxRadius;
+        ctx.save();
+        ctx.strokeStyle = wave.color.replace('ALPHA', alpha.toFixed(2));
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(wave.x, wave.y, wave.radius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // 9. Draw Floating Phenomenon Labels
+      for (let i = 0; i < state.floatingLabels.length; i++) {
+        const lbl = state.floatingLabels[i];
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, lbl.alpha);
+        ctx.font = 'bold 12px "Noto Sans TC", sans-serif';
+        ctx.fillStyle = lbl.color;
+        ctx.textAlign = 'center';
+        ctx.fillText(lbl.text, lbl.x, lbl.y);
+        ctx.restore();
+      }
+    }
+
+    // --- Render 400x Microscope Viewport ---
+    function renderMicroscope() {
+      const mw = microscopeCanvas.width;
+      const mh = microscopeCanvas.height;
+      mCtx.clearRect(0, 0, mw, mh);
+
+      // Microscope grid background
+      mCtx.fillStyle = '#040d1a';
+      mCtx.fillRect(0, 0, mw, mh);
+
+      mCtx.strokeStyle = 'rgba(56, 189, 248, 0.08)';
+      mCtx.lineWidth = 1;
+      for (let gx = 0; gx < mw; gx += 20) {
+        mCtx.beginPath(); mCtx.moveTo(gx, 0); mCtx.lineTo(gx, mh); mCtx.stroke();
+      }
+      for (let gy = 0; gy < mh; gy += 20) {
+        mCtx.beginPath(); mCtx.moveTo(0, gy); mCtx.lineTo(mw, gy); mCtx.stroke();
+      }
+
+      let selected = state.organisms.find(o => o.id === state.selectedOrganismId);
+      if (!selected && state.organisms.length > 0) {
+        selected = state.organisms[0];
+        state.selectedOrganismId = selected.id;
+      }
+      if (!selected) return;
+
+      // Determine zoom scale so organism fills microscope nicely
+      const zoomScale = selected.category === 'unicellular' ? 2.2 : (selected.species === 'elodea' ? 0.95 : 1.35);
+      drawOrganism(mCtx, selected, mw / 2, mh / 2, zoomScale, true);
+
+      // Circular vignette reticle
+      mCtx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
+      mCtx.lineWidth = 2;
+      mCtx.beginPath();
+      mCtx.arc(mw / 2, mh / 2, Math.min(mw, mh) * 0.45, 0, Math.PI * 2);
+      mCtx.stroke();
+    }
+
+    // --- Update UI Readouts, Counters & Inspector Panel ---
+    function updatePopulationCounters() {
+      const speciesKeys = Object.keys(SPECIES_INFO);
+      let uniCount = 0;
+      let multiCount = 0;
+
+      speciesKeys.forEach(sp => {
+        const count = state.organisms.filter(o => o.species === sp).length;
+        const badge = document.getElementById(`count-${sp}`);
+        if (badge) badge.textContent = count;
+        if (SPECIES_INFO[sp].category === 'unicellular') uniCount += count;
+        else multiCount += count;
+      });
+
+      document.getElementById('uniTotalCount').textContent = `${uniCount} 隻`;
+      document.getElementById('multiTotalCount').textContent = `${multiCount} 株/隻`;
+    }
+
+    function updateHUDAndInspector() {
+      // HUD Top-left
+      document.getElementById('hudO2').textContent = `${Math.round(state.dissolvedO2)}%`;
+      document.getElementById('hudCO2').textContent = `${Math.round(state.dissolvedCO2)}%`;
+      document.getElementById('hudWaterQuality').textContent = `${Math.round(state.waterQuality)}%`;
+
+      // Check critical survival elements warning
+      const alertBanner = document.getElementById('criticalAlertBanner');
+      const healthBadge = document.getElementById('ecosystemHealthBadge');
+      const missingElements = [];
+      if (state.sunlight < 20) missingElements.push('陽光不足');
+      if (state.dissolvedO2 < 30) missingElements.push('空氣/溶氧不足');
+      if (state.nutrients < 20) missingElements.push('養分缺乏');
+      if (state.waterLevel < 35) missingElements.push('水量乾涸');
+
+      if (missingElements.length > 0) {
+        alertBanner.classList.remove('hidden');
+        alertBanner.textContent = `⚠️ 生存危機：${missingElements.join('、')}！生物代謝與生長受阻`;
+        healthBadge.textContent = '環境失衡警告';
+        healthBadge.className = 'text-[11px] font-semibold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40';
+      } else {
+        alertBanner.classList.add('hidden');
+        healthBadge.textContent = '四要素充足・生態穩定';
+        healthBadge.className = 'text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+      }
+
+      // 5 Phenomena counters
+      document.getElementById('statMetabolism').textContent = state.dissolvedO2 > 35 && state.waterLevel > 35 ? '旺盛' : '受阻';
+      document.getElementById('statGrowth').textContent = `${state.counts.growthEvents} 次成熟`;
+      document.getElementById('statSensitivity').textContent = `${state.counts.sensitivityEvents} 次反應`;
+      document.getElementById('statMovement').textContent = state.waterLevel > 35 ? '活躍游動' : '空間受限';
+      document.getElementById('statReproduction').textContent = `${state.counts.reproductionEvents} 次繁衍`;
+
+      // Selected Organism Inspector
+      let selected = state.organisms.find(o => o.id === state.selectedOrganismId);
+      if (!selected && state.organisms.length > 0) {
+        selected = state.organisms[0];
+        state.selectedOrganismId = selected.id;
+      }
+      if (!selected) return;
+
+      const info = SPECIES_INFO[selected.species];
+      document.getElementById('inspectorName').textContent = info.name;
+      const cellBadge = document.getElementById('inspectorCellBadge');
+      cellBadge.textContent = info.badgeText;
+      if (selected.category === 'unicellular') {
+        cellBadge.className = 'text-[11px] font-semibold px-2 py-0.5 rounded-full bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30';
+      } else {
+        cellBadge.className = 'text-[11px] font-semibold px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30';
+      }
+
+      const energyPct = Math.round(selected.energy);
+      const growthPct = Math.round(selected.maturity * 100);
+      const reproPct = Math.round(selected.reproProgress);
+
+      document.getElementById('inspEnergyText').textContent = `${energyPct}%`;
+      document.getElementById('inspEnergyBar').style.width = `${energyPct}%`;
+
+      document.getElementById('inspGrowthText').textContent = `${growthPct}% (${growthPct >= 80 ? '成熟體' : '發育中幼體'})`;
+      document.getElementById('inspGrowthBar').style.width = `${growthPct}%`;
+
+      document.getElementById('inspReproText').textContent = `${reproPct}%`;
+      document.getElementById('inspReproBar').style.width = `${reproPct}%`;
+
+      document.getElementById('inspStructure').textContent = info.structure;
+      document.getElementById('inspMovement').textContent = info.movement;
+      document.getElementById('inspSensitivity').textContent = selected.senseState || info.sensitivity;
+      document.getElementById('inspMetaRepro').textContent = info.metaRepro;
+    }
+
+    // --- Canvas Interaction Handlers ---
+    function getCanvasCoords(e) {
+      const rect = aquariumCanvas.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      return {
+        x: (clientX - rect.left) * (aquariumCanvas.width / rect.width),
+        y: (clientY - rect.top) * (aquariumCanvas.height / rect.height)
+      };
+    }
+
+    function handleCanvasClickOrTap(x, y) {
+      const tool = state.activeTool;
+
+      if (tool === 'inspect') {
+        // Find closest organism
+        let closest = null;
+        let minDist = 65;
+        for (const org of state.organisms) {
+          const centerOffsetY = (org.species === 'elodea' || org.species === 'hydra') ? org.y - org.size * 0.45 : org.y;
+          const d = Math.hypot(org.x - x, centerOffsetY - y);
+          if (d < minDist) {
+            minDist = d;
+            closest = org;
+          }
+        }
+        if (closest) {
+          state.selectedOrganismId = closest.id;
+          sfx.playBubble(660);
+          addFloatingLabel(closest.x, closest.y - 18, `🔍 觀察：${SPECIES_INFO[closest.species].name.split(' ')[0]}`, '#38bdf8');
+          updateHUDAndInspector();
+        }
+      } else if (tool === 'feed') {
+        // Drop a cluster of food particles & boost nutrients slightly
+        for (let i = 0; i < 8; i++) {
+          spawnFoodParticle(x + rand(-22, 22), y + rand(-15, 15));
+        }
+        state.nutrients = clamp(state.nutrients + 4, 0, 100);
+        document.getElementById('nutrientSlider').value = state.nutrients;
+        document.getElementById('nutrientVal').textContent = `${Math.round(state.nutrients)}%`;
+        sfx.playBubble(480);
+        addFloatingLabel(x, y - 10, '🍞 投放養分微粒！', '#fbbf24');
+        addEventLog('🧪', '手動投放養分', '水中養分微粒增加，觀察草履蟲、變形蟲、水蚤與孔雀魚的趨化覓食反應！', 'text-emerald-300');
+      } else if (tool === 'poke') {
+        // Create stimulus wave: organisms flee or contract (Hydra contracts into a ball!)
+        state.stimuliWaves.push({
+          x,
+          y,
+          radius: 5,
+          maxRadius: 150,
+          color: 'rgba(244, 63, 94, ALPHA)'
+        });
+        sfx.playStimulus();
+        addFloatingLabel(x, y - 10, '⚡ 環境刺激（感應測試）', '#fb7185');
+
+        let reactedCount = 0;
+        for (const org of state.organisms) {
+          const d = Math.hypot(org.x - x, org.y - y);
+          if (d < 155) {
+            reactedCount++;
+            if (org.species === 'hydra') {
+              org.contracted = 1.0;
+              org.senseState = '⚡ 感應機械刺激！全身觸手瞬間收縮';
+              org.senseTimer = 80;
+            } else if (org.species !== 'elodea') {
+              const fleeAngle = Math.atan2(org.y - y, org.x - x);
+              const fleeSpeed = SPECIES_INFO[org.species].speed * 2.8;
+              org.vx = Math.cos(fleeAngle) * fleeSpeed;
+              org.vy = Math.sin(fleeAngle) * fleeSpeed;
+              org.senseState = '⚡ 感應外部刺激，迅速迴避逃離！';
+              org.senseTimer = 70;
+            }
+          }
+        }
+        if (reactedCount > 0) {
+          state.counts.sensitivityEvents += reactedCount;
+          addEventLog('📡', `生物感應與避敵反應 (${reactedCount} 個體)`, '受到點選刺激後，水螅瞬間收縮觸手，草履蟲與魚群迅速反向游離！', 'text-amber-300');
+        }
+      } else if (tool === 'divide') {
+        // Find closest organism and trigger immediate reproduction
+        let closest = null;
+        let minDist = 75;
+        for (const org of state.organisms) {
+          const centerOffsetY = (org.species === 'elodea' || org.species === 'hydra') ? org.y - org.size * 0.45 : org.y;
+          const d = Math.hypot(org.x - x, centerOffsetY - y);
+          if (d < minDist) {
+            minDist = d;
+            closest = org;
+          }
+        }
+        if (closest) {
+          closest.maturity = 1.0;
+          triggerReproduction(closest, true);
+          state.selectedOrganismId = closest.id;
+        } else {
+          addFloatingLabel(x, y, '請點擊任一生物以催化生殖', '#f472b6');
+        }
+      }
+    }
+
+    // --- Setup All UI Event Listeners ---
+    function bindUIEvents() {
+      // Canvas Resize
+      function resizeCanvases() {
+        const rect = aquariumCanvas.parentElement.getBoundingClientRect();
+        aquariumCanvas.width = rect.width;
+        aquariumCanvas.height = rect.height;
+
+        const mRect = microscopeCanvas.parentElement.getBoundingClientRect();
+        microscopeCanvas.width = mRect.width;
+        microscopeCanvas.height = mRect.height;
+      }
+      window.addEventListener('resize', resizeCanvases);
+      resizeCanvases();
+
+      // Pointer Events on Aquarium Canvas
+      aquariumCanvas.addEventListener('pointerdown', (e) => {
+        const coords = getCanvasCoords(e);
+        state.pointer.x = coords.x;
+        state.pointer.y = coords.y;
+        state.pointer.active = true;
+        state.pointer.down = true;
+        handleCanvasClickOrTap(coords.x, coords.y);
+      });
+
+      aquariumCanvas.addEventListener('pointermove', (e) => {
+        const coords = getCanvasCoords(e);
+        state.pointer.x = coords.x;
+        state.pointer.y = coords.y;
+        state.pointer.active = true;
+      });
+
+      aquariumCanvas.addEventListener('pointerleave', () => {
+        state.pointer.active = false;
+        state.pointer.down = false;
+      });
+
+      // Top Filter Tabs (All / Unicellular / Multicellular)
+      const viewBtns = [
+        { id: 'viewAllBtn', filter: 'all' },
+        { id: 'viewUniBtn', filter: 'unicellular' },
+        { id: 'viewMultiBtn', filter: 'multicellular' }
+      ];
+      viewBtns.forEach(item => {
+        document.getElementById(item.id).addEventListener('click', () => {
+          state.viewFilter = item.filter;
+          viewBtns.forEach(b => document.getElementById(b.id).classList.remove('active'));
+          document.getElementById(item.id).classList.add('active');
+
+          // Auto-select an organism matching the filter
+          if (item.filter !== 'all') {
+            const match = state.organisms.find(o => o.category === item.filter);
+            if (match) state.selectedOrganismId = match.id;
+          }
+          updateHUDAndInspector();
+        });
+      });
+
+      // Metabolism Particles Toggle
+      document.getElementById('toggleMetabolismParticlesBtn').addEventListener('click', () => {
+        state.showMetabolismParticles = !state.showMetabolismParticles;
+        document.getElementById('metabolismToggleText').textContent =
+          `代謝粒子：${state.showMetabolismParticles ? '顯示中' : '已隱藏'}`;
+      });
+
+      // Play / Pause
+      document.getElementById('playPauseBtn').addEventListener('click', () => {
+        state.running = !state.running;
+        document.getElementById('playPauseIcon').textContent = state.running ? '⏸️' : '▶️';
+        document.getElementById('playPauseText').textContent = state.running ? '暫停' : '繼續';
+      });
+
+      // Speed Multiplier
+      document.getElementById('speedBtn').addEventListener('click', (e) => {
+        state.speedMultiplier = state.speedMultiplier === 1 ? 2 : (state.speedMultiplier === 2 ? 0.5 : 1);
+        e.currentTarget.textContent = `${state.speedMultiplier}x 速度`;
+      });
+
+      // Mute Audio
+      document.getElementById('muteBtn').addEventListener('click', (e) => {
+        sfx.muted = !sfx.muted;
+        e.currentTarget.textContent = sfx.muted ? '🔇 靜音' : '🔊 音效';
+      });
+
+      // Reset Ecosystem
+      document.getElementById('resetBtn').addEventListener('click', () => {
+        applyPreset(85, 80, 75, 90, true);
+        initEcosystem();
+      });
+
+      // 4 Essential Elements Sliders
+      const sunlightSlider = document.getElementById('sunlightSlider');
+      sunlightSlider.addEventListener('input', (e) => {
+        state.sunlight = Number(e.target.value);
+        document.getElementById('sunlightVal').textContent = `${state.sunlight}%`;
+        const statusEl = document.getElementById('sunlightStatus');
+        if (state.sunlight > 60) { statusEl.textContent = '光照充足'; statusEl.className = 'text-amber-300'; }
+        else if (state.sunlight > 20) { statusEl.textContent = '弱光環境'; statusEl.className = 'text-slate-300'; }
+        else { statusEl.textContent = '黑暗無光（光合停止）'; statusEl.className = 'text-rose-400 font-semibold'; }
+      });
+
+      const airSlider = document.getElementById('airSlider');
+      airSlider.addEventListener('input', (e) => {
+        state.air = Number(e.target.value);
+        document.getElementById('airVal').textContent = `${state.air}%`;
+      });
+
+      document.getElementById('airPumpBtn').addEventListener('click', (e) => {
+        state.airPumpOn = !state.airPumpOn;
+        e.currentTarget.textContent = `打氣機：${state.airPumpOn ? '開' : '關'}`;
+        e.currentTarget.className = state.airPumpOn
+          ? 'px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/30 transition'
+          : 'px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30 transition';
+      });
+
+      const nutrientSlider = document.getElementById('nutrientSlider');
+      nutrientSlider.addEventListener('input', (e) => {
+        state.nutrients = Number(e.target.value);
+        document.getElementById('nutrientVal').textContent = `${state.nutrients}%`;
+      });
+
+      document.getElementById('feedBurstBtn').addEventListener('click', () => {
+        for (let i = 0; i < 12; i++) spawnFoodParticle();
+        state.nutrients = clamp(state.nutrients + 10, 0, 100);
+        nutrientSlider.value = state.nutrients;
+        document.getElementById('nutrientVal').textContent = `${state.nutrients}%`;
+        sfx.playBubble(500);
+        addEventLog('🧪', '補充水中養分', '投入大量有機養分與礦物質，促進生物代謝、生長與細胞分裂。', 'text-emerald-300');
+      });
+
+      const waterSlider = document.getElementById('waterSlider');
+      waterSlider.addEventListener('input', (e) => {
+        state.waterLevel = Number(e.target.value);
+        document.getElementById('waterVal').textContent = `${state.waterLevel}%`;
+      });
+
+      document.getElementById('cleanWaterBtn').addEventListener('click', () => {
+        state.waterLevel = 95;
+        state.waterQuality = 100;
+        waterSlider.value = 95;
+        document.getElementById('waterVal').textContent = '95%';
+        sfx.playBubble(620);
+        addEventLog('💧', '注入純淨新水', '水位與水質恢復至最佳狀態，提供生物代謝溶劑與充足活動空間。', 'text-blue-300');
+      });
+
+      // Scenario Presets
+      function applyPreset(sun, air, nut, water, pumpOn) {
+        state.sunlight = sun;
+        state.air = air;
+        state.nutrients = nut;
+        state.waterLevel = water;
+        state.airPumpOn = pumpOn;
+
+        sunlightSlider.value = sun;
+        sunlightSlider.dispatchEvent(new Event('input'));
+        airSlider.value = air;
+        airSlider.dispatchEvent(new Event('input'));
+        nutrientSlider.value = nut;
+        nutrientSlider.dispatchEvent(new Event('input'));
+        waterSlider.value = water;
+        waterSlider.dispatchEvent(new Event('input'));
+
+        const pumpBtn = document.getElementById('airPumpBtn');
+        pumpBtn.textContent = `打氣機：${pumpOn ? '開' : '關'}`;
+      }
+
+      document.getElementById('presetBalanced').addEventListener('click', () => {
+        applyPreset(85, 85, 75, 90, true);
+        addEventLog('🌿', '切換情境：理想平衡生態', '陽光、空氣、養分、水四大生存要素充足，單細胞與多細胞生物穩定生長繁衍。', 'text-emerald-300');
+      });
+
+      document.getElementById('presetNoSun').addEventListener('click', () => {
+        applyPreset(0, 70, 60, 85, true);
+        addEventLog('🌑', '切換情境：黑暗無光實驗', '關閉陽光！水蘊草與眼蟲無法進行光合作用產氧，眼蟲轉為吸收水中養分。', 'text-amber-300');
+      });
+
+      document.getElementById('presetNoAir').addEventListener('click', () => {
+        applyPreset(35, 5, 65, 85, false);
+        state.dissolvedO2 = 22;
+        addEventLog('🫧', '切換情境：缺氧窒息危機', '關閉打氣機與空氣供應！水中溶氧急劇下降，孔雀魚與草履蟲被迫游向水面呼吸。', 'text-cyan-300');
+      });
+
+      document.getElementById('presetDrought').addEventListener('click', () => {
+        applyPreset(95, 50, 40, 22, false);
+        addEventLog('🏜️', '切換情境：水池乾涸危機', '水量大幅流失！水生生物運動空間嚴重壓縮、水質惡化，代謝與生殖停滯。', 'text-rose-300');
+      });
+
+      document.getElementById('presetBoom').addEventListener('click', () => {
+        applyPreset(100, 95, 100, 95, true);
+        for (let i = 0; i < 18; i++) spawnFoodParticle();
+        addEventLog('🚀', '切換情境：養分與陽光充沛', '生存四要素最大化！觀察單細胞二分裂、水螅出芽與魚群快速生長繁殖。', 'text-indigo-300');
+      });
+
+      // Spawn Buttons
+      document.querySelectorAll('.spawn-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const sp = btn.getAttribute('data-spawn');
+          const newOrg = createOrganism(sp);
+          state.selectedOrganismId = newOrg.id;
+          sfx.playBubble(580);
+          updatePopulationCounters();
+          updateHUDAndInspector();
+          addFloatingLabel(newOrg.x, newOrg.y - 15, `+ 新增${SPECIES_INFO[sp].name.split(' ')[0]}`, '#38bdf8');
+        });
+      });
+
+      // Interactive Cursor Tools
+      document.querySelectorAll('.tool-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.activeTool = btn.getAttribute('data-tool');
+          document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+        });
+      });
+
+      // 5 Life Phenomena Highlight Cards
+      document.querySelectorAll('.phenomenon-card').forEach(card => {
+        card.addEventListener('click', () => {
+          const phenom = card.getAttribute('data-phenom');
+          if (state.highlightPhenomenon === phenom) {
+            state.highlightPhenomenon = null;
+            card.classList.remove('highlight');
+            document.getElementById('activePhenomenonHint').textContent = '目前顯示：全部生命現象';
+          } else {
+            state.highlightPhenomenon = phenom;
+            document.querySelectorAll('.phenomenon-card').forEach(c => c.classList.remove('highlight'));
+            card.classList.add('highlight');
+            const names = {
+              metabolism: '⚡ 代謝（呼吸、光合作用與能量轉換）',
+              growth: '🌱 生長（幼體發育與細胞體積增大）',
+              sensitivity: '📡 感應（趨光、趨化與避敵收縮反應）',
+              movement: '🏊 運動（纖毛、鞭毛、偽足與魚鰭游動）',
+              reproduction: '🧬 生殖（單細胞二分裂、水螅出芽與產卵）'
+            };
+            document.getElementById('activePhenomenonHint').textContent = `高光標示：${names[phenom]}`;
+          }
+        });
+      });
+
+      // Log vs Comparison Tabs
+      const tabLogBtn = document.getElementById('tabLogBtn');
+      const tabCompareBtn = document.getElementById('tabCompareBtn');
+      const logPanelView = document.getElementById('logPanelView');
+      const comparePanelView = document.getElementById('comparePanelView');
+
+      tabLogBtn.addEventListener('click', () => {
+        logPanelView.classList.remove('hidden');
+        comparePanelView.classList.add('hidden');
+        tabLogBtn.className = 'px-2 py-0.5 rounded bg-sky-600 text-white font-medium';
+        tabCompareBtn.className = 'px-2 py-0.5 rounded text-slate-400 hover:text-white';
+      });
+
+      tabCompareBtn.addEventListener('click', () => {
+        comparePanelView.classList.remove('hidden');
+        logPanelView.classList.add('hidden');
+        tabCompareBtn.className = 'px-2 py-0.5 rounded bg-sky-600 text-white font-medium';
+        tabLogBtn.className = 'px-2 py-0.5 rounded text-slate-400 hover:text-white';
+      });
+
+      // Random Organism Switch Button
+      document.getElementById('selectRandomBtn').addEventListener('click', () => {
+        if (state.organisms.length === 0) return;
+        const idx = state.organisms.findIndex(o => o.id === state.selectedOrganismId);
+        const nextOrg = state.organisms[(idx + 1) % state.organisms.length];
+        state.selectedOrganismId = nextOrg.id;
+        sfx.playBubble(640);
+        updateHUDAndInspector();
+      });
+    }
+
+    // --- Main Animation Loop ---
+    let animFrameId = null;
+    function loop() {
+      if (state.running) {
+        updateSimulation();
+      }
+      renderAquarium();
+      renderMicroscope();
+      animFrameId = requestAnimationFrame(loop);
+    }
+
+    window.addEventListener('load', () => {
+      bindUIEvents();
+      initEcosystem();
+      if (animFrameId) cancelAnimationFrame(animFrameId);
+      loop();
+    });
+  </script>
+</body>
+</html>

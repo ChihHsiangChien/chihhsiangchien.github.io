@@ -1,0 +1,1320 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>光合作用動態圖解模擬器 2.0</title>
+    <style>
+        :root {
+            --primary: #2e7d32;
+            --primary-dark: #1b5e20;
+            --primary-light: #e8f5e9;
+            --accent: #f57f17;
+            --bg: #f0f4f1;
+            --card: #ffffff;
+            --text: #263238;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', "Microsoft JhengHei", "PingFang TC", sans-serif;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        header {
+            background: linear-gradient(135deg, #1b5e20, #388e3c);
+            color: white;
+            text-align: center;
+            padding: 1rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+
+        header h1 {
+            font-size: 1.65rem;
+            margin-bottom: 0.25rem;
+            letter-spacing: 0.5px;
+        }
+
+        header p {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+
+        /* 導覽分頁 */
+        .tabs {
+            display: flex;
+            justify-content: center;
+            background-color: #c8e6c9;
+            padding: 0.5rem 1rem 0;
+            border-bottom: 3px solid var(--primary);
+            gap: 0.4rem;
+            flex-wrap: wrap;
+        }
+
+        .tab-btn {
+            padding: 0.75rem 1.5rem;
+            font-size: 1.05rem;
+            font-weight: bold;
+            border: none;
+            background: rgba(255,255,255,0.5);
+            color: var(--primary-dark);
+            cursor: pointer;
+            border-radius: 10px 10px 0 0;
+            transition: all 0.25s ease;
+        }
+
+        .tab-btn:hover {
+            background-color: rgba(255,255,255,0.85);
+        }
+
+        .tab-btn.active {
+            background-color: var(--primary);
+            color: white;
+            box-shadow: 0 -2px 6px rgba(0,0,0,0.1);
+        }
+
+        /* 主容器 */
+        .main-container {
+            display: flex;
+            flex: 1;
+            max-width: 1360px;
+            width: 100%;
+            margin: 1.2rem auto;
+            gap: 1.2rem;
+            padding: 0 1rem;
+        }
+
+        /* 左側畫布區 */
+        .canvas-section {
+            flex: 2.2;
+            background: var(--card);
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border: 1px solid #dce5dd;
+        }
+
+        /* 獨立頂部資訊橫幅 - 解決左上角文字遮擋問題 */
+        .canvas-topbar {
+            background: #f8fbf8;
+            border-bottom: 2px solid #e0ece1;
+            padding: 0.7rem 1.2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .topbar-title {
+            font-weight: bold;
+            font-size: 1.1rem;
+            color: var(--primary-dark);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .topbar-badge {
+            background: var(--primary-light);
+            color: var(--primary-dark);
+            border: 1px solid #a5d6a7;
+            padding: 0.2rem 0.7rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: bold;
+        }
+
+        .accounting-bar {
+            background: #fff8e1;
+            border: 1px solid #ffe082;
+            color: #e65100;
+            padding: 0.25rem 0.8rem;
+            border-radius: 6px;
+            font-size: 0.88rem;
+            font-weight: bold;
+        }
+
+        canvas {
+            width: 100%;
+            height: 520px;
+            display: block;
+            background-color: #ffffff;
+        }
+
+        /* 底部控制列 */
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.85rem 1.2rem;
+            background: #f1f8e9;
+            border-top: 1px solid #c8e6c9;
+            flex-wrap: wrap;
+            gap: 0.8rem;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .ctrl-btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            background-color: var(--primary);
+            color: white;
+            transition: 0.2s;
+            font-size: 0.9rem;
+        }
+
+        .ctrl-btn:hover { background-color: var(--primary-dark); }
+        .ctrl-btn.secondary { background-color: #607d8b; }
+        .ctrl-btn.secondary:hover { background-color: #455a64; }
+
+        .step-filters {
+            display: flex;
+            gap: 0.4rem;
+            flex-wrap: wrap;
+        }
+
+        .step-btn {
+            padding: 0.4rem 0.85rem;
+            border: 1.5px solid var(--primary);
+            background: white;
+            color: var(--primary);
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .step-btn:hover { background: var(--primary-light); }
+        .step-btn.active {
+            background: var(--primary);
+            color: white;
+        }
+
+        /* 右側資訊與定位區 */
+        .info-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            min-width: 320px;
+        }
+
+        .card-box {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 1.1rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.06);
+            border: 1px solid #dce5dd;
+        }
+
+        /* 場所定位雷達盒 */
+        .locator-header {
+            font-size: 0.95rem;
+            font-weight: bold;
+            color: var(--primary-dark);
+            margin-bottom: 0.6rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #locatorCanvas {
+            width: 100%;
+            height: 125px;
+            background: #f9fbf9;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+        }
+
+        /* 步驟解說列表 */
+        .process-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 0.65rem;
+            margin-top: 0.6rem;
+        }
+
+        .process-item {
+            padding: 0.75rem;
+            border-radius: 8px;
+            background: #fafafa;
+            border-left: 4px solid #bdbdbd;
+            transition: all 0.25s;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+
+        .process-item:hover {
+            transform: translateX(3px);
+            background: #f1f8e9;
+        }
+
+        .process-item.highlight {
+            background: #e8f5e9;
+            border-left-color: var(--primary);
+        }
+
+        .process-item strong {
+            color: var(--primary-dark);
+            display: block;
+            margin-bottom: 0.25rem;
+            font-size: 0.95rem;
+        }
+
+        .formula-box {
+            background: #e3f2fd;
+            border: 1px solid #90caf9;
+            color: #0d47a1;
+            padding: 0.65rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            margin-top: 0.7rem;
+            line-height: 1.4;
+        }
+
+        .legend-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+            font-size: 0.82rem;
+            margin-top: 0.6rem;
+            padding-top: 0.6rem;
+            border-top: 1px dashed #ccc;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            flex-shrink: 0;
+        }
+
+        @media (max-width: 1024px) {
+            .main-container { flex-direction: column; }
+            canvas { height: 460px; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>🌿 光合作用動態圖解模擬器 2.0</h1>
+        <p>全視角葉綠體定位 × 光反應電子傳遞 × 卡爾文循環碳數與能量轉變解析</p>
+    </header>
+
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('overview')">0. 葉綠體完整過程 (Overview)</button>
+        <button class="tab-btn" onclick="switchTab('light')">1. 光反應 (類囊體膜)</button>
+        <button class="tab-btn" onclick="switchTab('calvin')">2. 碳反應 / 卡爾文循環 (基質)</button>
+    </div>
+
+    <div class="main-container">
+        <!-- 左側：主模擬畫布 -->
+        <div class="canvas-section">
+            <!-- 獨立頂部資訊列，徹底避免左上角動畫遮擋文字 -->
+            <div class="canvas-topbar">
+                <div class="topbar-title">
+                    <span id="topbarTitle">葉綠體內的完整光合作用</span>
+                    <span class="topbar-badge" id="topbarLocation">場所：整個葉綠體</span>
+                </div>
+                <div class="accounting-bar" id="topbarFormula">
+                    總反應：6 CO₂ + 12 H₂O + 光能 ➔ C₆H₁₂O₆ (葡萄糖) + 6 O₂ + 6 H₂O
+                </div>
+            </div>
+
+            <canvas id="simCanvas" width="840" height="520"></canvas>
+
+            <div class="controls">
+                <div class="btn-group">
+                    <button class="ctrl-btn" id="playPauseBtn" onclick="togglePlay()">⏸ 暫停動畫</button>
+                    <button class="ctrl-btn secondary" onclick="resetSim()">🔄 重新開始</button>
+                </div>
+                <div class="step-filters" id="stepButtons"></div>
+            </div>
+        </div>
+
+        <!-- 右側：定位雷達與解說面板 -->
+        <div class="info-section">
+            <!-- 場所定位示意圖 -->
+            <div class="card-box">
+                <div class="locator-header">
+                    <span>🗺️ 目前反應發生地點 (葉綠體剖面定位)</span>
+                    <span id="locatorLabel" style="color:#e65100; font-size:0.85rem;">全區檢視</span>
+                </div>
+                <canvas id="locatorCanvas" width="340" height="125"></canvas>
+            </div>
+
+            <!-- 步驟與物質轉變解說 -->
+            <div class="card-box" id="infoPanel" style="flex:1; display:flex; flex-direction:column;">
+                <!-- 由 JS 動態注入 -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+        const locCanvas = document.getElementById('locatorCanvas');
+        const locCtx = locCanvas.getContext('2d');
+
+        let currentTab = 'overview'; // 'overview', 'light', 'calvin'
+        let isPlaying = true;
+        let highlightStep = 0; // 0 = 全部
+        let tick = 0;
+        let particles = [];
+
+        // 教學資料庫
+        const tabConfig = {
+            overview: {
+                title: "0. 光合作用完整過程總覽",
+                location: "📍 場所：葉綠體 (Chloroplast)",
+                locatorText: "類囊體 + 基質協同運作",
+                formula: "總反應：光反應提供能量載體 (ATP/NADPH)，驅動基質中的碳反應固定 CO₂",
+                steps: [
+                    { id: 1, title: "光反應階段（左側：類囊體）", detail: "葉綠素吸收光能，將水 (H₂O) 分解，釋出氧氣 (O₂)，並將光能轉化為化學能儲存在 ATP 與 NADPH 中。" },
+                    { id: 2, title: "能量載體循環（中間穿梭通道）", detail: "光反應產生的 ATP 與 NADPH 進入基質供碳反應使用；耗盡能量的 ADP+Pi 與 NADP⁺ 則返回類囊體重新充能。" },
+                    { id: 3, title: "碳反應階段（右側：葉綠體基質）", detail: "利用 ATP 的能量與 NADPH 的還原力，將外界進入的二氧化碳 (CO₂) 固定並還原成 G3P，進而合成葡萄糖等醣類。" }
+                ],
+                extraBox: `<strong>💡 核心觀念：</strong>光反應與碳反應並非獨立事件，而是透過 <b>ATP/ADP</b> 與 <b>NADPH/NADP⁺</b> 這兩組「能量與電子接駁車」緊密耦合在一起。`,
+                legends: [
+                    { color: '#ffeb3b', text: '光子 / 光能' },
+                    { color: '#ffd600', text: 'ATP (高能載體)' },
+                    { color: '#29b6f6', text: 'NADPH (還原力載體)' },
+                    { color: '#66bb6a', text: 'G3P / 葡萄糖產物' }
+                ]
+            },
+            light: {
+                title: "1. 光反應 (Light Reactions)",
+                location: "📍 場所：類囊體膜 (Thylakoid Membrane)",
+                locatorText: "高亮區域：類囊體膜",
+                formula: "產物：ATP (能量)、NADPH (還原力)、O₂ (副產物)",
+                steps: [
+                    { id: 1, title: "水分解與釋氧 (光系統 II)", detail: "PS II 吸收光能激發電子，促成水分子 (H₂O) 分解，釋出電子 (e⁻)、氫離子 (H⁺) 以及氧氣 (O₂)。" },
+                    { id: 2, title: "電子傳遞與 ATP 合成", detail: "電子經傳遞鏈 (PQ→Cyt b₆f→PC) 移動，將基質的 H⁺ 泵入類囊體腔建立高濃度梯度；H⁺ 流經 ATP 合酶時驅動合成 ATP。" },
+                    { id: 3, title: "NADPH 的形成 (光系統 I)", detail: "電子到達 PS I 再次受光激發，經 Fd 傳給 FNR 酵素，將基質中的 NADP⁺ 與 H⁺ 結合形成高還原力的 NADPH。" }
+                ],
+                extraBox: `<strong>⚡ 物質與能量轉變：</strong><br>光能 ➔ 電子的動能 ➔ 類囊體腔 H⁺ 濃度梯度位能 ➔ <b>ATP 與 NADPH 的化學能</b>。`,
+                legends: [
+                    { color: '#00e5ff', text: '高能電子 (e⁻)' },
+                    { color: '#ff5252', text: '氫離子 (H⁺)' },
+                    { color: '#ffd600', text: 'ATP (合成於基質側)' },
+                    { color: '#29b6f6', text: 'NADPH (合成於基質側)' }
+                ]
+            },
+            calvin: {
+                title: "2. 碳反應 / 卡爾文循環",
+                location: "📍 場所：葉綠體基質 (Stroma)",
+                locatorText: "高亮區域：葉綠體基質",
+                formula: "碳數守恆 (以 3 CO₂ 計)：3×5C (RuBP) + 3×1C (CO₂) ➔ 6×3C (G3P) ➔ 1×3C 輸出 + 5×3C 重組為 3×5C",
+                steps: [
+                    { id: 1, title: "① 碳固定：5C + 1C ➔ 兩分子 3C", detail: "由 Rubisco 催化，3 個五碳 RuBP (共15C) 與 3 個 CO₂ (共3C) 結合，形成極不穩定的六碳中間物，隨即裂解為 6 個三碳的 3-PGA (共18C)。" },
+                    { id: 2, title: "② 還原：低能酸 (3-PGA) ➔ 高能糖 (G3P)", detail: "【物質轉變關鍵】每個 3-PGA 先接收 ATP 的磷酸基變成 1,3-BPG，再接收 NADPH 的高能電子 (e⁻) 還原成高能量的三碳醣 G3P (共6個，18C)。" },
+                    { id: 3, title: "③ 分流與再生：5 個 3C (15C) ➔ 3 個 5C (15C)", detail: "6 個 G3P 中，只有 1 個 G3P (3C) 離開循環作為產物；剩下的 5 個 G3P (共15C) 消耗 3 個 ATP，透過複雜碳骨架重組，變回 3 個五碳 RuBP (共15C) 繼續循環！" }
+                ],
+                extraBox: `<strong>🧮 為什麼要看「3 個 CO₂」？</strong><br>因為產物 G3P 有 3 個碳！必須固定 3 個 CO₂ (3C)，才能讓總碳數從 15C 變成 18C，淨賺 1 個 G3P (3C) 輸出，並留下 15C 完美還原成 3 個五碳 RuBP (3×5C=15C)。`,
+                legends: [
+                    { color: '#37474f', text: '碳原子 (● 數量代表碳數)' },
+                    { color: '#ffca28', text: '磷酸基團 (P)' },
+                    { color: '#00e5ff', text: '高能電子注入 (還原力)' },
+                    { color: '#43a047', text: 'G3P (高能三碳醣)' }
+                ]
+            }
+        };
+
+        function switchTab(tab) {
+            currentTab = tab;
+            highlightStep = 0;
+            tick = 0;
+            particles = [];
+            
+            const tabOrder = ['overview', 'light', 'calvin'];
+            document.querySelectorAll('.tab-btn').forEach((btn, idx) => {
+                btn.classList.toggle('active', tabOrder[idx] === tab);
+            });
+
+            updateUI();
+        }
+
+        function setStep(step) {
+            highlightStep = step;
+            updateUI();
+        }
+
+        function togglePlay() {
+            isPlaying = !isPlaying;
+            document.getElementById('playPauseBtn').innerHTML = isPlaying ? '⏸ 暫停動畫' : '▶ 繼續播放';
+        }
+
+        function resetSim() {
+            tick = 0;
+            particles = [];
+            highlightStep = 0;
+            updateUI();
+        }
+
+        function updateUI() {
+            const cfg = tabConfig[currentTab];
+            document.getElementById('topbarTitle').textContent = cfg.title;
+            document.getElementById('topbarLocation').textContent = cfg.location;
+            document.getElementById('topbarFormula').textContent = cfg.formula;
+            document.getElementById('locatorLabel').textContent = cfg.locatorText;
+
+            // 步驟過濾按鈕
+            const stepBtnContainer = document.getElementById('stepButtons');
+            let btns = `<button class="step-btn ${highlightStep === 0 ? 'active' : ''}" onclick="setStep(0)">全部顯示</button>`;
+            cfg.steps.forEach(s => {
+                const shortName = s.title.split('：')[0];
+                btns += `<button class="step-btn ${highlightStep === s.id ? 'active' : ''}" onclick="setStep(${s.id})">${shortName}</button>`;
+            });
+            stepBtnContainer.innerHTML = btns;
+
+            // 右側資訊欄
+            const infoPanel = document.getElementById('infoPanel');
+            let stepsHtml = cfg.steps.map(s => `
+                <li class="process-item ${highlightStep === 0 || highlightStep === s.id ? 'highlight' : ''}" onclick="setStep(${s.id})">
+                    <strong>${s.title}</strong>
+                    <span>${s.detail}</span>
+                </li>
+            `).join('');
+
+            let legendsHtml = cfg.legends.map(l => `
+                <div class="legend-item">
+                    <span class="dot" style="background:${l.color}; border:1px solid rgba(0,0,0,0.2);"></span>
+                    <span>${l.text}</span>
+                </div>
+            `).join('');
+
+            infoPanel.innerHTML = `
+                <h3 style="color:var(--primary-dark); font-size:1.05rem;">🔍 階段過程解析（點擊可聚焦動畫）</h3>
+                <ul class="process-list">${stepsHtml}</ul>
+                <div class="formula-box">${cfg.extraBox}</div>
+                <div class="legend-grid" style="margin-top:auto;">${legendsHtml}</div>
+            `;
+        }
+
+        // ==================== 通用繪圖工具 ====================
+        function lerp(a, b, t) { return a + (b - a) * t; }
+
+        function drawRoundRect(ctx, x, y, w, h, r, fill, stroke, lineWidth = 2) {
+            ctx.beginPath();
+            ctx.roundRect(x, y, w, h, r);
+            if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+            if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lineWidth; ctx.stroke(); }
+        }
+
+        function drawPill(ctx, x, y, text, bg, fg = '#000', border = '#fff', scale = 1) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+            ctx.font = 'bold 12px "Segoe UI", sans-serif';
+            const w = Math.max(ctx.measureText(text).width + 16, 32);
+            const h = 22;
+            ctx.shadowColor = 'rgba(0,0,0,0.12)';
+            ctx.shadowBlur = 4;
+            ctx.shadowOffsetY = 2;
+            drawRoundRect(ctx, -w/2, -h/2, w, h, 11, bg, border, 1.5);
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetY = 0;
+            ctx.fillStyle = fg;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, 0, 1);
+            ctx.restore();
+        }
+
+        function getPointOnPath(path, progress) {
+            const total = path.length - 1;
+            const scaled = Math.max(0, Math.min(0.9999, progress)) * total;
+            const idx = Math.floor(scaled);
+            const t = scaled - idx;
+            return {
+                x: lerp(path[idx].x, path[idx+1].x, t),
+                y: lerp(path[idx].y, path[idx+1].y, t)
+            };
+        }
+
+        // ==================== 右上角：葉綠體場所定位雷達 (Mini-Map) ====================
+        function drawLocatorMap() {
+            locCtx.clearRect(0, 0, locCanvas.width, locCanvas.height);
+            const pulse = (Math.sin(tick * 0.08) + 1) / 2; // 0 ~ 1 呼吸燈效果
+
+            const cx = 170, cy = 62;
+
+            // 外膜與內膜
+            locCtx.beginPath();
+            locCtx.ellipse(cx, cy, 145, 50, 0, 0, Math.PI * 2);
+            locCtx.fillStyle = '#c8e6c9';
+            locCtx.fill();
+            locCtx.lineWidth = 3;
+            locCtx.strokeStyle = '#2e7d32';
+            locCtx.stroke();
+
+            // 基質 (Stroma)
+            locCtx.beginPath();
+            locCtx.ellipse(cx, cy, 136, 42, 0, 0, Math.PI * 2);
+            if (currentTab === 'calvin') {
+                locCtx.fillStyle = `rgba(255, 241, 118, ${0.45 + pulse * 0.45})`;
+                locCtx.strokeStyle = '#fbc02d';
+                locCtx.lineWidth = 2.5;
+            } else {
+                locCtx.fillStyle = '#e8f5e9';
+                locCtx.strokeStyle = '#66bb6a';
+                locCtx.lineWidth = 1.5;
+            }
+            locCtx.fill();
+            locCtx.stroke();
+
+            // 繪製三疊類囊體 (Grana)
+            const stacks = [85, 145, 205];
+            stacks.forEach((sx, sIdx) => {
+                // 基質片層連接線
+                if (sIdx < stacks.length - 1) {
+                    locCtx.strokeStyle = '#388e3c';
+                    locCtx.lineWidth = 3;
+                    locCtx.beginPath();
+                    locCtx.moveTo(sx + 18, cy);
+                    locCtx.lineTo(stacks[sIdx+1] - 18, cy);
+                    locCtx.stroke();
+                }
+
+                for (let i = -2; i <= 2; i++) {
+                    const sy = cy + i * 11;
+                    const isLightActive = (currentTab === 'light' || currentTab === 'overview');
+                    const fillCol = currentTab === 'light' 
+                        ? `rgba(255, 193, 7, ${0.6 + pulse * 0.4})` 
+                        : '#43a047';
+                    const strokeCol = currentTab === 'light' ? '#d84315' : '#1b5e20';
+                    
+                    drawRoundRect(locCtx, sx - 20, sy - 4, 40, 8, 4, fillCol, strokeCol, 1.5);
+                }
+            });
+
+            // 定位標籤與指示框
+            locCtx.font = 'bold 11px sans-serif';
+            if (currentTab === 'overview') {
+                locCtx.strokeStyle = `rgba(21, 101, 192, ${0.5 + pulse * 0.5})`;
+                locCtx.lineWidth = 2;
+                locCtx.setLineDash([4, 3]);
+                locCtx.strokeRect(20, 8, 300, 108);
+                locCtx.setLineDash([]);
+                locCtx.fillStyle = '#0d47a1';
+                locCtx.fillText('🔍 全景視角：類囊體 + 基質', 235, 35);
+            } else if (currentTab === 'light') {
+                // 放大鏡框出類囊體膜
+                locCtx.strokeStyle = '#d84315';
+                locCtx.lineWidth = 2.5;
+                locCtx.strokeRect(120, 25, 50, 32);
+                locCtx.fillStyle = '#bf360c';
+                locCtx.fillText('👈 目前位置：', 235, 50);
+                locCtx.fillText('類囊體膜 (放大)', 235, 68);
+            } else if (currentTab === 'calvin') {
+                locCtx.fillStyle = '#e65100';
+                locCtx.fillText('👈 目前位置：', 235, 50);
+                locCtx.fillText('葉綠體基質 (液態區)', 230, 68);
+            }
+        }
+
+        // ==================== 分頁 0：葉綠體完整過程 (Overview) ====================
+        function drawOverview() {
+            // 繪製大型葉綠體背景輪廓
+            ctx.fillStyle = '#f4fbf4';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 葉綠體雙層膜外框
+            drawRoundRect(ctx, 25, 35, 790, 450, 90, '#c8e6c9', '#2e7d32', 4);
+            drawRoundRect(ctx, 38, 48, 764, 424, 80, '#e8f5e9', '#66bb6a', 2);
+
+            ctx.fillStyle = '#1b5e20';
+            ctx.font = 'bold 14px sans-serif';
+            ctx.fillText('葉綠體外膜與內膜', 65, 72);
+            ctx.fillStyle = '#33691e';
+            ctx.fillText('葉綠體基質 (Stroma)', 380, 72);
+
+            // --- 左側：光反應區 (類囊體疊層) ---
+            ctx.save();
+            if (highlightStep && highlightStep !== 1) ctx.globalAlpha = 0.25;
+            
+            drawRoundRect(ctx, 75, 110, 230, 310, 20, 'rgba(165, 214, 167, 0.35)', '#43a047', 2);
+            ctx.fillStyle = '#1b5e20';
+            ctx.font = 'bold 16px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('【1. 光反應】', 190, 140);
+            ctx.font = '13px sans-serif';
+            ctx.fillText('場所：類囊體膜', 190, 160);
+
+            // 畫葉綠餅 (Grana)
+            for (let i = 0; i < 5; i++) {
+                let y = 185 + i * 32;
+                drawRoundRect(ctx, 115, y, 150, 24, 12, '#2e7d32', '#1b5e20', 2);
+                ctx.fillStyle = '#81c784';
+                ctx.fillRect(130, y + 8, 120, 8);
+            }
+
+            // 光能、水輸入與氧氣輸出動畫
+            let p1 = (tick % 90) / 90;
+            // 光線
+            drawPill(ctx, lerp(40, 140, p1), lerp(40, 195, p1), '☀️ 光能', '#ffeb3b', '#e65100');
+            // 水進入
+            drawPill(ctx, 145, lerp(10, 180, p1), '💧 H₂O', '#b3e5fc', '#01579b');
+            // 氧氣釋出
+            drawPill(ctx, 190, lerp(340, 505, p1), '🫧 O₂ 釋出', '#eeeeee', '#212121');
+            ctx.restore();
+
+            // --- 右側：碳反應區 (卡爾文循環) ---
+            ctx.save();
+            if (highlightStep && highlightStep !== 3) ctx.globalAlpha = 0.25;
+
+            drawRoundRect(ctx, 520, 110, 250, 310, 20, 'rgba(255, 245, 157, 0.35)', '#fbc02d', 2);
+            ctx.fillStyle = '#e65100';
+            ctx.font = 'bold 16px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('【2. 碳反應 (卡爾文循環)】', 645, 140);
+            ctx.font = '13px sans-serif';
+            ctx.fillText('場所：葉綠體基質', 645, 160);
+
+            // 旋轉循環圈
+            const rcx = 645, rcy = 265, rr = 65;
+            ctx.strokeStyle = '#fbc02d';
+            ctx.lineWidth = 10;
+            ctx.beginPath();
+            ctx.arc(rcx, rcy, rr, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // 循環上的動態碳點
+            for (let k = 0; k < 3; k++) {
+                let ang = (tick * 0.025) + (k * Math.PI * 2 / 3);
+                let bx = rcx + Math.cos(ang) * rr;
+                let by = rcy + Math.sin(ang) * rr;
+                let label = k === 0 ? 'RuBP(5C)' : (k === 1 ? '3-PGA(3C)' : 'G3P(3C)');
+                drawPill(ctx, bx, by, label, '#fff9c4', '#33691e', '#fbc02d', 0.9);
+            }
+
+            // CO2 輸入與 醣類輸出
+            let p3 = ((tick + 45) % 90) / 90;
+            drawPill(ctx, 645, lerp(10, 190, p3), '☁️ CO₂ 進入', '#cfd8dc', '#263238');
+            drawPill(ctx, 645, lerp(340, 505, p3), '🍬 G3P ➔ 葡萄糖', '#66bb6a', '#fff');
+            ctx.restore();
+
+            // --- 中間：能量載體接駁通道 (ATP/NADPH 與 ADP/NADP+) ---
+            ctx.save();
+            if (highlightStep && highlightStep !== 2) ctx.globalAlpha = 0.25;
+
+            // 上方通道：高能載體向右
+            ctx.strokeStyle = '#ffb300';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([6, 4]);
+            ctx.beginPath();
+            ctx.moveTo(310, 210);
+            ctx.quadraticCurveTo(412, 165, 515, 210);
+            ctx.stroke();
+
+            // 下方通道：低能載體向左
+            ctx.strokeStyle = '#78909c';
+            ctx.beginPath();
+            ctx.moveTo(515, 320);
+            ctx.quadraticCurveTo(412, 365, 310, 320);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            ctx.textAlign = 'center';
+            ctx.font = 'bold 13px sans-serif';
+            ctx.fillStyle = '#e65100';
+            ctx.fillText('⚡ 提供化學能與還原力 ➔', 412, 175);
+            ctx.fillStyle = '#546e7a';
+            ctx.fillText('⬅ 耗盡後返回重新充能', 412, 368);
+
+            // 穿梭粒子
+            for (let m = 0; m < 2; m++) {
+                let t = ((tick * 0.008) + m * 0.5) % 1;
+                // 向右的 ATP & NADPH
+                let topX = lerp(315, 510, t);
+                let topY = 210 - Math.sin(t * Math.PI) * 22;
+                drawPill(ctx, topX, topY - 12, 'ATP', '#ffd600', '#000', '#fff', 0.95);
+                drawPill(ctx, topX, topY + 12, 'NADPH', '#29b6f6', '#fff', '#fff', 0.95);
+
+                // 向左的 ADP & NADP+
+                let botX = lerp(510, 315, t);
+                let botY = 320 + Math.sin(t * Math.PI) * 22;
+                drawPill(ctx, botX, botY - 12, 'ADP + Pi', '#cfd8dc', '#455a64', '#fff', 0.9);
+                drawPill(ctx, botX, botY + 12, 'NADP⁺', '#e1f5fe', '#0277bd', '#fff', 0.9);
+            }
+            ctx.restore();
+        }
+
+        // ==================== 分頁 1：光反應 (類囊體膜) ====================
+        function spawnLightParticles() {
+            if (tick % 40 === 0) {
+                particles.push({ type: 'photon', x: 95, y: 50, tx: 175, ty: 220, p: 0, speed: 0.025, step: 1 });
+                particles.push({ type: 'photon', x: 370, y: 50, tx: 455, ty: 220, p: 0, speed: 0.025, step: 3 });
+            }
+            if (tick % 75 === 0) {
+                particles.push({
+                    type: 'electron', p: 0, speed: 0.0045, step: 2,
+                    path: [
+                        {x: 175, y: 325}, {x: 175, y: 245}, {x: 255, y: 235},
+                        {x: 320, y: 250}, {x: 385, y: 275}, {x: 455, y: 245},
+                        {x: 525, y: 210}, {x: 580, y: 220}
+                    ]
+                });
+                particles.push({ type: 'o2', x: 175, y: 370, vx: -0.4, vy: 0.7, alpha: 1, step: 1 });
+                particles.push({ type: 'h_lumen', x: 160, y: 365, vx: 0.7, vy: 0.3, life: 220, step: 1 });
+                particles.push({ type: 'h_lumen', x: 190, y: 365, vx: 0.9, vy: -0.2, life: 220, step: 1 });
+            }
+            if (tick % 60 === 0) {
+                particles.push({
+                    type: 'h_pump', p: 0, speed: 0.015, step: 2,
+                    path: [{x: 320, y: 140}, {x: 320, y: 250}, {x: 320, y: 365}]
+                });
+            }
+            if (tick % 65 === 0) {
+                particles.push({
+                    type: 'h_atp', p: 0, speed: 0.015, step: 2,
+                    path: [{x: 710, y: 370}, {x: 710, y: 250}, {x: 710, y: 135}]
+                });
+            }
+            if (tick % 75 === 35) {
+                particles.push({
+                    type: 'nadph_form', p: 0, speed: 0.012, step: 3,
+                    path: [{x: 580, y: 185}, {x: 595, y: 120}, {x: 625, y: 85}]
+                });
+            }
+        }
+
+        function drawLightReactions() {
+            // 1. 三層背景區域
+            // 基質 (Stroma)
+            ctx.fillStyle = '#eef7ee';
+            ctx.fillRect(0, 0, canvas.width, 200);
+            // 類囊體膜 (Membrane)
+            ctx.fillStyle = '#fff8e1';
+            ctx.fillRect(0, 200, canvas.width, 100);
+            // 類囊體腔 (Lumen)
+            ctx.fillStyle = '#e0f2f1';
+            ctx.fillRect(0, 300, canvas.width, 220);
+
+            // 清楚且不遮擋的區域浮水印標籤 (置於右側或底部安全區)
+            ctx.font = 'bold 14px sans-serif';
+            ctx.fillStyle = '#2e7d32';
+            ctx.fillText('▲ 葉綠體基質側 (Stroma) — [H⁺ 濃度低，合成 ATP 與 NADPH 處]', 20, 26);
+            ctx.fillStyle = '#00695c';
+            ctx.fillText('▼ 類囊體腔側 (Thylakoid Lumen) — [H⁺ 累積高濃度，建立電化學梯度]', 20, 502);
+
+            // 磷脂雙分子層視覺
+            ctx.fillStyle = '#ffe082';
+            for (let x = 12; x < canvas.width; x += 16) {
+                if ((x > 135 && x < 215) || (x > 285 && x < 355) || (x > 415 && x < 495) || (x > 670 && x < 750)) continue;
+                ctx.beginPath(); ctx.arc(x, 206, 5, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(x, 294, 5, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = '#ffca28'; ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.moveTo(x-2, 211); ctx.lineTo(x-2, 289); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(x+2, 211); ctx.lineTo(x+2, 289); ctx.stroke();
+            }
+
+            // 步驟 1：PS II 與水分解
+            ctx.save();
+            if (highlightStep && highlightStep !== 1) ctx.globalAlpha = 0.3;
+            drawRoundRect(ctx, 140, 185, 70, 130, 15, '#43a047', '#1b5e20');
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 15px sans-serif'; ctx.textAlign = 'center';
+            ctx.fillText('PS II', 175, 245);
+            ctx.font = '11px sans-serif'; ctx.fillText('光系統 II', 175, 263);
+            
+            drawRoundRect(ctx, 85, 325, 180, 28, 6, 'rgba(255,255,255,0.85)', '#26a69a', 1.5);
+            ctx.fillStyle = '#004d40'; ctx.font = 'bold 12px sans-serif';
+            ctx.fillText('2 H₂O ➔ 4 H⁺ + O₂↑ + 4 e⁻', 175, 343);
+            ctx.restore();
+
+            // 步驟 2：電子傳遞鏈 (PQ, Cyt b6f, PC)
+            ctx.save();
+            if (highlightStep && highlightStep !== 2) ctx.globalAlpha = 0.3;
+            drawRoundRect(ctx, 235, 215, 40, 35, 8, '#8d6e63', '#4e342e');
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
+            ctx.fillText('PQ', 255, 237);
+
+            drawRoundRect(ctx, 290, 190, 60, 120, 12, '#7e57c2', '#4527a0');
+            ctx.fillStyle = '#fff'; ctx.fillText('Cyt b₆f', 320, 255);
+
+            drawRoundRect(ctx, 365, 260, 40, 30, 8, '#26a69a', '#00695c');
+            ctx.fillStyle = '#fff'; ctx.fillText('PC', 385, 280);
+            ctx.restore();
+
+            // 步驟 3：PS I 與 NADPH 合成
+            ctx.save();
+            if (highlightStep && highlightStep !== 3) ctx.globalAlpha = 0.3;
+            drawRoundRect(ctx, 420, 185, 70, 130, 15, '#66bb6a', '#2e7d32');
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 15px sans-serif'; ctx.textAlign = 'center';
+            ctx.fillText('PS I', 455, 245);
+            ctx.font = '11px sans-serif'; ctx.fillText('光系統 I', 455, 263);
+
+            drawRoundRect(ctx, 505, 195, 38, 30, 8, '#ffa726', '#e65100');
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif'; ctx.fillText('Fd', 524, 215);
+
+            drawRoundRect(ctx, 555, 185, 50, 45, 10, '#29b6f6', '#0277bd');
+            ctx.fillStyle = '#fff'; ctx.fillText('FNR', 580, 212);
+            ctx.fillStyle = '#01579b'; ctx.font = 'bold 12px sans-serif';
+            ctx.fillText('NADP⁺ + H⁺ ➔ NADPH', 580, 160);
+            ctx.restore();
+
+            // 步驟 2 後半：ATP 合酶
+            ctx.save();
+            if (highlightStep && highlightStep !== 2) ctx.globalAlpha = 0.3;
+            drawRoundRect(ctx, 685, 190, 50, 120, 10, '#ef5350', '#b71c1c');
+            ctx.beginPath();
+            ctx.arc(710, 165, 28, 0, Math.PI * 2);
+            ctx.fillStyle = '#ff7043'; ctx.fill();
+            ctx.strokeStyle = '#bf360c'; ctx.lineWidth = 2; ctx.stroke();
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
+            ctx.fillText('ATP合酶', 710, 169);
+            ctx.fillStyle = '#b71c1c';
+            ctx.fillText('ADP + Pi ➔ ATP', 710, 110);
+            ctx.restore();
+
+            // 粒子更新與繪製
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let pt = particles[i];
+                let isDimmed = (highlightStep !== 0 && highlightStep !== pt.step);
+                ctx.save();
+                if (isDimmed) ctx.globalAlpha = 0.15;
+
+                if (pt.type === 'photon') {
+                    if (isPlaying) pt.p += pt.speed;
+                    drawPill(ctx, lerp(pt.x, pt.tx, pt.p), lerp(pt.y, pt.ty, pt.p), '⚡光能', '#ffeb3b', '#e65100');
+                    if (pt.p >= 1) particles.splice(i, 1);
+                } 
+                else if (pt.type === 'electron') {
+                    if (isPlaying) pt.p += pt.speed;
+                    let pos = getPointOnPath(pt.path, pt.p);
+                    drawPill(ctx, pos.x, pos.y, 'e⁻', '#00e5ff', '#004d40');
+                    if (pt.p >= 1) particles.splice(i, 1);
+                }
+                else if (pt.type === 'o2') {
+                    if (isPlaying) { pt.x += pt.vx; pt.y += pt.vy; pt.alpha -= 0.008; }
+                    ctx.globalAlpha = Math.max(0, isDimmed ? 0.1 : pt.alpha);
+                    drawPill(ctx, pt.x, pt.y, 'O₂↑', '#e0e0e0', '#212121');
+                    if (pt.alpha <= 0) particles.splice(i, 1);
+                }
+                else if (pt.type === 'h_lumen') {
+                    if (isPlaying) {
+                        pt.x += pt.vx; pt.y += pt.vy; pt.life--;
+                        if (pt.y < 330 || pt.y > 465) pt.vy *= -1;
+                        if (pt.x < 90 || pt.x > 670) pt.vx *= -1;
+                    }
+                    drawPill(ctx, pt.x, pt.y, 'H⁺', '#ff5252', '#fff');
+                    if (pt.life <= 0) particles.splice(i, 1);
+                }
+                else if (pt.type === 'h_pump') {
+                    if (isPlaying) pt.p += pt.speed;
+                    let pos = getPointOnPath(pt.path, pt.p);
+                    drawPill(ctx, pos.x, pos.y, 'H⁺', '#ff5252', '#fff');
+                    if (pt.p >= 1) {
+                        particles.push({ type: 'h_lumen', x: pos.x, y: pos.y, vx: 1.2, vy: 0.4, life: 180, step: 2 });
+                        particles.splice(i, 1);
+                    }
+                }
+                else if (pt.type === 'h_atp') {
+                    if (isPlaying) pt.p += pt.speed;
+                    let pos = getPointOnPath(pt.path, pt.p);
+                    drawPill(ctx, pos.x, pos.y, 'H⁺', '#ff5252', '#fff');
+                    if (pt.p >= 1) {
+                        particles.push({ type: 'atp_out', x: 710, y: 125, vx: 0.4, vy: -0.7, life: 80, step: 2 });
+                        particles.splice(i, 1);
+                    }
+                }
+                else if (pt.type === 'atp_out') {
+                    if (isPlaying) { pt.x += pt.vx; pt.y += pt.vy; pt.life--; }
+                    drawPill(ctx, pt.x, pt.y, 'ATP', '#ffd600', '#000');
+                    if (pt.life <= 0) particles.splice(i, 1);
+                }
+                else if (pt.type === 'nadph_form') {
+                    if (isPlaying) pt.p += pt.speed;
+                    let pos = getPointOnPath(pt.path, pt.p);
+                    drawPill(ctx, pos.x, pos.y, 'NADPH', '#29b6f6', '#fff');
+                    if (pt.p >= 1) particles.splice(i, 1);
+                }
+                ctx.restore();
+            }
+        }
+
+        // ==================== 分頁 2：卡爾文循環 (深度升級：碳數與物質轉變視覺化) ====================
+        const ccX = 420, ccY = 250, ccR = 152;
+
+        /**
+         * 繪製具象化的「碳骨架分子卡片」
+         * @param x, y 座標
+         * @param count 碳原子數量 (如 1, 3, 5, 6)
+         * @param title 分子名稱與化學計量 (如 "6 × 3-PGA")
+         * @param subtitle 碳數算式說明 (如 "6 × 3C = 18C (低能酸)")
+         * @param borderCol 邊框顏色
+         * @param options 附加視覺標記：{ pCount: 磷酸基數量(1或2), hasElectron: 是否帶有高能電子光暈 }
+         */
+        function drawMoleculeComplex(x, y, count, title, subtitle, borderCol, options = {}) {
+            ctx.save();
+            const r = 6.5;
+            const spacing = 14;
+            const chainW = (count - 1) * spacing;
+            const boxW = Math.max(chainW + 46, 138);
+            const boxH = 54;
+
+            // 高能電子光暈 (代表已被 NADPH 還原為高能糖 G3P)
+            if (options.hasElectron) {
+                ctx.shadowColor = '#00e5ff';
+                ctx.shadowBlur = 14;
+            } else {
+                ctx.shadowColor = 'rgba(0,0,0,0.12)';
+                ctx.shadowBlur = 5;
+            }
+
+            drawRoundRect(ctx, x - boxW/2, y - boxH/2, boxW, boxH, 10, 'rgba(255,255,255,0.96)', borderCol, 2.5);
+            ctx.shadowBlur = 0;
+
+            // 繪製碳原子串珠 (●-●-●)
+            const startX = x - chainW / 2;
+            const cy = y - 6;
+
+            // 碳鍵連線
+            if (count > 1) {
+                ctx.strokeStyle = '#37474f';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(startX, cy);
+                ctx.lineTo(startX + chainW, cy);
+                ctx.stroke();
+            }
+
+            // 碳原子球
+            for (let i = 0; i < count; i++) {
+                const cx = startX + i * spacing;
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                ctx.fillStyle = options.hasElectron ? '#1b5e20' : '#37474f';
+                ctx.fill();
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1.2;
+                ctx.stroke();
+
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 8px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('C', cx, cy + 0.5);
+            }
+
+            // 繪製磷酸基團 (P) 在碳鏈兩端
+            if (options.pCount >= 1) {
+                drawPhosphate(startX + chainW + 13, cy - 2);
+            }
+            if (options.pCount >= 2) {
+                drawPhosphate(startX - 13, cy - 2);
+            }
+
+            // 繪製高能電子標記
+            if (options.hasElectron) {
+                ctx.fillStyle = '#00838f';
+                ctx.font = 'bold 9px sans-serif';
+                ctx.fillText('⚡e⁻', startX - 13, cy);
+            }
+
+            // 標題與碳數總計文字
+            ctx.fillStyle = '#111';
+            ctx.font = 'bold 12px "Segoe UI", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(title, x, y - 18);
+
+            ctx.fillStyle = borderCol;
+            ctx.font = 'bold 10.5px "Segoe UI", sans-serif';
+            ctx.fillText(subtitle, x, y + 15);
+
+            ctx.restore();
+        }
+
+        function drawPhosphate(px, py) {
+            ctx.beginPath();
+            ctx.arc(px, py, 5.5, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffd600';
+            ctx.fill();
+            ctx.strokeStyle = '#e65100';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            ctx.fillStyle = '#000';
+            ctx.font = 'bold 8px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('P', px, py + 0.5);
+        }
+
+        function drawCalvinCycle() {
+            ctx.fillStyle = '#f9fbf7';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 繪製三大階段圓弧軌道
+            ctx.lineWidth = 20;
+            ctx.lineCap = 'round';
+
+            // 軌道 1：碳固定 (頂部 -> 右上)
+            ctx.save();
+            if (highlightStep && highlightStep !== 1) ctx.globalAlpha = 0.18;
+            ctx.strokeStyle = '#c5e1a5';
+            ctx.beginPath();
+            ctx.arc(ccX, ccY, ccR, -Math.PI * 0.52, Math.PI * 0.12);
+            ctx.stroke();
+            ctx.restore();
+
+            // 軌道 2：還原反應 (右側 -> 底部)
+            ctx.save();
+            if (highlightStep && highlightStep !== 2) ctx.globalAlpha = 0.18;
+            ctx.strokeStyle = '#81d4fa';
+            ctx.beginPath();
+            ctx.arc(ccX, ccY, ccR, Math.PI * 0.16, Math.PI * 0.52);
+            ctx.stroke();
+            ctx.restore();
+
+            // 軌道 3：再生反應 (底部 -> 左側 -> 頂部)
+            ctx.save();
+            if (highlightStep && highlightStep !== 3) ctx.globalAlpha = 0.18;
+            ctx.strokeStyle = '#ffcc80';
+            ctx.beginPath();
+            ctx.arc(ccX, ccY, ccR, Math.PI * 0.56, Math.PI * 1.44);
+            ctx.stroke();
+            ctx.restore();
+
+            // 中心「碳數與物質轉變儀表板」
+            ctx.beginPath();
+            ctx.arc(ccX, ccY, 96, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+            ctx.strokeStyle = '#a5d6a7';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#1b5e20';
+            ctx.font = 'bold 14px sans-serif';
+            ctx.fillText('📊 碳數守恆帳本', ccX, ccY - 52);
+            
+            ctx.font = 'bold 11.5px sans-serif';
+            ctx.fillStyle = '#33691e';
+            ctx.fillText('起始：3 RuBP (15C)', ccX, ccY - 28);
+            ctx.fillStyle = '#0277bd';
+            ctx.fillText('投入：+ 3 CO₂ (3C)', ccX, ccY - 10);
+            ctx.strokeStyle = '#ccc'; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(ccX - 60, ccY + 2); ctx.lineTo(ccX + 60, ccY + 2); ctx.stroke();
+            ctx.fillStyle = '#d84315';
+            ctx.fillText('中間總計：6 分子 3C (18C)', ccX, ccY + 18);
+            ctx.fillStyle = '#2e7d32';
+            ctx.fillText('輸出：- 1 G3P (3C 造糖)', ccX, ccY + 38);
+            ctx.fillStyle = '#e65100';
+            ctx.fillText('再生：5 G3P (15C) ➔ 3 RuBP', ccX, ccY + 56);
+
+            // --- 靜態里程碑與酵素標記 ---
+            // 1. 頂部：Rubisco 碳固定站
+            ctx.save();
+            if (highlightStep && highlightStep !== 1) ctx.globalAlpha = 0.25;
+            drawRoundRect(ctx, ccX - 75, ccY - ccR - 36, 150, 28, 8, '#6a1b9a', '#4a148c');
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
+            ctx.fillText('酵素：Rubisco (碳固定)', ccX, ccY - ccR - 18);
+
+            ctx.fillStyle = '#4a148c'; ctx.font = 'bold 13px sans-serif';
+            ctx.fillText('① 碳固定階段', ccX + 185, ccY - 115);
+            ctx.font = '11.5px sans-serif';
+            ctx.fillText('3×5C + 3×1C ➔ 6×3C', ccX + 185, ccY - 97);
+            ctx.restore();
+
+            // 2. 右下：還原反應與能量注入站
+            ctx.save();
+            if (highlightStep && highlightStep !== 2) ctx.globalAlpha = 0.25;
+            ctx.fillStyle = '#01579b'; ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center';
+            ctx.fillText('② 還原階段 (酸 ➔ 糖)', ccX + 245, ccY + 45);
+            ctx.font = '11.5px sans-serif';
+            ctx.fillText('接上磷酸(P) + 注入高能電子(e⁻)', ccX + 245, ccY + 63);
+
+            // 繪製右側 ATP 與 NADPH 注入動畫
+            let ePhase = (tick % 90) / 90;
+            if (ePhase < 0.65) {
+                let t = ePhase / 0.65;
+                let ax = lerp(740, ccX + 150, t);
+                let ay = lerp(190, ccY + 15, t);
+                drawPill(ctx, ax, ay - 14, '6 ATP (提供 P)', '#ffd600', '#000');
+                drawPill(ctx, ax, ay + 14, '6 NADPH (提供 e⁻)', '#29b6f6', '#fff');
+            } else {
+                let t = (ePhase - 0.65) / 0.35;
+                let ax = lerp(ccX + 150, 745, t);
+                let ay = lerp(ccY + 15, 290, t);
+                drawPill(ctx, ax, ay - 14, '6 ADP', '#cfd8dc', '#455a64');
+                drawPill(ctx, ax, ay + 14, '6 NADP⁺ + 6 Pi', '#e1f5fe', '#0277bd');
+            }
+            ctx.restore();
+
+            // 3. 底部：G3P 分流站 (1個輸出，5個留下)
+            ctx.save();
+            if (highlightStep && highlightStep !== 2 && highlightStep !== 3) ctx.globalAlpha = 0.25;
+            drawRoundRect(ctx, ccX - 95, ccY + ccR - 14, 190, 26, 13, '#2e7d32', '#1b5e20');
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 11.5px sans-serif'; ctx.textAlign = 'center';
+            ctx.fillText('🔀 G3P 分流站 (18C ➔ 3C + 15C)', ccX, ccY + ccR + 2);
+
+            // 底部產物收集盒
+            drawRoundRect(ctx, ccX - 135, 468, 270, 44, 10, '#e8f5e9', '#43a047', 2);
+            ctx.fillStyle = '#1b5e20'; ctx.font = 'bold 13px sans-serif';
+            ctx.fillText('🍬 淨產物：1 × G3P (3C 三碳醣)', ccX, 486);
+            ctx.font = '11.5px sans-serif';
+            ctx.fillText('（每累積 2 個 G3P 即可合成 1 分子 6C 葡萄糖）', ccX, 504);
+            ctx.restore();
+
+            // 4. 左側：RuBP 再生與碳骨架重組站
+            ctx.save();
+            if (highlightStep && highlightStep !== 3) ctx.globalAlpha = 0.25;
+            ctx.fillStyle = '#e65100'; ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center';
+            ctx.fillText('③ 再生階段 (碳數重組)', 140, ccY - 35);
+            ctx.font = '11.5px sans-serif';
+            ctx.fillText('5個 3C (15C) ➔ 重組為 3個 5C (15C)', 140, ccY - 17);
+
+            // 左側 3 ATP 投入動畫
+            let rPhase = ((tick + 45) % 90) / 90;
+            if (rPhase < 0.65) {
+                let t = rPhase / 0.65;
+                let rx = lerp(95, ccX - 155, t);
+                let ry = lerp(270, ccY + 20, t);
+                drawPill(ctx, rx, ry, '3 ATP (能量投入)', '#ffd600', '#000');
+            } else {
+                let t = (rPhase - 0.65) / 0.35;
+                let rx = lerp(ccX - 155, 95, t);
+                let ry = lerp(ccY + 20, 170, t);
+                drawPill(ctx, rx, ry, '3 ADP + 3 Pi', '#cfd8dc', '#455a64');
+            }
+            ctx.restore();
+
+            // ==================== 繪製循環軌道上的動態碳分子群 ====================
+            // 我們使用 2 組對稱的相位推進，讓學生能清楚追蹤每一個分子的轉變，畫面也不會過度擁擠
+            for (let k = 0; k < 2; k++) {
+                let p = ((tick * 0.0016) + k * 0.5) % 1; // 0.0 ~ 1.0 繞圓一圈
+                let angle = p * Math.PI * 2 - Math.PI / 2; // 從正上方 (-90度, p=0) 順時針出發
+                let mx = ccX + Math.cos(angle) * ccR;
+                let my = ccY + Math.sin(angle) * ccR;
+
+                // 【階段 1：碳固定 (p: 0.00 ~ 0.32)】
+                if (p < 0.32) {
+                    ctx.save();
+                    if (highlightStep && highlightStep !== 1) ctx.globalAlpha = 0.2;
+
+                    if (p < 0.07) {
+                        // CO2 從上方飛入與 RuBP 結合
+                        let co2T = p / 0.07;
+                        drawMoleculeComplex(ccX, lerp(25, ccY - ccR + 20, co2T), 1, '3 × CO₂ 進入', '3 × 1C = 3C', '#607d8b');
+                        drawMoleculeComplex(mx, my, 5, '3 × RuBP', '3 × 5C = 15C', '#d84315', { pCount: 2 });
+                    } 
+                    else if (p < 0.14) {
+                        // 短暫形成 6C 不穩定中間物並準備裂解
+                        drawMoleculeComplex(mx, my, 6, '3 × 六碳中間物 (不穩定)', '3 × 6C = 18C (即將裂解!)', '#8e24aa', { pCount: 2 });
+                    } 
+                    else {
+                        // 裂解為 6 個 3-PGA (3C)
+                        drawMoleculeComplex(mx, my, 3, '6 × 3-PGA (磷酸甘油酸)', '6 × 3C = 18C (低能酸)', '#689f38', { pCount: 1 });
+                    }
+                    ctx.restore();
+                }
+
+                // 【階段 2：還原反應 (p: 0.32 ~ 0.52)】
+                else if (p < 0.52) {
+                    ctx.save();
+                    if (highlightStep && highlightStep !== 2) ctx.globalAlpha = 0.2;
+
+                    if (p < 0.42) {
+                        // 接收 ATP 的磷酸基 -> 1,3-BPG (雙磷酸甘油酸，兩端都有 P)
+                        drawMoleculeComplex(mx, my, 3, '6 × 1,3-BPG (雙磷酸)', '6 × 3C = 18C (已接上 ATP 的 P)', '#0288d1', { pCount: 2 });
+                    } else {
+                        // 接收 NADPH 的高能電子 -> 還原為 G3P (高能三碳醣，發藍綠光)
+                        drawMoleculeComplex(mx, my, 3, '6 × G3P (甘油醛-3-磷酸)', '6 × 3C = 18C (高能三碳醣⚡)', '#00897b', { pCount: 1, hasElectron: true });
+                    }
+                    ctx.restore();
+                }
+
+                // 【階段 3：分流與 RuBP 再生 (p: 0.52 ~ 1.00)】
+                else {
+                    // 當經過底部 (p: 0.52 ~ 0.68) 時，分流出 1 個 G3P (3C) 往下掉入產物盒！
+                    if (p >= 0.52 && p < 0.68) {
+                        ctx.save();
+                        if (highlightStep && highlightStep !== 2 && highlightStep !== 3) ctx.globalAlpha = 0.2;
+                        let dropT = (p - 0.52) / 0.16;
+                        let dropY = lerp(ccY + ccR + 15, 455, dropT);
+                        drawMoleculeComplex(ccX, dropY, 3, '1 × G3P 輸出!', '1 × 3C = 3C (拿去造糖)', '#2e7d32', { pCount: 1, hasElectron: true });
+                        ctx.restore();
+                    }
+
+                    // 繼續往左上走的是剩下的 5 個 G3P (15C) -> 重組為 3 個 RuBP (15C)
+                    ctx.save();
+                    if (highlightStep && highlightStep !== 3) ctx.globalAlpha = 0.2;
+
+                    if (p < 0.76) {
+                        drawMoleculeComplex(mx, my, 3, '剩餘 5 × G3P (繼續循環)', '5 × 3C = 15C (準備重組)', '#f57c00', { pCount: 1, hasElectron: true });
+                    } 
+                    else if (p < 0.86) {
+                        // 消耗 ATP 進行碳骨架重組 (3C + 3C -> 6C/5C/4C 轉換)
+                        drawMoleculeComplex(mx, my, 5, '🔄 碳骨架重組中 (+3 ATP)', '5×3C (15C) ➔ 轉換為 3×5C (15C)', '#e65100', { pCount: 1 });
+                    } 
+                    else {
+                        // 完成再生，變回 3 個五碳 RuBP (兩端帶有 P)
+                        drawMoleculeComplex(mx, my, 5, '3 × RuBP (二磷酸核酮糖)', '3 × 5C = 15C (再生完成!)', '#d84315', { pCount: 2 });
+                    }
+                    ctx.restore();
+                }
+            }
+        }
+
+        // ==================== 主動畫迴圈 ====================
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (isPlaying) {
+                tick++;
+                if (currentTab === 'light') {
+                    spawnLightParticles();
+                }
+            }
+
+            // 繪製主畫布
+            if (currentTab === 'overview') {
+                drawOverview();
+            } else if (currentTab === 'light') {
+                drawLightReactions();
+            } else if (currentTab === 'calvin') {
+                drawCalvinCycle();
+            }
+
+            // 繪製右上角場所定位雷達
+            drawLocatorMap();
+
+            requestAnimationFrame(animate);
+        }
+
+        // 初始化啟動
+        updateUI();
+        animate();
+    </script>
+</body>
+</html>

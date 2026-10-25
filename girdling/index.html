@@ -1,0 +1,1520 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>樹木環狀剝皮（Girdling）生理變化動態模擬器</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Noto Sans TC', 'Inter', sans-serif;
+      background-color: #0f172a;
+      color: #f8fafc;
+    }
+    input[type="range"] {
+      accent-color: #10b981;
+    }
+    .stage-pill {
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .stage-pill.active {
+      background-color: #10b981;
+      color: #022c22;
+      font-weight: 700;
+      box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #1e293b;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #475569;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col selection:bg-emerald-500 selection:text-white">
+
+  <!-- Top Header -->
+  <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-30 px-4 py-3">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-700 flex items-center justify-center shadow-lg shadow-emerald-900/40">
+          <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-lg md:text-xl font-bold tracking-tight text-white flex items-center gap-2">
+            樹木環狀剝皮動態模擬器
+            <span class="text-xs font-medium px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">植物生理學實驗</span>
+          </h1>
+          <p class="text-xs text-slate-400">觀察韌皮部阻斷後，養分（蔗糖）與水分在莖葉、樹幹與根部隨時間演變的因果鏈</p>
+        </div>
+      </div>
+
+      <!-- Mode Switcher & Reset -->
+      <div class="flex items-center gap-2 flex-wrap">
+        <div class="bg-slate-800 p-1 rounded-lg border border-slate-700 flex items-center text-xs">
+          <button id="modeGirdledBtn" class="px-3 py-1.5 rounded-md font-semibold bg-amber-500 text-slate-950 transition">
+            🔪 主幹完全環剝 (致死過程)
+          </button>
+          <button id="modeControlBtn" class="px-3 py-1.5 rounded-md font-medium text-slate-300 hover:text-white transition">
+            🌱 正常未環剝 (對照組)
+          </button>
+          <button id="modeShallowBtn" class="px-3 py-1.5 rounded-md font-medium text-slate-300 hover:text-white transition">
+            🍎 果樹淺層環割 (癒合結果)
+          </button>
+        </div>
+        <button id="quizModalBtn" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-400/30 transition flex items-center gap-1.5">
+          <span>🧠 觀念診斷測驗</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Timeline & Playback Bar -->
+  <section class="bg-slate-900/60 border-b border-slate-800 px-4 py-3">
+    <div class="max-w-7xl mx-auto flex flex-col gap-3">
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <!-- Play / Pause / Step Controls -->
+        <div class="flex items-center gap-2">
+          <button id="playPauseBtn" class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm flex items-center gap-2 shadow-lg shadow-emerald-950/50 transition">
+            <span id="playIcon">▶</span>
+            <span id="playText">暫停模擬</span>
+          </button>
+          <button id="resetBtn" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition">
+            ↺ 重置 (Day 0)
+          </button>
+          <div class="flex items-center bg-slate-800 rounded-xl p-1 border border-slate-700 text-xs">
+            <span class="px-2 text-slate-400">速度:</span>
+            <button data-speed="0.5" class="speed-btn px-2 py-1 rounded text-slate-300 hover:text-white">0.5x</button>
+            <button data-speed="1" class="speed-btn px-2 py-1 rounded bg-slate-700 text-emerald-400 font-bold">1x</button>
+            <button data-speed="2.5" class="speed-btn px-2 py-1 rounded text-slate-300 hover:text-white">2.5x</button>
+          </div>
+        </div>
+
+        <!-- Day Readout & Stage Jump Pills -->
+        <div class="flex items-center gap-2 flex-wrap">
+          <div class="bg-slate-950 border border-slate-800 px-3.5 py-1.5 rounded-xl flex items-baseline gap-2">
+            <span class="text-xs text-slate-400">經過天數</span>
+            <span id="dayCounter" class="text-xl font-extrabold text-emerald-400 tabular-nums">Day 0</span>
+            <span class="text-xs text-slate-500">/ 120 天</span>
+          </div>
+          <div class="flex items-center gap-1.5 overflow-x-auto py-1">
+            <button data-jump="0" class="stage-pill active text-xs px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700">1. 剛環剝 (D0)</button>
+            <button data-jump="18" class="stage-pill text-xs px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700">2. 韌皮部阻斷 (D18)</button>
+            <button data-jump="45" class="stage-pill text-xs px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700">3. 上方腫大/根飢餓 (D45)</button>
+            <button data-jump="78" class="stage-pill text-xs px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700">4. 根部壞死停水 (D78)</button>
+            <button data-jump="110" class="stage-pill text-xs px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700">5. 莖葉枯死 (D110)</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Slider -->
+      <div class="flex items-center gap-3">
+        <span class="text-xs text-slate-400 font-mono shrink-0">Day 0</span>
+        <input id="timeSlider" type="range" min="0" max="120" step="0.2" value="0" class="w-full h-2 bg-slate-800 rounded-lg cursor-pointer">
+        <span class="text-xs text-slate-400 font-mono shrink-0">Day 120</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Main Content Grid -->
+  <main class="max-w-7xl mx-auto w-full flex-1 p-4 grid grid-cols-1 lg:grid-cols-12 gap-4">
+
+    <!-- Left 7 Cols: Interactive Dual-Canvas Visualizer -->
+    <div class="lg:col-span-7 flex flex-col gap-4">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl flex flex-col">
+        <!-- Canvas Top Bar -->
+        <div class="px-4 py-2.5 bg-slate-950/60 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center gap-4 text-xs">
+            <span class="flex items-center gap-1.5 font-medium text-sky-400">
+              <span class="w-2.5 h-2.5 rounded-full bg-sky-400 inline-block animate-pulse"></span>
+              木質部：水分與礦物質 (向上 ↑)
+            </span>
+            <span class="flex items-center gap-1.5 font-medium text-amber-400">
+              <span class="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block animate-pulse"></span>
+              韌皮部：光合養分/蔗糖 (向下 ↓)
+            </span>
+          </div>
+          <div class="flex items-center gap-2 text-xs">
+            <label class="flex items-center gap-1.5 cursor-pointer text-slate-300 select-none">
+              <input type="checkbox" id="showMicroToggle" checked class="rounded accent-emerald-500">
+              <span>顯示維管束顯微放大鏡</span>
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer text-slate-300 select-none ml-2">
+              <input type="checkbox" id="showLabelsToggle" checked class="rounded accent-emerald-500">
+              <span>顯示解剖標籤</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Responsive Canvas Container -->
+        <div class="relative w-full h-[460px] sm:h-[520px] bg-slate-950">
+          <canvas id="treeCanvas" class="w-full h-full block"></canvas>
+
+          <!-- Floating Phase Banner on Canvas -->
+          <div class="absolute top-3 left-3 max-w-xs sm:max-w-sm bg-slate-900/90 backdrop-blur-md border border-slate-700/80 rounded-xl p-3 shadow-lg pointer-events-none">
+            <div class="flex items-center gap-2 mb-1">
+              <span id="stageBadge" class="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">階段一</span>
+              <h2 id="stageTitle" class="text-sm font-bold text-white">環狀剝皮初期：水分照常上升</h2>
+            </div>
+            <p id="stageDesc" class="text-xs text-slate-300 leading-relaxed">
+              樹皮（含韌皮部與形成層）被環狀剝除，但內側木質部完好，根部仍能吸水往上供給枝葉，葉片維持翠綠並進行光合作用。
+            </p>
+          </div>
+        </div>
+
+        <!-- Organ Status Strip under Canvas -->
+        <div class="grid grid-cols-3 divide-x divide-slate-800 border-t border-slate-800 bg-slate-900/90 text-xs">
+          <div class="p-3">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-slate-400 font-medium">🌿 莖葉與樹冠狀態</span>
+              <span id="canopyStatusBadge" class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/20 text-emerald-300">翠綠旺盛</span>
+            </div>
+            <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mb-1">
+              <div id="canopyBar" class="bg-emerald-500 h-full transition-all duration-150" style="width: 100%"></div>
+            </div>
+            <p id="canopyDetail" class="text-[11px] text-slate-400">光合作用正常，蒸散拉力維持水分上升</p>
+          </div>
+
+          <div class="p-3">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-slate-400 font-medium">🪵 環剝切口與樹幹</span>
+              <span id="trunkStatusBadge" class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-amber-500/20 text-amber-300">韌皮部中斷</span>
+            </div>
+            <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mb-1">
+              <div id="swellingBar" class="bg-amber-400 h-full transition-all duration-150" style="width: 5%"></div>
+            </div>
+            <p id="trunkDetail" class="text-[11px] text-slate-400">切口上緣養分累積腫脹度：<strong id="swellPctText" class="text-amber-300">0%</strong></p>
+          </div>
+
+          <div class="p-3">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-slate-400 font-medium">🌱 根系活性與儲량</span>
+              <span id="rootStatusBadge" class="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/20 text-emerald-300">呼吸正常</span>
+            </div>
+            <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mb-1">
+              <div id="rootBar" class="bg-amber-500 h-full transition-all duration-150" style="width: 100%"></div>
+            </div>
+            <p id="rootDetail" class="text-[11px] text-slate-400">剩餘澱粉儲備：<strong id="rootSugarText" class="text-amber-300">100%</strong></p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right 5 Cols: Real-time Metrics, Chart & Causal Sequence -->
+    <div class="lg:col-span-5 flex flex-col gap-4">
+
+      <!-- 4 Quantitative Metric Cards -->
+      <div class="grid grid-cols-2 gap-3">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-3">
+          <div class="flex items-center justify-between text-xs text-slate-400 mb-1">
+            <span>💧 木質部水分運輸率</span>
+            <span class="text-sky-400 font-mono font-bold" id="metricWaterVal">100%</span>
+          </div>
+          <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+            <div id="metricWaterBar" class="bg-sky-400 h-full transition-all duration-150" style="width:100%"></div>
+          </div>
+          <p class="text-[11px] text-slate-500 mt-1.5">初期木質部未受損，直到根死才斷水</p>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-3">
+          <div class="flex items-center justify-between text-xs text-slate-400 mb-1">
+            <span>🍯 切口上方養分堆積</span>
+            <span class="text-amber-400 font-mono font-bold" id="metricUpperSugarVal">100%</span>
+          </div>
+          <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+            <div id="metricUpperSugarBar" class="bg-amber-400 h-full transition-all duration-150" style="width:50%"></div>
+          </div>
+          <p class="text-[11px] text-slate-500 mt-1.5">蔗糖無法下運，刺激切口上緣組織增生</p>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-3">
+          <div class="flex items-center justify-between text-xs text-slate-400 mb-1">
+            <span>🔋 根部養分存量</span>
+            <span class="text-orange-400 font-mono font-bold" id="metricRootSugarVal">100%</span>
+          </div>
+          <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+            <div id="metricRootSugarBar" class="bg-orange-400 h-full transition-all duration-150" style="width:100%"></div>
+          </div>
+          <p class="text-[11px] text-slate-500 mt-1.5">持續消耗自身澱粉進行細胞呼吸</p>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-3">
+          <div class="flex items-center justify-between text-xs text-slate-400 mb-1">
+            <span>🍃 葉片光合與含水率</span>
+            <span class="text-emerald-400 font-mono font-bold" id="metricLeafHealthVal">100%</span>
+          </div>
+          <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+            <div id="metricLeafHealthBar" class="bg-emerald-400 h-full transition-all duration-150" style="width:100%"></div>
+          </div>
+          <p class="text-[11px] text-slate-500 mt-1.5">後期因根部停止供水而急速萎蔫枯黃</p>
+        </div>
+      </div>
+
+      <!-- Dynamic Chart.js Curve -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col">
+        <div class="flex items-center justify-between mb-2">
+          <div>
+            <h3 class="text-sm font-bold text-white">生理指標連續變化曲線 (Day 0 – Day 120)</h3>
+            <p class="text-xs text-slate-400">觀察「根部先餓死 → 水分才中斷 → 莖葉後枯死」的時間差</p>
+          </div>
+        </div>
+        <div class="relative h-56 w-full">
+          <canvas id="metricsChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Causal Mechanism Chain Accordion / Stepper -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex-1 flex flex-col">
+        <h3 class="text-sm font-bold text-white mb-2.5 flex items-center justify-between">
+          <span>🔍 環狀剝皮因果機制鏈（點擊可跳轉至對應階段）</span>
+          <span class="text-[11px] font-normal text-slate-400">由外而內：樹皮 → 韌皮部 → 形成層 → 木質部</span>
+        </h3>
+        <div id="causalChainList" class="space-y-2 text-xs overflow-y-auto custom-scrollbar pr-1">
+          <div data-step-jump="5" class="causal-card cursor-pointer p-2.5 rounded-xl border border-slate-800 bg-slate-950/60 hover:border-slate-700 transition flex items-start gap-2.5">
+            <span class="w-5 h-5 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center font-bold shrink-0 mt-0.5">1</span>
+            <div>
+              <div class="font-bold text-slate-200">剝除樹皮與韌皮部（木質部仍完好）</div>
+              <p class="text-slate-400 mt-0.5">環剝移除了樹皮、韌皮部與形成層；但中央木質部管道暢通，初期水分與礦物質仍正常向上運輸至莖葉。</p>
+            </div>
+          </div>
+          <div data-step-jump="35" class="causal-card cursor-pointer p-2.5 rounded-xl border border-slate-800 bg-slate-950/60 hover:border-slate-700 transition flex items-start gap-2.5">
+            <span class="w-5 h-5 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center font-bold shrink-0 mt-0.5">2</span>
+            <div>
+              <div class="font-bold text-slate-200">切口上方養分滯留腫大（形成癒傷組織瘤）</div>
+              <p class="text-slate-400 mt-0.5">葉片光合作用產生的有機養分（蔗糖）經韌皮部向下運送到環剝口受阻，大量堆積在切口上緣，引起局部細胞增生膨大。</p>
+            </div>
+          </div>
+          <div data-step-jump="65" class="causal-card cursor-pointer p-2.5 rounded-xl border border-slate-800 bg-slate-950/60 hover:border-slate-700 transition flex items-start gap-2.5">
+            <span class="w-5 h-5 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center font-bold shrink-0 mt-0.5">3</span>
+            <div>
+              <div class="font-bold text-slate-200">根部長期得不到養分而飢餓死亡（關鍵轉折！）</div>
+              <p class="text-slate-400 mt-0.5">切口下方的根部無法行光合作用，只能消耗原本儲存的澱粉。當儲備耗盡後，根毛與根系細胞因缺乏能量停止呼吸作用並腐爛壞死。</p>
+            </div>
+          </div>
+          <div data-step-jump="105" class="causal-card cursor-pointer p-2.5 rounded-xl border border-slate-800 bg-slate-950/60 hover:border-slate-700 transition flex items-start gap-2.5">
+            <span class="w-5 h-5 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center font-bold shrink-0 mt-0.5">4</span>
+            <div>
+              <div class="font-bold text-slate-200">根部喪失吸水功能 → 莖葉缺水萎蔫枯死</div>
+              <p class="text-slate-400 mt-0.5">根系死亡後無法再從土壤吸收水分，木質部水柱中斷；上方枝葉因持續蒸散卻無水源補充，最終失水枯黃凋落，整株樹木死亡。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Quiz Modal -->
+  <div id="quizModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full p-5 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <span>🧠 環狀剝皮核心觀念診斷</span>
+        </h3>
+        <button id="closeQuizBtn" class="text-slate-400 hover:text-white text-sm px-2 py-1 rounded">✕ 關閉</button>
+      </div>
+
+      <div id="quizContent" class="space-y-4 text-xs">
+        <div class="p-3 rounded-xl bg-slate-950 border border-slate-800">
+          <p class="font-bold text-slate-200 mb-2">Q1. 樹木遭受主幹環狀剝皮後，哪一個部位會最先因為「缺乏養分」而死亡？</p>
+          <div class="grid grid-cols-1 gap-1.5">
+            <button data-q="1" data-correct="false" class="quiz-opt text-left px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition">A. 上方的莖與葉片，因為水分立刻無法上升</button>
+            <button data-q="1" data-correct="true" class="quiz-opt text-left px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition">B. 下方的根部，因為韌皮部中斷導致光合養分無法下運</button>
+            <button data-q="1" data-correct="false" class="quiz-opt text-left px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition">C. 中央的木質部心材細胞</button>
+          </div>
+          <p id="quizFeedback1" class="mt-2 hidden font-medium"></p>
+        </div>
+
+        <div class="p-3 rounded-xl bg-slate-950 border border-slate-800">
+          <p class="font-bold text-slate-200 mb-2">Q2. 為什麼環狀剝皮後，樹冠的葉片還能維持數週翠綠才枯萎？</p>
+          <div class="grid grid-cols-1 gap-1.5">
+            <button data-q="2" data-correct="true" class="quiz-opt text-left px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition">A. 內側木質部未被破壞，在根部徹底餓死前仍能向上輸送水分</button>
+            <button data-q="2" data-correct="false" class="quiz-opt text-left px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition">B. 葉片可以直接從空氣中吸收足夠液態水</button>
+            <button data-q="2" data-correct="false" class="quiz-opt text-left px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition">C. 韌皮部可以反向把土壤水分吸上來</button>
+          </div>
+          <p id="quizFeedback2" class="mt-2 hidden font-medium"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- Simulation State ---
+    const state = {
+      day: 0,
+      maxDay: 120,
+      playing: true,
+      speed: 1, // days per second factor
+      mode: 'girdled', // 'girdled' | 'control' | 'shallow'
+      showMicro: true,
+      showLabels: true,
+      waterParticles: [],
+      sugarParticles: [],
+      fallingLeaves: []
+    };
+
+    // --- Physiological Model Calculation (0 to 120 Days) ---
+    function computePhysiology(day, mode) {
+      if (mode === 'control') {
+        return {
+          waterFlow: 100,
+          upperSugar: 100,
+          swelling: 0,
+          rootSugar: 100,
+          rootHealth: 100,
+          leafHealth: 100,
+          fruitSize: 20,
+          healed: 100
+        };
+      }
+
+      if (mode === 'shallow') {
+        // Shallow agricultural scoring: heals between day 35 and 65
+        const healProgress = Math.max(0, Math.min(100, ((day - 30) / 35) * 100));
+        const blockFactor = 1 - (healProgress / 100);
+        const upperSugar = 100 + Math.sin(Math.min(day, 70) / 70 * Math.PI) * 85;
+        const swelling = Math.min(35, day * 0.6 * (0.4 + 0.6 * blockFactor));
+        const rootSugar = Math.max(55, 100 - Math.sin(Math.min(day, 80) / 80 * Math.PI) * 42);
+        const fruitSize = Math.min(100, 20 + (day / 120) * 80);
+        return {
+          waterFlow: 96,
+          upperSugar: Math.round(upperSugar),
+          swelling: Math.round(swelling),
+          rootSugar: Math.round(rootSugar),
+          rootHealth: 92,
+          leafHealth: 96,
+          fruitSize: Math.round(fruitSize),
+          healed: Math.round(healProgress)
+        };
+      }
+
+      // Default: Complete trunk girdling ('girdled')
+      // 1. Root sugar reserve drops steadily from Day 0 to Day 75 as roots respire without phloem supply
+      const rootSugar = Math.max(0, 100 - (day / 72) * 100);
+
+      // 2. Root health holds up while sugar > 30%, then collapses between Day 50 and Day 88
+      let rootHealth = 100;
+      if (day > 42) {
+        rootHealth = Math.max(0, 100 - Math.pow((day - 42) / 46, 1.45) * 100);
+      }
+
+      // 3. Water transport in xylem stays near 100% early on, then drops as rootHealth collapses
+      let waterFlow = 100;
+      if (day > 52) {
+        waterFlow = Math.max(0, 100 - Math.pow((day - 52) / 42, 1.6) * 100);
+      }
+
+      // 4. Leaf health / photosynthesis depends on waterFlow (lags slightly behind water loss)
+      let leafHealth = 100;
+      if (day > 62) {
+        leafHealth = Math.max(0, 100 - Math.pow((day - 62) / 46, 1.55) * 100);
+      }
+
+      // 5. Upper bark swelling increases while leaves are still photosynthesizing, then plateaus
+      const activePhotosynthesisDays = Math.min(day, 78);
+      const swelling = Math.min(100, Math.pow(activePhotosynthesisDays / 78, 0.85) * 100);
+
+      // 6. Upper sugar accumulation spikes above cut up to ~195%, then drops when leaves die
+      let upperSugar = 100;
+      if (day <= 68) {
+        upperSugar = 100 + (day / 68) * 95;
+      } else {
+        upperSugar = Math.max(10, 195 - ((day - 68) / 52) * 185);
+      }
+
+      return {
+        waterFlow: Math.round(waterFlow),
+        upperSugar: Math.round(upperSugar),
+        swelling: Math.round(swelling),
+        rootSugar: Math.round(rootSugar),
+        rootHealth: Math.round(rootHealth),
+        leafHealth: Math.round(leafHealth),
+        fruitSize: 25,
+        healed: 0
+      };
+    }
+
+    // --- Stage Narrative Descriptions ---
+    function getStageInfo(day, mode) {
+      if (mode === 'control') {
+        return {
+          badge: '正常對照組',
+          title: '維管束完整：水分與養分雙向暢通',
+          desc: '木質部持續將根部吸收的水分與礦物質向上運送到葉片；葉片光合作用產生的蔗糖則透過韌皮部向下運送到根部儲存，維持全株平衡。',
+          stepIndex: -1
+        };
+      }
+      if (mode === 'shallow') {
+        if (day < 35) {
+          return {
+            badge: '果樹環割初期',
+            title: '暫時阻斷韌皮部：養分集中留給果實',
+            desc: '農業上對枝條進行淺層環割（不傷及過多形成層），讓光合養分暫時無法下運，優先供給上方花芽與果實發育。',
+            stepIndex: 1
+          };
+        } else {
+          return {
+            badge: '形成層癒合期',
+            title: '形成層再生新韌皮部：果實碩大且根系恢復',
+            desc: '約 1–2 個月後，淺層切口由形成層癒傷組織重新接通韌皮部，有機養分恢復向下運送至根部，果樹不會死亡。',
+            stepIndex: 1
+          };
+        }
+      }
+
+      // Complete girdling stages
+      if (day < 15) {
+        return {
+          badge: '階段一 (Day 0–14)',
+          title: '剛完成環狀剝皮：木質部完好，枝葉翠綠',
+          desc: '樹皮與韌皮部被環狀剝除，但內側木質部未受損。根部吸水照常上升，因此上方莖葉看起來完全正常，光合作用持續進行。',
+          stepIndex: 0
+        };
+      } else if (day < 42) {
+        return {
+          badge: '階段二 (Day 15–41)',
+          title: '韌皮部下運受阻：切口上緣開始累積養分',
+          desc: '葉片製造的蔗糖經韌皮部向下運送時卡在環剝切口上方，局部養分濃度飆升；下方根部得不到新養分補給，開始消耗庫存澱粉。',
+          stepIndex: 1
+        };
+      } else if (day < 72) {
+        return {
+          badge: '階段三 (Day 42–71)',
+          title: '切口上緣明顯腫大 ＆ 根部陷入嚴重飢餓',
+          desc: '切口上方因過量養分與生長素累積，細胞異常增生形成明顯「樹瘤腫大」；同時根部澱粉即將耗盡，細根開始萎縮壞死。',
+          stepIndex: 2
+        };
+      } else if (day < 96) {
+        return {
+          badge: '階段四 (Day 72–95)',
+          title: '根系餓死腐爛 → 木質部吸水功能崩潰',
+          desc: '根部細胞因缺乏能量徹底壞死，失去主動吸收礦物質與水分的能力。木質部水柱斷裂，上方葉片開始出現缺水萎蔫與黃化。',
+          stepIndex: 2
+        };
+      } else {
+        return {
+          badge: '階段五 (Day 96–120)',
+          title: '水分供應斷絕：莖葉乾枯落葉，全株死亡',
+          desc: '即使當初沒有切斷木質部，但因為「根部先餓死導致無法吸水」，最終上方枝葉嚴重脫水、葉片枯落，整棵樹死亡。',
+          stepIndex: 3
+        };
+      }
+    }
+
+    // --- Initialize Particles ---
+    function initParticles() {
+      state.waterParticles = [];
+      state.sugarParticles = [];
+      for (let i = 0; i < 28; i++) {
+        state.waterParticles.push({
+          yProgress: Math.random(), // 0 (roots) to 1 (canopy)
+          laneOffset: (Math.random() - 0.5) * 14,
+          size: 2.5 + Math.random() * 1.5
+        });
+      }
+      for (let i = 0; i < 32; i++) {
+        state.sugarParticles.push({
+          yProgress: Math.random(), // 0 (canopy) to 1 (roots)
+          side: i % 2 === 0 ? -1 : 1,
+          size: 3 + Math.random() * 1.5,
+          stuckJitter: Math.random() * Math.PI * 2
+        });
+      }
+    }
+    initParticles();
+
+    // --- Chart.js Setup ---
+    let metricsChart;
+    function initChart() {
+      const ctx = document.getElementById('metricsChart').getContext('2d');
+      const labels = [];
+      for (let d = 0; d <= 120; d += 5) labels.push('D' + d);
+
+      const datasets = buildChartDatasets(state.mode);
+
+      metricsChart = new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: {
+              labels: { color: '#cbd5e1', font: { size: 11 }, boxWidth: 12, padding: 10 }
+            },
+            tooltip: {
+              backgroundColor: 'rgba(15, 23, 42, 0.95)',
+              titleColor: '#f8fafc',
+              bodyColor: '#e2e8f0',
+              borderColor: '#334155',
+              borderWidth: 1
+            }
+          },
+          scales: {
+            x: {
+              ticks: { color: '#94a3b8', font: { size: 10 } },
+              grid: { color: 'rgba(51, 65, 85, 0.3)' }
+            },
+            y: {
+              min: 0,
+              max: 200,
+              ticks: {
+                color: '#94a3b8',
+                font: { size: 10 },
+                callback: (v) => v + '%'
+              },
+              grid: { color: 'rgba(51, 65, 85, 0.3)' }
+            }
+          }
+        },
+        plugins: [{
+          id: 'verticalDayMarker',
+          afterDraw(chart) {
+            const xAxis = chart.scales.x;
+            const yAxis = chart.scales.y;
+            const ratio = state.day / state.maxDay;
+            const xPos = xAxis.left + ratio * (xAxis.right - xAxis.left);
+            const ctx = chart.ctx;
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(xPos, yAxis.top);
+            ctx.lineTo(xPos, yAxis.bottom);
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#10b981';
+            ctx.setLineDash([4, 3]);
+            ctx.stroke();
+
+            ctx.fillStyle = '#10b981';
+            ctx.font = 'bold 10px sans-serif';
+            ctx.fillText('D' + Math.round(state.day), Math.min(xPos + 4, xAxis.right - 28), yAxis.top + 12);
+            ctx.restore();
+          }
+        }]
+      });
+    }
+
+    function buildChartDatasets(mode) {
+      const waterData = [];
+      const upperSugarData = [];
+      const rootSugarData = [];
+      const leafHealthData = [];
+
+      for (let d = 0; d <= 120; d += 5) {
+        const p = computePhysiology(d, mode);
+        waterData.push(p.waterFlow);
+        upperSugarData.push(p.upperSugar);
+        rootSugarData.push(p.rootSugar);
+        leafHealthData.push(p.leafHealth);
+      }
+
+      return [
+        {
+          label: '切口上方養分 (韌皮部)',
+          data: upperSugarData,
+          borderColor: '#fbbf24',
+          backgroundColor: 'rgba(251, 191, 36, 0.1)',
+          borderWidth: 2,
+          tension: 0.35,
+          pointRadius: 0
+        },
+        {
+          label: '根部養分存量',
+          data: rootSugarData,
+          borderColor: '#f97316',
+          backgroundColor: 'rgba(249, 115, 22, 0.1)',
+          borderWidth: 2,
+          tension: 0.35,
+          pointRadius: 0
+        },
+        {
+          label: '木質部水分運輸',
+          data: waterData,
+          borderColor: '#38bdf8',
+          backgroundColor: 'rgba(56, 189, 248, 0.1)',
+          borderWidth: 2,
+          tension: 0.35,
+          pointRadius: 0
+        },
+        {
+          label: '莖葉健康度',
+          data: leafHealthData,
+          borderColor: '#34d399',
+          backgroundColor: 'rgba(52, 211, 153, 0.1)',
+          borderWidth: 2,
+          tension: 0.35,
+          pointRadius: 0
+        }
+      ];
+    }
+
+    // --- UI Sync ---
+    function updateUI() {
+      const phys = computePhysiology(state.day, state.mode);
+      const info = getStageInfo(state.day, state.mode);
+
+      document.getElementById('dayCounter').textContent = 'Day ' + Math.round(state.day);
+      document.getElementById('timeSlider').value = state.day;
+
+      // Stage Banner
+      document.getElementById('stageBadge').textContent = info.badge;
+      document.getElementById('stageTitle').textContent = info.title;
+      document.getElementById('stageDesc').textContent = info.desc;
+
+      // Top Stage Pills highlight
+      document.querySelectorAll('.stage-pill').forEach((btn) => {
+        const jumpDay = parseFloat(btn.getAttribute('data-jump'));
+        let isActive = false;
+        if (jumpDay === 0 && state.day < 15) isActive = true;
+        else if (jumpDay === 18 && state.day >= 15 && state.day < 40) isActive = true;
+        else if (jumpDay === 45 && state.day >= 40 && state.day < 70) isActive = true;
+        else if (jumpDay === 78 && state.day >= 70 && state.day < 96) isActive = true;
+        else if (jumpDay === 110 && state.day >= 96) isActive = true;
+        btn.classList.toggle('active', isActive);
+      });
+
+      // Highlight active causal card
+      document.querySelectorAll('.causal-card').forEach((card, idx) => {
+        if (idx === info.stepIndex) {
+          card.classList.add('border-emerald-500/70', 'bg-emerald-950/20');
+          card.classList.remove('border-slate-800');
+        } else {
+          card.classList.remove('border-emerald-500/70', 'bg-emerald-950/20');
+          card.classList.add('border-slate-800');
+        }
+      });
+
+      // Right Metric Bars
+      document.getElementById('metricWaterVal').textContent = phys.waterFlow + '%';
+      document.getElementById('metricWaterBar').style.width = phys.waterFlow + '%';
+
+      document.getElementById('metricUpperSugarVal').textContent = phys.upperSugar + '%';
+      document.getElementById('metricUpperSugarBar').style.width = Math.min(100, phys.upperSugar / 2) + '%';
+
+      document.getElementById('metricRootSugarVal').textContent = phys.rootSugar + '%';
+      document.getElementById('metricRootSugarBar').style.width = phys.rootSugar + '%';
+
+      document.getElementById('metricLeafHealthVal').textContent = phys.leafHealth + '%';
+      document.getElementById('metricLeafHealthBar').style.width = phys.leafHealth + '%';
+
+      // Bottom Organ Strip
+      document.getElementById('canopyBar').style.width = phys.leafHealth + '%';
+      document.getElementById('swellingBar').style.width = Math.max(5, phys.swelling) + '%';
+      document.getElementById('swellPctText').textContent = phys.swelling + '%';
+      document.getElementById('rootBar').style.width = phys.rootSugar + '%';
+      document.getElementById('rootSugarText').textContent = phys.rootSugar + '%';
+
+      const canopyBadge = document.getElementById('canopyStatusBadge');
+      const canopyDetail = document.getElementById('canopyDetail');
+      if (phys.leafHealth > 75) {
+        canopyBadge.textContent = '翠綠旺盛';
+        canopyBadge.className = 'px-1.5 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/20 text-emerald-300';
+        canopyDetail.textContent = state.mode === 'shallow' ? '果實獲得充足養分迅速膨大' : '光合作用正常，蒸散拉力維持水分上升';
+      } else if (phys.leafHealth > 30) {
+        canopyBadge.textContent = '缺水萎蔫';
+        canopyBadge.className = 'px-1.5 py-0.5 rounded text-[11px] font-semibold bg-amber-500/20 text-amber-300';
+        canopyDetail.textContent = '根部停止供水，葉片氣孔關閉並開始黃化';
+      } else {
+        canopyBadge.textContent = '乾枯凋落';
+        canopyBadge.className = 'px-1.5 py-0.5 rounded text-[11px] font-semibold bg-rose-500/20 text-rose-300';
+        canopyDetail.textContent = '水分徹底斷絕，莖葉失水枯死';
+      }
+
+      const trunkBadge = document.getElementById('trunkStatusBadge');
+      if (state.mode === 'control') {
+        trunkBadge.textContent = '韌皮部完整';
+        trunkBadge.className = 'px-1.5 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/20 text-emerald-300';
+      } else if (state.mode === 'shallow' && phys.healed > 60) {
+        trunkBadge.textContent = '形成層已癒合';
+        trunkBadge.className = 'px-1.5 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/20 text-emerald-300';
+      } else if (phys.swelling > 45) {
+        trunkBadge.textContent = '上緣明顯腫大';
+        trunkBadge.className = 'px-1.5 py-0.5 rounded text-[11px] font-semibold bg-amber-500/20 text-amber-300';
+      } else {
+        trunkBadge.textContent = '韌皮部中斷';
+        trunkBadge.className = 'px-1.5 py-0.5 rounded text-[11px] font-semibold bg-amber-500/20 text-amber-300';
+      }
+
+      const rootBadge = document.getElementById('rootStatusBadge');
+      if (phys.rootHealth > 75) {
+        rootBadge.textContent = '呼吸正常';
+        rootBadge.className = 'px-1.5 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/20 text-emerald-300';
+      } else if (phys.rootHealth > 25) {
+        rootBadge.textContent = '養分耗盡萎縮';
+        rootBadge.className = 'px-1.5 py-0.5 rounded text-[11px] font-semibold bg-orange-500/20 text-orange-300';
+      } else {
+        rootBadge.textContent = '壞死停止吸水';
+        rootBadge.className = 'px-1.5 py-0.5 rounded text-[11px] font-semibold bg-rose-500/20 text-rose-300';
+      }
+
+      if (metricsChart) {
+        metricsChart.update('none');
+      }
+    }
+
+    // --- Canvas Rendering ---
+    const canvas = document.getElementById('treeCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function resizeCanvas() {
+      const rect = canvas.parentElement.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    window.addEventListener('resize', resizeCanvas);
+
+    // Helper to blend colors for leaf yellowing/browning
+    function getCanopyColor(leafHealth, variant = 0) {
+      // 100 -> lush emerald (#10b981 / #059669)
+      // 50  -> yellow-amber (#eab308 / #ca8a04)
+      // 0   -> dry brown (#78350f / #451a03)
+      if (leafHealth >= 50) {
+        const t = (leafHealth - 50) / 50; // 1 at 100%, 0 at 50%
+        const r = Math.round(234 + (16 - 234) * t + variant * 12);
+        const g = Math.round(179 + (185 - 179) * t + variant * 12);
+        const b = Math.round(8 + (129 - 8) * t);
+        return `rgb(${r},${g},${b})`;
+      } else {
+        const t = leafHealth / 50; // 1 at 50%, 0 at 0%
+        const r = Math.round(115 + (234 - 115) * t + variant * 10);
+        const g = Math.round(58 + (179 - 58) * t + variant * 8);
+        const b = Math.round(18 + (8 - 18) * t);
+        return `rgb(${r},${g},${b})`;
+      }
+    }
+
+    function drawScene(dt) {
+      const rect = canvas.parentElement.getBoundingClientRect();
+      const W = rect.width;
+      const H = rect.height;
+      const phys = computePhysiology(state.day, state.mode);
+
+      ctx.clearRect(0, 0, W, H);
+
+      // Sky / Background Gradient
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, H * 0.72);
+      skyGrad.addColorStop(0, '#09101f');
+      skyGrad.addColorStop(1, '#111c33');
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, W, H * 0.72);
+
+      // Ground / Soil Section
+      const groundY = H * 0.72;
+      const soilGrad = ctx.createLinearGradient(0, groundY, 0, H);
+      soilGrad.addColorStop(0, '#271c15');
+      soilGrad.addColorStop(0.2, '#1c140f');
+      soilGrad.addColorStop(1, '#0f0a07');
+      ctx.fillStyle = soilGrad;
+      ctx.fillRect(0, groundY, W, H - groundY);
+
+      // Soil Horizon Line
+      ctx.strokeStyle = '#3f2e21';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, groundY);
+      ctx.lineTo(W, groundY);
+      ctx.stroke();
+
+      // Tree Center X (shift left slightly if zoomed inset is shown on wide screens)
+      const treeX = (state.showMicro && W > 560) ? W * 0.36 : W * 0.5;
+      const trunkTopY = H * 0.34;
+      const trunkBotY = groundY + 10;
+      const girdleY = H * 0.53;
+      const trunkHalfW = 28;
+
+      // 1. Draw Roots Below Ground
+      drawRoots(ctx, treeX, groundY, H, phys);
+
+      // 2. Draw Trunk & Girdling Cut & Callus Swelling
+      drawTrunkAndVessels(ctx, treeX, trunkTopY, trunkBotY, girdleY, trunkHalfW, phys);
+
+      // 3. Draw Canopy & Branches
+      drawCanopy(ctx, treeX, trunkTopY, W, H, phys, dt);
+
+      // 4. Draw Animated Transport Particles (Water in Xylem, Sucrose in Phloem)
+      drawParticles(ctx, treeX, trunkTopY, groundY + 65, girdleY, trunkHalfW, phys, dt);
+
+      // 5. Draw Anatomical Labels if enabled
+      if (state.showLabels) {
+        drawAnatomicalLabels(ctx, treeX, trunkTopY, girdleY, groundY, trunkHalfW, phys, W);
+      }
+
+      // 6. Draw Zoomed Microscopic Cross-Section Inset if enabled
+      if (state.showMicro && W > 480) {
+        drawMicroscopeInset(ctx, W, H, girdleY, treeX, trunkHalfW, phys);
+      }
+    }
+
+    function drawRoots(ctx, treeX, groundY, H, phys) {
+      const rootBranches = [
+        { dx1: -35, dy1: 35, dx2: -95, dy2: 75, dx3: -140, dy3: 110, w: 12 },
+        { dx1: -20, dy1: 45, dx2: -55, dy2: 95, dx3: -75, dy3: 130, w: 10 },
+        { dx1: 0, dy1: 50, dx2: 5, dy2: 100, dx3: -10, dy3: 135, w: 11 },
+        { dx1: 25, dy1: 45, dx2: 60, dy2: 95, dx3: 85, dy3: 128, w: 10 },
+        { dx1: 40, dy1: 35, dx2: 100, dy2: 70, dx3: 145, dy3: 105, w: 12 }
+      ];
+
+      // Root color transitions from healthy tan/amber to dark shriveled gray-brown as rootHealth drops
+      const healthRatio = phys.rootHealth / 100;
+      const rCol = Math.round(65 + 75 * healthRatio);
+      const gCol = Math.round(45 + 45 * healthRatio);
+      const bCol = Math.round(35 + 20 * healthRatio);
+      const rootColor = `rgb(${rCol},${gCol},${bCol})`;
+
+      ctx.save();
+      ctx.lineCap = 'round';
+
+      rootBranches.forEach((rb) => {
+        const shrink = 0.55 + 0.45 * healthRatio;
+        ctx.strokeStyle = rootColor;
+        ctx.lineWidth = rb.w * shrink;
+        ctx.beginPath();
+        ctx.moveTo(treeX, groundY);
+        ctx.bezierCurveTo(
+          treeX + rb.dx1, groundY + rb.dy1,
+          treeX + rb.dx2, groundY + rb.dy2,
+          treeX + rb.dx3 * (0.82 + 0.18 * healthRatio), groundY + rb.dy3 * (0.85 + 0.15 * healthRatio)
+        );
+        ctx.stroke();
+
+        // Fine root hairs (disappear when rootHealth < 40%)
+        if (phys.rootHealth > 25) {
+          ctx.strokeStyle = `rgba(251, 191, 36, ${0.15 + 0.45 * (phys.rootSugar / 100)})`;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(treeX + rb.dx2, groundY + rb.dy2);
+          ctx.lineTo(treeX + rb.dx2 - 14, groundY + rb.dy2 + 18);
+          ctx.moveTo(treeX + rb.dx2, groundY + rb.dy2);
+          ctx.lineTo(treeX + rb.dx2 + 14, groundY + rb.dy2 + 20);
+          ctx.stroke();
+        }
+      });
+
+      // Starch reserve glow in roots
+      if (phys.rootSugar > 5) {
+        const glowRadius = 60 * (phys.rootSugar / 100);
+        const rootGlow = ctx.createRadialGradient(treeX, groundY + 55, 5, treeX, groundY + 55, glowRadius + 20);
+        rootGlow.addColorStop(0, `rgba(245, 158, 11, ${0.35 * (phys.rootSugar / 100)})`);
+        rootGlow.addColorStop(1, 'rgba(245, 158, 11, 0)');
+        ctx.fillStyle = rootGlow;
+        ctx.beginPath();
+        ctx.arc(treeX, groundY + 55, glowRadius + 20, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawTrunkAndVessels(ctx, treeX, trunkTopY, trunkBotY, girdleY, trunkHalfW, phys) {
+      const swellPx = (phys.swelling / 100) * 18; // Max 18px bulge on each side above cut
+      const cutHalfH = state.mode === 'control' ? 0 : (state.mode === 'shallow' ? 7 : 16);
+
+      ctx.save();
+
+      // Central Xylem Core (Heartwood + Sapwood) - Always intact structurally
+      ctx.fillStyle = '#fde68a';
+      ctx.fillRect(treeX - trunkHalfW + 8, trunkTopY, (trunkHalfW - 8) * 2, trunkBotY - trunkTopY);
+
+      // Xylem Water Tint
+      ctx.fillStyle = `rgba(56, 189, 248, ${0.12 + 0.28 * (phys.waterFlow / 100)})`;
+      ctx.fillRect(treeX - trunkHalfW + 10, trunkTopY, (trunkHalfW - 10) * 2, trunkBotY - trunkTopY);
+
+      // Outer Bark & Phloem (Left and Right sides)
+      // Upper trunk bark (with callus swelling right above girdleY)
+      ctx.fillStyle = '#78350f';
+      // Left upper bark + swelling
+      ctx.beginPath();
+      ctx.moveTo(treeX - trunkHalfW, trunkTopY);
+      ctx.lineTo(treeX - trunkHalfW, girdleY - cutHalfH - 36);
+      ctx.quadraticCurveTo(
+        treeX - trunkHalfW - swellPx,
+        girdleY - cutHalfH - 10,
+        treeX - trunkHalfW,
+        girdleY - cutHalfH
+      );
+      ctx.lineTo(treeX - trunkHalfW + 9, girdleY - cutHalfH);
+      ctx.lineTo(treeX - trunkHalfW + 9, trunkTopY);
+      ctx.closePath();
+      ctx.fill();
+
+      // Right upper bark + swelling
+      ctx.beginPath();
+      ctx.moveTo(treeX + trunkHalfW, trunkTopY);
+      ctx.lineTo(treeX + trunkHalfW, girdleY - cutHalfH - 36);
+      ctx.quadraticCurveTo(
+        treeX + trunkHalfW + swellPx,
+        girdleY - cutHalfH - 10,
+        treeX + trunkHalfW,
+        girdleY - cutHalfH
+      );
+      ctx.lineTo(treeX + trunkHalfW - 9, girdleY - cutHalfH);
+      ctx.lineTo(treeX + trunkHalfW - 9, trunkTopY);
+      ctx.closePath();
+      ctx.fill();
+
+      // Golden sugar accumulation glow inside the upper swelling
+      if (phys.swelling > 5) {
+        ctx.fillStyle = `rgba(251, 191, 36, ${Math.min(0.75, phys.swelling / 110)})`;
+        ctx.beginPath();
+        ctx.arc(treeX - trunkHalfW - swellPx * 0.35 + 3, girdleY - cutHalfH - 12, 6 + swellPx * 0.45, 0, Math.PI * 2);
+        ctx.arc(treeX + trunkHalfW + swellPx * 0.35 - 3, girdleY - cutHalfH - 12, 6 + swellPx * 0.45, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Lower trunk bark (below girdleY)
+      // Shrinks slightly if roots starve
+      const lowerBarkW = 9 * (0.65 + 0.35 * (phys.rootHealth / 100));
+      ctx.fillStyle = '#5c280b';
+      ctx.fillRect(treeX - trunkHalfW, girdleY + cutHalfH, lowerBarkW, trunkBotY - (girdleY + cutHalfH));
+      ctx.fillRect(treeX + trunkHalfW - lowerBarkW, girdleY + cutHalfH, lowerBarkW, trunkBotY - (girdleY + cutHalfH));
+
+      // If shallow mode and healed, draw callus bridge across the cut
+      if (state.mode === 'shallow' && phys.healed > 10) {
+        ctx.fillStyle = `rgba(16, 185, 129, ${phys.healed / 120})`;
+        ctx.fillRect(treeX - trunkHalfW - 2, girdleY - cutHalfH, 8, cutHalfH * 2);
+        ctx.fillRect(treeX + trunkHalfW - 6, girdleY - cutHalfH, 8, cutHalfH * 2);
+      }
+
+      // Girdling Notch Highlight
+      if (state.mode !== 'control') {
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([3, 3]);
+        ctx.strokeRect(treeX - trunkHalfW - 6, girdleY - cutHalfH, trunkHalfW * 2 + 12, cutHalfH * 2);
+        ctx.setLineDash([]);
+      }
+
+      ctx.restore();
+    }
+
+    function drawCanopy(ctx, treeX, trunkTopY, W, H, phys, dt) {
+      ctx.save();
+
+      // Main Branches
+      ctx.strokeStyle = '#78350f';
+      ctx.lineCap = 'round';
+      const branches = [
+        { x2: treeX - 85, y2: trunkTopY - 65, w: 14 },
+        { x2: treeX - 35, y2: trunkTopY - 105, w: 12 },
+        { x2: treeX + 35, y2: trunkTopY - 105, w: 12 },
+        { x2: treeX + 85, y2: trunkTopY - 65, w: 14 }
+      ];
+      branches.forEach((b) => {
+        ctx.lineWidth = b.w;
+        ctx.beginPath();
+        ctx.moveTo(treeX, trunkTopY + 15);
+        ctx.quadraticCurveTo(treeX + (b.x2 - treeX) * 0.4, trunkTopY - 30, b.x2, b.y2);
+        ctx.stroke();
+      });
+
+      // Canopy Foliage Clusters
+      // Droop and thin out when leafHealth drops
+      const droopY = (1 - phys.leafHealth / 100) * 18;
+      const scaleRadius = 0.45 + 0.55 * (phys.leafHealth / 100);
+
+      const puffs = [
+        { dx: -95, dy: -65, r: 46, v: -0.5 },
+        { dx: -55, dy: -110, r: 54, v: 0.2 },
+        { dx: 0, dy: -128, r: 62, v: 0 },
+        { dx: 55, dy: -110, r: 54, v: -0.3 },
+        { dx: 95, dy: -65, r: 46, v: 0.4 },
+        { dx: -40, dy: -65, r: 48, v: 0.6 },
+        { dx: 40, dy: -65, r: 48, v: -0.2 }
+      ];
+
+      puffs.forEach((p) => {
+        ctx.fillStyle = getCanopyColor(phys.leafHealth, p.v);
+        ctx.beginPath();
+        ctx.arc(treeX + p.dx, trunkTopY + p.dy + droopY, p.r * scaleRadius, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // If shallow girdling mode, draw growing fruits in canopy
+      if (state.mode === 'shallow') {
+        const fruitPositions = [
+          { dx: -75, dy: -60 },
+          { dx: -25, dy: -95 },
+          { dx: 30, dy: -90 },
+          { dx: 75, dy: -55 },
+          { dx: 0, dy: -60 }
+        ];
+        const fRadius = 4 + (phys.fruitSize / 100) * 7;
+        fruitPositions.forEach((fp) => {
+          ctx.fillStyle = '#f43f5e';
+          ctx.beginPath();
+          ctx.arc(treeX + fp.dx, trunkTopY + fp.dy, fRadius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#fda4af';
+          ctx.beginPath();
+          ctx.arc(treeX + fp.dx - fRadius * 0.3, trunkTopY + fp.dy - fRadius * 0.3, fRadius * 0.28, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      }
+
+      // Falling withered leaves when leafHealth < 65%
+      if (state.playing && phys.leafHealth < 65 && phys.leafHealth > 2 && Math.random() < 0.18) {
+        state.fallingLeaves.push({
+          x: treeX + (Math.random() - 0.5) * 180,
+          y: trunkTopY - 50 - Math.random() * 60,
+          vx: (Math.random() - 0.5) * 25,
+          vy: 28 + Math.random() * 25,
+          rot: Math.random() * Math.PI * 2
+        });
+      }
+
+      for (let i = state.fallingLeaves.length - 1; i >= 0; i--) {
+        const fl = state.fallingLeaves[i];
+        if (state.playing) {
+          fl.x += fl.vx * dt + Math.sin(fl.y * 0.05) * 0.5;
+          fl.y += fl.vy * dt;
+          fl.rot += 2 * dt;
+        }
+        ctx.save();
+        ctx.translate(fl.x, fl.y);
+        ctx.rotate(fl.rot);
+        ctx.fillStyle = '#b45309';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 5, 2.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        if (fl.y > H * 0.72) {
+          state.fallingLeaves.splice(i, 1);
+        }
+      }
+
+      ctx.restore();
+    }
+
+    function drawParticles(ctx, treeX, topY, botY, girdleY, trunkHalfW, phys, dt) {
+      const spanH = botY - topY;
+      const girdleRatio = (girdleY - topY) / spanH;
+
+      // 1. Water Particles (Blue, moving UP inside Xylem)
+      const waterSpeed = 0.28 * (phys.waterFlow / 100);
+      ctx.fillStyle = '#38bdf8';
+      state.waterParticles.forEach((wp) => {
+        if (state.playing && phys.waterFlow > 2) {
+          wp.yProgress -= waterSpeed * dt;
+          if (wp.yProgress < 0) wp.yProgress = 1;
+        }
+        if (phys.waterFlow > 2) {
+          const py = topY + wp.yProgress * spanH;
+          const px = treeX + wp.laneOffset;
+          ctx.beginPath();
+          ctx.arc(px, py, wp.size, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      });
+
+      // 2. Sucrose / Phloem Particles (Amber/Gold, moving DOWN in outer bark)
+      const sugarProduction = phys.leafHealth / 100;
+      const canCrossGirdle = state.mode === 'control' || (state.mode === 'shallow' && phys.healed > 55);
+
+      ctx.fillStyle = '#fbbf24';
+      state.sugarParticles.forEach((sp) => {
+        if (state.playing && sugarProduction > 0.08) {
+          if (canCrossGirdle) {
+            sp.yProgress += 0.22 * dt;
+            if (sp.yProgress > 1) sp.yProgress = 0;
+          } else {
+            // Blocked at girdleRatio! Accumulate above the cut
+            const stopLimit = girdleRatio - 0.04;
+            if (sp.yProgress < stopLimit) {
+              sp.yProgress += 0.22 * sugarProduction * dt;
+              if (sp.yProgress >= stopLimit) {
+                sp.yProgress = stopLimit - Math.random() * 0.06;
+              }
+            } else {
+              // Particles that were below the cut at Day 0 get consumed by roots and disappear
+              sp.yProgress += 0.18 * dt;
+              if (sp.yProgress > 1) {
+                sp.yProgress = 0; // Respawn in canopy
+              }
+            }
+          }
+        }
+
+        // Only draw below-girdle particles if roots still have sugar or canCrossGirdle
+        if (!canCrossGirdle && sp.yProgress > girdleRatio && phys.rootSugar < 15) {
+          return;
+        }
+        if (sugarProduction <= 0.05 && sp.yProgress < girdleRatio - 0.08) {
+          return;
+        }
+
+        const py = topY + sp.yProgress * spanH;
+        const nearCut = !canCrossGirdle && Math.abs(sp.yProgress - (girdleRatio - 0.04)) < 0.07;
+        const swellOffset = nearCut ? (phys.swelling / 100) * 10 * Math.sin(sp.stuckJitter + state.day) : 0;
+        const px = treeX + sp.side * (trunkHalfW - 4) + sp.side * Math.abs(swellOffset);
+
+        ctx.beginPath();
+        ctx.arc(px, py, sp.size, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+
+    function drawAnatomicalLabels(ctx, treeX, trunkTopY, girdleY, groundY, trunkHalfW, phys, W) {
+      ctx.save();
+      ctx.font = '11px "Noto Sans TC", sans-serif';
+
+      // Callout 1: Upper Bark Swelling
+      if (state.mode !== 'control') {
+        const labelX = Math.max(12, treeX - trunkHalfW - 145);
+        const labelY = girdleY - 26;
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(labelX, labelY - 16, 122, 36, 6);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#fcd34d';
+        ctx.fillText('切口上緣：養分堆積', labelX + 8, labelY - 2);
+        ctx.fillStyle = '#cbd5e1';
+        ctx.fillText(`腫脹度 ${phys.swelling}%`, labelX + 8, labelY + 13);
+
+        // Connector line
+        ctx.strokeStyle = '#f59e0b';
+        ctx.beginPath();
+        ctx.moveTo(labelX + 122, labelY);
+        ctx.lineTo(treeX - trunkHalfW - 4, girdleY - 14);
+        ctx.stroke();
+      }
+
+      // Callout 2: Girdling Cut
+      if (state.mode !== 'control') {
+        const labelX = Math.max(12, treeX - trunkHalfW - 145);
+        const labelY = girdleY + 24;
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+        ctx.strokeStyle = '#ef4444';
+        ctx.beginPath();
+        ctx.roundRect(labelX, labelY - 14, 122, 26, 6);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#fca5a5';
+        ctx.fillText('🔪 環剝處 (無韌皮部)', labelX + 8, labelY + 3);
+      }
+
+      // Callout 3: Roots Status
+      const rootLabelX = Math.max(12, treeX - 165);
+      const rootLabelY = groundY + 45;
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+      ctx.strokeStyle = phys.rootHealth > 40 ? '#fb923c' : '#f43f5e';
+      ctx.beginPath();
+      ctx.roundRect(rootLabelX, rootLabelY - 14, 128, 34, 6);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = phys.rootHealth > 40 ? '#fdba74' : '#fda4af';
+      ctx.fillText(`根部儲備: ${phys.rootSugar}%`, rootLabelX + 8, rootLabelY);
+      ctx.fillStyle = '#cbd5e1';
+      ctx.fillText(phys.rootHealth > 40 ? '消耗澱粉維持呼吸' : '⚠️ 根系餓死無法吸水', rootLabelX + 8, rootLabelY + 14);
+
+      ctx.restore();
+    }
+
+    function drawMicroscopeInset(ctx, W, H, girdleY, treeX, trunkHalfW, phys) {
+      const boxW = 195;
+      const boxH = 230;
+      const boxX = W - boxW - 14;
+      const boxY = H - boxH - 14;
+
+      ctx.save();
+
+      // Magnifier Connector Line from trunk girdle to inset
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.45)';
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(treeX + trunkHalfW + 6, girdleY);
+      ctx.lineTo(boxX, boxY + boxH * 0.5);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Inset Panel Background
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.roundRect(boxX, boxY, boxW, boxH, 12);
+      ctx.fill();
+      ctx.stroke();
+
+      // Header
+      ctx.fillStyle = '#f8fafc';
+      ctx.font = 'bold 11px "Noto Sans TC", sans-serif';
+      ctx.fillText('🔬 樹幹維管束縱切面放大', boxX + 12, boxY + 20);
+
+      // Draw anatomical layers from Center (Left of diagram) to Bark (Right of diagram)
+      const diagX = boxX + 18;
+      const diagY = boxY + 34;
+      const diagH = 148;
+      const midY = diagY + diagH * 0.52;
+
+      // 1. Xylem (木質部 - Inner)
+      ctx.fillStyle = '#fef08a';
+      ctx.fillRect(diagX, diagY, 44, diagH);
+      ctx.fillStyle = `rgba(56, 189, 248, ${0.25 + 0.45 * (phys.waterFlow / 100)})`;
+      ctx.fillRect(diagX + 6, diagY, 32, diagH);
+
+      // Upward arrows in Xylem
+      ctx.fillStyle = '#0284c7';
+      ctx.font = 'bold 12px sans-serif';
+      if (phys.waterFlow > 10) {
+        ctx.fillText('↑ 水', diagX + 10, diagY + 35);
+        ctx.fillText('↑ 水', diagX + 10, diagY + 85);
+        ctx.fillText('↑ 水', diagX + 10, diagY + 130);
+      } else {
+        ctx.fillStyle = '#e11d48';
+        ctx.fillText('✕ 斷水', diagX + 4, diagY + 80);
+      }
+
+      // 2. Cambium (形成層)
+      ctx.fillStyle = '#4ade80';
+      if (state.mode === 'control') {
+        ctx.fillRect(diagX + 44, diagY, 6, diagH);
+      } else {
+        ctx.fillRect(diagX + 44, diagY, 6, diagH * 0.38);
+        ctx.fillRect(diagX + 44, diagY + diagH * 0.66, 6, diagH * 0.34);
+        if (state.mode === 'shallow' && phys.healed > 40) {
+          ctx.fillStyle = '#10b981';
+          ctx.fillRect(diagX + 44, diagY + diagH * 0.38, 6, diagH * 0.28);
+        }
+      }
+
+      // 3. Phloem (韌皮部) & Outer Bark (樹皮)
+      const upperBulge = (phys.swelling / 100) * 20;
+      ctx.fillStyle = '#fbbf24';
+      if (state.mode === 'control') {
+        ctx.fillRect(diagX + 50, diagY, 36, diagH);
+        ctx.fillStyle = '#78350f';
+        ctx.fillRect(diagX + 86, diagY, 14, diagH);
+      } else {
+        // Upper phloem with bulge right above the cut
+        ctx.beginPath();
+        ctx.moveTo(diagX + 50, diagY);
+        ctx.lineTo(diagX + 86, diagY);
+        ctx.lineTo(diagX + 86 + upperBulge, diagY + diagH * 0.38);
+        ctx.lineTo(diagX + 50, diagY + diagH * 0.38);
+        ctx.closePath();
+        ctx.fill();
+
+        // Upper outer bark
+        ctx.fillStyle = '#78350f';
+        ctx.beginPath();
+        ctx.moveTo(diagX + 86, diagY);
+        ctx.lineTo(diagX + 100, diagY);
+        ctx.lineTo(diagX + 100 + upperBulge, diagY + diagH * 0.38);
+        ctx.lineTo(diagX + 86 + upperBulge, diagY + diagH * 0.38);
+        ctx.closePath();
+        ctx.fill();
+
+        // Downward sugar arrow blocked at cut
+        ctx.fillStyle = '#78350f';
+        ctx.font = 'bold 10px sans-serif';
+        ctx.fillText('↓ 養分', diagX + 52, diagY + 25);
+        ctx.fillText('滯留腫大', diagX + 52, diagY + 50);
+
+        // Lower phloem (starved)
+        ctx.fillStyle = '#9ca3af';
+        ctx.fillRect(diagX + 50, diagY + diagH * 0.66, 32, diagH * 0.34);
+        ctx.fillStyle = '#5c280b';
+        ctx.fillRect(diagX + 82, diagY + diagH * 0.66, 12, diagH * 0.34);
+
+        // Cut Gap label
+        ctx.fillStyle = '#f87171';
+        ctx.font = 'bold 10px "Noto Sans TC", sans-serif';
+        ctx.fillText(state.mode === 'shallow' && phys.healed > 50 ? '✓ 癒傷組織接通' : '← 環剝缺口 →', diagX + 54, midY + 4);
+      }
+
+      // Legend Footer inside Inset
+      ctx.font = '10px "Noto Sans TC", sans-serif';
+      ctx.fillStyle = '#38bdf8';
+      ctx.fillText('■ 木質部(內)', boxX + 14, boxY + boxH - 24);
+      ctx.fillStyle = '#4ade80';
+      ctx.fillText('■ 形成層(中)', boxX + 78, boxY + boxH - 24);
+      ctx.fillStyle = '#fbbf24';
+      ctx.fillText('■ 韌皮部(外)', boxX + 14, boxY + boxH - 8);
+      ctx.fillStyle = '#a16207';
+      ctx.fillText('■ 樹皮保護層', boxX + 78, boxY + boxH - 8);
+
+      ctx.restore();
+    }
+
+    // --- Animation Loop ---
+    let lastTime = performance.now();
+    function animate(now) {
+      const dt = Math.min(0.1, (now - lastTime) / 1000);
+      lastTime = now;
+
+      if (state.playing) {
+        state.day += dt * 4.5 * state.speed;
+        if (state.day >= state.maxDay) {
+          state.day = state.maxDay;
+          state.playing = false;
+          syncPlayButton();
+        }
+        updateUI();
+      }
+
+      drawScene(dt);
+      requestAnimationFrame(animate);
+    }
+
+    function syncPlayButton() {
+      const playIcon = document.getElementById('playIcon');
+      const playText = document.getElementById('playText');
+      if (state.playing) {
+        playIcon.textContent = '⏸';
+        playText.textContent = '暫停模擬';
+      } else {
+        playIcon.textContent = '▶';
+        playText.textContent = state.day >= state.maxDay ? '重新播放' : '繼續播放';
+      }
+    }
+
+    // --- Event Listeners ---
+    document.getElementById('playPauseBtn').addEventListener('click', () => {
+      if (state.day >= state.maxDay) {
+        state.day = 0;
+        state.fallingLeaves = [];
+        state.playing = true;
+      } else {
+        state.playing = !state.playing;
+      }
+      syncPlayButton();
+      updateUI();
+    });
+
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      state.day = 0;
+      state.fallingLeaves = [];
+      state.playing = false;
+      initParticles();
+      syncPlayButton();
+      updateUI();
+    });
+
+    document.getElementById('timeSlider').addEventListener('input', (e) => {
+      state.day = parseFloat(e.target.value);
+      state.playing = false;
+      syncPlayButton();
+      updateUI();
+    });
+
+    document.querySelectorAll('.speed-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        state.speed = parseFloat(btn.getAttribute('data-speed'));
+        document.querySelectorAll('.speed-btn').forEach((b) => {
+          b.className = 'speed-btn px-2 py-1 rounded text-slate-300 hover:text-white';
+        });
+        btn.className = 'speed-btn px-2 py-1 rounded bg-slate-700 text-emerald-400 font-bold';
+      });
+    });
+
+    document.querySelectorAll('.stage-pill').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        state.day = parseFloat(btn.getAttribute('data-jump'));
+        updateUI();
+      });
+    });
+
+    document.querySelectorAll('.causal-card').forEach((card) => {
+      card.addEventListener('click', () => {
+        state.day = parseFloat(card.getAttribute('data-step-jump'));
+        updateUI();
+      });
+    });
+
+    function setSimulationMode(mode) {
+      state.mode = mode;
+      state.day = 0;
+      state.fallingLeaves = [];
+      state.playing = true;
+      initParticles();
+      syncPlayButton();
+
+      const btnGirdled = document.getElementById('modeGirdledBtn');
+      const btnControl = document.getElementById('modeControlBtn');
+      const btnShallow = document.getElementById('modeShallowBtn');
+
+      const inactiveClass = 'px-3 py-1.5 rounded-md font-medium text-slate-300 hover:text-white transition';
+      btnGirdled.className = mode === 'girdled' ? 'px-3 py-1.5 rounded-md font-semibold bg-amber-500 text-slate-950 transition' : inactiveClass;
+      btnControl.className = mode === 'control' ? 'px-3 py-1.5 rounded-md font-semibold bg-emerald-500 text-slate-950 transition' : inactiveClass;
+      btnShallow.className = mode === 'shallow' ? 'px-3 py-1.5 rounded-md font-semibold bg-rose-500 text-white transition' : inactiveClass;
+
+      if (metricsChart) {
+        metricsChart.data.datasets = buildChartDatasets(mode);
+        metricsChart.update();
+      }
+      updateUI();
+    }
+
+    document.getElementById('modeGirdledBtn').addEventListener('click', () => setSimulationMode('girdled'));
+    document.getElementById('modeControlBtn').addEventListener('click', () => setSimulationMode('control'));
+    document.getElementById('modeShallowBtn').addEventListener('click', () => setSimulationMode('shallow'));
+
+    document.getElementById('showMicroToggle').addEventListener('change', (e) => {
+      state.showMicro = e.target.checked;
+    });
+
+    document.getElementById('showLabelsToggle').addEventListener('change', (e) => {
+      state.showLabels = e.target.checked;
+    });
+
+    // Quiz Modal Logic
+    const quizModal = document.getElementById('quizModal');
+    document.getElementById('quizModalBtn').addEventListener('click', () => {
+      quizModal.classList.remove('hidden');
+      quizModal.classList.add('flex');
+    });
+    document.getElementById('closeQuizBtn').addEventListener('click', () => {
+      quizModal.classList.add('hidden');
+      quizModal.classList.remove('flex');
+    });
+    quizModal.addEventListener('click', (e) => {
+      if (e.target === quizModal) {
+        quizModal.classList.add('hidden');
+        quizModal.classList.remove('flex');
+      }
+    });
+
+    document.querySelectorAll('.quiz-opt').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const q = btn.getAttribute('data-q');
+        const isCorrect = btn.getAttribute('data-correct') === 'true';
+        const fb = document.getElementById('quizFeedback' + q);
+        fb.classList.remove('hidden');
+        if (isCorrect) {
+          fb.textContent = '✅ 答對了！環狀剝皮切斷韌皮部，導致根部先餓死，隨後才因失去吸水能力使上方莖葉枯死。';
+          fb.className = 'mt-2 font-medium text-emerald-400';
+        } else {
+          fb.textContent = '❌ 再想一下！環剝並未切斷內側的木質部，初期水分仍能上升，真正先缺乏能量的是下方的根系。';
+          fb.className = 'mt-2 font-medium text-rose-400';
+        }
+      });
+    });
+
+    // Initialize on load
+    window.addEventListener('load', () => {
+      resizeCanvas();
+      initChart();
+      syncPlayButton();
+      updateUI();
+      requestAnimationFrame(animate);
+    });
+  </script>
+</body>
+</html>

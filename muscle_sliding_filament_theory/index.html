@@ -1,0 +1,1456 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D 肌肉收縮分子動態模擬器 — 肌凝蛋白、肌動蛋白、Ca²⁺ 與 ATP 橫橋循環</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', 'Noto Sans TC', sans-serif;
+      background-color: #070b14;
+      color: #f1f5f9;
+      overflow-x: hidden;
+    }
+    #canvas-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      min-height: 440px;
+      background: radial-gradient(circle at 50% 45%, #131d36 0%, #070b14 85%);
+      overflow: hidden;
+      touch-action: none;
+    }
+    .label-3d {
+      position: absolute;
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+      backdrop-filter: blur(6px);
+      transition: opacity 0.2s ease;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      z-index: 10;
+    }
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.82);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+    }
+    input[type="range"] {
+      accent-color: #38bdf8;
+    }
+    .stage-pill.active {
+      background: linear-gradient(135deg, rgba(14, 165, 233, 0.28), rgba(99, 102, 241, 0.28));
+      border-color: #38bdf8;
+      box-shadow: 0 0 15px rgba(56, 189, 248, 0.25);
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col bg-slate-950 text-slate-100">
+
+  <!-- Top Navigation & Status Header -->
+  <header class="glass-panel sticky top-0 z-30 px-4 py-2.5 border-b border-slate-800/80">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-rose-500 via-amber-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-rose-500/20 font-bold text-slate-950 text-sm">
+          3D
+        </div>
+        <div>
+          <h1 class="text-sm sm:text-base font-bold tracking-tight text-white flex items-center gap-2">
+            肌肉收縮分子動態模擬器
+            <span class="hidden md:inline-block text-xs font-medium px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/30">
+              Sliding Filament &amp; Cross-Bridge Cycle
+            </span>
+          </h1>
+          <p class="text-xs text-slate-400">肌動蛋白 (Actin) · 肌凝蛋白 (Myosin) · 鈣離子 (Ca²⁺) · ATP 能量循環</p>
+        </div>
+      </div>
+
+      <!-- Quick Preset & View Buttons -->
+      <div class="flex flex-wrap items-center gap-1.5">
+        <button id="btn-action-potential" type="button" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 transition flex items-center gap-1.5 shadow-sm">
+          <span>⚡</span> 釋放神經衝動 (Ca²⁺ 湧入)
+        </button>
+        <button id="btn-preset-tetanus" type="button" class="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/30 transition">
+          💪 強直收縮
+        </button>
+        <button id="btn-preset-rigor" type="button" class="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 transition">
+          ⚠️ 缺 ATP 僵直
+        </button>
+        <button id="btn-preset-relax" type="button" class="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition">
+          🧘 舒張復位
+        </button>
+        <button id="btn-sound-toggle" type="button" class="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition" title="切換合成音效">
+          🔇 音效: 關
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Grid -->
+  <main class="flex-1 max-w-7xl w-full mx-auto grid grid-cols-1 lg:grid-cols-12 gap-4 p-3 sm:p-4">
+
+    <!-- Left / Center: 3D Viewport & Floating HUD (8 cols on lg) -->
+    <section class="lg:col-span-8 flex flex-col gap-3">
+      <div class="relative flex-1 rounded-2xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col min-h-[460px] sm:min-h-[540px]">
+        
+        <!-- 3D Canvas Container -->
+        <div id="canvas-container" class="flex-1 w-full">
+          <!-- Floating 3D Labels Container -->
+          <div id="labels-layer" class="absolute inset-0 pointer-events-none overflow-hidden">
+            <div id="lbl-actin" class="label-3d bg-rose-950/85 text-rose-200 border-rose-400/40">肌動蛋白細絲 (Actin)</div>
+            <div id="lbl-tropomyosin" class="label-3d bg-indigo-950/85 text-indigo-200 border-indigo-400/40">原肌凝蛋白 (Tropomyosin)</div>
+            <div id="lbl-troponin" class="label-3d bg-purple-950/85 text-purple-200 border-purple-400/40">肌鈣蛋白 (Troponin)</div>
+            <div id="lbl-binding-site" class="label-3d bg-amber-950/90 text-amber-200 border-amber-400/50">活性結合位點 (Binding Site)</div>
+            <div id="lbl-myosin-head" class="label-3d bg-sky-950/85 text-sky-200 border-sky-400/40">肌凝蛋白頭端 (Myosin Head)</div>
+            <div id="lbl-myosin-backbone" class="label-3d bg-blue-950/85 text-blue-200 border-blue-400/40">肌凝蛋白粗絲 (Thick Filament)</div>
+            <div id="lbl-atp" class="label-3d bg-yellow-950/90 text-yellow-200 border-yellow-400/50">ATP / ADP+Pi</div>
+            <div id="lbl-ca" class="label-3d bg-emerald-950/90 text-emerald-200 border-emerald-400/50">Ca²⁺ 鈣離子</div>
+          </div>
+
+          <!-- Top-Left Real-Time Telemetry Overlay -->
+          <div class="absolute top-3 left-3 z-20 flex flex-wrap gap-2 pointer-events-none">
+            <div class="glass-panel px-3 py-2 rounded-xl text-xs">
+              <div class="text-slate-400 text-[10px] uppercase tracking-wider">肌節長度 (Sarcomere)</div>
+              <div class="font-bold text-base text-sky-300 flex items-baseline gap-1">
+                <span id="hud-sarcomere-len">2.50</span>
+                <span class="text-xs font-normal text-slate-400">μm</span>
+              </div>
+              <div class="w-28 h-1.5 bg-slate-800 rounded-full mt-1 overflow-hidden">
+                <div id="hud-sarcomere-bar" class="h-full bg-gradient-to-r from-sky-400 to-emerald-400 transition-all duration-150" style="width: 20%"></div>
+              </div>
+            </div>
+
+            <div class="glass-panel px-3 py-2 rounded-xl text-xs">
+              <div class="text-slate-400 text-[10px] uppercase tracking-wider">橫橋張力 (Tension)</div>
+              <div class="font-bold text-base text-rose-300 flex items-baseline gap-1">
+                <span id="hud-tension">0</span>
+                <span class="text-xs font-normal text-slate-400">% Max</span>
+              </div>
+              <div class="w-28 h-1.5 bg-slate-800 rounded-full mt-1 overflow-hidden">
+                <div id="hud-tension-bar" class="h-full bg-gradient-to-r from-amber-400 to-rose-500 transition-all duration-150" style="width: 0%"></div>
+              </div>
+            </div>
+
+            <div class="glass-panel px-3 py-2 rounded-xl text-xs">
+              <div class="text-slate-400 text-[10px] uppercase tracking-wider">頭端角度 / 核苷酸狀態</div>
+              <div id="hud-head-state" class="font-semibold text-amber-300 mt-0.5">90° 高能備發 (ADP + Pi)</div>
+              <div id="hud-site-state" class="text-[11px] text-emerald-300">結合位點：遮蔽中</div>
+            </div>
+          </div>
+
+          <!-- Top-Right Camera Preset Controls -->
+          <div class="absolute top-3 right-3 z-20 flex flex-col gap-1.5">
+            <div class="glass-panel p-1.5 rounded-xl flex flex-wrap gap-1">
+              <button id="cam-closeup" type="button" class="px-2.5 py-1 rounded-lg text-xs font-medium bg-sky-500/25 text-sky-200 border border-sky-400/30 hover:bg-sky-500/35 transition">
+                🔬 橫橋特寫
+              </button>
+              <button id="cam-sarcomere" type="button" class="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-800/80 text-slate-300 hover:bg-slate-700 transition">
+                📐 肌節全景
+              </button>
+              <button id="cam-actin" type="button" class="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-800/80 text-slate-300 hover:bg-slate-700 transition">
+                🧬 結合位點視角
+              </button>
+              <button id="btn-toggle-labels" type="button" class="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-800/80 text-sky-300 border border-sky-500/30 hover:bg-slate-700 transition">
+                🏷️ 標籤: 開
+              </button>
+            </div>
+          </div>
+
+          <!-- Bottom Live Stage Banner inside 3D Viewport -->
+          <div class="absolute bottom-3 left-3 right-3 z-20 glass-panel p-3 rounded-xl border border-slate-700/70">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div class="flex items-start sm:items-center gap-2.5">
+                <span id="banner-stage-badge" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-sky-500/20 text-sky-300 border border-sky-400/40 shrink-0">
+                  階段 1 / 6
+                </span>
+                <div>
+                  <h2 id="banner-stage-title" class="text-sm font-bold text-white">
+                    舒張待命狀態 (Resting &amp; Cocked State)
+                  </h2>
+                  <p id="banner-stage-desc" class="text-xs text-slate-300 mt-0.5 leading-relaxed">
+                    低濃度 Ca²⁺ 下，原肌凝蛋白 (Tropomyosin) 遮蔽肌動蛋白上的黃色結合位點；肌凝蛋白頭端帶有已水解的 ADP + Pi，處於 90° 高能備發角度。
+                  </p>
+                </div>
+              </div>
+
+              <!-- Playback Toolbar -->
+              <div class="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                <button id="btn-prev-step" type="button" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition text-xs font-semibold" title="上一步驟">
+                  ⏮ 上一步
+                </button>
+                <button id="btn-play-pause" type="button" class="px-3.5 py-2 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs transition shadow-md shadow-sky-500/20 flex items-center gap-1">
+                  <span id="play-icon">⏸</span> <span id="play-text">暫停</span>
+                </button>
+                <button id="btn-next-step" type="button" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition text-xs font-semibold" title="下一步驟">
+                  下一步 ⏭
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Color Legend Bar -->
+      <div class="glass-panel rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-rose-500 inline-block shadow-sm shadow-rose-500"></span> 肌動蛋白 (Actin)</span>
+          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-amber-400 inline-block shadow-sm shadow-amber-400"></span> 活性結合位點 (Binding Site)</span>
+          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-indigo-400 inline-block"></span> 原肌凝蛋白 (Tropomyosin)</span>
+          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-purple-400 inline-block"></span> 肌鈣蛋白 (Troponin)</span>
+          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-sky-400 inline-block"></span> 肌凝蛋白頭端 (Myosin Head)</span>
+          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-emerald-400 inline-block shadow-sm shadow-emerald-400"></span> 鈣離子 (Ca²⁺)</span>
+          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-yellow-300 inline-block"></span> ATP / ADP + Pi</span>
+        </div>
+        <span class="text-[11px] text-slate-400">💡 滑鼠左鍵拖曳旋轉 · 滾輪縮放 · 右鍵平移</span>
+      </div>
+    </section>
+
+    <!-- Right Column: Controls, Cycle Stepper & Molecular Mechanism Details (4 cols on lg) -->
+    <aside class="lg:col-span-4 flex flex-col gap-3">
+
+      <!-- Physiological Parameter Controls Card -->
+      <div class="glass-panel rounded-2xl p-4 flex flex-col gap-3.5">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+          <h3 class="text-sm font-bold text-white flex items-center gap-1.5">
+            <span>🎛️</span> 細胞內生理環境調控
+          </h3>
+          <span id="mode-indicator" class="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+            自動循環模式
+          </span>
+        </div>
+
+        <!-- Calcium Concentration Slider -->
+        <div>
+          <div class="flex justify-between items-center text-xs mb-1">
+            <label for="slider-ca" class="font-semibold text-emerald-300 flex items-center gap-1.5">
+              <span>🟢 肌漿內鈣離子濃度 [Ca²⁺]</span>
+            </label>
+            <span id="val-ca" class="font-mono font-bold text-emerald-400">85% (8.5 μM)</span>
+          </div>
+          <input id="slider-ca" type="range" min="0" max="100" value="85" class="w-full h-2 bg-slate-800 rounded-lg cursor-pointer" />
+          <div class="flex justify-between text-[11px] text-slate-400 mt-1">
+            <span>0.1 μM (舒張，位點遮蔽)</span>
+            <span>&gt;35% 解鎖原肌凝蛋白</span>
+            <span>10 μM (完全暴露)</span>
+          </div>
+        </div>
+
+        <!-- ATP Concentration Slider -->
+        <div>
+          <div class="flex justify-between items-center text-xs mb-1">
+            <label for="slider-atp" class="font-semibold text-yellow-300 flex items-center gap-1.5">
+              <span>🟡 細胞內 ATP 能量供應 [ATP]</span>
+            </label>
+            <span id="val-atp" class="font-mono font-bold text-yellow-300">90% (4.5 mM)</span>
+          </div>
+          <input id="slider-atp" type="range" min="0" max="100" value="90" class="w-full h-2 bg-slate-800 rounded-lg cursor-pointer" />
+          <div class="flex justify-between text-[11px] text-slate-400 mt-1">
+            <span>0 mM (死後僵直 Rigor)</span>
+            <span>正常代謝補充</span>
+            <span>5.0 mM (充足)</span>
+          </div>
+        </div>
+
+        <!-- Simulation Speed Slider -->
+        <div>
+          <div class="flex justify-between items-center text-xs mb-1">
+            <label for="slider-speed" class="font-semibold text-sky-300">
+              ⏱️ 分子動力演化速度
+            </label>
+            <span id="val-speed" class="font-mono font-bold text-sky-300">1.0x</span>
+          </div>
+          <input id="slider-speed" type="range" min="20" max="250" value="100" class="w-full h-2 bg-slate-800 rounded-lg cursor-pointer" />
+        </div>
+
+        <!-- Structural Layer Checkboxes -->
+        <div class="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800/80 text-xs">
+          <label class="flex items-center gap-2 cursor-pointer text-slate-300 hover:text-white">
+            <input id="chk-show-tropomyosin" type="checkbox" checked class="rounded accent-sky-400" />
+            <span>顯示原肌凝/肌鈣蛋白</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer text-slate-300 hover:text-white">
+            <input id="chk-show-ca" type="checkbox" checked class="rounded accent-emerald-400" />
+            <span>顯示 Ca²⁺ 離子擴散</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- 6-Stage Interactive Cross-Bridge Cycle Navigator -->
+      <div class="glass-panel rounded-2xl p-4 flex flex-col gap-2.5 flex-1">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+          <h3 class="text-sm font-bold text-white flex items-center gap-1.5">
+            <span>🔄</span> 橫橋循環六大分子階段 (點擊跳轉)
+          </h3>
+          <span class="text-[11px] text-slate-400">Cross-Bridge Cycle</span>
+        </div>
+
+        <div id="stage-list" class="flex flex-col gap-1.5">
+          <button type="button" data-stage="0" class="stage-pill text-left p-2.5 rounded-xl border border-slate-800 bg-slate-900/60 hover:bg-slate-800/70 transition flex items-start gap-2.5">
+            <span class="w-5 h-5 rounded-full bg-slate-800 text-slate-300 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">1</span>
+            <div>
+              <div class="text-xs font-bold text-white">舒張狀態：結合位點遮蔽</div>
+              <div class="text-[11px] text-slate-400">低 Ca²⁺，原肌凝蛋白阻擋肌動蛋白；肌凝蛋白攜 ADP+Pi 呈 90° 備發態</div>
+            </div>
+          </button>
+
+          <button type="button" data-stage="1" class="stage-pill text-left p-2.5 rounded-xl border border-slate-800 bg-slate-900/60 hover:bg-slate-800/70 transition flex items-start gap-2.5">
+            <span class="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">2</span>
+            <div>
+              <div class="text-xs font-bold text-emerald-300">Ca²⁺ 結合肌鈣蛋白：暴露結合位點</div>
+              <div class="text-[11px] text-slate-400">Ca²⁺ 結合 Troponin C，牽動原肌凝蛋白旋轉移位，露出黃色活性位點</div>
+            </div>
+          </button>
+
+          <button type="button" data-stage="2" class="stage-pill text-left p-2.5 rounded-xl border border-slate-800 bg-slate-900/60 hover:bg-slate-800/70 transition flex items-start gap-2.5">
+            <span class="w-5 h-5 rounded-full bg-amber-500/20 text-amber-300 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">3</span>
+            <div>
+              <div class="text-xs font-bold text-amber-300">橫橋形成 (Cross-Bridge Formation)</div>
+              <div class="text-[11px] text-slate-400">高能態肌凝蛋白頭端 (含 ADP+Pi) 向上抬升並緊密結合肌動蛋白位點</div>
+            </div>
+          </button>
+
+          <button type="button" data-stage="3" class="stage-pill text-left p-2.5 rounded-xl border border-slate-800 bg-slate-900/60 hover:bg-slate-800/70 transition flex items-start gap-2.5">
+            <span class="w-5 h-5 rounded-full bg-rose-500/20 text-rose-300 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">4</span>
+            <div>
+              <div class="text-xs font-bold text-rose-300">Pi 與 ADP 釋放：動力衝程 (Power Stroke)</div>
+              <div class="text-[11px] text-slate-400">無機磷酸 Pi 脫離引發構型轉動 (90°→45°)，將肌動蛋白向中心拉動收縮</div>
+            </div>
+          </button>
+
+          <button type="button" data-stage="4" class="stage-pill text-left p-2.5 rounded-xl border border-slate-800 bg-slate-900/60 hover:bg-slate-800/70 transition flex items-start gap-2.5">
+            <span class="w-5 h-5 rounded-full bg-yellow-500/20 text-yellow-300 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">5</span>
+            <div>
+              <div class="text-xs font-bold text-yellow-300">ATP 結合：橫橋解離 (Detachment)</div>
+              <div class="text-[11px] text-slate-400">新 ATP 分子進入肌凝蛋白核苷酸槽，降低對肌動蛋白親和力而解開橫橋</div>
+            </div>
+          </button>
+
+          <button type="button" data-stage="5" class="stage-pill text-left p-2.5 rounded-xl border border-slate-800 bg-slate-900/60 hover:bg-slate-800/70 transition flex items-start gap-2.5">
+            <span class="w-5 h-5 rounded-full bg-sky-500/20 text-sky-300 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">6</span>
+            <div>
+              <div class="text-xs font-bold text-sky-300">ATP 水解：肌凝蛋白頭端復位 (Re-cocking)</div>
+              <div class="text-[11px] text-slate-400">ATPase 將 ATP 水解為 ADP + Pi，能量儲存於頭端樞紐並回彈至 90°</div>
+            </div>
+          </button>
+        </div>
+
+        <!-- Physiological Status Alert Box -->
+        <div id="physio-alert" class="mt-auto p-3 rounded-xl bg-slate-900/90 border border-slate-800 text-xs leading-relaxed text-slate-300">
+          <span class="font-bold text-sky-400">🔬 分子生理提示：</span>
+          <span id="physio-alert-text">當 [Ca²⁺] 與 [ATP] 均充足時，橫橋不斷進行「結合 → 拉動 → 解離 → 復位」循環，使兩側 Z 盤向 M 線靠攏，產生肌肉收縮張力。</span>
+        </div>
+      </div>
+
+    </aside>
+  </main>
+
+  <script>
+    (function () {
+      // ==========================================
+      // 1. Stage Metadata & Simulation State
+      // ==========================================
+      const STAGES = [
+        {
+          id: 0,
+          badge: '階段 1 / 6 · 舒張待命',
+          title: '舒張狀態：原肌凝蛋白遮蔽結合位點 (Resting State)',
+          desc: '當肌漿內 [Ca²⁺] 低於閾值時，原肌凝蛋白 (Tropomyosin) 覆蓋肌動蛋白上的黃色結合位點；肌凝蛋白頭端攜帶已水解的 ADP + Pi 處於 90° 高能備發態。',
+          headState: '90° 高能備發 (ADP + Pi)',
+          tension: 5
+        },
+        {
+          id: 1,
+          badge: '階段 2 / 6 · 鈣離子活化',
+          title: 'Ca²⁺ 結合肌鈣蛋白：原肌凝蛋白位移 (Ca²⁺ Activation)',
+          desc: '動作電位促使肌漿網釋放 Ca²⁺ 並結合至肌鈣蛋白 (Troponin C)，引發構型改變，將原肌凝蛋白拉離溝槽，暴露肌動蛋白上的黃色結合位點。',
+          headState: '90° 高能備發 (ADP + Pi)',
+          tension: 15
+        },
+        {
+          id: 2,
+          badge: '階段 3 / 6 · 橫橋形成',
+          title: '橫橋形成：肌凝蛋白與肌動蛋白結合 (Cross-Bridge Formation)',
+          desc: '高能備發態的肌凝蛋白頭端 (Myosin S1) 與肌動蛋白上暴露的活性位點緊密結合，形成「肌動-肌凝蛋白橫橋 (Actomyosin Cross-Bridge)」。',
+          headState: '90° 已結合橫橋 (ADP + Pi)',
+          tension: 45
+        },
+        {
+          id: 3,
+          badge: '階段 4 / 6 · 動力衝程',
+          title: '無機磷酸 (Pi) 與 ADP 釋放：動力衝程 (Power Stroke)',
+          desc: 'Pi 釋放誘發肌凝蛋白頸部樞紐由 90° 強勢彎曲至 45°，將肌動蛋白細絲往肌節中央 (M線) 拉動約 10 nm，隨後釋放 ADP。',
+          headState: '45° 動力衝程完成 (無核苷酸)',
+          tension: 100
+        },
+        {
+          id: 4,
+          badge: '階段 5 / 6 · ATP 結合解離',
+          title: 'ATP 結合：橫橋解離 (ATP Binding & Detachment)',
+          desc: '新一個 ATP 分子進入肌凝蛋白頭端的核苷酸結合槽，立即降低肌凝蛋白對肌動蛋白的親和力，使橫橋鬆開解離（若缺 ATP 則停留在死後僵直）。',
+          headState: '45° 已解離 (結合 ATP)',
+          tension: 25
+        },
+        {
+          id: 5,
+          badge: '階段 6 / 6 · 水解復位',
+          title: 'ATP 水解為 ADP + Pi：肌凝蛋白頭端復位 (Re-cocking)',
+          desc: '肌凝蛋白頭端具 ATPase 活性，將 ATP 水解為 ADP + Pi（產物仍留在頭端上），釋放之化學能使頭端回彈至 90° 高能備發位置。',
+          headState: '90° 復位充能 (ADP + Pi)',
+          tension: 10
+        }
+      ];
+
+      const simState = {
+        playing: true,
+        manualStepMode: false,
+        caLevel: 85,
+        atpLevel: 90,
+        speed: 1.0,
+        cycleTime: 0.0,
+        targetStage: null,
+        showLabels: true,
+        showTropomyosin: true,
+        showCa: true,
+        soundEnabled: false,
+        lastStageIndex: 0,
+        actinSlideOffset: 0,
+        tropomyosinExposure: 1.0
+      };
+
+      // ==========================================
+      // 2. Web Audio Synthesizer for Bio-Events
+      // ==========================================
+      let audioCtx = null;
+      function playBioSound(type) {
+        if (!simState.soundEnabled) return;
+        try {
+          if (!audioCtx) {
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            if (AudioContextClass) audioCtx = new AudioContextClass();
+          }
+          if (!audioCtx) return;
+          if (audioCtx.state === 'suspended') audioCtx.resume();
+
+          const now = audioCtx.currentTime;
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+
+          if (type === 'ca') {
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(520, now);
+            osc.frequency.exponentialRampToValueAtTime(880, now + 0.14);
+            gain.gain.setValueAtTime(0.08, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+            osc.start(now);
+            osc.stop(now + 0.16);
+          } else if (type === 'bind') {
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(320, now);
+            osc.frequency.exponentialRampToValueAtTime(480, now + 0.1);
+            gain.gain.setValueAtTime(0.1, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+            osc.start(now);
+            osc.stop(now + 0.12);
+          } else if (type === 'stroke') {
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(240, now);
+            osc.frequency.exponentialRampToValueAtTime(110, now + 0.22);
+            gain.gain.setValueAtTime(0.09, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+            osc.start(now);
+            osc.stop(now + 0.24);
+          } else if (type === 'atp') {
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(660, now);
+            osc.frequency.exponentialRampToValueAtTime(990, now + 0.12);
+            gain.gain.setValueAtTime(0.07, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+            osc.start(now);
+            osc.stop(now + 0.14);
+          }
+        } catch (e) {
+          // Ignore audio block errors
+        }
+      }
+
+      // ==========================================
+      // 3. Three.js Scene, Camera & Custom Orbit
+      // ==========================================
+      const container = document.getElementById('canvas-container');
+      const scene = new THREE.Scene();
+      scene.fog = new THREE.FogExp2(0x070b14, 0.022);
+
+      const camera = new THREE.PerspectiveCamera(
+        42,
+        container.clientWidth / container.clientHeight,
+        0.1,
+        150
+      );
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setSize(container.clientWidth, container.clientHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.shadowMap.enabled = true;
+      container.appendChild(renderer.domElement);
+
+      // Lighting
+      const ambientLight = new THREE.AmbientLight(0x94a3b8, 0.75);
+      scene.add(ambientLight);
+
+      const dirLight1 = new THREE.DirectionalLight(0xffffff, 1.15);
+      dirLight1.position.set(10, 18, 14);
+      scene.add(dirLight1);
+
+      const dirLight2 = new THREE.DirectionalLight(0x38bdf8, 0.55);
+      dirLight2.position.set(-12, -10, -8);
+      scene.add(dirLight2);
+
+      const pointLight = new THREE.PointLight(0xf59e0b, 0.8, 25);
+      pointLight.position.set(0, 1.5, 4);
+      scene.add(pointLight);
+
+      // Camera Orbit Controller State
+      const camControl = {
+        theta: 0.12,
+        phi: 1.38,
+        radius: 13.5,
+        target: new THREE.Vector3(0, 0.3, 0),
+        targetGoal: new THREE.Vector3(0, 0.3, 0),
+        thetaGoal: 0.12,
+        phiGoal: 1.38,
+        radiusGoal: 13.5,
+        isDragging: false,
+        isPanning: false,
+        prevX: 0,
+        prevY: 0
+      };
+
+      function setCameraPreset(preset) {
+        if (preset === 'closeup') {
+          camControl.thetaGoal = 0.12;
+          camControl.phiGoal = 1.38;
+          camControl.radiusGoal = 13.2;
+          camControl.targetGoal.set(0, 0.3, 0);
+        } else if (preset === 'sarcomere') {
+          camControl.thetaGoal = 0.0;
+          camControl.phiGoal = 1.45;
+          camControl.radiusGoal = 24.5;
+          camControl.targetGoal.set(0, 0.2, 0);
+        } else if (preset === 'actin') {
+          camControl.thetaGoal = 0.45;
+          camControl.phiGoal = 1.15;
+          camControl.radiusGoal = 9.5;
+          camControl.targetGoal.set(-0.5, 1.6, 0);
+        }
+      }
+
+      // Pointer & Touch Orbit Events
+      const domElem = renderer.domElement;
+      domElem.addEventListener('pointerdown', (e) => {
+        camControl.isDragging = true;
+        camControl.isPanning = (e.button === 2 || e.shiftKey);
+        camControl.prevX = e.clientX;
+        camControl.prevY = e.clientY;
+        domElem.setPointerCapture(e.pointerId);
+      });
+
+      domElem.addEventListener('pointermove', (e) => {
+        if (!camControl.isDragging) return;
+        const dx = e.clientX - camControl.prevX;
+        const dy = e.clientY - camControl.prevY;
+        camControl.prevX = e.clientX;
+        camControl.prevY = e.clientY;
+
+        if (camControl.isPanning) {
+          camControl.targetGoal.x -= dx * 0.015;
+          camControl.targetGoal.y += dy * 0.015;
+        } else {
+          camControl.thetaGoal -= dx * 0.007;
+          camControl.phiGoal = Math.max(0.25, Math.min(Math.PI - 0.25, camControl.phiGoal - dy * 0.007));
+        }
+      });
+
+      domElem.addEventListener('pointerup', (e) => {
+        camControl.isDragging = false;
+        try {
+          domElem.releasePointerCapture(e.pointerId);
+        } catch (err) {}
+      });
+
+      domElem.addEventListener('contextmenu', (e) => e.preventDefault());
+
+      domElem.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        camControl.radiusGoal = Math.max(6.5, Math.min(30, camControl.radiusGoal + e.deltaY * 0.01));
+      }, { passive: false });
+
+      // ==========================================
+      // 4. Build 3D Molecular Structures
+      // ==========================================
+      const actinMat = new THREE.MeshStandardMaterial({
+        color: 0xf43f5e,
+        roughness: 0.32,
+        metalness: 0.12
+      });
+      const bindingSiteMat = new THREE.MeshStandardMaterial({
+        color: 0xfbbf24,
+        emissive: 0xd97706,
+        emissiveIntensity: 0.55,
+        roughness: 0.2,
+        metalness: 0.3
+      });
+      const tropomyosinMat = new THREE.MeshStandardMaterial({
+        color: 0x818cf8,
+        roughness: 0.35,
+        metalness: 0.2,
+        transparent: true,
+        opacity: 0.92
+      });
+      const troponinCMat = new THREE.MeshStandardMaterial({
+        color: 0xc084fc,
+        roughness: 0.25,
+        metalness: 0.2
+      });
+      const troponinIMat = new THREE.MeshStandardMaterial({
+        color: 0xa855f7,
+        roughness: 0.3,
+        metalness: 0.15
+      });
+      const myosinBackboneMat = new THREE.MeshStandardMaterial({
+        color: 0x1e40af,
+        roughness: 0.4,
+        metalness: 0.25
+      });
+      const myosinNeckMat = new THREE.MeshStandardMaterial({
+        color: 0x38bdf8,
+        roughness: 0.3,
+        metalness: 0.25
+      });
+      const myosinHeadMat = new THREE.MeshStandardMaterial({
+        color: 0x0ea5e9,
+        emissive: 0x0284c7,
+        emissiveIntensity: 0.2,
+        roughness: 0.25,
+        metalness: 0.2
+      });
+      const caMat = new THREE.MeshStandardMaterial({
+        color: 0x34d399,
+        emissive: 0x10b981,
+        emissiveIntensity: 0.7,
+        roughness: 0.15
+      });
+      const atpMat = new THREE.MeshStandardMaterial({
+        color: 0xfde047,
+        emissive: 0xeab308,
+        emissiveIntensity: 0.65,
+        roughness: 0.2
+      });
+      const adpMat = new THREE.MeshStandardMaterial({
+        color: 0xfb923c,
+        emissive: 0xea580c,
+        emissiveIntensity: 0.5,
+        roughness: 0.2
+      });
+      const piMat = new THREE.MeshStandardMaterial({
+        color: 0xa3e635,
+        emissive: 0x65a30d,
+        emissiveIntensity: 0.6,
+        roughness: 0.2
+      });
+      const zDiscMat = new THREE.MeshStandardMaterial({
+        color: 0x64748b,
+        roughness: 0.5,
+        metalness: 0.5
+      });
+
+      // 4.1 Thin Filament Group (Actin + Tropomyosin + Troponin + Z-Disc)
+      const thinFilamentGroup = new THREE.Group();
+      thinFilamentGroup.position.set(0, 2.1, 0);
+      scene.add(thinFilamentGroup);
+
+      const actinMonomers = [];
+      const bindingSites = [];
+      const monomerGeo = new THREE.SphereGeometry(0.46, 24, 24);
+      const siteGeo = new THREE.SphereGeometry(0.18, 16, 16);
+
+      const numPairs = 22;
+      for (let i = 0; i < numPairs; i++) {
+        const x = -9.5 + i * 0.9;
+        const twist = i * 0.48;
+
+        for (let strand = 0; strand < 2; strand++) {
+          const angle = twist + strand * Math.PI;
+          const yOff = Math.sin(angle) * 0.34;
+          const zOff = Math.cos(angle) * 0.34;
+
+          const monomer = new THREE.Mesh(monomerGeo, actinMat);
+          monomer.position.set(x, yOff, zOff);
+          thinFilamentGroup.add(monomer);
+          actinMonomers.push(monomer);
+
+          const site = new THREE.Mesh(siteGeo, bindingSiteMat);
+          site.position.set(x, yOff - 0.35, zOff * 0.7);
+          thinFilamentGroup.add(site);
+          bindingSites.push(site);
+        }
+      }
+
+      // Tropomyosin & Troponin Regulatory Group
+      const regulatoryGroup = new THREE.Group();
+      thinFilamentGroup.add(regulatoryGroup);
+
+      function createTropomyosinStrand(phaseOffset, yShift) {
+        const points = [];
+        for (let i = 0; i <= 80; i++) {
+          const t = i / 80;
+          const x = -9.8 + t * 19.6;
+          const angle = t * 22 * 0.48 + phaseOffset;
+          const y = Math.sin(angle) * 0.48 + yShift;
+          const z = Math.cos(angle) * 0.48;
+          points.push(new THREE.Vector3(x, y, z));
+        }
+        const curve = new THREE.CatmullRomCurve3(points);
+        const tubeGeo = new THREE.TubeGeometry(curve, 120, 0.13, 12, false);
+        return new THREE.Mesh(tubeGeo, tropomyosinMat);
+      }
+
+      const tropoStrand1 = createTropomyosinStrand(-0.9, -0.18);
+      const tropoStrand2 = createTropomyosinStrand(Math.PI - 0.9, -0.18);
+      regulatoryGroup.add(tropoStrand1);
+      regulatoryGroup.add(tropoStrand2);
+
+      // Troponin Complexes
+      const troponinComplexes = [];
+      const dockedCaMeshes = [];
+      const troponinPositionsX = [-6.5, -1.2, 4.1];
+
+      troponinPositionsX.forEach((tx) => {
+        const tnGroup = new THREE.Group();
+        tnGroup.position.set(tx, -0.42, 0.48);
+
+        const tnc = new THREE.Mesh(new THREE.SphereGeometry(0.26, 18, 18), troponinCMat);
+        tnc.position.set(0, 0, 0.12);
+        const tni = new THREE.Mesh(new THREE.SphereGeometry(0.22, 18, 18), troponinIMat);
+        tni.position.set(0.26, -0.1, -0.05);
+        const tnt = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.55, 12), troponinIMat);
+        tnt.rotation.z = Math.PI / 2;
+        tnt.position.set(-0.25, 0.08, 0);
+
+        const caDock1 = new THREE.Mesh(new THREE.SphereGeometry(0.13, 14, 14), caMat);
+        caDock1.position.set(-0.08, 0.22, 0.22);
+        const caDock2 = new THREE.Mesh(new THREE.SphereGeometry(0.13, 14, 14), caMat);
+        caDock2.position.set(0.14, 0.2, 0.22);
+
+        tnGroup.add(tnc, tni, tnt, caDock1, caDock2);
+        regulatoryGroup.add(tnGroup);
+        troponinComplexes.push(tnGroup);
+        dockedCaMeshes.push(caDock1, caDock2);
+      });
+
+      // Left Z-Disc anchored to the Thin Filament
+      const leftZDisc = new THREE.Group();
+      leftZDisc.position.set(-10.2, -2.1, 0);
+      const zMainBar = new THREE.Mesh(new THREE.BoxGeometry(0.45, 7.5, 2.6), zDiscMat);
+      leftZDisc.add(zMainBar);
+      for (let z = -1; z <= 1; z++) {
+        const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 7.2, 8), zDiscMat);
+        strut.position.set(0.2, 0, z * 0.8);
+        strut.rotation.z = 0.15 * z;
+        leftZDisc.add(strut);
+      }
+      thinFilamentGroup.add(leftZDisc);
+
+      // Right mirrored Z-Disc
+      const rightZDisc = leftZDisc.clone();
+      rightZDisc.position.set(11.5, 0, 0);
+      scene.add(rightZDisc);
+
+      // Center M-Line reference pillar
+      const mLineGroup = new THREE.Group();
+      mLineGroup.position.set(4.5, -0.5, 0);
+      for (let i = -1; i <= 1; i++) {
+        const mBar = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.06, 0.06, 5.8, 12),
+          new THREE.MeshBasicMaterial({ color: 0x334155, transparent: true, opacity: 0.45 })
+        );
+        mBar.position.set(0, 0.8, i * 0.9);
+        mLineGroup.add(mBar);
+      }
+      scene.add(mLineGroup);
+
+      // 4.2 Thick Filament Group
+      const thickFilamentGroup = new THREE.Group();
+      thickFilamentGroup.position.set(0, -1.55, 0);
+      scene.add(thickFilamentGroup);
+
+      const backboneGeo = new THREE.CylinderGeometry(0.58, 0.58, 21, 28);
+      backboneGeo.rotateZ(Math.PI / 2);
+      const backboneMesh = new THREE.Mesh(backboneGeo, myosinBackboneMat);
+      thickFilamentGroup.add(backboneMesh);
+
+      for (let a = 0; a < 6; a++) {
+        const ang = (a / 6) * Math.PI * 2;
+        const rodGeo = new THREE.CylinderGeometry(0.12, 0.12, 20.8, 12);
+        rodGeo.rotateZ(Math.PI / 2);
+        const rod = new THREE.Mesh(rodGeo, myosinBackboneMat);
+        rod.position.set(0, Math.sin(ang) * 0.52, Math.cos(ang) * 0.52);
+        thickFilamentGroup.add(rod);
+      }
+
+      // Build 3 Myosin Cross-Bridge Units
+      const crossBridges = [];
+      const bridgeConfigs = [
+        { baseX: -4.1, phaseShift: 0.0, isPrimary: false },
+        { baseX: -0.5, phaseShift: 0.0, isPrimary: true },
+        { baseX: 3.1, phaseShift: 0.0, isPrimary: false }
+      ];
+
+      bridgeConfigs.forEach((cfg) => {
+        const root = new THREE.Group();
+        root.position.set(cfg.baseX, 0.45, 0);
+        thickFilamentGroup.add(root);
+
+        const s2Pivot = new THREE.Group();
+        root.add(s2Pivot);
+
+        const neckLen = 1.65;
+        const neckGeo = new THREE.CylinderGeometry(0.14, 0.18, neckLen, 16);
+        neckGeo.translate(0, neckLen / 2, 0);
+        const neckMesh = new THREE.Mesh(neckGeo, myosinNeckMat);
+        s2Pivot.add(neckMesh);
+
+        const headPivot = new THREE.Group();
+        headPivot.position.set(0, neckLen, 0);
+        s2Pivot.add(headPivot);
+
+        const headGeo = new THREE.SphereGeometry(0.52, 24, 24);
+        headGeo.scale(1.35, 0.88, 0.85);
+        const headMesh = new THREE.Mesh(headGeo, myosinHeadMat.clone());
+        headMesh.position.set(0.15, 0.25, 0);
+        headPivot.add(headMesh);
+
+        const twinHeadMesh = new THREE.Mesh(headGeo, myosinHeadMat);
+        twinHeadMesh.scale.set(0.82, 0.82, 0.82);
+        twinHeadMesh.position.set(-0.25, 0.05, -0.42);
+        headPivot.add(twinHeadMesh);
+
+        const nucleotideGroup = new THREE.Group();
+        nucleotideGroup.position.set(0.45, 0.15, 0.42);
+        headPivot.add(nucleotideGroup);
+
+        const atpMesh = new THREE.Group();
+        const adenosine = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.2, 0.18), atpMat);
+        const p1 = new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 12), atpMat);
+        p1.position.set(0.2, 0, 0);
+        const p2 = new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 12), atpMat);
+        p2.position.set(0.36, 0, 0);
+        const p3 = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 12), piMat);
+        p3.position.set(0.52, 0, 0);
+        atpMesh.add(adenosine, p1, p2, p3);
+        nucleotideGroup.add(atpMesh);
+
+        const adpCluster = new THREE.Group();
+        const adpBase = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.18, 0.18), adpMat);
+        const adpP1 = new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 12), adpMat);
+        adpP1.position.set(0.18, 0, 0);
+        const adpP2 = new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 12), adpMat);
+        adpP2.position.set(0.34, 0, 0);
+        adpCluster.add(adpBase, adpP1, adpP2);
+        nucleotideGroup.add(adpCluster);
+
+        const piSphere = new THREE.Mesh(new THREE.SphereGeometry(0.14, 14, 14), piMat);
+        piSphere.position.set(0.55, 0.08, 0);
+        nucleotideGroup.add(piSphere);
+
+        crossBridges.push({
+          root,
+          s2Pivot,
+          headPivot,
+          headMesh,
+          nucleotideGroup,
+          atpMesh,
+          adpCluster,
+          piSphere,
+          isPrimary: cfg.isPrimary
+        });
+      });
+
+      // 4.3 Floating Calcium (Ca2+) Ion Pool from Sarcoplasmic Reticulum
+      const caParticles = [];
+      const caParticleGroup = new THREE.Group();
+      scene.add(caParticleGroup);
+      const caSphereGeo = new THREE.SphereGeometry(0.14, 14, 14);
+
+      for (let i = 0; i < 28; i++) {
+        const mesh = new THREE.Mesh(caSphereGeo, caMat);
+        const homeX = -8 + (i / 28) * 16 + (Math.random() - 0.5) * 0.6;
+        const homeY = 4.2 + Math.random() * 1.1;
+        const homeZ = (Math.random() - 0.5) * 2.4;
+        const targetX = -7 + (i % 7) * 2.2 + (Math.random() - 0.5) * 0.5;
+        const targetY = 1.75 + (Math.random() - 0.5) * 0.45;
+        const targetZ = (Math.random() - 0.5) * 1.1;
+
+        mesh.position.set(homeX, homeY, homeZ);
+        caParticleGroup.add(mesh);
+        caParticles.push({
+          mesh,
+          home: new THREE.Vector3(homeX, homeY, homeZ),
+          target: new THREE.Vector3(targetX, targetY, targetZ),
+          phase: Math.random() * Math.PI * 2,
+          speed: 1.5 + Math.random() * 1.5
+        });
+      }
+
+      // ==========================================
+      // 5. 3D Label Projection Helper
+      // ==========================================
+      const labelElements = {
+        actin: document.getElementById('lbl-actin'),
+        tropomyosin: document.getElementById('lbl-tropomyosin'),
+        troponin: document.getElementById('lbl-troponin'),
+        bindingSite: document.getElementById('lbl-binding-site'),
+        myosinHead: document.getElementById('lbl-myosin-head'),
+        myosinBackbone: document.getElementById('lbl-myosin-backbone'),
+        atp: document.getElementById('lbl-atp'),
+        ca: document.getElementById('lbl-ca')
+      };
+
+      const tempProjVec = new THREE.Vector3();
+      function projectLabel(el, worldPos, visibleOverride = true) {
+        if (!simState.showLabels || !visibleOverride) {
+          el.style.opacity = '0';
+          return;
+        }
+        tempProjVec.copy(worldPos);
+        tempProjVec.project(camera);
+
+        if (tempProjVec.z > 1 || tempProjVec.z < -1) {
+          el.style.opacity = '0';
+          return;
+        }
+        const halfW = container.clientWidth / 2;
+        const halfH = container.clientHeight / 2;
+        const x = tempProjVec.x * halfW + halfW;
+        const y = -tempProjVec.y * halfH + halfH;
+
+        el.style.left = `${x}px`;
+        el.style.top = `${y}px`;
+        el.style.opacity = '1';
+      }
+
+      // ==========================================
+      // 6. Core Biomechanical Kinematics & Cycle Logic
+      // ==========================================
+      const primaryBridge = crossBridges[1];
+
+      function updateKinematics(dt) {
+        const caNorm = simState.caLevel / 100;
+        const atpNorm = simState.atpLevel / 100;
+        const caActive = caNorm >= 0.35;
+
+        const targetExposure = caActive ? Math.min(1, (caNorm - 0.25) / 0.5) : 0;
+        simState.tropomyosinExposure += (targetExposure - simState.tropomyosinExposure) * Math.min(1, dt * 6);
+
+        regulatoryGroup.visible = simState.showTropomyosin;
+        regulatoryGroup.rotation.x = -simState.tropomyosinExposure * 0.95;
+        regulatoryGroup.position.y = simState.tropomyosinExposure * 0.24;
+
+        bindingSiteMat.emissiveIntensity = 0.18 + simState.tropomyosinExposure * 0.85;
+
+        dockedCaMeshes.forEach((m) => {
+          m.visible = simState.tropomyosinExposure > 0.25;
+          const s = Math.max(0.01, simState.tropomyosinExposure);
+          m.scale.set(s, s, s);
+        });
+
+        if (simState.targetStage !== null) {
+          const goal = simState.targetStage + 0.5;
+          const diff = goal - simState.cycleTime;
+          if (Math.abs(diff) < 0.02) {
+            simState.cycleTime = goal;
+          } else {
+            simState.cycleTime += diff * Math.min(1, dt * 6);
+          }
+        } else if (simState.playing) {
+          if (!caActive) {
+            const diffToRest = 0.45 - simState.cycleTime;
+            simState.cycleTime += diffToRest * Math.min(1, dt * 3.5);
+          } else if (atpNorm < 0.1 && simState.cycleTime >= 3.7 && simState.cycleTime <= 4.3) {
+            simState.cycleTime = 3.92;
+          } else {
+            const rate = 0.85 * simState.speed * (0.45 + 0.55 * Math.min(caNorm, Math.max(0.2, atpNorm)));
+            simState.cycleTime += dt * rate;
+            if (simState.cycleTime >= 6.0) {
+              simState.cycleTime = caActive ? 1.0 : 0.0;
+            }
+            if (caActive && simState.cycleTime < 1.0) {
+              simState.cycleTime += dt * 1.4;
+            }
+          }
+        }
+
+        simState.cycleTime = Math.max(0, Math.min(5.999, simState.cycleTime));
+        const currentStage = Math.floor(simState.cycleTime);
+        const stageProgress = simState.cycleTime - currentStage;
+
+        if (currentStage !== simState.lastStageIndex) {
+          simState.lastStageIndex = currentStage;
+          if (currentStage === 1) playBioSound('ca');
+          if (currentStage === 2) playBioSound('bind');
+          if (currentStage === 3) playBioSound('stroke');
+          if (currentStage === 4) playBioSound('atp');
+          updateStageUI(currentStage);
+        }
+
+        let neckAngleZ = -0.05;
+        let neckLiftY = 0.0;
+        let slideTarget = 0.0;
+        let showATP = false;
+        let showADP = true;
+        let showPi = true;
+        const atpOffset = new THREE.Vector3(0, 0, 0);
+        const adpOffset = new THREE.Vector3(0, 0, 0);
+        const piOffset = new THREE.Vector3(0.55, 0.08, 0);
+
+        if (currentStage === 0) {
+          neckAngleZ = -0.05;
+          neckLiftY = 0.0;
+          slideTarget = 0.0;
+          showATP = false;
+          showADP = true;
+          showPi = true;
+        } else if (currentStage === 1) {
+          neckAngleZ = -0.05;
+          neckLiftY = stageProgress * 0.15;
+          slideTarget = 0.0;
+          showATP = false;
+          showADP = true;
+          showPi = true;
+        } else if (currentStage === 2) {
+          const ease = stageProgress * stageProgress * (3 - 2 * stageProgress);
+          neckAngleZ = -0.05;
+          neckLiftY = 0.15 + ease * 0.52;
+          slideTarget = 0.0;
+          showATP = false;
+          showADP = true;
+          showPi = true;
+        } else if (currentStage === 3) {
+          const ease = stageProgress < 0.5
+            ? 2 * stageProgress * stageProgress
+            : 1 - Math.pow(-2 * stageProgress + 2, 2) / 2;
+          neckAngleZ = -0.05 - ease * 0.68;
+          neckLiftY = 0.67;
+          slideTarget = ease * 1.15;
+          showATP = false;
+          showPi = stageProgress < 0.65;
+          piOffset.set(0.55 + stageProgress * 1.8, 0.08 - stageProgress * 1.4, stageProgress * 1.2);
+          showADP = stageProgress < 0.92;
+          if (stageProgress > 0.55) {
+            const adpT = (stageProgress - 0.55) / 0.4;
+            adpOffset.set(adpT * 1.4, -adpT * 1.1, adpT * 0.9);
+          }
+        } else if (currentStage === 4) {
+          slideTarget = 1.15;
+          showADP = false;
+          showPi = false;
+          showATP = true;
+          if (stageProgress < 0.45) {
+            const t = 1 - stageProgress / 0.45;
+            atpOffset.set(t * 1.8, -t * 1.2, t * 1.4);
+            neckAngleZ = -0.73;
+            neckLiftY = 0.67;
+          } else {
+            const t = (stageProgress - 0.45) / 0.55;
+            atpOffset.set(0, 0, 0);
+            neckAngleZ = -0.73;
+            neckLiftY = 0.67 * (1 - t);
+          }
+        } else if (currentStage === 5) {
+          const ease = stageProgress * stageProgress * (3 - 2 * stageProgress);
+          neckAngleZ = -0.73 + ease * 0.68;
+          neckLiftY = 0.0;
+          slideTarget = 1.15 * (1 - ease);
+          if (stageProgress < 0.4) {
+            showATP = true;
+            showADP = false;
+            showPi = false;
+          } else {
+            showATP = false;
+            showADP = true;
+            showPi = true;
+          }
+        }
+
+        crossBridges.forEach((cb) => {
+          cb.s2Pivot.rotation.z = neckAngleZ;
+          cb.root.position.y = 0.45 + neckLiftY * 0.42;
+          cb.headPivot.rotation.z = -neckAngleZ * 0.35;
+          cb.headMesh.material.emissiveIntensity = (currentStage === 2 || currentStage === 3) ? 0.55 : 0.18;
+
+          cb.atpMesh.visible = showATP;
+          cb.atpMesh.position.copy(atpOffset);
+
+          cb.adpCluster.visible = showADP;
+          cb.adpCluster.position.copy(adpOffset);
+
+          cb.piSphere.visible = showPi;
+          cb.piSphere.position.copy(piOffset);
+        });
+
+        simState.actinSlideOffset += (slideTarget - simState.actinSlideOffset) * Math.min(1, dt * 10);
+        thinFilamentGroup.position.x = simState.actinSlideOffset;
+        rightZDisc.position.x = 11.5 - simState.actinSlideOffset * 0.8;
+
+        caParticleGroup.visible = simState.showCa;
+        const timeNow = performance.now() * 0.001;
+        const activeCount = Math.round((simState.caLevel / 100) * caParticles.length);
+
+        caParticles.forEach((p, idx) => {
+          const isReleased = idx < activeCount;
+          const dest = isReleased ? p.target : p.home;
+          p.mesh.position.lerp(dest, Math.min(1, dt * 3.2));
+          p.mesh.position.x += Math.sin(timeNow * p.speed + p.phase) * 0.008;
+          p.mesh.position.y += Math.cos(timeNow * p.speed + p.phase) * 0.008;
+          p.mesh.visible = idx < Math.max(4, activeCount);
+        });
+
+        const sarcomereUm = (2.50 - simState.actinSlideOffset * 0.45).toFixed(2);
+        const contractionPct = Math.min(100, Math.max(8, Math.round((simState.actinSlideOffset / 1.15) * 100)));
+        document.getElementById('hud-sarcomere-len').textContent = sarcomereUm;
+        document.getElementById('hud-sarcomere-bar').style.width = `${contractionPct}%`;
+
+        const baseTension = STAGES[currentStage].tension;
+        const liveTension = caActive ? Math.round(baseTension * (0.5 + 0.5 * caNorm)) : 0;
+        document.getElementById('hud-tension').textContent = liveTension;
+        document.getElementById('hud-tension-bar').style.width = `${liveTension}%`;
+
+        const hudHeadEl = document.getElementById('hud-head-state');
+        if (atpNorm < 0.1 && currentStage === 3 && stageProgress > 0.85) {
+          hudHeadEl.textContent = '45° 死後僵直鎖死 (無 ATP)';
+          hudHeadEl.className = 'font-semibold text-rose-400 mt-0.5';
+        } else {
+          hudHeadEl.textContent = STAGES[currentStage].headState;
+          hudHeadEl.className = 'font-semibold text-amber-300 mt-0.5';
+        }
+
+        const hudSiteEl = document.getElementById('hud-site-state');
+        if (simState.tropomyosinExposure > 0.5) {
+          hudSiteEl.textContent = '結合位點：已暴露 (Ca²⁺ 活化)';
+          hudSiteEl.className = 'text-[11px] text-emerald-300';
+        } else {
+          hudSiteEl.textContent = '結合位點：原肌凝蛋白遮蔽中';
+          hudSiteEl.className = 'text-[11px] text-rose-300';
+        }
+      }
+
+      // ==========================================
+      // 7. UI Synchronization & Event Listeners
+      // ==========================================
+      const stageButtons = document.querySelectorAll('#stage-list .stage-pill');
+
+      function updateStageUI(stageIdx) {
+        const st = STAGES[stageIdx] || STAGES[0];
+        document.getElementById('banner-stage-badge').textContent = st.badge;
+        document.getElementById('banner-stage-title').textContent = st.title;
+        document.getElementById('banner-stage-desc').textContent = st.desc;
+
+        stageButtons.forEach((btn) => {
+          const bStage = parseInt(btn.getAttribute('data-stage'), 10);
+          if (bStage === stageIdx) {
+            btn.classList.add('active');
+          } else {
+            btn.classList.remove('active');
+          }
+        });
+
+        const alertText = document.getElementById('physio-alert-text');
+        if (simState.caLevel < 35) {
+          alertText.textContent = '目前 [Ca²⁺] 濃度過低 (<35%)：原肌凝蛋白覆蓋肌動蛋白結合位點，肌凝蛋白頭端雖處於高能態但無法形成橫橋，肌肉維持舒張。';
+        } else if (simState.atpLevel < 10) {
+          alertText.textContent = '警告：細胞內缺乏 ATP！動力衝程完成後，沒有新 ATP 結合至肌凝蛋白頭端，橫橋無法解離，形成「死後僵直 (Rigor Mortis)」。';
+        } else {
+          alertText.textContent = st.desc;
+        }
+      }
+
+      function updatePlayButtonUI() {
+        const icon = document.getElementById('play-icon');
+        const text = document.getElementById('play-text');
+        const modeBadge = document.getElementById('mode-indicator');
+
+        if (simState.playing && simState.targetStage === null) {
+          icon.textContent = '⏸';
+          text.textContent = '暫停';
+          modeBadge.textContent = '自動循環模式';
+          modeBadge.className = 'text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30';
+        } else {
+          icon.textContent = '▶';
+          text.textContent = '繼續自動播放';
+          modeBadge.textContent = '逐步觀察模式';
+          modeBadge.className = 'text-[11px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30';
+        }
+      }
+
+      stageButtons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const stIdx = parseInt(btn.getAttribute('data-stage'), 10);
+          simState.playing = false;
+          simState.targetStage = stIdx;
+          if (stIdx >= 1 && simState.caLevel < 45) {
+            simState.caLevel = 85;
+            document.getElementById('slider-ca').value = '85';
+            document.getElementById('val-ca').textContent = '85% (8.5 μM)';
+          }
+          if (stIdx === 0) {
+            simState.caLevel = 10;
+            document.getElementById('slider-ca').value = '10';
+            document.getElementById('val-ca').textContent = '10% (0.2 μM)';
+          }
+          updateStageUI(stIdx);
+          updatePlayButtonUI();
+        });
+      });
+
+      document.getElementById('btn-play-pause').addEventListener('click', () => {
+        if (simState.targetStage !== null) {
+          simState.targetStage = null;
+          simState.playing = true;
+        } else {
+          simState.playing = !simState.playing;
+        }
+        updatePlayButtonUI();
+      });
+
+      document.getElementById('btn-prev-step').addEventListener('click', () => {
+        const cur = simState.targetStage !== null ? simState.targetStage : Math.floor(simState.cycleTime);
+        const prev = (cur + 5) % 6;
+        simState.playing = false;
+        simState.targetStage = prev;
+        if (prev >= 1 && simState.caLevel < 45) {
+          simState.caLevel = 85;
+          document.getElementById('slider-ca').value = '85';
+          document.getElementById('val-ca').textContent = '85% (8.5 μM)';
+        }
+        updateStageUI(prev);
+        updatePlayButtonUI();
+      });
+
+      document.getElementById('btn-next-step').addEventListener('click', () => {
+        const cur = simState.targetStage !== null ? simState.targetStage : Math.floor(simState.cycleTime);
+        const next = (cur + 1) % 6;
+        simState.playing = false;
+        simState.targetStage = next;
+        if (next >= 1 && simState.caLevel < 45) {
+          simState.caLevel = 85;
+          document.getElementById('slider-ca').value = '85';
+          document.getElementById('val-ca').textContent = '85% (8.5 μM)';
+        }
+        updateStageUI(next);
+        updatePlayButtonUI();
+      });
+
+      const sliderCa = document.getElementById('slider-ca');
+      sliderCa.addEventListener('input', (e) => {
+        simState.caLevel = parseInt(e.target.value, 10);
+        const uM = (0.1 + (simState.caLevel / 100) * 9.9).toFixed(1);
+        document.getElementById('val-ca').textContent = `${simState.caLevel}% (${uM} μM)`;
+        updateStageUI(Math.floor(simState.cycleTime));
+      });
+
+      const sliderAtp = document.getElementById('slider-atp');
+      sliderAtp.addEventListener('input', (e) => {
+        simState.atpLevel = parseInt(e.target.value, 10);
+        const mM = ((simState.atpLevel / 100) * 5.0).toFixed(1);
+        document.getElementById('val-atp').textContent = `${simState.atpLevel}% (${mM} mM)`;
+        updateStageUI(Math.floor(simState.cycleTime));
+      });
+
+      const sliderSpeed = document.getElementById('slider-speed');
+      sliderSpeed.addEventListener('input', (e) => {
+        simState.speed = parseInt(e.target.value, 10) / 100;
+        document.getElementById('val-speed').textContent = `${simState.speed.toFixed(1)}x`;
+      });
+
+      document.getElementById('chk-show-tropomyosin').addEventListener('change', (e) => {
+        simState.showTropomyosin = e.target.checked;
+      });
+      document.getElementById('chk-show-ca').addEventListener('change', (e) => {
+        simState.showCa = e.target.checked;
+      });
+
+      document.getElementById('btn-action-potential').addEventListener('click', () => {
+        simState.caLevel = 95;
+        sliderCa.value = '95';
+        document.getElementById('val-ca').textContent = '95% (9.5 μM)';
+        if (simState.atpLevel < 20) {
+          simState.atpLevel = 90;
+          sliderAtp.value = '90';
+          document.getElementById('val-atp').textContent = '90% (4.5 mM)';
+        }
+        simState.targetStage = null;
+        simState.playing = true;
+        if (simState.cycleTime < 1.0) simState.cycleTime = 1.0;
+        playBioSound('ca');
+        updatePlayButtonUI();
+      });
+
+      document.getElementById('btn-preset-tetanus').addEventListener('click', () => {
+        simState.caLevel = 100;
+        sliderCa.value = '100';
+        document.getElementById('val-ca').textContent = '100% (10.0 μM)';
+        simState.atpLevel = 100;
+        sliderAtp.value = '100';
+        document.getElementById('val-atp').textContent = '100% (5.0 mM)';
+        simState.speed = 1.8;
+        sliderSpeed.value = '180';
+        document.getElementById('val-speed').textContent = '1.8x';
+        simState.targetStage = null;
+        simState.playing = true;
+        updatePlayButtonUI();
+      });
+
+      document.getElementById('btn-preset-rigor').addEventListener('click', () => {
+        simState.caLevel = 90;
+        sliderCa.value = '90';
+        document.getElementById('val-ca').textContent = '90% (9.0 μM)';
+        simState.atpLevel = 0;
+        sliderAtp.value = '0';
+        document.getElementById('val-atp').textContent = '0% (0.0 mM)';
+        simState.targetStage = null;
+        simState.playing = true;
+        simState.cycleTime = 3.2;
+        updatePlayButtonUI();
+        updateStageUI(3);
+      });
+
+      document.getElementById('btn-preset-relax').addEventListener('click', () => {
+        simState.caLevel = 5;
+        sliderCa.value = '5';
+        document.getElementById('val-ca').textContent = '5% (0.1 μM)';
+        simState.atpLevel = 90;
+        sliderAtp.value = '90';
+        document.getElementById('val-atp').textContent = '90% (4.5 mM)';
+        simState.targetStage = null;
+        simState.playing = true;
+        simState.cycleTime = 0.2;
+        updatePlayButtonUI();
+        updateStageUI(0);
+      });
+
+      const soundBtn = document.getElementById('btn-sound-toggle');
+      soundBtn.addEventListener('click', () => {
+        simState.soundEnabled = !simState.soundEnabled;
+        soundBtn.textContent = simState.soundEnabled ? '🔊 音效: 開' : '🔇 音效: 關';
+        if (simState.soundEnabled) playBioSound('atp');
+      });
+
+      document.getElementById('cam-closeup').addEventListener('click', () => setCameraPreset('closeup'));
+      document.getElementById('cam-sarcomere').addEventListener('click', () => setCameraPreset('sarcomere'));
+      document.getElementById('cam-actin').addEventListener('click', () => setCameraPreset('actin'));
+
+      const lblBtn = document.getElementById('btn-toggle-labels');
+      lblBtn.addEventListener('click', () => {
+        simState.showLabels = !simState.showLabels;
+        lblBtn.textContent = simState.showLabels ? '🏷️ 標籤: 開' : '🏷️ 標籤: 關';
+      });
+
+      // ==========================================
+      // 8. Main Animation Loop & Responsive Resize
+      // ==========================================
+      let lastTime = performance.now();
+      const worldPos = new THREE.Vector3();
+
+      function animate(now) {
+        requestAnimationFrame(animate);
+        const dt = Math.min(0.05, (now - lastTime) / 1000);
+        lastTime = now;
+
+        camControl.theta += (camControl.thetaGoal - camControl.theta) * 0.12;
+        camControl.phi += (camControl.phiGoal - camControl.phi) * 0.12;
+        camControl.radius += (camControl.radiusGoal - camControl.radius) * 0.12;
+        camControl.target.lerp(camControl.targetGoal, 0.12);
+
+        camera.position.x = camControl.target.x + camControl.radius * Math.sin(camControl.phi) * Math.sin(camControl.theta);
+        camera.position.y = camControl.target.y + camControl.radius * Math.cos(camControl.phi);
+        camera.position.z = camControl.target.z + camControl.radius * Math.sin(camControl.phi) * Math.cos(camControl.theta);
+        camera.lookAt(camControl.target);
+
+        updateKinematics(dt);
+
+        renderer.render(scene, camera);
+
+        worldPos.set(-3.2 + thinFilamentGroup.position.x, 2.75, 0);
+        projectLabel(labelElements.actin, worldPos);
+
+        worldPos.set(2.2 + thinFilamentGroup.position.x, 2.55, 0.6);
+        projectLabel(labelElements.tropomyosin, worldPos, simState.showTropomyosin);
+
+        troponinComplexes[1].getWorldPosition(worldPos);
+        worldPos.y += 0.35;
+        projectLabel(labelElements.troponin, worldPos, simState.showTropomyosin);
+
+        worldPos.set(-0.5 + thinFilamentGroup.position.x, 1.55, 0.45);
+        projectLabel(labelElements.bindingSite, worldPos);
+
+        primaryBridge.headMesh.getWorldPosition(worldPos);
+        worldPos.y -= 0.45;
+        projectLabel(labelElements.myosinHead, worldPos);
+
+        worldPos.set(-4.2, -2.25, 0.5);
+        projectLabel(labelElements.myosinBackbone, worldPos);
+
+        primaryBridge.nucleotideGroup.getWorldPosition(worldPos);
+        worldPos.x += 0.75;
+        worldPos.y += 0.25;
+        projectLabel(labelElements.atp, worldPos);
+
+        worldPos.set(1.2, 3.6, 0);
+        projectLabel(labelElements.ca, worldPos, simState.showCa);
+      }
+
+      window.addEventListener('resize', () => {
+        if (!container) return;
+        const w = container.clientWidth;
+        const h = container.clientHeight;
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h);
+      });
+
+      updateStageUI(0);
+      updatePlayButtonUI();
+      requestAnimationFrame(animate);
+    })();
+  </script>
+</body>
+</html>
