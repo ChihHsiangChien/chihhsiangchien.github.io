@@ -1,0 +1,1868 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>有氧呼吸全覽與ATP跨膜交換：六分頁精確計量模擬器</title>
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --panel-bg: #1e293b;
+            --text-main: #f8fafc;
+            --text-sub: #94a3b8;
+            --accent-blue: #38bdf8;
+            --accent-yellow: #facc15;
+            --accent-pink: #f472b6;
+            --accent-green: #4ade80;
+            --accent-purple: #a855f7;
+            --accent-orange: #fb923c;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* 頂部標題與全域計分板 */
+        header {
+            background-color: var(--panel-bg);
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #334155;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .title-group h1 {
+            font-size: 1.25rem;
+            color: var(--accent-blue);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .title-group p {
+            font-size: 0.78rem;
+            color: var(--text-sub);
+        }
+
+        /* 模式切換開關 (Strict vs Free Mode) */
+        .mode-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: #0f172a;
+            padding: 6px 12px;
+            border-radius: 8px;
+            border: 1px solid #475569;
+        }
+
+        .toggle-label {
+            font-size: 0.82rem;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 22px;
+        }
+
+        .switch input { opacity: 0; width: 0; height: 0; }
+
+        .slider {
+            position: absolute; cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #16a34a;
+            transition: .3s;
+            border-radius: 22px;
+        }
+
+        .slider:before {
+            position: absolute; content: "";
+            height: 16px; width: 16px;
+            left: 3px; bottom: 3px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+        }
+
+        input:not(:checked) + .slider { background-color: #64748b; }
+        input:checked + .slider:before { transform: translateX(22px); }
+
+        .stats-bar {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .stat-box {
+            background: rgba(15, 23, 42, 0.9);
+            padding: 4px 10px;
+            border-radius: 6px;
+            border: 1px solid #475569;
+            text-align: center;
+            min-width: 78px;
+        }
+
+        .stat-box .label {
+            font-size: 0.68rem;
+            color: var(--text-sub);
+            display: block;
+        }
+
+        .stat-box .value {
+            font-size: 1.05rem;
+            font-weight: bold;
+        }
+
+        /* 六分頁導覽列 */
+        .tabs-nav {
+            background: #0f172a;
+            display: flex;
+            padding: 8px 20px 0 20px;
+            gap: 6px;
+            border-bottom: 2px solid #334155;
+            overflow-x: auto;
+        }
+
+        .tab-btn {
+            background: #1e293b;
+            color: var(--text-sub);
+            border: 1px solid #334155;
+            border-bottom: none;
+            padding: 9px 14px;
+            border-radius: 8px 8px 0 0;
+            font-size: 0.88rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+        }
+
+        .tab-btn:hover { background: #334155; color: white; }
+
+        .tab-btn.active {
+            background: var(--accent-blue);
+            color: #0f172a;
+            border-color: var(--accent-blue);
+        }
+
+        .step-num {
+            background: rgba(0,0,0,0.25);
+            color: inherit;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 0.74rem;
+        }
+
+        /* 主內容區 */
+        .main-container {
+            display: flex;
+            flex: 1;
+            padding: 14px 20px;
+            gap: 14px;
+            max-width: 1650px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .canvas-wrapper {
+            flex: 3;
+            background: var(--panel-bg);
+            border-radius: 12px;
+            overflow: hidden;
+            position: relative;
+            border: 1px solid #334155;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            display: flex;
+            flex-direction: column;
+        }
+
+        canvas {
+            width: 100%;
+            height: 540px;
+            display: block;
+            cursor: pointer;
+        }
+
+        .legend-bar {
+            background: #0f172a;
+            padding: 8px 16px;
+            display: flex;
+            gap: 15px;
+            font-size: 0.8rem;
+            border-top: 1px solid #334155;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .legend-item { display: flex; align-items: center; gap: 5px; }
+        .dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+
+        /* 右側面板 */
+        .side-panel {
+            flex: 1;
+            min-width: 340px;
+            max-width: 410px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .card {
+            background: var(--panel-bg);
+            border-radius: 10px;
+            padding: 14px;
+            border: 1px solid #334155;
+        }
+
+        .card h2 {
+            font-size: 1rem;
+            color: var(--accent-blue);
+            margin-bottom: 8px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #334155;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .controls-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .btn {
+            padding: 10px 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.88rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: white;
+        }
+
+        .btn:hover:not(:disabled) { transform: translateY(-2px); filter: brightness(1.1); }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; filter: grayscale(0.5); }
+
+        .btn-primary { background: linear-gradient(135deg, #38bdf8, #0284c7); }
+        .btn-purple { background: linear-gradient(135deg, #a855f7, #7e22ce); }
+        .btn-green { background: linear-gradient(135deg, #4ade80, #16a34a); color: #0f172a; }
+        .btn-yellow { background: linear-gradient(135deg, #facc15, #eab308); color: #0f172a; }
+        .btn-orange { background: linear-gradient(135deg, #fb923c, #ea580c); color: #fff; }
+        .btn-secondary { background: #334155; color: #e2e8f0; border: 1px solid #64748b; }
+
+        .btn-badge {
+            background: rgba(0,0,0,0.3);
+            padding: 2px 7px;
+            border-radius: 8px;
+            font-size: 0.72rem;
+            color: #fff;
+        }
+
+        .info-box { flex: 1; display: flex; flex-direction: column; }
+        .info-title { font-size: 0.98rem; font-weight: bold; color: var(--accent-yellow); margin-bottom: 6px; }
+        .info-content { font-size: 0.86rem; line-height: 1.55; color: #cbd5e1; flex: 1; }
+        .equation-box {
+            background: #0f172a;
+            border-left: 3px solid var(--accent-green);
+            padding: 7px 9px;
+            margin-top: 8px;
+            font-size: 0.78rem;
+            color: #e2e8f0;
+            border-radius: 0 5px 5px 0;
+        }
+        .step-guide {
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px dashed #475569;
+            font-size: 0.8rem;
+            color: var(--accent-green);
+        }
+
+        @media (max-width: 1120px) {
+            .main-container { flex-direction: column; }
+            .side-panel { max-width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="title-group">
+            <h1>🔬 細胞有氧呼吸全覽與 ATP 輸出模擬器 (精確 32 ATP 化學計量版)</h1>
+            <p>完整呈現磷脂雙層膜、CoQ/Cyt c 軌跡、電子/質子流過 ATP 合成酶，以及 ANT/PiC 跨膜交換送出 ATP</p>
+        </div>
+
+        <!-- 嚴格存量 vs 自由模式開關 -->
+        <div class="mode-control">
+            <label class="switch">
+                <input type="checkbox" id="strict-toggle" checked onchange="app.toggleStrictMode(this.checked)">
+                <span class="slider"></span>
+            </label>
+            <label for="strict-toggle" class="toggle-label" id="mode-label" style="color: #4ade80;">
+                🔒 嚴格存量限制 (符合1葡萄糖=32ATP)
+            </label>
+            <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 0.76rem;" onclick="app.resetAll()">🔄 全局重置</button>
+        </div>
+
+        <!-- 全域精確代謝庫存計分板 -->
+        <div class="stats-bar">
+            <div class="stat-box" title="待分解的葡萄糖存量">
+                <span class="label">葡萄糖 (6C)</span>
+                <span class="value" style="color: #38bdf8;" id="stat-glu">1</span>
+            </div>
+            <div class="stat-box" title="糖解作用產出，供階段2使用">
+                <span class="label">丙酮酸 (3C)</span>
+                <span class="value" style="color: #fb923c;" id="stat-pyr">0</span>
+            </div>
+            <div class="stat-box" title="聯絡反應產出，供階段3使用">
+                <span class="label">乙醯CoA (2C)</span>
+                <span class="value" style="color: #4ade80;" id="stat-accoa">0</span>
+            </div>
+            <div class="stat-box" title="每個 NADH 可泵出 10 H⁺ (換 2.5 ATP)">
+                <span class="label">存量 NADH</span>
+                <span class="value" style="color: #38bdf8;" id="stat-nadh">0</span>
+            </div>
+            <div class="stat-box" title="每個 FADH₂ 可泵出 6 H⁺ (換 1.5 ATP)">
+                <span class="label">存量 FADH₂</span>
+                <span class="value" style="color: #a855f7;" id="stat-fadh2">0</span>
+            </div>
+            <div class="stat-box" title="膜間腔累積的質子 H⁺ (每 4 H⁺ 可完成1個ATP合成與輸出)">
+                <span class="label">膜間腔 H⁺</span>
+                <span class="value" style="color: #f472b6;" id="stat-h">0</span>
+            </div>
+            <div class="stat-box" title="在粒線體基質合成、尚未運出的 ATP">
+                <span class="label">基質 ATP</span>
+                <span class="value" style="color: #fde047;" id="stat-mat-atp">0</span>
+            </div>
+            <div class="stat-box" style="border-color: #facc15; background: rgba(250,204,21,0.12);" title="細胞質可用 ATP + 基質 ATP 總計 (1葡萄糖理論值 = 32 ATP)">
+                <span class="label">🌟 細胞總 ATP</span>
+                <span class="value" style="color: #facc15;" id="stat-total-atp">0</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- 六大階段分頁導覽列 -->
+    <nav class="tabs-nav">
+        <button class="tab-btn active" onclick="app.switchTab(0)" id="tab-0">
+            <span class="step-num">全覽</span> 🗺️ 有氧呼吸全景與 32 ATP 總帳
+        </button>
+        <button class="tab-btn" onclick="app.switchTab(1)" id="tab-1">
+            <span class="step-num">階段 1</span> 糖解作用
+        </button>
+        <button class="tab-btn" onclick="app.switchTab(2)" id="tab-2">
+            <span class="step-num">階段 2</span> 聯絡反應 (乙醯CoA)
+        </button>
+        <button class="tab-btn" onclick="app.switchTab(3)" id="tab-3">
+            <span class="step-num">階段 3</span> 檸檬酸循環 (克氏循環)
+        </button>
+        <button class="tab-btn" onclick="app.switchTab(4)" id="tab-4">
+            <span class="step-num">階段 4</span> 電子傳遞鏈與 ATP 合成酶
+        </button>
+        <button class="tab-btn" onclick="app.switchTab(5)" id="tab-5">
+            <span class="step-num">階段 5</span> 🔄 ATP/ADP 跨膜交換輸出
+        </button>
+    </nav>
+
+    <div class="main-container">
+        <!-- 左側互動畫布 -->
+        <div class="canvas-wrapper">
+            <canvas id="simCanvas" width="1020" height="540"></canvas>
+            <div class="legend-bar">
+                <div class="legend-item"><span class="dot" style="background: #94a3b8; border: 1.5px solid #fff;"></span> 磷脂雙層 (親水頭+疏水尾)</div>
+                <div class="legend-item"><span class="dot" style="background: #facc15; box-shadow: 0 0 6px #facc15;"></span> 高能電子 (2e⁻) / ATP</div>
+                <div class="legend-item"><span class="dot" style="background: #f472b6;"></span> 質子 (H⁺)</div>
+                <div class="legend-item"><span class="dot" style="background: #f97316;"></span> CoQ 脂溶性穿梭軌跡</div>
+                <div class="legend-item"><span class="dot" style="background: #ec4899;"></span> Cyt c 水溶性滑動軌跡</div>
+                <div class="legend-item" style="margin-left: auto; color: #38bdf8;" id="canvas-hint">💡 點擊全覽圖上的區塊可直接跳轉分頁</div>
+            </div>
+        </div>
+
+        <!-- 右側控制與解說面板 -->
+        <div class="side-panel">
+            <!-- 細胞定位小地圖 -->
+            <div class="card">
+                <h2>📍 反應位置：<span id="loc-name" style="color: #facc15;">全細胞與粒線體總覽</span></h2>
+                <div style="background: #0f172a; border-radius: 8px; padding: 6px; text-align: center;">
+                    <svg width="270" height="82" viewBox="0 0 280 86">
+                        <rect x="4" y="4" width="272" height="78" rx="8" fill="#0f172a" stroke="#334155" stroke-width="2"/>
+                        <text x="42" y="22" fill="#94a3b8" font-size="11" font-weight="bold">細胞質 (Cytosol)</text>
+                        <ellipse cx="178" cy="45" rx="88" ry="31" fill="#1e1b4b" stroke="#64748b" stroke-width="2"/>
+                        <path d="M 105 45 C 105 26, 125 26, 125 40 C 125 54, 140 54, 140 36 C 140 22, 164 22, 164 42 C 164 60, 186 60, 186 36 C 186 22, 210 22, 210 42 C 210 56, 230 56, 230 36 C 230 26, 250 28, 250 45 C 250 62, 226 62, 218 50 C 210 38, 195 64, 178 62 C 164 60, 146 38, 134 58 C 125 68, 105 62, 105 45 Z" fill="#0f2942" stroke="#38bdf8" stroke-width="2"/>
+                        <text x="178" y="48" fill="#cbd5e1" font-size="10" text-anchor="middle">粒線體基質</text>
+                        <circle id="map-marker" cx="140" cy="45" r="18" fill="rgba(250, 204, 21, 0.25)" stroke="#facc15" stroke-width="2.5" stroke-dasharray="4,2"/>
+                    </svg>
+                </div>
+            </div>
+
+            <!-- 動態操作按鈕區 -->
+            <div class="card">
+                <h2>⚡ 階段互動控制台</h2>
+                <div class="controls-grid" id="controls-container"></div>
+            </div>
+
+            <!-- 詳細解說與理論驗證區 -->
+            <div class="card info-box">
+                <h2>📖 生化機制與 ATP 計量核對</h2>
+                <div class="info-title" id="info-title"></div>
+                <div class="info-content" id="info-desc"></div>
+                <div class="equation-box" id="info-eq"></div>
+                <div class="step-guide" id="step-guide"></div>
+            </div>
+        </div>
+    </div>
+
+<script>
+/**
+ * 細胞有氧呼吸六分頁完整模擬器 (含 32 ATP 精確計量、磷脂雙層、CoQ/CytC 軌道、ATP/ADP 交換輸出)
+ */
+const canvas = document.getElementById('simCanvas');
+const ctx = canvas.getContext('2d');
+
+const STAGE_DATA = {
+    0: {
+        loc: "細胞質液 ➔ 粒線體基質与內膜 (全景)",
+        marker: { x: 140, y: 45 },
+        title: "0. 有氧呼吸全覽與理論 ATP 總帳核對 (32 ATP)",
+        desc: "為什麼 1 分子葡萄糖理論上產生 <b>30 ~ 32 ATP</b>？<br>• <b>階段 1 (糖解)：</b>淨產 <b>2 ATP</b> + <b>2 NADH</b><br>• <b>階段 2 (聯絡)：</b>產出 <b>2 NADH</b> + 2 CO₂<br>• <b>階段 3 (克氏循環 2 圈)：</b>產出 <b>2 ATP</b> + <b>6 NADH</b> + <b>2 FADH₂</b> + 4 CO₂<br>• <b>階段 4 & 5 (氧化磷酸化與輸出)：</b>總共 <b>10 NADH</b> (各泵出 10 H⁺ = 100 H⁺) 與 <b>2 FADH₂</b> (各泵出 6 H⁺ = 12 H⁺)，共 <b>112 個 H⁺</b>。每合成並輸出 1 個 ATP 消耗 <b>4 H⁺</b> (3 H⁺ 驅動合成酶 + 1 H⁺ 運送 Pi)，112 ÷ 4 = <b>28 ATP</b>！",
+        eq: "理論總計：2 (糖解ATP) + 2 (克氏ATP) + 25 (10 NADH) + 3 (2 FADH₂) = 32 ATP！",
+        guide: "👉 點擊上方「一鍵自動示範 1 葡萄糖 ➔ 32 ATP」，或點擊左側全覽圖中的任一階段區塊跳轉！"
+    },
+    1: {
+        loc: "細胞質液 (Cytosol)",
+        marker: { x: 42, y: 48 },
+        title: "1. 糖解作用 (Glycolysis) — 細胞質中的裂解",
+        desc: "在細胞質中進行，1 分子<b>葡萄糖 (6C)</b> 先消耗 2 ATP 活化為果糖雙磷酸，接著裂解為 2 個三碳糖 (G3P)。<br><br>隨後每個三碳糖氧化產出 1 NADH 與 2 ATP，最終得到 <b>2 個丙酮酸 (3C)</b>、<b>2 NADH</b>，並<b>淨賺 2 ATP</b>（直接留在細胞質供細胞使用）。",
+        eq: "1 葡萄糖(6C) ➔ 2 丙酮酸(3C) + 2 ATP (淨產) + 2 NADH",
+        guide: "👉 在「嚴格存量模式」下，消耗 1 個葡萄糖將精確得到 2 丙酮酸、2 NADH 與 2 ATP。"
+    },
+    2: {
+        loc: "跨雙層膜 ➔ 粒線體基質",
+        marker: { x: 112, y: 45 },
+        title: "2. 乙醯輔酶A形成 / 聯絡反應 (Link Reaction)",
+        desc: "丙酮酸 (3C) 穿過外膜孔蛋白與內膜轉運蛋白進入基質。<br><br>由<b>丙酮酸脫氫酶複合體</b>催化：脫去 1 個碳釋放 <b>1 CO₂</b>，將電子交給 NAD⁺ 形成 <b>1 NADH</b>，剩下的二碳乙醯基與輔酶 A 結合形成<b>乙醯輔酶 A (Acetyl-CoA, 2C)</b>。<br>*(1 分子葡萄糖有 2 個丙酮酸，故需執行 2 次)*",
+        eq: "2 丙酮酸(3C) + 2 CoA + 2 NAD⁺ ➔ 2 乙醯CoA(2C) + 2 CO₂ + 2 NADH",
+        guide: "👉 觀察內膜與外膜精緻的「磷脂雙層 (親水頭+疏水尾)」結構，點擊按鈕將 2 個丙酮酸送入基質！"
+    },
+    3: {
+        loc: "粒線體基質 (Mitochondrial Matrix)",
+        marker: { x: 175, y: 48 },
+        title: "3. 檸檬酸循環 (Krebs Cycle / 克氏循環)",
+        desc: "乙醯輔酶 A (2C) 與草醯乙酸 (4C) 結合生成<b>檸檬酸 (6C)</b>。<br><br>每轉一圈（消耗 1 個乙醯CoA）：<br>• 經歷兩次氧化脫羧釋放 <b>2 CO₂</b><br>• 還原產生 <b>3 NADH</b> 與 <b>1 FADH₂</b><br>• 受質階層磷酸化產生 <b>1 ATP</b> (位於基質)<br>*(1 分子葡萄糖有 2 個乙醯CoA，需轉動 2 圈)*",
+        eq: "2 乙醯CoA (轉2圈) ➔ 4 CO₂ + 6 NADH + 2 FADH₂ + 2 基質ATP",
+        guide: "👉 點擊按鈕轉動 2 圈克氏循環，把累積的 NADH 與 FADH₂ 送往階段 4！"
+    },
+    4: {
+        loc: "粒線體內膜 (Inner Membrane)",
+        marker: { x: 215, y: 34 },
+        title: "4. 電子傳遞鏈、CoQ/Cyt c 軌跡與 ATP 合成酶",
+        desc: "<b>• 專屬載體路徑：</b>清楚標示脂溶性 <b>CoQ</b> 在磷脂雙層疏水區內的穿梭軌道，以及水溶性 <b>Cyt c</b> 在膜間腔側的滑動軌道。<br><b>• 精確質子泵出：</b>1 個 NADH 經過複合體 I(4H⁺)、III(4H⁺)、IV(2H⁺) 共泵出 <b>10 H⁺</b>；1 個 FADH₂ 跳過 I，從 II 進入，共泵出 <b>6 H⁺</b>。<br><b>• 能量與電子/質子流過 ATP 合成酶：</b>電流與質子流通過 ATP 合成酶推動轉子，每消耗 <b>4 H⁺</b> (含階段5轉運成本) 合成 <b>1 ATP</b>！",
+        eq: "1 NADH ➔ 10 H⁺ (2.5 ATP) ｜ 1 FADH₂ ➔ 6 H⁺ (1.5 ATP) ｜ 每 4 H⁺ ➔ 1 ATP",
+        guide: "👉 投入 NADH 與 FADH₂ 後，點擊「通過 ATP 合成酶發電」，觀察電子/能量流與質子穿過合成酶！"
+    },
+    5: {
+        loc: "粒線體內膜 (ANT 與 PiC 轉運蛋白)",
+        marker: { x: 235, y: 52 },
+        title: "5. ATP/ADP 跨膜交換送出 (ANT & PiC 協同機制)",
+        desc: "在粒線體基質合成的 ATP 必須送往細胞質才能供細胞使用！內膜對帶負電的 ATP 不具通透性，依賴兩大轉運蛋白：<br><br><b>① 腺苷酸轉運體 (ANT)：</b>反向運輸蛋白 (Antiporter)，將基質的 <b>ATP⁴⁻ 送出</b>到膜間腔/細胞質，同時把外部的 <b>ADP³⁻ 換進</b>基質（由膜電位差驅動）。<br><b>② 磷酸轉運體 (PiC)：</b>同向運輸蛋白 (Symporter)，利用 <b>1 個 H⁺</b> 順濃度梯度回流基質的動力，把無機磷酸 <b>Pi (H₂PO₄⁻) 帶入基質</b>，這就是為什麼每合成並輸出 1 個 ATP 總共要花費 3 + 1 = <b>4 個 H⁺</b>！",
+        eq: "基質 ATP⁴⁻ + 外部 ADP³⁻ + 外部 Pi⁻ + 膜間腔 H⁺ ➔ 細胞質可用 ATP⁴⁻ + 基質 ADP³⁻ + 基質 Pi⁻",
+        guide: "👉 點擊按鈕啟動 ANT 交換馬達，將基質中的 ATP 正式交換輸出至細胞質！"
+    }
+};
+
+class MasterRespirationApp {
+    constructor() {
+        this.currentTab = 0;
+        this.strictMode = true; // 預設開啟嚴格存量模式 (確保 1 葡萄糖 = 32 ATP)
+
+        // 全域精確化學計量庫存
+        this.inv = {
+            glu: 1,        // 初始 1 分子葡萄糖
+            pyr: 0,        // 丙酮酸 (3C)
+            accoa: 0,      // 乙醯輔酶A (2C)
+            nadh: 0,       // NADH
+            fadh2: 0,      // FADH2
+            co2: 0,        // CO2
+            h: 0,          // 膜間腔 H+ 質子存量
+            matAtp: 0,     // 位於粒線體基質、尚未輸出的 ATP
+            cytoAtp: 0     // 已在細胞質可用的 ATP
+        };
+
+        // 記錄歷史累計產量 (供分頁0總帳表核對)
+        this.ledger = {
+            glyAtp: 0,
+            glyNadh: 0,
+            linkNadh: 0,
+            krebsAtp: 0,
+            krebsNadh: 0,
+            krebsFadh2: 0,
+            etcAtp: 0,
+            exportedAtp: 0
+        };
+
+        this.floatingTokens = [];
+
+        // 各分頁動畫狀態
+        this.gly = { active: false, phase: 0, timer: 0, gluY: 115, g3pLX: 510, g3pRX: 510, g3pY: 250 };
+        this.link = { packets: [] };
+        this.krebs = { angle: 0, spinning: false, progress: 0, trig: [false, false, false] };
+        this.etc = {
+            rotorAngle: 0, rotorSpeed: 0.015,
+            coQX: 350, coQY: 255, cytCX: 545, cytCY: 168,
+            showElectronThruSynthase: true, // 視覺化電子/能量流通過 ATP 合成酶
+            imsProtons: [], matProtons: [], animParticles: [], electrons: []
+        };
+        this.ant = {
+            angle: 0, targetAngle: 0, exchanging: false, timer: 0,
+            particles: []
+        };
+
+        this.initProtons();
+        this.bindCanvasClick();
+        this.switchTab(0);
+    }
+
+    initProtons() {
+        this.etc.imsProtons = [];
+        this.etc.matProtons = [];
+        for (let i = 0; i < 14; i++) {
+            this.etc.matProtons.push({
+                x: Math.random() * 920 + 40, y: Math.random() * 130 + 370,
+                vx: (Math.random() - 0.5) * 1.2, vy: (Math.random() - 0.5) * 1.2
+            });
+        }
+    }
+
+    syncImsProtonDots() {
+        // 讓畫面上的膜間腔 H+ 粒子數量與 this.inv.h 保持視覺同步 (上限顯示 40 顆以免畫面擁擠)
+        const targetDots = Math.min(this.inv.h, 40);
+        while (this.etc.imsProtons.length < targetDots) {
+            this.etc.imsProtons.push({
+                x: Math.random() * 900 + 50, y: Math.random() * 110 + 40,
+                vx: (Math.random() - 0.5) * 1.4, vy: (Math.random() - 0.5) * 1.4
+            });
+        }
+        while (this.etc.imsProtons.length > targetDots) {
+            this.etc.imsProtons.pop();
+        }
+    }
+
+    toggleStrictMode(isStrict) {
+        this.strictMode = isStrict;
+        const lbl = document.getElementById('mode-label');
+        if (isStrict) {
+            lbl.innerHTML = '🔒 嚴格存量限制 (符合1葡萄糖=32ATP)';
+            lbl.style.color = '#4ade80';
+        } else {
+            lbl.innerHTML = '🔓 自由探索模式 (不限存量可無限點擊)';
+            lbl.style.color = '#facc15';
+        }
+        this.renderControls();
+        this.updateStatsUI();
+    }
+
+    resetAll() {
+        this.inv = { glu: 1, pyr: 0, accoa: 0, nadh: 0, fadh2: 0, co2: 0, h: 0, matAtp: 0, cytoAtp: 0 };
+        this.ledger = { glyAtp: 0, glyNadh: 0, linkNadh: 0, krebsAtp: 0, krebsNadh: 0, krebsFadh2: 0, etcAtp: 0, exportedAtp: 0 };
+        this.floatingTokens = [];
+        this.gly.active = false;
+        this.link.packets = [];
+        this.krebs.spinning = false;
+        this.etc.electrons = [];
+        this.etc.animParticles = [];
+        this.ant.exchanging = false;
+        this.ant.particles = [];
+        this.syncImsProtonDots();
+        this.renderControls();
+        this.updateStatsUI();
+    }
+
+    addGlucose() {
+        this.inv.glu += 1;
+        this.renderControls();
+        this.updateStatsUI();
+    }
+
+    // 在分頁 0 一鍵示範 1 分子葡萄糖完整產生 32 ATP
+    instantCompleteDemo() {
+        this.resetAll();
+        this.inv.glu = 0;
+        this.inv.co2 = 6;
+        this.inv.cytoAtp = 32;
+        this.ledger = {
+            glyAtp: 2, glyNadh: 2,
+            linkNadh: 2,
+            krebsAtp: 2, krebsNadh: 6, krebsFadh2: 2,
+            etcAtp: 28, exportedAtp: 30
+        };
+        this.spawnToken('🎉 1 葡萄糖完整轉化為 32 ATP！', 510, 270, 510, 220, '#facc15', '#0f172a', 36);
+        this.renderControls();
+        this.updateStatsUI();
+    }
+
+    bindCanvasClick() {
+        canvas.addEventListener('click', (e) => {
+            if (this.currentTab !== 0) return;
+            const rect = canvas.getBoundingClientRect();
+            const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
+            const my = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+            // 分頁 0 全覽圖的五個點擊熱區
+            if (mx >= 40 && mx <= 230 && my >= 80 && my <= 320) this.switchTab(1);
+            else if (mx >= 260 && mx <= 450 && my >= 80 && my <= 320) this.switchTab(2);
+            else if (mx >= 470 && mx <= 660 && my >= 80 && my <= 320) this.switchTab(3);
+            else if (mx >= 680 && mx <= 840 && my >= 80 && my <= 320) this.switchTab(4);
+            else if (mx >= 850 && mx <= 990 && my >= 80 && my <= 320) this.switchTab(5);
+        });
+    }
+
+    switchTab(idx) {
+        this.currentTab = idx;
+        this.floatingTokens = [];
+        for (let i = 0; i <= 5; i++) {
+            document.getElementById(`tab-${i}`).classList.toggle('active', i === idx);
+        }
+        const d = STAGE_DATA[idx];
+        document.getElementById('loc-name').innerText = d.loc;
+        const marker = document.getElementById('map-marker');
+        marker.setAttribute('cx', d.marker.x);
+        marker.setAttribute('cy', d.marker.y);
+
+        document.getElementById('info-title').innerHTML = d.title;
+        document.getElementById('info-desc').innerHTML = d.desc;
+        document.getElementById('info-eq').innerHTML = d.eq;
+        document.getElementById('step-guide').innerHTML = d.guide;
+
+        this.syncImsProtonDots();
+        this.renderControls();
+        this.updateStatsUI();
+    }
+
+    renderControls() {
+        const c = document.getElementById('controls-container');
+        const s = this.strictMode;
+
+        if (this.currentTab === 0) {
+            c.innerHTML = `
+                <button class="btn btn-primary" onclick="app.switchTab(1)">
+                    <span>▶️ 開始第 1 步：前往糖解作用</span>
+                    <span class="btn-badge">逐步體驗</span>
+                </button>
+                <button class="btn btn-yellow" onclick="app.instantCompleteDemo()">
+                    <span>⚡ 一鍵演算 1 葡萄糖 ➔ 32 ATP 總帳</span>
+                    <span class="btn-badge">理論驗證</span>
+                </button>
+                <button class="btn btn-secondary" onclick="app.addGlucose()">
+                    <span>➕ 補充 1 分子葡萄糖 (6C)</span>
+                    <span class="btn-badge">目前: ${this.inv.glu}</span>
+                </button>
+            `;
+        } else if (this.currentTab === 1) {
+            const canRun = !s || this.inv.glu > 0;
+            c.innerHTML = `
+                <button class="btn btn-primary" ${canRun ? '' : 'disabled'} onclick="app.runGlycolysis()">
+                    <span>🍬 1. 分解 1 分子葡萄糖 (6C)</span>
+                    <span class="btn-badge">${s ? '需 1 葡萄糖 (存量:' + this.inv.glu + ')' : '自由模式'}</span>
+                </button>
+                <button class="btn btn-secondary" onclick="app.addGlucose()">
+                    <span>➕ 補充 1 分子葡萄糖</span>
+                    <span class="btn-badge">+1 葡萄糖</span>
+                </button>
+                <button class="btn btn-green" onclick="app.switchTab(2)">
+                    <span>➡️ 前往階段 2：聯絡反應 (丙酮酸: ${this.inv.pyr})</span>
+                </button>
+            `;
+        } else if (this.currentTab === 2) {
+            const canRun1 = !s || this.inv.pyr >= 1;
+            const canRun2 = !s || this.inv.pyr >= 2;
+            c.innerHTML = `
+                <button class="btn btn-primary" ${canRun1 ? '' : 'disabled'} onclick="app.runLinkReaction(1)">
+                    <span>🚚 運送 1 個丙酮酸進入基質</span>
+                    <span class="btn-badge">${s ? '存量: ' + this.inv.pyr : '自由模式'}</span>
+                </button>
+                <button class="btn btn-orange" ${canRun2 ? '' : 'disabled'} onclick="app.runLinkReaction(2)">
+                    <span>🚚🚚 批次運送 2 個丙酮酸 (1葡萄糖份量)</span>
+                    <span class="btn-badge">+2 乙醯CoA +2 NADH</span>
+                </button>
+                <button class="btn btn-green" onclick="app.switchTab(3)">
+                    <span>➡️ 前往階段 3：克氏循環 (乙醯CoA: ${this.inv.accoa})</span>
+                </button>
+            `;
+        } else if (this.currentTab === 3) {
+            const canRun1 = !s || this.inv.accoa >= 1;
+            c.innerHTML = `
+                <button class="btn btn-green" ${canRun1 ? '' : 'disabled'} onclick="app.runKrebsCycle()">
+                    <span>🔄 投入 1 個乙醯CoA 轉動克氏循環</span>
+                    <span class="btn-badge">${s ? '存量: ' + this.inv.accoa : '自由模式'}</span>
+                </button>
+                <button class="btn btn-primary" onclick="app.switchTab(4)">
+                    <span>➡️ 前往階段 4：電子傳遞鏈 (NADH:${this.inv.nadh}, FADH₂:${this.inv.fadh2})</span>
+                </button>
+            `;
+        } else if (this.currentTab === 4) {
+            const canNadh = !s || this.inv.nadh >= 1;
+            const canFadh2 = !s || this.inv.fadh2 >= 1;
+            const canAllCarriers = !s && false || (this.inv.nadh + this.inv.fadh2 > 0);
+            const canSynth = !s || this.inv.h >= 4;
+            const canSynthAll = this.inv.h >= 4;
+
+            c.innerHTML = `
+                <button class="btn btn-primary" ${canNadh ? '' : 'disabled'} onclick="app.injectETC('NADH')">
+                    <span>⚡ 1A. 投入 1 NADH (複合體I ➔ 泵出 10 H⁺)</span>
+                    <span class="btn-badge">${s ? '存量: ' + this.inv.nadh : '自由'}</span>
+                </button>
+                <button class="btn btn-purple" ${canFadh2 ? '' : 'disabled'} onclick="app.injectETC('FADH2')">
+                    <span>⚡ 1B. 投入 1 FADH₂ (複合體II ➔ 泵出 6 H⁺)</span>
+                    <span class="btn-badge">${s ? '存量: ' + this.inv.fadh2 : '自由'}</span>
+                </button>
+                <button class="btn btn-secondary" ${canAllCarriers ? '' : 'disabled'} onclick="app.injectAllCarriers()">
+                    <span>🚀 批次投入所有累積的 NADH & FADH₂</span>
+                    <span class="btn-badge">一鍵泵出 H⁺</span>
+                </button>
+                <button class="btn btn-yellow" ${canSynth ? '' : 'disabled'} onclick="app.triggerATPSynthase(false)">
+                    <span>⚙️ 2. 通過 ATP 合成酶發電 (耗 4 H⁺ ➔ 1 ATP)</span>
+                    <span class="btn-badge">H⁺ 存量: ${this.inv.h}</span>
+                </button>
+                <button class="btn btn-green" ${canSynthAll ? '' : 'disabled'} onclick="app.triggerATPSynthase(true)">
+                    <span>⚡ 批次將所有 H⁺ 轉化為基質 ATP</span>
+                    <span class="btn-badge">可產 ${Math.floor(this.inv.h / 4)} ATP</span>
+                </button>
+                <button class="btn btn-orange" onclick="app.switchTab(5)">
+                    <span>➡️ 前往階段 5：將基質 ATP 交換送出 (${this.inv.matAtp})</span>
+                </button>
+            `;
+        } else if (this.currentTab === 5) {
+            const canEx = !s || this.inv.matAtp >= 1;
+            const canExAll = this.inv.matAtp >= 1;
+            c.innerHTML = `
+                <button class="btn btn-yellow" ${canEx ? '' : 'disabled'} onclick="app.runANTExchange(false)">
+                    <span>🔄 1. 啟動 ANT 交換輸出 1 個基質 ATP</span>
+                    <span class="btn-badge">${s ? '基質ATP: ' + this.inv.matAtp : '自由模式'}</span>
+                </button>
+                <button class="btn btn-green" ${canExAll ? '' : 'disabled'} onclick="app.runANTExchange(true)">
+                    <span>🚀 批次輸出全部基質 ATP 到細胞質</span>
+                    <span class="btn-badge">共 ${this.inv.matAtp} 個</span>
+                </button>
+                <button class="btn btn-secondary" onclick="app.switchTab(0)">
+                    <span>🗺️ 返回分頁 0：檢視 32 ATP 完整總帳表</span>
+                </button>
+            `;
+        }
+    }
+
+    updateStatsUI() {
+        document.getElementById('stat-glu').innerText = this.inv.glu;
+        document.getElementById('stat-pyr').innerText = this.inv.pyr;
+        document.getElementById('stat-accoa').innerText = this.inv.accoa;
+        document.getElementById('stat-nadh').innerText = this.inv.nadh;
+        document.getElementById('stat-fadh2').innerText = this.inv.fadh2;
+        document.getElementById('stat-h').innerText = this.inv.h;
+        document.getElementById('stat-mat-atp').innerText = this.inv.matAtp;
+        document.getElementById('stat-total-atp').innerText = this.inv.cytoAtp + this.inv.matAtp;
+    }
+
+    spawnToken(text, x, y, targetX, targetY, color, fg = '#fff', radius = 22, onArrive = null) {
+        this.floatingTokens.push({
+            text, x, y, targetX, targetY, color, fg, radius,
+            progress: 0, speed: 0.024, onArrive
+        });
+    }
+
+    // =====================================================
+    // 共用繪圖工具：擬真磷脂雙層 (Phospholipid Bilayer) 與碳鏈
+    // =====================================================
+    drawHorizontalBilayer(yTop, yBottom, skipRanges = [], headColor = '#64748b', tailColor = '#475569') {
+        ctx.save();
+        const midY = (yTop + yBottom) / 2;
+        const headR = 5.5;
+        for (let x = 12; x < canvas.width - 10; x += 15) {
+            let skip = false;
+            for (const r of skipRanges) {
+                if (x >= r[0] && x <= r[1]) { skip = true; break; }
+            }
+            if (skip) continue;
+
+            // 兩條彎曲疏水脂肪酸尾巴 (上層與下層)
+            ctx.strokeStyle = tailColor;
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            // 上層尾巴
+            ctx.moveTo(x - 2.2, yTop + headR * 2);
+            ctx.quadraticCurveTo(x - 4, (yTop + midY) / 2, x - 1.5, midY - 3);
+            ctx.moveTo(x + 2.2, yTop + headR * 2);
+            ctx.quadraticCurveTo(x + 4, (yTop + midY) / 2, x + 1.5, midY - 3);
+            // 下層尾巴
+            ctx.moveTo(x - 2.2, yBottom - headR * 2);
+            ctx.quadraticCurveTo(x - 4, (yBottom + midY) / 2, x - 1.5, midY + 3);
+            ctx.moveTo(x + 2.2, yBottom - headR * 2);
+            ctx.quadraticCurveTo(x + 4, (yBottom + midY) / 2, x + 1.5, midY + 3);
+            ctx.stroke();
+
+            // 親水端磷酸圓頭 (Phosphate Head)
+            ctx.fillStyle = headColor;
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(x, yTop + headR, headR, 0, Math.PI * 2);
+            ctx.fill(); ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(x, yBottom - headR, headR, 0, Math.PI * 2);
+            ctx.fill(); ctx.stroke();
+        }
+        ctx.restore();
+    }
+
+    drawVerticalBilayer(xLeft, xRight, skipRanges = [], headColor = '#64748b', tailColor = '#475569') {
+        ctx.save();
+        const midX = (xLeft + xRight) / 2;
+        const headR = 5.5;
+        for (let y = 55; y < canvas.height - 15; y += 15) {
+            let skip = false;
+            for (const r of skipRanges) {
+                if (y >= r[0] && y <= r[1]) { skip = true; break; }
+            }
+            if (skip) continue;
+
+            ctx.strokeStyle = tailColor;
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            // 左層疏水尾
+            ctx.moveTo(xLeft + headR * 2, y - 2);
+            ctx.lineTo(midX - 2, y - 1.5);
+            ctx.moveTo(xLeft + headR * 2, y + 2);
+            ctx.lineTo(midX - 2, y + 1.5);
+            // 右層疏水尾
+            ctx.moveTo(xRight - headR * 2, y - 2);
+            ctx.lineTo(midX + 2, y - 1.5);
+            ctx.moveTo(xRight - headR * 2, y + 2);
+            ctx.lineTo(midX + 2, y + 1.5);
+            ctx.stroke();
+
+            ctx.fillStyle = headColor;
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(xLeft + headR, y, headR, 0, Math.PI * 2);
+            ctx.fill(); ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(xRight - headR, y, headR, 0, Math.PI * 2);
+            ctx.fill(); ctx.stroke();
+        }
+        ctx.restore();
+    }
+
+    drawCarbonChain(cx, cy, count, label, subLabel = '', highlightP = false) {
+        ctx.save();
+        const r = 12, gap = 26;
+        const startX = cx - ((count - 1) * gap) / 2;
+
+        ctx.strokeStyle = '#cbd5e1';
+        ctx.lineWidth = 3.5;
+        ctx.beginPath();
+        ctx.moveTo(startX, cy);
+        ctx.lineTo(startX + (count - 1) * gap, cy);
+        ctx.stroke();
+
+        if (highlightP) {
+            ctx.fillStyle = '#facc15';
+            ctx.beginPath();
+            ctx.arc(startX - 22, cy, 9, 0, Math.PI * 2);
+            ctx.arc(startX + (count - 1) * gap + 22, cy, 9, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#0f172a'; ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'center';
+            ctx.fillText('P', startX - 22, cy + 3);
+            ctx.fillText('P', startX + (count - 1) * gap + 22, cy + 3);
+        }
+
+        for (let i = 0; i < count; i++) {
+            const x = startX + i * gap;
+            ctx.fillStyle = '#475569';
+            ctx.strokeStyle = '#f8fafc';
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(x, cy, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center';
+            ctx.fillText('C', x, cy + 3.5);
+        }
+
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = 'bold 14px "Microsoft JhengHei"';
+        ctx.textAlign = 'center';
+        ctx.fillText(label, cx, cy - 20);
+        if (subLabel) {
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '11px "Microsoft JhengHei"';
+            ctx.fillText(subLabel, cx, cy + 28);
+        }
+        ctx.restore();
+    }
+
+    // =====================================================
+    // 分頁 0：有氧呼吸全覽圖與 32 ATP 總帳表
+    // =====================================================
+    drawOverview() {
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // 左側：細胞質區 ｜ 右側：粒線體大輪廓
+        ctx.fillStyle = '#1e293b';
+        ctx.strokeStyle = '#475569';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(25, 25, 220, 310, 16);
+        ctx.fill(); ctx.stroke();
+
+        // 粒線體雙層膜大背景框
+        ctx.fillStyle = '#172554';
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.roundRect(255, 25, 740, 310, 40);
+        ctx.fill(); ctx.stroke();
+
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = 'bold 15px "Microsoft JhengHei"';
+        ctx.fillText('🏠 細胞質液 (Cytosol)', 45, 52);
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillText('⚡ 粒線體 (Mitochondrion) — 雙層膜能量工廠 (點擊下方任一階段卡片可跳轉分頁)', 285, 52);
+
+        // 五大互動階段卡片
+        const stages = [
+            { tab: 1, x: 40, y: 75, w: 190, h: 240, c: '#0284c7', title: '階段 1：糖解作用', sub: '1 葡萄糖(6C) ➔ 2 丙酮酸(3C)', out1: '✨ 淨產 +2 ATP (細胞質)', out2: '🔋 產出 +2 NADH', stat: `已產: ${this.ledger.glyAtp} ATP` },
+            { tab: 2, x: 270, y: 75, w: 185, h: 240, c: '#ea580c', title: '階段 2：聯絡反應', sub: '2 丙酮酸 ➔ 2 乙醯CoA(2C)', out1: '💨 釋放 2 CO₂', out2: '🔋 產出 +2 NADH', stat: `已產: ${this.ledger.linkNadh} NADH` },
+            { tab: 3, x: 470, y: 75, w: 190, h: 240, c: '#16a34a', title: '階段 3：克氏循環', sub: '2 乙醯CoA 轉2圈分解', out1: '✨ 產出 +2 基質 ATP', out2: '🔋 +6 NADH, +2 FADH₂', stat: `已產: ${this.ledger.krebsAtp} ATP` },
+            { tab: 4, x: 675, y: 75, w: 165, h: 240, c: '#7e22ce', title: '階段 4：電子傳遞鏈', sub: '10 NADH + 2 FADH₂', out1: '💧 泵出 112 H⁺', out2: '⚙️ 合成 +28 基質 ATP', stat: `已產: ${this.ledger.etcAtp} ATP` },
+            { tab: 5, x: 855, y: 75, w: 125, h: 240, c: '#ca8a04', title: '階段 5：ATP輸出', sub: 'ANT / PiC 轉運體', out1: '🔄 ATP⁴⁻ 送出細胞質', out2: '🔄 ADP³⁻ + Pi 換入', stat: `已輸出: ${this.ledger.exportedAtp}` }
+        ];
+
+        stages.forEach((st, idx) => {
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+            ctx.strokeStyle = st.c;
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.roundRect(st.x, st.y, st.w, st.h, 12);
+            ctx.fill(); ctx.stroke();
+
+            // 頂部色條
+            ctx.fillStyle = st.c;
+            ctx.beginPath();
+            ctx.roundRect(st.x, st.y, st.w, 36, [10, 10, 0, 0]);
+            ctx.fill();
+
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 13px "Microsoft JhengHei"';
+            ctx.textAlign = 'center';
+            ctx.fillText(st.title, st.x + st.w / 2, st.y + 23);
+
+            ctx.fillStyle = '#e2e8f0';
+            ctx.font = '12px "Microsoft JhengHei"';
+            ctx.fillText(st.sub, st.x + st.w / 2, st.y + 70);
+
+            ctx.fillStyle = '#facc15';
+            ctx.font = 'bold 12px "Microsoft JhengHei"';
+            ctx.fillText(st.out1, st.x + st.w / 2, st.y + 115);
+
+            ctx.fillStyle = '#38bdf8';
+            ctx.fillText(st.out2, st.x + st.w / 2, st.y + 145);
+
+            ctx.fillStyle = '#4ade80';
+            ctx.font = 'bold 12px "Microsoft JhengHei"';
+            ctx.fillText(st.stat, st.x + st.w / 2, st.y + 190);
+
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '11px "Microsoft JhengHei"';
+            ctx.fillText('👆 點擊進入此分頁', st.x + st.w / 2, st.y + 222);
+
+            // 階段間連接箭頭
+            if (idx < stages.length - 1) {
+                ctx.fillStyle = '#facc15';
+                ctx.font = 'bold 18px sans-serif';
+                ctx.fillText('➔', st.x + st.w + 8, st.y + 120);
+            }
+        });
+
+        // 下方：1 分子葡萄糖 = 32 ATP 理論值 vs 實際值對照表
+        ctx.fillStyle = '#1e293b';
+        ctx.strokeStyle = '#facc15';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.roundRect(25, 350, 970, 175, 12);
+        ctx.fill(); ctx.stroke();
+
+        ctx.fillStyle = '#facc15';
+        ctx.font = 'bold 15px "Microsoft JhengHei"';
+        ctx.textAlign = 'left';
+        ctx.fillText('📊 【1 分子葡萄糖 (6C) 有氧呼吸能量總帳核對表】— 為什麼理論值是 32 ATP？', 45, 378);
+
+        const headers = ['呼吸階段', '直接產出 ATP', '產生電子載體', '泵出質子 (H⁺) 數量', '經 ATP 合成酶換得 ATP (每 4 H⁺ = 1 ATP)', '您目前已累積'];
+        const colX = [45, 210, 350, 510, 690, 900];
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = 'bold 12px "Microsoft JhengHei"';
+        headers.forEach((h, i) => ctx.fillText(h, colX[i], 404));
+
+        const rows = [
+            ['1. 糖解作用 (細胞質)', '2 ATP (淨產)', '2 NADH', '2 × 10 H⁺ = 20 H⁺ (或經穿梭為 12 H⁺)', '20 ÷ 4 = 5 ATP (或 3 ATP)', `${this.ledger.glyAtp} ATP / ${this.ledger.glyNadh} NADH`],
+            ['2. 聯絡反應 (基質)', '0 ATP', '2 NADH', '2 × 10 H⁺ = 20 H⁺', '20 ÷ 4 = 5 ATP', `${this.ledger.linkNadh} NADH`],
+            ['3. 克氏循環 (基質轉2圈)', '2 ATP (或GTP)', '6 NADH + 2 FADH₂', '6×10 + 2×6 = 72 H⁺', '60÷4 (15) + 12÷4 (3) = 18 ATP', `${this.ledger.krebsAtp} ATP / ${this.ledger.krebsNadh}N / ${this.ledger.krebsFadh2}F`],
+            ['🌟 總計 (1 分子葡萄糖)', '4 ATP (受質磷酸化)', '10 NADH + 2 FADH₂', '共泵出 112 個 H⁺', '112 ÷ 4 = 28 ATP (氧化磷酸化)', `總計: ${this.inv.cytoAtp + this.inv.matAtp} / 32 ATP`]
+        ];
+
+        rows.forEach((r, rIdx) => {
+            const y = 428 + rIdx * 23;
+            ctx.fillStyle = rIdx === 3 ? '#4ade80' : '#e2e8f0';
+            ctx.font = rIdx === 3 ? 'bold 12.5px "Microsoft JhengHei"' : '12px "Microsoft JhengHei"';
+            r.forEach((cell, cIdx) => ctx.fillText(cell, colX[cIdx], y));
+        });
+    }
+
+    // =====================================================
+    // 分頁 1：糖解作用
+    // =====================================================
+    runGlycolysis() {
+        if (this.gly.active) return;
+        if (this.strictMode && this.inv.glu < 1) return;
+
+        if (this.inv.glu > 0) this.inv.glu--;
+        this.gly.active = true;
+        this.gly.phase = 1;
+        this.gly.timer = 0;
+        this.gly.gluY = 115;
+        this.gly.g3pLX = 510;
+        this.gly.g3pRX = 510;
+        this.gly.g3pY = 250;
+
+        this.renderControls();
+        this.updateStatsUI();
+        this.spawnToken('投資 -2 ATP 活化', 340, 175, 480, 215, '#ef4444', '#fff', 26);
+    }
+
+    updateGlycolysis() {
+        if (!this.gly.active) return;
+        this.gly.timer++;
+
+        if (this.gly.phase === 1) {
+            this.gly.gluY += (245 - this.gly.gluY) * 0.08;
+            if (this.gly.timer > 50) { this.gly.phase = 2; this.gly.timer = 0; }
+        } else if (this.gly.phase === 2) {
+            this.gly.g3pLX += (310 - this.gly.g3pLX) * 0.08;
+            this.gly.g3pRX += (710 - this.gly.g3pRX) * 0.08;
+            if (this.gly.timer > 45) {
+                this.gly.phase = 3; this.gly.timer = 0;
+                this.spawnToken('+2 ATP (回收)', 310, 320, 150, 340, '#facc15', '#0f172a', 25);
+                this.spawnToken('+2 ATP (回收)', 710, 320, 870, 340, '#facc15', '#0f172a', 25);
+                this.spawnToken('+1 NADH', 310, 355, 150, 415, '#0284c7', '#fff', 24);
+                this.spawnToken('+1 NADH', 710, 355, 870, 415, '#0284c7', '#fff', 24);
+            }
+        } else if (this.gly.phase === 3) {
+            this.gly.g3pY += (435 - this.gly.g3pY) * 0.08;
+            if (this.gly.timer === 50) {
+                // 淨產出 2 ATP (直接進入細胞質可用 ATP)、2 NADH、2 丙酮酸
+                this.inv.cytoAtp += 2;
+                this.inv.nadh += 2;
+                this.inv.pyr += 2;
+                this.ledger.glyAtp += 2;
+                this.ledger.glyNadh += 2;
+                this.renderControls();
+                this.updateStatsUI();
+            }
+            if (this.gly.timer > 85) {
+                this.gly.active = false;
+                this.gly.phase = 0;
+                this.renderControls();
+            }
+        }
+    }
+
+    drawGlycolysis() {
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.05)';
+        ctx.strokeStyle = '#334155';
+        ctx.beginPath(); ctx.roundRect(50, 45, 920, 210, 12); ctx.fill(); ctx.stroke();
+
+        ctx.fillStyle = 'rgba(74, 222, 128, 0.05)';
+        ctx.beginPath(); ctx.roundRect(50, 275, 920, 225, 12); ctx.fill(); ctx.stroke();
+
+        ctx.fillStyle = '#38bdf8'; ctx.font = 'bold 15px "Microsoft JhengHei"'; ctx.textAlign = 'left';
+        ctx.fillText('【第一階段：能量投資期】消耗 2 ATP 使葡萄糖磷酸化，裂解為 2 個三碳糖 (G3P)', 70, 75);
+        ctx.fillStyle = '#4ade80';
+        ctx.fillText('【第二階段：能量回收期】產出 4 ATP (扣掉投資2個 = 淨賺 2 ATP)、2 NADH 與 2 丙酮酸 (3C)', 70, 305);
+
+        ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(510, 130); ctx.lineTo(510, 225);
+        ctx.moveTo(510, 225); ctx.lineTo(310, 270);
+        ctx.moveTo(510, 225); ctx.lineTo(710, 270);
+        ctx.moveTo(310, 290); ctx.lineTo(310, 420);
+        ctx.moveTo(710, 290); ctx.lineTo(710, 420);
+        ctx.stroke();
+
+        if (!this.gly.active) {
+            this.drawCarbonChain(510, 115, 6, '葡萄糖 (Glucose, 6C)', `待分解存量: ${this.inv.glu}`);
+            this.drawCarbonChain(510, 215, 6, '果糖-1,6-雙磷酸 (6C)', '消耗 2 ATP 活化', true);
+            this.drawCarbonChain(310, 435, 3, '丙酮酸 (Pyruvate, 3C)', '前往階段 2');
+            this.drawCarbonChain(710, 435, 3, '丙酮酸 (Pyruvate, 3C)', '前往階段 2');
+        } else {
+            if (this.gly.phase === 1) {
+                const hasP = this.gly.timer > 22;
+                this.drawCarbonChain(510, this.gly.gluY, 6, hasP ? '果糖-1,6-雙磷酸 (6C)' : '葡萄糖 (6C)', '', hasP);
+            } else if (this.gly.phase === 2) {
+                this.drawCarbonChain(this.gly.g3pLX, 255, 3, '甘油醛-3-磷酸 (3C)');
+                this.drawCarbonChain(this.gly.g3pRX, 255, 3, '甘油醛-3-磷酸 (3C)');
+            } else if (this.gly.phase === 3) {
+                this.drawCarbonChain(310, this.gly.g3pY, 3, '丙酮酸 (3C)');
+                this.drawCarbonChain(710, this.gly.g3pY, 3, '丙酮酸 (3C)');
+            }
+        }
+    }
+
+    // =====================================================
+    // 分頁 2：聯絡反應 (含雙層磷脂雙層膜圖示)
+    // =====================================================
+    runLinkReaction(count = 1) {
+        if (this.strictMode && this.inv.pyr < count) return;
+        for (let i = 0; i < count; i++) {
+            if (this.inv.pyr > 0) this.inv.pyr--;
+            setTimeout(() => {
+                this.link.packets.push({ x: 110, y: 270 + (i * 45 - (count > 1 ? 22 : 0)), stage: 0, timer: 0 });
+            }, i * 350);
+        }
+        this.renderControls();
+        this.updateStatsUI();
+    }
+
+    updateLinkReaction() {
+        for (let i = this.link.packets.length - 1; i >= 0; i--) {
+            const p = this.link.packets[i];
+            if (p.stage === 0) {
+                p.x += (610 - p.x) * 0.055;
+                if (Math.abs(p.x - 610) < 8) {
+                    p.stage = 1; p.timer = 0;
+                    this.spawnToken('CO₂ (1C)', 610, p.y - 20, 760, 100, '#64748b', '#fff', 20);
+                    this.spawnToken('+1 NADH', 610, p.y + 20, 770, 430, '#0284c7', '#fff', 24);
+                    this.spawnToken('CoA', 740, 150, 630, p.y, '#f97316', '#fff', 19);
+                }
+            } else if (p.stage === 1) {
+                p.timer++;
+                if (p.timer > 40) {
+                    p.stage = 2;
+                    this.inv.co2 += 1;
+                    this.inv.nadh += 1;
+                    this.inv.accoa += 1;
+                    this.ledger.linkNadh += 1;
+                    this.renderControls();
+                    this.updateStatsUI();
+                }
+            } else if (p.stage === 2) {
+                p.x += (860 - p.x) * 0.06;
+                if (p.x > 845) this.link.packets.splice(i, 1);
+            }
+        }
+    }
+
+    drawLinkReaction() {
+        // 背景分區：左=細胞質, 外膜(220~270), 膜間腔(270~400), 內膜(400~455), 右=基質
+        ctx.fillStyle = '#0f172a'; ctx.fillRect(0, 0, 220, canvas.height);
+        ctx.fillStyle = '#1e293b'; ctx.fillRect(220, 0, 50, canvas.height);
+        ctx.fillStyle = '#1e1b4b'; ctx.fillRect(270, 0, 130, canvas.height);
+        ctx.fillStyle = '#1e293b'; ctx.fillRect(400, 0, 55, canvas.height);
+        ctx.fillStyle = '#0f2942'; ctx.fillRect(455, 0, 565, canvas.height);
+
+        // 繪製垂直磷脂雙層 (外膜與內膜)
+        this.drawVerticalBilayer(220, 270, [[220, 320]], '#94a3b8', '#475569');
+        this.drawVerticalBilayer(400, 455, [[220, 320]], '#38bdf8', '#475569');
+
+        ctx.fillStyle = '#94a3b8'; ctx.font = 'bold 14px "Microsoft JhengHei"'; ctx.textAlign = 'center';
+        ctx.fillText('細胞質液', 110, 36);
+        ctx.fillText('粒線體外膜 (磷脂雙層)', 245, 36);
+        ctx.fillText('膜間腔', 335, 36);
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillText('粒線體內膜 (磷脂雙層)', 427, 18);
+        ctx.fillText('粒線體基質 (Mitochondrial Matrix)', 740, 36);
+
+        // 外膜孔蛋白與內膜丙酮酸轉運蛋白 (MPC)
+        ctx.fillStyle = '#64748b'; ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.roundRect(214, 225, 62, 90, 12); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 11px "Microsoft JhengHei"';
+        ctx.fillText('外膜孔蛋白', 245, 273);
+
+        ctx.fillStyle = '#ec4899';
+        ctx.beginPath(); ctx.roundRect(394, 225, 67, 90, 16); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#fff';
+        ctx.fillText('丙酮酸轉運體', 427, 273);
+
+        // 丙酮酸脫氫酶複合體 (PDC)
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.2)'; ctx.strokeStyle = '#10b981'; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.arc(610, 270, 75, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#4ade80'; ctx.font = 'bold 14px "Microsoft JhengHei"';
+        ctx.fillText('丙酮酸脫氫酶複合體 (PDC)', 610, 180);
+
+        if (this.link.packets.length === 0) {
+            this.drawCarbonChain(110, 270, 3, '丙酮酸 (3C)', `目前存量: ${this.inv.pyr}`);
+            this.drawCarbonChain(855, 270, 2, '乙醯輔酶 A (2C)', `目前存量: ${this.inv.accoa}`);
+        }
+
+        this.link.packets.forEach(p => {
+            if (p.stage === 0) this.drawCarbonChain(p.x, p.y, 3, '丙酮酸 (3C)');
+            else if (p.stage === 1) this.drawCarbonChain(p.x, p.y, 2, '脫羧與氧化中...');
+            else this.drawCarbonChain(p.x, p.y, 2, '乙醯輔酶 A (2C)');
+        });
+    }
+
+    // =====================================================
+    // 分頁 3：檸檬酸循環 (克氏循環)
+    // =====================================================
+    runKrebsCycle() {
+        if (this.krebs.spinning) return;
+        if (this.strictMode && this.inv.accoa < 1) return;
+
+        if (this.inv.accoa > 0) this.inv.accoa--;
+        this.krebs.spinning = true;
+        this.krebs.progress = 0;
+        this.krebs.trig = [false, false, false];
+        this.renderControls();
+        this.updateStatsUI();
+
+        this.spawnToken('乙醯CoA (2C) 進入', 220, 75, 490, 105, '#16a34a', '#fff', 28);
+    }
+
+    updateKrebsCycle() {
+        if (!this.krebs.spinning) {
+            this.krebs.angle += 0.002;
+            return;
+        }
+        this.krebs.progress += 0.009;
+        this.krebs.angle += 0.05;
+        const p = this.krebs.progress;
+
+        if (p > 0.25 && !this.krebs.trig[0]) {
+            this.krebs.trig[0] = true;
+            this.spawnToken('CO₂', 680, 210, 840, 150, '#64748b', '#fff', 20);
+            this.spawnToken('+1 NADH', 680, 240, 860, 210, '#0284c7', '#fff', 24);
+        }
+        if (p > 0.50 && !this.krebs.trig[1]) {
+            this.krebs.trig[1] = true;
+            this.spawnToken('CO₂', 640, 390, 830, 380, '#64748b', '#fff', 20);
+            this.spawnToken('+1 NADH', 640, 420, 850, 440, '#0284c7', '#fff', 24);
+            this.spawnToken('+1 基質 ATP', 510, 455, 510, 515, '#facc15', '#0f172a', 26);
+        }
+        if (p > 0.75 && !this.krebs.trig[2]) {
+            this.krebs.trig[2] = true;
+            this.spawnToken('+1 FADH₂', 330, 380, 160, 420, '#7e22ce', '#fff', 25);
+            this.spawnToken('+1 NADH', 310, 230, 150, 220, '#0284c7', '#fff', 24);
+        }
+        if (p >= 1) {
+            this.krebs.spinning = false;
+            this.inv.co2 += 2;
+            this.inv.nadh += 3;
+            this.inv.fadh2 += 1;
+            this.inv.matAtp += 1; // 克氏循環產生的 ATP 位於粒線體基質
+            this.ledger.krebsAtp += 1;
+            this.ledger.krebsNadh += 3;
+            this.ledger.krebsFadh2 += 1;
+            this.renderControls();
+            this.updateStatsUI();
+        }
+    }
+
+    drawKrebsCycle() {
+        const grad = ctx.createRadialGradient(510, 280, 40, 510, 280, 460);
+        grad.addColorStop(0, '#1e3a5f'); grad.addColorStop(1, '#081420');
+        ctx.fillStyle = grad; ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const cx = 510, cy = 285, radius = 165;
+        ctx.save();
+        ctx.strokeStyle = this.krebs.spinning ? '#4ade80' : '#38bdf8';
+        ctx.lineWidth = 6;
+        ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2); ctx.stroke();
+
+        ctx.translate(cx, cy);
+        ctx.rotate(this.krebs.angle);
+        ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 2;
+        for (let i = 0; i < 8; i++) {
+            ctx.rotate(Math.PI / 4);
+            ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, radius - 10); ctx.stroke();
+        }
+        ctx.restore();
+
+        ctx.fillStyle = '#f8fafc'; ctx.font = 'bold 18px "Microsoft JhengHei"'; ctx.textAlign = 'center';
+        ctx.fillText('檸檬酸循環 (克氏循環)', cx, cy - 8);
+        ctx.fillStyle = '#4ade80'; ctx.font = '12px "Microsoft JhengHei"';
+        ctx.fillText('每轉1圈：+3 NADH, +1 FADH₂, +1 基質ATP, -2 CO₂', cx, cy + 16);
+
+        const nodes = [
+            { angle: -Math.PI / 3, name: '檸檬酸 (6C)', sub: '2C + 4C 結合' },
+            { angle: Math.PI / 6, name: 'α-酮戊二酸 (5C)', sub: '脫羧 -1 CO₂, +1 NADH' },
+            { angle: Math.PI / 2, name: '琥珀醯CoA (4C)', sub: '-1 CO₂, +1 NADH, +1 ATP' },
+            { angle: 5 * Math.PI / 6, name: '延胡索酸/蘋果酸 (4C)', sub: '氧化 +1 FADH₂, +1 NADH' },
+            { angle: -5 * Math.PI / 6, name: '草醯乙酸 (OAA, 4C)', sub: '再生並等待乙醯CoA' }
+        ];
+
+        nodes.forEach(n => {
+            const nx = cx + Math.cos(n.angle) * radius;
+            const ny = cy + Math.sin(n.angle) * radius;
+            ctx.fillStyle = '#0f172a'; ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.roundRect(nx - 80, ny - 25, 160, 50, 10); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = '#facc15'; ctx.font = 'bold 13px "Microsoft JhengHei"';
+            ctx.fillText(n.name, nx, ny - 4);
+            ctx.fillStyle = '#cbd5e1'; ctx.font = '11px "Microsoft JhengHei"';
+            ctx.fillText(n.sub, nx, ny + 14);
+        });
+
+        if (this.krebs.spinning) {
+            const a = -Math.PI / 2 + this.krebs.progress * Math.PI * 2;
+            ctx.save();
+            ctx.shadowColor = '#facc15'; ctx.shadowBlur = 18;
+            ctx.fillStyle = '#facc15';
+            ctx.beginPath(); ctx.arc(cx + Math.cos(a) * radius, cy + Math.sin(a) * radius, 14, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+        }
+    }
+
+    // =====================================================
+    // 分頁 4：電子傳遞鏈 (含磷脂雙層、CoQ/Cyt c 專屬路徑、電子/質子通過 ATP 合成酶)
+    // =====================================================
+    injectETC(type) {
+        if (type === 'NADH') {
+            if (this.strictMode && this.inv.nadh < 1) return;
+            if (this.inv.nadh > 0) this.inv.nadh--;
+            this.renderControls();
+            this.updateStatsUI();
+
+            // 1 NADH 精確泵出 4 + 4 + 2 = 10 H+
+            this.spawnToken('NADH', 125, 490, 125, 355, '#0284c7', '#fff', 22, () => {
+                this.etc.electrons.push({
+                    waypoints: [
+                        { x: 125, y: 330 },
+                        { x: 125, y: 255, pump: 4 },             // 複合體 I 泵出 4 H+
+                        { x: 350, y: 255, carrier: 'coQ' },      // 經 CoQ 軌道
+                        { x: 450, y: 255, pump: 4 },             // 複合體 III 泵出 4 H+
+                        { x: 545, y: 168, carrier: 'cytC' },     // 經 Cyt c 軌道
+                        { x: 640, y: 255, pump: 2, water: true },// 複合體 IV 泵出 2 H+ 並生成水
+                        { x: 865, y: 160 },                      // 能量/電子流導引至 ATP 合成酶頂端
+                        { x: 865, y: 400, spinMotor: true }      // 穿過 ATP 合成酶通道驅動轉子
+                    ],
+                    idx: 0, progress: 0, x: 125, y: 330
+                });
+            });
+        } else {
+            if (this.strictMode && this.inv.fadh2 < 1) return;
+            if (this.inv.fadh2 > 0) this.inv.fadh2--;
+            this.renderControls();
+            this.updateStatsUI();
+
+            // 1 FADH2 精確泵出 0 + 4 + 2 = 6 H+
+            this.spawnToken('FADH₂', 260, 490, 260, 355, '#7e22ce', '#fff', 22, () => {
+                this.etc.electrons.push({
+                    waypoints: [
+                        { x: 260, y: 330 },
+                        { x: 260, y: 275 },                      // 複合體 II 不泵出 H+
+                        { x: 350, y: 255, carrier: 'coQ' },
+                        { x: 450, y: 255, pump: 4 },             // 複合體 III 泵出 4 H+
+                        { x: 545, y: 168, carrier: 'cytC' },
+                        { x: 640, y: 255, pump: 2, water: true },// 複合體 IV 泵出 2 H+
+                        { x: 865, y: 160 },
+                        { x: 865, y: 400, spinMotor: true }
+                    ],
+                    idx: 0, progress: 0, x: 260, y: 330
+                });
+            });
+        }
+    }
+
+    injectAllCarriers() {
+        const nCount = this.inv.nadh;
+        const fCount = this.inv.fadh2;
+        if (nCount + fCount === 0) return;
+
+        // 計算總泵出 H+：每個 NADH +10 H+，每個 FADH2 +6 H+
+        const totalPumped = nCount * 10 + fCount * 6;
+        this.inv.nadh = 0;
+        this.inv.fadh2 = 0;
+        this.inv.h += totalPumped;
+        this.syncImsProtonDots();
+
+        // 啟動代表性視覺動畫
+        if (nCount > 0) {
+            this.etc.electrons.push({
+                waypoints: [
+                    { x: 125, y: 330 }, { x: 125, y: 255 }, { x: 350, y: 255, carrier: 'coQ' },
+                    { x: 450, y: 255 }, { x: 545, y: 168, carrier: 'cytC' }, { x: 640, y: 255, water: true },
+                    { x: 865, y: 160 }, { x: 865, y: 400, spinMotor: true }
+                ],
+                idx: 0, progress: 0, x: 125, y: 330
+            });
+        }
+        this.spawnToken(`+${totalPumped} H⁺ 泵入膜間腔！`, 450, 220, 450, 90, '#ec4899', '#fff', 32);
+        this.renderControls();
+        this.updateStatsUI();
+    }
+
+    pumpETCProtons(cx, count) {
+        for (let i = 0; i < count; i++) {
+            setTimeout(() => {
+                this.etc.animParticles.push({
+                    x: cx + (Math.random() * 16 - 8), y: 375,
+                    targetX: cx + (Math.random() * 50 - 25), targetY: 95,
+                    progress: 0, type: 'pump'
+                });
+            }, i * 110);
+        }
+    }
+
+    triggerATPSynthase(batchAll = false) {
+        if (this.strictMode && this.inv.h < 4) return;
+
+        const sets = batchAll ? Math.floor(this.inv.h / 4) : 1;
+        if (sets < 1 && this.strictMode) return;
+
+        const actualSets = Math.max(1, sets);
+        if (this.inv.h >= actualSets * 4) {
+            this.inv.h -= actualSets * 4;
+        } else {
+            this.inv.h = 0;
+        }
+        this.syncImsProtonDots();
+        this.renderControls();
+        this.updateStatsUI();
+
+        // 產生 4 顆 H+ 與高能電子/能量束一起衝過 ATP 合成酶通道的動畫
+        for (let i = 0; i < 4; i++) {
+            setTimeout(() => {
+                this.etc.animParticles.push({
+                    x: 865 + (Math.random() * 40 - 20), y: 95,
+                    targetX: 865, targetY: 425,
+                    progress: 0,
+                    type: i === 0 ? 'e-synth' : 'h-synth', // 第1顆顯示高能電子/能量流與質子同步通過合成酶
+                    isLast: i === 3,
+                    atpYield: actualSets
+                });
+            }, i * 130);
+        }
+    }
+
+    updateETC() {
+        const moveList = (list, minY, maxY) => {
+            list.forEach(p => {
+                p.x += p.vx; p.y += p.vy;
+                if (p.x < 25 || p.x > 995) p.vx *= -1;
+                if (p.y < minY || p.y > maxY) p.vy *= -1;
+            });
+        };
+        moveList(this.etc.imsProtons, 28, 155);
+        moveList(this.etc.matProtons, 355, 520);
+
+        for (let i = this.etc.animParticles.length - 1; i >= 0; i--) {
+            const ap = this.etc.animParticles[i];
+            ap.progress += 0.032;
+            ap.x += (ap.targetX - ap.x) * 0.12;
+            ap.y += (ap.targetY - ap.y) * 0.12;
+            if (ap.progress >= 1) {
+                if (ap.type === 'pump') {
+                    this.inv.h += 1;
+                    this.syncImsProtonDots();
+                    this.renderControls();
+                    this.updateStatsUI();
+                } else if (ap.type === 'h-synth' || ap.type === 'e-synth') {
+                    this.etc.rotorSpeed = 0.32;
+                    if (ap.isLast) {
+                        this.inv.matAtp += ap.atpYield;
+                        this.ledger.etcAtp += ap.atpYield;
+                        this.renderControls();
+                        this.updateStatsUI();
+                        this.spawnToken(`+${ap.atpYield} 基質 ATP`, 865, 415, 800, 495, '#facc15', '#0f172a', 28);
+                    }
+                }
+                this.etc.animParticles.splice(i, 1);
+            }
+        }
+
+        let tCoQX = 350, tCytCX = 545;
+        for (let i = this.etc.electrons.length - 1; i >= 0; i--) {
+            const el = this.etc.electrons[i];
+            const s = el.waypoints[el.idx];
+            const e = el.waypoints[el.idx + 1];
+            if (!e) {
+                this.etc.electrons.splice(i, 1);
+                continue;
+            }
+            el.progress += 0.032;
+            el.x = s.x + (e.x - s.x) * el.progress;
+            el.y = s.y + (e.y - s.y) * el.progress;
+
+            if (s.carrier === 'coQ' || e.carrier === 'coQ') tCoQX = el.x;
+            if (s.carrier === 'cytC' || e.carrier === 'cytC') tCytCX = el.x;
+
+            if (el.progress >= 1) {
+                if (e.pump) this.pumpETCProtons(e.x, e.pump);
+                if (e.water) this.spawnToken('H₂O', 640, 355, 695, 470, '#0ea5e9', '#fff', 20);
+                if (e.spinMotor) this.etc.rotorSpeed = 0.28;
+                el.idx++;
+                el.progress = 0;
+            }
+        }
+        this.etc.coQX += (tCoQX - this.etc.coQX) * 0.18;
+        this.etc.cytCX += (tCytCX - this.etc.cytCX) * 0.18;
+
+        this.etc.rotorAngle += this.etc.rotorSpeed;
+        if (this.etc.rotorSpeed > 0.015) this.etc.rotorSpeed *= 0.96;
+    }
+
+    drawETC() {
+        const IMS_Y = 185, MEM_Y = 325;
+        ctx.fillStyle = '#1e1b4b'; ctx.fillRect(0, 0, canvas.width, IMS_Y);
+        ctx.fillStyle = '#1e293b'; ctx.fillRect(0, IMS_Y, canvas.width, MEM_Y - IMS_Y);
+        ctx.fillStyle = '#0f2942'; ctx.fillRect(0, MEM_Y, canvas.width, canvas.height - MEM_Y);
+
+        // 1. 繪製水平磷脂雙層膜 (避開五大複合體區域)
+        const skipZones = [[80, 170], [225, 295], [405, 495], [595, 685], [825, 905]];
+        this.drawHorizontalBilayer(IMS_Y, MEM_Y, skipZones, '#38bdf8', '#475569');
+
+        ctx.fillStyle = 'rgba(255,255,255,0.28)'; ctx.font = 'bold 14px "Microsoft JhengHei"'; ctx.textAlign = 'left';
+        ctx.fillText(`膜間腔 (Intermembrane Space) — 高 H⁺ 濃度區 (目前累積: ${this.inv.h} H⁺)`, 20, 28);
+        ctx.fillText('粒線體基質 (Mitochondrial Matrix) — 低 H⁺ 區', 20, 520);
+
+        // 2. 繪製 CoQ 與 Cyt c 的專屬移動軌道 (Path Visuals)
+        ctx.save();
+        // CoQ 脂溶性軌道 (位於內膜中央，連接 C1, C2 與 C3)
+        ctx.strokeStyle = 'rgba(249, 115, 22, 0.75)';
+        ctx.fillStyle = 'rgba(249, 115, 22, 0.12)';
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([5, 4]);
+        ctx.beginPath();
+        ctx.roundRect(150, 232, 285, 46, 23);
+        ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#fdba74'; ctx.font = 'bold 11px "Microsoft JhengHei"'; ctx.textAlign = 'center';
+        ctx.fillText('◀ CoQ 膜內脂溶性穿梭軌道 ▶', 345, 226);
+
+        // Cyt c 水溶性軌道 (位於內膜上緣膜間腔側，連接 C3 與 C4)
+        ctx.strokeStyle = 'rgba(236, 72, 153, 0.85)';
+        ctx.fillStyle = 'rgba(236, 72, 153, 0.15)';
+        ctx.beginPath();
+        ctx.roundRect(465, 148, 165, 38, 19);
+        ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#f9a8d4';
+        ctx.fillText('◀ Cyt c 膜外滑動軌道 ▶', 547, 142);
+
+        // 電子與質子通過 ATP 合成酶的導引路徑虛線
+        ctx.strokeStyle = 'rgba(250, 204, 21, 0.55)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(640, 255);
+        ctx.bezierCurveTo(720, 130, 800, 130, 865, 170);
+        ctx.lineTo(865, 415);
+        ctx.stroke();
+        ctx.restore();
+
+        // 3. 繪製複合體 I ~ IV
+        const comps = [
+            { x: 125, y: 255, w: 84, h: 170, c: '#2563eb', n: '複合體 I', s: '泵出 4 H⁺' },
+            { x: 260, y: 295, w: 68, h: 105, c: '#7c3aed', n: '複合體 II', s: '泵出 0 H⁺' },
+            { x: 450, y: 255, w: 84, h: 170, c: '#db2777', n: '複合體 III', s: '泵出 4 H⁺' },
+            { x: 640, y: 255, w: 84, h: 170, c: '#059669', n: '複合體 IV', s: '泵出 2 H⁺' }
+        ];
+
+        comps.forEach(cp => {
+            ctx.fillStyle = cp.c; ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 1.8;
+            ctx.beginPath(); ctx.roundRect(cp.x - cp.w / 2, cp.y - cp.h / 2, cp.w, cp.h, 24); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 13px "Microsoft JhengHei"'; ctx.textAlign = 'center';
+            ctx.fillText(cp.n, cp.x, cp.y - 4);
+            ctx.fillStyle = '#fde047'; ctx.font = 'bold 11px "Microsoft JhengHei"';
+            ctx.fillText(cp.s, cp.x, cp.y + 15);
+        });
+
+        // 4. 繪製 ATP 合成酶 (含內部透明通道顯示粒子流過)
+        const ax = 865;
+        ctx.fillStyle = '#ca8a04'; ctx.strokeStyle = '#fef08a'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.roundRect(ax - 34, IMS_Y - 12, 68, 152, 16); ctx.fill(); ctx.stroke();
+
+        // 中央能量與質子通道
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.65)';
+        ctx.fillRect(ax - 10, IMS_Y - 12, 20, 185);
+
+        ctx.save();
+        ctx.translate(ax, 398);
+        ctx.rotate(this.etc.rotorAngle);
+        for (let i = 0; i < 6; i++) {
+            ctx.rotate(Math.PI / 3);
+            ctx.fillStyle = i % 2 === 0 ? '#facc15' : '#eab308';
+            ctx.beginPath(); ctx.ellipse(0, 22, 14, 22, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        }
+        ctx.restore();
+
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 13px "Microsoft JhengHei"'; ctx.textAlign = 'center';
+        ctx.fillText('ATP 合成酶', ax, 240);
+        ctx.fillStyle = '#fef08a'; ctx.font = '11px "Microsoft JhengHei"';
+        ctx.fillText('e⁻ / H⁺ 通道', ax, 258);
+        ctx.fillStyle = '#94a3b8'; ctx.font = '12px "Microsoft JhengHei"';
+        ctx.fillText('½ O₂ + 2H⁺ + 2e⁻ ➔ H₂O', 640, 372);
+        ctx.fillText('每 4 H⁺ ➔ 1 ATP (含轉運)', ax, 458);
+
+        // 5. 繪製 CoQ 與 Cyt c 載體球
+        ctx.fillStyle = '#f97316'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(this.etc.coQX, 255, 19, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif';
+        ctx.fillText('CoQ', this.etc.coQX, 259);
+
+        ctx.fillStyle = '#ec4899';
+        ctx.beginPath(); ctx.arc(this.etc.cytCX, 168, 18, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#fff';
+        ctx.fillText('Cyt c', this.etc.cytCX, 172);
+
+        // 6. 繪製質子 H+ 與通過合成酶的粒子
+        const drawH = (x, y) => {
+            ctx.fillStyle = '#ec4899';
+            ctx.beginPath(); ctx.arc(x, y, 8.5, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 9.5px sans-serif';
+            ctx.fillText('H⁺', x, y + 3.5);
+        };
+        const drawE = (x, y) => {
+            ctx.save();
+            ctx.shadowColor = '#facc15'; ctx.shadowBlur = 14;
+            ctx.fillStyle = '#facc15';
+            ctx.beginPath(); ctx.arc(x, y, 11, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#0f172a'; ctx.font = 'bold 10px sans-serif';
+            ctx.fillText('2e⁻', x, y + 3.5);
+            ctx.restore();
+        };
+
+        this.etc.imsProtons.forEach(p => drawH(p.x, p.y));
+        this.etc.matProtons.forEach(p => drawH(p.x, p.y));
+        this.etc.animParticles.forEach(ap => {
+            if (ap.type === 'e-synth') drawE(ap.x, ap.y);
+            else drawH(ap.x, ap.y);
+        });
+        this.etc.electrons.forEach(el => drawE(el.x, el.y));
+    }
+
+    // =====================================================
+    // 分頁 5：ATP / ADP 跨膜交換送出視覺圖解 (ANT & PiC)
+    // =====================================================
+    runANTExchange(batchAll = false) {
+        if (this.ant.exchanging) return;
+        if (this.strictMode && this.inv.matAtp < 1) return;
+
+        const count = batchAll ? Math.max(1, this.inv.matAtp) : 1;
+        if (this.inv.matAtp >= count) {
+            this.inv.matAtp -= count;
+        } else {
+            this.inv.matAtp = 0;
+        }
+
+        this.ant.exchanging = true;
+        this.ant.timer = 0;
+        this.ant.targetAngle += Math.PI;
+        this.ant.exportCount = count;
+
+        // 建立 4 條同步跨膜粒子軌跡：
+        // 1. 基質 ATP4- 往上透過 ANT 送出至細胞質
+        // 2. 外部 ADP3- 往下透過 ANT 換入基質
+        // 3. 外部 Pi (H2PO4-) 往下透過 PiC 進入基質
+        // 4. 膜間腔 H+ 往下透過 PiC 同向進入基質
+        this.ant.particles = [
+            { text: `ATP⁴⁻ (×${count})`, x: 350, y: 420, tx: 350, ty: 80, c: '#facc15', fg: '#0f172a', r: 28 },
+            { text: `ADP³⁻ (×${count})`, x: 395, y: 80, tx: 395, ty: 420, c: '#fb923c', fg: '#fff', r: 26 },
+            { text: `Pi (H₂PO₄⁻)`, x: 680, y: 80, tx: 680, ty: 420, c: '#38bdf8', fg: '#0f172a', r: 25 },
+            { text: `H⁺ (同向動力)`, x: 735, y: 80, tx: 735, ty: 420, c: '#ec4899', fg: '#fff', r: 22 }
+        ];
+
+        this.renderControls();
+        this.updateStatsUI();
+    }
+
+    updateANTExchange() {
+        if (!this.ant.exchanging) return;
+        this.ant.timer++;
+        this.ant.angle += (this.ant.targetAngle - this.ant.angle) * 0.1;
+
+        this.ant.particles.forEach(p => {
+            p.x += (p.tx - p.x) * 0.06;
+            p.y += (p.ty - p.y) * 0.06;
+        });
+
+        if (this.ant.timer > 65) {
+            this.ant.exchanging = false;
+            this.inv.cytoAtp += this.ant.exportCount;
+            this.ledger.exportedAtp += this.ant.exportCount;
+            this.ant.particles = [];
+            this.renderControls();
+            this.updateStatsUI();
+        }
+    }
+
+    drawANTExchange() {
+        const IMS_Y = 185, MEM_Y = 325;
+        ctx.fillStyle = '#1e1b4b'; ctx.fillRect(0, 0, canvas.width, IMS_Y);
+        ctx.fillStyle = '#1e293b'; ctx.fillRect(0, IMS_Y, canvas.width, MEM_Y - IMS_Y);
+        ctx.fillStyle = '#0f2942'; ctx.fillRect(0, MEM_Y, canvas.width, canvas.height - MEM_Y);
+
+        // 繪製內膜磷脂雙層 (避開 ANT 與 PiC 轉運體)
+        this.drawHorizontalBilayer(IMS_Y, MEM_Y, [[290, 450], [630, 780]], '#38bdf8', '#475569');
+
+        // 膜電位正負號標示 (外側正電 +，內側負電 -，驅動 ATP4- 輸出)
+        ctx.fillStyle = '#f472b6'; ctx.font = 'bold 15px sans-serif'; ctx.textAlign = 'center';
+        for (let x = 60; x < 960; x += 140) {
+            if ((x > 270 && x < 470) || (x > 610 && x < 800)) continue;
+            ctx.fillText('➕ 正電位側 (高 H⁺)', x, IMS_Y - 12);
+        }
+        ctx.fillStyle = '#38bdf8';
+        for (let x = 60; x < 960; x += 140) {
+            if ((x > 270 && x < 470) || (x > 610 && x < 800)) continue;
+            ctx.fillText('➖ 負電位側 (低 H⁺)', x, MEM_Y + 22);
+        }
+
+        ctx.fillStyle = '#f8fafc'; ctx.font = 'bold 15px "Microsoft JhengHei"'; ctx.textAlign = 'left';
+        ctx.fillText('膜間腔 ➔ 通往細胞質 (Cytosol) — 已輸出可用 ATP: ' + this.inv.cytoAtp, 25, 32);
+        ctx.fillText('粒線體基質 (Matrix) — 待輸出基質 ATP: ' + this.inv.matAtp, 25, 515);
+
+        // 1. 繪製左側：腺苷酸轉運體 (ANT - Adenine Nucleotide Translocator)
+        const antX = 370, antY = 255;
+        ctx.save();
+        ctx.fillStyle = '#d97706'; ctx.strokeStyle = '#fef08a'; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.roundRect(antX - 75, IMS_Y - 15, 150, 170, 28); ctx.fill(); ctx.stroke();
+
+        // ANT 內部旋轉交換門動畫
+        ctx.translate(antX, antY);
+        ctx.rotate(this.ant.angle);
+        ctx.fillStyle = '#0f172a'; ctx.strokeStyle = '#facc15'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(0, 0, 48, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-48, 0); ctx.lineTo(48, 0); ctx.stroke();
+        ctx.restore();
+
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 14px "Microsoft JhengHei"'; ctx.textAlign = 'center';
+        ctx.fillText('腺苷酸轉運體 (ANT)', antX, 152);
+        ctx.fillStyle = '#fde047'; ctx.font = '12px "Microsoft JhengHei"';
+        ctx.fillText('反向運輸 (Antiporter)：ATP⁴⁻ 送出 / ADP³⁻ 換入', antX, 368);
+
+        // 2. 繪製右側：磷酸轉運體 (PiC - Phosphate Carrier)
+        const picX = 705, picY = 255;
+        ctx.fillStyle = '#0284c7'; ctx.strokeStyle = '#bae6fd'; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.roundRect(picX - 70, IMS_Y - 15, 140, 170, 28); ctx.fill(); ctx.stroke();
+
+        // PiC 雙通道
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.55)';
+        ctx.fillRect(picX - 38, IMS_Y - 10, 28, 160);
+        ctx.fillRect(picX + 10, IMS_Y - 10, 28, 160);
+
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 14px "Microsoft JhengHei"';
+        ctx.fillText('磷酸轉運體 (PiC)', picX, 152);
+        ctx.fillStyle = '#bae6fd'; ctx.font = '12px "Microsoft JhengHei"';
+        ctx.fillText('同向運輸 (Symporter)：H⁺ 順梯度帶入 Pi (H₂PO₄⁻)', picX, 368);
+
+        // 若未在動畫中，繪製靜態流向示意圖
+        if (!this.ant.exchanging) {
+            ctx.strokeStyle = '#facc15'; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(345, 410); ctx.lineTo(345, 100); ctx.stroke();
+            ctx.fillStyle = '#facc15'; ctx.fillText('⬆️ 基質 ATP⁴⁻ 送出', 260, 420);
+
+            ctx.strokeStyle = '#fb923c';
+            ctx.beginPath(); ctx.moveTo(395, 100); ctx.lineTo(395, 410); ctx.stroke();
+            ctx.fillStyle = '#fb923c'; ctx.fillText('⬇️ 細胞質 ADP³⁻ 換入', 475, 105);
+
+            ctx.strokeStyle = '#38bdf8';
+            ctx.beginPath(); ctx.moveTo(680, 100); ctx.lineTo(680, 410); ctx.stroke();
+            ctx.fillStyle = '#38bdf8'; ctx.fillText('⬇️ Pi 無機磷酸進入', 640, 105);
+
+            ctx.strokeStyle = '#ec4899';
+            ctx.beginPath(); ctx.moveTo(735, 100); ctx.lineTo(735, 410); ctx.stroke();
+            ctx.fillStyle = '#ec4899'; ctx.fillText('⬇️ 耗 1 H⁺ 進入', 785, 105);
+        }
+
+        // 繪製交換中的動態粒子
+        this.ant.particles.forEach(p => {
+            ctx.save();
+            ctx.shadowColor = p.c; ctx.shadowBlur = 15;
+            ctx.fillStyle = p.c;
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = p.fg; ctx.font = 'bold 11px "Microsoft JhengHei"'; ctx.textAlign = 'center';
+            ctx.fillText(p.text, p.x, p.y + 4);
+            ctx.restore();
+        });
+    }
+
+    // 主迴圈更新與繪製
+    update() {
+        if (this.currentTab === 1) this.updateGlycolysis();
+        else if (this.currentTab === 2) this.updateLinkReaction();
+        else if (this.currentTab === 3) this.updateKrebsCycle();
+        else if (this.currentTab === 4) this.updateETC();
+        else if (this.currentTab === 5) this.updateANTExchange();
+
+        for (let i = this.floatingTokens.length - 1; i >= 0; i--) {
+            const tk = this.floatingTokens[i];
+            tk.progress += tk.speed;
+            tk.x += (tk.targetX - tk.x) * 0.09;
+            tk.y += (tk.targetY - tk.y) * 0.09;
+            if (tk.progress >= 1) {
+                if (tk.onArrive) tk.onArrive();
+                this.floatingTokens.splice(i, 1);
+            }
+        }
+    }
+
+    draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        if (this.currentTab === 0) this.drawOverview();
+        else if (this.currentTab === 1) this.drawGlycolysis();
+        else if (this.currentTab === 2) this.drawLinkReaction();
+        else if (this.currentTab === 3) this.drawKrebsCycle();
+        else if (this.currentTab === 4) this.drawETC();
+        else if (this.currentTab === 5) this.drawANTExchange();
+
+        this.floatingTokens.forEach(tk => {
+            ctx.save();
+            ctx.shadowColor = tk.color; ctx.shadowBlur = 12;
+            ctx.fillStyle = tk.color;
+            ctx.beginPath(); ctx.arc(tk.x, tk.y, tk.radius, 0, Math.PI * 2); ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = tk.fg; ctx.font = 'bold 11px "Microsoft JhengHei"'; ctx.textAlign = 'center';
+            ctx.fillText(tk.text, tk.x, tk.y + 4);
+            ctx.restore();
+        });
+    }
+}
+
+const app = new MasterRespirationApp();
+
+function animate() {
+    app.update();
+    app.draw();
+    requestAnimationFrame(animate);
+}
+
+animate();
+</script>
+</body>
+</html>
