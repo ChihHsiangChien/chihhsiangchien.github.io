@@ -1,0 +1,1574 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D 樹幹維管束構造與運輸互動模擬器</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js r128 & OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #0b111e;
+            color: #f1f5f9;
+            overflow: hidden;
+            user-select: none;
+        }
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 1;
+            background: radial-gradient(circle at 50% 45%, #1e293b 0%, #090d16 100%);
+        }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
+        }
+        /* Smooth Side Panel Transitions */
+        .side-panel {
+            transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
+        }
+        .left-collapsed {
+            transform: translateX(calc(-100% - 24px)) !important;
+            opacity: 0;
+            pointer-events: none;
+        }
+        .right-collapsed {
+            transform: translateX(calc(100% + 24px)) !important;
+            opacity: 0;
+            pointer-events: none;
+        }
+        /* Custom Range Slider */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 8px;
+            cursor: pointer;
+            background: #334155;
+            border-radius: 999px;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            height: 18px;
+            width: 18px;
+            border-radius: 50%;
+            background: #22c55e;
+            cursor: pointer;
+            -webkit-appearance: none;
+            margin-top: -5px;
+            box-shadow: 0 0 10px rgba(34, 197, 94, 0.8);
+            border: 2px solid #ffffff;
+            transition: transform 0.15s ease;
+        }
+        input[type=range]::-webkit-slider-thumb:hover {
+            transform: scale(1.15);
+        }
+        /* 3D Floating Pin Labels */
+        .pin-label {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            pointer-events: auto;
+            cursor: pointer;
+            transition: transform 0.18s ease, border-color 0.2s, background-color 0.2s;
+            z-index: 12;
+            white-space: nowrap;
+        }
+        .pin-label:hover {
+            transform: translate(-50%, -50%) scale(1.08);
+            z-index: 25;
+        }
+        .pin-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 6px;
+            box-shadow: 0 0 8px currentColor;
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.4);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.4);
+            border-radius: 999px;
+        }
+        @keyframes pulse-border {
+            0%, 100% { border-color: rgba(239, 68, 68, 0.45); }
+            50% { border-color: rgba(239, 68, 68, 1); }
+        }
+        .alert-pulse {
+            animation: pulse-border 1.6s infinite;
+        }
+    </style>
+</head>
+<body class="relative w-screen h-screen overflow-hidden">
+
+    <!-- Three.js 3D Canvas Container -->
+    <div id="canvas-container"></div>
+
+    <!-- 3D Floating Labels Overlay -->
+    <div id="labels-container" class="fixed inset-0 pointer-events-none z-10 overflow-hidden"></div>
+
+    <!-- Top Header & Camera Presets -->
+    <header class="fixed top-3 left-3 right-3 z-30 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+        <div class="glass-panel px-3.5 py-2 rounded-2xl pointer-events-auto flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-700 flex items-center justify-center shadow-lg shadow-emerald-900/50 text-lg shrink-0">
+                🌲
+            </div>
+            <div>
+                <div class="flex items-center gap-2">
+                    <h1 class="text-sm md:text-base font-black tracking-tight text-white">樹幹維管束構造與運輸 3D 模擬器</h1>
+                    <span class="hidden lg:inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">生物科互動教具</span>
+                </div>
+                <p class="text-[11px] text-slate-400 hidden sm:block">滑鼠拖曳旋轉・滾輪縮放・點擊切面階層或標籤查看生理機能</p>
+            </div>
+        </div>
+
+        <!-- View, Labels & Focus Mode Controls -->
+        <div class="glass-panel px-2.5 py-1.5 rounded-2xl pointer-events-auto flex flex-wrap items-center gap-1.5">
+            <button onclick="setCameraPreset('iso')" class="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600/50 transition">
+                🎯 1/4 剖面斜視
+            </button>
+            <button onclick="setCameraPreset('top')" class="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600/50 transition">
+                🔍 橫切面俯視
+            </button>
+            <button onclick="setCameraPreset('side')" class="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600/50 transition">
+                📏 縱切面平視
+            </button>
+            <div class="h-4 w-[1px] bg-slate-700 mx-0.5"></div>
+            <button id="toggle-labels-btn" onclick="toggleLabels()" class="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-200 border border-emerald-500/40 transition">
+                🏷️ 3D 標籤：開
+            </button>
+            <button id="focus-mode-btn" onclick="toggleBothPanels()" class="px-2.5 py-1.5 text-xs font-bold rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/40 transition">
+                ⛶ 專注模式 (隱藏面板)
+            </button>
+        </div>
+    </header>
+
+    <!-- Floating Re-open Button for Left Panel (visible when left panel is hidden) -->
+    <button id="open-left-btn" onclick="toggleLeftPanel(true)" class="hidden fixed left-3 top-20 z-30 glass-panel px-3.5 py-2.5 rounded-xl text-xs font-bold text-emerald-300 hover:text-white hover:bg-slate-800/90 border border-emerald-500/40 shadow-lg flex items-center gap-1.5 transition transform hover:scale-105">
+        <span>▶ 展開實驗控制面板</span>
+    </button>
+
+    <!-- Floating Re-open Button for Right Panel (visible when right panel is hidden) -->
+    <button id="open-right-btn" onclick="toggleRightPanel(true)" class="hidden fixed right-3 top-20 z-30 glass-panel px-3.5 py-2.5 rounded-xl text-xs font-bold text-sky-300 hover:text-white hover:bg-slate-800/90 border border-sky-500/40 shadow-lg flex items-center gap-1.5 transition transform hover:scale-105">
+        <span>◀ 展開生理資訊面板</span>
+    </button>
+
+    <!-- Left Panel: Interactive Controls -->
+    <aside id="left-panel" class="
+        side-panel glass-panel z-20 rounded-2xl p-3.5
+        fixed bottom-3 left-3 right-3 max-h-[48vh] overflow-y-auto
+        md:top-20 md:bottom-auto md:right-auto md:w-80 lg:w-[360px] md:max-h-[calc(100vh-5.8rem)]
+        flex flex-col gap-3
+    ">
+        <!-- Section Title + Collapse Button -->
+        <div class="flex items-center justify-between border-b border-slate-700/70 pb-2">
+            <h2 class="text-xs sm:text-sm font-bold text-emerald-400 flex items-center gap-1.5">
+                <span>🎛️</span> 三大核心實驗控制
+            </h2>
+            <div class="flex items-center gap-2">
+                <button onclick="resetExperiment()" class="text-[11px] text-slate-400 hover:text-white underline">
+                    重置
+                </button>
+                <button onclick="toggleLeftPanel(false)" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-bold text-slate-200 border border-slate-600/60 transition flex items-center gap-1" title="收合左側控制面板">
+                    <span>◀ 隱藏面板</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Control 1: Tree Age & Radial Growth -->
+        <div class="bg-slate-900/75 border border-slate-700/60 rounded-xl p-3 space-y-2">
+            <div class="flex justify-between items-center">
+                <label for="age-slider" class="text-xs font-bold text-white flex items-center gap-1.5">
+                    <span class="w-5 h-5 rounded-md bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs">1</span>
+                    樹齡與次級生長（變粗）
+                </label>
+                <span id="age-badge" class="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                    12 年生
+                </span>
+            </div>
+            <input id="age-slider" type="range" min="3" max="30" step="1" value="12" class="w-full" oninput="handleAgeChange(this.value)">
+            <div class="flex justify-between text-[10px] text-slate-400 font-medium">
+                <span>🌱 3年幼苗 (無心材)</span>
+                <span>🌳 15年成樹</span>
+                <span>🏛️ 30年老樹 (心材厚)</span>
+            </div>
+            <p class="text-[11px] text-slate-300 leading-relaxed bg-slate-800/60 p-2 rounded-lg border border-slate-700/50">
+                💡 隨<b>形成層</b>分裂變粗，內層老木質部轉為深褐色<b>心材（失去輸水功能）</b>；僅靠近形成層的<b>半透明邊材木頭</b>內有水分向上運輸。
+            </p>
+        </div>
+
+        <!-- Control 2: Hollow Trunk Toggle -->
+        <div class="bg-slate-900/75 border border-slate-700/60 rounded-xl p-3 space-y-2">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-1.5">
+                    <span class="w-5 h-5 rounded-md bg-sky-500/20 text-sky-400 flex items-center justify-center text-xs font-bold">2</span>
+                    <span class="text-xs font-bold text-white">神木樹幹中空模擬</span>
+                </div>
+                <button id="hollow-toggle-btn" onclick="toggleHollow()" class="relative inline-flex h-6 w-12 items-center rounded-full bg-slate-700 transition-colors duration-200 focus:outline-none">
+                    <span id="hollow-toggle-dot" class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 translate-x-1"></span>
+                </button>
+            </div>
+            <p class="text-[11px] text-slate-300 leading-relaxed bg-slate-800/60 p-2 rounded-lg border border-slate-700/50">
+                🪵 開啟後移除內層老木質部（心材）變成中空樹洞，驗證外圈<b>半透明邊材木頭的水分運輸依然維持 100%</b>！
+            </p>
+        </div>
+
+        <!-- Control 3: Bark Damage / Girdling -->
+        <div class="bg-slate-900/75 border border-slate-700/60 rounded-xl p-3 space-y-2">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-1.5">
+                    <span class="w-5 h-5 rounded-md bg-amber-500/20 text-amber-400 flex items-center justify-center text-xs font-bold">3</span>
+                    <span class="text-xs font-bold text-white">樹皮受損／環狀剝皮</span>
+                </div>
+                <span id="bark-status-tag" class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300">正常完整</span>
+            </div>
+
+            <div class="grid grid-cols-3 gap-1.5">
+                <button id="bark-btn-normal" onclick="setBarkDamage('normal')" class="py-1.5 px-2 rounded-lg text-xs font-bold border transition bg-emerald-600/30 border-emerald-400 text-white shadow">
+                    ✅ 正常樹皮
+                </button>
+                <button id="bark-btn-partial" onclick="setBarkDamage('partial')" class="py-1.5 px-2 rounded-lg text-xs font-bold border transition bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700">
+                    ⚠️ 局部受損
+                </button>
+                <button id="bark-btn-girdled" onclick="setBarkDamage('girdled')" class="py-1.5 px-2 rounded-lg text-xs font-bold border transition bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700">
+                    🛑 環狀剝皮
+                </button>
+            </div>
+
+            <p class="text-[11px] text-slate-300 leading-relaxed bg-slate-800/60 p-2 rounded-lg border border-slate-700/50">
+                🍂 <b>韌皮部</b>位於樹皮內側。遭受<b>環狀剝皮</b>時，向下輸送的金黃色養分在切口上方堆積腫脹，根部因無法獲得養分而枯死。
+            </p>
+        </div>
+
+        <!-- Color & Particle Legend + Sapwood Opacity Slider -->
+        <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-3 space-y-2">
+            <div class="text-xs font-bold text-slate-300">🎨 構造分層（點擊高亮）與半透明木頭設定</div>
+            <div class="grid grid-cols-2 gap-1.5 text-[11px]">
+                <button onclick="selectLayer('bark')" class="flex items-center gap-1.5 p-1.5 rounded-lg bg-slate-800/70 hover:bg-slate-700/70 text-left transition border border-transparent hover:border-slate-500">
+                    <span class="w-3 h-3 rounded-sm bg-[#4e3524] border border-amber-700 shrink-0"></span>
+                    <span class="truncate">外樹皮 (保護層)</span>
+                </button>
+                <button onclick="selectLayer('phloem')" class="flex items-center gap-1.5 p-1.5 rounded-lg bg-slate-800/70 hover:bg-slate-700/70 text-left transition border border-transparent hover:border-slate-500">
+                    <span class="w-3 h-3 rounded-sm bg-[#d97706] shrink-0"></span>
+                    <span class="truncate">韌皮部 (輸養分↓)</span>
+                </button>
+                <button onclick="selectLayer('cambium')" class="flex items-center gap-1.5 p-1.5 rounded-lg bg-slate-800/70 hover:bg-slate-700/70 text-left transition border border-transparent hover:border-slate-500">
+                    <span class="w-3 h-3 rounded-sm bg-[#22c55e] shrink-0"></span>
+                    <span class="truncate">形成層 (細胞分裂)</span>
+                </button>
+                <button onclick="selectLayer('sapwood')" class="flex items-center gap-1.5 p-1.5 rounded-lg bg-slate-800/70 hover:bg-slate-700/70 text-left transition border border-transparent hover:border-slate-500">
+                    <span class="w-3 h-3 rounded-sm bg-[#e6cca0] border border-[#b8925a] shrink-0"></span>
+                    <span class="truncate">邊材/半透明淺木(輸水↑)</span>
+                </button>
+                <button onclick="selectLayer('heartwood')" class="flex items-center gap-1.5 p-1.5 rounded-lg bg-slate-800/70 hover:bg-slate-700/70 text-left transition border border-transparent hover:border-slate-500 col-span-2">
+                    <span class="w-3 h-3 rounded-sm bg-[#6b2d14] shrink-0"></span>
+                    <span class="truncate">心材/深色老木質部 (僅具支撐、無輸水功能)</span>
+                </button>
+            </div>
+
+            <!-- 邊材木頭半透明度微調控制 -->
+            <div class="pt-1.5 border-t border-slate-800 flex items-center justify-between gap-2 text-[11px]">
+                <label for="opacity-slider" class="text-amber-200/90 font-semibold whitespace-nowrap">🪵 邊材木頭透明度：</label>
+                <input id="opacity-slider" type="range" min="30" max="95" step="1" value="65" class="w-full" oninput="handleSapwoodOpacity(this.value)">
+                <span id="opacity-val" class="text-slate-300 font-mono w-9 text-right">65%</span>
+            </div>
+
+            <div class="flex items-center justify-between pt-1.5 border-t border-slate-800 text-[11px]">
+                <div class="flex items-center gap-1.5 text-sky-300 font-semibold">
+                    <span class="inline-block w-2.5 h-2.5 rounded-full bg-sky-400 shadow-[0_0_8px_#38bdf8]"></span>
+                    木頭導管水柱與水滴↑
+                </div>
+                <div class="flex items-center gap-1.5 text-amber-300 font-semibold">
+                    <span class="inline-block w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24]"></span>
+                    韌皮部養分/糖分↓
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Right Panel: Telemetry Dashboard & Science Explanation -->
+    <aside id="right-panel" class="
+        side-panel glass-panel z-20 rounded-2xl p-3.5
+        hidden md:flex md:flex-col gap-3
+        fixed top-20 right-3 w-80 lg:w-[360px] max-h-[calc(100vh-5.8rem)] overflow-y-auto
+    ">
+        <!-- Dashboard Header + Collapse Button -->
+        <div class="flex items-center justify-between border-b border-slate-700/70 pb-2">
+            <h2 class="text-xs sm:text-sm font-bold text-sky-400 flex items-center gap-1.5">
+                <span>📊</span> 生理指標與科學診斷
+            </h2>
+            <div class="flex items-center gap-1.5">
+                <span id="tree-health-badge" class="px-2 py-0.5 text-[11px] font-bold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                    🌿 生機蓬勃
+                </span>
+                <button onclick="toggleRightPanel(false)" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-bold text-slate-200 border border-slate-600/60 transition flex items-center gap-1" title="收合右側資訊面板">
+                    <span>隱藏 ▶</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Metrics Grid -->
+        <div class="grid grid-cols-2 gap-2">
+            <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-2.5">
+                <div class="text-[11px] text-slate-400">樹幹直徑 / 心材占比</div>
+                <div class="flex items-baseline gap-1.5 mt-0.5">
+                    <span id="metric-diameter" class="text-base font-black text-white">50 cm</span>
+                    <span id="metric-heartwood-ratio" class="text-xs font-semibold text-amber-400">(心材 33%)</span>
+                </div>
+            </div>
+            <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-2.5">
+                <div class="text-[11px] text-slate-400">物理結構支撐力</div>
+                <div class="flex items-baseline gap-1.5 mt-0.5">
+                    <span id="metric-support" class="text-base font-black text-emerald-400">100% 穩固</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Water Transport Progress Bar -->
+        <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-3 space-y-1.5">
+            <div class="flex justify-between items-center text-xs">
+                <span class="font-bold text-sky-300 flex items-center gap-1">💧 邊材（半透明新木質部）水分運輸率 ↑</span>
+                <span id="water-rate-text" class="font-black text-sky-400">100%</span>
+            </div>
+            <div class="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden">
+                <div id="water-rate-bar" class="h-full bg-gradient-to-r from-sky-500 to-cyan-300 rounded-full transition-all duration-500" style="width: 100%"></div>
+            </div>
+            <p id="water-status-note" class="text-[11px] text-slate-400">
+                靠近形成層內側的半透明邊材木頭導管暢通，水分正常由根部送往樹冠。
+            </p>
+        </div>
+
+        <!-- Nutrient Transport Progress Bar -->
+        <div id="nutrient-card" class="bg-slate-900/80 border border-slate-800 rounded-xl p-3 space-y-1.5 transition-all">
+            <div class="flex justify-between items-center text-xs">
+                <span class="font-bold text-amber-300 flex items-center gap-1">🍯 韌皮部（內樹皮）根部養分獲取率 ↓</span>
+                <span id="nutrient-rate-text" class="font-black text-amber-400">100%</span>
+            </div>
+            <div class="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden">
+                <div id="nutrient-rate-bar" class="h-full bg-gradient-to-r from-amber-500 to-yellow-300 rounded-full transition-all duration-500" style="width: 100%"></div>
+            </div>
+            <p id="nutrient-status-note" class="text-[11px] text-slate-400">
+                樹葉光合作用產生的養分經韌皮部順利向下輸送至根部。
+            </p>
+        </div>
+
+        <!-- Selected Structure Detail Card -->
+        <div class="bg-gradient-to-br from-slate-900 to-slate-800/90 border border-slate-700 rounded-xl p-3 space-y-1.5">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span id="layer-color-dot" class="w-3.5 h-3.5 rounded-full bg-[#e6cca0] shadow"></span>
+                    <h3 id="layer-title" class="text-xs sm:text-sm font-black text-white">邊材／功能性木質部 (Sapwood)</h3>
+                </div>
+                <span id="layer-tag" class="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-700 text-slate-300 shrink-0">半透明木頭輸水 ↑</span>
+            </div>
+            <p id="layer-desc" class="text-xs text-slate-300 leading-relaxed">
+                緊鄰形成層內側、較新生成的<b>淺黃色自然木材（邊材）</b>。其木質部導管保持暢通，透過模型的<b>半透明木頭質感</b>，可直接觀察內部木質部導管與藍色水滴正由根部往上輸送至樹冠！
+            </p>
+        </div>
+
+        <!-- Dynamic Experimental Principle Card -->
+        <div id="science-card" class="bg-emerald-950/40 border border-emerald-500/40 rounded-xl p-3 space-y-1.5">
+            <div class="text-xs font-extrabold text-emerald-300 flex items-center gap-1.5">
+                <span>🔬</span> <span id="science-title">目前實驗狀態解析：維管束雙向獨立運輸</span>
+            </div>
+            <p id="science-body" class="text-xs text-slate-200 leading-relaxed">
+                隨著樹齡增加，只有最靠近形成層內側的<b>邊材（半透明淺色新木質部）</b>具備活的導管構造可將水分往上送；內層的<b>心材（深褐色老木質部）</b>雖失去輸水功能，但能提供強大機械支撐。
+            </p>
+        </div>
+    </aside>
+
+    <!-- Mobile Quick Status Bar -->
+    <div class="md:hidden fixed top-16 left-3 right-3 z-20 pointer-events-none flex justify-between gap-2">
+        <div class="glass-panel px-3 py-1.5 rounded-xl pointer-events-auto flex items-center gap-3 text-xs w-full justify-between">
+            <div class="flex items-center gap-2">
+                <span class="text-sky-400 font-bold">💧輸水↑ <span id="mobile-water-rate">100%</span></span>
+                <span class="text-slate-600">|</span>
+                <span class="text-amber-400 font-bold">🍯養分↓ <span id="mobile-nutrient-rate">100%</span></span>
+            </div>
+            <span id="mobile-health-badge" class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-300">
+                🌿 正常
+            </span>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 1. 模擬器狀態與構造階層資料
+        // ==========================================
+        const state = {
+            age: 12,                   // 樹齡 3 ~ 30 年
+            isHollow: false,           // 神木中空開關
+            barkDamage: 'normal',      // 'normal' | 'partial' | 'girdled'
+            selectedLayer: 'sapwood',  // 預設聚焦邊材，展示半透明木頭內水流
+            showLabels: true,          // 是否顯示 3D 浮動標籤
+            sapwoodOpacity: 0.65,      // 邊材（半透明淺木頭）不透明度
+            leftPanelOpen: true,       // 左側控制面板開關
+            rightPanelOpen: true,      // 右側資訊面板開關
+            radii: {
+                rHollow: 0,
+                rHeartwood: 0.72,
+                rSapwood: 1.56,
+                rCambium: 1.62,
+                rPhloem: 1.82,
+                rBark: 2.04
+            }
+        };
+
+        const LAYER_INFO = {
+            bark: {
+                title: '外樹皮／木栓層 (Outer Bark / Cork)',
+                tag: '保護組織',
+                color: '#6b442a',
+                desc: '位於樹幹最外層，由死亡的木栓細胞與舊韌皮部堆積而成，質地粗糙堅硬。能防止水分過度散失、抵禦病蟲害入侵與物理機械損傷。'
+            },
+            phloem: {
+                title: '韌皮部／內樹皮 (Phloem)',
+                tag: '養分運輸 ↓',
+                color: '#f97316',
+                desc: '位於形成層外側、外樹皮內側（屬於樹皮的一部分）。內含篩管細胞，負責將葉片光合作用製造的有機養分（蔗糖等）由上往下輸送至根部。若遭環狀剝皮切斷，根部將餓死。'
+            },
+            cambium: {
+                title: '維管束形成層 (Vascular Cambium)',
+                tag: '分生組織',
+                color: '#22c55e',
+                desc: '夾在韌皮部與木質部之間的薄層分生組織。向內分裂產生新的木質部細胞（使木材變厚），向外分裂產生新的韌皮部細胞，是樹木逐年變粗的關鍵構造。'
+            },
+            sapwood: {
+                title: '邊材／功能性新木質部 (Sapwood / Active Xylem)',
+                tag: '半透明淺色木頭（內部輸水 ↑）',
+                color: '#e6cca0',
+                desc: '緊鄰形成層內側、較新生成的<b>淺黃色自然木材（邊材）</b>。其木質部導管與假導管保持暢通，透過模型的<b>半透明木頭質感</b>，可直接透視內部導管水柱與藍色水滴正由根部往上輸送至樹冠！'
+            },
+            heartwood: {
+                title: '心材／老木質部 (Heartwood / Inactive Xylem)',
+                tag: '深色實心木材（無輸水力）',
+                color: '#7c2d12',
+                desc: '樹木變粗過程中，內層較早形成的木質部導管逐漸被樹脂、單寧與色素填充堵塞，顏色轉為深紅褐色且完全失去運輸水分的功能。因此即使千年神木中心腐朽中空，也不會影響外圈邊材木頭輸送水分！'
+            }
+        };
+
+        // ==========================================
+        // 2. Three.js 場景、相機、光源與雙保險控制器初始化
+        // ==========================================
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+
+        const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(5.6, 4.3, 6.0);
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.sortObjects = true;
+        container.appendChild(renderer.domElement);
+
+        // 環境光與多向立體光源（凸顯半透明木紋與剖面層次）
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.78);
+        scene.add(ambientLight);
+
+        const mainDirLight = new THREE.DirectionalLight(0xfffbeb, 0.95);
+        mainDirLight.position.set(8, 12, 9);
+        scene.add(mainDirLight);
+
+        const fillDirLight = new THREE.DirectionalLight(0xbae6fd, 0.45);
+        fillDirLight.position.set(-8, -5, -6);
+        scene.add(fillDirLight);
+
+        // 底部科技格線參考底座
+        const polarGrid = new THREE.PolarGridHelper(4.2, 16, 8, 64, 0x334155, 0x1e293b);
+        polarGrid.position.y = -2.25;
+        scene.add(polarGrid);
+
+        // 雙保險控制器：優先使用 OrbitControls，若 CDN 阻擋則自動啟用內建球座標拖曳控制
+        let controls = null;
+        if (typeof THREE.OrbitControls !== 'undefined') {
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.06;
+            controls.maxPolarAngle = Math.PI * 0.85;
+            controls.minDistance = 3.2;
+            controls.maxDistance = 15;
+            controls.target.set(0, 0, 0);
+        } else {
+            // 內建原生 Fallback 旋轉與縮放控制器
+            const spherical = { radius: 9.2, phi: 1.05, theta: 0.78, dragging: false, prevX: 0, prevY: 0 };
+            const updateFallbackCamera = () => {
+                camera.position.x = spherical.radius * Math.sin(spherical.phi) * Math.sin(spherical.theta);
+                camera.position.y = spherical.radius * Math.cos(spherical.phi);
+                camera.position.z = spherical.radius * Math.sin(spherical.phi) * Math.cos(spherical.theta);
+                camera.lookAt(0, 0, 0);
+            };
+            renderer.domElement.addEventListener('pointerdown', e => {
+                spherical.dragging = true;
+                spherical.prevX = e.clientX;
+                spherical.prevY = e.clientY;
+            });
+            window.addEventListener('pointerup', () => spherical.dragging = false);
+            window.addEventListener('pointermove', e => {
+                if (!spherical.dragging) return;
+                spherical.theta -= (e.clientX - spherical.prevX) * 0.007;
+                spherical.phi = Math.max(0.2, Math.min(Math.PI * 0.85, spherical.phi - (e.clientY - spherical.prevY) * 0.007));
+                spherical.prevX = e.clientX;
+                spherical.prevY = e.clientY;
+                updateFallbackCamera();
+            });
+            renderer.domElement.addEventListener('wheel', e => {
+                spherical.radius = Math.max(3.5, Math.min(15, spherical.radius + e.deltaY * 0.005));
+                updateFallbackCamera();
+            });
+            controls = { update: () => {} };
+        }
+
+        // ==========================================
+        // 3. 程序化貼圖生成（樹皮紋理、真實早晚材年輪與縱向木質導管木紋）
+        // ==========================================
+        function createBarkTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#3e2723';
+            ctx.fillRect(0, 0, 512, 512);
+
+            for (let i = 0; i < 650; i++) {
+                const x = Math.random() * 512;
+                const y = Math.random() * 512;
+                const w = 3 + Math.random() * 10;
+                const h = 30 + Math.random() * 90;
+                ctx.fillStyle = Math.random() > 0.45 ? '#271714' : '#5d4037';
+                ctx.fillRect(x, y, w, h);
+            }
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.RepeatWrapping;
+            tex.repeat.set(3, 2);
+            return tex;
+        }
+
+        // 建立真實木材貼圖（結合頂部橫切面同心年輪 + 放射狀髓線 + 縱切面垂直木質纖維紋理）
+        function createRealisticWoodTexture(ringsCount, ratioLow, ratioHigh, isSapwood) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+            const cx = 256, cy = 256, maxR = 256;
+
+            // 基底木色：邊材為溫暖淺楓木/白楊木色 (#ebd6b0 ~ #dfc192)，心材為深紅褐胡桃木色 (#6b2b11 ~ #431606)
+            const grad = ctx.createRadialGradient(cx, cy, maxR * ratioLow, cx, cy, maxR * ratioHigh);
+            if (isSapwood) {
+                grad.addColorStop(0, '#dfc192');
+                grad.addColorStop(0.5, '#f0dec0');
+                grad.addColorStop(1, '#e4c797');
+            } else {
+                grad.addColorStop(0, '#431606');
+                grad.addColorStop(0.6, '#6b2b11');
+                grad.addColorStop(1, '#7c3416');
+            }
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 512, 512);
+
+            // 繪製縱向木質纖維與導管紋理
+            for (let i = 0; i < 420; i++) {
+                const x = Math.random() * 512;
+                const y = Math.random() * 512;
+                const w = 1 + Math.random() * 2.2;
+                const h = 25 + Math.random() * 85;
+                ctx.fillStyle = isSapwood
+                    ? (Math.random() > 0.5 ? 'rgba(175, 130, 72, 0.24)' : 'rgba(255, 248, 231, 0.28)')
+                    : (Math.random() > 0.5 ? 'rgba(40, 12, 3, 0.35)' : 'rgba(145, 65, 28, 0.22)');
+                ctx.fillRect(x, y, w, h);
+            }
+
+            // 繪製放射狀髓線 (Wood Rays)
+            ctx.strokeStyle = isSapwood ? 'rgba(170, 122, 65, 0.24)' : 'rgba(42, 14, 4, 0.32)';
+            ctx.lineWidth = 1;
+            for (let a = 0; a < 72; a++) {
+                const angle = (a / 72) * Math.PI * 2;
+                ctx.beginPath();
+                ctx.moveTo(cx + Math.cos(angle) * maxR * ratioLow, cy + Math.sin(angle) * maxR * ratioLow);
+                ctx.lineTo(cx + Math.cos(angle) * maxR * ratioHigh, cy + Math.sin(angle) * maxR * ratioHigh);
+                ctx.stroke();
+            }
+
+            // 繪製早材與晚材同心年輪 (Annual Rings)
+            const span = Math.max(0.05, ratioHigh - ratioLow);
+            for (let i = 1; i <= ringsCount; i++) {
+                const r = maxR * (ratioLow + (i / ringsCount) * span);
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                ctx.strokeStyle = isSapwood ? 'rgba(158, 108, 48, 0.75)' : 'rgba(38, 12, 3, 0.85)';
+                ctx.lineWidth = isSapwood ? 2.5 : 3.0;
+                ctx.stroke();
+            }
+
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.RepeatWrapping;
+            return tex;
+        }
+
+        const barkTex = createBarkTexture();
+
+        // ==========================================
+        // 4. 建立 3/4 圓柱（露出 1/4 橫切面與縱切面）幾何體產生器
+        // ==========================================
+        const TRUNK_HEIGHT = 4.2;
+        const THETA_START = Math.PI * 0.5;   // 保留 270 度，切開右前方 90 度 (0 ~ PI/2)
+        const THETA_LENGTH = Math.PI * 1.5;
+
+        function createCutawayHollowCylinderGeometry(rInner, rOuter, height, yCenter = 0, thetaStart = THETA_START, thetaLength = THETA_LENGTH, radialSegments = 56) {
+            const geometry = new THREE.BufferGeometry();
+            const positions = [];
+            const normals = [];
+            const uvs = [];
+            const indices = [];
+
+            const halfH = height / 2;
+            const yTop = yCenter + halfH;
+            const yBot = yCenter - halfH;
+
+            function addQuad(p1, p2, p3, p4, normal, uv1 = [0,0], uv2 = [1,0], uv3 = [1,1], uv4 = [0,1]) {
+                const base = positions.length / 3;
+                positions.push(...p1, ...p2, ...p3, ...p4);
+                for (let i = 0; i < 4; i++) normals.push(...normal);
+                uvs.push(...uv1, ...uv2, ...uv3, ...uv4);
+                indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+            }
+
+            for (let i = 0; i < radialSegments; i++) {
+                const u0 = i / radialSegments;
+                const u1 = (i + 1) / radialSegments;
+                const a0 = thetaStart + u0 * thetaLength;
+                const a1 = thetaStart + u1 * thetaLength;
+
+                const cos0 = Math.cos(a0), sin0 = Math.sin(a0);
+                const cos1 = Math.cos(a1), sin1 = Math.sin(a1);
+                const cosMid = Math.cos((a0 + a1) * 0.5), sinMid = Math.sin((a0 + a1) * 0.5);
+
+                // 1. 外側圓弧面
+                addQuad(
+                    [rOuter * cos0, yBot, rOuter * sin0],
+                    [rOuter * cos1, yBot, rOuter * sin1],
+                    [rOuter * cos1, yTop, rOuter * sin1],
+                    [rOuter * cos0, yTop, rOuter * sin0],
+                    [cosMid, 0, sinMid],
+                    [u0, 0], [u1, 0], [u1, 1], [u0, 1]
+                );
+
+                // 2. 內側圓弧面 (若 rInner > 0)
+                if (rInner > 0.001) {
+                    addQuad(
+                        [rInner * cos1, yBot, rInner * sin1],
+                        [rInner * cos0, yBot, rInner * sin0],
+                        [rInner * cos0, yTop, rInner * sin0],
+                        [rInner * cos1, yTop, rInner * sin1],
+                        [-cosMid, 0, -sinMid],
+                        [u1, 0], [u0, 0], [u0, 1], [u1, 1]
+                    );
+                }
+
+                // 3. 頂部橫切環面 (供同心年輪貼圖投影)
+                const uvIn0 = [0.5 + 0.5 * (rInner / rOuter) * cos0, 0.5 + 0.5 * (rInner / rOuter) * sin0];
+                const uvOut0 = [0.5 + 0.5 * cos0, 0.5 + 0.5 * sin0];
+                const uvOut1 = [0.5 + 0.5 * cos1, 0.5 + 0.5 * sin1];
+                const uvIn1 = [0.5 + 0.5 * (rInner / rOuter) * cos1, 0.5 + 0.5 * (rInner / rOuter) * sin1];
+
+                addQuad(
+                    [rInner * cos0, yTop, rInner * sin0],
+                    [rOuter * cos0, yTop, rOuter * sin0],
+                    [rOuter * cos1, yTop, rOuter * sin1],
+                    [rInner * cos1, yTop, rInner * sin1],
+                    [0, 1, 0],
+                    uvIn0, uvOut0, uvOut1, uvIn1
+                );
+
+                // 4. 底部橫切環面
+                addQuad(
+                    [rInner * cos1, yBot, rInner * sin1],
+                    [rOuter * cos1, yBot, rOuter * sin1],
+                    [rOuter * cos0, yBot, rOuter * sin0],
+                    [rInner * cos0, yBot, rInner * sin0],
+                    [0, -1, 0],
+                    uvIn1, uvOut1, uvOut0, uvIn0
+                );
+            }
+
+            // 5. 兩個縱切剖面 (thetaStart 與 thetaStart + thetaLength)
+            if (thetaLength < Math.PI * 1.999) {
+                const cS = Math.cos(thetaStart), sS = Math.sin(thetaStart);
+                addQuad(
+                    [rInner * cS, yBot, rInner * sS],
+                    [rOuter * cS, yBot, rOuter * sS],
+                    [rOuter * cS, yTop, rOuter * sS],
+                    [rInner * cS, yTop, rInner * sS],
+                    [sS, 0, -cS],
+                    [0, 0], [1, 0], [1, 1], [0, 1]
+                );
+
+                const endA = thetaStart + thetaLength;
+                const cE = Math.cos(endA), sE = Math.sin(endA);
+                addQuad(
+                    [rOuter * cE, yBot, rOuter * sE],
+                    [rInner * cE, yBot, rInner * sE],
+                    [rInner * cE, yTop, rInner * sE],
+                    [rOuter * cE, yTop, rOuter * sE],
+                    [-sE, 0, cE],
+                    [1, 0], [0, 0], [0, 1], [1, 1]
+                );
+            }
+
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+            geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+            geometry.setIndex(indices);
+            return geometry;
+        }
+
+        // ==========================================
+        // 5. 建立樹幹模型群組與半透明邊材內部導管水柱
+        // ==========================================
+        const trunkGroup = new THREE.Group();
+        scene.add(trunkGroup);
+
+        // 邊材（半透明淺木頭）內部的垂直木質部導管群組（使用 CylinderGeometry 相容 r128）
+        const xylemVesselsGroup = new THREE.Group();
+        scene.add(xylemVesselsGroup);
+        let vesselMeshes = [];
+        let interactiveMeshes = [];
+
+        function calculateRadii() {
+            const age = state.age;
+            // 心材半徑：4年生以下尚無心材，隨樹齡增加心材變粗
+            const rHeartwood = age <= 4 ? 0.0 : 0.18 + (age - 4) * 0.068;
+            // 邊材（具輸水功能的新木質部）維持在形成層內側外圍
+            const sapwoodThickness = 0.56 + Math.min(age, 12) * 0.015;
+            const rSapwood = rHeartwood + sapwoodThickness;
+            // 形成層薄環
+            const rCambium = rSapwood + 0.06;
+            // 韌皮部（內樹皮）
+            const rPhloem = rCambium + 0.19;
+            // 外樹皮（隨樹齡略增厚）
+            const rBark = rPhloem + 0.16 + age * 0.004;
+            // 神木中空時，移除內層心材
+            const rHollow = (state.isHollow && rHeartwood > 0.05) ? rHeartwood * 0.92 : 0.0;
+
+            state.radii = { rHollow, rHeartwood, rSapwood, rCambium, rPhloem, rBark };
+        }
+
+        // 在半透明淺色木頭（邊材）內部建立 28 根垂直木質部導管，呈現「木頭導管內有水柱流動」
+        function buildXylemVessels() {
+            while (xylemVesselsGroup.children.length > 0) {
+                const c = xylemVesselsGroup.children[0];
+                if (c.geometry) c.geometry.dispose();
+                if (c.material) c.material.dispose();
+                xylemVesselsGroup.remove(c);
+            }
+            vesselMeshes = [];
+
+            const { rHeartwood, rSapwood } = state.radii;
+            const vesselCount = 28;
+            const vesselGeo = new THREE.CylinderGeometry(0.018, 0.018, TRUNK_HEIGHT - 0.04, 10, 1, true);
+
+            for (let i = 0; i < vesselCount; i++) {
+                const uAngle = (i + 0.5) / vesselCount;
+                const theta = THETA_START + 0.03 + uAngle * (THETA_LENGTH - 0.06);
+                // 交錯分布在半透明邊材厚度內
+                const ringLayer = (i % 3 === 0) ? 0.30 : (i % 3 === 1 ? 0.56 : 0.82);
+                const r = rHeartwood + ringLayer * (rSapwood - rHeartwood);
+
+                const mat = new THREE.MeshBasicMaterial({
+                    color: 0x38bdf8,
+                    transparent: true,
+                    opacity: 0.32,
+                    depthWrite: false,
+                    blending: THREE.AdditiveBlending,
+                    side: THREE.DoubleSide
+                });
+
+                const mesh = new THREE.Mesh(vesselGeo, mat);
+                mesh.position.set(r * Math.cos(theta), 0, r * Math.sin(theta));
+                mesh.userData = { phase: i * 0.65 };
+                xylemVesselsGroup.add(mesh);
+                vesselMeshes.push(mesh);
+            }
+        }
+
+        function buildTrunkMeshes() {
+            while (trunkGroup.children.length > 0) {
+                const child = trunkGroup.children[0];
+                if (child.geometry) child.geometry.dispose();
+                trunkGroup.remove(child);
+            }
+            interactiveMeshes = [];
+
+            calculateRadii();
+            const { rHollow, rHeartwood, rSapwood, rCambium, rPhloem, rBark } = state.radii;
+            const isSelected = (key) => state.selectedLayer === key;
+
+            // 1. 心材 (Heartwood - 深紅褐色實心老木頭，無輸水功能)
+            if (rHeartwood > 0.02 && rHollow < rHeartwood) {
+                const heartRings = Math.max(1, state.age - 4);
+                const heartWoodTex = createRealisticWoodTexture(heartRings, rHollow / rHeartwood, 1.0, false);
+                const heartMat = new THREE.MeshStandardMaterial({
+                    color: isSelected('heartwood') ? 0x9a3412 : 0x7c2d12,
+                    map: heartWoodTex,
+                    roughness: 0.88,
+                    metalness: 0.04,
+                    emissive: isSelected('heartwood') ? 0x3b1103 : 0x000000
+                });
+                const heartGeo = createCutawayHollowCylinderGeometry(rHollow, rHeartwood, TRUNK_HEIGHT, 0);
+                const heartMesh = new THREE.Mesh(heartGeo, heartMat);
+                heartMesh.userData = { layer: 'heartwood' };
+                trunkGroup.add(heartMesh);
+                interactiveMeshes.push(heartMesh);
+            }
+
+            // 若神木中空開啟，在樹洞內壁加上深褐色腐朽木質內襯
+            if (state.isHollow && rHollow > 0.02) {
+                const cavityGeo = createCutawayHollowCylinderGeometry(rHollow - 0.02, rHollow, TRUNK_HEIGHT, 0);
+                const cavityMat = new THREE.MeshStandardMaterial({
+                    color: 0x1c1917,
+                    roughness: 0.95
+                });
+                const cavityMesh = new THREE.Mesh(cavityGeo, cavityMat);
+                cavityMesh.userData = { layer: 'heartwood' };
+                trunkGroup.add(cavityMesh);
+            }
+
+            // 2. 邊材 (Sapwood - 半透明溫暖淺黃木頭材質，具真實年輪與木紋，內部透出導管水柱與藍色水滴上升)
+            const sapRings = Math.min(state.age, 6);
+            const sapWoodTex = createRealisticWoodTexture(sapRings, rHeartwood / rSapwood, 1.0, true);
+            const sapMat = new THREE.MeshStandardMaterial({
+                color: isSelected('sapwood') ? 0xf5deb3 : 0xe6cca0,
+                map: sapWoodTex,
+                roughness: 0.65,
+                metalness: 0.02,
+                transparent: true,
+                opacity: state.sapwoodOpacity,
+                depthWrite: false, // 關鍵：讓木頭內部的導管與上升水滴清晰可見
+                emissive: isSelected('sapwood') ? 0x78552b : 0x2e1f0f,
+                emissiveIntensity: isSelected('sapwood') ? 0.25 : 0.1
+            });
+            const sapGeo = createCutawayHollowCylinderGeometry(rHeartwood, rSapwood, TRUNK_HEIGHT + 0.004, 0);
+            const sapMesh = new THREE.Mesh(sapGeo, sapMat);
+            sapMesh.userData = { layer: 'sapwood' };
+            trunkGroup.add(sapMesh);
+            interactiveMeshes.push(sapMesh);
+
+            // 建立半透明邊材木頭內部的垂直導管水柱
+            buildXylemVessels();
+
+            // 3. 形成層 (Cambium - 介於韌皮部與木質部間的亮綠色分生組織細環)
+            const cambiumMat = new THREE.MeshStandardMaterial({
+                color: 0x22c55e,
+                roughness: 0.35,
+                emissive: 0x16a34a,
+                emissiveIntensity: isSelected('cambium') ? 0.75 : 0.4
+            });
+            const cambiumGeo = createCutawayHollowCylinderGeometry(rSapwood, rCambium, TRUNK_HEIGHT + 0.008, 0);
+            const cambiumMesh = new THREE.Mesh(cambiumGeo, cambiumMat);
+            cambiumMesh.userData = { layer: 'cambium' };
+            trunkGroup.add(cambiumMesh);
+            interactiveMeshes.push(cambiumMesh);
+
+            // 4 & 5. 韌皮部 (Phloem) 與 外樹皮 (Outer Bark)
+            const phloemMat = new THREE.MeshStandardMaterial({
+                color: isSelected('phloem') ? 0xfb923c : 0xd97706,
+                roughness: 0.55,
+                transparent: true,
+                opacity: 0.72,
+                depthWrite: false,
+                emissive: isSelected('phloem') ? 0x9a3412 : 0x431407,
+                emissiveIntensity: 0.22
+            });
+
+            const barkMat = new THREE.MeshStandardMaterial({
+                color: isSelected('bark') ? 0x78350f : 0x4e3524,
+                map: barkTex,
+                roughness: 0.92,
+                emissive: isSelected('bark') ? 0x451a03 : 0x000000
+            });
+
+            const girdleGapH = 0.75; // 剝皮缺口高度
+            const segH = (TRUNK_HEIGHT - girdleGapH) / 2;
+            const topY = (TRUNK_HEIGHT - segH) / 2;
+            const botY = -(TRUNK_HEIGHT - segH) / 2;
+
+            if (state.barkDamage === 'normal') {
+                const pGeo = createCutawayHollowCylinderGeometry(rCambium, rPhloem, TRUNK_HEIGHT, 0);
+                const pMesh = new THREE.Mesh(pGeo, phloemMat);
+                pMesh.userData = { layer: 'phloem' };
+                trunkGroup.add(pMesh);
+                interactiveMeshes.push(pMesh);
+
+                const bGeo = createCutawayHollowCylinderGeometry(rPhloem, rBark, TRUNK_HEIGHT, 0);
+                const bMesh = new THREE.Mesh(bGeo, barkMat);
+                bMesh.userData = { layer: 'bark' };
+                trunkGroup.add(bMesh);
+                interactiveMeshes.push(bMesh);
+            } else {
+                // 上下兩段樹皮與韌皮部
+                [topY, botY].forEach(yPos => {
+                    const pGeo = createCutawayHollowCylinderGeometry(rCambium, rPhloem, segH, yPos);
+                    const pMesh = new THREE.Mesh(pGeo, phloemMat);
+                    pMesh.userData = { layer: 'phloem' };
+                    trunkGroup.add(pMesh);
+                    interactiveMeshes.push(pMesh);
+
+                    const bGeo = createCutawayHollowCylinderGeometry(rPhloem, rBark, segH, yPos);
+                    const bMesh = new THREE.Mesh(bGeo, barkMat);
+                    bMesh.userData = { layer: 'bark' };
+                    trunkGroup.add(bMesh);
+                    interactiveMeshes.push(bMesh);
+                });
+
+                if (state.barkDamage === 'partial') {
+                    // 局部受損：中段只剝除前段 110 度，保留後方韌皮部暢通
+                    const remainStart = Math.PI * 1.1;
+                    const remainLen = Math.PI * 0.9;
+                    const pMidGeo = createCutawayHollowCylinderGeometry(rCambium, rPhloem, girdleGapH, 0, remainStart, remainLen, 36);
+                    const pMidMesh = new THREE.Mesh(pMidGeo, phloemMat);
+                    pMidMesh.userData = { layer: 'phloem' };
+                    trunkGroup.add(pMidMesh);
+                    interactiveMeshes.push(pMidMesh);
+
+                    const bMidGeo = createCutawayHollowCylinderGeometry(rPhloem, rBark, girdleGapH, 0, remainStart, remainLen, 36);
+                    const bMidMesh = new THREE.Mesh(bMidGeo, barkMat);
+                    bMidMesh.userData = { layer: 'bark' };
+                    trunkGroup.add(bMidMesh);
+                    interactiveMeshes.push(bMidMesh);
+                }
+
+                // 環狀剝皮 (girdled)：在切口上緣建立養分堆積癒傷組織腫脹環 (Callus swelling)
+                if (state.barkDamage === 'girdled') {
+                    const swellGeo = createCutawayHollowCylinderGeometry(rCambium, rBark + 0.09, 0.22, girdleGapH / 2 + 0.11);
+                    const swellMat = new THREE.MeshStandardMaterial({
+                        color: 0xf59e0b,
+                        roughness: 0.4,
+                        emissive: 0xd97706,
+                        emissiveIntensity: 0.55,
+                        transparent: true,
+                        opacity: 0.9
+                    });
+                    const swellMesh = new THREE.Mesh(swellGeo, swellMat);
+                    swellMesh.userData = { layer: 'phloem' };
+                    trunkGroup.add(swellMesh);
+                }
+            }
+        }
+
+        // ==========================================
+        // 6. 動態發光粒子系統（半透明木頭導管內水分↑ 與 韌皮部養分↓）
+        // ==========================================
+        function createGlowParticleTexture(coreColor, midColor) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            const grad = ctx.createRadialGradient(32, 32, 2, 32, 32, 30);
+            grad.addColorStop(0, coreColor);
+            grad.addColorStop(0.4, midColor);
+            grad.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 64, 64);
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        const WATER_COUNT = 460;
+        const NUTRIENT_COUNT = 320;
+
+        const waterPositions = new Float32Array(WATER_COUNT * 3);
+        const waterMetaData = [];
+        const waterGeo = new THREE.BufferGeometry();
+
+        const nutrientPositions = new Float32Array(NUTRIENT_COUNT * 3);
+        const nutrientMetaData = [];
+        const nutrientGeo = new THREE.BufferGeometry();
+
+        function initParticles() {
+            for (let i = 0; i < WATER_COUNT; i++) {
+                // 讓水滴粒子沿著半透明邊材木頭內的 28 根導管軌跡分布，絕不進入心材
+                const vesselIdx = i % 28;
+                const baseAngle = THETA_START + 0.03 + ((vesselIdx + 0.5) / 28) * (THETA_LENGTH - 0.06);
+                const ringLayer = (vesselIdx % 3 === 0) ? 0.30 : (vesselIdx % 3 === 1 ? 0.56 : 0.82);
+
+                waterMetaData.push({
+                    uRadius: ringLayer + (Math.random() - 0.5) * 0.06,
+                    theta: baseAngle + (Math.random() - 0.5) * 0.03,
+                    y: (Math.random() - 0.5) * TRUNK_HEIGHT,
+                    speed: 0.024 + Math.random() * 0.015
+                });
+            }
+            waterGeo.setAttribute('position', new THREE.BufferAttribute(waterPositions, 3));
+            const waterMat = new THREE.PointsMaterial({
+                size: 0.19,
+                map: createGlowParticleTexture('#ffffff', '#00e5ff'),
+                transparent: true,
+                opacity: 0.98,
+                depthWrite: false,
+                blending: THREE.AdditiveBlending
+            });
+            const waterPoints = new THREE.Points(waterGeo, waterMat);
+            scene.add(waterPoints);
+
+            for (let i = 0; i < NUTRIENT_COUNT; i++) {
+                nutrientMetaData.push({
+                    uRadius: 0.18 + Math.random() * 0.65,
+                    theta: THETA_START + 0.03 + Math.random() * (THETA_LENGTH - 0.06),
+                    y: (Math.random() - 0.5) * TRUNK_HEIGHT,
+                    speed: 0.016 + Math.random() * 0.012,
+                    jitterPhase: Math.random() * Math.PI * 2
+                });
+            }
+            nutrientGeo.setAttribute('position', new THREE.BufferAttribute(nutrientPositions, 3));
+            const nutrientMat = new THREE.PointsMaterial({
+                size: 0.17,
+                map: createGlowParticleTexture('#ffffff', '#fbbf24'),
+                transparent: true,
+                opacity: 0.95,
+                depthWrite: false,
+                blending: THREE.AdditiveBlending
+            });
+            const nutrientPoints = new THREE.Points(nutrientGeo, nutrientMat);
+            scene.add(nutrientPoints);
+        }
+
+        function updateParticles(time) {
+            const { rHeartwood, rSapwood, rCambium, rPhloem } = state.radii;
+            const halfH = TRUNK_HEIGHT / 2;
+            const girdleTopY = 0.38;
+            const girdleBotY = -0.38;
+
+            // 更新半透明邊材木頭內的導管水柱脈衝光澤
+            for (let i = 0; i < vesselMeshes.length; i++) {
+                const vm = vesselMeshes[i];
+                vm.material.opacity = 0.18 + 0.18 * Math.sin(time * 3.8 + vm.userData.phase);
+            }
+
+            // 1. 更新藍色水分粒子 (由下往上 ↑，嚴格限制在半透明邊材木頭 Sapwood 導管內流動)
+            const wPos = waterGeo.attributes.position.array;
+            for (let i = 0; i < WATER_COUNT; i++) {
+                const p = waterMetaData[i];
+                p.y += p.speed;
+                if (p.y > halfH) p.y = -halfH;
+
+                const r = rHeartwood + p.uRadius * (rSapwood - rHeartwood);
+                wPos[i * 3] = r * Math.cos(p.theta);
+                wPos[i * 3 + 1] = p.y;
+                wPos[i * 3 + 2] = r * Math.sin(p.theta);
+            }
+            waterGeo.attributes.position.needsUpdate = true;
+
+            // 2. 更新金黃色養分粒子 (由上往下 ↓，在韌皮部 Phloem 內流動)
+            const nPos = nutrientGeo.attributes.position.array;
+            for (let i = 0; i < NUTRIENT_COUNT; i++) {
+                const p = nutrientMetaData[i];
+
+                if (state.barkDamage === 'normal') {
+                    p.y -= p.speed;
+                    if (p.y < -halfH) p.y = halfH;
+                } else if (state.barkDamage === 'partial') {
+                    const inDamagedSector = p.theta < Math.PI * 1.1;
+                    if (inDamagedSector && p.y <= girdleTopY + 0.12 && p.y > girdleBotY) {
+                        // 局部受損：往後方未受損的樹皮橫向繞道向下運輸
+                        p.theta += 0.015;
+                        p.y = girdleTopY + 0.06 + Math.sin(time * 4 + p.jitterPhase) * 0.05;
+                    } else {
+                        p.y -= p.speed;
+                        if (p.y < -halfH) {
+                            p.y = halfH;
+                            p.theta = THETA_START + 0.03 + Math.random() * (THETA_LENGTH - 0.06);
+                        }
+                    }
+                } else if (state.barkDamage === 'girdled') {
+                    // 環狀剝皮：養分完全受阻卡在切口上方 (y = 0.38 ~ 0.68) 劇烈堆積
+                    if (p.y > girdleTopY + 0.05) {
+                        p.y -= p.speed;
+                        if (p.y <= girdleTopY + 0.05) {
+                            p.y = girdleTopY + 0.05 + Math.random() * 0.25;
+                        }
+                    } else {
+                        if (p.y < girdleBotY) {
+                            p.y -= p.speed * 0.5;
+                            if (p.y < -halfH) p.y = halfH;
+                        } else {
+                            p.y = girdleTopY + 0.04 + (Math.sin(time * 5 + p.jitterPhase) * 0.5 + 0.5) * 0.26;
+                        }
+                    }
+                }
+
+                let extraSwell = 0;
+                if (state.barkDamage === 'girdled' && p.y >= girdleTopY && p.y <= girdleTopY + 0.35) {
+                    extraSwell = 0.08;
+                }
+
+                const r = rCambium + p.uRadius * (rPhloem - rCambium) + extraSwell;
+                nPos[i * 3] = r * Math.cos(p.theta);
+                nPos[i * 3 + 1] = p.y;
+                nPos[i * 3 + 2] = r * Math.sin(p.theta);
+            }
+            nutrientGeo.attributes.position.needsUpdate = true;
+        }
+
+        // ==========================================
+        // 7. 3D 浮動標籤系統 (HTML Overlay Pins)
+        // ==========================================
+        const labelsContainer = document.getElementById('labels-container');
+        const labelElements = {};
+
+        const LABEL_CONFIGS = [
+            { key: 'bark', name: '外樹皮 (保護)', color: '#a16207' },
+            { key: 'phloem', name: '韌皮部 (輸養分↓)', color: '#f97316' },
+            { key: 'cambium', name: '形成層 (分裂變粗)', color: '#22c55e' },
+            { key: 'sapwood', name: '邊材/半透明淺木頭 (導管輸水↑)', color: '#e6cca0' },
+            { key: 'heartwood', name: '心材/深色老木頭 (無輸水)', color: '#ef4444' }
+        ];
+
+        function init3DLabels() {
+            labelsContainer.innerHTML = '';
+            LABEL_CONFIGS.forEach(cfg => {
+                const el = document.createElement('div');
+                el.className = 'pin-label glass-panel px-2.5 py-1 rounded-full text-xs font-bold text-white flex items-center shadow-lg border border-white/20';
+                el.innerHTML = `<span class="pin-dot" style="background:${cfg.color}; color:${cfg.color}"></span><span class="label-text">${cfg.name}</span>`;
+                el.onclick = () => selectLayer(cfg.key);
+                labelsContainer.appendChild(el);
+                labelElements[cfg.key] = { el, cfg };
+            });
+        }
+
+        function getLayer3DAnchor(key) {
+            const { rHollow, rHeartwood, rSapwood, rCambium, rPhloem, rBark } = state.radii;
+            switch (key) {
+                case 'bark':
+                    return new THREE.Vector3((rPhloem + rBark) * 0.5, 1.35, 0);
+                case 'phloem':
+                    return new THREE.Vector3(0, 0.75, (rCambium + rPhloem) * 0.5);
+                case 'cambium':
+                    return new THREE.Vector3(rSapwood, 0.1, 0);
+                case 'sapwood':
+                    return new THREE.Vector3(0, -0.55, (rHeartwood + rSapwood) * 0.5);
+                case 'heartwood':
+                    return new THREE.Vector3((rHollow + rHeartwood) * 0.4, -1.25, 0);
+            }
+            return new THREE.Vector3();
+        }
+
+        function update3DLabels() {
+            if (!state.showLabels) {
+                Object.values(labelElements).forEach(({ el }) => el.style.display = 'none');
+                return;
+            }
+
+            Object.entries(labelElements).forEach(([key, { el }]) => {
+                if (key === 'heartwood' && state.radii.rHeartwood < 0.05) {
+                    el.style.display = 'none';
+                    return;
+                }
+
+                if (key === 'heartwood') {
+                    const txtSpan = el.querySelector('.label-text');
+                    txtSpan.textContent = state.isHollow ? '中空樹洞 (原心材腐朽)' : '心材/深色老木頭 (無輸水)';
+                }
+
+                const worldPos = getLayer3DAnchor(key);
+                const projected = worldPos.clone().project(camera);
+
+                if (projected.z > 1) {
+                    el.style.display = 'none';
+                    return;
+                }
+
+                const x = (projected.x * 0.5 + 0.5) * window.innerWidth;
+                const y = (-(projected.y * 0.5) + 0.5) * window.innerHeight;
+
+                el.style.display = 'flex';
+                el.style.left = `${x}px`;
+                el.style.top = `${y}px`;
+
+                if (state.selectedLayer === key) {
+                    el.style.borderColor = '#38bdf8';
+                    el.style.backgroundColor = 'rgba(15, 23, 42, 0.96)';
+                } else {
+                    el.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                    el.style.backgroundColor = 'rgba(15, 23, 42, 0.78)';
+                }
+            });
+        }
+
+        // ==========================================
+        // 8. 左右雙側面板收合/展開與專注模式 Toggle 邏輯
+        // ==========================================
+        function toggleLeftPanel(show) {
+            state.leftPanelOpen = (show !== undefined) ? show : !state.leftPanelOpen;
+            const leftPanel = document.getElementById('left-panel');
+            const openLeftBtn = document.getElementById('open-left-btn');
+
+            if (state.leftPanelOpen) {
+                leftPanel.classList.remove('left-collapsed');
+                openLeftBtn.classList.add('hidden');
+            } else {
+                leftPanel.classList.add('left-collapsed');
+                openLeftBtn.classList.remove('hidden');
+            }
+            updateFocusModeBtnUI();
+        }
+
+        function toggleRightPanel(show) {
+            state.rightPanelOpen = (show !== undefined) ? show : !state.rightPanelOpen;
+            const rightPanel = document.getElementById('right-panel');
+            const openRightBtn = document.getElementById('open-right-btn');
+
+            if (state.rightPanelOpen) {
+                rightPanel.classList.remove('right-collapsed');
+                openRightBtn.classList.add('hidden');
+            } else {
+                rightPanel.classList.add('right-collapsed');
+                openRightBtn.classList.remove('hidden');
+            }
+            updateFocusModeBtnUI();
+        }
+
+        function toggleBothPanels() {
+            const anyOpen = state.leftPanelOpen || state.rightPanelOpen;
+            toggleLeftPanel(!anyOpen);
+            toggleRightPanel(!anyOpen);
+        }
+
+        function updateFocusModeBtnUI() {
+            const btn = document.getElementById('focus-mode-btn');
+            const bothHidden = !state.leftPanelOpen && !state.rightPanelOpen;
+            if (bothHidden) {
+                btn.textContent = '⛶ 顯示兩側面板';
+                btn.className = 'px-2.5 py-1.5 text-xs font-bold rounded-lg bg-emerald-600/40 hover:bg-emerald-600/60 text-white border border-emerald-400 transition';
+            } else {
+                btn.textContent = '⛶ 專注模式 (隱藏面板)';
+                btn.className = 'px-2.5 py-1.5 text-xs font-bold rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/40 transition';
+            }
+        }
+
+        // ==========================================
+        // 9. UI 儀表板更新與科學控制互動
+        // ==========================================
+        function updateDashboardUI() {
+            const { rHeartwood, rSapwood } = state.radii;
+
+            document.getElementById('age-badge').textContent = `${state.age} 年生`;
+
+            const diameterCm = Math.round(state.age * 4.2);
+            const woodArea = rSapwood * rSapwood;
+            const heartArea = rHeartwood * rHeartwood;
+            const heartRatio = woodArea > 0 ? Math.round((heartArea / woodArea) * 100) : 0;
+
+            document.getElementById('metric-diameter').textContent = `${diameterCm} cm`;
+            document.getElementById('metric-heartwood-ratio').textContent = state.isHollow
+                ? `(中空 ${heartRatio}%)`
+                : `(心材 ${heartRatio}%)`;
+
+            const supportEl = document.getElementById('metric-support');
+            if (state.isHollow && state.age > 6) {
+                const remainSupport = Math.max(45, 100 - Math.round(heartRatio * 0.65));
+                supportEl.textContent = `${remainSupport}% (中空減弱)`;
+                supportEl.className = 'text-base font-black text-amber-400';
+            } else {
+                supportEl.textContent = '100% 穩固';
+                supportEl.className = 'text-base font-black text-emerald-400';
+            }
+
+            // 水分運輸率 (即使心材中空，外圍半透明邊材木頭依然 100% 正常輸水)
+            const waterRate = 100;
+            document.getElementById('water-rate-text').textContent = `${waterRate}%`;
+            document.getElementById('water-rate-bar').style.width = `${waterRate}%`;
+            document.getElementById('mobile-water-rate').textContent = `${waterRate}%`;
+
+            const waterNote = document.getElementById('water-status-note');
+            if (state.isHollow) {
+                waterNote.innerHTML = '✅ <b>關鍵驗證：</b>雖然內層心材腐朽中空，但外圈<b>半透明邊材木頭毫髮無傷</b>，水分運輸維持 100%！';
+                waterNote.className = 'text-[11px] text-sky-300 font-medium';
+            } else {
+                waterNote.textContent = '靠近形成層內側的半透明邊材木頭導管暢通，水分正常由根部送往樹冠。';
+                waterNote.className = 'text-[11px] text-slate-400';
+            }
+
+            // 養分運輸率
+            let nutrientRate = 100;
+            if (state.barkDamage === 'partial') nutrientRate = 70;
+            if (state.barkDamage === 'girdled') nutrientRate = 0;
+
+            document.getElementById('nutrient-rate-text').textContent = `${nutrientRate}%`;
+            document.getElementById('nutrient-rate-bar').style.width = `${nutrientRate}%`;
+            document.getElementById('mobile-nutrient-rate').textContent = `${nutrientRate}%`;
+
+            const nutrientCard = document.getElementById('nutrient-card');
+            const nutrientNote = document.getElementById('nutrient-status-note');
+            const healthBadge = document.getElementById('tree-health-badge');
+            const mobileHealthBadge = document.getElementById('mobile-health-badge');
+
+            if (state.barkDamage === 'normal') {
+                nutrientCard.classList.remove('alert-pulse', 'border-red-500');
+                nutrientNote.textContent = '樹葉光合作用產生的養分經韌皮部順利向下輸送至根部。';
+                nutrientNote.className = 'text-[11px] text-slate-400';
+
+                healthBadge.textContent = state.isHollow ? '🌲 中空但存活' : '🌿 生機蓬勃';
+                healthBadge.className = 'px-2 py-0.5 text-[11px] font-bold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
+                mobileHealthBadge.textContent = state.isHollow ? '🌲 中空存活' : '🌿 正常';
+                mobileHealthBadge.className = 'px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-300';
+            } else if (state.barkDamage === 'partial') {
+                nutrientCard.classList.remove('alert-pulse', 'border-red-500');
+                nutrientNote.innerHTML = '⚠️ 單側樹皮受損，養分可經由後方殘存的韌皮部繞道向下輸送（約 70%），樹木仍可存活。';
+                nutrientNote.className = 'text-[11px] text-amber-300';
+
+                healthBadge.textContent = '⚠️ 局部受損';
+                healthBadge.className = 'px-2 py-0.5 text-[11px] font-bold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40';
+                mobileHealthBadge.textContent = '⚠️ 局部受損';
+                mobileHealthBadge.className = 'px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/20 text-amber-300';
+            } else if (state.barkDamage === 'girdled') {
+                nutrientCard.classList.add('alert-pulse', 'border-red-500');
+                nutrientNote.innerHTML = '🛑 <b>環狀剝皮阻斷：</b>整圈韌皮部被削去！金黃色養分堆積在切口上方形成腫脹，根部獲取率 0%，根系將飢餓枯死！';
+                nutrientNote.className = 'text-[11px] text-red-300 font-semibold';
+
+                healthBadge.textContent = '💀 根部缺養瀕死';
+                healthBadge.className = 'px-2 py-0.5 text-[11px] font-bold rounded-full bg-red-500/20 text-red-300 border border-red-500/50';
+                mobileHealthBadge.textContent = '💀 環剝瀕死';
+                mobileHealthBadge.className = 'px-2 py-0.5 rounded-full text-[11px] font-bold bg-red-500/20 text-red-300';
+            }
+
+            // 更新選取構造層說明卡片
+            const info = LAYER_INFO[state.selectedLayer];
+            document.getElementById('layer-color-dot').style.backgroundColor = info.color;
+            document.getElementById('layer-title').textContent = info.title;
+            document.getElementById('layer-tag').textContent = info.tag;
+            document.getElementById('layer-desc').innerHTML = info.desc;
+
+            // 更新動態科學原理解說卡片
+            const sciCard = document.getElementById('science-card');
+            const sciTitle = document.getElementById('science-title');
+            const sciBody = document.getElementById('science-body');
+
+            if (state.barkDamage === 'girdled') {
+                sciCard.className = 'bg-red-950/45 border border-red-500/50 rounded-xl p-3 space-y-1.5';
+                sciTitle.className = 'text-xs font-extrabold text-red-300 flex items-center gap-1.5';
+                sciTitle.textContent = '科學診斷：為什麼「樹怕剝皮」？（環狀剝皮致死機制）';
+                sciBody.innerHTML = '韌皮部緊貼在樹皮內側。當樹幹遭到<b>環狀剝皮（Girdling）</b>時，整圈韌皮部篩管被切斷，葉片製造的糖分無法運送到根部（在切口上方堆積腫脹）。雖然短期內內側半透明木質部（邊材）仍能往上送水，但<b>根部因長期缺乏養分而餓死腐爛</b>，最終失去吸水能力導致整棵樹枯死！';
+            } else if (state.isHollow) {
+                sciCard.className = 'bg-sky-950/45 border border-sky-500/50 rounded-xl p-3 space-y-1.5';
+                sciTitle.className = 'text-xs font-extrabold text-sky-300 flex items-center gap-1.5';
+                sciTitle.textContent = '科學診斷：為什麼千年神木「樹幹中空」仍枝葉茂盛？';
+                sciBody.innerHTML = '樹木變粗時，只有靠近形成層內側最新生成的<b>邊材（半透明淺色木質部）</b>具有運輸水分的功能；中心深色的<b>心材（老木質部）</b>早已堵塞失去輸水能力。因此即使神木中心的心材被菌類腐蝕成巨大樹洞，只要外圈的<b>邊材、形成層與樹皮（韌皮部）完整</b>，水分與養分運輸就完全不受影響！';
+            } else if (state.age >= 20) {
+                sciCard.className = 'bg-emerald-950/40 border border-emerald-500/40 rounded-xl p-3 space-y-1.5';
+                sciTitle.className = 'text-xs font-extrabold text-emerald-300 flex items-center gap-1.5';
+                sciTitle.textContent = `目前狀態：${state.age} 年生大樹（心材比例顯著增加）`;
+                sciBody.innerHTML = '觀察 3D 橫切面可見：隨著樹齡增長，內層失去輸水功能的深褐色<b>心材</b>半徑大幅擴張，提供強大的抗風支撐力；而具有藍色水滴向上流動的<b>半透明邊材木頭</b>始終維持在緊貼形成層內側的外圍環帶。';
+            } else {
+                sciCard.className = 'bg-emerald-950/40 border border-emerald-500/40 rounded-xl p-3 space-y-1.5';
+                sciTitle.className = 'text-xs font-extrabold text-emerald-300 flex items-center gap-1.5';
+                sciTitle.textContent = '目前實驗狀態解析：維管束雙向獨立運輸';
+                sciBody.innerHTML = '雙子葉木本植物莖內，<b>形成層</b>向內生出木質部、向外生出韌皮部。<b>邊材（半透明淺色新木質部）</b>內部導管將根部水分由下往上送（藍色水滴↑）；<b>韌皮部</b>將葉片養分由上往下送（金黃粒子↓）。';
+            }
+        }
+
+        function handleAgeChange(val) {
+            state.age = parseInt(val, 10);
+            buildTrunkMeshes();
+            updateDashboardUI();
+        }
+
+        function handleSapwoodOpacity(val) {
+            const pct = parseInt(val, 10);
+            state.sapwoodOpacity = pct / 100;
+            document.getElementById('opacity-val').textContent = `${pct}%`;
+            buildTrunkMeshes();
+        }
+
+        function toggleHollow() {
+            state.isHollow = !state.isHollow;
+            if (state.isHollow && state.age < 10) {
+                state.age = 18;
+                document.getElementById('age-slider').value = 18;
+            }
+            const btn = document.getElementById('hollow-toggle-btn');
+            const dot = document.getElementById('hollow-toggle-dot');
+            if (state.isHollow) {
+                btn.className = 'relative inline-flex h-6 w-12 items-center rounded-full bg-sky-500 transition-colors duration-200 focus:outline-none';
+                dot.className = 'inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 translate-x-7';
+                state.selectedLayer = 'heartwood';
+            } else {
+                btn.className = 'relative inline-flex h-6 w-12 items-center rounded-full bg-slate-700 transition-colors duration-200 focus:outline-none';
+                dot.className = 'inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 translate-x-1';
+            }
+            buildTrunkMeshes();
+            updateDashboardUI();
+        }
+
+        function setBarkDamage(mode) {
+            state.barkDamage = mode;
+            const modes = ['normal', 'partial', 'girdled'];
+            const styles = {
+                normal: 'bg-emerald-600/30 border-emerald-400 text-white shadow',
+                partial: 'bg-amber-600/30 border-amber-400 text-white shadow',
+                girdled: 'bg-red-600/35 border-red-400 text-white shadow'
+            };
+            const inactiveStyle = 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700';
+
+            modes.forEach(m => {
+                const btn = document.getElementById(`bark-btn-${m}`);
+                btn.className = `py-1.5 px-2 rounded-lg text-xs font-bold border transition ${m === mode ? styles[m] : inactiveStyle}`;
+            });
+
+            const tag = document.getElementById('bark-status-tag');
+            if (mode === 'normal') {
+                tag.textContent = '正常完整';
+                tag.className = 'text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300';
+            } else if (mode === 'partial') {
+                tag.textContent = '局部受損 (約 70%)';
+                tag.className = 'text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300';
+                state.selectedLayer = 'phloem';
+            } else {
+                tag.textContent = '環狀剝皮 (0% 阻斷)';
+                tag.className = 'text-[10px] font-bold px-2 py-0.5 rounded bg-red-500/20 text-red-300';
+                state.selectedLayer = 'phloem';
+            }
+
+            buildTrunkMeshes();
+            updateDashboardUI();
+        }
+
+        function selectLayer(layerKey) {
+            state.selectedLayer = layerKey;
+            buildTrunkMeshes();
+            updateDashboardUI();
+        }
+
+        function toggleLabels() {
+            state.showLabels = !state.showLabels;
+            const btn = document.getElementById('toggle-labels-btn');
+            btn.textContent = state.showLabels ? '🏷️ 3D 標籤：開' : '🏷️ 3D 標籤：關';
+            btn.className = state.showLabels
+                ? 'px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-200 border border-emerald-500/40 transition'
+                : 'px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 border border-slate-600/50 transition';
+        }
+
+        function resetExperiment() {
+            state.age = 12;
+            document.getElementById('age-slider').value = 12;
+            state.sapwoodOpacity = 0.65;
+            document.getElementById('opacity-slider').value = 65;
+            document.getElementById('opacity-val').textContent = '65%';
+            if (state.isHollow) toggleHollow();
+            setBarkDamage('normal');
+            state.selectedLayer = 'sapwood';
+            setCameraPreset('iso');
+            buildTrunkMeshes();
+            updateDashboardUI();
+        }
+
+        // 相機預設視角平滑切換
+        let targetCamPos = null;
+        function setCameraPreset(preset) {
+            if (preset === 'iso') {
+                targetCamPos = new THREE.Vector3(5.6, 4.3, 6.0);
+            } else if (preset === 'top') {
+                targetCamPos = new THREE.Vector3(0.7, 8.4, 0.7);
+            } else if (preset === 'side') {
+                targetCamPos = new THREE.Vector3(5.8, 0.2, 5.8);
+            }
+        }
+
+        // 滑鼠點擊 3D 模型拾取構造層 (Raycaster)
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        let pointerDownPos = { x: 0, y: 0 };
+
+        renderer.domElement.addEventListener('pointerdown', (e) => {
+            pointerDownPos = { x: e.clientX, y: e.clientY };
+        });
+
+        renderer.domElement.addEventListener('pointerup', (e) => {
+            const dx = e.clientX - pointerDownPos.x;
+            const dy = e.clientY - pointerDownPos.y;
+            if (Math.hypot(dx, dy) > 6) return;
+
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+
+            const intersects = raycaster.intersectObjects(interactiveMeshes);
+            if (intersects.length > 0) {
+                const hitLayer = intersects[0].object.userData.layer;
+                if (hitLayer) selectLayer(hitLayer);
+            }
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // ==========================================
+        // 10. 雙保險啟動模擬與主動畫迴圈
+        // ==========================================
+        const clock = new THREE.Clock();
+        let isInitialized = false;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const elapsedTime = clock.getElapsedTime();
+
+            if (targetCamPos) {
+                camera.position.lerp(targetCamPos, 0.08);
+                camera.lookAt(0, 0, 0);
+                if (camera.position.distanceTo(targetCamPos) < 0.05) {
+                    targetCamPos = null;
+                }
+            }
+
+            if (controls && controls.update) controls.update();
+            updateParticles(elapsedTime);
+            update3DLabels();
+            renderer.render(scene, camera);
+        }
+
+        function startSimulator() {
+            if (isInitialized) return;
+            isInitialized = true;
+            init3DLabels();
+            initParticles();
+            buildTrunkMeshes();
+            updateDashboardUI();
+            animate();
+        }
+
+        document.addEventListener('DOMContentLoaded', startSimulator);
+        window.onload = startSimulator;
+    </script>
+</body>
+</html>

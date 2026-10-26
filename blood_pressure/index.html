@@ -1,0 +1,1559 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>人體血管系統：血壓與血流動力學互動模擬器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans TC', 'Inter', sans-serif;
+            background-color: #0b0f19;
+            color: #e2e8f0;
+            overflow-x: hidden;
+        }
+        /* 自訂滑桿樣式 */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 18px;
+            width: 18px;
+            border-radius: 50%;
+            background: #38bdf8;
+            cursor: pointer;
+            margin-top: -6px;
+            box-shadow: 0 0 10px rgba(56, 189, 248, 0.8);
+            transition: transform 0.1s;
+        }
+        input[type=range]::-webkit-slider-thumb:hover {
+            transform: scale(1.15);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 6px;
+            cursor: pointer;
+            background: #334155;
+            border-radius: 3px;
+        }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .zone-tab.active {
+            border-color: #38bdf8;
+            background: rgba(56, 189, 248, 0.15);
+            color: #fff;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- 頂部導覽與即時生理數據儀表板 -->
+    <header class="glass-panel sticky top-0 z-30 px-4 py-3 border-b border-slate-800 shadow-lg">
+        <div class="max-w-7xl mx-auto flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-500 to-blue-600 flex items-center justify-center shadow-md shadow-rose-500/20">
+                    <svg class="w-6 h-6 text-white animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-lg md:text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-rose-400 via-purple-300 to-sky-400">
+                        人體血管系統：血壓與血流動力學互動模擬器
+                    </h1>
+                    <p class="text-xs text-slate-400">探索「主動脈 → 小動脈 → 微血管 → 小靜脈 → 腔靜脈」的壓力驟降與回流機制</p>
+                </div>
+            </div>
+
+            <!-- 即時關鍵數據指標 -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full lg:w-auto">
+                <div class="bg-slate-900/90 border border-rose-500/30 rounded-lg px-3 py-1.5 flex flex-col">
+                    <span class="text-[11px] text-slate-400">主動脈血壓 (收縮/舒張)</span>
+                    <div class="flex items-baseline gap-1">
+                        <span id="stat-bp" class="text-base font-bold text-rose-400 font-mono">120 / 80</span>
+                        <span class="text-[10px] text-slate-500">mmHg</span>
+                    </div>
+                </div>
+                <div class="bg-slate-900/90 border border-amber-500/30 rounded-lg px-3 py-1.5 flex flex-col">
+                    <span class="text-[11px] text-slate-400">小動脈壓降 (減壓閥)</span>
+                    <div class="flex items-baseline gap-1">
+                        <span id="stat-drop" class="text-base font-bold text-amber-400 font-mono">-60</span>
+                        <span class="text-[10px] text-slate-500">mmHg</span>
+                    </div>
+                </div>
+                <div class="bg-slate-900/90 border border-purple-500/30 rounded-lg px-3 py-1.5 flex flex-col">
+                    <span class="text-[11px] text-slate-400">微血管壓 (動脈端→靜脈端)</span>
+                    <div class="flex items-baseline gap-1">
+                        <span id="stat-cap-bp" class="text-base font-bold text-purple-400 font-mono">35 → 15</span>
+                        <span class="text-[10px] text-slate-500">mmHg</span>
+                    </div>
+                </div>
+                <div class="bg-slate-900/90 border border-sky-500/30 rounded-lg px-3 py-1.5 flex flex-col">
+                    <span class="text-[11px] text-slate-400">組織液狀態 (史達林力)</span>
+                    <div class="flex items-baseline gap-1">
+                        <span id="stat-edema" class="text-xs font-bold text-emerald-400">動態平衡 (正常交換)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主體內容區 -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-3 md:p-5 grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+        <!-- 左側：雙層同步視覺化畫布 (佔 8 欄) -->
+        <div class="lg:col-span-8 flex flex-col gap-4">
+
+            <!-- 1. 血管結構與紅血球動態模擬畫布 -->
+            <div class="glass-panel rounded-2xl p-3 md:p-4 shadow-xl flex flex-col gap-2 relative overflow-hidden">
+                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span>
+                        <h2 class="text-sm font-bold text-slate-200">1. 血管結構、平滑肌調節、微血管物質交換與靜脈幫浦動畫</h2>
+                    </div>
+                    <div class="flex items-center gap-3 text-xs text-slate-400">
+                        <span class="flex items-center gap-1"><i class="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block"></i>充氧血 (O₂)</span>
+                        <span class="flex items-center gap-1"><i class="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block"></i>缺氧血 (CO₂)</span>
+                        <span class="flex items-center gap-1"><i class="w-2 h-2 rounded-full bg-emerald-400 inline-block"></i>養分過濾/代謝物回收</span>
+                    </div>
+                </div>
+
+                <!-- 血管分區頂部標籤 (可點擊切換解析) -->
+                <div class="grid grid-cols-5 gap-1 text-center text-xs font-medium select-none">
+                    <button onclick="selectZone(0)" class="zone-header py-1.5 rounded bg-rose-950/50 border border-rose-500/30 text-rose-300 hover:bg-rose-900/40 transition" id="zh-0">
+                        ① 主動脈 / 大動脈<br><span class="text-[10px] text-rose-400/80">彈性儲能・高壓脈動</span>
+                    </button>
+                    <button onclick="selectZone(1)" class="zone-header py-1.5 rounded bg-amber-950/50 border border-amber-500/30 text-amber-300 hover:bg-amber-900/40 transition" id="zh-1">
+                        ② 小動脈<br><span class="text-[10px] text-amber-400/80">平滑肌阻力・減壓閥</span>
+                    </button>
+                    <button onclick="selectZone(2)" class="zone-header py-1.5 rounded bg-purple-950/50 border border-purple-500/30 text-purple-300 hover:bg-purple-900/40 transition" id="zh-2">
+                        ③ 微血管網<br><span class="text-[10px] text-purple-400/80">總面積最大・流速最慢</span>
+                    </button>
+                    <button onclick="selectZone(3)" class="zone-header py-1.5 rounded bg-indigo-950/50 border border-indigo-500/30 text-indigo-300 hover:bg-indigo-900/40 transition" id="zh-3">
+                        ④ 小靜脈<br><span class="text-[10px] text-indigo-400/80">匯集血液・極低阻力</span>
+                    </button>
+                    <button onclick="selectZone(4)" class="zone-header py-1.5 rounded bg-sky-950/50 border border-sky-500/30 text-sky-300 hover:bg-sky-900/40 transition" id="zh-4">
+                        ⑤ 靜脈 / 腔靜脈<br><span class="text-[10px] text-sky-400/80">瓣膜防逆流・肌肉幫浦</span>
+                    </button>
+                </div>
+
+                <!-- 血管 Canvas 容器 -->
+                <div class="relative w-full h-[270px] sm:h-[310px] bg-slate-950 rounded-xl border border-slate-800/80 overflow-hidden">
+                    <canvas id="vesselCanvas" class="w-full h-full block cursor-pointer"></canvas>
+                </div>
+            </div>
+
+            <!-- 2. 即時同步動態圖表 (血壓、總橫截面積、血流速度) -->
+            <div class="glass-panel rounded-2xl p-3 md:p-4 shadow-xl flex flex-col gap-2">
+                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-4 h-4 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path>
+                        </svg>
+                        <h2 class="text-sm font-bold text-slate-200">2. 跨血管區段即時流體力學圖表（X 軸完全對齊上方血管）</h2>
+                    </div>
+
+                    <!-- 曲線開關 Checkboxes -->
+                    <div class="flex flex-wrap items-center gap-3 text-xs">
+                        <label class="flex items-center gap-1.5 cursor-pointer select-none bg-rose-950/40 border border-rose-500/40 px-2.5 py-1 rounded-full text-rose-300">
+                            <input type="checkbox" id="chk-bp" checked class="accent-rose-500 rounded">
+                            <span class="font-semibold">血壓 (mmHg)</span>
+                        </label>
+                        <label class="flex items-center gap-1.5 cursor-pointer select-none bg-emerald-950/40 border border-emerald-500/40 px-2.5 py-1 rounded-full text-emerald-300">
+                            <input type="checkbox" id="chk-area" checked class="accent-emerald-500 rounded">
+                            <span class="font-semibold">總橫截面積 (cm²)</span>
+                        </label>
+                        <label class="flex items-center gap-1.5 cursor-pointer select-none bg-amber-950/40 border border-amber-500/40 px-2.5 py-1 rounded-full text-amber-300">
+                            <input type="checkbox" id="chk-vel" checked class="accent-amber-500 rounded">
+                            <span class="font-semibold">血流速度 (cm/s)</span>
+                        </label>
+                        <label class="flex items-center gap-1.5 cursor-pointer select-none bg-purple-950/40 border border-purple-500/40 px-2.5 py-1 rounded-full text-purple-300" title="顯示血漿膠體滲透壓 ~25 mmHg 基準線">
+                            <input type="checkbox" id="chk-osmotic" checked class="accent-purple-500 rounded">
+                            <span>膠體滲透壓 (25 mmHg)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 圖表 Canvas 容器 -->
+                <div class="relative w-full h-[240px] sm:h-[260px] bg-slate-950 rounded-xl border border-slate-800/80 overflow-hidden">
+                    <canvas id="chartCanvas" class="w-full h-full block"></canvas>
+                </div>
+
+                <div class="flex flex-wrap items-center justify-between text-[11px] text-slate-400 px-1">
+                    <span>💡 物理定律 1：<strong class="text-amber-300">ΔP = Q × R</strong>（小動脈阻力 R 最大，因此產生最劇烈的血壓下降 ΔP）</span>
+                    <span>💡 物理定律 2：<strong class="text-emerald-300">v = Q / A</strong>（微血管總面積 A 暴增千倍，故流速 v 降至最慢以利物質交換）</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右側：互動實驗控制面板與快速情境 (佔 4 欄) -->
+        <div class="lg:col-span-4 flex flex-col gap-4">
+
+            <!-- 互動控制面板 -->
+            <div class="glass-panel rounded-2xl p-4 shadow-xl flex flex-col gap-4 border border-slate-800">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-5 h-5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path>
+                        </svg>
+                        <h2 class="text-base font-bold text-white">生理參數實驗控制台</h2>
+                    </div>
+                    <button onclick="applyPreset('normal')" class="text-xs text-sky-400 hover:text-sky-300 underline">重置正常值</button>
+                </div>
+
+                <!-- 一鍵生理情境模擬 -->
+                <div class="flex flex-col gap-1.5">
+                    <span class="text-xs font-semibold text-slate-300">⚡ 快速臨床與生理情境體驗：</span>
+                    <div class="grid grid-cols-2 gap-1.5">
+                        <button onclick="applyPreset('normal')" class="preset-btn text-xs py-1.5 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 transition text-left flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>正常休息狀態
+                        </button>
+                        <button onclick="applyPreset('vasoconstriction')" class="preset-btn text-xs py-1.5 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-amber-500/40 text-amber-200 transition text-left flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-amber-400"></span>小動脈收縮 (高血壓)
+                        </button>
+                        <button onclick="applyPreset('vasodilation')" class="preset-btn text-xs py-1.5 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-purple-500/40 text-purple-200 transition text-left flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-purple-400"></span>減壓閥失效 (微血管充血)
+                        </button>
+                        <button onclick="applyPreset('varicose')" class="preset-btn text-xs py-1.5 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-rose-500/40 text-rose-200 transition text-left flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-rose-400"></span>靜脈曲張 / 久站水腫
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 控制項 1：小動脈管徑 (周邊阻力) -->
+                <div class="bg-slate-900/70 p-3 rounded-xl border border-slate-800 flex flex-col gap-2">
+                    <div class="flex justify-between items-center">
+                        <label for="slider-arteriole" class="text-xs font-bold text-amber-300 flex items-center gap-1">
+                            <span>① 小動脈平滑肌管徑 (減壓閥)</span>
+                        </label>
+                        <span id="label-arteriole" class="text-xs font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300">100% (正常阻力)</span>
+                    </div>
+                    <input type="range" id="slider-arteriole" min="50" max="150" value="100" step="1">
+                    <div class="flex justify-between text-[10px] text-slate-400">
+                        <span>◀ 血管收縮 (阻力R劇增)</span>
+                        <span>正常</span>
+                        <span>血管舒張 (高壓衝擊微血管) ▶</span>
+                    </div>
+                    <p id="desc-arteriole" class="text-[11px] text-slate-300 bg-slate-950/70 p-2 rounded border border-slate-800/80 leading-relaxed">
+                        小動脈是循環系統的<strong>「總減壓閥」</strong>。收縮時保護後方微血管免受高壓，但會導致前方主動脈血壓飆升；過度舒張則會使高壓直接衝擊微血管。
+                    </p>
+                </div>
+
+                <!-- 控制項 2：心輸出量與心跳速率 -->
+                <div class="bg-slate-900/70 p-3 rounded-xl border border-slate-800 flex flex-col gap-2">
+                    <div class="flex justify-between items-center">
+                        <label for="slider-hr" class="text-xs font-bold text-rose-300">
+                            ② 心臟搏動速率與收縮力 (CO)
+                        </label>
+                        <span id="label-hr" class="text-xs font-mono px-2 py-0.5 rounded bg-rose-500/20 text-rose-300">72 BPM</span>
+                    </div>
+                    <input type="range" id="slider-hr" min="45" max="150" value="72" step="1">
+                    <div class="flex justify-between text-[10px] text-slate-400">
+                        <span>◀ 緩慢 (45 BPM)</span>
+                        <span>正常 (72 BPM)</span>
+                        <span>劇烈運動 (150 BPM) ▶</span>
+                    </div>
+                </div>
+
+                <!-- 控制項 3：骨骼肌幫浦與呼吸幫浦 -->
+                <div class="bg-slate-900/70 p-3 rounded-xl border border-slate-800 flex flex-col gap-2.5">
+                    <span class="text-xs font-bold text-sky-300">③ 靜脈回流輔助機制 (為什麼低壓能流回心臟？)</span>
+                    
+                    <div class="grid grid-cols-3 gap-1.5" id="muscle-pump-group">
+                        <button onclick="setMuscleState('inactive')" id="btn-muscle-inactive" class="text-xs py-1.5 px-2 rounded-lg border border-slate-700 bg-slate-800/60 text-slate-300 hover:bg-slate-800 transition">
+                            🧍 久站不動<br><span class="text-[10px] text-slate-400">無肌肉擠壓</span>
+                        </button>
+                        <button onclick="setMuscleState('normal')" id="btn-muscle-normal" class="text-xs py-1.5 px-2 rounded-lg border border-sky-500 bg-sky-500/20 text-white font-semibold transition">
+                            🚶 正常步行<br><span class="text-[10px] text-sky-300">規律擠壓推進</span>
+                        </button>
+                        <button onclick="setMuscleState('active')" id="btn-muscle-active" class="text-xs py-1.5 px-2 rounded-lg border border-slate-700 bg-slate-800/60 text-slate-300 hover:bg-slate-800 transition">
+                            🏃 劇烈運動<br><span class="text-[10px] text-slate-400">強力幫浦回流</span>
+                        </button>
+                    </div>
+
+                    <!-- 靜脈瓣膜開關與呼吸幫浦 -->
+                    <div class="flex flex-col gap-2 pt-1 border-t border-slate-800/80">
+                        <label class="flex items-center justify-between cursor-pointer">
+                            <span class="text-xs text-slate-300">單向「靜脈瓣膜」功能</span>
+                            <button id="btn-valve-toggle" onclick="toggleValve()" class="px-2.5 py-1 rounded text-xs font-bold bg-emerald-600/30 border border-emerald-500 text-emerald-300 transition">
+                                ✓ 瓣膜正常閉合 (防逆流)
+                            </button>
+                        </label>
+                        <label class="flex items-center justify-between cursor-pointer">
+                            <span class="text-xs text-slate-300">胸腔「呼吸幫浦」(吸氣負壓吸引)</span>
+                            <input type="checkbox" id="chk-resp-pump" checked class="accent-sky-400 w-4 h-4 rounded">
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- 底部全寬：深度原理解析互動卡片（針對微血管與靜脈血壓為什麼是那樣） -->
+        <div class="lg:col-span-12 glass-panel rounded-2xl p-4 md:p-6 shadow-xl border border-slate-800 flex flex-col gap-4">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                <div>
+                    <h2 class="text-base md:text-lg font-bold text-white flex items-center gap-2">
+                        <span class="px-2 py-0.5 text-xs rounded bg-purple-500/20 border border-purple-500/40 text-purple-300">核心問題深度解析</span>
+                        為什麼微血管和靜脈的血壓會呈現那樣的變化？
+                    </h2>
+                    <p class="text-xs text-slate-400 mt-0.5">點擊下方四個核心生理學問答標籤，或點擊上方血管分區，查看流體力學與史達林力（Starling Forces）圖解</p>
+                </div>
+            </div>
+
+            <!-- 4 大核心問答切換 Tabs -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                <button onclick="selectTopic(0)" id="topic-tab-0" class="zone-tab active text-left p-3 rounded-xl border border-slate-700 bg-slate-900/60 hover:bg-slate-800/70 transition flex flex-col justify-between gap-1">
+                    <span class="text-xs font-bold text-amber-400">Q1. 小動脈減壓與消波</span>
+                    <span class="text-sm font-bold text-slate-100">為什麼進微血管前血壓驟降且不再跳動？</span>
+                </button>
+                <button onclick="selectTopic(1)" id="topic-tab-1" class="zone-tab text-left p-3 rounded-xl border border-slate-700 bg-slate-900/60 hover:bg-slate-800/70 transition flex flex-col justify-between gap-1">
+                    <span class="text-xs font-bold text-purple-400">Q2. 史達林力 (35→15 mmHg)</span>
+                    <span class="text-sm font-bold text-slate-100">為什麼微血管血壓必須設計在 35 降到 15？</span>
+                </button>
+                <button onclick="selectTopic(2)" id="topic-tab-2" class="zone-tab text-left p-3 rounded-xl border border-slate-700 bg-slate-900/60 hover:bg-slate-800/70 transition flex flex-col justify-between gap-1">
+                    <span class="text-xs font-bold text-emerald-400">Q3. 並聯電路與面積悖論</span>
+                    <span class="text-sm font-bold text-slate-100">微血管那麼細，為何最大阻力卻在小動脈？</span>
+                </button>
+                <button onclick="selectTopic(3)" id="topic-tab-3" class="zone-tab text-left p-3 rounded-xl border border-slate-700 bg-slate-900/60 hover:bg-slate-800/70 transition flex flex-col justify-between gap-1">
+                    <span class="text-xs font-bold text-sky-400">Q4. 靜脈低壓回流之謎</span>
+                    <span class="text-sm font-bold text-slate-100">靜脈血壓接近 0 mmHg，血液怎麼流回心臟？</span>
+                </button>
+            </div>
+
+            <!-- 動態解析內容顯示區 -->
+            <div id="topic-content" class="bg-slate-950/90 rounded-xl p-4 md:p-5 border border-slate-800/90 grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+                <!-- 由 JS 動態渲染內容與專屬圖解 -->
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        /***********************************************************************
+         * 1. 全域狀態與流體力學模型參數 (State & Hemodynamics Model)
+         ***********************************************************************/
+        const state = {
+            arterioleDiameter: 100,   // 50% (收縮) ~ 150% (舒張)
+            heartRate: 72,            // 45 ~ 150 BPM
+            musclePump: 'normal',     // 'inactive' | 'normal' | 'active'
+            valveCompetent: true,     // true: 正常防逆流, false: 瓣膜閉鎖不全
+            respPump: true,           // true: 呼吸幫浦開啟
+            showBP: true,
+            showArea: true,
+            showVel: true,
+            showOsmotic: true,
+            selectedTopic: 0,
+            time: 0,
+            beatPhase: 0,
+            musclePhase: 0,
+            respPhase: 0,
+
+            // 計算後的生理數值
+            systolic: 120,
+            diastolic: 80,
+            capStartBP: 35,
+            capEndBP: 15,
+            venuleBP: 12,
+            venaCavaBP: 3,
+            flowRate: 1.0,            // 相對血流量 Q
+            edemaRisk: 'normal'       // 'low' | 'normal' | 'high'
+        };
+
+        // 五個血管區段在 X 軸上的正規化座標範圍 (0.0 ~ 1.0)
+        const ZONES = [
+            { id: 0, name: '主動脈與大動脈', start: 0.00, end: 0.20, topicMap: 0 },
+            { id: 1, name: '小動脈 (阻力血管)', start: 0.20, end: 0.38, topicMap: 0 },
+            { id: 2, name: '微血管網 (交換血管)', start: 0.38, end: 0.64, topicMap: 1 },
+            { id: 3, name: '小靜脈', start: 0.64, end: 0.80, topicMap: 3 },
+            { id: 4, name: '大靜脈與腔靜脈', start: 0.80, end: 1.00, topicMap: 3 }
+        ];
+
+        // 根據目前參數即時計算各區段血壓與血流動力學
+        function updateHemodynamics() {
+            const dRatio = state.arterioleDiameter / 100; // 0.5 ~ 1.5
+            // 泊肅葉定律 (Poiseuille's Law): 阻力 R 與半徑 4 次方成反比 (此處做平滑生理映射避免極端破圖)
+            const resistance = Math.pow(1 / dRatio, 2.3);
+            const coFactor = state.heartRate / 72; // 心輸出量因子
+
+            // 主動脈收縮壓與舒張壓受周邊阻力與心率影響
+            state.systolic = Math.round(120 * Math.pow(resistance, 0.28) * Math.pow(coFactor, 0.22));
+            state.diastolic = Math.round(80 * Math.pow(resistance, 0.32) * Math.pow(coFactor, 0.20));
+            state.systolic = Math.min(200, Math.max(85, state.systolic));
+            state.diastolic = Math.min(130, Math.max(50, state.diastolic));
+
+            // 靜脈端壓力受骨骼肌幫浦、靜脈瓣膜、呼吸幫浦影響
+            let venousBackPressure = 0;
+            if (state.musclePump === 'inactive') venousBackPressure += 6;
+            if (state.musclePump === 'active') venousBackPressure -= 2;
+            if (!state.valveCompetent) venousBackPressure += 10; // 瓣膜閉鎖不全導致血液逆流淤積
+            if (!state.respPump) venousBackPressure += 2;
+
+            state.venaCavaBP = Math.max(1, Math.min(18, 4 + venousBackPressure * 0.6));
+            state.venuleBP = Math.max(8, Math.min(30, 13 + venousBackPressure));
+
+            // 進入微血管動脈端的壓力：若小動脈收縮，微血管壓下降；若小動脈舒張，高壓直接衝入微血管
+            const baseCapStart = 35 * Math.pow(dRatio, 0.85) * Math.pow(coFactor, 0.15);
+            state.capStartBP = Math.round(Math.max(18, Math.min(65, baseCapStart + venousBackPressure * 0.35)));
+            state.capEndBP = Math.round(Math.max(10, Math.min(40, state.venuleBP + 3 + (dRatio - 1) * 6)));
+
+            // 總血流量 Q
+            let pumpBoost = state.musclePump === 'active' ? 1.25 : (state.musclePump === 'inactive' ? 0.82 : 1.0);
+            if (!state.valveCompetent) pumpBoost *= 0.75;
+            state.flowRate = (coFactor * Math.pow(dRatio, 0.7) * pumpBoost);
+
+            // 更新頂部儀表板
+            document.getElementById('stat-bp').textContent = `${state.systolic} / ${state.diastolic}`;
+            const meanArterialEnd = Math.round((state.systolic * 0.33 + state.diastolic * 0.67) * 0.92);
+            const drop = state.capStartBP - meanArterialEnd;
+            document.getElementById('stat-drop').textContent = `${drop} mmHg`;
+            document.getElementById('stat-cap-bp').textContent = `${state.capStartBP} → ${state.capEndBP}`;
+
+            const edemaEl = document.getElementById('stat-edema');
+            if (state.capStartBP > 42 || state.capEndBP > 24) {
+                state.edemaRisk = 'high';
+                edemaEl.textContent = '⚠️ 濾出＞回收 (組織水腫風險!)';
+                edemaEl.className = 'text-xs font-bold text-rose-400 animate-pulse';
+            } else if (state.capStartBP < 26) {
+                state.edemaRisk = 'low';
+                edemaEl.textContent = '⚠️ 灌流不足 (微血管過濾減少)';
+                edemaEl.className = 'text-xs font-bold text-amber-400';
+            } else {
+                state.edemaRisk = 'normal';
+                edemaEl.textContent = '✓ 動態平衡 (動脈過濾/靜脈吸收)';
+                edemaEl.className = 'text-xs font-bold text-emerald-400';
+            }
+        }
+
+        /***********************************************************************
+         * 2. 血管粒子與組織交換模擬 (Vessel Canvas Simulation)
+         ***********************************************************************/
+        const vesselCanvas = document.getElementById('vesselCanvas');
+        const vCtx = vesselCanvas.getContext('2d');
+        const chartCanvas = document.getElementById('chartCanvas');
+        const cCtx = chartCanvas.getContext('2d');
+
+        // 紅血球粒子系統
+        const rbcs = [];
+        const NUM_RBCS = 115;
+
+        // 微血管物質擴散粒子 (O2/養分濾出 vs CO2/代謝物再吸收)
+        const exchangeParticles = [];
+
+        function initParticles() {
+            rbcs.length = 0;
+            for (let i = 0; i < NUM_RBCS; i++) {
+                rbcs.push({
+                    x: Math.random(), // 0.0 ~ 1.0
+                    branch: Math.floor(Math.random() * 5), // 微血管 5 條分支通道 (0~4)
+                    radialOffset: (Math.random() - 0.5) * 0.7, // 管腔內徑向偏移
+                    size: 4.5 + Math.random() * 1.5,
+                    angle: Math.random() * Math.PI
+                });
+            }
+
+            exchangeParticles.length = 0;
+            for (let i = 0; i < 36; i++) {
+                const isFiltration = i < 20; // 前半部為動脈端過濾，後半部為靜脈端再吸收
+                exchangeParticles.push({
+                    x: isFiltration ? (0.39 + Math.random() * 0.12) : (0.52 + Math.random() * 0.11),
+                    progress: Math.random(),
+                    dir: Math.random() > 0.5 ? 1 : -1, // 上方或下方組織間隙
+                    isFiltration: isFiltration
+                });
+            }
+        }
+
+        // 自適應調整畫布解析度
+        function resizeCanvases() {
+            const dpr = window.devicePixelRatio || 1;
+            [vesselCanvas, chartCanvas].forEach(canvas => {
+                const rect = canvas.getBoundingClientRect();
+                canvas.width = rect.width * dpr;
+                canvas.height = rect.height * dpr;
+                const ctx = canvas.getContext('2d');
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            });
+        }
+        window.addEventListener('resize', resizeCanvases);
+
+        // 計算特定 X (0~1) 位置處的血流速度 (cm/s 映射為畫面移動速率)
+        function getNormalizedVelocityAtX(x, pulseWave) {
+            const baseFlow = state.flowRate;
+            if (x < 0.20) {
+                // 主動脈：高流速 + 明顯脈搏波震盪
+                return (0.18 + 0.10 * pulseWave) * baseFlow;
+            } else if (x < 0.38) {
+                // 小動脈：隨橫截面積擴大與阻力減速
+                const t = (x - 0.20) / 0.18;
+                const startV = (0.18 + 0.06 * pulseWave) * baseFlow;
+                const endV = 0.025 * baseFlow;
+                return startV * (1 - t) + endV * t;
+            } else if (x < 0.64) {
+                // 微血管網：總橫截面積最大，流速最慢且平滑無脈搏 (v = Q / A)
+                return 0.022 * baseFlow;
+            } else if (x < 0.80) {
+                // 小靜脈：匯流後橫截面積縮小，流速逐漸回升
+                const t = (x - 0.64) / 0.16;
+                return (0.022 * (1 - t) + 0.065 * t) * baseFlow;
+            } else {
+                // 腔靜脈：受骨骼肌幫浦擠壓與瓣膜逆流影響
+                const muscleSqueeze = getMuscleSqueezeFactor();
+                let v = 0.075 * baseFlow + muscleSqueeze * 0.06;
+                if (!state.valveCompetent && muscleSqueeze < -0.1) {
+                    // 若瓣膜閉鎖不全，肌肉放鬆瞬間發生逆流
+                    v = -0.045;
+                }
+                return v;
+            }
+        }
+
+        function getMuscleSqueezeFactor() {
+            if (state.musclePump === 'inactive') return 0;
+            const amp = state.musclePump === 'active' ? 1.0 : 0.6;
+            return Math.sin(state.musclePhase) * amp;
+        }
+
+        // 繪製上方血管結構與粒子動畫
+        function drawVesselSimulation(dt) {
+            const W = vesselCanvas.clientWidth;
+            const H = vesselCanvas.clientHeight;
+            const cy = H * 0.5;
+            vCtx.clearRect(0, 0, W, H);
+
+            // 背景分區垂直網格線
+            ZONES.forEach((z, idx) => {
+                if (idx > 0) {
+                    vCtx.save();
+                    vCtx.strokeStyle = 'rgba(148, 163, 184, 0.15)';
+                    vCtx.setLineDash([4, 4]);
+                    vCtx.beginPath();
+                    vCtx.moveTo(z.start * W, 0);
+                    vCtx.lineTo(z.start * W, H);
+                    vCtx.stroke();
+                    vCtx.restore();
+                }
+            });
+
+            // 計算心跳脈搏波 (Systolic peak)
+            const pulseWave = Math.pow(Math.max(0, Math.sin(state.beatPhase)), 3);
+            const arterioleScale = state.arterioleDiameter / 100; // 0.5 ~ 1.5
+            const muscleSqueeze = Math.max(0, getMuscleSqueezeFactor());
+
+            // 1. 繪製微血管網周圍的「組織間隙水腫狀態」背景光暈
+            const capX1 = 0.38 * W;
+            const capX2 = 0.64 * W;
+            const edemaAlpha = state.edemaRisk === 'high' ? (0.28 + 0.1 * Math.sin(state.time * 4)) : 0.07;
+            const edemaGrad = vCtx.createRadialGradient((capX1 + capX2) / 2, cy, 10, (capX1 + capX2) / 2, cy, (capX2 - capX1) * 0.7);
+            edemaGrad.addColorStop(0, state.edemaRisk === 'high' ? `rgba(56, 189, 248, ${edemaAlpha})` : `rgba(168, 85, 247, 0.08)`);
+            edemaGrad.addColorStop(1, 'rgba(15, 23, 42, 0)');
+            vCtx.fillStyle = edemaGrad;
+            vCtx.fillRect(capX1 - 20, 10, (capX2 - capX1) + 40, H - 20);
+
+            if (state.edemaRisk === 'high') {
+                vCtx.save();
+                vCtx.fillStyle = '#38bdf8';
+                vCtx.font = 'bold 11px "Noto Sans TC", sans-serif';
+                vCtx.textAlign = 'center';
+                vCtx.fillText('💧 組織間隙水腫 (微血管靜水壓過高，濾出 > 回收)', (capX1 + capX2) / 2, 22);
+                vCtx.restore();
+            }
+
+            // 2. 定義主血管管壁半徑函數 R(x)
+            function getMainRadius(normX) {
+                if (normX < 0.20) {
+                    // 主動脈：厚彈性管壁，隨收縮壓搏動擴張
+                    return 30 + pulseWave * 5.5;
+                } else if (normX < 0.38) {
+                    // 小動脈：隨平滑肌滑桿收縮或舒張
+                    const t = (normX - 0.20) / 0.18;
+                    const rAorta = 30 + pulseWave * 4 * (1 - t);
+                    const rArt = 18 * arterioleScale;
+                    // 中段最具平滑肌調節代表性
+                    const pinch = Math.sin(t * Math.PI);
+                    return rAorta * (1 - pinch) + rArt * pinch;
+                } else if (normX < 0.64) {
+                    // 微血管區外包絡線 (展示總橫截面積暴增)
+                    const t = (normX - 0.38) / 0.26;
+                    const expand = Math.sin(t * Math.PI);
+                    return 20 + expand * 68;
+                } else if (normX < 0.80) {
+                    // 小靜脈：由微血管匯集
+                    const t = (normX - 0.64) / 0.16;
+                    return 22 + t * 10;
+                } else {
+                    // 腔靜脈：管腔大、管壁薄，受周圍骨骼肌擠壓變形
+                    const t = (normX - 0.80) / 0.20;
+                    const squeezeEffect = Math.sin(t * Math.PI) * muscleSqueeze * 12;
+                    const varicoseBulge = !state.valveCompetent ? Math.sin(t * Math.PI) * 7 : 0;
+                    return 32 - squeezeEffect + varicoseBulge;
+                }
+            }
+
+            // 3. 繪製主血管背景通道 (主動脈、小動脈、小靜脈、大靜脈)
+            vCtx.save();
+            // 左半段 (主動脈 -> 小動脈)
+            const leftGrad = vCtx.createLinearGradient(0, 0, 0.39 * W, 0);
+            leftGrad.addColorStop(0, 'rgba(225, 29, 72, 0.35)');
+            leftGrad.addColorStop(0.6, 'rgba(244, 63, 94, 0.32)');
+            leftGrad.addColorStop(1, 'rgba(245, 158, 11, 0.28)');
+            vCtx.fillStyle = leftGrad;
+            vCtx.beginPath();
+            for (let x = 0; x <= 0.39 * W; x += 4) {
+                const r = getMainRadius(x / W);
+                if (x === 0) vCtx.moveTo(x, cy - r);
+                else vCtx.lineTo(x, cy - r);
+            }
+            for (let x = 0.39 * W; x >= 0; x -= 4) {
+                const r = getMainRadius(x / W);
+                vCtx.lineTo(x, cy + r);
+            }
+            vCtx.closePath();
+            vCtx.fill();
+
+            // 動脈厚彈性外管壁
+            vCtx.lineWidth = 4.5;
+            vCtx.strokeStyle = '#fb7185';
+            vCtx.stroke();
+            vCtx.restore();
+
+            // 右半段 (小靜脈 -> 大靜脈)
+            vCtx.save();
+            const rightGrad = vCtx.createLinearGradient(0.63 * W, 0, W, 0);
+            rightGrad.addColorStop(0, 'rgba(99, 102, 241, 0.28)');
+            rightGrad.addColorStop(0.4, 'rgba(59, 130, 246, 0.30)');
+            rightGrad.addColorStop(1, 'rgba(14, 165, 233, 0.35)');
+            vCtx.fillStyle = rightGrad;
+            vCtx.beginPath();
+            for (let x = 0.63 * W; x <= W; x += 4) {
+                const r = getMainRadius(x / W);
+                if (x === 0.63 * W) vCtx.moveTo(x, cy - r);
+                else vCtx.lineTo(x, cy - r);
+            }
+            for (let x = W; x >= 0.63 * W; x -= 4) {
+                const r = getMainRadius(x / W);
+                vCtx.lineTo(x, cy + r);
+            }
+            vCtx.closePath();
+            vCtx.fill();
+            // 靜脈較薄的管壁
+            vCtx.lineWidth = 2;
+            vCtx.strokeStyle = '#38bdf8';
+            vCtx.stroke();
+            vCtx.restore();
+
+            // 4. 繪製小動脈「血管平滑肌環 (減壓閥)」視覺效果
+            const artStart = 0.22 * W;
+            const artEnd = 0.36 * W;
+            vCtx.save();
+            for (let x = artStart; x <= artEnd; x += 11) {
+                const r = getMainRadius(x / W);
+                // 平滑肌環厚度隨收縮程度變厚
+                const ringThickness = 5 + (1.5 - arterioleScale) * 5;
+                vCtx.fillStyle = state.arterioleDiameter < 90 ? '#f59e0b' : '#fbbf24';
+                // 上下平滑肌束
+                vCtx.beginPath();
+                vCtx.roundRect(x - 3.5, cy - r - ringThickness, 7, ringThickness, 3);
+                vCtx.roundRect(x - 3.5, cy + r, 7, ringThickness, 3);
+                vCtx.fill();
+            }
+            // 小動脈標示
+            vCtx.fillStyle = '#fde68a';
+            vCtx.font = 'bold 11px "Noto Sans TC", sans-serif';
+            vCtx.textAlign = 'center';
+            const artLabel = state.arterioleDiameter < 90 ? '平滑肌收縮 (高阻力減壓)' : (state.arterioleDiameter > 110 ? '平滑肌舒張 (減壓減弱)' : '平滑肌阻力調節環');
+            vCtx.fillText(artLabel, (artStart + artEnd) / 2, cy - getMainRadius(0.29) - 16);
+            vCtx.restore();
+
+            // 5. 繪製微血管分支網 (5 條並聯微血管，展示極大總橫截面積與單層內皮)
+            const branchOffsets = [-68, -34, 0, 34, 68];
+            branchOffsets.forEach((offsetY, bIdx) => {
+                vCtx.save();
+                vCtx.beginPath();
+                const steps = 32;
+                for (let i = 0; i <= steps; i++) {
+                    const t = i / steps;
+                    const x = (0.37 + t * 0.28) * W;
+                    const spread = Math.sin(t * Math.PI);
+                    const y = cy + offsetY * spread;
+                    if (i === 0) vCtx.moveTo(x, y);
+                    else vCtx.lineTo(x, y);
+                }
+                // 外層基底膜光暈
+                vCtx.lineWidth = 13;
+                const capGrad = vCtx.createLinearGradient(0.37 * W, 0, 0.65 * W, 0);
+                capGrad.addColorStop(0, 'rgba(244, 63, 94, 0.45)');
+                capGrad.addColorStop(0.5, 'rgba(168, 85, 247, 0.45)');
+                capGrad.addColorStop(1, 'rgba(59, 130, 246, 0.45)');
+                vCtx.strokeStyle = capGrad;
+                vCtx.lineCap = 'round';
+                vCtx.stroke();
+
+                // 微血管壁虛線 (代表僅單層扁平內皮細胞、具細胞間隙利於物質交換)
+                vCtx.lineWidth = 1;
+                vCtx.setLineDash([3, 3]);
+                vCtx.strokeStyle = 'rgba(233, 213, 255, 0.6)';
+                vCtx.stroke();
+                vCtx.restore();
+            });
+
+            // 繪製微血管「動脈端過濾 (35>25)」與「靜脈端再吸收 (15<25)」擴散微粒與箭頭
+            exchangeParticles.forEach(p => {
+                p.progress += dt * 0.55;
+                if (p.progress > 1) p.progress -= 1;
+
+                const px = p.x * W;
+                const spread = Math.sin(((p.x - 0.37) / 0.28) * Math.PI);
+                const baseDist = 25 * spread;
+                let py, alpha;
+
+                if (p.isFiltration) {
+                    // 動脈端：由血管往外濾出 O2 與養分
+                    const dist = baseDist + p.progress * 55;
+                    py = cy + p.dir * dist;
+                    alpha = Math.sin(p.progress * Math.PI);
+                    vCtx.fillStyle = `rgba(52, 211, 153, ${alpha * 0.9})`;
+                } else {
+                    // 靜脈端：由組織間隙往血管內再吸收 CO2 與組織液
+                    const dist = baseDist + (1 - p.progress) * 55;
+                    py = cy + p.dir * dist;
+                    alpha = Math.sin(p.progress * Math.PI);
+                    vCtx.fillStyle = `rgba(56, 189, 248, ${alpha * 0.9})`;
+                }
+
+                vCtx.beginPath();
+                vCtx.arc(px, py, 2.3, 0, Math.PI * 2);
+                vCtx.fill();
+            });
+
+            // 微血管上下方史達林力標示
+            vCtx.save();
+            vCtx.font = '10px "Noto Sans TC", sans-serif';
+            vCtx.fillStyle = '#6ee7b7';
+            vCtx.textAlign = 'center';
+            vCtx.fillText(`↑ 動脈端過濾 (${state.capStartBP} > 25 mmHg)`, 0.44 * W, H - 10);
+            vCtx.fillStyle = '#7dd3fc';
+            vCtx.fillText(`↓ 靜脈端再吸收 (${state.capEndBP} < 25 mmHg)`, 0.58 * W, H - 10);
+            vCtx.restore();
+
+            // 6. 繪製靜脈端「骨骼肌幫浦 (Skeletal Muscle Pump)」與「單向靜脈瓣膜」
+            const muscleX = 0.88 * W;
+            const veinR = getMainRadius(0.88);
+            vCtx.save();
+            // 上下兩塊梭形骨骼肌
+            const mOffset = veinR + 18;
+            const mHeight = 16 + muscleSqueeze * 8;
+            const mGrad = vCtx.createLinearGradient(muscleX - 45, 0, muscleX + 45, 0);
+            mGrad.addColorStop(0, 'rgba(225, 29, 72, 0.15)');
+            mGrad.addColorStop(0.5, state.musclePump === 'inactive' ? 'rgba(148, 163, 184, 0.25)' : 'rgba(244, 63, 94, 0.55)');
+            mGrad.addColorStop(1, 'rgba(225, 29, 72, 0.15)');
+            vCtx.fillStyle = mGrad;
+            vCtx.strokeStyle = state.musclePump === 'inactive' ? '#475569' : '#fb7185';
+            vCtx.lineWidth = 1.5;
+
+            // 上骨骼肌
+            vCtx.beginPath();
+            vCtx.ellipse(muscleX, cy - mOffset, 46, mHeight, 0, 0, Math.PI * 2);
+            vCtx.fill();
+            vCtx.stroke();
+            // 下骨骼肌
+            vCtx.beginPath();
+            vCtx.ellipse(muscleX, cy + mOffset, 46, mHeight, 0, 0, Math.PI * 2);
+            vCtx.fill();
+            vCtx.stroke();
+
+            vCtx.fillStyle = '#fda4af';
+            vCtx.font = 'bold 10px "Noto Sans TC", sans-serif';
+            vCtx.textAlign = 'center';
+            const pumpText = state.musclePump === 'inactive' ? '骨骼肌放鬆 (久站無擠壓)' : '骨骼肌收縮擠壓 (肌肉幫浦)';
+            vCtx.fillText(pumpText, muscleX, cy - mOffset - mHeight - 5);
+            vCtx.restore();
+
+            // 繪製兩組「單向靜脈瓣膜 (Venous Valves)」(位於 0.81 與 0.94)
+            [0.81, 0.94].forEach((vxNorm, idx) => {
+                const vx = vxNorm * W;
+                const r = getMainRadius(vxNorm);
+                // 判斷瓣膜開合角度：正向推進時打開，放鬆瞬間閉合防逆流
+                const forwardVel = getNormalizedVelocityAtX(vxNorm, pulseWave);
+                let valveOpenRatio = forwardVel > 0.055 ? 0.75 : 0.15;
+                if (!state.valveCompetent) {
+                    // 瓣膜閉鎖不全：始終無法密合，呈現鬆弛漏血狀態
+                    valveOpenRatio = 0.65;
+                }
+
+                vCtx.save();
+                vCtx.strokeStyle = state.valveCompetent ? '#e0f2fe' : '#fb7185';
+                vCtx.lineWidth = 2.8;
+                vCtx.lineCap = 'round';
+
+                const tipX = vx + 14;
+                const gapY = r * valveOpenRatio;
+
+                // 上瓣葉
+                vCtx.beginPath();
+                vCtx.moveTo(vx, cy - r);
+                vCtx.quadraticCurveTo(vx + 8, cy - r * 0.4, tipX, cy - gapY);
+                vCtx.stroke();
+
+                // 下瓣葉
+                vCtx.beginPath();
+                vCtx.moveTo(vx, cy + r);
+                vCtx.quadraticCurveTo(vx + 8, cy + r * 0.4, tipX, cy + gapY);
+                vCtx.stroke();
+                vCtx.restore();
+            });
+
+            // 呼吸幫浦 (最右側胸腔負壓吸引標示)
+            if (state.respPump) {
+                const respPull = (Math.sin(state.respPhase) + 1) * 0.5;
+                vCtx.save();
+                vCtx.fillStyle = `rgba(56, 189, 248, ${0.3 + respPull * 0.5})`;
+                vCtx.font = 'bold 10px "Noto Sans TC", sans-serif';
+                vCtx.textAlign = 'right';
+                vCtx.fillText('🫁 胸腔負壓吸引 ➔', W - 8, cy + getMainRadius(0.96) + 22);
+                vCtx.restore();
+            }
+
+            // 7. 更新與繪製紅血球粒子 (RBCs)
+            rbcs.forEach(p => {
+                const vel = getNormalizedVelocityAtX(p.x, pulseWave);
+                p.x += vel * dt;
+                if (p.x > 1.02) {
+                    p.x = -0.02;
+                    p.branch = Math.floor(Math.random() * 5);
+                } else if (p.x < -0.02) {
+                    p.x = 1.0;
+                }
+
+                // 計算紅血球在畫布上的 (px, py)
+                const px = p.x * W;
+                let py = cy;
+
+                if (p.x >= 0.37 && p.x <= 0.65) {
+                    // 在微血管分支內單列緩慢通行
+                    const t = (p.x - 0.37) / 0.28;
+                    const spread = Math.sin(t * Math.PI);
+                    const targetOffset = branchOffsets[p.branch] * spread;
+                    const mainOffset = p.radialOffset * getMainRadius(p.x) * (1 - spread);
+                    py = cy + targetOffset + mainOffset;
+                } else {
+                    const r = getMainRadius(Math.max(0, Math.min(1, p.x))) - 5;
+                    py = cy + p.radialOffset * r;
+                }
+
+                // 計算紅血球含氧顏色變化 (主動脈鮮紅 -> 微血管漸變紫 -> 靜脈暗藍紅)
+                let color;
+                if (p.x < 0.38) {
+                    color = '#f43f5e'; // 充氧鮮紅
+                } else if (p.x <= 0.64) {
+                    const t = (p.x - 0.38) / 0.26;
+                    // 紅轉藍紫
+                    const r = Math.round(244 * (1 - t) + 59 * t);
+                    const g = Math.round(63 * (1 - t) + 130 * t);
+                    const b = Math.round(94 * (1 - t) + 246 * t);
+                    color = `rgb(${r},${g},${b})`;
+                } else {
+                    color = '#3b82f6'; // 缺氧靜脈血
+                }
+
+                // 繪製雙凹圓盤狀紅血球
+                vCtx.save();
+                vCtx.translate(px, py);
+                vCtx.rotate(p.angle + p.x * 8);
+                vCtx.fillStyle = color;
+                vCtx.beginPath();
+                vCtx.ellipse(0, 0, p.size, p.size * 0.72, 0, 0, Math.PI * 2);
+                vCtx.fill();
+
+                // 紅血球中心凹陷高光
+                vCtx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+                vCtx.beginPath();
+                vCtx.ellipse(0, 0, p.size * 0.45, p.size * 0.3, 0, 0, Math.PI * 2);
+                vCtx.fill();
+                vCtx.restore();
+            });
+        }
+
+        /***********************************************************************
+         * 3. 跨血管區段即時流體力學圖表 (Synchronized Multi-Curve Chart)
+         ***********************************************************************/
+        function getMeanBPAtX(normX) {
+            const meanAorta = state.diastolic + (state.systolic - state.diastolic) * 0.38;
+            const artStartBP = meanAorta - 5;
+
+            if (normX < 0.20) {
+                // 主動脈至大動脈：血壓極高，僅微幅下降
+                const t = normX / 0.20;
+                return meanAorta * (1 - t) + artStartBP * t;
+            } else if (normX < 0.38) {
+                // 小動脈：阻力最大，產生最陡峭的壓降 (平滑 S 曲線)
+                const t = (normX - 0.20) / 0.18;
+                const smoothT = t * t * (3 - 2 * t);
+                return artStartBP * (1 - smoothT) + state.capStartBP * smoothT;
+            } else if (normX < 0.64) {
+                // 微血管：從 ~35 mmHg 線性平緩降至 ~15 mmHg
+                const t = (normX - 0.38) / 0.26;
+                return state.capStartBP * (1 - t) + state.capEndBP * t;
+            } else if (normX < 0.80) {
+                // 小靜脈：平緩降至 ~12 mmHg
+                const t = (normX - 0.64) / 0.16;
+                return state.capEndBP * (1 - t) + state.venuleBP * t;
+            } else {
+                // 大靜脈至腔靜脈：降至接近 0~4 mmHg
+                const t = (normX - 0.80) / 0.20;
+                return state.venuleBP * (1 - t) + state.venaCavaBP * t;
+            }
+        }
+
+        // 取得脈搏震盪幅度 (進入微血管後完全消失)
+        function getPulseAmplitudeAtX(normX) {
+            const pulsePressure = (state.systolic - state.diastolic) * 0.5;
+            if (normX < 0.20) {
+                return pulsePressure * (1 - normX * 0.3);
+            } else if (normX < 0.38) {
+                // 小動脈的高阻力迅速消除脈搏波 (Windkessel damping)
+                const t = (normX - 0.20) / 0.18;
+                return pulsePressure * 0.94 * Math.pow(1 - t, 2.2);
+            }
+            return 0; // 微血管與靜脈無脈搏跳動
+        }
+
+        // 取得總橫截面積曲線 (0~1 正規化，微血管處高達 2500~4500 cm²)
+        function getAreaCurveAtX(normX) {
+            // 在微血管區段中心 (normX = 0.51) 達到最高峰
+            const gaussian = Math.exp(-Math.pow((normX - 0.51) / 0.11, 2));
+            const base = normX < 0.5 ? 0.02 : 0.06; // 靜脈總截面積略大於動脈
+            return Math.min(0.95, base + gaussian * 0.88);
+        }
+
+        // 取得血流速度曲線 (0~1 正規化，與總橫截面積成反比 v = Q / A)
+        function getVelocityCurveAtX(normX) {
+            const coScale = Math.min(1.3, state.flowRate);
+            if (normX < 0.20) {
+                return (0.82 - normX * 0.5) * coScale;
+            } else if (normX < 0.38) {
+                const t = (normX - 0.20) / 0.18;
+                return (0.72 * (1 - t) + 0.04 * t) * coScale;
+            } else if (normX < 0.64) {
+                // 微血管流速極慢 (< 0.1 cm/s)
+                const t = (normX - 0.38) / 0.26;
+                return (0.04 - Math.sin(t * Math.PI) * 0.025) * coScale;
+            } else if (normX < 0.80) {
+                const t = (normX - 0.64) / 0.16;
+                return (0.04 * (1 - t) + 0.22 * t) * coScale;
+            } else {
+                const t = (normX - 0.80) / 0.20;
+                return (0.22 * (1 - t) + 0.48 * t) * coScale;
+            }
+        }
+
+        function drawHemodynamicsChart() {
+            const W = chartCanvas.clientWidth;
+            const H = chartCanvas.clientHeight;
+            const padTop = 18;
+            const padBottom = 26;
+            const chartH = H - padTop - padBottom;
+            const maxBP = 180; // Y 軸最大血壓刻度 180 mmHg
+
+            cCtx.clearRect(0, 0, W, H);
+
+            const bpToY = (bp) => padTop + chartH * (1 - bp / maxBP);
+
+            // 1. 背景網格與分區線
+            cCtx.save();
+            [0, 25, 40, 80, 120, 160].forEach(bp => {
+                const y = bpToY(bp);
+                cCtx.strokeStyle = bp === 25 ? 'rgba(168, 85, 247, 0.15)' : 'rgba(148, 163, 184, 0.1)';
+                cCtx.lineWidth = 1;
+                cCtx.beginPath();
+                cCtx.moveTo(0, y);
+                cCtx.lineTo(W, y);
+                cCtx.stroke();
+
+                cCtx.fillStyle = '#64748b';
+                cCtx.font = '10px monospace';
+                cCtx.fillText(`${bp}`, 6, y - 3);
+            });
+
+            // 垂直區段分隔線與底部名稱
+            ZONES.forEach((z, idx) => {
+                if (idx > 0) {
+                    cCtx.strokeStyle = 'rgba(148, 163, 184, 0.18)';
+                    cCtx.setLineDash([4, 4]);
+                    cCtx.beginPath();
+                    cCtx.moveTo(z.start * W, padTop);
+                    cCtx.lineTo(z.start * W, H - padBottom);
+                    cCtx.stroke();
+                    cCtx.setLineDash([]);
+                }
+                cCtx.fillStyle = '#94a3b8';
+                cCtx.font = '11px "Noto Sans TC", sans-serif';
+                cCtx.textAlign = 'center';
+                cCtx.fillText(z.name, ((z.start + z.end) / 2) * W, H - 7);
+            });
+            cCtx.restore();
+
+            // 2. 血漿膠體滲透壓基準線 (~25 mmHg，解釋微血管過濾與再吸收的關鍵)
+            if (state.showOsmotic) {
+                const yOsm = bpToY(25);
+                cCtx.save();
+                cCtx.strokeStyle = '#c084fc';
+                cCtx.lineWidth = 1.5;
+                cCtx.setLineDash([6, 4]);
+                cCtx.beginPath();
+                cCtx.moveTo(0.35 * W, yOsm);
+                cCtx.lineTo(0.68 * W, yOsm);
+                cCtx.stroke();
+
+                cCtx.fillStyle = '#d8b4fe';
+                cCtx.font = 'bold 10px "Noto Sans TC", sans-serif';
+                cCtx.textAlign = 'center';
+                cCtx.fillText('血漿膠體滲透壓 πc ≈ 25 mmHg (吸水拉力)', 0.51 * W, yOsm - 6);
+                cCtx.restore();
+            }
+
+            // 3. 繪製總橫截面積曲線 (綠色虛線/填色)
+            if (state.showArea) {
+                cCtx.save();
+                cCtx.beginPath();
+                for (let x = 0; x <= W; x += 4) {
+                    const normX = x / W;
+                    const y = padTop + chartH * (1 - getAreaCurveAtX(normX));
+                    if (x === 0) cCtx.moveTo(x, y);
+                    else cCtx.lineTo(x, y);
+                }
+                cCtx.strokeStyle = '#10b981';
+                cCtx.lineWidth = 2.2;
+                cCtx.stroke();
+
+                // 面積峰值標註
+                const peakX = 0.51 * W;
+                const peakY = padTop + chartH * (1 - getAreaCurveAtX(0.51));
+                cCtx.fillStyle = '#34d399';
+                cCtx.font = 'bold 11px "Noto Sans TC", sans-serif';
+                cCtx.textAlign = 'center';
+                cCtx.fillText('總橫截面積最大 (~4500 cm²)', peakX, peakY - 6);
+                cCtx.restore();
+            }
+
+            // 4. 繪製血流速度曲線 (琥珀黃色曲線)
+            if (state.showVel) {
+                cCtx.save();
+                cCtx.beginPath();
+                for (let x = 0; x <= W; x += 4) {
+                    const normX = x / W;
+                    const y = padTop + chartH * (1 - getVelocityCurveAtX(normX));
+                    if (x === 0) cCtx.moveTo(x, y);
+                    else cCtx.lineTo(x, y);
+                }
+                cCtx.strokeStyle = '#f59e0b';
+                cCtx.lineWidth = 2.2;
+                cCtx.setLineDash([4, 3]);
+                cCtx.stroke();
+                cCtx.setLineDash([]);
+
+                const minVelX = 0.51 * W;
+                const minVelY = padTop + chartH * (1 - getVelocityCurveAtX(0.51));
+                cCtx.fillStyle = '#fbbf24';
+                cCtx.font = '10px "Noto Sans TC", sans-serif';
+                cCtx.textAlign = 'center';
+                cCtx.fillText('流速最慢 (<0.1 cm/s)', minVelX, minVelY - 6);
+                cCtx.restore();
+            }
+
+            // 5. 繪製血壓曲線 (含收縮壓/舒張壓震盪包絡帶與即時脈搏波)
+            if (state.showBP) {
+                // 5a. 收縮壓與舒張壓包絡區域
+                cCtx.save();
+                cCtx.fillStyle = 'rgba(244, 63, 94, 0.16)';
+                cCtx.beginPath();
+                for (let x = 0; x <= 0.40 * W; x += 4) {
+                    const normX = x / W;
+                    const mean = getMeanBPAtX(normX);
+                    const amp = getPulseAmplitudeAtX(normX);
+                    const sysY = bpToY(mean + amp * 1.15);
+                    if (x === 0) cCtx.moveTo(x, sysY);
+                    else cCtx.lineTo(x, sysY);
+                }
+                for (let x = 0.40 * W; x >= 0; x -= 4) {
+                    const normX = x / W;
+                    const mean = getMeanBPAtX(normX);
+                    const amp = getPulseAmplitudeAtX(normX);
+                    const diaY = bpToY(mean - amp * 0.85);
+                    cCtx.lineTo(x, diaY);
+                }
+                cCtx.closePath();
+                cCtx.fill();
+                cCtx.restore();
+
+                // 5b. 繪製微血管「過濾區 (高於25)」與「再吸收區 (低於25)」色塊
+                if (state.showOsmotic) {
+                    const yOsm = bpToY(25);
+                    for (let x = 0.38 * W; x < 0.64 * W; x += 3) {
+                        const bp = getMeanBPAtX(x / W);
+                        const yBP = bpToY(bp);
+                        cCtx.fillStyle = bp >= 25 ? 'rgba(16, 185, 129, 0.22)' : 'rgba(56, 189, 248, 0.22)';
+                        cCtx.fillRect(x, Math.min(yBP, yOsm), 3, Math.abs(yOsm - yBP));
+                    }
+                }
+
+                // 5c. 動態即時血壓波形與平均血壓主曲線
+                cCtx.save();
+                cCtx.beginPath();
+                for (let x = 0; x <= W; x += 3) {
+                    const normX = x / W;
+                    const mean = getMeanBPAtX(normX);
+                    const amp = getPulseAmplitudeAtX(normX);
+                    // 傳遞中的行進脈搏波
+                    const wave = Math.sin(state.beatPhase - normX * 26) * amp;
+                    const y = bpToY(mean + wave);
+                    if (x === 0) cCtx.moveTo(x, y);
+                    else cCtx.lineTo(x, y);
+                }
+                const bpGrad = cCtx.createLinearGradient(0, 0, W, 0);
+                bpGrad.addColorStop(0, '#f43f5e');
+                bpGrad.addColorStop(0.35, '#fb923c');
+                bpGrad.addColorStop(0.55, '#c084fc');
+                bpGrad.addColorStop(1, '#38bdf8');
+                cCtx.strokeStyle = bpGrad;
+                cCtx.lineWidth = 3;
+                cCtx.stroke();
+                cCtx.restore();
+
+                // 5d. 關鍵轉折點數值標籤
+                const drawBadge = (normX, bpVal, text, color) => {
+                    const x = normX * W;
+                    const y = bpToY(bpVal);
+                    cCtx.save();
+                    cCtx.fillStyle = color;
+                    cCtx.beginPath();
+                    cCtx.arc(x, y, 4, 0, Math.PI * 2);
+                    cCtx.fill();
+                    cCtx.font = 'bold 11px monospace';
+                    cCtx.textAlign = 'center';
+                    cCtx.fillText(text, x, y - 9);
+                    cCtx.restore();
+                };
+
+                drawBadge(0.08, state.systolic, `${state.systolic}/${state.diastolic}`, '#fb7185');
+                drawBadge(0.38, state.capStartBP, `${state.capStartBP} mmHg`, '#e879f9');
+                drawBadge(0.64, state.capEndBP, `${state.capEndBP} mmHg`, '#818cf8');
+                drawBadge(0.95, state.venaCavaBP, `~${Math.round(state.venaCavaBP)} mmHg`, '#38bdf8');
+            }
+        }
+
+        /***********************************************************************
+         * 4. 深度原理解析互動卡片資料庫与渲染 (Educational Deep-Dive Cards)
+         ***********************************************************************/
+        const TOPICS = [
+            {
+                title: '為什麼進入微血管前，血壓會在小動脈大幅驟降且不再跳動？',
+                subtitle: '關鍵機制：小動脈平滑肌的高周邊阻力（ΔP = Q × R）與阻尼消波效應',
+                badge: '小動脈 = 循環系統的總減壓閥',
+                points: [
+                    {
+                        head: '1. 保護極度脆弱的單層微血管壁',
+                        body: '微血管為了讓氧氣與養分快速擴散，管壁演化到<strong>只有一層扁平內皮細胞（厚度僅約 0.5 微米）</strong>，毫無平滑肌與彈性纖維。如果主動脈 120 mmHg 的高壓與劇烈脈搏直接衝進微血管，微血管會瞬間破裂出血！'
+                    },
+                    {
+                        head: '2. 流體力學壓降公式：ΔP = Q × R',
+                        body: '流體通過管道時，<strong>壓力下降幅度（ΔP）正比於阻力（R）</strong>。小動脈管壁擁有發達的環狀平滑肌，管徑雖細且受交感神經調控，貢獻了全身總周邊阻力（TPR）的 <strong>50%～60% 以上</strong>。血液克服小動脈摩擦阻力時消耗了大量機械能，使血壓從平均 ~95 mmHg 驟降至 35 mmHg。'
+                    },
+                    {
+                        head: '3. 為什麼微血管的血流不再一跳一跳（脈搏波消失）？',
+                        body: '大動脈的「彈性儲能（風箱效應 Windkessel effect）」先吸收了一部分收縮壓衝擊，接著小動脈的高阻力如同「高頻濾波器（阻尼器）」，將高壓脈動完全撫平，轉化為穩定、無搏動的平滑層流進入微血管。'
+                    }
+                ],
+                experimentTip: '👉 親手實驗：將右側「① 小動脈平滑肌管徑」滑桿往右拉到 150%（舒張），觀察高壓如何直接衝入微血管並引發水腫警告！'
+            },
+            {
+                title: '為什麼微血管血壓必須精準設計在「35 降到 15 mmHg」？',
+                subtitle: '關鍵機制：史達林力（Starling Forces）與血漿膠體滲透壓（~25 mmHg）的完美拔河',
+                badge: '微血管 = 動脈端過濾、靜脈端再吸收',
+                points: [
+                    {
+                        head: '1. 血液中有股恆定的「吸水拉力」：血漿膠體滲透壓（πc ≈ 25 mmHg）',
+                        body: '血液中的白蛋白（Albumin）等大分子無法穿過微血管壁，因此會在微血管內產生約 <strong>25 mmHg 把水分吸回血管內的滲透壓</strong>。微血管血壓（把水往外推的靜水壓 Pc）必須圍繞著 25 mmHg 上下波動，才能完成雙向物質交換！'
+                    },
+                    {
+                        head: '2. 微血管動脈端（Pc ≈ 35 mmHg ＞ 25 mmHg）➔ 淨過濾（Filtration）',
+                        body: '剛進入微血管時，血壓 35 mmHg 大於膠體滲透壓 25 mmHg，產生向外的淨推動力，將<strong>氧氣、葡萄糖、胺基酸與血漿水分「擠」出微血管</strong>，供給周圍組織細胞使用。'
+                    },
+                    {
+                        head: '3. 微血管靜脈端（Pc ≈ 15 mmHg ＜ 25 mmHg）➔ 淨再吸收（Reabsorption）',
+                        body: '血液流經微血管網時因摩擦阻力持續掉壓，到了微血管尾端降至約 <strong>15 mmHg（低於 25 mmHg）</strong>。此時膠體滲透壓佔上風，將組織間隙的<strong>二氧化碳、代謝廢物與 90% 濾出的水分重新「吸」回血管內</strong>（剩餘 10% 由淋巴管回收），避免組織水腫。'
+                    }
+                ],
+                experimentTip: '👉 觀察上方圖表：紫色虛線（25 mmHg）將微血管血壓線切為左半部「綠色過濾區」與右半部「藍色再吸收區」。'
+            },
+            {
+                title: '單根微血管比小動脈更細，為什麼最大阻力與壓降卻發生在小動脈？',
+                subtitle: '關鍵機制：電學與流體力學的「並聯電路效應（Parallel Resistance）」與連續性方程式（Q = A × v）',
+                badge: '微血管 = 數十億根並聯・總面積暴增千倍',
+                points: [
+                    {
+                        head: '1. 單根阻力極大 vs 數十億根「並聯」總阻力反而小',
+                        body: '根據泊肅葉定律（R ∝ 1/r⁴），單根微血管（直徑 8 μm）的阻力確實比單根小動脈大。但人體擁有<strong>約 100 億～400 億根微血管同時「並聯」</strong>！就像高速公路收費站同時開啟一萬個車道（1/R_total = Σ 1/R_i），並聯後的微血管網整體阻力反而低於上游的小動脈。'
+                    },
+                    {
+                        head: '2. 為什麼微血管的血流速度最慢（＜0.1 cm/s）？',
+                        body: '根據流體力學連續性方程式 <strong>Q = A × v（流量 = 總橫截面積 × 流速）</strong>。主動脈橫截面積僅約 4.5 cm²，而全身微血管加總的「總橫截面積」高達 <strong>4,500 cm²（暴增 1000 倍）</strong>！因為總面積 A 劇增千倍，流速 v 必然驟降千倍。'
+                    },
+                    {
+                        head: '3. 流速慢的生理意義：給紅血球充足的氣體交換時間',
+                        body: '微血管長度僅約 0.5～1 毫米，若流速像主動脈一樣快（40 cm/s），血液 0.002 秒就衝過去了，根本來不及擴散氧氣。減速至 0.05 cm/s 後，紅血球有 <strong>1～2 秒的充裕時間</strong>完成 O₂ 與 CO₂ 交換。'
+                    }
+                ],
+                experimentTip: '👉 觀察上方圖表：綠色「總橫截面積曲線」在微血管達到最高峰時，黃色「血流速度曲線」剛好掉到最低谷！'
+            },
+            {
+                title: '為什麼靜脈血壓這麼低（幾乎接近 0 mmHg），血液還流得回心臟？',
+                subtitle: '關鍵機制：殘餘微弱壓差 + 單向靜脈瓣膜 + 骨骼肌幫浦 + 呼吸負壓幫浦',
+                badge: '靜脈 = 容量血管・四大回流助力',
+                points: [
+                    {
+                        head: '1. 為什麼靜脈血壓只剩 0～15 mmHg？',
+                        body: '心臟收縮賦予血液的壓力能，在經過小動脈與微血管網這兩大阻力區時，已經因為摩擦损耗（轉為熱能）消耗殆盡；加上靜脈管壁薄、順應性極高（可容納全身 60%～70% 血液的「容量血管」），因此靜脈壓非常低。'
+                    },
+                    {
+                        head: '2. 助力一：殘餘壓差（小靜脈 ~15 mmHg ➔ 右心房 ~0 mmHg）',
+                        body: '因為大靜脈管腔粗大、阻力極低，只要小靜脈（15 mmHg）與右心房（0 mmHg）之間存在這 <strong>15 mmHg 的微弱壓力梯度</strong>，在平躺時就足以推動血液緩慢流回心臟。'
+                    },
+                    {
+                        head: '3. 助力二與三：骨骼肌幫浦 ＋ 單向「靜脈瓣膜」＋ 呼吸幫浦',
+                        body: '當人體站立對抗地心引力時，小腿與四肢的<strong>骨骼肌收縮會擠壓靜脈</strong>，配合只允許血液流向心臟的<strong>「單向靜脈瓣膜」</strong>（防止放鬆時逆流），像擠牙膏一樣把血推回心臟；同時吸氣時胸腔擴張產生<strong>負壓</strong>，也會將腔靜脈血液「吸」入右心房。'
+                    }
+                ],
+                experimentTip: '👉 親手實驗：點擊右側「靜脈曲張 / 久站水腫」情境，觀察當瓣膜失效且久站不動時，血液如何逆流並導致上游微血管水腫！'
+            }
+        ];
+
+        function selectTopic(idx) {
+            state.selectedTopic = idx;
+            for (let i = 0; i < 4; i++) {
+                const tab = document.getElementById(`topic-tab-${i}`);
+                if (i === idx) tab.classList.add('active');
+                else tab.classList.remove('active');
+            }
+            renderTopicContent();
+        }
+
+        function selectZone(zoneIdx) {
+            const z = ZONES[zoneIdx];
+            if (z) selectTopic(z.topicMap);
+        }
+
+        function renderTopicContent() {
+            const t = TOPICS[state.selectedTopic];
+            const container = document.getElementById('topic-content');
+
+            container.innerHTML = `
+                <div class="lg:col-span-8 flex flex-col gap-3">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="px-2.5 py-0.5 text-xs font-bold rounded-full bg-sky-500/20 border border-sky-500/40 text-sky-300">${t.badge}</span>
+                        <span class="text-xs text-slate-400">${t.subtitle}</span>
+                    </div>
+                    <h3 class="text-base md:text-lg font-bold text-white">${t.title}</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-1">
+                        ${t.points.map(p => `
+                            <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3 flex flex-col gap-1.5">
+                                <h4 class="text-xs font-bold text-sky-300">${p.head}</h4>
+                                <p class="text-xs text-slate-300 leading-relaxed">${p.body}</p>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div class="text-xs text-amber-300 bg-amber-950/30 border border-amber-500/30 rounded-lg px-3 py-2 mt-1">
+                        ${t.experimentTip}
+                    </div>
+                </div>
+                <div class="lg:col-span-4 bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex flex-col items-center justify-center min-h-[210px]">
+                    ${getTopicDiagramSVG(state.selectedTopic)}
+                </div>
+            `;
+        }
+
+        // 為每個主題提供清晰的專屬向量圖解 (SVG)
+        function getTopicDiagramSVG(idx) {
+            if (idx === 0) {
+                return `
+                    <div class="text-xs font-bold text-amber-300 mb-2">【圖解】小動脈減壓閥與消波作用</div>
+                    <svg viewBox="0 0 280 135" class="w-full max-w-[280px]">
+                        <rect x="5" y="15" width="85" height="90" rx="8" fill="#4c0519" stroke="#f43f5e" stroke-opacity="0.5"/>
+                        <text x="47" y="32" fill="#fda4af" font-size="10" text-anchor="middle" font-weight="bold">主動脈 (高壓脈動)</text>
+                        <path d="M 12 75 L 25 45 L 35 85 L 48 45 L 58 85 L 72 45 L 82 85" fill="none" stroke="#fb7185" stroke-width="2.5"/>
+                        <text x="47" y="100" fill="#fecdd3" font-size="9" text-anchor="middle">120/80 mmHg</text>
+
+                        <!-- 小動脈水龍頭閥門 -->
+                        <path d="M 95 45 L 175 56 L 175 74 L 95 85 Z" fill="#78350f" stroke="#f59e0b" stroke-width="2"/>
+                        <rect x="122" y="34" width="26" height="14" rx="3" fill="#f59e0b"/>
+                        <rect x="122" y="82" width="26" height="14" rx="3" fill="#f59e0b"/>
+                        <text x="135" y="25" fill="#fcd34d" font-size="10" text-anchor="middle" font-weight="bold">小動脈平滑肌 (高阻力 R)</text>
+                        <text x="135" y="114" fill="#fde68a" font-size="9" text-anchor="middle">消耗動能・消除脈搏波</text>
+
+                        <!-- 微血管平滑低壓 -->
+                        <rect x="180" y="15" width="95" height="90" rx="8" fill="#3b0764" stroke="#a855f7" stroke-opacity="0.5"/>
+                        <text x="227" y="32" fill="#d8b4fe" font-size="10" text-anchor="middle" font-weight="bold">微血管 (低壓平穩)</text>
+                        <line x1="188" y1="65" x2="266" y2="75" stroke="#c084fc" stroke-width="3"/>
+                        <text x="227" y="100" fill="#e9d5ff" font-size="9" text-anchor="middle">35 → 15 mmHg (無搏動)</text>
+                    </svg>
+                `;
+            } else if (idx === 1) {
+                return `
+                    <div class="text-xs font-bold text-purple-300 mb-2">【圖解】史達林力：動脈端過濾 vs 靜脈端再吸收</div>
+                    <svg viewBox="0 0 280 135" class="w-full max-w-[280px]">
+                        <!-- 微血管管道 -->
+                        <defs>
+                            <linearGradient id="capG" x1="0" y1="0" x2="1" y2="0">
+                                <stop offset="0%" stop-color="#f43f5e" stop-opacity="0.4"/>
+                                <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.4"/>
+                            </linearGradient>
+                        </defs>
+                        <rect x="15" y="45" width="250" height="42" rx="21" fill="url(#capG)" stroke="#c084fc" stroke-width="1.5" stroke-dasharray="4 3"/>
+                        <text x="140" y="70" fill="#f3e8ff" font-size="10" text-anchor="middle" font-weight="bold">血漿膠體滲透壓 πc = 25 mmHg (向內吸水)</text>
+
+                        <!-- 動脈端過濾 -->
+                        <text x="70" y="20" fill="#6ee7b7" font-size="10" text-anchor="middle" font-weight="bold">動脈端 Pc = ${state.capStartBP} mmHg</text>
+                        <path d="M 55 45 L 55 26 M 50 31 L 55 25 L 60 31" stroke="#34d399" stroke-width="2" fill="none"/>
+                        <path d="M 85 87 L 85 108 M 80 103 L 85 109 L 90 103" stroke="#34d399" stroke-width="2" fill="none"/>
+                        <text x="70" y="124" fill="#6ee7b7" font-size="9" text-anchor="middle">淨過濾 (+10 mmHg 推出 O₂/養分)</text>
+
+                        <!-- 靜脈端再吸收 -->
+                        <text x="210" y="20" fill="#7dd3fc" font-size="10" text-anchor="middle" font-weight="bold">靜脈端 Pc = ${state.capEndBP} mmHg</text>
+                        <path d="M 195 25 L 195 44 M 190 39 L 195 45 L 200 39" stroke="#38bdf8" stroke-width="2" fill="none"/>
+                        <path d="M 225 109 L 225 88 M 220 93 L 225 87 L 230 93" stroke="#38bdf8" stroke-width="2" fill="none"/>
+                        <text x="210" y="124" fill="#7dd3fc" font-size="9" text-anchor="middle">淨再吸收 (-10 mmHg 吸回 CO₂/水)</text>
+                    </svg>
+                `;
+            } else if (idx === 2) {
+                return `
+                    <div class="text-xs font-bold text-emerald-300 mb-2">【圖解】數十億微血管並聯：總面積最大、流速最慢</div>
+                    <svg viewBox="0 0 280 135" class="w-full max-w-[280px]">
+                        <rect x="10" y="52" width="55" height="28" rx="4" fill="#be123c"/>
+                        <text x="37" y="45" fill="#fda4af" font-size="9" text-anchor="middle">主動脈 A=4.5cm²</text>
+                        <text x="37" y="70" fill="#fff" font-size="9" text-anchor="middle" font-weight="bold">v = 40 cm/s</text>
+
+                        <!-- 並聯微血管網 -->
+                        <g stroke="#a855f7" stroke-width="3">
+                            <line x1="65" y1="60" x2="105" y2="22"/><line x1="105" y1="22" x2="175" y2="22"/><line x1="175" y1="22" x2="215" y2="60"/>
+                            <line x1="65" y1="63" x2="105" y2="44"/><line x1="105" y1="44" x2="175" y2="44"/><line x1="175" y1="44" x2="215" y2="63"/>
+                            <line x1="65" y1="66" x2="215" y2="66"/>
+                            <line x1="65" y1="69" x2="105" y2="88"/><line x1="105" y1="88" x2="175" y2="88"/><line x1="175" y1="88" x2="215" y2="69"/>
+                            <line x1="65" y1="72" x2="105" y2="110"/><line x1="105" y1="110" x2="175" y2="110"/><line x1="175" y1="110" x2="215" y2="72"/>
+                        </g>
+                        <rect x="100" y="52" width="80" height="28" rx="4" fill="#0f172a" stroke="#10b981"/>
+                        <text x="140" y="64" fill="#34d399" font-size="9" text-anchor="middle" font-weight="bold">總面積 A = 4500 cm²</text>
+                        <text x="140" y="76" fill="#fde047" font-size="9" text-anchor="middle">v = Q/A ＜ 0.1 cm/s</text>
+
+                        <rect x="215" y="48" width="55" height="36" rx="4" fill="#1d4ed8"/>
+                        <text x="242" y="42" fill="#93c5fd" font-size="9" text-anchor="middle">腔靜脈 A=18cm²</text>
+                        <text x="242" y="70" fill="#fff" font-size="9" text-anchor="middle" font-weight="bold">v = 15 cm/s</text>
+                    </svg>
+                `;
+            } else {
+                return `
+                    <div class="text-xs font-bold text-sky-300 mb-2">【圖解】靜脈瓣膜與骨骼肌幫浦推進機制</div>
+                    <svg viewBox="0 0 280 135" class="w-full max-w-[280px]">
+                        <!-- 骨骼肌收縮 -->
+                        <ellipse cx="140" cy="24" rx="55" ry="14" fill="#be123c" fill-opacity="0.5" stroke="#fb7185"/>
+                        <ellipse cx="140" cy="111" rx="55" ry="14" fill="#be123c" fill-opacity="0.5" stroke="#fb7185"/>
+                        <text x="140" y="28" fill="#ffe4e6" font-size="9" text-anchor="middle" font-weight="bold">骨骼肌收縮擠壓 ▼</text>
+                        <text x="140" y="115" fill="#ffe4e6" font-size="9" text-anchor="middle" font-weight="bold">骨骼肌收縮擠壓 ▲</text>
+
+                        <!-- 靜脈管壁 -->
+                        <path d="M 15 44 Q 140 56 265 44" fill="none" stroke="#38bdf8" stroke-width="2.5"/>
+                        <path d="M 15 91 Q 140 79 265 91" fill="none" stroke="#38bdf8" stroke-width="2.5"/>
+
+                        <!-- 後方關閉瓣膜 (防逆流) -->
+                        <path d="M 65 47 Q 80 65 82 67" fill="none" stroke="#34d399" stroke-width="3"/>
+                        <path d="M 65 88 Q 80 70 82 68" fill="none" stroke="#34d399" stroke-width="3"/>
+                        <text x="55" y="40" fill="#6ee7b7" font-size="9" text-anchor="middle">後方瓣膜閉合(防逆流)</text>
+
+                        <!-- 前方開啟瓣膜 (流向心臟) -->
+                        <path d="M 205 47 Q 218 55 222 57" fill="none" stroke="#e0f2fe" stroke-width="3"/>
+                        <path d="M 205 88 Q 218 80 222 78" fill="none" stroke="#e0f2fe" stroke-width="3"/>
+                        <path d="M 125 67 L 245 67 M 237 61 L 246 67 L 237 73" stroke="#38bdf8" stroke-width="2.5" fill="none"/>
+                        <text x="225" y="40" fill="#7dd3fc" font-size="9" text-anchor="middle">前方瓣膜開啟 ➔ 右心房</text>
+                    </svg>
+                `;
+            }
+        }
+
+        /***********************************************************************
+         * 5. 互動控制事件綁定與情境預設集 (Interactive Controls & Presets)
+         ***********************************************************************/
+        const sliderArteriole = document.getElementById('slider-arteriole');
+        const labelArteriole = document.getElementById('label-arteriole');
+        const sliderHR = document.getElementById('slider-hr');
+        const labelHR = document.getElementById('label-hr');
+
+        sliderArteriole.addEventListener('input', (e) => {
+            state.arterioleDiameter = parseInt(e.target.value, 10);
+            updateUIControls();
+            updateHemodynamics();
+        });
+
+        sliderHR.addEventListener('input', (e) => {
+            state.heartRate = parseInt(e.target.value, 10);
+            updateUIControls();
+            updateHemodynamics();
+        });
+
+        ['bp', 'area', 'vel', 'osmotic'].forEach(key => {
+            document.getElementById(`chk-${key}`).addEventListener('change', (e) => {
+                if (key === 'bp') state.showBP = e.target.checked;
+                if (key === 'area') state.showArea = e.target.checked;
+                if (key === 'vel') state.showVel = e.target.checked;
+                if (key === 'osmotic') state.showOsmotic = e.target.checked;
+            });
+        });
+
+        document.getElementById('chk-resp-pump').addEventListener('change', (e) => {
+            state.respPump = e.target.checked;
+            updateHemodynamics();
+        });
+
+        function setMuscleState(mode) {
+            state.musclePump = mode;
+            ['inactive', 'normal', 'active'].forEach(m => {
+                const btn = document.getElementById(`btn-muscle-${m}`);
+                if (m === mode) {
+                    btn.className = 'text-xs py-1.5 px-2 rounded-lg border border-sky-500 bg-sky-500/20 text-white font-semibold transition';
+                } else {
+                    btn.className = 'text-xs py-1.5 px-2 rounded-lg border border-slate-700 bg-slate-800/60 text-slate-300 hover:bg-slate-800 transition';
+                }
+            });
+            updateHemodynamics();
+        }
+
+        function toggleValve() {
+            state.valveCompetent = !state.valveCompetent;
+            updateUIControls();
+            updateHemodynamics();
+        }
+
+        function updateUIControls() {
+            sliderArteriole.value = state.arterioleDiameter;
+            if (state.arterioleDiameter < 90) {
+                labelArteriole.textContent = `${state.arterioleDiameter}% (血管收縮・高阻力)`;
+                labelArteriole.className = 'text-xs font-mono px-2 py-0.5 rounded bg-rose-500/20 text-rose-300';
+            } else if (state.arterioleDiameter > 110) {
+                labelArteriole.textContent = `${state.arterioleDiameter}% (血管舒張・低阻力)`;
+                labelArteriole.className = 'text-xs font-mono px-2 py-0.5 rounded bg-purple-500/20 text-purple-300';
+            } else {
+                labelArteriole.textContent = `${state.arterioleDiameter}% (正常阻力)`;
+                labelArteriole.className = 'text-xs font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300';
+            }
+
+            sliderHR.value = state.heartRate;
+            labelHR.textContent = `${state.heartRate} BPM`;
+
+            const valveBtn = document.getElementById('btn-valve-toggle');
+            if (state.valveCompetent) {
+                valveBtn.textContent = '✓ 瓣膜正常閉合 (防逆流)';
+                valveBtn.className = 'px-2.5 py-1 rounded text-xs font-bold bg-emerald-600/30 border border-emerald-500 text-emerald-300 transition';
+            } else {
+                valveBtn.textContent = '✗ 瓣膜閉鎖不全 (血液逆流!)';
+                valveBtn.className = 'px-2.5 py-1 rounded text-xs font-bold bg-rose-600/30 border border-rose-500 text-rose-300 transition animate-pulse';
+            }
+
+            document.getElementById('chk-resp-pump').checked = state.respPump;
+            renderTopicContent();
+        }
+
+        function applyPreset(presetName) {
+            if (presetName === 'normal') {
+                state.arterioleDiameter = 100;
+                state.heartRate = 72;
+                state.valveCompetent = true;
+                state.respPump = true;
+                setMuscleState('normal');
+                selectTopic(1);
+            } else if (presetName === 'vasoconstriction') {
+                // 小動脈強烈收縮：主動脈高血壓，但微血管受保護血壓偏低
+                state.arterioleDiameter = 62;
+                state.heartRate = 82;
+                state.valveCompetent = true;
+                state.respPump = true;
+                setMuscleState('normal');
+                selectTopic(0);
+            } else if (presetName === 'vasodilation') {
+                // 小動脈過度舒張：減壓閥失效，高壓直接衝進微血管導致濾出過多水腫
+                state.arterioleDiameter = 145;
+                state.heartRate = 85;
+                state.valveCompetent = true;
+                state.respPump = true;
+                setMuscleState('normal');
+                selectTopic(1);
+            } else if (presetName === 'varicose') {
+                // 久站不動 + 靜脈瓣膜閉鎖不全：靜脈淤血逆流，導致微血管靜水壓上升水腫
+                state.arterioleDiameter = 105;
+                state.heartRate = 76;
+                state.valveCompetent = false;
+                state.respPump = false;
+                setMuscleState('inactive');
+                selectTopic(3);
+            }
+            updateUIControls();
+            updateHemodynamics();
+        }
+
+        // 點擊血管畫布對應區段時自動切換下方深度解析
+        vesselCanvas.addEventListener('click', (e) => {
+            const rect = vesselCanvas.getBoundingClientRect();
+            const normX = (e.clientX - rect.left) / rect.width;
+            const zone = ZONES.find(z => normX >= z.start && normX <= z.end);
+            if (zone) selectZone(zone.id);
+        });
+
+        /***********************************************************************
+         * 6. 主動畫迴圈 (Main Animation Loop)
+         ***********************************************************************/
+        let lastTime = performance.now();
+
+        function animate(now) {
+            const dt = Math.min(0.05, (now - lastTime) / 1000);
+            lastTime = now;
+
+            state.time += dt;
+            // 心跳相位推進
+            state.beatPhase += dt * (state.heartRate / 60) * Math.PI * 2;
+            // 骨骼肌收縮相位推進
+            const muscleFreq = state.musclePump === 'active' ? 2.2 : (state.musclePump === 'normal' ? 1.1 : 0);
+            state.musclePhase += dt * muscleFreq * Math.PI * 2;
+            // 呼吸幫浦相位推進
+            state.respPhase += dt * 0.45 * Math.PI * 2;
+
+            drawVesselSimulation(dt);
+            drawHemodynamicsChart();
+
+            requestAnimationFrame(animate);
+        }
+
+        window.onload = function () {
+            resizeCanvases();
+            initParticles();
+            updateHemodynamics();
+            updateUIControls();
+            selectTopic(1); // 預設展示微血管史達林力解析
+            requestAnimationFrame(animate);
+        };
+    </script>
+</body>
+</html>
