@@ -1,0 +1,2160 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>植物向性（Plant Tropisms）互動動態模擬與虛擬實驗室</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'Noto Sans TC', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        lab: {
+                            bg: '#060b14',
+                            panel: '#0f172a',
+                            border: '#1e293b',
+                            emerald: '#10b981',
+                            amber: '#f59e0b',
+                            coral: '#f43f5e',
+                            cyan: '#06b6d4'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #060b14;
+            color: #f1f5f9;
+            overflow-x: hidden;
+        }
+        /* 自訂捲軸 */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #090f1d;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #334155;
+        }
+        /* 科技感網格背景 */
+        .bg-lab-grid {
+            background-size: 28px 28px;
+            background-image: 
+                linear-gradient(to right, rgba(30, 41, 59, 0.35) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(30, 41, 59, 0.35) 1px, transparent 1px);
+        }
+        /* 滑桿美化 */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            height: 6px;
+            border-radius: 999px;
+            background: #1e293b;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #10b981;
+            cursor: pointer;
+            margin-top: -5px;
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.8);
+            transition: transform 0.15s ease;
+        }
+        input[type=range]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+        .glow-emerald {
+            box-shadow: 0 0 18px rgba(16, 185, 129, 0.25);
+        }
+        .glow-amber {
+            box-shadow: 0 0 18px rgba(245, 158, 11, 0.25);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col font-sans select-none">
+
+    <!-- 頂部導航列与全局時間軸控制 -->
+    <header class="bg-slate-900/90 backdrop-blur-md border-b border-slate-800 sticky top-0 z-30 px-4 py-2.5">
+        <div class="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-3">
+            <!-- 標題與 Logo -->
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/40 flex items-center justify-center shadow-inner">
+                    <svg class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+                    </svg>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="text-base md:text-lg font-bold tracking-wide text-white">植物向性互動動態模擬與虛擬實驗室</h1>
+                        <span class="hidden sm:inline-block text-[11px] font-mono uppercase px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">BioSim v2.5</span>
+                    </div>
+                    <p class="text-xs text-slate-400 hidden sm:block">Plant Tropisms & Auxin (IAA) Transport Interactive Laboratory</p>
+                </div>
+            </div>
+
+            <!-- 三大模擬模組切換分頁 -->
+            <nav class="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800" id="module-tabs">
+                <button onclick="switchModule('photo')" id="tab-photo" class="tab-btn flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs md:text-sm font-semibold transition-all bg-emerald-500 text-slate-950 shadow">
+                    <span>☀️</span>
+                    <span>1. 向光性 (Phototropism)</span>
+                </button>
+                <button onclick="switchModule('gravi')" id="tab-gravi" class="tab-btn flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs md:text-sm font-semibold transition-all text-slate-400 hover:text-white">
+                    <span>🌍</span>
+                    <span>2. 向地性與劑量效應 (Gravitropism)</span>
+                </button>
+                <button onclick="switchModule('thigmo')" id="tab-thigmo" class="tab-btn flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs md:text-sm font-semibold transition-all text-slate-400 hover:text-white">
+                    <span>🌿</span>
+                    <span>3. 向觸性與傾觸性 (Thigmotropism)</span>
+                </button>
+            </nav>
+
+            <!-- 實驗室時間軸與播放控制 -->
+            <div class="flex items-center gap-2 bg-slate-950/90 px-3 py-1.5 rounded-xl border border-slate-800">
+                <div class="pr-2 border-r border-slate-800 text-right">
+                    <div class="text-[10px] text-slate-400 uppercase tracking-wider">Time-lapse 實驗時間</div>
+                    <div class="text-sm font-mono font-bold text-amber-400"><span id="sim-time-display">0.0</span> hr</div>
+                </div>
+
+                <!-- 開始/暫停 -->
+                <button id="btn-play-pause" onclick="togglePlay()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-semibold transition">
+                    <span id="play-icon">⏸</span>
+                    <span id="play-text">暫停</span>
+                </button>
+
+                <!-- 單步推進 -->
+                <button onclick="stepSimulation()" title="單步推進 (+0.5 hr)" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition">
+                    ⏭ 單步
+                </button>
+
+                <!-- 速度倍率 -->
+                <div class="flex items-center bg-slate-900 rounded-lg p-0.5 border border-slate-800">
+                    <button onclick="setSpeed(1)" id="speed-1" class="speed-btn px-2 py-1 rounded text-xs font-mono bg-amber-500 text-slate-950 font-bold">1x</button>
+                    <button onclick="setSpeed(2)" id="speed-2" class="speed-btn px-2 py-1 rounded text-xs font-mono text-slate-400 hover:text-white">2x</button>
+                    <button onclick="setSpeed(5)" id="speed-5" class="speed-btn px-2 py-1 rounded text-xs font-mono text-slate-400 hover:text-white">5x</button>
+                </div>
+
+                <!-- 重置幼苗 -->
+                <button onclick="resetSimulation()" class="px-2.5 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-semibold transition">
+                    ↺ 重置
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主內容區：左側視覺化畫布 + 右側控制與數據儀表板 -->
+    <main class="flex-1 max-w-[1600px] w-full mx-auto p-3 md:p-4 grid grid-cols-1 lg:grid-cols-12 gap-4">
+
+        <!-- 左側/中央：主模擬畫布與微觀機制疊加層 (佔 7 欄) -->
+        <section class="lg:col-span-7 flex flex-col gap-3">
+            <div class="relative flex-1 min-h-[520px] lg:min-h-[640px] bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden shadow-2xl bg-lab-grid flex flex-col">
+                
+                <!-- 畫布頂部狀態浮動列 -->
+                <div class="absolute top-3 left-3 right-3 flex flex-wrap items-center justify-between gap-2 pointer-events-none z-10">
+                    <div class="flex items-center gap-2 bg-slate-900/85 backdrop-blur-md px-3 py-1.5 rounded-xl border border-slate-700/70 pointer-events-auto">
+                        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                        <span id="canvas-mode-title" class="text-xs md:text-sm font-bold text-slate-100">向光性動態模擬：正常幼苗（達爾文/溫特模型）</span>
+                    </div>
+
+                    <!-- 微觀疊加層開關 -->
+                    <div class="flex items-center gap-2 bg-slate-900/85 backdrop-blur-md px-3 py-1.5 rounded-xl border border-slate-700/70 pointer-events-auto">
+                        <label class="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
+                            <input type="checkbox" id="toggle-auxin-particles" checked onchange="updateOverlaySettings()" class="rounded accent-amber-400">
+                            <span class="text-amber-300 font-medium">✨ 生長素(IAA)粒子流</span>
+                        </label>
+                        <span class="text-slate-700">|</span>
+                        <label class="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
+                            <input type="checkbox" id="toggle-micro-inset" checked onchange="updateOverlaySettings()" class="rounded accent-emerald-400">
+                            <span class="text-emerald-300 font-medium">🔬 微觀細胞放大鏡</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 互動提示標籤 -->
+                <div id="canvas-hint-badge" class="absolute bottom-3 left-3 z-10 bg-slate-900/85 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-800 text-xs text-slate-300 pointer-events-none flex items-center gap-2">
+                    <span class="text-amber-400">💡 互動提示：</span>
+                    <span id="canvas-hint-text">可直接在畫布中「拖曳太陽光源」改變照射角度，並觀察背光側 IAA 粒子濃度與細胞伸長變化。</span>
+                </div>
+
+                <!-- 圖例說明標籤 -->
+                <div class="absolute bottom-3 right-3 z-10 bg-slate-900/85 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-800 text-[11px] text-slate-300 pointer-events-none hidden sm:flex items-center gap-3">
+                    <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block shadow-[0_0_8px_#f59e0b]"></span> 生長素 (IAA)</span>
+                    <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block"></span> 促進細胞伸長</span>
+                    <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block"></span> 高濃度抑制/乙烯訊號</span>
+                </div>
+
+                <!-- 主模擬 HTML5 Canvas -->
+                <canvas id="main-sim-canvas" class="w-full h-full flex-1 cursor-grab active:cursor-grabbing block"></canvas>
+            </div>
+
+            <!-- 底部即時實驗原理解析卡 -->
+            <div class="bg-slate-900/90 rounded-2xl border border-slate-800 p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div class="space-y-1">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">即時機制解析</span>
+                        <h3 id="mechanism-summary-title" class="text-sm font-bold text-white">單側光誘導生長素橫向運輸（Cholodny-Went 假說）</h3>
+                    </div>
+                    <p id="mechanism-summary-desc" class="text-xs text-slate-300 leading-relaxed">
+                        胚芽鞘尖端感光後，生長素（IAA）由向光側往背光側進行橫向運輸，再經極性運輸向下傳遞。背光側較高濃度的生長素刺激細胞縱向伸長速率加快，導致幼苗向光源彎曲。
+                    </p>
+                </div>
+                <div class="flex shrink-0 gap-2 self-end sm:self-center">
+                    <div class="bg-slate-950 px-3 py-2 rounded-xl border border-slate-800 text-center min-w-[90px]">
+                        <div class="text-[10px] text-slate-400">目前彎曲角度</div>
+                        <div id="metric-angle" class="text-sm font-mono font-bold text-emerald-400">0.0°</div>
+                    </div>
+                    <div class="bg-slate-950 px-3 py-2 rounded-xl border border-slate-800 text-center min-w-[105px]">
+                        <div id="metric-ratio-label" class="text-[10px] text-slate-400">背光 : 向光 IAA</div>
+                        <div id="metric-ratio" class="text-sm font-mono font-bold text-amber-400">50 : 50</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 右側：模組專屬參數控制面板 + 動態曲線儀表板 (佔 5 欄) -->
+        <aside class="lg:col-span-5 flex flex-col gap-3">
+
+            <!-- ==========================================
+                 面板 1：向光性 (Phototropism) 控制項
+                 ========================================== -->
+            <div id="panel-photo" class="bg-slate-900/90 rounded-2xl border border-slate-800 p-4 space-y-4">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                    <div>
+                        <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                            <span class="text-amber-400">☀️</span> 向光性實驗參數與經典歷史處理組
+                        </h2>
+                        <p class="text-[11px] text-slate-400">探究達爾文 (1880)、波森-詹森 (1913) 與溫特 (1926) 的經典實驗</p>
+                    </div>
+                </div>
+
+                <!-- 光源角度與強度滑桿 -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-950/70 p-3 rounded-xl border border-slate-800/80">
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-300 font-medium">光源照射角度</span>
+                            <span id="val-light-angle" class="font-mono text-amber-400 font-bold">+55° (右側光)</span>
+                        </div>
+                        <input type="range" id="slider-light-angle" min="-80" max="80" value="55" step="1" oninput="onPhotoParamChange()" class="w-full">
+                        <div class="flex justify-between text-[10px] text-slate-500 mt-1">
+                            <span>-80° (左側)</span>
+                            <span>0° (正頂光)</span>
+                            <span>+80° (右側)</span>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-300 font-medium">光照強度 (藍光光子通量)</span>
+                            <span id="val-light-intensity" class="font-mono text-amber-400 font-bold">85%</span>
+                        </div>
+                        <input type="range" id="slider-light-intensity" min="0" max="100" value="85" step="5" oninput="onPhotoParamChange()" class="w-full">
+                        <div class="flex justify-between text-[10px] text-slate-500 mt-1">
+                            <span>0% (黑暗室)</span>
+                            <span>50%</span>
+                            <span>100% (強光)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 經典實驗處理組切換按鈕網格 -->
+                <div>
+                    <div class="text-xs font-semibold text-slate-300 mb-2 flex items-center justify-between">
+                        <span>選擇經典實驗處理組（點擊立即切換並重新觀測）：</span>
+                        <span class="text-[11px] text-emerald-400 font-mono">6 種實驗設計</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2" id="photo-treatment-grid">
+                        <button onclick="setPhotoTreatment('normal')" data-treat="normal" class="photo-treat-btn text-left p-2.5 rounded-xl border transition bg-emerald-500/15 border-emerald-500/50 text-white">
+                            <div class="text-xs font-bold flex items-center justify-between">
+                                <span>🌱 1. 正常幼苗 (對照組)</span>
+                                <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">彎曲</span>
+                            </div>
+                            <p class="text-[11px] text-slate-400 mt-0.5">尖端正常感光，IAA 向背光側運輸</p>
+                        </button>
+
+                        <button onclick="setPhotoTreatment('decapitated')" data-treat="decapitated" class="photo-treat-btn text-left p-2.5 rounded-xl border transition bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700">
+                            <div class="text-xs font-bold flex items-center justify-between">
+                                <span>✂️ 2. 切除胚芽鞘尖端</span>
+                                <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">不生長</span>
+                            </div>
+                            <p class="text-[11px] text-slate-400 mt-0.5">缺乏生長素來源，不生長亦不彎曲</p>
+                        </button>
+
+                        <button onclick="setPhotoTreatment('foil_cap')" data-treat="foil_cap" class="photo-treat-btn text-left p-2.5 rounded-xl border transition bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700">
+                            <div class="text-xs font-bold flex items-center justify-between">
+                                <span>🎩 3. 尖端套不透光錫箔帽</span>
+                                <span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">直立生長</span>
+                            </div>
+                            <p class="text-[11px] text-slate-400 mt-0.5">尖端無法感應單側光，IAA 均勻分布</p>
+                        </button>
+
+                        <button onclick="setPhotoTreatment('mica_lit')" data-treat="mica_lit" class="photo-treat-btn text-left p-2.5 rounded-xl border transition bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700">
+                            <div class="text-xs font-bold flex items-center justify-between">
+                                <span>🔪 4A. 雲母片插入向光側</span>
+                                <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">仍向光彎</span>
+                            </div>
+                            <p class="text-[11px] text-slate-400 mt-0.5">背光側極性運輸未受阻，仍向光彎曲</p>
+                        </button>
+
+                        <button onclick="setPhotoTreatment('mica_shaded')" data-treat="mica_shaded" class="photo-treat-btn text-left p-2.5 rounded-xl border transition bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700">
+                            <div class="text-xs font-bold flex items-center justify-between">
+                                <span>🛑 4B. 雲母片插入背光側</span>
+                                <span class="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300">阻斷彎曲</span>
+                            </div>
+                            <p class="text-[11px] text-slate-400 mt-0.5">阻斷背光側 IAA 下運，不向光彎曲</p>
+                        </button>
+
+                        <button onclick="setPhotoTreatment('agar_left')" data-treat="agar_left" class="photo-treat-btn text-left p-2.5 rounded-xl border transition bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700">
+                            <div class="text-xs font-bold flex items-center justify-between">
+                                <span>🧊 5. 溫特含IAA洋菜塊偏放</span>
+                                <span class="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300">朝對側彎</span>
+                            </div>
+                            <p class="text-[11px] text-slate-400 mt-0.5">切尖後於左側放 IAA 洋菜，向右彎曲</p>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ==========================================
+                 面板 2：向地性 (Gravitropism) 控制項與劑量效應曲線
+                 ========================================== -->
+            <div id="panel-gravi" class="hidden bg-slate-900/90 rounded-2xl border border-slate-800 p-4 space-y-3.5">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                    <div>
+                        <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                            <span class="text-emerald-400">🌍</span> 向地性模擬：太空重力環境與生長素雙重標準
+                        </h2>
+                        <p class="text-[11px] text-slate-400">觀察根冠平衡石（澱粉體）沉降及根、莖對 IAA 濃度的敏感度差異</p>
+                    </div>
+                </div>
+
+                <!-- 傾角與重力環境設定 -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-950/70 p-3 rounded-xl border border-slate-800">
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-300 font-medium">幼苗擺放傾角</span>
+                            <span id="val-gravi-angle" class="font-mono text-emerald-400 font-bold">90° (水平橫放)</span>
+                        </div>
+                        <input type="range" id="slider-gravi-angle" min="-90" max="90" value="90" step="5" oninput="onGraviParamChange()" class="w-full">
+                        <div class="flex justify-between text-[10px] text-slate-500 mt-1">
+                            <span>-90° (橫放)</span>
+                            <span>0° (直立)</span>
+                            <span>+90° (橫放)</span>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="text-xs text-slate-300 font-medium mb-1.5">重力場與太空迴轉器環境</div>
+                        <div class="grid grid-cols-2 gap-1.5">
+                            <button onclick="setGravityEnv('earth')" data-genv="earth" class="gravi-env-btn px-2 py-1.5 rounded-lg text-[11px] font-semibold border bg-emerald-500/20 border-emerald-500/50 text-emerald-300">🌍 地球 (1.0g)</button>
+                            <button onclick="setGravityEnv('moon')" data-genv="moon" class="gravi-env-btn px-2 py-1.5 rounded-lg text-[11px] font-semibold border bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700">🌙 月球 (0.16g)</button>
+                            <button onclick="setGravityEnv('space')" data-genv="space" class="gravi-env-btn px-2 py-1.5 rounded-lg text-[11px] font-semibold border bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700">🛸 微重力 (0g)</button>
+                            <button onclick="setGravityEnv('clinostat')" data-genv="clinostat" class="gravi-env-btn px-2 py-1.5 rounded-lg text-[11px] font-semibold border bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700">🔄 迴轉器抵消</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 經典生長素劑量效應曲線圖 (Dose-Response Curve) -->
+                <div class="bg-slate-950 rounded-xl border border-slate-800 p-3">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <span class="text-xs font-bold text-slate-200">📈 生長素對根與莖的差異效應曲線 (Dose-Response Curve)</span>
+                        <span class="text-[10px] font-mono text-amber-400">IAA 濃度 (10⁻¹¹ ~ 10⁻³ M)</span>
+                    </div>
+                    <canvas id="dose-response-canvas" width="460" height="175" class="w-full h-[165px] block rounded-lg bg-slate-950"></canvas>
+                    <p class="text-[11px] text-slate-400 mt-1.5 leading-snug">
+                        <strong class="text-amber-300">關鍵解析：</strong>重力使根與莖的「下側」IAA 濃度皆升高（約 <span class="font-mono text-slate-200">10⁻⁵ M</span>）。此濃度落在<strong class="text-emerald-400">莖的促進區高點</strong>（下側長得快→向上彎），卻落在<strong class="text-rose-400">根的嚴重抑制區</strong>（下側被抑制、上側長得快→向下彎）！
+                    </p>
+                </div>
+            </div>
+
+            <!-- ==========================================
+                 面板 3：向觸性 (Thigmotropism) 控制項與傾觸性對照
+                 ========================================== -->
+            <div id="panel-thigmo" class="hidden bg-slate-900/90 rounded-2xl border border-slate-800 p-4 space-y-3.5">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                    <div>
+                        <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                            <span class="text-emerald-400">🌿</span> 向觸性模擬（卷鬚纏繞）與觸發運動對比
+                        </h2>
+                        <p class="text-[11px] text-slate-400">在畫布中拖曳「竹竿支撐物」，觀察接觸點 Ca²⁺ 訊號與兩側不對稱生長</p>
+                    </div>
+                </div>
+
+                <!-- 支撐桿位置與敏感度控制 -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-950/70 p-3 rounded-xl border border-slate-800">
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-300 font-medium">竹竿支撐物水平位置</span>
+                            <span id="val-pole-x" class="font-mono text-emerald-400 font-bold">右側接觸 (+28px)</span>
+                        </div>
+                        <input type="range" id="slider-pole-x" min="-70" max="70" value="28" step="2" oninput="onThigmoParamChange()" class="w-full">
+                        <div class="flex justify-between text-[10px] text-slate-500 mt-1">
+                            <span>左側纏繞</span>
+                            <span>正中央</span>
+                            <span>右側纏繞</span>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-300 font-medium">機械受器敏感度 (纏繞曲率)</span>
+                            <span id="val-thigmo-sens" class="font-mono text-amber-400 font-bold">標準 (1.0x)</span>
+                        </div>
+                        <input type="range" id="slider-thigmo-sens" min="0.5" max="1.8" value="1.0" step="0.1" oninput="onThigmoParamChange()" class="w-full">
+                        <div class="flex justify-between text-[10px] text-slate-500 mt-1">
+                            <span>緩慢彎曲</span>
+                            <span>標準</span>
+                            <span>緊密螺旋</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 教學補充小視窗：向觸性 vs 觸發運動 (傾觸性) 並排互動對照卡 -->
+                <div class="bg-slate-950 rounded-xl border border-slate-800 p-3 space-y-2.5">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-cyan-300 flex items-center gap-1.5">
+                            <span>🔍</span> 觀念釐清：向觸性 (Thigmotropism) vs. 觸發運動/傾觸性 (Thigmonasty)
+                        </span>
+                        <button onclick="triggerMimosaDemo()" class="px-2.5 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-[11px] font-semibold transition">
+                            👆 點擊觸碰含羞草葉片
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                        <div class="p-2.5 rounded-lg bg-emerald-950/30 border border-emerald-500/30 space-y-1">
+                            <div class="font-bold text-emerald-300 flex items-center justify-between">
+                                <span>🌱 向觸性 (如：豌豆/絲瓜卷鬚)</span>
+                                <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20">向性運動</span>
+                            </div>
+                            <ul class="text-[11px] text-slate-300 space-y-0.5 list-disc list-inside">
+                                <li><strong class="text-white">生理機制：</strong>生長素/乙烯梯度改變 → 兩側細胞不對稱生長</li>
+                                <li><strong class="text-white">方向性：</strong>與刺激方向有關（朝接觸側彎曲）</li>
+                                <li><strong class="text-white">可逆性：</strong>屬於生長現象，<span class="text-amber-300">不可逆</span>、反應較慢（數十分鐘至數小時）</li>
+                            </ul>
+                        </div>
+
+                        <div class="p-2.5 rounded-lg bg-cyan-950/30 border border-cyan-500/30 space-y-1">
+                            <div class="font-bold text-cyan-300 flex items-center justify-between">
+                                <span>🍃 觸發運動 (如：含羞草/捕蠅草)</span>
+                                <span class="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20">傾性運動</span>
+                            </div>
+                            <ul class="text-[11px] text-slate-300 space-y-0.5 list-disc list-inside">
+                                <li><strong class="text-white">生理機制：</strong>葉枕細胞 K⁺、Cl⁻ 流出 → <span class="text-cyan-300">膨壓瞬間改變</span>（無關生長素）</li>
+                                <li><strong class="text-white">方向性：</strong>與刺激方向無關（固定方向閉合下垂）</li>
+                                <li><strong class="text-white">可逆性：</strong>水分回流後<span class="text-emerald-300">可逆恢復</span>、反應極快（數秒內）</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ==========================================
+                 模組 4：即時數據圖表與實驗紀錄儀表板 (常駐於右側下方)
+                 ========================================== -->
+            <div class="bg-slate-900/90 rounded-2xl border border-slate-800 p-4 flex-1 flex flex-col justify-between space-y-3">
+                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                    <div>
+                        <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                            <span class="text-cyan-400">📊</span> 即時動態數據圖表與實驗紀錄儀表板
+                        </h2>
+                        <p class="text-[11px] text-slate-400">隨 Time-lapse 實驗時間同步繪製生理指標曲線</p>
+                    </div>
+                    <!-- 數據指標標籤 -->
+                    <div class="flex items-center gap-3 text-[11px]">
+                        <span class="flex items-center gap-1 text-emerald-400 font-medium">
+                            <span class="w-2.5 h-0.5 bg-emerald-400 inline-block"></span> 器官彎曲角度 (°)
+                        </span>
+                        <span class="flex items-center gap-1 text-amber-400 font-medium">
+                            <span class="w-2.5 h-0.5 bg-amber-400 inline-block"></span> 兩側 IAA 濃度比值
+                        </span>
+                        <span class="flex items-center gap-1 text-cyan-400 font-medium">
+                            <span class="w-2.5 h-0.5 bg-cyan-400 inline-block"></span> 細胞伸長比
+                        </span>
+                    </div>
+                </div>
+
+                <!-- 折線圖 Canvas -->
+                <div class="bg-slate-950 rounded-xl border border-slate-800 p-2.5">
+                    <canvas id="telemetry-chart-canvas" width="480" height="170" class="w-full h-[160px] block"></canvas>
+                </div>
+
+                <!-- 三欄即時數值統計卡 -->
+                <div class="grid grid-cols-3 gap-2 text-center">
+                    <div class="bg-slate-950/90 p-2 rounded-xl border border-slate-800">
+                        <div class="text-[10px] text-slate-400" id="card-label-1">背光側 / 下側 IAA 占比</div>
+                        <div class="text-sm font-mono font-bold text-amber-400 mt-0.5" id="card-val-1">68%</div>
+                    </div>
+                    <div class="bg-slate-950/90 p-2 rounded-xl border border-slate-800">
+                        <div class="text-[10px] text-slate-400" id="card-label-2">兩側細胞相對長度比</div>
+                        <div class="text-sm font-mono font-bold text-cyan-400 mt-0.5" id="card-val-2">1.35 : 1.00</div>
+                    </div>
+                    <div class="bg-slate-950/90 p-2 rounded-xl border border-slate-800">
+                        <div class="text-[10px] text-slate-400" id="card-label-3">累積彎曲角度</div>
+                        <div class="text-sm font-mono font-bold text-emerald-400 mt-0.5" id="card-val-3">+0.0°</div>
+                    </div>
+                </div>
+            </div>
+
+        </aside>
+    </main>
+
+    <!-- JavaScript 模擬引擎與視覺化繪圖核心 -->
+    <script>
+        // =====================================================
+        // 全局模擬狀態與參數設定
+        // =====================================================
+        const state = {
+            currentModule: 'photo', // 'photo' | 'gravi' | 'thigmo'
+            isPlaying: true,
+            speed: 1,               // 1x, 2x, 5x
+            simTime: 0,             // 模擬小時數 (0.0 ~ 24.0 hr)
+            maxSimTime: 24,
+            showAuxinParticles: true,
+            showMicroInset: true,
+
+            // 1. 向光性參數
+            photo: {
+                lightAngle: 55,       // -80 ~ +80 度 (正值為右側光源)
+                lightIntensity: 85,   // 0 ~ 100 %
+                treatment: 'normal',  // 'normal' | 'decapitated' | 'foil_cap' | 'mica_lit' | 'mica_shaded' | 'agar_left'
+                sunPos: { x: 0, y: 0 },
+                isDraggingSun: false
+            },
+
+            // 2. 向地性參數
+            gravi: {
+                seedAngle: 90,        // -90 ~ +90 度 (90度代表水平橫放)
+                env: 'earth',         // 'earth' (1g) | 'moon' (0.16g) | 'space' (0g) | 'clinostat'
+                clinostatPhase: 0,
+                statoliths: []        // 根冠平衡石(澱粉體)微粒座標與速度
+            },
+
+            // 3. 向觸性參數
+            thigmo: {
+                poleOffsetX: 28,      // 支撐桿相對植物中心的 X 偏移 (-70 ~ +70)
+                sensitivity: 1.0,     // 機械受器敏感度
+                isDraggingPole: false,
+                contactDetected: false,
+                caPulsePhase: 0,
+                mimosaFoldProgress: 0, // 含羞草傾觸性示範動畫 (0 = 張開, 1 = 閉合)
+                mimosaTriggeredAt: -999
+            },
+
+            // 動態計算出的即時生理數值
+            metrics: {
+                shootBendAngle: 0,    // 莖或胚芽鞘彎曲角度 (度)
+                rootBendAngle: 0,     // 根部彎曲角度 (度)
+                auxinHighSidePct: 50, // 背光側或下側 IAA 百分比 (50% ~ 85%)
+                cellElongationRatio: 1.0, // 兩側細胞相對長度比
+                growthProgress: 0     // 0 ~ 1
+            },
+
+            // 生長素 (IAA) 動態粒子陣列
+            auxinParticles: [],
+
+            // 歷史時間序列紀錄 (供右側折線圖繪製)
+            history: []
+        };
+
+        // 取得 Canvas 與 Context
+        const mainCanvas = document.getElementById('main-sim-canvas');
+        const mainCtx = mainCanvas.getContext('2d');
+        const doseCanvas = document.getElementById('dose-response-canvas');
+        const doseCtx = doseCanvas.getContext('2d');
+        const chartCanvas = document.getElementById('telemetry-chart-canvas');
+        const chartCtx = chartCanvas.getContext('2d');
+
+        // =====================================================
+        // 初始化粒子與根冠澱粉體
+        // =====================================================
+        function initParticles() {
+            state.auxinParticles = [];
+            for (let i = 0; i < 85; i++) {
+                state.auxinParticles.push({
+                    progress: Math.random(),          // 0 (頂端) -> 1 (基部)
+                    lane: (Math.random() - 0.5) * 2,  // -1 (左側) ~ +1 (右側)
+                    speed: 0.18 + Math.random() * 0.14,
+                    size: 2.2 + Math.random() * 1.6,
+                    alpha: 0.55 + Math.random() * 0.45
+                });
+            }
+
+            // 初始化根冠細胞內的平衡石 (澱粉體 Statoliths)
+            state.gravi.statoliths = [];
+            for (let i = 0; i < 16; i++) {
+                state.gravi.statoliths.push({
+                    x: (Math.random() - 0.5) * 44,
+                    y: (Math.random() - 0.5) * 44,
+                    vx: 0,
+                    vy: 0,
+                    r: 3.8 + Math.random() * 1.2
+                });
+            }
+        }
+
+        // =====================================================
+        // 響應式調整主畫布尺寸
+        // =====================================================
+        function resizeCanvases() {
+            const rect = mainCanvas.parentElement.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            mainCanvas.width = rect.width * dpr;
+            mainCanvas.height = rect.height * dpr;
+            mainCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+
+        window.addEventListener('resize', resizeCanvases);
+
+        // =====================================================
+        // 模組切換與實驗控制邏輯
+        // =====================================================
+        function switchModule(mod) {
+            state.currentModule = mod;
+
+            // 更新頂部 Tab 樣式
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.className = 'tab-btn flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs md:text-sm font-semibold transition-all text-slate-400 hover:text-white';
+            });
+            const activeBtn = document.getElementById(`tab-${mod}`);
+            activeBtn.className = 'tab-btn flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs md:text-sm font-semibold transition-all bg-emerald-500 text-slate-950 shadow';
+
+            // 切換右側控制面板
+            document.getElementById('panel-photo').classList.toggle('hidden', mod !== 'photo');
+            document.getElementById('panel-gravi').classList.toggle('hidden', mod !== 'gravi');
+            document.getElementById('panel-thigmo').classList.toggle('hidden', mod !== 'thigmo');
+
+            // 更新畫布提示與標題
+            updateHeaderAndMechanismText();
+            resetSimulation();
+        }
+
+        function togglePlay() {
+            state.isPlaying = !state.isPlaying;
+            document.getElementById('play-icon').textContent = state.isPlaying ? '⏸' : '▶️';
+            document.getElementById('play-text').textContent = state.isPlaying ? '暫停' : '繼續';
+        }
+
+        function setSpeed(spd) {
+            state.speed = spd;
+            [1, 2, 5].forEach(s => {
+                const btn = document.getElementById(`speed-${s}`);
+                if (s === spd) {
+                    btn.className = 'speed-btn px-2 py-1 rounded text-xs font-mono bg-amber-500 text-slate-950 font-bold';
+                } else {
+                    btn.className = 'speed-btn px-2 py-1 rounded text-xs font-mono text-slate-400 hover:text-white';
+                }
+            });
+        }
+
+        function stepSimulation() {
+            state.isPlaying = false;
+            document.getElementById('play-icon').textContent = '▶️';
+            document.getElementById('play-text').textContent = '繼續';
+            advanceSimTime(0.5);
+        }
+
+        function resetSimulation() {
+            state.simTime = 0;
+            state.history = [];
+            state.thigmo.contactDetected = false;
+            initParticles();
+            computeBiologicalMetrics();
+            recordHistoryPoint();
+        }
+
+        function updateOverlaySettings() {
+            state.showAuxinParticles = document.getElementById('toggle-auxin-particles').checked;
+            state.showMicroInset = document.getElementById('toggle-micro-inset').checked;
+        }
+
+        // =====================================================
+        // 各模組參數變更處理
+        // =====================================================
+        function onPhotoParamChange() {
+            const ang = parseInt(document.getElementById('slider-light-angle').value, 10);
+            const inten = parseInt(document.getElementById('slider-light-intensity').value, 10);
+            state.photo.lightAngle = ang;
+            state.photo.lightIntensity = inten;
+
+            const dirText = ang > 5 ? '(右側光)' : (ang < -5 ? '(左側光)' : '(正頂光)');
+            document.getElementById('val-light-angle').textContent = `${ang > 0 ? '+' : ''}${ang}° ${dirText}`;
+            document.getElementById('val-light-intensity').textContent = `${inten}%`;
+            updateHeaderAndMechanismText();
+        }
+
+        function setPhotoTreatment(treat) {
+            state.photo.treatment = treat;
+            document.querySelectorAll('.photo-treat-btn').forEach(btn => {
+                const isSelected = btn.getAttribute('data-treat') === treat;
+                btn.className = isSelected
+                    ? 'photo-treat-btn text-left p-2.5 rounded-xl border transition bg-emerald-500/15 border-emerald-500/50 text-white'
+                    : 'photo-treat-btn text-left p-2.5 rounded-xl border transition bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700';
+            });
+            updateHeaderAndMechanismText();
+            resetSimulation();
+        }
+
+        function onGraviParamChange() {
+            const ang = parseInt(document.getElementById('slider-gravi-angle').value, 10);
+            state.gravi.seedAngle = ang;
+            const label = Math.abs(ang) >= 75 ? '(水平橫放)' : (Math.abs(ang) <= 10 ? '(直立)' : '(傾斜)');
+            document.getElementById('val-gravi-angle').textContent = `${ang > 0 ? '+' : ''}${ang}° ${label}`;
+            updateHeaderAndMechanismText();
+        }
+
+        function setGravityEnv(env) {
+            state.gravi.env = env;
+            document.querySelectorAll('.gravi-env-btn').forEach(btn => {
+                const isSelected = btn.getAttribute('data-genv') === env;
+                btn.className = isSelected
+                    ? 'gravi-env-btn px-2 py-1.5 rounded-lg text-[11px] font-semibold border bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
+                    : 'gravi-env-btn px-2 py-1.5 rounded-lg text-[11px] font-semibold border bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700';
+            });
+            updateHeaderAndMechanismText();
+            resetSimulation();
+        }
+
+        function onThigmoParamChange() {
+            const px = parseInt(document.getElementById('slider-pole-x').value, 10);
+            const sens = parseFloat(document.getElementById('slider-thigmo-sens').value);
+            state.thigmo.poleOffsetX = px;
+            state.thigmo.sensitivity = sens;
+
+            const side = px >= 0 ? `右側接觸 (+${px}px)` : `左側接觸 (${px}px)`;
+            document.getElementById('val-pole-x').textContent = side;
+            document.getElementById('val-thigmo-sens').textContent = `${sens.toFixed(1)}x`;
+            updateHeaderAndMechanismText();
+        }
+
+        function triggerMimosaDemo() {
+            state.thigmo.mimosaTriggeredAt = performance.now();
+        }
+
+        // =====================================================
+        // 更新狀態列與原理解析文字
+        // =====================================================
+        function updateHeaderAndMechanismText() {
+            const titleEl = document.getElementById('canvas-mode-title');
+            const hintEl = document.getElementById('canvas-hint-text');
+            const mechTitle = document.getElementById('mechanism-summary-title');
+            const mechDesc = document.getElementById('mechanism-summary-desc');
+            const ratioLabel = document.getElementById('metric-ratio-label');
+
+            if (state.currentModule === 'photo') {
+                hintEl.textContent = '可直接在畫布中「拖曳太陽光源」改變照射角度，並觀察背光側 IAA 粒子密度與兩側細胞伸長對比。';
+                ratioLabel.textContent = '背光 : 向光 IAA';
+
+                const treatMap = {
+                    normal: {
+                        t: '向光性動態模擬：正常幼苗（對照組）',
+                        mt: '單側光誘導生長素橫向運輸（Cholodny-Went 模型）',
+                        md: '胚芽鞘尖端向光素（Phototropin）接收藍光後，促使生長素（IAA）往背光側橫向運輸。背光側高濃度 IAA 加速細胞縱向伸長，使幼苗朝向光源彎曲。'
+                    },
+                    decapitated: {
+                        t: '向光性動態模擬：切除胚芽鞘尖端（達爾文/溫特實驗）',
+                        mt: '切除尖端：無生長素來源、無感光部位',
+                        md: '胚芽鞘尖端同時負責「感受光刺激」與「產生生長素（IAA）」。切除尖端後，下方伸長區缺乏生長素刺激，因此既不伸長生長、也不會產生彎曲。'
+                    },
+                    foil_cap: {
+                        t: '向光性動態模擬：尖端套上不透光錫箔帽（達爾文實驗）',
+                        mt: '尖端遮光：生長素均勻向下極性運輸',
+                        md: '證明「感光部位在胚芽鞘尖端」。套上不透光錫箔帽後，尖端無法感知單側光方向，生長素在兩側維持 50:50 均勻分布，因此幼苗直立向上生長。'
+                    },
+                    mica_lit: {
+                        t: '向光性動態模擬：雲母片插入向光側（波森-詹森實驗）',
+                        mt: '向光側阻斷：背光側極性運輸仍暢通無阻',
+                        md: '不透水的雲母片插入向光側下方時，由於尖端已將大部分 IAA 橫向轉移至背光側，背光側仍能順利向下運輸高濃度生長素，幼苗依然向光彎曲。'
+                    },
+                    mica_shaded: {
+                        t: '向光性動態模擬：雲母片插入背光側（波森-詹森實驗）',
+                        mt: '背光側阻斷：阻斷生長素向下極性運輸',
+                        md: '當不透水雲母片插入背光側時，由尖端橫向運來的大量生長素被雲母片攔截，無法到達下方背光側伸長區，因此無法產生向光彎曲。'
+                    },
+                    agar_left: {
+                        t: '向光性動態模擬：溫特（Went）含生長素洋菜塊偏放實驗',
+                        mt: '溫特實驗（1926）：化學物質（IAA）不對稱分布直接造成彎曲',
+                        md: '切去尖端後，將含有生長素的洋菜塊偏放於「左側」。左側下方細胞獲得較多 IAA 而快速伸長，導致幼苗在無單側光刺激下直接朝向「右側（對側）」彎曲。'
+                    }
+                };
+                const info = treatMap[state.photo.treatment];
+                titleEl.textContent = info.t;
+                mechTitle.textContent = info.mt;
+                mechDesc.textContent = info.md;
+
+            } else if (state.currentModule === 'gravi') {
+                hintEl.textContent = '觀察左下角「根冠細胞平衡石（澱粉體）」如何隨重力滾動沉降，並對照右側生長素雙鐘形劑量曲線。';
+                ratioLabel.textContent = '下側 : 上側 IAA';
+
+                const envNames = {
+                    earth: '地球重力環境 (1.0g)',
+                    moon: '月球低重力環境 (0.16g)',
+                    space: '微重力太空站環境 (0g)',
+                    clinostat: '慢速旋轉迴轉器 (Clinostat)'
+                };
+                titleEl.textContent = `向地性與劑量效應：${envNames[state.gravi.env]}`;
+                mechTitle.textContent = '澱粉體平衡石沉降與「根、莖對生長素敏感度差異」';
+                mechDesc.textContent = '橫放時，根冠細胞內的澱粉體（Statoliths）沉降至下側，引導生長素累積於根與莖的下側。莖對 IAA 較不敏感，下側高濃度促進伸長（背地向上彎）；根對 IAA 極度敏感，下側高濃度反而抑制伸長（向地向下彎）。';
+
+            } else if (state.currentModule === 'thigmo') {
+                hintEl.textContent = '可直接在畫布中「左右拖曳竹竿支撐物」，或點擊右側按鈕測試含羞草「觸發運動（膨壓變化）」。';
+                ratioLabel.textContent = '外側 : 接觸側伸長';
+                titleEl.textContent = '向觸性動態模擬：卷鬚接觸機械刺激與螺旋纏繞';
+                mechTitle.textContent = '接觸誘導 Ca²⁺ 波與兩側細胞不對稱伸長（向觸性 vs. 觸發運動）';
+                mechDesc.textContent = '當卷鬚接觸竹竿時，表皮機械受器引發 Ca²⁺ 內流與乙烯/生長素梯度重組：接觸側細胞伸長受抑甚至微幅收縮，非接觸側（外側）細胞快速伸長，使卷鬚緊密纏繞支撐物。';
+            }
+        }
+
+        // =====================================================
+        // 核心生物物理與數學模型計算
+        // =====================================================
+        function computeBiologicalMetrics() {
+            const tNorm = Math.min(1, state.simTime / 16); // 16小時達主要彎曲飽和
+            const smoothProgress = 1 - Math.pow(1 - tNorm, 2.2);
+            state.metrics.growthProgress = smoothProgress;
+
+            if (state.currentModule === 'photo') {
+                const { lightAngle, lightIntensity, treatment } = state.photo;
+                const sinAngle = Math.sin((lightAngle * Math.PI) / 180);
+                const intensityFactor = lightIntensity / 100;
+
+                let targetBend = 0;
+                let highSidePct = 50;
+                let growthRate = 1.0;
+
+                if (treatment === 'normal') {
+                    // 正常幼苗：向光彎曲
+                    const bias = sinAngle * intensityFactor;
+                    highSidePct = Math.round(50 + Math.abs(bias) * 26);
+                    targetBend = bias * 62;
+                } else if (treatment === 'decapitated') {
+                    // 切除尖端：無 IAA，不生長不彎曲
+                    highSidePct = 0;
+                    targetBend = 0;
+                    growthRate = 0.08;
+                } else if (treatment === 'foil_cap') {
+                    // 錫箔帽遮光：均勻分布，直立向上生長
+                    highSidePct = 50;
+                    targetBend = 0;
+                } else if (treatment === 'mica_lit') {
+                    // 雲母片插向光側：背光側仍暢通，仍向光彎曲(略減)
+                    const bias = sinAngle * intensityFactor;
+                    highSidePct = Math.round(50 + Math.abs(bias) * 24);
+                    targetBend = bias * 52;
+                } else if (treatment === 'mica_shaded') {
+                    // 雲母片插背光側：阻斷背光側 IAA，不向光彎曲
+                    highSidePct = 50;
+                    targetBend = 0;
+                    growthRate = 0.35;
+                } else if (treatment === 'agar_left') {
+                    // 溫特實驗：左側放含 IAA 洋菜塊 -> 固定向右彎曲 (+48度)
+                    highSidePct = 74;
+                    targetBend = 48;
+                }
+
+                state.metrics.shootBendAngle = targetBend * smoothProgress;
+                state.metrics.rootBendAngle = 0;
+                state.metrics.auxinHighSidePct = highSidePct;
+                state.metrics.cellElongationRatio = treatment === 'decapitated'
+                    ? 1.0
+                    : +(1 + (Math.abs(state.metrics.shootBendAngle) / 65) * 0.55 * growthRate).toFixed(2);
+
+            } else if (state.currentModule === 'gravi') {
+                const { seedAngle, env } = state.gravi;
+                const gFactor = env === 'earth' ? 1.0 : (env === 'moon' ? 0.38 : 0.0);
+                const tiltFactor = Math.sin((seedAngle * Math.PI) / 180);
+
+                // 目標：莖向上彎 (抵消 seedAngle)，根向下彎
+                const maxCorrection = seedAngle * gFactor;
+                state.metrics.shootBendAngle = -maxCorrection * 0.92 * smoothProgress;
+                state.metrics.rootBendAngle = maxCorrection * 0.88 * smoothProgress;
+
+                state.metrics.auxinHighSidePct = Math.round(50 + Math.abs(tiltFactor) * gFactor * 24);
+                state.metrics.cellElongationRatio = +(1 + Math.abs(tiltFactor) * gFactor * smoothProgress * 0.48).toFixed(2);
+
+            } else if (state.currentModule === 'thigmo') {
+                const { poleOffsetX, sensitivity } = state.thigmo;
+                const dist = Math.abs(poleOffsetX);
+                // 若支撐桿距離在可接觸範圍內 (< 48px) 且時間超過 2.5 hr 則開始接觸纏繞
+                const canTouch = dist <= 48;
+                const touchStartHr = 2.5;
+
+                if (canTouch && state.simTime >= touchStartHr) {
+                    state.thigmo.contactDetected = true;
+                    const wrapProgress = Math.min(1, (state.simTime - touchStartHr) / 14);
+                    const sign = poleOffsetX >= 0 ? 1 : -1;
+                    state.metrics.shootBendAngle = sign * wrapProgress * 320 * sensitivity;
+                    state.metrics.auxinHighSidePct = Math.round(50 + wrapProgress * 28);
+                    state.metrics.cellElongationRatio = +(1 + wrapProgress * 0.65 * sensitivity).toFixed(2);
+                } else {
+                    state.thigmo.contactDetected = false;
+                    state.metrics.shootBendAngle = Math.sin(state.simTime * 0.6) * 8; // 自由迴旋運動 (Circumnutation)
+                    state.metrics.auxinHighSidePct = 52;
+                    state.metrics.cellElongationRatio = 1.04;
+                }
+            }
+
+            updateDOMMetrics();
+        }
+
+        function updateDOMMetrics() {
+            document.getElementById('sim-time-display').textContent = state.simTime.toFixed(1);
+            const ang = state.metrics.shootBendAngle;
+            const sign = ang > 0.1 ? '+' : '';
+            document.getElementById('metric-angle').textContent = `${sign}${ang.toFixed(1)}°`;
+
+            const high = state.metrics.auxinHighSidePct;
+            const low = high === 0 ? 0 : 100 - high;
+            document.getElementById('metric-ratio').textContent = `${high} : ${low}`;
+
+            // 更新右下角三欄數據卡
+            document.getElementById('card-val-1').textContent = high === 0 ? '無 IAA (0%)' : `${high}% : ${low}%`;
+            document.getElementById('card-val-2').textContent = `${state.metrics.cellElongationRatio.toFixed(2)} : 1.00`;
+            document.getElementById('card-val-3').textContent = `${sign}${ang.toFixed(1)}°`;
+        }
+
+        function recordHistoryPoint() {
+            if (state.history.length === 0 || state.simTime - state.history[state.history.length - 1].t >= 0.25) {
+                state.history.push({
+                    t: state.simTime,
+                    angle: Math.abs(state.metrics.shootBendAngle),
+                    auxinRatio: state.metrics.auxinHighSidePct,
+                    elongation: (state.metrics.cellElongationRatio - 1) * 100
+                });
+                if (state.history.length > 100) state.history.shift();
+            }
+        }
+
+        function advanceSimTime(dtHours) {
+            state.simTime = Math.min(state.maxSimTime, state.simTime + dtHours);
+            computeBiologicalMetrics();
+            recordHistoryPoint();
+            if (state.simTime >= state.maxSimTime) {
+                // 到達 24 小時後保持在終態但粒子持續流動
+            }
+        }
+
+        // =====================================================
+        // 滑鼠與觸控互動 (拖曳太陽光源 / 拖曳竹竿支撐物)
+        // =====================================================
+        function getCanvasPointerPos(evt) {
+            const rect = mainCanvas.getBoundingClientRect();
+            const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+            const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top,
+                w: rect.width,
+                h: rect.height
+            };
+        }
+
+        mainCanvas.addEventListener('pointerdown', (e) => {
+            const pos = getCanvasPointerPos(e);
+            if (state.currentModule === 'photo') {
+                const dx = pos.x - state.photo.sunPos.x;
+                const dy = pos.y - state.photo.sunPos.y;
+                if (Math.hypot(dx, dy) < 55) {
+                    state.photo.isDraggingSun = true;
+                }
+            } else if (state.currentModule === 'thigmo') {
+                const centerX = pos.w * 0.5;
+                const poleX = centerX + state.thigmo.poleOffsetX;
+                if (Math.abs(pos.x - poleX) < 40) {
+                    state.thigmo.isDraggingPole = true;
+                }
+            }
+        });
+
+        window.addEventListener('pointermove', (e) => {
+            if (!state.photo.isDraggingSun && !state.thigmo.isDraggingPole) return;
+            const pos = getCanvasPointerPos(e);
+
+            if (state.photo.isDraggingSun && state.currentModule === 'photo') {
+                const baseX = pos.w * 0.5;
+                const baseY = pos.h * 0.75;
+                const angleRad = Math.atan2(pos.x - baseX, baseY - pos.y);
+                let deg = Math.round((angleRad * 180) / Math.PI);
+                deg = Math.max(-80, Math.min(80, deg));
+                document.getElementById('slider-light-angle').value = deg;
+                onPhotoParamChange();
+            } else if (state.thigmo.isDraggingPole && state.currentModule === 'thigmo') {
+                const centerX = pos.w * 0.5;
+                let offset = Math.round(pos.x - centerX);
+                offset = Math.max(-70, Math.min(70, offset));
+                document.getElementById('slider-pole-x').value = offset;
+                onThigmoParamChange();
+            }
+        });
+
+        window.addEventListener('pointerup', () => {
+            state.photo.isDraggingSun = false;
+            state.thigmo.isDraggingPole = false;
+        });
+
+        // =====================================================
+        // 視覺化繪製：1. 向光性模組 (Phototropism)
+        // =====================================================
+        function renderPhototropism(ctx, w, h, dt) {
+            const baseX = w * 0.5;
+            const soilY = h * 0.80;
+
+            // 1. 繪製土壤與實驗平台
+            drawSoilAndGround(ctx, w, h, soilY);
+
+            // 2. 計算並繪製太陽/光源與光束
+            const { lightAngle, lightIntensity, treatment } = state.photo;
+            const angleRad = (lightAngle * Math.PI) / 180;
+            const orbitRadius = Math.min(w, h) * 0.56;
+            const sunX = baseX + Math.sin(angleRad) * orbitRadius;
+            const sunY = soilY - Math.cos(angleRad) * orbitRadius * 0.88;
+            state.photo.sunPos = { x: sunX, y: sunY };
+
+            // 光束漸層
+            if (lightIntensity > 0) {
+                ctx.save();
+                const beamGrad = ctx.createLinearGradient(sunX, sunY, baseX, soilY - 90);
+                const alpha = (lightIntensity / 100) * 0.24;
+                beamGrad.addColorStop(0, `rgba(251, 191, 36, ${alpha * 1.4})`);
+                beamGrad.addColorStop(1, 'rgba(251, 191, 36, 0.0)');
+                ctx.fillStyle = beamGrad;
+                ctx.beginPath();
+                ctx.moveTo(sunX, sunY);
+                ctx.lineTo(baseX - 95, soilY);
+                ctx.lineTo(baseX + 95, soilY);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // 太陽本體與光暈
+            drawDraggableSun(ctx, sunX, sunY, lightIntensity);
+
+            // 3. 計算胚芽鞘分段骨架 (Skeletal Spine)
+            const segments = 20;
+            const isDecap = treatment === 'decapitated' || treatment === 'agar_left';
+            const growthFactor = treatment === 'decapitated' ? 0.1 : 1.0;
+            const totalLength = (135 + state.metrics.growthProgress * 65 * growthFactor);
+            const bendRad = (state.metrics.shootBendAngle * Math.PI) / 180;
+
+            const spine = [];
+            let cx = baseX;
+            let cy = soilY;
+            let currentAngle = 0; // 0 為正上方
+
+            for (let i = 0; i <= segments; i++) {
+                const t = i / segments;
+                // 彎曲主要發生在尖端下方伸長區 (t = 0.25 ~ 0.8)
+                const bendWeight = Math.sin(t * Math.PI);
+                currentAngle = bendRad * t * (0.65 + 0.35 * bendWeight);
+                spine.push({
+                    x: cx,
+                    y: cy,
+                    angle: currentAngle,
+                    width: (1 - t * 0.42) * 26
+                });
+                const stepLen = totalLength / segments;
+                cx += Math.sin(currentAngle) * stepLen;
+                cy -= Math.cos(currentAngle) * stepLen;
+            }
+
+            // 4. 繪製胚芽鞘組織 (向光側與背光側雙色漸層以呈現 IAA 濃度差異)
+            drawColeoptileBody(ctx, spine, isDecap, lightAngle);
+
+            // 5. 繪製實驗處理配件 (錫箔帽 / 雲母片 / 溫特洋菜塊)
+            drawPhotoTreatmentAccessories(ctx, spine, treatment, lightAngle);
+
+            // 6. 繪製生長素 (IAA) 極性與橫向運輸粒子流
+            if (state.showAuxinParticles && treatment !== 'decapitated') {
+                updateAndDrawAuxinParticles(ctx, spine, dt, 'photo');
+            }
+
+            // 7. 繪製微觀細胞縱向伸長率放大鏡 (左上/左下浮動視窗)
+            if (state.showMicroInset) {
+                drawPhotoMicroInset(ctx, w, h);
+            }
+        }
+
+        function drawSoilAndGround(ctx, w, h, soilY) {
+            const grad = ctx.createLinearGradient(0, soilY, 0, h);
+            grad.addColorStop(0, '#1e293b');
+            grad.addColorStop(0.15, '#0f172a');
+            grad.addColorStop(1, '#060b14');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, soilY, w, h - soilY);
+
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, soilY);
+            ctx.lineTo(w, soilY);
+            ctx.stroke();
+
+            // 刻度標線
+            ctx.fillStyle = '#64748b';
+            ctx.font = '10px "JetBrains Mono"';
+            for (let x = 60; x < w; x += 60) {
+                ctx.fillRect(x, soilY, 1, 6);
+            }
+        }
+
+        function drawDraggableSun(ctx, x, y, intensity) {
+            ctx.save();
+            const glowRadius = 26 + (intensity / 100) * 22;
+            const glow = ctx.createRadialGradient(x, y, 6, x, y, glowRadius);
+            glow.addColorStop(0, 'rgba(253, 224, 71, 1)');
+            glow.addColorStop(0.5, 'rgba(245, 158, 11, 0.55)');
+            glow.addColorStop(1, 'rgba(245, 158, 11, 0)');
+            ctx.fillStyle = glow;
+            ctx.beginPath();
+            ctx.arc(x, y, glowRadius, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = intensity > 0 ? '#fde047' : '#475569';
+            ctx.beginPath();
+            ctx.arc(x, y, 16, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#f59e0b';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.fillStyle = '#fef3c7';
+            ctx.font = '600 11px "Noto Sans TC"';
+            ctx.textAlign = 'center';
+            ctx.fillText(`☀️ 拖曳光源 (${state.photo.lightAngle}°)`, x, y - 24);
+            ctx.restore();
+        }
+
+        function drawColeoptileBody(ctx, spine, isDecap, lightAngle) {
+            const maxIdx = isDecap ? spine.length - 4 : spine.length - 1;
+            ctx.save();
+
+            // 繪製左右兩側組織路徑
+            const leftPts = [];
+            const rightPts = [];
+            for (let i = 0; i <= maxIdx; i++) {
+                const p = spine[i];
+                const nx = Math.cos(p.angle);
+                const ny = Math.sin(p.angle);
+                let r = p.width;
+                if (!isDecap && i > maxIdx - 3) {
+                    // 圓潤尖端
+                    const tipFactor = (maxIdx - i + 0.4) / 3.4;
+                    r *= Math.sqrt(Math.max(0.05, tipFactor));
+                }
+                leftPts.push({ x: p.x - nx * r, y: p.y - ny * r });
+                rightPts.push({ x: p.x + nx * r, y: p.y + ny * r });
+            }
+
+            ctx.beginPath();
+            ctx.moveTo(leftPts[0].x, leftPts[0].y);
+            for (let i = 1; i < leftPts.length; i++) ctx.lineTo(leftPts[i].x, leftPts[i].y);
+            if (!isDecap) {
+                const tip = spine[maxIdx];
+                ctx.quadraticCurveTo(
+                    tip.x + Math.sin(tip.angle) * 14,
+                    tip.y - Math.cos(tip.angle) * 14,
+                    rightPts[rightPts.length - 1].x,
+                    rightPts[rightPts.length - 1].y
+                );
+            } else {
+                ctx.lineTo(rightPts[rightPts.length - 1].x, rightPts[rightPts.length - 1].y);
+            }
+            for (let i = rightPts.length - 2; i >= 0; i--) ctx.lineTo(rightPts[i].x, rightPts[i].y);
+            ctx.closePath();
+
+            // 組織翠綠漸層填色
+            const base = spine[0];
+            const top = spine[maxIdx];
+            const plantGrad = ctx.createLinearGradient(base.x, base.y, top.x, top.y);
+            plantGrad.addColorStop(0, '#059669');
+            plantGrad.addColorStop(0.6, '#10b981');
+            plantGrad.addColorStop(1, '#6ee7b7');
+            ctx.fillStyle = plantGrad;
+            ctx.fill();
+
+            // 若有不對稱生長素，將背光側加深琥珀螢光色澤
+            if (state.metrics.auxinHighSidePct > 52) {
+                const shadedIsLeft = lightAngle >= 0 && state.photo.treatment !== 'agar_left' || state.photo.treatment === 'agar_left';
+                const sidePts = shadedIsLeft ? leftPts : rightPts;
+                ctx.strokeStyle = 'rgba(245, 158, 11, 0.75)';
+                ctx.lineWidth = 5;
+                ctx.beginPath();
+                for (let i = 0; i < sidePts.length; i++) {
+                    if (i === 0) ctx.moveTo(sidePts[i].x, sidePts[i].y);
+                    else ctx.lineTo(sidePts[i].x, sidePts[i].y);
+                }
+                ctx.stroke();
+            }
+
+            ctx.strokeStyle = '#a7f3d0';
+            ctx.lineWidth = 1.8;
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        function drawPhotoTreatmentAccessories(ctx, spine, treatment, lightAngle) {
+            ctx.save();
+            if (treatment === 'foil_cap') {
+                // 尖端不透光錫箔帽
+                const tip = spine[spine.length - 1];
+                const sub = spine[spine.length - 5];
+                ctx.translate(sub.x, sub.y);
+                ctx.rotate(sub.angle);
+                ctx.fillStyle = '#94a3b8';
+                ctx.strokeStyle = '#f8fafc';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.roundRect(-22, -46, 44, 48, [18, 18, 4, 4]);
+                ctx.fill();
+                ctx.stroke();
+                ctx.fillStyle = '#0f172a';
+                ctx.font = 'bold 10px "Noto Sans TC"';
+                ctx.textAlign = 'center';
+                ctx.fillText('錫箔帽', 0, -18);
+            } else if (treatment === 'mica_lit' || treatment === 'mica_shaded') {
+                // 雲母片插入向光側或背光側
+                const node = spine[Math.floor(spine.length * 0.65)];
+                ctx.translate(node.x, node.y);
+                ctx.rotate(node.angle);
+                const lightFromRight = lightAngle >= 0;
+                const insertRight = (treatment === 'mica_lit' && lightFromRight) || (treatment === 'mica_shaded' && !lightFromRight);
+                const xStart = insertRight ? 0 : -34;
+                ctx.fillStyle = '#38bdf8';
+                ctx.strokeStyle = '#e0f2fe';
+                ctx.lineWidth = 1.5;
+                ctx.fillRect(xStart, -3.5, 34, 7);
+                ctx.strokeRect(xStart, -3.5, 34, 7);
+
+                ctx.fillStyle = '#7dd3fc';
+                ctx.font = 'bold 11px "Noto Sans TC"';
+                ctx.textAlign = insertRight ? 'left' : 'right';
+                ctx.fillText('雲母片 (阻斷運輸)', insertRight ? 38 : -38, 4);
+            } else if (treatment === 'agar_left') {
+                // 溫特含 IAA 洋菜塊偏放於切口左側
+                const cutTop = spine[spine.length - 4];
+                ctx.translate(cutTop.x, cutTop.y);
+                ctx.rotate(cutTop.angle);
+                ctx.fillStyle = 'rgba(245, 158, 11, 0.88)';
+                ctx.strokeStyle = '#fde68a';
+                ctx.lineWidth = 2;
+                ctx.fillRect(-20, -20, 20, 20);
+                ctx.strokeRect(-20, -20, 20, 20);
+
+                ctx.fillStyle = '#fef3c7';
+                ctx.font = 'bold 10px "Noto Sans TC"';
+                ctx.textAlign = 'right';
+                ctx.fillText('含 IAA 洋菜塊', -25, -6);
+            }
+            ctx.restore();
+        }
+
+        function updateAndDrawAuxinParticles(ctx, spine, dt, mode) {
+            const maxIdx = (mode === 'photo' && (state.photo.treatment === 'decapitated' || state.photo.treatment === 'agar_left'))
+                ? spine.length - 4
+                : spine.length - 1;
+
+            const highPct = state.metrics.auxinHighSidePct / 100;
+            // 決定哪一側是高濃度側 (-1 為左，+1 為右)
+            let highSideDir = -1;
+            if (mode === 'photo') {
+                if (state.photo.treatment === 'agar_left') highSideDir = -1;
+                else highSideDir = state.photo.lightAngle >= 0 ? -1 : 1;
+            }
+
+            ctx.save();
+            for (const p of state.auxinParticles) {
+                if (state.isPlaying) {
+                    p.progress += p.speed * dt * state.speed * 0.45;
+                    if (p.progress > 1) {
+                        p.progress = 0;
+                        // 依照兩側濃度比分配粒子車道
+                        const goHighSide = Math.random() < highPct;
+                        const sideSign = goHighSide ? highSideDir : -highSideDir;
+                        p.lane = sideSign * (0.18 + Math.random() * 0.65);
+                    }
+                }
+
+                // 若遇到雲母片則攔截停止在雲母片上方
+                if (mode === 'photo' && (state.photo.treatment === 'mica_lit' || state.photo.treatment === 'mica_shaded')) {
+                    const lightFromRight = state.photo.lightAngle >= 0;
+                    const blockedSide = (state.photo.treatment === 'mica_lit' && lightFromRight) || (state.photo.treatment === 'mica_shaded' && !lightFromRight) ? 1 : -1;
+                    if (Math.sign(p.lane) === blockedSide && p.progress > 0.34) {
+                        p.progress = 0.32 + Math.random() * 0.03;
+                    }
+                }
+
+                const spineIdxFloat = (1 - p.progress) * maxIdx;
+                const idx = Math.max(0, Math.min(maxIdx - 1, Math.floor(spineIdxFloat)));
+                const frac = spineIdxFloat - idx;
+                const n0 = spine[idx];
+                const n1 = spine[idx + 1];
+
+                const sx = n0.x + (n1.x - n0.x) * frac;
+                const sy = n0.y + (n1.y - n0.y) * frac;
+                const sang = n0.angle + (n1.angle - n0.angle) * frac;
+                const sw = n0.width;
+
+                const px = sx + Math.cos(sang) * p.lane * sw * 0.78;
+                const py = sy + Math.sin(sang) * p.lane * sw * 0.78;
+
+                ctx.fillStyle = `rgba(251, 191, 36, ${p.alpha})`;
+                ctx.shadowColor = '#f59e0b';
+                ctx.shadowBlur = 6;
+                ctx.beginPath();
+                ctx.arc(px, py, p.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        // 微觀細胞伸長對比放大鏡
+        function drawPhotoMicroInset(ctx, w, h) {
+            const boxW = 215;
+            const boxH = 175;
+            const boxX = 16;
+            const boxY = 56;
+
+            ctx.save();
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.roundRect(boxX, boxY, boxW, boxH, 12);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#e2e8f0';
+            ctx.font = 'bold 11px "Noto Sans TC"';
+            ctx.fillText('🔬 兩側細胞縱向伸長率放大鏡', boxX + 12, boxY + 20);
+
+            const ratio = state.metrics.cellElongationRatio;
+            const lightFromRight = state.photo.lightAngle >= 0 && state.photo.treatment !== 'agar_left' || state.photo.treatment === 'agar_left';
+            const leftRatio = lightFromRight ? ratio : 1.0;
+            const rightRatio = lightFromRight ? 1.0 : ratio;
+
+            // 繪製左側與右側細胞柱
+            const colY = boxY + 42;
+            drawCellColumn(ctx, boxX + 26, colY, 68, 102, leftRatio, lightFromRight ? '左側 (背光高IAA)' : '左側 (向光低IAA)', lightFromRight);
+            drawCellColumn(ctx, boxX + 118, colY, 68, 102, rightRatio, lightFromRight ? '右側 (向光低IAA)' : '右側 (背光高IAA)', !lightFromRight);
+
+            ctx.restore();
+        }
+
+        function drawCellColumn(ctx, x, y, w, h, elongationRatio, label, isHighAuxin) {
+            const cellCount = Math.max(2, Math.round(5 / elongationRatio));
+            const cellH = (h - 14) / cellCount;
+
+            for (let i = 0; i < cellCount; i++) {
+                const cy = y + i * cellH;
+                ctx.fillStyle = isHighAuxin ? 'rgba(16, 185, 129, 0.32)' : 'rgba(16, 185, 129, 0.15)';
+                ctx.strokeStyle = isHighAuxin ? '#fbbf24' : '#34d399';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.roundRect(x, cy, w, cellH - 3, 4);
+                ctx.fill();
+                ctx.stroke();
+
+                // 液泡與生長素點綴
+                ctx.fillStyle = isHighAuxin ? 'rgba(245, 158, 11, 0.35)' : 'rgba(52, 211, 153, 0.2)';
+                ctx.beginPath();
+                ctx.roundRect(x + 8, cy + 4, w - 16, Math.max(4, cellH - 11), 3);
+                ctx.fill();
+            }
+
+            ctx.fillStyle = isHighAuxin ? '#fbbf24' : '#94a3b8';
+            ctx.font = '600 10px "Noto Sans TC"';
+            ctx.textAlign = 'center';
+            ctx.fillText(label, x + w / 2, y + h + 4);
+        }
+
+        // =====================================================
+        // 視覺化繪製：2. 向地性模組 (Gravitropism)
+        // =====================================================
+        function renderGravitropism(ctx, w, h, dt) {
+            const centerX = w * 0.52;
+            const centerY = h * 0.48;
+
+            // 若為慢速旋轉迴轉器 (Clinostat) 則持續旋轉視覺標記
+            if (state.gravi.env === 'clinostat' && state.isPlaying) {
+                state.gravi.clinostatPhase += dt * state.speed * 1.8;
+            }
+
+            // 1. 繪製重力場背景指示箭頭
+            drawGravityFieldVectors(ctx, w, h);
+
+            // 2. 計算種子基準角度與莖、根的彎曲骨架
+            const baseSeedRad = (state.gravi.seedAngle * Math.PI) / 180;
+            const shootBendRad = (state.metrics.shootBendAngle * Math.PI) / 180;
+            const rootBendRad = (state.metrics.rootBendAngle * Math.PI) / 180;
+            const progress = state.metrics.growthProgress;
+
+            // 莖部骨架 (負向地性：向上彎曲)
+            const shootSpine = [];
+            let sx = centerX;
+            let sy = centerY;
+            const shootLen = 115 + progress * 55;
+            const segs = 18;
+
+            for (let i = 0; i <= segs; i++) {
+                const t = i / segs;
+                const ang = baseSeedRad + shootBendRad * Math.pow(t, 1.15);
+                shootSpine.push({ x: sx, y: sy, angle: ang, width: (1 - t * 0.45) * 16 });
+                sx += Math.sin(ang) * (shootLen / segs);
+                sy -= Math.cos(ang) * (shootLen / segs);
+            }
+
+            // 根部骨架 (正向地性：向下彎曲，初始方向與莖相反 baseSeedRad + PI)
+            const rootSpine = [];
+            let rx = centerX;
+            let ry = centerY;
+            const rootLen = 110 + progress * 60;
+
+            for (let i = 0; i <= segs; i++) {
+                const t = i / segs;
+                const ang = (baseSeedRad + Math.PI) - rootBendRad * Math.pow(t, 1.2);
+                rootSpine.push({ x: rx, y: ry, angle: ang, width: (1 - t * 0.55) * 13 });
+                rx += Math.sin(ang) * (rootLen / segs);
+                ry -= Math.cos(ang) * (rootLen / segs);
+            }
+
+            // 3. 繪製根部 (象牙白至琥珀漸層，標示下側高 IAA 抑制區)
+            drawOrganTube(ctx, rootSpine, '#e2e8f0', '#94a3b8', true);
+
+            // 4. 繪製莖部與嫩葉 (翠綠漸層，標示下側高 IAA 促進區)
+            drawOrganTube(ctx, shootSpine, '#059669', '#34d399', false);
+            drawShootLeaves(ctx, shootSpine[shootSpine.length - 1]);
+
+            // 5. 繪製中央發芽種子本體
+            ctx.save();
+            ctx.translate(centerX, centerY);
+            ctx.rotate(baseSeedRad + (state.gravi.env === 'clinostat' ? state.gravi.clinostatPhase : 0));
+            const seedGrad = ctx.createRadialGradient(-4, -4, 3, 0, 0, 24);
+            seedGrad.addColorStop(0, '#fbbf24');
+            seedGrad.addColorStop(0.7, '#b45309');
+            seedGrad.addColorStop(1, '#78350f');
+            ctx.fillStyle = seedGrad;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 18, 24, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#fde68a';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.restore();
+
+            // 6. 標示根與莖上下兩側的促進/抑制文字標籤
+            if (Math.abs(state.gravi.seedAngle) > 15 && state.gravi.env !== 'space' && state.gravi.env !== 'clinostat') {
+                const sMid = shootSpine[10];
+                const rMid = rootSpine[10];
+                ctx.save();
+                ctx.font = 'bold 11px "Noto Sans TC"';
+                ctx.fillStyle = '#34d399';
+                ctx.fillText('▲ 莖下側高 IAA：促進伸長 (負向地性)', sMid.x + 18, sMid.y + 26);
+                ctx.fillStyle = '#fb7185';
+                ctx.fillText('▼ 根下側高 IAA：抑制伸長 (正向地性)', rMid.x - 175, rMid.y + 28);
+                ctx.restore();
+            }
+
+            // 7. 左上角微觀放大視窗：根冠細胞平衡石 (Statoliths / 澱粉體) 沉降物理模擬
+            if (state.showMicroInset) {
+                updateAndDrawStatolithsInset(ctx, dt, rootSpine[rootSpine.length - 1]);
+            }
+
+            // 8. 同步更新右側生長素劑量效應曲線圖 (Dose-Response Curve)
+            renderDoseResponseCurve();
+        }
+
+        function drawGravityFieldVectors(ctx, w, h) {
+            ctx.save();
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.18)';
+            ctx.fillStyle = 'rgba(148, 163, 184, 0.28)';
+            ctx.lineWidth = 1.5;
+
+            if (state.gravi.env === 'space') {
+                ctx.font = 'bold 12px "JetBrains Mono"';
+                ctx.fillText('🛸 0g MICROGRAVITY (無單向重力沉降)', w - 270, 82);
+            } else if (state.gravi.env === 'clinostat') {
+                ctx.font = 'bold 12px "JetBrains Mono"';
+                ctx.fillText('🔄 CLINOSTAT 慢速旋轉抵消單向重力', w - 275, 82);
+            } else {
+                const gLabel = state.gravi.env === 'earth' ? 'g = 9.8 m/s² (1.0g)' : 'g = 1.6 m/s² (0.16g)';
+                ctx.font = 'bold 12px "JetBrains Mono"';
+                ctx.fillText(`⬇ 重力向量 ${gLabel}`, w - 220, 82);
+                for (let x = 90; x < w - 50; x += 110) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, 110);
+                    ctx.lineTo(x, 155);
+                    ctx.lineTo(x - 5, 146);
+                    ctx.moveTo(x, 155);
+                    ctx.lineTo(x + 5, 146);
+                    ctx.stroke();
+                }
+            }
+            ctx.restore();
+        }
+
+        function drawOrganTube(ctx, spine, colorStart, colorEnd, isRoot) {
+            ctx.save();
+            const leftPts = [];
+            const rightPts = [];
+            for (let i = 0; i < spine.length; i++) {
+                const p = spine[i];
+                const nx = Math.cos(p.angle);
+                const ny = Math.sin(p.angle);
+                leftPts.push({ x: p.x - nx * p.width, y: p.y - ny * p.width });
+                rightPts.push({ x: p.x + nx * p.width, y: p.y + ny * p.width });
+            }
+
+            ctx.beginPath();
+            ctx.moveTo(leftPts[0].x, leftPts[0].y);
+            for (let i = 1; i < leftPts.length; i++) ctx.lineTo(leftPts[i].x, leftPts[i].y);
+            const tip = spine[spine.length - 1];
+            ctx.quadraticCurveTo(
+                tip.x + Math.sin(tip.angle) * 14,
+                tip.y - Math.cos(tip.angle) * 14,
+                rightPts[rightPts.length - 1].x,
+                rightPts[rightPts.length - 1].y
+            );
+            for (let i = rightPts.length - 2; i >= 0; i--) ctx.lineTo(rightPts[i].x, rightPts[i].y);
+            ctx.closePath();
+
+            const grad = ctx.createLinearGradient(spine[0].x, spine[0].y, tip.x, tip.y);
+            grad.addColorStop(0, colorStart);
+            grad.addColorStop(1, colorEnd);
+            ctx.fillStyle = grad;
+            ctx.fill();
+            ctx.strokeStyle = isRoot ? '#cbd5e1' : '#6ee7b7';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            // 標示下側高濃度 IAA 光帶
+            if (state.metrics.auxinHighSidePct > 53) {
+                const lowerPts = leftPts[8].y > rightPts[8].y ? leftPts : rightPts;
+                ctx.strokeStyle = isRoot ? 'rgba(244, 63, 94, 0.85)' : 'rgba(245, 158, 11, 0.85)';
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                for (let i = 2; i < lowerPts.length - 2; i++) {
+                    if (i === 2) ctx.moveTo(lowerPts[i].x, lowerPts[i].y);
+                    else ctx.lineTo(lowerPts[i].x, lowerPts[i].y);
+                }
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        function drawShootLeaves(ctx, tipNode) {
+            ctx.save();
+            ctx.translate(tipNode.x, tipNode.y);
+            ctx.rotate(tipNode.angle);
+            ctx.fillStyle = '#10b981';
+            ctx.strokeStyle = '#a7f3d0';
+            ctx.lineWidth = 1.5;
+
+            // 左右兩片嫩葉
+            ctx.beginPath();
+            ctx.ellipse(-10, -8, 12, 6, -0.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.ellipse(10, -8, 12, 6, 0.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        // 根冠細胞平衡石 (澱粉體 Statoliths) 即時物理沉降放大視窗
+        function updateAndDrawStatolithsInset(ctx, dt, rootTipNode) {
+            const boxX = 16;
+            const boxY = 56;
+            const boxW = 210;
+            const boxH = 185;
+
+            ctx.save();
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.roundRect(boxX, boxY, boxW, boxH, 12);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#e2e8f0';
+            ctx.font = 'bold 11px "Noto Sans TC"';
+            ctx.fillText('🔬 根冠細胞平衡石 (澱粉體) 沉降', boxX + 12, boxY + 20);
+
+            const cellCenterX = boxX + boxW / 2;
+            const cellCenterY = boxY + 98;
+            const cellRadius = 46;
+
+            // 繪製旋轉中的根冠平衡細胞外框
+            const cellAngle = rootTipNode.angle;
+            ctx.save();
+            ctx.translate(cellCenterX, cellCenterY);
+            ctx.rotate(cellAngle);
+            ctx.fillStyle = 'rgba(16, 185, 129, 0.12)';
+            ctx.strokeStyle = '#34d399';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.roundRect(-cellRadius, -cellRadius, cellRadius * 2, cellRadius * 2, 16);
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+
+            // 更新並繪製澱粉體顆粒 (受重力向下 +y 沉降，或在 0g 漂浮)
+            const env = state.gravi.env;
+            const gAccel = env === 'earth' ? 95 : (env === 'moon' ? 22 : 0);
+
+            for (const s of state.gravi.statoliths) {
+                if (env === 'space') {
+                    // 微重力隨機布朗運動
+                    s.vx += (Math.random() - 0.5) * 18 * dt;
+                    s.vy += (Math.random() - 0.5) * 18 * dt;
+                } else if (env === 'clinostat') {
+                    // 迴轉器旋轉力場使澱粉體無法穩定沉降於單一側
+                    const rotAng = state.gravi.clinostatPhase * 2;
+                    s.vx += Math.cos(rotAng) * 45 * dt;
+                    s.vy += Math.sin(rotAng) * 45 * dt;
+                } else {
+                    // 受重力向下 (+y) 沉降
+                    s.vy += gAccel * dt;
+                    s.vx += (Math.random() - 0.5) * 12 * dt;
+                }
+
+                s.vx *= 0.90;
+                s.vy *= 0.90;
+                s.x += s.vx * dt;
+                s.y += s.vy * dt;
+
+                // 圓形邊界碰撞約束
+                const dist = Math.hypot(s.x, s.y);
+                const maxR = cellRadius - s.r - 5;
+                if (dist > maxR) {
+                    const nx = s.x / dist;
+                    const ny = s.y / dist;
+                    s.x = nx * maxR;
+                    s.y = ny * maxR;
+                    s.vx *= -0.3;
+                    s.vy *= -0.3;
+                }
+
+                ctx.fillStyle = '#fbbf24';
+                ctx.strokeStyle = '#fde68a';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.arc(cellCenterX + s.x, cellCenterY + s.y, s.r, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+            }
+
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '10px "Noto Sans TC"';
+            ctx.textAlign = 'center';
+            const statusText = env === 'space' ? '0g 微重力：澱粉體懸浮不沉降'
+                : (env === 'clinostat' ? '迴轉器：重力方向不斷改變' : '澱粉體壓迫下側內質網 → 引導 IAA 下移');
+            ctx.fillText(statusText, cellCenterX, boxY + boxH - 12);
+            ctx.restore();
+        }
+
+        // 繪製生長素劑量效應雙鐘形曲線 (Dose-Response Curve)
+        function renderDoseResponseCurve() {
+            const w = doseCanvas.width;
+            const h = doseCanvas.height;
+            doseCtx.clearRect(0, 0, w, h);
+
+            const padL = 42;
+            const padR = 18;
+            const padT = 18;
+            const padB = 28;
+            const plotW = w - padL - padR;
+            const plotH = h - padT - padB;
+            const zeroY = padT + plotH * 0.62; // 0% 促進/抑制基準線
+
+            // 繪製背景促進區與抑制區色塊
+            doseCtx.fillStyle = 'rgba(16, 185, 129, 0.06)';
+            doseCtx.fillRect(padL, padT, plotW, zeroY - padT);
+            doseCtx.fillStyle = 'rgba(244, 63, 94, 0.08)';
+            doseCtx.fillRect(padL, zeroY, plotW, padT + plotH - zeroY);
+
+            // 基準虛線 (0%)
+            doseCtx.strokeStyle = '#475569';
+            doseCtx.setLineDash([4, 4]);
+            doseCtx.beginPath();
+            doseCtx.moveTo(padL, zeroY);
+            doseCtx.lineTo(padL + plotW, zeroY);
+            doseCtx.stroke();
+            doseCtx.setLineDash([]);
+
+            // 座標軸文字
+            doseCtx.fillStyle = '#94a3b8';
+            doseCtx.font = '10px "JetBrains Mono"';
+            doseCtx.fillText('促進 +', 4, padT + 14);
+            doseCtx.fillText('0%', 18, zeroY + 4);
+            doseCtx.fillText('抑制 -', 4, padT + plotH - 4);
+
+            // 橫軸對數濃度 (-11 到 -3)
+            const logMin = -11;
+            const logMax = -3;
+            const logToX = (logC) => padL + ((logC - logMin) / (logMax - logMin)) * plotW;
+
+            for (let c = -10; c <= -4; c += 2) {
+                const x = logToX(c);
+                doseCtx.fillStyle = '#64748b';
+                doseCtx.textAlign = 'center';
+                doseCtx.fillText(`10^${c}`, x, h - 8);
+            }
+
+            // 定義根與莖的劑量反應函數 (回傳 -1 ~ +1)
+            const rootResponse = (logC) => {
+                if (logC < -8.2) {
+                    return Math.exp(-Math.pow((logC - (-10.0)) / 1.15, 2)) * 0.55;
+                } else {
+                    return Math.exp(-Math.pow((logC - (-10.0)) / 1.15, 2)) * 0.55 - Math.min(0.95, Math.pow((logC - (-8.2)) / 2.2, 1.4));
+                }
+            };
+
+            const shootResponse = (logC) => {
+                if (logC < -3.6) {
+                    return Math.exp(-Math.pow((logC - (-5.0)) / 1.65, 2)) * 0.92;
+                } else {
+                    return Math.exp(-Math.pow((logC - (-5.0)) / 1.65, 2)) * 0.92 - Math.pow((logC - (-3.6)) / 0.9, 1.5);
+                }
+            };
+
+            const respToY = (r) => zeroY - r * (plotH * 0.55);
+
+            // 繪製「根 (Root)」曲線 (青色)
+            doseCtx.strokeStyle = '#22d3ee';
+            doseCtx.lineWidth = 2.2;
+            doseCtx.beginPath();
+            for (let i = 0; i <= 120; i++) {
+                const lc = logMin + (i / 120) * (logMax - logMin);
+                const x = logToX(lc);
+                const y = Math.min(padT + plotH, Math.max(padT, respToY(rootResponse(lc))));
+                if (i === 0) doseCtx.moveTo(x, y);
+                else doseCtx.lineTo(x, y);
+            }
+            doseCtx.stroke();
+
+            // 繪製「莖 (Shoot)」曲線 (翠綠色)
+            doseCtx.strokeStyle = '#10b981';
+            doseCtx.lineWidth = 2.5;
+            doseCtx.beginPath();
+            for (let i = 0; i <= 120; i++) {
+                const lc = logMin + (i / 120) * (logMax - logMin);
+                const x = logToX(lc);
+                const y = Math.min(padT + plotH, Math.max(padT, respToY(shootResponse(lc))));
+                if (i === 0) doseCtx.moveTo(x, y);
+                else doseCtx.lineTo(x, y);
+            }
+            doseCtx.stroke();
+
+            // 根據目前植物傾角與重力，即時標示「根下側」與「莖下側」在曲線上的動態工作點
+            const bias = (state.metrics.auxinHighSidePct - 50) / 24; // 0 ~ 1
+            const rootLowerLogC = -9.8 + bias * 3.2;  // 平常在 -9.8 (促進)，橫放後升至 -6.6 (抑制區)
+            const shootLowerLogC = -6.8 + bias * 1.8; // 平常在 -6.8，橫放後升至 -5.0 (強促進區)
+
+            // 繪製根下側標記點
+            const rx = logToX(rootLowerLogC);
+            const ry = Math.min(padT + plotH - 4, respToY(rootResponse(rootLowerLogC)));
+            doseCtx.fillStyle = '#f43f5e';
+            doseCtx.beginPath();
+            doseCtx.arc(rx, ry, 5, 0, Math.PI * 2);
+            doseCtx.fill();
+            doseCtx.fillStyle = '#fda4af';
+            doseCtx.font = 'bold 10px "Noto Sans TC"';
+            doseCtx.textAlign = 'left';
+            doseCtx.fillText('根下側 (高IAA抑制)', rx + 7, ry + 3);
+
+            // 繪製莖下側標記點
+            const sx = logToX(shootLowerLogC);
+            const sy = respToY(shootResponse(shootLowerLogC));
+            doseCtx.fillStyle = '#fbbf24';
+            doseCtx.beginPath();
+            doseCtx.arc(sx, sy, 5, 0, Math.PI * 2);
+            doseCtx.fill();
+            doseCtx.fillStyle = '#fde68a';
+            doseCtx.textAlign = 'right';
+            doseCtx.fillText('莖下側 (高IAA促進)', sx - 7, sy - 6);
+
+            // 曲線名稱標示
+            doseCtx.fillStyle = '#22d3ee';
+            doseCtx.textAlign = 'left';
+            doseCtx.fillText('根 (Root)', logToX(-10.3), padT + 22);
+            doseCtx.fillStyle = '#10b981';
+            doseCtx.fillText('莖 (Shoot)', logToX(-5.5), padT + 14);
+        }
+
+        // =====================================================
+        // 視覺化繪製：3. 向觸性模組 (Thigmotropism) 與含羞草傾觸性
+        // =====================================================
+        function renderThigmotropism(ctx, w, h, dt) {
+            const centerX = w * 0.48;
+            const soilY = h * 0.82;
+
+            drawSoilAndGround(ctx, w, h, soilY);
+
+            // 1. 繪製可拖曳竹竿支撐物 (Bamboo Support Pole)
+            const poleX = centerX + state.thigmo.poleOffsetX;
+            const poleRadius = 12;
+            drawSupportPole(ctx, poleX, soilY, poleRadius);
+
+            // 2. 計算並繪製卷鬚生長與螺旋纏繞路徑
+            const progress = state.metrics.growthProgress;
+            const sens = state.thigmo.sensitivity;
+            const canTouch = Math.abs(state.thigmo.poleOffsetX) <= 48;
+
+            ctx.save();
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            const pts = [];
+            const totalSegs = 65;
+            const contactSeg = 22;
+
+            for (let i = 0; i <= totalSegs; i++) {
+                const s = i / totalSegs;
+                if (s > 0.22 + progress * 0.78) break;
+
+                let px, py;
+                if (!canTouch || i <= contactSeg) {
+                    // 接觸前向上生長並逐漸靠近支撐桿
+                    const preRatio = i / contactSeg;
+                    px = centerX + (canTouch ? state.thigmo.poleOffsetX * Math.pow(preRatio, 1.3) * 0.85 : Math.sin(s * 6 + state.simTime) * 18);
+                    py = soilY - i * 5.2;
+                } else {
+                    // 接觸後產生螺旋纏繞 (接觸側細胞收縮、外側細胞伸長)
+                    const wrapIdx = i - contactSeg;
+                    const theta = wrapIdx * 0.34 * sens * (state.thigmo.poleOffsetX >= 0 ? 1 : -1);
+                    const rx = (poleRadius + 5) * Math.cos(theta);
+                    const zDepth = Math.sin(theta);
+                    px = poleX - rx;
+                    py = (soilY - contactSeg * 5.2) - wrapIdx * 3.8 + zDepth * 3;
+                }
+                pts.push({ x: px, y: py });
+            }
+
+            // 繪製卷鬚外側 (快速伸長側：琥珀金高生長素標示) 與主體
+            if (pts.length > 1) {
+                ctx.strokeStyle = '#10b981';
+                ctx.lineWidth = 7;
+                ctx.beginPath();
+                ctx.moveTo(pts[0].x, pts[0].y);
+                for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+                ctx.stroke();
+
+                ctx.strokeStyle = '#6ee7b7';
+                ctx.lineWidth = 2.5;
+                ctx.stroke();
+            }
+
+            // 3. 若已接觸支撐桿，繪製接觸點 Ca²⁺ 離子訊號波紋與乙烯梯度
+            if (state.thigmo.contactDetected && pts.length > contactSeg) {
+                state.thigmo.caPulsePhase = (state.thigmo.caPulsePhase + dt * 3.2) % 1;
+                const cp = pts[contactSeg];
+
+                const pulseR = 8 + state.thigmo.caPulsePhase * 28;
+                ctx.strokeStyle = `rgba(34, 211, 238, ${1 - state.thigmo.caPulsePhase})`;
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.arc(cp.x, cp.y, pulseR, 0, Math.PI * 2);
+                ctx.stroke();
+
+                ctx.fillStyle = '#22d3ee';
+                ctx.beginPath();
+                ctx.arc(cp.x, cp.y, 5, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = '#67e8f9';
+                ctx.font = 'bold 11px "Noto Sans TC"';
+                ctx.fillText('⚡ 接觸點機械受器：Ca²⁺ 訊號觸發兩側不對稱生長', cp.x + 18, cp.y + 4);
+            }
+            ctx.restore();
+
+            // 4. 左上角：接觸側 vs 非接觸側 (外側) 細胞伸長放大鏡
+            if (state.showMicroInset) {
+                drawThigmoMicroInset(ctx);
+            }
+
+            // 5. 右下角：含羞草觸發運動 (膨壓變化) 互動小視窗
+            drawMimosaNasticInset(ctx, w, h);
+        }
+
+        function drawSupportPole(ctx, poleX, soilY, r) {
+            ctx.save();
+            const poleTop = 90;
+            const grad = ctx.createLinearGradient(poleX - r, 0, poleX + r, 0);
+            grad.addColorStop(0, '#78350f');
+            grad.addColorStop(0.4, '#d97706');
+            grad.addColorStop(1, '#451a03');
+
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.roundRect(poleX - r, poleTop, r * 2, soilY - poleTop, 6);
+            ctx.fill();
+
+            // 竹節紋理
+            ctx.strokeStyle = '#fde68a';
+            ctx.lineWidth = 1.5;
+            for (let y = poleTop + 55; y < soilY; y += 65) {
+                ctx.beginPath();
+                ctx.moveTo(poleX - r, y);
+                ctx.lineTo(poleX + r, y);
+                ctx.stroke();
+            }
+
+            ctx.fillStyle = '#fcd34d';
+            ctx.font = 'bold 11px "Noto Sans TC"';
+            ctx.textAlign = 'center';
+            ctx.fillText('🎋 拖曳竹竿支撐物', poleX, poleTop - 10);
+            ctx.restore();
+        }
+
+        function drawThigmoMicroInset(ctx) {
+            const boxX = 16;
+            const boxY = 56;
+            const boxW = 215;
+            const boxH = 170;
+
+            ctx.save();
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.roundRect(boxX, boxY, boxW, boxH, 12);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#e2e8f0';
+            ctx.font = 'bold 11px "Noto Sans TC"';
+            ctx.fillText('🔬 卷鬚外側 vs. 接觸側細胞變化', boxX + 12, boxY + 20);
+
+            const ratio = state.metrics.cellElongationRatio;
+            drawCellColumn(ctx, boxX + 24, boxY + 38, 72, 98, ratio, '非接觸側(快速伸長)', true);
+            drawCellColumn(ctx, boxX + 118, boxY + 38, 72, 98, 0.85, '接觸側(受抑微縮)', false);
+            ctx.restore();
+        }
+
+        function drawMimosaNasticInset(ctx, w, h) {
+            const boxW = 225;
+            const boxH = 145;
+            const boxX = w - boxW - 16;
+            const boxY = h - boxH - 46;
+
+            // 計算含羞草觸碰後的快速閉合與緩慢恢復進度
+            const elapsedSec = (performance.now() - state.thigmo.mimosaTriggeredAt) / 1000;
+            let fold = 0;
+            if (elapsedSec >= 0 && elapsedSec < 0.4) {
+                fold = elapsedSec / 0.4; // 0.4秒內瞬間閉合
+            } else if (elapsedSec >= 0.4 && elapsedSec < 4.5) {
+                fold = 1 - (elapsedSec - 0.4) / 4.1; // 緩慢吸水恢復膨壓
+            }
+
+            ctx.save();
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+            ctx.strokeStyle = '#0891b2';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.roundRect(boxX, boxY, boxW, boxH, 12);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#67e8f9';
+            ctx.font = 'bold 11px "Noto Sans TC"';
+            ctx.fillText('🍃 對照：含羞草觸發運動 (膨壓改變)', boxX + 12, boxY + 20);
+
+            const cx = boxX + boxW / 2;
+            const cy = boxY + 86;
+
+            // 繪製葉柄與葉枕 (Pulvinus)
+            ctx.strokeStyle = '#10b981';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(cx - 55, cy + 15);
+            ctx.lineTo(cx - 20, cy);
+            ctx.stroke();
+
+            // 葉枕部位標示
+            ctx.fillStyle = fold > 0.3 ? '#f43f5e' : '#22d3ee';
+            ctx.beginPath();
+            ctx.arc(cx - 20, cy, 5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 羽狀小葉隨 fold 角度閉合下垂
+            ctx.save();
+            ctx.translate(cx - 20, cy);
+            ctx.rotate(fold * 0.48);
+
+            ctx.strokeStyle = '#34d399';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(68, 0);
+            ctx.stroke();
+
+            for (let i = 12; i <= 60; i += 14) {
+                const openAng = (1 - fold * 0.85) * 0.95;
+                ctx.fillStyle = '#10b981';
+                // 上側小葉
+                ctx.beginPath();
+                ctx.ellipse(i, -Math.sin(openAng) * 10, 7, 3.2, -openAng, 0, Math.PI * 2);
+                ctx.fill();
+                // 下側小葉
+                ctx.beginPath();
+                ctx.ellipse(i, Math.sin(openAng) * 10, 7, 3.2, openAng, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+
+            ctx.fillStyle = '#cbd5e1';
+            ctx.font = '10px "Noto Sans TC"';
+            ctx.fillText(fold > 0.2 ? '⚡ 葉枕 K⁺/H₂O 流出 → 膨壓下降閉合！' : '狀態：葉枕細胞膨壓飽滿（小葉張開）', boxX + 12, boxY + boxH - 12);
+            ctx.restore();
+        }
+
+        // =====================================================
+        // 視覺化繪製：4. 右下角即時時序數據折線圖
+        // =====================================================
+        function renderTelemetryChart() {
+            const w = chartCanvas.width;
+            const h = chartCanvas.height;
+            chartCtx.clearRect(0, 0, w, h);
+
+            const padL = 36;
+            const padR = 14;
+            const padT = 14;
+            const padB = 24;
+            const plotW = w - padL - padR;
+            const plotH = h - padT - padB;
+
+            // 座標格線
+            chartCtx.strokeStyle = '#1e293b';
+            chartCtx.lineWidth = 1;
+            for (let i = 0; i <= 4; i++) {
+                const y = padT + (i / 4) * plotH;
+                chartCtx.beginPath();
+                chartCtx.moveTo(padL, y);
+                chartCtx.lineTo(padL + plotW, y);
+                chartCtx.stroke();
+            }
+
+            // 橫軸時間刻度 (0 ~ 24 hr)
+            chartCtx.fillStyle = '#64748b';
+            chartCtx.font = '10px "JetBrains Mono"';
+            chartCtx.textAlign = 'center';
+            for (let hr = 0; hr <= 24; hr += 6) {
+                const x = padL + (hr / 24) * plotW;
+                chartCtx.fillText(`${hr}h`, x, h - 6);
+            }
+
+            chartCtx.textAlign = 'right';
+            chartCtx.fillText('100', padL - 6, padT + 8);
+            chartCtx.fillText('50', padL - 6, padT + plotH / 2 + 4);
+            chartCtx.fillText('0', padL - 6, padT + plotH + 3);
+
+            if (state.history.length < 2) return;
+
+            const tToX = (t) => padL + (t / state.maxSimTime) * plotW;
+            const valToY = (v, maxV) => padT + plotH - Math.min(1, Math.max(0, v / maxV)) * plotH;
+
+            // 1. 繪製兩側 IAA 濃度比值曲線 (琥珀金)
+            chartCtx.strokeStyle = '#f59e0b';
+            chartCtx.lineWidth = 2;
+            chartCtx.beginPath();
+            state.history.forEach((pt, idx) => {
+                const x = tToX(pt.t);
+                const y = valToY(pt.auxinRatio, 100);
+                if (idx === 0) chartCtx.moveTo(x, y);
+                else chartCtx.lineTo(x, y);
+            });
+            chartCtx.stroke();
+
+            // 2. 繪製細胞相對伸長增幅曲線 (青色)
+            chartCtx.strokeStyle = '#06b6d4';
+            chartCtx.lineWidth = 2;
+            chartCtx.beginPath();
+            state.history.forEach((pt, idx) => {
+                const x = tToX(pt.t);
+                const y = valToY(pt.elongation, 80);
+                if (idx === 0) chartCtx.moveTo(x, y);
+                else chartCtx.lineTo(x, y);
+            });
+            chartCtx.stroke();
+
+            // 3. 繪製彎曲角度變化曲線 (翠綠色)
+            const maxAngleScale = state.currentModule === 'thigmo' ? 320 : 90;
+            chartCtx.strokeStyle = '#10b981';
+            chartCtx.lineWidth = 2.5;
+            chartCtx.beginPath();
+            state.history.forEach((pt, idx) => {
+                const x = tToX(pt.t);
+                const y = valToY(pt.angle, maxAngleScale);
+                if (idx === 0) chartCtx.moveTo(x, y);
+                else chartCtx.lineTo(x, y);
+            });
+            chartCtx.stroke();
+        }
+
+        // =====================================================
+        // 主動畫迴圈 (Animation Loop)
+        // =====================================================
+        let lastFrameTime = performance.now();
+
+        function animateLoop(now) {
+            const dt = Math.min(0.05, (now - lastFrameTime) / 1000);
+            lastFrameTime = now;
+
+            if (state.isPlaying && state.simTime < state.maxSimTime) {
+                advanceSimTime(dt * 1.15 * state.speed);
+            } else {
+                computeBiologicalMetrics();
+            }
+
+            // 清除並繪製主畫布
+            const rect = mainCanvas.parentElement.getBoundingClientRect();
+            const w = rect.width;
+            const h = rect.height;
+            mainCtx.clearRect(0, 0, w, h);
+
+            if (state.currentModule === 'photo') {
+                renderPhototropism(mainCtx, w, h, dt);
+            } else if (state.currentModule === 'gravi') {
+                renderGravitropism(mainCtx, w, h, dt);
+            } else if (state.currentModule === 'thigmo') {
+                renderThigmotropism(mainCtx, w, h, dt);
+            }
+
+            // 更新右下角即時折線圖
+            renderTelemetryChart();
+
+            requestAnimationFrame(animateLoop);
+        }
+
+        // 啟動應用程式
+        window.onload = function () {
+            resizeCanvases();
+            initParticles();
+            updateHeaderAndMechanismText();
+            computeBiologicalMetrics();
+            recordHistoryPoint();
+            requestAnimationFrame(animateLoop);
+        };
+    </script>
+</body>
+</html>

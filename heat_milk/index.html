@@ -1,0 +1,1767 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>食品熱加工與殺菌方式互動動態模擬系統 | Food Thermal Processing Lab</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Noto Sans TC"', 'Inter', 'sans-serif'],
+                        mono: ['"JetBrains Mono"', 'monospace'],
+                    },
+                    colors: {
+                        lab: {
+                            950: '#060a12',
+                            900: '#0b1120',
+                            800: '#131c31',
+                            700: '#1e293b',
+                            accent: '#38bdf8',
+                            danger: '#f43f5e',
+                            warn: '#f59e0b',
+                            spore: '#a855f7',
+                            protein: '#10b981'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #060a12;
+            color: #e2e8f0;
+            overflow-x: hidden;
+        }
+        /* 自訂捲軸 */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0b1120;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+        /* 滑桿樣式 */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            height: 6px;
+            border-radius: 999px;
+            background: #1e293b;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 18px;
+            width: 18px;
+            border-radius: 50%;
+            background: #38bdf8;
+            cursor: pointer;
+            margin-top: -6px;
+            box-shadow: 0 0 10px rgba(56, 189, 248, 0.6);
+            border: 2px solid #fff;
+            transition: transform 0.15s ease;
+        }
+        input[type=range]::-webkit-slider-thumb:hover {
+            transform: scale(1.15);
+        }
+        .glass-panel {
+            background: rgba(19, 28, 49, 0.78);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(148, 163, 184, 0.14);
+        }
+        .preset-btn.active {
+            border-color: #38bdf8;
+            background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(14, 165, 233, 0.05));
+            box-shadow: 0 0 15px rgba(56, 189, 248, 0.2);
+        }
+        @keyframes pulse-glow {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
+        .animate-glow {
+            animation: pulse-glow 2s infinite;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col selection:bg-sky-500 selection:text-white">
+
+    <!-- 頂部導覽列 -->
+    <header class="sticky top-0 z-30 glass-panel border-b border-slate-800 px-4 lg:px-6 py-3">
+        <div class="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/20">
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
+                    </svg>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="text-lg md:text-xl font-bold tracking-tight text-white">食品熱加工與殺菌方式互動模擬系統</h1>
+                        <span class="hidden sm:inline-block text-[11px] font-mono uppercase px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30">Bio-Thermal Lab v2.4</span>
+                    </div>
+                    <p class="text-xs text-slate-400">探索 LTLT、HTST、UHT、罐頭滅菌與 HPP 對微生物、耐熱芽孢與乳品保存期限的動態影響</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <button onclick="openComparisonModal()" class="px-3.5 py-2 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-xs md:text-sm font-medium flex items-center gap-1.5 transition">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <span>鮮乳 vs 保久乳 關鍵揭密</span>
+                </button>
+                <button onclick="resetFullExperiment()" class="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs md:text-sm font-medium flex items-center gap-1.5 transition">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                    <span>重置樣本</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主內容三欄佈局 -->
+    <main class="flex-1 max-w-[1600px] w-full mx-auto p-3 md:p-5 grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+
+        <!-- 左欄：預設殺菌模式與參數控制 (4 cols) -->
+        <section class="lg:col-span-4 flex flex-col gap-4">
+            <!-- 1. 殺菌方式預設模式 -->
+            <div class="glass-panel rounded-2xl p-4 shadow-xl">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-sm font-bold uppercase tracking-wider text-sky-400 flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-sky-400"></span>
+                        步驟 1：選擇殺菌加工方式
+                    </h2>
+                    <span id="currentMethodBadge" class="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300">HTST 高溫短時</span>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2" id="presetButtonsContainer">
+                    <!-- 預設按鈕由 JS 動態渲染或直接綁定 -->
+                    <button onclick="selectPreset('raw')" id="btn-raw" class="preset-btn text-left p-2.5 rounded-xl border border-slate-700/80 bg-slate-900/60 hover:bg-slate-800/70 transition flex flex-col justify-between">
+                        <div class="flex items-center justify-between">
+                            <span class="font-bold text-xs text-slate-200">1. 生乳 (未殺菌)</span>
+                            <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300">25°C / 0s</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-1">含天然菌叢與潛在病原菌，極易腐敗</p>
+                    </button>
+
+                    <button onclick="selectPreset('ltlt')" id="btn-ltlt" class="preset-btn text-left p-2.5 rounded-xl border border-slate-700/80 bg-slate-900/60 hover:bg-slate-800/70 transition flex flex-col justify-between">
+                        <div class="flex items-center justify-between">
+                            <span class="font-bold text-xs text-slate-200">2. LTLT 低溫長時</span>
+                            <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300">65°C / 30m</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-1">巴氏殺菌、小農鮮乳，保留最多乳清蛋白</p>
+                    </button>
+
+                    <button onclick="selectPreset('htst')" id="btn-htst" class="preset-btn active text-left p-2.5 rounded-xl border border-slate-700/80 bg-slate-900/60 hover:bg-slate-800/70 transition flex flex-col justify-between">
+                        <div class="flex items-center justify-between">
+                            <span class="font-bold text-xs text-slate-200">3. HTST 高溫短時</span>
+                            <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">75°C / 15s</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-1">歐美主流鮮乳，殺滅病原菌但殘留孢子</p>
+                    </button>
+
+                    <button onclick="selectPreset('uht')" id="btn-uht" class="preset-btn text-left p-2.5 rounded-xl border border-slate-700/80 bg-slate-900/60 hover:bg-slate-800/70 transition flex flex-col justify-between">
+                        <div class="flex items-center justify-between">
+                            <span class="font-bold text-xs text-amber-300">4. UHT 超高溫瞬間</span>
+                            <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">135°C / 4s</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-1">台灣主流鮮乳 & 利樂包保久乳關鍵分水嶺</p>
+                    </button>
+
+                    <button onclick="selectPreset('retort')" id="btn-retort" class="preset-btn text-left p-2.5 rounded-xl border border-slate-700/80 bg-slate-900/60 hover:bg-slate-800/70 transition flex flex-col justify-between">
+                        <div class="flex items-center justify-between">
+                            <span class="font-bold text-xs text-slate-200">5. 商業高壓滅菌釜</span>
+                            <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-300">121°C / 20m</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-1">玻璃瓶裝保久乳、罐頭，梅納焦糖化明顯</p>
+                    </button>
+
+                    <button onclick="selectPreset('hpp')" id="btn-hpp" class="preset-btn text-left p-2.5 rounded-xl border border-slate-700/80 bg-slate-900/60 hover:bg-slate-800/70 transition flex flex-col justify-between">
+                        <div class="flex items-center justify-between">
+                            <span class="font-bold text-xs text-purple-300">6. HPP 超高壓冷殺菌</span>
+                            <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300">600MPa / 10°C</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-1">冷壓蔬果汁，不加熱保鮮但殺不死芽孢</p>
+                    </button>
+                </div>
+
+                <!-- UHT 專屬子選項切換 (鮮乳 vs 保久乳分水嶺) -->
+                <div id="uhtSubOptions" class="hidden mt-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30">
+                    <div class="text-xs font-bold text-amber-300 mb-2 flex items-center gap-1.5">
+                        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                        <span>UHT 分水嶺：為什麼同樣 135°C 殺菌，卻分為鮮乳與保久乳？</span>
+                    </div>
+                    <div class="grid grid-cols-1 gap-2">
+                        <button onclick="setUhtSubMode('fresh')" id="uht-sub-fresh" class="text-left p-2 rounded-lg border border-amber-400/50 bg-amber-500/20 text-xs transition">
+                            <div class="font-bold text-white">A. 台灣主流鮮乳模式 (UHT + 一般潔淨室充填 PE/紙盒)</div>
+                            <div class="text-[11px] text-amber-200/80 mt-0.5">殺菌時幾乎無菌，但充填與包材非完全無菌阻隔，可能有極微量落菌與透氧，故<b>必須 4°C 冷藏</b>（保存約14天）。</div>
+                        </button>
+                        <button onclick="setUhtSubMode('shelf')" id="uht-sub-shelf" class="text-left p-2 rounded-lg border border-slate-700 bg-slate-900/70 text-xs transition">
+                            <div class="font-bold text-white">B. 利樂包保久乳模式 (UHT + 無菌冷充填 + 六層鋁箔阻隔包)</div>
+                            <div class="text-[11px] text-slate-300 mt-0.5">乳汁達商業無菌 + H₂O₂滅菌鋁箔包無菌室封裝，100% 隔絕光線、氧氣與微生物，<b>不加防腐劑即可室溫保存半年以上！</b></div>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 當前殺菌法介紹小卡 -->
+                <div id="methodDescriptionCard" class="mt-3 p-3 rounded-xl bg-slate-900/90 border border-slate-800 text-xs space-y-1.5">
+                    <div class="flex items-center justify-between">
+                        <span class="font-bold text-sky-300" id="descTitle">HTST 高溫短時殺菌 (High Temperature Short Time)</span>
+                        <span class="text-[11px] text-slate-400" id="descFood">代表：歐美鮮乳、部分台灣鮮乳</span>
+                    </div>
+                    <p class="text-slate-300 leading-relaxed" id="descBody">
+                        利用板式熱交換器將生乳迅速加熱至 72°C~75°C 維持 15 秒。能 100% 殺滅結核桿菌、沙門氏菌等致病菌，並減少 99.9% 腐敗乳酸菌，但「耐熱芽孢」與極少數耐溫菌仍會存活，因此必須全程 4°C 冷藏。
+                    </p>
+                </div>
+            </div>
+
+            <!-- 2. 自訂熱力學與包裝環境參數控制 -->
+            <div class="glass-panel rounded-2xl p-4 shadow-xl space-y-4">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-sm font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                        步驟 2：調整製程與保存環境參數
+                    </h2>
+                    <span id="customParamNotice" class="text-[11px] text-slate-400 font-mono">可自由微調實驗</span>
+                </div>
+
+                <!-- 溫度滑桿 -->
+                <div>
+                    <div class="flex justify-between text-xs mb-1.5">
+                        <label for="tempSlider" class="text-slate-300 font-medium">加工溫度 (Temperature)</label>
+                        <span class="font-mono font-bold text-sky-400 text-sm" id="tempValueDisplay">75 °C</span>
+                    </div>
+                    <input type="range" id="tempSlider" min="10" max="145" step="1" value="75" class="w-full" oninput="onCustomSliderChange()">
+                    <div class="flex justify-between text-[10px] text-slate-500 font-mono mt-1">
+                        <span>10°C (冷壓)</span>
+                        <span>65°C (LTLT)</span>
+                        <span>75°C (HTST)</span>
+                        <span>121°C (滅菌釜)</span>
+                        <span>135°C+ (UHT)</span>
+                    </div>
+                </div>
+
+                <!-- 時間滑桿 (使用分段映射讓秒到分鐘都好拉) -->
+                <div>
+                    <div class="flex justify-between text-xs mb-1.5">
+                        <label for="timeSlider" class="text-slate-300 font-medium">維持時間 (Holding Time)</label>
+                        <span class="font-mono font-bold text-sky-400 text-sm" id="timeValueDisplay">15 秒</span>
+                    </div>
+                    <input type="range" id="timeSlider" min="0" max="100" step="1" value="35" class="w-full" oninput="onCustomSliderChange()">
+                    <div class="flex justify-between text-[10px] text-slate-500 font-mono mt-1">
+                        <span>0s</span>
+                        <span>4s (UHT)</span>
+                        <span>15s (HTST)</span>
+                        <span>5m</span>
+                        <span>20m (罐頭)</span>
+                        <span>30m (LTLT)</span>
+                    </div>
+                </div>
+
+                <!-- HPP 壓力狀態指示 (當選擇 HPP 時顯示) -->
+                <div id="pressureToggleRow" class="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/80 border border-slate-800">
+                    <div>
+                        <div class="text-xs font-medium text-slate-200">超高靜水壓 (HPP 600 MPa)</div>
+                        <div class="text-[10px] text-slate-400">以物理高壓破壞細菌細胞膜，不破壞共價鍵(維生素/風味)</div>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="hppCheckbox" class="sr-only peer" onchange="onCustomSliderChange()">
+                        <div class="w-10 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-500"></div>
+                    </label>
+                </div>
+
+                <!-- 包裝與充填環境 -->
+                <div>
+                    <label class="block text-xs text-slate-300 font-medium mb-1.5">充填與包裝阻隔等級 (Packaging & Filling)</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button type="button" onclick="setPackaging('clean')" id="pkg-clean" class="p-2 rounded-xl border border-sky-500 bg-sky-500/15 text-left transition">
+                            <div class="text-xs font-bold text-white flex items-center justify-between">
+                                <span>一般潔淨充填</span>
+                                <span class="w-2 h-2 rounded-full bg-sky-400"></span>
+                            </div>
+                            <div class="text-[10px] text-slate-300 mt-0.5">一般鮮乳盒/家庭瓶，微量二次落菌與透氣可能</div>
+                        </button>
+                        <button type="button" onclick="setPackaging('aseptic')" id="pkg-aseptic" class="p-2 rounded-xl border border-slate-700 bg-slate-900/60 text-left transition">
+                            <div class="text-xs font-bold text-white flex items-center justify-between">
+                                <span>無菌密封包裝</span>
+                                <span class="w-2 h-2 rounded-full bg-slate-600"></span>
+                            </div>
+                            <div class="text-[10px] text-slate-400 mt-0.5">無菌充填利樂包/真空滅菌罐，完全隔絕外界菌與氧</div>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 殺菌後保存環境溫度 -->
+                <div>
+                    <label class="block text-xs text-slate-300 font-medium mb-1.5">殺菌後儲存環境溫度 (Storage Temp)</label>
+                    <div class="grid grid-cols-3 gap-2">
+                        <button type="button" onclick="setStorageTemp(4)" id="store-4" class="p-2 rounded-xl border border-sky-500 bg-sky-500/15 text-center transition">
+                            <div class="text-xs font-bold text-sky-300 font-mono">❄️ 4°C 冷藏</div>
+                            <div class="text-[10px] text-slate-400">抑制殘留菌繁殖</div>
+                        </button>
+                        <button type="button" onclick="setStorageTemp(25)" id="store-25" class="p-2 rounded-xl border border-slate-700 bg-slate-900/60 text-center transition">
+                            <div class="text-xs font-bold text-amber-300 font-mono">🏠 25°C 室溫</div>
+                            <div class="text-[10px] text-slate-400">一般常溫貨架</div>
+                        </button>
+                        <button type="button" onclick="setStorageTemp(35)" id="store-35" class="p-2 rounded-xl border border-slate-700 bg-slate-900/60 text-center transition">
+                            <div class="text-xs font-bold text-rose-400 font-mono">☀️ 35°C 夏溫</div>
+                            <div class="text-[10px] text-slate-400">芽孢極速萌發</div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 中欄：微觀動態視覺化與分階段實驗控制 (5 cols) -->
+        <section class="lg:col-span-5 flex flex-col gap-4">
+            <div class="glass-panel rounded-2xl p-4 shadow-xl flex flex-col">
+                <!-- 畫布頂部狀態列 -->
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                    <div>
+                        <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                            <span>🔬 乳品微觀粒子與熱加工管線模擬</span>
+                            <span id="simPhaseBadge" class="text-[11px] font-mono px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">待命：生乳原液</span>
+                        </h2>
+                    </div>
+                    <div class="flex items-center gap-3 text-xs font-mono">
+                        <div class="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800">
+                            爐溫：<span id="liveTempReadout" class="text-sky-400 font-bold">25.0°C</span>
+                        </div>
+                        <div class="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800">
+                            酸鹼值：<span id="livePhReadout" class="text-emerald-400 font-bold">pH 6.70</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 微觀粒子圖例 -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 mb-3 text-[11px]">
+                    <div class="px-2 py-1.5 rounded-lg bg-slate-900/90 border border-rose-500/30 flex items-center justify-between">
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block shadow shadow-rose-500"></span>
+                            <span class="text-slate-200">病原菌</span>
+                        </div>
+                        <span id="countPathogen" class="font-mono font-bold text-rose-400">100%</span>
+                    </div>
+                    <div class="px-2 py-1.5 rounded-lg bg-slate-900/90 border border-amber-500/30 flex items-center justify-between">
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block shadow shadow-amber-400"></span>
+                            <span class="text-slate-200">腐敗乳酸菌</span>
+                        </div>
+                        <span id="countSpoilage" class="font-mono font-bold text-amber-300">100%</span>
+                    </div>
+                    <div class="px-2 py-1.5 rounded-lg bg-slate-900/90 border border-purple-500/30 flex items-center justify-between">
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-purple-400 ring-2 ring-cyan-300 inline-block"></span>
+                            <span class="text-slate-200">耐熱芽孢</span>
+                        </div>
+                        <span id="countSpore" class="font-mono font-bold text-purple-300">100%</span>
+                    </div>
+                    <div class="px-2 py-1.5 rounded-lg bg-slate-900/90 border border-emerald-500/30 flex items-center justify-between">
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block"></span>
+                            <span class="text-slate-200">活性乳清蛋白</span>
+                        </div>
+                        <span id="countProtein" class="font-mono font-bold text-emerald-400">100%</span>
+                    </div>
+                </div>
+
+                <!-- HTML5 Canvas 視覺化容器 -->
+                <div class="relative w-full aspect-[4/3] rounded-xl overflow-hidden border border-slate-700/80 bg-slate-950 shadow-inner">
+                    <canvas id="microCanvas" class="w-full h-full block"></canvas>
+
+                    <!-- 頂部管線加工進度浮層 -->
+                    <div id="processOverlayBar" class="hidden absolute top-3 left-3 right-3 bg-slate-900/90 backdrop-blur-md border border-slate-700 rounded-xl p-2.5">
+                        <div class="flex justify-between text-xs mb-1">
+                            <span id="processOverlayText" class="font-bold text-sky-300">正在執行熱殺菌程序...</span>
+                            <span id="processOverlayPct" class="font-mono text-white">0%</span>
+                        </div>
+                        <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                            <div id="processProgressFill" class="h-full bg-gradient-to-r from-sky-500 via-amber-500 to-rose-500 transition-all duration-75" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <!-- 底部乳品外觀與狀態浮層 -->
+                    <div class="absolute bottom-3 left-3 right-3 flex items-center justify-between px-3 py-2 rounded-xl bg-slate-900/85 backdrop-blur-md border border-slate-800/90 text-xs">
+                        <div class="flex items-center gap-2">
+                            <span id="milkColorSwatch" class="w-4 h-4 rounded-full border border-white/40 shadow" style="background-color: #fdfefc;"></span>
+                            <span id="milkQualityText" class="text-slate-200 font-medium">乳品狀態：新鮮生乳（未殺菌，含活性菌）</span>
+                        </div>
+                        <span id="storageDayBadge" class="font-mono text-sky-300 font-bold">Day 0.0</span>
+                    </div>
+                </div>
+
+                <!-- 兩階段模擬控制區 -->
+                <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button id="btnRunProcess" onclick="startThermalProcess()" class="py-3 px-4 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-bold text-sm shadow-lg shadow-sky-500/25 flex items-center justify-center gap-2 transition active:scale-[0.99]">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"/></svg>
+                        <span>階段一：執行殺菌加工</span>
+                    </button>
+
+                    <button id="btnRunStorage" onclick="toggleStorageSimulation()" class="py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-sm shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-2 transition active:scale-[0.99]">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <span id="btnRunStorageText">階段二：快轉保存實驗 (0~30天)</span>
+                    </button>
+                </div>
+
+                <!-- 儲存天數手動/自動檢視滑桿 -->
+                <div class="mt-3 p-3 rounded-xl bg-slate-900/70 border border-slate-800/80">
+                    <div class="flex justify-between items-center text-xs mb-1.5">
+                        <span class="text-slate-300 font-medium flex items-center gap-1.5">
+                            <span>📅 保存貨架期時間軸 (Storage Timeline)</span>
+                        </span>
+                        <span id="timelineStatusLabel" class="font-mono text-amber-300">請先執行階段一或直接拖曳預覽</span>
+                    </div>
+                    <input type="range" id="storageDaySlider" min="0" max="30" step="0.5" value="0" class="w-full" oninput="onManualStorageDayChange(this.value)">
+                    <div class="flex justify-between text-[10px] text-slate-500 font-mono mt-1">
+                        <span>第 0 天 (剛出廠)</span>
+                        <span>第 7 天</span>
+                        <span>第 14 天 (鮮乳極限)</span>
+                        <span>第 21 天</span>
+                        <span>第 30 天+ (保久乳無虞)</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 右欄：即時數據圖表與科學解析面板 (3 cols) -->
+        <section class="lg:col-span-3 flex flex-col gap-4">
+            <!-- 1. 菌數對數圖表與營養指標 -->
+            <div class="glass-panel rounded-2xl p-4 shadow-xl space-y-4">
+                <h2 class="text-sm font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                    即時微生物對數與營養指標
+                </h2>
+
+                <!-- 總生菌數 Log10 CFU/mL 視覺圖 -->
+                <div class="p-3 rounded-xl bg-slate-900/90 border border-slate-800">
+                    <div class="flex justify-between items-baseline mb-1">
+                        <span class="text-xs text-slate-300 font-medium">總活菌濃度 (Log₁₀ CFU/mL)</span>
+                        <span id="cfuValueText" class="font-mono text-sm font-bold text-amber-400">4.50 Log</span>
+                    </div>
+                    <!-- 動態生長曲線小畫布 -->
+                    <div class="w-full h-28 bg-slate-950 rounded-lg border border-slate-800/80 overflow-hidden relative">
+                        <canvas id="growthChartCanvas" class="w-full h-full block"></canvas>
+                        <div class="absolute top-1 right-2 text-[9px] font-mono text-rose-400/90">── 腐敗酸敗線 (10⁶ CFU/mL)</div>
+                    </div>
+                    <div class="flex justify-between text-[10px] text-slate-400 mt-1.5">
+                        <span>商業無菌：&lt; 0 Log</span>
+                        <span>腐敗閾值：&gt; 6.0 Log (凝結發酸)</span>
+                    </div>
+                </div>
+
+                <!-- 營養風味與梅納反應權衡條 (Trade-off Bars) -->
+                <div class="space-y-2.5 text-xs">
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-slate-300">乳清蛋白生物活性保留率</span>
+                            <span id="wheyRetainPct" class="font-mono font-bold text-emerald-400">100%</span>
+                        </div>
+                        <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                            <div id="wheyRetainBar" class="h-full bg-emerald-500 transition-all duration-300" style="width: 100%"></div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-slate-300">水溶性維生素 (B群/C) 保留率</span>
+                            <span id="vitaminRetainPct" class="font-mono font-bold text-sky-400">100%</span>
+                        </div>
+                        <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                            <div id="vitaminRetainBar" class="h-full bg-sky-400 transition-all duration-300" style="width: 100%"></div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-slate-300">梅納反應 / 焦糖化煮熟乳香程度</span>
+                            <span id="maillardPct" class="font-mono font-bold text-amber-400">0% (清爽生乳感)</span>
+                        </div>
+                        <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                            <div id="maillardBar" class="h-full bg-gradient-to-r from-amber-300 via-amber-500 to-orange-600 transition-all duration-300" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. 「為什麼有些要冷藏？有些可室溫？」互動科學診斷卡 -->
+            <div class="glass-panel rounded-2xl p-4 shadow-xl flex-1 flex flex-col justify-between space-y-3 border-l-4 border-l-sky-400" id="diagnosticCard">
+                <div class="space-y-2.5">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-sm font-bold text-white flex items-center gap-1.5">
+                            <span>🧠 實驗室科學診斷報告</span>
+                        </h3>
+                        <span id="shelfLifeBadge" class="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-sky-500/20 text-sky-300">需冷藏保存</span>
+                    </div>
+
+                    <div id="diagnosticMainText" class="text-xs text-slate-200 leading-relaxed space-y-2 bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+                        <!-- 由 JS 即時更新診斷內容 -->
+                    </div>
+
+                    <!-- 微生物殘留分析小表 -->
+                    <div class="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/80 space-y-1.5 text-[11px]">
+                        <div class="font-bold text-slate-300 mb-1">關鍵保鮮因子檢核：</div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-slate-400">1. 致病菌 (沙門氏菌/李斯特菌)</span>
+                            <span id="checkPathogen" class="font-mono font-bold text-emerald-400">✓ 已完全殺滅</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-slate-400">2. 耐熱細菌內生孢子 (Spores)</span>
+                            <span id="checkSpore" class="font-mono font-bold text-rose-400">✗ 存活 (室溫會萌發)</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-slate-400">3. 無菌充填與阻隔包裝</span>
+                            <span id="checkPackage" class="font-mono font-bold text-amber-400">△ 一般潔淨盒 (需冷藏)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <button onclick="openComparisonModal()" class="w-full py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 text-xs font-medium flex items-center justify-center gap-1.5 transition">
+                    <span>查看完整「鮮乳 vs 保久乳 vs 各類殺菌法」對照表</span>
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                </button>
+            </div>
+        </section>
+    </main>
+
+    <!-- 鮮乳 vs 保久乳 科學對照 Modal 彈窗 -->
+    <div id="comparisonModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+        <div class="glass-panel max-w-4xl w-full max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-700 shadow-2xl p-5 md:p-6 space-y-5">
+            <div class="flex items-start justify-between gap-4 border-b border-slate-800 pb-3">
+                <div>
+                    <h2 class="text-lg md:text-xl font-bold text-white flex items-center gap-2">
+                        <span>🥛 為什麼鮮乳要冷藏、保久乳可以放室溫？科學真相與殺菌全對照</span>
+                    </h2>
+                    <p class="text-xs text-slate-400 mt-1">破除「保久乳有加防腐劑」與「保久乳沒營養」的常見迷思</p>
+                </div>
+                <button onclick="closeComparisonModal()" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+
+            <!-- 兩大核心問答卡片 -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-2">
+                    <h3 class="text-sm font-bold text-amber-300">❓ 迷思一：保久乳可以放室溫半年，是因為加了防腐劑嗎？</h3>
+                    <p class="text-xs text-slate-200 leading-relaxed">
+                        <b>完全沒有防腐劑！</b> 保久乳能常溫保存的核心原因有兩個：<br>
+                        1. <b>消滅耐熱芽孢（商業滅菌）</b>：透過 UHT (135°C以上 2~5秒) 或滅菌釜 (121°C 15~30分)，將一般殺菌殺不死的「細菌內生孢子 (Spores)」徹底摧毀。<br>
+                        2. <b>無菌充填與多層阻隔包裝 (Aseptic Packaging)</b>：利樂包採用六層複合材質（含鋁箔層隔絕光與氧氣），並在無菌室中冷卻充填密封，外界微生物 100% 無法進入，自然不會腐敗。
+                    </p>
+                </div>
+                <div class="p-4 rounded-xl bg-sky-500/10 border border-sky-500/30 space-y-2">
+                    <h3 class="text-sm font-bold text-sky-300">❓ 迷思二：台灣很多鮮乳也用 UHT (130°C) 殺菌，為何還要冷藏？</h3>
+                    <p class="text-xs text-slate-200 leading-relaxed">
+                        這是台灣乳品最有趣的地方！台灣高達 85% 鮮乳採用 UHT 殺菌，但因為採用<b>「一般潔淨室充填」</b>與<b>「透光/微透氧的屋頂紙盒或 PE 塑膠瓶」</b>。<br>
+                        在充填封口瞬間無法保證 100% 絕對無菌，且包材無法完全阻隔氧氣，因此仍須<b>全程 4°C 冷藏</b>來抑制極微量微生物生長，保存期限約 10~14 天。
+                    </p>
+                </div>
+            </div>
+
+            <!-- 完整對照表格 -->
+            <div class="overflow-x-auto rounded-xl border border-slate-800">
+                <table class="w-full text-left border-collapse text-xs">
+                    <thead>
+                        <tr class="bg-slate-900 text-slate-300 border-b border-slate-800">
+                            <th class="p-3 font-bold">殺菌方式</th>
+                            <th class="p-3 font-bold">溫度與時間</th>
+                            <th class="p-3 font-bold">病原菌</th>
+                            <th class="p-3 font-bold">耐熱芽孢 (Spores)</th>
+                            <th class="p-3 font-bold">包裝與保存條件</th>
+                            <th class="p-3 font-bold">風味與營養變化</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800/80 bg-slate-950/60">
+                        <tr>
+                            <td class="p-3 font-bold text-sky-300">LTLT 低溫長時</td>
+                            <td class="p-3 font-mono">62~65°C / 30分</td>
+                            <td class="p-3 text-emerald-400">100% 殺滅</td>
+                            <td class="p-3 text-rose-400">存活 (未破壞)</td>
+                            <td class="p-3">一般瓶裝，<b>須 4°C 冷藏</b> (約7~10天)</td>
+                            <td class="p-3">乳清蛋白保留最高，接近生乳清爽原味</td>
+                        </tr>
+                        <tr>
+                            <td class="p-3 font-bold text-emerald-300">HTST 高溫短時</td>
+                            <td class="p-3 font-mono">72~75°C / 15秒</td>
+                            <td class="p-3 text-emerald-400">100% 殺滅</td>
+                            <td class="p-3 text-rose-400">存活 (未破壞)</td>
+                            <td class="p-3">一般瓶裝，<b>須 4°C 冷藏</b> (約10~14天)</td>
+                            <td class="p-3">保留大部分乳清蛋白與免疫球蛋白，口感清爽</td>
+                        </tr>
+                        <tr>
+                            <td class="p-3 font-bold text-amber-300">UHT + 潔淨充填<br><span class="text-[10px] text-slate-400">(台灣主流鮮乳)</span></td>
+                            <td class="p-3 font-mono">125~138°C / 2~5秒</td>
+                            <td class="p-3 text-emerald-400">100% 殺滅</td>
+                            <td class="p-3 text-emerald-400">99.999% 殺滅</td>
+                            <td class="p-3">屋頂盒/PE瓶 (非無菌充填)，<b>須 4°C 冷藏</b> (14天)</td>
+                            <td class="p-3">乳清蛋白變性釋放硫氫基，具濃郁乳香</td>
+                        </tr>
+                        <tr>
+                            <td class="p-3 font-bold text-amber-400">UHT + 無菌包裝<br><span class="text-[10px] text-slate-400">(利樂包保久乳)</span></td>
+                            <td class="p-3 font-mono">135~140°C / 2~5秒</td>
+                            <td class="p-3 text-emerald-400">100% 殺滅</td>
+                            <td class="p-3 text-emerald-400">100% 商業無菌</td>
+                            <td class="p-3">無菌鋁箔複合包，<b>可 25°C 室溫保存 6~9 個月</b></td>
+                            <td class="p-3">鈣質與蛋白質總量與鮮乳相同，維生素微降</td>
+                        </tr>
+                        <tr>
+                            <td class="p-3 font-bold text-orange-300">高壓商業滅菌釜<br><span class="text-[10px] text-slate-400">(玻璃瓶保久乳/罐頭)</span></td>
+                            <td class="p-3 font-mono">115~121°C / 15~30分</td>
+                            <td class="p-3 text-emerald-400">100% 殺滅</td>
+                            <td class="p-3 text-emerald-400">100% 商業無菌</td>
+                            <td class="p-3">裝瓶密封後高壓蒸氣滅菌，<b>可室溫保存 1 年+</b></td>
+                            <td class="p-3">顯著梅納反應，顏色偏米黃，具焦糖燉奶香</td>
+                        </tr>
+                        <tr>
+                            <td class="p-3 font-bold text-purple-300">HPP 高壓冷殺菌<br><span class="text-[10px] text-slate-400">(冷壓蔬果汁)</span></td>
+                            <td class="p-3 font-mono">600 MPa / 4~25°C</td>
+                            <td class="p-3 text-emerald-400">100% 殺滅</td>
+                            <td class="p-3 text-rose-400">存活 (高壓難滅孢子)</td>
+                            <td class="p-3">PET瓶，<b>須 4°C 冷藏</b> (配合低pH或冷鏈)</td>
+                            <td class="p-3">不加熱，100%保留維生素C與鮮果原始風味</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="flex justify-end">
+                <button onclick="closeComparisonModal()" class="px-5 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs transition">
+                    回到實驗模擬器
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript 核心物理與生物模擬引擎 -->
+    <script>
+        // ==========================================
+        // 1. 預設殺菌模式資料庫
+        // ==========================================
+        const PRESETS = {
+            raw: {
+                id: 'raw',
+                badge: '生乳 (未殺菌)',
+                title: '生乳 / 未殺菌原乳 (Raw Milk)',
+                food: '代表：剛擠出的生乳（法規禁止直接生飲販售）',
+                desc: '未經任何熱處理，完整保留乳清蛋白、酵素與免疫球蛋白，但同時含有沙門氏菌、李斯特菌、大腸桿菌等潛在致病菌，以及大量乳酸腐敗菌與耐熱芽孢，在室溫下數小時即迅速酸敗。',
+                temp: 25,
+                timeSliderVal: 0, // 0 秒
+                hpp: false,
+                packaging: 'clean',
+                storageTemp: 4
+            },
+            ltlt: {
+                id: 'ltlt',
+                badge: 'LTLT 低溫長時',
+                title: 'LTLT 低溫長時巴氏殺菌 (65°C / 30分鐘)',
+                food: '代表：部分小農牧場鮮乳、手工起司原料乳',
+                desc: '巴斯德發明的經典溫和殺菌法。62~65°C 維持 30 分鐘可 100% 殺死病原菌並消滅約 99% 腐敗菌，且幾乎不破壞乳清蛋白結構（保留生乳清爽口感與凝乳酶活性），但無法殺死耐熱芽孢，須全程 4°C 冷藏。',
+                temp: 65,
+                timeSliderVal: 100, // 1800 秒 (30m)
+                hpp: false,
+                packaging: 'clean',
+                storageTemp: 4
+            },
+            htst: {
+                id: 'htst',
+                badge: 'HTST 高溫短時',
+                title: 'HTST 高溫短時巴氏殺菌 (75°C / 15秒)',
+                food: '代表：歐美主流鮮乳、台灣部分高品質鮮乳',
+                desc: '將生乳加熱至 72°C~75°C 維持 15 秒。能 100% 殺滅結核桿菌與沙門氏菌等致病菌，並殺死 99.9% 一般腐敗菌；但「耐熱細菌內生孢子 (Spores)」與極少數耐溫乳酸菌仍會存活，置於室溫會迅速萌發酸敗，故必須 4°C 冷藏。',
+                temp: 75,
+                timeSliderVal: 35, // 15 秒
+                hpp: false,
+                packaging: 'clean',
+                storageTemp: 4
+            },
+            uht: {
+                id: 'uht',
+                badge: 'UHT 超高溫瞬間',
+                title: 'UHT 超高溫瞬間滅菌 (135°C / 4秒)',
+                food: '代表：台灣主流鮮乳 (潔淨充填) 或 利樂包保久乳 (無菌充填)',
+                desc: '瞬間加熱至 135°C 僅 2~5 秒，高溫足以擊碎「耐熱芽孢」達到商業無菌！關鍵差異在於後續包裝：若搭配「一般潔淨充填」即為台灣常見鮮乳（需冷藏）；若搭配「無菌充填與六層鋁箔利樂包」即成為可室溫放半年的保久乳！',
+                temp: 135,
+                timeSliderVal: 16, // 4 秒
+                hpp: false,
+                packaging: 'clean',
+                storageTemp: 4
+            },
+            retort: {
+                id: 'retort',
+                badge: '高壓商業滅菌釜',
+                title: '高壓商業滅菌 / 罐頭滅菌 (121°C / 20分鐘)',
+                food: '代表：玻璃瓶裝保久乳、鐵罐裝牛奶、低酸性罐頭',
+                desc: '將乳品先裝入玻璃瓶或鐵罐密封後，送入高壓蒸氣滅菌釜以 121°C 加熱 20 分鐘。徹底消滅包括肉毒桿菌孢子在內的所有微生物（100% 商業無菌）。長時間高溫會引發顯著「梅納反應」，使乳色微黃並帶有濃郁焦糖燉奶香，可室溫長期保存。',
+                temp: 121,
+                timeSliderVal: 90, // 1200 秒 (20m)
+                hpp: false,
+                packaging: 'aseptic',
+                storageTemp: 25
+            },
+            hpp: {
+                id: 'hpp',
+                badge: 'HPP 高壓冷殺菌',
+                title: 'HPP 超高靜水壓非熱殺菌 (600 MPa / 10°C)',
+                food: '代表：冷壓鮮榨蔬果汁、高單價冷萃飲品',
+                desc: '不透過高溫，而是將密封飲品置於 600 MPa（約 6000 大氣壓，馬里亞納海溝壓力的 6 倍）靜水壓下。高壓會擠破病原菌與腐敗菌的細胞膜，但不會破壞小分子共價鍵（100% 保留維生素與天然果香）。然而單靠高壓無法消滅耐熱細菌芽孢，仍需 4°C 冷藏！',
+                temp: 10,
+                timeSliderVal: 60, // 180 秒 (3m)
+                hpp: true,
+                packaging: 'clean',
+                storageTemp: 4
+            }
+        };
+
+        // ==========================================
+        // 2. 系統狀態變數
+        // ==========================================
+        let state = {
+            currentPreset: 'htst',
+            uhtSubMode: 'fresh', // 'fresh' or 'shelf'
+            temp: 75,            // °C
+            timeSeconds: 15,     // 秒
+            hpp: false,          // 是否啟用 600 MPa
+            packaging: 'clean',  // 'clean' (一般潔淨) or 'aseptic' (無菌阻隔)
+            storageTemp: 4,      // 4, 25, 35 °C
+
+            // 模擬階段狀態
+            phase: 'raw',        // 'raw' | 'processing' | 'processed' | 'storing'
+            processProgress: 0,  // 0 ~ 1
+            storageDays: 0,      // 0 ~ 30 天
+            storagePlaying: false,
+
+            // 微生物與營養計算結果 (殺菌剛結束時 Day 0 的基準值)
+            postProcess: {
+                pathogenSurviveRate: 1.0,  // 0 ~ 1
+                spoilageSurviveRate: 1.0,  // 0 ~ 1
+                sporeSurviveRate: 1.0,     // 0 ~ 1
+                wheyIntactRate: 1.0,       // 0 ~ 1
+                vitaminRetainRate: 1.0,    // 0 ~ 1
+                maillardLevel: 0.0,        // 0 ~ 1
+                initialLogCfu: 4.5,        // Log10 CFU/mL
+                isCommerciallySterile: false
+            },
+
+            // 當前時間點 (含保存天數後) 的即時狀態
+            live: {
+                temp: 25,
+                ph: 6.70,
+                logCfu: 4.50,
+                pathogenDisplayPct: 100,
+                spoilageDisplayPct: 100,
+                sporeDisplayPct: 100,
+                proteinDisplayPct: 100
+            }
+        };
+
+        // 時間滑桿 (0~100) 非線性對數轉換為秒數 (0s ~ 1800s)
+        function sliderToSeconds(val) {
+            val = Number(val);
+            if (val <= 0) return 0;
+            if (val <= 20) return Math.round((val / 20) * 5); // 0 ~ 5s
+            if (val <= 40) return Math.round(5 + ((val - 20) / 20) * 15); // 5 ~ 20s
+            if (val <= 60) return Math.round(20 + ((val - 40) / 20) * 160); // 20s ~ 180s (3m)
+            if (val <= 80) return Math.round(180 + ((val - 60) / 20) * 420); // 3m ~ 10m
+            return Math.round(600 + ((val - 80) / 20) * 1200); // 10m ~ 30m (1800s)
+        }
+
+        function formatSeconds(sec) {
+            if (sec === 0) return '0 秒 (未加熱)';
+            if (sec < 60) return `${sec} 秒`;
+            const mins = (sec / 60).toFixed(sec % 60 === 0 ? 0 : 1);
+            return `${mins} 分鐘 (${sec}s)`;
+        }
+
+        // ==========================================
+        // 3. 食品微生物熱力學殺菌與保存數學模型
+        // ==========================================
+        function computeThermalKinetics(temp, timeSec, hpp, packaging) {
+            if (timeSec === 0 && !hpp) {
+                return {
+                    pathogenSurviveRate: 1.0,
+                    spoilageSurviveRate: 1.0,
+                    sporeSurviveRate: 1.0,
+                    wheyIntactRate: 1.0,
+                    vitaminRetainRate: 1.0,
+                    maillardLevel: 0.0,
+                    initialLogCfu: 4.5,
+                    isCommerciallySterile: false
+                };
+            }
+
+            let pathogenLogReduction = 0;
+            let spoilageLogReduction = 0;
+            let sporeLogReduction = 0;
+
+            // A. 熱力學 D-value 與 Z-value 模型
+            if (temp >= 55) {
+                // 1. 病原菌 (李斯特菌/沙門氏菌/結核桿菌): 65°C 30min 或 72°C 15s 可達 >7 Log 殺滅
+                const dPathogen72 = 1.8; // 72°C 時 D 值約 1.8 秒
+                const zPathogen = 5.5;
+                const dPathogenT = dPathogen72 * Math.pow(10, (72 - temp) / zPathogen);
+                pathogenLogReduction += timeSec / dPathogenT;
+
+                // 2. 一般腐敗菌/嗜溫乳酸菌: 耐熱性稍高於病原菌
+                const dSpoilage72 = 3.8;
+                const zSpoilage = 6.5;
+                const dSpoilageT = dSpoilage72 * Math.pow(10, (72 - temp) / zSpoilage);
+                spoilageLogReduction += timeSec / dSpoilageT;
+            }
+
+            // 3. 耐熱芽孢 (Geobacillus / Bacillus spores): 必須 >105°C 才開始有效殺滅
+            if (temp >= 105) {
+                // 121°C 時 D 值約 120 秒，135°C 時 D 值約 0.4 秒 (Z = 9.5°C)
+                const dSpore121 = 110;
+                const zSpore = 9.2;
+                const dSporeT = dSpore121 * Math.pow(10, (121 - temp) / zSpore);
+                sporeLogReduction += timeSec / dSporeT;
+            }
+
+            // B. HPP 高靜水壓 (600 MPa) 效應：殺滅營養體細胞，但無法殺滅耐熱內生孢子
+            if (hpp) {
+                const hppFactor = Math.min(1.5, Math.max(0.3, timeSec / 120));
+                pathogenLogReduction += 6.5 * hppFactor;
+                spoilageLogReduction += 4.2 * hppFactor;
+                // 芽孢對單純靜水壓極具抵抗力
+                sporeLogReduction += 0.05 * hppFactor;
+            }
+
+            // 將 Log Reduction 轉換為視覺化存活比例 (0 ~ 1)
+            const pathogenSurviveRate = pathogenLogReduction >= 5.0 ? 0 : Math.pow(10, -pathogenLogReduction);
+            const spoilageSurviveRate = spoilageLogReduction >= 8.0 ? 0 : Math.max(0, Math.pow(10, -spoilageLogReduction * 0.45));
+            const sporeSurviveRate = sporeLogReduction >= 6.0 ? 0 : Math.max(0, Math.pow(10, -sporeLogReduction * 0.5));
+
+            // 計算殺菌後初始總生菌數 Log10 CFU/mL (生乳初始假設 4.5 Log)
+            let residualVegLog = 4.5 - spoilageLogReduction;
+            let residualSporeLog = 2.2 - sporeLogReduction; // 生乳中芽孢約 10^2.2 CFU/mL
+
+            // 若為一般潔淨充填 (非無菌充填)，會有極微量環境二次落菌 (約 0.2 ~ 0.5 Log)
+            let postContaminationLog = (packaging === 'clean') ? 0.4 : -3.0;
+
+            let combinedCfu = Math.pow(10, Math.max(-4, residualVegLog)) +
+                              Math.pow(10, Math.max(-4, residualSporeLog)) +
+                              (packaging === 'clean' ? Math.pow(10, postContaminationLog) : 0);
+
+            let initialLogCfu = Math.log10(combinedCfu);
+
+            // 商業無菌判定：芽孢殺滅 > 5 Log 且 採用無菌密封包裝
+            const isCommerciallySterile = (sporeLogReduction >= 5.0 && pathogenLogReduction >= 6.0 && packaging === 'aseptic');
+            if (isCommerciallySterile) {
+                initialLogCfu = -2.0; // 代表商業無菌 (< 0.01 CFU/mL)
+            }
+
+            // C. 蛋白質變性與梅納反應程度計算
+            let wheyDenature = 0;
+            if (temp > 60) {
+                // LTLT (65C 30m) 約變性 12%, HTST (75C 15s) 約變性 18%, UHT (135C 4s) 約變性 65%, Retort (121C 20m) 約變性 92%
+                if (temp <= 80) {
+                    wheyDenature = ((temp - 60) / 20) * 0.15 + (timeSec / 1800) * 0.10;
+                } else {
+                    const heatIntensity = ((temp - 75) / 60) * Math.pow(Math.max(1, timeSec), 0.28);
+                    wheyDenature = Math.min(0.95, 0.20 + heatIntensity * 0.22);
+                }
+            }
+            const wheyIntactRate = Math.max(0.05, 1.0 - wheyDenature);
+
+            // 水溶性維生素保留率
+            let vitLoss = 0;
+            if (temp > 60) {
+                vitLoss = Math.min(0.45, ((temp - 60) / 80) * 0.12 + (timeSec / 1800) * 0.22);
+            }
+            const vitaminRetainRate = Math.max(0.55, 1.0 - vitLoss);
+
+            // 梅納反應 (Maillard Reaction)：高溫 + 長時間最顯著 (罐頭滅菌 > UHT > HTST)
+            let maillardLevel = 0;
+            if (temp >= 95) {
+                maillardLevel = Math.min(1.0, ((temp - 95) / 45) * 0.22 + (timeSec / 1200) * ((temp - 90) / 35) * 0.78);
+            }
+
+            return {
+                pathogenSurviveRate,
+                spoilageSurviveRate,
+                sporeSurviveRate,
+                wheyIntactRate,
+                vitaminRetainRate,
+                maillardLevel,
+                initialLogCfu,
+                isCommerciallySterile
+            };
+        }
+
+        // 計算保存第 N 天時的菌數與 pH 值
+        function computeStorageAtDay(day) {
+            const post = state.postProcess;
+            if (post.isCommerciallySterile) {
+                // 商業無菌 + 無菌包裝：即使 30 天室溫也不長菌！
+                // 僅在極高溫長期存放下有極微小物理化學陳化
+                return {
+                    logCfu: -2.0,
+                    ph: 6.68,
+                    spoiled: false,
+                    curdled: false,
+                    sporesGerminated: false
+                };
+            }
+
+            // 溫度對細菌生長速率的影響係數 (4°C 極慢, 25°C 快, 35°C 極快)
+            let growthRatePerDay = 0.28; // 4°C 基準 (每天約增加 0.28 Log，約 12~14 天到達 6 Log)
+            let lagPhaseDays = 2.5;
+
+            if (state.storageTemp === 25) {
+                growthRatePerDay = 2.4; // 室溫下約 1.5 ~ 2 天即破表酸敗
+                lagPhaseDays = 0.3;
+            } else if (state.storageTemp === 35) {
+                growthRatePerDay = 4.2; // 夏溫下不到 1 天即酸敗
+                lagPhaseDays = 0.1;
+            }
+
+            // 若未殺菌 (生乳)，無遲滯期且初始菌高
+            if (state.temp < 55 && !state.hpp) {
+                lagPhaseDays = 0;
+                growthRatePerDay *= 1.6;
+            }
+
+            // 若經過 UHT 但使用一般潔淨充填 (台灣主流鮮乳)，初始菌極低，4°C 可撐 14~16 天，但 25°C 仍會在 2~3 天壞掉
+            const effectiveDays = Math.max(0, day - lagPhaseDays);
+            let currentLog = post.initialLogCfu + effectiveDays * growthRatePerDay;
+
+            // 若有耐熱芽孢存活，在 25°C / 35°C 下芽孢會大量萌發 (Germination) 轉為營養體細菌！
+            let sporesGerminated = false;
+            if (post.sporeSurviveRate > 0.05 && state.storageTemp >= 20 && day >= 0.5) {
+                sporesGerminated = true;
+                currentLog += (day - 0.3) * (state.storageTemp === 35 ? 2.2 : 1.3);
+            }
+
+            currentLog = Math.min(9.0, currentLog); // 最大飽和菌數 10^9 CFU/mL
+
+            // 根據菌數計算乳酸發酵導致的 pH 下降 (正常生乳 pH 6.7，當 Log > 6.0 開始快速酸化，pH < 5.2 酪蛋白凝結)
+            let ph = 6.70;
+            if (currentLog > 5.0) {
+                ph = Math.max(4.40, 6.70 - (currentLog - 5.0) * 0.58);
+            }
+
+            const spoiled = currentLog >= 6.0;
+            const curdled = ph <= 5.3;
+
+            return {
+                logCfu: currentLog,
+                ph,
+                spoiled,
+                curdled,
+                sporesGerminated
+            };
+        }
+
+        // ==========================================
+        // 4. Canvas 微觀粒子系統
+        // ==========================================
+        const canvas = document.getElementById('microCanvas');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+
+        function initParticles() {
+            particles = [];
+            // 1. 病原菌 (14 顆)
+            for (let i = 0; i < 14; i++) {
+                particles.push({
+                    type: 'pathogen',
+                    x: Math.random(),
+                    y: Math.random(),
+                    vx: (Math.random() - 0.5) * 0.0018,
+                    vy: (Math.random() - 0.5) * 0.0018,
+                    angle: Math.random() * Math.PI * 2,
+                    va: (Math.random() - 0.5) * 0.04,
+                    alive: true,
+                    killThreshold: Math.random() // 用於比較 surviveRate
+                });
+            }
+            // 2. 一般腐敗菌/乳酸菌 (26 顆)
+            for (let i = 0; i < 26; i++) {
+                particles.push({
+                    type: 'spoilage',
+                    x: Math.random(),
+                    y: Math.random(),
+                    vx: (Math.random() - 0.5) * 0.0015,
+                    vy: (Math.random() - 0.5) * 0.0015,
+                    angle: Math.random() * Math.PI * 2,
+                    alive: true,
+                    isMultiplied: false,
+                    killThreshold: Math.random()
+                });
+            }
+            // 3. 耐熱芽孢 (12 顆)
+            for (let i = 0; i < 12; i++) {
+                particles.push({
+                    type: 'spore',
+                    x: Math.random(),
+                    y: Math.random(),
+                    vx: (Math.random() - 0.5) * 0.0009,
+                    vy: (Math.random() - 0.5) * 0.0009,
+                    alive: true,
+                    germinated: false,
+                    killThreshold: Math.random()
+                });
+            }
+            // 4. 乳清蛋白分子 (24 顆)
+            for (let i = 0; i < 24; i++) {
+                particles.push({
+                    type: 'protein',
+                    x: Math.random(),
+                    y: Math.random(),
+                    vx: (Math.random() - 0.5) * 0.0012,
+                    vy: (Math.random() - 0.5) * 0.0012,
+                    angle: Math.random() * Math.PI * 2,
+                    denatured: false,
+                    threshold: Math.random()
+                });
+            }
+        }
+
+        function resizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+            drawGrowthChart();
+        });
+
+        // 動態繪製微觀畫布
+        function renderMicroCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            const w = rect.width;
+            const h = rect.height;
+
+            // 1. 計算背景乳品底色（隨梅納反應變米黃、或隨加熱發出紅熱光暈）
+            const maillard = (state.phase === 'raw') ? 0 : state.postProcess.maillardLevel * (state.phase === 'processing' ? state.processProgress : 1);
+            const storageInfo = computeStorageAtDay(state.storageDays);
+
+            // 深色顯微鏡視野背景，帶有乳脂微粒質感與梅納色澤偏移
+            const rBase = Math.round(14 + maillard * 35 + (state.phase === 'processing' && state.temp > 60 ? 28 : 0));
+            const gBase = Math.round(22 + maillard * 22);
+            const bBase = Math.round(38 - maillard * 15);
+            ctx.fillStyle = `rgb(${rBase}, ${gBase}, ${bBase})`;
+            ctx.fillRect(0, 0, w, h);
+
+            // 繪製顯微鏡格線
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.06)';
+            ctx.lineWidth = 1;
+            const gridSize = 40;
+            for (let gx = 0; gx < w; gx += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(gx, 0);
+                ctx.lineTo(gx, h);
+                ctx.stroke();
+            }
+            for (let gy = 0; gy < h; gy += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, gy);
+                ctx.lineTo(w, gy);
+                ctx.stroke();
+            }
+
+            // 若發生酸敗酪蛋白凝結 (Curdling)，繪製酸敗絮狀凝塊
+            if (state.storageDays > 0 && storageInfo.spoiled) {
+                ctx.save();
+                ctx.fillStyle = 'rgba(234, 179, 8, 0.12)';
+                for (let i = 0; i < 8; i++) {
+                    const cx = ((i * 97) % 100) / 100 * w;
+                    const cy = ((i * 53) % 100) / 100 * h;
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, 45 + (i % 3) * 18, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.restore();
+            }
+
+            // 速度倍率：隨當前溫度提升布朗運動速度
+            const speedMult = state.phase === 'processing'
+                ? (0.8 + (state.temp / 70))
+                : (state.storageDays > 0 ? (0.4 + state.storageTemp / 25) : 1.0);
+
+            // 更新與繪製所有粒子
+            for (let i = 0; i < particles.length; i++) {
+                const p = particles[i];
+
+                // 移動位置
+                const activeFactor = (p.alive === false) ? 0.15 : speedMult;
+                p.x += p.vx * activeFactor;
+                p.y += p.vy * activeFactor;
+                if (p.angle !== undefined) p.angle += (p.va || 0.01) * activeFactor;
+
+                // 邊界反彈
+                if (p.x < 0.04) { p.x = 0.04; p.vx *= -1; }
+                if (p.x > 0.96) { p.x = 0.96; p.vx *= -1; }
+                if (p.y < 0.08) { p.y = 0.08; p.vy *= -1; }
+                if (p.y > 0.88) { p.y = 0.88; p.vy *= -1; }
+
+                const px = p.x * w;
+                const py = p.y * h;
+
+                ctx.save();
+                ctx.translate(px, py);
+
+                if (p.type === 'pathogen') {
+                    // 紅色桿狀致病菌
+                    ctx.rotate(p.angle);
+                    if (p.alive) {
+                        ctx.fillStyle = '#f43f5e';
+                        ctx.shadowColor = '#f43f5e';
+                        ctx.shadowBlur = 8;
+                        ctx.beginPath();
+                        ctx.roundRect(-9, -4, 18, 8, 4);
+                        ctx.fill();
+                    } else {
+                        // 死亡破裂狀態
+                        ctx.strokeStyle = 'rgba(244, 63, 94, 0.35)';
+                        ctx.lineWidth = 1.5;
+                        ctx.setLineDash([2, 2]);
+                        ctx.beginPath();
+                        ctx.roundRect(-8, -3.5, 16, 7, 3);
+                        ctx.stroke();
+                    }
+                } else if (p.type === 'spoilage') {
+                    // 橘黃色雙球狀乳酸腐敗菌
+                    ctx.rotate(p.angle);
+                    if (p.alive) {
+                        ctx.fillStyle = '#fbbf24';
+                        ctx.shadowColor = '#f59e0b';
+                        ctx.shadowBlur = 6;
+                        ctx.beginPath();
+                        ctx.arc(-4, 0, 4.5, 0, Math.PI * 2);
+                        ctx.arc(4, 0, 4.5, 0, Math.PI * 2);
+                        ctx.fill();
+                    } else {
+                        ctx.fillStyle = 'rgba(251, 191, 36, 0.18)';
+                        ctx.beginPath();
+                        ctx.arc(-3, 0, 3.5, 0, Math.PI * 2);
+                        ctx.arc(3, 0, 3.5, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                } else if (p.type === 'spore') {
+                    // 耐熱芽孢：紫色核心 + 青色堅硬厚外殼
+                    if (p.alive) {
+                        ctx.fillStyle = '#a855f7';
+                        ctx.strokeStyle = p.germinated ? '#f59e0b' : '#22d3ee';
+                        ctx.lineWidth = 2.5;
+                        ctx.shadowColor = '#a855f7';
+                        ctx.shadowBlur = 8;
+                        ctx.beginPath();
+                        ctx.arc(0, 0, 6.5, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.stroke();
+
+                        // 內核亮點
+                        ctx.fillStyle = '#fff';
+                        ctx.beginPath();
+                        ctx.arc(-1.5, -1.5, 1.8, 0, Math.PI * 2);
+                        ctx.fill();
+                    } else {
+                        // 被 UHT 或高壓滅菌釜擊碎的芽孢殼
+                        ctx.strokeStyle = 'rgba(168, 85, 247, 0.3)';
+                        ctx.lineWidth = 1.5;
+                        ctx.beginPath();
+                        ctx.arc(0, 0, 6, 0.3, Math.PI * 1.4);
+                        ctx.stroke();
+                    }
+                } else if (p.type === 'protein') {
+                    // 乳清蛋白與風味分子：活性時為翠綠螺旋，變性後纏結為琥珀色/白色團塊
+                    ctx.rotate(p.angle);
+                    if (!p.denatured) {
+                        ctx.strokeStyle = '#10b981';
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.moveTo(-7, 0);
+                        ctx.bezierCurveTo(-3, -6, 3, 6, 7, 0);
+                        ctx.stroke();
+                    } else {
+                        // 變性纏結蛋白質 (若梅納反應高則偏焦糖金棕色)
+                        ctx.strokeStyle = maillard > 0.35 ? '#d97706' : '#6ee7b7';
+                        ctx.lineWidth = 1.8;
+                        ctx.beginPath();
+                        ctx.arc(0, 0, 4.5, 0, Math.PI * 1.7);
+                        ctx.moveTo(-3, -3);
+                        ctx.lineTo(4, 3);
+                        ctx.stroke();
+                    }
+                }
+
+                ctx.restore();
+            }
+
+            // 若在加工階段，繪製熱能或高壓視覺波紋
+            if (state.phase === 'processing') {
+                if (state.hpp) {
+                    ctx.strokeStyle = 'rgba(168, 85, 247, 0.45)';
+                    ctx.lineWidth = 6;
+                    ctx.strokeRect(3, 3, w - 6, h - 6);
+                } else if (state.temp >= 60) {
+                    const alpha = Math.min(0.45, (state.temp - 50) / 220);
+                    const grad = ctx.createRadialGradient(w / 2, h / 2, w * 0.2, w / 2, h / 2, w * 0.65);
+                    grad.addColorStop(0, 'rgba(244, 63, 94, 0)');
+                    grad.addColorStop(1, `rgba(244, 63, 94, ${alpha})`);
+                    ctx.fillStyle = grad;
+                    ctx.fillRect(0, 0, w, h);
+                }
+            }
+
+            requestAnimationFrame(renderMicroCanvas);
+        }
+
+        // 同步粒子存活狀態與計算結果
+        function syncParticlesToState(progressRatio = 1.0) {
+            const post = state.postProcess;
+            const curPathogenSurvive = 1 - (1 - post.pathogenSurviveRate) * progressRatio;
+            const curSpoilageSurvive = 1 - (1 - post.spoilageSurviveRate) * progressRatio;
+            const curSporeSurvive = 1 - (1 - post.sporeSurviveRate) * progressRatio;
+            const curWheyIntact = 1 - (1 - post.wheyIntactRate) * progressRatio;
+
+            // 先移除之前在保存期間動態增殖的多餘腐敗菌
+            particles = particles.filter(p => !p.isMultiplied);
+
+            particles.forEach(p => {
+                if (p.type === 'pathogen') {
+                    p.alive = p.killThreshold < curPathogenSurvive;
+                } else if (p.type === 'spoilage') {
+                    p.alive = p.killThreshold < curSpoilageSurvive;
+                } else if (p.type === 'spore') {
+                    p.alive = p.killThreshold < curSporeSurvive;
+                    p.germinated = false;
+                } else if (p.type === 'protein') {
+                    p.denatured = p.threshold > curWheyIntact;
+                }
+            });
+
+            // 若在保存階段 (storageDays > 0)，根據對數菌數動態新增繁殖的細菌粒子
+            if (state.storageDays > 0 && !post.isCommerciallySterile) {
+                const storageInfo = computeStorageAtDay(state.storageDays);
+                if (storageInfo.sporesGerminated) {
+                    particles.forEach(p => {
+                        if (p.type === 'spore' && p.alive) p.germinated = true;
+                    });
+                }
+                // 計算需要額外生成的腐敗菌視覺顆粒數 (最多新增 65 顆)
+                if (storageInfo.logCfu > post.initialLogCfu + 0.3) {
+                    const extraCount = Math.min(65, Math.floor((storageInfo.logCfu - Math.max(0, post.initialLogCfu)) * 10));
+                    for (let i = 0; i < extraCount; i++) {
+                        particles.push({
+                            type: (state.temp < 55 && !state.hpp && i % 3 === 0) ? 'pathogen' : 'spoilage',
+                            x: Math.random(),
+                            y: Math.random(),
+                            vx: (Math.random() - 0.5) * 0.0022,
+                            vy: (Math.random() - 0.5) * 0.0022,
+                            angle: Math.random() * Math.PI * 2,
+                            alive: true,
+                            isMultiplied: true,
+                            killThreshold: 0
+                        });
+                    }
+                }
+            }
+        }
+
+        // ==========================================
+        // 5. 右側生長曲線圖表繪製
+        // ==========================================
+        function drawGrowthChart() {
+            const chartCanvas = document.getElementById('growthChartCanvas');
+            if (!chartCanvas) return;
+            const rect = chartCanvas.parentElement.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            chartCanvas.width = rect.width * dpr;
+            chartCanvas.height = rect.height * dpr;
+            const cctx = chartCanvas.getContext('2d');
+            cctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+            const w = rect.width;
+            const h = rect.height;
+            cctx.clearRect(0, 0, w, h);
+
+            // Y 軸範圍：-2 Log 到 9 Log
+            const mapY = (logVal) => {
+                const norm = (logVal - (-2)) / (9 - (-2));
+                return h - 12 - norm * (h - 24);
+            };
+            const mapX = (day) => 24 + (day / 30) * (w - 34);
+
+            // 繪製 6.0 Log 腐敗酸敗警戒紅線
+            const spoilY = mapY(6.0);
+            cctx.strokeStyle = 'rgba(244, 63, 94, 0.55)';
+            cctx.lineWidth = 1;
+            cctx.setLineDash([4, 3]);
+            cctx.beginPath();
+            cctx.moveTo(20, spoilY);
+            cctx.lineTo(w - 6, spoilY);
+            cctx.stroke();
+            cctx.setLineDash([]);
+
+            // 繪製 0~30 天預測曲線
+            cctx.strokeStyle = state.postProcess.isCommerciallySterile ? '#10b981' : '#38bdf8';
+            cctx.lineWidth = 2;
+            cctx.beginPath();
+            for (let d = 0; d <= 30; d += 0.5) {
+                const info = computeStorageAtDay(d);
+                const x = mapX(d);
+                const y = mapY(info.logCfu);
+                if (d === 0) cctx.moveTo(x, y);
+                else cctx.lineTo(x, y);
+            }
+            cctx.stroke();
+
+            // 繪製當前保存天數定位點
+            const curInfo = computeStorageAtDay(state.storageDays);
+            const cx = mapX(state.storageDays);
+            const cy = mapY(curInfo.logCfu);
+
+            cctx.fillStyle = curInfo.spoiled ? '#f43f5e' : '#f59e0b';
+            cctx.beginPath();
+            cctx.arc(cx, cy, 4.5, 0, Math.PI * 2);
+            cctx.fill();
+            cctx.strokeStyle = '#fff';
+            cctx.lineWidth = 1.5;
+            cctx.stroke();
+        }
+
+        // ==========================================
+        // 6. UI 狀態與科學診斷更新
+        // ==========================================
+        function updateUI() {
+            const post = computeThermalKinetics(state.temp, state.timeSeconds, state.hpp, state.packaging);
+            state.postProcess = post;
+
+            const storageInfo = computeStorageAtDay(state.storageDays);
+
+            // 更新滑桿顯示文字
+            document.getElementById('tempValueDisplay').textContent = `${state.temp} °C`;
+            document.getElementById('timeValueDisplay').textContent = formatSeconds(state.timeSeconds);
+            document.getElementById('hppCheckbox').checked = state.hpp;
+
+            // 更新包裝按鈕高亮
+            const pkgCleanBtn = document.getElementById('pkg-clean');
+            const pkgAsepticBtn = document.getElementById('pkg-aseptic');
+            if (state.packaging === 'clean') {
+                pkgCleanBtn.className = 'p-2 rounded-xl border border-sky-500 bg-sky-500/15 text-left transition';
+                pkgAsepticBtn.className = 'p-2 rounded-xl border border-slate-700 bg-slate-900/60 text-left transition';
+            } else {
+                pkgAsepticBtn.className = 'p-2 rounded-xl border border-emerald-500 bg-emerald-500/15 text-left transition';
+                pkgCleanBtn.className = 'p-2 rounded-xl border border-slate-700 bg-slate-900/60 text-left transition';
+            }
+
+            // 更新保存溫度按鈕高亮
+            [4, 25, 35].forEach(t => {
+                const btn = document.getElementById(`store-${t}`);
+                if (state.storageTemp === t) {
+                    btn.className = 'p-2 rounded-xl border border-sky-500 bg-sky-500/20 text-center transition shadow';
+                } else {
+                    btn.className = 'p-2 rounded-xl border border-slate-700 bg-slate-900/60 text-center transition';
+                }
+            });
+
+            // 根據當前模擬階段決定顯示數值
+            const isRawView = (state.phase === 'raw');
+            const pathPct = isRawView ? 100 : Math.round(post.pathogenSurviveRate * 100);
+            const spoilPct = isRawView ? 100 : (storageInfo.spoiled ? 999 : Math.max(0, Math.round(post.spoilageSurviveRate * 1000) / 10));
+            const sporePct = isRawView ? 100 : Math.round(post.sporeSurviveRate * 100);
+            const protPct = isRawView ? 100 : Math.round(post.wheyIntactRate * 100);
+
+            document.getElementById('countPathogen').textContent = pathPct === 0 ? '0% (全滅)' : `${pathPct}%`;
+            document.getElementById('countSpoilage').textContent = spoilPct > 100 ? '暴增酸敗!' : (spoilPct === 0 ? '<0.01%' : `${spoilPct}%`);
+            document.getElementById('countSpore').textContent = sporePct === 0 ? '0% (商業無菌)' : `${sporePct}%`;
+            document.getElementById('countProtein').textContent = `${protPct}%`;
+
+            // 爐溫與 pH 顯示
+            const displayTemp = state.phase === 'processing'
+                ? state.temp
+                : (state.storageDays > 0 ? state.storageTemp : (state.phase === 'processed' ? state.temp : 25));
+            document.getElementById('liveTempReadout').textContent = `${displayTemp.toFixed(1)}°C`;
+
+            const pHElem = document.getElementById('livePhReadout');
+            pHElem.textContent = `pH ${storageInfo.ph.toFixed(2)}`;
+            pHElem.className = storageInfo.ph < 5.8 ? 'text-rose-400 font-bold' : 'text-emerald-400 font-bold';
+
+            // 底部乳品外觀顏色與文字
+            const swatch = document.getElementById('milkColorSwatch');
+            const milkText = document.getElementById('milkQualityText');
+            document.getElementById('storageDayBadge').textContent = `Day ${Number(state.storageDays).toFixed(1)}`;
+
+            if (post.maillardLevel > 0.35 && state.phase !== 'raw') {
+                swatch.style.backgroundColor = '#f3e5ab'; // 梅納反應焦糖米黃色
+            } else {
+                swatch.style.backgroundColor = '#fdfefc';
+            }
+
+            if (storageInfo.curdled) {
+                milkText.innerHTML = `<span class="text-rose-400 font-bold">⚠️ 嚴重酸敗凝結 (pH ${storageInfo.ph.toFixed(1)})：細菌大量產酸導致酪蛋白變性結塊！</span>`;
+            } else if (storageInfo.spoiled) {
+                milkText.innerHTML = `<span class="text-amber-400 font-bold">⚠️ 微生物超標 (>10⁶ CFU/mL)：開始發酸產生異味，不可飲用</span>`;
+            } else if (post.isCommerciallySterile && state.phase !== 'raw') {
+                milkText.innerHTML = `<span class="text-emerald-300 font-bold">✨ 商業無菌狀態：無活菌與芽孢，室溫穩定保存中</span>`;
+            } else if (state.phase === 'raw') {
+                milkText.textContent = '乳品狀態：生乳原液（點擊下方「階段一」執行殺菌，或直接快轉觀察腐敗）';
+            } else {
+                milkText.textContent = `乳品狀態：殺菌完成，於 ${state.storageTemp}°C 環境保存正常`;
+            }
+
+            // 更新右側營養條與 CFU 讀數
+            const cfuText = document.getElementById('cfuValueText');
+            if (post.isCommerciallySterile && state.phase !== 'raw') {
+                cfuText.textContent = '0 CFU (商業無菌)';
+                cfuText.className = 'font-mono text-sm font-bold text-emerald-400';
+            } else {
+                cfuText.textContent = `${storageInfo.logCfu.toFixed(2)} Log CFU/mL`;
+                cfuText.className = storageInfo.spoiled
+                    ? 'font-mono text-sm font-bold text-rose-400'
+                    : 'font-mono text-sm font-bold text-amber-400';
+            }
+
+            const wheyPct = Math.round(post.wheyIntactRate * 100);
+            document.getElementById('wheyRetainPct').textContent = `${wheyPct}%`;
+            document.getElementById('wheyRetainBar').style.width = `${wheyPct}%`;
+
+            const vitPct = Math.round(post.vitaminRetainRate * 100);
+            document.getElementById('vitaminRetainPct').textContent = `${vitPct}%`;
+            document.getElementById('vitaminRetainBar').style.width = `${vitPct}%`;
+
+            const mailPct = Math.round(post.maillardLevel * 100);
+            let mailDesc = '清爽生乳感';
+            if (mailPct > 60) mailDesc = '濃郁焦糖燉奶香 (褐變)';
+            else if (mailPct > 15) mailDesc = '典型熟乳脂香氣';
+            document.getElementById('maillardPct').textContent = `${mailPct}% (${mailDesc})`;
+            document.getElementById('maillardBar').style.width = `${mailPct}%`;
+
+            // 更新科學診斷報告卡片
+            updateDiagnosticReport(post, storageInfo);
+
+            // 重繪圖表
+            drawGrowthChart();
+        }
+
+        function updateDiagnosticReport(post, storageInfo) {
+            const badge = document.getElementById('shelfLifeBadge');
+            const mainText = document.getElementById('diagnosticMainText');
+            const chkPath = document.getElementById('checkPathogen');
+            const chkSpore = document.getElementById('checkSpore');
+            const chkPkg = document.getElementById('checkPackage');
+
+            // 檢核表更新
+            if (post.pathogenSurviveRate === 0) {
+                chkPath.textContent = '✓ 100% 殺滅 (安全)';
+                chkPath.className = 'font-mono font-bold text-emerald-400';
+            } else {
+                chkPath.textContent = `✗ 殘留 ${Math.round(post.pathogenSurviveRate * 100)}% (具感染風險!)`;
+                chkPath.className = 'font-mono font-bold text-rose-400';
+            }
+
+            if (post.sporeSurviveRate === 0) {
+                chkSpore.textContent = '✓ 已徹底摧毀 (無芽孢)';
+                chkSpore.className = 'font-mono font-bold text-emerald-400';
+            } else {
+                chkSpore.textContent = `✗ 存活 ${Math.round(post.sporeSurviveRate * 100)}% (室溫會萌發)`;
+                chkSpore.className = 'font-mono font-bold text-rose-400';
+            }
+
+            if (state.packaging === 'aseptic') {
+                chkPkg.textContent = '✓ 無菌密封阻隔 (隔絕氧與菌)';
+                chkPkg.className = 'font-mono font-bold text-emerald-400';
+            } else {
+                chkPkg.textContent = '△ 一般潔淨盒 (微量落菌/透氣)';
+                chkPkg.className = 'font-mono font-bold text-amber-400';
+            }
+
+            // 綜合診斷邏輯
+            if (post.isCommerciallySterile) {
+                badge.textContent = '可室溫長期保存 (保久乳)';
+                badge.className = 'text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
+                mainText.innerHTML = `
+                    <p><b class="text-emerald-300">✅ 達成「商業無菌 + 無菌包裝」條件！</b></p>
+                    <p>當前製程（<b>${state.temp}°C / ${formatSeconds(state.timeSeconds)}</b>）的高熱能已徹底擊碎最頑強的「耐熱細菌芽孢」，並配合<b>無菌密封包裝</b>隔絕外界空氣與二次落菌。</p>
+                    <p class="text-amber-200/90">💡 <b>科學結論</b>：這就是為什麼<b>保久乳不需要加任何防腐劑</b>，也能在 25°C 室溫下保存 6 個月到 1 年以上不會壞！</p>
+                `;
+            } else if (post.sporeSurviveRate === 0 && state.packaging === 'clean') {
+                badge.textContent = '須 4°C 冷藏 (台灣主流鮮乳)';
+                badge.className = 'text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/40';
+                mainText.innerHTML = `
+                    <p><b class="text-sky-300">❄️ 為什麼已經用 UHT 高溫殺死芽孢，卻還是要冷藏？</b></p>
+                    <p>雖然 <b>${state.temp}°C</b> 瞬間消滅了幾乎所有細菌與芽孢，但因為採用<b>「一般潔淨室充填（屋頂紙盒/家庭號塑膠瓶）」</b>，無法像利樂包一樣達到 100% 絕對無菌密封與完全阻氧。</p>
+                    <p class="text-amber-200/90">💡 <b>科學結論</b>：這正是<b>台灣主流 UHT 鮮乳</b>的做法！若放在 ${state.storageTemp}°C 下，微量二次落菌仍會繁殖，因此必須<b>全程 4°C 冷藏</b>（保存約 14 天）。想變成保久乳？請將左側包裝切換為「無菌密封包裝」試試看！</p>
+                `;
+            } else if (post.pathogenSurviveRate === 0 && post.sporeSurviveRate > 0) {
+                badge.textContent = '必須 4°C 冷藏 (巴氏鮮乳/HPP)';
+                badge.className = 'text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40';
+                mainText.innerHTML = `
+                    <p><b class="text-amber-300">🔬 消滅了致病菌，但「耐熱芽孢」與微量腐敗菌仍存活！</b></p>
+                    <p>當前條件已 100% 殺死沙門氏菌等致病菌，飲用安全無虞且完美保留了 <b>${Math.round(post.wheyIntactRate * 100)}%</b> 活性乳清蛋白；但溫度不足以破壞<b>具厚殼的耐熱芽孢</b>。</p>
+                    <p class="text-slate-300">💡 <b>科學結論</b>：若置於 25°C 室溫，休眠的芽孢會在數小時內萌發並呈指數倍增，約 1~2 天即發酸凝結；<b>置於 4°C 冷藏可大幅抑制細菌酵素活性與分裂速度</b>，延長保鮮至 10~14 天。</p>
+                `;
+            } else {
+                badge.textContent = '高風險：未完全殺菌';
+                badge.className = 'text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40';
+                mainText.innerHTML = `
+                    <p><b class="text-rose-400">⚠️ 殺菌強度不足（病原菌仍存活）！</b></p>
+                    <p>當前溫度（<b>${state.temp}°C</b>）與時間不足以殺死結核桿菌、李斯特菌與沙門氏菌等食源性致病菌。</p>
+                    <p class="text-slate-300">💡 <b>科學結論</b>：生乳即使放進 4°C 冰箱，李斯特菌等「嗜冷致病菌」依然能緩慢生長，且乳酸菌會在短期內使乳品酸敗，不可直接飲用。</p>
+                `;
+            }
+        }
+
+        // ==========================================
+        // 7. 互動控制與動畫流程函數
+        // ==========================================
+        function selectPreset(presetKey) {
+            stopStorageAnimation();
+            const p = PRESETS[presetKey];
+            if (!p) return;
+
+            state.currentPreset = presetKey;
+            state.temp = p.temp;
+            state.timeSeconds = sliderToSeconds(p.timeSliderVal);
+            state.hpp = p.hpp;
+            state.packaging = p.packaging;
+            state.storageTemp = p.storageTemp;
+            state.storageDays = 0;
+            state.phase = 'processed'; // 點擊預設直接展示該殺菌法結果，方便即時比較
+
+            // 更新滑桿位置
+            document.getElementById('tempSlider').value = p.temp;
+            document.getElementById('timeSlider').value = p.timeSliderVal;
+            document.getElementById('storageDaySlider').value = 0;
+
+            // 更新預設按鈕樣式
+            document.querySelectorAll('.preset-btn').forEach(btn => btn.classList.remove('active'));
+            const activeBtn = document.getElementById(`btn-${presetKey}`);
+            if (activeBtn) activeBtn.classList.add('active');
+
+            // UHT 子模式面板顯示控制
+            const uhtSub = document.getElementById('uhtSubOptions');
+            if (presetKey === 'uht') {
+                uhtSub.classList.remove('hidden');
+                setUhtSubMode(state.uhtSubMode, false);
+            } else {
+                uhtSub.classList.add('hidden');
+            }
+
+            // 更新說明卡
+            document.getElementById('currentMethodBadge').textContent = p.badge;
+            document.getElementById('descTitle').textContent = p.title;
+            document.getElementById('descFood').textContent = p.food;
+            document.getElementById('descBody').textContent = p.desc;
+            document.getElementById('simPhaseBadge').textContent = presetKey === 'raw' ? '狀態：生乳未殺菌' : `已完成：${p.badge}`;
+
+            updateUI();
+            syncParticlesToState(1.0);
+        }
+
+        function setUhtSubMode(mode, triggerUpdate = true) {
+            state.uhtSubMode = mode;
+            const freshBtn = document.getElementById('uht-sub-fresh');
+            const shelfBtn = document.getElementById('uht-sub-shelf');
+
+            if (mode === 'fresh') {
+                state.packaging = 'clean';
+                state.storageTemp = 4;
+                freshBtn.className = 'text-left p-2 rounded-lg border border-amber-400 bg-amber-500/20 text-xs transition';
+                shelfBtn.className = 'text-left p-2 rounded-lg border border-slate-700 bg-slate-900/70 text-xs transition';
+            } else {
+                state.packaging = 'aseptic';
+                state.storageTemp = 25;
+                shelfBtn.className = 'text-left p-2 rounded-lg border border-emerald-400 bg-emerald-500/20 text-xs transition';
+                freshBtn.className = 'text-left p-2 rounded-lg border border-slate-700 bg-slate-900/70 text-xs transition';
+            }
+
+            if (triggerUpdate) {
+                state.storageDays = 0;
+                document.getElementById('storageDaySlider').value = 0;
+                updateUI();
+                syncParticlesToState(1.0);
+            }
+        }
+
+        function onCustomSliderChange() {
+            stopStorageAnimation();
+            state.temp = Number(document.getElementById('tempSlider').value);
+            const timeVal = Number(document.getElementById('timeSlider').value);
+            state.timeSeconds = sliderToSeconds(timeVal);
+            state.hpp = document.getElementById('hppCheckbox').checked;
+            state.storageDays = 0;
+            document.getElementById('storageDaySlider').value = 0;
+            state.phase = 'processed';
+
+            document.getElementById('currentMethodBadge').textContent = '自訂實驗參數';
+            document.getElementById('simPhaseBadge').textContent = `自訂殺菌：${state.temp}°C / ${formatSeconds(state.timeSeconds)}`;
+
+            updateUI();
+            syncParticlesToState(1.0);
+        }
+
+        function setPackaging(pkgType) {
+            stopStorageAnimation();
+            state.packaging = pkgType;
+            if (state.currentPreset === 'uht') {
+                state.uhtSubMode = (pkgType === 'aseptic') ? 'shelf' : 'fresh';
+                setUhtSubMode(state.uhtSubMode, false);
+            }
+            updateUI();
+            syncParticlesToState(1.0);
+        }
+
+        function setStorageTemp(tempVal) {
+            state.storageTemp = tempVal;
+            updateUI();
+            syncParticlesToState(1.0);
+        }
+
+        // 階段一：執行熱殺菌動態過程動畫
+        let processAnimId = null;
+        function startThermalProcess() {
+            stopStorageAnimation();
+            if (processAnimId) cancelAnimationFrame(processAnimId);
+
+            // 先將粒子重置為生乳 100% 活性狀態
+            initParticles();
+            state.storageDays = 0;
+            document.getElementById('storageDaySlider').value = 0;
+            state.phase = 'processing';
+            state.processProgress = 0;
+
+            const overlay = document.getElementById('processOverlayBar');
+            const overlayText = document.getElementById('processOverlayText');
+            const overlayPct = document.getElementById('processOverlayPct');
+            const fill = document.getElementById('processProgressFill');
+            overlay.classList.remove('hidden');
+
+            document.getElementById('simPhaseBadge').textContent = '🔥 階段一：殺菌加工進行中...';
+
+            const duration = 1800; // 1.8 秒動畫展示
+            const startTime = performance.now();
+
+            function step(now) {
+                const elapsed = now - startTime;
+                const progress = Math.min(1, elapsed / duration);
+                state.processProgress = progress;
+
+                const pct = Math.round(progress * 100);
+                overlayPct.textContent = `${pct}%`;
+                fill.style.width = `${pct}%`;
+
+                if (state.hpp) {
+                    overlayText.textContent = `正在加壓至 600 MPa 超高靜水壓 (${ state.temp }°C)...`;
+                } else {
+                    overlayText.textContent = `熱交換器加熱中：${state.temp}°C 維持 ${formatSeconds(state.timeSeconds)}...`;
+                }
+
+                syncParticlesToState(progress);
+                updateUI();
+
+                if (progress < 1) {
+                    processAnimId = requestAnimationFrame(step);
+                } else {
+                    state.phase = 'processed';
+                    document.getElementById('simPhaseBadge').textContent = '✓ 殺菌完成 (Day 0)';
+                    setTimeout(() => {
+                        overlay.classList.add('hidden');
+                    }, 500);
+                    updateUI();
+                }
+            }
+
+            processAnimId = requestAnimationFrame(step);
+        }
+
+        // 階段二：快轉保存實驗 (0 ~ 30 天)
+        let storageInterval = null;
+        function toggleStorageSimulation() {
+            if (state.storagePlaying) {
+                stopStorageAnimation();
+                return;
+            }
+
+            if (state.phase === 'raw') {
+                state.phase = 'processed';
+            }
+            if (state.storageDays >= 30) {
+                state.storageDays = 0;
+            }
+
+            state.storagePlaying = true;
+            document.getElementById('btnRunStorageText').textContent = '⏸ 暫停保存快轉實驗';
+            document.getElementById('simPhaseBadge').textContent = `⏳ 階段二：${state.storageTemp}°C 保存測試中`;
+
+            storageInterval = setInterval(() => {
+                state.storageDays = Math.min(30, state.storageDays + 0.5);
+                document.getElementById('storageDaySlider').value = state.storageDays;
+                document.getElementById('timelineStatusLabel').textContent = `保存第 ${state.storageDays.toFixed(1)} 天 (${state.storageTemp}°C 環境)`;
+
+                syncParticlesToState(1.0);
+                updateUI();
+
+                if (state.storageDays >= 30) {
+                    stopStorageAnimation();
+                }
+            }, 90);
+        }
+
+        function stopStorageAnimation() {
+            state.storagePlaying = false;
+            if (storageInterval) {
+                clearInterval(storageInterval);
+                storageInterval = null;
+            }
+            const btnText = document.getElementById('btnRunStorageText');
+            if (btnText) btnText.textContent = '階段二：快轉保存實驗 (0~30天)';
+        }
+
+        function onManualStorageDayChange(val) {
+            stopStorageAnimation();
+            if (state.phase === 'raw') state.phase = 'processed';
+            state.storageDays = Number(val);
+            document.getElementById('timelineStatusLabel').textContent = `保存第 ${state.storageDays.toFixed(1)} 天 (${state.storageTemp}°C 環境)`;
+            syncParticlesToState(1.0);
+            updateUI();
+        }
+
+        function resetFullExperiment() {
+            stopStorageAnimation();
+            initParticles();
+            selectPreset('raw');
+            state.phase = 'raw';
+            document.getElementById('simPhaseBadge').textContent = '待命：生乳原液';
+            document.getElementById('timelineStatusLabel').textContent = '已重置為新鮮生乳狀態';
+            updateUI();
+        }
+
+        function openComparisonModal() {
+            const modal = document.getElementById('comparisonModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeComparisonModal() {
+            const modal = document.getElementById('comparisonModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        // 啟動初始化
+        window.onload = function () {
+            resizeCanvas();
+            initParticles();
+            selectPreset('htst');
+            renderMicroCanvas();
+        };
+    </script>
+</body>
+</html>
