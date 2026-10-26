@@ -1,0 +1,2130 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D 消化道內視鏡：第一人稱食物奇幻旅程</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #050203;
+            font-family: 'Noto Sans TC', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 1;
+        }
+        /* 內視鏡光學暗角與掃描線特效 */
+        .endoscope-vignette {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 10;
+            background: radial-gradient(circle at center, transparent 58%, rgba(12, 3, 5, 0.55) 78%, rgba(2, 0, 1, 0.96) 98%);
+            box-shadow: inset 0 0 90px rgba(0,0,0,0.95);
+        }
+        .scanlines {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 11;
+            background: linear-gradient(
+                to bottom,
+                rgba(255,255,255,0),
+                rgba(255,255,255,0) 50%,
+                rgba(0, 0, 0, 0.12) 50%,
+                rgba(0, 0, 0, 0.12)
+            );
+            background-size: 100% 4px;
+            opacity: 0.45;
+        }
+        .mono-font {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        /* 嗆到警告紅光閃爍 */
+        @keyframes chokePulse {
+            0%, 100% { box-shadow: inset 0 0 0px rgba(239, 68, 68, 0); background-color: rgba(239, 68, 68, 0); }
+            50% { box-shadow: inset 0 0 130px rgba(239, 68, 68, 0.85); background-color: rgba(239, 68, 68, 0.18); }
+        }
+        .choke-alert-overlay {
+            animation: chokePulse 0.35s infinite;
+        }
+        /* 自訂滑桿樣式 */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            height: 8px;
+            border-radius: 999px;
+            background: linear-gradient(90deg, 
+                #f472b6 0%, #f472b6 12%, 
+                #fb7185 12%, #fb7185 25%, 
+                #e11d48 25%, #e11d48 38%, 
+                #ca8a04 38%, #ca8a04 55%, 
+                #10b981 55%, #10b981 82%, 
+                #a16207 82%, #a16207 100%);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 22px;
+            width: 22px;
+            border-radius: 50%;
+            background: #ffffff;
+            box-shadow: 0 0 12px #38bdf8, inset 0 0 4px #0284c7;
+            margin-top: -8px;
+            cursor: pointer;
+            transition: transform 0.15s ease;
+        }
+        input[type=range]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+        /* 3D 空間解剖標籤 */
+        .label-3d {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+            z-index: 15;
+        }
+        /* 2D 解剖圖互動與脈衝特效 */
+        .organ-svg-node {
+            cursor: pointer;
+            transition: all 0.25s ease;
+        }
+        .organ-svg-node:hover {
+            filter: brightness(1.35) drop-shadow(0 0 6px rgba(56, 189, 248, 0.75));
+        }
+        .organ-active-glow {
+            filter: drop-shadow(0 0 8px rgba(34, 211, 238, 0.95));
+        }
+        @keyframes radarPing {
+            0% { r: 4; opacity: 0.95; stroke-width: 2.5px; }
+            100% { r: 16; opacity: 0; stroke-width: 0.5px; }
+        }
+        .radar-ring {
+            animation: radarPing 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+        }
+        /* 玻璃擬態捲軸 */
+        ::-webkit-scrollbar {
+            width: 5px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.4);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(56, 189, 248, 0.4);
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="text-slate-100 antialiased">
+
+    <!-- 3D 渲染容器 -->
+    <div id="canvas-container"></div>
+
+    <!-- 內視鏡光學遮罩與警告層 -->
+    <div id="choke-overlay" class="fixed inset-0 pointer-events-none z-20 hidden"></div>
+    <div class="endoscope-vignette"></div>
+    <div class="scanlines"></div>
+
+    <!-- 3D 空間解剖浮動標籤容器 -->
+    <div id="labels-container" class="fixed inset-0 pointer-events-none z-15 overflow-hidden"></div>
+
+    <!-- 頂部內視鏡醫療 HUD 狀態列 -->
+    <header class="fixed top-0 left-0 right-0 z-30 p-3 md:p-4 pointer-events-none flex flex-wrap justify-between items-start gap-2">
+        <!-- 左上：內視鏡系統資訊與即時遙測 -->
+        <div class="bg-slate-950/80 backdrop-blur-md border border-cyan-500/30 rounded-2xl p-3.5 shadow-2xl pointer-events-auto flex items-center gap-4">
+            <div class="relative flex items-center justify-center w-12 h-12 rounded-xl bg-cyan-950/80 border border-cyan-400/40 text-cyan-300">
+                <svg class="w-7 h-7 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                </svg>
+                <span class="absolute -top-1 -right-1 flex h-3 w-3">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span>
+                </span>
+            </div>
+            <div>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs font-bold tracking-widest uppercase text-cyan-400 mono-font">ENDO-CAM // GI-TRACT 3D</span>
+                    <span class="px-2 py-0.5 text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 rounded-full mono-font">LIVE REC</span>
+                </div>
+                <h1 class="text-base md:text-lg font-black tracking-tight text-white mt-0.5">第一人稱消化道內視鏡・食物視角模擬器</h1>
+                <div class="flex flex-wrap items-center gap-3 mt-1 text-xs mono-font text-slate-300">
+                    <span>深度: <strong id="hud-depth" class="text-cyan-300">0.0 cm</strong></span>
+                    <span class="text-slate-600">|</span>
+                    <span>酸鹼值: <strong id="hud-ph" class="text-emerald-300">pH 7.0</strong></span>
+                    <span class="text-slate-600">|</span>
+                    <span>管徑: <strong id="hud-diameter" class="text-amber-300">4.5 cm</strong></span>
+                    <span class="text-slate-600 hidden sm:inline">|</span>
+                    <span class="hidden sm:inline">溫度: <strong class="text-rose-300">37.0 °C</strong></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 中上：6 大消化道站點快速導覽列 -->
+        <nav class="bg-slate-950/80 backdrop-blur-md border border-slate-700/60 rounded-2xl p-1.5 shadow-2xl pointer-events-auto flex flex-wrap items-center gap-1 max-w-full overflow-x-auto">
+            <button onclick="jumpToStation(0)" id="nav-btn-0" class="station-btn px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 bg-cyan-500/20 text-cyan-300 border border-cyan-400/50">
+                <span>1. 口腔</span>
+            </button>
+            <button onclick="jumpToStation(1)" id="nav-btn-1" class="station-btn px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 text-slate-300 hover:bg-slate-800/70">
+                <span>2. 咽與分岔口</span>
+                <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+            </button>
+            <button onclick="jumpToStation(2)" id="nav-btn-2" class="station-btn px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 text-slate-300 hover:bg-slate-800/70">
+                <span>3. 食道蠕動</span>
+            </button>
+            <button onclick="jumpToStation(3)" id="nav-btn-3" class="station-btn px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 text-slate-300 hover:bg-slate-800/70">
+                <span>4. 胃與皺摺</span>
+            </button>
+            <button onclick="jumpToStation(4)" id="nav-btn-4" class="station-btn px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 text-slate-300 hover:bg-slate-800/70">
+                <span>5. 小腸絨毛森林</span>
+            </button>
+            <button onclick="jumpToStation(5)" id="nav-btn-5" class="station-btn px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 text-slate-300 hover:bg-slate-800/70">
+                <span>6. 大腸結腸袋</span>
+            </button>
+        </nav>
+
+        <!-- 右上：輔助開關與 2D 導航圖收合控制 -->
+        <div class="flex items-center gap-2 pointer-events-auto">
+            <button id="toggle-labels-btn" onclick="toggleLabels()" class="bg-slate-950/80 hover:bg-slate-900 backdrop-blur-md border border-cyan-500/40 text-cyan-300 px-3 py-2 rounded-xl text-xs font-bold shadow-lg transition flex items-center gap-1.5">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>
+                <span class="hidden sm:inline">3D 標籤: 開啟</span>
+            </button>
+            <button onclick="resetCameraLook()" class="bg-slate-950/80 hover:bg-slate-900 backdrop-blur-md border border-slate-700 text-slate-300 px-3 py-2 rounded-xl text-xs font-bold shadow-lg transition flex items-center gap-1" title="將視角回正至管道正前方">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                <span class="hidden md:inline">視角回正</span>
+            </button>
+            <button id="toggle-minimap-btn" onclick="toggleMiniMap()" class="bg-cyan-950/90 hover:bg-cyan-900 backdrop-blur-md border border-cyan-400/60 text-cyan-200 px-3 py-2 rounded-xl text-xs font-bold shadow-lg transition flex items-center gap-1.5">
+                <span>📍 2D 導航圖</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- 右上角：人體消化系統 2D 解剖位置示意圖 (即時雷達導航與點擊跳轉) -->
+    <aside id="minimap-panel" class="fixed right-3 md:right-5 top-20 z-30 w-64 sm:w-72 pointer-events-auto transition-all duration-300">
+        <div class="bg-slate-950/85 backdrop-blur-xl border border-cyan-500/40 rounded-2xl p-3 shadow-[0_0_40px_rgba(0,0,0,0.85)] flex flex-col gap-2">
+            <!-- 標題列 -->
+            <div class="flex items-center justify-between border-b border-slate-800/90 pb-1.5">
+                <div class="flex items-center gap-1.5">
+                    <span class="relative flex h-2.5 w-2.5">
+                        <span id="minimap-status-ping" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                        <span id="minimap-status-dot" class="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-400"></span>
+                    </span>
+                    <h3 class="text-xs font-black tracking-wide text-white">📍 人體消化系統定位圖 <span class="text-[10px] text-cyan-400 font-normal mono-font">(2D 導航)</span></h3>
+                </div>
+                <div class="flex items-center gap-1">
+                    <span class="text-[10px] text-slate-400">點擊器官跳轉</span>
+                    <button onclick="toggleMiniMap()" class="text-slate-400 hover:text-white px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10px]" title="收合 2D 導航圖">✕</button>
+                </div>
+            </div>
+
+            <!-- 2D 人體解剖 SVG 畫布 -->
+            <div class="relative w-full h-72 sm:h-80 bg-slate-900/75 rounded-xl border border-slate-800/90 overflow-hidden flex items-center justify-center">
+                <!-- 醫療座標網格背景 -->
+                <div class="absolute inset-0 opacity-15 pointer-events-none" style="background-image: radial-gradient(#38bdf8 1px, transparent 1px); background-size: 14px 14px;"></div>
+
+                <!-- 懸浮提示 Tooltip -->
+                <div id="minimap-tooltip" class="absolute top-2 left-2 z-20 pointer-events-none bg-slate-950/90 border border-cyan-400/50 text-cyan-200 text-[10px] font-bold px-2 py-0.5 rounded-md shadow hidden">
+                    點擊跳轉
+                </div>
+
+                <!-- 誤入氣管 2D 警告標籤 -->
+                <div id="minimap-choke-badge" class="absolute top-2 right-2 z-20 pointer-events-none bg-rose-600/90 border border-rose-300 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-lg animate-pulse hidden">
+                    ⚠️ 誤入氣管分支！
+                </div>
+
+                <svg id="anatomy-2d-svg" viewBox="0 0 220 340" class="w-full h-full select-none">
+                    <defs>
+                        <!-- 內視鏡視角扇形漸層 -->
+                        <linearGradient id="fovConeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.65"/>
+                            <stop offset="100%" stop-color="#38bdf8" stop-opacity="0"/>
+                        </linearGradient>
+                        <!-- 胃酸漸層 -->
+                        <linearGradient id="stomachGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" stop-color="#e11d48" stop-opacity="0.45"/>
+                            <stop offset="70%" stop-color="#be123c" stop-opacity="0.55"/>
+                            <stop offset="100%" stop-color="#84cc16" stop-opacity="0.65"/>
+                        </linearGradient>
+                    </defs>
+
+                    <!-- 1. 人體頭頸與胸腹軀幹輪廓線 (Silhouette) -->
+                    <path d="M 88 12
+                             C 66 12, 58 28, 58 42
+                             C 54 46, 52 50, 56 54
+                             C 56 62, 62 68, 72 70
+                             L 74 88
+                             C 44 94, 30 110, 28 142
+                             L 28 285
+                             C 28 312, 52 328, 110 328
+                             C 168 328, 192 312, 192 285
+                             L 192 142
+                             C 190 110, 176 94, 146 88
+                             L 148 70
+                             C 158 68, 164 62, 164 54
+                             C 164 30, 142 12, 112 12 Z"
+                          fill="rgba(15, 23, 42, 0.55)" stroke="#334155" stroke-width="1.5" stroke-dasharray="3 2" />
+
+                    <!-- 橫膈膜參考線 (Diaphragm) -->
+                    <path d="M 42 152 Q 110 138 178 152" fill="none" stroke="#475569" stroke-width="1" stroke-dasharray="2 3" />
+                    <text x="176" y="148" fill="#64748b" font-size="7" text-anchor="end">橫膈膜</text>
+
+                    <!-- 2. 雙側肺臟輪廓 (Lungs - 呼吸道背景對照) -->
+                    <g opacity="0.45">
+                        <!-- 右肺 (畫面左側) -->
+                        <path d="M 92 98 C 68 96, 52 112, 48 144 C 66 146, 84 142, 92 138 Z" fill="#0c4a6e" stroke="#38bdf8" stroke-width="1"/>
+                        <!-- 左肺 (畫面右側) -->
+                        <path d="M 116 98 C 140 96, 156 112, 160 144 C 142 146, 124 142, 116 138 Z" fill="#0c4a6e" stroke="#38bdf8" stroke-width="1"/>
+                    </g>
+
+                    <!-- 3. 肝臟、膽囊與胰臟 (附屬消化腺體對照) -->
+                    <g class="organ-svg-node" onclick="jumpToStation(4)" onmouseenter="showMapTip('肝臟與膽囊 (分泌膽汁入十二指腸)')" onmouseleave="hideMapTip()">
+                        <!-- 肝臟 (Liver) -->
+                        <path d="M 44 154 C 44 148, 86 146, 108 158 L 96 184 C 72 186, 48 178, 44 154 Z"
+                              fill="rgba(124, 45, 18, 0.55)" stroke="#d97706" stroke-width="1.2" />
+                        <!-- 膽囊 (Gallbladder) -->
+                        <ellipse cx="82" cy="182" rx="6" ry="4" transform="rotate(-20 82 182)" fill="#84cc16" stroke="#bef264" stroke-width="1" />
+                        <text x="64" y="168" fill="#fdba74" font-size="7.5" font-weight="bold">肝/膽</text>
+                    </g>
+                    <!-- 胰臟 (Pancreas) -->
+                    <g class="organ-svg-node" onclick="jumpToStation(4)" onmouseenter="showMapTip('胰臟 (分泌胰液入十二指腸)')" onmouseleave="hideMapTip()">
+                        <path d="M 98 192 Q 122 188 138 196 Q 122 204 98 200 Z" fill="rgba(250, 204, 21, 0.35)" stroke="#facc15" stroke-width="1" stroke-dasharray="2 1"/>
+                    </g>
+
+                    <!-- 4. 鼻腔分岔通道 (Nasal Cavity - 點擊可直接仰視鼻咽) -->
+                    <g id="svg-organ-nasal" class="organ-svg-node" onclick="lookAtNasalCavity()" onmouseenter="showMapTip('👃 鼻腔與鼻咽 (點擊仰視鼻咽分岔)')" onmouseleave="hideMapTip()">
+                        <path id="path-2d-nasal" d="M 58 40 Q 82 32 98 44 L 106 56" fill="none" stroke="#c084fc" stroke-width="5" stroke-linecap="round" stroke-dasharray="3 2" opacity="0.75" />
+                        <text x="72" y="29" fill="#d8b4fe" font-size="7.5" font-weight="bold">鼻腔</text>
+                    </g>
+
+                    <!-- 5. 氣管與支氣管分支 (Trachea - 點擊可模擬誤入氣管嗆到) -->
+                    <g id="svg-organ-trachea" class="organ-svg-node" onclick="triggerChokeSimulation()" onmouseenter="showMapTip('⚠️ 氣管與C型軟骨 (點擊模擬誤入氣管嗆到)')" onmouseleave="hideMapTip()">
+                        <path id="path-2d-trachea" d="M 106 68 L 96 86 L 96 118" fill="none" stroke="#38bdf8" stroke-width="5.5" stroke-linecap="round" opacity="0.8" />
+                        <!-- 氣管 C 型軟骨環橫紋 -->
+                        <line x1="93" y1="88" x2="99" y2="88" stroke="#e0f2fe" stroke-width="1.2"/>
+                        <line x1="93" y1="95" x2="99" y2="95" stroke="#e0f2fe" stroke-width="1.2"/>
+                        <line x1="93" y1="102" x2="99" y2="102" stroke="#e0f2fe" stroke-width="1.2"/>
+                        <line x1="93" y1="109" x2="99" y2="109" stroke="#e0f2fe" stroke-width="1.2"/>
+                        <!-- 左右支氣管分叉 -->
+                        <path d="M 96 118 L 82 128 M 96 118 L 114 128" fill="none" stroke="#38bdf8" stroke-width="3.5" stroke-linecap="round" opacity="0.7"/>
+                        <text x="86" y="106" fill="#7dd3fc" font-size="7.5" font-weight="bold" text-anchor="end">氣管</text>
+                    </g>
+
+                    <!-- 6. 第一站：口腔 (Oral Cavity) -->
+                    <g id="svg-organ-0" class="organ-svg-node" onclick="jumpToStation(0)" onmouseenter="showMapTip('1. 口腔 (咀嚼與唾液澱粉酶)')" onmouseleave="hideMapTip()">
+                        <path d="M 60 52 Q 82 48 104 56" fill="none" stroke="#f472b6" stroke-width="7" stroke-linecap="round" />
+                        <!-- 舌頭小示意 -->
+                        <path d="M 66 55 Q 82 53 96 57" fill="none" stroke="#fb7185" stroke-width="3" stroke-linecap="round" />
+                        <text x="50" y="64" fill="#f9a8d4" font-size="8" font-weight="bold">1.口腔</text>
+                    </g>
+
+                    <!-- 7. 第二站：咽部與會厭軟骨三叉口 (Pharynx & Epiglottis) -->
+                    <g id="svg-organ-1" class="organ-svg-node" onclick="jumpToStation(1)" onmouseenter="showMapTip('2. 咽與會厭分岔口 (鼻腔/氣管/食道交會)')" onmouseleave="hideMapTip()">
+                        <circle cx="106" cy="64" r="6.5" fill="rgba(251, 113, 133, 0.35)" stroke="#fb7185" stroke-width="2" />
+                        <!-- 會厭軟骨小葉片 -->
+                        <line id="svg-epiglottis-flap" x1="104" y1="67" x2="97" y2="73" stroke="#fde047" stroke-width="2.2" stroke-linecap="round" />
+                        <text x="117" y="66" fill="#fda4af" font-size="8" font-weight="bold">2.咽/會厭</text>
+                    </g>
+
+                    <!-- 8. 第三站：食道 (Esophagus) -->
+                    <g id="svg-organ-2" class="organ-svg-node" onclick="jumpToStation(2)" onmouseenter="showMapTip('3. 食道 (蠕動波推進至賁門)')" onmouseleave="hideMapTip()">
+                        <path d="M 108 70 C 112 96, 112 126, 112 154" fill="none" stroke="#fb7185" stroke-width="6" stroke-linecap="round" />
+                        <text x="120" y="114" fill="#fda4af" font-size="8" font-weight="bold">3.食道</text>
+                    </g>
+
+                    <!-- 9. 第四站：胃囊 (Stomach & Rugae) -->
+                    <g id="svg-organ-3" class="organ-svg-node" onclick="jumpToStation(3)" onmouseenter="showMapTip('4. 胃 (胃皺摺、強酸HCl與胃蛋白酶)')" onmouseleave="hideMapTip()">
+                        <path d="M 112 154
+                                 C 134 150, 156 164, 152 186
+                                 C 148 206, 122 212, 96 198
+                                 C 98 188, 118 190, 122 176
+                                 C 124 166, 116 160, 112 154 Z"
+                              fill="url(#stomachGrad)" stroke="#f43f5e" stroke-width="2" stroke-linejoin="round" />
+                        <text x="156" y="178" fill="#fda4af" font-size="8" font-weight="bold">4.胃囊</text>
+                    </g>
+
+                    <!-- 10. 第六站：大腸外框 (升結腸、橫結腸、降結腸、乙狀結腸、直腸 - 先繪製於底層方便看清環繞結構) -->
+                    <g id="svg-organ-5" class="organ-svg-node" onclick="jumpToStation(5)" onmouseenter="showMapTip('6. 大腸與結腸袋 (吸收水分與電解質)')" onmouseleave="hideMapTip()">
+                        <path d="M 74 268
+                                 C 66 250, 66 222, 72 204
+                                 C 96 200, 128 200, 150 206
+                                 C 156 226, 156 254, 148 274
+                                 C 140 286, 110 284, 110 298
+                                 L 110 318"
+                              fill="none" stroke="#ca8a04" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" opacity="0.78" />
+                        <!-- 結腸袋分節紋理 -->
+                        <path d="M 74 268 C 66 250, 66 222, 72 204 C 96 200, 128 200, 150 206 C 156 226, 156 254, 148 274 C 140 286, 110 284, 110 298 L 110 318"
+                              fill="none" stroke="#fef08a" stroke-width="7" stroke-dasharray="2 7" stroke-linecap="round" opacity="0.35" />
+                        <text x="44" y="242" fill="#fde047" font-size="8" font-weight="bold">6.大腸</text>
+                        <text x="122" y="315" fill="#fde047" font-size="7.5" font-weight="bold">直腸</text>
+                    </g>
+
+                    <!-- 11. 第五站：小腸盤繞區 (十二指腸、空腸、迴腸絨毛森林) -->
+                    <g id="svg-organ-4" class="organ-svg-node" onclick="jumpToStation(4)" onmouseenter="showMapTip('5. 小腸絨毛森林 (膽汁/胰液/腸液與養分吸收)')" onmouseleave="hideMapTip()">
+                        <path d="M 96 198
+                                 C 82 198, 82 216, 98 220
+                                 C 128 222, 134 234, 106 238
+                                 C 82 240, 84 252, 114 254
+                                 C 138 256, 132 268, 104 268
+                                 C 88 268, 82 268, 74 268"
+                              fill="none" stroke="#10b981" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.9" />
+                        <text x="110" y="244" fill="#6ee7b7" font-size="8" font-weight="bold" text-anchor="middle">5.小腸絨毛區</text>
+                    </g>
+
+                    <!-- 12. 隱藏的完整消化道連續導航軌跡曲線 (供 JS getPointAtLength 精準計算 0~100% 座標) -->
+                    <path id="svg-master-gi-track"
+                          d="M 60 52
+                             Q 82 49 106 62
+                             C 110 85, 112 122, 112 154
+                             C 140 162, 146 184, 132 196
+                             C 118 204, 104 200, 96 198
+                             C 82 198, 82 216, 98 220
+                             C 128 222, 134 234, 106 238
+                             C 82 240, 84 252, 114 254
+                             C 138 256, 132 268, 104 268
+                             L 74 268
+                             C 66 250, 66 222, 72 204
+                             C 96 200, 128 200, 150 206
+                             C 156 226, 156 254, 148 274
+                             C 140 286, 110 284, 110 298
+                             L 110 318"
+                          fill="none" stroke="transparent" stroke-width="1" pointer-events="none" />
+
+                    <!-- 13. 已通過路徑高亮軌跡線 -->
+                    <path id="svg-traveled-track"
+                          d=""
+                          fill="none" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round" opacity="0.8" pointer-events="none" />
+
+                    <!-- 14. 動態內視鏡/食團位置標記 (含視角扇形 FoV Cone 與雙層雷達波) -->
+                    <g id="svg-endoscope-marker" transform="translate(60, 52)" pointer-events="none">
+                        <!-- 內視鏡照射方向扇形錐 -->
+                        <g id="svg-marker-fov" transform="rotate(15)">
+                            <polygon points="0,0 24,-10 24,10" fill="url(#fovConeGrad)" />
+                        </g>
+                        <!-- 擴散雷達波圈 -->
+                        <circle id="svg-marker-radar" cx="0" cy="0" r="8" fill="none" stroke="#38bdf8" class="radar-ring" />
+                        <!-- 核心發光食團/鏡頭點 -->
+                        <circle id="svg-marker-core" cx="0" cy="0" r="4.8" fill="#ffffff" stroke="#0284c7" stroke-width="2" />
+                    </g>
+                </svg>
+            </div>
+
+            <!-- 底部：臨床內視鏡定位數據讀數 -->
+            <div class="bg-slate-900/90 rounded-xl px-2.5 py-2 border border-slate-800 flex items-center justify-between text-[11px]">
+                <div class="flex flex-col">
+                    <span class="text-[9px] text-slate-400 uppercase tracking-wider">目前解剖位置</span>
+                    <strong id="minimap-region-name" class="text-cyan-300 font-bold truncate max-w-[125px]">1. 口腔 (Oral)</strong>
+                </div>
+                <div class="h-6 w-px bg-slate-800"></div>
+                <div class="flex flex-col text-right mono-font">
+                    <span class="text-[9px] text-slate-400">距門齒深度 / 酸鹼度</span>
+                    <div>
+                        <strong id="minimap-incisor-dist" class="text-amber-300">11.3 cm</strong>
+                        <span class="text-slate-600">|</span>
+                        <strong id="minimap-ph-val" class="text-emerald-300">pH 7.0</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- 左側：即時解剖與生理資訊面板（可收合） -->
+    <aside id="info-panel" class="fixed left-3 md:left-5 top-28 bottom-28 w-80 md:w-96 z-30 pointer-events-none flex flex-col justify-between transition-transform duration-300">
+        <div class="bg-slate-950/82 backdrop-blur-xl border border-slate-700/70 rounded-2xl p-4 shadow-2xl pointer-events-auto overflow-y-auto max-h-full flex flex-col gap-3">
+            <!-- 標題與收合鈕 -->
+            <div class="flex items-start justify-between border-b border-slate-800 pb-2.5">
+                <div>
+                    <span id="organ-badge" class="text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-pink-500/20 text-pink-300 border border-pink-500/30">
+                        STATION 01 // 0% - 12%
+                    </span>
+                    <h2 id="organ-title" class="text-xl font-black text-white mt-1.5 flex items-center gap-2">
+                        口腔 (Oral Cavity)
+                    </h2>
+                </div>
+                <button onclick="toggleInfoPanel()" class="text-slate-400 hover:text-white p-1 rounded-lg bg-slate-900/60 border border-slate-800 text-xs">
+                    收合
+                </button>
+            </div>
+
+            <!-- 黏膜與解剖構造特徵 -->
+            <div class="bg-slate-900/70 rounded-xl p-3 border border-slate-800/80">
+                <div class="text-xs font-bold text-cyan-400 mb-1 flex items-center gap-1.5">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
+                    <span>內視鏡觀察：黏膜、皺摺與特殊構造</span>
+                </div>
+                <p id="organ-structure" class="text-xs md:text-sm text-slate-200 leading-relaxed">
+                    上方可見粉紅色硬腭、軟腭與下垂的「懸雍垂」；下方為富含味蕾乳突、動態起伏的舌頭肌肉組織；兩側排列白色的門齒、犬齒與臼齒。
+                </p>
+            </div>
+
+            <!-- 分泌消化液與粒子圖例 -->
+            <div class="bg-slate-900/70 rounded-xl p-3 border border-slate-800/80">
+                <div class="text-xs font-bold text-emerald-400 mb-1.5 flex items-center justify-between">
+                    <span class="flex items-center gap-1.5">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
+                        消化液分泌與粒子視覺圖例
+                    </span>
+                    <span id="organ-enzyme-tag" class="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300">唾液澱粉酶</span>
+                </div>
+                <p id="organ-secretion" class="text-xs text-slate-300 leading-relaxed mb-2">
+                    三對唾腺（耳下腺、頷下腺、舌下腺）分泌清澈唾液，含「唾液澱粉酶」可將澱粉初步分解為麥芽糖，並含黏液素潤滑食團。
+                </p>
+                <!-- 動態粒子顏色圖例 -->
+                <div id="particle-legend" class="grid grid-cols-2 gap-1.5 pt-1 border-t border-slate-800/80 text-[11px]">
+                    <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-sky-400 shadow-[0_0_8px_#38bdf8]"></span><span class="text-slate-300">水藍色：唾液與澱粉酶</span></div>
+                    <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-lime-400 shadow-[0_0_8px_#a3e635]"></span><span class="text-slate-300">黃綠色：胃酸與胃蛋白酶</span></div>
+                    <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24]"></span><span class="text-slate-300">金黃色：膽汁乳化微粒</span></div>
+                    <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-fuchsia-400 shadow-[0_0_8px_#e879f9]"></span><span class="text-slate-300">粉紫/金色：養分吸收流</span></div>
+                </div>
+            </div>
+
+            <!-- 專屬互動控制區（依器官動態突顯） -->
+            <div id="special-interaction-box" class="bg-gradient-to-br from-cyan-950/80 to-slate-900/90 rounded-xl p-3 border border-cyan-500/40 shadow-inner">
+                <div class="text-xs font-bold text-amber-300 mb-2 flex items-center gap-1.5">
+                    <span>⚡ 當前器官專屬生理互動實驗</span>
+                </div>
+                
+                <!-- 口腔專屬互動 -->
+                <div id="interact-oral" class="space-y-2">
+                    <button onclick="triggerChewAndSaliva()" class="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-sky-500 to-cyan-500 hover:from-sky-400 hover:to-cyan-400 text-slate-950 font-black text-xs shadow-lg shadow-cyan-500/20 transition flex items-center justify-center gap-2">
+                        <span>🦷 觸發「大力咀嚼與唾液大量分泌」</span>
+                    </button>
+                </div>
+
+                <!-- 咽部生死分岔路口專屬互動（鼻腔 / 氣管會厭 / 食道） -->
+                <div id="interact-pharynx" class="space-y-2 hidden">
+                    <div class="text-[11px] text-amber-200/90 leading-snug mb-1.5">
+                        此處為消化道與呼吸道的十字路口！觀察上方<strong>鼻咽通道</strong>與下方<strong>會厭軟骨 (Epiglottis)</strong> 如何決定食物去向：
+                    </div>
+                    <div class="grid grid-cols-1 gap-1.5">
+                        <button onclick="setSwallowMode('normal')" id="btn-swallow-normal" class="py-2 px-3 rounded-xl bg-emerald-500/30 border border-emerald-400 text-emerald-200 font-bold text-xs transition flex items-center justify-between">
+                            <span>✅ 正常吞嚥：軟腭封閉鼻腔 + 會厭蓋住氣管</span>
+                            <span class="text-[10px] bg-emerald-400 text-slate-950 px-1.5 py-0.5 rounded font-black">安全食道</span>
+                        </button>
+                        <button onclick="triggerChokeSimulation()" id="btn-swallow-choke" class="py-2 px-3 rounded-xl bg-rose-600/30 hover:bg-rose-600/50 border border-rose-400 text-rose-200 font-bold text-xs transition flex items-center justify-between">
+                            <span>⚠️ 模擬嗆到：會厭未蓋！誤入氣管 (C型軟骨)</span>
+                            <span class="text-[10px] bg-rose-500 text-white px-1.5 py-0.5 rounded font-black">咳嗽反射</span>
+                        </button>
+                        <button onclick="lookAtNasalCavity()" class="py-1.5 px-3 rounded-xl bg-purple-600/30 hover:bg-purple-600/50 border border-purple-400/60 text-purple-200 font-bold text-xs transition flex items-center justify-center gap-1.5">
+                            <span>👃 仰視觀察上方「鼻咽與鼻腔分岔通道」</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 一般器官分泌加強互動 -->
+                <div id="interact-general" class="mt-2 pt-2 border-t border-slate-800/80">
+                    <button onclick="triggerSecretionSurge()" class="w-full py-2 px-3 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/50 text-amber-200 font-bold text-xs transition flex items-center justify-center gap-1.5">
+                        <span>💧 觸發消化液噴發 / 強化黏膜生理反應</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 操作提示 -->
+            <div class="text-[11px] text-slate-400 flex items-center justify-between pt-1">
+                <span>🖱️ 拖曳畫面：360° 環顧管壁皺摺與分岔</span>
+                <span>⚙️ 滾輪：前後推進</span>
+            </div>
+        </div>
+    </aside>
+
+    <!-- 收合後顯示的展開按鈕 -->
+    <button id="expand-info-btn" onclick="toggleInfoPanel()" class="fixed left-4 top-28 z-30 hidden bg-slate-950/90 border border-cyan-500/40 text-cyan-300 px-3.5 py-2 rounded-xl text-xs font-bold shadow-xl">
+        📖 展開解剖生理面板
+    </button>
+
+    <!-- 嗆到/咳嗽反射中央警示彈窗 -->
+    <div id="choke-modal" class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 pointer-events-none hidden">
+        <div class="bg-rose-950/95 border-2 border-rose-500 rounded-2xl p-5 shadow-[0_0_60px_rgba(244,63,94,0.8)] max-w-md text-center animate-bounce">
+            <div class="text-3xl mb-1">🚨 誤入氣管！劇烈咳嗽反射！</div>
+            <h3 class="text-lg font-black text-rose-200">會厭軟骨未及時蓋下 (Aspiration / Choking)</h3>
+            <p class="text-xs text-rose-100/90 mt-2 leading-relaxed">
+                您正看見前方帶有白色 <strong>C 型軟骨環</strong>的「氣管（呼吸道）」！邊吃東西邊說話會導致<strong>會厭軟骨</strong>來不及蓋住喉口，引發氣管黏膜劇烈咳嗽反射，強行將食團噴回咽部並重新導向後方的食道！
+            </p>
+        </div>
+    </div>
+
+    <!-- 底部：時間軸進度拉桿與推進控制列 -->
+    <footer class="fixed bottom-0 left-0 right-0 z-30 p-3 md:p-4 pointer-events-none">
+        <div class="max-w-5xl mx-auto bg-slate-950/85 backdrop-blur-xl border border-slate-700/70 rounded-2xl p-3 md:px-5 shadow-2xl pointer-events-auto flex flex-col gap-2">
+            <!-- 進度條上方里程碑標記 -->
+            <div class="flex justify-between items-center text-[11px] font-bold text-slate-400 px-1">
+                <span class="text-pink-400">0% 口腔</span>
+                <span class="text-rose-400">12% 咽分岔(鼻/氣管)</span>
+                <span class="text-red-400">25% 食道</span>
+                <span class="text-amber-400">38% 胃囊皺摺</span>
+                <span class="text-emerald-400">55% 小腸絨毛森林</span>
+                <span class="text-yellow-600">82% 大腸結腸袋 100%</span>
+            </div>
+
+            <!-- 進度滑桿 -->
+            <div class="flex items-center gap-3">
+                <input id="progress-slider" type="range" min="0" max="1000" value="15" class="w-full" oninput="onSliderInput(this.value)">
+                <span id="progress-percent" class="mono-font text-sm font-bold text-cyan-300 w-14 text-right">1.5%</span>
+            </div>
+
+            <!-- 控制按鈕列 -->
+            <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+                <div class="flex items-center gap-2">
+                    <button id="play-pause-btn" onclick="togglePlay()" class="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs transition flex items-center gap-1.5 shadow-lg shadow-cyan-500/20">
+                        <span id="play-icon">⏸ 暫停推進</span>
+                    </button>
+                    <button onclick="stepProgress(-0.04)" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs transition">
+                        ⏪ 後退
+                    </button>
+                    <button onclick="stepProgress(0.04)" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs transition">
+                        前進 ⏩
+                    </button>
+                </div>
+
+                <!-- 推進速度與快速分岔跳轉 -->
+                <div class="flex items-center gap-2">
+                    <button onclick="jumpToPharynxJunction()" class="px-3 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-400/50 text-rose-300 text-xs font-bold transition flex items-center gap-1">
+                        <span>🔀 觀察咽部三叉口 (鼻腔/氣管/食道)</span>
+                    </button>
+                    <div class="flex items-center bg-slate-900 rounded-xl p-1 border border-slate-800 text-xs">
+                        <span class="px-2 text-slate-400">速度:</span>
+                        <button onclick="setSpeed(0.5)" id="spd-05" class="px-2 py-1 rounded-lg text-slate-300 hover:bg-slate-800">0.5x</button>
+                        <button onclick="setSpeed(1)" id="spd-1" class="px-2 py-1 rounded-lg bg-cyan-500/20 text-cyan-300 font-bold">1x</button>
+                        <button onclick="setSpeed(2.5)" id="spd-25" class="px-2 py-1 rounded-lg text-slate-300 hover:bg-slate-800">2.5x</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // ============================================================================
+        // 1. 消化道各器官解剖與生理資料庫 (0.00 ~ 1.00)
+        // ============================================================================
+        const STATIONS = [
+            {
+                id: 0,
+                name: "口腔 (Oral Cavity)",
+                badge: "STATION 01 // 0% - 12%",
+                range: [0.0, 0.12],
+                startT: 0.015,
+                ph: "pH 6.8 - 7.2 (中性)",
+                diameter: "4.5 cm",
+                enzyme: "唾液澱粉酶、黏液素",
+                structure: "上方可見硬腭、軟腭與下垂擺動的「懸雍垂 (Uvula)」；下方為布滿味蕾乳突、動態起伏的粉紅舌頭組織；兩側排列立體白色的門齒、犬齒與臼齒。",
+                secretion: "雙側唾腺分泌清澈水藍色「唾液粒子（含唾液澱粉酶）」，開始將澱粉分解為麥芽糖，並將食物潤滑嚼碎形成「食團 (Bolus)」。",
+                fogColor: 0x380b14,
+                lightColor: 0xffe4e6
+            },
+            {
+                id: 1,
+                name: "咽部與生死分岔路口 (Pharynx & Epiglottis)",
+                badge: "STATION 02 // 12% - 25% [關鍵分岔]",
+                range: [0.12, 0.25],
+                startT: 0.165,
+                ph: "pH 7.0 (中性黏液)",
+                diameter: "3.2 cm (三叉交會)",
+                enzyme: "潤滑黏液素 (無消化酶)",
+                structure: "【消化與呼吸的十字路口】向上仰視可見通往「鼻咽 / 鼻腔」的暗紅雙孔通道（吞嚥時軟腭與懸雍垂會上抬封閉鼻腔）；前方下側可見帶有白色 C 型軟骨環的「喉與氣管入口」及葉狀的「會厭軟骨」；後方則為正常的「食道入口」。",
+                secretion: "咽壁分泌透明潤滑黏液。正常吞嚥時，喉部上提、會厭軟骨向下折蓋住氣管入口；若邊吃邊笑導致會厭未蓋緊，食團誤入氣管即引發劇烈咳嗽反射！",
+                fogColor: 0x2e0812,
+                lightColor: 0xffd6e0
+            },
+            {
+                id: 2,
+                name: "食道 (Esophagus)",
+                badge: "STATION 03 // 25% - 38%",
+                range: [0.25, 0.38],
+                startT: 0.27,
+                ph: "pH 6.5 - 7.0",
+                diameter: "2.2 cm (肌肉收縮波)",
+                enzyme: "食道腺體黏液",
+                structure: "狹長粉紅色的厚壁肌肉管道。內壁呈現縱向皺摺，並具有強烈的環肌與縱肌「蠕動波 (Peristalsis)」——管壁規律向中心收縮，將食團推向末端「賁門括約肌 (Cardia)」。",
+                secretion: "管壁分泌保護性黏液潤滑管道，無消化酶分泌，但來自口腔的唾液澱粉酶仍在食團中心持續作用。",
+                fogColor: 0x330811,
+                lightColor: 0xffccd5
+            },
+            {
+                id: 3,
+                name: "胃 (Stomach & Gastric Rugae)",
+                badge: "STATION 04 // 38% - 55%",
+                range: [0.38, 0.55],
+                startT: 0.42,
+                ph: "pH 1.5 - 2.0 (強酸環境!)",
+                diameter: "11.5 cm (巨型囊狀腔)",
+                enzyme: "胃蛋白酶、鹽酸(HCl)、黏液",
+                structure: "通過賁門後管腔驟然擴張為巨大的 J 型囊狀空間！內壁呈現深紅褐色、凹凸劇烈的「胃皺摺 (Gastric Rugae)」與無數胃小凹，底部翻騰著半透明黃綠色的強酸胃液池，末端經「幽門括約肌」離開。",
+                secretion: "胃腺噴出大量黃綠色「鹽酸 (HCl) 與胃蛋白酶粒子」並伴隨消化氣泡，強力殺菌並將蛋白質初步分解為多肽（ペプチド），同时黏液細胞分泌厚重鹼性黏液層防止「自體消化」。",
+                fogColor: 0x2d1808,
+                lightColor: 0xffedd5
+            },
+            {
+                id: 4,
+                name: "小腸：十二指腸與絨毛森林 (Small Intestine & Villi)",
+                badge: "STATION 05 // 55% - 82%",
+                range: [0.55, 0.82],
+                startT: 0.58,
+                ph: "pH 7.5 - 8.0 (弱鹼性)",
+                diameter: "3.5 cm (吸收表面積最大化)",
+                enzyme: "膽汁、胰澱粉/蛋白/脂酶、腸液",
+                structure: "前段「十二指腸」側壁有十二指腸大乳頭開口；中後段（空腸與迴腸）內壁布滿立體的「環狀皺摺 (Circular Folds)」與數以百計隨流體搖擺的立體手指狀突起——「小腸絨毛 (Intestinal Villi) 森林」！",
+                secretion: "十二指腸乳頭噴出金黃色「膽汁（乳化脂肪）」與乳白色「胰液」；後段發光的營養分子粒子（葡萄糖、胺基酸、脂肪酸）不斷飄向並被吸入絨毛內的微血管網與乳糜管中！",
+                fogColor: 0x261218,
+                lightColor: 0xffe4e6
+            },
+            {
+                id: 5,
+                name: "大腸：結腸袋與直腸 (Large Intestine / Colon)",
+                badge: "STATION 06 // 82% - 100%",
+                range: [0.82, 1.00],
+                startT: 0.85,
+                ph: "pH 6.0 - 6.8",
+                diameter: "6.5 cm (結腸袋分節)",
+                enzyme: "杯狀細胞黏液、共生菌發酵",
+                structure: "管徑變寬，表面完全「沒有絨毛」，但呈現典型一節一節膨大的囊狀皺摺構造——「結腸袋 (Haustra)」。隨著水分被吸收，管腔環境與食糜殘渣逐漸轉為深褐色，最終抵達直腸與肛門括約肌。",
+                secretion: "大量杯狀細胞分泌透明黏液粒子保護管壁並黏合糞便；同時可見水藍色「水分與電解質粒子」不斷被吸向管壁（水分再吸收），完成消化道壯遊！",
+                fogColor: 0x1c1008,
+                lightColor: 0xfde68a
+            }
+        ];
+
+        // ============================================================================
+        // 2. 全域狀態變數
+        // ============================================================================
+        let scene, camera, renderer, clock;
+        let mainCurve, tracheaCurve, nasalCurve;
+        let tubeGeometry, baseTubePositions, baseTubeNormals, tubeMesh;
+        
+        // 進度與控制狀態
+        let progress = 0.015;          // 0.0 ~ 1.0 主消化道進度
+        let isPlaying = true;
+        let playSpeed = 1.0;
+        let currentStationIdx = 0;
+        let showLabels = true;
+        let isInspectingNasal = false; // 是否正在仰視鼻咽通道
+
+        // 咽部生死分岔與「嗆到誤入氣管」動畫狀態
+        let swallowMode = 'normal';    // 'normal' | 'choke'
+        let isChokingAnim = false;
+        let chokeTimer = 0;
+        let epiglottisGroup, uvulaGroup, upperTeethGroup, lowerTeethGroup, tongueMesh;
+        let gastricAcidPool, cardiaSphincter, pyloricSphincter, analSphincter;
+        let villiInstancedMesh, villiDummy, villiData = [];
+        let secretionBoostTimer = 0;
+        let chewBoostTimer = 0;
+
+        // 攝影機自由環顧偏移角度 (滑鼠拖曳)
+        let lookYaw = 0;
+        let lookPitch = 0;
+        let targetYaw = 0;
+        let targetPitch = 0;
+        let isPointerDown = false;
+        let prevPointer = { x: 0, y: 0 };
+
+        // 內視鏡燈光與粒子系統
+        let endoscopeSpotLight, endoscopePointLight, ambientLight;
+        let particleSystems = {};
+        let anatomicalLabels = [];
+
+        // ============================================================================
+        // 3. 程序化生成黏膜凹凸與法線貼圖 (Procedural Canvas Bump/Roughness Map)
+        // ============================================================================
+        function createMucosaTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+
+            // 基底灰階
+            ctx.fillStyle = '#808080';
+            ctx.fillRect(0, 0, 512, 512);
+
+            // 疊加多層有機細胞與黏膜皺摺斑點
+            for (let i = 0; i < 1600; i++) {
+                const x = Math.random() * 512;
+                const y = Math.random() * 512;
+                const r = 4 + Math.random() * 22;
+                const grad = ctx.createRadialGradient(x, y, 1, x, y, r);
+                const bright = Math.random() > 0.45 ? 215 : 45;
+                grad.addColorStop(0, `rgba(${bright}, ${bright}, ${bright}, 0.22)`);
+                grad.addColorStop(1, 'rgba(128, 128, 128, 0)');
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.arc(x, y, r, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // 微血管與環狀肌紋理線條
+            ctx.strokeStyle = 'rgba(240, 240, 240, 0.14)';
+            ctx.lineWidth = 2;
+            for (let i = 0; i < 90; i++) {
+                ctx.beginPath();
+                const y = Math.random() * 512;
+                ctx.moveTo(0, y);
+                ctx.bezierCurveTo(170, y + (Math.random() - 0.5) * 40, 340, y + (Math.random() - 0.5) * 40, 512, y);
+                ctx.stroke();
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.set(28, 8);
+            return texture;
+        }
+
+        // 建立圓形柔光粒子貼圖
+        function createParticleTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            const grad = ctx.createRadialGradient(32, 32, 2, 32, 32, 30);
+            grad.addColorStop(0, 'rgba(255,255,255,1)');
+            grad.addColorStop(0.4, 'rgba(255,255,255,0.8)');
+            grad.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 64, 64);
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        // ============================================================================
+        // 4. 初始化 Three.js 場景、消化道曲線與各器官 3D 構造
+        // ============================================================================
+        function initThreeScene() {
+            const container = document.getElementById('canvas-container');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x28060d);
+            scene.fog = new THREE.FogExp2(0x380b14, 0.0155);
+
+            camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerHeight, 0.1, 220);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.15;
+            container.appendChild(renderer.domElement);
+
+            clock = new THREE.Clock();
+
+            // 內視鏡光源設計（隨攝影機移動的聚光燈 + 補光點光源）
+            ambientLight = new THREE.AmbientLight(0x6b2130, 0.65);
+            scene.add(ambientLight);
+
+            endoscopeSpotLight = new THREE.SpotLight(0xfff1f2, 2.6, 95, Math.PI / 2.3, 0.45, 1.3);
+            scene.add(endoscopeSpotLight);
+            scene.add(endoscopeSpotLight.target);
+
+            endoscopePointLight = new THREE.PointLight(0xffe4e6, 1.2, 45, 1.5);
+            scene.add(endoscopePointLight);
+
+            // 建立主消化道 3D 曲線與兩個分岔曲線（鼻腔、氣管）
+            buildDigestiveCurves();
+
+            // 建立程序化變徑、多皺摺且帶頂點色彩的完整消化道主管道
+            buildMainDigestiveTube();
+
+            // 建立咽部兩大真實立體分岔管道：1. 上方鼻咽/鼻腔通道  2. 前下方喉部與氣管(含白色C型軟骨環)
+            buildPharynxBranches();
+
+            // 建立各站點特色立體構造（牙齒、舌頭、懸雍垂、會厭軟骨、括約肌、胃酸池、小腸絨毛森林）
+            buildOralStructures();
+            buildEpiglottisAndSphincters();
+            buildStomachAcidPool();
+            buildSmallIntestineVilliForest();
+
+            // 建立消化液與養分吸收粒子系統
+            buildSecretionParticles();
+
+            // 註冊 3D 空間解剖浮動標籤
+            setup3DAnatomicalLabels();
+
+            // 綁定滑鼠、觸控與滾輪事件
+            setupInteractionEvents();
+        }
+
+        // ============================================================================
+        // 5. 定義完整消化道 3D 曲線 (CatmullRomCurve3) 與分岔路徑
+        // ============================================================================
+        function buildDigestiveCurves() {
+            // 主消化道控制點 (t: 0.0 -> 1.0)
+            const mainPoints = [
+                // 0.00 - 0.12: 口腔 (水平向內推進)
+                new THREE.Vector3(0, 0, 0),
+                new THREE.Vector3(0, 0.4, -22),
+                new THREE.Vector3(0, 0.2, -45),
+                // 0.12 - 0.25: 咽部三叉分岔區 (t ≈ 0.18 為關鍵分岔點)
+                new THREE.Vector3(0, -1.5, -68),
+                new THREE.Vector3(0, -8.5, -88),   // t ≈ 0.185 分岔核心點
+                new THREE.Vector3(0, -24, -98),
+                // 0.25 - 0.38: 食道 (垂直向下穿過胸腔與橫膈)
+                new THREE.Vector3(0, -52, -102),
+                new THREE.Vector3(0, -82, -104),
+                new THREE.Vector3(2, -110, -105),
+                // 0.38 - 0.55: 胃 (J型龐大囊腔，向左下方彎曲膨大)
+                new THREE.Vector3(14, -128, -115),
+                new THREE.Vector3(24, -146, -135),
+                new THREE.Vector3(10, -158, -155),
+                new THREE.Vector3(-12, -152, -170),
+                // 0.55 - 0.82: 小腸 (十二指腸 C 型彎曲 + 空腸迴腸盤繞曲折)
+                new THREE.Vector3(-25, -162, -190),
+                new THREE.Vector3(-5, -176, -215),
+                new THREE.Vector3(25, -168, -240),
+                new THREE.Vector3(12, -192, -268),
+                new THREE.Vector3(-22, -184, -295),
+                new THREE.Vector3(0, -205, -322),
+                // 0.82 - 1.00: 大腸 (升結腸、橫結腸、乙狀結腸至直腸肛門)
+                new THREE.Vector3(26, -195, -350),
+                new THREE.Vector3(15, -178, -380),
+                new THREE.Vector3(-15, -185, -408),
+                new THREE.Vector3(0, -212, -432),
+                new THREE.Vector3(0, -242, -445)
+            ];
+            mainCurve = new THREE.CatmullRomCurve3(mainPoints, false, 'catmullrom', 0.45);
+
+            // 分岔一：通往「喉部與氣管 (Trachea / 呼吸道)」的前下方分岔曲線 (從咽部 t=0.175 分出向前下方延伸)
+            const forkOrigin = mainCurve.getPointAt(0.175);
+            tracheaCurve = new THREE.CatmullRomCurve3([
+                forkOrigin.clone(),
+                forkOrigin.clone().add(new THREE.Vector3(0, -7, 10)),
+                forkOrigin.clone().add(new THREE.Vector3(0, -20, 18)),
+                forkOrigin.clone().add(new THREE.Vector3(0, -40, 22))
+            ]);
+
+            // 分岔二：通往「鼻咽與鼻腔 (Nasopharynx / Nasal Cavity)」的上方分岔曲線
+            const nasalOrigin = mainCurve.getPointAt(0.145);
+            nasalCurve = new THREE.CatmullRomCurve3([
+                nasalOrigin.clone(),
+                nasalOrigin.clone().add(new THREE.Vector3(0, 12, -6)),
+                nasalOrigin.clone().add(new THREE.Vector3(0, 24, 8)),
+                nasalOrigin.clone().add(new THREE.Vector3(0, 29, 28))
+            ]);
+        }
+
+        // ============================================================================
+        // 6. 建立主消化道立體幾何體（隨進度漸變管徑、胃皺摺、小腸環狀皺摺、大腸結腸袋）
+        // ============================================================================
+        function getOrganRadius(t) {
+            if (t < 0.12) {
+                // 口腔：寬闊扁圓形腔室
+                return 8.2 - Math.sin((t / 0.12) * Math.PI) * 1.2;
+            } else if (t < 0.25) {
+                // 咽部分岔腔：稍微擴大以容納氣管與鼻腔分岔口
+                return 6.8;
+            } else if (t < 0.38) {
+                // 食道：狹窄肌肉管，末端賁門括約肌收縮
+                const localT = (t - 0.25) / 0.13;
+                if (localT > 0.88) return 2.8; // 賁門括約肌收窄
+                return 4.3;
+            } else if (t < 0.55) {
+                // 胃：巨型囊狀擴張！末端幽門括約肌收縮
+                const localT = (t - 0.38) / 0.17;
+                constouch = Math.sin(localT * Math.PI);
+                if (localT > 0.92) return 3.0; // 幽門括約肌
+                return 4.5 + Math.pow(constouch, 0.65) * 13.5;
+            } else if (t < 0.82) {
+                // 小腸：中等管徑
+                return 5.4;
+            } else {
+                // 大腸與直腸：較寬且呈現結腸袋分節，末端肛門收束
+                const localT = (t - 0.82) / 0.18;
+                if (localT > 0.93) return 2.2 * (1 - (localT - 0.93) / 0.07) + 0.8;
+                return 7.4;
+            }
+        }
+
+        function getOrganColor(t, angle, foldDisplacement) {
+            const c = new THREE.Color();
+            if (t < 0.12) {
+                // 口腔：粉嫩紅潤黏膜
+                c.setHSL(0.96, 0.68, 0.56);
+            } else if (t < 0.25) {
+                // 咽部：深粉紅色
+                c.setHSL(0.97, 0.65, 0.48);
+            } else if (t < 0.38) {
+                // 食道：平滑粉白肌黏膜
+                c.setHSL(0.96, 0.58, 0.54);
+            } else if (t < 0.55) {
+                // 胃：充血深紅至暗橘紅色，皺摺凹陷處更深紅
+                const depthShade = foldDisplacement * 0.04;
+                c.setHSL(0.01, 0.78, 0.36 + depthShade);
+            } else if (t < 0.63) {
+                // 十二指腸：受膽汁與胰液浸潤帶微黃粉紅
+                c.setHSL(0.04, 0.65, 0.46);
+            } else if (t < 0.82) {
+                // 空腸與迴腸：絨毛豐富、微血管充沛的珊瑚絨粉紅
+                c.setHSL(0.98, 0.66, 0.50);
+            } else {
+                // 大腸：隨水分吸收與糞便形成，由暗粉紅漸變為深褐黃色
+                const localT = (t - 0.82) / 0.18;
+                c.setHSL(0.06, 0.52, 0.38 - localT * 0.12);
+            }
+            return c;
+        }
+
+        function buildMainDigestiveTube() {
+            const tubularSegments = 520;
+            const radialSegments = 44;
+            tubeGeometry = new THREE.TubeGeometry(mainCurve, tubularSegments, 5, radialSegments, false);
+
+            const posAttr = tubeGeometry.attributes.position;
+            const normAttr = tubeGeometry.attributes.normal;
+            const uvAttr = tubeGeometry.attributes.uv;
+            const vertexCount = posAttr.count;
+
+            const colors = new Float32Array(vertexCount * 3);
+            baseTubePositions = new Float32Array(vertexCount * 3);
+            baseTubeNormals = new Float32Array(vertexCount * 3);
+
+            const centerPt = new THREE.Vector3();
+            const vertPt = new THREE.Vector3();
+            const dirVec = new THREE.Vector3();
+
+            for (let i = 0; i < vertexCount; i++) {
+                const u = uvAttr.getX(i); // 0.0 ~ 1.0 沿消化道進度
+                const v = uvAttr.getY(i); // 0.0 ~ 1.0 環繞管壁角度
+                const angle = v * Math.PI * 2;
+
+                mainCurve.getPointAt(u, centerPt);
+                vertPt.fromBufferAttribute(posAttr, i);
+                dirVec.subVectors(vertPt, centerPt).normalize();
+
+                // 基礎器官管徑
+                let radius = getOrganRadius(u);
+                let foldOffset = 0;
+
+                // 1. 口腔：上方硬腭拱起、下方舌頭平台微調
+                if (u < 0.12) {
+                    if (Math.sin(angle) < -0.2) {
+                        radius *= 0.78; // 底部較平坦承載舌頭
+                    }
+                }
+                // 2. 食道：縱向黏膜皺摺 (Longitudinal folds)
+                else if (u >= 0.25 && u < 0.38) {
+                    foldOffset = Math.sin(angle * 9) * 0.38;
+                }
+                // 3. 胃：凹凸明顯的「胃皺摺 (Gastric Rugae)」與胃小凹
+                else if (u >= 0.38 && u < 0.55) {
+                    const rugae1 = Math.sin(angle * 12 + Math.sin(u * 95) * 2.2) * 1.35;
+                    const rugae2 = Math.cos(u * 210 + angle * 6) * 0.75;
+                    foldOffset = rugae1 + rugae2;
+                }
+                // 4. 小腸：密集的「環狀皺摺 (Circular Folds / Kerckring's folds)」
+                else if (u >= 0.55 && u < 0.82) {
+                    const ringWave = Math.sin(u * 920) * 0.95;
+                    const subWave = Math.cos(angle * 5 + u * 300) * 0.25;
+                    foldOffset = ringWave + subWave;
+                }
+                // 5. 大腸：典型的「結腸袋 (Haustra)」一節一節膨大囊狀構造與三條結腸帶 (Taeniae coli)
+                else if (u >= 0.82) {
+                    const haustraPocket = Math.abs(Math.sin(u * 220)) * 2.3 - 0.6;
+                    const taeniaBand = Math.cos(angle * 3) * 0.75;
+                    foldOffset = haustraPocket + taeniaBand;
+                }
+
+                const finalRadius = Math.max(1.2, radius + foldOffset);
+                const newPos = centerPt.clone().addScaledVector(dirVec, finalRadius);
+
+                posAttr.setXYZ(i, newPos.x, newPos.y, newPos.z);
+                baseTubePositions[i * 3] = newPos.x;
+                baseTubePositions[i * 3 + 1] = newPos.y;
+                baseTubePositions[i * 3 + 2] = newPos.z;
+
+                // 內壁法線朝向管道內部
+                baseTubeNormals[i * 3] = dirVec.x;
+                baseTubeNormals[i * 3 + 1] = dirVec.y;
+                baseTubeNormals[i * 3 + 2] = dirVec.z;
+
+                const col = getOrganColor(u, angle, foldOffset);
+                colors[i * 3] = col.r;
+                colors[i * 3 + 1] = col.g;
+                colors[i * 3 + 2] = col.b;
+            }
+
+            tubeGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            tubeGeometry.computeVertexNormals();
+
+            const mucosaTex = createMucosaTexture();
+            const tubeMaterial = new THREE.MeshStandardMaterial({
+                vertexColors: true,
+                side: THREE.BackSide, // 從管道內部觀看內壁
+                roughness: 0.24,     // 濕潤黏膜高光澤感
+                metalness: 0.06,
+                bumpMap: mucosaTex,
+                bumpScale: 0.38
+            });
+
+            tubeMesh = new THREE.Mesh(tubeGeometry, tubeMaterial);
+            scene.add(tubeMesh);
+        }
+
+        // ============================================================================
+        // 7. 建立咽部兩大關鍵分岔管道：鼻咽/鼻腔 (上) 與 喉/氣管 C型軟骨環 (前下)
+        // ============================================================================
+        function buildPharynxBranches() {
+            const mucosaTex = createMucosaTexture();
+
+            // --- A. 前下方分岔：喉部與氣管 (Trachea) ---
+            const tracheaGeo = new THREE.TubeGeometry(tracheaCurve, 48, 3.6, 28, false);
+            const tracheaMat = new THREE.MeshStandardMaterial({
+                color: 0xd9465f,
+                side: THREE.BackSide,
+                roughness: 0.28,
+                bumpMap: mucosaTex,
+                bumpScale: 0.2
+            });
+            const tracheaMesh = new THREE.Mesh(tracheaGeo, tracheaMat);
+            scene.add(tracheaMesh);
+
+            // 氣管內的白色「C 型透明軟骨環 (C-shaped Cartilage Rings)」——呼吸道最顯著的解剖特徵！
+            const ringMat = new THREE.MeshStandardMaterial({
+                color: 0xf8fafc,
+                roughness: 0.35,
+                emissive: 0x38bdf8,
+                emissiveIntensity: 0.15
+            });
+
+            for (let i = 1; i <= 11; i++) {
+                const t = i / 12;
+                const pt = tracheaCurve.getPointAt(t);
+                const tangent = tracheaCurve.getTangentAt(t);
+                // C 型環 (約 280 度圓弧，後方朝食道側缺口)
+                const ringGeo = new THREE.TorusGeometry(3.45, 0.32, 12, 28, Math.PI * 1.65);
+                const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+                ringMesh.position.copy(pt);
+                ringMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent);
+                ringMesh.rotateZ(Math.PI * 0.18);
+                scene.add(ringMesh);
+            }
+
+            // 氣管深處標示光圈
+            const tracheaGlow = new THREE.PointLight(0x38bdf8, 1.4, 28);
+            tracheaGlow.position.copy(tracheaCurve.getPointAt(0.65));
+            scene.add(tracheaGlow);
+
+            // --- B. 上方分岔：鼻咽與鼻腔通道 (Nasopharynx & Nasal Cavity) ---
+            const nasalGeo = new THREE.TubeGeometry(nasalCurve, 40, 3.8, 24, false);
+            const nasalMat = new THREE.MeshStandardMaterial({
+                color: 0x9f1239,
+                side: THREE.BackSide,
+                roughness: 0.25,
+                bumpMap: mucosaTex,
+                bumpScale: 0.25
+            });
+            const nasalMesh = new THREE.Mesh(nasalGeo, nasalMat);
+            scene.add(nasalMesh);
+
+            // 鼻中隔 (Nasal Septum) 將鼻腔後孔分為左右兩個後鼻孔 (Choanae)
+            const septumPos = nasalCurve.getPointAt(0.45);
+            const septumGeo = new THREE.BoxGeometry(0.45, 7.5, 12);
+            const septumMat = new THREE.MeshStandardMaterial({ color: 0xbe123c, roughness: 0.3 });
+            const septumMesh = new THREE.Mesh(septumGeo, septumMat);
+            septumMesh.position.copy(septumPos);
+            scene.add(septumMesh);
+
+            // 鼻腔上方柔和紫紅光源，讓使用者抬頭即可清楚看見鼻腔通道
+            const nasalLight = new THREE.PointLight(0xf472b6, 1.5, 32);
+            nasalLight.position.copy(nasalCurve.getPointAt(0.55));
+            scene.add(nasalLight);
+        }
+
+        // ============================================================================
+        // 8. 建立第一站：口腔構造 (上下排牙齒、動態舌頭、懸雍垂 Uvula)
+        // ============================================================================
+        function buildOralStructures() {
+            upperTeethGroup = new THREE.Group();
+            lowerTeethGroup = new THREE.Group();
+
+            const toothMat = new THREE.MeshStandardMaterial({
+                color: 0xfefce8,
+                roughness: 0.15,
+                metalness: 0.05
+            });
+
+            // 沿口腔兩側與前緣排列立體門齒、犬齒、前臼齒與大臼齒
+            for (let side of [-1, 1]) {
+                for (let i = 0; i < 7; i++) {
+                    const zPos = -5 - i * 5.2;
+                    const xSpread = (i < 2) ? (1.8 + i * 1.6) * side : 5.2 * side;
+                    const isMolar = i >= 3;
+                    const isCanine = i === 2;
+
+                    // 上排牙齒
+                    const uToothGeo = isCanine
+                        ? new THREE.ConeGeometry(0.85, 2.6, 12)
+                        : new THREE.BoxGeometry(isMolar ? 1.9 : 1.3, 2.3, isMolar ? 2.4 : 1.5);
+                    const uTooth = new THREE.Mesh(uToothGeo, toothMat);
+                    uTooth.position.set(xSpread, 3.8, zPos);
+                    if (isCanine) uTooth.rotation.x = Math.PI;
+                    upperTeethGroup.add(uTooth);
+
+                    // 下排牙齒
+                    const lToothGeo = isCanine
+                        ? new THREE.ConeGeometry(0.8, 2.4, 12)
+                        : new THREE.BoxGeometry(isMolar ? 1.9 : 1.3, 2.2, isMolar ? 2.4 : 1.5);
+                    const lTooth = new THREE.Mesh(lToothGeo, toothMat);
+                    lTooth.position.set(xSpread, -3.5, zPos);
+                    lowerTeethGroup.add(lTooth);
+                }
+            }
+            scene.add(upperTeethGroup);
+            scene.add(lowerTeethGroup);
+
+            // 動態粉紅舌頭組織 (位於口腔底部)
+            const tongueGeo = new THREE.SphereGeometry(4.8, 32, 24);
+            tongueGeo.scale(1.05, 0.42, 4.2);
+            const mucosaTex = createMucosaTexture();
+            const tongueMat = new THREE.MeshStandardMaterial({
+                color: 0xf43f5e,
+                roughness: 0.35,
+                bumpMap: mucosaTex,
+                bumpScale: 0.45
+            });
+            tongueMesh = new THREE.Mesh(tongueGeo, tongueMat);
+            tongueMesh.position.set(0, -4.6, -24);
+            scene.add(tongueMesh);
+
+            // 軟腭與懸雍垂 (Uvula - 位於口腔與咽部交界上方 t ≈ 0.115)
+            uvulaGroup = new THREE.Group();
+            const uvulaPos = mainCurve.getPointAt(0.115);
+            uvulaGroup.position.set(uvulaPos.x, uvulaPos.y + 5.2, uvulaPos.z);
+
+            const uvulaGeo = new THREE.CylinderGeometry(0.95, 0.55, 4.2, 16);
+            uvulaGeo.translate(0, -2.1, 0);
+            const uvulaMat = new THREE.MeshStandardMaterial({
+                color: 0xfb7185,
+                roughness: 0.22
+            });
+            const uvulaDrop = new THREE.Mesh(uvulaGeo, uvulaMat);
+            const uvulaTip = new THREE.Mesh(new THREE.SphereGeometry(0.65, 16, 16), uvulaMat);
+            uvulaTip.position.y = -4.1;
+            uvulaGroup.add(uvulaDrop);
+            uvulaGroup.add(uvulaTip);
+            scene.add(uvulaGroup);
+        }
+
+        // ============================================================================
+        // 9. 建立會厭軟骨 (Epiglottis) 與三大括約肌 (賁門、幽門、肛門)
+        // ============================================================================
+        function buildEpiglottisAndSphincters() {
+            // 會厭軟骨 (Epiglottis)：位於氣管入口上方 (t ≈ 0.172)，吞嚥時向下蓋住氣管！
+            epiglottisGroup = new THREE.Group();
+            const epiPos = mainCurve.getPointAt(0.172);
+            epiglottisGroup.position.set(epiPos.x, epiPos.y - 1.2, epiPos.z + 4.8);
+
+            // 葉片狀軟骨造型
+            const epiGeo = new THREE.SphereGeometry(3.4, 24, 16);
+            epiGeo.scale(1.1, 0.22, 1.45);
+            epiGeo.translate(0, 0, -2.2); // 旋轉軸心設於根部
+            const epiMat = new THREE.MeshStandardMaterial({
+                color: 0xfda4af,
+                roughness: 0.25,
+                emissive: 0x9f1239,
+                emissiveIntensity: 0.2
+            });
+            const epiMesh = new THREE.Mesh(epiGeo, epiMat);
+            epiglottisGroup.add(epiMesh);
+            scene.add(epiglottisGroup);
+
+            // 建立括約肌環 (賁門 t=0.375, 幽門 t=0.545, 肛門 t=0.985)
+            const sphincterMat = new THREE.MeshStandardMaterial({
+                color: 0xbe123c,
+                roughness: 0.22
+            });
+
+            function createSphincter(tVal, radius, tubeThick) {
+                const pt = mainCurve.getPointAt(tVal);
+                const tan = mainCurve.getTangentAt(tVal);
+                const geo = new THREE.TorusGeometry(radius, tubeThick, 16, 32);
+                const mesh = new THREE.Mesh(geo, sphincterMat);
+                mesh.position.copy(pt);
+                mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tan);
+                scene.add(mesh);
+                return mesh;
+            }
+
+            cardiaSphincter = createSphincter(0.378, 3.1, 1.35);
+            pyloricSphincter = createSphincter(0.546, 3.3, 1.45);
+            analSphincter = createSphincter(0.988, 2.2, 1.2);
+        }
+
+        // ============================================================================
+        // 10. 建立第四站：胃底翻騰的黃綠色「胃酸與胃蛋白酶液體池」
+        // ============================================================================
+        function buildStomachAcidPool() {
+            const stomachCenter = mainCurve.getPointAt(0.465);
+            const acidGeo = new THREE.PlaneGeometry(36, 48, 28, 28);
+            acidGeo.rotateX(-Math.PI / 2);
+
+            const acidMat = new THREE.MeshStandardMaterial({
+                color: 0xa3e635,
+                emissive: 0x4d7c0f,
+                emissiveIntensity: 0.45,
+                transparent: true,
+                opacity: 0.68,
+                roughness: 0.12,
+                side: THREE.DoubleSide
+            });
+
+            gastricAcidPool = new THREE.Mesh(acidGeo, acidMat);
+            gastricAcidPool.position.set(stomachCenter.x, stomachCenter.y - 6.2, stomachCenter.z);
+            scene.add(gastricAcidPool);
+        }
+
+        // ============================================================================
+        // 11. 建立第五站：小腸立體「絨毛森林 (Intestinal Villi)」(InstancedMesh 950根)
+        // ============================================================================
+        function buildSmallIntestineVilliForest() {
+            const villiCount = 950;
+            // 手指狀絨毛幾何體（底部在原點，向小腸管腔中心突出）
+            const villusGeo = new THREE.CylinderGeometry(0.14, 0.28, 1.85, 8, 4);
+            villusGeo.translate(0, 0.925, 0);
+
+            const villusMat = new THREE.MeshStandardMaterial({
+                color: 0xfb7185,
+                roughness: 0.3,
+                emissive: 0x881337,
+                emissiveIntensity: 0.22
+            });
+
+            villiInstancedMesh = new THREE.InstancedMesh(villusGeo, villusMat, villiCount);
+            villiDummy = new THREE.Object3D();
+
+            const upVec = new THREE.Vector3(0, 1, 0);
+
+            for (let i = 0; i < villiCount; i++) {
+                // 分布於小腸區段 (t: 0.56 ~ 0.815)
+                const t = 0.56 + (i / villiCount) * 0.255;
+                const angle = (i * 2.39996) % (Math.PI * 2); // 黃金角均勻分布於管壁四周
+
+                const center = mainCurve.getPointAt(t);
+                const tangent = mainCurve.getTangentAt(t);
+
+                // 計算管壁法線基底
+                const refUp = Math.abs(tangent.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+                const binormal = new THREE.Vector3().crossVectors(tangent, refUp).normalize();
+                const normal = new THREE.Vector3().crossVectors(binormal, tangent).normalize();
+
+                const radialDir = new THREE.Vector3()
+                    .addScaledVector(normal, Math.cos(angle))
+                    .addScaledVector(binormal, Math.sin(angle))
+                    .normalize();
+
+                // 配合小腸環狀皺摺半徑
+                const ringWave = Math.sin(t * 920) * 0.95;
+                const r = 5.2 + ringWave;
+
+                const wallPos = center.clone().addScaledVector(radialDir, r);
+                const inwardDir = radialDir.clone().negate(); // 朝向管腔中心
+
+                villiData.push({
+                    wallPos,
+                    inwardDir,
+                    phase: Math.random() * Math.PI * 2,
+                    scale: 0.75 + Math.random() * 0.55
+                });
+
+                villiDummy.position.copy(wallPos);
+                villiDummy.quaternion.setFromUnitVectors(upVec, inwardDir);
+                villiDummy.scale.setScalar(villiData[i].scale);
+                villiDummy.updateMatrix();
+                villiInstancedMesh.setMatrixAt(i, villiDummy.matrix);
+            }
+
+            scene.add(villiInstancedMesh);
+        }
+
+        // ============================================================================
+        // 12. 建立各站消化液分泌與養分/水分吸收粒子系統
+        // ============================================================================
+        function buildSecretionParticles() {
+            const pTex = createParticleTexture();
+
+            function createZoneParticles(tMin, tMax, count, colorHex, size, mode) {
+                const geo = new THREE.BufferGeometry();
+                const positions = new Float32Array(count * 3);
+                const meta = [];
+
+                for (let i = 0; i < count; i++) {
+                    const t = tMin + Math.random() * (tMax - tMin);
+                    const angle = Math.random() * Math.PI * 2;
+                    const radialFrac = Math.random(); // 0=中心, 1=管壁
+                    meta.push({ t, angle, radialFrac, speed: 0.35 + Math.random() * 0.65 });
+                }
+
+                geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                const mat = new THREE.PointsMaterial({
+                    color: colorHex,
+                    size: size,
+                    map: pTex,
+                    transparent: true,
+                    opacity: 0.88,
+                    depthWrite: false,
+                    blending: THREE.AdditiveBlending
+                });
+
+                const points = new THREE.Points(geo, mat);
+                scene.add(points);
+                return { points, geo, meta, tMin, tMax, mode, baseSize: size };
+            }
+
+            // 1. 口腔：水藍色唾液與澱粉酶粒子 (由管壁向中心分泌飄落)
+            particleSystems.saliva = createZoneParticles(0.01, 0.13, 220, 0x38bdf8, 0.75, 'secrete_inward');
+            // 2. 胃部：黃綠色胃酸 (HCl) 與胃蛋白酶氣泡 (由胃腺噴出並向上翻騰)
+            particleSystems.gastric = createZoneParticles(0.38, 0.54, 340, 0xa3e635, 0.95, 'secrete_inward');
+            // 3. 十二指腸前段：金黃綠色膽汁與乳白胰液粒子流
+            particleSystems.bile = createZoneParticles(0.55, 0.63, 240, 0xfbbf24, 0.85, 'secrete_inward');
+            // 4. 小腸絨毛區：發光粉紫與金色營養分子 (由管腔中心被吸入管壁絨毛微血管！)
+            particleSystems.nutrients = createZoneParticles(0.58, 0.82, 380, 0xe879f9, 0.8, 'absorb_outward');
+            // 5. 大腸結腸袋：水藍色水分粒子被管壁吸收 (水分再吸收)
+            particleSystems.water = createZoneParticles(0.82, 0.98, 260, 0x60a5fa, 0.75, 'absorb_outward');
+        }
+
+        function updateParticles(dt) {
+            const boost = secretionBoostTimer > 0 ? 2.6 : 1.0;
+            const center = new THREE.Vector3();
+            const tangent = new THREE.Vector3();
+
+            Object.values(particleSystems).forEach(sys => {
+                const posArr = sys.geo.attributes.position.array;
+                sys.points.material.size = sys.baseSize * (secretionBoostTimer > 0 ? 1.45 : 1.0);
+
+                for (let i = 0; i < sys.meta.length; i++) {
+                    const m = sys.meta[i];
+                    if (sys.mode === 'secrete_inward') {
+                        // 從管壁向管腔中心噴出分泌
+                        m.radialFrac -= dt * m.speed * 0.45 * boost;
+                        if (m.radialFrac < 0.1) m.radialFrac = 1.0;
+                    } else {
+                        // 從管腔中心向管壁絨毛/黏膜吸收
+                        m.radialFrac += dt * m.speed * 0.45 * boost;
+                        if (m.radialFrac > 1.0) m.radialFrac = 0.08;
+                    }
+
+                    mainCurve.getPointAt(m.t, center);
+                    mainCurve.getTangentAt(m.t, tangent);
+                    const refUp = Math.abs(tangent.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+                    const binormal = new THREE.Vector3().crossVectors(tangent, refUp).normalize();
+                    const normal = new THREE.Vector3().crossVectors(binormal, tangent).normalize();
+
+                    const rMax = getOrganRadius(m.t) * 0.88;
+                    const r = m.radialFrac * rMax;
+
+                    const px = center.x + (normal.x * Math.cos(m.angle) + binormal.x * Math.sin(m.angle)) * r;
+                    const py = center.y + (normal.y * Math.cos(m.angle) + binormal.y * Math.sin(m.angle)) * r;
+                    const pz = center.z + (normal.z * Math.cos(m.angle) + binormal.z * Math.sin(m.angle)) * r;
+
+                    posArr[i * 3] = px;
+                    posArr[i * 3 + 1] = py;
+                    posArr[i * 3 + 2] = pz;
+                }
+                sys.geo.attributes.position.needsUpdate = true;
+            });
+        }
+
+        // ============================================================================
+        // 13. 3D 空間解剖浮動標籤系統 (自動投影至螢幕座標)
+        // ============================================================================
+        function setup3DAnatomicalLabels() {
+            const labelDefs = [
+                { title: "切齒與臼齒 (Teeth)", sub: "物理性咀嚼磨碎食物", pos: new THREE.Vector3(4.5, 1.5, -18), minT: 0.0, maxT: 0.11, color: "cyan" },
+                { title: "舌頭與味蕾 (Tongue)", sub: "攪拌食團與唾液澱粉酶", pos: new THREE.Vector3(0, -3.2, -22), minT: 0.0, maxT: 0.11, color: "pink" },
+                { title: "懸雍垂與軟腭 (Uvula)", sub: "吞嚥時上抬封閉鼻咽通道", pos: mainCurve.getPointAt(0.115).add(new THREE.Vector3(0, 2.2, 0)), minT: 0.05, maxT: 0.19, color: "rose" },
+                { title: "⬆️ 鼻咽與鼻腔分岔 (Nasal Cavity)", sub: "呼吸通道・軟腭防止食物逆流鼻腔", pos: nasalCurve.getPointAt(0.32), minT: 0.10, maxT: 0.23, color: "purple" },
+                { title: "🛡️ 會厭軟骨 (Epiglottis)", sub: "吞嚥時下折蓋住氣管入口的守門員", pos: mainCurve.getPointAt(0.172).add(new THREE.Vector3(0, -1.0, 3.2)), minT: 0.11, maxT: 0.24, color: "amber" },
+                { title: "⚠️ 氣管與 C 型軟骨環 (Trachea)", sub: "前下方呼吸道分岔・誤入會引發劇烈咳嗽", pos: tracheaCurve.getPointAt(0.38), minT: 0.12, maxT: 0.24, color: "rose" },
+                { title: "✅ 食道入口 (Esophagus)", sub: "氣管正後方的正確消化通道", pos: mainCurve.getPointAt(0.21), minT: 0.13, maxT: 0.26, color: "emerald" },
+                { title: "食道蠕動波 (Peristalsis)", sub: "環肌收縮將食團推向胃部", pos: mainCurve.getPointAt(0.31).add(new THREE.Vector3(2.2, 0, 0)), minT: 0.24, maxT: 0.37, color: "pink" },
+                { title: "賁門括約肌 (Cardia Sphincter)", sub: "防止強酸胃液逆流回食道", pos: mainCurve.getPointAt(0.378), minT: 0.32, maxT: 0.42, color: "amber" },
+                { title: "胃皺摺 (Gastric Rugae)", sub: "容納大量食物並分泌胃酸與胃蛋白酶", pos: mainCurve.getPointAt(0.45).add(new THREE.Vector3(7, 2, 0)), minT: 0.38, maxT: 0.54, color: "rose" },
+                { title: "強酸胃液池 (HCl Pool, pH 1.5)", sub: "殺菌並啟動胃蛋白酶分解蛋白質", pos: mainCurve.getPointAt(0.465).add(new THREE.Vector3(0, -5.5, 0)), minT: 0.39, maxT: 0.54, color: "lime" },
+                { title: "幽門括約肌 (Pyloric Sphincter)", sub: "控制食糜分批進入十二指腸", pos: mainCurve.getPointAt(0.546), minT: 0.49, maxT: 0.59, color: "amber" },
+                { title: "十二指腸大乳頭 (Duodenal Papilla)", sub: "注入膽汁(乳化脂肪)與胰液", pos: mainCurve.getPointAt(0.585).add(new THREE.Vector3(3.2, 1, 0)), minT: 0.54, maxT: 0.65, color: "amber" },
+                { title: "小腸環狀皺摺與絨毛森林 (Villi)", sub: "內含微血管與乳糜管・吸收養分主力", pos: mainCurve.getPointAt(0.69).add(new THREE.Vector3(-2.5, 1.5, 0)), minT: 0.60, maxT: 0.81, color: "emerald" },
+                { title: "大腸結腸袋 (Haustra)", sub: "無絨毛囊狀皺摺・吸收水分與電解質", pos: mainCurve.getPointAt(0.89).add(new THREE.Vector3(3.5, 1.5, 0)), minT: 0.81, maxT: 0.99, color: "amber" }
+            ];
+
+            const container = document.getElementById('labels-container');
+            container.innerHTML = '';
+
+            labelDefs.forEach(def => {
+                const el = document.createElement('div');
+                el.className = `label-3d bg-slate-950/85 backdrop-blur-md border border-${def.color}-400/60 rounded-xl px-2.5 py-1.5 shadow-lg`;
+                el.innerHTML = `
+                    <div class="text-xs font-black text-${def.color}-300 whitespace-nowrap flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-${def.color}-400"></span>
+                        <span>${def.title}</span>
+                    </div>
+                    <div class="text-[10px] text-slate-300 whitespace-nowrap">${def.sub}</div>
+                `;
+                container.appendChild(el);
+                anatomicalLabels.push({ ...def, el });
+            });
+        }
+
+        function update3DLabels() {
+            const widthHalf = window.innerWidth / 2;
+            const heightHalf = window.innerHeight / 2;
+            const tempVec = new THREE.Vector3();
+            const camDir = new THREE.Vector3();
+            camera.getWorldDirection(camDir);
+
+            anatomicalLabels.forEach(lbl => {
+                if (!showLabels || progress < lbl.minT || progress > lbl.maxT) {
+                    lbl.el.style.opacity = '0';
+                    return;
+                }
+
+                tempVec.copy(lbl.pos);
+                const toLabel = tempVec.clone().sub(camera.position);
+                const dist = toLabel.length();
+
+                // 檢查是否在攝影機前方且距離適中
+                if (toLabel.dot(camDir) <= 0.1 || dist > 68) {
+                    lbl.el.style.opacity = '0';
+                    return;
+                }
+
+                tempVec.project(camera);
+                const x = (tempVec.x * widthHalf) + widthHalf;
+                const y = -(tempVec.y * heightHalf) + heightHalf;
+
+                lbl.el.style.left = `${x}px`;
+                lbl.el.style.top = `${y}px`;
+                lbl.el.style.opacity = '1';
+            });
+        }
+
+        // ============================================================================
+        // 14. 動態頂點動畫：食道蠕動波、胃酸波浪、牙齒咀嚼、會厭軟骨開合、絨毛擺動
+        // ============================================================================
+        function updateDynamicOrganAnimations(elapsedTime, dt) {
+            if (secretionBoostTimer > 0) secretionBoostTimer -= dt;
+            if (chewBoostTimer > 0) chewBoostTimer -= dt;
+
+            // 1. 口腔牙齒咀嚼與舌頭起伏、懸雍垂擺動
+            const chewFreq = chewBoostTimer > 0 ? 14.0 : 2.8;
+            const chewAmp = chewBoostTimer > 0 ? 1.15 : 0.35;
+            const biteOffset = Math.abs(Math.sin(elapsedTime * chewFreq)) * chewAmp;
+            upperTeethGroup.position.y = -biteOffset;
+            lowerTeethGroup.position.y = biteOffset;
+            tongueMesh.position.y = -4.6 + Math.sin(elapsedTime * chewFreq) * 0.45;
+            tongueMesh.rotation.x = Math.sin(elapsedTime * 2.0) * 0.06;
+
+            // 吞嚥時懸雍垂上抬封閉鼻咽通道
+            const nearPharynx = (progress > 0.11 && progress < 0.22 && swallowMode === 'normal');
+            const targetUvulaRot = nearPharynx ? -0.85 : Math.sin(elapsedTime * 2.2) * 0.12;
+            uvulaGroup.rotation.x += (targetUvulaRot - uvulaGroup.rotation.x) * 0.1;
+
+            // 2. 會厭軟骨 (Epiglottis) 開合動畫：
+            // 正常吞嚥通過咽部時，會厭軟骨向下折蓋住氣管；若切換為「模擬嗆到」模式，會厭軟骨保持打開露出氣管！
+            let targetEpiRotX = 0.25; // 平時微開呼吸
+            if (!isChokingAnim && swallowMode === 'normal' && progress > 0.13 && progress < 0.23) {
+                targetEpiRotX = -1.25; // 向下蓋緊氣管口
+            } else if (isChokingAnim || swallowMode === 'choke') {
+                targetEpiRotX = 0.55;  // 張開讓食物看見並誤入氣管
+            }
+            epiglottisGroup.rotation.x += (targetEpiRotX - epiglottisGroup.rotation.x) * 0.12;
+
+            // 3. 食道蠕動收縮波 (Peristalsis Wave) 與胃蠕動波
+            const posAttr = tubeGeometry.attributes.position;
+            const uvAttr = tubeGeometry.attributes.uv;
+            const vCount = posAttr.count;
+
+            for (let i = 0; i < vCount; i++) {
+                const u = uvAttr.getX(i);
+                // 僅針對食道與胃區段進行即時蠕動收縮計算以維持 60FPS 高效能
+                if (u >= 0.24 && u <= 0.55) {
+                    const bx = baseTubePositions[i * 3];
+                    const by = baseTubePositions[i * 3 + 1];
+                    const bz = baseTubePositions[i * 3 + 2];
+                    const nx = baseTubeNormals[i * 3];
+                    const ny = baseTubeNormals[i * 3 + 1];
+                    const nz = baseTubeNormals[i * 3 + 2];
+
+                    // 沿管道向下推進的收縮波
+                    const wave = Math.sin(u * 120 - elapsedTime * 4.5);
+                    const squeeze = (u < 0.38)
+                        ? (wave > 0 ? wave * 1.45 : 0) // 食道明顯向內收縮推進
+                        : Math.sin(u * 65 - elapsedTime * 2.5) * 0.85; // 胃壁攪拌蠕動
+
+                    posAttr.setXYZ(
+                        i,
+                        bx - nx * squeeze,
+                        by - ny * squeeze,
+                        bz - nz * squeeze
+                    );
+                }
+            }
+            posAttr.needsUpdate = true;
+
+            // 4. 胃酸池波浪翻騰動畫
+            if (gastricAcidPool) {
+                gastricAcidPool.position.y = mainCurve.getPointAt(0.465).y - 6.0 + Math.sin(elapsedTime * 2.2) * 0.55;
+                gastricAcidPool.rotation.z = Math.sin(elapsedTime * 1.3) * 0.04;
+            }
+
+            // 5. 小腸絨毛森林隨流體擺動 (當攝影機接近小腸時更新)
+            if (progress > 0.48 && progress < 0.86) {
+                const upVec = new THREE.Vector3(0, 1, 0);
+                const swayDir = new THREE.Vector3();
+                for (let i = 0; i < villiData.length; i++) {
+                    const vd = villiData[i];
+                    const sway = Math.sin(elapsedTime * 3.2 + vd.phase) * 0.22;
+                    swayDir.copy(vd.inwardDir);
+                    swayDir.x += sway;
+                    swayDir.z += Math.cos(elapsedTime * 2.7 + vd.phase) * 0.22;
+                    swayDir.normalize();
+
+                    villiDummy.position.copy(vd.wallPos);
+                    villiDummy.quaternion.setFromUnitVectors(upVec, swayDir);
+                    villiDummy.scale.setScalar(vd.scale);
+                    villiDummy.updateMatrix();
+                    villiInstancedMesh.setMatrixAt(i, villiDummy.matrix);
+                }
+                villiInstancedMesh.instanceMatrix.needsUpdate = true;
+            }
+        }
+
+        // ============================================================================
+        // 15. 攝影機路徑推進與「模擬嗆到（誤入氣管＋劇烈咳嗽反射）」邏輯
+        // ============================================================================
+        function updateCameraAndEndoscope(dt, elapsedTime) {
+            // 處理「誤入氣管嗆到」特殊分岔體驗
+            if (isChokingAnim) {
+                chokeTimer += dt;
+                const chokeOverlay = document.getElementById('choke-overlay');
+                const chokeModal = document.getElementById('choke-modal');
+                chokeOverlay.classList.remove('hidden');
+                chokeOverlay.classList.add('choke-alert-overlay');
+                chokeModal.classList.remove('hidden');
+
+                // 前 2.2 秒深入氣管分岔，看見白色 C 型軟骨環；2.2 ~ 4.0 秒劇烈咳嗽震動並退回咽部轉入食道
+                let branchT = 0;
+                if (chokeTimer < 2.2) {
+                    branchT = (chokeTimer / 2.2) * 0.68;
+                } else if (chokeTimer < 4.0) {
+                    branchT = 0.68 * (1.0 - (chokeTimer - 2.2) / 1.8);
+                } else {
+                    // 結束嗆到動畫，自動切換為正常吞嚥蓋上會厭並進入食道
+                    isChokingAnim = false;
+                    chokeTimer = 0;
+                    swallowMode = 'normal';
+                    updateSwallowButtonsUI();
+                    chokeOverlay.classList.add('hidden');
+                    chokeOverlay.classList.remove('choke-alert-overlay');
+                    chokeModal.classList.add('hidden');
+                    progress = 0.205;
+                    return;
+                }
+
+                const camPos = tracheaCurve.getPointAt(branchT);
+                const lookTarget = tracheaCurve.getPointAt(Math.min(0.98, branchT + 0.15));
+
+                // 劇烈咳嗽反射震動特效
+                if (chokeTimer > 1.0) {
+                    const shake = 0.65;
+                    camPos.x += (Math.random() - 0.5) * shake;
+                    camPos.y += (Math.random() - 0.5) * shake;
+                    camPos.z += (Math.random() - 0.5) * shake;
+                }
+
+                camera.position.copy(camPos);
+                camera.lookAt(lookTarget);
+                endoscopeSpotLight.position.copy(camPos);
+                endoscopeSpotLight.target.position.copy(lookTarget);
+                endoscopePointLight.position.copy(camPos);
+
+                // 同步更新右上角 2D 導航圖：顯示紅光雷達偏入「氣管」分支
+                update2DMiniMap(branchT);
+                return;
+            }
+
+            // 一般消化道自動推進
+            if (isPlaying) {
+                isInspectingNasal = false;
+                progress += dt * 0.018 * playSpeed;
+                // 若使用者將咽部設為「模擬嗆到模式」且行進到分岔點 (t ≈ 0.175)，自動觸發誤入氣管！
+                if (swallowMode === 'choke' && progress >= 0.172 && progress <= 0.195) {
+                    triggerChokeSimulation();
+                    return;
+                }
+                if (progress >= 0.995) {
+                    progress = 0.995;
+                    togglePlay(false);
+                }
+                syncSliderUI();
+            }
+
+            // 取得主消化道曲線上的攝影機位置與切線方向
+            const camPos = mainCurve.getPointAt(progress);
+            const lookAheadT = Math.min(0.999, progress + 0.018);
+            const baseTarget = mainCurve.getPointAt(lookAheadT);
+
+            // 內視鏡呼吸微幅律動感
+            camPos.y += Math.sin(elapsedTime * 2.3) * 0.12;
+
+            camera.position.copy(camPos);
+
+            // 平滑插值使用者的滑鼠環顧視角 (Yaw / Pitch)
+            lookYaw += (targetYaw - lookYaw) * 0.14;
+            lookPitch += (targetPitch - lookPitch) * 0.14;
+
+            const forward = new THREE.Vector3().subVectors(baseTarget, camPos).normalize();
+            const refUp = Math.abs(forward.y) > 0.92 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0);
+            const right = new THREE.Vector3().crossVectors(forward, refUp).normalize();
+            const up = new THREE.Vector3().crossVectors(right, forward).normalize();
+
+            // 旋轉視線向量以支援 360 度環顧管壁、抬頭看鼻腔或低頭看氣管
+            const finalDir = forward.clone()
+                .applyAxisAngle(up, lookYaw)
+                .applyAxisAngle(right, lookPitch)
+                .normalize();
+
+            const finalLookTarget = camPos.clone().addScaledVector(finalDir, 20);
+            camera.up.copy(up);
+            camera.lookAt(finalLookTarget);
+
+            // 內視鏡冷光源同步照亮視線前方
+            endoscopeSpotLight.position.copy(camPos);
+            endoscopeSpotLight.target.position.copy(finalLookTarget);
+            endoscopePointLight.position.copy(camPos);
+
+            // 更新所在器官 HUD 與生理資訊面板
+            updateHUDAndStationInfo();
+
+            // 同步更新右上角 2D 解剖定位導航圖
+            update2DMiniMap(0);
+        }
+
+        // ============================================================================
+        // 15.5 右上角 2D 人體消化系統解剖定位圖即時更新邏輯
+        // ============================================================================
+        function mapProgressToSVGFraction(t) {
+            // 將 3D 進度 (0.0 ~ 1.0) 精準映射至 2D SVG 主軌跡各器官段落長度比例
+            const mapStops = [
+                { t: 0.00, s: 0.00 }, // 口腔起點
+                { t: 0.12, s: 0.07 }, // 咽部與會厭三叉口
+                { t: 0.25, s: 0.11 }, // 食道上段
+                { t: 0.38, s: 0.25 }, // 賁門入胃
+                { t: 0.55, s: 0.39 }, // 幽門出胃入十二指腸
+                { t: 0.82, s: 0.67 }, // 小腸結束入盲腸/升結腸
+                { t: 1.00, s: 1.00 }  // 大腸至直腸肛門
+            ];
+            for (let i = 0; i < mapStops.length - 1; i++) {
+                const a = mapStops[i];
+                const b = mapStops[i + 1];
+                if (t >= a.t && t <= b.t) {
+                    const local = (t - a.t) / (b.t - a.t);
+                    return a.s + local * (b.s - a.s);
+                }
+            }
+            return 1.0;
+        }
+
+        function update2DMiniMap(chokeBranchT = 0) {
+            const masterTrack = document.getElementById('svg-master-gi-track');
+            const tracheaTrack = document.getElementById('path-2d-trachea');
+            const nasalTrack = document.getElementById('path-2d-nasal');
+            const marker = document.getElementById('svg-endoscope-marker');
+            const fovGroup = document.getElementById('svg-marker-fov');
+            const radarCircle = document.getElementById('svg-marker-radar');
+            const coreCircle = document.getElementById('svg-marker-core');
+            const chokeBadge = document.getElementById('minimap-choke-badge');
+            const statusDot = document.getElementById('minimap-status-dot');
+            const statusPing = document.getElementById('minimap-status-ping');
+            const epiFlap = document.getElementById('svg-epiglottis-flap');
+
+            if (!masterTrack || !marker) return;
+
+            let pt, nextPt, degAngle = 90;
+
+            // 情況 A：正在模擬誤入氣管嗆到 (Choking into Trachea)
+            if (isChokingAnim && tracheaTrack) {
+                const totalLen = tracheaTrack.getTotalLength();
+                const curLen = Math.min(totalLen, chokeBranchT * totalLen);
+                pt = tracheaTrack.getPointAtLength(curLen);
+                nextPt = tracheaTrack.getPointAtLength(Math.min(totalLen, curLen + 4));
+                degAngle = Math.atan2(nextPt.y - pt.y, nextPt.x - pt.x) * (180 / Math.PI);
+
+                chokeBadge.classList.remove('hidden');
+                radarCircle.setAttribute('stroke', '#f43f5e');
+                coreCircle.setAttribute('fill', '#ffe4e6');
+                coreCircle.setAttribute('stroke', '#e11d48');
+                statusDot.className = "relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500";
+                statusPing.className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75";
+
+                document.getElementById('minimap-region-name').textContent = "⚠️ 誤入氣管 (Trachea)";
+                document.getElementById('minimap-region-name').className = "text-rose-400 font-black truncate max-w-[125px]";
+                // 會厭軟骨打開
+                if (epiFlap) {
+                    epiFlap.setAttribute('x2', '102');
+                    epiFlap.setAttribute('y2', '58');
+                }
+            }
+            // 情況 B：正在咽部仰視觀察鼻咽與鼻腔分岔
+            else if (isInspectingNasal && nasalTrack) {
+                const totalLen = nasalTrack.getTotalLength();
+                pt = nasalTrack.getPointAtLength(totalLen * 0.65);
+                degAngle = -145 + lookYaw * (180 / Math.PI);
+
+                chokeBadge.classList.add('hidden');
+                radarCircle.setAttribute('stroke', '#c084fc');
+                coreCircle.setAttribute('fill', '#fae8ff');
+                coreCircle.setAttribute('stroke', '#9333ea');
+                document.getElementById('minimap-region-name').textContent = "👃 鼻咽通道 (Nasopharynx)";
+                document.getElementById('minimap-region-name').className = "text-purple-300 font-bold truncate max-w-[125px]";
+            }
+            // 情況 C：正常沿主消化道推進
+            else {
+                const totalLen = masterTrack.getTotalLength();
+                const svgFrac = mapProgressToSVGFraction(progress);
+                const curLen = svgFrac * totalLen;
+                pt = masterTrack.getPointAtLength(curLen);
+                nextPt = masterTrack.getPointAtLength(Math.min(totalLen, curLen + 3.5));
+
+                // 結合 2D 管道切線方向與使用者滑鼠左右環顧偏移
+                const baseAngle = Math.atan2(nextPt.y - pt.y, nextPt.x - pt.x) * (180 / Math.PI);
+                degAngle = baseAngle - lookYaw * 35;
+
+                chokeBadge.classList.add('hidden');
+                radarCircle.setAttribute('stroke', '#38bdf8');
+                coreCircle.setAttribute('fill', '#ffffff');
+                coreCircle.setAttribute('stroke', '#0284c7');
+                statusDot.className = "relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-400";
+                statusPing.className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75";
+
+                const shortNames = [
+                    "1. 口腔 (Oral)",
+                    "2. 咽與會厭 (Pharynx)",
+                    "3. 食道 (Esophagus)",
+                    "4. 胃囊 (Stomach)",
+                    "5. 小腸絨毛 (Intestine)",
+                    "6. 大腸結腸袋 (Colon)"
+                ];
+                const shortPh = ["pH 7.0", "pH 7.0", "pH 6.8", "pH 1.8", "pH 7.8", "pH 6.5"];
+                document.getElementById('minimap-region-name').textContent = shortNames[currentStationIdx];
+                document.getElementById('minimap-region-name').className = "text-cyan-300 font-bold truncate max-w-[125px]";
+                document.getElementById('minimap-ph-val').textContent = shortPh[currentStationIdx];
+                document.getElementById('minimap-incisor-dist').textContent = `${(progress * 750).toFixed(1)} cm`;
+
+                // 2D 會厭軟骨動態反映吞嚥蓋住氣管
+                if (epiFlap) {
+                    if (progress > 0.12 && progress < 0.23 && swallowMode === 'normal') {
+                        epiFlap.setAttribute('x2', '95');
+                        epiFlap.setAttribute('y2', '76');
+                    } else {
+                        epiFlap.setAttribute('x2', '98');
+                        epiFlap.setAttribute('y2', '70');
+                    }
+                }
+            }
+
+            marker.setAttribute('transform', `translate(${pt.x.toFixed(1)}, ${pt.y.toFixed(1)})`);
+            fovGroup.setAttribute('transform', `rotate(${degAngle.toFixed(1)})`);
+
+            // 高亮當前所在的 2D 器官群組
+            for (let i = 0; i < 6; i++) {
+                const g = document.getElementById(`svg-organ-${i}`);
+                if (g) {
+                    if (!isChokingAnim && !isInspectingNasal && i === currentStationIdx) {
+                        g.classList.add('organ-active-glow');
+                    } else {
+                        g.classList.remove('organ-active-glow');
+                    }
+                }
+            }
+            const tracheaG = document.getElementById('svg-organ-trachea');
+            if (tracheaG) tracheaG.classList.toggle('organ-active-glow', isChokingAnim);
+            const nasalG = document.getElementById('svg-organ-nasal');
+            if (nasalG) nasalG.classList.toggle('organ-active-glow', isInspectingNasal);
+        }
+
+        function showMapTip(text) {
+            const tip = document.getElementById('minimap-tooltip');
+            if (!tip) return;
+            tip.textContent = text;
+            tip.classList.remove('hidden');
+        }
+
+        function hideMapTip() {
+            const tip = document.getElementById('minimap-tooltip');
+            if (tip) tip.classList.add('hidden');
+        }
+
+        function toggleMiniMap() {
+            const panel = document.getElementById('minimap-panel');
+            if (panel.classList.contains('translate-x-[120%]')) {
+                panel.classList.remove('translate-x-[120%]');
+            } else {
+                panel.classList.add('translate-x-[120%]');
+            }
+        }
+
+        // ============================================================================
+        // 16. UI 儀表板更新與互動處理函式
+        // ============================================================================
+        function updateHUDAndStationInfo() {
+            // 計算真實人體消化道對應深度 (0 ~ 750 cm)
+            const depthCm = (progress * 750).toFixed(1);
+            document.getElementById('hud-depth').textContent = `${depthCm} cm`;
+
+            // 判斷當前所在器官站點
+            let foundIdx = 0;
+            for (let i = 0; i < STATIONS.length; i++) {
+                if (progress >= STATIONS[i].range[0] && progress <= STATIONS[i].range[1]) {
+                    foundIdx = i;
+                    break;
+                }
+            }
+
+            const st = STATIONS[foundIdx];
+            // 平滑漸變環境迷霧色調
+            scene.fog.color.lerp(new THREE.Color(st.fogColor), 0.08);
+            scene.background.lerp(new THREE.Color(st.fogColor).multiplyScalar(0.55), 0.08);
+
+            if (foundIdx !== currentStationIdx) {
+                currentStationIdx = foundIdx;
+                document.getElementById('hud-ph').textContent = st.ph;
+                document.getElementById('hud-diameter').textContent = st.diameter;
+                document.getElementById('organ-badge').textContent = st.badge;
+                document.getElementById('organ-title').textContent = st.name;
+                document.getElementById('organ-structure').textContent = st.structure;
+                document.getElementById('organ-secretion').textContent = st.secretion;
+                document.getElementById('organ-enzyme-tag').textContent = st.enzyme;
+
+                // 切換導覽按鈕高亮
+                document.querySelectorAll('.station-btn').forEach((btn, idx) => {
+                    if (idx === foundIdx) {
+                        btn.className = "station-btn px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 bg-cyan-500/25 text-cyan-300 border border-cyan-400/60 shadow-md";
+                    } else {
+                        btn.className = "station-btn px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 text-slate-300 hover:bg-slate-800/70";
+                    }
+                });
+
+                // 切換專屬互動按鈕區 (口腔 vs 咽部分岔口)
+                document.getElementById('interact-oral').classList.toggle('hidden', foundIdx !== 0);
+                document.getElementById('interact-pharynx').classList.toggle('hidden', foundIdx !== 1);
+            }
+        }
+
+        function syncSliderUI() {
+            const slider = document.getElementById('progress-slider');
+            slider.value = Math.round(progress * 1000);
+            document.getElementById('progress-percent').textContent = `${(progress * 100).toFixed(1)}%`;
+        }
+
+        function onSliderInput(val) {
+            isChokingAnim = false;
+            isInspectingNasal = false;
+            document.getElementById('choke-overlay').classList.add('hidden');
+            document.getElementById('choke-modal').classList.add('hidden');
+            progress = Math.max(0.002, Math.min(0.995, val / 1000));
+            document.getElementById('progress-percent').textContent = `${(progress * 100).toFixed(1)}%`;
+            updateHUDAndStationInfo();
+            update2DMiniMap(0);
+        }
+
+        function jumpToStation(idx) {
+            isChokingAnim = false;
+            isInspectingNasal = false;
+            document.getElementById('choke-overlay').classList.add('hidden');
+            document.getElementById('choke-modal').classList.add('hidden');
+            progress = STATIONS[idx].startT;
+            resetCameraLook();
+            syncSliderUI();
+            updateHUDAndStationInfo();
+            update2DMiniMap(0);
+        }
+
+        function jumpToPharynxJunction() {
+            jumpToStation(1);
+            progress = 0.165;
+            syncSliderUI();
+            update2DMiniMap(0);
+        }
+
+        function togglePlay(forceState) {
+            isPlaying = (typeof forceState === 'boolean') ? forceState : !isPlaying;
+            const btn = document.getElementById('play-pause-btn');
+            const icon = document.getElementById('play-icon');
+            if (isPlaying) {
+                icon.textContent = "⏸ 暫停推進";
+                btn.className = "px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs transition flex items-center gap-1.5 shadow-lg shadow-cyan-500/20";
+            } else {
+                icon.textContent = "▶️ 自動推進";
+                btn.className = "px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs transition flex items-center gap-1.5 shadow-lg shadow-emerald-500/20";
+            }
+        }
+
+        function stepProgress(delta) {
+            togglePlay(false);
+            progress = Math.max(0.005, Math.min(0.995, progress + delta));
+            syncSliderUI();
+            updateHUDAndStationInfo();
+        }
+
+        function setSpeed(spd) {
+            playSpeed = spd;
+            ['05', '1', '25'].forEach(id => {
+                document.getElementById(`spd-${id}`).className = "px-2 py-1 rounded-lg text-slate-300 hover:bg-slate-800";
+            });
+            const activeId = spd === 0.5 ? '05' : (spd === 1 ? '1' : '25');
+            document.getElementById(`spd-${activeId}`).className = "px-2 py-1 rounded-lg bg-cyan-500/20 text-cyan-300 font-bold";
+        }
+
+        function triggerChewAndSaliva() {
+            if (progress > 0.12) jumpToStation(0);
+            chewBoostTimer = 3.5;
+            secretionBoostTimer = 3.5;
+        }
+
+        function triggerSecretionSurge() {
+            secretionBoostTimer = 4.0;
+        }
+
+        function setSwallowMode(mode) {
+            swallowMode = mode;
+            updateSwallowButtonsUI();
+            if (mode === 'normal') {
+                isChokingAnim = false;
+                document.getElementById('choke-overlay').classList.add('hidden');
+                document.getElementById('choke-modal').classList.add('hidden');
+                resetCameraLook();
+            }
+        }
+
+        function updateSwallowButtonsUI() {
+            const btnNormal = document.getElementById('btn-swallow-normal');
+            const btnChoke = document.getElementById('btn-swallow-choke');
+            if (swallowMode === 'normal') {
+                btnNormal.className = "py-2 px-3 rounded-xl bg-emerald-500/35 border-2 border-emerald-400 text-emerald-100 font-bold text-xs transition flex items-center justify-between";
+                btnChoke.className = "py-2 px-3 rounded-xl bg-rose-950/50 border border-rose-500/40 text-rose-300 font-bold text-xs transition flex items-center justify-between";
+            } else {
+                btnNormal.className = "py-2 px-3 rounded-xl bg-slate-900 border border-emerald-500/30 text-emerald-300/70 font-bold text-xs transition flex items-center justify-between";
+                btnChoke.className = "py-2 px-3 rounded-xl bg-rose-600/45 border-2 border-rose-400 text-white font-bold text-xs transition flex items-center justify-between";
+            }
+        }
+
+        // 觸發「模擬嗆到（誤入氣管與咳嗽反射）」完整體驗
+        function triggerChokeSimulation() {
+            progress = 0.175;
+            syncSliderUI();
+            updateHUDAndStationInfo();
+            swallowMode = 'choke';
+            updateSwallowButtonsUI();
+            isChokingAnim = true;
+            chokeTimer = 0;
+            resetCameraLook();
+        }
+
+        // 抬頭仰視觀察咽部上方的「鼻咽與鼻腔通道」
+        function lookAtNasalCavity() {
+            togglePlay(false);
+            isChokingAnim = false;
+            isInspectingNasal = true;
+            progress = 0.145;
+            syncSliderUI();
+            updateHUDAndStationInfo();
+            targetYaw = 0;
+            targetPitch = 0.92; // 向上仰角看鼻咽雙孔
+            update2DMiniMap(0);
+        }
+
+        function resetCameraLook() {
+            isInspectingNasal = false;
+            targetYaw = 0;
+            targetPitch = 0;
+        }
+
+        function toggleLabels() {
+            showLabels = !showLabels;
+            const btn = document.getElementById('toggle-labels-btn');
+            btn.querySelector('span').textContent = `3D 解剖標籤: ${showLabels ? '開啟' : '關閉'}`;
+        }
+
+        function toggleInfoPanel() {
+            const panel = document.getElementById('info-panel');
+            const expandBtn = document.getElementById('expand-info-btn');
+            if (panel.classList.contains('-translate-x-[120%]')) {
+                panel.classList.remove('-translate-x-[120%]');
+                expandBtn.classList.add('hidden');
+            } else {
+                panel.classList.add('-translate-x-[120%]');
+                expandBtn.classList.remove('hidden');
+            }
+        }
+
+        // ============================================================================
+        // 17. 滑鼠拖曳環顧視角、滾輪推進與視窗自適應
+        // ============================================================================
+        function setupInteractionEvents() {
+            const dom = renderer.domElement;
+
+            dom.addEventListener('pointerdown', (e) => {
+                isPointerDown = true;
+                prevPointer.x = e.clientX;
+                prevPointer.y = e.clientY;
+            });
+
+            window.addEventListener('pointermove', (e) => {
+                if (!isPointerDown) return;
+                const dx = e.clientX - prevPointer.x;
+                const dy = e.clientY - prevPointer.y;
+                prevPointer.x = e.clientX;
+                prevPointer.y = e.clientY;
+
+                targetYaw -= dx * 0.0055;
+                targetPitch = Math.max(-1.25, Math.min(1.25, targetPitch - dy * 0.0055));
+            });
+
+            window.addEventListener('pointerup', () => {
+                isPointerDown = false;
+            });
+
+            dom.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                if (isChokingAnim) return;
+                progress = Math.max(0.005, Math.min(0.995, progress + e.deltaY * 0.00012));
+                syncSliderUI();
+                updateHUDAndStationInfo();
+            }, { passive: false });
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+
+        // ============================================================================
+        // 18. 啟動主動畫迴圈
+        // ============================================================================
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = Math.min(clock.getDelta(), 0.1);
+            const elapsedTime = clock.getElapsedTime();
+
+            updateDynamicOrganAnimations(elapsedTime, dt);
+            updateParticles(dt);
+            updateCameraAndEndoscope(dt, elapsedTime);
+            update3DLabels();
+
+            renderer.render(scene, camera);
+        }
+
+        window.onload = function () {
+            initThreeScene();
+            animate();
+        };
+    </script>
+</body>
+</html>

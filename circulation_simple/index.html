@@ -1,0 +1,1897 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>人體血液循環互動式教學板</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@500;700;900&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Noto Sans TC', sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+      overflow: hidden;
+    }
+    .vessel-path {
+      transition: stroke 0.25s ease, stroke-width 0.25s ease, opacity 0.25s ease;
+    }
+    .chamber-bg {
+      transition: fill 0.3s ease, opacity 0.3s ease;
+    }
+    @keyframes flowDash {
+      to { stroke-dashoffset: -44; }
+    }
+    .flow-highlight-active {
+      stroke-dasharray: 12 10;
+      animation: flowDash 0.9s linear infinite;
+    }
+    .node-interactive {
+      cursor: pointer;
+    }
+    .node-interactive rect {
+      transition: fill 0.15s ease, stroke 0.15s ease, stroke-width 0.15s ease, filter 0.15s ease;
+    }
+    .node-interactive:hover rect {
+      filter: drop-shadow(0 3px 6px rgba(0,0,0,0.18));
+    }
+    .canvas-grab { cursor: grab; }
+    .canvas-grabbing { cursor: grabbing !important; }
+    @keyframes pulseRing {
+      0%, 100% { opacity: 0.95; stroke-width: 4px; transform: scale(1); }
+      50% { opacity: 0.3; stroke-width: 8px; transform: scale(1.15); }
+    }
+    .particle-pulse-ring {
+      animation: pulseRing 1.1s ease-in-out infinite;
+      transform-origin: center;
+    }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 h-screen w-screen overflow-hidden flex flex-col">
+
+  <!-- 頂部功能與控制工具列 -->
+  <header class="bg-white border-b border-slate-200 shadow-sm shrink-0 z-30 px-3 py-1.5">
+    <div class="w-full flex flex-wrap items-center justify-between gap-2">
+      <!-- 標題與解剖鏡像視角提示 -->
+      <div class="flex items-center gap-2">
+        <div class="w-9 h-9 rounded-xl bg-rose-600 flex items-center justify-center text-white font-black text-lg shadow-sm shrink-0">♥</div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-base md:text-lg font-black tracking-tight text-slate-900">人體血液循環互動式教學板</h1>
+            <span class="text-[12px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 hidden sm:inline-block">
+              解剖視角：圖左＝人體右心 / 圖右＝人體左心
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 標籤填空切換與線條獨立顯示開關 -->
+      <div class="flex flex-wrap items-center gap-1.5 bg-slate-100 p-1.5 rounded-xl border border-slate-200">
+        <span class="text-xs font-bold text-slate-500 px-1 hidden xl:inline">標籤填空：</span>
+        <button onclick="setLabelFilter('all')" id="btn-filter-all" class="px-2.5 py-1 rounded-lg text-xs font-bold transition bg-white text-slate-900 shadow-sm border border-slate-300">👁️ 全部顯示</button>
+        <button onclick="setLabelFilter('none')" id="btn-filter-none" class="px-2.5 py-1 rounded-lg text-xs font-bold transition text-slate-600 hover:bg-white">❓ 全部隱藏 (測驗)</button>
+        <button onclick="setLabelFilter('chambers')" id="btn-filter-chambers" class="px-2.5 py-1 rounded-lg text-xs font-bold transition text-slate-600 hover:bg-white">🫀 心臟腔室</button>
+        <button onclick="setLabelFilter('vessels')" id="btn-filter-vessels" class="px-2.5 py-1 rounded-lg text-xs font-bold transition text-slate-600 hover:bg-white">🩸 血管路徑</button>
+
+        <div class="h-4 w-[1px] bg-slate-300 mx-1"></div>
+
+        <button onclick="toggleHeartLines()" id="btn-toggle-heart-lines" class="px-2.5 py-1 rounded-lg text-xs font-bold transition bg-rose-600 text-white shadow-sm hover:bg-rose-700">♥ 心臟線條: 顯示</button>
+        <button onclick="toggleVesselLines()" id="btn-toggle-vessel-lines" class="px-2.5 py-1 rounded-lg text-xs font-bold transition bg-indigo-600 text-white shadow-sm hover:bg-indigo-700">⇄ 路徑線條: 顯示</button>
+
+        <div class="h-4 w-[1px] bg-slate-300 mx-1"></div>
+        <button onclick="toggleContinuousRBCFlow()" id="btn-top-rbc-flow" class="px-3 py-1 rounded-lg text-xs font-black transition bg-red-600 hover:bg-red-700 text-white shadow-sm flex items-center gap-1">
+          <span>🩸</span> <span id="top-rbc-btn-text">啟動多紅血球連續循環</span>
+        </button>
+
+        <div class="h-4 w-[1px] bg-slate-300 mx-1"></div>
+        <button onclick="resetBoard()" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800 text-white hover:bg-slate-700 transition">↺ 重置</button>
+      </div>
+
+      <!-- 右側面板展開/收合切換 -->
+      <div class="flex items-center">
+        <button onclick="toggleRightSidebar()" id="btn-toggle-sidebar" class="px-3.5 py-1.5 rounded-xl text-xs font-black bg-amber-500 hover:bg-amber-600 text-white shadow-sm transition flex items-center gap-1.5">
+          <span id="sidebar-toggle-icon">⇥</span>
+          <span id="sidebar-toggle-text">隱藏右側面板</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 主工作區：左側大畫布 + 右側獨立捲動面板 -->
+  <main class="w-full flex-1 min-h-0 flex flex-col lg:flex-row gap-2.5 p-2 overflow-hidden relative">
+
+    <!-- 左側：SVG 幾何校準循環圖 -->
+    <section id="left-canvas-section" class="flex-1 h-full min-w-0 bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col overflow-hidden relative">
+      
+      <!-- 畫布頂部資訊條 -->
+      <div class="h-9 px-3 bg-slate-50 border-b border-slate-200 shrink-0 flex items-center justify-between text-xs overflow-x-auto">
+        <div class="flex items-center gap-4 shrink-0 font-bold">
+          <span class="text-slate-800 flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-slate-900 inline-block"></span> 原始簡圖</span>
+          <span class="text-red-600 flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-red-600 inline-block"></span> 充氧血 (高 O₂)</span>
+          <span class="text-blue-700 flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-blue-700 inline-block"></span> 缺氧血 (高 CO₂)</span>
+          <span class="hidden md:inline text-[12px] text-slate-500 font-normal">💡 線條端點直連標籤邊界；滾輪縮放、拖曳畫布；點擊標籤可翻開/蓋上</span>
+        </div>
+        <label class="inline-flex items-center gap-1.5 cursor-pointer font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-2.5 py-1 rounded-lg transition shrink-0 text-xs">
+          <input type="checkbox" id="toggle-sketch-guide" checked onchange="toggleSketchGuide(this.checked)" class="rounded text-emerald-600">
+          <span>氣體交換說明框</span>
+        </label>
+      </div>
+
+      <!-- SVG 畫布 (絕對定位滿版，支援 Pan & Zoom) -->
+      <div id="svg-viewport" class="relative flex-1 w-full bg-white overflow-hidden canvas-grab">
+        <svg id="circulation-svg" viewBox="0 0 1100 860" preserveAspectRatio="xMidYMid meet" class="absolute inset-0 w-full h-full select-none">
+          <defs>
+            <!-- 箭頭標記：黑色、鮮紅色(充氧血)、寶藍色(缺氧血) -->
+            <marker id="arr-black" viewBox="0 0 10 10" refX="7.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+              <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#0f172a"/>
+            </marker>
+            <marker id="arr-oxy" viewBox="0 0 10 10" refX="7.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+              <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#dc2626"/>
+            </marker>
+            <marker id="arr-deoxy" viewBox="0 0 10 10" refX="7.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+              <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#1d4ed8"/>
+            </marker>
+          </defs>
+
+          <!-- Pan / Zoom 總容器 -->
+          <g id="viewport-group" transform="translate(0, 0) scale(1)">
+
+            <!-- 0. 左右循環大分區背景提示 -->
+            <g id="layer-zones" class="opacity-70 pointer-events-none">
+              <text x="210" y="38" text-anchor="middle" class="text-sm font-black fill-slate-400 tracking-widest">【體循環路徑（大循環）】</text>
+              <text x="890" y="38" text-anchor="middle" class="text-sm font-black fill-slate-400 tracking-widest">【肺循環路徑（小循環）】</text>
+            </g>
+
+            <!-- 1. 心臟四腔室填充底色 -->
+            <g id="layer-chamber-fills">
+              <!-- 右心房 RA (圖左上) -->
+              <path id="fill-ra" class="chamber-bg" d="M 550 290 C 500 220, 360 240, 360 380 L 435 390 L 445 422 L 475 422 L 485 390 L 550 385 Z" fill="#f8fafc" opacity="0.6"/>
+              <!-- 右心室 RV (圖左下) -->
+              <path id="fill-rv" class="chamber-bg" d="M 360 380 C 360 485, 450 545, 548 590 L 550 385 L 485 390 L 475 422 L 445 422 L 435 390 Z" fill="#f8fafc" opacity="0.6"/>
+              <!-- 左心房 LA (圖右上) -->
+              <path id="fill-la" class="chamber-bg" d="M 550 290 C 600 220, 740 240, 740 380 L 665 390 L 655 422 L 625 422 L 615 390 L 550 385 Z" fill="#f8fafc" opacity="0.6"/>
+              <!-- 左心室 LV (圖右下) -->
+              <path id="fill-lv" class="chamber-bg" d="M 740 380 C 740 485, 650 545, 548 590 L 550 385 L 615 390 L 625 422 L 655 422 L 665 390 Z" fill="#f8fafc" opacity="0.6"/>
+            </g>
+
+            <!-- 2. 中央心臟外形、中隔與房室瓣水平折線 -->
+            <g id="layer-heart-outline" class="pointer-events-none">
+              <!-- 心臟外廓心形輪廓 -->
+              <path d="M 550 290 C 500 220, 360 240, 360 380 C 360 485, 450 545, 548 590 C 650 545, 740 485, 740 380 C 740 240, 600 220, 550 290 Z"
+                    fill="none" stroke="#0f172a" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <!-- 中央心室中隔 -->
+              <line x1="550" y1="290" x2="548" y2="590" stroke="#0f172a" stroke-width="4.5" stroke-linecap="round"/>
+              <!-- 右側房室隔折線 (三尖瓣) -->
+              <polyline points="360,380 435,390 445,422" fill="none" stroke="#0f172a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+              <polyline points="475,422 485,390 550,385" fill="none" stroke="#0f172a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+              <!-- 左側房室隔折線 (二尖瓣) -->
+              <polyline points="550,385 615,390 625,422" fill="none" stroke="#0f172a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+              <polyline points="655,422 665,390 740,380" fill="none" stroke="#0f172a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+            </g>
+
+            <!-- 3. 動態流動高亮軌跡 (體循環 / 肺循環，嚴格與結構骨幹對齊) -->
+            <g id="layer-circuit-highlight" class="pointer-events-none">
+              <!-- 體循環高亮流動虛線：左心室 ➔ 大動脈 ➔ 全身小動脈 ➔ 全身組織微血管 ➔ 全身小靜脈 ➔ 上下大靜脈 ➔ 右心房 -->
+              <path id="highlight-systemic" class="hidden flow-highlight-active"
+                    d="M 645 490 L 710 530 C 720 540, 740 600, 740 620 C 580 755, 430 765, 305 730 L 220 730 C 170 730, 140 670, 140 595 L 140 545 C 140 455, 140 445, 140 375 L 140 315 C 140 250, 190 200, 260 175 L 340 175 C 410 175, 450 200, 460 295"
+                    fill="none" stroke="#f59e0b" stroke-width="14" stroke-linecap="round" opacity="0.65"/>
+
+              <!-- 肺循環高亮流動虛線：右心室 ➔ 肺動脈 ➔ 肺小動脈 ➔ 肺部微血管 ➔ 肺小靜脈 ➔ 肺靜脈 ➔ 左心房 -->
+              <path id="highlight-pulmonary" class="hidden flow-highlight-active"
+                    d="M 455 490 L 390 530 C 375 550, 360 600, 360 620 C 520 755, 670 765, 795 730 L 880 730 C 930 730, 960 670, 960 595 L 960 545 C 960 455, 960 445, 960 375 L 960 315 C 960 250, 910 200, 840 175 L 760 175 C 690 175, 650 200, 640 295"
+                    fill="none" stroke="#06b6d4" stroke-width="14" stroke-linecap="round" opacity="0.65"/>
+
+              <!-- 完整連續循環 8 字形隱藏校準路徑 (用於 requestAnimationFrame 連續取樣) -->
+              <path id="path-continuous-full-circuit" class="opacity-0 pointer-events-none"
+                    d="M 640 470 L 665 500 L 715 535 C 740 600, 740 620, 740 620 C 580 755, 430 765, 305 730 L 250 730 L 195 730 C 150 730, 140 685, 140 620 L 140 595 L 140 570 L 140 525 L 140 500 L 140 475 L 140 420 L 140 395 L 140 370 C 140 250, 180 185, 240 175 L 300 175 L 360 175 C 430 175, 460 215, 460 295 L 460 320 L 460 345 L 460 395 L 460 445 L 460 470 L 435 500 L 385 535 C 360 600, 360 620, 360 620 C 520 755, 670 765, 795 730 L 850 730 L 905 730 C 950 730, 960 685, 960 620 L 960 595 L 960 570 L 960 525 L 960 500 L 960 475 L 960 420 L 960 395 L 960 370 C 960 250, 920 185, 860 175 L 800 175 L 740 175 C 670 175, 640 215, 640 295 L 640 320 L 640 345 L 640 395 L 640 445 Z"
+                    fill="none"/>
+            </g>
+
+            <!-- 4. 原圖所有血管路徑與方向箭頭 (嚴格接續標籤邊緣) -->
+            <g id="layer-vessels">
+              <!-- (A) 心房到心室瓣膜處向下箭頭 -->
+              <!-- 三尖瓣 (右心房 ➔ 右心室) -->
+              <line id="path-valve-r" data-blood="deoxy" class="vessel-path cursor-pointer" onclick="selectNode('valve-r')"
+                    x1="460" y1="345" x2="460" y2="445" stroke="#0f172a" stroke-width="4.5" stroke-linecap="round" marker-end="url(#arr-black)"/>
+              <!-- 二尖瓣 (左心房 ➔ 左心室) -->
+              <line id="path-valve-l" data-blood="oxy" class="vessel-path cursor-pointer" onclick="selectNode('valve-l')"
+                    x1="640" y1="345" x2="640" y2="445" stroke="#0f172a" stroke-width="4.5" stroke-linecap="round" marker-end="url(#arr-black)"/>
+
+              <!-- (B) 心室射血短箭頭 -->
+              <!-- 右心室射出 (右心室 ➔ 肺動脈起點) -->
+              <line id="path-rv-exit" data-blood="deoxy" class="vessel-path cursor-pointer" onclick="selectNode('pul-artery')"
+                    x1="435" y1="500" x2="385" y2="535" stroke="#0f172a" stroke-width="4.5" stroke-linecap="round" marker-end="url(#arr-black)"/>
+              <!-- 左心室射出 (左心室 ➔ 大動脈起點) -->
+              <line id="path-lv-exit" data-blood="oxy" class="vessel-path cursor-pointer" onclick="selectNode('aorta')"
+                    x1="665" y1="500" x2="715" y2="535" stroke="#0f172a" stroke-width="4.5" stroke-linecap="round" marker-end="url(#arr-black)"/>
+
+              <!-- (C) 下方兩條交叉主幹長弧線 (嚴格連至大動脈、肺動脈標籤端點) -->
+              <!-- 大動脈長弧：左心室射出端 ➔ 往左穿過下方 ➔ 連接至「大動脈標籤」右側端點 (x=305, y=730) -->
+              <path id="path-aorta" data-blood="oxy" class="vessel-path cursor-pointer" onclick="selectNode('aorta')"
+                    d="M 720 540 C 740 600, 740 620, 740 620 C 580 755, 430 765, 305 730"
+                    fill="none" stroke="#0f172a" stroke-width="4.8" stroke-linecap="round" marker-end="url(#arr-black)"/>
+              <!-- 肺動脈長弧：右心室射出端 ➔ 往右穿過下方 ➔ 連接至「肺動脈標籤」左側端點 (x=795, y=730) -->
+              <path id="path-pul-artery" data-blood="deoxy" class="vessel-path cursor-pointer" onclick="selectNode('pul-artery')"
+                    d="M 380 540 C 360 600, 360 620, 360 620 C 520 755, 670 765, 795 730"
+                    fill="none" stroke="#0f172a" stroke-width="4.8" stroke-linecap="round" marker-end="url(#arr-black)"/>
+
+              <!-- (D) 左側體循環分段箭頭 (完全銜接標籤之間) -->
+              <!-- 大動脈標籤左端 (x=195) ➔ 導向全身小動脈標籤底端 (y=620) -->
+              <path id="path-sys-artery-to-arteriole" data-blood="oxy" class="vessel-path cursor-pointer" onclick="selectNode('sys-arteriole')"
+                    d="M 195 730 C 150 730, 140 685, 140 620"
+                    fill="none" stroke="#0f172a" stroke-width="4.5" stroke-linecap="round" marker-end="url(#arr-black)"/>
+              <!-- 全身小動脈標籤頂端 (y=570) ➔ 全身組織微血管標籤底端 (y=525) -->
+              <line id="path-sys-arteriole-to-cap" data-blood="oxy" class="vessel-path cursor-pointer" onclick="selectNode('sys-cap')"
+                    x1="140" y1="570" x2="140" y2="525" stroke="#0f172a" stroke-width="4.5" stroke-linecap="round" marker-end="url(#arr-black)"/>
+              <!-- 全身組織微血管標籤頂端 (y=475) ➔ 全身小靜脈標籤底端 (y=420) -->
+              <line id="path-sys-cap-to-venule" data-blood="deoxy" class="vessel-path cursor-pointer" onclick="selectNode('sys-venule')"
+                    x1="140" y1="475" x2="140" y2="420" stroke="#0f172a" stroke-width="4.5" stroke-linecap="round" marker-end="url(#arr-black)"/>
+              <!-- 全身小靜脈標籤頂端 (y=370) ➔ 弧形導向上下大靜脈標籤左端 (x=240, y=175) -->
+              <path id="path-sys-venule-to-cava" data-blood="deoxy" class="vessel-path cursor-pointer" onclick="selectNode('vena-cava')"
+                    d="M 140 370 C 140 250, 180 185, 240 175"
+                    fill="none" stroke="#0f172a" stroke-width="4.5" stroke-linecap="round" marker-end="url(#arr-black)"/>
+              <!-- 上下大靜脈標籤右端 (x=360, y=175) ➔ 導向右心房標籤頂端 (x=460, y=295) -->
+              <path id="path-sys-cava-to-ra" data-blood="deoxy" class="vessel-path cursor-pointer" onclick="selectNode('ra')"
+                    d="M 360 175 C 430 175, 460 215, 460 295"
+                    fill="none" stroke="#0f172a" stroke-width="4.5" stroke-linecap="round" marker-end="url(#arr-black)"/>
+
+              <!-- (E) 右側肺循環分段箭頭 (完全銜接標籤之間，向上流向肺微血管、換氣後流入左心) -->
+              <!-- 肺動脈標籤右端 (x=905) ➔ 導向肺小動脈標籤底端 (y=620) -->
+              <path id="path-pul-artery-to-arteriole" data-blood="deoxy" class="vessel-path cursor-pointer" onclick="selectNode('pul-arteriole')"
+                    d="M 905 730 C 950 730, 960 685, 960 620"
+                    fill="none" stroke="#0f172a" stroke-width="4.5" stroke-linecap="round" marker-end="url(#arr-black)"/>
+              <!-- 肺小動脈標籤頂端 (y=570) ➔ 肺部微血管標籤底端 (y=525) -->
+              <line id="path-pul-arteriole-to-cap" data-blood="deoxy" class="vessel-path cursor-pointer" onclick="selectNode('pul-cap')"
+                    x1="960" y1="570" x2="960" y2="525" stroke="#0f172a" stroke-width="4.5" stroke-linecap="round" marker-end="url(#arr-black)"/>
+              <!-- 肺部微血管標籤頂端 (y=475) ➔ 肺小靜脈標籤底端 (y=420) -->
+              <line id="path-pul-cap-to-venule" data-blood="oxy" class="vessel-path cursor-pointer" onclick="selectNode('pul-venule')"
+                    x1="960" y1="475" x2="960" y2="420" stroke="#0f172a" stroke-width="4.5" stroke-linecap="round" marker-end="url(#arr-black)"/>
+              <!-- 肺小靜脈標籤頂端 (y=370) ➔ 弧形導向肺靜脈標籤右端 (x=860, y=175) -->
+              <path id="path-pul-venule-to-vein" data-blood="oxy" class="vessel-path cursor-pointer" onclick="selectNode('pul-vein')"
+                    d="M 960 370 C 960 250, 920 185, 860 175"
+                    fill="none" stroke="#0f172a" stroke-width="4.5" stroke-linecap="round" marker-end="url(#arr-black)"/>
+              <!-- 肺靜脈標籤左端 (x=740, y=175) ➔ 導向左心房標籤頂端 (x=640, y=295) -->
+              <path id="path-pul-vein-to-la" data-blood="oxy" class="vessel-path cursor-pointer" onclick="selectNode('la')"
+                    d="M 740 175 C 670 175, 640 215, 640 295"
+                    fill="none" stroke="#0f172a" stroke-width="4.5" stroke-linecap="round" marker-end="url(#arr-black)"/>
+            </g>
+
+            <!-- 5. 氣體交換說明框與指示引線 -->
+            <g id="layer-sketch-guides" class="pointer-events-none">
+              <!-- 左側：全身組織細胞氣體交換 (內呼吸) -->
+              <g transform="translate(18, 650)">
+                <path d="M 122 0 L 122 -125" stroke="#059669" stroke-width="2.2" stroke-dasharray="5 3" fill="none"/>
+                <rect x="0" y="0" width="244" height="136" rx="14" fill="#ecfdf5" fill-opacity="0.96" stroke="#059669" stroke-width="2.5"/>
+                <rect x="10" y="9" width="224" height="26" rx="8" fill="#059669"/>
+                <text x="122" y="27" text-anchor="middle" class="text-xs font-black fill-white">🏠 全身組織細胞 (內呼吸)</text>
+                <text x="122" y="58" text-anchor="middle" class="text-xs font-black fill-red-600">⬇ 氧氣 (O₂) 擴散進入細胞</text>
+                <text x="122" y="80" text-anchor="middle" class="text-xs font-black fill-blue-700">⬆ 二氧化碳 (CO₂) 進入微血管</text>
+                <line x1="15" y1="92" x2="229" y2="92" stroke="#a7f3d0" stroke-width="1.5"/>
+                <text x="122" y="112" text-anchor="middle" class="text-[12px] font-bold fill-slate-700">血液由 <tspan class="fill-red-600 font-black">充氧血</tspan> ➔ <tspan class="fill-blue-700 font-black">缺氧血</tspan></text>
+                <text x="122" y="128" text-anchor="middle" class="text-[11px] font-bold fill-emerald-800">位置：圖左「全身微血管」</text>
+              </g>
+
+              <!-- 右側：肺泡氣體交換 (外呼吸) -->
+              <g transform="translate(838, 650)">
+                <path d="M 122 0 L 122 -125" stroke="#0284c7" stroke-width="2.2" stroke-dasharray="5 3" fill="none"/>
+                <rect x="0" y="0" width="244" height="136" rx="14" fill="#f0f9ff" fill-opacity="0.96" stroke="#0284c7" stroke-width="2.5"/>
+                <rect x="10" y="9" width="224" height="26" rx="8" fill="#0284c7"/>
+                <text x="122" y="27" text-anchor="middle" class="text-xs font-black fill-white">🫁 肺部肺泡 (外呼吸)</text>
+                <text x="122" y="58" text-anchor="middle" class="text-xs font-black fill-red-600">⬇ 肺泡 O₂ 擴散入微血管結合</text>
+                <text x="122" y="80" text-anchor="middle" class="text-xs font-black fill-blue-700">⬆ 血液 CO₂ 擴散入肺泡呼出</text>
+                <line x1="15" y1="92" x2="229" y2="92" stroke="#bae6fd" stroke-width="1.5"/>
+                <text x="122" y="112" text-anchor="middle" class="text-[12px] font-bold fill-slate-700">血液由 <tspan class="fill-blue-700 font-black">缺氧血</tspan> ➔ <tspan class="fill-red-600 font-black">充氧血</tspan></text>
+                <text x="122" y="128" text-anchor="middle" class="text-[11px] font-bold fill-sky-800">位置：圖右「肺部微血管」</text>
+              </g>
+            </g>
+
+            <!-- 6. 互動式標籤圖層 (放大尺寸、大字體、節點端點串接) -->
+            <g id="layer-labels"></g>
+
+            <!-- 6.5 多顆紅血球連續循環圖層 (Multi-RBC Continuous Hemodynamic Layer) -->
+            <g id="layer-continuous-rbcs" class="pointer-events-none"></g>
+
+            <!-- 7. O₂ / CO₂ 動態循環旅程粒子 -->
+            <g id="layer-journey-particle" class="hidden pointer-events-none">
+              <!-- 外層脈衝光環 -->
+              <circle id="journey-pulse" cx="960" cy="500" r="30" fill="none" stroke="#ef4444" stroke-width="4.5" class="particle-pulse-ring"/>
+              <!-- 粒子主體圓球 -->
+              <circle id="journey-ball" cx="960" cy="500" r="23" fill="#ef4444" stroke="#ffffff" stroke-width="3.5"/>
+              <!-- 粒子中心文字 (O₂ 或 CO₂) -->
+              <text id="journey-gas-text" x="960" y="507" text-anchor="middle" fill="#ffffff" class="text-[15px] font-black tracking-tight">O₂</text>
+              <!-- 粒子下方性質標籤膠囊 -->
+              <g id="journey-badge" transform="translate(960, 536)">
+                <rect id="journey-badge-rect" x="-54" y="-12" width="108" height="24" rx="12" fill="#dc2626" stroke="#ffffff" stroke-width="1.8"/>
+                <text id="journey-badge-text" x="0" y="5" text-anchor="middle" fill="#ffffff" class="text-[12px] font-black">O₂ (充氧血)</text>
+              </g>
+              <!-- 粒子上方即時站點說明氣泡 -->
+              <g id="journey-callout" transform="translate(960, 460)">
+                <rect x="-105" y="-28" width="210" height="28" rx="14" fill="#0f172a" opacity="0.95"/>
+                <text id="journey-callout-text" x="0" y="-9" text-anchor="middle" fill="#f8fafc" class="text-[12px] font-bold">肺部微血管出發</text>
+              </g>
+            </g>
+
+          </g><!-- 結束 #viewport-group -->
+        </svg>
+
+        <!-- 懸浮 Pan / Zoom 操作列 (左下角) -->
+        <div class="absolute bottom-3 left-3 z-20 flex items-center gap-1.5 bg-white/95 backdrop-blur border border-slate-300 shadow-md rounded-xl p-1.5">
+          <button onclick="zoomCanvas(1.2)" class="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-800 font-black text-lg flex items-center justify-center transition" title="放大">＋</button>
+          <span id="zoom-level-badge" onclick="resetPanZoom()" class="px-2.5 text-xs font-black text-slate-700 cursor-pointer hover:text-indigo-600" title="點擊重置">100%</span>
+          <button onclick="zoomCanvas(1/1.2)" class="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-800 font-black text-lg flex items-center justify-center transition" title="縮小">－</button>
+          <div class="h-4 w-[1px] bg-slate-200 mx-0.5"></div>
+          <button onclick="resetPanZoom()" class="px-2.5 h-8 rounded-lg hover:bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center transition">🎯 置中重置</button>
+        </div>
+
+        <!-- 懸浮快捷切換列 (右下角) -->
+        <div class="absolute bottom-3 right-3 z-20 flex items-center gap-2">
+          <button onclick="toggleBottomBanner()" id="btn-toggle-banner" class="px-3 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-white text-xs font-bold shadow-md transition">
+            ▼ 收合下方知識卡
+          </button>
+          <button onclick="toggleRightSidebar()" id="btn-floating-sidebar" class="hidden px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-black shadow-md transition">
+            ⇤ 展開控制面板
+          </button>
+        </div>
+      </div>
+
+      <!-- 畫布底部：固定高度結構詳情說明卡 (固定高度 96px，零排版抖動) -->
+      <div id="selected-node-banner" class="h-[96px] bg-slate-50 border-t border-slate-200 px-4 py-2 shrink-0 flex flex-col justify-between overflow-y-auto">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex flex-wrap items-center gap-2">
+            <span id="detail-badge" class="px-2.5 py-0.5 rounded-md text-xs font-black bg-rose-100 text-rose-800 border border-rose-300">🫀 心臟腔室</span>
+            <h3 id="detail-title" class="text-base font-black text-slate-900">左心室 (Left Ventricle)</h3>
+            <span id="detail-blood-tag" class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-600 text-white">🔴 充氧血 (高 O₂)</span>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <div id="detail-extra" class="hidden xl:flex items-center gap-1.5 text-xs"></div>
+            <button onclick="toggleCurrentNodeVisibility()" id="btn-toggle-single" class="text-xs font-bold px-3 py-1 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 transition">
+              🙈 隱藏此標籤
+            </button>
+          </div>
+        </div>
+        <p id="detail-desc" class="text-xs text-slate-700 leading-snug">
+          位於畫面右下方。體循環的起點，心肌壁最厚，負責強力收縮將充氧血經主動脈送往全身各器官。
+        </p>
+      </div>
+    </section>
+
+    <!-- 右側：獨立捲動互動操作與模擬控制面板 -->
+    <aside id="right-control-sidebar" class="w-full lg:w-[410px] xl:w-[440px] shrink-0 h-full overflow-y-auto pr-1 flex flex-col gap-2.5 pb-4">
+
+      <!-- 模組 0 (新增)：多顆紅血球連續真實循環模式 -->
+      <div class="bg-gradient-to-br from-red-50 to-rose-100/70 rounded-2xl shadow-sm border-2 border-red-200 p-3.5">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-sm font-black text-red-950 flex items-center gap-1.5">
+            <span class="w-5 h-5 rounded-md bg-red-600 text-white flex items-center justify-center text-xs">★</span>
+            多顆紅血球連續真實循環
+          </h2>
+          <span id="rbc-flow-status-badge" class="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-slate-200 text-slate-700">
+            靜止中
+          </span>
+        </div>
+
+        <div class="flex items-center gap-2 mb-2.5">
+          <button onclick="toggleContinuousRBCFlow()" id="btn-side-rbc-flow" class="flex-1 py-2.5 px-3 rounded-xl text-xs font-black bg-red-600 hover:bg-red-700 text-white shadow-sm flex items-center justify-center gap-2 transition active:scale-95">
+            <span id="side-rbc-icon">🩸</span>
+            <span id="side-rbc-btn-text">啟動真實連續血液循環</span>
+          </button>
+          <button onclick="resetContinuousRBCs()" class="py-2.5 px-3 rounded-xl text-xs font-bold bg-white text-slate-700 hover:bg-slate-100 border border-red-200 transition">
+            重設
+          </button>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 text-xs mb-2">
+          <div class="bg-white/80 p-2 rounded-xl border border-red-100">
+            <label class="block font-bold text-slate-700 mb-1">流速控制：<span id="label-rbc-speed" class="text-red-700 font-black">正常 (1.0x)</span></label>
+            <input type="range" id="slider-rbc-speed" min="0.3" max="2.5" step="0.1" value="1.0" oninput="changeRBCSpeed(this.value)" class="w-full accent-red-600 cursor-pointer">
+          </div>
+          <div class="bg-white/80 p-2 rounded-xl border border-red-100">
+            <label class="block font-bold text-slate-700 mb-1">紅血球數量：<span id="label-rbc-count" class="text-red-700 font-black">24 顆</span></label>
+            <select onchange="changeRBCCount(this.value)" class="w-full bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold text-slate-800">
+              <option value="12">12 顆 (稀疏好觀察)</option>
+              <option value="24" selected>24 顆 (標準循環)</option>
+              <option value="36">36 顆 (真實稠密)</option>
+              <option value="48">48 顆 (高速滿載)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between text-xs bg-white/90 px-3 py-1.5 rounded-xl border border-red-100">
+          <span class="font-bold text-slate-700">顯示紅血球氣體標籤 (O₂ / CO₂)：</span>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="toggle-rbc-labels" checked onchange="toggleRBCLabels(this.checked)" class="sr-only peer">
+            <div class="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-600"></div>
+          </label>
+        </div>
+
+        <p class="text-[11px] text-red-950/80 mt-2 leading-relaxed">
+          💡 紅血球在左右兩側微血管會<strong>連續動態漸層換色</strong>：全身微血管（圖左）由<strong>鮮紅 O₂</strong> 轉化為<strong>藍紫 CO₂</strong>；肺部微血管（圖右）由<strong>藍紫 CO₂</strong> 吸氧轉化為<strong>鮮紅 O₂</strong>，重現 8 字形連續真實血流！
+        </p>
+      </div>
+
+      <!-- 模組 1：充氧血 / 缺氧血路徑顏色標示 -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-3.5">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-sm font-black text-slate-900 flex items-center gap-1.5">
+            <span class="w-5 h-5 rounded-md bg-red-100 text-red-600 flex items-center justify-center text-xs">1</span>
+            充氧血 / 缺氧血路徑標示
+          </h2>
+          <span class="text-xs font-bold text-slate-400">左心充氧・右心缺氧</span>
+        </div>
+        <div class="grid grid-cols-2 gap-1.5">
+          <button onclick="setBloodColorMode('bw')" id="btn-blood-bw" class="px-2.5 py-2 rounded-xl text-xs font-bold border-2 border-slate-900 bg-slate-900 text-white flex items-center justify-center gap-1.5 transition">
+            <span class="w-2.5 h-2.5 rounded-full bg-white border border-slate-400"></span> 全部黑白 (簡圖)
+          </button>
+          <button onclick="setBloodColorMode('oxy')" id="btn-blood-oxy" class="px-2.5 py-2 rounded-xl text-xs font-bold border-2 border-red-200 bg-red-50 text-red-700 hover:bg-red-100 flex items-center justify-center gap-1.5 transition">
+            <span class="w-2.5 h-2.5 rounded-full bg-red-600"></span> 充氧血路徑 (紅色)
+          </button>
+          <button onclick="setBloodColorMode('deoxy')" id="btn-blood-deoxy" class="px-2.5 py-2 rounded-xl text-xs font-bold border-2 border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 flex items-center justify-center gap-1.5 transition">
+            <span class="w-2.5 h-2.5 rounded-full bg-blue-700"></span> 缺氧血路徑 (藍色)
+          </button>
+          <button onclick="setBloodColorMode('both')" id="btn-blood-both" class="px-2.5 py-2 rounded-xl text-xs font-bold border-2 border-purple-200 bg-gradient-to-r from-red-50 to-blue-50 text-slate-800 hover:from-red-100 hover:to-blue-100 flex items-center justify-center gap-1.5 transition">
+            <span class="flex"><span class="w-2 h-2 rounded-full bg-red-600"></span><span class="w-2 h-2 rounded-full bg-blue-700 -ml-0.5"></span></span> 雙色顯示 (紅+藍)
+          </button>
+        </div>
+        <div class="mt-2 bg-amber-50 border border-amber-200/90 rounded-xl px-2.5 py-1.5 text-xs text-amber-900 leading-relaxed">
+          💡 <strong>考試高頻考點：</strong>「肺動脈」由右心室出發，裡面流的是<strong>缺氧血 (高 CO₂)</strong>；「肺靜脈」流回左心房，裡面流的是<strong>充氧血 (高 O₂)</strong>。
+        </div>
+      </div>
+
+      <!-- 模組 2：Highlight 肺循環 / 體循環 (從心室出發到心房) -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-3.5">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-sm font-black text-slate-900 flex items-center gap-1.5">
+            <span class="w-5 h-5 rounded-md bg-amber-100 text-amber-700 flex items-center justify-center text-xs">2</span>
+            Highlight 體循環 / 肺循環
+          </h2>
+          <span class="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">心室出發 ➔ 心房結束</span>
+        </div>
+        <div class="grid grid-cols-3 gap-1.5">
+          <button onclick="setCircuitHighlight('systemic')" id="btn-circuit-systemic" class="p-2.5 rounded-xl border-2 border-slate-200 hover:border-amber-400 text-left transition bg-slate-50">
+            <div class="text-xs font-black text-slate-800">🏃 體循環 (大)</div>
+            <div class="text-[11px] font-bold text-slate-500 mt-0.5">左心室 ➔ 右心房</div>
+          </button>
+          <button onclick="setCircuitHighlight('pulmonary')" id="btn-circuit-pulmonary" class="p-2.5 rounded-xl border-2 border-slate-200 hover:border-cyan-400 text-left transition bg-slate-50">
+            <div class="text-xs font-black text-slate-800">🫁 肺循環 (小)</div>
+            <div class="text-[11px] font-bold text-slate-500 mt-0.5">右心室 ➔ 左心房</div>
+          </button>
+          <button onclick="setCircuitHighlight('none')" id="btn-circuit-none" class="p-2.5 rounded-xl border-2 border-slate-800 bg-slate-800 text-white text-center transition flex flex-col items-center justify-center">
+            <div class="text-xs font-black">關閉高亮</div>
+            <div class="text-[10px] text-slate-300">恢復一般視圖</div>
+          </button>
+        </div>
+        <div id="circuit-formula-box" class="hidden mt-2 p-2.5 rounded-xl bg-slate-900 text-white text-xs">
+          <div id="circuit-formula-title" class="font-black text-amber-400 mb-1"></div>
+          <div id="circuit-formula-steps" class="leading-relaxed text-[11px] text-slate-200"></div>
+        </div>
+      </div>
+
+      <!-- 模組 3：O₂ 與 CO₂ 循環旅程模擬器 -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-3.5 flex-1 flex flex-col">
+        <div class="flex items-center justify-between mb-1.5">
+          <h2 class="text-sm font-black text-slate-900 flex items-center gap-1.5">
+            <span class="w-5 h-5 rounded-md bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs">3</span>
+            O₂ 與 CO₂ 循環旅程模擬
+          </h2>
+          <span id="journey-gas-indicator" class="text-xs font-black px-2.5 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-300">
+            目前分子：O₂ (充氧血)
+          </span>
+        </div>
+
+        <!-- 3 種模式切換 -->
+        <div class="grid grid-cols-1 gap-1.5 mb-2">
+          <button onclick="selectJourneyMode('full_from_lung', true)" id="btn-journey-full" class="px-3 py-2 rounded-xl border-2 border-emerald-600 bg-emerald-50 text-left transition flex items-center justify-between">
+            <div>
+              <div class="text-xs font-black text-emerald-950">🔄 完整一圈：肺部微血管 O₂ ➔ 全身組織換 CO₂ ➔ 排回肺部</div>
+              <div class="text-[11px] text-emerald-700">含全身小動脈、小靜脈、肺小動脈、肺小靜脈完整 12 站</div>
+            </div>
+            <span class="text-xs font-black text-emerald-700 shrink-0 ml-2">12 站</span>
+          </button>
+
+          <div class="grid grid-cols-2 gap-1.5">
+            <button onclick="selectJourneyMode('o2_only', true)" id="btn-journey-o2" class="px-2.5 py-1.5 rounded-xl border-2 border-slate-200 hover:border-red-300 bg-white text-left transition">
+              <div class="text-xs font-black text-red-600">🔴 O₂ 氧氣送抵全身</div>
+              <div class="text-[10px] text-slate-500">肺微血管 ➔ 組織微血管</div>
+            </button>
+            <button onclick="selectJourneyMode('co2_journey', true)" id="btn-journey-co2" class="px-2.5 py-1.5 rounded-xl border-2 border-slate-200 hover:border-blue-300 bg-white text-left transition">
+              <div class="text-xs font-black text-blue-700">🔵 CO₂ 排出呼氣旅程</div>
+              <div class="text-[10px] text-slate-500">組織微血管 ➔ 肺部呼出</div>
+            </button>
+          </div>
+        </div>
+
+        <!-- 播放控制鍵 -->
+        <div class="flex items-center justify-between gap-1.5 bg-slate-100 p-1.5 rounded-xl border border-slate-200 mb-2">
+          <div class="flex items-center gap-1">
+            <button onclick="togglePlayJourney()" id="btn-journey-play" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-sm transition flex items-center gap-1">
+              <span>▶</span> <span id="play-btn-text">自動播放</span>
+            </button>
+            <button onclick="stepJourney(-1)" class="px-2.5 py-1.5 rounded-lg bg-white hover:bg-slate-200 text-slate-700 text-xs font-bold border border-slate-300 transition">⏮ 上一站</button>
+            <button onclick="stepJourney(1)" class="px-2.5 py-1.5 rounded-lg bg-white hover:bg-slate-200 text-slate-700 text-xs font-bold border border-slate-300 transition">下一站 ⏭</button>
+            <button onclick="stopJourney()" class="px-2 py-1.5 rounded-lg bg-white hover:bg-rose-50 text-rose-600 text-xs font-bold border border-slate-300 transition" title="停止">⏹</button>
+          </div>
+          <div class="flex items-center gap-1 text-xs font-bold text-slate-600">
+            <span>速度</span>
+            <select onchange="setJourneySpeed(this.value)" class="bg-white border border-slate-300 rounded px-1.5 py-0.5 text-xs font-bold text-slate-800">
+              <option value="0.7">慢</option>
+              <option value="1" selected>中</option>
+              <option value="1.6">快</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 當前站點解說卡 -->
+        <div id="journey-status-card" class="rounded-xl p-2.5 bg-slate-900 text-white mb-2 shrink-0">
+          <div class="flex items-center justify-between gap-2 mb-1">
+            <span id="journey-step-badge" class="text-xs font-black px-2 py-0.5 rounded bg-emerald-500 text-slate-950">第 1 / 12 站</span>
+            <span id="journey-step-gas-tag" class="text-xs font-black px-2 py-0.5 rounded bg-red-600 text-white">攜帶分子：O₂ (充氧血)</span>
+          </div>
+          <div id="journey-step-title" class="text-sm font-black text-amber-300">肺部微血管（攜帶 O₂ 出發）</div>
+          <p id="journey-step-desc" class="text-xs text-slate-300 mt-0.5 leading-relaxed">
+            氧氣擴散入微血管，紅血球充氧成為鮮紅色充氧血！
+          </p>
+        </div>
+
+        <!-- 旅程站點列表 -->
+        <div class="text-xs font-bold text-slate-500 mb-1">📍 旅程站點清單（可直接點擊跳轉）：</div>
+        <div id="journey-steps-list" class="flex-1 overflow-y-auto space-y-1 pr-1 max-h-[190px]"></div>
+      </div>
+
+    </aside>
+  </main>
+
+  <script>
+    // =========================================================================
+    // 1. 嚴格對應 SVG (viewBox: 0 0 1100 860) 的解剖標籤資料庫 (放大字體與尺寸)
+    // =========================================================================
+    const NODES_DATA = [
+      // 心臟四腔室 (解剖視角：圖左=右心，圖右=左心)
+      {
+        id: 'ra', name: '右心房', category: 'chambers', blood: 'deoxy',
+        x: 460, y: 320, width: 104, height: 42,
+        connects: '上下大靜脈 ➔ 右心房 ➔ 右心室',
+        circuit: '體循環終點',
+        desc: '位於畫面左上方。接收來自上下大靜脈匯集的缺氧血（含高濃度 CO₂），並經由三尖瓣流入右心室。'
+      },
+      {
+        id: 'rv', name: '右心室', category: 'chambers', blood: 'deoxy',
+        x: 460, y: 470, width: 104, height: 42,
+        connects: '右心房 ➔ 右心室 ➔ 肺動脈',
+        circuit: '肺循環起點',
+        desc: '位於畫面左下方。肺循環的幫浦起點，收縮時將缺氧血射入下方跨越的肺動脈送往肺部。'
+      },
+      {
+        id: 'la', name: '左心房', category: 'chambers', blood: 'oxy',
+        x: 640, y: 320, width: 104, height: 42,
+        connects: '肺靜脈 ➔ 左心房 ➔ 左心室',
+        circuit: '肺循環終點',
+        desc: '位於畫面右上方。接收自肺部微血管完成氣體交換後、經由肺靜脈送回的鮮紅充氧血。'
+      },
+      {
+        id: 'lv', name: '左心室', category: 'chambers', blood: 'oxy',
+        x: 640, y: 470, width: 104, height: 42,
+        connects: '左心房 ➔ 左心室 ➔ 大動脈',
+        circuit: '體循環起點',
+        desc: '位於畫面右下方。體循環的強力起點，心肌壁最厚，負責將充氧血強力壓入主動脈送往全身各器官。'
+      },
+      // 瓣膜
+      {
+        id: 'valve-r', name: '三尖瓣(房室瓣)', category: 'chambers', blood: 'deoxy',
+        x: 460, y: 395, width: 140, height: 34,
+        connects: '右心房 ➔ 瓣膜 ➔ 右心室',
+        circuit: '防止血液逆流回右心房',
+        desc: '位於右心房與右心室間的水平折線開口。心室收縮時關閉，防止血液倒流回右心房。'
+      },
+      {
+        id: 'valve-l', name: '二尖瓣/僧帽瓣', category: 'chambers', blood: 'oxy',
+        x: 640, y: 395, width: 140, height: 34,
+        connects: '左心房 ➔ 瓣膜 ➔ 左心室',
+        circuit: '防止血液逆流回左心房',
+        desc: '位於左心房與左心室間的水平折線開口。左心室收縮噴血時關閉，確保血液向前注入主動脈。'
+      },
+      // 體循環血管與微血管 (圖左側)
+      {
+        id: 'aorta', name: '大動脈(主動脈)', category: 'vessels', blood: 'oxy',
+        x: 250, y: 730, width: 130, height: 42,
+        connects: '左心室 ➔ 大動脈 ➔ 全身小動脈',
+        circuit: '體循環動脈主幹',
+        desc: '由左心室出發（圖下方由右向左跨越的長弧線），承受極高血壓，將充氧血輸向全身。'
+      },
+      {
+        id: 'sys-arteriole', name: '全身小動脈', category: 'vessels', blood: 'oxy',
+        x: 140, y: 595, width: 120, height: 40,
+        connects: '大動脈 ➔ 全身小動脈 ➔ 全身微血管',
+        circuit: '體循環阻力血管',
+        desc: '大動脈分支進入各器官的小動脈，管壁平滑肌發達，將富含氧氣的血液導入微血管網。'
+      },
+      {
+        id: 'sys-cap', name: '全身微血管', category: 'vessels', blood: 'exchange-sys',
+        x: 140, y: 500, width: 126, height: 42,
+        connects: '全身小動脈 ➔ 全身微血管 ➔ 全身小靜脈',
+        circuit: '體循環氣體養分交換處',
+        desc: '位於畫面左側。管壁僅一層內皮細胞，在此進行內呼吸：將 O₂ 與養分交給細胞，細胞排出的 CO₂ 進入血液。'
+      },
+      {
+        id: 'sys-venule', name: '全身小靜脈', category: 'vessels', blood: 'deoxy',
+        x: 140, y: 395, width: 120, height: 40,
+        connects: '全身微血管 ➔ 全身小靜脈 ➔ 上下大靜脈',
+        circuit: '體循環回流起點',
+        desc: '收集組織微血管交換後的缺氧血（含高濃度 CO₂），匯流至上下大靜脈。'
+      },
+      {
+        id: 'vena-cava', name: '上下大靜脈', category: 'vessels', blood: 'deoxy',
+        x: 300, y: 175, width: 124, height: 42,
+        connects: '全身小靜脈 ➔ 上下大靜脈 ➔ 右心房',
+        circuit: '體循環回心大靜脈',
+        desc: '畫面左上方弧形匯流管路。匯集全身缺氧血，流回右心房完成體循環。'
+      },
+      // 肺循環血管與微血管 (圖右側)
+      {
+        id: 'pul-artery', name: '肺動脈', category: 'vessels', blood: 'deoxy',
+        x: 850, y: 730, width: 116, height: 42,
+        connects: '右心室 ➔ 肺動脈 ➔ 肺小動脈',
+        circuit: '肺循環出心動脈',
+        desc: '由右心室出發（圖下方由左向右跨越的長弧線）。注意：雖然名為動脈，但裡面流的是「缺氧血（高 CO₂）」！'
+      },
+      {
+        id: 'pul-arteriole', name: '肺小動脈', category: 'vessels', blood: 'deoxy',
+        x: 960, y: 595, width: 116, height: 40,
+        connects: '肺動脈 ➔ 肺小動脈 ➔ 肺部微血管',
+        circuit: '肺循環前微血管分支',
+        desc: '肺動脈分支進入肺葉的小動脈，引導缺氧血進入圍繞肺泡的微血管網。'
+      },
+      {
+        id: 'pul-cap', name: '肺部微血管', category: 'vessels', blood: 'exchange-pul',
+        x: 960, y: 500, width: 126, height: 42,
+        connects: '肺小動脈 ➔ 肺部微血管 ➔ 肺小靜脈',
+        circuit: '肺循環氣體交換處',
+        desc: '位於畫面右側，緊密貼附肺泡壁。排出 CO₂ 進入肺泡呼出，同時吸收肺泡內的新鮮 O₂，轉變為充氧血！'
+      },
+      {
+        id: 'pul-venule', name: '肺小靜脈', category: 'vessels', blood: 'oxy',
+        x: 960, y: 395, width: 116, height: 40,
+        connects: '肺部微血管 ➔ 肺小靜脈 ➔ 肺靜脈',
+        circuit: '肺循環充氧血匯流',
+        desc: '收集肺泡微血管完成氣體交換後的新鮮充氧血，匯聚流向肺靜脈。'
+      },
+      {
+        id: 'pul-vein', name: '肺靜脈', category: 'vessels', blood: 'oxy',
+        x: 800, y: 175, width: 116, height: 42,
+        connects: '肺小靜脈 ➔ 肺靜脈 ➔ 左心房',
+        circuit: '肺循環回心靜脈',
+        desc: '位於畫面右上方。注意：雖然名為靜脈，但裡面流的是飽含 O₂ 的「充氧血」，流回左心房完成肺循環。'
+      }
+    ];
+
+    // =========================================================================
+    // 2. 氣體循環旅程 (與結構線條完全共用精準幾何座標)
+    // =========================================================================
+    const JOURNEYS = {
+      full_from_lung: {
+        name: '完整一圈旅程（肺部微血管出發 ➔ 全身組織換氣 ➔ 排回肺部）',
+        steps: [
+          {
+            nodeId: 'pul-cap', gas: 'O₂', bloodType: 'oxy',
+            title: '第 1 站：肺部微血管（結合新鮮 O₂ 出發！）',
+            callout: '吸入新鮮 O₂',
+            desc: '肺泡內的 O₂ 擴散進入肺部微血管與紅血球血紅素結合，血液成為鮮紅色「充氧血」，啟程流向心臟。',
+            waypoints: [[960, 500]]
+          },
+          {
+            nodeId: 'pul-venule', gas: 'O₂', bloodType: 'oxy',
+            title: '第 2 站：肺小靜脈（匯流充氧血）',
+            callout: 'O₂ 經肺小靜脈匯聚',
+            desc: '攜帶 O₂ 的充氧血向上流入「肺小靜脈」，順著右側路徑上行。',
+            waypoints: [[960, 500], [960, 475], [960, 420], [960, 395]]
+          },
+          {
+            nodeId: 'pul-vein', gas: 'O₂', bloodType: 'oxy',
+            title: '第 3 站：肺靜脈（輸送 O₂ 入左心）',
+            callout: '經肺靜脈回心',
+            desc: '充氧血沿弧線進入頂部「肺靜脈」，順著導管流向左心房。',
+            waypoints: [[960, 395], [960, 370], [960, 250], [920, 185], [860, 175], [800, 175]]
+          },
+          {
+            nodeId: 'la', gas: 'O₂', bloodType: 'oxy',
+            title: '第 4 站：左心房（肺循環終點）',
+            callout: 'O₂ 流入左心房',
+            desc: 'O₂ 隨充氧血由上方弧線注入圖右上方的「左心房」，肺循環宣告完成。',
+            waypoints: [[800, 175], [740, 175], [670, 175], [640, 215], [640, 295], [640, 320]]
+          },
+          {
+            nodeId: 'valve-l', gas: 'O₂', bloodType: 'oxy',
+            title: '第 5 站：二尖瓣（通過房室瓣口）',
+            callout: '二尖瓣開啟向下流',
+            desc: '左心房收縮，血液穿過「二尖瓣（僧帽瓣）」開口向下注入左心室。',
+            waypoints: [[640, 320], [640, 345], [640, 395]]
+          },
+          {
+            nodeId: 'lv', gas: 'O₂', bloodType: 'oxy',
+            title: '第 6 站：左心室（體循環幫浦起點）',
+            callout: '左心室強力加壓',
+            desc: 'O₂ 抵達心肌最厚的「左心室」，準備強力收縮將充氧血打入大動脈！',
+            waypoints: [[640, 395], [640, 445], [640, 470]]
+          },
+          {
+            nodeId: 'aorta', gas: 'O₂', bloodType: 'oxy',
+            title: '第 7 站：大動脈(主動脈)（跨越長弧送全身）',
+            callout: '大動脈高速運送 O₂',
+            desc: '左心室射血，O₂ 順著下方由右向左跨越的長弧線「大動脈」高速流向全身。',
+            waypoints: [[640, 470], [665, 500], [715, 535], [740, 620], [580, 755], [430, 765], [305, 730], [250, 730]]
+          },
+          {
+            nodeId: 'sys-arteriole', gas: 'O₂', bloodType: 'oxy',
+            title: '第 8 站：全身小動脈（分流至各組織）',
+            callout: '分流入全身小動脈',
+            desc: '充氧血沿外圍圓弧向上進入「全身小動脈」，準備導入微血管網供細胞利用。',
+            waypoints: [[250, 730], [195, 730], [150, 730], [140, 685], [140, 620], [140, 595]]
+          },
+          {
+            nodeId: 'sys-cap', gas: 'CO₂', bloodType: 'deoxy',
+            title: '第 9 站：全身微血管（⚡ 氣體交換：O₂ 換成 CO₂！）',
+            callout: '⚡ 氣體交換：O₂ 換 CO₂！',
+            desc: '【關鍵轉折】O₂ 釋放給組織細胞行呼吸作用；細胞產生的代謝廢物 CO₂ 擴散入血！粒子轉為深藍紫色「CO₂ (缺氧血)」！',
+            waypoints: [[140, 595], [140, 570], [140, 525], [140, 500]]
+          },
+          {
+            nodeId: 'sys-venule', gas: 'CO₂', bloodType: 'deoxy',
+            title: '第 10 站：全身小靜脈（匯集 CO₂ 缺氧血）',
+            callout: 'CO₂ 經小靜脈上行',
+            desc: '攜帶 CO₂ 的缺氧血匯入「全身小靜脈」，沿著圖左側繼續向上流動。',
+            waypoints: [[140, 500], [140, 475], [140, 420], [140, 395]]
+          },
+          {
+            nodeId: 'vena-cava', gas: 'CO₂', bloodType: 'deoxy',
+            title: '第 11 站：上下大靜脈（匯流入右心）',
+            callout: '經大靜脈回心',
+            desc: 'CO₂ 順著左上方弧線管路匯聚於「上下大靜脈」，準備注入右心房完成體循環。',
+            waypoints: [[140, 395], [140, 370], [140, 250], [180, 185], [240, 175], [300, 175]]
+          },
+          {
+            nodeId: 'ra', gas: 'CO₂', bloodType: 'deoxy',
+            title: '第 12 站：右心房 ➔ 右心室 ➔ 肺動脈 ➔ 回到肺部微血管',
+            callout: '🎉 CO₂ 經肺動脈呼出！',
+            desc: 'CO₂ 經右心房、三尖瓣進入右心室，右心室射入「肺動脈 ➔ 肺小動脈」回到肺部微血管，擴散入肺泡呼出體外！',
+            waypoints: [
+              [300, 175], [360, 175], [430, 175], [460, 215], [460, 295], [460, 320],
+              [460, 345], [460, 395], [460, 445], [460, 470],
+              [435, 500], [385, 535], [360, 620], [520, 755], [670, 765], [795, 730], [850, 730],
+              [905, 730], [950, 730], [960, 685], [960, 620], [960, 595],
+              [960, 570], [960, 525], [960, 500]
+            ]
+          }
+        ]
+      },
+      o2_only: {
+        name: 'O₂ 氧氣送抵全身旅程（肺部微血管 ➔ 左心 ➔ 組織微血管）',
+        steps: [
+          {
+            nodeId: 'pul-cap', gas: 'O₂', bloodType: 'oxy',
+            title: '第 1 站：肺部微血管（吸入 O₂）',
+            callout: '結合 O₂',
+            desc: 'O₂ 進入肺部微血管與血紅素結合。',
+            waypoints: [[960, 500]]
+          },
+          {
+            nodeId: 'pul-venule', gas: 'O₂', bloodType: 'oxy',
+            title: '第 2 站：肺小靜脈',
+            callout: '經肺小靜脈匯流',
+            desc: '充氧血經由肺小靜脈向心臟匯流。',
+            waypoints: [[960, 500], [960, 475], [960, 420], [960, 395]]
+          },
+          {
+            nodeId: 'pul-vein', gas: 'O₂', bloodType: 'oxy',
+            title: '第 3 站：肺靜脈',
+            callout: '經肺靜脈回心',
+            desc: '充氧血流入肺靜脈，準備注入左心房。',
+            waypoints: [[960, 395], [960, 370], [960, 250], [920, 185], [860, 175], [800, 175]]
+          },
+          {
+            nodeId: 'la', gas: 'O₂', bloodType: 'oxy',
+            title: '第 4 站：左心房',
+            callout: '進入左心房',
+            desc: 'O₂ 進入左心房。',
+            waypoints: [[800, 175], [740, 175], [670, 175], [640, 215], [640, 295], [640, 320]]
+          },
+          {
+            nodeId: 'lv', gas: 'O₂', bloodType: 'oxy',
+            title: '第 5 站：左心室（通過二尖瓣）',
+            callout: '進入左心室',
+            desc: '充氧血通過二尖瓣進入左心室。',
+            waypoints: [[640, 320], [640, 395], [640, 470]]
+          },
+          {
+            nodeId: 'aorta', gas: 'O₂', bloodType: 'oxy',
+            title: '第 6 站：大動脈',
+            callout: '經大動脈送往全身',
+            desc: '左心室強力將充氧血壓入大動脈長弧。',
+            waypoints: [[640, 470], [665, 500], [715, 535], [740, 620], [580, 755], [430, 765], [305, 730], [250, 730]]
+          },
+          {
+            nodeId: 'sys-arteriole', gas: 'O₂', bloodType: 'oxy',
+            title: '第 7 站：全身小動脈',
+            callout: '進入小動脈',
+            desc: '充氧血分流入各器官小動脈。',
+            waypoints: [[250, 730], [195, 730], [150, 730], [140, 685], [140, 620], [140, 595]]
+          },
+          {
+            nodeId: 'sys-cap', gas: 'O₂', bloodType: 'oxy',
+            title: '第 8 站：全身微血管（O₂ 釋出進入細胞！）',
+            callout: '🎯 O₂ 送達細胞！',
+            desc: 'O₂ 擴散穿過微血管壁進入組織細胞進行呼吸作用！',
+            waypoints: [[140, 595], [140, 570], [140, 525], [140, 500]]
+          }
+        ]
+      },
+      co2_journey: {
+        name: 'CO₂ 二氧化碳排出呼氣旅程（組織微血管 ➔ 右心 ➔ 肺部呼出）',
+        steps: [
+          {
+            nodeId: 'sys-cap', gas: 'CO₂', bloodType: 'deoxy',
+            title: '第 1 站：全身微血管（細胞排出 CO₂）',
+            callout: '細胞 CO₂ 排入血液',
+            desc: '全身組織細胞產生的代謝廢物 CO₂ 擴散進入微血管，血液成為缺氧血。',
+            waypoints: [[140, 500]]
+          },
+          {
+            nodeId: 'sys-venule', gas: 'CO₂', bloodType: 'deoxy',
+            title: '第 2 站：全身小靜脈',
+            callout: 'CO₂ 經小靜脈上行',
+            desc: '缺氧血匯入小靜脈向上輸送。',
+            waypoints: [[140, 500], [140, 475], [140, 420], [140, 395]]
+          },
+          {
+            nodeId: 'vena-cava', gas: 'CO₂', bloodType: 'deoxy',
+            title: '第 3 站：上下大靜脈',
+            callout: '大靜脈匯流入右心',
+            desc: '匯聚全身缺氧血流向右心房。',
+            waypoints: [[140, 395], [140, 370], [140, 250], [180, 185], [240, 175], [300, 175]]
+          },
+          {
+            nodeId: 'ra', gas: 'CO₂', bloodType: 'deoxy',
+            title: '第 4 站：右心房',
+            callout: '進入右心房',
+            desc: '缺氧血注入右心房完成體循環。',
+            waypoints: [[300, 175], [360, 175], [430, 175], [460, 215], [460, 295], [460, 320]]
+          },
+          {
+            nodeId: 'rv', gas: 'CO₂', bloodType: 'deoxy',
+            title: '第 5 站：右心室（通過三尖瓣）',
+            callout: '進入右心室',
+            desc: 'CO₂ 通過三尖瓣進入右心室。',
+            waypoints: [[460, 320], [460, 395], [460, 470]]
+          },
+          {
+            nodeId: 'pul-artery', gas: 'CO₂', bloodType: 'deoxy',
+            title: '第 6 站：肺動脈（跨越弧線往肺部）',
+            callout: '肺動脈射血送肺部',
+            desc: '右心室收縮，將高濃度 CO₂ 血液打入肺動脈長弧。',
+            waypoints: [[460, 470], [435, 500], [385, 535], [360, 620], [520, 755], [670, 765], [795, 730], [850, 730]]
+          },
+          {
+            nodeId: 'pul-arteriole', gas: 'CO₂', bloodType: 'deoxy',
+            title: '第 7 站：肺小動脈',
+            callout: '進入肺小動脈',
+            desc: '缺氧血進入肺泡周圍的肺小動脈。',
+            waypoints: [[850, 730], [905, 730], [950, 730], [960, 685], [960, 620], [960, 595]]
+          },
+          {
+            nodeId: 'pul-cap', gas: 'CO₂', bloodType: 'deoxy',
+            title: '第 8 站：肺部微血管（CO₂ 擴散入肺泡呼出！）',
+            callout: '🎉 CO₂ 呼出體外！',
+            desc: 'CO₂ 擴散穿過微血管壁進入肺泡，隨呼氣排出體外！',
+            waypoints: [[960, 595], [960, 570], [960, 525], [960, 500]]
+          }
+        ]
+      }
+    };
+
+    // =========================================================================
+    // 3. 全域狀態管理
+    // =========================================================================
+    let state = {
+      visibleNodes: new Set(NODES_DATA.map(n => n.id)),
+      selectedNodeId: 'lv',
+      showHeartLines: true,
+      showVesselLines: true,
+      rightSidebarOpen: true,
+      bottomBannerOpen: true,
+      bloodColorMode: 'bw',
+      circuitHighlight: 'none',
+      journeyMode: 'full_from_lung',
+      journeyStepIndex: 0,
+      journeyPlaying: false,
+      journeySpeed: 1.0,
+      journeyTimer: null,
+      animFrameId: null,
+      zoom: 1.0,
+      panX: 0,
+      panY: 0,
+      isPanning: false,
+      startPanX: 0,
+      startPanY: 0,
+      pointerMoved: false,
+      // 連續多顆紅血球循環狀態
+      continuousRBCRunning: false,
+      rbcCount: 24,
+      rbcSpeed: 1.0,
+      showRBCLabels: true,
+      rbcOffsets: [],
+      continuousAnimId: null,
+      lastTimestamp: null
+    };
+
+    // =========================================================================
+    // 4. 初始化與 SVG 標籤建置 (放大文字與框體)
+    // =========================================================================
+    function initBoard() {
+      buildLabelsDOM();
+      updateLabelsVisual();
+      setupPanZoomHandlers();
+      initContinuousRBCs();
+      selectNode('lv', false);
+      selectJourneyMode('full_from_lung', false);
+    }
+
+    function buildLabelsDOM() {
+      const container = document.getElementById('layer-labels');
+      container.innerHTML = '';
+
+      NODES_DATA.forEach(node => {
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        g.setAttribute('id', `label-group-${node.id}`);
+        g.setAttribute('transform', `translate(${node.x}, ${node.y})`);
+        g.setAttribute('class', 'node-interactive');
+        g.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (state.pointerMoved) return;
+          handleNodeClick(node.id);
+        });
+
+        const halfW = node.width / 2;
+        const halfH = node.height / 2;
+
+        // 選中高亮外光環
+        const halo = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        halo.setAttribute('id', `label-halo-${node.id}`);
+        halo.setAttribute('x', -(halfW + 4));
+        halo.setAttribute('y', -(halfH + 4));
+        halo.setAttribute('width', node.width + 8);
+        halo.setAttribute('height', node.height + 8);
+        halo.setAttribute('rx', '12');
+        halo.setAttribute('fill', 'none');
+        halo.setAttribute('stroke', '#f59e0b');
+        halo.setAttribute('stroke-width', '3.5');
+        halo.setAttribute('opacity', '0');
+        g.appendChild(halo);
+
+        // 標籤卡片本體
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('id', `label-rect-${node.id}`);
+        rect.setAttribute('x', -halfW);
+        rect.setAttribute('y', -halfH);
+        rect.setAttribute('width', node.width);
+        rect.setAttribute('height', node.height);
+        rect.setAttribute('rx', '9');
+        g.appendChild(rect);
+
+        // 文字節點 (放大至 15-16px)
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('id', `label-text-${node.id}`);
+        text.setAttribute('x', '0');
+        text.setAttribute('y', '6');
+        text.setAttribute('text-anchor', 'middle');
+        g.appendChild(text);
+
+        // 右上角血型小圓點
+        const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        dot.setAttribute('id', `label-dot-${node.id}`);
+        dot.setAttribute('cx', halfW - 8);
+        dot.setAttribute('cy', -halfH + 8);
+        dot.setAttribute('r', '4.5');
+        dot.setAttribute('fill', 'transparent');
+        g.appendChild(dot);
+
+        container.appendChild(g);
+      });
+    }
+
+    function updateLabelsVisual() {
+      NODES_DATA.forEach(node => {
+        const isRevealed = state.visibleNodes.has(node.id);
+        const isSelected = state.selectedNodeId === node.id;
+
+        const halo = document.getElementById(`label-halo-${node.id}`);
+        const rect = document.getElementById(`label-rect-${node.id}`);
+        const text = document.getElementById(`label-text-${node.id}`);
+        const dot = document.getElementById(`label-dot-${node.id}`);
+
+        let bgFill = '#ffffff';
+        let strokeColor = '#0f172a';
+        let textColor = '#0f172a';
+        let dotColor = 'transparent';
+
+        if (!isRevealed) {
+          bgFill = '#f8fafc';
+          strokeColor = '#64748b';
+          textColor = '#64748b';
+        } else {
+          if (state.bloodColorMode === 'oxy' || state.bloodColorMode === 'both') {
+            if (node.blood === 'oxy') {
+              bgFill = '#fef2f2';
+              strokeColor = '#dc2626';
+              textColor = '#991b1b';
+              dotColor = '#dc2626';
+            }
+          }
+          if (state.bloodColorMode === 'deoxy' || state.bloodColorMode === 'both') {
+            if (node.blood === 'deoxy') {
+              bgFill = '#eff6ff';
+              strokeColor = '#1d4ed8';
+              textColor = '#1e3a8a';
+              dotColor = '#1d4ed8';
+            }
+          }
+          if (state.bloodColorMode !== 'bw' && (node.blood === 'exchange-sys' || node.blood === 'exchange-pul')) {
+            bgFill = '#faf5ff';
+            strokeColor = '#7e22ce';
+            textColor = '#581c87';
+          }
+        }
+
+        if (isSelected) {
+          strokeColor = '#d97706';
+        }
+
+        halo.setAttribute('opacity', isSelected ? '1' : '0');
+        rect.setAttribute('fill', bgFill);
+        rect.setAttribute('stroke', strokeColor);
+        rect.setAttribute('stroke-width', isSelected ? '3.2' : (isRevealed ? '2.4' : '2'));
+
+        if (!isRevealed) {
+          rect.setAttribute('stroke-dasharray', '5 3');
+          text.setAttribute('class', 'text-sm font-bold');
+          text.textContent = '❓ 翻開';
+        } else {
+          rect.removeAttribute('stroke-dasharray');
+          text.setAttribute('class', node.name.length >= 6 ? 'text-[14px] font-black' : 'text-[16px] font-black');
+          text.textContent = node.name;
+        }
+
+        text.setAttribute('fill', textColor);
+        dot.setAttribute('fill', isRevealed ? dotColor : 'transparent');
+      });
+    }
+
+    // =========================================================================
+    // 5. 互動式事件與介面控制
+    // =========================================================================
+    function handleNodeClick(nodeId) {
+      if (!state.visibleNodes.has(nodeId)) {
+        state.visibleNodes.add(nodeId);
+      } else if (state.selectedNodeId === nodeId) {
+        state.visibleNodes.delete(nodeId);
+      }
+      selectNode(nodeId, false);
+    }
+
+    function selectNode(nodeId, forceReveal = false) {
+      if (forceReveal) state.visibleNodes.add(nodeId);
+      state.selectedNodeId = nodeId;
+      updateLabelsVisual();
+      updateDetailBanner(nodeId);
+    }
+
+    function toggleCurrentNodeVisibility() {
+      const id = state.selectedNodeId;
+      if (state.visibleNodes.has(id)) state.visibleNodes.delete(id);
+      else state.visibleNodes.add(id);
+      updateLabelsVisual();
+      updateDetailBanner(id);
+    }
+
+    function updateDetailBanner(nodeId) {
+      const node = NODES_DATA.find(n => n.id === nodeId);
+      if (!node) return;
+      const isRevealed = state.visibleNodes.has(nodeId);
+
+      document.getElementById('detail-badge').textContent = node.category === 'chambers' ? '🫀 心臟腔室與瓣膜' : '🩸 血管與微血管網';
+      document.getElementById('detail-title').textContent = isRevealed ? node.name : '❓ 【已蓋牌隱藏 — 點擊標籤翻開】';
+
+      const bloodTag = document.getElementById('detail-blood-tag');
+      if (node.blood === 'oxy') {
+        bloodTag.textContent = '🔴 充氧血 (高 O₂)';
+        bloodTag.className = 'px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-600 text-white';
+      } else if (node.blood === 'deoxy') {
+        bloodTag.textContent = '🔵 缺氧血 (高 CO₂)';
+        bloodTag.className = 'px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-700 text-white';
+      } else {
+        bloodTag.textContent = '🟣 氣體交換微血管網 (O₂ ⇄ CO₂)';
+        bloodTag.className = 'px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-700 text-white';
+      }
+
+      document.getElementById('detail-desc').textContent = node.desc;
+      document.getElementById('detail-extra').innerHTML = `
+        <span class="bg-white border border-slate-200 px-2 py-0.5 rounded text-slate-700 font-bold">🔗 ${node.connects}</span>
+        <span class="bg-white border border-slate-200 px-2 py-0.5 rounded text-slate-700 font-bold">🔄 ${node.circuit}</span>
+      `;
+      document.getElementById('btn-toggle-single').textContent = isRevealed ? '🙈 隱藏此標籤' : '👁️ 顯示此標籤';
+    }
+
+    function setLabelFilter(mode) {
+      if (mode === 'all') state.visibleNodes = new Set(NODES_DATA.map(n => n.id));
+      else if (mode === 'none') state.visibleNodes.clear();
+      else if (mode === 'chambers') state.visibleNodes = new Set(NODES_DATA.filter(n => n.category === 'chambers').map(n => n.id));
+      else if (mode === 'vessels') state.visibleNodes = new Set(NODES_DATA.filter(n => n.category === 'vessels').map(n => n.id));
+
+      ['all', 'none', 'chambers', 'vessels'].forEach(m => {
+        const btn = document.getElementById(`btn-filter-${m}`);
+        btn.className = (m === mode)
+          ? 'px-2.5 py-1 rounded-lg text-xs font-bold transition bg-white text-slate-900 shadow-sm border border-slate-300'
+          : 'px-2.5 py-1 rounded-lg text-xs font-bold transition text-slate-600 hover:bg-white';
+      });
+
+      updateLabelsVisual();
+      updateDetailBanner(state.selectedNodeId);
+    }
+
+    function toggleHeartLines(forceVal = null) {
+      state.showHeartLines = forceVal !== null ? forceVal : !state.showHeartLines;
+      document.getElementById('layer-heart-outline').setAttribute('opacity', state.showHeartLines ? '1' : '0');
+      document.getElementById('layer-chamber-fills').setAttribute('opacity', state.showHeartLines ? '1' : '0');
+      const btn = document.getElementById('btn-toggle-heart-lines');
+      btn.textContent = state.showHeartLines ? '♥ 心臟線條: 顯示' : '♥ 心臟線條: 隱藏';
+      btn.className = state.showHeartLines
+        ? 'px-2.5 py-1 rounded-lg text-xs font-bold transition bg-rose-600 text-white shadow-sm hover:bg-rose-700'
+        : 'px-2.5 py-1 rounded-lg text-xs font-bold transition bg-white text-rose-700 border border-rose-300 hover:bg-rose-50';
+    }
+
+    function toggleVesselLines(forceVal = null) {
+      state.showVesselLines = forceVal !== null ? forceVal : !state.showVesselLines;
+      const vesselLayer = document.getElementById('layer-vessels');
+      vesselLayer.setAttribute('opacity', state.showVesselLines ? '1' : '0');
+      vesselLayer.style.pointerEvents = state.showVesselLines ? 'auto' : 'none';
+      const btn = document.getElementById('btn-toggle-vessel-lines');
+      btn.textContent = state.showVesselLines ? '⇄ 路徑線條: 顯示' : '⇄ 路徑線條: 隱藏';
+      btn.className = state.showVesselLines
+        ? 'px-2.5 py-1 rounded-lg text-xs font-bold transition bg-indigo-600 text-white shadow-sm hover:bg-indigo-700'
+        : 'px-2.5 py-1 rounded-lg text-xs font-bold transition bg-white text-indigo-700 border border-indigo-300 hover:bg-indigo-50';
+    }
+
+    function toggleRightSidebar() {
+      state.rightSidebarOpen = !state.rightSidebarOpen;
+      const sidebar = document.getElementById('right-control-sidebar');
+      const floatingBtn = document.getElementById('btn-floating-sidebar');
+      const iconEl = document.getElementById('sidebar-toggle-icon');
+      const textEl = document.getElementById('sidebar-toggle-text');
+      const topBtn = document.getElementById('btn-toggle-sidebar');
+
+      if (state.rightSidebarOpen) {
+        sidebar.classList.remove('hidden');
+        floatingBtn.classList.add('hidden');
+        iconEl.textContent = '⇥';
+        textEl.textContent = '隱藏右側面板';
+        topBtn.className = 'px-3.5 py-1.5 rounded-xl text-xs font-black bg-amber-500 hover:bg-amber-600 text-white shadow-sm transition flex items-center gap-1.5';
+      } else {
+        sidebar.classList.add('hidden');
+        floatingBtn.classList.remove('hidden');
+        iconEl.textContent = '⇤';
+        textEl.textContent = '展開控制面板';
+        topBtn.className = 'px-3.5 py-1.5 rounded-xl text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm transition flex items-center gap-1.5';
+      }
+    }
+
+    function toggleBottomBanner() {
+      state.bottomBannerOpen = !state.bottomBannerOpen;
+      const banner = document.getElementById('selected-node-banner');
+      const btn = document.getElementById('btn-toggle-banner');
+      if (state.bottomBannerOpen) {
+        banner.classList.remove('hidden');
+        btn.textContent = '▼ 收合下方知識卡';
+      } else {
+        banner.classList.add('hidden');
+        btn.textContent = '▲ 展開下方知識卡';
+      }
+    }
+
+    function toggleSketchGuide(checked) {
+      document.getElementById('layer-sketch-guides').classList.toggle('hidden', !checked);
+    }
+
+    // =========================================================================
+    // 6. 充氧血/缺氧血顏色切換與循環高亮
+    // =========================================================================
+    function setBloodColorMode(mode) {
+      state.bloodColorMode = mode;
+      const modes = {
+        bw: 'px-2.5 py-2 rounded-xl text-xs font-bold border-2 border-slate-900 bg-slate-900 text-white flex items-center justify-center gap-1.5 transition shadow-sm',
+        oxy: 'px-2.5 py-2 rounded-xl text-xs font-bold border-2 border-red-600 bg-red-600 text-white flex items-center justify-center gap-1.5 transition shadow-sm',
+        deoxy: 'px-2.5 py-2 rounded-xl text-xs font-bold border-2 border-blue-700 bg-blue-700 text-white flex items-center justify-center gap-1.5 transition shadow-sm',
+        both: 'px-2.5 py-2 rounded-xl text-xs font-bold border-2 border-purple-700 bg-gradient-to-r from-red-600 to-blue-700 text-white flex items-center justify-center gap-1.5 transition shadow-sm'
+      };
+      const defaults = {
+        bw: 'px-2.5 py-2 rounded-xl text-xs font-bold border-2 border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 flex items-center justify-center gap-1.5 transition',
+        oxy: 'px-2.5 py-2 rounded-xl text-xs font-bold border-2 border-red-200 bg-red-50 text-red-700 hover:bg-red-100 flex items-center justify-center gap-1.5 transition',
+        deoxy: 'px-2.5 py-2 rounded-xl text-xs font-bold border-2 border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 flex items-center justify-center gap-1.5 transition',
+        both: 'px-2.5 py-2 rounded-xl text-xs font-bold border-2 border-purple-200 bg-gradient-to-r from-red-50 to-blue-50 text-slate-800 hover:from-red-100 hover:to-blue-100 flex items-center justify-center gap-1.5 transition'
+      };
+      ['bw', 'oxy', 'deoxy', 'both'].forEach(m => {
+        document.getElementById(`btn-blood-${m}`).className = (m === mode) ? modes[m] : defaults[m];
+      });
+
+      document.querySelectorAll('.vessel-path').forEach(el => {
+        const blood = el.getAttribute('data-blood');
+        const isMain = el.id === 'path-aorta' || el.id === 'path-pul-artery';
+        const baseW = isMain ? '4.8' : '4.5';
+
+        if (mode === 'bw') {
+          el.setAttribute('stroke', '#0f172a');
+          el.setAttribute('stroke-width', baseW);
+          el.setAttribute('opacity', '1');
+          el.setAttribute('marker-end', 'url(#arr-black)');
+        } else if (mode === 'oxy') {
+          if (blood === 'oxy') {
+            el.setAttribute('stroke', '#dc2626');
+            el.setAttribute('stroke-width', '5.5');
+            el.setAttribute('opacity', '1');
+            el.setAttribute('marker-end', 'url(#arr-oxy)');
+          } else {
+            el.setAttribute('stroke', '#94a3b8');
+            el.setAttribute('stroke-width', '3');
+            el.setAttribute('opacity', '0.35');
+            el.setAttribute('marker-end', 'url(#arr-black)');
+          }
+        } else if (mode === 'deoxy') {
+          if (blood === 'deoxy') {
+            el.setAttribute('stroke', '#1d4ed8');
+            el.setAttribute('stroke-width', '5.5');
+            el.setAttribute('opacity', '1');
+            el.setAttribute('marker-end', 'url(#arr-deoxy)');
+          } else {
+            el.setAttribute('stroke', '#94a3b8');
+            el.setAttribute('stroke-width', '3');
+            el.setAttribute('opacity', '0.35');
+            el.setAttribute('marker-end', 'url(#arr-black)');
+          }
+        } else if (mode === 'both') {
+          if (blood === 'oxy') {
+            el.setAttribute('stroke', '#dc2626');
+            el.setAttribute('stroke-width', '5.2');
+            el.setAttribute('opacity', '1');
+            el.setAttribute('marker-end', 'url(#arr-oxy)');
+          } else {
+            el.setAttribute('stroke', '#1d4ed8');
+            el.setAttribute('stroke-width', '5.2');
+            el.setAttribute('opacity', '1');
+            el.setAttribute('marker-end', 'url(#arr-deoxy)');
+          }
+        }
+      });
+
+      const fillRA = document.getElementById('fill-ra');
+      const fillRV = document.getElementById('fill-rv');
+      const fillLA = document.getElementById('fill-la');
+      const fillLV = document.getElementById('fill-lv');
+      const showOxy = mode === 'oxy' || mode === 'both';
+      const showDeoxy = mode === 'deoxy' || mode === 'both';
+
+      fillLA.setAttribute('fill', showOxy ? '#fecaca' : '#f8fafc');
+      fillLV.setAttribute('fill', showOxy ? '#fca5a5' : '#f8fafc');
+      fillLA.setAttribute('opacity', showOxy ? '0.7' : '0.4');
+      fillLV.setAttribute('opacity', showOxy ? '0.7' : '0.4');
+
+      fillRA.setAttribute('fill', showDeoxy ? '#bfdbfe' : '#f8fafc');
+      fillRV.setAttribute('fill', showDeoxy ? '#93c5fd' : '#f8fafc');
+      fillRA.setAttribute('opacity', showDeoxy ? '0.7' : '0.4');
+      fillRV.setAttribute('opacity', showDeoxy ? '0.7' : '0.4');
+
+      updateLabelsVisual();
+    }
+
+    function setCircuitHighlight(circuit) {
+      state.circuitHighlight = circuit;
+      const sysPath = document.getElementById('highlight-systemic');
+      const pulPath = document.getElementById('highlight-pulmonary');
+      const formulaBox = document.getElementById('circuit-formula-box');
+      const formulaTitle = document.getElementById('circuit-formula-title');
+      const formulaSteps = document.getElementById('circuit-formula-steps');
+
+      const btnSys = document.getElementById('btn-circuit-systemic');
+      const btnPul = document.getElementById('btn-circuit-pulmonary');
+      const btnNone = document.getElementById('btn-circuit-none');
+
+      btnSys.className = 'p-2.5 rounded-xl border-2 border-slate-200 hover:border-amber-400 text-left transition bg-slate-50';
+      btnPul.className = 'p-2.5 rounded-xl border-2 border-slate-200 hover:border-cyan-400 text-left transition bg-slate-50';
+      btnNone.className = 'p-2.5 rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-700 text-center transition flex flex-col items-center justify-center';
+
+      if (circuit === 'systemic') {
+        sysPath.classList.remove('hidden');
+        pulPath.classList.add('hidden');
+        btnSys.className = 'p-2.5 rounded-xl border-2 border-amber-500 bg-amber-50 text-left transition shadow-sm';
+        formulaBox.classList.remove('hidden');
+        formulaTitle.textContent = '🏃 體循環路徑：左心室 ➔ 右心房';
+        formulaSteps.innerHTML = '<span class="text-red-400 font-bold">左心室</span> ➔ <span class="text-red-400 font-bold">大動脈</span> ➔ <span class="text-red-300 font-bold">全身小動脈</span> ➔ <span class="text-amber-300 font-bold">全身微血管 (O₂ 換 CO₂)</span> ➔ <span class="text-blue-300 font-bold">全身小靜脈</span> ➔ <span class="text-blue-400 font-bold">上下大靜脈</span> ➔ <span class="text-blue-400 font-bold">右心房</span>';
+      } else if (circuit === 'pulmonary') {
+        sysPath.classList.add('hidden');
+        pulPath.classList.remove('hidden');
+        btnPul.className = 'p-2.5 rounded-xl border-2 border-cyan-500 bg-cyan-50 text-left transition shadow-sm';
+        formulaBox.classList.remove('hidden');
+        formulaTitle.textContent = '🫁 肺循環路徑：右心室 ➔ 左心房';
+        formulaSteps.innerHTML = '<span class="text-blue-400 font-bold">右心室</span> ➔ <span class="text-blue-400 font-bold">肺動脈</span> ➔ <span class="text-blue-300 font-bold">肺小動脈</span> ➔ <span class="text-cyan-300 font-bold">肺部微血管 (排 CO₂、吸 O₂)</span> ➔ <span class="text-red-300 font-bold">肺小靜脈</span> ➔ <span class="text-red-400 font-bold">肺靜脈</span> ➔ <span class="text-red-400 font-bold">左心房</span>';
+      } else {
+        sysPath.classList.add('hidden');
+        pulPath.classList.add('hidden');
+        btnNone.className = 'p-2.5 rounded-xl border-2 border-slate-800 bg-slate-800 text-white text-center transition flex flex-col items-center justify-center';
+        formulaBox.classList.add('hidden');
+      }
+    }
+
+    // =========================================================================
+    // 7. O₂ 與 CO₂ 循環旅程粒子模擬
+    // =========================================================================
+    function selectJourneyMode(mode, autoStartFirstStep = true) {
+      pauseJourney();
+      state.journeyMode = mode;
+      state.journeyStepIndex = 0;
+
+      const btnFull = document.getElementById('btn-journey-full');
+      const btnO2 = document.getElementById('btn-journey-o2');
+      const btnCO2 = document.getElementById('btn-journey-co2');
+
+      btnFull.className = mode === 'full_from_lung'
+        ? 'px-3 py-2 rounded-xl border-2 border-emerald-600 bg-emerald-50 text-left transition flex items-center justify-between shadow-sm'
+        : 'px-3 py-2 rounded-xl border-2 border-slate-200 hover:border-emerald-300 bg-white text-left transition flex items-center justify-between';
+
+      btnO2.className = mode === 'o2_only'
+        ? 'px-2.5 py-1.5 rounded-xl border-2 border-red-600 bg-red-50 text-left transition shadow-sm'
+        : 'px-2.5 py-1.5 rounded-xl border-2 border-slate-200 hover:border-red-300 bg-white text-left transition';
+
+      btnCO2.className = mode === 'co2_journey'
+        ? 'px-2.5 py-1.5 rounded-xl border-2 border-blue-700 bg-blue-50 text-left transition shadow-sm'
+        : 'px-2.5 py-1.5 rounded-xl border-2 border-slate-200 hover:border-blue-300 bg-white text-left transition';
+
+      renderJourneyStepList();
+      if (autoStartFirstStep) {
+        goToJourneyStep(0, false);
+      } else {
+        updateJourneyStepUI(0);
+      }
+    }
+
+    function renderJourneyStepList() {
+      const listEl = document.getElementById('journey-steps-list');
+      const steps = JOURNEYS[state.journeyMode].steps;
+      listEl.innerHTML = '';
+
+      steps.forEach((step, idx) => {
+        const isCurrent = idx === state.journeyStepIndex;
+        const isO2 = step.gas === 'O₂';
+        const gasBadge = isO2
+          ? '<span class="px-1.5 py-0.5 rounded text-[11px] font-black bg-red-600 text-white shrink-0">O₂</span>'
+          : '<span class="px-1.5 py-0.5 rounded text-[11px] font-black bg-blue-700 text-white shrink-0">CO₂</span>';
+
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.onclick = () => {
+          pauseJourney();
+          goToJourneyStep(idx, true);
+        };
+        item.className = `w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between gap-1.5 transition border ${
+          isCurrent
+            ? 'bg-amber-50 border-amber-400 font-black text-slate-900 shadow-sm'
+            : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700 font-medium'
+        }`;
+        item.innerHTML = `<span class="truncate">${step.title}</span>${gasBadge}`;
+        listEl.appendChild(item);
+      });
+    }
+
+    function applyParticleGasAppearance(step) {
+      const isO2 = step.gas === 'O₂';
+      const mainColor = isO2 ? '#ef4444' : '#2563eb';
+      const darkBadgeColor = isO2 ? '#dc2626' : '#1d4ed8';
+      const subLabel = isO2 ? 'O₂ (充氧血)' : 'CO₂ (缺氧血)';
+
+      document.getElementById('journey-pulse').setAttribute('stroke', mainColor);
+      document.getElementById('journey-ball').setAttribute('fill', mainColor);
+      const gasText = document.getElementById('journey-gas-text');
+      gasText.textContent = step.gas;
+      gasText.setAttribute('class', isO2 ? 'text-[15px] font-black' : 'text-[13px] font-black');
+
+      document.getElementById('journey-badge-rect').setAttribute('fill', darkBadgeColor);
+      document.getElementById('journey-badge-text').textContent = subLabel;
+      document.getElementById('journey-callout-text').textContent = step.callout;
+
+      const topIndicator = document.getElementById('journey-gas-indicator');
+      const stepGasTag = document.getElementById('journey-step-gas-tag');
+
+      if (isO2) {
+        topIndicator.textContent = '目前分子：O₂ (充氧血)';
+        topIndicator.className = 'text-xs font-black px-2.5 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-300';
+        stepGasTag.textContent = '攜帶分子：O₂ (充氧血)';
+        stepGasTag.className = 'text-xs font-black px-2 py-0.5 rounded bg-red-600 text-white';
+      } else {
+        topIndicator.textContent = '目前分子：CO₂ (缺氧血)';
+        topIndicator.className = 'text-xs font-black px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-300';
+        stepGasTag.textContent = '攜帶分子：CO₂ (缺氧血)';
+        stepGasTag.className = 'text-xs font-black px-2 py-0.5 rounded bg-blue-600 text-white';
+      }
+    }
+
+    function setParticlePosition(x, y) {
+      document.getElementById('journey-pulse').setAttribute('cx', x);
+      document.getElementById('journey-pulse').setAttribute('cy', y);
+      document.getElementById('journey-ball').setAttribute('cx', x);
+      document.getElementById('journey-ball').setAttribute('cy', y);
+      document.getElementById('journey-gas-text').setAttribute('x', x);
+      document.getElementById('journey-gas-text').setAttribute('y', y + 6);
+      document.getElementById('journey-badge').setAttribute('transform', `translate(${x}, ${y + 36})`);
+      document.getElementById('journey-callout').setAttribute('transform', `translate(${x}, ${y - 36})`);
+    }
+
+    function updateJourneyStepUI(stepIdx) {
+      const steps = JOURNEYS[state.journeyMode].steps;
+      const step = steps[stepIdx];
+      if (!step) return;
+
+      document.getElementById('journey-step-badge').textContent = `第 ${stepIdx + 1} / ${steps.length} 站`;
+      document.getElementById('journey-step-title').textContent = step.title;
+      document.getElementById('journey-step-desc').textContent = step.desc;
+
+      applyParticleGasAppearance(step);
+      renderJourneyStepList();
+    }
+
+    function goToJourneyStep(stepIdx, animate = true, onComplete = null) {
+      if (state.animFrameId) {
+        cancelAnimationFrame(state.animFrameId);
+        state.animFrameId = null;
+      }
+
+      const steps = JOURNEYS[state.journeyMode].steps;
+      if (stepIdx < 0) stepIdx = steps.length - 1;
+      if (stepIdx >= steps.length) stepIdx = 0;
+
+      state.journeyStepIndex = stepIdx;
+      const step = steps[stepIdx];
+
+      document.getElementById('layer-journey-particle').classList.remove('hidden');
+      selectNode(step.nodeId, false);
+      updateJourneyStepUI(stepIdx);
+
+      const pts = step.waypoints;
+      if (!animate || pts.length <= 1) {
+        const lastPt = pts[pts.length - 1];
+        setParticlePosition(lastPt[0], lastPt[1]);
+        if (onComplete) onComplete();
+        return;
+      }
+
+      let segLengths = [];
+      let totalLength = 0;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const d = Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]);
+        segLengths.push(d);
+        totalLength += d;
+      }
+
+      const duration = Math.max(450, (totalLength * 3.2) / state.journeySpeed);
+      const startTime = performance.now();
+
+      function tick(now) {
+        const elapsed = now - startTime;
+        const t = Math.min(1, elapsed / duration);
+        const targetDist = t * totalLength;
+
+        let acc = 0;
+        let curX = pts[pts.length - 1][0];
+        let curY = pts[pts.length - 1][1];
+
+        for (let i = 0; i < segLengths.length; i++) {
+          if (acc + segLengths[i] >= targetDist) {
+            const localT = segLengths[i] === 0 ? 0 : (targetDist - acc) / segLengths[i];
+            curX = pts[i][0] + (pts[i + 1][0] - pts[i][0]) * localT;
+            curY = pts[i][1] + (pts[i + 1][1] - pts[i][1]) * localT;
+            break;
+          }
+          acc += segLengths[i];
+        }
+
+        setParticlePosition(curX, curY);
+
+        if (t < 1) {
+          state.animFrameId = requestAnimationFrame(tick);
+        } else {
+          state.animFrameId = null;
+          if (onComplete) onComplete();
+        }
+      }
+
+      state.animFrameId = requestAnimationFrame(tick);
+    }
+
+    function togglePlayJourney() {
+      if (state.journeyPlaying) {
+        pauseJourney();
+      } else {
+        startPlayJourney();
+      }
+    }
+
+    function startPlayJourney() {
+      state.journeyPlaying = true;
+      const playBtn = document.getElementById('btn-journey-play');
+      playBtn.className = 'px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-black shadow-sm transition flex items-center gap-1';
+      playBtn.innerHTML = '<span>⏸</span> <span>暫停播放</span>';
+
+      function runNext() {
+        if (!state.journeyPlaying) return;
+        goToJourneyStep(state.journeyStepIndex, true, () => {
+          if (!state.journeyPlaying) return;
+          state.journeyTimer = setTimeout(() => {
+            if (!state.journeyPlaying) return;
+            const steps = JOURNEYS[state.journeyMode].steps;
+            state.journeyStepIndex = (state.journeyStepIndex + 1) % steps.length;
+            runNext();
+          }, 950 / state.journeySpeed);
+        });
+      }
+
+      runNext();
+    }
+
+    function pauseJourney() {
+      state.journeyPlaying = false;
+      if (state.journeyTimer) {
+        clearTimeout(state.journeyTimer);
+        state.journeyTimer = null;
+      }
+      if (state.animFrameId) {
+        cancelAnimationFrame(state.animFrameId);
+        state.animFrameId = null;
+      }
+      const playBtn = document.getElementById('btn-journey-play');
+      if (playBtn) {
+        playBtn.className = 'px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-sm transition flex items-center gap-1';
+        playBtn.innerHTML = '<span>▶</span> <span>自動播放</span>';
+      }
+    }
+
+    function stepJourney(delta) {
+      pauseJourney();
+      const steps = JOURNEYS[state.journeyMode].steps;
+      const nextIdx = (state.journeyStepIndex + delta + steps.length) % steps.length;
+      goToJourneyStep(nextIdx, true);
+    }
+
+    function stopJourney() {
+      pauseJourney();
+      document.getElementById('layer-journey-particle').classList.add('hidden');
+    }
+
+    function setJourneySpeed(val) {
+      state.journeySpeed = parseFloat(val) || 1.0;
+    }
+
+    // =========================================================================
+    // 7.5 多顆紅血球連續真實循環系統 (Multi-RBC Continuous Hemodynamics)
+    // =========================================================================
+    function initContinuousRBCs() {
+      const container = document.getElementById('layer-continuous-rbcs');
+      container.innerHTML = '';
+      state.rbcOffsets = [];
+
+      for (let i = 0; i < state.rbcCount; i++) {
+        state.rbcOffsets.push(i / state.rbcCount);
+
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        g.setAttribute('id', `rbc-group-${i}`);
+        g.setAttribute('class', 'transition-opacity duration-300');
+
+        // 紅血球外圈光暈
+        const halo = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        halo.setAttribute('id', `rbc-halo-${i}`);
+        halo.setAttribute('r', '13.5');
+        halo.setAttribute('fill', 'none');
+        halo.setAttribute('stroke-width', '2.5');
+        halo.setAttribute('opacity', '0.45');
+        g.appendChild(halo);
+
+        // 雙凹圓盤造形外本體
+        const disc = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        disc.setAttribute('id', `rbc-disc-${i}`);
+        disc.setAttribute('r', '10.5');
+        disc.setAttribute('stroke', '#ffffff');
+        disc.setAttribute('stroke-width', '1.6');
+        g.appendChild(disc);
+
+        // 紅血球中心凹槽反光感
+        const inner = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        inner.setAttribute('id', `rbc-inner-${i}`);
+        inner.setAttribute('r', '4.5');
+        inner.setAttribute('fill', '#ffffff');
+        inner.setAttribute('opacity', '0.45');
+        g.appendChild(inner);
+
+        // 氣體文字 (O₂ 或 CO₂)
+        const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        txt.setAttribute('id', `rbc-txt-${i}`);
+        txt.setAttribute('text-anchor', 'middle');
+        txt.setAttribute('dy', '3.8');
+        txt.setAttribute('fill', '#ffffff');
+        txt.setAttribute('class', 'text-[9.5px] font-black select-none pointer-events-none');
+        g.appendChild(txt);
+
+        container.appendChild(g);
+      }
+      updateContinuousRBCPositions(0);
+    }
+
+    // 顏色插值工具函數 (充氧鮮紅 #ef4444 ⇄ 缺氧藍紫 #2563eb)
+    function interpolateColor(t) {
+      // 0: 充氧血鮮紅 rgb(239, 68, 68)
+      // 1: 缺氧血藍紫 rgb(37, 99, 235)
+      const r = Math.round(239 + (37 - 239) * t);
+      const g = Math.round(68 + (99 - 68) * t);
+      const b = Math.round(68 + (235 - 68) * t);
+      return `rgb(${r}, ${g}, ${b})`;
+    }
+
+    function toggleContinuousRBCFlow() {
+      if (state.continuousRBCRunning) {
+        pauseContinuousRBCFlow();
+      } else {
+        startContinuousRBCFlow();
+      }
+    }
+
+    function startContinuousRBCFlow() {
+      // 如果單顆分子旅程正在播放，先暫停以避免衝突
+      pauseJourney();
+
+      state.continuousRBCRunning = true;
+      state.lastTimestamp = performance.now();
+
+      // 同步頂部按鈕與側邊欄按鈕
+      document.getElementById('top-rbc-btn-text').textContent = '暫停多紅血球連續循環';
+      document.getElementById('btn-top-rbc-flow').className = 'px-3 py-1 rounded-lg text-xs font-black transition bg-amber-500 hover:bg-amber-600 text-white shadow-sm flex items-center gap-1';
+
+      document.getElementById('side-rbc-btn-text').textContent = '暫停連續血液循環';
+      document.getElementById('side-rbc-icon').textContent = '⏸';
+      document.getElementById('btn-side-rbc-flow').className = 'flex-1 py-2.5 px-3 rounded-xl text-xs font-black bg-amber-500 hover:bg-amber-600 text-white shadow-sm flex items-center justify-center gap-2 transition active:scale-95';
+
+      const statusBadge = document.getElementById('rbc-flow-status-badge');
+      statusBadge.textContent = '血流流動中 (60 FPS)';
+      statusBadge.className = 'text-[11px] font-black px-2.5 py-0.5 rounded-full bg-emerald-500 text-white animate-pulse';
+
+      state.continuousAnimId = requestAnimationFrame(continuousRBCAnimationLoop);
+    }
+
+    function pauseContinuousRBCFlow() {
+      state.continuousRBCRunning = false;
+      if (state.continuousAnimId) {
+        cancelAnimationFrame(state.continuousAnimId);
+        state.continuousAnimId = null;
+      }
+
+      document.getElementById('top-rbc-btn-text').textContent = '啟動多紅血球連續循環';
+      document.getElementById('btn-top-rbc-flow').className = 'px-3 py-1 rounded-lg text-xs font-black transition bg-red-600 hover:bg-red-700 text-white shadow-sm flex items-center gap-1';
+
+      document.getElementById('side-rbc-btn-text').textContent = '啟動真實連續血液循環';
+      document.getElementById('side-rbc-icon').textContent = '🩸';
+      document.getElementById('btn-side-rbc-flow').className = 'flex-1 py-2.5 px-3 rounded-xl text-xs font-black bg-red-600 hover:bg-red-700 text-white shadow-sm flex items-center justify-center gap-2 transition active:scale-95';
+
+      const statusBadge = document.getElementById('rbc-flow-status-badge');
+      statusBadge.textContent = '已暫停';
+      statusBadge.className = 'text-[11px] font-black px-2.5 py-0.5 rounded-full bg-slate-200 text-slate-700';
+    }
+
+    function resetContinuousRBCs() {
+      pauseContinuousRBCFlow();
+      initContinuousRBCs();
+    }
+
+    function changeRBCSpeed(val) {
+      state.rbcSpeed = parseFloat(val) || 1.0;
+      document.getElementById('label-rbc-speed').textContent = `${state.rbcSpeed.toFixed(1)}x`;
+    }
+
+    function changeRBCCount(val) {
+      state.rbcCount = parseInt(val, 10) || 24;
+      document.getElementById('label-rbc-count').textContent = `${state.rbcCount} 顆`;
+      initContinuousRBCs();
+      if (state.continuousRBCRunning) {
+        state.lastTimestamp = performance.now();
+        state.continuousAnimId = requestAnimationFrame(continuousRBCAnimationLoop);
+      }
+    }
+
+    function toggleRBCLabels(checked) {
+      state.showRBCLabels = checked;
+      for (let i = 0; i < state.rbcCount; i++) {
+        const txt = document.getElementById(`rbc-txt-${i}`);
+        if (txt) txt.setAttribute('opacity', checked ? '1' : '0');
+      }
+    }
+
+    function continuousRBCAnimationLoop(now) {
+      if (!state.continuousRBCRunning) return;
+
+      const dt = (now - state.lastTimestamp) / 1000;
+      state.lastTimestamp = now;
+
+      // 基準跑完 8 字形完整循環約需要 22 秒
+      const baseCycleSeconds = 22.0 / state.rbcSpeed;
+      const progressDelta = dt / baseCycleSeconds;
+
+      updateContinuousRBCPositions(progressDelta);
+      state.continuousAnimId = requestAnimationFrame(continuousRBCAnimationLoop);
+    }
+
+    function updateContinuousRBCPositions(delta) {
+      const fullPath = document.getElementById('path-continuous-full-circuit');
+      if (!fullPath) return;
+
+      const totalLength = fullPath.getTotalLength();
+
+      for (let i = 0; i < state.rbcCount; i++) {
+        let frac = (state.rbcOffsets[i] + delta) % 1.0;
+        if (frac < 0) frac += 1.0;
+        state.rbcOffsets[i] = frac;
+
+        const distance = frac * totalLength;
+        const pt = fullPath.getPointAtLength(distance);
+
+        const group = document.getElementById(`rbc-group-${i}`);
+        const halo = document.getElementById(`rbc-halo-${i}`);
+        const disc = document.getElementById(`rbc-disc-${i}`);
+        const txt = document.getElementById(`rbc-txt-${i}`);
+
+        if (!group) continue;
+        group.setAttribute('transform', `translate(${pt.x.toFixed(1)}, ${pt.y.toFixed(1)})`);
+
+        // 動態生理換氣與顏色漸變計算 (8 字形路徑比例劃分)：
+        // 0.00 ~ 0.22 : 體循環出心至小動脈 (充氧血，鮮紅，O₂)
+        // 0.22 ~ 0.32 : 全身組織微血管換氣 (O₂ 換 CO₂，紅漸變至藍紫)
+        // 0.32 ~ 0.72 : 上下大靜脈、右心、肺動脈 (缺氧血，深藍紫，CO₂)
+        // 0.72 ~ 0.82 : 肺部微血管外呼吸換氣 (排 CO₂、吸 O₂，藍紫漸變回鮮紅)
+        // 0.82 ~ 1.00 : 肺小靜脈、肺靜脈、左心 (充氧血，鮮紅，O₂)
+        let colorStr = '#ef4444';
+        let gasText = 'O₂';
+
+        if (frac >= 0 && frac < 0.22) {
+          colorStr = '#ef4444';
+          gasText = 'O₂';
+        } else if (frac >= 0.22 && frac < 0.32) {
+          const t = (frac - 0.22) / 0.10;
+          colorStr = interpolateColor(t);
+          gasText = t < 0.5 ? 'O₂' : 'CO₂';
+        } else if (frac >= 0.32 && frac < 0.72) {
+          colorStr = '#2563eb';
+          gasText = 'CO₂';
+        } else if (frac >= 0.72 && frac < 0.82) {
+          const t = 1 - (frac - 0.72) / 0.10;
+          colorStr = interpolateColor(t);
+          gasText = t < 0.5 ? 'CO₂' : 'O₂';
+        } else {
+          colorStr = '#ef4444';
+          gasText = 'O₂';
+        }
+
+        disc.setAttribute('fill', colorStr);
+        halo.setAttribute('stroke', colorStr);
+
+        if (txt) {
+          txt.textContent = gasText;
+          txt.setAttribute('opacity', state.showRBCLabels ? '1' : '0');
+        }
+      }
+    }
+
+    // =========================================================================
+    // 8. Pan & Zoom 畫布縮放與重置
+    // =========================================================================
+    function applyPanZoomTransform() {
+      const vp = document.getElementById('viewport-group');
+      if (!vp) return;
+      vp.setAttribute('transform', `translate(${state.panX.toFixed(1)}, ${state.panY.toFixed(1)}) scale(${state.zoom.toFixed(3)})`);
+      document.getElementById('zoom-level-badge').textContent = `${Math.round(state.zoom * 100)}%`;
+    }
+
+    function zoomCanvas(factor, clientX = null, clientY = null) {
+      const svg = document.getElementById('circulation-svg');
+      const newZoom = Math.min(3.2, Math.max(0.6, state.zoom * factor));
+      const actualFactor = newZoom / state.zoom;
+
+      let pivotX = 550, pivotY = 430;
+      if (clientX !== null && clientY !== null && svg) {
+        const pt = svg.createSVGPoint();
+        pt.x = clientX;
+        pt.y = clientY;
+        const ctm = svg.getScreenCTM();
+        if (ctm) {
+          const svgPt = pt.matrixTransform(ctm.inverse());
+          pivotX = svgPt.x;
+          pivotY = svgPt.y;
+        }
+      }
+
+      state.panX = pivotX - (pivotX - state.panX) * actualFactor;
+      state.panY = pivotY - (pivotY - state.panY) * actualFactor;
+      state.zoom = newZoom;
+      applyPanZoomTransform();
+    }
+
+    function resetPanZoom() {
+      state.zoom = 1.0;
+      state.panX = 0;
+      state.panY = 0;
+      applyPanZoomTransform();
+    }
+
+    function setupPanZoomHandlers() {
+      const viewport = document.getElementById('svg-viewport');
+      const svg = document.getElementById('circulation-svg');
+
+      viewport.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const factor = e.deltaY < 0 ? 1.12 : (1 / 1.12);
+        zoomCanvas(factor, e.clientX, e.clientY);
+      }, { passive: false });
+
+      viewport.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0 && e.pointerType === 'mouse') return;
+        state.isPanning = true;
+        state.pointerMoved = false;
+        state.startPanX = e.clientX;
+        state.startPanY = e.clientY;
+        viewport.classList.add('canvas-grabbing');
+      });
+
+      window.addEventListener('pointermove', (e) => {
+        if (!state.isPanning) return;
+        const dx = e.clientX - state.startPanX;
+        const dy = e.clientY - state.startPanY;
+        if (Math.hypot(dx, dy) > 4) state.pointerMoved = true;
+
+        const rect = svg.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          const scale = Math.max(1100 / rect.width, 860 / rect.height);
+          state.panX += dx * scale;
+          state.panY += dy * scale;
+          state.startPanX = e.clientX;
+          state.startPanY = e.clientY;
+          applyPanZoomTransform();
+        }
+      });
+
+      window.addEventListener('pointerup', () => {
+        if (state.isPanning) {
+          state.isPanning = false;
+          viewport.classList.remove('canvas-grabbing');
+        }
+      });
+    }
+
+    function resetBoard() {
+      pauseContinuousRBCFlow();
+      stopJourney();
+      resetPanZoom();
+      toggleHeartLines(true);
+      toggleVesselLines(true);
+      setBloodColorMode('bw');
+      setCircuitHighlight('none');
+      setLabelFilter('all');
+      document.getElementById('toggle-sketch-guide').checked = true;
+      toggleSketchGuide(true);
+      selectNode('lv', true);
+    }
+
+    window.addEventListener('DOMContentLoaded', initBoard);
+  </script>
+</body>
+</html>

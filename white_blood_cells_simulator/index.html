@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>人體白血球全圖鑑與組織修復模擬器</title>
+    <style>
+        :root {
+            --bg-color: #f0f4f8;
+            --panel-bg: #ffffff;
+            --text-color: #2c3e50;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: var(--bg-color); color: var(--text-color); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        
+        header { background-color: #1a252f; color: white; padding: 8px 18px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 6px rgba(0,0,0,0.2); z-index: 10; flex-wrap: wrap; gap: 10px; }
+        .header-left { display: flex; align-items: center; gap: 15px; }
+        header h1 { font-size: 1.15rem; display: flex; align-items: center; gap: 8px; }
+        
+        /* 標籤 Toggle 開關樣式 */
+        .toggle-label { display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.15); padding: 5px 12px; border-radius: 20px; cursor: pointer; font-size: 0.85rem; font-weight: bold; user-select: none; border: 1px solid rgba(255,255,255,0.3); transition: 0.2s; }
+        .toggle-label:hover { background: rgba(255,255,255,0.25); }
+        .toggle-label input { accent-color: #2ecc71; width: 16px; height: 16px; cursor: pointer; }
+
+        .stats { display: flex; gap: 12px; font-size: 0.8rem; background: rgba(255,255,255,0.1); padding: 5px 12px; border-radius: 20px; }
+        .stat-item span { font-weight: bold; color: #f1c40f; }
+
+        .main-container { display: flex; flex: 1; overflow: hidden; }
+        
+        .canvas-container { flex: 3; position: relative; background: #fff5f5; display: flex; flex-direction: column; }
+        canvas { width: 100%; height: 100%; display: block; cursor: crosshair; }
+        
+        .overlay-labels { position: absolute; left: 10px; top: 0; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: 12px 0; }
+        .zone-label { background: rgba(255,255,255,0.9); padding: 4px 10px; border-radius: 6px; font-weight: bold; font-size: 0.8rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-left: 4px solid #e74c3c; }
+        .zone-label.tissue { border-left-color: #e67e22; }
+
+        .sidebar { flex: 1; min-width: 390px; max-width: 450px; background: var(--panel-bg); border-left: 1px solid #dcdde1; display: flex; flex-direction: column; overflow-y: auto; padding: 10px; gap: 10px; }
+        
+        .control-group { background: #f8f9fa; padding: 8px 10px; border-radius: 8px; border: 1px solid #e9ecef; }
+        .control-group h3 { font-size: 0.86rem; margin-bottom: 6px; color: #2c3e50; border-bottom: 2px solid #dfe4ea; padding-bottom: 3px; }
+        
+        .btn-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+        .btn-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
+        button { padding: 7px 6px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; transition: all 0.15s; font-size: 0.78rem; display: flex; align-items: center; justify-content: center; gap: 4px; text-align: center; }
+        button:hover { transform: translateY(-1px); box-shadow: 0 2px 5px rgba(0,0,0,0.15); filter: brightness(1.05); }
+        button:active { transform: translateY(0); }
+        
+        .btn-bacteria { background-color: #27ae60; color: white; }
+        .btn-virus { background-color: #8e44ad; color: white; }
+        .btn-parasite { background-color: #b7950b; color: white; }
+
+        .btn-neutro { background-color: #3498db; color: white; }
+        .btn-mono { background-color: #6c5ce7; color: white; }
+        .btn-eosino { background-color: #e84393; color: white; }
+        .btn-baso { background-color: #2c3e50; color: white; }
+        .btn-nk { background-color: #00cec9; color: #1e272e; }
+        .btn-bcell { background-color: #e67e22; color: white; }
+        .btn-tcell { background-color: #16a085; color: white; }
+        .btn-clear { background-color: #95a5a6; color: white; }
+
+        .knowledge-box { flex: 1; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; padding-right: 4px; }
+        .info-card { background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 7px 9px; font-size: 0.75rem; line-height: 1.4; box-shadow: 0 1px 2px rgba(0,0,0,0.04); transition: all 0.25s; }
+        .info-card.active { border-color: #3498db; background-color: #ebf5fb; box-shadow: 0 0 8px rgba(52, 152, 219, 0.35); }
+        .info-card h4 { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; color: #2c3e50; font-size: 0.81rem; }
+        .badge { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+        .live-log { background: #1e272e; color: #f1f2f6; padding: 8px 10px; border-radius: 6px; font-size: 0.79rem; min-height: 54px; display: flex; align-items: center; border-left: 4px solid #f1c40f; line-height: 1.35; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="header-left">
+        <h1>🔬 人體白血球全圖鑑與組織修復模擬器</h1>
+        <label class="toggle-label">
+            <input type="checkbox" id="toggle-labels" checked>
+            🏷️ 顯示白血球與狀態標籤
+        </label>
+    </div>
+    <div class="stats">
+        <div class="stat-item">活組織細胞: <span id="stat-healthy">10</span>/10</div>
+        <div class="stat-item">細菌: <span id="stat-bacteria">0</span></div>
+        <div class="stat-item">游離病毒: <span id="stat-virus">0</span></div>
+        <div class="stat-item">寄生蟲: <span id="stat-parasite">0</span></div>
+        <div class="stat-item">細胞殘骸: <span id="stat-debris">0</span></div>
+    </div>
+</header>
+
+<div class="main-container">
+    <div class="canvas-container" id="canvas-wrapper">
+        <canvas id="simCanvas"></canvas>
+        <div class="overlay-labels">
+            <div class="zone-label">🩸 微血管內部 (紅血球、未活化白血球循環區)</div>
+            <div class="zone-label tissue" style="margin-bottom: 42%;">🧱 微血管壁內皮細胞間隙 (受組織胺與發炎訊號調節)</div>
+            <div class="zone-label tissue">🥩 周邊組織區 (點擊畫面可直接放入細菌)</div>
+        </div>
+    </div>
+
+    <div class="sidebar">
+        <div class="live-log" id="live-log">
+            💡 歡迎！您可以隨時勾選上方「🏷️ 顯示白血球與狀態標籤」，觀察各種白血球的變形、攻擊，以及健康細胞如何透過「有絲分裂」修補死亡空缺！
+        </div>
+
+        <div class="control-group">
+            <h3>🦠 1. 製造感染源 (3種不同尺度的病原體)</h3>
+            <div class="btn-grid-3">
+                <button class="btn-bacteria" onclick="spawnBacteria()">➕ 放入細菌</button>
+                <button class="btn-virus" onclick="spawnFreeVirus()">👾 放入游離病毒</button>
+                <button class="btn-parasite" onclick="spawnParasite()">🪱 放入大型寄生蟲</button>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <h3>🛡️ 2. 顆粒球與單核吞噬系統 (先天非專一性)</h3>
+            <div class="btn-grid-2">
+                <button class="btn-neutro" onclick="spawnNeutrophil()">⚪ 嗜中性球 (快速吞菌)</button>
+                <button class="btn-mono" onclick="spawnMonocyte()">🟣 單核球➔巨噬細胞</button>
+                <button class="btn-eosino" onclick="spawnEosinophil()">🔴 嗜酸性球 (殺寄生蟲)</button>
+                <button class="btn-baso" onclick="spawnBasophil()">🔵 嗜鹼性球 (釋組織胺)</button>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <h3>🎯 3. 淋巴球系統 (NK細胞、B細胞、T細胞)</h3>
+            <div class="btn-grid-2">
+                <button class="btn-nk" onclick="spawnNKCell()">🔮 自然殺手(NK)細胞</button>
+                <button class="btn-bcell" onclick="triggerBCell()">🟠 B細胞 (分泌Y型抗體)</button>
+                <button class="btn-tcell" onclick="spawnTCell()">🟢 毒殺型T細胞 (專一殺毒)</button>
+                <button class="btn-clear" onclick="resetSim()">🔄 重置模擬器</button>
+            </div>
+        </div>
+
+        <div class="knowledge-box">
+            <div class="info-card" id="card-mitosis">
+                <h4><span class="badge" style="background:#f8c471;"></span> 細胞死亡與「鄰近活細胞有絲分裂」</h4>
+                <p>被病毒撐破或被T/NK細胞殺死的組織細胞會碎裂成<strong>不規則細胞殘骸</strong>。死細胞無法復活！必須等<strong>巨噬細胞清走殘骸</strong>後，由<strong>鄰近健康的活細胞進行「有絲分裂(一分為二)」</strong>來填補空缺。</p>
+            </div>
+
+            <div class="info-card" id="card-neutro">
+                <h4><span class="badge" style="background:#3498db;"></span> 嗜中性球 & 巨噬細胞 (吞噬雙雄)</h4>
+                <p><strong>嗜中性球</strong>(多葉核)最快穿出血管吞菌，但吞幾隻後即凋亡(化膿)；<strong>單核球</strong>穿出血管後膨大分化為<strong>巨噬細胞</strong>，能大量吞噬細菌、死掉的白血球與<strong>細胞殘骸</strong>，為組織修復開路！</p>
+            </div>
+
+            <div class="info-card" id="card-eosino">
+                <h4><span class="badge" style="background:#e84393;"></span> 嗜酸性球 vs 大型線蟲寄生蟲</h4>
+                <p>蠕蟲/線蟲體積龐大無法被吞噬。具雙葉核的<strong>嗜酸性球</strong>會包圍寄生蟲，噴射橘紅色<strong>毒性顆粒蛋白（脫顆粒作用）</strong>從外部將蟲體溶解擊殺！</p>
+            </div>
+
+            <div class="info-card" id="card-baso">
+                <h4><span class="badge" style="background:#2c3e50;"></span> 嗜鹼性球 (釋放組織胺擴張血管)</h4>
+                <p>釋放深藍色<strong>組織胺 (Histamine)</strong>，使微血管擴張、<strong>內皮細胞間隙大幅變寬</strong>，讓所有白血球鑽出血管的速度加倍！</p>
+            </div>
+
+            <div class="info-card" id="card-lymph">
+                <h4><span class="badge" style="background:#16a085;"></span> 淋巴球：B細胞抗體 vs T/NK細胞殺手</h4>
+                <p><strong>B細胞抗體</strong>只能在細胞外抓住細菌與游離病毒；一旦病毒鑽入細胞內，就必須靠<strong>NK細胞</strong>或<strong>毒殺T細胞</strong>將受感染的宿主細胞整個摧毀（誘導細胞凋亡）。</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const canvas = document.getElementById('simCanvas');
+const ctx = canvas.getContext('2d');
+const logEl = document.getElementById('live-log');
+const toggleLabelsCheckbox = document.getElementById('toggle-labels');
+
+let width, height, vesselY;
+function resize() {
+    const wrapper = document.getElementById('canvas-wrapper');
+    width = canvas.width = wrapper.clientWidth;
+    height = canvas.height = wrapper.clientHeight;
+    vesselY = height * 0.28;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// 實體陣列
+let rbcs = [];
+let endothelialCells = [];
+let tissueSites = []; // 固定的組織細胞位置 (用來管理活細胞、死亡空缺與鄰近細胞分裂)
+let bacteria = [];
+let freeViruses = [];
+let parasites = [];
+let cellDebris = []; // 不規則形狀的死亡細胞殘骸
+let histamines = [];
+let eosinophilGranules = [];
+
+// 白血球陣列
+let phagocytes = [];
+let eosinophils = [];
+let basophils = [];
+let bCells = [];
+let antibodies = [];
+let killerCells = [];
+let ripples = [];
+
+let histamineBoostTimer = 0;
+
+function updateLog(msg, cardId = null) {
+    logEl.innerHTML = msg;
+    document.querySelectorAll('.info-card').forEach(c => c.classList.remove('active'));
+    if (cardId) {
+        const card = document.getElementById(cardId);
+        if (card) card.classList.add('active');
+    }
+}
+
+// 繪製浮動標籤輔助函數
+function drawLabel(text, x, y, bgColor = 'rgba(26, 37, 47, 0.82)', textColor = '#fff') {
+    if (!toggleLabelsCheckbox.checked) return;
+    ctx.save();
+    ctx.font = 'bold 11px "Segoe UI", sans-serif';
+    const paddingX = 5;
+    const textWidth = ctx.measureText(text).width;
+    const boxW = textWidth + paddingX * 2;
+    const boxH = 16;
+    
+    ctx.fillStyle = bgColor;
+    ctx.beginPath();
+    ctx.roundRect(x - boxW / 2, y - boxH / 2, boxW, boxH, 4);
+    ctx.fill();
+
+    ctx.fillStyle = textColor;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x, y);
+    ctx.restore();
+}
+
+function initEnvironment() {
+    endothelialCells = [];
+    const numWallCells = 8;
+    const cellW = width / numWallCells;
+    for (let i = 0; i < numWallCells; i++) {
+        endothelialCells.push({
+            x: i * cellW + cellW / 2,
+            y: vesselY,
+            baseW: cellW - 7,
+            currentW: cellW - 7,
+            h: 15
+        });
+    }
+
+    // 建立 2x5 的組織細胞網格，讓每個位置紀錄自己的鄰居，以便死亡時由鄰近活細胞進行「有絲分裂」修補
+    tissueSites = [];
+    const rows = 2;
+    const cols = 5;
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            let sx = (width / (cols + 1)) * (c + 1) + (Math.random() * 16 - 8);
+            let sy = vesselY + 105 + r * 125 + (Math.random() * 14 - 7);
+            tissueSites.push({
+                id: r * cols + c,
+                row: r, col: c,
+                x: sx, y: sy,
+                r: 30,
+                state: 'healthy', // healthy, infected, dividing (正在分裂給鄰居), empty (死亡空缺), incoming (正被分裂出的新細胞填補)
+                infectionProgress: 0,
+                mitosisProgress: 0,
+                targetSite: null
+            });
+        }
+    }
+
+    rbcs = [];
+    for (let i = 0; i < 20; i++) {
+        rbcs.push({
+            x: Math.random() * width,
+            y: Math.random() * (vesselY - 34) + 16,
+            vx: 1.5 + Math.random() * 1,
+            r: 10,
+            angle: Math.random() * Math.PI
+        });
+    }
+
+    bacteria = [];
+    freeViruses = [];
+    parasites = [];
+    cellDebris = [];
+    histamines = [];
+    eosinophilGranules = [];
+    phagocytes = [];
+    eosinophils = [];
+    basophils = [];
+    bCells = [];
+    killerCells = [];
+    antibodies = [];
+    ripples = [];
+    histamineBoostTimer = 0;
+
+    spawnNeutrophil(true);
+    spawnBCell();
+}
+
+function getNearestGapX(targetX) {
+    let nearestX = width / 2;
+    let minDist = Infinity;
+    for (let i = 0; i < endothelialCells.length - 1; i++) {
+        let gapX = (endothelialCells[i].x + endothelialCells[i+1].x) / 2;
+        let d = Math.abs(targetX - gapX);
+        if (d < minDist) {
+            minDist = d;
+            nearestX = gapX;
+        }
+    }
+    return nearestX;
+}
+
+// 產生不規則形狀的「細胞凋亡/壞死殘骸」 (不再是紫色圓形！)
+function createCellDebris(x, y, siteId, count = 5) {
+    for (let i = 0; i < count; i++) {
+        let angle = (Math.PI * 2 / count) * i + (Math.random() * 0.4 - 0.2);
+        let dist = 8 + Math.random() * 14;
+        // 產生不規則多邊形頂點
+        let vertices = [];
+        let numPts = 5 + Math.floor(Math.random() * 3);
+        let baseR = 6 + Math.random() * 3;
+        for (let p = 0; p < numPts; p++) {
+            let a = (Math.PI * 2 / numPts) * p;
+            let r = baseR * (0.6 + Math.random() * 0.6);
+            vertices.push({ x: Math.cos(a) * r, y: Math.sin(a) * r });
+        }
+        cellDebris.push({
+            x: x + Math.cos(angle) * dist,
+            y: y + Math.sin(angle) * dist,
+            r: baseR,
+            siteId: siteId, // 標記屬於哪個細胞位置的殘骸，清空後該位置才能接受鄰居有絲分裂
+            vertices: vertices,
+            rotation: Math.random() * Math.PI * 2
+        });
+    }
+}
+
+// --- 1. 病原體生成 ---
+function spawnBacteria(x, y) {
+    const bx = x || Math.random() * (width - 100) + 50;
+    const by = y || vesselY + 50 + Math.random() * (height - vesselY - 80);
+    bacteria.push({
+        x: bx, y: by,
+        vx: (Math.random() - 0.5) * 1.1,
+        vy: (Math.random() - 0.5) * 1.1,
+        r: 8.5,
+        angle: Math.random() * Math.PI * 2,
+        opsonized: false,
+        abCount: 0,
+        divideTimer: 0 // 細菌會在細胞外自己進行二分裂繁殖
+    });
+    ripples.push({x: bx, y: by, r: 5, alpha: 0.8, color: '#27ae60'});
+    updateLog("🦠 細菌進入組織液！若不盡快派「嗜中性球」或「巨噬細胞」吞噬，細菌會在組織間隙中自行分裂繁殖！", "card-neutro");
+}
+
+function spawnFreeVirus(x, y, count = 3) {
+    for (let i = 0; i < count; i++) {
+        const vx = (x || width / 2) + (Math.random() * 80 - 40);
+        const vy = (y || vesselY + 50) + (Math.random() * 40 - 20);
+        freeViruses.push({
+            x: vx, y: vy,
+            vx: (Math.random() - 0.5) * 1.8,
+            vy: (Math.random() - 0.5) * 1.8,
+            r: 6,
+            opsonized: false,
+            abCount: 0,
+            penetratingTimer: 0
+        });
+    }
+    updateLog("👾 游離病毒入侵！病毒無法自己分裂，必須鑽入活的組織細胞內劫持細胞工廠來複製！", "card-lymph");
+}
+
+function spawnParasite() {
+    const px = Math.random() * (width - 200) + 100;
+    const py = vesselY + 80 + Math.random() * (height - vesselY - 140);
+    parasites.push({
+        x: px, y: py,
+        vx: (Math.random() - 0.5) * 0.45,
+        vy: (Math.random() - 0.5) * 0.35,
+        hp: 100,
+        maxHp: 100,
+        phase: Math.random() * Math.PI * 2,
+        angle: (Math.random() - 0.5) * 0.5
+    });
+    updateLog("🪱 大型線蟲寄生蟲入侵組織！體型巨大無法被吞噬，請召喚「🔴 嗜酸性球」從外部噴射毒性顆粒溶解它！", "card-eosino");
+}
+
+// --- 2. 免疫細胞生成 ---
+function spawnNeutrophil(silent = false) {
+    phagocytes.push({
+        subtype: 'neutrophil',
+        x: 20, y: Math.random() * (vesselY - 45) + 22,
+        r: 16, state: 'patrol',
+        scaleX: 1, scaleY: 1, targetGapX: null,
+        wobble: Math.random() * 10,
+        eatenCount: 0, maxEat: 3,
+        tissueLife: 650, alpha: 1
+    });
+    if (!silent) updateLog("⚪ 嗜中性球出動！最快穿出血管吞噬細菌，但吞滿 3 隻後會在組織內凋亡（形成膿液）。", "card-neutro");
+}
+
+function spawnMonocyte() {
+    phagocytes.push({
+        subtype: 'monocyte',
+        x: 20, y: Math.random() * (vesselY - 45) + 22,
+        r: 18, state: 'patrol',
+        scaleX: 1, scaleY: 1, targetGapX: null,
+        wobble: Math.random() * 10,
+        eatenCount: 0, maxEat: 15,
+        tissueLife: 1900, alpha: 1
+    });
+    updateLog("🟣 單核球出動！穿出血管進入組織後會膨大分化為「巨噬細胞」，除了吃細菌，還能清除死亡細胞殘骸，讓活細胞得以分裂修復組織！", "card-neutro");
+}
+
+function spawnEosinophil() {
+    eosinophils.push({
+        x: 20, y: Math.random() * (vesselY - 45) + 22,
+        r: 17, state: 'patrol',
+        scaleX: 1, scaleY: 1, targetGapX: null,
+        ammo: 85, tissueLife: 950, alpha: 1
+    });
+    updateLog("🔴 嗜酸性球出動！穿出微血管後將包圍大型線蟲寄生蟲，釋放橘紅色毒性蛋白顆粒溶解蟲體！", "card-eosino");
+}
+
+function spawnBasophil() {
+    basophils.push({
+        x: 30, y: vesselY - 28,
+        r: 16, degranulating: 100
+    });
+    histamineBoostTimer = 480;
+    updateLog("🔵 嗜鹼性球活化並釋放「組織胺 (Histamine)」！微血管壁間隙大幅擴張，所有白血球穿出血管速度加倍！", "card-baso");
+}
+
+function spawnBCell() {
+    bCells.push({ x: 75, y: vesselY - 38, r: 16, producing: 0 });
+}
+
+function triggerBCell() {
+    if (bCells.length === 0) spawnBCell();
+    bCells.forEach(b => b.producing = 110);
+    updateLog("🟠 B 淋巴球活化並分泌 Y 型抗體！抗體能結合在細菌與「游離病毒」表面使其失去活動與感染能力。", "card-lymph");
+}
+
+function spawnTCell() {
+    killerCells.push({
+        subtype: 'tcell',
+        x: 20, y: Math.random() * (vesselY - 45) + 22,
+        r: 16, state: 'patrol',
+        scaleX: 1, scaleY: 1, targetGapX: null,
+        tissueLife: 900, alpha: 1
+    });
+    updateLog("🟢 毒殺型 T 細胞出動！將穿出血管並摧毀整個受病毒感染的細胞（化為不規則細胞殘骸）。", "card-lymph");
+}
+
+function spawnNKCell() {
+    killerCells.push({
+        subtype: 'nk',
+        x: 20, y: Math.random() * (vesselY - 45) + 22,
+        r: 18, state: 'patrol',
+        scaleX: 1, scaleY: 1, targetGapX: null,
+        tissueLife: 900, alpha: 1
+    });
+    updateLog("🔮 自然殺手(NK)細胞出動！直接穿出血管摧毀受感染的異常細胞，阻止病毒繼續複製！", "card-lymph");
+}
+
+function resetSim() {
+    initEnvironment();
+    updateLog("🔄 模擬器已重置。");
+}
+
+canvas.addEventListener('mousedown', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    if (clickY > vesselY + 25) spawnBacteria(clickX, clickY);
+});
+
+// --- 繪圖輔助函數 ---
+function drawAntibody(x, y, angle, alpha = 1) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    ctx.strokeStyle = '#d35400';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, 5); ctx.lineTo(0, -1);
+    ctx.moveTo(0, -1); ctx.lineTo(-4, -5);
+    ctx.moveTo(0, -1); ctx.lineTo(4, -5);
+    ctx.stroke();
+    ctx.restore();
+}
+
+function drawVirusShape(x, y, r, color) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = color;
+    ctx.strokeStyle = '#4a235a';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill(); ctx.stroke();
+    for (let i = 0; i < 6; i++) {
+        let a = (Math.PI * 2 / 6) * i;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+        ctx.lineTo(Math.cos(a) * (r + 3.5), Math.sin(a) * (r + 3.5));
+        ctx.stroke();
+    }
+    ctx.restore();
+}
+
+// 全新繪製：流線型蠕動線蟲/蠕蟲寄生蟲 (不再像一串紅血球！)
+function drawNematodeParasite(para) {
+    ctx.save();
+    ctx.translate(para.x, para.y);
+    ctx.rotate(para.angle);
+
+    const numPts = 22;
+    const length = 95;
+    let spine = [];
+    for (let i = 0; i < numPts; i++) {
+        let t = i / (numPts - 1); // 0 到 1
+        let px = (t - 0.5) * length;
+        let py = Math.sin(para.phase + t * Math.PI * 2.5) * 10;
+        // 頭尾漸細的流線型半徑
+        let thickness = Math.sin(t * Math.PI) * 9 + 2.5;
+        spine.push({ x: px, y: py, r: thickness });
+    }
+
+    // 繪製蟲體外輪廓與漸層底色
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // 外框深褐色
+    for (let i = 0; i < numPts - 1; i++) {
+        ctx.strokeStyle = '#7e5109';
+        ctx.lineWidth = spine[i].r * 2 + 3;
+        ctx.beginPath();
+        ctx.moveTo(spine[i].x, spine[i].y);
+        ctx.lineTo(spine[i+1].x, spine[i+1].y);
+        ctx.stroke();
+    }
+    // 內層黃褐/米白肉色蟲體
+    for (let i = 0; i < numPts - 1; i++) {
+        ctx.strokeStyle = '#f5cba7';
+        ctx.lineWidth = spine[i].r * 2 - 1;
+        ctx.beginPath();
+        ctx.moveTo(spine[i].x, spine[i].y);
+        ctx.lineTo(spine[i+1].x, spine[i+1].y);
+        ctx.stroke();
+    }
+    // 繪製體表環節紋路與消化道線條
+    ctx.strokeStyle = '#ca6f1e';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 2; i < numPts - 2; i++) {
+        if (i === 2) ctx.moveTo(spine[i].x, spine[i].y);
+        else ctx.lineTo(spine[i].x, spine[i].y);
+    }
+    ctx.stroke();
+
+    // 頭部口器吸盤 (在 spine[0] 處)
+    ctx.fillStyle = '#7e5109';
+    ctx.beginPath();
+    ctx.arc(spine[0].x, spine[0].y, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 血條與標籤
+    ctx.rotate(-para.angle);
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(-32, -28, 64, 5);
+    ctx.fillStyle = '#e74c3c';
+    ctx.fillRect(-32, -28, 64 * (para.hp / para.maxHp), 5);
+    drawLabel(`大型寄生蟲 (${Math.ceil(para.hp)}%)`, 0, -38, 'rgba(126, 81, 9, 0.9)');
+    ctx.restore();
+}
+
+// --- 主迴圈 ---
+function animate() {
+    ctx.clearRect(0, 0, width, height);
+
+    if (histamineBoostTimer > 0) histamineBoostTimer--;
+    const hasPathogens = bacteria.length > 0 || freeViruses.length > 0 || parasites.length > 0 || tissueSites.some(c => c.state === 'infected');
+
+    // 0. 背景分區
+    ctx.fillStyle = '#ffebee';
+    ctx.fillRect(0, 0, width, vesselY);
+    ctx.fillStyle = histamineBoostTimer > 0 ? '#ffece6' : '#fff9f5';
+    ctx.fillRect(0, vesselY, width, height - vesselY);
+
+    // 1. 組織細胞更新與「鄰近活細胞有絲分裂 (Mitosis)」修復邏輯
+    tissueSites.forEach(site => {
+        if (site.state === 'empty') {
+            // 繪製死亡後的組織空缺虛線
+            ctx.save();
+            ctx.strokeStyle = '#bdc3c7';
+            ctx.setLineDash([4, 4]);
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(site.x, site.y, site.r, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+
+            // 檢查該位置的細胞殘骸是否已被吞噬細胞清理乾淨
+            const hasRemainingDebris = cellDebris.some(d => d.siteId === site.id);
+            if (hasRemainingDebris) {
+                drawLabel("死亡空缺 (待巨噬細胞清殘骸)", site.x, site.y, 'rgba(127, 140, 141, 0.75)');
+            } else {
+                drawLabel("組織空缺 (待鄰近活細胞分裂)", site.x, site.y, 'rgba(127, 140, 141, 0.75)');
+                // 尋找相鄰且處於 healthy 狀態的活細胞來進行「有絲分裂」
+                let healthyNeighbors = tissueSites.filter(other => 
+                    other.state === 'healthy' &&
+                    (Math.abs(other.row - site.row) + Math.abs(other.col - site.col) === 1)
+                );
+                if (healthyNeighbors.length > 0 && Math.random() < 0.015) {
+                    let donor = healthyNeighbors[0];
+                    donor.state = 'dividing';
+                    donor.mitosisProgress = 0;
+                    donor.targetSite = site;
+                    site.state = 'incoming';
+                    updateLog("🧬 殘骸清理完畢！鄰近的健康活細胞啟動「有絲分裂 (Mitosis)」，複製細胞核並一分為二來填補死亡細胞的空缺！", "card-mitosis");
+                }
+            }
+            return;
+        }
+
+        if (site.state === 'incoming') {
+            // 正在等待鄰居細胞分裂遷移過來
+            ctx.save();
+            ctx.strokeStyle = '#f8c471';
+            ctx.setLineDash([3, 3]);
+            ctx.beginPath();
+            ctx.arc(site.x, site.y, site.r, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+            return;
+        }
+
+        if (site.state === 'dividing') {
+            // 繪製「有絲分裂」動畫：0~50% 雙核拉長，50~100% 子細胞移動到空缺位置
+            site.mitosisProgress += 0.7;
+            let p = site.mitosisProgress / 100;
+            let target = site.targetSite;
+
+            if (p < 0.5) {
+                // 母細胞拉長並出現雙細胞核
+                let stretch = 1 + p * 0.5;
+                let angle = Math.atan2(target.y - site.y, target.x - site.x);
+                ctx.save();
+                ctx.translate(site.x, site.y);
+                ctx.rotate(angle);
+                ctx.fillStyle = '#fdebd0';
+                ctx.strokeStyle = '#f39c12';
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.ellipse(0, 0, site.r * stretch, site.r * (1 / stretch), 0, 0, Math.PI * 2);
+                ctx.fill(); ctx.stroke();
+                // 兩個分裂中的細胞核
+                let sep = p * 22;
+                ctx.fillStyle = '#eb984e';
+                ctx.beginPath();
+                ctx.arc(-sep, 0, 7, 0, Math.PI * 2);
+                ctx.arc(sep, 0, 7, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+                drawLabel("有絲分裂中 (染色體複製)", site.x, site.y - site.r - 10, 'rgba(230, 126, 34, 0.9)');
+            } else {
+                // 一分為二，新子細胞滑向目標空缺
+                let moveRatio = (p - 0.5) * 2; // 0 到 1
+                let childX = site.x + (target.x - site.x) * moveRatio;
+                let childY = site.y + (target.y - site.y) * moveRatio;
+
+                // 原母細胞
+                ctx.fillStyle = '#fdebd0'; ctx.strokeStyle = '#f8c471'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.arc(site.x, site.y, site.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+                ctx.fillStyle = '#eb984e';
+                ctx.beginPath(); ctx.arc(site.x, site.y, 7.5, 0, Math.PI * 2); ctx.fill();
+
+                // 新分裂出的子細胞
+                ctx.fillStyle = '#fdebd0'; ctx.strokeStyle = '#f39c12'; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.arc(childX, childY, site.r * (0.7 + 0.3 * moveRatio), 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+                ctx.fillStyle = '#eb984e';
+                ctx.beginPath(); ctx.arc(childX, childY, 7.5, 0, Math.PI * 2); ctx.fill();
+                drawLabel("新分裂子細胞", childX, childY - site.r - 8, 'rgba(230, 126, 34, 0.9)');
+            }
+
+            if (site.mitosisProgress >= 100) {
+                site.state = 'healthy';
+                site.mitosisProgress = 0;
+                target.state = 'healthy';
+                target.infectionProgress = 0;
+                site.targetSite = null;
+            }
+            return;
+        }
+
+        // 正常健康細胞 或 受病毒感染細胞
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(site.x, site.y, site.r, 0, Math.PI * 2);
+        if (site.state === 'infected') {
+            site.infectionProgress += 0.13;
+            ctx.fillStyle = '#e8daef';
+            ctx.strokeStyle = '#8e44ad';
+            ctx.fill(); ctx.lineWidth = 2.5; ctx.stroke();
+
+            let vCount = Math.floor(site.infectionProgress / 18) + 1;
+            for (let i = 0; i < vCount; i++) {
+                let a = (site.infectionProgress * 0.05) + (i * Math.PI * 2 / vCount);
+                drawVirusShape(site.x + Math.cos(a) * 13, site.y + Math.sin(a) * 13, 3.8, '#8e44ad');
+            }
+            drawLabel(`受感染細胞 (病毒複製 ${Math.floor(site.infectionProgress)}%)`, site.x, site.y - site.r - 10, 'rgba(142, 68, 173, 0.9)');
+
+            if (site.infectionProgress >= 100) {
+                site.state = 'empty';
+                site.infectionProgress = 0;
+                createCellDebris(site.x, site.y, site.id, 5);
+                spawnFreeVirus(site.x, site.y, 4);
+                ripples.push({x: site.x, y: site.y, r: 10, alpha: 1, color: '#8e44ad'});
+                updateLog("💥 宿主細胞被複製滿載的病毒撐破（裂解死亡），噴出 4 顆新病毒並留下「不規則細胞殘骸」！", "card-mitosis");
+            }
+        } else {
+            ctx.fillStyle = '#fdebd0';
+            ctx.strokeStyle = '#f8c471';
+            ctx.fill(); ctx.lineWidth = 2; ctx.stroke();
+        }
+        ctx.fillStyle = site.state === 'infected' ? '#5b2c6f' : '#eb984e';
+        ctx.beginPath();
+        ctx.arc(site.x, site.y, 7.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    });
+
+    // 1.5 繪製不規則形狀的「細胞殘骸 (Cell Debris)」
+    cellDebris.forEach((d, idx) => {
+        ctx.save();
+        ctx.translate(d.x, d.y);
+        ctx.rotate(d.rotation);
+        ctx.fillStyle = '#d5dbdb'; // 灰褐/枯萎組織色，不再是紫色圓形！
+        ctx.strokeStyle = '#95a5a6';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        d.vertices.forEach((v, i) => {
+            if (i === 0) ctx.moveTo(v.x, v.y);
+            else ctx.lineTo(v.x, v.y);
+        });
+        ctx.closePath();
+        ctx.fill(); ctx.stroke();
+        ctx.restore();
+        if (idx % 3 === 0) {
+            drawLabel("細胞殘骸", d.x, d.y - 12, 'rgba(127, 140, 141, 0.85)');
+        }
+    });
+
+    // 2. 紅血球
+    rbcs.forEach((rbc, idx) => {
+        rbc.x += rbc.vx;
+        if (rbc.x > width + 20) rbc.x = -20;
+        ctx.save();
+        ctx.translate(rbc.x, rbc.y);
+        ctx.rotate(rbc.angle);
+        ctx.fillStyle = '#e74c3c';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, rbc.r, rbc.r * 0.65, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#c0392b';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, rbc.r * 0.5, rbc.r * 0.3, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        if (idx === 0) drawLabel("紅血球", rbc.x, rbc.y - 15, 'rgba(192, 57, 43, 0.75)');
+    });
+
+    // 3. 微血管壁
+    endothelialCells.forEach(wall => {
+        let shrink = 0;
+        if (histamineBoostTimer > 0) shrink = 26;
+        else if (hasPathogens) shrink = 13;
+
+        const targetW = wall.baseW - shrink;
+        wall.currentW += (targetW - wall.currentW) * 0.06;
+        ctx.fillStyle = histamineBoostTimer > 0 ? '#e74c3c' : (hasPathogens ? '#e57373' : '#ef9a9a');
+        ctx.strokeStyle = '#c62828';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.roundRect(wall.x - wall.currentW / 2, wall.y - wall.h / 2, wall.currentW, wall.h, 8);
+        ctx.fill(); ctx.stroke();
+    });
+
+    // 4. 波紋與組織胺顆粒
+    for (let i = ripples.length - 1; i >= 0; i--) {
+        let p = ripples[i];
+        p.r += 1.2; p.alpha -= 0.02;
+        if (p.alpha <= 0) { ripples.splice(i, 1); continue; }
+        ctx.save();
+        ctx.strokeStyle = p.color; ctx.globalAlpha = p.alpha; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
+    }
+
+    for (let i = histamines.length - 1; i >= 0; i--) {
+        let h = histamines[i];
+        h.x += h.vx; h.y += h.vy; h.life--;
+        if (h.life <= 0) { histamines.splice(i, 1); continue; }
+        ctx.save();
+        ctx.fillStyle = '#2c3e50';
+        ctx.globalAlpha = h.life / 120;
+        ctx.beginPath(); ctx.arc(h.x, h.y, 2.5, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+    }
+
+    // 5. 大型線蟲寄生蟲 (Nematode)
+    for (let i = parasites.length - 1; i >= 0; i--) {
+        let para = parasites[i];
+        para.phase += 0.12;
+        para.x += para.vx; para.y += para.vy;
+        if (para.x < 70 || para.x > width - 70) para.vx *= -1;
+        if (para.y < vesselY + 60 || para.y > height - 45) para.vy *= -1;
+
+        if (para.hp <= 0) {
+            createCellDebris(para.x - 15, para.y, -1, 4);
+            createCellDebris(para.x + 15, para.y, -1, 4);
+            parasites.splice(i, 1);
+            updateLog("🎉 大型線蟲寄生蟲已被「嗜酸性球」釋放的毒性顆粒徹底溶解成殘骸碎塊！", "card-eosino");
+            continue;
+        }
+        drawNematodeParasite(para);
+    }
+
+    for (let i = eosinophilGranules.length - 1; i >= 0; i--) {
+        let g = eosinophilGranules[i];
+        g.x += g.vx; g.y += g.vy; g.life--;
+        if (g.life <= 0) { eosinophilGranules.splice(i, 1); continue; }
+        ctx.fillStyle = '#e84393';
+        ctx.beginPath(); ctx.arc(g.x, g.y, 2.8, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // 6. 游離病毒與細菌 (含細菌二分裂繁殖邏輯)
+    for (let i = freeViruses.length - 1; i >= 0; i--) {
+        let v = freeViruses[i];
+        if (!v.opsonized) {
+            let healthyCells = tissueSites.filter(c => c.state === 'healthy');
+            if (healthyCells.length > 0) {
+                let nearest = healthyCells.reduce((prev, curr) => 
+                    Math.hypot(curr.x - v.x, curr.y - v.y) < Math.hypot(prev.x - v.x, prev.y - v.y) ? curr : prev
+                );
+                let dx = nearest.x - v.x, dy = nearest.y - v.y, dist = Math.hypot(dx, dy);
+                if (dist > nearest.r) {
+                    v.x += (dx / dist) * 1.1; v.y += (dy / dist) * 1.1;
+                } else {
+                    v.penetratingTimer++;
+                    v.x += (dx / dist) * 0.35; v.y += (dy / dist) * 0.35;
+                    if (v.penetratingTimer > 45) {
+                        nearest.state = 'infected'; nearest.infectionProgress = 10;
+                        freeViruses.splice(i, 1);
+                        continue;
+                    }
+                }
+            } else {
+                v.x += v.vx; v.y += v.vy;
+                if (v.x < 20 || v.x > width - 20) v.vx *= -1;
+                if (v.y < vesselY + 30 || v.y > height - 20) v.vy *= -1;
+            }
+        }
+        drawVirusShape(v.x, v.y, v.r, v.opsonized ? '#a569bd' : '#8e44ad');
+        if (v.abCount > 0) {
+            for (let k = 0; k < Math.min(v.abCount, 3); k++) {
+                drawAntibody(v.x + Math.cos(k*2)*10, v.y + Math.sin(k*2)*10, k*2 + Math.PI/2);
+            }
+        }
+        drawLabel(v.opsonized ? "游離病毒(已中和)" : "游離病毒", v.x, v.y - 14, 'rgba(142, 68, 173, 0.85)');
+    }
+
+    for (let i = bacteria.length - 1; i >= 0; i--) {
+        let b = bacteria[i];
+        if (!b.opsonized) {
+            b.x += b.vx; b.y += b.vy; b.angle += 0.03;
+            if (b.x < 20 || b.x > width - 20) b.vx *= -1;
+            if (b.y < vesselY + 30 || b.y > height - 20) b.vy *= -1;
+            // 細菌在細胞外會自己進行二分裂繁殖 (上限 18 隻避免畫面卡頓)
+            b.divideTimer++;
+            if (b.divideTimer > 480 && bacteria.length < 18) {
+                b.divideTimer = 0;
+                bacteria.push({
+                    x: b.x + 8, y: b.y + 8,
+                    vx: (Math.random() - 0.5) * 1.1, vy: (Math.random() - 0.5) * 1.1,
+                    r: 8.5, angle: Math.random() * Math.PI * 2,
+                    opsonized: false, abCount: 0, divideTimer: 0
+                });
+            }
+        }
+        ctx.save();
+        ctx.translate(b.x, b.y); ctx.rotate(b.angle);
+        ctx.fillStyle = b.opsonized ? '#1e8449' : '#2ecc71';
+        ctx.strokeStyle = '#145a32'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.roundRect(-11, -5.5, 22, 11, 5.5); ctx.fill(); ctx.stroke();
+        if (b.abCount > 0) {
+            for (let k = 0; k < Math.min(b.abCount, 4); k++) {
+                drawAntibody(Math.cos(k*1.5)*13, Math.sin(k*1.5)*9, k*1.5 + Math.PI/2);
+            }
+        }
+        ctx.restore();
+        drawLabel(b.opsonized ? "細菌(抗體標記)" : "細菌", b.x, b.y - 14, 'rgba(39, 174, 96, 0.85)');
+    }
+
+    // 7. 嗜鹼性球 (Basophils)
+    for (let i = basophils.length - 1; i >= 0; i--) {
+        let baso = basophils[i];
+        baso.x += 0.5;
+        if (baso.x > width + 20) baso.x = -20;
+        if (baso.degranulating > 0) {
+            baso.degranulating--;
+            if (baso.degranulating % 4 === 0) {
+                histamines.push({
+                    x: baso.x, y: baso.y,
+                    vx: (Math.random() - 0.5) * 2.5, vy: 1 + Math.random() * 2, life: 120
+                });
+            }
+        }
+        ctx.save();
+        ctx.translate(baso.x, baso.y);
+        ctx.fillStyle = '#d6eaf8'; ctx.strokeStyle = '#2c3e50'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(0, 0, baso.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        const gPos = [[-6,-5],[5,-6],[0,0],[-7,4],[6,5],[-2,8],[3,-2],[-3,-8]];
+        ctx.fillStyle = '#1a252f';
+        gPos.forEach(pos => {
+            ctx.beginPath(); ctx.arc(pos[0], pos[1], 3.2, 0, Math.PI * 2); ctx.fill();
+        });
+        ctx.restore();
+        drawLabel("嗜鹼性球 (釋放組織胺)", baso.x, baso.y - baso.r - 9, 'rgba(44, 62, 80, 0.9)');
+    }
+
+    // 8. 嗜酸性球 (Eosinophils)
+    const squeezeSpeedBonus = histamineBoostTimer > 0 ? 1.7 : 1.0;
+
+    for (let i = eosinophils.length - 1; i >= 0; i--) {
+        let eo = eosinophils[i];
+        if (eo.state === 'patrol') {
+            eo.x += 1.2;
+            if (eo.x > width + 30) eo.x = -30;
+            if (parasites.length > 0) {
+                eo.targetGapX = getNearestGapX(parasites[0].x);
+                eo.state = 'moveToGap';
+            }
+        } else if (eo.state === 'moveToGap') {
+            let dx = eo.targetGapX - eo.x, dy = (vesselY - 16) - eo.y, dist = Math.hypot(dx, dy);
+            if (dist < 4) { eo.x = eo.targetGapX; eo.state = 'squeezing'; }
+            else { eo.x += (dx / dist) * 2.5; eo.y += (dy / dist) * 2.5; }
+        } else if (eo.state === 'squeezing') {
+            eo.y += 0.9 * squeezeSpeedBonus;
+            let distFromWall = Math.abs(eo.y - vesselY);
+            if (distFromWall < 20) {
+                let sf = 1 - (distFromWall / 20);
+                eo.scaleX = 1 - sf * 0.55; eo.scaleY = 1 + sf * 0.75;
+            } else {
+                eo.scaleX = 1; eo.scaleY = 1;
+                if (eo.y > vesselY + 20) eo.state = 'hunting';
+            }
+        } else if (eo.state === 'hunting') {
+            eo.tissueLife--;
+            if (eo.tissueLife <= 0 || eo.ammo <= 0) {
+                eo.alpha -= 0.02;
+                if (eo.alpha <= 0) { eosinophils.splice(i, 1); continue; }
+            }
+            if (parasites.length > 0) {
+                let target = parasites[0];
+                let dx = target.x - eo.x, dy = target.y - eo.y, dist = Math.hypot(dx, dy);
+                if (dist > 55) {
+                    eo.x += (dx / dist) * 1.8; eo.y += (dy / dist) * 1.8;
+                } else {
+                    if (Math.random() < 0.35 && eo.ammo > 0) {
+                        eo.ammo--;
+                        target.hp -= 0.45;
+                        eosinophilGranules.push({
+                            x: eo.x, y: eo.y,
+                            vx: (dx / dist) * 3 + (Math.random() - 0.5),
+                            vy: (dy / dist) * 3 + (Math.random() - 0.5),
+                            life: 18
+                        });
+                    }
+                }
+            } else {
+                eo.tissueLife -= 3;
+                eo.x += (Math.random() - 0.5) * 0.6; eo.y += (Math.random() - 0.5) * 0.6;
+            }
+        }
+
+        ctx.save();
+        ctx.globalAlpha = eo.alpha;
+        ctx.translate(eo.x, eo.y); ctx.scale(eo.scaleX, eo.scaleY);
+        ctx.fillStyle = '#fadbd8'; ctx.strokeStyle = '#e84393'; ctx.lineWidth = 2.2;
+        ctx.beginPath(); ctx.arc(0, 0, eo.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#880e4f';
+        ctx.beginPath();
+        ctx.arc(-5.5, 0, 5, 0, Math.PI * 2);
+        ctx.arc(5.5, 0, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#880e4f'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(-5, -2); ctx.lineTo(5, -2); ctx.stroke();
+        ctx.restore();
+        drawLabel("嗜酸性球 (殺寄生蟲)", eo.x, eo.y - eo.r - 9, 'rgba(232, 67, 147, 0.9)');
+    }
+
+    // 9. 嗜中性球 與 單核球➔巨噬細胞
+    for (let i = phagocytes.length - 1; i >= 0; i--) {
+        let p = phagocytes[i];
+        p.wobble += 0.08;
+
+        let allTargets = [
+            ...bacteria.map((item, idx) => ({ type: 'bacteria', item, idx, priority: item.opsonized ? 0.35 : 1 })),
+            ...freeViruses.map((item, idx) => ({ type: 'virus', item, idx, priority: item.opsonized ? 0.35 : 1.6 })),
+            ...cellDebris.map((item, idx) => ({ type: 'debris', item, idx, priority: p.subtype === 'macrophage' ? 0.45 : 1.3 }))
+        ];
+
+        if (p.state === 'patrol') {
+            p.x += 1.2;
+            if (p.x > width + 30) p.x = -30;
+            if (allTargets.length > 0) {
+                p.targetGapX = getNearestGapX(allTargets[0].item.x);
+                p.state = 'moveToGap';
+            }
+        } else if (p.state === 'moveToGap') {
+            let dx = p.targetGapX - p.x, dy = (vesselY - 18) - p.y, dist = Math.hypot(dx, dy);
+            if (dist < 4) { p.x = p.targetGapX; p.state = 'squeezing'; }
+            else { p.x += (dx / dist) * 2.5; p.y += (dy / dist) * 2.5; }
+        } else if (p.state === 'squeezing') {
+            p.y += 0.85 * squeezeSpeedBonus;
+            let distFromWall = Math.abs(p.y - vesselY);
+            if (distFromWall < 22) {
+                let sf = 1 - (distFromWall / 22);
+                p.scaleX = 1 - sf * 0.6; p.scaleY = 1 + sf * 0.8;
+            } else {
+                p.scaleX = 1; p.scaleY = 1;
+                if (p.y > vesselY + 22) {
+                    p.state = 'hunting';
+                    if (p.subtype === 'monocyte') {
+                        p.subtype = 'macrophage';
+                        updateLog("🟣 單核球穿出血管進入組織，成功分化為體積龐大的「巨噬細胞」，準備吞噬病原體與清理細胞殘骸！", "card-neutro");
+                    }
+                }
+            }
+        } else if (p.state === 'hunting') {
+            p.tissueLife--;
+            if (p.subtype === 'macrophage' && p.r < 25) p.r += 0.15;
+
+            let deformAmt = p.subtype === 'macrophage' ? 0.18 : 0.1;
+            p.scaleX = 1 + Math.sin(p.wobble) * deformAmt;
+            p.scaleY = 1 + Math.cos(p.wobble) * deformAmt;
+
+            if (p.eatenCount >= p.maxEat || p.tissueLife <= 0) {
+                p.state = 'apoptosis';
+            } else if (allTargets.length > 0) {
+                let bestTarget = allTargets.reduce((prev, curr) => {
+                    let dPrev = Math.hypot(prev.item.x - p.x, prev.item.y - p.y) * prev.priority;
+                    let dCurr = Math.hypot(curr.item.x - p.x, curr.item.y - p.y) * curr.priority;
+                    return dCurr < dPrev ? curr : prev;
+                });
+                let dx = bestTarget.item.x - p.x, dy = bestTarget.item.y - p.y, dist = Math.hypot(dx, dy);
+                let speed = p.subtype === 'neutrophil' ? 2.1 : 1.55;
+                p.x += (dx / dist) * speed; p.y += (dy / dist) * speed;
+
+                if (dist < p.r) {
+                    if (bestTarget.type === 'bacteria') bacteria.splice(bestTarget.idx, 1);
+                    else if (bestTarget.type === 'virus') freeViruses.splice(bestTarget.idx, 1);
+                    else if (bestTarget.type === 'debris') cellDebris.splice(bestTarget.idx, 1);
+                    p.eatenCount++;
+                    ripples.push({x: p.x, y: p.y, r: 5, alpha: 0.9, color: p.subtype === 'macrophage' ? '#6c5ce7' : '#3498db'});
+                }
+            } else {
+                p.tissueLife -= 2;
+                p.x += Math.sin(p.wobble * 0.3) * 0.4; p.y += Math.cos(p.wobble * 0.3) * 0.4;
+            }
+        } else if (p.state === 'apoptosis') {
+            p.alpha -= 0.015; p.r *= 0.99;
+            if (p.alpha <= 0) { phagocytes.splice(i, 1); continue; }
+        }
+
+        ctx.save();
+        ctx.globalAlpha = p.alpha;
+        ctx.translate(p.x, p.y); ctx.scale(p.scaleX, p.scaleY);
+
+        if (p.subtype === 'neutrophil') {
+            ctx.fillStyle = p.state === 'apoptosis' ? '#dfe6e9' : 'rgba(255, 255, 255, 0.95)';
+            ctx.strokeStyle = '#2980b9'; ctx.lineWidth = 2.2;
+            ctx.beginPath(); ctx.arc(0, 0, p.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = '#2980b9';
+            ctx.beginPath();
+            ctx.arc(-5, -3, 4, 0, Math.PI * 2);
+            ctx.arc(5, -3, 4, 0, Math.PI * 2);
+            ctx.arc(0, 5, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+            let labelTxt = p.state === 'apoptosis' ? "嗜中性球 (凋亡化膿)" : `嗜中性球 (${p.eatenCount}/${p.maxEat})`;
+            drawLabel(labelTxt, p.x, p.y - p.r - 9, 'rgba(41, 128, 185, 0.9)');
+        } else {
+            ctx.fillStyle = p.subtype === 'macrophage' ? '#f3e5f5' : '#ede7f6';
+            ctx.strokeStyle = '#6c5ce7'; ctx.lineWidth = 2.5;
+            ctx.beginPath(); ctx.arc(0, 0, p.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = '#5f27cd';
+            ctx.beginPath();
+            ctx.arc(0, 0, p.r * 0.48, 0.3, Math.PI * 1.7);
+            ctx.fill();
+            ctx.restore();
+            let name = p.subtype === 'macrophage' ? `巨噬細胞 (${p.eatenCount}/${p.maxEat})` : "單核球 (血管巡邏)";
+            drawLabel(name, p.x, p.y - p.r - 9, 'rgba(108, 92, 231, 0.9)');
+        }
+    }
+
+    // 10. B 細胞與抗體
+    bCells.forEach(b => {
+        b.x += 0.35;
+        if (b.x > width - 50) b.x = 50;
+        if (b.producing > 0) {
+            b.producing--;
+            if (b.producing % 6 === 0) {
+                antibodies.push({
+                    x: b.x, y: b.y,
+                    vx: (Math.random() - 0.5) * 2, vy: 1.5 + Math.random() * 1.5,
+                    angle: Math.random() * Math.PI * 2, life: 550
+                });
+            }
+        }
+        ctx.save();
+        ctx.fillStyle = '#f39c12'; ctx.strokeStyle = '#d68910'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#9c640c';
+        ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 0.68, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        drawLabel(b.producing > 0 ? "B淋巴球 (分泌抗體中)" : "B淋巴球", b.x, b.y - b.r - 9, 'rgba(211, 84, 0, 0.9)');
+    });
+
+    for (let i = antibodies.length - 1; i >= 0; i--) {
+        let ab = antibodies[i];
+        ab.life--;
+        if (ab.life <= 0) { antibodies.splice(i, 1); continue; }
+        let targets = [...bacteria.filter(b => b.abCount < 3), ...freeViruses.filter(v => v.abCount < 2)];
+        let target = targets.length > 0 ? targets[0] : null;
+
+        if (target && ab.y > vesselY) {
+            let dx = target.x - ab.x, dy = target.y - ab.y, dist = Math.hypot(dx, dy);
+            ab.x += (dx / dist) * 3.5; ab.y += (dy / dist) * 3.5;
+            ab.angle = Math.atan2(dy, dx) - Math.PI / 2;
+            if (dist < target.r + 6) {
+                target.abCount++;
+                if (!target.opsonized && target.abCount >= 2) target.opsonized = true;
+                antibodies.splice(i, 1); continue;
+            }
+        } else {
+            ab.x += ab.vx; ab.y += ab.vy; ab.angle += 0.04;
+            if (ab.y > height - 15) ab.vy *= -0.5;
+            if (ab.x < 10 || ab.x > width - 10) ab.vx *= -1;
+        }
+        drawAntibody(ab.x, ab.y, ab.angle, ab.life < 100 ? ab.life / 100 : 1);
+    }
+
+    // 11. 殺手淋巴球 (毒殺型 T 細胞 & 自然殺手 NK 細胞)
+    for (let i = killerCells.length - 1; i >= 0; i--) {
+        let k = killerCells[i];
+        let infectedCells = tissueSites.filter(c => c.state === 'infected');
+
+        if (k.state === 'patrol') {
+            k.x += 1.4;
+            if (k.x > width + 30) k.x = -30;
+            if (infectedCells.length > 0) {
+                k.targetGapX = getNearestGapX(infectedCells[0].x);
+                k.state = 'moveToGap';
+            }
+        } else if (k.state === 'moveToGap') {
+            let dx = k.targetGapX - k.x, dy = (vesselY - 15) - k.y, dist = Math.hypot(dx, dy);
+            if (dist < 4) { k.x = k.targetGapX; k.state = 'squeezing'; }
+            else { k.x += (dx / dist) * 2.5; k.y += (dy / dist) * 2.5; }
+        } else if (k.state === 'squeezing') {
+            k.y += 1.0 * squeezeSpeedBonus;
+            let distFromWall = Math.abs(k.y - vesselY);
+            if (distFromWall < 18) {
+                let sf = 1 - (distFromWall / 18);
+                k.scaleX = 1 - sf * 0.55; k.scaleY = 1 + sf * 0.7;
+            } else {
+                k.scaleX = 1; k.scaleY = 1;
+                if (k.y > vesselY + 18) k.state = 'hunting';
+            }
+        } else if (k.state === 'hunting') {
+            k.tissueLife--;
+            if (k.tissueLife <= 0) {
+                k.alpha -= 0.02;
+                if (k.alpha <= 0) { killerCells.splice(i, 1); continue; }
+            }
+            if (infectedCells.length > 0) {
+                let target = infectedCells[0];
+                let dx = target.x - k.x, dy = target.y - k.y, dist = Math.hypot(dx, dy);
+                let speed = k.subtype === 'nk' ? 2.5 : 2.1;
+                k.x += (dx / dist) * speed; k.y += (dy / dist) * speed;
+
+                if (dist < target.r + k.r) {
+                    target.state = 'empty';
+                    target.infectionProgress = 0;
+                    createCellDebris(target.x, target.y, target.id, 5);
+                    ripples.push({x: target.x, y: target.y, r: 10, alpha: 1, color: '#00cec9'});
+                    let name = k.subtype === 'nk' ? '自然殺手(NK)細胞' : '毒殺型 T 細胞';
+                    updateLog(`⚔️ ${name}摧毀了受感染的宿主細胞（誘導細胞凋亡），化為不規則細胞殘骸！待巨噬細胞清理殘骸後，鄰近活細胞即可分裂修補！`, "card-mitosis");
+                }
+            } else {
+                k.tissueLife -= 3;
+                k.x += (Math.random() - 0.5) * 0.8; k.y += (Math.random() - 0.5) * 0.8;
+            }
+        }
+
+        ctx.save();
+        ctx.globalAlpha = k.alpha;
+        ctx.translate(k.x, k.y); ctx.scale(k.scaleX, k.scaleY);
+        ctx.fillStyle = k.subtype === 'nk' ? '#dff9fb' : '#e8f8f5';
+        ctx.strokeStyle = k.subtype === 'nk' ? '#00cec9' : '#16a085';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.arc(0, 0, k.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = k.subtype === 'nk' ? '#0984e3' : '#1abc9c';
+        ctx.beginPath(); ctx.arc(-2, 0, k.r * 0.62, 0, Math.PI * 2); ctx.fill();
+        if (k.subtype === 'nk') {
+            ctx.fillStyle = '#d63031';
+            ctx.beginPath(); ctx.arc(7, -4, 2, 0, Math.PI*2); ctx.arc(6, 4, 2, 0, Math.PI*2); ctx.fill();
+        }
+        ctx.restore();
+        let kLabel = k.subtype === 'nk' ? "自然殺手(NK)細胞" : "毒殺型T細胞";
+        drawLabel(kLabel, k.x, k.y - k.r - 9, k.subtype === 'nk' ? 'rgba(0, 151, 167, 0.9)' : 'rgba(22, 160, 133, 0.9)');
+    }
+
+    // 更新統計
+    document.getElementById('stat-healthy').innerText = tissueSites.filter(c => c.state === 'healthy' || c.state === 'dividing').length;
+    document.getElementById('stat-bacteria').innerText = bacteria.length;
+    document.getElementById('stat-virus').innerText = freeViruses.length;
+    document.getElementById('stat-parasite').innerText = parasites.length;
+    document.getElementById('stat-debris').innerText = cellDebris.length;
+
+    requestAnimationFrame(animate);
+}
+
+initEnvironment();
+animate();
+</script>
+</body>
+</html>
