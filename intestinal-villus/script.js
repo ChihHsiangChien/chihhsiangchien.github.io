@@ -1481,11 +1481,12 @@
     initVascularPaths();
     initRedBloodCells();
     initEnzymes();
-
+    /*
     // 初始投放三種大分子養分由左方流入
     ['carb', 'protein', 'lipid', 'carb'].forEach((t, idx) => {
       spawnMacromolecule(t, 140 + idx * 90);
     });
+    */
 
     function loop() {
       updateSimulation();
