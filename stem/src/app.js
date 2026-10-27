@@ -328,11 +328,12 @@
 
   // --- App State ---
   const state = {
-    mode: 'dicot',          // 'dicot' | 'monocot' | 'cell'
+    mode: 'cell',           // 'dicot' | 'monocot' | 'cell' (預設顯示「單一細胞構造」分頁)
     cellSubmode: 'pair',    // 'pair' | 'phloem' | 'xylem'
     cellCutaway: true,
     cellPins: true,
     cellFlow: true,
+    cellPhloemDir: 'down',  // 'up' (全部往上) | 'down' (全部往下) | 'alternate' (雙向交替)
     viewPreset: 'wedge',    // 'wedge' | 'cross' | 'long' | 'full'
     sliceYPct: 100,         // 15 ~ 100
     wedgeAngleDeg: 90,      // 0 ~ 180
@@ -353,6 +354,7 @@
   let raycaster, mouse;
   let clippingPlaneY;
   let barkTexture = null;
+  let clock = new THREE.Clock(); // 用來計算每一幀經過的時間 (Delta Time)
 
   // --- Initialize Application ---
   function init() {
@@ -367,7 +369,11 @@
     // 2. Camera (optimized near/far ratio for high depth buffer precision)
     const aspect = window.innerWidth / window.innerHeight;
     camera = new THREE.PerspectiveCamera(40, aspect, 0.5, 300);
-    camera.position.set(-14, 11, 16);
+    if (state.mode === 'cell') {
+      camera.position.set(0, 0, 18.0);
+    } else {
+      camera.position.set(-14, 11, 16);
+    }
 
     // 3. Renderer with Logarithmic Depth Buffer to completely eliminate z-fighting flickering
     renderer = new THREE.WebGLRenderer({
@@ -386,7 +392,11 @@
     controls.dampingFactor = 0.06;
     controls.maxDistance = 55;
     controls.minDistance = 3;
-    controls.target.set(0, 0, 0);
+    if (state.mode === 'cell') {
+      controls.target.set(0, -1.25, 0);
+    } else {
+      controls.target.set(0, 0, 0);
+    }
 
     // 5. Studio 3-Point Lighting
     setupLighting();
@@ -404,7 +414,7 @@
     // 9. Environment Grid
     createEnvironment();
 
-    // 10. Build Initial Model (3D Wedge)
+    // 10. Build Initial Model (Cell or Stem)
     rebuildSceneModel();
 
     // 11. Microscope bundle model (initially hidden)
@@ -419,7 +429,17 @@
     bindEvents();
     updateLegendUI();
 
-    // 14. Render Loop
+    // 14. Initial structure selection & UI state sync
+    if (state.mode === 'cell') {
+      if (state.cellSubmode === 'pair') selectStructure('cell_pair');
+      else if (state.cellSubmode === 'phloem') selectStructure('cell_phloem');
+      else if (state.cellSubmode === 'xylem') selectStructure('cell_xylem');
+      setCellPhloemDirection(state.cellPhloemDir);
+    } else {
+      selectStructure('default');
+    }
+
+    // 15. Render Loop
     animate();
   }
 
@@ -960,7 +980,9 @@
         pPos[i * 3] = rad * Math.cos(theta);
         pPos[i * 3 + 1] = (Math.random() - 0.5) * h;
         pPos[i * 3 + 2] = rad * Math.sin(theta);
-        pSpeeds[i] = (i % 2 === 0 ? 1 : -1) * (0.02 + Math.random() * 0.03);
+
+        //pSpeeds[i] = (i % 2 === 0 ? 1 : -1) * (0.02 + Math.random() * 0.03);
+        pSpeeds[i] = (0.02 + Math.random() * 0.03);
       }
       pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
 
@@ -972,7 +994,14 @@
         blending: THREE.AdditiveBlending
       });
       const points = new THREE.Points(pGeo, pMat);
-      points.userData = { isCellPhloemFlow: true, speeds: pSpeeds, h: h, rMax: rInner * 0.72 };
+      points.userData = { 
+        isCellPhloemFlow: true, 
+        speeds: pSpeeds, 
+        h: h, 
+        rMax: rInner * 0.72,
+        timer: 0,
+        alternateDir: 1
+      };
       root.add(points);
     }
 
@@ -2718,7 +2747,7 @@
     phloemParticles.userData = { speeds: new Float32Array(phloemSpeeds) };
   }
 
-  function updateParticles() {
+  function updateParticles(delta = 0.016) {
     const halfH = STEM_HEIGHT * 0.5;
 
     // Single Cell Particles
@@ -2729,6 +2758,7 @@
       if (state.cellFlow) {
         activeModelGroup.traverse(child => {
           if (child.isPoints && child.userData.isCellWaterFlow) {
+            // 木質部導管水分：始終由下往上蒸散流動 (Upward)
             const pos = child.geometry.attributes.position.array;
             const speeds = child.userData.speeds;
             const h = child.userData.h;
@@ -2738,13 +2768,36 @@
             }
             child.geometry.attributes.position.needsUpdate = true;
           } else if (child.isPoints && child.userData.isCellPhloemFlow) {
+            // 韌皮部篩管養分：由使用者控制全部往上 (1)、全部往下 (-1) 或雙向交替
             const pos = child.geometry.attributes.position.array;
             const speeds = child.userData.speeds;
             const h = child.userData.h;
+
+            let dir = -1; // 預設往下
+            if (state.cellPhloemDir === 'up') {
+              dir = 1;
+            } else if (state.cellPhloemDir === 'down') {
+              dir = -1;
+            } else if (state.cellPhloemDir === 'alternate') {
+              child.userData.timer = (child.userData.timer || 0) + delta;
+              if (child.userData.timer >= 3.0) {
+                child.userData.timer = 0;
+                child.userData.alternateDir = (child.userData.alternateDir || 1) * -1;
+              }
+              dir = child.userData.alternateDir || 1;
+            }
+
             for (let i = 0; i < speeds.length; i++) {
-              pos[i * 3 + 1] += speeds[i];
-              if (pos[i * 3 + 1] > h * 0.5) pos[i * 3 + 1] = -h * 0.5;
-              if (pos[i * 3 + 1] < -h * 0.5) pos[i * 3 + 1] = h * 0.5;
+              pos[i * 3 + 1] += speeds[i] * dir;
+              if (dir > 0) {
+                // 全部往上流動時的邊界循環
+                if (pos[i * 3 + 1] > h * 0.5) pos[i * 3 + 1] = -h * 0.5;
+                if (pos[i * 3 + 1] < -h * 0.5) pos[i * 3 + 1] = -h * 0.5;
+              } else {
+                // 全部往下流動時的邊界循環
+                if (pos[i * 3 + 1] < -h * 0.5) pos[i * 3 + 1] = h * 0.5;
+                if (pos[i * 3 + 1] > h * 0.5) pos[i * 3 + 1] = h * 0.5;
+              }
             }
             child.geometry.attributes.position.needsUpdate = true;
           }
@@ -3016,6 +3069,7 @@
       if (state.cellSubmode === 'pair') selectStructure('cell_pair');
       else if (state.cellSubmode === 'phloem') selectStructure('cell_phloem');
       else if (state.cellSubmode === 'xylem') selectStructure('cell_xylem');
+      setCellPhloemDirection(state.cellPhloemDir);
     } else {
       selectStructure('default');
     }
@@ -3037,6 +3091,18 @@
     if (submode === 'pair') selectStructure('cell_pair');
     else if (submode === 'phloem') selectStructure('cell_phloem');
     else if (submode === 'xylem') selectStructure('cell_xylem');
+    setCellPhloemDirection(state.cellPhloemDir);
+  }
+
+  function setCellPhloemDirection(dir) {
+    state.cellPhloemDir = dir;
+    const btnUp = document.getElementById('btn-phloem-up');
+    const btnDown = document.getElementById('btn-phloem-down');
+    const btnAlt = document.getElementById('btn-phloem-alt');
+
+    if (btnUp) btnUp.classList.toggle('active', dir === 'up');
+    if (btnDown) btnDown.classList.toggle('active', dir === 'down');
+    if (btnAlt) btnAlt.classList.toggle('active', dir === 'alternate');
   }
 
   function toggleMicroscopeMode() {
@@ -3069,6 +3135,15 @@
 
     const btnXylem = document.getElementById('cell-view-xylem');
     if (btnXylem) btnXylem.addEventListener('click', () => setCellSubmode('xylem'));
+
+    const btnPhloemUp = document.getElementById('btn-phloem-up');
+    if (btnPhloemUp) btnPhloemUp.addEventListener('click', () => setCellPhloemDirection('up'));
+
+    const btnPhloemDown = document.getElementById('btn-phloem-down');
+    if (btnPhloemDown) btnPhloemDown.addEventListener('click', () => setCellPhloemDirection('down'));
+
+    const btnPhloemAlt = document.getElementById('btn-phloem-alt');
+    if (btnPhloemAlt) btnPhloemAlt.addEventListener('click', () => setCellPhloemDirection('alternate'));
 
     const tCut = document.getElementById('toggle-cell-cutaway');
     if (tCut) tCut.addEventListener('change', (e) => {
@@ -3181,6 +3256,8 @@
   function animate() {
     requestAnimationFrame(animate);
 
+    const delta = clock.getDelta();
+
     controls.update();
 
     if (state.autoRotate && !state.microscopeMode && activeModelGroup) {
@@ -3191,7 +3268,7 @@
       microscopeGroup.rotation.y += 0.005;
     }
 
-    updateParticles();
+    updateParticles(delta);
 
     renderer.render(scene, camera);
   }
