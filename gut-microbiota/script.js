@@ -26,7 +26,12 @@
   const modeHighBtn = document.getElementById('mode-high-fiber');
   const modeNoneBtn = document.getElementById('mode-no-fiber');
   const btnDropFiber = document.getElementById('btn-drop-fiber');
+  const btnDropBacteriaAll = document.getElementById('btn-drop-bacteria-all');
+  const btnDropProbiotic = document.getElementById('btn-drop-probiotic');
+  const btnDropMucin = document.getElementById('btn-drop-mucin');
   const btnDropScfa = document.getElementById('btn-drop-scfa');
+  const btnClearLumen = document.getElementById('btn-clear-lumen');
+  const brushRadios = document.querySelectorAll('input[name="spawn-brush"]');
   const sliderFiberRate = document.getElementById('fiber-rate');
   const labelFiberRate = document.getElementById('fiber-rate-val');
   const sliderSpeed = document.getElementById('sim-speed');
@@ -64,9 +69,10 @@
 
   // 全域模擬參數與狀態
   const state = {
-    paused: false,
+    paused: true,          // 預設進入時動畫暫停，方便教學講解
     simSpeed: 1.0,
-    fiberRate: 80, // 0 ~ 100
+    fiberRate: 0,          // 預設 0，等待手動投入或開啟高纖模式
+    spawnBrush: 'fiber',   // 畫布點擊投放模式：'fiber' | 'probiotic' | 'mucin'
     showLabels: true,
     showJunctions: true,
     showCytokines: true,
@@ -75,7 +81,7 @@
     // 統計數值 (0 ~ 100)
     avgMucus: 95,
     avgJunction: 98,
-    scfaLevel: 85,
+    scfaLevel: 75,
     inflammation: 4,
     time: 0
   };
@@ -190,29 +196,8 @@
 
     updateCellPositions();
 
-    // 初始投放膳食纖維
-    for (let i = 0; i < 12; i++) {
-      spawnFiber(Math.random() * W);
-    }
-
-    // 初始產生腸道菌群 (共 26 隻：益生桿菌 + 雙歧桿菌 + 噬黏液菌)
-    const types = ['butyrate_rod', 'bifido', 'mucin_degrader'];
-    for (let i = 0; i < 26; i++) {
-      const t = i < 11 ? 'butyrate_rod' : (i < 18 ? 'bifido' : 'mucin_degrader');
-      bacteria.push(createBacterium(t, Math.random() * (W - 60) + 30));
-    }
-
-    // 初始產生一些 SCFA 粒子
-    for (let i = 0; i < 16; i++) {
-      scfas.push({
-        x: Math.random() * (W - 40) + 20,
-        y: Y.outerMucusTop + Math.random() * (Y.epitheliumTop - Y.outerMucusTop - 15),
-        vx: (Math.random() - 0.5) * 0.6,
-        vy: 0.45 + Math.random() * 0.5,
-        r: 4.5,
-        alpha: 1
-      });
-    }
+    // 預設進入時：不產生膳食纖維、不產生腸道微生物、不產生游離 SCFA
+    // 保持大腸皮膜與黏液層在健康原始狀態，等待使用者投入物質並按繼續開始講解！
 
     // 初始產生固有層免疫細胞 (巨噬細胞與樹突細胞)
     for (let i = 0; i < 7; i++) {
@@ -236,6 +221,13 @@
         speed: 0.9 + Math.random() * 0.35
       });
     }
+
+    // 初始狀態數值校正
+    state.avgMucus = 95;
+    state.avgJunction = 98;
+    state.scfaLevel = 70;
+    state.inflammation = 4;
+    updateDashboardUI();
   }
 
   function updateCellPositions() {
@@ -247,13 +239,14 @@
     }
   }
 
-  function createBacterium(type, x) {
-    const yMin = Y.lumenTop + 45;
-    const yMax = Y.outerMucusTop + 35;
+  function createBacterium(type, x, y = null) {
+    const yMin = Y.lumenTop + 35;
+    const yMax = Y.outerMucusTop + 25;
+    const actualY = y !== null ? Math.max(30, Math.min(Y.outerMucusTop + 25, y)) : (yMin + Math.random() * (yMax - yMin));
     return {
       type, // 'butyrate_rod' (產丁酸菌), 'bifido' (雙歧益生菌), 'mucin_degrader' (噬黏液菌/伺機菌)
       x: x,
-      y: yMin + Math.random() * (yMax - yMin),
+      y: actualY,
       vx: (Math.random() - 0.5) * 1.1,
       vy: (Math.random() - 0.5) * 0.7,
       angle: Math.random() * Math.PI * 2,
@@ -263,6 +256,23 @@
       eatCooldown: 0,
       wigglePhase: Math.random() * Math.PI * 2
     };
+  }
+
+  // 批量投放微生物 (綜合菌群、益生菌、噬黏液菌)
+  function spawnBacteriaBatch(groupType, count = 6) {
+    for (let i = 0; i < count; i++) {
+      let t = 'butyrate_rod';
+      if (groupType === 'all') {
+        const r = Math.random();
+        t = r < 0.45 ? 'butyrate_rod' : (r < 0.75 ? 'bifido' : 'mucin_degrader');
+      } else if (groupType === 'probiotic') {
+        t = Math.random() < 0.55 ? 'butyrate_rod' : 'bifido';
+      } else if (groupType === 'mucin') {
+        t = 'mucin_degrader';
+      }
+      const x = 40 + Math.random() * (W - 80);
+      bacteria.push(createBacterium(t, x));
+    }
   }
 
   function spawnFiber(startX = -30, startY = null) {
@@ -1670,10 +1680,31 @@
   }
 
   function updateFiberRateLabel(val) {
-    if (val === 0) labelFiberRate.textContent = '0% (無纖維精緻飲食)';
+    if (val === 0) labelFiberRate.textContent = '0% (等待投放 / 手動控制)';
     else if (val < 35) labelFiberRate.textContent = `${val}% (纖維不足)`;
     else if (val < 70) labelFiberRate.textContent = `${val}% (中等供給)`;
     else labelFiberRate.textContent = `${val}% (高纖充足)`;
+  }
+
+  function togglePause(forcedState) {
+    state.paused = (typeof forcedState === 'boolean') ? forcedState : !state.paused;
+    if (state.paused) {
+      btnPause.textContent = '▶ 開始 / 繼續模擬';
+      btnPause.classList.add('btn-play-state');
+      flowBannerText.textContent = '⏸ 動畫已暫停（講解模式）：請由右側投放膳食纖維與微生物，按「▶ 開始 / 繼續模擬」啟動';
+    } else {
+      btnPause.textContent = '⏸ 暫停模擬';
+      btnPause.classList.remove('btn-play-state');
+      if (state.fiberRate > 0) {
+        flowBannerText.textContent = '腸腔食糜由左向右漂流：膳食纖維供養共生菌產出 SCFA';
+      } else if (bacteria.length > 0 && fibers.length === 0) {
+        flowBannerText.textContent = '⚠️ 缺乏膳食纖維！飢餓的腸道菌開始向下啃食黏液層糖蛋白';
+      } else if (fibers.length > 0 && bacteria.length > 0) {
+        flowBannerText.textContent = '共生菌正在發酵膳食纖維，產生短鏈脂肪酸 (SCFA) 滋養皮膜';
+      } else {
+        flowBannerText.textContent = '腸腔運作中：可隨時投放膳食纖維或微生物進行觀察';
+      }
+    }
   }
 
   modeHighBtn.addEventListener('click', () => setDietMode('high'));
@@ -1685,10 +1716,45 @@
     }
   });
 
+  if (btnDropBacteriaAll) {
+    btnDropBacteriaAll.addEventListener('click', () => {
+      spawnBacteriaBatch('all', 8);
+    });
+  }
+
+  if (btnDropProbiotic) {
+    btnDropProbiotic.addEventListener('click', () => {
+      spawnBacteriaBatch('probiotic', 6);
+    });
+  }
+
+  if (btnDropMucin) {
+    btnDropMucin.addEventListener('click', () => {
+      spawnBacteriaBatch('mucin', 4);
+    });
+  }
+
   btnDropScfa.addEventListener('click', () => {
     for (let i = 0; i < 18; i++) {
       spawnScfaBurst(40 + Math.random() * (W - 80), Y.outerMucusTop + 20 + Math.random() * 60, 1);
     }
+  });
+
+  if (btnClearLumen) {
+    btnClearLumen.addEventListener('click', () => {
+      fibers.length = 0;
+      bacteria.length = 0;
+      scfas.length = 0;
+      biteEffects.length = 0;
+    });
+  }
+
+  brushRadios.forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        state.spawnBrush = e.target.value;
+      }
+    });
   });
 
   sliderFiberRate.addEventListener('input', (e) => {
@@ -1712,14 +1778,16 @@
     labelSpeed.textContent = `${state.simSpeed.toFixed(1)}x`;
   });
 
-  btnPause.addEventListener('click', () => {
-    state.paused = !state.paused;
-    btnPause.textContent = state.paused ? '▶ 繼續模擬' : '⏸ 暫停模擬';
-  });
+  btnPause.addEventListener('click', () => togglePause());
 
   btnReset.addEventListener('click', () => {
-    setDietMode('high');
+    state.fiberRate = 0;
+    sliderFiberRate.value = 0;
+    updateFiberRateLabel(0);
+    modeHighBtn.classList.remove('active');
+    modeNoneBtn.classList.remove('active');
     initWorld();
+    togglePause(true);
   });
 
   chkLabels.addEventListener('change', (e) => { state.showLabels = e.target.checked; });
@@ -1766,10 +1834,17 @@
       infoDesc.textContent = info.desc;
     }
 
-    // 若點擊/觸控在腸腔或外黏液層上緣，直接於該處生成 2 條膳食纖維方便互動測試
-    if (my < Y.outerMucusTop + 25 && fibers.length < 35) {
-      spawnFiber(mx - 10, my);
-      spawnFiber(mx + 10, my + 8);
+    // 若點擊/觸控在腸腔或外黏液層上緣，依據選取的筆刷投放對應物質
+    if (my < Y.outerMucusTop + 25) {
+      if (state.spawnBrush === 'fiber' && fibers.length < 35) {
+        spawnFiber(mx - 10, my);
+        spawnFiber(mx + 10, my + 8);
+      } else if (state.spawnBrush === 'probiotic' && bacteria.length < 45) {
+        const t = Math.random() < 0.55 ? 'butyrate_rod' : 'bifido';
+        bacteria.push(createBacterium(t, mx, my));
+      } else if (state.spawnBrush === 'mucin' && bacteria.length < 45) {
+        bacteria.push(createBacterium('mucin_degrader', mx, my));
+      }
     }
   }
 
@@ -1807,11 +1882,20 @@
     } else if (isPointerDown) {
       e.preventDefault();
       showTooltipAt(mx, my);
-      // 支援手指在腸腔滑動時連續撒入膳食纖維
+      // 支援手指在腸腔滑動時連續撒入對應物質
       const now = performance.now();
-      if (my < Y.outerMucusTop + 20 && now - lastDragSpawnTime > 120 && fibers.length < 35) {
-        spawnFiber(mx, my);
-        lastDragSpawnTime = now;
+      if (my < Y.outerMucusTop + 20 && now - lastDragSpawnTime > 120) {
+        if (state.spawnBrush === 'fiber' && fibers.length < 35) {
+          spawnFiber(mx, my);
+          lastDragSpawnTime = now;
+        } else if (state.spawnBrush === 'probiotic' && bacteria.length < 45) {
+          const t = Math.random() < 0.55 ? 'butyrate_rod' : 'bifido';
+          bacteria.push(createBacterium(t, mx, my));
+          lastDragSpawnTime = now;
+        } else if (state.spawnBrush === 'mucin' && bacteria.length < 45) {
+          bacteria.push(createBacterium('mucin_degrader', mx, my));
+          lastDragSpawnTime = now;
+        }
       }
     }
   }, { passive: false });
@@ -1855,5 +1939,6 @@
 
   resizeCanvas();
   initWorld();
+  togglePause(true);
   animate();
 })();
