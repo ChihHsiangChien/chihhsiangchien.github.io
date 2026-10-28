@@ -136,9 +136,92 @@
       width: 100%;
       height: 100%;
       display: block;
-      cursor: crosshair;
+      cursor: grab;
       touch-action: none;
-      /* 停用畫布預設手勢，確保觸控拖曳放大鏡不引發瀏覽器縮放與捲動 */
+      /* 停用畫布預設手勢，確保觸控拖曳放大鏡與縮放平移不引發瀏覽器縮放與捲動 */
+    }
+
+    canvas:active {
+      cursor: grabbing;
+    }
+
+    /* Floating Zoom & Pan Controls */
+    .canvas-zoom-toolbar {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: rgba(15, 23, 42, 0.88);
+      backdrop-filter: blur(10px);
+      padding: 3px 6px;
+      border-radius: 8px;
+      border: 1px solid var(--panel-border);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+      z-index: 20;
+    }
+
+    .zoom-btn {
+      background: rgba(255, 255, 255, 0.08);
+      color: #f8fafc;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 6px;
+      width: 26px;
+      height: 26px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      user-select: none;
+      touch-action: manipulation;
+    }
+
+    .zoom-btn.text-btn {
+      width: auto;
+      padding: 0 7px;
+      font-size: 0.72rem;
+      font-weight: 600;
+    }
+
+    .zoom-btn:hover {
+      background: rgba(56, 189, 248, 0.25);
+      border-color: #38bdf8;
+      color: #38bdf8;
+      transform: translateY(-1px);
+    }
+
+    .zoom-badge {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #38bdf8;
+      min-width: 40px;
+      text-align: center;
+      padding: 0 4px;
+      user-select: none;
+    }
+
+    /* Floating Navigation Tip */
+    .canvas-nav-hint {
+      position: absolute;
+      bottom: 8px;
+      left: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(15, 23, 42, 0.82);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 0.7rem;
+      color: #cbd5e1;
+      pointer-events: none;
+      z-index: 15;
+      user-select: none;
     }
 
     /* Tooltip */
@@ -501,6 +584,21 @@
       <div class="canvas-wrapper" id="canvas-container">
         <canvas id="stemCanvas"></canvas>
         <div id="tooltip"></div>
+
+        <!-- Floating Zoom & Pan Controls -->
+        <div class="canvas-zoom-toolbar" id="zoomToolbar">
+          <button id="btn-zoom-in" class="zoom-btn" title="放大視角 (滾輪向上)">＋</button>
+          <button id="btn-zoom-out" class="zoom-btn" title="縮小視角 (滾輪向下)">－</button>
+          <button id="btn-zoom-fit" class="zoom-btn text-btn" title="全覽巨木 (縮小以容納全部年輪)">全覽</button>
+          <button id="btn-zoom-reset" class="zoom-btn text-btn" title="重設為 100% 原始比例">100%</button>
+          <span class="zoom-badge" id="zoomBadge">100%</span>
+        </div>
+
+        <!-- Floating Navigation Tip -->
+        <div class="canvas-nav-hint" id="canvasNavHint">
+          <span class="hint-icon">🔍</span>
+          <span id="hintText">滾輪縮放・拖曳畫布探索巨大樹幹</span>
+        </div>
       </div>
 
       <!-- Controls -->
@@ -509,7 +607,7 @@
         <div class="timeline-container">
           <label for="timeSlider">生長時間 / 年輪累積：</label>
           <div class="slider-wrapper">
-            <input type="range" id="timeSlider" class="range-slider" min="0" max="5" step="0.05" value="5">
+            <input type="range" id="timeSlider" class="range-slider" min="0" max="5" step="0.05" value="0">
             <div class="slider-ticks" id="sliderTicks">
               <span>初生期 (0年)</span>
               <span>形成層環化</span>
@@ -520,7 +618,7 @@
               <span>5年輪 (幼樹)</span>
             </div>
           </div>
-          <div class="time-badge" id="timeDisplay">第 5 年輪 (5.0 年)</div>
+          <div class="time-badge" id="timeDisplay">初生構造 (第 0 年)</div>
         </div>
 
         <!-- Buttons Row -->
@@ -540,13 +638,13 @@
 
           <!-- Quick Jumps (5-year default) -->
           <div class="btn-group" id="quickButtonsGroup">
-            <button class="btn quick-btn" data-year="0">初生期</button>
+            <button class="btn quick-btn active" data-year="0">初生期</button>
             <button class="btn quick-btn" data-year="0.5">形成層環化</button>
             <button class="btn quick-btn" data-year="1.0">第 1 年</button>
             <button class="btn quick-btn" data-year="2.0">第 2 年</button>
             <button class="btn quick-btn" data-year="3.0">第 3 年</button>
             <button class="btn quick-btn" data-year="4.0">第 4 年</button>
-            <button class="btn quick-btn active" data-year="5.0">第 5 年 (幼樹)</button>
+            <button class="btn quick-btn" data-year="5.0">第 5 年 (幼樹)</button>
           </div>
         </div>
       </div>
@@ -578,7 +676,7 @@
 
     // State Variables
     let maxYears = 5; // default 5 years (幼樹模式)
-    let growthTime = 5.0; // default 5.0 (五年幼樹)
+    let growthTime = 0.0; // default 0.0 (初生期開始)
     let isPlaying = false;
     let isLooping = true;
     let showBarkWoodRegions = true;
@@ -587,6 +685,19 @@
     let isHoveringXylem = false;
     let highlightedRegion = null; // 'bark', 'wood', 'cambium', or null
     let isolationMode = 'all'; // 'all' | 'bark' | 'wood' (只顯示樹皮或木材)
+
+    // Zoom & Pan State (支援自由縮放與平移探索超大巨木)
+    let zoom = 1.0;
+    let panX = 0;
+    let panY = 0;
+    let isDragging = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let panStartX = 0;
+    let panStartY = 0;
+    let hasMovedSinceDown = false;
+    const minZoom = 0.25;
+    const maxZoom = 4.0;
 
     const btnIsolateAll = document.getElementById('btn-isolate-all');
     const btnIsolateBark = document.getElementById('btn-isolate-bark');
@@ -656,48 +767,69 @@
       const h = container.clientHeight;
       const cx = w / 2;
       const cy = h / 2;
-      const maxScreenR = Math.min(w, h) * 0.36;
+      const minDim = Math.min(w, h);
+      const scale = minDim / 520; // 響應式螢幕基準縮放比
 
-      // Unscaled world dimensions
-      const rPith = 60;
-      const rBundle0 = 120; // Radius where initial 8 bundles sit
       const bundleCount = 8;
-
-      // Secondary growth progression (from t = 0.8 to maxYears)
       const secT = Math.max(0, t - 0.8);
-      const maxSecT = (maxYears === 5) ? 4.2 : 19.2;
-      const progress = Math.min(1.0, secT / maxSecT); // 0.0 to 1.0
 
-      // Radial thicknesses in world units
-      const maxWoodTh = (maxYears === 5) ? 115 : 160;
-      const woodThickness = maxWoodTh * progress;           // Secondary xylem
-      const phloemThickness = (maxYears === 5 ? 26 : 34) * progress;          // Secondary phloem
-      const corkThickness = 26 + (maxYears === 5 ? 16 : 22) * progress;        // Outer bark / cork
+      // 初生期共同解剖基準 (Year 0 初生構造，兩模式一致)
+      const rPith = 38 * scale;
+      const rInitialCambium = 76 * scale;
 
-      // World radii from inside to outside
-      const worldCambium = rBundle0 + woodThickness;
-      const worldPrimaryPhloem = worldCambium + phloemThickness + 14;
-      const worldOuterStem = worldPrimaryPhloem + corkThickness;
+      if (maxYears === 5) {
+        // 5 年幼樹模式 (幼樹期：間距清晰、適度增粗、一屏完整收納)
+        const maxSecT = 4.2;
+        const progress = Math.min(1.0, secT / maxSecT);
+        const woodThickness = 96 * scale * progress;
+        const phloemThickness = (18 + 12 * progress) * scale;
+        const corkThickness = (18 + 10 * progress) * scale;
 
-      // Stem expands on screen as it grows (68% or 55% at Year 0 to 100% at maxYears)
-      const minExp = (maxYears === 5) ? 0.68 : 0.55;
-      const visualExpansion = minExp + (1.0 - minExp) * progress;
-      const screenOuterStem = maxScreenR * visualExpansion;
-      const scale = screenOuterStem / worldOuterStem;
+        const rCambium = rInitialCambium + woodThickness;
+        const rPhloem = rCambium + phloemThickness;
+        const rOuterStem = rPhloem + corkThickness;
 
-      return {
-        cx,
-        cy,
-        bundleCount,
-        secT,
-        progress,
-        scale,
-        rCenterPith: rPith * scale,
-        rInitialCambium: rBundle0 * scale,
-        rCambium: worldCambium * scale,
-        rPhloem: worldPrimaryPhloem * scale,
-        rOuterStem: screenOuterStem
-      };
+        return {
+          cx,
+          cy,
+          bundleCount,
+          secT,
+          progress,
+          scale,
+          rCenterPith: rPith,
+          rInitialCambium,
+          rCambium,
+          rPhloem,
+          rOuterStem
+        };
+      } else {
+        // 20 年成樹模式 (巨木模式：顯著增粗、允許超出畫布、看起來很巨)
+        const maxSecT = 19.2;
+        const progress = Math.min(1.0, secT / maxSecT);
+
+        // 每道年輪皆具備真實顯著寬度，20年終期次生木質部累積厚達 490px*scale
+        const woodThickness = 490 * scale * progress;
+        const phloemThickness = (20 + 36 * progress) * scale;
+        const corkThickness = (20 + 40 * progress) * scale;
+
+        const rCambium = rInitialCambium + woodThickness;
+        const rPhloem = rCambium + phloemThickness;
+        const rOuterStem = rPhloem + corkThickness;
+
+        return {
+          cx,
+          cy,
+          bundleCount,
+          secT,
+          progress,
+          scale,
+          rCenterPith: rPith,
+          rInitialCambium,
+          rCambium,
+          rPhloem,
+          rOuterStem
+        };
+      }
     }
 
     // Helper: Draw egg-shaped bundle (Primary Xylem & Phloem)
@@ -743,7 +875,13 @@
       const geom = getStemGeometry(growthTime);
       const { cx, cy, rCenterPith, rInitialCambium, rCambium, rPhloem, rOuterStem, bundleCount, secT, scale } = geom;
 
-      // 1. Draw Outermost Stem Boundary & Base (依據「全部 / 只顯示樹皮 / 只顯示木材」動態調整)
+      // ─── 1. STEM TRANSFORMED DRAWING (WITH ZOOM & PAN) ───
+      ctx.save();
+      ctx.translate(cx + panX, cy + panY);
+      ctx.scale(zoom, zoom);
+      ctx.translate(-cx, -cy);
+
+      // (A) Draw Outermost Stem Boundary & Base
       ctx.save();
       if (isolationMode === 'bark') {
         // 【只顯示樹皮】：中心木材部分挖空，僅繪製形成層至外緣樹皮的圓環
@@ -809,12 +947,12 @@
       }
       ctx.restore();
 
-      // 2. Secondary Growth: Wood (Secondary Xylem) Rings & Bark Layers
+      // (B) Secondary Growth: Wood (Secondary Xylem) Rings & Bark Layers
       if (growthTime > 0.8) {
         const totalRings = Math.floor(secT);
         const partialRing = secT - totalRings;
         const totalWoodThickness = rCambium - rInitialCambium;
-        const activeYears = Math.min(20, Math.ceil(secT));
+        const activeYears = Math.min(maxYears, Math.ceil(secT));
 
         // Draw Wood Layers (次生木質部) - 僅在非「只顯示樹皮」模式下繪製
         if (isolationMode !== 'bark') {
@@ -827,41 +965,43 @@
             const outerR = rInitialCambium + (((yr - 1) + weight) / secT) * totalWoodThickness;
 
             // Heartwood (心材) vs Sapwood (邊材) 分布：
-            // 內側老木質部形成深色心材，外側 3~4 層為活躍邊材
-            const heartwoodBoundary = Math.max(0, activeYears - 4);
-            const isDeepHeartwood = (activeYears >= 10 && yr <= activeYears * 0.4);
-            const isHeartwood = (activeYears >= 5 && yr <= heartwoodBoundary);
+            // 內側老木質部形成深色心材，外側 3~5 層為活躍邊材
+            const sapwoodCount = (maxYears === 20) ? 5 : 2;
+            const isSapwood = (yr > activeYears - sapwoodCount);
+            const isDeepHeartwood = (maxYears === 20 && yr <= activeYears * 0.35);
 
             ctx.beginPath();
             ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
             ctx.arc(cx, cy, innerR, 0, Math.PI * 2, true);
+
             if (isDeepHeartwood) {
+              // 深層心材 (沉積單寧樹脂、顏色厚實深褐紅)
+              ctx.fillStyle = (yr % 2 === 0) ? '#852e12' : '#9a3412';
+            } else if (!isSapwood) {
+              // 中層心材 (暖琥珀焦糖色)
               ctx.fillStyle = (yr % 2 === 0) ? '#b45309' : '#c2410c';
-            } else if (isHeartwood) {
-              ctx.fillStyle = (yr % 2 === 0) ? '#d97706' : '#ea580c';
             } else {
+              // 活躍邊材 (亮金黃輸水層)
               ctx.fillStyle = (yr % 2 === 0) ? '#f59e0b' : '#fbbf24';
             }
             ctx.fill();
 
-            // Late wood annual ring boundary line
+            // Late wood annual ring boundary line (秋材年輪線)
             ctx.beginPath();
             ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
-            ctx.strokeStyle = isDeepHeartwood ? '#7c2d12' : (isHeartwood ? '#9a3412' : '#b45309');
-            ctx.lineWidth = (activeYears > 12) ? 1.2 : 1.6;
+            ctx.strokeStyle = isDeepHeartwood ? '#541c0a' : (!isSapwood ? '#78350f' : '#b45309');
+            ctx.lineWidth = (activeYears > 12) ? 1.4 : 1.8;
             ctx.stroke();
           }
-
         }
 
         // Draw Secondary Phloem Layers (次生韌皮部) - 僅在非「只顯示木材」模式下繪製
         if (isolationMode !== 'wood') {
-          // 生物學規律：形成層向外分裂，最新生成的韌皮部「緊靠形成層外側」，較老層層被往外推擠
           const totalPhloemThickness = rPhloem - rCambium;
           const unitPhloemTh = totalPhloemThickness / secT;
           const currentWeight = partialRing || 1.0;
 
-          // 1. 最新生長的一年 (Current newest year - 緊貼形成層外緣)
+          // 1. 最新生長的一年 (緊貼形成層外緣)
           const newestOuterR = rCambium + currentWeight * unitPhloemTh;
           ctx.beginPath();
           ctx.arc(cx, cy, newestOuterR, 0, Math.PI * 2);
@@ -875,17 +1015,16 @@
           ctx.lineWidth = 1.3;
           ctx.stroke();
 
-          // 2. 過去歷年的舊韌皮部 (由內向外依序為 Year N-1, Year N-2 ... 到最外圈的 Year 1)
+          // 2. 過去歷年的舊韌皮部 (由內向外依序排列，外側受壓)
           const pastYears = activeYears - 1;
           for (let p = 1; p <= pastYears; p++) {
             const phloemInnerR = rCambium + currentWeight * unitPhloemTh + (p - 1) * unitPhloemTh;
             const phloemOuterR = phloemInnerR + unitPhloemTh;
-            const yrNum = activeYears - p; // 離形成層越遠，年份越早
+            const yrNum = activeYears - p;
 
             ctx.beginPath();
             ctx.arc(cx, cy, phloemOuterR, 0, Math.PI * 2);
             ctx.arc(cx, cy, phloemInnerR, 0, Math.PI * 2, true);
-            // 越外側(年代越久遠)顏色越深/受擠壓
             ctx.fillStyle = (yrNum % 2 === 0) ? '#10b981' : '#15803d';
             ctx.fill();
 
@@ -898,7 +1037,7 @@
         }
       }
 
-      // 3. Central Pith (髓) - 僅在非「只顯示樹皮」模式下繪製
+      // (C) Central Pith (髓) - 僅在非「只顯示樹皮」模式下繪製
       if (isolationMode !== 'bark') {
         ctx.beginPath();
         ctx.arc(cx, cy, rCenterPith, 0, Math.PI * 2);
@@ -906,7 +1045,7 @@
         ctx.fill();
       }
 
-      // 4. Draw Initial 8 Primary Xylem Bundles (初生木質部) - 僅在非「只顯示樹皮」模式下繪製
+      // (D) Draw Initial 8 Primary Xylem Bundles (初生木質部)
       if (isolationMode !== 'bark') {
         for (let i = 0; i < bundleCount; i++) {
           const angle = (i * Math.PI * 2) / bundleCount - Math.PI / 2;
@@ -926,9 +1065,8 @@
         }
       }
 
-      // 5. Vascular Cambium (維管束形成層)
+      // (E) Vascular Cambium (維管束形成層)
       if (growthTime < 0.7) {
-        // Individual bundles with bridging fascicles
         for (let i = 0; i < bundleCount; i++) {
           const angle = (i * Math.PI * 2) / bundleCount - Math.PI / 2;
           const bx = cx + Math.cos(angle) * rInitialCambium;
@@ -979,7 +1117,7 @@
         ctx.stroke();
       }
 
-      // 6. Primary Phloem Bundles (初生韌皮部，向外推移) - 僅在非「只顯示木材」模式下繪製
+      // (F) Primary Phloem Bundles (初生韌皮部，向外推移)
       if (isolationMode !== 'wood') {
         for (let i = 0; i < bundleCount; i++) {
           const angle = (i * Math.PI * 2) / bundleCount - Math.PI / 2;
@@ -1000,20 +1138,49 @@
         }
       }
 
-      // 7. Outer Cork / Bark Texture (木栓層) - 僅在非「只顯示木材」模式下繪製
+      // (G) Outer Cork / Bark Texture (木栓層與粗糙樹皮紋理)
       if (isolationMode !== 'wood' && growthTime >= 1.5) {
         ctx.save();
-        ctx.strokeStyle = 'rgba(120, 53, 15, 0.45)';
-        ctx.lineWidth = 2.5;
+        const is20yr = (maxYears === 20 && growthTime >= 3.0);
+        const fissureCount = is20yr ? 48 : 28;
+        const fissureDepth = is20yr ? (7 * scale) : (3.5 * scale);
+
+        // 樹皮外緣深色輪廓與天然木栓凹凸
+        ctx.strokeStyle = is20yr ? '#3f1f0d' : 'rgba(120, 53, 15, 0.55)';
+        ctx.lineWidth = is20yr ? 3.5 : 2.5;
         ctx.beginPath();
-        ctx.arc(cx, cy, rOuterStem - 3 * scale, 0, Math.PI * 2);
+        for (let i = 0; i <= fissureCount; i++) {
+          const th = (i * Math.PI * 2) / fissureCount;
+          const rVar = ((i % 2 === 0) ? fissureDepth : -fissureDepth * 0.5) * Math.sin(i * 3.7);
+          const r = rOuterStem - 2 * scale + rVar;
+          const fx = cx + Math.cos(th) * r;
+          const fy = cy + Math.sin(th) * r;
+          if (i === 0) ctx.moveTo(fx, fy);
+          else ctx.lineTo(fx, fy);
+        }
+        ctx.closePath();
         ctx.stroke();
+
+        // 巨木成樹放射狀木栓裂隙紋路
+        if (is20yr && growthTime >= 5.0) {
+          ctx.strokeStyle = 'rgba(43, 20, 8, 0.75)';
+          ctx.lineWidth = 1.8;
+          for (let i = 0; i < 24; i++) {
+            const crackAngle = (i * Math.PI * 2) / 24 + ((i % 3) * 0.05);
+            const crackLen = (14 + (i % 5) * 8) * scale;
+            const cosA = Math.cos(crackAngle);
+            const sinA = Math.sin(crackAngle);
+            ctx.beginPath();
+            ctx.moveTo(cx + cosA * (rOuterStem - crackLen), cy + sinA * (rOuterStem - crackLen));
+            ctx.lineTo(cx + cosA * (rOuterStem + 2), cy + sinA * (rOuterStem + 2));
+            ctx.stroke();
+          }
+        }
         ctx.restore();
       }
 
-      // 8. BARK VS WOOD VISUAL INSPECTOR OVERLAYS
+      // (H) BARK VS WOOD VISUAL INSPECTOR OVERLAYS
       if (isolationMode === 'bark') {
-        // 只顯示樹皮：高亮樹皮圓環外廓
         ctx.save();
         ctx.beginPath();
         ctx.arc(cx, cy, rOuterStem, 0, Math.PI * 2);
@@ -1029,7 +1196,6 @@
         ctx.stroke();
         ctx.restore();
       } else if (isolationMode === 'wood') {
-        // 只顯示木材：高亮木材圓柱外圈
         ctx.save();
         ctx.beginPath();
         ctx.arc(cx, cy, rCambium, 0, Math.PI * 2);
@@ -1039,54 +1205,47 @@
         ctx.restore();
       } else if (showBarkWoodRegions || highlightedRegion) {
         ctx.save();
-
-        // (A) WOOD ZONE HIGHLIGHT (形成層以內) - 乾淨實線邊界
         if (!highlightedRegion || highlightedRegion === 'wood') {
           ctx.beginPath();
           ctx.arc(cx, cy, rCambium - 2, 0, Math.PI * 2);
           ctx.fillStyle = COLORS.woodOverlay;
           ctx.fill();
-
           ctx.strokeStyle = '#f59e0b';
           ctx.lineWidth = 2.0;
           ctx.stroke();
         }
-
-        // (B) BARK ZONE HIGHLIGHT (形成層以外) - 最外圈樹皮採用平滑實線
         if (!highlightedRegion || highlightedRegion === 'bark') {
           ctx.beginPath();
           ctx.arc(cx, cy, rOuterStem, 0, Math.PI * 2);
           ctx.arc(cx, cy, rCambium + 2, 0, Math.PI * 2, true);
           ctx.fillStyle = COLORS.barkOverlay;
           ctx.fill();
-
           ctx.strokeStyle = '#c084fc';
           ctx.lineWidth = 2.0;
           ctx.stroke();
         }
-
-        // (C) VASCULAR CAMBIUM HIGHLIGHT (分生分界線) - 乾淨實線
         ctx.beginPath();
         ctx.arc(cx, cy, rCambium, 0, Math.PI * 2);
         ctx.strokeStyle = '#0284c7';
         ctx.lineWidth = 3.0;
         ctx.stroke();
-
         ctx.restore();
       }
 
-      // 9. LABELS & ANNOTATIONS
+      ctx.restore(); // ─── END OF STEM TRANSFORMED DRAWING ───
+
+      // ─── 2. SCREEN SPACE OVERLAYS: LABELS & MAGNIFIER ───
       if (showLabels) {
         drawAnnotations(ctx, geom);
       }
 
-      // 10. MICROSCOPIC MAGNIFIER LOUPE (春材與秋材微觀構造放大鏡 - 僅在5年幼樹模式啟用)
+      // MICROSCOPIC MAGNIFIER LOUPE (春材與秋材微觀構造放大鏡 - 僅在5年幼樹模式啟用)
       if (maxYears === 5 && showMagnifier && isHoveringXylem && mouseX > 0 && mouseY > 0) {
         drawMicroscopeMagnifier(ctx, mouseX, mouseY, geom);
       }
     }
 
-    // Helper: Draw Clean Educational Labels with Leader Lines
+    // Helper: Draw Clean Educational Labels with Leader Lines (螢幕座標投影，不隨縮放失真)
     function drawAnnotations(ctx, geom) {
       const w = container.clientWidth;
       const h = container.clientHeight;
@@ -1094,52 +1253,78 @@
       ctx.save();
       ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
-      function drawPin(text, targetX, targetY, labelX, labelY, color, subtext) {
-        ctx.beginPath();
-        ctx.moveTo(targetX, targetY);
-        ctx.lineTo(labelX, labelY);
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 1.6;
-        ctx.stroke();
+      function drawPin(text, worldTargetX, worldTargetY, preferredSide, color, subtext) {
+        // 將世界座標換算為當前縮放與平移下的螢幕座標
+        const screenTargetX = cx + panX + (worldTargetX - cx) * zoom;
+        const screenTargetY = cy + panY + (worldTargetY - cy) * zoom;
 
-        // Pin target circle
-        ctx.beginPath();
-        ctx.arc(targetX, targetY, 4, 0, Math.PI * 2);
-        ctx.fillStyle = color;
-        ctx.fill();
-        ctx.strokeStyle = '#0f172a';
-        ctx.lineWidth = 1;
-        ctx.stroke();
+        // 若標註點超出視窗過遠則暫時隱藏
+        if (screenTargetX < -150 || screenTargetX > w + 150 || screenTargetY < -150 || screenTargetY > h + 150) {
+          return;
+        }
 
-        // Label Tag Background with safe canvas padding
         const padX = 8;
         const metrics = ctx.measureText(text);
         const boxW = metrics.width + padX * 2;
         const boxH = subtext ? 34 : 22;
-        const isRight = labelX > cx;
-        const rectX = isRight ? Math.min(w - boxW - 12, labelX) : Math.max(12, labelX - boxW);
-        const rectY = Math.max(12, Math.min(h - boxH - 12, labelY - 14));
 
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+        let labelX, labelY;
+        if (preferredSide === 'top-left') {
+          labelX = Math.max(14, Math.min(w - boxW - 14, screenTargetX - boxW - 36));
+          labelY = Math.max(14, Math.min(h - boxH - 14, screenTargetY - 24));
+        } else if (preferredSide === 'bottom-left') {
+          labelX = Math.max(14, Math.min(w - boxW - 14, screenTargetX - boxW - 36));
+          labelY = Math.max(14, Math.min(h - boxH - 14, screenTargetY + 20));
+        } else if (preferredSide === 'right') {
+          labelX = Math.max(14, Math.min(w - boxW - 14, screenTargetX + 36));
+          labelY = Math.max(14, Math.min(h - boxH - 14, screenTargetY - 14));
+        } else {
+          // center / pith
+          labelX = Math.max(14, Math.min(w - boxW - 14, screenTargetX + 35));
+          labelY = Math.max(14, Math.min(h - boxH - 14, screenTargetY + 30));
+        }
+
+        // 引線繪製
+        const anchorX = (labelX > screenTargetX) ? labelX : (labelX + boxW);
+        const anchorY = labelY + boxH / 2;
+
+        ctx.beginPath();
+        ctx.moveTo(screenTargetX, screenTargetY);
+        ctx.lineTo(anchorX, anchorY);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+
+        // 標註定位圓點
+        ctx.beginPath();
+        ctx.arc(screenTargetX, screenTargetY, 4.5, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+
+        // 標籤卡片底色與框線
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
         ctx.strokeStyle = color;
         ctx.lineWidth = 1.4;
         ctx.beginPath();
-        safeRoundRect(ctx, rectX, rectY, boxW, boxH, 6);
+        safeRoundRect(ctx, labelX, labelY, boxW, boxH, 6);
         ctx.fill();
         ctx.stroke();
 
-        // Text
+        // 標籤文字
         ctx.fillStyle = '#ffffff';
-        ctx.fillText(text, rectX + padX, rectY + 14);
+        ctx.fillText(text, labelX + padX, labelY + 14);
         if (subtext) {
           ctx.font = '10px -apple-system, sans-serif';
           ctx.fillStyle = '#94a3b8';
-          ctx.fillText(subtext, rectX + padX, rectY + 27);
+          ctx.fillText(subtext, labelX + padX, labelY + 27);
           ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
         }
       }
 
-      // (1) Bark Label (Top Left) - 僅在非「只看木材」時顯示
+      // (1) Bark Label (Top Left)
       if (isolationMode !== 'wood') {
         const barkMidR = (rCambium + rOuterStem) / 2;
         const barkAngle = -Math.PI * 0.75;
@@ -1147,29 +1332,27 @@
           '樹皮 (Bark)',
           cx + Math.cos(barkAngle) * barkMidR,
           cy + Math.sin(barkAngle) * barkMidR,
-          cx - rOuterStem - 24,
-          cy - rOuterStem * 0.55,
+          'top-left',
           '#c084fc',
           (isolationMode === 'bark') ? '目前單獨顯示（形成層以內已隱藏）' : '形成層以外全部組織'
         );
       }
 
-      // (2) Wood Label (Bottom Left) - 僅在非「只看樹皮」時顯示
+      // (2) Wood Label (Bottom Left)
       if (isolationMode !== 'bark') {
         const woodMidR = (rCenterPith + rCambium) / 2;
         const woodAngle = Math.PI * 0.75;
         drawPin(
-          '木材 (Wood / 年輪)',
+          (maxYears === 20 && growthTime >= 5) ? '木材 (Wood / 20年輪・心邊材)' : '木材 (Wood / 年輪)',
           cx + Math.cos(woodAngle) * woodMidR,
           cy + Math.sin(woodAngle) * woodMidR,
-          cx - rOuterStem - 24,
-          cy + rOuterStem * 0.55,
+          'bottom-left',
           '#f59e0b',
           (isolationMode === 'wood') ? '目前單獨顯示（形成層以外已隱藏）' : '形成層以內全部木質部'
         );
       }
 
-      // (3) Vascular Cambium (Right Side - Key Boundary)
+      // (3) Vascular Cambium (Right Side)
       const cambiumSubtext = (isolationMode === 'bark') ? '樹皮內側生長邊界' :
         (isolationMode === 'wood') ? '木材外側生長邊界' :
           '樹皮與木材的生長分界';
@@ -1177,20 +1360,18 @@
         '維管束形成層 (Cambium)',
         cx + rCambium,
         cy,
-        cx + rOuterStem + 18,
-        cy,
+        'right',
         '#38bdf8',
         cambiumSubtext
       );
 
-      // (4) Pith (Center) - 僅在非「只看樹皮」時顯示
+      // (4) Pith (Center)
       if (isolationMode !== 'bark') {
         drawPin(
           '髓 (Pith)',
           cx,
           cy,
-          cx + 38,
-          cy + 50,
+          'center',
           '#94a3b8',
           '中心薄壁儲藏組織'
         );
@@ -1199,21 +1380,235 @@
       ctx.restore();
     }
 
-    // --- INTERACTIVE HOVER & TOOLTIP ---
-    function handlePointerMove(e) {
+    // --- ZOOM & PAN CONTROLS & INTERACTION ---
+    function updateZoomUI() {
+      const badge = document.getElementById('zoomBadge');
+      if (badge) {
+        badge.innerText = Math.round(zoom * 100) + '%';
+      }
+    }
+
+    function zoomIn() {
+      const newZoom = Math.min(maxZoom, zoom * 1.25);
+      panX = panX * (newZoom / zoom);
+      panY = panY * (newZoom / zoom);
+      zoom = newZoom;
+      updateZoomUI();
+      render();
+    }
+
+    function zoomOut() {
+      const newZoom = Math.max(minZoom, zoom * 0.8);
+      panX = panX * (newZoom / zoom);
+      panY = panY * (newZoom / zoom);
+      zoom = newZoom;
+      updateZoomUI();
+      render();
+    }
+
+    function zoomToFit() {
+      const geom = getStemGeometry(growthTime);
+      const padding = 36;
+      const availW = container.clientWidth - padding * 2;
+      const availH = container.clientHeight - padding * 2;
+      const stemDia = geom.rOuterStem * 2;
+      const targetZoom = Math.min(1.0, Math.min(availW / stemDia, availH / stemDia));
+      zoom = Math.max(minZoom, targetZoom);
+      panX = 0;
+      panY = 0;
+      updateZoomUI();
+      render();
+    }
+
+    function resetView() {
+      zoom = 1.0;
+      panX = 0;
+      panY = 0;
+      updateZoomUI();
+      render();
+    }
+
+    const btnZoomIn = document.getElementById('btn-zoom-in');
+    const btnZoomOut = document.getElementById('btn-zoom-out');
+    const btnZoomFit = document.getElementById('btn-zoom-fit');
+    const btnZoomReset = document.getElementById('btn-zoom-reset');
+
+    if (btnZoomIn) btnZoomIn.addEventListener('click', zoomIn);
+    if (btnZoomOut) btnZoomOut.addEventListener('click', zoomOut);
+    if (btnZoomFit) btnZoomFit.addEventListener('click', zoomToFit);
+    if (btnZoomReset) btnZoomReset.addEventListener('click', resetView);
+
+    // Mouse Wheel Zoom (Centered at Cursor)
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
       const rect = canvas.getBoundingClientRect();
-      mouseX = e.clientX - rect.left;
-      mouseY = e.clientY - rect.top;
+      const screenX = e.clientX - rect.left;
+      const screenY = e.clientY - rect.top;
 
       const geom = getStemGeometry(growthTime);
-      const dx = mouseX - geom.cx;
-      const dy = mouseY - geom.cy;
+      const cx = geom.cx;
+      const cy = geom.cy;
+
+      const worldX = (screenX - cx - panX) / zoom + cx;
+      const worldY = (screenY - cy - panY) / zoom + cy;
+
+      const zoomFactor = e.deltaY < 0 ? 1.15 : 0.87;
+      const newZoom = Math.min(maxZoom, Math.max(minZoom, zoom * zoomFactor));
+      if (Math.abs(newZoom - zoom) < 0.001) return;
+
+      panX = screenX - cx - (worldX - cx) * newZoom;
+      panY = screenY - cy - (worldY - cy) * newZoom;
+      zoom = newZoom;
+
+      updateZoomUI();
+      render();
+    }, { passive: false });
+
+    // Mouse Drag Pan
+    canvas.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      isDragging = true;
+      hasMovedSinceDown = false;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      panStartX = panX;
+      panStartY = panY;
+      canvas.style.cursor = 'grabbing';
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      const dx = e.clientX - dragStartX;
+      const dy = e.clientY - dragStartY;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+        hasMovedSinceDown = true;
+        tooltip.style.display = 'none';
+      }
+      panX = panStartX + dx;
+      panY = panStartY + dy;
+      render();
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (isDragging) {
+        isDragging = false;
+        canvas.style.cursor = (maxYears === 5 && showMagnifier && isHoveringXylem) ? 'crosshair' : 'grab';
+      }
+    });
+
+    // Touch Drag Pan & 2-Finger Pinch Zoom
+    let touchStartDist = 0;
+    let touchStartZoom = 1;
+    let isPinching = false;
+
+    canvas.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) {
+        isDragging = true;
+        isPinching = false;
+        hasMovedSinceDown = false;
+        dragStartX = e.touches[0].clientX;
+        dragStartY = e.touches[0].clientY;
+        panStartX = panX;
+        panStartY = panY;
+      } else if (e.touches.length === 2) {
+        isDragging = false;
+        isPinching = true;
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        touchStartDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        touchStartZoom = zoom;
+      }
+    }, { passive: false });
+
+    canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      if (e.touches.length === 1 && isDragging) {
+        const dx = e.touches[0].clientX - dragStartX;
+        const dy = e.touches[0].clientY - dragStartY;
+        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+          hasMovedSinceDown = true;
+          tooltip.style.display = 'none';
+        }
+        panX = panStartX + dx;
+        panY = panStartY + dy;
+        render();
+      } else if (e.touches.length === 2 && isPinching) {
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        const currentDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        if (touchStartDist > 10) {
+          const factor = currentDist / touchStartDist;
+          const rect = canvas.getBoundingClientRect();
+          const midScreenX = (t1.clientX + t2.clientX) / 2 - rect.left;
+          const midScreenY = (t1.clientY + t2.clientY) / 2 - rect.top;
+
+          const geom = getStemGeometry(growthTime);
+          const cx = geom.cx;
+          const cy = geom.cy;
+          const worldX = (midScreenX - cx - panX) / zoom + cx;
+          const worldY = (midScreenY - cy - panY) / zoom + cy;
+
+          const newZoom = Math.min(maxZoom, Math.max(minZoom, touchStartZoom * factor));
+          panX = midScreenX - cx - (worldX - cx) * newZoom;
+          panY = midScreenY - cy - (worldY - cy) * newZoom;
+          zoom = newZoom;
+
+          updateZoomUI();
+          render();
+        }
+      }
+    }, { passive: false });
+
+    canvas.addEventListener('touchend', (e) => {
+      if (e.touches.length === 0) {
+        isDragging = false;
+        isPinching = false;
+        if (!hasMovedSinceDown && e.changedTouches.length > 0) {
+          handlePointerMove({
+            clientX: e.changedTouches[0].clientX,
+            clientY: e.changedTouches[0].clientY
+          });
+        }
+      } else if (e.touches.length === 1) {
+        isPinching = false;
+        isDragging = true;
+        dragStartX = e.touches[0].clientX;
+        dragStartY = e.touches[0].clientY;
+        panStartX = panX;
+        panStartY = panY;
+      }
+    });
+
+    // --- INTERACTIVE HOVER & TOOLTIP ---
+    function handlePointerMove(e) {
+      if (isDragging && hasMovedSinceDown) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const screenX = e.clientX - rect.left;
+      const screenY = e.clientY - rect.top;
+
+      const geom = getStemGeometry(growthTime);
+      const cx = geom.cx;
+      const cy = geom.cy;
+
+      // 投影螢幕游標至莖構造解剖世界座標
+      const worldX = (screenX - cx - panX) / zoom + cx;
+      const worldY = (screenY - cy - panY) / zoom + cy;
+
+      mouseX = worldX;
+      mouseY = worldY;
+
+      const dx = worldX - cx;
+      const dy = worldY - cy;
       const dist = Math.sqrt(dx * dx + dy * dy);
 
       const wasHovering = isHoveringXylem;
-      // Check if mouse is hovering in xylem (wood) region
       const inXylem = (dist >= geom.rCenterPith && dist <= geom.rCambium);
       isHoveringXylem = inXylem;
+
+      if (!isDragging) {
+        canvas.style.cursor = (maxYears === 5 && showMagnifier && inXylem) ? 'crosshair' : 'grab';
+      }
 
       if (maxYears === 5 && showMagnifier && isHoveringXylem) {
         tooltip.style.display = 'none';
@@ -1221,7 +1616,6 @@
         return;
       }
 
-      // If just exited xylem, re-render to clear microscope loupe
       if (wasHovering && !isHoveringXylem) {
         render();
       }
@@ -1244,8 +1638,8 @@
           • 歸屬區域：<strong>木材 (Wood)</strong><br>
           • 分界：維管束形成層以內<br>
           • 包含：初生木質部 + ${ringCount > 0 ? ringCount + ' 道次生年輪' : '初生維管束木質部'}<br>
-          • 微觀構造：<strong>春材（導管大壁薄）</strong>與<strong>秋材（導管小壁厚）</strong>交替構成年輪。`;
-      } else if (Math.abs(dist - geom.rCambium) <= 7) {
+          • 特徵：${maxYears === 20 ? '內側深色心材與外側淺色邊材' : '春材大導管與秋材厚壁細胞交替形成年輪'}。`;
+      } else if (Math.abs(dist - geom.rCambium) <= 8) {
         tooltip.innerHTML = `<strong>維管束形成層 (Vascular Cambium)</strong><br>
           • <strong>關鍵分界：樹皮與木材的生長分生組織！</strong><br>
           • <strong>向內分裂</strong> → 新生木質部（緊貼形成層內側）<br>
@@ -1271,38 +1665,7 @@
 
     canvas.addEventListener('mousemove', handlePointerMove);
     canvas.addEventListener('mouseleave', handlePointerLeave);
-    canvas.addEventListener('pointermove', handlePointerMove);
-    canvas.addEventListener('pointerleave', handlePointerLeave);
 
-    // Tablet touch support for inspecting xylem with microscope loupe
-    function handleCanvasTouch(e) {
-      if (e.touches && e.touches.length > 0) {
-        e.preventDefault();
-        const touch = e.touches[0];
-        handlePointerMove({
-          clientX: touch.clientX,
-          clientY: touch.clientY
-        });
-      }
-    }
-
-    canvas.addEventListener('touchstart', handleCanvasTouch, { passive: false });
-    canvas.addEventListener('touchmove', handleCanvasTouch, { passive: false });
-    canvas.addEventListener('touchend', handlePointerLeave);
-
-    // Tablet double-tap zoom prevention (全面禁止平板快速雙擊觸發瀏覽器縮放)
-    document.addEventListener('dblclick', (e) => {
-      e.preventDefault();
-    }, { passive: false });
-
-    let lastTouchEndTime = 0;
-    document.addEventListener('touchend', (e) => {
-      const now = Date.now();
-      if (now - lastTouchEndTime <= 300) {
-        e.preventDefault();
-      }
-      lastTouchEndTime = now;
-    }, { passive: false });
     // --- PRE-RENDERED HIGH-RESOLUTION MICROSCOPIC XYLEM ATLAS ---
     // 事先準備好完整的春材與秋材顯微高解析度繪圖（包含大導管、厚壁小導管、木射線與年輪線），
     // 放大鏡視窗直接依據游標在木質部中的相對座標與年輪位置進行動態局部取樣觀察。
@@ -1462,9 +1825,13 @@
       const h = container.clientHeight;
       const R_lens = 175; // 擴大放大鏡視野半徑 (直徑增至 350px，提供更宏大之細胞微觀全景視野)
 
+      // 換算游標在當前平移縮放下的螢幕座標
+      const screenMx = geom.cx + panX + (mx - geom.cx) * zoom;
+      const screenMy = geom.cy + panY + (my - geom.cy) * zoom;
+
       // Position loupe comfortably offset from cursor
-      let lx = (mx > geom.cx) ? (mx - R_lens - 35) : (mx + R_lens + 35);
-      let ly = (my > geom.cy) ? (my - R_lens - 15) : (my + R_lens + 15);
+      let lx = (screenMx > geom.cx) ? (screenMx - R_lens - 35) : (screenMx + R_lens + 35);
+      let ly = (screenMy > geom.cy) ? (screenMy - R_lens - 15) : (screenMy + R_lens + 15);
 
       // Clamp inside canvas bounds
       lx = Math.max(R_lens + 14, Math.min(w - R_lens - 14, lx));
@@ -1503,7 +1870,7 @@
 
       // 1. Dotted reticle leader line from cursor to lens center
       ctx.beginPath();
-      ctx.moveTo(mx, my);
+      ctx.moveTo(screenMx, screenMy);
       ctx.lineTo(lx, ly);
       ctx.strokeStyle = isAutumnWood ? '#fb923c' : '#38bdf8';
       ctx.lineWidth = 1.6;
@@ -1512,14 +1879,14 @@
 
       // Target reticle on cursor
       ctx.beginPath();
-      ctx.arc(mx, my, 8, 0, Math.PI * 2);
+      ctx.arc(screenMx, screenMy, 8, 0, Math.PI * 2);
       ctx.strokeStyle = isAutumnWood ? '#f97316' : '#38bdf8';
       ctx.lineWidth = 2;
       ctx.setLineDash([]);
       ctx.stroke();
 
       ctx.beginPath();
-      ctx.arc(mx, my, 2.5, 0, Math.PI * 2);
+      ctx.arc(screenMx, screenMy, 2.5, 0, Math.PI * 2);
       ctx.fillStyle = isAutumnWood ? '#ea580c' : '#38bdf8';
       ctx.fill();
 
@@ -1926,14 +2293,20 @@
 
       timeSlider.max = maxYears;
 
+      const navHintText = document.getElementById('hintText');
+
       if (maxYears === 5) {
-        // Re-enable Magnifier in 5-year young tree mode
+        // 5 年幼樹模式：重啟顯微放大鏡
         btnToggleMagnifier.disabled = false;
         btnToggleMagnifier.style.opacity = '1';
         btnToggleMagnifier.style.cursor = 'pointer';
         btnToggleMagnifier.title = '開關木質部顯微放大鏡 (觀察春材/秋材導管差異)';
         btnToggleMagnifier.classList.toggle('active', showMagnifier);
         btnToggleMagnifier.innerText = `顯微放大鏡: ${showMagnifier ? '開' : '關'}`;
+
+        if (navHintText) {
+          navHintText.innerText = '滾輪縮放・拖曳畫布；懸停木質部可開啟顯微鏡';
+        }
 
         sliderTicks.innerHTML = `
           <span>初生期 (0年)</span>
@@ -1945,7 +2318,7 @@
           <span>5年輪 (幼樹)</span>
         `;
         quickButtonsGroup.innerHTML = `
-          <button class="btn quick-btn" data-year="0">初生期</button>
+          <button class="btn quick-btn active" data-year="0">初生期</button>
           <button class="btn quick-btn" data-year="0.5">形成層環化</button>
           <button class="btn quick-btn" data-year="1.0">第 1 年</button>
           <button class="btn quick-btn" data-year="2.0">第 2 年</button>
@@ -1954,36 +2327,40 @@
           <button class="btn quick-btn" data-year="5.0">第 5 年 (幼樹)</button>
         `;
       } else {
-        // Disable Magnifier in 20-year mature tree mode (20年的不需要顯微放大，禁止使用)
+        // 20 年成樹模式：巨木超框震撼視野，以 Zoom & Pan 取代局部顯微鏡
         btnToggleMagnifier.disabled = true;
         btnToggleMagnifier.style.opacity = '0.45';
         btnToggleMagnifier.style.cursor = 'not-allowed';
-        btnToggleMagnifier.title = '20年成樹模式僅供宏觀年輪觀察，顯微放大鏡已禁用 (僅限5年幼樹模式)';
+        btnToggleMagnifier.title = '20年成樹模式聚焦巨木年輪全貌與縮放平移，顯微鏡僅限5年幼樹模式';
         btnToggleMagnifier.classList.remove('active');
-        btnToggleMagnifier.innerText = '顯微鏡: 禁用(僅幼樹)';
+        btnToggleMagnifier.innerText = '顯微鏡: 僅幼樹';
+
+        if (navHintText) {
+          navHintText.innerText = '🌲 巨木模式：滾輪縮放・拖曳畫布探索超粗樹幹 (點「全覽」可容納全貌)';
+        }
 
         sliderTicks.innerHTML = `
           <span>初生期 (0年)</span>
           <span>1年輪</span>
           <span>3年輪</span>
-          <span>5年輪</span>
+          <span>6年輪</span>
           <span>10年輪</span>
           <span>15年輪</span>
-          <span>20年輪 (大樹)</span>
+          <span>20年輪 (巨大成樹)</span>
         `;
         quickButtonsGroup.innerHTML = `
-          <button class="btn quick-btn" data-year="0">初生期</button>
+          <button class="btn quick-btn active" data-year="0">初生期</button>
           <button class="btn quick-btn" data-year="0.5">形成層環化</button>
           <button class="btn quick-btn" data-year="1.0">第 1 年</button>
           <button class="btn quick-btn" data-year="3.0">第 3 年</button>
           <button class="btn quick-btn" data-year="6.0">第 6 年</button>
           <button class="btn quick-btn" data-year="10.0">第 10 年</button>
           <button class="btn quick-btn" data-year="15.0">第 15 年</button>
-          <button class="btn quick-btn" data-year="20.0">第 20 年 (大樹)</button>
+          <button class="btn quick-btn" data-year="20.0">第 20 年 (巨大成樹)</button>
         `;
       }
 
-      // Re-bind click event for quick buttons
+      // 重新綁定跳轉按鈕事件
       quickButtonsGroup.querySelectorAll('.quick-btn').forEach(btn => {
         btn.addEventListener('click', () => {
           stopAnimation();
@@ -1991,14 +2368,20 @@
         });
       });
 
-      if (growthTime > maxYears) {
-        growthTime = maxYears;
-      }
-      updateGrowth(growthTime);
+      // 依照需求：切換模式一律從「初生期 (Year 0)」開始，並重設視角置中
+      resetView();
+      updateGrowth(0);
     }
 
-    btnMode5yr.addEventListener('click', () => setYearMode(5));
-    btnMode20yr.addEventListener('click', () => setYearMode(20));
+    btnMode5yr.addEventListener('click', () => {
+      stopAnimation();
+      setYearMode(5);
+    });
+
+    btnMode20yr.addEventListener('click', () => {
+      stopAnimation();
+      setYearMode(20);
+    });
 
     btnToggleMagnifier.addEventListener('click', () => {
       if (maxYears === 20) return; // 20年模式禁止開啟顯微放大
@@ -2015,9 +2398,9 @@
 
       // Update Time Display
       if (growthTime < 0.3) {
-        timeDisplay.innerText = '初生構造';
+        timeDisplay.innerText = '初生構造 (第 0 年)';
       } else if (growthTime < 0.8) {
-        timeDisplay.innerText = '形成層連環';
+        timeDisplay.innerText = '形成層連環化';
       } else {
         const yr = Math.floor(growthTime - 0.8) + 1;
         timeDisplay.innerText = `第 ${yr} 年輪 (${growthTime.toFixed(1)} 年)`;
@@ -2026,9 +2409,9 @@
       // Update Key Metrics
       const rings = Math.max(0, Math.floor(growthTime - 0.8));
       if (metricRings) metricRings.innerText = rings;
-      const maxSecT = (maxYears === 5) ? 4.2 : 19.2;
-      const minExp = (maxYears === 5) ? 0.68 : 0.55;
-      const diaMultiplier = (minExp + (1.0 - minExp) * Math.min(1.0, Math.max(0, growthTime - 0.8) / maxSecT) / minExp).toFixed(1) + 'x';
+      const geom0 = getStemGeometry(0);
+      const geomCurrent = getStemGeometry(growthTime);
+      const diaMultiplier = (geomCurrent.rOuterStem / geom0.rOuterStem).toFixed(1) + 'x';
       if (metricDia) metricDia.innerText = diaMultiplier;
 
       // Update quick button active state
@@ -2059,7 +2442,7 @@
       const dt = (timestamp - lastTimestamp) / 1000;
       lastTimestamp = timestamp;
 
-      const animSpeed = (maxYears === 5) ? 0.8 : 1.8;
+      const animSpeed = (maxYears === 5) ? 0.9 : 2.4;
       growthTime += dt * animSpeed;
 
       if (growthTime > maxYears) {
@@ -2103,6 +2486,7 @@
 
     btnReset.addEventListener('click', () => {
       stopAnimation();
+      resetView();
       updateGrowth(0);
     });
 
@@ -2149,15 +2533,15 @@
     initMicroAtlas();
     resizeCanvas();
 
-    // Support URL parameters for direct state linking (defaults to 5-year mode at Year 5.0)
+    // Support URL parameters for direct state linking (defaults to 5-year mode at Year 0.0)
     const urlParams = new URLSearchParams(window.location.search);
     const m = urlParams.has('mode') ? parseInt(urlParams.get('mode')) : 5;
     setYearMode(m === 20 ? 20 : 5, true);
 
-    const initYear = urlParams.has('year') ? parseFloat(urlParams.get('year')) : 5.0;
-    updateGrowth(isNaN(initYear) ? 5.0 : initYear);
+    const initYear = urlParams.has('year') ? parseFloat(urlParams.get('year')) : 0.0;
+    updateGrowth(isNaN(initYear) ? 0.0 : initYear);
 
-    // Support optional initial hover position (e.g. ?mode=5&year=3&hoverX=480&hoverY=257)
+    // Support optional initial hover position
     if (urlParams.has('hoverX') && urlParams.has('hoverY')) {
       const hx = parseFloat(urlParams.get('hoverX'));
       const hy = parseFloat(urlParams.get('hoverY'));
