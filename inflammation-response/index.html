@@ -1,10 +1,10 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-TW">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>發炎反應視覺化 (Inflammation Response)</title>
+    <title>發炎反應微循環視覺化 (Inflammation Microcirculation)</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
@@ -16,219 +16,265 @@
 <body>
     <div class="app-container">
         <header>
-            <h1>發炎反應機制 <span class="subtitle">Inflammation Response</span></h1>
-            <p class="description">互動式探索紅、腫、熱、痛的生理機制</p>
+            <h1>發炎微循環機制 <span class="subtitle">Inflammation & Microcirculation</span></h1>
+            <p class="description">探索小動脈平滑肌調節、微血管單行血流、通透性增加與神經痛覺傳導</p>
         </header>
 
         <main class="main-content">
             <div class="controls-panel">
                 <div class="stage-buttons">
-                    <button class="stage-btn toggle-btn" data-effect="red">紅 (Redness)</button>
-                    <button class="stage-btn toggle-btn" data-effect="heat">熱 (Heat)</button>
-                    <button class="stage-btn toggle-btn" data-effect="swelling">腫 (Swelling)</button>
-                    <button class="stage-btn toggle-btn" data-effect="pain">痛 (Pain)</button>
-                    <button class="stage-btn reset-btn" id="reset-btn">重置 (Reset)</button>
+                    <button class="stage-btn toggle-btn" data-effect="red">紅 (Redness / 充血擴張)</button>
+                    <button class="stage-btn toggle-btn" data-effect="heat">熱 (Heat / 代謝灌流)</button>
+                    <button class="stage-btn toggle-btn" data-effect="swelling">腫 (Swelling / 滲出水腫)</button>
+                    <button class="stage-btn toggle-btn" data-effect="pain">痛 (Pain / 刺激傳導)</button>
+                    <button class="stage-btn reset-btn" id="reset-btn">重置狀態 (Reset All)</button>
                 </div>
 
                 <div class="info-card">
-                    <h2 id="stage-title">正常狀態</h2>
-                    <p id="stage-desc">組織與血管處於恆定狀態，血流速度正常，無發炎反應。</p>
+                    <h2 id="stage-title">正常恆定狀態 (Homeostasis)</h2>
+                    <p id="stage-desc">前毛細血管小動脈平滑肌處於正常張力，微血管腔狹窄，血球單行依序通過，組織液處於平衡狀態。</p>
                     <div class="mechanism-box">
-                        <h3>生理機制</h3>
-                        <p id="mechanism-desc">--</p>
+                        <h3>微循環生理機制</h3>
+                        <div id="mechanism-desc">--</div>
                     </div>
                 </div>
             </div>
 
-            <div class="visualization-container">
-                <!-- SVG Visualization will be injected here or defined inline -->
-                <svg id="inflammation-viz" viewBox="0 0 800 500" xmlns="http://www.w3.org/2000/svg">
+            <div class="visualization-container" id="viz-container">
+                <div class="pan-hint">滾輪縮放 / 拖曳平移 (Pan & Zoom)</div>
+
+                <!-- Zoom Controls Overlay -->
+                <div class="zoom-controls">
+                    <button class="zoom-btn" id="zoom-in" title="放大 (Zoom In)">+</button>
+                    <button class="zoom-btn" id="zoom-out" title="縮小 (Zoom Out)">−</button>
+                    <button class="zoom-btn" id="zoom-reset" title="重設視角 (Reset View)">⟲</button>
+                </div>
+
+                <svg id="inflammation-viz" viewBox="0 0 1000 500" xmlns="http://www.w3.org/2000/svg">
                     <defs>
-                        <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+                        <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
                             <feGaussianBlur stdDeviation="3" result="blur" />
                             <feComposite in="SourceGraphic" in2="blur" operator="over" />
                         </filter>
-                        <linearGradient id="vesselGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                            <stop id="vessel-stop-1" offset="0%" style="stop-color:#ff8787;stop-opacity:1" />
-                            <stop id="vessel-stop-2" offset="100%" style="stop-color:#ff8787;stop-opacity:1" />
-                        </linearGradient>
                         <radialGradient id="inflammationGlow" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
-                            <stop offset="0%" style="stop-color:rgb(255, 50, 50);stop-opacity:0.6" />
+                            <stop offset="0%" style="stop-color:rgb(255, 60, 60);stop-opacity:0.75" />
                             <stop offset="100%" style="stop-color:rgb(255, 0, 0);stop-opacity:0" />
                         </radialGradient>
-                        <pattern id="skinPattern" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
-                            <rect x="0" y="0" width="20" height="20" fill="#e9ecef" stroke="#dee2e6" stroke-width="1" />
-                        </pattern>
                     </defs>
 
-                    <!-- Skin Surface (Epidermis) -->
-                    <path id="skin-surface" d="M 0 50 L 800 50" stroke="#adb5bd" stroke-width="2" fill="none" />
+                    <!-- Pan & Zoom World Container Group -->
+                    <g id="viewport-group" transform="matrix(1 0 0 1 0 0)">
+                        <!-- Background Tissue Area -->
+                        <path id="tissue-bg" d="M 0 55 L 1000 55 L 1000 300 L 0 300 Z" fill="#181a24" />
 
-                    <!-- Epidermis Cells (Group that moves with skin surface) -->
-                    <g id="epidermis-group">
-                        <path id="skin-layer-fill" d="M 0 0 L 800 0 L 800 50 L 0 50 Z" fill="url(#skinPattern)"
-                            opacity="0.8" />
+                        <!-- Swelling Edema Liquid Overlay (Tissue Fluid) -->
+                        <path id="swelling-overlay" d="M 0 55 L 1000 55 L 1000 300 L 0 300 Z" fill="#ff922b"
+                            opacity="0" />
+
+                        <!-- Multilayer Stratified Epidermis -->
+                        <g id="epidermis-group">
+                            <g id="stratum-corneum"></g>
+                            <g id="stratum-spinosum"></g>
+                            <g id="stratum-basale"></g>
+                            <!-- Skin Surface Outline -->
+                            <path id="skin-surface" d="M 0 2 L 1000 2" stroke="#e0a96d" stroke-width="2" fill="none"
+                                opacity="0.8" />
+                            <!-- Basement Membrane (Basal Lamina) -->
+                            <path id="basement-membrane" d="M 0 55 L 1000 55" stroke="#4a5568" stroke-width="2"
+                                fill="none" stroke-dasharray="4,2" opacity="0.9" />
+                        </g>
+
+                        <!-- Tissue Subcutaneous Fibroblasts & Adipocytes -->
+                        <g id="tissue-cells" opacity="0.55">
+                            <!-- Row 1 -->
+                            <g transform="translate(80, 95)">
+                                <circle r="18" fill="#ffe066" />
+                                <circle r="6" fill="#fcc419" />
+                            </g>
+                            <g transform="translate(160, 110)">
+                                <circle r="20" fill="#ffe066" />
+                                <circle r="7" fill="#fcc419" />
+                            </g>
+                            <g transform="translate(250, 85)">
+                                <circle r="17" fill="#ffe066" />
+                                <circle r="6" fill="#fcc419" />
+                            </g>
+                            <g transform="translate(340, 115)">
+                                <circle r="21" fill="#ffe066" />
+                                <circle r="7" fill="#fcc419" />
+                            </g>
+                            <g transform="translate(680, 85)">
+                                <circle r="18" fill="#ffe066" />
+                                <circle r="6" fill="#fcc419" />
+                            </g>
+                            <g transform="translate(760, 110)">
+                                <circle r="20" fill="#ffe066" />
+                                <circle r="7" fill="#fcc419" />
+                            </g>
+                            <g transform="translate(840, 90)">
+                                <circle r="19" fill="#ffe066" />
+                                <circle r="6" fill="#fcc419" />
+                            </g>
+                            <g transform="translate(930, 105)">
+                                <circle r="21" fill="#ffe066" />
+                                <circle r="7" fill="#fcc419" />
+                            </g>
+
+                            <!-- Row 2 -->
+                            <g transform="translate(90, 170)">
+                                <circle r="20" fill="#ffe066" />
+                                <circle r="7" fill="#fcc419" />
+                            </g>
+                            <g transform="translate(180, 155)">
+                                <circle r="18" fill="#ffe066" />
+                                <circle r="6" fill="#fcc419" />
+                            </g>
+                            <g transform="translate(270, 185)">
+                                <circle r="21" fill="#ffe066" />
+                                <circle r="7" fill="#fcc419" />
+                            </g>
+                            <g transform="translate(360, 150)">
+                                <circle r="19" fill="#ffe066" />
+                                <circle r="6" fill="#fcc419" />
+                            </g>
+                            <g transform="translate(700, 165)">
+                                <circle r="20" fill="#ffe066" />
+                                <circle r="7" fill="#fcc419" />
+                            </g>
+                            <g transform="translate(780, 150)">
+                                <circle r="18" fill="#ffe066" />
+                                <circle r="6" fill="#fcc419" />
+                            </g>
+                            <g transform="translate(860, 180)">
+                                <circle r="21" fill="#ffe066" />
+                                <circle r="7" fill="#fcc419" />
+                            </g>
+                            <g transform="translate(940, 155)">
+                                <circle r="17" fill="#ffe066" />
+                                <circle r="6" fill="#fcc419" />
+                            </g>
+
+                            <!-- Row 3 -->
+                            <g transform="translate(70, 245)">
+                                <circle r="19" fill="#ffe066" />
+                                <circle r="6" fill="#fcc419" />
+                            </g>
+                            <g transform="translate(170, 230)">
+                                <circle r="21" fill="#ffe066" />
+                                <circle r="7" fill="#fcc419" />
+                            </g>
+                            <g transform="translate(260, 255)">
+                                <circle r="18" fill="#ffe066" />
+                                <circle r="6" fill="#fcc419" />
+                            </g>
+                            <g transform="translate(350, 235)">
+                                <circle r="20" fill="#ffe066" />
+                                <circle r="7" fill="#fcc419" />
+                            </g>
+                            <g transform="translate(690, 245)">
+                                <circle r="19" fill="#ffe066" />
+                                <circle r="6" fill="#fcc419" />
+                            </g>
+                            <g transform="translate(770, 225)">
+                                <circle r="21" fill="#ffe066" />
+                                <circle r="7" fill="#fcc419" />
+                            </g>
+                            <g transform="translate(850, 255)">
+                                <circle r="18" fill="#ffe066" />
+                                <circle r="6" fill="#fcc419" />
+                            </g>
+                            <g transform="translate(930, 235)">
+                                <circle r="20" fill="#ffe066" />
+                                <circle r="7" fill="#fcc419" />
+                            </g>
+                        </g>
+
+                        <!-- Anatomical Free Nerve Ending with Axon & Branches -->
+                        <g id="nerve-network">
+                            <!-- Axon Trunk Path -->
+                            <path id="nerve-trunk" d="M -10 220 C 120 230, 260 205, 410 190" stroke="#ffd43b"
+                                stroke-width="3.5" fill="none" stroke-linecap="round" />
+                            <!-- Myelin Sheaths dynamically rendered along axon -->
+                            <g id="myelin-sheaths"></g>
+
+                            <!-- Branching Free Nerve Endings near injury site -->
+                            <path class="nerve-branch" id="nerve-branch-1" d="M 410 190 C 460 185, 495 140, 520 105"
+                                stroke="#ffd43b" stroke-width="2.5" fill="none" stroke-linecap="round" />
+                            <path class="nerve-branch" id="nerve-branch-2" d="M 410 190 C 460 195, 500 180, 535 135"
+                                stroke="#ffd43b" stroke-width="2.5" fill="none" stroke-linecap="round" />
+                            <path class="nerve-branch" id="nerve-branch-3" d="M 410 190 C 450 215, 510 210, 550 155"
+                                stroke="#ffd43b" stroke-width="2" fill="none" stroke-linecap="round" />
+                            <path class="nerve-branch" id="nerve-branch-4" d="M 470 160 C 500 145, 530 155, 555 120"
+                                stroke="#ffd43b" stroke-width="1.8" fill="none" stroke-linecap="round" />
+
+                            <!-- Receptor Endings (Nociceptors) -->
+                            <circle class="nerve-terminal" id="nerve-term-1" cx="520" cy="105" r="4.5" fill="#ffd43b" />
+                            <circle class="nerve-terminal" id="nerve-term-2" cx="535" cy="135" r="4.5" fill="#ffd43b" />
+                            <circle class="nerve-terminal" id="nerve-term-3" cx="550" cy="155" r="4" fill="#ffd43b" />
+                            <circle class="nerve-terminal" id="nerve-term-4" cx="555" cy="120" r="3.5" fill="#ffd43b" />
+
+                            <!-- Pain Signal Pulses -->
+                            <circle id="pulse-1" cx="0" cy="0" r="4.5" fill="#ff4d4f" opacity="0" />
+                            <circle id="pulse-2" cx="0" cy="0" r="4.5" fill="#ff4d4f" opacity="0" />
+                            <circle id="pulse-3" cx="0" cy="0" r="4.5" fill="#ff4d4f" opacity="0" />
+                        </g>
+
+                        <!-- Microcirculation System (Branching Arteriole + Precapillary Sphincters + 3 Capillaries) -->
+                        <g id="vessel-group" transform="translate(0, 300)">
+                            <!-- Dynamic Vessel Lumen Fills for All Branches -->
+                            <g id="vessel-lumens-group"></g>
+
+                            <!-- Upstream Arteriole (Main Inflow Stem) -->
+                            <g id="arteriole-structure">
+                                <rect id="arteriole-wall-top" x="0" y="0" width="140" height="8" fill="#a51d24" />
+                                <rect id="arteriole-wall-bottom" x="0" y="100" width="140" height="8" fill="#a51d24" />
+                                <g id="smooth-muscle-layer"></g>
+                            </g>
+
+                            <!-- Precapillary Sphincter Rings at each capillary branch entrance -->
+                            <g id="precapillary-sphincters"></g>
+
+                            <!-- Capillary Endothelial Cells for Upper, Middle, Lower Capillaries -->
+                            <g id="endothelium-layer"></g>
+
+                            <!-- Blood Cells Streaming (Single file in each capillary branch) -->
+                            <g id="blood-cells"></g>
+                        </g>
+
+                        <!-- Extravasated Plasma & Diapedesis WBCs in Tissue Space -->
+                        <g id="extravasated-layer"></g>
+
+                        <!-- Injury Site (Thorn penetrating epidermis into dermis) -->
+                        <g id="injury-site" opacity="0">
+                            <polygon points="533,-10 547,-10 541,92 539,92" fill="#5c4033" stroke="#2b1d0c"
+                                stroke-width="1" />
+                            <line x1="540" y1="-10" x2="540" y2="85" stroke="#8b5a2b" stroke-width="1" opacity="0.6" />
+                            <g id="pathogens">
+                                <ellipse cx="528" cy="75" rx="3.5" ry="2" fill="#51cf66"
+                                    transform="rotate(25 528 75)" />
+                                <ellipse cx="552" cy="80" rx="3.5" ry="2" fill="#51cf66"
+                                    transform="rotate(-35 552 80)" />
+                                <ellipse cx="538" cy="98" rx="3" ry="1.8" fill="#51cf66"
+                                    transform="rotate(15 538 98)" />
+                                <ellipse cx="524" cy="90" rx="3.5" ry="2" fill="#51cf66"
+                                    transform="rotate(-20 524 90)" />
+                                <ellipse cx="556" cy="94" rx="3.5" ry="2" fill="#51cf66"
+                                    transform="rotate(40 556 94)" />
+                            </g>
+                            <circle cx="540" cy="90" r="38" fill="url(#inflammationGlow)" />
+                        </g>
+
+                        <!-- Anatomy Annotations -->
+                        <text x="25" y="42" fill="#e0a96d" font-size="12" font-weight="600" letter-spacing="0.5">複層表皮
+                            (Stratified Epidermis)</text>
+                        <text x="25" y="278" fill="#868e96" font-size="12">皮下真皮組織 (Dermis / Interstitium)</text>
+                        <text x="25" y="304" fill="#ff6b6b" font-size="12" font-weight="600">小動脈 (Arteriole) 與平滑肌</text>
+                        <text id="sphincter-label" x="150" y="304" fill="#ffd43b" font-size="11">前毛細括約肌
+                            (Sphincter)</text>
+                        <text id="capillary-label" x="320" y="304" fill="#ff8787" font-size="12" font-weight="600">微血管網
+                            (Capillary: 單行排列)</text>
+                        <text x="25" y="210" fill="#ffd43b" font-size="12">感覺神經纖維 (Nociceptor Nerve)</text>
                     </g>
-
-                    <!-- Background Tissue (Path for animation) -->
-                    <path id="tissue-bg" d="M 0 50 L 800 50 L 800 300 L 0 300 Z" fill="#2a2a35" />
-
-                    <!-- Tissue Cells (Subcutaneous) -->
-                    <g id="tissue-cells" opacity="0.6">
-                        <!-- Row 1 -->
-                        <g transform="translate(50, 80)">
-                            <circle r="22" fill="#ffe066" />
-                            <circle r="8" fill="#fcc419" />
-                        </g>
-                        <g transform="translate(120, 100)">
-                            <circle r="24" fill="#ffe066" />
-                            <circle r="9" fill="#fcc419" />
-                        </g>
-                        <g transform="translate(200, 70)">
-                            <circle r="20" fill="#ffe066" />
-                            <circle r="7" fill="#fcc419" />
-                        </g>
-                        <g transform="translate(280, 110)">
-                            <circle r="25" fill="#ffe066" />
-                            <circle r="9" fill="#fcc419" />
-                        </g>
-                        <g transform="translate(350, 80)">
-                            <circle r="22" fill="#ffe066" />
-                            <circle r="8" fill="#fcc419" />
-                        </g>
-                        <g transform="translate(450, 90)">
-                            <circle r="23" fill="#ffe066" />
-                            <circle r="8" fill="#fcc419" />
-                        </g>
-                        <g transform="translate(520, 70)">
-                            <circle r="21" fill="#ffe066" />
-                            <circle r="7" fill="#fcc419" />
-                        </g>
-                        <g transform="translate(600, 110)">
-                            <circle r="24" fill="#ffe066" />
-                            <circle r="9" fill="#fcc419" />
-                        </g>
-                        <g transform="translate(680, 80)">
-                            <circle r="22" fill="#ffe066" />
-                            <circle r="8" fill="#fcc419" />
-                        </g>
-                        <g transform="translate(750, 100)">
-                            <circle r="25" fill="#ffe066" />
-                            <circle r="9" fill="#fcc419" />
-                        </g>
-
-                        <!-- Row 2 -->
-                        <g transform="translate(80, 170)">
-                            <circle r="23" fill="#ffe066" />
-                            <circle r="8" fill="#fcc419" />
-                        </g>
-                        <g transform="translate(160, 150)">
-                            <circle r="21" fill="#ffe066" />
-                            <circle r="7" fill="#fcc419" />
-                        </g>
-                        <g transform="translate(240, 180)">
-                            <circle r="24" fill="#ffe066" />
-                            <circle r="9" fill="#fcc419" />
-                        </g>
-                        <g transform="translate(320, 140)">
-                            <circle r="22" fill="#ffe066" />
-                            <circle r="8" fill="#fcc419" />
-                        </g>
-                        <g transform="translate(480, 170)">
-                            <circle r="23" fill="#ffe066" />
-                            <circle r="8" fill="#fcc419" />
-                        </g>
-                        <g transform="translate(560, 150)">
-                            <circle r="21" fill="#ffe066" />
-                            <circle r="7" fill="#fcc419" />
-                        </g>
-                        <g transform="translate(640, 180)">
-                            <circle r="24" fill="#ffe066" />
-                            <circle r="9" fill="#fcc419" />
-                        </g>
-                        <g transform="translate(720, 160)">
-                            <circle r="22" fill="#ffe066" />
-                            <circle r="8" fill="#fcc419" />
-                        </g>
-
-                        <!-- Row 3 -->
-                        <g transform="translate(40, 240)">
-                            <circle r="22" fill="#ffe066" />
-                            <circle r="8" fill="#fcc419" />
-                        </g>
-                        <g transform="translate(130, 220)">
-                            <circle r="24" fill="#ffe066" />
-                            <circle r="9" fill="#fcc419" />
-                        </g>
-                        <g transform="translate(220, 250)">
-                            <circle r="21" fill="#ffe066" />
-                            <circle r="7" fill="#fcc419" />
-                        </g>
-                        <g transform="translate(300, 230)">
-                            <circle r="23" fill="#ffe066" />
-                            <circle r="8" fill="#fcc419" />
-                        </g>
-                        <g transform="translate(500, 240)">
-                            <circle r="22" fill="#ffe066" />
-                            <circle r="8" fill="#fcc419" />
-                        </g>
-                        <g transform="translate(590, 220)">
-                            <circle r="24" fill="#ffe066" />
-                            <circle r="9" fill="#fcc419" />
-                        </g>
-                        <g transform="translate(670, 250)">
-                            <circle r="21" fill="#ffe066" />
-                            <circle r="7" fill="#fcc419" />
-                        </g>
-                        <g transform="translate(760, 230)">
-                            <circle r="23" fill="#ffe066" />
-                            <circle r="8" fill="#fcc419" />
-                        </g>
-                    </g>
-
-                    <!-- Nerve -->
-                    <path id="nerve" d="M -20 220 Q 150 220 390 200" stroke="#ffd43b" stroke-width="4" fill="none"
-                        stroke-dasharray="5,5" />
-                    <circle id="nerve-ending" cx="400" cy="200" r="8" fill="#ffd43b" opacity="0.5" />
-
-                    <!-- Blood Vessel (Bottom part) -->
-                    <g id="vessel-group" transform="translate(0, 300)">
-                        <!-- Top Wall -->
-                        <rect id="vessel-wall-top" x="0" y="0" width="800" height="10" fill="url(#vesselGradient)" />
-                        <!-- Lumen -->
-                        <rect id="vessel-lumen" x="0" y="10" width="800" height="80" fill="#4a0000" />
-                        <!-- Bottom Wall -->
-                        <rect id="vessel-wall-bottom" x="0" y="90" width="800" height="10"
-                            fill="url(#vesselGradient)" />
-
-                        <!-- Blood Cells (Animated via JS) -->
-                        <g id="blood-cells"></g>
-                    </g>
-
-                    <!-- Injury Site (Initially hidden) -->
-                    <g id="injury-site" opacity="0">
-                        <!-- Nail/Sharp Object penetrating from top -->
-                        <path d="M 395 -20 L 405 -20 L 400 80 Z" fill="#868e96" stroke="#343a40" stroke-width="1" />
-                        <!-- Pathogens (Bacteria) -->
-                        <g id="pathogens">
-                            <circle cx="390" cy="60" r="3" fill="#51cf66" />
-                            <circle cx="410" cy="70" r="3" fill="#51cf66" />
-                            <circle cx="400" cy="90" r="3" fill="#51cf66" />
-                            <circle cx="385" cy="75" r="3" fill="#51cf66" />
-                            <circle cx="415" cy="85" r="3" fill="#51cf66" />
-                        </g>
-                        <circle cx="400" cy="80" r="30" fill="url(#inflammationGlow)" />
-                    </g>
-
-                    <!-- Swelling Overlay (Initially hidden) -->
-                    <path id="swelling-overlay" d="M 0 50 Q 400 50 800 50 L 800 300 L 0 300 Z" fill="#ff6b6b"
-                        opacity="0" />
-
-                    <!-- Labels -->
-                    <text x="20" y="280" fill="#868e96" font-size="14">組織 (Tissue)</text>
-                    <text x="20" y="350" fill="#ffc9c9" font-size="14">血管 (Blood Vessel)</text>
-                    <text x="420" y="210" fill="#ffd43b" font-size="14">神經 (Nerve)</text>
-
                 </svg>
             </div>
         </main>
