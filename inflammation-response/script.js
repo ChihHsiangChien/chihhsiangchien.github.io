@@ -43,7 +43,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const mucosaCiliaLayer = document.getElementById('mucosa-cilia-layer');
     const mucusLayer = document.getElementById('mucus-layer');
     const mucosaChemicalsLayer = document.getElementById('mucosa-chemicals-layer');
-    const btnDemoMucosa = document.getElementById('btn-demo-mucosa');
 
     // Stratified Epidermis Groups (Skin Side)
     const stratumCorneum = document.getElementById('stratum-corneum');
@@ -69,6 +68,25 @@ document.addEventListener('DOMContentLoaded', () => {
     const toggleButtons = document.querySelectorAll('.stage-btn.toggle-btn');
     const resetBtn = document.getElementById('reset-btn');
     const toggleLabelsCheckbox = document.getElementById('toggle-labels');
+    const toggleDimNerveCheckbox = document.getElementById('toggle-dim-nerve');
+    const nerveNetworkGroup = document.getElementById('nerve-network');
+
+    let simSpeed = 1.0;
+    let speedAccum = 0;
+    let selectedPathogen = 'bacteria';
+
+    function spawnActivePathogen(x, y) {
+        const skinY = getSkinSurfaceY(x, swellingLevel);
+        const isDeep = y > (skinY + 10);
+        if (selectedPathogen === 'virus') {
+            spawnFreeVirus(x, y, isDeep ? 1 : 2);
+        } else if (selectedPathogen === 'parasite') {
+            spawnParasite(x, y);
+        } else {
+            spawnBacteria(x, y);
+        }
+        updateStats();
+    }
 
     // Coagulation Stepper Buttons
     const btnCutSkin = document.getElementById('btn-cut-skin');
@@ -113,6 +131,13 @@ document.addEventListener('DOMContentLoaded', () => {
             return skinY + 4;
         }
         return basementY + 4;
+    }
+
+    function lerpAngle(curr, target, factor) {
+        let diff = (target - curr) % (Math.PI * 2);
+        if (diff > Math.PI) diff -= Math.PI * 2;
+        if (diff < -Math.PI) diff += Math.PI * 2;
+        return curr + diff * factor;
     }
 
     function updateStats() {
@@ -202,27 +227,9 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // 2. Pure click without dragging
+        // 2. Pure click without dragging: spawn the active pathogen at clicked coordinates
         if (dist < 6) {
-            const skinY = getSkinSurfaceY(clickWorldX, swellingLevel);
-            if (clickWorldY <= skinY + 12) {
-                // Clicked in external environment above barrier: spawn bacteria outside
-                spawnBacteria(clickWorldX, clickWorldY);
-                updateStats();
-            } else {
-                // Clicked in tissue below barrier
-                if (clickWorldX < 500 && coagState.woundOpen > 0.05 && Math.abs(clickWorldX - WOUND_X) < 45) {
-                    spawnBacteria(clickWorldX, clickWorldY);
-                    const b = bacteria[bacteria.length - 1];
-                    if (b) { b.inTissue = true; b.trappedInMucus = false; }
-                    updateLog("⚠️ <strong>細菌從皮膚受損創口直接侵入真皮層！</strong>");
-                    updateStats();
-                } else if (clickWorldX >= 500) {
-                    updateLog("🛡️ <strong>黏膜上皮緊密連接（Tight Junctions）保護基底層！</strong>請在黏膜表面外界生成病原體，觀察黏液捕捉、纖毛向右擺動與溶菌酶的第一道防線運作。");
-                } else {
-                    updateLog("🛡️ <strong>健康皮膚角質層為堅固屏障！</strong>病原體無法穿透完整皮膚。請在皮膚上方外界點擊生成病原體，並向下劃動切開皮膚觀察其入侵！");
-                }
-            }
+            spawnActivePathogen(clickWorldX, clickWorldY);
         }
     });
 
@@ -292,22 +299,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (dist < 10) {
-                const skinY = getSkinSurfaceY(clickWorldX, swellingLevel);
-                if (clickWorldY <= skinY + 12) {
-                    spawnBacteria(clickWorldX, clickWorldY);
-                    updateStats();
-                } else {
-                    if (clickWorldX < 500 && coagState.woundOpen > 0.05 && Math.abs(clickWorldX - WOUND_X) < 45) {
-                        spawnBacteria(clickWorldX, clickWorldY);
-                        const b = bacteria[bacteria.length - 1];
-                        if (b) { b.inTissue = true; b.trappedInMucus = false; }
-                        updateStats();
-                    } else if (clickWorldX >= 500) {
-                        updateLog("🛡️ <strong>黏膜上皮緊密連接（Tight Junctions）保護基底層！</strong>");
-                    } else {
-                        updateLog("🛡️ <strong>健康皮膚角質層為堅固屏障！</strong>病原體無法穿透完整皮膚。");
-                    }
-                }
+                spawnActivePathogen(clickWorldX, clickWorldY);
             }
         }
     });
@@ -388,6 +380,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let bloodWBCs = [];
     let activeTissueWBCs = [];
     let bloodParticles = [];
+    let autoWbcRecruitTimer = 0;
 
     let smoothMuscles = [];
     let sphincterElements = [];
@@ -538,21 +531,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     vx: (Math.random() - 0.5) * 0.2,
                     r: 4.8,
                     atSurface: prog > 0.92,
+                    surfaceLife: 260 + Math.random() * 120,
                     surfaceDrift: (Math.random() < 0.5 ? -1 : 1) * (0.2 + Math.random() * 0.35),
                     alpha: 1
                 });
             }
-            updateLog("🔪 <strong>皮膚劃傷與血管破裂！</strong>血液平緩湧出並於皮膚表層淤積，暴露真皮層底部的膠原蛋白 (Collagen)！");
+            updateLog("🔪 <strong>皮膚劃傷與血管破裂！</strong>血液持續自破口湧出並於皮膚表層淤積；在纖維蛋白網封堵前將持續出血！");
         } else if (stage === 2) {
-            // Platelet Plug aggregation
+            // Platelet Plug aggregation - still actively oozing until fibrin mesh seals
             coagState.plateletPlug = 1;
-            coagState.bleedIntensity = 0.45;
+            coagState.bleedIntensity = 0.55;
             // Reflex vasoconstriction
             targetArterioleWidth = 48;
             targetCapillaryWidth = 14;
-            updateLog("⚡ <strong>暴露的膠原蛋白活化血小板！</strong>血小板伸出偽足變形為星芒狀，黏附聚集形成「初級血小板栓」！");
+            updateLog("⚡ <strong>暴露的膠原蛋白活化血小板！</strong>形成「初級血小板栓」；纖維蛋白網尚未形成前血液仍會持續湧出！");
         } else if (stage === 3) {
-            // Fibrin mesh network formation
+            // Fibrin mesh network formation - stops bleeding completely!
             coagState.plateletPlug = 1;
             coagState.fibrinMesh = 1;
             coagState.bleedIntensity = 0;
@@ -634,13 +628,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 const r = baseR * (0.6 + Math.random() * 0.6);
                 vertices.push({ x: Math.cos(a) * r, y: Math.sin(a) * r });
             }
+            const isMucosaDebris = (x >= 500 || siteId === -1);
             cellDebris.push({
                 x: x + Math.cos(angle) * dist,
                 y: y + Math.sin(angle) * dist,
                 r: baseR,
                 siteId: siteId,
                 vertices: vertices,
-                rotation: Math.random() * Math.PI * 2
+                rotation: Math.random() * Math.PI * 2,
+                life: isMucosaDebris ? (260 + Math.random() * 120) : (1200 + Math.random() * 400),
+                alpha: 1.0
             });
         }
     }
@@ -660,7 +657,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const by = y !== undefined ? y : (-50 + Math.random() * 25);
         const skinY = getSkinSurfaceY(bx, swellingLevel);
-        const inTissue = by > (skinY + 12);
+        const inTissue = y !== undefined ? (by > skinY + 10) : false;
         bacteria.push({
             x: bx, y: by,
             vx: (Math.random() - 0.5) * 1.0,
@@ -674,28 +671,34 @@ document.addEventListener('DOMContentLoaded', () => {
             divideTimer: 0
         });
         if (inTissue) {
-            updateLog("⚠️ <strong>細菌於創口破裂處侵入真皮層！</strong>若未被嗜中性球吞噬，將二分裂繁殖。");
+            updateLog("⚠️ <strong>已直接於皮下組織引入細菌！</strong>（模擬深層感染）細菌將在真皮層進行二分裂繁殖，並刺激巨噬細胞釋放趨化因子。");
         } else if (bx >= 500) {
             updateLog("💧 <strong>外界細菌生成於黏膜表面外界！</strong>即將受黏液捕捉、動態纖毛向右推動與溶菌酶攻擊！");
         } else {
-            updateLog("🦠 <strong>外界細菌生成於皮膚表層外！</strong>完整角質層阻擋細菌侵入；需待皮膚受損創傷時才會趁隙入侵。");
+            if (coagState.woundOpen > 0.05) {
+                updateLog("⚠️ <strong>外界細菌生成於皮膚表層！</strong>感應到創口滲出液，正游移移行鑽入創口。");
+            } else {
+                updateLog("🛡️ <strong>外界細菌生成於皮膚表層！</strong>無創口時完整角質層嚴密阻隔，病原體無法穿透進入皮下。");
+            }
         }
         updateStats();
     }
 
     function spawnFreeVirus(x, y, count = 3) {
+        let spawnedInTissue = false;
         for (let i = 0; i < count; i++) {
             let vx;
             if (x !== undefined) {
-                vx = x + (Math.random() * 24 - 12);
+                vx = x + (count > 1 ? (Math.random() * 24 - 12) : 0);
             } else {
                 vx = (coagState.woundOpen > 0.05 && Math.random() < 0.75)
                     ? (WOUND_X + (Math.random() - 0.5) * 160)
                     : (160 + Math.random() * 680) + (Math.random() * 24 - 12);
             }
-            const vy = (y !== undefined ? y : (-48 + Math.random() * 22)) + (Math.random() * 16 - 8);
+            const vy = (y !== undefined ? y : (-48 + Math.random() * 22)) + (count > 1 ? (Math.random() * 16 - 8) : 0);
             const skinY = getSkinSurfaceY(vx, swellingLevel);
-            const inTissue = vy > (skinY + 12);
+            const inTissue = y !== undefined ? (vy > skinY + 10) : false;
+            if (inTissue) spawnedInTissue = true;
             freeViruses.push({
                 x: vx, y: vy,
                 vx: (Math.random() - 0.5) * 1.3,
@@ -708,7 +711,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 penetratingTimer: 0
             });
         }
-        updateLog("👾 <strong>游離病毒出現在外界！</strong>黏膜分泌型 IgA 與皮膚死角質層形成雙重第一道防線！");
+        if (spawnedInTissue) {
+            updateLog("👾 <strong>已直接於皮下組織引入游離病毒！</strong>（模擬深層感染）病毒將嘗試侵入鄰近健康組織細胞並引發感染。");
+        } else if (x !== undefined && x >= 500) {
+            updateLog("👾 <strong>游離病毒生成於黏膜表面外界！</strong>分泌型 IgA (sIgA) 與纖毛黏液手扶梯正進行攔截中和。");
+        } else {
+            if (coagState.woundOpen > 0.05) {
+                updateLog("👾 <strong>外界病毒生成於皮膚表層！</strong>正尋找創口擴散侵入。");
+            } else {
+                updateLog("🛡️ <strong>外界病毒生成於皮膚表層！</strong>無創口時死角質層形成物理屏障，病毒無法穿透進入皮下。");
+            }
+        }
         updateStats();
     }
 
@@ -722,18 +735,30 @@ document.addEventListener('DOMContentLoaded', () => {
                 : (160 + Math.random() * 680);
         }
         const py = y !== undefined ? y : (-42 + Math.random() * 18);
+        const skinY = getSkinSurfaceY(px, swellingLevel);
+        const inTissue = y !== undefined ? (py > skinY + 10) : false;
         parasites.push({
             x: px,
             y: py,
             vx: (Math.random() - 0.5) * 0.5,
             vy: (Math.random() - 0.5) * 0.2,
-            inTissue: false,
+            inTissue: inTissue,
             trappedInMucus: false,
             hp: 100, maxHp: 100,
             phase: Math.random() * Math.PI * 2,
-            angle: (Math.random() - 0.5) * 0.3
+            angle: inTissue ? ((Math.random() - 0.5) * 0.6) : 0
         });
-        updateLog("🪱 <strong>大型線蟲出現在外界！</strong>皮膚受損破裂時將循氣味與滲出液蜿蜒鑽入創口；黏膜處則受黏液與纖毛向右推送排障！");
+        if (inTissue) {
+            updateLog("🪱 <strong>已直接於皮下組織引入大型線蟲！</strong>（模擬皮下感染）嗜酸性球將前來聚集並釋放毒性顆粒！");
+        } else if (px >= 500) {
+            updateLog("🪱 <strong>大型線蟲生成於黏膜表面外界！</strong>黏液毯與纖毛屏障阻絕寄生蟲，並向右推動排障。");
+        } else {
+            if (coagState.woundOpen > 0.05) {
+                updateLog("🪱 <strong>大型線蟲生成於皮膚表層！</strong>正蜿蜒爬向創口鑽入。");
+            } else {
+                updateLog("🛡️ <strong>大型線蟲生成於皮膚表層！</strong>無創口時受限於完整角質層，無法穿透進入皮下。");
+            }
+        }
         updateStats();
     }
 
@@ -838,11 +863,25 @@ document.addEventListener('DOMContentLoaded', () => {
         g.appendChild(n);
     }
 
+    function chooseWbcBranch(subtype) {
+        const hasInjury = coagStage >= 1 || bacteria.some(b => b.inTissue) || cellDebris.length > 0 || tissueSites.some(c => c.state === 'infected');
+        if (subtype === 'neutrophil' || subtype === 'monocyte') {
+            return hasInjury && Math.random() < 0.75 ? 'top' : ['top', 'mid', 'bot'][Math.floor(Math.random() * 3)];
+        }
+        if (subtype === 'eosinophil') {
+            const hasParasite = parasites.some(p => p.inTissue) || parasites.length > 0;
+            return hasParasite && Math.random() < 0.8 ? 'top' : ['top', 'mid', 'bot'][Math.floor(Math.random() * 3)];
+        }
+        return ['top', 'mid', 'bot'][Math.floor(Math.random() * 3)];
+    }
+
     function spawnNeutrophil() {
         const wbc = {
             subtype: 'neutrophil',
-            x: 20, y: 65,
-            branchId: 'top',
+            x: -15 + Math.random() * 25,
+            y: 65,
+            laneOffset: (Math.random() - 0.5) * 0.75,
+            branchId: chooseWbcBranch('neutrophil'),
             r: 7.5, state: 'patrol',
             exitRoute: null,
             targetGapX: null,
@@ -852,15 +891,17 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         assignWbcExitStrategy(wbc);
         bloodWBCs.push(wbc);
-        updateLog("⚪ <strong>嗜中性球出動！</strong>將自選內皮間隙變形蟲遊出或從創口移出，吞噬細菌。");
+        updateLog("⚪ <strong>嗜中性球出動！</strong>進入小動脈向微血管巡航，準備變形蟲遊出吞噬細菌。");
         updateStats();
     }
 
     function spawnMonocyte() {
         const wbc = {
             subtype: 'monocyte',
-            x: 20, y: 65,
-            branchId: 'mid',
+            x: -15 + Math.random() * 25,
+            y: 65,
+            laneOffset: (Math.random() - 0.5) * 0.75,
+            branchId: chooseWbcBranch('monocyte'),
             r: 8.5, state: 'patrol',
             exitRoute: null,
             targetGapX: null,
@@ -877,8 +918,10 @@ document.addEventListener('DOMContentLoaded', () => {
     function spawnEosinophil() {
         const wbc = {
             subtype: 'eosinophil',
-            x: 20, y: 65,
-            branchId: 'top',
+            x: -15 + Math.random() * 25,
+            y: 65,
+            laneOffset: (Math.random() - 0.5) * 0.75,
+            branchId: chooseWbcBranch('eosinophil'),
             r: 7.8, state: 'patrol',
             exitRoute: null,
             targetGapX: null,
@@ -894,8 +937,10 @@ document.addEventListener('DOMContentLoaded', () => {
     function spawnBasophil() {
         const wbc = {
             subtype: 'basophil',
-            x: 35, y: 65,
-            branchId: 'bot',
+            x: -15 + Math.random() * 25,
+            y: 65,
+            laneOffset: (Math.random() - 0.5) * 0.75,
+            branchId: chooseWbcBranch('basophil'),
             r: 7.8, state: 'patrol',
             exitRoute: null,
             targetGapX: null,
@@ -918,8 +963,10 @@ document.addEventListener('DOMContentLoaded', () => {
     function spawnBCell() {
         const wbc = {
             subtype: 'bcell',
-            x: 40, y: 65,
-            branchId: 'bot',
+            x: -15 + Math.random() * 25,
+            y: 65,
+            laneOffset: (Math.random() - 0.5) * 0.75,
+            branchId: chooseWbcBranch('bcell'),
             r: 8.0, state: 'patrol',
             exitRoute: null,
             targetGapX: null,
@@ -937,8 +984,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const type = Math.random() < 0.5 ? 'tcell' : 'nk';
         const wbc = {
             subtype: type,
-            x: 20, y: 65,
-            branchId: 'mid',
+            x: -15 + Math.random() * 25,
+            y: 65,
+            laneOffset: (Math.random() - 0.5) * 0.75,
+            branchId: chooseWbcBranch(type),
             r: 7.8, state: 'patrol',
             exitRoute: null,
             targetGapX: null,
@@ -949,6 +998,28 @@ document.addEventListener('DOMContentLoaded', () => {
         bloodWBCs.push(wbc);
         const name = type === 'nk' ? "自然殺手 (NK) 細胞" : "毒殺型 T 細胞";
         updateLog(`🟢 <strong>${name}出動！</strong>辨識並摧毀受病毒感染的細胞，誘導凋亡裂解！`);
+        updateStats();
+    }
+
+    function recruitCirculatingWbc(subtype = 'neutrophil') {
+        const wbc = {
+            subtype: subtype,
+            x: -25,
+            y: 65,
+            laneOffset: (Math.random() - 0.5) * 0.75,
+            branchId: chooseWbcBranch(subtype),
+            r: subtype === 'monocyte' ? 8.5 : 7.5,
+            state: 'patrol',
+            exitRoute: null,
+            targetGapX: null,
+            amoebaProgress: 0,
+            eatenCount: 0,
+            maxEat: subtype === 'monocyte' ? 16 : 3,
+            tissueLife: subtype === 'monocyte' ? 2000 : 700,
+            alpha: 1
+        };
+        assignWbcExitStrategy(wbc);
+        bloodWBCs.push(wbc);
         updateStats();
     }
 
@@ -1358,16 +1429,40 @@ document.addEventListener('DOMContentLoaded', () => {
             const bTopY = b.targetY - halfCap;
             const bBotY = b.targetY + halfCap;
 
-            const pathData = `
-                M 140 ${b.targetY < 65 ? artTopY : (b.targetY === 65 ? artCenterY - 10 : artCenterY + 10)}
-                C 155 ${b.targetY < 65 ? artTopY : artCenterY}, 160 ${bTopY}, 175 ${bTopY}
-                L 1000 ${bTopY}
-                L 1000 ${bBotY}
-                L 175 ${bBotY}
-                C 160 ${bBotY}, 155 ${b.targetY > 65 ? artBotY : artCenterY}, 140 ${b.targetY > 65 ? artBotY : (b.targetY === 65 ? artCenterY + 10 : artCenterY - 10)}
-                Z
-            `;
-            item.pathEl.setAttribute("d", pathData);
+            let pathData;
+            if (b.targetY < 65) {
+                // Top capillary branch: curves smoothly leftward from arteriole (x=138) into capillary height by x=148
+                pathData = `
+                    M 138 ${artTopY}
+                    C 142 ${artTopY}, 145 ${bTopY}, 148 ${bTopY}
+                    L 1000 ${bTopY}
+                    L 1000 ${bBotY}
+                    L 148 ${bBotY}
+                    C 145 ${bBotY}, 142 ${artCenterY - 4}, 138 ${artCenterY - 8}
+                    Z
+                `;
+            } else if (b.targetY > 65) {
+                // Bottom capillary branch: curves smoothly leftward from arteriole (x=138) into capillary height by x=148
+                pathData = `
+                    M 138 ${artCenterY + 8}
+                    C 142 ${artCenterY + 4}, 145 ${bTopY}, 148 ${bTopY}
+                    L 1000 ${bTopY}
+                    L 1000 ${bBotY}
+                    L 148 ${bBotY}
+                    C 145 ${bBotY}, 142 ${artBotY}, 138 ${artBotY}
+                    Z
+                `;
+            } else {
+                // Middle capillary branch (straight through)
+                pathData = `
+                    M 138 ${artCenterY - halfCap}
+                    L 1000 ${bTopY}
+                    L 1000 ${bBotY}
+                    L 138 ${artCenterY + halfCap}
+                    Z
+                `;
+            }
+            item.pathEl.setAttribute("d", pathData.replace(/\s+/g, ' ').trim());
 
             const sph = sphincterElements[idx];
             sph.top.setAttribute("y", bTopY - sphincterThickness - 1);
@@ -1413,9 +1508,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ==========================================
-    // 10. Main Animation Loop
+    // 10. Main Animation Step & Loop
     // ==========================================
-    function animate() {
+    function stepSimulation() {
         // Clear dynamic SVG render layers
         tissueSitesLayer.innerHTML = '';
         cellDebrisLayer.innerHTML = '';
@@ -1600,9 +1695,14 @@ document.addEventListener('DOMContentLoaded', () => {
         // ----------------------------------------------------
         // B. Bleeding RBCs Welling up onto Skin Surface
         // ----------------------------------------------------
-        if (coagState.bleedIntensity > 0.02) {
-            // Calm continuous welling up from breached capillary at y=312
-            if (Math.random() < 0.38 * coagState.bleedIntensity && bleedingRBCs.length < 32) {
+        // ----------------------------------------------------
+        // B. Bleeding RBCs (Escaping upward through wound cavity)
+        // Continuous bleeding until fibrinMesh appears!
+        // ----------------------------------------------------
+        const isBleedingActive = coagState.bleedIntensity > 0.02 && coagState.fibrinMesh < 0.5;
+        if (isBleedingActive) {
+            // Continuously spawn fresh welling RBCs from capillary breach at y=312
+            if (Math.random() < 0.32 * coagState.bleedIntensity) {
                 bleedingRBCs.push({
                     x: WOUND_X + (Math.random() - 0.5) * 14,
                     y: 312,
@@ -1610,11 +1710,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     vy: -(0.45 + Math.random() * 0.45), // gentle upward ooze
                     r: 4.8,
                     atSurface: false,
-                    surfaceDrift: (Math.random() < 0.5 ? -1 : 1) * (0.2 + Math.random() * 0.35),
+                    surfaceLife: 220 + Math.random() * 120,
+                    surfaceDrift: (Math.random() < 0.5 ? -1 : 1) * (0.18 + Math.random() * 0.32),
                     alpha: 1
                 });
             }
+        }
 
+        if (bleedingRBCs.length > 0) {
             for (let i = bleedingRBCs.length - 1; i >= 0; i--) {
                 const r = bleedingRBCs[i];
                 if (!r.atSurface) {
@@ -1631,16 +1734,27 @@ document.addEventListener('DOMContentLoaded', () => {
                         r.vy = 0;
                     }
                 } else {
-                    // Reached skin surface: slowly pool and spread laterally along the surface
-                    if (Math.abs(r.x - WOUND_X) < 38) {
-                        r.x += r.surfaceDrift;
-                    }
-                    r.y = topBulgeY + Math.sin(r.x * 0.08) * 1.5;
-                }
+                    // Reached skin surface
+                    if (coagState.fibrinMesh > 0.5) {
+                        // Thrombus locked in fibrin mesh - stationary, embedded in clot
+                        r.vy = 0;
+                        r.vx = 0;
+                    } else {
+                        // Slowly pool and spread laterally along the surface
+                        if (Math.abs(r.x - WOUND_X) < 42) {
+                            r.x += r.surfaceDrift;
+                        }
+                        r.y = topBulgeY + Math.sin(r.x * 0.08) * 1.5;
 
-                if (coagState.fibrinMesh > 0.5) {
-                    r.vy = 0;
-                    r.vx = 0;
+                        r.surfaceLife--;
+                        if (r.surfaceLife < 80 || Math.abs(r.x - WOUND_X) >= 42) {
+                            r.alpha -= 0.012; // slow drip / fade away so new blood continuously wells up
+                        }
+                        if (r.alpha <= 0) {
+                            bleedingRBCs.splice(i, 1);
+                            continue;
+                        }
+                    }
                 }
 
                 const rG = document.createElementNS("http://www.w3.org/2000/svg", "g");
@@ -1652,7 +1766,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 el.setAttribute("fill", "#dc2626");
                 el.setAttribute("stroke", "#7f1d1d");
                 el.setAttribute("stroke-width", "1");
-                el.setAttribute("opacity", (r.alpha * Math.max(0.35, coagState.bleedIntensity)).toFixed(2));
+                el.setAttribute("opacity", (r.alpha * (coagState.fibrinMesh > 0.5 ? 0.95 : Math.max(0.4, coagState.bleedIntensity))).toFixed(2));
 
                 const dip = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
                 dip.setAttribute("rx", r.r * 0.45);
@@ -1665,7 +1779,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 bleedingLayer.appendChild(rG);
             }
 
-            createSvgLabel("血液平緩湧出至皮膚表層淤積", WOUND_X, topBulgeY - 14, 'rgba(185, 28, 28, 0.9)');
+            if (isBleedingActive) {
+                const bleedMsg = coagState.plateletPlug > 0.5 ? "血小板栓形成但仍持續微量滲血 (待纖維網凝固)" : "血液持續湧出並於表層淤積";
+                createSvgLabel(bleedMsg, WOUND_X, topBulgeY - 14, 'rgba(185, 28, 28, 0.9)');
+            }
         }
 
         // ----------------------------------------------------
@@ -1810,9 +1927,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const hasDebris = cellDebris.some(d => d.siteId === site.id);
                 if (hasDebris) {
+                    site.emptyTimer = 0;
                     createSvgLabel("死亡空缺(待清殘骸)", site.x, site.y, 'rgba(71, 85, 105, 0.85)');
                 } else {
-                    createSvgLabel("空缺(待活細胞分裂)", site.x, site.y, 'rgba(71, 85, 105, 0.85)');
+                    site.emptyTimer = (site.emptyTimer || 0) + 1;
+                    createSvgLabel("空缺(待細胞增生填補)", site.x, site.y, 'rgba(71, 85, 105, 0.85)');
                     const healthyNeighbors = tissueSites.filter(other =>
                         other.state === 'healthy' && (Math.abs(other.row - site.row) + Math.abs(other.col - site.col) === 1)
                     );
@@ -1823,6 +1942,22 @@ document.addEventListener('DOMContentLoaded', () => {
                         donor.targetSite = site;
                         site.state = 'incoming';
                         updateLog("🧬 <strong>細胞殘骸已清空！</strong>鄰近健康細胞啟動「有絲分裂 (Mitosis)」，一分為二填補空缺！");
+                    } else if (healthyNeighbors.length === 0 || site.emptyTimer > 150) {
+                        // Peripheral migration: stem cells/fibroblasts proliferate and migrate in from outside the frame
+                        if (Math.random() < 0.025) {
+                            site.state = 'migrating_in';
+                            const fromLeft = site.col <= 2;
+                            const startX = fromLeft ? -40 : 1040;
+                            const startY = site.origY + (Math.random() - 0.5) * 20;
+                            site.migratingCell = {
+                                x: startX,
+                                y: startY,
+                                startX: startX,
+                                startY: startY,
+                                progress: 0
+                            };
+                            updateLog("🌱 <strong>畫面外健康細胞／幹細胞增生遷徙進駐！</strong>從周邊體表移入填補空缺，組織重新啟動再生！");
+                        }
                     }
                 }
                 return;
@@ -1833,6 +1968,53 @@ document.addEventListener('DOMContentLoaded', () => {
                 waitCircle.setAttribute("cx", site.x); waitCircle.setAttribute("cy", site.y); waitCircle.setAttribute("r", site.r);
                 waitCircle.setAttribute("fill", "none"); waitCircle.setAttribute("stroke", "#f59e0b"); waitCircle.setAttribute("stroke-dasharray", "3,3");
                 tissueSitesLayer.appendChild(waitCircle);
+                return;
+            }
+
+            if (site.state === 'migrating_in') {
+                const mig = site.migratingCell;
+                if (!mig) { site.state = 'empty'; return; }
+
+                mig.progress += 0.013;
+                const t = Math.min(1, mig.progress);
+                const ease = t * t * (3 - 2 * t);
+                mig.x = mig.startX + (site.x - mig.startX) * ease;
+                mig.y = mig.startY + (site.y - mig.startY) * ease;
+
+                const waitCircle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                waitCircle.setAttribute("cx", site.x); waitCircle.setAttribute("cy", site.y); waitCircle.setAttribute("r", site.r);
+                waitCircle.setAttribute("fill", "none"); waitCircle.setAttribute("stroke", "#10b981"); waitCircle.setAttribute("stroke-dasharray", "3,3");
+                waitCircle.setAttribute("stroke-width", "1.5");
+                tissueSitesLayer.appendChild(waitCircle);
+
+                const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+                g.setAttribute("transform", `translate(${mig.x}, ${mig.y})`);
+
+                const body = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                body.setAttribute("r", site.r);
+                body.setAttribute("fill", "#ecfdf5");
+                body.setAttribute("stroke", "#10b981");
+                body.setAttribute("stroke-width", "2");
+                body.setAttribute("opacity", "0.95");
+
+                const nuc = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                nuc.setAttribute("r", "6");
+                nuc.setAttribute("fill", "#047857");
+
+                g.appendChild(body);
+                g.appendChild(nuc);
+                tissueSitesLayer.appendChild(g);
+
+                createSvgLabel("畫面外細胞增生遷徙填補", mig.x, mig.y - site.r - 8, 'rgba(4, 120, 87, 0.9)');
+
+                if (mig.progress >= 1) {
+                    site.state = 'healthy';
+                    site.infectionProgress = 0;
+                    site.migratingCell = null;
+                    site.emptyTimer = 0;
+                    updateStats();
+                    updateLog("✨ <strong>畫面外幹細胞成功就位分化為新健康細胞！</strong>空缺已填滿，組織屏障維持恆定！");
+                }
                 return;
             }
 
@@ -1936,19 +2118,54 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         // ----------------------------------------------------
-        // G. Cell Debris Layer
+        // G. Cell Debris Layer (Mucosa clearance & Tissue Autolysis)
         // ----------------------------------------------------
-        cellDebris.forEach((d, idx) => {
+        for (let idx = cellDebris.length - 1; idx >= 0; idx--) {
+            const d = cellDebris[idx];
+            d.life = (d.life || 450) - 1;
+
+            if (d.x >= 500 || d.siteId === -1) {
+                // Mucosal debris: carried rightward by mucus & cilia wave, pushed off-screen to the right!
+                d.x += 1.3;
+                const skinY = getSkinSurfaceY(d.x, swellingLevel);
+                d.y = skinY - 6 + Math.sin(Date.now() * 0.003 - d.x * 0.04) * 2;
+
+                if (d.x >= 1025) {
+                    cellDebris.splice(idx, 1);
+                    mucusClearedCount++;
+                    updateStats();
+                    updateLog("🌊 <strong>黏膜纖毛手扶梯成功將殘渣推送到畫面外排出！</strong>");
+                    continue;
+                }
+
+                if (d.life < 100) {
+                    d.alpha = Math.max(0, d.life / 100);
+                }
+                if (d.life <= 0 || d.alpha <= 0) {
+                    cellDebris.splice(idx, 1);
+                    continue;
+                }
+            } else {
+                // Interstitial tissue debris: slow natural autolysis if not engulfed by macrophages
+                if (d.life < 150) {
+                    d.alpha = Math.max(0, d.life / 150);
+                }
+                if (d.life <= 0) {
+                    cellDebris.splice(idx, 1);
+                    continue;
+                }
+            }
+
             const poly = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
-            const pts = d.vertices.map(v => `${d.x + v.x},${d.y + v.y}`).join(" ");
+            const pts = d.vertices.map(v => `${(d.x + v.x).toFixed(1)},${(d.y + v.y).toFixed(1)}`).join(" ");
             poly.setAttribute("points", pts);
             poly.setAttribute("fill", "#64748b");
             poly.setAttribute("stroke", "#94a3b8");
             poly.setAttribute("stroke-width", "1");
-            poly.setAttribute("opacity", "0.85");
+            poly.setAttribute("opacity", (0.85 * (d.alpha !== undefined ? d.alpha : 1)).toFixed(2));
             cellDebrisLayer.appendChild(poly);
             if (idx % 4 === 0) createSvgLabel("細胞殘骸", d.x, d.y - 10, 'rgba(100, 116, 139, 0.85)');
-        });
+        }
 
         // ----------------------------------------------------
         // H. Pathogens (Bacteria, Free Viruses, Nematode Parasites)
@@ -1966,11 +2183,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     const mucusTopY = skinY - 14;
                     if (b.y >= mucusTopY) {
                         b.trappedInMucus = true;
-                        b.vy *= 0.5;
-                        b.vx = 0.8; // Swept rightward by metachronal ciliary wave
-
-                        if (b.y > skinY - 2) { b.y = skinY - 2; b.vy = -Math.abs(b.vy) * 0.5; }
-                        if (b.y < mucusTopY - 2) { b.y = mucusTopY - 2; b.vy = Math.abs(b.vy) * 0.5; }
+                        b.x += 1.4; // Continuous rightward propulsion by mucociliary escalator & fluid mucus!
+                        b.y = skinY - 7 + Math.sin(Date.now() * 0.003 - b.x * 0.04) * 2;
+                        b.angle += 0.04;
 
                         // Lysozyme bactericidal lysis
                         let lysed = false;
@@ -1988,17 +2203,19 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                         if (lysed) continue;
 
-                        if (b.x >= 985) {
+                        // Pushed completely off the right edge of the screen!
+                        if (b.x >= 1025) {
                             bacteria.splice(i, 1);
                             mucusClearedCount++;
                             updateStats();
-                            updateLog("🌊 <strong>纖毛黏液手扶梯（Mucociliary Escalator）成功向右排出細菌！</strong>黏膜物理屏障排障完成。");
+                            updateLog("🌊 <strong>纖毛黏液手扶梯（Mucociliary Escalator）成功將細菌推送到畫面外排出！</strong>");
                             continue;
                         }
                     } else {
-                        // In air above mucosa
+                        // In air above mucosa: settle gently towards mucus blanket
                         b.x += b.vx;
                         b.y += b.vy;
+                        b.vy += 0.04;
                         if (isWoundOpen && b.x < 650) b.vx -= 0.06; // Opportunistic drift towards wound on left
                     }
                 } else {
@@ -2146,11 +2363,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     const mucusTopY = skinY - 14;
                     if (v.y >= mucusTopY) {
                         v.trappedInMucus = true;
-                        v.vy *= 0.5;
-                        v.vx = 0.8; // Cilia transport rightward
-
-                        if (v.y > skinY - 2) { v.y = skinY - 2; v.vy = -Math.abs(v.vy) * 0.5; }
-                        if (v.y < mucusTopY - 2) { v.y = mucusTopY - 2; v.vy = Math.abs(v.vy) * 0.5; }
+                        v.x += 1.4; // Continuous rightward propulsion by mucus & cilia
+                        v.y = skinY - 7 + Math.sin(Date.now() * 0.003 - v.x * 0.04) * 2;
 
                         // Secretory IgA Neutralization
                         for (let ab of sIgAList) {
@@ -2163,15 +2377,19 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
                         }
 
-                        if (v.x >= 985) {
+                        // Pushed completely off the right edge of the screen!
+                        if (v.x >= 1025) {
                             freeViruses.splice(i, 1);
                             mucusClearedCount++;
                             updateStats();
-                            updateLog("🌊 <strong>中和病毒已被黏膜纖毛擺動向右徹底排除！</strong>");
+                            updateLog("🌊 <strong>中和病毒已被黏液與纖毛推送到畫面外徹底排除！</strong>");
                             continue;
                         }
                     } else {
-                        v.x += v.vx; v.y += v.vy;
+                        // In air above mucosa: settle gently towards mucus
+                        v.x += v.vx;
+                        v.y += v.vy;
+                        v.vy += 0.04;
                         if (isWoundOpen && v.x < 650) v.vx -= 0.08;
                     }
                 } else {
@@ -2313,23 +2531,35 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Mucosa Zone (Right: 500~1000)
                     const contactY = skinY - 14;
                     if (p.y >= contactY - 2) {
-                        p.y = Math.min(skinY - 2, Math.max(contactY - 2, p.y));
-                        p.vy = -Math.abs(p.vy) * 0.3;
-                        p.vx = 0.65; // Trapped and swept rightward by cilia and mucus
+                        p.trappedInMucus = true;
+                        p.x += 1.1; // Trapped and propelled rightward by mucus blanket & cilia
+                        p.y = skinY - 8 + Math.sin(Date.now() * 0.003 - p.x * 0.04) * 2;
+                        p.angle = lerpAngle(p.angle, Math.sin(p.phase) * 0.08, 0.1);
                         updateLog("🛡️ <strong>黏膜緻密黏液毯與纖毛屏障阻絕寄生蟲，並向右推動排障！</strong>");
 
-                        if (p.x >= 985) {
+                        // Pushed completely off the right edge of the screen!
+                        if (p.x >= 1045) {
                             parasites.splice(i, 1);
                             mucusClearedCount++;
                             updateStats();
-                            updateLog("🌊 <strong>黏膜纖毛擺動與黏液毯成功將大型寄生蟲向右推進並排除出體外！</strong>");
+                            updateLog("🌊 <strong>黏膜纖毛擺動與黏液毯成功將大型寄生蟲推送到畫面外排出！</strong>");
                             continue;
                         }
-                    } else if (isWoundOpen && p.x < 650) {
-                        p.vx -= 0.08; // Creeps towards skin side on left
+                    } else {
+                        p.x += p.vx;
+                        p.y += p.vy;
+                        p.vy += 0.03;
+                        if (isWoundOpen && p.x < 650) p.vx -= 0.08; // Creeps towards skin side on left
+                        if (Math.hypot(p.vx, p.vy) > 0.3) {
+                            p.angle = lerpAngle(p.angle, Math.atan2(p.vy, p.vx), 0.1);
+                        }
                     }
                 } else {
                     // Skin Zone (Left: 0~500)
+                    const skinSlope = (getSkinSurfaceY(p.x + 10, swellingLevel) - getSkinSurfaceY(p.x - 10, swellingLevel)) / 20;
+                    const skinTangent = Math.atan2(skinSlope, 1);
+                    const surfaceWiggle = skinTangent + Math.sin(p.phase) * 0.1;
+
                     if (isWoundOpen) {
                         // Senses serum & tissue warmth from wound: crawls towards cut!
                         const targetY = getSkinSurfaceY(WOUND_X, swellingLevel);
@@ -2361,7 +2591,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
                         p.x += p.vx;
                         p.y += p.vy;
-                        p.angle = Math.atan2(p.vy, p.vx);
 
                         // Contact with skin surface or open wound
                         if (p.y >= skinY - 5) {
@@ -2369,8 +2598,9 @@ document.addEventListener('DOMContentLoaded', () => {
                                 // Worm slithers through the open cut into dermis!
                                 p.inTissue = true;
                                 p.y = skinY + 16;
-                                p.vy = 0.45;
+                                p.vy = 0.5;
                                 p.vx = (Math.random() - 0.5) * 0.3;
+                                p.angle = Math.PI / 2;
                                 updateLog("🪱 <strong>大型線蟲受創口組織吸引，蜿蜒爬行鑽入真皮組織！</strong>嗜酸性球準備釋放毒性顆粒！");
                             } else {
                                 // Slithers along skin surface towards wound gap, NO bouncing!
@@ -2378,6 +2608,11 @@ document.addEventListener('DOMContentLoaded', () => {
                                 p.vy = 0;
                                 const crawlDir = p.x < WOUND_X ? 0.9 : -0.9;
                                 p.vx = p.vx * 0.75 + crawlDir * 0.25 + (Math.random() - 0.5) * 0.15;
+                                p.angle = lerpAngle(p.angle, surfaceWiggle, 0.15);
+                            }
+                        } else {
+                            if (spd > 0.35) {
+                                p.angle = lerpAngle(p.angle, Math.atan2(p.vy, p.vx), 0.1);
                             }
                         }
                     } else {
@@ -2388,12 +2623,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
                         p.x += p.vx;
                         p.y += p.vy;
-                        p.angle = Math.atan2(p.vy, p.vx);
 
                         if (p.y >= skinY - 5) {
                             p.y = skinY - 5;
                             p.vy = 0;
                             p.vx = p.vx * 0.85 + (Math.random() - 0.5) * 0.2;
+                            p.angle = lerpAngle(p.angle, surfaceWiggle, 0.15);
+                        } else {
+                            if (Math.hypot(p.vx, p.vy) > 0.35) {
+                                p.angle = lerpAngle(p.angle, Math.atan2(p.vy, p.vx), 0.1);
+                            }
                         }
                     }
                 }
@@ -2405,7 +2644,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Inside dermis
                 p.x += p.vx;
                 p.y += p.vy;
-                if (p.x < 150 || p.x > 850) p.vx *= -1;
+                if (p.x < 40 || p.x > 960) p.vx *= -1;
 
                 const dermisTop = getDermisTopY(p.x, swellingLevel) + 6;
                 if (p.y < dermisTop) {
@@ -2414,6 +2653,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else if (p.y > 260) {
                     p.y = 260;
                     p.vy = -Math.abs(p.vy);
+                }
+
+                const inTissueSpd = Math.hypot(p.vx, p.vy);
+                if (inTissueSpd > 0.25) {
+                    p.angle = lerpAngle(p.angle, Math.atan2(p.vy, p.vx) + Math.sin(p.phase) * 0.15, 0.08);
                 }
 
                 if (p.hp <= 0) {
@@ -2527,11 +2771,26 @@ document.addEventListener('DOMContentLoaded', () => {
         // ----------------------------------------------------
         // J. Intravascular & Extravasating (Amoeboid / Wound) WBCs
         // ----------------------------------------------------
-        const squeezeSpeed = (activeEffects.has('swelling') || gapSize > 4) ? 1.6 : 0.8;
+        const isSwollen = activeEffects.has('swelling') || gapSize > 3.5 || swellingLevel > 0.2;
+        const squeezeSpeed = isSwollen ? 1.8 : 0.8;
+
+        // Auto physiological recruitment of leukocytes when tissue is swollen or infected
+        const hasTargets = bacteria.some(b => b.inTissue) || freeViruses.some(v => v.inTissue) || parasites.some(p => p.inTissue) || cellDebris.length > 0 || tissueSites.some(c => c.state === 'infected') || coagStage >= 1 || isSwollen;
+
+        if (isSwollen || hasTargets) {
+            autoWbcRecruitTimer++;
+            const recruitInterval = isSwollen ? 220 : 380;
+            if (autoWbcRecruitTimer > recruitInterval && (bloodWBCs.length + activeTissueWBCs.length) < 8) {
+                autoWbcRecruitTimer = 0;
+                const pool = isSwollen ? ['neutrophil', 'neutrophil', 'monocyte'] : ['neutrophil', 'monocyte'];
+                recruitCirculatingWbc(pool[Math.floor(Math.random() * pool.length)]);
+            }
+        } else {
+            autoWbcRecruitTimer = 0;
+        }
 
         for (let i = bloodWBCs.length - 1; i >= 0; i--) {
             const wbc = bloodWBCs[i];
-            const hasTargets = bacteria.some(b => b.inTissue) || freeViruses.some(v => v.inTissue) || parasites.some(p => p.inTissue) || cellDebris.length > 0 || tissueSites.some(c => c.state === 'infected') || coagStage >= 1;
 
             if (wbc.state === 'patrol') {
                 if (!wbc.targetGapX) {
@@ -2541,11 +2800,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 wbc.x += flowSpeed * 0.9;
                 if (wbc.x > 1020) {
                     wbc.x = -20;
+                    wbc.laneOffset = (Math.random() - 0.5) * 0.75;
+                    wbc.branchId = chooseWbcBranch(wbc.subtype);
                     assignWbcExitStrategy(wbc);
                 }
 
-                // If targets are present in tissue and wbc approaches its unique target gap
-                if (hasTargets && wbc.targetGapX && Math.abs(wbc.x - wbc.targetGapX) < 14) {
+                // If targets are present (or tissue is swollen) and wbc approaches an endothelial gap
+                const nearTargetGap = wbc.targetGapX && Math.abs(wbc.x - wbc.targetGapX) < (isSwollen ? 24 : 14);
+                const nearAnyGap = isSwollen && ENDO_GAPS.some(gx => Math.abs(wbc.x - gx) < 18);
+
+                if (hasTargets && (nearTargetGap || nearAnyGap)) {
+                    if (nearAnyGap && !nearTargetGap) {
+                        wbc.targetGapX = ENDO_GAPS.find(gx => Math.abs(wbc.x - gx) < 18);
+                    }
                     wbc.x = wbc.targetGapX;
                     wbc.amoebaProgress = 0;
                     if (wbc.exitRoute === 'wound' && coagState.woundOpen > 0.08 && coagState.scabProgress < 0.7) {
@@ -2553,14 +2820,40 @@ document.addEventListener('DOMContentLoaded', () => {
                         updateLog(`🛡️ <strong>${getWbcName(wbc.subtype)}從傷口破口直接移出！</strong>進入創傷中心消滅病原。`);
                     } else {
                         wbc.state = 'diapedesis';
-                        updateLog(`🔬 <strong>${getWbcName(wbc.subtype)}於內皮間隙展現變形蟲運動遊出 (Diapedesis)！</strong>`);
+                        updateLog(`🔬 <strong>${getWbcName(wbc.subtype)}於內皮間隙展現變形蟲運動遊出 (Diapedesis)！</strong>${isSwollen ? '（組織水腫使內皮間隙顯著擴大，白血球極易滲出至組織間質）' : ''}`);
                     }
                 }
 
+                // Dynamic Y position: strictly inside arteriole, smoothly curving leftward into capillary
+                const branchObj = BRANCHES.find(b => b.id === wbc.branchId) || BRANCHES[0];
+                const halfArt = arterioleWidth / 2;
+                const halfCap = capillaryWidth / 2;
+                const laneOff = wbc.laneOffset !== undefined ? wbc.laneOffset : 0;
+
+                // Safe spread inside arteriole: strictly contained within arteriole walls
+                const maxSpread = Math.max(2, halfArt - wbc.r - 2);
+                const branchBias = wbc.branchId === 'top' ? -0.35 : (wbc.branchId === 'bot' ? 0.35 : 0);
+                const startY = 65 + branchBias * maxSpread + laneOff * (maxSpread * 0.45);
+
+                const endY = branchObj.targetY + laneOff * Math.max(0, halfCap - wbc.r - 1);
+
+                let localY;
+                const xTransStart = 95;
+                const xTransEnd = 148;
+                if (wbc.x < xTransStart) {
+                    localY = startY;
+                } else if (wbc.x >= xTransStart && wbc.x < xTransEnd) {
+                    const t = (wbc.x - xTransStart) / (xTransEnd - xTransStart);
+                    const s = t * t * (3 - 2 * t);
+                    localY = startY + (endY - startY) * s;
+                } else {
+                    localY = endY;
+                }
+                wbc.y = localY;
+                const wbcGlobalY = 300 + localY;
+
                 // Render patrolling spherical WBC in vessel
                 const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-                const branchObj = BRANCHES.find(b => b.id === wbc.branchId) || BRANCHES[0];
-                const wbcGlobalY = 300 + branchObj.targetY;
                 g.setAttribute("transform", `translate(${wbc.x}, ${wbcGlobalY})`);
 
                 const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
@@ -2760,14 +3053,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // ----------------------------------------------------
-        // L. Intravascular RBCs Stream
+        // L. Intravascular RBCs & Platelet/Plasma Stream
         // ----------------------------------------------------
         const halfCap = capillaryWidth / 2;
         const halfArt = arterioleWidth / 2;
+        const xTransStart = 95;
+        const xTransEnd = 148;
 
         bloodParticles.forEach(p => {
             let sectionSpeed = flowSpeed;
-            if (p.x < 140) sectionSpeed = flowSpeed * (22 / arterioleWidth);
+            if (p.x < xTransEnd) sectionSpeed = flowSpeed * (22 / arterioleWidth);
             p.x += sectionSpeed;
             if (p.x > 1020) {
                 p.x = -20;
@@ -2779,17 +3074,21 @@ document.addEventListener('DOMContentLoaded', () => {
             const targetBranchObj = BRANCHES.find(b => b.id === p.branchId) || BRANCHES[1];
             const branchY = targetBranchObj.targetY;
 
-            if (p.x < 140) {
-                const maxSpread = halfArt - p.r - 2;
-                p.y = 65 + p.laneOffset * (maxSpread * 1.6);
-            } else if (p.x >= 140 && p.x < 180) {
-                const t = (p.x - 140) / 40;
-                const startY = 65 + p.laneOffset * (halfArt - p.r - 2);
-                const endY = branchY + (capillaryWidth > 20 ? p.laneOffset * (halfCap - p.r) : 0);
-                p.y = startY + (endY - startY) * t;
+            // Shift transition leftward (x: 95 -> 148) so RBCs & platelets curve smoothly into capillary
+            // and pass cleanly through precapillary sphincters (x=152..164) without overshooting outside
+            const maxSpread = Math.max(1, halfArt - p.r - 2);
+            const branchBias = p.branchId === 'top' ? -0.4 : (p.branchId === 'bot' ? 0.4 : 0);
+            const startY = 65 + branchBias * maxSpread + p.laneOffset * (maxSpread * 0.45);
+            const endY = branchY + (capillaryWidth > 20 ? p.laneOffset * (halfCap - p.r) : p.laneOffset * Math.max(0, halfCap - p.r - 1.2));
+
+            if (p.x < xTransStart) {
+                p.y = startY;
+            } else if (p.x >= xTransStart && p.x < xTransEnd) {
+                const t = (p.x - xTransStart) / (xTransEnd - xTransStart);
+                const s = t * t * (3 - 2 * t);
+                p.y = startY + (endY - startY) * s;
             } else {
-                if (capillaryWidth <= 20) p.y = branchY;
-                else p.y = branchY + (halfCap - p.r - 1.2) * p.laneOffset;
+                p.y = endY;
             }
 
             p.el.setAttribute("cx", p.x);
@@ -2926,8 +3225,18 @@ document.addEventListener('DOMContentLoaded', () => {
         // N. Real-time Status Board
         // ----------------------------------------------------
         updateStats();
+    }
 
+    function animate() {
         animationId = requestAnimationFrame(animate);
+
+        speedAccum += simSpeed;
+        if (speedAccum < 1.0) return;
+
+        while (speedAccum >= 1.0) {
+            speedAccum -= 1.0;
+            stepSimulation();
+        }
     }
 
     // Helper functions for WBC rendering
@@ -3083,9 +3392,35 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    document.getElementById('btn-spawn-bacteria').addEventListener('click', () => spawnBacteria());
-    document.getElementById('btn-spawn-virus').addEventListener('click', () => spawnFreeVirus());
-    document.getElementById('btn-spawn-parasite').addEventListener('click', () => spawnParasite());
+    const btnSpawnBacteria = document.getElementById('btn-spawn-bacteria');
+    const btnSpawnVirus = document.getElementById('btn-spawn-virus');
+    const btnSpawnParasite = document.getElementById('btn-spawn-parasite');
+
+    function selectPathogen(type) {
+        selectedPathogen = type;
+        if (btnSpawnBacteria) btnSpawnBacteria.classList.toggle('active', type === 'bacteria');
+        if (btnSpawnVirus) btnSpawnVirus.classList.toggle('active', type === 'virus');
+        if (btnSpawnParasite) btnSpawnParasite.classList.toggle('active', type === 'parasite');
+    }
+
+    if (btnSpawnBacteria) {
+        btnSpawnBacteria.addEventListener('click', () => {
+            selectPathogen('bacteria');
+            spawnBacteria();
+        });
+    }
+    if (btnSpawnVirus) {
+        btnSpawnVirus.addEventListener('click', () => {
+            selectPathogen('virus');
+            spawnFreeVirus();
+        });
+    }
+    if (btnSpawnParasite) {
+        btnSpawnParasite.addEventListener('click', () => {
+            selectPathogen('parasite');
+            spawnParasite();
+        });
+    }
 
     document.getElementById('btn-spawn-neutro').addEventListener('click', () => spawnNeutrophil());
     document.getElementById('btn-spawn-mono').addEventListener('click', () => spawnMonocyte());
@@ -3094,46 +3429,19 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btn-spawn-bcell').addEventListener('click', () => spawnBCell());
     document.getElementById('btn-spawn-tcell').addEventListener('click', () => spawnKillerCell());
 
-    if (btnDemoMucosa) {
-        btnDemoMucosa.addEventListener('click', () => {
-            // Spawn 3 bacteria and 3 viruses directly over the mucosa surface on the right (x: 580 ~ 880)
-            for (let k = 0; k < 3; k++) {
-                const bx = 580 + k * 105 + (Math.random() * 20 - 10);
-                const by = -45 + (Math.random() * 15 - 7.5);
-                bacteria.push({
-                    x: bx, y: by,
-                    vx: 0.2 + (Math.random() - 0.5) * 0.3,
-                    vy: 0.85 + Math.random() * 0.35,
-                    r: 7.5,
-                    inTissue: false,
-                    trappedInMucus: false,
-                    angle: Math.random() * Math.PI * 2,
-                    opsonized: false,
-                    abCount: 0,
-                    divideTimer: 0
-                });
-            }
-
-            for (let k = 0; k < 3; k++) {
-                const vx = 620 + k * 95 + (Math.random() * 20 - 10);
-                const vy = -48 + (Math.random() * 15 - 7.5);
-                freeViruses.push({
-                    x: vx, y: vy,
-                    vx: 0.2 + (Math.random() - 0.5) * 0.3,
-                    vy: 0.95 + Math.random() * 0.35,
-                    r: 5.5,
-                    inTissue: false,
-                    trappedInMucus: false,
-                    opsonized: false,
-                    abCount: 0,
-                    penetratingTimer: 0
-                });
-            }
-
-            updateLog("💧 <strong>演示黏膜第一道防線：</strong>杯狀細胞分泌黏液捕捉病原體，溶菌酶（黃色光點）水解細菌細胞壁，分泌型 IgA（藍色抗體）中和病毒，柱狀細胞上的纖毛向右波浪擺動排障！");
-            updateStats();
+    if (toggleDimNerveCheckbox && nerveNetworkGroup) {
+        toggleDimNerveCheckbox.addEventListener('change', () => {
+            nerveNetworkGroup.classList.toggle('dimmed', toggleDimNerveCheckbox.checked);
         });
     }
+
+    document.querySelectorAll('.speed-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.speed-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            simSpeed = parseFloat(btn.dataset.speed) || 1.0;
+        });
+    });
 
     resetBtn.addEventListener('click', () => {
         activeEffects.clear();
@@ -3152,6 +3460,7 @@ document.addEventListener('DOMContentLoaded', () => {
         bloodWBCs = [];
         activeTissueWBCs = [];
         mucusClearedCount = 0;
+        selectPathogen('bacteria');
         initMucosaChemicals();
         initTissueSites();
         updateVisualization();
