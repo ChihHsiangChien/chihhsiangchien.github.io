@@ -94,7 +94,7 @@
       targetX: 468,
       targetY: 385,
       hitRadius: 36,
-      desc: '排列在絨毛最外層的單層柱狀上皮細胞，游離面具有密集的「微絨毛」（刷狀緣），其上附著雙醣酶與肽酶，可完成養分最後一步分解並進行主動與被動吸收。'
+      desc: '排列在絨毛最外層的單層柱狀上皮細胞，游離面具有密集的「微絨毛」（刷狀緣）。細胞膜外側牢牢嵌有雙醣酶與肽酶（刷狀緣酵素，負責最後一步分解）；微絨毛膜上【無脂酶】，脂質在腸腔先行分解後直接穿膜擴散。'
     },
     capillary: {
       id: 'capillary',
@@ -255,30 +255,69 @@
   function initEnzymes() {
     enzymes.length = 0;
     const densityLevel = parseInt(enzymeDensityEl.value, 10); // 1, 2, 3
-    const total = densityLevel === 1 ? 10 : densityLevel === 2 ? 18 : 28;
 
-    const types = ['maltase', 'peptidase', 'lipase'];
-    for (let i = 0; i < total; i++) {
-      // 分布在左側腸腔與絨毛刷狀緣周圍 (x: 240 ~ 470, y: 80 ~ 510)
-      const angle = Math.random() * Math.PI * 2;
-      const baseX = 335 + Math.random() * 125;
-      const baseY = 110 + Math.random() * 395;
+    // 1. 微絨毛膜結合酵素 (雙醣酶與肽酶，牢固鑲嵌於微絨毛外膜/刷狀緣)
+    // 分布在左側與頂端迎著食糜流入的絨毛上皮細胞 (cell index 12 ~ 36)
+    const stepInterval = densityLevel === 1 ? 4 : densityLevel === 2 ? 3 : 2;
+    let toggleType = 0;
+    for (let cIdx = 12; cIdx <= 36; cIdx += stepInterval) {
+      if (!epithelialCells[cIdx]) continue;
+      const cell = epithelialCells[cIdx];
+      const isMaltase = toggleType % 2 === 0;
+      toggleType++;
+
+      const membraneApexDist = cell.height * 0.5; // 15px (微絨毛外膜)
+      const stalkLen = 9; // 酵素突出於細胞膜微絨毛外側的長度
+      const enzX = cell.x + cell.nx * (membraneApexDist + stalkLen);
+      const enzY = cell.y + cell.ny * (membraneApexDist + stalkLen);
+
       enzymes.push({
-        type: types[i % types.length],
+        id: (isMaltase ? 'maltase_' : 'peptidase_') + cIdx,
+        type: isMaltase ? 'maltase' : 'peptidase',
+        name: isMaltase ? '雙醣酶 (微絨毛膜)' : '肽酶 (微絨毛膜)',
+        substrate: isMaltase ? 'carb' : 'protein',
+        isMembrane: true,
+        cellIndex: cIdx,
+        baseX: enzX,
+        baseY: enzY,
+        x: enzX,
+        y: enzY,
+        nx: cell.nx,
+        ny: cell.ny,
+        angle: cell.angle,
+        stalkBaseX: cell.x + cell.nx * membraneApexDist,
+        stalkBaseY: cell.y + cell.ny * membraneApexDist,
+        busyTimer: 0,
+        vibrateOffset: Math.random() * Math.PI * 2
+      });
+    }
+
+    // 2. 小腸腔游離酵素：胰脂酶 (游離於左側與中央小腸腔液體中；微絨毛膜上無脂酶)
+    const lipaseCount = densityLevel === 1 ? 3 : densityLevel === 2 ? 5 : 8;
+    for (let i = 0; i < lipaseCount; i++) {
+      const baseX = 210 + Math.random() * 190;
+      const baseY = 130 + Math.random() * 340;
+      const angle = Math.random() * Math.PI * 2;
+      enzymes.push({
+        id: 'lipase_' + i,
+        type: 'lipase',
+        name: '胰脂酶 (小腸腔游離)',
+        substrate: 'lipid',
+        isMembrane: false,
         x: baseX,
         y: baseY,
         homeX: baseX,
         homeY: baseY,
-        vx: Math.cos(angle) * 0.5,
-        vy: Math.sin(angle) * 0.5,
-        mouthPhase: Math.random() * Math.PI * 2,
-        busyTimer: 0
+        vx: Math.cos(angle) * 0.55,
+        vy: Math.sin(angle) * 0.55,
+        busyTimer: 0,
+        mouthPhase: Math.random() * Math.PI * 2
       });
     }
   }
 
   // ==========================================
-  // 2. 養分分子生成與分解邏輯
+  // 2. 養分分子生成與分解邏輯 (酵素專一性機制)
   // ==========================================
   function spawnMacromolecule(type, customY) {
     const types = ['carb', 'protein', 'lipid'];
@@ -287,7 +326,7 @@
     const startX = 25 + Math.random() * 45;
     const startY = customY !== undefined ? customY : (105 + Math.random() * 365);
 
-    // 設定目標靠近中央解剖絨毛的左側刷狀緣 (x: 390 ~ 440)
+    // 設定目標靠近中央解剖絨毛的左側刷狀緣 (x: 420 ~ 438)
     const targetY = Math.max(125, Math.min(485, startY + (Math.random() - 0.5) * 90));
     const targetX = targetY < 190 ? 430 + (190 - targetY) * 0.45 : 425;
 
@@ -309,27 +348,27 @@
   }
 
   function cleaveMacromolecule(macro, enzyme) {
-    // 產生分解閃光與文字特效
+    // 產生分解閃光與文字特效 (依專一性與空間位置明確標示)
     const labelMap = {
-      carb: '雙醣酶分解 ➔ 葡萄糖',
-      protein: '肽酶分解 ➔ 胺基酸',
-      lipid: '脂酶分解 ➔ 脂肪酸+甘油'
+      carb: '雙醣酶 (微絨毛膜) ➔ 葡萄糖',
+      protein: '肽酶 (微絨毛膜) ➔ 胺基酸',
+      lipid: '胰脂酶 (小腸腔) ➔ 脂肪酸與微胞'
     };
     const colorMap = {
-      carb: '#0ea5e9',
-      protein: '#a855f7',
-      lipid: '#eab308'
+      carb: '#0284c7',
+      protein: '#8b5cf6',
+      lipid: '#f59e0b'
     };
 
     effects.push({
       x: macro.x,
       y: macro.y,
       radius: 6,
-      maxRadius: 34,
+      maxRadius: 36,
       alpha: 1,
       color: colorMap[macro.type],
       text: labelMap[macro.type],
-      vy: -0.6
+      vy: -0.65
     });
 
     if (enzyme) {
@@ -351,13 +390,13 @@
       let waypoints = [];
       if (isWaterSoluble) {
         // 水溶性養分（葡萄糖、胺基酸）— 微血管左進右出：
-        // 1. 穿過左側絨毛上皮細胞 (x: 455 -> 495)
+        // 1. 經上皮細胞膜轉運蛋白主動運輸穿膜 (x: 462 -> 498)
         // 2. 從左側進入微血管網 (x: 534, y: absorbY)
         // 3. 順著微血管網由左往右橫向流動至右側微靜脈端 (x: 586, y: absorbY)
         // 4. 順著右側微靜脈向下（配合右側藍色向下箭頭）匯入底部小靜脈 (x: 586, y: 632)
         // 5. 隨小靜脈血液向右方流出 (x: 880, y: 632)
         waypoints = [
-          { x: 462, y: absorbY, stage: 'epithelium' },
+          { x: 462, y: absorbY, stage: 'epithelium', desc: '膜轉運蛋白主動運輸' },
           { x: 498, y: absorbY, stage: 'crossing' },
           { x: 534, y: absorbY, stage: 'vessel' },
           { x: 586, y: absorbY + 6, stage: 'capillary_cross' },
@@ -365,14 +404,16 @@
           { x: 880, y: 632, stage: 'exit' }
         ];
       } else {
-        // 脂溶性養分（脂肪酸+甘油 ➔ 乳糜微粒）：
-        // 1. 穿過左側絨毛上皮細胞 (x: 455 -> 505)
-        // 2. 進入絨毛中央的黃綠色乳糜管 (x: 560, y: absorbY)
-        // 3. 順著乳糜管向下流入底部淋巴管 (x: 560, y: 658)
-        // 4. 隨淋巴液由左往右流出 (x: 880, y: 658)
+        // 脂溶性養分（脂肪酸+甘油微胞）：
+        // 1. 在微絨毛膜直接【簡單擴散穿膜】(膜上無脂酶！)
+        // 2. 在上皮細胞內質網重組成三酸甘油酯並包裝為乳糜微粒 (x: 510)
+        // 3. 進入絨毛中央的黃綠色乳糜管 (x: 560, y: absorbY)
+        // 4. 順著乳糜管向下流入底部淋巴管 (x: 560, y: 658)
+        // 5. 隨淋巴液由左往右流出 (x: 880, y: 658)
         waypoints = [
-          { x: 462, y: absorbY, stage: 'epithelium' },
-          { x: 510, y: absorbY, stage: 'crossing' },
+          { x: 452, y: absorbY, stage: 'diffuse_in', desc: '脂溶性直接擴散穿膜' },
+          { x: 480, y: absorbY, stage: 'epithelium' },
+          { x: 512, y: absorbY, stage: 'crossing', desc: '合成乳糜微粒' },
           { x: 560, y: absorbY, stage: 'vessel' },
           { x: 560, y: 658, stage: 'lymph_trunk' },
           { x: 880, y: 658, stage: 'exit' }
@@ -385,7 +426,7 @@
         y: my,
         waypoints,
         wpIndex: 0,
-        speed: 1.65 + Math.random() * 0.35,
+        speed: (macro.type === 'lipid' ? 1.55 : 1.68) + Math.random() * 0.3,
         counted: false,
         inVessel: false,
         pulse: Math.random() * Math.PI * 2
@@ -431,58 +472,71 @@
       }
     });
 
-    // 3. 更新消化酵素運動與追蹤大分子
+    // 3. 更新消化酵素：
+    // (A) 膜結合酵素 (雙醣酶/肽酶)：牢固嵌在微絨毛外膜，受微腸蠕動微幅擺動
+    // (B) 腸腔游離胰脂酶：自由游動於小腸腔液中，具專一性，專門追蹤催化三酸甘油酯
     enzymes.forEach(enz => {
-      enz.mouthPhase += 0.18 * simSpeed;
       if (enz.busyTimer > 0) enz.busyTimer -= simSpeed;
 
-      // 尋找最近且尚未被完全分解的大分子
-      let nearest = null;
-      let minDist = 115;
-      for (let i = 0; i < macromolecules.length; i++) {
-        const m = macromolecules[i];
-        if (m.x > 180) {
-          const d = Math.hypot(m.x - enz.x, m.y - enz.y);
-          if (d < minDist) {
-            minDist = d;
-            nearest = m;
+      if (enz.isMembrane) {
+        // 微絨毛外膜結合酵素：輕微波動
+        enz.vibrateOffset += 0.08 * simSpeed;
+        const wobble = Math.sin(timeTick * 2.2 + enz.vibrateOffset) * 1.8;
+        enz.x = enz.baseX + enz.ny * wobble;
+        enz.y = enz.baseY - enz.nx * wobble;
+      } else {
+        // 腸腔游離胰脂酶：游離巡邏並專一追蹤脂質大分子
+        enz.mouthPhase += 0.18 * simSpeed;
+
+        let nearestLipid = null;
+        let minDist = 135;
+        for (let i = 0; i < macromolecules.length; i++) {
+          const m = macromolecules[i];
+          if (m.type === 'lipid' && m.x > 80 && m.x < 440) {
+            const d = Math.hypot(m.x - enz.x, m.y - enz.y);
+            if (d < minDist) {
+              minDist = d;
+              nearestLipid = m;
+            }
           }
         }
+
+        if (nearestLipid) {
+          const dx = nearestLipid.x - enz.x;
+          const dy = nearestLipid.y - enz.y;
+          const d = Math.hypot(dx, dy) || 1;
+          enz.vx += (dx / d) * 0.22 * simSpeed;
+          enz.vy += (dy / d) * 0.22 * simSpeed;
+        } else {
+          // 緩和回到巡邏區域
+          const dx = enz.homeX - enz.x;
+          const dy = enz.homeY - enz.y;
+          enz.vx += dx * 0.006 * simSpeed + (Math.random() - 0.5) * 0.08;
+          enz.vy += dy * 0.006 * simSpeed + (Math.random() - 0.5) * 0.08;
+        }
+
+        const speed = Math.hypot(enz.vx, enz.vy);
+        const maxSpd = 1.95;
+        if (speed > maxSpd) {
+          enz.vx = (enz.vx / speed) * maxSpd;
+          enz.vy = (enz.vy / speed) * maxSpd;
+        }
+
+        enz.x += enz.vx * simSpeed;
+        enz.y += enz.vy * simSpeed;
+
+        // 邊界限制在小腸腔中
+        if (enz.x < 170) enz.x = 170;
+        if (enz.x > 425) enz.x = 425;
+        if (enz.y < 85) enz.y = 85;
+        if (enz.y > 515) enz.y = 515;
       }
-
-      if (nearest) {
-        const dx = nearest.x - enz.x;
-        const dy = nearest.y - enz.y;
-        const d = Math.hypot(dx, dy) || 1;
-        enz.vx += (dx / d) * 0.16 * simSpeed;
-        enz.vy += (dy / d) * 0.16 * simSpeed;
-      } else {
-        // 緩和回到各自的巡邏區域 (左側腸腔與刷狀緣附近)
-        const dx = enz.homeX - enz.x;
-        const dy = enz.homeY - enz.y;
-        enz.vx += dx * 0.005 * simSpeed + (Math.random() - 0.5) * 0.08;
-        enz.vy += dy * 0.005 * simSpeed + (Math.random() - 0.5) * 0.08;
-      }
-
-      // 限制酵素最大速度
-      const speed = Math.hypot(enz.vx, enz.vy);
-      const maxSpd = 1.85;
-      if (speed > maxSpd) {
-        enz.vx = (enz.vx / speed) * maxSpd;
-        enz.vy = (enz.vy / speed) * maxSpd;
-      }
-
-      enz.x += enz.vx * simSpeed;
-      enz.y += enz.vy * simSpeed;
-
-      // 邊界限制在腸腔與刷狀緣外側
-      if (enz.x < 180) enz.x = 180;
-      if (enz.x > 460) enz.x = 460;
-      if (enz.y < 70) enz.y = 70;
-      if (enz.y > 525) enz.y = 525;
     });
 
-    // 4. 更新大分子養分（由左往右漂流 -> 接近絨毛刷狀緣與酵素 -> 分解）
+    // 4. 更新大分子養分（酵素專一性催化機制）：
+    // - 醣類 (carb)：只由微絨毛膜上的「雙醣酶 (maltase)」水解
+    // - 蛋白質 (protein)：只由微絨毛膜上的「肽酶 (peptidase)」水解
+    // - 脂質 (lipid)：在小腸腔由游離的「胰脂酶 (lipase)」水解；微絨毛膜無脂酶！
     for (let i = macromolecules.length - 1; i >= 0; i--) {
       const m = macromolecules[i];
       m.angle += m.va * simSpeed;
@@ -495,24 +549,52 @@
         m.x += m.vx * simSpeed;
         m.y += (dy * 0.015 + Math.sin(timeTick + i) * 0.25) * simSpeed;
       } else {
-        // 已抵達絨毛上皮細胞刷狀緣外圍，微微浮動等待/進行分解
+        // 已抵達絨毛上皮細胞刷狀緣外圍，微微浮動
         m.x += Math.sin(timeTick * 2 + i) * 0.2 * simSpeed;
         m.y += Math.cos(timeTick * 2 + i) * 0.2 * simSpeed;
-        // 刷狀緣固定酶也會直接催化分解
-        m.digestionProgress += 1.45 * simSpeed;
-        m.beingDigested = true;
       }
 
-      // 檢查是否有游離酵素接觸催化
       let catalystEnzyme = null;
-      for (let j = 0; j < enzymes.length; j++) {
-        const enz = enzymes[j];
-        const dist = Math.hypot(enz.x - m.x, enz.y - m.y);
-        if (dist < 32 && m.x > 210) {
-          m.digestionProgress += 2.6 * simSpeed;
+
+      if (m.type === 'lipid') {
+        // 脂質：由小腸腔液中的胰脂酶 (lipase) 催化水解
+        for (let j = 0; j < enzymes.length; j++) {
+          const enz = enzymes[j];
+          if (enz.type === 'lipase') {
+            const dist = Math.hypot(enz.x - m.x, enz.y - m.y);
+            if (dist < 34) {
+              m.digestionProgress += 3.2 * simSpeed;
+              m.beingDigested = true;
+              catalystEnzyme = enz;
+              break;
+            }
+          }
+        }
+        // 微絨毛細胞膜上【無脂酶】：若脂質大分子未經胰脂酶分解即抵達刷狀緣，不能被膜水解
+        // 必須等待腸腔胰脂酶前來催化
+        if (dx <= 12 && !catalystEnzyme && m.digestionProgress < 20) {
+          // 微微浮動等待胰脂酶
+        }
+      } else {
+        // 醣類 (carb) 與 蛋白質 (protein)：抵達微絨毛膜時，由專一的膜結合酵素水解
+        const reqType = m.type === 'carb' ? 'maltase' : 'peptidase';
+        for (let j = 0; j < enzymes.length; j++) {
+          const enz = enzymes[j];
+          if (enz.type === reqType) {
+            const dist = Math.hypot(enz.x - m.x, enz.y - m.y);
+            if (dist < 36) {
+              m.digestionProgress += 3.0 * simSpeed;
+              m.beingDigested = true;
+              catalystEnzyme = enz;
+              break;
+            }
+          }
+        }
+
+        // 當抵達微絨毛刷狀緣 (dx <= 12)，微絨毛膜結合酵素持續依專一性催化
+        if (dx <= 12 && !catalystEnzyme) {
+          m.digestionProgress += 1.3 * simSpeed;
           m.beingDigested = true;
-          catalystEnzyme = enz;
-          break;
         }
       }
 
@@ -1007,29 +1089,116 @@
     ctx.save();
     enzymes.forEach(enz => {
       ctx.save();
-      ctx.translate(enz.x, enz.y);
-      const mouthAngle = 0.25 + Math.abs(Math.sin(enz.mouthPhase)) * 0.45;
-      const heading = Math.atan2(enz.vy, enz.vx);
-      ctx.rotate(heading);
 
-      // 酵素主體 (Pac-Man 催化活性位造型)
-      ctx.fillStyle = enz.busyTimer > 0 ? '#34d399' : '#10b981';
-      ctx.strokeStyle = '#065f46';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(0, 0, 10, mouthAngle, Math.PI * 2 - mouthAngle);
-      ctx.lineTo(0, 0);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
+      if (enz.isMembrane) {
+        // (A) 微絨毛外膜結合酵素：繪製微絨毛錨定柄桿 (Anchor Stalk)
+        ctx.strokeStyle = enz.type === 'maltase' ? 'rgba(2, 132, 199, 0.5)' : 'rgba(124, 58, 237, 0.5)';
+        ctx.lineWidth = 2.4;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(enz.stalkBaseX, enz.stalkBaseY);
+        ctx.lineTo(enz.x, enz.y);
+        ctx.stroke();
 
-      ctx.restore();
+        ctx.translate(enz.x, enz.y);
+        // 面向微絨毛法向量外側 (朝向腸腔)
+        const heading = Math.atan2(enz.ny, enz.nx);
+        ctx.rotate(heading);
 
-      // 酵素小標籤
-      ctx.fillStyle = '#065f46';
-      ctx.font = 'bold 9px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('酵素', enz.x, enz.y - 13);
+        const isBusy = enz.busyTimer > 0;
+
+        if (enz.type === 'maltase') {
+          // 雙醣酶 (Maltase)：天藍色圓球 + 外側六角形鎖鑰受質結合凹槽
+          if (isBusy) {
+            ctx.shadowColor = '#38bdf8';
+            ctx.shadowBlur = 10;
+          }
+          ctx.fillStyle = isBusy ? '#38bdf8' : '#0284c7';
+          ctx.strokeStyle = '#0369a1';
+          ctx.lineWidth = 1.6;
+
+          ctx.beginPath();
+          ctx.arc(0, 0, 9.5, 0.45, Math.PI * 2 - 0.45);
+          // 內嵌六角形受質結合位
+          ctx.lineTo(-1, 4.5);
+          ctx.lineTo(-4.5, 0);
+          ctx.lineTo(-1, -4.5);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.restore();
+
+          // 膜結合雙醣酶標籤
+          ctx.fillStyle = '#0369a1';
+          ctx.font = 'bold 8.5px "Noto Sans TC", sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('雙醣酶(膜)', enz.x, enz.y - 12);
+        } else {
+          // 肽酶 (Peptidase)：紫色圓球 + 外側多齒狀肽鍵受質結合凹槽
+          if (isBusy) {
+            ctx.shadowColor = '#c084fc';
+            ctx.shadowBlur = 10;
+          }
+          ctx.fillStyle = isBusy ? '#c084fc' : '#8b5cf6';
+          ctx.strokeStyle = '#6d28d9';
+          ctx.lineWidth = 1.6;
+
+          ctx.beginPath();
+          ctx.arc(0, 0, 9.5, 0.55, Math.PI * 2 - 0.55);
+          // 內凹肽鍵結合齒
+          ctx.lineTo(-1, 5);
+          ctx.lineTo(-4, 2.5);
+          ctx.lineTo(-1, 0);
+          ctx.lineTo(-4, -2.5);
+          ctx.lineTo(-1, -5);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.restore();
+
+          // 膜結合肽酶標籤
+          ctx.fillStyle = '#6d28d9';
+          ctx.font = 'bold 8.5px "Noto Sans TC", sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('肽酶(膜)', enz.x, enz.y - 12);
+        }
+      } else {
+        // (B) 小腸腔游離胰脂酶：自由游動於小腸腔液體中
+        ctx.translate(enz.x, enz.y);
+        const heading = Math.atan2(enz.vy, enz.vx);
+        ctx.rotate(heading);
+
+        const isBusy = enz.busyTimer > 0;
+        if (isBusy) {
+          ctx.shadowColor = '#f59e0b';
+          ctx.shadowBlur = 12;
+        }
+
+        const mouthAngle = 0.28 + Math.abs(Math.sin(enz.mouthPhase)) * 0.38;
+        ctx.fillStyle = isBusy ? '#fbbf24' : '#f59e0b';
+        ctx.strokeStyle = '#b45309';
+        ctx.lineWidth = 1.6;
+
+        ctx.beginPath();
+        ctx.arc(0, 0, 10.5, mouthAngle, Math.PI * 2 - mouthAngle);
+        // 脂酶雙葉狀活性凹槽
+        ctx.lineTo(-2, 3.5);
+        ctx.lineTo(-5.5, 0);
+        ctx.lineTo(-2, -3.5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.restore();
+
+        // 腸腔胰脂酶標籤
+        ctx.fillStyle = '#b45309';
+        ctx.font = 'bold 8.5px "Noto Sans TC", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('胰脂酶(腔)', enz.x, enz.y - 13);
+      }
     });
     ctx.restore();
   }
@@ -1056,7 +1225,7 @@
       ctx.rotate(m.angle);
 
       if (m.beingDigested) {
-        ctx.shadowColor = '#10b981';
+        ctx.shadowColor = m.type === 'carb' ? '#0ea5e9' : m.type === 'protein' ? '#a855f7' : '#f59e0b';
         ctx.shadowBlur = 12;
       }
 
@@ -1106,16 +1275,16 @@
 
       ctx.restore();
 
-      // 若正在被酵素分解，繪製分解進度環
+      // 若正在被專一酵素分解，繪製相應顏色的分解進度環
       if (m.digestionProgress > 5) {
         ctx.save();
-        ctx.strokeStyle = '#10b981';
-        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = m.type === 'carb' ? '#0284c7' : m.type === 'protein' ? '#8b5cf6' : '#f59e0b';
+        ctx.lineWidth = 2.6;
         ctx.beginPath();
         ctx.arc(
           m.x,
           m.y,
-          21,
+          22,
           -Math.PI / 2,
           -Math.PI / 2 + (Math.PI * 2 * m.digestionProgress) / 100
         );
@@ -1335,6 +1504,7 @@
         return st;
       }
     }
+
     // 額外檢查中央乳糜管長條區
     if (vx >= 546 - pad * 0.5 && vx <= 574 + pad * 0.5 && vy >= 180 && vy <= 520) {
       return STRUCTURES.lacteal;
@@ -1343,6 +1513,35 @@
     if (vx >= 525 - pad * 0.5 && vx <= 595 + pad * 0.5 && vy >= 150 && vy <= 540) {
       return STRUCTURES.capillary;
     }
+
+    // 檢查是否點擊或懸停於消化酵素
+    if (toggleEnzymesEl.checked) {
+      for (let i = 0; i < enzymes.length; i++) {
+        const enz = enzymes[i];
+        if (Math.hypot(vx - enz.x, vy - enz.y) < 18 + pad) {
+          if (enz.type === 'maltase') {
+            return {
+              id: 'maltase',
+              name: '雙醣酶 (微絨毛膜結合酵素)',
+              desc: '【刷狀緣膜酵素】：牢固鑲嵌於微絨毛細胞膜外表面。具嚴格專一性，專門將麥芽糖等雙醣水解為單醣（葡萄糖），分解後隨即由旁邊的細胞膜轉運蛋白主動運輸吸收進入微血管。'
+            };
+          } else if (enz.type === 'peptidase') {
+            return {
+              id: 'peptidase',
+              name: '肽酶 (微絨毛膜結合酵素)',
+              desc: '【刷狀緣膜酵素】：牢固鑲嵌於微絨毛細胞膜外表面。具嚴格專一性，專門將寡肽或二肽水解為游離胺基酸，隨即進入微血管。'
+            };
+          } else if (enz.type === 'lipase') {
+            return {
+              id: 'lipase',
+              name: '胰脂酶 (小腸腔游離酵素)',
+              desc: '【腸腔游離酵素】：由胰臟製造分泌進入小腸管腔液中。在膽鹽乳化輔助下，於小腸腔中將三酸甘油酯分解為游離脂肪酸與單酸甘油酯。請注意：微絨毛細胞膜上【無脂質消化酵素】，脂質水解產物是以脂溶性特性直接擴散穿膜吸收！'
+            };
+          }
+        }
+      }
+    }
+
     return null;
   }
 
