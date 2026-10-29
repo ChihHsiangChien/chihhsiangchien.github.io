@@ -876,11 +876,12 @@ class DigestGame {
     this.sound = new SoundController();
 
     // Game State
-    this.mode = 'beginner'; // 'beginner' | 'intermediate'
+    this.mode = 'beginner'; // 'beginner' | 'intermediate' | 'auto'
+    this.isAutoMode = false;
     this.hp = 100;
     this.score = 0;
     this.absorbedCount = 0;
-    this.targetAbsorbed = 25;
+    this.targetAbsorbed = 10;
     this.isGameOver = false;
     this.isVictory = false;
 
@@ -1028,16 +1029,58 @@ class DigestGame {
     const addFastAction = (id, handler) => {
       const el = document.getElementById(id);
       if (!el) return;
-      el.addEventListener('pointerdown', (e) => {
-        if (e.cancelable) e.preventDefault();
+      let lastTrigger = 0;
+      const doAction = (e) => {
+        const now = performance.now();
+        if (now - lastTrigger < 120) return;
+        lastTrigger = now;
         this.sound.init();
         handler(e);
+      };
+      el.addEventListener('pointerdown', (e) => {
+        if (e.cancelable) e.preventDefault();
+        doAction(e);
+      });
+      el.addEventListener('click', (e) => {
+        doAction(e);
       });
     };
 
     // Mode toggles
     addFastAction('btnBeginner', () => this.setMode('beginner'));
     addFastAction('btnIntermediate', () => this.setMode('intermediate'));
+    addFastAction('btnAuto', () => {
+      if (this.mode === 'auto') {
+        this.setMode('beginner');
+      } else {
+        this.setMode('auto');
+      }
+    });
+
+    // Keyboard shortcuts for Accessibility and Fast Demonstration
+    window.addEventListener('keydown', (e) => {
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
+      if (e.key === 'a' || e.key === 'A') {
+        e.preventDefault();
+        if (this.mode === 'auto') {
+          this.setMode('beginner');
+        } else {
+          this.setMode('auto');
+        }
+      } else if (e.key === '1') {
+        this.triggerGland('salivary');
+      } else if (e.key === '2') {
+        this.triggerGland('gastric');
+      } else if (e.key === '3') {
+        this.triggerGland('liver');
+      } else if (e.key === '4') {
+        this.triggerGland('pancreas');
+      } else if (e.key === '5') {
+        this.triggerGland('intestinal');
+      } else if (e.key === 'r' || e.key === 'R') {
+        this.restart();
+      }
+    });
 
     // Sound toggle
     addFastAction('btnMute', () => {
@@ -1131,11 +1174,40 @@ class DigestGame {
     }
   }
 
-  setMode(mode) {
+  setMode(mode, forceRestart = true) {
     this.mode = mode;
-    document.getElementById('btnBeginner').classList.toggle('active', mode === 'beginner');
-    document.getElementById('btnIntermediate').classList.toggle('active', mode === 'intermediate');
-    this.targetAbsorbed = mode === 'beginner' ? 10 : 25;
+    this.isAutoMode = (mode === 'auto');
+
+    if (mode === 'beginner') {
+      this.targetAbsorbed = 10;
+    } else if (mode === 'intermediate') {
+      this.targetAbsorbed = 25;
+    } else {
+      this.targetAbsorbed = Infinity;
+    }
+
+    if (forceRestart || this.isGameOver || this.isVictory) {
+      this.restart();
+    } else {
+      this.updateHUD();
+    }
+
+    const centerX = this.width ? this.width * 0.45 : 300;
+    const centerY = this.height ? this.height * 0.35 : 120;
+    if (this.isAutoMode) {
+      this.floatingTexts.push(new FloatingText(centerX, centerY, '🤖 已啟動【無限自動演示】：消化腺將持續自動反應！', '#10b981', true));
+      this.sound.playDigested();
+      if (this.nutrients.length === 0) {
+        this.spawnNutrient();
+      }
+    } else {
+      const modeName = mode === 'beginner' ? '初階教學' : '中階挑戰';
+      this.floatingTexts.push(new FloatingText(centerX, centerY, `🎮 已切換至【${modeName}】：請手動點擊消化腺`, '#38bdf8'));
+      this.sound.playDigested();
+    }
+  }
+
+  reset() {
     this.restart();
   }
 
@@ -1476,7 +1548,7 @@ class DigestGame {
     } else {
       chosenType = types[Math.floor(Math.random() * types.length)];
     }
-    const speed = this.mode === 'beginner' ? 1.05 : 1.45;
+    const speed = this.mode === 'beginner' ? 1.05 : this.mode === 'auto' ? 1.20 : 1.45;
     const profile = getTractProfile(0, this.height);
     const n = new Nutrient(chosenType, -30, profile.centerY, speed);
     this.nutrients.push(n);
@@ -1488,7 +1560,7 @@ class DigestGame {
     const speedMult = this.speedMultiplier || 1.0;
 
     // Synchronize peristaltic wave travel distance at the EXACT velocity of the nutrients
-    const baseSpeed = this.mode === 'beginner' ? 1.05 : 1.45;
+    const baseSpeed = this.mode === 'beginner' ? 1.05 : this.mode === 'auto' ? 1.20 : 1.45;
     const currentSpeed = baseSpeed * speedMult;
     this.peristalsisDistance = (this.peristalsisDistance || 0) + (currentSpeed * 60 * dt);
 
@@ -1518,9 +1590,14 @@ class DigestGame {
 
     // Spawn Nutrients (Scales smoothly with speed multiplier to prevent clustering)
     this.spawnTimer += dt * speedMult;
-    const interval = this.mode === 'beginner' ? 7.5 : 3.8;
+    const interval = this.mode === 'beginner' ? 7.5 : this.mode === 'auto' ? 5.2 : 3.8;
     if (this.mode === 'beginner') {
       if (this.nutrients.length === 0) {
+        this.spawnNutrient();
+        this.spawnTimer = 0;
+      }
+    } else if (this.mode === 'auto') {
+      if (this.nutrients.length === 0 || this.spawnTimer >= interval) {
         this.spawnNutrient();
         this.spawnTimer = 0;
       }
@@ -1589,8 +1666,8 @@ class DigestGame {
 
           this.updateHUD();
 
-          // Check Victory
-          if (this.absorbedCount >= this.targetAbsorbed) {
+          // Check Victory (Manual modes only; auto mode runs infinitely)
+          if (this.mode !== 'auto' && this.targetAbsorbed !== Infinity && this.absorbedCount >= this.targetAbsorbed) {
             this.triggerVictory();
           }
         }
@@ -1670,8 +1747,127 @@ class DigestGame {
       if (this.floatingTexts[i].life <= 0) this.floatingTexts.splice(i, 1);
     }
 
+    // Auto Mode: automatically react with digestive glands as nutrients arrive!
+    this.updateAutoMode(dt);
+
     // Update Button Highlights for Beginner mode
     this.updateButtonGuides();
+  }
+
+  ensureChargeForAuto(key) {
+    const g = this.glands[key];
+    if (g && g.charges <= 0) {
+      g.charges = 1;
+      this.updateGlandBars();
+    }
+  }
+
+  highlightAutoGland(key) {
+    const btn = document.getElementById(`btn-${key}`);
+    if (btn) {
+      btn.classList.add('auto-trigger');
+      setTimeout(() => {
+        btn.classList.remove('auto-trigger');
+      }, 300);
+    }
+  }
+
+  updateAutoMode(dt) {
+    if (!this.isAutoMode || this.isGameOver || this.isVictory) return;
+
+    // Check each active nutrient in the digestive canal
+    for (const n of this.nutrients) {
+      if (n.isDead || n.stage === 3) continue;
+
+      const relX = n.x / this.width;
+
+      // 1. 口腔 (0.000 ~ 0.143) -> 唾腺 (Salivary Gland)
+      // 專一性受質：大澱粉 (starch, stage 0)
+      if (n.type === 'starch' && n.stage === 0) {
+        if (relX >= 0.035 && relX <= 0.125) {
+          const g = this.glands['salivary'];
+          if (g && g.activeTimer <= 0.05) {
+            this.ensureChargeForAuto('salivary');
+            this.triggerGland('salivary');
+            this.highlightAutoGland('salivary');
+          }
+        }
+      }
+
+      // 2. 胃 (0.286 ~ 0.429) -> 胃腺 (Gastric Gland)
+      // 專一性受質：大蛋白質 (protein, stage 0)
+      else if (n.type === 'protein' && n.stage === 0) {
+        if (relX >= 0.31 && relX <= 0.40) {
+          const g = this.glands['gastric'];
+          if (g && g.activeTimer <= 0.05) {
+            this.ensureChargeForAuto('gastric');
+            this.triggerGland('gastric');
+            this.highlightAutoGland('gastric');
+          }
+        }
+      }
+
+      // 3. 小腸前段 (十二指腸 0.429 ~ 0.571) -> 肝臟膽汁 (Liver Bile)
+      // 專一性受質：大油滴 (lipid, stage 0) -> 物理乳化增加表面積
+      else if (n.type === 'lipid' && n.stage === 0) {
+        if (relX >= 0.445 && relX <= 0.54) {
+          const g = this.glands['liver'];
+          if (g && g.activeTimer <= 0.05) {
+            this.ensureChargeForAuto('liver');
+            this.triggerGland('liver');
+            this.highlightAutoGland('liver');
+          }
+        }
+      }
+
+      // 4. 小腸中段 (0.571 ~ 0.714) -> 胰臟 (Pancreas)
+      // 專一性受質：
+      // - 已乳化小油滴 (lipid, stage 1, !isMediumDroplet) -> 胰脂肪酶水解成甘油 + 脂肪酸
+      // - 多肽鏈 (protein, stage 1) -> 胰蛋白酶水解成胺基酸
+      // - (容錯：若有未在口腔水解的澱粉漂至此處)
+      else if (
+        (n.type === 'lipid' && n.stage === 1 && !n.isMediumDroplet) ||
+        (n.type === 'protein' && n.stage === 1) ||
+        (n.type === 'starch' && n.stage === 0)
+      ) {
+        if (relX >= 0.585 && relX <= 0.68) {
+          const g = this.glands['pancreas'];
+          if (g && g.activeTimer <= 0.05) {
+            this.ensureChargeForAuto('pancreas');
+            this.triggerGland('pancreas');
+            this.highlightAutoGland('pancreas');
+          }
+        }
+      }
+
+      // 5. 小腸後段 (0.714 ~ 0.857) -> 腸腺 (Intestinal Gland)
+      // 專一性受質：
+      // - 麥芽糖 (starch, stage 1) -> 麥芽糖酶水解成葡萄糖
+      // - (容錯：若有多肽鏈尚未被胰臟分解)
+      else if (
+        (n.type === 'starch' && n.stage === 1) ||
+        (n.type === 'protein' && n.stage === 1)
+      ) {
+        if (relX >= 0.725 && relX <= 0.81) {
+          const g = this.glands['intestinal'];
+          if (g && g.activeTimer <= 0.05) {
+            this.ensureChargeForAuto('intestinal');
+            this.triggerGland('intestinal');
+            this.highlightAutoGland('intestinal');
+          }
+        }
+      }
+
+      // 6. 纖維素 (cellulose)：人體無酵素，自動保留至大腸共生菌群發酵
+      else if (n.type === 'cellulose') {
+        if (relX >= 0.06 && !n._celluloseNotified) {
+          n._celluloseNotified = true;
+          this.floatingTexts.push(
+            new FloatingText(n.x, n.y - 28, '💡 人體無纖維素酶，保留至大腸由共生菌發酵', '#4ade80')
+          );
+        }
+      }
+    }
   }
 
   updateButtonGuides() {
@@ -1712,9 +1908,20 @@ class DigestGame {
 
   updateHUD() {
     document.getElementById('hudHp').textContent = `${this.hp}%`;
+    document.getElementById('hudHp').style.color = this.hp > 60 ? '#10b981' : this.hp > 30 ? '#f59e0b' : '#ef4444';
     document.getElementById('hpBar').style.width = `${this.hp}%`;
     document.getElementById('hudScore').textContent = this.score;
-    document.getElementById('hudProgress').textContent = `${this.absorbedCount} / ${this.targetAbsorbed}`;
+    const progressText = (this.mode === 'auto' || this.isAutoMode || this.targetAbsorbed === Infinity) ? `${this.absorbedCount} / ∞` : `${this.absorbedCount} / ${this.targetAbsorbed}`;
+    document.getElementById('hudProgress').textContent = progressText;
+
+    document.getElementById('btnBeginner')?.classList.toggle('active', this.mode === 'beginner');
+    document.getElementById('btnIntermediate')?.classList.toggle('active', this.mode === 'intermediate');
+    document.getElementById('btnAuto')?.classList.toggle('active', this.mode === 'auto');
+
+    const autoBadge = document.getElementById('autoStatusBadge');
+    if (autoBadge) {
+      autoBadge.classList.toggle('hidden', !this.isAutoMode);
+    }
 
     this.updateGlandBars();
   }
@@ -2096,14 +2303,18 @@ class DigestGame {
 
   triggerVictory() {
     this.isVictory = true;
-    document.getElementById('modalResultTitle').textContent = '完美消化！營養吸收大成功';
+    const title = this.isAutoMode ? '自動演示成功！完美消化吸收' : '完美消化！營養吸收大成功';
+    document.getElementById('modalResultTitle').textContent = title;
     document.getElementById('modalResultTitle').style.color = '#38bdf8';
     const iconEl = document.getElementById('modalResultIcon');
     if (iconEl) iconEl.textContent = '';
     document.getElementById('resScore').textContent = this.score;
     document.getElementById('resAbsorbed').textContent = this.absorbedCount;
     document.getElementById('resHp').textContent = `${this.hp}%`;
-    document.getElementById('modalResultDesc').textContent = `您已成功讓小腸吸收了 ${this.absorbedCount} 份完整分解的小分子營養！人體充滿能量！`;
+    const desc = this.isAutoMode
+      ? `系統已自動引導消化腺完成 ${this.absorbedCount} 份養分的兩階段水解與乳化，小腸絨毛全數成功吸收！`
+      : `您已成功讓小腸吸收了 ${this.absorbedCount} 份完整分解的小分子營養！人體充滿能量！`;
+    document.getElementById('modalResultDesc').textContent = desc;
     document.getElementById('modalResult').classList.add('open');
   }
 
