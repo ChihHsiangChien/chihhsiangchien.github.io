@@ -68,12 +68,156 @@ document.addEventListener('DOMContentLoaded', () => {
     const toggleButtons = document.querySelectorAll('.stage-btn.toggle-btn');
     const resetBtn = document.getElementById('reset-btn');
     const toggleLabelsCheckbox = document.getElementById('toggle-labels');
+    const toggleAutoWbcCheckbox = document.getElementById('toggle-auto-wbc');
     const toggleDimNerveCheckbox = document.getElementById('toggle-dim-nerve');
     const nerveNetworkGroup = document.getElementById('nerve-network');
 
     let simSpeed = 1.0;
     let speedAccum = 0;
     let selectedPathogen = 'bacteria';
+
+    let vaccineState = {
+        bacteria: false,
+        virus: false
+    };
+    let bacterialEncounterOccurred = false;
+    let viralEncounterOccurred = false;
+
+    // Dermal initial lymphatic drainage coordinates
+    const LYMPH_VESSEL_X = 885;
+    const LYMPH_VESSEL_Y = 268;
+
+    let lymphNodeState = {
+        active: false,
+        antigenType: null,
+        timer: 0,
+        duration: 200 // ~3.3s at 60fps
+    };
+
+    function updateVaccineUI() {
+        const toggleMemoryBacteria = document.getElementById('toggle-memory-bacteria');
+        const toggleMemoryVirus = document.getElementById('toggle-memory-virus');
+        const cardMemoryBacteria = document.getElementById('card-memory-bacteria');
+        const cardMemoryVirus = document.getElementById('card-memory-virus');
+        const statusVacBac = document.getElementById('status-vac-bacteria');
+        const statusVacVir = document.getElementById('status-vac-virus');
+        const statMemory = document.getElementById('stat-memory');
+
+        if (toggleMemoryBacteria) toggleMemoryBacteria.checked = !!vaccineState.bacteria;
+        if (toggleMemoryVirus) toggleMemoryVirus.checked = !!vaccineState.virus;
+
+        if (cardMemoryBacteria) cardMemoryBacteria.classList.toggle('active', vaccineState.bacteria);
+        if (cardMemoryVirus) cardMemoryVirus.classList.toggle('active', vaccineState.virus);
+
+        if (statusVacBac) {
+            statusVacBac.innerHTML = vaccineState.bacteria
+                ? '<span style="color:#34d399;font-weight:600;">已啟用 (二次應答・血管抗體就緒)</span>'
+                : '關閉 (初次應答・無血管抗體)';
+        }
+        if (statusVacVir) {
+            statusVacVir.innerHTML = vaccineState.virus
+                ? '<span style="color:#a78bfa;font-weight:600;">已啟用 (二次應答・血管抗體就緒)</span>'
+                : '關閉 (初次應答・無血管抗體)';
+        }
+
+        if (statMemory) {
+            if (vaccineState.bacteria && vaccineState.virus) {
+                statMemory.textContent = "雙重記憶 (全免疫)";
+                statMemory.style.color = "#34d399";
+            } else if (vaccineState.bacteria) {
+                statMemory.textContent = "細菌記憶 (二次應答)";
+                statMemory.style.color = "#10b981";
+            } else if (vaccineState.virus) {
+                statMemory.textContent = "病毒記憶 (二次應答)";
+                statMemory.style.color = "#a78bfa";
+            } else {
+                statMemory.textContent = "無 (初次應答)";
+                statMemory.style.color = "inherit";
+            }
+        }
+    }
+
+    function triggerSecondaryResponse(type, x, y, target) {
+        const count = type === 'bacteria' ? 14 : 10;
+        // Antibodies originate from systemic circulation via the left arteriole (x <= 0, y ≈ 365)
+        // They stream rapidly with arterial blood, branch into capillaries, and extravasate near the infection site
+        for (let k = 0; k < count; k++) {
+            const entryX = -10 - k * 18 - Math.random() * 8; // Staggered stream in arterial inflow
+            const targetX = Math.max(180, Math.min(880, x + (Math.random() - 0.5) * 50));
+            antibodies.push({
+                x: entryX,
+                y: 365 + (Math.random() - 0.5) * 14,
+                laneOffset: (Math.random() - 0.5),
+                speed: 4.2 + Math.random() * 1.5,
+                targetExtravasateX: targetX,
+                stage: 'circulation', // 'circulation' -> 'tissue'
+                vx: 3.8,
+                vy: 0,
+                life: 520,
+                isSecondary: true,
+                targetType: type
+            });
+        }
+        if (target) {
+            if (type === 'bacteria') target.divideTimer = -999999; // Inhibit immediate division while antibodies home in
+            if (type === 'virus') target.penetratingTimer = 0;
+        }
+        if (toggleAutoWbcCheckbox && toggleAutoWbcCheckbox.checked) {
+            if (type === 'bacteria') {
+                if (activeTissueWBCs.length === 0 || !activeTissueWBCs.some(w => w.subtype === 'macrophage' || w.subtype === 'neutrophil')) {
+                    recruitCirculatingWbc('neutrophil');
+                }
+            } else if (type === 'virus') {
+                if (!activeTissueWBCs.some(w => w.subtype === 'tcell' || w.subtype === 'nk')) {
+                    recruitCirculatingWbc('tcell');
+                }
+            }
+        }
+    }
+
+    function initApcCell(cell, antigenType) {
+        cell.state = 'apc_migrating';
+        cell.antigenType = antigenType;
+        cell.tissueLife = Math.max(cell.tissueLife || 0, 1800);
+        // Staggered entry target along the initial lymphatic capillary valve flaps (y: 257..279, x: 876..904)
+        cell.targetLymphX = 876 + Math.random() * 28;
+        cell.targetLymphY = 268 + (Math.random() - 0.5) * 22;
+        // Individualized crawling speed, crawl phase, and drainage speed to produce natural variation
+        cell.crawlSpeed = 1.7 + Math.random() * 0.9;
+        cell.crawlPhase = Math.random() * Math.PI * 2;
+        cell.flowSpeed = 1.8 + Math.random() * 0.8;
+    }
+
+    function triggerApcMigration(antigenType, sourceX, sourceY) {
+        if (!antigenType || vaccineState[antigenType]) return;
+
+        // 1. If an active macrophage is already present in tissue, convert it to migrating APC
+        const existingMac = activeTissueWBCs.find(w => w.subtype === 'macrophage' && w.state !== 'apc_migrating' && w.state !== 'lymph_draining');
+        if (existingMac) {
+            initApcCell(existingMac, antigenType);
+            const agName = antigenType === 'bacteria' ? '細菌' : '病毒';
+            updateLog(`🧬 <strong>【抗原呈現細胞 APC 活化】</strong>巨噬細胞吞噬 ${agName}，組裝 MHC-II 複合體並以隨機瓣膜路徑前往微淋巴管！`);
+            return;
+        }
+
+        // 2. If no macrophage is active in tissue (e.g. only neutrophils ate the pathogen),
+        // recruit a sentinel tissue dendritic cell / macrophage directly at the site!
+        const apcX = Math.max(50, Math.min(840, sourceX || 400));
+        const apcY = Math.max(100, Math.min(260, sourceY || 200));
+        const newApc = {
+            x: apcX + (Math.random() - 0.5) * 16,
+            y: apcY + (Math.random() - 0.5) * 16,
+            r: 11.5,
+            subtype: 'macrophage',
+            alpha: 1,
+            eatenCount: 1,
+            isSentinelAPC: true
+        };
+        initApcCell(newApc, antigenType);
+        activeTissueWBCs.push(newApc);
+        const agName = antigenType === 'bacteria' ? '細菌' : '病毒';
+        updateLog(`🧬 <strong>【前哨樹突 / 巨噬細胞 (APC) 攝取抗原】</strong>組織駐留抗原呈現細胞於感染點攝取 ${agName} 殘骸，活化 MHC-II 複合體，開始游向微淋巴管！`);
+    }
 
     function spawnActivePathogen(x, y) {
         const skinY = getSkinSurfaceY(x, swellingLevel);
@@ -157,6 +301,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         statDebris.textContent = cellDebris.length;
         statWbc.textContent = activeTissueWBCs.length;
+        updateVaccineUI();
     }
 
     // Zoom Buttons
@@ -177,8 +322,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let clickStartY = 0;
     let clickWorldX = 0;
     let clickWorldY = 0;
-    let swipeStartY = 0;
-    let swipeStartX = 0;
 
     function updateTransform() {
         viewportGroup.setAttribute('transform', `matrix(${scale} 0 0 ${scale} ${panX} ${panY})`);
@@ -197,9 +340,6 @@ document.addEventListener('DOMContentLoaded', () => {
         clickWorldX = worldX;
         clickWorldY = worldY;
 
-        swipeStartX = worldX;
-        swipeStartY = worldY;
-
         isDragging = true;
         startX = e.clientX - panX;
         startY = e.clientY - panY;
@@ -217,17 +357,7 @@ document.addEventListener('DOMContentLoaded', () => {
         isDragging = false;
         const dist = Math.hypot(e.clientX - clickStartX, e.clientY - clickStartY);
 
-        const rect = svg.getBoundingClientRect();
-        const svgY = -65 + ((e.clientY - rect.top) / rect.height) * 565;
-        const endWorldY = (svgY - panY) / scale;
-
-        // 1. Check if user swiped downwards across skin surface (from y < 25 to y > 65)
-        if (swipeStartY < 25 && endWorldY > 65) {
-            triggerCutWound();
-            return;
-        }
-
-        // 2. Pure click without dragging: spawn the active pathogen at clicked coordinates
+        // Click without dragging: spawn the active pathogen at clicked coordinates
         if (dist < 6) {
             spawnActivePathogen(clickWorldX, clickWorldY);
         }
@@ -251,9 +381,6 @@ document.addEventListener('DOMContentLoaded', () => {
             clickStartY = t.clientY;
             clickWorldX = worldX;
             clickWorldY = worldY;
-
-            swipeStartX = worldX;
-            swipeStartY = worldY;
 
             isDragging = true;
             startX = t.clientX - panX;
@@ -289,14 +416,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.changedTouches.length > 0) {
             const t = e.changedTouches[0];
             const dist = Math.hypot(t.clientX - clickStartX, t.clientY - clickStartY);
-            const rect = svg.getBoundingClientRect();
-            const svgY = -65 + ((t.clientY - rect.top) / rect.height) * 565;
-            const endWorldY = (svgY - panY) / scale;
-
-            if (swipeStartY < 25 && endWorldY > 65) {
-                triggerCutWound();
-                return;
-            }
 
             if (dist < 10) {
                 spawnActivePathogen(clickWorldX, clickWorldY);
@@ -332,6 +451,12 @@ document.addEventListener('DOMContentLoaded', () => {
         { id: 'mid', targetY: 65, isNearInjury: false },
         { id: 'bot', targetY: 110, isNearInjury: false }
     ];
+
+    // Microvascular bifurcation & sphincter boundary landmarks
+    const BRANCH_START_X = 140; // Arteriole ends at x=140, microvascular bifurcation starts
+    const BRANCH_END_X = 168;   // Transition curves finish, branches become horizontal
+    const SPHINCTER_X = 168;    // Precapillary sphincters at capillary entrances
+    const SPHINCTER_W = 10;     // Precapillary sphincter width (x: 168..178)
 
     const WOUND_X = 260;
     const WOUND_HALF_W = 60;
@@ -381,6 +506,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let activeTissueWBCs = [];
     let bloodParticles = [];
     let autoWbcRecruitTimer = 0;
+    let immuneSurveillanceTimer = 0;
 
     let smoothMuscles = [];
     let sphincterElements = [];
@@ -650,18 +776,18 @@ document.addEventListener('DOMContentLoaded', () => {
         if (x !== undefined) {
             bx = x;
         } else {
-            // When wound is open, bias towards skin wound so user can observe wound migration & invasion
-            bx = (coagState.woundOpen > 0.05 && Math.random() < 0.75) 
-                ? (WOUND_X + (Math.random() - 0.5) * 160) 
-                : (120 + Math.random() * 760);
+            // Center spawn on cutaneous skin/wound zone (X: 180~420), preventing accidental drift into respiratory mucosa (X >= 500)
+            bx = (coagState.woundOpen > 0.05) 
+                ? (WOUND_X + (Math.random() - 0.5) * 70) 
+                : (180 + Math.random() * 240);
         }
-        const by = y !== undefined ? y : (-50 + Math.random() * 25);
+        const by = y !== undefined ? y : (-38 + Math.random() * 20);
         const skinY = getSkinSurfaceY(bx, swellingLevel);
         const inTissue = y !== undefined ? (by > skinY + 10) : false;
         bacteria.push({
             x: bx, y: by,
-            vx: (Math.random() - 0.5) * 1.0,
-            vy: (Math.random() - 0.5) * 0.8,
+            vx: (Math.random() - 0.5) * 0.8,
+            vy: (Math.random() - 0.5) * 0.6,
             r: 7.5,
             inTissue: inTissue,
             trappedInMucus: false,
@@ -671,7 +797,14 @@ document.addEventListener('DOMContentLoaded', () => {
             divideTimer: 0
         });
         if (inTissue) {
-            updateLog("⚠️ <strong>已直接於皮下組織引入細菌！</strong>（模擬深層感染）細菌將在真皮層進行二分裂繁殖，並刺激巨噬細胞釋放趨化因子。");
+            bacterialEncounterOccurred = true;
+            if (vaccineState.bacteria) {
+                const newB = bacteria[bacteria.length - 1];
+                triggerSecondaryResponse('bacteria', bx, by, newB);
+                updateLog("⚡ <strong>【二次免疫循環動員】血液特異性抗體隨小動脈湧入微血管，並經內皮間隙滲出（Extravasation）！</strong>全面調理標記細菌（Opsonization），吞噬細胞高速撲殺！");
+            } else {
+                updateLog("⚠️ <strong>【初次感染空窗期】體內尚無專一性抗體！</strong>細菌將於真皮層二分裂增殖，需由先天免疫部隊逐步定位清創。");
+            }
         } else if (bx >= 500) {
             updateLog("💧 <strong>外界細菌生成於黏膜表面外界！</strong>即將受黏液捕捉、動態纖毛向右推動與溶菌酶攻擊！");
         } else {
@@ -691,18 +824,18 @@ document.addEventListener('DOMContentLoaded', () => {
             if (x !== undefined) {
                 vx = x + (count > 1 ? (Math.random() * 24 - 12) : 0);
             } else {
-                vx = (coagState.woundOpen > 0.05 && Math.random() < 0.75)
-                    ? (WOUND_X + (Math.random() - 0.5) * 160)
-                    : (160 + Math.random() * 680) + (Math.random() * 24 - 12);
+                vx = (coagState.woundOpen > 0.05)
+                    ? (WOUND_X + (Math.random() - 0.5) * 70)
+                    : (180 + Math.random() * 240);
             }
-            const vy = (y !== undefined ? y : (-48 + Math.random() * 22)) + (count > 1 ? (Math.random() * 16 - 8) : 0);
+            const vy = (y !== undefined ? y : (-38 + Math.random() * 18)) + (count > 1 ? (Math.random() * 16 - 8) : 0);
             const skinY = getSkinSurfaceY(vx, swellingLevel);
             const inTissue = y !== undefined ? (vy > skinY + 10) : false;
             if (inTissue) spawnedInTissue = true;
             freeViruses.push({
                 x: vx, y: vy,
-                vx: (Math.random() - 0.5) * 1.3,
-                vy: (Math.random() - 0.5) * 1.1,
+                vx: (Math.random() - 0.5) * 0.9,
+                vy: (Math.random() - 0.5) * 0.7,
                 r: 5.5,
                 inTissue: inTissue,
                 trappedInMucus: false,
@@ -712,7 +845,13 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
         if (spawnedInTissue) {
-            updateLog("👾 <strong>已直接於皮下組織引入游離病毒！</strong>（模擬深層感染）病毒將嘗試侵入鄰近健康組織細胞並引發感染。");
+            viralEncounterOccurred = true;
+            if (vaccineState.virus) {
+                freeViruses.filter(v => v.inTissue).forEach(v => triggerSecondaryResponse('virus', v.x, v.y, v));
+                updateLog("⚡ <strong>【二次免疫循環動員】血液特異性中和抗體隨小動脈湧入微血管並滲出！</strong>病毒剛進入皮下即遭抗體包覆中和，無法附著感染宿主細胞！");
+            } else {
+                updateLog("👾 <strong>【初次感染空窗期】缺乏中和抗體阻斷！</strong>游離病毒長驅直入感染健康細胞，誘導細胞病變。");
+            }
         } else if (x !== undefined && x >= 500) {
             updateLog("👾 <strong>游離病毒生成於黏膜表面外界！</strong>分泌型 IgA (sIgA) 與纖毛黏液手扶梯正進行攔截中和。");
         } else {
@@ -864,9 +1003,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function chooseWbcBranch(subtype) {
-        const hasInjury = coagStage >= 1 || bacteria.some(b => b.inTissue) || cellDebris.length > 0 || tissueSites.some(c => c.state === 'infected');
-        if (subtype === 'neutrophil' || subtype === 'monocyte') {
-            return hasInjury && Math.random() < 0.75 ? 'top' : ['top', 'mid', 'bot'][Math.floor(Math.random() * 3)];
+        const hasInjury = coagStage >= 1 || bacteria.some(b => b.inTissue) || cellDebris.length > 0 || tissueSites.some(c => c.state === 'infected') || freeViruses.some(v => v.inTissue);
+        if (subtype === 'neutrophil' || subtype === 'monocyte' || subtype === 'bcell' || subtype === 'tcell' || subtype === 'nk') {
+            return hasInjury && Math.random() < 0.8 ? 'top' : ['top', 'mid', 'bot'][Math.floor(Math.random() * 3)];
         }
         if (subtype === 'eosinophil') {
             const hasParasite = parasites.some(p => p.inTissue) || parasites.length > 0;
@@ -1001,25 +1140,47 @@ document.addEventListener('DOMContentLoaded', () => {
         updateStats();
     }
 
-    function recruitCirculatingWbc(subtype = 'neutrophil') {
+    function recruitCirculatingWbc(subtype = 'neutrophil', logMessage = null) {
+        let r = 7.5;
+        let tissueLife = 700;
+        let eatenCount = 0;
+        let maxEat = 3;
+        let ammo = 0;
+        let producing = 0;
+
+        if (subtype === 'monocyte') {
+            r = 8.5; tissueLife = 2000; maxEat = 16;
+        } else if (subtype === 'eosinophil') {
+            r = 7.8; tissueLife = 950; ammo = 80;
+        } else if (subtype === 'nk' || subtype === 'tcell') {
+            r = 7.8; tissueLife = 1000;
+        } else if (subtype === 'bcell') {
+            r = 8.0; tissueLife = 900; producing = 120;
+        }
+
         const wbc = {
             subtype: subtype,
             x: -25,
             y: 65,
             laneOffset: (Math.random() - 0.5) * 0.75,
             branchId: chooseWbcBranch(subtype),
-            r: subtype === 'monocyte' ? 8.5 : 7.5,
+            r: r,
             state: 'patrol',
             exitRoute: null,
             targetGapX: null,
             amoebaProgress: 0,
-            eatenCount: 0,
-            maxEat: subtype === 'monocyte' ? 16 : 3,
-            tissueLife: subtype === 'monocyte' ? 2000 : 700,
+            eatenCount: eatenCount,
+            maxEat: maxEat,
+            ammo: ammo,
+            producing: producing,
+            tissueLife: tissueLife,
             alpha: 1
         };
         assignWbcExitStrategy(wbc);
         bloodWBCs.push(wbc);
+        if (logMessage) {
+            updateLog(logMessage);
+        }
         updateStats();
     }
 
@@ -1301,17 +1462,17 @@ document.addEventListener('DOMContentLoaded', () => {
             branchLumenPaths.push({ branch: branch, pathEl: bPath });
 
             const sphTop = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-            sphTop.setAttribute("x", 152);
-            sphTop.setAttribute("width", 12);
-            sphTop.setAttribute("rx", 4);
+            sphTop.setAttribute("x", SPHINCTER_X);
+            sphTop.setAttribute("width", SPHINCTER_W);
+            sphTop.setAttribute("rx", 3.5);
             sphTop.setAttribute("fill", "#c92a2a");
             sphTop.setAttribute("stroke", "#ff8787");
             sphTop.setAttribute("stroke-width", "1");
 
             const sphBot = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-            sphBot.setAttribute("x", 152);
-            sphBot.setAttribute("width", 12);
-            sphBot.setAttribute("rx", 4);
+            sphBot.setAttribute("x", SPHINCTER_X);
+            sphBot.setAttribute("width", SPHINCTER_W);
+            sphBot.setAttribute("rx", 3.5);
             sphBot.setAttribute("fill", "#c92a2a");
             sphBot.setAttribute("stroke", "#ff8787");
             sphBot.setAttribute("stroke-width", "1");
@@ -1406,7 +1567,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const artTopY = artCenterY - halfArt;
         const artBotY = artCenterY + halfArt;
 
-        arterioleLumenPath.setAttribute("d", `M 0 ${artTopY} L 140 ${artTopY} L 140 ${artBotY} L 0 ${artBotY} Z`);
+        arterioleLumenPath.setAttribute("d", `M 0 ${artTopY} L ${BRANCH_START_X} ${artTopY} L ${BRANCH_START_X} ${artBotY} L 0 ${artBotY} Z`);
         arterioleWallTop.setAttribute("y", artTopY - 7);
         arterioleWallBottom.setAttribute("y", artBotY);
 
@@ -1424,6 +1585,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const halfCap = capillaryWidth / 2;
         const sphincterThickness = 6 + sphincterTone * 8;
 
+        const x0 = BRANCH_START_X;
+        const x1 = BRANCH_END_X;
+        const dx = x1 - x0;
+        const cp1X = x0 + dx * 0.45;
+        const cp2X = x0 + dx * 0.55;
+
         branchLumenPaths.forEach((item, idx) => {
             const b = item.branch;
             const bTopY = b.targetY - halfCap;
@@ -1431,34 +1598,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
             let pathData;
             if (b.targetY < 65) {
-                // Top capillary branch: curves smoothly leftward from arteriole (x=138) into capillary height by x=148
+                // Top capillary branch: curves smoothly from arteriole upper boundary into capillary
                 pathData = `
-                    M 138 ${artTopY}
-                    C 142 ${artTopY}, 145 ${bTopY}, 148 ${bTopY}
+                    M ${x0} ${artTopY}
+                    C ${cp1X} ${artTopY}, ${cp2X} ${bTopY}, ${x1} ${bTopY}
                     L 1000 ${bTopY}
                     L 1000 ${bBotY}
-                    L 148 ${bBotY}
-                    C 145 ${bBotY}, 142 ${artCenterY - 4}, 138 ${artCenterY - 8}
+                    L ${x1} ${bBotY}
+                    C ${cp2X} ${bBotY}, ${cp1X} ${artCenterY - 4}, ${x0} ${artCenterY - 4}
                     Z
                 `;
             } else if (b.targetY > 65) {
-                // Bottom capillary branch: curves smoothly leftward from arteriole (x=138) into capillary height by x=148
+                // Bottom capillary branch: curves smoothly from arteriole lower boundary into capillary
                 pathData = `
-                    M 138 ${artCenterY + 8}
-                    C 142 ${artCenterY + 4}, 145 ${bTopY}, 148 ${bTopY}
+                    M ${x0} ${artCenterY + 4}
+                    C ${cp1X} ${artCenterY + 4}, ${cp2X} ${bTopY}, ${x1} ${bTopY}
                     L 1000 ${bTopY}
                     L 1000 ${bBotY}
-                    L 148 ${bBotY}
-                    C 145 ${bBotY}, 142 ${artBotY}, 138 ${artBotY}
+                    L ${x1} ${bBotY}
+                    C ${cp2X} ${bBotY}, ${cp1X} ${artBotY}, ${x0} ${artBotY}
                     Z
                 `;
             } else {
-                // Middle capillary branch (straight through)
+                // Middle capillary branch (straight through arteriole center into capillary)
                 pathData = `
-                    M 138 ${artCenterY - halfCap}
+                    M ${x0} ${artCenterY - 4}
+                    C ${cp1X} ${artCenterY - 4}, ${cp2X} ${bTopY}, ${x1} ${bTopY}
                     L 1000 ${bTopY}
                     L 1000 ${bBotY}
-                    L 138 ${artCenterY + halfCap}
+                    L ${x1} ${bBotY}
+                    C ${cp2X} ${bBotY}, ${cp1X} ${artCenterY + 4}, ${x0} ${artCenterY + 4}
                     Z
                 `;
             }
@@ -1530,6 +1699,60 @@ document.addEventListener('DOMContentLoaded', () => {
         sphincterTone += (targetSphincterTone - sphincterTone) * 0.05;
         flowSpeed += (targetFlowSpeed - flowSpeed) * 0.05;
         gapSize += (targetGapSize - gapSize) * 0.05;
+
+        // Draining Lymph Node Adaptive Immunity Clonal Expansion Progress
+        if (lymphNodeState.active) {
+            lymphNodeState.timer++;
+            const prog = Math.min(100, Math.round((lymphNodeState.timer / lymphNodeState.duration) * 100));
+            const statLymphPill = document.getElementById('stat-lymph-pill');
+            const statLymphText = document.getElementById('stat-lymph-text');
+            const lymphProgressFill = document.getElementById('lymph-progress-fill');
+            if (statLymphPill) statLymphPill.style.display = 'inline-flex';
+            if (statLymphText) {
+                const agName = lymphNodeState.antigenType === 'bacteria' ? '細菌' : '病毒';
+                statLymphText.textContent = `${agName}抗原・株落選殖 (${prog}%)`;
+            }
+            if (lymphProgressFill) lymphProgressFill.style.width = `${prog}%`;
+
+            if (lymphNodeState.timer >= lymphNodeState.duration) {
+                const agType = lymphNodeState.antigenType;
+                lymphNodeState.active = false;
+                if (statLymphPill) statLymphPill.style.display = 'none';
+
+                const agName = agType === 'bacteria' ? '細菌' : '病毒';
+
+                // If presenter has manually activated memory toggle, surge effector antibodies
+                if (vaccineState[agType]) {
+                    updateLog(`🫁 <strong>【淋巴結致敏選殖完成！】</strong>生發中心完成 ${agName} 抗原株落選殖！專一性抗體經胸導管注入靜脈血，正從小動脈奔赴微血管！`);
+                    for (let k = 0; k < 14; k++) {
+                        antibodies.push({
+                            x: -15 - k * 16,
+                            y: 365 + (Math.random() - 0.5) * 14,
+                            laneOffset: (Math.random() - 0.5),
+                            speed: 4.2 + Math.random() * 1.4,
+                            targetExtravasateX: 220 + Math.random() * 560,
+                            stage: 'circulation',
+                            life: 520,
+                            isSecondary: true
+                        });
+                    }
+                } else {
+                    // Teaching protection: Keep toggle switch OFF by default, do not disrupt primary defense explanation
+                    updateLog(`🫁 <strong>【淋巴結致敏選殖完成】</strong>生發中心已建立 ${agName} 抗原專一性細胞株！為維護初次應答教學流程，開關維持關閉；若欲展示二次應答與血管抗體湧入，請手動開啟【${agName}免疫記憶】Toggle開關！`);
+                }
+
+                // If auto WBC is enabled, recruit effector leukocytes from circulation
+                if (toggleAutoWbcCheckbox && toggleAutoWbcCheckbox.checked) {
+                    if (agType === 'bacteria') {
+                        recruitCirculatingWbc('neutrophil');
+                        recruitCirculatingWbc('monocyte');
+                    } else if (agType === 'virus') {
+                        recruitCirculatingWbc('tcell');
+                        recruitCirculatingWbc('bcell');
+                    }
+                }
+            }
+        }
 
         const targetSwelling = activeEffects.has('swelling') ? 1 : 0;
         swellingLevel += (targetSwelling - swellingLevel) * 0.05;
@@ -2146,13 +2369,24 @@ document.addEventListener('DOMContentLoaded', () => {
                     continue;
                 }
             } else {
-                // Interstitial tissue debris: slow natural autolysis if not engulfed by macrophages
-                if (d.life < 150) {
-                    d.alpha = Math.max(0, d.life / 150);
-                }
-                if (d.life <= 0) {
-                    cellDebris.splice(idx, 1);
-                    continue;
+                // Interstitial tissue debris: slow natural autolysis or cleared by lymphatic drainage
+                if (d.x >= 870 && d.y >= 248 && d.y <= 288) {
+                    // Draining through initial lymphatic capillary
+                    d.x += 1.6 * simSpeed;
+                    d.y += (LYMPH_VESSEL_Y - d.y) * 0.05 * simSpeed;
+                    d.alpha = (d.alpha !== undefined ? d.alpha : 1) - 0.018 * simSpeed;
+                    if (d.alpha <= 0.05 || d.x >= 995) {
+                        cellDebris.splice(idx, 1);
+                        continue;
+                    }
+                } else {
+                    if (d.life < 150) {
+                        d.alpha = Math.max(0, d.life / 150);
+                    }
+                    if (d.life <= 0) {
+                        cellDebris.splice(idx, 1);
+                        continue;
+                    }
                 }
             }
 
@@ -2259,7 +2493,13 @@ document.addEventListener('DOMContentLoaded', () => {
                                 b.y = skinY + 10;
                                 b.vy = 0.5 + Math.random() * 0.4;
                                 b.vx = (Math.random() - 0.5) * 0.6;
-                                updateLog("⚠️ <strong>外界細菌感應到創口滲出液，循隨機路徑游移鑽入真皮層！</strong>");
+                                bacterialEncounterOccurred = true;
+                                if (vaccineState.bacteria) {
+                                    triggerSecondaryResponse('bacteria', b.x, b.y, b);
+                                    updateLog("⚡ <strong>【二次免疫循環動員】外界細菌侵入創口，血液抗體隨小動脈湧至微血管並滲出，全面標記中和細菌！</strong>");
+                                } else {
+                                    updateLog("⚠️ <strong>【初次感染】外界細菌感應到創口滲出液鑽入真皮層！尚無專一性抗體，細菌開始增殖。</strong>");
+                                }
                             } else {
                                 // Intact skin surface: NO bouncing! Crawls along keratin towards wound!
                                 b.y = skinY - 3;
@@ -2291,35 +2531,96 @@ document.addEventListener('DOMContentLoaded', () => {
 
             } else {
                 // Inside dermal tissue
-                if (!b.opsonized) {
-                    b.x += b.vx; b.y += b.vy; b.angle += 0.03;
-                    if (b.x < 30 || b.x > 970) b.vx *= -1;
+                if (b.state === 'lymph_draining') {
+                    // Bacteria flowing inside initial lymphatic capillary lumen towards lymph node
+                    b.x += (1.9 + Math.random() * 0.4) * simSpeed;
+                    b.y += (LYMPH_VESSEL_Y - b.y) * 0.05 * simSpeed;
+                    b.angle += 0.04;
+                    b.alpha = (b.alpha !== undefined ? b.alpha : 1) - 0.016 * simSpeed;
 
-                    // Support swollen upper dermis and wound cavity!
-                    const dermisTop = getDermisTopY(b.x, swellingLevel);
-                    if (b.y < dermisTop) {
-                        b.y = dermisTop;
-                        b.vy = Math.abs(b.vy);
-                    } else if (b.y > 275) {
-                        b.y = 275;
-                        b.vy = -Math.abs(b.vy);
+                    if (b.alpha <= 0.05 || b.x >= 995) {
+                        // Bacteria enters lymph node!
+                        if (!lymphNodeState.active && !vaccineState.bacteria) {
+                            lymphNodeState.active = true;
+                            lymphNodeState.antigenType = 'bacteria';
+                            lymphNodeState.timer = 0;
+                            const statLymphPill = document.getElementById('stat-lymph-pill');
+                            if (statLymphPill) statLymphPill.style.display = 'inline-flex';
+                            updateLog("🧪 <strong>【細菌隨淋巴液引流至局部淋巴結】</strong>游離細菌沖入引流淋巴結！被膜下竇巨噬細胞展開抗原過濾，啟動淋巴結免疫應答！");
+                        }
+                        bacteria.splice(i, 1);
+                        continue;
                     }
+                } else {
+                    // Check entry into initial lymphatic capillary valve (x >= 875, y: 250..286)
+                    if (b.x >= 875 && b.y >= 250 && b.y <= 286) {
+                        b.state = 'lymph_draining';
+                        b.alpha = 1;
+                        updateLog("🧪 <strong>【細菌進入微淋巴管】</strong>部分真皮組織液中的細菌穿過微淋巴管瓦狀單向瓣膜，順著淋巴液回流前往引流淋巴結！");
+                    } else if (!b.opsonized) {
+                        // In ECM collagen meshwork: viscous damping + localized motility (NO artificial rightward fluid push!)
+                        b.vx *= 0.85;
+                        b.vy *= 0.85;
+                        b.vx += (Math.random() - 0.5) * 0.35 * simSpeed;
+                        b.vy += (Math.random() - 0.5) * 0.35 * simSpeed;
 
-                    b.divideTimer++;
-                    if (b.divideTimer > 450 && bacteria.length < 24) {
-                        b.divideTimer = 0;
-                        bacteria.push({
-                            x: b.x + 8, y: b.y + 8,
-                            vx: (Math.random() - 0.5) * 1.0, vy: (Math.random() - 0.5) * 1.0,
-                            r: 7.5, inTissue: true, angle: Math.random() * Math.PI * 2,
-                            opsonized: false, abCount: 0, divideTimer: 0
-                        });
+                        b.x += b.vx; b.y += b.vy; b.angle += 0.03;
+                        if (b.x < 120) { b.x = 120; b.vx = Math.abs(b.vx); }
+                        if (b.x > 865 && (b.y < 250 || b.y > 286)) { b.x = 865; b.vx = -Math.abs(b.vx); }
+
+                        // Support swollen upper dermis and wound cavity!
+                        const dermisTop = getDermisTopY(b.x, swellingLevel) + 4;
+                        if (b.y < dermisTop) {
+                            b.y = dermisTop;
+                            b.vy = Math.abs(b.vy);
+                        } else if (b.y > 275 && b.x < 868) {
+                            b.y = 275;
+                            b.vy = -Math.abs(b.vy);
+                        }
+
+                        // In primary infection (unopsonized), bacteria releases toxins damaging adjacent healthy cells
+                        for (let c of tissueSites) {
+                            if (c.state === 'healthy' && Math.hypot(c.x - b.x, c.y - b.y) < 28) {
+                                c.toxinTimer = (c.toxinTimer || 0) + 1;
+                                if (c.toxinTimer > 280) {
+                                    c.state = 'empty';
+                                    c.toxinTimer = 0;
+                                    createCellDebris(c.x, c.y, c.id, 5);
+                                    updateLog("⚠️ <strong>【初次感染傷害】未標記細菌釋放毒素破壞宿主細胞！</strong>產生壞死細胞殘骸。");
+                                    break;
+                                }
+                            }
+                        }
+
+                        b.divideTimer++;
+                        if (b.divideTimer > 450 && bacteria.length < 24) {
+                            b.divideTimer = 0;
+                            bacteria.push({
+                                x: b.x + (Math.random() - 0.5) * 14,
+                                y: b.y + (Math.random() - 0.5) * 14,
+                                vx: (Math.random() - 0.5) * 0.5,
+                                vy: (Math.random() - 0.5) * 0.5,
+                                r: 7.5, inTissue: true, angle: Math.random() * Math.PI * 2,
+                                opsonized: false, abCount: 0, divideTimer: 0
+                            });
+                        }
+                    } else {
+                        // Opsonized bacterium: motility paralyzed by antibody cross-linking, stays localized!
+                        b.vx *= 0.70;
+                        b.vy *= 0.70;
+                        b.x += b.vx; b.y += b.vy;
+                        if (b.x < 120) { b.x = 120; b.vx = Math.abs(b.vx); }
+                        if (b.x > 865 && (b.y < 250 || b.y > 286)) { b.x = 865; b.vx = -Math.abs(b.vx); }
+                        const dermisTop = getDermisTopY(b.x, swellingLevel) + 4;
+                        if (b.y < dermisTop) { b.y = dermisTop; b.vy = Math.abs(b.vy); }
+                        else if (b.y > 275 && b.x < 868) { b.y = 275; b.vy = -Math.abs(b.vy); }
                     }
                 }
             }
 
             const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
             g.setAttribute("transform", `translate(${b.x}, ${b.y}) rotate(${b.angle * 180 / Math.PI})`);
+            g.setAttribute("opacity", (b.alpha !== undefined ? b.alpha : 1).toFixed(2));
 
             const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
             rect.setAttribute("x", -9); rect.setAttribute("y", -4.5);
@@ -2330,17 +2631,37 @@ document.addEventListener('DOMContentLoaded', () => {
             rect.setAttribute("stroke-width", "1.5");
             g.appendChild(rect);
 
+            // Render bound antibodies (opsonins) studded around bacterial surface
+            if (b.abCount > 0 && b.inTissue) {
+                const showCount = Math.min(b.abCount, 6);
+                for (let a = 0; a < showCount; a++) {
+                    const ang = (Math.PI * 2 / showCount) * a;
+                    const bx = Math.cos(ang) * 11;
+                    const by = Math.sin(ang) * 6.5;
+                    const yLine = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                    yLine.setAttribute("d", "M 0 3.5 L 0 0 L -2 -2 M 0 0 L 2 -2");
+                    yLine.setAttribute("stroke", "#fbbf24");
+                    yLine.setAttribute("stroke-width", "1.5");
+                    yLine.setAttribute("stroke-linecap", "round");
+                    yLine.setAttribute("fill", "none");
+                    yLine.setAttribute("transform", `translate(${bx}, ${by}) rotate(${ang * 180 / Math.PI + 90})`);
+                    g.appendChild(yLine);
+                }
+            }
+
             pathogensTissueLayer.appendChild(g);
 
             const bText = b.inTissue 
-                ? (b.opsonized ? "細菌(抗體標記)" : "細菌(真皮感染)") 
+                ? (b.state === 'lymph_draining' 
+                    ? "🌊 細菌隨淋巴引流 ➔ 淋巴結" 
+                    : (b.opsonized ? "細菌(抗體標記)" : "細菌(真皮感染)")) 
                 : (b.trappedInMucus 
                     ? "細菌(黏液捕捉・向右推送中)" 
                     : (isWoundOpen 
                         ? "細菌(感知創口・移行入侵中)" 
                         : (b.x >= 500 ? "外界細菌(黏膜上空)" : "外界細菌(角質阻隔・定植表皮)")));
             const bBg = b.inTissue 
-                ? (b.opsonized ? 'rgba(21, 128, 61, 0.9)' : 'rgba(34, 197, 94, 0.85)') 
+                ? (b.state === 'lymph_draining' ? 'rgba(6, 78, 59, 0.95)' : (b.opsonized ? 'rgba(21, 128, 61, 0.9)' : 'rgba(34, 197, 94, 0.85)')) 
                 : (b.trappedInMucus 
                     ? 'rgba(13, 148, 136, 0.9)' 
                     : (isWoundOpen 
@@ -2421,7 +2742,13 @@ document.addEventListener('DOMContentLoaded', () => {
                                 v.inTissue = true;
                                 v.y = skinY + 8;
                                 v.vy = Math.abs(v.vy) * 0.6 + 0.3;
-                                updateLog("👾 <strong>外界病毒經創口侵入真皮層！</strong>開始尋找健康細胞感染。");
+                                viralEncounterOccurred = true;
+                                if (vaccineState.virus) {
+                                    triggerSecondaryResponse('virus', v.x, v.y, v);
+                                    updateLog("⚡ <strong>【二次免疫循環動員】外界病毒經創口侵入，血液中和抗體隨小動脈湧至微血管滲出，立即封鎖病毒！</strong>");
+                                } else {
+                                    updateLog("👾 <strong>【初次感染】外界病毒經創口侵入真皮層！缺乏中和抗體阻斷，開始尋找細胞感染。</strong>");
+                                }
                             } else {
                                 v.y = skinY - 3;
                                 v.vy = 0;
@@ -2449,36 +2776,79 @@ document.addEventListener('DOMContentLoaded', () => {
 
             } else {
                 // Inside dermal tissue
-                if (!v.opsonized) {
-                    const healthyCells = tissueSites.filter(c => c.state === 'healthy');
-                    if (healthyCells.length > 0) {
-                        const nearest = healthyCells.reduce((prev, curr) =>
-                            Math.hypot(curr.x - v.x, curr.y - v.y) < Math.hypot(prev.x - v.x, prev.y - v.y) ? curr : prev
-                        );
-                        const dx = nearest.x - v.x, dy = nearest.y - v.y, dist = Math.hypot(dx, dy);
-                        if (dist > nearest.r) {
-                            v.x += (dx / dist) * 1.0; v.y += (dy / dist) * 1.0;
-                        } else {
-                            v.penetratingTimer++;
-                            v.x += (dx / dist) * 0.3; v.y += (dy / dist) * 0.3;
-                            if (v.penetratingTimer > 40) {
-                                nearest.state = 'infected'; nearest.infectionProgress = 10;
-                                freeViruses.splice(i, 1);
-                                continue;
+                if (v.state === 'lymph_draining') {
+                    // Free virus particles flowing inside initial lymphatic capillary towards lymph node
+                    v.x += (2.1 + Math.random() * 0.4) * simSpeed;
+                    v.y += (LYMPH_VESSEL_Y - v.y) * 0.05 * simSpeed;
+                    v.alpha = (v.alpha !== undefined ? v.alpha : 1) - 0.016 * simSpeed;
+
+                    if (v.alpha <= 0.05 || v.x >= 995) {
+                        // Reaches lymph node
+                        if (!lymphNodeState.active && !vaccineState.virus) {
+                            lymphNodeState.active = true;
+                            lymphNodeState.antigenType = 'virus';
+                            lymphNodeState.timer = 0;
+                            const statLymphPill = document.getElementById('stat-lymph-pill');
+                            if (statLymphPill) statLymphPill.style.display = 'inline-flex';
+                            updateLog("🧪 <strong>【病毒隨淋巴液引流至局部淋巴結】</strong>游離病毒微粒流入引流淋巴結！啟動淋巴結免疫應答！");
+                        }
+                        freeViruses.splice(i, 1);
+                        continue;
+                    }
+                } else {
+                    // Check entry into initial lymphatic vessel valve (x >= 868, y: 248..288)
+                    if (v.x >= 868 && v.y >= 248 && v.y <= 288) {
+                        v.state = 'lymph_draining';
+                        v.alpha = 1;
+                        updateLog("🧪 <strong>【游離病毒進入微淋巴管】</strong>微小病毒顆粒隨組織液引流入微淋巴管瓦狀單向瓣膜，奔向局部引流淋巴結！");
+                    } else if (!v.opsonized) {
+                        const healthyCells = tissueSites.filter(c => c.state === 'healthy');
+                        if (healthyCells.length > 0) {
+                            const nearest = healthyCells.reduce((prev, curr) =>
+                                Math.hypot(curr.x - v.x, curr.y - v.y) < Math.hypot(prev.x - v.x, prev.y - v.y) ? curr : prev
+                            );
+                            const dx = nearest.x - v.x, dy = nearest.y - v.y, dist = Math.hypot(dx, dy);
+                            if (dist > nearest.r) {
+                                v.x += (dx / dist) * 1.0; v.y += (dy / dist) * 1.0;
+                            } else {
+                                v.penetratingTimer++;
+                                v.x += (dx / dist) * 0.3; v.y += (dy / dist) * 0.3;
+                                if (v.penetratingTimer > 40) {
+                                    nearest.state = 'infected'; nearest.infectionProgress = 10;
+                                    freeViruses.splice(i, 1);
+                                    continue;
+                                }
                             }
+                        } else {
+                            // In tissue without adjacent cells: localized Brownian motion with damping (NO rightward push!)
+                            v.vx *= 0.88;
+                            v.vy *= 0.88;
+                            v.vx += (Math.random() - 0.5) * 0.35 * simSpeed;
+                            v.vy += (Math.random() - 0.5) * 0.35 * simSpeed;
+                            v.x += v.vx; v.y += v.vy;
+                            if (v.x < 120) { v.x = 120; v.vx = Math.abs(v.vx); }
+                            if (v.x > 865 && (v.y < 250 || v.y > 286)) { v.x = 865; v.vx = -Math.abs(v.vx); }
+                            const dermisTop = getDermisTopY(v.x, swellingLevel) + 4;
+                            if (v.y < dermisTop) { v.y = dermisTop; v.vy = Math.abs(v.vy); }
+                            else if (v.y > 275 && v.x < 868) { v.y = 275; v.vy = -Math.abs(v.vy); }
                         }
                     } else {
+                        // Opsonized / neutralized virus: paralyzed, stays in place
+                        v.vx *= 0.75;
+                        v.vy *= 0.75;
                         v.x += v.vx; v.y += v.vy;
-                        if (v.x < 30 || v.x > 970) v.vx *= -1;
-                        const dermisTop = getDermisTopY(v.x, swellingLevel);
+                        if (v.x < 120) { v.x = 120; v.vx = Math.abs(v.vx); }
+                        if (v.x > 865 && (v.y < 250 || v.y > 286)) { v.x = 865; v.vx = -Math.abs(v.vx); }
+                        const dermisTop = getDermisTopY(v.x, swellingLevel) + 4;
                         if (v.y < dermisTop) { v.y = dermisTop; v.vy = Math.abs(v.vy); }
-                        else if (v.y > 275) { v.y = 275; v.vy = -Math.abs(v.vy); }
+                        else if (v.y > 275 && v.x < 868) { v.y = 275; v.vy = -Math.abs(v.vy); }
                     }
                 }
             }
 
             const vG = document.createElementNS("http://www.w3.org/2000/svg", "g");
             vG.setAttribute("transform", `translate(${v.x}, ${v.y})`);
+            vG.setAttribute("opacity", (v.alpha !== undefined ? v.alpha : 1).toFixed(2));
             const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
             circle.setAttribute("r", v.r);
             circle.setAttribute("fill", v.inTissue ? (v.opsonized ? "#c084fc" : "#a855f7") : (v.trappedInMucus ? (v.opsonized ? "#67e8f9" : "#38bdf8") : "#d8b4fe"));
@@ -2497,17 +2867,38 @@ document.addEventListener('DOMContentLoaded', () => {
                 spike.setAttribute("stroke-width", "1.2");
                 vG.appendChild(spike);
             }
+
+            // Render bound neutralizing antibodies on viral surface
+            if (v.abCount > 0 && v.inTissue) {
+                const showCount = Math.min(v.abCount, 4);
+                for (let a = 0; a < showCount; a++) {
+                    const ang = (Math.PI * 2 / showCount) * a + Math.PI / 4;
+                    const bx = Math.cos(ang) * (v.r + 3.5);
+                    const by = Math.sin(ang) * (v.r + 3.5);
+                    const yLine = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                    yLine.setAttribute("d", "M 0 3 L 0 0 L -1.8 -1.8 M 0 0 L 1.8 -1.8");
+                    yLine.setAttribute("stroke", "#fbbf24");
+                    yLine.setAttribute("stroke-width", "1.4");
+                    yLine.setAttribute("stroke-linecap", "round");
+                    yLine.setAttribute("fill", "none");
+                    yLine.setAttribute("transform", `translate(${bx}, ${by}) rotate(${ang * 180 / Math.PI + 90})`);
+                    vG.appendChild(yLine);
+                }
+            }
+
             pathogensTissueLayer.appendChild(vG);
 
             const vText = v.inTissue 
-                ? (v.opsonized ? "病毒(已中和)" : "游離病毒(真皮感染)") 
+                ? (v.state === 'lymph_draining' 
+                    ? "🌊 病毒隨淋巴引流 ➔ 淋巴結" 
+                    : (v.opsonized ? "病毒(已中和)" : "游離病毒(真皮感染)")) 
                 : (v.trappedInMucus 
                     ? (v.opsonized ? "病毒(sIgA中和・向右排障中)" : "病毒(黏液捕捉・向右推送中)") 
                     : (isWoundOpen 
                         ? "病毒(向創口擴散移行中)" 
                         : (v.x >= 500 ? "外界病毒(黏膜上空)" : "外界病毒(角質阻隔・定植表皮)")));
             const vBg = v.inTissue 
-                ? (v.opsonized ? 'rgba(192, 132, 252, 0.9)' : 'rgba(168, 85, 247, 0.85)') 
+                ? (v.state === 'lymph_draining' ? 'rgba(6, 78, 59, 0.95)' : (v.opsonized ? 'rgba(192, 132, 252, 0.9)' : 'rgba(168, 85, 247, 0.85)')) 
                 : (v.trappedInMucus 
                     ? 'rgba(14, 116, 144, 0.9)' 
                     : (isWoundOpen 
@@ -2736,33 +3127,273 @@ document.addEventListener('DOMContentLoaded', () => {
             chemicalsLayer.appendChild(dot);
         }
 
+        // Continuous Humoral Immune Surveillance & Memory Inflow (Automatic Sustained Protection)
+        if (vaccineState.bacteria || vaccineState.virus) {
+            immuneSurveillanceTimer++;
+
+            // 1. Bacteria Humoral Memory Active
+            if (vaccineState.bacteria) {
+                const tissueBac = bacteria.filter(b => b.inTissue && b.state !== 'lymph_draining');
+                const unopsonizedBac = tissueBac.filter(b => (b.abCount || 0) < 4);
+                const circBacAb = antibodies.filter(a => a.stage === 'circulation' && a.targetType === 'bacteria');
+
+                if (unopsonizedBac.length > 0) {
+                    // Ongoing bacterial challenge: Continuous effector antibody surge from systemic circulation!
+                    if (immuneSurveillanceTimer % 14 === 0 && circBacAb.length < 12) {
+                        const targetB = unopsonizedBac[Math.floor(Math.random() * unopsonizedBac.length)];
+                        antibodies.push({
+                            x: -15 - Math.random() * 10,
+                            y: 365 + (Math.random() - 0.5) * 14,
+                            laneOffset: (Math.random() - 0.5),
+                            speed: 4.2 + Math.random() * 1.4,
+                            targetExtravasateX: Math.max(180, Math.min(880, targetB.x + (Math.random() - 0.5) * 45)),
+                            stage: 'circulation',
+                            vx: 3.8, vy: 0,
+                            life: 580,
+                            isSecondary: true,
+                            targetType: 'bacteria'
+                        });
+                    }
+                } else {
+                    // Basal serum antibody titer: Continuous arterial patrol in bloodstream
+                    if (immuneSurveillanceTimer % 40 === 0 && circBacAb.length < 5) {
+                        antibodies.push({
+                            x: -15 - Math.random() * 10,
+                            y: 365 + (Math.random() - 0.5) * 14,
+                            laneOffset: (Math.random() - 0.5),
+                            speed: 3.8 + Math.random() * 1.0,
+                            targetExtravasateX: null,
+                            stage: 'circulation',
+                            vx: 3.8, vy: 0,
+                            life: 600,
+                            isSecondary: true,
+                            targetType: 'bacteria'
+                        });
+                    }
+                }
+            }
+
+            // 2. Virus Humoral Memory Active
+            if (vaccineState.virus) {
+                const tissueVir = freeViruses.filter(v => v.inTissue && v.state !== 'lymph_draining');
+                const unneutralizedVir = tissueVir.filter(v => (v.abCount || 0) < 3);
+                const circVirAb = antibodies.filter(a => a.stage === 'circulation' && a.targetType === 'virus');
+
+                if (unneutralizedVir.length > 0) {
+                    // Ongoing viral challenge: Continuous neutralizing antibody surge!
+                    if (immuneSurveillanceTimer % 14 === 0 && circVirAb.length < 12) {
+                        const targetV = unneutralizedVir[Math.floor(Math.random() * unneutralizedVir.length)];
+                        antibodies.push({
+                            x: -15 - Math.random() * 10,
+                            y: 365 + (Math.random() - 0.5) * 14,
+                            laneOffset: (Math.random() - 0.5),
+                            speed: 4.2 + Math.random() * 1.4,
+                            targetExtravasateX: Math.max(180, Math.min(880, targetV.x + (Math.random() - 0.5) * 45)),
+                            stage: 'circulation',
+                            vx: 3.8, vy: 0,
+                            life: 580,
+                            isSecondary: true,
+                            targetType: 'virus'
+                        });
+                    }
+                } else {
+                    // Basal serum antibody titer
+                    if (immuneSurveillanceTimer % 40 === 0 && circVirAb.length < 5) {
+                        antibodies.push({
+                            x: -15 - Math.random() * 10,
+                            y: 365 + (Math.random() - 0.5) * 14,
+                            laneOffset: (Math.random() - 0.5),
+                            speed: 3.8 + Math.random() * 1.0,
+                            targetExtravasateX: null,
+                            stage: 'circulation',
+                            vx: 3.8, vy: 0,
+                            life: 600,
+                            isSecondary: true,
+                            targetType: 'virus'
+                        });
+                    }
+                }
+            }
+        }
+
         for (let i = antibodies.length - 1; i >= 0; i--) {
             const ab = antibodies[i];
             ab.life--;
             if (ab.life <= 0) { antibodies.splice(i, 1); continue; }
-            const targets = [...bacteria.filter(b => b.inTissue && b.abCount < 3), ...freeViruses.filter(v => v.inTissue && v.abCount < 2)];
-            if (targets.length > 0) {
-                const target = targets[0];
-                const dx = target.x - ab.x, dy = target.y - ab.y, dist = Math.hypot(dx, dy);
-                ab.x += (dx / dist) * 2.8; ab.y += (dy / dist) * 2.8;
-                if (dist < target.r + 5) {
-                    target.abCount++;
-                    if (!target.opsonized && target.abCount >= 2) target.opsonized = true;
-                    antibodies.splice(i, 1); continue;
+
+            // Stage 1: Circulating inside vascular system (Arteriole -> Precapillary Sphincters -> Capillary Bed)
+            if (ab.stage === 'circulation') {
+                const spd = (ab.speed || 4.2) * simSpeed;
+                ab.x += spd;
+
+                if (ab.x < 140) {
+                    // Inside Arteriole lumen (global Y: 365 +- laneOffset * 10)
+                    ab.y = 365 + (ab.laneOffset || 0) * 12;
+                    ab.rot = 90; // Oriented horizontally with arterial stream
+                } else if (ab.x >= 140 && ab.x < 168) {
+                    // Bifurcation into upper capillary lumen (global Y: 365 -> 320)
+                    const t = (ab.x - 140) / 28;
+                    const s = t * t * (3 - 2 * t);
+                    ab.y = 365 + (320 - 365) * s + (ab.laneOffset || 0) * 4;
+                    ab.rot = 90 - s * 25; // Smooth curve tilt
+                } else {
+                    // Inside upper capillary bed (global Y: 320 +- laneOffset * 3)
+                    ab.y = 320 + (ab.laneOffset || 0) * 4;
+                    ab.rot = 90;
+
+                    // Extravasation Conditions:
+                    // A) Explicit destination X reached (near an infection site)
+                    // B) OR dynamic opportunistic extravasation: passing capillary zone adjacent to active in-tissue pathogen
+                    let shouldExtravasate = false;
+                    let matchedPathogen = null;
+
+                    const matchType = ab.targetType || 'bacteria';
+                    const activeTargets = matchType === 'virus'
+                        ? freeViruses.filter(v => v.inTissue && v.state !== 'lymph_draining' && (v.abCount || 0) < 3)
+                        : bacteria.filter(b => b.inTissue && b.state !== 'lymph_draining' && (b.abCount || 0) < 4);
+
+                    if (ab.targetExtravasateX && ab.x >= ab.targetExtravasateX) {
+                        shouldExtravasate = true;
+                    } else if (ab.x >= 180 && ab.x <= 880 && activeTargets.length > 0) {
+                        const nearby = activeTargets.find(t => Math.abs(t.x - ab.x) < 50);
+                        if (nearby) {
+                            shouldExtravasate = true;
+                            matchedPathogen = nearby;
+                        }
+                    }
+
+                    if (shouldExtravasate) {
+                        ab.stage = 'tissue';
+                        ab.y = 304; // Enters dermis just above endothelial junction
+
+                        if (!matchedPathogen && activeTargets.length > 0) {
+                            let bestD = 9999;
+                            for (let t of activeTargets) {
+                                const d = Math.hypot(t.x - ab.x, t.y - 304);
+                                if (d < bestD) { bestD = d; matchedPathogen = t; }
+                            }
+                        }
+
+                        if (matchedPathogen) {
+                            const aimAngle = Math.atan2(matchedPathogen.y - 304, matchedPathogen.x - ab.x);
+                            // Spread in a natural cone towards the lesion (+- 20 deg)
+                            const spread = aimAngle + (Math.random() - 0.5) * 0.7;
+                            const initSpd = 1.9 + Math.random() * 0.7;
+                            ab.vx = Math.cos(spread) * initSpd;
+                            ab.vy = Math.sin(spread) * initSpd;
+                        } else {
+                            // Upward-radial fan dispersion into dermis (-36 to -144 deg)
+                            const fanAngle = -Math.PI * (0.2 + Math.random() * 0.6);
+                            const initSpd = 1.6 + Math.random() * 0.6;
+                            ab.vx = Math.cos(fanAngle) * initSpd;
+                            ab.vy = Math.sin(fanAngle) * initSpd;
+                        }
+                        ab.rot = Math.atan2(ab.vy, ab.vx) * (180 / Math.PI) + 90;
+                        ab.life = 600;
+                    }
+                }
+
+                if (ab.x > 1020) {
+                    antibodies.splice(i, 1);
+                    continue;
                 }
             } else {
-                ab.x += ab.vx; ab.y += ab.vy;
-                if (ab.x < 40 || ab.x > 960) ab.vx *= -1;
-                const abTop = getDermisTopY(ab.x, swellingLevel);
-                if (ab.y < abTop || ab.y > 275) ab.vy *= -1;
+                // Stage 2: Moving through dermal interstitial fluid via convection, diffusion & antigen affinity
+                // 1. ECM hydraulic damping (slows down initial diapedesis jet into interstitial percolation)
+                ab.vx *= 0.94;
+                ab.vy *= 0.94;
+
+                // 2. Microenvironmental Brownian percolation
+                ab.vx += (Math.random() - 0.5) * 0.28 * simSpeed;
+                ab.vy += (Math.random() - 0.5) * 0.24 * simSpeed;
+
+                // 3. Gentle bulk interstitial drainage drift towards lymphatics (rightward)
+                ab.vx += 0.03 * simSpeed;
+
+                // 4. Local Antigen Affinity & Chemotactic Sink:
+                const matchType = ab.targetType || 'bacteria';
+                const activeTargets = matchType === 'virus'
+                    ? freeViruses.filter(v => v.inTissue && v.state !== 'lymph_draining')
+                    : bacteria.filter(b => b.inTissue && b.state !== 'lymph_draining');
+
+                // Prioritize un-opsonized targets (< 3 antibodies bound) so antibodies distribute across ALL pathogens evenly
+                const unopsonized = activeTargets.filter(t => (t.abCount || 0) < 3);
+                const searchList = unopsonized.length > 0 ? unopsonized : activeTargets;
+
+                let nearest = null;
+                let minDist = 9999;
+                for (let t of searchList) {
+                    const d = Math.hypot(t.x - ab.x, t.y - ab.y);
+                    if (d < minDist) {
+                        minDist = d;
+                        nearest = t;
+                    }
+                }
+
+                if (nearest && minDist < 120) {
+                    // Within 120px of pathogen: Fab epitope affinity field steers the antibody towards the target
+                    const affinityPull = Math.min(0.72, (1 - minDist / 120) * 0.55 + 0.18) * simSpeed;
+                    const dx = nearest.x - ab.x;
+                    const dy = nearest.y - ab.y;
+                    ab.vx += (dx / minDist) * affinityPull;
+                    ab.vy += (dy / minDist) * affinityPull;
+                }
+
+                ab.x += ab.vx * simSpeed;
+                ab.y += ab.vy * simSpeed;
+                ab.rot = Math.atan2(ab.vy, ab.vx) * (180 / Math.PI) + 90;
+
+                // 5. Stochastic Collision & High-Affinity Epitope Binding (Opsonization)
+                let collided = false;
+                if (nearest && minDist < ((nearest.r || 6.5) + 10.5)) {
+                    nearest.abCount = (nearest.abCount || 0) + 1;
+                    nearest.opsonized = true;
+                    nearest.divideTimer = -999999;
+                    if (nearest.r <= 6) {
+                        nearest.neutralized = true;
+                        nearest.penetratingTimer = 0;
+                    }
+                    collided = true;
+                }
+
+                if (collided) {
+                    // Studded onto pathogen surface as opsonin marker
+                    antibodies.splice(i, 1);
+                    continue;
+                }
+
+                // 6. Dermal Boundaries: Keep within interstitial space rather than vanishing instantly!
+                const abTop = getDermisTopY(ab.x, swellingLevel) + 6;
+                if (ab.y < abTop) {
+                    ab.y = abTop;
+                    ab.vy = Math.abs(ab.vy) * 0.5; // Reflect off basement membrane
+                }
+                if (ab.y > 320) {
+                    ab.y = 320;
+                    ab.vy = -Math.abs(ab.vy) * 0.5;
+                }
+
+                // 7. Lymphatic Drainage & Expiration
+                if (ab.x >= 868 && ab.y >= 248 && ab.y <= 288) {
+                    // Enters initial lymphatic vessel and drains to lymph node
+                    antibodies.splice(i, 1);
+                    continue;
+                }
+
+                if (ab.x < 20 || ab.x > 980) {
+                    antibodies.splice(i, 1);
+                    continue;
+                }
             }
 
             const yG = document.createElementNS("http://www.w3.org/2000/svg", "g");
-            yG.setAttribute("transform", `translate(${ab.x}, ${ab.y})`);
+            const rot = ab.rot !== undefined ? ab.rot : (ab.stage === 'circulation' ? 90 : 0);
+            yG.setAttribute("transform", `translate(${ab.x}, ${ab.y}) rotate(${rot})`);
             const yLine = document.createElementNS("http://www.w3.org/2000/svg", "path");
-            yLine.setAttribute("d", "M 0 4 L 0 0 L -3 -3 M 0 0 L 3 -3");
-            yLine.setAttribute("stroke", "#f97316");
-            yLine.setAttribute("stroke-width", "1.5");
+            yLine.setAttribute("d", "M 0 4.5 L 0 0 L -3.5 -3.5 M 0 0 L 3.5 -3.5");
+            yLine.setAttribute("stroke", ab.isSecondary ? "#fbbf24" : "#f97316");
+            yLine.setAttribute("stroke-width", ab.isSecondary ? "2.2" : "1.5");
+            yLine.setAttribute("stroke-linecap", "round");
             yLine.setAttribute("fill", "none");
             yG.appendChild(yLine);
             chemicalsLayer.appendChild(yG);
@@ -2774,16 +3405,55 @@ document.addEventListener('DOMContentLoaded', () => {
         const isSwollen = activeEffects.has('swelling') || gapSize > 3.5 || swellingLevel > 0.2;
         const squeezeSpeed = isSwollen ? 1.8 : 0.8;
 
-        // Auto physiological recruitment of leukocytes when tissue is swollen or infected
+        // Auto physiological recruitment of leukocytes (controlled by toggle switch, default OFF)
         const hasTargets = bacteria.some(b => b.inTissue) || freeViruses.some(v => v.inTissue) || parasites.some(p => p.inTissue) || cellDebris.length > 0 || tissueSites.some(c => c.state === 'infected') || coagStage >= 1 || isSwollen;
+        const isAutoWbcEnabled = toggleAutoWbcCheckbox && toggleAutoWbcCheckbox.checked;
 
-        if (isSwollen || hasTargets) {
-            autoWbcRecruitTimer++;
-            const recruitInterval = isSwollen ? 220 : 380;
-            if (autoWbcRecruitTimer > recruitInterval && (bloodWBCs.length + activeTissueWBCs.length) < 8) {
+        if (isAutoWbcEnabled) {
+            const hasParasiteInTissue = parasites.some(p => p.inTissue);
+            const hasInfectedCells = tissueSites.some(c => c.state === 'infected');
+            const hasBacteriaInTissue = bacteria.some(b => b.inTissue);
+            const hasDebris = cellDebris.length > 0;
+            const hasFreeVirusesInTissue = freeViruses.some(v => v.inTissue);
+
+            if (hasParasiteInTissue || hasInfectedCells || hasBacteriaInTissue || hasDebris || hasFreeVirusesInTissue || isSwollen) {
+                autoWbcRecruitTimer++;
+                const recruitInterval = (hasParasiteInTissue || hasInfectedCells) ? 140 : (isSwollen ? 200 : 300);
+
+                if (autoWbcRecruitTimer > recruitInterval && (bloodWBCs.length + activeTissueWBCs.length) < 9) {
+                    autoWbcRecruitTimer = 0;
+
+                    // 1. Virus-infected cells demand NK / Cytotoxic T cells
+                    const activeKillers = [...bloodWBCs, ...activeTissueWBCs].filter(w => w.subtype === 'nk' || w.subtype === 'tcell');
+                    if (hasInfectedCells && activeKillers.length < 2) {
+                        const killerSubtype = Math.random() < 0.6 ? 'nk' : 'tcell';
+                        const killerName = killerSubtype === 'nk' ? '自然殺手 (NK) 細胞' : '毒殺型 T 細胞';
+                        recruitCirculatingWbc(killerSubtype, `🟢 <strong>【自動免疫召募】偵測到細胞受病毒感染！</strong>自動派遣${killerName}趕往清除受感染宿主細胞！`);
+                    }
+                    // 2. Nematode parasites in tissue demand Eosinophils
+                    else if (hasParasiteInTissue && [...bloodWBCs, ...activeTissueWBCs].filter(w => w.subtype === 'eosinophil').length < 3) {
+                        recruitCirculatingWbc('eosinophil', "🔴 <strong>【自動免疫召募】偵測到大型線蟲侵入真皮層！</strong>自動召募嗜酸性球前往釋放毒性顆粒！");
+                    }
+                    // 3. Bacteria in tissue demand Phagocytes + Humoral B-cells
+                    else if (hasBacteriaInTissue && [...bloodWBCs, ...activeTissueWBCs].filter(w => w.subtype === 'bcell').length < 2 && Math.random() < 0.35) {
+                        recruitCirculatingWbc('bcell', "🟠 <strong>【自動免疫召募】偵測到真皮細菌感染！</strong>自動派遣 B 淋巴球分化為漿細胞，分泌專一性抗體調理標記！");
+                    }
+                    else if ((hasBacteriaInTissue || hasDebris) && [...bloodWBCs, ...activeTissueWBCs].filter(w => w.subtype === 'neutrophil' || w.subtype === 'monocyte' || w.subtype === 'macrophage').length < 4) {
+                        const phagoSubtype = Math.random() < 0.65 ? 'neutrophil' : 'monocyte';
+                        recruitCirculatingWbc(phagoSubtype, `⚪ <strong>【自動免疫召募】偵測到細菌與細胞殘骸！</strong>自動召募${phagoSubtype === 'neutrophil' ? '嗜中性球' : '單核巨噬細胞'}前往吞噬清創！`);
+                    }
+                    // 4. Free viruses in tissue demand B-cells for antibody neutralization
+                    else if (hasFreeVirusesInTissue && [...bloodWBCs, ...activeTissueWBCs].filter(w => w.subtype === 'bcell').length < 2) {
+                        recruitCirculatingWbc('bcell', "🟠 <strong>【自動免疫召募】偵測到游離病毒！</strong>自動派遣 B 淋巴球分泌抗體進行中和！");
+                    }
+                    // 5. General swelling surveillance
+                    else if (isSwollen && (bloodWBCs.length + activeTissueWBCs.length) < 4) {
+                        const pool = ['neutrophil', 'monocyte'];
+                        recruitCirculatingWbc(pool[Math.floor(Math.random() * pool.length)]);
+                    }
+                }
+            } else {
                 autoWbcRecruitTimer = 0;
-                const pool = isSwollen ? ['neutrophil', 'neutrophil', 'monocyte'] : ['neutrophil', 'monocyte'];
-                recruitCirculatingWbc(pool[Math.floor(Math.random() * pool.length)]);
             }
         } else {
             autoWbcRecruitTimer = 0;
@@ -2824,7 +3494,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
 
-                // Dynamic Y position: strictly inside arteriole, smoothly curving leftward into capillary
+                // Dynamic Y position: strictly inside arteriole, branching smoothly at BRANCH_START_X into capillary
                 const branchObj = BRANCHES.find(b => b.id === wbc.branchId) || BRANCHES[0];
                 const halfArt = arterioleWidth / 2;
                 const halfCap = capillaryWidth / 2;
@@ -2833,17 +3503,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Safe spread inside arteriole: strictly contained within arteriole walls
                 const maxSpread = Math.max(2, halfArt - wbc.r - 2);
                 const branchBias = wbc.branchId === 'top' ? -0.35 : (wbc.branchId === 'bot' ? 0.35 : 0);
-                const startY = 65 + branchBias * maxSpread + laneOff * (maxSpread * 0.45);
+                const startY = 65 + branchBias * maxSpread + laneOff * (maxSpread * 0.4);
 
                 const endY = branchObj.targetY + laneOff * Math.max(0, halfCap - wbc.r - 1);
 
                 let localY;
-                const xTransStart = 95;
-                const xTransEnd = 148;
-                if (wbc.x < xTransStart) {
+                if (wbc.x < BRANCH_START_X) {
                     localY = startY;
-                } else if (wbc.x >= xTransStart && wbc.x < xTransEnd) {
-                    const t = (wbc.x - xTransStart) / (xTransEnd - xTransStart);
+                } else if (wbc.x >= BRANCH_START_X && wbc.x < BRANCH_END_X) {
+                    const t = (wbc.x - BRANCH_START_X) / (BRANCH_END_X - BRANCH_START_X);
                     const s = t * t * (3 - 2 * t);
                     localY = startY + (endY - startY) * s;
                 } else {
@@ -2939,15 +3607,99 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
             } else if (w.subtype === 'bcell') {
-                if (w.producing > 0) {
-                    w.producing--;
-                    if (w.producing % 5 === 0) {
+                // Activated B cell / Plasma Cell (效應漿細胞持續分泌工廠)
+                const inTissueBacteria = bacteria.filter(b => b.inTissue && b.state !== 'lymph_draining');
+                const inTissueViruses = freeViruses.filter(v => v.inTissue && v.state !== 'lymph_draining');
+                const pathogens = [...inTissueBacteria, ...inTissueViruses];
+
+                // 1. Amoeboid Chemotaxis & Standoff Positioning
+                if (pathogens.length > 0) {
+                    let closestP = null;
+                    let closestD = 9999;
+                    for (let p of pathogens) {
+                        const d = Math.hypot(p.x - w.x, p.y - w.y);
+                        if (d < closestD) {
+                            closestD = d;
+                            closestP = p;
+                        }
+                    }
+
+                    if (closestP) {
+                        const dx = closestP.x - w.x;
+                        const dy = closestP.y - w.y;
+                        const idealDist = 65; // Optimal firing distance to spray antibodies into lesion
+
+                        if (closestD > idealDist + 15) {
+                            // Crawl towards the infection site
+                            w.x += (dx / closestD) * 1.3 * simSpeed;
+                            w.y += (dy / closestD) * 1.3 * simSpeed;
+                        } else if (closestD < idealDist - 15) {
+                            // Back up to maintain optimal standoff distance
+                            w.x -= (dx / closestD) * 0.8 * simSpeed;
+                            w.y -= (dy / closestD) * 0.8 * simSpeed;
+                        } else {
+                            // Gentle lateral orbit / micro-maneuver
+                            w.x += (Math.random() - 0.5) * 0.6 * simSpeed;
+                            w.y += (Math.random() - 0.5) * 0.6 * simSpeed;
+                        }
+                    }
+
+                    // 2. Continuous Sustained Antibody Secretion (Plasma Cell Factory)
+                    w.isPlasmaActive = true;
+                    w.secreteCooldown = (w.secreteCooldown || 0) + 1;
+
+                    // Continuous secretion: emits antibody every 16 frames as long as pathogens remain
+                    if (w.secreteCooldown >= 16) {
+                        w.secreteCooldown = 0;
+
+                        // Target an un-opsonized pathogen if possible, aiming towards it with fan spread
+                        const unopTargets = pathogens.filter(p => (p.abCount || 0) < 3);
+                        const targetP = unopTargets.length > 0
+                            ? unopTargets[Math.floor(Math.random() * unopTargets.length)]
+                            : closestP;
+
+                        const aimAngle = Math.atan2(targetP.y - w.y, targetP.x - w.x) + (Math.random() - 0.5) * 0.8;
+                        const spd = 2.1 + Math.random() * 0.7;
+                        const targetType = inTissueBacteria.includes(targetP) ? 'bacteria' : 'virus';
+
                         antibodies.push({
-                            x: w.x, y: w.y,
-                            vx: (Math.random() - 0.5) * 2, vy: (Math.random() - 0.5) * 2, life: 400
+                            x: w.x,
+                            y: w.y,
+                            vx: Math.cos(aimAngle) * spd,
+                            vy: Math.sin(aimAngle) * spd,
+                            stage: 'tissue',
+                            life: 520,
+                            isSecondary: false,
+                            targetType: targetType
                         });
                     }
+                } else {
+                    // No pathogens: resting memory surveillance patrol
+                    w.isPlasmaActive = false;
+                    w.x += (Math.random() - 0.5) * 0.7 * simSpeed;
+                    w.y += (Math.random() - 0.5) * 0.6 * simSpeed;
                 }
+
+                // Volume repulsion between multiple B cells so they don't overlap
+                for (let j = 0; j < activeTissueWBCs.length; j++) {
+                    if (i !== j && activeTissueWBCs[j].subtype === 'bcell') {
+                        const otherB = activeTissueWBCs[j];
+                        const sepDx = w.x - otherB.x;
+                        const sepDy = w.y - otherB.y;
+                        const sepD = Math.hypot(sepDx, sepDy);
+                        if (sepD < 32 && sepD > 0.01) {
+                            w.x += (sepDx / sepD) * 0.7 * simSpeed;
+                            w.y += (sepDy / sepD) * 0.7 * simSpeed;
+                        }
+                    }
+                }
+
+                // Dermis bounds confinement
+                const dermisTop = getDermisTopY(w.x, swellingLevel) + 10;
+                if (w.y < dermisTop) { w.y = dermisTop; }
+                if (w.y > 275) { w.y = 275; }
+                if (w.x < 130) { w.x = 130; }
+                if (w.x > 840) { w.x = 840; }
             } else if (w.subtype === 'eosinophil') {
                 const tissueParasites = parasites.filter(p => p.inTissue);
                 if (tissueParasites.length > 0) {
@@ -2986,6 +3738,68 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else {
                     w.x += (Math.random() - 0.5) * 0.8; w.y += (Math.random() - 0.5) * 0.8;
                 }
+            } else if (w.state === 'apc_migrating') {
+                // APC Chemotaxis: Amoeboid crawling towards the dermal initial lymphatic capillary valve
+                const targetX = w.targetLymphX || LYMPH_VESSEL_X;
+                const targetY = w.targetLymphY || LYMPH_VESSEL_Y;
+                const dx = targetX - w.x;
+                const dy = targetY - w.y;
+                const dist = Math.hypot(dx, dy);
+                const baseSpeed = w.crawlSpeed || 2.1;
+                const speed = baseSpeed * simSpeed;
+
+                w.crawlPhase = (w.crawlPhase || 0) + 0.05 * simSpeed;
+                const lateralWander = Math.sin(w.crawlPhase) * 0.4;
+
+                if (dist > 3) {
+                    w.x += (dx / dist) * speed;
+                    w.y += (dy / dist) * speed + lateralWander * simSpeed;
+                }
+
+                // Volume repulsion: avoid overlapping with other migrating/draining APCs
+                for (let j = 0; j < activeTissueWBCs.length; j++) {
+                    if (i !== j) {
+                        const other = activeTissueWBCs[j];
+                        if (other.state === 'apc_migrating' || other.state === 'lymph_draining') {
+                            const sepDx = w.x - other.x;
+                            const sepDy = w.y - other.y;
+                            const sepDist = Math.hypot(sepDx, sepDy);
+                            const minDist = (w.r || 11.5) + (other.r || 11.5) + 4;
+                            if (sepDist < minDist && sepDist > 0.01) {
+                                const push = ((minDist - sepDist) / minDist) * 0.85 * simSpeed;
+                                w.x += (sepDx / sepDist) * push;
+                                w.y += (sepDy / sepDist) * push;
+                            }
+                        }
+                    }
+                }
+
+                // Enter through the flap valve into lymphatic stream
+                if (dist < 14 || w.x >= targetX) {
+                    w.state = 'lymph_draining';
+                    const agName = w.antigenType === 'bacteria' ? '細菌' : '病毒';
+                    updateLog(`🧪 <strong>【抗原呈現細胞進入微淋巴管】</strong>APC 穿過微淋巴管瓣膜進入淋巴流，前往局部引流淋巴結！`);
+
+                    // Trigger lymph node clonal expansion if not already running
+                    if (!lymphNodeState.active) {
+                        lymphNodeState.active = true;
+                        lymphNodeState.antigenType = w.antigenType;
+                        lymphNodeState.timer = 0;
+                        const statLymphPill = document.getElementById('stat-lymph-pill');
+                        if (statLymphPill) statLymphPill.style.display = 'inline-flex';
+                    }
+                }
+            } else if (w.state === 'lymph_draining') {
+                // Flowing inside initial lymphatic vessel towards downstream lymph node
+                w.x += (w.flowSpeed || 2.0) * simSpeed;
+                w.y += (LYMPH_VESSEL_Y - w.y) * 0.05 * simSpeed; // Center in lymphatic lumen
+                w.alpha = (w.alpha !== undefined ? w.alpha : 1) - 0.018 * simSpeed;
+                w.r = Math.max(3.5, w.r * 0.985); // Natural fluid entry scaling
+
+                if (w.alpha <= 0.05 || w.x >= 995) {
+                    activeTissueWBCs.splice(i, 1);
+                    continue;
+                }
             } else if (w.subtype === 'neutrophil' || w.subtype === 'macrophage') {
                 const targets = [
                     ...bacteria.filter(b => b.inTissue).map(item => ({ type: 'bacteria', item, priority: 1 })),
@@ -3004,17 +3818,26 @@ document.addEventListener('DOMContentLoaded', () => {
                     w.x += (dx / dist) * speed; w.y += (dy / dist) * speed;
 
                     if (dist < w.r + (best.item.r || 5)) {
+                        let eatenAntigen = null;
                         if (best.type === 'bacteria') {
                             const bIdx = bacteria.indexOf(best.item);
-                            if (bIdx !== -1) bacteria.splice(bIdx, 1);
+                            if (bIdx !== -1) { bacteria.splice(bIdx, 1); eatenAntigen = 'bacteria'; }
                         } else if (best.type === 'virus') {
                             const vIdx = freeViruses.indexOf(best.item);
-                            if (vIdx !== -1) freeViruses.splice(vIdx, 1);
+                            if (vIdx !== -1) { freeViruses.splice(vIdx, 1); eatenAntigen = 'virus'; }
                         } else if (best.type === 'debris') {
                             const dIdx = cellDebris.indexOf(best.item);
-                            if (dIdx !== -1) cellDebris.splice(dIdx, 1);
+                            if (dIdx !== -1) {
+                                cellDebris.splice(dIdx, 1);
+                                eatenAntigen = viralEncounterOccurred ? 'virus' : (bacterialEncounterOccurred ? 'bacteria' : null);
+                            }
                         }
                         w.eatenCount++;
+
+                        // APC Activation: If primary infection (not vaccinated), load antigen and migrate to lymphatic capillary!
+                        if (eatenAntigen && !vaccineState[eatenAntigen] && !lymphNodeState.active) {
+                            triggerApcMigration(eatenAntigen, w.x, w.y);
+                        }
                     }
                 } else {
                     w.x += (Math.random() - 0.5) * 0.6; w.y += (Math.random() - 0.5) * 0.6;
@@ -3026,11 +3849,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            const dermisTop = getDermisTopY(w.x, swellingLevel);
-            w.x = Math.max(40, Math.min(960, w.x));
-            w.y = Math.max(dermisTop, Math.min(275, w.y));
+            if (w.state === 'lymph_draining') {
+                w.x = Math.max(860, Math.min(1005, w.x));
+                w.y = Math.max(248, Math.min(288, w.y));
+            } else {
+                const dermisTop = getDermisTopY(w.x, swellingLevel);
+                w.x = Math.max(40, Math.min(960, w.x));
+                w.y = Math.max(dermisTop, Math.min(278, w.y));
+            }
 
-            if (w.tissueLife <= 0) {
+            if (w.tissueLife <= 0 && w.state !== 'lymph_draining') {
                 w.alpha -= 0.02;
                 if (w.alpha <= 0) { activeTissueWBCs.splice(i, 1); continue; }
             }
@@ -3042,14 +3870,45 @@ document.addEventListener('DOMContentLoaded', () => {
             const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
             circle.setAttribute("r", w.r);
             circle.setAttribute("fill", getWbcColor(w.subtype));
-            circle.setAttribute("stroke", "#fff");
-            circle.setAttribute("stroke-width", "1.5");
+            const isLymph = w.state === 'apc_migrating' || w.state === 'lymph_draining';
+            const strokeColor = w.state === 'lymph_draining' ? "#10b981" : (w.state === 'apc_migrating' ? "#34d399" : "#fff");
+            circle.setAttribute("stroke", strokeColor);
+            circle.setAttribute("stroke-width", isLymph ? "2.2" : "1.5");
             g.appendChild(circle);
+
+            if (isLymph) {
+                const halo = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                halo.setAttribute("r", w.r + 4.5);
+                halo.setAttribute("fill", "none");
+                halo.setAttribute("stroke", w.state === 'lymph_draining' ? "#10b981" : "#34d399");
+                halo.setAttribute("stroke-width", "1.6");
+                halo.setAttribute("stroke-dasharray", "3,2");
+                g.appendChild(halo);
+            } else if (w.subtype === 'bcell' && w.isPlasmaActive) {
+                const pulseR = w.r + 3.8 + Math.sin(Date.now() * 0.008 + w.x) * 1.8;
+                const halo = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                halo.setAttribute("r", pulseR);
+                halo.setAttribute("fill", "none");
+                halo.setAttribute("stroke", "#fb923c");
+                halo.setAttribute("stroke-width", "1.5");
+                halo.setAttribute("stroke-dasharray", "3,2");
+                g.appendChild(halo);
+            }
 
             drawWbcNucleus(g, w.subtype, w.r);
             activeWbcLayer.appendChild(g);
 
-            createSvgLabel(getWbcLabelText(w), w.x, w.y - w.r - 8, getWbcLabelBg(w.subtype));
+            let labelText;
+            if (w.state === 'lymph_draining') {
+                labelText = `🌊 淋巴回流 ➔ 淋巴結`;
+            } else if (w.state === 'apc_migrating') {
+                labelText = `🏷️ 呈現抗原 (MHC-II) ➔ 淋巴管`;
+            } else {
+                labelText = getWbcLabelText(w);
+            }
+            const labelBg = isLymph ? 'rgba(6, 78, 59, 0.95)' : getWbcLabelBg(w.subtype);
+            const labelColor = isLymph ? '#a7f3d0' : '#fff';
+            createSvgLabel(labelText, w.x, w.y - w.r - 8, labelBg, labelColor);
         }
 
         // ----------------------------------------------------
@@ -3057,13 +3916,18 @@ document.addEventListener('DOMContentLoaded', () => {
         // ----------------------------------------------------
         const halfCap = capillaryWidth / 2;
         const halfArt = arterioleWidth / 2;
-        const xTransStart = 95;
-        const xTransEnd = 148;
 
         bloodParticles.forEach(p => {
             let sectionSpeed = flowSpeed;
-            if (p.x < xTransEnd) sectionSpeed = flowSpeed * (22 / arterioleWidth);
+            if (p.x < BRANCH_START_X) {
+                sectionSpeed = flowSpeed * (22 / arterioleWidth);
+            } else if (p.x < BRANCH_END_X) {
+                const t = (p.x - BRANCH_START_X) / (BRANCH_END_X - BRANCH_START_X);
+                const artSp = flowSpeed * (22 / arterioleWidth);
+                sectionSpeed = artSp + (flowSpeed - artSp) * t;
+            }
             p.x += sectionSpeed;
+
             if (p.x > 1020) {
                 p.x = -20;
                 const bIds = ['top', 'mid', 'bot'];
@@ -3074,17 +3938,18 @@ document.addEventListener('DOMContentLoaded', () => {
             const targetBranchObj = BRANCHES.find(b => b.id === p.branchId) || BRANCHES[1];
             const branchY = targetBranchObj.targetY;
 
-            // Shift transition leftward (x: 95 -> 148) so RBCs & platelets curve smoothly into capillary
-            // and pass cleanly through precapillary sphincters (x=152..164) without overshooting outside
+            // Safe spread inside arteriole: strictly contained within arteriole boundaries (x < BRANCH_START_X)
             const maxSpread = Math.max(1, halfArt - p.r - 2);
-            const branchBias = p.branchId === 'top' ? -0.4 : (p.branchId === 'bot' ? 0.4 : 0);
-            const startY = 65 + branchBias * maxSpread + p.laneOffset * (maxSpread * 0.45);
+            const branchBias = p.branchId === 'top' ? -0.38 : (p.branchId === 'bot' ? 0.38 : 0);
+            const startY = 65 + branchBias * maxSpread + p.laneOffset * (maxSpread * 0.4);
+
+            // Capillary target lane (x >= BRANCH_END_X)
             const endY = branchY + (capillaryWidth > 20 ? p.laneOffset * (halfCap - p.r) : p.laneOffset * Math.max(0, halfCap - p.r - 1.2));
 
-            if (p.x < xTransStart) {
+            if (p.x < BRANCH_START_X) {
                 p.y = startY;
-            } else if (p.x >= xTransStart && p.x < xTransEnd) {
-                const t = (p.x - xTransStart) / (xTransEnd - xTransStart);
+            } else if (p.x >= BRANCH_START_X && p.x < BRANCH_END_X) {
+                const t = (p.x - BRANCH_START_X) / (BRANCH_END_X - BRANCH_START_X);
                 const s = t * t * (3 - 2 * t);
                 p.y = startY + (endY - startY) * s;
             } else {
@@ -3112,8 +3977,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (prog >= 0.45) {
                 const t = (prog - 0.45) / 0.55;
                 return evalCubicBezier(
-                    { x: 360, y: 200 },
-                    { x: 230, y: 220 },
+                    { x: 318, y: 160 },
+                    { x: 260, y: 200 },
                     { x: 100, y: 245 },
                     { x: -10, y: 240 },
                     t
@@ -3122,71 +3987,71 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const t = prog / 0.45;
             if (idx === 0) {
-                // Path 0: From Terminal 1 (240, 125) via Branch 1 to (360, 200)
+                // Path 0: From Terminal 1 (175, 78) in interstitial space -> Junction (318, 160)
                 return evalCubicBezier(
-                    { x: 240, y: 125 },
-                    { x: 270, y: 155 },
-                    { x: 320, y: 170 },
-                    { x: 360, y: 200 },
+                    { x: 175, y: 78 },
+                    { x: 175, y: 130 },
+                    { x: 260, y: 160 },
+                    { x: 318, y: 160 },
                     t
                 );
             } else if (idx === 1) {
-                // Path 1: From Terminal 2 (395, 75) via Branch 2 to (360, 200)
+                // Path 1: From Terminal 2 (318, 76) in interstitial space -> Junction (318, 160)
                 return evalCubicBezier(
-                    { x: 395, y: 75 },
-                    { x: 370, y: 110 },
-                    { x: 385, y: 160 },
-                    { x: 360, y: 200 },
+                    { x: 318, y: 76 },
+                    { x: 318, y: 105 },
+                    { x: 318, y: 135 },
+                    { x: 318, y: 160 },
                     t
                 );
             } else if (idx === 2) {
-                // Path 2: From Terminal 4 (535, 85) near wound -> (525, 155) -> (360, 200)
-                if (t < 0.4) {
-                    const subT = t / 0.4;
+                // Path 2: From Terminal 3 (462, 78) -> (462, 160) -> Junction (318, 160)
+                if (t < 0.5) {
+                    const subT = t / 0.5;
                     return evalCubicBezier(
-                        { x: 535, y: 85 },
-                        { x: 530, y: 110 },
-                        { x: 522, y: 135 },
-                        { x: 525, y: 155 },
+                        { x: 462, y: 78 },
+                        { x: 460, y: 105 },
+                        { x: 462, y: 135 },
+                        { x: 462, y: 160 },
                         subT
                     );
                 } else {
-                    const subT = (t - 0.4) / 0.6;
+                    const subT = (t - 0.5) / 0.5;
                     return evalCubicBezier(
-                        { x: 525, y: 155 },
-                        { x: 475, y: 185 },
-                        { x: 420, y: 205 },
-                        { x: 360, y: 200 },
+                        { x: 462, y: 160 },
+                        { x: 415, y: 160 },
+                        { x: 365, y: 160 },
+                        { x: 318, y: 160 },
                         subT
                     );
                 }
             } else {
-                // Path 3: From Terminal 6 (780, 75) -> (680, 130) -> (525, 155) -> (360, 200)
-                if (t < 0.3) {
-                    const subT = t / 0.3;
+                // Path 3: From Terminal 5 (608, 78) -> (608, 140) -> (462, 160) -> Junction (318, 160)
+                if (t < 0.35) {
+                    const subT = t / 0.35;
                     return evalCubicBezier(
-                        { x: 780, y: 75 },
-                        { x: 750, y: 90 },
-                        { x: 720, y: 110 },
-                        { x: 680, y: 130 },
+                        { x: 608, y: 78 },
+                        { x: 606, y: 95 },
+                        { x: 612, y: 120 },
+                        { x: 608, y: 140 },
                         subT
                     );
-                } else if (t < 0.6) {
-                    const subT = (t - 0.3) / 0.3;
+                } else if (t < 0.7) {
+                    const subT = (t - 0.35) / 0.35;
                     return evalCubicBezier(
-                        { x: 680, y: 130 },
-                        { x: 630, y: 155 },
-                        { x: 580, y: 145 },
-                        { x: 525, y: 155 },
+                        { x: 608, y: 140 },
+                        { x: 580, y: 160 },
+                        { x: 535, y: 160 },
+                        { x: 462, y: 160 },
                         subT
                     );
                 } else {
-                    const subT = (t - 0.6) / 0.4;
+                    const subT = (t - 0.7) / 0.3;
                     return evalCubicBezier(
-                        { x: 525, y: 155 },
-                        { x: 475, y: 185 },
-                        { x: 420, y: 205 },
-                        { x: 360, y: 200 },
+                        { x: 462, y: 160 },
+                        { x: 415, y: 160 },
+                        { x: 365, y: 160 },
+                        { x: 318, y: 160 },
                         subT
                     );
                 }
@@ -3219,6 +4084,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 t.setAttribute("r", "4");
             });
             pulses.forEach(p => p.setAttribute("opacity", "0"));
+        }
+
+        // Primary Infection Clearance Notification (Preserving presenter's toggle state)
+        if (bacterialEncounterOccurred && !vaccineState.bacteria) {
+            const activeTissueBac = bacteria.filter(b => b.inTissue).length;
+            if (activeTissueBac === 0) {
+                bacterialEncounterOccurred = false;
+                updateLog("ℹ️ <strong>【初次細菌感染已被白血球吞噬清除！】</strong>創面平息。若欲向學生示範二次免疫應答，請手動開啟【細菌免疫記憶】Toggle開關！");
+            }
+        }
+
+        if (viralEncounterOccurred && !vaccineState.virus) {
+            const activeTissueVir = freeViruses.filter(v => v.inTissue).length;
+            const infectedCells = tissueSites.filter(c => c.state === 'infected').length;
+            if (activeTissueVir === 0 && infectedCells === 0) {
+                viralEncounterOccurred = false;
+                updateLog("ℹ️ <strong>【初次病毒感染已完全平息！】</strong>若欲向學生示範二次免疫應答，請手動開啟【病毒免疫記憶】Toggle開關！");
+            }
         }
 
         // ----------------------------------------------------
@@ -3273,7 +4156,7 @@ document.addEventListener('DOMContentLoaded', () => {
             case 'macrophage': return `巨噬細胞(${w.eatenCount}/${w.maxEat})`;
             case 'eosinophil': return `嗜酸性球(彈藥${w.ammo})`;
             case 'basophil': return "嗜鹼性球(釋組織胺)";
-            case 'bcell': return "B淋巴球(分泌抗體)";
+            case 'bcell': return w.isPlasmaActive ? "漿細胞(分泌抗體中)" : "記憶B細胞(巡邏)";
             case 'tcell': return "毒殺T細胞(專一殺毒)";
             case 'nk': return "自然殺手NK細胞";
             default: return "白血球";
@@ -3422,12 +4305,78 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const toggleMemoryBacteria = document.getElementById('toggle-memory-bacteria');
+    const toggleMemoryVirus = document.getElementById('toggle-memory-virus');
+
+    if (toggleMemoryBacteria) {
+        toggleMemoryBacteria.addEventListener('change', (e) => {
+            vaccineState.bacteria = e.target.checked;
+            updateVaccineUI();
+            if (vaccineState.bacteria) {
+                updateLog("💉 <strong>【已開啟細菌免疫記憶 (二次應答)】</strong>專一性抗體巡邏啟動！抗體由小動脈注入微血管網，遇細菌將迅速調理結合！");
+                for (let k = 0; k < 10; k++) {
+                    antibodies.push({
+                        x: -10 - k * 18,
+                        y: 365 + (Math.random() - 0.5) * 14,
+                        laneOffset: (Math.random() - 0.5),
+                        speed: 4.0 + Math.random() * 1.2,
+                        targetExtravasateX: 240 + Math.random() * 500,
+                        stage: 'circulation',
+                        life: 500,
+                        isSecondary: true
+                    });
+                }
+            } else {
+                updateLog("⚪ <strong>【已關閉細菌免疫記憶】維持初次應答狀態。</strong>血管中不再自動釋放抗體，便於課堂講解初次先天性防線。");
+                // Remove circulating secondary antibodies so they do not disturb lecturing
+                antibodies = antibodies.filter(a => a.stage === 'bound' || !a.isSecondary);
+            }
+            updateStats();
+        });
+    }
+
+    if (toggleMemoryVirus) {
+        toggleMemoryVirus.addEventListener('change', (e) => {
+            vaccineState.virus = e.target.checked;
+            updateVaccineUI();
+            if (vaccineState.virus) {
+                updateLog("💉 <strong>【已開啟病毒免疫記憶 (二次應答)】</strong>專一性中和抗體就緒！正從小動脈注入微血管隨時防截游離病毒！");
+                for (let k = 0; k < 10; k++) {
+                    antibodies.push({
+                        x: -10 - k * 18,
+                        y: 365 + (Math.random() - 0.5) * 14,
+                        laneOffset: (Math.random() - 0.5),
+                        speed: 4.0 + Math.random() * 1.2,
+                        targetExtravasateX: 240 + Math.random() * 500,
+                        stage: 'circulation',
+                        life: 500,
+                        isSecondary: true
+                    });
+                }
+            } else {
+                updateLog("⚪ <strong>【已關閉病毒免疫記憶】維持初次應答狀態。</strong>血管中不再自動釋放中和抗體。");
+                antibodies = antibodies.filter(a => a.stage === 'bound' || !a.isSecondary);
+            }
+            updateStats();
+        });
+    }
+
     document.getElementById('btn-spawn-neutro').addEventListener('click', () => spawnNeutrophil());
     document.getElementById('btn-spawn-mono').addEventListener('click', () => spawnMonocyte());
     document.getElementById('btn-spawn-eosino').addEventListener('click', () => spawnEosinophil());
     document.getElementById('btn-spawn-baso').addEventListener('click', () => spawnBasophil());
     document.getElementById('btn-spawn-bcell').addEventListener('click', () => spawnBCell());
     document.getElementById('btn-spawn-tcell').addEventListener('click', () => spawnKillerCell());
+
+    if (toggleAutoWbcCheckbox) {
+        toggleAutoWbcCheckbox.addEventListener('change', () => {
+            if (toggleAutoWbcCheckbox.checked) {
+                updateLog("🛡️ <strong>【已開啟自動召募白血球】</strong>免疫監控系統啟動，將依據病原體威脅自動派遣專一性白血球（病毒➔NK/T細胞、寄生蟲➔嗜酸性球、細菌➔嗜中性/巨噬細胞）！");
+            } else {
+                updateLog("⏸️ <strong>【已關閉自動召募白血球】</strong>恢復手動控制，白血球僅在點擊按鈕時出動。");
+            }
+        });
+    }
 
     if (toggleDimNerveCheckbox && nerveNetworkGroup) {
         toggleDimNerveCheckbox.addEventListener('change', () => {
@@ -3461,6 +4410,16 @@ document.addEventListener('DOMContentLoaded', () => {
         activeTissueWBCs = [];
         mucusClearedCount = 0;
         selectPathogen('bacteria');
+        if (toggleAutoWbcCheckbox) toggleAutoWbcCheckbox.checked = false;
+        if (toggleLabelsCheckbox) toggleLabelsCheckbox.checked = false;
+        vaccineState = { bacteria: false, virus: false };
+        immuneSurveillanceTimer = 0;
+        lymphNodeState = { active: false, antigenType: null, timer: 0, duration: 200 };
+        const statLymphPill = document.getElementById('stat-lymph-pill');
+        if (statLymphPill) statLymphPill.style.display = 'none';
+        bacterialEncounterOccurred = false;
+        viralEncounterOccurred = false;
+        updateVaccineUI();
         initMucosaChemicals();
         initTissueSites();
         updateVisualization();
@@ -3479,6 +4438,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initBloodParticles();
     initTissueSites();
     updateVisualization();
+    updateVaccineUI();
     updateStats();
     animate();
 
@@ -3492,6 +4452,7 @@ document.addEventListener('DOMContentLoaded', () => {
         getActiveWBCs: () => activeTissueWBCs,
         getCellDebris: () => cellDebris,
         getSwellingLevel: () => swellingLevel,
-        getDermisTopY: getDermisTopY
+        getDermisTopY: getDermisTopY,
+        getVaccineState: () => vaccineState
     };
 });
