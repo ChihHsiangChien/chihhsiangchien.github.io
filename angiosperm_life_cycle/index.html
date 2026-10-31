@@ -1,0 +1,1146 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>被子植物生活史互動模擬器</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <style>
+    :root {
+      --bg-color: #0b1120;
+      --card-bg: #1e293b;
+      --border-color: #334155;
+      --text-main: #f8fafc;
+      --text-sub: #94a3b8;
+      --c-2n: #22c55e;   /* 2n 綠色 */
+      --c-n: #f97316;    /* n 橘色 */
+      --c-nn: #a855f7;   /* n+n 紫色 */
+      --c-3n: #38bdf8;   /* 3n 藍色 */
+      --accent: #eab308;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg-color);
+      color: var(--text-main);
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      height: 52px;
+      background: rgba(15, 23, 42, 0.95);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      z-index: 10;
+      overflow-x: auto;
+      white-space: nowrap;
+      touch-action: pan-x;
+    }
+
+    .nav-tabs {
+      display: flex;
+      gap: 6px;
+    }
+
+    .nav-btn {
+      background: #1e293b;
+      border: 1px solid #475569;
+      color: var(--text-main);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      min-height: 38px;
+      transition: all 0.2s;
+    }
+
+    .nav-btn.active {
+      background: #2563eb;
+      border-color: #60a5fa;
+      font-weight: bold;
+    }
+
+    #viewport-container {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background: radial-gradient(circle at center, #1e293b 0%, #0b1120 100%);
+      cursor: grab;
+    }
+
+    #viewport-container:active {
+      cursor: grabbing;
+    }
+
+    #stage-svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .top-info-bar {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      right: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      pointer-events: none;
+      z-index: 5;
+      gap: 10px;
+    }
+
+    .legend-panel {
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 11px;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .status-banner {
+      background: rgba(30, 41, 59, 0.92);
+      border: 1px solid #60a5fa;
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 13px;
+      color: #fff;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      max-width: 500px;
+      line-height: 1.4;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+    }
+
+    /* 底部歷程軌跡鏈 HUD */
+    #timeline-panel {
+      height: 135px;
+      background: rgba(15, 23, 42, 0.96);
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      z-index: 10;
+      transition: height 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    #timeline-panel.expanded {
+      height: 75vh;
+    }
+
+    .timeline-header {
+      padding: 5px 14px;
+      background: #1e293b;
+      font-size: 11px;
+      color: var(--text-sub);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .timeline-tracks-wrap {
+      flex: 1;
+      padding: 6px 14px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 6px;
+      touch-action: pan-x;
+    }
+
+    #timeline-panel.expanded .timeline-tracks-wrap {
+      overflow-y: auto;
+      justify-content: flex-start;
+      gap: 16px;
+      padding: 16px;
+    }
+
+    .track-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+
+    .track-label {
+      width: 52px;
+      font-size: 11px;
+      font-weight: bold;
+      color: var(--text-sub);
+      flex-shrink: 0;
+    }
+
+    .flow-node {
+      background: #1e293b;
+      border: 1px solid #475569;
+      border-radius: 5px;
+      padding: 4px 8px;
+      font-size: 11px;
+      cursor: pointer;
+      opacity: 0.25;
+      transform: scale(0.95);
+      transition: all 0.25s ease;
+      touch-action: manipulation;
+    }
+
+    .flow-node.active {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .flow-node.current {
+      border-color: var(--accent);
+      background: #283446;
+      box-shadow: 0 0 8px rgba(234, 179, 8, 0.4);
+    }
+
+    .arrow-indicator {
+      color: var(--text-sub);
+      font-size: 11px;
+      opacity: 0.25;
+    }
+
+    .arrow-indicator.active {
+      opacity: 1;
+      color: var(--text-main);
+    }
+
+    footer {
+      height: 56px;
+      background: #0f172a;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      z-index: 10;
+    }
+
+    .ctrl-group {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .btn-ctrl {
+      min-width: 44px;
+      min-height: 42px;
+      padding: 0 14px;
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: bold;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: manipulation;
+    }
+
+    .btn-ctrl.secondary { background: #334155; }
+    .btn-ctrl.replay { background: #059669; }
+    .btn-ctrl:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    .anno-line { stroke: #64748b; stroke-width: 1; stroke-dasharray: 2 2; transition: opacity 0.25s ease; }
+    .anno-txt { font-size: 11px; fill: #cbd5e1; transition: opacity 0.25s ease; }
+
+    /* 標籤隱藏控制 */
+    body.labels-hidden .anno-txt,
+    body.labels-hidden .anno-line,
+    body.labels-hidden #m-stage-label,
+    body.labels-hidden #fs-deg-txt,
+    body.labels-hidden #fs-surv-txt,
+    body.labels-hidden #mitosis-in-tube-txt,
+    body.labels-hidden #sac-7cells-lines text,
+    body.labels-hidden #proembryo-group text,
+    body.labels-hidden #heart-embryo-group text {
+      opacity: 0 !important;
+      pointer-events: none;
+    }
+
+    .btn-ctrl.active-toggle {
+      background: #475569;
+      border: 1px solid #94a3b8;
+    }
+
+    .btn-ctrl.play-pause-btn {
+      background: #0284c7;
+      min-width: 72px;
+    }
+
+    /* 動畫進度 Slider 控制區 */
+    .timeline-scrubber-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+      max-width: 320px;
+      margin: 0 12px;
+      background: rgba(15, 23, 42, 0.7);
+      padding: 4px 12px;
+      border-radius: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .scrubber-label {
+      font-size: 11px;
+      font-weight: bold;
+      color: #94a3b8;
+      white-space: nowrap;
+      user-select: none;
+    }
+
+    .anim-slider {
+      flex: 1;
+      height: 6px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: #334155;
+      border-radius: 3px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .anim-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #38bdf8;
+      border: 2px solid #fff;
+      cursor: pointer;
+      box-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+      transition: transform 0.15s ease, background 0.15s ease;
+    }
+
+    .anim-slider::-webkit-slider-thumb:hover {
+      transform: scale(1.25);
+      background: #60a5fa;
+    }
+
+    .anim-slider::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #38bdf8;
+      border: 2px solid #fff;
+      cursor: pointer;
+      box-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+    }
+
+    .speed-select {
+      background: #1e293b;
+      color: #e2e8f0;
+      border: 1px solid #475569;
+      border-radius: 6px;
+      padding: 3px 6px;
+      font-size: 11px;
+      font-weight: bold;
+      cursor: pointer;
+      outline: none;
+    }
+
+    @media (max-width: 900px) {
+      .timeline-scrubber-wrap { max-width: 200px; margin: 0 6px; }
+      .scrubber-label { display: none; }
+    }
+
+    @media (max-width: 680px) {
+      .legend-panel { display: none; }
+      .status-banner { font-size: 12px; max-width: 100%; }
+      footer { flex-wrap: wrap; height: auto; padding: 8px 10px; gap: 8px; }
+      .timeline-scrubber-wrap { order: 3; width: 100%; max-width: 100%; margin: 4px 0 0 0; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="nav-tabs" id="navTabs">
+      <button class="nav-btn active" data-step="0">0. 孢子體母細胞(2n)</button>
+      <button class="nav-btn" data-step="1">1. 減數分裂與退化</button>
+      <button class="nav-btn" data-step="2">2. 有絲分裂(花粉×4 / 胚囊8核)</button>
+      <button class="nav-btn" data-step="3">3. 授粉(飛落柱頭)</button>
+      <button class="nav-btn" data-step="4">4. 花粉管延長與精細胞</button>
+      <button class="nav-btn" data-step="5">5. 雙重受精分解動畫</button>
+      <button class="nav-btn" data-step="6">6. 種子與果實發育</button>
+    </div>
+  </header>
+
+  <div id="viewport-container">
+    <div class="top-info-bar">
+      <div class="status-banner" id="status-desc"></div>
+      <div class="legend-panel">
+        <span class="badge"><span class="dot" style="background:var(--c-2n)"></span>2n 孢子體/合子</span>
+        <span class="badge"><span class="dot" style="background:var(--c-n)"></span>n 配子體/配子</span>
+        <span class="badge"><span class="dot" style="background:var(--c-nn)"></span>n+n 中央細胞</span>
+        <span class="badge"><span class="dot" style="background:var(--c-3n)"></span>3n 胚乳</span>
+      </div>
+    </div>
+
+    <!-- 主舞台 SVG：移除 viewBox 自動偏移，改用螢幕像素對齊矩陣以支援精準游標縮放 -->
+    <svg id="stage-svg">
+      <g id="camera-group">
+
+        <!-- 花托與花瓣背景 -->
+        <g id="flower-organ">
+          <path id="petals-bg" d="M 450 630 C 280 590, 220 380, 340 280 C 400 340, 440 480, 460 610 M 550 630 C 720 590, 780 380, 660 280 C 600 340, 560 480, 540 610" 
+                fill="#334155" opacity="0.22" stroke="#475569" stroke-width="1.5"/>
+          <path d="M 440 630 C 440 680, 560 680, 560 630 Z" fill="#1e293b" stroke="#475569" stroke-width="2"/>
+          <line x1="500" y1="655" x2="500" y2="700" stroke="#475569" stroke-width="6"/>
+        </g>
+
+        <!-- ==================== 雄蕊系統 (左側花藥) ==================== -->
+        <g id="stamen-system">
+          <path d="M 455 625 Q 300 540 250 290" fill="none" stroke="#64748b" stroke-width="4"/>
+          
+          <g id="anther-box" transform="translate(250, 270)">
+            <path d="M -55 -40 C -75 -40, -75 0, -55 0 C -75 0, -75 40, -55 40 L 55 40 C 75 40, 75 0, 55 0 C 75 0, 75 -40, 55 -40 Z" 
+                  fill="#1e293b" stroke="#94a3b8" stroke-width="2.5"/>
+            <text x="0" y="-48" class="anno-txt" font-weight="bold" text-anchor="middle">花藥切面 (2n)</text>
+
+            <!-- Stage 0: 小孢子母細胞 (2n) -->
+            <circle id="m-mother" cx="0" cy="0" r="18" fill="var(--c-2n)" stroke="#fff" stroke-width="1.5"/>
+            <text id="m-mother-txt" x="0" y="4" fill="#000" font-size="10" font-weight="bold" text-anchor="middle">小孢子母(2n)</text>
+
+            <!-- Stage 1 & 2: 4顆小孢子 -> 4顆全數發育為花粉粒（不消失！） -->
+            <g id="m-4-cells" opacity="0">
+              <!-- 左上花粉 (座標 -22, -16) -->
+              <g id="mp-1" transform="translate(0,0)">
+                <circle class="pollen-coat" cx="0" cy="0" r="11" fill="#854d0e" stroke="#facc15" stroke-width="2" opacity="0"/>
+                <circle class="spore-body" cx="0" cy="0" r="9" fill="var(--c-n)" stroke="#fff" stroke-width="1"/>
+                <circle class="veg-nuc" cx="3" cy="3" r="3" fill="#fde047" opacity="0"/>
+              </g>
+              <!-- 右上花粉 (座標 22, -16) - 此顆在 Stage 3 將飛向柱頭 -->
+              <g id="mp-2" transform="translate(0,0)">
+                <circle class="pollen-coat" cx="0" cy="0" r="11" fill="#854d0e" stroke="#facc15" stroke-width="2" opacity="0"/>
+                <circle class="spore-body" cx="0" cy="0" r="9" fill="var(--c-n)" stroke="#fff" stroke-width="1"/>
+                <circle class="veg-nuc" cx="3" cy="3" r="3" fill="#fde047" opacity="0"/>
+              </g>
+              <!-- 左下花粉 (座標 -22, 16) -->
+              <g id="mp-3" transform="translate(0,0)">
+                <circle class="pollen-coat" cx="0" cy="0" r="11" fill="#854d0e" stroke="#facc15" stroke-width="2" opacity="0"/>
+                <circle class="spore-body" cx="0" cy="0" r="9" fill="var(--c-n)" stroke="#fff" stroke-width="1"/>
+                <circle class="veg-nuc" cx="3" cy="3" r="3" fill="#fde047" opacity="0"/>
+              </g>
+              <!-- 右下花粉 (座標 22, 16) -->
+              <g id="mp-4" transform="translate(0,0)">
+                <circle class="pollen-coat" cx="0" cy="0" r="11" fill="#854d0e" stroke="#facc15" stroke-width="2" opacity="0"/>
+                <circle class="spore-body" cx="0" cy="0" r="9" fill="var(--c-n)" stroke="#fff" stroke-width="1"/>
+                <circle class="veg-nuc" cx="3" cy="3" r="3" fill="#fde047" opacity="0"/>
+              </g>
+              <text id="m-stage-label" x="0" y="55" fill="var(--c-n)" font-size="11" font-weight="bold" text-anchor="middle">小孢子 (n) × 4（全部存活）</text>
+            </g>
+          </g>
+        </g>
+
+        <!-- ==================== 雌蕊系統 (中央) ==================== -->
+        <g id="pistil-system">
+          <path id="ovary-wall" d="M 480 210 L 480 420 C 395 445, 385 600, 480 625 L 520 625 C 615 600, 605 445, 520 420 L 520 210 Z" 
+                fill="#1e293b" stroke="#64748b" stroke-width="3"/>
+          <text x="360" y="520" class="anno-txt" id="ovary-label">子房壁 (2n)</text>
+
+          <!-- 柱頭 -->
+          <ellipse cx="500" cy="208" rx="32" ry="12" fill="#334155" stroke="#94a3b8" stroke-width="2"/>
+          <text x="500" y="188" class="anno-txt" font-weight="bold" text-anchor="middle">柱頭</text>
+          <text x="545" y="310" class="anno-txt">花柱</text>
+
+          <!-- 倒生胚珠 (中心座標 500, 520) -->
+          <g id="ovule-box" transform="translate(500, 520)">
+            <path d="M 52 65 C 52 20, 32 5, 24 -15" fill="none" stroke="var(--c-2n)" stroke-width="3.5"/>
+            <text x="58" y="45" class="anno-txt" fill="var(--c-2n)" font-size="10">珠柄 (2n)</text>
+
+            <!-- 珠被 -->
+            <path id="integument-coat" 
+                  d="M -8 36 C -44 32, -50 -46, 0 -52 C 50 -46, 46 12, 24 28 L 15 16 C 32 4, 30 -38, 0 -40 C -34 -38, -30 22, -8 24 Z" 
+                  fill="#334155" stroke="var(--c-2n)" stroke-width="2"/>
+            <text id="integument-label" x="-72" y="-34" class="anno-txt" fill="var(--c-2n)" font-size="10" font-weight="bold">珠被 (2n)</text>
+
+            <!-- 珠孔標示 -->
+            <line x1="3" y1="28" x2="-20" y2="54" class="anno-line"/>
+            <text x="-28" y="66" class="anno-txt" fill="#fff" font-size="10" font-weight="bold">珠孔</text>
+
+            <!-- 珠心背景腔 -->
+            <ellipse cx="0" cy="-6" rx="24" ry="30" fill="#090d16" stroke="#334155" stroke-width="1"/>
+
+            <!-- Stage 0: 大孢子母細胞 (2n) 位於中心 (0, -6) -->
+            <circle id="f-mother" cx="0" cy="-6" r="13" fill="var(--c-2n)" stroke="#fff" stroke-width="1.5"/>
+            <text id="f-mother-txt" x="0" y="-2" fill="#000" font-size="9" font-weight="bold" text-anchor="middle">2n</text>
+
+            <!-- Stage 1: 減數分裂 4 細胞 (3 退化 + 1 留存大孢子固定於中心 0, -6) -->
+            <g id="f-meiosis-group" opacity="0">
+              <circle id="fs-deg1" cx="0" cy="-6" r="6" fill="var(--c-n)"/>
+              <circle id="fs-deg2" cx="0" cy="-6" r="6" fill="var(--c-n)"/>
+              <circle id="fs-deg3" cx="0" cy="-6" r="6" fill="var(--c-n)"/>
+              <!-- 存活的大孢子固定在 (0, -6) 原地膨大為胚囊，不產生奇怪位移 -->
+              <ellipse id="fs-survive-sac" cx="0" cy="-6" rx="9" ry="9" fill="var(--c-n)" stroke="#fff" stroke-width="1.5"/>
+              <text id="fs-deg-txt" x="-85" y="-18" fill="#94a3b8" font-size="9" opacity="0">3顆退化消失</text>
+              <text id="fs-surv-txt" x="-85" y="4" fill="var(--c-n)" font-size="10" font-weight="bold" opacity="0">大孢子(n)×1 留存</text>
+            </g>
+
+            <!-- Stage 2~5: 胚囊 (7細胞8核) 固定在 (0, -6) 原地進行 1->2->4->8 核分裂 -->
+            <g id="f-embryo-sac" opacity="0">
+              <!-- 大孢子原地膨大後的胚囊外框 -->
+              <ellipse id="expanded-sac-wall" cx="0" cy="-6" rx="22" ry="28" fill="#0f172a" stroke="var(--c-n)" stroke-width="1.5"/>
+              
+              <!-- 細胞間隔線與標籤 (8核定位後浮現) -->
+              <g id="sac-7cells-lines" opacity="0">
+                <!-- 中央細胞區 (n+n) -->
+                <ellipse id="central-cell-zone" cx="0" cy="-6" rx="14" ry="11" fill="rgba(168, 85, 247, 0.2)" stroke="var(--c-nn)" stroke-width="1.2" stroke-dasharray="2 1"/>
+                <!-- 卵細胞膜外圈 -->
+                <circle id="egg-cell-zone" cx="0" cy="14" r="6.5" fill="rgba(249, 115, 22, 0.25)" stroke="#fff" stroke-width="1.2"/>
+                <text x="28" y="-4" fill="var(--c-nn)" font-size="9" font-weight="bold">中央cell (極核 n+n)</text>
+                <text x="-68" y="-22" fill="var(--c-n)" font-size="8">反足cell×3</text>
+                <text x="-56" y="18" fill="var(--c-n)" font-size="9" font-weight="bold">卵cell(n)</text>
+                <text x="26" y="18" fill="var(--c-n)" font-size="8">助cell×2</text>
+              </g>
+
+              <!-- 8 顆細胞核 (n)：全部由 (0, -6) 原地分裂展開 -->
+              <!-- 合點端 4 核 (3 反足 + 1 上極核) -->
+              <circle id="nuc-top-1" cx="0" cy="-6" r="3.5" fill="var(--c-n)"/>
+              <circle id="nuc-top-2" cx="0" cy="-6" r="3.5" fill="var(--c-n)"/>
+              <circle id="nuc-top-3" cx="0" cy="-6" r="3.5" fill="var(--c-n)"/>
+              <circle id="nuc-polar-1" cx="0" cy="-6" r="4" fill="var(--c-n)" stroke="#fff" stroke-width="0.8"/>
+              <!-- 珠孔端 4 核 (1 卵核 + 2 助細胞核 + 1 下極核) -->
+              <circle id="nuc-bot-syn1" cx="0" cy="-6" r="3.2" fill="var(--c-n)"/>
+              <circle id="nuc-bot-syn2" cx="0" cy="-6" r="3.2" fill="var(--c-n)"/>
+              <circle id="nuc-bot-egg"  cx="0" cy="-6" r="4.5" fill="var(--c-n)" stroke="#fff" stroke-width="1.2"/>
+              <circle id="nuc-polar-2" cx="0" cy="-6" r="4" fill="var(--c-n)" stroke="#fff" stroke-width="0.8"/>
+            </g>
+
+            <!-- Stage 5 & 6: 雙重受精清楚標示與發育產物 -->
+            <g id="fertilized-layer" opacity="0">
+              <!-- 受精步驟一：合子 (2n) 位於 (0, 14) -->
+              <g id="zygote-group" opacity="0">
+                <circle id="zygote-circle" cx="0" cy="14" r="7.5" fill="var(--c-2n)" stroke="#fff" stroke-width="2"/>
+                <text id="zygote-inner-txt" x="0" y="17" fill="#000" font-size="7.5" font-weight="bold" text-anchor="middle">2n</text>
+                <!-- 動態方程式說明牌 1 -->
+                <g id="eq-box-1" transform="translate(-105, 14)">
+                  <rect x="-55" y="-11" width="110" height="20" rx="4" fill="#064e3b" stroke="var(--c-2n)" stroke-width="1.5"/>
+                  <text x="0" y="3" fill="#fff" font-size="9.5" font-weight="bold" text-anchor="middle">精(n)+卵(n) ➔ 合子(2n)</text>
+                </g>
+              </g>
+
+              <!-- 受精步驟二：胚乳母細胞 (3n) 位於 (0, -6) -->
+              <g id="endosperm-group" opacity="0">
+                <ellipse id="endosperm-ellipse" cx="0" cy="-6" rx="14" ry="11" fill="var(--c-3n)" stroke="#fff" stroke-width="2"/>
+                <text id="endosperm-inner-txt" x="0" y="-3" fill="#000" font-size="8" font-weight="bold" text-anchor="middle">胚乳(3n)</text>
+                <!-- 動態方程式說明牌 2 -->
+                <g id="eq-box-2" transform="translate(105, -6)">
+                  <rect x="-65" y="-11" width="130" height="20" rx="4" fill="#0c4a6e" stroke="var(--c-3n)" stroke-width="1.5"/>
+                  <text x="0" y="3" fill="#fff" font-size="9.5" font-weight="bold" text-anchor="middle">精(n)+極核(n+n) ➔ 胚乳(3n)</text>
+                </g>
+              </g>
+
+              <!-- 受精後發育步驟：球形小胚 (原胚 2n) 與胚柄 (suspensor) -->
+              <g id="proembryo-group" opacity="0">
+                <!-- 胚柄 (連向珠孔端) -->
+                <line x1="0" y1="16" x2="0" y2="23" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+                <circle cx="0" cy="22" r="1.8" fill="var(--c-2n)"/>
+                <circle cx="0" cy="18" r="1.6" fill="var(--c-2n)"/>
+                <!-- 球形小胚本體 -->
+                <circle id="proembryo-circle" cx="0" cy="12" r="5.5" fill="var(--c-2n)" stroke="#fff" stroke-width="1.5"/>
+                <text id="proembryo-label" x="-26" y="14" class="anno-txt" fill="var(--c-2n)" font-size="8.5" font-weight="bold">小胚(2n)</text>
+              </g>
+
+              <!-- Stage 6: 幼胚雙子葉展開（心型胚，由小胚發育擴展，底端連繫珠孔端胚柄） -->
+              <g id="heart-embryo-group" opacity="0">
+                <line x1="0" y1="16" x2="0" y2="24" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/>
+                <path id="embryo-cotyledons" d="M 0 16 C -10 8, -12 -6, -4 -8 C 0 -4, 0 2, 0 6 C 0 2, 0 -4, 4 -8 C 12 -6, 10 8, 0 16 Z" 
+                      fill="var(--c-2n)" stroke="#fff" stroke-width="1.2"/>
+                <text x="-48" y="0" class="anno-txt" fill="var(--c-2n)" font-size="9" font-weight="bold">心型幼胚(2n)</text>
+              </g>
+            </g>
+
+          </g>
+        </g>
+
+        <!-- ==================== 授粉飛行與花粉管精準路徑系統 ==================== -->
+        <!-- 授粉飛行花粉粒 (對應花藥右上角那顆 mp-2: 272, 254 -> 柱頭 500, 204) -->
+        <g id="flying-pollen" transform="translate(272, 254)" opacity="0">
+          <circle id="flying-pollen-coat" cx="0" cy="0" r="10" fill="#854d0e" stroke="#facc15" stroke-width="2"/>
+          <circle id="flying-pollen-gen" cx="-2" cy="-2" r="3.5" fill="var(--c-n)" stroke="#fff" stroke-width="0.8"/>
+          <circle id="flying-pollen-veg" cx="3" cy="3" r="3" fill="#fde047"/>
+        </g>
+
+        <!-- 花粉管生長路徑 (起點 500,208 -> 沿花柱筆直向下至子房口 500,420 -> 經左側子房腔繞至胚珠下方 -> 彎入珠孔 502,546) -->
+        <path id="pollen-tube-path" 
+              d="M 500 208 L 500 420 C 500 445, 436 455, 434 490 C 432 535, 442 568, 475 572 C 494 574, 502 562, 502 546" 
+              fill="none" stroke="#fde047" stroke-width="5.5" stroke-linecap="round" opacity="0"/>
+
+        <!-- 管內隨花粉管同步推進的細胞核群 -->
+        <g id="tube-nuclei-group" opacity="0">
+          <!-- 管核 (營養核)：永遠在花粉管最前端領航 -->
+          <circle id="moving-tube-nuc" cx="500" cy="208" r="3.8" fill="#fde047" stroke="#000" stroke-width="0.8"/>
+          <!-- 生殖細胞 / 精細胞 1 -->
+          <circle id="moving-sperm-1" cx="500" cy="208" r="4.8" fill="var(--c-n)" stroke="#fff" stroke-width="1.5"/>
+          <!-- 精細胞 2 (半途由生殖細胞有絲分裂產生) -->
+          <circle id="moving-sperm-2" cx="500" cy="208" r="4.8" fill="var(--c-n)" stroke="#fff" stroke-width="1.5" opacity="0"/>
+          <text id="mitosis-in-tube-txt" x="516" y="340" fill="#fde047" font-size="10" font-weight="bold" opacity="0">← 生殖細胞有絲分裂為 2 精細胞(n)</text>
+        </g>
+
+      </g>
+    </svg>
+  </div>
+
+  <!-- 下方歷程軌跡鏈 -->
+  <div id="timeline-panel">
+    <div class="timeline-header">
+      <span>歷程軌跡鏈（點擊任意節點可直接跳轉並重播該階段動畫）</span>
+      <span style="cursor:pointer;color:#60a5fa;font-weight:bold;" id="toggle-board-btn">［ 展開全螢幕板書 ］</span>
+    </div>
+    <div class="timeline-tracks-wrap">
+      <div class="track-row">
+        <span class="track-label">♂ 雄蕊：</span>
+        <div class="flow-node" data-step="0">小孢子母cell(2n)</div>
+        <div class="arrow-indicator">減數➔</div>
+        <div class="flow-node" data-step="1">小孢子(n)×4(全留存)</div>
+        <div class="arrow-indicator">有絲×1➔</div>
+        <div class="flow-node" data-step="2">花粉粒×4(生殖+管核)</div>
+        <div class="arrow-indicator">授粉➔</div>
+        <div class="flow-node" data-step="3">黏著柱頭</div>
+        <div class="arrow-indicator">有絲×1➔</div>
+        <div class="flow-node" data-step="4">花粉管(管核+2精cell)</div>
+      </div>
+      <div class="track-row">
+        <span class="track-label">♀ 雌蕊：</span>
+        <div class="flow-node" data-step="0">大孢子母cell(2n)</div>
+        <div class="arrow-indicator">減數➔</div>
+        <div class="flow-node" data-step="1">大孢子(n)×1(3退化)</div>
+        <div class="arrow-indicator">有絲×3➔</div>
+        <div class="flow-node" data-step="2">胚囊(7cell 8核)</div>
+        <div class="arrow-indicator">雙受精➔</div>
+        <div class="flow-node" data-step="5">雙受精➔合子(2n)+胚乳(3n)➔球形小胚</div>
+        <div class="arrow-indicator">發育➔</div>
+        <div class="flow-node" data-step="6">種子(心型胚+胚乳+種皮)</div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <div class="ctrl-group">
+      <button class="btn-ctrl secondary" id="btn-prev">⏮ 上一步</button>
+      <button class="btn-ctrl play-pause-btn" id="btn-play-pause">⏸ 暫停</button>
+      <button class="btn-ctrl replay" id="btn-replay">🔄 重播</button>
+      <button class="btn-ctrl" id="btn-next">下一步 ⏭</button>
+    </div>
+
+    <!-- 動畫進度 Scrubber 與速度調節 -->
+    <div class="timeline-scrubber-wrap">
+      <span class="scrubber-label">進度</span>
+      <input type="range" class="anim-slider" id="anim-progress-slider" min="0" max="1000" value="0" step="1">
+      <select class="speed-select" id="anim-speed-select" title="調整動畫播放速度">
+        <option value="0.25">0.25x</option>
+        <option value="0.5">0.5x</option>
+        <option value="1" selected>1.0x</option>
+        <option value="1.5">1.5x</option>
+        <option value="2">2.0x</option>
+      </select>
+    </div>
+
+    <div class="ctrl-group">
+      <button class="btn-ctrl secondary" id="btn-toggle-labels">🏷 標籤：顯示中</button>
+      <button class="btn-ctrl secondary" id="btn-reset-cam">視角置中</button>
+    </div>
+  </footer>
+
+  <script>
+    let currentStep = 0;
+    const TOTAL_STEPS = 6;
+    let activeTimeline = null;
+
+    const STAGE_TEXTS = [
+      "<strong>Stage 0：開花植株（孢子體 2n）</strong><br>花藥內具小孢子母細胞 (2n)，胚珠珠心中央具大孢子母細胞 (2n)。",
+      "<strong>Stage 1：雌雄同步減數分裂（4留4 vs 4留1）</strong><br>♂ 小孢子母細胞分裂為 4 顆小孢子(n) 全部留存；♀ 大孢子母細胞分裂為 4 顆，上方 3 顆退化消失，中央僅留 1 顆大孢子(n)。",
+      "<strong>Stage 2：有絲分裂發育為配子體</strong><br>♂ 4 顆小孢子全部各自有絲分裂成為 4 顆花粉粒（內含生殖細胞+管核）；♀ 留存的大孢子原地膨大，經 3 次有絲分裂（1→2→4→8核）形成 7細胞8核胚囊。",
+      "<strong>Stage 3：授粉（Pollination）</strong><br>其中一顆成熟花粉粒從花藥飄出，平穩降落並黏附於柱頭黏液上（其餘花粉粒仍留存於花藥可對照）。",
+      "<strong>Stage 4：花粉管延長與管內同步行進</strong><br>管核緊貼花粉管尖端前導，生殖細胞緊隨其後並在管內分裂為 2 顆精細胞(n)，沿花粉管彎入珠孔。",
+      "<strong>Stage 5：雙重受精與小胚形成</strong><br>① 精(n)+卵(n)➔<strong>合子(2n)</strong>；② 精(n)+極核(n+n)➔<strong>胚乳(3n)</strong>。<br>受精後合子隨即分裂形成<strong>球形小胚(2n)</strong>與連向珠孔端的<strong>胚柄(suspensor)</strong>。",
+      "<strong>Stage 6：心型幼胚與種子果實發育（完成世代交替）</strong><br>球形小胚持續分化出兩片子葉原基發育為<strong>心型幼胚(2n)</strong>，胚乳(3n)增殖提供營養，珠被(2n)發育為種皮，子房壁(2n)發育為果實。"
+    ];
+
+    const tubePathEl = document.getElementById('pollen-tube-path');
+    const totalTubeLen = tubePathEl.getTotalLength();
+
+    // 乾淨重置所有視覺元件
+    function resetAllElements() {
+      if (activeTimeline) activeTimeline.kill();
+
+      gsap.set(["#m-4-cells", "#f-meiosis-group", "#fs-deg-txt", "#fs-surv-txt",
+                "#f-embryo-sac", "#sac-7cells-lines", "#fertilized-layer",
+                "#zygote-group", "#proembryo-group", "#heart-embryo-group",
+                "#endosperm-group", "#embryo-cotyledons",
+                "#flying-pollen", "#pollen-tube-path", "#tube-nuclei-group",
+                "#moving-sperm-2", "#mitosis-in-tube-txt"], { opacity: 0 });
+
+      gsap.set(["#m-mother", "#m-mother-txt", "#f-mother", "#f-mother-txt", "#petals-bg", "#mp-2"], { opacity: 1, scale: 1 });
+      gsap.set(["#mp-1", "#mp-2", "#mp-3", "#mp-4"], { x: 0, y: 0 });
+      gsap.set(".pollen-coat, .veg-nuc", { opacity: 0 });
+      gsap.set(".spore-body", { x: 0, y: 0, r: 9 });
+
+      gsap.set(["#fs-deg1", "#fs-deg2", "#fs-deg3"], { x: 0, y: 0, scale: 1, opacity: 1, fill: "#f97316" });
+      gsap.set("#fs-survive-sac", { rx: 9, ry: 9, fill: "#f97316" });
+
+      gsap.set(["#nuc-top-1", "#nuc-top-2", "#nuc-top-3", "#nuc-polar-1",
+                "#nuc-bot-syn1", "#nuc-bot-syn2", "#nuc-bot-egg", "#nuc-polar-2"], { x: 0, y: 0, scale: 1, opacity: 1 });
+
+      gsap.set(["#flying-pollen-gen", "#flying-pollen-veg"], { opacity: 1 });
+      gsap.set("#pollen-tube-path", { strokeDasharray: totalTubeLen, strokeDashoffset: totalTubeLen });
+      gsap.set("#ovary-wall", { scaleX: 1, scaleY: 1, stroke: "#64748b", transformOrigin: "50% 50%" });
+      document.getElementById("integument-label").textContent = "珠被 (2n)";
+      document.getElementById("ovary-label").textContent = "子房壁 (2n)";
+    }
+
+    // 快速設定「Stage 2 結束時的成熟4花粉與成熟8核胚囊狀態」
+    function setMatureGametophyteBase() {
+      gsap.set(["#m-mother", "#m-mother-txt", "#f-mother", "#f-mother-txt"], { opacity: 0 });
+      gsap.set(["#m-4-cells", "#f-embryo-sac", "#sac-7cells-lines"], { opacity: 1 });
+      // 4 顆成熟花粉定位於花藥四角
+      gsap.set("#mp-1", { x: -22, y: -16 });
+      gsap.set("#mp-2", { x: 22,  y: -16 });
+      gsap.set("#mp-3", { x: -22, y: 16 });
+      gsap.set("#mp-4", { x: 22,  y: 16 });
+      gsap.set(".pollen-coat, .veg-nuc", { opacity: 1 });
+      gsap.set(".spore-body", { x: -2, y: -2, r: 4.5 });
+      document.getElementById("m-stage-label").textContent = "成熟花粉粒 × 4 (各含生殖細胞+管核)";
+
+      // 8 核定型座標 (相對於中心 0, -6)
+      gsap.set("#nuc-top-1",   { x: -10, y: -20 });
+      gsap.set("#nuc-top-2",   { x: 0,   y: -22 });
+      gsap.set("#nuc-top-3",   { x: 10,  y: -20 });
+      gsap.set("#nuc-polar-1", { x: -4,  y: 0 }); // 中央上極核
+      gsap.set("#nuc-polar-2", { x: 4,   y: 0 }); // 中央下極核
+      gsap.set("#nuc-bot-syn1",{ x: -10, y: 20 });
+      gsap.set("#nuc-bot-syn2",{ x: 10,  y: 20 });
+      gsap.set("#nuc-bot-egg", { x: 0,   y: 20 }); // 卵細胞位於 (0, 14) 即相對偏移 y:+20
+    }
+
+    let isUserScrubbing = false;
+    let currentSpeed = 1.0;
+
+    function playStageAnimation(step) {
+      resetAllElements();
+
+      const slider = document.getElementById('anim-progress-slider');
+      const playPauseBtn = document.getElementById('btn-play-pause');
+      if (slider) slider.value = 0;
+      if (playPauseBtn) playPauseBtn.innerText = '⏸ 暫停';
+
+      activeTimeline = gsap.timeline({
+        onUpdate: () => {
+          if (!isUserScrubbing && activeTimeline && slider) {
+            slider.value = Math.round(activeTimeline.progress() * 1000);
+          }
+        },
+        onComplete: () => {
+          if (playPauseBtn) playPauseBtn.innerText = '🔄 重播';
+        }
+      });
+      activeTimeline.timeScale(currentSpeed);
+
+      // 更新介面狀態
+      document.getElementById('status-desc').innerHTML = STAGE_TEXTS[step];
+      document.querySelectorAll('.nav-btn').forEach((btn, idx) => btn.classList.toggle('active', idx === step));
+      document.querySelectorAll('.flow-node').forEach(node => {
+        const ns = parseInt(node.getAttribute('data-step'));
+        node.classList.toggle('active', ns <= step);
+        node.classList.toggle('current', ns === step);
+      });
+      document.querySelectorAll('.arrow-indicator').forEach((arr, idx) => arr.classList.toggle('active', idx < step * 1.5));
+      document.getElementById('btn-prev').disabled = (step === 0);
+      document.getElementById('btn-next').disabled = (step === TOTAL_STEPS);
+
+      if (step === 0) {
+        activeTimeline.fromTo(["#m-mother", "#f-mother"], { scale: 0.7 }, { scale: 1, duration: 0.5, ease: "back.out(2)" });
+      }
+      else if (step === 1) {
+        // Stage 1: 減數分裂（雄4顆全留；雌3顆向上退化，1顆固定原地不亂移）
+        gsap.set(["#m-mother", "#m-mother-txt", "#f-mother", "#f-mother-txt"], { opacity: 0 });
+        gsap.set(["#m-4-cells", "#f-meiosis-group"], { opacity: 1 });
+        document.getElementById("m-stage-label").textContent = "小孢子 (n) × 4（全部存活）";
+
+        activeTimeline
+          // 雄蕊分裂為 4 顆小孢子
+          .to("#mp-1", { x: -22, y: -16, duration: 0.8, ease: "back.out(1.6)" }, 0)
+          .to("#mp-2", { x: 22,  y: -16, duration: 0.8, ease: "back.out(1.6)" }, 0)
+          .to("#mp-3", { x: -22, y: 16,  duration: 0.8, ease: "back.out(1.6)" }, 0)
+          .to("#mp-4", { x: 22,  y: 16,  duration: 0.8, ease: "back.out(1.6)" }, 0)
+          // 雌蕊分裂：1顆固定原地(0,-6)，3顆推向合點端後萎縮退化
+          .to("#fs-deg1", { x: -12, y: -18, duration: 0.7 }, 0)
+          .to("#fs-deg2", { x: 0,   y: -22, duration: 0.7 }, 0)
+          .to("#fs-deg3", { x: 12,  y: -18, duration: 0.7 }, 0)
+          .to(["#fs-deg1", "#fs-deg2", "#fs-deg3"], { scale: 0.1, opacity: 0, fill: "#64748b", duration: 0.9 }, 0.8)
+          .to("#fs-deg-txt", { opacity: 1, duration: 0.4 }, 0.8)
+          .to("#fs-survive-sac", { rx: 12, ry: 14, duration: 0.6 }, 1.1)
+          .to("#fs-surv-txt", { opacity: 1, duration: 0.4 }, 1.1);
+      }
+      else if (step === 2) {
+        // Stage 2: 4顆小孢子「同時原地變成4顆花粉粒」 + 大孢子「原地膨大為胚囊並 1->2->4->8 核分裂」
+        gsap.set(["#m-mother", "#m-mother-txt", "#f-mother", "#f-mother-txt"], { opacity: 0 });
+        gsap.set(["#m-4-cells", "#f-embryo-sac"], { opacity: 1 });
+        gsap.set("#mp-1", { x: -22, y: -16 });
+        gsap.set("#mp-2", { x: 22,  y: -16 });
+        gsap.set("#mp-3", { x: -22, y: 16 });
+        gsap.set("#mp-4", { x: 22,  y: 16 });
+        document.getElementById("m-stage-label").textContent = "成熟花粉粒 × 4 (各含生殖細胞+管核)";
+
+        const topNucs = ["#nuc-top-1", "#nuc-top-2", "#nuc-top-3", "#nuc-polar-1"];
+        const botNucs = ["#nuc-bot-syn1", "#nuc-bot-syn2", "#nuc-bot-egg", "#nuc-polar-2"];
+
+        activeTimeline
+          // 雄蕊：4 顆小孢子同時長出花粉外壁並分裂出生殖細胞與管核
+          .to(".pollen-coat", { opacity: 1, duration: 0.6 }, 0.2)
+          .to(".spore-body", { x: -2, y: -2, r: 4.5, duration: 0.6 }, 0.5)
+          .to(".veg-nuc", { opacity: 1, duration: 0.6 }, 0.5)
+
+          // 雌蕊：大孢子原地膨大為胚囊外框 (無中心偏移)
+          .fromTo("#expanded-sac-wall", { rx: 12, ry: 14 }, { rx: 22, ry: 28, duration: 0.7 }, 0)
+          // 第 1 次有絲分裂：1 核分為上下兩極 (2核)
+          .to(topNucs, { y: -18, duration: 0.6, ease: "power2.inOut" }, 0.6)
+          .to(botNucs, { y: 18,  duration: 0.6, ease: "power2.inOut" }, 0.6)
+          // 第 2 次有絲分裂：上下各自左右分開 (4核)
+          .to(["#nuc-top-1", "#nuc-top-2"], { x: -7, duration: 0.5 }, 1.3)
+          .to(["#nuc-top-3", "#nuc-polar-1"], { x: 7, duration: 0.5 }, 1.3)
+          .to(["#nuc-bot-syn1", "#nuc-bot-egg"], { x: -7, duration: 0.5 }, 1.3)
+          .to(["#nuc-bot-syn2", "#nuc-polar-2"], { x: 7, duration: 0.5 }, 1.3)
+          // 第 3 次有絲分裂與細胞定型 (8核)：上下各 1 顆極核移回中心 (0, -6)
+          .to("#nuc-top-1",   { x: -10, y: -20, duration: 0.6 }, 2.0)
+          .to("#nuc-top-2",   { x: 0,   y: -22, duration: 0.6 }, 2.0)
+          .to("#nuc-top-3",   { x: 10,  y: -20, duration: 0.6 }, 2.0)
+          .to("#nuc-bot-syn1",{ x: -10, y: 20,  duration: 0.6 }, 2.0)
+          .to("#nuc-bot-egg", { x: 0,   y: 20,  duration: 0.6 }, 2.0)
+          .to("#nuc-bot-syn2",{ x: 10,  y: 20,  duration: 0.6 }, 2.0)
+          .to("#nuc-polar-1", { x: -4,  y: 0,   duration: 0.7, ease: "power2.out" }, 2.0)
+          .to("#nuc-polar-2", { x: 4,   y: 0,   duration: 0.7, ease: "power2.out" }, 2.0)
+          .to("#sac-7cells-lines", { opacity: 1, duration: 0.5 }, 2.5);
+      }
+      else if (step === 3) {
+        // Stage 3: 授粉（右上角花粉飛出，其餘3顆留在花藥；降落柱頭平穩黏附不反彈）
+        setMatureGametophyteBase();
+        gsap.set("#mp-2", { opacity: 0 }); // 右上角那顆變成飛行花粉
+        gsap.set("#flying-pollen", { opacity: 1, x: 272, y: 254 });
+        gsap.set(["#flying-pollen-gen", "#flying-pollen-veg"], { opacity: 1 });
+
+        activeTimeline.to("#flying-pollen", {
+          keyframes: [
+            { x: 380, y: 155, duration: 0.7, ease: "power1.out" },
+            { x: 500, y: 204, duration: 0.8, ease: "power3.out" } // 平穩緩衝黏著，絕不反彈
+          ]
+        });
+      }
+      else if (step === 4) {
+        // Stage 4: 花粉管延長 + 柱頭頂部花粉粒萌發空殼化 + 管核與精細胞同步推進
+        setMatureGametophyteBase();
+        gsap.set("#mp-2", { opacity: 0 });
+        gsap.set("#flying-pollen", { opacity: 1, x: 500, y: 204 });
+        // 花粉管伸出時，花粉粒內的管核與生殖細胞已進入花粉管，頂部花粉粒僅留空殼
+        gsap.set(["#flying-pollen-gen", "#flying-pollen-veg"], { opacity: 0 });
+        gsap.set(["#pollen-tube-path", "#tube-nuclei-group"], { opacity: 1 });
+
+        let progressObj = { p: 0 };
+        activeTimeline.to(progressObj, {
+          p: 1,
+          duration: 3.2,
+          ease: "power1.inOut",
+          onUpdate: () => {
+            const curLen = progressObj.p * totalTubeLen;
+            // 1. 更新花粉管線條長度
+            gsap.set("#pollen-tube-path", { strokeDashoffset: totalTubeLen - curLen });
+
+            // 2. 管核永遠在花粉管最尖端 (curLen - 2px)
+            const tipPt = tubePathEl.getPointAtLength(Math.max(0, curLen - 2));
+            gsap.set("#moving-tube-nuc", { attr: { cx: tipPt.x, cy: tipPt.y } });
+
+            // 3. 精細胞 1 緊跟在管核後方 14px
+            const s1Pt = tubePathEl.getPointAtLength(Math.max(0, curLen - 16));
+            gsap.set("#moving-sperm-1", { attr: { cx: s1Pt.x, cy: s1Pt.y } });
+
+            // 4. 當推進超過 35% (花柱中段) 時，生殖細胞分裂出第 2 顆精細胞，緊跟在後方 28px
+            if (progressObj.p > 0.35) {
+              gsap.set(["#moving-sperm-2", "#mitosis-in-tube-txt"], { opacity: 1 });
+              const s2Pt = tubePathEl.getPointAtLength(Math.max(0, curLen - 28));
+              gsap.set("#moving-sperm-2", { attr: { cx: s2Pt.x, cy: s2Pt.y } });
+            }
+          }
+        });
+      }
+      else if (step === 5) {
+        // Stage 5: 雙重受精兩階段分解動畫（清楚交代誰跟誰融合、變成什麼）
+        setMatureGametophyteBase();
+        gsap.set("#mp-2", { opacity: 0 });
+        gsap.set("#flying-pollen", { opacity: 1, x: 500, y: 204 });
+        gsap.set(["#flying-pollen-gen", "#flying-pollen-veg"], { opacity: 0 }); // 柱頭頂部花粉粒保持空殼
+        gsap.set("#pollen-tube-path", { opacity: 1, strokeDashoffset: 0 });
+        gsap.set(["#tube-nuclei-group", "#moving-sperm-2", "#fertilized-layer"], { opacity: 1 });
+
+        // 精確繼承花粉管終端抵達珠孔時的細胞位置，尺度保持 1.0，杜絕尺寸與位置跳動
+        const endLen = totalTubeLen;
+        const tipPt = tubePathEl.getPointAtLength(Math.max(0, endLen - 2));
+        const s1Pt = tubePathEl.getPointAtLength(Math.max(0, endLen - 16));
+        const s2Pt = tubePathEl.getPointAtLength(Math.max(0, endLen - 28));
+
+        gsap.set("#moving-tube-nuc", { attr: { cx: tipPt.x, cy: tipPt.y }, opacity: 0.3 });
+        gsap.set("#moving-sperm-1",  { attr: { cx: s1Pt.x, cy: s1Pt.y }, scale: 1.0, opacity: 1 });
+        gsap.set("#moving-sperm-2",  { attr: { cx: s2Pt.x, cy: s2Pt.y }, scale: 1.0, opacity: 1 });
+
+        activeTimeline
+          // 【第一受精】：精細胞 1 由花粉管末端游向珠孔端卵細胞 (500, 534)
+          .to("#moving-sperm-1", { attr: { cx: 500, cy: 534 }, duration: 1.1, ease: "power2.inOut" }, 0.2)
+          // 融合為合子 (2n) 並彈出綠色算式說明牌
+          .to(["#moving-sperm-1", "#nuc-bot-egg", "#egg-cell-zone"], { opacity: 0, duration: 0.2 }, 1.3)
+          .to("#zygote-group", { opacity: 1, duration: 0.3 }, 1.3)
+          .fromTo("#zygote-circle", { scale: 0.4 }, { scale: 1.15, duration: 0.5, ease: "back.out(2)" }, 1.3)
+
+          // 【第二受精】：精細胞 2 緊接著穿過珠孔游向中央細胞雙極核中心 (500, 514)
+          .to("#moving-sperm-2", { attr: { cx: 500, cy: 514 }, duration: 1.3, ease: "power2.inOut" }, 2.0)
+          // 融合為胚乳母細胞 (3n) 並彈出藍色算式說明牌
+          .to(["#moving-sperm-2", "#nuc-polar-1", "#nuc-polar-2", "#central-cell-zone"], { opacity: 0, duration: 0.2 }, 3.3)
+          .to("#endosperm-group", { opacity: 1, duration: 0.3 }, 3.3)
+          .fromTo("#endosperm-ellipse", { scale: 0.4 }, { scale: 1.05, duration: 0.6, ease: "back.out(1.8)" }, 3.3)
+          // 助細胞與反足細胞完成任務後淡化
+          .to(["#nuc-bot-syn1", "#nuc-bot-syn2", "#nuc-top-1", "#nuc-top-2", "#nuc-top-3"], { opacity: 0.2, duration: 0.5 }, 3.5)
+
+          // 【合子分裂形成球形小胚與胚柄】：雙受精後合子有絲分裂，頂端為球形小胚、基部形成胚柄連向珠孔端
+          .to("#zygote-circle, #zygote-inner-txt", { opacity: 0, duration: 0.4 }, 3.8)
+          .fromTo("#proembryo-group", { opacity: 0, scale: 0.5, transformOrigin: "0px 16px" }, { opacity: 1, scale: 1, duration: 0.7, ease: "back.out(1.6)" }, 3.9);
+      }
+      else if (step === 6) {
+        // Stage 6: 種子與果實發育（小胚發育為心型雙子葉幼胚、胚乳增殖、種皮果實發育）
+        gsap.set(["#m-mother", "#m-mother-txt", "#f-mother", "#f-mother-txt"], { opacity: 0 });
+        gsap.set(["#f-embryo-sac", "#fertilized-layer", "#endosperm-group", "#proembryo-group"], { opacity: 1 });
+        gsap.set(["#zygote-group", "#zygote-circle", "#zygote-inner-txt"], { opacity: 0 });
+        gsap.set(["#nuc-top-1", "#nuc-top-2", "#nuc-top-3", "#nuc-polar-1", "#nuc-polar-2", "#nuc-bot-syn1", "#nuc-bot-syn2", "#nuc-bot-egg"], { opacity: 0 });
+
+        document.getElementById("integument-label").textContent = "種皮 (由珠被發育 2n)";
+        document.getElementById("ovary-label").textContent = "果實/果皮 (由子房壁發育 2n)";
+
+        activeTimeline
+          .to("#petals-bg", { opacity: 0.04, duration: 0.8 }, 0)
+          .to("#ovary-wall", { scaleX: 1.18, scaleY: 1.06, stroke: "#22c55e", duration: 1.0 }, 0)
+          .to("#endosperm-ellipse", { attr: { rx: 20, ry: 22 }, duration: 0.9 }, 0.2)
+          // 球形小胚兩側子葉原基迅速分裂，自然過渡展開為心型胚（基部胚柄無縫連貫）
+          .to("#proembryo-group", { opacity: 0, duration: 0.3 }, 0.3)
+          .fromTo("#heart-embryo-group", 
+            { opacity: 0, scale: 0.35, transformOrigin: "0px 16px" }, 
+            { opacity: 1, scale: 1, duration: 0.9, ease: "back.out(1.5)" }, 0.3);
+      }
+    }
+
+    // 控制按鈕事件
+    document.getElementById('btn-next').addEventListener('click', () => {
+      if (currentStep < TOTAL_STEPS) playStageAnimation(++currentStep);
+    });
+    document.getElementById('btn-prev').addEventListener('click', () => {
+      if (currentStep > 0) playStageAnimation(--currentStep);
+    });
+    document.getElementById('btn-replay').addEventListener('click', () => {
+      playStageAnimation(currentStep);
+    });
+    document.querySelectorAll('.nav-btn, .flow-node').forEach(el => {
+      el.addEventListener('click', (e) => {
+        currentStep = parseInt(e.currentTarget.getAttribute('data-step'));
+        playStageAnimation(currentStep);
+      });
+    });
+
+    const timelinePanel = document.getElementById('timeline-panel');
+    const toggleBoardBtn = document.getElementById('toggle-board-btn');
+    toggleBoardBtn.addEventListener('click', () => {
+      const isExpanded = timelinePanel.classList.toggle('expanded');
+      toggleBoardBtn.innerText = isExpanded ? '［ 收合板書回到解剖舞台 ］' : '［ 展開全螢幕板書 ］';
+    });
+
+    // 標籤顯示 / 隱藏切換
+    const btnToggleLabels = document.getElementById('btn-toggle-labels');
+    btnToggleLabels.addEventListener('click', () => {
+      const isHidden = document.body.classList.toggle('labels-hidden');
+      btnToggleLabels.classList.toggle('active-toggle', isHidden);
+      btnToggleLabels.innerText = isHidden ? '🏷 標籤：已隱藏' : '🏷 標籤：顯示中';
+    });
+
+    // 動畫播放 / 暫停控制
+    const playPauseBtn = document.getElementById('btn-play-pause');
+    playPauseBtn.addEventListener('click', () => {
+      if (!activeTimeline) return;
+      if (activeTimeline.progress() >= 1) {
+        // 若已播放完畢，點擊則重頭播放
+        playStageAnimation(currentStep);
+        return;
+      }
+      if (activeTimeline.paused()) {
+        activeTimeline.play();
+        playPauseBtn.innerText = '⏸ 暫停';
+      } else {
+        activeTimeline.pause();
+        playPauseBtn.innerText = '▶ 播放';
+      }
+    });
+
+    // 動畫進度拉桿 (Slider Scrubber)
+    const animSlider = document.getElementById('anim-progress-slider');
+    animSlider.addEventListener('input', (e) => {
+      if (!activeTimeline) return;
+      isUserScrubbing = true;
+      activeTimeline.pause();
+      playPauseBtn.innerText = '▶ 播放';
+      const targetProg = parseFloat(e.target.value) / 1000;
+      activeTimeline.progress(targetProg);
+    });
+
+    animSlider.addEventListener('change', () => {
+      isUserScrubbing = false;
+    });
+
+    // 動畫速度切換 (0.25x ~ 2.0x 慢速與微調展示)
+    const animSpeedSelect = document.getElementById('anim-speed-select');
+    animSpeedSelect.addEventListener('change', (e) => {
+      currentSpeed = parseFloat(e.target.value);
+      if (activeTimeline) {
+        activeTimeline.timeScale(currentSpeed);
+      }
+    });
+
+    /* =========================================================================
+       以滑鼠位置 / 雙指中心為基準的精準縮放與平移引擎 (Zoom to Pointer)
+       ========================================================================= */
+    const viewportContainer = document.getElementById('viewport-container');
+    const cameraGroup = document.getElementById('camera-group');
+    let viewState = { x: 0, y: 0, scale: 1.0 };
+
+    function renderCamera() {
+      cameraGroup.setAttribute('transform', `translate(${viewState.x}, ${viewState.y}) scale(${viewState.scale})`);
+    }
+
+    // 初始畫面自動將 (500, 380) 置中對齊容器
+    function fitToScreen(animate = false) {
+      const rect = viewportContainer.getBoundingClientRect();
+      const targetScale = Math.min(rect.width / 950, rect.height / 680);
+      const targetX = rect.width / 2 - 480 * targetScale;
+      const targetY = rect.height / 2 - 380 * targetScale;
+
+      if (animate) {
+        gsap.to(viewState, {
+          x: targetX, y: targetY, scale: targetScale, duration: 0.45, ease: "power2.out",
+          onUpdate: renderCamera
+        });
+      } else {
+        viewState = { x: targetX, y: targetY, scale: targetScale };
+        renderCamera();
+      }
+    }
+
+    // 核心數學：以螢幕指定點 (cx, cy) 為錨點進行倍率縮放
+    function zoomAtPoint(newScale, screenX, screenY) {
+      const clampedScale = Math.min(Math.max(newScale, 0.4), 6.5);
+      const rect = viewportContainer.getBoundingClientRect();
+      const pointerX = screenX - rect.left;
+      const pointerY = screenY - rect.top;
+
+      // 保持游標指向的世界座標在縮放前後不變
+      const worldX = (pointerX - viewState.x) / viewState.scale;
+      const worldY = (pointerY - viewState.y) / viewState.scale;
+
+      viewState.scale = clampedScale;
+      viewState.x = pointerX - worldX * viewState.scale;
+      viewState.y = pointerY - worldY * viewState.scale;
+      renderCamera();
+    }
+
+    // 滑鼠滾輪：以滑鼠游標為中心縮放
+    viewportContainer.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.14 : 0.88;
+      zoomAtPoint(viewState.scale * factor, e.clientX, e.clientY);
+    }, { passive: false });
+
+    // 單指 / 滑鼠拖曳平移
+    let isDragging = false, startX = 0, startY = 0;
+    viewportContainer.addEventListener('pointerdown', (e) => {
+      isDragging = true;
+      startX = e.clientX - viewState.x;
+      startY = e.clientY - viewState.y;
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      if (!isDragging) return;
+      viewState.x = e.clientX - startX;
+      viewState.y = e.clientY - startY;
+      renderCamera();
+    });
+
+    window.addEventListener('pointerup', () => { isDragging = false; });
+    window.addEventListener('pointercancel', () => { isDragging = false; });
+
+    // 平板 / 手機雙指 Pinch：以雙指連線中心點為基準縮放
+    let initialPinchDist = null, initialPinchScale = 1;
+    function getTouchDist(t) {
+      return Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+    }
+    function getTouchMid(t) {
+      return { x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 };
+    }
+
+    viewportContainer.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 2) {
+        isDragging = false;
+        initialPinchDist = getTouchDist(e.touches);
+        initialPinchScale = viewState.scale;
+      }
+    }, { passive: false });
+
+    viewportContainer.addEventListener('touchmove', (e) => {
+      if (e.touches.length === 2 && initialPinchDist) {
+        e.preventDefault();
+        const dist = getTouchDist(e.touches);
+        const mid = getTouchMid(e.touches);
+        zoomAtPoint(initialPinchScale * (dist / initialPinchDist), mid.x, mid.y);
+      }
+    }, { passive: false });
+
+    viewportContainer.addEventListener('touchend', (e) => {
+      if (e.touches.length < 2) initialPinchDist = null;
+    });
+
+    document.getElementById('btn-reset-cam').addEventListener('click', () => fitToScreen(true));
+    window.addEventListener('resize', () => fitToScreen(false));
+
+    // 啟動初始化
+    fitToScreen(false);
+    playStageAnimation(0);
+  </script>
+</body>
+</html>
