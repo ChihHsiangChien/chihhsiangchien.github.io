@@ -1,0 +1,3607 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>闌尾微生態與免疫演練模擬器</title>
+  <style>
+    :root {
+      --bg-dark: #090d16;
+      --panel-bg: #151f32;
+      --panel-border: #2e3f5c;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --green-probiotic: #2ecc71;
+      --purple-pathogen: #a855f7;
+      --blue-siga: #38bdf8;
+      --brown-fecalith: #8d6e63;
+      --red-danger: #ef4444;
+      --amber-warn: #f59e0b;
+      --accent-teal: #14b8a6;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft JhengHei", sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      min-height: 100dvh;
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      overflow-x: hidden;
+      overscroll-behavior: none;
+    }
+
+    body {
+      display: flex;
+      justify-content: center;
+      padding: env(safe-area-inset-top, 8px) env(safe-area-inset-right, 10px) env(safe-area-inset-bottom, 10px) env(safe-area-inset-left, 10px);
+    }
+
+    .app-container {
+      width: 100%;
+      max-width: 1120px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-height: calc(100dvh - 18px);
+      justify-content: space-between;
+    }
+
+    /* Compact Responsive Header & HUD */
+    .header-bar {
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 14px;
+      padding: 10px 14px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+    }
+
+    /* Mode Navigation Tabs */
+    .view-tabs-bar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .view-tab {
+      flex: 1;
+      min-width: 250px;
+      padding: 8px 14px;
+      border-radius: 10px;
+      text-decoration: none;
+      font-size: clamp(0.78rem, 1.6vw, 0.88rem);
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      border: 1px solid var(--panel-border);
+      background: var(--panel-bg);
+      color: var(--text-muted);
+      transition: all 0.2s ease;
+    }
+
+    .view-tab.active {
+      border-color: #14b8a6;
+      background: rgba(20, 184, 166, 0.16);
+      color: #5eead4;
+      box-shadow: 0 0 12px rgba(20, 184, 166, 0.25);
+    }
+
+    .view-tab.highlight {
+      border-color: #38bdf8;
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.15), rgba(168, 85, 247, 0.15));
+      color: #bae6fd;
+      animation: pulseTab 3s infinite;
+    }
+
+    @keyframes pulseTab {
+      0%, 100% { box-shadow: 0 0 6px rgba(56, 189, 248, 0.2); }
+      50% { box-shadow: 0 0 16px rgba(56, 189, 248, 0.45); }
+    }
+
+    .view-tab:hover {
+      transform: translateY(-1px);
+      border-color: #94a3b8;
+      color: #fff;
+    }
+
+    .title-group {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .title-group h1 {
+      font-size: clamp(1rem, 2.2vw, 1.25rem);
+      font-weight: 800;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .title-group p {
+      font-size: clamp(0.72rem, 1.6vw, 0.82rem);
+      color: var(--text-muted);
+    }
+
+    .metrics-group {
+      display: grid;
+      grid-template-columns: repeat(3, auto);
+      gap: 8px;
+      align-items: stretch;
+    }
+
+    .metric-card {
+      background: rgba(9, 13, 22, 0.72);
+      border: 1px solid var(--panel-border);
+      border-radius: 10px;
+      padding: 6px 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-width: 135px;
+    }
+
+    .metric-label {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 4px;
+      font-weight: 600;
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 9px;
+      background: #090d16;
+      border-radius: 99px;
+      overflow: hidden;
+      border: 1px solid #334155;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 88%;
+      background: linear-gradient(90deg, #10b981, #2ecc71);
+      border-radius: 99px;
+      transition: width 0.25s ease, background 0.3s ease;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      font-size: 0.76rem;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 99px;
+      background: rgba(46, 204, 113, 0.15);
+      color: #4ade80;
+      border: 1px solid rgba(46, 204, 113, 0.4);
+      white-space: nowrap;
+    }
+
+    .status-badge.warn {
+      background: rgba(245, 158, 11, 0.18);
+      color: #fbbf24;
+      border-color: rgba(245, 158, 11, 0.45);
+    }
+
+    .status-badge.danger {
+      background: rgba(239, 68, 68, 0.24);
+      color: #f87171;
+      border-color: rgba(239, 68, 68, 0.6);
+      animation: pulse-badge 0.8s infinite alternate;
+    }
+
+    @keyframes pulse-badge {
+      from { transform: scale(1); box-shadow: 0 0 0 rgba(239,68,68,0); }
+      to { transform: scale(1.03); box-shadow: 0 0 10px rgba(239,68,68,0.55); }
+    }
+
+    /* Main Interactive Canvas Stage */
+    .stage-wrapper {
+      position: relative;
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: column;
+      background: radial-gradient(circle at 45% 45%, #1e293b 0%, #090d16 100%);
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+      touch-action: none;
+    }
+
+    .canvas-container {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 960 / 500;
+      max-height: 58dvh;
+      margin: auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      touch-action: none;
+      cursor: grab;
+      user-select: none;
+    }
+
+    canvas.panning {
+      cursor: grabbing;
+    }
+
+    /* Floating Canvas Overlays (Zoom toolbar, Touch Hint, Legend) */
+    .canvas-top-bar {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      right: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .touch-hint-pill {
+      background: rgba(15, 23, 42, 0.88);
+      backdrop-filter: blur(6px);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      color: #bae6fd;
+      padding: 6px 11px;
+      border-radius: 99px;
+      font-size: 0.74rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+    }
+
+    .legend-bar {
+      background: rgba(15, 23, 42, 0.84);
+      backdrop-filter: blur(6px);
+      border: 1px solid var(--panel-border);
+      border-radius: 10px;
+      padding: 6px 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      font-size: 0.73rem;
+      color: #e2e8f0;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+
+    /* Floating Zoom & Pan Toolbar on Canvas Bottom-Left */
+    .floating-zoom-toolbar {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
+      z-index: 15;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      background: rgba(15, 23, 42, 0.9);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(56, 189, 248, 0.38);
+      border-radius: 12px;
+      padding: 4px 6px;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+    }
+
+    .zoom-tool-btn {
+      background: rgba(30, 41, 59, 0.9);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      border-radius: 8px;
+      min-width: 34px;
+      height: 34px;
+      padding: 0 8px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+
+    .zoom-tool-btn:hover {
+      background: rgba(56, 189, 248, 0.22);
+      border-color: #38bdf8;
+      color: #fff;
+    }
+
+    .zoom-tool-btn:active {
+      transform: scale(0.92);
+    }
+
+    .zoom-tool-btn.active {
+      background: #0284c7;
+      color: #fff;
+      border-color: #7dd3fc;
+    }
+
+    .zoom-tool-btn.text-btn {
+      font-size: 0.8rem;
+      padding: 0 10px;
+      gap: 4px;
+    }
+
+    /* Interactive Touch Inspection Card (Floating Tooltip on Canvas) */
+    .inspect-card {
+      position: absolute;
+      bottom: 12px;
+      right: 12px;
+      max-width: min(350px, calc(100% - 24px));
+      background: rgba(15, 23, 42, 0.95);
+      backdrop-filter: blur(10px);
+      border: 1.5px solid #38bdf8;
+      border-radius: 12px;
+      padding: 10px 14px;
+      z-index: 18;
+      display: none;
+      flex-direction: column;
+      gap: 4px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.65);
+      animation: pop-in 0.18s ease-out;
+    }
+
+    @keyframes pop-in {
+      from { opacity: 0; transform: translateY(8px) scale(0.96); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .inspect-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.85rem;
+      font-weight: 800;
+      color: #7dd3fc;
+    }
+
+    .inspect-close {
+      background: none;
+      border: none;
+      color: #94a3b8;
+      font-size: 1.1rem;
+      line-height: 1;
+      padding: 2px 6px;
+      cursor: pointer;
+    }
+
+    .inspect-body {
+      font-size: 0.78rem;
+      line-height: 1.45;
+      color: #e2e8f0;
+    }
+
+    /* Emergency Surgery Floating Modal */
+    .surgery-modal {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: min(92%, 460px);
+      background: rgba(127, 29, 29, 0.96);
+      backdrop-filter: blur(8px);
+      border: 2px solid #ef4444;
+      border-radius: 16px;
+      padding: 14px 18px;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 12px;
+      box-shadow: 0 0 40px rgba(239, 68, 68, 0.85);
+      z-index: 25;
+      animation: pulse-modal 0.7s infinite alternate;
+    }
+
+    @keyframes pulse-modal {
+      from { transform: translate(-50%, -50%) scale(1); }
+      to { transform: translate(-50%, -50%) scale(1.03); }
+    }
+
+    .surgery-btn {
+      width: 100%;
+      min-height: 50px;
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      color: #fff;
+      font-weight: 800;
+      font-size: 1rem;
+      padding: 12px 20px;
+      border: 1px solid #fca5a5;
+      border-radius: 12px;
+      cursor: pointer;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+      transition: transform 0.15s ease;
+    }
+
+    .surgery-btn:active {
+      transform: scale(0.95);
+    }
+
+    /* Ergonomic Touch Control Dock (48px+ Minimum Touch Targets) */
+    .controls-panel {
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 14px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .scenario-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .utility-grid {
+      display: grid;
+      grid-template-columns: 1.5fr 1fr 0.8fr;
+      gap: 8px;
+    }
+
+    .ctrl-btn {
+      min-height: 48px;
+      background: #0f172a;
+      color: #f1f5f9;
+      border: 1.5px solid #475569;
+      border-radius: 12px;
+      padding: 8px 12px;
+      font-size: clamp(0.8rem, 1.8vw, 0.9rem);
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 6px;
+      transition: transform 0.12s ease, background 0.2s ease, border-color 0.2s ease;
+      touch-action: manipulation;
+    }
+
+    .ctrl-btn:active:not(:disabled) {
+      transform: scale(0.95);
+    }
+
+    @media (hover: hover) {
+      .ctrl-btn:hover:not(:disabled) {
+        border-color: #cbd5e1;
+        background: #1e293b;
+      }
+    }
+
+    .ctrl-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .btn-train {
+      border-color: #38bdf8;
+      background: rgba(56, 189, 248, 0.14);
+      color: #7dd3fc;
+    }
+
+    .btn-storm {
+      border-color: #f59e0b;
+      background: rgba(245, 158, 11, 0.14);
+      color: #fcd34d;
+    }
+
+    .btn-stone {
+      border-color: #f87171;
+      background: rgba(239, 68, 68, 0.14);
+      color: #fca5a5;
+    }
+
+    .btn-toggle {
+      border-color: #a855f7;
+      background: rgba(168, 85, 247, 0.14);
+      color: #d8b4fe;
+    }
+
+    .btn-zoom-dock {
+      border-color: #14b8a6;
+      background: rgba(20, 184, 166, 0.14);
+      color: #5eead4;
+    }
+
+    /* Pedagogical Guided Banner */
+    .commentary-box {
+      background: linear-gradient(135deg, #151f32 0%, #090d16 100%);
+      border: 1px solid var(--panel-border);
+      border-left: 5px solid var(--accent-teal);
+      border-radius: 12px;
+      padding: 10px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+    }
+
+    .commentary-title {
+      font-size: clamp(0.84rem, 1.8vw, 0.94rem);
+      font-weight: 800;
+      color: #5eead4;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .commentary-text {
+      font-size: clamp(0.78rem, 1.6vw, 0.88rem);
+      line-height: 1.5;
+      color: #e2e8f0;
+    }
+
+    .highlight-tag {
+      background: rgba(20, 184, 166, 0.22);
+      color: #5eead4;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-weight: 700;
+    }
+
+    /* Responsive Breakpoints for Smartphones & Portrait Tablets */
+    @media (max-width: 820px) {
+      .header-bar {
+        flex-direction: column;
+        align-items: stretch;
+        padding: 8px 12px;
+      }
+      .metrics-group {
+        grid-template-columns: repeat(3, 1fr);
+      }
+      .metric-card {
+        min-width: 0;
+        padding: 6px 8px;
+      }
+      .canvas-container {
+        max-height: 48dvh;
+      }
+      .legend-bar {
+        display: none; /* Save canvas space on mobile; users can tap directly to inspect */
+      }
+    }
+
+    @media (max-width: 600px) {
+      .metrics-group {
+        grid-template-columns: 1fr 1fr;
+      }
+      .metric-card:last-child {
+        grid-column: span 2;
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .metric-card:last-child .metric-label {
+        margin-bottom: 0;
+      }
+      .scenario-grid {
+        grid-template-columns: 1fr;
+      }
+      .utility-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+      .utility-grid .ctrl-btn:first-child {
+        grid-column: span 2;
+      }
+      .floating-zoom-toolbar {
+        bottom: 8px;
+        left: 8px;
+        padding: 3px 4px;
+        gap: 3px;
+      }
+      .zoom-tool-btn {
+        min-width: 30px;
+        height: 30px;
+        font-size: 0.85rem;
+        padding: 0 5px;
+      }
+      .zoom-tool-btn.text-btn {
+        font-size: 0.72rem;
+        padding: 0 6px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div class="app-container">
+  <!-- Top Metrics HUD Bar -->
+  <header class="header-bar">
+    <div class="title-group">
+      <h1>🔬 闌尾微生態與免疫演練模擬器</h1>
+      <p>解剖方向：小腸從右向左注入 • 升結腸由左下往上蠕動 • 支援平移與縮放 (Pan & Zoom)</p>
+    </div>
+
+    <div class="metrics-group">
+      <div class="metric-card">
+        <div class="metric-label">
+          <span>大腸菌相健康</span>
+          <span id="healthVal">88%</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" id="healthBar"></div>
+        </div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-label">
+          <span>闌尾腔壓力</span>
+          <span id="pressureVal">12 mmHg</span>
+        </div>
+        <div id="pressureBadge" class="status-badge">🟢 暢通正常</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-label">
+          <span>解剖對照模式</span>
+        </div>
+        <div id="organBadge" class="status-badge">🛡️ 保留完整闌尾</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Mode Navigation Tabs -->
+  <nav class="view-tabs-bar">
+    <a href="index.html" class="view-tab active">
+      <span>🗺️ 模式一：整體解剖與大腸微生態 (當前)</span>
+    </a>
+    <a href="immune.html" class="view-tab highlight">
+      <span>🔬 模式二：【專題分頁】闌尾微觀免疫演習 (超高倍率放大) ➔</span>
+    </a>
+  </nav>
+
+  <!-- Main Interactive Touch Stage -->
+  <div class="stage-wrapper">
+    <div class="canvas-top-bar">
+      <div class="touch-hint-pill">
+        <span>👆 支援 Pan & Zoom：滾輪/雙指縮放、拖曳畫布移動、點擊組織解析、拖曳糞石</span>
+      </div>
+
+      <div class="legend-bar">
+        <div class="legend-item"><span class="dot" style="background:#10b981; box-shadow:0 0 6px #10b981;"></span>黏膜定植菌 (大腸微生態主體)</div>
+        <div class="legend-item"><span class="dot" style="background:#86efac;"></span>食糜游離菌 (隨食物沖刷)</div>
+        <div class="legend-item"><span class="dot" style="background:#34d399; box-shadow:0 0 6px #34d399;"></span>闌尾播種菌 (平時接種/災後定植)</div>
+        <div class="legend-item"><span class="dot" style="background:#a855f7; border:1px solid #ef4444;"></span>致病菌 (紫刺)</div>
+        <div class="legend-item"><span class="dot" style="background:#38bdf8;"></span>sIgA 抗體 (藍 Y)</div>
+        <div class="legend-item"><span class="dot" style="background:#8d6e63;"></span>硬化糞石</div>
+      </div>
+    </div>
+
+    <div class="canvas-container">
+      <canvas id="simCanvas"></canvas>
+
+      <!-- Floating Zoom & Pan Toolbar -->
+      <div class="floating-zoom-toolbar">
+        <button class="zoom-tool-btn" id="btnZoomIn" type="button" title="放大視角 (Zoom In)">＋</button>
+        <button class="zoom-tool-btn" id="btnZoomOut" type="button" title="縮小視角 (Zoom Out)">−</button>
+        <button class="zoom-tool-btn text-btn" id="btnZoomCanvas" type="button" title="聚焦闌尾特寫">
+          <span>🔍 闌尾特寫</span>
+        </button>
+        <button class="zoom-tool-btn text-btn" id="btnZoomReset" type="button" title="恢復全景視角 (1.0x)">
+          <span>↺ 全景</span>
+        </button>
+      </div>
+
+      <!-- On-Canvas Interactive Touch Inspection Card -->
+      <div class="inspect-card" id="inspectCard">
+        <div class="inspect-header">
+          <span id="inspectTitle">🔬 組織與微生態解析</span>
+          <button class="inspect-close" id="btnCloseInspect" aria-label="關閉解說">✕</button>
+        </div>
+        <div class="inspect-body" id="inspectBody">
+          點擊畫布中的任何區域即可檢視即時生理機制。
+        </div>
+      </div>
+
+      <!-- Emergency Surgery Floating Touch Modal -->
+      <div class="surgery-modal" id="surgeryModal">
+        <div>
+          <div style="font-weight:800; color:#fecaca; font-size:1rem; margin-bottom:4px;">🚨 急性化膿性闌尾炎警報！</div>
+          <div style="font-size:0.82rem; color:#fee2e2; line-height:1.4;">
+            糞石卡死盲端出口，腔內高壓缺血（>60 mmHg）、細菌突破黏膜引發化膿，隨時有穿孔腹膜炎風險！
+          </div>
+        </div>
+        <button class="surgery-btn" id="btnSurgery" type="button">✂️ 立即執行腹腔鏡切除術 (點擊或點選闌尾)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ergonomic Touch Control Dock -->
+  <div class="controls-panel">
+    <div class="scenario-grid">
+      <button class="ctrl-btn btn-train" id="btnTrain" type="button">
+        <span>🛡️ 1. 免疫演習 (敵友辨識與耐受)</span>
+      </button>
+      <button class="ctrl-btn btn-storm" id="btnStorm" type="button">
+        <span>💊 2. 抗生素風暴 (方舟備份測試)</span>
+      </button>
+      <button class="ctrl-btn btn-stone" id="btnStone" type="button">
+        <span>🪨 3. 投擲糞石 (誘發急性闌尾炎)</span>
+      </button>
+    </div>
+
+    <div class="utility-grid">
+      <button class="ctrl-btn btn-toggle" id="btnToggleAppendix" type="button">
+        <span>🔄 對照切換：保留闌尾 vs. 已切除</span>
+      </button>
+      <button class="ctrl-btn btn-zoom-dock" id="btnZoomDock" type="button">
+        <span>🔍 視角：全景 / 闌尾特寫</span>
+      </button>
+      <button class="ctrl-btn" id="btnReset" type="button">
+        <span>↺ 重置模擬</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Pedagogical Live Guide Banner -->
+  <div class="commentary-box" id="commentaryBox">
+    <div class="commentary-title">
+      <span id="commentaryTitle">💡 當前生理狀態：平日微生態平衡（Homeostasis）</span>
+    </div>
+    <div class="commentary-text" id="commentaryText">
+      右側<strong>小腸末端（迴腸）</strong>消化食糜向左注入；左下方<strong>盲腸</strong>為寬闊的轉運緩衝袋；左側<strong>大腸幹道（升結腸）</strong>蠕動水流快速向上推進；最底下的<strong>闌尾</strong>則是流速近乎零的狹窄盲端死胡同。闌尾壁內的<strong>淋巴濾泡</strong>持續分泌藍色 Y 型 <strong>sIgA 抗體</strong>，將綠色益生菌溫和錨定在深處形成發光的<strong>黏液生物膜（Biofilm）</strong>，只束縛不開火，儲備腸道火種。
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('simCanvas');
+  const ctx = canvas.getContext('2d');
+
+  // Logical coordinate space remains 960x500 for consistent physics & geometry
+  const LOGICAL_WIDTH = 960;
+  const LOGICAL_HEIGHT = 500;
+
+  // Camera Pan & Zoom State
+  let camScale = 1.0;
+  let camOffsetX = 0;
+  let camOffsetY = 0;
+  let isAnimatingCamera = false;
+  let targetCamScale = 1.0;
+  let targetCamOffsetX = 0;
+  let targetCamOffsetY = 0;
+
+  const TARGET_ZOOM_SCALE = 1.95;
+  const TARGET_ZOOM_FOCUS_X = 245; // Centered around Cecum bottom, Appendix & Follicles
+  const TARGET_ZOOM_FOCUS_Y = 430;
+
+  // High-DPI Retina Scaling Setup
+  function resizeCanvas() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    canvas.width = LOGICAL_WIDTH * dpr;
+    canvas.height = LOGICAL_HEIGHT * dpr;
+  }
+  window.addEventListener('resize', resizeCanvas);
+  resizeCanvas();
+
+  // UI Elements
+  const healthVal = document.getElementById('healthVal');
+  const healthBar = document.getElementById('healthBar');
+  const pressureVal = document.getElementById('pressureVal');
+  const pressureBadge = document.getElementById('pressureBadge');
+  const organBadge = document.getElementById('organBadge');
+  const surgeryModal = document.getElementById('surgeryModal');
+  const commentaryTitle = document.getElementById('commentaryTitle');
+  const commentaryText = document.getElementById('commentaryText');
+  const commentaryBox = document.getElementById('commentaryBox');
+
+  const inspectCard = document.getElementById('inspectCard');
+  const inspectTitle = document.getElementById('inspectTitle');
+  const inspectBody = document.getElementById('inspectBody');
+  const btnCloseInspect = document.getElementById('btnCloseInspect');
+
+  const btnTrain = document.getElementById('btnTrain');
+  const btnStorm = document.getElementById('btnStorm');
+  const btnStone = document.getElementById('btnStone');
+  const btnSurgery = document.getElementById('btnSurgery');
+  const btnToggleAppendix = document.getElementById('btnToggleAppendix');
+  const btnZoomCanvas = document.getElementById('btnZoomCanvas');
+  const btnZoomDock = document.getElementById('btnZoomDock');
+  const btnZoomIn = document.getElementById('btnZoomIn');
+  const btnZoomOut = document.getElementById('btnZoomOut');
+  const btnZoomReset = document.getElementById('btnZoomReset');
+  const btnReset = document.getElementById('btnReset');
+
+  // Simulation State
+  let simTime = 0;
+  let appendixState = 'NORMAL'; // 'NORMAL' | 'BLOCKED' | 'INFLAMED' | 'REMOVED'
+  let internalPressure = 12; // mmHg
+  let stormTimer = 0;
+  let recolonizeTimer = 0;
+  let trainingTimer = 0;
+  let isDraggingFecalith = false;
+
+  // Active Mucosal Immune Cells in Appendix Submucosa & Follicles
+  const immuneCells = {
+    dc: {
+      x: 235,
+      y: 418,
+      r: 8.5,
+      name: '樹突狀細胞 (Dendritic Cell, DC)',
+      role: '黏膜抗原採樣前哨兵',
+      isSampling: false,
+      samplePhase: 'IDLE', // 'IDLE' | 'PROBIOTIC' | 'PATHOGEN'
+      arms: [
+        { targetX: 253, targetY: 416 },
+        { targetX: 247, targetY: 428 },
+        { targetX: 228, targetY: 407 },
+        { targetX: 224, targetY: 425 }
+      ]
+    },
+    treg: {
+      x: 221,
+      y: 410,
+      r: 8.0,
+      name: '調節型 T 細胞 (Treg Cell)',
+      role: '免疫耐受煞車（分泌 TGF-β/IL-10）',
+      toleranceGlow: 0,
+      mode: 'IDLE'
+    },
+    plasma: {
+      x: 282,
+      y: 438,
+      r: 10.0,
+      name: 'B 漿細胞 (Plasma B Cell)',
+      role: '分泌型 sIgA 抗體工廠',
+      secretePulse: 0,
+      mode: 'IDLE'
+    },
+    macrophage: {
+      x: 235,
+      y: 446,
+      homeX: 235,
+      homeY: 446,
+      r: 11.5,
+      name: '巨噬細胞 (Macrophage)',
+      role: '變形偽足巡邏與胞吞裂解敵菌',
+      isHunting: false,
+      isEngulfing: false,
+      engulfProgress: 0,
+      mode: 'IDLE'
+    }
+  };
+
+  // Demonstration actors for Immune Training Scenario
+  let demoProbiotic = null;
+  let demoPathogen = null;
+  let trainingPhaseText = '';
+
+  // Follicles along the Appendix Curve
+  const follicles = [
+    { x: 242, y: 418, r: 15, activePulse: 0, mode: 'IDLE', name: '淋巴濾泡 #1 (生發中心)' },
+    { x: 264, y: 442, r: 16, activePulse: 0, mode: 'IDLE', name: '淋巴濾泡 #2 (生發中心)' },
+    { x: 252, y: 466, r: 15, activePulse: 0, mode: 'IDLE', name: '淋巴濾泡 #3 (生發中心)' }
+  ];
+
+  let particles = [];
+  let antibodies = [];
+  let effects = [];
+  let fecalith = null;
+
+  // Helper: Anatomical Spine of Appendix
+  function getAppendixSpineX(y) {
+    const t = Math.max(0, Math.min(1, (y - 398) / 77));
+    return 225 + Math.sin(t * Math.PI * 0.85) * 32 + t * 14;
+  }
+
+  function isInAppendix(x, y) {
+    if (appendixState === 'REMOVED') return false;
+    if (y < 396 || y > 488) return false;
+    const spineX = getAppendixSpineX(y);
+    const swell = (appendixState === 'BLOCKED' || appendixState === 'INFLAMED')
+      ? Math.min(20, (internalPressure - 12) * 0.24)
+      : 0;
+    const halfWidth = 14 + swell * Math.sin(((y - 398) / 77) * Math.PI);
+    return Math.abs(x - spineX) <= halfWidth;
+  }
+
+  function isInCecum(x, y) {
+    return (x >= 155 && x <= 305 && y >= 310 && y <= 398);
+  }
+
+  function isInColon(x, y) {
+    return (x >= 150 && x <= 315 && y >= 30 && y < 310);
+  }
+
+  function isInIleum(x, y) {
+    return (x > 300 && x <= 940 && y >= 315 && y <= 375);
+  }
+
+  // Convert Screen ClientX/Y to Logical Canvas Coordinates
+  function screenToLogical(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    const normX = (clientX - rect.left) / rect.width;
+    const normY = (clientY - rect.top) / rect.height;
+    const rawX = normX * LOGICAL_WIDTH;
+    const rawY = normY * LOGICAL_HEIGHT;
+
+    const logicalX = (rawX - camOffsetX) / camScale;
+    const logicalY = (rawY - camOffsetY) / camScale;
+    return { x: logicalX, y: logicalY };
+  }
+
+  // Clamp camera position within comfortable viewing boundaries
+  function clampCamera() {
+    const maxOffsetX = LOGICAL_WIDTH * 0.6;
+    const minOffsetX = LOGICAL_WIDTH * (0.4 - camScale);
+    const maxOffsetY = LOGICAL_HEIGHT * 0.6;
+    const minOffsetY = LOGICAL_HEIGHT * (0.4 - camScale);
+    camOffsetX = Math.max(minOffsetX, Math.min(maxOffsetX, camOffsetX));
+    camOffsetY = Math.max(minOffsetY, Math.min(maxOffsetY, camOffsetY));
+  }
+
+  function zoomAt(rawX, rawY, factor) {
+    const logicalX = (rawX - camOffsetX) / camScale;
+    const logicalY = (rawY - camOffsetY) / camScale;
+    const newScale = Math.max(0.65, Math.min(3.2, camScale * factor));
+    camOffsetX = rawX - logicalX * newScale;
+    camOffsetY = rawY - logicalY * newScale;
+    camScale = newScale;
+    clampCamera();
+    updateZoomBtnState();
+  }
+
+  function focusAppendix() {
+    isAnimatingCamera = true;
+    targetCamScale = TARGET_ZOOM_SCALE;
+    targetCamOffsetX = LOGICAL_WIDTH * 0.48 - TARGET_ZOOM_FOCUS_X * TARGET_ZOOM_SCALE;
+    targetCamOffsetY = LOGICAL_HEIGHT * 0.52 - TARGET_ZOOM_FOCUS_Y * TARGET_ZOOM_SCALE;
+    updateZoomBtnState(true);
+  }
+
+  function focusImmuneTraining() {
+    isAnimatingCamera = true;
+    targetCamScale = 2.25; // Magnified close-up on immune battlefield
+    targetCamOffsetX = LOGICAL_WIDTH * 0.48 - 250 * 2.25;
+    targetCamOffsetY = LOGICAL_HEIGHT * 0.52 - 435 * 2.25;
+    updateZoomBtnState(true);
+  }
+
+  function resetCamera() {
+    isAnimatingCamera = true;
+    targetCamScale = 1.0;
+    targetCamOffsetX = 0;
+    targetCamOffsetY = 0;
+    updateZoomBtnState(false);
+  }
+
+  function updateZoomBtnState(active = null) {
+    const isCloseUp = active !== null ? active : (Math.abs(camScale - TARGET_ZOOM_SCALE) < 0.25);
+    btnZoomCanvas.classList.toggle('active', isCloseUp);
+    btnZoomCanvas.querySelector('span').textContent = isCloseUp ? '🔍 返回全景 (1.0x)' : '🔍 闌尾特寫';
+    btnZoomDock.querySelector('span').textContent = isCloseUp ? '🔍 視角：返回全景' : '🔍 視角：闌尾特寫';
+  }
+
+  function toggleAppendixZoom() {
+    const isCloseUp = Math.abs(camScale - TARGET_ZOOM_SCALE) < 0.25;
+    if (isCloseUp) {
+      resetCamera();
+    } else {
+      focusAppendix();
+    }
+  }
+
+  function zoomIn() {
+    isAnimatingCamera = false;
+    zoomAt(LOGICAL_WIDTH / 2, LOGICAL_HEIGHT / 2, 1.25);
+  }
+
+  function zoomOut() {
+    isAnimatingCamera = false;
+    zoomAt(LOGICAL_WIDTH / 2, LOGICAL_HEIGHT / 2, 0.8);
+  }
+
+  btnZoomCanvas.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleAppendixZoom();
+  });
+  btnZoomDock.addEventListener('click', toggleAppendixZoom);
+  if (btnZoomIn) btnZoomIn.addEventListener('click', zoomIn);
+  if (btnZoomOut) btnZoomOut.addEventListener('click', zoomOut);
+  if (btnZoomReset) btnZoomReset.addEventListener('click', resetCamera);
+
+  function showInspectCard(title, bodyHtml, borderColor = '#38bdf8') {
+    inspectTitle.innerHTML = title;
+    inspectBody.innerHTML = bodyHtml;
+    inspectCard.style.borderColor = borderColor;
+    inspectCard.style.display = 'flex';
+  }
+
+  btnCloseInspect.addEventListener('click', (e) => {
+    e.stopPropagation();
+    inspectCard.style.display = 'none';
+  });
+
+  // Direct Canvas Pointer / Touch Interactivity (Pan, Zoom, Tap to Inspect + Drag Fecalith)
+  const activePointers = new Map();
+  let pointerDownPos = { x: 0, y: 0 };
+  let isPanning = false;
+  let lastPanPoint = { x: 0, y: 0 };
+  let initialPinchDist = null;
+  let initialPinchScale = 1.0;
+  let initialPinchCenter = { rawX: 0, rawY: 0 };
+
+  canvas.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    canvas.setPointerCapture(e.pointerId);
+    activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    isAnimatingCamera = false;
+
+    if (activePointers.size === 1) {
+      pointerDownPos = { x: e.clientX, y: e.clientY };
+      lastPanPoint = { x: e.clientX, y: e.clientY };
+
+      const pt = screenToLogical(e.clientX, e.clientY);
+
+      // Check if tapping Fecalith
+      if (fecalith && Math.hypot(pt.x - fecalith.x, pt.y - fecalith.y) <= fecalith.r + 18) {
+        isDraggingFecalith = true;
+        isPanning = false;
+        showInspectCard(
+          '🪨 硬化糞石 (Fecalith)',
+          '由滯留糞便殘渣脫水並吸附鈣鹽形成的堅硬結石。您可直接<strong>拖曳糞石</strong>移動位置，卡入闌尾瓶頸開口引發急性高壓缺血，將其移開則可解除阻塞！',
+          '#f59e0b'
+        );
+      } else {
+        isPanning = true;
+      }
+    } else if (activePointers.size === 2) {
+      isPanning = false;
+      isDraggingFecalith = false;
+      const pts = Array.from(activePointers.values());
+      initialPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      initialPinchScale = camScale;
+      const rect = canvas.getBoundingClientRect();
+      const midClientX = (pts[0].x + pts[1].x) / 2;
+      const midClientY = (pts[0].y + pts[1].y) / 2;
+      const normX = (midClientX - rect.left) / rect.width;
+      const normY = (midClientY - rect.top) / rect.height;
+      initialPinchCenter = {
+        rawX: normX * LOGICAL_WIDTH,
+        rawY: normY * LOGICAL_HEIGHT
+      };
+    }
+  });
+
+  canvas.addEventListener('pointermove', (e) => {
+    // Dynamic cursor feedback on hover
+    if (activePointers.size === 0) {
+      const pt = screenToLogical(e.clientX, e.clientY);
+      const { dc, macrophage, plasma, treg } = immuneCells;
+      if (fecalith && Math.hypot(pt.x - fecalith.x, pt.y - fecalith.y) <= fecalith.r + 16) {
+        canvas.style.cursor = 'move';
+      } else if (appendixState === 'INFLAMED' && isInAppendix(pt.x, pt.y)) {
+        canvas.style.cursor = 'pointer';
+      } else if (follicles.some(f => Math.hypot(pt.x - f.x, pt.y - f.y) <= f.r + 10)) {
+        canvas.style.cursor = 'pointer';
+      } else if (appendixState !== 'REMOVED' && (
+        Math.hypot(pt.x - dc.x, pt.y - dc.y) <= dc.r + 14 ||
+        Math.hypot(pt.x - macrophage.x, pt.y - macrophage.y) <= macrophage.r + 14 ||
+        Math.hypot(pt.x - plasma.x, pt.y - plasma.y) <= plasma.r + 14 ||
+        Math.hypot(pt.x - treg.x, pt.y - treg.y) <= treg.r + 14
+      )) {
+        canvas.style.cursor = 'pointer';
+      } else {
+        canvas.style.cursor = 'grab';
+      }
+      return;
+    }
+
+    activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    // Handle 2-finger pinch zoom
+    if (activePointers.size === 2 && initialPinchDist) {
+      const pts = Array.from(activePointers.values());
+      const currentDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      const ratio = currentDist / initialPinchDist;
+      const newScale = Math.max(0.65, Math.min(3.2, initialPinchScale * ratio));
+
+      const rect = canvas.getBoundingClientRect();
+      const midClientX = (pts[0].x + pts[1].x) / 2;
+      const midClientY = (pts[0].y + pts[1].y) / 2;
+      const curRawX = ((midClientX - rect.left) / rect.width) * LOGICAL_WIDTH;
+      const curRawY = ((midClientY - rect.top) / rect.height) * LOGICAL_HEIGHT;
+
+      const logicalX = (initialPinchCenter.rawX - camOffsetX) / initialPinchScale;
+      const logicalY = (initialPinchCenter.rawY - camOffsetY) / initialPinchScale;
+
+      camScale = newScale;
+      camOffsetX = curRawX - logicalX * camScale;
+      camOffsetY = curRawY - logicalY * camScale;
+      clampCamera();
+      updateZoomBtnState();
+      return;
+    }
+
+    // Handle 1-finger / mouse drag
+    if (isDraggingFecalith && fecalith) {
+      e.preventDefault();
+      const pt = screenToLogical(e.clientX, e.clientY);
+      fecalith.x = Math.max(160, Math.min(920, pt.x));
+      fecalith.y = Math.max(40, Math.min(410, pt.y));
+
+      if (appendixState !== 'REMOVED') {
+        if (Math.hypot(fecalith.x - 225, fecalith.y - 398) <= 22) {
+          fecalith.x = 225;
+          fecalith.y = 398;
+          fecalith.wedged = true;
+          if (appendixState === 'NORMAL') {
+            appendixState = 'BLOCKED';
+          }
+        } else {
+          fecalith.wedged = false;
+          if (appendixState === 'BLOCKED' || appendixState === 'INFLAMED') {
+            appendixState = 'NORMAL';
+            internalPressure = 12;
+            surgeryModal.style.display = 'none';
+            setCommentary(
+              '✅ 糞石已移開闌尾開口！阻塞解除',
+              '您已將糞石拖離闌尾頸部出口，滯留黏液順利排出，闌尾腔內壓力迅速恢復正常（12 mmHg），成功避免急性闌尾炎穿孔！',
+              '#2ecc71'
+            );
+          }
+        }
+      }
+    } else if (isPanning) {
+      canvas.classList.add('panning');
+      canvas.style.cursor = 'grabbing';
+      const rect = canvas.getBoundingClientRect();
+      const dx = ((e.clientX - lastPanPoint.x) / rect.width) * LOGICAL_WIDTH;
+      const dy = ((e.clientY - lastPanPoint.y) / rect.height) * LOGICAL_HEIGHT;
+      camOffsetX += dx;
+      camOffsetY += dy;
+      clampCamera();
+      lastPanPoint = { x: e.clientX, y: e.clientY };
+    }
+  });
+
+  function handlePointerUpOrCancel(e) {
+    if (activePointers.has(e.pointerId)) {
+      try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+      activePointers.delete(e.pointerId);
+    }
+
+    canvas.classList.remove('panning');
+    canvas.style.cursor = 'grab';
+
+    if (activePointers.size === 0) {
+      if (isDraggingFecalith) {
+        isDraggingFecalith = false;
+      } else if (isPanning) {
+        const moveDist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
+        // If movement was small (< 7px), treat as tap/click!
+        if (moveDist < 7) {
+          handleTap(e.clientX, e.clientY);
+        }
+        isPanning = false;
+      }
+      initialPinchDist = null;
+    } else if (activePointers.size === 1) {
+      const remaining = activePointers.values().next().value;
+      lastPanPoint = { x: remaining.x, y: remaining.y };
+      isPanning = true;
+      initialPinchDist = null;
+    }
+  }
+
+  canvas.addEventListener('pointerup', handlePointerUpOrCancel);
+  canvas.addEventListener('pointercancel', handlePointerUpOrCancel);
+
+  // Mouse Wheel Zoom centered on cursor
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    isAnimatingCamera = false;
+    const rect = canvas.getBoundingClientRect();
+    const normX = (e.clientX - rect.left) / rect.width;
+    const normY = (e.clientY - rect.top) / rect.height;
+    const rawX = normX * LOGICAL_WIDTH;
+    const rawY = normY * LOGICAL_HEIGHT;
+    const factor = e.deltaY < 0 ? 1.15 : 0.87;
+    zoomAt(rawX, rawY, factor);
+  }, { passive: false });
+
+  // Handle Tap / Click on anatomical organs & entities
+  function handleTap(clientX, clientY) {
+    const pt = screenToLogical(clientX, clientY);
+
+    // Visual touch ripple feedback
+    effects.push({
+      type: 'TOUCH_RIPPLE',
+      x: pt.x,
+      y: pt.y,
+      r: 4,
+      alpha: 0.95
+    });
+
+    // 1. If Appendix is INFLAMED and user taps directly on it, trigger surgery
+    if (appendixState === 'INFLAMED' && isInAppendix(pt.x, pt.y)) {
+      performAppendectomy();
+      return;
+    }
+
+    // 2. Check if tapping an Active Immune Cell
+    if (appendixState !== 'REMOVED') {
+      const { dc, macrophage, plasma, treg } = immuneCells;
+      if (Math.hypot(pt.x - dc.x, pt.y - dc.y) <= dc.r + 14) {
+        showInspectCard(
+          '🧬 樹突狀細胞 (Dendritic Cell, DC)',
+          '闌尾黏膜免疫的<strong>情報前哨兵</strong>。長度分支的樹突狀偽足穿透上皮細胞屏障，探入管腔黏液中主動<strong>採樣細菌表面抗原</strong>（Antigen Sampling）。辨識出益生菌時引導 Treg 啟動耐受；辨識出外來致病菌時發送危險信號（PAMPs）動員巨噬細胞與淋巴濾泡。',
+          '#38bdf8'
+        );
+        return;
+      }
+      if (Math.hypot(pt.x - macrophage.x, pt.y - macrophage.y) <= macrophage.r + 14) {
+        showInspectCard(
+          '🥊 巨噬細胞 (Macrophage)',
+          '先天免疫系統的<strong>重裝清理隊</strong>。具有高度變形的變形蟲偽足，穿梭於黏膜下與管腔邊緣。一旦接收到敵菌信號，立即追擊並伸出偽足包圍目標，進行<strong>胞吞作用（Phagocytosis）</strong>，將致病菌包裹於吞噬體中，再藉由體內<strong>溶酶體（Lysosome）酵素</strong>將其徹底裂解殺滅！',
+          '#ec4899'
+        );
+        return;
+      }
+      if (Math.hypot(pt.x - plasma.x, pt.y - plasma.y) <= plasma.r + 14) {
+        showInspectCard(
+          '🏭 漿細胞 / B 淋巴細胞 (Plasma B Cell)',
+          '位於闌尾生發中心（Germinal Center）的<strong>抗體合成工廠</strong>。受 Treg 調節信號引導後專門合成並大量分泌雙聚體 <strong>sIgA 抗體</strong>。sIgA 是「非發炎性保護抗體」，不召喚補體殺敵，只專注於<strong>溫和包被並錨定益生菌</strong>於黏液生物膜，儲備腸道方舟火種。',
+          '#818cf8'
+        );
+        return;
+      }
+      if (Math.hypot(pt.x - treg.x, pt.y - treg.y) <= treg.r + 14) {
+        showInspectCard(
+          '🛑 調節型 T 細胞 (Treg Cell)',
+          '免疫系統的<strong>總煞車與和平使者</strong>。當樹突細胞呈遞共生益生菌抗原時，Treg 會釋放抑制性細胞因子（TGF-β、IL-10），<strong>踩下免疫煞車（免疫耐受 Immune Tolerance）</strong>，禁止發動破壞性發炎，確保人體與腸道共生菌群和平共存。',
+          '#facc15'
+        );
+        return;
+      }
+    }
+
+    // 3. Check if tapping a Lymphoid Follicle
+    if (appendixState !== 'REMOVED') {
+      for (const f of follicles) {
+        if (Math.hypot(pt.x - f.x, pt.y - f.y) <= f.r + 10) {
+          f.activePulse = 90;
+          effects.push({
+            type: 'TOLERANCE_RING',
+            x: f.x,
+            y: f.y,
+            r: 8,
+            alpha: 1
+          });
+          // Release 3 sIgA antibodies on tap
+          for (let k = 0; k < 3; k++) {
+            const targetY = f.y + (Math.random() - 0.5) * 24;
+            const targetX = getAppendixSpineX(targetY);
+            antibodies.push({
+              x: f.x,
+              y: f.y,
+              vx: (targetX - f.x) * 0.05,
+              vy: (targetY - f.y) * 0.05,
+              angle: Math.random() * Math.PI * 2,
+              life: 500
+            });
+          }
+          showInspectCard(
+            `🟡 ${f.name}`,
+            '闌尾黏膜下密集的<strong>次級淋巴組織</strong>（含生發中心）。B 細胞在此演練辨別敵友：對共生益生菌啟動<strong>免疫耐受</strong>並分泌藍色 <strong>sIgA 抗體</strong>；對外來致病菌則啟動清除反應。',
+            '#facc15'
+          );
+          return;
+        }
+      }
+    }
+
+    // 3. Check if tapping a Pathogen or Probiotic particle
+    for (const p of particles) {
+      if (Math.hypot(pt.x - p.x, pt.y - p.y) <= p.r + 10) {
+        if (p.type === 'PATHOGEN') {
+          showInspectCard(
+            '🟣 外來致病菌 / 困難梭狀桿菌',
+            p.opportunistic
+              ? '<strong>困難梭狀桿菌 (C. difficile)</strong>：當切除闌尾又遭遇廣效抗生素清空腸道時，缺乏闌尾益生菌及時補位，耐藥惡菌便會趁虛而入大舉繁殖！'
+              : '<strong>外來致病菌</strong>：表面帶有危險分子信號（PAMPs），進入闌尾後會被淋巴濾泡識別並發動清除攻擊。',
+            '#a855f7'
+          );
+        } else {
+          showInspectCard(
+            '🟢 共生益生菌 (Commensal Probiotics)',
+            p.inBiofilm
+              ? '<strong>闌尾生物膜益生菌</strong>：受藍色 sIgA 抗體溫和錨定於闌尾盲端黏液層中，流速為零且代謝穩定，是腸道遭遇腹瀉或抗生素浩劫時的「諾亞方舟種子庫」。'
+              : '<strong>大腸游離益生菌</strong>：協助發酵膳食纖維並維持腸道屏障，隨大腸蠕動向上排空，腹瀉時極易被沖刷流失。',
+            '#2ecc71'
+          );
+        }
+        return;
+      }
+    }
+
+    // 4. Check Anatomical Regions
+    if (isInAppendix(pt.x, pt.y)) {
+      showInspectCard(
+        '🛡️ 闌尾 (Vermiform Appendix)',
+        '懸垂於盲腸底部的狹長盲管（死胡同）。因<strong>液體對流近乎零</strong>且富含<strong>sIgA 與黏液生物膜</strong>，成為共生益生菌躲避腹瀉與抗生素風暴的「安全防空洞」，同時也是青少年期重要的黏膜免疫演練場。',
+        '#14b8a6'
+      );
+    } else if (Math.hypot(pt.x - 295, pt.y - 345) <= 30) {
+      showInspectCard(
+        '🚪 迴盲瓣 (Ileocecal Valve)',
+        '位於小腸末端（迴腸）與盲腸交界處的<strong>單向括約肌閥門</strong>。負責讓右側小腸消化後的食糜向左規律進入盲腸，並防止大腸內高濃度的細菌逆流回小腸。',
+        '#fda4af'
+      );
+    } else if (isInCecum(pt.x, pt.y)) {
+      showInspectCard(
+        '🏺 盲腸 (Cecum)',
+        '大腸的最前端起點，位於人體右下腹（解剖圖左下），呈寬闊囊袋狀。主要功能為<strong>接收小腸食糜、初步吸收水分與電解質</strong>並混合菌群。民間俗稱的「割盲腸」其實是切除底下的細小闌尾，盲腸本身完好保留以維持消化道暢通！',
+        '#f43f5e'
+      );
+    } else if (isInColon(pt.x, pt.y)) {
+      showInspectCard(
+        '🌊 大腸幹道 / 升結腸 (Ascending Colon)',
+        '具有一節節結腸袋（Haustra）與強勁的<strong>向上蠕動推力（Peristalsis）</strong>。管腔內游離細菌隨糞便向上推進排空，一旦發生劇烈腹瀉或服用抗生素，幹道內的菌群會在數秒內被沖刷殆盡。',
+        '#fb7185'
+      );
+    } else if (isInIleum(pt.x, pt.y)) {
+      showInspectCard(
+        '🥖 小腸末端：迴腸 (Terminal Ileum)',
+        '負責吸收營養、維生素 B12 與膽鹽，消化流體食糜由右向左透過迴盲瓣送入大腸起點（盲腸）。',
+        '#fda4af'
+      );
+    }
+  }
+
+  // Initialize Simulation & Organ Placement
+  function initSimulation(keepRemovedState = false) {
+    if (!keepRemovedState) {
+      appendixState = 'NORMAL';
+    }
+    internalPressure = 12;
+    stormTimer = 0;
+    recolonizeTimer = 0;
+    trainingTimer = 0;
+    demoProbiotic = null;
+    demoPathogen = null;
+    trainingPhaseText = '';
+    fecalith = null;
+    isDraggingFecalith = false;
+    particles = [];
+    antibodies = [];
+    effects = [];
+    surgeryModal.style.display = 'none';
+    inspectCard.style.display = 'none';
+
+    // Reset immune cells
+    if (typeof immuneCells !== 'undefined') {
+      immuneCells.dc.isSampling = false;
+      immuneCells.dc.samplePhase = 'IDLE';
+      immuneCells.treg.toleranceGlow = 0;
+      immuneCells.treg.mode = 'IDLE';
+      immuneCells.plasma.secretePulse = 0;
+      immuneCells.plasma.mode = 'IDLE';
+      immuneCells.macrophage.x = immuneCells.macrophage.homeX;
+      immuneCells.macrophage.y = immuneCells.macrophage.homeY;
+      immuneCells.macrophage.isHunting = false;
+      immuneCells.macrophage.isEngulfing = false;
+      immuneCells.macrophage.engulfProgress = 0;
+      immuneCells.macrophage.mode = 'IDLE';
+    }
+
+    // 1. DENSE RESIDENT COLONIZED PROBIOTICS on Ascending Colon Mucosa (Left & Right walls)
+    // Left colon mucosa (x: 164 ~ 176, y: 45 ~ 305)
+    for (let i = 0; i < 38; i++) {
+      const py = 45 + Math.random() * 260;
+      spawnMucosalProbiotic(164 + Math.random() * 12, py, 'LEFT');
+    }
+    // Right colon mucosa (x: 284 ~ 296, y: 45 ~ 305)
+    for (let i = 0; i < 38; i++) {
+      const py = 45 + Math.random() * 260;
+      spawnMucosalProbiotic(284 + Math.random() * 12, py, 'RIGHT');
+    }
+
+    // 2. Colonized resident probiotics on Cecum Mucosa (y: 310 ~ 388)
+    for (let i = 0; i < 24; i++) {
+      const py = 315 + Math.random() * 70;
+      const px = (i % 2 === 0) ? (165 + Math.random() * 16) : (278 + Math.random() * 16);
+      spawnMucosalProbiotic(px, py, 'CECUM');
+    }
+
+    // 3. Floating Luminal Probiotics in central chyme stream (being sheared & flushed upwards with food)
+    for (let i = 0; i < 22; i++) {
+      spawnProbioticInMainTract(
+        195 + Math.random() * 70,
+        50 + Math.random() * 255,
+        true
+      );
+    }
+
+    // 4. Probiotics in Terminal Ileum (moderate physiological influx from small intestine)
+    for (let i = 0; i < 22; i++) {
+      spawnProbioticInMainTract(
+        340 + Math.random() * 560,
+        326 + Math.random() * 38,
+        false
+      );
+    }
+
+    // 5. Probiotics & Antibodies in Appendix safe house
+    if (appendixState !== 'REMOVED') {
+      for (let i = 0; i < 48; i++) {
+        const py = 402 + Math.random() * 70;
+        const spineX = getAppendixSpineX(py);
+        const px = spineX + (Math.random() - 0.5) * 16;
+        particles.push({
+          x: px,
+          y: py,
+          vx: 0,
+          vy: 0,
+          type: 'PROBIOTIC',
+          inBiofilm: true,
+          tetheredByIgA: i % 2 === 0,
+          r: 4.6 + Math.random() * 1.0,
+          angle: Math.random() * Math.PI * 2,
+          hp: 100
+        });
+      }
+
+      for (let i = 0; i < 15; i++) {
+        const py = 405 + Math.random() * 68;
+        const spineX = getAppendixSpineX(py);
+        antibodies.push({
+          x: spineX + (Math.random() - 0.5) * 14,
+          y: py,
+          vx: (Math.random() - 0.5) * 0.25,
+          vy: (Math.random() - 0.5) * 0.25,
+          angle: Math.random() * Math.PI * 2,
+          life: 9999
+        });
+      }
+    }
+
+    updateUI();
+    if (appendixState === 'REMOVED') {
+      setCommentary(
+        '🔄 對照組模式：已切除闌尾（術後狀態）',
+        '闌尾已從盲腸底部切除縫合。平時<strong>大腸黏膜定植菌</strong>仍能維持消化與平衡；但腸道失去了底部的「益生菌地下防空洞」。現在請點擊<strong>【2. 抗生素風暴】</strong>，觀察缺乏闌尾備份時，黏膜菌群被剝奪後的差異！',
+        '#a855f7'
+      );
+    } else {
+      setCommentary(
+        '💡 當前生理狀態：平日微生態平衡與闌尾持續接種（Continuous Inoculation）',
+        '① <strong>大腸黏膜定植菌</strong>：約 10¹¹～10¹² CFU/mL 緊密定植於升結腸與盲腸兩側黏膜，構成綠色微生態屏障。<br>' +
+        '② <strong>中央食糜沖刷</strong>：食物水流向上推進，自然將老舊脫落菌刷出。<br>' +
+        '③ <strong>平常時候闌尾持續釋放</strong>：闌尾深處的生物膜在日常狀態下持續增殖脫落，<strong>源源不絕向盲腸注入先鋒益生菌（持續性接種）</strong>，主動補位修補大腸黏膜缺損！<br>' +
+        '④ <strong>災後方舟救援</strong>：一旦遭遇抗生素風暴，闌尾儲備菌群將向上噴湧，在數秒內<strong>重新定植全段大腸黏膜壁</strong>！',
+        '#10b981'
+      );
+    }
+  }
+
+  function spawnMucosalProbiotic(x, y, side) {
+    particles.push({
+      x,
+      y,
+      baseX: x,
+      baseY: y,
+      vx: 0,
+      vy: 0,
+      type: 'PROBIOTIC',
+      inColonMucosa: true,
+      mucosaSide: side,
+      divideCooldown: Math.floor(Math.random() * 240 + 120),
+      inBiofilm: true,
+      tetheredByIgA: false,
+      r: 4.8 + Math.random() * 1.0,
+      angle: Math.random() * Math.PI * 2,
+      hp: 100
+    });
+  }
+
+  function spawnProbioticInMainTract(x, y, isChymeFlushed = false) {
+    particles.push({
+      x,
+      y,
+      vx: isChymeFlushed ? (Math.random() - 0.5) * 0.4 : (-1.2 + (Math.random() - 0.5) * 0.4),
+      vy: isChymeFlushed ? (-1.6 - Math.random() * 0.8) : ((Math.random() - 0.5) * 0.4),
+      type: 'PROBIOTIC',
+      inColonMucosa: false,
+      isChymeFlushed,
+      inBiofilm: false,
+      tetheredByIgA: false,
+      r: 4.6 + Math.random() * 1.2,
+      angle: Math.random() * Math.PI * 2,
+      hp: 100
+    });
+  }
+
+  function setCommentary(title, htmlText, borderColor = '#14b8a6') {
+    commentaryTitle.innerHTML = title;
+    commentaryText.innerHTML = htmlText;
+    commentaryBox.style.borderLeftColor = borderColor;
+  }
+
+  // Scenario 1: Immune Training & Tolerance (Magnified Concrete Micro-Actions)
+  btnTrain.addEventListener('click', () => {
+    if (appendixState === 'REMOVED') {
+      setCommentary(
+        '⚠️ 闌尾已切除，無法進行闌尾局部演練',
+        '請先點擊下方<strong>【對照切換：保留闌尾】</strong>或<strong>【重置模擬】</strong>恢復闌尾構造，再觀察淋巴濾泡辨識敵友的過程。',
+        '#f59e0b'
+      );
+      return;
+    }
+    if (appendixState === 'BLOCKED' || appendixState === 'INFLAMED') return;
+
+    // Automatically zoom and pan to the Appendix immune battlefield for close-up inspection
+    focusImmuneTraining();
+
+    trainingTimer = 480; // ~8 seconds at 60fps
+    trainingPhaseText = '【第 1/4 階段：抗原採樣】樹突狀細胞伸出偽足，探入管腔觸摸採樣細菌表面抗原...';
+
+    // Reset immune cell states
+    const { dc, treg, plasma, macrophage } = immuneCells;
+    dc.isSampling = true;
+    dc.samplePhase = 'PROBIOTIC';
+    treg.toleranceGlow = 0;
+    treg.mode = 'IDLE';
+    plasma.secretePulse = 0;
+    plasma.mode = 'IDLE';
+    macrophage.x = macrophage.homeX;
+    macrophage.y = macrophage.homeY;
+    macrophage.isHunting = false;
+    macrophage.isEngulfing = false;
+    macrophage.engulfProgress = 0;
+    macrophage.mode = 'IDLE';
+
+    // Spawn Demo Bacterial Actors: Commensal Probiotic (Friendly) & Invading Pathogen (Enemy)
+    demoProbiotic = {
+      x: 252,
+      y: 412,
+      vx: 0,
+      vy: 0,
+      r: 5.6,
+      name: '益生菌 (友軍)',
+      status: 'ENTERING', // 'ENTERING' | 'SAMPLED' | 'TOLERATED' | 'ANCHORED'
+      tethered: false,
+      alpha: 1.0,
+      glow: 0
+    };
+
+    demoPathogen = {
+      x: 258,
+      y: 424,
+      vx: 0,
+      vy: 0,
+      r: 6.8,
+      name: '致病菌 (敵人)',
+      status: 'INVADING', // 'INVADING' | 'DETECTED' | 'ENGULFED' | 'LYSED'
+      alpha: 1.0,
+      burst: 0
+    };
+
+    // Background probiotics in appendix biofilm
+    for (let i = 0; i < 6; i++) {
+      const py = 432 + Math.random() * 38;
+      const spineX = getAppendixSpineX(py);
+      particles.push({
+        x: spineX + (Math.random() - 0.5) * 14,
+        y: py,
+        vx: 0,
+        vy: 0,
+        type: 'PROBIOTIC',
+        inBiofilm: true,
+        tetheredByIgA: true,
+        r: 4.8,
+        angle: Math.random() * Math.PI * 2,
+        hp: 100
+      });
+    }
+
+    follicles.forEach(f => {
+      f.activePulse = 180;
+      f.mode = 'TRAINING';
+    });
+
+    setCommentary(
+      '🛡️ 情境 1：闌尾微觀免疫特訓 —— 4 階段具體動作展示 (自動放大特寫)',
+      '畫面已自動為您<strong>放大特寫闌尾微觀世界</strong>！請仔細觀察四大免疫細胞具體動作：<br>' +
+      '① <strong>樹突細胞 (DC)</strong> 伸出分支長臂偽足穿透黏膜上皮採樣抗原 ➔ 辨識益生菌與致病菌。<br>' +
+      '② <strong>Treg 細胞</strong> 釋放金綠色耐受波（TGF-β/IL-10），踩下發炎煞車。<br>' +
+      '③ <strong>B 漿細胞</strong> 脈衝噴射 Y 型 sIgA 抗體，溫柔包覆並將益生菌固著至綠色生物膜。<br>' +
+      '④ <strong>巨噬細胞</strong> 伸出變形足爬出，形成吞噬杯胞吞致病菌並以溶酶體 💥 消化裂解！',
+      '#38bdf8'
+    );
+  });
+
+  // Scenario 2: Antibiotic Storm / Severe Diarrhea
+  btnStorm.addEventListener('click', () => {
+    trainingTimer = 0;
+    demoProbiotic = null;
+    demoPathogen = null;
+    if (appendixState === 'BLOCKED' || appendixState === 'INFLAMED') {
+      setCommentary(
+        '🚨 闌尾目前處於阻塞發炎狀態！',
+        '糞石已堵死出口，請先點擊畫面中央的<strong>【立即執行腹腔鏡切除術】</strong>或<strong>【重置模擬】</strong>。',
+        '#ef4444'
+      );
+      return;
+    }
+
+    stormTimer = 170;
+    recolonizeTimer = 0;
+
+    // Upward storm waves in ascending colon
+    for (let i = 0; i < 5; i++) {
+      effects.push({
+        type: 'STORM_WAVE',
+        direction: 'UP',
+        x: 155,
+        y: 380 + i * 80,
+        speed: 9
+      });
+    }
+
+    // Leftward storm waves in ileum
+    for (let i = 0; i < 4; i++) {
+      effects.push({
+        type: 'STORM_WAVE',
+        direction: 'LEFT',
+        x: 880 + i * 90,
+        y: 320,
+        speed: 11
+      });
+    }
+
+    if (appendixState !== 'REMOVED') {
+      setCommentary(
+        '💊 情境 2：廣效抗生素風暴 / 劇烈腹瀉 ——「諾亞方舟」啟動！',
+        '黃色抗生素與腹瀉急流橫掃<strong>迴腸、盲腸與升結腸幹道</strong>，主幹道內的游離菌群在數秒內被沖刷殆盡！但底下的<strong>闌尾死胡同</strong>因<strong>零對流地形＋緻密生物膜屏障</strong>，深處的綠色益生菌安然躲過浩劫，稍後即將向上湧出重建家園！',
+        '#f59e0b'
+      );
+    } else {
+      setCommentary(
+        '💊 情境 2（無闌尾對照組）：抗生素風暴後的「生態荒漠與惡菌入侵」',
+        '大腸幹道菌群被抗生素與腹瀉沖刷一空！由於<strong>已切除闌尾</strong>，缺乏底部的「益生菌種子庫」及時播種，大腸陷入漫長的菌相荒漠期，讓耐藥性的<strong>紫色困難梭狀桿菌（C. difficile）</strong>趁虛而入、大量繁殖佔領腸道！',
+        '#ef4444'
+      );
+    }
+  });
+
+  // Scenario 3: Drop Fecalith
+  btnStone.addEventListener('click', () => {
+    trainingTimer = 0;
+    demoProbiotic = null;
+    demoPathogen = null;
+    if (appendixState === 'REMOVED') {
+      setCommentary(
+        'ℹ️ 闌尾已切除，不會再發生闌尾糞石阻塞',
+        '這正是切除闌尾的好處之一：沒有了狹窄盲管，糞石只會順著大腸幹道隨糞便排出。若想體驗急性闌尾炎機制，請先點擊<strong>【對照切換：保留闌尾】</strong>。',
+        '#a855f7'
+      );
+      return;
+    }
+    if (fecalith) return;
+
+    fecalith = {
+      x: 225,
+      y: 335,
+      vy: 1.8,
+      r: 16,
+      wedged: false
+    };
+
+    setCommentary(
+      '🪨 情境 3：硬化糞石掉落 —— 死胡同變身「高壓壓力鍋」！',
+      '一顆脫水鈣化的棕色<strong>糞石（Fecalith）</strong>從盲腸往下滾落，卡住僅 0.5 公分寬的闌尾瓶頸開口！（您也可以<strong>直接用手指/滑鼠拖曳糞石</strong>移動位置）。一旦卡死出口，黏液無法排出，將迅速引發高壓缺血與急性闌尾炎。',
+      '#ef4444'
+    );
+  });
+
+  // Perform Laparoscopic Appendectomy
+  function performAppendectomy() {
+    surgeryModal.style.display = 'none';
+    appendixState = 'REMOVED';
+    internalPressure = 12;
+    trainingTimer = 0;
+    demoProbiotic = null;
+    demoPathogen = null;
+    fecalith = null;
+    isDraggingFecalith = false;
+
+    particles = particles.filter(p => p.y < 398);
+    antibodies = antibodies.filter(a => a.y < 398);
+
+    effects.push({
+      type: 'SURGERY_CUT',
+      x: 225,
+      y: 398,
+      alpha: 1.0
+    });
+
+    updateUI();
+    setCommentary(
+      '✂️ 腹腔鏡闌尾切除術（Appendectomy）完成！',
+      '已將發炎化膿的闌尾連同糞石一併切除，並在<strong>盲腸底部打結縫合</strong>，成功解除穿孔腹膜炎危機！請注意：<strong>盲腸（大水槽）與大腸幹道依然完好暢通</strong>。您現在可以點擊<strong>【2. 抗生素風暴】</strong>測試失去闌尾防空洞後的復原差異。',
+      '#10b981'
+    );
+  }
+
+  btnSurgery.addEventListener('click', performAppendectomy);
+
+  // Toggle Appendix Present / Removed
+  btnToggleAppendix.addEventListener('click', () => {
+    if (appendixState === 'REMOVED') {
+      appendixState = 'NORMAL';
+      initSimulation(false);
+    } else {
+      appendixState = 'REMOVED';
+      initSimulation(true);
+    }
+  });
+
+  btnReset.addEventListener('click', () => {
+    initSimulation(false);
+  });
+
+  // Update Simulation Logic
+  function update() {
+    simTime += 0.05;
+
+    // Smooth camera interpolation
+    if (isAnimatingCamera) {
+      camScale += (targetCamScale - camScale) * 0.15;
+      camOffsetX += (targetCamOffsetX - camOffsetX) * 0.15;
+      camOffsetY += (targetCamOffsetY - camOffsetY) * 0.15;
+      if (Math.abs(camScale - targetCamScale) < 0.005 &&
+          Math.abs(camOffsetX - targetCamOffsetX) < 0.5 &&
+          Math.abs(camOffsetY - targetCamOffsetY) < 0.5) {
+        camScale = targetCamScale;
+        camOffsetX = targetCamOffsetX;
+        camOffsetY = targetCamOffsetY;
+        isAnimatingCamera = false;
+      }
+    }
+
+    // 1. Handle Fecalith Movement & Blockage
+    if (fecalith && !fecalith.wedged && !isDraggingFecalith) {
+      if (appendixState !== 'REMOVED' && Math.abs(fecalith.x - 225) < 35 && fecalith.y < 398) {
+        fecalith.x += (225 - fecalith.x) * 0.12;
+        fecalith.y += fecalith.vy;
+        if (fecalith.y >= 398) {
+          fecalith.y = 398;
+          fecalith.x = 225;
+          fecalith.wedged = true;
+          appendixState = 'BLOCKED';
+        }
+      } else {
+        // Carry fecalith out along colon if dragged away from appendix
+        fecalith.y -= 1.8;
+        if (fecalith.y < 30) fecalith = null;
+      }
+    }
+
+    // 2. Handle Appendix Internal Pressure & Inflammation
+    if (appendixState === 'BLOCKED' || appendixState === 'INFLAMED') {
+      internalPressure = Math.min(98, internalPressure + 0.32);
+      if (internalPressure >= 55 && appendixState !== 'INFLAMED') {
+        appendixState = 'INFLAMED';
+        surgeryModal.style.display = 'flex';
+        setCommentary(
+          '🚨 急性闌尾炎爆發！腔內高壓缺血 ➔ 黏膜屏障崩潰 ➔ 細菌入侵化膿',
+          '糞石卡死出口導致闌尾腔內壓力飆破 <strong>60 mmHg</strong>，壓迫微血管造成缺血壞死。原本和平共處的細菌失去黏膜與 sIgA 管制，大舉侵入闌尾壁內引發劇烈發炎紅腫！請立即點擊<strong>【立即執行腹腔鏡切除術】</strong>（或直接用手指把糞石拖開）！',
+          '#ef4444'
+        );
+      }
+
+      if (appendixState === 'INFLAMED' && Math.random() < 0.25) {
+        const py = 405 + Math.random() * 65;
+        const spineX = getAppendixSpineX(py);
+        effects.push({
+          type: 'INFLAME_SPARK',
+          x: spineX + (Math.random() - 0.5) * 28,
+          y: py,
+          r: 4,
+          alpha: 0.85
+        });
+      }
+    }
+
+    // 3. Handle Antibiotic / Diarrhea Storm
+    if (stormTimer > 0) {
+      stormTimer--;
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        if (p.y < 398) {
+          // Inside main tract (Colon, Cecum, Ileum)
+          p.vy -= 1.8;
+          p.hp -= 4.5;
+          if (p.hp <= 0 || p.y < 20 || p.x < 140) {
+            particles.splice(i, 1);
+          }
+        } else if (p.y >= 398 && p.y < 415) {
+          // Just near the neck
+          p.hp -= 0.6;
+          if (p.hp <= 0) particles.splice(i, 1);
+        }
+      }
+
+      if (stormTimer === 1) {
+        if (appendixState === 'NORMAL') {
+          recolonizeTimer = 210;
+          setCommentary(
+            '🌱 災後重建啟動！闌尾「益生菌方舟」湧出播種！',
+            '抗生素與腹瀉風暴已過，大腸幹道呈現菌群荒漠。此時<strong>闌尾死胡同內倖存的綠色益生菌</strong>開始快速分裂，順著濃度梯度向上湧出闌尾開口，在短短幾秒內重新定植<strong>盲腸與升結腸幹道</strong>，阻絕惡菌入侵！',
+            '#2ecc71'
+          );
+        } else if (appendixState === 'REMOVED') {
+          for (let k = 0; k < 22; k++) {
+            particles.push({
+              x: 170 + Math.random() * 120,
+              y: 60 + Math.random() * 260,
+              vx: (Math.random() - 0.5) * 0.6,
+              vy: (Math.random() - 0.5) * 0.6,
+              type: 'PATHOGEN',
+              opportunistic: true,
+              r: 6.8,
+              angle: Math.random() * Math.PI * 2,
+              hp: 100
+            });
+          }
+          setCommentary(
+            '⚠️ 無闌尾對照結果：菌叢復原緩慢，困難梭狀桿菌（紫刺惡菌）趁虛而入！',
+            '因為<strong>缺乏闌尾防空洞的備份益生菌</strong>，大腸在抗生素風暴後呈現生態真空，讓耐藥性的<strong>紫色困難梭狀桿菌（C. difficile）</strong>搶先佔領腸道生態位，引發偽膜性腸炎與復發性腹瀉！這證實了闌尾在災後重建微生態的關鍵價值。',
+            '#ef4444'
+          );
+        }
+      }
+    }
+
+    // 4. Handle Post-Storm Recolonization from Appendix Safe-House
+    if (recolonizeTimer > 0 && appendixState === 'NORMAL') {
+      recolonizeTimer--;
+      if (recolonizeTimer % 3 === 0) {
+        for (let k = 0; k < 2; k++) {
+          particles.push({
+            x: 225 + (Math.random() - 0.5) * 16,
+            y: 395,
+            vx: (Math.random() - 0.5) * 1.6,
+            vy: -3.2 - Math.random() * 2.2, // streaming UP into cecum and colon!
+            type: 'PROBIOTIC',
+            inBiofilm: false,
+            tetheredByIgA: false,
+            seeding: true,
+            fromAppendix: true,
+            r: 5.0,
+            angle: Math.random() * Math.PI * 2,
+            hp: 100
+          });
+        }
+      }
+
+      if (recolonizeTimer === 1) {
+        setCommentary(
+          '✅ 災後黏膜定植完成！大腸微生態全面復原',
+          '闌尾「菌種方舟」釋放的益生菌已成功<strong>牢牢定植（Colonization）於升結腸與盲腸兩側黏膜壁</strong>，重新築起緻密綠色生物膜防護罩！大腸菌相健康度回升至健康水準，有力驗證了闌尾安全避風港的關鍵生理價值。',
+          '#10b981'
+        );
+      }
+    }
+
+    // 4.8 Normal Steady-State Physiological Shedding & Continuous Inoculation from Appendix
+    if (appendixState === 'NORMAL' && stormTimer === 0 && recolonizeTimer === 0 && (!fecalith || !fecalith.wedged)) {
+      // Gentle continuous shedding: ~every 40-50 frames (approx 1.2 per second at 60fps)
+      if (Math.random() < 0.024) {
+        particles.push({
+          x: 225 + (Math.random() - 0.5) * 12,
+          y: 395,
+          vx: (Math.random() - 0.5) * 0.9,
+          vy: -1.6 - Math.random() * 1.0,
+          type: 'PROBIOTIC',
+          inBiofilm: false,
+          tetheredByIgA: false,
+          seeding: true,
+          fromAppendix: true,
+          r: 4.8,
+          angle: Math.random() * Math.PI * 2,
+          hp: 100
+        });
+      }
+    }
+
+    // 4.5 Handle Multi-Phase Immune Training Drill
+    if (trainingTimer > 0 && appendixState !== 'REMOVED') {
+      trainingTimer--;
+      const { dc, treg, plasma, macrophage } = immuneCells;
+
+      // Phase 1: Antigen Sampling by Dendritic Cell (t: 480 -> 360)
+      if (trainingTimer > 360) {
+        dc.isSampling = true;
+        if (trainingTimer > 420) {
+          // Sampling Friendly Probiotic
+          dc.samplePhase = 'PROBIOTIC';
+          trainingPhaseText = '【第 1/4 階段：抗原採樣】樹突細胞 (DC) 伸出分支偽足穿透上皮，接觸益生菌採樣表面抗原...';
+          if (demoProbiotic) {
+            demoProbiotic.status = 'SAMPLED';
+            demoProbiotic.glow = Math.min(1, (480 - trainingTimer) / 50);
+            if (trainingTimer % 16 === 0) {
+              effects.push({
+                type: 'TOUCH_RIPPLE',
+                x: demoProbiotic.x,
+                y: demoProbiotic.y,
+                r: 4,
+                alpha: 0.95
+              });
+            }
+          }
+        } else {
+          // Sampling Invading Pathogen
+          dc.samplePhase = 'PATHOGEN';
+          trainingPhaseText = '【第 1/4 階段：抗原辨識】樹突細胞偽足轉向觸摸致病菌，偵測到危險分子(PAMPs)！發出清剿信號！';
+          if (demoPathogen) {
+            demoPathogen.status = 'DETECTED';
+            if (trainingTimer % 14 === 0) {
+              effects.push({
+                type: 'INFLAME_SPARK',
+                x: demoPathogen.x + (Math.random() - 0.5) * 8,
+                y: demoPathogen.y + (Math.random() - 0.5) * 8,
+                r: 4.5,
+                alpha: 0.95
+              });
+            }
+          }
+        }
+      }
+      // Phase 2: Immune Tolerance (Treg) & sIgA Secretion (Plasma Cell) (t: 360 -> 240)
+      else if (trainingTimer > 240) {
+        dc.samplePhase = 'IDLE';
+        treg.mode = 'TOLERANCE';
+        treg.toleranceGlow = Math.sin(simTime * 6) * 0.5 + 0.5;
+        trainingPhaseText = '【第 2/4 階段：免疫耐受與抗體錨定】Treg 釋放 TGF-β 踩煞車禁發炎；漿細胞分泌 sIgA 固著益生菌！';
+
+        // Treg releases periodic tolerance aura rings
+        if (trainingTimer % 22 === 0) {
+          effects.push({
+            type: 'TOLERANCE_RING',
+            x: treg.x,
+            y: treg.y,
+            r: 8,
+            alpha: 1.0
+          });
+        }
+
+        // Plasma cell synthesizes and shoots sIgA antibodies toward demoProbiotic
+        plasma.secretePulse = 1.0;
+        if (trainingTimer % 14 === 0 && demoProbiotic) {
+          const dx = demoProbiotic.x - plasma.x;
+          const dy = demoProbiotic.y - plasma.y;
+          const dist = Math.hypot(dx, dy) || 1;
+          antibodies.push({
+            x: plasma.x,
+            y: plasma.y,
+            vx: (dx / dist) * 1.9,
+            vy: (dy / dist) * 1.9,
+            angle: Math.atan2(dy, dx),
+            life: 200
+          });
+        }
+
+        // Probiotic is coated and moves toward left biofilm wall
+        if (demoProbiotic) {
+          demoProbiotic.status = 'TOLERATED';
+          // Gently drift toward mucosal biofilm at x: 239, y: 412
+          demoProbiotic.x += (239 - demoProbiotic.x) * 0.05;
+          if (Math.abs(demoProbiotic.x - 239) < 2) {
+            demoProbiotic.status = 'ANCHORED';
+            demoProbiotic.tethered = true;
+          }
+        }
+      }
+      // Phase 3: Macrophage Amoeboid Hunt & Phagocytosis (t: 240 -> 90)
+      else if (trainingTimer > 90) {
+        treg.mode = 'IDLE';
+        treg.toleranceGlow = 0;
+        plasma.secretePulse = 0;
+        trainingPhaseText = '【第 3/4 階段：巨噬細胞出擊】巨噬細胞伸出變形足爬出，形成吞噬杯包裹致病菌並裂解！';
+
+        if (demoPathogen && demoPathogen.alpha > 0) {
+          macrophage.isHunting = true;
+          // Crawl toward pathogen
+          const targetX = demoPathogen.x;
+          const targetY = demoPathogen.y;
+          macrophage.x += (targetX - macrophage.x) * 0.07;
+          macrophage.y += (targetY - macrophage.y) * 0.07;
+
+          const dist = Math.hypot(macrophage.x - targetX, macrophage.y - targetY);
+          if (dist < 10) {
+            macrophage.isEngulfing = true;
+            macrophage.engulfProgress = Math.min(1.0, macrophage.engulfProgress + 0.035);
+            demoPathogen.status = 'ENGULFED';
+            demoPathogen.r = Math.max(1.5, 6.8 * (1 - macrophage.engulfProgress * 0.7));
+            demoPathogen.alpha = Math.max(0, 1 - macrophage.engulfProgress * 0.9);
+
+            if (macrophage.engulfProgress >= 0.85) {
+              demoPathogen.status = 'LYSED';
+              demoPathogen.alpha = 0;
+              // Spark enzymatic lysis
+              for (let k = 0; k < 6; k++) {
+                effects.push({
+                  type: 'LYSIS_BURST',
+                  x: macrophage.x + (Math.random() - 0.5) * 12,
+                  y: macrophage.y + (Math.random() - 0.5) * 12,
+                  r: 3 + Math.random() * 5,
+                  alpha: 1.0
+                });
+              }
+            }
+          }
+        }
+      }
+      // Phase 4: Resolution & Return Home (t: 90 -> 0)
+      else {
+        trainingPhaseText = '【第 4/4 階段：防線穩固】致病菌已被完全清除，巨噬細胞返回哨點，闌尾微生態維持和平！';
+        macrophage.isHunting = false;
+        macrophage.isEngulfing = false;
+        // Crawl back to resting home
+        macrophage.x += (macrophage.homeX - macrophage.x) * 0.06;
+        macrophage.y += (macrophage.homeY - macrophage.y) * 0.06;
+      }
+
+      if (trainingTimer === 1) {
+        setCommentary(
+          '✅ 闌尾免疫演習圓滿完成！「辨別敵友」與「精準防禦」展示完畢',
+          '<strong>闌尾微觀防禦成功驗收：</strong><br>' +
+          '① <strong>情報採樣</strong>：樹突細胞 (DC) 伸出偽足精準辨別益生菌無害，發出耐受通行信號。<br>' +
+          '② <strong>友善定植</strong>：Treg 細胞分泌 TGF-β 踩煞車制止發炎；B 漿細胞持續分泌 sIgA 形成防護膜錨定益生菌。<br>' +
+          '③ <strong>雷霆清剿</strong>：巨噬細胞主動出擊，變形偽足胞吞致病菌，溶酶體快速分解裂解，維持腸道微生態純淨！<br>' +
+          '👉 您可以點擊任一免疫細胞（樹突、Treg、漿細胞、巨噬細胞）隨時查看深入細胞構造與免疫學機轉！',
+          '#10b981'
+        );
+      }
+    }
+
+    // 5. Normal Continuous Replenishment in Main Tract (Small Intestine Influx)
+    if (stormTimer === 0) {
+      const ileumProbiotics = particles.filter(p => isInIleum(p.x, p.y) && p.type === 'PROBIOTIC').length;
+      if (ileumProbiotics < 20 && Math.random() < 0.16) {
+        // Continuous moderate inflow from terminal ileum
+        spawnProbioticInMainTract(930, 326 + Math.random() * 38, false);
+      }
+
+      const mainProbiotics = particles.filter(p => p.y < 398 && p.type === 'PROBIOTIC').length;
+      const mainPathogens = particles.filter(p => p.y < 398 && p.type === 'PATHOGEN').length;
+      if (mainProbiotics > 75 && mainPathogens > 0 && Math.random() < 0.15) {
+        const idx = particles.findIndex(p => p.y < 398 && p.type === 'PATHOGEN');
+        if (idx !== -1) particles.splice(idx, 1);
+      }
+    }
+
+    // 6. Update Particles Physics & Immune Interactions
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.angle += 0.03;
+
+      if (p.y >= 398 && appendixState !== 'REMOVED') {
+        // --- Inside Appendix ---
+        const spineX = getAppendixSpineX(p.y);
+
+        if (p.type === 'PROBIOTIC') {
+          const targetOffset = (i % 2 === 0 ? -1 : 1) * 7;
+          const targetX = spineX + targetOffset;
+          p.vx = (targetX - p.x) * 0.05 + (Math.random() - 0.5) * 0.25;
+          p.vy = (Math.random() - 0.5) * 0.25;
+
+          if (appendixState === 'INFLAMED') {
+            p.vx += (Math.random() - 0.5) * 2.2;
+            p.vy += (Math.random() - 0.5) * 2.2;
+          }
+
+          p.x += p.vx;
+          p.y = Math.max(398, Math.min(474, p.y + p.vy));
+        } else if (p.type === 'PATHOGEN') {
+          p.x += p.vx;
+          p.y = Math.max(398, Math.min(472, p.y + p.vy));
+          p.vx *= 0.95;
+          p.vy *= 0.95;
+
+          if (!p.targeted && Math.random() < 0.12) {
+            p.targeted = true;
+            const nearestF = follicles.reduce((best, f) =>
+              Math.hypot(f.x - p.x, f.y - p.y) < Math.hypot(best.x - p.x, best.y - p.y) ? f : best
+            , follicles[0]);
+
+            effects.push({
+              type: 'ATTACK_LASER',
+              x1: nearestF.x,
+              y1: nearestF.y,
+              x2: p.x,
+              y2: p.y,
+              target: p,
+              progress: 0
+            });
+          }
+        }
+      } else {
+        // --- Outside Appendix (Main Digestive Tract) ---
+        if (p.inColonMucosa) {
+          // Resident mucosal flora: adhered to colonic mucus lining with viscoelastic elasticity
+          p.vx = (p.baseX - p.x) * 0.12 + Math.sin(simTime * 2 + p.baseY * 0.08) * 0.25;
+          p.vy = (p.baseY - p.y) * 0.12 + Math.cos(simTime * 2 + p.baseX * 0.08) * 0.25;
+          p.x += p.vx;
+          p.y += p.vy;
+
+          // Proliferation & natural shedding into chyme stream:
+          if (stormTimer === 0) {
+            p.divideCooldown--;
+            if (p.divideCooldown <= 0) {
+              p.divideCooldown = 280 + Math.floor(Math.random() * 260);
+              const shedX = p.mucosaSide === 'LEFT' ? p.x + 18 : (p.mucosaSide === 'RIGHT' ? p.x - 18 : p.x);
+              spawnProbioticInMainTract(shedX, p.y, true); // Shed into central food stream
+            }
+          }
+        } else if (p.seeding) {
+          // Seeding / Inoculating from appendix orifice upward into cecum & ascending colon
+          // Lateral migration force fanning out towards mucosal walls
+          if (p.x < 225) {
+            p.vx += (-0.85 - p.vx) * 0.08;
+          } else {
+            p.vx += (0.85 - p.vx) * 0.08;
+          }
+          p.x += p.vx;
+          p.y += p.vy;
+          p.vy *= 0.985;
+          if (p.vy > -1.6) p.vy = -1.6;
+
+          // Check for active adhesion & colonization on denuded mucosa:
+          let canColonize = false;
+          let side = 'LEFT';
+          if (p.x <= 180 && p.y >= 45 && p.y <= 385) {
+            canColonize = true;
+            side = 'LEFT';
+          } else if (p.x >= 280 && p.y >= 45 && p.y <= 385) {
+            canColonize = true;
+            side = 'RIGHT';
+          }
+
+          if (canColonize) {
+            // Check local mucosal density so bacteria distribute evenly along the whole colon
+            const nearbyCount = particles.filter(m => m.inColonMucosa && Math.hypot(m.x - p.x, m.y - p.y) < 16).length;
+            if (nearbyCount < 2) {
+              p.inColonMucosa = true;
+              p.baseX = (side === 'LEFT') ? (165 + Math.random() * 11) : (284 + Math.random() * 11);
+              p.baseY = p.y;
+              p.x = p.baseX;
+              p.mucosaSide = side;
+              p.seeding = false;
+              p.fromAppendix = false;
+              p.vx = 0;
+              p.vy = 0;
+              p.divideCooldown = Math.floor(Math.random() * 240 + 120);
+              effects.push({
+                type: 'COLONIZE_PULSE',
+                x: p.x,
+                y: p.y,
+                r: 4,
+                alpha: 1.0
+              });
+            }
+          }
+
+          // If reached top of ascending colon without finding an open spot, convert to luminal flow
+          if (p.y <= 45) {
+            p.seeding = false;
+          }
+        } else if (isInIleum(p.x, p.y)) {
+          // In Terminal Ileum: moving from RIGHT to LEFT towards cecum
+          p.vx += (-1.85 - p.vx) * 0.08;
+          p.vy += (Math.sin(p.x * 0.04 + simTime) * 0.35 - p.vy) * 0.08;
+          p.x += p.vx;
+          p.y += p.vy;
+          p.y = Math.max(324, Math.min(366, p.y));
+
+          // When passing through ileocecal valve
+          if (p.x <= 300) {
+            p.vx = -1.5;
+          }
+        } else if (isInCecum(p.x, p.y)) {
+          // In Cecum: swirling reservoir, gradually moving UP into ascending colon
+          const targetVx = Math.sin(simTime + p.y * 0.05) * 0.6;
+          const targetVy = -0.9 + Math.cos(simTime + p.x * 0.05) * 0.4;
+          p.vx += (targetVx - p.vx) * 0.08;
+          p.vy += (targetVy - p.vy) * 0.08;
+          p.x += p.vx;
+          p.y += p.vy;
+
+          if (p.x < 165) p.x = 165;
+          if (p.x > 295) p.x = 295;
+          if (p.y > 392) p.y = 392;
+
+          // Docking on cecum wall if bare spot exists
+          if (p.type === 'PROBIOTIC' && (p.x <= 178 || p.x >= 282) && Math.random() < 0.08) {
+            const nearbyCount = particles.filter(m => m.inColonMucosa && Math.hypot(m.x - p.x, m.y - p.y) < 16).length;
+            if (nearbyCount < 2) {
+              p.inColonMucosa = true;
+              p.baseX = p.x;
+              p.baseY = p.y;
+              p.mucosaSide = 'CECUM';
+              p.vx = 0; p.vy = 0;
+              p.divideCooldown = Math.floor(Math.random() * 240 + 120);
+              effects.push({ type: 'COLONIZE_PULSE', x: p.x, y: p.y, r: 4, alpha: 1.0 });
+            }
+          }
+        } else {
+          // In Ascending Colon: moving UPWARDS (vy < 0)
+          const targetVy = p.opportunistic ? -0.4 : -1.85;
+          const haustraWave = Math.sin(p.y * 0.045 - simTime * 1.5) * 0.4;
+          p.vy += (targetVy - p.vy) * 0.08;
+          p.vx += (haustraWave - p.vx) * 0.08;
+
+          p.x += p.vx;
+          p.y += p.vy;
+
+          if (p.x < 162) { p.x = 162; p.vx *= -0.5; }
+          if (p.x > 298) { p.x = 298; p.vx *= -0.5; }
+
+          // Opportunistic docking on colon wall if bare spot exists
+          if (p.type === 'PROBIOTIC' && (p.x <= 178 || p.x >= 282) && Math.random() < 0.08) {
+            const side = (p.x < 230) ? 'LEFT' : 'RIGHT';
+            const nearbyCount = particles.filter(m => m.inColonMucosa && Math.hypot(m.x - p.x, m.y - p.y) < 16).length;
+            if (nearbyCount < 2) {
+              p.inColonMucosa = true;
+              p.baseX = (side === 'LEFT') ? (165 + Math.random() * 11) : (284 + Math.random() * 11);
+              p.baseY = p.y;
+              p.x = p.baseX;
+              p.mucosaSide = side;
+              p.seeding = false;
+              p.fromAppendix = false;
+              p.vx = 0;
+              p.vy = 0;
+              p.divideCooldown = Math.floor(Math.random() * 240 + 120);
+              effects.push({ type: 'COLONIZE_PULSE', x: p.x, y: p.y, r: 4, alpha: 1.0 });
+            }
+          }
+
+          // Exiting colon at top (超出升結腸直接消失，不需要橫結腸)
+          if (p.y < 30 || p.x < 150 || p.x > 310) {
+            particles.splice(i, 1);
+          }
+        }
+      }
+    }
+
+    // 7. Update sIgA Antibodies
+    for (let i = antibodies.length - 1; i >= 0; i--) {
+      const ab = antibodies[i];
+      ab.x += ab.vx;
+      ab.y += ab.vy;
+      ab.vx *= 0.94;
+      ab.vy *= 0.94;
+      ab.angle += 0.02;
+
+      if (ab.y < 400) ab.y = 400;
+      if (ab.y > 472) ab.y = 472;
+      const spineX = getAppendixSpineX(ab.y);
+      if (Math.abs(ab.x - spineX) > 13) {
+        ab.x = spineX + Math.sign(ab.x - spineX) * 12;
+      }
+
+      ab.life--;
+      if (ab.life <= 0 && antibodies.length > 15) {
+        antibodies.splice(i, 1);
+      }
+    }
+
+    // 8. Update Visual Effects
+    for (let i = effects.length - 1; i >= 0; i--) {
+      const ef = effects[i];
+      if (ef.type === 'TOLERANCE_RING') {
+        ef.r += 1.4;
+        ef.alpha -= 0.022;
+        if (ef.alpha <= 0) effects.splice(i, 1);
+      } else if (ef.type === 'TOUCH_RIPPLE') {
+        ef.r += 2.2;
+        ef.alpha -= 0.05;
+        if (ef.alpha <= 0) effects.splice(i, 1);
+      } else if (ef.type === 'ATTACK_LASER') {
+        ef.progress += 0.1;
+        if (ef.progress >= 1) {
+          const idx = particles.indexOf(ef.target);
+          if (idx !== -1) {
+            effects.push({
+              type: 'LYSIS_BURST',
+              x: ef.target.x,
+              y: ef.target.y,
+              r: 3,
+              alpha: 1
+            });
+            particles.splice(idx, 1);
+          }
+          effects.splice(i, 1);
+        }
+      } else if (ef.type === 'LYSIS_BURST' || ef.type === 'INFLAME_SPARK') {
+        ef.r += 1.2;
+        ef.alpha -= 0.06;
+        if (ef.alpha <= 0) effects.splice(i, 1);
+      } else if (ef.type === 'COLONIZE_PULSE') {
+        ef.r += 0.8;
+        ef.alpha -= 0.045;
+        if (ef.alpha <= 0) effects.splice(i, 1);
+      } else if (ef.type === 'STORM_WAVE') {
+        if (ef.direction === 'UP') {
+          ef.y -= ef.speed;
+          if (ef.y < -80) effects.splice(i, 1);
+        } else {
+          ef.x -= ef.speed;
+          if (ef.x < 240) effects.splice(i, 1);
+        }
+      } else if (ef.type === 'SURGERY_CUT') {
+        ef.alpha -= 0.03;
+        if (ef.alpha <= 0) effects.splice(i, 1);
+      }
+    }
+
+    follicles.forEach(f => {
+      if (f.activePulse > 0) f.activePulse--;
+    });
+
+    updateUI();
+  }
+
+  // Update Dashboard Metrics
+  function updateUI() {
+    const mainProbiotics = particles.filter(p => p.y < 398 && p.type === 'PROBIOTIC').length;
+    const mainPathogens = particles.filter(p => p.y < 398 && p.type === 'PATHOGEN').length;
+
+    let healthPct = Math.round(Math.min(100, (mainProbiotics / 125) * 100 - mainPathogens * 2.2));
+    healthPct = Math.max(0, healthPct);
+
+    healthVal.textContent = `${healthPct}%`;
+    healthBar.style.width = `${healthPct}%`;
+
+    if (healthPct >= 65) {
+      healthBar.style.background = 'linear-gradient(90deg, #10b981, #2ecc71)';
+      healthVal.style.color = '#4ade80';
+    } else if (healthPct >= 30) {
+      healthBar.style.background = 'linear-gradient(90deg, #f59e0b, #fbbf24)';
+      healthVal.style.color = '#fbbf24';
+    } else {
+      healthBar.style.background = 'linear-gradient(90deg, #dc2626, #ef4444)';
+      healthVal.style.color = '#f87171';
+    }
+
+    if (appendixState === 'REMOVED') {
+      pressureVal.textContent = '-- mmHg';
+      pressureBadge.className = 'status-badge warn';
+      pressureBadge.textContent = '✂️ 已切除縫合';
+      organBadge.className = 'status-badge warn';
+      organBadge.textContent = '🔬 對照：無闌尾';
+    } else {
+      const pVal = Math.round(internalPressure);
+      pressureVal.textContent = `${pVal} mmHg`;
+      organBadge.className = 'status-badge';
+      organBadge.textContent = '🛡️ 保留完整闌尾';
+
+      if (appendixState === 'NORMAL') {
+        pressureBadge.className = 'status-badge';
+        pressureBadge.textContent = '🟢 暢通正常';
+      } else if (appendixState === 'BLOCKED') {
+        pressureBadge.className = 'status-badge warn';
+        pressureBadge.textContent = '🟠 糞石阻塞';
+      } else if (appendixState === 'INFLAMED') {
+        pressureBadge.className = 'status-badge danger';
+        pressureBadge.textContent = '🔴 急性發炎';
+      }
+    }
+  }
+
+  // Render Anatomy & Particles with High-DPI & Camera Zoom Transform
+  function draw() {
+    const dpr = canvas.width / LOGICAL_WIDTH;
+    ctx.save();
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+
+    // Apply Camera Zoom & Pan transform
+    ctx.save();
+    ctx.translate(camOffsetX, camOffsetY);
+    ctx.scale(camScale, camScale);
+
+    // Extended background grid to handle pan & zoom gracefully
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.05)';
+    ctx.lineWidth = 1;
+    for (let x = -LOGICAL_WIDTH; x <= LOGICAL_WIDTH * 2; x += 40) {
+      ctx.beginPath(); ctx.moveTo(x, -LOGICAL_HEIGHT); ctx.lineTo(x, LOGICAL_HEIGHT * 2); ctx.stroke();
+    }
+    for (let y = -LOGICAL_HEIGHT; y <= LOGICAL_HEIGHT * 2; y += 40) {
+      ctx.beginPath(); ctx.moveTo(-LOGICAL_WIDTH, y); ctx.lineTo(LOGICAL_WIDTH * 2, y); ctx.stroke();
+    }
+
+    // 1. Draw Anatomical Organs
+    drawAnatomy();
+
+    // 1.5 Draw Mucosal Immune Cells (DC, Treg, Plasma B, Macrophage)
+    drawImmuneCells(simTime);
+
+    // 2. Draw Effects (Storm Waves, Tolerance Rings, Touch Ripples)
+    effects.forEach(ef => {
+      if (ef.type === 'STORM_WAVE') {
+        if (ef.direction === 'UP') {
+          const grad = ctx.createLinearGradient(0, ef.y + 70, 0, ef.y);
+          grad.addColorStop(0, 'rgba(250, 204, 21, 0)');
+          grad.addColorStop(0.5, 'rgba(250, 204, 21, 0.45)');
+          grad.addColorStop(1, 'rgba(250, 204, 21, 0)');
+          ctx.fillStyle = grad;
+          ctx.fillRect(150, ef.y, 160, 70);
+        } else {
+          const grad = ctx.createLinearGradient(ef.x + 85, 0, ef.x, 0);
+          grad.addColorStop(0, 'rgba(250, 204, 21, 0)');
+          grad.addColorStop(0.5, 'rgba(250, 204, 21, 0.42)');
+          grad.addColorStop(1, 'rgba(250, 204, 21, 0)');
+          ctx.fillStyle = grad;
+          ctx.fillRect(ef.x, 318, 85, 54);
+        }
+      } else if (ef.type === 'TOLERANCE_RING') {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(ef.x, ef.y, ef.r, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(46, 204, 113, ${ef.alpha})`;
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+        ctx.restore();
+      } else if (ef.type === 'TOUCH_RIPPLE') {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(ef.x, ef.y, ef.r, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(56, 189, 248, ${ef.alpha})`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.restore();
+      } else if (ef.type === 'COLONIZE_PULSE') {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(ef.x, ef.y, ef.r, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(16, 185, 129, ${ef.alpha})`;
+        ctx.lineWidth = 2.2;
+        ctx.shadowColor = '#10b981';
+        ctx.shadowBlur = 8;
+        ctx.stroke();
+        ctx.restore();
+      }
+    });
+
+    // 3. Draw Particles
+    particles.forEach(p => {
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.angle);
+
+      if (p.type === 'PROBIOTIC') {
+        if (p.inColonMucosa) {
+          ctx.shadowColor = '#10b981';
+          ctx.shadowBlur = 8;
+          ctx.fillStyle = '#10b981'; // Vibrant emerald green for colonized mucosal flora
+        } else if (p.inBiofilm && appendixState !== 'INFLAMED') {
+          ctx.shadowColor = '#2ecc71';
+          ctx.shadowBlur = 7;
+          ctx.fillStyle = '#2ecc71';
+        } else if (p.fromAppendix || p.seeding) {
+          ctx.shadowColor = '#34d399';
+          ctx.shadowBlur = 9;
+          ctx.fillStyle = '#34d399'; // Inoculating/seeding pioneer bacteria from appendix
+        } else if (p.isChymeFlushed) {
+          ctx.shadowColor = '#4ade80';
+          ctx.shadowBlur = 4;
+          ctx.fillStyle = '#86efac'; // Lighter green for bacteria flushed with food chyme
+        } else {
+          ctx.fillStyle = (appendixState === 'INFLAMED' && p.y >= 398) ? '#f97316' : '#2ecc71';
+        }
+        ctx.beginPath();
+        ctx.roundRect(-p.r * 1.2, -p.r * 0.65, p.r * 2.4, p.r * 1.3, p.r * 0.65);
+        ctx.fill();
+      } else if (p.type === 'PATHOGEN') {
+        ctx.shadowColor = '#ef4444';
+        ctx.shadowBlur = 8;
+        ctx.fillStyle = '#9333ea';
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 1.5;
+
+        ctx.beginPath();
+        const spikes = 7;
+        for (let s = 0; s < spikes * 2; s++) {
+          const rad = (s % 2 === 0) ? p.r * 1.35 : p.r * 0.65;
+          const ang = (s * Math.PI) / spikes;
+          const sx = Math.cos(ang) * rad;
+          const sy = Math.sin(ang) * rad;
+          if (s === 0) ctx.moveTo(sx, sy);
+          else ctx.lineTo(sx, sy);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.restore();
+    });
+
+    // 3.5 Draw Demo Bacterial Actors (Immune Training Focus)
+    drawDemoActors(simTime);
+
+    // 4. Draw sIgA Antibodies (Blue Double-Y clamps)
+    if (appendixState !== 'REMOVED') {
+      antibodies.forEach(ab => {
+        ctx.save();
+        ctx.translate(ab.x, ab.y);
+        ctx.rotate(ab.angle);
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1.8;
+        ctx.shadowColor = '#38bdf8';
+        ctx.shadowBlur = 5;
+
+        ctx.beginPath();
+        ctx.moveTo(-5, 0); ctx.lineTo(5, 0);
+        ctx.moveTo(-5, 0); ctx.lineTo(-9, -4);
+        ctx.moveTo(-5, 0); ctx.lineTo(-9, 4);
+        ctx.moveTo(5, 0); ctx.lineTo(9, -4);
+        ctx.moveTo(5, 0); ctx.lineTo(9, 4);
+        ctx.stroke();
+
+        ctx.fillStyle = '#bae6fd';
+        ctx.beginPath();
+        ctx.arc(0, 0, 1.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      });
+    }
+
+    // 5. Draw Fecalith (Draggable Hardened Stone)
+    if (fecalith) {
+      ctx.save();
+      ctx.translate(fecalith.x, fecalith.y);
+      if (isDraggingFecalith) {
+        ctx.shadowColor = '#fbbf24';
+        ctx.shadowBlur = 14;
+      }
+      ctx.fillStyle = '#795548';
+      ctx.strokeStyle = isDraggingFecalith ? '#fbbf24' : '#4e342e';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      const pts = [
+        [-16, -8], [-6, -15], [10, -14], [18, -4],
+        [15, 10], [4, 15], [-11, 13], [-18, 3]
+      ];
+      pts.forEach(([px, py], idx) => {
+        if (idx === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      });
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(215, 204, 200, 0.35)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 8, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('糞石', 0, 4);
+      ctx.restore();
+    }
+
+    // 6. Draw Foreground Effects
+    effects.forEach(ef => {
+      if (ef.type === 'ATTACK_LASER') {
+        ctx.save();
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 2.5;
+        ctx.shadowColor = '#ef4444';
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.moveTo(ef.x1, ef.y1);
+        const curX = ef.x1 + (ef.x2 - ef.x1) * ef.progress;
+        const curY = ef.y1 + (ef.y2 - ef.y1) * ef.progress;
+        ctx.lineTo(curX, curY);
+        ctx.stroke();
+
+        ctx.fillStyle = '#fca5a5';
+        ctx.beginPath();
+        ctx.arc(curX, curY, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      } else if (ef.type === 'LYSIS_BURST' || ef.type === 'INFLAME_SPARK') {
+        ctx.save();
+        ctx.strokeStyle = `rgba(239, 68, 68, ${ef.alpha})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(ef.x, ef.y, ef.r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      } else if (ef.type === 'SURGERY_CUT') {
+        ctx.save();
+        ctx.strokeStyle = `rgba(56, 189, 248, ${ef.alpha})`;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(ef.x - 25, ef.y);
+        ctx.lineTo(ef.x + 25, ef.y);
+        ctx.stroke();
+        ctx.restore();
+      }
+    });
+
+    // 7. Draw Clear Anatomical Labels
+    drawLabels();
+
+    ctx.restore(); // camera transform restore (back to 960x500 logical space)
+
+    // 8. Draw Fixed Screen HUD for Immune Training
+    drawTrainingHUD(simTime);
+
+    ctx.restore(); // DPR scale restore
+  }
+
+  // Draw Concrete Animated Mucosal Immune Cells (DC, Treg, Plasma, Macrophage)
+  function drawImmuneCells(simTime) {
+    if (appendixState === 'REMOVED') return;
+
+    const { dc, treg, plasma, macrophage } = immuneCells;
+
+    // ----------------------------------------------------
+    // 1. Dendritic Cell (DC) - 樹突狀細胞 at (dc.x, dc.y)
+    // ----------------------------------------------------
+    ctx.save();
+    ctx.translate(dc.x, dc.y);
+
+    // Dynamic sampling target
+    let samplingTarget = null;
+    if (trainingTimer > 0 && dc.isSampling) {
+      if (dc.samplePhase === 'PROBIOTIC' && demoProbiotic) {
+        samplingTarget = { x: demoProbiotic.x - dc.x, y: demoProbiotic.y - dc.y };
+      } else if (dc.samplePhase === 'PATHOGEN' && demoPathogen && demoPathogen.alpha > 0) {
+        samplingTarget = { x: demoPathogen.x - dc.x, y: demoPathogen.y - dc.y };
+      }
+    }
+
+    // Branching Dendritic Arms (長度樹突分支偽足)
+    const armDefs = [
+      { baseAngle: 0.1, length: 19, branch: 0.4 },
+      { baseAngle: 1.4, length: 16, branch: -0.3 },
+      { baseAngle: 2.8, length: 17, branch: 0.35 },
+      { baseAngle: 4.2, length: 18, branch: -0.4 },
+      { baseAngle: 5.4, length: 15, branch: 0.3 }
+    ];
+
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 2.0;
+    ctx.lineCap = 'round';
+
+    armDefs.forEach((arm, i) => {
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+
+      let targetX, targetY;
+      if (i === 0 && samplingTarget) {
+        // Extended tactile dendrite arm reaching out across epithelium into lumen
+        targetX = samplingTarget.x;
+        targetY = samplingTarget.y;
+      } else {
+        const wave = Math.sin(simTime * 3 + i * 1.5) * 0.18;
+        const ang = arm.baseAngle + wave;
+        targetX = Math.cos(ang) * arm.length;
+        targetY = Math.sin(ang) * arm.length;
+      }
+
+      const midX = targetX * 0.5 + Math.sin(simTime * 2 + i) * 2;
+      const midY = targetY * 0.5 + Math.cos(simTime * 2 + i) * 2;
+      ctx.quadraticCurveTo(midX, midY, targetX, targetY);
+      ctx.stroke();
+
+      // Sensory bulb tip
+      ctx.fillStyle = (i === 0 && samplingTarget) ? '#67e8f9' : '#38bdf8';
+      ctx.beginPath();
+      ctx.arc(targetX, targetY, (i === 0 && samplingTarget) ? 3.0 : 2.0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Branchlet
+      if (!samplingTarget || i !== 0) {
+        ctx.beginPath();
+        ctx.moveTo(midX, midY);
+        const bAng = arm.baseAngle + arm.branch;
+        ctx.lineTo(midX + Math.cos(bAng) * 7, midY + Math.sin(bAng) * 7);
+        ctx.stroke();
+      }
+    });
+
+    // DC Cell Body (星狀不規則細胞體)
+    ctx.fillStyle = 'rgba(14, 165, 233, 0.45)';
+    ctx.strokeStyle = '#0284c7';
+    ctx.lineWidth = 1.8;
+    ctx.shadowColor = '#38bdf8';
+    ctx.shadowBlur = dc.isSampling ? 10 : 4;
+
+    ctx.beginPath();
+    const bodyPoints = 8;
+    for (let p = 0; p < bodyPoints; p++) {
+      const theta = (p / bodyPoints) * Math.PI * 2;
+      const rad = dc.r + Math.sin(theta * 3 + simTime * 3) * 1.8;
+      const bx = Math.cos(theta) * rad;
+      const by = Math.sin(theta) * rad;
+      if (p === 0) ctx.moveTo(bx, by);
+      else ctx.lineTo(bx, by);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Nucleus
+    ctx.fillStyle = '#0369a1';
+    ctx.beginPath();
+    ctx.arc(0, 0, 4.0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // DC Name badge
+    ctx.fillStyle = '#e0f2fe';
+    ctx.font = 'bold 9px "Inter", "Microsoft JhengHei", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('DC (樹突細胞)', 0, -dc.r - 8);
+
+    // Live Speech Bubble
+    if (trainingTimer > 0 && dc.isSampling) {
+      const bubbleText = dc.samplePhase === 'PROBIOTIC' ? '🔬 採樣：益生菌無害！' :
+                         dc.samplePhase === 'PATHOGEN' ? '🚨 警報：致病菌抗原！' : '📡 偵測中...';
+      const bubbleBg = dc.samplePhase === 'PATHOGEN' ? 'rgba(239, 68, 68, 0.92)' : 'rgba(2, 132, 199, 0.92)';
+      drawSpeechBubble(ctx, 0, -dc.r - 20, bubbleText, bubbleBg);
+    }
+    ctx.restore();
+
+    // ----------------------------------------------------
+    // 2. Regulatory T Cell (Treg) at (treg.x, treg.y)
+    // ----------------------------------------------------
+    ctx.save();
+    ctx.translate(treg.x, treg.y);
+
+    // Tolerance suppression glow rings (TGF-β / IL-10)
+    if (treg.toleranceGlow > 0) {
+      ctx.strokeStyle = `rgba(250, 204, 21, ${treg.toleranceGlow * 0.75})`;
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.arc(0, 0, treg.r + 7 + treg.toleranceGlow * 8, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // Treg Cell Body
+    const tregGrad = ctx.createRadialGradient(0, 0, 2, 0, 0, treg.r);
+    tregGrad.addColorStop(0, '#fef08a');
+    tregGrad.addColorStop(0.7, '#eab308');
+    tregGrad.addColorStop(1, '#ca8a04');
+    ctx.fillStyle = tregGrad;
+    ctx.strokeStyle = '#facc15';
+    ctx.lineWidth = 1.5;
+    ctx.shadowColor = '#facc15';
+    ctx.shadowBlur = treg.toleranceGlow > 0 ? 12 : 4;
+
+    ctx.beginPath();
+    ctx.arc(0, 0, treg.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // CD4 / Foxp3 round nucleus
+    ctx.fillStyle = '#854d0e';
+    ctx.beginPath();
+    ctx.arc(0, 0, 4.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Treg Name badge
+    ctx.fillStyle = '#fef08a';
+    ctx.font = 'bold 9px "Inter", "Microsoft JhengHei", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Treg (調節T細胞)', 0, -treg.r - 6);
+
+    if (treg.toleranceGlow > 0) {
+      drawSpeechBubble(ctx, 0, -treg.r - 18, '🕊️ TGF-β (煞車禁發炎)', 'rgba(202, 138, 4, 0.92)');
+    }
+    ctx.restore();
+
+    // ----------------------------------------------------
+    // 3. Plasma B Cell (B 漿細胞) at (plasma.x, plasma.y)
+    // ----------------------------------------------------
+    ctx.save();
+    ctx.translate(plasma.x, plasma.y);
+
+    const pulseSize = plasma.secretePulse * Math.sin(simTime * 8) * 2;
+
+    // Secretion aura
+    if (plasma.secretePulse > 0) {
+      ctx.strokeStyle = 'rgba(129, 140, 248, 0.65)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, plasma.r + 6 + pulseSize, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // Plasma Cell Body (富含發達粗面內質網 rER)
+    ctx.fillStyle = 'rgba(99, 102, 241, 0.45)';
+    ctx.strokeStyle = '#818cf8';
+    ctx.lineWidth = 1.8;
+    ctx.shadowColor = '#818cf8';
+    ctx.shadowBlur = plasma.secretePulse > 0 ? 10 : 3;
+
+    ctx.beginPath();
+    ctx.ellipse(0, 0, plasma.r + pulseSize, (plasma.r - 1.5) + pulseSize, 0.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Concentric rER texture
+    ctx.strokeStyle = 'rgba(199, 210, 254, 0.4)';
+    ctx.lineWidth = 1.0;
+    ctx.beginPath();
+    ctx.arc(2, 0, 7, -0.9, 0.9);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(3, 0, 5, -1.1, 1.1);
+    ctx.stroke();
+
+    // Eccentric Clock-Face Nucleus (偏心車輪核)
+    ctx.save();
+    ctx.translate(-3, 0);
+    ctx.fillStyle = '#3730a3';
+    ctx.beginPath();
+    ctx.arc(0, 0, 4.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#c7d2fe';
+    ctx.lineWidth = 0.8;
+    for (let s = 0; s < 5; s++) {
+      const sa = (s / 5) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(Math.cos(sa) * 4.2, Math.sin(sa) * 4.2);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // Plasma Cell Name badge
+    ctx.fillStyle = '#e0e7ff';
+    ctx.font = 'bold 9px "Inter", "Microsoft JhengHei", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('漿細胞 (Plasma)', 0, -plasma.r - 7);
+
+    if (plasma.secretePulse > 0) {
+      drawSpeechBubble(ctx, 0, -plasma.r - 19, '🛡️ 分泌 sIgA 抗體', 'rgba(79, 70, 229, 0.92)');
+    }
+    ctx.restore();
+
+    // ----------------------------------------------------
+    // 4. Macrophage (巨噬細胞) at (macrophage.x, macrophage.y)
+    // ----------------------------------------------------
+    ctx.save();
+    ctx.translate(macrophage.x, macrophage.y);
+
+    // Undulating Amoeboid Pseudopodia (變形足輪廓)
+    ctx.fillStyle = macrophage.isHunting ? 'rgba(236, 72, 153, 0.55)' : 'rgba(236, 72, 153, 0.4)';
+    ctx.strokeStyle = macrophage.isHunting ? '#f472b6' : '#db2777';
+    ctx.lineWidth = 2.0;
+    ctx.shadowColor = '#ec4899';
+    ctx.shadowBlur = macrophage.isHunting ? 12 : 5;
+
+    const numNodes = 12;
+    ctx.beginPath();
+    for (let i = 0; i < numNodes; i++) {
+      const angle = (i / numNodes) * Math.PI * 2;
+      let nodeR = macrophage.r;
+
+      // Amoeboid undulation waves
+      nodeR += Math.sin(angle * 3 + simTime * 5) * 2.2;
+      nodeR += Math.cos(angle * 4 - simTime * 3) * 1.5;
+
+      // When hunting, extend pseudopod towards target direction
+      if (macrophage.isHunting && demoPathogen) {
+        const targetAngle = Math.atan2(demoPathogen.y - macrophage.y, demoPathogen.x - macrophage.x);
+        const angleDiff = Math.atan2(Math.sin(angle - targetAngle), Math.cos(angle - targetAngle));
+        if (Math.abs(angleDiff) < 0.8) {
+          nodeR += (1.0 - Math.abs(angleDiff) / 0.8) * 5.5; // protruding pseudopod arm
+        }
+      }
+
+      const nx = Math.cos(angle) * nodeR;
+      const ny = Math.sin(angle) * nodeR;
+      if (i === 0) ctx.moveTo(nx, ny);
+      else ctx.lineTo(nx, ny);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Kidney-shaped Nucleus (典型腎形核)
+    ctx.fillStyle = '#831843';
+    ctx.beginPath();
+    ctx.arc(-2, -1, 4.5, 0.5, Math.PI * 1.5);
+    ctx.quadraticCurveTo(-1, 0, -2, 3);
+    ctx.fill();
+
+    // Internal Lysosome Granules (溶酶體顆粒)
+    const lysoCoords = [
+      [3, 3], [4, -2], [1, 5], [-4, -3], [0, -4]
+    ];
+    lysoCoords.forEach(([lx, ly], idx) => {
+      const lysoPulse = Math.sin(simTime * 6 + idx) * 0.5;
+      ctx.fillStyle = (macrophage.isEngulfing) ? '#fbbf24' : '#f472b6';
+      ctx.beginPath();
+      ctx.arc(lx + lysoPulse, ly - lysoPulse, 1.4, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // If engulfing, draw Phagocytic Cup arms (胞吞杯偽足環抱)
+    if (macrophage.isEngulfing && macrophage.engulfProgress > 0) {
+      ctx.strokeStyle = '#f472b6';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, macrophage.r + 3, -1.2, 1.2);
+      ctx.stroke();
+    }
+
+    // Macrophage Name badge
+    ctx.fillStyle = '#fce7f3';
+    ctx.font = 'bold 9px "Inter", "Microsoft JhengHei", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('巨噬細胞', 0, -macrophage.r - 8);
+
+    if (macrophage.isHunting) {
+      if (macrophage.isEngulfing) {
+        if (macrophage.engulfProgress >= 0.85) {
+          drawSpeechBubble(ctx, 0, -macrophage.r - 20, '💥 溶酶體裂解消化！', 'rgba(220, 38, 38, 0.95)');
+        } else {
+          drawSpeechBubble(ctx, 0, -macrophage.r - 20, '🥄 胞吞杯形成中...', 'rgba(219, 39, 119, 0.95)');
+        }
+      } else {
+        drawSpeechBubble(ctx, 0, -macrophage.r - 20, '⚔️ 變形偽足追捕！', 'rgba(219, 39, 119, 0.95)');
+      }
+    }
+    ctx.restore();
+  }
+
+  // Draw Demo Bacteria Actors with Labels and Interactive States
+  function drawDemoActors(simTime) {
+    if (appendixState === 'REMOVED') return;
+
+    // A. Demo Friendly Probiotic
+    if (demoProbiotic && demoProbiotic.alpha > 0) {
+      ctx.save();
+      ctx.translate(demoProbiotic.x, demoProbiotic.y);
+      ctx.globalAlpha = demoProbiotic.alpha;
+
+      // Outer green aura
+      ctx.shadowColor = '#22c55e';
+      ctx.shadowBlur = 12;
+      ctx.fillStyle = '#22c55e';
+      ctx.strokeStyle = '#86efac';
+      ctx.lineWidth = 1.6;
+
+      // Bacillary rod shape
+      ctx.beginPath();
+      ctx.roundRect(-demoProbiotic.r * 1.3, -demoProbiotic.r * 0.7, demoProbiotic.r * 2.6, demoProbiotic.r * 1.4, demoProbiotic.r * 0.7);
+      ctx.fill();
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // Dynamic pili / flagella waving
+      ctx.strokeStyle = 'rgba(134, 239, 172, 0.6)';
+      ctx.lineWidth = 1.0;
+      for (let f = 0; f < 3; f++) {
+        const fy = -demoProbiotic.r * 0.5 + f * demoProbiotic.r * 0.5;
+        const wave = Math.sin(simTime * 8 + f) * 3;
+        ctx.beginPath();
+        ctx.moveTo(demoProbiotic.r * 1.3, fy);
+        ctx.quadraticCurveTo(demoProbiotic.r * 1.3 + 4, fy + wave, demoProbiotic.r * 1.3 + 7, fy + wave * 0.5);
+        ctx.stroke();
+      }
+
+      // Anchored sIgA markers on probiotic coat
+      if (demoProbiotic.status === 'TOLERATED' || demoProbiotic.status === 'ANCHORED') {
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1.5;
+        [-4, 4].forEach(ox => {
+          ctx.beginPath();
+          ctx.moveTo(ox, -5); ctx.lineTo(ox, -9);
+          ctx.moveTo(ox, -9); ctx.lineTo(ox - 3, -12);
+          ctx.moveTo(ox, -9); ctx.lineTo(ox + 3, -12);
+          ctx.stroke();
+        });
+      }
+
+      // Name & Status Tag
+      ctx.font = 'bold 9.5px "Inter", "Microsoft JhengHei", sans-serif';
+      ctx.fillStyle = '#86efac';
+      ctx.textAlign = 'center';
+      ctx.fillText(demoProbiotic.name, 0, -demoProbiotic.r - 9);
+
+      if (demoProbiotic.status === 'ANCHORED') {
+        ctx.fillStyle = '#4ade80';
+        ctx.font = 'bold 8.5px sans-serif';
+        ctx.fillText('🌿 錨定於生物膜', 0, demoProbiotic.r + 10);
+      } else if (demoProbiotic.status === 'TOLERATED') {
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = 'bold 8.5px sans-serif';
+        ctx.fillText('🛡️ sIgA 包裹引導中', 0, demoProbiotic.r + 10);
+      }
+      ctx.restore();
+    }
+
+    // B. Demo Invading Pathogen
+    if (demoPathogen && demoPathogen.alpha > 0) {
+      ctx.save();
+      ctx.translate(demoPathogen.x, demoPathogen.y);
+      ctx.globalAlpha = demoPathogen.alpha;
+
+      ctx.shadowColor = '#ef4444';
+      ctx.shadowBlur = 14;
+      ctx.fillStyle = '#9333ea';
+      ctx.strokeStyle = '#ef4444';
+      ctx.lineWidth = 2.0;
+
+      // Spiky toxic body
+      ctx.beginPath();
+      const spikes = 8;
+      for (let s = 0; s < spikes * 2; s++) {
+        const rad = (s % 2 === 0) ? demoPathogen.r * 1.4 : demoPathogen.r * 0.7;
+        const ang = (s * Math.PI) / spikes;
+        const sx = Math.cos(ang) * rad;
+        const sy = Math.sin(ang) * rad;
+        if (s === 0) ctx.moveTo(sx, sy);
+        else ctx.lineTo(sx, sy);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // Toxic aura ring
+      ctx.strokeStyle = 'rgba(239, 68, 68, 0.55)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(0, 0, demoPathogen.r + 3 + Math.sin(simTime * 8) * 1.5, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Name & Status Tag
+      ctx.font = 'bold 9.5px "Inter", "Microsoft JhengHei", sans-serif';
+      ctx.fillStyle = '#fca5a5';
+      ctx.textAlign = 'center';
+      ctx.fillText(demoPathogen.name, 0, -demoPathogen.r - 10);
+
+      if (demoPathogen.status === 'ENGULFED') {
+        ctx.fillStyle = '#f87171';
+        ctx.font = 'bold 8.5px sans-serif';
+        ctx.fillText('⚠️ 胞吞溶解中...', 0, demoPathogen.r + 11);
+      } else if (demoPathogen.status === 'DETECTED') {
+        ctx.fillStyle = '#ef4444';
+        ctx.font = 'bold 8.5px sans-serif';
+        ctx.fillText('🚨 標記鎖定！', 0, demoPathogen.r + 11);
+      }
+      ctx.restore();
+    }
+  }
+
+  // Draw Micro Speech Bubble
+  function drawSpeechBubble(ctx, x, y, text, bgColor) {
+    ctx.save();
+    ctx.font = 'bold 9.5px "Inter", "Microsoft JhengHei", sans-serif';
+    const textWidth = ctx.measureText(text).width;
+    const padX = 6;
+    const h = 16;
+    const w = textWidth + padX * 2;
+    const bx = x - w / 2;
+    const by = y - h;
+
+    ctx.fillStyle = bgColor;
+    ctx.beginPath();
+    ctx.roundRect(bx, by, w, h, 4);
+    ctx.fill();
+
+    // Triangle pointer
+    ctx.beginPath();
+    ctx.moveTo(x - 3, by + h);
+    ctx.lineTo(x + 3, by + h);
+    ctx.lineTo(x, by + h + 3);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x, by + h / 2);
+    ctx.restore();
+  }
+
+  // Draw Fixed Screen HUD Banner for Immune Training
+  function drawTrainingHUD(simTime) {
+    if (trainingTimer <= 0) return;
+
+    ctx.save();
+    const hudW = Math.min(680, LOGICAL_WIDTH - 40);
+    const hudH = 50;
+    const hudX = (LOGICAL_WIDTH - hudW) / 2;
+    const hudY = 16;
+
+    // Glowing translucent dark background panel
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.90)';
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 1.5;
+    ctx.shadowColor = '#38bdf8';
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    ctx.roundRect(hudX, hudY, hudW, hudH, 10);
+    ctx.fill();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Phase Indicator Tag
+    let phaseBadge = '';
+    let badgeColor = '#38bdf8';
+    if (trainingTimer > 360) {
+      phaseBadge = 'STAGE 1/4 • 樹突細胞抗原採樣 (Antigen Sampling)';
+      badgeColor = '#38bdf8';
+    } else if (trainingTimer > 240) {
+      phaseBadge = 'STAGE 2/4 • Treg 免疫耐受 ＆ 漿細胞分泌 sIgA 錨定';
+      badgeColor = '#facc15';
+    } else if (trainingTimer > 90) {
+      phaseBadge = 'STAGE 3/4 • 巨噬細胞變形足追獵 ＆ 胞吞裂解 (Phagocytosis)';
+      badgeColor = '#ec4899';
+    } else {
+      phaseBadge = 'STAGE 4/4 • 致病菌完全清除，回復巡邏常態 (Homeostasis)';
+      badgeColor = '#22c55e';
+    }
+
+    ctx.font = 'bold 11px "Inter", "Microsoft JhengHei", sans-serif';
+    ctx.fillStyle = badgeColor;
+    ctx.textAlign = 'left';
+    ctx.fillText(phaseBadge, hudX + 16, hudY + 18);
+
+    // Dynamic description line
+    ctx.font = '12px "Inter", "Microsoft JhengHei", sans-serif';
+    ctx.fillStyle = '#f1f5f9';
+    ctx.fillText(trainingPhaseText, hudX + 16, hudY + 36);
+
+    // Live Progress Bar at bottom of HUD
+    const prog = 1.0 - (trainingTimer / 480);
+    const barW = hudW - 32;
+    const barH = 3;
+    const barX = hudX + 16;
+    const barY = hudY + hudH - 5;
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.beginPath();
+    ctx.roundRect(barX, barY, barW, barH, 1.5);
+    ctx.fill();
+
+    ctx.fillStyle = badgeColor;
+    ctx.shadowColor = badgeColor;
+    ctx.shadowBlur = 4;
+    ctx.beginPath();
+    ctx.roundRect(barX, barY, barW * prog, barH, 1.5);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    ctx.restore();
+  }
+
+  function drawAnatomy() {
+    ctx.save();
+
+    // --- A. Small Intestine (Terminal Ileum) ---
+    // Coming from RIGHT to LEFT into the Cecum
+    ctx.fillStyle = 'rgba(190, 85, 110, 0.22)';
+    ctx.strokeStyle = '#e11d48';
+    ctx.lineWidth = 3.5;
+
+    // Ileum borders
+    ctx.beginPath();
+    ctx.moveTo(940, 320);
+    ctx.lineTo(300, 320);
+    ctx.moveTo(940, 370);
+    ctx.lineTo(300, 370);
+    ctx.stroke();
+
+    // Ileum interior fill
+    ctx.fillRect(300, 320, 640, 50);
+
+    // Circular folds (Plicae circulares) inside ileum
+    ctx.strokeStyle = 'rgba(244, 63, 94, 0.25)';
+    ctx.lineWidth = 2;
+    for (let ix = 345; ix <= 915; ix += 42) {
+      ctx.beginPath();
+      ctx.moveTo(ix, 322);
+      ctx.quadraticCurveTo(ix - 8, 345, ix, 368);
+      ctx.stroke();
+    }
+
+    // One-way Ileocecal Valve (迴盲瓣) at junction (x: 295~305, y: 320~370)
+    // Flaps point towards the left (into Cecum cavity)
+    const valveOpen = Math.sin(simTime * 2) * 4 + 7;
+    ctx.strokeStyle = '#fda4af';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    // Upper valve lip
+    ctx.moveTo(300, 320);
+    ctx.lineTo(280, 342 - valveOpen);
+    // Lower valve lip
+    ctx.moveTo(300, 370);
+    ctx.lineTo(280, 348 + valveOpen);
+    ctx.stroke();
+
+    // Valve sphincter base glow
+    ctx.fillStyle = '#fda4af';
+    ctx.beginPath();
+    ctx.arc(300, 320, 4, 0, Math.PI * 2);
+    ctx.arc(300, 370, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // --- B. Cecum & Ascending Colon ---
+    // Ascending colon goes from bottom-left UPWARDS to top (only ascending colon)
+    ctx.fillStyle = 'rgba(159, 43, 75, 0.26)';
+    ctx.strokeStyle = '#f43f5e';
+    ctx.lineWidth = 4.5;
+
+    ctx.beginPath();
+    // Start at Appendix Orifice (Left edge: x: 212, y: 398)
+    if (appendixState === 'REMOVED') {
+      ctx.moveTo(212, 398);
+      ctx.lineTo(238, 398);
+    } else {
+      ctx.moveTo(212, 398);
+    }
+
+    // Lower Cecum Left border (curves from 212, 398 to 160, 385)
+    ctx.quadraticCurveTo(168, 398, 160, 385);
+
+    // Left wall with Haustra (結腸袋) going UPWARDS from 385 to 30
+    // Segment 1: 385 -> 310
+    ctx.quadraticCurveTo(140, 348, 160, 310);
+    // Segment 2: 310 -> 240
+    ctx.quadraticCurveTo(140, 275, 160, 240);
+    // Segment 3: 240 -> 170
+    ctx.quadraticCurveTo(140, 205, 160, 170);
+    // Segment 4: 170 -> 100
+    ctx.quadraticCurveTo(140, 135, 160, 100);
+    // Segment 5: 100 -> 30
+    ctx.quadraticCurveTo(140, 65, 160, 30);
+
+    // Open top end of Ascending Colon (lumen continues upward; lift to right wall at 300, 30)
+    ctx.moveTo(300, 30);
+
+    // Right wall with Haustra going DOWNWARDS from 30 to 320
+    // Segment 5: 30 -> 100
+    ctx.quadraticCurveTo(320, 65, 300, 100);
+    // Segment 4: 100 -> 170
+    ctx.quadraticCurveTo(320, 135, 300, 170);
+    // Segment 3: 170 -> 240
+    ctx.quadraticCurveTo(320, 205, 300, 240);
+    // Segment 2: 240 -> 320 (meeting top of ileum)
+    ctx.quadraticCurveTo(320, 280, 300, 320);
+
+    // Move to bottom of ileum junction at (300, 370)
+    ctx.moveTo(300, 370);
+
+    // Lower Cecum Right border (curves from 300, 370 to 238, 398)
+    ctx.quadraticCurveTo(288, 398, 238, 398);
+
+    ctx.stroke();
+
+    // Top open rim dashed indicator showing lumen continuation
+    ctx.save();
+    ctx.strokeStyle = 'rgba(244, 63, 94, 0.4)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(160, 30);
+    ctx.lineTo(300, 30);
+    ctx.stroke();
+    ctx.restore();
+
+    // Fill Cecum & Colon interior
+    ctx.fillStyle = 'rgba(136, 19, 55, 0.22)';
+    // Cecum fill
+    ctx.beginPath();
+    ctx.roundRect(158, 312, 144, 82, [0, 0, 20, 20]);
+    ctx.fill();
+    // Colon vertical stem fill (y: 30 to 312)
+    ctx.beginPath();
+    ctx.roundRect(158, 30, 144, 285, 0);
+    ctx.fill();
+
+    // Colonic Mucosa Biofilm Linings (大腸兩側緻密黏液定植保護層)
+    ctx.fillStyle = 'rgba(16, 185, 129, 0.09)';
+    ctx.beginPath();
+    ctx.roundRect(158, 30, 24, 280, 4);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.roundRect(278, 30, 24, 280, 4);
+    ctx.fill();
+
+    // Subtle upward food chyme stream current lines in center of colon
+    ctx.strokeStyle = 'rgba(251, 191, 36, 0.08)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(215, 305); ctx.lineTo(215, 35);
+    ctx.moveTo(245, 305); ctx.lineTo(245, 35);
+    ctx.stroke();
+
+    // Taenia Coli (結腸帶 - longitudinal muscular band along the colon)
+    ctx.strokeStyle = 'rgba(253, 164, 175, 0.18)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(230, 390);
+    ctx.lineTo(230, 30);
+    ctx.stroke();
+
+    // Surgical Suture marks if appendix is removed
+    if (appendixState === 'REMOVED') {
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 2.5;
+      for (let sx = 214; sx <= 236; sx += 6) {
+        ctx.beginPath();
+        ctx.moveTo(sx, 393);
+        ctx.lineTo(sx + 3, 403);
+        ctx.stroke();
+      }
+    }
+
+    // --- C. Vermiform Appendix (闌尾) ---
+    if (appendixState !== 'REMOVED') {
+      const swell = (appendixState === 'BLOCKED' || appendixState === 'INFLAMED')
+        ? Math.min(20, (internalPressure - 12) * 0.24)
+        : 0;
+
+      const isInflamed = appendixState === 'INFLAMED';
+      ctx.fillStyle = isInflamed
+        ? 'rgba(220, 38, 38, 0.44)'
+        : 'rgba(159, 43, 75, 0.35)';
+      ctx.strokeStyle = isInflamed ? '#ef4444' : '#fb7185';
+      ctx.lineWidth = isInflamed ? 5.5 : 4.0;
+
+      if (isInflamed) {
+        ctx.shadowColor = '#ef4444';
+        ctx.shadowBlur = 18;
+      }
+
+      ctx.beginPath();
+      const steps = 24;
+      // Left edge of appendix
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const py = 398 + t * 77;
+        const spineX = getAppendixSpineX(py);
+        const w = 13 + swell * Math.sin(t * Math.PI);
+        const lx = spineX - w;
+        if (i === 0) ctx.moveTo(lx, py);
+        else ctx.lineTo(lx, py);
+      }
+      // Rounded tip
+      const tipY = 475;
+      const tipX = getAppendixSpineX(tipY);
+      ctx.arc(tipX, tipY, 13 + swell * 0.2, Math.PI, 0, true);
+
+      // Right edge of appendix back up
+      for (let i = steps; i >= 0; i--) {
+        const t = i / steps;
+        const py = 398 + t * 77;
+        const spineX = getAppendixSpineX(py);
+        const w = 13 + swell * Math.sin(t * Math.PI);
+        const rx = spineX + w;
+        ctx.lineTo(rx, py);
+      }
+      ctx.fill();
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // Glowing Green Mucus Biofilm lining
+      if (!isInflamed) {
+        ctx.strokeStyle = 'rgba(46, 204, 113, 0.35)';
+        ctx.lineWidth = 7;
+        ctx.lineCap = 'round';
+        // Left biofilm lining
+        ctx.beginPath();
+        for (let i = 2; i <= steps - 2; i++) {
+          const t = i / steps;
+          const py = 398 + t * 77;
+          const spineX = getAppendixSpineX(py);
+          if (i === 2) ctx.moveTo(spineX - 7, py);
+          else ctx.lineTo(spineX - 7, py);
+        }
+        ctx.stroke();
+
+        // Right biofilm lining
+        ctx.beginPath();
+        for (let i = 2; i <= steps - 2; i++) {
+          const t = i / steps;
+          const py = 398 + t * 77;
+          const spineX = getAppendixSpineX(py);
+          if (i === 2) ctx.moveTo(spineX + 7, py);
+          else ctx.lineTo(spineX + 7, py);
+        }
+        ctx.stroke();
+      }
+
+      // Draw 3 Lymphoid Follicles (次級淋巴濾泡)
+      follicles.forEach((f) => {
+        ctx.save();
+        const pulseR = f.activePulse > 0 ? Math.sin(simTime * 4) * 3 : 0;
+        ctx.fillStyle = f.activePulse > 0 ? 'rgba(250, 204, 21, 0.42)' : 'rgba(250, 204, 21, 0.24)';
+        ctx.strokeStyle = f.activePulse > 0 ? '#facc15' : '#eab308';
+        ctx.lineWidth = 2;
+
+        ctx.beginPath();
+        ctx.arc(f.x, f.y, f.r + pulseR, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#fef08a';
+        for (let b = 0; b < 4; b++) {
+          const bx = f.x + Math.cos(b * 1.6 + simTime) * 5;
+          const by = f.y + Math.sin(b * 1.6 + simTime) * 5;
+          ctx.beginPath();
+          ctx.arc(bx, by, 2.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      });
+    }
+
+    ctx.restore();
+  }
+
+  function drawLabels() {
+    ctx.save();
+
+    // 1. Ileum Label (Right to Left)
+    ctx.font = 'bold 13px "Inter", "Microsoft JhengHei", sans-serif';
+    ctx.fillStyle = '#fda4af';
+    ctx.fillText('【小腸末端 / 迴腸 Ileum】 ── 食糜消化水流 ⬅ ⬅ ⬅', 510, 310);
+    ctx.font = '11px "Inter", "Microsoft JhengHei", sans-serif';
+    ctx.fillStyle = '#cbd5e1';
+    ctx.fillText('由右向左經單向迴盲瓣注入盲腸', 580, 395);
+
+    // Leftward flow arrows inside ileum
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
+    ctx.lineWidth = 2;
+    for (let ax = 880; ax >= 380; ax -= 110) {
+      ctx.beginPath();
+      ctx.moveTo(ax, 345);
+      ctx.lineTo(ax - 36, 345);
+      ctx.lineTo(ax - 30, 340);
+      ctx.moveTo(ax - 36, 345);
+      ctx.lineTo(ax - 30, 350);
+      ctx.stroke();
+    }
+
+    // 2. Ileocecal valve Label
+    ctx.font = '11px "Inter", "Microsoft JhengHei", sans-serif';
+    ctx.fillStyle = '#fecdd3';
+    ctx.fillText('迴盲瓣 (單向閥) ➔', 255, 314);
+
+    // 3. Cecum Label
+    ctx.font = 'bold 13px "Inter", "Microsoft JhengHei", sans-serif';
+    ctx.fillStyle = '#fda4af';
+    ctx.fillText('【盲腸 Cecum】', 168, 352);
+    ctx.font = '10px "Inter", "Microsoft JhengHei", sans-serif';
+    ctx.fillStyle = '#cbd5e1';
+    ctx.fillText('寬闊緩衝袋 (點此解析)', 168, 368);
+
+    // 4. Colon Label & Upward Arrows
+    ctx.font = 'bold 13px "Inter", "Microsoft JhengHei", sans-serif';
+    ctx.fillStyle = '#fda4af';
+    ctx.fillText('【大腸幹道 / 升結腸】', 165, 142);
+    ctx.font = '11px "Inter", "Microsoft JhengHei", sans-serif';
+    ctx.fillStyle = '#cbd5e1';
+    ctx.fillText('蠕動水流向上 ⬆ ⬆ ⬆', 165, 160);
+
+    // Upward arrows along colon
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.16)';
+    ctx.lineWidth = 2;
+    for (let ay of [270, 200, 130, 65]) {
+      ctx.beginPath();
+      ctx.moveTo(230, ay);
+      ctx.lineTo(230, ay - 32);
+      ctx.lineTo(225, ay - 26);
+      ctx.moveTo(230, ay - 32);
+      ctx.lineTo(235, ay - 26);
+      ctx.stroke();
+    }
+
+    ctx.font = '11px "Inter", "Microsoft JhengHei", sans-serif';
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText('⬆ 向上排出 (超出即離開)', 165, 22);
+
+    // 5. Appendix Labels
+    if (appendixState !== 'REMOVED') {
+      ctx.font = 'bold 13px "Inter", "Microsoft JhengHei", sans-serif';
+      ctx.fillStyle = appendixState === 'INFLAMED' ? '#f87171' : '#5eead4';
+      ctx.fillText('【闌尾 Appendix (盲端死胡同)】', 305, 432);
+
+      ctx.font = '11px "Inter", "Microsoft JhengHei", sans-serif';
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillText('• 流速 ≈ 0 (腹瀉沖不走的防空洞)', 305, 450);
+      ctx.fillText('• 綠色內襯：緻密黏液生物膜 (Biofilm)', 305, 466);
+      ctx.fillText('• 黃色圓區：淋巴濾泡 (點擊釋放 sIgA)', 305, 482);
+
+      ctx.strokeStyle = '#64748b';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(225, 400);
+      ctx.lineTo(195, 420);
+      ctx.stroke();
+      ctx.fillStyle = '#e2e8f0';
+      ctx.fillText('瓶頸口 (~0.5cm)', 95, 424);
+    } else {
+      ctx.font = 'bold 13px "Inter", "Microsoft JhengHei", sans-serif';
+      ctx.fillStyle = '#fbbf24';
+      ctx.fillText('✂️ 闌尾已切除並縫合 (盲腸與大腸仍暢通)', 150, 435);
+    }
+
+    ctx.restore();
+  }
+
+  function loop() {
+    update();
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  initSimulation(false);
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

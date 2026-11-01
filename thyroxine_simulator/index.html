@@ -1,0 +1,1776 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>甲狀腺素逐步促進代謝與產熱動態模擬器</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Noto Sans TC', sans-serif;
+      user-select: none;
+      background-color: #030712;
+      color: #f3f4f6;
+    }
+    .font-mono-code {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0b0f19;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #374151;
+      border-radius: 3px;
+    }
+    @keyframes glow-pulse {
+      0%, 100% { box-shadow: 0 0 16px rgba(245, 158, 11, 0.35); border-color: rgba(245, 158, 11, 0.85); }
+      50% { box-shadow: 0 0 24px rgba(239, 68, 68, 0.45); border-color: rgba(239, 68, 68, 0.9); }
+    }
+    .active-narrative-border {
+      animation: glow-pulse 3s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col bg-slate-950 text-slate-100 antialiased overflow-x-hidden">
+
+  <!-- ================= TOP HEADER & HORMONE MASTER CONTROLS ================= -->
+  <header class="bg-slate-900/95 backdrop-blur-md border-b border-slate-800 sticky top-0 z-40 px-3 sm:px-5 py-2.5 shadow-xl">
+    <div class="max-w-[1520px] mx-auto flex flex-col lg:flex-row items-center justify-between gap-2.5">
+      
+      <!-- Brand & Title -->
+      <div class="flex items-center gap-3 w-full lg:w-auto justify-between">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500 via-rose-500 to-purple-600 flex items-center justify-center shadow-lg border border-amber-300/30 shrink-0">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.3" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+            </svg>
+          </div>
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <h1 class="text-sm sm:text-base font-black tracking-tight text-white">
+                甲狀腺素逐步促進細胞代謝與產熱機制模擬器
+              </h1>
+              <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                高中 / 資優專用・嚴密生物因果版
+              </span>
+            </div>
+            <p class="text-[11px] text-slate-400 hidden sm:block">
+              真實分子機械循環：E1/E2 幫浦閘門水解 ATP ➔ SGLT 貫穿轉運葡萄糖 ➔ 呼吸鏈質子泵 ➔ UCP 碰撞產熱
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mode Switcher -->
+      <div class="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 w-full lg:w-auto justify-center">
+        <button id="btnModeStep" onclick="setAppMode('step')" class="flex-1 lg:flex-initial px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 bg-gradient-to-r from-amber-500 to-orange-600 text-slate-950 shadow-md">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+          非同步逐步解說 (Step 1~6)
+        </button>
+        <button id="btnModeSync" onclick="setAppMode('sync')" class="flex-1 lg:flex-initial px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 text-slate-400 hover:text-white">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          同步全系統動態運作
+        </button>
+      </div>
+
+      <!-- T3/T4 Master Slider -->
+      <div class="flex items-center gap-2 bg-slate-950/90 px-3 py-1.5 rounded-xl border border-slate-800 w-full lg:w-auto justify-between">
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-bold text-purple-300 whitespace-nowrap flex items-center gap-1">
+            <span class="w-2 h-2 rounded-full bg-purple-400 animate-ping"></span>
+            T₃/T₄:
+          </span>
+          <input type="range" id="t3Slider" min="5" max="100" value="65" class="w-24 sm:w-28 accent-amber-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg">
+          <span id="t3Badge" class="font-mono-code text-xs font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 min-w-[2.8rem] text-center">
+            65%
+          </span>
+        </div>
+
+        <div class="flex items-center gap-1">
+          <button onclick="setHormonePreset(15)" class="px-2 py-0.5 text-[11px] font-semibold rounded bg-blue-950 hover:bg-blue-900 text-blue-300 border border-blue-700/50 transition active:scale-95">
+            低下
+          </button>
+          <button onclick="setHormonePreset(50)" class="px-2 py-0.5 text-[11px] font-semibold rounded bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-700/50 transition active:scale-95">
+            正常
+          </button>
+          <button onclick="setHormonePreset(90)" class="px-2 py-0.5 text-[11px] font-semibold rounded bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-700/50 transition active:scale-95">
+            亢進
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- ================= MOLECULAR LEGEND CARD ================= -->
+  <section class="max-w-[1520px] mx-auto w-full px-3 sm:px-5 pt-2">
+    <div class="bg-slate-900/90 rounded-xl border border-slate-800 p-2 sm:p-2.5 shadow-lg flex flex-wrap items-center justify-between gap-2 text-xs">
+      <div class="flex items-center gap-1.5 text-slate-300 font-bold shrink-0">
+        <span class="text-amber-400 text-sm">🧪</span>
+        <span>實體分子圖例對照：</span>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2 sm:gap-3.5">
+        <div class="flex items-center gap-1.5 bg-slate-950 px-2 py-0.5 rounded-lg border border-purple-800/50">
+          <span class="inline-block w-3 h-3 bg-purple-500 rotate-45 rounded-[2px] shadow-[0_0_6px_#c084fc]"></span>
+          <span class="text-purple-300 font-mono-code font-bold text-[11px]">T₃ (甲狀腺素)</span>
+        </div>
+        <div class="flex items-center gap-1.5 bg-slate-950 px-2 py-0.5 rounded-lg border border-cyan-800/50">
+          <span class="inline-block w-3.5 h-3.5 rounded-full bg-cyan-400 text-slate-950 text-[9px] font-black text-center leading-3">+</span>
+          <span class="text-cyan-300 font-mono-code font-bold text-[11px]">Na⁺ (鈉離子)</span>
+        </div>
+        <div class="flex items-center gap-1.5 bg-slate-950 px-2 py-0.5 rounded-lg border border-indigo-800/50">
+          <span class="inline-block w-3.5 h-3.5 rounded-full bg-indigo-400 text-slate-950 text-[9px] font-black text-center leading-3">+</span>
+          <span class="text-indigo-300 font-mono-code font-bold text-[11px]">K⁺ (鉀離子)</span>
+        </div>
+        <div class="flex items-center gap-1.5 bg-slate-950 px-2 py-0.5 rounded-lg border border-emerald-800/50">
+          <span class="inline-block w-3.5 h-3.5 bg-emerald-400 rounded-sm shadow-[0_0_6px_#34d399]"></span>
+          <span class="text-emerald-300 font-mono-code font-bold text-[11px]">Glc (葡萄糖)</span>
+        </div>
+        <div class="flex items-center gap-1.5 bg-slate-950 px-2 py-0.5 rounded-lg border border-yellow-800/50">
+          <span class="inline-block px-1 py-[1px] bg-yellow-400 text-slate-950 text-[9px] font-black rounded font-mono-code leading-none shadow-[0_0_8px_#facc15]">ATP</span>
+          <span class="text-yellow-300 font-mono-code font-bold text-[11px]">ATP (~P~P~P)</span>
+        </div>
+        <div class="flex items-center gap-1.5 bg-slate-950 px-2 py-0.5 rounded-lg border border-orange-800/50">
+          <span class="inline-block px-1 py-[1px] bg-orange-500 text-slate-950 text-[9px] font-black rounded font-mono-code leading-none">ADP</span>
+          <span class="text-orange-300 font-mono-code font-bold text-[11px]">ADP + Pi</span>
+        </div>
+        <div class="flex items-center gap-1.5 bg-slate-950 px-2 py-0.5 rounded-lg border border-sky-800/50">
+          <span class="inline-block w-3 h-3 rounded-full bg-sky-400 text-slate-950 text-[9px] font-bold text-center leading-3">+</span>
+          <span class="text-sky-300 font-mono-code font-bold text-[11px]">H⁺ (質子)</span>
+        </div>
+        <div class="flex items-center gap-1.5 bg-slate-950 px-2 py-0.5 rounded-lg border border-rose-800/50">
+          <span class="text-xs">🔥</span>
+          <span class="text-rose-400 font-mono-code font-bold text-[11px]">UCP 碰撞熱波</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= MAIN WORKSPACE (CANVAS + DASHBOARD) ================= -->
+  <main class="max-w-[1520px] mx-auto w-full px-3 sm:px-5 py-2.5 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
+
+    <!-- LEFT 8 COLS: Cellular Canvas & Step Explanation Box -->
+    <div class="lg:col-span-8 flex flex-col gap-2.5">
+      
+      <!-- Step Narrative Explanation Card -->
+      <div id="stepNarrativeBox" class="bg-slate-900/95 rounded-2xl border-2 border-amber-500/80 p-3 shadow-xl active-narrative-border transition-all">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 pb-1.5 mb-1.5 border-b border-slate-800">
+          <div class="flex items-center gap-2">
+            <span id="narrativeBadge" class="px-2 py-0.5 rounded text-xs font-mono-code font-black bg-amber-500 text-slate-950">
+              STEP 1 / 6
+            </span>
+            <h2 id="narrativeTitle" class="text-sm sm:text-base font-black text-white">
+              跨膜進入與核內受體結合 (Nuclear Receptor Binding)
+            </h2>
+          </div>
+          <span id="narrativeFormula" class="text-xs font-mono-code px-2 py-0.5 rounded bg-slate-950 text-amber-300 border border-slate-800 shrink-0">
+            T₄ ➔ T₃ + TR/RXR ➔ 代謝 mRNA 轉錄釋出
+          </span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-2 text-xs leading-relaxed">
+          <div class="md:col-span-8 text-slate-200">
+            <p id="narrativeDesc">
+              血液中的游離 T₄/T₃ 跨膜進入細胞質，脫碘酶 (DIO2) 將其轉化為高活性 <strong>T₃</strong>。T₃ 進入細胞核與 <strong>TR/RXR 受體複合體</strong> 結合，啟動轉錄！大量 mRNA 攜帶藍圖游出核孔，嵌入質膜合成幫浦、嵌入粒線體合成 UCP！
+            </p>
+          </div>
+          <div class="md:col-span-4 bg-slate-950/90 p-2 rounded-xl border border-slate-800 flex flex-col justify-center">
+            <div class="text-[11px] font-bold text-amber-400 mb-0.5 flex items-center gap-1">
+              <span>🎯</span> 本步驟分子動態
+            </div>
+            <p id="narrativeKeyPoint" class="text-[11px] text-slate-300">
+              觀察紫色 T₃ 穿越脂雙層進入細胞核，DNA 啟動後釋放出亮色 mRNA 游往細胞膜與粒線體！
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Canvas Container with Fixed Floating HUD -->
+      <div class="bg-slate-900 rounded-2xl border border-slate-800 p-2 shadow-2xl relative">
+        
+        <!-- Canvas Top Toggle Bar -->
+        <div class="flex flex-wrap items-center justify-between gap-2 pb-2 px-1 text-xs">
+          <div class="flex flex-wrap items-center gap-1.5">
+            <button id="btnToggleLabels" onclick="toggleLabels()" class="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold flex items-center gap-1 transition">
+              🏷️ 分子文字標籤: 開啟
+            </button>
+            <button id="btnToggleCausal" onclick="toggleCausalFlow()" class="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold flex items-center gap-1 transition">
+              🔀 閉路因果路徑指引: 開啟
+            </button>
+          </div>
+
+          <div class="flex items-center gap-1.5">
+            <button id="btnTriggerPump" onclick="triggerImmediatePump()" class="px-2.5 py-1 rounded-lg bg-cyan-600/40 hover:bg-cyan-500/60 text-cyan-200 border border-cyan-400 font-bold flex items-center gap-1 active:scale-95 transition shadow-lg shadow-cyan-900/40">
+              ⚡ 立即觸發幫浦轉運
+            </button>
+            <button id="btnTriggerSglt" onclick="triggerImmediateSglt()" class="px-2.5 py-1 rounded-lg bg-emerald-600/40 hover:bg-emerald-500/60 text-emerald-200 border border-emerald-400 font-bold flex items-center gap-1 active:scale-95 transition shadow-lg shadow-emerald-900/40">
+              🍬 立即觸發 SGLT 吸收
+            </button>
+            <button id="btnPlayPause" onclick="togglePlayPause()" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold flex items-center gap-1">
+              ⏸ 暫停
+            </button>
+          </div>
+        </div>
+
+        <!-- The Bio Molecular Interactive Canvas -->
+        <div class="relative w-full h-[510px] sm:h-[550px] bg-slate-950 rounded-xl overflow-hidden border border-slate-800">
+          <canvas id="bioCanvas" class="w-full h-full block cursor-pointer"></canvas>
+
+          <!-- FIXED FLOATING HUD STEPPER -->
+          <div class="absolute bottom-2.5 left-2.5 right-2.5 bg-slate-900/95 backdrop-blur-md px-3 py-2 rounded-xl border border-amber-500/50 shadow-2xl flex flex-wrap items-center justify-between gap-2 z-20">
+            
+            <!-- Step Navigation Buttons -->
+            <div class="flex items-center gap-1.5 shrink-0">
+              <button id="btnHudPrev" onclick="changeStep(-1)" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-xs font-bold text-slate-200 border border-slate-700 transition active:scale-95 flex items-center gap-1">
+                ◀ 上一步
+              </button>
+              <button id="btnHudNext" onclick="changeStep(1)" class="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 text-xs font-black shadow-md shadow-amber-500/20 transition active:scale-95 flex items-center gap-1">
+                下一步 (Step 2) ▶
+              </button>
+            </div>
+
+            <!-- 6 Direct Step Pills -->
+            <div class="flex items-center gap-1 overflow-x-auto py-0.5">
+              <button onclick="selectStep(1)" id="hudPill-1" class="px-2 py-1 rounded-md text-[11px] font-bold border border-slate-800 transition active:scale-95 whitespace-nowrap">
+                1.核受體轉錄
+              </button>
+              <button onclick="selectStep(2)" id="hudPill-2" class="px-2 py-1 rounded-md text-[11px] font-bold border border-slate-800 transition active:scale-95 whitespace-nowrap">
+                2.幫浦消耗ATP
+              </button>
+              <button onclick="selectStep(3)" id="hudPill-3" class="px-2 py-1 rounded-md text-[11px] font-bold border border-slate-800 transition active:scale-95 whitespace-nowrap">
+                3.SGLT穿膜吸養分
+              </button>
+              <button onclick="selectStep(4)" id="hudPill-4" class="px-2 py-1 rounded-md text-[11px] font-bold border border-slate-800 transition active:scale-95 whitespace-nowrap">
+                4.呼吸鏈泵H⁺
+              </button>
+              <button onclick="selectStep(5)" id="hudPill-5" class="px-2 py-1 rounded-md text-[11px] font-bold border border-slate-800 transition active:scale-95 whitespace-nowrap">
+                5.UCP碰撞產熱🔥
+              </button>
+              <button onclick="selectStep(6)" id="hudPill-6" class="px-2 py-1 rounded-md text-[11px] font-bold border border-slate-800 transition active:scale-95 whitespace-nowrap">
+                6.全身收支閉路
+              </button>
+            </div>
+
+            <!-- Keyboard shortcut hint -->
+            <div class="text-[10px] text-slate-400 hidden xl:flex items-center gap-1">
+              <span class="px-1 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono-code">←/→</span> 鍵盤切換
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- RIGHT 4 COLS: Telemetry & Paradox Dashboards -->
+    <div class="lg:col-span-4 flex flex-col gap-3">
+
+      <!-- Card 1: The ATP Paradox & Hydrolysis Turnover -->
+      <div class="bg-slate-900/90 rounded-2xl border border-slate-800 p-3.5 shadow-xl">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-xs sm:text-sm font-bold text-white flex items-center gap-1.5">
+            <span class="text-amber-400">⚡</span> ATP 命運：合成 vs 幫浦水解
+          </h3>
+          <span id="atpStatusBadge" class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700/50">
+            動態平衡
+          </span>
+        </div>
+        <p class="text-[11px] text-slate-400 mb-2.5 leading-relaxed">
+          嚴格閉路循環：ATP 在粒線體由合成酶結合 ADP+Pi 製成，游至質膜被 Na⁺/K⁺-ATPase 水解為 <strong class="text-orange-400">ADP + Pi</strong>，再實體游回粒線體！
+        </p>
+
+        <div class="space-y-2 text-xs">
+          <div>
+            <div class="flex justify-between mb-1">
+              <span class="text-slate-300">Na⁺/K⁺ 幫浦水解 ATP 消耗率</span>
+              <span id="valAtpBurn" class="font-mono-code font-bold text-cyan-400">95 unit/s</span>
+            </div>
+            <div class="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
+              <div id="barAtpBurn" class="bg-cyan-400 h-full transition-all duration-300" style="width: 48%"></div>
+            </div>
+          </div>
+
+          <div>
+            <div class="flex justify-between mb-1">
+              <span class="text-slate-300">粒線體 ATP 合成酶產率</span>
+              <span id="valAtpSynth" class="font-mono-code font-bold text-yellow-400">105 unit/s</span>
+            </div>
+            <div class="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
+              <div id="barAtpSynth" class="bg-yellow-400 h-full transition-all duration-300" style="width: 52%"></div>
+            </div>
+          </div>
+
+          <div class="pt-1 border-t border-slate-800">
+            <div class="flex justify-between mb-1">
+              <span class="font-semibold text-white">細胞可用淨 ATP 電池 (ATP/ADP 比值)</span>
+              <span id="valNetAtp" class="font-mono-code font-bold text-emerald-400">84% (充足)</span>
+            </div>
+            <div class="w-full bg-slate-950 h-2.5 rounded-lg overflow-hidden border border-slate-800 p-0.5">
+              <div id="barNetAtp" class="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded transition-all duration-300" style="width: 84%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 2: H+ Proton Fate & UCP Uncoupling Heat -->
+      <div class="bg-slate-900/90 rounded-2xl border border-slate-800 p-3.5 shadow-xl">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-xs sm:text-sm font-bold text-white flex items-center gap-1.5">
+            <span class="text-rose-400">🔥</span> H⁺ 質子終點：合成酶 vs UCP 產熱
+          </h3>
+          <span id="poBadge" class="font-mono-code text-[11px] font-bold px-2 py-0.5 rounded bg-slate-950 text-amber-300 border border-slate-800">
+            P/O 比值: 2.5
+          </span>
+        </div>
+
+        <div class="mb-2.5">
+          <div class="flex justify-between text-[11px] font-semibold mb-1">
+            <span class="text-yellow-400">⚙️ 做工合成 ATP (偶聯)</span>
+            <span class="text-rose-400">🔥 UCP 碰撞產熱 (解偶聯)</span>
+          </div>
+          <div class="w-full h-6 bg-slate-950 rounded-xl overflow-hidden flex p-0.5 border border-slate-800">
+            <div id="barCoupled" class="bg-gradient-to-r from-amber-500 to-yellow-400 h-full rounded-l-lg transition-all duration-300 flex items-center justify-center text-[10px] font-mono-code font-black text-slate-950" style="width: 78%">
+              78%
+            </div>
+            <div id="barUncoupled" class="bg-gradient-to-r from-orange-600 to-rose-600 h-full rounded-r-lg transition-all duration-300 flex items-center justify-center text-[10px] font-mono-code font-black text-white" style="width: 22%">
+              22%
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <div class="bg-slate-950 p-2 rounded-xl border border-slate-800">
+            <div class="text-[10px] text-slate-400">總產熱功率 (Heat Rate)</div>
+            <div id="valHeatPower" class="font-mono-code text-sm font-bold text-rose-400 mt-0.5">75 kcal/h</div>
+            <div class="text-[9px] text-slate-500">UCP 捷徑碰撞釋熱</div>
+          </div>
+          <div class="bg-slate-950 p-2 rounded-xl border border-slate-800">
+            <div class="text-[10px] text-slate-400">膜間隙跨膜電位 (Δψ)</div>
+            <div id="valMembPot" class="font-mono-code text-sm font-bold text-sky-400 mt-0.5">180 mV</div>
+            <div class="text-[9px] text-slate-500">質子水庫驅動力</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 3: Glucose Uptake & Whole-body Telemetry -->
+      <div class="bg-slate-900/90 rounded-2xl border border-slate-800 p-3.5 shadow-xl">
+        <h3 class="text-xs sm:text-sm font-bold text-white mb-2 flex items-center gap-1.5">
+          <span class="text-emerald-400">🩺</span> 養分吸收與全身生理表徵連動
+        </h3>
+
+        <div class="grid grid-cols-2 gap-2 text-xs mb-2.5">
+          <div class="bg-slate-950 p-2 rounded-xl border border-slate-800">
+            <div class="text-[10px] text-slate-400">SGLT 葡萄糖吸入流速</div>
+            <div id="valGlcFlux" class="font-mono-code text-sm font-bold text-emerald-400 mt-0.5">1.0x 基準</div>
+            <div class="text-[9px] text-slate-500">Na⁺ 梯度驅動進細胞</div>
+          </div>
+          <div class="bg-slate-950 p-2 rounded-xl border border-slate-800">
+            <div class="text-[10px] text-slate-400">核心體溫 & 心跳</div>
+            <div id="valTempHeart" class="font-mono-code text-sm font-bold text-rose-400 mt-0.5">37.0°C / 72 bpm</div>
+            <div class="text-[9px] text-slate-500">基礎產熱與心搏率</div>
+          </div>
+        </div>
+
+        <div class="p-2 rounded-xl bg-slate-950 border border-slate-800 text-[11px] text-slate-300 leading-relaxed">
+          <div class="font-bold text-amber-300 mb-0.5 flex items-center gap-1">
+            <span>💡</span> 為什麼亢進時「吃多卻暴瘦」？
+          </div>
+          <p id="systemicAnalysisText">
+            SGLT 狂吸葡萄糖，但粒線體因 UCP 嚴重漏損導致發電效率 (P/O) 暴跌。吃進來的熱量大量轉化為熱能散失，身體被迫大量燃燒脂肪與肌肉以維持能量，形成高食量卻快速消瘦的矛盾現象。
+          </p>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- ================= JAVASCRIPT SIMULATION ENGINE ================= -->
+  <script>
+    /* =========================================================================
+       1. PEDAGOGICAL NARRATIVE DATABASE (6 SEQUENTIAL STAGES)
+    ========================================================================= */
+    const NARRATIVE_STEPS = {
+      1: {
+        badge: "STEP 1 / 6",
+        title: "跨膜進入與核內受體結合 (Nuclear Receptor Binding)",
+        formula: "T₄ ➔ T₃ + 核內受體(TR/RXR) ➔ 代謝 mRNA 轉錄釋出",
+        desc: "血液中的游離 T₄/T₃ 跨膜進入細胞質，脫碘酶 (DIO2) 將其轉化為高活性 <strong>T₃</strong>。T₃ 進入細胞核與 <strong>TR/RXR 受體複合體</strong> 結合，啟動轉錄！大量 mRNA 攜帶藍圖游出核孔，嵌入質膜合成幫浦、嵌入粒線體合成 UCP！",
+        keyPoint: "觀察紫色 T₃ 穿越脂雙層進入細胞核，DNA 啟動後釋放出亮色 mRNA 游往細胞膜與粒線體！"
+      },
+      2: {
+        badge: "STEP 2 / 6",
+        title: "膜上 Na⁺/K⁺ 幫浦機械循環——水解 ATP 與離子逆轉運 (Pump E1/E2 Cycle)",
+        formula: "3 Na⁺(內) 結合 ➔ ATP 結合水解為 ADP + Pi (釋熱放能) ➔ 幫浦開向外打出 3 Na⁺ ➔ 2 K⁺(外) 進入 ➔ 轉向內釋入 2 K⁺",
+        desc: "<strong>Na⁺/K⁺-ATPase</strong> 展現精密的 E1/E2 構形變化：<br>① 3 個 Na⁺ 進入內側結合腔。<br>② <strong>ATP 抵達水解為 ADP + 磷酸基 (Pi)</strong>，放出強烈能量閃光！<br>③ 幫浦外閘門打開，將 3 個 Na⁺ 釋放至細胞外液！<br>④ 2 個 K⁺ 進入幫浦，幫浦轉為朝內開口釋放 K⁺。<strong>脫離的 ADP 實體游回粒線體！</strong>",
+        keyPoint: "仔細觀察畫面上幫浦上下閘門的開闔，以及 ATP 實體水解成 ADP+Pi 游回粒線體的大循環！"
+      },
+      3: {
+        badge: "STEP 3 / 6",
+        title: "SGLT 共同運輸蛋白——Na⁺ 順流攜帶葡萄糖貫穿轉運 (Secondary Active Transport)",
+        formula: "外側 Na⁺ 與微血管 Glc 雙重結合 ➔ SGLT 構形翻轉 ➔ Na⁺ 與葡萄糖貫穿蛋白進入細胞質 ➔ 葡萄糖直奔粒線體",
+        desc: "步驟 2 累積的細胞外高濃度 Na⁺，與微血管中的<strong>葡萄糖 (Glc)</strong> 同時進入 <strong>SGLT</strong> 的外側結合口袋。SGLT 產生交替遮閉（Alternating Access）轉運，<strong>Na⁺ 與葡萄糖確實穿過蛋白質孔道內部</strong>，釋放到細胞質內！葡萄糖接著直奔粒線體發電！",
+        keyPoint: "次級主動運輸的實體展現：葡萄糖不是憑空穿牆，而是乘著 Na⁺ 的回流勢能被「載」過 SGLT 內部！"
+      },
+      4: {
+        badge: "STEP 4 / 6",
+        title: "高濃度 ADP 訊號催逼粒線體呼吸鏈狂泵 H⁺ (Respiratory Control)",
+        formula: "高 [ADP + Pi] + 葡萄糖分解電子 ➔ 呼吸鏈(ETC)狂打質子 H⁺ 至膜間腔",
+        desc: "步驟 2 產生的高濃度 <strong>ADP</strong> 游回粒線體基質，作為最強催化訊號；步驟 3 抵達的葡萄糖經氧化產生電子傳入電子傳遞鏈 (ETC I~IV)。呼吸鏈消耗氧氣，將大量 <strong>H⁺ 泵入膜間隙 (IMS)</strong> 建立超高質子位能！",
+        keyPoint: "因果鏈條緊扣：呼吸鏈之所以超頻耗氧，是因為前端幫浦把 ATP 燒成了大量 ADP！"
+      },
+      5: {
+        badge: "STEP 5 / 6",
+        title: "雙重質子終點——ATP 合成酶發電 vs UCP 捷徑碰撞產熱 (Thermogenesis)",
+        formula: "高 H⁺ 位能 ➔ ① 通過合成酶轉出 ATP ＋ ② 經 UCP 漏回基質劇烈碰撞化為熱波 🔥",
+        desc: "膜間隙的高能 H⁺ 有兩條終點：<br>① 走 <strong>ATP 合成酶</strong>：轉動齒輪將 ADP+Pi 合成 ATP，游向質膜幫浦。<br>② 走 <strong>UCP 解偶聯孔道</strong>：高速衝回基質，<strong>在出口處引爆分子劇烈碰撞，完全化為向外擴散的熱波 🔥！</strong>",
+        keyPoint: "產熱的物理本質：高電位質子走捷徑洩洪，未能儲存為 ATP 的位能 100% 透過分子碰撞轉化為熱能！"
+      },
+      6: {
+        badge: "STEP 6 / 6",
+        title: "巨觀全身代謝收支總結——吃多卻暴瘦、高熱與疲勞 (Systemic Outcome)",
+        formula: "總燃料燃燒 ↑↑ ＋ 發電效率(P/O比) ↓↓ ➔ 產熱飆升、體重大幅減輕",
+        desc: "整條因果閉路完成：正常濃度 (50%) 維持 37°C 恆溫與充沛體力；當亢進 (90%) 時，UCP 嚴重漏損使效率崩潰。即使吞入大量葡萄糖，多數能量仍化為廢熱消散，引發<strong>「吃多暴瘦、體溫過高、細胞缺可用 ATP 而肌肉無力」</strong>！",
+        keyPoint: "總結：甲狀腺素同時踩死「耗能幫浦」與「漏損暖氣機 (UCP)」兩個油門，拉高全身體內燃燒轉速！"
+      }
+    };
+
+    /* =========================================================================
+       2. SIMULATION STATE & CONFIGURATION
+    ========================================================================= */
+    const state = {
+      mode: 'step',           // 'step' or 'sync'
+      currentStep: 1,         // 1 to 6
+      hormoneLevel: 65,       // 5 to 100%
+      isPlaying: true,
+      showLabels: true,       // Persistent molecular & protein labels
+      showCausalPath: true,   // Flow guides
+      time: 0,
+      visualGlow: 0,
+      actionHighlight: null   // 'pump' or 'sglt' focus highlight ring
+    };
+
+    // Rigorous Conformational State Machines for Na+/K+-ATPase
+    // State 0: E1 (Open inwards), 3 Na+ binding
+    // State 1: WAITING_FOR_ATP (Frozen until ATP physically docks!)
+    // State 2: HYDROLYZING (Spark & ADP release)
+    // State 3: E2_P (Open outwards), 3 Na+ ejected
+    // State 4: K_BINDING (2 K+ bind from outside)
+    // State 5: E1_DEPHOSPHO (Open inwards), 2 K+ released into cytoplasm
+    const pumpMachine = {
+      state: 0, // 0 to 5
+      timer: 0,
+      glow: 0,
+      hasAtpDocked: false,
+      boundNaCount: 0,
+      boundKCount: 0
+    };
+
+    const sgltMachine = {
+      stage: 'idle', // 'idle', 'binding_ext', 'translocating', 'releasing_int'
+      timer: 0,
+      hasGlc: false,
+      hasNa: false,
+      poreOffset: 0
+    };
+
+    // Strict Closed-loop Particle System
+    const particles = {
+      t3: [],         // Blood -> Nucleus
+      mrna: [],       // Nucleus -> Membrane & Mito
+      atp_to_pump: [],// Synthase -> Pump cavity
+      adp_to_mito: [],// Pump -> Synthase
+      glc_blood: [],  // Blood stream -> SGLT outer entrance
+      glc_to_mito: [],// SGLT inner exit -> Mito Matrix
+      na_ext: [],     // Blood/Extracellular pool
+      na_int: [],     // Cytoplasm pool
+      k_ext: [],      // Extracellular pool
+      k_int: [],      // Cytoplasm pool
+      h_ims: [],      // ETC pumped into IMS
+      h_ucp: [],      // Passing through UCP pore
+      heat_waves: []  // Explosive thermal waves from UCP pore exit
+    };
+
+    function setAppMode(m) {
+      state.mode = m;
+      const btnStep = document.getElementById('btnModeStep');
+      const btnSync = document.getElementById('btnModeSync');
+
+      if (m === 'step') {
+        btnStep.className = "flex-1 lg:flex-initial px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 bg-gradient-to-r from-amber-500 to-orange-600 text-slate-950 shadow-md";
+        btnSync.className = "flex-1 lg:flex-initial px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 text-slate-400 hover:text-white";
+        selectStep(state.currentStep);
+      } else {
+        btnSync.className = "flex-1 lg:flex-initial px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 bg-gradient-to-r from-emerald-400 to-cyan-500 text-slate-950 shadow-md";
+        btnStep.className = "flex-1 lg:flex-initial px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 text-slate-400 hover:text-white";
+        updateNarrative();
+      }
+      updateTelemetry();
+    }
+
+    function selectStep(step) {
+      state.currentStep = Math.max(1, Math.min(6, step));
+      if (state.mode !== 'step') setAppMode('step');
+      updateNarrative();
+      updateTelemetry();
+    }
+
+    function changeStep(delta) {
+      if (state.mode !== 'step') setAppMode('step');
+      const next = state.currentStep + delta;
+      if (next >= 1 && next <= 6) selectStep(next);
+    }
+
+    function updateNarrative() {
+      const s = state.currentStep;
+      const info = NARRATIVE_STEPS[s];
+
+      const prevBtn = document.getElementById('btnHudPrev');
+      const nextBtn = document.getElementById('btnHudNext');
+      prevBtn.disabled = (state.mode === 'step' && s <= 1);
+
+      if (state.mode === 'sync') {
+        nextBtn.textContent = "切換逐步解說 ▶";
+      } else if (s === 6) {
+        nextBtn.textContent = "🔄 重回 Step 1";
+        nextBtn.onclick = () => selectStep(1);
+      } else {
+        nextBtn.textContent = `下一步 (Step ${s + 1}) ▶`;
+        nextBtn.onclick = () => changeStep(1);
+      }
+
+      if (state.mode === 'sync') {
+        document.getElementById('narrativeBadge').textContent = "全系統同步運作中 (SYNC)";
+        document.getElementById('narrativeBadge').className = "px-2 py-0.5 rounded text-xs font-mono-code font-black bg-emerald-400 text-slate-950";
+        document.getElementById('narrativeTitle').textContent = "所有蛋白質機械動作與閉路循環同步運轉：調節 T₃ 檢視即時生化動態";
+        document.getElementById('narrativeFormula').textContent = "Step 1 ➔ 2 ➔ 3 ➔ 4 ➔ 5 ➔ 6 閉路因果運作中";
+        document.getElementById('narrativeDesc').innerHTML = "目前為<strong>同步全系統運作模式</strong>。觀察 Na⁺/K⁺-ATPase 水解 ATP 打出 Na⁺ ➔ 驅動 SGLT 轉運葡萄糖 ➔ 葡萄糖直奔粒線體呼吸鏈 ➔ UCP 漏損質子碰撞產熱！";
+        document.getElementById('narrativeKeyPoint').textContent = "可隨時點擊上方按鈕立即觸發幫浦水解轉運或 SGLT 吸收，觀察微觀機械構形變化！";
+      } else {
+        document.getElementById('narrativeBadge').textContent = info.badge;
+        document.getElementById('narrativeBadge').className = "px-2 py-0.5 rounded text-xs font-mono-code font-black bg-amber-500 text-slate-950";
+        document.getElementById('narrativeTitle').textContent = info.title;
+        document.getElementById('narrativeFormula').textContent = info.formula;
+        document.getElementById('narrativeDesc').innerHTML = info.desc;
+        document.getElementById('narrativeKeyPoint').textContent = info.keyPoint;
+      }
+
+      for (let i = 1; i <= 6; i++) {
+        const pill = document.getElementById(`hudPill-${i}`);
+        if (!pill) continue;
+        if (state.mode === 'sync') {
+          pill.className = "px-2 py-1 rounded-md text-[11px] font-bold border border-emerald-500/40 bg-slate-900 text-slate-200 whitespace-nowrap";
+        } else if (i === s) {
+          pill.className = "px-2.5 py-1 rounded-md text-[11px] font-black border-2 border-amber-400 bg-amber-500 text-slate-950 shadow-md shadow-amber-500/30 whitespace-nowrap scale-105";
+        } else if (i < s) {
+          pill.className = "px-2 py-1 rounded-md text-[11px] font-semibold border border-slate-700 bg-slate-800 text-slate-300 whitespace-nowrap";
+        } else {
+          pill.className = "px-2 py-1 rounded-md text-[11px] font-medium border border-slate-800 bg-slate-950/60 text-slate-500 opacity-60 whitespace-nowrap";
+        }
+      }
+    }
+
+    function setHormonePreset(val) {
+      document.getElementById('t3Slider').value = val;
+      handleSlider();
+    }
+
+    function handleSlider() {
+      state.hormoneLevel = parseInt(document.getElementById('t3Slider').value, 10);
+      const badge = document.getElementById('t3Badge');
+      badge.textContent = `${state.hormoneLevel}%`;
+      if (state.hormoneLevel <= 25) {
+        badge.className = "font-mono-code text-xs font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/40 min-w-[2.8rem] text-center";
+      } else if (state.hormoneLevel >= 75) {
+        badge.className = "font-mono-code text-xs font-bold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 min-w-[2.8rem] text-center";
+      } else {
+        badge.className = "font-mono-code text-xs font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 min-w-[2.8rem] text-center";
+      }
+      updateTelemetry();
+    }
+    document.getElementById('t3Slider').addEventListener('input', handleSlider);
+
+    function toggleLabels() {
+      state.showLabels = !state.showLabels;
+      const btn = document.getElementById('btnToggleLabels');
+      btn.textContent = `🏷️ 分子文字標籤: ${state.showLabels ? '開啟' : '關閉'}`;
+      btn.className = state.showLabels
+        ? "px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold flex items-center gap-1 transition"
+        : "px-2.5 py-1 rounded-lg bg-slate-800 text-slate-400 border border-slate-700 font-medium flex items-center gap-1 transition";
+    }
+
+    function toggleCausalFlow() {
+      state.showCausalPath = !state.showCausalPath;
+      const btn = document.getElementById('btnToggleCausal');
+      btn.textContent = `🔀 閉路因果路徑指引: ${state.showCausalPath ? '開啟' : '關閉'}`;
+      btn.className = state.showCausalPath
+        ? "px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold flex items-center gap-1 transition"
+        : "px-2.5 py-1 rounded-lg bg-slate-800 text-slate-400 border border-slate-700 font-medium flex items-center gap-1 transition";
+    }
+
+    function togglePlayPause() {
+      state.isPlaying = !state.isPlaying;
+      const btn = document.getElementById('btnPlayPause');
+      btn.innerHTML = state.isPlaying ? "⏸ 暫停" : "▶️ 播放";
+      btn.className = state.isPlaying
+        ? "px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold flex items-center gap-1"
+        : "px-2.5 py-1 rounded-lg bg-emerald-600 text-white border border-emerald-400 font-semibold flex items-center gap-1";
+    }
+
+    // Forceful Immediate Pump Trigger
+    function triggerImmediatePump() {
+      state.actionHighlight = { type: 'pump', timer: 1.5 };
+      pumpMachine.state = 0;
+      pumpMachine.boundNaCount = 3;
+      pumpMachine.timer = 0;
+      pumpMachine.hasAtpDocked = false;
+
+      // Spawn an express ATP directly from Mitochondria Synthase aiming straight into pump
+      const w = canvas.width;
+      const h = canvas.height;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const memX = w * 0.135;
+      const memW = w * 0.065;
+      const mitoX = w * 0.50;
+      const mitoW = w * 0.47;
+      const innerX = mitoX + mitoW * 0.33;
+      const innerY = h * 0.09 + 38 * dpr;
+      const innerH = h * 0.82 - 58 * dpr;
+      const rotorX = innerX + 26 * dpr;
+      const synthY = innerY + innerH * 0.56;
+      const pumpY = h * 0.28;
+
+      particles.atp_to_pump = [{
+        x: rotorX,
+        y: synthY,
+        targetX: memX + memW + 4 * dpr,
+        targetY: pumpY,
+        progress: 0,
+        speed: 0.045 // Express speed
+      }];
+    }
+
+    // Forceful Immediate SGLT Trigger
+    function triggerImmediateSglt() {
+      state.actionHighlight = { type: 'sglt', timer: 1.5 };
+      sgltMachine.stage = 'binding_ext';
+      sgltMachine.timer = 0;
+
+      const w = canvas.width;
+      const h = canvas.height;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const memX = w * 0.135;
+      const sgltY = h * 0.68;
+
+      particles.glc_blood.push({
+        x: 10 * dpr,
+        y: sgltY - 6 * dpr,
+        targetX: memX - 6 * dpr,
+        targetY: sgltY - 6 * dpr,
+        progress: 0.5
+      });
+      particles.na_ext.push({
+        x: memX - 25 * dpr,
+        y: sgltY + 8 * dpr,
+        targetX: memX - 6 * dpr,
+        targetY: sgltY + 8 * dpr,
+        progress: 0.5
+      });
+    }
+
+    /* =========================================================================
+       3. TELEMETRY & BIOCHEMICAL CALCULATIONS
+    ========================================================================= */
+    function isStepActive(sNum) {
+      if (state.mode === 'sync') return true;
+      return state.currentStep >= sNum;
+    }
+
+    function updateTelemetry() {
+      const t = state.hormoneLevel;
+      const s2 = isStepActive(2) ? 1 : 0.2;
+      const s3 = isStepActive(3) ? 1 : 0.2;
+      const s4 = isStepActive(4) ? 1 : 0.2;
+      const s5 = isStepActive(5) ? 1 : 0.2;
+
+      const atpBurn = Math.round((28 + t * 1.55) * s2);
+      const atpSynth = Math.round((30 + t * 1.48) * s5);
+      document.getElementById('valAtpBurn').textContent = `${atpBurn} unit/s`;
+      document.getElementById('barAtpBurn').style.width = `${Math.min(100, atpBurn / 2)}%`;
+      document.getElementById('valAtpSynth').textContent = `${atpSynth} unit/s`;
+      document.getElementById('barAtpSynth').style.width = `${Math.min(100, atpSynth / 2)}%`;
+
+      let netPool = 84;
+      if (t < 30) netPool = Math.round(48 + t * 0.8);
+      else if (t > 65) netPool = Math.round(84 - (t - 65) * 1.15);
+      if (isStepActive(2) && !isStepActive(5)) netPool = 36;
+
+      const poolBar = document.getElementById('barNetAtp');
+      const poolText = document.getElementById('valNetAtp');
+      const statusBadge = document.getElementById('atpStatusBadge');
+      poolBar.style.width = `${netPool}%`;
+
+      if (netPool < 55) {
+        poolText.textContent = `${netPool}% (局部能量危機/無力)`;
+        poolText.className = "font-mono-code font-bold text-rose-400";
+        poolBar.className = "bg-gradient-to-r from-rose-600 to-amber-500 h-full rounded transition-all duration-300";
+        statusBadge.textContent = t < 30 ? "能量生成不足" : "高週轉供不應求";
+        statusBadge.className = "text-[10px] font-bold px-2 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-700/50";
+      } else {
+        poolText.textContent = `${netPool}% (充足)`;
+        poolText.className = "font-mono-code font-bold text-emerald-400";
+        poolBar.className = "bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded transition-all duration-300";
+        statusBadge.textContent = "供需動態平衡";
+        statusBadge.className = "text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700/50";
+      }
+
+      const ucpLeak = isStepActive(5)
+        ? Math.min(74, Math.max(10, Math.round(8 + Math.pow(t / 100, 1.6) * 66)))
+        : 12;
+      const coupled = 100 - ucpLeak;
+      const poRatio = (2.7 * (coupled / 85)).toFixed(2);
+      document.getElementById('barCoupled').style.width = `${coupled}%`;
+      document.getElementById('barCoupled').textContent = `${coupled}% 偶聯做功`;
+      document.getElementById('barUncoupled').style.width = `${ucpLeak}%`;
+      document.getElementById('barUncoupled').textContent = `${ucpLeak}% UCP 產熱`;
+      document.getElementById('poBadge').textContent = `P/O 比值: ${poRatio}`;
+
+      const heatPower = Math.round(36 + (atpBurn * 0.28) + (isStepActive(5) ? ucpLeak * 1.55 : 8));
+      const membPot = isStepActive(4) ? Math.round(155 + (t * 0.55) - (isStepActive(5) ? ucpLeak * 0.42 : 0)) : 135;
+      document.getElementById('valHeatPower').textContent = `${heatPower} kcal/h`;
+      document.getElementById('valMembPot').textContent = `${membPot} mV`;
+
+      const glcFlux = (0.3 + (t / 50) * 0.7 * s3).toFixed(1);
+      const temp = (35.8 + (t / 100) * 3.7 * (isStepActive(5) ? 1 : 0.5)).toFixed(1);
+      const hr = Math.round(56 + t * 0.74);
+      document.getElementById('valGlcFlux').textContent = `${glcFlux}x 基準流速`;
+      document.getElementById('valTempHeart').textContent = `${temp}°C / ${hr} bpm`;
+
+      const analysisEl = document.getElementById('systemicAnalysisText');
+      if (t <= 25) {
+        analysisEl.innerHTML = `【甲狀腺低下】基因轉錄量少 ➔ 膜上幫浦與 UCP 稀疏 ➔ 葡萄糖吸入緩慢、能量代謝遲緩、基礎產熱不足 (${temp}°C)，多餘養分沉積導致畏寒與水腫性發胖。`;
+      } else if (t >= 75) {
+        analysisEl.innerHTML = `【甲狀腺亢進超頻】SGLT 吸入葡萄糖飆至 ${glcFlux}x，但粒線體因 UCP 質子捷徑嚴重漏損 (${ucpLeak}% 變熱能)，使發電效率 P/O 暴跌至 ${poRatio}。即使暴飲暴食，燃料仍全數化為 ${heatPower} kcal/h 廢熱擴散，導致體重急速減輕與體溫過高 (${temp}°C)！`;
+      } else {
+        analysisEl.innerHTML = `【正常生理恆定】基因轉錄維持適量幫浦與受控 UCP (${ucpLeak}%)，葡萄糖平穩氧化，使細胞維持充足 ATP (${netPool}%) 並產出剛好維持 37.0°C 恆溫之熱量。`;
+      }
+    }
+
+    /* =========================================================================
+       4. BIO-CANVAS RENDER ENGINE & CLOSED-LOOP MECHANICS
+    ========================================================================= */
+    const canvas = document.getElementById('bioCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function resizeCanvas() {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+    }
+    window.addEventListener('resize', resizeCanvas);
+
+    let rotorAngle = 0;
+
+    function renderLoop() {
+      const w = canvas.width;
+      const h = canvas.height;
+      if (!w || !h) {
+        requestAnimationFrame(renderLoop);
+        return;
+      }
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const t = state.hormoneLevel;
+
+      // Speed scale factor dependent on hormone level (Cold slow vs Hyper fast)
+      const speedScale = t <= 25 ? 0.32 : (t >= 75 ? 1.75 : 1.0);
+
+      if (state.isPlaying) {
+        state.time += 0.035 * speedScale;
+        if (state.actionHighlight && state.actionHighlight.timer > 0) {
+          state.actionHighlight.timer -= 0.02;
+        }
+      }
+
+      ctx.clearRect(0, 0, w, h);
+
+      // Landmark Coordinates
+      const bloodW = w * 0.13;
+      const memX = w * 0.135;
+      const memW = w * 0.065; // Thicker membrane for conformational machinery
+      const nucX = w * 0.24;
+      const nucY = h * 0.58;
+      const nucW = w * 0.22;
+      const nucH = h * 0.32;
+      const mitoX = w * 0.50;
+      const mitoY = h * 0.09;
+      const mitoW = w * 0.47;
+      const mitoH = h * 0.82;
+      const innerX = mitoX + mitoW * 0.33;
+      const innerY = mitoY + 38 * dpr;
+      const innerW = mitoW * 0.63;
+      const innerH = mitoH - 58 * dpr;
+
+      // Machinery Positions
+      const pumpY = h * 0.28;
+      const sgltY = h * 0.68;
+      const etcY = innerY + innerH * 0.26;
+      const synthY = innerY + innerH * 0.56;
+      const ucpY = innerY + innerH * 0.82;
+      const rotorX = innerX + 26 * dpr;
+      const trX = nucX + nucW * 0.5;
+      const dnaY = nucY + nucH * 0.55;
+
+      // =========================================================================
+      // DYNAMIC COLOR PALETTE LINKED TO THYROID HORMONE LEVEL (HYPO vs HYPER)
+      // =========================================================================
+      let cytoColor = '#050b1a';
+      let mitoColor = 'rgba(88, 28, 135, 0.52)';
+      let imsColor = 'rgba(14, 116, 144, 0.18)';
+      let bloodColorA = '#2b0716';
+      let bloodColorB = '#190510';
+
+      if (t <= 25) {
+        // Hypothyroid Cold / Frozen Palette (Icy Blue / Gray)
+        cytoColor = '#050f1e';
+        mitoColor = 'rgba(30, 41, 59, 0.65)';
+        imsColor = 'rgba(56, 189, 248, 0.08)';
+        bloodColorA = '#1e293b';
+        bloodColorB = '#0f172a';
+      } else if (t >= 75) {
+        // Hyperthyroid Scorching Flame Palette (Fiery Orange / Red)
+        const heatPulse = 0.15 * Math.sin(state.time * 6);
+        cytoColor = `rgba(${35 + heatPulse * 20}, 7, 18, 0.95)`;
+        mitoColor = `rgba(${136 + heatPulse * 40}, 19, 55, 0.72)`;
+        imsColor = 'rgba(239, 68, 68, 0.32)';
+        bloodColorA = '#500718';
+        bloodColorB = '#2d050f';
+      }
+
+      // 1. Draw Compartments
+      // Bloodstream
+      const bGrad = ctx.createLinearGradient(0, 0, bloodW, 0);
+      bGrad.addColorStop(0, bloodColorA);
+      bGrad.addColorStop(1, bloodColorB);
+      ctx.fillStyle = bGrad;
+      ctx.fillRect(0, 0, bloodW, h);
+
+      // Plasma Membrane
+      ctx.fillStyle = t >= 75 ? '#1f131a' : (t <= 25 ? '#0c1a2e' : '#0f172a');
+      ctx.fillRect(memX, 0, memW, h);
+      ctx.strokeStyle = t >= 75 ? '#e11d48' : (t <= 25 ? '#38bdf8' : '#334155');
+      ctx.lineWidth = 1.8 * dpr;
+      ctx.strokeRect(memX, 0, memW, h);
+
+      // Cytoplasm
+      ctx.fillStyle = cytoColor;
+      ctx.fillRect(memX + memW, 0, w - (memX + memW), h);
+
+      // Nucleus
+      ctx.fillStyle = 'rgba(46, 16, 101, 0.7)';
+      ctx.strokeStyle = '#9333ea';
+      ctx.lineWidth = 2 * dpr;
+      ctx.beginPath();
+      ctx.roundRect(nucX, nucY, nucW, nucH, 16 * dpr);
+      ctx.fill();
+      ctx.stroke();
+
+      // Mitochondrion Outer Membrane (IMS)
+      ctx.fillStyle = imsColor;
+      ctx.strokeStyle = t >= 75 ? '#f43f5e' : (t <= 25 ? '#64748b' : '#38bdf8');
+      ctx.lineWidth = 2.5 * dpr;
+      ctx.beginPath();
+      ctx.roundRect(mitoX, mitoY, mitoW, mitoH, 24 * dpr);
+      ctx.fill();
+      ctx.stroke();
+
+      // Mitochondrion Inner Matrix
+      ctx.fillStyle = mitoColor;
+      ctx.strokeStyle = t >= 75 ? '#fb7185' : (t <= 25 ? '#475569' : '#818cf8');
+      ctx.lineWidth = 2 * dpr;
+      ctx.beginPath();
+      ctx.roundRect(innerX, innerY, innerW, innerH, 18 * dpr);
+      ctx.fill();
+      ctx.stroke();
+
+      // Thermal Heat aura in Hyperthyroidism
+      if (t >= 75) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.08)';
+        ctx.beginPath();
+        ctx.arc(innerX + innerW * 0.5, innerY + innerH * 0.5, (innerW * 0.55) + Math.sin(state.time * 5) * 15 * dpr, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // Top Compartment Titles
+      if (state.showLabels) {
+        ctx.font = `bold ${10.5 * dpr}px "Noto Sans TC", sans-serif`;
+        ctx.fillStyle = t >= 75 ? '#fb7185' : (t <= 25 ? '#94a3b8' : '#f43f5e');
+        ctx.fillText(t >= 75 ? '🩸 沸騰微血管 (Hyper Blood)' : (t <= 25 ? '🩸 凝滯微血管 (Hypo Blood)' : '🩸 微血管血液 (Blood)'), 8 * dpr, 20 * dpr);
+
+        ctx.fillStyle = '#94a3b8';
+        ctx.fillText('細胞膜', memX + 2 * dpr, 20 * dpr);
+
+        ctx.fillStyle = '#c084fc';
+        ctx.fillText('① 細胞核 (TR 受體)', nucX + 8 * dpr, nucY + 18 * dpr);
+
+        ctx.fillStyle = t >= 75 ? '#f87171' : '#38bdf8';
+        ctx.fillText('膜間隙 (IMS: H⁺ 水庫)', mitoX + 8 * dpr, mitoY + 20 * dpr);
+
+        ctx.fillStyle = t >= 75 ? '#fecdd3' : (t <= 25 ? '#94a3b8' : '#e0e7ff');
+        ctx.fillText(t >= 75 ? '粒線體基質 (🔥 全力超頻燒毀中)' : (t <= 25 ? '粒線體基質 (❄️ 凍結低落狀態)' : '粒線體基質 (Matrix: 發電與產熱)'), innerX + 8 * dpr, innerY + 20 * dpr);
+      }
+
+      function getAlpha(stage) {
+        if (state.mode === 'sync') return 1.0;
+        if (state.currentStep === 6) return 1.0;
+        if (state.currentStep === stage) return 1.0;
+        if (state.currentStep > stage) return 0.8;
+        return 0.22;
+      }
+
+      // =========================================================================
+      // 2. RIGOROUS Na+/K+-ATPase STATE MACHINE (STATES 0 -> 5)
+      // =========================================================================
+      ctx.save();
+      ctx.globalAlpha = getAlpha(2);
+
+      if (state.isPlaying && isStepActive(2)) {
+        const stepRate = 0.024 * speedScale;
+
+        // STATE 0: E1 (Facing Inwards), Loading 3 Na+ from cytoplasm
+        if (pumpMachine.state === 0) {
+          pumpMachine.timer += stepRate;
+          pumpMachine.boundNaCount = Math.min(3, Math.floor(pumpMachine.timer * 4) + 1);
+          if (pumpMachine.boundNaCount >= 3 && pumpMachine.timer > 0.6) {
+            pumpMachine.state = 1; // Transition to WAITING FOR ATP
+            pumpMachine.timer = 0;
+            pumpMachine.hasAtpDocked = false;
+
+            // Trigger an ATP from Synthase if none is in transit
+            if (particles.atp_to_pump.length === 0) {
+              particles.atp_to_pump.push({
+                x: rotorX,
+                y: synthY,
+                targetX: memX + memW + 4 * dpr,
+                targetY: pumpY,
+                progress: 0,
+                speed: 0.018 * speedScale
+              });
+            }
+          }
+        }
+        // STATE 1: WAITING_FOR_ATP (STALLED until ATP arrives!)
+        else if (pumpMachine.state === 1) {
+          // If no ATP is flying, dispatch one immediately
+          if (particles.atp_to_pump.length === 0 && !pumpMachine.hasAtpDocked) {
+            particles.atp_to_pump.push({
+              x: rotorX,
+              y: synthY,
+              targetX: memX + memW + 4 * dpr,
+              targetY: pumpY,
+              progress: 0,
+              speed: 0.022 * speedScale
+            });
+          }
+          if (pumpMachine.hasAtpDocked) {
+            pumpMachine.state = 2; // ATP arrived! Trigger Hydrolysis!
+            pumpMachine.timer = 0;
+            pumpMachine.glow = 1.0;
+
+            // Eject ADP back toward Mito
+            particles.adp_to_mito.push({
+              x: memX + memW + 4 * dpr,
+              y: pumpY + 12 * dpr,
+              targetX: rotorX,
+              targetY: synthY,
+              progress: 0,
+              speed: 0.016 * speedScale
+            });
+          }
+        }
+        // STATE 2: HYDROLYZING (Energy burst, conformational transition to E2-P)
+        else if (pumpMachine.state === 2) {
+          pumpMachine.timer += stepRate;
+          if (pumpMachine.timer > 0.5) {
+            pumpMachine.state = 3; // Switched to E2-P (Facing outwards)
+            pumpMachine.timer = 0;
+            // Shoot 3 Na+ out to extracellular space!
+            for (let k = 0; k < 3; k++) {
+              particles.na_ext.push({
+                x: memX - 4 * dpr,
+                y: pumpY + (k - 1) * 9 * dpr,
+                targetX: memX - 16 * dpr,
+                targetY: sgltY - 14 * dpr + (k * 12 * dpr), // Aim precisely for SGLT!
+                progress: 0,
+                speed: 0.022 * speedScale
+              });
+            }
+            pumpMachine.boundNaCount = 0;
+          }
+        }
+        // STATE 3: E2_P (Facing Outwards, waiting for 2 K+ to bind)
+        else if (pumpMachine.state === 3) {
+          pumpMachine.timer += stepRate;
+          pumpMachine.boundKCount = Math.min(2, Math.floor(pumpMachine.timer * 3) + 1);
+          if (pumpMachine.boundKCount >= 2 && pumpMachine.timer > 0.6) {
+            pumpMachine.state = 4; // Dephosphorylation & transition to E1
+            pumpMachine.timer = 0;
+          }
+        }
+        // STATE 4: E1_DEPHOSPHO (Switched inwards, releasing 2 K+ into cytoplasm)
+        else if (pumpMachine.state === 4) {
+          pumpMachine.timer += stepRate;
+          if (pumpMachine.timer > 0.5) {
+            for (let k = 0; k < 2; k++) {
+              particles.k_int.push({
+                x: memX + memW + 6 * dpr,
+                y: pumpY + (k - 0.5) * 10 * dpr,
+                vx: (1.2 + Math.random() * 0.8) * dpr,
+                vy: (Math.random() - 0.5) * 1.2 * dpr,
+                age: 0
+              });
+            }
+            pumpMachine.boundKCount = 0;
+            pumpMachine.state = 5;
+            pumpMachine.timer = 0;
+          }
+        }
+        // STATE 5: RESET
+        else if (pumpMachine.state === 5) {
+          pumpMachine.timer += stepRate;
+          if (pumpMachine.timer > (t >= 75 ? 0.1 : 0.6)) {
+            pumpMachine.state = 0;
+            pumpMachine.timer = 0;
+          }
+        }
+      }
+
+      if (pumpMachine.glow > 0) pumpMachine.glow -= 0.04;
+
+      // Draw Mechanical Gates for Pump
+      const pLeft = memX - 2 * dpr;
+      const pTop = pumpY - 28 * dpr;
+      const pW = memW + 4 * dpr;
+      const pH = 56 * dpr;
+
+      // Outward gate open: State 2, 3
+      const outGateOpen = (pumpMachine.state === 2 || pumpMachine.state === 3);
+      // Inward gate open: State 0, 1, 4, 5
+      const inGateOpen = !outGateOpen;
+
+      ctx.fillStyle = t <= 25 ? '#164e63' : (t >= 75 ? '#831843' : '#0e7490');
+      ctx.strokeStyle = pumpMachine.glow > 0 ? '#facc15' : (t >= 75 ? '#f43f5e' : '#22d3ee');
+      ctx.lineWidth = 2.4 * dpr;
+
+      // Top Half lobe
+      ctx.beginPath();
+      ctx.moveTo(pLeft, pTop);
+      ctx.lineTo(pLeft + pW, pTop);
+      ctx.lineTo(pLeft + pW, pTop + (inGateOpen ? 12 * dpr : 24 * dpr));
+      ctx.lineTo(pLeft, pTop + (outGateOpen ? 12 * dpr : 24 * dpr));
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Bottom Half lobe
+      ctx.beginPath();
+      ctx.moveTo(pLeft, pTop + pH);
+      ctx.lineTo(pLeft + pW, pTop + pH);
+      ctx.lineTo(pLeft + pW, pTop + pH - (inGateOpen ? 12 * dpr : 24 * dpr));
+      ctx.lineTo(pLeft, pTop + pH - (outGateOpen ? 12 * dpr : 24 * dpr));
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Draw bound ions directly inside pump pocket!
+      if (pumpMachine.boundNaCount > 0) {
+        for (let i = 0; i < pumpMachine.boundNaCount; i++) {
+          drawNa(ctx, pLeft + pW * 0.4, pumpY - 8 * dpr + i * 8 * dpr, dpr);
+        }
+      }
+      if (pumpMachine.boundKCount > 0) {
+        for (let i = 0; i < pumpMachine.boundKCount; i++) {
+          drawK(ctx, pLeft + pW * 0.4, pumpY - 4 * dpr + i * 10 * dpr, dpr);
+        }
+      }
+
+      // ATP Hydrolysis Catalytic Site Glow
+      if (pumpMachine.glow > 0) {
+        ctx.save();
+        ctx.fillStyle = `rgba(250, 204, 21, ${pumpMachine.glow})`;
+        ctx.beginPath();
+        ctx.arc(pLeft + pW - 2 * dpr, pumpY, 18 * dpr * pumpMachine.glow, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.font = `black ${9.5 * dpr}px "JetBrains Mono", monospace`;
+        ctx.fillText('⚡ 水解放能!', pLeft + pW + 24 * dpr, pumpY - 14 * dpr);
+        ctx.restore();
+      }
+
+      // Highlight circle when trigger button is clicked
+      if (state.actionHighlight && state.actionHighlight.type === 'pump' && state.actionHighlight.timer > 0) {
+        ctx.save();
+        ctx.strokeStyle = `rgba(34, 211, 238, ${state.actionHighlight.timer})`;
+        ctx.lineWidth = 3.5 * dpr;
+        ctx.beginPath();
+        ctx.arc(memX + memW * 0.5, pumpY, (36 + Math.sin(state.time * 12) * 6) * dpr, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      if (state.showLabels) {
+        ctx.fillStyle = '#cffafe';
+        ctx.font = `bold ${8.5 * dpr}px "JetBrains Mono", monospace`;
+        ctx.textAlign = 'center';
+        ctx.fillText('Na⁺/K⁺-ATPase', memX + memW * 0.5, pumpY - 32 * dpr);
+
+        let stageStr = 'E1 朝內載納中';
+        let stageCol = '#a5f3fc';
+        if (pumpMachine.state === 1) {
+          stageStr = '⏳ 停滯！等待 ATP 抵達';
+          stageCol = '#facc15';
+        } else if (pumpMachine.state === 2) {
+          stageStr = '⚡ 水解磷酸化轉構形';
+          stageCol = '#fbbf24';
+        } else if (pumpMachine.state === 3) {
+          stageStr = 'E2-P 朝外排納載鉀';
+          stageCol = '#f472b6';
+        } else if (pumpMachine.state === 4) {
+          stageStr = 'E1 朝內釋鉀入細胞';
+          stageCol = '#c084fc';
+        }
+
+        ctx.font = `bold ${7.5 * dpr}px "Noto Sans TC", sans-serif`;
+        ctx.fillStyle = stageCol;
+        ctx.fillText(stageStr, memX + memW * 0.5, pumpY + 36 * dpr);
+      }
+      ctx.restore();
+
+      // =========================================================================
+      // [C] Step 3: SGLT Transporter Conformational Machine
+      // =========================================================================
+      ctx.save();
+      ctx.globalAlpha = getAlpha(3);
+
+      if (state.isPlaying && isStepActive(3)) {
+        sgltMachine.timer += 0.024 * speedScale;
+
+        if (sgltMachine.stage === 'idle' && (particles.na_ext.length > 0 || state.currentStep === 3 || t >= 75)) {
+          sgltMachine.stage = 'binding_ext';
+          sgltMachine.timer = 0;
+        } else if (sgltMachine.stage === 'binding_ext' && sgltMachine.timer > 0.6) {
+          sgltMachine.stage = 'translocating';
+          sgltMachine.timer = 0;
+        } else if (sgltMachine.stage === 'translocating' && sgltMachine.timer > 0.6) {
+          sgltMachine.stage = 'releasing_int';
+          sgltMachine.timer = 0;
+          // Release Glucose into cytoplasm, heading towards Mitochondria!
+          particles.glc_to_mito.push({
+            x: memX + memW + 6 * dpr,
+            y: sgltY,
+            targetX: innerX - 10 * dpr,
+            targetY: etcY + 12 * dpr,
+            progress: 0,
+            speed: 0.016 * speedScale
+          });
+          // Release Na+ into cytoplasm
+          particles.na_int.push({
+            x: memX + memW + 6 * dpr,
+            y: sgltY + 8 * dpr,
+            targetX: memX + memW + 18 * dpr,
+            targetY: pumpY + 14 * dpr,
+            progress: 0,
+            speed: 0.018 * speedScale
+          });
+        } else if (sgltMachine.stage === 'releasing_int' && sgltMachine.timer > 0.5) {
+          sgltMachine.stage = 'idle';
+          sgltMachine.timer = 0;
+        }
+      }
+
+      // Draw SGLT Barrel Gates
+      const sLeft = memX - 2 * dpr;
+      const sTop = sgltY - 26 * dpr;
+      const sW = memW + 4 * dpr;
+      const sH = 52 * dpr;
+
+      const sOutOpen = (sgltMachine.stage === 'binding_ext');
+      const sInOpen = (sgltMachine.stage === 'releasing_int');
+      const sMidPore = (sgltMachine.stage === 'translocating');
+
+      ctx.fillStyle = t <= 25 ? '#064e3b' : (t >= 75 ? '#065f46' : '#047857');
+      ctx.strokeStyle = t >= 75 ? '#34d399' : '#10b981';
+      ctx.lineWidth = 2.4 * dpr;
+
+      // Top Barrel Lobe
+      ctx.beginPath();
+      ctx.moveTo(sLeft, sTop);
+      ctx.lineTo(sLeft + sW, sTop);
+      ctx.lineTo(sLeft + sW, sTop + (sInOpen ? 8 * dpr : (sMidPore ? 14 * dpr : 22 * dpr)));
+      ctx.lineTo(sLeft, sTop + (sOutOpen ? 8 * dpr : (sMidPore ? 14 * dpr : 22 * dpr)));
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Bottom Barrel Lobe
+      ctx.beginPath();
+      ctx.moveTo(sLeft, sTop + sH);
+      ctx.lineTo(sLeft + sW, sTop + sH);
+      ctx.lineTo(sLeft + sW, sTop + sH - (sInOpen ? 8 * dpr : (sMidPore ? 14 * dpr : 22 * dpr)));
+      ctx.lineTo(sLeft, sTop + sH - (sOutOpen ? 8 * dpr : (sMidPore ? 14 * dpr : 22 * dpr)));
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Translocating Payload visible inside SGLT Barrel
+      if (sMidPore) {
+        drawGlucose(ctx, sLeft + sW * 0.5, sgltY - 4 * dpr, dpr);
+        drawNa(ctx, sLeft + sW * 0.5, sgltY + 8 * dpr, dpr);
+      }
+
+      // Highlight circle when SGLT button is triggered
+      if (state.actionHighlight && state.actionHighlight.type === 'sglt' && state.actionHighlight.timer > 0) {
+        ctx.save();
+        ctx.strokeStyle = `rgba(52, 211, 153, ${state.actionHighlight.timer})`;
+        ctx.lineWidth = 3.5 * dpr;
+        ctx.beginPath();
+        ctx.arc(memX + memW * 0.5, sgltY, (36 + Math.sin(state.time * 12) * 6) * dpr, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      if (state.showLabels) {
+        ctx.fillStyle = '#d1fae5';
+        ctx.font = `bold ${8.5 * dpr}px "JetBrains Mono", monospace`;
+        ctx.textAlign = 'center';
+        ctx.fillText('SGLT 共同運輸', memX + memW * 0.5, sgltY - 30 * dpr);
+        const sgltLabel = sOutOpen ? '外側結合口袋開' : (sInOpen ? '內側釋放開' : (sMidPore ? '穿越孔道內部中 ➔' : '遮閉待命'));
+        ctx.font = `bold ${7.5 * dpr}px "Noto Sans TC", sans-serif`;
+        ctx.fillStyle = '#6ee7b7';
+        ctx.fillText(sgltLabel, memX + memW * 0.5, sgltY + 34 * dpr);
+      }
+      ctx.restore();
+
+      // [D] Step 4: ETC Complexes
+      ctx.save();
+      ctx.globalAlpha = getAlpha(4);
+      ctx.fillStyle = t <= 25 ? '#1e3a8a' : (t >= 75 ? '#dc2626' : '#2563eb');
+      ctx.strokeStyle = t >= 75 ? '#f87171' : '#60a5fa';
+      ctx.lineWidth = 2 * dpr;
+      ctx.beginPath();
+      ctx.roundRect(innerX - 18 * dpr, etcY - 20 * dpr, 36 * dpr, 40 * dpr, 6 * dpr);
+      ctx.fill();
+      ctx.stroke();
+
+      if (state.showLabels) {
+        ctx.fillStyle = '#dbeafe';
+        ctx.font = `bold ${8.5 * dpr}px "JetBrains Mono", monospace`;
+        ctx.textAlign = 'center';
+        ctx.fillText('ETC', innerX, etcY - 2 * dpr);
+        ctx.fillText('I~IV', innerX, etcY + 10 * dpr);
+      }
+      ctx.restore();
+
+      // [E] Step 5: ATP Synthase Machinery
+      ctx.save();
+      ctx.globalAlpha = getAlpha(5);
+      if (state.isPlaying && isStepActive(5)) {
+        rotorAngle += 0.12 * (0.3 + (t / 60)) * speedScale;
+      }
+      ctx.fillStyle = '#d97706';
+      ctx.strokeStyle = '#facc15';
+      ctx.lineWidth = 2 * dpr;
+      ctx.beginPath();
+      ctx.roundRect(innerX - 16 * dpr, synthY - 12 * dpr, 28 * dpr, 24 * dpr, 4 * dpr);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#eab308';
+      ctx.beginPath();
+      ctx.arc(rotorX, synthY, 15 * dpr, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.strokeStyle = '#713f12';
+      ctx.lineWidth = 2 * dpr;
+      for (let k = 0; k < 3; k++) {
+        const ang = rotorAngle + (k * Math.PI * 2) / 3;
+        ctx.beginPath();
+        ctx.moveTo(rotorX, synthY);
+        ctx.lineTo(rotorX + Math.cos(ang) * 12 * dpr, synthY + Math.sin(ang) * 12 * dpr);
+        ctx.stroke();
+      }
+
+      if (state.showLabels) {
+        ctx.fillStyle = '#fef08a';
+        ctx.font = `bold ${8.5 * dpr}px "JetBrains Mono", monospace`;
+        ctx.textAlign = 'center';
+        ctx.fillText('ATP Synthase', rotorX + 38 * dpr, synthY + 3 * dpr);
+      }
+      ctx.restore();
+
+      // [F] Step 5: UCP Pore Machinery
+      ctx.save();
+      ctx.globalAlpha = getAlpha(5);
+      // UCP pore expands dramatically in Hyperthyroidism!
+      const ucpPoreSize = (t <= 25 ? 6 : (10 + (t / 100) * 24)) * dpr;
+      ctx.fillStyle = t >= 75 ? '#9f1239' : '#e11d48';
+      ctx.strokeStyle = t >= 75 ? '#fda4af' : '#fb7185';
+      ctx.lineWidth = 2.4 * dpr;
+      ctx.beginPath();
+      ctx.roundRect(innerX - 18 * dpr, ucpY - ucpPoreSize * 0.5 - 9 * dpr, 36 * dpr, 9 * dpr, 4 * dpr);
+      ctx.roundRect(innerX - 18 * dpr, ucpY + ucpPoreSize * 0.5, 36 * dpr, 9 * dpr, 4 * dpr);
+      ctx.fill();
+      ctx.stroke();
+
+      if (state.showLabels) {
+        ctx.fillStyle = '#fecdd3';
+        ctx.font = `bold ${8.5 * dpr}px "JetBrains Mono", monospace`;
+        ctx.textAlign = 'center';
+        ctx.fillText(t >= 75 ? '🔥 UCP 狂暴漏孔' : 'UCP 質子捷徑', innerX + 44 * dpr, ucpY + 3 * dpr);
+      }
+      ctx.restore();
+
+      // =========================================================================
+      // 3. CLOSED-LOOP PARTICLES SPAWN & PHYSICAL CONVERSION
+      // =========================================================================
+      if (state.isPlaying) {
+        // [Step 1] T3 particles
+        const t3Chance = (t <= 25 ? 0.01 : (t >= 75 ? 0.15 : 0.04));
+        if (isStepActive(1) && Math.random() < t3Chance) {
+          particles.t3.push({
+            x: 8 * dpr,
+            y: nucY + (Math.random() * 0.4 + 0.3) * nucH,
+            targetX: trX,
+            targetY: dnaY,
+            progress: 0,
+            speed: 0.014 * speedScale
+          });
+        }
+
+        // [Step 3] Blood Glucose drifting towards SGLT entrance
+        const glcChance = (t <= 25 ? 0.015 : (t >= 75 ? 0.18 : 0.05));
+        if (isStepActive(3) && Math.random() < glcChance) {
+          particles.glc_blood.push({
+            x: 8 * dpr,
+            y: sgltY - 14 * dpr + Math.random() * 28 * dpr,
+            targetX: memX - 8 * dpr,
+            targetY: sgltY,
+            progress: 0,
+            speed: 0.015 * speedScale
+          });
+        }
+
+        // [Step 4] H+ pumped into IMS from ETC
+        const hChance = (t <= 25 ? 0.03 : (0.06 + (t / 100) * 0.28));
+        if (isStepActive(4) && Math.random() < hChance) {
+          particles.h_ims.push({
+            x: innerX - 8 * dpr,
+            y: etcY + (Math.random() - 0.5) * 16 * dpr,
+            targetY: (t >= 75 || Math.random() < 0.6) ? ucpY : synthY,
+            progress: 0,
+            speed: 0.018 * speedScale
+          });
+        }
+      }
+
+      // =========================================================================
+      // 4. UPDATE AND RENDER PARTICLES (WITH STRICT TIMING)
+      // =========================================================================
+
+      // --- T3 into Nucleus ---
+      for (let i = particles.t3.length - 1; i >= 0; i--) {
+        const p = particles.t3[i];
+        if (state.isPlaying) p.progress += p.speed;
+        p.x = 8 * dpr + (p.targetX - 8 * dpr) * p.progress;
+        p.y = p.y + (p.targetY - p.y) * 0.02;
+        drawT3(ctx, p.x, p.y, dpr);
+        if (p.progress >= 1) particles.t3.splice(i, 1);
+      }
+
+      // --- ATP: Synthase -> Cytoplasm -> Pump Cavity (STRICT CONTACT CHECK) ---
+      for (let i = particles.atp_to_pump.length - 1; i >= 0; i--) {
+        const p = particles.atp_to_pump[i];
+        if (state.isPlaying) p.progress += p.speed;
+        const u = 1 - p.progress;
+        const cp1x = w * 0.45, cp1y = synthY - 30 * dpr;
+        const cp2x = w * 0.30, cp2y = pumpY + 40 * dpr;
+        p.x = u * u * u * rotorX + 3 * u * u * p.progress * cp1x + 3 * u * p.progress * p.progress * cp2x + p.progress * p.progress * p.progress * p.targetX;
+        p.y = u * u * u * synthY + 3 * u * u * p.progress * cp1y + 3 * u * p.progress * p.progress * cp2y + p.progress * p.progress * p.progress * p.targetY;
+
+        drawATP(ctx, p.x, p.y, dpr);
+
+        // Check if ATP touched the Pump pocket
+        if (p.progress >= 1) {
+          if (pumpMachine.state === 1 || pumpMachine.state === 0) {
+            pumpMachine.hasAtpDocked = true; // Pump unlocks & hydrolyzes!
+          }
+          particles.atp_to_pump.splice(i, 1);
+        }
+      }
+
+      // --- ADP + Pi: Pump -> Cytoplasm -> Back to Synthase ---
+      for (let i = particles.adp_to_mito.length - 1; i >= 0; i--) {
+        const p = particles.adp_to_mito[i];
+        if (state.isPlaying) p.progress += p.speed;
+        const u = 1 - p.progress;
+        const cp1x = w * 0.28, cp1y = pumpY - 45 * dpr;
+        const cp2x = w * 0.44, cp2y = etcY - 20 * dpr;
+        p.x = u * u * u * (memX + memW) + 3 * u * u * p.progress * cp1x + 3 * u * p.progress * p.progress * cp2x + p.progress * p.progress * p.progress * p.targetX;
+        p.y = u * u * u * (pumpY + 12 * dpr) + 3 * u * u * p.progress * cp1y + 3 * u * p.progress * p.progress * cp2y + p.progress * p.progress * p.progress * p.targetY;
+
+        drawADP(ctx, p.x, p.y, dpr);
+
+        if (p.progress >= 1) {
+          particles.adp_to_mito.splice(i, 1);
+        }
+      }
+
+      // --- Extracellular Na+ (Shot from Pump, Heading toward SGLT Outer Pocket!) ---
+      for (let i = particles.na_ext.length - 1; i >= 0; i--) {
+        const p = particles.na_ext[i];
+        if (state.isPlaying) p.progress += p.speed;
+        p.x = (memX - 4 * dpr) + (p.targetX - (memX - 4 * dpr)) * p.progress;
+        p.y = (pumpY) + (p.targetY - (pumpY)) * p.progress;
+
+        drawNa(ctx, p.x, p.y, dpr);
+
+        if (p.progress >= 1) {
+          // Trigger SGLT Alternating Access!
+          sgltMachine.stage = 'translocating';
+          sgltMachine.timer = 0;
+          particles.na_ext.splice(i, 1);
+        }
+      }
+
+      // --- Blood Glucose Drifting into SGLT Pocket ---
+      for (let i = particles.glc_blood.length - 1; i >= 0; i--) {
+        const p = particles.glc_blood[i];
+        if (state.isPlaying) p.progress += p.speed;
+        p.x = 8 * dpr + (p.targetX - 8 * dpr) * p.progress;
+        p.y = p.y + (p.targetY - p.y) * 0.04;
+
+        drawGlucose(ctx, p.x, p.y, dpr);
+
+        if (p.progress >= 1) {
+          particles.glc_blood.splice(i, 1);
+        }
+      }
+
+      // --- Glucose Translocated by SGLT, Traveling into Mitochondria Matrix ---
+      for (let i = particles.glc_to_mito.length - 1; i >= 0; i--) {
+        const p = particles.glc_to_mito[i];
+        if (state.isPlaying) p.progress += p.speed;
+        const u = 1 - p.progress;
+        const cp1x = w * 0.35, cp1y = sgltY;
+        const cp2x = w * 0.44, cp2y = innerY + innerH * 0.4;
+        p.x = u * u * u * (memX + memW + 6 * dpr) + 3 * u * u * p.progress * cp1x + 3 * u * p.progress * p.progress * cp2x + p.progress * p.progress * p.progress * p.targetX;
+        p.y = u * u * u * sgltY + 3 * u * u * p.progress * cp1y + 3 * u * p.progress * p.progress * cp2y + p.progress * p.progress * p.progress * p.targetY;
+
+        drawGlucose(ctx, p.x, p.y, dpr);
+
+        if (p.progress >= 1) {
+          if (isStepActive(4)) {
+            const burst = t >= 75 ? 4 : 2;
+            for (let k = 0; k < burst; k++) {
+              particles.h_ims.push({
+                x: innerX - 8 * dpr,
+                y: etcY + (k - 0.5) * 12 * dpr,
+                targetY: ucpY,
+                progress: 0,
+                speed: 0.02 * speedScale
+              });
+            }
+          }
+          particles.glc_to_mito.splice(i, 1);
+        }
+      }
+
+      // --- Cytoplasm Na+ from SGLT (Heading back to Pump) ---
+      for (let i = particles.na_int.length - 1; i >= 0; i--) {
+        const p = particles.na_int[i];
+        if (state.isPlaying) p.progress += p.speed;
+        p.x = (memX + memW + 6 * dpr) + (p.targetX - (memX + memW + 6 * dpr)) * p.progress;
+        p.y = sgltY + (p.targetY - sgltY) * p.progress;
+
+        drawNa(ctx, p.x, p.y, dpr);
+
+        if (p.progress >= 1) particles.na_int.splice(i, 1);
+      }
+
+      // --- K+ released into cytoplasm ---
+      for (let i = particles.k_int.length - 1; i >= 0; i--) {
+        const p = particles.k_int[i];
+        if (state.isPlaying) {
+          p.x += p.vx * speedScale;
+          p.y += p.vy * speedScale;
+          p.age++;
+        }
+        drawK(ctx, p.x, p.y, dpr);
+        if (p.age > 45) particles.k_int.splice(i, 1);
+      }
+
+      // --- H+ within IMS: Drifts towards Synthase or UCP ---
+      for (let i = particles.h_ims.length - 1; i >= 0; i--) {
+        const p = particles.h_ims[i];
+        if (state.isPlaying) {
+          p.progress += p.speed;
+          p.x = (innerX - 8 * dpr) - Math.sin(p.progress * Math.PI) * 16 * dpr;
+          p.y = etcY + (p.targetY - etcY) * p.progress;
+        }
+
+        drawH(ctx, p.x, p.y, dpr);
+
+        if (p.progress >= 1) {
+          if (Math.abs(p.targetY - ucpY) < 18 * dpr && isStepActive(5)) {
+            // Shoots through UCP pore!
+            particles.h_ucp.push({
+              x: innerX - 18 * dpr,
+              y: ucpY,
+              targetX: innerX + 22 * dpr,
+              progress: 0,
+              speed: 0.065 * speedScale
+            });
+          }
+          particles.h_ims.splice(i, 1);
+        }
+      }
+
+      // --- H+ Passing through UCP Pore (High Speed Shortcut!) ---
+      for (let i = particles.h_ucp.length - 1; i >= 0; i--) {
+        const p = particles.h_ucp[i];
+        if (state.isPlaying) p.progress += p.speed;
+        p.x = (innerX - 18 * dpr) + ((innerX + 22 * dpr) - (innerX - 18 * dpr)) * p.progress;
+
+        drawH(ctx, p.x, p.y, dpr, true);
+
+        // EXIT UCP: EXPLOSIVE COLLISION INTO EXPANDING HEAT WAVES!
+        if (p.progress >= 1) {
+          const waveCount = t >= 75 ? 2 : 1;
+          for (let wIdx = 0; wIdx < waveCount; wIdx++) {
+            particles.heat_waves.push({
+              x: innerX + 26 * dpr,
+              y: ucpY + (wIdx - 0.5) * 8 * dpr,
+              radius: 5 * dpr,
+              alpha: 1.0,
+              maxRadius: (t >= 75 ? 42 : 24) * dpr,
+              expandSpeed: (t >= 75 ? 2.4 : 1.4) * dpr * speedScale
+            });
+          }
+          particles.h_ucp.splice(i, 1);
+        }
+      }
+
+      // --- Expanding Thermal Heat Waves (Heat Emission) ---
+      for (let i = particles.heat_waves.length - 1; i >= 0; i--) {
+        const hw = particles.heat_waves[i];
+        if (state.isPlaying) {
+          hw.radius += hw.expandSpeed;
+          hw.alpha -= 0.024 * speedScale;
+          hw.y -= 0.35 * dpr;
+        }
+        ctx.save();
+        const strokeCol = t >= 75 ? `rgba(239, 68, 68, ${Math.max(0, hw.alpha)})` : `rgba(244, 63, 94, ${Math.max(0, hw.alpha)})`;
+        const fillCol = t >= 75 ? `rgba(249, 115, 22, ${Math.max(0, hw.alpha * 0.4)})` : `rgba(251, 146, 60, ${Math.max(0, hw.alpha * 0.25)})`;
+        ctx.strokeStyle = strokeCol;
+        ctx.fillStyle = fillCol;
+        ctx.lineWidth = (t >= 75 ? 2.8 : 1.8) * dpr;
+        ctx.beginPath();
+        ctx.arc(hw.x, hw.y, hw.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        if (state.showLabels && hw.radius > 14 * dpr && hw.alpha > 0.35) {
+          ctx.fillStyle = `rgba(254, 205, 211, ${hw.alpha})`;
+          ctx.font = `bold ${8.5 * dpr}px "Noto Sans TC", sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.fillText('🔥 質子碰撞產熱', hw.x, hw.y - hw.radius - 2 * dpr);
+        }
+        ctx.restore();
+
+        if (hw.alpha <= 0 || hw.radius > hw.maxRadius) particles.heat_waves.splice(i, 1);
+      }
+
+      requestAnimationFrame(renderLoop);
+    }
+
+    /* =========================================================================
+       6. PRECISE MOLECULAR DRAWING ROUTINES
+    ========================================================================= */
+    function drawT3(c, x, y, dpr) {
+      c.save();
+      c.fillStyle = '#c084fc';
+      c.strokeStyle = '#f5d0fe';
+      c.lineWidth = 1.5 * dpr;
+      c.beginPath();
+      c.moveTo(x, y - 6 * dpr);
+      c.lineTo(x + 5 * dpr, y + 4 * dpr);
+      c.lineTo(x - 5 * dpr, y + 4 * dpr);
+      c.closePath();
+      c.fill();
+      c.stroke();
+      if (state.showLabels) {
+        c.fillStyle = '#fdf4ff';
+        c.font = `bold ${8 * dpr}px "JetBrains Mono", monospace`;
+        c.textAlign = 'center';
+        c.fillText('T₃', x, y - 8 * dpr);
+      }
+      c.restore();
+    }
+
+    function drawATP(c, x, y, dpr) {
+      c.save();
+      c.fillStyle = '#facc15';
+      c.strokeStyle = '#fef08a';
+      c.lineWidth = 1.5 * dpr;
+      c.beginPath();
+      c.roundRect(x - 12 * dpr, y - 7 * dpr, 24 * dpr, 14 * dpr, 4 * dpr);
+      c.fill();
+      c.stroke();
+      c.fillStyle = '#854d0e';
+      c.beginPath();
+      c.arc(x - 6 * dpr, y, 2 * dpr, 0, Math.PI * 2);
+      c.arc(x, y, 2 * dpr, 0, Math.PI * 2);
+      c.arc(x + 6 * dpr, y, 2 * dpr, 0, Math.PI * 2);
+      c.fill();
+      if (state.showLabels) {
+        c.fillStyle = '#000000';
+        c.font = `black ${8.5 * dpr}px "JetBrains Mono", monospace`;
+        c.textAlign = 'center';
+        c.fillText('ATP', x, y - 8 * dpr);
+      }
+      c.restore();
+    }
+
+    function drawADP(c, x, y, dpr) {
+      c.save();
+      c.fillStyle = '#f97316';
+      c.strokeStyle = '#fdba74';
+      c.lineWidth = 1.5 * dpr;
+      c.beginPath();
+      c.roundRect(x - 10 * dpr, y - 6 * dpr, 20 * dpr, 12 * dpr, 4 * dpr);
+      c.fill();
+      c.stroke();
+      c.fillStyle = '#fb923c';
+      c.beginPath();
+      c.arc(x + 13 * dpr, y + 4 * dpr, 3 * dpr, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      if (state.showLabels) {
+        c.fillStyle = '#fed7aa';
+        c.font = `bold ${8 * dpr}px "JetBrains Mono", monospace`;
+        c.textAlign = 'center';
+        c.fillText('ADP+Pi', x, y - 7 * dpr);
+      }
+      c.restore();
+    }
+
+    function drawGlucose(c, x, y, dpr) {
+      c.save();
+      c.fillStyle = '#34d399';
+      c.strokeStyle = '#a7f3d0';
+      c.lineWidth = 1.5 * dpr;
+      c.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const ang = (i * Math.PI) / 3;
+        const hx = x + Math.cos(ang) * 7 * dpr;
+        const hy = y + Math.sin(ang) * 7 * dpr;
+        if (i === 0) c.moveTo(hx, hy);
+        else c.lineTo(hx, hy);
+      }
+      c.closePath();
+      c.fill();
+      c.stroke();
+      if (state.showLabels) {
+        c.fillStyle = '#d1fae5';
+        c.font = `bold ${8 * dpr}px "JetBrains Mono", monospace`;
+        c.textAlign = 'center';
+        c.fillText('Glc', x, y - 9 * dpr);
+      }
+      c.restore();
+    }
+
+    function drawNa(c, x, y, dpr) {
+      c.save();
+      c.fillStyle = '#22d3ee';
+      c.strokeStyle = '#a5f3fc';
+      c.lineWidth = 1.2 * dpr;
+      c.beginPath();
+      c.arc(x, y, 4.5 * dpr, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      if (state.showLabels) {
+        c.fillStyle = '#083344';
+        c.font = `bold ${6.5 * dpr}px "JetBrains Mono", monospace`;
+        c.textAlign = 'center';
+        c.fillText('+', x, y + 2.5 * dpr);
+      }
+      c.restore();
+    }
+
+    function drawK(c, x, y, dpr) {
+      c.save();
+      c.fillStyle = '#818cf8';
+      c.strokeStyle = '#c7d2fe';
+      c.lineWidth = 1.2 * dpr;
+      c.beginPath();
+      c.arc(x, y, 4.5 * dpr, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      if (state.showLabels) {
+        c.fillStyle = '#1e1b4b';
+        c.font = `bold ${6.5 * dpr}px "JetBrains Mono", monospace`;
+        c.textAlign = 'center';
+        c.fillText('+', x, y + 2.5 * dpr);
+      }
+      c.restore();
+    }
+
+    function drawH(c, x, y, dpr, isUcp = false) {
+      c.save();
+      c.fillStyle = isUcp ? '#fb7185' : '#38bdf8';
+      c.strokeStyle = '#ffffff';
+      c.lineWidth = 1.2 * dpr;
+      c.beginPath();
+      c.arc(x, y, 3.8 * dpr, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+      if (state.showLabels) {
+        c.fillStyle = '#ffffff';
+        c.font = `bold ${7 * dpr}px "JetBrains Mono", monospace`;
+        c.textAlign = 'center';
+        c.fillText('H⁺', x, y - 5 * dpr);
+      }
+      c.restore();
+    }
+
+    // Keyboard Shortcuts
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight') changeStep(1);
+      else if (e.key === 'ArrowLeft') changeStep(-1);
+      else if (e.key === ' ') {
+        e.preventDefault();
+        togglePlayPause();
+      }
+    });
+
+    window.addEventListener('load', () => {
+      resizeCanvas();
+      updateNarrative();
+      handleSlider();
+      renderLoop();
+    });
+  </script>
+</body>
+</html>

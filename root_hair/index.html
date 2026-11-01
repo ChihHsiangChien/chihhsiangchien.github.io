@@ -1,0 +1,1972 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>植物根毛吸水與離子幫浦協同機制：巨觀到微觀互動教學模擬器</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
+        body {
+            font-family: 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+            overflow: hidden;
+        }
+        .touch-btn {
+            min-height: 46px;
+            touch-action: manipulation;
+            transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .touch-btn:active {
+            transform: scale(0.96);
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: grab;
+        }
+        canvas:active {
+            cursor: grabbing;
+        }
+        /* Custom Scrollbar for side panel on smaller screens */
+        ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 9999px;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 h-screen w-screen flex flex-col overflow-hidden">
+
+    <!-- ================= TOP HEADER BAR ================= -->
+    <header class="bg-slate-900/95 border-b border-slate-800 px-3 py-2 flex flex-wrap items-center justify-between gap-2 z-30 shrink-0 shadow-md">
+        <!-- Title & Badge -->
+        <div class="flex items-center space-x-2.5">
+            <div class="bg-gradient-to-br from-amber-600 to-emerald-600 p-2 rounded-xl text-white shadow-md">
+                <i class="fa-solid fa-magnifying-glass-chart text-lg"></i>
+            </div>
+            <div>
+                <div class="flex items-center space-x-2">
+                    <h1 class="text-base md:text-lg font-black tracking-tight text-white">植物根毛吸水機制：巨觀 ➔ 微觀教學模擬器</h1>
+                    <span class="hidden sm:inline-block bg-amber-500/20 text-amber-300 text-[11px] px-2.5 py-0.5 rounded-full border border-amber-500/40 font-bold">目標導向路徑版</span>
+                </div>
+                <p class="text-[11px] text-slate-400 hidden md:block">解剖方向：【左】木質部與皮層 ⬅ 表皮細胞與根毛 ⬅ 【右】土壤水分與礦物質（支援縮放平移）</p>
+            </div>
+        </div>
+
+        <!-- Camera View Switchers (Macro vs Micro Zoom) -->
+        <div class="flex items-center space-x-1.5 bg-slate-800/90 p-1 rounded-2xl border border-slate-700">
+            <button id="btnViewMacro" onclick="setCameraPreset('macro')" class="touch-btn px-3 py-1.5 rounded-xl text-xs md:text-sm font-bold flex items-center space-x-1.5 bg-amber-600 text-white shadow">
+                <i class="fa-solid fa-earth-asia"></i>
+                <span>🌍 巨觀：根毛全貌</span>
+            </button>
+            <button id="btnViewMicro" onclick="setCameraPreset('micro')" class="touch-btn px-3 py-1.5 rounded-xl text-xs md:text-sm font-bold flex items-center space-x-1.5 text-slate-300 hover:text-white hover:bg-slate-700/60">
+                <i class="fa-solid fa-microscope"></i>
+                <span>🔬 微觀：放大細胞膜</span>
+            </button>
+            <button id="btnViewPump" onclick="setCameraPreset('ultra')" class="touch-btn px-2.5 py-1.5 rounded-xl text-xs md:text-sm font-bold hidden sm:flex items-center space-x-1 text-slate-300 hover:text-white hover:bg-slate-700/60" title="特寫離子幫浦與水通道">
+                <i class="fa-solid fa-crosshairs"></i>
+                <span>特寫通道</span>
+            </button>
+        </div>
+
+        <!-- Sync vs Step-by-Step Mode Toggle -->
+        <div class="flex items-center space-x-1.5 bg-slate-800/90 p-1 rounded-2xl border border-slate-700">
+            <button id="btnModeSync" onclick="setSimMode('sync')" class="touch-btn px-3 py-1.5 rounded-xl text-xs md:text-sm font-bold flex items-center space-x-1.5 bg-emerald-600 text-white shadow">
+                <i class="fa-solid fa-arrows-spin"></i>
+                <span>🔄 連續同步運作</span>
+            </button>
+            <button id="btnModeStep" onclick="setSimMode('step')" class="touch-btn px-3 py-1.5 rounded-xl text-xs md:text-sm font-bold flex items-center space-x-1.5 text-slate-300 hover:text-white hover:bg-slate-700/60">
+                <i class="fa-solid fa-shoe-prints"></i>
+                <span>🎯 分段逐步解說</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- ================= STEP-BY-STEP TEACHER BAR (Sub-header) ================= -->
+    <div id="stepControlBar" class="bg-slate-900 border-b border-amber-500/30 px-3 py-2 z-20 shrink-0 hidden">
+        <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center space-x-1.5">
+                <span class="bg-amber-500 text-slate-950 text-xs font-black px-2 py-1 rounded-lg">逐步解說模式</span>
+                <span class="text-xs text-amber-200 hidden lg:inline">點擊步驟將自動對焦並執行單一生理過程：</span>
+            </div>
+
+            <div class="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-1.5 max-w-4xl">
+                <button onclick="selectStep(1)" id="stepTab1" class="touch-btn px-2 py-1.5 rounded-xl text-xs font-bold border transition flex items-center justify-center space-x-1">
+                    <span>① 粒線體送出 ATP</span>
+                </button>
+                <button onclick="selectStep(2)" id="stepTab2" class="touch-btn px-2 py-1.5 rounded-xl text-xs font-bold border transition flex items-center justify-center space-x-1">
+                    <span>② 幫浦抓入礦物質</span>
+                </button>
+                <button onclick="selectStep(3)" id="stepTab3" class="touch-btn px-2 py-1.5 rounded-xl text-xs font-bold border transition flex items-center justify-center space-x-1">
+                    <span>③ 根毛內濃度上升</span>
+                </button>
+                <button onclick="selectStep(4)" id="stepTab4" class="touch-btn px-2 py-1.5 rounded-xl text-xs font-bold border transition flex items-center justify-center space-x-1">
+                    <span>④ 水由水道高速進入</span>
+                </button>
+            </div>
+
+            <div class="flex items-center space-x-1.5">
+                <button onclick="replayCurrentStep()" class="touch-btn bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/40 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center space-x-1">
+                    <i class="fa-solid fa-rotate-left"></i>
+                    <span>重播本步</span>
+                </button>
+                <button onclick="advanceNextStep()" class="touch-btn bg-amber-500 hover:bg-amber-400 text-slate-950 px-3 py-1.5 rounded-xl text-xs font-black flex items-center space-x-1 shadow-lg">
+                    <span>下一步</span>
+                    <i class="fa-solid fa-forward-step"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= MAIN WORKSPACE ================= -->
+    <main class="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
+
+        <!-- LEFT / CENTER: INTERACTIVE CANVAS VIEWPORT -->
+        <div class="flex-1 relative bg-slate-950 overflow-hidden flex flex-col">
+
+            <!-- Top-Left & Top-Right Concentration / Osmotic Comparison HUD (Left Root vs Right Soil) -->
+            <div class="absolute top-3 left-3 right-3 z-10 flex flex-wrap items-start justify-between gap-2 pointer-events-none">
+                
+                <!-- Left Side Indicator: Inside Root Hair Cell -->
+                <div class="bg-slate-900/90 backdrop-blur-md border-2 border-amber-600/60 rounded-2xl p-2.5 shadow-xl pointer-events-auto min-w-[210px] sm:min-w-[250px]">
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-1 mb-1.5">
+                        <span class="text-xs font-black text-amber-300 flex items-center">
+                            <i class="fa-solid fa-arrow-left mr-1 text-amber-400"></i>【左】根毛細胞內部
+                        </span>
+                        <span id="badgeCellState" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-300 border border-orange-500/40">高濃度・低水勢</span>
+                    </div>
+                    <div class="space-y-1.5 text-xs">
+                        <div>
+                            <div class="flex justify-between text-[11px] text-slate-300 mb-0.5">
+                                <span>細胞內礦物質濃度:</span>
+                                <span id="valCellIon" class="font-bold text-orange-400 font-mono">高 (85 mM)</span>
+                            </div>
+                            <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                                <div id="barCellIon" class="bg-gradient-to-r from-orange-500 to-amber-400 h-full rounded-full transition-all duration-300" style="width: 85%"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-[11px] text-slate-300 mb-0.5">
+                                <span>細胞內水勢 (Ψw):</span>
+                                <span id="valCellWP" class="font-bold text-cyan-300 font-mono">低 (-0.8 MPa)</span>
+                            </div>
+                            <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                                <div id="barCellWP" class="bg-cyan-500 h-full rounded-full transition-all duration-300" style="width: 25%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Center Direction Indicator Banner -->
+                <div class="hidden xl:flex flex-col items-center bg-slate-900/90 backdrop-blur-md border border-slate-700 px-4 py-2 rounded-2xl shadow-xl pointer-events-auto">
+                    <div class="text-[11px] text-slate-400 font-bold mb-0.5">水分與礦物質吸收方向（由右向左）</div>
+                    <div class="flex items-center space-x-2 text-xs font-black">
+                        <span class="text-emerald-400">【左：植物根部】</span>
+                        <div class="flex items-center text-cyan-400 animate-pulse">
+                            <i class="fa-solid fa-angles-left text-base"></i>
+                            <span class="mx-1 text-[11px] bg-cyan-500/20 px-2 py-0.5 rounded-full border border-cyan-400/40">滲透吸水 & 主動運輸</span>
+                            <i class="fa-solid fa-angles-left text-base"></i>
+                        </div>
+                        <span class="text-amber-500">【右：土壤環境】</span>
+                    </div>
+                </div>
+
+                <!-- Right Side Indicator: Right Soil Environment -->
+                <div class="bg-slate-900/90 backdrop-blur-md border-2 border-stone-600/70 rounded-2xl p-2.5 shadow-xl pointer-events-auto min-w-[210px] sm:min-w-[250px]">
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-1 mb-1.5">
+                        <span class="text-xs font-black text-stone-300 flex items-center">
+                            【右】土壤溶液環境<i class="fa-solid fa-arrow-right ml-1 text-stone-400"></i>
+                        </span>
+                        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">低濃度・高水勢</span>
+                    </div>
+                    <div class="space-y-1.5 text-xs">
+                        <div>
+                            <div class="flex justify-between text-[11px] text-slate-300 mb-0.5">
+                                <span>土壤礦物質濃度:</span>
+                                <span id="valSoilIon" class="font-bold text-orange-300 font-mono">低 (15 mM)</span>
+                            </div>
+                            <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                                <div id="barSoilIon" class="bg-orange-500/70 h-full rounded-full transition-all duration-300" style="width: 18%"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-[11px] text-slate-300 mb-0.5">
+                                <span>土壤水勢 (Ψw):</span>
+                                <span id="valSoilWP" class="font-bold text-cyan-400 font-mono">高 (-0.1 MPa)</span>
+                            </div>
+                            <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                                <div id="barSoilWP" class="bg-cyan-400 h-full rounded-full transition-all duration-300" style="width: 90%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Interactive Zoom & Pan Floating Helper (Bottom-Left of Canvas) -->
+            <div class="absolute bottom-16 left-3 z-10 flex items-center space-x-1.5 bg-slate-900/90 backdrop-blur border border-slate-700 p-1.5 rounded-2xl shadow-lg">
+                <button onclick="zoomCamera(1.25)" class="touch-btn w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center justify-center" title="放大">
+                    <i class="fa-solid fa-magnifying-glass-plus"></i>
+                </button>
+                <button onclick="zoomCamera(0.8)" class="touch-btn w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center justify-center" title="縮小">
+                    <i class="fa-solid fa-magnifying-glass-minus"></i>
+                </button>
+                <button onclick="setCameraPreset('macro')" class="touch-btn px-2.5 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 flex items-center space-x-1" title="重設視角">
+                    <i class="fa-solid fa-expand"></i>
+                    <span>全圖復位</span>
+                </button>
+                <span id="zoomLevelText" class="text-[11px] font-mono text-amber-400 px-2 font-bold">1.0x</span>
+            </div>
+
+            <!-- Step-by-Step Pedagogical Subtitle Banner (Overlay at Bottom of Canvas) -->
+            <div id="pedagogicalBanner" class="absolute bottom-16 right-3 left-3 md:left-auto md:max-w-xl z-10 bg-slate-900/95 backdrop-blur-md border-2 border-amber-500/70 rounded-2xl p-3 shadow-2xl pointer-events-auto transition-all duration-300">
+                <div class="flex items-start space-x-3">
+                    <div id="bannerIconBox" class="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center text-lg shrink-0 mt-0.5">
+                        <i id="bannerIcon" class="fa-solid fa-chalkboard-user"></i>
+                    </div>
+                    <div class="flex-1">
+                        <div class="flex items-center justify-between">
+                            <h3 id="bannerTitle" class="text-sm font-black text-amber-300">連續同步模式：根毛全天候主動吸肥與滲透吸水</h3>
+                            <span id="bannerTag" class="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-md font-bold">可隨時放大細胞膜觀察</span>
+                        </div>
+                        <p id="bannerDesc" class="text-xs text-slate-200 mt-1 leading-relaxed">
+                            右側土壤中的礦物質先由<strong class="text-orange-400">離子幫浦（消耗粒線體 ATP）</strong>逆濃度抓入根毛內，使根毛內離子濃度升高、水勢降低；接著右側土壤的水分子便順著滲透壓差，成列經由<strong class="text-cyan-400">水通道蛋白</strong>高速流入根毛！
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MAIN HTML5 CANVAS -->
+            <div class="flex-1 w-full h-full relative">
+                <canvas id="bioCanvas"></canvas>
+            </div>
+
+            <!-- Bottom Playback & Legend Bar -->
+            <div class="bg-slate-900/95 border-t border-slate-800 px-3 py-2 flex flex-wrap items-center justify-between gap-2 z-20 shrink-0">
+                <!-- Play/Pause & Speed Controls -->
+                <div class="flex items-center space-x-2">
+                    <button id="btnPlayPause" onclick="togglePlay()" class="touch-btn px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs md:text-sm flex items-center space-x-1.5 shadow">
+                        <i id="iconPlayPause" class="fa-solid fa-pause"></i>
+                        <span id="textPlayPause">暫停模擬</span>
+                    </button>
+
+                    <div class="flex items-center bg-slate-800 p-1 rounded-xl border border-slate-700">
+                        <span class="text-[11px] text-slate-400 px-2 hidden sm:inline">速度:</span>
+                        <button onclick="setSpeed(0.25)" id="spd025" class="px-2 py-1 rounded-lg text-xs font-bold text-slate-400 hover:text-white">0.25x</button>
+                        <button onclick="setSpeed(0.5)" id="spd05" class="px-2 py-1 rounded-lg text-xs font-bold text-slate-400 hover:text-white">0.5x</button>
+                        <button onclick="setSpeed(1.0)" id="spd10" class="px-2 py-1 rounded-lg text-xs font-bold bg-amber-600 text-white shadow">1.0x</button>
+                        <button onclick="setSpeed(2.0)" id="spd20" class="px-2 py-1 rounded-lg text-xs font-bold text-slate-400 hover:text-white">2.0x</button>
+                    </div>
+                </div>
+
+                <!-- Visual Legend -->
+                <div class="flex flex-wrap items-center gap-3 text-xs font-bold">
+                    <div class="flex items-center space-x-1.5">
+                        <span class="w-3.5 h-3.5 rounded-full bg-amber-400 inline-block border border-white shadow-[0_0_8px_#facc15]"></span>
+                        <span class="text-amber-300">ATP (能量)</span>
+                    </div>
+                    <div class="flex items-center space-x-1.5">
+                        <span class="w-3.5 h-3.5 rotate-45 bg-orange-500 inline-block border border-white"></span>
+                        <span class="text-orange-300">礦物質離子 (K⁺/NO₃⁻)</span>
+                    </div>
+                    <div class="flex items-center space-x-1.5">
+                        <span class="w-3.5 h-3.5 rounded-full bg-sky-400 inline-block border border-white"></span>
+                        <span class="text-sky-300">水分子 (H₂O)</span>
+                    </div>
+                    <div class="hidden md:flex items-center space-x-1.5">
+                        <span class="w-3.5 h-3.5 rounded bg-purple-600 inline-block border border-purple-300"></span>
+                        <span class="text-purple-300">離子幫浦</span>
+                    </div>
+                    <div class="hidden md:flex items-center space-x-1.5">
+                        <span class="w-3.5 h-3.5 rounded bg-cyan-600 inline-block border border-cyan-300"></span>
+                        <span class="text-cyan-300">水通道蛋白</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT SIDEBAR: TEACHER CONTROLS & EXPERIMENTAL TOGGLES -->
+        <aside class="w-full lg:w-80 bg-slate-900 border-t lg:border-t-0 lg:border-l border-slate-800 p-3 flex flex-col justify-between overflow-y-auto z-20 shrink-0 max-h-[38vh] lg:max-h-full">
+            <div class="space-y-3">
+                <!-- Section 1: Quick Camera & Visual Guides -->
+                <div class="bg-slate-950/70 border border-slate-800 rounded-2xl p-3 space-y-2.5">
+                    <h2 class="text-xs font-black text-amber-400 uppercase tracking-wider flex items-center">
+                        <i class="fa-solid fa-eye mr-1.5"></i> 視覺輔助與軌跡顯示
+                    </h2>
+
+                    <!-- Guide Path Toggle -->
+                    <label class="flex items-center justify-between cursor-pointer p-1.5 hover:bg-slate-900 rounded-xl transition">
+                        <div>
+                            <div class="text-xs font-bold text-slate-200">顯示分子目標移動軌跡</div>
+                            <div class="text-[10px] text-slate-400">標示 ATP、離子與水的確定性路徑</div>
+                        </div>
+                        <input type="checkbox" id="chkShowPaths" checked onchange="toggleGuidePaths(this.checked)" class="w-5 h-5 accent-amber-500 rounded cursor-pointer">
+                    </label>
+
+                    <!-- Anatomy Labels Toggle -->
+                    <label class="flex items-center justify-between cursor-pointer p-1.5 hover:bg-slate-900 rounded-xl transition">
+                        <div>
+                            <div class="text-xs font-bold text-slate-200">顯示解剖構造名稱標示</div>
+                            <div class="text-[10px] text-slate-400">表皮細胞、根毛、細胞核、蛋白質標示</div>
+                        </div>
+                        <input type="checkbox" id="chkShowLabels" checked onchange="toggleAnatomyLabels(this.checked)" class="w-5 h-5 accent-amber-500 rounded cursor-pointer">
+                    </label>
+                </div>
+
+                <!-- Section 2: Physiological Experiments (Teacher Comparison) -->
+                <div class="bg-slate-950/70 border border-slate-800 rounded-2xl p-3 space-y-2.5">
+                    <h2 class="text-xs font-black text-emerald-400 uppercase tracking-wider flex items-center">
+                        <i class="fa-solid fa-flask-vial mr-1.5"></i> 課堂對照實驗開關
+                    </h2>
+
+                    <!-- Experiment 1: Aquaporin ON/OFF -->
+                    <div class="p-2 rounded-xl bg-slate-900 border border-slate-800">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <div class="text-xs font-bold text-cyan-300">水通道蛋白 (Aquaporins)</div>
+                                <div id="aqpStatusSub" class="text-[10px] text-slate-400">開啟：水分子成列高速滑入</div>
+                            </div>
+                            <button id="btnToggleAQP" onclick="toggleAquaporins()" class="touch-btn px-3 py-1 rounded-xl text-xs font-black bg-cyan-600 text-white shadow">
+                                正常開啟
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Experiment 2: Mitochondria / ATP ON/OFF -->
+                    <div class="p-2 rounded-xl bg-slate-900 border border-slate-800">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <div class="text-xs font-bold text-amber-300">粒線體呼吸作用 (ATP供應)</div>
+                                <div id="mitoStatusSub" class="text-[10px] text-slate-400">開啟：持續提供 ATP 給離子幫浦</div>
+                            </div>
+                            <button id="btnToggleMito" onclick="toggleMitochondria()" class="touch-btn px-3 py-1 rounded-xl text-xs font-black bg-amber-600 text-white shadow">
+                                正常供能
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Water Influx Speedometer Comparison -->
+                    <div class="p-2.5 rounded-xl bg-slate-900/90 border border-cyan-500/30">
+                        <div class="flex items-center justify-between text-xs mb-1">
+                            <span class="text-slate-300 font-bold"><i class="fa-solid fa-gauge-high text-cyan-400 mr-1"></i>目前水分進入速率：</span>
+                            <span id="txtWaterSpeed" class="text-cyan-400 font-black font-mono">極快 (3×10⁹/秒)</span>
+                        </div>
+                        <div class="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden">
+                            <div id="barWaterSpeed" class="bg-gradient-to-r from-cyan-500 to-sky-300 h-full rounded-full transition-all duration-300 shadow-[0_0_10px_#38bdf8]" style="width: 95%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 3: Interactive Step Cards for Fast Jumping -->
+                <div class="bg-slate-950/70 border border-slate-800 rounded-2xl p-3 space-y-1.5">
+                    <h2 class="text-xs font-black text-purple-400 uppercase tracking-wider flex items-center mb-1">
+                        <i class="fa-solid fa-list-ol mr-1.5"></i> 四大生理連鎖反應（點擊直達）
+                    </h2>
+
+                    <button onclick="jumpToStepWithZoom(1)" id="sideStep1" class="w-full text-left p-2 rounded-xl border border-slate-800 hover:border-amber-500/50 bg-slate-900/70 transition flex items-center space-x-2.5">
+                        <span class="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-400 font-black text-xs flex items-center justify-center shrink-0">1</span>
+                        <div class="text-xs">
+                            <div class="font-bold text-amber-200">粒線體製造並傳送 ATP</div>
+                            <div class="text-[10px] text-slate-400">由粒線體沿明確軌道送達離子幫浦</div>
+                        </div>
+                    </button>
+
+                    <button onclick="jumpToStepWithZoom(2)" id="sideStep2" class="w-full text-left p-2 rounded-xl border border-slate-800 hover:border-orange-500/50 bg-slate-900/70 transition flex items-center space-x-2.5">
+                        <span class="w-6 h-6 rounded-lg bg-orange-500/20 text-orange-400 font-black text-xs flex items-center justify-center shrink-0">2</span>
+                        <div class="text-xs">
+                            <div class="font-bold text-orange-200">離子幫浦主動運輸礦物質</div>
+                            <div class="text-[10px] text-slate-400">消耗 ATP，將右側土壤離子抓入根毛內</div>
+                        </div>
+                    </button>
+
+                    <button onclick="jumpToStepWithZoom(3)" id="sideStep3" class="w-full text-left p-2 rounded-xl border border-slate-800 hover:border-emerald-500/50 bg-slate-900/70 transition flex items-center space-x-2.5">
+                        <span class="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 font-black text-xs flex items-center justify-center shrink-0">3</span>
+                        <div class="text-xs">
+                            <div class="font-bold text-emerald-200">根毛內離子濃度上升 (水勢下降)</div>
+                            <div class="text-[10px] text-slate-400">建立「右方土壤水勢高 ➔ 左方根毛水勢低」</div>
+                        </div>
+                    </button>
+
+                    <button onclick="jumpToStepWithZoom(4)" id="sideStep4" class="w-full text-left p-2 rounded-xl border border-slate-800 hover:border-cyan-500/50 bg-slate-900/70 transition flex items-center space-x-2.5">
+                        <span class="w-6 h-6 rounded-lg bg-cyan-500/20 text-cyan-400 font-black text-xs flex items-center justify-center shrink-0">4</span>
+                        <div class="text-xs">
+                            <div class="font-bold text-cyan-200">水分子經水通道蛋白高速進入</div>
+                            <div class="text-[10px] text-slate-400">成列由右向左穿過水通道，輸往皮層</div>
+                        </div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Footer Tip -->
+            <div class="mt-2 pt-2 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
+                <span>💡 支援滑鼠滾輪縮放、按住拖曳平移</span>
+                <button onclick="resetAll()" class="text-rose-400 hover:text-rose-300 font-bold underline">全部重置</button>
+            </div>
+        </aside>
+    </main>
+
+    <!-- ================= SIMULATION ENGINE & DETERMINISTIC GRAPHICS ================= -->
+    <script>
+        /**
+         * 植物根毛吸水與離子幫浦協同機制：巨觀到微觀互動教學模擬器
+         * ------------------------------------------------------------------
+         * 座標系統設計 (World Space: 1600 x 1000)
+         * - 左側 (X: 0 ~ 360)    : 木質部導管與多層皮層細胞 (Cortex cells，依參考圖磚塊狀排列)
+         * - 中左 (X: 360 ~ 470)  : 表皮細胞列 (Epidermal cells)
+         * - 中右 (X: 470 ~ 1150) : 三條向右延伸的根毛 (Root hairs: 上、中、下主根毛)
+         * - 右側 (X: 470 ~ 1600) : 土壤環境 (Soil Environment)，水分與礦物質由右向左進入根毛！
+         */
+
+        const canvas = document.getElementById('bioCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Viewport & Camera State (World coordinates: 1600 x 1000)
+        const WORLD_W = 1600;
+        const WORLD_H = 1000;
+
+        let camera = {
+            x: 820,          // Center X in world
+            y: 520,          // Center Y in world
+            zoom: 1.0,       // Current zoom
+            targetX: 820,
+            targetY: 520,
+            targetZoom: 1.0
+        };
+
+        const CAMERA_PRESETS = {
+            macro: { x: 800, y: 500, zoom: 0.95 },   // 巨觀：完整呈現皮層、表皮細胞、三條根毛與右側土壤
+            micro: { x: 870, y: 695, zoom: 2.55 },   // 微觀：放大下方主根毛的細胞膜、粒線體、離子幫浦與水通道
+            ultra: { x: 935, y: 695, zoom: 3.85 }    // 特寫：聚焦細胞膜上的離子幫浦與水通道蛋白
+        };
+
+        // Simulation State
+        let simMode = 'sync';       // 'sync' (連續同步) or 'step' (分段逐步)
+        let currentStep = 1;        // 1, 2, 3, 4
+        let isPlaying = true;
+        let simSpeed = 1.0;
+        let showGuidePaths = true;
+        let showAnatomyLabels = true;
+
+        // Biological Switches
+        let aqpEnabled = true;      // 水通道蛋白開關
+        let mitoEnabled = true;     // 粒線體 ATP 供能開關
+
+        // Dynamic Internal Ion Concentration State (for visual feedback)
+        let internalIonLevel = 85;  // 20 ~ 95
+        let step3HighlightTimer = 0;
+
+        // Animation clock
+        let globalTime = 0;
+
+        // ================= ANATOMICAL & MOLECULAR ANCHORS (World Coordinates) =================
+        // 下方主根毛 (Main Lower Root Hair) 為微觀放大示範主舞台：
+        // 根毛從表皮細胞 (X=470, Y=620~770) 向右延伸至 (X=1180, Y=655~745)
+        // 我們在下方主根毛的「上側細胞膜」、「下側細胞膜」與「右側頂端細胞膜」配置離子幫浦與水通道蛋白！
+
+        // 粒線體位置 (位於下方主根毛細胞質內部)
+        const MITOCHONDRIA = [
+            { id: 'mito1', x: 670, y: 692, rx: 42, ry: 22, angle: -0.08 },
+            { id: 'mito2', x: 855, y: 700, rx: 44, ry: 22, angle: 0.06 }
+        ];
+
+        // 離子幫浦 (Ion Pumps) 位置 (嵌入在根毛細胞膜上，接收來自內部粒線體的 ATP，將右側/外部土壤的礦物質抓進根毛內)
+        const ION_PUMPS = [
+            {
+                id: 'pump1',
+                x: 785, y: 642,           // 上側細胞膜
+                angle: 0,                 // 膜朝向
+                mitoSource: 0,            // 由 mito1 供能
+                // ATP 確定性貝茲曲線軌跡 (Mito1 -> Pump1)
+                atpPath: { p0: {x: 695, y: 682}, p1: {x: 730, y: 665}, p2: {x: 760, y: 662}, p3: {x: 785, y: 654} },
+                // 礦物質由右方土壤進入根毛內部的確定性路徑 (Right Soil -> Through Pump1 -> Inside Root Hair Leftward)
+                ionPath: {
+                    soilStart: {x: 960, y: 565},
+                    soilCtrl:  {x: 850, y: 565},
+                    gateOuter: {x: 785, y: 625},
+                    gateInner: {x: 785, y: 662},
+                    cellTarget:{x: 615, y: 675}
+                },
+                hasATP: false,
+                pumpAnimProgress: 0
+            },
+            {
+                id: 'pump2',
+                x: 985, y: 652,           // 前段上側細胞膜
+                angle: 0.05,
+                mitoSource: 1,            // 由 mito2 供能
+                atpPath: { p0: {x: 885, y: 692}, p1: {x: 925, y: 682}, p2: {x: 960, y: 675}, p3: {x: 985, y: 664} },
+                ionPath: {
+                    soilStart: {x: 1210, y: 585},
+                    soilCtrl:  {x: 1075, y: 585},
+                    gateOuter: {x: 985, y: 635},
+                    gateInner: {x: 985, y: 672},
+                    cellTarget:{x: 745, y: 685}
+                },
+                hasATP: false,
+                pumpAnimProgress: 0
+            },
+            {
+                id: 'pump3',
+                x: 920, y: 748,           // 下側細胞膜
+                angle: 0,
+                mitoSource: 1,            // 由 mito2 供能
+                atpPath: { p0: {x: 875, y: 712}, p1: {x: 895, y: 725}, p2: {x: 910, y: 730}, p3: {x: 920, y: 736} },
+                ionPath: {
+                    soilStart: {x: 1160, y: 825},
+                    soilCtrl:  {x: 1015, y: 820},
+                    gateOuter: {x: 920, y: 765},
+                    gateInner: {x: 920, y: 730},
+                    cellTarget:{x: 725, y: 715}
+                },
+                hasATP: false,
+                pumpAnimProgress: 0
+            }
+        ];
+
+        // 水通道蛋白 (Aquaporins) 位置 (嵌入在根毛細胞膜上，讓右側土壤水分子成列由右向左高速滑入根毛，再流向表皮細胞)
+        const AQUAPORINS = [
+            {
+                id: 'aqp1',
+                x: 1095, y: 660,          // 根毛前端上側膜
+                orientation: 'top',
+                streamPath: {
+                    soilStart: {x: 1360, y: 605},
+                    soilCtrl:  {x: 1185, y: 605},
+                    channelIn: {x: 1105, y: 644},
+                    channelOut:{x: 1085, y: 676},
+                    cytoCtrl:  {x: 900,  y: 690},
+                    xylemEnd:  {x: 360,  y: 690}
+                }
+            },
+            {
+                id: 'aqp2',
+                x: 1172, y: 700,          // 根毛最右端頂端膜 (正對右側土壤，最直觀由右向左進入！)
+                orientation: 'tip',
+                streamPath: {
+                    soilStart: {x: 1470, y: 700},
+                    soilCtrl:  {x: 1310, y: 700},
+                    channelIn: {x: 1190, y: 700},
+                    channelOut:{x: 1152, y: 700},
+                    cytoCtrl:  {x: 820,  y: 700},
+                    xylemEnd:  {x: 340,  y: 700}
+                }
+            },
+            {
+                id: 'aqp3',
+                x: 1055, y: 744,          // 根毛前端下側膜
+                orientation: 'bottom',
+                streamPath: {
+                    soilStart: {x: 1350, y: 795},
+                    soilCtrl:  {x: 1165, y: 795},
+                    channelIn: {x: 1065, y: 760},
+                    channelOut:{x: 1045, y: 728},
+                    cytoCtrl:  {x: 860,  y: 712},
+                    xylemEnd:  {x: 360,  y: 712}
+                }
+            },
+            // 上方與中間根毛的水通道路徑 (巨觀視角下也能看到三條根毛同時由右向左吸水)
+            {
+                id: 'aqp_upper',
+                x: 1015, y: 205,
+                orientation: 'tip',
+                macroOnly: true,
+                streamPath: {
+                    soilStart: {x: 1380, y: 215},
+                    soilCtrl:  {x: 1180, y: 210},
+                    channelIn: {x: 1030, y: 205},
+                    channelOut:{x: 995,  y: 200},
+                    cytoCtrl:  {x: 700,  y: 175},
+                    xylemEnd:  {x: 340,  y: 185}
+                }
+            },
+            {
+                id: 'aqp_mid',
+                x: 855, y: 438,
+                orientation: 'tip',
+                macroOnly: true,
+                streamPath: {
+                    soilStart: {x: 1260, y: 442},
+                    soilCtrl:  {x: 1050, y: 440},
+                    channelIn: {x: 870,  y: 438},
+                    channelOut:{x: 835,  y: 435},
+                    cytoCtrl:  {x: 620,  y: 420},
+                    xylemEnd:  {x: 340,  y: 420}
+                }
+            }
+        ];
+
+        // ================= DETERMINISTIC CONVEYOR TRACK PARTICLES =================
+        // 1. ATP 粒子陣列 (沿著 Mito -> Pump 的貝茲曲線運動，t: 0.0 -> 1.0)
+        let atpParticles = [];
+        // 2. 礦物質離子陣列 (沿著 右側土壤 -> 離子幫浦 -> 左側根毛細胞質 的路徑運動，t: 0.0 -> 1.0)
+        let ionParticles = [];
+        // 3. 根毛內部已累積的礦物質離子 (整齊停駐在根毛細胞質內，呈現高濃度與低水勢，不亂撞)
+        let accumulatedIons = [];
+        // 4. 水分子陣列 (沿著 右側土壤 -> 水通道蛋白 -> 根毛 -> 表皮細胞 -> 皮層 的單列流線運動，t: 0.0 -> 1.0)
+        let waterParticles = [];
+
+        function initDeterministicParticles() {
+            atpParticles = [];
+            ionParticles = [];
+            accumulatedIons = [];
+            waterParticles = [];
+
+            // 每個離子幫浦配置固定相位差的 ATP 與礦物質離子
+            ION_PUMPS.forEach((pump, pIdx) => {
+                atpParticles.push({
+                    pumpIndex: pIdx,
+                    t: pIdx * 0.33,       // 0 ~ 1: 0~0.7 飛往幫浦, 0.7~1.0 在幫浦上結合閃光並釋放能量
+                    active: true
+                });
+
+                // 每個幫浦通道上配置 2 顆接力移動的礦物質離子
+                for (let k = 0; k < 2; k++) {
+                    ionParticles.push({
+                        pumpIndex: pIdx,
+                        t: (k * 0.5 + pIdx * 0.17) % 1.0
+                    });
+                }
+            });
+
+            // 預設在根毛細胞質內配置整齊有序的礦物質離子陣列（直觀展示根毛內部高離子濃度）
+            const gridPositions = [
+                {x: 520, y: 665}, {x: 560, y: 685}, {x: 535, y: 718}, {x: 585, y: 660},
+                {x: 610, y: 705}, {x: 640, y: 662}, {x: 655, y: 722}, {x: 715, y: 668},
+                {x: 735, y: 722}, {x: 775, y: 695}, {x: 810, y: 672}, {x: 815, y: 722},
+                {x: 910, y: 678}, {x: 945, y: 705}, {x: 1015, y: 692}, {x: 1065, y: 702},
+                // 表皮細胞本體內也有部分離子
+                {x: 420, y: 640}, {x: 435, y: 700}, {x: 415, y: 755}
+            ];
+            gridPositions.forEach((pos, idx) => {
+                accumulatedIons.push({
+                    baseX: pos.x,
+                    baseY: pos.y,
+                    phase: idx * 0.7
+                });
+            });
+
+            // 每條水通道配置整齊排隊的單列水分子 (Single-file water stream)
+            AQUAPORINS.forEach((aqp, aIdx) => {
+                const count = aqp.macroOnly ? 8 : 12;
+                for (let i = 0; i < count; i++) {
+                    waterParticles.push({
+                        aqpIndex: aIdx,
+                        t: i / count
+                    });
+                }
+            });
+        }
+
+        // ================= MATH & BEZIER PATH HELPERS =================
+        function cubicBezier(p0, p1, p2, p3, t) {
+            const u = 1 - t;
+            const tt = t * t;
+            const uu = u * u;
+            const uuu = uu * u;
+            const ttt = tt * t;
+            return {
+                x: uuu * p0.x + 3 * uu * t * p1.x + 3 * u * tt * p2.x + ttt * p3.x,
+                y: uuu * p0.y + 3 * uu * t * p1.y + 3 * u * tt * p2.y + ttt * p3.y
+            };
+        }
+
+        function lerp(a, b, t) {
+            return a + (b - a) * t;
+        }
+
+        function lerpPoint(pA, pB, t) {
+            return {
+                x: lerp(pA.x, pB.x, t),
+                y: lerp(pA.y, pB.y, t)
+            };
+        }
+
+        // 計算礦物質離子在確定性路徑上的座標 (t: 0.0 -> 1.0)
+        // 0.0 ~ 0.45 : 從右側土壤平滑移動至離子幫浦外側入口
+        // 0.45 ~ 0.65: 穿過細胞膜上的離子幫浦 (主動運輸過膜)
+        // 0.65 ~ 1.00: 進入根毛細胞質並向左側移動匯入細胞內部
+        function getIonPositionOnPath(pump, t) {
+            const path = pump.ionPath;
+            if (t < 0.45) {
+                const localT = t / 0.45;
+                return cubicBezier(path.soilStart, path.soilCtrl, path.gateOuter, path.gateOuter, localT);
+            } else if (t < 0.65) {
+                const localT = (t - 0.45) / 0.20;
+                return lerpPoint(path.gateOuter, path.gateInner, localT);
+            } else {
+                const localT = (t - 0.65) / 0.35;
+                return cubicBezier(path.gateInner, {x: path.gateInner.x - 40, y: path.cellTarget.y}, path.cellTarget, path.cellTarget, localT);
+            }
+        }
+
+        // 計算水分子在確定性單列路徑上的座標 (t: 0.0 -> 1.0)
+        // 0.00 ~ 0.38: 從右側土壤沿匯流線對準水通道蛋白入口
+        // 0.38 ~ 0.52: 單列高速穿過水通道蛋白孔道 (由右至左過膜)
+        // 0.52 ~ 1.00: 沿根毛內部中央管道一路向左流進表皮細胞與皮層木質部
+        function getWaterPositionOnPath(aqp, t) {
+            const sp = aqp.streamPath;
+            if (t < 0.38) {
+                const localT = t / 0.38;
+                return cubicBezier(sp.soilStart, sp.soilCtrl, sp.channelIn, sp.channelIn, localT);
+            } else if (t < 0.52) {
+                const localT = (t - 0.38) / 0.14;
+                return lerpPoint(sp.channelIn, sp.channelOut, localT);
+            } else {
+                const localT = (t - 0.52) / 0.48;
+                return cubicBezier(sp.channelOut, sp.cytoCtrl, {x: sp.xylemEnd.x + 120, y: sp.xylemEnd.y}, sp.xylemEnd, localT);
+            }
+        }
+
+        // ================= UPDATE SIMULATION LOGIC =================
+        function updateSimulation(dt) {
+            // Smooth Camera Interpolation
+            camera.x += (camera.targetX - camera.x) * 0.12;
+            camera.y += (camera.targetY - camera.y) * 0.12;
+            camera.zoom += (camera.targetZoom - camera.zoom) * 0.12;
+            document.getElementById('zoomLevelText').innerText = camera.zoom.toFixed(1) + 'x';
+
+            if (!isPlaying) return;
+
+            const effDt = dt * simSpeed;
+            globalTime += effDt;
+
+            // Determine which processes are active based on Sync vs Step Mode
+            const runStep1_ATP   = (simMode === 'sync') || (simMode === 'step' && currentStep === 1) || (simMode === 'step' && currentStep === 2);
+            const runStep2_Pump  = (simMode === 'sync') || (simMode === 'step' && currentStep === 2);
+            const runStep3_Osmo  = (simMode === 'sync') || (simMode === 'step' && currentStep === 3);
+            const runStep4_Water = (simMode === 'sync') || (simMode === 'step' && currentStep === 4);
+
+            // 1. Update ATP Particles along deterministic tracks (Mitochondria -> Ion Pump)
+            if (mitoEnabled && runStep1_ATP) {
+                atpParticles.forEach(p => {
+                    if (simMode === 'step' && currentStep === 1) {
+                        // 在步驟 1 時，ATP 飛到離子幫浦 (t=0.82) 後停駐閃耀，方便老師講解「ATP 已送達離子幫浦」
+                        p.t += effDt * 0.38;
+                        if (p.t > 0.95) p.t = 0;
+                    } else {
+                        p.t = (p.t + effDt * 0.45) % 1.0;
+                    }
+                    const pump = ION_PUMPS[p.pumpIndex];
+                    pump.hasATP = (p.t >= 0.65 && p.t <= 0.98);
+                });
+            } else if (!mitoEnabled) {
+                ION_PUMPS.forEach(pump => pump.hasATP = false);
+            }
+
+            // 2. Update Mineral Ion Particles along deterministic tracks (Right Soil -> Pump -> Left Cytoplasm)
+            if (mitoEnabled && runStep2_Pump) {
+                ionParticles.forEach(ion => {
+                    ion.t = (ion.t + effDt * 0.28) % 1.0;
+                    const pump = ION_PUMPS[ion.pumpIndex];
+                    // 當離子正在通過幫浦 (t: 0.42 ~ 0.65) 時，觸發幫浦構形動畫
+                    if (ion.t >= 0.42 && ion.t <= 0.66) {
+                        pump.pumpAnimProgress = Math.sin(((ion.t - 0.42) / 0.24) * Math.PI);
+                    }
+                });
+                internalIonLevel = Math.min(92, internalIonLevel + effDt * 8);
+            } else if (!mitoEnabled) {
+                internalIonLevel = Math.max(22, internalIonLevel - effDt * 6);
+            }
+
+            // 3. Step 3 Osmotic Pressure Highlight Pulse
+            if (runStep3_Osmo) {
+                step3HighlightTimer += effDt * 3.0;
+                if (simMode === 'step' && currentStep === 3) {
+                    internalIonLevel = 92;
+                }
+            }
+
+            // 4. Update Water Molecules along single-file Aquaporin streams (Right Soil -> Aquaporin -> Root Hair -> Cortex)
+            if (runStep4_Water) {
+                // 水流速度取決於：(1) 水通道蛋白是否開啟 (2) 根毛內離子濃度是否高於土壤
+                const osmoticFactor = Math.max(0.1, (internalIonLevel - 15) / 75);
+                const channelMultiplier = aqpEnabled ? 1.0 : 0.06; // 關閉水通道蛋白時速度驟降為單純擴散
+                const waterSpeed = 0.32 * osmoticFactor * channelMultiplier;
+
+                waterParticles.forEach(w => {
+                    w.t = (w.t + effDt * waterSpeed) % 1.0;
+                });
+            }
+
+            updateDashboardUI();
+        }
+
+        // ================= RENDER ANATOMY & MOLECULES (Canvas 2D) =================
+        function renderScene() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            if (canvas.width !== Math.floor(rect.width * dpr) || canvas.height !== Math.floor(rect.height * dpr)) {
+                canvas.width = Math.floor(rect.width * dpr);
+                canvas.height = Math.floor(rect.height * dpr);
+            }
+
+            ctx.save();
+            ctx.scale(dpr, dpr);
+            const viewW = rect.width;
+            const viewH = rect.height;
+
+            // Clear background (Warm Soil & Tissue Backdrop)
+            ctx.fillStyle = '#1c1917';
+            ctx.fillRect(0, 0, viewW, viewH);
+
+            // Apply Camera Pan & Zoom Transform
+            ctx.translate(viewW / 2, viewH / 2);
+            const baseScale = Math.min(viewW / WORLD_W, viewH / WORLD_H);
+            const totalScale = baseScale * camera.zoom;
+            ctx.scale(totalScale, totalScale);
+            ctx.translate(-camera.x, -camera.y);
+
+            // 1. 繪製右側土壤環境背景 (Right Soil Environment)
+            drawRightSoilEnvironment(ctx);
+
+            // 2. 繪製左側皮層細胞與木質部維管束 (Left Cortex Cells & Xylem - 完全比照使用者提供之插畫風格)
+            drawLeftRootCortexAndXylem(ctx);
+
+            // 3. 繪製中間表皮細胞列與三條向右延伸的根毛 (Epidermal Cells & 3 Right-Extending Root Hairs)
+            drawEpidermisAndRootHairs(ctx);
+
+            // 4. 繪製滲透壓／濃度梯度視覺化效果 (Step 3 or Micro Overlay)
+            drawOsmoticConcentrationVisuals(ctx);
+
+            // 5. 繪製目標導引軌跡線 (Guide Paths - 讓老師講解時清楚指出移動路線)
+            if (showGuidePaths) {
+                drawDeterministicGuidePaths(ctx);
+            }
+
+            // 6. 繪製根毛細胞內的粒線體 (Mitochondria)
+            drawMitochondriaList(ctx);
+
+            // 7. 繪製根毛細胞膜上的離子幫浦與水通道蛋白 (Ion Pumps & Aquaporins)
+            drawMembraneProteins(ctx);
+
+            // 8. 繪製所有沿確定性軌道移動的分子 (ATP、礦物質離子、水分子)
+            drawAllDeterministicMolecules(ctx);
+
+            // 9. 繪製教科書風格的解剖引線標示 (「表皮細胞」、「根毛」、「細胞核」與微觀蛋白標示)
+            if (showAnatomyLabels) {
+                drawTextbookLabels(ctx, camera.zoom);
+            }
+
+            ctx.restore();
+        }
+
+        // ----------------- 1. 右側土壤環境 (Right Soil) -----------------
+        function drawRightSoilEnvironment(ctx) {
+            // 右側土壤底色 (X: 460 ~ 1600)
+            const soilGrad = ctx.createLinearGradient(460, 0, 1600, 0);
+            soilGrad.addColorStop(0, '#292524');
+            soilGrad.addColorStop(0.3, '#1c1917');
+            soilGrad.addColorStop(1, '#0c0a09');
+            ctx.fillStyle = soilGrad;
+            ctx.fillRect(460, -200, 1300, 1400);
+
+            // 土壤顆粒紋理與水膜光暈 (靜態柔和背景，不干擾前景分子)
+            const soilPebbles = [
+                {x: 1320, y: 150, r: 45}, {x: 1460, y: 280, r: 60}, {x: 1250, y: 360, r: 38},
+                {x: 1420, y: 490, r: 52}, {x: 1350, y: 640, r: 42}, {x: 1490, y: 740, r: 65},
+                {x: 1290, y: 860, r: 50}, {x: 1120, y: 890, r: 35}, {x: 1150, y: 320, r: 32}
+            ];
+            soilPebbles.forEach(p => {
+                ctx.save();
+                ctx.fillStyle = '#44403c';
+                ctx.strokeStyle = '#57534e';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                // 土壤顆粒外圍的藍色水膜 (Soil water film)
+                ctx.strokeStyle = 'rgba(56, 189, 248, 0.18)';
+                ctx.lineWidth = 8;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.r + 6, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+            });
+
+            // 右上角土壤區域大字浮水印
+            ctx.save();
+            ctx.fillStyle = 'rgba(214, 211, 209, 0.25)';
+            ctx.font = '900 34px "Noto Sans TC", sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText('【右側：土壤環境 Soil】', 1540, 75);
+            ctx.font = '700 20px "Noto Sans TC", sans-serif';
+            ctx.fillStyle = 'rgba(56, 189, 248, 0.45)';
+            ctx.fillText('水分子與礦物質由此處向左進入根毛 ⬅', 1540, 110);
+            ctx.restore();
+        }
+
+        // ----------------- 2. 左側木質部與皮層細胞 (比照使用者上傳之插畫) -----------------
+        function drawLeftRootCortexAndXylem(ctx) {
+            // 最左側木質部導管區 (X: 0 ~ 110)
+            const xylemGrad = ctx.createLinearGradient(0, 0, 110, 0);
+            xylemGrad.addColorStop(0, '#451a03');
+            xylemGrad.addColorStop(1, '#78350f');
+            ctx.fillStyle = xylemGrad;
+            ctx.fillRect(0, -100, 110, 1200);
+
+            // 木質部環紋導管壁與向上輸送箭頭
+            ctx.strokeStyle = '#b45309';
+            ctx.lineWidth = 4;
+            for (let y = 0; y < 1000; y += 45) {
+                ctx.beginPath();
+                ctx.moveTo(15, y);
+                ctx.lineTo(95, y);
+                ctx.stroke();
+            }
+
+            // 木質部內向上流動的藍色水流指示
+            const flowOffset = (globalTime * 60) % 80;
+            ctx.fillStyle = 'rgba(56, 189, 248, 0.45)';
+            for (let y = 1000 - flowOffset; y > 0; y -= 80) {
+                ctx.beginPath();
+                ctx.moveTo(55, y - 18);
+                ctx.lineTo(40, y + 8);
+                ctx.lineTo(70, y + 8);
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            // 皮層細胞 (3 列縱向排列的磚塊狀植物細胞，溫暖棕米色調完全還原參考圖)
+            const cortexCols = [
+                { x: 110, w: 82, yOffset: 0,   cells: [160, 180, 170, 190, 170, 180] },
+                { x: 192, w: 84, yOffset: -45, cells: [180, 175, 185, 165, 180, 185] },
+                { x: 276, w: 84, yOffset: -15, cells: [155, 190, 175, 180, 165, 190] }
+            ];
+
+            cortexCols.forEach((col, cIdx) => {
+                let curY = col.yOffset;
+                col.cells.forEach((h, rIdx) => {
+                    drawTextbookPlantCell(ctx, col.x, curY, col.w, h, true);
+                    curY += h;
+                });
+            });
+        }
+
+        // 繪製單一教科書風格的皮層/表皮無根毛細胞
+        function drawTextbookPlantCell(ctx, x, y, w, h, hasNucleus = true, nucleusRight = false) {
+            ctx.save();
+            // 細胞壁底色 (深棕色)
+            ctx.fillStyle = '#6b4c35';
+            ctx.fillRect(x, y, w, h);
+
+            // 細胞腔與細胞質漸層 (米白至淺棕褐，如參考圖)
+            const pad = 5;
+            const innerX = x + pad;
+            const innerY = y + pad;
+            const innerW = w - pad * 2;
+            const innerH = h - pad * 2;
+
+            const cellGrad = ctx.createRadialGradient(
+                innerX + innerW * 0.5, innerY + innerH * 0.5, 5,
+                innerX + innerW * 0.5, innerY + innerH * 0.5, Math.max(innerW, innerH) * 0.75
+            );
+            cellGrad.addColorStop(0, '#f5ebd6');
+            cellGrad.addColorStop(0.65, '#DFC8A2');
+            cellGrad.addColorStop(1, '#b89872');
+
+            ctx.fillStyle = cellGrad;
+            ctx.strokeStyle = '#5c3e28';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.roundRect(innerX, innerY, innerW, innerH, 12);
+            ctx.fill();
+            ctx.stroke();
+
+            // 繪製深棕色圓形細胞核 (如參考圖中的模糊深褐色核)
+            if (hasNucleus) {
+                const nucX = nucleusRight ? (innerX + innerW * 0.65) : (innerX + innerW * 0.42);
+                const nucY = innerY + innerH * 0.48;
+                const nucGrad = ctx.createRadialGradient(nucX, nucY, 2, nucX, nucY, 13);
+                nucGrad.addColorStop(0, '#4a2e1b');
+                nucGrad.addColorStop(0.6, '#6e492e');
+                nucGrad.addColorStop(1, 'rgba(110, 73, 46, 0)');
+                ctx.fillStyle = nucGrad;
+                ctx.beginPath();
+                ctx.arc(nucX, nucY, 13, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        // ----------------- 3. 表皮細胞列與三條向右延伸的根毛 (100% 對應上傳圖結構) -----------------
+        function drawEpidermisAndRootHairs(ctx) {
+            const epiX = 360;
+            const epiW = 96;
+
+            // 表皮細胞縱列配置 (由上而下：一般表皮細胞 與 3 個向外延伸根毛的根毛細胞)
+            // 1. 頂部表皮細胞
+            drawTextbookPlantCell(ctx, epiX, -30, epiW, 95, true, true);
+
+            // 2. 第一根毛細胞 (Upper Root Hair: Y=65 ~ 215, 向右彎曲延伸至 X=1030)
+            drawRootHairCellComplete(ctx, {
+                epiX, epiY: 65, epiW, epiH: 150,
+                hairTopY: 112, hairBotY: 162,
+                tipX: 1025, tipY: 205,
+                ctrl1X: 650, ctrl1Y: 95,
+                ctrl2X: 860, ctrl2Y: 115,
+                nucleusPos: { x: 405, y: 100 },
+                isMainMicroTarget: false
+            });
+
+            // 3. 中間一般表皮細胞 1 (小)
+            drawTextbookPlantCell(ctx, epiX, 215, epiW, 85, true, true);
+
+            // 4. 第二根毛細胞 (Middle Root Hair: Y=300 ~ 455, 向右延伸至 X=865)
+            drawRootHairCellComplete(ctx, {
+                epiX, epiY: 300, epiW, epiH: 155,
+                hairTopY: 365, hairBotY: 418,
+                tipX: 865, tipY: 438,
+                ctrl1X: 560, ctrl1Y: 385,
+                ctrl2X: 730, ctrl2Y: 375,
+                nucleusPos: { x: 398, y: 340 },
+                isMainMicroTarget: false
+            });
+
+            // 5. 中間一般表皮細胞 2 (標示「表皮細胞」處，Y=455 ~ 605)
+            drawTextbookPlantCell(ctx, epiX, 455, epiW, 150, true, true);
+
+            // 6. 第三根毛細胞 —— 主教學微觀放大舞台 (Main Lower Root Hair: Y=605 ~ 795, 向右長延伸至 X=1185)
+            drawRootHairCellComplete(ctx, {
+                epiX, epiY: 605, epiW, epiH: 190,
+                hairTopY: 642, hairBotY: 748,
+                tipX: 1185, tipY: 700,
+                ctrl1X: 690, ctrl1Y: 632,
+                ctrl2X: 980, ctrl2Y: 648,
+                nucleusPos: { x: 405, y: 655 },
+                isMainMicroTarget: true
+            });
+
+            // 7. 底部表皮細胞 (標示「細胞核」處，Y=795 ~ 960)
+            drawTextbookPlantCell(ctx, epiX, 795, epiW, 165, true, true);
+        }
+
+        // 繪製表皮細胞與向右無縫延伸的管狀根毛 (含雙層細胞壁與細胞膜細節)
+        function drawRootHairCellComplete(ctx, cfg) {
+            ctx.save();
+
+            const { epiX, epiY, epiW, epiH, hairTopY, hairBotY, tipX, tipY, ctrl1X, ctrl1Y, ctrl2X, ctrl2Y, nucleusPos, isMainMicroTarget } = cfg;
+            const rightWallX = epiX + epiW;
+            const pad = 5;
+
+            // 定義根毛外輪廓路徑函數
+            function traceRootHairPath(offset) {
+                const bx = epiX + pad - offset;
+                const by = epiY + pad - offset;
+                const bw = epiW - pad * 2 + offset * 2;
+                const bh = epiH - pad * 2 + offset * 2;
+                const rX = rightWallX - pad + offset;
+
+                ctx.beginPath();
+                // 左上角開始
+                ctx.moveTo(bx + 12, by);
+                // 上邊界至右上
+                ctx.lineTo(rX - 8, by);
+                ctx.quadraticCurveTo(rX, by, rX, by + 10);
+                // 右上壁向下至根毛上緣起點
+                ctx.lineTo(rX, hairTopY - 15 - offset);
+                ctx.quadraticCurveTo(rX, hairTopY - offset, rX + 25, hairTopY - offset);
+
+                // 根毛上緣向右延伸至頂端 (Tip)
+                ctx.bezierCurveTo(
+                    ctrl1X, ctrl1Y - offset,
+                    ctrl2X, ctrl2Y - offset,
+                    tipX - 15, tipY - 26 - offset
+                );
+
+                // 根毛圓潤頂端 (右側盲端)
+                ctx.bezierCurveTo(
+                    tipX + 18 + offset, tipY - 22 - offset,
+                    tipX + 18 + offset, tipY + 22 + offset,
+                    tipX - 15, tipY + 26 + offset
+                );
+
+                // 根毛下緣由右向左回到表皮細胞本體
+                const botDiff = hairBotY - hairTopY;
+                ctx.bezierCurveTo(
+                    ctrl2X, ctrl2Y + botDiff + offset,
+                    ctrl1X, ctrl1Y + botDiff + offset,
+                    rX + 25, hairBotY + offset
+                );
+                ctx.quadraticCurveTo(rX, hairBotY + offset, rX, hairBotY + 18 + offset);
+
+                // 右下壁向下至底邊
+                ctx.lineTo(rX, by + bh - 10);
+                ctx.quadraticCurveTo(rX, by + bh, rX - 10, by + bh);
+                // 底邊向左
+                ctx.lineTo(bx + 12, by + bh);
+                ctx.quadraticCurveTo(bx, by + bh, bx, by + bh - 12);
+                // 左壁向上回到起點
+                ctx.lineTo(bx, by + 12);
+                ctx.quadraticCurveTo(bx, by, bx + 12, by);
+                ctx.closePath();
+            }
+
+            // 1. 繪製外層細胞壁 (Cell Wall - 溫暖棕色)
+            traceRootHairPath(5);
+            ctx.fillStyle = '#856244';
+            ctx.strokeStyle = '#5c3e28';
+            ctx.lineWidth = 4;
+            ctx.fill();
+            ctx.stroke();
+
+            // 2. 繪製內部細胞質與細胞膜 (Cytoplasm & Plasma Membrane)
+            traceRootHairPath(0);
+
+            // 若內部離子濃度高，根毛內部呈現溫暖飽和的米金色光澤
+            const cytoGrad = ctx.createLinearGradient(epiX, epiY, tipX, tipY);
+            cytoGrad.addColorStop(0, '#f3e5c8');
+            cytoGrad.addColorStop(0.5, '#f7edd6');
+            cytoGrad.addColorStop(1, '#efe0be');
+            ctx.fillStyle = cytoGrad;
+            ctx.fill();
+
+            // 緊貼細胞壁內側的細胞膜 (Plasma Membrane - 在微觀放大時呈現雙層磷脂感)
+            ctx.strokeStyle = isMainMicroTarget ? '#d97706' : '#9c7853';
+            ctx.lineWidth = isMainMicroTarget ? 3.5 : 2;
+            ctx.stroke();
+
+            // 如果是下方主教學根毛，在微觀視角下繪製細胞膜磷脂雙層刻度紋理，強化「細胞膜層級」視覺
+            if (isMainMicroTarget && camera.zoom > 1.45) {
+                ctx.save();
+                ctx.strokeStyle = 'rgba(180, 83, 9, 0.45)';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([4, 4]);
+                traceRootHairPath(-3.5);
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // 3. 繪製根毛細胞的細胞核
+            if (nucleusPos) {
+                const nucGrad = ctx.createRadialGradient(nucleusPos.x, nucleusPos.y, 2, nucleusPos.x, nucleusPos.y, 14);
+                nucGrad.addColorStop(0, '#4a2e1b');
+                nucGrad.addColorStop(0.65, '#6e492e');
+                nucGrad.addColorStop(1, 'rgba(110, 73, 46, 0)');
+                ctx.fillStyle = nucGrad;
+                ctx.beginPath();
+                ctx.arc(nucleusPos.x, nucleusPos.y, 14, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            ctx.restore();
+        }
+
+        // ----------------- 4. 滲透壓與濃度梯度高亮視覺化 (Step 3 專用與背景指示) -----------------
+        function drawOsmoticConcentrationVisuals(ctx) {
+            // 當處於步驟 3（建立滲透壓差）時，在根毛內部與右側土壤之間繪製大型直觀的水勢比較與滲透推力箭頭
+            if (simMode === 'step' && currentStep === 3) {
+                const pulse = 0.5 + 0.5 * Math.sin(step3HighlightTimer);
+                ctx.save();
+
+                // 根毛內部高離子濃度橘色光暈
+                const innerGlow = ctx.createRadialGradient(800, 695, 20, 800, 695, 340);
+                innerGlow.addColorStop(0, `rgba(249, 115, 22, ${0.22 + pulse * 0.15})`);
+                innerGlow.addColorStop(1, 'rgba(249, 115, 22, 0)');
+                ctx.fillStyle = innerGlow;
+                ctx.beginPath();
+                ctx.ellipse(800, 695, 350, 75, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 滲透壓差大標牌 (位於根毛與右側土壤交界上方)
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+                ctx.strokeStyle = '#10b981';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.roundRect(650, 520, 560, 72, 16);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.font = '900 20px "Noto Sans TC", sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#fde047';
+                ctx.fillText('⚖️ 【左：根毛內】離子濃度高・水勢低  ⬅  【右：土壤】離子濃度低・水勢高', 930, 550);
+                ctx.font = '700 15px "Noto Sans TC", sans-serif';
+                ctx.fillStyle = '#38bdf8';
+                ctx.fillText('產生強大滲透壓差 (Osmotic Gradient)，準備將右側土壤水分大量吸入根毛！', 930, 578);
+
+                ctx.restore();
+            }
+        }
+
+        // ----------------- 5. 繪製確定性目標移動軌跡線 (Guide Paths) -----------------
+        function drawDeterministicGuidePaths(ctx) {
+            ctx.save();
+
+            // A. 繪製 ATP 軌跡 (粒線體 -> 離子幫浦，金黃色點線)
+            ctx.strokeStyle = 'rgba(250, 204, 21, 0.55)';
+            ctx.lineWidth = 2.5;
+            ctx.setLineDash([5, 5]);
+            ION_PUMPS.forEach(pump => {
+                const ap = pump.atpPath;
+                ctx.beginPath();
+                ctx.moveTo(ap.p0.x, ap.p0.y);
+                ctx.bezierCurveTo(ap.p1.x, ap.p1.y, ap.p2.x, ap.p2.y, ap.p3.x, ap.p3.y);
+                ctx.stroke();
+            });
+
+            // B. 繪製礦物質離子主動運輸軌跡 (右側土壤 -> 離子幫浦 -> 左側根毛內，橘色虛線)
+            ctx.strokeStyle = 'rgba(249, 115, 22, 0.5)';
+            ctx.lineWidth = 2.5;
+            ctx.setLineDash([7, 5]);
+            ION_PUMPS.forEach(pump => {
+                const ip = pump.ionPath;
+                ctx.beginPath();
+                ctx.moveTo(ip.soilStart.x, ip.soilStart.y);
+                ctx.bezierCurveTo(ip.soilCtrl.x, ip.soilCtrl.y, ip.gateOuter.x, ip.gateOuter.y, ip.gateOuter.x, ip.gateOuter.y);
+                ctx.lineTo(ip.gateInner.x, ip.gateInner.y);
+                ctx.bezierCurveTo(ip.gateInner.x - 40, ip.cellTarget.y, ip.cellTarget.x, ip.cellTarget.y, ip.cellTarget.x, ip.cellTarget.y);
+                ctx.stroke();
+            });
+
+            // C. 繪製水分子高速通道軌跡 (右側土壤 -> 水通道蛋白 -> 根毛中央 -> 左側表皮與皮層，青藍色流線)
+            ctx.strokeStyle = aqpEnabled ? 'rgba(56, 189, 248, 0.55)' : 'rgba(148, 163, 184, 0.25)';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([10, 6]);
+            AQUAPORINS.forEach(aqp => {
+                const sp = aqp.streamPath;
+                ctx.beginPath();
+                ctx.moveTo(sp.soilStart.x, sp.soilStart.y);
+                ctx.bezierCurveTo(sp.soilCtrl.x, sp.soilCtrl.y, sp.channelIn.x, sp.channelIn.y, sp.channelIn.x, sp.channelIn.y);
+                ctx.lineTo(sp.channelOut.x, sp.channelOut.y);
+                ctx.bezierCurveTo(sp.cytoCtrl.x, sp.cytoCtrl.y, sp.xylemEnd.x + 120, sp.xylemEnd.y, sp.xylemEnd.x, sp.xylemEnd.y);
+                ctx.stroke();
+            });
+
+            ctx.restore();
+        }
+
+        // ----------------- 6. 繪製粒線體 (Mitochondria inside Root Hair) -----------------
+        function drawMitochondriaList(ctx) {
+            MITOCHONDRIA.forEach((m, idx) => {
+                ctx.save();
+                ctx.translate(m.x, m.y);
+                ctx.rotate(m.angle);
+
+                // 呼吸作用發光脈動
+                const pulse = mitoEnabled ? (1 + 0.05 * Math.sin(globalTime * 5 + idx)) : 1;
+                ctx.scale(pulse, pulse);
+
+                if (mitoEnabled) {
+                    ctx.shadowColor = '#f59e0b';
+                    ctx.shadowBlur = 16;
+                }
+
+                // 粒線體外膜 (紅棕/琥珀色橢圓)
+                ctx.fillStyle = mitoEnabled ? '#b45309' : '#57534e';
+                ctx.strokeStyle = '#78350f';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.ellipse(0, 0, m.rx, m.ry, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                // 粒線體內膜皺褶 (Cristae)
+                ctx.fillStyle = mitoEnabled ? '#f59e0b' : '#78716c';
+                ctx.beginPath();
+                ctx.ellipse(0, 0, m.rx - 5, m.ry - 5, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.strokeStyle = '#78350f';
+                ctx.lineWidth = 2.8;
+                ctx.beginPath();
+                for (let x = -m.rx + 12; x <= m.rx - 12; x += 11) {
+                    const topOrBot = (Math.abs(x) % 22 < 11) ? 1 : -1;
+                    ctx.moveTo(x, topOrBot * (m.ry - 5));
+                    ctx.lineTo(x, -topOrBot * 4);
+                }
+                ctx.stroke();
+
+                // 粒線體文字標示
+                ctx.fillStyle = '#451a03';
+                ctx.font = '900 11px "Noto Sans TC", sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('粒線體', 0, 4);
+
+                ctx.restore();
+            });
+        }
+
+        // ----------------- 7. 繪製細胞膜上的離子幫浦與水通道蛋白 -----------------
+        function drawMembraneProteins(ctx) {
+            // A. 繪製離子幫浦 (Ion Pumps - 主動運輸蛋白)
+            ION_PUMPS.forEach((pump, idx) => {
+                ctx.save();
+                ctx.translate(pump.x, pump.y);
+                ctx.rotate(pump.angle);
+
+                const squeeze = pump.pumpAnimProgress * 3.5;
+
+                if (pump.hasATP && mitoEnabled) {
+                    ctx.shadowColor = '#f97316';
+                    ctx.shadowBlur = 18;
+                }
+
+                // 幫浦跨膜雙葉結構
+                ctx.fillStyle = mitoEnabled ? '#9333ea' : '#64748b';
+                ctx.strokeStyle = '#f3e8ff';
+                ctx.lineWidth = 2;
+
+                // 左葉
+                ctx.beginPath();
+                ctx.roundRect(-16 - squeeze * 0.3, -15, 13, 30, 6);
+                ctx.fill();
+                ctx.stroke();
+
+                // 右葉
+                ctx.beginPath();
+                ctx.roundRect(3 + squeeze * 0.3, -15, 13, 30, 6);
+                ctx.fill();
+                ctx.stroke();
+
+                // 中央離子結合腔與 ATP 結合位點
+                ctx.fillStyle = pump.hasATP ? '#facc15' : '#3b0764';
+                ctx.beginPath();
+                ctx.arc(0, 0, 5, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.restore();
+            });
+
+            // B. 繪製水通道蛋白 (Aquaporins - 専用水孔道)
+            AQUAPORINS.forEach(aqp => {
+                ctx.save();
+                ctx.translate(aqp.x, aqp.y);
+                if (aqp.orientation === 'tip') {
+                    ctx.rotate(Math.PI / 2);
+                }
+
+                if (aqpEnabled) {
+                    ctx.shadowColor = '#0ea5e9';
+                    ctx.shadowBlur = 15;
+                }
+
+                // 水通道兩側次單元蛋白壁 (呈現清晰的中空親水孔道)
+                ctx.fillStyle = aqpEnabled ? '#0284c7' : '#475569';
+                ctx.strokeStyle = '#bae6fd';
+                ctx.lineWidth = 2;
+
+                // 左壁
+                ctx.beginPath();
+                ctx.roundRect(-15, -14, 10, 28, 5);
+                ctx.fill();
+                ctx.stroke();
+
+                // 右壁
+                ctx.beginPath();
+                ctx.roundRect(5, -14, 10, 28, 5);
+                ctx.fill();
+                ctx.stroke();
+
+                // 中央孔道狀態 (開啟時為亮青色通道，關閉時有紅色阻斷門)
+                if (aqpEnabled) {
+                    ctx.fillStyle = 'rgba(56, 189, 248, 0.35)';
+                    ctx.fillRect(-5, -14, 10, 28);
+                } else {
+                    ctx.fillStyle = '#ef4444';
+                    ctx.fillRect(-7, -4, 14, 8);
+                }
+
+                ctx.restore();
+            });
+        }
+
+        // ----------------- 8. 繪製所有沿確定性軌道移動的分子 -----------------
+        function drawAllDeterministicMolecules(ctx) {
+            // A. 先畫根毛內部已累積的礦物質離子 (整齊溫和擺動，絕不亂撞，呈現高離子濃度)
+            const activeCount = Math.round((internalIonLevel / 95) * accumulatedIons.length);
+            for (let i = 0; i < activeCount; i++) {
+                const item = accumulatedIons[i];
+                const gx = item.baseX + Math.sin(globalTime * 2 + item.phase) * 2.5;
+                const gy = item.baseY + Math.cos(globalTime * 2 + item.phase) * 2.5;
+                drawSingleMineralIon(ctx, gx, gy, 7.5, false);
+            }
+
+            // B. 繪製從右側土壤沿目標軌道進入離子幫浦的礦物質離子
+            ionParticles.forEach(ion => {
+                const pump = ION_PUMPS[ion.pumpIndex];
+                const pos = getIonPositionOnPath(pump, ion.t);
+                const isPassingPump = (ion.t >= 0.42 && ion.t <= 0.66);
+                drawSingleMineralIon(ctx, pos.x, pos.y, isPassingPump ? 9.5 : 8.5, isPassingPump);
+            });
+
+            // C. 繪製從粒線體沿目標軌道飛向離子幫浦的 ATP 能量分子
+            if (mitoEnabled) {
+                atpParticles.forEach(atp => {
+                    const pump = ION_PUMPS[atp.pumpIndex];
+                    const ap = pump.atpPath;
+                    // t: 0~0.75 沿曲線飛行，0.75~1.0 在幫浦受體處釋放能量光芒
+                    const moveT = Math.min(1.0, atp.t / 0.78);
+                    const pos = cubicBezier(ap.p0, ap.p1, ap.p2, ap.p3, moveT);
+                    const isBinding = atp.t >= 0.78;
+                    drawSingleATPMolecule(ctx, pos.x, pos.y, isBinding);
+                });
+            }
+
+            // D. 繪製從右側土壤成列通過水通道蛋白進入根毛並流向皮層的水分子 (Single-file stream)
+            waterParticles.forEach(w => {
+                const aqp = AQUAPORINS[w.aqpIndex];
+                // 在微觀放大模式下，隱藏上方與中間根毛的水分子以保持畫面極致乾淨
+                if (aqp.macroOnly && camera.zoom > 1.8) return;
+
+                const pos = getWaterPositionOnPath(aqp, w.t);
+                const isInChannel = (w.t >= 0.36 && w.t <= 0.54);
+                drawSingleWaterMolecule(ctx, pos.x, pos.y, isInChannel);
+            });
+        }
+
+        function drawSingleATPMolecule(ctx, x, y, isBinding) {
+            ctx.save();
+            ctx.translate(x, y);
+            const scale = isBinding ? (1.25 + 0.2 * Math.sin(globalTime * 18)) : 1.0;
+            ctx.scale(scale, scale);
+
+            ctx.shadowColor = '#facc15';
+            ctx.shadowBlur = isBinding ? 20 : 10;
+
+            // 金黃色發光星芒圓體
+            ctx.fillStyle = '#fde047';
+            ctx.strokeStyle = '#ca8a04';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(0, 0, 10, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#713f12';
+            ctx.font = '900 8.5px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('ATP', 0, 0.5);
+            ctx.restore();
+        }
+
+        function drawSingleMineralIon(ctx, x, y, size, highlight) {
+            ctx.save();
+            ctx.translate(x, y);
+            if (highlight) {
+                ctx.shadowColor = '#fb923c';
+                ctx.shadowBlur = 14;
+            }
+            ctx.rotate(Math.PI / 4);
+            ctx.fillStyle = '#f97316';
+            ctx.strokeStyle = '#ffedd5';
+            ctx.lineWidth = 1.8;
+            ctx.beginPath();
+            ctx.roundRect(-size / 2, -size / 2, size, size, 2.5);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.rotate(-Math.PI / 4);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '900 7.5px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('K⁺', 0, 0.5);
+            ctx.restore();
+        }
+
+        function drawSingleWaterMolecule(ctx, x, y, isInChannel) {
+            ctx.save();
+            ctx.translate(x, y);
+            if (isInChannel) {
+                ctx.shadowColor = '#38bdf8';
+                ctx.shadowBlur = 12;
+            }
+
+            // H2O 水分子造型 (中央氧原子 + 兩顆小氫耳朵)
+            ctx.fillStyle = '#e0f2fe';
+            ctx.beginPath();
+            ctx.arc(-4.5, -4, 3, 0, Math.PI * 2);
+            ctx.arc(4.5, -4, 3, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = isInChannel ? '#0284c7' : '#38bdf8';
+            ctx.strokeStyle = '#bae6fd';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(0, 0, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        // ----------------- 9. 繪製教科書解剖標示線與微觀蛋白質標籤 -----------------
+        function drawTextbookLabels(ctx, currentZoom) {
+            ctx.save();
+
+            // A. 巨觀教科書三大經典標示 (完全復刻使用者上傳圖片之位置與風格：「表皮細胞」、「根毛」、「細胞核」)
+            const textbookCallouts = [
+                {
+                    lineStart: { x: 452, y: 530 },
+                    lineEnd:   { x: 585, y: 530 },
+                    text: '表皮細胞'
+                },
+                {
+                    lineStart: { x: 825, y: 642 },
+                    lineEnd:   { x: 905, y: 555 },
+                    text: '根毛'
+                },
+                {
+                    lineStart: { x: 412, y: 868 },
+                    lineEnd:   { x: 585, y: 868 },
+                    text: '細胞核'
+                }
+            ];
+
+            textbookCallouts.forEach(c => {
+                // 引線白底黑邊確保在深色土壤背景依然 100% 清晰
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.moveTo(c.lineStart.x, c.lineStart.y);
+                ctx.lineTo(c.lineEnd.x, c.lineEnd.y);
+                ctx.stroke();
+
+                // 文字膠囊標籤
+                ctx.font = '900 28px "Noto Sans TC", sans-serif';
+                const textW = ctx.measureText(c.text).width;
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+                ctx.strokeStyle = '#d6d3d1';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.roundRect(c.lineEnd.x + 6, c.lineEnd.y - 24, textW + 24, 44, 10);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = '#ffffff';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(c.text, c.lineEnd.x + 18, c.lineEnd.y);
+            });
+
+            // 左側皮層與木質部頂部標示
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+            ctx.strokeStyle = '#a8a29e';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.roundRect(18, 35, 325, 42, 10);
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = '#fde68a';
+            ctx.font = '900 20px "Noto Sans TC", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('⬅ 木質部 ｜ 皮層細胞 (Cortex)', 180, 57);
+
+            // B. 當放大至微觀視角 (zoom > 1.4) 時，顯示細胞膜層級的精細標籤 (離子幫浦、水通道蛋白)
+            if (currentZoom > 1.35) {
+                // 離子幫浦標籤
+                drawMicroPillTag(ctx, 785, 602, '離子幫浦 (耗ATP抓礦物質)', '#a855f7');
+                drawMicroPillTag(ctx, 985, 612, '離子幫浦 (主動運輸)', '#a855f7');
+
+                // 水通道蛋白標籤
+                drawMicroPillTag(ctx, 1095, 622, '水通道蛋白 (AQP)', '#0ea5e9');
+                drawMicroPillTag(ctx, 1235, 665, '水通道蛋白 (高速引水⬅)', '#0ea5e9');
+            }
+
+            ctx.restore();
+        }
+
+        function drawMicroPillTag(ctx, x, y, text, borderColor) {
+            ctx.save();
+            ctx.font = '900 11px "Noto Sans TC", sans-serif';
+            const tw = ctx.measureText(text).width;
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+            ctx.strokeStyle = borderColor;
+            ctx.lineWidth = 1.8;
+            ctx.beginPath();
+            ctx.roundRect(x - tw / 2 - 8, y - 11, tw + 16, 22, 6);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#f8fafc';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, x, y);
+            ctx.restore();
+        }
+
+        // ================= UI & PEDAGOGICAL CONTROLLER FUNCTIONS =================
+        const STEP_DESCRIPTIONS = {
+            1: {
+                title: "步驟 ①：根毛內的粒線體進行呼吸作用，產生 ATP 送往離子幫浦",
+                tag: "步驟 1 / 4・能量供應",
+                desc: "根毛細胞因為要全天候進行「主動運輸」，內部含有豐富的<strong class='text-amber-300'>粒線體</strong>。請觀察金黃色的 <strong class='text-amber-300'>ATP 能量分子</strong>沿著明確軌道，精準傳送到細胞膜上的離子幫浦！",
+                icon: "fa-solid fa-bolt"
+            },
+            2: {
+                title: "步驟 ②：離子幫浦消耗 ATP，將【右側土壤】礦物質抓進【左側根毛】",
+                tag: "步驟 2 / 4・主動運輸",
+                desc: "離子幫浦獲得 ATP 後改變構形，逆著濃度梯度把<strong class='text-orange-400'>右側土壤中稀少的礦物質離子 (K⁺/NO₃⁻)</strong> 強行抓過細胞膜，送進左側的根毛細胞質內。",
+                icon: "fa-solid fa-arrow-right-to-bracket"
+            },
+            3: {
+                title: "步驟 ③：根毛內離子濃度大幅上升，建立「右高左低」的水勢差",
+                tag: "步驟 3 / 4・建立滲透壓差",
+                desc: "隨著礦物質在根毛細胞內大量累積，<strong class='text-emerald-300'>根毛內部溶質濃度變高、水勢 (Ψw) 降低</strong>；相對地，右側土壤的水勢較高，在細胞膜兩側形成強大的滲透壓梯度！",
+                icon: "fa-solid fa-scale-unbalanced"
+            },
+            4: {
+                title: "步驟 ④：右側土壤的水分子排成單列，經由水通道蛋白高速進入根毛！",
+                tag: "步驟 4 / 4・水通道蛋白協助擴散",
+                desc: "順著滲透壓差，<strong class='text-cyan-300'>右側土壤的水分子 (H₂O)</strong> 沿著目標流線排成單列，以每秒 30 億顆的極速穿過<strong class='text-cyan-300'>水通道蛋白 (Aquaporins)</strong> 進入根毛，並一路向左輸往表皮細胞與皮層木質部！",
+                icon: "fa-solid fa-water"
+            }
+        };
+
+        function setCameraPreset(presetName) {
+            const p = CAMERA_PRESETS[presetName];
+            if (!p) return;
+            camera.targetX = p.x;
+            camera.targetY = p.y;
+            camera.targetZoom = p.zoom;
+
+            // Update button active styles
+            const macroBtn = document.getElementById('btnViewMacro');
+            const microBtn = document.getElementById('btnViewMicro');
+            const pumpBtn  = document.getElementById('btnViewPump');
+
+            [macroBtn, microBtn, pumpBtn].forEach(b => {
+                if (b) b.className = "touch-btn px-3 py-1.5 rounded-xl text-xs md:text-sm font-bold flex items-center space-x-1.5 text-slate-300 hover:text-white hover:bg-slate-700/60";
+            });
+
+            if (presetName === 'macro') {
+                macroBtn.className = "touch-btn px-3 py-1.5 rounded-xl text-xs md:text-sm font-bold flex items-center space-x-1.5 bg-amber-600 text-white shadow";
+            } else if (presetName === 'micro') {
+                microBtn.className = "touch-btn px-3 py-1.5 rounded-xl text-xs md:text-sm font-bold flex items-center space-x-1.5 bg-amber-600 text-white shadow";
+            } else if (presetName === 'ultra' && pumpBtn) {
+                pumpBtn.className = "touch-btn px-2.5 py-1.5 rounded-xl text-xs md:text-sm font-bold hidden sm:flex items-center space-x-1 bg-amber-600 text-white shadow";
+            }
+        }
+
+        function zoomCamera(factor) {
+            camera.targetZoom = Math.max(0.65, Math.min(4.8, camera.targetZoom * factor));
+        }
+
+        function setSimMode(mode) {
+            simMode = mode;
+            const btnSync = document.getElementById('btnModeSync');
+            const btnStep = document.getElementById('btnModeStep');
+            const stepBar = document.getElementById('stepControlBar');
+
+            if (mode === 'sync') {
+                btnSync.className = "touch-btn px-3 py-1.5 rounded-xl text-xs md:text-sm font-bold flex items-center space-x-1.5 bg-emerald-600 text-white shadow";
+                btnStep.className = "touch-btn px-3 py-1.5 rounded-xl text-xs md:text-sm font-bold flex items-center space-x-1.5 text-slate-300 hover:text-white hover:bg-slate-700/60";
+                stepBar.classList.add('hidden');
+
+                document.getElementById('bannerTitle').innerText = "連續同步模式：根毛全天候主動吸肥與滲透吸水";
+                document.getElementById('bannerTag').innerText = "四階段同步循環中";
+                document.getElementById('bannerDesc').innerHTML = "右側土壤中的礦物質先由<strong class='text-orange-400'>離子幫浦（消耗粒線體 ATP）</strong>逆濃度抓入根毛內，使根毛內離子濃度升高、水勢降低；接著右側土壤的水分子便順著滲透壓差，成列經由<strong class='text-cyan-400'>水通道蛋白</strong>高速流入根毛！";
+                document.getElementById('bannerIcon').className = "fa-solid fa-arrows-spin";
+
+                highlightStepUI(0);
+            } else {
+                btnStep.className = "touch-btn px-3 py-1.5 rounded-xl text-xs md:text-sm font-bold flex items-center space-x-1.5 bg-amber-500 text-slate-950 shadow";
+                btnSync.className = "touch-btn px-3 py-1.5 rounded-xl text-xs md:text-sm font-bold flex items-center space-x-1.5 text-slate-300 hover:text-white hover:bg-slate-700/60";
+                stepBar.classList.remove('hidden');
+                selectStep(currentStep);
+            }
+        }
+
+        function selectStep(stepNum) {
+            currentStep = stepNum;
+            isPlaying = true;
+            updatePlayButtonUI();
+            highlightStepUI(stepNum);
+
+            const info = STEP_DESCRIPTIONS[stepNum];
+            document.getElementById('bannerTitle').innerText = info.title;
+            document.getElementById('bannerTag').innerText = info.tag;
+            document.getElementById('bannerDesc').innerHTML = info.desc;
+            document.getElementById('bannerIcon').className = info.icon;
+
+            // 自動平滑調整鏡頭以呈現該步驟最佳解說畫面
+            if (stepNum === 1) {
+                camera.targetX = 830; camera.targetY = 690; camera.targetZoom = 2.65;
+            } else if (stepNum === 2) {
+                camera.targetX = 910; camera.targetY = 690; camera.targetZoom = 2.55;
+            } else if (stepNum === 3) {
+                camera.targetX = 880; camera.targetY = 650; camera.targetZoom = 1.75;
+            } else if (stepNum === 4) {
+                camera.targetX = 960; camera.targetY = 695; camera.targetZoom = 2.25;
+            }
+        }
+
+        function jumpToStepWithZoom(stepNum) {
+            if (simMode !== 'step') {
+                setSimMode('step');
+            }
+            selectStep(stepNum);
+        }
+
+        function replayCurrentStep() {
+            if (currentStep === 1) {
+                atpParticles.forEach((p, idx) => p.t = idx * 0.15);
+            } else if (currentStep === 2) {
+                ionParticles.forEach((ion, idx) => ion.t = (idx * 0.18) % 0.45);
+            } else if (currentStep === 3) {
+                step3HighlightTimer = 0;
+            } else if (currentStep === 4) {
+                waterParticles.forEach((w, idx) => w.t = (idx % 10) / 10);
+            }
+            isPlaying = true;
+            updatePlayButtonUI();
+        }
+
+        function advanceNextStep() {
+            if (simMode !== 'step') {
+                setSimMode('step');
+                selectStep(1);
+            } else {
+                const next = currentStep >= 4 ? 1 : currentStep + 1;
+                selectStep(next);
+            }
+        }
+
+        function highlightStepUI(activeStep) {
+            for (let i = 1; i <= 4; i++) {
+                const topTab = document.getElementById('stepTab' + i);
+                const sideCard = document.getElementById('sideStep' + i);
+                if (i === activeStep) {
+                    topTab.className = "touch-btn px-2 py-1.5 rounded-xl text-xs font-black border border-amber-400 bg-amber-500 text-slate-950 shadow-md flex items-center justify-center space-x-1";
+                    sideCard.className = "w-full text-left p-2 rounded-xl border-2 border-amber-400 bg-amber-500/20 transition flex items-center space-x-2.5 shadow";
+                } else {
+                    topTab.className = "touch-btn px-2 py-1.5 rounded-xl text-xs font-bold border border-slate-700 bg-slate-800 text-slate-300 hover:text-white flex items-center justify-center space-x-1";
+                    sideCard.className = "w-full text-left p-2 rounded-xl border border-slate-800 hover:border-slate-700 bg-slate-900/70 transition flex items-center space-x-2.5";
+                }
+            }
+        }
+
+        function togglePlay() {
+            isPlaying = !isPlaying;
+            updatePlayButtonUI();
+        }
+
+        function updatePlayButtonUI() {
+            const btn = document.getElementById('btnPlayPause');
+            const icon = document.getElementById('iconPlayPause');
+            const txt = document.getElementById('textPlayPause');
+            if (isPlaying) {
+                btn.className = "touch-btn px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs md:text-sm flex items-center space-x-1.5 shadow";
+                icon.className = "fa-solid fa-pause";
+                txt.innerText = "暫停模擬";
+            } else {
+                btn.className = "touch-btn px-4 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs md:text-sm flex items-center space-x-1.5 shadow";
+                icon.className = "fa-solid fa-play";
+                txt.innerText = "繼續播放";
+            }
+        }
+
+        function setSpeed(s) {
+            simSpeed = s;
+            const ids = { 0.25: 'spd025', 0.5: 'spd05', 1.0: 'spd10', 2.0: 'spd20' };
+            Object.values(ids).forEach(id => {
+                document.getElementById(id).className = "px-2 py-1 rounded-lg text-xs font-bold text-slate-400 hover:text-white";
+            });
+            document.getElementById(ids[s]).className = "px-2 py-1 rounded-lg text-xs font-bold bg-amber-600 text-white shadow";
+        }
+
+        function toggleGuidePaths(val) {
+            showGuidePaths = val;
+        }
+
+        function toggleAnatomyLabels(val) {
+            showAnatomyLabels = val;
+        }
+
+        function toggleAquaporins() {
+            aqpEnabled = !aqpEnabled;
+            const btn = document.getElementById('btnToggleAQP');
+            const sub = document.getElementById('aqpStatusSub');
+            if (aqpEnabled) {
+                btn.innerText = "正常開啟";
+                btn.className = "touch-btn px-3 py-1 rounded-xl text-xs font-black bg-cyan-600 text-white shadow";
+                sub.innerText = "開啟：水分子成列高速滑入";
+            } else {
+                btn.innerText = "已抑制關閉";
+                btn.className = "touch-btn px-3 py-1 rounded-xl text-xs font-black bg-rose-600 text-white shadow";
+                sub.innerText = "關閉：僅剩極緩慢的單純擴散！";
+            }
+        }
+
+        function toggleMitochondria() {
+            mitoEnabled = !mitoEnabled;
+            const btn = document.getElementById('btnToggleMito');
+            const sub = document.getElementById('mitoStatusSub');
+            if (mitoEnabled) {
+                btn.innerText = "正常供能";
+                btn.className = "touch-btn px-3 py-1 rounded-xl text-xs font-black bg-amber-600 text-white shadow";
+                sub.innerText = "開啟：持續提供 ATP 給離子幫浦";
+            } else {
+                btn.innerText = "停止供能";
+                btn.className = "touch-btn px-3 py-1 rounded-xl text-xs font-black bg-rose-600 text-white shadow";
+                sub.innerText = "關閉：無 ATP，離子幫浦停擺！";
+            }
+        }
+
+        function updateDashboardUI() {
+            const ionVal = Math.round(internalIonLevel);
+            document.getElementById('valCellIon').innerText = ionVal > 50 ? `高 (${ionVal} mM)` : `低 (${ionVal} mM)`;
+            document.getElementById('barCellIon').style.width = ionVal + '%';
+
+            const wpMpa = (-0.1 - (ionVal / 100) * 0.8).toFixed(2);
+            document.getElementById('valCellWP').innerText = `${ionVal > 50 ? '低' : '中'} (${wpMpa} MPa)`;
+            document.getElementById('barCellWP').style.width = Math.max(15, 100 - ionVal) + '%';
+
+            // Water influx rate indicator
+            const txtWater = document.getElementById('txtWaterSpeed');
+            const barWater = document.getElementById('barWaterSpeed');
+            if (!aqpEnabled) {
+                txtWater.innerText = "極慢 (單純擴散)";
+                txtWater.className = "text-rose-400 font-black font-mono";
+                barWater.style.width = "8%";
+            } else if (ionVal < 35) {
+                txtWater.innerText = "緩慢 (缺乏滲透壓差)";
+                txtWater.className = "text-amber-400 font-black font-mono";
+                barWater.style.width = "25%";
+            } else {
+                txtWater.innerText = "極快 (3×10⁹ H₂O/秒)";
+                txtWater.className = "text-cyan-400 font-black font-mono";
+                barWater.style.width = "95%";
+            }
+        }
+
+        function resetAll() {
+            aqpEnabled = true;
+            mitoEnabled = true;
+            internalIonLevel = 85;
+            showGuidePaths = true;
+            showAnatomyLabels = true;
+            document.getElementById('chkShowPaths').checked = true;
+            document.getElementById('chkShowLabels').checked = true;
+
+            // Reset buttons
+            document.getElementById('btnToggleAQP').innerText = "正常開啟";
+            document.getElementById('btnToggleAQP').className = "touch-btn px-3 py-1 rounded-xl text-xs font-black bg-cyan-600 text-white shadow";
+            document.getElementById('btnToggleMito').innerText = "正常供能";
+            document.getElementById('btnToggleMito').className = "touch-btn px-3 py-1 rounded-xl text-xs font-black bg-amber-600 text-white shadow";
+
+            setSpeed(1.0);
+            setSimMode('sync');
+            setCameraPreset('macro');
+            initDeterministicParticles();
+        }
+
+        // ================= MOUSE & TOUCH PAN / ZOOM GESTURES =================
+        let isDragging = false;
+        let lastPointer = { x: 0, y: 0 };
+        let initialPinchDist = null;
+        let initialPinchZoom = 1;
+
+        canvas.addEventListener('mousedown', e => {
+            isDragging = true;
+            lastPointer = { x: e.clientX, y: e.clientY };
+        });
+
+        window.addEventListener('mousemove', e => {
+            if (!isDragging) return;
+            const dx = e.clientX - lastPointer.x;
+            const dy = e.clientY - lastPointer.y;
+            lastPointer = { x: e.clientX, y: e.clientY };
+
+            const rect = canvas.getBoundingClientRect();
+            const baseScale = Math.min(rect.width / WORLD_W, rect.height / WORLD_H);
+            const totalScale = baseScale * camera.zoom;
+
+            camera.targetX = Math.max(200, Math.min(1450, camera.targetX - dx / totalScale));
+            camera.targetY = Math.max(150, Math.min(850, camera.targetY - dy / totalScale));
+        });
+
+        window.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+
+        canvas.addEventListener('wheel', e => {
+            e.preventDefault();
+            const factor = e.deltaY < 0 ? 1.14 : 0.88;
+            zoomCamera(factor);
+        }, { passive: false });
+
+        // Double click to toggle Macro / Micro zoom
+        canvas.addEventListener('dblclick', () => {
+            if (camera.targetZoom < 1.6) {
+                setCameraPreset('micro');
+            } else {
+                setCameraPreset('macro');
+            }
+        });
+
+        // Touch gestures (1-finger pan, 2-finger pinch zoom)
+        canvas.addEventListener('touchstart', e => {
+            if (e.touches.length === 1) {
+                isDragging = true;
+                lastPointer = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            } else if (e.touches.length === 2) {
+                isDragging = false;
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                initialPinchDist = Math.hypot(dx, dy);
+                initialPinchZoom = camera.targetZoom;
+            }
+        }, { passive: true });
+
+        canvas.addEventListener('touchmove', e => {
+            if (e.touches.length === 1 && isDragging) {
+                const dx = e.touches[0].clientX - lastPointer.x;
+                const dy = e.touches[0].clientY - lastPointer.y;
+                lastPointer = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+
+                const rect = canvas.getBoundingClientRect();
+                const baseScale = Math.min(rect.width / WORLD_W, rect.height / WORLD_H);
+                const totalScale = baseScale * camera.zoom;
+
+                camera.targetX = Math.max(200, Math.min(1450, camera.targetX - dx / totalScale));
+                camera.targetY = Math.max(150, Math.min(850, camera.targetY - dy / totalScale));
+            } else if (e.touches.length === 2 && initialPinchDist) {
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                const dist = Math.hypot(dx, dy);
+                const ratio = dist / initialPinchDist;
+                camera.targetZoom = Math.max(0.65, Math.min(4.8, initialPinchZoom * ratio));
+            }
+        }, { passive: true });
+
+        canvas.addEventListener('touchend', () => {
+            isDragging = false;
+            initialPinchDist = null;
+        });
+
+        // ================= MAIN ANIMATION LOOP =================
+        let prevTimestamp = 0;
+        function mainLoop(timestamp) {
+            if (!prevTimestamp) prevTimestamp = timestamp;
+            const dt = Math.min(0.05, (timestamp - prevTimestamp) / 1000);
+            prevTimestamp = timestamp;
+
+            updateSimulation(dt);
+            renderScene();
+
+            requestAnimationFrame(mainLoop);
+        }
+
+        window.onload = () => {
+            initDeterministicParticles();
+            setCameraPreset('macro');
+            requestAnimationFrame(mainLoop);
+        };
+    </script>
+</body>
+</html>
