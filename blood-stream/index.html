@@ -12,25 +12,80 @@
 </head>
 <body>
     <div id="info" class="text-sm">
-        <h1 class="text-xl font-bold mb-2">3D動態瓣膜血流模擬</h1>
-        <p class="mb-2">使用滑鼠/觸控操作視角。點擊下方按鈕控制模擬。</p>
-        <p>
-            前瓣膜狀態: <span id="front-valve-status" class="status-badge status-off">關閉</span>
-        </p>
-        <p class="mt-1">
-            後瓣膜狀態: <span id="back-valve-status" class="status-badge status-off">關閉</span>
+        <h1 class="text-xl font-bold mb-1">3D動態瓣膜血流模擬</h1>
+        <p class="text-xs text-slate-600 mb-2">心臟的演化原型：具單向瓣膜的搏動血管（流向：左 → 右）</p>
+        <div class="status-grid">
+            <p>
+                血管狀態: <span id="vessel-phase-status" class="status-badge status-neutral">平時 (靜止)</span>
+            </p>
+            <p>
+                動脈脈搏: <span id="arterial-pulse-status" class="status-badge status-off">未形成 (無單向瓣膜高壓射血)</span>
+            </p>
+            <p>
+                心房囊袋 (靜脈竇): <span id="atrium-status" class="status-badge status-off">未開啟</span>
+            </p>
+            <p>
+                後瓣膜 (左/入口): <span id="back-valve-status" class="status-badge status-off">未安裝</span>
+            </p>
+            <p>
+                前瓣膜 (右/出口): <span id="front-valve-status" class="status-badge status-off">未安裝</span>
+            </p>
+            <p>
+                瓣膜閉合功能: <span id="regurgitation-status" class="status-badge status-neutral">健康正常 (緊密閉合)</span>
+            </p>
+        </div>
+        <p id="flow-hint" class="mt-2 text-xs font-semibold text-slate-700 bg-slate-100 p-1.5 rounded">
+            💡 無瓣膜：壓縮與擴張時血液僅在原地左右往復震盪，無法形成單向循環。
         </p>
     </div>
+
+    <!-- 可切換顯示/隱藏的 3D 空間大字構造標籤（預設關閉 hidden） -->
+    <div id="anatomical-labels" class="anatomical-labels-container hidden">
+        <div id="label-vein" class="anat-label anat-label-top anat-vein">
+            <span class="anat-title">靜脈</span>
+            <span class="anat-sub">（低壓回心）</span>
+            <div class="anat-stem-down"></div>
+        </div>
+        <div id="label-atrium" class="anat-label anat-label-bottom anat-atrium">
+            <div class="anat-stem-up"></div>
+            <span class="anat-title">心房</span>
+            <span class="anat-sub">（靜脈竇）</span>
+        </div>
+        <div id="label-av-valve" class="anat-label anat-label-bottom anat-valve">
+            <div class="anat-stem-up"></div>
+            <span class="anat-title">房室瓣</span>
+            <span class="anat-sub">（後瓣膜）</span>
+        </div>
+        <div id="label-ventricle" class="anat-label anat-label-top anat-ventricle">
+            <span class="anat-title">心室</span>
+            <span class="anat-sub">（搏動心管）</span>
+            <div class="anat-stem-down"></div>
+        </div>
+        <div id="label-arterial-valve" class="anat-label anat-label-bottom anat-valve">
+            <div class="anat-stem-up"></div>
+            <span class="anat-title">動脈瓣</span>
+            <span class="anat-sub">（前瓣膜）</span>
+        </div>
+        <div id="label-artery" class="anat-label anat-label-top anat-artery">
+            <span class="anat-title">動脈</span>
+            <span class="anat-sub">（彈性脈搏波）</span>
+            <div class="anat-stem-down"></div>
+        </div>
+    </div>
+
     <div class="ui-container">
-        <button id="toggle-compress" class="btn btn-blue">壓縮血管</button>
-        <button id="add-front-valve" class="btn btn-green">新增前瓣膜</button>
-        <button id="remove-front-valve" class="btn btn-red hidden">移除前瓣膜</button>
-        <button id="add-back-valve" class="btn btn-green">新增後瓣膜</button>
-        <button id="remove-back-valve" class="btn btn-red hidden">移除後瓣膜</button>
+        <button id="toggle-compress" class="btn btn-blue">壓縮心室</button>
+        <button id="auto-compress" class="btn btn-purple">連續壓縮</button>
+        <button id="irregular-compress" class="btn btn-rose">不規律收縮(心律不整)</button>
+        <button id="toggle-regurgitation" class="btn btn-amber">⚠️ 瓣膜關閉不全(逆流)</button>
+        <button id="toggle-atrium" class="btn btn-green">＋ 心房囊袋(靜脈竇)</button>
+        <button id="toggle-back-valve" class="btn btn-green">＋ 新增後瓣膜(左)</button>
+        <button id="toggle-front-valve" class="btn btn-green">＋ 新增前瓣膜(右)</button>
+        <button id="toggle-labels" class="btn btn-neutral">🏷️ 顯示標籤</button>
         <button id="reset-view" class="btn btn-neutral">重置視角</button>
         <div class="quality-control-container">
-            <span class="quality-label">粒子數量:</span>
-            <input type="range" id="particle-slider" class="particle-slider" min="50" max="400" step="10" value="200" title="調整粒子數量" />
+            <span class="quality-label">血球數量:</span>
+            <input type="range" id="particle-slider" class="particle-slider" min="50" max="400" step="10" value="200" title="調整血球數量" />
             <span id="particle-count-display" class="particle-count-display">200 顆</span>
             <div class="quality-buttons-group">
                 <button type="button" id="quality-low-btn" class="quality-btn" data-count="80" title="低畫質 (80 顆，手機/低階裝置)">低 80</button>
