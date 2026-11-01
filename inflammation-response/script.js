@@ -70,11 +70,73 @@ document.addEventListener('DOMContentLoaded', () => {
     const toggleLabelsCheckbox = document.getElementById('toggle-labels');
     const toggleAutoWbcCheckbox = document.getElementById('toggle-auto-wbc');
     const toggleDimNerveCheckbox = document.getElementById('toggle-dim-nerve');
+    const toggleFluidCheckbox = document.getElementById('toggle-fluid-circulation');
+    const labelToggleFluid = document.getElementById('label-toggle-fluid');
+    const fluidTankBgLayer = document.getElementById('fluid-tank-bg-layer');
     const nerveNetworkGroup = document.getElementById('nerve-network');
 
     let simSpeed = 1.0;
     let speedAccum = 0;
     let selectedPathogen = 'bacteria';
+    let fluidCirculationEnabled = false;
+    let fluidDroplets = [];
+    let fluidSpawnTimer = 0;
+
+    function initFluidTankDroplets() {
+        fluidDroplets = [];
+        // 1. Pre-fill the covered water tank (dermis interstitial space) with evenly distributed bathing droplets
+        // so the tissue immediately looks like a full water tank rather than a directional stream!
+        const cols = 9;
+        const rows = 4;
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                const bx = 65 + c * 88 + (Math.random() - 0.5) * 36;
+                const by = 78 + r * 48 + (Math.random() - 0.5) * 20;
+                fluidDroplets.push({
+                    state: 'tank_bathing',
+                    x: bx,
+                    y: by,
+                    r: 2.7 + Math.random() * 0.9,
+                    wanderAngle: Math.random() * Math.PI * 2,
+                    phase: Math.random() * Math.PI * 2,
+                    life: 140 + Math.floor(Math.random() * 240),
+                    maxLife: 380,
+                    alpha: 0.55 + Math.random() * 0.3
+                });
+            }
+        }
+        // 2. Seed a few upward-filtering plasma droplets at capillary endothelial gaps (Inlet pipe)
+        const sampleGaps = [230, 340, 470, 590, 720];
+        sampleGaps.forEach(gx => {
+            const targetY = 85 + Math.random() * 150;
+            fluidDroplets.push({
+                state: 'inlet_filtering',
+                x: gx + (Math.random() - 0.5) * 8,
+                y: 306 - Math.random() * 25,
+                startY: 318,
+                targetTankY: targetY,
+                vx: (Math.random() - 0.5) * 0.28, // strictly symmetric, zero rightward bias!
+                vy: -(0.85 + Math.random() * 0.35),
+                r: 2.8,
+                wanderAngle: Math.random() * Math.PI * 2,
+                phase: Math.random() * Math.PI * 2,
+                life: 320,
+                maxLife: 320,
+                alpha: 0.9
+            });
+        });
+        // 3. Seed a few overflow droplets at the right-hand lymphatic blind-end outlet (Outlet pipe)
+        for (let k = 0; k < 5; k++) {
+            fluidDroplets.push({
+                state: 'lymph_draining',
+                x: 825 + k * 28 + (Math.random() - 0.5) * 10,
+                y: 256 + (Math.random() - 0.5) * 20,
+                targetValveY: 268 + (Math.random() - 0.5) * 14,
+                r: 2.8,
+                alpha: 0.85
+            });
+        }
+    }
 
     let vaccineState = {
         bacteria: false,
@@ -1692,6 +1754,8 @@ document.addEventListener('DOMContentLoaded', () => {
         plateletPlugLayer.innerHTML = '';
         fibrinMeshLayer.innerHTML = '';
         scabLayer.innerHTML = '';
+        if (extravasatedLayer) extravasatedLayer.innerHTML = '';
+        if (fluidTankBgLayer) fluidTankBgLayer.innerHTML = '';
 
         // Smooth physical params
         arterioleWidth += (targetArterioleWidth - arterioleWidth) * 0.05;
@@ -1785,6 +1849,319 @@ document.addEventListener('DOMContentLoaded', () => {
         tissueBg.setAttribute("d", `${juncD} L 1000 300 L 0 300 Z`);
         swellingOverlay.setAttribute("d", `${juncD} L 1000 300 L 0 300 Z`);
         swellingOverlay.setAttribute("opacity", swellingLevel * 0.42);
+
+        // ----------------------------------------------------
+        // 0. Interstitial Fluid & Lymphatic Circulation (Covered Water Tank Model)
+        // ----------------------------------------------------
+        if (fluidCirculationEnabled && fluidTankBgLayer && extravasatedLayer) {
+            fluidTankBgLayer.setAttribute("opacity", "1");
+            const nowMs = Date.now();
+            const isEdema = activeEffects.has('swelling') || swellingLevel > 0.15;
+
+            // A) Covered Water Tank Background Fill (Interstitial Fluid Pool filling the Dermis)
+            const tankPool = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            tankPool.setAttribute("d", `${juncD} L 1000 300 L 0 300 Z`);
+            tankPool.setAttribute("fill", "url(#interstitialTankGrad)");
+            tankPool.setAttribute("opacity", (0.85 + swellingLevel * 0.15).toFixed(2));
+            fluidTankBgLayer.appendChild(tankPool);
+
+            // B) Top Watertight Lid Bar (基底膜與上皮屏障封蓋)
+            const lidSeal = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            lidSeal.setAttribute("d", juncD);
+            lidSeal.setAttribute("stroke", "#38bdf8");
+            lidSeal.setAttribute("stroke-width", "3.2");
+            lidSeal.setAttribute("fill", "none");
+            lidSeal.setAttribute("opacity", "0.85");
+            fluidTankBgLayer.appendChild(lidSeal);
+
+            // C) Standing Liquid Level Ripples inside the Water Tank (Horizontal standing waves, NO rightward stream!)
+            const waveOffsets = [12, 55, 115, 175, 230];
+            waveOffsets.forEach((yOff, wIdx) => {
+                let waveD = '';
+                const maxX = yOff > 190 ? 865 : 980;
+                for (let wx = 20; wx <= maxX; wx += 25) {
+                    const baseLidY = 55 + getSkinSurfaceY(wx, swellingLevel) - 2;
+                    // Standing wave oscillation (bobbing vertically in place, not marching toward lymphatics)
+                    const standingWave = Math.sin(wx * 0.035 + wIdx * 1.3) * Math.cos(nowMs * 0.0028 + wIdx * 0.8) * (wIdx === 0 ? 2.5 : 3.2);
+                    const wy = Math.min(294, baseLidY + yOff + standingWave);
+                    waveD += (wx === 20 ? 'M ' : 'L ') + wx + ' ' + wy.toFixed(1) + ' ';
+                }
+                const wavePath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                wavePath.setAttribute("d", waveD.trim());
+                wavePath.setAttribute("stroke", wIdx === 0 ? "#7dd3fc" : "rgba(186, 230, 253, 0.35)");
+                wavePath.setAttribute("stroke-width", wIdx === 0 ? "1.8" : "1.2");
+                if (wIdx > 0) wavePath.setAttribute("stroke-dasharray", "8,6");
+                wavePath.setAttribute("fill", "none");
+                fluidTankBgLayer.appendChild(wavePath);
+            });
+
+            // D) Water Tank Side Wall Frame & Level Gauge (Left wall & Right wall above lymphatic outlet pipe)
+            const leftTopY = 55 + getSkinSurfaceY(14, swellingLevel) + 2;
+            const rightTopY = 55 + getSkinSurfaceY(868, swellingLevel) + 2;
+            const tankWalls = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            // Left bracket (x=14, y: leftTopY..296) and Right tank wall (x=868, y: rightTopY..246 right above lymphatic pipe!)
+            tankWalls.setAttribute("d", `M 24 ${leftTopY} L 14 ${leftTopY} L 14 296 L 24 296 M 858 ${rightTopY} L 868 ${rightTopY} L 868 246 L 858 246`);
+            tankWalls.setAttribute("stroke", "#38bdf8");
+            tankWalls.setAttribute("stroke-width", "2");
+            tankWalls.setAttribute("fill", "none");
+            tankWalls.setAttribute("opacity", "0.75");
+            fluidTankBgLayer.appendChild(tankWalls);
+
+            // E) Cell-Bathing Ripples around Living Tissue Cells (組織液浸潤細胞交換物質)
+            tissueSites.forEach((site, sIdx) => {
+                if (site.state === 'healthy' || site.state === 'infected' || site.state === 'dividing') {
+                    const t = Math.max(0, Math.min(1, site.origX / 1000));
+                    const sy = site.origY - maxBulge * 4 * t * (1 - t) * 0.4;
+                    const pulseR = site.r + 5 + Math.sin(nowMs * 0.0035 + sIdx * 0.9) * 2.5;
+                    const bathRing = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                    bathRing.setAttribute("cx", site.x);
+                    bathRing.setAttribute("cy", sy);
+                    bathRing.setAttribute("r", pulseR.toFixed(1));
+                    bathRing.setAttribute("fill", "none");
+                    bathRing.setAttribute("stroke", "#7dd3fc");
+                    bathRing.setAttribute("stroke-width", "1.3");
+                    bathRing.setAttribute("stroke-dasharray", "5,4");
+                    bathRing.setAttribute("opacity", "0.45");
+                    fluidTankBgLayer.appendChild(bathRing);
+                }
+            });
+
+            // F) Spawn & Update 3-Phase Fluid Droplets (1: Inlet Capillary Filtration, 2: Isotropic Tank Bathing, 3: Lymphatic Overflow)
+            fluidSpawnTimer++;
+            const spawnInterval = isEdema ? 7 : 13;
+            const filtrationGaps = [230, 280, 340, 410, 470, 590, 650, 720, 780];
+
+            if (fluidSpawnTimer >= spawnInterval) {
+                fluidSpawnTimer = 0;
+
+                // 1) Spawn Plasma Filtration Droplet at a capillary endothelial gap (Inlet Pipe: Blood -> Interstitial Tank)
+                const bathingCount = fluidDroplets.filter(d => d.state === 'tank_bathing' || d.state === 'inlet_filtering').length;
+                const maxTankDroplets = isEdema ? 74 : 52;
+                if (bathingCount < maxTankDroplets) {
+                    const gx = filtrationGaps[Math.floor(Math.random() * filtrationGaps.length)];
+                    const lidAtGx = 55 + getSkinSurfaceY(gx, swellingLevel) + 12;
+                    const targetY = lidAtGx + Math.random() * (245 - lidAtGx);
+                    fluidDroplets.push({
+                        state: 'inlet_filtering',
+                        x: gx + (Math.random() - 0.5) * (isEdema ? 12 : 6),
+                        y: 316,
+                        startY: 316,
+                        targetTankY: targetY,
+                        vx: (Math.random() - 0.5) * 0.34, // Strictly symmetric left/right fan-out, ZERO rightward bias!
+                        vy: -(0.9 + Math.random() * 0.45) * (isEdema ? 1.25 : 1.0),
+                        r: 2.7 + Math.random() * 0.7,
+                        wanderAngle: Math.random() * Math.PI * 2,
+                        phase: Math.random() * Math.PI * 2,
+                        life: 260 + Math.floor(Math.random() * 140),
+                        maxLife: 380,
+                        alpha: 0.92
+                    });
+                }
+
+                // 2) Spawn Local Overflow Drainage Droplet ONLY at the right-side lymphatic catchment zone (x: 790..855, y: 215..282)
+                // This represents water tank overflow into the outlet pipe without pulling mid-tank droplets in a diagonal line!
+                const drainingCount = fluidDroplets.filter(d => d.state === 'lymph_draining').length;
+                if (drainingCount < (isEdema ? 14 : 9)) {
+                    fluidDroplets.push({
+                        state: 'lymph_draining',
+                        x: 795 + Math.random() * 55,
+                        y: 222 + Math.random() * 58,
+                        targetValveY: 268 + (Math.random() - 0.5) * 16,
+                        r: 2.7 + Math.random() * 0.6,
+                        alpha: 0.85
+                    });
+                }
+            }
+
+            // Render upward filtration arrows at capillary gaps (Inlet Pipe indicators)
+            const indicatorGaps = [230, 340, 470, 590, 720];
+            indicatorGaps.forEach((gx, idx) => {
+                const bob = Math.sin(nowMs * 0.005 + idx) * 2.5;
+                const ay = 304 + bob;
+                const arrow = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                arrow.setAttribute("d", `M ${gx} ${ay + 7} L ${gx} ${ay - 4} M ${gx - 3.5} ${ay} L ${gx} ${ay - 4.5} L ${gx + 3.5} ${ay}`);
+                arrow.setAttribute("stroke", "#fde047");
+                arrow.setAttribute("stroke-width", "1.6");
+                arrow.setAttribute("stroke-linecap", "round");
+                arrow.setAttribute("fill", "none");
+                arrow.setAttribute("opacity", "0.78");
+                extravasatedLayer.appendChild(arrow);
+            });
+
+            // Update & Render each fluid droplet
+            for (let i = fluidDroplets.length - 1; i >= 0; i--) {
+                const d = fluidDroplets[i];
+
+                if (d.state === 'inlet_filtering') {
+                    // Rising vertically from capillary into the dermal water tank
+                    d.x += d.vx * simSpeed;
+                    d.y += d.vy * simSpeed;
+
+                    const riseSpan = Math.max(20, d.startY - d.targetTankY);
+                    const prog = Math.max(0, Math.min(1, (d.startY - d.y) / riseSpan));
+
+                    // Color transition: Golden Plasma (#ffd43b) -> Aqua Interstitial Fluid (#7dd3fc)
+                    const isStillPlasma = d.y > 286 || prog < 0.28;
+                    const fillCol = isStillPlasma ? "#ffd43b" : "#7dd3fc";
+                    const strokeCol = isStillPlasma ? "#f59e0b" : "#38bdf8";
+
+                    const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                    c.setAttribute("cx", d.x.toFixed(1));
+                    c.setAttribute("cy", d.y.toFixed(1));
+                    c.setAttribute("r", d.r.toFixed(1));
+                    c.setAttribute("fill", fillCol);
+                    c.setAttribute("stroke", strokeCol);
+                    c.setAttribute("stroke-width", "0.8");
+                    c.setAttribute("opacity", d.alpha.toFixed(2));
+                    extravasatedLayer.appendChild(c);
+
+                    if (d.y <= d.targetTankY) {
+                        d.state = 'tank_bathing';
+                        d.wanderAngle = Math.random() * Math.PI * 2;
+                    }
+                } else if (d.state === 'tank_bathing') {
+                    // Isotropic diffusion & cell-bathing inside the covered water tank (ZERO rightward drift!)
+                    d.life -= simSpeed;
+                    d.wanderAngle += (Math.random() - 0.5) * 0.26 * simSpeed;
+                    let vx = Math.cos(d.wanderAngle) * 0.32;
+                    let vy = Math.sin(d.wanderAngle) * 0.28;
+
+                    // Gently orbit around nearby tissue cells (bathing cells in interstitial fluid)
+                    for (let site of tissueSites) {
+                        if (site.state !== 'empty') {
+                            const dx = d.x - site.x;
+                            const dy = d.y - site.y;
+                            const dist = Math.hypot(dx, dy);
+                            const minR = site.r + 5;
+                            if (dist < minR + 12 && dist > 0.1) {
+                                // Tangential glide around cell membrane + soft radial cushion
+                                const nx = dx / dist;
+                                const ny = dy / dist;
+                                vx = -ny * 0.38 + (dist < minR ? nx * 0.5 : 0);
+                                vy = nx * 0.38 + (dist < minR ? ny * 0.5 : 0);
+                                d.wanderAngle = Math.atan2(vy, vx);
+                                break;
+                            }
+                        }
+                    }
+
+                    d.x += vx * simSpeed;
+                    d.y += vy * simSpeed;
+
+                    // Confinement inside the Covered Water Tank (Top lid = basement membrane, Bottom = capillary wall)
+                    const lidY = 55 + getSkinSurfaceY(d.x, swellingLevel) + 8;
+                    if (d.y < lidY) {
+                        d.y = lidY;
+                        d.wanderAngle = Math.abs(d.wanderAngle);
+                    } else if (d.y > 276) {
+                        d.y = 276;
+                        d.wanderAngle = -Math.abs(d.wanderAngle);
+                    }
+                    if (d.x < 35) {
+                        d.x = 35;
+                        d.wanderAngle = Math.PI - d.wanderAngle;
+                    } else if (d.x > 850) {
+                        // Only droplets already at the far right near the lymphatic blind end (y > 205) overflow into lymphatics
+                        if (d.y > 205) {
+                            d.state = 'lymph_draining';
+                            d.targetValveY = 268 + (Math.random() - 0.5) * 14;
+                        } else {
+                            d.x = 850;
+                            d.wanderAngle = Math.PI - d.wanderAngle;
+                        }
+                    }
+
+                    if (d.life <= 0) {
+                        fluidDroplets.splice(i, 1);
+                        continue;
+                    }
+
+                    const fadeAlpha = d.life < 50 ? (d.life / 50) * 0.75 : 0.72;
+                    const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                    c.setAttribute("cx", d.x.toFixed(1));
+                    c.setAttribute("cy", d.y.toFixed(1));
+                    c.setAttribute("r", d.r.toFixed(1));
+                    c.setAttribute("fill", "#7dd3fc");
+                    c.setAttribute("stroke", "#bae6fd");
+                    c.setAttribute("stroke-width", "0.7");
+                    c.setAttribute("opacity", fadeAlpha.toFixed(2));
+                    extravasatedLayer.appendChild(c);
+
+                } else if (d.state === 'lymph_draining') {
+                    // Right-side Overflow Outlet Pipe: Entering initial lymphatics and turning into green Lymph!
+                    const inLumen = d.x >= 868;
+                    if (!inLumen) {
+                        // Converging locally from right-side tank edge (x: 790..868) into the flap valve at x=870
+                        const dx = 872 - d.x;
+                        const dy = (d.targetValveY || 268) - d.y;
+                        const dist = Math.max(1, Math.hypot(dx, dy));
+                        const spd = (1.15 + (isEdema ? 0.45 : 0)) * simSpeed;
+                        d.x += (dx / dist) * spd;
+                        d.y += (dy / dist) * spd;
+                    } else {
+                        // Flowing rightward inside the lymphatic capillary outlet pipe (x: 868 -> 1000)
+                        d.x += (1.9 + (isEdema ? 0.5 : 0)) * simSpeed;
+                        d.y += (268 - d.y) * 0.06 * simSpeed;
+                        if (d.x > 965) {
+                            d.alpha -= 0.04 * simSpeed;
+                        }
+                    }
+
+                    if (d.x >= 1002 || d.alpha <= 0.05) {
+                        fluidDroplets.splice(i, 1);
+                        continue;
+                    }
+
+                    const fillCol = inLumen ? "#34d399" : "#5eead4";
+                    const strokeCol = inLumen ? "#059669" : "#14b8a6";
+                    const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                    c.setAttribute("cx", d.x.toFixed(1));
+                    c.setAttribute("cy", d.y.toFixed(1));
+                    c.setAttribute("r", d.r.toFixed(1));
+                    c.setAttribute("fill", fillCol);
+                    c.setAttribute("stroke", strokeCol);
+                    c.setAttribute("stroke-width", "0.85");
+                    c.setAttribute("opacity", d.alpha.toFixed(2));
+                    extravasatedLayer.appendChild(c);
+                }
+            }
+
+            // G) Render 3 Educational Water-Tank Callout Badges (Always visible when this toggle is active)
+            const renderTankBadge = (text, bx, by, bgCol, borderCol, textCol = '#ffffff') => {
+                const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+                const approxW = text.length * 10.6 + 18;
+                const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+                rect.setAttribute("x", bx - approxW / 2);
+                rect.setAttribute("y", by - 10);
+                rect.setAttribute("width", approxW);
+                rect.setAttribute("height", 20);
+                rect.setAttribute("rx", 6);
+                rect.setAttribute("fill", bgCol);
+                rect.setAttribute("stroke", borderCol);
+                rect.setAttribute("stroke-width", "1.2");
+                const txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                txt.setAttribute("x", bx);
+                txt.setAttribute("y", by + 4);
+                txt.setAttribute("fill", textCol);
+                txt.setAttribute("font-size", "10.5");
+                txt.setAttribute("font-weight", "700");
+                txt.setAttribute("text-anchor", "middle");
+                txt.textContent = text;
+                g.appendChild(rect);
+                g.appendChild(txt);
+                extravasatedLayer.appendChild(g);
+            };
+
+            const midLidY = 55 + getSkinSurfaceY(460, swellingLevel);
+            const lidBadgeText = isEdema
+                ? "② 組織水腫：入水大於排水，組織液累積撐起表皮上蓋！"
+                : "② 組織間隙：血漿轉為「組織液(淺藍)」・漫流浸潤細胞";
+            renderTankBadge(lidBadgeText, 460, midLidY + 16, "rgba(12, 74, 110, 0.92)", "#38bdf8", "#e0f2fe");
+            renderTankBadge("⬆️ ① 入水管 (微血管)：血漿(黃)經內皮間隙向上濾出", 460, 290, "rgba(120, 53, 15, 0.92)", "#fbbf24", "#fef3c7");
+            renderTankBadge("➡️ ③ 出水管 (微淋巴管)：右側多餘組織液溢流回收成「淋巴(綠)」", 825, 232, "rgba(6, 78, 59, 0.94)", "#34d399", "#a7f3d0");
+        } else if (fluidTankBgLayer) {
+            fluidTankBgLayer.setAttribute("opacity", "0");
+        }
 
         // Dynamically align Epidermis Tint (Left: 0~500) and Mucosa Tint (Right: 500~1000)
         const epiBgEl = document.getElementById('epidermis-bg');
@@ -4384,6 +4761,20 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    if (toggleFluidCheckbox) {
+        toggleFluidCheckbox.addEventListener('change', () => {
+            fluidCirculationEnabled = toggleFluidCheckbox.checked;
+            if (labelToggleFluid) labelToggleFluid.classList.toggle('active', fluidCirculationEnabled);
+            if (fluidCirculationEnabled) {
+                initFluidTankDroplets();
+                updateLog("💧 <strong>【已開啟組織液與淋巴循環）】</strong>① <strong>入水管（微血管）</strong>：血漿經內皮間隙向上濾出轉為<strong>組織液</strong>；② <strong>組織間隙</strong>：組織液蓄滿並在細胞間漫流浸潤（非直接衝向淋巴管）；③ <strong>出水管（微淋巴管）</strong>：右側多餘組織液經單向瓣膜溢流回收成為<strong>淋巴液</strong>！");
+            } else {
+                fluidDroplets = [];
+                updateLog("⏸️ <strong>【已關閉組織液與淋巴循環視圖】</strong>隱藏水箱液體層與微粒，方便專注觀察發炎與免疫細胞反應。");
+            }
+        });
+    }
+
     document.querySelectorAll('.speed-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             document.querySelectorAll('.speed-btn').forEach(b => b.classList.remove('active'));
@@ -4412,6 +4803,10 @@ document.addEventListener('DOMContentLoaded', () => {
         selectPathogen('bacteria');
         if (toggleAutoWbcCheckbox) toggleAutoWbcCheckbox.checked = false;
         if (toggleLabelsCheckbox) toggleLabelsCheckbox.checked = false;
+        if (toggleFluidCheckbox) toggleFluidCheckbox.checked = false;
+        if (labelToggleFluid) labelToggleFluid.classList.remove('active');
+        fluidCirculationEnabled = false;
+        fluidDroplets = [];
         vaccineState = { bacteria: false, virus: false };
         immuneSurveillanceTimer = 0;
         lymphNodeState = { active: false, antigenType: null, timer: 0, duration: 200 };
@@ -4453,6 +4848,7 @@ document.addEventListener('DOMContentLoaded', () => {
         getCellDebris: () => cellDebris,
         getSwellingLevel: () => swellingLevel,
         getDermisTopY: getDermisTopY,
-        getVaccineState: () => vaccineState
+        getVaccineState: () => vaccineState,
+        getFluidCirculationState: () => ({ enabled: fluidCirculationEnabled, droplets: fluidDroplets })
     };
 });
