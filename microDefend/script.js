@@ -38,6 +38,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const tissueBg = document.getElementById('tissue-bg');
 
     // Multilayer Epithelial Barrier & Mucosa Groups
+    const epiBgEl = document.getElementById('epidermis-bg');
+    const mucBgEl = document.getElementById('mucosa-bg');
+    const mucCutLine = document.getElementById('mucocutaneous-junction');
     const mucosaColumnarCells = document.getElementById('mucosa-columnar-cells');
     const mucosaGobletCells = document.getElementById('mucosa-goblet-cells');
     const mucosaCiliaLayer = document.getElementById('mucosa-cilia-layer');
@@ -74,6 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const toggleFluidCheckbox = document.getElementById('toggle-fluid-circulation');
     const labelToggleFluid = document.getElementById('label-toggle-fluid');
     const fluidTankBgLayer = document.getElementById('fluid-tank-bg-layer');
+    const fluidArrowsLayer = document.getElementById('fluid-arrows-layer');
     const nerveNetworkGroup = document.getElementById('nerve-network');
 
     function updateNerveDimming() {
@@ -165,45 +169,64 @@ document.addEventListener('DOMContentLoaded', () => {
         duration: 200 // ~3.3s at 60fps
     };
 
-    function updateVaccineUI() {
-        const toggleMemoryBacteria = document.getElementById('toggle-memory-bacteria');
-        const toggleMemoryVirus = document.getElementById('toggle-memory-virus');
-        const cardMemoryBacteria = document.getElementById('card-memory-bacteria');
-        const cardMemoryVirus = document.getElementById('card-memory-virus');
-        const statusVacBac = document.getElementById('status-vac-bacteria');
-        const statusVacVir = document.getElementById('status-vac-virus');
-        const statMemory = document.getElementById('stat-memory');
+    let lastVacBacState = null;
+    let lastVacVirState = null;
+    let cachedVacUiElements = null;
 
-        if (toggleMemoryBacteria) toggleMemoryBacteria.checked = !!vaccineState.bacteria;
-        if (toggleMemoryVirus) toggleMemoryVirus.checked = !!vaccineState.virus;
+    function getVacUiElements() {
+        if (!cachedVacUiElements) {
+            cachedVacUiElements = {
+                toggleMemoryBacteria: document.getElementById('toggle-memory-bacteria'),
+                toggleMemoryVirus: document.getElementById('toggle-memory-virus'),
+                cardMemoryBacteria: document.getElementById('card-memory-bacteria'),
+                cardMemoryVirus: document.getElementById('card-memory-virus'),
+                statusVacBac: document.getElementById('status-vac-bacteria'),
+                statusVacVir: document.getElementById('status-vac-virus'),
+                statMemory: document.getElementById('stat-memory')
+            };
+        }
+        return cachedVacUiElements;
+    }
 
-        if (cardMemoryBacteria) cardMemoryBacteria.classList.toggle('active', vaccineState.bacteria);
-        if (cardMemoryVirus) cardMemoryVirus.classList.toggle('active', vaccineState.virus);
+    function updateVaccineUI(force = false) {
+        if (!force && vaccineState.bacteria === lastVacBacState && vaccineState.virus === lastVacVirState) {
+            return;
+        }
+        lastVacBacState = !!vaccineState.bacteria;
+        lastVacVirState = !!vaccineState.virus;
 
-        if (statusVacBac) {
-            statusVacBac.innerHTML = vaccineState.bacteria
+        const ui = getVacUiElements();
+
+        if (ui.toggleMemoryBacteria) ui.toggleMemoryBacteria.checked = !!vaccineState.bacteria;
+        if (ui.toggleMemoryVirus) ui.toggleMemoryVirus.checked = !!vaccineState.virus;
+
+        if (ui.cardMemoryBacteria) ui.cardMemoryBacteria.classList.toggle('active', !!vaccineState.bacteria);
+        if (ui.cardMemoryVirus) ui.cardMemoryVirus.classList.toggle('active', !!vaccineState.virus);
+
+        if (ui.statusVacBac) {
+            ui.statusVacBac.innerHTML = vaccineState.bacteria
                 ? '<span style="color:#34d399;font-weight:600;">已啟用 (二次應答・血管抗體就緒)</span>'
                 : '關閉 (初次應答・無血管抗體)';
         }
-        if (statusVacVir) {
-            statusVacVir.innerHTML = vaccineState.virus
+        if (ui.statusVacVir) {
+            ui.statusVacVir.innerHTML = vaccineState.virus
                 ? '<span style="color:#a78bfa;font-weight:600;">已啟用 (二次應答・血管抗體就緒)</span>'
                 : '關閉 (初次應答・無血管抗體)';
         }
 
-        if (statMemory) {
+        if (ui.statMemory) {
             if (vaccineState.bacteria && vaccineState.virus) {
-                statMemory.textContent = "雙重記憶 (全免疫)";
-                statMemory.style.color = "#34d399";
+                ui.statMemory.textContent = "雙重記憶 (全免疫)";
+                ui.statMemory.style.color = "#34d399";
             } else if (vaccineState.bacteria) {
-                statMemory.textContent = "細菌記憶 (二次應答)";
-                statMemory.style.color = "#10b981";
+                ui.statMemory.textContent = "細菌記憶 (二次應答)";
+                ui.statMemory.style.color = "#10b981";
             } else if (vaccineState.virus) {
-                statMemory.textContent = "病毒記憶 (二次應答)";
-                statMemory.style.color = "#a78bfa";
+                ui.statMemory.textContent = "病毒記憶 (二次應答)";
+                ui.statMemory.style.color = "#a78bfa";
             } else {
-                statMemory.textContent = "無 (初次應答)";
-                statMemory.style.color = "inherit";
+                ui.statMemory.textContent = "無 (初次應答)";
+                ui.statMemory.style.color = "inherit";
             }
         }
     }
@@ -320,9 +343,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const statVirus = document.getElementById('stat-virus');
     const statDebris = document.getElementById('stat-debris');
     const statWbc = document.getElementById('stat-wbc');
+    const statLymphPill = document.getElementById('stat-lymph-pill');
+    const statLymphText = document.getElementById('stat-lymph-text');
+    const lymphProgressFill = document.getElementById('lymph-progress-fill');
 
     let mucusClearedCount = 0;
     let ciliaList = [];
+    let ciliaCombinedPath = null;
     let lysozymes = [];
     let sIgAList = [];
 
@@ -355,8 +382,13 @@ document.addEventListener('DOMContentLoaded', () => {
         return curr + diff * factor;
     }
 
-    function updateStats() {
+    let lastStatsUpdateTime = 0;
+    function updateStats(force = false) {
         if (!statHealthy) return;
+        const now = performance.now();
+        if (!force && now - lastStatsUpdateTime < 120) return;
+        lastStatsUpdateTime = now;
+
         statHealthy.textContent = tissueSites.filter(c => c.state === 'healthy' || c.state === 'dividing').length;
         if (statMucusCleared) statMucusCleared.textContent = mucusClearedCount;
         statBleeding.textContent = `${Math.round(coagState.bleedIntensity * 100)}%`;
@@ -522,6 +554,11 @@ document.addEventListener('DOMContentLoaded', () => {
         { id: 'mid', targetY: 65, isNearInjury: false },
         { id: 'bot', targetY: 110, isNearInjury: false }
     ];
+    const BRANCH_MAP = {
+        top: BRANCHES[0],
+        mid: BRANCHES[1],
+        bot: BRANCHES[2]
+    };
 
     // Microvascular bifurcation & sphincter boundary landmarks
     const BRANCH_START_X = 140; // Arteriole ends at x=140, microvascular bifurcation starts
@@ -586,14 +623,59 @@ document.addEventListener('DOMContentLoaded', () => {
     let arterioleLumenPath = null;
     let animationId;
 
-    // Helper: Dynamic Floating Label inside SVG
+    // Helper: Dynamic Floating Label Pool inside SVG (Zero-allocation pooling)
+    const labelPool = [];
+    let labelPoolCount = 0;
+
+    function resetLabelPool() {
+        labelPoolCount = 0;
+    }
+
+    function finalizeLabelPool() {
+        for (let i = labelPoolCount; i < labelPool.length; i++) {
+            if (!labelPool[i].hidden) {
+                labelPool[i].g.style.display = 'none';
+                labelPool[i].hidden = true;
+            }
+        }
+    }
+
     function createSvgLabel(text, x, y, bg = 'rgba(20,24,36,0.85)', color = '#fff') {
-        if (!toggleLabelsCheckbox.checked) return null;
-        const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        if (!toggleLabelsCheckbox || !toggleLabelsCheckbox.checked) return null;
         const approxW = text.length * 11 + 10;
+        const rx = x - approxW / 2;
+        const ry = y - 8;
+        const tx = x;
+        const ty = y + 3.5;
+
+        let item;
+        if (labelPoolCount < labelPool.length) {
+            item = labelPool[labelPoolCount++];
+            if (item.hidden) {
+                item.g.style.display = '';
+                item.hidden = false;
+            }
+            if (item.rx !== rx || item.ry !== ry || item.w !== approxW || item.bg !== bg) {
+                item.rect.setAttribute("x", rx);
+                item.rect.setAttribute("y", ry);
+                item.rect.setAttribute("width", approxW);
+                item.rect.setAttribute("fill", bg);
+                item.rx = rx; item.ry = ry; item.w = approxW; item.bg = bg;
+            }
+            if (item.tx !== tx || item.ty !== ty || item.color !== color || item.text !== text) {
+                item.txt.setAttribute("x", tx);
+                item.txt.setAttribute("y", ty);
+                item.txt.setAttribute("fill", color);
+                item.txt.textContent = text;
+                item.tx = tx; item.ty = ty; item.color = color; item.text = text;
+            }
+            return item.g;
+        }
+
+        const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
         const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-        rect.setAttribute("x", x - approxW / 2);
-        rect.setAttribute("y", y - 8);
+        rect.setAttribute("x", rx);
+        rect.setAttribute("y", ry);
         rect.setAttribute("width", approxW);
         rect.setAttribute("height", 16);
         rect.setAttribute("rx", 4);
@@ -602,8 +684,8 @@ document.addEventListener('DOMContentLoaded', () => {
         rect.setAttribute("stroke-width", "0.8");
 
         const txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
-        txt.setAttribute("x", x);
-        txt.setAttribute("y", y + 3.5);
+        txt.setAttribute("x", tx);
+        txt.setAttribute("y", ty);
         txt.setAttribute("fill", color);
         txt.setAttribute("font-size", "10");
         txt.setAttribute("font-weight", "600");
@@ -613,6 +695,10 @@ document.addEventListener('DOMContentLoaded', () => {
         g.appendChild(rect);
         g.appendChild(txt);
         floatingLabelsLayer.appendChild(g);
+
+        item = { g, rect, txt, rx, ry, w: approxW, bg, tx, ty, color, text, hidden: false };
+        labelPool.push(item);
+        labelPoolCount++;
         return g;
     }
 
@@ -622,24 +708,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ==========================================
     // 3. Build Collagen Fibers Striations in Dermis
-    // (Coagulation wavy collagen matrix)
+    // (Coagulation wavy collagen matrix - Single combined path)
     // ==========================================
     function buildCollagenFibers() {
         collagenFibersGroup.innerHTML = '';
-        // 6 wavy collagen fiber bands running across the dermis
+        let d = '';
+        // 6 wavy collagen fiber bands running across the dermis combined into 1 SVG path
         for (let y = 80; y <= 270; y += 32) {
-            let d = '';
             for (let x = 0; x <= 1000; x += 30) {
                 const waveY = y + Math.sin(x * 0.025 + y * 0.1) * 6;
                 d += (x === 0 ? 'M ' : 'L ') + x + ' ' + waveY.toFixed(1) + ' ';
             }
-            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-            path.setAttribute("d", d.trim());
-            path.setAttribute("stroke", "rgba(254, 226, 226, 0.4)");
-            path.setAttribute("stroke-width", "2");
-            path.setAttribute("fill", "none");
-            collagenFibersGroup.appendChild(path);
         }
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("d", d.trim());
+        path.setAttribute("stroke", "rgba(254, 226, 226, 0.4)");
+        path.setAttribute("stroke-width", "2");
+        path.setAttribute("fill", "none");
+        collagenFibersGroup.appendChild(path);
     }
 
     // ==========================================
@@ -790,6 +876,37 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     // 6. Initialize Tissue Sites (2x6 Grid of Dermis Cells)
     // ==========================================
+    function initTissueSitesDOM() {
+        if (!tissueSitesLayer) return;
+        tissueSitesLayer.innerHTML = '';
+        tissueSites.forEach(site => {
+            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            const body = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            body.setAttribute("cx", site.x);
+            body.setAttribute("cy", site.origY);
+            body.setAttribute("r", site.r);
+            body.setAttribute("fill", "#fdebd0");
+            body.setAttribute("stroke", "#f8c471");
+            body.setAttribute("stroke-width", "2");
+            body.setAttribute("opacity", "0.9");
+
+            const nuc = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            nuc.setAttribute("cx", site.x);
+            nuc.setAttribute("cy", site.origY);
+            nuc.setAttribute("r", "6");
+            nuc.setAttribute("fill", "#eb984e");
+
+            g.appendChild(body);
+            g.appendChild(nuc);
+            tissueSitesLayer.appendChild(g);
+
+            site.domGroup = g;
+            site.domBody = body;
+            site.domNuc = nuc;
+            site.renderedState = 'healthy';
+        });
+    }
+
     function initTissueSites() {
         tissueSites = [];
         const rows = 2;
@@ -811,6 +928,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
         }
+        initTissueSitesDOM();
     }
 
     function createCellDebris(x, y, siteId, count = 5) {
@@ -826,12 +944,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 vertices.push({ x: Math.cos(a) * r, y: Math.sin(a) * r });
             }
             const isMucosaDebris = (x >= 500 || siteId === -1);
+            const localPts = vertices.map(v => `${v.x.toFixed(1)},${v.y.toFixed(1)}`).join(" ");
             cellDebris.push({
                 x: x + Math.cos(angle) * dist,
                 y: y + Math.sin(angle) * dist,
                 r: baseR,
                 siteId: siteId,
                 vertices: vertices,
+                localPts: localPts,
                 rotation: Math.random() * Math.PI * 2,
                 life: isMucosaDebris ? (260 + Math.random() * 120) : (1200 + Math.random() * 400),
                 alpha: 1.0
@@ -1407,40 +1527,71 @@ document.addEventListener('DOMContentLoaded', () => {
                 const cOffsets = [-5, -1.8, 1.8, 5];
                 cOffsets.forEach(off => {
                     const cx = x + off;
-                    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                    path.setAttribute("stroke", "#ec4899");
-                    path.setAttribute("stroke-width", "1.4");
-                    path.setAttribute("stroke-linecap", "round");
-                    path.setAttribute("fill", "none");
-                    path.setAttribute("opacity", "0.9");
-                    if (mucosaCiliaLayer) mucosaCiliaLayer.appendChild(path);
-                    ciliaList.push({ el: path, baseX: cx, cellX: x });
+                    ciliaList.push({ baseX: cx, cellX: x, sY: getSkinSurfaceY(cx, swellingLevel) });
                 });
             }
 
             epidermisCells.push({ el: g, origY: yBase, type: 'group', posX: x });
         }
+
+        if (mucosaCiliaLayer) {
+            ciliaCombinedPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            ciliaCombinedPath.setAttribute("stroke", "#ec4899");
+            ciliaCombinedPath.setAttribute("stroke-width", "1.4");
+            ciliaCombinedPath.setAttribute("stroke-linecap", "round");
+            ciliaCombinedPath.setAttribute("fill", "none");
+            ciliaCombinedPath.setAttribute("opacity", "0.9");
+            mucosaCiliaLayer.appendChild(ciliaCombinedPath);
+        }
     }
 
     function initMucosaChemicals() {
         lysozymes = [];
+        if (mucosaChemicalsLayer) mucosaChemicalsLayer.innerHTML = '';
         for (let i = 0; i < 7; i++) {
+            let g = null, circle = null;
+            if (mucosaChemicalsLayer) {
+                g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+                circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                circle.setAttribute("r", "2.2");
+                circle.setAttribute("fill", "#fde047");
+                circle.setAttribute("stroke", "#ca8a04");
+                circle.setAttribute("stroke-width", "0.8");
+                g.appendChild(circle);
+                mucosaChemicalsLayer.appendChild(g);
+            }
+
             lysozymes.push({
                 x: 535 + i * 62 + (Math.random() * 20 - 10),
                 y: -8 + (Math.random() * 8 - 4),
                 vx: (Math.random() - 0.5) * 0.4,
                 vy: (Math.random() - 0.5) * 0.2,
-                sparkle: Math.random() * Math.PI * 2
+                sparkle: Math.random() * Math.PI * 2,
+                el: g,
+                circle: circle
             });
         }
 
         sIgAList = [];
         for (let i = 0; i < 5; i++) {
+            let g = null;
+            if (mucosaChemicalsLayer) {
+                g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+                const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                p.setAttribute("d", "M -4 -3 L 0 0 L 4 -3 M 0 0 L 0 4 M -4 7 L 0 4 L 4 7");
+                p.setAttribute("stroke", "#38bdf8");
+                p.setAttribute("stroke-width", "1.4");
+                p.setAttribute("fill", "none");
+                g.appendChild(p);
+                mucosaChemicalsLayer.appendChild(g);
+            }
+
             sIgAList.push({
                 x: 545 + i * 85 + (Math.random() * 20 - 10),
                 y: -6 + (Math.random() * 6 - 3),
                 vx: (Math.random() - 0.5) * 0.3,
-                vy: (Math.random() - 0.5) * 0.2
+                vy: (Math.random() - 0.5) * 0.2,
+                el: g
             });
         }
     }
@@ -1747,24 +1898,663 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Precomputed Platelet Star Points (Zero-trig per frame)
+    const STAR_PTS_STRING = (() => {
+        const spikes = 7;
+        const outerR = 9;
+        const innerR = 4;
+        let pts = '';
+        for (let k = 0; k < spikes * 2; k++) {
+            const radius = k % 2 === 0 ? outerR : innerR;
+            const a = (k * Math.PI) / spikes;
+            pts += (Math.cos(a) * radius).toFixed(1) + ',' + (Math.sin(a) * radius).toFixed(1) + ' ';
+        }
+        return pts.trim();
+    })();
+
+    // Persistent Fluid Arrows & Tank Pool
+    let gapArrowElements = [];
+    function initGapArrows() {
+        if (!fluidArrowsLayer || gapArrowElements.length > 0) return;
+        const indicatorGaps = [214.1, 285.4, 356.7, 428.0, 499.3, 570.6, 641.9, 713.2, 784.5];
+        indicatorGaps.forEach(gx => {
+            const arrow = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            arrow.setAttribute("stroke", "#38bdf8");
+            arrow.setAttribute("stroke-width", "1.5");
+            arrow.setAttribute("stroke-linecap", "round");
+            arrow.setAttribute("fill", "none");
+            arrow.setAttribute("opacity", "0.78");
+            fluidArrowsLayer.appendChild(arrow);
+            gapArrowElements.push({ gx, el: arrow });
+        });
+    }
+
+    let tankPoolEl = null;
+    function getTankPoolEl() {
+        if (!tankPoolEl && fluidTankBgLayer) {
+            tankPoolEl = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            tankPoolEl.setAttribute("fill", "url(#interstitialTankGrad)");
+            fluidTankBgLayer.appendChild(tankPoolEl);
+        }
+        return tankPoolEl;
+    }
+
+    // Module-level Nerve Path Bezier Functions (compiled once)
+    function evalCubicBezier(p0, p1, p2, p3, t) {
+        const mt = 1 - t;
+        const mt2 = mt * mt;
+        const t2 = t * t;
+        return {
+            x: mt2 * mt * p0.x + 3 * mt2 * t * p1.x + 3 * mt * t2 * p2.x + t2 * t * p3.x,
+            y: mt2 * mt * p0.y + 3 * mt2 * t * p1.y + 3 * mt * t2 * p2.y + t2 * t * p3.y
+        };
+    }
+
+    function getNervePulseCoord(idx, prog) {
+        if (prog >= 0.45) {
+            const t = (prog - 0.45) / 0.55;
+            return evalCubicBezier(
+                { x: 318, y: 160 },
+                { x: 260, y: 200 },
+                { x: 100, y: 245 },
+                { x: -10, y: 240 },
+                t
+            );
+        }
+
+        const t = prog / 0.45;
+        if (idx === 0) {
+            return evalCubicBezier(
+                { x: 175, y: 78 },
+                { x: 175, y: 130 },
+                { x: 260, y: 160 },
+                { x: 318, y: 160 },
+                t
+            );
+        } else if (idx === 1) {
+            return evalCubicBezier(
+                { x: 318, y: 76 },
+                { x: 318, y: 105 },
+                { x: 318, y: 135 },
+                { x: 318, y: 160 },
+                t
+            );
+        } else if (idx === 2) {
+            if (t < 0.5) {
+                return evalCubicBezier(
+                    { x: 462, y: 78 },
+                    { x: 460, y: 105 },
+                    { x: 462, y: 135 },
+                    { x: 462, y: 160 },
+                    t / 0.5
+                );
+            } else {
+                return evalCubicBezier(
+                    { x: 462, y: 160 },
+                    { x: 415, y: 160 },
+                    { x: 365, y: 160 },
+                    { x: 318, y: 160 },
+                    (t - 0.5) / 0.5
+                );
+            }
+        } else {
+            if (t < 0.35) {
+                return evalCubicBezier(
+                    { x: 608, y: 78 },
+                    { x: 606, y: 95 },
+                    { x: 612, y: 120 },
+                    { x: 608, y: 140 },
+                    t / 0.35
+                );
+            } else if (t < 0.7) {
+                return evalCubicBezier(
+                    { x: 608, y: 140 },
+                    { x: 580, y: 160 },
+                    { x: 535, y: 160 },
+                    { x: 462, y: 160 },
+                    (t - 0.35) / 0.35
+                );
+            } else {
+                return evalCubicBezier(
+                    { x: 462, y: 160 },
+                    { x: 415, y: 160 },
+                    { x: 365, y: 160 },
+                    { x: 318, y: 160 },
+                    (t - 0.7) / 0.3
+                );
+            }
+        }
+    }
+
+    let lastSwellingLevel = -999;
+    let lastArtW = -1, lastCapW = -1, lastSphTone = -1, lastGap = -1, lastWoundOpen = -1, lastHealProg = -1;
+    let nervePainActiveLast = true;
+    let lastCoagActive = false;
+
+    // ==========================================
+    // Precomputed Pathogen Geometry & Zero-Allocation SVG Element Pools
+    // ==========================================
+    const BAC_AB_PATHS = (() => {
+        const paths = [''];
+        const localPts = [[0, 3.5], [0, 0], [-2, -2], [0, 0], [2, -2]];
+        for (let cnt = 1; cnt <= 6; cnt++) {
+            let d = '';
+            for (let a = 0; a < cnt; a++) {
+                const ang = (Math.PI * 2 / cnt) * a;
+                const bx = Math.cos(ang) * 11;
+                const by = Math.sin(ang) * 6.5;
+                const cosT = -Math.sin(ang);
+                const sinT = Math.cos(ang);
+                const tp = localPts.map(([lx, ly]) => [
+                    (bx + lx * cosT - ly * sinT).toFixed(1),
+                    (by + lx * sinT + ly * cosT).toFixed(1)
+                ]);
+                d += `M ${tp[0][0]} ${tp[0][1]} L ${tp[1][0]} ${tp[1][1]} L ${tp[2][0]} ${tp[2][1]} M ${tp[3][0]} ${tp[3][1]} L ${tp[4][0]} ${tp[4][1]} `;
+            }
+            paths.push(d.trim());
+        }
+        return paths;
+    })();
+
+    const VIR_SPIKES_PATH = (() => {
+        const r = 5.5;
+        let d = '';
+        for (let s = 0; s < 6; s++) {
+            const a = (Math.PI * 2 / 6) * s;
+            const c = Math.cos(a), sn = Math.sin(a);
+            d += `M ${(c * r).toFixed(1)} ${(sn * r).toFixed(1)} L ${(c * (r + 2.5)).toFixed(1)} ${(sn * (r + 2.5)).toFixed(1)} `;
+        }
+        return d.trim();
+    })();
+
+    const VIR_AB_PATHS = (() => {
+        const paths = [''];
+        const r = 5.5;
+        const localPts = [[0, 3], [0, 0], [-1.8, -1.8], [0, 0], [1.8, -1.8]];
+        for (let cnt = 1; cnt <= 4; cnt++) {
+            let d = '';
+            for (let a = 0; a < cnt; a++) {
+                const ang = (Math.PI * 2 / cnt) * a + Math.PI / 4;
+                const bx = Math.cos(ang) * (r + 3.5);
+                const by = Math.sin(ang) * (r + 3.5);
+                const cosT = -Math.sin(ang);
+                const sinT = Math.cos(ang);
+                const tp = localPts.map(([lx, ly]) => [
+                    (bx + lx * cosT - ly * sinT).toFixed(1),
+                    (by + lx * sinT + ly * cosT).toFixed(1)
+                ]);
+                d += `M ${tp[0][0]} ${tp[0][1]} L ${tp[1][0]} ${tp[1][1]} L ${tp[2][0]} ${tp[2][1]} M ${tp[3][0]} ${tp[3][1]} L ${tp[4][0]} ${tp[4][1]} `;
+            }
+            paths.push(d.trim());
+        }
+        return paths;
+    })();
+
+    // Persistent Coagulation Elements (Built once, updated via attributes/display)
+    let exposedCollagenPathEl = null;
+    let plateletPlugBuilt = false;
+    let fibrinMeshBuilt = false;
+    let scabPathEl = null;
+
+    function getExposedCollagenPath() {
+        if (!exposedCollagenPathEl && exposedCollagenLayer) {
+            exposedCollagenPathEl = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            exposedCollagenPathEl.setAttribute("stroke", "#fde047");
+            exposedCollagenPathEl.setAttribute("stroke-width", "2");
+            exposedCollagenPathEl.setAttribute("fill", "none");
+            exposedCollagenLayer.appendChild(exposedCollagenPathEl);
+        }
+        return exposedCollagenPathEl;
+    }
+
+    function ensurePlateletPlugDOM() {
+        if (plateletPlugBuilt || !plateletPlugLayer) return;
+        plateletPlugLayer.innerHTML = '';
+        plugPlatelets.forEach((p, idx) => {
+            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            g.setAttribute("transform", `translate(${p.x.toFixed(1)}, ${p.y.toFixed(1)}) rotate(${(p.angle * 180 / Math.PI).toFixed(1)})`);
+            const poly = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+            poly.setAttribute("points", STAR_PTS_STRING);
+            poly.setAttribute("fill", "#fde047");
+            poly.setAttribute("stroke", "#d97706");
+            poly.setAttribute("stroke-width", "1.2");
+            g.appendChild(poly);
+            if (idx % 2 === 0) {
+                const rbc = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
+                rbc.setAttribute("cx", "-2"); rbc.setAttribute("cy", "-1");
+                rbc.setAttribute("rx", "5"); rbc.setAttribute("ry", "3.2");
+                rbc.setAttribute("fill", "#dc2626");
+                g.appendChild(rbc);
+            }
+            plateletPlugLayer.appendChild(g);
+        });
+        plateletPlugBuilt = true;
+    }
+
+    function ensureFibrinMeshDOM() {
+        if (fibrinMeshBuilt || !fibrinMeshLayer) return;
+        fibrinMeshLayer.innerHTML = '';
+        let strandD = '';
+        fibrinStrands.forEach(strand => {
+            strandD += `M ${strand.ax.toFixed(1)} ${strand.ay.toFixed(1)} L ${strand.bx.toFixed(1)} ${strand.by.toFixed(1)} `;
+        });
+        const strandPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        strandPath.setAttribute("d", strandD.trim());
+        strandPath.setAttribute("stroke", "#f59e0b");
+        strandPath.setAttribute("stroke-width", "2.2");
+        strandPath.setAttribute("stroke-linecap", "round");
+        strandPath.setAttribute("fill", "none");
+        fibrinMeshLayer.appendChild(strandPath);
+
+        let archD = '';
+        for (let k = 0; k < 5; k++) {
+            const yOff = 315 - k * 9;
+            archD += `M ${WOUND_X - 35} ${yOff} Q ${WOUND_X} ${yOff + (k % 2 === 0 ? 6 : -6)} ${WOUND_X + 35} ${yOff} `;
+        }
+        const archPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        archPath.setAttribute("d", archD.trim());
+        archPath.setAttribute("stroke", "#fbbf24");
+        archPath.setAttribute("stroke-width", "2");
+        archPath.setAttribute("fill", "none");
+        fibrinMeshLayer.appendChild(archPath);
+        fibrinMeshBuilt = true;
+    }
+
+    function getScabPathEl() {
+        if (!scabPathEl && scabLayer) {
+            scabPathEl = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            scabPathEl.setAttribute("fill", "#450a0a");
+            scabPathEl.setAttribute("stroke", "#7f1d1d");
+            scabPathEl.setAttribute("stroke-width", "2");
+            scabLayer.appendChild(scabPathEl);
+        }
+        return scabPathEl;
+    }
+
+    // Dynamic Particle & Entity Object Pools
+    const dropletPool = []; let dropletPoolCount = 0;
+    const bleedPool = []; let bleedPoolCount = 0;
+    const debrisPool = []; let debrisPoolCount = 0;
+    const bacPool = []; let bacPoolCount = 0;
+    const virPool = []; let virPoolCount = 0;
+    const parPool = []; let parPoolCount = 0;
+    const chemDotPool = []; let chemDotPoolCount = 0;
+    const abPool = []; let abPoolCount = 0;
+    const wbcSpherePool = []; let wbcSpherePoolCount = 0;
+    const wbcAmoebaPool = []; let wbcAmoebaPoolCount = 0;
+
+    function resetAllSvgPools() {
+        resetLabelPool();
+        dropletPoolCount = 0;
+        bleedPoolCount = 0;
+        debrisPoolCount = 0;
+        bacPoolCount = 0;
+        virPoolCount = 0;
+        parPoolCount = 0;
+        chemDotPoolCount = 0;
+        abPoolCount = 0;
+        wbcSpherePoolCount = 0;
+        wbcAmoebaPoolCount = 0;
+    }
+
+    function hideUnusedPoolItems(pool, usedCount) {
+        for (let i = usedCount; i < pool.length; i++) {
+            const item = pool[i];
+            if (!item.hidden) {
+                item.el.style.display = 'none';
+                item.hidden = true;
+            }
+        }
+    }
+
+    function finalizeAllSvgPools() {
+        finalizeLabelPool();
+        hideUnusedPoolItems(dropletPool, dropletPoolCount);
+        hideUnusedPoolItems(bleedPool, bleedPoolCount);
+        hideUnusedPoolItems(debrisPool, debrisPoolCount);
+        hideUnusedPoolItems(bacPool, bacPoolCount);
+        hideUnusedPoolItems(virPool, virPoolCount);
+        hideUnusedPoolItems(parPool, parPoolCount);
+        hideUnusedPoolItems(chemDotPool, chemDotPoolCount);
+        hideUnusedPoolItems(abPool, abPoolCount);
+        hideUnusedPoolItems(wbcSpherePool, wbcSpherePoolCount);
+        hideUnusedPoolItems(wbcAmoebaPool, wbcAmoebaPoolCount);
+    }
+
+    function renderPooledDroplet(cx, cy, rx, ry, stroke, sw, op) {
+        let item;
+        if (dropletPoolCount < dropletPool.length) {
+            item = dropletPool[dropletPoolCount++];
+            if (item.hidden) { item.el.style.display = ''; item.hidden = false; }
+        } else {
+            const el = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
+            el.setAttribute("fill", "#7dd3fc");
+            extravasatedLayer.appendChild(el);
+            item = { el, rx: '', ry: '', stroke: '', sw: '', op: '', hidden: false };
+            dropletPool.push(item);
+            dropletPoolCount++;
+        }
+        item.el.setAttribute("cx", cx);
+        item.el.setAttribute("cy", cy);
+        if (item.rx !== rx) { item.el.setAttribute("rx", rx); item.rx = rx; }
+        if (item.ry !== ry) { item.el.setAttribute("ry", ry); item.ry = ry; }
+        if (item.stroke !== stroke) { item.el.setAttribute("stroke", stroke); item.stroke = stroke; }
+        if (item.sw !== sw) { item.el.setAttribute("stroke-width", sw); item.sw = sw; }
+        if (item.op !== op) { item.el.setAttribute("opacity", op); item.op = op; }
+    }
+
+    function renderPooledBleedRbc(x, y, op) {
+        let item;
+        if (bleedPoolCount < bleedPool.length) {
+            item = bleedPool[bleedPoolCount++];
+            if (item.hidden) { item.el.style.display = ''; item.hidden = false; }
+        } else {
+            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            const outer = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
+            outer.setAttribute("rx", "4.8");
+            outer.setAttribute("ry", "3.26");
+            outer.setAttribute("fill", "#dc2626");
+            outer.setAttribute("stroke", "#7f1d1d");
+            outer.setAttribute("stroke-width", "1");
+            const dip = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
+            dip.setAttribute("rx", "2.16");
+            dip.setAttribute("ry", "1.44");
+            dip.setAttribute("fill", "#991b1b");
+            dip.setAttribute("opacity", "0.75");
+            g.appendChild(outer);
+            g.appendChild(dip);
+            bleedingLayer.appendChild(g);
+            item = { el: g, outer, op: '', hidden: false };
+            bleedPool.push(item);
+            bleedPoolCount++;
+        }
+        item.el.setAttribute("transform", `translate(${x.toFixed(1)}, ${y.toFixed(1)})`);
+        if (item.op !== op) { item.outer.setAttribute("opacity", op); item.op = op; }
+    }
+
+    function renderPooledDebris(x, y, localPts, op) {
+        let item;
+        if (debrisPoolCount < debrisPool.length) {
+            item = debrisPool[debrisPoolCount++];
+            if (item.hidden) { item.el.style.display = ''; item.hidden = false; }
+        } else {
+            const poly = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+            poly.setAttribute("fill", "#64748b");
+            poly.setAttribute("stroke", "#94a3b8");
+            poly.setAttribute("stroke-width", "1");
+            cellDebrisLayer.appendChild(poly);
+            item = { el: poly, pts: '', op: '', hidden: false };
+            debrisPool.push(item);
+            debrisPoolCount++;
+        }
+        item.el.setAttribute("transform", `translate(${x.toFixed(1)}, ${y.toFixed(1)})`);
+        if (item.pts !== localPts) { item.el.setAttribute("points", localPts); item.pts = localPts; }
+        if (item.op !== op) { item.el.setAttribute("opacity", op); item.op = op; }
+    }
+
+    function renderPooledBacterium(x, y, deg, op, fill, stroke, abShowCount) {
+        let item;
+        if (bacPoolCount < bacPool.length) {
+            item = bacPool[bacPoolCount++];
+            if (item.hidden) { item.el.style.display = ''; item.hidden = false; }
+        } else {
+            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+            rect.setAttribute("x", "-9"); rect.setAttribute("y", "-4.5");
+            rect.setAttribute("width", "18"); rect.setAttribute("height", "9");
+            rect.setAttribute("rx", "4.5");
+            rect.setAttribute("stroke-width", "1.5");
+            const abPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            abPath.setAttribute("stroke", "#fbbf24");
+            abPath.setAttribute("stroke-width", "1.5");
+            abPath.setAttribute("stroke-linecap", "round");
+            abPath.setAttribute("fill", "none");
+            g.appendChild(rect);
+            g.appendChild(abPath);
+            pathogensTissueLayer.appendChild(g);
+            item = { el: g, rect, abPath, op: '', fill: '', stroke: '', abCnt: -1, hidden: false };
+            bacPool.push(item);
+            bacPoolCount++;
+        }
+        item.el.setAttribute("transform", `translate(${x.toFixed(1)}, ${y.toFixed(1)}) rotate(${deg.toFixed(1)})`);
+        if (item.op !== op) { item.el.setAttribute("opacity", op); item.op = op; }
+        if (item.fill !== fill) { item.rect.setAttribute("fill", fill); item.fill = fill; }
+        if (item.stroke !== stroke) { item.rect.setAttribute("stroke", stroke); item.stroke = stroke; }
+        if (item.abCnt !== abShowCount) {
+            item.abPath.setAttribute("d", BAC_AB_PATHS[abShowCount] || '');
+            item.abCnt = abShowCount;
+        }
+    }
+
+    function renderPooledVirus(x, y, op, fill, stroke, abShowCount) {
+        let item;
+        if (virPoolCount < virPool.length) {
+            item = virPool[virPoolCount++];
+            if (item.hidden) { item.el.style.display = ''; item.hidden = false; }
+        } else {
+            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            circle.setAttribute("r", "5.5");
+            circle.setAttribute("stroke-width", "1.2");
+            const spikes = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            spikes.setAttribute("d", VIR_SPIKES_PATH);
+            spikes.setAttribute("stroke-width", "1.2");
+            spikes.setAttribute("fill", "none");
+            const abPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            abPath.setAttribute("stroke", "#fbbf24");
+            abPath.setAttribute("stroke-width", "1.4");
+            abPath.setAttribute("stroke-linecap", "round");
+            abPath.setAttribute("fill", "none");
+            g.appendChild(circle);
+            g.appendChild(spikes);
+            g.appendChild(abPath);
+            pathogensTissueLayer.appendChild(g);
+            item = { el: g, circle, spikes, abPath, op: '', fill: '', stroke: '', abCnt: -1, hidden: false };
+            virPool.push(item);
+            virPoolCount++;
+        }
+        item.el.setAttribute("transform", `translate(${x.toFixed(1)}, ${y.toFixed(1)})`);
+        if (item.op !== op) { item.el.setAttribute("opacity", op); item.op = op; }
+        if (item.fill !== fill) { item.circle.setAttribute("fill", fill); item.fill = fill; }
+        if (item.stroke !== stroke) {
+            item.circle.setAttribute("stroke", stroke);
+            item.spikes.setAttribute("stroke", stroke);
+            item.stroke = stroke;
+        }
+        if (item.abCnt !== abShowCount) {
+            item.abPath.setAttribute("d", VIR_AB_PATHS[abShowCount] || '');
+            item.abCnt = abShowCount;
+        }
+    }
+
+    function renderPooledParasite(x, y, deg, dPath, bodyStroke, coreStroke) {
+        let item;
+        if (parPoolCount < parPool.length) {
+            item = parPool[parPoolCount++];
+            if (item.hidden) { item.el.style.display = ''; item.hidden = false; }
+        } else {
+            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            const pBody = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            pBody.setAttribute("stroke-width", "12");
+            pBody.setAttribute("stroke-linecap", "round");
+            pBody.setAttribute("fill", "none");
+            const pCore = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            pCore.setAttribute("stroke-width", "3");
+            pCore.setAttribute("fill", "none");
+            g.appendChild(pBody);
+            g.appendChild(pCore);
+            pathogensTissueLayer.appendChild(g);
+            item = { el: g, pBody, pCore, bStroke: '', cStroke: '', hidden: false };
+            parPool.push(item);
+            parPoolCount++;
+        }
+        item.el.setAttribute("transform", `translate(${x.toFixed(1)}, ${y.toFixed(1)}) rotate(${deg.toFixed(1)})`);
+        item.pBody.setAttribute("d", dPath);
+        item.pCore.setAttribute("d", dPath);
+        if (item.bStroke !== bodyStroke) { item.pBody.setAttribute("stroke", bodyStroke); item.bStroke = bodyStroke; }
+        if (item.cStroke !== coreStroke) { item.pCore.setAttribute("stroke", coreStroke); item.cStroke = coreStroke; }
+    }
+
+    function renderPooledChemDot(cx, cy, r, fill, op) {
+        let item;
+        if (chemDotPoolCount < chemDotPool.length) {
+            item = chemDotPool[chemDotPoolCount++];
+            if (item.hidden) { item.el.style.display = ''; item.hidden = false; }
+        } else {
+            const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            chemicalsLayer.appendChild(dot);
+            item = { el: dot, r: '', fill: '', op: '', hidden: false };
+            chemDotPool.push(item);
+            chemDotPoolCount++;
+        }
+        item.el.setAttribute("cx", cx.toFixed(1));
+        item.el.setAttribute("cy", cy.toFixed(1));
+        if (item.r !== r) { item.el.setAttribute("r", r); item.r = r; }
+        if (item.fill !== fill) { item.el.setAttribute("fill", fill); item.fill = fill; }
+        if (item.op !== op) { item.el.setAttribute("opacity", op); item.op = op; }
+    }
+
+    function renderPooledAntibody(x, y, rot, isSec) {
+        let item;
+        if (abPoolCount < abPool.length) {
+            item = abPool[abPoolCount++];
+            if (item.hidden) { item.el.style.display = ''; item.hidden = false; }
+        } else {
+            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            const yLine = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            yLine.setAttribute("d", "M 0 4.5 L 0 0 L -3.5 -3.5 M 0 0 L 3.5 -3.5");
+            yLine.setAttribute("stroke-linecap", "round");
+            yLine.setAttribute("fill", "none");
+            g.appendChild(yLine);
+            chemicalsLayer.appendChild(g);
+            item = { el: g, yLine, isSec: null, hidden: false };
+            abPool.push(item);
+            abPoolCount++;
+        }
+        item.el.setAttribute("transform", `translate(${x.toFixed(1)}, ${y.toFixed(1)}) rotate(${rot.toFixed(1)})`);
+        if (item.isSec !== isSec) {
+            item.yLine.setAttribute("stroke", isSec ? "#fbbf24" : "#f97316");
+            item.yLine.setAttribute("stroke-width", isSec ? "2.2" : "1.5");
+            item.isSec = isSec;
+        }
+    }
+
+    function renderPooledWbcSphere(x, y, r, subtype, op, strokeColor, strokeWidth, haloR, haloStroke) {
+        let item;
+        if (wbcSpherePoolCount < wbcSpherePool.length) {
+            item = wbcSpherePool[wbcSpherePoolCount++];
+            if (item.hidden) { item.el.style.display = ''; item.hidden = false; }
+        } else {
+            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            const halo = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            halo.setAttribute("fill", "none");
+            halo.setAttribute("stroke-width", "1.6");
+            halo.setAttribute("stroke-dasharray", "3,2");
+            halo.style.display = 'none';
+            const nucGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            g.appendChild(circle);
+            g.appendChild(halo);
+            g.appendChild(nucGroup);
+            activeWbcLayer.appendChild(g);
+            item = { el: g, circle, halo, nucGroup, subtype: '', r: -1, op: '', stroke: '', sw: '', haloShown: false, hidden: false };
+            wbcSpherePool.push(item);
+            wbcSpherePoolCount++;
+        }
+        item.el.setAttribute("transform", `translate(${x.toFixed(1)}, ${y.toFixed(1)})`);
+        if (item.op !== op) { item.el.setAttribute("opacity", op); item.op = op; }
+        if (item.subtype !== subtype || item.r !== r) {
+            item.circle.setAttribute("r", r);
+            item.circle.setAttribute("fill", getWbcColor(subtype));
+            item.nucGroup.innerHTML = '';
+            drawWbcNucleus(item.nucGroup, subtype, r);
+            item.subtype = subtype;
+            item.r = r;
+        }
+        if (item.stroke !== strokeColor) { item.circle.setAttribute("stroke", strokeColor); item.stroke = strokeColor; }
+        if (item.sw !== strokeWidth) { item.circle.setAttribute("stroke-width", strokeWidth); item.sw = strokeWidth; }
+        if (haloR > 0) {
+            if (!item.haloShown) { item.halo.style.display = ''; item.haloShown = true; }
+            item.halo.setAttribute("r", haloR.toFixed(1));
+            item.halo.setAttribute("stroke", haloStroke);
+        } else if (item.haloShown) {
+            item.halo.style.display = 'none';
+            item.haloShown = false;
+        }
+    }
+
+    function renderPooledWbcAmoeba(cx, cy, r, progress, subtype, state) {
+        let item;
+        if (wbcAmoebaPoolCount < wbcAmoebaPool.length) {
+            item = wbcAmoebaPool[wbcAmoebaPoolCount++];
+            if (item.hidden) { item.el.style.display = ''; item.hidden = false; }
+        } else {
+            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            path.setAttribute("stroke", "#ffffff");
+            path.setAttribute("stroke-width", "1.4");
+            const nuc = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
+            g.appendChild(path);
+            g.appendChild(nuc);
+            activeWbcLayer.appendChild(g);
+            item = { el: g, path, nuc, hidden: false };
+            wbcAmoebaPool.push(item);
+            wbcAmoebaPoolCount++;
+        }
+
+        const color = getWbcColor(subtype);
+        const numPts = 12;
+        const pts = [];
+        const nowMs = Date.now();
+
+        for (let i = 0; i < numPts; i++) {
+            const a = (i * 2 * Math.PI) / numPts;
+            const align = -Math.sin(a);
+            const perp = Math.abs(Math.cos(a));
+
+            let rad = r;
+            if (state === 'diapedesis') {
+                if (progress < 0.35) {
+                    rad = r * (align > 0 ? (1 + 0.65 * align) : (0.75 - 0.25 * perp));
+                } else if (progress < 0.75) {
+                    const squeezeWaist = Math.max(0.42, 1 - 0.58 * perp);
+                    rad = r * squeezeWaist * (1 + 0.15 * Math.sin(a * 3 + nowMs / 130));
+                } else {
+                    rad = r * (align > 0 ? 1.15 : 0.72) * (1 + 0.12 * Math.sin(a * 2 + nowMs / 150));
+                }
+            } else {
+                rad = r * (1 + 0.3 * align + 0.16 * Math.sin(a * 3 + nowMs / 160));
+            }
+            pts.push({ x: cx + Math.cos(a) * rad, y: cy + Math.sin(a) * rad });
+        }
+
+        let d = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+        for (let i = 0; i < pts.length; i++) {
+            const curr = pts[i];
+            const next = pts[(i + 1) % pts.length];
+            const midX = (curr.x + next.x) / 2;
+            const midY = (curr.y + next.y) / 2;
+            d += ` Q ${curr.x.toFixed(1)} ${curr.y.toFixed(1)} ${midX.toFixed(1)} ${midY.toFixed(1)}`;
+        }
+        d += ' Z';
+
+        item.path.setAttribute("d", d);
+        item.path.setAttribute("fill", color);
+        item.nuc.setAttribute("cx", cx.toFixed(1));
+        item.nuc.setAttribute("cy", (cy + (state === 'diapedesis' && progress < 0.5 ? 2.5 : -2.5)).toFixed(1));
+        item.nuc.setAttribute("rx", (r * 0.36).toFixed(1));
+        item.nuc.setAttribute("ry", (r * (state === 'diapedesis' ? 0.62 : 0.42)).toFixed(1));
+        item.nuc.setAttribute("fill", getWbcNucleusColor(subtype));
+    }
+
     // ==========================================
     // 10. Main Animation Step & Loop
     // ==========================================
     function stepSimulation() {
-        // Clear dynamic SVG render layers
-        tissueSitesLayer.innerHTML = '';
-        cellDebrisLayer.innerHTML = '';
-        pathogensTissueLayer.innerHTML = '';
-        chemicalsLayer.innerHTML = '';
-        activeWbcLayer.innerHTML = '';
-        floatingLabelsLayer.innerHTML = '';
-        exposedCollagenLayer.innerHTML = '';
-        bleedingLayer.innerHTML = '';
-        plateletPlugLayer.innerHTML = '';
-        fibrinMeshLayer.innerHTML = '';
-        scabLayer.innerHTML = '';
-        if (extravasatedLayer) extravasatedLayer.innerHTML = '';
-        if (fluidTankBgLayer) fluidTankBgLayer.innerHTML = '';
+        const simNowMs = Date.now();
+
+        // Reset zero-allocation SVG pools for this frame
+        resetAllSvgPools();
 
         // Smooth physical params
         arterioleWidth += (targetArterioleWidth - arterioleWidth) * 0.05;
@@ -1777,9 +2567,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (lymphNodeState.active) {
             lymphNodeState.timer++;
             const prog = Math.min(100, Math.round((lymphNodeState.timer / lymphNodeState.duration) * 100));
-            const statLymphPill = document.getElementById('stat-lymph-pill');
-            const statLymphText = document.getElementById('stat-lymph-text');
-            const lymphProgressFill = document.getElementById('lymph-progress-fill');
             if (statLymphPill) statLymphPill.style.display = 'inline-flex';
             if (statLymphText) {
                 const agName = lymphNodeState.antigenType === 'bacteria' ? '細菌' : '病毒';
@@ -1831,88 +2618,146 @@ document.addEventListener('DOMContentLoaded', () => {
         const targetSwelling = activeEffects.has('swelling') ? 1 : 0;
         swellingLevel += (targetSwelling - swellingLevel) * 0.05;
 
-        updateLumenGeometry();
+        // Geometry update only when physical parameters change
+        const artWDiff = Math.abs(arterioleWidth - lastArtW);
+        const capWDiff = Math.abs(capillaryWidth - lastCapW);
+        const sphDiff = Math.abs(sphincterTone - lastSphTone);
+        const gapDiff = Math.abs(gapSize - lastGap);
+        const woundDiff = coagState.woundOpen !== lastWoundOpen || coagState.healProgress !== lastHealProg;
+
+        if (artWDiff > 0.01 || capWDiff > 0.01 || sphDiff > 0.005 || gapDiff > 0.01 || woundDiff) {
+            lastArtW = arterioleWidth;
+            lastCapW = capillaryWidth;
+            lastSphTone = sphincterTone;
+            lastGap = gapSize;
+            lastWoundOpen = coagState.woundOpen;
+            lastHealProg = coagState.healProgress;
+            updateLumenGeometry();
+        }
 
         // Epidermis and Surface Bulge
         const maxBulge = swellingLevel * 38;
         const junctionBulgeY = 55 - maxBulge;
         const topBulgeY = 2 - maxBulge;
 
-        epidermisCells.forEach(cell => {
-            const t = Math.max(0, Math.min(1, cell.posX / 1000));
-            const factor = 4 * t * (1 - t);
-            const yOffset = -maxBulge * factor;
-            if (cell.type === 'rect') cell.el.setAttribute('y', cell.origY + yOffset);
-            else cell.el.setAttribute('transform', `translate(0, ${yOffset})`);
-        });
+        const swellingChanged = Math.abs(swellingLevel - lastSwellingLevel) > 0.0008;
+        let juncD = '';
+        if (swellingChanged || !skinSurface.getAttribute("d")) {
+            lastSwellingLevel = swellingLevel;
+            epidermisCells.forEach(cell => {
+                const t = Math.max(0, Math.min(1, cell.posX / 1000));
+                const factor = 4 * t * (1 - t);
+                const yOffset = -maxBulge * factor;
+                if (cell.type === 'rect') cell.el.setAttribute('y', cell.origY + yOffset);
+                else cell.el.setAttribute('transform', `translate(0, ${yOffset})`);
+            });
 
-        // Dynamically compute exact surface and basement membrane curves
-        let skinD = `M 0 ${getSkinSurfaceY(0, swellingLevel).toFixed(1)}`;
-        let juncD = `M 0 ${(55 + getSkinSurfaceY(0, swellingLevel) - 2).toFixed(1)}`;
-        for (let px = 25; px <= 1000; px += 25) {
-            const sy = getSkinSurfaceY(px, swellingLevel);
-            skinD += ` L ${px} ${sy.toFixed(1)}`;
-            juncD += ` L ${px} ${(55 + sy - 2).toFixed(1)}`;
+            ciliaList.forEach(c => {
+                c.sY = getSkinSurfaceY(c.baseX, swellingLevel);
+            });
+
+            // Dynamically compute exact surface and basement membrane curves
+            let skinD = `M 0 ${getSkinSurfaceY(0, swellingLevel).toFixed(1)}`;
+            juncD = `M 0 ${(55 + getSkinSurfaceY(0, swellingLevel) - 2).toFixed(1)}`;
+            for (let px = 25; px <= 1000; px += 25) {
+                const sy = getSkinSurfaceY(px, swellingLevel);
+                skinD += ` L ${px} ${sy.toFixed(1)}`;
+                juncD += ` L ${px} ${(55 + sy - 2).toFixed(1)}`;
+            }
+            skinSurface.setAttribute("d", skinD);
+            if (basementMembrane) basementMembrane.setAttribute("d", juncD);
+            tissueBg.setAttribute("d", `${juncD} L 1000 300 L 0 300 Z`);
+            swellingOverlay.setAttribute("d", `${juncD} L 1000 300 L 0 300 Z`);
+            swellingOverlay.setAttribute("opacity", swellingLevel * 0.42);
+
+            if (epiBgEl) {
+                let epiD = `M 0 ${getSkinSurfaceY(0, swellingLevel).toFixed(1)}`;
+                for (let px = 25; px <= 500; px += 25) epiD += ` L ${px} ${getSkinSurfaceY(px, swellingLevel).toFixed(1)}`;
+                for (let px = 500; px >= 0; px -= 25) epiD += ` L ${px} ${(55 + getSkinSurfaceY(px, swellingLevel) - 2).toFixed(1)}`;
+                epiD += ' Z';
+                epiBgEl.setAttribute('d', epiD);
+            }
+            if (mucBgEl) {
+                let mucD = `M 500 ${getSkinSurfaceY(500, swellingLevel).toFixed(1)}`;
+                for (let px = 525; px <= 1000; px += 25) mucD += ` L ${px} ${getSkinSurfaceY(px, swellingLevel).toFixed(1)}`;
+                for (let px = 1000; px >= 500; px -= 25) mucD += ` L ${px} ${(55 + getSkinSurfaceY(px, swellingLevel) - 2).toFixed(1)}`;
+                mucD += ' Z';
+                mucBgEl.setAttribute('d', mucD);
+            }
+            if (mucCutLine) {
+                const midSkinY = getSkinSurfaceY(500, swellingLevel);
+                mucCutLine.setAttribute('y1', midSkinY - 28);
+                mucCutLine.setAttribute('y2', 55 + midSkinY - 2);
+            }
         }
-        skinSurface.setAttribute("d", skinD);
-        if (basementMembrane) basementMembrane.setAttribute("d", juncD);
-        tissueBg.setAttribute("d", `${juncD} L 1000 300 L 0 300 Z`);
-        swellingOverlay.setAttribute("d", `${juncD} L 1000 300 L 0 300 Z`);
-        swellingOverlay.setAttribute("opacity", swellingLevel * 0.42);
 
         // ----------------------------------------------------
         // 0. Interstitial Fluid & Lymphatic Circulation (Covered Water Tank Model)
         // ----------------------------------------------------
         if (fluidCirculationEnabled && fluidTankBgLayer && extravasatedLayer) {
             fluidTankBgLayer.setAttribute("opacity", "1");
-            const nowMs = Date.now();
             const isEdema = activeEffects.has('swelling') || swellingLevel > 0.15;
 
-            // A) Covered Water Tank Background Fill (Interstitial Fluid Pool filling the Dermis)
-            const tankPool = document.createElementNS("http://www.w3.org/2000/svg", "path");
-            tankPool.setAttribute("d", `${juncD} L 1000 300 L 0 300 Z`);
-            tankPool.setAttribute("fill", "url(#interstitialTankGrad)");
-            tankPool.setAttribute("opacity", (0.85 + swellingLevel * 0.15).toFixed(2));
-            fluidTankBgLayer.appendChild(tankPool);
+            // A) Covered Water Tank Background Fill
+            const tPool = getTankPoolEl();
+            if (tPool) {
+                if (swellingChanged || !tPool.getAttribute("d")) {
+                    if (!juncD) {
+                        juncD = `M 0 ${(55 + getSkinSurfaceY(0, swellingLevel) - 2).toFixed(1)}`;
+                        for (let px = 25; px <= 1000; px += 25) {
+                            juncD += ` L ${px} ${(55 + getSkinSurfaceY(px, swellingLevel) - 2).toFixed(1)}`;
+                        }
+                    }
+                    tPool.setAttribute("d", `${juncD} L 1000 300 L 0 300 Z`);
+                }
+                tPool.setAttribute("opacity", (0.85 + swellingLevel * 0.15).toFixed(2));
+                tPool.style.display = '';
+            }
 
-            // B) Top Watertight Lid Bar (removed)
-
-            // C) Standing waves (removed)
-
-            // D) Side wall frame (removed)
-
-            // E) Cell-Bathing Ripples around Living Tissue Cells (組織液浸潤細胞交換物質)
+            // E) Cell-Bathing Ripples around Living Tissue Cells (Zero-DOM creation)
             tissueSites.forEach((site, sIdx) => {
-                if (site.state === 'healthy' || site.state === 'infected' || site.state === 'dividing') {
-                    const t = Math.max(0, Math.min(1, site.origX / 1000));
-                    const sy = site.origY - maxBulge * 4 * t * (1 - t) * 0.4;
-                    const pulseR = site.r + 5 + Math.sin(nowMs * 0.0035 + sIdx * 0.9) * 2.5;
-                    const bathRing = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-                    bathRing.setAttribute("cx", site.x);
-                    bathRing.setAttribute("cy", sy);
-                    bathRing.setAttribute("r", pulseR.toFixed(1));
-                    bathRing.setAttribute("fill", "none");
-                    bathRing.setAttribute("stroke", "#7dd3fc");
-                    bathRing.setAttribute("stroke-width", "1.3");
-                    bathRing.setAttribute("stroke-dasharray", "5,4");
-                    bathRing.setAttribute("opacity", "0.45");
-                    fluidTankBgLayer.appendChild(bathRing);
+                if (!site.bathRing && fluidTankBgLayer) {
+                    const ring = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                    ring.setAttribute("fill", "none");
+                    ring.setAttribute("stroke", "#7dd3fc");
+                    ring.setAttribute("stroke-width", "1.3");
+                    ring.setAttribute("stroke-dasharray", "5,4");
+                    ring.setAttribute("opacity", "0.45");
+                    fluidTankBgLayer.appendChild(ring);
+                    site.bathRing = ring;
+                }
+                if (site.bathRing) {
+                    if (site.state === 'healthy' || site.state === 'infected' || site.state === 'dividing') {
+                        const t = Math.max(0, Math.min(1, site.origX / 1000));
+                        const sy = site.origY - maxBulge * 4 * t * (1 - t) * 0.4;
+                        const pulseR = site.r + 5 + Math.sin(simNowMs * 0.0035 + sIdx * 0.9) * 2.5;
+                        site.bathRing.setAttribute("cx", site.x);
+                        site.bathRing.setAttribute("cy", sy);
+                        site.bathRing.setAttribute("r", pulseR.toFixed(1));
+                        site.bathRing.style.display = '';
+                    } else {
+                        site.bathRing.style.display = 'none';
+                    }
                 }
             });
 
-            // F) Spawn & Update 3-Phase Fluid Droplets (1: Inlet Capillary Filtration, 2: Isotropic Tank Bathing, 3: Lymphatic Overflow)
+            // F) Spawn & Update 3-Phase Fluid Droplets
             fluidSpawnTimer++;
             const spawnInterval = isEdema ? 7 : 13;
-            // filtrationGaps replaced with exact endothelial intercellular gaps
 
             if (fluidSpawnTimer >= spawnInterval) {
                 fluidSpawnTimer = 0;
 
-                // 1) Spawn Plasma Filtration Droplet at a capillary endothelial gap (Inlet Pipe: Blood -> Interstitial Tank)
-                const bathingCount = fluidDroplets.filter(d => d.state === 'tank_bathing' || d.state === 'inlet_filtering').length;
+                let bathingCount = 0;
+                let drainingCount = 0;
+                for (let k = 0; k < fluidDroplets.length; k++) {
+                    const st = fluidDroplets[k].state;
+                    if (st === 'tank_bathing' || st === 'inlet_filtering') bathingCount++;
+                    else if (st === 'lymph_draining') drainingCount++;
+                }
+
                 const maxTankDroplets = isEdema ? 74 : 52;
                 if (bathingCount < maxTankDroplets) {
-                    // Exact endothelial intercellular gap centers along the upper capillary wall (y=320)
                     const endoIntercellularGaps = [214.1, 249.7, 285.4, 321.0, 356.7, 392.3, 428.0, 463.6, 499.3, 534.9, 570.6, 606.2, 641.9, 677.6, 713.2, 748.9, 784.5, 820.2];
                     const gx = endoIntercellularGaps[Math.floor(Math.random() * endoIntercellularGaps.length)];
                     const lidAtGx = 55 + getSkinSurfaceY(gx, swellingLevel) + 12;
@@ -1921,8 +2766,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     fluidDroplets.push({
                         state: 'inlet_filtering',
                         gapX: gx,
-                        x: gx, // Centers exactly within the intercellular cleft
-                        y: 320, // Originates inside capillary lumen right below endothelial gap
+                        x: gx,
+                        y: 320,
                         startY: 320,
                         targetTankY: targetY,
                         vx: (Math.random() - 0.5) * 0.30,
@@ -1937,9 +2782,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                 }
 
-                // 2) Spawn Local Overflow Drainage Droplet ONLY at the right-side lymphatic catchment zone (x: 790..855, y: 215..282)
-                // This represents water tank overflow into the outlet pipe without pulling mid-tank droplets in a diagonal line!
-                const drainingCount = fluidDroplets.filter(d => d.state === 'lymph_draining').length;
                 if (drainingCount < (isEdema ? 14 : 9)) {
                     fluidDroplets.push({
                         state: 'lymph_draining',
@@ -1952,62 +2794,34 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            // Render upward filtration arrows directly emerging through endothelial intercellular gaps (Inlet cleft indicators)
-            const indicatorGaps = [214.1, 285.4, 356.7, 428.0, 499.3, 570.6, 641.9, 713.2, 784.5];
-            indicatorGaps.forEach((gx, idx) => {
-                const bob = Math.sin(nowMs * 0.005 + idx) * 2.2;
-                const ay = 306 + bob; // Just above endothelial cleft line (y: 312..320)
-                const arrow = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                arrow.setAttribute("d", `M ${gx} ${ay + 6} L ${gx} ${ay - 3} M ${gx - 3} ${ay} L ${gx} ${ay - 3.5} L ${gx + 3} ${ay}`);
-                arrow.setAttribute("stroke", "#38bdf8");
-                arrow.setAttribute("stroke-width", "1.5");
-                arrow.setAttribute("stroke-linecap", "round");
-                arrow.setAttribute("fill", "none");
-                arrow.setAttribute("opacity", "0.78");
-                extravasatedLayer.appendChild(arrow);
-            });
+            // Render upward filtration arrows directly emerging through endothelial intercellular gaps (Persistent arrows)
+            initGapArrows();
+            if (fluidArrowsLayer && gapArrowElements.length > 0) {
+                fluidArrowsLayer.style.display = '';
+                gapArrowElements.forEach((item, idx) => {
+                    const bob = Math.sin(simNowMs * 0.005 + idx) * 2.2;
+                    const ay = 306 + bob;
+                    item.el.setAttribute("d", `M ${item.gx} ${ay + 6} L ${item.gx} ${ay - 3} M ${item.gx - 3} ${ay} L ${item.gx} ${ay - 3.5} L ${item.gx + 3} ${ay}`);
+                });
+            }
 
-            // Update & Render each fluid droplet
+            // Update & Render each fluid droplet via zero-allocation dropletPool
             for (let i = fluidDroplets.length - 1; i >= 0; i--) {
                 const d = fluidDroplets[i];
 
                 if (d.state === 'inlet_filtering') {
-                    // Squeezing through endothelial cell junction cleft (y: 320 -> 310) then rising into dermal tissue
                     d.y += d.vy * simSpeed;
-
                     if (d.y >= 310) {
-                        // Squeezing through tight endothelial intercellular cleft: lock horizontal X strictly to gap center!
                         d.x = d.gapX || d.x;
                     } else {
-                        // Once emerged into interstitial space (y < 310): fan out naturally into tissue
                         d.x += d.vx * simSpeed;
                     }
 
-                    // Squeezing elongation effect while traversing the endothelial junction cleft
                     const isPassingCleft = d.y >= 309 && d.y <= 321;
                     const rX = isPassingCleft ? Math.max(1.3, (d.baseR || 2.7) * 0.65) : (d.baseR || 2.7);
                     const rY = isPassingCleft ? ((d.baseR || 2.7) * 1.45) : (d.baseR || 2.7);
 
-                    const fillCol = "#7dd3fc";
-                    const strokeCol = "#38bdf8";
-
-                    const c = isPassingCleft 
-                        ? document.createElementNS("http://www.w3.org/2000/svg", "ellipse")
-                        : document.createElementNS("http://www.w3.org/2000/svg", "circle");
-
-                    c.setAttribute("cx", d.x.toFixed(1));
-                    c.setAttribute("cy", d.y.toFixed(1));
-                    if (isPassingCleft) {
-                        c.setAttribute("rx", rX.toFixed(1));
-                        c.setAttribute("ry", rY.toFixed(1));
-                    } else {
-                        c.setAttribute("r", rX.toFixed(1));
-                    }
-                    c.setAttribute("fill", fillCol);
-                    c.setAttribute("stroke", strokeCol);
-                    c.setAttribute("stroke-width", "0.8");
-                    c.setAttribute("opacity", d.alpha.toFixed(2));
-                    extravasatedLayer.appendChild(c);
+                    renderPooledDroplet(d.x.toFixed(1), d.y.toFixed(1), rX.toFixed(1), rY.toFixed(1), "#38bdf8", "0.8", d.alpha.toFixed(2));
 
                     if (d.y <= d.targetTankY) {
                         d.state = 'tank_bathing';
@@ -2015,21 +2829,21 @@ document.addEventListener('DOMContentLoaded', () => {
                         d.r = d.baseR || 2.7;
                     }
                 } else if (d.state === 'tank_bathing') {
-                    // Isotropic diffusion & cell-bathing inside the covered water tank (ZERO rightward drift!)
                     d.life -= simSpeed;
                     d.wanderAngle += (Math.random() - 0.5) * 0.26 * simSpeed;
                     let vx = Math.cos(d.wanderAngle) * 0.32;
                     let vy = Math.sin(d.wanderAngle) * 0.28;
 
-                    // Gently orbit around nearby tissue cells (bathing cells in interstitial fluid)
-                    for (let site of tissueSites) {
+                    for (let sIdx = 0; sIdx < tissueSites.length; sIdx++) {
+                        const site = tissueSites[sIdx];
                         if (site.state !== 'empty') {
                             const dx = d.x - site.x;
                             const dy = d.y - site.y;
-                            const dist = Math.hypot(dx, dy);
+                            const distSq = dx * dx + dy * dy;
                             const minR = site.r + 5;
-                            if (dist < minR + 12 && dist > 0.1) {
-                                // Tangential glide around cell membrane + soft radial cushion
+                            const maxCheck = minR + 12;
+                            if (distSq < maxCheck * maxCheck && distSq > 0.01) {
+                                const dist = Math.sqrt(distSq);
                                 const nx = dx / dist;
                                 const ny = dy / dist;
                                 vx = -ny * 0.38 + (dist < minR ? nx * 0.5 : 0);
@@ -2043,7 +2857,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     d.x += vx * simSpeed;
                     d.y += vy * simSpeed;
 
-                    // Confinement inside the Covered Water Tank (Top lid = basement membrane, Bottom = capillary wall)
                     const lidY = 55 + getSkinSurfaceY(d.x, swellingLevel) + 8;
                     if (d.y < lidY) {
                         d.y = lidY;
@@ -2056,7 +2869,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         d.x = 35;
                         d.wanderAngle = Math.PI - d.wanderAngle;
                     } else if (d.x > 850) {
-                        // Only droplets already at the far right near the lymphatic blind end (y > 205) overflow into lymphatics
                         if (d.y > 205) {
                             d.state = 'lymph_draining';
                             d.targetValveY = 268 + (Math.random() - 0.5) * 14;
@@ -2072,21 +2884,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
 
                     const fadeAlpha = d.life < 50 ? (d.life / 50) * 0.75 : 0.72;
-                    const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-                    c.setAttribute("cx", d.x.toFixed(1));
-                    c.setAttribute("cy", d.y.toFixed(1));
-                    c.setAttribute("r", d.r.toFixed(1));
-                    c.setAttribute("fill", "#7dd3fc");
-                    c.setAttribute("stroke", "#bae6fd");
-                    c.setAttribute("stroke-width", "0.7");
-                    c.setAttribute("opacity", fadeAlpha.toFixed(2));
-                    extravasatedLayer.appendChild(c);
+                    const rStr = d.r.toFixed(1);
+                    renderPooledDroplet(d.x.toFixed(1), d.y.toFixed(1), rStr, rStr, "#bae6fd", "0.7", fadeAlpha.toFixed(2));
 
                 } else if (d.state === 'lymph_draining') {
-                    // Right-side Overflow Outlet Pipe: Entering initial lymphatics and turning into green Lymph!
                     const inLumen = d.x >= 868;
                     if (!inLumen) {
-                        // Converging locally from right-side tank edge (x: 790..868) into the flap valve at x=870
                         const dx = 872 - d.x;
                         const dy = (d.targetValveY || 268) - d.y;
                         const dist = Math.max(1, Math.hypot(dx, dy));
@@ -2094,7 +2897,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         d.x += (dx / dist) * spd;
                         d.y += (dy / dist) * spd;
                     } else {
-                        // Flowing rightward inside the lymphatic capillary outlet pipe (x: 868 -> 1000)
                         d.x += (1.9 + (isEdema ? 0.5 : 0)) * simSpeed;
                         d.y += (268 - d.y) * 0.06 * simSpeed;
                         if (d.x > 965) {
@@ -2107,47 +2909,15 @@ document.addEventListener('DOMContentLoaded', () => {
                         continue;
                     }
 
-                    // Draining fluid droplets in initial lymphatics maintain consistent light blue
-                    const fillCol = "#7dd3fc";
-                    const strokeCol = "#38bdf8";
-                    const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-                    c.setAttribute("cx", d.x.toFixed(1));
-                    c.setAttribute("cy", d.y.toFixed(1));
-                    c.setAttribute("r", d.r.toFixed(1));
-                    c.setAttribute("fill", fillCol);
-                    c.setAttribute("stroke", strokeCol);
-                    c.setAttribute("stroke-width", "0.85");
-                    c.setAttribute("opacity", d.alpha.toFixed(2));
-                    extravasatedLayer.appendChild(c);
+                    const rStr = d.r.toFixed(1);
+                    renderPooledDroplet(d.x.toFixed(1), d.y.toFixed(1), rStr, rStr, "#38bdf8", "0.85", d.alpha.toFixed(2));
                 }
             }
-            // (Educational water-tank badges removed)
         } else if (fluidTankBgLayer) {
             fluidTankBgLayer.setAttribute("opacity", "0");
-        }
-
-        // Dynamically align Epidermis Tint (Left: 0~500) and Mucosa Tint (Right: 500~1000)
-        const epiBgEl = document.getElementById('epidermis-bg');
-        if (epiBgEl) {
-            let epiD = `M 0 ${getSkinSurfaceY(0, swellingLevel).toFixed(1)}`;
-            for (let px = 25; px <= 500; px += 25) epiD += ` L ${px} ${getSkinSurfaceY(px, swellingLevel).toFixed(1)}`;
-            for (let px = 500; px >= 0; px -= 25) epiD += ` L ${px} ${(55 + getSkinSurfaceY(px, swellingLevel) - 2).toFixed(1)}`;
-            epiD += ' Z';
-            epiBgEl.setAttribute('d', epiD);
-        }
-        const mucBgEl = document.getElementById('mucosa-bg');
-        if (mucBgEl) {
-            let mucD = `M 500 ${getSkinSurfaceY(500, swellingLevel).toFixed(1)}`;
-            for (let px = 525; px <= 1000; px += 25) mucD += ` L ${px} ${getSkinSurfaceY(px, swellingLevel).toFixed(1)}`;
-            for (let px = 1000; px >= 500; px -= 25) mucD += ` L ${px} ${(55 + getSkinSurfaceY(px, swellingLevel) - 2).toFixed(1)}`;
-            mucD += ' Z';
-            mucBgEl.setAttribute('d', mucD);
-        }
-        const mucCutLine = document.getElementById('mucocutaneous-junction');
-        if (mucCutLine) {
-            const midSkinY = getSkinSurfaceY(500, swellingLevel);
-            mucCutLine.setAttribute('y1', midSkinY - 28);
-            mucCutLine.setAttribute('y2', 55 + midSkinY - 2);
+            if (tankPoolEl) tankPoolEl.style.display = 'none';
+            tissueSites.forEach(site => { if (site.bathRing) site.bathRing.style.display = 'none'; });
+            if (fluidArrowsLayer) fluidArrowsLayer.style.display = 'none';
         }
 
         // ----------------------------------------------------
@@ -2157,23 +2927,28 @@ document.addEventListener('DOMContentLoaded', () => {
             let mD = `M 500 ${getSkinSurfaceY(500, swellingLevel) + 3} L 1000 ${getSkinSurfaceY(1000, swellingLevel) + 3} `;
             for (let mx = 1000; mx >= 500; mx -= 20) {
                 const sY = getSkinSurfaceY(mx, swellingLevel);
-                const wave = Math.sin(Date.now() * 0.003 - mx * 0.04) * 2;
+                const wave = Math.sin(simNowMs * 0.003 - mx * 0.04) * 2;
                 mD += `L ${mx} ${(sY - 14 + wave).toFixed(1)} `;
             }
             mD += 'Z';
             mucusLayer.setAttribute('d', mD);
         }
 
-        ciliaList.forEach(c => {
-            const sY = getSkinSurfaceY(c.baseX, swellingLevel);
-            const beatPhase = Date.now() * 0.008 - c.baseX * 0.055;
-            const tipDx = Math.sin(beatPhase) * 5 + 3.5; // rightward sweeping wave
-            const tipDy = -10 + Math.cos(beatPhase) * 2;
-            c.el.setAttribute('d', `M ${c.baseX} ${sY} Q ${c.baseX + tipDx * 0.4} ${sY + tipDy * 0.5} ${c.baseX + tipDx} ${sY + tipDy}`);
-        });
+        if (ciliaCombinedPath && ciliaList.length > 0) {
+            let ciliaD = '';
+            const timePhase = simNowMs * 0.008;
+            for (let i = 0; i < ciliaList.length; i++) {
+                const c = ciliaList[i];
+                const sY = c.sY;
+                const beatPhase = timePhase - c.baseX * 0.055;
+                const tipDx = Math.sin(beatPhase) * 5 + 3.5;
+                const tipDy = -10 + Math.cos(beatPhase) * 2;
+                ciliaD += `M ${c.baseX} ${sY.toFixed(1)} Q ${(c.baseX + tipDx * 0.4).toFixed(1)} ${(sY + tipDy * 0.5).toFixed(1)} ${(c.baseX + tipDx).toFixed(1)} ${(sY + tipDy).toFixed(1)} `;
+            }
+            ciliaCombinedPath.setAttribute('d', ciliaD);
+        }
 
         if (mucosaChemicalsLayer) {
-            mucosaChemicalsLayer.innerHTML = '';
             lysozymes.forEach(ly => {
                 ly.sparkle += 0.12;
                 ly.x += ly.vx; ly.y += ly.vy;
@@ -2181,15 +2956,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const sY = getSkinSurfaceY(ly.x, swellingLevel);
                 if (ly.y < sY - 16 || ly.y > sY + 2) ly.vy *= -1;
 
-                const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-                g.setAttribute("transform", `translate(${ly.x}, ${ly.y})`);
-                const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-                circle.setAttribute("r", (2.2 + Math.sin(ly.sparkle) * 0.8).toFixed(1));
-                circle.setAttribute("fill", "#fde047");
-                circle.setAttribute("stroke", "#ca8a04");
-                circle.setAttribute("stroke-width", "0.8");
-                g.appendChild(circle);
-                mucosaChemicalsLayer.appendChild(g);
+                if (ly.el) {
+                    ly.el.setAttribute("transform", `translate(${ly.x.toFixed(1)}, ${ly.y.toFixed(1)})`);
+                    if (ly.circle) ly.circle.setAttribute("r", (2.2 + Math.sin(ly.sparkle) * 0.8).toFixed(1));
+                }
             });
 
             sIgAList.forEach(ab => {
@@ -2198,15 +2968,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const sY = getSkinSurfaceY(ab.x, swellingLevel);
                 if (ab.y < sY - 16 || ab.y > sY + 2) ab.vy *= -1;
 
-                const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-                g.setAttribute("transform", `translate(${ab.x}, ${ab.y}) scale(0.85)`);
-                const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                p.setAttribute("d", "M -4 -3 L 0 0 L 4 -3 M 0 0 L 0 4 M -4 7 L 0 4 L 4 7");
-                p.setAttribute("stroke", "#38bdf8");
-                p.setAttribute("stroke-width", "1.4");
-                p.setAttribute("fill", "none");
-                g.appendChild(p);
-                mucosaChemicalsLayer.appendChild(g);
+                if (ab.el) {
+                    ab.el.setAttribute("transform", `translate(${ab.x.toFixed(1)}, ${ab.y.toFixed(1)}) scale(0.85)`);
+                }
             });
         }
 
@@ -2218,12 +2982,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const bladeProgress = Math.sin(coagState.bladeAnim * Math.PI);
             const bladeY = 2 + bladeProgress * 290;
             scalpelBladeLayer.setAttribute("opacity", "0.95");
-            scalpelBladeLayer.setAttribute("transform", `translate(${WOUND_X}, ${bladeY})`);
+            scalpelBladeLayer.setAttribute("transform", `translate(${WOUND_X}, ${bladeY.toFixed(1)})`);
         } else {
             scalpelBladeLayer.setAttribute("opacity", "0");
         }
 
         // Wound Cavity V-shape cut from skin down to capillary
+        const expColEl = getExposedCollagenPath();
         if (coagState.woundOpen > 0.02) {
             const healFactor = 1 - coagState.healProgress * 0.95;
             const topW = WOUND_HALF_W * coagState.woundOpen * healFactor;
@@ -2234,43 +2999,40 @@ document.addEventListener('DOMContentLoaded', () => {
             woundCavity.setAttribute("d", cavityD);
             woundCavity.setAttribute("opacity", Math.max(0, healFactor).toFixed(2));
 
-            // Exposed collagen fibers along wound edge
-            if (coagStage >= 1 && coagStage <= 3) {
+            // Exposed collagen fibers along wound edge (Combined single path)
+            if (coagStage >= 1 && coagStage <= 3 && expColEl) {
+                let colD = '';
+                const timeDiv = simNowMs / 200;
                 for (let side of [-1, 1]) {
                     const edgeX = WOUND_X + side * botW;
                     for (let k = 0; k < 5; k++) {
-                        const line = document.createElementNS("http://www.w3.org/2000/svg", "path");
                         const startY = botY - 5 - k * 8;
-                        const wiggle = Math.sin(Date.now() / 200 + k) * 4;
-                        line.setAttribute("d", `M ${edgeX} ${startY} Q ${edgeX + side * (12 + wiggle)} ${startY + 4} ${edgeX + side * 18} ${startY - 2}`);
-                        line.setAttribute("stroke", "#fde047");
-                        line.setAttribute("stroke-width", "2");
-                        line.setAttribute("fill", "none");
-                        exposedCollagenLayer.appendChild(line);
+                        const wiggle = Math.sin(timeDiv + k) * 4;
+                        colD += `M ${edgeX.toFixed(1)} ${startY.toFixed(1)} Q ${(edgeX + side * (12 + wiggle)).toFixed(1)} ${(startY + 4).toFixed(1)} ${(edgeX + side * 18).toFixed(1)} ${(startY - 2).toFixed(1)} `;
                     }
                 }
+                expColEl.setAttribute("d", colD);
+                expColEl.style.display = '';
                 createSvgLabel("⚡ 暴露膠原蛋白 (活化血小板)", WOUND_X + botW + 15, botY - 20, 'rgba(202, 138, 4, 0.9)');
+            } else if (expColEl) {
+                expColEl.style.display = 'none';
             }
         } else {
             woundCavity.setAttribute("opacity", "0");
+            if (expColEl) expColEl.style.display = 'none';
         }
 
         // ----------------------------------------------------
-        // B. Bleeding RBCs Welling up onto Skin Surface
-        // ----------------------------------------------------
-        // ----------------------------------------------------
         // B. Bleeding RBCs (Escaping upward through wound cavity)
-        // Continuous bleeding until fibrinMesh appears!
         // ----------------------------------------------------
         const isBleedingActive = coagState.bleedIntensity > 0.02 && coagState.fibrinMesh < 0.5;
         if (isBleedingActive) {
-            // Continuously spawn fresh welling RBCs from capillary breach at y=312
             if (Math.random() < 0.32 * coagState.bleedIntensity) {
                 bleedingRBCs.push({
                     x: WOUND_X + (Math.random() - 0.5) * 14,
                     y: 312,
                     vx: (Math.random() - 0.5) * 0.2,
-                    vy: -(0.45 + Math.random() * 0.45), // gentle upward ooze
+                    vy: -(0.45 + Math.random() * 0.45),
                     r: 4.8,
                     atSurface: false,
                     surfaceLife: 220 + Math.random() * 120,
@@ -2281,10 +3043,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (bleedingRBCs.length > 0) {
+            const baseBleedOp = coagState.fibrinMesh > 0.5 ? 0.95 : Math.max(0.4, coagState.bleedIntensity);
             for (let i = bleedingRBCs.length - 1; i >= 0; i--) {
                 const r = bleedingRBCs[i];
                 if (!r.atSurface) {
-                    // Welling up inside the V-cavity channel
                     r.y += r.vy;
                     r.x += r.vx;
                     const cavityFrac = Math.max(0, Math.min(1, (312 - r.y) / Math.max(1, 312 - topBulgeY)));
@@ -2297,13 +3059,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         r.vy = 0;
                     }
                 } else {
-                    // Reached skin surface
                     if (coagState.fibrinMesh > 0.5) {
-                        // Thrombus locked in fibrin mesh - stationary, embedded in clot
                         r.vy = 0;
                         r.vx = 0;
                     } else {
-                        // Slowly pool and spread laterally along the surface
                         if (Math.abs(r.x - WOUND_X) < 42) {
                             r.x += r.surfaceDrift;
                         }
@@ -2311,7 +3070,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                         r.surfaceLife--;
                         if (r.surfaceLife < 80 || Math.abs(r.x - WOUND_X) >= 42) {
-                            r.alpha -= 0.012; // slow drip / fade away so new blood continuously wells up
+                            r.alpha -= 0.012;
                         }
                         if (r.alpha <= 0) {
                             bleedingRBCs.splice(i, 1);
@@ -2320,26 +3079,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
 
-                const rG = document.createElementNS("http://www.w3.org/2000/svg", "g");
-                rG.setAttribute("transform", `translate(${r.x}, ${r.y})`);
-
-                const el = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
-                el.setAttribute("rx", r.r);
-                el.setAttribute("ry", r.r * 0.68);
-                el.setAttribute("fill", "#dc2626");
-                el.setAttribute("stroke", "#7f1d1d");
-                el.setAttribute("stroke-width", "1");
-                el.setAttribute("opacity", (r.alpha * (coagState.fibrinMesh > 0.5 ? 0.95 : Math.max(0.4, coagState.bleedIntensity))).toFixed(2));
-
-                const dip = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
-                dip.setAttribute("rx", r.r * 0.45);
-                dip.setAttribute("ry", r.r * 0.3);
-                dip.setAttribute("fill", "#991b1b");
-                dip.setAttribute("opacity", "0.75");
-
-                rG.appendChild(el);
-                rG.appendChild(dip);
-                bleedingLayer.appendChild(rG);
+                renderPooledBleedRbc(r.x, r.y, (r.alpha * baseBleedOp).toFixed(2));
             }
 
             if (isBleedingActive) {
@@ -2349,98 +3089,50 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // ----------------------------------------------------
-        // C. Platelet Plug (Star-shaped Activated Platelets)
+        // C. Platelet Plug (Persistent DOM)
         // ----------------------------------------------------
         if (coagState.plateletPlug > 0.05) {
-            plugPlatelets.forEach((p, idx) => {
-                const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-                g.setAttribute("transform", `translate(${p.x}, ${p.y}) rotate(${p.angle * 180 / Math.PI})`);
-
-                // 7-spiked activated platelet star
-                const spikes = 7;
-                const outerR = 9;
-                const innerR = 4;
-                let pts = '';
-                for (let k = 0; k < spikes * 2; k++) {
-                    const radius = k % 2 === 0 ? outerR : innerR;
-                    const a = (k * Math.PI) / spikes;
-                    pts += (Math.cos(a) * radius).toFixed(1) + ',' + (Math.sin(a) * radius).toFixed(1) + ' ';
-                }
-
-                const poly = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
-                poly.setAttribute("points", pts.trim());
-                poly.setAttribute("fill", "#fde047");
-                poly.setAttribute("stroke", "#d97706");
-                poly.setAttribute("stroke-width", "1.2");
-                g.appendChild(poly);
-
-                // Trapped red blood cell within plug
-                if (idx % 2 === 0) {
-                    const rbc = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
-                    rbc.setAttribute("cx", -2); rbc.setAttribute("cy", -1);
-                    rbc.setAttribute("rx", "5"); rbc.setAttribute("ry", "3.2");
-                    rbc.setAttribute("fill", "#dc2626");
-                    g.appendChild(rbc);
-                }
-                plateletPlugLayer.appendChild(g);
-            });
+            ensurePlateletPlugDOM();
+            plateletPlugLayer.style.display = '';
             createSvgLabel("初級血小板栓塞 (Platelet Plug)", WOUND_X, 290, 'rgba(217, 119, 6, 0.9)');
+        } else if (plateletPlugBuilt) {
+            plateletPlugLayer.style.display = 'none';
         }
 
         // ----------------------------------------------------
-        // D. Fibrin Mesh (Gold/Amber Interlaced Strands)
+        // D. Fibrin Mesh (Persistent Combined Paths)
         // ----------------------------------------------------
         if (coagState.fibrinMesh > 0.05) {
-            fibrinStrands.forEach(strand => {
-                const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-                line.setAttribute("x1", strand.ax); line.setAttribute("y1", strand.ay);
-                line.setAttribute("x2", strand.bx); line.setAttribute("y2", strand.by);
-                line.setAttribute("stroke", "#f59e0b");
-                line.setAttribute("stroke-width", "2.2");
-                line.setAttribute("stroke-linecap", "round");
-                line.setAttribute("opacity", (0.9 * coagState.fibrinMesh).toFixed(2));
-                fibrinMeshLayer.appendChild(line);
-            });
-
-            // Arched reinforcement strands
-            for (let k = 0; k < 5; k++) {
-                const arch = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                const yOff = 315 - k * 9;
-                arch.setAttribute("d", `M ${WOUND_X - 35} ${yOff} Q ${WOUND_X} ${yOff + (k % 2 === 0 ? 6 : -6)} ${WOUND_X + 35} ${yOff}`);
-                arch.setAttribute("stroke", "#fbbf24");
-                arch.setAttribute("stroke-width", "2");
-                arch.setAttribute("fill", "none");
-                arch.setAttribute("opacity", (0.9 * coagState.fibrinMesh).toFixed(2));
-                fibrinMeshLayer.appendChild(arch);
-            }
+            ensureFibrinMeshDOM();
+            fibrinMeshLayer.style.display = '';
+            fibrinMeshLayer.setAttribute("opacity", (0.9 * coagState.fibrinMesh).toFixed(2));
             createSvgLabel("纖維蛋白網 (Fibrin Clot)", WOUND_X, 275, 'rgba(245, 158, 11, 0.9)');
+        } else if (fibrinMeshBuilt) {
+            fibrinMeshLayer.style.display = 'none';
         }
 
         // ----------------------------------------------------
         // E. Scab & Dried Surface Crust / Detachment & Recovery
         // ----------------------------------------------------
+        const scabEl = getScabPathEl();
         if (coagState.scabDetachAnim > 0) {
             coagState.scabDetachAnim += 0.016;
             const progress = Math.min(1, coagState.scabDetachAnim);
 
-            // Dissolve clot and close wound
             coagState.fibrinMesh = Math.max(0, 1 - progress);
             coagState.plateletPlug = Math.max(0, 1 - progress);
             coagState.woundOpen = Math.max(0, 1 - progress);
 
-            // Scab lifts upward and dissolves
             const detachY = -progress * 26;
             const detachOpacity = Math.max(0, 1 - progress);
 
-            const scab = document.createElementNS("http://www.w3.org/2000/svg", "path");
-            const scabD = `M ${WOUND_X - 45} ${topBulgeY} Q ${WOUND_X} ${topBulgeY - 10} ${WOUND_X + 45} ${topBulgeY} L ${WOUND_X + 38} ${topBulgeY + 12} Q ${WOUND_X} ${topBulgeY + 18} ${WOUND_X - 38} ${topBulgeY + 12} Z`;
-            scab.setAttribute("d", scabD);
-            scab.setAttribute("fill", "#450a0a");
-            scab.setAttribute("stroke", "#7f1d1d");
-            scab.setAttribute("stroke-width", "2");
-            scab.setAttribute("transform", `translate(0, ${detachY})`);
-            scab.setAttribute("opacity", (0.95 * detachOpacity).toFixed(2));
-            scabLayer.appendChild(scab);
+            if (scabEl) {
+                const scabD = `M ${WOUND_X - 45} ${topBulgeY} Q ${WOUND_X} ${topBulgeY - 10} ${WOUND_X + 45} ${topBulgeY} L ${WOUND_X + 38} ${topBulgeY + 12} Q ${WOUND_X} ${topBulgeY + 18} ${WOUND_X - 38} ${topBulgeY + 12} Z`;
+                scabEl.setAttribute("d", scabD);
+                scabEl.setAttribute("transform", `translate(0, ${detachY.toFixed(1)})`);
+                scabEl.setAttribute("opacity", (0.95 * detachOpacity).toFixed(2));
+                scabEl.style.display = '';
+            }
 
             createSvgLabel("痂皮脫落與纖溶重塑 (Fibrinolysis & Detachment)", WOUND_X, topBulgeY + detachY - 14, 'rgba(127, 29, 29, 0.9)');
 
@@ -2451,23 +3143,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 coagState.fibrinMesh = 0;
                 coagState.plateletPlug = 0;
                 woundCavity.setAttribute("opacity", "0");
-                scabLayer.innerHTML = '';
-                fibrinMeshLayer.innerHTML = '';
-                plateletPlugLayer.innerHTML = '';
-                exposedCollagenLayer.innerHTML = '';
-                bleedingLayer.innerHTML = '';
+                if (scabEl) scabEl.style.display = 'none';
+                if (fibrinMeshBuilt) fibrinMeshLayer.style.display = 'none';
+                if (plateletPlugBuilt) plateletPlugLayer.style.display = 'none';
+                if (expColEl) expColEl.style.display = 'none';
+                bleedingRBCs = [];
                 updateStats();
             }
         } else if (coagState.scabProgress > 0.05) {
-            const scab = document.createElementNS("http://www.w3.org/2000/svg", "path");
-            const scabD = `M ${WOUND_X - 45} ${topBulgeY} Q ${WOUND_X} ${topBulgeY - 10} ${WOUND_X + 45} ${topBulgeY} L ${WOUND_X + 38} ${topBulgeY + 12} Q ${WOUND_X} ${topBulgeY + 18} ${WOUND_X - 38} ${topBulgeY + 12} Z`;
-            scab.setAttribute("d", scabD);
-            scab.setAttribute("fill", "#450a0a");
-            scab.setAttribute("stroke", "#7f1d1d");
-            scab.setAttribute("stroke-width", "2");
-            scab.setAttribute("opacity", "0.95");
-            scabLayer.appendChild(scab);
+            if (scabEl) {
+                const scabD = `M ${WOUND_X - 45} ${topBulgeY} Q ${WOUND_X} ${topBulgeY - 10} ${WOUND_X + 45} ${topBulgeY} L ${WOUND_X + 38} ${topBulgeY + 12} Q ${WOUND_X} ${topBulgeY + 18} ${WOUND_X - 38} ${topBulgeY + 12} Z`;
+                scabEl.setAttribute("d", scabD);
+                scabEl.removeAttribute("transform");
+                scabEl.setAttribute("opacity", "0.95");
+                scabEl.style.display = '';
+            }
             createSvgLabel("乾燥保護性痂皮 (Scab)", WOUND_X, topBulgeY - 14, 'rgba(69, 10, 10, 0.9)');
+        } else if (scabEl) {
+            scabEl.style.display = 'none';
         }
 
         // ----------------------------------------------------
@@ -2478,15 +3171,58 @@ document.addEventListener('DOMContentLoaded', () => {
             const yOffset = -maxBulge * 4 * t * (1 - t) * 0.4;
             site.y = site.origY + yOffset;
 
+            if (!site.domGroup) return;
+
+            if (site.state === 'healthy') {
+                if (site.renderedState !== 'healthy') {
+                    site.domGroup.innerHTML = '';
+                    site.domBody.setAttribute("cx", site.x);
+                    site.domBody.setAttribute("r", site.r);
+                    site.domBody.setAttribute("fill", "#fdebd0");
+                    site.domBody.setAttribute("stroke", "#f8c471");
+                    site.domBody.setAttribute("stroke-width", "2");
+                    site.domBody.removeAttribute("stroke-dasharray");
+                    site.domBody.setAttribute("opacity", "0.9");
+                    site.domBody.style.display = '';
+
+                    site.domNuc.setAttribute("cx", site.x);
+                    site.domNuc.setAttribute("r", "6");
+                    site.domNuc.setAttribute("fill", "#eb984e");
+                    site.domNuc.style.display = '';
+
+                    site.domGroup.appendChild(site.domBody);
+                    site.domGroup.appendChild(site.domNuc);
+                    site.renderedState = 'healthy';
+                    site.lastY = -999;
+                }
+                if (Math.abs(site.y - (site.lastY || -999)) > 0.05) {
+                    const yStr = site.y.toFixed(1);
+                    site.domBody.setAttribute("cy", yStr);
+                    site.domNuc.setAttribute("cy", yStr);
+                    site.lastY = site.y;
+                }
+                return;
+            }
+
             if (site.state === 'empty') {
-                const emptyCircle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-                emptyCircle.setAttribute("cx", site.x); emptyCircle.setAttribute("cy", site.y);
-                emptyCircle.setAttribute("r", site.r);
-                emptyCircle.setAttribute("fill", "none");
-                emptyCircle.setAttribute("stroke", "#64748b");
-                emptyCircle.setAttribute("stroke-dasharray", "4,4");
-                emptyCircle.setAttribute("stroke-width", "1.5");
-                tissueSitesLayer.appendChild(emptyCircle);
+                if (site.renderedState !== 'empty') {
+                    site.domGroup.innerHTML = '';
+                    site.domBody.setAttribute("cx", site.x);
+                    site.domBody.setAttribute("r", site.r);
+                    site.domBody.setAttribute("fill", "none");
+                    site.domBody.setAttribute("stroke", "#64748b");
+                    site.domBody.setAttribute("stroke-dasharray", "4,4");
+                    site.domBody.setAttribute("stroke-width", "1.5");
+                    site.domBody.setAttribute("opacity", "1");
+                    site.domBody.style.display = '';
+                    site.domGroup.appendChild(site.domBody);
+                    site.renderedState = 'empty';
+                    site.lastY = -999;
+                }
+                if (Math.abs(site.y - (site.lastY || -999)) > 0.05) {
+                    site.domBody.setAttribute("cy", site.y.toFixed(1));
+                    site.lastY = site.y;
+                }
 
                 const hasDebris = cellDebris.some(d => d.siteId === site.id);
                 if (hasDebris) {
@@ -2527,12 +3263,87 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (site.state === 'incoming') {
-                const waitCircle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-                waitCircle.setAttribute("cx", site.x); waitCircle.setAttribute("cy", site.y); waitCircle.setAttribute("r", site.r);
-                waitCircle.setAttribute("fill", "none"); waitCircle.setAttribute("stroke", "#f59e0b"); waitCircle.setAttribute("stroke-dasharray", "3,3");
-                tissueSitesLayer.appendChild(waitCircle);
+                if (site.renderedState !== 'incoming') {
+                    site.domGroup.innerHTML = '';
+                    site.domBody.setAttribute("cx", site.x);
+                    site.domBody.setAttribute("r", site.r);
+                    site.domBody.setAttribute("fill", "none");
+                    site.domBody.setAttribute("stroke", "#f59e0b");
+                    site.domBody.setAttribute("stroke-dasharray", "3,3");
+                    site.domBody.setAttribute("stroke-width", "1.5");
+                    site.domBody.style.display = '';
+                    site.domGroup.appendChild(site.domBody);
+                    site.renderedState = 'incoming';
+                    site.lastY = -999;
+                }
+                if (Math.abs(site.y - (site.lastY || -999)) > 0.05) {
+                    site.domBody.setAttribute("cy", site.y.toFixed(1));
+                    site.lastY = site.y;
+                }
                 return;
             }
+
+            if (site.state === 'infected') {
+                site.infectionProgress += 0.15;
+                if (site.renderedState !== 'infected') {
+                    site.domGroup.innerHTML = '';
+                    site.domBody.setAttribute("cx", site.x);
+                    site.domBody.setAttribute("r", site.r);
+                    site.domBody.setAttribute("fill", "#f3e8ff");
+                    site.domBody.setAttribute("stroke", "#9333ea");
+                    site.domBody.setAttribute("stroke-width", "2.5");
+                    site.domBody.removeAttribute("stroke-dasharray");
+                    site.domBody.setAttribute("opacity", "1");
+                    site.domBody.style.display = '';
+                    site.domGroup.appendChild(site.domBody);
+
+                    if (!site.domVirDots) {
+                        site.domVirDots = [];
+                        for (let k = 0; k < 6; k++) {
+                            const vDot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                            vDot.setAttribute("r", "3");
+                            vDot.setAttribute("fill", "#9333ea");
+                            site.domVirDots.push(vDot);
+                        }
+                    }
+                    for (let k = 0; k < 6; k++) {
+                        site.domGroup.appendChild(site.domVirDots[k]);
+                    }
+                    site.renderedState = 'infected';
+                    site.lastY = -999;
+                }
+                if (Math.abs(site.y - (site.lastY || -999)) > 0.05) {
+                    site.domBody.setAttribute("cy", site.y.toFixed(1));
+                    site.lastY = site.y;
+                }
+
+                const vCount = Math.min(6, Math.floor(site.infectionProgress / 20) + 1);
+                for (let k = 0; k < 6; k++) {
+                    const vDot = site.domVirDots[k];
+                    if (k < vCount) {
+                        const a = (site.infectionProgress * 0.05) + (k * Math.PI * 2 / vCount);
+                        vDot.setAttribute("cx", (site.x + Math.cos(a) * 11).toFixed(1));
+                        vDot.setAttribute("cy", (site.y + Math.sin(a) * 11).toFixed(1));
+                        vDot.style.display = '';
+                    } else {
+                        vDot.style.display = 'none';
+                    }
+                }
+                createSvgLabel(`受病毒感染(${Math.floor(site.infectionProgress)}%)`, site.x, site.y - site.r - 8, 'rgba(147, 51, 234, 0.9)');
+
+                if (site.infectionProgress >= 100) {
+                    site.state = 'empty';
+                    site.infectionProgress = 0;
+                    createCellDebris(site.x, site.y, site.id, 5);
+                    spawnFreeVirus(site.x, site.y, 4);
+                    updateLog("💥 <strong>受感染細胞裂解死亡！</strong>病毒撐破宿主細胞，散出游離病毒並留下不規則細胞殘骸。");
+                }
+                return;
+            }
+
+            // For transient mitosis / migration states, render into site.domGroup
+            site.renderedState = site.state;
+            site.domGroup.innerHTML = '';
 
             if (site.state === 'migrating_in') {
                 const mig = site.migratingCell;
@@ -2548,7 +3359,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 waitCircle.setAttribute("cx", site.x); waitCircle.setAttribute("cy", site.y); waitCircle.setAttribute("r", site.r);
                 waitCircle.setAttribute("fill", "none"); waitCircle.setAttribute("stroke", "#10b981"); waitCircle.setAttribute("stroke-dasharray", "3,3");
                 waitCircle.setAttribute("stroke-width", "1.5");
-                tissueSitesLayer.appendChild(waitCircle);
+                site.domGroup.appendChild(waitCircle);
 
                 const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
                 g.setAttribute("transform", `translate(${mig.x}, ${mig.y})`);
@@ -2566,7 +3377,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 g.appendChild(body);
                 g.appendChild(nuc);
-                tissueSitesLayer.appendChild(g);
+                site.domGroup.appendChild(g);
 
                 createSvgLabel("畫面外細胞增生遷徙填補", mig.x, mig.y - site.r - 8, 'rgba(4, 120, 87, 0.9)');
 
@@ -2603,7 +3414,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     n2.setAttribute("cx", p * 22); n2.setAttribute("cy", 0); n2.setAttribute("r", 5.5); n2.setAttribute("fill", "#b45309");
 
                     g.appendChild(el); g.appendChild(n1); g.appendChild(n2);
-                    tissueSitesLayer.appendChild(g);
+                    site.domGroup.appendChild(g);
                     createSvgLabel("有絲分裂中(DNA複製)", site.x, site.y - site.r - 8, 'rgba(217, 119, 6, 0.9)');
                 } else {
                     const ratio = (p - 0.5) * 2;
@@ -2622,8 +3433,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     const cN = document.createElementNS("http://www.w3.org/2000/svg", "circle");
                     cN.setAttribute("cx", childX); cN.setAttribute("cy", childY); cN.setAttribute("r", 5); cN.setAttribute("fill", "#b45309");
 
-                    tissueSitesLayer.appendChild(mG); tissueSitesLayer.appendChild(mN);
-                    tissueSitesLayer.appendChild(cG); tissueSitesLayer.appendChild(cN);
+                    site.domGroup.appendChild(mG); site.domGroup.appendChild(mN);
+                    site.domGroup.appendChild(cG); site.domGroup.appendChild(cN);
                     createSvgLabel("新分裂子細胞", childX, childY - site.r - 8, 'rgba(217, 119, 6, 0.9)');
                 }
 
@@ -2634,50 +3445,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 return;
             }
-
-            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-            const body = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-            body.setAttribute("cx", site.x); body.setAttribute("cy", site.y); body.setAttribute("r", site.r);
-
-            if (site.state === 'infected') {
-                site.infectionProgress += 0.15;
-                body.setAttribute("fill", "#f3e8ff");
-                body.setAttribute("stroke", "#9333ea");
-                body.setAttribute("stroke-width", "2.5");
-                g.appendChild(body);
-
-                const vCount = Math.floor(site.infectionProgress / 20) + 1;
-                for (let k = 0; k < vCount; k++) {
-                    const a = (site.infectionProgress * 0.05) + (k * Math.PI * 2 / vCount);
-                    const vDot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-                    vDot.setAttribute("cx", site.x + Math.cos(a) * 11);
-                    vDot.setAttribute("cy", site.y + Math.sin(a) * 11);
-                    vDot.setAttribute("r", "3");
-                    vDot.setAttribute("fill", "#9333ea");
-                    g.appendChild(vDot);
-                }
-                createSvgLabel(`受病毒感染(${Math.floor(site.infectionProgress)}%)`, site.x, site.y - site.r - 8, 'rgba(147, 51, 234, 0.9)');
-
-                if (site.infectionProgress >= 100) {
-                    site.state = 'empty';
-                    site.infectionProgress = 0;
-                    createCellDebris(site.x, site.y, site.id, 5);
-                    spawnFreeVirus(site.x, site.y, 4);
-                    updateLog("💥 <strong>受感染細胞裂解死亡！</strong>病毒撐破宿主細胞，散出游離病毒並留下不規則細胞殘骸。");
-                }
-            } else {
-                body.setAttribute("fill", "#fdebd0");
-                body.setAttribute("stroke", "#f8c471");
-                body.setAttribute("stroke-width", "2");
-                body.setAttribute("opacity", "0.9");
-                g.appendChild(body);
-
-                const nuc = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-                nuc.setAttribute("cx", site.x); nuc.setAttribute("cy", site.y); nuc.setAttribute("r", "6");
-                nuc.setAttribute("fill", "#eb984e");
-                g.appendChild(nuc);
-            }
-            tissueSitesLayer.appendChild(g);
         });
 
         // ----------------------------------------------------
@@ -2730,14 +3497,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            const poly = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
-            const pts = d.vertices.map(v => `${(d.x + v.x).toFixed(1)},${(d.y + v.y).toFixed(1)}`).join(" ");
-            poly.setAttribute("points", pts);
-            poly.setAttribute("fill", "#64748b");
-            poly.setAttribute("stroke", "#94a3b8");
-            poly.setAttribute("stroke-width", "1");
-            poly.setAttribute("opacity", (0.85 * (d.alpha !== undefined ? d.alpha : 1)).toFixed(2));
-            cellDebrisLayer.appendChild(poly);
+            const opStr = (0.85 * (d.alpha !== undefined ? d.alpha : 1)).toFixed(2);
+            renderPooledDebris(d.x, d.y, d.localPts, opStr);
             if (idx % 4 === 0) createSvgLabel("細胞殘骸", d.x, d.y - 10, 'rgba(100, 116, 139, 0.85)');
         }
 
@@ -2884,7 +3645,6 @@ document.addEventListener('DOMContentLoaded', () => {
                             lymphNodeState.active = true;
                             lymphNodeState.antigenType = 'bacteria';
                             lymphNodeState.timer = 0;
-                            const statLymphPill = document.getElementById('stat-lymph-pill');
                             if (statLymphPill) statLymphPill.style.display = 'inline-flex';
                             updateLog("🧪 <strong>【細菌隨淋巴液引流至局部淋巴結】</strong>游離細菌沖入引流淋巴結！被膜下竇巨噬細胞展開抗原過濾，啟動淋巴結免疫應答！");
                         }
@@ -2958,38 +3718,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-            g.setAttribute("transform", `translate(${b.x}, ${b.y}) rotate(${b.angle * 180 / Math.PI})`);
-            g.setAttribute("opacity", (b.alpha !== undefined ? b.alpha : 1).toFixed(2));
-
-            const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-            rect.setAttribute("x", -9); rect.setAttribute("y", -4.5);
-            rect.setAttribute("width", 18); rect.setAttribute("height", 9);
-            rect.setAttribute("rx", 4.5);
-            rect.setAttribute("fill", b.inTissue ? (b.opsonized ? "#15803d" : "#22c55e") : (b.trappedInMucus ? "#10b981" : "#86efac"));
-            rect.setAttribute("stroke", b.inTissue ? "#14532d" : (b.trappedInMucus ? "#047857" : "#16a34a"));
-            rect.setAttribute("stroke-width", "1.5");
-            g.appendChild(rect);
-
-            // Render bound antibodies (opsonins) studded around bacterial surface
-            if (b.abCount > 0 && b.inTissue) {
-                const showCount = Math.min(b.abCount, 6);
-                for (let a = 0; a < showCount; a++) {
-                    const ang = (Math.PI * 2 / showCount) * a;
-                    const bx = Math.cos(ang) * 11;
-                    const by = Math.sin(ang) * 6.5;
-                    const yLine = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                    yLine.setAttribute("d", "M 0 3.5 L 0 0 L -2 -2 M 0 0 L 2 -2");
-                    yLine.setAttribute("stroke", "#fbbf24");
-                    yLine.setAttribute("stroke-width", "1.5");
-                    yLine.setAttribute("stroke-linecap", "round");
-                    yLine.setAttribute("fill", "none");
-                    yLine.setAttribute("transform", `translate(${bx}, ${by}) rotate(${ang * 180 / Math.PI + 90})`);
-                    g.appendChild(yLine);
-                }
-            }
-
-            pathogensTissueLayer.appendChild(g);
+            const bFill = b.inTissue ? (b.opsonized ? "#15803d" : "#22c55e") : (b.trappedInMucus ? "#10b981" : "#86efac");
+            const bStroke = b.inTissue ? "#14532d" : (b.trappedInMucus ? "#047857" : "#16a34a");
+            const bAbShow = (b.abCount > 0 && b.inTissue) ? Math.min(b.abCount, 6) : 0;
+            renderPooledBacterium(
+                b.x,
+                b.y,
+                b.angle * 180 / Math.PI,
+                (b.alpha !== undefined ? b.alpha : 1).toFixed(2),
+                bFill,
+                bStroke,
+                bAbShow
+            );
 
             const bText = b.inTissue 
                 ? (b.state === 'lymph_draining' 
@@ -3128,7 +3868,6 @@ document.addEventListener('DOMContentLoaded', () => {
                             lymphNodeState.active = true;
                             lymphNodeState.antigenType = 'virus';
                             lymphNodeState.timer = 0;
-                            const statLymphPill = document.getElementById('stat-lymph-pill');
                             if (statLymphPill) statLymphPill.style.display = 'inline-flex';
                             updateLog("🧪 <strong>【病毒隨淋巴液引流至局部淋巴結】</strong>游離病毒微粒流入引流淋巴結！啟動淋巴結免疫應答！");
                         }
@@ -3142,12 +3881,18 @@ document.addEventListener('DOMContentLoaded', () => {
                         v.alpha = 1;
                         updateLog("🧪 <strong>【游離病毒進入微淋巴管】</strong>微小病毒顆粒隨組織液引流入微淋巴管瓦狀單向瓣膜，奔向局部引流淋巴結！");
                     } else if (!v.opsonized) {
-                        const healthyCells = tissueSites.filter(c => c.state === 'healthy');
-                        if (healthyCells.length > 0) {
-                            const nearest = healthyCells.reduce((prev, curr) =>
-                                Math.hypot(curr.x - v.x, curr.y - v.y) < Math.hypot(prev.x - v.x, prev.y - v.y) ? curr : prev
-                            );
-                            const dx = nearest.x - v.x, dy = nearest.y - v.y, dist = Math.hypot(dx, dy);
+                        let nearest = null;
+                        let bestD2 = Infinity;
+                        for (let cIdx = 0; cIdx < tissueSites.length; cIdx++) {
+                            const c = tissueSites[cIdx];
+                            if (c.state === 'healthy') {
+                                const dx = c.x - v.x, dy = c.y - v.y;
+                                const d2 = dx * dx + dy * dy;
+                                if (d2 < bestD2) { bestD2 = d2; nearest = c; }
+                            }
+                        }
+                        if (nearest) {
+                            const dx = nearest.x - v.x, dy = nearest.y - v.y, dist = Math.sqrt(bestD2);
                             if (dist > nearest.r) {
                                 v.x += (dx / dist) * 1.0; v.y += (dy / dist) * 1.0;
                             } else {
@@ -3186,47 +3931,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            const vG = document.createElementNS("http://www.w3.org/2000/svg", "g");
-            vG.setAttribute("transform", `translate(${v.x}, ${v.y})`);
-            vG.setAttribute("opacity", (v.alpha !== undefined ? v.alpha : 1).toFixed(2));
-            const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-            circle.setAttribute("r", v.r);
-            circle.setAttribute("fill", v.inTissue ? (v.opsonized ? "#c084fc" : "#a855f7") : (v.trappedInMucus ? (v.opsonized ? "#67e8f9" : "#38bdf8") : "#d8b4fe"));
-            circle.setAttribute("stroke", v.inTissue ? "#581c87" : (v.trappedInMucus ? "#0284c7" : "#7e22ce"));
-            circle.setAttribute("stroke-width", "1.2");
-            vG.appendChild(circle);
-
-            for (let s = 0; s < 6; s++) {
-                const a = (Math.PI * 2 / 6) * s;
-                const spike = document.createElementNS("http://www.w3.org/2000/svg", "line");
-                spike.setAttribute("x1", Math.cos(a) * v.r);
-                spike.setAttribute("y1", Math.sin(a) * v.r);
-                spike.setAttribute("x2", Math.cos(a) * (v.r + 2.5));
-                spike.setAttribute("y2", Math.sin(a) * (v.r + 2.5));
-                spike.setAttribute("stroke", v.inTissue ? "#581c87" : (v.trappedInMucus ? "#0284c7" : "#7e22ce"));
-                spike.setAttribute("stroke-width", "1.2");
-                vG.appendChild(spike);
-            }
-
-            // Render bound neutralizing antibodies on viral surface
-            if (v.abCount > 0 && v.inTissue) {
-                const showCount = Math.min(v.abCount, 4);
-                for (let a = 0; a < showCount; a++) {
-                    const ang = (Math.PI * 2 / showCount) * a + Math.PI / 4;
-                    const bx = Math.cos(ang) * (v.r + 3.5);
-                    const by = Math.sin(ang) * (v.r + 3.5);
-                    const yLine = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                    yLine.setAttribute("d", "M 0 3 L 0 0 L -1.8 -1.8 M 0 0 L 1.8 -1.8");
-                    yLine.setAttribute("stroke", "#fbbf24");
-                    yLine.setAttribute("stroke-width", "1.4");
-                    yLine.setAttribute("stroke-linecap", "round");
-                    yLine.setAttribute("fill", "none");
-                    yLine.setAttribute("transform", `translate(${bx}, ${by}) rotate(${ang * 180 / Math.PI + 90})`);
-                    vG.appendChild(yLine);
-                }
-            }
-
-            pathogensTissueLayer.appendChild(vG);
+            const vFill = v.inTissue ? (v.opsonized ? "#c084fc" : "#a855f7") : (v.trappedInMucus ? (v.opsonized ? "#67e8f9" : "#38bdf8") : "#d8b4fe");
+            const vStroke = v.inTissue ? "#581c87" : (v.trappedInMucus ? "#0284c7" : "#7e22ce");
+            const vAbShow = (v.abCount > 0 && v.inTissue) ? Math.min(v.abCount, 4) : 0;
+            renderPooledVirus(
+                v.x,
+                v.y,
+                (v.alpha !== undefined ? v.alpha : 1).toFixed(2),
+                vFill,
+                vStroke,
+                vAbShow
+            );
 
             const vText = v.inTissue 
                 ? (v.state === 'lymph_draining' 
@@ -3400,9 +4115,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            const pG = document.createElementNS("http://www.w3.org/2000/svg", "g");
-            pG.setAttribute("transform", `translate(${p.x}, ${p.y}) rotate(${p.angle * 180 / Math.PI})`);
-
             const numPts = 12;
             const length = 75;
             let dPath = '';
@@ -3413,22 +4125,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 dPath += (k === 0 ? 'M ' : 'L ') + px.toFixed(1) + ' ' + py.toFixed(1) + ' ';
             }
 
-            const pBody = document.createElementNS("http://www.w3.org/2000/svg", "path");
-            pBody.setAttribute("d", dPath);
-            pBody.setAttribute("stroke", p.inTissue ? "#f59e0b" : "#fde68a");
-            pBody.setAttribute("stroke-width", "12");
-            pBody.setAttribute("stroke-linecap", "round");
-            pBody.setAttribute("fill", "none");
-
-            const pCore = document.createElementNS("http://www.w3.org/2000/svg", "path");
-            pCore.setAttribute("d", dPath);
-            pCore.setAttribute("stroke", p.inTissue ? "#d97706" : "#f59e0b");
-            pCore.setAttribute("stroke-width", "3");
-            pCore.setAttribute("fill", "none");
-
-            pG.appendChild(pBody);
-            pG.appendChild(pCore);
-            pathogensTissueLayer.appendChild(pG);
+            renderPooledParasite(
+                p.x,
+                p.y,
+                p.angle * 180 / Math.PI,
+                dPath,
+                p.inTissue ? "#f59e0b" : "#fde68a",
+                p.inTissue ? "#d97706" : "#f59e0b"
+            );
 
             const pText = p.inTissue 
                 ? `大型線蟲(真皮內, ${Math.ceil(p.hp)}%)` 
@@ -3448,23 +4152,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const h = histamines[i];
             h.x += h.vx; h.y += h.vy; h.life--;
             if (h.life <= 0) { histamines.splice(i, 1); continue; }
-            const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-            dot.setAttribute("cx", h.x); dot.setAttribute("cy", h.y);
-            dot.setAttribute("r", "2.5");
-            dot.setAttribute("fill", "#38bdf8");
-            dot.setAttribute("opacity", (h.life / 100).toFixed(2));
-            chemicalsLayer.appendChild(dot);
+            renderPooledChemDot(h.x, h.y, "2.5", "#38bdf8", (h.life / 100).toFixed(2));
         }
 
         for (let i = eosinophilGranules.length - 1; i >= 0; i--) {
             const g = eosinophilGranules[i];
             g.x += g.vx; g.y += g.vy; g.life--;
             if (g.life <= 0) { eosinophilGranules.splice(i, 1); continue; }
-            const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-            dot.setAttribute("cx", g.x); dot.setAttribute("cy", g.y);
-            dot.setAttribute("r", "2.8");
-            dot.setAttribute("fill", "#f43f5e");
-            chemicalsLayer.appendChild(dot);
+            renderPooledChemDot(g.x, g.y, "2.8", "#f43f5e", "1");
         }
 
         // Continuous Humoral Immune Surveillance & Memory Inflow (Automatic Sustained Protection)
@@ -3556,10 +4251,19 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        // Pre-filter target lists once per frame for all antibodies (O(1) allocation)
+        const activeBacTargets = bacteria.filter(b => (b.inTissue || b.y >= getSkinSurfaceY(b.x, swellingLevel) - 8) && b.state !== 'lymph_draining');
+        const activeVirTargets = freeViruses.filter(v => (v.inTissue || v.y >= getSkinSurfaceY(v.x, swellingLevel) - 8) && v.state !== 'lymph_draining');
+        const unopBacTargets = activeBacTargets.filter(b => (b.abCount || 0) < 3);
+        const unopVirTargets = activeVirTargets.filter(v => (v.abCount || 0) < 3);
+
         for (let i = antibodies.length - 1; i >= 0; i--) {
             const ab = antibodies[i];
             ab.life--;
             if (ab.life <= 0) { antibodies.splice(i, 1); continue; }
+
+            const matchType = ab.targetType || 'bacteria';
+            const activeTargets = matchType === 'virus' ? activeVirTargets : activeBacTargets;
 
             // Stage 1: Circulating inside vascular system (Arteriole -> Precapillary Sphincters -> Capillary Bed)
             if (ab.stage === 'circulation') {
@@ -3587,18 +4291,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     let shouldExtravasate = false;
                     let matchedPathogen = null;
 
-                    const matchType = ab.targetType || 'bacteria';
-                    const activeTargets = matchType === 'virus'
-                        ? freeViruses.filter(v => (v.inTissue || v.y >= getSkinSurfaceY(v.x, swellingLevel) - 8) && v.state !== 'lymph_draining' && (v.abCount || 0) < 3)
-                        : bacteria.filter(b => (b.inTissue || b.y >= getSkinSurfaceY(b.x, swellingLevel) - 8) && b.state !== 'lymph_draining' && (b.abCount || 0) < 4);
-
                     if (ab.targetExtravasateX && ab.x >= ab.targetExtravasateX) {
                         shouldExtravasate = true;
                     } else if (ab.x >= 180 && ab.x <= 880 && activeTargets.length > 0) {
-                        const nearby = activeTargets.find(t => Math.abs(t.x - ab.x) < 70);
-                        if (nearby) {
-                            shouldExtravasate = true;
-                            matchedPathogen = nearby;
+                        for (let tIdx = 0; tIdx < activeTargets.length; tIdx++) {
+                            const tgt = activeTargets[tIdx];
+                            if (Math.abs(tgt.x - ab.x) < 70) {
+                                shouldExtravasate = true;
+                                matchedPathogen = tgt;
+                                break;
+                            }
                         }
                     }
 
@@ -3607,10 +4309,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         ab.y = 304; // Enters dermis just above endothelial junction
 
                         if (!matchedPathogen && activeTargets.length > 0) {
-                            let bestD = 9999;
-                            for (let t of activeTargets) {
-                                const d = Math.hypot(t.x - ab.x, t.y - 304);
-                                if (d < bestD) { bestD = d; matchedPathogen = t; }
+                            let bestD2 = Infinity;
+                            for (let tIdx = 0; tIdx < activeTargets.length; tIdx++) {
+                                const tgt = activeTargets[tIdx];
+                                const dx = tgt.x - ab.x;
+                                const dy = tgt.y - 304;
+                                const d2 = dx * dx + dy * dy;
+                                if (d2 < bestD2) { bestD2 = d2; matchedPathogen = tgt; }
                             }
                         }
 
@@ -3651,24 +4356,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 ab.vx += 0.03 * simSpeed;
 
                 // 4. Local Antigen Affinity & Chemotactic Sink:
-                const matchType = ab.targetType || 'bacteria';
-                const activeTargets = matchType === 'virus'
-                    ? freeViruses.filter(v => (v.inTissue || v.y >= getSkinSurfaceY(v.x, swellingLevel) - 8) && v.state !== 'lymph_draining')
-                    : bacteria.filter(b => (b.inTissue || b.y >= getSkinSurfaceY(b.x, swellingLevel) - 8) && b.state !== 'lymph_draining');
-
-                // Prioritize un-opsonized targets (< 3 antibodies bound) so antibodies distribute across ALL pathogens evenly
-                const unopsonized = activeTargets.filter(t => (t.abCount || 0) < 3);
+                const unopsonized = matchType === 'virus' ? unopVirTargets : unopBacTargets;
                 const searchList = unopsonized.length > 0 ? unopsonized : activeTargets;
 
                 let nearest = null;
-                let minDist = 9999;
-                for (let t of searchList) {
-                    const d = Math.hypot(t.x - ab.x, t.y - ab.y);
-                    if (d < minDist) {
-                        minDist = d;
+                let minDistSq = 240 * 240; // max radius 240px
+                for (let tIdx = 0; tIdx < searchList.length; tIdx++) {
+                    const t = searchList[tIdx];
+                    const dx = t.x - ab.x;
+                    const dy = t.y - ab.y;
+                    const d2 = dx * dx + dy * dy;
+                    if (d2 < minDistSq) {
+                        minDistSq = d2;
                         nearest = t;
                     }
                 }
+                const minDist = nearest ? Math.sqrt(minDistSq) : 9999;
 
                 if (nearest && minDist < 240) {
                     // Within 240px of pathogen: Fab epitope affinity field steers the antibody towards the target
@@ -3729,17 +4432,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            const yG = document.createElementNS("http://www.w3.org/2000/svg", "g");
             const rot = ab.rot !== undefined ? ab.rot : (ab.stage === 'circulation' ? 90 : 0);
-            yG.setAttribute("transform", `translate(${ab.x}, ${ab.y}) rotate(${rot})`);
-            const yLine = document.createElementNS("http://www.w3.org/2000/svg", "path");
-            yLine.setAttribute("d", "M 0 4.5 L 0 0 L -3.5 -3.5 M 0 0 L 3.5 -3.5");
-            yLine.setAttribute("stroke", ab.isSecondary ? "#fbbf24" : "#f97316");
-            yLine.setAttribute("stroke-width", ab.isSecondary ? "2.2" : "1.5");
-            yLine.setAttribute("stroke-linecap", "round");
-            yLine.setAttribute("fill", "none");
-            yG.appendChild(yLine);
-            chemicalsLayer.appendChild(yG);
+            renderPooledAntibody(ab.x, ab.y, rot, !!ab.isSecondary);
         }
 
         // ----------------------------------------------------
@@ -3838,7 +4532,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 // Dynamic Y position: strictly inside arteriole, branching smoothly at BRANCH_START_X into capillary
-                const branchObj = BRANCHES.find(b => b.id === wbc.branchId) || BRANCHES[0];
+                const branchObj = BRANCH_MAP[wbc.branchId] || BRANCHES[0];
                 const halfArt = arterioleWidth / 2;
                 const halfCap = capillaryWidth / 2;
                 const laneOff = wbc.laneOffset !== undefined ? wbc.laneOffset : 0;
@@ -3864,30 +4558,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 const wbcGlobalY = 300 + localY;
 
                 // Render patrolling spherical WBC in vessel
-                const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-                g.setAttribute("transform", `translate(${wbc.x}, ${wbcGlobalY})`);
-
-                const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-                circle.setAttribute("r", wbc.r);
-                circle.setAttribute("fill", getWbcColor(wbc.subtype));
-                circle.setAttribute("stroke", "#fff");
-                circle.setAttribute("stroke-width", "1.2");
-                g.appendChild(circle);
-
-                drawWbcNucleus(g, wbc.subtype, wbc.r);
-                activeWbcLayer.appendChild(g);
+                renderPooledWbcSphere(wbc.x, wbcGlobalY, wbc.r, wbc.subtype, "1", "#fff", "1.2", 0, "");
 
             } else if (wbc.state === 'diapedesis') {
                 // Amoeboid squeezing through vascular endothelial gap
                 wbc.amoebaProgress += 0.013 * squeezeSpeed;
-                const branchObj = BRANCHES.find(b => b.id === wbc.branchId) || BRANCHES[0];
+                const branchObj = BRANCH_MAP[wbc.branchId] || BRANCHES[0];
                 const lumenY = 300 + branchObj.targetY;
                 const tissueTargetY = 260;
                 const currentY = lumenY - (lumenY - tissueTargetY) * wbc.amoebaProgress;
 
-                const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-                drawAmoeboidWbc(g, wbc.x, currentY, wbc.r, wbc.amoebaProgress, wbc.subtype, 'diapedesis');
-                activeWbcLayer.appendChild(g);
+                renderPooledWbcAmoeba(wbc.x, currentY, wbc.r, wbc.amoebaProgress, wbc.subtype, 'diapedesis');
 
                 createSvgLabel("變形蟲偽足遊出 (Diapedesis)", wbc.x, currentY - wbc.r - 10, 'rgba(30, 41, 59, 0.9)');
 
@@ -3911,9 +4592,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const currentY = breachY - (breachY - tissueTargetY) * wbc.amoebaProgress;
                 const wiggleX = wbc.targetGapX + Math.sin(wbc.amoebaProgress * Math.PI * 2) * 8;
 
-                const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-                drawAmoeboidWbc(g, wiggleX, currentY, wbc.r, wbc.amoebaProgress, wbc.subtype, 'wound_exit');
-                activeWbcLayer.appendChild(g);
+                renderPooledWbcAmoeba(wiggleX, currentY, wbc.r, wbc.amoebaProgress, wbc.subtype, 'wound_exit');
 
                 createSvgLabel("從創口破口移出 (Wound Emigration)", wiggleX, currentY - wbc.r - 10, 'rgba(185, 28, 28, 0.9)');
 
@@ -3935,6 +4614,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // ----------------------------------------------------
         // K. Active Roaming Leukocytes
         // ----------------------------------------------------
+        const inTissueBacWbc = bacteria.filter(b => b.inTissue);
+        const inTissueVirWbc = freeViruses.filter(v => v.inTissue);
+
         for (let i = activeTissueWBCs.length - 1; i >= 0; i--) {
             const w = activeTissueWBCs[i];
             w.tissueLife--;
@@ -4128,7 +4810,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         lymphNodeState.active = true;
                         lymphNodeState.antigenType = w.antigenType;
                         lymphNodeState.timer = 0;
-                        const statLymphPill = document.getElementById('stat-lymph-pill');
                         if (statLymphPill) statLymphPill.style.display = 'inline-flex';
                     }
                 }
@@ -4144,32 +4825,45 @@ document.addEventListener('DOMContentLoaded', () => {
                     continue;
                 }
             } else if (w.subtype === 'neutrophil' || w.subtype === 'macrophage') {
-                const targets = [
-                    ...bacteria.filter(b => b.inTissue).map(item => ({ type: 'bacteria', item, priority: 1 })),
-                    ...freeViruses.filter(v => v.inTissue).map(item => ({ type: 'virus', item, priority: 1.4 })),
-                    ...cellDebris.map(item => ({ type: 'debris', item, priority: w.subtype === 'macrophage' ? 0.8 : 2.5 }))
-                ];
+                let bestItem = null;
+                let bestType = null;
+                let bestWeightedDist = Infinity;
 
-                if (targets.length > 0) {
-                    const best = targets.reduce((prev, curr) => {
-                        const dP = Math.hypot(prev.item.x - w.x, prev.item.y - w.y) * prev.priority;
-                        const dC = Math.hypot(curr.item.x - w.x, curr.item.y - w.y) * curr.priority;
-                        return dC < dP ? curr : prev;
-                    });
-                    const dx = best.item.x - w.x, dy = best.item.y - w.y, dist = Math.hypot(dx, dy);
+                for (let j = 0; j < inTissueBacWbc.length; j++) {
+                    const b = inTissueBacWbc[j];
+                    const dx = b.x - w.x, dy = b.y - w.y;
+                    const d = Math.hypot(dx, dy) * 1.0;
+                    if (d < bestWeightedDist) { bestWeightedDist = d; bestItem = b; bestType = 'bacteria'; }
+                }
+                for (let j = 0; j < inTissueVirWbc.length; j++) {
+                    const v = inTissueVirWbc[j];
+                    const dx = v.x - w.x, dy = v.y - w.y;
+                    const d = Math.hypot(dx, dy) * 1.4;
+                    if (d < bestWeightedDist) { bestWeightedDist = d; bestItem = v; bestType = 'virus'; }
+                }
+                const debrisPriority = w.subtype === 'macrophage' ? 0.8 : 2.5;
+                for (let j = 0; j < cellDebris.length; j++) {
+                    const dItem = cellDebris[j];
+                    const dx = dItem.x - w.x, dy = dItem.y - w.y;
+                    const d = Math.hypot(dx, dy) * debrisPriority;
+                    if (d < bestWeightedDist) { bestWeightedDist = d; bestItem = dItem; bestType = 'debris'; }
+                }
+
+                if (bestItem) {
+                    const dx = bestItem.x - w.x, dy = bestItem.y - w.y, dist = Math.hypot(dx, dy);
                     const speed = w.subtype === 'neutrophil' ? 1.8 : 1.4;
                     w.x += (dx / dist) * speed; w.y += (dy / dist) * speed;
 
-                    if (dist < w.r + (best.item.r || 5)) {
+                    if (dist < w.r + (bestItem.r || 5)) {
                         let eatenAntigen = null;
-                        if (best.type === 'bacteria') {
-                            const bIdx = bacteria.indexOf(best.item);
+                        if (bestType === 'bacteria') {
+                            const bIdx = bacteria.indexOf(bestItem);
                             if (bIdx !== -1) { bacteria.splice(bIdx, 1); eatenAntigen = 'bacteria'; }
-                        } else if (best.type === 'virus') {
-                            const vIdx = freeViruses.indexOf(best.item);
+                        } else if (bestType === 'virus') {
+                            const vIdx = freeViruses.indexOf(bestItem);
                             if (vIdx !== -1) { freeViruses.splice(vIdx, 1); eatenAntigen = 'virus'; }
-                        } else if (best.type === 'debris') {
-                            const dIdx = cellDebris.indexOf(best.item);
+                        } else if (bestType === 'debris') {
+                            const dIdx = cellDebris.indexOf(bestItem);
                             if (dIdx !== -1) {
                                 cellDebris.splice(dIdx, 1);
                                 eatenAntigen = viralEncounterOccurred ? 'virus' : (bacterialEncounterOccurred ? 'bacteria' : null);
@@ -4206,40 +4900,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (w.alpha <= 0) { activeTissueWBCs.splice(i, 1); continue; }
             }
 
-            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-            g.setAttribute("transform", `translate(${w.x}, ${w.y})`);
-            g.setAttribute("opacity", (w.alpha || 1).toFixed(2));
-
-            const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-            circle.setAttribute("r", w.r);
-            circle.setAttribute("fill", getWbcColor(w.subtype));
             const isLymph = w.state === 'apc_migrating' || w.state === 'lymph_draining';
             const strokeColor = w.state === 'lymph_draining' ? "#10b981" : (w.state === 'apc_migrating' ? "#34d399" : "#fff");
-            circle.setAttribute("stroke", strokeColor);
-            circle.setAttribute("stroke-width", isLymph ? "2.2" : "1.5");
-            g.appendChild(circle);
-
+            let haloR = 0, haloStroke = "";
             if (isLymph) {
-                const halo = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-                halo.setAttribute("r", w.r + 4.5);
-                halo.setAttribute("fill", "none");
-                halo.setAttribute("stroke", w.state === 'lymph_draining' ? "#10b981" : "#34d399");
-                halo.setAttribute("stroke-width", "1.6");
-                halo.setAttribute("stroke-dasharray", "3,2");
-                g.appendChild(halo);
+                haloR = w.r + 4.5;
+                haloStroke = w.state === 'lymph_draining' ? "#10b981" : "#34d399";
             } else if (w.subtype === 'bcell' && w.isPlasmaActive) {
-                const pulseR = w.r + 3.8 + Math.sin(Date.now() * 0.008 + w.x) * 1.8;
-                const halo = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-                halo.setAttribute("r", pulseR);
-                halo.setAttribute("fill", "none");
-                halo.setAttribute("stroke", "#fb923c");
-                halo.setAttribute("stroke-width", "1.5");
-                halo.setAttribute("stroke-dasharray", "3,2");
-                g.appendChild(halo);
+                haloR = w.r + 3.8 + Math.sin(simNowMs * 0.008 + w.x) * 1.8;
+                haloStroke = "#fb923c";
             }
 
-            drawWbcNucleus(g, w.subtype, w.r);
-            activeWbcLayer.appendChild(g);
+            renderPooledWbcSphere(w.x, w.y, w.r, w.subtype, (w.alpha || 1).toFixed(2), strokeColor, isLymph ? "2.2" : "1.5", haloR, haloStroke);
 
             let labelText;
             if (w.state === 'lymph_draining') {
@@ -4278,7 +4950,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 p.laneOffset = (Math.random() - 0.5);
             }
 
-            const targetBranchObj = BRANCHES.find(b => b.id === p.branchId) || BRANCHES[1];
+            const targetBranchObj = BRANCH_MAP[p.branchId] || BRANCHES[1];
             const branchY = targetBranchObj.targetY;
 
             // Safe spread inside arteriole: strictly contained within arteriole boundaries (x < BRANCH_START_X)
@@ -4299,116 +4971,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 p.y = endY;
             }
 
-            p.el.setAttribute("cx", p.x);
-            p.el.setAttribute("cy", p.y);
+            p.el.setAttribute("cx", p.x.toFixed(1));
+            if (Math.abs(p.y - (p.lastY || -999)) > 0.05) {
+                p.el.setAttribute("cy", p.y.toFixed(1));
+                p.lastY = p.y;
+            }
         });
 
         // ----------------------------------------------------
         // M. Nerve Pain Pulses (Distributed Dermal Plexus)
         // ----------------------------------------------------
-        function evalCubicBezier(p0, p1, p2, p3, t) {
-            const mt = 1 - t;
-            const mt2 = mt * mt;
-            const t2 = t * t;
-            return {
-                x: mt2 * mt * p0.x + 3 * mt2 * t * p1.x + 3 * mt * t2 * p2.x + t2 * t * p3.x,
-                y: mt2 * mt * p0.y + 3 * mt2 * t * p1.y + 3 * mt * t2 * p2.y + t2 * t * p3.y
-            };
-        }
-
-        function getNervePulseCoord(idx, prog) {
-            if (prog >= 0.45) {
-                const t = (prog - 0.45) / 0.55;
-                return evalCubicBezier(
-                    { x: 318, y: 160 },
-                    { x: 260, y: 200 },
-                    { x: 100, y: 245 },
-                    { x: -10, y: 240 },
-                    t
-                );
-            }
-
-            const t = prog / 0.45;
-            if (idx === 0) {
-                // Path 0: From Terminal 1 (175, 78) in interstitial space -> Junction (318, 160)
-                return evalCubicBezier(
-                    { x: 175, y: 78 },
-                    { x: 175, y: 130 },
-                    { x: 260, y: 160 },
-                    { x: 318, y: 160 },
-                    t
-                );
-            } else if (idx === 1) {
-                // Path 1: From Terminal 2 (318, 76) in interstitial space -> Junction (318, 160)
-                return evalCubicBezier(
-                    { x: 318, y: 76 },
-                    { x: 318, y: 105 },
-                    { x: 318, y: 135 },
-                    { x: 318, y: 160 },
-                    t
-                );
-            } else if (idx === 2) {
-                // Path 2: From Terminal 3 (462, 78) -> (462, 160) -> Junction (318, 160)
-                if (t < 0.5) {
-                    const subT = t / 0.5;
-                    return evalCubicBezier(
-                        { x: 462, y: 78 },
-                        { x: 460, y: 105 },
-                        { x: 462, y: 135 },
-                        { x: 462, y: 160 },
-                        subT
-                    );
-                } else {
-                    const subT = (t - 0.5) / 0.5;
-                    return evalCubicBezier(
-                        { x: 462, y: 160 },
-                        { x: 415, y: 160 },
-                        { x: 365, y: 160 },
-                        { x: 318, y: 160 },
-                        subT
-                    );
-                }
-            } else {
-                // Path 3: From Terminal 5 (608, 78) -> (608, 140) -> (462, 160) -> Junction (318, 160)
-                if (t < 0.35) {
-                    const subT = t / 0.35;
-                    return evalCubicBezier(
-                        { x: 608, y: 78 },
-                        { x: 606, y: 95 },
-                        { x: 612, y: 120 },
-                        { x: 608, y: 140 },
-                        subT
-                    );
-                } else if (t < 0.7) {
-                    const subT = (t - 0.35) / 0.35;
-                    return evalCubicBezier(
-                        { x: 608, y: 140 },
-                        { x: 580, y: 160 },
-                        { x: 535, y: 160 },
-                        { x: 462, y: 160 },
-                        subT
-                    );
-                } else {
-                    const subT = (t - 0.7) / 0.3;
-                    return evalCubicBezier(
-                        { x: 462, y: 160 },
-                        { x: 415, y: 160 },
-                        { x: 365, y: 160 },
-                        { x: 318, y: 160 },
-                        subT
-                    );
-                }
-            }
-        }
-
         if (activeEffects.has('pain')) {
-            const isFlicker = Math.floor(Date.now() / 150) % 2 === 0;
+            nervePainActiveLast = true;
+            const isFlicker = Math.floor(simNowMs / 150) % 2 === 0;
             const nerveColor = isFlicker ? "#ff4d4f" : "#ffd43b";
             nerveTrunk.setAttribute("stroke", nerveColor);
             nerveBranches.forEach(b => b.setAttribute("stroke", nerveColor));
             nerveTerminals.forEach(t => {
                 t.setAttribute("fill", "#ff4d4f");
-                t.setAttribute("r", (5.5 + Math.sin(Date.now() / 80) * 1.5).toFixed(1));
+                t.setAttribute("r", (5.5 + Math.sin(simNowMs / 80) * 1.5).toFixed(1));
             });
 
             pulses.forEach((p, idx) => {
@@ -4419,7 +5000,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 p.setAttribute("cx", pt.x.toFixed(1));
                 p.setAttribute("cy", pt.y.toFixed(1));
             });
-        } else {
+        } else if (nervePainActiveLast) {
+            nervePainActiveLast = false;
             nerveTrunk.setAttribute("stroke", "#ffd43b");
             nerveBranches.forEach(b => b.setAttribute("stroke", "#ffd43b"));
             nerveTerminals.forEach(t => {
@@ -4448,8 +5030,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // ----------------------------------------------------
-        // N. Real-time Status Board
+        // N. Real-time Status Board & Pool Finalization
         // ----------------------------------------------------
+        finalizeAllSvgPools();
         updateStats();
     }
 
@@ -4459,10 +5042,13 @@ document.addEventListener('DOMContentLoaded', () => {
         speedAccum += simSpeed;
         if (speedAccum < 1.0) return;
 
-        while (speedAccum >= 1.0) {
+        let steps = 0;
+        while (speedAccum >= 1.0 && steps < 2) {
             speedAccum -= 1.0;
             stepSimulation();
+            steps++;
         }
+        if (speedAccum > 2.0) speedAccum = 0;
     }
 
     // Helper functions for WBC rendering
@@ -4797,10 +5383,15 @@ document.addEventListener('DOMContentLoaded', () => {
         vaccineState = { bacteria: false, virus: false };
         immuneSurveillanceTimer = 0;
         lymphNodeState = { active: false, antigenType: null, timer: 0, duration: 200 };
-        const statLymphPill = document.getElementById('stat-lymph-pill');
         if (statLymphPill) statLymphPill.style.display = 'none';
         bacterialEncounterOccurred = false;
         viralEncounterOccurred = false;
+        if (scabPathEl) scabPathEl.style.display = 'none';
+        if (fibrinMeshBuilt) fibrinMeshLayer.style.display = 'none';
+        if (plateletPlugBuilt) plateletPlugLayer.style.display = 'none';
+        if (exposedCollagenPathEl) exposedCollagenPathEl.style.display = 'none';
+        resetAllSvgPools();
+        finalizeAllSvgPools();
         updateVaccineUI();
         initMucosaChemicals();
         initTissueSites();
