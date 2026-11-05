@@ -63,6 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Info & Controls
     const stageTitle = document.getElementById('stage-title');
+    const stageStatusContainer = document.getElementById('stage-status-container');
     const stageDesc = document.getElementById('stage-desc');
     const mechanismDesc = document.getElementById('mechanism-desc');
     const toggleButtons = document.querySelectorAll('.stage-btn.toggle-btn');
@@ -74,6 +75,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const labelToggleFluid = document.getElementById('label-toggle-fluid');
     const fluidTankBgLayer = document.getElementById('fluid-tank-bg-layer');
     const nerveNetworkGroup = document.getElementById('nerve-network');
+
+    function updateNerveDimming() {
+        if (!nerveNetworkGroup) return;
+        const shouldDim = (toggleDimNerveCheckbox && toggleDimNerveCheckbox.checked) || (toggleFluidCheckbox && toggleFluidCheckbox.checked);
+        nerveNetworkGroup.classList.toggle('dimmed', shouldDim);
+    }
 
     let simSpeed = 1.0;
     let speedAccum = 0;
@@ -105,15 +112,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
         }
-        // 2. Seed a few upward-filtering plasma droplets at capillary endothelial gaps (Inlet pipe)
-        const sampleGaps = [230, 340, 470, 590, 720];
+        // 2. Seed a few upward-filtering plasma droplets precisely at capillary endothelial intercellular gaps (Inlet pipe)
+        const sampleGaps = [214.1, 285.4, 356.7, 428.0, 499.3, 570.6, 641.9, 713.2, 784.5];
         sampleGaps.forEach(gx => {
             const targetY = 85 + Math.random() * 150;
             fluidDroplets.push({
                 state: 'inlet_filtering',
-                x: gx + (Math.random() - 0.5) * 8,
-                y: 306 - Math.random() * 25,
-                startY: 318,
+                gapX: gx,
+                x: gx,
+                y: 310 - Math.random() * 20,
+                startY: 320,
+                baseR: 2.7,
                 targetTankY: targetY,
                 vx: (Math.random() - 0.5) * 0.28, // strictly symmetric, zero rightward bias!
                 vy: -(0.85 + Math.random() * 0.35),
@@ -1797,7 +1806,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             targetExtravasateX: 220 + Math.random() * 560,
                             stage: 'circulation',
                             life: 520,
-                            isSecondary: true
+                            isSecondary: true,
+                            targetType: agType
                         });
                     }
                 } else {
@@ -1865,47 +1875,11 @@ document.addEventListener('DOMContentLoaded', () => {
             tankPool.setAttribute("opacity", (0.85 + swellingLevel * 0.15).toFixed(2));
             fluidTankBgLayer.appendChild(tankPool);
 
-            // B) Top Watertight Lid Bar (基底膜與上皮屏障封蓋)
-            const lidSeal = document.createElementNS("http://www.w3.org/2000/svg", "path");
-            lidSeal.setAttribute("d", juncD);
-            lidSeal.setAttribute("stroke", "#38bdf8");
-            lidSeal.setAttribute("stroke-width", "3.2");
-            lidSeal.setAttribute("fill", "none");
-            lidSeal.setAttribute("opacity", "0.85");
-            fluidTankBgLayer.appendChild(lidSeal);
+            // B) Top Watertight Lid Bar (removed)
 
-            // C) Standing Liquid Level Ripples inside the Water Tank (Horizontal standing waves, NO rightward stream!)
-            const waveOffsets = [12, 55, 115, 175, 230];
-            waveOffsets.forEach((yOff, wIdx) => {
-                let waveD = '';
-                const maxX = yOff > 190 ? 865 : 980;
-                for (let wx = 20; wx <= maxX; wx += 25) {
-                    const baseLidY = 55 + getSkinSurfaceY(wx, swellingLevel) - 2;
-                    // Standing wave oscillation (bobbing vertically in place, not marching toward lymphatics)
-                    const standingWave = Math.sin(wx * 0.035 + wIdx * 1.3) * Math.cos(nowMs * 0.0028 + wIdx * 0.8) * (wIdx === 0 ? 2.5 : 3.2);
-                    const wy = Math.min(294, baseLidY + yOff + standingWave);
-                    waveD += (wx === 20 ? 'M ' : 'L ') + wx + ' ' + wy.toFixed(1) + ' ';
-                }
-                const wavePath = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                wavePath.setAttribute("d", waveD.trim());
-                wavePath.setAttribute("stroke", wIdx === 0 ? "#7dd3fc" : "rgba(186, 230, 253, 0.35)");
-                wavePath.setAttribute("stroke-width", wIdx === 0 ? "1.8" : "1.2");
-                if (wIdx > 0) wavePath.setAttribute("stroke-dasharray", "8,6");
-                wavePath.setAttribute("fill", "none");
-                fluidTankBgLayer.appendChild(wavePath);
-            });
+            // C) Standing waves (removed)
 
-            // D) Water Tank Side Wall Frame & Level Gauge (Left wall & Right wall above lymphatic outlet pipe)
-            const leftTopY = 55 + getSkinSurfaceY(14, swellingLevel) + 2;
-            const rightTopY = 55 + getSkinSurfaceY(868, swellingLevel) + 2;
-            const tankWalls = document.createElementNS("http://www.w3.org/2000/svg", "path");
-            // Left bracket (x=14, y: leftTopY..296) and Right tank wall (x=868, y: rightTopY..246 right above lymphatic pipe!)
-            tankWalls.setAttribute("d", `M 24 ${leftTopY} L 14 ${leftTopY} L 14 296 L 24 296 M 858 ${rightTopY} L 868 ${rightTopY} L 868 246 L 858 246`);
-            tankWalls.setAttribute("stroke", "#38bdf8");
-            tankWalls.setAttribute("stroke-width", "2");
-            tankWalls.setAttribute("fill", "none");
-            tankWalls.setAttribute("opacity", "0.75");
-            fluidTankBgLayer.appendChild(tankWalls);
+            // D) Side wall frame (removed)
 
             // E) Cell-Bathing Ripples around Living Tissue Cells (組織液浸潤細胞交換物質)
             tissueSites.forEach((site, sIdx) => {
@@ -1929,7 +1903,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // F) Spawn & Update 3-Phase Fluid Droplets (1: Inlet Capillary Filtration, 2: Isotropic Tank Bathing, 3: Lymphatic Overflow)
             fluidSpawnTimer++;
             const spawnInterval = isEdema ? 7 : 13;
-            const filtrationGaps = [230, 280, 340, 410, 470, 590, 650, 720, 780];
+            // filtrationGaps replaced with exact endothelial intercellular gaps
 
             if (fluidSpawnTimer >= spawnInterval) {
                 fluidSpawnTimer = 0;
@@ -1938,18 +1912,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 const bathingCount = fluidDroplets.filter(d => d.state === 'tank_bathing' || d.state === 'inlet_filtering').length;
                 const maxTankDroplets = isEdema ? 74 : 52;
                 if (bathingCount < maxTankDroplets) {
-                    const gx = filtrationGaps[Math.floor(Math.random() * filtrationGaps.length)];
+                    // Exact endothelial intercellular gap centers along the upper capillary wall (y=320)
+                    const endoIntercellularGaps = [214.1, 249.7, 285.4, 321.0, 356.7, 392.3, 428.0, 463.6, 499.3, 534.9, 570.6, 606.2, 641.9, 677.6, 713.2, 748.9, 784.5, 820.2];
+                    const gx = endoIntercellularGaps[Math.floor(Math.random() * endoIntercellularGaps.length)];
                     const lidAtGx = 55 + getSkinSurfaceY(gx, swellingLevel) + 12;
                     const targetY = lidAtGx + Math.random() * (245 - lidAtGx);
+                    const dropletRadius = 2.7 + Math.random() * 0.6;
                     fluidDroplets.push({
                         state: 'inlet_filtering',
-                        x: gx + (Math.random() - 0.5) * (isEdema ? 12 : 6),
-                        y: 316,
-                        startY: 316,
+                        gapX: gx,
+                        x: gx, // Centers exactly within the intercellular cleft
+                        y: 320, // Originates inside capillary lumen right below endothelial gap
+                        startY: 320,
                         targetTankY: targetY,
-                        vx: (Math.random() - 0.5) * 0.34, // Strictly symmetric left/right fan-out, ZERO rightward bias!
+                        vx: (Math.random() - 0.5) * 0.30,
                         vy: -(0.9 + Math.random() * 0.45) * (isEdema ? 1.25 : 1.0),
-                        r: 2.7 + Math.random() * 0.7,
+                        r: dropletRadius,
+                        baseR: dropletRadius,
                         wanderAngle: Math.random() * Math.PI * 2,
                         phase: Math.random() * Math.PI * 2,
                         life: 260 + Math.floor(Math.random() * 140),
@@ -1973,15 +1952,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            // Render upward filtration arrows at capillary gaps (Inlet Pipe indicators)
-            const indicatorGaps = [230, 340, 470, 590, 720];
+            // Render upward filtration arrows directly emerging through endothelial intercellular gaps (Inlet cleft indicators)
+            const indicatorGaps = [214.1, 285.4, 356.7, 428.0, 499.3, 570.6, 641.9, 713.2, 784.5];
             indicatorGaps.forEach((gx, idx) => {
-                const bob = Math.sin(nowMs * 0.005 + idx) * 2.5;
-                const ay = 304 + bob;
+                const bob = Math.sin(nowMs * 0.005 + idx) * 2.2;
+                const ay = 306 + bob; // Just above endothelial cleft line (y: 312..320)
                 const arrow = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                arrow.setAttribute("d", `M ${gx} ${ay + 7} L ${gx} ${ay - 4} M ${gx - 3.5} ${ay} L ${gx} ${ay - 4.5} L ${gx + 3.5} ${ay}`);
-                arrow.setAttribute("stroke", "#fde047");
-                arrow.setAttribute("stroke-width", "1.6");
+                arrow.setAttribute("d", `M ${gx} ${ay + 6} L ${gx} ${ay - 3} M ${gx - 3} ${ay} L ${gx} ${ay - 3.5} L ${gx + 3} ${ay}`);
+                arrow.setAttribute("stroke", "#38bdf8");
+                arrow.setAttribute("stroke-width", "1.5");
                 arrow.setAttribute("stroke-linecap", "round");
                 arrow.setAttribute("fill", "none");
                 arrow.setAttribute("opacity", "0.78");
@@ -1993,22 +1972,37 @@ document.addEventListener('DOMContentLoaded', () => {
                 const d = fluidDroplets[i];
 
                 if (d.state === 'inlet_filtering') {
-                    // Rising vertically from capillary into the dermal water tank
-                    d.x += d.vx * simSpeed;
+                    // Squeezing through endothelial cell junction cleft (y: 320 -> 310) then rising into dermal tissue
                     d.y += d.vy * simSpeed;
 
-                    const riseSpan = Math.max(20, d.startY - d.targetTankY);
-                    const prog = Math.max(0, Math.min(1, (d.startY - d.y) / riseSpan));
+                    if (d.y >= 310) {
+                        // Squeezing through tight endothelial intercellular cleft: lock horizontal X strictly to gap center!
+                        d.x = d.gapX || d.x;
+                    } else {
+                        // Once emerged into interstitial space (y < 310): fan out naturally into tissue
+                        d.x += d.vx * simSpeed;
+                    }
 
-                    // Color transition: Golden Plasma (#ffd43b) -> Aqua Interstitial Fluid (#7dd3fc)
-                    const isStillPlasma = d.y > 286 || prog < 0.28;
-                    const fillCol = isStillPlasma ? "#ffd43b" : "#7dd3fc";
-                    const strokeCol = isStillPlasma ? "#f59e0b" : "#38bdf8";
+                    // Squeezing elongation effect while traversing the endothelial junction cleft
+                    const isPassingCleft = d.y >= 309 && d.y <= 321;
+                    const rX = isPassingCleft ? Math.max(1.3, (d.baseR || 2.7) * 0.65) : (d.baseR || 2.7);
+                    const rY = isPassingCleft ? ((d.baseR || 2.7) * 1.45) : (d.baseR || 2.7);
 
-                    const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                    const fillCol = "#7dd3fc";
+                    const strokeCol = "#38bdf8";
+
+                    const c = isPassingCleft 
+                        ? document.createElementNS("http://www.w3.org/2000/svg", "ellipse")
+                        : document.createElementNS("http://www.w3.org/2000/svg", "circle");
+
                     c.setAttribute("cx", d.x.toFixed(1));
                     c.setAttribute("cy", d.y.toFixed(1));
-                    c.setAttribute("r", d.r.toFixed(1));
+                    if (isPassingCleft) {
+                        c.setAttribute("rx", rX.toFixed(1));
+                        c.setAttribute("ry", rY.toFixed(1));
+                    } else {
+                        c.setAttribute("r", rX.toFixed(1));
+                    }
                     c.setAttribute("fill", fillCol);
                     c.setAttribute("stroke", strokeCol);
                     c.setAttribute("stroke-width", "0.8");
@@ -2018,6 +2012,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (d.y <= d.targetTankY) {
                         d.state = 'tank_bathing';
                         d.wanderAngle = Math.random() * Math.PI * 2;
+                        d.r = d.baseR || 2.7;
                     }
                 } else if (d.state === 'tank_bathing') {
                     // Isotropic diffusion & cell-bathing inside the covered water tank (ZERO rightward drift!)
@@ -2112,8 +2107,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         continue;
                     }
 
-                    const fillCol = inLumen ? "#34d399" : "#5eead4";
-                    const strokeCol = inLumen ? "#059669" : "#14b8a6";
+                    // Draining fluid droplets in initial lymphatics maintain consistent light blue
+                    const fillCol = "#7dd3fc";
+                    const strokeCol = "#38bdf8";
                     const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
                     c.setAttribute("cx", d.x.toFixed(1));
                     c.setAttribute("cy", d.y.toFixed(1));
@@ -2125,40 +2121,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     extravasatedLayer.appendChild(c);
                 }
             }
-
-            // G) Render 3 Educational Water-Tank Callout Badges (Always visible when this toggle is active)
-            const renderTankBadge = (text, bx, by, bgCol, borderCol, textCol = '#ffffff') => {
-                const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-                const approxW = text.length * 10.6 + 18;
-                const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-                rect.setAttribute("x", bx - approxW / 2);
-                rect.setAttribute("y", by - 10);
-                rect.setAttribute("width", approxW);
-                rect.setAttribute("height", 20);
-                rect.setAttribute("rx", 6);
-                rect.setAttribute("fill", bgCol);
-                rect.setAttribute("stroke", borderCol);
-                rect.setAttribute("stroke-width", "1.2");
-                const txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
-                txt.setAttribute("x", bx);
-                txt.setAttribute("y", by + 4);
-                txt.setAttribute("fill", textCol);
-                txt.setAttribute("font-size", "10.5");
-                txt.setAttribute("font-weight", "700");
-                txt.setAttribute("text-anchor", "middle");
-                txt.textContent = text;
-                g.appendChild(rect);
-                g.appendChild(txt);
-                extravasatedLayer.appendChild(g);
-            };
-
-            const midLidY = 55 + getSkinSurfaceY(460, swellingLevel);
-            const lidBadgeText = isEdema
-                ? "② 組織水腫：入水大於排水，組織液累積撐起表皮上蓋！"
-                : "② 組織間隙：血漿轉為「組織液(淺藍)」・漫流浸潤細胞";
-            renderTankBadge(lidBadgeText, 460, midLidY + 16, "rgba(12, 74, 110, 0.92)", "#38bdf8", "#e0f2fe");
-            renderTankBadge("⬆️ ① 入水管 (微血管)：血漿(黃)經內皮間隙向上濾出", 460, 290, "rgba(120, 53, 15, 0.92)", "#fbbf24", "#fef3c7");
-            renderTankBadge("➡️ ③ 出水管 (微淋巴管)：右側多餘組織液溢流回收成「淋巴(綠)」", 825, 232, "rgba(6, 78, 59, 0.94)", "#34d399", "#a7f3d0");
+            // (Educational water-tank badges removed)
         } else if (fluidTankBgLayer) {
             fluidTankBgLayer.setAttribute("opacity", "0");
         }
@@ -3510,7 +3473,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 1. Bacteria Humoral Memory Active
             if (vaccineState.bacteria) {
-                const tissueBac = bacteria.filter(b => b.inTissue && b.state !== 'lymph_draining');
+                const tissueBac = bacteria.filter(b => (b.inTissue || b.y >= getSkinSurfaceY(b.x, swellingLevel) - 8) && b.state !== 'lymph_draining');
                 const unopsonizedBac = tissueBac.filter(b => (b.abCount || 0) < 4);
                 const circBacAb = antibodies.filter(a => a.stage === 'circulation' && a.targetType === 'bacteria');
 
@@ -3552,7 +3515,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 2. Virus Humoral Memory Active
             if (vaccineState.virus) {
-                const tissueVir = freeViruses.filter(v => v.inTissue && v.state !== 'lymph_draining');
+                const tissueVir = freeViruses.filter(v => (v.inTissue || v.y >= getSkinSurfaceY(v.x, swellingLevel) - 8) && v.state !== 'lymph_draining');
                 const unneutralizedVir = tissueVir.filter(v => (v.abCount || 0) < 3);
                 const circVirAb = antibodies.filter(a => a.stage === 'circulation' && a.targetType === 'virus');
 
@@ -3626,13 +3589,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     const matchType = ab.targetType || 'bacteria';
                     const activeTargets = matchType === 'virus'
-                        ? freeViruses.filter(v => v.inTissue && v.state !== 'lymph_draining' && (v.abCount || 0) < 3)
-                        : bacteria.filter(b => b.inTissue && b.state !== 'lymph_draining' && (b.abCount || 0) < 4);
+                        ? freeViruses.filter(v => (v.inTissue || v.y >= getSkinSurfaceY(v.x, swellingLevel) - 8) && v.state !== 'lymph_draining' && (v.abCount || 0) < 3)
+                        : bacteria.filter(b => (b.inTissue || b.y >= getSkinSurfaceY(b.x, swellingLevel) - 8) && b.state !== 'lymph_draining' && (b.abCount || 0) < 4);
 
                     if (ab.targetExtravasateX && ab.x >= ab.targetExtravasateX) {
                         shouldExtravasate = true;
                     } else if (ab.x >= 180 && ab.x <= 880 && activeTargets.length > 0) {
-                        const nearby = activeTargets.find(t => Math.abs(t.x - ab.x) < 50);
+                        const nearby = activeTargets.find(t => Math.abs(t.x - ab.x) < 70);
                         if (nearby) {
                             shouldExtravasate = true;
                             matchedPathogen = nearby;
@@ -3690,8 +3653,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 4. Local Antigen Affinity & Chemotactic Sink:
                 const matchType = ab.targetType || 'bacteria';
                 const activeTargets = matchType === 'virus'
-                    ? freeViruses.filter(v => v.inTissue && v.state !== 'lymph_draining')
-                    : bacteria.filter(b => b.inTissue && b.state !== 'lymph_draining');
+                    ? freeViruses.filter(v => (v.inTissue || v.y >= getSkinSurfaceY(v.x, swellingLevel) - 8) && v.state !== 'lymph_draining')
+                    : bacteria.filter(b => (b.inTissue || b.y >= getSkinSurfaceY(b.x, swellingLevel) - 8) && b.state !== 'lymph_draining');
 
                 // Prioritize un-opsonized targets (< 3 antibodies bound) so antibodies distribute across ALL pathogens evenly
                 const unopsonized = activeTargets.filter(t => (t.abCount || 0) < 3);
@@ -3707,9 +3670,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
 
-                if (nearest && minDist < 120) {
-                    // Within 120px of pathogen: Fab epitope affinity field steers the antibody towards the target
-                    const affinityPull = Math.min(0.72, (1 - minDist / 120) * 0.55 + 0.18) * simSpeed;
+                if (nearest && minDist < 240) {
+                    // Within 240px of pathogen: Fab epitope affinity field steers the antibody towards the target
+                    const affinityPull = Math.min(1.4, (1 - minDist / 240) * 1.1 + 0.3) * simSpeed;
                     const dx = nearest.x - ab.x;
                     const dy = nearest.y - ab.y;
                     ab.vx += (dx / minDist) * affinityPull;
@@ -3722,7 +3685,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // 5. Stochastic Collision & High-Affinity Epitope Binding (Opsonization)
                 let collided = false;
-                if (nearest && minDist < ((nearest.r || 6.5) + 10.5)) {
+                if (nearest && minDist < ((nearest.r || 6.5) + 16.0)) {
                     nearest.abCount = (nearest.abCount || 0) + 1;
                     nearest.opsonized = true;
                     nearest.divideTimer = -999999;
@@ -3739,11 +3702,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     continue;
                 }
 
-                // 6. Dermal Boundaries: Keep within interstitial space rather than vanishing instantly!
-                const abTop = getDermisTopY(ab.x, swellingLevel) + 6;
-                if (ab.y < abTop) {
-                    ab.y = abTop;
-                    ab.vy = Math.abs(ab.vy) * 0.5; // Reflect off basement membrane
+                // 6. Dermal & Epidermal Boundaries: Allow chasing pathogens into upper epidermis/wound!
+                const skinY = getSkinSurfaceY(ab.x, swellingLevel);
+                const isNearSuperficialTarget = nearest && minDist < 150 && nearest.y <= (getDermisTopY(ab.x, swellingLevel) + 12);
+                const abTopLimit = isNearSuperficialTarget ? (skinY - 5) : (getDermisTopY(ab.x, swellingLevel) - 4);
+
+                if (ab.y < abTopLimit) {
+                    ab.y = abTopLimit;
+                    ab.vy = Math.abs(ab.vy) * 0.5; // Reflect off surface
                 }
                 if (ab.y > 320) {
                     ab.y = 320;
@@ -4605,12 +4571,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateStageCard() {
+        if (!stageStatusContainer) return;
         if (activeEffects.size === 0) {
-            stageTitle.textContent = "正常恆定狀態 (Homeostasis)";
-            stageDesc.textContent = "前毛細小動脈平滑肌維持正常張力，微血管腔狹窄，紅血球單行通過，組織液處於動態平衡。";
+            stageStatusContainer.style.display = "none";
+            stageTitle.textContent = "";
+            stageDesc.textContent = "";
             return;
         }
 
+        stageStatusContainer.style.display = "block";
         const titles = [];
         const descs = [];
 
@@ -4757,7 +4726,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (toggleDimNerveCheckbox && nerveNetworkGroup) {
         toggleDimNerveCheckbox.addEventListener('change', () => {
-            nerveNetworkGroup.classList.toggle('dimmed', toggleDimNerveCheckbox.checked);
+            updateNerveDimming();
+        });
+    }
+
+    if (toggleLabelsCheckbox) {
+        toggleLabelsCheckbox.addEventListener('change', () => {
+            const anatomyGroup = document.getElementById('anatomy-annotations');
+            if (anatomyGroup) anatomyGroup.style.display = toggleLabelsCheckbox.checked ? '' : 'none';
         });
     }
 
@@ -4767,10 +4743,16 @@ document.addEventListener('DOMContentLoaded', () => {
             if (labelToggleFluid) labelToggleFluid.classList.toggle('active', fluidCirculationEnabled);
             if (fluidCirculationEnabled) {
                 initFluidTankDroplets();
-                updateLog("💧 <strong>【已開啟組織液與淋巴循環）】</strong>① <strong>入水管（微血管）</strong>：血漿經內皮間隙向上濾出轉為<strong>組織液</strong>；② <strong>組織間隙</strong>：組織液蓄滿並在細胞間漫流浸潤（非直接衝向淋巴管）；③ <strong>出水管（微淋巴管）</strong>：右側多餘組織液經單向瓣膜溢流回收成為<strong>淋巴液</strong>！");
+                tissueBg.classList.add('fluid-active');
+                if (collagenFibersGroup) collagenFibersGroup.classList.add('fluid-active');
+                updateNerveDimming();
+                updateLog("💧 <strong>【已開啟組織液與淋巴循環】</strong>血漿經微血管<strong>內皮細胞間隙（Intercellular Clefts）</strong>濾出為組織液，漫流浸潤並滋養周圍細胞，多餘組織液經微淋巴管盲端單向瓣膜溢流回收為淋巴液！");
             } else {
                 fluidDroplets = [];
-                updateLog("⏸️ <strong>【已關閉組織液與淋巴循環視圖】</strong>隱藏水箱液體層與微粒，方便專注觀察發炎與免疫細胞反應。");
+                tissueBg.classList.remove('fluid-active');
+                if (collagenFibersGroup) collagenFibersGroup.classList.remove('fluid-active');
+                updateNerveDimming();
+                updateLog("⏸️ <strong>【已關閉組織液與淋巴循環視圖】</strong>隱藏組織液與微粒，方便專注觀察發炎與免疫細胞反應。");
             }
         });
     }
@@ -4806,6 +4788,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (toggleFluidCheckbox) toggleFluidCheckbox.checked = false;
         if (labelToggleFluid) labelToggleFluid.classList.remove('active');
         fluidCirculationEnabled = false;
+        tissueBg.classList.remove('fluid-active');
+        if (collagenFibersGroup) collagenFibersGroup.classList.remove('fluid-active');
+        updateNerveDimming();
+        const anatomyGroup = document.getElementById('anatomy-annotations');
+        if (anatomyGroup) anatomyGroup.style.display = 'none';
         fluidDroplets = [];
         vaccineState = { bacteria: false, virus: false };
         immuneSurveillanceTimer = 0;

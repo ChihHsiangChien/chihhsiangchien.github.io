@@ -3,27 +3,61 @@ window.onload = function () {
     let renderer, scene, camera;
     let world;
     let particles = [];
-    let particleCount = 200;
+    let particleCount = 240;
     const particleRadius = 0.52;
     const tubeRadius = 4;
 
+    // 攝影機軌道控制參數（標準 OrbitControls 航向-俯仰角球座標模型：永遠維持世界 Y 軸向上，旋轉不歪斜翻轉）
+    const orbitTarget = new THREE.Vector3(0, -4, 0);
+    const spherical = {
+        radius: 80,
+        theta: Math.PI / 2,
+        phi: Math.PI / 2 - 0.28
+    };
+
+    function updateCameraFromSpherical() {
+        const sinPhiRadius = spherical.radius * Math.sin(spherical.phi);
+        camera.position.x = orbitTarget.x + sinPhiRadius * Math.cos(spherical.theta);
+        camera.position.y = orbitTarget.y + spherical.radius * Math.cos(spherical.phi);
+        camera.position.z = orbitTarget.z + sinPhiRadius * Math.sin(spherical.theta);
+        camera.up.set(0, 1, 0);
+        camera.lookAt(orbitTarget);
+    }
+
+    function initCameraSpherical(x, y, z, tx, ty, tz) {
+        orbitTarget.set(tx, ty, tz);
+        const dx = x - tx;
+        const dy = y - ty;
+        const dz = z - tz;
+        spherical.radius = Math.max(25, Math.min(180, Math.sqrt(dx * dx + dy * dy + dz * dz)));
+        spherical.phi = Math.acos(Math.max(-1, Math.min(1, dy / spherical.radius)));
+        spherical.theta = Math.atan2(dz, dx);
+        updateCameraFromSpherical();
+    }
+
     const compressionFactor = 0.35; // 壓縮時管徑收縮幅度更明顯
     const compressionSpeed = 0.08;  // 平滑自然的收縮/舒張動畫速度
-    const tubeLength = 170;         // 延長血管總長 (-85 到 +85)，大幅擴展動脈脈搏波傳播距離
-    const halfTubeLength = tubeLength / 2;
-    const compressionLength = 30;   // 中央心室壓縮區長度 (-15 到 +15)
+
+    // 單一 V 型心管單元長度 (-60 到 +60，共 120 單位)
+    const tubeLength = 120;
+    const halfTubeLength = tubeLength / 2; // 60
+    const compressionLength = 30;          // 中央心室壓縮區長度 (-15 到 +15)
     const halfCompressionLength = compressionLength / 2;
     const centralSectionZ = 0;
 
-    // 心房囊袋（靜脈竇 Sinus Venosus / Atrium）參數：位於後瓣膜 (+16) 上游入口處 (z = +16.5 ~ +44.5)
-    const atriumLength = 28;
+    // 心房囊袋（靜脈竇 Sinus Venosus / Atrium）參數：位於後瓣膜 (+16) 上游入口處 (u = +16.5 ~ +42.5)
+    const atriumLength = 26;
     const halfAtriumLength = atriumLength / 2;
-    const atriumCenterZ = 30.5;
+    const atriumCenterZ = 29.5;
     const atriumZMin = atriumCenterZ - halfAtriumLength; // +16.5
-    const atriumZMax = atriumCenterZ + halfAtriumLength; // +44.5
+    const atriumZMax = atriumCenterZ + halfAtriumLength; // +42.5
     const atriumMaxBulgeFactor = 0.92; // 囊袋最大膨大倍率（半徑可達原本的 ~1.92 倍）
 
-    // 物理剛體與視覺網格
+    // 動脈彈性脈搏波區段參數 (u = -60 ~ -16，長度 44)
+    const arteryLength = halfTubeLength - (halfCompressionLength + 1); // 60 - 16 = 44
+    const arteryCenterZ = -(halfCompressionLength + 1 + arteryLength / 2); // -38.0
+
+    // 物理剛體與視覺網格（支援單一管或左右雙心管共 2 組前瓣膜 + 2 組後瓣膜）
     let frontValveBodies = [], backValveBodies = [];
     let frontValveMeshes = [], backValveMeshes = [];
 
@@ -34,36 +68,544 @@ window.onload = function () {
 
     let frontValveEnabled = false;
     let backValveEnabled = false;
-    let regurgitationEnabled = false; // 模擬瓣膜關閉不全 / 逆流 (Valvular Regurgitation)
+    let regurgitationEnabled = false;
     let atriumEnabled = false;
-    let atriumCurrentBulge = 0; // 0 (未膨大普通血管) ~ 1+ (心房囊袋充盈膨大)
+    let atriumCurrentBulge = 0;
 
-    // 連續壓縮（規律自動搏動）狀態
+    // 兩階段演化/組裝控制：
+    // 1. bendEnabled: 控制單根心管是否產生 V 型彎折 (0 = 水平直管, 1 = V 型心室彎折)
+    // 2. dualHeartEnabled: 控制是否組合兩組反向對稱的 V 型心管並使動脈與對側靜脈連接成閉鎖循環
+    let bendEnabled = false;
+    let currentBend = 0.0;
+    let targetBend = 0.0;
+    let dualHeartEnabled = false;
+
+    const MAX_SPINE_SAMPLES = 1200;
+    const SPINE_S_STEP = 0.5;
+    let spineCount = 240;
+    let loopTotalLength = 120;
+    let seg1StartS = 120;
+    let seg2StartS = 180;
+    let seg3StartS = 300;
+
+    const spineCx = new Float32Array(MAX_SPINE_SAMPLES);
+    const spineCy = new Float32Array(MAX_SPINE_SAMPLES);
+    const spineCz = new Float32Array(MAX_SPINE_SAMPLES);
+    const spineTx = new Float32Array(MAX_SPINE_SAMPLES);
+    const spineTy = new Float32Array(MAX_SPINE_SAMPLES);
+    const spineTz = new Float32Array(MAX_SPINE_SAMPLES);
+    const spineUx = new Float32Array(MAX_SPINE_SAMPLES);
+    const spineUy = new Float32Array(MAX_SPINE_SAMPLES);
+    const spineUz = new Float32Array(MAX_SPINE_SAMPLES);
+    const spineVx = new Float32Array(MAX_SPINE_SAMPLES);
+    const spineVy = new Float32Array(MAX_SPINE_SAMPLES);
+    const spineVz = new Float32Array(MAX_SPINE_SAMPLES);
+    const spineAlpha = new Float32Array(MAX_SPINE_SAMPLES);
+
+    const tempSpine = { cx: 0, cy: 0, cz: 0, tx: 0, ty: 0, tz: 1, ux: 0, uy: 1, uz: 0, vx: 1, vy: 0, vz: 0, alpha: 0 };
+    const tempSpinePrev = { cx: 0, cy: 0, cz: 0, tx: 0, ty: 0, tz: 1, ux: 0, uy: 1, uz: 0, vx: 1, vy: 0, vz: 0, alpha: 0 };
+    const tempSpineProj = { cx: 0, cy: 0, cz: 0, tx: 0, ty: 0, tz: 1, ux: 0, uy: 1, uz: 0, vx: 1, vy: 0, vz: 0, alpha: 0 };
+
+    function wrapLoopS(s) {
+        if (!dualHeartEnabled) {
+            return Math.max(0, Math.min(loopTotalLength, s));
+        }
+        let r = s % loopTotalLength;
+        if (r < 0) r += loopTotalLength;
+        return r;
+    }
+
+    function getSpineAngleAtU(u, bend) {
+        if (bend <= 0.00001) return 0;
+        const turnScale = 6.8;
+        if (u >= 0) {
+            const baseInflow = 1.32 * Math.tanh(u / turnScale);
+            const topCurveIn = 0.32 * Math.max(0, (u - 24) / 32);
+            return bend * (baseInflow + topCurveIn);
+        } else {
+            const arterialMaxAngle = 1.24; // ~71° 陡峭筆直斜向高射
+            return bend * arterialMaxAngle * Math.tanh(u / turnScale);
+        }
+    }
+
+    function sampleCubicBezierByArcLength(p0, p1, p2, p3, step) {
+        const fineSteps = 160;
+        const ptsX = new Float32Array(fineSteps + 1);
+        const ptsY = new Float32Array(fineSteps + 1);
+        const ptsZ = new Float32Array(fineSteps + 1);
+        const cumLen = new Float32Array(fineSteps + 1);
+
+        for (let i = 0; i <= fineSteps; i++) {
+            const t = i / fineSteps;
+            const mt = 1 - t;
+            const b0 = mt * mt * mt;
+            const b1 = 3 * mt * mt * t;
+            const b2 = 3 * mt * t * t;
+            const b3 = t * t * t;
+            ptsX[i] = b0 * p0.x + b1 * p1.x + b2 * p2.x + b3 * p3.x;
+            ptsY[i] = b0 * p0.y + b1 * p1.y + b2 * p2.y + b3 * p3.y;
+            ptsZ[i] = b0 * p0.z + b1 * p1.z + b2 * p2.z + b3 * p3.z;
+            if (i > 0) {
+                const dx = ptsX[i] - ptsX[i - 1];
+                const dy = ptsY[i] - ptsY[i - 1];
+                const dz = ptsZ[i] - ptsZ[i - 1];
+                cumLen[i] = cumLen[i - 1] + Math.sqrt(dx * dx + dy * dy + dz * dz);
+            }
+        }
+
+        const totalArc = cumLen[fineSteps];
+        const numSegments = Math.max(12, Math.round(totalArc / step));
+        const resX = new Float32Array(numSegments);
+        const resY = new Float32Array(numSegments);
+        const resZ = new Float32Array(numSegments);
+
+        let searchIdx = 0;
+        for (let k = 0; k < numSegments; k++) {
+            const targetD = (k / numSegments) * totalArc;
+            while (searchIdx < fineSteps - 1 && cumLen[searchIdx + 1] < targetD) {
+                searchIdx++;
+            }
+            const segLen = Math.max(0.00001, cumLen[searchIdx + 1] - cumLen[searchIdx]);
+            const frac = (targetD - cumLen[searchIdx]) / segLen;
+            resX[k] = ptsX[searchIdx] + (ptsX[searchIdx + 1] - ptsX[searchIdx]) * frac;
+            resY[k] = ptsY[searchIdx] + (ptsY[searchIdx + 1] - ptsY[searchIdx]) * frac;
+            resZ[k] = ptsZ[searchIdx] + (ptsZ[searchIdx + 1] - ptsZ[searchIdx]) * frac;
+        }
+
+        return {
+            x: resX,
+            y: resY,
+            z: resZ,
+            count: numSegments,
+            length: numSegments * step
+        };
+    }
+
+    // 使用平行傳輸 (Bishop Parallel Transport) 計算頂端連接圓弧的無扭結截面基底 (U, V)，徹底消除切線平行於 X 軸時的截面翻轉與擠壓
+    function transportArchFrame(startIdx, endIdx) {
+        const span = endIdx - startIdx;
+        if (span <= 1) return;
+
+        const tmpUx = new Float32Array(span + 1);
+        const tmpUy = new Float32Array(span + 1);
+        const tmpUz = new Float32Array(span + 1);
+        const tmpVx = new Float32Array(span + 1);
+        const tmpVy = new Float32Array(span + 1);
+        const tmpVz = new Float32Array(span + 1);
+
+        tmpUx[0] = spineUx[startIdx];
+        tmpUy[0] = spineUy[startIdx];
+        tmpUz[0] = spineUz[startIdx];
+        tmpVx[0] = spineVx[startIdx];
+        tmpVy[0] = spineVy[startIdx];
+        tmpVz[0] = spineVz[startIdx];
+
+        for (let step = 1; step <= span; step++) {
+            const idx = (startIdx + step) % spineCount;
+            const tx = spineTx[idx];
+            const ty = spineTy[idx];
+            const tz = spineTz[idx];
+
+            let ux = tmpUx[step - 1];
+            let uy = tmpUy[step - 1];
+            let uz = tmpUz[step - 1];
+            const dotUT = ux * tx + uy * ty + uz * tz;
+            ux -= dotUT * tx;
+            uy -= dotUT * ty;
+            uz -= dotUT * tz;
+            const uLen = Math.max(0.00001, Math.sqrt(ux * ux + uy * uy + uz * uz));
+            ux /= uLen;
+            uy /= uLen;
+            uz /= uLen;
+
+            tmpUx[step] = ux;
+            tmpUy[step] = uy;
+            tmpUz[step] = uz;
+            tmpVx[step] = uy * tz - uz * ty;
+            tmpVy[step] = uz * tx - ux * tz;
+            tmpVz[step] = ux * ty - uy * tx;
+        }
+
+        const endMod = endIdx % spineCount;
+        const targetUx = spineUx[endMod];
+        const targetUy = spineUy[endMod];
+        const targetUz = spineUz[endMod];
+
+        const cosTheta = targetUx * tmpUx[span] + targetUy * tmpUy[span] + targetUz * tmpUz[span];
+        const sinTheta = targetUx * tmpVx[span] + targetUy * tmpVy[span] + targetUz * tmpVz[span];
+        const totalTwist = Math.atan2(sinTheta, cosTheta);
+
+        for (let step = 1; step < span; step++) {
+            const idx = (startIdx + step) % spineCount;
+            const theta = (step / span) * totalTwist;
+            const c = Math.cos(theta);
+            const s = Math.sin(theta);
+
+            spineUx[idx] = c * tmpUx[step] + s * tmpVx[step];
+            spineUy[idx] = c * tmpUy[step] + s * tmpVy[step];
+            spineUz[idx] = c * tmpUz[step] + s * tmpVz[step];
+            spineVx[idx] = -s * tmpUx[step] + c * tmpVx[step];
+            spineVy[idx] = -s * tmpUy[step] + c * tmpVy[step];
+            spineVz[idx] = -s * tmpUz[step] + c * tmpVz[step];
+        }
+    }
+
+    function rebuildSpineTable(bend) {
+        const heartSteps = Math.round(tubeLength / SPINE_S_STEP); // 240
+        const zeroIdx = Math.round(halfTubeLength / SPINE_S_STEP); // 120
+        const baseY = new Float32Array(heartSteps + 1);
+        const baseZ = new Float32Array(heartSteps + 1);
+
+        const baseApexY = -30.0 * bend;
+        baseY[zeroIdx] = baseApexY;
+        baseZ[zeroIdx] = 0;
+
+        for (let i = zeroIdx + 1; i <= heartSteps; i++) {
+            const uMid = -halfTubeLength + (i - 0.5) * SPINE_S_STEP;
+            const aMid = getSpineAngleAtU(uMid, bend);
+            baseY[i] = baseY[i - 1] + Math.sin(aMid) * SPINE_S_STEP;
+            baseZ[i] = baseZ[i - 1] + Math.cos(aMid) * SPINE_S_STEP;
+        }
+        for (let i = zeroIdx - 1; i >= 0; i--) {
+            const uMid = -halfTubeLength + (i + 0.5) * SPINE_S_STEP;
+            const aMid = getSpineAngleAtU(uMid, bend);
+            baseY[i] = baseY[i + 1] - Math.sin(aMid) * SPINE_S_STEP;
+            baseZ[i] = baseZ[i + 1] - Math.cos(aMid) * SPINE_S_STEP;
+        }
+
+        if (!dualHeartEnabled) {
+            for (let i = 0; i <= heartSteps; i++) {
+                spineCx[i] = 0;
+                spineCy[i] = baseY[i];
+                spineCz[i] = baseZ[i];
+
+                const u = -halfTubeLength + i * SPINE_S_STEP;
+                const a = getSpineAngleAtU(u, bend);
+                const sinA = Math.sin(a);
+                const cosA = Math.cos(a);
+                spineAlpha[i] = a;
+                spineTx[i] = 0;
+                spineTy[i] = sinA;
+                spineTz[i] = cosA;
+                spineUx[i] = 0;
+                spineUy[i] = cosA;
+                spineUz[i] = -sinA;
+                spineVx[i] = 1;
+                spineVy[i] = 0;
+                spineVz[i] = 0;
+            }
+            spineCount = heartSteps;
+            loopTotalLength = tubeLength;
+            seg1StartS = tubeLength;
+            seg2StartS = tubeLength;
+            seg3StartS = tubeLength;
+            return;
+        }
+
+        const xSep = 4.4;
+        const zApexOffset = 7.5 * bend;
+        const yDualSpread = 14.0 * (1 - bend);
+
+        const h0X = +xSep;
+        const h0Y = +yDualSpread;
+        const h1X = -xSep;
+        const h1Y = -yDualSpread;
+
+        const aArt = getSpineAngleAtU(-halfTubeLength, bend);
+        const aVein = getSpineAngleAtU(halfTubeLength, bend);
+
+        const p0Art = { x: h0X, y: baseY[0] + h0Y, z: +zApexOffset + baseZ[0] };
+        const p0Vein = { x: h0X, y: baseY[heartSteps] + h0Y, z: +zApexOffset + baseZ[heartSteps] };
+        const t0Art = { x: 0, y: Math.sin(aArt), z: Math.cos(aArt) };
+        const t0Vein = { x: 0, y: Math.sin(aVein), z: Math.cos(aVein) };
+
+        const p1Art = { x: h1X, y: baseY[0] + h1Y, z: -zApexOffset - baseZ[0] };
+        const p1Vein = { x: h1X, y: baseY[heartSteps] + h1Y, z: -zApexOffset - baseZ[heartSteps] };
+        const t1Art = { x: 0, y: Math.sin(aArt), z: -Math.cos(aArt) };
+        const t1Vein = { x: 0, y: Math.sin(aVein), z: -Math.cos(aVein) };
+
+        const handleLen = 10.5;
+        const archLift = 0.0;
+
+        // 左上方動靜脈連接弧 (連接 Heart 0 的靜脈 p0Vein -> Heart 1 的動脈 p1Art)
+        // 注意切線方向：s 增加方向在 p0Vein 為 +t0Vein (向上)，在 p1Art 為 +t1Art (向下進入 Heart 1)，因此 P2 需沿 -t1Art 往上延伸
+        const archLeftTop = sampleCubicBezierByArcLength(
+            p0Vein,
+            {
+                x: p0Vein.x + t0Vein.x * handleLen,
+                y: p0Vein.y + t0Vein.y * handleLen + archLift,
+                z: p0Vein.z + t0Vein.z * handleLen
+            },
+            {
+                x: p1Art.x - t1Art.x * handleLen,
+                y: p1Art.y - t1Art.y * handleLen + archLift,
+                z: p1Art.z - t1Art.z * handleLen
+            },
+            p1Art,
+            SPINE_S_STEP
+        );
+
+        // 右上方肺部微血管連接弧 (連接 Heart 1 的靜脈 p1Vein -> Heart 0 的動脈 p0Art)
+        // 注意切線方向：s 增加方向在 p1Vein 為 +t1Vein (向上)，在 p0Art 為 +t0Art (向下進入 Heart 0)，因此 P2 需沿 -t0Art 往上延伸
+        const archRightTop = sampleCubicBezierByArcLength(
+            p1Vein,
+            {
+                x: p1Vein.x + t1Vein.x * handleLen,
+                y: p1Vein.y + t1Vein.y * handleLen + archLift,
+                z: p1Vein.z + t1Vein.z * handleLen
+            },
+            {
+                x: p0Art.x - t0Art.x * handleLen,
+                y: p0Art.y - t0Art.y * handleLen + archLift,
+                z: p0Art.z - t0Art.z * handleLen
+            },
+            p0Art,
+            SPINE_S_STEP
+        );
+
+        let writeIdx = 0;
+
+        for (let i = 0; i < heartSteps; i++) {
+            spineCx[writeIdx] = h0X;
+            spineCy[writeIdx] = baseY[i] + h0Y;
+            spineCz[writeIdx] = +zApexOffset + baseZ[i];
+            writeIdx++;
+        }
+        const seg1Idx = writeIdx;
+        seg1StartS = seg1Idx * SPINE_S_STEP;
+
+        for (let i = 0; i < archLeftTop.count; i++) {
+            spineCx[writeIdx] = archLeftTop.x[i];
+            spineCy[writeIdx] = archLeftTop.y[i];
+            spineCz[writeIdx] = archLeftTop.z[i];
+            writeIdx++;
+        }
+        const seg2Idx = writeIdx;
+        seg2StartS = seg2Idx * SPINE_S_STEP;
+
+        for (let i = 0; i < heartSteps; i++) {
+            spineCx[writeIdx] = h1X;
+            spineCy[writeIdx] = baseY[i] + h1Y;
+            spineCz[writeIdx] = -zApexOffset - baseZ[i];
+            writeIdx++;
+        }
+        const seg3Idx = writeIdx;
+        seg3StartS = seg3Idx * SPINE_S_STEP;
+
+        for (let i = 0; i < archRightTop.count; i++) {
+            spineCx[writeIdx] = archRightTop.x[i];
+            spineCy[writeIdx] = archRightTop.y[i];
+            spineCz[writeIdx] = archRightTop.z[i];
+            writeIdx++;
+        }
+
+        spineCount = writeIdx;
+        loopTotalLength = spineCount * SPINE_S_STEP;
+
+        spineCx[spineCount] = spineCx[0];
+        spineCy[spineCount] = spineCy[0];
+        spineCz[spineCount] = spineCz[0];
+
+        for (let i = 0; i < spineCount; i++) {
+            const prev = (i - 1 + spineCount) % spineCount;
+            const next = (i + 1) % spineCount;
+            const dx = spineCx[next] - spineCx[prev];
+            const dy = spineCy[next] - spineCy[prev];
+            const dz = spineCz[next] - spineCz[prev];
+            const len = Math.max(0.00001, Math.sqrt(dx * dx + dy * dy + dz * dz));
+            const tx = dx / len;
+            const ty = dy / len;
+            const tz = dz / len;
+
+            spineTx[i] = tx;
+            spineTy[i] = ty;
+            spineTz[i] = tz;
+            spineAlpha[i] = Math.atan2(ty, tz);
+
+            const yzLen = Math.max(0.0001, Math.sqrt(ty * ty + tz * tz));
+            const ux = 0;
+            const uy = tz / yzLen;
+            const uz = -ty / yzLen;
+            spineUx[i] = ux;
+            spineUy[i] = uy;
+            spineUz[i] = uz;
+
+            spineVx[i] = uy * tz - uz * ty;
+            spineVy[i] = uz * tx - ux * tz;
+            spineVz[i] = ux * ty - uy * tx;
+        }
+
+        // 對頂端左右兩道連接圓弧使用平行傳輸法向量，消除切線接近 X 軸時的截面扭轉
+        transportArchFrame(seg1Idx - 1, seg2Idx);
+        transportArchFrame(seg3Idx - 1, spineCount);
+
+        spineTx[spineCount] = spineTx[0];
+        spineTy[spineCount] = spineTy[0];
+        spineTz[spineCount] = spineTz[0];
+        spineUx[spineCount] = spineUx[0];
+        spineUy[spineCount] = spineUy[0];
+        spineUz[spineCount] = spineUz[0];
+        spineVx[spineCount] = spineVx[0];
+        spineVy[spineCount] = spineVy[0];
+        spineVz[spineCount] = spineVz[0];
+        spineAlpha[spineCount] = spineAlpha[0];
+    }
+
+    function getSpineAtS(s, out) {
+        const target = out || tempSpine;
+        const wrappedS = wrapLoopS(s);
+        const f = wrappedS / SPINE_S_STEP;
+        const idx = Math.min(spineCount - 1, Math.max(0, Math.floor(f)));
+        const nextIdx = idx + 1;
+        const t = f - idx;
+
+        target.cx = spineCx[idx] + (spineCx[nextIdx] - spineCx[idx]) * t;
+        target.cy = spineCy[idx] + (spineCy[nextIdx] - spineCy[idx]) * t;
+        target.cz = spineCz[idx] + (spineCz[nextIdx] - spineCz[idx]) * t;
+
+        let tx = spineTx[idx] + (spineTx[nextIdx] - spineTx[idx]) * t;
+        let ty = spineTy[idx] + (spineTy[nextIdx] - spineTy[idx]) * t;
+        let tz = spineTz[idx] + (spineTz[nextIdx] - spineTz[idx]) * t;
+        const tLen = Math.max(0.00001, Math.sqrt(tx * tx + ty * ty + tz * tz));
+        target.tx = tx / tLen;
+        target.ty = ty / tLen;
+        target.tz = tz / tLen;
+
+        let ux = spineUx[idx] + (spineUx[nextIdx] - spineUx[idx]) * t;
+        let uy = spineUy[idx] + (spineUy[nextIdx] - spineUy[idx]) * t;
+        let uz = spineUz[idx] + (spineUz[nextIdx] - spineUz[idx]) * t;
+        const uLen = Math.max(0.00001, Math.sqrt(ux * ux + uy * uy + uz * uz));
+        target.ux = ux / uLen;
+        target.uy = uy / uLen;
+        target.uz = uz / uLen;
+
+        let vx = spineVx[idx] + (spineVx[nextIdx] - spineVx[idx]) * t;
+        let vy = spineVy[idx] + (spineVy[nextIdx] - spineVy[idx]) * t;
+        let vz = spineVz[idx] + (spineVz[nextIdx] - spineVz[idx]) * t;
+        const vLen = Math.max(0.00001, Math.sqrt(vx * vx + vy * vy + vz * vz));
+        target.vx = vx / vLen;
+        target.vy = vy / vLen;
+        target.vz = vz / vLen;
+
+        target.alpha = spineAlpha[idx] + (spineAlpha[nextIdx] - spineAlpha[idx]) * t;
+        return target;
+    }
+
+    function getHeartLocalU(s) {
+        if (!dualHeartEnabled) {
+            const clamped = Math.max(0, Math.min(loopTotalLength, s));
+            return { heartIndex: 0, u: clamped - halfTubeLength };
+        }
+        const ws = wrapLoopS(s);
+        if (ws <= seg1StartS) {
+            return { heartIndex: 0, u: ws - halfTubeLength };
+        } else if (ws < seg2StartS) {
+            const archLen = seg2StartS - seg1StartS;
+            const dFromH0 = ws - seg1StartS;
+            if (dFromH0 < archLen * 0.5) {
+                return { heartIndex: 0, u: halfTubeLength + dFromH0 };
+            } else {
+                return { heartIndex: 1, u: -halfTubeLength - (seg2StartS - ws) };
+            }
+        } else if (ws <= seg3StartS) {
+            return { heartIndex: 1, u: (ws - seg2StartS) - halfTubeLength };
+        } else {
+            const archLen = loopTotalLength - seg3StartS;
+            const dFromH1 = ws - seg3StartS;
+            if (dFromH1 < archLen * 0.5) {
+                return { heartIndex: 1, u: halfTubeLength + dFromH1 };
+            } else {
+                return { heartIndex: 0, u: -halfTubeLength - (loopTotalLength - ws) };
+            }
+        }
+    }
+
+    function getLoopSFromHeartU(heartIndex, u) {
+        if (!dualHeartEnabled || heartIndex === 0) {
+            return wrapLoopS(u + halfTubeLength);
+        } else {
+            return wrapLoopS(seg2StartS + u + halfTubeLength);
+        }
+    }
+
+    function findClosestLoopS(x, y, z) {
+        let bestIdx = 0;
+        let bestDistSq = Infinity;
+        for (let i = 0; i < spineCount; i++) {
+            const dx = x - spineCx[i];
+            const dy = y - spineCy[i];
+            const dz = z - spineCz[i];
+            const dSq = dx * dx + dy * dy + dz * dz;
+            if (dSq < bestDistSq) {
+                bestDistSq = dSq;
+                bestIdx = i;
+            }
+        }
+        return bestIdx * SPINE_S_STEP;
+    }
+
+    function projectPointToSpineS(x, y, z, hintS) {
+        let baseS;
+        if (typeof hintS === 'number' && !isNaN(hintS)) {
+            const centerIdx = Math.round(wrapLoopS(hintS) / SPINE_S_STEP) % spineCount;
+            let bestIdx = centerIdx;
+            let bestDistSq = Infinity;
+            const searchRadius = 18;
+            for (let offset = -searchRadius; offset <= searchRadius; offset++) {
+                const idx = (centerIdx + offset + spineCount) % spineCount;
+                const dx = x - spineCx[idx];
+                const dy = y - spineCy[idx];
+                const dz = z - spineCz[idx];
+                const dSq = dx * dx + dy * dy + dz * dz;
+                if (dSq < bestDistSq) {
+                    bestDistSq = dSq;
+                    bestIdx = idx;
+                }
+            }
+            if (bestDistSq > 49.0) {
+                baseS = findClosestLoopS(x, y, z);
+            } else {
+                baseS = bestIdx * SPINE_S_STEP;
+            }
+        } else {
+            baseS = findClosestLoopS(x, y, z);
+        }
+
+        getSpineAtS(baseS, tempSpineProj);
+        const dx = x - tempSpineProj.cx;
+        const dy = y - tempSpineProj.cy;
+        const dz = z - tempSpineProj.cz;
+        const rawDs = dx * tempSpineProj.tx + dy * tempSpineProj.ty + dz * tempSpineProj.tz;
+        const clampedDs = Math.max(-SPINE_S_STEP, Math.min(SPINE_S_STEP, rawDs));
+        return wrapLoopS(baseS + clampedDs);
+    }
+
+    rebuildSpineTable(currentBend);
+
     let autoCompressEnabled = false;
     let autoCompressTimer = 0;
-    const autoCycleHalfPeriod = 0.85; // 每 0.85 秒切換一次收縮/舒張（約每分鐘 35~40 次完整搏動，便於觀察）
+    const autoCycleHalfPeriod = 0.85;
 
-    // 不規律收縮（心律不整原型）狀態
     let irregularCompressEnabled = false;
     let irregularTimer = 0;
     let irregularNextInterval = 0.3;
-    let irregularStrength = 0.5;   // 當前不規律搏動的有效收縮/舒張強度 (0.2 ~ 1.0)
-    let irregularModeType = 'premature'; // 'premature' (早搏) | 'fibrillation' (微弱亂顫) | 'pause' (節律停頓) | 'compensatory' (補償收縮)
+    let irregularStrength = 0.5;
+    let irregularModeType = 'premature';
     let tremorTime = 0;
 
-    // 動脈彈性脈搏波（Arterial Pulse Waves）參數與狀態：長度 69 單位長
-    const arteryLength = halfTubeLength - (halfCompressionLength + 1); // 85 - 16 = 69
-    const arteryCenterZ = -(halfCompressionLength + 1 + arteryLength / 2); // -50.5
     let arterialPulseWaves = [];
-    let pulseSpawnedThisPhase = false; // 每搏收縮期精準激發單次脈搏波的時相旗標
+    let pulseSpawnedThisPhase = false;
 
-    // Visual meshes
-    let fullTubeMesh;
-    let compressionZoneMesh;
-    let atriumZoneMesh;
-    let arteryZoneMesh;
+    // Visual meshes:
+    // - singleTubeMesh: 單一心管半透明外管
+    // - loopTubeMesh: 雙心循環完整閉鎖外管
+    let singleTubeMesh = null;
+    let loopTubeMesh = null;
+    let compressionZoneMeshes = [];
+    let atriumZoneMeshes = [];
+    let arteryZoneMeshes = [];
     let sharedParticleGeometry = null;
-    let sharedParticleMaterial = null;
+    let rbcMaterialPalette = [];
 
     // UI elements
     const toggleCompressBtn = document.getElementById('toggle-compress');
@@ -73,17 +615,11 @@ window.onload = function () {
     const toggleAtriumBtn = document.getElementById('toggle-atrium');
     const toggleBackValveBtn = document.getElementById('toggle-back-valve');
     const toggleFrontValveBtn = document.getElementById('toggle-front-valve');
+    const toggleBendBtn = document.getElementById('toggle-bend');
+    const toggleDualHeartBtn = document.getElementById('toggle-dual-heart');
     const toggleLabelsBtn = document.getElementById('toggle-labels');
     const resetViewBtn = document.getElementById('reset-view');
-    const atriumStatus = document.getElementById('atrium-status');
-    const arterialPulseStatus = document.getElementById('arterial-pulse-status');
-    const frontValveStatus = document.getElementById('front-valve-status');
-    const backValveStatus = document.getElementById('back-valve-status');
-    const regurgitationStatus = document.getElementById('regurgitation-status');
-    const vesselPhaseStatus = document.getElementById('vessel-phase-status');
-    const flowHint = document.getElementById('flow-hint');
 
-    // 大字構造標籤元素（預設關閉）
     let labelsVisible = false;
     const anatomicalLabelsContainer = document.getElementById('anatomical-labels');
     const labelVein = document.getElementById('label-vein');
@@ -92,9 +628,13 @@ window.onload = function () {
     const labelVentricle = document.getElementById('label-ventricle');
     const labelArterialValve = document.getElementById('label-arterial-valve');
     const labelArtery = document.getElementById('label-artery');
+
+    const labelVein2 = document.getElementById('label-vein-2');
+    const labelAtrium2 = document.getElementById('label-atrium-2');
+    const labelVentricle2 = document.getElementById('label-ventricle-2');
+    const labelArtery2 = document.getElementById('label-artery-2');
     const tempProjVec = new THREE.Vector3();
 
-    // Particle quality UI elements
     const particleSlider = document.getElementById('particle-slider');
     const particleCountDisplay = document.getElementById('particle-count-display');
     const qualityLowBtn = document.getElementById('quality-low-btn');
@@ -102,33 +642,27 @@ window.onload = function () {
     const qualityHighBtn = document.getElementById('quality-high-btn');
 
     function init() {
-        // 渲染器
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
         renderer.setClearColor(0x1e293b);
         document.body.appendChild(renderer.domElement);
 
-        // 場景
         scene = new THREE.Scene();
-        scene.fog = new THREE.Fog(0x1e293b, 85, 235);
+        scene.fog = new THREE.Fog(0x1e293b, 95, 260);
 
-        // 攝影機：讓更長的 Z 軸血管橫向完整展開於畫面中央
         camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(58, 42, 0);
-        camera.lookAt(0, 0, 0);
+        initCameraSpherical(78, 26, 0, 0, -2, 0);
 
-        // 光源
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
         scene.add(ambientLight);
         const directionalLight = new THREE.DirectionalLight(0xffffff, 0.85);
-        directionalLight.position.set(30, 45, 25);
+        directionalLight.position.set(35, 50, 25);
         scene.add(directionalLight);
         const backLight = new THREE.DirectionalLight(0x93c5fd, 0.35);
-        backLight.position.set(-30, -20, -20);
+        backLight.position.set(-35, -20, -20);
         scene.add(backLight);
 
-        // 物理世界：使用 SAPBroadphase 大幅提升多粒子碰撞檢測效能，並設定零摩擦材質防止血球塞車
         world = new CANNON.World();
         world.gravity.set(0, 0, 0);
         world.broadphase = new CANNON.SAPBroadphase(world);
@@ -136,16 +670,10 @@ window.onload = function () {
         world.defaultContactMaterial.friction = 0.0;
         world.defaultContactMaterial.restitution = 0.1;
 
-        // 創建血管（視覺效果）
         createTube();
-
-        // 創建血球
         createParticles();
-
-        // 鼠標/觸控控制
         initControls();
 
-        // 單次壓縮/擴張切換按鈕
         toggleCompressBtn.addEventListener('click', () => {
             if (autoCompressEnabled) stopAutoCompress();
             if (irregularCompressEnabled) stopIrregularCompress();
@@ -156,7 +684,6 @@ window.onload = function () {
             }
         });
 
-        // 連續壓縮（規律自動心臟搏動）按鈕
         if (autoCompressBtn) {
             autoCompressBtn.addEventListener('click', () => {
                 if (autoCompressEnabled) {
@@ -166,11 +693,9 @@ window.onload = function () {
                     if (irregularCompressEnabled) stopIrregularCompress();
                     startAutoCompress();
                 }
-                updateFlowHint();
             });
         }
 
-        // 不規律收縮（心律不整原型）按鈕
         if (irregularCompressBtn) {
             irregularCompressBtn.addEventListener('click', () => {
                 if (irregularCompressEnabled) {
@@ -180,11 +705,9 @@ window.onload = function () {
                     if (autoCompressEnabled) stopAutoCompress();
                     startIrregularCompress();
                 }
-                updateFlowHint();
             });
         }
 
-        // 瓣膜關閉不全（逆流）切換按鈕
         if (toggleRegurgitationBtn) {
             toggleRegurgitationBtn.addEventListener('click', () => {
                 toggleRegurgitation();
@@ -217,21 +740,30 @@ window.onload = function () {
             });
         }
 
+        if (toggleBendBtn) {
+            toggleBendBtn.addEventListener('click', () => {
+                toggleVesselBend();
+            });
+        }
+
+        if (toggleDualHeartBtn) {
+            toggleDualHeartBtn.addEventListener('click', () => {
+                toggleDualHeartMode();
+            });
+        }
+
         if (toggleLabelsBtn) {
             toggleLabelsBtn.addEventListener('click', () => {
                 labelsVisible = !labelsVisible;
                 if (anatomicalLabelsContainer) {
                     anatomicalLabelsContainer.classList.toggle('hidden', !labelsVisible);
                 }
+                toggleLabelsBtn.classList.toggle('btn-active', labelsVisible);
                 if (labelsVisible) {
-                    toggleLabelsBtn.textContent = '🏷️ 隱藏標籤';
-                    toggleLabelsBtn.classList.remove('btn-neutral');
-                    toggleLabelsBtn.classList.add('btn-blue');
+                    toggleLabelsBtn.textContent = '隱藏標籤';
                     updateAnatomicalLabels();
                 } else {
-                    toggleLabelsBtn.textContent = '🏷️ 顯示標籤';
-                    toggleLabelsBtn.classList.remove('btn-blue');
-                    toggleLabelsBtn.classList.add('btn-neutral');
+                    toggleLabelsBtn.textContent = '構造標籤';
                 }
             });
         }
@@ -249,74 +781,150 @@ window.onload = function () {
             });
         }
         if (qualityLowBtn) {
-            qualityLowBtn.addEventListener('click', () => setParticleCount(80));
+            qualityLowBtn.addEventListener('click', () => setParticleCount(120));
         }
         if (qualityMedBtn) {
-            qualityMedBtn.addEventListener('click', () => setParticleCount(200));
+            qualityMedBtn.addEventListener('click', () => setParticleCount(240));
         }
         if (qualityHighBtn) {
-            qualityHighBtn.addEventListener('click', () => setParticleCount(400));
+            qualityHighBtn.addEventListener('click', () => setParticleCount(420));
         }
 
-        updateFlowHint();
         window.addEventListener('resize', onWindowResize);
+    }
+
+    function updateBendButtonUI() {
+        if (!toggleBendBtn) return;
+        if (bendEnabled) {
+            toggleBendBtn.textContent = '水平直管';
+            toggleBendBtn.classList.add('btn-active');
+        } else {
+            toggleBendBtn.textContent = '心管彎折(V型)';
+            toggleBendBtn.classList.remove('btn-active');
+        }
+    }
+
+    function updateDualHeartButtonUI() {
+        if (!toggleDualHeartBtn) return;
+        if (dualHeartEnabled) {
+            toggleDualHeartBtn.textContent = '單一心管';
+            toggleDualHeartBtn.classList.add('btn-active');
+        } else {
+            toggleDualHeartBtn.textContent = '雙心循環';
+            toggleDualHeartBtn.classList.remove('btn-active');
+        }
+    }
+
+    function syncSecondaryMeshesVisibility() {
+        if (singleTubeMesh) {
+            singleTubeMesh.visible = !dualHeartEnabled;
+        }
+        if (loopTubeMesh) {
+            loopTubeMesh.visible = dualHeartEnabled;
+        }
+        if (compressionZoneMeshes[1]) {
+            compressionZoneMeshes[1].visible = dualHeartEnabled;
+        }
+        if (atriumZoneMeshes[1]) {
+            atriumZoneMeshes[1].visible = dualHeartEnabled && (atriumCurrentBulge > 0.01);
+        }
+        if (arteryZoneMeshes[1]) {
+            arteryZoneMeshes[1].visible = dualHeartEnabled && (frontValveEnabled || backValveEnabled);
+        }
+        frontValveMeshes.forEach(m => {
+            if (m && m.userData && m.userData.heartIndex === 1) {
+                m.visible = dualHeartEnabled;
+            }
+        });
+        backValveMeshes.forEach(m => {
+            if (m && m.userData && m.userData.heartIndex === 1) {
+                m.visible = dualHeartEnabled;
+            }
+        });
+
+        const extraLabels = [labelVein2, labelAtrium2, labelVentricle2, labelArtery2];
+        extraLabels.forEach(el => {
+            if (el) el.classList.toggle('hidden', !dualHeartEnabled);
+        });
+    }
+
+    function toggleVesselBend() {
+        bendEnabled = !bendEnabled;
+        targetBend = bendEnabled ? 1.0 : 0.0;
+        if (!bendEnabled && dualHeartEnabled) {
+            dualHeartEnabled = false;
+            updateDualHeartButtonUI();
+            rebuildSpineTable(currentBend);
+            syncSecondaryMeshesVisibility();
+            redistributeParticlesOnModeSwitch();
+            syncValvesToSpine();
+            updateAllTubeMeshes();
+        }
+        updateBendButtonUI();
+    }
+
+    function toggleDualHeartMode() {
+        dualHeartEnabled = !dualHeartEnabled;
+        if (dualHeartEnabled && !bendEnabled) {
+            bendEnabled = true;
+            currentBend = 1.0;
+            targetBend = 1.0;
+            updateBendButtonUI();
+        }
+        updateDualHeartButtonUI();
+        rebuildSpineTable(currentBend);
+        syncSecondaryMeshesVisibility();
+        syncValvesToSpine();
+        redistributeParticlesOnModeSwitch();
+        updateAllTubeMeshes();
+        if (labelsVisible) updateAnatomicalLabels();
+    }
+
+    function redistributeParticlesOnModeSwitch() {
+        for (let i = 0; i < particles.length; i++) {
+            const p = particles[i];
+            const s = Math.random() * loopTotalLength;
+            p.s = s;
+            const sp = getSpineAtS(s, tempSpine);
+            const { u } = getHeartLocalU(s);
+            const maxR = getEffectiveTubeRadiusAtZ(u);
+            const { x: rv, y: ru } = randomCrossSectionXY(maxR);
+
+            p.body.position.set(
+                sp.cx + rv * sp.vx + ru * sp.ux,
+                sp.cy + rv * sp.vy + ru * sp.uy,
+                sp.cz + rv * sp.vz + ru * sp.uz
+            );
+            p.body.velocity.set(0, 0, 0);
+
+            const palIdx = getParticleOxygenPaletteIndex(s);
+            p.palIdx = palIdx;
+            if (rbcMaterialPalette[palIdx]) {
+                p.mesh.material = rbcMaterialPalette[palIdx];
+            }
+        }
     }
 
     function toggleRegurgitation() {
         regurgitationEnabled = !regurgitationEnabled;
+        if (toggleRegurgitationBtn) {
+            toggleRegurgitationBtn.classList.toggle('btn-active', regurgitationEnabled);
+            toggleRegurgitationBtn.textContent = regurgitationEnabled ? '關閉逆流' : '瓣膜逆流';
+        }
         if (regurgitationEnabled) {
-            if (toggleRegurgitationBtn) {
-                toggleRegurgitationBtn.textContent = '❌ 移除關閉不全(恢復正常)';
-                toggleRegurgitationBtn.classList.remove('btn-amber');
-                toggleRegurgitationBtn.classList.add('btn-red');
-            }
-            if (regurgitationStatus) {
-                regurgitationStatus.textContent = '⚠️ 關閉不全 (逆流漏血)';
-                regurgitationStatus.className = 'status-badge status-warn';
-            }
-            // 若目前尚未安裝瓣膜，自動為使用者安裝前後瓣膜以利即時觀察
             if (!backValveEnabled && !frontValveEnabled) {
                 addValve('back');
                 addValve('front');
             }
-        } else {
-            if (toggleRegurgitationBtn) {
-                toggleRegurgitationBtn.textContent = '⚠️ 瓣膜關閉不全(逆流)';
-                toggleRegurgitationBtn.classList.remove('btn-red');
-                toggleRegurgitationBtn.classList.add('btn-amber');
-            }
-            if (regurgitationStatus) {
-                regurgitationStatus.textContent = '健康正常 (緊密閉合)';
-                regurgitationStatus.className = 'status-badge status-neutral';
-            }
         }
-        updateFlowHint();
     }
 
     function toggleAtrium() {
         atriumEnabled = !atriumEnabled;
-        if (atriumEnabled) {
-            if (toggleAtriumBtn) {
-                toggleAtriumBtn.textContent = '－ 移除心房囊袋';
-                toggleAtriumBtn.classList.remove('btn-green');
-                toggleAtriumBtn.classList.add('btn-red');
-            }
-            if (atriumStatus) {
-                atriumStatus.textContent = '已開啟 (儲血囊袋)';
-                atriumStatus.className = 'status-badge status-on';
-            }
-        } else {
-            if (toggleAtriumBtn) {
-                toggleAtriumBtn.textContent = '＋ 心房囊袋(靜脈竇)';
-                toggleAtriumBtn.classList.remove('btn-red');
-                toggleAtriumBtn.classList.add('btn-green');
-            }
-            if (atriumStatus) {
-                atriumStatus.textContent = '未開啟';
-                atriumStatus.className = 'status-badge status-off';
-            }
+        if (toggleAtriumBtn) {
+            toggleAtriumBtn.classList.toggle('btn-active', atriumEnabled);
+            toggleAtriumBtn.textContent = atriumEnabled ? '移除心房' : '心房囊袋';
         }
-        updateFlowHint();
     }
 
     function setVesselPhase(newPhase) {
@@ -324,49 +932,16 @@ window.onload = function () {
         phaseTimer = 0;
         pulseSpawnedThisPhase = false;
 
-        if (vesselState === 'compress') {
-            toggleCompressBtn.textContent = '擴張心室';
-            toggleCompressBtn.classList.remove('btn-blue', 'btn-green');
-            toggleCompressBtn.classList.add('btn-red');
-            if (vesselPhaseStatus) {
-                if (irregularCompressEnabled) {
-                    const modeText = irregularModeType === 'premature'
-                        ? '⚡ 心律不整：提早收縮 (充盈不足)'
-                        : irregularModeType === 'fibrillation'
-                            ? '⚡ 心律不整：微弱亂顫 (無效搏動)'
-                            : '⚡ 心律不整：不規則收縮';
-                    vesselPhaseStatus.textContent = modeText;
-                    vesselPhaseStatus.className = 'status-badge status-warn';
-                } else {
-                    vesselPhaseStatus.textContent = autoCompressEnabled ? '自動搏動：心室收縮' : '壓縮心室 (收縮期)';
-                    vesselPhaseStatus.className = 'status-badge status-off';
-                }
-            }
-        } else if (vesselState === 'expand') {
-            toggleCompressBtn.textContent = '壓縮心室';
-            toggleCompressBtn.classList.remove('btn-blue', 'btn-red');
-            toggleCompressBtn.classList.add('btn-green');
-            if (vesselPhaseStatus) {
-                if (irregularCompressEnabled) {
-                    const modeText = irregularModeType === 'pause'
-                        ? '⚡ 心律不整：代償長停頓 (血流遲滯)'
-                        : irregularModeType === 'premature'
-                            ? '⚡ 心律不整：極短舒張 (來不及充血)'
-                            : '⚡ 心律不整：不規則舒張';
-                    vesselPhaseStatus.textContent = modeText;
-                    vesselPhaseStatus.className = 'status-badge status-warn';
-                } else {
-                    vesselPhaseStatus.textContent = autoCompressEnabled ? '自動搏動：心室舒張' : '擴張心室 (舒張期)';
-                    vesselPhaseStatus.className = 'status-badge status-on';
-                }
-            }
-        } else {
-            toggleCompressBtn.textContent = '壓縮心室';
-            toggleCompressBtn.classList.remove('btn-red', 'btn-green');
-            toggleCompressBtn.classList.add('btn-blue');
-            if (vesselPhaseStatus) {
-                vesselPhaseStatus.textContent = '平時 (靜止)';
-                vesselPhaseStatus.className = 'status-badge status-neutral';
+        if (toggleCompressBtn) {
+            if (vesselState === 'compress') {
+                toggleCompressBtn.textContent = '擴張心室';
+                toggleCompressBtn.classList.add('btn-active');
+            } else if (vesselState === 'expand') {
+                toggleCompressBtn.textContent = '壓縮心室';
+                toggleCompressBtn.classList.add('btn-active');
+            } else {
+                toggleCompressBtn.textContent = '單次壓縮';
+                toggleCompressBtn.classList.remove('btn-active');
             }
         }
     }
@@ -376,9 +951,8 @@ window.onload = function () {
         autoCompressTimer = 0;
         irregularStrength = 1.0;
         if (autoCompressBtn) {
-            autoCompressBtn.textContent = '停止連續壓縮';
-            autoCompressBtn.classList.remove('btn-purple');
-            autoCompressBtn.classList.add('btn-amber');
+            autoCompressBtn.textContent = '停止搏動';
+            autoCompressBtn.classList.add('btn-active');
         }
         setVesselPhase('compress');
     }
@@ -387,9 +961,8 @@ window.onload = function () {
         autoCompressEnabled = false;
         autoCompressTimer = 0;
         if (autoCompressBtn) {
-            autoCompressBtn.textContent = '連續壓縮';
-            autoCompressBtn.classList.remove('btn-amber');
-            autoCompressBtn.classList.add('btn-purple');
+            autoCompressBtn.textContent = '連續搏動';
+            autoCompressBtn.classList.remove('btn-active');
         }
     }
 
@@ -398,37 +971,29 @@ window.onload = function () {
         const rand = Math.random();
 
         if (vesselState !== 'compress') {
-            // 即將進入收縮期：隨機決定是「早搏 (充盈不足)」、「微弱亂顫」或「代償後收縮」
             if (irregularModeType === 'premature') {
-                // 剛經歷極短舒張期，心室尚未充飽血就提早收縮 → 收縮力道弱、排血量少
                 irregularStrength = 0.35 + Math.random() * 0.2;
                 irregularNextInterval = 0.22 + Math.random() * 0.15;
             } else if (rand < 0.45) {
-                // 快速微弱亂顫 (Fibrillation / Flutter)：管壁急促淺抖，幾乎推不動血液
                 irregularModeType = 'fibrillation';
                 irregularStrength = 0.22 + Math.random() * 0.18;
                 irregularNextInterval = 0.14 + Math.random() * 0.12;
             } else {
-                // 代償間歇後的偶發較強收縮
                 irregularModeType = 'compensatory';
                 irregularStrength = 0.72 + Math.random() * 0.22;
                 irregularNextInterval = 0.45 + Math.random() * 0.25;
             }
             setVesselPhase('compress');
         } else {
-            // 即將進入舒張期：隨機決定是「極短舒張 (引發下一次早搏)」、「亂顫抖動」或「代償性長停頓」
             if (rand < 0.42) {
-                // 極短舒張期：心室還沒擴張完、血液還沒流入多少，馬上又會觸發早搏！
                 irregularModeType = 'premature';
                 irregularStrength = 0.3 + Math.random() * 0.2;
                 irregularNextInterval = 0.16 + Math.random() * 0.12;
             } else if (rand < 0.75) {
-                // 亂顫期短促舒張
                 irregularModeType = 'fibrillation';
                 irregularStrength = 0.25 + Math.random() * 0.15;
                 irregularNextInterval = 0.14 + Math.random() * 0.12;
             } else {
-                // 代償間歇 (Compensatory Pause)：長停頓，血流一度停滯
                 irregularModeType = 'pause';
                 irregularStrength = 0.55 + Math.random() * 0.2;
                 irregularNextInterval = 1.05 + Math.random() * 0.45;
@@ -441,9 +1006,8 @@ window.onload = function () {
         irregularCompressEnabled = true;
         irregularModeType = 'premature';
         if (irregularCompressBtn) {
-            irregularCompressBtn.textContent = '停止不規律收縮';
-            irregularCompressBtn.classList.remove('btn-rose');
-            irregularCompressBtn.classList.add('btn-irregular-active');
+            irregularCompressBtn.textContent = '停止心律不整';
+            irregularCompressBtn.classList.add('btn-active');
         }
         scheduleNextIrregularPhase();
     }
@@ -453,80 +1017,40 @@ window.onload = function () {
         irregularTimer = 0;
         irregularStrength = 1.0;
         if (irregularCompressBtn) {
-            irregularCompressBtn.textContent = '不規律收縮(心律不整)';
-            irregularCompressBtn.classList.remove('btn-irregular-active');
-            irregularCompressBtn.classList.add('btn-rose');
-        }
-    }
-
-    function updateFlowHint() {
-        if (!flowHint) return;
-        if (regurgitationEnabled) {
-            if (frontValveEnabled && backValveEnabled) {
-                flowHint.textContent = '⚠️ 瓣膜關閉不全（全心逆流）：收縮期房室瓣無法閉合，大量血液逆噴回心房；舒張期動脈瓣漏縫倒灌，動脈脈搏波塌陷（水錘脈），循環效率大幅癱瘓！';
-            } else if (backValveEnabled) {
-                flowHint.textContent = '⚠️ 房室瓣關閉不全（二尖瓣逆流）：收縮期血液透過瓣膜縫隙逆流噴回心房/靜脈，前向動脈射血量大幅腰斬！';
-            } else if (frontValveEnabled) {
-                flowHint.textContent = '⚠️ 動脈瓣關閉不全（主動脈瓣逆流）：舒張期動脈高壓血液倒灌回心室，脈搏波迅速衰減塌陷，心室容量負荷超載！';
-            } else {
-                flowHint.textContent = '⚠️ 請開啟前瓣膜或後瓣膜，以觀察瓣膜關閉不全與逆流現象。';
-            }
-            return;
-        }
-        if (irregularCompressEnabled) {
-            flowHint.textContent = '⚡ 心律不整（不規律收縮）：舒張期過短導致心室來不及充血就提早收縮（空打），加上快速微弱亂顫與長停頓，使血流忽快忽慢、效率大幅下降！';
-            return;
-        }
-        const atriumNote = atriumEnabled
-            ? '【心房/靜脈竇囊袋已開啟：心室收縮時囊袋膨大暫存回流血，心室舒張時囊袋回縮將大量血液快速灌入心室！】'
-            : '';
-        if (frontValveEnabled && backValveEnabled) {
-            flowHint.textContent = `❤️ 雙瓣膜心臟模式：收縮時後瓣膜閉合向右排血並激發動脈脈搏波；舒張時前瓣膜閉合防倒流、從左側吸入新血。${atriumNote}`;
-        } else if (backValveEnabled && !frontValveEnabled) {
-            flowHint.textContent = `⚠️ 僅有後瓣膜(左)：收縮時向右排血激發動脈脈搏，但舒張時缺乏前瓣膜，剛排出的血液又會倒流回來。${atriumNote}`;
-        } else if (!backValveEnabled && frontValveEnabled) {
-            flowHint.textContent = `⚠️ 僅有前瓣膜(右)：舒張時防止右側動脈血液倒流，但收縮時缺乏後瓣膜，部分血液會向左側逆流漏失。${atriumNote}`;
-        } else {
-            flowHint.textContent = `💡 原始未分化心管（無瓣膜）：收縮時血液對稱向兩端散開，舒張時吸回，在原地往復震盪；尚未建立單向高壓動脈脈搏。${atriumNote}`;
+            irregularCompressBtn.textContent = '心律不整';
+            irregularCompressBtn.classList.remove('btn-active');
         }
     }
 
     function initControls() {
-        const center = new THREE.Vector3(0, 0, 0);
         let isDragging = false;
         let previousMousePosition = { x: 0, y: 0 };
         let touchStartDistance = 0;
         let previousTouchPosition = { x: 0, y: 0 };
 
         function rotateCamera(deltaX, deltaY) {
-            const sensitivity = 0.005;
-            const axisX = new THREE.Vector3(0, 1, 0);
-            const axisY = new THREE.Vector3(1, 0, 0);
-            const qX = new THREE.Quaternion().setFromAxisAngle(axisX, -deltaX * sensitivity);
-            const qY = new THREE.Quaternion().setFromAxisAngle(axisY, -deltaY * sensitivity);
-            camera.position.applyQuaternion(qX);
-            camera.position.applyQuaternion(qY);
-            camera.up.applyQuaternion(qX);
-            camera.up.applyQuaternion(qY);
-            camera.lookAt(center);
+            const rotateSpeed = 0.0055;
+            spherical.theta -= deltaX * rotateSpeed;
+            spherical.phi -= deltaY * rotateSpeed;
+            const phiMargin = 0.06;
+            spherical.phi = Math.max(phiMargin, Math.min(Math.PI - phiMargin, spherical.phi));
+            updateCameraFromSpherical();
         }
 
         function panCamera(deltaX, deltaY) {
-            const sensitivity = camera.position.distanceTo(center) * 0.001;
-            const right = new THREE.Vector3().crossVectors(camera.up, camera.position).normalize();
-            const up = camera.up.clone();
-            camera.position.addScaledVector(right, -deltaX * sensitivity);
-            camera.position.addScaledVector(up, deltaY * sensitivity);
-            center.addScaledVector(right, -deltaX * sensitivity);
-            center.addScaledVector(up, deltaY * sensitivity);
-            camera.lookAt(center);
+            const panSpeed = spherical.radius * 0.0012;
+            const cosT = Math.cos(spherical.theta);
+            const sinT = Math.sin(spherical.theta);
+            orbitTarget.x += sinT * deltaX * panSpeed;
+            orbitTarget.z -= cosT * deltaX * panSpeed;
+            orbitTarget.y += deltaY * panSpeed;
+            updateCameraFromSpherical();
         }
 
         function zoomCamera(delta) {
-            const sensitivity = 1.5;
-            const newLen = Math.max(20, Math.min(140, camera.position.length() + delta * sensitivity));
-            camera.position.setLength(newLen);
-            camera.lookAt(center);
+            const zoomSpeed = 2.0;
+            spherical.radius = Math.max(25, Math.min(180, spherical.radius + delta * zoomSpeed));
+            updateCameraFromSpherical();
         }
 
         renderer.domElement.addEventListener('mousedown', (e) => {
@@ -569,7 +1093,7 @@ window.onload = function () {
                 const touch = e.touches[0];
                 const deltaX = touch.clientX - previousTouchPosition.x;
                 const deltaY = touch.clientY - previousTouchPosition.y;
-                rotateCamera(deltaX * 0.5, deltaY * 0.5);
+                rotateCamera(deltaX * 0.8, deltaY * 0.8);
                 previousTouchPosition.x = touch.clientX;
                 previousTouchPosition.y = touch.clientY;
             } else if (isDragging === 'zoom' && e.touches.length === 2) {
@@ -577,77 +1101,143 @@ window.onload = function () {
                 const dy = e.touches[0].clientY - e.touches[1].clientY;
                 const currentDistance = Math.sqrt(dx * dx + dy * dy);
                 const delta = touchStartDistance - currentDistance;
-                zoomCamera(delta * 0.1);
+                zoomCamera(delta * 0.15);
                 touchStartDistance = currentDistance;
             }
         }, { passive: false });
         renderer.domElement.addEventListener('touchend', () => { isDragging = false; });
     }
 
+    function prepareLoopTubeGeometry(geometry, isFullLoop, heartIndex, centerU, segLength) {
+        const posAttr = geometry.attributes.position;
+        const count = posAttr.count;
+        const baseNorm = new Float32Array(count);
+        const baseU = new Float32Array(count);
+        const baseUv = new Float32Array(count);
+        const baseUu = new Float32Array(count);
+
+        for (let i = 0; i < count; i++) {
+            const vx = posAttr.getX(i);
+            const vy = posAttr.getY(i);
+            const vz = posAttr.getZ(i);
+            const r = Math.sqrt(vx * vx + vz * vz);
+            baseNorm[i] = (vy + segLength * 0.5) / segLength; // 0 ~ 1
+            baseU[i] = centerU + vy;
+            if (r > 0.0001) {
+                baseUv[i] = vx / r;
+                baseUu[i] = -vz / r;
+            } else {
+                baseUv[i] = 0;
+                baseUu[i] = 0;
+            }
+        }
+        geometry.userData = {
+            isFullLoop: !!isFullLoop,
+            heartIndex: heartIndex || 0,
+            baseNorm,
+            baseU,
+            baseUv,
+            baseUu
+        };
+    }
+
     function createTube() {
-        // 全長連貫無接縫的半透明主血管（軸向分段數提升至 144，長度擴充至 170，呈現長距離脈搏波波動）
-        const fullTubeGeometry = new THREE.CylinderGeometry(tubeRadius, tubeRadius, tubeLength, 36, 144, true);
-        const fullTubeMaterial = new THREE.MeshPhongMaterial({
+        compressionZoneMeshes = [];
+        atriumZoneMeshes = [];
+        arteryZoneMeshes = [];
+
+        const mainTubeMaterial = new THREE.MeshPhongMaterial({
             color: 0xf1f5f9,
             transparent: true,
-            opacity: 0.18,
+            opacity: 0.17,
             side: THREE.DoubleSide,
             depthWrite: false
         });
-        fullTubeMesh = new THREE.Mesh(fullTubeGeometry, fullTubeMaterial);
-        fullTubeMesh.rotation.x = Math.PI / 2;
-        fullTubeMesh.position.z = 0;
-        scene.add(fullTubeMesh);
 
-        // 中央可收縮/舒張的原始心管肌肉壁（搏動心室腔 z: -15 ~ +15）
-        const compressionGeometry = new THREE.CylinderGeometry(tubeRadius, tubeRadius, compressionLength, 36, 32, true);
-        const compressionMaterial = new THREE.MeshPhongMaterial({
-            color: 0x38bdf8,
-            emissive: 0x0284c7,
-            emissiveIntensity: 0.12,
-            transparent: true,
-            opacity: 0.32,
-            side: THREE.DoubleSide,
-            depthWrite: false
-        });
-        compressionZoneMesh = new THREE.Mesh(compressionGeometry, compressionMaterial);
-        compressionZoneMesh.rotation.x = Math.PI / 2;
-        compressionZoneMesh.position.z = centralSectionZ;
-        scene.add(compressionZoneMesh);
+        // 1. 單一心管主網格
+        const singleTubeGeom = new THREE.CylinderGeometry(tubeRadius, tubeRadius, tubeLength, 32, 128, true);
+        prepareLoopTubeGeometry(singleTubeGeom, false, 0, 0, tubeLength);
+        singleTubeMesh = new THREE.Mesh(singleTubeGeom, mainTubeMaterial);
+        singleTubeMesh.visible = !dualHeartEnabled;
+        scene.add(singleTubeMesh);
 
-        // 上游入口處可膨大的心房囊袋 / 靜脈竇肌肉壁（z: +16.5 ~ +44.5）
-        const atriumGeometry = new THREE.CylinderGeometry(tubeRadius, tubeRadius, atriumLength, 36, 32, true);
-        const atriumMaterial = new THREE.MeshPhongMaterial({
-            color: 0xf43f5e,
-            emissive: 0xbe123c,
-            emissiveIntensity: 0.15,
-            transparent: true,
-            opacity: 0.0,
-            side: THREE.DoubleSide,
-            depthWrite: false
-        });
-        atriumZoneMesh = new THREE.Mesh(atriumGeometry, atriumMaterial);
-        atriumZoneMesh.rotation.x = Math.PI / 2;
-        atriumZoneMesh.position.z = atriumCenterZ;
-        atriumZoneMesh.visible = false;
-        scene.add(atriumZoneMesh);
+        // 2. 雙心循環閉鎖全環網格 (360 軸向分段)
+        const loopTubeGeom = new THREE.CylinderGeometry(tubeRadius, tubeRadius, 360, 32, 360, true);
+        prepareLoopTubeGeometry(loopTubeGeom, true, 0, 0, 360);
+        loopTubeMesh = new THREE.Mesh(loopTubeGeom, mainTubeMaterial);
+        loopTubeMesh.visible = dualHeartEnabled;
+        scene.add(loopTubeMesh);
 
-        // 下游長距離彈性動脈肌肉壁套管（長度 69 單位長，細分 64 格，高幅度生動跳動）
-        const arteryGeometry = new THREE.CylinderGeometry(tubeRadius, tubeRadius, arteryLength, 36, 64, true);
-        const arteryMaterial = new THREE.MeshPhongMaterial({
-            color: 0xf87171,
-            emissive: 0x991b1b,
-            emissiveIntensity: 0.16,
-            transparent: true,
-            opacity: 0.28,
-            side: THREE.DoubleSide,
-            depthWrite: false
-        });
-        arteryZoneMesh = new THREE.Mesh(arteryGeometry, arteryMaterial);
-        arteryZoneMesh.rotation.x = Math.PI / 2;
-        arteryZoneMesh.position.z = arteryCenterZ;
-        arteryZoneMesh.visible = false; // 初始未安裝瓣膜時隱藏，血管保持完全對稱無動脈化
-        scene.add(arteryZoneMesh);
+        // 3. 為左組心管 (h = 0) 與右組對稱心管 (h = 1) 建立心室腔、心房囊袋與動脈套管
+        for (let h = 0; h < 2; h++) {
+            const compressionGeometry = new THREE.CylinderGeometry(tubeRadius, tubeRadius, compressionLength, 32, 40, true);
+            prepareLoopTubeGeometry(compressionGeometry, false, h, centralSectionZ, compressionLength);
+            const compressionMaterial = new THREE.MeshPhongMaterial({
+                color: 0x38bdf8,
+                emissive: 0x0284c7,
+                emissiveIntensity: 0.14,
+                transparent: true,
+                opacity: 0.34,
+                side: THREE.DoubleSide,
+                depthWrite: false
+            });
+            const ventMesh = new THREE.Mesh(compressionGeometry, compressionMaterial);
+            ventMesh.visible = (h === 0) || dualHeartEnabled;
+            scene.add(ventMesh);
+            compressionZoneMeshes.push(ventMesh);
+
+            const atriumGeometry = new THREE.CylinderGeometry(tubeRadius, tubeRadius, atriumLength, 32, 32, true);
+            prepareLoopTubeGeometry(atriumGeometry, false, h, atriumCenterZ, atriumLength);
+            const atriumMaterial = new THREE.MeshPhongMaterial({
+                color: 0xf43f5e,
+                emissive: 0xbe123c,
+                emissiveIntensity: 0.15,
+                transparent: true,
+                opacity: 0.0,
+                side: THREE.DoubleSide,
+                depthWrite: false
+            });
+            const atrMesh = new THREE.Mesh(atriumGeometry, atriumMaterial);
+            atrMesh.visible = false;
+            scene.add(atrMesh);
+            atriumZoneMeshes.push(atrMesh);
+
+            const arteryGeometry = new THREE.CylinderGeometry(tubeRadius, tubeRadius, arteryLength, 32, 48, true);
+            prepareLoopTubeGeometry(arteryGeometry, false, h, arteryCenterZ, arteryLength);
+            const arteryMaterial = new THREE.MeshPhongMaterial({
+                color: 0xf87171,
+                emissive: 0x991b1b,
+                emissiveIntensity: 0.16,
+                transparent: true,
+                opacity: 0.28,
+                side: THREE.DoubleSide,
+                depthWrite: false
+            });
+            const artMesh = new THREE.Mesh(arteryGeometry, arteryMaterial);
+            artMesh.visible = false;
+            scene.add(artMesh);
+            arteryZoneMeshes.push(artMesh);
+        }
+
+        updateAllTubeMeshes();
+    }
+
+    function updateAllTubeMeshes() {
+        if (!dualHeartEnabled) {
+            updateCylinderMeshProfile(singleTubeMesh, 1.0);
+        } else {
+            updateCylinderMeshProfile(loopTubeMesh, 1.0);
+        }
+        const activeHearts = dualHeartEnabled ? 2 : 1;
+        for (let h = 0; h < activeHearts; h++) {
+            updateCylinderMeshProfile(compressionZoneMeshes[h], 1.02);
+            if (atriumZoneMeshes[h] && atriumZoneMeshes[h].visible) {
+                updateCylinderMeshProfile(atriumZoneMeshes[h], 1.025);
+            }
+            if (arteryZoneMeshes[h] && arteryZoneMeshes[h].visible) {
+                updateCylinderMeshProfile(arteryZoneMeshes[h], 1.02);
+            }
+        }
     }
 
     function clearParticles() {
@@ -663,77 +1253,94 @@ window.onload = function () {
             sharedParticleGeometry.dispose();
             sharedParticleGeometry = null;
         }
-        if (sharedParticleMaterial) {
-            sharedParticleMaterial.dispose();
-            sharedParticleMaterial = null;
-        }
+        rbcMaterialPalette.forEach(mat => mat.dispose());
+        rbcMaterialPalette = [];
         particles = [];
     }
 
-    // 取得在指定 Z 位置處的血管有效內半徑（動脈波高度與心室外觀精準吻合）
-    function getEffectiveTubeRadiusAtZ(z) {
-        // 1. 中央心室區 (-15 ~ +15)：平滑收縮與舒張
-        if (Math.abs(z) <= halfCompressionLength) {
-            const u = z / halfCompressionLength; // -1 ~ +1
-            const ventEnvelope = Math.pow(Math.cos(u * Math.PI * 0.5), 0.75);
+    function getEffectiveTubeRadiusAtZ(u) {
+        if (Math.abs(u) <= halfCompressionLength) {
+            const normU = u / halfCompressionLength;
+            const ventEnvelope = Math.pow(Math.cos(normU * Math.PI * 0.5), 0.75);
             const scale = 1 - currentCompression * compressionFactor * ventEnvelope;
             return tubeRadius * scale;
         }
-        // 2. 上游心房囊袋 / 靜脈竇區 (+16.5 ~ +44.5)：開啟時膨大成圓潤囊袋
-        if (atriumCurrentBulge > 0.001 && z >= atriumZMin && z <= atriumZMax) {
-            const u = (z - atriumCenterZ) / halfAtriumLength; // -1 ~ +1
-            const pouchProfile = Math.pow(Math.cos(u * Math.PI * 0.5), 1.6);
+        if (atriumCurrentBulge > 0.001 && u >= atriumZMin && u <= atriumZMax) {
+            const normU = (u - atriumCenterZ) / halfAtriumLength;
+            const pouchProfile = Math.pow(Math.cos(normU * Math.PI * 0.5), 1.6);
             const scale = 1 + atriumCurrentBulge * atriumMaxBulgeFactor * pouchProfile;
             return tubeRadius * scale;
         }
-        // 3. 下游動脈區 (z <= -16)：受心室射血驅動的動脈彈性脈搏波 (Arterial Pulse Waves)
-        if (z <= -halfCompressionLength - 1) {
+        if (u <= -halfCompressionLength - 1 && u > -halfTubeLength) {
             let pulseExpansion = 0;
             for (let i = 0; i < arterialPulseWaves.length; i++) {
                 const wave = arterialPulseWaves[i];
-                const dist = Math.abs(z - wave.z);
+                const dist = Math.abs(u - wave.z);
                 if (dist < wave.width * 2.2) {
                     const norm = dist / wave.width;
                     pulseExpansion += wave.amplitude * Math.exp(-norm * norm * 1.5);
                 }
             }
             if (pulseExpansion > 0.0005) {
-                // 根部平滑漸變 (Root Taper): 在動脈瓣交界處 (z = -16 到 -19) 平滑銜接，消除接縫落差
-                const rootDist = Math.max(0, (-halfCompressionLength - 1) - z);
+                const rootDist = Math.max(0, (-halfCompressionLength - 1) - u);
                 const rootTaper = Math.min(1.0, rootDist / 3.0);
-                // 脈搏波高度與心室充盈期高度 (約 4.8 ~ 5.0) 保持一致吻合，最大擴張約 +24%
-                const scale = 1 + Math.min(0.24, pulseExpansion * 0.22) * rootTaper;
+                const tipDist = Math.max(0, u + halfTubeLength);
+                const tipTaper = Math.min(1.0, tipDist / 8.0);
+                const scale = 1 + Math.min(0.24, pulseExpansion * 0.22) * rootTaper * tipTaper;
                 return tubeRadius * scale;
             }
         }
         return tubeRadius;
     }
 
-    // 動態更新血管主體、心室套管與心房囊袋的 3D 頂點形狀，使囊袋膨大與心室搏動平滑自然
-    function updateCylinderMeshProfile(mesh, centerZ, radiusOffsetFactor) {
+    function updateCylinderMeshProfile(mesh, radiusOffsetFactor) {
         if (!mesh || !mesh.geometry) return;
-        const posAttr = mesh.geometry.attributes.position;
+        const geom = mesh.geometry;
+        const posAttr = geom.attributes.position;
+        const normAttr = geom.attributes.normal;
+        const { isFullLoop, heartIndex, baseNorm, baseU, baseUv, baseUu } = geom.userData;
+        if (!baseUv) return;
+
         for (let i = 0; i < posAttr.count; i++) {
-            const vx = posAttr.getX(i);
-            const vy = posAttr.getY(i); // 旋轉 90 度後，local Y 對應 world Z 偏移
-            const vz = posAttr.getZ(i);
-            const currRadial = Math.sqrt(vx * vx + vz * vz);
-            if (currRadial > 0.0001) {
-                const worldZ = centerZ + vy;
-                const targetR = getEffectiveTubeRadiusAtZ(worldZ) * radiusOffsetFactor;
-                const ratio = targetR / currRadial;
-                posAttr.setX(i, vx * ratio);
-                posAttr.setZ(i, vz * ratio);
+            let loopS;
+            let localU;
+            if (isFullLoop) {
+                loopS = baseNorm[i] * loopTotalLength;
+                localU = getHeartLocalU(loopS).u;
+            } else {
+                localU = baseU[i];
+                loopS = getLoopSFromHeartU(heartIndex, localU);
+            }
+
+            const sp = getSpineAtS(loopS, tempSpine);
+            const targetR = getEffectiveTubeRadiusAtZ(localU) * radiusOffsetFactor;
+
+            const uv = baseUv[i];
+            const uu = baseUu[i];
+            const nx = uv * sp.vx + uu * sp.ux;
+            const ny = uv * sp.vy + uu * sp.uy;
+            const nz = uv * sp.vz + uu * sp.uz;
+
+            posAttr.setXYZ(
+                i,
+                sp.cx + targetR * nx,
+                sp.cy + targetR * ny,
+                sp.cz + targetR * nz
+            );
+            if (normAttr) {
+                normAttr.setXYZ(i, nx, ny, nz);
             }
         }
+
         posAttr.needsUpdate = true;
+        if (normAttr) {
+            normAttr.needsUpdate = true;
+        }
     }
 
-    // 在給定區間生成隨機血管截面座標 (x, y)
     function randomCrossSectionXY(maxR) {
-        const safeR = Math.max(0.5, maxR - particleRadius * 1.3);
+        const safeR = Math.max(0.2, maxR - particleRadius * 1.15);
         const angle = Math.random() * Math.PI * 2;
-        // 使用平方根分佈讓粒子在圓截面內均勻分佈，不擠在圓心
         const r = Math.sqrt(Math.random()) * safeR;
         return {
             x: Math.cos(angle) * r,
@@ -741,39 +1348,75 @@ window.onload = function () {
         };
     }
 
+    function getParticleOxygenPaletteIndex(s) {
+        const paletteMax = rbcMaterialPalette.length - 1;
+        if (paletteMax <= 0) return 0;
+        if (!dualHeartEnabled) {
+            return paletteMax;
+        }
+
+        const ws = wrapLoopS(s);
+        if (ws <= seg1StartS) {
+            return 0;
+        } else if (ws < seg2StartS) {
+            const t = (ws - seg1StartS) / Math.max(1, seg2StartS - seg1StartS);
+            return Math.min(paletteMax, Math.max(0, Math.round(t * paletteMax)));
+        } else if (ws <= seg3StartS) {
+            return paletteMax;
+        } else {
+            const t = 1.0 - (ws - seg3StartS) / Math.max(1, loopTotalLength - seg3StartS);
+            return Math.min(paletteMax, Math.max(0, Math.round(t * paletteMax)));
+        }
+    }
+
     function createParticles(count) {
         if (typeof count === 'number') {
             particleCount = count;
         }
 
-        // 依粒子數量動態調整網格細分，兼顧行動裝置效能與紅血球圓潤外觀
-        let segments = 14;
-        if (particleCount <= 100) {
+        let segments = 12;
+        if (particleCount <= 150) {
             segments = 10;
-        } else if (particleCount <= 250) {
-            segments = 12;
         }
 
-        // 建立略帶扁平雙凹感的紅血球幾何體與共用材質（大幅減少 GPU draw state 切換）
         sharedParticleGeometry = new THREE.SphereGeometry(particleRadius, segments, segments);
-        sharedParticleGeometry.scale(1.15, 0.65, 1.15); // 紅血球圓盤比例
-        sharedParticleMaterial = new THREE.MeshPhongMaterial({
-            color: 0xdc2626,
-            emissive: 0x450a0a,
-            specular: 0xfca5a5,
-            shininess: 35
-        });
+        sharedParticleGeometry.scale(1.15, 0.65, 1.15);
 
-        // 隨機均勻分佈血球於整條血管內，無分層排序或人工間隔，呈現完全自然的流體分佈
+        const paletteSteps = 16;
+        const deoxColor = new THREE.Color(0x4a0418); // 深度暗紫紅（缺氧靜脈血）
+        const oxColor = new THREE.Color(0xff0820);   // 極致鮮亮紅（充氧動脈血）
+        const deoxEmissive = new THREE.Color(0x1a0108);
+        const oxEmissive = new THREE.Color(0x80000a);
+
+        rbcMaterialPalette = [];
+        for (let k = 0; k < paletteSteps; k++) {
+            const t = k / (paletteSteps - 1);
+            const c = deoxColor.clone().lerp(oxColor, t);
+            const em = deoxEmissive.clone().lerp(oxEmissive, t);
+            rbcMaterialPalette.push(new THREE.MeshPhongMaterial({
+                color: c,
+                emissive: em,
+                specular: t > 0.5 ? 0xfecaca : 0x991b1b,
+                shininess: 45
+            }));
+        }
+
         const collisionShape = new CANNON.Sphere(particleRadius * 0.7);
 
         for (let i = 0; i < particleCount; i++) {
-            const z = (Math.random() - 0.5) * (tubeLength - 4);
-            const localR = getEffectiveTubeRadiusAtZ(z);
-            const { x, y } = randomCrossSectionXY(localR);
+            const s = Math.random() * loopTotalLength;
+            const { u } = getHeartLocalU(s);
+            const maxR = getEffectiveTubeRadiusAtZ(u);
+            const { x: rv, y: ru } = randomCrossSectionXY(maxR);
+            const sp = getSpineAtS(s, tempSpine);
 
-            const particleMesh = new THREE.Mesh(sharedParticleGeometry, sharedParticleMaterial);
-            particleMesh.position.set(x, y, z);
+            const wx = sp.cx + rv * sp.vx + ru * sp.ux;
+            const wy = sp.cy + rv * sp.vy + ru * sp.uy;
+            const wz = sp.cz + rv * sp.vz + ru * sp.uz;
+
+            const palIdx = getParticleOxygenPaletteIndex(s);
+            const particleMesh = new THREE.Mesh(sharedParticleGeometry, rbcMaterialPalette[palIdx]);
+            particleMesh.position.set(wx, wy, wz);
             particleMesh.rotation.set(
                 Math.random() * Math.PI,
                 Math.random() * Math.PI,
@@ -784,12 +1427,11 @@ window.onload = function () {
             const particleBody = new CANNON.Body({
                 mass: 1,
                 shape: collisionShape,
-                position: new CANNON.Vec3(x, y, z),
-                linearDamping: 0.35, // 具備真實血液黏滯感，外力停止時平緩減速
+                position: new CANNON.Vec3(wx, wy, wz),
+                linearDamping: 0.35,
                 angularDamping: 0.4
             });
 
-            // 微小初始自轉
             particleBody.angularVelocity.set(
                 (Math.random() - 0.5) * 1.2,
                 (Math.random() - 0.5) * 1.2,
@@ -797,17 +1439,17 @@ window.onload = function () {
             );
 
             world.addBody(particleBody);
-            particles.push({ mesh: particleMesh, body: particleBody, hasPulsed: false });
+            particles.push({ mesh: particleMesh, body: particleBody, s: s, palIdx: palIdx });
         }
     }
 
     function setParticleCount(newCount) {
-        newCount = Math.max(20, Math.min(500, parseInt(newCount, 10) || 200));
+        newCount = Math.max(40, Math.min(550, parseInt(newCount, 10) || 240));
         clearParticles();
         createParticles(newCount);
 
         if (particleSlider) particleSlider.value = newCount;
-        if (particleCountDisplay) particleCountDisplay.textContent = `${newCount} 顆`;
+        if (particleCountDisplay) particleCountDisplay.textContent = `${newCount}`;
 
         const buttons = [qualityLowBtn, qualityMedBtn, qualityHighBtn];
         buttons.forEach(btn => {
@@ -821,108 +1463,119 @@ window.onload = function () {
         });
     }
 
+    const tempBasisMat = new THREE.Matrix4();
+    function alignValveGroupToSpine(valveGroup, heartIndex, localU) {
+        const loopS = getLoopSFromHeartU(heartIndex, localU);
+        const sp = getSpineAtS(loopS, tempSpine);
+        valveGroup.position.set(sp.cx, sp.cy, sp.cz);
+        tempBasisMat.set(
+            sp.vx, sp.ux, sp.tx, 0,
+            sp.vy, sp.uy, sp.ty, 0,
+            sp.vz, sp.uz, sp.tz, 0,
+            0,     0,     0,     1
+        );
+        valveGroup.quaternion.setFromRotationMatrix(tempBasisMat);
+    }
+
+    function syncValvesToSpine() {
+        const allValveMeshes = [...frontValveMeshes, ...backValveMeshes];
+        for (let i = 0; i < allValveMeshes.length; i++) {
+            const valveGroup = allValveMeshes[i];
+            if (!valveGroup || !valveGroup.userData) continue;
+            alignValveGroupToSpine(valveGroup, valveGroup.userData.heartIndex, valveGroup.userData.zPos);
+        }
+    }
+
     function createValve(position) {
         let zPos;
         if (position === 'front') {
-            zPos = -halfCompressionLength - 1; // z = -16 (右側出口前瓣膜)
+            zPos = -halfCompressionLength - 1; // u = -16
         } else if (position === 'back') {
-            zPos = halfCompressionLength + 1;  // z = +16 (左側入口後瓣膜)
+            zPos = halfCompressionLength + 1;  // u = +16
         }
 
-        // 注意：不在 Cannon.js 放入永久靜態擋板剛體，避免順流時血球撞牆塞車！
-        // 僅使用輕量座標物件紀錄瓣膜物理平面位置，單向阻擋由 updateValves 流體邊界條件精準控制
-        const valveAnchor = {
-            position: new CANNON.Vec3(0, 0, zPos)
-        };
+        for (let h = 0; h < 2; h++) {
+            const valveAnchor = {
+                heartIndex: h,
+                zPos: zPos
+            };
 
-        // 解剖擬真靜脈/心臟瓣膜 (Bicuspid Valve + Annulus Ring)
-        const valveGroup = new THREE.Group();
-        valveGroup.position.set(0, 0, zPos);
+            const valveGroup = new THREE.Group();
+            alignValveGroupToSpine(valveGroup, h, zPos);
+            valveGroup.visible = (h === 0) || dualHeartEnabled;
 
-        // 血管壁基部纖維環 (Annulus Fibrosus)
-        const ringGeometry = new THREE.TorusGeometry(tubeRadius * 0.98, 0.2, 12, 32);
-        const ringMaterial = new THREE.MeshPhongMaterial({ color: 0xb91c1c });
-        const ringMesh = new THREE.Mesh(ringGeometry, ringMaterial);
-        valveGroup.add(ringMesh);
+            const ringGeometry = new THREE.TorusGeometry(tubeRadius * 0.98, 0.2, 12, 32);
+            const ringMaterial = new THREE.MeshPhongMaterial({ color: 0xb91c1c });
+            const ringMesh = new THREE.Mesh(ringGeometry, ringMaterial);
+            valveGroup.add(ringMesh);
 
-        // 擬真葉片材質
-        const cuspMaterial = new THREE.MeshPhongMaterial({
-            color: 0xf87171,
-            emissive: 0x7f1d1d,
-            emissiveIntensity: 0.2,
-            side: THREE.DoubleSide
-        });
+            const cuspMaterial = new THREE.MeshPhongMaterial({
+                color: 0xf87171,
+                emissive: 0x7f1d1d,
+                emissiveIntensity: 0.2,
+                side: THREE.DoubleSide
+            });
 
-        // 雙瓣葉片尺寸
-        const flapWidth = tubeRadius * 1.65;
-        const flapLength = tubeRadius * 0.88;
-        const flapThickness = 0.16;
-        const cuspGeometry = new THREE.BoxGeometry(flapWidth, flapLength, flapThickness);
+            const flapWidth = tubeRadius * 1.65;
+            const flapLength = tubeRadius * 0.88;
+            const flapThickness = 0.16;
+            const cuspGeometry = new THREE.BoxGeometry(flapWidth, flapLength, flapThickness);
 
-        // 上葉片樞紐 (Top Cusp Pivot)
-        const topPivot = new THREE.Group();
-        topPivot.position.set(0, tubeRadius * 0.72, 0);
-        const topCusp = new THREE.Mesh(cuspGeometry, cuspMaterial);
-        topCusp.position.set(0, -flapLength / 2, 0);
-        topPivot.add(topCusp);
-        valveGroup.add(topPivot);
+            const topPivot = new THREE.Group();
+            topPivot.position.set(0, tubeRadius * 0.72, 0);
+            const topCusp = new THREE.Mesh(cuspGeometry, cuspMaterial);
+            topCusp.position.set(0, -flapLength / 2, 0);
+            topPivot.add(topCusp);
+            valveGroup.add(topPivot);
 
-        // 下葉片樞紐 (Bottom Cusp Pivot)
-        const bottomPivot = new THREE.Group();
-        bottomPivot.position.set(0, -tubeRadius * 0.72, 0);
-        const bottomCusp = new THREE.Mesh(cuspGeometry, cuspMaterial);
-        bottomCusp.position.set(0, flapLength / 2, 0);
-        bottomPivot.add(bottomCusp);
-        valveGroup.add(bottomPivot);
+            const bottomPivot = new THREE.Group();
+            bottomPivot.position.set(0, -tubeRadius * 0.72, 0);
+            const bottomCusp = new THREE.Mesh(cuspGeometry, cuspMaterial);
+            bottomCusp.position.set(0, flapLength / 2, 0);
+            bottomPivot.add(bottomCusp);
+            valveGroup.add(bottomPivot);
 
-        // 初始靜止閉合角度（頂端朝向順流 -Z 右側方向微傾閉合，呈 V 字型漏斗阻止倒流）
-        const restAngle = 0.18;
-        topPivot.rotation.x = restAngle;
-        bottomPivot.rotation.x = -restAngle;
+            const restAngle = 0.18;
+            topPivot.rotation.x = restAngle;
+            bottomPivot.rotation.x = -restAngle;
 
-        valveGroup.material = cuspMaterial;
-        valveGroup.userData = {
-            topPivot,
-            bottomPivot,
-            currentOpen: 0,
-            zPos,
-            position
-        };
+            valveGroup.material = cuspMaterial;
+            valveGroup.userData = {
+                topPivot,
+                bottomPivot,
+                currentOpen: 0,
+                heartIndex: h,
+                zPos,
+                position
+            };
 
-        if (position === 'front') {
-            frontValveMeshes.push(valveGroup);
-            frontValveBodies.push(valveAnchor);
-        } else if (position === 'back') {
-            backValveMeshes.push(valveGroup);
-            backValveBodies.push(valveAnchor);
+            if (position === 'front') {
+                frontValveMeshes.push(valveGroup);
+                frontValveBodies.push(valveAnchor);
+            } else if (position === 'back') {
+                backValveMeshes.push(valveGroup);
+                backValveBodies.push(valveAnchor);
+            }
+
+            scene.add(valveGroup);
         }
-
-        scene.add(valveGroup);
     }
 
     function addValve(position) {
         if (position === 'front' && !frontValveEnabled) {
             createValve('front');
             frontValveEnabled = true;
-            frontValveStatus.textContent = "已安裝 (單向導通)";
-            frontValveStatus.className = 'status-badge status-on';
             if (toggleFrontValveBtn) {
-                toggleFrontValveBtn.textContent = '－ 移除前瓣膜(右)';
-                toggleFrontValveBtn.classList.remove('btn-green');
-                toggleFrontValveBtn.classList.add('btn-red');
+                toggleFrontValveBtn.textContent = '移除動脈瓣';
+                toggleFrontValveBtn.classList.add('btn-active');
             }
-            updateFlowHint();
         } else if (position === 'back' && !backValveEnabled) {
             createValve('back');
             backValveEnabled = true;
-            backValveStatus.textContent = "已安裝 (單向導通)";
-            backValveStatus.className = 'status-badge status-on';
             if (toggleBackValveBtn) {
-                toggleBackValveBtn.textContent = '－ 移除後瓣膜(左)';
-                toggleBackValveBtn.classList.remove('btn-green');
-                toggleBackValveBtn.classList.add('btn-red');
+                toggleBackValveBtn.textContent = '移除房室瓣';
+                toggleBackValveBtn.classList.add('btn-active');
             }
-            updateFlowHint();
         }
     }
 
@@ -943,14 +1596,10 @@ window.onload = function () {
             frontValveMeshes = [];
             frontValveBodies = [];
             frontValveEnabled = false;
-            frontValveStatus.textContent = "未安裝";
-            frontValveStatus.className = 'status-badge status-off';
             if (toggleFrontValveBtn) {
-                toggleFrontValveBtn.textContent = '＋ 新增前瓣膜(右)';
-                toggleFrontValveBtn.classList.remove('btn-red');
-                toggleFrontValveBtn.classList.add('btn-green');
+                toggleFrontValveBtn.textContent = '出口動脈瓣';
+                toggleFrontValveBtn.classList.remove('btn-active');
             }
-            updateFlowHint();
         } else if (position === 'back' && backValveEnabled) {
             backValveMeshes.forEach(m => {
                 scene.remove(m);
@@ -967,20 +1616,63 @@ window.onload = function () {
             backValveMeshes = [];
             backValveBodies = [];
             backValveEnabled = false;
-            backValveStatus.textContent = "未安裝";
-            backValveStatus.className = 'status-badge status-off';
             if (toggleBackValveBtn) {
-                toggleBackValveBtn.textContent = '＋ 新增後瓣膜(左)';
-                toggleBackValveBtn.classList.remove('btn-red');
-                toggleBackValveBtn.classList.add('btn-green');
+                toggleBackValveBtn.textContent = '入口房室瓣';
+                toggleBackValveBtn.classList.remove('btn-active');
             }
-            updateFlowHint();
         }
     }
 
-    // 核心流體力學與心管搏動模型
+    function updateDynamicBendTransition(dt) {
+        const bendDiff = targetBend - currentBend;
+        if (Math.abs(bendDiff) <= 0.0001) return;
+
+        const oldLoopLength = loopTotalLength;
+        const count = particles.length;
+        for (let i = 0; i < count; i++) {
+            const p = particles[i];
+            const pos = p.body.position;
+            const vel = p.body.velocity;
+            p.s = projectPointToSpineS(pos.x, pos.y, pos.z, p.s);
+            const spOld = getSpineAtS(p.s, tempSpinePrev);
+            const dx = pos.x - spOld.cx;
+            const dy = pos.y - spOld.cy;
+            const dz = pos.z - spOld.cz;
+            p._normS = p.s / oldLoopLength;
+            p._rv = dx * spOld.vx + dy * spOld.vy + dz * spOld.vz;
+            p._ru = dx * spOld.ux + dy * spOld.uy + dz * spOld.uz;
+            p._velS = vel.x * spOld.tx + vel.y * spOld.ty + vel.z * spOld.tz;
+            p._velV = vel.x * spOld.vx + vel.y * spOld.vy + vel.z * spOld.vz;
+            p._velU = vel.x * spOld.ux + vel.y * spOld.uy + vel.z * spOld.uz;
+        }
+
+        const step = bendDiff * Math.min(1.0, dt * 4.2);
+        if (Math.abs(bendDiff) < 0.001) {
+            currentBend = targetBend;
+        } else {
+            currentBend += step;
+        }
+        rebuildSpineTable(currentBend);
+        syncValvesToSpine();
+
+        for (let i = 0; i < count; i++) {
+            const p = particles[i];
+            const pos = p.body.position;
+            const vel = p.body.velocity;
+            p.s = p._normS * loopTotalLength;
+            const spNew = getSpineAtS(p.s, tempSpine);
+            pos.x = spNew.cx + p._rv * spNew.vx + p._ru * spNew.ux;
+            pos.y = spNew.cy + p._rv * spNew.vy + p._ru * spNew.uy;
+            pos.z = spNew.cz + p._rv * spNew.vz + p._ru * spNew.uz;
+            vel.x = p._velS * spNew.tx + p._velV * spNew.vx + p._velU * spNew.ux;
+            vel.y = p._velS * spNew.ty + p._velV * spNew.vy + p._velU * spNew.uy;
+            vel.z = p._velS * spNew.tz + p._velV * spNew.vz + p._velU * spNew.uz;
+        }
+    }
+
     function updateCompression(dt) {
-        // 若開啟「連續壓縮」，自動依規律週期切換壓縮(收縮)與擴張(舒張)
+        updateDynamicBendTransition(dt);
+
         if (autoCompressEnabled) {
             autoCompressTimer += dt;
             if (autoCompressTimer >= autoCycleHalfPeriod) {
@@ -992,7 +1684,6 @@ window.onload = function () {
                 }
             }
         } else if (irregularCompressEnabled) {
-            // 若開啟「不規律收縮（心律不整）」，依隨機忽快忽慢與深淺不一的節律切換
             irregularTimer += dt;
             tremorTime += dt;
             if (irregularTimer >= irregularNextInterval) {
@@ -1002,10 +1693,8 @@ window.onload = function () {
 
         phaseTimer += dt;
 
-        // 1. 更新中央心室腔與上游心房囊袋（靜脈竇）的視覺與物理管徑
         let targetCompression = 0;
         const effectiveStrength = irregularCompressEnabled ? irregularStrength : 1.0;
-        // 心律不整亂顫時，管壁附加高頻微幅顫抖 (Fibrillation Tremor)
         const tremorOffset = (irregularCompressEnabled && irregularModeType === 'fibrillation')
             ? Math.sin(tremorTime * 42.0) * 0.12
             : 0;
@@ -1013,7 +1702,7 @@ window.onload = function () {
         if (vesselState === 'compress') {
             targetCompression = 1.0 * effectiveStrength + tremorOffset;
         } else if (vesselState === 'expand') {
-            targetCompression = -0.55 * effectiveStrength + tremorOffset; // 舒張時適度擴張
+            targetCompression = -0.55 * effectiveStrength + tremorOffset;
         } else {
             targetCompression = 0.0;
         }
@@ -1021,36 +1710,16 @@ window.onload = function () {
         const adaptSpeed = irregularCompressEnabled ? compressionSpeed * 1.45 : compressionSpeed;
         currentCompression += (targetCompression - currentCompression) * adaptSpeed * (dt * 60);
 
-        // 計算心房囊袋（靜脈竇）的動態膨大程度：
-        // - 心室壓縮 (compress) 時：後瓣膜關閉，上游回流血液湧入心房囊袋儲血，囊袋顯著充盈膨大 (1.05)
-        // - 心室擴張 (expand) 時：心房囊袋彈性回縮 (0.28)，將儲存的血液快速擠入心室！
-        // - 心律不整時：房室協同失調 (AV Dyssynchrony)，心房不規則顫動，無法有效配合心室注血
         let targetAtriumBulge = 0;
         if (atriumEnabled) {
             if (irregularCompressEnabled) {
                 targetAtriumBulge = 0.68 + 0.22 * Math.sin(tremorTime * 19.0);
-                if (atriumStatus) {
-                    atriumStatus.textContent = '⚡ 房室失調 (心房亂顫)';
-                    atriumStatus.className = 'status-badge status-warn';
-                }
             } else if (vesselState === 'compress') {
                 targetAtriumBulge = 1.05;
-                if (atriumStatus) {
-                    atriumStatus.textContent = '充盈儲血中 (囊袋膨大)';
-                    atriumStatus.className = 'status-badge status-warn';
-                }
             } else if (vesselState === 'expand') {
                 targetAtriumBulge = 0.28;
-                if (atriumStatus) {
-                    atriumStatus.textContent = '收縮注血中 (灌入心室 →)';
-                    atriumStatus.className = 'status-badge status-on';
-                }
             } else {
                 targetAtriumBulge = 0.85;
-                if (atriumStatus) {
-                    atriumStatus.textContent = '已開啟 (儲血囊袋)';
-                    atriumStatus.className = 'status-badge status-on';
-                }
             }
         }
 
@@ -1058,92 +1727,81 @@ window.onload = function () {
         atriumCurrentBulge += (targetAtriumBulge - atriumCurrentBulge) * 0.09 * (dt * 60);
         const atriumBulgeDelta = atriumCurrentBulge - prevAtriumBulge;
 
-        // 推進動脈彈性脈搏波向右（下游）長距離傳導 (Pulse Wave Propagation)
-        const pulseWaveSpeed = 42.0; // 脈搏波在動脈壁中的傳播速度 (單位/秒)
+        // 推進動脈彈性脈搏波
+        const pulseWaveSpeed = 42.0;
         for (let i = arterialPulseWaves.length - 1; i >= 0; i--) {
             const wave = arterialPulseWaves[i];
             wave.z -= pulseWaveSpeed * dt;
-            // 若發生動脈瓣關閉不全（舒張期血液倒灌），動脈舒張壓急速潰散，脈搏波迅速衰減塌陷 (Corrigan's / collapsing pulse)
             const decayRate = (regurgitationEnabled && frontValveEnabled && vesselState === 'expand')
                 ? Math.pow(0.78, dt * 60)
                 : Math.pow(0.982, dt * 60);
             wave.amplitude *= decayRate;
-            if (wave.z < -halfTubeLength - 10 || wave.amplitude < 0.04) {
+            if (wave.z < -halfTubeLength - 15 || wave.amplitude < 0.04) {
                 arterialPulseWaves.splice(i, 1);
             }
         }
 
-        // 激發動脈彈性脈搏波（演化邏輯：需先安裝單向瓣膜建立射血體系；無瓣膜時左右對稱分流，不產生單側動脈波）
+        // 激發動脈彈性脈搏波
         if (vesselState === 'compress' && (frontValveEnabled || backValveEnabled)) {
-            // 判定心室是否已明顯收縮增壓 (currentCompression 達到收縮進度，避免剛按下的第 1 幀過早發射)
             const isChamberContracted = currentCompression >= 0.35 || phaseTimer >= 0.22;
-            // 判定動脈瓣是否已順流推開 (有安裝前瓣膜時檢測開度，僅後瓣膜或心律不整時達射血時相)
             const isValveOpened = !frontValveEnabled || (frontValveMeshes.length > 0 && frontValveMeshes[0].userData && frontValveMeshes[0].userData.currentOpen > 0.16) || phaseTimer >= 0.30;
 
             if (!pulseSpawnedThisPhase && isChamberContracted && isValveOpened) {
                 pulseSpawnedThisPhase = true;
-                // 若房室瓣關閉不全，大量血液逆流回心房，前向射血量折損，動脈脈搏波強度顯著減弱
                 const regurgLoss = (regurgitationEnabled && backValveEnabled) ? 0.48 : 1.0;
                 const amp = (irregularCompressEnabled ? irregularStrength : 1.0) * (frontValveEnabled ? 1.0 : 0.8) * regurgLoss;
                 arterialPulseWaves.push({
-                    z: -halfCompressionLength - 1.0, // 從動脈瓣口 (z = -16.0) 根部平滑湧出
+                    z: -halfCompressionLength - 1.0,
                     amplitude: amp,
-                    width: 8.5 // 脈搏波寬度
+                    width: 8.5
                 });
             }
         }
 
-        // 動態更新動脈脈搏狀態提示
-        if (arterialPulseStatus) {
-            if (!frontValveEnabled && !backValveEnabled) {
-                arterialPulseStatus.textContent = '未形成 (無單向瓣膜高壓射血)';
-                arterialPulseStatus.className = 'status-badge status-off';
-            } else {
-                const maxPulseAmp = arterialPulseWaves.length > 0 ? Math.max(...arterialPulseWaves.map(w => w.amplitude)) : 0;
-                if (regurgitationEnabled && frontValveEnabled && vesselState === 'expand') {
-                    arterialPulseStatus.textContent = '⚠️ 脈搏波塌陷 (水錘脈/舒張倒灌)';
-                    arterialPulseStatus.className = 'status-badge status-warn';
-                } else if (maxPulseAmp > 0.3) {
-                    arterialPulseStatus.textContent = '💓 收縮期脈搏波 (強烈傳導中...)';
-                    arterialPulseStatus.className = 'status-badge status-on';
+        // 更新外管與套管網格頂點
+        if (!dualHeartEnabled) {
+            updateCylinderMeshProfile(singleTubeMesh, 1.0);
+        } else {
+            updateCylinderMeshProfile(loopTubeMesh, 1.0);
+        }
+
+        const activeHearts = dualHeartEnabled ? 2 : 1;
+        for (let h = 0; h < 2; h++) {
+            const isHeartActive = (h < activeHearts);
+            if (compressionZoneMeshes[h]) {
+                compressionZoneMeshes[h].visible = isHeartActive;
+                if (isHeartActive) {
+                    updateCylinderMeshProfile(compressionZoneMeshes[h], 1.02);
+                }
+            }
+
+            const atrMesh = atriumZoneMeshes[h];
+            if (atrMesh) {
+                if (isHeartActive && atriumCurrentBulge > 0.01) {
+                    atrMesh.visible = true;
+                    atrMesh.material.opacity = Math.min(0.36, atriumCurrentBulge * 0.36);
+                    updateCylinderMeshProfile(atrMesh, 1.025);
                 } else {
-                    arterialPulseStatus.textContent = '平穩 (舒張基線)';
-                    arterialPulseStatus.className = 'status-badge status-neutral';
+                    atrMesh.visible = false;
+                }
+            }
+
+            const artMesh = arteryZoneMeshes[h];
+            const hasAnyValve = frontValveEnabled || backValveEnabled;
+            if (artMesh) {
+                if (isHeartActive && hasAnyValve) {
+                    artMesh.visible = true;
+                    updateCylinderMeshProfile(artMesh, 1.02);
+                    const activePulseAmp = arterialPulseWaves.length > 0 ? Math.max(...arterialPulseWaves.map(w => w.amplitude)) : 0;
+                    artMesh.material.emissiveIntensity = 0.12 + Math.min(0.50, activePulseAmp * 0.40);
+                    artMesh.material.opacity = 0.25 + Math.min(0.25, activePulseAmp * 0.20);
+                } else {
+                    artMesh.visible = false;
+                    if (!hasAnyValve) arterialPulseWaves = [];
                 }
             }
         }
 
-        // 更新主血管、心室肌肉壁、心房囊袋與動脈彈性套管的 3D 網格頂點
-        updateCylinderMeshProfile(fullTubeMesh, 0, 1.0);
-        updateCylinderMeshProfile(compressionZoneMesh, centralSectionZ, 1.02);
-
-        if (atriumZoneMesh) {
-            if (atriumCurrentBulge > 0.01) {
-                atriumZoneMesh.visible = true;
-                atriumZoneMesh.material.opacity = Math.min(0.36, atriumCurrentBulge * 0.36);
-                updateCylinderMeshProfile(atriumZoneMesh, atriumCenterZ, 1.025);
-            } else {
-                atriumZoneMesh.visible = false;
-            }
-        }
-
-        const hasAnyValve = frontValveEnabled || backValveEnabled;
-        if (arteryZoneMesh) {
-            if (hasAnyValve) {
-                arteryZoneMesh.visible = true;
-                updateCylinderMeshProfile(arteryZoneMesh, arteryCenterZ, 1.02);
-                const activePulseAmp = arterialPulseWaves.length > 0 ? Math.max(...arterialPulseWaves.map(w => w.amplitude)) : 0;
-                // 脈搏波通過時發出自然雅緻的收縮壓動脈微光，柔和吻合心室
-                arteryZoneMesh.material.emissiveIntensity = 0.12 + Math.min(0.50, activePulseAmp * 0.40);
-                arteryZoneMesh.material.opacity = 0.25 + Math.min(0.25, activePulseAmp * 0.20);
-            } else {
-                arteryZoneMesh.visible = false;
-                arterialPulseWaves = [];
-            }
-        }
-
-        // 2. 依據「收縮/舒張狀態」、「前後瓣膜配置」與「心房囊袋儲血/注血」計算連續流場推進力
-        // 脈衝包絡線：規律連續搏動時維持飽滿動能；心律不整時隨早搏/亂顫/長停頓呈現強弱不均與斷續停滯
         let pulseEnvelope;
         if (autoCompressEnabled) {
             pulseEnvelope = 0.6 + 0.4 * Math.cos(Math.min(Math.PI, (phaseTimer / autoCycleHalfPeriod) * Math.PI * 0.7));
@@ -1153,137 +1811,147 @@ window.onload = function () {
             pulseEnvelope = Math.exp(-phaseTimer * 1.6);
         }
 
-        const frontZ = -halfCompressionLength - 1; // -16 (右側出口)
-        const backZ = halfCompressionLength + 1;   // +16 (左側入口)
+        const frontZ = -halfCompressionLength - 1; // -16
+        const backZ = halfCompressionLength + 1;   // +16
 
         for (let i = 0; i < particles.length; i++) {
             const p = particles[i];
             const pos = p.body.position;
-            const posZ = pos.z;
+            const vel = p.body.velocity;
+
+            const prevS = p.s;
+            const spPrev = getSpineAtS(prevS, tempSpinePrev);
+            let velS = vel.x * spPrev.tx + vel.y * spPrev.ty + vel.z * spPrev.tz;
+            let velV = vel.x * spPrev.vx + vel.y * spPrev.vy + vel.z * spPrev.vz;
+            let velU = vel.x * spPrev.ux + vel.y * spPrev.uy + vel.z * spPrev.uz;
+
+            const newS = projectPointToSpineS(pos.x, pos.y, pos.z, prevS);
+            p.s = newS;
+            const sp = getSpineAtS(newS, tempSpine);
+            const { u: posZ } = getHeartLocalU(newS);
+
+            const newPalIdx = getParticleOxygenPaletteIndex(newS);
+            if (newPalIdx !== p.palIdx && rbcMaterialPalette[newPalIdx]) {
+                p.palIdx = newPalIdx;
+                p.mesh.material = rbcMaterialPalette[newPalIdx];
+            }
+
+            const dx = pos.x - sp.cx;
+            const dy = pos.y - sp.cy;
+            const dz = pos.z - sp.cz;
+            const rv = dx * sp.vx + dy * sp.vy + dz * sp.vz;
+            const ru = dx * sp.ux + dy * sp.uy + dz * sp.uz;
+            const rSq = rv * rv + ru * ru;
+
             let targetVz = 0;
 
-            // 當心房囊袋正在膨大充盈時，讓位於囊袋區 (+16.5 ~ +44.5) 內的血球自然向囊袋外圍擴散填滿囊袋空間
-            if (atriumCurrentBulge > 0.05 && posZ >= atriumZMin && posZ <= atriumZMax) {
-                const localMaxR = getEffectiveTubeRadiusAtZ(posZ) - particleRadius * 1.2;
-                const rSq = pos.x * pos.x + pos.y * pos.y;
-                if (atriumBulgeDelta > 0.0005 && rSq > 0.01 && rSq < localMaxR * localMaxR * 0.85) {
-                    const radialOutSpeed = atriumBulgeDelta * 45.0;
-                    p.body.velocity.x += (pos.x / Math.sqrt(rSq)) * radialOutSpeed;
-                    p.body.velocity.y += (pos.y / Math.sqrt(rSq)) * radialOutSpeed;
-                }
-            }
-
-            if (vesselState === 'compress') {
-                // 【壓縮心室 / 心室收縮期】
-                if (backValveEnabled) {
-                    if (regurgitationEnabled) {
-                        // 房室瓣關閉不全 (Mitral / AV Regurgitation):
-                        // 心室收縮期高壓下，中央漏孔產生強勁反向高速射流 (+Z 方向，逆噴入心房)
-                        const rSq = pos.x * pos.x + pos.y * pos.y;
-                        const isCentralJet = rSq < 3.2 * 3.2;
-
-                        if (posZ >= -4 && posZ <= backZ + 20) {
-                            // 房室瓣前後區域：中央高速逆流噴柱
-                            if (isCentralJet) {
-                                targetVz = +(12.5 + Math.sin(phaseTimer * 28.0) * 2.5) * pulseEnvelope;
-                            } else {
-                                targetVz = +(4.0 * pulseEnvelope);
-                            }
-                        } else if (posZ > backZ + 20) {
-                            // 心房囊袋/靜脈深部受逆流波及，血液受阻倒退
-                            targetVz = +(3.0 * pulseEnvelope);
-                        } else {
-                            // 心室前半部 (-16 ~ -4)：前向射血量折損
-                            const chamberProgress = (posZ - frontZ) / (backZ - frontZ);
-                            const speed = (2.5 + 5.5 * (1.0 - chamberProgress)) * pulseEnvelope;
-                            targetVz = -speed;
-                        }
-                    } else {
-                        // 後瓣膜正常緊密閉合：
-                        // 心室內部 (-16 ~ +16) 與右側下游 (z < -16) 的血液全部受壓向右 (-Z) 強勁噴出！
-                        if (posZ <= backZ) {
-                            const chamberProgress = posZ > frontZ
-                                ? (backZ - posZ) / (backZ - frontZ)
-                                : 1.0;
-                            const speed = (6.0 + 13.5 * chamberProgress) * pulseEnvelope;
-                            targetVz = -speed;
-                        } else if (atriumEnabled) {
-                            // 心房囊袋已開啟：上游 (z > 44.5) 靜脈血快速流入心房囊袋；囊袋內 (16 < z <= 44.5) 緩速匯聚儲血！
-                            if (posZ > atriumZMax) {
-                                targetVz = -9.5 * pulseEnvelope;
-                            } else {
-                                // 越靠近關閉的後瓣膜 (+16)，流速越平緩，讓血球舒適儲存在膨大的心房囊袋中
-                                const pouchProgress = (posZ - backZ) / atriumLength; // 0 (在 backZ) ~ 1 (在囊袋入口)
-                                targetVz = -(1.5 + 6.5 * pouchProgress) * pulseEnvelope;
-                            }
-                        } else {
-                            // 無心房囊袋：上游靜脈血液僅能平緩向右 (-Z) 推進
-                            targetVz = -3.8 * pulseEnvelope;
-                        }
-                    }
-                } else {
-                    // 無後瓣膜：壓縮時血液從中央 (z = 0) 向左右兩端分流擠出
-                    if (posZ < 0) {
-                        const factor = Math.min(1.0, Math.abs(posZ) / 12 + 0.25);
-                        targetVz = -14.0 * factor * pulseEnvelope;
-                    } else {
-                        const factor = Math.min(1.0, Math.abs(posZ) / 12 + 0.25);
-                        targetVz = +14.0 * factor * pulseEnvelope;
+            // 在雙心循環的頂端連接區段 (左上/右上動靜脈交界處)，給予持續平穩的順向推進動能並收斂橫向離心偏移
+            const isTopArch = dualHeartEnabled && (
+                (newS > seg1StartS && newS < seg2StartS) ||
+                (newS > seg3StartS && newS < loopTotalLength)
+            );
+            if (isTopArch) {
+                targetVz = -9.5 * Math.max(0.45, pulseEnvelope);
+                velV *= 0.88;
+                velU *= 0.88;
+            } else {
+                if (atriumCurrentBulge > 0.05 && posZ >= atriumZMin && posZ <= atriumZMax) {
+                    const localMaxR = getEffectiveTubeRadiusAtZ(posZ) - particleRadius * 1.2;
+                    if (atriumBulgeDelta > 0.0005 && rSq > 0.01 && rSq < localMaxR * localMaxR * 0.85) {
+                        const radialOutSpeed = atriumBulgeDelta * 45.0;
+                        const r = Math.sqrt(rSq);
+                        velV += (rv / r) * radialOutSpeed;
+                        velU += (ru / r) * radialOutSpeed;
                     }
                 }
-            } else if (vesselState === 'expand') {
-                // 【擴張心室 / 心室舒張期】
-                // 若開啟心房囊袋（靜脈竇），規律搏動時囊袋彈性回縮提供 1.38 倍額外注血推力 (Atrial Kick)；心律不整時房室失調失去增幅
-                const atrialBoost = (atriumEnabled && posZ >= centralSectionZ && posZ <= atriumZMax + 4)
-                    ? (irregularCompressEnabled ? 0.85 : 1.38)
-                    : 1.0;
 
-                if (frontValveEnabled) {
-                    if (regurgitationEnabled) {
-                        // 動脈瓣關閉不全 (Aortic Regurgitation):
-                        // 舒張期動脈內高壓血液經由未閉合的動脈瓣孔徑劇烈倒灌回低壓心室 (+Z 方向)
-                        if (posZ <= frontZ && posZ >= frontZ - 30) {
-                            // 動脈近端：血液急速倒灌回心室 (水錘脈 / 舒張期逆流)
-                            const leakFactor = Math.max(0.35, 1.0 - Math.abs(posZ - frontZ) / 30);
-                            targetVz = +(13.5 * leakFactor) * pulseEnvelope;
-                        } else if (posZ < frontZ - 30) {
-                            // 動脈遠端：前向動能驟失停滯
-                            targetVz = +0.5 * pulseEnvelope;
-                        } else if (posZ > frontZ && posZ <= 0) {
-                            // 心室流出道：倒灌血液湧入心室前端
-                            targetVz = +(6.5 * (1.0 - (posZ - frontZ) / 16)) * pulseEnvelope;
+                if (vesselState === 'compress') {
+                    if (backValveEnabled) {
+                        if (regurgitationEnabled) {
+                            const isCentralJet = rSq < 3.2 * 3.2;
+                            if (posZ >= -4 && posZ <= backZ + 20) {
+                                if (isCentralJet) {
+                                    targetVz = +(12.5 + Math.sin(phaseTimer * 28.0) * 2.5) * pulseEnvelope;
+                                } else {
+                                    targetVz = +(4.0 * pulseEnvelope);
+                                }
+                            } else if (posZ > backZ + 20) {
+                                targetVz = +(3.0 * pulseEnvelope);
+                            } else {
+                                const chamberProgress = Math.max(0, (posZ - frontZ) / (backZ - frontZ));
+                                const speed = (2.5 + 5.5 * (1.0 - chamberProgress)) * pulseEnvelope;
+                                targetVz = -speed;
+                            }
                         } else {
-                            // 心室後部與心房：從左向右充血
-                            const distToFront = Math.max(0, posZ - frontZ);
-                            const fillFactor = Math.min(1.0, distToFront / 10 + 0.35);
-                            targetVz = -11.0 * fillFactor * atrialBoost * pulseEnvelope;
+                            if (posZ <= backZ) {
+                                const chamberProgress = posZ > frontZ
+                                    ? (backZ - posZ) / (backZ - frontZ)
+                                    : 1.0;
+                                const speed = (6.5 + 13.5 * chamberProgress) * pulseEnvelope;
+                                targetVz = -speed;
+                            } else if (atriumEnabled) {
+                                if (posZ > atriumZMax) {
+                                    targetVz = -9.5 * pulseEnvelope;
+                                } else {
+                                    const pouchProgress = (posZ - backZ) / atriumLength;
+                                    targetVz = -(1.5 + 6.5 * pouchProgress) * pulseEnvelope;
+                                }
+                            } else {
+                                targetVz = -5.2 * pulseEnvelope;
+                            }
                         }
                     } else {
-                        // 前瓣膜正常緊密阻擋下游血液倒流：
-                        if (posZ >= frontZ) {
-                            const distToFront = Math.max(0, posZ - frontZ);
-                            const fillFactor = Math.min(1.0, distToFront / 10 + 0.35);
-                            targetVz = -15.0 * fillFactor * atrialBoost * pulseEnvelope;
+                        if (posZ < 0) {
+                            const factor = Math.min(1.0, Math.abs(posZ) / 12 + 0.25);
+                            targetVz = -14.0 * factor * pulseEnvelope;
                         } else {
-                            targetVz = -4.5 * pulseEnvelope;
+                            const factor = Math.min(1.0, Math.abs(posZ) / 12 + 0.25);
+                            targetVz = +14.0 * factor * pulseEnvelope;
                         }
                     }
-                } else {
-                    // 無前瓣膜：擴張時右側下游 (z < 0) 血液倒流吸回腔室
-                    if (posZ < -2) {
-                        const factor = Math.min(1.0, Math.abs(posZ) / 15 + 0.25);
-                        targetVz = +13.5 * factor * pulseEnvelope;
-                    } else if (posZ > 2) {
-                        const factor = Math.min(1.0, Math.abs(posZ) / 15 + 0.25);
-                        targetVz = -13.5 * factor * atrialBoost * pulseEnvelope;
+                } else if (vesselState === 'expand') {
+                    const atrialBoost = (atriumEnabled && posZ >= centralSectionZ && posZ <= atriumZMax + 4)
+                        ? (irregularCompressEnabled ? 0.85 : 1.38)
+                        : 1.0;
+
+                    if (frontValveEnabled) {
+                        if (regurgitationEnabled) {
+                            if (posZ <= frontZ && posZ >= frontZ - 30) {
+                                const leakFactor = Math.max(0.35, 1.0 - Math.abs(posZ - frontZ) / 30);
+                                targetVz = +(13.5 * leakFactor) * pulseEnvelope;
+                            } else if (posZ < frontZ - 30) {
+                                targetVz = +0.5 * pulseEnvelope;
+                            } else if (posZ > frontZ && posZ <= 0) {
+                                targetVz = +(6.5 * (1.0 - (posZ - frontZ) / 16)) * pulseEnvelope;
+                            } else {
+                                const distToFront = Math.max(0, posZ - frontZ);
+                                const fillFactor = Math.min(1.0, distToFront / 10 + 0.35);
+                                targetVz = -11.0 * fillFactor * atrialBoost * pulseEnvelope;
+                            }
+                        } else {
+                            if (posZ >= frontZ) {
+                                const distToFront = Math.max(0, posZ - frontZ);
+                                const fillFactor = Math.min(1.0, distToFront / 10 + 0.35);
+                                targetVz = -15.0 * fillFactor * atrialBoost * pulseEnvelope;
+                            } else {
+                                targetVz = -5.8 * pulseEnvelope;
+                            }
+                        }
                     } else {
-                        targetVz = 0;
+                        if (posZ < -2) {
+                            const factor = Math.min(1.0, Math.abs(posZ) / 15 + 0.25);
+                            targetVz = +13.5 * factor * pulseEnvelope;
+                        } else if (posZ > 2) {
+                            const factor = Math.min(1.0, Math.abs(posZ) / 15 + 0.25);
+                            targetVz = -13.5 * factor * atrialBoost * pulseEnvelope;
+                        } else {
+                            targetVz = 0;
+                        }
                     }
                 }
             }
 
-            // 動脈脈搏波推力：當脈搏波通過時，賦予下游血球更澎湃同步的動脈射血脈衝流速！
-            if (posZ < -halfCompressionLength - 1) {
+            if (posZ < -halfCompressionLength - 1 && posZ > -halfTubeLength) {
                 for (let w = 0; w < arterialPulseWaves.length; w++) {
                     const wave = arterialPulseWaves[w];
                     const dist = posZ - wave.z;
@@ -1294,16 +1962,18 @@ window.onload = function () {
                 }
             }
 
-            // 平滑更新粒子的軸向速度（在平時 normal 狀態自然減速靜止，不人為分區聚簇）
             if (vesselState === 'normal') {
-                p.body.velocity.z *= 0.94;
+                velS *= 0.94;
             } else {
-                p.body.velocity.z += (targetVz - p.body.velocity.z) * 0.18;
+                velS += (targetVz - velS) * 0.18;
             }
+
+            vel.x = velS * sp.tx + velV * sp.vx + velU * sp.ux;
+            vel.y = velS * sp.ty + velV * sp.vy + velU * sp.uy;
+            vel.z = velS * sp.tz + velV * sp.vz + velU * sp.uz;
         }
     }
 
-    // 單向瓣膜物理約束、管壁徑向約束、以及左右兩端無限循環補血
     function updateValves() {
         const hasFront = frontValveEnabled;
         const hasBack = backValveEnabled;
@@ -1315,112 +1985,151 @@ window.onload = function () {
             const pos = p.body.position;
             const vel = p.body.velocity;
 
-            // 1. 動態管壁徑向約束（在中央壓縮區會隨血管收縮真正將血球往軸心擠壓）
-            const localTubeRadius = getEffectiveTubeRadiusAtZ(pos.z);
-            const maxAllowedR = Math.max(particleRadius * 1.1, localTubeRadius - particleRadius * 0.9);
-            const rSq = pos.x * pos.x + pos.y * pos.y;
+            let s = projectPointToSpineS(pos.x, pos.y, pos.z, p.s);
+            let sp = getSpineAtS(s, tempSpine);
+            let { heartIndex, u: localU } = getHeartLocalU(s);
+
+            const dx = pos.x - sp.cx;
+            const dy = pos.y - sp.cy;
+            const dz = pos.z - sp.cz;
+            let rv = dx * sp.vx + dy * sp.vy + dz * sp.vz;
+            let ru = dx * sp.ux + dy * sp.uy + dz * sp.uz;
+
+            // 1. 動態 3D 管壁徑向約束與法平面鎖定 (確保大曲率轉彎處血球絕對不穿出管壁)
+            const localTubeRadius = getEffectiveTubeRadiusAtZ(localU);
+            const maxAllowedR = Math.max(0.5, localTubeRadius - particleRadius * 0.95);
+            const rSq = rv * rv + ru * ru;
 
             if (rSq > maxAllowedR * maxAllowedR) {
                 const r = Math.sqrt(rSq);
                 const scale = maxAllowedR / r;
-                pos.x *= scale;
-                pos.y *= scale;
-                // 將向外衝撞管壁的速度分量平滑導回管內
-                const nx = pos.x / maxAllowedR;
-                const ny = pos.y / maxAllowedR;
-                const radialVel = vel.x * nx + vel.y * ny;
+                rv *= scale;
+                ru *= scale;
+
+                const nv = rv / maxAllowedR;
+                const nu = ru / maxAllowedR;
+                const nx = nv * sp.vx + nu * sp.ux;
+                const ny = nv * sp.vy + nu * sp.uy;
+                const nz = nv * sp.vz + nu * sp.uz;
+                const radialVel = vel.x * nx + vel.y * ny + vel.z * nz;
                 if (radialVel > 0) {
-                    vel.x -= radialVel * nx * 1.2;
-                    vel.y -= radialVel * ny * 1.2;
+                    vel.x -= radialVel * nx * 1.25;
+                    vel.y -= radialVel * ny * 1.25;
+                    vel.z -= radialVel * nz * 1.25;
                 }
             }
 
-            // 2. 單向瓣膜物理阻擋判定（順流 -Z 完全暢通，逆流 +Z 精準阻擋且不塞車）
-            // 後瓣膜 (backZ = +16)：阻擋粒子從腔室 (z <= backZ) 向左逆流 (+Z) 穿過 backZ
-            if (hasBack) {
-                if (pos.z <= backZ && pos.z > backZ - 4.0 && vel.z > 0) {
-                    // 若開啟瓣膜關閉不全，中央孔隙區 (r < 2.5) 允許血球向後逆流漏失，不予阻擋！
-                    const rSq = pos.x * pos.x + pos.y * pos.y;
+            pos.x = sp.cx + rv * sp.vx + ru * sp.ux;
+            pos.y = sp.cy + rv * sp.vy + ru * sp.uy;
+            pos.z = sp.cz + rv * sp.vz + ru * sp.uz;
+
+            let velS = vel.x * sp.tx + vel.y * sp.ty + vel.z * sp.tz;
+            const velV = vel.x * sp.vx + vel.y * sp.vy + vel.z * sp.vz;
+            const velU = vel.x * sp.ux + vel.y * sp.uy + vel.z * sp.uz;
+
+            // 2. 單向瓣膜物理阻擋判定
+            if (hasBack && Math.abs(localU) <= halfTubeLength) {
+                if (localU <= backZ && localU > backZ - 4.0 && velS > 0) {
                     const isLeakingThrough = regurgitationEnabled && (rSq < 2.5 * 2.5);
                     if (!isLeakingThrough) {
-                        vel.z = -Math.abs(vel.z) * 0.15; // 柔和反彈，避免卡死在平面上
-                        if (pos.z > backZ - 0.3) {
-                            pos.z = backZ - 0.3 - Math.random() * 0.8;
+                        velS = -Math.abs(velS) * 0.15;
+                        if (localU > backZ - 0.3) {
+                            const clampedU = backZ - 0.3 - Math.random() * 0.8;
+                            s = getLoopSFromHeartU(heartIndex, clampedU);
+                            sp = getSpineAtS(s, tempSpine);
+                            pos.x = sp.cx + rv * sp.vx + ru * sp.ux;
+                            pos.y = sp.cy + rv * sp.vy + ru * sp.uy;
+                            pos.z = sp.cz + rv * sp.vz + ru * sp.uz;
                         }
+                        vel.x = velS * sp.tx + velV * sp.vx + velU * sp.ux;
+                        vel.y = velS * sp.ty + velV * sp.vy + velU * sp.uy;
+                        vel.z = velS * sp.tz + velV * sp.vz + velU * sp.uz;
                     }
                 }
             }
 
-            // 前瓣膜 (frontZ = -16)：阻擋粒子從下游 (z <= frontZ) 向左逆流 (+Z) 穿過 frontZ
-            if (hasFront) {
-                if (pos.z <= frontZ && pos.z > frontZ - 4.0 && vel.z > 0) {
-                    // 若開啟瓣膜關閉不全，中央孔隙區 (r < 2.5) 允許血球向左倒灌回心室！
-                    const rSq = pos.x * pos.x + pos.y * pos.y;
+            if (hasFront && Math.abs(localU) <= halfTubeLength) {
+                if (localU <= frontZ && localU > frontZ - 4.0 && velS > 0) {
                     const isLeakingThrough = regurgitationEnabled && (rSq < 2.5 * 2.5);
                     if (!isLeakingThrough) {
-                        vel.z = -Math.abs(vel.z) * 0.15;
-                        if (pos.z > frontZ - 0.3) {
-                            pos.z = frontZ - 0.3 - Math.random() * 0.8;
+                        velS = -Math.abs(velS) * 0.15;
+                        if (localU > frontZ - 0.3) {
+                            const clampedU = frontZ - 0.3 - Math.random() * 0.8;
+                            s = getLoopSFromHeartU(heartIndex, clampedU);
+                            sp = getSpineAtS(s, tempSpine);
+                            pos.x = sp.cx + rv * sp.vx + ru * sp.ux;
+                            pos.y = sp.cy + rv * sp.vy + ru * sp.uy;
+                            pos.z = sp.cz + rv * sp.vz + ru * sp.uz;
                         }
+                        vel.x = velS * sp.tx + velV * sp.vx + velU * sp.ux;
+                        vel.y = velS * sp.ty + velV * sp.vy + velU * sp.uy;
+                        vel.z = velS * sp.tz + velV * sp.vz + velU * sp.uz;
                     }
                 }
             }
 
-            // 3. 邊界循環機制：右側 (-Z) 離開血管的血球消失，立即在左側 (+Z) 入口補上！
-            if (pos.z < -halfTubeLength) {
-                const overflow = -halfTubeLength - pos.z;
-                pos.z = halfTubeLength - (overflow % 4.0) - Math.random() * 1.5;
-                const { x, y } = randomCrossSectionXY(tubeRadius);
-                pos.x = x;
-                pos.y = y;
-                vel.x *= 0.2;
-                vel.y *= 0.2;
-            } else if (pos.z > halfTubeLength) {
-                // 若在無後瓣膜時有血球從左側 (+Z) 逆流溢出，則循環補回右側末端，保持血管內血球總數守恆
-                const overflow = pos.z - halfTubeLength;
-                pos.z = -halfTubeLength + (overflow % 4.0) + Math.random() * 1.5;
-                const { x, y } = randomCrossSectionXY(tubeRadius);
-                pos.x = x;
-                pos.y = y;
-                vel.x *= 0.2;
-                vel.y *= 0.2;
+            if (!dualHeartEnabled) {
+                if (s <= 0.5 && velS < 0) {
+                    s = loopTotalLength - 1.0 - Math.random() * 2.0;
+                    const { x: newRv, y: newRu } = randomCrossSectionXY(tubeRadius);
+                    sp = getSpineAtS(s, tempSpine);
+                    pos.x = sp.cx + newRv * sp.vx + newRu * sp.ux;
+                    pos.y = sp.cy + newRv * sp.vy + newRu * sp.uy;
+                    pos.z = sp.cz + newRv * sp.vz + newRu * sp.uz;
+                    vel.x = velS * sp.tx;
+                    vel.y = velS * sp.ty;
+                    vel.z = velS * sp.tz;
+                } else if (s >= loopTotalLength - 0.5 && velS > 0) {
+                    s = 1.0 + Math.random() * 2.0;
+                    const { x: newRv, y: newRu } = randomCrossSectionXY(tubeRadius);
+                    sp = getSpineAtS(s, tempSpine);
+                    pos.x = sp.cx + newRv * sp.vx + newRu * sp.ux;
+                    pos.y = sp.cy + newRv * sp.vy + newRu * sp.uy;
+                    pos.z = sp.cz + newRv * sp.vz + newRu * sp.uz;
+                    vel.x = velS * sp.tx;
+                    vel.y = velS * sp.ty;
+                    vel.z = velS * sp.tz;
+                }
             }
+
+            p.s = s;
         }
     }
 
-    // 動態解剖瓣膜開闔動畫與即時狀態顯示：順流 (-Z) 時向外張開，逆流或靜止時緊密閉合
     function updateValveFlapAnimation(valveMesh, valveZ, valveType) {
-        if (!valveMesh || !valveMesh.userData || !valveMesh.userData.topPivot) return;
-        const { topPivot, bottomPivot } = valveMesh.userData;
+        if (!valveMesh || !valveMesh.visible || !valveMesh.userData || !valveMesh.userData.topPivot) return;
+        const { topPivot, bottomPivot, heartIndex } = valveMesh.userData;
 
-        // 計算瓣膜附近的血液淨流速 (-Z 為正值順流，+Z 為負值逆流)
+        const valveLoopS = getLoopSFromHeartU(heartIndex, valveZ);
+        const spValve = getSpineAtS(valveLoopS, tempSpine);
+
         let netForwardFlow = 0;
         let count = 0;
         for (let i = 0; i < particles.length; i++) {
             const p = particles[i];
-            const dz = p.body.position.z - valveZ;
-            if (Math.abs(dz) < 9) {
+            let ds = Math.abs(p.s - valveLoopS);
+            if (dualHeartEnabled && ds > loopTotalLength * 0.5) ds = loopTotalLength - ds;
+            if (ds < 9) {
                 count++;
-                netForwardFlow += -p.body.velocity.z;
+                const vel = p.body.velocity;
+                const velS = vel.x * spValve.tx + vel.y * spValve.ty + vel.z * spValve.tz;
+                netForwardFlow += -velS;
             }
         }
 
         const avgForwardFlow = count > 0 ? (netForwardFlow / count) : 0;
 
-        // 結合流體速度與搏動周期決定瓣膜張開程度
         let targetOpen = 0;
         let isRegurgitating = false;
 
         if (valveType === 'front' && vesselState === 'expand') {
-            // 舒張擴張時，動脈瓣應受下游逆壓迅速緊閉；若關閉不全則無法閉合
             if (regurgitationEnabled) {
-                targetOpen = 0.36; // 維持中央漏孔
+                targetOpen = 0.36;
                 isRegurgitating = true;
             } else {
                 targetOpen = 0.0;
             }
         } else if (valveType === 'back' && vesselState === 'compress') {
-            // 收縮壓縮時，後瓣膜應受腔室高壓迅速緊閉；若關閉不全則維持縫隙
             if (regurgitationEnabled) {
                 targetOpen = 0.36;
                 isRegurgitating = true;
@@ -1433,47 +2142,22 @@ window.onload = function () {
             targetOpen = regurgitationEnabled ? 0.22 : 0.0;
         }
 
-        // 開啟時平滑自然，閉合時果斷迅速（防止倒流生理特性）
         const smoothing = targetOpen > valveMesh.userData.currentOpen ? 0.22 : 0.38;
         valveMesh.userData.currentOpen += (targetOpen - valveMesh.userData.currentOpen) * smoothing;
 
-        const restAngle = 0.18; // 緊密貼合角
-        const maxTilt = 0.65;   // 最大開啟角
-
-        // 瓣膜關閉不全受高速逆流衝擊時，瓣葉伴隨病理性撲動震顫 (Valvular Fluttering)
+        const restAngle = 0.18;
+        const maxTilt = 0.65;
         const regurgFlutter = isRegurgitating ? Math.sin(phaseTimer * 46.0) * 0.07 : 0;
 
         topPivot.rotation.x = restAngle + (valveMesh.userData.currentOpen + regurgFlutter) * maxTilt;
         bottomPivot.rotation.x = -restAngle - (valveMesh.userData.currentOpen + regurgFlutter) * maxTilt;
-
-        // 同步更新左上角資訊面板的瓣膜即時開闔狀態
-        const isOpen = valveMesh.userData.currentOpen > 0.22;
-        if (valveType === 'front' && frontValveStatus) {
-            if (isRegurgitating) {
-                frontValveStatus.textContent = '❌ 關閉不全 (舒張期倒灌)';
-                frontValveStatus.className = 'status-badge status-warn';
-            } else {
-                frontValveStatus.textContent = isOpen ? '開啟導通 (順流 →)' : '閉合阻擋 (防倒流)';
-                frontValveStatus.className = isOpen ? 'status-badge status-on' : 'status-badge status-neutral';
-            }
-        } else if (valveType === 'back' && backValveStatus) {
-            if (isRegurgitating) {
-                backValveStatus.textContent = '❌ 關閉不全 (收縮期逆流)';
-                backValveStatus.className = 'status-badge status-warn';
-            } else {
-                backValveStatus.textContent = isOpen ? '開啟導通 (吸入 →)' : '閉合阻擋 (防逆流)';
-                backValveStatus.className = isOpen ? 'status-badge status-on' : 'status-badge status-neutral';
-            }
-        }
     }
 
-    // 將 3D 解剖位置投影至 2D 螢幕座標，更新大字構造標籤位置
     function positionSingleLabel(el, x, y, z, isActive) {
-        if (!el) return;
+        if (!el || el.classList.contains('hidden')) return;
         tempProjVec.set(x, y, z);
         tempProjVec.project(camera);
 
-        // 若在攝影機視野後方則隱藏
         if (tempProjVec.z > 1.0) {
             el.style.display = 'none';
             return;
@@ -1486,6 +2170,15 @@ window.onload = function () {
         el.classList.toggle('anat-inactive', !isActive);
     }
 
+    function positionLabelAtHeartU(el, heartIndex, localU, isTop, radiusAtS, isActive, zOutwardOffset) {
+        const loopS = getLoopSFromHeartU(heartIndex, localU);
+        const sp = getSpineAtS(loopS, tempSpine);
+        const offset = radiusAtS + 4.8;
+        const wy = sp.cy + (isTop ? offset : -offset);
+        const wz = sp.cz + (zOutwardOffset || 0);
+        positionSingleLabel(el, sp.cx, wy, wz, isActive);
+    }
+
     function updateAnatomicalLabels() {
         if (!labelsVisible) return;
         const frontZ = -halfCompressionLength - 1; // -16 動脈瓣
@@ -1493,26 +2186,32 @@ window.onload = function () {
         const atriumR = getEffectiveTubeRadiusAtZ(atriumCenterZ);
         const ventR = getEffectiveTubeRadiusAtZ(centralSectionZ);
         const arteryR = getEffectiveTubeRadiusAtZ(arteryCenterZ);
-
-        // 上排標籤 (anat-label-top，引線向下)：
-        // 1. 靜脈 (z = +62)、2. 心室 (z = 0)、3. 動脈 (z = -50.5)
-        // 只有在安裝瓣膜建立單向循環時，兩端才分化出動脈與靜脈；無瓣膜時維持未分化心管
         const hasCirculation = frontValveEnabled || backValveEnabled || atriumEnabled;
-        positionSingleLabel(labelVein, 0, tubeRadius + 4.2, 62, hasCirculation);
-        positionSingleLabel(labelVentricle, 0, ventR + 4.2, centralSectionZ, true);
-        positionSingleLabel(labelArtery, 0, arteryR + 4.2, arteryCenterZ, hasCirculation);
 
-        // 下排標籤 (anat-label-bottom，引線向上)：
-        // 4. 心房 (z = +30.5)、5. 房室瓣 (z = +16)、6. 動脈瓣 (z = -16)
-        positionSingleLabel(labelAtrium, 0, -(atriumR + 4.2), atriumCenterZ, atriumEnabled);
-        positionSingleLabel(labelAvValve, 0, -(tubeRadius + 4.2), backZ, backValveEnabled);
-        positionSingleLabel(labelArterialValve, 0, -(tubeRadius + 4.2), frontZ, frontValveEnabled);
+        if (!dualHeartEnabled) {
+            positionLabelAtHeartU(labelVein, 0, 48, true, tubeRadius, hasCirculation, 0);
+            positionLabelAtHeartU(labelAtrium, 0, atriumCenterZ, false, atriumR, atriumEnabled, 0);
+            positionLabelAtHeartU(labelAvValve, 0, backZ, false, tubeRadius, backValveEnabled, 0);
+            positionLabelAtHeartU(labelVentricle, 0, centralSectionZ, false, ventR, true, 0);
+            positionLabelAtHeartU(labelArterialValve, 0, frontZ, false, tubeRadius, frontValveEnabled, 0);
+            positionLabelAtHeartU(labelArtery, 0, -45, true, arteryR, hasCirculation, 0);
+        } else {
+            positionLabelAtHeartU(labelVein, 0, 48, true, tubeRadius, hasCirculation, 6.0);
+            positionLabelAtHeartU(labelAtrium, 0, atriumCenterZ, false, atriumR, atriumEnabled, 7.0);
+            positionLabelAtHeartU(labelAvValve, 0, backZ, false, tubeRadius, backValveEnabled, 5.0);
+            positionLabelAtHeartU(labelVentricle, 0, centralSectionZ, false, ventR, true, 3.5);
+            positionLabelAtHeartU(labelArterialValve, 0, frontZ, false, tubeRadius, frontValveEnabled, -4.0);
+            positionLabelAtHeartU(labelArtery, 0, -48, true, arteryR, hasCirculation, 0);
+
+            positionLabelAtHeartU(labelVein2, 1, 48, true, tubeRadius, hasCirculation, -6.0);
+            positionLabelAtHeartU(labelAtrium2, 1, atriumCenterZ, false, atriumR, atriumEnabled, -7.0);
+            positionLabelAtHeartU(labelVentricle2, 1, centralSectionZ, false, ventR, true, -3.5);
+            positionLabelAtHeartU(labelArtery2, 1, -48, true, arteryR, hasCirculation, 0);
+        }
     }
 
     function resetCamera() {
-        camera.position.set(58, 42, 0);
-        camera.up.set(0, 1, 0);
-        camera.lookAt(0, 0, 0);
+        initCameraSpherical(78, 26, 0, 0, -2, 0);
     }
 
     function onWindowResize() {
@@ -1540,11 +2239,15 @@ window.onload = function () {
             p.mesh.quaternion.copy(p.body.quaternion);
         }
 
-        if (frontValveEnabled && frontValveMeshes.length > 0 && frontValveBodies.length > 0) {
-            updateValveFlapAnimation(frontValveMeshes[0], frontValveBodies[0].position.z, 'front');
+        if (frontValveEnabled) {
+            for (let i = 0; i < frontValveMeshes.length; i++) {
+                updateValveFlapAnimation(frontValveMeshes[i], frontValveMeshes[i].userData.zPos, 'front');
+            }
         }
-        if (backValveEnabled && backValveMeshes.length > 0 && backValveBodies.length > 0) {
-            updateValveFlapAnimation(backValveMeshes[0], backValveBodies[0].position.z, 'back');
+        if (backValveEnabled) {
+            for (let i = 0; i < backValveMeshes.length; i++) {
+                updateValveFlapAnimation(backValveMeshes[i], backValveMeshes[i].userData.zPos, 'back');
+            }
         }
 
         if (labelsVisible) {
@@ -1554,7 +2257,6 @@ window.onload = function () {
         renderer.render(scene, camera);
     }
 
-    // 初始狀態設定
     init();
     setVesselPhase('normal');
     animate(performance.now());
