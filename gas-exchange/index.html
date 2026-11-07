@@ -1,65 +1,997 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>氣體交換視覺化模型</title>
-    <link rel="stylesheet" href="style.css">
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>氣體交換動態模擬器（圖3-21 身體組織 ＆ 圖3-22 肺部）</title>
+<style>
+  :root {
+    --bg: #f1f5f9;
+    --card: #ffffff;
+    --text: #1e293b;
+    --border: #cbd5e1;
+    --red: #dc2626;
+    --gray: #475569;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+  body {
+    font-family: "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 14px;
+    min-height: 100vh;
+  }
+  .toolbar {
+    width: 100%;
+    max-width: 1220px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 18px;
+    margin-bottom: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  }
+  .toolbar-title {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .toolbar-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  button {
+    cursor: pointer;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: #1e293b;
+    padding: 6px 13px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition: all 0.15s;
+  }
+  button:hover { background: #f8fafc; border-color: #94a3b8; }
+  button.primary {
+    background: #dc2626;
+    color: #fff;
+    border-color: #b91c1c;
+  }
+  button.primary:hover { background: #b91c1c; }
+  button.active-filter {
+    background: #1e293b;
+    color: #fff;
+    border-color: #0f172a;
+  }
+  .speed-box {
+    display: inline-flex;
+    background: #e2e8f0;
+    padding: 3px;
+    border-radius: 8px;
+    gap: 2px;
+  }
+  .speed-box button {
+    border: none;
+    background: transparent;
+    padding: 4px 10px;
+    font-size: 0.85rem;
+    border-radius: 6px;
+  }
+  .speed-box button.active {
+    background: #fff;
+    color: #dc2626;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+  }
+  .chk-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 4px 8px;
+  }
+  .canvas-container {
+    width: 100%;
+    max-width: 1220px;
+    background: #ffffff;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    box-shadow: 0 4px 18px rgba(0,0,0,0.07);
+    overflow: hidden;
+  }
+  canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+</style>
 </head>
-
 <body>
-    <div class="container">
 
-        <div class="main-view">
-            <!-- Left Panel: Tissue Cells -->
-            <div class="panel tissue-panel">
-                <h2>組織細胞</h2>
-                <div id="tissue-svg-container" class="svg-container">
-                    <!-- SVG content will be injected or drawn here -->
-                </div>
-                <div class="description">
-                    <p>組織細胞消耗氧氣產生二氧化碳。</p>
-                    <p>CO<sub>2</sub> 擴散進入微血管，O<sub>2</sub> 進入細胞。</p>
-                </div>
-            </div>
-
-            <!-- Right Panel: Alveoli -->
-            <div class="panel lung-panel">
-                <h2>肺泡</h2>
-                <div id="lung-svg-container" class="svg-container">
-                    <!-- SVG content will be injected or drawn here -->
-                </div>
-                <div class="description">
-                    <p>吸氣時氧氣進入肺泡。</p>
-                    <p>O<sub>2</sub> 擴散進入微血管，CO<sub>2</sub> 呼出。</p>
-                </div>
-            </div>
-        </div>
-
-        <div class="controls">
-            <button id="toggle-animation">暫停/播放</button>
-            <label>
-                <input type="checkbox" id="toggle-gases" checked> 顯示氣體
-            </label>
-            <label>
-                <input type="checkbox" id="toggle-labels"> 顯示標籤
-            </label>
-            <label for="speed-control">流速:</label>
-            <input type="range" id="speed-control" min="0.5" max="3" step="0.1" value="1">
-            <div class="legend">
-                <span class="item"><span class="dot o2"></span> 氧氣</span>
-                <span class="item"><span class="dot co2"></span> 二氧化碳</span>
-                <span class="item"><span class="dot rbc"></span> 紅血球</span>
-            </div>
-        </div>
+<div class="toolbar">
+  <div class="toolbar-title">
+    <span>氣體交換互動動態模擬</span>
+  </div>
+  <div class="toolbar-controls">
+    <button id="btnPlay" class="primary">⏸ 暫停</button>
+    <div class="speed-box">
+      <button data-speed="0.5">慢速 (0.5x)</button>
+      <button data-speed="1.0" class="active">正常 (1x)</button>
+      <button data-speed="1.8">加速 (1.8x)</button>
     </div>
+    <button id="btnFilterAll">顯示全部氣體</button>
+    <button id="btnFilterO2" class="active-filter" >只看氧氣 (O₂)</button>
+    <button id="btnFilterCO2">只看二氧化碳 (CO₂)</button>
+    <label class="chk-label">
+      <input type="checkbox" id="chkLabels"> 顯示文字
+    </label>
+  </div>
+</div>
 
-    <script src="script.js"></script>
+<div class="canvas-container">
+  <canvas id="simCanvas" width="1220" height="640"></canvas>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('simCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = 1220, H = 640;
+
+  function setupDPI() {
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  setupDPI();
+
+  let running = true;
+  let speed = 1.0;
+  let simTime = 0;
+  let gasFilter = 'O2';
+  let showLabels = false;
+
+  const LEFT_BOX = { x: 18, y: 20, w: 492, h: 545 };
+  const RIGHT_BOX = { x: 690, y: 20, w: 512, h: 545 };
+
+  // --- 效能優化：共用快取漸層與樣式 ---
+  const offscreenCanvas = document.createElement('canvas');
+  offscreenCanvas.width = W;
+  offscreenCanvas.height = H;
+
+  // ============================================================================
+  // LEFT DIAGRAM GEOMETRY & PATHS
+  // ============================================================================
+  function getLeftCapillaryCenter(t) {
+    const y = 20 + t * 545;
+    const x = 256 - 16 * Math.sin(t * Math.PI * 0.7) - 18 * t;
+    return { x, y };
+  }
+
+  function getLeftCapillaryFrame(t, normalOffset = 0) {
+    const dt = 0.01;
+    const p1 = getLeftCapillaryCenter(t - dt);
+    const p2 = getLeftCapillaryCenter(t + dt);
+    const dx = p2.x - p1.x, dy = p2.y - p1.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len, ny = dx / len;
+    const c = getLeftCapillaryCenter(t);
+    return {
+      x: c.x + nx * normalOffset,
+      y: c.y + ny * normalOffset,
+      angle: Math.atan2(dy, dx),
+      nx, ny
+    };
+  }
+
+  const leftTissueCells = [
+    { cx: 52, cy: 65, rx: 52, ry: 44, rot: -0.08, nx: 40, ny: 68, seed: 1 },
+    { cx: 48, cy: 175, rx: 48, ry: 50, rot: 0.06, nx: 36, ny: 178, seed: 2 },
+    { cx: 45, cy: 290, rx: 46, ry: 46, rot: -0.05, nx: 34, ny: 292, seed: 3 },
+    { cx: 48, cy: 405, rx: 50, ry: 52, rot: -0.12, nx: 38, ny: 402, seed: 4 },
+    { cx: 36, cy: 520, rx: 42, ry: 48, rot: 0.10, nx: 26, ny: 518, seed: 5 },
+    { cx: 145, cy: 62, rx: 48, ry: 42, rot: 0.05, nx: 140, ny: 62, seed: 6, side: 'L', active: true },
+    { cx: 145, cy: 172, rx: 58, ry: 48, rot: -0.06, nx: 148, ny: 172, seed: 7, side: 'L', active: true },
+    { cx: 138, cy: 288, rx: 56, ry: 48, rot: 0.08, nx: 142, ny: 288, seed: 8, side: 'L', active: true },
+    { cx: 134, cy: 402, rx: 54, ry: 48, rot: -0.04, nx: 135, ny: 402, seed: 9, side: 'L', active: true },
+    { cx: 118, cy: 512, rx: 58, ry: 48, rot: 0.07, nx: 120, ny: 510, seed: 10, side: 'L', active: true },
+    { cx: 352, cy: 60, rx: 56, ry: 45, rot: 0.14, nx: 348, ny: 62, seed: 11, side: 'R', active: true },
+    { cx: 350, cy: 192, rx: 64, ry: 54, rot: 0.16, nx: 352, ny: 190, seed: 12, side: 'R', active: true },
+    { cx: 332, cy: 338, rx: 58, ry: 55, rot: -0.22, nx: 332, ny: 342, seed: 13, side: 'R', active: true },
+    { cx: 326, cy: 472, rx: 60, ry: 52, rot: 0.05, nx: 325, ny: 472, seed: 14, side: 'R', active: true },
+    { cx: 312, cy: 565, rx: 56, ry: 38, rot: 0.12, nx: 310, ny: 560, seed: 15 },
+    { cx: 462, cy: 62, rx: 48, ry: 46, rot: -0.12, nx: 468, ny: 62, seed: 16 },
+    { cx: 450, cy: 205, rx: 46, ry: 60, rot: 0.06, nx: 458, ny: 215, seed: 17 },
+    { cx: 445, cy: 368, rx: 48, ry: 62, rot: -0.10, nx: 452, ny: 372, seed: 18 },
+    { cx: 442, cy: 505, rx: 52, ry: 50, rot: 0.08, nx: 446, ny: 505, seed: 19 }
+  ];
+
+  // ============================================================================
+  // RIGHT DIAGRAM GEOMETRY & PATHS
+  // ============================================================================
+  const rightCapControlPts = [
+    { x: 805, y: 20 },
+    { x: 705, y: 270 },
+    { x: 760, y: 555 },
+    { x: 1202, y: 405 }
+  ];
+
+  const rightCapSamples = [];
+  const SAMPLE_COUNT = 200;
+  let accumArc = 0;
+  for (let i = 0; i <= SAMPLE_COUNT; i++) {
+    const u = i / SAMPLE_COUNT;
+    const b = evalCubicBezier(rightCapControlPts, u);
+    if (i > 0) {
+      const prev = rightCapSamples[i - 1];
+      accumArc += Math.hypot(b.x - prev.x, b.y - prev.y);
+    }
+    rightCapSamples.push({ u, s: accumArc, ...b });
+  }
+  const RIGHT_CAP_TOTAL_LEN = accumArc;
+
+  function evalCubicBezier(pts, t) {
+    const u = 1 - t;
+    const x = u*u*u*pts[0].x + 3*u*u*t*pts[1].x + 3*u*t*t*pts[2].x + t*t*t*pts[3].x;
+    const y = u*u*u*pts[0].y + 3*u*u*t*pts[1].y + 3*u*t*t*pts[2].y + t*t*t*pts[3].y;
+    const dx = 3*u*u*(pts[1].x - pts[0].x) + 6*u*t*(pts[2].x - pts[1].x) + 3*t*t*(pts[3].x - pts[2].x);
+    const dy = 3*u*u*(pts[1].y - pts[0].y) + 6*u*t*(pts[2].y - pts[1].y) + 3*t*t*(pts[3].y - pts[2].y);
+    const len = Math.hypot(dx, dy) || 1;
+    return { x, y, tx: dx / len, ty: dy / len, nx: -dy / len, ny: dx / len, angle: Math.atan2(dy, dx) };
+  }
+
+  function getRightCapillaryFrame(t, normalOffset = 0) {
+    const clampedT = Math.max(0, Math.min(1, t));
+    const targetS = clampedT * RIGHT_CAP_TOTAL_LEN;
+    let lo = 0, hi = SAMPLE_COUNT;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (rightCapSamples[mid].s < targetS) lo = mid + 1;
+      else hi = mid;
+    }
+    const idx = Math.max(1, lo);
+    const s0 = rightCapSamples[idx - 1];
+    const s1 = rightCapSamples[idx];
+    const ratio = (targetS - s0.s) / Math.max(0.0001, s1.s - s0.s);
+    const x = s0.x + (s1.x - s0.x) * ratio;
+    const y = s0.y + (s1.y - s0.y) * ratio;
+    const nx = s0.nx + (s1.nx - s0.nx) * ratio;
+    const ny = s0.ny + (s1.ny - s0.ny) * ratio;
+    const angle = Math.atan2(s0.ty + (s1.ty - s0.ty) * ratio, s0.tx + (s1.tx - s0.tx) * ratio);
+    return { x: x + nx * normalOffset, y: y + ny * normalOffset, angle, nx, ny };
+  }
+
+  const TRACHEA = { x: 965, topY: 20, bottomY: 98, width: 68 };
+
+  // ============================================================================
+  // SIMULATION 1: LEFT DIAGRAM (由下往上：t從1.0遞減至0.0)
+  // ============================================================================
+  const leftRBCs = [];
+  const leftO2s = [];
+  const leftCO2s = [];
+
+  const NUM_LEFT_RBCS = 6;
+  for (let i = 0; i < NUM_LEFT_RBCS; i++) {
+    spawnLeftRBC(1.0 - (i / NUM_LEFT_RBCS), true);
+  }
+
+  function spawnLeftRBC(t, init = false) {
+    const rbc = {
+      t,
+      hasO2: init ? (t > 0.42) : true,
+      oxyColor: init ? (t > 0.42 ? 1 : 0.15) : 1,
+      tilt: (Math.random() - 0.5) * 0.35,
+      releaseAtT: 0.25 + Math.random() * 0.45
+    };
+    leftRBCs.push(rbc);
+
+    if (rbc.hasO2) {
+      const o2 = { state: 'ON_RBC', rbc, x: 0, y: 0, rot: (Math.random() - 0.5) * 0.4, alpha: 1 };
+      rbc.boundO2 = o2;
+      leftO2s.push(o2);
+    }
+  }
+
+  leftTissueCells.forEach((cell, idx) => {
+    if (idx % 3 === 0) {
+      leftCO2s.push({ state: 'CELL_IDLE', cell, x: cell.cx + (Math.random() - 0.5) * 24, y: cell.cy + (Math.random() - 0.5) * 20, rot: (Math.random() - 0.5) * 0.8, alpha: 1 });
+    }
+  });
+  for (let i = 0; i < 4; i++) {
+    const t = 0.2 + i * 0.18;
+    const offset = (i % 2 === 0) ? -16 : 16;
+    const pos = getLeftCapillaryFrame(t, offset);
+    leftCO2s.push({ state: 'IN_PLASMA', t, plasmaOffset: offset, x: pos.x, y: pos.y, rot: (Math.random() - 0.5) * 0.6, alpha: 1 });
+  }
+
+  let leftCO2Timer = 0;
+
+  function updateLeftDiagram(dt) {
+    const flowSpeed = 0.17;
+
+    for (let i = leftRBCs.length - 1; i >= 0; i--) {
+      const rbc = leftRBCs[i];
+      rbc.t -= flowSpeed * dt; // 由下往上遞減
+      const f = getLeftCapillaryFrame(rbc.t, 0);
+      rbc.x = f.x;
+      rbc.y = f.y;
+      rbc.angle = f.angle;
+
+      const targetColor = rbc.hasO2 ? 1.0 : 0.15;
+      rbc.oxyColor += (targetColor - rbc.oxyColor) * Math.min(1, dt * 3.5);
+
+      if (rbc.hasO2 && rbc.boundO2 && rbc.t <= rbc.releaseAtT) {
+        rbc.hasO2 = false;
+        const o2 = rbc.boundO2;
+        rbc.boundO2 = null;
+        const candidates = leftTissueCells.filter(c => c.active && Math.abs(c.cy - rbc.y) < 110);
+        const targetCell = candidates.length > 0 ? candidates[Math.floor(Math.random() * candidates.length)] : leftTissueCells[7];
+
+        o2.state = 'TO_CELL';
+        o2.startX = rbc.x;
+        o2.startY = rbc.y;
+        o2.targetX = targetCell.cx + (Math.random() - 0.5) * 32;
+        o2.targetY = targetCell.cy + (Math.random() - 0.5) * 28;
+        o2.progress = 0;
+      }
+
+      if (rbc.t < -0.08) {
+        if (rbc.boundO2) {
+          const idx = leftO2s.indexOf(rbc.boundO2);
+          if (idx !== -1) leftO2s.splice(idx, 1);
+        }
+        leftRBCs.splice(i, 1);
+        spawnLeftRBC(1.08, false); // 從底部重生
+      }
+    }
+
+    for (let i = leftO2s.length - 1; i >= 0; i--) {
+      const m = leftO2s[i];
+      if (m.state === 'ON_RBC') {
+        m.x = m.rbc.x + 4;
+        m.y = m.rbc.y - 3;
+      } else if (m.state === 'TO_CELL') {
+        m.progress += dt * 0.95;
+        const p = Math.min(1, m.progress);
+        const ease = 1 - Math.pow(1 - p, 2);
+        m.x = m.startX + (m.targetX - m.startX) * ease;
+        m.y = m.startY + (m.targetY - m.startY) * ease;
+        if (p >= 1) { m.state = 'IN_CELL'; m.holdTimer = 0; }
+      } else if (m.state === 'IN_CELL') {
+        m.holdTimer += dt;
+        m.x += Math.sin(simTime * 4 + i) * 3 * dt;
+        if (m.holdTimer > 2.2) {
+          m.alpha -= dt * 1.1;
+          if (m.alpha <= 0) leftO2s.splice(i, 1);
+        }
+      }
+    }
+
+    leftCO2Timer += dt;
+    if (leftCO2Timer > 0.75) {
+      leftCO2Timer = 0;
+      const activeCells = leftTissueCells.filter(c => c.active);
+      const cell = activeCells[Math.floor(Math.random() * activeCells.length)];
+      const targetT = Math.max(0.18, Math.min(0.82, (cell.cy - 20) / 545));
+      const plasmaOffset = cell.side === 'L' ? -18 : 18;
+      leftCO2s.push({
+        state: 'TO_PLASMA',
+        startX: cell.cx + (cell.side === 'L' ? 12 : -12),
+        startY: cell.cy,
+        x: cell.cx,
+        y: cell.cy,
+        targetT,
+        plasmaOffset,
+        progress: 0,
+        rot: (Math.random() - 0.5) * 0.5,
+        alpha: 1
+      });
+    }
+
+    for (let i = leftCO2s.length - 1; i >= 0; i--) {
+      const m = leftCO2s[i];
+      if (m.state === 'CELL_IDLE') {
+        m.x += Math.cos(simTime * 2 + i) * 2.5 * dt;
+        m.y += Math.sin(simTime * 2 + i) * 2.5 * dt;
+      } else if (m.state === 'TO_PLASMA') {
+        m.progress += dt * 0.95;
+        const p = Math.min(1, m.progress);
+        m.targetT -= flowSpeed * dt * 0.4; // 向上流動
+        const dest = getLeftCapillaryFrame(m.targetT, m.plasmaOffset);
+        m.x = m.startX + (dest.x - m.startX) * p;
+        m.y = m.startY + (dest.y - m.startY) * p;
+        if (p >= 1) { m.state = 'IN_PLASMA'; m.t = m.targetT; }
+      } else if (m.state === 'IN_PLASMA') {
+        m.t -= flowSpeed * dt;
+        const pos = getLeftCapillaryFrame(m.t, m.plasmaOffset);
+        m.x = pos.x;
+        m.y = pos.y;
+        if (m.t < -0.06) leftCO2s.splice(i, 1);
+      }
+    }
+  }
+
+  // ============================================================================
+  // SIMULATION 2: RIGHT DIAGRAM (由下往上：t從1.0遞減至0.0)
+  // ============================================================================
+  const rightRBCs = [];
+  const rightO2s = [];
+  const rightCO2s = [];
+
+  const NUM_RIGHT_RBCS = 8;
+  for (let i = 0; i < NUM_RIGHT_RBCS; i++) {
+    spawnRightRBC(1.0 - (i / NUM_RIGHT_RBCS), true);
+  }
+
+  function spawnRightRBC(t, init = false) {
+    const hasO2 = init ? (t < 0.45) : false;
+    const rbc = {
+      t,
+      hasO2,
+      incomingO2: null,
+      oxyColor: hasO2 ? 1.0 : 0.15,
+      tilt: (Math.random() - 0.5) * 0.3
+    };
+    rightRBCs.push(rbc);
+
+    if (hasO2) {
+      const o2 = { state: 'ON_RBC', rbc, x: 0, y: 0, rot: (Math.random() - 0.5) * 0.4, alpha: 1 };
+      rbc.boundO2 = o2;
+      rightO2s.push(o2);
+    }
+  }
+
+  for (let i = 0; i < 6; i++) {
+    rightO2s.push({
+      state: 'IN_ALVEOLI',
+      x: 890 + (Math.random() - 0.5) * 140,
+      y: 235 + (Math.random() - 0.5) * 120,
+      vx: (Math.random() - 0.5) * 18,
+      vy: (Math.random() - 0.5) * 18,
+      rot: (Math.random() - 0.5) * 0.5,
+      alpha: 1
+    });
+  }
+
+  for (let i = 0; i < 4; i++) {
+    const t = 0.1 + i * 0.22;
+    const offset = (i % 2 === 0) ? 16 : -16;
+    const pos = getRightCapillaryFrame(t, offset);
+    rightCO2s.push({
+      state: 'IN_PLASMA',
+      t,
+      plasmaOffset: offset,
+      diffuseAtT: 0.35 + (i % 3) * 0.15,
+      x: pos.x,
+      y: pos.y,
+      rot: (Math.random() - 0.5) * 0.6,
+      alpha: 1
+    });
+  }
+
+  let rightInhaleTimer = 0;
+  let rightPlasmaCO2Timer = 0;
+
+  function updateRightDiagram(dt) {
+    const flowSpeed = 0.14;
+
+    for (let i = rightRBCs.length - 1; i >= 0; i--) {
+      const rbc = rightRBCs[i];
+      rbc.t -= flowSpeed * dt; // 由下往上遞減
+      const f = getRightCapillaryFrame(rbc.t, 0);
+      rbc.x = f.x;
+      rbc.y = f.y;
+      rbc.angle = f.angle;
+
+      const targetColor = rbc.hasO2 ? 1.0 : 0.15;
+      rbc.oxyColor += (targetColor - rbc.oxyColor) * Math.min(1, dt * 3.5);
+
+      if (!rbc.hasO2 && !rbc.incomingO2 && rbc.t > 0.28 && rbc.t < 0.68) {
+        const availO2 = rightO2s.find(m => m.state === 'IN_ALVEOLI');
+        if (availO2) {
+          availO2.state = 'TO_RBC';
+          availO2.rbc = rbc;
+          availO2.startX = availO2.x;
+          availO2.startY = availO2.y;
+          availO2.progress = 0;
+          rbc.incomingO2 = availO2;
+        }
+      }
+
+      if (rbc.t < -0.05) {
+        if (rbc.boundO2) {
+          const idx = rightO2s.indexOf(rbc.boundO2);
+          if (idx !== -1) rightO2s.splice(idx, 1);
+        }
+        if (rbc.incomingO2) {
+          const idx = rightO2s.indexOf(rbc.incomingO2);
+          if (idx !== -1) rightO2s.splice(idx, 1);
+        }
+        rightRBCs.splice(i, 1);
+        spawnRightRBC(1.05, false); // 從頂部重生
+      }
+    }
+
+    rightInhaleTimer += dt;
+    if (rightInhaleTimer > 0.65) {
+      rightInhaleTimer = 0;
+      const countInAlveoli = rightO2s.filter(m => m.state === 'TRACHEA_IN' || m.state === 'IN_ALVEOLI').length;
+      if (countInAlveoli < 9) {
+        rightO2s.push({
+          state: 'TRACHEA_IN',
+          startX: TRACHEA.x - 12 + (Math.random() - 0.5) * 18,
+          startY: 16,
+          x: TRACHEA.x - 12,
+          y: 16,
+          targetX: 860 + Math.random() * 140,
+          targetY: 210 + Math.random() * 115,
+          progress: 0,
+          rot: (Math.random() - 0.5) * 0.5,
+          alpha: 1
+        });
+      }
+    }
+
+    for (let i = rightO2s.length - 1; i >= 0; i--) {
+      const m = rightO2s[i];
+      if (m.state === 'TRACHEA_IN') {
+        m.progress += dt * 0.78;
+        const p = Math.min(1, m.progress);
+        const ctrlX = TRACHEA.x - 10;
+        const ctrlY = 145;
+        const u = 1 - p;
+        m.x = u*u*m.startX + 2*u*p*ctrlX + p*p*m.targetX;
+        m.y = u*u*m.startY + 2*u*p*ctrlY + p*p*m.targetY;
+        if (p >= 1) { m.state = 'IN_ALVEOLI'; m.vx = (Math.random() - 0.5) * 20; m.vy = (Math.random() - 0.5) * 20; }
+      } else if (m.state === 'IN_ALVEOLI') {
+        m.x += m.vx * dt;
+        m.y += m.vy * dt;
+        const dx = m.x - 910, dy = m.y - 255;
+        const dist = Math.hypot(dx, dy);
+        if (dist > 90) { m.vx -= (dx / dist) * 35 * dt; m.vy -= (dy / dist) * 35 * dt; }
+      } else if (m.state === 'TO_RBC') {
+        m.progress += dt * 1.15;
+        const p = Math.min(1, m.progress);
+        const rbc = m.rbc;
+        m.x = m.startX + (rbc.x - m.startX) * p;
+        m.y = m.startY + (rbc.y - m.startY) * p;
+        if (p >= 1) { m.state = 'ON_RBC'; rbc.hasO2 = true; rbc.boundO2 = m; rbc.incomingO2 = null; }
+      } else if (m.state === 'ON_RBC') {
+        m.x = m.rbc.x + 3;
+        m.y = m.rbc.y - 3;
+      }
+    }
+
+    rightPlasmaCO2Timer += dt;
+    if (rightPlasmaCO2Timer > 0.72) {
+      rightPlasmaCO2Timer = 0;
+      const offset = (Math.random() < 0.5) ? 16 : -16;
+      const pos = getRightCapillaryFrame(1.0, offset); // 從底部生成 CO2
+      rightCO2s.push({
+        state: 'IN_PLASMA',
+        t: 1.03,
+        plasmaOffset: offset,
+        diffuseAtT: 0.35 + Math.random() * 0.30,
+        x: pos.x,
+        y: pos.y,
+        rot: (Math.random() - 0.5) * 0.6,
+        alpha: 1
+      });
+    }
+
+    for (let i = rightCO2s.length - 1; i >= 0; i--) {
+      const m = rightCO2s[i];
+      if (m.state === 'IN_PLASMA') {
+        m.t -= flowSpeed * dt; // 由下往上遞減
+        const pos = getRightCapillaryFrame(m.t, m.plasmaOffset);
+        m.x = pos.x;
+        m.y = pos.y;
+
+        if (m.t <= m.diffuseAtT) {
+          m.state = 'TO_ALVEOLI';
+          m.startX = m.x;
+          m.startY = m.y;
+          m.targetX = 855 + Math.random() * 95;
+          m.targetY = 230 + (Math.random() - 0.5) * 75;
+          m.progress = 0;
+        }
+      } else if (m.state === 'TO_ALVEOLI') {
+        m.progress += dt * 1.0;
+        const p = Math.min(1, m.progress);
+        m.x = m.startX + (m.targetX - m.startX) * p;
+        m.y = m.startY + (m.targetY - m.startY) * p;
+        if (p >= 1) {
+          m.state = 'TRACHEA_OUT';
+          m.startX = m.x;
+          m.startY = m.y;
+          m.progress = 0;
+        }
+      } else if (m.state === 'TRACHEA_OUT') {
+        m.progress += dt * 0.72;
+        const p = Math.min(1, m.progress);
+        const ctrlX = TRACHEA.x + 14;
+        const ctrlY = 140;
+        const endX = TRACHEA.x + 14 + (i % 2 === 0 ? 5 : -5);
+        const endY = 12;
+        const u = 1 - p;
+        m.x = u*u*m.startX + 2*u*p*ctrlX + p*p*endX;
+        m.y = u*u*m.startY + 2*u*p*ctrlY + p*p*endY;
+        if (p > 0.82) m.alpha = (1 - p) / 0.18;
+        if (p >= 1) rightCO2s.splice(i, 1);
+      }
+    }
+  }
+
+  // ============================================================================
+  // RENDERING FUNCTIONS (已進行效能與繪製精簡優化)
+  // ============================================================================
+  function drawO2(x, y, rot = 0, scale = 1, alpha = 1) {
+    if (gasFilter === 'CO2') return;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rot);
+    ctx.scale(scale, scale);
+    ctx.globalAlpha = alpha;
+
+    ctx.beginPath();
+    ctx.arc(-4.2, 0, 6.8, 0, Math.PI * 2);
+    ctx.arc(4.2, 0, 6.8, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.fill();
+
+    [-4.2, 4.2].forEach(ox => {
+      ctx.beginPath();
+      ctx.arc(ox, 0, 5.6, 0, Math.PI * 2);
+      ctx.fillStyle = '#e52418';
+      ctx.fill();
+    });
+    ctx.restore();
+  }
+
+  function drawCO2(x, y, rot = 0, scale = 1, alpha = 1) {
+    if (gasFilter === 'O2') return;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rot);
+    ctx.scale(scale, scale);
+    ctx.globalAlpha = alpha;
+
+    ctx.beginPath();
+    ctx.arc(-7.4, 0, 6.1, 0, Math.PI * 2);
+    ctx.arc(0, 0, 6.7, 0, Math.PI * 2);
+    ctx.arc(7.4, 0, 6.1, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.fill();
+
+    [-7.4, 7.4].forEach(ox => {
+      ctx.beginPath();
+      ctx.arc(ox, 0, 5.0, 0, Math.PI * 2);
+      ctx.fillStyle = '#e52418';
+      ctx.fill();
+    });
+
+    ctx.beginPath();
+    ctx.arc(0, 0, 5.6, 0, Math.PI * 2);
+    ctx.fillStyle = '#3e4c59';
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawRBC(rbc) {
+    ctx.save();
+    ctx.translate(rbc.x, rbc.y);
+    ctx.rotate(rbc.angle + Math.PI / 2 + rbc.tilt);
+
+    const o = rbc.oxyColor;
+    const rMain = Math.round(160 + 75 * o);
+    const gMain = Math.round(20 + 14 * o);
+    const bMain = Math.round(26 - 12 * o);
+
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 27, 20, 0, 0, Math.PI * 2);
+    ctx.fillStyle = `rgb(${rMain}, ${gMain}, ${bMain})`;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 14, 10, 0, 0, Math.PI * 2);
+    ctx.fillStyle = `rgb(${Math.round(rMain * 0.65)}, 10, 10)`;
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  function drawOrganicCell(cell) {
+    ctx.save();
+    ctx.translate(cell.cx, cell.cy);
+    ctx.rotate(cell.rot);
+
+    ctx.beginPath();
+    const pts = 20; // 減少頂點以提昇效能
+    for (let i = 0; i <= pts; i++) {
+      const a = (i / pts) * Math.PI * 2;
+      const px = Math.cos(a) * cell.rx;
+      const py = Math.sin(a) * cell.ry;
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fillStyle = '#f6d68b';
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(185, 135, 65, 0.5)';
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.ellipse(cell.nx - cell.cx, cell.ny - cell.cy, 13, 16, 0.15, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(202, 155, 88, 0.68)';
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function renderLeftDiagram() {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(LEFT_BOX.x, LEFT_BOX.y, LEFT_BOX.w, LEFT_BOX.h);
+    ctx.clip();
+
+    ctx.fillStyle = '#f8e096';
+    ctx.fillRect(LEFT_BOX.x, LEFT_BOX.y, LEFT_BOX.w, LEFT_BOX.h);
+
+    leftTissueCells.forEach(drawOrganicCell);
+
+    const capR = 42;
+    const leftEdge = [], rightEdge = [];
+    const N = 35; // 減少採樣點以優化效能
+    for (let i = 0; i <= N; i++) {
+      const t = i / N;
+      leftEdge.push(getLeftCapillaryFrame(t, -capR));
+      rightEdge.push(getLeftCapillaryFrame(t, capR));
+    }
+
+    ctx.beginPath();
+    leftEdge.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+    for (let i = N; i >= 0; i--) ctx.lineTo(rightEdge[i].x, rightEdge[i].y);
+    ctx.closePath();
+    ctx.fillStyle = '#fce5d2';
+    ctx.fill();
+
+    [leftEdge, rightEdge].forEach(edge => {
+      ctx.beginPath();
+      edge.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = '#c45432';
+      ctx.stroke();
+    });
+
+    leftRBCs.forEach(drawRBC);
+    leftO2s.forEach(m => drawO2(m.x, m.y, m.rot, 1.25, m.alpha));
+    leftCO2s.forEach(m => drawCO2(m.x, m.y, m.rot, 1.22, m.alpha));
+
+    ctx.restore();
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(LEFT_BOX.x, LEFT_BOX.y, LEFT_BOX.w, LEFT_BOX.h);
+  }
+
+  function renderRightDiagram() {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(RIGHT_BOX.x, RIGHT_BOX.y, RIGHT_BOX.w, RIGHT_BOX.h);
+    ctx.clip();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(RIGHT_BOX.x, RIGHT_BOX.y, RIGHT_BOX.w, RIGHT_BOX.h);
+
+    const breath = 1 + 0.014 * Math.sin(simTime * 2.2);
+
+    ctx.save();
+    const trLeft = TRACHEA.x - TRACHEA.width / 2;
+    const trRight = TRACHEA.x + TRACHEA.width / 2;
+    ctx.fillStyle = '#fae1e9';
+    ctx.beginPath();
+    ctx.moveTo(trLeft, 20);
+    ctx.lineTo(trRight, 20);
+    ctx.lineTo(trRight + 10, 110);
+    ctx.lineTo(trLeft - 10, 110);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    const sacs = [
+      { x: 968, y: 122, r: 108 },
+      { x: 1120, y: 222, r: 94 },
+      { x: 902, y: 280, r: 124 }
+    ];
+
+    sacs.forEach(s => {
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.scale(breath, breath);
+      ctx.beginPath();
+      ctx.arc(0, 0, s.r, 0, Math.PI * 2);
+      ctx.fillStyle = '#f7c2d4';
+      ctx.fill();
+      ctx.restore();
+    });
+
+    const capR = 38;
+    const outerEdge = [], innerEdge = [];
+    const N = 45; // 效能優化採樣數
+    for (let i = 0; i <= N; i++) {
+      const t = i / N;
+      outerEdge.push(getRightCapillaryFrame(t, capR));
+      innerEdge.push(getRightCapillaryFrame(t, -capR));
+    }
+
+    ctx.beginPath();
+    outerEdge.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+    for (let i = N; i >= 0; i--) ctx.lineTo(innerEdge[i].x, innerEdge[i].y);
+    ctx.closePath();
+    ctx.fillStyle = '#fde3cf';
+    ctx.fill();
+
+    [outerEdge, innerEdge].forEach(edge => {
+      ctx.beginPath();
+      edge.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = '#c45432';
+      ctx.stroke();
+    });
+
+    rightRBCs.forEach(drawRBC);
+    rightO2s.forEach(m => drawO2(m.x, m.y, m.rot, 1.25, m.alpha));
+    rightCO2s.forEach(m => drawCO2(m.x, m.y, m.rot, 1.22, m.alpha));
+
+    ctx.restore();
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(RIGHT_BOX.x, RIGHT_BOX.y, RIGHT_BOX.w, RIGHT_BOX.h);
+  }
+
+  function renderCenterLegend() {
+    const cx = 600;
+    ctx.save();
+    const prevFilter = gasFilter;
+    gasFilter = 'ALL';
+    drawO2(cx, 208, 0, 1.85);
+    ctx.font = '21px "PingFang TC", "Microsoft JhengHei", sans-serif';
+    ctx.fillStyle = '#222';
+    ctx.fillText('（氧氣）', cx, 245);
+
+    drawCO2(cx, 280, 0, 1.85);
+    ctx.fillText('（二氧化碳）', cx, 318);
+    gasFilter = prevFilter;
+    ctx.restore();
+  }
+
+  function renderAnnotations() {
+    ctx.save();
+    function drawCaption(x, y, title) {
+      ctx.font = '23px "Microsoft JhengHei", sans-serif';
+      ctx.fillStyle = '#222';
+      ctx.fillText(title, x + 132, y + 21);
+    }
+    drawCaption(18, 590, '身體組織的氣體交換');
+    drawCaption(690, 590, '肺部的氣體交換');
+
+    if (!showLabels) { ctx.restore(); return; }
+
+    function drawText(txt, x, y, size = 25, color = '#222') {
+      ctx.font = `${size}px "PingFang TC", "Microsoft JhengHei", sans-serif`;
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+      ctx.strokeText(txt, x, y);
+      ctx.fillStyle = color;
+      ctx.fillText(txt, x, y);
+    }
+
+    function drawArrow(x1, y1, x2, y2, color) {
+      const ang = Math.atan2(y2 - y1, x2 - x1);
+      const len = Math.hypot(x2 - x1, y2 - y1);
+      ctx.save();
+      ctx.translate(x1, y1);
+      ctx.rotate(ang);
+      ctx.beginPath();
+      ctx.moveTo(0, -6.5);
+      ctx.lineTo(len - 18, -6.5);
+      ctx.lineTo(len - 18, -13);
+      ctx.lineTo(len, 0);
+      ctx.lineTo(len - 18, 13);
+      ctx.lineTo(len - 18, 6.5);
+      ctx.lineTo(0, 6.5);
+      ctx.closePath();
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.restore();
+    }
+
+    drawText('組織細胞', 65, 68, 25);
+    drawText('微血管', 240, 68, 25);
+
+    if (gasFilter !== 'O2') { drawCO2(46, 294, 0, 1.3); drawText('二氧化碳', 68, 303, 24); drawArrow(180, 294, 248, 294, '#787c82'); }
+    if (gasFilter !== 'CO2') { drawO2(118, 356, 0, 1.3); drawText('氧氣', 135, 365, 24); drawArrow(258, 356, 190, 356, '#d91e18'); }
+
+    drawText('氣管', 942, 48, 20, '#881337');
+    if (gasFilter !== 'CO2') drawArrow(946, 58, 946, 98, '#d91e18');
+    if (gasFilter !== 'O2') drawArrow(984, 98, 984, 58, '#787c82');
+
+    drawText('肺泡', 1105, 288, 25);
+    drawText('微血管', 1085, 405, 25);
+    ctx.restore();
+  }
+
+  // ============================================================================
+  // MAIN LOOP
+  // ============================================================================
+  let lastNow = performance.now();
+  function tick(now) {
+    const rawDt = Math.min(0.05, (now - lastNow) / 1000);
+    lastNow = now;
+
+    if (running) {
+      const dt = rawDt * speed;
+      simTime += dt;
+      updateLeftDiagram(dt);
+      updateRightDiagram(dt);
+    }
+
+    ctx.clearRect(0, 0, W, H);
+    renderLeftDiagram();
+    renderRightDiagram();
+    renderCenterLegend();
+    renderAnnotations();
+
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  // UI Listeners
+  const btnPlay = document.getElementById('btnPlay');
+  btnPlay.addEventListener('click', () => {
+    running = !running;
+    btnPlay.textContent = running ? '⏸ 暫停' : '▶ 播放';
+    btnPlay.classList.toggle('primary', running);
+  });
+
+  document.querySelectorAll('.speed-box button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.speed-box button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+        speed = parseFloat(btn.dataset.speed);
+    });
+  });
+
+  const filterBtns = [
+    { id: 'btnFilterAll', val: 'ALL' },
+    { id: 'btnFilterO2', val: 'O2' },
+    { id: 'btnFilterCO2', val: 'CO2' }
+  ];
+  filterBtns.forEach(item => {
+    document.getElementById(item.id).addEventListener('click', (e) => {
+      filterBtns.forEach(b => document.getElementById(b.id).classList.remove('active-filter'));
+      e.currentTarget.classList.add('active-filter');
+      gasFilter = item.val;
+    });
+  });
+
+  document.getElementById('chkLabels').addEventListener('change', (e) => {
+    showLabels = e.target.checked;
+  });
+})();
+</script>
 </body>
-
 </html>
