@@ -1,0 +1,1734 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>中央法則互動式實驗室 | Central Dogma Interactive App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+            box-sizing: border-box;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #060b19;
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", Arial, sans-serif;
+            touch-action: none;
+        }
+        #main-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            cursor: grab;
+        }
+        #main-canvas:active {
+            cursor: grabbing;
+        }
+        .hud-layer {
+            position: absolute;
+            z-index: 10;
+            pointer-events: none;
+        }
+        .hud-element {
+            pointer-events: auto;
+        }
+        /* 標準分子生物學色彩編碼 */
+        .base-A { background-color: #10B981; border-color: #059669; color: #fff; } /* 翠綠 Emerald */
+        .base-T, .base-U { background-color: #E11D48; border-color: #BE123C; color: #fff; } /* 緋紅 Crimson */
+        .base-C { background-color: #2563EB; border-color: #1D4ED8; color: #fff; } /* 寶藍 Royal Blue */
+        .base-G { background-color: #F59E0B; border-color: #D97706; color: #fff; } /* 琥珀黃 Amber */
+
+        /* 玻璃擬態面板 */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.6);
+        }
+        /* 最小 48x48px 觸控友善目標 */
+        .touch-btn {
+            min-width: 48px;
+            min-height: 48px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s ease;
+        }
+        .touch-btn:active {
+            transform: scale(0.93);
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-8px); }
+            75% { transform: translateX(8px); }
+        }
+        .shake-anim {
+            animation: shake 0.35s ease-in-out;
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.5); }
+        ::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.4); border-radius: 3px; }
+    </style>
+</head>
+<body class="text-slate-100">
+
+    <!-- 1. 底層無限畫布 (Hierarchical Infinite Canvas) -->
+    <canvas id="main-canvas"></canvas>
+
+    <!-- 2. 頂部 HUD 導覽列 -->
+    <header class="hud-layer top-0 left-0 right-0 p-3 md:p-4 flex flex-wrap justify-between items-center gap-3">
+        <!-- 品牌與標題 -->
+        <div class="hud-element glass-panel px-4 py-2.5 rounded-2xl flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 via-teal-500 to-blue-600 flex items-center justify-center font-black text-xl shadow-lg shadow-emerald-500/20">
+                🧬
+            </div>
+            <div>
+                <h1 class="font-bold text-base md:text-lg tracking-wide text-white leading-tight">中央法則互動實驗室</h1>
+                <p class="text-xs text-slate-400 hidden sm:block">DNA → mRNA → 蛋白質 (階層式細胞視覺化)</p>
+            </div>
+        </div>
+
+        <!-- 雙模式切換器 (Mode Switcher) -->
+        <div class="hud-element glass-panel p-1.5 rounded-2xl flex items-center gap-1">
+            <button id="btn-mode-auto" onclick="switchMode('auto')" class="touch-btn px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 bg-blue-600 text-white shadow-lg shadow-blue-600/30">
+                <span>🎬</span>
+                <span>自動演示 (授課模式)</span>
+            </button>
+            <button id="btn-mode-challenge" onclick="switchMode('challenge')" class="touch-btn px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 text-slate-300 hover:text-white hover:bg-slate-800/60">
+                <span>🎮</span>
+                <span>互動挑戰 (學生實作)</span>
+            </button>
+        </div>
+
+        <!-- 基因庫預設與輔助工具 -->
+        <div class="hud-element glass-panel px-3 py-1.5 rounded-2xl flex items-center gap-2">
+            <label for="gene-select" class="text-xs text-slate-400 font-semibold pl-1 hidden md:inline">目標基因:</label>
+            <select id="gene-select" onchange="changeGenePreset(this.value)" class="touch-btn bg-slate-800/90 text-white text-sm font-medium rounded-xl px-3 py-1.5 border border-slate-700 focus:outline-none focus:border-blue-500">
+                <option value="insulin">胰島素基因 (Insulin - 分泌蛋白)</option>
+                <option value="hbb">血紅素 β 鏈 (HBB - 結構與攜氧)</option>
+                <option value="gfp">綠色螢光蛋白 (GFP - 生物標記)</option>
+            </select>
+            <button id="btn-sound" onclick="toggleSound()" class="touch-btn w-12 h-12 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-lg" title="音效開關">
+                🔊
+            </button>
+            <button onclick="toggleModal('help-modal')" class="touch-btn w-12 h-12 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-lg font-bold text-blue-400" title="操作說明與密碼子表">
+                ?
+            </button>
+        </div>
+    </header>
+
+    <!-- 3. 左側 HUD：階層式視角快速導航與色碼圖例 -->
+    <aside class="hud-layer left-3 md:left-4 top-24 flex flex-col gap-3 max-w-[230px]">
+        <!-- 智慧對焦導覽 -->
+        <div class="hud-element glass-panel p-3 rounded-2xl flex flex-col gap-1.5">
+            <div class="text-xs font-bold uppercase tracking-wider text-slate-400 px-1 mb-1 flex items-center justify-between">
+                <span>智慧視角對焦</span>
+                <span id="zoom-badge" class="text-[11px] bg-slate-800 text-blue-400 px-2 py-0.5 rounded-md font-mono">1.0x</span>
+            </div>
+            <button onclick="focusOrganelle('macro')" id="nav-macro" class="touch-btn justify-start px-3 py-2 rounded-xl text-sm font-medium bg-blue-600/20 text-blue-300 border border-blue-500/30 hover:bg-blue-600/30 text-left gap-2.5">
+                <span>🌐</span> <span>細胞巨觀總覽</span>
+            </button>
+            <button onclick="focusOrganelle('nucleus')" id="nav-nucleus" class="touch-btn justify-start px-3 py-2 rounded-xl text-sm font-medium text-slate-300 hover:bg-slate-800/70 text-left gap-2.5">
+                <span>🟣</span> <span>細胞核：轉錄作用</span>
+            </button>
+            <button onclick="focusOrganelle('ribosome')" id="nav-ribosome" class="touch-btn justify-start px-3 py-2 rounded-xl text-sm font-medium text-slate-300 hover:bg-slate-800/70 text-left gap-2.5">
+                <span>🟠</span> <span>核醣體：轉譯作用</span>
+            </button>
+            <button onclick="focusOrganelle('golgi')" id="nav-golgi" class="touch-btn justify-start px-3 py-2 rounded-xl text-sm font-medium text-slate-300 hover:bg-slate-800/70 text-left gap-2.5">
+                <span>🟢</span> <span>高基氏體與胞吐</span>
+            </button>
+        </div>
+
+        <!-- 標準分子色碼圖例 -->
+        <div class="hud-element glass-panel p-3 rounded-2xl hidden sm:flex flex-col gap-2">
+            <div class="text-xs font-bold uppercase tracking-wider text-slate-400 px-1">標準鹼基色碼</div>
+            <div class="grid grid-cols-2 gap-1.5 text-xs font-bold">
+                <div class="flex items-center gap-2 bg-slate-900/60 p-1.5 rounded-lg border border-slate-800">
+                    <span class="w-5 h-5 rounded flex items-center justify-center base-A text-[11px]">A</span>
+                    <span>腺嘌呤</span>
+                </div>
+                <div class="flex items-center gap-2 bg-slate-900/60 p-1.5 rounded-lg border border-slate-800">
+                    <span class="w-5 h-5 rounded flex items-center justify-center base-T text-[11px]">T/U</span>
+                    <span>胸腺/尿嘧啶</span>
+                </div>
+                <div class="flex items-center gap-2 bg-slate-900/60 p-1.5 rounded-lg border border-slate-800">
+                    <span class="w-5 h-5 rounded flex items-center justify-center base-C text-[11px]">C</span>
+                    <span>胞嘧啶</span>
+                </div>
+                <div class="flex items-center gap-2 bg-slate-900/60 p-1.5 rounded-lg border border-slate-800">
+                    <span class="w-5 h-5 rounded flex items-center justify-center base-G text-[11px]">G</span>
+                    <span>鳥嘌呤</span>
+                </div>
+            </div>
+            <div class="text-[11px] text-slate-400 px-1 pt-1 border-t border-slate-800/80 flex justify-between">
+                <span>配對原則:</span>
+                <span class="text-slate-200 font-mono">A↔T/U , C↔G</span>
+            </div>
+        </div>
+    </aside>
+
+    <!-- 4. 右側 HUD：常駐縮放與平移控制按鈕 ([+], [-], [重置]) -->
+    <aside class="hud-layer right-3 md:right-4 top-24 flex flex-col gap-2">
+        <div class="hud-element glass-panel p-1.5 rounded-2xl flex flex-col gap-1.5">
+            <button onclick="zoomStep(1.35)" class="touch-btn w-12 h-12 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-xl font-bold text-white shadow" title="放大視圖 [+]">
+                +
+            </button>
+            <button onclick="zoomStep(0.74)" class="touch-btn w-12 h-12 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-xl font-bold text-white shadow" title="縮小視圖 [-]">
+                −
+            </button>
+            <div class="h-px bg-slate-700/60 my-0.5"></div>
+            <button onclick="focusOrganelle('macro')" class="touch-btn w-12 h-12 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-xs font-bold text-blue-300 flex flex-col items-center justify-center leading-none gap-0.5" title="重置視圖">
+                <span class="text-base">⟲</span>
+                <span class="text-[10px]">重置</span>
+            </button>
+        </div>
+    </aside>
+
+    <!-- 5. 底部 HUD：雙模式動態控制中心 -->
+    <footer class="hud-layer bottom-0 left-0 right-0 p-3 md:p-4 flex justify-center">
+        
+        <!-- 模式 A：自動演示模式控制列 (Auto-Pilot Controls) -->
+        <div id="panel-auto" class="hud-element glass-panel px-4 py-3 rounded-3xl w-full max-w-4xl flex flex-col gap-3">
+            <!-- 階段進度指示器 -->
+            <div class="flex items-center justify-between gap-2 px-2">
+                <div class="flex items-center gap-2">
+                    <span id="stage-badge" class="px-2.5 py-1 rounded-lg bg-purple-500/20 border border-purple-400/40 text-purple-300 text-xs font-bold">階段 1/5</span>
+                    <h2 id="stage-title" class="font-bold text-sm md:text-base text-white">細胞核內：DNA 解旋與轉錄作用 (Transcription)</h2>
+                </div>
+                <span id="stage-desc" class="text-xs text-slate-300 hidden lg:inline">RNA 聚合酶沿著 DNA 模板股移動，依互補配對合成前驅 mRNA。</span>
+            </div>
+
+            <!-- 進度條與步驟節點 -->
+            <div class="relative pt-1 px-2">
+                <input id="timeline-slider" type="range" min="0" max="100" step="0.2" value="0" oninput="scrubTimeline(this.value)" class="w-full h-2.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                <div class="flex justify-between text-[11px] font-semibold text-slate-400 mt-1.5">
+                    <button onclick="jumpToStage(0)" class="hover:text-purple-300 transition">1. 細胞核轉錄</button>
+                    <button onclick="jumpToStage(22)" class="hover:text-blue-300 transition">2. 核孔輸出 mRNA</button>
+                    <button onclick="jumpToStage(42)" class="hover:text-amber-300 transition">3. 核醣體轉譯</button>
+                    <button onclick="jumpToStage(68)" class="hover:text-emerald-300 transition">4. 內質網摺疊與囊泡</button>
+                    <button onclick="jumpToStage(85)" class="hover:text-teal-300 transition">5. 高基氏體與胞吐</button>
+                </div>
+            </div>
+
+            <!-- 播放 / 暫停 / 單步 / 速度倍率 -->
+            <div class="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-slate-800/80">
+                <div class="flex items-center gap-2">
+                    <button id="btn-play" onclick="togglePlay()" class="touch-btn px-5 py-2 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm gap-2 shadow-lg shadow-emerald-600/25">
+                        <span id="play-icon">⏸</span>
+                        <span id="play-text">暫停演示</span>
+                    </button>
+                    <button onclick="stepBackward()" class="touch-btn px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs gap-1" title="上一步">
+                        <span>⏮</span> <span class="hidden sm:inline">上一步</span>
+                    </button>
+                    <button onclick="stepForward()" class="touch-btn px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs gap-1" title="單步執行">
+                        <span class="hidden sm:inline">單步執行</span> <span>⏭</span>
+                    </button>
+                </div>
+
+                <!-- 自動跟隨鏡頭開關 -->
+                <div class="flex items-center gap-2">
+                    <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer bg-slate-800/70 px-3 py-2.5 rounded-xl border border-slate-700">
+                        <input type="checkbox" id="chk-autofollow" onchange="toggleAutoFollow(this.checked)" class="w-4 h-4 accent-blue-500 rounded">
+                        <span>鏡頭自動跟隨流水線</span>
+                    </label>
+                </div>
+
+                <!-- 速度倍率 (0.5x, 1x, 2x) -->
+                <div class="flex items-center gap-1.5 bg-slate-900/80 p-1 rounded-xl border border-slate-800">
+                    <span class="text-xs text-slate-400 px-2">速度:</span>
+                    <button onclick="setSpeed(0.5)" id="spd-0.5" class="touch-btn px-3 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:bg-slate-800">0.5×</button>
+                    <button onclick="setSpeed(1)" id="spd-1" class="touch-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white">1.0×</button>
+                    <button onclick="setSpeed(2)" id="spd-2" class="touch-btn px-3 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:bg-slate-800">2.0×</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 模式 B：互動挑戰模式面板 (Interactive Challenge Controls) -->
+        <div id="panel-challenge" class="hud-element glass-panel px-4 py-3 rounded-3xl w-full max-w-5xl hidden flex-col gap-3">
+            <!-- 關卡切換列與狀態回饋 -->
+            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+                <div class="flex items-center gap-1.5">
+                    <button onclick="selectChallengeLevel(1)" id="lvl-btn-1" class="touch-btn px-3.5 py-1.5 rounded-xl font-bold text-xs md:text-sm bg-purple-600 text-white shadow">
+                        第一關：轉錄挑戰 (DNA→mRNA)
+                    </button>
+                    <button onclick="selectChallengeLevel(2)" id="lvl-btn-2" class="touch-btn px-3.5 py-1.5 rounded-xl font-bold text-xs md:text-sm bg-slate-800 text-slate-300 hover:bg-slate-700">
+                        第二關：轉譯挑戰 (mRNA→tRNA)
+                    </button>
+                    <button onclick="selectChallengeLevel(3)" id="lvl-btn-3" class="touch-btn px-3.5 py-1.5 rounded-xl font-bold text-xs md:text-sm bg-slate-800 text-slate-300 hover:bg-slate-700">
+                        第三關：突變沙盒 (Mutation Sandbox)
+                    </button>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div id="challenge-feedback" class="text-xs md:text-sm font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-3 py-1.5 rounded-xl">
+                        請根據上方畫布高亮的 DNA 模板股鹼基，點擊下方互補的 RNA 核苷酸！
+                    </div>
+                    <button onclick="resetCurrentChallenge()" class="touch-btn px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300">
+                        重置本關
+                    </button>
+                </div>
+            </div>
+
+            <!-- 第一關抽屜：轉錄挑戰 (A, U, C, G 大型觸控按鈕) -->
+            <div id="drawer-level-1" class="flex flex-wrap items-center justify-between gap-4 py-1">
+                <div class="flex items-center gap-3">
+                    <div class="bg-slate-900/90 border border-slate-700 px-4 py-2 rounded-2xl">
+                        <div class="text-[11px] text-slate-400">目前目標 DNA 模板鹼基 (3'→5')</div>
+                        <div class="flex items-center gap-2 mt-0.5">
+                            <span id="target-dna-base" class="w-9 h-9 rounded-xl font-black text-xl flex items-center justify-center base-T">T</span>
+                            <span class="text-slate-400 text-xs">➔ 需配對 mRNA (5'→3')：</span>
+                            <span id="target-mrna-slot" class="w-9 h-9 rounded-xl font-black text-xl flex items-center justify-center border-2 border-dashed border-amber-400 text-amber-300">?</span>
+                        </div>
+                    </div>
+                    <div class="hidden md:block text-xs text-slate-400 max-w-[200px]">
+                        進度：<span id="lvl1-progress" class="text-white font-bold">0 / 12</span> 核苷酸<br>
+                        規則：DNA 的 <b class="text-emerald-400">A</b> 配對 RNA 的 <b class="text-rose-400">U</b>
+                    </div>
+                </div>
+
+                <!-- 48x48px+ 超大核苷酸按鈕 -->
+                <div class="flex items-center gap-2.5">
+                    <button onclick="submitTranscriptionBase('A')" class="touch-btn px-5 py-3 rounded-2xl base-A border-b-4 font-black text-lg shadow-lg flex flex-col items-center">
+                        <span>A</span>
+                        <span class="text-[10px] font-normal opacity-90">腺嘌呤</span>
+                    </button>
+                    <button onclick="submitTranscriptionBase('U')" class="touch-btn px-5 py-3 rounded-2xl base-U border-b-4 font-black text-lg shadow-lg flex flex-col items-center">
+                        <span>U</span>
+                        <span class="text-[10px] font-normal opacity-90">尿嘧啶</span>
+                    </button>
+                    <button onclick="submitTranscriptionBase('C')" class="touch-btn px-5 py-3 rounded-2xl base-C border-b-4 font-black text-lg shadow-lg flex flex-col items-center">
+                        <span>C</span>
+                        <span class="text-[10px] font-normal opacity-90">胞嘧啶</span>
+                    </button>
+                    <button onclick="submitTranscriptionBase('G')" class="touch-btn px-5 py-3 rounded-2xl base-G border-b-4 font-black text-lg shadow-lg flex flex-col items-center">
+                        <span>G</span>
+                        <span class="text-[10px] font-normal opacity-90">鳥嘌呤</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 第二關抽屜：轉譯挑戰 (tRNA 反密碼子與胺基酸卡匣) -->
+            <div id="drawer-level-2" class="hidden flex-wrap items-center justify-between gap-3 py-1">
+                <div class="bg-slate-900/90 border border-slate-700 px-4 py-2 rounded-2xl flex items-center gap-3">
+                    <div>
+                        <div class="text-[11px] text-slate-400">核醣體 A 位點目標密碼子 (mRNA)</div>
+                        <div id="target-codon-box" class="flex items-center gap-1 mt-1">
+                            <!-- 動態填入三個鹼基 -->
+                        </div>
+                    </div>
+                    <div class="h-8 w-px bg-slate-700"></div>
+                    <div class="text-xs">
+                        <div class="text-slate-400">已合成多肽鏈</div>
+                        <div id="lvl2-progress" class="font-bold text-amber-400 text-sm mt-0.5">0 / 4 胺基酸</div>
+                    </div>
+                </div>
+
+                <!-- tRNA 選擇抽屜 -->
+                <div id="trna-options-container" class="flex flex-wrap items-center gap-2">
+                    <!-- 由 JS 動態生成 4 個 tRNA 選項按鈕 -->
+                </div>
+            </div>
+
+            <!-- 第三關抽屜：突變沙盒 (點突變：取代、插入、缺失) -->
+            <div id="drawer-level-3" class="hidden flex-col gap-2.5 py-1">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <!-- 點擊選擇要突變的 DNA 位置 -->
+                    <div class="flex items-center gap-1.5 overflow-x-auto pb-1">
+                        <span class="text-xs font-bold text-slate-400 mr-1">點擊選擇 DNA 編碼股位點:</span>
+                        <div id="sandbox-dna-strip" class="flex items-center gap-1">
+                            <!-- JS 生成 12 個可點擊的鹼基按鈕 -->
+                        </div>
+                    </div>
+
+                    <!-- 突變操作按鈕群 -->
+                    <div class="flex flex-wrap items-center gap-1.5">
+                        <span class="text-xs text-slate-400 mr-1">取代為:</span>
+                        <button onclick="mutateSubstitute('A')" class="touch-btn w-10 h-10 rounded-xl base-A font-black text-sm">A</button>
+                        <button onclick="mutateSubstitute('T')" class="touch-btn w-10 h-10 rounded-xl base-T font-black text-sm">T</button>
+                        <button onclick="mutateSubstitute('C')" class="touch-btn w-10 h-10 rounded-xl base-C font-black text-sm">C</button>
+                        <button onclick="mutateSubstitute('G')" class="touch-btn w-10 h-10 rounded-xl base-G font-black text-sm">G</button>
+                        <div class="h-6 w-px bg-slate-700 mx-1"></div>
+                        <button onclick="mutateInsert()" class="touch-btn px-3 py-2 rounded-xl bg-amber-600/80 hover:bg-amber-500 text-white font-bold text-xs">
+                            ➕ 插入鹼基 (Insertion)
+                        </button>
+                        <button onclick="mutateDelete()" class="touch-btn px-3 py-2 rounded-xl bg-rose-600/80 hover:bg-rose-500 text-white font-bold text-xs">
+                            ➖ 缺失鹼基 (Deletion)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 突變下游影響即時診斷列 -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-2 bg-slate-900/90 p-2.5 rounded-2xl border border-slate-800 text-xs">
+                    <div class="flex items-center gap-2">
+                        <span class="text-slate-400 font-semibold">突變類型診斷:</span>
+                        <span id="mutation-badge" class="px-2.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">野生型 (Wild-Type 正常)</span>
+                    </div>
+                    <div class="flex items-center gap-2 overflow-hidden">
+                        <span class="text-slate-400 font-semibold shrink-0">轉譯多肽鏈:</span>
+                        <div id="sandbox-protein-chain" class="flex items-center gap-1 font-mono font-bold truncate"></div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-slate-400 font-semibold shrink-0">蛋白質功能影響:</span>
+                        <span id="mutation-effect-desc" class="text-slate-200 font-medium truncate">結構折疊正常，具備完整生物活性。</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- 6. 說明與遺傳密碼表 Modal -->
+    <div id="help-modal" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="glass-panel max-w-2xl w-full rounded-3xl p-6 text-slate-200 border border-slate-700 max-h-[85vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b border-slate-700 pb-3 mb-4">
+                <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                    <span>📖</span> <span>中央法則互動實驗室 — 操作與教學指南</span>
+                </h3>
+                <button onclick="toggleModal('help-modal')" class="touch-btn w-10 h-10 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold">✕</button>
+            </div>
+            <div class="space-y-4 text-sm leading-relaxed">
+                <div class="bg-slate-900/70 p-3.5 rounded-2xl border border-slate-800">
+                    <h4 class="font-bold text-blue-400 mb-1">🖐️ 觸控與視角操作 (Hierarchical Infinite Canvas)</h4>
+                    <ul class="list-disc list-inside text-xs text-slate-300 space-y-1">
+                        <li><b>雙指縮放 (Pinch-to-Zoom) / 滑鼠滾輪</b>：在「細胞巨觀全景」與「胞器分子微觀視圖」間無縫縮放。</li>
+                        <li><b>單指拖曳 (Pan) / 滑鼠按住拖曳</b>：自由平移探索細胞核、粗糙內質網、高基氏體與細胞膜。</li>
+                        <li><b>智慧對焦</b>：直接點擊畫布上的胞器，或使用左側導覽列，鏡頭將平滑過場放大至該分子反應區。</li>
+                    </ul>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div class="bg-slate-900/70 p-3.5 rounded-2xl border border-slate-800">
+                        <h4 class="font-bold text-emerald-400 mb-1">🎬 自動演示模式 (適合課堂講授)</h4>
+                        <p class="text-xs text-slate-300">提供全自動工廠化流水線動畫，完整呈現 DNA 解旋、RNA 聚合酶轉錄、核孔輸出、核醣體與 tRNA 轉譯、內質網摺疊，直到囊泡運輸與胞吐作用。</p>
+                    </div>
+                    <div class="bg-slate-900/70 p-3.5 rounded-2xl border border-slate-800">
+                        <h4 class="font-bold text-purple-400 mb-1">🎮 互動挑戰模式 (適合學生實作)</h4>
+                        <p class="text-xs text-slate-300">包含三道關卡：<b>第一關轉錄配對</b>、<b>第二關核醣體 tRNA 解碼</b>，以及<b>第三關突變沙盒</b>（自由測試取代、插入、缺失造成的同義、錯義、無義與移碼突變）。</p>
+                    </div>
+                </div>
+                <div class="bg-slate-900/70 p-3.5 rounded-2xl border border-slate-800">
+                    <h4 class="font-bold text-amber-400 mb-2">🧬 本實驗室常用 mRNA 密碼子對照表</h4>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
+                        <div class="bg-slate-800/80 p-2 rounded-lg"><span class="text-emerald-400 font-bold">AUG</span> : Met (起始/甲硫胺酸)</div>
+                        <div class="bg-slate-800/80 p-2 rounded-lg"><span class="text-blue-300 font-bold">GCC/GCU</span> : Ala (丙胺酸)</div>
+                        <div class="bg-slate-800/80 p-2 rounded-lg"><span class="text-blue-300 font-bold">CCG/CCU</span> : Pro (脯胺酸)</div>
+                        <div class="bg-slate-800/80 p-2 rounded-lg"><span class="text-blue-300 font-bold"> AAG/AAA</span> : Lys (離胺酸)</div>
+                        <div class="bg-slate-800/80 p-2 rounded-lg"><span class="text-blue-300 font-bold">GUG/GUA</span> : Val (纈胺酸)</div>
+                        <div class="bg-slate-800/80 p-2 rounded-lg"><span class="text-blue-300 font-bold">CAC/CAU</span> : His (組胺酸)</div>
+                        <div class="bg-slate-800/80 p-2 rounded-lg"><span class="text-blue-300 font-bold">CUG/UUG</span> : Leu (白胺酸)</div>
+                        <div class="bg-slate-800/80 p-2 rounded-lg"><span class="text-rose-400 font-bold">UAA/UAG/UGA</span> : STOP (終止)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 7. 核心互動與 Canvas 渲染引擎 -->
+    <script>
+        /* ============================================================================
+         * 1. 分子生物學資料庫 (基因庫預設、標準色碼、遺傳密碼表)
+         * ============================================================================ */
+        const BASE_COLORS = {
+            A: { fill: '#10B981', stroke: '#059669', name: '腺嘌呤' }, // Emerald
+            T: { fill: '#E11D48', stroke: '#BE123C', name: '胸腺嘧啶' }, // Crimson
+            U: { fill: '#E11D48', stroke: '#BE123C', name: '尿嘧啶' },   // Crimson
+            C: { fill: '#2563EB', stroke: '#1D4ED8', name: '胞嘧啶' },   // Royal Blue
+            G: { fill: '#F59E0B', stroke: '#D97706', name: '鳥嘌呤' }    // Amber
+        };
+
+        const GENE_PRESETS = {
+            insulin: {
+                name: '胰島素基因 (Insulin)',
+                codingStrand: 'ATGGCCCTGTGG', // 5' -> 3' 編碼股
+                role: '調節血糖之分泌性蛋白質激素'
+            },
+            hbb: {
+                name: '血紅素 β 鏈 (HBB)',
+                codingStrand: 'ATGGTGCACCTG',
+                role: '紅血球攜帶氧氣的關鍵球蛋白'
+            },
+            gfp: {
+                name: '綠色螢光蛋白 (GFP)',
+                codingStrand: 'ATGAGTAAAGGA',
+                role: '受激發會發出綠色螢光的報導蛋白'
+            }
+        };
+
+        const CODON_TABLE = {
+            'AUG': { aa: 'Met', full: '甲硫胺酸 (起始)', color: '#10B981' },
+            'GCC': { aa: 'Ala', full: '丙胺酸', color: '#3B82F6' },
+            'GCU': { aa: 'Ala', full: '丙胺酸', color: '#3B82F6' },
+            'GCA': { aa: 'Ala', full: '丙胺酸', color: '#3B82F6' },
+            'GCG': { aa: 'Ala', full: '丙胺酸', color: '#3B82F6' },
+            'CUG': { aa: 'Leu', full: '白胺酸', color: '#8B5CF6' },
+            'UUG': { aa: 'Leu', full: '白胺酸', color: '#8B5CF6' },
+            'UUA': { aa: 'Leu', full: '白胺酸', color: '#8B5CF6' },
+            'CUU': { aa: 'Leu', full: '白胺酸', color: '#8B5CF6' },
+            'CUC': { aa: 'Leu', full: '白胺酸', color: '#8B5CF6' },
+            'CUA': { aa: 'Leu', full: '白胺酸', color: '#8B5CF6' },
+            'UGG': { aa: 'Trp', full: '色胺酸', color: '#EC4899' },
+            'GUG': { aa: 'Val', full: '纈胺酸', color: '#F59E0B' },
+            'GUU': { aa: 'Val', full: '纈胺酸', color: '#F59E0B' },
+            'GUC': { aa: 'Val', full: '纈胺酸', color: '#F59E0B' },
+            'GUA': { aa: 'Val', full: '纈胺酸', color: '#F59E0B' },
+            'CAC': { aa: 'His', full: '組胺酸', color: '#06B6D4' },
+            'CAU': { aa: 'His', full: '組胺酸', color: '#06B6D4' },
+            'AGU': { aa: 'Ser', full: '絲胺酸', color: '#14B8A6' },
+            'AGC': { aa: 'Ser', full: '絲胺酸', color: '#14B8A6' },
+            'UCU': { aa: 'Ser', full: '絲胺酸', color: '#14B8A6' },
+            'UCC': { aa: 'Ser', full: '絲胺酸', color: '#14B8A6' },
+            'UCA': { aa: 'Ser', full: '絲胺酸', color: '#14B8A6' },
+            'UCG': { aa: 'Ser', full: '絲胺酸', color: '#14B8A6' },
+            'AAA': { aa: 'Lys', full: '離胺酸', color: '#6366F1' },
+            'AAG': { aa: 'Lys', full: '離胺酸', color: '#6366F1' },
+            'GGA': { aa: 'Gly', full: '甘胺酸', color: '#A855F7' },
+            'GGU': { aa: 'Gly', full: '甘胺酸', color: '#A855F7' },
+            'GGC': { aa: 'Gly', full: '甘胺酸', color: '#A855F7' },
+            'GGG': { aa: 'Gly', full: '甘胺酸', color: '#A855F7' },
+            'CCG': { aa: 'Pro', full: '脯胺酸', color: '#F97316' },
+            'CCU': { aa: 'Pro', full: '脯胺酸', color: '#F97316' },
+            'CCC': { aa: 'Pro', full: '脯胺酸', color: '#F97316' },
+            'CCA': { aa: 'Pro', full: '脯胺酸', color: '#F97316' },
+            'GAA': { aa: 'Glu', full: '麩胺酸', color: '#EF4444' },
+            'GAG': { aa: 'Glu', full: '麩胺酸', color: '#EF4444' },
+            'UAA': { aa: 'STOP', full: '終止密碼子', color: '#64748B' },
+            'UAG': { aa: 'STOP', full: '終止密碼子', color: '#64748B' },
+            'UGA': { aa: 'STOP', full: '終止密碼子', color: '#64748B' }
+        };
+
+        function translateCodon(codon) {
+            if (codon.length < 3) return { aa: '---', full: '不完整密碼子', color: '#475569' };
+            if (CODON_TABLE[codon]) return CODON_TABLE[codon];
+            // 通用備援對應
+            const genericMap = {
+                'UU': 'Phe', 'AU': 'Ile', 'UA': 'Tyr', 'CA': 'Gln',
+                'AA': 'Asn', 'GA': 'Asp', 'UG': 'Cys', 'CG': 'Arg', 'AC': 'Thr'
+            };
+            const prefix = codon.slice(0, 2);
+            return { aa: genericMap[prefix] || 'Xaa', full: '胺基酸殘基', color: '#38BDF8' };
+        }
+
+        function dnaToTemplate(coding) {
+            const map = { A: 'T', T: 'A', C: 'G', G: 'C' };
+            return coding.split('').map(b => map[b] || 'A').join('');
+        }
+
+        function templateToMrna(template) {
+            const map = { T: 'A', A: 'U', C: 'G', G: 'C' };
+            return template.split('').map(b => map[b] || 'U').join('');
+        }
+
+        function codonToAnticodon(codon) {
+            const map = { A: 'U', U: 'A', C: 'G', G: 'C' };
+            return codon.split('').map(b => map[b] || 'A').join('');
+        }
+
+        /* ============================================================================
+         * 2. Web Audio 合成音效系統 (零外部音檔依賴)
+         * ============================================================================ */
+        let soundEnabled = true;
+        let audioCtx = null;
+
+        function playTone(freq = 440, type = 'sine', duration = 0.12, gainVal = 0.08) {
+            if (!soundEnabled) return;
+            try {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(gainVal, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch (e) {}
+        }
+
+        function playSuccessSound() {
+            playTone(523.25, 'triangle', 0.1, 0.1);
+            setTimeout(() => playTone(659.25, 'triangle', 0.14, 0.1), 80);
+        }
+
+        function playErrorSound() {
+            playTone(180, 'sawtooth', 0.22, 0.1);
+        }
+
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            document.getElementById('btn-sound').textContent = soundEnabled ? '🔊' : '🔇';
+            if (soundEnabled) playTone(600, 'sine', 0.08);
+        }
+
+        /* ============================================================================
+         * 3. 應用程式全域狀態與視窗矩陣 (Camera & App State)
+         * ============================================================================ */
+        const canvas = document.getElementById('main-canvas');
+        const ctx = canvas.getContext('2d');
+
+        // 世界座標基準：寬 1600 x 高 900
+        const ORGANELLE_TARGETS = {
+            macro:    { x: 0,    y: 0,    scale: 0.78, label: '細胞巨觀總覽' },
+            nucleus:  { x: -370, y: -40,  scale: 2.25, label: '細胞核：轉錄作用' },
+            ribosome: { x: 85,   y: 55,   scale: 2.35, label: '核醣體：轉譯作用' },
+            golgi:    { x: 460,  y: -15,  scale: 1.85, label: '高基氏體與胞吐' }
+        };
+
+        const camera = {
+            x: 0,
+            y: 0,
+            scale: 0.78,
+            targetX: 0,
+            targetY: 0,
+            targetScale: 0.78
+        };
+
+        const appState = {
+            mode: 'auto', // 'auto' | 'challenge'
+            geneKey: 'insulin',
+            codingDNA: GENE_PRESETS.insulin.codingStrand,
+            templateDNA: dnaToTemplate(GENE_PRESETS.insulin.codingStrand),
+            mrnaSeq: templateToMrna(dnaToTemplate(GENE_PRESETS.insulin.codingStrand)),
+
+            // 自動演示狀態
+            isPlaying: true,
+            speed: 1.0,
+            timeline: 0, // 0 ~ 100
+            autoFollow: false,
+
+            // 互動挑戰狀態
+            challengeLevel: 1, // 1: 轉錄, 2: 轉譯, 3: 突變沙盒
+            lvl1Index: 4,      // 預設已完成前 4 個鹼基，讓學生接力完成後 8 個
+            lvl2CodonIndex: 0, // 0 ~ 3 (共 4 個密碼子)
+            sandboxSelectedIdx: 4,
+            sandboxOriginalCoding: GENE_PRESETS.insulin.codingStrand,
+            sandboxMutatedCoding: GENE_PRESETS.insulin.codingStrand,
+            lastMutationOp: 'none' // 'none' | 'sub' | 'ins' | 'del'
+        };
+
+        // 背景常駐低強度粒子流動 (確保在巨觀視圖下中央法則流動意象清晰可見)
+        const ambientParticles = Array.from({ length: 28 }, (_, i) => ({
+            progress: (i / 28) * 100,
+            offset: (Math.random() - 0.5) * 45,
+            size: 2.5 + Math.random() * 2.5,
+            speedOffset: 0.7 + Math.random() * 0.6
+        }));
+
+        /* ============================================================================
+         * 4. 視窗縮放、平移與觸控手勢處理 (Pan & Pinch-to-Zoom)
+         * ============================================================================ */
+        function resizeCanvas() {
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = window.innerWidth * dpr;
+            canvas.height = window.innerHeight * dpr;
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        function focusOrganelle(key) {
+            const t = ORGANELLE_TARGETS[key];
+            if (!t) return;
+            camera.targetX = t.x;
+            camera.targetY = t.y;
+            camera.targetScale = t.scale;
+            playTone(480, 'sine', 0.07, 0.05);
+
+            // 更新左側導覽列高亮
+            ['macro', 'nucleus', 'ribosome', 'golgi'].forEach(k => {
+                const btn = document.getElementById('nav-' + k);
+                if (k === key) {
+                    btn.className = 'touch-btn justify-start px-3 py-2 rounded-xl text-sm font-medium bg-blue-600/20 text-blue-300 border border-blue-500/30 text-left gap-2.5';
+                } else {
+                    btn.className = 'touch-btn justify-start px-3 py-2 rounded-xl text-sm font-medium text-slate-300 hover:bg-slate-800/70 text-left gap-2.5';
+                }
+            });
+        }
+
+        function zoomStep(factor) {
+            camera.targetScale = Math.max(0.45, Math.min(3.5, camera.targetScale * factor));
+            playTone(factor > 1 ? 520 : 380, 'sine', 0.06, 0.04);
+        }
+
+        // 指標事件 (支援單指平移 + 雙指縮放 + 點擊胞器智慧對焦)
+        const activePointers = new Map();
+        let lastPanPos = null;
+        let lastPinchDist = null;
+        let pointerDownPos = null;
+
+        canvas.addEventListener('pointerdown', (e) => {
+            canvas.setPointerCapture(e.pointerId);
+            activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+            if (activePointers.size === 1) {
+                lastPanPos = { x: e.clientX, y: e.clientY };
+                pointerDownPos = { x: e.clientX, y: e.clientY };
+            } else if (activePointers.size === 2) {
+                const pts = Array.from(activePointers.values());
+                lastPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+            }
+        });
+
+        canvas.addEventListener('pointermove', (e) => {
+            if (!activePointers.has(e.pointerId)) return;
+            activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+            if (activePointers.size === 1 && lastPanPos) {
+                const dx = e.clientX - lastPanPos.x;
+                const dy = e.clientY - lastPanPos.y;
+                camera.targetX -= dx / camera.scale;
+                camera.targetY -= dy / camera.scale;
+                camera.x = camera.targetX;
+                camera.y = camera.targetY;
+                lastPanPos = { x: e.clientX, y: e.clientY };
+            } else if (activePointers.size === 2) {
+                const pts = Array.from(activePointers.values());
+                const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+                if (lastPinchDist && lastPinchDist > 10) {
+                    const ratio = dist / lastPinchDist;
+                    camera.targetScale = Math.max(0.45, Math.min(3.5, camera.targetScale * ratio));
+                    camera.scale = camera.targetScale;
+                }
+                lastPinchDist = dist;
+            }
+        });
+
+        function handlePointerUp(e) {
+            if (activePointers.size === 1 && pointerDownPos) {
+                const moveDist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
+                if (moveDist < 8) {
+                    handleCanvasClick(e.clientX, e.clientY);
+                }
+            }
+            activePointers.delete(e.pointerId);
+            if (activePointers.size < 2) lastPinchDist = null;
+            if (activePointers.size === 1) {
+                const remaining = Array.from(activePointers.values())[0];
+                lastPanPos = { x: remaining.x, y: remaining.y };
+            } else {
+                lastPanPos = null;
+            }
+        }
+        canvas.addEventListener('pointerup', handlePointerUp);
+        canvas.addEventListener('pointercancel', handlePointerUp);
+
+        // 滑鼠滾輪縮放
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomFactor = e.deltaY < 0 ? 1.12 : 0.89;
+            camera.targetScale = Math.max(0.45, Math.min(3.5, camera.targetScale * zoomFactor));
+        }, { passive: false });
+
+        // 點擊畫布胞器觸發智慧對焦
+        function screenToWorld(sx, sy) {
+            const cx = window.innerWidth / 2;
+            const cy = window.innerHeight / 2;
+            return {
+                x: (sx - cx) / camera.scale + camera.x,
+                y: (sy - cy) / camera.scale + camera.y
+            };
+        }
+
+        function handleCanvasClick(sx, sy) {
+            if (camera.scale > 1.5) return; // 已在微觀視圖時不誤觸跳轉
+            const w = screenToWorld(sx, sy);
+            if (Math.hypot(w.x - (-370), w.y - (-40)) < 210) {
+                focusOrganelle('nucleus');
+            } else if (Math.hypot(w.x - 85, w.y - 55) < 170) {
+                focusOrganelle('ribosome');
+            } else if (Math.hypot(w.x - 460, w.y - (-15)) < 190) {
+                focusOrganelle('golgi');
+            }
+        }
+
+        /* ============================================================================
+         * 5. 雙模式與控制邏輯 (Auto-Pilot & Interactive Challenge)
+         * ============================================================================ */
+        function switchMode(mode) {
+            appState.mode = mode;
+            const btnAuto = document.getElementById('btn-mode-auto');
+            const btnChal = document.getElementById('btn-mode-challenge');
+            const panelAuto = document.getElementById('panel-auto');
+            const panelChal = document.getElementById('panel-challenge');
+
+            if (mode === 'auto') {
+                btnAuto.className = 'touch-btn px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 bg-blue-600 text-white shadow-lg shadow-blue-600/30';
+                btnChal.className = 'touch-btn px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 text-slate-300 hover:text-white hover:bg-slate-800/60';
+                panelAuto.classList.remove('hidden');
+                panelAuto.classList.add('flex');
+                panelChal.classList.add('hidden');
+                panelChal.classList.remove('flex');
+                focusOrganelle('macro');
+            } else {
+                btnChal.className = 'touch-btn px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 bg-purple-600 text-white shadow-lg shadow-purple-600/30';
+                btnAuto.className = 'touch-btn px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 text-slate-300 hover:text-white hover:bg-slate-800/60';
+                panelChal.classList.remove('hidden');
+                panelChal.classList.add('flex');
+                panelAuto.classList.add('hidden');
+                panelAuto.classList.remove('flex');
+                appState.isPlaying = false;
+                updatePlayButtonUI();
+                selectChallengeLevel(appState.challengeLevel);
+            }
+            playTone(520, 'sine', 0.09);
+        }
+
+        function changeGenePreset(key) {
+            if (!GENE_PRESETS[key]) return;
+            appState.geneKey = key;
+            appState.codingDNA = GENE_PRESETS[key].codingStrand;
+            appState.templateDNA = dnaToTemplate(appState.codingDNA);
+            appState.mrnaSeq = templateToMrna(appState.templateDNA);
+            appState.sandboxOriginalCoding = appState.codingDNA;
+            appState.sandboxMutatedCoding = appState.codingDNA;
+            appState.lastMutationOp = 'none';
+            resetCurrentChallenge();
+            playTone(580, 'triangle', 0.1);
+        }
+
+        // 自動演示控制
+        function togglePlay() {
+            appState.isPlaying = !appState.isPlaying;
+            updatePlayButtonUI();
+            playTone(appState.isPlaying ? 540 : 360, 'sine', 0.08);
+        }
+
+        function updatePlayButtonUI() {
+            const icon = document.getElementById('play-icon');
+            const text = document.getElementById('play-text');
+            const btn = document.getElementById('btn-play');
+            if (appState.isPlaying) {
+                icon.textContent = '⏸';
+                text.textContent = '暫停演示';
+                btn.className = 'touch-btn px-5 py-2 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm gap-2 shadow-lg shadow-emerald-600/25';
+            } else {
+                icon.textContent = '▶';
+                text.textContent = '播放演示';
+                btn.className = 'touch-btn px-5 py-2 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm gap-2 shadow-lg shadow-blue-600/25';
+            }
+        }
+
+        function setSpeed(spd) {
+            appState.speed = spd;
+            [0.5, 1, 2].forEach(s => {
+                const el = document.getElementById('spd-' + s);
+                if (s === spd) {
+                    el.className = 'touch-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white';
+                } else {
+                    el.className = 'touch-btn px-3 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:bg-slate-800';
+                }
+            });
+            playTone(440 * spd, 'sine', 0.06);
+        }
+
+        function scrubTimeline(val) {
+            appState.timeline = parseFloat(val);
+            updateStageBanner(appState.timeline);
+        }
+
+        function jumpToStage(val) {
+            appState.timeline = val;
+            document.getElementById('timeline-slider').value = val;
+            updateStageBanner(val);
+            if (val < 22) focusOrganelle('nucleus');
+            else if (val >= 35 && val < 68) focusOrganelle('ribosome');
+            else if (val >= 68) focusOrganelle('golgi');
+        }
+
+        function stepForward() {
+            appState.isPlaying = false;
+            updatePlayButtonUI();
+            const stops = [0, 22, 42, 68, 85, 99];
+            const next = stops.find(s => s > appState.timeline + 2) ?? 0;
+            jumpToStage(next);
+        }
+
+        function stepBackward() {
+            appState.isPlaying = false;
+            updatePlayButtonUI();
+            const stops = [0, 22, 42, 68, 85];
+            const prev = [...stops].reverse().find(s => s < appState.timeline - 2) ?? 0;
+            jumpToStage(prev);
+        }
+
+        function toggleAutoFollow(checked) {
+            appState.autoFollow = checked;
+        }
+
+        function updateStageBanner(t) {
+            const badge = document.getElementById('stage-badge');
+            const title = document.getElementById('stage-title');
+            const desc = document.getElementById('stage-desc');
+            if (t < 22) {
+                badge.textContent = '階段 1/5';
+                title.textContent = '細胞核內：DNA 解旋與轉錄作用 (Transcription)';
+                desc.textContent = 'RNA 聚合酶沿著 DNA 模板股移動，依互補配對 (A-U, T-A, C-G) 合成 mRNA。';
+            } else if (t < 42) {
+                badge.textContent = '階段 2/5';
+                title.textContent = '核膜孔運輸：成熟 mRNA 離開細胞核';
+                desc.textContent = 'mRNA 穿過核膜孔進入細胞質，前往粗糙內質網上的核醣體。';
+            } else if (t < 68) {
+                badge.textContent = '階段 3/5';
+                title.textContent = '細胞質核醣體：轉譯作用 (Translation)';
+                desc.textContent = 'tRNA 反密碼子識別 mRNA 密碼子，依序將正確胺基酸結合形成多肽鏈。';
+            } else if (t < 85) {
+                badge.textContent = '階段 4/5';
+                title.textContent = '粗糙內質網 (RER)：多肽鏈摺疊與囊泡出芽';
+                desc.textContent = '新生多肽鏈進入內質網腔進行三維結構摺疊，並包裹進運輸囊泡。';
+            } else {
+                badge.textContent = '階段 5/5';
+                title.textContent = '高基氏體修飾與細胞膜胞吐作用 (Exocytosis)';
+                desc.textContent = '高基氏體完成蛋白質分類與修飾，分泌囊泡與細胞膜融合釋放蛋白質。';
+            }
+        }
+
+        /* ============================================================================
+         * 6. 互動挑戰模式三關卡邏輯 (Level 1, Level 2, Level 3)
+         * ============================================================================ */
+        function selectChallengeLevel(lvl) {
+            appState.challengeLevel = lvl;
+            [1, 2, 3].forEach(n => {
+                const btn = document.getElementById('lvl-btn-' + n);
+                const drawer = document.getElementById('drawer-level-' + n);
+                if (n === lvl) {
+                    btn.className = 'touch-btn px-3.5 py-1.5 rounded-xl font-bold text-xs md:text-sm bg-purple-600 text-white shadow';
+                    drawer.classList.remove('hidden');
+                    drawer.classList.add('flex');
+                } else {
+                    btn.className = 'touch-btn px-3.5 py-1.5 rounded-xl font-bold text-xs md:text-sm bg-slate-800 text-slate-300 hover:bg-slate-700';
+                    drawer.classList.add('hidden');
+                    drawer.classList.remove('flex');
+                }
+            });
+
+            if (lvl === 1) {
+                focusOrganelle('nucleus');
+                updateLevel1UI();
+            } else if (lvl === 2) {
+                focusOrganelle('ribosome');
+                updateLevel2UI();
+            } else if (lvl === 3) {
+                focusOrganelle('nucleus');
+                updateLevel3UI();
+            }
+        }
+
+        function resetCurrentChallenge() {
+            if (appState.challengeLevel === 1) {
+                appState.lvl1Index = 4;
+                updateLevel1UI();
+            } else if (appState.challengeLevel === 2) {
+                appState.lvl2CodonIndex = 0;
+                updateLevel2UI();
+            } else if (appState.challengeLevel === 3) {
+                appState.sandboxMutatedCoding = appState.sandboxOriginalCoding;
+                appState.lastMutationOp = 'none';
+                updateLevel3UI();
+            }
+        }
+
+        function setChallengeFeedback(msg, isError = false) {
+            const box = document.getElementById('challenge-feedback');
+            box.textContent = msg;
+            if (isError) {
+                box.className = 'text-xs md:text-sm font-bold text-rose-300 bg-rose-950/70 border border-rose-500/40 px-3 py-1.5 rounded-xl shake-anim';
+                setTimeout(() => box.classList.remove('shake-anim'), 400);
+            } else {
+                box.className = 'text-xs md:text-sm font-bold text-emerald-300 bg-emerald-950/60 border border-emerald-500/30 px-3 py-1.5 rounded-xl';
+            }
+        }
+
+        // --- 第一關：轉錄挑戰 ---
+        function updateLevel1UI() {
+            const total = appState.templateDNA.length;
+            const idx = appState.lvl1Index;
+            document.getElementById('lvl1-progress').textContent = `${idx} / ${total}`;
+            const targetBox = document.getElementById('target-dna-base');
+            const slotBox = document.getElementById('target-mrna-slot');
+
+            if (idx >= total) {
+                targetBox.textContent = '✓';
+                targetBox.className = 'w-9 h-9 rounded-xl font-black text-xl flex items-center justify-center bg-emerald-600 text-white';
+                slotBox.textContent = '✓';
+                setChallengeFeedback('🎉 恭喜完成 mRNA 轉錄合成！可切換至「第二關：轉譯挑戰」繼續實作。');
+                return;
+            }
+
+            const dnaBase = appState.templateDNA[idx];
+            targetBox.textContent = dnaBase;
+            targetBox.className = `w-9 h-9 rounded-xl font-black text-xl flex items-center justify-center base-${dnaBase}`;
+            slotBox.textContent = '?';
+            setChallengeFeedback(`請為第 ${idx + 1} 個位置的 DNA 模板鹼基【${dnaBase}】選擇互補的 mRNA 核苷酸！`);
+        }
+
+        function submitTranscriptionBase(chosenRnaBase) {
+            if (appState.lvl1Index >= appState.templateDNA.length) return;
+            const expected = appState.mrnaSeq[appState.lvl1Index];
+            const dnaBase = appState.templateDNA[appState.lvl1Index];
+
+            if (chosenRnaBase === expected) {
+                playSuccessSound();
+                appState.lvl1Index++;
+                updateLevel1UI();
+            } else {
+                playErrorSound();
+                setChallengeFeedback(`❌ 配對錯誤！DNA 模板股的【${dnaBase}】在轉錄時應配對 RNA 的【${expected}】。`, true);
+            }
+        }
+
+        // --- 第二關：轉譯挑戰 ---
+        function updateLevel2UI() {
+            const totalCodons = Math.floor(appState.mrnaSeq.length / 3);
+            const cIdx = appState.lvl2CodonIndex;
+            document.getElementById('lvl2-progress').textContent = `${cIdx} / ${totalCodons} 胺基酸`;
+
+            const codonBox = document.getElementById('target-codon-box');
+            const optionsContainer = document.getElementById('trna-options-container');
+            codonBox.innerHTML = '';
+            optionsContainer.innerHTML = '';
+
+            if (cIdx >= totalCodons) {
+                codonBox.innerHTML = `<span class="px-3 py-1 rounded-lg bg-emerald-600 text-white font-bold text-xs">多肽鏈轉譯完成！</span>`;
+                setChallengeFeedback('🎉 恭喜完成核醣體轉譯挑戰！所有胺基酸皆已正確接合為多肽鏈。');
+                return;
+            }
+
+            const currentCodon = appState.mrnaSeq.slice(cIdx * 3, cIdx * 3 + 3);
+            currentCodon.split('').forEach(b => {
+                const span = document.createElement('span');
+                span.className = `w-8 h-8 rounded-lg font-black text-sm flex items-center justify-center base-${b}`;
+                span.textContent = b;
+                codonBox.appendChild(span);
+            });
+
+            const correctAnticodon = codonToAnticodon(currentCodon);
+            const correctAA = translateCodon(currentCodon);
+
+            // 建立 1 個正確 tRNA + 3 個誘答 tRNA
+            const distractors = [
+                { anticodon: 'UAA', aa: 'Ile', full: '異白胺酸' },
+                { anticodon: 'GGC', aa: 'Pro', full: '脯胺酸' },
+                { anticodon: 'CUA', aa: 'Asp', full: '天冬胺酸' },
+                { anticodon: 'UUU', aa: 'Lys', full: '離胺酸' },
+                { anticodon: 'CCA', aa: 'Gly', full: '甘胺酸' }
+            ].filter(d => d.anticodon !== correctAnticodon).slice(0, 3);
+
+            const choices = [
+                { anticodon: correctAnticodon, aa: correctAA.aa, full: correctAA.full, isCorrect: true },
+                ...distractors.map(d => ({ ...d, isCorrect: false }))
+            ].sort(() => Math.random() - 0.5);
+
+            choices.forEach(ch => {
+                const btn = document.createElement('button');
+                btn.className = 'touch-btn px-3.5 py-2 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-600 flex flex-col items-center gap-1 shadow';
+                btn.onclick = () => submitTranslationTrna(ch, currentCodon, correctAnticodon);
+                btn.innerHTML = `
+                    <div class="px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 font-bold text-xs">
+                        胺基酸: ${ch.aa}
+                    </div>
+                    <div class="text-[11px] text-slate-300 font-mono">
+                        tRNA 反密碼子: <b class="text-white">${ch.anticodon}</b>
+                    </div>
+                `;
+                optionsContainer.appendChild(btn);
+            });
+
+            setChallengeFeedback(`請為 mRNA 密碼子【${currentCodon}】挑選具有互補反密碼子與正確胺基酸的 tRNA！`);
+        }
+
+        function submitTranslationTrna(choice, currentCodon, correctAnticodon) {
+            if (choice.isCorrect) {
+                playSuccessSound();
+                appState.lvl2CodonIndex++;
+                updateLevel2UI();
+            } else {
+                playErrorSound();
+                setChallengeFeedback(`❌ tRNA 配對錯誤！mRNA 密碼子【${currentCodon}】需與反密碼子【${correctAnticodon}】互補配對。`, true);
+            }
+        }
+
+        // --- 第三關：突變沙盒 ---
+        function updateLevel3UI() {
+            const strip = document.getElementById('sandbox-dna-strip');
+            strip.innerHTML = '';
+
+            const seq = appState.sandboxMutatedCoding;
+            seq.split('').forEach((base, idx) => {
+                const btn = document.createElement('button');
+                const isSel = idx === appState.sandboxSelectedIdx;
+                btn.className = `w-9 h-9 rounded-xl font-black text-sm flex flex-col items-center justify-center base-${base} transition ${isSel ? 'ring-4 ring-white scale-110 z-10' : 'opacity-85 hover:opacity-100'}`;
+                btn.innerHTML = `<span>${base}</span><span class="text-[9px] font-mono opacity-80">${idx + 1}</span>`;
+                btn.onclick = () => {
+                    appState.sandboxSelectedIdx = idx;
+                    playTone(460, 'sine', 0.05);
+                    updateLevel3UI();
+                };
+                strip.appendChild(btn);
+            });
+
+            // 同步更新畫布所用的序列，讓學生在畫布直接看到突變後的結果
+            appState.codingDNA = seq;
+            appState.templateDNA = dnaToTemplate(seq);
+            appState.mrnaSeq = templateToMrna(appState.templateDNA);
+
+            analyzeSandboxMutation();
+        }
+
+        function mutateSubstitute(newBase) {
+            const idx = appState.sandboxSelectedIdx;
+            const arr = appState.sandboxMutatedCoding.split('');
+            if (idx < 0 || idx >= arr.length) return;
+            arr[idx] = newBase;
+            appState.sandboxMutatedCoding = arr.join('');
+            appState.lastMutationOp = 'sub';
+            playTone(500, 'triangle', 0.09);
+            updateLevel3UI();
+        }
+
+        function mutateInsert() {
+            const idx = appState.sandboxSelectedIdx;
+            const bases = ['A', 'T', 'C', 'G'];
+            const randomBase = bases[Math.floor(Math.random() * bases.length)];
+            const s = appState.sandboxMutatedCoding;
+            appState.sandboxMutatedCoding = s.slice(0, idx + 1) + randomBase + s.slice(idx + 1);
+            appState.lastMutationOp = 'ins';
+            playTone(620, 'sawtooth', 0.1);
+            updateLevel3UI();
+        }
+
+        function mutateDelete() {
+            if (appState.sandboxMutatedCoding.length <= 6) {
+                setChallengeFeedback('⚠️ 序列過短，無法再刪除鹼基！請點擊「重置本關」恢復野生型。', true);
+                return;
+            }
+            const idx = appState.sandboxSelectedIdx;
+            const s = appState.sandboxMutatedCoding;
+            appState.sandboxMutatedCoding = s.slice(0, idx) + s.slice(idx + 1);
+            appState.sandboxSelectedIdx = Math.max(0, Math.min(appState.sandboxSelectedIdx, appState.sandboxMutatedCoding.length - 1));
+            appState.lastMutationOp = 'del';
+            playTone(300, 'sawtooth', 0.1);
+            updateLevel3UI();
+        }
+
+        function analyzeSandboxMutation() {
+            const origMrna = templateToMrna(dnaToTemplate(appState.sandboxOriginalCoding));
+            const mutMrna = appState.mrnaSeq;
+
+            const origProteins = [];
+            for (let i = 0; i + 3 <= origMrna.length; i += 3) {
+                origProteins.push(translateCodon(origMrna.slice(i, i + 3)).aa);
+            }
+
+            const mutProteins = [];
+            let prematureStop = false;
+            for (let i = 0; i + 3 <= mutMrna.length; i += 3) {
+                const aa = translateCodon(mutMrna.slice(i, i + 3)).aa;
+                mutProteins.push(aa);
+                if (aa === 'STOP') {
+                    prematureStop = true;
+                    break;
+                }
+            }
+
+            // 渲染多肽鏈標籤
+            const chainBox = document.getElementById('sandbox-protein-chain');
+            chainBox.innerHTML = mutProteins.map((aa, i) => {
+                const changed = aa !== origProteins[i];
+                const bg = aa === 'STOP' ? 'bg-rose-600 text-white' : (changed ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-emerald-300');
+                return `<span class="px-2 py-0.5 rounded ${bg}">${aa}</span>`;
+            }).join('<span class="text-slate-600">-</span>');
+
+            const badge = document.getElementById('mutation-badge');
+            const desc = document.getElementById('mutation-effect-desc');
+
+            if (appState.sandboxMutatedCoding === appState.sandboxOriginalCoding) {
+                badge.textContent = '野生型 (Wild-Type 正常)';
+                badge.className = 'px-2.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30';
+                desc.textContent = '結構折疊正常，具備完整生物活性。';
+                setChallengeFeedback('目前為正常野生型 DNA 序列。請點擊任一鹼基並嘗試「取代」、「插入」或「缺失」！');
+            } else if (prematureStop) {
+                badge.textContent = '無義突變 (Nonsense Mutation)';
+                badge.className = 'px-2.5 py-0.5 rounded-md bg-rose-500/20 text-rose-300 font-bold border border-rose-500/40';
+                desc.textContent = '產生提前終止密碼子，多肽鏈截短並喪失蛋白質功能！';
+                setChallengeFeedback('🚨 偵測到「無義突變」！突變產生了終止密碼子 (STOP)，導致轉譯提前結束。', true);
+            } else if (appState.sandboxMutatedCoding.length !== appState.sandboxOriginalCoding.length) {
+                badge.textContent = '移碼突變 (Frameshift Mutation)';
+                badge.className = 'px-2.5 py-0.5 rounded-md bg-purple-500/20 text-purple-300 font-bold border border-purple-500/40';
+                desc.textContent = '插入或缺失改變了三聯體閱讀框，下游胺基酸序列完全錯亂！';
+                setChallengeFeedback('⚠️ 偵測到「移碼突變」！因為插入或缺失非 3 倍數的鹼基，後續密碼子閱讀框全部位移。');
+            } else if (mutProteins.join('-') === origProteins.join('-')) {
+                badge.textContent = '同義突變 / 靜默突變 (Silent Mutation)';
+                badge.className = 'px-2.5 py-0.5 rounded-md bg-blue-500/20 text-blue-300 font-bold border border-blue-500/40';
+                desc.textContent = '密碼子改變但對應相同胺基酸（遺傳密碼簡併性），蛋白質功能不受影響。';
+                setChallengeFeedback('✨ 偵測到「同義突變」！雖然 DNA 與 mRNA 鹼基改變，但轉譯出的胺基酸完全相同。');
+            } else {
+                badge.textContent = '錯義突變 (Missense Mutation)';
+                badge.className = 'px-2.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 font-bold border border-amber-500/40';
+                desc.textContent = '單一胺基酸發生替換（如鐮刀型紅血球貧血症），可能改變蛋白質折疊與活性。';
+                setChallengeFeedback('🔍 偵測到「錯義突變」！單一密碼子改變導致多肽鏈中對應的胺基酸被替換。');
+            }
+        }
+
+        function toggleModal(id) {
+            const m = document.getElementById(id);
+            if (m.classList.contains('hidden')) {
+                m.classList.remove('hidden');
+                m.classList.add('flex');
+            } else {
+                m.classList.add('hidden');
+                m.classList.remove('flex');
+            }
+        }
+
+        /* ============================================================================
+         * 7. 階層式無限畫布渲染引擎 (60fps Canvas Render Loop)
+         * ============================================================================ */
+        function drawRoundedRect(ctx, x, y, w, h, r) {
+            ctx.beginPath();
+            ctx.roundRect(x, y, w, h, r);
+            ctx.closePath();
+        }
+
+        function drawNucleotideBlock(ctx, x, y, base, isTopStrand = true, highlight = false, scaleAlpha = 1) {
+            const info = BASE_COLORS[base] || BASE_COLORS.A;
+            ctx.save();
+            ctx.globalAlpha = scaleAlpha;
+            if (highlight) {
+                ctx.shadowColor = '#FBBF24';
+                ctx.shadowBlur = 14;
+            }
+            ctx.fillStyle = info.fill;
+            ctx.strokeStyle = highlight ? '#FEF08A' : info.stroke;
+            ctx.lineWidth = highlight ? 2.5 : 1.2;
+
+            drawRoundedRect(ctx, x - 11, y - 13, 22, 26, 5);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = 'bold 13px "Segoe UI", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(base, x, y);
+            ctx.restore();
+        }
+
+        // 根據時間軸 (0~100) 取得 mRNA 與蛋白質在細胞流水線中的座標
+        function getPipelinePosition(t) {
+            if (t < 22) {
+                // 細胞核內轉錄
+                const p = t / 22;
+                return { x: -490 + p * 230, y: -20 };
+            } else if (t < 42) {
+                // 穿過核孔進入細胞質核醣體
+                const p = (t - 22) / 20;
+                return { x: -260 + p * 345, y: -20 + p * 75 };
+            } else if (t < 68) {
+                // 核醣體轉譯中
+                return { x: 85, y: 55 };
+            } else if (t < 85) {
+                // 粗糙內質網摺疊與囊泡運輸至高基氏體
+                const p = (t - 68) / 17;
+                return { x: 85 + p * 335, y: 55 - p * 70 };
+            } else {
+                // 高基氏體分泌囊泡至細胞膜胞吐
+                const p = (t - 85) / 15;
+                return { x: 420 + p * 235, y: -15 };
+            }
+        }
+
+        function renderScene(time) {
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+
+            // 自動演示時間推進
+            if (appState.mode === 'auto' && appState.isPlaying) {
+                appState.timeline = (appState.timeline + 0.08 * appState.speed) % 100;
+                document.getElementById('timeline-slider').value = appState.timeline;
+                updateStageBanner(appState.timeline);
+
+                if (appState.autoFollow) {
+                    const pos = getPipelinePosition(appState.timeline);
+                    camera.targetX = pos.x;
+                    camera.targetY = pos.y;
+                    camera.targetScale = 1.75;
+                }
+            }
+
+            // 平滑阻尼鏡頭插值
+            camera.x += (camera.targetX - camera.x) * 0.12;
+            camera.y += (camera.targetY - camera.y) * 0.12;
+            camera.scale += (camera.targetScale - camera.scale) * 0.12;
+            document.getElementById('zoom-badge').textContent = camera.scale.toFixed(1) + 'x';
+
+            // 清除背景
+            ctx.fillStyle = '#060b19';
+            ctx.fillRect(0, 0, width, height);
+
+            ctx.save();
+            // 套用無限畫布平移與縮放矩陣
+            ctx.translate(width / 2, height / 2);
+            ctx.scale(camera.scale, camera.scale);
+            ctx.translate(-camera.x, -camera.y);
+
+            // 1. 繪製背景生物座標網格
+            drawBioGrid(ctx);
+
+            // 2. 繪製真核細胞巨觀輪廓與四大胞器區
+            drawEukaryoticCellMacro(ctx, time);
+
+            // 3. 繪製背景常駐粒子流 (確保巨觀視圖下仍清晰呈現遺傳訊息流動)
+            drawAmbientFlowParticles(ctx);
+
+            // 4. 繪製細胞核內部：DNA 雙股螺旋、RNA 聚合酶與轉錄作用
+            drawNucleusMicro(ctx, time);
+
+            // 5. 繪製細胞質與核醣體：mRNA 密碼子、tRNA 反密碼子配對與多肽鏈合成
+            drawRibosomeMicro(ctx, time);
+
+            // 6. 繪製粗糙內質網、高基氏體、囊泡出芽與細胞膜胞吐作用
+            drawGolgiAndExocytosisMicro(ctx, time);
+
+            ctx.restore();
+            requestAnimationFrame(renderScene);
+        }
+
+        function drawBioGrid(ctx) {
+            ctx.save();
+            ctx.strokeStyle = 'rgba(30, 41, 59, 0.45)';
+            ctx.lineWidth = 1;
+            const step = 80;
+            for (let x = -1200; x <= 1200; x += step) {
+                ctx.beginPath();
+                ctx.moveTo(x, -800);
+                ctx.lineTo(x, 800);
+                ctx.stroke();
+            }
+            for (let y = -800; y <= 800; y += step) {
+                ctx.beginPath();
+                ctx.moveTo(-1200, y);
+                ctx.lineTo(1200, y);
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        function drawEukaryoticCellMacro(ctx, time) {
+            ctx.save();
+
+            // 細胞質與雙層磷脂細胞膜 (Plasma Membrane)
+            const cellGrad = ctx.createRadialGradient(0, 0, 120, 0, 0, 680);
+            cellGrad.addColorStop(0, 'rgba(15, 23, 42, 0.85)');
+            cellGrad.addColorStop(0.75, 'rgba(15, 35, 65, 0.65)');
+            cellGrad.addColorStop(1, 'rgba(20, 83, 116, 0.35)');
+
+            ctx.fillStyle = cellGrad;
+            ctx.strokeStyle = '#0EA5E9';
+            ctx.lineWidth = 8;
+            ctx.beginPath();
+            ctx.ellipse(30, 0, 660, 400, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            // 內層磷脂膜細節線
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.ellipse(30, 0, 650, 390, 0, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // 粗糙內質網 (Rough ER) 摺疊腔室
+            ctx.fillStyle = 'rgba(59, 130, 246, 0.14)';
+            ctx.strokeStyle = 'rgba(96, 165, 250, 0.45)';
+            ctx.lineWidth = 3;
+            drawRoundedRect(ctx, -120, -140, 350, 290, 45);
+            ctx.fill();
+            ctx.stroke();
+
+            // 高基氏體 (Golgi Apparatus) 扁平囊泡堆疊
+            ctx.strokeStyle = '#10B981';
+            ctx.fillStyle = 'rgba(16, 185, 129, 0.16)';
+            ctx.lineWidth = 4;
+            for (let i = 0; i < 4; i++) {
+                const gx = 370 + i * 26;
+                drawRoundedRect(ctx, gx, -125 + i * 10, 16, 220 - i * 20, 8);
+                ctx.fill();
+                ctx.stroke();
+            }
+
+            // 細胞核 (Nucleus) 與核膜孔 (Nuclear Pores)
+            const nucGrad = ctx.createRadialGradient(-370, -40, 30, -370, -40, 215);
+            nucGrad.addColorStop(0, 'rgba(88, 28, 135, 0.45)');
+            nucGrad.addColorStop(1, 'rgba(59, 7, 100, 0.72)');
+            ctx.fillStyle = nucGrad;
+            ctx.beginPath();
+            ctx.arc(-370, -40, 210, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 具核孔的核膜虛線段
+            ctx.strokeStyle = '#A855F7';
+            ctx.lineWidth = 7;
+            const segments = 12;
+            for (let i = 0; i < segments; i++) {
+                const startAngle = (i / segments) * Math.PI * 2 + 0.06;
+                const endAngle = ((i + 0.75) / segments) * Math.PI * 2;
+                ctx.beginPath();
+                ctx.arc(-370, -40, 210, startAngle, endAngle);
+                ctx.stroke();
+            }
+
+            // 巨觀胞器導覽標籤 (隨放大自動淡出，不干擾微觀分子細節)
+            const macroAlpha = Math.max(0.15, Math.min(1, 1.65 - camera.scale * 0.6));
+            ctx.globalAlpha = macroAlpha;
+            ctx.font = 'bold 16px "Segoe UI", sans-serif';
+            ctx.textAlign = 'center';
+
+            ctx.fillStyle = '#E9D5FF';
+            ctx.fillText('🟣 細胞核 (Nucleus) — 轉錄作用', -370, -268);
+
+            ctx.fillStyle = '#FDE68A';
+            ctx.fillText('🟠 粗糙內質網與核醣體 — 轉譯作用', 65, -162);
+
+            ctx.fillStyle = '#A7F3D0';
+            ctx.fillText('🟢 高基氏體 (Golgi)', 415, -148);
+
+            ctx.fillStyle = '#7DD3FC';
+            ctx.fillText('🔵 細胞膜 (胞吐作用 Exocytosis)', 565, 195);
+
+            ctx.restore();
+        }
+
+        function drawAmbientFlowParticles(ctx) {
+            ctx.save();
+            ambientParticles.forEach(p => {
+                p.progress = (p.progress + 0.12 * p.speedOffset) % 100;
+                const pos = getPipelinePosition(p.progress);
+                ctx.fillStyle = p.progress < 42 ? 'rgba(244, 63, 94, 0.55)' : 'rgba(52, 211, 153, 0.55)';
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y + p.offset, p.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            ctx.restore();
+        }
+
+        // 微觀視圖 1：細胞核內 DNA 解旋與 RNA 聚合酶轉錄
+        function drawNucleusMicro(ctx, time) {
+            ctx.save();
+            const startX = -515;
+            const centerY = -40;
+            const spacing = 25;
+            const seqLen = appState.codingDNA.length;
+
+            // 計算目前轉錄氣泡位置
+            let activeIdx = seqLen;
+            if (appState.mode === 'auto') {
+                activeIdx = appState.timeline < 22
+                    ? Math.floor((appState.timeline / 22) * seqLen)
+                    : seqLen;
+            } else if (appState.challengeLevel === 1) {
+                activeIdx = appState.lvl1Index;
+            }
+
+            // 繪製 RNA 聚合酶 (RNA Polymerase) 光暈橢圓
+            const polyX = startX + Math.min(activeIdx, seqLen - 1) * spacing;
+            ctx.fillStyle = 'rgba(168, 85, 247, 0.28)';
+            ctx.strokeStyle = 'rgba(216, 180, 254, 0.7)';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.ellipse(polyX, centerY + 12, 48, 68, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#F3E8FF';
+            ctx.font = 'bold 11px "Segoe UI", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('RNA 聚合酶', polyX, centerY + 92);
+
+            // 繪製 DNA 編碼股 (5'->3')、模板股 (3'->5') 與新生 mRNA
+            ctx.strokeStyle = '#94A3B8';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(startX - 20, centerY - 46);
+            ctx.lineTo(startX + seqLen * spacing, centerY - 46);
+            ctx.moveTo(startX - 20, centerY - 6);
+            ctx.lineTo(startX + seqLen * spacing, centerY - 6);
+            ctx.stroke();
+
+            // 標示 5' 與 3' 端
+            ctx.fillStyle = '#CBD5E1';
+            ctx.font = 'bold 11px monospace';
+            ctx.fillText("5' 編碼股", startX - 48, centerY - 46);
+            ctx.fillText("3' 模板股", startX - 48, centerY - 6);
+            ctx.fillStyle = '#FDA4AF';
+            ctx.fillText("5' mRNA", startX - 48, centerY + 42);
+
+            for (let i = 0; i < seqLen; i++) {
+                const bx = startX + i * spacing;
+                const codingBase = appState.codingDNA[i];
+                const templateBase = appState.templateDNA[i];
+                const mrnaBase = appState.mrnaSeq[i];
+
+                const isChallengeTarget = (appState.mode === 'challenge' && appState.challengeLevel === 1 && i === appState.lvl1Index);
+                const isSandboxSelected = (appState.mode === 'challenge' && appState.challengeLevel === 3 && i === appState.sandboxSelectedIdx);
+
+                // 上方：DNA 編碼股
+                drawNucleotideBlock(ctx, bx, centerY - 46, codingBase, true, isSandboxSelected);
+                // 中間：DNA 模板股
+                drawNucleotideBlock(ctx, bx, centerY - 6, templateBase, false, isChallengeTarget);
+
+                // 下方：已合成的 mRNA 核苷酸
+                if (i < activeIdx) {
+                    ctx.strokeStyle = '#FB7185';
+                    ctx.lineWidth = 3;
+                    if (i > 0) {
+                        ctx.beginPath();
+                        ctx.moveTo(bx - spacing, centerY + 42);
+                        ctx.lineTo(bx, centerY + 42);
+                        ctx.stroke();
+                    }
+                    drawNucleotideBlock(ctx, bx, centerY + 42, mrnaBase, false, false);
+                } else if (isChallengeTarget) {
+                    // 第一關挑戰待填槽位
+                    ctx.strokeStyle = '#FBBF24';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([4, 3]);
+                    drawRoundedRect(ctx, bx - 11, centerY + 29, 22, 26, 5);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    ctx.fillStyle = '#FDE047';
+                    ctx.font = 'bold 14px sans-serif';
+                    ctx.fillText('?', bx, centerY + 42);
+                }
+            }
+
+            // 自動演示階段 2：繪製 mRNA 穿過核孔移動至核醣體的動態鏈
+            if (appState.mode === 'auto' && appState.timeline >= 22 && appState.timeline < 42) {
+                const p = (appState.timeline - 22) / 20;
+                const mx = -260 + p * 345;
+                const my = -20 + p * 75;
+                ctx.fillStyle = '#FB7185';
+                ctx.font = 'bold 12px sans-serif';
+                ctx.fillText('mRNA 經核膜孔輸出 ➔', mx, my - 22);
+                for (let k = 0; k < 6; k++) {
+                    drawNucleotideBlock(ctx, mx - 60 + k * 23, my, appState.mrnaSeq[k] || 'A');
+                }
+            }
+
+            ctx.restore();
+        }
+
+        // 微觀視圖 2：細胞質核醣體、mRNA 密碼子與 tRNA 轉譯多肽鏈
+        function drawRibosomeMicro(ctx, time) {
+            ctx.save();
+            const riboX = 85;
+            const riboY = 55;
+
+            // 核醣體大次單元 (Large Subunit 60S)
+            const largeGrad = ctx.createRadialGradient(riboX, riboY - 35, 15, riboX, riboY - 25, 115);
+            largeGrad.addColorStop(0, 'rgba(245, 158, 11, 0.45)');
+            largeGrad.addColorStop(1, 'rgba(180, 83, 9, 0.65)');
+            ctx.fillStyle = largeGrad;
+            ctx.strokeStyle = '#F59E0B';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.ellipse(riboX, riboY - 28, 118, 66, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            // 核醣體小次單元 (Small Subunit 40S)
+            ctx.fillStyle = 'rgba(217, 119, 6, 0.55)';
+            ctx.beginPath();
+            ctx.ellipse(riboX, riboY + 42, 105, 32, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            // E / P / A 位點標記
+            ctx.fillStyle = 'rgba(254, 243, 199, 0.75)';
+            ctx.font = 'bold 11px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('E 位點', riboX - 65, riboY - 72);
+            ctx.fillText('P 位點', riboX, riboY - 72);
+            ctx.fillText('A 位點', riboX + 65, riboY - 72);
+
+            // 判斷目前轉譯進度 (0 ~ 4 個密碼子)
+            const totalCodons = Math.floor(appState.mrnaSeq.length / 3);
+            let activeCodonIdx = totalCodons;
+            if (appState.mode === 'auto') {
+                if (appState.timeline < 42) activeCodonIdx = 0;
+                else if (appState.timeline < 68) {
+                    activeCodonIdx = Math.min(totalCodons, Math.floor(((appState.timeline - 42) / 26) * (totalCodons + 1)));
+                } else {
+                    activeCodonIdx = totalCodons;
+                }
+            } else if (appState.challengeLevel === 2) {
+                activeCodonIdx = appState.lvl2CodonIndex;
+            }
+
+            // 繪製夾在核醣體間的 mRNA 序列與密碼子分組框
+            const mrnaStartX = riboX - 135;
+            const mrnaY = riboY + 25;
+            ctx.strokeStyle = '#FB7185';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(mrnaStartX - 15, mrnaY);
+            ctx.lineTo(mrnaStartX + appState.mrnaSeq.length * 24 + 10, mrnaY);
+            ctx.stroke();
+
+            for (let i = 0; i < appState.mrnaSeq.length; i++) {
+                const bx = mrnaStartX + i * 24;
+                const codonIdx = Math.floor(i / 3);
+                const isCurrentCodon = (codonIdx === activeCodonIdx);
+                drawNucleotideBlock(ctx, bx, mrnaY, appState.mrnaSeq[i], false, isCurrentCodon);
+            }
+
+            // 繪製當前進入核醣體的 tRNA 與反密碼子
+            if (activeCodonIdx < totalCodons && (appState.mode === 'challenge' || appState.timeline >= 42)) {
+                const codonStr = appState.mrnaSeq.slice(activeCodonIdx * 3, activeCodonIdx * 3 + 3);
+                const anticodonStr = codonToAnticodon(codonStr);
+                const aaInfo = translateCodon(codonStr);
+                const trnaCenterX = mrnaStartX + (activeCodonIdx * 3 + 1) * 24;
+                const trnaCenterY = riboY - 18;
+
+                // tRNA 本體支架
+                ctx.fillStyle = 'rgba(14, 165, 233, 0.32)';
+                ctx.strokeStyle = '#38BDF8';
+                ctx.lineWidth = 2.5;
+                drawRoundedRect(ctx, trnaCenterX - 36, trnaCenterY - 32, 72, 46, 12);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = '#E0F2FE';
+                ctx.font = 'bold 10px sans-serif';
+                ctx.fillText('tRNA 轉運載體', trnaCenterX, trnaCenterY - 20);
+
+                // 反密碼子三個鹼基 (在自動演示模式直接顯示，在挑戰模式第二關顯示提示框)
+                if (appState.mode === 'auto' || appState.challengeLevel !== 2) {
+                    for (let k = 0; k < 3; k++) {
+                        drawNucleotideBlock(ctx, trnaCenterX - 24 + k * 24, trnaCenterY + 2, anticodonStr[k]);
+                    }
+                } else {
+                    ctx.fillStyle = '#FDE047';
+                    ctx.font = 'bold 12px sans-serif';
+                    ctx.fillText('請由下方挑選 tRNA', trnaCenterX, trnaCenterY + 2);
+                }
+            }
+
+            // 繪製上方生長中的多肽鏈 (Polypeptide Chain - 胺基酸珠串)
+            const chainCount = Math.min(activeCodonIdx, totalCodons);
+            for (let c = 0; c < chainCount; c++) {
+                const codonStr = appState.mrnaSeq.slice(c * 3, c * 3 + 3);
+                const aaInfo = translateCodon(codonStr);
+                const ax = riboX - 45 + c * 34;
+                const ay = riboY - 110 - Math.sin(c * 1.2 + time * 0.003) * 8;
+
+                if (c > 0) {
+                    ctx.strokeStyle = '#F8FAFC';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(ax - 34, riboY - 110);
+                    ctx.lineTo(ax, ay);
+                    ctx.stroke();
+                }
+
+                ctx.fillStyle = aaInfo.color;
+                ctx.strokeStyle = '#FFFFFF';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(ax, ay, 14, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = 'bold 11px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(aaInfo.aa, ax, ay);
+            }
+
+            ctx.restore();
+        }
+
+        // 微觀視圖 3：內質網摺疊、囊泡運輸、高基氏體與細胞膜胞吐作用
+        function drawGolgiAndExocytosisMicro(ctx, time) {
+            ctx.save();
+
+            // 計算囊泡動態座標
+            let vesicleX = 290;
+            let vesicleY = 10;
+            let isExocytosis = false;
+
+            if (appState.mode === 'auto') {
+                if (appState.timeline >= 68 && appState.timeline < 85) {
+                    const p = (appState.timeline - 68) / 17;
+                    vesicleX = 210 + p * 190;
+                    vesicleY = 30 - p * 45;
+                } else if (appState.timeline >= 85) {
+                    const p = (appState.timeline - 85) / 15;
+                    vesicleX = 450 + p * 210;
+                    vesicleY = -15;
+                    if (p > 0.65) isExocytosis = true;
+                }
+            } else {
+                // 挑戰模式下維持週期性背景分泌示範
+                const loopP = (time * 0.00025) % 1;
+                vesicleX = 250 + loopP * 410;
+                vesicleY = -15 + Math.sin(loopP * Math.PI * 2) * 20;
+                if (loopP > 0.8) isExocytosis = true;
+            }
+
+            // 繪製運輸囊泡 (Transport / Secretory Vesicle)
+            ctx.fillStyle = 'rgba(20, 184, 166, 0.28)';
+            ctx.strokeStyle = '#2DD4BF';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(vesicleX, vesicleY, 32, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            // 囊泡內的折疊成熟蛋白質
+            ctx.strokeStyle = '#F43F5E';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            for (let a = 0; a < Math.PI * 4; a += 0.3) {
+                const r = 4 + a * 1.4;
+                const px = vesicleX + Math.cos(a + time * 0.004) * r;
+                const py = vesicleY + Math.sin(a + time * 0.004) * r;
+                if (a === 0) ctx.moveTo(px, py);
+                else ctx.lineTo(px, py);
+            }
+            ctx.stroke();
+
+            ctx.fillStyle = '#CCFBF1';
+            ctx.font = 'bold 12px "Segoe UI", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(isExocytosis ? '✨ 胞吐作用釋放蛋白質！' : '運輸囊泡 (摺疊蛋白質)', vesicleX, vesicleY - 44);
+
+            // 若發生胞吐作用，繪製細胞外釋放的活性蛋白質粒子
+            if (isExocytosis) {
+                for (let k = 0; k < 5; k++) {
+                    const ex = 695 + k * 22 + Math.sin(time * 0.005 + k) * 8;
+                    const ey = -45 + k * 18;
+                    ctx.fillStyle = '#10B981';
+                    ctx.beginPath();
+                    ctx.arc(ex, ey, 8, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            ctx.restore();
+        }
+
+        // 啟動應用程式與 60fps 渲染迴圈
+        updateStageBanner(0);
+        requestAnimationFrame(renderScene);
+    </script>
+</body>
+</html>

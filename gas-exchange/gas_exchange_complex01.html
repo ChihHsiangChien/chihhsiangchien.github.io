@@ -1,0 +1,1667 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>氣體交換互動動態模擬器（圖3-21 身體組織 ＆ 圖3-22 肺部）</title>
+<style>
+  :root {
+    --bg: #f4f6f9;
+    --panel-bg: #ffffff;
+    --accent: #d94336;
+    --accent-blue: #2b6cb0;
+    --text: #2d3748;
+    --border: #e2e8f0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+  body {
+    font-family: "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 12px 16px;
+  }
+  header {
+    width: 100%;
+    max-width: 1240px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    background: var(--panel-bg);
+    padding: 12px 20px;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+  }
+  .title-area h1 {
+    font-size: 1.35rem;
+    color: #1a202c;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .badge {
+    background: #feebc8;
+    color: #c05621;
+    font-size: 0.8rem;
+    padding: 3px 10px;
+    border-radius: 99px;
+    font-weight: 700;
+  }
+  .controls-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+  button {
+    cursor: pointer;
+    border: 1px solid #cbd5e0;
+    background: #fff;
+    color: #2d3748;
+    padding: 7px 13px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  button:hover { background: #edf2f7; border-color: #a0aec0; }
+  button.primary {
+    background: #e53e3e;
+    color: #fff;
+    border-color: #c53030;
+  }
+  button.primary:hover { background: #c53030; }
+  button.track-o2 {
+    background: #fff5f5;
+    color: #c53030;
+    border-color: #feb2b2;
+  }
+  button.track-o2.active {
+    background: #e53e3e;
+    color: #fff;
+    border-color: #9b2c2c;
+    box-shadow: 0 0 0 3px rgba(229,62,62,0.25);
+  }
+  button.track-co2 {
+    background: #edf2f7;
+    color: #2d3748;
+    border-color: #cbd5e0;
+  }
+  button.track-co2.active {
+    background: #2d3748;
+    color: #fff;
+    border-color: #1a202c;
+    box-shadow: 0 0 0 3px rgba(45,55,72,0.25);
+  }
+  .speed-group {
+    display: inline-flex;
+    background: #edf2f7;
+    border-radius: 8px;
+    padding: 3px;
+    gap: 3px;
+  }
+  .speed-group button {
+    border: none;
+    background: transparent;
+    padding: 5px 10px;
+    font-size: 0.85rem;
+    border-radius: 6px;
+  }
+  .speed-group button.active {
+    background: #fff;
+    color: #d94336;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+  }
+
+  /* Canvas Container */
+  .stage-wrapper {
+    position: relative;
+    width: 100%;
+    max-width: 1240px;
+    background: #ffffff;
+    border-radius: 14px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  /* Tracker Banner */
+  .tracker-banner {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(26, 32, 44, 0.92);
+    color: #fff;
+    padding: 8px 18px;
+    border-radius: 99px;
+    font-size: 0.92rem;
+    font-weight: 600;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.25s;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    white-space: nowrap;
+    z-index: 10;
+  }
+  .tracker-banner.show { opacity: 1; }
+
+  /* Bottom Info & Legend Bar */
+  .info-panel {
+    width: 100%;
+    max-width: 1240px;
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 12px;
+  }
+  .card {
+    background: var(--panel-bg);
+    border-radius: 10px;
+    padding: 12px 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    border-left: 5px solid #cbd5e0;
+    font-size: 0.9rem;
+    line-height: 1.55;
+  }
+  .card.o2-card { border-left-color: #e53e3e; }
+  .card.co2-card { border-left-color: #4a5568; }
+  .card h3 {
+    font-size: 0.98rem;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .step-flow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    margin-top: 4px;
+    font-weight: 600;
+    color: #2d3748;
+  }
+  .step-tag {
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 0.84rem;
+  }
+  .step-tag.highlight-red { background: #fff5f5; border-color: #feb2b2; color: #c53030; }
+  .step-tag.highlight-plasma { background: #fefcbf; border-color: #f6e05e; color: #975a16; }
+  .checkbox-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 5px 8px;
+    border-radius: 6px;
+  }
+  .checkbox-label:hover { background: #edf2f7; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title-area">
+    <h1>
+      <span>人體的氣體交換動態模擬器</span>
+      <span class="badge">國中生物互動教具</span>
+    </h1>
+  </div>
+
+  <div class="controls-bar">
+    <button id="btnPlay" class="primary">⏸ 暫停</button>
+    <div class="speed-group" title="調整生理代謝與血流速度">
+      <button data-speed="0.6">慢動作</button>
+      <button data-speed="1" class="active">休息(1x)</button>
+      <button data-speed="2.0">運動狀態(2x)</button>
+    </div>
+    <button id="btnTrackO2" class="track-o2">🔍 追蹤氧氣 (O₂) 旅程</button>
+    <button id="btnTrackCO2" class="track-co2">🔍 追蹤二氧化碳 (CO₂) 旅程</button>
+    <button id="btnInhale">💨 深吸一口氣</button>
+    <label class="checkbox-label">
+      <input type="checkbox" id="chkLoop" checked> 顯示血液循環連通管
+    </label>
+    <label class="checkbox-label">
+      <input type="checkbox" id="chkLabels" checked> 顯示課本箭頭與標示
+    </label>
+  </div>
+</header>
+
+<div class="stage-wrapper">
+  <div id="trackerBanner" class="tracker-banner">追蹤模式啟動中...</div>
+  <canvas id="simCanvas" width="1200" height="630"></canvas>
+</div>
+
+<div class="info-panel">
+  <div class="card o2-card">
+    <h3 style="color:#c53030;">🔴 氧氣（O₂）的運輸與交換路徑（由紅血球攜帶）</h3>
+    <div class="step-flow">
+      <span class="step-tag">① 外界經<b>氣管</b>吸氣</span> ➔
+      <span class="step-tag">② 進入<b>肺泡</b></span> ➔
+      <span class="step-tag highlight-red">③ 擴散進入微血管<b>紅血球</b>內</span> ➔
+      <span class="step-tag">④ 隨血液流至組織微血管</span> ➔
+      <span class="step-tag highlight-red">⑤ 進入<b>組織細胞</b>供呼吸作用</span>
+    </div>
+  </div>
+  <div class="card co2-card">
+    <h3 style="color:#2d3748;">⚫ 二氧化碳（CO₂）的運輸與交換路徑（由血漿攜帶）</h3>
+    <div class="step-flow">
+      <span class="step-tag">① <b>組織細胞</b>代謝產生</span> ➔
+      <span class="step-tag highlight-plasma">② 擴散進入微血管<b>血漿</b>中</span> ➔
+      <span class="step-tag">③ 隨血漿流至肺部微血管</span> ➔
+      <span class="step-tag highlight-plasma">④ 擴散進入<b>肺泡</b></span> ➔
+      <span class="step-tag">⑤ 經由<b>氣管</b>呼氣排出體外</span>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('simCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = 1200, H = 630;
+
+  // High-DPI scaling
+  function setupHiDPI() {
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  setupHiDPI();
+
+  // State
+  let running = true;
+  let speedMult = 1.0;
+  let simTime = 0;
+  let showLoop = true;
+  let showLabels = true;
+  let trackedMolecule = null; // { type: 'O2' | 'CO2', mol: obj }
+
+  // UI Elements
+  const btnPlay = document.getElementById('btnPlay');
+  const btnTrackO2 = document.getElementById('btnTrackO2');
+  const btnTrackCO2 = document.getElementById('btnTrackCO2');
+  const btnInhale = document.getElementById('btnInhale');
+  const chkLoop = document.getElementById('chkLoop');
+  const chkLabels = document.getElementById('chkLabels');
+  const trackerBanner = document.getElementById('trackerBanner');
+
+  // Layout Constants (matching textbook image proportions)
+  // Left Panel: x in [20, 505], y in [25, 555]  (圖3-21 身體組織的氣體交換)
+  // Center Column: x in [505, 675]              (氣體交換 圖例 & 血液循環連通)
+  // Right Panel: x in [675, 1180], y in [25, 555](圖3-22 肺部的氣體交換)
+
+  // Left Capillary Centerline Curve (Top to Bottom)
+  function getLeftCapPoint(t) {
+    // t in [0, 1] from top (y=25) to bottom (y=555)
+    const y = 25 + t * 530;
+    const x = 258 - 22 * Math.sin(t * Math.PI * 0.65) - 18 * t;
+    return { x, y };
+  }
+
+  // Right Capillary Centerline Curve (Top-Left around Alveoli to Bottom-Right)
+  // Let's use a smooth cubic Bezier curve that wraps around the pink alveoli just like 圖3-22
+  const rightCapBezier = [
+    { x: 795, y: 25 },
+    { x: 700, y: 270 },
+    { x: 745, y: 545 },
+    { x: 1180, y: 400 }
+  ];
+
+  function evalBezier(pts, t) {
+    const u = 1 - t;
+    const x = u*u*u*pts[0].x + 3*u*u*t*pts[1].x + 3*u*t*t*pts[2].x + t*t*t*pts[3].x;
+    const y = u*u*u*pts[0].y + 3*u*u*t*pts[1].y + 3*u*t*t*pts[2].y + t*t*t*pts[3].y;
+    // derivative for tangent angle
+    const dx = 3*u*u*(pts[1].x - pts[0].x) + 6*u*t*(pts[2].x - pts[1].x) + 3*t*t*(pts[3].x - pts[2].x);
+    const dy = 3*u*u*(pts[1].y - pts[0].y) + 6*u*t*(pts[2].y - pts[1].y) + 3*t*t*(pts[3].y - pts[2].y);
+    const len = Math.hypot(dx, dy) || 1;
+    return { x, y, tx: dx / len, ty: dy / len, nx: -dy / len, ny: dx / len };
+  }
+
+  // Pre-build arc-length parameterized lookup table for the entire closed circulatory loop
+  // Segment A (s in [0, 1]): Left Tissue Capillary (t: 0 -> 1, flowing top to bottom)
+  // Segment B (s in [1, 1.65]): Deoxygenated return tube (Bottom of Left Cap -> Top of Right Cap)
+  // Segment C (s in [1.65, 2.85]): Right Lung Capillary (t: 0 -> 1, wrapping around alveoli)
+  // Segment D (s in [2.85, 3.5]): Oxygenated delivery tube (Exit of Right Cap -> Top of Left Cap)
+  const TOTAL_LOOP_S = 3.5;
+
+  function getCirculationPos(s, offsetNormal = 0) {
+    s = ((s % TOTAL_LOOP_S) + TOTAL_LOOP_S) % TOTAL_LOOP_S;
+    if (s <= 1.0) {
+      // Left Tissue Capillary
+      const t = s;
+      const p1 = getLeftCapPoint(Math.max(0, t - 0.01));
+      const p2 = getLeftCapPoint(Math.min(1, t + 0.01));
+      const dx = p2.x - p1.x, dy = p2.y - p1.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const nx = -dy / len, ny = dx / len;
+      const p = getLeftCapPoint(t);
+      return {
+        x: p.x + nx * offsetNormal,
+        y: p.y + ny * offsetNormal,
+        angle: Math.atan2(dy, dx),
+        zone: 'TISSUE_CAP',
+        localT: t
+      };
+    } else if (s <= 1.65) {
+      // Deoxygenated blood tube: from (218, 555) to (795, 25)
+      const t = (s - 1.0) / 0.65;
+      const pts = [
+        { x: 240, y: 555 },
+        { x: 240, y: 615 },
+        { x: 795, y: -35 },
+        { x: 795, y: 25 }
+      ];
+      const b = evalBezier(pts, t);
+      return {
+        x: b.x + b.nx * offsetNormal * 0.4,
+        y: b.y + b.ny * offsetNormal * 0.4,
+        angle: Math.atan2(b.ty, b.tx),
+        zone: 'TO_LUNG',
+        localT: t
+      };
+    } else if (s <= 2.85) {
+      // Right Lung Capillary
+      const t = (s - 1.65) / 1.20;
+      const b = evalBezier(rightCapBezier, t);
+      return {
+        x: b.x + b.nx * offsetNormal,
+        y: b.y + b.ny * offsetNormal,
+        angle: Math.atan2(b.ty, b.tx),
+        zone: 'LUNG_CAP',
+        localT: t
+      };
+    } else {
+      // Oxygenated blood tube: from (1180, 400) via top arch to (258, 25)
+      const t = (s - 2.85) / 0.65;
+      const pts = [
+        { x: 1180, y: 400 },
+        { x: 1195, y: 8 },
+        { x: 258, y: -25 },
+        { x: 258, y: 25 }
+      ];
+      const b = evalBezier(pts, t);
+      return {
+        x: b.x + b.nx * offsetNormal * 0.4,
+        y: b.y + b.ny * offsetNormal * 0.4,
+        angle: Math.atan2(b.ty, b.tx),
+        zone: 'TO_TISSUE',
+        localT: t
+      };
+    }
+  }
+
+  // Tissue Cells Data (matching 圖3-21 left and right of capillary)
+  const tissueCells = [
+    // Left column outer
+    { x: 52, y: 78, rx: 48, ry: 42, rot: -0.1, nx: 40, ny: 80 },
+    { x: 46, y: 185, rx: 46, ry: 46, rot: 0.1, nx: 36, ny: 185 },
+    { x: 45, y: 292, rx: 44, ry: 42, rot: 0.0, nx: 35, ny: 292 },
+    { x: 48, y: 405, rx: 48, ry: 50, rot: -0.15, nx: 38, ny: 405 },
+    { x: 35, y: 515, rx: 38, ry: 44, rot: 0.1, nx: 25, ny: 515 },
+    // Left column inner (next to capillary)
+    { x: 146, y: 175, rx: 56, ry: 46, rot: -0.08, nx: 148, ny: 175, active: true, side: 'L' },
+    { x: 138, y: 290, rx: 54, ry: 46, rot: 0.12, nx: 142, ny: 290, active: true, side: 'L' },
+    { x: 135, y: 400, rx: 52, ry: 48, rot: -0.05, nx: 135, ny: 400, active: true, side: 'L' },
+    { x: 120, y: 505, rx: 56, ry: 46, rot: 0.08, nx: 122, ny: 505, active: true, side: 'L' },
+    // Right column inner (next to capillary)
+    { x: 348, y: 65, rx: 56, ry: 44, rot: 0.15, nx: 345, ny: 65, active: true, side: 'R' },
+    { x: 350, y: 195, rx: 62, ry: 52, rot: 0.18, nx: 350, ny: 192, active: true, side: 'R' },
+    { x: 330, y: 342, rx: 56, ry: 54, rot: -0.25, nx: 330, ny: 345, active: true, side: 'R' },
+    { x: 325, y: 472, rx: 58, ry: 50, rot: 0.05, nx: 325, ny: 472, active: true, side: 'R' },
+    // Right column outer
+    { x: 458, y: 65, rx: 46, ry: 44, rot: -0.1, nx: 462, ny: 65 },
+    { x: 445, y: 205, rx: 45, ry: 58, rot: 0.08, nx: 450, ny: 215 },
+    { x: 442, y: 365, rx: 46, ry: 60, rot: -0.12, nx: 446, ny: 370 },
+    { x: 438, y: 498, rx: 48, ry: 48, rot: 0.1, nx: 442, ny: 500 }
+  ];
+
+  // Alveoli Pouches Data (matching 圖3-22 pink sacs + upper bronchiole/trachea airway)
+  // Trachea / Bronchiole enters at top-right around (955, 25) into the central alveolar sac
+  const TRACHEA_X = 955;
+  const alveoliSacs = [
+    { x: 745, y: 115, r: 95, isBg: true },
+    { x: 965, y: 118, r: 112, isUpper: true },
+    { x: 1110, y: 215, r: 92, isRight: true },
+    { x: 895, y: 278, r: 122, isMain: true } // main exchange sac adjacent to capillary
+  ];
+
+  // Create Red Blood Cells (RBCs) spaced evenly around the circulation loop
+  const NUM_RBCS = 16;
+  const rbcs = [];
+  for (let i = 0; i < NUM_RBCS; i++) {
+    const s = (i / NUM_RBCS) * TOTAL_LOOP_S;
+    // Determine initial oxygenation based on position in loop
+    const hasO2 = (s > 2.15 || s < 0.55);
+    rbcs.push({
+      id: i,
+      s,
+      hasO2,
+      oxyLevel: hasO2 ? 1.0 : 0.15,
+      tilt: (i % 2 === 0 ? 0.22 : -0.18),
+      o2Offset: { x: 4, y: -4 }
+    });
+  }
+
+  // Dynamic Gas Molecules
+  // O2 molecules:
+  // state: 'TRACHEA_IN' -> 'ALVEOLI' -> 'DIFFUSE_TO_RBC' -> 'ON_RBC' -> 'DIFFUSE_TO_CELL' -> 'IN_CELL'
+  const o2Molecules = [];
+  // CO2 molecules:
+  // state: 'IN_CELL' -> 'DIFFUSE_TO_PLASMA' -> 'IN_PLASMA' -> 'DIFFUSE_TO_ALVEOLI' -> 'ALVEOLI_OUT' -> 'TRACHEA_OUT'
+  const co2Molecules = [];
+
+  // Initialize ambient molecules in alveoli, cells, and plasma so the screen starts rich like the textbook diagram
+  function initMolecules() {
+    // 1. Ambient O2 inside alveoli sacs
+    for (let i = 0; i < 8; i++) {
+      o2Molecules.push(createO2InAlveoli());
+    }
+    // 2. O2 bound to oxygenated RBCs
+    rbcs.forEach(rbc => {
+      if (rbc.hasO2) {
+        const m = {
+          type: 'O2',
+          state: 'ON_RBC',
+          rbc: rbc,
+          x: 0, y: 0,
+          vx: 0, vy: 0,
+          timer: 0,
+          rot: (Math.random() - 0.5) * 0.5
+        };
+        rbc.boundO2 = m;
+        o2Molecules.push(m);
+      }
+    });
+    // 3. O2 inside tissue cells
+    const activeCells = tissueCells.filter(c => c.active);
+    for (let i = 0; i < 4; i++) {
+      const cell = activeCells[i % activeCells.length];
+      o2Molecules.push({
+        type: 'O2',
+        state: 'IN_CELL',
+        x: cell.x + (Math.random() - 0.5) * 30,
+        y: cell.y + (Math.random() - 0.5) * 30,
+        targetCell: cell,
+        timer: Math.random() * 2.5,
+        rot: 0.2,
+        alpha: 1
+      });
+    }
+
+    // 4. CO2 in tissue cells & plasma & alveoli
+    for (let i = 0; i < 6; i++) {
+      const cell = tissueCells[Math.floor(Math.random() * tissueCells.length)];
+      co2Molecules.push({
+        type: 'CO2',
+        state: 'IN_CELL',
+        cell: cell,
+        x: cell.x + (Math.random() - 0.5) * 28,
+        y: cell.y + (Math.random() - 0.5) * 24,
+        timer: Math.random() * 2.0,
+        rot: (Math.random() - 0.5) * 0.9,
+        alpha: 1
+      });
+    }
+
+    // 5. CO2 flowing in plasma (between RBCs, especially from tissue cap to lung cap)
+    for (let i = 0; i < 9; i++) {
+      const s = 0.35 + (i / 9) * 1.95; // distributed along tissue cap -> return tube -> lung cap
+      const offset = (i % 2 === 0 ? 18 : -18);
+      const pos = getCirculationPos(s, offset);
+      co2Molecules.push({
+        type: 'CO2',
+        state: 'IN_PLASMA',
+        s: s,
+        plasmaOffset: offset,
+        x: pos.x,
+        y: pos.y,
+        rot: (Math.random() - 0.5) * 0.8,
+        alpha: 1
+      });
+    }
+  }
+
+  function createO2InTrachea() {
+    return {
+      type: 'O2',
+      state: 'TRACHEA_IN',
+      x: TRACHEA_X + (Math.random() - 0.5) * 34,
+      y: -10,
+      targetX: 895 + (Math.random() - 0.5) * 130,
+      targetY: 165 + Math.random() * 145,
+      timer: 0,
+      rot: (Math.random() - 0.5) * 0.6,
+      alpha: 1
+    };
+  }
+
+  function createO2InAlveoli() {
+    const angle = Math.random() * Math.PI * 2;
+    const rad = Math.random() * 85;
+    return {
+      type: 'O2',
+      state: 'ALVEOLI',
+      x: 910 + Math.cos(angle) * rad,
+      y: 235 + Math.sin(angle) * rad,
+      vx: (Math.random() - 0.5) * 18,
+      vy: (Math.random() - 0.5) * 18,
+      timer: Math.random() * 2.0,
+      rot: (Math.random() - 0.5) * 0.6,
+      alpha: 1
+    };
+  }
+
+  initMolecules();
+
+  // Spawners
+  let inhaleTimer = 0;
+  let co2SpawnTimer = 0;
+
+  function updateSimulation(dt) {
+    const effDt = dt * speedMult;
+    simTime += effDt;
+
+    // 1. Move Red Blood Cells along the circulation loop
+    const rbcSpeed = 0.22; // loop units per second
+    rbcs.forEach(rbc => {
+      rbc.s = (rbc.s + rbcSpeed * effDt) % TOTAL_LOOP_S;
+      const pos = getCirculationPos(rbc.s, 0);
+      rbc.x = pos.x;
+      rbc.y = pos.y;
+      rbc.angle = pos.angle;
+      rbc.zone = pos.zone;
+      rbc.localT = pos.localT;
+
+      // Smooth oxygenation color transition
+      const targetOxy = rbc.hasO2 ? 1.0 : 0.15;
+      rbc.oxyLevel += (targetOxy - rbc.oxyLevel) * Math.min(1, effDt * 4);
+
+      // In Lung Capillary (localT in [0.32, 0.85]), if RBC does not have O2, attract an O2 from Alveoli!
+      if (rbc.zone === 'LUNG_CAP' && rbc.localT > 0.28 && rbc.localT < 0.85 && !rbc.hasO2 && !rbc.incomingO2) {
+        // Find an available O2 in ALVEOLI
+        const candidate = o2Molecules.find(m => m.state === 'ALVEOLI');
+        if (candidate) {
+          candidate.state = 'DIFFUSE_TO_RBC';
+          candidate.rbc = rbc;
+          candidate.startX = candidate.x;
+          candidate.startY = candidate.y;
+          candidate.progress = 0;
+          rbc.incomingO2 = candidate;
+        }
+      }
+
+      // In Tissue Capillary (localT in [0.22, 0.82]), if RBC has O2, release it into a nearby Tissue Cell!
+      if (rbc.zone === 'TISSUE_CAP' && rbc.localT > 0.25 && rbc.localT < 0.85 && rbc.hasO2 && rbc.boundO2) {
+        // Find a nearby active tissue cell
+        const nearbyCells = tissueCells.filter(c => c.active && Math.abs(c.y - rbc.y) < 95);
+        if (nearbyCells.length > 0 && Math.random() < effDt * 1.9) {
+          const targetCell = nearbyCells[Math.floor(Math.random() * nearbyCells.length)];
+          const m = rbc.boundO2;
+          rbc.boundO2 = null;
+          rbc.hasO2 = false;
+          m.state = 'DIFFUSE_TO_CELL';
+          m.startX = rbc.x;
+          m.startY = rbc.y;
+          m.targetCell = targetCell;
+          m.targetX = targetCell.x + (Math.random() - 0.5) * 36;
+          m.targetY = targetCell.y + (Math.random() - 0.5) * 30;
+          m.progress = 0;
+        }
+      }
+
+      // Failsafe: ensure RBCs entering TO_TISSUE have O2 and entering TO_LUNG have released O2
+      if (rbc.zone === 'TO_TISSUE' && !rbc.hasO2 && !rbc.incomingO2) {
+        rbc.hasO2 = true;
+        const m = { type: 'O2', state: 'ON_RBC', rbc: rbc, x: rbc.x, y: rbc.y, rot: 0.1, alpha: 1 };
+        rbc.boundO2 = m;
+        o2Molecules.push(m);
+      }
+    });
+
+    // 2. Periodically inhale new O2 from the Trachea into Alveoli
+    inhaleTimer += effDt;
+    if (inhaleTimer > 0.65) {
+      inhaleTimer = 0;
+      const countInAlveoli = o2Molecules.filter(m => m.state === 'ALVEOLI' || m.state === 'TRACHEA_IN').length;
+      if (countInAlveoli < 12) {
+        o2Molecules.push(createO2InTrachea());
+      }
+    }
+
+    // 3. Update O2 Molecules
+    for (let i = o2Molecules.length - 1; i >= 0; i--) {
+      const m = o2Molecules[i];
+      if (m.state === 'TRACHEA_IN') {
+        m.timer += effDt * 0.95;
+        const t = Math.min(1, m.timer);
+        // Smooth ease out from trachea down into alveolar sac
+        const ease = 1 - Math.pow(1 - t, 2);
+        m.x = m.x * (1 - effDt * 2) + m.targetX * (effDt * 2);
+        m.y = -10 + ease * (m.targetY + 10);
+        if (t >= 1) {
+          m.state = 'ALVEOLI';
+          m.vx = (Math.random() - 0.5) * 22;
+          m.vy = (Math.random() - 0.5) * 22;
+        }
+      } else if (m.state === 'ALVEOLI') {
+        m.x += m.vx * effDt;
+        m.y += m.vy * effDt;
+        // Keep inside main/upper alveoli bounds
+        const dx = m.x - 915, dy = m.y - 235;
+        const dist = Math.hypot(dx, dy);
+        if (dist > 105) {
+          m.vx -= (dx / dist) * 40 * effDt;
+          m.vy -= (dy / dist) * 40 * effDt;
+        }
+      } else if (m.state === 'DIFFUSE_TO_RBC') {
+        m.progress += effDt * 1.45;
+        const t = Math.min(1, m.progress);
+        const rbc = m.rbc;
+        // Curved path from alveoli across capillary wall onto RBC center
+        const arc = Math.sin(t * Math.PI) * 18;
+        m.x = m.startX + (rbc.x - m.startX) * t - arc * 0.5;
+        m.y = m.startY + (rbc.y - m.startY) * t + arc * 0.5;
+        if (t >= 1) {
+          m.state = 'ON_RBC';
+          rbc.hasO2 = true;
+          rbc.boundO2 = m;
+          rbc.incomingO2 = null;
+        }
+      } else if (m.state === 'ON_RBC') {
+        if (!m.rbc) {
+          o2Molecules.splice(i, 1);
+          continue;
+        }
+        m.x = m.rbc.x + Math.cos(m.rbc.angle) * 5;
+        m.y = m.rbc.y + Math.sin(m.rbc.angle) * 5 - 3;
+      } else if (m.state === 'DIFFUSE_TO_CELL') {
+        m.progress += effDt * 1.25;
+        const t = Math.min(1, m.progress);
+        m.x = m.startX + (m.targetX - m.startX) * t;
+        m.y = m.startY + (m.targetY - m.startY) * t;
+        if (t >= 1) {
+          m.state = 'IN_CELL';
+          m.timer = 0;
+        }
+      } else if (m.state === 'IN_CELL') {
+        m.timer += effDt;
+        // Slight jiggle inside tissue cell before being consumed by cellular respiration
+        m.x += Math.sin(simTime * 5 + i) * 4 * effDt;
+        if (m.timer > 2.6) {
+          m.alpha -= effDt * 1.2;
+          if (m.alpha <= 0) {
+            if (trackedMolecule && trackedMolecule.mol === m) {
+              // Switch tracker to a newly inhaled O2 so student can keep watching or see completion
+              trackedMolecule.completed = true;
+            }
+            o2Molecules.splice(i, 1);
+          }
+        }
+      }
+    }
+
+    // 4. Spawn & Update CO2 Molecules (Tissue Cell -> Plasma -> Alveoli -> Trachea Out)
+    co2SpawnTimer += effDt;
+    if (co2SpawnTimer > 0.7) {
+      co2SpawnTimer = 0;
+      const plasmaCount = co2Molecules.filter(m => m.state === 'IN_PLASMA' || m.state === 'DIFFUSE_TO_PLASMA').length;
+      if (plasmaCount < 12) {
+        const activeCells = tissueCells.filter(c => c.active);
+        const cell = activeCells[Math.floor(Math.random() * activeCells.length)];
+        // Target s along Left Tissue Capillary matching cell.y
+        const targetT = Math.max(0.15, Math.min(0.88, (cell.y - 25) / 530));
+        const plasmaOffset = cell.side === 'L' ? 16 : -16;
+        co2Molecules.push({
+          type: 'CO2',
+          state: 'DIFFUSE_TO_PLASMA',
+          startX: cell.x + (cell.side === 'L' ? 18 : -18),
+          startY: cell.y,
+          x: cell.x,
+          y: cell.y,
+          targetS: targetT,
+          plasmaOffset: plasmaOffset,
+          progress: 0,
+          rot: (Math.random() - 0.5) * 0.5,
+          alpha: 1
+        });
+      }
+    }
+
+    for (let i = co2Molecules.length - 1; i >= 0; i--) {
+      const m = co2Molecules[i];
+      if (m.state === 'IN_CELL') {
+        // Ambient CO2 in outer tissue cells gently bobbing
+        m.x += Math.cos(simTime * 2 + i) * 3 * effDt;
+        m.y += Math.sin(simTime * 2 + i) * 3 * effDt;
+      } else if (m.state === 'DIFFUSE_TO_PLASMA') {
+        m.progress += effDt * 1.2;
+        const t = Math.min(1, m.progress);
+        const targetPos = getCirculationPos(m.targetS, m.plasmaOffset);
+        m.x = m.startX + (targetPos.x - m.startX) * t;
+        m.y = m.startY + (targetPos.y - m.startY) * t;
+        if (t >= 1) {
+          m.state = 'IN_PLASMA';
+          m.s = m.targetS;
+        }
+      } else if (m.state === 'IN_PLASMA') {
+        // CO2 moves in the PLASMA (between RBCs) along the blood stream
+        m.s = (m.s + rbcSpeed * effDt) % TOTAL_LOOP_S;
+        const pos = getCirculationPos(m.s, m.plasmaOffset);
+        m.x = pos.x;
+        m.y = pos.y;
+
+        // When CO2 in plasma reaches the Lung Capillary (localT in [0.18, 0.72]), diffuse out into Alveoli!
+        if (pos.zone === 'LUNG_CAP' && pos.localT > 0.18 && pos.localT < 0.75) {
+          if (Math.random() < effDt * 2.2 || pos.localT > 0.65) {
+            m.state = 'DIFFUSE_TO_ALVEOLI';
+            m.startX = m.x;
+            m.startY = m.y;
+            m.targetX = 855 + Math.random() * 95;
+            m.targetY = 215 + (Math.random() - 0.5) * 95;
+            m.progress = 0;
+          }
+        }
+      } else if (m.state === 'DIFFUSE_TO_ALVEOLI') {
+        m.progress += effDt * 1.25;
+        const t = Math.min(1, m.progress);
+        m.x = m.startX + (m.targetX - m.startX) * t;
+        m.y = m.startY + (m.targetY - m.startY) * t;
+        if (t >= 1) {
+          m.state = 'ALVEOLI_OUT';
+          m.startX = m.x;
+          m.startY = m.y;
+          m.progress = 0;
+        }
+      } else if (m.state === 'ALVEOLI_OUT') {
+        // Move up from Alveoli through the Trachea / Bronchiole airway and exit!
+        m.progress += effDt * 0.75;
+        const t = Math.min(1, m.progress);
+        const ctrlX = 955;
+        const ctrlY = 120;
+        const endX = TRACHEA_X + (i % 2 === 0 ? 12 : -12);
+        const endY = -18;
+        const u = 1 - t;
+        m.x = u*u*m.startX + 2*u*t*ctrlX + t*t*endX;
+        m.y = u*u*m.startY + 2*u*t*ctrlY + t*t*endY;
+        if (t > 0.85) m.alpha = (1 - t) / 0.15;
+        if (t >= 1) {
+          if (trackedMolecule && trackedMolecule.mol === m) {
+            trackedMolecule.completed = true;
+          }
+          co2Molecules.splice(i, 1);
+        }
+      }
+    }
+
+    updateTrackerBanner();
+  }
+
+  // Update Tracker Banner Text
+  function updateTrackerBanner() {
+    if (!trackedMolecule) {
+      trackerBanner.classList.remove('show');
+      return;
+    }
+    trackerBanner.classList.add('show');
+    const { type, mol, completed } = trackedMolecule;
+    if (completed || !mol) {
+      if (type === 'O2') {
+        trackerBanner.textContent = '✅ 氧氣 (O₂) 已成功送達組織細胞內，供細胞進行呼吸作用產生能量！（點擊按鈕可再次追蹤）';
+      } else {
+        trackerBanner.textContent = '✅ 二氧化碳 (CO₂) 已成功由肺泡經氣管呼出體外！（點擊按鈕可再次追蹤）';
+      }
+      return;
+    }
+
+    if (type === 'O2') {
+      const pos = mol.rbc ? getCirculationPos(mol.rbc.s) : null;
+      if (mol.state === 'TRACHEA_IN') {
+        trackerBanner.textContent = '🔴 追蹤氧氣 (O₂) 步驟 1/4：吸氣時，氧氣從【氣管／支氣管】進入【肺泡】腔內';
+      } else if (mol.state === 'ALVEOLI' || mol.state === 'DIFFUSE_TO_RBC') {
+        trackerBanner.textContent = '🔴 追蹤氧氣 (O₂) 步驟 2/4：氧氣由【肺泡】擴散穿過微血管壁，進入【紅血球】內與血紅素結合';
+      } else if (mol.state === 'ON_RBC') {
+        if (pos && (pos.zone === 'LUNG_CAP' || pos.zone === 'TO_TISSUE')) {
+          trackerBanner.textContent = '🔴 追蹤氧氣 (O₂) 步驟 3/4：氧氣附著在【紅血球】上，隨血液循環由肺部運往身體組織';
+        } else {
+          trackerBanner.textContent = '🔴 追蹤氧氣 (O₂) 步驟 3/4：攜氧紅血球抵達【組織微血管】，準備釋放氧氣';
+        }
+      } else if (mol.state === 'DIFFUSE_TO_CELL' || mol.state === 'IN_CELL') {
+        trackerBanner.textContent = '🔴 追蹤氧氣 (O₂) 步驟 4/4：氧氣離開紅血球，擴散進入【組織細胞】內！';
+      }
+    } else if (type === 'CO2') {
+      const pos = mol.s !== undefined ? getCirculationPos(mol.s) : null;
+      if (mol.state === 'DIFFUSE_TO_PLASMA') {
+        trackerBanner.textContent = '⚫ 追蹤二氧化碳 (CO₂) 步驟 1/4：由【組織細胞】代謝產生並移出，擴散進入微血管的【血漿】中';
+      } else if (mol.state === 'IN_PLASMA') {
+        if (pos && pos.zone === 'TISSUE_CAP') {
+          trackerBanner.textContent = '⚫ 追蹤二氧化碳 (CO₂) 步驟 2/4：溶於【血漿】（紅血球之間的液體）中隨血液流動';
+        } else {
+          trackerBanner.textContent = '⚫ 追蹤二氧化碳 (CO₂) 步驟 2/4：隨【血漿】運送至肺部微血管';
+        }
+      } else if (mol.state === 'DIFFUSE_TO_ALVEOLI') {
+        trackerBanner.textContent = '⚫ 追蹤二氧化碳 (CO₂) 步驟 3/4：從微血管【血漿】擴散進入【肺泡】內';
+      } else if (mol.state === 'ALVEOLI_OUT') {
+        trackerBanner.textContent = '⚫ 追蹤二氧化碳 (CO₂) 步驟 4/4：呼氣時，由【肺泡】向上經由【氣管】離開人體！';
+      }
+    }
+  }
+
+  // ==================== DRAWING FUNCTIONS ====================
+
+  // 1. Draw O2 Molecule (2 joined glossy red spheres with white highlight outline like textbook)
+  function drawO2(x, y, rot = 0, scale = 1, alpha = 1, isTracked = false) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rot);
+    ctx.scale(scale, scale);
+    ctx.globalAlpha = alpha;
+
+    if (isTracked) {
+      const pulse = 1 + 0.2 * Math.sin(simTime * 8);
+      ctx.save();
+      ctx.scale(pulse, pulse);
+      ctx.beginPath();
+      ctx.arc(0, 0, 22, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 230, 0, 0.45)';
+      ctx.fill();
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = '#d94336';
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // White outline glow (exact match to textbook O2 on RBCs)
+    ctx.beginPath();
+    ctx.arc(-4.2, 0, 6.8, 0, Math.PI * 2);
+    ctx.arc(4.2, 0, 6.8, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.88)';
+    ctx.fill();
+
+    // Two red oxygen atoms
+    [-4.2, 4.2].forEach(ox => {
+      const grad = ctx.createRadialGradient(ox - 1.8, -2, 1, ox, 0, 6);
+      grad.addColorStop(0, '#ff8a80');
+      grad.addColorStop(0.35, '#e52418');
+      grad.addColorStop(1, '#8c0d07');
+      ctx.beginPath();
+      ctx.arc(ox, 0, 5.7, 0, Math.PI * 2);
+      ctx.fillStyle = grad;
+      ctx.fill();
+    });
+    ctx.restore();
+  }
+
+  // 2. Draw CO2 Molecule (Red - Black - Red linear triatomic molecule like textbook)
+  function drawCO2(x, y, rot = 0, scale = 1, alpha = 1, isTracked = false) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rot);
+    ctx.scale(scale, scale);
+    ctx.globalAlpha = alpha;
+
+    if (isTracked) {
+      const pulse = 1 + 0.2 * Math.sin(simTime * 8);
+      ctx.save();
+      ctx.scale(pulse, pulse);
+      ctx.beginPath();
+      ctx.arc(0, 0, 24, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(56, 178, 172, 0.38)';
+      ctx.fill();
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = '#1a202c';
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // White halo
+    ctx.beginPath();
+    ctx.arc(-7.5, 0, 6.2, 0, Math.PI * 2);
+    ctx.arc(0, 0, 6.8, 0, Math.PI * 2);
+    ctx.arc(7.5, 0, 6.2, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.fill();
+
+    // Left & Right Red O atoms
+    [-7.5, 7.5].forEach(ox => {
+      const rGrad = ctx.createRadialGradient(ox - 1.5, -1.8, 0.8, ox, 0, 5.4);
+      rGrad.addColorStop(0, '#ff8a80');
+      rGrad.addColorStop(0.4, '#e52418');
+      rGrad.addColorStop(1, '#8c0d07');
+      ctx.beginPath();
+      ctx.arc(ox, 0, 5.1, 0, Math.PI * 2);
+      ctx.fillStyle = rGrad;
+      ctx.fill();
+    });
+
+    // Center Black/Charcoal Carbon atom
+    const cGrad = ctx.createRadialGradient(-1.8, -2, 1, 0, 0, 6);
+    cGrad.addColorStop(0, '#9aa5b1');
+    cGrad.addColorStop(0.4, '#3e4c59');
+    cGrad.addColorStop(1, '#101418');
+    ctx.beginPath();
+    ctx.arc(0, 0, 5.7, 0, Math.PI * 2);
+    ctx.fillStyle = cGrad;
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  // 3. Draw 3D Biconcave Red Blood Cell (matching textbook illustration)
+  function drawRBC(rbc) {
+    ctx.save();
+    ctx.translate(rbc.x, rbc.y);
+    ctx.rotate(rbc.angle + Math.PI / 2 + rbc.tilt);
+
+    // Interpolate color between bright oxygenated red and darker deoxygenated red
+    const o = rbc.oxyLevel;
+    const rOuter = Math.round(165 + 70 * o);
+    const gOuter = Math.round(22 + 12 * o);
+    const bOuter = Math.round(28 - 14 * o);
+
+    // Outer disc
+    const grad = ctx.createRadialGradient(-6, -5, 4, 0, 0, 29);
+    grad.addColorStop(0, `rgb(${Math.min(255, rOuter + 35)}, ${gOuter + 45}, ${bOuter + 30})`);
+    grad.addColorStop(0.55, `rgb(${rOuter}, ${gOuter}, ${bOuter})`);
+    grad.addColorStop(1, `rgb(${Math.round(rOuter * 0.55)}, 8, 10)`);
+
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 27, 20, 0, 0, Math.PI * 2);
+    ctx.fillStyle = grad;
+    ctx.shadowColor = 'rgba(80, 0, 0, 0.35)';
+    ctx.shadowBlur = 6;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Biconcave center dimple
+    const dimpleGrad = ctx.createRadialGradient(2, 2, 1, 0, 0, 15);
+    dimpleGrad.addColorStop(0, `rgb(${Math.round(rOuter * 0.52)}, 8, 8)`);
+    dimpleGrad.addColorStop(0.7, `rgb(${Math.round(rOuter * 0.85)}, ${gOuter}, ${bOuter})`);
+    dimpleGrad.addColorStop(1, 'rgba(220, 40, 30, 0)');
+
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 14, 10, 0, 0, Math.PI * 2);
+    ctx.fillStyle = dimpleGrad;
+    ctx.fill();
+
+    // Glossy rim highlight
+    ctx.beginPath();
+    ctx.ellipse(-2, -3, 21, 14, 0, Math.PI * 1.1, Math.PI * 1.85);
+    ctx.strokeStyle = 'rgba(255, 190, 175, 0.45)';
+    ctx.lineWidth = 2.2;
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  // 4. Draw Left Panel: 圖3-21 身體組織的氣體交換
+  function drawLeftPanel() {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(20, 25, 485, 530);
+    ctx.clip();
+
+    // Warm yellow intercellular fluid background
+    ctx.fillStyle = '#f9e3a0';
+    ctx.fillRect(20, 25, 485, 530);
+
+    // Draw Tissue Cells
+    tissueCells.forEach(cell => {
+      ctx.save();
+      ctx.translate(cell.x, cell.y);
+      ctx.rotate(cell.rot);
+
+      // Soft 3D pillow-like cell body
+      const cellGrad = ctx.createRadialGradient(-cell.rx * 0.25, -cell.ry * 0.25, 8, 0, 0, Math.max(cell.rx, cell.ry));
+      cellGrad.addColorStop(0, '#fff7dc');
+      cellGrad.addColorStop(0.65, '#f6d68b');
+      cellGrad.addColorStop(1, '#d8aa5b');
+
+      ctx.beginPath();
+      ctx.ellipse(0, 0, cell.rx, cell.ry, 0, 0, Math.PI * 2);
+      ctx.fillStyle = cellGrad;
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = 'rgba(185, 135, 65, 0.55)';
+      ctx.stroke();
+
+      // Cell Nucleus
+      ctx.beginPath();
+      ctx.ellipse(cell.nx - cell.x, cell.ny - cell.y, 13, 16, 0.15, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(205, 160, 95, 0.65)';
+      ctx.fill();
+
+      ctx.restore();
+    });
+
+    // Draw Left Capillary Wall & Lumen
+    const capRadius = 42;
+    const leftWall = [], rightWall = [];
+    const steps = 40;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const pos = getCirculationPos(t, -capRadius);
+      const posR = getCirculationPos(t, capRadius);
+      leftWall.push(pos);
+      rightWall.push(posR);
+    }
+
+    // Outer capillary tube shadow/border
+    ctx.beginPath();
+    leftWall.forEach((p, idx) => idx === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+    for (let i = rightWall.length - 1; i >= 0; i--) ctx.lineTo(rightWall[i].x, rightWall[i].y);
+    ctx.closePath();
+
+    const plasmaGrad = ctx.createLinearGradient(195, 0, 305, 0);
+    plasmaGrad.addColorStop(0, '#d86c48');
+    plasmaGrad.addColorStop(0.18, '#f6b898');
+    plasmaGrad.addColorStop(0.5, '#fce3cf'); // warm plasma interior
+    plasmaGrad.addColorStop(0.82, '#f6b898');
+    plasmaGrad.addColorStop(1, '#d86c48');
+    ctx.fillStyle = plasmaGrad;
+    ctx.fill();
+
+    // Endothelial cell grid pattern inside capillary lumen
+    ctx.save();
+    ctx.clip();
+    ctx.strokeStyle = 'rgba(190, 85, 55, 0.28)';
+    ctx.lineWidth = 1.2;
+    for (let y = 30; y < 555; y += 36) {
+      ctx.beginPath();
+      ctx.moveTo(180, y);
+      ctx.quadraticCurveTo(245, y + 12, 310, y - 5);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // Capillary cut-away double wall rim (peach/orange endothelial wall like textbook)
+    [leftWall, rightWall].forEach(wall => {
+      ctx.beginPath();
+      wall.forEach((p, idx) => idx === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+      ctx.lineWidth = 7;
+      ctx.strokeStyle = '#c85a38';
+      ctx.stroke();
+
+      ctx.beginPath();
+      wall.forEach((p, idx) => idx === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = '#f8cdb4';
+      ctx.stroke();
+    });
+
+    ctx.restore();
+
+    // Panel Border
+    ctx.strokeStyle = '#ccc';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(20, 25, 485, 530);
+  }
+
+  // 5. Draw Right Panel: 圖3-22 肺部的氣體交換 (with Trachea/Bronchiole + Alveoli + Capillary)
+  function drawRightPanel() {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(675, 25, 505, 530);
+    ctx.clip();
+
+    // White background
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(675, 25, 505, 530);
+
+    // Subtle breathing expansion of Alveoli
+    const breathScale = 1 + 0.018 * Math.sin(simTime * 2.2);
+
+    // Upper Left background bronchiole / vessel behind capillary (like textbook top-left brown tube)
+    const tubeGrad = ctx.createLinearGradient(760, 25, 835, 25);
+    tubeGrad.addColorStop(0, '#b54a24');
+    tubeGrad.addColorStop(0.5, '#e88a5a');
+    tubeGrad.addColorStop(1, '#9c3b18');
+    ctx.fillStyle = tubeGrad;
+    ctx.beginPath();
+    ctx.moveTo(765, 25);
+    ctx.lineTo(835, 25);
+    ctx.lineTo(845, 165);
+    ctx.lineTo(765, 165);
+    ctx.closePath();
+    ctx.fill();
+
+    // Draw Trachea / Bronchiole Airway Channel at Top (x: 915..995) leading into Alveoli
+    ctx.save();
+    const airwayGrad = ctx.createLinearGradient(910, 0, 1000, 0);
+    airwayGrad.addColorStop(0, '#e89bb0');
+    airwayGrad.addColorStop(0.25, '#fce4ec');
+    airwayGrad.addColorStop(0.5, '#fff5f8');
+    airwayGrad.addColorStop(0.75, '#fce4ec');
+    airwayGrad.addColorStop(1, '#e89bb0');
+    ctx.fillStyle = airwayGrad;
+    ctx.beginPath();
+    ctx.moveTo(915, 25);
+    ctx.lineTo(995, 25);
+    ctx.lineTo(1005, 95);
+    ctx.lineTo(905, 95);
+    ctx.closePath();
+    ctx.fill();
+
+    // Trachea cartilage rings subtle texture
+    ctx.strokeStyle = 'rgba(215, 120, 145, 0.45)';
+    ctx.lineWidth = 3;
+    for (let ry = 35; ry <= 75; ry += 18) {
+      ctx.beginPath();
+      ctx.arc(955, ry, 38, 0.15 * Math.PI, 0.85 * Math.PI);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // Draw Pink Alveoli Pouches (matching 圖3-22)
+    alveoliSacs.forEach(sac => {
+      ctx.save();
+      ctx.translate(sac.x, sac.y);
+      ctx.scale(breathScale, breathScale);
+
+      const r = sac.r;
+      const alvGrad = ctx.createRadialGradient(-r * 0.2, -r * 0.2, r * 0.1, 0, 0, r);
+      if (sac.isBg) {
+        alvGrad.addColorStop(0, '#fce0ea');
+        alvGrad.addColorStop(0.7, '#f4b8cc');
+        alvGrad.addColorStop(1, '#e58ca8');
+      } else {
+        alvGrad.addColorStop(0, '#fdf0f5');
+        alvGrad.addColorStop(0.65, '#f7c2d4');
+        alvGrad.addColorStop(1, '#e68aa7');
+      }
+
+      ctx.beginPath();
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.fillStyle = alvGrad;
+      ctx.fill();
+
+      // White alveolar septum wall rim (as shown in textbook 圖3-22)
+      if (!sac.isBg) {
+        ctx.lineWidth = 7;
+        ctx.strokeStyle = '#ffffff';
+        ctx.stroke();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#e598b0';
+        ctx.stroke();
+      }
+      ctx.restore();
+    });
+
+    // Re-blend interior of alveolar cavities so they form connected chambers with the trachea
+    const innerHollow = ctx.createRadialGradient(895, 255, 15, 910, 230, 115);
+    innerHollow.addColorStop(0, '#faeaf0');
+    innerHollow.addColorStop(0.75, '#f5bfd1');
+    innerHollow.addColorStop(1, 'rgba(245, 191, 209, 0)');
+    ctx.fillStyle = innerHollow;
+    ctx.beginPath();
+    ctx.arc(900, 240, 112, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Draw Right Capillary wrapping around the Alveoli
+    const capRadius = 38;
+    const outerWall = [], innerWall = [];
+    const steps = 55;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const pOut = getCirculationPos(1.65 + t * 1.20, capRadius);
+      const pIn = getCirculationPos(1.65 + t * 1.20, -capRadius);
+      outerWall.push(pOut);
+      innerWall.push(pIn);
+    }
+
+    // Capillary lumen fill
+    ctx.beginPath();
+    outerWall.forEach((p, idx) => idx === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+    for (let i = innerWall.length - 1; i >= 0; i--) ctx.lineTo(innerWall[i].x, innerWall[i].y);
+    ctx.closePath();
+
+    const lungCapGrad = ctx.createLinearGradient(710, 180, 1080, 480);
+    lungCapGrad.addColorStop(0, '#f4b592');
+    lungCapGrad.addColorStop(0.5, '#fde2ce'); // plasma color
+    lungCapGrad.addColorStop(0.82, '#f2a379');
+    lungCapGrad.addColorStop(1, '#c95227');
+    ctx.fillStyle = lungCapGrad;
+    ctx.fill();
+
+    // Endothelial cell net lines inside lung capillary
+    ctx.save();
+    ctx.clip();
+    ctx.strokeStyle = 'rgba(185, 80, 45, 0.28)';
+    ctx.lineWidth = 1.2;
+    for (let i = 3; i < steps - 4; i += 4) {
+      ctx.beginPath();
+      ctx.moveTo(outerWall[i].x, outerWall[i].y);
+      ctx.quadraticCurveTo(
+        (outerWall[i].x + innerWall[i].x) * 0.5 + 8,
+        (outerWall[i].y + innerWall[i].y) * 0.5 + 8,
+        innerWall[i].x,
+        innerWall[i].y
+      );
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // Capillary double wall borders
+    [outerWall, innerWall].forEach(wall => {
+      ctx.beginPath();
+      wall.forEach((p, idx) => idx === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+      ctx.lineWidth = 7;
+      ctx.strokeStyle = '#c85a38';
+      ctx.stroke();
+
+      ctx.beginPath();
+      wall.forEach((p, idx) => idx === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = '#fad2ba';
+      ctx.stroke();
+    });
+
+    // Intact 3D Capillary Tube Sleeve on the far right (x > 1050, matching 圖3-22 "微血管" label area)
+    ctx.beginPath();
+    const cutIdx = Math.floor(steps * 0.80);
+    ctx.moveTo(outerWall[cutIdx].x, outerWall[cutIdx].y);
+    for (let i = cutIdx + 1; i <= steps; i++) ctx.lineTo(outerWall[i].x, outerWall[i].y);
+    for (let i = steps; i >= cutIdx; i--) ctx.lineTo(innerWall[i].x, innerWall[i].y);
+    ctx.closePath();
+    const sleeveGrad = ctx.createLinearGradient(1060, 360, 1100, 460);
+    sleeveGrad.addColorStop(0, '#b5431c');
+    sleeveGrad.addColorStop(0.45, '#e88558');
+    sleeveGrad.addColorStop(1, '#9e3512');
+    ctx.fillStyle = sleeveGrad;
+    ctx.fill();
+
+    // Cross-section opening rim at cutIdx
+    ctx.beginPath();
+    ctx.ellipse(
+      (outerWall[cutIdx].x + innerWall[cutIdx].x) * 0.5,
+      (outerWall[cutIdx].y + innerWall[cutIdx].y) * 0.5,
+      10, capRadius, -0.35, 0, Math.PI * 2
+    );
+    ctx.strokeStyle = '#f8cdb4';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    ctx.restore();
+
+    // Panel Border
+    ctx.strokeStyle = '#ccc';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(675, 25, 505, 530);
+  }
+
+  // 6. Draw Optional Circulatory Connecting Tubes (Bridging Left & Right Panels)
+  function drawCirculationLoopOverlay() {
+    if (!showLoop) return;
+    ctx.save();
+
+    // Top Arch: Oxygenated blood from Lung Capillary -> Tissue Capillary
+    ctx.beginPath();
+    for (let i = 0; i <= 30; i++) {
+      const s = 2.85 + (i / 30) * 0.65;
+      const p = getCirculationPos(s, 0);
+      i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y);
+    }
+    ctx.lineWidth = 22;
+    ctx.strokeStyle = 'rgba(229, 62, 62, 0.16)';
+    ctx.stroke();
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 6]);
+    ctx.strokeStyle = 'rgba(229, 62, 62, 0.55)';
+    ctx.stroke();
+
+    // Bottom-to-Top Arch: Deoxygenated blood + Plasma CO2 from Tissue Capillary -> Lung Capillary
+    ctx.beginPath();
+    for (let i = 0; i <= 30; i++) {
+      const s = 1.0 + (i / 30) * 0.65;
+      const p = getCirculationPos(s, 0);
+      i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y);
+    }
+    ctx.lineWidth = 22;
+    ctx.strokeStyle = 'rgba(113, 128, 150, 0.16)';
+    ctx.stroke();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(74, 85, 104, 0.55)';
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Small directional labels on the connecting paths
+    ctx.font = 'bold 12px "Microsoft JhengHei", sans-serif';
+    ctx.fillStyle = '#c53030';
+    ctx.fillText('⬅ 充氧血（紅血球攜帶 O₂ 運往組織）', 495, 17);
+    ctx.fillStyle = '#4a5568';
+    ctx.fillText('缺氧血（血漿攜帶 CO₂ 運往肺部）➡', 495, 576);
+
+    ctx.restore();
+  }
+
+  // 7. Draw Center Textbook Legend ("氣體交換", O2, CO2, dotted divider)
+  function drawCenterLegend() {
+    const cx = 590;
+    ctx.save();
+
+    // Dotted orange-red vertical line (top and bottom of legend)
+    ctx.fillStyle = '#db6b5c';
+    for (let y = 8; y < 35; y += 9) {
+      ctx.beginPath(); ctx.arc(cx, y, 2.5, 0, Math.PI * 2); ctx.fill();
+    }
+    for (let y = 340; y < 560; y += 10) {
+      ctx.beginPath(); ctx.arc(cx, y, 2.5, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // Rounded vertical box "氣體交換"
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#db6b5c';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.roundRect(cx - 26, 36, 52, 148, 10);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.font = 'bold 25px "PingFang TC", "Microsoft JhengHei", sans-serif';
+    ctx.fillStyle = '#db6b5c';
+    ctx.textAlign = 'center';
+    ['氣', '體', '交', '換'].forEach((ch, idx) => {
+      ctx.fillText(ch, cx, 70 + idx * 33);
+    });
+
+    // O2 Legend
+    drawO2(cx, 208, 0, 1.85);
+    ctx.font = '21px "PingFang TC", "Microsoft JhengHei", sans-serif';
+    ctx.fillStyle = '#2d3748';
+    ctx.fillText('（氧氣）', cx, 244);
+
+    // CO2 Legend
+    drawCO2(cx, 278, 0, 1.85);
+    ctx.fillText('（二氧化碳）', cx, 316);
+
+    ctx.restore();
+  }
+
+  // 8. Draw Textbook Arrows, Labels & Bottom Captions (圖3-21 & 圖3-22)
+  function drawTextbookAnnotations() {
+    ctx.save();
+
+    // Bottom Captions (Always visible)
+    // Left caption: 圖3-21 身體組織的氣體交換
+    ctx.fillStyle = '#8c8c8c';
+    ctx.beginPath();
+    ctx.roundRect(20, 582, 24, 26, 4);
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(26, 598); ctx.lineTo(32, 591); ctx.lineTo(38, 598);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#8c8c8c';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(48, 582, 92, 26, 5);
+    ctx.stroke();
+    ctx.font = 'bold 19px "Microsoft JhengHei", sans-serif';
+    ctx.fillStyle = '#222';
+    ctx.fillText('圖3-21', 59, 601);
+    ctx.font = '22px "Microsoft JhengHei", sans-serif';
+    ctx.fillStyle = '#333';
+    ctx.fillText('身體組織的氣體交換', 150, 602);
+
+    // Right caption: 圖3-22 肺部的氣體交換
+    ctx.fillStyle = '#8c8c8c';
+    ctx.beginPath();
+    ctx.roundRect(675, 582, 24, 26, 4);
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(681, 598); ctx.lineTo(687, 591); ctx.lineTo(693, 598);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#8c8c8c';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(703, 582, 92, 26, 5);
+    ctx.stroke();
+    ctx.font = 'bold 19px "Microsoft JhengHei", sans-serif';
+    ctx.fillStyle = '#222';
+    ctx.fillText('圖3-22', 714, 601);
+    ctx.font = '22px "Microsoft JhengHei", sans-serif';
+    ctx.fillStyle = '#333';
+    ctx.fillText('肺部的氣體交換', 805, 602);
+
+    if (!showLabels) {
+      ctx.restore();
+      return;
+    }
+
+    // Helper for textbook-style outlined text
+    function drawLabel(text, x, y, size = 24, color = '#222') {
+      ctx.font = `${size}px "PingFang TC", "Microsoft JhengHei", sans-serif`;
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+      ctx.strokeText(text, x, y);
+      ctx.fillStyle = color;
+      ctx.fillText(text, x, y);
+    }
+
+    // Helper for textbook block arrow with white border
+    function drawBlockArrow(x1, y1, x2, y2, fillColor) {
+      const angle = Math.atan2(y2 - y1, x2 - x1);
+      const len = Math.hypot(x2 - x1, y2 - y1);
+      const headLen = 18;
+      const shaftW = 13;
+      const headW = 26;
+
+      ctx.save();
+      ctx.translate(x1, y1);
+      ctx.rotate(angle);
+
+      ctx.beginPath();
+      ctx.moveTo(0, -shaftW / 2);
+      ctx.lineTo(len - headLen, -shaftW / 2);
+      ctx.lineTo(len - headLen, -headW / 2);
+      ctx.lineTo(len, 0);
+      ctx.lineTo(len - headLen, headW / 2);
+      ctx.lineTo(len - headLen, shaftW / 2);
+      ctx.lineTo(0, shaftW / 2);
+      ctx.closePath();
+
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = '#ffffff';
+      ctx.stroke();
+      ctx.fillStyle = fillColor;
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // --- Left Panel Labels (圖3-21) ---
+    drawLabel('組織細胞', 68, 68, 25);
+    drawLabel('微血管', 238, 68, 25);
+
+    // CO2 arrow (Tissue cell -> Capillary plasma)
+    drawLabel('二氧化碳', 68, 298, 23);
+    drawCO2(46, 290, 0, 1.25);
+    drawBlockArrow(176, 290, 245, 290, '#787c82');
+
+    // O2 arrow (Capillary RBC -> Tissue cell)
+    drawLabel('氧氣', 135, 358, 23);
+    drawO2(118, 350, 0, 1.25);
+    drawBlockArrow(258, 350, 192, 350, '#d91e18');
+
+    // Plasma indicator tag in Left Capillary
+    ctx.font = 'bold 14px "Microsoft JhengHei", sans-serif';
+    ctx.fillStyle = 'rgba(135, 75, 25, 0.85)';
+    ctx.fillText('▲ 血漿運送 CO₂', 202, 238);
+
+    // --- Right Panel Labels (圖3-22) ---
+    drawLabel('氣管／支氣管', 892, 52, 19, '#8b2645');
+    // Breathing airflow arrows in Trachea
+    drawBlockArrow(938, 62, 938, 102, '#d91e18'); // Inhale O2 arrow
+    drawBlockArrow(974, 102, 974, 62, '#787c82');  // Exhale CO2 arrow
+    ctx.font = 'bold 13px "Microsoft JhengHei", sans-serif';
+    ctx.fillStyle = '#c53030';
+    ctx.fillText('吸氣(O₂)', 880, 88);
+    ctx.fillStyle = '#4a5568';
+    ctx.fillText('呼氣(CO₂)', 984, 88);
+
+    drawLabel('肺泡', 1085, 285, 25);
+    drawLabel('微血管', 1068, 396, 25);
+
+    // CO2 arrow in Lung (Capillary plasma -> Alveoli)
+    drawBlockArrow(788, 372, 838, 318, '#787c82');
+    drawLabel('二氧化碳', 832, 313, 23);
+    drawCO2(952, 305, 0, 1.25);
+
+    // O2 arrow in Lung (Alveoli -> Capillary RBC)
+    drawBlockArrow(872, 378, 822, 430, '#d91e18');
+    drawLabel('氧氣', 880, 373, 23);
+    drawO2(945, 366, 0, 1.25);
+
+    ctx.restore();
+  }
+
+  // 9. Main Render Loop
+  let lastTime = performance.now();
+  function animate(now) {
+    const dt = Math.min(0.05, (now - lastTime) / 1000);
+    lastTime = now;
+
+    if (running) {
+      updateSimulation(dt);
+    }
+
+    ctx.clearRect(0, 0, W, H);
+
+    // Draw panels & background structures
+    drawLeftPanel();
+    drawRightPanel();
+    drawCirculationLoopOverlay();
+    drawCenterLegend();
+
+    // Draw Red Blood Cells (filter hidden ones if showLoop is unchecked)
+    rbcs.forEach(rbc => {
+      if (!showLoop && (rbc.zone === 'TO_LUNG' || rbc.zone === 'TO_TISSUE')) return;
+      drawRBC(rbc);
+    });
+
+    // Draw O2 Molecules
+    o2Molecules.forEach(m => {
+      if (m.state === 'ON_RBC' && !showLoop && (m.rbc.zone === 'TO_LUNG' || m.rbc.zone === 'TO_TISSUE')) return;
+      const isTracked = trackedMolecule && trackedMolecule.mol === m;
+      drawO2(m.x, m.y, m.rot, 1.25, m.alpha ?? 1, isTracked);
+    });
+
+    // Draw CO2 Molecules (in cells, diffusing, in plasma, and exhaling via trachea)
+    co2Molecules.forEach(m => {
+      if (m.state === 'IN_PLASMA' && !showLoop) {
+        const pos = getCirculationPos(m.s);
+        if (pos.zone === 'TO_LUNG' || pos.zone === 'TO_TISSUE') return;
+      }
+      const isTracked = trackedMolecule && trackedMolecule.mol === m;
+      drawCO2(m.x, m.y, m.rot, 1.22, m.alpha ?? 1, isTracked);
+    });
+
+    // Draw Textbook Labels & Arrows on top
+    drawTextbookAnnotations();
+
+    requestAnimationFrame(animate);
+  }
+
+  requestAnimationFrame(animate);
+
+  // ==================== INTERACTIVE CONTROLS ====================
+
+  btnPlay.addEventListener('click', () => {
+    running = !running;
+    btnPlay.textContent = running ? '⏸ 暫停' : '▶ 播放';
+    btnPlay.classList.toggle('primary', running);
+  });
+
+  document.querySelectorAll('.speed-group button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.speed-group button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      speedMult = parseFloat(btn.dataset.speed);
+    });
+  });
+
+  btnTrackO2.addEventListener('click', () => {
+    if (trackedMolecule && trackedMolecule.type === 'O2' && !trackedMolecule.completed) {
+      trackedMolecule = null;
+      btnTrackO2.classList.remove('active');
+      return;
+    }
+    btnTrackCO2.classList.remove('active');
+    btnTrackO2.classList.add('active');
+    // Spawn a fresh O2 entering the trachea and track it immediately!
+    const newO2 = createO2InTrachea();
+    o2Molecules.push(newO2);
+    trackedMolecule = { type: 'O2', mol: newO2, completed: false };
+    updateTrackerBanner();
+  });
+
+  btnTrackCO2.addEventListener('click', () => {
+    if (trackedMolecule && trackedMolecule.type === 'CO2' && !trackedMolecule.completed) {
+      trackedMolecule = null;
+      btnTrackCO2.classList.remove('active');
+      return;
+    }
+    btnTrackO2.classList.remove('active');
+    btnTrackCO2.classList.add('active');
+    // Spawn a fresh CO2 leaving a tissue cell into the plasma and track it!
+    const cell = tissueCells.find(c => c.active && c.side === 'L') || tissueCells[5];
+    const targetT = Math.max(0.2, Math.min(0.6, (cell.y - 25) / 530));
+    const newCO2 = {
+      type: 'CO2',
+      state: 'DIFFUSE_TO_PLASMA',
+      startX: cell.x + 15,
+      startY: cell.y,
+      x: cell.x,
+      y: cell.y,
+      targetS: targetT,
+      plasmaOffset: 16,
+      progress: 0,
+      rot: 0,
+      alpha: 1
+    };
+    co2Molecules.push(newCO2);
+    trackedMolecule = { type: 'CO2', mol: newCO2, completed: false };
+    updateTrackerBanner();
+  });
+
+  btnInhale.addEventListener('click', () => {
+    // Burst of 5 O2 molecules rushing down the trachea into the alveoli
+    for (let i = 0; i < 5; i++) {
+      const m = createO2InTrachea();
+      m.y = -5 - i * 16;
+      o2Molecules.push(m);
+    }
+  });
+
+  chkLoop.addEventListener('change', e => { showLoop = e.target.checked; });
+  chkLabels.addEventListener('change', e => { showLabels = e.target.checked; });
+})();
+</script>
+</body>
+</html>
