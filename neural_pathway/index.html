@@ -1,0 +1,1192 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>人體神經系統互動模擬器</title>
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --panel-bg: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --cns-color: #f59e0b;      /* 中樞神經：暖橘黃 */
+            --pns-color: #0ea5e9;      /* 周圍神經：亮天藍 */
+            --sensory-color: #00f2fe;  /* 感覺衝動：青藍光 */
+            --motor-color: #ff0844;    /* 運動衝動：紅粉光 */
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body {
+            font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        header {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(10px);
+            padding: 15px 30px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+            height: 65px;
+        }
+
+        header h1 {
+            font-size: 1.4rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: linear-gradient(90deg, #38bdf8, #f472b6, #f59e0b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .main-container {
+            display: flex;
+            flex: 1;
+            height: calc(100vh - 65px);
+            position: relative;
+        }
+
+        /* 左側/中央 畫布區 (支援 Pan/Zoom) */
+        .canvas-section {
+            flex: 1.3;
+            position: relative;
+            background: radial-gradient(circle at center, #1e293b 0%, #090d16 100%);
+            overflow: hidden;
+            cursor: grab;
+        }
+
+        .canvas-section:active {
+            cursor: grabbing;
+        }
+
+        .diagram-wrapper {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 550px;
+            height: 800px;
+            transform-origin: 0 0;
+            will-change: transform;
+        }
+
+        #anatomy-svg {
+            width: 100%;
+            height: 100%;
+            overflow: visible;
+        }
+
+        /* 視圖與標籤控制按鈕浮動列 */
+        .floating-controls {
+            position: absolute;
+            bottom: 25px;
+            left: 25px;
+            display: flex;
+            gap: 8px;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(8px);
+            padding: 6px;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.1);
+            z-index: 20;
+        }
+
+        .ctrl-btn {
+            background: #334155;
+            color: #fff;
+            border: none;
+            padding: 0 12px;
+            height: 36px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 6px;
+            transition: background 0.2s;
+        }
+
+        .ctrl-btn:hover {
+            background: #0ea5e9;
+        }
+
+        .ctrl-btn.active-toggle {
+            background: rgba(14, 165, 233, 0.3);
+            border: 1px solid #38bdf8;
+            color: #38bdf8;
+        }
+
+        /* 身體輪廓與神經線條樣式 */
+        .body-silhouette {
+            fill: #262129;
+            stroke: #473d47;
+            stroke-width: 1.5;
+            filter: drop-shadow(0 0 25px rgba(0,0,0,0.8));
+        }
+
+        .nerve-path {
+            fill: none;
+            stroke: var(--pns-color);
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            opacity: 0.65;
+            transition: opacity 0.3s, stroke-width 0.3s, filter 0.3s;
+            cursor: pointer;
+        }
+
+        .nerve-path:hover {
+            opacity: 1;
+            filter: drop-shadow(0 0 8px var(--pns-color));
+        }
+
+        .cns-spinal {
+            fill: none;
+            stroke: var(--cns-color);
+            stroke-width: 7;
+            stroke-linecap: round;
+            filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.5));
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .cns-brain {
+            fill: #e899a8;
+            stroke: #be185d;
+            stroke-width: 1.5;
+            filter: drop-shadow(0 0 12px rgba(244, 114, 182, 0.5));
+            cursor: pointer;
+        }
+
+        .cns-brain:hover, .cns-spinal:hover {
+            filter: drop-shadow(0 0 20px #fbbf24);
+        }
+
+        /* 高亮狀態 */
+        .highlight-active {
+            opacity: 1 !important;
+            filter: drop-shadow(0 0 15px #fff) !important;
+        }
+        .dimmed {
+            opacity: 0.15 !important;
+        }
+
+        /* 預設隱藏標籤群組 */
+        #labels-container {
+            display: none;
+        }
+
+        .label-group {
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .label-group:hover text {
+            fill: #fff !important;
+            text-shadow: 0 0 10px rgba(255,255,255,0.8);
+        }
+        .label-line {
+            fill: none;
+            stroke: #64748b;
+            stroke-width: 1.5;
+        }
+        .label-text {
+            font-size: 16px;
+            font-weight: bold;
+            fill: #cbd5e1;
+        }
+        .label-title-cns {
+            font-size: 20px;
+            font-weight: 900;
+            fill: #f97316;
+            writing-mode: vertical-rl;
+            letter-spacing: 4px;
+        }
+        .label-title-pns {
+            font-size: 20px;
+            font-weight: 900;
+            fill: #38bdf8;
+            writing-mode: vertical-rl;
+            letter-spacing: 4px;
+        }
+
+        /* 互動節點 */
+        .trigger-node {
+            fill: rgba(255, 255, 255, 0.15);
+            stroke: #38bdf8;
+            stroke-width: 1.5;
+            cursor: pointer;
+            transition: all 0.2s;
+            animation: pulse-node 2s infinite;
+        }
+        .trigger-node:hover {
+            fill: #38bdf8;
+            r: 8;
+            filter: drop-shadow(0 0 10px #38bdf8);
+        }
+
+        @keyframes pulse-node {
+            0% { stroke-width: 1.5; stroke-opacity: 1; }
+            50% { stroke-width: 5; stroke-opacity: 0.3; }
+            100% { stroke-width: 1.5; stroke-opacity: 1; }
+        }
+
+        .impulse-dot {
+            pointer-events: none;
+        }
+
+        /* 右側控制面板 */
+        .control-panel {
+            width: 420px;
+            background: var(--panel-bg);
+            border-left: 1px solid rgba(255,255,255,0.1);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            z-index: 10;
+            overflow-y: auto;
+            max-height: calc(100vh - 65px);
+        }
+
+        .panel-card {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 12px;
+            padding: 16px;
+        }
+
+        .panel-card h3 {
+            font-size: 1.05rem;
+            margin-bottom: 12px;
+            color: #38bdf8;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .motor-buttons-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 6px;
+        }
+
+        .motor-btn {
+            background: rgba(255, 8, 68, 0.08);
+            border: 1px solid rgba(255, 8, 68, 0.35);
+            color: #ffe4e6;
+            padding: 10px 8px;
+            border-radius: 8px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            text-align: center;
+        }
+
+        .motor-btn:hover {
+            background: rgba(255, 8, 68, 0.28);
+            border-color: #ff0844;
+            color: #ffffff;
+            box-shadow: 0 0 12px rgba(255, 8, 68, 0.45);
+            transform: translateY(-2px);
+        }
+
+        .motor-btn:active, .motor-btn.motor-btn-active {
+            background: #ff0844 !important;
+            color: #ffffff !important;
+            border-color: #ff0844 !important;
+            box-shadow: 0 0 18px rgba(255, 8, 68, 0.8) !important;
+            transform: translateY(0);
+        }
+
+        .motor-btn.full-span {
+            grid-column: 1 / -1;
+            background: linear-gradient(90deg, rgba(255, 8, 68, 0.2), rgba(244, 63, 94, 0.25));
+            border-color: rgba(255, 8, 68, 0.55);
+        }
+
+        .motor-btn.full-span:hover {
+            background: linear-gradient(90deg, #ff0844, #f43f5e);
+            color: #fff;
+            box-shadow: 0 0 16px rgba(255, 8, 68, 0.6);
+        }
+
+        .reflex-btn {
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.4);
+            color: #fef3c7;
+            padding: 10px 8px;
+            border-radius: 8px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            text-align: center;
+        }
+
+        .reflex-btn:hover {
+            background: rgba(245, 158, 11, 0.3);
+            border-color: #f59e0b;
+            color: #ffffff;
+            box-shadow: 0 0 12px rgba(245, 158, 11, 0.45);
+            transform: translateY(-2px);
+        }
+
+        .reflex-btn:active, .reflex-btn.reflex-btn-active {
+            background: #f59e0b !important;
+            color: #ffffff !important;
+            border-color: #f59e0b !important;
+            box-shadow: 0 0 18px rgba(245, 158, 11, 0.8) !important;
+            transform: translateY(0);
+        }
+
+        .reflex-btn.full-span {
+            grid-column: 1 / -1;
+            background: linear-gradient(90deg, rgba(245, 158, 11, 0.2), rgba(249, 115, 22, 0.25));
+            border-color: rgba(245, 158, 11, 0.6);
+        }
+
+        .reflex-btn.full-span:hover {
+            background: linear-gradient(90deg, #f59e0b, #f97316);
+            color: #fff;
+            box-shadow: 0 0 16px rgba(245, 158, 11, 0.6);
+        }
+
+        .mode-buttons {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+        }
+
+        .mode-btn {
+            background: #334155;
+            border: 2px solid transparent;
+            color: var(--text-main);
+            padding: 12px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 0.95rem;
+            transition: all 0.2s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            text-align: left;
+        }
+
+        .mode-btn:hover {
+            background: #475569;
+        }
+
+        .mode-btn.active {
+            background: rgba(14, 165, 233, 0.2);
+            border-color: #38bdf8;
+            color: #38bdf8;
+            box-shadow: 0 0 15px rgba(56, 189, 248, 0.25);
+        }
+
+        .slider-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 15px;
+        }
+        .slider-group label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+        input[type="range"] {
+            width: 100%;
+            accent-color: #38bdf8;
+        }
+
+        .legend {
+            display: flex;
+            gap: 15px;
+            font-size: 0.85rem;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .action-trigger-btn {
+            width: 100%;
+            margin-top: 15px;
+            padding: 12px;
+            background: linear-gradient(90deg, #0284c7, #2563eb);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-weight: bold;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .action-trigger-btn:hover {
+            opacity: 0.9;
+        }
+
+        @media (max-width: 900px) {
+            .main-container {
+                flex-direction: column;
+                height: auto;
+            }
+            .control-panel {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>⚡ 人體神經系統：互動動態模擬器</h1>
+    <div style="font-size: 0.9rem; color: var(--text-muted);">支援滾輪縮放與拖曳平移 (Pan & Zoom)</div>
+</header>
+
+<div class="main-container">
+    <!-- 左側 SVG 互動解剖圖與 Pan/Zoom 視圖 -->
+    <div class="canvas-section" id="canvas-section">
+        <div class="diagram-wrapper" id="diagram-wrapper">
+            <svg id="anatomy-svg" viewBox="0 0 550 800">
+                <defs>
+                    <filter id="glow-sensory" x="-50%" y="-50%" width="200%" height="200%">
+                        <feGaussianBlur stdDeviation="4" result="blur" />
+                        <feMerge>
+                            <feMergeNode in="blur" />
+                            <feMergeNode in="SourceGraphic" />
+                        </feMerge>
+                    </filter>
+                    <filter id="glow-motor" x="-50%" y="-50%" width="200%" height="200%">
+                        <feGaussianBlur stdDeviation="5" result="blur" />
+                        <feMerge>
+                            <feMergeNode in="blur" />
+                            <feMergeNode in="SourceGraphic" />
+                        </feMerge>
+                    </filter>
+                </defs>
+
+                <!-- 1. 人體背面輪廓 (置中 X=275) -->
+                <path class="body-silhouette" d="
+                    M 275 15
+                    C 250 15, 240 35, 242 65
+                    C 244 85, 252 95, 252 108
+                    C 235 120, 195 125, 180 145
+                    C 165 165, 160 220, 152 275
+                    C 145 320, 138 365, 132 395
+                    L 122 415 L 126 420 L 134 408
+                    L 126 435 L 132 437 L 138 415
+                    L 134 440 L 140 440 L 144 415
+                    L 143 435 L 148 433 L 150 405
+                    C 156 365, 166 320, 175 275
+                    C 182 240, 192 200, 200 185
+                    C 205 225, 210 275, 212 315
+                    C 212 345, 202 380, 202 435
+                    C 202 495, 212 555, 214 590
+                    C 215 630, 222 690, 225 735
+                    L 215 765 L 245 765 L 242 735
+                    C 245 685, 255 630, 255 590
+                    C 256 530, 265 460, 275 430
+                    C 285 460, 294 530, 295 590
+                    C 295 630, 305 685, 308 735
+                    L 305 765 L 335 765 L 325 735
+                    C 328 690, 335 630, 336 590
+                    C 338 555, 348 495, 348 435
+                    C 348 380, 338 345, 338 315
+                    C 340 275, 345 225, 350 185
+                    C 358 200, 368 240, 375 275
+                    C 384 320, 394 365, 400 405
+                    L 402 433 L 407 435 L 406 415
+                    L 410 440 L 416 440 L 412 415
+                    L 418 437 L 424 435 L 416 408
+                    L 424 420 L 428 415 L 418 395
+                    C 412 365, 405 320, 398 275
+                    C 390 220, 385 165, 370 145
+                    C 355 125, 315 120, 298 108
+                    C 298 95, 306 85, 308 65
+                    C 310 35, 300 15, 275 15 Z
+                "/>
+
+                <!-- 2. 周圍神經系統：脊神經與分支 -->
+                <g id="group-pns">
+                    <g id="group-cranial">
+                        <path id="cn-l1" class="nerve-path" stroke-width="1.8" d="M 268 75 Q 252 72 245 60" />
+                        <path id="cn-l2" class="nerve-path" stroke-width="1.8" d="M 268 82 Q 250 85 244 95" />
+                        <path id="cn-l3" class="nerve-path" stroke-width="1.5" d="M 270 90 Q 255 100 248 112" />
+                        <path id="cn-r1" class="nerve-path" stroke-width="1.8" d="M 282 75 Q 298 72 305 60" />
+                        <path id="cn-r2" class="nerve-path" stroke-width="1.8" d="M 282 82 Q 300 85 306 95" />
+                        <path id="cn-r3" class="nerve-path" stroke-width="1.5" d="M 280 90 Q 295 100 302 112" />
+                    </g>
+
+                    <g id="group-spinal-nerves">
+                        <path class="nerve-path" stroke-width="1.5" d="M 272 150 Q 230 155 210 180" />
+                        <path class="nerve-path" stroke-width="1.5" d="M 272 168 Q 225 175 208 200" />
+                        <path class="nerve-path" stroke-width="1.5" d="M 272 186 Q 225 195 210 220" />
+                        <path class="nerve-path" stroke-width="1.5" d="M 272 204 Q 225 215 212 240" />
+                        <path class="nerve-path" stroke-width="1.5" d="M 272 222 Q 228 235 215 260" />
+                        <path class="nerve-path" stroke-width="1.5" d="M 272 240 Q 230 255 218 280" />
+                        <path class="nerve-path" stroke-width="1.5" d="M 272 258 Q 235 275 222 300" />
+
+                        <path class="nerve-path" stroke-width="1.5" d="M 278 150 Q 320 155 340 180" />
+                        <path class="nerve-path" stroke-width="1.5" d="M 278 168 Q 325 175 342 200" />
+                        <path class="nerve-path" stroke-width="1.5" d="M 278 186 Q 325 195 340 220" />
+                        <path class="nerve-path" stroke-width="1.5" d="M 278 204 Q 325 215 338 240" />
+                        <path class="nerve-path" stroke-width="1.5" d="M 278 222 Q 322 235 335 260" />
+                        <path class="nerve-path" stroke-width="1.5" d="M 278 240 Q 320 255 332 280" />
+                        <path class="nerve-path" stroke-width="1.5" d="M 278 258 Q 315 275 328 300" />
+
+                        <path id="path-left-arm" class="nerve-path" stroke-width="3.2" d="M 272 130 C 235 135, 195 150, 178 195 C 165 245, 155 310, 140 405" />
+                        <path class="nerve-path" stroke-width="1.8" d="M 215 142 C 185 160, 170 220, 152 340 L 130 415" />
+                        <path class="nerve-path" stroke-width="1.4" d="M 168 235 Q 155 280 158 330" />
+                        <path class="nerve-path" stroke-width="1.4" d="M 155 310 Q 142 360 148 415" />
+
+                        <path id="path-right-arm" class="nerve-path" stroke-width="3.2" d="M 278 130 C 315 135, 355 150, 372 195 C 385 245, 395 310, 410 405" />
+                        <path class="nerve-path" stroke-width="1.8" d="M 335 142 C 365 160, 380 220, 398 340 L 420 415" />
+                        <path class="nerve-path" stroke-width="1.4" d="M 382 235 Q 395 280 392 330" />
+                        <path class="nerve-path" stroke-width="1.4" d="M 395 310 Q 408 360 402 415" />
+
+                        <path id="path-left-leg" class="nerve-path" stroke-width="4" d="M 273 300 C 265 340, 235 365, 232 425 C 230 500, 232 590, 232 745" />
+                        <path class="nerve-path" stroke-width="2" d="M 273 280 Q 230 310 215 365" />
+                        <path class="nerve-path" stroke-width="1.8" d="M 248 365 Q 215 410 215 490" />
+                        <path class="nerve-path" stroke-width="2.2" d="M 232 520 Q 218 600 222 720" />
+                        <path class="nerve-path" stroke-width="1.6" d="M 232 560 Q 245 630 240 735" />
+
+                        <path id="path-right-leg" class="nerve-path" stroke-width="4" d="M 277 300 C 285 340, 315 365, 318 425 C 320 500, 318 590, 318 745" />
+                        <path class="nerve-path" stroke-width="2" d="M 277 280 Q 320 310 335 365" />
+                        <path class="nerve-path" stroke-width="1.8" d="M 302 365 Q 335 410 335 490" />
+                        <path class="nerve-path" stroke-width="2.2" d="M 318 520 Q 332 600 328 720" />
+                        <path class="nerve-path" stroke-width="1.6" d="M 318 560 Q 305 630 310 735" />
+                    </g>
+                </g>
+
+                <!-- 3. 中樞神經系統：腦與脊髓 -->
+                <g id="group-cns">
+                    <path id="path-spinal-cord" class="cns-spinal" d="M 275 82 L 275 315" />
+                    <path stroke="#f59e0b" stroke-width="2" fill="none" opacity="0.8" d="M 275 310 L 270 365 M 275 310 L 275 375 M 275 310 L 280 365" />
+
+                    <g id="group-brain" class="cns-brain">
+                        <path d="M 275 25 C 252 25, 243 40, 245 58 C 246 72, 258 78, 275 76 Z" />
+                        <path d="M 275 25 C 298 25, 307 40, 305 58 C 304 72, 292 78, 275 76 Z" />
+                        <path d="M 255 40 Q 265 45 262 32 M 250 55 Q 262 52 268 62 M 295 40 Q 285 45 288 32 M 300 55 Q 288 52 282 62" fill="none" stroke="#9d174d" stroke-width="1.3"/>
+                        <path d="M 257 72 Q 266 83 275 80 Q 284 83 293 72" fill="#d47589" />
+                    </g>
+                </g>
+
+                <!-- 4. 文字標籤與引導線群組 (預設隱藏，由 Toggle 控制) -->
+                <g id="labels-container">
+                    <g class="label-group" onclick="highlightPart('pns')">
+                        <text x="35" y="135" class="label-title-pns">周圍神經系統</text>
+                        <path class="label-line" d="M 52 175 L 72 175 M 92 75 L 72 75 L 72 265 L 92 265" />
+                    </g>
+                    <g class="label-group" onclick="highlightPart('cranial')">
+                        <text x="98" y="81" class="label-text">腦神經</text>
+                        <path class="label-line" d="M 155 75 L 185 75 M 242 58 L 185 58 L 185 95 L 245 95" />
+                    </g>
+                    <g class="label-group" onclick="highlightPart('spinal-nerves')">
+                        <text x="98" y="271" class="label-text">脊神經</text>
+                        <path class="label-line" d="M 155 265 L 235 265 M 255 98 L 235 98 L 235 375 L 265 375" />
+                    </g>
+                    <g class="label-group" onclick="highlightPart('cns')">
+                        <text x="505" y="65" class="label-title-cns">中樞神經系統</text>
+                        <path class="label-line" d="M 488 90 L 465 90 M 415 58 L 465 58 L 465 115 L 430 115" />
+                    </g>
+                    <g class="label-group" onclick="highlightPart('brain')">
+                        <text x="385" y="64" class="label-text">腦</text>
+                        <path class="label-line" d="M 306 58 L 378 58" />
+                    </g>
+                    <g class="label-group" onclick="highlightPart('spinal-cord')">
+                        <text x="385" y="121" class="label-text">脊髓</text>
+                        <path class="label-line" d="M 278 115 L 378 115" />
+                    </g>
+                    <g class="label-group" onclick="triggerNodeClick('left-knee')">
+                        <text x="130" y="525" class="label-text">膝蓋 (髕韌帶)</text>
+                        <path class="label-line" d="M 230 520 L 205 520" />
+                    </g>
+                    <g class="label-group" onclick="triggerNodeClick('right-knee')">
+                        <text x="345" y="525" class="label-text">膝蓋 (髕韌帶)</text>
+                        <path class="label-line" d="M 320 520 L 340 520" />
+                    </g>
+                </g>
+
+                <!-- 5. 衝動粒子圖層與互動觸發點 -->
+                <g id="impulse-layer"></g>
+
+                <g id="trigger-layer">
+                    <circle class="trigger-node" cx="275" cy="50" r="6" onclick="triggerNodeClick('brain')" title="大腦中樞 (點擊發送運動指令)" />
+                    <circle class="trigger-node" cx="245" cy="95" r="5" onclick="triggerNodeClick('cranial')" title="腦神經受器 (點擊傳入大腦)" />
+                    <circle class="trigger-node" cx="140" cy="405" r="6" onclick="triggerNodeClick('left-hand')" title="左手受器 (縮手反射 / 感覺傳入)" />
+                    <circle class="trigger-node" cx="410" cy="405" r="6" onclick="triggerNodeClick('right-hand')" title="右手受器 (縮手反射 / 感覺傳入)" />
+                    <circle class="trigger-node" cx="275" cy="200" r="5" onclick="triggerNodeClick('spinal')" title="脊髓中樞" />
+                    <circle class="trigger-node" cx="232" cy="520" r="6" onclick="triggerNodeClick('left-knee')" title="左膝受器 (膝反射 / 膝跳反射)" />
+                    <circle class="trigger-node" cx="318" cy="520" r="6" onclick="triggerNodeClick('right-knee')" title="右膝受器 (膝反射 / 膝跳反射)" />
+                    <circle class="trigger-node" cx="232" cy="745" r="6" onclick="triggerNodeClick('left-foot')" title="左腳受器 (腳底縮腿反射 / 感覺傳入)" />
+                    <circle class="trigger-node" cx="318" cy="745" r="6" onclick="triggerNodeClick('right-foot')" title="右腳受器 (腳底縮腿反射 / 感覺傳入)" />
+                </g>
+            </svg>
+        </div>
+
+        <!-- 浮動控制列 (縮放與標籤 Toggle) -->
+        <div class="floating-controls">
+            <button class="ctrl-btn" onclick="zoomIn()" title="放大">+</button>
+            <button class="ctrl-btn" onclick="zoomOut()" title="縮小">-</button>
+            <button class="ctrl-btn" onclick="resetZoom()" title="重設視圖">⟲</button>
+            <button class="ctrl-btn" id="label-toggle-btn" onclick="toggleLabels()">🏷️ 標籤</button>
+        </div>
+    </div>
+
+    <!-- 右側控制面板 (固定高度防跳動) -->
+    <div class="control-panel">
+        <div class="panel-card">
+            <h3>🎮 選擇互動模擬模式</h3>
+            <div class="mode-buttons">
+                <button class="mode-btn active" onclick="setMode('free')" id="btn-free">
+                    <span>⚡ 自由刺激模式</span>
+                    <small style="font-weight:normal; color:var(--text-muted)">點擊受器傳入大腦</small>
+                </button>
+                <button class="mode-btn" onclick="setMode('reflex')" id="btn-reflex">
+                    <span>🔥 脊髓反射弧</span>
+                    <small style="font-weight:normal; color:var(--text-muted)">手燙縮手・腳踩刺・膝反射</small>
+                </button>
+                <button class="mode-btn" onclick="setMode('voluntary')" id="btn-voluntary">
+                    <span>🧠 意識動作模式</span>
+                    <small style="font-weight:normal; color:var(--text-muted)">大腦下達運動指令</small>
+                </button>
+            </div>
+
+            <div class="slider-group">
+                <label>
+                    <span>神經衝動傳導速度</span>
+                    <span id="speed-val">正常 (1.0x)</span>
+                </label>
+                <input type="range" id="speed-slider" min="0.4" max="2.5" step="0.1" value="1" oninput="updateSpeed(this.value)">
+            </div>
+
+            <div class="legend">
+                <div class="legend-item">
+                    <span class="dot" style="background: var(--sensory-color); box-shadow: 0 0 8px var(--sensory-color);"></span>
+                    <span>感覺衝動 (向心，傳入大腦/脊髓)</span>
+                </div>
+                <div class="legend-item">
+                    <span class="dot" style="background: var(--motor-color); box-shadow: 0 0 8px var(--motor-color);"></span>
+                    <span>運動衝動 (離心，傳往動器肌肉)</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 脊髓反射弧模式專用控制卡片 (在反射模式下顯示) -->
+        <div class="panel-card" id="reflex-panel-card" style="display: none;">
+            <h3 style="color: #f59e0b; display: flex; align-items: center; justify-content: space-between;">
+                <span>🔥 脊髓反射項目模擬</span>
+                <span style="font-size: 0.75rem; color: #fde68a; font-weight: normal; background: rgba(245,158,11,0.15); padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(245,158,11,0.3);">不經大腦中樞</span>
+            </h3>
+            <p style="font-size: 0.82rem; color: #94a3b8; margin-bottom: 8px; line-height: 1.4;">
+                由受器傳入脊髓，脊髓直接發出運動衝動傳達動器（痛覺/本體感覺隨後才傳至大腦）：
+            </p>
+            <div class="motor-buttons-grid">
+                <button class="reflex-btn" id="reflex-btn-hand" onclick="runHandReflex('left-hand')" title="手觸高溫縮手反射">✋ 手部縮手反射</button>
+                <button class="reflex-btn" id="reflex-btn-foot" onclick="runFootReflex('left-foot')" title="腳底踩刺縮腿反射">🦶 腳底縮腿反射</button>
+                <button class="reflex-btn full-span" id="reflex-btn-knee" onclick="runKneeReflex('left-knee')" title="敲擊膝蓋髕腱之膝跳反射">🦵 膝跳反射 (膝反射)</button>
+            </div>
+        </div>
+
+        <!-- 運動訊號傳往何處：按鈕 UI 控制 (自由/意識動作模式下顯示) -->
+        <div class="panel-card" id="motor-panel-card">
+            <h3 style="color: #f43f5e; display: flex; align-items: center; justify-content: space-between;">
+                <span>🔴 運動訊號傳出控制</span>
+                <span style="font-size: 0.75rem; color: #fda4af; font-weight: normal; background: rgba(244,63,94,0.15); padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(244,63,94,0.3);">動器選擇</span>
+            </h3>
+            <p style="font-size: 0.82rem; color: #94a3b8; margin-bottom: 8px; line-height: 1.4;">
+                由大腦發出運動衝動，請選擇傳往哪個動器部位：
+            </p>
+            <div class="motor-buttons-grid">
+                <button class="motor-btn" id="motor-btn-head" onclick="sendMotorTo('head')" title="大腦傳至頭部/臉部動器">👤 頭部 (面部)</button>
+                <button class="motor-btn" id="motor-btn-left-arm" onclick="sendMotorTo('left-arm')" title="大腦經脊髓傳至左手动器">✋ 左手动器</button>
+                <button class="motor-btn" id="motor-btn-right-arm" onclick="sendMotorTo('right-arm')" title="大腦經脊髓傳至右手動器">🤚 右手动器</button>
+                <button class="motor-btn" id="motor-btn-left-leg" onclick="sendMotorTo('left-leg')" title="大腦經脊髓傳至左腳動器">🦶 左腳動器</button>
+                <button class="motor-btn" id="motor-btn-right-leg" onclick="sendMotorTo('right-leg')" title="大腦經脊髓傳至右腳動器">🦵 右腳動器</button>
+                <button class="motor-btn full-span" id="motor-btn-all" onclick="sendMotorTo('all')" title="大腦經脊髓同時傳至四肢">🏃 四肢全身連動</button>
+            </div>
+        </div>
+
+        <div class="panel-card" style="display: flex; flex-direction: column; justify-content: space-between;">
+            <h3 id="mode-title">⚡ 自由刺激模式</h3>
+            <div class="info-box" id="mode-desc" style="font-size: 0.92rem; color: #cbd5e1; line-height: 1.6; min-height: 60px;">
+                請點擊左側人體圖上的<strong>受器節點</strong>（手、腳、頭部腦神經）觀察感覺衝動傳入大腦；再由上方按鈕控制運動訊號傳往何處動器。
+            </div>
+            <button class="action-trigger-btn" id="main-action-btn" onclick="runCurrentModeDemo()">
+                ▶ 示範完整神經傳導（感覺 ➔ 運動）
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- Pan & Zoom 控制器 ---
+    let scale = 1.0;
+    let panX = 0;
+    let panY = 0;
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let showLabels = false;
+
+    const canvasSection = document.getElementById('canvas-section');
+    const diagramWrapper = document.getElementById('diagram-wrapper');
+
+    function initView() {
+        const rect = canvasSection.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        const padding = 20;
+        const availW = Math.max(100, rect.width - padding * 2);
+        const availH = Math.max(100, rect.height - padding * 2);
+        // 人體圖 SVG 原始規格為 550 x 800
+        const fitScale = Math.min(availW / 550, availH / 800);
+        scale = Math.min(Math.max(fitScale, 0.35), 1.15);
+
+        panX = (rect.width - 550 * scale) / 2;
+        panY = (rect.height - 800 * scale) / 2;
+        updateTransform();
+    }
+
+    function updateTransform() {
+        diagramWrapper.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+    }
+
+    canvasSection.addEventListener('mousedown', (e) => {
+        if (e.target.tagName === 'circle' || e.target.tagName === 'path' || e.target.closest('.floating-controls')) return;
+        isDragging = true;
+        startX = e.clientX - panX;
+        startY = e.clientY - panY;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        panX = e.clientX - startX;
+        panY = e.clientY - startY;
+        updateTransform();
+    });
+
+    window.addEventListener('mouseup', () => { isDragging = false; });
+
+    canvasSection.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const zoomFactor = 1.12;
+        let newScale = e.deltaY < 0 ? scale * zoomFactor : scale / zoomFactor;
+        newScale = Math.max(0.35, Math.min(newScale, 5.0));
+
+        const rect = canvasSection.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        panX = mouseX - (mouseX - panX) * (newScale / scale);
+        panY = mouseY - (mouseY - panY) * (newScale / scale);
+        scale = newScale;
+
+        updateTransform();
+    }, { passive: false });
+
+    function zoomIn() { scale = Math.min(scale * 1.2, 5.0); updateTransform(); }
+    function zoomOut() { scale = Math.max(scale / 1.2, 0.35); updateTransform(); }
+    function resetZoom() { initView(); }
+
+    function toggleLabels() {
+        showLabels = !showLabels;
+        document.getElementById('labels-container').style.display = showLabels ? 'block' : 'none';
+        document.getElementById('label-toggle-btn').classList.toggle('active-toggle', showLabels);
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        requestAnimationFrame(initView);
+    });
+    window.addEventListener('load', () => {
+        requestAnimationFrame(initView);
+    });
+    window.addEventListener('resize', initView);
+
+    // --- 神經模擬核心邏輯 ---
+    let currentMode = 'free';
+    let speedMultiplier = 1.0;
+
+    function updateSpeed(val) {
+        speedMultiplier = parseFloat(val);
+        document.getElementById('speed-val').textContent = `${speedMultiplier.toFixed(1)}x`;
+    }
+
+    function updateDesc(html) {
+        const desc = document.getElementById('mode-desc');
+        if (desc) desc.innerHTML = html;
+    }
+
+    function setMode(mode) {
+        currentMode = mode;
+        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById(`btn-${mode}`).classList.add('active');
+        clearHighlights();
+
+        const title = document.getElementById('mode-title');
+        const btn = document.getElementById('main-action-btn');
+        const reflexCard = document.getElementById('reflex-panel-card');
+        const motorCard = document.getElementById('motor-panel-card');
+
+        if (mode === 'free') {
+            if (reflexCard) reflexCard.style.display = 'none';
+            if (motorCard) motorCard.style.display = 'block';
+            title.innerHTML = '⚡ 自由刺激模式';
+            updateDesc('請點擊左側人體上的<strong>受器節點</strong>（手、腳、膝蓋、腦神經）觀察感覺衝動傳入大腦；並可點擊上方按鈕由大腦下達運動指令至動器。');
+            btn.textContent = '▶ 示範完整神經傳導（感覺 ➔ 運動）';
+        } else if (mode === 'reflex') {
+            if (reflexCard) reflexCard.style.display = 'block';
+            if (motorCard) motorCard.style.display = 'none';
+            title.innerHTML = '🔥 脊髓反射弧模擬（不經大腦中樞）';
+            updateDesc('手觸燙物、腳踩圖釘或敲擊膝蓋時，感覺衝動由受器傳入<strong>脊髓</strong>後直接由脊髓發出運動指令使肌肉收縮，爭取防衛時間；痛覺或本體感覺隨後才傳達大腦。<br><span style="color:#f59e0b;">請點擊左圖<strong>手部、膝蓋或腳底受器</strong>，或點擊上方反射按鈕觀察不同反射弧傳導路徑！</span>');
+            btn.textContent = '🔥 隨機示範一項脊髓反射（手/腳/膝）';
+            runKneeReflex('left-knee');
+        } else if (mode === 'voluntary') {
+            if (reflexCard) reflexCard.style.display = 'none';
+            if (motorCard) motorCard.style.display = 'block';
+            title.innerHTML = '🧠 意識動作模式';
+            updateDesc('大腦運動皮質主導下達指令，訊號沿脊髓向下傳遞，經由脊神經分支精準傳導至指定動器。請使用上方動器按鈕進行操控。');
+            btn.textContent = '🧠 模擬大腦下令四肢運動';
+            sendMotorTo('all');
+        }
+    }
+
+    function clearHighlights() {
+        document.querySelectorAll('.nerve-path, .cns-spinal, .cns-brain').forEach(el => {
+            el.classList.remove('highlight-active', 'dimmed');
+        });
+    }
+
+    function highlightPart(partKey) {
+        clearHighlights();
+        const allElements = document.querySelectorAll('.nerve-path, .cns-spinal, .cns-brain');
+        allElements.forEach(el => el.classList.add('dimmed'));
+        if (partKey === 'cns') {
+            document.querySelectorAll('#group-cns * , .cns-spinal, .cns-brain').forEach(el => {
+                el.classList.remove('dimmed');
+                el.classList.add('highlight-active');
+            });
+        }
+    }
+
+    function animateImpulseOnPath(pathId, reverse = false, type = 'sensory', duration = 900, onComplete = null, startRatio = 0, endRatio = 1) {
+        const pathEl = document.getElementById(pathId);
+        if (!pathEl) return;
+
+        const layer = document.getElementById('impulse-layer');
+        const totalLength = pathEl.getTotalLength();
+        const actualDuration = duration / speedMultiplier;
+
+        const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        const color = type === 'sensory' ? '#00f2fe' : '#ff0844';
+        dot.setAttribute('r', type === 'sensory' ? '6' : '7');
+        dot.setAttribute('fill', '#ffffff');
+        dot.setAttribute('stroke', color);
+        dot.setAttribute('stroke-width', '4');
+        dot.setAttribute('filter', type === 'sensory' ? 'url(#glow-sensory)' : 'url(#glow-motor)');
+        dot.classList.add('impulse-dot');
+        layer.appendChild(dot);
+
+        const startTime = performance.now();
+
+        function step(now) {
+            const elapsed = now - startTime;
+            let progress = Math.min(elapsed / actualDuration, 1);
+
+            const currentRatio = startRatio + (endRatio - startRatio) * progress;
+            const dist = reverse ? totalLength * (1 - currentRatio) : totalLength * currentRatio;
+            const pt = pathEl.getPointAtLength(dist);
+
+            dot.setAttribute('cx', pt.x);
+            dot.setAttribute('cy', pt.y);
+
+            if (progress < 1) {
+                requestAnimationFrame(step);
+            } else {
+                layer.removeChild(dot);
+                if (onComplete) onComplete();
+            }
+        }
+        requestAnimationFrame(step);
+    }
+
+    function flashBrain(color = '#f472b6') {
+        const brain = document.getElementById('group-brain');
+        brain.style.filter = `drop-shadow(0 0 25px ${color})`;
+        setTimeout(() => { brain.style.filter = ''; }, 450 / speedMultiplier);
+    }
+
+    // --- 動器反應光波特效 (視覺化標記運動訊號到達的肌肉動器位置) ---
+    function flashEffector(x, y) {
+        const layer = document.getElementById('impulse-layer');
+        const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        ring.setAttribute('cx', x);
+        ring.setAttribute('cy', y);
+        ring.setAttribute('r', '8');
+        ring.setAttribute('fill', 'none');
+        ring.setAttribute('stroke', '#ff0844');
+        ring.setAttribute('stroke-width', '3');
+        ring.style.transition = 'all 0.5s ease-out';
+        layer.appendChild(ring);
+
+        requestAnimationFrame(() => {
+            ring.setAttribute('r', '24');
+            ring.setAttribute('stroke-width', '1');
+            ring.style.opacity = '0';
+        });
+        setTimeout(() => {
+            if (ring.parentNode) layer.removeChild(ring);
+        }, 550);
+    }
+
+    // --- 運動訊號傳送：由按鈕 UI 控制傳往何處動器 ---
+    function highlightMotorBtn(target) {
+        const btn = document.getElementById(`motor-btn-${target}`);
+        if (btn) {
+            btn.classList.add('motor-btn-active');
+            setTimeout(() => btn.classList.remove('motor-btn-active'), 500);
+        }
+    }
+
+    function highlightReflexBtn(type) {
+        const btn = document.getElementById(`reflex-btn-${type}`);
+        if (btn) {
+            btn.classList.add('reflex-btn-active');
+            setTimeout(() => btn.classList.remove('reflex-btn-active'), 500);
+        }
+    }
+
+    function sendMotorTo(target) {
+        highlightMotorBtn(target);
+        flashBrain('#ff0844');
+
+        setTimeout(() => {
+            if (target === 'head') {
+                animateImpulseOnPath('cn-l2', false, 'motor', 500);
+                updateDesc('⚡ <strong>大腦發出運動指令 ➔ 頭部動器</strong>：運動衝動（紅光）沿腦神經傳往頭部/臉部動器（如眨眼、表情肌肉）！');
+            } else if (target === 'left-arm') {
+                animateImpulseOnPath('path-spinal-cord', false, 'motor', 380, () => {
+                    animateImpulseOnPath('path-left-arm', false, 'motor', 750, () => flashEffector(140, 405));
+                }, 0, 0.25);
+                updateDesc('⚡ <strong>大腦發出運動指令 ➔ 左手动器</strong>：運動衝動（紅光）沿脊髓傳至左臂與手部動器肌肉！');
+            } else if (target === 'right-arm') {
+                animateImpulseOnPath('path-spinal-cord', false, 'motor', 380, () => {
+                    animateImpulseOnPath('path-right-arm', false, 'motor', 750, () => flashEffector(410, 405));
+                }, 0, 0.25);
+                updateDesc('⚡ <strong>大腦發出運動指令 ➔ 右手动器</strong>：運動衝動（紅光）沿脊髓傳至右臂與手部動器肌肉！');
+            } else if (target === 'left-leg') {
+                animateImpulseOnPath('path-spinal-cord', false, 'motor', 600, () => {
+                    animateImpulseOnPath('path-left-leg', false, 'motor', 850, () => flashEffector(232, 745));
+                }, 0, 0.95);
+                updateDesc('⚡ <strong>大腦發出運動指令 ➔ 左腳動器</strong>：運動衝動（紅光）沿脊髓向下傳遞至左腿動器肌肉！');
+            } else if (target === 'right-leg') {
+                animateImpulseOnPath('path-spinal-cord', false, 'motor', 600, () => {
+                    animateImpulseOnPath('path-right-leg', false, 'motor', 850, () => flashEffector(318, 745));
+                }, 0, 0.95);
+                updateDesc('⚡ <strong>大腦發出運動指令 ➔ 右腳動器</strong>：運動衝動（紅光）沿脊髓向下傳遞至右腿動器肌肉！');
+            } else if (target === 'all') {
+                animateImpulseOnPath('path-spinal-cord', false, 'motor', 400, () => {
+                    animateImpulseOnPath('path-left-arm', false, 'motor', 700, () => flashEffector(140, 405));
+                    animateImpulseOnPath('path-right-arm', false, 'motor', 700, () => flashEffector(410, 405));
+                    animateImpulseOnPath('path-left-leg', false, 'motor', 850, () => flashEffector(232, 745));
+                    animateImpulseOnPath('path-right-leg', false, 'motor', 850, () => flashEffector(318, 745));
+                }, 0, 0.35);
+                updateDesc('⚡ <strong>大腦發出全身運動指令</strong>：運動衝動（紅光）同時傳至四肢所有動器肌肉，協同運動！');
+            }
+        }, 180 / speedMultiplier);
+    }
+
+    // --- 脊髓反射弧專屬函數 (手部縮手、腳底縮腿、膝跳反射) ---
+    function runHandReflex(hand = 'left-hand') {
+        clearHighlights();
+        highlightReflexBtn('hand');
+        const isLeft = hand === 'left-hand';
+        const armPath = isLeft ? 'path-left-arm' : 'path-right-arm';
+        const handName = isLeft ? '左手' : '右手';
+        updateDesc(`🔥 <strong>${handName}縮手反射觸發</strong>：手指受器觸碰高溫！<br>感覺衝動（青藍光）沿臂神經傳入脊髓頸段 ➔ 脊髓<strong>立即直接發出運動神經衝動（紅光）</strong>傳回手臂屈肌收縮使手縮回！<br><span style="color:#38bdf8;">痛覺衝動隨後才由脊髓上傳大腦（感到燙痛時，手已先縮回避險）。</span>`);
+        
+        // 1. 感覺衝動由手指受器傳入脊髓
+        animateImpulseOnPath(armPath, true, 'sensory', 750, () => {
+            // 2. 脊髓直接發出運動衝動傳回手臂屈肌動器
+            animateImpulseOnPath(armPath, false, 'motor', 650, () => {
+                flashEffector(isLeft ? 140 : 410, 405);
+            });
+            // 3. 同時脊髓將痛覺衝動向上傳達大腦
+            animateImpulseOnPath('path-spinal-cord', true, 'sensory', 650, () => {
+                flashBrain('#00f2fe');
+            }, 0.75, 1);
+        });
+    }
+
+    function runFootReflex(foot = 'left-foot') {
+        clearHighlights();
+        highlightReflexBtn('foot');
+        const isLeft = foot === 'left-foot';
+        const legPath = isLeft ? 'path-left-leg' : 'path-right-leg';
+        const footName = isLeft ? '左腳' : '右腳';
+        updateDesc(`🔥 <strong>${footName}腳底縮腿反射觸發</strong>：腳底受器踩到尖刺圖釘！<br>感覺衝動（青藍光）沿腿神經傳入脊髓腰段 ➔ 脊髓<strong>立即直接發出運動衝動（紅光）</strong>傳回腿部屈肌收縮使腳提起！<br><span style="color:#38bdf8;">痛覺衝動隨後才由脊髓向上傳導至大腦（大腦感知好痛，但腳已先縮起）。</span>`);
+
+        // 1. 感覺衝動由腳底受器傳入脊髓腰段
+        animateImpulseOnPath(legPath, true, 'sensory', 850, () => {
+            // 2. 脊髓直接發出運動衝動傳回腿部肌群
+            animateImpulseOnPath(legPath, false, 'motor', 750, () => {
+                flashEffector(isLeft ? 232 : 318, 700);
+            }, 0, 0.9);
+            // 3. 同時脊髓將痛覺衝動向上傳導到大腦
+            animateImpulseOnPath('path-spinal-cord', true, 'sensory', 650, () => {
+                flashBrain('#00f2fe');
+            }, 0, 1);
+        });
+    }
+
+    function runKneeReflex(knee = 'left-knee') {
+        clearHighlights();
+        highlightReflexBtn('knee');
+        const isLeft = knee === 'left-knee';
+        const legPath = isLeft ? 'path-left-leg' : 'path-right-leg';
+        const kneeName = isLeft ? '左膝' : '右膝';
+        updateDesc(`⚡ <strong>${kneeName}膝跳反射（膝反射）觸發</strong>：敲擊髕骨韌帶！<br>感覺衝動（青藍光）由<strong>膝部受器傳入脊髓腰段</strong> ➔ 脊髓<strong>立即直接發出運動衝動（紅光）傳達大腿股四頭肌（動器）</strong>收縮，帶動小腿向前彈踢！<br><span style="color:#38bdf8;">本體感覺衝動亦同時沿脊髓向上傳達大腦。</span>`);
+
+        // 1. 感覺衝動由膝蓋受器 (ratio ~0.50) 向上傳入脊髓腰段 (ratio 0.0)
+        animateImpulseOnPath(legPath, true, 'sensory', 550, () => {
+            // 2. 脊髓直接發出運動衝動傳至【大腿股四頭肌】(ratio ~0.35) 引起收縮彈腿！注意：運動訊號終點為大腿動器，不傳至腳底
+            animateImpulseOnPath(legPath, false, 'motor', 450, () => {
+                flashEffector(isLeft ? 232 : 318, 430);
+            }, 0, 0.35);
+            // 3. 同時脊髓將本體感覺向上傳達大腦
+            animateImpulseOnPath('path-spinal-cord', true, 'sensory', 650, () => {
+                flashBrain('#00f2fe');
+            }, 0, 1);
+        }, 0.50, 1.0);
+    }
+
+    // --- 感覺末梢節點點擊事件 ---
+    function triggerNodeClick(nodeType) {
+        clearHighlights();
+
+        // 脊髓反射弧模式：支援手部、腳底、膝蓋三種反射
+        if (currentMode === 'reflex') {
+            if (nodeType === 'left-hand' || nodeType === 'right-hand') {
+                runHandReflex(nodeType);
+                return;
+            }
+            if (nodeType === 'left-foot' || nodeType === 'right-foot') {
+                runFootReflex(nodeType);
+                return;
+            }
+            if (nodeType === 'left-knee' || nodeType === 'right-knee') {
+                runKneeReflex(nodeType);
+                return;
+            }
+        }
+
+        // 自由刺激模式：點擊感覺末梢只傳入大腦，不需要運動
+        if (nodeType === 'left-hand' || nodeType === 'right-hand') {
+            const isLeft = nodeType === 'left-hand';
+            const armPath = isLeft ? 'path-left-arm' : 'path-right-arm';
+            const handName = isLeft ? '左手' : '右手';
+            updateDesc(`📥 <strong>${handName}受器受到刺激</strong>：感覺衝動（青藍光）經臂神經傳入脊髓，再傳入大腦中樞。<br><span style="color:#38bdf8;">大腦已感知！請點擊右側「動器按鈕」決定大腦運動訊號傳往何處。</span>`);
+            animateImpulseOnPath(armPath, true, 'sensory', 850, () => {
+                animateImpulseOnPath('path-spinal-cord', true, 'sensory', 450, () => {
+                    flashBrain('#00f2fe');
+                }, 0.75, 1);
+            });
+        } else if (nodeType === 'left-knee' || nodeType === 'right-knee') {
+            const isLeft = nodeType === 'left-knee';
+            const legPath = isLeft ? 'path-left-leg' : 'path-right-leg';
+            const kneeName = isLeft ? '左膝' : '右膝';
+            updateDesc(`📥 <strong>${kneeName}受器受到刺激</strong>：本體感覺衝動（青藍光）由膝部沿神經與脊髓傳入大腦中樞。<br><span style="color:#38bdf8;">大腦已感知！若要體驗不經大腦的「膝跳反射」，可切換至【🔥 脊髓反射弧】模式。</span>`);
+            animateImpulseOnPath(legPath, true, 'sensory', 550, () => {
+                animateImpulseOnPath('path-spinal-cord', true, 'sensory', 700, () => {
+                    flashBrain('#00f2fe');
+                });
+            }, 0.50, 1.0);
+        } else if (nodeType === 'left-foot' || nodeType === 'right-foot') {
+            const isLeft = nodeType === 'left-foot';
+            const legPath = isLeft ? 'path-left-leg' : 'path-right-leg';
+            const footName = isLeft ? '左腳' : '右腳';
+            updateDesc(`📥 <strong>${footName}受器受到刺激</strong>：感覺衝動（青藍光）沿腿神經與脊髓傳入大腦中樞。<br><span style="color:#38bdf8;">大腦已感知！若要體驗不經大腦的「腳底縮腿反射」，可切換至【🔥 脊髓反射弧】模式。</span>`);
+            animateImpulseOnPath(legPath, true, 'sensory', 1000, () => {
+                animateImpulseOnPath('path-spinal-cord', true, 'sensory', 700, () => {
+                    flashBrain('#00f2fe');
+                });
+            });
+        } else if (nodeType === 'cranial') {
+            // 點擊頭部的腦神經只傳入一條訊號
+            updateDesc(`📥 <strong>頭部受器受到刺激</strong>：感覺衝動（青藍光）沿單一腦神經直接傳入大腦中樞。<br><span style="color:#38bdf8;">大腦已感知！請點擊右側「動器按鈕」決定大腦運動訊號傳往何處。</span>`);
+            animateImpulseOnPath('cn-l2', true, 'sensory', 500, () => {
+                flashBrain('#00f2fe');
+            });
+        } else if (nodeType === 'brain') {
+            sendMotorTo('all');
+        } else if (nodeType === 'spinal') {
+            updateDesc('📥 <strong>脊髓訊號向上傳遞</strong>：感覺衝動沿脊髓傳入大腦中樞。');
+            animateImpulseOnPath('path-spinal-cord', true, 'sensory', 500, () => flashBrain('#00f2fe'));
+        }
+    }
+
+    function runVoluntarySimulation() {
+        sendMotorTo('all');
+    }
+
+    function runCurrentModeDemo() {
+        if (currentMode === 'free') {
+            const sensoryNodes = ['left-hand', 'right-hand', 'left-knee', 'right-knee', 'left-foot', 'right-foot', 'cranial'];
+            const motorTargets = ['left-arm', 'right-arm', 'left-leg', 'right-leg', 'head'];
+            const randomSensory = sensoryNodes[Math.floor(Math.random() * sensoryNodes.length)];
+            const randomMotor = motorTargets[Math.floor(Math.random() * motorTargets.length)];
+
+            triggerNodeClick(randomSensory);
+            setTimeout(() => {
+                sendMotorTo(randomMotor);
+            }, 1500 / speedMultiplier);
+        } else if (currentMode === 'reflex') {
+            const reflexDemos = ['hand', 'foot', 'knee'];
+            const pick = reflexDemos[Math.floor(Math.random() * reflexDemos.length)];
+            if (pick === 'hand') runHandReflex('left-hand');
+            else if (pick === 'foot') runFootReflex('left-foot');
+            else if (pick === 'knee') runKneeReflex('left-knee');
+        } else if (currentMode === 'voluntary') {
+            sendMotorTo('all');
+        }
+    }
+</script>
+
+</body>
+</html>
