@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>氣體交換動態模擬器（圖3-21 身體組織 ＆ 圖3-22 肺部）</title>
+<title>氣體交換動態模擬器（身體組織 ＆ 肺部氣體交換）</title>
 <style>
   :root {
     --bg: #f1f5f9;
@@ -31,7 +31,7 @@
     border: 1px solid var(--border);
     border-radius: 12px;
     padding: 10px 18px;
-    margin-bottom: 12px;
+    margin-bottom: 8px;
     display: flex;
     flex-wrap: wrap;
     justify-content: space-between;
@@ -58,9 +58,9 @@
     border: 1px solid #cbd5e1;
     background: #fff;
     color: #1e293b;
-    padding: 6px 13px;
+    padding: 6px 12px;
     border-radius: 8px;
-    font-size: 0.9rem;
+    font-size: 0.88rem;
     font-weight: 600;
     transition: all 0.15s;
   }
@@ -71,30 +71,67 @@
     border-color: #b91c1c;
   }
   button.primary:hover { background: #b91c1c; }
-  button.active-filter {
-    background: #1e293b;
-    color: #fff;
-    border-color: #0f172a;
-  }
-  .speed-box {
+  
+  .speed-box, .mode-box {
     display: inline-flex;
     background: #e2e8f0;
     padding: 3px;
     border-radius: 8px;
     gap: 2px;
   }
-  .speed-box button {
+  .speed-box button, .mode-box button {
     border: none;
     background: transparent;
     padding: 4px 10px;
     font-size: 0.85rem;
     border-radius: 6px;
+    color: #334155;
+    font-weight: 600;
   }
   .speed-box button.active {
     background: #fff;
     color: #dc2626;
     box-shadow: 0 1px 3px rgba(0,0,0,0.12);
   }
+  .mode-box button.active {
+    background: #2563eb;
+    color: #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  }
+  .mode-box button.active.deep {
+    background: #16a34a;
+  }
+  .mode-box button.active.hold {
+    background: #dc2626;
+  }
+
+  /* 三個分子控制按鈕：外觀樣式與行為完全一致 */
+  .mol-group {
+    display: inline-flex;
+    gap: 6px;
+  }
+  .mol-btn {
+    cursor: pointer;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #334155;
+    padding: 6px 13px;
+    border-radius: 8px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    transition: all 0.15s;
+  }
+  .mol-btn:hover {
+    background: #f8fafc;
+    border-color: #94a3b8;
+  }
+  .mol-btn.active {
+    background: #1e293b;
+    color: #ffffff;
+    border-color: #0f172a;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  }
+
   .chk-label {
     display: inline-flex;
     align-items: center;
@@ -103,6 +140,35 @@
     font-weight: 600;
     cursor: pointer;
     padding: 4px 8px;
+  }
+  .status-banner {
+    width: 100%;
+    max-width: 1220px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-left: 5px solid #2563eb;
+    border-radius: 10px;
+    padding: 8px 16px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.92rem;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+    transition: all 0.3s;
+  }
+  .status-badge {
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 6px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    white-space: nowrap;
+    transition: all 0.3s;
+  }
+  .status-desc {
+    color: #334155;
+    line-height: 1.45;
   }
   .canvas-container {
     width: 100%;
@@ -124,7 +190,7 @@
 
 <div class="toolbar">
   <div class="toolbar-title">
-    <span>氣體交換互動動態模擬</span>
+    <span>🫁 氣體交換互動動態模擬</span>
   </div>
   <div class="toolbar-controls">
     <button id="btnPlay" class="primary">⏸ 暫停</button>
@@ -133,13 +199,30 @@
       <button data-speed="1.0" class="active">正常 (1x)</button>
       <button data-speed="1.8">加速 (1.8x)</button>
     </div>
-    <button id="btnFilterAll">顯示全部氣體</button>
-    <button id="btnFilterO2" class="active-filter" >只看氧氣 (O₂)</button>
-    <button id="btnFilterCO2">只看二氧化碳 (CO₂)</button>
+
+    <!-- 呼吸模式控制 -->
+    <div class="mode-box">
+      <button id="btnModeNormal" class="mode-btn active" data-mode="NORMAL">🫁 正常呼吸</button>
+      <button id="btnModeDeep" class="mode-btn" data-mode="DEEP">💨 深呼吸</button>
+      <button id="btnModeHold" class="mode-btn" data-mode="HOLD">🤐 憋氣</button>
+    </div>
+
+    <!-- 葡萄糖、氧氣、二氧化碳獨立開關（預設顯示氧氣，樣式與行為相同） -->
+    <div class="mol-group">
+      <button id="btnToggleO2" class="mol-btn active">氧氣 (O₂)</button>
+      <button id="btnToggleCO2" class="mol-btn">二氧化碳 (CO₂)</button>
+      <button id="btnToggleGlucose" class="mol-btn">葡萄糖</button>
+    </div>
+
     <label class="chk-label">
       <input type="checkbox" id="chkLabels"> 顯示文字
     </label>
   </div>
+</div>
+
+<div class="status-banner" id="statusBanner">
+  <span class="status-badge" id="statusBadge">🫁 正常呼吸</span>
+  <span class="status-desc" id="statusDesc">肺泡正常起伏擴張，紅血球在肺泡微血管吸附氧氣（高血氧）運送至全身組織微血管釋放；組織細胞釋放二氧化碳至微血管呼出。</span>
 </div>
 
 <div class="canvas-container">
@@ -163,19 +246,68 @@
   let running = true;
   let speed = 1.0;
   let simTime = 0;
-  let gasFilter = 'O2';
   let showLabels = false;
+
+  // 三種分子各自分開獨立控制顯示或隱藏（預設顯示氧氣）
+  let showO2 = true;
+  let showCO2 = false;
+  let showGlucose = false;
+
+  // 呼吸模式：'NORMAL' | 'DEEP' | 'HOLD'
+  let breathingMode = 'NORMAL';
+  let holdTimer = 0;
+
+  // 葡萄糖與能量效果
+  const leftGlucoses = [];
+  const energyEffects = [];
+  let leftGlucoseTimer = 0;
 
   const LEFT_BOX = { x: 18, y: 20, w: 492, h: 545 };
   const RIGHT_BOX = { x: 690, y: 20, w: 512, h: 545 };
 
-  // --- 效能優化：共用快取漸層與樣式 ---
-  const offscreenCanvas = document.createElement('canvas');
-  offscreenCanvas.width = W;
-  offscreenCanvas.height = H;
+  // ============================================================================
+  // RBC MULTI-O2 SLOTS HELPER
+  // ============================================================================
+  function getRBCSlotOffset(capacity, slotIndex) {
+    if (capacity === 3) {
+      const s3 = [
+        { x: -9, y: -5 },
+        { x: 9, y: -5 },
+        { x: 0, y: 6 }
+      ];
+      return s3[slotIndex % 3];
+    } else if (capacity === 5) {
+      const s5 = [
+        { x: -10, y: -6 },
+        { x: 10, y: -6 },
+        { x: -10, y: 6 },
+        { x: 10, y: 6 },
+        { x: 0, y: 0 }
+      ];
+      return s5[slotIndex % 5];
+    } else {
+      const s4 = [
+        { x: -9, y: -5 },
+        { x: 9, y: -5 },
+        { x: -9, y: 5 },
+        { x: 9, y: 5 }
+      ];
+      return s4[slotIndex % 4];
+    }
+  }
+
+  function getRBCWorldSlotPos(rbc, slot) {
+    const rot = rbc.angle + Math.PI / 2 + rbc.tilt;
+    const cos = Math.cos(rot);
+    const sin = Math.sin(rot);
+    return {
+      x: rbc.x + (slot.x * cos - slot.y * sin),
+      y: rbc.y + (slot.x * sin + slot.y * cos)
+    };
+  }
 
   // ============================================================================
-  // LEFT DIAGRAM GEOMETRY & PATHS
+  // LEFT DIAGRAM GEOMETRY & PATHS (身體組織)
   // ============================================================================
   function getLeftCapillaryCenter(t) {
     const y = 20 + t * 545;
@@ -222,7 +354,7 @@
   ];
 
   // ============================================================================
-  // RIGHT DIAGRAM GEOMETRY & PATHS
+  // RIGHT DIAGRAM GEOMETRY & PATHS (肺部)
   // ============================================================================
   const rightCapControlPts = [
     { x: 805, y: 20 },
@@ -279,7 +411,7 @@
   const TRACHEA = { x: 965, topY: 20, bottomY: 98, width: 68 };
 
   // ============================================================================
-  // SIMULATION 1: LEFT DIAGRAM (由下往上：t從1.0遞減至0.0)
+  // SIMULATION 1: LEFT DIAGRAM (組織微血管：由下往上流動)
   // ============================================================================
   const leftRBCs = [];
   const leftO2s = [];
@@ -291,20 +423,46 @@
   }
 
   function spawnLeftRBC(t, init = false) {
+    const capacity = 3 + Math.floor(Math.random() * 3);
+    let numO2 = capacity;
+    if (breathingMode === 'HOLD') {
+      const reduction = Math.min(1, holdTimer / 6);
+      numO2 = Math.max(0, Math.floor(capacity * (1 - reduction)));
+    }
+
     const rbc = {
       t,
-      hasO2: init ? (t > 0.42) : true,
-      oxyColor: init ? (t > 0.42 ? 1 : 0.15) : 1,
-      tilt: (Math.random() - 0.5) * 0.35,
-      releaseAtT: 0.25 + Math.random() * 0.45
+      capacity,
+      boundO2s: [],
+      oxyColor: 1,
+      tilt: (Math.random() - 0.5) * 0.35
     };
+    const f = getLeftCapillaryFrame(t, 0);
+    rbc.x = f.x;
+    rbc.y = f.y;
+    rbc.angle = f.angle;
     leftRBCs.push(rbc);
 
-    if (rbc.hasO2) {
-      const o2 = { state: 'ON_RBC', rbc, x: 0, y: 0, rot: (Math.random() - 0.5) * 0.4, alpha: 1 };
-      rbc.boundO2 = o2;
-      leftO2s.push(o2);
+    for (let s = 0; s < numO2; s++) {
+      const releaseAtT = 0.75 - (s / capacity) * 0.48 + (Math.random() - 0.5) * 0.05;
+      if (!init || t > releaseAtT) {
+        const slot = getRBCSlotOffset(capacity, s);
+        const pos = getRBCWorldSlotPos(rbc, slot);
+        const o2 = {
+          state: 'ON_RBC',
+          rbc,
+          slotIdx: s,
+          releaseAtT,
+          x: pos.x,
+          y: pos.y,
+          rot: rbc.angle + Math.PI / 2 + rbc.tilt,
+          alpha: 1
+        };
+        rbc.boundO2s.push(o2);
+        leftO2s.push(o2);
+      }
     }
+    rbc.oxyColor = rbc.capacity > 0 ? (0.15 + 0.85 * (rbc.boundO2s.length / rbc.capacity)) : 0.15;
   }
 
   leftTissueCells.forEach((cell, idx) => {
@@ -326,45 +484,50 @@
 
     for (let i = leftRBCs.length - 1; i >= 0; i--) {
       const rbc = leftRBCs[i];
-      rbc.t -= flowSpeed * dt; // 由下往上遞減
+      rbc.t -= flowSpeed * dt;
       const f = getLeftCapillaryFrame(rbc.t, 0);
       rbc.x = f.x;
       rbc.y = f.y;
       rbc.angle = f.angle;
 
-      const targetColor = rbc.hasO2 ? 1.0 : 0.15;
+      const targetColor = rbc.capacity > 0 ? (0.15 + 0.85 * (rbc.boundO2s.length / rbc.capacity)) : 0.15;
       rbc.oxyColor += (targetColor - rbc.oxyColor) * Math.min(1, dt * 3.5);
 
-      if (rbc.hasO2 && rbc.boundO2 && rbc.t <= rbc.releaseAtT) {
-        rbc.hasO2 = false;
-        const o2 = rbc.boundO2;
-        rbc.boundO2 = null;
-        const candidates = leftTissueCells.filter(c => c.active && Math.abs(c.cy - rbc.y) < 110);
-        const targetCell = candidates.length > 0 ? candidates[Math.floor(Math.random() * candidates.length)] : leftTissueCells[7];
+      for (let j = rbc.boundO2s.length - 1; j >= 0; j--) {
+        const o2 = rbc.boundO2s[j];
+        if (rbc.t <= o2.releaseAtT) {
+          rbc.boundO2s.splice(j, 1);
+          const candidates = leftTissueCells.filter(c => c.active && Math.abs(c.cy - rbc.y) < 115);
+          const targetCell = candidates.length > 0 ? candidates[Math.floor(Math.random() * candidates.length)] : leftTissueCells[7];
 
-        o2.state = 'TO_CELL';
-        o2.startX = rbc.x;
-        o2.startY = rbc.y;
-        o2.targetX = targetCell.cx + (Math.random() - 0.5) * 32;
-        o2.targetY = targetCell.cy + (Math.random() - 0.5) * 28;
-        o2.progress = 0;
+          o2.state = 'TO_CELL';
+          o2.startX = o2.x;
+          o2.startY = o2.y;
+          o2.targetX = targetCell.cx + (Math.random() - 0.5) * 32;
+          o2.targetY = targetCell.cy + (Math.random() - 0.5) * 28;
+          o2.progress = 0;
+          o2.targetCell = targetCell;
+        }
       }
 
       if (rbc.t < -0.08) {
-        if (rbc.boundO2) {
-          const idx = leftO2s.indexOf(rbc.boundO2);
+        rbc.boundO2s.forEach(o2 => {
+          const idx = leftO2s.indexOf(o2);
           if (idx !== -1) leftO2s.splice(idx, 1);
-        }
+        });
         leftRBCs.splice(i, 1);
-        spawnLeftRBC(1.08, false); // 從底部重生
+        spawnLeftRBC(1.08, false);
       }
     }
 
     for (let i = leftO2s.length - 1; i >= 0; i--) {
       const m = leftO2s[i];
       if (m.state === 'ON_RBC') {
-        m.x = m.rbc.x + 4;
-        m.y = m.rbc.y - 3;
+        const slot = getRBCSlotOffset(m.rbc.capacity, m.slotIdx);
+        const pos = getRBCWorldSlotPos(m.rbc, slot);
+        m.x = pos.x;
+        m.y = pos.y;
+        m.rot = m.rbc.angle + Math.PI / 2 + m.rbc.tilt;
       } else if (m.state === 'TO_CELL') {
         m.progress += dt * 0.95;
         const p = Math.min(1, m.progress);
@@ -375,15 +538,109 @@
       } else if (m.state === 'IN_CELL') {
         m.holdTimer += dt;
         m.x += Math.sin(simTime * 4 + i) * 3 * dt;
-        if (m.holdTimer > 2.2) {
+        if (m.holdTimer > 2.0) {
           m.alpha -= dt * 1.1;
           if (m.alpha <= 0) leftO2s.splice(i, 1);
         }
       }
     }
 
+    // 葡萄糖邏輯
+    leftGlucoseTimer += dt;
+    const glucoseInterval = (breathingMode === 'DEEP') ? 0.8 : 1.15;
+    if (leftGlucoseTimer > glucoseInterval && leftGlucoses.length < 8) {
+      leftGlucoseTimer = 0;
+      const offset = (Math.random() - 0.5) * 32;
+      const pos = getLeftCapillaryFrame(1.05, offset);
+      leftGlucoses.push({
+        state: 'IN_PLASMA',
+        t: 1.05,
+        plasmaOffset: offset,
+        diffuseAtT: 0.28 + Math.random() * 0.48,
+        x: pos.x,
+        y: pos.y,
+        rot: Math.random() * Math.PI,
+        alpha: 1,
+        consumed: false
+      });
+    }
+
+    for (let i = leftGlucoses.length - 1; i >= 0; i--) {
+      const g = leftGlucoses[i];
+      if (g.state === 'IN_PLASMA') {
+        g.t -= flowSpeed * dt;
+        const pos = getLeftCapillaryFrame(g.t, g.plasmaOffset);
+        g.x = pos.x;
+        g.y = pos.y;
+        g.rot += dt * 0.6;
+
+        if (g.t <= g.diffuseAtT) {
+          const candidates = leftTissueCells.filter(c => c.active && Math.abs(c.cy - g.y) < 100);
+          const targetCell = candidates.length > 0 ? candidates[Math.floor(Math.random() * candidates.length)] : leftTissueCells[7];
+          g.state = 'TO_CELL';
+          g.startX = g.x;
+          g.startY = g.y;
+          g.targetCell = targetCell;
+          g.targetX = targetCell.cx + (Math.random() - 0.5) * 28;
+          g.targetY = targetCell.cy + (Math.random() - 0.5) * 24;
+          g.progress = 0;
+        }
+        if (g.t < -0.05) leftGlucoses.splice(i, 1);
+      } else if (g.state === 'TO_CELL') {
+        g.progress += dt * 0.9;
+        const p = Math.min(1, g.progress);
+        const ease = 1 - Math.pow(1 - p, 2);
+        g.x = g.startX + (g.targetX - g.startX) * ease;
+        g.y = g.startY + (g.targetY - g.startY) * ease;
+        g.rot += dt * 1.2;
+        if (p >= 1) {
+          g.state = 'IN_CELL';
+          g.holdTimer = 0;
+        }
+      } else if (g.state === 'IN_CELL') {
+        g.holdTimer += dt;
+        g.x += Math.sin(simTime * 3 + i) * 2.5 * dt;
+        g.y += Math.cos(simTime * 3 + i) * 2.5 * dt;
+
+        if (g.holdTimer > 1.2 && !g.consumed) {
+          g.consumed = true;
+          energyEffects.push({
+            x: g.x,
+            y: g.y,
+            life: 1.0,
+            maxLife: 1.0
+          });
+          const targetT = Math.max(0.18, Math.min(0.82, (g.targetCell.cy - 20) / 545));
+          const plasmaOffset = g.targetCell.side === 'L' ? -18 : 18;
+          leftCO2s.push({
+            state: 'TO_PLASMA',
+            startX: g.targetCell.cx + (g.targetCell.side === 'L' ? 12 : -12),
+            startY: g.targetCell.cy,
+            x: g.targetCell.cx,
+            y: g.targetCell.cy,
+            targetT,
+            plasmaOffset,
+            progress: 0,
+            rot: (Math.random() - 0.5) * 0.5,
+            alpha: 1
+          });
+        }
+        if (g.holdTimer > 1.2) {
+          g.alpha -= dt * 1.4;
+          if (g.alpha <= 0) leftGlucoses.splice(i, 1);
+        }
+      }
+    }
+
+    for (let i = energyEffects.length - 1; i >= 0; i--) {
+      const eff = energyEffects[i];
+      eff.life -= dt;
+      if (eff.life <= 0) energyEffects.splice(i, 1);
+    }
+
     leftCO2Timer += dt;
-    if (leftCO2Timer > 0.75) {
+    const co2Interval = (breathingMode === 'HOLD') ? 0.55 : 0.75;
+    if (leftCO2Timer > co2Interval) {
       leftCO2Timer = 0;
       const activeCells = leftTissueCells.filter(c => c.active);
       const cell = activeCells[Math.floor(Math.random() * activeCells.length)];
@@ -411,7 +668,7 @@
       } else if (m.state === 'TO_PLASMA') {
         m.progress += dt * 0.95;
         const p = Math.min(1, m.progress);
-        m.targetT -= flowSpeed * dt * 0.4; // 向上流動
+        m.targetT -= flowSpeed * dt * 0.4;
         const dest = getLeftCapillaryFrame(m.targetT, m.plasmaOffset);
         m.x = m.startX + (dest.x - m.startX) * p;
         m.y = m.startY + (dest.y - m.startY) * p;
@@ -427,7 +684,7 @@
   }
 
   // ============================================================================
-  // SIMULATION 2: RIGHT DIAGRAM (由下往上：t從1.0遞減至0.0)
+  // SIMULATION 2: RIGHT DIAGRAM (肺部)
   // ============================================================================
   const rightRBCs = [];
   const rightO2s = [];
@@ -439,24 +696,44 @@
   }
 
   function spawnRightRBC(t, init = false) {
-    const hasO2 = init ? (t < 0.45) : false;
+    const capacity = 3 + Math.floor(Math.random() * 3);
     const rbc = {
       t,
-      hasO2,
-      incomingO2: null,
-      oxyColor: hasO2 ? 1.0 : 0.15,
-      tilt: (Math.random() - 0.5) * 0.3
+      capacity,
+      boundO2s: [],
+      incomingO2s: [],
+      oxyColor: 0.15,
+      tilt: (Math.random() - 0.5) * 0.3,
+      pickupTimer: Math.random() * 0.12
     };
+    const f = getRightCapillaryFrame(t, 0);
+    rbc.x = f.x;
+    rbc.y = f.y;
+    rbc.angle = f.angle;
     rightRBCs.push(rbc);
 
-    if (hasO2) {
-      const o2 = { state: 'ON_RBC', rbc, x: 0, y: 0, rot: (Math.random() - 0.5) * 0.4, alpha: 1 };
-      rbc.boundO2 = o2;
-      rightO2s.push(o2);
+    if (init && t < 0.45 && breathingMode !== 'HOLD') {
+      const numBound = Math.min(capacity, Math.round(capacity * ((0.45 - t) / 0.25)));
+      for (let s = 0; s < numBound; s++) {
+        const slot = getRBCSlotOffset(capacity, s);
+        const pos = getRBCWorldSlotPos(rbc, slot);
+        const o2 = {
+          state: 'ON_RBC',
+          rbc,
+          slotIdx: s,
+          x: pos.x,
+          y: pos.y,
+          rot: rbc.angle + Math.PI / 2 + rbc.tilt,
+          alpha: 1
+        };
+        rbc.boundO2s.push(o2);
+        rightO2s.push(o2);
+      }
+      rbc.oxyColor = 0.15 + 0.85 * (rbc.boundO2s.length / rbc.capacity);
     }
   }
 
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 7; i++) {
     rightO2s.push({
       state: 'IN_ALVEOLI',
       x: 890 + (Math.random() - 0.5) * 140,
@@ -490,74 +767,97 @@
   function updateRightDiagram(dt) {
     const flowSpeed = 0.14;
 
+    if (breathingMode === 'HOLD') {
+      holdTimer += dt;
+    } else {
+      holdTimer = Math.max(0, holdTimer - dt * 2.5);
+    }
+
     for (let i = rightRBCs.length - 1; i >= 0; i--) {
       const rbc = rightRBCs[i];
-      rbc.t -= flowSpeed * dt; // 由下往上遞減
+      rbc.t -= flowSpeed * dt;
       const f = getRightCapillaryFrame(rbc.t, 0);
       rbc.x = f.x;
       rbc.y = f.y;
       rbc.angle = f.angle;
 
-      const targetColor = rbc.hasO2 ? 1.0 : 0.15;
-      rbc.oxyColor += (targetColor - rbc.oxyColor) * Math.min(1, dt * 3.5);
+      const targetColor = rbc.capacity > 0 ? (0.15 + 0.85 * (rbc.boundO2s.length / rbc.capacity)) : 0.15;
+      rbc.oxyColor += (targetColor - rbc.oxyColor) * Math.min(1, dt * 4.0);
 
-      if (!rbc.hasO2 && !rbc.incomingO2 && rbc.t > 0.28 && rbc.t < 0.68) {
+      rbc.pickupTimer += dt;
+      const canAcceptMore = (rbc.boundO2s.length + rbc.incomingO2s.length < rbc.capacity);
+      if (canAcceptMore && rbc.t > 0.22 && rbc.t < 0.74 && rbc.pickupTimer > 0.13) {
+        rbc.pickupTimer = 0;
         const availO2 = rightO2s.find(m => m.state === 'IN_ALVEOLI');
         if (availO2) {
+          const slotIdx = rbc.boundO2s.length + rbc.incomingO2s.length;
           availO2.state = 'TO_RBC';
           availO2.rbc = rbc;
+          availO2.slotIdx = slotIdx;
           availO2.startX = availO2.x;
           availO2.startY = availO2.y;
           availO2.progress = 0;
-          rbc.incomingO2 = availO2;
+          rbc.incomingO2s.push(availO2);
         }
       }
 
       if (rbc.t < -0.05) {
-        if (rbc.boundO2) {
-          const idx = rightO2s.indexOf(rbc.boundO2);
+        rbc.boundO2s.forEach(o2 => {
+          const idx = rightO2s.indexOf(o2);
           if (idx !== -1) rightO2s.splice(idx, 1);
-        }
-        if (rbc.incomingO2) {
-          const idx = rightO2s.indexOf(rbc.incomingO2);
+        });
+        rbc.incomingO2s.forEach(o2 => {
+          const idx = rightO2s.indexOf(o2);
           if (idx !== -1) rightO2s.splice(idx, 1);
-        }
+        });
         rightRBCs.splice(i, 1);
-        spawnRightRBC(1.05, false); // 從頂部重生
+        spawnRightRBC(1.05, false);
       }
     }
 
-    rightInhaleTimer += dt;
-    if (rightInhaleTimer > 0.65) {
-      rightInhaleTimer = 0;
-      const countInAlveoli = rightO2s.filter(m => m.state === 'TRACHEA_IN' || m.state === 'IN_ALVEOLI').length;
-      if (countInAlveoli < 9) {
-        rightO2s.push({
-          state: 'TRACHEA_IN',
-          startX: TRACHEA.x - 12 + (Math.random() - 0.5) * 18,
-          startY: 16,
-          x: TRACHEA.x - 12,
-          y: 16,
-          targetX: 860 + Math.random() * 140,
-          targetY: 210 + Math.random() * 115,
-          progress: 0,
-          rot: (Math.random() - 0.5) * 0.5,
-          alpha: 1
-        });
+    if (breathingMode !== 'HOLD') {
+      rightInhaleTimer += dt;
+      const inhaleThreshold = (breathingMode === 'DEEP') ? 0.26 : 0.60;
+      const maxAlveoliO2 = (breathingMode === 'DEEP') ? 16 : 9;
+
+      if (rightInhaleTimer > inhaleThreshold) {
+        rightInhaleTimer = 0;
+        const countInAlveoli = rightO2s.filter(m => m.state === 'TRACHEA_IN' || m.state === 'IN_ALVEOLI').length;
+        if (countInAlveoli < maxAlveoliO2) {
+          rightO2s.push({
+            state: 'TRACHEA_IN',
+            startX: TRACHEA.x - 12 + (Math.random() - 0.5) * 18,
+            startY: 16,
+            x: TRACHEA.x - 12,
+            y: 16,
+            targetX: 860 + Math.random() * 140,
+            targetY: 210 + Math.random() * 115,
+            progress: 0,
+            rot: (Math.random() - 0.5) * 0.5,
+            alpha: 1
+          });
+        }
       }
+    } else {
+      rightInhaleTimer = 0;
     }
 
     for (let i = rightO2s.length - 1; i >= 0; i--) {
       const m = rightO2s[i];
       if (m.state === 'TRACHEA_IN') {
-        m.progress += dt * 0.78;
+        const speedFactor = (breathingMode === 'DEEP') ? 1.25 : 0.85;
+        m.progress += dt * speedFactor;
         const p = Math.min(1, m.progress);
         const ctrlX = TRACHEA.x - 10;
         const ctrlY = 145;
         const u = 1 - p;
         m.x = u*u*m.startX + 2*u*p*ctrlX + p*p*m.targetX;
         m.y = u*u*m.startY + 2*u*p*ctrlY + p*p*m.targetY;
-        if (p >= 1) { m.state = 'IN_ALVEOLI'; m.vx = (Math.random() - 0.5) * 20; m.vy = (Math.random() - 0.5) * 20; }
+        if (p >= 1) {
+          m.state = 'IN_ALVEOLI';
+          m.vx = (Math.random() - 0.5) * 20;
+          m.vy = (Math.random() - 0.5) * 20;
+        }
       } else if (m.state === 'IN_ALVEOLI') {
         m.x += m.vx * dt;
         m.y += m.vy * dt;
@@ -565,23 +865,33 @@
         const dist = Math.hypot(dx, dy);
         if (dist > 90) { m.vx -= (dx / dist) * 35 * dt; m.vy -= (dy / dist) * 35 * dt; }
       } else if (m.state === 'TO_RBC') {
-        m.progress += dt * 1.15;
+        m.progress += dt * 1.55;
         const p = Math.min(1, m.progress);
-        const rbc = m.rbc;
-        m.x = m.startX + (rbc.x - m.startX) * p;
-        m.y = m.startY + (rbc.y - m.startY) * p;
-        if (p >= 1) { m.state = 'ON_RBC'; rbc.hasO2 = true; rbc.boundO2 = m; rbc.incomingO2 = null; }
+        const slot = getRBCSlotOffset(m.rbc.capacity, m.slotIdx);
+        const target = getRBCWorldSlotPos(m.rbc, slot);
+        m.x = m.startX + (target.x - m.startX) * p;
+        m.y = m.startY + (target.y - m.startY) * p;
+        if (p >= 1) {
+          m.state = 'ON_RBC';
+          const inIdx = m.rbc.incomingO2s.indexOf(m);
+          if (inIdx !== -1) m.rbc.incomingO2s.splice(inIdx, 1);
+          m.rbc.boundO2s.push(m);
+        }
       } else if (m.state === 'ON_RBC') {
-        m.x = m.rbc.x + 3;
-        m.y = m.rbc.y - 3;
+        const slot = getRBCSlotOffset(m.rbc.capacity, m.slotIdx);
+        const pos = getRBCWorldSlotPos(m.rbc, slot);
+        m.x = pos.x;
+        m.y = pos.y;
+        m.rot = m.rbc.angle + Math.PI / 2 + m.rbc.tilt;
       }
     }
 
     rightPlasmaCO2Timer += dt;
-    if (rightPlasmaCO2Timer > 0.72) {
+    const co2Rate = (breathingMode === 'HOLD') ? 0.5 : 0.72;
+    if (rightPlasmaCO2Timer > co2Rate) {
       rightPlasmaCO2Timer = 0;
       const offset = (Math.random() < 0.5) ? 16 : -16;
-      const pos = getRightCapillaryFrame(1.0, offset); // 從底部生成 CO2
+      const pos = getRightCapillaryFrame(1.0, offset);
       rightCO2s.push({
         state: 'IN_PLASMA',
         t: 1.03,
@@ -597,7 +907,7 @@
     for (let i = rightCO2s.length - 1; i >= 0; i--) {
       const m = rightCO2s[i];
       if (m.state === 'IN_PLASMA') {
-        m.t -= flowSpeed * dt; // 由下往上遞減
+        m.t -= flowSpeed * dt;
         const pos = getRightCapillaryFrame(m.t, m.plasmaOffset);
         m.x = pos.x;
         m.y = pos.y;
@@ -611,18 +921,41 @@
           m.progress = 0;
         }
       } else if (m.state === 'TO_ALVEOLI') {
-        m.progress += dt * 1.0;
+        m.progress += dt * 1.1;
         const p = Math.min(1, m.progress);
         m.x = m.startX + (m.targetX - m.startX) * p;
         m.y = m.startY + (m.targetY - m.startY) * p;
         if (p >= 1) {
+          if (breathingMode === 'HOLD') {
+            m.state = 'ALVEOLI_STUCK';
+            m.vx = (Math.random() - 0.5) * 18;
+            m.vy = (Math.random() - 0.5) * 18;
+          } else {
+            m.state = 'TRACHEA_OUT';
+            m.startX = m.x;
+            m.startY = m.y;
+            m.progress = 0;
+          }
+        }
+      } else if (m.state === 'ALVEOLI_STUCK') {
+        if (breathingMode !== 'HOLD') {
           m.state = 'TRACHEA_OUT';
           m.startX = m.x;
           m.startY = m.y;
           m.progress = 0;
+        } else {
+          m.x += m.vx * dt;
+          m.y += m.vy * dt;
+          const dx = m.x - 910, dy = m.y - 250;
+          const dist = Math.hypot(dx, dy);
+          if (dist > 90) {
+            m.vx -= (dx / dist) * 35 * dt;
+            m.vy -= (dy / dist) * 35 * dt;
+          }
         }
       } else if (m.state === 'TRACHEA_OUT') {
-        m.progress += dt * 0.72;
+        const outSpeed = (breathingMode === 'DEEP') ? 1.05 : 0.75;
+        m.progress += dt * outSpeed;
         const p = Math.min(1, m.progress);
         const ctrlX = TRACHEA.x + 14;
         const ctrlY = 140;
@@ -638,10 +971,10 @@
   }
 
   // ============================================================================
-  // RENDERING FUNCTIONS (已進行效能與繪製精簡優化)
+  // RENDERING FUNCTIONS
   // ============================================================================
   function drawO2(x, y, rot = 0, scale = 1, alpha = 1) {
-    if (gasFilter === 'CO2') return;
+    if (!showO2) return;
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(rot);
@@ -664,7 +997,7 @@
   }
 
   function drawCO2(x, y, rot = 0, scale = 1, alpha = 1) {
-    if (gasFilter === 'O2') return;
+    if (!showCO2) return;
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(rot);
@@ -692,15 +1025,78 @@
     ctx.restore();
   }
 
+  function drawGlucose(x, y, rot = 0, scale = 1, alpha = 1) {
+    if (!showGlucose) return;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rot);
+    ctx.scale(scale, scale);
+    ctx.globalAlpha = alpha;
+
+    const r = 7.6;
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = (i * Math.PI) / 3;
+      const px = r * Math.cos(a);
+      const py = r * Math.sin(a);
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+
+    ctx.lineWidth = 3.6;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.stroke();
+
+    ctx.fillStyle = '#059669';
+    ctx.fill();
+
+    ctx.lineWidth = 1.6;
+    ctx.strokeStyle = '#34d399';
+    ctx.stroke();
+
+    ctx.font = 'bold 8.5px sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('G', 0, 0.5);
+
+    ctx.restore();
+  }
+
+  function drawEnergyEffect(eff) {
+    if (!showGlucose) return;
+    ctx.save();
+    const progress = 1 - (eff.life / eff.maxLife);
+    const curY = eff.y - progress * 24;
+    const alpha = Math.max(0, eff.life / eff.maxLife);
+    ctx.globalAlpha = alpha;
+
+    ctx.beginPath();
+    ctx.arc(eff.x, curY, 8 + progress * 14, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(234, 179, 8, ${alpha * 0.85})`;
+    ctx.lineWidth = 2.2;
+    ctx.stroke();
+
+    ctx.font = 'bold 13px "PingFang TC", "Microsoft JhengHei", sans-serif';
+    ctx.fillStyle = '#d97706';
+    ctx.lineWidth = 3.5;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.strokeText('ATP ⚡', eff.x - 18, curY - 3);
+    ctx.fillText('ATP ⚡', eff.x - 18, curY - 3);
+
+    ctx.restore();
+  }
+
   function drawRBC(rbc) {
     ctx.save();
     ctx.translate(rbc.x, rbc.y);
     ctx.rotate(rbc.angle + Math.PI / 2 + rbc.tilt);
 
     const o = rbc.oxyColor;
-    const rMain = Math.round(160 + 75 * o);
-    const gMain = Math.round(20 + 14 * o);
-    const bMain = Math.round(26 - 12 * o);
+    const rMain = Math.round(155 + 85 * o);
+    const gMain = Math.round(18 + 14 * o);
+    const bMain = Math.round(28 - 14 * o);
 
     ctx.beginPath();
     ctx.ellipse(0, 0, 27, 20, 0, 0, Math.PI * 2);
@@ -709,7 +1105,7 @@
 
     ctx.beginPath();
     ctx.ellipse(0, 0, 14, 10, 0, 0, Math.PI * 2);
-    ctx.fillStyle = `rgb(${Math.round(rMain * 0.65)}, 10, 10)`;
+    ctx.fillStyle = `rgb(${Math.round(rMain * 0.62)}, 10, 10)`;
     ctx.fill();
 
     ctx.restore();
@@ -721,7 +1117,7 @@
     ctx.rotate(cell.rot);
 
     ctx.beginPath();
-    const pts = 20; // 減少頂點以提昇效能
+    const pts = 20;
     for (let i = 0; i <= pts; i++) {
       const a = (i / pts) * Math.PI * 2;
       const px = Math.cos(a) * cell.rx;
@@ -755,7 +1151,7 @@
 
     const capR = 42;
     const leftEdge = [], rightEdge = [];
-    const N = 35; // 減少採樣點以優化效能
+    const N = 35;
     for (let i = 0; i <= N; i++) {
       const t = i / N;
       leftEdge.push(getLeftCapillaryFrame(t, -capR));
@@ -778,7 +1174,9 @@
     });
 
     leftRBCs.forEach(drawRBC);
-    leftO2s.forEach(m => drawO2(m.x, m.y, m.rot, 1.25, m.alpha));
+    leftGlucoses.forEach(g => drawGlucose(g.x, g.y, g.rot, 1.25, g.alpha));
+    energyEffects.forEach(drawEnergyEffect);
+    leftO2s.forEach(m => drawO2(m.x, m.y, m.rot, m.state === 'ON_RBC' ? 0.95 : 1.25, m.alpha));
     leftCO2s.forEach(m => drawCO2(m.x, m.y, m.rot, 1.22, m.alpha));
 
     ctx.restore();
@@ -796,7 +1194,15 @@
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(RIGHT_BOX.x, RIGHT_BOX.y, RIGHT_BOX.w, RIGHT_BOX.h);
 
-    const breath = 1 + 0.014 * Math.sin(simTime * 2.2);
+    let breathAmp = 0.016;
+    let breathFreq = 2.2;
+    if (breathingMode === 'DEEP') {
+      breathAmp = 0.048;
+      breathFreq = 1.8;
+    } else if (breathingMode === 'HOLD') {
+      breathAmp = 0;
+    }
+    const breath = 1 + breathAmp * Math.sin(simTime * breathFreq);
 
     ctx.save();
     const trLeft = TRACHEA.x - TRACHEA.width / 2;
@@ -809,6 +1215,20 @@
     ctx.lineTo(trLeft - 10, 110);
     ctx.closePath();
     ctx.fill();
+
+    if (breathingMode === 'HOLD') {
+      ctx.fillStyle = 'rgba(239, 68, 68, 0.22)';
+      ctx.fillRect(trLeft, 20, TRACHEA.width, 90);
+      ctx.fillStyle = '#dc2626';
+      ctx.font = 'bold 14px "PingFang TC", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('氣流停止', TRACHEA.x, 62);
+    } else if (breathingMode === 'DEEP') {
+      ctx.fillStyle = '#16a34a';
+      ctx.font = 'bold 13px "PingFang TC", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('💨 大量通氣', TRACHEA.x, 60);
+    }
     ctx.restore();
 
     const sacs = [
@@ -830,7 +1250,7 @@
 
     const capR = 38;
     const outerEdge = [], innerEdge = [];
-    const N = 45; // 效能優化採樣數
+    const N = 45;
     for (let i = 0; i <= N; i++) {
       const t = i / N;
       outerEdge.push(getRightCapillaryFrame(t, capR));
@@ -853,29 +1273,13 @@
     });
 
     rightRBCs.forEach(drawRBC);
-    rightO2s.forEach(m => drawO2(m.x, m.y, m.rot, 1.25, m.alpha));
+    rightO2s.forEach(m => drawO2(m.x, m.y, m.rot, m.state === 'ON_RBC' ? 0.95 : 1.25, m.alpha));
     rightCO2s.forEach(m => drawCO2(m.x, m.y, m.rot, 1.22, m.alpha));
 
     ctx.restore();
     ctx.strokeStyle = '#cbd5e1';
     ctx.lineWidth = 1.5;
     ctx.strokeRect(RIGHT_BOX.x, RIGHT_BOX.y, RIGHT_BOX.w, RIGHT_BOX.h);
-  }
-
-  function renderCenterLegend() {
-    const cx = 600;
-    ctx.save();
-    const prevFilter = gasFilter;
-    gasFilter = 'ALL';
-    drawO2(cx, 208, 0, 1.85);
-    ctx.font = '21px "PingFang TC", "Microsoft JhengHei", sans-serif';
-    ctx.fillStyle = '#222';
-    ctx.fillText('（氧氣）', cx, 245);
-
-    drawCO2(cx, 280, 0, 1.85);
-    ctx.fillText('（二氧化碳）', cx, 318);
-    gasFilter = prevFilter;
-    ctx.restore();
   }
 
   function renderAnnotations() {
@@ -922,12 +1326,29 @@
     drawText('組織細胞', 65, 68, 25);
     drawText('微血管', 240, 68, 25);
 
-    if (gasFilter !== 'O2') { drawCO2(46, 294, 0, 1.3); drawText('二氧化碳', 68, 303, 24); drawArrow(180, 294, 248, 294, '#787c82'); }
-    if (gasFilter !== 'CO2') { drawO2(118, 356, 0, 1.3); drawText('氧氣', 135, 365, 24); drawArrow(258, 356, 190, 356, '#d91e18'); }
+    if (showCO2) {
+      drawCO2(46, 294, 0, 1.3);
+      drawText('二氧化碳', 68, 303, 24);
+      drawArrow(180, 294, 248, 294, '#787c82');
+    }
+    if (showO2) {
+      drawO2(118, 356, 0, 1.3);
+      drawText('氧氣', 135, 365, 24);
+      drawArrow(258, 356, 190, 356, '#d91e18');
+    }
+    if (showGlucose) {
+      drawGlucose(118, 418, 0, 1.3);
+      drawText('葡萄糖', 135, 427, 24, '#059669');
+      drawArrow(258, 418, 190, 418, '#059669');
+    }
 
     drawText('氣管', 942, 48, 20, '#881337');
-    if (gasFilter !== 'CO2') drawArrow(946, 58, 946, 98, '#d91e18');
-    if (gasFilter !== 'O2') drawArrow(984, 98, 984, 58, '#787c82');
+    if (breathingMode !== 'HOLD') {
+      if (showO2) drawArrow(946, 58, 946, 98, '#d91e18');
+      if (showCO2) drawArrow(984, 98, 984, 58, '#787c82');
+    } else {
+      drawText('⛔ 氣流中斷', 920, 84, 16, '#dc2626');
+    }
 
     drawText('肺泡', 1105, 288, 25);
     drawText('微血管', 1085, 405, 25);
@@ -952,14 +1373,27 @@
     ctx.clearRect(0, 0, W, H);
     renderLeftDiagram();
     renderRightDiagram();
-    renderCenterLegend();
+
+    // 中央簡約優雅分割線
+    ctx.save();
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.moveTo(600, 25);
+    ctx.lineTo(600, 560);
+    ctx.stroke();
+    ctx.restore();
+
     renderAnnotations();
 
     requestAnimationFrame(tick);
   }
   requestAnimationFrame(tick);
 
-  // UI Listeners
+  // ============================================================================
+  // UI LISTENERS
+  // ============================================================================
   const btnPlay = document.getElementById('btnPlay');
   btnPlay.addEventListener('click', () => {
     running = !running;
@@ -971,21 +1405,65 @@
     btn.addEventListener('click', () => {
       document.querySelectorAll('.speed-box button').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-        speed = parseFloat(btn.dataset.speed);
+      speed = parseFloat(btn.dataset.speed);
     });
   });
 
-  const filterBtns = [
-    { id: 'btnFilterAll', val: 'ALL' },
-    { id: 'btnFilterO2', val: 'O2' },
-    { id: 'btnFilterCO2', val: 'CO2' }
-  ];
-  filterBtns.forEach(item => {
-    document.getElementById(item.id).addEventListener('click', (e) => {
-      filterBtns.forEach(b => document.getElementById(b.id).classList.remove('active-filter'));
-      e.currentTarget.classList.add('active-filter');
-      gasFilter = item.val;
+  // 呼吸模式切換
+  function updateStatusBanner() {
+    const badge = document.getElementById('statusBadge');
+    const desc = document.getElementById('statusDesc');
+    const banner = document.getElementById('statusBanner');
+
+    if (breathingMode === 'NORMAL') {
+      banner.style.borderLeftColor = '#2563eb';
+      badge.style.background = '#eff6ff';
+      badge.style.color = '#1d4ed8';
+      badge.textContent = '🫁 正常呼吸';
+      desc.textContent = '肺泡正常起伏擴張，紅血球在肺泡微血管吸附氧氣（高血氧）運送至全身組織微血管釋放；組織細胞釋放二氧化碳至微血管呼出。';
+    } else if (breathingMode === 'DEEP') {
+      banner.style.borderLeftColor = '#16a34a';
+      badge.style.background = '#dcfce7';
+      badge.style.color = '#15803d';
+      badge.textContent = '💨 深呼吸';
+      desc.textContent = '深呼吸中：肺泡大幅膨脹吸入大量新鮮氧氣！血氧飽和度達最高，紅血球充份結合氧氣，組織細胞獲得極充沛氧氣與能量！';
+    } else if (breathingMode === 'HOLD') {
+      banner.style.borderLeftColor = '#dc2626';
+      badge.style.background = '#fee2e2';
+      badge.style.color = '#b91c1c';
+      badge.textContent = '🤐 憋氣中';
+      desc.textContent = '憋氣中：氣道停止進出氣，肺泡殘存氧氣被迅速吸收耗盡；後續紅血球無法獲得氧氣呈缺氧暗色，二氧化碳大量滯留無法排出！';
+    }
+  }
+
+  document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active', 'deep', 'hold'));
+      btn.classList.add('active');
+      breathingMode = btn.dataset.mode;
+      if (breathingMode === 'DEEP') btn.classList.add('deep');
+      if (breathingMode === 'HOLD') btn.classList.add('hold');
+      updateStatusBanner();
     });
+  });
+
+  // 葡萄糖、氧氣、二氧化碳獨立控制切換（行為與顏色樣式一致）
+  const btnToggleO2 = document.getElementById('btnToggleO2');
+  btnToggleO2.addEventListener('click', () => {
+    showO2 = !showO2;
+    btnToggleO2.classList.toggle('active', showO2);
+  });
+
+  const btnToggleCO2 = document.getElementById('btnToggleCO2');
+  btnToggleCO2.addEventListener('click', () => {
+    showCO2 = !showCO2;
+    btnToggleCO2.classList.toggle('active', showCO2);
+  });
+
+  const btnToggleGlucose = document.getElementById('btnToggleGlucose');
+  btnToggleGlucose.addEventListener('click', () => {
+    showGlucose = !showGlucose;
+    btnToggleGlucose.classList.toggle('active', showGlucose);
   });
 
   document.getElementById('chkLabels').addEventListener('change', (e) => {
