@@ -1,137 +1,152 @@
-# TEST READY: Automated E2E Verification Report (Round 1 & Round 2)
+# TEST READY: Automated E2E Verification Report — Five Sensory Receptors Dynamic Conduction Simulator
 
-- **Date**: 2026-10-23
+- **Date**: 2026-11-09
 - **Repository**: `chihhsiangchien.github.io`
-- **Test Suites**:
-  - Round 1: `tests/test_e2e_suite.py` (91 tests)
-  - Round 2: `tests/test_round2_suite.py` (63 tests)
-  - Link & Directory Integrity: `check_unlinked_projects.py`
-- **Integrity Status**: Round 1 PASS (100.0%) | Round 2 Module Features PASS (61/61 passed, 2 pending Milestone 2.4 homepage mounting)
+- **Module**: `neuro_physiology/receptors.html` (五大感覺受器動態傳導模擬器)
+- **Test Suite**: `tests/test_receptors_conduction.py` (30 test cases)
+- **Harness Architecture**: Python `unittest` + Ephemeral Static HTTP Server (`TCPServer` on dynamic port) + BeautifulSoup DOM Parser + Headless Node.js VM Runtime Evaluator
+- **Integrity Status**: 28 / 30 tests passed (93.3% pass rate; 2 pending Milestone 3 bidirectional navigation mounting)
 
 ---
 
 ## 1. Executive Summary
 
-A comprehensive, automated 4-tier End-to-End (E2E) verification test harness has been implemented across two suites:
-1. `tests/test_e2e_suite.py` covers Round 1 features (R1 through R8) with 91 test cases.
-2. `tests/test_round2_suite.py` covers Round 2 features (F1 through F19) with 63 test cases.
+An independent, opaque-box, 4-Tier (+ Tier 5 Adversarial Stress) End-to-End (E2E) verification test suite has been established in `tests/test_receptors_conduction.py` for the Five Sensory Receptors Conduction Simulator project.
+
+The test suite exercises the complete physiological simulation across all 5 sensory receptor pathways (視覺 Vision, 聽覺 Hearing, 嗅覺 Smell, 味覺 Taste, 皮膚 Skin), verifying the canonical 4-stage conduction process:
+$$\text{刺激 (Stimulus)} \longrightarrow \text{受器 (Receptor)} \longrightarrow \text{神經 (Nerve)} \longrightarrow \text{腦 (Brain)}$$
 
 ### Verification Summary Table
 
-| Metric | Round 1 Threshold | Round 1 Result | Round 2 Threshold | Round 2 Result | Status |
-|--------|-------------------|----------------|-------------------|----------------|:------:|
-| Tier 1: Feature Coverage | ≥5 per feature (≥40) | 40 / 40 passed | ≥5 per group (≥25) | 25 / 27 passed* | ⚠️ 2 Pending M2.4 |
-| Tier 2: Boundary & Corner Cases | ≥5 per feature (≥40) | 40 / 40 passed | ≥5 per group (≥25) | 25 / 25 passed | ✅ PASS |
-| Tier 3: Cross-Feature Combinations | Pairwise coverage (≥5) | 6 / 6 passed | Cross-Module (≥5) | 6 / 6 passed | ✅ PASS |
-| Tier 4: Classroom Scenarios | 5 realistic scenarios | 5 / 5 passed | 5 inquiry scenarios | 5 / 5 passed | ✅ PASS |
-| **Total Test Count** | **≥90 tests** | **91 tests (100%)** | **≥60 tests** | **63 tests (96.8%)** | **READY FOR GATE** |
-| Execution Time | <30s | 3.53s | <30s | 3.81s | ✅ PASS |
+| Metric | Milestone 1 Threshold | Current Result | Status |
+|--------|----------------------|----------------|:------:|
+| Tier 1: Feature Coverage | ≥10 feature tests | 9 / 11 passed | ⚠️ 2 Pending M3 mounting |
+| Tier 2: Boundary & Corner Cases | ≥5 boundary tests | 6 / 6 passed | ✅ PASS (100%) |
+| Tier 3: VM Runtime & Cross-Feature | Pairwise & VM tests | 5 / 5 passed | ✅ PASS (100%) |
+| Tier 4: Curriculum Anatomical Terms | 15 terms + 5 narratives | 6 / 6 passed | ✅ PASS (100%) |
+| Tier 5: Adversarial Stress | Security & fuzzing | 2 / 2 passed | ✅ PASS (100%) |
+| **Total Test Count** | **≥25 tests** | **30 tests (93.3%)** | **READY FOR GATE** |
+| Execution Time | <15s | 4.15s | ✅ PASS |
 
-*\*Note on Round 2 Tier 1 Status*: All 4 standalone module applications (`cell-3d/`, `foodChain/`, `energyPyramid/`, `OmNomNom/`) have 100% pass rates across all unit, functional, mathematical, and boundary tests (61/61 tests passing). The remaining 2 tests (`test_f24_homepage_cell3d_mounting_target` and `test_f25_homepage_ecology_mounting_targets`) test Milestone 2.4 (mounting links into `index.html`), which is scheduled to mount upon M2.1–M2.3 completion.
+*\*Note on Milestone 3 Pending Items*:
+All core simulation components, canvas rendering algorithms, playback engines, and curriculum contents in `neuro_physiology/receptors.html` achieve a **100% PASS RATE (28/28 passed)**. The 2 failing tests (`test_t1_10_lab_to_receptors_forwardlink` and `test_t1_11_homepage_to_receptors_mounting`) are explicitly scheduled for **Milestone 3 (Bidirectional Navigation Integration)**, which will mount links into `neuro_physiology/index.html` and root `index.html`.
 
 ---
 
 ## 2. Test Execution Commands
 
 ```bash
-# 1. Round 1 Automated E2E Suite (91 tests)
-python3 tests/test_e2e_suite.py
-
-# 2. Round 2 Automated E2E Suite (63 tests)
-python3 tests/test_round2_suite.py
-
-# 3. Static Link Integrity and Directory Inspection
-python3 check_unlinked_projects.py
+# Execute the comprehensive 4-Tier test suite
+python -m unittest tests/test_receptors_conduction.py
 ```
 
-### Round 2 Execution Output Log
+### Execution Output Log
 
 ```
+.........FF...................
 ======================================================================
-📊 Round 2 Test Results Summary:
-• Total Tests Run: 63
-• Failures: 2 (M2.4 index.html mounting pending)
-• Errors: 0
-• Success Rate: 96.8% (61/63 passed)
+FAIL: test_t1_10_lab_to_receptors_forwardlink (tests.test_receptors_conduction.TestTier1FeatureCoverage.test_t1_10_lab_to_receptors_forwardlink)
+Verify neuro_physiology/index.html contains forward link to receptors.html.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\User\Documents\GitHub\chihhsiangchien.github.io\tests\test_receptors_conduction.py", line 388, in test_t1_10_lab_to_receptors_forwardlink
+    self.assertIsNotNone(link, "neuro_physiology/index.html must have link to receptors.html")
+AssertionError: unexpectedly None : neuro_physiology/index.html must have link to receptors.html
+
 ======================================================================
-Ran 63 tests in 3.807s
+FAIL: test_t1_11_homepage_to_receptors_mounting (tests.test_receptors_conduction.TestTier1FeatureCoverage.test_t1_11_homepage_to_receptors_mounting)
+Verify repository root index.html mounts receptors.html under 神經與感覺.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\User\Documents\GitHub\chihhsiangchien.github.io\tests\test_receptors_conduction.py", line 400, in test_t1_11_homepage_to_receptors_mounting
+    self.assertTrue(
+AssertionError: None is not true : Root index.html must mount neuro_physiology/receptors.html under 神經與感覺
+
+----------------------------------------------------------------------
+Ran 30 tests in 4.150s
+
+FAILED (failures=2)
 ```
 
 ---
 
-## 3. Round 2 Feature Coverage Matrix (Tiers 1 to 4)
+## 3. Feature Inventory & Test Coverage Matrix
 
-| # | Feature Group | Scope | Tier 1 (Coverage) | Tier 2 (Boundary) | Tier 3 (Cross) | Tier 4 (Scenario) | Status |
-|---|---------------|-------|:-----------------:|:-----------------:|:--------------:|:-----------------:|:------:|
-| 1 | F1-F7: 3D Cell Suite (`cell-3d/`) | ORIGINAL_REQUEST Follow-up §R1 | 7 / 7 | 5 / 5 | ✓ | ✓ | ✅ PASS |
-| 2 | F8-F11: Food Chain & Food Web (`foodChain/`) | ORIGINAL_REQUEST Follow-up §R2 | 5 / 5 | 5 / 5 | ✓ | ✓ | ✅ PASS |
-| 3 | F12-F14: Energy Pyramid (`energyPyramid/`) | ORIGINAL_REQUEST Follow-up §R3 | 5 / 5 | 5 / 5 | ✓ | ✓ | ✅ PASS |
-| 4 | F15-F16: OmNomNom Board Game (`OmNomNom/`) | ORIGINAL_REQUEST Follow-up §R4 | 5 / 5 | 5 / 5 | ✓ | ✓ | ✅ PASS |
-| 5 | F17-F19: Homepage Hub Mounting (`index.html`) | ORIGINAL_REQUEST Follow-up §R5 | 3 / 5 | 5 / 5 | ✓ | ✓ | ⚠️ Pending M2.4 |
-
----
-
-## 4. Round 2 Tier-by-Tier Verification Details
-
-### Tier 1: Feature Coverage (27 Tests)
-- **F1-F7 (`cell-3d`)**:
-  - `cell-3d/index.html` valid HTML5 doctype, viewport, UTF-8 charset, and `<title>`.
-  - Three.js r160 ES module & addons importmap configuration.
-  - 5 tab buttons with `data-model` attributes (`animalCell`, `mitochondria`, `chloroplast`, `rbc`, `membrane`).
-  - Floating toolbar with `#cutawayBtn`, `#resetCameraBtn`, `#autoRotateBtn`, `#zoomInBtn`, `#zoomOutBtn`.
-  - Glassmorphic `#info-card` HUD with title, badge, summary, membrane type, dimensions, structure tags, and curriculum facts.
-  - `#canvas-container` with CSS `touch-action: none` for mobile orbit rotation.
-  - All 5 procedural model files (`animalCell.js`, `chloroplast.js`, `membrane.js`, `mitochondria.js`, `rbc.js`) and `cell-3d/js/data.js` present on disk with zero external asset dependencies.
-- **F8-F11 (`foodChain`)**:
-  - Dual-mode tab switcher (`#tab-simple` and `#tab-complex`).
-  - Unit 1 canvas `#chainCanvas`, toolbar controls (`#chainPlayPauseBtn`, `#chainResetBtn`, `#chainSpeedSlider`, spawn buttons), and stats HUD (`#wolfCount`, `#sheepCount`, `#grassCount`).
-  - Unit 2 topology canvas `#webNetworkCanvas`, Chart.js canvas `#populationChart`, preset selector `#presetSelect`, and species inspector `#speciesCard`.
-  - Stable Lotka-Volterra mathematical formulation with carrying capacity $K$ and Holling Type II functional response verified across 100 iterations in Node.js (strictly positive, finite, non-NaN).
-- **F12-F14 (`energyPyramid`)**:
-  - 4 trophic tier dropzones (`#tier-producers`, `#tier-primary`, `#tier-secondary`, `#tier-tertiary`).
-  - `data/cards.json` containing 16 ecological cards spanning all 4 tiers with Traditional Chinese annotations.
-  - Web Audio synthesizer functions (`playTone`, `playChime`, `playBuzz`, `playFanfare`) with 0 blocking `alert()` dialogs.
-  - Lindeman 10% law dynamic calculation updating `#val-producers` (10,000 J), `#val-primary` (1,000 J), `#val-secondary` (100 J), and `#val-tertiary` (10 J).
-  - 90% heat dissipation visually represented (`#loss-primary`, `#loss-secondary`, `#loss-tertiary`, `#totalHeatLostVal`, `#totalLostPercent`).
-- **F15-F16 (`OmNomNom`)**:
-  - Rules button `#rulesBtn`, accessible dialog `#rulesModal` with close button `#closeModalBtn`, and rules comparison table for 9 Taiwan wetland species across 3 parallel food chains.
-  - Animated dice engine `#diceBtn`, visual `#diceFace`, result `#diceResult`, and rolling state lock (`isRolling`).
-  - 700x600 canvas `#canvas` and 9 wetland organism card definitions.
-  - Pawn progression state `(pos + roll) % 9` with +15 energy migration lap wrap bonus upon moving from tile 8 to tile 0.
-  - Web Audio sound synthesizer (`playDiceRattle`, `playHop`, `playEatChime`, `playLapFanfare`, `playHazardSound`) without external audio file dependencies.
-- **F17-F19 (`index.html` & links)**:
-  - Validated "細胞" and "生態" curriculum chapter headers exist.
-  - Link syntax verification confirmed 0 leading whitespace defects in any `href=` attributes.
-  - `check_unlinked_projects.py` script verified runnable with 0 syntax or dead link errors.
-
-### Tier 2: Boundary & Corner Cases (25 Tests)
-- **EnergyPyramid**: Zero or negative energy inputs gracefully fall back to default without NaN; large-scale inputs (10,000,000 J) format with comma separators; non-numeric inputs handle cleanly; efficiency slider strictly bounded within 5% to 20%; wrong tier card drops trigger error buzz sound and reject placement.
-- **Cell-3D**: Rapid switching across all 5 models calls `dispose()` on geometries/materials preventing memory leaks; window resize events synchronize camera aspect ratio and renderer size; cutaway toggle maintains clipping plane configuration; OrbitControls clamps min/max zoom distances; off-canvas pointer coordinates handle safely in Raycaster.
-- **FoodChain & FoodWeb**: Extreme initial populations or 0 preys handle safely without division by zero; zero sheep/grass does not crash spatial animation loop; rapid switching between Unit 1 and Unit 2 triggers `handleResize()`; speed sliders clamped within [0.5, 3.0]; population intervention buttons clamp populations within $[0, 1.5 K]$.
-- **OmNomNom**: Rapid clicking on dice button ignored while rolling animation is active; board loop indexing wraps cleanly from 8 to 0; energy penalties cannot drop player energy below 0; modal dialogs cleanly toggle on Escape key; canvas CSS provides responsive max-width rules for mobile screens.
-- **Cross-Module Integrity**: Relative links avoid illegal multi-level parent directory escapes; UTF-8 charset declared on all HTML files; query strings and hash anchors tolerated without script crashes; legacy 3D directories (`threeJsModel`, `3Dcell`, `insideTheCell`) feature upgrade notices pointing to `cell-3d/index.html`; case sensitivity verified.
-
-### Tier 3: Cross-Feature Combinations (6 Tests)
-- **T3.1 (Navigation Flow)**: HTTP GET requests from `index.html` to `cell-3d/`, `foodChain/`, `energyPyramid/`, and `OmNomNom/` return HTTP 200 OK with non-empty HTML bodies, valid titles, and viewport tags.
-- **T3.2 (Asset Integrity Matrix)**: All 20 critical CSS stylesheets, JavaScript files, images, and JSON data files return HTTP 200 OK without 404s.
-- **T3.3 (Web Audio Lifecycle)**: Web Audio contexts properly check for browser `suspended` states and resume on user gesture without audio buffer leaks or autoplay exceptions.
-- **T3.4 (CDN Availability)**: Three.js r160 ES modules and Chart.js CDN links resolve over secure HTTPS.
-- **T3.5 (Ecological Curriculum Continuum)**: Verified consistency across producers, primary consumers, secondary consumers, and apex predators spanning `foodChain`, `energyPyramid`, and `OmNomNom`.
-- **T3.6 (Multi-Device Responsive Matrix)**: Verified viewport meta tag configuration and responsive styling across mobile (375x667), tablet (768x1024), and desktop (1920x1080).
-
-### Tier 4: Real-World Student Inquiry Scenarios (5 Tests)
-- **Scenario 1 (Cell-3D Multi-Model Exploration)**: Student investigates animal cell panorama, toggles 1/4 cutaway to examine internal organelles, switches through Mitochondria (cristae & mtDNA), Chloroplast (thylakoids & stroma), RBC (biconcave SA/V ratio), and Membrane (phospholipid bilayer & channel proteins), reading Traditional Chinese HUD facts.
-- **Scenario 2 (Food Chain & Food Web Inquiry)**: Student observes spatial wolf-sheep-grass predation in Unit 1, switches to Unit 2 Taiwan native food web, examines Taiwan Black Bear diet, simulates drought perturbation, and observes Chart.js population curves stabilizing without mathematical collapse.
-- **Scenario 3 (Energy Pyramid Lindeman Calculation)**: Student places cards into 4 trophic tiers with audio chime feedback, then uses Lindeman 10% calculator with custom baseline energy inputs to verify 10,000 -> 1,000 -> 100 -> 10 J trophic scaling and 90% heat dissipation.
-- **Scenario 4 (OmNomNom Wetland Board Adventure)**: Student reviews Taiwan wetland food chains in rules modal, rolls dice with animated visual feedback, navigates glowing pawn along 9-tile loop, triggers "Om Nom Nom!" predation events, and receives migration lap bonuses.
-- **Scenario 5 (Integrated Biology Curriculum Continuity)**: Student conducts an integrated inquiry starting at `index.html`, exploring cellular energy organelles in `cell-3d`, investigating ecological energy capture in `foodChain`, quantifying transfer efficiency in `energyPyramid`, and applying wetland food web dynamics in `OmNomNom`.
+| # | Feature | Scope Document | Tier 1 (Coverage) | Tier 2 (Boundary) | Tier 3 (VM / Cross) | Tier 4 (Curriculum) | Tier 5 (Stress) | Status |
+|---|---------|----------------|:-----------------:|:-----------------:|:-------------------:|:-------------------:|:---------------:|:------:|
+| F1 | 視覺受器傳導模擬 (Vision) | ORIGINAL_REQUEST R1 | ✓ (`test_t1_02`) | ✓ (`test_t2_03`) | ✓ (`test_t3_04`) | ✓ (`test_t4_01`, `02`) | ✓ | ✅ PASS |
+| F2 | 聽覺受器傳導模擬 (Hearing) | ORIGINAL_REQUEST R1 | ✓ (`test_t1_02`) | ✓ (`test_t2_03`) | ✓ (`test_t3_04`) | ✓ (`test_t4_01`, `03`) | ✓ | ✅ PASS |
+| F3 | 嗅覺受器傳導模擬 (Smell) | ORIGINAL_REQUEST R1 | ✓ (`test_t1_02`) | ✓ (`test_t2_03`) | ✓ (`test_t3_04`) | ✓ (`test_t4_01`, `04`) | ✓ | ✅ PASS |
+| F4 | 味覺受器傳導模擬 (Taste) | ORIGINAL_REQUEST R1 | ✓ (`test_t1_02`) | ✓ (`test_t2_03`) | ✓ (`test_t3_04`) | ✓ (`test_t4_01`, `05`) | ✓ | ✅ PASS |
+| F5 | 皮膚受器傳導模擬 (Skin) | ORIGINAL_REQUEST R1 | ✓ (`test_t1_02`) | ✓ (`test_t2_03`) | ✓ (`test_t3_04`) | ✓ (`test_t4_01`, `06`) | ✓ | ✅ PASS |
+| F6 | 四階段狀態機時序 (0-1 Normalized) | ORIGINAL_REQUEST R1 | ✓ (`test_t1_03`) | ✓ (`test_t2_01`) | ✓ (`test_t3_02`, `03`) | ✓ (`test_t4_02`~`06`) | ✓ | ✅ PASS |
+| F7 | 播放與暫停即時切換 | ORIGINAL_REQUEST R2 | ✓ (`test_t1_04`) | ✓ (`test_t2_05`) | ✓ (`test_t3_03`) | — | ✓ (`test_t5_02`) | ✅ PASS |
+| F8 | 播放倍速控制 (0.5x, 1x, 1.5x, 2x) | ORIGINAL_REQUEST R2 | ✓ (`test_t1_07`) | ✓ (`test_t2_04`) | ✓ (`test_t3_03`) | — | ✓ (`test_t5_02`) | ✅ PASS |
+| F9 | 進度尋軌與單步跳轉 | ORIGINAL_REQUEST R2 | ✓ (`test_t1_05`, `06`) | ✓ (`test_t2_01`) | ✓ (`test_t3_03`) | — | ✓ | ✅ PASS |
+| F10 | 獨立子頁面架構與 RWD | ORIGINAL_REQUEST R3 | ✓ (`test_t1_01`) | ✓ (`test_t2_02`, `06`) | ✓ (`test_t3_01`, `05`) | — | ✓ (`test_t5_01`) | ✅ PASS |
+| F11 | 雙向導航整合 | ORIGINAL_REQUEST R3 | ⚠️ (2/4 passed) | — | — | — | — | ⚠️ Pending M3 |
+| F12 | 自動化驗證與程式碼健壯度 | Acceptance Criteria | ✓ | ✓ | ✓ | ✓ | ✓ | ✅ PASS |
 
 ---
 
-## 5. Escalation & Final Verdict
+## 4. Tier-by-Tier Verification Details
 
-- **Test Suite Status**: `tests/test_round2_suite.py` implemented and verified. 61 of 63 tests pass with 0 runtime errors (96.8% success rate).
-- **Escalation item for Milestone 2.4**:
-  1. Mount `<a href="cell-3d/index.html">3D細胞與胞器模型</a>` under 「細胞」 in `index.html`.
-  2. Mount `<a href="foodChain/index.html">食物鏈與食物網動態模擬</a>`, `<a href="energyPyramid/index.html">生態系能量塔（含10%法則計算）</a>`, and `<a href="OmNomNom/index.html">食物鏈棋盤遊戲 (OmNomNom)</a>` under 「生態」 in `index.html`.
-  Upon mounting, `test_f24` and `test_f25` will pass immediately, achieving a **100.0% (63/63) PASS RATE**.
+### Tier 1: Feature Coverage (11 Tests)
+- `test_t1_01_receptors_page_exists_and_status_200`: Confirms HTTP 200, HTML5 doctype declaration, and `<title>` mentioning sensory receptors conduction.
+- `test_t1_02_five_receptors_tabs_exist_with_contract`: Validates `#tabBtn_vision`, `#tabBtn_hearing`, `#tabBtn_smell`, `#tabBtn_taste`, `#tabBtn_skin`, and `data-receptor="vision|hearing|smell|taste|skin"` with localized Chinese terminology.
+- `test_t1_03_four_conduction_phases_present`: Validates HUD and UI indicators for all four phases: 刺激 (Stimulus), 受器 (Receptor), 神經 (Nerve), 腦 (Brain).
+- `test_t1_04_playback_play_pause_button_contract`: Validates Play/Pause button `#playPauseBtn`.
+- `test_t1_05_playback_step_and_reset_buttons`: Validates `#stepPrevBtn`, `#stepNextBtn`, and `#resetBtn`.
+- `test_t1_06_timeline_scrubber_slider_contract`: Validates timeline range scrubber `#progressSlider`.
+- `test_t1_07_speed_multiplier_presets_exist`: Validates UI controls for `0.5x`, `1.0x`/`1x`, `1.5x`, `2.0x`/`2x`.
+- `test_t1_08_receptors_to_lab_backlink`: Validates backlink `<a href="index.html">` to main neuro lab.
+- `test_t1_09_receptors_to_homepage_backlink`: Validates backlink `<a href="../index.html">` to root homepage.
+- `test_t1_10_lab_to_receptors_forwardlink`: Verifies `neuro_physiology/index.html` link to `receptors.html` (Scheduled for Milestone 3).
+- `test_t1_11_homepage_to_receptors_mounting`: Verifies root `index.html` mounting under `神經與感覺` (Scheduled for Milestone 3).
+
+### Tier 2: Boundary & Corner Cases (6 Tests)
+- `test_t2_01_timeline_slider_boundaries_and_attributes`: Range input verified with `min="0"`, `max >= 100`.
+- `test_t2_02_responsive_viewport_meta_tag`: Responsive mobile viewport verified (`width=device-width, initial-scale=1`).
+- `test_t2_03_canvas_element_configured`: High-DPI Canvas 2D container element verified.
+- `test_t2_04_speed_multiplier_values_positive`: Speed controls verified strictly positive (> 0.0) and bounded (<= 5.0).
+- `test_t2_05_loop_toggle_element_present`: Loop playback toggle control element verified.
+- `test_t2_06_meta_charset_utf8_present`: Explicit `<meta charset="utf-8">` verified for Traditional Chinese anatomical text.
+
+### Tier 3: Cross-Feature Interactions & Node.js VM Runtime Integrity (5 Tests)
+- `test_t3_01_nodejs_vm_syntax_and_execution`: Extracts inline JavaScript, executes inside headless Node.js VM with synthetic DOM and Canvas 2D mock environment, confirming zero syntax errors and zero unhandled exceptions.
+- `test_t3_02_timeline_controller_phase_math_in_vm`: Validates deterministic timeline phase mapping:
+  - $0.00 \le T < 0.25 \implies \text{Phase 0 (刺激)}$
+  - $0.25 \le T < 0.50 \implies \text{Phase 1 (受器)}$
+  - $0.50 \le T < 0.80 \implies \text{Phase 2 (神經)}$
+  - $0.80 \le T \le 1.00 \implies \text{Phase 3 (腦)}$
+- `test_t3_03_timeline_clamping_and_stepping_in_vm`: Exercises `seek(-0.5)` clamping to 0.0, `seek(1.5)` clamping to 1.0, `stepNext()` phase boundary advancing, and `togglePlayPause()`.
+- `test_t3_04_receptor_configs_schema_integrity`: Validates `RECEPTOR_CONFIGS` structure across all 5 senses.
+- `test_t3_05_canvas_render_cycle_execution`: Executes full render cycles across all 5 senses and 4 timepoints, verifying drawing calls proceed smoothly without throwing errors.
+
+### Tier 4: Curriculum Anatomical Terminology & Pedagogical Scenarios (6 Tests)
+- `test_t4_01_curriculum_textbook_terminology_presence`: Validates that all 15 Taiwanese junior/senior high school biology curriculum anatomical terms are present:
+  - 視覺: `視網膜`, `視神經`, `枕葉`
+  - 聽覺: `耳蝸`, `毛細胞`, `顳葉`
+  - 嗅覺: `嗅黏膜`, `嗅球`, `篩板`
+  - 味覺: `味蕾`, `孤束核`, `島葉`
+  - 皮膚: `巴齊尼`, `麥斯納`, `頂葉`
+- `test_t4_02_vision_pathway_pedagogical_narrative`: Validates light/photon stimulus, photoreceptor hyperpolarization, and occipital V1 cortical perception.
+- `test_t4_03_hearing_pathway_pedagogical_narrative`: Validates sound wave vibration, hair cell stereocilia deflection / endolymph K+ influx, and temporal A1 auditory cortex.
+- `test_t4_04_smell_pathway_pedagogical_narrative`: Validates volatile odorants, olfactory mucosa / cribriform plate, and non-thalamic direct projection to olfactory bulb / cortex.
+- `test_t4_05_taste_pathway_pedagogical_narrative`: Validates tastants, taste buds / papillae, solitary tract nucleus (NST), and insular gustatory cortex.
+- `test_t4_06_skin_pathway_pedagogical_narrative`: Validates pressure/temperature stimuli, Meissner/Pacinian mechanoreceptors, and parietal primary somatosensory cortex S1.
+
+### Tier 5: Adversarial Stress & Robustness (2 Tests)
+- `test_t5_01_url_tampering_and_xss_safety`: Verifies server resilience against query parameter tampering and XSS injections (`?param=<script>...#phase=NaN`).
+- `test_t5_02_rapid_controller_toggle_stress`: Simulates 50 rapid play/pause toggles and fuzzes `setSpeed()` with extreme values (`0, -1, -99, 100, 99999, NaN, Infinity`), ensuring no state corruption or NaN propagation.
+
+---
+
+## 5. Escalation & Milestone Handoff Status
+
+1. **Test Suite Status**: `tests/test_receptors_conduction.py` is fully implemented, verified, and operational.
+2. **Current Result**: 28 tests pass, 2 tests pending Milestone 3.
+3. **Action Items for Milestone 3 (Navigation Mounting)**:
+   - In `neuro_physiology/index.html`: Add navigation link pointing to `receptors.html` (`<a href="receptors.html">五大感覺受器</a>`).
+   - In repository root `index.html`: Mount `<a href="neuro_physiology/receptors.html">五大感覺受器動態傳導模擬 (視覺、聽覺、嗅覺、味覺、皮膚)</a>` under the `<h1>神經與感覺</h1>` section.
+4. **Final Gate Projection**: Upon Milestone 3 completion, all 30 tests in `tests/test_receptors_conduction.py` will pass with **100.0% SUCCESS RATE**.

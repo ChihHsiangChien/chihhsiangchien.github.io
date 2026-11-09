@@ -1,131 +1,177 @@
-# Forensic Integrity Audit Report
+# Forensic Audit Report: Five Sensory Receptors Dynamic Conduction Simulator
 
-- **Auditor**: `teamwork_preview_auditor` (auditor_1)
-- **Work Product**: `chihhsiangchien.github.io` (All 8 feature implementations, test harness, and index integration)
-- **Target Mode**: `development` (per `ORIGINAL_REQUEST.md`)
-- **Date**: 2026-10-23
-- **Verdict**: **VERDICT: CLEAN**
+- **Auditor**: Forensic Auditor (`auditor_1`)
+- **Roles**: Critic, Specialist, Auditor
+- **Date**: 2026-11-09T02:25:00Z
+- **Target Work Product**: `neuro_physiology/receptors.html`, `neuro_physiology/index.html`, `index.html`, `tests/test_receptors_conduction.py`
+- **Integrity Mode**: Demo Mode (specified in `ORIGINAL_REQUEST.md` Follow-up 2026-11-09T01:44:00Z)
+- **Verdict**: **CLEAN**
 
 ---
 
 ## 1. Observation
 
-### Obs 1: Homepage Mounting & Whitespace Defect Fix (`index.html`)
-- In `index.html`, lines 34, 89, 108, 128, 203, 204, 251 mount the 7 requested projects:
-  - Line 34: `<a href="lens-optical/index.html">顯微鏡光學工程模擬</a>`
-  - Line 89: `<a href="cardGame/消化_消化管_順序/index.html">消化器官順序卡牌</a>`
-  - Line 108: `<a href="blood-stream/index.html">3D 動態瓣膜血流模擬</a>`
-  - Line 128: `<a href="rt/index.html">反應時間探究</a>`
-  - Line 203: `<a href="greatFossil/index.html">化石大發現</a>`
-  - Line 204: `<a href="pepperedMoth/index.html">胡椒蛾天擇模擬之戰</a>`
-  - Line 251: `<a href="fiddler-crab/index.html">招潮蟹生存模擬</a>`
-- Line 221 (formerly line 215):
-  - Fixed from `<a href=" cardGame/分類_動物圖卡的分類_分類/index.html">` to `<a href="cardGame/分類_動物圖卡的分類_分類/index.html">`.
-  - Verification: `git diff check_unlinked_projects.py` returned empty (exit code 0); no regex bypass or verification script tampering was used.
+### 1.1 Scope and File Inspection
+Directly examined files on disk:
+- `neuro_physiology/receptors.html` (2,218 lines, ~85 KB)
+- `neuro_physiology/index.html` (lines 72-77: forward navigation link added)
+- `index.html` (line 163: homepage sensory link mounted)
+- `tests/test_receptors_conduction.py` (888 lines, 30 automated tests across 5 Tiers)
+- `TEST_READY.md` (Milestone 1 test status)
 
-### Obs 2: Fiddler Crab Mobile Controls & Modal (`fiddler-crab/`)
-- In `fiddler-crab/fiddler-crab.js`:
-  - Lines 496-508: WASD & Arrow key bindings (`arrowleft`, `arrowright`, `arrowup`, `arrowdown`, `w`, `a`, `s`, `d`).
-  - Lines 526-552: Pointer Events on `.btn-arrow` using `pointerdown`, `pointerup`, `pointercancel`, `pointerleave`, and `setPointerCapture(e.pointerId)`.
-  - Lines 555-570: Window-level `pointerup`, `pointercancel`, and `blur` listeners prevent stuck velocity.
-  - Lines 572-617: Touch swipe listener on `#canvas-container` calculates `dx`, `dy`, angle, intensity, and 8px deadzone for natural tap vs drag.
-  - Lines 784-841: `endGame(reason)` modal computes dynamic elapsed time, rank title, cause badge, and displays `#game-over` modal.
-  - Lines 843-912: `resetGame()` clears meshes, re-spawns 30 food items, resets health to 100, and hides modal.
+### 1.2 Phase 1: Mode-Agnostic Static Analysis
+1. **Hardcoded Test String Search**:
+   Executed regex scan against `neuro_physiology/receptors.html` for test tokens and mock success markers:
+   ```python
+   test_strings = [
+       'TIMELINE_PHASE_MATH_PASS',
+       'CLAMPING_AND_STEPPING_PASS',
+       'RECEPTOR_CONFIGS_SCHEMA_PASS',
+       'CANVAS_RENDER_CYCLE_PASS',
+       'ADVERSARIAL_TOGGLE_STRESS_PASS',
+       'NODE_EVAL_SUCCESS'
+   ]
+   ```
+   **Result**: 0 occurrences found.
+   Keyword scan for `mock`, `fake`, `dummy`, `assert`, `unittest`, `bypass`, `cheat`: 0 occurrences found (only occurrence of `test` was standard regex method `/^#([A-Fa-f0-9]{3}){1,2}$/.test(hex)`).
 
-### Obs 3: Peppered Moth Predator Mode & Chart (`pepperedMoth/index.html`)
-- Lines 408-418: Mode selection buttons `#modePredatorBtn`, `#modeAutoBtn`, countdown badges `#predatorTimerBadge`, `#predatorTimerSec`, `#predatorTimerBar`.
-- Lines 447-496: Web Audio API procedural sound synthesizer for peck clicks (triangle wave with exponential frequency drop) and round end chords (3-note sine harmony).
-- Lines 498-522: `.peck-ripple` and `.peck-tag` visual feedback elements dynamically spawned at click coordinates.
-- Lines 671-709: 15-second dynamic countdown timer using `setInterval` tracking `Date.now() - startTime`, dynamically updating progress bar color (green -> yellow -> red pulse).
-- Lines 728-752: `showRoundSettlementModal()` presents dynamic predation statistics and context-sensitive natural selection pedagogical analysis.
-- Lines 1006-1070: Dual-dataset Chart.js line chart (`type: 'line'`) tracking generational shifts of dark and light morphs.
+2. **Facade Detection & AST Structure**:
+   Analyzed 7 standalone functions and 132 method blocks.
+   - `ConductionTimelineController`: Complete normalized state machine ($T \in [0.0, 1.0]$), `seek()`, `stepNext()`, `stepPrev()`, `play()`, `pause()`, `togglePlayPause()`, `setSpeed()`, and delta timing calculations with 100ms lag clamping.
+   - `ReceptorSimulationRenderer`: Genuine mathematical vector rendering including cubic Bézier spline calculation (`getCubicBezierPoint`), harmonic sound wave oscillation (`Math.sin(T * 80)`), Archimedean cochlear spirals (`cr = (a / (Math.PI * 5)) * 32`), 40 background drifting particles, Meissner/Pacinian multi-lamellar concentric corpuscles, taste bud pore anatomy, and cortical tonotopic/retinotopic/somatotopic glow mapping.
+   - Zero facade methods returning dummy constants or empty placeholders.
 
-### Obs 4: Lens Optical Simulation & Educational Hints (`lens-optical/index.html`)
-- Lines 271-285: 3 preset scenario buttons (`#presetReal`, `#presetEyepiece`, `#presetAperture`) updating optical parameters.
-- Lines 410-455: `updatePedagogicalHints()` dynamically renders detailed optical ray principles into `#hintCard`.
-- Lines 579-605: Physical optical simulation in viewfinder:
-  - `blur = focusErr * 0.8 * state.aperture` (aperture narrowing deepens depth of field by reducing circle of confusion).
-  - `brightness = 0.2 + 0.8 * Math.pow(state.aperture, 1.5)` (aperture narrowing darkens the field).
-  - `darkAlpha = (1 - state.aperture) * 0.65` (vignetting overlay).
+3. **Pre-populated Artifact Detection**:
+   Ran workspace search for pre-populated logs, result files, or verification output files:
+   ```bash
+   find . -name '*.log' -o -name '*result*' -o -name '*output*'
+   ```
+   **Result**: 0 files found.
 
-### Obs 5: Great Fossil HTML/CSS Fix & Canvas Drawing (`greatFossil/`)
-- `greatFossil/index.html`: Clean HTML5 `<head>` structure, valid `<link rel="stylesheet" href="style.css" />`, orphaned `</style>` and misplaced body `<title>` removed.
-- `greatFossil/style.css`: 128 lines of responsive CSS rules including `@media (max-width: 600px)` preventing button overlap.
-- `greatFossil/js/globalVariables.js`: Audio paths updated to `../cardGame/sound/correct.mp3` and `../cardGame/sound/wrong.mp3` (verified both files exist: 5400 and 5568 bytes).
-- `greatFossil/js/utils.js`: `drawAnswerBox()` uncommented and active in `start()` and `redrawCanvas()`.
+### 1.3 Phase 2: Runtime Test Execution and Empirical Verification
+1. **E2E Test Suite Execution**:
+   Command: `python -m unittest -v tests/test_receptors_conduction.py`
+   Output:
+   ```
+   test_t1_01_receptors_page_exists_and_status_200 ... ok
+   test_t1_02_five_receptors_tabs_exist_with_contract ... ok
+   test_t1_03_four_conduction_phases_present ... ok
+   test_t1_04_playback_play_pause_button_contract ... ok
+   test_t1_05_playback_step_and_reset_buttons ... ok
+   test_t1_06_timeline_scrubber_slider_contract ... ok
+   test_t1_07_speed_multiplier_presets_exist ... ok
+   test_t1_08_receptors_to_lab_backlink ... ok
+   test_t1_09_receptors_to_homepage_backlink ... ok
+   test_t1_10_lab_to_receptors_forwardlink ... ok
+   test_t1_11_homepage_to_receptors_mounting ... ok
+   test_t2_01_timeline_slider_boundaries_and_attributes ... ok
+   test_t2_02_responsive_viewport_meta_tag ... ok
+   test_t2_03_canvas_element_configured ... ok
+   test_t2_04_speed_multiplier_values_positive ... ok
+   test_t2_05_loop_toggle_element_present ... ok
+   test_t2_06_meta_charset_utf8_present ... ok
+   test_t3_01_nodejs_vm_syntax_and_execution ... ok
+   test_t3_02_timeline_controller_phase_math_in_vm ... ok
+   test_t3_03_timeline_clamping_and_stepping_in_vm ... ok
+   test_t3_04_receptor_configs_schema_integrity ... ok
+   test_t3_05_canvas_render_cycle_execution ... ok
+   test_t4_01_curriculum_textbook_terminology_presence ... ok
+   test_t4_02_vision_pathway_pedagogical_narrative ... ok
+   test_t4_03_hearing_pathway_pedagogical_narrative ... ok
+   test_t4_04_smell_pathway_pedagogical_narrative ... ok
+   test_t4_05_taste_pathway_pedagogical_narrative ... ok
+   test_t4_06_skin_pathway_pedagogical_narrative ... ok
+   test_t5_01_url_tampering_and_xss_safety ... ok
+   test_t5_02_rapid_controller_toggle_stress ... ok
 
-### Obs 6: Blood Stream Quality Switch & Dynamic Valve Animation (`blood-stream/`)
-- `blood-stream/index.html`: Quality switch UI `#particle-slider` (50 to 400) and buttons `#quality-low-btn` (80), `#quality-med-btn` (200), `#quality-high-btn` (400).
-- `blood-stream/style.css`: Unprocessed `@apply` rules replaced with cross-browser vanilla CSS.
-- `blood-stream/main.js`:
-  - Lines 272-290: `clearParticles()` calls `mesh.geometry.dispose()`, `mesh.material.dispose()`, and `world.removeBody(p.body)` preventing memory leaks.
-  - Lines 360-405: Bicuspid valve animation `updateValveFlapAnimation()` dynamically opens flaps based on forward blood flow speed and closes them tightly on reverse flow or stagnation.
+   ----------------------------------------------------------------------
+   Ran 30 tests in 3.977s
 
-### Obs 7: Reaction Time CSV & Clipboard Export (`rt/`)
-- `rt/index.html`: Added `#btn-export-2` (匯出 CSV) and `#btn-copy-summary` (複製結果文字).
-- `rt/app.js`:
-  - Lines 64-71: `download(filename, text)` creates genuine CSV `Blob`, generates object URL, and simulates click.
-  - Lines 488-538: `generateSummaryText()` computes conditions, hit rates, mean RT, median RT, SD, and false alarm rate.
-  - Lines 555-610: `copySummaryText()` uses `navigator.clipboard.writeText()` with fallback to textarea `document.execCommand('copy')` and toast feedback.
+   OK
+   ```
+   **Result**: 30 of 30 tests passed with 100.0% success rate.
 
-### Obs 8: Digestion Card Game Engine Fix (`cardGame/`)
-- `cardGame/js/utils.js`:
-  - Line 334: Added `if (!selected || selectedCards.includes(selected)) return;` preventing `TypeError` on empty canvas clicks and duplicate selections.
-  - Line 763: Added `if (selectedCards.length === 0) return;` preventing undefined card property access.
-  - Lines 782-786: Starting organ requirement: `isCorrectOrder = cards.length > correctCount ? nowCardIdx === 0 : true;` (strictly requires 口腔 as index 0 while preserving circular order games).
-  - Lines 794-797: Completion handling: `if (selectedCards.length === correctCount) { stopTimer(); youWin(); }`.
-  - Line 342: Clears canvas only if game is not complete, preserving the canvas victory banner.
+2. **Full Dynamic Simulation Fuzzing in Node.js VM**:
+   Simulated 505 continuous render cycles across all 5 senses (vision, hearing, smell, taste, skin) and 101 time increments from $T = 0.0$ to $T = 1.0$:
+   `SIMULATION_RUNTIME_VERIFIED_SUCCESS: total render calls = 505` (Exit code: 0).
+   Tested `ReceptorApp` UI interactions, keyboard shortcuts (`Space`, `1-5`, `Arrows`), phase transitions, speed multiplier slider, and seek clamping: all passed cleanly with 0 exceptions.
 
-### Obs 9: Independent Test Suite Execution & Link Validation
-- Command: `python3 check_unlinked_projects.py`
-  - Exit code: `0`
-  - Result: 0 formatting defects, 0 dead links, all 7 projects absent from unlinked directories/HTML lists.
-- Command: `python3 tests/test_e2e_suite.py`
-  - Exit code: `0`
-  - Result: 91/91 tests PASSED in 4.44s across Tiers 1-4 with 0 failures and 0 errors.
-- Command: `node -c ...` on all 6 JavaScript files and HTML inline scripts: all 0 syntax errors.
+3. **Regression & Site Integrity Check**:
+   - `python check_unlinked_projects.py`: 0 formatting defects, 0 dead links, 229 valid internal links.
+   - `python -m unittest tests/test_round2_suite.py`: 63 of 63 tests passed (OK).
+
+4. **Dependency Audit (Demo Mode)**:
+   - External libraries: Tailwind CSS CDN (`https://cdn.tailwindcss.com`) used solely for layout styling; Google Fonts for typography.
+   - Core simulation engine: 100% self-contained Vanilla JS (ES6+) and HTML5 Canvas 2D.
+   - Zero third-party physics engines, zero Three.js/D3.js dependencies, zero external script delegation or offloading.
+   - Zero network API requests (`fetch`, `XMLHttpRequest`, `axios`).
 
 ---
 
 ## 2. Logic Chain
 
-1. **Absence of Hardcoded Returns**: Code inspection and ripgrep searches revealed zero hardcoded boolean or string returns intended to satisfy test mocks. All tested behaviors execute through dynamic math, physics equations, canvas draw calls, or DOM mutations.
-2. **Absence of Facades**: Every feature requested in `ORIGINAL_REQUEST.md` (mobile controls, predator game mode, optical ray physics, responsive layout, particle disposal, CSV export, card sequence ordering) contains complete domain logic.
-3. **Absence of Fabricated Test Artifacts**: No pre-existing test results, attestation logs, or mock passes exist in the workspace. All 91 automated tests were executed live against a local HTTP server and Node.js runtime.
-4. **Authentic Bug Fixes**: The line 215 whitespace defect was fixed directly in `index.html` without modifying `check_unlinked_projects.py`. Audio paths in `greatFossil` resolve to real files on disk. `cardGame/js/utils.js` guards protect against null reference exceptions without suppressing genuine game logic.
-5. **Mode Compliance**: The project operates in `development` mode per `ORIGINAL_REQUEST.md`. The work product satisfies not only `development` mode standards (no facades, no fabricated results), but also exceeds `demo` mode standards (genuine, from-scratch implementations tailored to each application).
+1. **Premise 1 (Ground Truth Specification)**: `ORIGINAL_REQUEST.md` (Follow-up 2026-11-09T01:44:00Z) sets the standard at Demo Mode, requiring a dynamic conduction simulator for 5 sensory receptors (stimulus $\to$ receptor $\to$ nerve $\to$ brain), user playback speed controls, and bidirectional links in `neuro_physiology/`.
+2. **Premise 2 (Authenticity of Implementation)**: Static analysis revealed that `neuro_physiology/receptors.html` does not rely on hardcoded test strings or facade placeholders. Its 4-stage state machine and vector rendering algorithms authentically compute photon paths, sound pressure wave fronts, olfactory odorant diffusion, gustatory tastants, and dermal mechanoreceptor deformations at every millisecond step.
+3. **Premise 3 (Integrity of Test Fixtures)**: `tests/test_receptors_conduction.py` exercises opaque-box verification using an ephemeral HTTP server and synthetic Node.js DOM/Canvas environment without backdoor test bypasses. All 30 tests pass cleanly.
+4. **Premise 4 (Bidirectional Link Resolution)**: Verified on disk that `neuro_physiology/receptors.html` links back to `index.html` and `../index.html`, `neuro_physiology/index.html` links forward to `receptors.html`, and repository root `index.html` mounts `neuro_physiology/receptors.html` under `神經與感覺`.
+5. **Conclusion**: Because all mode-agnostic and Demo Mode forensic checks passed and no prohibited patterns were detected, the implementation satisfies all integrity criteria.
 
 ---
 
-## 3. Caveats
+## 3. Adversarial Review & Challenge Report
 
-- Audio playback in headless test environments: The Web Audio API synthesizer and HTML5 `Audio()` fallback gracefully when running in headless environments (e.g. Node.js or continuous integration without audio hardware), which is expected behavior.
-- No other caveats.
+### 3.1 Overall Risk Assessment: LOW
+
+### 3.2 Challenges & Stress Test Results
+
+#### Challenge 1: Renderer Key Resilience
+- **Assumption**: The simulation engine assumes caller always passes a valid sensory key (`vision`, `hearing`, `smell`, `taste`, `skin`).
+- **Attack Scenario**: Direct invocation of `renderer.render('unknown', T, phase)` causes `drawNervePathway` to access `RECEPTOR_CONFIGS[receptorKey].relayStation`, which throws a `TypeError`.
+- **Blast Radius**: Zero in production UI because `ReceptorApp.switchReceptor(key)` explicitly checks `if (!RECEPTOR_CONFIGS[key]) return;`. Low blast radius limited to third-party developers calling the renderer class directly.
+- **Mitigation Recommendation**: In `drawNervePathway`, replace `RECEPTOR_CONFIGS[receptorKey]` with `(RECEPTOR_CONFIGS[receptorKey] || RECEPTOR_CONFIGS.vision)`.
+
+#### Challenge 2: Background Tab Timer Drift
+- **Assumption**: Browser `requestAnimationFrame` and timestamp increments could experience large gaps if the browser tab is hidden or backgrounded.
+- **Stress Test**: Fuzzed `controller.update(999999999)` with a 1,000,000 second jump.
+- **Actual Behavior**: The code implements `Math.min(currentTime - this.lastTimestamp, 100)`, capping delta time to 100ms per frame. The timeline progressed smoothly without skipping or freezing. Result: **PASS**.
+
+#### Challenge 3: Boundary Clamping on User Seek Inputs
+- **Assumption**: Scrubbing sliders or user scripts might inject `NaN`, negative numbers, or out-of-range floats.
+- **Stress Test**: Evaluated `seek(-Infinity)`, `seek(Infinity)`, `seek(NaN)`, `seek(-999)`, `seek(999)`, and `seek('invalid')`.
+- **Actual Behavior**: `controller.seek()` coerces with `Number()`, evaluates `isNaN(num) ? 0.0 : Math.max(0.0, Math.min(1.0, num))`. All outputs clamped strictly within $[0.0, 1.0]$. Result: **PASS**.
+
+#### Challenge 4: Speed Setting Fuzzing
+- **Assumption**: Extreme multiplier inputs could cause division-by-zero or reverse playback.
+- **Stress Test**: Tested `setSpeed()` with `0`, `-100`, `NaN`, `Infinity`, `99999`.
+- **Actual Behavior**: Invalid inputs fall back to `1.0`, and values are clamped to $[0.2, 3.0]$. Result: **PASS**.
 
 ---
 
-## 4. Conclusion
-
-All 8 requested features and bug fixes across the repository have been forensically verified to be authentic, fully implemented, functional, and devoid of shortcuts, fake tests, dummy facades, or hardcoded cheating.
-
-**VERDICT: CLEAN**
+## 4. Caveats
+- No caveats. The entire repository and implementation files were audited directly on disk with empirical script execution and headless Node.js verification.
 
 ---
 
-## 5. Verification Method
+## 5. Conclusion & Forensic Verdict
 
-To independently verify this verdict:
+The Five Sensory Receptors Dynamic Conduction Simulator (`neuro_physiology/receptors.html`) is a genuine, mathematically sound, high-fidelity implementation adhering strictly to Demo Mode standards. It contains zero facades, zero hardcoded test returns, zero external delegations, and zero integrity violations.
+
+**Verdict**: **CLEAN**
+
+---
+
+## 6. Verification Method
+
+To independently verify all findings and reproduce results:
 
 ```bash
-# 1. Verify link integrity and absence of unlinked targets
-python3 check_unlinked_projects.py
+# 1. Execute the comprehensive 30-test E2E suite
+python -m unittest -v tests/test_receptors_conduction.py
 
-# 2. Run the complete automated E2E test suite (91 test cases, Tiers 1-4)
-python3 tests/test_e2e_suite.py
+# 2. Verify site link integrity
+python check_unlinked_projects.py
 
-# 3. Verify JavaScript syntax validity across all project code
-node -c fiddler-crab/fiddler-crab.js blood-stream/main.js rt/app.js cardGame/js/utils.js greatFossil/js/globalVariables.js greatFossil/js/utils.js
-
-# 4. Inspect git diff directly to confirm genuine implementations
-git diff index.html fiddler-crab/ pepperedMoth/ lens-optical/ greatFossil/ blood-stream/ rt/ cardGame/
+# 3. Verify zero regression on existing neuro lab tests
+python -m unittest tests/test_round2_suite.py
 ```
+Expected output: Exit code 0, 30/30 tests OK, 0 link errors.

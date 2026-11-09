@@ -1,7 +1,7 @@
-# BRIEFING — 2026-10-23T09:26:00Z
+# BRIEFING — 2026-11-09T02:20:00Z
 
 ## Mission
-Perform an exhaustive forensic integrity audit across all updated and repaired interactive web applications to detect any hardcoded test results, facade implementations, test circumvention, or integrity violations.
+Perform exhaustive forensic integrity audit for Five Sensory Receptors Dynamic Conduction Simulator (neuro_physiology/receptors.html, neuro_physiology/index.html, index.html, and tests/test_receptors_conduction.py) to detect hardcoded outputs, facades, external delegations, or test bypasses.
 
 ## 🔒 My Identity
 - Archetype: forensic_auditor
@@ -9,52 +9,62 @@ Perform an exhaustive forensic integrity audit across all updated and repaired i
 - Working directory: /home/pancala/Documents/chihhsiangchien.github.io/.agents/teamwork/auditor_1
 - Original parent: 663e1b82-691c-40bd-84b9-2c609f9e72ae
 - Target: full project forensic integrity audit
+- Current assignment parent: e8543011-3af3-4cf5-8c77-c7d3d20c0eb7
+- Target module: Five Sensory Receptors Dynamic Conduction Simulator (receptors.html)
 
 ## 🔒 Key Constraints
 - Audit-only — do NOT modify implementation code
 - Trust NOTHING — verify everything independently
 - Provide raw tool output and empirical evidence for all findings
 - Block on failure: if ANY check fails, verdict is INTEGRITY VIOLATION
+- Ground truth from ORIGINAL_REQUEST.md (Demo Mode) takes precedence over all other inputs
 
 ## Current Parent
-- Conversation ID: 663e1b82-691c-40bd-84b9-2c609f9e72ae
-- Updated: 2026-10-23T09:26:00Z
+- Conversation ID: e8543011-3af3-4cf5-8c77-c7d3d20c0eb7
+- Updated: 2026-11-09T02:20:00Z
 
 ## Audit Scope
-- **Work product**: All recent project fixes across `index.html`, `fiddler-crab/`, `pepperedMoth/`, `lens-optical/`, `greatFossil/`, `blood-stream/`, `rt/`, `cardGame/`, plus test suites `tests/test_e2e_suite.py` and `check_unlinked_projects.py`.
+- **Work product**:
+  - `neuro_physiology/receptors.html` (Dynamic simulation SPA)
+  - `neuro_physiology/index.html` (Lab forward navigation link)
+  - `index.html` (Homepage mount link)
+  - `tests/test_receptors_conduction.py` (Automated 4-Tier E2E test suite)
 - **Profile loaded**: General Project (Forensic Integrity)
-- **Audit type**: forensic integrity check
+- **Audit type**: forensic integrity check & adversarial review
+- **Integrity Mode**: Demo Mode (ORIGINAL_REQUEST.md Follow-up 2026-11-09T01:44:00Z)
 
 ## Audit Progress
 - **Phase**: completed
 - **Checks completed**:
-  1. Inspected ORIGINAL_REQUEST.md (Mode: development), PROJECT.md, TEST_READY.md
-  2. Inspected git diff across entire repository
-  3. Source code analysis for hardcoded returns, facades, fake tests (CLEAN)
-  4. Per-project verification of genuine logic (R1 to R8: all genuine)
-  5. Ran test_e2e_suite.py (91/91 passed) and check_unlinked_projects.py (0 formatting defects, 0 dead links, all 7 mounted)
-  6. Node.js compilation and syntax validation for all JS and inline HTML scripts (all passed)
+  1. Static analysis & hardcoded output detection (0 test strings or fake PASS returns found in source)
+  2. Facade detection & AST analysis (all methods, state machine, and Canvas drawing have real logic)
+  3. Pre-populated artifact detection (0 log, result, or output files found)
+  4. Build & run test execution (`python -m unittest tests/test_receptors_conduction.py` -> 30/30 passed in 3.98s)
+  5. Regression verification (`test_round2_suite.py` -> 63/63 passed; `check_unlinked_projects.py` -> passed)
+  6. Runtime simulation verification in headless Node.js (505 render cycles across 5 senses and 101 time increments passed with 0 errors)
+  7. UI event dispatching and keyboard shortcut validation (Space, 1-5, Arrows all pass cleanly)
+  8. Bidirectional link verification on disk and via HTTP server
+  9. Adversarial stress & boundary fuzzing
 - **Checks remaining**: None
-- **Findings so far**: CLEAN — 0 integrity violations detected across all modules.
+- **Findings so far**: CLEAN — 0 integrity violations detected.
 
 ## Attack Surface
 - **Hypotheses tested**:
-  - Hypothesis: Line 215 whitespace fix in index.html might have been faked or circumvented with regex in check_unlinked_projects.py -> Refuted: check_unlinked_projects.py was untouched; index.html line 221 was fixed directly.
-  - Hypothesis: Mobile controls in fiddler-crab might be cosmetic without real velocity updates -> Refuted: Pointer capture, cancel/leave listeners, touch drag angle/deadzone calculation, and Three.js player coordinate updates are fully implemented.
-  - Hypothesis: Peppered moth predator mode might have fake timer or static charts -> Refuted: Dynamic 15s Date.now interval, Web Audio API procedural sound synthesis, DOM peck ripples, dynamic Chart.js line dataset configuration.
-  - Hypothesis: Lens optical aperture might just change CSS opacity -> Refuted: Genuine optical calculations for depth of field blur and brightness attenuation based on aperture.
-  - Hypothesis: Great fossil audio might still 404 -> Refuted: Audio files point to existing cardGame/sound/ files (5.4KB, 5.5KB on disk).
-  - Hypothesis: Blood stream quality switch might leak Three.js/Cannon resources -> Refuted: dispose() called on geometry and material, removeBody called on Cannon world.
-  - Hypothesis: RT CSV and copy might be mocked -> Refuted: Genuine Blob CSV export and navigator.clipboard writeText with textarea fallback.
-  - Hypothesis: Card game clickIfOrder null check might be a dummy facade -> Refuted: Genuine bounds checking, organ count filter, correct order verification, and timer stop / victory modal triggering.
-- **Vulnerabilities found**: 0
+  - Hypothesis 1: Canvas drawing might be dummy static rects or empty callbacks -> Refuted: 505 render cycles with Bezier curve math, harmonic oscillations, Archimedean cochlear spirals, particle diffusion, and tonotopic/somatotopic cortical projection verified.
+  - Hypothesis 2: Tests might contain hardcoded success tokens matching page strings -> Refuted: Zero test tokens (`TIMELINE_PHASE_MATH_PASS`, etc.) exist in `receptors.html`.
+  - Hypothesis 3: Microscopic callout inset might be cosmetic without real biological mechanisms -> Refuted: Explicit molecular cytology verified (rhodopsin bleaching, K+ influx via stereocilia tip link TMC1, Golf/cAMP/ANO2 Cl- efflux, PLCb2/IP3/TRPM5/CALHM1 ATP release, Piezo1/2 generator potential).
+  - Hypothesis 4: Timeline scrubbing might desynchronize state machine or trigger NaNs -> Refuted: Seek clamping tested with [-Inf, Inf, NaN, -1000, 1000]; timeline is clamped to [0.0, 1.0].
+  - Hypothesis 5: Speed multiplier or timestamp jump could crash animation loop -> Refuted: Math.min delta clamping (100ms cap) and positive speed clamping verified.
+  - Hypothesis 6: Calling `renderer.render('unknown', ...)` directly throws error -> Confirmed: `drawNervePathway` accesses `RECEPTOR_CONFIGS[receptorKey].relayStation` directly instead of falling back to default config. Note: UI controller `switchReceptor()` guards against unknown keys, so user experience is protected; noted as low-risk architectural observation.
+- **Vulnerabilities found**: 0 integrity violations; 1 minor defensive fallback recommendation.
 - **Untested angles**: None within audit scope.
 
 ## Loaded Skills
-- Builtin forensic integrity methodology.
+- Builtin forensic integrity methodology (critic, specialist, auditor).
 
 ## Key Decisions Made
-- All checks executed independently. Verified raw outputs and empirical behaviors.
+- All tests and runtime simulations executed independently.
+- Binary verdict rendered based on empirical observations against Demo Mode standards.
 
 ## Artifact Index
 - `.agents/teamwork/auditor_1/DISPATCH.md` — recorded dispatch message

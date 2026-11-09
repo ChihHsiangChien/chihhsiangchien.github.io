@@ -1,24 +1,43 @@
-## 2026-10-23T09:21:39Z
-You are Forensic Integrity Auditor (teamwork_preview_auditor).
-Your working directory is: /home/pancala/Documents/chihhsiangchien.github.io/.agents/teamwork/auditor_1
-You MUST read:
-- /home/pancala/Documents/chihhsiangchien.github.io/.agents/teamwork/ORIGINAL_REQUEST.md
-- /home/pancala/Documents/chihhsiangchien.github.io/PROJECT.md
-- /home/pancala/Documents/chihhsiangchien.github.io/TEST_READY.md
+# Dispatch: Forensic Auditor
 
-Your mission:
-Perform a comprehensive forensic integrity audit across the entire codebase to detect any form of cheating, fabrication, dummy/facade implementations, or test circumvention:
-1. Audit each project for genuine logic vs hardcoded results:
-   - `index.html`: Are links genuine relative links matching actual directories? Is line 215 truly fixed without regex bypass?
-   - `fiddler-crab/`: Are WASD, pointer events, touch swipe, and settlement modal genuine Three.js game code?
-   - `pepperedMoth/`: Is the predator mode, timer, peck feedback, and Chart.js line chart genuine dynamic logic?
-   - `lens-optical/`: Are preset scenarios and aperture depth-of-field calculations genuine physical optical simulations?
-   - `greatFossil/`: Are HTML tags, CSS, sound paths, and answer box canvas drawing genuine?
-   - `blood-stream/`: Are particle controls, memory cleanup, and bicuspid valve physics genuine Three.js / Cannon.js logic?
-   - `rt/`: Are CSV export and clipboard copy functions genuine?
-   - `cardGame/`: Are `utils.js` null-checks, organ sequence verification, and victory handling genuine?
-2. Run static analysis and git diff inspection to ensure no shortcuts, fake tests, or mocked passes exist.
-3. Run `python3 tests/test_e2e_suite.py` and `python3 check_unlinked_projects.py`.
-Document full forensic evidence and findings in `/home/pancala/Documents/chihhsiangchien.github.io/.agents/teamwork/auditor_1/handoff.md`.
-Deliver your final verdict clearly:
-**VERDICT: CLEAN** or **VERDICT: INTEGRITY VIOLATION** with full supporting evidence. Then notify parent.
+## Role: Auditor (`teamwork_auditor`)
+You are the Forensic Integrity Auditor for the Five Sensory Receptors Conduction Simulator project.
+
+## Inputs:
+- ORIGINAL_REQUEST.md: `c:\Users\User\Documents\GitHub\chihhsiangchien.github.io\.agents\teamwork\ORIGINAL_REQUEST.md`
+- PROJECT.md: `c:\Users\User\Documents\GitHub\chihhsiangchien.github.io\.agents\teamwork\orchestrator_1\PROJECT.md`
+- Implementation files:
+  - `c:\Users\User\Documents\GitHub\chihhsiangchien.github.io\neuro_physiology\receptors.html`
+  - `c:\Users\User\Documents\GitHub\chihhsiangchien.github.io\neuro_physiology\index.html`
+  - `c:\Users\User\Documents\GitHub\chihhsiangchien.github.io\index.html`
+  - `c:\Users\User\Documents\GitHub\chihhsiangchien.github.io\tests\test_receptors_conduction.py`
+
+## Instructions:
+1. Conduct complete forensic integrity verification per Integrity Forensics standards:
+   - Check for hardcoded test results or expected output spoofing.
+   - Check for dummy or facade implementations (e.g. static drawings without true animation math, fake state machines).
+   - Check for external script delegation or copying of open-source project core logic.
+   - Check runtime authenticity and algorithmic genuineness.
+2. Deliver your handoff report to `.agents/teamwork/auditor_1/handoff.md` with an explicit binary verdict: CLEAN or INTEGRITY VIOLATION.
+3. Notify orchestrator via `send_message`.
+
+
+## 2026-11-09T02:13:35Z
+You are Forensic Auditor for Five Sensory Receptors Conduction Simulator.
+Read:
+- ORIGINAL_REQUEST.md: c:\Users\User\Documents\GitHub\chihhsiangchien.github.io\.agents\teamwork\ORIGINAL_REQUEST.md
+- PROJECT.md: c:\Users\User\Documents\GitHub\chihhsiangchien.github.io\.agents\teamwork\orchestrator_1\PROJECT.md
+- TEST_READY.md: c:\Users\User\Documents\GitHub\chihhsiangchien.github.io\TEST_READY.md
+- DISPATCH.md: c:\Users\User\Documents\GitHub\chihhsiangchien.github.io\.agents\teamwork\auditor_1\DISPATCH.md
+
+Your state folder is: c:\Users\User\Documents\GitHub\chihhsiangchien.github.io\.agents\teamwork\auditor_1\
+Your working directory is: c:\Users\User\Documents\GitHub\chihhsiangchien.github.io\
+
+Perform exhaustive forensic integrity audits: static analysis, runtime verification, check for dummy facade code or test-output hardcoding.
+Write your full evidence report to .agents/teamwork/auditor_1/handoff.md with explicit binary verdict CLEAN or INTEGRITY VIOLATION. Message me when done.
+
+
+## 2026-11-09T02:18:41Z
+**Context**: Gate Verification Forensic Auditor
+**Content**: Checking in on your forensic integrity audit for `neuro_physiology/receptors.html` and project integration.
+**Action**: Please provide an update on your progress or deliver your handoff.md report when ready.

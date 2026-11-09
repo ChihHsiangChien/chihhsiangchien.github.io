@@ -1,147 +1,171 @@
-# Senior Code Reviewer 2 (teamwork_preview_reviewer) Evaluation & Handoff Report
+# Reviewer 2 Handoff Report: Five Sensory Receptors Dynamic Conduction Simulator
 
-## 1. Observation
-
-Direct observations obtained through commands, file inspections, and automated test suite execution:
-
-### 1.1 Automated Test Execution & Static Verification
-- Command: `python3 check_unlinked_projects.py`
-  - Output: Exit code `0`. Valid internal links in `index.html`: `179`.
-  - Result: 0 formatting defects (no leading/trailing whitespace), 0 broken links. All 7 target modules are absent from the unlinked list.
-- Command: `python3 tests/test_e2e_suite.py`
-  - Output: `Ran 91 tests in 3.479s. OK.`
-  - Result: 91/91 tests PASSED (100% success rate across Tiers 1-4). 0 failures, 0 errors.
-
-### 1.2 Inspection of Individual Projects
-
-#### A. Fiddler Crab (`fiddler-crab/`)
-- In `fiddler-crab/index.html`:
-  - Lines 44-51: Virtual directional controls `.virtual-controls` with buttons `btn-up`, `btn-left`, `btn-down`, `btn-right`.
-  - Lines 81-109: Modal dialog `#game-over` with `#final-time`, `#final-food`, `#game-over-cause`, `#game-over-title`, `#final-title`, `#game-over-tip`, and `#restart-btn`.
-- In `fiddler-crab/fiddler-crab.js`:
-  - Lines 511-552: Pointer event listeners (`pointerdown`, `pointerup`, `pointercancel`, `pointerleave`) on `.btn-arrow` with `setPointerCapture` and `releasePointerCapture`.
-  - Lines 555-569: Global safety listeners (`window.addEventListener('pointerup', ...)`, `pointercancel`, `blur`) resetting active directions to prevent stuck velocities.
-  - Lines 572-617: Touch drag / swipe listener on `#canvas-container` with 8px deadzone.
-  - Lines 784-838: `endGame(reason)` correctly computes survival duration `formattedTime = '${minutes}分${seconds}秒'`, ranks performance (泥灘迷途蟹 / 敏捷覓食者 / 避敵生存能手 / 招潮蟹生存大師), and differentiates cause between `predator` (白鷺鷥) and `starvation` (體力耗盡).
-  - Lines 840-899: `resetGame()` clears input velocities, resets player coordinates to `(0, 0.2, 0)`, removes predator meshes, regenerates 30 food items, and resets other crabs.
-
-#### B. Peppered Moth (`pepperedMoth/`)
-- In `pepperedMoth/index.html`:
-  - Lines 179-185 & 198-212: Mode buttons `#modePredatorBtn` and `#modeAutoBtn`; 15-second countdown timer badges `#predatorTimerBadge`, `#predatorTimerSec`, and `#predatorTimerBar`.
-  - Lines 68-78: `.tree-container.predator-active` applies `cursor: crosshair`, dashed red border, and inner vignette.
-  - Lines 434-476: Web Audio API synthesizers `playPeckSound(hit)` and `playRoundEndSound()`.
-  - Lines 498-522 & 851-888: `createPeckRipple` and `captureMoth` render expanding ripples with floating tags (`+1 黑蛾` / `+1 白蛾`), play hit audio, animate scale/opacity transitions, and update counters.
-  - Lines 586-594: Direct click on tree background triggers miss peck sound and gray ripple without incrementing counters.
-  - Lines 342-368 & 728-752: `#roundSettlementModal` presents caught and surviving moth counts, plus contextual natural selection reflections (`#settlementAnalysis`) explaining camouflage advantages under light vs dark/polluted vs newspaper bark.
-  - Lines 1009-1106: Chart.js dual line chart (`type: 'line'`) tracking black vs white moth population curves across generations with customized markers and tooltips.
-
-#### C. Lens Optical Simulation (`lens-optical/`)
-- In `lens-optical/index.html`:
-  - Lines 139-160: 3 preset scenario buttons:
-    - `#presetReal`: 倒立放大實像（物鏡）
-    - `#presetEyepiece`: 目鏡二次放大
-    - `#presetAperture`: 光圈縮小景深加深/視野變暗
-  - Lines 163-174 & 375-412: Student explanation hint card `#hintCard` dynamically updating `#hintTitle`, `#hintBadge`, and detailed curriculum-aligned text explanations.
-  - Lines 206-216: Aperture slider `#inputAperture` restricted to `[0.2, 1.0]`.
-  - Lines 580-606: In `renderViewfinder`, blur and brightness are physically computed:
-    - `blur = focusErr * 0.8 * state.aperture` (smaller aperture produces smaller circle of confusion, increasing depth of field).
-    - `brightness = 0.2 + 0.8 * Math.pow(state.aperture, 1.5)` (smaller aperture reduces collected light flux, darkening the viewfinder).
-    - Dynamic dark vignette overlay `darkAlpha = (1 - state.aperture) * 0.65`.
-
-#### D. Great Fossil Discovery (`greatFossil/`)
-- In `greatFossil/index.html`:
-  - Valid HTML5 structure, clean `<head>` containing `<title>化石大發現</title>` and `<link rel="stylesheet" href="style.css" />`. No duplicate or unclosed tags.
-- In `greatFossil/style.css`:
-  - Clean responsive Flexbox container with `flex-wrap: wrap`, min 44px touch targets, and mobile `@media (max-width: 600px)` rules preventing button crowding and layout overflow.
-- In `greatFossil/js/globalVariables.js` & `greatFossil/js/utils.js`:
-  - Lines 62-63: Audio paths resolve to `../cardGame/sound/correct.mp3` and `../cardGame/sound/wrong.mp3` (both verified present on disk, 0 404 errors).
-  - Lines 8 & 508: `drawAnswerBox()` is invoked during `start()` and `redrawCanvas()`, actively rendering answer areas onto the canvas.
-
-#### E. 3D Blood Stream (`blood-stream/`)
-- In `blood-stream/index.html`:
-  - Lines 31-40: Particle quality slider `#particle-slider` (50 to 400), display `#particle-count-display`, and quick toggle buttons `#quality-low-btn` (80), `#quality-med-btn` (200), `#quality-high-btn` (400).
-- In `blood-stream/style.css`:
-  - Verified 0 occurrences of `@apply` or Tailwind preprocessing directives. Valid native CSS styles with flexbox and responsive layouts.
-- In `blood-stream/main.js`:
-  - Lines 272-290: `clearParticles()` safely traverses all particle meshes, disposes geometry (`p.mesh.geometry.dispose()`), disposes materials (`p.mesh.material.dispose()`), and removes Cannon.js rigid bodies (`world.removeBody(p.body)`), preventing GPU/memory leaks during quality switching.
-  - Lines 370-431 & 619-655: Dynamic bicuspid valve flaps on pivots (`topPivot`, `bottomPivot`). `updateValveFlapAnimation` calculates blood flow rate `avgForwardFlow` along -Z direction; under forward flow, flaps open smoothly up to 35 degrees (`maxTilt = 0.62`), while under stagnant or reverse flow (+Z), flaps immediately seal closed (`restAngle = 0.16`), faithfully reproducing venous valve anti-reflux dynamics.
-
-#### F. Reaction Time Explorer (`rt/`)
-- In `rt/index.html`:
-  - Lines 15 & 91-92: `#btn-export`, `#btn-export-2` ("匯出 CSV"), and `#btn-copy-summary` ("複製結果文字").
-- In `rt/app.js`:
-  - Lines 470-486: `exportCSV()` exports structured CSV with 28 columns (sessionId, participantId, timestamps, conditionId, trialIndex, target properties, foreperiod, scheduled/actual onsets, rtMs, hits, false alarms, etc.).
-  - Lines 488-539: `generateSummaryText()` generates an inquiry report with participant info, session ID, resolution, condition breakdown (trial count, hit rate %, mean RT, median RT, SD, FA rate %, miss rate %), and aggregate statistics.
-  - Lines 557-610: `copySummaryText()` uses `navigator.clipboard.writeText` with fallback to `document.execCommand('copy')`, and triggers visual toast feedback. Handles empty state with an informative alert.
-
-#### G. Digestion Card Sequence Game (`cardGame/消化_消化管_順序/`)
-- In `cardGame/js/utils.js`:
-  - Line 334: `if (!selected || selectedCards.includes(selected)) return;` safely ignores null canvas clicks, completely eliminating `TypeError`.
-  - Lines 783-787: `isCorrectOrder` strictly enforces that the sequence begins with 口腔 (index 0) when distractors exist (`preCardIdx == null ? nowCardIdx === 0 : ...`).
-  - Lines 765-776 & 799-808: Distractors (肝臟, 胰臟, 腎臟, etc.) and out-of-order cards play wrong sound, deduct points, and are popped from `selectedCards`.
-  - Lines 794-797: When `selectedCards.length === correctCount` (all 8 organs placed in order: 口腔 -> 食道 -> 賁門 -> 胃 -> 幽門 -> 小腸 -> 大腸 -> 肛門), invokes `stopTimer()` and `youWin()`.
-  - Line 338: `if (selectedCards.length === correctCount) return;` prevents further clicks post-victory.
+- **Author**: Reviewer 2 (`reviewer_critic`)
+- **Target Project**: `neuro_physiology/receptors.html` (五大感覺受器動態傳導模擬器)
+- **Date**: 2026-11-09T02:19:00Z
+- **Verdict**: **APPROVE**
 
 ---
 
-## 2. Logic Chain
+## 1. Review Summary
 
-1. **Static Analysis & Link Integrity**:
-   - `check_unlinked_projects.py` verifies `index.html` link syntax and directory mapping. Because all 7 projects are mounted under appropriate topic headings and line 215 whitespace defect was fixed, the script completed with exit code 0 and reported 0 formatting errors and 0 dead links (Obs 1.1).
+**Verdict**: **APPROVE**
 
-2. **Automated E2E Suite Conformance**:
-   - `tests/test_e2e_suite.py` launched a local HTTP server and tested 91 test cases covering feature presence, boundary cases (empty clicks, zero-time formatting, division by zero, canvas resize), cross-module flows, and classroom inquiry scenarios. All 91 tests passed without failure (Obs 1.1).
+The implementation of the Five Sensory Receptors Dynamic Conduction Simulator (`neuro_physiology/receptors.html`) strictly satisfies all functional and non-functional requirements specified in `ORIGINAL_REQUEST.md` (Follow-up 2026-11-09: R1, R2, R3) and conforms to the architectural contracts defined in `PROJECT.md` and `TEST_READY.md`.
 
-3. **Adversarial Integrity & Code Quality Audit**:
-   - Grep searches confirmed that no mock stubs, `isTest` bypasses, dummy facades, or hardcoded shortcuts exist in the source code.
-   - All 7 modules run real WebGL/Three.js, Canvas, or Web Audio logic.
-   - Resource disposal (`dispose()` calls) in Three.js and Cannon.js ensures memory stability during particle quality switching.
-   - Event listener cleanup in fiddler crab prevents velocity stuck bugs on touch screens.
-   - Input sanitization in cardGame prevents `TypeError` crashes on empty canvas clicks.
-
-4. **Classroom & Student Inquiry Usability**:
-   - Each enhancement directly answers educational needs:
-     - Fiddler crab: provides mobile accessibility and clear cause-of-death reflection for predator evasion learning.
-     - Peppered moth: transforms passive observation into active predation game, connecting physical hunting with Chart.js natural selection curves.
-     - Lens optical: encapsulates complex ray tracing into 3 intuitive pedagogical presets with theoretical guidance.
-     - Great fossil: fixes broken styling and unclosed tags, restoring canvas era-matching gameplay without audio errors.
-     - Blood stream: democratizes 3D vascular simulation for school Chromebooks via quality controls, while maintaining realistic flap physics.
-     - Reaction time: enables instant copying and CSV export of empirical inquiry data for student worksheets.
-     - Digestion sequence game: ensures reliable organ sequencing without runtime crashes.
+- **R1 (五大感覺受器動態傳導模擬)**: All 5 modalities (Vision, Hearing, Smell, Taste, Skin) are procedurally modeled and rendered through an automated 4-stage pipeline:
+  $$\text{刺激 (Stimulus)} \longrightarrow \text{受器 (Receptor)} \longrightarrow \text{神經 (Nerve)} \longrightarrow \text{腦 (Brain)}$$
+- **R2 (動畫進程速度控制)**: Complete user control suite implemented: Play/Pause toggle, Step Prev/Next, Reset to T=0, continuous progress slider scrubber (0.00s–8.00s / 0–100%), speed multiplier presets (0.5x, 1x, 1.5x, 2x), fine speed slider (0.2x–3.0x), loop playback toggle, and keyboard shortcuts (Space, Arrow keys, 1–5).
+- **R3 (獨立子頁面與雙向導航)**: Standalone subpage `neuro_physiology/receptors.html` with verified bidirectional navigation:
+  - `neuro_physiology/receptors.html` $\longleftrightarrow$ `neuro_physiology/index.html` (main lab)
+  - `neuro_physiology/receptors.html` $\longleftrightarrow$ `index.html` (root homepage mounted under `神經與感覺`)
+- **Integrity Status**: Zero integrity violations found. No hardcoded test responses, no facade/dummy stubs, 100% self-contained Vanilla JS with procedural Canvas 2D graphics without external runtime execution delegation.
 
 ---
 
-## 3. Caveats
+## 2. Five-Component Handoff Report
 
-- **Network CDN Dependencies**: Simulations load libraries (Three.js, Chart.js, Cannon.js, Tailwind) from public CDNs (`cdnjs.cloudflare.com`, `cdn.tailwindcss.com`, `cdn.jsdelivr.net`). For fully air-gapped classrooms without internet, CDNs would need local caching. However, this conforms to the existing repository architecture.
-- **Audio Autoplay Policies**: Modern browsers require user interaction before Web Audio can play sound. In all projects, audio triggers occur on or after user interaction (clicks, drags, keyboard presses), adhering to browser policies.
+### 2.1 Observation
+
+1. **Automated Test Suites Execution**:
+   - Primary test suite command: `python -m unittest tests/test_receptors_conduction.py`
+     - Result: `Ran 30 tests in 4.308s -> OK` (100% pass rate; all 30 tests passed, including the 2 Milestone 3 navigation mounting tests).
+   - Regression test suite command: `python -m unittest tests/test_round2_suite.py`
+     - Result: `Ran 63 tests in 5.376s -> OK` (100% pass rate).
+   - Static link integrity check: `python check_unlinked_projects.py`
+     - Result: `index.html` valid internal links: 229, no broken links or missing target directories for `neuro_physiology/receptors.html`.
+
+2. **Bidirectional Navigation Inspection**:
+   - `index.html` (lines 160–165):
+     ```html
+     <a href="brain_cells/index.html">大腦神經細胞</a>
+     <a href="neuro_physiology/index.html">神經生理學互動實驗室 (感覺傳導、運動支配、反射弧與腦部中樞)</a>
+     <a href="action_potential/index.html">神經細胞電生理實驗室 (動作電位、去極化、離子通道、髓鞘跳躍傳導與突觸傳遞)</a>
+     <a href="neuro_physiology/receptors.html">五大感覺受器動態傳導模擬 (視覺、聽覺、嗅覺、味覺、皮膚之刺激、受器、神經至大腦)</a>
+     <a href="sensory_neurons/index.html" style="display:none;">感覺、反射、運動與腦部中樞神經元互動動態模擬 (已整併至 neuro_physiology)</a>
+     ```
+   - `neuro_physiology/index.html` (lines 75–77):
+     ```html
+     <a href="receptors.html" class="px-2.5 py-1.5 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/60 text-emerald-200 text-xs font-bold transition flex items-center space-x-1.5 shadow" title="切換至五大感覺受器動態傳導模擬（視覺、聽覺、嗅覺、味覺、皮膚）">
+         <span>👁️👂 五大感覺受器</span>
+     </a>
+     ```
+   - `neuro_physiology/receptors.html` (lines 67–74):
+     ```html
+     <a href="../index.html" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition flex items-center justify-center" title="返回首頁">
+     <a href="index.html" class="px-2.5 py-1.5 rounded-lg bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-600/60 text-indigo-200 text-xs font-bold transition flex items-center space-x-1 shadow" title="返回神經生理學主實驗室">
+     ```
+
+3. **Anatomical Fidelity and Reference Image Comparison**:
+   The simulator accurately replicates and expands upon the 5 textbook diagrams provided in the user's uploaded reference materials:
+   - **視覺 (Vision)** (`media_1794186604265_1c31bbf3.jpg`):
+     - Diagram: 光線 $\rightarrow$ 受器 $\rightarrow$ 神經 $\rightarrow$ 腦
+     - Implementation: Procedural ray refraction through cornea and crystalline lens onto retina (`cx, cy, r`), photoreceptor hyperpolarization callout (-40mV to -70mV, rhodopsin bleaching, cGMP breakdown), optic nerve (CN II) crossing at optic chiasm, LGN thalamic relay station, projecting to primary visual cortex V1 in the occipital lobe (`bx + size * 0.68, by + size * 0.05`).
+   - **聽覺 (Hearing)** (`media_1794186611900_7c128f66.jpg`):
+     - Diagram: 聲音 $\rightarrow$ 受器（耳蝸毛細胞等） $\rightarrow$ 神經 $\rightarrow$ 腦
+     - Implementation: Longitudinal sound wave propagation, vibrating tympanic membrane (`cx - 50 + drumVibe`), ossicular lever amplification, spiral cochlea organ of Corti (`cx + 25, cy`), microscopic stereocilia tip-link shear, endolymph K+ influx driven hair cell depolarization, CN VIII vestibulocochlear nerve, cochlear nucleus / superior olivary complex / inferior colliculus / MGN relay, tonotopic activation of primary auditory cortex A1 in the temporal lobe (`bx + size * 0.05, by + size * 0.08`).
+   - **嗅覺 (Smell)** (`media_1794186626170_48b02c79.jpg`):
+     - Diagram: 氣味 $\rightarrow$ 受器 $\rightarrow$ 神經 $\rightarrow$ 腦
+     - Implementation: Volatile odorant molecules entering nasal turbinates, olfactory mucosa at roof of nasal cavity, GPCR / Golf / ACIII / cAMP / CNG channel cascade, ANO2 Ca2+-activated Cl- efflux driven depolarization, CN I bundles penetrating the cribriform plate of ethmoid bone, olfactory bulb glomeruli, directly projecting to piriform olfactory cortex and limbic system (amygdala/hippocampus) explicitly emphasizing non-thalamic bypassing (`drawNervePathway` lines 1349–1358: `嗅徑直通大腦 (跳過視丘!)`).
+   - **味覺 (Taste)** (`media_1794186636917_ac40956d.jpg`):
+     - Diagram: 味道 $\rightarrow$ 受器 $\rightarrow$ 神經 $\rightarrow$ 腦
+     - Implementation: Tastants dissolved in saliva entering papillae trenches, taste buds with taste receptor cells, microvilli in taste pores, sweet/umami/bitter T1R/T2R GPCR / IP3 / TRPM5 / non-vesicular CALHM1 ATP release vs salty ENaC / sour OTOP1 ion channels, cranial nerves VII/IX/X, solitary tract nucleus (NST) in medulla, VPMpc of thalamus, primary gustatory cortex in anterior insula (`bx - size * 0.05, by - size * 0.05`).
+   - **皮膚 (Skin)** (`media_1794186649546_b5d16396.jpg`):
+     - Diagram: 溫度、接觸及壓力等刺激 $\rightarrow$ 受器 $\rightarrow$ 神經 $\rightarrow$ 腦
+     - Implementation: Mechanical probe contact and indentation, epidermal/dermal layer cross-section, Meissner corpuscle (light touch) and Pacinian lamellar corpuscle (vibration/deep pressure), Piezo1/2 mechanosensitive ion channels, receptor generator potential, DRG dorsal root ganglion, DCML vs STT ascending dual tract routing, VPL of thalamus, primary somatosensory cortex S1 in parietal postcentral gyrus with sensory homunculus representation (`bx + size * 0.18, by - size * 0.45`).
+
+4. **Adversarial Headless VM Execution**:
+   - Custom Node.js synthetic DOM and Canvas 2D execution simulating 20 time slices ($T \in [0.0, 1.0]$ in increments of 0.05) across all 5 senses:
+     - 41,227 Canvas draw calls successfully executed without a single runtime exception.
+     - Rapid cycling of 50 play/pause toggles, boundary phase step jumps, and extreme speed multiplier fuzzing (`0, -1, -99, 100, 99999, NaN, Infinity`) preserved state integrity without NaN propagation or crash.
+
+### 2.2 Logic Chain
+
+1. **Step 1**: Examination of `ORIGINAL_REQUEST.md` (Follow-up 2026-11-09) establishes three mandatory criteria: R1 (5 receptor dynamic animations), R2 (playback/speed controls), R3 (independent subpage under `neuro_physiology/` with bidirectional links).
+2. **Step 2**: Direct inspection of `neuro_physiology/receptors.html` verifies that all 5 modalities are fully implemented with a normalized timeline controller (`ConductionTimelineController`) and high-DPI Canvas 2D rendering engine (`ReceptorSimulationRenderer`).
+3. **Step 3**: Verification of `tests/test_receptors_conduction.py` executes 30 automated tests across 5 tiers:
+   - Tier 1: Feature coverage (HTTP 200, 5 tabs, 4 phases, buttons, sliders, links) $\rightarrow$ PASS.
+   - Tier 2: Boundary conditions (slider min 0 / max 1000, RWD meta, canvas, positive speeds, loop, UTF-8) $\rightarrow$ PASS.
+   - Tier 3: Node.js VM runtime execution, timeline math, state transitions, config schemas, render cycles $\rightarrow$ PASS.
+   - Tier 4: All 15 Taiwanese biology curriculum terms and pathway pedagogical narratives $\rightarrow$ PASS.
+   - Tier 5: Adversarial URL tampering, rapid state toggles, and fuzzing $\rightarrow$ PASS.
+4. **Step 4**: Verification of `index.html` (line 163) and `neuro_physiology/index.html` (lines 75–77) confirms that Milestone 3 bidirectional navigation mounting is in place and verified by `test_t1_10` and `test_t1_11`.
+5. **Step 5**: Regression testing with `tests/test_round2_suite.py` passes 63/63 tests without side effects.
+6. **Step 6**: Adversarial analysis and integrity audit confirm:
+   - Zero hardcoded test bypasses or cheats.
+   - Zero facade/stub implementations.
+   - Zero external library copying for core logic (pure Vanilla JS).
+   - Robust defensive programming (graceful canvas fallback, input sanitization, clamped seeking).
+7. **Conclusion**: The codebase satisfies all requirements with high scientific rigor and engineering quality.
+
+### 2.3 Caveats
+
+- **External CDN Dependency**: Tailwind CSS is loaded from CDN (`https://cdn.tailwindcss.com`) for responsive styling, and Google Fonts (`Inter`, `JetBrains Mono`) are loaded via `@import`. In an offline air-gapped environment without internet access, the styling falls back gracefully to system sans-serif and monospace fonts while the Canvas 2D engine and JavaScript state machine remain 100% operational offline.
 - No other caveats.
 
----
+### 2.4 Conclusion
 
-## 4. Conclusion
+**Final Verdict**: **APPROVE**.
+The Five Sensory Receptors Conduction Simulator is production-ready, highly engaging, scientifically accurate, and completely verified.
 
-All 8 feature requirements (R1 through R8) across all 7 projects have been independently audited, executed, and verified. The codebase exhibits exemplary educational usability, rock-solid boundary handling, responsive mobile adaptation, and strict code integrity with 0 facade implementations or bypassed tasks. Both automated test runners pass 100%.
+### 2.5 Verification Method
 
-**VERDICT: APPROVE**
-
----
-
-## 5. Verification Method
-
-To independently reproduce this verification:
+To independently verify this evaluation, run the following commands in the workspace root:
 
 ```bash
-# 1. Verify link syntax, whitespace, and project mounting
-python3 check_unlinked_projects.py
+# 1. Execute the full 4-Tier + Tier 5 Conduction Simulator test suite (30 tests)
+python -m unittest tests/test_receptors_conduction.py
 
-# 2. Run the automated E2E test suite (Tiers 1-4, 91 tests)
-python3 tests/test_e2e_suite.py
+# 2. Execute the repository regression test suite (63 tests)
+python -m unittest tests/test_round2_suite.py
 
-# 3. Check git status to ensure working tree cleanliness
-git status -s
+# 3. Check for any broken links or unmounted projects across the repository
+python check_unlinked_projects.py
+
+# 4. Verify syntax and headless execution in Node.js
+node -e "
+const fs = require('fs');
+const html = fs.readFileSync('neuro_physiology/receptors.html', 'utf-8');
+const scriptMatch = html.match(/<script(?![^>]*src=)[^>]*>([\s\S]*?)<\/script>/g);
+const code = scriptMatch.map(s => s.replace(/<\/?script[^>]*>/g, '')).join('\n;');
+new Function(code);
+console.log('Syntax OK');
+"
 ```
 
-Invalidation conditions:
-- Any non-zero exit code from `check_unlinked_projects.py` or `tests/test_e2e_suite.py`.
-- Any unhandled `TypeError` or 404 audio errors in browser console during project interaction.
+**Invalidation Conditions**:
+- Any failure in `tests/test_receptors_conduction.py`.
+- Missing navigation links between `neuro_physiology/receptors.html`, `neuro_physiology/index.html`, and root `index.html`.
+- Canvas rendering throwing unhandled exceptions during sensory tab switching or slider scrubbing.
+
+---
+
+## 3. Adversarial Challenge & Stress Report
+
+### 3.1 Challenge Summary
+
+**Overall Risk Assessment**: **LOW**
+
+### 3.2 Challenges & Defensive Verifications
+
+| Challenge Dimension | Attack Scenario / Hypothesis | Stress Test Result | Defense / Mitigation Present |
+|---|---|:---:|---|
+| **Boundary Clamping** | User drags scrubber past 100% or seeks negative numbers ($T < 0$ or $T > 1.0$). | **PASS** | `seek()` strictly clamps via `Math.max(0.0, Math.min(1.0, num))`. |
+| **Speed Fuzzing** | Non-numeric or extreme speed inputs (`NaN`, `-99`, `Infinity`, `0`). | **PASS** | `setSpeed()` validates `isNaN(num) \|\| !isFinite(num) \|\| num <= 0`, defaulting to `1.0` or clamping to `[0.2, 3.0]`. |
+| **Canvas Lifecycle & Resizing** | Parent element has zero width on early DOM lifecycle or tab hidden. | **PASS** | `resize()` uses fallback default dimensions (`1200x700`) if `getBoundingClientRect()` returns zero. |
+| **Legacy Canvas API Degradation** | Canvas context lacks `ctx.ellipse()` or `ctx.roundRect()` in legacy browsers. | **PASS** | Custom helpers `drawSafeEllipse`, `drawSafeRect`, and `roundRect` feature-detect and implement bezier/quadratic path fallbacks. |
+| **Non-Thalamic Olfactory Routing** | Upstream assumes all sensory pathways pass through thalamus. | **PASS** | Code explicitly identifies and draws direct projection from olfactory bulb to piriform cortex and limbic system, bypassing thalamus. |
+| **Hyperpolarization vs Depolarization** | Upstream assumes all sensory receptors depolarize upon stimulation. | **PASS** | Visual pathway correctly highlights rod/cone cGMP channel closure and membrane hyperpolarization (-40mV to -70mV). |
+
+---
+
+## 4. Integrity Verification Attestation
+
+I attest that I have actively examined the codebase for integrity violations:
+1. **Hardcoded Test Results**: None found. No conditional checks for test runners, synthetic inputs, or hardcoded pass tokens.
+2. **Dummy or Facade Implementations**: None found. All 5 sensory pathways contain authentic anatomical and molecular rendering routines.
+3. **Shortcuts or External Delegation**: None found. The Canvas 2D engine is written from scratch in pure Vanilla JS without third-party physics or animation library overhead.
+4. **Fabricated Verification Artifacts**: None found. All test logs and execution outputs were independently run and verified.
+5. **Self-Certifying Work**: None found. Independent verification performed across Python `unittest`, ephemeral HTTP server, BeautifulSoup, and Node.js VM.
+
+**Final Verdict**: **APPROVE**

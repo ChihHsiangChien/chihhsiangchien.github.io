@@ -1,217 +1,154 @@
-# Adversarial Challenge & Verification Report
+# Empirical Challenger Verification Report: Five Sensory Receptors Conduction Simulator
 
-- **Agent**: Adversarial Verifier 1 (`teamwork_preview_challenger` / challenger_1)
-- **Role**: Critic, Empirical Challenger
-- **Working Directory**: `/home/pancala/Documents/chihhsiangchien.github.io/.agents/teamwork/challenger_1`
-- **Date**: 2026-10-23
-- **Verdict**: **VERDICT: REQUEST_CHANGES**
+- **Auditor**: Challenger 1 (`empirical_challenger`)
+- **Target Page**: `neuro_physiology/receptors.html`
+- **Target Integrations**: `neuro_physiology/index.html`, `index.html`
+- **Test Harnesses**:
+  - `tests/test_receptors_conduction.py` (30 E2E tests across 5 tiers)
+  - `tests/test_challenger_receptors_stress.py` (7 Adversarial Stress & Fuzzing tests)
+- **Verdict**: **APPROVE**
 
 ---
 
 ## 1. Observation
 
-### Obs 1: Static Link Integrity & Unlinked Target Project
-Executed command:
-```bash
-python3 check_unlinked_projects.py
+### 1.1 Automated Test Execution Results
+
+1. **Baseline E2E Test Suite (`tests/test_receptors_conduction.py`)**:
+   Command:
+   ```bash
+   python -m unittest tests/test_receptors_conduction.py
+   ```
+   Verbatim Output:
+   ```text
+   ..............................
+   ----------------------------------------------------------------------
+   Ran 30 tests in 4.043s
+
+   OK
+   ```
+   All 30 tests passed:
+   - Tier 1 (Coverage): 11/11 passed (including bidirectional mounting in `neuro_physiology/index.html` line 75 and root `index.html` line 163).
+   - Tier 2 (Boundary): 6/6 passed (time scrubber range 0-1000, UTF-8 charset, High-DPI canvas configuration).
+   - Tier 3 (Node.js VM & Cross-Feature): 5/5 passed (zero syntax errors, deterministic 4-phase timeline mapping).
+   - Tier 4 (Curriculum Pedagogy): 6/6 passed (all 15 Taiwanese high school biology curriculum anatomical terms present).
+   - Tier 5 (Stress): 2/2 passed (URL injection, controller rapid toggling).
+
+2. **Challenger Adversarial Stress Suite (`tests/test_challenger_receptors_stress.py`)**:
+   Command:
+   ```bash
+   python -m unittest tests/test_challenger_receptors_stress.py
+   ```
+   Verbatim Output:
+   ```text
+   .......
+   ----------------------------------------------------------------------
+   Ran 7 tests in 11.998s
+
+   OK
+   ```
+   Combined Execution:
+   ```bash
+   python -m unittest tests/test_receptors_conduction.py tests/test_challenger_receptors_stress.py
+   ```
+   Verbatim Output:
+   ```text
+   .....................................
+   ----------------------------------------------------------------------
+   Ran 37 tests in 19.040s
+
+   OK
+   ```
+
+### 1.2 Playwright Headless Real Browser Verification (Microsoft Edge)
+During real headless browser execution via Playwright against `http://127.0.0.1:<port>/neuro_physiology/receptors.html`:
+- 30 rapid Play/Pause button clicks within 500ms: Handled with zero state desync.
+- 25 rapid tab switches across all 5 senses (Vision, Hearing, Smell, Taste, Skin) while running at 3.0x speed: Handled cleanly without animation stutter.
+- Timeline scrubber sweep across positions [100, 250, 500, 750, 990, 0, 450, 850, 1000]: Progress clamped accurately in $[0.0, 1.0]$.
+- Keyboard shortcuts (`Space`, `ArrowRight`, `ArrowLeft`, `1`, `2`, `3`, `4`, `5`): Dispatched and processed without error.
+- Help modal and Sidebar toggle open/close hammering: Modals opened and closed smoothly.
+- Mobile viewport resize to $375 \times 667$ (iPhone SE / mobile standard) for 1 second of active animation: Canvas scaled properly, no layout breakage.
+- Browser Console Monitor: Exactly **0 unhandled page errors**, **0 console errors**, and **0 failed network requests** recorded.
+
+### 1.3 State Machine and Biophysical Invariants
+- Fuzzing `ConductionTimelineController.seek()` with `[-1000, -1.0, 1.0001, 99999, NaN, Infinity, -Infinity, null, undefined, "invalid", {}, []]` resulted in guaranteed clamping within $[0.0, 1.0]$.
+- Fuzzing `setSpeed()` with `[0, -1, NaN, Infinity, -Infinity, "fast", 10000]` clamped multiplier safely within $[0.2, 3.0]$.
+- Smell pathway skips the thalamus: `RECEPTOR_CONFIGS.smell.relayStation` explicitly verifies `"嗅球 (Olfactory Bulb) 嗅絲球 (無須經視丘!)"`, and `hasThalamus = receptorKey !== 'smell'` accurately suppresses thalamus rendering.
+- Vision pathway verifies rhodopsin bleaching, cGMP reduction, and phototransduction hyperpolarization (-40mV -> -70mV).
+- Hearing pathway verifies stereocilia tip links deflection and K+ influx from high-potassium endolymph.
+- Taste pathway verifies 5 canonical tastes (甜、酸、鹹、苦、鮮) and solitary tract nucleus (NST) relay.
+- Skin pathway verifies Meissner/Pacinian mechanoreceptors, DRG, dual-track DCML vs STT, and primary somatosensory cortex S1.
+- Particle array length (`bgParticles.length === 40`) was verified invariant across 5,000 continuous render cycles, ensuring zero memory expansion.
+
+### 1.4 Minor Defensive Programming Observation
+In `neuro_physiology/receptors.html` line 1346:
+```javascript
+const relayName = RECEPTOR_CONFIGS[receptorKey].relayStation.split('➔').pop().trim();
 ```
-Verbatim stdout output:
-```
-🔍 正在檢視專案目錄: /home/pancala/Documents/chihhsiangchien.github.io
-📄 讀取首頁: /home/pancala/Documents/chihhsiangchien.github.io/index.html
-
-============================================================
-📊 統計總覽
-============================================================
-• index.html 有效內部連結數: 178
-• 一級目錄總數: 160
-  ├── 已連結之一級目錄: 133
-  └── 未被連結之一級目錄: 27
-• 全專案未被連結之 HTML 檔案數: 98
-
-============================================================
-📁 未被 index.html 連結之一級目錄清單 (27 個)
-============================================================
-...
-• greatFossil               | 🟢 具 index.html | 共 3 檔案 [首頁標題: 化石大發現]
-...
-```
-- Direct observation: `greatFossil` is explicitly listed under **未被 index.html 連結之一級目錄清單 (27 個)**.
-- Inspection of `index.html` (lines 196-203):
-```html
-    <h1>演化</h1>
-    <a href="fossils/index.html">化石拼圖</a>
-    <a href="pepperedMoth/index.html">胡椒蛾天擇模擬之戰</a>
-```
-`<a href="greatFossil/index.html">化石大發現</a>` is completely missing from `index.html`. Only 6 of the 7 requested projects are mounted.
-
-### Obs 2: Test Suite Regressions in `tests/test_e2e_suite.py`
-Executed command:
-```bash
-python3 tests/test_e2e_suite.py
-```
-Verbatim stdout output:
-```
-======================================================================
-FAIL: test_r5_1_great_fossil_html_head_structure (__main__.TestTier1FeatureCoverage.test_r5_1_great_fossil_html_head_structure)
-R5.1: Verify greatFossil/index.html links style.css and has proper <title>.
-----------------------------------------------------------------------
-Traceback (most recent call last):
-  File "/home/pancala/Documents/chihhsiangchien.github.io/tests/test_e2e_suite.py", line 299, in test_r5_1_great_fossil_html_head_structure
-    self.assertIsNotNone(css_link, "greatFossil/index.html must link style.css")
-AssertionError: unexpectedly None : greatFossil/index.html must link style.css
-
-======================================================================
-FAIL: test_r5_3_audio_paths_sound_resolution (__main__.TestTier1FeatureCoverage.test_r5_3_audio_paths_sound_resolution)
-R5.3: Verify greatFossil/js/globalVariables.js links existing audio files.
-----------------------------------------------------------------------
-Traceback (most recent call last):
-  File "/home/pancala/Documents/chihhsiangchien.github.io/tests/test_e2e_suite.py", line 324, in test_r5_3_audio_paths_sound_resolution
-    self.assertIn('../cardGame/sound/correct.mp3', code)
-AssertionError: '../cardGame/sound/correct.mp3' not found in '... var correctSound = new Audio("../sound/correct.mp3");\nvar wrongSound = new Audio("../sound/wrong.mp3"); ...'
-
-======================================================================
-FAIL: test_r5_5_responsive_flexbox_styling (__main__.TestTier1FeatureCoverage.test_r5_5_responsive_flexbox_styling)
-R5.5: Verify greatFossil/style.css contains responsive layout rules.
-----------------------------------------------------------------------
-Traceback (most recent call last):
-  File "/home/pancala/Documents/chihhsiangchien.github.io/tests/test_e2e_suite.py", line 346, in test_r5_5_responsive_flexbox_styling
-    self.assertIn('@media', css_text)
-AssertionError: '@media' not found in '<!DOCTYPE HTML>... <h1>Error response</h1><p>Error code: 404</p> ...'
-
-======================================================================
-FAIL: test_t3_6_cross_project_asset_and_sound_integrity_matrix (__main__.TestTier3CrossFeatureCombinations.test_t3_6_cross_project_asset_and_sound_integrity_matrix)
-T3.6: Verify asset matrix (audio, CSS, JS) returns 200 OK without 404s.
-----------------------------------------------------------------------
-Traceback (most recent call last):
-  File "/home/pancala/Documents/chihhsiangchien.github.io/tests/test_e2e_suite.py", line 1024, in test_t3_6_cross_project_asset_and_sound_integrity_matrix
-    self.assertEqual(status, 200, f"Critical asset '{asset}' returned HTTP {status}")
-AssertionError: 404 != 200 : Critical asset 'greatFossil/style.css' returned HTTP 404
-
-----------------------------------------------------------------------
-Ran 91 tests in 3.616s
-
-FAILED (failures=7)
-
-======================================================================
-📊 Test Results Summary:
-• Total Tests Run: 91
-• Failures: 7
-• Errors: 0
-• Success Rate: 92.3%
-======================================================================
-❌ Test suite encountered failures or errors!
-```
-- Total test count: 91 tests run, 7 failures, 84 passed (92.3% success rate). Required threshold: 100% (0 failures, 0 errors).
-- Failed tests:
-  1. `test_r1_1_check_unlinked_projects_script`: Failed due to `greatFossil` in unlinked list.
-  2. `test_r1_2_all_seven_projects_mounted_in_homepage`: Failed due to missing `<a href="greatFossil/index.html">`.
-  3. `test_r1_4_target_projects_absent_from_unlinked_list`: Failed due to `greatFossil` presence in unlinked directories.
-  4. `test_r5_1_great_fossil_html_head_structure`: Failed because `greatFossil/style.css` is not linked.
-  5. `test_r5_3_audio_paths_sound_resolution`: Failed because `greatFossil/js/globalVariables.js` still points to `../sound/correct.mp3` instead of `../cardGame/sound/correct.mp3`.
-  6. `test_r5_5_responsive_flexbox_styling`: Failed because `greatFossil/style.css` returned HTTP 404.
-  7. `test_t3_6_cross_project_asset_and_sound_integrity_matrix`: Failed because `greatFossil/style.css` returned HTTP 404.
-
-### Obs 3: Unhandled Promise Rejections in Card Game Audio Playback
-Executed empirical headless Chromium CDP probe on `cardGame/消化_消化管_順序/index.html` and `greatFossil/index.html` under standard browser autoplay restrictions:
-Verbatim CDP Exception Output:
-```
-Runtime.exceptionThrown: Uncaught (in promise): NotAllowedError: play() failed because the user didn't interact with the document first. https://goo.gl/xX8pDD
-```
-- Direct observation in `cardGame/js/utils.js`:
-  - Line 766: `wrongSound.play();`
-  - Line 790: `correctSound.play();`
-  - Line 799: `wrongSound.play();`
-- Direct observation in `greatFossil/js/utils.js`:
-  - Lines 571, 574, 579, 591, 615, 629, 642, 646: naked `wrongSound.play()` and `correctSound.play()`.
-- Neither `cardGame/js/utils.js` nor `greatFossil/js/utils.js` catches the promise returned by `Audio.play()`. When audio playback is rejected by browser autoplay policies, iOS WebKit restrictions, or headless test runners, an unhandled promise rejection (`Uncaught (in promise) NotAllowedError`) is logged to the console.
-
-### Obs 4: Empirical Stress Test Suite (`tests/test_adversarial_stress.py`)
-Executed command:
-```bash
-python3 tests/test_adversarial_stress.py
-```
-Verbatim stdout output:
-```
-test_stress_blood_stream_quality_switch_and_simulation (__main__.AdversarialStressTestSuite.test_stress_blood_stream_quality_switch_and_simulation)
-Adversarial stress test on blood-stream particle quality toggling during active simulation. ... ok
-test_stress_digestion_card_game_engine (__main__.AdversarialStressTestSuite.test_stress_digestion_card_game_engine)
-Adversarial stress test on digestion card game out-of-order, empty & distractor clicks. ... ok
-test_stress_fiddler_crab_controls_and_modal (__main__.AdversarialStressTestSuite.test_stress_fiddler_crab_controls_and_modal)
-Adversarial stress test on fiddler crab mobile controls, canvas drag & modal. ... ok
-test_stress_great_fossil_card_drag_and_reshuffle (__main__.AdversarialStressTestSuite.test_stress_great_fossil_card_drag_and_reshuffle)
-Adversarial stress test on greatFossil canvas drag boundaries and rapid reshuffle. ... ok
-test_stress_lens_optical_presets_and_equations (__main__.AdversarialStressTestSuite.test_stress_lens_optical_presets_and_equations)
-Adversarial stress test on lens-optical rapid preset switching and boundary physics. ... ok
-test_stress_peppered_moth_predator_mode (__main__.AdversarialStressTestSuite.test_stress_peppered_moth_predator_mode)
-Adversarial stress test on peppered moth predator mode pecks, double-clicks & timers. ... ok
-test_stress_rt_copy_and_export_operations (__main__.AdversarialStressTestSuite.test_stress_rt_copy_and_export_operations)
-Adversarial stress test on reaction time CSV export & copy text with edge cases. ... ok
-
-----------------------------------------------------------------------
-Ran 7 tests in 22.937s
-
-OK
-```
-All 7 adversarial stress scenarios (rapid clicking, boundary slider dragging, extreme canvas resizing, thin-lens equation singularity, 100% false-alarm stats, and Cannon.js/Three.js particle memory cleanup) execute successfully without game freezes or arithmetic NaN errors when dependencies are present.
+- Line 778 provides a fallback config: `const config = RECEPTOR_CONFIGS[receptorKey] || RECEPTOR_CONFIGS.vision;`.
+- However, line 1346 indexes `RECEPTOR_CONFIGS[receptorKey]` directly instead of `config.relayStation`.
+- In normal user interaction, `switchReceptor()` and `setReceptor()` guard against invalid keys, so this line is never reached with an invalid key.
+- If called directly in JavaScript with a malformed key (e.g. `renderer.render('bad_key', 0.5, 2)`), it throws a `TypeError`. This is a non-blocking minor defensive suggestion.
 
 ---
 
 ## 2. Logic Chain
 
-1. **Premise 1 (Acceptance Criteria 1)**: `ORIGINAL_REQUEST.md § Acceptance Criteria 1` explicitly requires:
-   > "執行 `python3 check_unlinked_projects.py` 時，上述 7 個目錄均不再列入未連結清單。"
-   > "在 `index.html` 中將以下 7 個專案依照教學主題掛載至正確段落：`greatFossil/index.html` → 掛載於「演化」"
-2. **Inference 1**: Observation 1 shows that `index.html` lacks `<a href="greatFossil/index.html">化石大發現</a>`, and `python3 check_unlinked_projects.py` explicitly lists `greatFossil` as unlinked. Therefore, Requirement R1.1 and Acceptance Criteria 1 are violated.
-3. **Premise 2 (Acceptance Criteria 2 & R5)**: `ORIGINAL_REQUEST.md § R5` requires:
-   > "修復 HTML 中 CSS 引入路徑與重複未閉合標籤問題，確保在手機與桌面瀏覽器皆正常載入樣式。"
-   > "確保卡片佈局具備響應式（RWD），在不同螢幕寬度下皆不會發生破版或按鈕重疊。"
-4. **Inference 2**: Observation 2 shows `greatFossil/style.css` returns HTTP 404, and `greatFossil/js/globalVariables.js` retains invalid audio paths (`../sound/correct.mp3`), breaking asset integrity and causing 7 test failures in `tests/test_e2e_suite.py`. Therefore, Requirement R5 and Milestone M3/M6 acceptance criteria are violated.
-5. **Premise 3 (Acceptance Criteria 3)**: `ORIGINAL_REQUEST.md § Acceptance Criteria 3` requires:
-   > "開啟 7 個專案的各個頁面，Console 不出現未捕獲的例外報錯（Uncaught Error）。"
-6. **Inference 3**: Observation 3 shows that card clicks in `cardGame/消化_消化管_順序/` and placement checks in `greatFossil/` trigger naked `Audio.play()` calls without `.catch()`. In environments with restricted autoplay policies (e.g. mobile browsers, unmuted automated test agents), this logs `Uncaught (in promise): NotAllowedError`, violating Acceptance Criteria 3.
-7. **Synthesis**: The codebase currently fails the repository acceptance threshold (7 test failures in `tests/test_e2e_suite.py`, 1 unlinked module in `check_unlinked_projects.py`, and unhandled audio promise rejections).
+1. **R1 Fulfillment (Five Sensory Receptors Conduction Simulation)**:
+   - Observations in 1.1 and 1.3 show all 5 receptor pathways (Vision, Hearing, Smell, Taste, Skin) are fully implemented with accurate anatomical structures, molecular transduction mechanisms, and a 4-phase deterministic conduction sequence (刺激 ➔ 受器 ➔ 神經 ➔ 腦).
+   - In accordance with R1, the animation automatically demonstrates the full sensory trajectory without requiring the user to adjust stimulus parameters.
+
+2. **R2 Fulfillment (Playback & Speed Control)**:
+   - Observations in 1.1 and 1.2 demonstrate that `#playPauseBtn`, speed multiplier presets (`0.5x`, `1.0x`, `1.5x`, `2.0x`), continuous speed slider (`0.2x` - `3.0x`), interactive timeline scrubber (`#progressSlider`), step navigation (`#stepPrevBtn`, `#stepNextBtn`), and loop toggle (`#loopCheckbox`) operate smoothly with zero runtime errors.
+
+3. **R3 Fulfillment (Project Integration & Navigation)**:
+   - Observation 1.1 confirms that `neuro_physiology/receptors.html` exists as a self-contained SPA subpage.
+   - `neuro_physiology/index.html` line 75 links forward to `receptors.html`.
+   - `neuro_physiology/receptors.html` lines 67-74 link backward to `neuro_physiology/index.html` and root `index.html`.
+   - Root `index.html` line 163 properly mounts `neuro_physiology/receptors.html` under the `<h1>神經與感覺</h1>` section.
+
+4. **Code Quality and Robustness**:
+   - Observations 1.1, 1.2, and 1.3 confirm that 37 out of 37 automated tests pass with 100% success rate.
+   - Playwright headless Edge browser stress testing confirmed zero console errors, zero page crashes, zero network 404s, and stable mobile responsiveness.
 
 ---
 
 ## 3. Caveats
 
-- **Scope boundary**: This review specifically evaluated the 7 projects defined in Milestone 1 through 6 (`fiddler-crab`, `pepperedMoth`, `lens-optical`, `greatFossil`, `blood-stream`, `rt`, `cardGame/消化_消化管_順序`) and `index.html`. It did not audit the new round 2 requirements (`cell-3d/`, `foodChain/`, `energyPyramid/`, `OmNomNom/`) dispatched at 2026-10-23T09:35:29Z.
-- **WebGL Environment**: Headless Chromium tests require `--use-gl=angle --use-angle=swiftshader --ignore-gpu-blocklist` to provide software WebGL emulation on headless Linux test runners for Three.js initialization in `fiddler-crab` and `blood-stream`. Real user browsers with hardware acceleration initialize WebGL naturally.
+1. **Third-Party CDN Dependency**:
+   - `neuro_physiology/receptors.html` imports Tailwind CSS via CDN (`https://cdn.tailwindcss.com`) and Google Fonts (`Inter` and `JetBrains Mono`). If executed in an environment with no internet access, typography and utility classes rely on browser system defaults. All core simulation logic, canvas rendering, particle engines, and timeline controls are 100% offline Vanilla JS.
+2. **Defensive API Suggestion**:
+   - Line 1346 indexing `RECEPTOR_CONFIGS[receptorKey]` should ideally use `config.relayStation` for defensive consistency with line 778. This is a cosmetic code-quality note and does not affect the end user.
 
 ---
 
 ## 4. Conclusion
 
-The enhancements implemented across `fiddler-crab`, `pepperedMoth`, `lens-optical`, `blood-stream`, and `rt` demonstrate strong algorithmic and interactive quality, passing all empirical stress tests. However, the overall solution cannot be approved due to 4 blocking defects:
+The Five Sensory Receptors Dynamic Conduction Simulator (`neuro_physiology/receptors.html`) satisfies all requirements (R1, R2, R3) and meets all acceptance criteria. It exhibits deterministic state machine transitions, high-DPI rendering stability, accurate pedagogical and biophysical narratives, and exceptional resilience under adversarial stress testing.
 
-1. **Missing Homepage Link**: `greatFossil/index.html` is omitted from `index.html` under 「演化」, causing `check_unlinked_projects.py` to fail.
-2. **Missing `greatFossil/style.css`**: HTTP 404 occurs on `greatFossil/style.css`, causing layout breakage.
-3. **Broken Audio References in `greatFossil`**: `greatFossil/js/globalVariables.js` links to non-existent `../sound/` instead of `../cardGame/sound/`.
-4. **Unhandled Audio Promise Rejections**: `wrongSound.play()` and `correctSound.play()` in `cardGame/js/utils.js` and `greatFossil/js/utils.js` must be wrapped with `.catch(() => {})` or safe audio helper to prevent `Uncaught (in promise) NotAllowedError`.
-
-**VERDICT: REQUEST_CHANGES**
+**VERDICT: APPROVE**
 
 ---
 
 ## 5. Verification Method
 
-To independently verify these findings, execute the following commands in the workspace root:
+To independently verify the test suite and browser execution, run:
 
 ```bash
-# 1. Verify unlinked project detection (shows greatFossil unlinked):
-python3 check_unlinked_projects.py
+# 1. Run the baseline 30-test E2E suite
+python -m unittest tests/test_receptors_conduction.py
 
-# 2. Verify 7 test failures in baseline E2E test suite:
-python3 tests/test_e2e_suite.py
+# 2. Run the 7-test Challenger adversarial stress suite
+python -m unittest tests/test_challenger_receptors_stress.py
 
-# 3. Verify adversarial stress test suite:
-python3 tests/test_adversarial_stress.py
+# 3. Run all 37 tests in one combined pass
+python -m unittest tests/test_receptors_conduction.py tests/test_challenger_receptors_stress.py
 
-# 4. Inspect index.html diff for missing greatFossil mount:
-git diff index.html | grep greatFossil
+# 4. Verify homepage link integrity
+python check_unlinked_projects.py
 ```
-Invalidation conditions:
-- `python3 check_unlinked_projects.py` exits 0 with 0 target projects in unlinked lists.
-- `python3 tests/test_e2e_suite.py` exits 0 with 91 passed / 0 failures / 0 errors (100.0% pass rate).
-- No `Uncaught (in promise)` errors appear on the browser console during card interaction.
+
+### Invalidation Conditions
+- Any test failure among the 37 test cases.
+- Any unhandled exception or `console.error` thrown during Playwright browser execution.
+- Any 404 or broken navigation links between `neuro_physiology/receptors.html`, `neuro_physiology/index.html`, and `index.html`.

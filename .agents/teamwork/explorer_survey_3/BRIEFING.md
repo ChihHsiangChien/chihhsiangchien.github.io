@@ -1,7 +1,7 @@
-# BRIEFING — 2026-10-23T08:48:00Z
+# BRIEFING — 2026-11-09T01:54:00Z
 
 ## Mission
-Conduct a comprehensive codebase survey of lens-optical/ (R4), greatFossil/ (R5), blood-stream/ (R6), and rt/ (R7) to provide actionable findings and implementation plans.
+Design the animation pipeline (stimulus -> receptor -> nerve -> brain), playback and speed controls (play/pause, multipliers, step/scrub), UI component architecture, and the automated verification testing plan for the Five Sensory Receptors Conduction Simulator in `neuro_physiology/`.
 
 ## 🔒 My Identity
 - Archetype: teamwork_preview_explorer
@@ -9,38 +9,50 @@ Conduct a comprehensive codebase survey of lens-optical/ (R4), greatFossil/ (R5)
 - Working directory: /home/pancala/Documents/chihhsiangchien.github.io/.agents/teamwork/explorer_survey_3
 - Original parent: 663e1b82-691c-40bd-84b9-2c609f9e72ae
 - Milestone: Survey & Analysis
+- [2026-11-09T01:46:14Z Addendum]:
+  - Archetype: teamwork_explorer
+  - Roles: Explorer 3 (UI/UX, Animation Architecture & Verification)
+  - Working directory: c:\Users\User\Documents\GitHub\chihhsiangchien.github.io\neuro_physiology
+  - State folder: c:\Users\User\Documents\GitHub\chihhsiangchien.github.io\.agents\teamwork\explorer_survey_3\
+  - Original parent: e8543011-3af3-4cf5-8c77-c7d3d20c0eb7
+  - Milestone: Five Sensory Receptors Conduction Simulator - Architecture & Verification Design
 
 ## 🔒 Key Constraints
 - Read-only investigation — do NOT implement changes in source code
 - Produce structured survey report in survey_report.md
 - Produce handoff.md following 5-component protocol
 - Output concise coordination message to parent
+- [2026-11-09T01:46:14Z Addendum]:
+  - Read-only investigation — do NOT modify source code files
+  - Design animation pipeline for 5 sensory receptors (stimulus -> receptor -> nerve -> brain)
+  - Design playback and speed controls (play/pause, 0.5x/1x/1.5x/2x multipliers, step/scrub, loop/reset)
+  - Design UI component architecture (tabs, responsive layout, dark theme matching existing lab, educational labels/tooltips)
+  - Design automated verification testing plan (Tiers 1-4, DOM, state machine, timer checks, error checks)
+  - Deliver handoff report to `.agents/teamwork/explorer_survey_3/handoff.md`
 
 ## Current Parent
-- Conversation ID: 663e1b82-691c-40bd-84b9-2c609f9e72ae
-- Updated: 2026-10-23T08:38:50Z
+- Conversation ID: e8543011-3af3-4cf5-8c77-c7d3d20c0eb7
+- Updated: 2026-11-09T01:52:18Z
 
 ## Investigation State
 - **Explored paths**:
-  - `lens-optical/index.html`
-  - `greatFossil/` (`index.html`, `js/data.js`, `js/globalVariables.js`, `js/settings.js`, `js/utils.js`, `images/`)
-  - `blood-stream/` (`index.html`, `main.js`, `style.css`)
-  - `rt/` (`index.html`, `app.js`, `styles.css`, `config/ControlA.json`, `config/ExpB.json`)
-  - `check_unlinked_projects.py`, `UNLINKED_PROJECTS.md`, `cardGame/css/style.css`, `cardGame/sound/`
+  - `neuro_physiology/index.html` (Existing lab implementation, Tailwind CSS, dark mode `#020617`, Canvas 2D API, pulse rendering)
+  - Reference textbook images (`media_1794186604265_1c31bbf3.jpg` to `b5d16396.jpg`)
+  - Test infrastructure: `TEST_INFRA.md`, `tests/test_round2_suite.py`, `tests/test_e2e_suite.py`
+  - Peer explorer activities: Explorer 1 (Codebase/Integration), Explorer 2 (`explorer_survey_2/handoff.md` completed)
 - **Key findings**:
-  - `lens-optical`: DIN 160 mm tube length engine is solid; needs 3 preset scenario buttons, explanation card, and aperture state integration.
-  - `greatFossil`: broken CSS link to `/css/style.css`, orphaned `</style>`, `<title>` in body, audio 404 paths (`../sound/` vs `../cardGame/sound/`), `drawAnswerBox()` commented out, and lack of mobile RWD container styling.
-  - `blood-stream`: 200 particles hardcoded; needs Low/Med/High quality switcher with teardown/rebuild logic, invalid CSS `@apply` cleanup, and valve flap tilt animation.
-  - `rt`: High-accuracy timing engine; CSV export exists, but needs "複製結果文字" (Copy Result Text) button and clipboard handler.
-  - Console errors: Audio 404s in `greatFossil`, CSS `@apply` warnings in `blood-stream`.
-- **Unexplored areas**: None within the assigned survey scope.
+  - Fully articulated 4-phase Normalized Timeline Controller ($T \in [0.0, 1.0]$) mapping Phase 0 (Stimulus, 0.00-0.25), Phase 1 (Receptor, 0.25-0.50), Phase 2 (Nerve, 0.50-0.80), and Phase 3 (Brain, 0.80-1.00).
+  - Playback controls specified: Play/Pause, speed multipliers (0.5x, 1x, 1.5x, 2x), timeline scrubber (0-1000 range), stage stepping (prev/next), and auto-loop.
+  - UI/UX & RWD layout designed: 5-tab selector with individual sensory themes, 4-station horizontal canvas layout with micro-transduction callout window, floating glassmorphic control dock, collapsible educational info drawer.
+  - Verification test suite specified: Complete Python 4-Tier test suite (`tests/test_receptors_conduction.py`) covering DOM assertions, boundary conditions, Node.js VM syntax/runtime checks, and pedagogical workflows.
+- **Unexplored areas**: None.
 
 ## Key Decisions Made
-- Fully documented all 4 target project architectures, defect locations, and proposed implementation steps in `survey_report.md`.
-- Produced 5-component self-contained `handoff.md`.
+- Architecture and testing plan documented in full detail in `handoff.md`.
+- Ready for orchestrator feature inventory & milestone decomposition.
 
 ## Artifact Index
-- `/home/pancala/Documents/chihhsiangchien.github.io/.agents/teamwork/explorer_survey_3/survey_report.md` — Comprehensive survey findings
-- `/home/pancala/Documents/chihhsiangchien.github.io/.agents/teamwork/explorer_survey_3/handoff.md` — Self-contained handoff report
-- `/home/pancala/Documents/chihhsiangchien.github.io/.agents/teamwork/explorer_survey_3/progress.md` — Liveness heartbeat
-- `/home/pancala/Documents/chihhsiangchien.github.io/.agents/teamwork/explorer_survey_3/DISPATCH.md` — Inbound message log
+- `.agents/teamwork/explorer_survey_3/DISPATCH.md` — Inbound message log
+- `.agents/teamwork/explorer_survey_3/progress.md` — Liveness heartbeat
+- `.agents/teamwork/explorer_survey_3/BRIEFING.md` — Explorer state & memory
+- `.agents/teamwork/explorer_survey_3/handoff.md` — Authoritative 5-component survey handoff report
