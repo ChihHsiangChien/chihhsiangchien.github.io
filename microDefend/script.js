@@ -5,7 +5,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentTab = 'tab-1';
     const sharedImmuneState = {
         afferentQueue: [], // Page 1 exit -> Page 2 afferent inlet
-        efferentQueue: []  // Page 2 efferent -> Page 3 venous confluence
+        efferentQueue: [], // Page 2 efferent -> Page 3 venous confluence
+        homingQueue: []    // Page 2 efferent -> Page 4 bone marrow homing
     };
 
     const svg = document.getElementById('inflammation-viz');
@@ -5559,8 +5560,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Tab 2 Simulation State
     const tab2State = {
         initialized: false,
+        antibodySecretionActive: false,
         droplets: [],
         pathogens: [],
+        macrophages: [],
         apcs: [],
         helperTCells: [],
         bCells: [],
@@ -5568,6 +5571,7 @@ document.addEventListener('DOMContentLoaded', () => {
         antibodies: [],
         synapses: [],
         floatingLabels: [],
+        labelCooldowns: {},
         stepStage: 0,
         dropletTimer: 0,
         stats: {
@@ -5577,6 +5581,87 @@ document.addEventListener('DOMContentLoaded', () => {
             antibodiesSecreting: 0
         }
     };
+
+    // Exact Vessel Geometry Helpers for Tab 2 & Tab 3 (Afferent, Efferent & Venous Bezier Curves)
+    function cubicBezier1D(t, p0, p1, p2, p3) {
+        const tc = Math.max(0, Math.min(1, t));
+        const u = 1 - tc;
+        return u * u * u * p0 + 3 * u * u * tc * p1 + 3 * u * tc * tc * p2 + tc * tc * tc * p3;
+    }
+
+    function getLnAfferentBounds(vessel, x) {
+        if (vessel === 'upper') {
+            // Secondary Afferent Vessel 1 (Upper): M 20 70 C 80 80, 140 100, 190 120 L 180 144 C 135 125, 75 105, 16 95 Z
+            const t = Math.max(0, Math.min(1, (x - 18) / (185 - 18)));
+            const yTop = cubicBezier1D(t, 70, 80, 100, 120);
+            const yBot = cubicBezier1D(t, 95, 105, 125, 144);
+            const center = (yTop + yBot) * 0.5;
+            const halfWidth = Math.max(3.5, (yBot - yTop) * 0.34);
+            return {
+                top: yTop + 3,
+                bot: yBot - 3,
+                center,
+                halfWidth,
+                yTop,
+                yBot,
+                centerY: center,
+                maxOff: halfWidth
+            };
+        } else if (vessel === 'lower') {
+            // Secondary Afferent Vessel 2 (Lower): M 20 430 C 80 420, 140 400, 190 380 L 180 356 C 135 375, 75 395, 16 405 Z
+            const t = Math.max(0, Math.min(1, (x - 18) / (185 - 18)));
+            const yTop = cubicBezier1D(t, 405, 395, 375, 356);
+            const yBot = cubicBezier1D(t, 430, 420, 400, 380);
+            const center = (yTop + yBot) * 0.5;
+            const halfWidth = Math.max(3.5, (yBot - yTop) * 0.34);
+            return {
+                top: yTop + 3,
+                bot: yBot - 3,
+                center,
+                halfWidth,
+                yTop,
+                yBot,
+                centerY: center,
+                maxOff: halfWidth
+            };
+        } else {
+            // Primary Afferent Inlet (Middle): M 0 248 C 40 248, 80 252, 130 256 L 130 280 C 80 284, 40 288, 0 288 Z
+            const t = Math.max(0, Math.min(1, x / 130));
+            const yTop = cubicBezier1D(t, 248, 248, 252, 256);
+            const yBot = cubicBezier1D(t, 288, 288, 284, 280);
+            const center = (yTop + yBot) * 0.5;
+            const halfWidth = Math.max(4.5, (yBot - yTop) * 0.35);
+            return {
+                top: yTop + 3,
+                bot: yBot - 3,
+                center,
+                halfWidth,
+                yTop,
+                yBot,
+                centerY: center,
+                maxOff: halfWidth
+            };
+        }
+    }
+
+    function getLnEfferentBounds(x) {
+        // Efferent Lymphatic Vessel: M 780 258 C 840 264, 910 270, 1000 274 L 1000 304 C 910 300, 840 294, 780 288 Z
+        const t = Math.max(0, Math.min(1, (x - 780) / 220));
+        const yTop = cubicBezier1D(t, 258, 264, 270, 274);
+        const yBot = cubicBezier1D(t, 288, 294, 300, 304);
+        const center = (yTop + yBot) * 0.5;
+        const halfWidth = Math.max(4.5, (yBot - yTop) * 0.34);
+        return {
+            top: yTop + 3,
+            bot: yBot - 3,
+            center,
+            halfWidth,
+            yTop,
+            yBot,
+            centerY: center,
+            maxOff: halfWidth
+        };
+    }
 
     // Zero-allocation SVG Object Pools for Tab 2
     const lnDropletPool = [];
@@ -5712,7 +5797,41 @@ document.addEventListener('DOMContentLoaded', () => {
         item.el.setAttribute("transform", `translate(${cell.x.toFixed(1)}, ${cell.y.toFixed(1)})`);
         item.el.setAttribute("opacity", (cell.alpha || 1).toFixed(2));
 
-        if (cell.type === 'apc') {
+        if (cell.type === 'macrophage') {
+            // Sinus Macrophage (Subcapsular & Medullary Sinus Phagocytic Sentinel)
+            if (cell.phagocytosingTimer > 0) {
+                item.halo.style.display = '';
+                item.halo.setAttribute("cx", 0); item.halo.setAttribute("cy", 0);
+                item.halo.setAttribute("r", (cell.r + 4.5 + Math.sin(Date.now() * 0.015) * 1.5).toFixed(1));
+                item.halo.setAttribute("fill", "rgba(168, 85, 247, 0.25)");
+                item.halo.setAttribute("stroke", "#fbbf24");
+                item.halo.setAttribute("stroke-width", "1.6");
+                item.halo.removeAttribute("stroke-dasharray");
+            } else {
+                item.halo.style.display = 'none';
+            }
+
+            item.body.setAttribute("cx", 0); item.body.setAttribute("cy", 0);
+            item.body.setAttribute("r", cell.r.toFixed(1));
+            item.body.setAttribute("fill", "#9333ea");
+            item.body.setAttribute("stroke", "#d8b4fe");
+            item.body.setAttribute("stroke-width", "1.4");
+
+            item.nuc.style.display = '';
+            item.nuc.setAttribute("cx", -2.2); item.nuc.setAttribute("cy", 0);
+            item.nuc.setAttribute("r", (cell.r * 0.46).toFixed(1));
+            item.nuc.setAttribute("fill", "#4c1d95");
+
+            if (cell.eatenCount > 0) {
+                item.nuc2.style.display = '';
+                item.nuc2.setAttribute("cx", 3.0); item.nuc2.setAttribute("cy", 1.2);
+                item.nuc2.setAttribute("r", "2.4");
+                item.nuc2.setAttribute("fill", "#22c55e"); // Phagolysosome digesting pathogen
+            } else {
+                item.nuc2.style.display = 'none';
+            }
+
+        } else if (cell.type === 'apc') {
             // Migrating APC (MHC-II Antigen Presentation)
             item.halo.style.display = '';
             item.halo.setAttribute("cx", 0); item.halo.setAttribute("cy", 0);
@@ -5761,13 +5880,13 @@ document.addEventListener('DOMContentLoaded', () => {
             item.nuc2.style.display = 'none';
 
         } else if (cell.type === 'bcell') {
-            // B Cell in Follicle / Germinal Center
-            if (cell.sensitized) {
+            // B Cell in Follicle / Germinal Center / Migrating Plasmablast
+            if (cell.sensitized || cell.migratingToMedulla) {
                 item.halo.style.display = '';
                 item.halo.setAttribute("cx", 0); item.halo.setAttribute("cy", 0);
                 item.halo.setAttribute("r", (cell.r + 4.0).toFixed(1));
-                item.halo.setAttribute("fill", "rgba(251, 146, 60, 0.25)");
-                item.halo.setAttribute("stroke", "#fb923c");
+                item.halo.setAttribute("fill", cell.migratingToMedulla ? "rgba(249, 115, 22, 0.3)" : "rgba(251, 146, 60, 0.25)");
+                item.halo.setAttribute("stroke", cell.migratingToMedulla ? "#f97316" : "#fb923c");
                 item.halo.setAttribute("stroke-width", "1.4");
                 item.halo.setAttribute("stroke-dasharray", "3,2");
             } else {
@@ -5787,19 +5906,24 @@ document.addEventListener('DOMContentLoaded', () => {
             item.nuc2.style.display = 'none';
 
         } else if (cell.type === 'plasma') {
-            // Plasma Cell in Medullary Cord (Vigorously secreting antibodies)
-            item.halo.style.display = '';
-            item.halo.setAttribute("cx", 0); item.halo.setAttribute("cy", 0);
-            item.halo.setAttribute("r", (cell.r + 4.5 + Math.sin(Date.now() * 0.008 + cell.x) * 2.0).toFixed(1));
-            item.halo.setAttribute("fill", "rgba(249, 115, 22, 0.2)");
-            item.halo.setAttribute("stroke", "#f97316");
-            item.halo.setAttribute("stroke-width", "1.6");
-            item.halo.removeAttribute("stroke-dasharray");
+            // Plasma Cell in Medullary Cord (Active halo only when activated to secrete antibodies)
+            const isSecreting = !!(cell.activated && tab2State.antibodySecretionActive);
+            if (isSecreting || cell.leavingNode) {
+                item.halo.style.display = '';
+                item.halo.setAttribute("cx", 0); item.halo.setAttribute("cy", 0);
+                item.halo.setAttribute("r", (cell.r + 4.5 + Math.sin(Date.now() * 0.008 + cell.x) * 2.0).toFixed(1));
+                item.halo.setAttribute("fill", "rgba(249, 115, 22, 0.22)");
+                item.halo.setAttribute("stroke", cell.leavingNode ? "#fbbf24" : "#f97316");
+                item.halo.setAttribute("stroke-width", "1.6");
+                item.halo.removeAttribute("stroke-dasharray");
+            } else {
+                item.halo.style.display = 'none';
+            }
 
             item.body.setAttribute("cx", 0); item.body.setAttribute("cy", 0);
             item.body.setAttribute("r", cell.r.toFixed(1));
             item.body.setAttribute("fill", "#fb923c");
-            item.body.setAttribute("stroke", "#f97316");
+            item.body.setAttribute("stroke", isSecreting ? "#fbbf24" : "#f97316");
             item.body.setAttribute("stroke-width", "1.8");
 
             // Eccentric cartwheel nucleus & Golgi pale area
@@ -5898,10 +6022,36 @@ document.addEventListener('DOMContentLoaded', () => {
         lnLabelCount++;
     }
 
-    // Helper to spawn a floating label on Tab 2
+    // Helper to spawn a floating label on Tab 2 (with deduplication & cooldown)
     function spawnLnLabel(x, y, text, border, bg) {
+        const now = Date.now();
+        if (tab2State.labelCooldowns[text] && now - tab2State.labelCooldowns[text] < 1800) {
+            for (let i = 0; i < tab2State.floatingLabels.length; i++) {
+                if (tab2State.floatingLabels[i].text === text) {
+                    tab2State.floatingLabels[i].life = Math.max(tab2State.floatingLabels[i].life, 75);
+                    return;
+                }
+            }
+            return;
+        }
+        for (let i = 0; i < tab2State.floatingLabels.length; i++) {
+            if (tab2State.floatingLabels[i].text === text) {
+                tab2State.floatingLabels[i].life = 90;
+                tab2State.labelCooldowns[text] = now;
+                return;
+            }
+        }
+        tab2State.labelCooldowns[text] = now;
+        let finalY = y;
+        for (let i = 0; i < tab2State.floatingLabels.length; i++) {
+            const existing = tab2State.floatingLabels[i];
+            if (Math.abs(existing.x - x) < 160 && Math.abs(existing.y - finalY) < 28) {
+                finalY = existing.y - 30;
+            }
+        }
+        finalY = Math.max(28, Math.min(450, finalY));
         tab2State.floatingLabels.push({
-            x, y, text,
+            x, y: finalY, text,
             border: border || '#10b981',
             bg: bg || 'rgba(15, 23, 42, 0.92)',
             life: 90
@@ -5911,16 +6061,38 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize Tab 2 Simulation Population
     function initTab2Simulation() {
         tab2State.initialized = true;
+        tab2State.antibodySecretionActive = false;
         tab2State.droplets = [];
         tab2State.pathogens = [];
         tab2State.apcs = [];
+        tab2State.macrophages = [];
         tab2State.helperTCells = [];
         tab2State.bCells = [];
         tab2State.plasmaCells = [];
         tab2State.antibodies = [];
         tab2State.synapses = [];
         tab2State.floatingLabels = [];
+        tab2State.labelCooldowns = {};
         tab2State.stepStage = 0;
+
+        // 0. Resident Sinus Macrophages (竇巨噬細胞) in Subcapsular & Medullary Sinuses for active phagocytosis
+        const macPositions = [
+            { x: 185, y: 265 }, { x: 205, y: 155 }, { x: 205, y: 375 },
+            { x: 540, y: 235 }, { x: 555, y: 295 }
+        ];
+        macPositions.forEach((mp, idx) => {
+            tab2State.macrophages.push({
+                id: `mac-${idx}`,
+                type: 'macrophage',
+                x: mp.x,
+                y: mp.y,
+                baseX: mp.x,
+                baseY: mp.y,
+                r: 11.2,
+                phagocytosingTimer: 0,
+                engulfCount: 0
+            });
+        });
 
         // 1. Resident Helper T cells in Paracortex
         const tPositions = [
@@ -5951,7 +6123,7 @@ document.addEventListener('DOMContentLoaded', () => {
         follicleCenters.forEach(fc => {
             for (let b = 0; b < 2; b++) {
                 const angle = Math.random() * Math.PI * 2;
-                const dist = 6 + Math.random() * 16;
+                const dist = 6 + Math.random() * 14;
                 tab2State.bCells.push({
                     type: 'bcell',
                     follicleIndex: fc.f,
@@ -5962,37 +6134,144 @@ document.addEventListener('DOMContentLoaded', () => {
                     r: 8.0,
                     sensitized: false,
                     cloneTimer: 0,
-                    cloned: false
+                    cloned: false,
+                    migratingToMedulla: false,
+                    targetX: 610 + Math.random() * 90,
+                    targetY: 215 + Math.random() * 85
                 });
             }
         });
 
-        // 3. Resident Plasma cells in Medullary Cords
+        // 3. Resident Plasma cells in Medullary Cords (dormant until activated)
         const plasmaPositions = [
             { x: 620, y: 210 }, { x: 660, y: 265 }, { x: 630, y: 305 }, { x: 710, y: 265 }
         ];
-        plasmaPositions.forEach(pp => {
+        plasmaPositions.forEach((pp, idx) => {
             tab2State.plasmaCells.push({
                 type: 'plasma',
                 x: pp.x,
                 y: pp.y,
+                baseX: pp.x,
+                baseY: pp.y,
                 r: 10.5,
                 pulse: 0,
+                activated: false,
+                homingToMarrow: idx === 3,
+                leavingNode: false,
+                stayTimer: 0,
                 secreteTimer: Math.floor(Math.random() * 25)
             });
         });
 
-        // 4. Initial flowing fluid droplets across streams
-        for (let k = 0; k < 12; k++) {
+        // 4. Initial flowing fluid droplets across all 3 afferent vessels, internal sinuses, and efferent duct
+        for (let k = 0; k < 4; k++) {
+            const xPrim = 15 + k * 28;
+            const bPrim = getLnAfferentBounds('primary', xPrim);
+            const laneP = (Math.random() - 0.5) * 0.65;
             tab2State.droplets.push({
-                x: 30 + k * 75,
-                y: 268 + (Math.random() - 0.5) * 16,
-                vx: 2.1,
+                vessel: 'primary',
+                laneOffset: laneP,
+                x: xPrim,
+                y: bPrim.center + laneP * bPrim.halfWidth,
+                vx: 2.0,
                 vy: 0,
-                r: 2.7 + Math.random() * 0.5,
-                alpha: 0.8
+                r: 2.7 + Math.random() * 0.4,
+                alpha: 0.85
+            });
+
+            const xUp = 28 + k * 36;
+            const bUp = getLnAfferentBounds('upper', xUp);
+            const laneU = (Math.random() - 0.5) * 0.65;
+            tab2State.droplets.push({
+                vessel: 'upper',
+                laneOffset: laneU,
+                x: xUp,
+                y: bUp.center + laneU * bUp.halfWidth,
+                vx: 1.8,
+                vy: 0,
+                r: 2.5 + Math.random() * 0.4,
+                alpha: 0.82
+            });
+
+            const xLow = 28 + k * 36;
+            const bLow = getLnAfferentBounds('lower', xLow);
+            const laneL = (Math.random() - 0.5) * 0.65;
+            tab2State.droplets.push({
+                vessel: 'lower',
+                laneOffset: laneL,
+                x: xLow,
+                y: bLow.center + laneL * bLow.halfWidth,
+                vx: 1.8,
+                vy: 0,
+                r: 2.5 + Math.random() * 0.4,
+                alpha: 0.82
             });
         }
+        // Internal sinus droplets
+        for (let k = 0; k < 7; k++) {
+            const xSinus = 195 + k * 82;
+            const lane = (Math.random() - 0.5) * 0.6;
+            tab2State.droplets.push({
+                vessel: 'primary',
+                laneOffset: lane,
+                x: xSinus,
+                y: 268 + lane * 45,
+                vx: 2.0,
+                vy: 0,
+                r: 2.7,
+                alpha: 0.82
+            });
+        }
+        // Efferent lymphatic vessel droplets (x = 785..985) so efferent duct is always visibly flowing
+        for (let k = 0; k < 6; k++) {
+            const xEff = 785 + k * 36;
+            const bEff = getLnEfferentBounds(xEff);
+            const laneE = (Math.random() - 0.5) * 0.65;
+            tab2State.droplets.push({
+                vessel: 'primary',
+                laneOffset: laneE,
+                x: xEff,
+                y: bEff.center + laneE * bEff.halfWidth,
+                vx: 2.3,
+                vy: 0,
+                r: 2.8,
+                alpha: 0.85
+            });
+        }
+
+        // 5. Initial incoming Bacteria, Viruses, and APC in the afferent lymphatic vessels
+        const initVessels = ['primary', 'upper', 'lower'];
+        for (let i = 0; i < 3; i++) {
+            const v = initVessels[i];
+            const xStart = v === 'primary' ? 18 + i * 25 : 32 + i * 25;
+            const b = getLnAfferentBounds(v, xStart);
+            const lane = (Math.random() - 0.5) * 0.45;
+            tab2State.pathogens.push({
+                type: i % 2 === 0 ? 'bacteria' : 'virus',
+                vessel: v,
+                laneOffset: lane,
+                x: xStart,
+                y: b.center + lane * b.halfWidth,
+                vx: 1.9,
+                vy: 0,
+                angle: Math.random() * 6.28,
+                opsonized: false,
+                beingEngulfed: false,
+                alpha: 1
+            });
+        }
+        tab2State.apcs.push({
+            type: 'apc',
+            x: 24,
+            y: 268,
+            targetX: 420,
+            targetY: 235,
+            r: 11.5,
+            vx: 1.9,
+            vy: 0,
+            presented: false,
+            antigenType: 'bacteria'
+        });
     }
 
     // Step Tab 2 Simulation Frame
@@ -6008,9 +6287,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 tab2State.apcs.push({
                     type: 'apc',
                     x: 0,
-                    y: 268 + (Math.random() - 0.5) * 10,
-                    targetX: 420 + (Math.random() - 0.5) * 60,
-                    targetY: 240 + (Math.random() - 0.5) * 60,
+                    y: 268,
+                    targetX: 420 + (Math.random() - 0.5) * 50,
+                    targetY: 240 + (Math.random() - 0.5) * 50,
                     r: 11.5,
                     vx: 2.0,
                     vy: 0,
@@ -6021,81 +6300,147 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (incoming.type === 'bacteria' || incoming.type === 'pathogen') {
                 tab2State.pathogens.push({
                     type: 'bacteria',
+                    vessel: 'primary',
+                    laneOffset: (Math.random() - 0.5) * 0.5,
                     x: 0,
-                    y: 268 + (Math.random() - 0.5) * 12,
-                    vx: 2.0 + Math.random() * 0.4,
+                    y: 268,
+                    vx: 2.0 + Math.random() * 0.3,
                     vy: 0,
                     angle: Math.random() * 6.28,
                     opsonized: false,
+                    beingEngulfed: false,
                     alpha: 1
                 });
             } else if (incoming.type === 'virus') {
                 tab2State.pathogens.push({
                     type: 'virus',
+                    vessel: 'primary',
+                    laneOffset: (Math.random() - 0.5) * 0.5,
                     x: 0,
-                    y: 268 + (Math.random() - 0.5) * 12,
-                    vx: 2.2 + Math.random() * 0.4,
+                    y: 268,
+                    vx: 2.1 + Math.random() * 0.3,
                     vy: 0,
                     angle: Math.random() * 6.28,
                     opsonized: false,
+                    beingEngulfed: false,
                     alpha: 1
                 });
             }
         }
 
-        // 2. Background Lymph Droplet Circulation
+        // 2. Background Lymph Droplet Circulation across all 3 afferent vessels AND efferent vessel
         tab2State.dropletTimer += simSpeed;
-        if (tab2State.dropletTimer >= 14) {
+        if (tab2State.dropletTimer >= 12) {
             tab2State.dropletTimer = 0;
-            // Spawn at primary inlet
+            // Spawn at primary inlet (x=0, y=268)
+            const laneP = (Math.random() - 0.5) * 0.65;
+            const bP = getLnAfferentBounds('primary', 0);
             tab2State.droplets.push({
+                vessel: 'primary',
+                laneOffset: laneP,
                 x: 0,
-                y: 268 + (Math.random() - 0.5) * 18,
-                vx: 2.2,
+                y: bP.center + laneP * bP.halfWidth,
+                vx: 2.1,
                 vy: 0,
                 r: 2.8,
                 alpha: 0.85
             });
-            // Spawn at secondary inlets periodically
-            if (Math.random() < 0.5) {
-                tab2State.droplets.push({
-                    x: 20,
-                    y: 72 + Math.random() * 12,
-                    vx: 1.8,
-                    vy: 0.8,
-                    r: 2.6,
-                    alpha: 0.8
-                });
-            } else {
-                tab2State.droplets.push({
-                    x: 20,
-                    y: 425 + Math.random() * 12,
-                    vx: 1.8,
-                    vy: -0.8,
-                    r: 2.6,
-                    alpha: 0.8
+            // Spawn at upper secondary afferent inlet (x=22)
+            const laneU = (Math.random() - 0.5) * 0.65;
+            const bU = getLnAfferentBounds('upper', 22);
+            tab2State.droplets.push({
+                vessel: 'upper',
+                laneOffset: laneU,
+                x: 22,
+                y: bU.center + laneU * bU.halfWidth,
+                vx: 1.85,
+                vy: 0,
+                r: 2.6,
+                alpha: 0.82
+            });
+            // Spawn at lower secondary afferent inlet (x=22)
+            const laneL = (Math.random() - 0.5) * 0.65;
+            const bL = getLnAfferentBounds('lower', 22);
+            tab2State.droplets.push({
+                vessel: 'lower',
+                laneOffset: laneL,
+                x: 22,
+                y: bL.center + laneL * bL.halfWidth,
+                vx: 1.85,
+                vy: 0,
+                r: 2.6,
+                alpha: 0.82
+            });
+            // Ensure efferent lymphatic vessel (x=780..1000) always has a steady stream of lymph droplets
+            const laneE = (Math.random() - 0.5) * 0.65;
+            const bE = getLnEfferentBounds(780);
+            tab2State.droplets.push({
+                vessel: 'primary',
+                laneOffset: laneE,
+                x: 780,
+                y: bE.center + laneE * bE.halfWidth,
+                vx: 2.35,
+                vy: 0,
+                r: 2.8,
+                alpha: 0.85
+            });
+
+            // Periodically replenish incoming pathogens so afferent pathogen inflow & macrophage phagocytosis are always observable
+            if (tab2State.pathogens.length < 3 && Math.random() < 0.35) {
+                const vessels = ['primary', 'upper', 'lower'];
+                const v = vessels[Math.floor(Math.random() * 3)];
+                const xStart = v === 'primary' ? 0 : 22;
+                const b = getLnAfferentBounds(v, xStart);
+                const lane = (Math.random() - 0.5) * 0.5;
+                tab2State.pathogens.push({
+                    type: Math.random() < 0.55 ? 'bacteria' : 'virus',
+                    vessel: v,
+                    laneOffset: lane,
+                    x: xStart,
+                    y: b.center + lane * b.halfWidth,
+                    vx: 1.95,
+                    vy: 0,
+                    angle: Math.random() * 6.28,
+                    opsonized: false,
+                    beingEngulfed: false,
+                    alpha: 1
                 });
             }
         }
 
-        // Update droplets
+        // Update droplets strictly inside afferent vessels, sinuses, and efferent vessel
         for (let i = tab2State.droplets.length - 1; i >= 0; i--) {
             const d = tab2State.droplets[i];
-            if (d.x < 140) {
+            const vessel = d.vessel || 'primary';
+            const lane = d.laneOffset !== undefined ? d.laneOffset : 0;
+            const afferentEnd = vessel === 'primary' ? 130 : 185;
+
+            if (d.x < afferentEnd) {
                 d.x += d.vx * simSpeed;
-                d.y += (268 - d.y) * 0.05 * simSpeed;
+                const bounds = getLnAfferentBounds(vessel, Math.max(0, d.x));
+                const targetY = bounds.center + lane * bounds.halfWidth;
+                d.y += (targetY - d.y) * 0.35 * simSpeed;
+                d.y = Math.max(bounds.top, Math.min(bounds.bot, d.y));
             } else if (d.x < 780) {
-                d.x += (1.8 + Math.random() * 0.4) * simSpeed;
-                if (d.y < 200) {
-                    d.y += Math.sin(d.x * 0.01) * 0.6 * simSpeed;
-                } else if (d.y > 340) {
-                    d.y -= Math.sin(d.x * 0.01) * 0.6 * simSpeed;
+                d.x += (1.9 + Math.random() * 0.3) * simSpeed;
+                // Smoothly converge from subcapsular sinus through medullary sinuses toward efferent hilum (y ~ 282)
+                const progress = (d.x - afferentEnd) / (780 - afferentEnd);
+                let targetSinusY = 268;
+                if (vessel === 'upper') {
+                    targetSinusY = 148 + progress * (276 - 148) + lane * 14 * (1 - progress * 0.5);
+                } else if (vessel === 'lower') {
+                    targetSinusY = 382 + progress * (288 - 382) + lane * 14 * (1 - progress * 0.5);
                 } else {
-                    d.y += (270 - d.y) * 0.02 * simSpeed;
+                    targetSinusY = 268 + progress * (282 - 268) + lane * 18 * (1 - progress * 0.4);
                 }
+                d.y += (targetSinusY - d.y) * 0.08 * simSpeed;
+                d.y = Math.max(85, Math.min(435, d.y));
             } else {
-                d.x += (2.4 + Math.random() * 0.4) * simSpeed;
-                d.y += (282 - d.y) * 0.06 * simSpeed;
+                d.x += (2.4 + Math.random() * 0.3) * simSpeed;
+                const effBounds = getLnEfferentBounds(d.x);
+                const targetY = effBounds.center + lane * effBounds.halfWidth * 0.8;
+                d.y += (targetY - d.y) * 0.25 * simSpeed;
+                d.y = Math.max(effBounds.top, Math.min(effBounds.bot, d.y));
             }
 
             if (d.x >= 1000) {
@@ -6106,23 +6451,35 @@ document.addEventListener('DOMContentLoaded', () => {
             renderPooledLnDroplet(d.x, d.y, d.r, d.alpha);
         }
 
-        // 3. Pathogen Dynamics
+        // 3. Pathogen Dynamics + Sinus Macrophage Phagocytosis & Antibody Opsonization
         for (let i = tab2State.pathogens.length - 1; i >= 0; i--) {
             const p = tab2State.pathogens[i];
-            if (p.x < 140) {
-                p.x += p.vx * simSpeed;
-                p.y += (268 - p.y) * 0.05 * simSpeed;
-            } else if (p.x < 780) {
-                p.x += (1.5 + Math.random() * 0.3) * simSpeed;
-                p.y += (Math.random() - 0.5) * 0.8 * simSpeed;
-            } else {
-                p.x += 2.0 * simSpeed;
-                p.y += (282 - p.y) * 0.05 * simSpeed;
+            const vessel = p.vessel || 'primary';
+            const lane = p.laneOffset !== undefined ? p.laneOffset : 0;
+            const afferentEnd = vessel === 'primary' ? 130 : 185;
+
+            if (!p.beingEngulfed) {
+                if (p.x < afferentEnd) {
+                    p.x += p.vx * simSpeed;
+                    const bounds = getLnAfferentBounds(vessel, Math.max(0, p.x));
+                    const targetY = bounds.center + lane * bounds.halfWidth * 0.7;
+                    p.y += (targetY - p.y) * 0.3 * simSpeed;
+                    p.y = Math.max(bounds.top + 3, Math.min(bounds.bot - 3, p.y));
+                } else if (p.x < 775) {
+                    p.x += (1.25 + Math.random() * 0.25) * simSpeed;
+                    p.y += (275 - p.y) * 0.015 * simSpeed + (Math.random() - 0.5) * 0.6 * simSpeed;
+                    p.y = Math.max(110, Math.min(420, p.y));
+                } else {
+                    p.x += 1.9 * simSpeed;
+                    const effBounds = getLnEfferentBounds(p.x);
+                    p.y += (effBounds.center - p.y) * 0.2 * simSpeed;
+                    p.y = Math.max(effBounds.top + 3, Math.min(effBounds.bot - 3, p.y));
+                }
             }
 
             p.angle += 0.03 * simSpeed;
 
-            // Check contact with antibodies in medullary sinuses
+            // Check contact with antibodies in medullary sinuses (Opsonization / Neutralization)
             if (!p.opsonized) {
                 for (let j = 0; j < tab2State.antibodies.length; j++) {
                     const ab = tab2State.antibodies[j];
@@ -6130,14 +6487,64 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (dist < 22) {
                         p.opsonized = true;
                         ab.alpha = 0;
-                        spawnLnLabel(p.x, p.y - 14, p.type === 'bacteria' ? "🏷️ 抗體調理細菌" : "🏷️ 特異性中和病毒", "#fbbf24");
+                        spawnLnLabel(p.x, p.y - 16, p.type === 'bacteria' ? "🏷️ 抗體調理細菌・加速巨噬細胞吞噬" : "🏷️ 特異性抗體中和病毒", "#fbbf24");
                         break;
                     }
                 }
             }
 
-            if (p.opsonized) {
-                p.alpha = (p.alpha || 1) - 0.008 * simSpeed;
+            // Check contact with Resident Sinus Macrophages (主動吞噬病原體)
+            if (p.x >= 145 && p.x <= 680 && !p.beingEngulfed) {
+                for (let m = 0; m < tab2State.macrophages.length; m++) {
+                    const mac = tab2State.macrophages[m];
+                    const dist = Math.hypot(p.x - mac.x, p.y - mac.y);
+                    const captureRadius = p.opsonized ? 68 : 48;
+                    if (dist < captureRadius) {
+                        // Macrophage reaches toward pathogen and pulls pathogen in
+                        mac.x += (p.x - mac.x) * 0.08 * simSpeed;
+                        mac.y += (p.y - mac.y) * 0.08 * simSpeed;
+                        p.x += (mac.x - p.x) * 0.14 * simSpeed;
+                        p.y += (mac.y - p.y) * 0.14 * simSpeed;
+                        if (dist < 16) {
+                            p.beingEngulfed = true;
+                            p.engulfTarget = mac;
+                            mac.phagocytosingTimer = 45;
+                            mac.engulfCount = (mac.engulfCount || 0) + 1;
+                            const msg = p.opsonized
+                                ? "🛡️ 淋巴竇巨噬細胞調理吞噬病原體 (Opsonophagocytosis)"
+                                : "🛡️ 淋巴竇巨噬細胞吞噬攔截病原體 (Phagocytosis)";
+                            spawnLnLabel(mac.x, mac.y - 18, msg, "#38bdf8", "rgba(12, 74, 110, 0.94)");
+                            // If no APC is currently active, macrophage/DC antigen capture triggers APC presentation
+                            if (tab2State.apcs.length === 0) {
+                                tab2State.apcs.push({
+                                    type: 'apc',
+                                    x: mac.x + 10,
+                                    y: mac.y,
+                                    targetX: 420 + (Math.random() - 0.5) * 40,
+                                    targetY: 240 + (Math.random() - 0.5) * 40,
+                                    r: 11.5,
+                                    vx: 2.0,
+                                    vy: 0,
+                                    presented: false,
+                                    antigenType: p.type
+                                });
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (p.beingEngulfed && p.engulfTarget) {
+                p.x += (p.engulfTarget.x - p.x) * 0.25 * simSpeed;
+                p.y += (p.engulfTarget.y - p.y) * 0.25 * simSpeed;
+                p.alpha = (p.alpha || 1) - 0.04 * simSpeed;
+                if (p.alpha <= 0.08) {
+                    tab2State.pathogens.splice(i, 1);
+                    continue;
+                }
+            } else if (p.opsonized) {
+                p.alpha = (p.alpha || 1) - 0.012 * simSpeed;
                 if (p.alpha <= 0.1 || p.x >= 995) {
                     tab2State.pathogens.splice(i, 1);
                     continue;
@@ -6150,21 +6557,38 @@ document.addEventListener('DOMContentLoaded', () => {
             renderPooledLnPathogen(p);
         }
 
+        // 3b. Render & update Sinus Macrophages
+        for (let i = 0; i < tab2State.macrophages.length; i++) {
+            const mac = tab2State.macrophages[i];
+            if (mac.phagocytosingTimer > 0) {
+                mac.phagocytosingTimer -= simSpeed;
+            }
+            // Gently return toward base sinus patrol position
+            mac.x += (mac.baseX - mac.x) * 0.03 * simSpeed + Math.sin(simNowMs * 0.002 + i) * 0.15 * simSpeed;
+            mac.y += (mac.baseY - mac.y) * 0.03 * simSpeed + Math.cos(simNowMs * 0.002 + i) * 0.15 * simSpeed;
+            renderPooledLnCell(mac);
+        }
+
         // 4. APC Dynamics & Antigen Presentation
         for (let i = tab2State.apcs.length - 1; i >= 0; i--) {
             const apc = tab2State.apcs[i];
-            if (!apc.presented) {
+            if (apc.x < 130) {
+                apc.x += apc.vx * simSpeed;
+                const bounds = getLnAfferentBounds('primary', Math.max(0, apc.x));
+                apc.y += (bounds.center - apc.y) * 0.25 * simSpeed;
+                apc.y = Math.max(bounds.top + 4, Math.min(bounds.bot - 4, apc.y));
+            } else if (!apc.presented) {
                 const dx = apc.targetX - apc.x;
                 const dy = apc.targetY - apc.y;
                 const dist = Math.hypot(dx, dy);
                 if (dist > 8) {
-                    apc.x += (dx / dist) * 1.5 * simSpeed;
-                    apc.y += (dy / dist) * 1.5 * simSpeed;
+                    apc.x += (dx / dist) * 1.6 * simSpeed;
+                    apc.y += (dy / dist) * 1.6 * simSpeed;
                 } else {
                     for (let j = 0; j < tab2State.helperTCells.length; j++) {
                         const th = tab2State.helperTCells[j];
                         const tDist = Math.hypot(apc.x - th.x, apc.y - th.y);
-                        if (tDist < 30) {
+                        if (tDist < 32) {
                             apc.presented = true;
                             th.activated = true;
                             th.cytokineTimer = 120;
@@ -6175,8 +6599,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
             } else {
-                apc.x += (Math.random() - 0.5) * 0.4 * simSpeed;
-                apc.y += (Math.random() - 0.5) * 0.4 * simSpeed;
+                apc.x += (Math.random() - 0.5) * 0.35 * simSpeed;
+                apc.y += (Math.random() - 0.5) * 0.35 * simSpeed;
             }
 
             renderPooledLnCell(apc);
@@ -6186,14 +6610,14 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let i = 0; i < tab2State.helperTCells.length; i++) {
             const th = tab2State.helperTCells[i];
             if (th.activated) {
-                th.x += (280 - th.x) * 0.015 * simSpeed;
-                th.y += (Math.random() - 0.5) * 0.8 * simSpeed;
+                th.x += (285 - th.x) * 0.018 * simSpeed;
+                th.y += (Math.random() - 0.5) * 0.7 * simSpeed;
 
                 for (let j = 0; j < tab2State.bCells.length; j++) {
                     const bc = tab2State.bCells[j];
                     if (!bc.sensitized) {
                         const bDist = Math.hypot(th.x - bc.x, th.y - bc.y);
-                        if (bDist < 35) {
+                        if (bDist < 38) {
                             bc.sensitized = true;
                             bc.cloneTimer = 0;
                             spawnLnLabel(bc.x, bc.y - 16, "🏷️ 輔助T細胞致敏B細胞 (CD40L-CD40)", "#fb923c", "rgba(124, 45, 18, 0.95)");
@@ -6202,8 +6626,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
             } else {
-                th.x += (Math.random() - 0.5) * 0.6 * simSpeed;
-                th.y += (Math.random() - 0.5) * 0.6 * simSpeed;
+                th.x += (Math.random() - 0.5) * 0.5 * simSpeed;
+                th.y += (Math.random() - 0.5) * 0.5 * simSpeed;
                 th.x = Math.max(340, Math.min(520, th.x));
                 th.y = Math.max(160, Math.min(320, th.y));
             }
@@ -6211,49 +6635,78 @@ document.addEventListener('DOMContentLoaded', () => {
             renderPooledLnCell(th);
         }
 
-        // 6. B Cells & Germinal Center Clonal Expansion
+        // 6. B Cells, Germinal Center Clonal Expansion & Migration to Medullary Cords
         for (let i = tab2State.bCells.length - 1; i >= 0; i--) {
             const bc = tab2State.bCells[i];
             if (bc.sensitized) {
                 bc.cloneTimer += simSpeed;
-                bc.x += (Math.random() - 0.5) * 0.8 * simSpeed;
-                bc.y += (Math.random() - 0.5) * 0.8 * simSpeed;
 
-                if (!bc.cloned && bc.cloneTimer > 50) {
+                if (!bc.cloned && bc.cloneTimer > 45) {
                     bc.cloned = true;
-                    tab2State.bCells.push({
-                        type: 'bcell',
-                        follicleIndex: bc.follicleIndex,
-                        x: bc.x + 8,
-                        y: bc.y + 6,
-                        baseX: bc.baseX,
-                        baseY: bc.baseY,
-                        r: 8.0,
-                        sensitized: true,
-                        cloneTimer: 100,
-                        cloned: true
-                    });
-                    spawnLnLabel(bc.x, bc.y - 16, "🏷️ 生發中心 B細胞選殖增殖 (克隆擴增)", "#ea580c", "rgba(154, 52, 18, 0.95)");
+                    bc.migratingToMedulla = true;
+                    bc.targetX = 600 + Math.random() * 105;
+                    bc.targetY = 210 + Math.random() * 95;
+                    // Spawn daughter clone in follicle that also migrates to medullary cords
+                    if (tab2State.bCells.length < 18) {
+                        tab2State.bCells.push({
+                            type: 'bcell',
+                            follicleIndex: bc.follicleIndex,
+                            x: bc.x + 8,
+                            y: bc.y + 6,
+                            baseX: bc.baseX,
+                            baseY: bc.baseY,
+                            r: 8.0,
+                            sensitized: true,
+                            cloneTimer: 50,
+                            cloned: true,
+                            migratingToMedulla: true,
+                            targetX: 605 + Math.random() * 105,
+                            targetY: 210 + Math.random() * 95
+                        });
+                    }
+                    spawnLnLabel(bc.x, bc.y - 16, "🏷️ 生發中心 B細胞選殖增殖 ➔ 遷移往髓索", "#ea580c", "rgba(154, 52, 18, 0.95)");
                 }
 
-                if (bc.cloneTimer > 130) {
-                    tab2State.plasmaCells.push({
-                        type: 'plasma',
-                        x: 580 + Math.random() * 120,
-                        y: 220 + Math.random() * 90,
-                        r: 10.5,
-                        pulse: 0,
-                        secreteTimer: 0
-                    });
-                    spawnLnLabel(600, 240, "🏷️ B細胞分化為漿細胞・定居髓索", "#f97316", "rgba(194, 65, 12, 0.95)");
-                    tab2State.bCells.splice(i, 1);
-                    continue;
+                if (bc.migratingToMedulla) {
+                    // Visibly migrate from cortical follicle across paracortex to medullary cords
+                    const tx = bc.targetX || 640;
+                    const ty = bc.targetY || 265;
+                    const dx = tx - bc.x;
+                    const dy = ty - bc.y;
+                    const dist = Math.hypot(dx, dy);
+                    if (dist > 10) {
+                        bc.x += (dx / dist) * 2.1 * simSpeed;
+                        bc.y += (dy / dist) * 2.1 * simSpeed;
+                    } else {
+                        // Arrived in medullary cords -> differentiate into Plasma Cell
+                        // ~45% of newly differentiated plasma cells are long-lived precursors that leave LN to home to bone marrow
+                        const willHomeToMarrow = Math.random() < 0.45;
+                        tab2State.plasmaCells.push({
+                            type: 'plasma',
+                            x: bc.x,
+                            y: bc.y,
+                            baseX: bc.x,
+                            baseY: bc.y,
+                            r: 10.5,
+                            pulse: 0,
+                            activated: tab2State.antibodySecretionActive,
+                            homingToMarrow: willHomeToMarrow,
+                            stayTimer: 0,
+                            secreteTimer: 0
+                        });
+                        spawnLnLabel(bc.x, bc.y - 16, "🏷️ B細胞遷移抵達髓索・分化為漿細胞", "#f97316", "rgba(194, 65, 12, 0.95)");
+                        tab2State.bCells.splice(i, 1);
+                        continue;
+                    }
+                } else {
+                    bc.x += (Math.random() - 0.5) * 0.7 * simSpeed;
+                    bc.y += (Math.random() - 0.5) * 0.7 * simSpeed;
                 }
             } else {
                 bc.x += (Math.random() - 0.5) * 0.4 * simSpeed;
                 bc.y += (Math.random() - 0.5) * 0.4 * simSpeed;
                 const dFromBase = Math.hypot(bc.x - bc.baseX, bc.y - bc.baseY);
-                if (dFromBase > 35) {
+                if (dFromBase > 32) {
                     bc.x += (bc.baseX - bc.x) * 0.05;
                     bc.y += (bc.baseY - bc.y) * 0.05;
                 }
@@ -6262,41 +6715,94 @@ document.addEventListener('DOMContentLoaded', () => {
             renderPooledLnCell(bc);
         }
 
-        // 7. Plasma Cells & Antibody Secretion
-        for (let i = 0; i < tab2State.plasmaCells.length; i++) {
+        // 7. Plasma Cells: Bone Marrow Homing Migration & Gated Antibody Secretion
+        for (let i = tab2State.plasmaCells.length - 1; i >= 0; i--) {
             const pc = tab2State.plasmaCells[i];
-            pc.secreteTimer += simSpeed;
             pc.pulse = Math.sin(simNowMs * 0.008 + pc.x);
+            pc.stayTimer = (pc.stayTimer || 0) + simSpeed;
 
-            if (pc.secreteTimer >= 22) {
-                pc.secreteTimer = 0;
-                const angle = (Math.random() - 0.5) * 0.8;
-                tab2State.antibodies.push({
-                    x: pc.x + 10,
-                    y: pc.y + (Math.random() - 0.5) * 8,
-                    vx: 2.2 + Math.random() * 0.6,
-                    vy: (282 - pc.y) * 0.03,
-                    angle: angle,
-                    color: Math.random() < 0.6 ? "#fbbf24" : "#f97316",
-                    alpha: 1
-                });
+            // Some differentiated plasma cells leave the lymph node via the efferent vessel to home to the bone marrow (Tab 4)
+            if (pc.homingToMarrow && pc.stayTimer > 80) {
+                pc.leavingNode = true;
+                if (pc.x < 780) {
+                    const dx = 784 - pc.x;
+                    const dy = 273 - pc.y;
+                    const dist = Math.hypot(dx, dy) || 1;
+                    pc.x += (dx / dist) * 1.85 * simSpeed;
+                    pc.y += (dy / dist) * 1.85 * simSpeed;
+                    if (!pc.announcedHoming && pc.x > 730) {
+                        pc.announcedHoming = true;
+                        spawnLnLabel(pc.x, pc.y - 18, "🦴 長壽漿細胞前驅離開淋巴結 ➔ 經輸出管歸巢骨髓", "#a855f7", "rgba(88, 28, 135, 0.94)");
+                    }
+                } else {
+                    pc.x += 2.25 * simSpeed;
+                    const effBounds = getLnEfferentBounds(pc.x);
+                    pc.y += (effBounds.center - pc.y) * 0.28 * simSpeed;
+                    pc.y = Math.max(effBounds.top + 2, Math.min(effBounds.bot - 2, pc.y));
+                    if (pc.x >= 1020) {
+                        if (sharedImmuneState && Array.isArray(sharedImmuneState.homingQueue) && sharedImmuneState.homingQueue.length < 30) {
+                            sharedImmuneState.homingQueue.push({ type: 'llpc_precursor', timestamp: Date.now() });
+                        }
+                        tab2State.plasmaCells.splice(i, 1);
+                        continue;
+                    }
+                }
+            }
+
+            // ONLY secrete antibodies when activated by button/cascade AND while inside medullary cords (x < 755)!
+            if (tab2State.antibodySecretionActive && pc.activated && pc.x < 755) {
+                pc.secreteTimer += simSpeed;
+                if (pc.secreteTimer >= 22) {
+                    pc.secreteTimer = 0;
+                    const lane = (Math.random() - 0.5) * 0.7;
+                    tab2State.antibodies.push({
+                        x: pc.x + 10,
+                        y: pc.y + (Math.random() - 0.5) * 6,
+                        vx: 2.4 + Math.random() * 0.4,
+                        vy: 0,
+                        laneOffset: lane,
+                        angle: (Math.random() - 0.5) * 0.35,
+                        color: Math.random() < 0.6 ? "#fbbf24" : "#f97316",
+                        alpha: 1
+                    });
+                }
             }
 
             renderPooledLnCell(pc);
         }
 
-        // 8. Antibodies Stream through Medullary Sinuses to Efferent Duct
+        // 8. Antibodies Stream Strictly within Medullary Sinus & Efferent Duct (Zero Undamped Oscillation)
         for (let i = tab2State.antibodies.length - 1; i >= 0; i--) {
             const ab = tab2State.antibodies[i];
-            ab.x += ab.vx * simSpeed;
-            ab.y += ab.vy * simSpeed;
-            ab.vy += (282 - ab.y) * 0.04 * simSpeed;
+            if (ab.alpha <= 0.05) {
+                tab2State.antibodies.splice(i, 1);
+                continue;
+            }
+            ab.x += (ab.vx || 2.4) * simSpeed;
+            const lane = ab.laneOffset !== undefined ? ab.laneOffset : 0;
 
-            if (ab.x >= 1000) {
-                sharedImmuneState.efferentQueue.push({
-                    type: 'antibody',
-                    color: ab.color
-                });
+            if (ab.x < 780) {
+                // Smoothly converge from medullary cords (x ~ 600..775) into the hilum entrance (x=780, y=273)
+                const progress = Math.max(0, Math.min(1, (ab.x - 600) / 180));
+                const allowedHalfWidth = 30 * (1 - progress) + 10 * progress;
+                const targetY = 273 + lane * allowedHalfWidth;
+                ab.y += (targetY - ab.y) * 0.18 * simSpeed;
+                ab.y = Math.max(273 - allowedHalfWidth - 3, Math.min(273 + allowedHalfWidth + 3, ab.y));
+            } else {
+                // Strictly confined inside the efferent lymphatic vessel walls (x = 780..1000)
+                const effBounds = getLnEfferentBounds(ab.x);
+                const targetY = effBounds.center + lane * effBounds.halfWidth * 0.78;
+                ab.y += (targetY - ab.y) * 0.30 * simSpeed;
+                ab.y = Math.max(effBounds.top, Math.min(effBounds.bot, ab.y));
+            }
+
+            if (ab.x >= 1015) {
+                if (sharedImmuneState && Array.isArray(sharedImmuneState.efferentQueue) && sharedImmuneState.efferentQueue.length < 60) {
+                    sharedImmuneState.efferentQueue.push({
+                        type: 'antibody',
+                        color: ab.color
+                    });
+                }
                 tab2State.antibodies.splice(i, 1);
                 continue;
             }
@@ -6320,7 +6826,7 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let i = tab2State.floatingLabels.length - 1; i >= 0; i--) {
             const lbl = tab2State.floatingLabels[i];
             lbl.life -= simSpeed;
-            lbl.y -= 0.25 * simSpeed;
+            lbl.y -= 0.22 * simSpeed;
             if (lbl.life <= 0) {
                 tab2State.floatingLabels.splice(i, 1);
                 continue;
@@ -6331,23 +6837,67 @@ document.addEventListener('DOMContentLoaded', () => {
         finalizeLnSvgPools();
     }
 
+    // Helper to spawn tightly-bounded antibodies into Tab 2 efferent pathway
+    function spawnBoundedTab2Antibodies(count) {
+        tab2State.antibodySecretionActive = true;
+        tab2State.plasmaCells.forEach((pc, idx) => {
+            pc.activated = true;
+            if (idx === tab2State.plasmaCells.length - 1) {
+                pc.homingToMarrow = true;
+                pc.stayTimer = Math.max(pc.stayTimer || 0, 82);
+            }
+        });
+        for (let i = 0; i < count; i++) {
+            const xPos = 640 + (i / count) * 260;
+            const lane = (Math.random() - 0.5) * 0.68;
+            let yPos;
+            if (xPos < 780) {
+                const progress = Math.max(0, Math.min(1, (xPos - 600) / 180));
+                const halfW = 22 * (1 - progress) + 10 * progress;
+                yPos = 273 + lane * halfW;
+            } else {
+                const bEff = getLnEfferentBounds(xPos);
+                yPos = bEff.center + lane * bEff.halfWidth * 0.78;
+            }
+            tab2State.antibodies.push({
+                x: xPos,
+                y: yPos,
+                vx: 2.4 + Math.random() * 0.4,
+                vy: 0,
+                laneOffset: lane,
+                angle: (Math.random() - 0.5) * 0.3,
+                color: Math.random() < 0.65 ? '#fbbf24' : '#f97316',
+                alpha: 1
+            });
+        }
+    }
+
     // Initialize Interactive Controls for Tab 2, 3, 4
     function initTabControls() {
-        // Step 1: Inflow
+        // Step 1: Inflow across all 3 afferent vessels
         const btnInflow = document.getElementById('btn-t2-step-inflow');
         if (btnInflow) {
             btnInflow.addEventListener('click', () => {
-                for (let i = 0; i < 8; i++) {
-                    tab2State.droplets.push({ x: 0 - i * 15, y: 268 + (Math.random() - 0.5) * 16, vx: 2.2, vy: 0, r: 2.8, alpha: 0.85 });
+                for (let i = 0; i < 5; i++) {
+                    const laneP = (Math.random() - 0.5) * 0.6;
+                    tab2State.droplets.push({ vessel: 'primary', laneOffset: laneP, x: 0, y: 268 + laneP * 11, vx: 2.2, vy: 0, r: 2.8, alpha: 0.85 });
+                    const laneU = (Math.random() - 0.5) * 0.6;
+                    const bU = getLnAfferentBounds('upper', 22);
+                    tab2State.droplets.push({ vessel: 'upper', laneOffset: laneU, x: 22, y: bU.center + laneU * bU.halfWidth, vx: 1.9, vy: 0, r: 2.6, alpha: 0.82 });
+                    const laneL = (Math.random() - 0.5) * 0.6;
+                    const bL = getLnAfferentBounds('lower', 22);
+                    tab2State.droplets.push({ vessel: 'lower', laneOffset: laneL, x: 22, y: bL.center + laneL * bL.halfWidth, vx: 1.9, vy: 0, r: 2.6, alpha: 0.82 });
                 }
                 for (let i = 0; i < 3; i++) {
-                    tab2State.pathogens.push({ type: 'bacteria', x: 0 - i * 20, y: 268 + (Math.random() - 0.5) * 12, vx: 2.0, vy: 0, angle: 0, opsonized: false });
-                    tab2State.pathogens.push({ type: 'virus', x: -10 - i * 20, y: 268 + (Math.random() - 0.5) * 12, vx: 2.1, vy: 0, angle: 0, opsonized: false });
+                    const laneB = (Math.random() - 0.5) * 0.5;
+                    tab2State.pathogens.push({ type: 'bacteria', vessel: 'primary', laneOffset: laneB, x: 0, y: 268 + laneB * 10, vx: 2.0 + i * 0.15, vy: 0, angle: 0, opsonized: false });
+                    const laneV = (Math.random() - 0.5) * 0.5;
+                    tab2State.pathogens.push({ type: 'virus', vessel: 'primary', laneOffset: laneV, x: 0, y: 268 + laneV * 10, vx: 2.1 + i * 0.15, vy: 0, angle: 0, opsonized: false });
                 }
                 tab2State.apcs.push({
-                    type: 'apc', x: -10, y: 268, targetX: 420, targetY: 230, r: 11.5, vx: 2.0, vy: 0, presented: false, antigenType: 'bacteria'
+                    type: 'apc', x: 0, y: 268, targetX: 420, targetY: 230, r: 11.5, vx: 2.0, vy: 0, presented: false, antigenType: 'bacteria'
                 });
-                spawnLnLabel(130, 240, "🌊 輸入淋巴、抗原與APC湧入包膜下竇", "#34d399");
+                spawnLnLabel(150, 235, "🌊 三條輸入淋巴管同步湧入淋巴液、病原體與APC", "#34d399");
             });
         }
 
@@ -6371,33 +6921,39 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        // Step 4: Clonal expansion in germinal center
+        // Step 4: Clonal expansion in germinal center & migration to medullary cords
         const btnClonal = document.getElementById('btn-t2-step-clonal');
         if (btnClonal) {
             btnClonal.addEventListener('click', () => {
                 tab2State.bCells.forEach(bc => {
                     bc.sensitized = true;
-                    bc.cloneTimer = 40;
+                    bc.cloneTimer = 42;
                 });
-                spawnLnLabel(240, 180, "⚡ 生發中心 B細胞啟動高速選殖增殖 (SHM突變)", "#ea580c");
+                spawnLnLabel(260, 180, "⚡ 生發中心 B細胞選殖增殖 ➔ 遷移至髓索並部分歸巢骨髓", "#ea580c");
             });
         }
 
-        // Step 5: Antibody secretion & efferent outflow
+        // Step 5: Antibody secretion & efferent outflow (Activates plasma cells!)
         const btnAb = document.getElementById('btn-t2-step-antibody');
         if (btnAb) {
             btnAb.addEventListener('click', () => {
-                for (let k = 0; k < 3; k++) {
+                for (let k = 0; k < 2; k++) {
                     tab2State.plasmaCells.push({
-                        type: 'plasma', x: 590 + Math.random() * 120, y: 220 + Math.random() * 90, r: 10.5, pulse: 0, secreteTimer: 0
+                        type: 'plasma',
+                        x: 600 + Math.random() * 100,
+                        y: 220 + Math.random() * 80,
+                        baseX: 640,
+                        baseY: 260,
+                        r: 10.5,
+                        pulse: 0,
+                        activated: true,
+                        homingToMarrow: k === 0,
+                        stayTimer: 40,
+                        secreteTimer: 0
                     });
                 }
-                for (let i = 0; i < 20; i++) {
-                    tab2State.antibodies.push({
-                        x: 620 + Math.random() * 100, y: 250 + Math.random() * 50, vx: 2.6 + Math.random() * 0.8, vy: 0, angle: 0, color: '#fbbf24', alpha: 1
-                    });
-                }
-                spawnLnLabel(780, 250, "✨ 髓索漿細胞全力分泌高濃度抗體 ➔ 輸出淋巴管", "#fbbf24");
+                spawnBoundedTab2Antibodies(16);
+                spawnLnLabel(760, 242, "✨ 髓索漿細胞活化分泌高濃度抗體 ➔ 沿輸出淋巴管流出", "#fbbf24");
             });
         }
 
@@ -6405,20 +6961,30 @@ document.addEventListener('DOMContentLoaded', () => {
         const btnBac = document.getElementById('btn-t2-spawn-bacteria');
         if (btnBac) {
             btnBac.addEventListener('click', () => {
+                const vessels = ['primary', 'upper', 'lower'];
                 for (let i = 0; i < 3; i++) {
-                    tab2State.pathogens.push({ type: 'bacteria', x: 0 - i * 15, y: 268 + (Math.random() - 0.5) * 14, vx: 2.0, vy: 0, angle: 0, opsonized: false });
+                    const v = vessels[i % 3];
+                    const xStart = v === 'primary' ? 0 : 22;
+                    const b = getLnAfferentBounds(v, xStart);
+                    const lane = (Math.random() - 0.5) * 0.5;
+                    tab2State.pathogens.push({ type: 'bacteria', vessel: v, laneOffset: lane, x: xStart, y: b.center + lane * b.halfWidth, vx: 2.0, vy: 0, angle: 0, opsonized: false });
                 }
-                spawnLnLabel(80, 248, "➕ 細菌輸入", "#27ae60");
+                spawnLnLabel(110, 248, "➕ 細菌由輸入淋巴管進入 ➔ 竇巨噬細胞準備吞噬", "#27ae60");
             });
         }
 
         const btnVir = document.getElementById('btn-t2-spawn-virus');
         if (btnVir) {
             btnVir.addEventListener('click', () => {
-                for (let i = 0; i < 4; i++) {
-                    tab2State.pathogens.push({ type: 'virus', x: 0 - i * 15, y: 268 + (Math.random() - 0.5) * 14, vx: 2.1, vy: 0, angle: 0, opsonized: false });
+                const vessels = ['primary', 'upper', 'lower'];
+                for (let i = 0; i < 3; i++) {
+                    const v = vessels[i % 3];
+                    const xStart = v === 'primary' ? 0 : 22;
+                    const b = getLnAfferentBounds(v, xStart);
+                    const lane = (Math.random() - 0.5) * 0.5;
+                    tab2State.pathogens.push({ type: 'virus', vessel: v, laneOffset: lane, x: xStart, y: b.center + lane * b.halfWidth, vx: 2.1, vy: 0, angle: 0, opsonized: false });
                 }
-                spawnLnLabel(80, 248, "👾 病毒輸入", "#8e44ad");
+                spawnLnLabel(110, 248, "👾 病毒由輸入淋巴管進入 ➔ 巨噬細胞與抗體攔截", "#8e44ad");
             });
         }
 
@@ -6428,19 +6994,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 tab2State.apcs.push({
                     type: 'apc', x: 0, y: 268, targetX: 430, targetY: 240, r: 11.5, vx: 2.0, vy: 0, presented: false, antigenType: 'bacteria'
                 });
-                spawnLnLabel(80, 248, "🏷️ 抗原呈現細胞輸入", "#34d399");
+                spawnLnLabel(110, 248, "🏷️ 抗原呈現細胞輸入", "#34d399");
             });
         }
 
         const btnTriggerPlasma = document.getElementById('btn-t2-trigger-plasma');
         if (btnTriggerPlasma) {
             btnTriggerPlasma.addEventListener('click', () => {
-                for (let i = 0; i < 15; i++) {
-                    tab2State.antibodies.push({
-                        x: 630 + Math.random() * 80, y: 240 + Math.random() * 60, vx: 2.8, vy: 0, angle: 0, color: '#fbbf24', alpha: 1
-                    });
-                }
-                spawnLnLabel(650, 220, "✨ 活化漿細胞群抗體噴射", "#fbbf24");
+                spawnBoundedTab2Antibodies(14);
+                spawnLnLabel(650, 220, "✨ 活化漿細胞群分泌抗體 ➔ 匯入輸出淋巴管", "#fbbf24");
             });
         }
 
@@ -6449,7 +7011,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (btnResetLn) {
             btnResetLn.addEventListener('click', () => {
                 initTab2Simulation();
-                spawnLnLabel(450, 240, "🔄 淋巴結已重置為休眠監控狀態", "#94a3b8");
+                spawnLnLabel(450, 240, "🔄 淋巴結已重置為休眠監控狀態 (預設不分泌抗體)", "#94a3b8");
             });
         }
 
@@ -6491,8 +7053,43 @@ document.addEventListener('DOMContentLoaded', () => {
         lymphDroplets: [],
         antibodies: [],
         eddies: [],
-        floatingLabels: []
+        floatingLabels: [],
+        labelCooldowns: {}
     };
+
+    // Exact Bezier geometry helpers for Page 3 veins & thoracic duct
+    function getP3JugularBoundsX(y) {
+        const tL = Math.max(0, Math.min(1, (y + 65) / 313));
+        const xLeft = cubicBezier1D(tL, 420, 432, 452, 475) + 7;
+        const tR = Math.max(0, Math.min(1, (y + 65) / 247));
+        const xRight = cubicBezier1D(tR, 560, 572, 596, 630) - 7;
+        return { left: xLeft, right: Math.max(xLeft + 20, xRight) };
+    }
+
+    function getP3SubclavianBoundsX(y) {
+        const tL = Math.max(0, Math.min(1, (500 - y) / 218));
+        const xLeft = cubicBezier1D(tL, 360, 398, 440, 475) + 7;
+        const tR = Math.max(0, Math.min(1, (500 - y) / 174));
+        const xRight = cubicBezier1D(tR, 490, 528, 578, 630) - 7;
+        return { left: xLeft, right: Math.max(xLeft + 20, xRight) };
+    }
+
+    function getP3ThoracicBoundsY(branch, x) {
+        if (x < 225) {
+            const t = Math.max(0, Math.min(1, x / 225));
+            if (branch === 0) {
+                const cy = cubicBezier1D(t, 176, 176, 232, 255);
+                return { top: cy - 8, bot: cy + 8, center: cy };
+            } else if (branch === 2) {
+                const cy = cubicBezier1D(t, 376, 376, 305, 276);
+                return { top: cy - 8, bot: cy + 8, center: cy };
+            } else {
+                const cy = cubicBezier1D(t, 268, 268, 266, 265);
+                return { top: cy - 10, bot: cy + 10, center: cy };
+            }
+        }
+        return { top: 249, bot: 281, center: 265 };
+    }
 
     // Zero-Allocation SVG Object Pools for Tab 3
     const p3RbcPool = [];
@@ -6688,9 +7285,35 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function spawnP3Label(x, y, text, color) {
+        const now = Date.now();
+        if (tab3State.labelCooldowns[text] && now - tab3State.labelCooldowns[text] < 2200) {
+            for (let i = 0; i < tab3State.floatingLabels.length; i++) {
+                if (tab3State.floatingLabels[i].text === text) {
+                    tab3State.floatingLabels[i].life = Math.max(tab3State.floatingLabels[i].life, 75);
+                    return;
+                }
+            }
+            return;
+        }
+        for (let i = 0; i < tab3State.floatingLabels.length; i++) {
+            if (tab3State.floatingLabels[i].text === text) {
+                tab3State.floatingLabels[i].life = 80;
+                tab3State.labelCooldowns[text] = now;
+                return;
+            }
+        }
+        tab3State.labelCooldowns[text] = now;
+        let finalY = y;
+        for (let i = 0; i < tab3State.floatingLabels.length; i++) {
+            const existing = tab3State.floatingLabels[i];
+            if (Math.abs(existing.x - x) < 180 && Math.abs(existing.y - finalY) < 26) {
+                finalY = existing.y - 28;
+            }
+        }
+        finalY = Math.max(28, Math.min(450, finalY));
         tab3State.floatingLabels.push({
-            x: Math.max(80, Math.min(880, x)),
-            y,
+            x: Math.max(120, Math.min(860, x)),
+            y: finalY,
             text,
             color: color || '#38bdf8',
             life: 80,
@@ -6754,47 +7377,60 @@ document.addEventListener('DOMContentLoaded', () => {
         tab3State.antibodies = [];
         tab3State.eddies = [];
         tab3State.floatingLabels = [];
+        tab3State.labelCooldowns = {};
 
-        // 1. Initial RBCs in Internal Jugular Vein (y=-65..220)
+        // 1. Initial RBCs in Internal Jugular Vein (y=-60..210), strictly inside Jugular Bezier walls
         for (let i = 0; i < 30; i++) {
+            const y = -58 + Math.random() * 265;
+            const lane = 0.12 + Math.random() * 0.76;
+            const b = getP3JugularBoundsX(y);
+            const x = b.left + lane * (b.right - b.left);
             tab3State.rbcs.push({
-                x: 480 + Math.random() * 110,
-                y: -60 + Math.random() * 280,
-                vx: 1.5 + Math.random(),
-                vy: 5.5 + Math.random() * 2,
+                x: x,
+                y: y,
+                lane: lane,
+                vx: 1.4,
+                vy: 5.2 + Math.random() * 1.4,
                 r: 4.8,
                 biconcave: Math.random() < 0.35,
-                angle: 1.57,
+                angle: 1.35,
                 alpha: 0.9,
                 origin: 'jugular'
             });
         }
 
-        // 2. Initial RBCs in Subclavian Vein (y=280..500)
+        // 2. Initial RBCs in Subclavian Vein (y=295..495), strictly inside Subclavian Bezier walls
         for (let i = 0; i < 25; i++) {
+            const y = 295 + Math.random() * 195;
+            const lane = 0.12 + Math.random() * 0.76;
+            const b = getP3SubclavianBoundsX(y);
+            const x = b.left + lane * (b.right - b.left);
             tab3State.rbcs.push({
-                x: 360 + Math.random() * 120,
-                y: 300 + Math.random() * 200,
-                vx: 3.5 + Math.random(),
-                vy: -5.5 - Math.random() * 2,
+                x: x,
+                y: y,
+                lane: lane,
+                vx: 2.2,
+                vy: -5.0 - Math.random() * 1.4,
                 r: 4.8,
                 biconcave: Math.random() < 0.35,
-                angle: -0.9,
+                angle: -1.1,
                 alpha: 0.9,
                 origin: 'subclavian'
             });
         }
 
-        // 3. Initial RBCs in Superior Vena Cava Main Trunk (x=620..1000)
+        // 3. Initial RBCs in Superior Vena Cava Main Trunk (x=620..990, y=192..316)
         for (let i = 0; i < 40; i++) {
-            const y = 190 + Math.random() * 125;
-            const distNorm = Math.min(1, Math.abs(y - 255) / 60.0);
-            const vx = 8.5 * (1 - 0.58 * distNorm * distNorm) + Math.random() * 0.5;
+            const lane = 0.12 + Math.random() * 0.76;
+            const y = 190 + lane * 128;
+            const distNorm = Math.min(1, Math.abs(y - 254) / 64.0);
+            const vx = 8.2 * (1 - 0.52 * distNorm * distNorm) + Math.random() * 0.4;
             tab3State.rbcs.push({
                 x: 620 + Math.random() * 370,
                 y: y,
+                lane: lane,
                 vx: vx,
-                vy: (255 - y) * 0.015,
+                vy: 0,
                 r: 4.8,
                 biconcave: Math.random() < 0.35,
                 angle: 0,
@@ -6803,59 +7439,151 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        // 4. Initial Patrolling WBCs in Vein
+        // 4. Initial Patrolling WBCs flowing continuously from upstream Jugular & Subclavian into SVC
         const subtypes = ['neutrophil', 'neutrophil', 'monocyte', 'bcell', 'neutrophil', 'tcell', 'monocyte', 'neutrophil'];
         for (let i = 0; i < subtypes.length; i++) {
             const isTop = i % 2 === 0;
-            tab3State.wbcs.push({
-                subtype: subtypes[i],
-                x: 630 + i * 45,
-                y: isTop ? 198 + Math.random() * 12 : 306 + Math.random() * 12,
-                r: subtypes[i] === 'monocyte' ? 8.5 : (subtypes[i] === 'neutrophil' ? 7.5 : 8.0),
-                vx: 3.0 + Math.random() * 0.5,
-                vy: 0,
-                isTop: isTop
-            });
+            if (i < 2) {
+                // Start in far upstream Internal Jugular Vein
+                const y = -45 + i * 110;
+                const lane = isTop ? 0.80 : 0.22;
+                const b = getP3JugularBoundsX(y);
+                tab3State.wbcs.push({
+                    subtype: subtypes[i],
+                    origin: 'jugular',
+                    lane: lane,
+                    x: b.left + lane * (b.right - b.left),
+                    y: y,
+                    r: subtypes[i] === 'monocyte' ? 8.5 : (subtypes[i] === 'neutrophil' ? 7.5 : 8.0),
+                    vx: 1.2,
+                    vy: 3.1,
+                    isTop: isTop
+                });
+            } else if (i < 4) {
+                // Start in far upstream Subclavian Vein
+                const y = 480 - (i - 2) * 100;
+                const lane = isTop ? 0.22 : 0.80;
+                const b = getP3SubclavianBoundsX(y);
+                tab3State.wbcs.push({
+                    subtype: subtypes[i],
+                    origin: 'subclavian',
+                    lane: lane,
+                    x: b.left + lane * (b.right - b.left),
+                    y: y,
+                    r: subtypes[i] === 'monocyte' ? 8.5 : (subtypes[i] === 'neutrophil' ? 7.5 : 8.0),
+                    vx: 1.5,
+                    vy: -3.0,
+                    isTop: isTop
+                });
+            } else {
+                // In SVC main trunk
+                const lane = isTop ? 0.14 : 0.86;
+                tab3State.wbcs.push({
+                    subtype: subtypes[i],
+                    origin: 'svc',
+                    lane: lane,
+                    x: 600 + (i - 4) * 95,
+                    y: 190 + lane * 128,
+                    r: subtypes[i] === 'monocyte' ? 8.5 : (subtypes[i] === 'neutrophil' ? 7.5 : 8.0),
+                    vx: 3.1 + Math.random() * 0.4,
+                    vy: 0,
+                    isTop: isTop
+                });
+            }
         }
 
-        // 5. Initial Lymph Droplets in Efferents and Thoracic Duct
-        for (let i = 0; i < 20; i++) {
-            const frac = i / 20;
-            let x, y;
-            if (frac < 0.5) {
-                x = frac * 2 * 225;
-                const branch = i % 3;
-                if (branch === 0) y = 175 + frac * 2 * 70;
-                else if (branch === 1) y = 268;
-                else y = 375 - frac * 2 * 90;
-            } else {
-                x = 225 + (frac - 0.5) * 2 * 240;
-                y = 265 + (Math.random() - 0.5) * 16;
+        // 5. Initial Lymph Droplets in all 3 Left Efferent Tributaries and Main Thoracic Duct
+        for (let br = 0; br < 3; br++) {
+            for (let k = 0; k < 5; k++) {
+                const x = 18 + k * 42;
+                const b = getP3ThoracicBoundsY(br, x);
+                const laneOff = (Math.random() - 0.5) * 0.55;
+                tab3State.lymphDroplets.push({
+                    branch: br,
+                    laneOff: laneOff,
+                    lane: 0.25 + Math.random() * 0.5,
+                    x: x,
+                    y: b.center + laneOff * (b.bot - b.top) * 0.45,
+                    vx: 1.75,
+                    vy: 0,
+                    r: 2.7 + Math.random() * 0.4,
+                    alpha: 0.85,
+                    inVein: false,
+                    isChylomicron: Math.random() < 0.28
+                });
             }
+        }
+        for (let k = 0; k < 8; k++) {
+            const x = 230 + k * 30;
+            const laneOff = (Math.random() - 0.5) * 0.6;
             tab3State.lymphDroplets.push({
+                branch: k % 3,
+                laneOff: laneOff,
+                lane: 0.25 + Math.random() * 0.5,
                 x: x,
-                y: y,
-                vx: 1.6,
+                y: 265 + laneOff * 12,
+                vx: 1.8,
                 vy: 0,
-                r: 2.7 + Math.random() * 0.5,
+                r: 2.8,
                 alpha: 0.85,
                 inVein: false,
                 isChylomicron: Math.random() < 0.3
             });
         }
 
-        // 6. Initial Antibodies in Thoracic Duct
+        // 6. Initial Antibodies in ALL 3 Left Efferent Tributaries (branch 0, 1, 2) and Main Thoracic Duct
+        for (let br = 0; br < 3; br++) {
+            for (let k = 0; k < 3; k++) {
+                const x = 25 + k * 68;
+                const b = getP3ThoracicBoundsY(br, x);
+                const laneOff = (Math.random() - 0.5) * 0.45;
+                tab3State.antibodies.push({
+                    branch: br,
+                    laneOff: laneOff,
+                    lane: 0.25 + Math.random() * 0.5,
+                    x: x,
+                    y: b.center + laneOff * (b.bot - b.top) * 0.4,
+                    vx: 1.75,
+                    vy: 0,
+                    angle: 0,
+                    color: (br + k) % 2 === 0 ? '#fbbf24' : '#f97316',
+                    alpha: 1,
+                    inVein: false
+                });
+            }
+        }
         for (let i = 0; i < 4; i++) {
             tab3State.antibodies.push({
+                branch: i % 3,
+                laneOff: (Math.random() - 0.5) * 0.5,
+                lane: 0.3 + Math.random() * 0.4,
                 x: 240 + i * 55,
-                y: 265 + (Math.random() - 0.5) * 14,
-                vx: 1.6,
+                y: 265 + (Math.random() - 0.5) * 10,
+                vx: 1.8,
                 vy: 0,
                 angle: 0,
                 color: '#fbbf24',
                 alpha: 1,
                 inVein: false
             });
+        }
+        tab3State.abBranchCounter = 0;
+        updateP3ValveButtonsUI();
+    }
+
+    function updateP3ValveButtonsUI() {
+        const isClosed = !!tab3State.backpressureMode;
+        const btnToggleValve = document.getElementById('btn-t3-toggle-valve');
+        if (btnToggleValve) {
+            btnToggleValve.textContent = isClosed
+                ? "2. 靜脈瓣控制：🔒 已關閉 (點擊開啟瓣膜)"
+                : "2. 靜脈瓣控制：🚪 開啟中 (點擊關閉防逆流)";
+        }
+        const btnStressValve = document.getElementById('btn-t3-stress-valve');
+        if (btnStressValve) {
+            btnStressValve.textContent = isClosed
+                ? "🚪 開啟終末靜脈瓣 (Open Valve)"
+                : "🔒 關閉終末靜脈瓣 (Close Valve)";
         }
     }
 
@@ -6864,23 +7592,19 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!p3VenousBloodLayer || !p3LymphStreamLayer) return;
         resetP3SvgPools();
 
-        // 1. Lymph Pulse Timing & Terminal Valve Leaflet Opening/Closing
+        // 1. Button-Controlled Terminal Bicuspid Valve Opening/Closing
         tab3State.lymphPulseTimer += simSpeed;
         if (tab3State.surgeTimer > 0) tab3State.surgeTimer -= simSpeed;
 
-        const pulseCycle = Math.floor(tab3State.lymphPulseTimer) % 120;
-        const isPulsePhase = (pulseCycle < 45) || (tab3State.surgeTimer > 0);
-
+        // Valve state is directly controlled by user button (backpressureMode: true = Closed 0.0, false = Open 1.0)
         if (tab3State.backpressureMode) {
             tab3State.targetValveOpenness = 0.0;
-        } else if (isPulsePhase) {
-            tab3State.targetValveOpenness = 1.0;
         } else {
-            tab3State.targetValveOpenness = 0.2;
+            tab3State.targetValveOpenness = 1.0;
         }
 
         // Smoothly interpolate valve openness
-        tab3State.valveOpenness += (tab3State.targetValveOpenness - tab3State.valveOpenness) * 0.15;
+        tab3State.valveOpenness += (tab3State.targetValveOpenness - tab3State.valveOpenness) * 0.18;
         const k = tab3State.valveOpenness;
 
         // Dynamically update terminal bicuspid valve leaflets in SVG
@@ -6897,83 +7621,96 @@ document.addEventListener('DOMContentLoaded', () => {
             valveSealLine.setAttribute("opacity", tab3State.backpressureMode ? "0.95" : (k < 0.1 ? "0.65" : "0"));
         }
 
-        // 2. Cross-Tab Queue Ingestion from Page 2 Efferent Vessel
+        // 2. Cross-Tab Queue Ingestion from Page 2 Efferent Vessel across all 3 left tributaries
         if (sharedImmuneState && sharedImmuneState.efferentQueue && sharedImmuneState.efferentQueue.length > 0) {
             const incoming = sharedImmuneState.efferentQueue.shift();
             if (incoming.type === 'antibody') {
+                const br = (tab3State.abBranchCounter = (tab3State.abBranchCounter || 0) + 1) % 3;
+                const b = getP3ThoracicBoundsY(br, 0);
+                const laneOff = (Math.random() - 0.5) * 0.45;
                 tab3State.antibodies.push({
+                    branch: br,
+                    laneOff: laneOff,
+                    lane: 0.25 + Math.random() * 0.5,
                     x: 0,
-                    y: 268 + (Math.random() - 0.5) * 12,
-                    vx: 1.8 + Math.random() * 0.4,
+                    y: b.center + laneOff * (b.bot - b.top) * 0.4,
+                    vx: 1.8 + Math.random() * 0.3,
                     vy: 0,
                     angle: 0,
                     color: incoming.color || '#fbbf24',
                     alpha: 1,
                     inVein: false
                 });
-                spawnP3Label(90, 248, "✨ 承接淋巴結輸出抗體 ➔ 進入胸導管", "#fbbf24");
+                spawnP3Label(145, 240, "✨ 承接淋巴結輸出抗體 ➔ 經三條輸出管匯入胸導管", "#fbbf24");
             }
         }
 
-        // 3. Periodic Lymph Droplet Inflow
+        // 3. Periodic Lymph Droplet & Antibody Inflow across ALL 3 left efferent tributaries
         tab3State.dropletSpawnTimer += simSpeed;
-        const spawnInterval = (tab3State.surgeTimer > 0) ? 6 : 15;
+        const spawnInterval = (tab3State.surgeTimer > 0) ? 7 : 16;
         if (tab3State.dropletSpawnTimer >= spawnInterval) {
             tab3State.dropletSpawnTimer = 0;
-            // Spawn across 3 efferent inlets on the left
-            const branch = Math.floor(Math.random() * 3);
-            let sy = 268, svy = 0;
-            if (branch === 0) { sy = 175 + (Math.random() - 0.5) * 10; svy = 0.5; }
-            else if (branch === 1) { sy = 268 + (Math.random() - 0.5) * 10; svy = 0; }
-            else { sy = 375 + (Math.random() - 0.5) * 10; svy = -0.5; }
-
-            tab3State.lymphDroplets.push({
-                x: 0,
-                y: sy,
-                vx: 1.8,
-                vy: svy,
-                r: 2.7 + Math.random() * 0.5,
-                alpha: 0.85,
-                inVein: false,
-                isChylomicron: Math.random() < 0.28
-            });
-
-            // Endogenous antibody production along thoracic duct
-            if (Math.random() < 0.15) {
-                tab3State.antibodies.push({
+            // Spawn lymph droplets in all 3 left efferent inlets (upper, middle, lower)
+            for (let br = 0; br < 3; br++) {
+                const b = getP3ThoracicBoundsY(br, 0);
+                const laneOff = (Math.random() - 0.5) * 0.55;
+                tab3State.lymphDroplets.push({
+                    branch: br,
+                    laneOff: laneOff,
+                    lane: 0.22 + Math.random() * 0.56,
                     x: 0,
-                    y: 268 + (Math.random() - 0.5) * 14,
-                    vx: 1.6,
+                    y: b.center + laneOff * (b.bot - b.top) * 0.45,
+                    vx: 1.8 + Math.random() * 0.2,
                     vy: 0,
-                    angle: 0,
-                    color: '#fbbf24',
-                    alpha: 1,
-                    inVein: false
+                    r: 2.7 + Math.random() * 0.4,
+                    alpha: 0.85,
+                    inVein: false,
+                    isChylomicron: Math.random() < 0.26
                 });
             }
+
+            // Spawn antibodies rotating across all 3 left efferent inlets (branch 0, 1, 2)
+            const abBranch = (tab3State.abBranchCounter = (tab3State.abBranchCounter || 0) + 1) % 3;
+            const bAb = getP3ThoracicBoundsY(abBranch, 0);
+            const abLaneOff = (Math.random() - 0.5) * 0.45;
+            tab3State.antibodies.push({
+                branch: abBranch,
+                laneOff: abLaneOff,
+                lane: 0.25 + Math.random() * 0.5,
+                x: 0,
+                y: bAb.center + abLaneOff * (bAb.bot - bAb.top) * 0.4,
+                vx: 1.75 + Math.random() * 0.2,
+                vy: 0,
+                angle: 0,
+                color: abBranch === 1 ? '#fbbf24' : '#f97316',
+                alpha: 1,
+                inVein: false
+            });
         }
 
-        // 4. Update Lymph Droplets & Mixing Eddies
+        // 4. Update Lymph Droplets & Mixing Eddies (Strictly inside all 3 Tributaries, Thoracic Duct & Vein Walls)
         const lymphSpeedMult = (1.0 + (tab3State.surgeTimer > 0 ? 1.4 : 0)) * simSpeed;
         for (let i = tab3State.lymphDroplets.length - 1; i >= 0; i--) {
             const d = tab3State.lymphDroplets[i];
             if (!d.inVein) {
-                if (d.x < 225) {
+                if (d.x < 470) {
                     d.x += d.vx * lymphSpeedMult;
-                    d.y += (265 - d.y) * 0.035 * lymphSpeedMult;
-                } else if (d.x < 472) {
-                    d.x += d.vx * lymphSpeedMult;
-                    d.y += (265 - d.y) * 0.05 * lymphSpeedMult;
+                    const b = getP3ThoracicBoundsY(d.branch !== undefined ? d.branch : 1, d.x);
+                    const laneOff = d.laneOff !== undefined ? d.laneOff : 0;
+                    const targetY = b.center + laneOff * (b.bot - b.top) * 0.42;
+                    d.y += (targetY - d.y) * 0.28 * lymphSpeedMult;
+                    d.y = Math.max(b.top, Math.min(b.bot, d.y));
                 } else {
                     if (tab3State.valveOpenness > 0.25) {
                         d.inVein = true;
-                        d.x = 480;
-                        d.vx = 4.0;
-                        d.vy = (Math.random() - 0.5) * 2.0;
+                        d.x = 482;
+                        d.vx = 4.2;
+                        d.vy = 0;
+                        if (d.lane === undefined) d.lane = 0.3 + Math.random() * 0.4;
                         if (Math.random() < 0.45 && tab3State.eddies.length < 15) {
                             tab3State.eddies.push({
-                                x: 490 + Math.random() * 50,
-                                y: 255 + (Math.random() - 0.5) * 35,
+                                x: 495 + Math.random() * 45,
+                                y: 255 + (Math.random() - 0.5) * 28,
                                 rot: Math.random() * 6.28,
                                 scale: 0.8,
                                 life: 35,
@@ -6983,16 +7720,25 @@ document.addEventListener('DOMContentLoaded', () => {
                             });
                         }
                     } else {
-                        d.x = 471;
+                        // Valve is closed: hold droplets neatly inside the terminal thoracic duct before the closed valve
+                        d.x = 458 + (i % 5) * 2.5;
+                        const b = getP3ThoracicBoundsY(1, d.x);
+                        d.y = Math.max(b.top, Math.min(b.bot, d.y));
+                        if (tab3State.lymphDroplets.length > 48 && i < 10) {
+                            tab3State.lymphDroplets.splice(i, 1);
+                            continue;
+                        }
                     }
                 }
             } else {
-                const distNorm = Math.min(1, Math.abs(d.y - 255) / 60.0);
-                const targetVx = (7.5 * (1 - 0.5 * distNorm * distNorm)) * tab3State.venousSpeedFactor * simSpeed;
-                d.vx += (targetVx - d.vx) * 0.12;
-                d.vy += (255 - d.y) * 0.02 * simSpeed;
+                const lane = d.lane !== undefined ? d.lane : 0.5;
+                const targetY = 194 + lane * 120;
+                const distNorm = Math.min(1, Math.abs(d.y - 254) / 62.0);
+                const targetVx = (7.4 * (1 - 0.48 * distNorm * distNorm)) * tab3State.venousSpeedFactor * simSpeed;
+                d.vx += (targetVx - d.vx) * 0.14;
                 d.x += d.vx;
-                d.y += d.vy;
+                d.y += (targetY - d.y) * 0.08 * simSpeed;
+                d.y = Math.max(190, Math.min(318, d.y));
             }
 
             if (d.x >= 1010) {
@@ -7002,30 +7748,35 @@ document.addEventListener('DOMContentLoaded', () => {
             renderPooledP3Lymph(d);
         }
 
-        // 5. Update Venous Blood Flow (RBCs)
+        // 5. Update Venous Blood Flow (RBCs strictly bounded inside Jugular, Subclavian, and SVC walls without oscillation)
         while (tab3State.rbcs.length < 95) {
             const isJugular = Math.random() < 0.55;
+            const lane = 0.12 + Math.random() * 0.76;
             if (isJugular) {
+                const b = getP3JugularBoundsX(-60);
                 tab3State.rbcs.push({
-                    x: 480 + Math.random() * 110,
+                    x: b.left + lane * (b.right - b.left),
                     y: -60,
-                    vx: 1.5 + Math.random(),
-                    vy: (5.5 + Math.random() * 2) * tab3State.venousSpeedFactor,
+                    lane: lane,
+                    vx: 1.4,
+                    vy: (5.2 + Math.random() * 1.4) * tab3State.venousSpeedFactor,
                     r: 4.8,
                     biconcave: Math.random() < 0.35,
-                    angle: 1.57,
+                    angle: 1.38,
                     alpha: 0.9,
                     origin: 'jugular'
                 });
             } else {
+                const b = getP3SubclavianBoundsX(495);
                 tab3State.rbcs.push({
-                    x: 360 + Math.random() * 110,
+                    x: b.left + lane * (b.right - b.left),
                     y: 495,
-                    vx: (3.5 + Math.random()) * tab3State.venousSpeedFactor,
-                    vy: (-5.5 - Math.random() * 2) * tab3State.venousSpeedFactor,
+                    lane: lane,
+                    vx: 2.2 * tab3State.venousSpeedFactor,
+                    vy: (-5.0 - Math.random() * 1.4) * tab3State.venousSpeedFactor,
                     r: 4.8,
                     biconcave: Math.random() < 0.35,
-                    angle: -0.9,
+                    angle: -1.12,
                     alpha: 0.9,
                     origin: 'subclavian'
                 });
@@ -7034,37 +7785,53 @@ document.addEventListener('DOMContentLoaded', () => {
 
         for (let i = tab3State.rbcs.length - 1; i >= 0; i--) {
             const rbc = tab3State.rbcs[i];
-            if (rbc.origin === 'jugular' && rbc.y < 235 && rbc.x < 620) {
-                rbc.y += rbc.vy * simSpeed;
-                rbc.x += rbc.vx * simSpeed;
-                if (rbc.y >= 180) {
-                    rbc.vx += 0.35 * tab3State.venousSpeedFactor * simSpeed;
-                    rbc.vy += (-rbc.vy) * 0.08 * simSpeed;
+            const lane = rbc.lane !== undefined ? rbc.lane : 0.5;
+            const prevX = rbc.x;
+            const prevY = rbc.y;
+
+            if (rbc.origin === 'jugular' && rbc.y < 215 && rbc.x < 625) {
+                rbc.y += (5.2 * tab3State.venousSpeedFactor) * simSpeed;
+                const b = getP3JugularBoundsX(rbc.y);
+                const targetX = b.left + lane * (b.right - b.left);
+                rbc.x += (targetX - rbc.x) * 0.38 * simSpeed;
+                rbc.x = Math.max(b.left, Math.min(b.right, rbc.x));
+                if (rbc.y >= 195) {
+                    // Smoothly transition into upper half of SVC
+                    rbc.origin = 'svc';
+                    rbc.lane = 0.10 + lane * 0.44;
                 }
-            } else if (rbc.origin === 'subclavian' && rbc.y > 275 && rbc.x < 620) {
-                rbc.y += rbc.vy * simSpeed;
-                rbc.x += rbc.vx * simSpeed;
-                if (rbc.y <= 330) {
-                    rbc.vx += 0.35 * tab3State.venousSpeedFactor * simSpeed;
-                    rbc.vy += (-rbc.vy) * 0.08 * simSpeed;
+            } else if (rbc.origin === 'subclavian' && rbc.y > 305 && rbc.x < 625) {
+                rbc.y -= (5.0 * tab3State.venousSpeedFactor) * simSpeed;
+                const b = getP3SubclavianBoundsX(rbc.y);
+                const targetX = b.left + lane * (b.right - b.left);
+                rbc.x += (targetX - rbc.x) * 0.38 * simSpeed;
+                rbc.x = Math.max(b.left, Math.min(b.right, rbc.x));
+                if (rbc.y <= 315) {
+                    // Smoothly transition into lower half of SVC
+                    rbc.origin = 'svc';
+                    rbc.lane = 0.48 + lane * 0.42;
                 }
             } else {
-                const distNorm = Math.min(1, Math.abs(rbc.y - 255) / 60.0);
-                const targetVx = (8.6 * (1 - 0.58 * distNorm * distNorm)) * tab3State.venousSpeedFactor * simSpeed;
-                rbc.vx += (targetVx - rbc.vx) * 0.12;
-                rbc.vy += (255 - rbc.y) * 0.015 * simSpeed;
-                rbc.x += rbc.vx;
-                rbc.y += rbc.vy;
+                // In Confluence & Superior Vena Cava Main Trunk (y strictly inside [190, 318])
+                const targetY = 190 + lane * 128;
+                const distNorm = Math.min(1, Math.abs(rbc.y - 254) / 64.0);
+                const stepVx = (8.2 * (1 - 0.52 * distNorm * distNorm)) * tab3State.venousSpeedFactor * simSpeed;
+                rbc.x += stepVx;
+                rbc.y += (targetY - rbc.y) * 0.12 * simSpeed;
+                rbc.y = Math.max(190, Math.min(318, rbc.y));
             }
 
             // Terminal valve anti-reflux collision boundary:
-            if (rbc.x > 468 && rbc.x < 500 && rbc.y > 245 && rbc.y < 285) {
-                rbc.x = 502;
-                rbc.vx = Math.abs(rbc.vx) + 2.5;
-                rbc.vy = (rbc.y < 265) ? -2.2 : 2.2;
+            if (rbc.x > 468 && rbc.x < 502 && rbc.y > 245 && rbc.y < 285) {
+                rbc.x = 504;
+                rbc.y = (rbc.y < 265) ? 242 : 288;
             }
 
-            rbc.angle = Math.atan2(rbc.vy, rbc.vx);
+            const dx = rbc.x - prevX;
+            const dy = rbc.y - prevY;
+            if (Math.abs(dx) + Math.abs(dy) > 0.05) {
+                rbc.angle = Math.atan2(dy, dx);
+            }
 
             if (rbc.x >= 1010) {
                 tab3State.rbcs.splice(i, 1);
@@ -7073,44 +7840,101 @@ document.addEventListener('DOMContentLoaded', () => {
             renderPooledP3Rbc(rbc);
         }
 
-        // 6. Update Patrolling WBCs (Margination along SVC Endothelium)
+        // 6. Update Patrolling WBCs (Flowing naturally from far upstream Jugular & Subclavian into SVC)
         for (let i = 0; i < tab3State.wbcs.length; i++) {
             const w = tab3State.wbcs[i];
-            const targetY = w.isTop ? 200 : 306;
-            w.y += (targetY - w.y) * 0.05 * simSpeed;
-            w.x += w.vx * tab3State.venousSpeedFactor * simSpeed;
+            const vFactor = tab3State.venousSpeedFactor * simSpeed;
 
+            if (w.origin === 'jugular') {
+                w.y += 2.8 * vFactor;
+                const b = getP3JugularBoundsX(w.y);
+                const lane = w.lane !== undefined ? w.lane : (w.isTop ? 0.80 : 0.22);
+                const targetX = b.left + lane * (b.right - b.left);
+                w.x += (targetX - w.x) * 0.35 * simSpeed;
+                w.x = Math.max(b.left + 2, Math.min(b.right - 2, w.x));
+                if (w.y >= 198) {
+                    w.origin = 'svc';
+                    w.isTop = true;
+                }
+            } else if (w.origin === 'subclavian') {
+                w.y -= 2.8 * vFactor;
+                const b = getP3SubclavianBoundsX(w.y);
+                const lane = w.lane !== undefined ? w.lane : (w.isTop ? 0.22 : 0.80);
+                const targetX = b.left + lane * (b.right - b.left);
+                w.x += (targetX - w.x) * 0.35 * simSpeed;
+                w.x = Math.max(b.left + 2, Math.min(b.right - 2, w.x));
+                if (w.y <= 310) {
+                    w.origin = 'svc';
+                    w.isTop = false;
+                }
+            } else {
+                const targetY = w.isTop ? 198 : 308;
+                w.y += (targetY - w.y) * 0.08 * simSpeed;
+                w.y = Math.max(192, Math.min(316, w.y));
+                w.x += w.vx * vFactor;
+            }
+
+            // When exiting right edge, respawn at the far upstream entrance of Jugular (y=-62) or Subclavian (y=498)
             if (w.x >= 1010) {
-                w.x = 480 + Math.random() * 80;
-                w.y = w.isTop ? 198 + Math.random() * 8 : 304 + Math.random() * 8;
+                const fromJugular = (i % 2 === 0);
+                if (fromJugular) {
+                    w.origin = 'jugular';
+                    w.y = -62;
+                    w.lane = 0.72 + Math.random() * 0.14;
+                    const b = getP3JugularBoundsX(w.y);
+                    w.x = b.left + w.lane * (b.right - b.left);
+                    w.isTop = true;
+                } else {
+                    w.origin = 'subclavian';
+                    w.y = 498;
+                    w.lane = 0.72 + Math.random() * 0.14;
+                    const b = getP3SubclavianBoundsX(w.y);
+                    w.x = b.left + w.lane * (b.right - b.left);
+                    w.isTop = false;
+                }
             }
             renderPooledP3Wbc(w);
         }
 
-        // 7. Update Antibodies
+        // 7. Update Antibodies (Strictly bounded in all 3 Left Tributaries, Thoracic Duct & SVC without oscillation)
         for (let i = tab3State.antibodies.length - 1; i >= 0; i--) {
             const ab = tab3State.antibodies[i];
             if (!ab.inVein) {
-                ab.x += ab.vx * lymphSpeedMult;
-                ab.y += (265 - ab.y) * 0.05 * lymphSpeedMult;
-                if (ab.x >= 472) {
+                if (ab.x < 470) {
+                    ab.x += ab.vx * lymphSpeedMult;
+                    const b = getP3ThoracicBoundsY(ab.branch !== undefined ? ab.branch : 1, ab.x);
+                    const laneOff = ab.laneOff !== undefined ? ab.laneOff : 0;
+                    const targetY = b.center + laneOff * (b.bot - b.top) * 0.4;
+                    ab.y += (targetY - ab.y) * 0.28 * lymphSpeedMult;
+                    ab.y = Math.max(b.top, Math.min(b.bot, ab.y));
+                } else {
                     if (tab3State.valveOpenness > 0.25) {
                         ab.inVein = true;
                         ab.x = 482;
                         ab.vx = 4.5;
-                        ab.vy = (Math.random() - 0.5) * 2.2;
-                        spawnP3Label(520, 245, "✨ 專一性抗體經胸導管注入靜脈角 ➔ 進入全身循環！", "#fbbf24");
+                        ab.vy = 0;
+                        if (ab.lane === undefined) ab.lane = 0.25 + Math.random() * 0.5;
+                        spawnP3Label(580, 232, "✨ 專一性抗體經胸導管注入靜脈角 ➔ 進入全身循環！", "#fbbf24");
                     } else {
-                        ab.x = 471;
+                        // Valve is closed: hold antibodies inside terminal thoracic duct before the closed valve
+                        ab.x = 456 + (i % 5) * 2.5;
+                        const b = getP3ThoracicBoundsY(1, ab.x);
+                        ab.y = Math.max(b.top, Math.min(b.bot, ab.y));
+                        if (tab3State.antibodies.length > 26 && i < 6) {
+                            tab3State.antibodies.splice(i, 1);
+                            continue;
+                        }
                     }
                 }
             } else {
-                const distNorm = Math.min(1, Math.abs(ab.y - 255) / 60.0);
-                const targetVx = (8.2 * (1 - 0.5 * distNorm * distNorm)) * tab3State.venousSpeedFactor * simSpeed;
-                ab.vx += (targetVx - ab.vx) * 0.12;
-                ab.vy += (255 - ab.y) * 0.02 * simSpeed;
+                const lane = ab.lane !== undefined ? ab.lane : 0.5;
+                const targetY = 196 + lane * 116;
+                const distNorm = Math.min(1, Math.abs(ab.y - 254) / 60.0);
+                const targetVx = (8.0 * (1 - 0.48 * distNorm * distNorm)) * tab3State.venousSpeedFactor * simSpeed;
+                ab.vx += (targetVx - ab.vx) * 0.14;
                 ab.x += ab.vx;
-                ab.y += ab.vy;
+                ab.y += (targetY - ab.y) * 0.09 * simSpeed;
+                ab.y = Math.max(192, Math.min(316, ab.y));
                 ab.angle += 0.08 * simSpeed;
             }
 
@@ -7156,46 +7980,57 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function initTab3Controls() {
-        // Step 1: Confluence
+        // Step 1: Confluence (Opens valve & surges antibodies/lymph across all 3 left tributaries)
         const btnStepConfluence = document.getElementById('btn-t3-step-confluence');
         if (btnStepConfluence) {
             btnStepConfluence.addEventListener('click', () => {
+                tab3State.backpressureMode = false;
                 tab3State.surgeTimer = 90;
-                for (let k = 0; k < 6; k++) {
-                    tab3State.antibodies.push({
-                        x: 230 + k * 35,
-                        y: 265 + (Math.random() - 0.5) * 12,
-                        vx: 1.8,
-                        vy: 0,
-                        angle: 0,
-                        color: '#fbbf24',
-                        alpha: 1,
-                        inVein: false
-                    });
+                updateP3ValveButtonsUI();
+                for (let br = 0; br < 3; br++) {
+                    for (let k = 0; k < 3; k++) {
+                        const x = 15 + k * 65;
+                        const b = getP3ThoracicBoundsY(br, x);
+                        const laneOff = (Math.random() - 0.5) * 0.45;
+                        tab3State.antibodies.push({
+                            branch: br,
+                            laneOff: laneOff,
+                            lane: 0.25 + Math.random() * 0.5,
+                            x: x,
+                            y: b.center + laneOff * (b.bot - b.top) * 0.4,
+                            vx: 1.9,
+                            vy: 0,
+                            angle: 0,
+                            color: '#fbbf24',
+                            alpha: 1,
+                            inVein: false
+                        });
+                    }
                 }
-                spawnP3Label(320, 240, "🌊 淋巴總管節律搏動 ➔ 終末靜脈瓣開啟 ➔ 注入左靜脈角！", "#34d399");
+                spawnP3Label(320, 240, "🌊 三條輸出淋巴管匯聚抗體與淋巴 ➔ 終末靜脈瓣開啟 ➔ 注入左靜脈角！", "#34d399");
                 const desc = document.getElementById('mechanism-desc-tab-3');
                 if (desc) {
-                    desc.innerHTML = "<strong>【淋巴總管匯流注入靜脈角】</strong>粗大的胸導管（淋巴總管）收集全身下半身與左半身經淋巴結過濾的清亮體液與高濃度抗體，經由節段平滑肌收縮推進，沖開終末靜脈瓣，源源不絕注入左靜脈角（左鎖骨下靜脈與內頸靜脈匯流處）！";
+                    desc.innerHTML = "<strong>【淋巴總管匯流注入靜脈角】</strong>左側三條輸出淋巴管各自攜帶清亮淋巴液與高濃度抗體匯集入粗大的胸導管（淋巴總管），經由開啟的終末靜脈瓣，源源不絕注入左靜脈角（左鎖骨下靜脈與內頸靜脈匯流處）！";
                 }
             });
         }
 
-        // Step 2: Toggle Valve Backpressure Stress
+        // Step 2: Toggle Valve Open/Close via Button
         const btnToggleValve = document.getElementById('btn-t3-toggle-valve');
         if (btnToggleValve) {
             btnToggleValve.addEventListener('click', () => {
                 tab3State.backpressureMode = !tab3State.backpressureMode;
+                updateP3ValveButtonsUI();
                 const desc = document.getElementById('mechanism-desc-tab-3');
                 if (tab3State.backpressureMode) {
-                    spawnP3Label(470, 225, "🛡️ 靜脈高壓反衝！雙葉瓣膜緊密閉合，100% 杜絕血液倒流！", "#ef4444");
+                    spawnP3Label(470, 225, "🔒 靜脈瓣已關閉！雙葉瓣膜緊密閉合，阻擋淋巴流出並 100% 杜絕血液倒流！", "#ef4444");
                     if (desc) {
-                        desc.innerHTML = "<strong>【靜脈瓣防逆流實測】</strong>當人體咳嗽、用力或靜脈回心壓力升高時，終末靜脈瓣的半月形雙葉受血液逆向壓迫迅速緊密閉合，形成一道堅不可摧的物理單向閥，徹底杜絕深紅靜脈血液倒灌進入脆弱的淋巴系統！";
+                        desc.innerHTML = "<strong>【靜脈瓣關閉狀態（防逆流）】</strong>終末靜脈瓣的半月形雙葉緊密閉合，形成單向物理閥門，徹底杜絕深紅靜脈血液倒灌進入淋巴系統；此時胸導管內淋巴液與抗體暫時蓄留於瓣膜左側，再次點擊按鈕即可開啟瓣膜釋放！";
                     }
                 } else {
-                    spawnP3Label(470, 225, "✅ 恢復正常節律性瓣膜開闔", "#34d399");
+                    spawnP3Label(470, 225, "🚪 靜脈瓣已開啟！胸導管淋巴液與抗體順暢注入靜脈角！", "#34d399");
                     if (desc) {
-                        desc.innerHTML = "<strong>【恢復生理節律】</strong>靜脈壓力恢復正常，胸導管隨呼吸胸腔負壓與平滑肌蠕動節律性開啟瓣膜，體液順暢回流！";
+                        desc.innerHTML = "<strong>【靜脈瓣開啟狀態】</strong>終末靜脈瓣雙葉向靜脈腔側舒張開啟，胸導管匯集自三條輸出淋巴管的淋巴液與高濃度抗體順暢注入左靜脈角，匯入上腔靜脈全身大循環！";
                     }
                 }
             });
@@ -7209,62 +8044,78 @@ document.addEventListener('DOMContentLoaded', () => {
                 const desc = document.getElementById('mechanism-desc-tab-3');
                 spawnP3Label(720, 220, tab3State.venousSpeedFactor > 1.2 ? "🏃 運動狀態：靜脈回心血流加速 (Hyperdynamic Flow)" : "🧘 安靜休息：典型拋物線層流 (Laminar Flow)", "#38bdf8");
                 if (desc) {
-                    desc.innerHTML = "<strong>【大靜脈血流力學 (Hemodynamics)】</strong>大靜脈內血液呈典型層流（Laminar Flow），管腔中央流速最快，貼近內皮細胞處受黏滯阻力減速。白血球（嗜中性球、單核球）在此邊集滾動巡邏；抗體混入後迅速隨血液奔向右心房，即將進行全身大循環！";
+                    desc.innerHTML = "<strong>【大靜脈血流力學 (Hemodynamics)】</strong>大靜脈內血液呈典型層流（Laminar Flow），管腔中央流速最快，貼近內皮細胞處受黏滯阻力減速。白血球（嗜中性球、單核球）自遠端上游血管自然流入；抗體混入後迅速隨血液奔向右心房，進行全身大循環！";
                 }
             });
         }
 
-        // Surge Lymph Flow Button
+        // Surge Lymph Flow Button (Spawns across all 3 left tributaries)
         const btnSurge = document.getElementById('btn-t3-surge-lymph');
         if (btnSurge) {
             btnSurge.addEventListener('click', () => {
                 tab3State.surgeTimer = 120;
-                for (let k = 0; k < 12; k++) {
-                    tab3State.lymphDroplets.push({
-                        x: Math.random() * 200,
-                        y: 268 + (Math.random() - 0.5) * 16,
-                        vx: 2.2,
-                        vy: 0,
-                        r: 2.8,
-                        alpha: 0.85,
-                        inVein: false,
-                        isChylomicron: Math.random() < 0.3
-                    });
+                for (let br = 0; br < 3; br++) {
+                    for (let k = 0; k < 4; k++) {
+                        const x = k * 45;
+                        const b = getP3ThoracicBoundsY(br, x);
+                        const laneOff = (Math.random() - 0.5) * 0.55;
+                        tab3State.lymphDroplets.push({
+                            branch: br,
+                            laneOff: laneOff,
+                            lane: 0.25 + Math.random() * 0.5,
+                            x: x,
+                            y: b.center + laneOff * (b.bot - b.top) * 0.45,
+                            vx: 2.2,
+                            vy: 0,
+                            r: 2.8,
+                            alpha: 0.85,
+                            inVein: false,
+                            isChylomicron: Math.random() < 0.3
+                        });
+                    }
                 }
-                spawnP3Label(200, 240, "🚀 加速淋巴回流：胸導管體液激增衝頂！", "#10b981");
+                spawnP3Label(220, 240, "🚀 加速淋巴回流：左側三條輸出淋巴管同步激增匯流！", "#10b981");
             });
         }
 
-        // Valve Stress Challenge Button
+        // Valve Open/Close Toggle Button (#btn-t3-stress-valve)
         const btnStressValve = document.getElementById('btn-t3-stress-valve');
         if (btnStressValve) {
             btnStressValve.addEventListener('click', () => {
-                tab3State.backpressureMode = true;
-                spawnP3Label(470, 225, "🛡️ 靜脈逆壓挑戰啟動：瓣膜嚴密封閉！", "#ef4444");
-                const desc = document.getElementById('mechanism-desc-tab-3');
-                if (desc) {
-                    desc.innerHTML = "<strong>【靜脈逆壓極限挑戰】</strong>深紅紅血球在瓣膜外側被徹底彈開，淋巴管內維持清亮純淨，證實靜脈瓣膜防逆流機制 100% 成功！";
+                if (btnToggleValve) {
+                    btnToggleValve.click();
+                } else {
+                    tab3State.backpressureMode = !tab3State.backpressureMode;
+                    updateP3ValveButtonsUI();
                 }
             });
         }
 
-        // Inject Antibodies Button
+        // Inject Antibodies Button (Spawns across all 3 left tributaries!)
         const btnSpawnAb = document.getElementById('btn-t3-spawn-antibodies');
         if (btnSpawnAb) {
             btnSpawnAb.addEventListener('click', () => {
-                for (let i = 0; i < 10; i++) {
-                    tab3State.antibodies.push({
-                        x: 180 + Math.random() * 120,
-                        y: 265 + (Math.random() - 0.5) * 18,
-                        vx: 2.0,
-                        vy: 0,
-                        angle: 0,
-                        color: '#fbbf24',
-                        alpha: 1,
-                        inVein: false
-                    });
+                for (let br = 0; br < 3; br++) {
+                    for (let k = 0; k < 4; k++) {
+                        const x = 10 + k * 50;
+                        const b = getP3ThoracicBoundsY(br, x);
+                        const laneOff = (Math.random() - 0.5) * 0.45;
+                        tab3State.antibodies.push({
+                            branch: br,
+                            laneOff: laneOff,
+                            lane: 0.25 + Math.random() * 0.5,
+                            x: x,
+                            y: b.center + laneOff * (b.bot - b.top) * 0.4,
+                            vx: 2.0,
+                            vy: 0,
+                            angle: 0,
+                            color: (br + k) % 2 === 0 ? '#fbbf24' : '#f97316',
+                            alpha: 1,
+                            inVein: false
+                        });
+                    }
                 }
-                spawnP3Label(260, 240, "✨ 注入大量專一性抗體 ➔ 湧向大靜脈", "#fbbf24");
+                spawnP3Label(260, 240, "✨ 三條輸出淋巴管同步注入大量專一性抗體 ➔ 匯入大靜脈", "#fbbf24");
             });
         }
 
@@ -7318,6 +8169,7 @@ document.addEventListener('DOMContentLoaded', () => {
         poreBoostTimer: 0,
         rbcSpawnTimer: 0,
         cycleTick: 0,
+        lineageCounter: 0,
         // Entity Collections
         hscs: [],
         bCells: [],
@@ -7327,7 +8179,8 @@ document.addEventListener('DOMContentLoaded', () => {
         antibodies: [],
         sinusoidRbcs: [],
         transmigratingCells: [],
-        floatingLabels: []
+        floatingLabels: [],
+        labelCooldowns: {}
     };
 
     // Zero-Allocation SVG Object Pools for Tab 4
@@ -7796,13 +8649,96 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function spawnP4Label(x, y, text, color = "#38bdf8") {
+        const now = Date.now();
+        if (tab4State.labelCooldowns[text] && now - tab4State.labelCooldowns[text] < 2000) {
+            for (let i = 0; i < tab4State.floatingLabels.length; i++) {
+                if (tab4State.floatingLabels[i].text === text) {
+                    tab4State.floatingLabels[i].life = Math.max(tab4State.floatingLabels[i].life, 100);
+                    return;
+                }
+            }
+            return;
+        }
+        for (let i = 0; i < tab4State.floatingLabels.length; i++) {
+            if (tab4State.floatingLabels[i].text === text) {
+                tab4State.floatingLabels[i].life = 130;
+                tab4State.labelCooldowns[text] = now;
+                return;
+            }
+        }
+        tab4State.labelCooldowns[text] = now;
+        let finalY = y;
+        for (let i = 0; i < tab4State.floatingLabels.length; i++) {
+            const existing = tab4State.floatingLabels[i];
+            if (Math.abs(existing.x - x) < 180 && Math.abs(existing.y - finalY) < 26) {
+                finalY = existing.y - 28;
+            }
+        }
+        finalY = Math.max(26, Math.min(455, finalY));
         tab4State.floatingLabels.push({
-            x: x,
-            y: y,
+            x: Math.max(120, Math.min(860, x)),
+            y: finalY,
             text: text,
             color: color,
-            life: 140
+            life: 130
         });
+    }
+
+    // Helper to spawn a differentiating progenitor from an HSC that visibly migrates to become a B cell, Neutrophil, or RBC
+    function spawnDifferentiatingProgenitor(forcedLineage) {
+        const lineages = ['bcell', 'neutrophil', 'rbc'];
+        const lineage = forcedLineage || lineages[tab4State.lineageCounter % 3];
+        tab4State.lineageCounter++;
+
+        if (lineage === 'bcell') {
+            tab4State.hscs.push({
+                x: 138,
+                y: 122,
+                r: 8.6,
+                pulse: 0,
+                state: 'clp',
+                differentiating: true,
+                lineage: 'bcell',
+                targetX: 235,
+                targetY: 132,
+                speed: 1.15,
+                fill: '#14b8a6',
+                stroke: '#fb923c',
+                nucleusFill: '#7c2d12'
+            });
+        } else if (lineage === 'neutrophil') {
+            tab4State.hscs.push({
+                x: 155,
+                y: 105,
+                r: 8.8,
+                pulse: 0,
+                state: 'cmp',
+                differentiating: true,
+                lineage: 'neutrophil',
+                targetX: 468,
+                targetY: 88,
+                speed: 1.85,
+                fill: '#0ea5e9',
+                stroke: '#38bdf8',
+                nucleusFill: '#0369a1'
+            });
+        } else {
+            tab4State.hscs.push({
+                x: 128,
+                y: 158,
+                r: 8.2,
+                pulse: 0,
+                state: 'mep',
+                differentiating: true,
+                lineage: 'rbc',
+                targetX: 205,
+                targetY: 256,
+                speed: 1.25,
+                fill: '#e11d48',
+                stroke: '#fda4af',
+                nucleusFill: '#881337'
+            });
+        }
     }
 
     function initTab4Simulation() {
@@ -7812,6 +8748,7 @@ document.addEventListener('DOMContentLoaded', () => {
         tab4State.mobilizeTimer = 0;
         tab4State.llpcBoostTimer = 0;
         tab4State.poresOpen = true;
+        tab4State.lineageCounter = 0;
 
         tab4State.hscs = [];
         tab4State.bCells = [];
@@ -7821,6 +8758,7 @@ document.addEventListener('DOMContentLoaded', () => {
         tab4State.antibodies = [];
         tab4State.sinusoidRbcs = [];
         tab4State.floatingLabels = [];
+        tab4State.labelCooldowns = {};
 
         // 1. Initialize Quiescent & Dividing HSCs in Endosteal Niche
         tab4State.hscs.push({
@@ -7835,19 +8773,23 @@ document.addEventListener('DOMContentLoaded', () => {
         tab4State.hscs.push({
             x: 165, y: 100, r: 9.0, pulse: 3.6, state: 'mpp', fill: '#0f766e', stroke: '#2dd4bf', nucleusFill: '#042f2e'
         });
+        // Seed initial differentiating progenitors in transit along the 3 lineages
+        spawnDifferentiatingProgenitor('bcell');
+        spawnDifferentiatingProgenitor('neutrophil');
+        spawnDifferentiatingProgenitor('rbc');
 
         // 2. Initialize B Cell Development Pipeline (Pro-B -> Pre-B -> Immature B -> Mature Naive B)
         tab4State.bCells.push({ stage: 'pro_b', x: 235, y: 130, r: 6.5, fill: '#ea580c', nucleusFill: '#7c2d12', vx: 0.15, vy: 0.05, squeezing: false, inSinusoid: false });
-        tab4State.bCells.push({ stage: 'pre_b', x: 275, y: 150, r: 7.0, fill: '#f97316', nucleusFill: '#9a3412', vx: 0.2, vy: 0.1, squeezing: false, inSinusoid: false });
-        tab4State.bCells.push({ stage: 'immature_b', x: 315, y: 175, r: 7.5, fill: '#fb923c', nucleusFill: '#c2410c', vx: 0.25, vy: 0.15, squeezing: false, inSinusoid: false });
-        tab4State.bCells.push({ stage: 'mature_b', x: 350, y: 205, r: 8.0, fill: '#fb923c', nucleusFill: '#c2410c', vx: 0.3, vy: 0.2, squeezing: false, inSinusoid: false });
+        tab4State.bCells.push({ stage: 'pre_b', x: 275, y: 155, r: 7.0, fill: '#f97316', nucleusFill: '#9a3412', vx: 0.2, vy: 0.1, squeezing: false, inSinusoid: false });
+        tab4State.bCells.push({ stage: 'immature_b', x: 315, y: 185, r: 7.5, fill: '#fb923c', nucleusFill: '#c2410c', vx: 0.25, vy: 0.15, squeezing: false, inSinusoid: false });
+        tab4State.bCells.push({ stage: 'mature_b', x: 345, y: 215, r: 8.0, fill: '#fb923c', nucleusFill: '#c2410c', vx: 0.3, vy: 0.2, squeezing: false, inSinusoid: false });
 
         // 3. Initialize Neutrophil Maturation Pipeline
-        tab4State.neutrophils.push({ stage: 'myeloblast', x: 470, y: 88, r: 9.0, fill: '#0284c7', vx: 0.1, vy: 0.04, squeezing: false });
-        tab4State.neutrophils.push({ stage: 'promyelocyte', x: 510, y: 100, r: 8.5, fill: '#0ea5e9', vx: 0.12, vy: 0.05, squeezing: false });
-        tab4State.neutrophils.push({ stage: 'metamyelocyte', x: 550, y: 114, r: 8.0, fill: '#38bdf8', vx: 0.15, vy: 0.06, squeezing: false });
-        tab4State.neutrophils.push({ stage: 'band', x: 590, y: 128, r: 7.8, fill: '#38bdf8', vx: 0.2, vy: 0.08, squeezing: false });
-        tab4State.neutrophils.push({ stage: 'segmented', x: 630, y: 142, r: 7.5, fill: '#38bdf8', vx: 0.25, vy: 0.1, squeezing: false });
+        tab4State.neutrophils.push({ stage: 'myeloblast', x: 470, y: 88, r: 9.0, fill: '#0284c7', vx: 0.45, vy: 0.14, squeezing: false });
+        tab4State.neutrophils.push({ stage: 'promyelocyte', x: 510, y: 100, r: 8.5, fill: '#0ea5e9', vx: 0.45, vy: 0.14, squeezing: false });
+        tab4State.neutrophils.push({ stage: 'metamyelocyte', x: 550, y: 114, r: 8.0, fill: '#38bdf8', vx: 0.45, vy: 0.14, squeezing: false });
+        tab4State.neutrophils.push({ stage: 'band', x: 590, y: 128, r: 7.8, fill: '#38bdf8', vx: 0.45, vy: 0.14, squeezing: false });
+        tab4State.neutrophils.push({ stage: 'segmented', x: 630, y: 142, r: 7.5, fill: '#38bdf8', vx: 0.45, vy: 0.14, squeezing: false });
 
         // 4. Initialize Massive Storage Pool Reservoir (72 mature segmented neutrophils)
         for (let row = 0; row < 6; row++) {
@@ -7889,18 +8831,20 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
 
-        // 6. Initialize Sinusoidal Red Blood Cells (~36 RBCs)
+        // 6. Initialize Sinusoidal Red Blood Cells (~36 RBCs, strictly inside horizontal sinusoid y ∈ [253, 297])
         for (let i = 0; i < 36; i++) {
-            const rx = 60 + i * 26 + Math.random() * 8;
-            const midY = 245 + 0.05 * (rx - 60) + 18 * Math.sin(rx * 0.007);
+            const rx = 64 + i * 25 + Math.random() * 8;
+            const lane = 0.15 + Math.random() * 0.70;
+            const ry = 253 + lane * 44;
             tab4State.sinusoidRbcs.push({
                 x: rx,
-                y: midY + (Math.random() - 0.5) * 28,
-                vx: 3.2 + Math.random() * 2.2,
-                vy: (Math.random() - 0.5) * 0.4,
+                y: ry,
+                lane: lane,
+                vx: 3.2 + Math.random() * 2.0,
+                vy: 0,
                 r: 4.8,
                 biconcave: (i % 3 === 0),
-                angle: (Math.random() - 0.5) * 0.6,
+                angle: (Math.random() - 0.5) * 0.25,
                 alpha: 0.9
             });
         }
@@ -7913,18 +8857,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
         tab4State.cycleTick++;
 
-        // 1. Sinusoidal Red Blood Cells Hemodynamics
+        // 0. Check cross-tab homing queue for newly arrived Long-Lived Plasma Cell precursors from Page 2 Lymph Node
+        if (sharedImmuneState && sharedImmuneState.homingQueue && sharedImmuneState.homingQueue.length > 0) {
+            sharedImmuneState.homingQueue.shift();
+            if (tab4State.llpcs.length < 9) {
+                tab4State.llpcs.push({
+                    x: 340 + Math.random() * 100,
+                    y: 355 + Math.random() * 60,
+                    pulse: 0,
+                    secreteTimer: 0,
+                    alpha: 1.0
+                });
+            }
+            spawnP4Label(390, 335, "🦴 淋巴結漿細胞歸巢定居骨髓微環境 ➔ 轉為長壽漿細胞！", "#a855f7");
+        }
+
+        // 1. Sinusoidal Red Blood Cells Hemodynamics (Strictly inside horizontal vessel walls y = 245..305)
         tab4State.rbcSpawnTimer += simSpeed;
         if (tab4State.rbcSpawnTimer >= 8) {
             tab4State.rbcSpawnTimer = 0;
+            const lane = 0.15 + Math.random() * 0.70;
             tab4State.sinusoidRbcs.push({
-                x: 60,
-                y: 265 + (Math.random() - 0.5) * 26,
-                vx: 3.4 + Math.random() * 2.0,
+                x: 62,
+                y: 253 + lane * 44,
+                lane: lane,
+                vx: 3.4 + Math.random() * 1.8,
                 vy: 0,
                 r: 4.8,
-                biconcave: Math.random() < 0.32,
-                angle: (Math.random() - 0.5) * 0.5,
+                biconcave: Math.random() < 0.35,
+                angle: (Math.random() - 0.5) * 0.2,
                 alpha: 0.9
             });
         }
@@ -7932,9 +8893,10 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let i = tab4State.sinusoidRbcs.length - 1; i >= 0; i--) {
             const rbc = tab4State.sinusoidRbcs[i];
             rbc.x += rbc.vx * simSpeed;
-            // Centerline guiding trajectory through sinusoid
-            const targetY = 255 + 0.04 * (rbc.x - 60) + 16 * Math.sin(rbc.x * 0.0068);
-            rbc.y += (targetY - rbc.y) * 0.05 * simSpeed;
+            const lane = rbc.lane !== undefined ? rbc.lane : 0.5;
+            const targetY = 253 + lane * 44;
+            rbc.y += (targetY - rbc.y) * 0.14 * simSpeed;
+            rbc.y = Math.max(252, Math.min(298, rbc.y));
 
             if (rbc.x >= 1010) {
                 tab4State.sinusoidRbcs.splice(i, 1);
@@ -7943,36 +8905,83 @@ document.addEventListener('DOMContentLoaded', () => {
             renderPooledP4SinusoidRbc(rbc);
         }
 
-        // 2. Hematopoietic Stem Cell (HSC) Dynamics & Differentiation Burst
+        // 2. Hematopoietic Stem Cell (HSC) Self-Renewal & Multi-Lineage Differentiation into B Cells, Neutrophils & RBCs
+        const hscSpawnInterval = (tab4State.hscBurstTimer > 0) ? 18 : 55;
         if (tab4State.hscBurstTimer > 0) {
             tab4State.hscBurstTimer -= simSpeed;
-            if (tab4State.cycleTick % 22 === 0) {
-                // Spawn a new progenitor branching out
-                tab4State.hscs.push({
-                    x: 135 + Math.random() * 25,
-                    y: 125 + Math.random() * 25,
-                    r: 8.5,
-                    pulse: Math.random() * 3,
-                    state: Math.random() < 0.5 ? 'clp' : 'cmp',
-                    fill: Math.random() < 0.5 ? '#ea580c' : '#0284c7',
-                    stroke: '#38bdf8',
-                    nucleusFill: '#042f2e',
-                    vx: 0.5 + Math.random() * 0.4,
-                    vy: (Math.random() - 0.5) * 0.3,
-                    life: 160
-                });
-            }
+        }
+        if (tab4State.cycleTick % hscSpawnInterval === 0 && tab4State.hscs.length < 14) {
+            spawnDifferentiatingProgenitor();
         }
 
         for (let i = tab4State.hscs.length - 1; i >= 0; i--) {
             const h = tab4State.hscs[i];
             h.pulse = (h.pulse || 0) + 0.05 * simSpeed;
 
-            if (h.life !== undefined) {
-                h.life -= simSpeed;
-                h.x += (h.vx || 0) * simSpeed;
-                h.y += (h.vy || 0) * simSpeed;
-                if (h.life <= 0) {
+            if (h.differentiating) {
+                const dx = h.targetX - h.x;
+                const dy = h.targetY - h.y;
+                const dist = Math.hypot(dx, dy);
+                const step = (h.speed || 1.3) * simSpeed;
+
+                if (dist > 8) {
+                    h.x += (dx / dist) * step;
+                    h.y += (dy / dist) * step;
+                    // Morph color progressively as progenitor approaches target lineage zone
+                    if (h.lineage === 'bcell' && dist < 45) {
+                        h.fill = '#ea580c';
+                        h.stroke = '#fb923c';
+                    } else if (h.lineage === 'neutrophil' && dist < 120) {
+                        h.fill = '#0284c7';
+                        h.stroke = '#38bdf8';
+                    } else if (h.lineage === 'rbc' && dist < 50) {
+                        h.fill = '#dc2626';
+                        h.stroke = '#f87171';
+                    }
+                } else {
+                    // Progenitor reaches target lineage & visibly transforms into that cell type!
+                    if (h.lineage === 'bcell') {
+                        if (tab4State.bCells.length < 10) {
+                            tab4State.bCells.push({
+                                stage: 'pro_b',
+                                x: h.targetX,
+                                y: h.targetY,
+                                r: 6.8,
+                                fill: '#ea580c',
+                                nucleusFill: '#7c2d12',
+                                vx: 0.25,
+                                vy: 0.15,
+                                squeezing: false,
+                                inSinusoid: false
+                            });
+                        }
+                    } else if (h.lineage === 'neutrophil') {
+                        if (tab4State.neutrophils.length < 9) {
+                            tab4State.neutrophils.push({
+                                stage: 'myeloblast',
+                                x: 468,
+                                y: 88,
+                                r: 9.0,
+                                fill: '#0284c7',
+                                vx: 0.55,
+                                vy: 0.17,
+                                squeezing: false
+                            });
+                        }
+                    } else if (h.lineage === 'rbc') {
+                        const lane = 0.18 + Math.random() * 0.35;
+                        tab4State.sinusoidRbcs.push({
+                            x: h.targetX,
+                            y: 253 + lane * 44,
+                            lane: lane,
+                            vx: 3.6 + Math.random() * 1.4,
+                            vy: 0,
+                            r: 4.8,
+                            biconcave: true,
+                            angle: 0,
+                            alpha: 0.95
+                        });
+                    }
                     tab4State.hscs.splice(i, 1);
                     continue;
                 }
@@ -7980,76 +8989,108 @@ document.addEventListener('DOMContentLoaded', () => {
             renderPooledP4Hsc(h);
         }
 
-        // 3. B Cell Lineage Development & Sinusoidal Intravasation
+        // 3. B Cell Lineage Development (Pro-B -> Pre-B -> Immature B -> Mature B) & Sinusoidal Intravasation
         for (let i = tab4State.bCells.length - 1; i >= 0; i--) {
             const bc = tab4State.bCells[i];
 
             if (bc.inSinusoid) {
-                bc.x += 2.6 * simSpeed;
-                bc.y += (268 - bc.y) * 0.05 * simSpeed;
+                bc.x += 2.8 * simSpeed;
+                const lane = bc.lane !== undefined ? bc.lane : 0.35;
+                const targetY = 255 + lane * 38;
+                bc.y += (targetY - bc.y) * 0.12 * simSpeed;
+                bc.y = Math.max(253, Math.min(297, bc.y));
                 if (bc.x >= 1010) {
                     tab4State.bCells.splice(i, 1);
                     continue;
                 }
             } else if (bc.squeezing) {
-                // Squeezing through Pore 1 into marrow blood stream
-                bc.x += 0.35 * simSpeed;
-                bc.y += 0.45 * simSpeed;
-                if (bc.y >= 242) {
+                // Squeezing through Pore 1 (x: 358, y: 245) into marrow blood stream
+                bc.x += 0.25 * simSpeed;
+                bc.y += 0.65 * simSpeed;
+                if (bc.y >= 256) {
                     bc.squeezing = false;
                     bc.inSinusoid = true;
+                    bc.lane = 0.22 + Math.random() * 0.55;
                     spawnP4Label(bc.x, bc.y - 14, "成熟B細胞跨內皮出髓 ➔ 巡邏全身！", "#fb923c");
                 }
             } else {
-                // Non-intravasated B cells migrating along pipeline toward Pore 1 (x: 358, y: 225)
+                // Progressive maturation stages along B-cell cord toward Pore 1 (x: 358, y: 238)
+                if (bc.x < 262) {
+                    bc.stage = 'pro_b'; bc.r = 6.6; bc.fill = '#ea580c'; bc.nucleusFill = '#7c2d12';
+                } else if (bc.x < 298) {
+                    bc.stage = 'pre_b'; bc.r = 7.1; bc.fill = '#f97316'; bc.nucleusFill = '#9a3412';
+                } else if (bc.x < 332) {
+                    bc.stage = 'immature_b'; bc.r = 7.6; bc.fill = '#fb923c'; bc.nucleusFill = '#c2410c';
+                } else {
+                    bc.stage = 'mature_b'; bc.r = 8.0; bc.fill = '#fb923c'; bc.nucleusFill = '#c2410c';
+                }
+
                 const targetX = 358;
-                const targetY = 225;
+                const targetY = 238;
                 const dx = targetX - bc.x;
                 const dy = targetY - bc.y;
                 const dist = Math.hypot(dx, dy);
 
                 if (dist > 6) {
-                    bc.x += (dx / dist) * 0.42 * simSpeed;
-                    bc.y += (dy / dist) * 0.42 * simSpeed;
+                    bc.x += (dx / dist) * 0.48 * simSpeed;
+                    bc.y += (dy / dist) * 0.48 * simSpeed;
                 } else {
-                    // Squeezing through Pore 1 into marrow blood stream
                     bc.squeezing = true;
                     bc.angle = Math.atan2(dy, dx);
-                    bc.x += 0.35 * simSpeed;
-                    bc.y += 0.45 * simSpeed;
-                    if (bc.y >= 242) {
-                        bc.squeezing = false;
-                        bc.inSinusoid = true;
-                        spawnP4Label(bc.x, bc.y - 14, "成熟B細胞跨內皮出髓 ➔ 巡邏全身！", "#fb923c");
-                    }
                 }
             }
             renderPooledP4Bcell(bc);
         }
 
-        // Continuous replenishment of pipeline B cells
-        if (tab4State.cycleTick % 80 === 0 && tab4State.bCells.length < 8) {
-            tab4State.bCells.push({
-                stage: 'immature_b',
-                x: 230 + Math.random() * 20,
-                y: 135 + Math.random() * 15,
-                r: 7.2,
-                fill: '#fb923c',
-                nucleusFill: '#c2410c',
-                vx: 0.25,
-                vy: 0.15,
-                squeezing: false,
-                inSinusoid: false
-            });
-        }
-
-        // 4. Neutrophil Maturation Pipeline
-        for (let i = 0; i < tab4State.neutrophils.length; i++) {
+        // 4. Neutrophil Maturation Pipeline (Myeloblast -> Promyelocyte -> Metamyelocyte -> Band -> Segmented -> Storage Pool)
+        for (let i = tab4State.neutrophils.length - 1; i >= 0; i--) {
             const n = tab4State.neutrophils[i];
-            n.x += n.vx * simSpeed * 0.35;
-            n.y += n.vy * simSpeed * 0.35;
-            // Bound inside cord
-            if (n.x > 640) n.x = 460 + (i * 42);
+            n.x += (n.vx || 0.48) * simSpeed;
+            n.y += (n.vy || 0.15) * simSpeed;
+
+            // Morph maturation stage and nucleus shape along the myeloid cord
+            if (n.x < 498) {
+                n.stage = 'myeloblast'; n.r = 9.0; n.fill = '#0284c7';
+            } else if (n.x < 535) {
+                n.stage = 'promyelocyte'; n.r = 8.5; n.fill = '#0ea5e9';
+            } else if (n.x < 572) {
+                n.stage = 'metamyelocyte'; n.r = 8.0; n.fill = '#38bdf8';
+            } else if (n.x < 608) {
+                n.stage = 'band'; n.r = 7.8; n.fill = '#38bdf8';
+            } else {
+                n.stage = 'segmented'; n.r = 7.5; n.fill = '#38bdf8';
+            }
+
+            if (n.x >= 642) {
+                // Mature segmented neutrophil enters the Storage Pool reservoir (or wraps back if pool is full)
+                if (tab4State.storagePool.length < 76) {
+                    const col = Math.floor(Math.random() * 12);
+                    const row = Math.floor(Math.random() * 6);
+                    const baseX = 650 + col * 18 + ((row % 2 === 1) ? 9 : 0);
+                    const baseY = 70 + row * 24;
+                    tab4State.storagePool.push({
+                        x: n.x,
+                        y: n.y,
+                        origX: baseX,
+                        origY: baseY,
+                        vx: 0,
+                        vy: 0,
+                        r: 7.5,
+                        mobilized: false,
+                        squeezing: false,
+                        inSinusoid: false,
+                        alpha: 0.95
+                    });
+                }
+                if (tab4State.neutrophils.length > 5) {
+                    tab4State.neutrophils.splice(i, 1);
+                    continue;
+                } else {
+                    n.x = 468;
+                    n.y = 88;
+                    n.stage = 'myeloblast';
+                }
+            }
             renderPooledP4Neutro(n);
         }
 
@@ -8062,49 +9103,46 @@ document.addEventListener('DOMContentLoaded', () => {
             const sn = tab4State.storagePool[i];
 
             if (sn.inSinusoid) {
-                // In sinusoidal circulation: swift outflow
-                sn.x += (4.8 + (i % 3) * 0.8) * simSpeed;
-                sn.y += (278 - sn.y) * 0.06 * simSpeed;
+                // In sinusoidal circulation: swift outflow strictly inside vessel walls (y ∈ [253, 297])
+                sn.x += (4.6 + (i % 3) * 0.7) * simSpeed;
+                const lane = sn.lane !== undefined ? sn.lane : 0.45;
+                const targetY = 255 + lane * 38;
+                sn.y += (targetY - sn.y) * 0.14 * simSpeed;
+                sn.y = Math.max(253, Math.min(297, sn.y));
                 if (sn.x >= 1010) {
                     tab4State.storagePool.splice(i, 1);
                     continue;
                 }
             } else if (sn.mobilized) {
                 if (sn.squeezing) {
-                    const targetPoreY = (sn.origX < 730) ? 272 : 275;
-                    sn.x += 0.4 * simSpeed;
-                    sn.y += 0.8 * simSpeed;
-                    if (sn.y >= targetPoreY + 12) {
+                    sn.x += 0.3 * simSpeed;
+                    sn.y += 0.75 * simSpeed;
+                    if (sn.y >= 256) {
                         sn.squeezing = false;
                         sn.inSinusoid = true;
+                        sn.lane = 0.2 + Math.random() * 0.6;
                     }
                 } else {
-                    // Moving toward transcellular pores: Pore 2 (x: 642, y: 272) or Pore 4 (x: 798, y: 275)
+                    // Moving toward transcellular pores on top wall: Pore 2 (x: 642, y: 238) or Pore 4 (x: 798, y: 238)
                     const targetPoreX = (sn.origX < 730) ? 642 : 798;
-                    const targetPoreY = (sn.origX < 730) ? 272 : 275;
+                    const targetPoreY = 238;
                     const dx = targetPoreX - sn.x;
                     const dy = targetPoreY - sn.y;
                     const dist = Math.hypot(dx, dy);
 
                     if (dist > 8) {
-                        sn.x += (dx / dist) * 1.6 * simSpeed;
-                        sn.y += (dy / dist) * 1.6 * simSpeed;
+                        sn.x += (dx / dist) * 1.65 * simSpeed;
+                        sn.y += (dy / dist) * 1.65 * simSpeed;
                     } else {
                         // Squeezing through pore with hourglass waist
                         sn.squeezing = true;
                         sn.angle = Math.atan2(dy, dx);
-                        sn.x += 0.4 * simSpeed;
-                        sn.y += 0.8 * simSpeed;
-                        if (sn.y >= targetPoreY + 12) {
-                            sn.squeezing = false;
-                            sn.inSinusoid = true;
-                        }
                     }
                 }
             } else {
-                // Resting in storage pool: gentle physiological Brownian tremor
-                sn.x = sn.origX + Math.sin(tab4State.cycleTick * 0.04 + i) * 1.2;
-                sn.y = sn.origY + Math.cos(tab4State.cycleTick * 0.04 + i) * 1.0;
+                // Resting in storage pool: smoothly settle to grid coordinate + gentle tremor
+                sn.x += (sn.origX - sn.x) * 0.08 * simSpeed + Math.sin(tab4State.cycleTick * 0.04 + i) * 0.35;
+                sn.y += (sn.origY - sn.y) * 0.08 * simSpeed + Math.cos(tab4State.cycleTick * 0.04 + i) * 0.3;
             }
 
             renderPooledP4StorageNeutro(sn);
@@ -8144,12 +9182,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const threshold = (tab4State.llpcBoostTimer > 0) ? 8 : 28;
             if (lp.secreteTimer >= threshold) {
                 lp.secreteTimer = 0;
-                // Emit gold Y antibody migrating toward Pore 3 (x: 435, y: 281)
+                // Emit gold Y antibody migrating toward Pore 3 on bottom sinusoid wall (x: 435, y: 305)
                 tab4State.antibodies.push({
                     x: lp.x + (Math.random() - 0.5) * 8,
                     y: lp.y - 8,
-                    vx: 0.15 + (Math.random() - 0.5) * 0.2,
+                    vx: 0,
                     vy: -1.2,
+                    lane: 0.25 + Math.random() * 0.55,
                     color: '#fbbf24',
                     angle: -90,
                     inSinusoid: false,
@@ -8159,27 +9198,30 @@ document.addEventListener('DOMContentLoaded', () => {
             renderPooledP4Llpc(lp);
         }
 
-        // 7. Antibodies Migration & Sinusoid Outflow
+        // 7. Antibodies Migration & Sinusoid Outflow (Strictly inside horizontal vessel walls y ∈ [253, 297])
         for (let i = tab4State.antibodies.length - 1; i >= 0; i--) {
             const ab = tab4State.antibodies[i];
 
             if (ab.inSinusoid) {
                 ab.x += 4.2 * simSpeed;
-                ab.y += (282 - ab.y) * 0.05 * simSpeed;
+                const lane = ab.lane !== undefined ? ab.lane : 0.5;
+                const targetY = 256 + lane * 36;
+                ab.y += (targetY - ab.y) * 0.14 * simSpeed;
+                ab.y = Math.max(253, Math.min(297, ab.y));
                 ab.angle = 0;
                 if (ab.x >= 1010) {
                     tab4State.antibodies.splice(i, 1);
                     continue;
                 }
             } else {
-                // Rising up toward sinusoid Pore 3 (x: 435, y: 281)
+                // Rising up toward sinusoid Pore 3 on bottom wall (x: 435, y: 298)
                 const dx = 435 - ab.x;
-                const dy = 281 - ab.y;
+                const dy = 298 - ab.y;
                 const dist = Math.hypot(dx, dy);
 
                 if (dist > 6) {
-                    ab.x += (dx / dist) * 1.2 * simSpeed;
-                    ab.y += (dy / dist) * 1.2 * simSpeed;
+                    ab.x += (dx / dist) * 1.25 * simSpeed;
+                    ab.y += (dy / dist) * 1.25 * simSpeed;
                 } else {
                     // Intravasates through Pore 3 into marrow venous stream
                     ab.inSinusoid = true;
@@ -8211,10 +9253,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (btnStepHsc) {
             btnStepHsc.addEventListener('click', () => {
                 tab4State.hscBurstTimer = 100;
-                spawnP4Label(140, 95, "🌱 造血幹細胞(HSC)自我更新與多能祖細胞(MPP)分化！", "#14b8a6");
+                spawnDifferentiatingProgenitor('bcell');
+                spawnDifferentiatingProgenitor('neutrophil');
+                spawnDifferentiatingProgenitor('rbc');
+                spawnP4Label(210, 95, "🌱 造血幹細胞(HSC)分裂 ➔ 子代分別遷移分化為B細胞、嗜中性球與紅血球！", "#14b8a6");
                 const desc = document.getElementById('mechanism-desc-tab-4');
                 if (desc) {
-                    desc.innerHTML = "<strong>【1. 造血幹細胞自我更新與多能分化】</strong>造血幹細胞 (HSC) 定居於低氧的骨內膜微環境，在成骨細胞與基質細胞的訊號調控下維持未分化狀態。當受到造血生長因子刺激時，HSC進行不對稱分裂：一個子細胞留在微環境維持幹細胞池（自我更新），另一個子細胞分化為多能祖細胞 (MPP)，進而分化為髓系共同祖細胞 (CMP) 與淋巴系共同祖細胞 (CLP)！";
+                    desc.innerHTML = "<strong>【1. 造血幹細胞自我更新與多能分化】</strong>造血幹細胞 (HSC) 定居於低氧的骨內膜微環境，在成骨細胞與基質細胞的訊號調控下維持未分化狀態。當受到造血生長因子刺激時，HSC進行不對稱分裂：一個子細胞留在微環境維持幹細胞池（自我更新），另一個子細胞分化為多能祖細胞 (MPP)，並分別沿三大產線遷移分化為 B細胞（橙色）、嗜中性球（藍色）與紅血球（紅色）！";
                 }
             });
         }
@@ -8300,7 +9345,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (btnHscBurst) {
             btnHscBurst.addEventListener('click', () => {
                 tab4State.hscBurstTimer = 120;
-                spawnP4Label(150, 110, "🌱 造血幹細胞分化爆發：全產線加速運轉！", "#14b8a6");
+                spawnDifferentiatingProgenitor('bcell');
+                spawnDifferentiatingProgenitor('neutrophil');
+                spawnDifferentiatingProgenitor('rbc');
+                spawnP4Label(210, 110, "🌱 造血幹細胞分化爆發：子代湧入 B細胞、嗜中性球與紅血球產線！", "#14b8a6");
             });
         }
 
