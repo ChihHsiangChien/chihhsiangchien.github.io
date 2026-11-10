@@ -1,64 +1,63 @@
-# Project: Biology Educational Interactive Web Enhancements (chihhsiangchien.github.io)
+# Project: MicroDefend Multi-Tab Lymphatic & Hematopoietic Expansion
 
 ## Architecture
-- Static web applications hosted on GitHub Pages / HTTP static server.
-- Entry point: `index.html` linking to thematic modules categorized by biological topics.
-- Modules:
-  1. `fiddler-crab/`: Three.js procedural 3D simulation of crab behavior, survival, and predation.
-  2. `pepperedMoth/`: Tailwind CSS + Chart.js natural selection and industrial melanism simulation.
-  3. `lens-optical/`: Optical ray-tracing and compound microscope optics workbench.
-  4. `greatFossil/`: Canvas-based fossil era matching educational game.
-  5. `blood-stream/`: Three.js + Cannon.js 3D vascular blood flow and valve dynamics.
-  6. `rt/`: Web Audio + high-resolution timer reaction time experimental testing tool.
-  7. `cardGame/消化_消化管_順序/`: Canvas sequence card game driven by `cardGame/js/utils.js`.
+- Target system: Pure client-side vanilla JavaScript + SVG vector graphics + CSS3 responsive layout.
+- Host directory: `c:\Users\user\Documents\GitHub\chihhsiangchien.github.io\microDefend`
+- Core files:
+  * `index.html`: Multi-tab semantic navigation (`.tabs-nav`), 4 dedicated SVG scene viewports (`#viz-tab-1` to `#viz-tab-4`), and modular control panels (`#controls-tab-1` to `#controls-tab-4`).
+  * `style.css`: Unified aesthetic system matching Page 1 dark theme (`#0f172a`, `#1e293b`), glassmorphism panels, tab button indicators, and responsive layout.
+  * `script.js`: Master active-tab gated animation loop (`masterAnimationLoop`), zero-allocation SVG object pooling, state management, and biological entity physics for Tabs 1–4.
+  * `tests/`: Automated 4-tier E2E test harness (`tests/test_microdefend_e2e.py` and Node.js CDP runner `tests/test_cdp_e2e.js`).
 
 ## Code Layout
-- `index.html`: Main hub / curriculum chapter index
-- `check_unlinked_projects.py`: Python verification script for link integrity and formatting
-- `fiddler-crab/`: `index.html`, `style.css`, `fiddler-crab.js`
-- `pepperedMoth/`: `index.html`
-- `lens-optical/`: `index.html`
-- `greatFossil/`: `index.html`, `style.css`, `js/globalVariables.js`, `js/utils.js`
-- `blood-stream/`: `index.html`, `style.css`, `main.js`
-- `rt/`: `index.html`, `app.js`, `style.css`, `config/`
-- `cardGame/`: `消化_消化管_順序/index.html`, `js/utils.js`, `sound/`
-- `tests/`: Automated E2E verification test harness and test scripts
+- `microDefend/index.html`: DOM structure for all 4 tabs and control panels.
+- `microDefend/style.css`: Styles for tabs, control panels, SVG elements, tooltips, and badges.
+- `microDefend/script.js`: Simulation logic, event listeners, SVG rendering pools, and biological models for all 4 pages.
+- `tests/test_microdefend_e2e.py`: Python standard library test runner for DOM structure, spatial geometry, and static constraints.
+- `tests/test_cdp_e2e.js`: Node.js v24 headless Chrome CDP test runner for dynamic SVG rendering, tab switching, and console error interception.
 
 ## Feature Inventory
 | # | Feature | Description | Milestone | Source |
 |---|---------|-------------|-----------|--------|
-| 1 | R1.1 Index Project Mounting | Mount all 7 projects to corresponding curriculum chapters in index.html | M1 | Survey / ORIGINAL_REQUEST |
-| 2 | R1.2 Index Whitespace Fix | Fix leading space defect on line 215 in index.html | M1 | Survey / ORIGINAL_REQUEST |
-| 3 | R2.1 Fiddler Crab Mobile Controls | Add virtual directional buttons & touch swipe without velocity stuck bug | M2 | Survey / ORIGINAL_REQUEST |
-| 4 | R2.2 Fiddler Crab Settlement Modal | Full-screen modal with survival time, food count, restart button & cause | M2 | Survey / ORIGINAL_REQUEST |
-| 5 | R3.1 Peppered Moth Predator Mode | Interactive minigame with timer, bird click predation, sound & settlement | M2 | Survey / ORIGINAL_REQUEST |
-| 6 | R3.2 Peppered Moth Line Chart | Update Chart.js to dual-dataset line chart tracking generational shifts | M2 | Survey / ORIGINAL_REQUEST |
-| 7 | R4.1 Lens Optical Presets | 3 preset scenario buttons (物鏡倒立放大, 目鏡二次放大, 光圈縮小景深) | M3 | Survey / ORIGINAL_REQUEST |
-| 8 | R4.2 Lens Optical Explanations & Aperture | Explanatory hint card and aperture state integration | M3 | Survey / ORIGINAL_REQUEST |
-| 9 | R5.1 Great Fossil HTML/CSS Fix | Remove orphaned tags, fix CSS path & styling, fix audio 404 paths | M3 | Survey / ORIGINAL_REQUEST |
-| 10 | R5.2 Great Fossil Canvas & RWD | Uncomment drawAnswerBox, add responsive layout without button overlap | M3 | Survey / ORIGINAL_REQUEST |
-| 11 | R6.1 Blood Stream Quality Switch | Particle count / quality switch (Low / Med / High) and remove @apply CSS | M4 | Survey / ORIGINAL_REQUEST |
-| 12 | R6.2 Blood Stream Valve Animation | Realistic dynamic valve flap tilt physics animation during blood flow | M4 | Survey / ORIGINAL_REQUEST |
-| 13 | R7.1 Reaction Time Data Export | Add "Export CSV" and "Copy Result Text" buttons for student inquiry | M4 | Survey / ORIGINAL_REQUEST |
-| 14 | R8.1 Digestion Card Game Engine Fix | Fix empty click TypeError, enforce mouth start, win condition in utils.js | M5 | Survey / ORIGINAL_REQUEST |
-| 15 | R8.2 Digestion Card Game Verification | Verify cardGame/消化_消化管_順序/ assets, flow and no console errors | M5 | Survey / ORIGINAL_REQUEST |
-| 16 | E2E & Acceptance Verification | Pass check_unlinked_projects.py, zero 404s, zero console uncaught errors | M6 | Acceptance Criteria |
+| 1 | Multi-Tab Nav Framework | Top tab bar (`.tabs-nav`) switching Tabs 1–4 with active-tab gating | M1 | ORIGINAL_REQUEST §R1 |
+| 2 | Tab 2 Lymph Node Canvas & Vessels | SVG scene with afferent vessels, capsule, subcapsular sinus, trabeculae, efferent vessel | M1 | ORIGINAL_REQUEST §R1 |
+| 3 | Page 1 ↔ Page 2 Spatial Continuity | Primary afferent inlet at `x=0, y=248..288` (center 268) seamlessly matching Page 1 exit | M1 | ORIGINAL_REQUEST §R1 |
+| 4 | Tab 2 Specific Immune Cascade | APC presentation to Th cells, B/T cell activation, germinal centers, plasma cells & antibody output | M1 | ORIGINAL_REQUEST §R1 |
+| 5 | Tab 3 Lymphatic Duct Confluence | Efferent lymphatics merging into thoracic duct entering left venous angle | M2 | ORIGINAL_REQUEST §R2 |
+| 6 | Tab 3 Venous Valves & Wall Anatomy | Bicuspid terminal valves preventing backflow, endothelial cells with nuclei (`#f87171`/`#991b1b`) | M2 | ORIGINAL_REQUEST §R2 |
+| 7 | Tab 3 Hemodynamics & Cell Consistency | Rapid laminar venous blood flow, slow lymph inflow, RBC/WBC visual fidelity matching Page 1 | M2 | ORIGINAL_REQUEST §R2 |
+| 8 | Tab 4 Bone Marrow Architecture | Trabecular bone framework, sinusoidal capillaries, endosteal and perivascular niches | M3 | ORIGINAL_REQUEST §R3 |
+| 9 | Tab 4 HSC Hematopoietic Cascade | HSC self-renewal & multipotent differentiation lines (myeloid & lymphoid) | M3 | ORIGINAL_REQUEST §R3 |
+| 10 | Tab 4 B Cell Maturation | B cell development from progenitors to naive B cells and sinusoidal intravasation | M3 | ORIGINAL_REQUEST §R3 |
+| 11 | Tab 4 LLPC Antibody Factory | Long-lived plasma cells homing to bone marrow niches with continuous basal antibody production | M3 | ORIGINAL_REQUEST §R3 |
+| 12 | Tab 4 Neutrophil Maturation & Pool | Myeloblast to segmented neutrophil maturation series & massive storage pool for acute mobilization | M3 | ORIGINAL_REQUEST §R3 |
+| 13 | Interactive Control Panels (Tabs 2-4) | Dedicated controls for pathogen injection, cellular triggers, labels, and speed (0.5x, 1x, 2x) | M4 | ORIGINAL_REQUEST §R4 |
+| 14 | Cross-Tab State & Lifecycle Hygiene | Zero-allocation SVG pool cleanup, active-tab simulation gating, zero memory leaks, zero console errors | M4 | ORIGINAL_REQUEST §R4 |
+| 15 | E2E Automated Test Infrastructure | Dual-mode test harness (Python unittest + Node.js CDP runner) verifying all requirements | M0 | Acceptance Criteria |
+| 16 | 100% E2E Pass, Hardening & Audit | 100% pass of Tiers 1-4, Tier 5 adversarial stress testing, and clean forensic integrity audit | M5 | Acceptance Criteria |
 
 ## Milestones
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
-| M1 | Homepage Linking & Syntax Fix | R1: index.html mounting of 7 projects, line 215 whitespace fix | none | DONE |
-| M2 | Ecology & Evolution Enhancements | R2 (fiddler-crab) & R3 (pepperedMoth) | none | DONE |
-| M3 | Optics & Paleontology Refactoring | R4 (lens-optical) & R5 (greatFossil) | none | DONE |
-| M4 | Hemodynamics & Neuro-Inquiry | R6 (blood-stream) & R7 (rt) | none | DONE |
-| M5 | Digestion Card Game Engine | R8: cardGame/消化_消化管_順序/ & cardGame/js/utils.js | none | DONE |
-| M6 | Final Acceptance & E2E Validation | Full E2E test suite pass (Tiers 1-4) & Forensic Audit | M1, M2, M3, M4, M5 | DONE |
+| M0 | E2E Testing Track | Test suite design, Python & Node.js CDP test runners, publish `TEST_READY.md` | none | DONE |
+| M1 | Multi-Tab Nav & Lymph Node Scene | Tab navigation, Tab 2 SVG, afferent/efferent vessels, spatial continuity from P1, immune cascade | M0 | DONE |
+| M2 | Lymphatic Ducts & Venous Confluence | Tab 3 SVG, thoracic duct, venous valves, endothelial walls, laminar hemodynamics, cell fidelity | M1 | DONE |
+| M3 | Bone Marrow Hematopoiesis & Memory | Tab 4 SVG, trabeculae/sinusoids, HSC differentiation, B cell development, LLPC factory, neutrophil pool | M2 | DONE |
+| M4 | Interactive Controls & State Lifecycle | Modular control panels for Tabs 2–4, pathogen injection, cellular reaction triggers, speed/pause, pool hygiene | M3 | DONE |
+| M5 | Final E2E Verification & Forensic Audit | Pass 100% of Tiers 1-4 tests, Tier 5 adversarial coverage hardening, clean forensic integrity audit | M0, M1, M2, M3, M4 | DONE |
 
 ## Interface Contracts
-### Homepage ↔ Modules
-- Standard relative URLs `<a href="<dir>/index.html">...</a>`
-- Relative paths must resolve directly from root directory without 404s
-### Card Game Engine ↔ Digestion Game
-- `cardGame/js/utils.js` shared API:
-  - `clickIfOrder()`: handles card selection; must safely ignore null/empty canvas clicks without throwing TypeError.
-  - `handleOrderingCards()`: validates consecutive card order, terminates timer and shows win modal when `selectedCards.length === correctCount`.
+### Tab Navigation ↔ SVG Viewports
+- Tab switching changes `currentTab = 'tab-1' | 'tab-2' | 'tab-3' | 'tab-4'`.
+- Inactive SVG viewports set `style.display = 'none'`, active viewport sets `style.display = 'block'`.
+- Controls panels toggle visibility matching `currentTab`.
+### Page 1 ↔ Page 2 Spatial Alignment
+- Page 1 capillary exit: `x = 1000, y = 248..288` (center `y = 268`), vector `vx > 0, vy = 0`.
+- Page 2 afferent inlet: `x = 0, y = 248..288` (center `y = 268`), vector `vx > 0, vy = 0`.
+- Vessel styling: fill `rgba(16, 185, 129, 0.18)`, stroke `#10b981`, stroke-width `1.8`, stroke-dasharray `6,3`.
+### Page 2 ↔ Page 3 Lymphatic Continuity
+- Page 2 efferent vessel exiting hilum drains filtered lymph and newly generated antibodies.
+- Page 3 receives efferent vessels merging into thoracic duct with terminal bicuspid valve entering vein.
+### Page 4 ↔ Page 1 Immunological Memory Loop
+- Page 4 LLPCs in bone marrow continuously produce basal IgG antibodies (`#fbbf24`).
+- Explains Page 1's arterial antibody influx when memory is active, closing the physiological loop.

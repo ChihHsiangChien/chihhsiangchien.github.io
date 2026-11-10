@@ -1,162 +1,106 @@
-# Handoff Report — Milestone 2: Ecology & Evolution Enhancements
-
-**Agent**: Worker M2 (`teamwork_preview_worker`)  
-**Role**: implementer, qa, specialist  
-**Date**: 2026-10-23  
-**Working Directory**: `/home/pancala/Documents/chihhsiangchien.github.io/.agents/teamwork/worker_m2`  
-
----
+# Milestone 2 Handoff Report: Page 3 (Lymphatic Ducts & Venous Confluence Scene)
 
 ## 1. Observation
-
-### Initial Codebase Findings
-1. **`fiddler-crab/` (R2)**:
-   - Keyboard controls in `fiddler-crab/fiddler-crab.js:525-528` only checked `this.keys['arrowleft']`, `arrowright`, `arrowup`, `arrowdown`. WASD keys (`w`, `a`, `s`, `d`) were completely absent.
-   - Virtual directional buttons in `fiddler-crab/fiddler-crab.js:501-514` directly modified `this.player.vx` and `this.player.vz` inside button `mouseup`/`touchend` listeners. When mouse or finger dragged outside button bounds before releasing, the release event failed to fire on the button element, causing `this.player.vx` / `this.player.vz` to remain indefinitely locked in motion ("stuck velocity bug").
-   - `#canvas-container` had zero touch swipe or drag gesture handlers.
-   - The `#game-over` dialog was situated inside `.control-panel` in `fiddler-crab/index.html:78-86`, with `position: absolute; top: 50%; left: 50%` in `fiddler-crab/style.css:220-231`. It lacked a full-screen backdrop modal (`position: fixed; inset: 0`), lacked formatted minutes and seconds survival time, hardcoded the death cause to "你被天敵吃掉了！" even upon starvation, and lacked styles for restart action.
-2. **`pepperedMoth/` (R3)**:
-   - In `pepperedMoth/index.html:340-380`, starting a simulation had zero time limit, allowing indefinite clicks without natural predation pressure.
-   - There was no dedicated toggle or button to select "天敵捕食者模式 (Predator Mode)".
-   - In `pepperedMoth/index.html:595-659`, population dynamics were rendered using `type: 'bar'` (bar chart) rather than the textbook standard dual-dataset line chart (`type: 'line'`).
-   - Clicking moths had no audio feedback or crosshair reticle on `#treeContainer`.
-   - No round settlement modal existed between generations to explain natural selection outcomes.
-
----
+- Target module: `microDefend/` within repository root `c:\Users\user\Documents\GitHub\chihhsiangchien.github.io\`.
+- Baseline state prior to Milestone 2:
+  * Page 3 SVG scene `#viz-tab-3` was an initial placeholder in `microDefend/index.html`.
+  * `#controls-tab-3` contained 4 initial stepper buttons with basic mechanism text.
+  * `stepPage3Simulation()` in `microDefend/script.js` was an empty placeholder function.
+- Test commands executed:
+  * Python full test suite:
+    `& "C:\Users\user\miniconda3\python.exe" tests/test_microdefend_e2e.py`
+    Result: 15 tests run, 15 passed, 0 failed, 0 errored (`OK`).
+  * Python Milestone 2 filtered test:
+    `& "C:\Users\user\miniconda3\python.exe" tests/test_microdefend_e2e.py --milestone 2`
+    Result: 13 tests run, 13 passed, 0 failed, 0 errored (`OK`).
+  * Headless Chrome CDP full test:
+    `& "C:\Users\user\AppData\Local\ms-playwright-go\1.57.0\node.exe" tests/test_cdp_e2e.js`
+    Result: 17 checks executed, 17 passed (100%), 0 uncaught exceptions, 0 console errors.
+  * Headless Chrome CDP Milestone 2 filtered test:
+    `& "C:\Users\user\AppData\Local\ms-playwright-go\1.57.0\node.exe" tests/test_cdp_e2e.js --milestone 2`
+    Result: 16 checks executed, 16 passed (100%), 0 uncaught exceptions, 0 console errors.
+- Files modified:
+  * `microDefend/index.html`:
+    - Implemented complete Page 3 SVG Scene (`#viz-tab-3`, `viewBox="0 -65 1000 565"`):
+      * Multiple efferent vessels (`#efferent-inlet-1`, `#efferent-inlet-2`, `#efferent-inlet-3`) converging into `#thoracic-duct` and `#lymphatic-duct-trunk`.
+      * Left Venous Angle (左靜脈角: Left Internal Jugular Vein descending from top + Left Subclavian Vein ascending from lower-left meeting at `x=475, y=248..282`).
+      * Great Vein main trunk: Superior Vena Cava / Left Brachiocephalic Vein running horizontally (`x=620..1000, y=182..326`).
+      * Venous wall architecture: Endothelial cells matching Page 1 style (`fill="#f87171" stroke="#991b1b" stroke-width="1"` with elongated ruby nucleus `ellipse rx="4.5" ry="2.2" fill="#7f1d1d"`), plus Tunica Media (`#d9480f`) and Tunica Adventitia (`#991b1b`).
+      * Terminal bicuspid venous valve (`#venous-valve` with `#valve-leaflet-upper`, `#valve-leaflet-lower`, and `#valve-seal-line`).
+      * Secondary semilunar venous valves (`#svc-venous-valves`) along the Superior Vena Cava wall.
+      * Dynamic entity layers: `#p3-lymph-stream-layer`, `#p3-eddies-layer`, `#p3-venous-blood-layer`, `#p3-antibodies-layer`, `#p3-floating-labels-layer`.
+      * Educational annotation layer (`#p3-annotations`) linked to `#toggle-labels`.
+    - Enhanced `#controls-tab-3` with action buttons:
+      * `#btn-t3-step-confluence` ("1. 淋巴總管注入左鎖骨下靜脈")
+      * `#btn-t3-toggle-valve` ("2. 靜脈瓣開闔防逆流")
+      * `#btn-t3-hemodynamics` ("3. 血液搏動循環全身")
+      * `#btn-t3-surge-lymph` ("🚀 加速淋巴回流 (Lymph Surge)")
+      * `#btn-t3-stress-valve` ("🛡️ 測試靜脈瓣防逆流 (Backpressure)")
+      * `#btn-t3-spawn-antibodies` ("✨ 注入高濃度專一抗體")
+      * `#btn-t3-toggle-hemo` ("💨 切換大靜脈血流速 (Flow Rate)")
+      * `#btn-t3-reset` ("🔄 重置大靜脈匯流 (Reset Confluence)")
+  * `microDefend/style.css`:
+    - Added styling for `#thoracic-duct`, `.lymphangion-ring` (pulsing contractile rings), `#valve-leaflet-upper` / `#valve-leaflet-lower`, `#confluence-mixing-glow`, `.endothelial-cell`, and button gradient styles (`.btn-lymph`, `.btn-valve-test`, `.btn-ab-inject`, `.btn-toggle-hemo`).
+  * `microDefend/script.js`:
+    - Implemented `initTab3Simulation()` and `stepPage3Simulation()`:
+      * Parabolic laminar velocity profile in the Great Vein: fast in center ($v_x \approx 8.6\text{ px/frame}$), slower near endothelium ($v_x \approx 3.2\text{ px/frame}$).
+      * Dense continuous intravascular RBC stream (~95 RBCs) streaming through internal jugular, subclavian, and superior vena cava, featuring 70% normal disk circles (`#ef4444`, $r=4.8$) and 30% biconcave angled ellipses (`#dc2626` / `#991b1b`).
+      * Patrolling leukocytes (neutrophils `#38bdf8`, monocytes `#c084fc`, lymphocytes `#fb923c` / `#34d399`) marginating and rolling along the endothelium.
+      * Rhythmic pulsatile inflow of filtered lymph carrying chylomicrons, endogenous antibodies, and cross-tab antibodies from `sharedImmuneState.efferentQueue`.
+      * Dynamic terminal bicuspid valve physics: rhythmic opening during lymph pulse wave and tight convex closure against venous backpressure.
+      * Fluid mixing eddies (`p3EddyPool`) at the confluence point as lymph enters systemic blood.
+      * Elastic repulsion barrier preventing red blood cells from entering the thoracic duct during valve closure.
+      * Zero-allocation SVG object pooling (`p3RbcPool`, `p3LymphPool`, `p3WbcPool`, `p3AbPool`, `p3EddyPool`, `p3LabelPool`).
+    - Integrated Tab 3 into `updateTransform` (pan/zoom) and `switchTab` (automatic initialization on first view, `#toggle-labels` synchronization).
+    - Registered all interactive button handlers in `initTab3Controls()`.
+  * `tests/test_cdp_e2e.js`:
+    - Adjusted milestone gating checks to evaluate Tab 3 controls for Milestone 2 (`targetMilestone === null || targetMilestone >= 2`).
 
 ## 2. Logic Chain
-
-1. **`fiddler-crab/` Keyboard & Pointer Input Refactoring**:
-   - Supporting WASD required mapping `this.keys['w']`, `'a'`, `'s'`, `'d'` concurrently with `ArrowUp`, `ArrowDown`, `ArrowLeft`, `ArrowRight` in `update()` and preventing default page scroll in `keydown`.
-   - To eliminate the stuck velocity bug, virtual button inputs were decoupled from direct player coordinates by introducing `this.btnVx` and `this.btnVz`. Modern Pointer Events (`pointerdown`, `pointerup`, `pointercancel`, `pointerleave`) were bound to each `.btn-arrow` with `setPointerCapture(e.pointerId)`. In addition, window-level `pointerup`, `pointercancel`, and `blur` listeners ensure that if the cursor leaves the window or releases anywhere on screen, active button sets are instantly cleared and velocity resets to 0.
-   - Touch drag on `#canvas-container` was implemented by recording initial touch coordinates, computing normalized displacement vector `(dx, dy)` with an 8px deadzone, and setting `this.touchVx` and `this.touchVz`.
-2. **`fiddler-crab/` Full-screen Settlement Modal**:
-   - `#game-over` was relocated out of `.control-panel` to be a top-level modal within `.container` with CSS:
-     ```css
-     position: fixed; inset: 0; background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(6px); z-index: 1000; display: flex; align-items: center; justify-content: center;
-     ```
-   - In `fiddler-crab.js`, `endGame(reason)` formats elapsed survival time into minutes and seconds (`${minutes}分${seconds}秒 (${this.elapsedTime}秒)`), sets `#final-food`, computes an evolutionary title badge (`泥灘迷途蟹`, `敏捷覓食者`, `避敵生存能手`, `招潮蟹生存大師`), and differentiates death reasons:
-     - `endGame('predator')`: "💀 死亡原因：天敵捕食 (白鷺鷥)" + avoidance survival tip
-     - `endGame('starvation')`: "🍂 死亡原因：飢餓枯竭 (體力耗盡)" + feeding guidance tip
-   - A `resetGame()` method was implemented and wired to both `#restart-btn` and `#new-game-btn`, resetting player state, health, food, clearing predator meshes, respawning food items, and hiding the modal without requiring destructive page reloads.
-3. **`pepperedMoth/` Predator Mode (天敵捕食者模式)**:
-   - Added mode toggle buttons in `phase1Controls` allowing selection between "🦅 天敵捕食者模式 (Predator Challenge Mode)" (default) and "⚙️ 自然族群模擬模式 (Auto Simulation Mode)".
-   - In Predator Mode, starting a generation triggers a 15-second countdown timer (`startPredatorRound()`) with tenth-of-a-second resolution (`15.0s`), an animated multi-stage color progress bar (green -> yellow -> pulsing red), and crosshair cursor (`.predator-active`).
-   - Built a standalone Web Audio API synthesizer (`playPeckSound(hit)` and `playRoundEndSound()`) generating bird peck snaps (850Hz -> 140Hz exponential ramp) and chime chords with zero external audio assets.
-   - Added visual peck ripple animation (`.peck-ripple`) and floating score tags (`.peck-tag`) at click coordinates.
-   - When the 15s timer elapses, `endPredatorRound()` locks predation, plays the round completion chime, and displays `#roundSettlementModal` showing caught vs surviving counts for both morphs, along with dynamic natural selection explanations tailored to the active background (light bark, dark soot bark, newspaper).
-   - Upgraded Chart.js to `type: 'line'` with two distinct line datasets:
-     - `黑蛾數量 (Dark Moth)`: slate line (`#1e293b`), point dots (`#0f172a`), tension `0.35`
-     - `白蛾數量 (Light Moth)`: sky blue line (`#0284c7`), point dots (`#38bdf8`), tension `0.35`
-   - Preserved reflection phase (`#phase5Controls`) and generation history table (`#dataTable`).
-
----
+1. Milestone 2 dispatched the completion of Page 3 (Lymphatic Ducts & Venous Confluence Scene).
+2. Spatial and anatomical analysis showed that Page 2 exits at the hilum on the right edge ($x \approx 1000, y \approx 280$). In Page 3, efferent vessels enter from the left ($x = 0$) and converge into the thoracic duct ($x \in [226, 475]$), which opens directly at the Left Venous Angle ($x \approx 475, y \in [248, 282]$).
+3. The venous angle was modeled as the convergence of the Left Internal Jugular Vein (descending from $y=-65$ down to $y=245$) and the Left Subclavian Vein (ascending from $y=500$ up to $y=285$), feeding into the Superior Vena Cava / Brachiocephalic Vein main trunk ($x=620..1000, y=182..326$).
+4. The venous vessel wall architecture strictly follows Page 1 specifications: elongated endothelial cells with ruby nuclei (`fill="#f87171" stroke="#991b1b" stroke-width="1"`, nucleus `ellipse rx="4.5" ry="2.2" fill="#7f1d1d"`), smooth muscle tunica media (`#d9480f`), and adventitia (`#991b1b`).
+5. The terminal bicuspid valve leaflets (`#venous-valve`) were engineered with dynamic Bezier interpolation: opening during lymphatic pulse surges to allow lymph and antibodies to inject into venous circulation, and firmly sealing together during resting/backpressure stress, with elastic repulsion deflecting venous RBCs away from the thoracic duct orifice.
+6. Hemodynamics were implemented using a physiological parabolic velocity profile: centerline velocity reaches $\sim 8.6\text{ px/frame}$, with leukocyte margination along the vessel boundary and mixing eddies formed at the confluence.
+7. Zero-allocation SVG pooling was implemented across all 6 entity types in Tab 3, avoiding garbage collection spikes and DOM thrashing.
+8. Execution of both Python and Headless Chrome CDP test runners confirmed 100% test passage across all assertions with 0 console errors and 0 uncaught exceptions.
 
 ## 3. Caveats
-
-- In headless Linux test environments lacking physical GPU hardware, WebGL requires software rasterization (`--use-gl=angle --use-angle=swiftshader`). Both files were verified under SwiftShader and run cleanly without unhandled exceptions.
-- Web Audio API requires a user gesture to resume the `AudioContext` from `suspended` state according to standard browser autoplay policies. Since the user clicks "開始模擬" or clicks on the screen/moth, audio resumes automatically on first interaction.
-- No caveats regarding biological simulation fidelity or external dependencies.
-
----
+- Tab 4 (`#viz-tab-4`) and its controls (`#controls-tab-4`) remain in foundational structural placeholder state as designed for Milestone 3 (Bone Marrow Niches Scene).
+- No caveats regarding Milestone 2 deliverables; all requirements are fully implemented and verified.
 
 ## 4. Conclusion
-
-All requirements for Milestone 2 (R2 and R3) have been implemented and verified:
-1. `fiddler-crab/` supports seamless WASD + Arrow keys, zero-stuck virtual buttons via Pointer Events, fluid mobile touch drag on `#canvas-container`, and an informative full-screen settlement modal with formatted time, food count, cause of death differentiation, and soft reset.
-2. `pepperedMoth/` features an engaging 15-second Predator Mode with countdown progress bar, crosshair reticle, peck sound & ripple animation, round settlement summary, and a dual-dataset line chart tracking dark vs light moths across generations.
-3. Verified with syntax checks (`node -c`) and automated in-browser execution with 33 passing assertions and zero console exceptions.
-
----
+Milestone 2 is complete. Page 3 (Lymphatic Ducts & Venous Confluence Scene) is fully implemented with high anatomical and visual fidelity, realistic hemodynamics, dynamic terminal bicuspid valve anti-reflux behavior, fluid mixing eddies, zero-allocation SVG object pooling, interactive control buttons, and cross-tab immune continuity. All automated tests pass with 100% success rate.
 
 ## 5. Verification Method
+To independently verify Milestone 2:
 
-### 1. Syntax Validation
-```bash
-node -c fiddler-crab/fiddler-crab.js
-node -e "
-const fs = require('fs');
-const html = fs.readFileSync('pepperedMoth/index.html', 'utf8');
-const scriptMatches = html.match(/<script>([\s\S]*?)<\/script>/gi);
-const vm = require('vm');
-for (const match of scriptMatches) {
-    const code = match.replace(/<\/?script>/gi, '');
-    new vm.Script(code);
-}
-console.log('All JS syntax validations passed!');
-"
-```
+1. Run the Python Milestone 2 E2E test:
+   ```powershell
+   & "C:\Users\user\miniconda3\python.exe" tests/test_microdefend_e2e.py --milestone 2
+   ```
+   Expected: 13/13 tests run, 13 passed, 0 failures, 0 errors (`OK`).
 
-### 2. In-Browser Verification
-Run headless Chromium against local server:
-```bash
-python3 -c "
-import http.server, socketserver, threading, subprocess, time, os
+2. Run the Python full E2E test suite:
+   ```powershell
+   & "C:\Users\user\miniconda3\python.exe" tests/test_microdefend_e2e.py
+   ```
+   Expected: 15/15 tests run, 15 passed, 0 failures, 0 errors (`OK`).
 
-PORT = 8097
-DIRECTORY = '/home/pancala/Documents/chihhsiangchien.github.io'
+3. Run the Headless Chrome CDP Milestone 2 test runner:
+   ```powershell
+   & "C:\Users\user\AppData\Local\ms-playwright-go\1.57.0\node.exe" tests/test_cdp_e2e.js --milestone 2
+   ```
+   Expected: 16/16 checks passed (100%), 0 uncaught exceptions, 0 console errors.
 
-class TestHandler(http.server.SimpleHTTPRequestHandler):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=DIRECTORY, **kwargs)
+4. Run the Headless Chrome CDP full test runner:
+   ```powershell
+   & "C:\Users\user\AppData\Local\ms-playwright-go\1.57.0\node.exe" tests/test_cdp_e2e.js
+   ```
+   Expected: 17/17 checks passed (100%), 0 uncaught exceptions, 0 console errors.
 
-    def do_GET(self):
-        if self.path == '/run-tests':
-            self.send_response(200)
-            self.send_header('Content-Type', 'text/html; charset=utf-8')
-            self.end_headers()
-            html = '''<!DOCTYPE html>
-<html><body><iframe id=\"targetFrame\" style=\"width:800px; height:600px;\"></iframe><script>
-async function run() {
-    const iframe = document.getElementById('targetFrame');
-    iframe.src = '/pepperedMoth/index.html';
-    await new Promise(r => iframe.onload = r);
-    await new Promise(r => setTimeout(r, 500));
-    const mDoc = iframe.contentDocument;
-    const mWin = iframe.contentWindow;
-    mDoc.getElementById('startSimulationBtn').click();
-    await new Promise(r => setTimeout(r, 400));
-    console.log('VERIFY: pepperedMoth chart type =', mWin.chart.config.type);
-    console.log('VERIFY: pepperedMoth chart datasets =', mWin.chart.data.datasets.length);
-    console.log('VERIFY: pepperedMoth timer active =', !mDoc.getElementById('predatorTimerBadge').classList.contains('hidden'));
-    iframe.src = '/fiddler-crab/index.html';
-    await new Promise(r => iframe.onload = r);
-    await new Promise(r => setTimeout(r, 800));
-    const cDoc = iframe.contentDocument;
-    const cWin = iframe.contentWindow;
-    cWin.fiddlerCrabGame.endGame('predator');
-    console.log('VERIFY: fiddlerCrab modal display =', cDoc.getElementById('game-over').style.display);
-    console.log('VERIFY: fiddlerCrab cause =', cDoc.getElementById('game-over-cause').textContent);
-    console.log('ALL VERIFICATIONS COMPLETED SUCCESSFULLY');
-}
-window.onload = run;
-</script></body></html>'''
-            self.wfile.write(html.encode('utf-8'))
-        else:
-            super().do_GET()
-
-socketserver.TCPServer.allow_reuse_address = True
-server = socketserver.TCPServer(('', PORT), TestHandler)
-threading.Thread(target=server.serve_forever, daemon=True).start()
-
-proc = subprocess.Popen([
-    'chromium', '--headless', '--disable-gpu', '--no-sandbox',
-    '--use-gl=angle', '--use-angle=swiftshader',
-    '--enable-logging=stderr',
-    f'http://localhost:{PORT}/run-tests'
-], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-
-time.sleep(6)
-proc.terminate()
-out, err = proc.communicate()
-server.shutdown()
-for line in err.splitlines():
-    if 'VERIFY:' in line or 'COMPLETED' in line:
-        print(line)
-"
-```
-
-### 3. Invalidation Conditions
-- `chart.config.type` in `pepperedMoth` is not `'line'`.
-- Direction buttons leave `buttonVx` or `buttonVz` non-zero after pointer release outside.
-- Settlement modal does not display formatted minutes and seconds or does not distinguish predator vs starvation deaths.
+5. Invalidation conditions:
+   - Any test failure in either test runner.
+   - Any console error or unhandled runtime JavaScript exception during Tab 3 simulation or tab switching.
+   - Failure of the terminal bicuspid valve to prevent retrograde blood flow or lack of endothelial wall cells with elongated nuclei matching Page 1.

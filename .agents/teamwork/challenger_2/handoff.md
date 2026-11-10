@@ -1,122 +1,204 @@
-# Challenger 2 Handoff Report: Empirical Adversarial Stress Verification
+# Milestone 5 Challenger 2 Verification & Adversarial Invariant Audit Report
 
-- **Module**: `neuro_physiology/receptors.html` (Five Sensory Receptors Conduction Simulator / 五大感覺受器動態傳導模擬器)
-- **Role**: `teamwork_challenger` (empirical_challenger)
-- **Date**: 2026-11-09
-- **Binary Verdict**: **VERDICT: APPROVE**
+**Date**: 2026-11-10T02:10:00Z  
+**Agent**: Challenger 2 (`teamwork_challenger`)  
+**Scope**: Milestone 5 Biological & Spatial Invariant Verification (MicroDefend Tabs 1–4)  
+**Target Repository**: `microDefend/index.html`, `microDefend/script.js`, `microDefend/style.css`  
+**Automated Suites**: `tests/test_challenger2_invariants.py`, `tests/test_challenger2_cdp.js`, `tests/test_microdefend_e2e.py`, `tests/test_cdp_e2e.js`  
+**Verdict**: `REQUEST_CHANGES`
 
 ---
 
 ## 1. Observation
 
-Direct empirical observations obtained via executing test commands and examining file artifacts:
+### Invariant 1: Spatial Continuity & Flow Vectors (Page 1 Exit ↔ Page 2 Entrance)
+* **DOM Path Verification**:
+  * Page 1 capillary exit path (`#lymph-capillary-lumen`):
+    `d="M 1000 248 C 940 248, 900 256, 868 268 C 900 280, 940 288, 1000 288 Z"`
+    Boundary at `x = 1000`: `min_y = 248.0`, `max_y = 288.0`, `center_y = 268.0`, `height = 40.0px`.
+  * Page 2 primary afferent inlet path (`#afferent-inlet-primary`):
+    `d="M 0 248 C 40 248, 80 252, 130 256 L 130 280 C 80 284, 40 288, 0 288 Z"`
+    Boundary at `x = 0`: `min_y = 248.0`, `max_y = 288.0`, `center_y = 268.0`, `height = 40.0px`.
+  * **Empirical delta**: `delta_y = |268.0 - 268.0| = 0.0px <= 0.5px` (PASS).
+  * **Flow Vector Matching**:
+    * Page 1 particles exit with rightward velocity `vx in [1.9, 2.3]` (`vx > 0`) and asymptotic vertical dampening `(LYMPH_VESSEL_Y - b.y) * 0.05` converging to `y = 268.0` (`vy -> 0`).
+    * Page 2 particles enter at `x = 0`, `y = 268 ± offset` with initial rightward velocity `vx in [2.0, 2.2]` (`vx > 0`) and `vy = 0`.
+  * **Visual Styling**: Both vessels use stroke `#10b981`, stroke-width `1.8`, stroke-dasharray `6,3`, and fill `rgba(16, 185, 129, 0.18)` (PASS).
 
-1. **Baseline E2E Test Suite Execution**:
-   - Command: `python -m unittest tests/test_receptors_conduction.py`
-   - Result:
-     ```
-     Ran 30 tests in 4.002s
-     OK
-     ```
-   - 30 / 30 tests passed (100.0% success rate), including:
-     - 5 sensory receptor tabs and localized Chinese terminology (視覺, 聽覺, 嗅覺, 味覺, 皮膚).
-     - Canonical 4-stage conduction process (刺激 ➔ 受器 ➔ 神經 ➔ 腦).
-     - Playback controls (Play/Pause, timeline scrubber, single-step forward/backward, speed multipliers `0.5x`, `1.0x`, `1.5x`, `2.0x`).
-     - Node.js VM runtime execution and Canvas 2D render cycle without uncaught exceptions.
-     - Bidirectional navigation links between `neuro_physiology/index.html` and `neuro_physiology/receptors.html`.
-     - Root `index.html` mounting under `神經與感覺` (`line 163`).
+### Invariant 2: Venous Valve Anti-Reflux & RBC Retrograde Deflection
+* **Bicuspid Valve Kinematics**:
+  * Valve leaflets dynamically interpolate between pulse (`k = 1.0`, aperture `gap = 34px`) and rest (`k = 0.2`).
+  * Under venous backpressure (`tab3State.backpressureMode = true`), `targetValveOpenness = 0.0`, closing leaflets to `yuTip = 263.0` and `ylTip = 267.0`, with `#valve-seal-line` active at opacity `0.95`.
+* **RBC Collision Deflection**:
+  * Collision boundary in `script.js` lines 7060-7065:
+    `if (rbc.x > 468 && rbc.x < 500 && rbc.y > 245 && rbc.y < 285) { rbc.x = 502; rbc.vx = Math.abs(rbc.vx) + 2.5; rbc.vy = (rbc.y < 265) ? -2.2 : 2.2; }`
+  * Monte Carlo simulation of 1,000 frames (95 RBCs) and direct adversarial injection of 10,000 hostile retrograde RBCs (`vx < 0`):
+    * 100% of colliding RBCs are deflected to `x >= 502` with forward velocity `vx > 0`.
+    * Retrograde reflux into thoracic duct (`x <= 475, y in [245, 285]`): **0 out of 10,000 (0.00%)** (PASS).
 
-2. **Challenger 2 Empirical Stress Test Suite Execution**:
-   - Command: `python -m unittest tests/test_challenger2_stress.py`
-   - Result:
-     ```
-     Ran 11 tests in 4.021s
-     OK
-     ```
-   - Tested areas:
-     - `test_seek_extreme_and_malformed_fuzzing`: 31 malicious, boundary, and non-numeric inputs (`-1e9`, `1e9`, `NaN`, `Infinity`, `-Infinity`, `null`, `undefined`, `{}`, `[]`, strings) evaluated in Node.js VM. All inputs were safely sanitized into $[0.0, 1.0]$ with 0 unhandled exceptions.
-     - `test_set_speed_fuzzing`: 27 boundary, zero, negative, and extreme inputs (`-100`, `0`, `0.0001`, `100`, `NaN`, `Infinity`, `fast`). All outputs were bounded within $[0.2, 3.0]$ with 0 errors.
-     - `test_rapid_play_pause_toggles`: 5,000 continuous `togglePlayPause()` invocations; verified exact parity preservation and zero state desynchronization.
-     - `test_step_next_and_step_prev_boundary_stress`: 1,000 randomized floating-point starting positions in $[0.0, 1.0]$; 0 invalid progress bounds or NaN drift.
-     - `test_all_five_receptors_dense_sampling_strict_canvas`: 1,000 timepoints ($T \in [0.0, 1.0]$, step 0.005) rendered across all 5 receptors on a strict Canvas 2D mock that throws `IndexSizeError` on negative arc radii. 0 exceptions thrown; 10,000+ valid arc calls executed.
-     - `test_phase_boundaries_exact_sampling`: 12 exact boundary timepoints ($\{0.0, 0.25, 0.50, 0.80, 1.0\} \pm 10^{-6}$) across all 5 receptors; 0 crashes.
-     - `test_rapid_receptor_switching_under_active_animation`: 1,000 rapid receptor tab switches while calling `controller.update()` and `renderer.render()`; 0 exceptions.
-     - `test_all_relative_links_resolve_on_disk`: All 4 relative `<a>` links in `receptors.html` (`index.html`, `../index.html`, `../neural_pathway/index.html`, `../action_potential/index.html`) resolve to real files on disk with 0 broken links.
+### Invariant 3: Bone Marrow Mobilization & LLPC Continuous Basal IgG Production
+* **LLPC Continuous Basal Synthesis**:
+  * 5 LLPCs placed at `(345, 355), (390, 365), (365, 395), (425, 380), (410, 415)`.
+  * Every `threshold = 28` simulation ticks, each LLPC continuously emits a gold `#fbbf24` IgG antibody into marrow parenchyma, migrating to Pore 3 (`x=435, y=281`) and entering sinusoidal blood stream at `vx = 4.2`.
+  * In live CDP headless Chrome, 23 basal antibodies were rendered within 1.5 seconds without user intervention (PASS).
+* **CRITICAL DEFECT OBSERVED in Neutrophil Storage Pool Mobilization & B Cell Intravasation**:
+  * In `microDefend/script.js` lines 8063-8084:
+    ```javascript
+    } else if (sn.mobilized) {
+        // Moving toward transcellular pores: Pore 2 (x: 642, y: 272) or Pore 4 (x: 798, y: 275)
+        const targetPoreX = (sn.origX < 730) ? 642 : 798;
+        const targetPoreY = (sn.origX < 730) ? 272 : 275;
+        const dx = targetPoreX - sn.x;
+        const dy = targetPoreY - sn.y;
+        const dist = Math.hypot(dx, dy);
 
-3. **Challenger 1 Stress Suite Execution**:
-   - Command: `python -m unittest tests/test_challenger_receptors_stress.py`
-   - Result:
-     ```
-     Ran 4 tests in 11.494s
-     OK
-     ```
+        if (dist > 8) {
+            sn.x += (dx / dist) * 1.6 * simSpeed;
+            sn.y += (dy / dist) * 1.6 * simSpeed;
+        } else {
+            // Squeezing through pore with hourglass waist
+            sn.squeezing = true;
+            sn.angle = Math.atan2(dy, dx);
+            sn.x += 0.4 * simSpeed;
+            sn.y += 0.8 * simSpeed;
+            if (sn.y >= targetPoreY + 12) {
+                sn.squeezing = false;
+                sn.inSinusoid = true;
+            }
+        }
+    }
+    ```
+  * In live headless Chrome execution (`tests/monitor_neutro_live.js`), 24 mobilized neutrophils were tracked across 12 continuous seconds at 2.0x speed:
+    * At $T = 1\text{s}$ through $T = 12\text{s}$, `activeCount = 72`, `strokeBlue = 24`.
+    * All 24 mobilized neutrophils remained trapped vibrating at `translate(801, 281)` indefinitely.
+    * Exactly **0 neutrophils ever completed intravasation** into `#p4-sinusoid-blood-layer` (`intravasated = 0`).
+  * Identical defect confirmed in B cell development at `script.js` lines 7995-8016 (`targetY = 225`, exit condition `bc.y >= 242`, but `dist > 6` pulls `bc` back before reaching 242; `bc.inSinusoid` is never reached).
 
-4. **Adversarial Edge-Case Discovery (Empirical Characterization)**:
-   - *Test*: `test_skin_receptor_negative_t_index_size_error_characterization`
-   - *Observation*: Direct injection of negative $T$ (e.g. $T = -0.7$) into `drawStimulusSource(ctx, 'skin', ...)` at line 1052:
-     ```javascript
-     ctx.arc(x2 - 15, cy, k * 10 + (T * 20) % 15, -Math.PI * 0.4, Math.PI * 0.4);
-     ```
-     For $k = 1$: $( -0.7 \times 20 ) \% 15 = -14$.
-     Radius evaluates to $10 + (-14) = -4$, triggering:
-     `IndexSizeError: radius is negative: -4`.
-   - *Trigger Conditions Analysis*: In normal application runtime, `controller.seek()` strictly clamps $T \in [0.0, 1.0]$, the HTML range input slider has `min="0" max="1000"`, and browser `requestAnimationFrame` supplies monotonic timestamps. Thus, $T < 0$ is prevented at all user-facing entry points.
-   - *Recommendation for future defense-in-depth*: In `neuro_physiology/receptors.html` line 1052, wrap with `Math.max(1, k * 10 + (T * 20) % 15)`, and in `controller.update(now)` guard `deltaMs` with `Math.max(0, deltaMs)`.
-
-5. **Static Site Integrity Check**:
-   - Command: `python check_unlinked_projects.py`
-   - Result: `neuro_physiology` is properly linked from root `index.html`. Zero 404 links.
+### Invariant 4: Cross-Tab State Continuity via `sharedImmuneState`
+* `sharedImmuneState.afferentQueue` (Page 1 -> Page 2) and `sharedImmuneState.efferentQueue` (Page 2 -> Page 3) maintain pure FIFO semantics.
+* Tested with 10,000 mixed enqueue/dequeue events: 100% data integrity, zero object prototype contamination, zero cross-tab state leakage (PASS).
 
 ---
 
 ## 2. Logic Chain
 
-1. **From Observation 1**: The primary E2E test suite `test_receptors_conduction.py` achieves 100% pass rate (30/30) covering all functional requirements (F1 through F12), DOM elements, playback controls, curriculum terminology, and bidirectional links.
-2. **From Observation 2**: The dedicated adversarial test suite `test_challenger2_stress.py` systematically fuzzed state transitions, numerical boundaries, extreme inputs, and strict canvas mock rendering:
-   - Fuzzing 31 malformed inputs to `seek()` demonstrated that `Math.max(0.0, Math.min(1.0, num))` effectively neutralizes non-numeric and out-of-range values.
-   - Fuzzing 27 inputs to `setSpeed()` verified that invalid or non-positive speeds revert safely to `1.0x` and remain clamped in $[0.2, 3.0]$.
-   - 5,000 rapid toggle cycles and 1,000 rapid tab switch cycles confirmed zero DOM race conditions, memory leaks, or unhandled exceptions.
-   - Dense sampling across 1,000 timepoints on a strict Canvas mock proved that within the standard $[0.0, 1.0]$ timeline, no negative arc radii or math invalidities occur.
-3. **From Observation 3 & 4**: An edge case where $T < 0$ can cause a negative radius in skin receptor drawing was empirically identified and characterized. However, because all entry points (`seek()`, `stepNext()`, `stepPrev()`, `reset()`, slider `min="0"`) clamp $T \ge 0.0$, this failure mode cannot be triggered by normal or edge-case user actions.
-4. **From Observation 5**: Bidirectional navigation is verified: `neuro_physiology/index.html` contains an accessible pill link to `receptors.html`, and repository root `index.html` mounts `neuro_physiology/receptors.html` under `神經與感覺`. All target files exist on disk with zero broken links.
-5. **Conclusion Formulation**: The simulator is robust, deterministically bounded, responsive, fully self-contained, and compliant with all functional and educational requirements.
+1. **Premise**: Invariant 3 requires that when acute mobilization is triggered, neutrophils in the storage pool must be mobilized and enter sinusoidal circulation to combat infection.
+2. **Observation**: Lines 8063-8084 govern the movement of mobilized neutrophils. The cell initially travels toward `(targetPoreX, targetPoreY)`.
+3. **Transition to Squeezing**: When the Euclidean distance `dist = hypot(targetPoreX - sn.x, targetPoreY - sn.y) <= 8`, the code enters the `else` branch, setting `sn.squeezing = true` and incrementing `sn.y += 0.8 * simSpeed`.
+4. **Distance Re-evaluation Trap**:
+   - The exit condition requires `sn.y >= targetPoreY + 12`.
+   - However, as soon as `sn.y > targetPoreY + 8`, the distance `dist = hypot(dx, dy) >= 8.01 > 8`.
+   - Because line 8071 checks `if (dist > 8)` without checking `if (!sn.squeezing)`, the control flow re-enters the `if (dist > 8)` branch on the very next frame.
+   - In that branch, `dy = targetPoreY - sn.y` is negative because `sn.y > targetPoreY`.
+   - Therefore, `(dy / dist) * 1.6` is negative, which decrements `sn.y` and pulls the neutrophil backwards into the pore!
+5. **Harmonic Trap**:
+   - As `sn.y` is pulled backward, `dist` drops below 8 again, so the code enters the `else` branch and increments `sn.y`.
+   - This creates an inescapable infinite oscillation loop around `y ≈ targetPoreY + 8.0`.
+   - The condition `sn.y >= targetPoreY + 12` is mathematically impossible to reach under this logic.
+6. **Cascading Failure**:
+   - `sn.inSinusoid` remains `false` forever.
+   - Mobilized neutrophils never enter sinusoidal blood flow (`sn.x` outflow never occurs).
+   - Because cells never leave the storage pool, `tab4State.storagePool.length` never drops below 50, which permanently prevents the replenishment mechanism (line 8095) from ever activating.
+   - Mature B cells in lines 7995-8016 suffer from the exact same harmonic distance trap at Pore 1 (`targetY = 225`, exit at `242`, gated by `dist > 6`).
+7. **Conclusion**: Invariant 3 is broken for cellular intravasation. Remediation is required before milestone approval.
 
 ---
 
 ## 3. Caveats
 
-- **Hardware-accelerated mobile GPU performance**: Automated headless testing ran in a Node.js synthetic DOM and Chromium environment. Actual physical mobile device frame rates will depend on client GPU capabilities, though 2D vector canvas rendering and particle counts (40 background particles) are deliberately lightweight and CPU-friendly.
-- **Negative T Edge Case**: While unreachable through normal UI interactions, defensive clamping (`Math.max(1, ...)`) on the skin stimulus arc is recommended for future hardening if third-party scripts invoke internal rendering methods directly.
+* Invariant 1 (Spatial Continuity), Invariant 2 (Venous Valve Anti-Reflux), and Invariant 4 (Cross-Tab State Continuity) are fully intact, verified both mathematically and in headless Chrome CDP.
+* LLPC basal IgG antibody synthesis in Invariant 3 functions correctly (antibodies transition to `inSinusoid = true` immediately upon reaching `dist <= 6` at line 8166 without the intermediate oscillation trap).
+* The flaw is strictly localized to the two-phase pore transit state machines for neutrophils (lines 8063-8084) and B cells (lines 7995-8016) in `microDefend/script.js`.
 
 ---
 
-## 4. Conclusion
+## 4. Conclusion & Required Remediation
 
-The Five Sensory Receptors Conduction Simulator (`neuro_physiology/receptors.html`) satisfies 100% of the acceptance criteria defined in `ORIGINAL_REQUEST.md` and `PROJECT.md`. It has withstood extensive empirical fuzzing, stress testing, and boundary checks.
+### Explicit Verdict
+**`VERDICT: REQUEST_CHANGES`**
 
-**VERDICT: APPROVE**
+### Required Code Fixes (for Implementation Workers):
+1. **Fix Neutrophil Pore Transit State Machine (`microDefend/script.js` lines 8063-8084)**:
+   Ensure that once `sn.squeezing` is true, the cell continues its transendothelial transit until `sn.y >= targetPoreY + 12`, without re-evaluating entry distance:
+   ```javascript
+   } else if (sn.mobilized) {
+       if (sn.squeezing) {
+           const targetPoreY = (sn.origX < 730) ? 272 : 275;
+           sn.x += 0.4 * simSpeed;
+           sn.y += 0.8 * simSpeed;
+           if (sn.y >= targetPoreY + 12) {
+               sn.squeezing = false;
+               sn.inSinusoid = true;
+           }
+       } else {
+           const targetPoreX = (sn.origX < 730) ? 642 : 798;
+           const targetPoreY = (sn.origX < 730) ? 272 : 275;
+           const dx = targetPoreX - sn.x;
+           const dy = targetPoreY - sn.y;
+           const dist = Math.hypot(dx, dy);
+
+           if (dist > 8) {
+               sn.x += (dx / dist) * 1.6 * simSpeed;
+               sn.y += (dy / dist) * 1.6 * simSpeed;
+           } else {
+               sn.squeezing = true;
+               sn.angle = Math.atan2(dy, dx);
+               sn.x += 0.4 * simSpeed;
+               sn.y += 0.8 * simSpeed;
+           }
+       }
+   }
+   ```
+
+2. **Fix B Cell Pore Transit State Machine (`microDefend/script.js` lines 7995-8017)**:
+   Apply the identical state separation so `bc.squeezing` completes transit through Pore 1 into `bc.inSinusoid`:
+   ```javascript
+   } else if (bc.squeezing) {
+       bc.x += 0.35 * simSpeed;
+       bc.y += 0.45 * simSpeed;
+       if (bc.y >= 242) {
+           bc.squeezing = false;
+           bc.inSinusoid = true;
+           spawnP4Label(bc.x, bc.y - 14, "成熟B細胞跨內皮出髓 ➔ 巡邏全身！", "#fb923c");
+       }
+   } else {
+       const targetX = 358;
+       const targetY = 225;
+       const dx = targetX - bc.x;
+       const dy = targetY - bc.y;
+       const dist = Math.hypot(dx, dy);
+
+       if (dist > 6) {
+           bc.x += (dx / dist) * 0.42 * simSpeed;
+           bc.y += (dy / dist) * 0.42 * simSpeed;
+       } else {
+           bc.squeezing = true;
+           bc.angle = Math.atan2(dy, dx);
+           bc.x += 0.35 * simSpeed;
+           bc.y += 0.45 * simSpeed;
+       }
+   }
+   ```
 
 ---
 
 ## 5. Verification Method
 
-To independently reproduce and verify this report, execute the following commands in the project root:
+To independently reproduce this finding and verify any subsequent fix:
 
-```bash
-# 1. Run the primary 30-test E2E verification suite
-python -m unittest tests/test_receptors_conduction.py
+1. **Execute Python Invariant Suite**:
+   ```powershell
+   & "C:\Users\user\miniconda3\python.exe" tests/test_challenger2_invariants.py
+   ```
+   * *Invalidation Condition*: When properly fixed, `test_identify_pore_intravasation_oscillation_flaw` should be updated or complemented by an intravasation success test demonstrating `intravasated_count > 15`.
 
-# 2. Run the Challenger 2 adversarial stress test suite
-python -m unittest tests/test_challenger2_stress.py
+2. **Execute Headless Chrome CDP Live Browser Suite**:
+   ```powershell
+   & "C:\Users\user\AppData\Local\ms-playwright-go\1.57.0\node.exe" tests/test_challenger2_cdp.js
+   ```
 
-# 3. Run the Challenger 1 stress test suite
-python -m unittest tests/test_challenger_receptors_stress.py
-
-# 4. Run repository static integrity check
-python check_unlinked_projects.py
-```
-
-**Invalidation conditions**:
-- Any test failure in `test_receptors_conduction.py` or `test_challenger2_stress.py`.
-- Any unhandled `Uncaught Error` or `IndexSizeError` appearing in the browser developer console during normal playback ($T \in [0.0, 1.0]$).
-- Any broken link between `neuro_physiology/index.html`, `receptors.html`, and root `index.html`.
+3. **Execute Baseline E2E Suites**:
+   ```powershell
+   & "C:\Users\user\miniconda3\python.exe" -m unittest tests/test_microdefend_e2e.py
+   & "C:\Users\user\AppData\Local\ms-playwright-go\1.57.0\node.exe" tests/test_cdp_e2e.js
+   ```

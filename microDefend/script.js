@@ -1,4 +1,13 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // ==========================================
+    // Multi-Tab Navigation & Shared Immune Pipeline
+    // ==========================================
+    let currentTab = 'tab-1';
+    const sharedImmuneState = {
+        afferentQueue: [], // Page 1 exit -> Page 2 afferent inlet
+        efferentQueue: []  // Page 2 efferent -> Page 3 venous confluence
+    };
+
     const svg = document.getElementById('inflammation-viz');
     const viewportGroup = document.getElementById('viewport-group');
     const vizContainer = document.getElementById('viz-container');
@@ -427,7 +436,13 @@ document.addEventListener('DOMContentLoaded', () => {
     let clickWorldY = 0;
 
     function updateTransform() {
-        viewportGroup.setAttribute('transform', `matrix(${scale} 0 0 ${scale} ${panX} ${panY})`);
+        if (viewportGroup) viewportGroup.setAttribute('transform', `matrix(${scale} 0 0 ${scale} ${panX} ${panY})`);
+        const lnVp = document.getElementById('ln-viewport-group');
+        if (lnVp) lnVp.setAttribute('transform', `matrix(${scale} 0 0 ${scale} ${panX} ${panY})`);
+        const p3Vp = document.getElementById('p3-viewport-group');
+        if (p3Vp) p3Vp.setAttribute('transform', `matrix(${scale} 0 0 ${scale} ${panX} ${panY})`);
+        const p4Vp = document.getElementById('p4-viewport-group');
+        if (p4Vp) p4Vp.setAttribute('transform', `matrix(${scale} 0 0 ${scale} ${panX} ${panY})`);
     }
 
     vizContainer.addEventListener('mousedown', (e) => {
@@ -2548,9 +2563,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ==========================================
-    // 10. Main Animation Step & Loop
+    // 10. Main Animation Step & Loop (Page 1: Tissue Microcirculation)
     // ==========================================
-    function stepSimulation() {
+    function stepPage1Simulation() {
         const simNowMs = Date.now();
 
         // Reset zero-allocation SVG pools for this frame
@@ -3648,6 +3663,9 @@ document.addEventListener('DOMContentLoaded', () => {
                             if (statLymphPill) statLymphPill.style.display = 'inline-flex';
                             updateLog("🧪 <strong>【細菌隨淋巴液引流至局部淋巴結】</strong>游離細菌沖入引流淋巴結！被膜下竇巨噬細胞展開抗原過濾，啟動淋巴結免疫應答！");
                         }
+                        if (sharedImmuneState && sharedImmuneState.afferentQueue) {
+                            sharedImmuneState.afferentQueue.push({ type: 'bacteria' });
+                        }
                         bacteria.splice(i, 1);
                         continue;
                     }
@@ -3870,6 +3888,9 @@ document.addEventListener('DOMContentLoaded', () => {
                             lymphNodeState.timer = 0;
                             if (statLymphPill) statLymphPill.style.display = 'inline-flex';
                             updateLog("🧪 <strong>【病毒隨淋巴液引流至局部淋巴結】</strong>游離病毒微粒流入引流淋巴結！啟動淋巴結免疫應答！");
+                        }
+                        if (sharedImmuneState && sharedImmuneState.afferentQueue) {
+                            sharedImmuneState.afferentQueue.push({ type: 'virus' });
                         }
                         freeViruses.splice(i, 1);
                         continue;
@@ -4821,6 +4842,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 w.r = Math.max(3.5, w.r * 0.985); // Natural fluid entry scaling
 
                 if (w.alpha <= 0.05 || w.x >= 995) {
+                    if (sharedImmuneState && sharedImmuneState.afferentQueue) {
+                        sharedImmuneState.afferentQueue.push({ type: 'apc', antigenType: w.antigenType || 'bacteria' });
+                    }
                     activeTissueWBCs.splice(i, 1);
                     continue;
                 }
@@ -5035,6 +5059,27 @@ document.addEventListener('DOMContentLoaded', () => {
         finalizeAllSvgPools();
         updateStats();
     }
+
+    // ==========================================
+    // Master Animation Loop & Tab Simulation Gating
+    // ==========================================
+    function masterAnimationLoop() {
+        if (currentTab === 'tab-1') {
+            stepPage1Simulation();
+        } else if (currentTab === 'tab-2') {
+            stepPage2Simulation();
+        } else if (currentTab === 'tab-3') {
+            stepPage3Simulation();
+        } else if (currentTab === 'tab-4') {
+            stepPage4Simulation();
+        }
+    }
+
+    function stepSimulation() {
+        masterAnimationLoop();
+    }
+
+    // stepPage3Simulation and stepPage4Simulation are implemented in Page 3 & Page 4 modules below
 
     function animate() {
         animationId = requestAnimationFrame(animate);
@@ -5318,8 +5363,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (toggleLabelsCheckbox) {
         toggleLabelsCheckbox.addEventListener('change', () => {
+            const isChecked = toggleLabelsCheckbox.checked;
             const anatomyGroup = document.getElementById('anatomy-annotations');
-            if (anatomyGroup) anatomyGroup.style.display = toggleLabelsCheckbox.checked ? '' : 'none';
+            if (anatomyGroup) anatomyGroup.style.display = (isChecked && currentTab === 'tab-1') ? '' : 'none';
+            const lnAnn = document.getElementById('ln-annotations');
+            if (lnAnn) lnAnn.style.display = (isChecked && currentTab === 'tab-2') ? 'block' : 'none';
+            const p3Ann = document.getElementById('p3-annotations');
+            if (p3Ann) p3Ann.style.display = (isChecked && currentTab === 'tab-3') ? 'block' : 'none';
+            const p4Ann = document.getElementById('p4-annotations');
+            if (p4Ann) p4Ann.style.display = (isChecked && currentTab === 'tab-4') ? 'block' : 'none';
         });
     }
 
@@ -5400,6 +5452,2890 @@ document.addEventListener('DOMContentLoaded', () => {
         updateLog("🔄 <strong>模擬器已全面重置！</strong>創傷完全癒合，組織與血管恢復正常狀態。");
     });
 
+    // =========================================================================
+    // Multi-Tab Navigation & Viewport Switching Logic
+    // =========================================================================
+    function switchTab(targetTabId) {
+        if (!targetTabId) return;
+        currentTab = targetTabId;
+
+        // 1. Tab buttons active toggle
+        document.querySelectorAll('.tabs-nav .tab-btn').forEach(btn => {
+            const btnTab = btn.getAttribute('data-tab') || btn.id.replace('tab-btn-', 'tab-');
+            if (btnTab === targetTabId) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+
+        // 2. SVG scenes display toggle
+        const scenes = {
+            'tab-1': document.getElementById('inflammation-viz'),
+            'tab-2': document.getElementById('viz-tab-2'),
+            'tab-3': document.getElementById('viz-tab-3'),
+            'tab-4': document.getElementById('viz-tab-4')
+        };
+
+        const vizTab1Wrapper = document.getElementById('viz-tab-1');
+        if (vizTab1Wrapper) {
+            vizTab1Wrapper.style.display = (targetTabId === 'tab-1') ? 'block' : 'none';
+        }
+
+        for (const [id, scene] of Object.entries(scenes)) {
+            if (scene) {
+                const isActive = (id === targetTabId);
+                scene.style.display = isActive ? 'block' : 'none';
+                if (isActive) scene.classList.add('active');
+                else scene.classList.remove('active');
+            }
+        }
+
+        // 3. Control panels display toggle
+        for (let i = 1; i <= 4; i++) {
+            const panel = document.getElementById(`controls-tab-${i}`);
+            if (panel) {
+                panel.style.display = (targetTabId === `tab-${i}`) ? 'flex' : 'none';
+            }
+        }
+
+        // 4. Initialize Tab 2, 3 & 4 on first view
+        if (targetTabId === 'tab-2' && !tab2State.initialized) {
+            initTab2Simulation();
+        }
+        if (targetTabId === 'tab-3' && !tab3State.initialized) {
+            initTab3Simulation();
+        }
+        if (targetTabId === 'tab-4' && !tab4State.initialized) {
+            initTab4Simulation();
+        }
+
+        // 5. Update annotations display based on toggle-labels
+        const toggleLabels = document.getElementById('toggle-labels');
+        if (toggleLabels) {
+            const lnAnn = document.getElementById('ln-annotations');
+            if (lnAnn) lnAnn.style.display = (toggleLabels.checked && targetTabId === 'tab-2') ? 'block' : 'none';
+            const p3Ann = document.getElementById('p3-annotations');
+            if (p3Ann) p3Ann.style.display = (toggleLabels.checked && targetTabId === 'tab-3') ? 'block' : 'none';
+            const p4Ann = document.getElementById('p4-annotations');
+            if (p4Ann) p4Ann.style.display = (toggleLabels.checked && targetTabId === 'tab-4') ? 'block' : 'none';
+        }
+
+        // 6. Reset pan & zoom to center
+        scale = 1;
+        panX = 0;
+        panY = 0;
+        if (viewportGroup) viewportGroup.setAttribute('transform', 'matrix(1 0 0 1 0 0)');
+        const lnVp = document.getElementById('ln-viewport-group');
+        if (lnVp) lnVp.setAttribute('transform', 'matrix(1 0 0 1 0 0)');
+        const p3Vp = document.getElementById('p3-viewport-group');
+        if (p3Vp) p3Vp.setAttribute('transform', 'matrix(1 0 0 1 0 0)');
+        const p4Vp = document.getElementById('p4-viewport-group');
+        if (p4Vp) p4Vp.setAttribute('transform', 'matrix(1 0 0 1 0 0)');
+    }
+
+    function initTabNavigation() {
+        document.querySelectorAll('.tabs-nav .tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const targetTab = btn.getAttribute('data-tab') || btn.id.replace('tab-btn-', 'tab-');
+                switchTab(targetTab);
+            });
+        });
+    }
+
+    // =========================================================================
+    // Page 2: Draining Lymph Node (淋巴結專一性免疫反應) Simulation Module
+    // =========================================================================
+    const vizTab2 = document.getElementById('viz-tab-2');
+    const lnViewportGroup = document.getElementById('ln-viewport-group');
+    const lnDropletsLayer = document.getElementById('ln-fluid-droplets-layer');
+    const lnPathogensLayer = document.getElementById('ln-pathogens-layer');
+    const lnCellsLayer = document.getElementById('ln-cells-layer');
+    const lnSynapsesLayer = document.getElementById('ln-synapses-layer');
+    const lnAntibodiesLayer = document.getElementById('ln-antibodies-layer');
+    const lnFloatingLabelsLayer = document.getElementById('ln-floating-labels-layer');
+    const lnAnnotations = document.getElementById('ln-annotations');
+
+    // Tab 2 Simulation State
+    const tab2State = {
+        initialized: false,
+        droplets: [],
+        pathogens: [],
+        apcs: [],
+        helperTCells: [],
+        bCells: [],
+        plasmaCells: [],
+        antibodies: [],
+        synapses: [],
+        floatingLabels: [],
+        stepStage: 0,
+        dropletTimer: 0,
+        stats: {
+            apcsPresent: 0,
+            helperTActivated: 0,
+            bCellsCloned: 0,
+            antibodiesSecreting: 0
+        }
+    };
+
+    // Zero-allocation SVG Object Pools for Tab 2
+    const lnDropletPool = [];
+    let lnDropletCount = 0;
+    const lnPathogenPool = [];
+    let lnPathogenCount = 0;
+    const lnCellPool = [];
+    let lnCellCount = 0;
+    const lnAbPool = [];
+    let lnAbCount = 0;
+    const lnSynapsePool = [];
+    let lnSynapseCount = 0;
+    const lnLabelPool = [];
+    let lnLabelCount = 0;
+
+    function resetLnSvgPools() {
+        lnDropletCount = 0;
+        lnPathogenCount = 0;
+        lnCellCount = 0;
+        lnAbCount = 0;
+        lnSynapseCount = 0;
+        lnLabelCount = 0;
+    }
+
+    function finalizeLnSvgPools() {
+        for (let i = lnDropletCount; i < lnDropletPool.length; i++) lnDropletPool[i].style.display = 'none';
+        for (let i = lnPathogenCount; i < lnPathogenPool.length; i++) lnPathogenPool[i].el.style.display = 'none';
+        for (let i = lnCellCount; i < lnCellPool.length; i++) lnCellPool[i].el.style.display = 'none';
+        for (let i = lnAbCount; i < lnAbPool.length; i++) lnAbPool[i].style.display = 'none';
+        for (let i = lnSynapseCount; i < lnSynapsePool.length; i++) lnSynapsePool[i].style.display = 'none';
+        for (let i = lnLabelCount; i < lnLabelPool.length; i++) lnLabelPool[i].el.style.display = 'none';
+    }
+
+    // Pooled Element Renderers for Tab 2
+    function renderPooledLnDroplet(x, y, r, alpha) {
+        if (!lnDropletsLayer) return;
+        let c;
+        if (lnDropletCount < lnDropletPool.length) {
+            c = lnDropletPool[lnDropletCount];
+            c.style.display = '';
+        } else {
+            c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            c.setAttribute("fill", "#38bdf8");
+            lnDropletsLayer.appendChild(c);
+            lnDropletPool.push(c);
+        }
+        c.setAttribute("cx", x.toFixed(1));
+        c.setAttribute("cy", y.toFixed(1));
+        c.setAttribute("r", r.toFixed(1));
+        c.setAttribute("opacity", alpha.toFixed(2));
+        lnDropletCount++;
+    }
+
+    function renderPooledLnPathogen(p) {
+        if (!lnPathogensLayer) return;
+        let item;
+        if (lnPathogenCount < lnPathogenPool.length) {
+            item = lnPathogenPool[lnPathogenCount];
+            item.el.style.display = '';
+        } else {
+            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+            const circ = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            const ab1 = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            g.appendChild(rect);
+            g.appendChild(circ);
+            g.appendChild(ab1);
+            lnPathogensLayer.appendChild(g);
+            item = { el: g, rect, circ, ab1 };
+            lnPathogenPool.push(item);
+        }
+
+        item.el.setAttribute("transform", `translate(${p.x.toFixed(1)}, ${p.y.toFixed(1)}) rotate(${(p.angle * 57.3).toFixed(1)})`);
+        item.el.setAttribute("opacity", (p.alpha || 1).toFixed(2));
+
+        if (p.type === 'bacteria') {
+            item.rect.style.display = '';
+            item.circ.style.display = 'none';
+            item.rect.setAttribute("x", -8);
+            item.rect.setAttribute("y", -4);
+            item.rect.setAttribute("width", 16);
+            item.rect.setAttribute("height", 8);
+            item.rect.setAttribute("rx", 4);
+            item.rect.setAttribute("fill", p.opsonized ? "#15803d" : "#27ae60");
+            item.rect.setAttribute("stroke", p.opsonized ? "#fbbf24" : "#1e824c");
+            item.rect.setAttribute("stroke-width", p.opsonized ? "2" : "1.2");
+        } else {
+            item.rect.style.display = 'none';
+            item.circ.style.display = '';
+            item.circ.setAttribute("cx", 0);
+            item.circ.setAttribute("cy", 0);
+            item.circ.setAttribute("r", 5.5);
+            item.circ.setAttribute("fill", p.opsonized ? "#7e22ce" : "#8e44ad");
+            item.circ.setAttribute("stroke", p.opsonized ? "#fbbf24" : "#c084fc");
+            item.circ.setAttribute("stroke-width", p.opsonized ? "2" : "1.2");
+        }
+
+        if (p.opsonized) {
+            item.ab1.style.display = '';
+            item.ab1.setAttribute("d", "M 0 0 L 0 5 M 0 0 L -3 -4 M 0 0 L 3 -4");
+            item.ab1.setAttribute("stroke", "#fbbf24");
+            item.ab1.setAttribute("stroke-width", "1.6");
+            item.ab1.setAttribute("fill", "none");
+            item.ab1.setAttribute("transform", "translate(7, -5) scale(0.9)");
+        } else {
+            item.ab1.style.display = 'none';
+        }
+
+        lnPathogenCount++;
+    }
+
+    function renderPooledLnCell(cell) {
+        if (!lnCellsLayer) return;
+        let item;
+        if (lnCellCount < lnCellPool.length) {
+            item = lnCellPool[lnCellCount];
+            item.el.style.display = '';
+        } else {
+            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            const halo = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            const body = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            const nuc = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            const nuc2 = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            g.appendChild(halo);
+            g.appendChild(body);
+            g.appendChild(nuc);
+            g.appendChild(nuc2);
+            lnCellsLayer.appendChild(g);
+            item = { el: g, halo, body, nuc, nuc2 };
+            lnCellPool.push(item);
+        }
+
+        item.el.setAttribute("transform", `translate(${cell.x.toFixed(1)}, ${cell.y.toFixed(1)})`);
+        item.el.setAttribute("opacity", (cell.alpha || 1).toFixed(2));
+
+        if (cell.type === 'apc') {
+            // Migrating APC (MHC-II Antigen Presentation)
+            item.halo.style.display = '';
+            item.halo.setAttribute("cx", 0); item.halo.setAttribute("cy", 0);
+            item.halo.setAttribute("r", (cell.r + 4.5).toFixed(1));
+            item.halo.setAttribute("fill", "none");
+            item.halo.setAttribute("stroke", "#34d399");
+            item.halo.setAttribute("stroke-width", "1.6");
+            item.halo.setAttribute("stroke-dasharray", "3,2");
+
+            item.body.setAttribute("cx", 0); item.body.setAttribute("cy", 0);
+            item.body.setAttribute("r", cell.r.toFixed(1));
+            item.body.setAttribute("fill", "#a855f7");
+            item.body.setAttribute("stroke", "#34d399");
+            item.body.setAttribute("stroke-width", "1.5");
+
+            item.nuc.style.display = '';
+            item.nuc.setAttribute("cx", -2); item.nuc.setAttribute("cy", 0);
+            item.nuc.setAttribute("r", (cell.r * 0.45).toFixed(1));
+            item.nuc.setAttribute("fill", "#581c87");
+            item.nuc2.style.display = 'none';
+
+        } else if (cell.type === 'helperT') {
+            // Helper T Cell (CD4+)
+            if (cell.activated) {
+                item.halo.style.display = '';
+                item.halo.setAttribute("cx", 0); item.halo.setAttribute("cy", 0);
+                item.halo.setAttribute("r", (cell.r + 3.5).toFixed(1));
+                item.halo.setAttribute("fill", "rgba(52, 211, 153, 0.2)");
+                item.halo.setAttribute("stroke", "#34d399");
+                item.halo.setAttribute("stroke-width", "1.2");
+                item.halo.removeAttribute("stroke-dasharray");
+            } else {
+                item.halo.style.display = 'none';
+            }
+
+            item.body.setAttribute("cx", 0); item.body.setAttribute("cy", 0);
+            item.body.setAttribute("r", cell.r.toFixed(1));
+            item.body.setAttribute("fill", "#34d399");
+            item.body.setAttribute("stroke", "#059669");
+            item.body.setAttribute("stroke-width", "1.2");
+
+            item.nuc.style.display = '';
+            item.nuc.setAttribute("cx", 0); item.nuc.setAttribute("cy", 0);
+            item.nuc.setAttribute("r", (cell.r * 0.55).toFixed(1));
+            item.nuc.setAttribute("fill", "#047857");
+            item.nuc2.style.display = 'none';
+
+        } else if (cell.type === 'bcell') {
+            // B Cell in Follicle / Germinal Center
+            if (cell.sensitized) {
+                item.halo.style.display = '';
+                item.halo.setAttribute("cx", 0); item.halo.setAttribute("cy", 0);
+                item.halo.setAttribute("r", (cell.r + 4.0).toFixed(1));
+                item.halo.setAttribute("fill", "rgba(251, 146, 60, 0.25)");
+                item.halo.setAttribute("stroke", "#fb923c");
+                item.halo.setAttribute("stroke-width", "1.4");
+                item.halo.setAttribute("stroke-dasharray", "3,2");
+            } else {
+                item.halo.style.display = 'none';
+            }
+
+            item.body.setAttribute("cx", 0); item.body.setAttribute("cy", 0);
+            item.body.setAttribute("r", cell.r.toFixed(1));
+            item.body.setAttribute("fill", "#fb923c");
+            item.body.setAttribute("stroke", "#ea580c");
+            item.body.setAttribute("stroke-width", "1.2");
+
+            item.nuc.style.display = '';
+            item.nuc.setAttribute("cx", 0); item.nuc.setAttribute("cy", 0);
+            item.nuc.setAttribute("r", (cell.r * 0.55).toFixed(1));
+            item.nuc.setAttribute("fill", "#c2410c");
+            item.nuc2.style.display = 'none';
+
+        } else if (cell.type === 'plasma') {
+            // Plasma Cell in Medullary Cord (Vigorously secreting antibodies)
+            item.halo.style.display = '';
+            item.halo.setAttribute("cx", 0); item.halo.setAttribute("cy", 0);
+            item.halo.setAttribute("r", (cell.r + 4.5 + Math.sin(Date.now() * 0.008 + cell.x) * 2.0).toFixed(1));
+            item.halo.setAttribute("fill", "rgba(249, 115, 22, 0.2)");
+            item.halo.setAttribute("stroke", "#f97316");
+            item.halo.setAttribute("stroke-width", "1.6");
+            item.halo.removeAttribute("stroke-dasharray");
+
+            item.body.setAttribute("cx", 0); item.body.setAttribute("cy", 0);
+            item.body.setAttribute("r", cell.r.toFixed(1));
+            item.body.setAttribute("fill", "#fb923c");
+            item.body.setAttribute("stroke", "#f97316");
+            item.body.setAttribute("stroke-width", "1.8");
+
+            // Eccentric cartwheel nucleus & Golgi pale area
+            item.nuc.style.display = '';
+            item.nuc.setAttribute("cx", -3); item.nuc.setAttribute("cy", 0);
+            item.nuc.setAttribute("r", (cell.r * 0.48).toFixed(1));
+            item.nuc.setAttribute("fill", "#c2410c");
+
+            item.nuc2.style.display = '';
+            item.nuc2.setAttribute("cx", 3.2); item.nuc2.setAttribute("cy", -1);
+            item.nuc2.setAttribute("r", (cell.r * 0.24).toFixed(1));
+            item.nuc2.setAttribute("fill", "#fed7aa"); // Prominent Golgi zone
+        }
+
+        lnCellCount++;
+    }
+
+    function renderPooledLnAntibody(ab) {
+        if (!lnAntibodiesLayer) return;
+        let path;
+        if (lnAbCount < lnAbPool.length) {
+            path = lnAbPool[lnAbCount];
+            path.style.display = '';
+        } else {
+            path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            path.setAttribute("d", "M 0 0 L 0 6 M 0 0 L -4 -5 M 0 0 L 4 -5");
+            path.setAttribute("fill", "none");
+            lnAntibodiesLayer.appendChild(path);
+            lnAbPool.push(path);
+        }
+
+        path.setAttribute("transform", `translate(${ab.x.toFixed(1)}, ${ab.y.toFixed(1)}) rotate(${(ab.angle * 57.3).toFixed(1)}) scale(1.1)`);
+        path.setAttribute("stroke", ab.color || "#fbbf24");
+        path.setAttribute("stroke-width", "2.0");
+        path.setAttribute("opacity", (ab.alpha || 1).toFixed(2));
+        lnAbCount++;
+    }
+
+    function renderPooledLnSynapse(syn) {
+        if (!lnSynapsesLayer) return;
+        let c;
+        if (lnSynapseCount < lnSynapsePool.length) {
+            c = lnSynapsePool[lnSynapseCount];
+            c.style.display = '';
+        } else {
+            c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            c.setAttribute("fill", "none");
+            c.setAttribute("stroke", "#34d399");
+            c.setAttribute("stroke-width", "2");
+            c.setAttribute("stroke-dasharray", "2,2");
+            lnSynapsesLayer.appendChild(c);
+            lnSynapsePool.push(c);
+        }
+        c.setAttribute("cx", syn.x.toFixed(1));
+        c.setAttribute("cy", syn.y.toFixed(1));
+        c.setAttribute("r", syn.r.toFixed(1));
+        c.setAttribute("opacity", Math.max(0, syn.life / 75).toFixed(2));
+        lnSynapseCount++;
+    }
+
+    function renderPooledLnLabel(lbl) {
+        if (!lnFloatingLabelsLayer) return;
+        let item;
+        if (lnLabelCount < lnLabelPool.length) {
+            item = lnLabelPool[lnLabelCount];
+            item.el.style.display = '';
+        } else {
+            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+            const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+            text.setAttribute("font-size", "10");
+            text.setAttribute("font-weight", "600");
+            text.setAttribute("text-anchor", "middle");
+            text.setAttribute("fill", "#ffffff");
+            g.appendChild(rect);
+            g.appendChild(text);
+            lnFloatingLabelsLayer.appendChild(g);
+            item = { el: g, rect, text };
+            lnLabelPool.push(item);
+        }
+
+        item.text.textContent = lbl.text;
+        const textLen = lbl.text.length;
+        const w = textLen * 9.5 + 14;
+        item.rect.setAttribute("x", -w / 2);
+        item.rect.setAttribute("y", -11);
+        item.rect.setAttribute("width", w);
+        item.rect.setAttribute("height", 16);
+        item.rect.setAttribute("rx", 5);
+        item.rect.setAttribute("fill", lbl.bg || "rgba(15, 23, 42, 0.92)");
+        item.rect.setAttribute("stroke", lbl.border || "#10b981");
+        item.rect.setAttribute("stroke-width", "1");
+        item.text.setAttribute("y", 1);
+        item.el.setAttribute("transform", `translate(${lbl.x.toFixed(1)}, ${lbl.y.toFixed(1)})`);
+        item.el.setAttribute("opacity", Math.min(1, lbl.life / 20).toFixed(2));
+        lnLabelCount++;
+    }
+
+    // Helper to spawn a floating label on Tab 2
+    function spawnLnLabel(x, y, text, border, bg) {
+        tab2State.floatingLabels.push({
+            x, y, text,
+            border: border || '#10b981',
+            bg: bg || 'rgba(15, 23, 42, 0.92)',
+            life: 90
+        });
+    }
+
+    // Initialize Tab 2 Simulation Population
+    function initTab2Simulation() {
+        tab2State.initialized = true;
+        tab2State.droplets = [];
+        tab2State.pathogens = [];
+        tab2State.apcs = [];
+        tab2State.helperTCells = [];
+        tab2State.bCells = [];
+        tab2State.plasmaCells = [];
+        tab2State.antibodies = [];
+        tab2State.synapses = [];
+        tab2State.floatingLabels = [];
+        tab2State.stepStage = 0;
+
+        // 1. Resident Helper T cells in Paracortex
+        const tPositions = [
+            { x: 380, y: 200 }, { x: 420, y: 180 }, { x: 460, y: 220 },
+            { x: 410, y: 260 }, { x: 460, y: 280 }, { x: 490, y: 240 }
+        ];
+        tPositions.forEach((pos, idx) => {
+            tab2State.helperTCells.push({
+                id: `th-${idx}`,
+                type: 'helperT',
+                x: pos.x,
+                y: pos.y,
+                r: 7.8,
+                baseX: pos.x,
+                baseY: pos.y,
+                vx: 0,
+                vy: 0,
+                activated: false,
+                cytokineTimer: 0
+            });
+        });
+
+        // 2. Resident B cells in Cortical Follicles
+        const follicleCenters = [
+            { x: 280, y: 110, f: 0 }, { x: 220, y: 200, f: 1 },
+            { x: 220, y: 330, f: 2 }, { x: 280, y: 420, f: 3 }
+        ];
+        follicleCenters.forEach(fc => {
+            for (let b = 0; b < 2; b++) {
+                const angle = Math.random() * Math.PI * 2;
+                const dist = 6 + Math.random() * 16;
+                tab2State.bCells.push({
+                    type: 'bcell',
+                    follicleIndex: fc.f,
+                    x: fc.x + Math.cos(angle) * dist,
+                    y: fc.y + Math.sin(angle) * dist,
+                    baseX: fc.x,
+                    baseY: fc.y,
+                    r: 8.0,
+                    sensitized: false,
+                    cloneTimer: 0,
+                    cloned: false
+                });
+            }
+        });
+
+        // 3. Resident Plasma cells in Medullary Cords
+        const plasmaPositions = [
+            { x: 620, y: 210 }, { x: 660, y: 265 }, { x: 630, y: 305 }, { x: 710, y: 265 }
+        ];
+        plasmaPositions.forEach(pp => {
+            tab2State.plasmaCells.push({
+                type: 'plasma',
+                x: pp.x,
+                y: pp.y,
+                r: 10.5,
+                pulse: 0,
+                secreteTimer: Math.floor(Math.random() * 25)
+            });
+        });
+
+        // 4. Initial flowing fluid droplets across streams
+        for (let k = 0; k < 12; k++) {
+            tab2State.droplets.push({
+                x: 30 + k * 75,
+                y: 268 + (Math.random() - 0.5) * 16,
+                vx: 2.1,
+                vy: 0,
+                r: 2.7 + Math.random() * 0.5,
+                alpha: 0.8
+            });
+        }
+    }
+
+    // Step Tab 2 Simulation Frame
+    function stepPage2Simulation() {
+        if (!tab2State.initialized) initTab2Simulation();
+        const simNowMs = Date.now();
+        resetLnSvgPools();
+
+        // 1. Inflow from cross-tab afferent queue
+        if (sharedImmuneState.afferentQueue.length > 0) {
+            const incoming = sharedImmuneState.afferentQueue.shift();
+            if (incoming.type === 'apc') {
+                tab2State.apcs.push({
+                    type: 'apc',
+                    x: 0,
+                    y: 268 + (Math.random() - 0.5) * 10,
+                    targetX: 420 + (Math.random() - 0.5) * 60,
+                    targetY: 240 + (Math.random() - 0.5) * 60,
+                    r: 11.5,
+                    vx: 2.0,
+                    vy: 0,
+                    presented: false,
+                    antigenType: incoming.antigenType || 'bacteria'
+                });
+                spawnLnLabel(130, 240, "🏷️ APC呈現細胞進入主要輸入淋巴管", "#34d399");
+            } else if (incoming.type === 'bacteria' || incoming.type === 'pathogen') {
+                tab2State.pathogens.push({
+                    type: 'bacteria',
+                    x: 0,
+                    y: 268 + (Math.random() - 0.5) * 12,
+                    vx: 2.0 + Math.random() * 0.4,
+                    vy: 0,
+                    angle: Math.random() * 6.28,
+                    opsonized: false,
+                    alpha: 1
+                });
+            } else if (incoming.type === 'virus') {
+                tab2State.pathogens.push({
+                    type: 'virus',
+                    x: 0,
+                    y: 268 + (Math.random() - 0.5) * 12,
+                    vx: 2.2 + Math.random() * 0.4,
+                    vy: 0,
+                    angle: Math.random() * 6.28,
+                    opsonized: false,
+                    alpha: 1
+                });
+            }
+        }
+
+        // 2. Background Lymph Droplet Circulation
+        tab2State.dropletTimer += simSpeed;
+        if (tab2State.dropletTimer >= 14) {
+            tab2State.dropletTimer = 0;
+            // Spawn at primary inlet
+            tab2State.droplets.push({
+                x: 0,
+                y: 268 + (Math.random() - 0.5) * 18,
+                vx: 2.2,
+                vy: 0,
+                r: 2.8,
+                alpha: 0.85
+            });
+            // Spawn at secondary inlets periodically
+            if (Math.random() < 0.5) {
+                tab2State.droplets.push({
+                    x: 20,
+                    y: 72 + Math.random() * 12,
+                    vx: 1.8,
+                    vy: 0.8,
+                    r: 2.6,
+                    alpha: 0.8
+                });
+            } else {
+                tab2State.droplets.push({
+                    x: 20,
+                    y: 425 + Math.random() * 12,
+                    vx: 1.8,
+                    vy: -0.8,
+                    r: 2.6,
+                    alpha: 0.8
+                });
+            }
+        }
+
+        // Update droplets
+        for (let i = tab2State.droplets.length - 1; i >= 0; i--) {
+            const d = tab2State.droplets[i];
+            if (d.x < 140) {
+                d.x += d.vx * simSpeed;
+                d.y += (268 - d.y) * 0.05 * simSpeed;
+            } else if (d.x < 780) {
+                d.x += (1.8 + Math.random() * 0.4) * simSpeed;
+                if (d.y < 200) {
+                    d.y += Math.sin(d.x * 0.01) * 0.6 * simSpeed;
+                } else if (d.y > 340) {
+                    d.y -= Math.sin(d.x * 0.01) * 0.6 * simSpeed;
+                } else {
+                    d.y += (270 - d.y) * 0.02 * simSpeed;
+                }
+            } else {
+                d.x += (2.4 + Math.random() * 0.4) * simSpeed;
+                d.y += (282 - d.y) * 0.06 * simSpeed;
+            }
+
+            if (d.x >= 1000) {
+                tab2State.droplets.splice(i, 1);
+                continue;
+            }
+
+            renderPooledLnDroplet(d.x, d.y, d.r, d.alpha);
+        }
+
+        // 3. Pathogen Dynamics
+        for (let i = tab2State.pathogens.length - 1; i >= 0; i--) {
+            const p = tab2State.pathogens[i];
+            if (p.x < 140) {
+                p.x += p.vx * simSpeed;
+                p.y += (268 - p.y) * 0.05 * simSpeed;
+            } else if (p.x < 780) {
+                p.x += (1.5 + Math.random() * 0.3) * simSpeed;
+                p.y += (Math.random() - 0.5) * 0.8 * simSpeed;
+            } else {
+                p.x += 2.0 * simSpeed;
+                p.y += (282 - p.y) * 0.05 * simSpeed;
+            }
+
+            p.angle += 0.03 * simSpeed;
+
+            // Check contact with antibodies in medullary sinuses
+            if (!p.opsonized) {
+                for (let j = 0; j < tab2State.antibodies.length; j++) {
+                    const ab = tab2State.antibodies[j];
+                    const dist = Math.hypot(p.x - ab.x, p.y - ab.y);
+                    if (dist < 22) {
+                        p.opsonized = true;
+                        ab.alpha = 0;
+                        spawnLnLabel(p.x, p.y - 14, p.type === 'bacteria' ? "🏷️ 抗體調理細菌" : "🏷️ 特異性中和病毒", "#fbbf24");
+                        break;
+                    }
+                }
+            }
+
+            if (p.opsonized) {
+                p.alpha = (p.alpha || 1) - 0.008 * simSpeed;
+                if (p.alpha <= 0.1 || p.x >= 995) {
+                    tab2State.pathogens.splice(i, 1);
+                    continue;
+                }
+            } else if (p.x >= 1000) {
+                tab2State.pathogens.splice(i, 1);
+                continue;
+            }
+
+            renderPooledLnPathogen(p);
+        }
+
+        // 4. APC Dynamics & Antigen Presentation
+        for (let i = tab2State.apcs.length - 1; i >= 0; i--) {
+            const apc = tab2State.apcs[i];
+            if (!apc.presented) {
+                const dx = apc.targetX - apc.x;
+                const dy = apc.targetY - apc.y;
+                const dist = Math.hypot(dx, dy);
+                if (dist > 8) {
+                    apc.x += (dx / dist) * 1.5 * simSpeed;
+                    apc.y += (dy / dist) * 1.5 * simSpeed;
+                } else {
+                    for (let j = 0; j < tab2State.helperTCells.length; j++) {
+                        const th = tab2State.helperTCells[j];
+                        const tDist = Math.hypot(apc.x - th.x, apc.y - th.y);
+                        if (tDist < 30) {
+                            apc.presented = true;
+                            th.activated = true;
+                            th.cytokineTimer = 120;
+                            tab2State.synapses.push({ x: (apc.x + th.x) / 2, y: (apc.y + th.y) / 2, r: 12, life: 75 });
+                            spawnLnLabel(apc.x, apc.y - 18, "🏷️ 抗原呈現 (MHC-II ➔ TCR 活化輔助T細胞)", "#34d399", "rgba(6, 78, 59, 0.95)");
+                            break;
+                        }
+                    }
+                }
+            } else {
+                apc.x += (Math.random() - 0.5) * 0.4 * simSpeed;
+                apc.y += (Math.random() - 0.5) * 0.4 * simSpeed;
+            }
+
+            renderPooledLnCell(apc);
+        }
+
+        // 5. Helper T Cells (CD4+) & B Cell Activation
+        for (let i = 0; i < tab2State.helperTCells.length; i++) {
+            const th = tab2State.helperTCells[i];
+            if (th.activated) {
+                th.x += (280 - th.x) * 0.015 * simSpeed;
+                th.y += (Math.random() - 0.5) * 0.8 * simSpeed;
+
+                for (let j = 0; j < tab2State.bCells.length; j++) {
+                    const bc = tab2State.bCells[j];
+                    if (!bc.sensitized) {
+                        const bDist = Math.hypot(th.x - bc.x, th.y - bc.y);
+                        if (bDist < 35) {
+                            bc.sensitized = true;
+                            bc.cloneTimer = 0;
+                            spawnLnLabel(bc.x, bc.y - 16, "🏷️ 輔助T細胞致敏B細胞 (CD40L-CD40)", "#fb923c", "rgba(124, 45, 18, 0.95)");
+                            break;
+                        }
+                    }
+                }
+            } else {
+                th.x += (Math.random() - 0.5) * 0.6 * simSpeed;
+                th.y += (Math.random() - 0.5) * 0.6 * simSpeed;
+                th.x = Math.max(340, Math.min(520, th.x));
+                th.y = Math.max(160, Math.min(320, th.y));
+            }
+
+            renderPooledLnCell(th);
+        }
+
+        // 6. B Cells & Germinal Center Clonal Expansion
+        for (let i = tab2State.bCells.length - 1; i >= 0; i--) {
+            const bc = tab2State.bCells[i];
+            if (bc.sensitized) {
+                bc.cloneTimer += simSpeed;
+                bc.x += (Math.random() - 0.5) * 0.8 * simSpeed;
+                bc.y += (Math.random() - 0.5) * 0.8 * simSpeed;
+
+                if (!bc.cloned && bc.cloneTimer > 50) {
+                    bc.cloned = true;
+                    tab2State.bCells.push({
+                        type: 'bcell',
+                        follicleIndex: bc.follicleIndex,
+                        x: bc.x + 8,
+                        y: bc.y + 6,
+                        baseX: bc.baseX,
+                        baseY: bc.baseY,
+                        r: 8.0,
+                        sensitized: true,
+                        cloneTimer: 100,
+                        cloned: true
+                    });
+                    spawnLnLabel(bc.x, bc.y - 16, "🏷️ 生發中心 B細胞選殖增殖 (克隆擴增)", "#ea580c", "rgba(154, 52, 18, 0.95)");
+                }
+
+                if (bc.cloneTimer > 130) {
+                    tab2State.plasmaCells.push({
+                        type: 'plasma',
+                        x: 580 + Math.random() * 120,
+                        y: 220 + Math.random() * 90,
+                        r: 10.5,
+                        pulse: 0,
+                        secreteTimer: 0
+                    });
+                    spawnLnLabel(600, 240, "🏷️ B細胞分化為漿細胞・定居髓索", "#f97316", "rgba(194, 65, 12, 0.95)");
+                    tab2State.bCells.splice(i, 1);
+                    continue;
+                }
+            } else {
+                bc.x += (Math.random() - 0.5) * 0.4 * simSpeed;
+                bc.y += (Math.random() - 0.5) * 0.4 * simSpeed;
+                const dFromBase = Math.hypot(bc.x - bc.baseX, bc.y - bc.baseY);
+                if (dFromBase > 35) {
+                    bc.x += (bc.baseX - bc.x) * 0.05;
+                    bc.y += (bc.baseY - bc.y) * 0.05;
+                }
+            }
+
+            renderPooledLnCell(bc);
+        }
+
+        // 7. Plasma Cells & Antibody Secretion
+        for (let i = 0; i < tab2State.plasmaCells.length; i++) {
+            const pc = tab2State.plasmaCells[i];
+            pc.secreteTimer += simSpeed;
+            pc.pulse = Math.sin(simNowMs * 0.008 + pc.x);
+
+            if (pc.secreteTimer >= 22) {
+                pc.secreteTimer = 0;
+                const angle = (Math.random() - 0.5) * 0.8;
+                tab2State.antibodies.push({
+                    x: pc.x + 10,
+                    y: pc.y + (Math.random() - 0.5) * 8,
+                    vx: 2.2 + Math.random() * 0.6,
+                    vy: (282 - pc.y) * 0.03,
+                    angle: angle,
+                    color: Math.random() < 0.6 ? "#fbbf24" : "#f97316",
+                    alpha: 1
+                });
+            }
+
+            renderPooledLnCell(pc);
+        }
+
+        // 8. Antibodies Stream through Medullary Sinuses to Efferent Duct
+        for (let i = tab2State.antibodies.length - 1; i >= 0; i--) {
+            const ab = tab2State.antibodies[i];
+            ab.x += ab.vx * simSpeed;
+            ab.y += ab.vy * simSpeed;
+            ab.vy += (282 - ab.y) * 0.04 * simSpeed;
+
+            if (ab.x >= 1000) {
+                sharedImmuneState.efferentQueue.push({
+                    type: 'antibody',
+                    color: ab.color
+                });
+                tab2State.antibodies.splice(i, 1);
+                continue;
+            }
+
+            renderPooledLnAntibody(ab);
+        }
+
+        // 9. Immunological Synapses
+        for (let i = tab2State.synapses.length - 1; i >= 0; i--) {
+            const syn = tab2State.synapses[i];
+            syn.life -= simSpeed;
+            syn.r += 0.1 * simSpeed;
+            if (syn.life <= 0) {
+                tab2State.synapses.splice(i, 1);
+                continue;
+            }
+            renderPooledLnSynapse(syn);
+        }
+
+        // 10. Floating Labels
+        for (let i = tab2State.floatingLabels.length - 1; i >= 0; i--) {
+            const lbl = tab2State.floatingLabels[i];
+            lbl.life -= simSpeed;
+            lbl.y -= 0.25 * simSpeed;
+            if (lbl.life <= 0) {
+                tab2State.floatingLabels.splice(i, 1);
+                continue;
+            }
+            renderPooledLnLabel(lbl);
+        }
+
+        finalizeLnSvgPools();
+    }
+
+    // Initialize Interactive Controls for Tab 2, 3, 4
+    function initTabControls() {
+        // Step 1: Inflow
+        const btnInflow = document.getElementById('btn-t2-step-inflow');
+        if (btnInflow) {
+            btnInflow.addEventListener('click', () => {
+                for (let i = 0; i < 8; i++) {
+                    tab2State.droplets.push({ x: 0 - i * 15, y: 268 + (Math.random() - 0.5) * 16, vx: 2.2, vy: 0, r: 2.8, alpha: 0.85 });
+                }
+                for (let i = 0; i < 3; i++) {
+                    tab2State.pathogens.push({ type: 'bacteria', x: 0 - i * 20, y: 268 + (Math.random() - 0.5) * 12, vx: 2.0, vy: 0, angle: 0, opsonized: false });
+                    tab2State.pathogens.push({ type: 'virus', x: -10 - i * 20, y: 268 + (Math.random() - 0.5) * 12, vx: 2.1, vy: 0, angle: 0, opsonized: false });
+                }
+                tab2State.apcs.push({
+                    type: 'apc', x: -10, y: 268, targetX: 420, targetY: 230, r: 11.5, vx: 2.0, vy: 0, presented: false, antigenType: 'bacteria'
+                });
+                spawnLnLabel(130, 240, "🌊 輸入淋巴、抗原與APC湧入包膜下竇", "#34d399");
+            });
+        }
+
+        // Step 2: APC Present & Activate Helper T
+        const btnApc = document.getElementById('btn-t2-step-apc');
+        if (btnApc) {
+            btnApc.addEventListener('click', () => {
+                tab2State.apcs.push({
+                    type: 'apc', x: 260, y: 268, targetX: 430, targetY: 240, r: 11.5, vx: 2.5, vy: 0, presented: false, antigenType: 'bacteria'
+                });
+                spawnLnLabel(430, 200, "🏷️ 樹突細胞向副皮質區輔助T細胞呈現抗原 (MHC-II)", "#34d399");
+            });
+        }
+
+        // Step 3: Helper T activates B cell
+        const btnBcell = document.getElementById('btn-t2-step-bcell');
+        if (btnBcell) {
+            btnBcell.addEventListener('click', () => {
+                tab2State.helperTCells.forEach(th => th.activated = true);
+                spawnLnLabel(320, 220, "🏷️ 活化輔助T細胞向皮質濾泡釋出細胞激素・致敏B細胞", "#fb923c");
+            });
+        }
+
+        // Step 4: Clonal expansion in germinal center
+        const btnClonal = document.getElementById('btn-t2-step-clonal');
+        if (btnClonal) {
+            btnClonal.addEventListener('click', () => {
+                tab2State.bCells.forEach(bc => {
+                    bc.sensitized = true;
+                    bc.cloneTimer = 40;
+                });
+                spawnLnLabel(240, 180, "⚡ 生發中心 B細胞啟動高速選殖增殖 (SHM突變)", "#ea580c");
+            });
+        }
+
+        // Step 5: Antibody secretion & efferent outflow
+        const btnAb = document.getElementById('btn-t2-step-antibody');
+        if (btnAb) {
+            btnAb.addEventListener('click', () => {
+                for (let k = 0; k < 3; k++) {
+                    tab2State.plasmaCells.push({
+                        type: 'plasma', x: 590 + Math.random() * 120, y: 220 + Math.random() * 90, r: 10.5, pulse: 0, secreteTimer: 0
+                    });
+                }
+                for (let i = 0; i < 20; i++) {
+                    tab2State.antibodies.push({
+                        x: 620 + Math.random() * 100, y: 250 + Math.random() * 50, vx: 2.6 + Math.random() * 0.8, vy: 0, angle: 0, color: '#fbbf24', alpha: 1
+                    });
+                }
+                spawnLnLabel(780, 250, "✨ 髓索漿細胞全力分泌高濃度抗體 ➔ 輸出淋巴管", "#fbbf24");
+            });
+        }
+
+        // Pathogen / APC spawners
+        const btnBac = document.getElementById('btn-t2-spawn-bacteria');
+        if (btnBac) {
+            btnBac.addEventListener('click', () => {
+                for (let i = 0; i < 3; i++) {
+                    tab2State.pathogens.push({ type: 'bacteria', x: 0 - i * 15, y: 268 + (Math.random() - 0.5) * 14, vx: 2.0, vy: 0, angle: 0, opsonized: false });
+                }
+                spawnLnLabel(80, 248, "➕ 細菌輸入", "#27ae60");
+            });
+        }
+
+        const btnVir = document.getElementById('btn-t2-spawn-virus');
+        if (btnVir) {
+            btnVir.addEventListener('click', () => {
+                for (let i = 0; i < 4; i++) {
+                    tab2State.pathogens.push({ type: 'virus', x: 0 - i * 15, y: 268 + (Math.random() - 0.5) * 14, vx: 2.1, vy: 0, angle: 0, opsonized: false });
+                }
+                spawnLnLabel(80, 248, "👾 病毒輸入", "#8e44ad");
+            });
+        }
+
+        const btnSpawnApc = document.getElementById('btn-t2-spawn-apc');
+        if (btnSpawnApc) {
+            btnSpawnApc.addEventListener('click', () => {
+                tab2State.apcs.push({
+                    type: 'apc', x: 0, y: 268, targetX: 430, targetY: 240, r: 11.5, vx: 2.0, vy: 0, presented: false, antigenType: 'bacteria'
+                });
+                spawnLnLabel(80, 248, "🏷️ 抗原呈現細胞輸入", "#34d399");
+            });
+        }
+
+        const btnTriggerPlasma = document.getElementById('btn-t2-trigger-plasma');
+        if (btnTriggerPlasma) {
+            btnTriggerPlasma.addEventListener('click', () => {
+                for (let i = 0; i < 15; i++) {
+                    tab2State.antibodies.push({
+                        x: 630 + Math.random() * 80, y: 240 + Math.random() * 60, vx: 2.8, vy: 0, angle: 0, color: '#fbbf24', alpha: 1
+                    });
+                }
+                spawnLnLabel(650, 220, "✨ 活化漿細胞群抗體噴射", "#fbbf24");
+            });
+        }
+
+        // Reset LN
+        const btnResetLn = document.getElementById('btn-t2-reset');
+        if (btnResetLn) {
+            btnResetLn.addEventListener('click', () => {
+                initTab2Simulation();
+                spawnLnLabel(450, 240, "🔄 淋巴結已重置為休眠監控狀態", "#94a3b8");
+            });
+        }
+
+        // Tab 3 Controls
+        initTab3Controls();
+
+        // Tab 4 Controls
+        initTab4Controls();
+    }
+
+    // =========================================================================
+    // Page 3: Thoracic Duct & Venous Confluence (淋巴總管與靜脈匯流) Simulation Module
+    // =========================================================================
+    const vizTab3 = document.getElementById('viz-tab-3');
+    const p3ViewportGroup = document.getElementById('p3-viewport-group');
+    const p3LymphStreamLayer = document.getElementById('p3-lymph-stream-layer');
+    const p3EddiesLayer = document.getElementById('p3-eddies-layer');
+    const p3VenousBloodLayer = document.getElementById('p3-venous-blood-layer');
+    const p3AntibodiesLayer = document.getElementById('p3-antibodies-layer');
+    const p3FloatingLabelsLayer = document.getElementById('p3-floating-labels-layer');
+    const p3Annotations = document.getElementById('p3-annotations');
+    const valveLeafletUpper = document.getElementById('valve-leaflet-upper');
+    const valveLeafletLower = document.getElementById('valve-leaflet-lower');
+    const valveSealLine = document.getElementById('valve-seal-line');
+
+    const tab3State = {
+        initialized: false,
+        lymphPulseTimer: 0,
+        valveOpenness: 0.35,
+        targetValveOpenness: 0.35,
+        backpressureMode: false,
+        venousSpeedFactor: 1.0,
+        surgeTimer: 0,
+        dropletSpawnTimer: 0,
+        rbcSpawnTimer: 0,
+        // Entity arrays
+        rbcs: [],
+        wbcs: [],
+        lymphDroplets: [],
+        antibodies: [],
+        eddies: [],
+        floatingLabels: []
+    };
+
+    // Zero-Allocation SVG Object Pools for Tab 3
+    const p3RbcPool = [];
+    let p3RbcCount = 0;
+    const p3LymphPool = [];
+    let p3LymphCount = 0;
+    const p3WbcPool = [];
+    let p3WbcCount = 0;
+    const p3AbPool = [];
+    let p3AbCount = 0;
+    const p3EddyPool = [];
+    let p3EddyCount = 0;
+    const p3LabelPool = [];
+    let p3LabelCount = 0;
+
+    function resetP3SvgPools() {
+        p3RbcCount = 0;
+        p3LymphCount = 0;
+        p3WbcCount = 0;
+        p3AbCount = 0;
+        p3EddyCount = 0;
+        p3LabelCount = 0;
+    }
+
+    function finalizeP3SvgPools() {
+        for (let i = p3RbcCount; i < p3RbcPool.length; i++) {
+            p3RbcPool[i].g.style.display = 'none';
+        }
+        for (let i = p3LymphCount; i < p3LymphPool.length; i++) {
+            p3LymphPool[i].style.display = 'none';
+        }
+        for (let i = p3WbcCount; i < p3WbcPool.length; i++) {
+            p3WbcPool[i].g.style.display = 'none';
+        }
+        for (let i = p3AbCount; i < p3AbPool.length; i++) {
+            p3AbPool[i].style.display = 'none';
+        }
+        for (let i = p3EddyCount; i < p3EddyPool.length; i++) {
+            p3EddyPool[i].style.display = 'none';
+        }
+        for (let i = p3LabelCount; i < p3LabelPool.length; i++) {
+            p3LabelPool[i].el.style.display = 'none';
+        }
+    }
+
+    function renderPooledP3Rbc(rbc) {
+        if (!p3VenousBloodLayer) return;
+        let item;
+        if (p3RbcCount < p3RbcPool.length) {
+            item = p3RbcPool[p3RbcCount];
+            item.g.style.display = '';
+        } else {
+            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            const outer = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
+            const inner = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
+            g.appendChild(outer);
+            g.appendChild(inner);
+            p3VenousBloodLayer.appendChild(g);
+            item = { g, outer, inner };
+            p3RbcPool.push(item);
+        }
+
+        if (rbc.biconcave) {
+            item.outer.setAttribute("rx", (rbc.r || 4.8).toFixed(1));
+            item.outer.setAttribute("ry", ((rbc.r || 4.8) * 0.68).toFixed(1));
+            item.outer.setAttribute("fill", "#dc2626");
+            item.inner.style.display = '';
+            item.inner.setAttribute("rx", ((rbc.r || 4.8) * 0.45).toFixed(1));
+            item.inner.setAttribute("ry", ((rbc.r || 4.8) * 0.30).toFixed(1));
+            item.inner.setAttribute("fill", "#991b1b");
+            item.inner.setAttribute("opacity", "0.85");
+        } else {
+            item.outer.setAttribute("rx", (rbc.r || 4.8).toFixed(1));
+            item.outer.setAttribute("ry", (rbc.r || 4.8).toFixed(1));
+            item.outer.setAttribute("fill", "#ef4444");
+            item.inner.style.display = 'none';
+        }
+
+        item.g.setAttribute("transform", `translate(${rbc.x.toFixed(1)}, ${rbc.y.toFixed(1)}) rotate(${(rbc.angle * 57.3).toFixed(1)})`);
+        item.g.setAttribute("opacity", (rbc.alpha || 0.9).toFixed(2));
+        p3RbcCount++;
+    }
+
+    function renderPooledP3Lymph(d) {
+        if (!p3LymphStreamLayer) return;
+        let c;
+        if (p3LymphCount < p3LymphPool.length) {
+            c = p3LymphPool[p3LymphCount];
+            c.style.display = '';
+        } else {
+            c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            p3LymphStreamLayer.appendChild(c);
+            p3LymphPool.push(c);
+        }
+        c.setAttribute("cx", d.x.toFixed(1));
+        c.setAttribute("cy", d.y.toFixed(1));
+        c.setAttribute("r", d.r.toFixed(1));
+        c.setAttribute("fill", d.isChylomicron ? "#ffffff" : "#38bdf8");
+        c.setAttribute("opacity", (d.alpha || 0.85).toFixed(2));
+        p3LymphCount++;
+    }
+
+    function renderPooledP3Wbc(w) {
+        if (!p3VenousBloodLayer) return;
+        let item;
+        if (p3WbcCount < p3WbcPool.length) {
+            item = p3WbcPool[p3WbcCount];
+            item.g.style.display = '';
+        } else {
+            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            const body = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            const nuc1 = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            const nuc2 = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            const nuc3 = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            g.appendChild(body);
+            g.appendChild(nuc1);
+            g.appendChild(nuc2);
+            g.appendChild(nuc3);
+            p3VenousBloodLayer.appendChild(g);
+            item = { g, body, nuc1, nuc2, nuc3 };
+            p3WbcPool.push(item);
+        }
+
+        item.body.setAttribute("cx", 0); item.body.setAttribute("cy", 0);
+        item.body.setAttribute("r", w.r.toFixed(1));
+        item.body.setAttribute("fill", getWbcColor(w.subtype));
+        item.body.setAttribute("stroke", "#ffffff");
+        item.body.setAttribute("stroke-width", "1.2");
+
+        if (w.subtype === 'neutrophil') {
+            item.nuc1.style.display = '';
+            item.nuc1.setAttribute("cx", -2.4); item.nuc1.setAttribute("cy", -1.8); item.nuc1.setAttribute("r", 2.2); item.nuc1.setAttribute("fill", "#0369a1");
+            item.nuc2.style.display = '';
+            item.nuc2.setAttribute("cx", 2.4); item.nuc2.setAttribute("cy", -1.8); item.nuc2.setAttribute("r", 2.2); item.nuc2.setAttribute("fill", "#0369a1");
+            item.nuc3.style.display = '';
+            item.nuc3.setAttribute("cx", 0); item.nuc3.setAttribute("cy", 2.4); item.nuc3.setAttribute("r", 2.2); item.nuc3.setAttribute("fill", "#0369a1");
+        } else if (w.subtype === 'monocyte') {
+            item.nuc1.style.display = '';
+            item.nuc1.setAttribute("cx", -1.5); item.nuc1.setAttribute("cy", 0); item.nuc1.setAttribute("r", (w.r * 0.45).toFixed(1)); item.nuc1.setAttribute("fill", "#581c87");
+            item.nuc2.style.display = 'none';
+            item.nuc3.style.display = 'none';
+        } else {
+            item.nuc1.style.display = '';
+            item.nuc1.setAttribute("cx", 0); item.nuc1.setAttribute("cy", 0); item.nuc1.setAttribute("r", (w.r * 0.55).toFixed(1)); item.nuc1.setAttribute("fill", "#c2410c");
+            item.nuc2.style.display = 'none';
+            item.nuc3.style.display = 'none';
+        }
+
+        item.g.setAttribute("transform", `translate(${w.x.toFixed(1)}, ${w.y.toFixed(1)})`);
+        p3WbcCount++;
+    }
+
+    function renderPooledP3Antibody(ab) {
+        if (!p3AntibodiesLayer) return;
+        let path;
+        if (p3AbCount < p3AbPool.length) {
+            path = p3AbPool[p3AbCount];
+            path.style.display = '';
+        } else {
+            path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            path.setAttribute("d", "M 0 0 L 0 6 M 0 0 L -4 -5 M 0 0 L 4 -5");
+            path.setAttribute("fill", "none");
+            p3AntibodiesLayer.appendChild(path);
+            p3AbPool.push(path);
+        }
+
+        path.setAttribute("transform", `translate(${ab.x.toFixed(1)}, ${ab.y.toFixed(1)}) rotate(${(ab.angle * 57.3).toFixed(1)}) scale(1.15)`);
+        path.setAttribute("stroke", ab.color || "#fbbf24");
+        path.setAttribute("stroke-width", "2.2");
+        path.setAttribute("opacity", (ab.alpha || 1).toFixed(2));
+        p3AbCount++;
+    }
+
+    function renderPooledP3Eddy(eddy) {
+        if (!p3EddiesLayer) return;
+        let path;
+        if (p3EddyCount < p3EddyPool.length) {
+            path = p3EddyPool[p3EddyCount];
+            path.style.display = '';
+        } else {
+            path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            path.setAttribute("d", "M -8 0 C -6 -6, 6 -6, 8 0 C 6 6, -3 5, 0 1");
+            path.setAttribute("fill", "none");
+            p3EddiesLayer.appendChild(path);
+            p3EddyPool.push(path);
+        }
+
+        path.setAttribute("transform", `translate(${eddy.x.toFixed(1)}, ${eddy.y.toFixed(1)}) rotate(${(eddy.rot * 57.3).toFixed(1)}) scale(${eddy.scale.toFixed(2)})`);
+        path.setAttribute("stroke", eddy.color || "#38bdf8");
+        path.setAttribute("stroke-width", "1.6");
+        path.setAttribute("opacity", (eddy.alpha || 0.65).toFixed(2));
+        p3EddyCount++;
+    }
+
+    function spawnP3Label(x, y, text, color) {
+        tab3State.floatingLabels.push({
+            x: Math.max(80, Math.min(880, x)),
+            y,
+            text,
+            color: color || '#38bdf8',
+            life: 80,
+            alpha: 1
+        });
+    }
+
+    function renderPooledP3Label(lbl) {
+        if (!p3FloatingLabelsLayer) return;
+        let item;
+        if (p3LabelCount < p3LabelPool.length) {
+            item = p3LabelPool[p3LabelCount];
+            item.el.style.display = '';
+        } else {
+            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+            const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+            text.setAttribute("font-size", "10");
+            text.setAttribute("font-weight", "600");
+            text.setAttribute("text-anchor", "middle");
+            g.appendChild(rect);
+            g.appendChild(text);
+            p3FloatingLabelsLayer.appendChild(g);
+            item = { el: g, rect, text };
+            p3LabelPool.push(item);
+        }
+
+        item.text.textContent = lbl.text;
+        item.text.setAttribute("fill", "#ffffff");
+        item.text.setAttribute("x", lbl.x.toFixed(1));
+        item.text.setAttribute("y", (lbl.y - 1).toFixed(1));
+
+        const textLen = (lbl.text || '').length * 10.5 + 16;
+        item.rect.setAttribute("x", (lbl.x - textLen / 2).toFixed(1));
+        item.rect.setAttribute("y", (lbl.y - 12).toFixed(1));
+        item.rect.setAttribute("width", textLen.toFixed(1));
+        item.rect.setAttribute("height", "16");
+        item.rect.setAttribute("rx", "4");
+        item.rect.setAttribute("fill", lbl.color || "rgba(15, 23, 42, 0.9)");
+        item.rect.setAttribute("stroke", "#ffffff");
+        item.rect.setAttribute("stroke-width", "0.8");
+
+        item.el.setAttribute("opacity", (lbl.alpha || 1).toFixed(2));
+        p3LabelCount++;
+    }
+
+    function initTab3Simulation() {
+        tab3State.initialized = true;
+        tab3State.lymphPulseTimer = 0;
+        tab3State.valveOpenness = 0.4;
+        tab3State.targetValveOpenness = 0.4;
+        tab3State.backpressureMode = false;
+        tab3State.venousSpeedFactor = 1.0;
+        tab3State.surgeTimer = 0;
+        tab3State.dropletSpawnTimer = 0;
+        tab3State.rbcSpawnTimer = 0;
+
+        tab3State.rbcs = [];
+        tab3State.wbcs = [];
+        tab3State.lymphDroplets = [];
+        tab3State.antibodies = [];
+        tab3State.eddies = [];
+        tab3State.floatingLabels = [];
+
+        // 1. Initial RBCs in Internal Jugular Vein (y=-65..220)
+        for (let i = 0; i < 30; i++) {
+            tab3State.rbcs.push({
+                x: 480 + Math.random() * 110,
+                y: -60 + Math.random() * 280,
+                vx: 1.5 + Math.random(),
+                vy: 5.5 + Math.random() * 2,
+                r: 4.8,
+                biconcave: Math.random() < 0.35,
+                angle: 1.57,
+                alpha: 0.9,
+                origin: 'jugular'
+            });
+        }
+
+        // 2. Initial RBCs in Subclavian Vein (y=280..500)
+        for (let i = 0; i < 25; i++) {
+            tab3State.rbcs.push({
+                x: 360 + Math.random() * 120,
+                y: 300 + Math.random() * 200,
+                vx: 3.5 + Math.random(),
+                vy: -5.5 - Math.random() * 2,
+                r: 4.8,
+                biconcave: Math.random() < 0.35,
+                angle: -0.9,
+                alpha: 0.9,
+                origin: 'subclavian'
+            });
+        }
+
+        // 3. Initial RBCs in Superior Vena Cava Main Trunk (x=620..1000)
+        for (let i = 0; i < 40; i++) {
+            const y = 190 + Math.random() * 125;
+            const distNorm = Math.min(1, Math.abs(y - 255) / 60.0);
+            const vx = 8.5 * (1 - 0.58 * distNorm * distNorm) + Math.random() * 0.5;
+            tab3State.rbcs.push({
+                x: 620 + Math.random() * 370,
+                y: y,
+                vx: vx,
+                vy: (255 - y) * 0.015,
+                r: 4.8,
+                biconcave: Math.random() < 0.35,
+                angle: 0,
+                alpha: 0.9,
+                origin: 'svc'
+            });
+        }
+
+        // 4. Initial Patrolling WBCs in Vein
+        const subtypes = ['neutrophil', 'neutrophil', 'monocyte', 'bcell', 'neutrophil', 'tcell', 'monocyte', 'neutrophil'];
+        for (let i = 0; i < subtypes.length; i++) {
+            const isTop = i % 2 === 0;
+            tab3State.wbcs.push({
+                subtype: subtypes[i],
+                x: 630 + i * 45,
+                y: isTop ? 198 + Math.random() * 12 : 306 + Math.random() * 12,
+                r: subtypes[i] === 'monocyte' ? 8.5 : (subtypes[i] === 'neutrophil' ? 7.5 : 8.0),
+                vx: 3.0 + Math.random() * 0.5,
+                vy: 0,
+                isTop: isTop
+            });
+        }
+
+        // 5. Initial Lymph Droplets in Efferents and Thoracic Duct
+        for (let i = 0; i < 20; i++) {
+            const frac = i / 20;
+            let x, y;
+            if (frac < 0.5) {
+                x = frac * 2 * 225;
+                const branch = i % 3;
+                if (branch === 0) y = 175 + frac * 2 * 70;
+                else if (branch === 1) y = 268;
+                else y = 375 - frac * 2 * 90;
+            } else {
+                x = 225 + (frac - 0.5) * 2 * 240;
+                y = 265 + (Math.random() - 0.5) * 16;
+            }
+            tab3State.lymphDroplets.push({
+                x: x,
+                y: y,
+                vx: 1.6,
+                vy: 0,
+                r: 2.7 + Math.random() * 0.5,
+                alpha: 0.85,
+                inVein: false,
+                isChylomicron: Math.random() < 0.3
+            });
+        }
+
+        // 6. Initial Antibodies in Thoracic Duct
+        for (let i = 0; i < 4; i++) {
+            tab3State.antibodies.push({
+                x: 240 + i * 55,
+                y: 265 + (Math.random() - 0.5) * 14,
+                vx: 1.6,
+                vy: 0,
+                angle: 0,
+                color: '#fbbf24',
+                alpha: 1,
+                inVein: false
+            });
+        }
+    }
+
+    function stepPage3Simulation() {
+        if (!tab3State.initialized) initTab3Simulation();
+        if (!p3VenousBloodLayer || !p3LymphStreamLayer) return;
+        resetP3SvgPools();
+
+        // 1. Lymph Pulse Timing & Terminal Valve Leaflet Opening/Closing
+        tab3State.lymphPulseTimer += simSpeed;
+        if (tab3State.surgeTimer > 0) tab3State.surgeTimer -= simSpeed;
+
+        const pulseCycle = Math.floor(tab3State.lymphPulseTimer) % 120;
+        const isPulsePhase = (pulseCycle < 45) || (tab3State.surgeTimer > 0);
+
+        if (tab3State.backpressureMode) {
+            tab3State.targetValveOpenness = 0.0;
+        } else if (isPulsePhase) {
+            tab3State.targetValveOpenness = 1.0;
+        } else {
+            tab3State.targetValveOpenness = 0.2;
+        }
+
+        // Smoothly interpolate valve openness
+        tab3State.valveOpenness += (tab3State.targetValveOpenness - tab3State.valveOpenness) * 0.15;
+        const k = tab3State.valveOpenness;
+
+        // Dynamically update terminal bicuspid valve leaflets in SVG
+        if (valveLeafletUpper && valveLeafletLower) {
+            const yuTip = 263 - 15 * k;
+            const ylTip = 267 + 15 * k;
+            const xTip = 495 + 1 * k;
+            const yuCtrl = 258 - 8 * k;
+            const ylCtrl = 272 + 8 * k;
+            valveLeafletUpper.setAttribute("d", `M 475 248 C 484 ${yuCtrl.toFixed(1)}, 492 ${(yuTip - 2).toFixed(1)}, ${xTip.toFixed(1)} ${yuTip.toFixed(1)}`);
+            valveLeafletLower.setAttribute("d", `M 475 282 C 484 ${ylCtrl.toFixed(1)}, 492 ${(ylTip + 2).toFixed(1)}, ${xTip.toFixed(1)} ${ylTip.toFixed(1)}`);
+        }
+        if (valveSealLine) {
+            valveSealLine.setAttribute("opacity", tab3State.backpressureMode ? "0.95" : (k < 0.1 ? "0.65" : "0"));
+        }
+
+        // 2. Cross-Tab Queue Ingestion from Page 2 Efferent Vessel
+        if (sharedImmuneState && sharedImmuneState.efferentQueue && sharedImmuneState.efferentQueue.length > 0) {
+            const incoming = sharedImmuneState.efferentQueue.shift();
+            if (incoming.type === 'antibody') {
+                tab3State.antibodies.push({
+                    x: 0,
+                    y: 268 + (Math.random() - 0.5) * 12,
+                    vx: 1.8 + Math.random() * 0.4,
+                    vy: 0,
+                    angle: 0,
+                    color: incoming.color || '#fbbf24',
+                    alpha: 1,
+                    inVein: false
+                });
+                spawnP3Label(90, 248, "✨ 承接淋巴結輸出抗體 ➔ 進入胸導管", "#fbbf24");
+            }
+        }
+
+        // 3. Periodic Lymph Droplet Inflow
+        tab3State.dropletSpawnTimer += simSpeed;
+        const spawnInterval = (tab3State.surgeTimer > 0) ? 6 : 15;
+        if (tab3State.dropletSpawnTimer >= spawnInterval) {
+            tab3State.dropletSpawnTimer = 0;
+            // Spawn across 3 efferent inlets on the left
+            const branch = Math.floor(Math.random() * 3);
+            let sy = 268, svy = 0;
+            if (branch === 0) { sy = 175 + (Math.random() - 0.5) * 10; svy = 0.5; }
+            else if (branch === 1) { sy = 268 + (Math.random() - 0.5) * 10; svy = 0; }
+            else { sy = 375 + (Math.random() - 0.5) * 10; svy = -0.5; }
+
+            tab3State.lymphDroplets.push({
+                x: 0,
+                y: sy,
+                vx: 1.8,
+                vy: svy,
+                r: 2.7 + Math.random() * 0.5,
+                alpha: 0.85,
+                inVein: false,
+                isChylomicron: Math.random() < 0.28
+            });
+
+            // Endogenous antibody production along thoracic duct
+            if (Math.random() < 0.15) {
+                tab3State.antibodies.push({
+                    x: 0,
+                    y: 268 + (Math.random() - 0.5) * 14,
+                    vx: 1.6,
+                    vy: 0,
+                    angle: 0,
+                    color: '#fbbf24',
+                    alpha: 1,
+                    inVein: false
+                });
+            }
+        }
+
+        // 4. Update Lymph Droplets & Mixing Eddies
+        const lymphSpeedMult = (1.0 + (tab3State.surgeTimer > 0 ? 1.4 : 0)) * simSpeed;
+        for (let i = tab3State.lymphDroplets.length - 1; i >= 0; i--) {
+            const d = tab3State.lymphDroplets[i];
+            if (!d.inVein) {
+                if (d.x < 225) {
+                    d.x += d.vx * lymphSpeedMult;
+                    d.y += (265 - d.y) * 0.035 * lymphSpeedMult;
+                } else if (d.x < 472) {
+                    d.x += d.vx * lymphSpeedMult;
+                    d.y += (265 - d.y) * 0.05 * lymphSpeedMult;
+                } else {
+                    if (tab3State.valveOpenness > 0.25) {
+                        d.inVein = true;
+                        d.x = 480;
+                        d.vx = 4.0;
+                        d.vy = (Math.random() - 0.5) * 2.0;
+                        if (Math.random() < 0.45 && tab3State.eddies.length < 15) {
+                            tab3State.eddies.push({
+                                x: 490 + Math.random() * 50,
+                                y: 255 + (Math.random() - 0.5) * 35,
+                                rot: Math.random() * 6.28,
+                                scale: 0.8,
+                                life: 35,
+                                maxLife: 35,
+                                alpha: 0.7,
+                                color: d.isChylomicron ? '#fef08a' : '#38bdf8'
+                            });
+                        }
+                    } else {
+                        d.x = 471;
+                    }
+                }
+            } else {
+                const distNorm = Math.min(1, Math.abs(d.y - 255) / 60.0);
+                const targetVx = (7.5 * (1 - 0.5 * distNorm * distNorm)) * tab3State.venousSpeedFactor * simSpeed;
+                d.vx += (targetVx - d.vx) * 0.12;
+                d.vy += (255 - d.y) * 0.02 * simSpeed;
+                d.x += d.vx;
+                d.y += d.vy;
+            }
+
+            if (d.x >= 1010) {
+                tab3State.lymphDroplets.splice(i, 1);
+                continue;
+            }
+            renderPooledP3Lymph(d);
+        }
+
+        // 5. Update Venous Blood Flow (RBCs)
+        while (tab3State.rbcs.length < 95) {
+            const isJugular = Math.random() < 0.55;
+            if (isJugular) {
+                tab3State.rbcs.push({
+                    x: 480 + Math.random() * 110,
+                    y: -60,
+                    vx: 1.5 + Math.random(),
+                    vy: (5.5 + Math.random() * 2) * tab3State.venousSpeedFactor,
+                    r: 4.8,
+                    biconcave: Math.random() < 0.35,
+                    angle: 1.57,
+                    alpha: 0.9,
+                    origin: 'jugular'
+                });
+            } else {
+                tab3State.rbcs.push({
+                    x: 360 + Math.random() * 110,
+                    y: 495,
+                    vx: (3.5 + Math.random()) * tab3State.venousSpeedFactor,
+                    vy: (-5.5 - Math.random() * 2) * tab3State.venousSpeedFactor,
+                    r: 4.8,
+                    biconcave: Math.random() < 0.35,
+                    angle: -0.9,
+                    alpha: 0.9,
+                    origin: 'subclavian'
+                });
+            }
+        }
+
+        for (let i = tab3State.rbcs.length - 1; i >= 0; i--) {
+            const rbc = tab3State.rbcs[i];
+            if (rbc.origin === 'jugular' && rbc.y < 235 && rbc.x < 620) {
+                rbc.y += rbc.vy * simSpeed;
+                rbc.x += rbc.vx * simSpeed;
+                if (rbc.y >= 180) {
+                    rbc.vx += 0.35 * tab3State.venousSpeedFactor * simSpeed;
+                    rbc.vy += (-rbc.vy) * 0.08 * simSpeed;
+                }
+            } else if (rbc.origin === 'subclavian' && rbc.y > 275 && rbc.x < 620) {
+                rbc.y += rbc.vy * simSpeed;
+                rbc.x += rbc.vx * simSpeed;
+                if (rbc.y <= 330) {
+                    rbc.vx += 0.35 * tab3State.venousSpeedFactor * simSpeed;
+                    rbc.vy += (-rbc.vy) * 0.08 * simSpeed;
+                }
+            } else {
+                const distNorm = Math.min(1, Math.abs(rbc.y - 255) / 60.0);
+                const targetVx = (8.6 * (1 - 0.58 * distNorm * distNorm)) * tab3State.venousSpeedFactor * simSpeed;
+                rbc.vx += (targetVx - rbc.vx) * 0.12;
+                rbc.vy += (255 - rbc.y) * 0.015 * simSpeed;
+                rbc.x += rbc.vx;
+                rbc.y += rbc.vy;
+            }
+
+            // Terminal valve anti-reflux collision boundary:
+            if (rbc.x > 468 && rbc.x < 500 && rbc.y > 245 && rbc.y < 285) {
+                rbc.x = 502;
+                rbc.vx = Math.abs(rbc.vx) + 2.5;
+                rbc.vy = (rbc.y < 265) ? -2.2 : 2.2;
+            }
+
+            rbc.angle = Math.atan2(rbc.vy, rbc.vx);
+
+            if (rbc.x >= 1010) {
+                tab3State.rbcs.splice(i, 1);
+                continue;
+            }
+            renderPooledP3Rbc(rbc);
+        }
+
+        // 6. Update Patrolling WBCs (Margination along SVC Endothelium)
+        for (let i = 0; i < tab3State.wbcs.length; i++) {
+            const w = tab3State.wbcs[i];
+            const targetY = w.isTop ? 200 : 306;
+            w.y += (targetY - w.y) * 0.05 * simSpeed;
+            w.x += w.vx * tab3State.venousSpeedFactor * simSpeed;
+
+            if (w.x >= 1010) {
+                w.x = 480 + Math.random() * 80;
+                w.y = w.isTop ? 198 + Math.random() * 8 : 304 + Math.random() * 8;
+            }
+            renderPooledP3Wbc(w);
+        }
+
+        // 7. Update Antibodies
+        for (let i = tab3State.antibodies.length - 1; i >= 0; i--) {
+            const ab = tab3State.antibodies[i];
+            if (!ab.inVein) {
+                ab.x += ab.vx * lymphSpeedMult;
+                ab.y += (265 - ab.y) * 0.05 * lymphSpeedMult;
+                if (ab.x >= 472) {
+                    if (tab3State.valveOpenness > 0.25) {
+                        ab.inVein = true;
+                        ab.x = 482;
+                        ab.vx = 4.5;
+                        ab.vy = (Math.random() - 0.5) * 2.2;
+                        spawnP3Label(520, 245, "✨ 專一性抗體經胸導管注入靜脈角 ➔ 進入全身循環！", "#fbbf24");
+                    } else {
+                        ab.x = 471;
+                    }
+                }
+            } else {
+                const distNorm = Math.min(1, Math.abs(ab.y - 255) / 60.0);
+                const targetVx = (8.2 * (1 - 0.5 * distNorm * distNorm)) * tab3State.venousSpeedFactor * simSpeed;
+                ab.vx += (targetVx - ab.vx) * 0.12;
+                ab.vy += (255 - ab.y) * 0.02 * simSpeed;
+                ab.x += ab.vx;
+                ab.y += ab.vy;
+                ab.angle += 0.08 * simSpeed;
+            }
+
+            if (ab.x >= 1005) {
+                tab3State.antibodies.splice(i, 1);
+                continue;
+            }
+            renderPooledP3Antibody(ab);
+        }
+
+        // 8. Update Fluid Mixing Eddies
+        for (let i = tab3State.eddies.length - 1; i >= 0; i--) {
+            const eddy = tab3State.eddies[i];
+            eddy.rot += 0.12 * simSpeed;
+            eddy.scale += 0.015 * simSpeed;
+            eddy.x += 1.8 * tab3State.venousSpeedFactor * simSpeed;
+            eddy.life -= simSpeed;
+            eddy.alpha = Math.max(0, eddy.life / eddy.maxLife);
+
+            if (eddy.life <= 0) {
+                tab3State.eddies.splice(i, 1);
+                continue;
+            }
+            renderPooledP3Eddy(eddy);
+        }
+
+        // 9. Update Floating Status Labels
+        for (let i = tab3State.floatingLabels.length - 1; i >= 0; i--) {
+            const lbl = tab3State.floatingLabels[i];
+            lbl.y -= 0.45 * simSpeed;
+            lbl.life -= simSpeed;
+            lbl.alpha = Math.max(0, lbl.life / 75);
+
+            if (lbl.life <= 0) {
+                tab3State.floatingLabels.splice(i, 1);
+                continue;
+            }
+            renderPooledP3Label(lbl);
+        }
+
+        // 10. Pool Finalization
+        finalizeP3SvgPools();
+    }
+
+    function initTab3Controls() {
+        // Step 1: Confluence
+        const btnStepConfluence = document.getElementById('btn-t3-step-confluence');
+        if (btnStepConfluence) {
+            btnStepConfluence.addEventListener('click', () => {
+                tab3State.surgeTimer = 90;
+                for (let k = 0; k < 6; k++) {
+                    tab3State.antibodies.push({
+                        x: 230 + k * 35,
+                        y: 265 + (Math.random() - 0.5) * 12,
+                        vx: 1.8,
+                        vy: 0,
+                        angle: 0,
+                        color: '#fbbf24',
+                        alpha: 1,
+                        inVein: false
+                    });
+                }
+                spawnP3Label(320, 240, "🌊 淋巴總管節律搏動 ➔ 終末靜脈瓣開啟 ➔ 注入左靜脈角！", "#34d399");
+                const desc = document.getElementById('mechanism-desc-tab-3');
+                if (desc) {
+                    desc.innerHTML = "<strong>【淋巴總管匯流注入靜脈角】</strong>粗大的胸導管（淋巴總管）收集全身下半身與左半身經淋巴結過濾的清亮體液與高濃度抗體，經由節段平滑肌收縮推進，沖開終末靜脈瓣，源源不絕注入左靜脈角（左鎖骨下靜脈與內頸靜脈匯流處）！";
+                }
+            });
+        }
+
+        // Step 2: Toggle Valve Backpressure Stress
+        const btnToggleValve = document.getElementById('btn-t3-toggle-valve');
+        if (btnToggleValve) {
+            btnToggleValve.addEventListener('click', () => {
+                tab3State.backpressureMode = !tab3State.backpressureMode;
+                const desc = document.getElementById('mechanism-desc-tab-3');
+                if (tab3State.backpressureMode) {
+                    spawnP3Label(470, 225, "🛡️ 靜脈高壓反衝！雙葉瓣膜緊密閉合，100% 杜絕血液倒流！", "#ef4444");
+                    if (desc) {
+                        desc.innerHTML = "<strong>【靜脈瓣防逆流實測】</strong>當人體咳嗽、用力或靜脈回心壓力升高時，終末靜脈瓣的半月形雙葉受血液逆向壓迫迅速緊密閉合，形成一道堅不可摧的物理單向閥，徹底杜絕深紅靜脈血液倒灌進入脆弱的淋巴系統！";
+                    }
+                } else {
+                    spawnP3Label(470, 225, "✅ 恢復正常節律性瓣膜開闔", "#34d399");
+                    if (desc) {
+                        desc.innerHTML = "<strong>【恢復生理節律】</strong>靜脈壓力恢復正常，胸導管隨呼吸胸腔負壓與平滑肌蠕動節律性開啟瓣膜，體液順暢回流！";
+                    }
+                }
+            });
+        }
+
+        // Step 3: Hemodynamics
+        const btnHemodynamics = document.getElementById('btn-t3-hemodynamics');
+        if (btnHemodynamics) {
+            btnHemodynamics.addEventListener('click', () => {
+                tab3State.venousSpeedFactor = (tab3State.venousSpeedFactor > 1.2 ? 1.0 : 1.75);
+                const desc = document.getElementById('mechanism-desc-tab-3');
+                spawnP3Label(720, 220, tab3State.venousSpeedFactor > 1.2 ? "🏃 運動狀態：靜脈回心血流加速 (Hyperdynamic Flow)" : "🧘 安靜休息：典型拋物線層流 (Laminar Flow)", "#38bdf8");
+                if (desc) {
+                    desc.innerHTML = "<strong>【大靜脈血流力學 (Hemodynamics)】</strong>大靜脈內血液呈典型層流（Laminar Flow），管腔中央流速最快，貼近內皮細胞處受黏滯阻力減速。白血球（嗜中性球、單核球）在此邊集滾動巡邏；抗體混入後迅速隨血液奔向右心房，即將進行全身大循環！";
+                }
+            });
+        }
+
+        // Surge Lymph Flow Button
+        const btnSurge = document.getElementById('btn-t3-surge-lymph');
+        if (btnSurge) {
+            btnSurge.addEventListener('click', () => {
+                tab3State.surgeTimer = 120;
+                for (let k = 0; k < 12; k++) {
+                    tab3State.lymphDroplets.push({
+                        x: Math.random() * 200,
+                        y: 268 + (Math.random() - 0.5) * 16,
+                        vx: 2.2,
+                        vy: 0,
+                        r: 2.8,
+                        alpha: 0.85,
+                        inVein: false,
+                        isChylomicron: Math.random() < 0.3
+                    });
+                }
+                spawnP3Label(200, 240, "🚀 加速淋巴回流：胸導管體液激增衝頂！", "#10b981");
+            });
+        }
+
+        // Valve Stress Challenge Button
+        const btnStressValve = document.getElementById('btn-t3-stress-valve');
+        if (btnStressValve) {
+            btnStressValve.addEventListener('click', () => {
+                tab3State.backpressureMode = true;
+                spawnP3Label(470, 225, "🛡️ 靜脈逆壓挑戰啟動：瓣膜嚴密封閉！", "#ef4444");
+                const desc = document.getElementById('mechanism-desc-tab-3');
+                if (desc) {
+                    desc.innerHTML = "<strong>【靜脈逆壓極限挑戰】</strong>深紅紅血球在瓣膜外側被徹底彈開，淋巴管內維持清亮純淨，證實靜脈瓣膜防逆流機制 100% 成功！";
+                }
+            });
+        }
+
+        // Inject Antibodies Button
+        const btnSpawnAb = document.getElementById('btn-t3-spawn-antibodies');
+        if (btnSpawnAb) {
+            btnSpawnAb.addEventListener('click', () => {
+                for (let i = 0; i < 10; i++) {
+                    tab3State.antibodies.push({
+                        x: 180 + Math.random() * 120,
+                        y: 265 + (Math.random() - 0.5) * 18,
+                        vx: 2.0,
+                        vy: 0,
+                        angle: 0,
+                        color: '#fbbf24',
+                        alpha: 1,
+                        inVein: false
+                    });
+                }
+                spawnP3Label(260, 240, "✨ 注入大量專一性抗體 ➔ 湧向大靜脈", "#fbbf24");
+            });
+        }
+
+        // Toggle Hemodynamics Button
+        const btnToggleHemo = document.getElementById('btn-t3-toggle-hemo');
+        if (btnToggleHemo) {
+            btnToggleHemo.addEventListener('click', () => {
+                if (btnHemodynamics) btnHemodynamics.click();
+            });
+        }
+
+        // Reset Confluence
+        const btnResetConfluence = document.getElementById('btn-t3-reset');
+        if (btnResetConfluence) {
+            btnResetConfluence.addEventListener('click', () => {
+                initTab3Simulation();
+                spawnP3Label(500, 250, "🔄 大靜脈匯流場景已重置", "#94a3b8");
+                const desc = document.getElementById('mechanism-desc-tab-3');
+                if (desc) {
+                    desc.innerHTML = "全身組織液經由淋巴結過濾並富集抗體後，匯集入粗大的<strong>淋巴總管</strong>（胸導管），於左靜脈角注入鎖骨下靜脈。此處設有精巧的<strong>靜脈瓣</strong>，防止高壓深紅血液倒流進入淋巴管道，實現體液與免疫分子的閉環循環。";
+                }
+            });
+        }
+    }
+
+    // =========================================================================
+    // Page 4: Bone Marrow Hematopoiesis & Immune Memory Simulation Module
+    // (骨髓造血微環境、幹細胞自我更新、產線發育、嗜中性球儲存庫與長壽漿細胞工廠)
+    // =========================================================================
+    const vizTab4 = document.getElementById('viz-tab-4');
+    const p4ViewportGroup = document.getElementById('p4-viewport-group');
+    const p4SinusoidBloodLayer = document.getElementById('p4-sinusoid-blood-layer');
+    const p4StromaCellsLayer = document.getElementById('p4-stroma-cells-layer');
+    const p4HscLayer = document.getElementById('p4-hsc-layer');
+    const p4BcellPipelineLayer = document.getElementById('p4-bcell-pipeline-layer');
+    const p4NeutrophilPipelineLayer = document.getElementById('p4-neutrophil-pipeline-layer');
+    const p4StoragePoolLayer = document.getElementById('p4-storage-pool-layer');
+    const p4LlpcLayer = document.getElementById('p4-llpc-layer');
+    const p4AntibodiesLayer = document.getElementById('p4-antibodies-layer');
+    const p4IntravasationLayer = document.getElementById('p4-intravasation-layer');
+    const p4FloatingLabelsLayer = document.getElementById('p4-floating-labels-layer');
+    const p4Annotations = document.getElementById('p4-annotations');
+
+    const tab4State = {
+        initialized: false,
+        activeStep: 1,
+        hscBurstTimer: 0,
+        mobilizeTimer: 0,
+        llpcBoostTimer: 0,
+        poresOpen: true,
+        poreBoostTimer: 0,
+        rbcSpawnTimer: 0,
+        cycleTick: 0,
+        // Entity Collections
+        hscs: [],
+        bCells: [],
+        neutrophils: [],
+        storagePool: [],
+        llpcs: [],
+        antibodies: [],
+        sinusoidRbcs: [],
+        transmigratingCells: [],
+        floatingLabels: []
+    };
+
+    // Zero-Allocation SVG Object Pools for Tab 4
+    const p4HscPool = [];
+    let p4HscCount = 0;
+    const p4BcellPool = [];
+    let p4BcellCount = 0;
+    const p4NeutroPool = [];
+    let p4NeutroCount = 0;
+    const p4StoragePool = [];
+    let p4StorageCount = 0;
+    const p4LlpcPool = [];
+    let p4LlpcCount = 0;
+    const p4AbPool = [];
+    let p4AbCount = 0;
+    const p4SinusoidRbcPool = [];
+    let p4SinusoidRbcCount = 0;
+    const p4LabelPool = [];
+    let p4LabelCount = 0;
+
+    function resetP4SvgPools() {
+        p4HscCount = 0;
+        p4BcellCount = 0;
+        p4NeutroCount = 0;
+        p4StorageCount = 0;
+        p4LlpcCount = 0;
+        p4AbCount = 0;
+        p4SinusoidRbcCount = 0;
+        p4LabelCount = 0;
+    }
+
+    function finalizeP4SvgPools() {
+        for (let i = p4HscCount; i < p4HscPool.length; i++) {
+            p4HscPool[i].g.style.display = 'none';
+        }
+        for (let i = p4BcellCount; i < p4BcellPool.length; i++) {
+            p4BcellPool[i].g.style.display = 'none';
+        }
+        for (let i = p4NeutroCount; i < p4NeutroPool.length; i++) {
+            p4NeutroPool[i].g.style.display = 'none';
+        }
+        for (let i = p4StorageCount; i < p4StoragePool.length; i++) {
+            p4StoragePool[i].g.style.display = 'none';
+        }
+        for (let i = p4LlpcCount; i < p4LlpcPool.length; i++) {
+            p4LlpcPool[i].g.style.display = 'none';
+        }
+        for (let i = p4AbCount; i < p4AbPool.length; i++) {
+            p4AbPool[i].style.display = 'none';
+        }
+        for (let i = p4SinusoidRbcCount; i < p4SinusoidRbcPool.length; i++) {
+            p4SinusoidRbcPool[i].g.style.display = 'none';
+        }
+        for (let i = p4LabelCount; i < p4LabelPool.length; i++) {
+            p4LabelPool[i].el.style.display = 'none';
+        }
+    }
+
+    // Pooled Element Renderers for Tab 4
+    function renderPooledP4Hsc(h) {
+        if (!p4HscLayer) return;
+        let item;
+        if (p4HscCount < p4HscPool.length) {
+            item = p4HscPool[p4HscCount];
+            item.g.style.display = '';
+        } else {
+            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            const aura = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            const body = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            const nucleus = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            g.appendChild(aura);
+            g.appendChild(body);
+            g.appendChild(nucleus);
+            p4HscLayer.appendChild(g);
+            item = { g, aura, body, nucleus };
+            p4HscPool.push(item);
+        }
+
+        const r = h.r || 9.5;
+        const pulseScale = 1.0 + 0.12 * Math.sin(h.pulse || 0);
+
+        item.aura.setAttribute("cx", "0");
+        item.aura.setAttribute("cy", "0");
+        item.aura.setAttribute("r", (r * 2.2 * pulseScale).toFixed(1));
+        item.aura.setAttribute("fill", "url(#hscAuraGrad)");
+        item.aura.setAttribute("opacity", (0.55 + 0.25 * Math.sin(h.pulse || 0)).toFixed(2));
+
+        item.body.setAttribute("cx", "0");
+        item.body.setAttribute("cy", "0");
+        item.body.setAttribute("r", r.toFixed(1));
+        item.body.setAttribute("fill", h.fill || "#0d9488");
+        item.body.setAttribute("stroke", h.stroke || "#14b8a6");
+        item.body.setAttribute("stroke-width", "1.8");
+
+        item.nucleus.setAttribute("cx", "0");
+        item.nucleus.setAttribute("cy", "0");
+        item.nucleus.setAttribute("r", (r * 0.52).toFixed(1));
+        item.nucleus.setAttribute("fill", h.nucleusFill || "#042f2e");
+
+        item.g.setAttribute("transform", `translate(${h.x.toFixed(1)}, ${h.y.toFixed(1)})`);
+        item.g.setAttribute("opacity", (h.alpha || 1).toFixed(2));
+        p4HscCount++;
+    }
+
+    function renderPooledP4Bcell(b) {
+        if (!p4BcellPipelineLayer) return;
+        let item;
+        if (p4BcellCount < p4BcellPool.length) {
+            item = p4BcellPool[p4BcellCount];
+            item.g.style.display = '';
+        } else {
+            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            const body = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            const nucleus = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            g.appendChild(body);
+            g.appendChild(nucleus);
+            p4BcellPipelineLayer.appendChild(g);
+            item = { g, body, nucleus };
+            p4BcellPool.push(item);
+        }
+
+        const r = b.r || 8.0;
+        item.body.setAttribute("cx", "0");
+        item.body.setAttribute("cy", "0");
+        item.body.setAttribute("r", r.toFixed(1));
+        item.body.setAttribute("fill", b.fill || "#fb923c");
+        item.body.setAttribute("stroke", b.stage === 'mature_b' ? "#ffffff" : "#ea580c");
+        item.body.setAttribute("stroke-width", b.stage === 'mature_b' ? "1.4" : "1.0");
+
+        item.nucleus.setAttribute("cx", "0");
+        item.nucleus.setAttribute("cy", "0");
+        item.nucleus.setAttribute("r", (r * 0.55).toFixed(1));
+        item.nucleus.setAttribute("fill", b.nucleusFill || "#c2410c");
+
+        // Transmigration waist squeeze deformation
+        if (b.squeezing) {
+            item.body.setAttribute("r", (r * 0.65).toFixed(1));
+            item.g.setAttribute("transform", `translate(${b.x.toFixed(1)}, ${b.y.toFixed(1)}) scale(0.65, 1.45) rotate(${((b.angle || 0) * 57.3).toFixed(1)})`);
+        } else {
+            item.g.setAttribute("transform", `translate(${b.x.toFixed(1)}, ${b.y.toFixed(1)})`);
+        }
+
+        item.g.setAttribute("opacity", (b.alpha || 1).toFixed(2));
+        p4BcellCount++;
+    }
+
+    function renderPooledP4Neutro(n) {
+        if (!p4NeutrophilPipelineLayer) return;
+        let item;
+        if (p4NeutroCount < p4NeutroPool.length) {
+            item = p4NeutroPool[p4NeutroCount];
+            item.g.style.display = '';
+        } else {
+            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            const body = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            const n1 = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            const n2 = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            const n3 = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            const bandPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            g.appendChild(body);
+            g.appendChild(n1);
+            g.appendChild(n2);
+            g.appendChild(n3);
+            g.appendChild(bandPath);
+            p4NeutrophilPipelineLayer.appendChild(g);
+            item = { g, body, n1, n2, n3, bandPath };
+            p4NeutroPool.push(item);
+        }
+
+        const r = n.r || 7.5;
+        item.body.setAttribute("cx", "0");
+        item.body.setAttribute("cy", "0");
+        item.body.setAttribute("r", r.toFixed(1));
+        item.body.setAttribute("fill", n.fill || "#38bdf8");
+        item.body.setAttribute("stroke", n.stage === 'segmented' ? "#ffffff" : "#0284c7");
+        item.body.setAttribute("stroke-width", n.stage === 'segmented' ? "1.4" : "1.0");
+
+        if (n.stage === 'band') {
+            // Horseshoe / U-shaped nucleus
+            item.n1.style.display = 'none';
+            item.n2.style.display = 'none';
+            item.n3.style.display = 'none';
+            item.bandPath.style.display = '';
+            item.bandPath.setAttribute("d", "M -3.2 -2.5 C -3.5 2.5, 3.5 2.5, 3.2 -2.5");
+            item.bandPath.setAttribute("fill", "none");
+            item.bandPath.setAttribute("stroke", "#0369a1");
+            item.bandPath.setAttribute("stroke-width", "2.6");
+            item.bandPath.setAttribute("stroke-linecap", "round");
+        } else if (n.stage === 'myeloblast' || n.stage === 'promyelocyte') {
+            // Single large round nucleus
+            item.bandPath.style.display = 'none';
+            item.n2.style.display = 'none';
+            item.n3.style.display = 'none';
+            item.n1.style.display = '';
+            item.n1.setAttribute("cx", "0");
+            item.n1.setAttribute("cy", "0");
+            item.n1.setAttribute("r", (r * 0.55).toFixed(1));
+            item.n1.setAttribute("fill", "#0369a1");
+        } else {
+            // Segmented neutrophil: classic tri-lobed nucleus matching Page 1
+            item.bandPath.style.display = 'none';
+            item.n1.style.display = '';
+            item.n2.style.display = '';
+            item.n3.style.display = '';
+            item.n1.setAttribute("cx", "-2.5");
+            item.n1.setAttribute("cy", "-2.0");
+            item.n1.setAttribute("r", "2.2");
+            item.n1.setAttribute("fill", "#0369a1");
+
+            item.n2.setAttribute("cx", "2.5");
+            item.n2.setAttribute("cy", "-2.0");
+            item.n2.setAttribute("r", "2.2");
+            item.n2.setAttribute("fill", "#0369a1");
+
+            item.n3.setAttribute("cx", "0");
+            item.n3.setAttribute("cy", "2.5");
+            item.n3.setAttribute("r", "2.2");
+            item.n3.setAttribute("fill", "#0369a1");
+        }
+
+        item.g.setAttribute("transform", `translate(${n.x.toFixed(1)}, ${n.y.toFixed(1)})`);
+        item.g.setAttribute("opacity", (n.alpha || 1).toFixed(2));
+        p4NeutroCount++;
+    }
+
+    function renderPooledP4StorageNeutro(sn) {
+        if (!p4StoragePoolLayer) return;
+        let item;
+        if (p4StorageCount < p4StoragePool.length) {
+            item = p4StoragePool[p4StorageCount];
+            item.g.style.display = '';
+        } else {
+            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            const body = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            const n1 = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            const n2 = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            const n3 = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            g.appendChild(body);
+            g.appendChild(n1);
+            g.appendChild(n2);
+            g.appendChild(n3);
+            p4StoragePoolLayer.appendChild(g);
+            item = { g, body, n1, n2, n3 };
+            p4StoragePool.push(item);
+        }
+
+        const r = sn.r || 7.5;
+        item.body.setAttribute("cx", "0");
+        item.body.setAttribute("cy", "0");
+        item.body.setAttribute("r", r.toFixed(1));
+        item.body.setAttribute("fill", "#38bdf8");
+        item.body.setAttribute("stroke", sn.mobilized ? "#7dd3fc" : "#ffffff");
+        item.body.setAttribute("stroke-width", sn.mobilized ? "1.8" : "1.2");
+
+        item.n1.setAttribute("cx", "-2.5");
+        item.n1.setAttribute("cy", "-2.0");
+        item.n1.setAttribute("r", "2.2");
+        item.n1.setAttribute("fill", "#0369a1");
+
+        item.n2.setAttribute("cx", "2.5");
+        item.n2.setAttribute("cy", "-2.0");
+        item.n2.setAttribute("r", "2.2");
+        item.n2.setAttribute("fill", "#0369a1");
+
+        item.n3.setAttribute("cx", "0");
+        item.n3.setAttribute("cy", "2.5");
+        item.n3.setAttribute("r", "2.2");
+        item.n3.setAttribute("fill", "#0369a1");
+
+        if (sn.squeezing) {
+            item.g.setAttribute("transform", `translate(${sn.x.toFixed(1)}, ${sn.y.toFixed(1)}) scale(0.65, 1.45) rotate(${((sn.angle || 0) * 57.3).toFixed(1)})`);
+        } else {
+            item.g.setAttribute("transform", `translate(${sn.x.toFixed(1)}, ${sn.y.toFixed(1)})`);
+        }
+
+        item.g.setAttribute("opacity", (sn.alpha || 0.95).toFixed(2));
+        p4StorageCount++;
+    }
+
+    function renderPooledP4Llpc(lp) {
+        if (!p4LlpcLayer) return;
+        let item;
+        if (p4LlpcCount < p4LlpcPool.length) {
+            item = p4LlpcPool[p4LlpcCount];
+            item.g.style.display = '';
+        } else {
+            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            const halo = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
+            const body = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
+            const golgi = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
+            const nucleus = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            // Cartwheel chromatin lines
+            const spoke1 = document.createElementNS("http://www.w3.org/2000/svg", "line");
+            const spoke2 = document.createElementNS("http://www.w3.org/2000/svg", "line");
+            const spoke3 = document.createElementNS("http://www.w3.org/2000/svg", "line");
+            g.appendChild(halo);
+            g.appendChild(body);
+            g.appendChild(golgi);
+            g.appendChild(nucleus);
+            g.appendChild(spoke1);
+            g.appendChild(spoke2);
+            g.appendChild(spoke3);
+            p4LlpcLayer.appendChild(g);
+            item = { g, halo, body, golgi, nucleus, spoke1, spoke2, spoke3 };
+            p4LlpcPool.push(item);
+        }
+
+        const pulseScale = 1.0 + 0.1 * Math.sin(lp.pulse || 0);
+        item.halo.setAttribute("cx", "0");
+        item.halo.setAttribute("cy", "0");
+        item.halo.setAttribute("rx", (15 * pulseScale).toFixed(1));
+        item.halo.setAttribute("ry", (13 * pulseScale).toFixed(1));
+        item.halo.setAttribute("fill", "url(#llpcGlowGrad)");
+        item.halo.setAttribute("opacity", (0.5 + 0.3 * Math.sin(lp.pulse || 0)).toFixed(2));
+
+        // Plump oval cytoplasm
+        item.body.setAttribute("cx", "0");
+        item.body.setAttribute("cy", "0");
+        item.body.setAttribute("rx", "10.5");
+        item.body.setAttribute("ry", "8.5");
+        item.body.setAttribute("fill", "#ea580c");
+        item.body.setAttribute("stroke", "#fbbf24");
+        item.body.setAttribute("stroke-width", "1.4");
+
+        // Golgi pale zone
+        item.golgi.setAttribute("cx", "3.2");
+        item.golgi.setAttribute("cy", "0.5");
+        item.golgi.setAttribute("rx", "3.0");
+        item.golgi.setAttribute("ry", "3.8");
+        item.golgi.setAttribute("fill", "#fed7aa");
+        item.golgi.setAttribute("opacity", "0.75");
+
+        // Eccentric cartwheel nucleus
+        item.nucleus.setAttribute("cx", "-3.0");
+        item.nucleus.setAttribute("cy", "-0.5");
+        item.nucleus.setAttribute("r", "4.6");
+        item.nucleus.setAttribute("fill", "#7c2d12");
+
+        // Cartwheel spokes
+        item.spoke1.setAttribute("x1", "-3.0");
+        item.spoke1.setAttribute("y1", "-4.5");
+        item.spoke1.setAttribute("x2", "-3.0");
+        item.spoke1.setAttribute("y2", "3.5");
+        item.spoke1.setAttribute("stroke", "#ea580c");
+        item.spoke1.setAttribute("stroke-width", "1.0");
+
+        item.spoke2.setAttribute("x1", "-6.5");
+        item.spoke2.setAttribute("y1", "-2.5");
+        item.spoke2.setAttribute("x2", "0.5");
+        item.spoke2.setAttribute("y2", "1.5");
+        item.spoke2.setAttribute("stroke", "#ea580c");
+        item.spoke2.setAttribute("stroke-width", "1.0");
+
+        item.spoke3.setAttribute("x1", "-6.5");
+        item.spoke3.setAttribute("y1", "1.5");
+        item.spoke3.setAttribute("x2", "0.5");
+        item.spoke3.setAttribute("y2", "-2.5");
+        item.spoke3.setAttribute("stroke", "#ea580c");
+        item.spoke3.setAttribute("stroke-width", "1.0");
+
+        item.g.setAttribute("transform", `translate(${lp.x.toFixed(1)}, ${lp.y.toFixed(1)})`);
+        item.g.setAttribute("opacity", (lp.alpha || 1).toFixed(2));
+        p4LlpcCount++;
+    }
+
+    function renderPooledP4Ab(ab) {
+        if (!p4AntibodiesLayer) return;
+        let p;
+        if (p4AbCount < p4AbPool.length) {
+            p = p4AbPool[p4AbCount];
+            p.style.display = '';
+        } else {
+            p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            p.setAttribute("d", "M 0 5 L 0 0 L -3.5 -4 M 0 0 L 3.5 -4");
+            p.setAttribute("fill", "none");
+            p.setAttribute("stroke-linecap", "round");
+            p.setAttribute("stroke-linejoin", "round");
+            p4AntibodiesLayer.appendChild(p);
+            p4AbPool.push(p);
+        }
+
+        p.setAttribute("stroke", ab.color || "#fbbf24");
+        p.setAttribute("stroke-width", "2.2");
+        p.setAttribute("transform", `translate(${ab.x.toFixed(1)}, ${ab.y.toFixed(1)}) rotate(${(ab.angle || 0).toFixed(1)})`);
+        p.setAttribute("opacity", (ab.alpha || 1).toFixed(2));
+        p4AbCount++;
+    }
+
+    function renderPooledP4SinusoidRbc(r) {
+        if (!p4SinusoidBloodLayer) return;
+        let item;
+        if (p4SinusoidRbcCount < p4SinusoidRbcPool.length) {
+            item = p4SinusoidRbcPool[p4SinusoidRbcCount];
+            item.g.style.display = '';
+        } else {
+            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            const outer = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
+            const inner = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
+            g.appendChild(outer);
+            g.appendChild(inner);
+            p4SinusoidBloodLayer.appendChild(g);
+            item = { g, outer, inner };
+            p4SinusoidRbcPool.push(item);
+        }
+
+        if (r.biconcave) {
+            item.outer.setAttribute("rx", (r.r || 4.8).toFixed(1));
+            item.outer.setAttribute("ry", ((r.r || 4.8) * 0.68).toFixed(1));
+            item.outer.setAttribute("fill", "#dc2626");
+            item.inner.style.display = '';
+            item.inner.setAttribute("rx", ((r.r || 4.8) * 0.45).toFixed(1));
+            item.inner.setAttribute("ry", ((r.r || 4.8) * 0.30).toFixed(1));
+            item.inner.setAttribute("fill", "#991b1b");
+            item.inner.setAttribute("opacity", "0.85");
+        } else {
+            item.outer.setAttribute("rx", (r.r || 4.8).toFixed(1));
+            item.outer.setAttribute("ry", (r.r || 4.8).toFixed(1));
+            item.outer.setAttribute("fill", "#ef4444");
+            item.inner.style.display = 'none';
+        }
+
+        item.g.setAttribute("transform", `translate(${r.x.toFixed(1)}, ${r.y.toFixed(1)}) rotate(${((r.angle || 0) * 57.3).toFixed(1)})`);
+        item.g.setAttribute("opacity", (r.alpha || 0.9).toFixed(2));
+        p4SinusoidRbcCount++;
+    }
+
+    function renderPooledP4Label(lbl) {
+        if (!p4FloatingLabelsLayer) return;
+        let item;
+        if (p4LabelCount < p4LabelPool.length) {
+            item = p4LabelPool[p4LabelCount];
+            item.el.style.display = '';
+        } else {
+            const el = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+            const txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
+            el.appendChild(rect);
+            el.appendChild(txt);
+            p4FloatingLabelsLayer.appendChild(el);
+            item = { el, rect, txt };
+            p4LabelPool.push(item);
+        }
+
+        const len = lbl.text ? lbl.text.length : 10;
+        const w = len * 11 + 16;
+        item.rect.setAttribute("x", (-w / 2).toFixed(1));
+        item.rect.setAttribute("y", "-10");
+        item.rect.setAttribute("width", w.toFixed(1));
+        item.rect.setAttribute("height", "20");
+        item.rect.setAttribute("rx", "5");
+        item.rect.setAttribute("fill", "rgba(15, 23, 42, 0.92)");
+        item.rect.setAttribute("stroke", lbl.color || "#38bdf8");
+        item.rect.setAttribute("stroke-width", "1.2");
+
+        item.txt.setAttribute("x", "0");
+        item.txt.setAttribute("y", "3.5");
+        item.txt.setAttribute("fill", lbl.color || "#38bdf8");
+        item.txt.setAttribute("font-size", "10.5");
+        item.txt.setAttribute("font-weight", "600");
+        item.txt.setAttribute("text-anchor", "middle");
+        item.txt.textContent = lbl.text;
+
+        item.el.setAttribute("transform", `translate(${lbl.x.toFixed(1)}, ${lbl.y.toFixed(1)})`);
+        item.el.setAttribute("opacity", Math.min(1, lbl.life / 30).toFixed(2));
+        p4LabelCount++;
+    }
+
+    function spawnP4Label(x, y, text, color = "#38bdf8") {
+        tab4State.floatingLabels.push({
+            x: x,
+            y: y,
+            text: text,
+            color: color,
+            life: 140
+        });
+    }
+
+    function initTab4Simulation() {
+        tab4State.initialized = true;
+        tab4State.cycleTick = 0;
+        tab4State.hscBurstTimer = 0;
+        tab4State.mobilizeTimer = 0;
+        tab4State.llpcBoostTimer = 0;
+        tab4State.poresOpen = true;
+
+        tab4State.hscs = [];
+        tab4State.bCells = [];
+        tab4State.neutrophils = [];
+        tab4State.storagePool = [];
+        tab4State.llpcs = [];
+        tab4State.antibodies = [];
+        tab4State.sinusoidRbcs = [];
+        tab4State.floatingLabels = [];
+
+        // 1. Initialize Quiescent & Dividing HSCs in Endosteal Niche
+        tab4State.hscs.push({
+            x: 130, y: 120, r: 10.5, pulse: 0, state: 'quiescent', fill: '#0d9488', stroke: '#14b8a6', nucleusFill: '#042f2e'
+        });
+        tab4State.hscs.push({
+            x: 152, y: 155, r: 9.8, pulse: 1.2, state: 'quiescent', fill: '#0d9488', stroke: '#14b8a6', nucleusFill: '#042f2e'
+        });
+        tab4State.hscs.push({
+            x: 110, y: 180, r: 9.2, pulse: 2.4, state: 'quiescent', fill: '#0d9488', stroke: '#14b8a6', nucleusFill: '#042f2e'
+        });
+        tab4State.hscs.push({
+            x: 165, y: 100, r: 9.0, pulse: 3.6, state: 'mpp', fill: '#0f766e', stroke: '#2dd4bf', nucleusFill: '#042f2e'
+        });
+
+        // 2. Initialize B Cell Development Pipeline (Pro-B -> Pre-B -> Immature B -> Mature Naive B)
+        tab4State.bCells.push({ stage: 'pro_b', x: 235, y: 130, r: 6.5, fill: '#ea580c', nucleusFill: '#7c2d12', vx: 0.15, vy: 0.05, squeezing: false, inSinusoid: false });
+        tab4State.bCells.push({ stage: 'pre_b', x: 275, y: 150, r: 7.0, fill: '#f97316', nucleusFill: '#9a3412', vx: 0.2, vy: 0.1, squeezing: false, inSinusoid: false });
+        tab4State.bCells.push({ stage: 'immature_b', x: 315, y: 175, r: 7.5, fill: '#fb923c', nucleusFill: '#c2410c', vx: 0.25, vy: 0.15, squeezing: false, inSinusoid: false });
+        tab4State.bCells.push({ stage: 'mature_b', x: 350, y: 205, r: 8.0, fill: '#fb923c', nucleusFill: '#c2410c', vx: 0.3, vy: 0.2, squeezing: false, inSinusoid: false });
+
+        // 3. Initialize Neutrophil Maturation Pipeline
+        tab4State.neutrophils.push({ stage: 'myeloblast', x: 470, y: 88, r: 9.0, fill: '#0284c7', vx: 0.1, vy: 0.04, squeezing: false });
+        tab4State.neutrophils.push({ stage: 'promyelocyte', x: 510, y: 100, r: 8.5, fill: '#0ea5e9', vx: 0.12, vy: 0.05, squeezing: false });
+        tab4State.neutrophils.push({ stage: 'metamyelocyte', x: 550, y: 114, r: 8.0, fill: '#38bdf8', vx: 0.15, vy: 0.06, squeezing: false });
+        tab4State.neutrophils.push({ stage: 'band', x: 590, y: 128, r: 7.8, fill: '#38bdf8', vx: 0.2, vy: 0.08, squeezing: false });
+        tab4State.neutrophils.push({ stage: 'segmented', x: 630, y: 142, r: 7.5, fill: '#38bdf8', vx: 0.25, vy: 0.1, squeezing: false });
+
+        // 4. Initialize Massive Storage Pool Reservoir (72 mature segmented neutrophils)
+        for (let row = 0; row < 6; row++) {
+            for (let col = 0; col < 12; col++) {
+                const offsetX = (row % 2 === 1) ? 9 : 0;
+                const baseX = 650 + col * 18 + offsetX + (Math.random() - 0.5) * 4;
+                const baseY = 70 + row * 24 + (Math.random() - 0.5) * 4;
+                tab4State.storagePool.push({
+                    x: baseX,
+                    y: baseY,
+                    origX: baseX,
+                    origY: baseY,
+                    vx: 0,
+                    vy: 0,
+                    r: 7.5,
+                    mobilized: false,
+                    squeezing: false,
+                    inSinusoid: false,
+                    alpha: 0.95
+                });
+            }
+        }
+
+        // 5. Initialize Long-Lived Plasma Cells (LLPCs) in Perivascular Sanctuary
+        const llpcCoords = [
+            { x: 345, y: 355 },
+            { x: 390, y: 365 },
+            { x: 365, y: 395 },
+            { x: 425, y: 380 },
+            { x: 410, y: 415 }
+        ];
+        llpcCoords.forEach((pt, idx) => {
+            tab4State.llpcs.push({
+                x: pt.x,
+                y: pt.y,
+                pulse: idx * 1.1,
+                secreteTimer: idx * 18,
+                alpha: 1.0
+            });
+        });
+
+        // 6. Initialize Sinusoidal Red Blood Cells (~36 RBCs)
+        for (let i = 0; i < 36; i++) {
+            const rx = 60 + i * 26 + Math.random() * 8;
+            const midY = 245 + 0.05 * (rx - 60) + 18 * Math.sin(rx * 0.007);
+            tab4State.sinusoidRbcs.push({
+                x: rx,
+                y: midY + (Math.random() - 0.5) * 28,
+                vx: 3.2 + Math.random() * 2.2,
+                vy: (Math.random() - 0.5) * 0.4,
+                r: 4.8,
+                biconcave: (i % 3 === 0),
+                angle: (Math.random() - 0.5) * 0.6,
+                alpha: 0.9
+            });
+        }
+    }
+
+    function stepPage4Simulation() {
+        if (!tab4State.initialized) initTab4Simulation();
+        if (!p4SinusoidBloodLayer || !p4StoragePoolLayer) return;
+        resetP4SvgPools();
+
+        tab4State.cycleTick++;
+
+        // 1. Sinusoidal Red Blood Cells Hemodynamics
+        tab4State.rbcSpawnTimer += simSpeed;
+        if (tab4State.rbcSpawnTimer >= 8) {
+            tab4State.rbcSpawnTimer = 0;
+            tab4State.sinusoidRbcs.push({
+                x: 60,
+                y: 265 + (Math.random() - 0.5) * 26,
+                vx: 3.4 + Math.random() * 2.0,
+                vy: 0,
+                r: 4.8,
+                biconcave: Math.random() < 0.32,
+                angle: (Math.random() - 0.5) * 0.5,
+                alpha: 0.9
+            });
+        }
+
+        for (let i = tab4State.sinusoidRbcs.length - 1; i >= 0; i--) {
+            const rbc = tab4State.sinusoidRbcs[i];
+            rbc.x += rbc.vx * simSpeed;
+            // Centerline guiding trajectory through sinusoid
+            const targetY = 255 + 0.04 * (rbc.x - 60) + 16 * Math.sin(rbc.x * 0.0068);
+            rbc.y += (targetY - rbc.y) * 0.05 * simSpeed;
+
+            if (rbc.x >= 1010) {
+                tab4State.sinusoidRbcs.splice(i, 1);
+                continue;
+            }
+            renderPooledP4SinusoidRbc(rbc);
+        }
+
+        // 2. Hematopoietic Stem Cell (HSC) Dynamics & Differentiation Burst
+        if (tab4State.hscBurstTimer > 0) {
+            tab4State.hscBurstTimer -= simSpeed;
+            if (tab4State.cycleTick % 22 === 0) {
+                // Spawn a new progenitor branching out
+                tab4State.hscs.push({
+                    x: 135 + Math.random() * 25,
+                    y: 125 + Math.random() * 25,
+                    r: 8.5,
+                    pulse: Math.random() * 3,
+                    state: Math.random() < 0.5 ? 'clp' : 'cmp',
+                    fill: Math.random() < 0.5 ? '#ea580c' : '#0284c7',
+                    stroke: '#38bdf8',
+                    nucleusFill: '#042f2e',
+                    vx: 0.5 + Math.random() * 0.4,
+                    vy: (Math.random() - 0.5) * 0.3,
+                    life: 160
+                });
+            }
+        }
+
+        for (let i = tab4State.hscs.length - 1; i >= 0; i--) {
+            const h = tab4State.hscs[i];
+            h.pulse = (h.pulse || 0) + 0.05 * simSpeed;
+
+            if (h.life !== undefined) {
+                h.life -= simSpeed;
+                h.x += (h.vx || 0) * simSpeed;
+                h.y += (h.vy || 0) * simSpeed;
+                if (h.life <= 0) {
+                    tab4State.hscs.splice(i, 1);
+                    continue;
+                }
+            }
+            renderPooledP4Hsc(h);
+        }
+
+        // 3. B Cell Lineage Development & Sinusoidal Intravasation
+        for (let i = tab4State.bCells.length - 1; i >= 0; i--) {
+            const bc = tab4State.bCells[i];
+
+            if (bc.inSinusoid) {
+                bc.x += 2.6 * simSpeed;
+                bc.y += (268 - bc.y) * 0.05 * simSpeed;
+                if (bc.x >= 1010) {
+                    tab4State.bCells.splice(i, 1);
+                    continue;
+                }
+            } else if (bc.squeezing) {
+                // Squeezing through Pore 1 into marrow blood stream
+                bc.x += 0.35 * simSpeed;
+                bc.y += 0.45 * simSpeed;
+                if (bc.y >= 242) {
+                    bc.squeezing = false;
+                    bc.inSinusoid = true;
+                    spawnP4Label(bc.x, bc.y - 14, "成熟B細胞跨內皮出髓 ➔ 巡邏全身！", "#fb923c");
+                }
+            } else {
+                // Non-intravasated B cells migrating along pipeline toward Pore 1 (x: 358, y: 225)
+                const targetX = 358;
+                const targetY = 225;
+                const dx = targetX - bc.x;
+                const dy = targetY - bc.y;
+                const dist = Math.hypot(dx, dy);
+
+                if (dist > 6) {
+                    bc.x += (dx / dist) * 0.42 * simSpeed;
+                    bc.y += (dy / dist) * 0.42 * simSpeed;
+                } else {
+                    // Squeezing through Pore 1 into marrow blood stream
+                    bc.squeezing = true;
+                    bc.angle = Math.atan2(dy, dx);
+                    bc.x += 0.35 * simSpeed;
+                    bc.y += 0.45 * simSpeed;
+                    if (bc.y >= 242) {
+                        bc.squeezing = false;
+                        bc.inSinusoid = true;
+                        spawnP4Label(bc.x, bc.y - 14, "成熟B細胞跨內皮出髓 ➔ 巡邏全身！", "#fb923c");
+                    }
+                }
+            }
+            renderPooledP4Bcell(bc);
+        }
+
+        // Continuous replenishment of pipeline B cells
+        if (tab4State.cycleTick % 80 === 0 && tab4State.bCells.length < 8) {
+            tab4State.bCells.push({
+                stage: 'immature_b',
+                x: 230 + Math.random() * 20,
+                y: 135 + Math.random() * 15,
+                r: 7.2,
+                fill: '#fb923c',
+                nucleusFill: '#c2410c',
+                vx: 0.25,
+                vy: 0.15,
+                squeezing: false,
+                inSinusoid: false
+            });
+        }
+
+        // 4. Neutrophil Maturation Pipeline
+        for (let i = 0; i < tab4State.neutrophils.length; i++) {
+            const n = tab4State.neutrophils[i];
+            n.x += n.vx * simSpeed * 0.35;
+            n.y += n.vy * simSpeed * 0.35;
+            // Bound inside cord
+            if (n.x > 640) n.x = 460 + (i * 42);
+            renderPooledP4Neutro(n);
+        }
+
+        // 5. Massive Storage Pool Dynamics & Emergency Mobilization
+        if (tab4State.mobilizeTimer > 0) {
+            tab4State.mobilizeTimer -= simSpeed;
+        }
+
+        for (let i = tab4State.storagePool.length - 1; i >= 0; i--) {
+            const sn = tab4State.storagePool[i];
+
+            if (sn.inSinusoid) {
+                // In sinusoidal circulation: swift outflow
+                sn.x += (4.8 + (i % 3) * 0.8) * simSpeed;
+                sn.y += (278 - sn.y) * 0.06 * simSpeed;
+                if (sn.x >= 1010) {
+                    tab4State.storagePool.splice(i, 1);
+                    continue;
+                }
+            } else if (sn.mobilized) {
+                if (sn.squeezing) {
+                    const targetPoreY = (sn.origX < 730) ? 272 : 275;
+                    sn.x += 0.4 * simSpeed;
+                    sn.y += 0.8 * simSpeed;
+                    if (sn.y >= targetPoreY + 12) {
+                        sn.squeezing = false;
+                        sn.inSinusoid = true;
+                    }
+                } else {
+                    // Moving toward transcellular pores: Pore 2 (x: 642, y: 272) or Pore 4 (x: 798, y: 275)
+                    const targetPoreX = (sn.origX < 730) ? 642 : 798;
+                    const targetPoreY = (sn.origX < 730) ? 272 : 275;
+                    const dx = targetPoreX - sn.x;
+                    const dy = targetPoreY - sn.y;
+                    const dist = Math.hypot(dx, dy);
+
+                    if (dist > 8) {
+                        sn.x += (dx / dist) * 1.6 * simSpeed;
+                        sn.y += (dy / dist) * 1.6 * simSpeed;
+                    } else {
+                        // Squeezing through pore with hourglass waist
+                        sn.squeezing = true;
+                        sn.angle = Math.atan2(dy, dx);
+                        sn.x += 0.4 * simSpeed;
+                        sn.y += 0.8 * simSpeed;
+                        if (sn.y >= targetPoreY + 12) {
+                            sn.squeezing = false;
+                            sn.inSinusoid = true;
+                        }
+                    }
+                }
+            } else {
+                // Resting in storage pool: gentle physiological Brownian tremor
+                sn.x = sn.origX + Math.sin(tab4State.cycleTick * 0.04 + i) * 1.2;
+                sn.y = sn.origY + Math.cos(tab4State.cycleTick * 0.04 + i) * 1.0;
+            }
+
+            renderPooledP4StorageNeutro(sn);
+        }
+
+        // Replenish storage pool if mobilized depleted
+        if (tab4State.storagePool.length < 50 && tab4State.cycleTick % 30 === 0) {
+            const newCol = Math.floor(Math.random() * 10);
+            const newRow = Math.floor(Math.random() * 5);
+            const baseX = 660 + newCol * 18;
+            const baseY = 75 + newRow * 24;
+            tab4State.storagePool.push({
+                x: baseX,
+                y: baseY,
+                origX: baseX,
+                origY: baseY,
+                vx: 0,
+                vy: 0,
+                r: 7.5,
+                mobilized: false,
+                squeezing: false,
+                inSinusoid: false,
+                alpha: 0.95
+            });
+        }
+
+        // 6. Long-Lived Plasma Cells (LLPCs) & Basal IgG Antibody Synthesis
+        if (tab4State.llpcBoostTimer > 0) {
+            tab4State.llpcBoostTimer -= simSpeed;
+        }
+
+        for (let i = 0; i < tab4State.llpcs.length; i++) {
+            const lp = tab4State.llpcs[i];
+            lp.pulse = (lp.pulse || 0) + 0.06 * simSpeed;
+            lp.secreteTimer = (lp.secreteTimer || 0) + simSpeed;
+
+            const threshold = (tab4State.llpcBoostTimer > 0) ? 8 : 28;
+            if (lp.secreteTimer >= threshold) {
+                lp.secreteTimer = 0;
+                // Emit gold Y antibody migrating toward Pore 3 (x: 435, y: 281)
+                tab4State.antibodies.push({
+                    x: lp.x + (Math.random() - 0.5) * 8,
+                    y: lp.y - 8,
+                    vx: 0.15 + (Math.random() - 0.5) * 0.2,
+                    vy: -1.2,
+                    color: '#fbbf24',
+                    angle: -90,
+                    inSinusoid: false,
+                    alpha: 1.0
+                });
+            }
+            renderPooledP4Llpc(lp);
+        }
+
+        // 7. Antibodies Migration & Sinusoid Outflow
+        for (let i = tab4State.antibodies.length - 1; i >= 0; i--) {
+            const ab = tab4State.antibodies[i];
+
+            if (ab.inSinusoid) {
+                ab.x += 4.2 * simSpeed;
+                ab.y += (282 - ab.y) * 0.05 * simSpeed;
+                ab.angle = 0;
+                if (ab.x >= 1010) {
+                    tab4State.antibodies.splice(i, 1);
+                    continue;
+                }
+            } else {
+                // Rising up toward sinusoid Pore 3 (x: 435, y: 281)
+                const dx = 435 - ab.x;
+                const dy = 281 - ab.y;
+                const dist = Math.hypot(dx, dy);
+
+                if (dist > 6) {
+                    ab.x += (dx / dist) * 1.2 * simSpeed;
+                    ab.y += (dy / dist) * 1.2 * simSpeed;
+                } else {
+                    // Intravasates through Pore 3 into marrow venous stream
+                    ab.inSinusoid = true;
+                    ab.vx = 4.2;
+                }
+            }
+            renderPooledP4Ab(ab);
+        }
+
+        // 8. Floating Labels Lifecycle
+        for (let i = tab4State.floatingLabels.length - 1; i >= 0; i--) {
+            const lbl = tab4State.floatingLabels[i];
+            lbl.life -= simSpeed;
+            lbl.y -= 0.25 * simSpeed;
+            if (lbl.life <= 0) {
+                tab4State.floatingLabels.splice(i, 1);
+                continue;
+            }
+            renderPooledP4Label(lbl);
+        }
+
+        finalizeP4SvgPools();
+    }
+
+    // Initialize Interactive Controls for Tab 4
+    function initTab4Controls() {
+        // Stepper 1: HSC Self-Renewal & Differentiation
+        const btnStepHsc = document.getElementById('btn-t4-step-hsc');
+        if (btnStepHsc) {
+            btnStepHsc.addEventListener('click', () => {
+                tab4State.hscBurstTimer = 100;
+                spawnP4Label(140, 95, "🌱 造血幹細胞(HSC)自我更新與多能祖細胞(MPP)分化！", "#14b8a6");
+                const desc = document.getElementById('mechanism-desc-tab-4');
+                if (desc) {
+                    desc.innerHTML = "<strong>【1. 造血幹細胞自我更新與多能分化】</strong>造血幹細胞 (HSC) 定居於低氧的骨內膜微環境，在成骨細胞與基質細胞的訊號調控下維持未分化狀態。當受到造血生長因子刺激時，HSC進行不對稱分裂：一個子細胞留在微環境維持幹細胞池（自我更新），另一個子細胞分化為多能祖細胞 (MPP)，進而分化為髓系共同祖細胞 (CMP) 與淋巴系共同祖細胞 (CLP)！";
+                }
+            });
+        }
+
+        // Stepper 2: B Cell Lineage & Emigration
+        const btnStepBcell = document.getElementById('btn-t4-step-bcell');
+        if (btnStepBcell) {
+            btnStepBcell.addEventListener('click', () => {
+                for (let k = 0; k < 2; k++) {
+                    tab4State.bCells.push({
+                        stage: 'mature_b',
+                        x: 320 + k * 18,
+                        y: 185 + k * 12,
+                        r: 8.0,
+                        fill: '#fb923c',
+                        nucleusFill: '#c2410c',
+                        vx: 0.35,
+                        vy: 0.2,
+                        squeezing: false,
+                        inSinusoid: false
+                    });
+                }
+                spawnP4Label(330, 160, "成熟天生B細胞通過耐受篩選・穿過血竇孔道出髓！", "#fb923c");
+                const desc = document.getElementById('mechanism-desc-tab-4');
+                if (desc) {
+                    desc.innerHTML = "<strong>【2. B細胞誕生發育出髓】</strong>淋巴系祖細胞 (CLP) 在骨髓基質微環境中依序經歷 Pro-B ➔ Pre-B ➔ 未成熟B細胞發育階段，完成BCR抗原受體重排與骨髓中樞耐受篩選（避免自身免疫疾病）。通過考驗之成熟天生B細胞隨後穿過骨髓血竇有孔內皮進入血液，前往第2頁淋巴結巡邏！";
+                }
+            });
+        }
+
+        // Stepper 3: Neutrophil Maturation & Storage Pool
+        const btnStepNeutro = document.getElementById('btn-t4-step-neutrophil');
+        if (btnStepNeutro) {
+            btnStepNeutro.addEventListener('click', () => {
+                for (let k = 0; k < 8; k++) {
+                    const sn = tab4State.storagePool[k % tab4State.storagePool.length];
+                    if (sn) sn.mobilized = true;
+                }
+                spawnP4Label(660, 45, "嗜中性球成熟產線：分葉核粒球進入龐大骨髓儲備庫！", "#38bdf8");
+                const desc = document.getElementById('mechanism-desc-tab-4');
+                if (desc) {
+                    desc.innerHTML = "<strong>【3. 嗜中性球成熟產線與儲存庫】</strong>粒細胞產線歷經原髓細胞 ➔ 早/中幼髓 ➔ 晚幼髓 ➔ 桿狀核 ➔ 最終形成經典三葉核之成熟嗜中性球。人體高達 90% 以上的成熟嗜中性球均儲存於骨髓儲存庫（總量高達血液巡航量的 10~20 倍），隨時待命！";
+                }
+            });
+        }
+
+        // Stepper 4: LLPC Sanctuary & Basal Antibody Factory
+        const btnStepLlpc = document.getElementById('btn-t4-step-llpc');
+        if (btnStepLlpc) {
+            btnStepLlpc.addEventListener('click', () => {
+                tab4State.llpcBoostTimer = 120;
+                spawnP4Label(370, 330, "長壽漿細胞避難所持續分泌高親和力基礎抗體！", "#fbbf24");
+                const desc = document.getElementById('mechanism-desc-tab-4');
+                if (desc) {
+                    desc.innerHTML = "<strong>【4. 長壽漿細胞避難所與抗體工廠】</strong>在淋巴結生發中心完成親和力成熟的漿細胞回巢定居於骨髓血管周圍微環境，獲得基質細胞提供的 CXCL12、APRIL 與 IL-6 存活訊號免除凋亡。長壽漿細胞可存活數月至數十年，持續合成分泌高親和力專一抗體注入血竇，正是第1頁小動脈中源源不絕基礎抗體的真正來源！";
+                }
+            });
+        }
+
+        // Action Trigger 1: Mobilize Storage Pool
+        const btnMobilize = document.getElementById('btn-t4-mobilize-neutrophils');
+        if (btnMobilize) {
+            btnMobilize.addEventListener('click', () => {
+                tab4State.mobilizeTimer = 160;
+                let count = 0;
+                for (let k = 0; k < tab4State.storagePool.length; k++) {
+                    const sn = tab4State.storagePool[k];
+                    if (!sn.inSinusoid && count < 24) {
+                        sn.mobilized = true;
+                        count++;
+                    }
+                }
+                spawnP4Label(720, 110, "🚨 急性發炎動員！骨髓儲存庫大量嗜中性球鑽過孔道湧入血液！", "#38bdf8");
+                const desc = document.getElementById('mechanism-desc-tab-4');
+                if (desc) {
+                    desc.innerHTML = "<strong>【急性發炎骨髓應急動員 (G-CSF Mobilization)】</strong>當外周真皮創口發生細菌入侵時，發炎介質促使巨噬細胞釋放 G-CSF。骨髓感應後下調 CXCL12 滯留訊號，骨髓儲存庫內成群的分葉核嗜中性球受趨化牽引，以變形蟲運動密集穿過血竇跨內皮出髓孔道湧入血流，奔赴前線清創！";
+                }
+            });
+        }
+
+        // Action Trigger 2: HSC Differentiation Burst
+        const btnHscBurst = document.getElementById('btn-t4-hsc-burst');
+        if (btnHscBurst) {
+            btnHscBurst.addEventListener('click', () => {
+                tab4State.hscBurstTimer = 120;
+                spawnP4Label(150, 110, "🌱 造血幹細胞分化爆發：全產線加速運轉！", "#14b8a6");
+            });
+        }
+
+        // Action Trigger 3: LLPC Boost
+        const btnLlpcBoost = document.getElementById('btn-t4-llpc-boost');
+        if (btnLlpcBoost) {
+            btnLlpcBoost.addEventListener('click', () => {
+                tab4State.llpcBoostTimer = 160;
+                spawnP4Label(370, 340, "🏭 活化長壽漿細胞工廠：高親和力抗體大量注入血竇！", "#fbbf24");
+            });
+        }
+
+        // Action Trigger 4: Toggle Migration Pores
+        const btnTogglePores = document.getElementById('btn-t4-toggle-pores');
+        if (btnTogglePores) {
+            btnTogglePores.addEventListener('click', () => {
+                tab4State.poresOpen = !tab4State.poresOpen;
+                spawnP4Label(550, 260, tab4State.poresOpen ? "🚪 出髓孔道已完全舒張開放！" : "🔒 出髓孔道處於靜息狀態", "#38bdf8");
+            });
+        }
+
+        // Reset Button
+        const btnResetMarrow = document.getElementById('btn-t4-reset');
+        if (btnResetMarrow) {
+            btnResetMarrow.addEventListener('click', () => {
+                initTab4Simulation();
+                spawnP4Label(500, 240, "🔄 骨髓微環境已全面重置", "#94a3b8");
+                const desc = document.getElementById('mechanism-desc-tab-4');
+                if (desc) {
+                    desc.innerHTML = "<strong>骨髓</strong>是人體所有血球與免疫細胞的造血搖籃。<strong>造血幹細胞</strong>在骨內膜與血管竇微環境中自我更新並多能分化為<strong>B細胞</strong>與各類血球；骨髓同時也是<strong>長壽漿細胞</strong>的永久庇護所，數十年如一日持續分泌專一性<strong>抗體</strong>維持基礎血清效價，並儲備高達血液10~20倍的龐大<strong>嗜中性球儲存庫</strong>，隨時應對全身急性發炎動員！";
+                }
+            });
+        }
+    }
+
     // Start everything
     buildEpidermis();
     initMucosaChemicals();
@@ -5410,6 +8346,11 @@ document.addEventListener('DOMContentLoaded', () => {
     buildBranchingVessels();
     initBloodParticles();
     initTissueSites();
+    initTabNavigation();
+    initTabControls();
+    initTab2Simulation();
+    initTab3Simulation();
+    initTab4Simulation();
     updateVisualization();
     updateVaccineUI();
     updateStats();

@@ -1,152 +1,99 @@
-# TEST READY: Automated E2E Verification Report — Five Sensory Receptors Dynamic Conduction Simulator
+# MicroDefend Multi-Tab Expansion — Test Readiness Declaration (TEST_READY.md)
 
-- **Date**: 2026-11-09
-- **Repository**: `chihhsiangchien.github.io`
-- **Module**: `neuro_physiology/receptors.html` (五大感覺受器動態傳導模擬器)
-- **Test Suite**: `tests/test_receptors_conduction.py` (30 test cases)
-- **Harness Architecture**: Python `unittest` + Ephemeral Static HTTP Server (`TCPServer` on dynamic port) + BeautifulSoup DOM Parser + Headless Node.js VM Runtime Evaluator
-- **Integrity Status**: 28 / 30 tests passed (93.3% pass rate; 2 pending Milestone 3 bidirectional navigation mounting)
-
----
-
-## 1. Executive Summary
-
-An independent, opaque-box, 4-Tier (+ Tier 5 Adversarial Stress) End-to-End (E2E) verification test suite has been established in `tests/test_receptors_conduction.py` for the Five Sensory Receptors Conduction Simulator project.
-
-The test suite exercises the complete physiological simulation across all 5 sensory receptor pathways (視覺 Vision, 聽覺 Hearing, 嗅覺 Smell, 味覺 Taste, 皮膚 Skin), verifying the canonical 4-stage conduction process:
-$$\text{刺激 (Stimulus)} \longrightarrow \text{受器 (Receptor)} \longrightarrow \text{神經 (Nerve)} \longrightarrow \text{腦 (Brain)}$$
-
-### Verification Summary Table
-
-| Metric | Milestone 1 Threshold | Current Result | Status |
-|--------|----------------------|----------------|:------:|
-| Tier 1: Feature Coverage | ≥10 feature tests | 9 / 11 passed | ⚠️ 2 Pending M3 mounting |
-| Tier 2: Boundary & Corner Cases | ≥5 boundary tests | 6 / 6 passed | ✅ PASS (100%) |
-| Tier 3: VM Runtime & Cross-Feature | Pairwise & VM tests | 5 / 5 passed | ✅ PASS (100%) |
-| Tier 4: Curriculum Anatomical Terms | 15 terms + 5 narratives | 6 / 6 passed | ✅ PASS (100%) |
-| Tier 5: Adversarial Stress | Security & fuzzing | 2 / 2 passed | ✅ PASS (100%) |
-| **Total Test Count** | **≥25 tests** | **30 tests (93.3%)** | **READY FOR GATE** |
-| Execution Time | <15s | 4.15s | ✅ PASS |
-
-*\*Note on Milestone 3 Pending Items*:
-All core simulation components, canvas rendering algorithms, playback engines, and curriculum contents in `neuro_physiology/receptors.html` achieve a **100% PASS RATE (28/28 passed)**. The 2 failing tests (`test_t1_10_lab_to_receptors_forwardlink` and `test_t1_11_homepage_to_receptors_mounting`) are explicitly scheduled for **Milestone 3 (Bidirectional Navigation Integration)**, which will mount links into `neuro_physiology/index.html` and root `index.html`.
+## Status: READY FOR MILESTONE IMPLEMENTATION
+**Milestone**: M0 (E2E Test Suite Creation)  
+**Date**: 2026-11-10  
+**Test Writer**: Teamwork Test Writer (Specialist & QA)  
+**Target Repository**: `c:\Users\user\Documents\GitHub\chihhsiangchien.github.io`  
+**Target Module**: `microDefend/`  
 
 ---
 
-## 2. Test Execution Commands
+## 1. Test Harness Deliverables
 
-```bash
-# Execute the comprehensive 4-Tier test suite
-python -m unittest tests/test_receptors_conduction.py
+| Deliverable | Path | Status | Verification Engine |
+|---|---|---|---|
+| **Python 4-Tier Test Suite** | `tests/test_microdefend_e2e.py` | ✅ Ready & Verified | Python 3.13 stdlib (`unittest`, `http.server`, custom DOM/SVG parser) |
+| **Node.js Chrome CDP Runner** | `tests/test_cdp_e2e.js` | ✅ Ready & Verified | Node.js v24 + Headless Google Chrome over native WebSocket CDP |
+| **Test Infrastructure Spec** | `TEST_INFRA.md` | ✅ Published | Markdown specification at repository root |
+| **Test Readiness Declaration** | `TEST_READY.md` | ✅ Published | This document |
+
+---
+
+## 2. Milestone 0 Baseline Execution Verification
+
+Both test runners were executed against the pre-expansion `microDefend/` baseline codebase. The test harnesses executed cleanly, with zero crashes, zero uncaught exceptions, and recorded exact expected baseline results.
+
+### Summary Results Matrix
+
+| Metric | Python Test Suite (`test_microdefend_e2e.py`) | Node.js CDP Runner (`test_cdp_e2e.js`) | Notes |
+|---|---|---|---|
+| **Total Test Checks** | 15 | 15 | Covers Tiers 1–4 across all 4 planned tabs |
+| **Passed in M0 Baseline** | 6 (40%) | 8 (53%) | 100% of currently existing Page 1 baseline features pass |
+| **Failed in M0 Baseline** | 9 (60%) | 7 (47%) | All failures cleanly assert against planned features in M1–M4 |
+| **Uncaught JS Exceptions** | 0 | 0 | Strict requirement satisfied |
+| **Console Errors Logged** | 0 | 0 | Strict requirement satisfied |
+| **Execution Duration** | 0.96s | 3.82s | Fast feedback loop for local and CI development |
+
+---
+
+## 3. Baseline Passes vs. Pending Milestone Mapping
+
+### Currently Passing in Baseline (Milestone 0)
+- ✅ `test_t1_p1_baseline_lymphatic_vessel_geometry`: Initial lymphatic vessel geometry confirmed at `x=868..1000, y=248..288`, center `y=268`, stroke `#10b981`, `stroke-dasharray="6,3"`.
+- ✅ `test_t1_p1_baseline_controls_and_stats`: Coagulation stepper (5 stages), Cardinal signs (4 buttons), pathogen spawners verified.
+- ✅ `test_t2_speed_multipliers_boundary`: `0.5x`, `1.0x`, `2.0x` speed controls verified within physiological boundaries `[0.1, 5.0]`.
+- ✅ `test_t2_viewport_meta_and_responsive_structure`: Responsive `<meta name="viewport">` and layout containers confirmed.
+- ✅ `test_t3_object_pool_hygiene_and_listeners`: Zero-allocation object pool pattern present in `script.js`.
+- ✅ `test_t4_educational_descriptions_and_mechanisms`: Educational mechanism container (`#mechanism-desc`) verified.
+- ✅ (CDP) `Page Title Verification`: Confirmed title matches MicroDefend pattern.
+- ✅ (CDP) `SVG Visualization Presence`: Existing `#inflammation-viz` SVG rendering confirmed.
+- ✅ (CDP) `Speed Multiplier Interaction`: 2.0x click triggers live speed update.
+- ✅ (CDP) `Pathogen Spawn Interaction`: Pathogen spawn click executes with 0 runtime errors.
+- ✅ (CDP) `Anatomy Labels Toggle`: Toggling `#toggle-labels` alters annotation layer visibility.
+- ✅ (CDP) `Zero Uncaught Runtime Exceptions`: 0 unhandled exceptions across entire interaction session.
+
+### Pending Implementation (Failing as Expected in TDD Baseline)
+The following failures serve as the automated acceptance criteria gates for subsequent milestones:
+1. **Milestone 1 Gates**:
+   - `test_t1_m1_multi_tab_navigation_bar`: `.tabs-nav` with Tabs 1–4.
+   - `test_t1_m1_tab2_lymph_node_scene_structure`: `#viz-tab-2` scene, afferent inlet, capsule, sinus, trabeculae, follicles, efferent duct.
+   - `test_t2_spatial_coordinate_exactness`: Spatial continuity (`x=0, y=248..288`, center 268) matching Page 1.
+   - `test_t3_cross_tab_viewport_isolation`: Active-tab display gating for SVG scenes.
+2. **Milestone 2 Gates**:
+   - `test_t1_m2_tab3_venous_confluence_scene`: `#viz-tab-3`, thoracic duct, venous valve leaflets, `#f87171` / `#991b1b` walls.
+3. **Milestone 3 Gates**:
+   - `test_t1_m3_tab4_bone_marrow_scene`: `#viz-tab-4`, trabeculae, sinusoids, HSC, B cells, LLPC factory, neutrophil pool.
+4. **Milestone 4 Gates**:
+   - `test_t1_m4_interactive_control_panels`: Control panels `#controls-tab-2`, `#controls-tab-3`, `#controls-tab-4`.
+   - `test_t3_animation_loop_gating_in_script`: Active-tab simulation gating in `script.js`.
+   - `test_t4_curriculum_biological_terminology`: Presence of remaining 7 biological curriculum terms (`輔助T細胞`, `淋巴總管`, `靜脈瓣`, `骨髓`, `造血幹細胞`, `長壽漿細胞`, `嗜中性球儲存庫`).
+5. **Milestone 5 Gate**:
+   - 100% test pass (15/15 Python tests and 15/15 CDP checks) with zero errors.
+
+---
+
+## 4. Verification Instructions for Subsequent Milestone Workers
+
+When completing each milestone, the implementing agent can run the test suite scoped to that milestone:
+
+```powershell
+# Verify Milestone 0 baseline:
+& "C:\Users\user\miniconda3\python.exe" tests/test_microdefend_e2e.py --milestone 0
+& "C:\Users\user\AppData\Local\ms-playwright-go\1.57.0\node.exe" tests/test_cdp_e2e.js --milestone 0
+
+# Verify Milestone 1:
+& "C:\Users\user\miniconda3\python.exe" tests/test_microdefend_e2e.py --milestone 1
+
+# Verify Milestone 2:
+& "C:\Users\user\miniconda3\python.exe" tests/test_microdefend_e2e.py --milestone 2
+
+# Verify Milestone 3:
+& "C:\Users\user\miniconda3\python.exe" tests/test_microdefend_e2e.py --milestone 3
+
+# Verify Full Suite (Milestones 4 and 5):
+& "C:\Users\user\miniconda3\python.exe" tests/test_microdefend_e2e.py
+& "C:\Users\user\AppData\Local\ms-playwright-go\1.57.0\node.exe" tests/test_cdp_e2e.js
 ```
 
-### Execution Output Log
-
-```
-.........FF...................
-======================================================================
-FAIL: test_t1_10_lab_to_receptors_forwardlink (tests.test_receptors_conduction.TestTier1FeatureCoverage.test_t1_10_lab_to_receptors_forwardlink)
-Verify neuro_physiology/index.html contains forward link to receptors.html.
-----------------------------------------------------------------------
-Traceback (most recent call last):
-  File "C:\Users\User\Documents\GitHub\chihhsiangchien.github.io\tests\test_receptors_conduction.py", line 388, in test_t1_10_lab_to_receptors_forwardlink
-    self.assertIsNotNone(link, "neuro_physiology/index.html must have link to receptors.html")
-AssertionError: unexpectedly None : neuro_physiology/index.html must have link to receptors.html
-
-======================================================================
-FAIL: test_t1_11_homepage_to_receptors_mounting (tests.test_receptors_conduction.TestTier1FeatureCoverage.test_t1_11_homepage_to_receptors_mounting)
-Verify repository root index.html mounts receptors.html under 神經與感覺.
-----------------------------------------------------------------------
-Traceback (most recent call last):
-  File "C:\Users\User\Documents\GitHub\chihhsiangchien.github.io\tests\test_receptors_conduction.py", line 400, in test_t1_11_homepage_to_receptors_mounting
-    self.assertTrue(
-AssertionError: None is not true : Root index.html must mount neuro_physiology/receptors.html under 神經與感覺
-
-----------------------------------------------------------------------
-Ran 30 tests in 4.150s
-
-FAILED (failures=2)
-```
-
----
-
-## 3. Feature Inventory & Test Coverage Matrix
-
-| # | Feature | Scope Document | Tier 1 (Coverage) | Tier 2 (Boundary) | Tier 3 (VM / Cross) | Tier 4 (Curriculum) | Tier 5 (Stress) | Status |
-|---|---------|----------------|:-----------------:|:-----------------:|:-------------------:|:-------------------:|:---------------:|:------:|
-| F1 | 視覺受器傳導模擬 (Vision) | ORIGINAL_REQUEST R1 | ✓ (`test_t1_02`) | ✓ (`test_t2_03`) | ✓ (`test_t3_04`) | ✓ (`test_t4_01`, `02`) | ✓ | ✅ PASS |
-| F2 | 聽覺受器傳導模擬 (Hearing) | ORIGINAL_REQUEST R1 | ✓ (`test_t1_02`) | ✓ (`test_t2_03`) | ✓ (`test_t3_04`) | ✓ (`test_t4_01`, `03`) | ✓ | ✅ PASS |
-| F3 | 嗅覺受器傳導模擬 (Smell) | ORIGINAL_REQUEST R1 | ✓ (`test_t1_02`) | ✓ (`test_t2_03`) | ✓ (`test_t3_04`) | ✓ (`test_t4_01`, `04`) | ✓ | ✅ PASS |
-| F4 | 味覺受器傳導模擬 (Taste) | ORIGINAL_REQUEST R1 | ✓ (`test_t1_02`) | ✓ (`test_t2_03`) | ✓ (`test_t3_04`) | ✓ (`test_t4_01`, `05`) | ✓ | ✅ PASS |
-| F5 | 皮膚受器傳導模擬 (Skin) | ORIGINAL_REQUEST R1 | ✓ (`test_t1_02`) | ✓ (`test_t2_03`) | ✓ (`test_t3_04`) | ✓ (`test_t4_01`, `06`) | ✓ | ✅ PASS |
-| F6 | 四階段狀態機時序 (0-1 Normalized) | ORIGINAL_REQUEST R1 | ✓ (`test_t1_03`) | ✓ (`test_t2_01`) | ✓ (`test_t3_02`, `03`) | ✓ (`test_t4_02`~`06`) | ✓ | ✅ PASS |
-| F7 | 播放與暫停即時切換 | ORIGINAL_REQUEST R2 | ✓ (`test_t1_04`) | ✓ (`test_t2_05`) | ✓ (`test_t3_03`) | — | ✓ (`test_t5_02`) | ✅ PASS |
-| F8 | 播放倍速控制 (0.5x, 1x, 1.5x, 2x) | ORIGINAL_REQUEST R2 | ✓ (`test_t1_07`) | ✓ (`test_t2_04`) | ✓ (`test_t3_03`) | — | ✓ (`test_t5_02`) | ✅ PASS |
-| F9 | 進度尋軌與單步跳轉 | ORIGINAL_REQUEST R2 | ✓ (`test_t1_05`, `06`) | ✓ (`test_t2_01`) | ✓ (`test_t3_03`) | — | ✓ | ✅ PASS |
-| F10 | 獨立子頁面架構與 RWD | ORIGINAL_REQUEST R3 | ✓ (`test_t1_01`) | ✓ (`test_t2_02`, `06`) | ✓ (`test_t3_01`, `05`) | — | ✓ (`test_t5_01`) | ✅ PASS |
-| F11 | 雙向導航整合 | ORIGINAL_REQUEST R3 | ⚠️ (2/4 passed) | — | — | — | — | ⚠️ Pending M3 |
-| F12 | 自動化驗證與程式碼健壯度 | Acceptance Criteria | ✓ | ✓ | ✓ | ✓ | ✓ | ✅ PASS |
-
----
-
-## 4. Tier-by-Tier Verification Details
-
-### Tier 1: Feature Coverage (11 Tests)
-- `test_t1_01_receptors_page_exists_and_status_200`: Confirms HTTP 200, HTML5 doctype declaration, and `<title>` mentioning sensory receptors conduction.
-- `test_t1_02_five_receptors_tabs_exist_with_contract`: Validates `#tabBtn_vision`, `#tabBtn_hearing`, `#tabBtn_smell`, `#tabBtn_taste`, `#tabBtn_skin`, and `data-receptor="vision|hearing|smell|taste|skin"` with localized Chinese terminology.
-- `test_t1_03_four_conduction_phases_present`: Validates HUD and UI indicators for all four phases: 刺激 (Stimulus), 受器 (Receptor), 神經 (Nerve), 腦 (Brain).
-- `test_t1_04_playback_play_pause_button_contract`: Validates Play/Pause button `#playPauseBtn`.
-- `test_t1_05_playback_step_and_reset_buttons`: Validates `#stepPrevBtn`, `#stepNextBtn`, and `#resetBtn`.
-- `test_t1_06_timeline_scrubber_slider_contract`: Validates timeline range scrubber `#progressSlider`.
-- `test_t1_07_speed_multiplier_presets_exist`: Validates UI controls for `0.5x`, `1.0x`/`1x`, `1.5x`, `2.0x`/`2x`.
-- `test_t1_08_receptors_to_lab_backlink`: Validates backlink `<a href="index.html">` to main neuro lab.
-- `test_t1_09_receptors_to_homepage_backlink`: Validates backlink `<a href="../index.html">` to root homepage.
-- `test_t1_10_lab_to_receptors_forwardlink`: Verifies `neuro_physiology/index.html` link to `receptors.html` (Scheduled for Milestone 3).
-- `test_t1_11_homepage_to_receptors_mounting`: Verifies root `index.html` mounting under `神經與感覺` (Scheduled for Milestone 3).
-
-### Tier 2: Boundary & Corner Cases (6 Tests)
-- `test_t2_01_timeline_slider_boundaries_and_attributes`: Range input verified with `min="0"`, `max >= 100`.
-- `test_t2_02_responsive_viewport_meta_tag`: Responsive mobile viewport verified (`width=device-width, initial-scale=1`).
-- `test_t2_03_canvas_element_configured`: High-DPI Canvas 2D container element verified.
-- `test_t2_04_speed_multiplier_values_positive`: Speed controls verified strictly positive (> 0.0) and bounded (<= 5.0).
-- `test_t2_05_loop_toggle_element_present`: Loop playback toggle control element verified.
-- `test_t2_06_meta_charset_utf8_present`: Explicit `<meta charset="utf-8">` verified for Traditional Chinese anatomical text.
-
-### Tier 3: Cross-Feature Interactions & Node.js VM Runtime Integrity (5 Tests)
-- `test_t3_01_nodejs_vm_syntax_and_execution`: Extracts inline JavaScript, executes inside headless Node.js VM with synthetic DOM and Canvas 2D mock environment, confirming zero syntax errors and zero unhandled exceptions.
-- `test_t3_02_timeline_controller_phase_math_in_vm`: Validates deterministic timeline phase mapping:
-  - $0.00 \le T < 0.25 \implies \text{Phase 0 (刺激)}$
-  - $0.25 \le T < 0.50 \implies \text{Phase 1 (受器)}$
-  - $0.50 \le T < 0.80 \implies \text{Phase 2 (神經)}$
-  - $0.80 \le T \le 1.00 \implies \text{Phase 3 (腦)}$
-- `test_t3_03_timeline_clamping_and_stepping_in_vm`: Exercises `seek(-0.5)` clamping to 0.0, `seek(1.5)` clamping to 1.0, `stepNext()` phase boundary advancing, and `togglePlayPause()`.
-- `test_t3_04_receptor_configs_schema_integrity`: Validates `RECEPTOR_CONFIGS` structure across all 5 senses.
-- `test_t3_05_canvas_render_cycle_execution`: Executes full render cycles across all 5 senses and 4 timepoints, verifying drawing calls proceed smoothly without throwing errors.
-
-### Tier 4: Curriculum Anatomical Terminology & Pedagogical Scenarios (6 Tests)
-- `test_t4_01_curriculum_textbook_terminology_presence`: Validates that all 15 Taiwanese junior/senior high school biology curriculum anatomical terms are present:
-  - 視覺: `視網膜`, `視神經`, `枕葉`
-  - 聽覺: `耳蝸`, `毛細胞`, `顳葉`
-  - 嗅覺: `嗅黏膜`, `嗅球`, `篩板`
-  - 味覺: `味蕾`, `孤束核`, `島葉`
-  - 皮膚: `巴齊尼`, `麥斯納`, `頂葉`
-- `test_t4_02_vision_pathway_pedagogical_narrative`: Validates light/photon stimulus, photoreceptor hyperpolarization, and occipital V1 cortical perception.
-- `test_t4_03_hearing_pathway_pedagogical_narrative`: Validates sound wave vibration, hair cell stereocilia deflection / endolymph K+ influx, and temporal A1 auditory cortex.
-- `test_t4_04_smell_pathway_pedagogical_narrative`: Validates volatile odorants, olfactory mucosa / cribriform plate, and non-thalamic direct projection to olfactory bulb / cortex.
-- `test_t4_05_taste_pathway_pedagogical_narrative`: Validates tastants, taste buds / papillae, solitary tract nucleus (NST), and insular gustatory cortex.
-- `test_t4_06_skin_pathway_pedagogical_narrative`: Validates pressure/temperature stimuli, Meissner/Pacinian mechanoreceptors, and parietal primary somatosensory cortex S1.
-
-### Tier 5: Adversarial Stress & Robustness (2 Tests)
-- `test_t5_01_url_tampering_and_xss_safety`: Verifies server resilience against query parameter tampering and XSS injections (`?param=<script>...#phase=NaN`).
-- `test_t5_02_rapid_controller_toggle_stress`: Simulates 50 rapid play/pause toggles and fuzzes `setSpeed()` with extreme values (`0, -1, -99, 100, 99999, NaN, Infinity`), ensuring no state corruption or NaN propagation.
-
----
-
-## 5. Escalation & Milestone Handoff Status
-
-1. **Test Suite Status**: `tests/test_receptors_conduction.py` is fully implemented, verified, and operational.
-2. **Current Result**: 28 tests pass, 2 tests pending Milestone 3.
-3. **Action Items for Milestone 3 (Navigation Mounting)**:
-   - In `neuro_physiology/index.html`: Add navigation link pointing to `receptors.html` (`<a href="receptors.html">五大感覺受器</a>`).
-   - In repository root `index.html`: Mount `<a href="neuro_physiology/receptors.html">五大感覺受器動態傳導模擬 (視覺、聽覺、嗅覺、味覺、皮膚)</a>` under the `<h1>神經與感覺</h1>` section.
-4. **Final Gate Projection**: Upon Milestone 3 completion, all 30 tests in `tests/test_receptors_conduction.py` will pass with **100.0% SUCCESS RATE**.
+The test infrastructure is fully operational, verified, and ready.

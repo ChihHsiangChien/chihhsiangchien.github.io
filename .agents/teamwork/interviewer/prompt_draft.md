@@ -1,41 +1,36 @@
-針對解剖構造呼叫較高級的模型。為視覺、聽覺、嗅覺、味覺、皮膚五大感覺受器製作動態傳導模擬器（如動畫般呈現傳導歷程，進程速度由使用者控制），並以獨立子頁面形式與 neuro_physiology 專案建立雙向連結。
+擴充 MicroDefend 微觀人體防線模擬器，新增分頁以視覺化呈現淋巴循環（輸入淋巴管、淋巴結內部免疫反應、淋巴總管匯流至靜脈）以及骨髓造血與免疫記憶事件。
 
-Working directory: c:\Users\User\Documents\GitHub\chihhsiangchien.github.io\neuro_physiology
+Working directory: c:\Users\user\Documents\GitHub\chihhsiangchien.github.io\microDefend
 Integrity mode: demo
-The team must NOT: copy code from existing open-source projects for core logic, run external scripts or delegate execution to other tools
-
-## Reference Material
-- 視覺受器（眼睛）：光線 -> 受器 -> 神經 -> 腦 (C:/Users/User/.gemini/antigravity/brain/a4696a0b-249e-4c39-9c6f-a2571143e63a/.user_uploaded/media_1794186604265_1c31bbf3.jpg)
-- 聽覺受器（耳朵）：聲音 -> 受器（耳蝸毛細胞等） -> 神經 -> 腦 (C:/Users/User/.gemini/antigravity/brain/a4696a0b-249e-4c39-9c6f-a2571143e63a/.user_uploaded/media_1794186611900_7c128f66.jpg)
-- 嗅覺受器（鼻腔）：氣味 -> 受器 -> 神經 -> 腦 (C:/Users/User/.gemini/antigravity/brain/a4696a0b-249e-4c39-9c6f-a2571143e63a/.user_uploaded/media_1794186626170_48b02c79.jpg)
-- 味覺受器（舌頭）：味道 -> 受器 -> 神經 -> 腦 (C:/Users/User/.gemini/antigravity/brain/a4696a0b-249e-4c39-9c6f-a2571143e63a/.user_uploaded/media_1794186636917_ac40956d.jpg)
-- 皮膚受器（皮膚）：溫度、接觸及壓力等刺激 -> 受器 -> 神經 -> 腦 (C:/Users/User/.gemini/antigravity/brain/a4696a0b-249e-4c39-9c6f-a2571143e63a/.user_uploaded/media_1794186649546_b5d16396.jpg)
+The team must NOT: copy code from existing open-source projects for core logic
 
 ## Requirements
 
-### R1. 五大感覺受器動態傳導模擬
-實現視覺、聽覺、嗅覺、味覺、皮膚五種感覺受器的動態傳導模擬動畫，呈現「刺激 -> 受器 -> 神經 -> 腦」的訊號傳導歷程。動畫流程自動展示傳導動態，不要求使用者調整各項刺激內容。
+### R1. 分頁導航架構與淋巴結場景（第二頁）
+在現有介面中新增分頁導航功能。第二頁繪製多條輸入淋巴管連接至淋巴結，以及一條輸出淋巴管。其中一條輸入淋巴管必須從第一頁右下方的微淋巴管位置視覺連貫對應過來，確保空間相對位置與流向的視覺一致性。動態描繪組織液淋巴、細菌與病毒等病原體流入淋巴結後發生的專一性免疫反應，包含抗原呈現、B/T細胞活化與漿細胞抗體生成，過濾後的淋巴與抗體匯入輸出淋巴管。
 
-### R2. 動畫進程速度控制
-提供進程速度控制介面，使使用者能控制動畫播放狀態與速度（包含播放/暫停、速度調整或進度切換），便於觀察各階段的傳導動態。
+### R2. 淋巴總管與靜脈匯機場景（第三頁）
+第三頁描繪多條輸出淋巴管匯集成淋巴總管並注入靜脈的解剖與生理場景。其血管壁結構、血液流動動態以及血球細胞的視覺繪製風格與比例，必須與第一頁保持高度一致性。
 
-### R3. neuro_physiology 專案獨立子頁面整合
-在 `neuro_physiology` 目錄下建立獨立子頁面，並在現有首頁（`index.html`）與新子頁面之間建立雙向導覽連結，確保可互相連結存取。
+### R3. 骨髓免疫記憶與造血功能（第四頁）
+延伸第一頁的專一性免疫記憶機制，建立第四頁「骨髓造血與免疫記憶」獨立分頁：繪製骨髓作為長壽漿細胞的「避難所與工廠」、造血幹細胞的「無限分化與產線」、B細胞的誕生與發育，以及嗜中性球的成熟與「儲存庫」。細胞形態、顏色與視覺風格必須與第一頁保持嚴格一致。
+
+### R4. 互動操作面板與跨頁狀態維護
+為新增分頁提供如第一頁般的互動控制面板（支援引入病原體、觸發細胞反應、切換細胞狀態標籤與調整模擬速度）。各分頁切換時維持場景獨立或狀態同步，SVG 動畫迴圈運作正常無破圖或記憶體洩漏。
 
 ## Acceptance Criteria
 
-### 五大受器傳導模擬 (Receptor Simulations)
-- [ ] 介面具備視覺、聽覺、嗅覺、味覺、皮膚五種受器的展示區域或切換模組。
-- [ ] 每個受器皆呈現完整的「刺激 -> 受器 -> 神經 -> 腦」傳導動態歷程。
-- [ ] 動畫流程自動演繹，不需使用者設定或調整刺激參數。
+### 視覺空間與風格一致性
+- [ ] 第二頁輸入淋巴管之起始端與第一頁右下方微淋巴管在相對空間位置與流向具備直觀連貫的視覺對應。
+- [ ] 第三頁靜脈血管、內皮細胞與血流動態風格與第一頁微循環保持一致。
+- [ ] 第四頁骨髓場景中之長壽漿細胞、造血幹細胞、B細胞與嗜中性球外觀與第一頁既有細胞風格相符。
 
-### 進程控制功能 (Progress & Speed Control)
-- [ ] 提供播放與暫停切換按鈕，使用者可隨時暫停及繼續動畫。
-- [ ] 提供播放速度控制（如倍速按鈕或速度滑桿），可即時調節動畫播放速度。
+### 生理機制與動畫邏輯
+- [ ] 第二頁動態呈現病原體與淋巴液經輸入淋巴管進入淋巴結，並觸發內部抗原呈現、B/T細胞活化及抗體生成之完整反應。
+- [ ] 第三頁動態呈現多條輸出淋巴管匯入淋巴總管並注入靜脈血液循環之過程。
+- [ ] 第四頁呈現造血幹細胞分化產線、B細胞生成及長壽漿細胞持續生產抗體之動態。
+- [ ] 各分頁具備如第一頁般的互動控制面板，各項控制按鈕與開關皆能正確觸發對應生理動態與標籤顯示。
 
-### 專案整合與導覽 (Project Integration)
-- [ ] 在 `neuro_physiology` 目錄下以獨立子頁面形式實現（如 `receptors.html`）。
-- [ ] 現有 `neuro_physiology/index.html` 與新子頁面具備可正常點擊互通的導覽連結。
-
-### 驗證機制 (Verification)
-- [ ] 透過自動化 DOM/腳本檢查或獨立測試，確認頁面載入無 JavaScript 錯誤，且五大受器模擬區塊與播放/速度控制功能皆可正常操作與響應。
+### 系統與程式碼品質
+- [ ] 分頁切換功能順暢，各分頁 SVG 渲染與動畫迴圈在無控制台 JavaScript 錯誤下穩定執行。
+- [ ] 具備客觀的前端自動化檢查（包含 DOM 結構、SVG 節點生成與分頁切換功能驗證）。
