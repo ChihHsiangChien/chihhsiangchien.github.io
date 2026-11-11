@@ -1,275 +1,139 @@
-# 五大感覺受器動態傳導模擬器：解剖路徑、受器機制與視覺化動畫規格報告
+# Handoff Report — Anatomical & Visual Style Explorer Survey
 
-- **報告代號**: `handoff.md`
-- **調查員**: Explorer 2 (Model: pro — 解剖學與受器生理學專家)
-- **隸屬任務**: 五大感覺受器動態傳導模擬器 (Five Sensory Receptors Conduction Simulator)
-- **工作目錄**: `c:\Users\User\Documents\GitHub\chihhsiangchien.github.io\neuro_physiology`
-- **狀態資料夾**: `c:\Users\User\Documents\GitHub\chihhsiangchien.github.io\.agents\teamwork\explorer_survey_2\`
-- **交付對象**: Orchestrator 1 (`e8543011-3af3-4cf5-8c77-c7d3d20c0eb7`)
-- **生成時間**: 2026-11-09T01:52:00Z
+**Agent**: Explorer 2 (Anatomical & Visual Style Explorer)  
+**State folder**: `c:\Users\user\Documents\GitHub\chihhsiangchien.github.io\.agents\teamwork\explorer_survey_2\`  
+**Date**: 2026-11-10  
+**Target Milestone**: Phase 0 (Exploration & Visual Survey)  
 
 ---
 
-## 1. 觀察 (Observation)
+## 1. Observation
 
-### 1.1 教科書基準參考圖像分析 (Reference Images Inspection)
-針對使用者提供的五張中學生物教科書經典感覺受器圖解進行微觀與宏觀檢視：
+Direct code observations from `microDefend` codebase:
 
-1. **視覺受器（眼睛）(`media_1794186604265_1c31bbf3.jpg`)**:
-   - **圖像呈現**: 側臉剖面圖，清晰標註眼球解剖結構（角膜、晶狀體、眼球內腔玻璃體）、視網膜受器（以青藍色弧線標記眼球後壁）、視神經（粗藍色神經束自眼球後極穿出）、指向標記為「腦」（粉紅色圓形帶字標章）的藍色箭頭。
-   - **核心文字與路徑**: 「光線（藍箭頭）➔ 受器（視網膜）➔ 神經（視神經）➔ 腦」；配文「眼睛中的視覺受器可感受光線的刺激。」
-   - **教學意涵**: 凸顯眼球屈光聚光介質與後壁視網膜光受器的角色，光線由前方進入，神經脈衝由後方傳向大腦。
+1. **Initial Lymphatic Capillary Geometry and Coordinates in Page 1**:
+   - `index.html:355-367`:
+     ```html
+     <!-- Dermal Initial Lymphatics (微淋巴管盲端與淋巴引流通道) -->
+     <g id="lymphatic-vessel-group">
+         <path id="lymph-capillary-lumen" d="M 1000 248 C 940 248, 900 256, 868 268 C 900 280, 940 288, 1000 288 Z"
+             fill="rgba(16, 185, 129, 0.18)" stroke="#10b981" stroke-width="1.8" stroke-dasharray="6,3" />
+         ...
+         <g id="lymph-flow-indicators" opacity="0.75">
+             <polygon points="940,268 930,263 930,273" fill="#34d399" opacity="0.7" />
+             <polygon points="975,268 965,263 965,273" fill="#34d399" opacity="0.7" />
+         </g>
+     </g>
+     ```
+   - In `script.js:162-163`:
+     ```javascript
+     const LYMPH_VESSEL_X = 885;
+     const LYMPH_VESSEL_Y = 268;
+     ```
+   - In `script.js:4816-4826`:
+     ```javascript
+     } else if (w.state === 'lymph_draining') {
+         w.x += (w.flowSpeed || 2.0) * simSpeed;
+         w.y += (LYMPH_VESSEL_Y - w.y) * 0.05 * simSpeed;
+         w.alpha = (w.alpha !== undefined ? w.alpha : 1) - 0.018 * simSpeed;
+         w.r = Math.max(3.5, w.r * 0.985);
+         if (w.alpha <= 0.05 || w.x >= 995) {
+             activeTissueWBCs.splice(i, 1);
+             continue;
+         }
+     }
+     ```
+   - The lymphatic vessel starts with a blind end at `(868, 268)`, top wall reaches `(1000, 248)` and bottom wall reaches `(1000, 288)`. Central exit axis is `y = 268`, with rightward velocity `vx > 0, vy ≈ 0`.
 
-2. **聽覺受器（耳朵）(`media_1794186611900_7c128f66.jpg`)**:
-   - **圖像呈現**: 頭部耳部冠狀剖面，包含外耳廓、外耳道、鼓膜、三塊聽小骨、內耳前庭半規管與耳蝸（蝸牛狀螺旋殼）、自耳蝸引出的聽神經（藍色神經纖維）向上傾斜指向粉紅色「腦」標章。
-   - **核心文字與路徑**: 「聲音（藍箭頭）➔ 受器（耳蝸）➔ 神經（聽神經）➔ 腦」；配文「耳朵中的聽覺受器可感受聲音的刺激。」
-   - **教學意涵**: 展示空氣振動經外耳、中耳機械放大後，進入內耳耳蝸將流體波動轉化為神經訊號的歷程。
+2. **Red Blood Cell Specs**:
+   - Intravascular: `script.js:1763-1766`: `<circle r="4.8" fill="#ef4444" opacity="0.9">`.
+   - Extravasated/bleeding: `script.js:2253-2263`: Outer `<ellipse rx="4.8" ry="3.26" fill="#dc2626" stroke="#7f1d1d" stroke-width="1">`, inner concave dimple `<ellipse rx="2.16" ry="1.44" fill="#991b1b" opacity="0.75">`.
+   - Platelet plug trapped: `script.js:2123-2127`: `<ellipse cx="-2" cy="-1" rx="5" ry="3.2" fill="#dc2626">`.
 
-3. **嗅覺受器（鼻腔）(`media_1794186626170_48b02c79.jpg`)**:
-   - **圖像呈現**: 頭部正中矢狀剖面，氣味箭頭自外鼻孔向上捲入鼻腔頂部，鼻腔頂部標記「受器」（嗅黏膜與嗅纖毛分布於上鼻甲與篩板下方），神經纖維穿過篩骨向上匯聚為藍色「神經」（嗅球與嗅神經束），斜向後上方指入「腦」。
-   - **核心文字與路徑**: 「氣味（藍箭頭）➔ 受器（嗅黏膜）➔ 神經（嗅神經）➔ 腦」；配文「鼻腔中的嗅覺受器可感受氣味的刺激。」
-   - **教學意涵**: 說明氣味分子需經擴散與渦流到達鼻腔上方嗅黏膜，嗅神經直接進入顱底前腦。
+3. **White Blood Cell Subtypes, Radii, Colors and Nuclei**:
+   - `script.js:5055-5067`:
+     - neutrophil: `#38bdf8`, monocyte: `#c084fc`, macrophage: `#a855f7`, eosinophil: `#fb7185`, basophil: `#475569`, bcell: `#fb923c`, tcell: `#34d399`, nk: `#22d3ee`.
+   - `script.js:5095-5119`:
+     - neutrophil nucleus: 3 lobes `<circle r="2.2" fill="#0369a1">` at `(-2.5, -2)`, `(2.5, -2)`, `(0, 2.5)`.
+     - eosinophil nucleus: 2 lobes `<circle r="2.5" fill="#881337">` at `(-3, 0)`, `(3, 0)`.
+     - macrophage/monocyte nucleus: offset `<circle cx="-1" cy="0" r="r*0.45" fill="#581c87">`.
+     - lymphocyte/bcell/tcell/nk nucleus: `<circle cx="0" cy="0" r="r*0.55" fill="rgba(0,0,0,0.4)">` or `#c2410c` / `#047857`.
+   - Radii: neutrophil `7.5`, monocyte `8.5`, macrophage `11.5`, eosinophil `7.8`, basophil `7.8`, bcell `8.0`, tcell `7.8`, nk `7.8`.
+   - Amoeboid rendering: `script.js:1137-1194`, `2486-2525`: 12-point spline with pseudopod extension, diapedesis waist narrowing (`squeezeWaist = 0.42`), white stroke `#ffffff` width `1.4`.
+   - APC marker: `script.js:4903-4908`: halo radius `w.r + 4.5`, dashed stroke `#34d399` (`apc_migrating`) or `#10b981` (`lymph_draining`).
 
-4. **味覺受器（舌頭）(`media_1794186636917_ac40956d.jpg`)**:
-   - **圖像呈現**: 張口吐舌的大體圖，並引出局部顯微放大方框。方框內呈現舌乳頭表面上皮、深陷的乳頭側壁溝槽、埋藏於側壁的洋蔥狀「味覺受器（味蕾）」以及自味蕾基底延伸分叉的藍色「神經」纖維，最後匯集指向「腦」。
-   - **核心文字與路徑**: 「味覺受器（味蕾）／神經 ➔ 腦」；配文「舌頭上的味覺受器可感受味道的刺激。」
-   - **教學意涵**: 建立「舌表面 ➔ 舌乳頭 ➔ 側壁味蕾 ➔ 傳導神經 ➔ 大腦」的宏觀到微觀對應。
+4. **Pathogens and Debris**:
+   - Bacteria: `script.js:2301-2327`: `<rect x="-9" y="-4.5" width="18" height="9" rx="4.5" fill="#27ae60" stroke="#1e824c" stroke-width="1.5">`, with `BAC_AB_PATHS` for 1-6 attached Y antibodies.
+   - Virus: `script.js:2335-2368`: `<circle r="5.5" fill="#8e44ad" stroke="#6c3483">`, 6 spikes extending `2.5px` (`VIR_SPIKES_PATH`), with `VIR_AB_PATHS` for 1-4 neutralizing antibodies.
+   - Parasite: `script.js:2376-2396`: body `<path stroke-width="12" stroke="#b7950b">`, core `<path stroke-width="3" stroke="#7d6608">`.
+   - Debris: `script.js:2281-2285`: `<polygon fill="#64748b" stroke="#94a3b8" stroke-width="1">` with 5-7 random vertices (`r=5~8`).
 
-5. **皮膚受器（皮膚）(`media_1794186649546_b5d16396.jpg`)**:
-   - **圖像呈現**: 皮膚三維立體剖面塊體，層次分明：表皮層（角質層與棘層）、真皮層（含真皮乳頭、毛囊、立毛肌、多種小體受器）、皮下組織（黃色脂肪小葉）。受器包含梅斯納小體、巴齊尼氏小體、莫克爾盤、魯菲尼終末、纏繞毛囊的神經叢及游離末梢，所有纖維匯入深層水平走行的粗大藍色「神經」幹，右行指向「腦」。
-   - **核心文字與路徑**: 「各種受器 ➔ 神經 ➔ 腦」；配文「皮膚中有各種受器，可感受溫度、接觸及壓力等刺激。」
-   - **教學意涵**: 強調皮膚感覺的多模態性（觸、壓、冷、熱、痛、震動由特化小體或游離末梢分別負責）。
+5. **Endothelial Cells & Vascular Structure**:
+   - `script.js:1725-1745`: `<rect height="8" rx="3.5" fill="#f87171" stroke="#991b1b" stroke-width="1">`, nucleus `<ellipse rx="4.5" ry="2.2" fill="#7f1d1d">`.
+   - Smooth muscle: `script.js:1642-1665`: `<rect width="18" rx="4.5" fill="#d9480f" stroke="#ff922b" stroke-width="1.1">`.
+   - Sphincters: `script.js:1686-1701`: `<rect width="14" rx="3.5" fill="#c92a2a" stroke="#ff8787">`.
 
-### 1.2 現有 Codebase 生態系統觀察 (`neuro_physiology/index.html`)
-- **檔案規格**: 單一 HTML 整合架構，約 4400 餘行，採用 Tailwind CSS (暗黑主題 `bg-slate-950`, `text-slate-100`)、Google Fonts (Inter, JetBrains Mono) 與原生 HTML5 Canvas 2D 繪圖引擎。
-- **色彩語彙規範**:
-  - 感覺路徑統一色調: 天藍色系 (`#38bdf8`, `sky-400/500`)、青藍色 (`#06b6d4`, `cyan-400`)。
-  - 運動路徑色調: 珊瑚紅 (`#f43f5e`, `rose-500`)。
-  - 聯絡與突觸色調: 翡翠綠 (`#34d399`, `emerald-400`)。
-  - 上行感覺路徑: 金黃色 (`#fbbf24`, `amber-400`)。
-  - 下行運動路徑: 紫色 (`#c084fc`, `purple-400`)。
-- **畫布渲染管線**: 使用 `requestAnimationFrame` 迴圈，具備 `scale`, `offsetX`, `offsetY` 視圖矩陣平移縮放，以脈衝粒子陣列 (`activePulses`, `brainPulses`) 記錄動作電位前進位置與強度衰減。
-- **導航現狀**: 頂部導航包含主頁 (`../index.html`)、全身神經路徑 (`../neural_pathway/index.html`)、動作電位 (`../action_potential/index.html`)。本專案將在此增設獨立子頁面（建議命名為 `receptors.html`），並在 `index.html` 與新頁面間建立對等雙向導覽連結。
-
----
-
-## 2. 邏輯推導鏈 (Logic Chain)
-
-```
-[原始中學教科書四階段框架]
-刺激 (Stimulus) ──▶ 受器 (Receptor) ──▶ 神經 (Nerve) ──▶ 腦 (Brain)
-        │                       │                     │                │
-        ▼                       ▼                     ▼                ▼
-[專業神經生物學解剖對應]
-物理/化學物理量         微觀感官組織與        特異腦神經/脊髓      特異大腦皮質葉區
-(光子/聲波/分子/壓力)   分子轉導機制 (GPCR/    中繼核團與視丘      (枕葉/顳葉/邊緣/
-                       離子通道/機械門控)     (LGN/MGN/VPM/VPL)   島葉/頂葉 S1)
-        │                       │                     │                │
-        └───────────────────────┴─────────────────────┴────────────────┘
-                                        │
-                                        ▼
-             [動態傳導模擬器動畫時間軸 (時序 T: 0.0 ➔ 1.0)]
-             T=0.00~0.25: 刺激波/分子抵達受器表面
-             T=0.25~0.50: 微觀受器細胞去極化/轉導發放
-             T=0.50~0.80: 神經軸突跳躍/連續傳導至中繼核團
-             T=0.80~1.00: 抵達大腦皮質，皮層輝光激發，認知產生
-```
-
-### 2.1 五大感覺途徑之精密神經生理學解剖矩陣
-
-下表將教科書框架全面對齊現代高階神經解剖學與生理學標準：
-
-| 感覺模式 | 1. 刺激 (Stimulus) 特徵 | 2. 受器器官與微觀轉導機制 | 3. 神經傳導路徑與中繼核團 | 4. 大腦中樞與認知感知 |
-| :--- | :--- | :--- | :--- | :--- |
-| **視覺 (Vision)** | **光子 / 電磁波** (波長 380~750 nm)<br>經角膜 ➔ 前房 ➔ 瞳孔 ➔ 水晶體折射聚焦 ➔ 玻璃體 ➔ 視網膜倒立實像 | **眼球視網膜 (Retina)**<br>• **視桿 (Rods)**: 視紫質 (Rhodopsin)，暗光黑白，高靈敏。<br>• **視錐 (Cones)**: 紅/綠/藍視蛋白 (Photopsins)，明光色彩。<br>• **機制**: 光照 ➔ 11-順式視黃醛異構化 ➔ Transducin ➔ PDE 活化 ➔ cGMP 水解下降 ➔ 陽離子通道關閉 ➔ **感光細胞超極化** ➔ 釋放麩胺酸減少 ➔ 雙極細胞去抑制 ➔ 神經節細胞產生動作電位 | **視神經 (CN II)**<br>• 視網膜神經節細胞 (RGC) 軸突 ➔ 視神經盤 (盲點) ➔ 視神經 (CN II)<br>• **視交叉 (Optic Chiasm)**: 鼻側纖維交叉對側，顳側纖維同側<br>• 視徑 (Optic tract) ➔ **視丘外側膝狀體 (LGN)** 換元<br>• 視放射 (Optic radiation) 形成 Meyer's loop 與 Baum's loop | **枕葉 (Occipital Lobe)**<br>• **初級視覺皮質 (V1 / Brodmann 17 區)**，位於距狀裂 (Calcarine sulcus)<br>• 腹側流 (Ventral stream): 進入顳葉識別「物體形狀與顏色 (What)」<br>• 背側流 (Dorsal stream): 進入頂葉識別「空間運動 (Where/How)」 |
-| **聽覺 (Hearing)** | **疏密聲波 / 空氣縱波** (20~20,000 Hz)<br>耳廓集音 ➔ 外耳道共振 ➔ 鼓膜振動 ➔ 聽小骨 (槌/砧/鐙) 槓桿放大 20 倍 ➔ 卵圓窗壓迫 | **內耳耳蝸 (Cochlea)**<br>• 前庭階與鼓室階外淋巴波動 ➔ 耳蝸管基底膜行波 (高頻在底，低頻在頂端)<br>• **柯蒂氏器 (Organ of Corti)** 內毛細胞 (IHC)<br>• **機制**: 靜纖毛剪切偏折 ➔ 頂端 Tip links 被拉緊 ➔ 機械門控通道 (TMC1) 打開 ➔ 內淋巴高濃度 K+ 快速內流 ➔ **毛細胞去極化** ➔ 電壓門控 Ca2+ 通道開啟 ➔ 突觸囊泡釋放麩胺酸 | **耳蝸神經 (CN VIII 聽支)**<br>• 耳蝸螺旋神經節 ➔ 耳蝸神經 ➔ **延髓耳蝸背/腹側核**<br>• 投射至**橋腦上橄欖核** (計算雙耳時間差 ITD 與強度差 ILD 進行聲源定位)<br>• 經外側丘系 ➔ **中腦下丘** (聲反射與音訊整合)<br>• 間腦**視丘內側膝狀體 (MGN)** 換元 ➔ 聽放射 | **顳葉 (Temporal Lobe)**<br>• **初級聽覺皮質 (A1 / Brodmann 41, 42 區)**，位於上顳迴的**赫氏迴 (Heschl's gyri)**<br>• 嚴格保留頻率音階映射 (Tonotopy)<br>• 連繫至韋尼克區 (Wernicke's area) 進行語音及詞義解析 |
-| **嗅覺 (Smell)** | **揮發性氣味分子 (Odorants)**<br>吸入空氣渦流 ➔ 鼻前庭 ➔ 鼻甲紊流導向鼻腔頂穹 | **鼻腔頂部嗅上皮 (Olfactory Epithelium)**<br>• **嗅受器神經元 (OSN)**，雙極神經元，具 10-20 根嗅纖毛浸潤於黏液中<br>• **機制**: 氣味分子結合 GPCR ➔ 活化 G 蛋白 (Golf) ➔ 腺苷酸環化酶 III (ACIII) ➔ cAMP 上升 ➔ 打開 CNG 陽離子通道 (Na+/Ca2+ 內流) ➔ Ca2+ 激活 ANO2 氯通道 ➔ **Cl- 逆向外流** 產生強烈去極化爆發 | **嗅神經 (CN I)**<br>• 軸突匯集為 20 條嗅神經絲，穿過**篩骨篩板 (Cribriform plate)**<br>• 進入**嗅球 (Olfactory Bulb)** 嗅絲球 (Glomeruli) 突觸僧帽細胞 (Mitral) 與簇狀細胞 (Tufted)<br>• 經嗅徑 (Olfactory tract) 傳播<br>• **特點: 人體唯一「不需先經視丘換元」即直達皮質的感覺！** | **邊緣系統與顳葉皮質**<br>• **初級嗅皮質 (Piriform cortex)**、杏仁核 (Amygdala, 誘發情緒)、內嗅皮質 (與海馬記憶連結)<br>• 次級投射至**額葉眶額皮質 (OFC)** (經視丘背內側核 MD 中繼)，產生氣味意識辨析與食慾評價 |
-| **味覺 (Taste)** | **溶解化學呈味物質 (Tastants)**<br>溶於唾液 ➔ 甜、酸、鹹、苦、鮮五種基本呈味物 (辣為痛覺，澀為摩擦感) | **舌頭味蕾 (Taste Buds)**<br>• 輪廓狀、葉狀、蕈狀乳頭溝槽內味蕾，頂端具味孔與微絨毛<br>• **機制 (雙模式)**:<br>  - **甜/鮮/苦 (GPCR)**: T1R/T2R 結合 ➔ Gustducin ➔ PLCβ2 ➔ IP3 ➔ 內質網釋 Ca2+ ➔ TRPM5 陽離子通道開 ➔ CALHM1/3 釋放 ATP。<br>  - **鹹/酸 (離子通道)**: Na+ 經 ENaC 內流 / H+ 經 OTOP1 內流 ➔ 去極化 ➔ 電壓 Ca2+ 通道開啟 ➔ 傳統突觸釋放 5-HT | **三對腦神經傳導 (CN VII / IX / X)**<br>• 舌前 2/3: **顏面神經 (CN VII) 鼓索支**<br>• 舌後 1/3: **舌咽神經 (CN IX)**<br>• 會厭部: **迷走神經 (CN X)**<br>• 進入**延髓孤立束核 (NST / 孤束核味覺部)**<br>• 投射至**視丘腹後內側核小細胞部 (VPMpc)** 換元 | **島葉與額葉島蓋 (Insula)**<br>• **初級味覺皮質 (Primary Gustatory Cortex / Brodmann 43 區)** 位於前島葉 (Anterior Insula) 與額蓋 (Frontal operculum)<br>• 投射至眶額皮質 (OFC)，與嗅覺及口腔觸覺整合為完整「風味 (Flavor)」體驗 |
-| **皮膚感覺 (Skin / Touch)** | **機械壓力、變形、振動、溫度變化、組織化學損傷** | **表皮與真皮多型受器**<br>• **梅斯納小體 (Meissner)**: 淺層輕觸/滑動 (RA I)<br>• **莫克爾盤 (Merkel)**: 恆壓/紋理盲文 (SA I)<br>• **巴齊尼小體 (Pacinian)**: 深層震動/重壓 (RA II)<br>• **魯菲尼終末 (Ruffini)**: 皮膚拉伸 (SA II)<br>• **自由末梢**: 冷 (TRPM8)、熱 (TRPV3/4)、痛 (TRPV1、Nav1.7/1.8)、癢 (Mrgpr)<br>• **機制**: 機械壓力使細胞膜形變打開 **Piezo2** 通道，或溫度活化 TRP 通道，引起去極化 | **脊神經 DRG ➔ 雙軌上行系統**<br>• 一級神經元胞體位於**背根神經節 (DRG)**<br>• **後索-內側丘系途徑 (DCML, 精細觸覺/震動)**: 經脊髓後索 (薄束/楔束) 同側上行 ➔ 延髓薄束/楔束核 ➔ **延髓內側丘系交叉** ➔ 視丘 **VPL 核**。<br>• **脊髓丘腦束 (STT, 溫痛粗觸)**: 脊髓後角換元 ➔ **脊髓前白連合立即交叉至對側** ➔ 前外側索上行 ➔ 視丘 **VPL 核** | **頂葉 (Parietal Lobe)**<br>• **初級體感皮質 (S1 / Brodmann 3, 1, 2 區)**，位於**後中央迴 (Postcentral Gyrus)**<br>• 具備清晰之**感覺人身小人圖 (Sensory Homunculus)**，手、面唇部皮質代表區面積巨大 |
+6. **Fluids, Droplets and Antibodies**:
+   - Interstitial / filtering droplets: `script.js:2824, 2888, 2913`: `r=2.7`, fill `#38bdf8` (filtering/draining) or `#bae6fd` (bathing `r=2.7~3.6`).
+   - Histamine: `script.js:4155`: `r=2.5`, fill `#38bdf8`.
+   - Eosinophil granules: `script.js:4162`: `r=2.8`, fill `#f43f5e`.
+   - Antibodies: `script.js:2423-2439`: Y-shaped path `M 0 4.5 L 0 0 L -3.5 -3.5 M 0 0 L 3.5 -3.5`, primary orange `#f97316` width `1.5`, secondary gold `#fbbf24` width `2.2`.
 
 ---
 
-## 3. 視覺化設計與動畫規格 (Visual & Animation Specs)
+## 2. Logic Chain
 
-### 3.1 畫面四分區架構 (Four-Station Anatomical Layout)
-為確保在 16:9 或各類螢幕下均能呈現流暢教育動畫，畫布（Canvas 寬度 $W$, 高度 $H$）採用由左至右的直觀流水線布局：
-
-```
-+---------------------------------------------------------------------------------------------------------+
-| [頂部控制欄]: 頁面導航 | 五大受器分頁 (👁️視覺 👂聽覺 👃嗅覺 👅味覺 ✋皮膚) | ⏯播放/暫停 | ⏩倍速 | 📍進度條  |
-+---------------------------------------------------------------------------------------------------------+
-|                                      主要動態繪圖區 (Canvas 2D)                                          |
-|                                                                                                         |
-|  [第 1 區: 刺激源]    [第 2 區: 受器器官]       [第 3 區: 神經傳導束]          [第 4 區: 大腦中樞皮質]      |
-|   (X: 0.05~0.18 W)     (X: 0.20~0.42 W)         (X: 0.45~0.72 W)             (X: 0.75~0.95 W)          |
-|                                                                                                         |
-|     光束 / 聲波 /       眼球 / 耳蝸 / 鼻腔 /       視神經 / 聽神經 / 嗅徑 /       完整大腦輪廓側影           |
-|     氣味 / 味滴 /       舌乳頭 / 皮膚剖面          味覺腦神經 / 脊髓後索          特異葉區高亮輝光           |
-|     壓力粒子            (附微觀轉導嵌窗)           + 視丘 (Thalamus) 核團         (枕葉/顳葉/島葉/頂葉)      |
-|                                                                                                         |
-|       ○ ~ ~ ~ ───▶  [ 受器去極化激發 ]  ═══════════ ⚡ 動作電位脈衝 ═══════════▶  [ 🧠 皮層網絡發光 ]        |
-+---------------------------------------------------------------------------------------------------------+
-| [底部動態導讀與生理日誌]: 即時呈現當前時序 (T) 對應之神經生理步驟、離子流向與神經科學重要術語解析          |
-+---------------------------------------------------------------------------------------------------------+
-```
-
-### 3.2 五大受器專屬幾何描繪與粒子系統規格
-
-#### 1. 視覺 (Vision)
-- **刺激幾何**: 黃白/金色平行光錐（含波長光子粒子流，以高斯光暈描繪），自左方平滑射入角膜。
-- **器官幾何**:
-  - 眼球切面（直徑約 $0.22 W$），清晰繪製鞏膜 (白外殼)、角膜 (前突透明弧)、虹膜與瞳孔 (孔徑可微縮)、晶狀體 (淡藍透明凸透鏡，睫狀肌拉引)、玻璃體腔 (深邃靛藍透明球體)。
-  - 視網膜後壁以多層同心弧展現，黃斑中心窩以微小凹陷描繪。
-  - **微觀轉導嵌窗 (Callout)**: 放大圓框顯示視桿與視錐細胞外節膜盤，當光子擊中時，膜盤顏色由紫紅轉淡黃（視紫質褪色 Bleaching），同時伴隨 cGMP 陽離子通道關閉與發光波紋。
-- **神經路徑**: 自視網膜神經節層延伸出視神經束（亮青色 `#38bdf8`），穿越視交叉（展示對側交叉與同側直行分流），經視徑連入視丘 LGN 節點，再以扇狀視放射抵達腦枕葉。
-- **大腦標的**: 大腦後端**枕葉 (Occipital Lobe)**，距狀裂周圍點亮鮮明青白色脈衝光暈，伴隨「👁️ 影像感知形成」符號。
-
-#### 2. 聽覺 (Hearing)
-- **刺激幾何**: 環形同心擴散聲波弧線（青白漸層弧線，頻率可設定為波紋疏密），自左向右推進至耳廓。
-- **器官幾何**:
-  - 外耳廓軟骨輪廓 ➔ S 型外耳道。
-  - 鼓膜（彈性橢圓斜面，在聲波抵達時產生高頻微幅水平抖動）。
-  - 聽小骨鏈（槌骨、砧骨、鐙骨以連桿鉸鏈幾何繪製，展示精緻的槓桿聯動動畫）。
-  - 內耳耳蝸（2.75 圈金色螺旋殼，內部描繪前庭階、鼓室階與耳蝸管中階）。
-  - **微觀轉導嵌窗**: 柯蒂氏器毛細胞階梯狀排列的靜纖毛（Stereocilia），在基底膜行波推動下發生向右微幅傾倒，頂端 Tip links 變紅拉直，伴隨金色 $K^+$ 粒子湧入毛細胞胞體。
-- **神經路徑**: 自耳蝸神經節拉出 CN VIII 耳蝸神經束，穿過腦幹耳蝸核與上橄欖核（亮黃中繼點），經中腦下丘折射至視丘 MGN，最後向上發散射入顳葉。
-- **大腦標的**: 大腦外側裂下方之**顳葉 (Temporal Lobe)**（赫氏迴），呈現節奏性震盪波紋，伴隨「🎵 音調與語音解析」徽章。
-
-#### 3. 嗅覺 (Smell)
-- **刺激幾何**: 數十顆隨機布朗運動的彩色揮發性氣味分子粒子（紫、綠、柑橘色微粒，直徑 3~5px），隨氣流流線飄入外鼻孔。
-- **器官幾何**:
-  - 側面鼻腔與鼻甲（上、中、下鼻甲呈海綿狀卷曲骨瓣），引導氣流產生渦流擴散。
-  - 鼻腔頂部**嗅黏膜**（金橙色條帶，向下延伸無數微細嗅纖毛叢）。
-  - 上方為多孔的篩骨篩板（灰色多孔結構）與其上的黃色**嗅球 (Olfactory Bulb)**。
-  - **微觀轉導嵌窗**: 嗅纖毛受體與 GPCR 嵌合過程，氣味分子嵌入受體囊腔，活化 Golf，胞內釋出亮黃色 cAMP 粒子波，Cl- 離子通道打開並釋出螢光光環。
-- **神經路徑**: 嗅受器軸突束穿過篩孔進入嗅球的圓球狀「嗅絲球 (Glomeruli)」，在該處產生突觸閃光，隨後由粗壯的嗅徑 (Olfactory Tract) **直接繞過視丘**向前額下側及顳葉內側邊緣系統投射。
-- **大腦標的**: 顳葉內側梨狀皮質及杏仁核/海馬區域閃耀深紫色柔和光暈，並次級延伸至眶額皮質，呈現「👃 氣味回憶與情緒激發」提示。
-
-#### 4. 味覺 (Taste)
-- **刺激幾何**: 透明液體懸浮呈味微滴（水溶性離子與分子團，如晶格鹽粒子、糖分子），自左上方滴落至舌面。
-- **器官幾何**:
-  - 舌頭縱切面（粉紅肌質結構，表面隆起輪廓狀與蕈狀乳頭）。
-  - 乳頭側面深溝凹槽，唾液流動。
-  - **微觀轉導嵌窗**: 蒜頭/洋蔥狀**味蕾 (Taste Bud)** 剖面，頂部有微小味孔（Taste pore）。呈味物穿過味孔接觸細微絨毛。顯示微觀離子流入（Na+/H+）或 GPCR 途徑釋放 ATP，突觸間隙爆發螢光訊號。
-- **神經路徑**: 三股感覺神經（CN VII 鼓索、CN IX 舌咽、CN X 迷走）匯入延髓孤立束核 (NST)，再上行穿過腦幹至視丘 VPMpc 核團。
-- **大腦標的**: 大腦側裂深處之**島葉 (Insula)** 與額葉島蓋，亮起翠綠色漣漪，提示「👅 甜/鮮/鹹/酸/苦 風味辨識」。
-
-#### 5. 皮膚感覺 (Skin / Touch)
-- **刺激幾何**: 具有多重切換的物理刺針/壓力探針（向下垂直下壓引起凹陷波）或冷熱熱力場弧（藍/紅雙色溫熱波），作用於皮膚角質層。
-- **器官幾何**:
-  - 3D 透視感立體皮膚斷面：外層淡粉色表皮、中層富含毛細血管與纖維的真皮層、底層金黃色網狀脂肪小葉。
-  - 一次性完整呈現教科書圖鑑中的代表性受器：
-    1. 麥斯納小體（真皮乳頭內橢圓形層狀小體，接觸滑動時發亮）。
-    2. 巴齊尼氏小體（皮下深層洋蔥狀多層同心圓囊袋，重壓與震動時同心圓受壓扁平化）。
-    3. 莫克爾盤（表皮與真皮交界處的盤狀足座）。
-    4. 自由神經末梢（分叉至表皮淺層的樹狀枝椏，受溫/痛刺激時發光）。
-  - **微觀轉導嵌窗**: 局部放大巴齊尼同心圓囊片形變，中央未包被軸突末梢的 Piezo2 機械敏感離子通道被物理牽拉張開，金色陽離子湧入觸發動作電位。
-- **神經路徑**:
-  - 纖維匯集入周邊神經幹 ➔ 進入脊髓背根神經節 (DRG, 假單極胞體群) ➔ 脊髓後角。
-  - 精確呈現**雙軌分流**：
-    - 精細觸壓覺走後索（同側上行至延髓換元後交叉）。
-    - 溫痛覺在脊髓後角換元並於前白連合立即交叉至對側前外側索上行。
-  - 兩路匯集於視丘腹後外側核 (VPL)。
-- **大腦標的**: **頂葉後中央迴 (Primary Somatosensory Cortex, S1)**，皮質人身小人圖的手部與面部對應區燃起亮橘紅色激發環，標記「✋ 觸覺、壓覺與溫痛體感」。
-
-### 3.3 動畫時序狀態機 (Normalized Timeline $T \in [0.0, 1.0]$)
-
-整個傳導週期採用標準化時間參數 $T$ ($0 \le T \le 1$)，藉由統一的狀態機驅動所有幾何、粒子與光暈運算：
-
-```javascript
-// 動態傳導時序配置
-const CONDUCTION_PHASES = {
-    STIMULUS_APPROACH: { start: 0.00, end: 0.25, name: '刺激發生與傳遞' },
-    RECEPTOR_TRANSDUCTION: { start: 0.25, end: 0.50, name: '受器感應與訊號轉導' },
-    NERVE_CONDUCTION: { start: 0.50, end: 0.80, name: '神經傳導與視丘中繼' },
-    BRAIN_PERCEPTION: { start: 0.80, end: 1.00, name: '大腦中樞統合與感知' }
-};
-```
-
-1. **階段 1: 刺激發生與傳遞 ($T = 0.00 \sim 0.25$)**:
-   - 粒子/波形自左緣生成，依物理軌跡飛向受器組織。
-   - 底部日誌提示當前刺激型態與物理量。
-2. **階段 2: 受器感應與能量轉導 ($T = 0.25 \sim 0.50$)**:
-   - 刺激抵達受器表面，受器結構發生微觀形變或分子結合。
-   - 微觀放大窗激發，展示離子通道開啟、去極化/超極化電位轉導。
-   - 產生感受器電位 (Receptor Potential)，跨越閥值觸發第 1 個動作電位脈衝。
-3. **階段 3: 神經纖維傳導與核團中繼 ($T = 0.50 \sim 0.80$)**:
-   - 一連串高對比動作電位光球（Action Potential Spikes，直徑 6~10px，帶電離子拖尾）沿神經路徑平滑前進。
-   - 有髓鞘纖維展現**跳躍傳導 (Saltatory Conduction)**（脈衝在蘭氏結間瞬間躍進跳動）；
-   - 抵達腦幹/視丘中繼核團（LGN / MGN / VPM / VPL，嗅覺除外）時，核團產生突觸化學遞質釋放閃光，並無縫啟動下一級神經元傳導。
-4. **階段 4: 大腦皮層統合與意識感知 ($T = 0.80 \sim 1.00$)**:
-   - 神經脈衝進入特定大腦皮質葉區（枕葉 / 顳葉 / 島葉 / 頂葉 / 邊緣系統）。
-   - 皮層細胞柱發出漣漪狀同心輝光，神經迴路同步點亮。
-   - 畫面中央或大腦上方浮現感知結果卡片（如「視覺感知：清晰全彩影像」），完成一次完整生命週期。
-   - 週期結束後平滑淡出，自動重置或單次循環停止。
-
-### 3.4 速度與進程控制系統設計 (Control & Playback Architecture)
-- **播放狀態**: `isPlaying` (布林值，支援 Play / Pause 即時切換，空格鍵或介面按鈕)。
-- **速度倍率**: `speedMultiplier` 支持 0.25x, 0.5x, 1x, 2x, 4x 切換或連續滑桿，允許學習者慢動作細察離子門控細節，或快轉縱覽全局。
-- **進程滑桿 (Scrubber)**: 使用者可隨時拖曳進度條，雙向尋軌（Seekable），Canvas 根據指定 $T$ 即時重算所有粒子座標與器官狀態。
-- **單步微調按鈕 (Step Forward / Backward)**: 每次跳躍 0.25 階段，快速跳至四大里程碑節點（刺激 ➔ 受器 ➔ 神經 ➔ 大腦）。
+1. **Premise 1 (Spatial Continuity)**: Page 1 drains lymph and APCs out of the view at `x=1000, y=268` via a翠綠色 initial lymphatic vessel. To make the educational experience seamless, Page 2's primary afferent lymphatic vessel must enter at `x=0, y=268`, with identical width (`40px`) and green dashed border (`#10b981`), leading directly into the subcapsular sinus (Obs 1).
+2. **Premise 2 (Immunological Cascade Continuity)**: In Page 1, when bacteria or viruses are phagocytosed by macrophages, they transition to `apc_migrating`, acquire a green MHC-II halo, enter the lymph capillary, and flow towards the lymph node (Obs 1 & 3). In Page 2, these exact APCs must emerge from the afferent lymphatic into the subcapsular sinus, crawl into the paracortex, present to Helper T cells, and activate the Germinal Center (Obs 3).
+3. **Premise 3 (Hemodynamic & Visual Fidelity)**: Page 3 and Page 4 involve large veins and bone marrow sinusoids. The endothelial cell style (`#f87171` fill, `#991b1b` stroke, `#7f1d1d` nucleus), RBC style (`#ef4444` / biconcave `#dc2626`), and WBC styles must be preserved verbatim to ensure cross-page unity (Obs 2, 3, 5).
+4. **Premise 4 (Memory Loop Closure)**: Page 1 features a toggle for bacterial and viral immune memory (`toggle-memory-bacteria`, `toggle-memory-virus`) that releases secondary golden antibodies (`#fbbf24`) from the left arteriole. In biological reality, these basal serum antibodies are produced by long-lived plasma cells (LLPCs) homing in bone marrow niches. Documenting Page 4's LLPC "sanctuary & factory" directly explains the biological origin of Page 1's arterial antibody influx, closing the physiological loop (Obs 6).
 
 ---
 
-## 4. 限制、考量與未竟事項 (Caveats)
+## 3. Caveats
 
-1. **教學清晰度 vs. 解剖極限細節之平衡 (Didactic Abstraction)**:
-   - 人體真實神經傳導路徑在空間上為複雜之 3D 空間交叉彎曲結構（如視交叉、內側丘系交叉、邊緣系統海馬內凹）。若直接投影在單一 2D 畫布上易產生視覺重疊與混亂。
-   - **處置原則**: 採用如倫敦地鐵圖般兼具「精準解剖形態」與「清晰線路圖論」之高對比半寫實風格，保留關鍵解剖坐標（如角膜、晶狀體、視網膜、視神經、視交叉、視丘、枕葉）之正確相對拓撲關係與形態，去除冗餘背景結締組織。
-2. **嗅覺系統的非視丘路徑之特殊強調**:
-   - 在五大感覺中，嗅覺是唯一**不先經視丘即直達初級大腦皮質**的特例。在程式撰寫與畫面標註中需特別以高亮標籤註明「💡 特殊生理特點：嗅覺不經視丘直接抵達嗅皮質與邊緣系統」，以彰顯高階生物學之嚴謹性。
-3. **無拷貝外部開源邏輯約束 (Integrity Mode: Demo)**:
-   - 嚴格遵守規範，不引用任何外部現成之生物醫學模擬器函式庫，所有 Canvas 向量幾何、貝茲曲線路徑、行波物理運動、粒子流動與動畫時間軸驅動，均使用純 JavaScript 原生數學演算法（Bézier interpolation, damped sine waves, spring dynamics）手動實作。
-4. **雙向導覽連結無死角驗證 (Bidirectional Linking)**:
-   - `neuro_physiology/index.html` 必須在頂部選單顯著位置掛載指向子頁面（例如 `receptors.html`）的導覽按鈕。
-   - 子頁面亦需在頂部具備直達 `index.html`（神經生理學實驗室主控台）與首頁 `../index.html` 的跳轉連結。
+1. **Canvas ViewBox Assumptions**: Page 1 uses viewBox `0 -65 1000 565`. For Pages 2, 3, and 4, viewBox `0 0 1000 600` is recommended for clean layout; if so, coordinate y=268 aligns near the upper-middle vertical axis, which fits a kidney-shaped lymph node comfortably.
+2. **Performance Scaling**: In Page 3 and Page 4, cell densities (e.g. hundreds of RBCs in venous laminar flow, thousands of mature neutrophils in the marrow storage pool) require zero-allocation rendering pools (similar to Page 1's `bleedPool`, `wbcSpherePool`) or grouped SVG instancing to maintain 60 FPS.
+3. **No Code Implementation**: In accordance with the Explorer role constraints, no source code files in `microDefend/` have been modified during this turn. All findings and directives are documented in `report.md`.
 
 ---
 
-## 5. 結論與規格摘要 (Conclusion)
+## 4. Conclusion
 
-本調查報告已徹底分析中學教科書五大感覺受器參考圖鑑，並將其升華為符合醫學神經解剖學標準的動態傳導架構：
-
-1. **完整的五條傳導流水線**:
-   - **視覺**: 光子 ➔ 視網膜視桿/視錐超極化 ➔ 雙極細胞 ➔ 節細胞 ➔ CN II ➔ 視交叉 ➔ 視丘 LGN ➔ 枕葉初級視覺皮質 (V1)。
-   - **聽覺**: 聲波 ➔ 鼓膜/聽小骨 ➔ 耳蝸基底膜行波 ➔ 毛細胞纖毛偏折 K+ 內流 ➔ CN VIII ➔ 耳蝸核/上橄欖核 ➔ 下丘 ➔ 視丘 MGN ➔ 顳葉初級聽覺皮質 (A1)。
-   - **嗅覺**: 揮發分子 ➔ 嗅上皮嗅纖毛 GPCR (Golf) ➔ cAMP/Cl- 外流 ➔ CN I 穿篩板 ➔ 嗅球嗅絲球 ➔ 嗅徑 ➔ 梨狀嗅皮質/邊緣系統 (跳過視丘!)。
-   - **味覺**: 水溶呈味物 ➔ 舌乳頭味蕾微絨毛 (GPCR / ENaC / OTOP1) ➔ CN VII/IX/X ➔ 延髓孤立束核 ➔ 視丘 VPMpc ➔ 前島葉初級味覺皮質。
-   - **皮膚**: 機械/溫熱刺激 ➔ 梅斯納/巴齊尼/莫克爾/魯菲尼/自由末梢 ➔ DRG ➔ 雙軌路徑 (後索內側丘系 vs 脊髓前白連合交叉丘腦束) ➔ 視丘 VPL ➔ 頂葉後中央迴初級體感皮質 (S1)。
-2. **成熟可行的視覺化規範**:
-   - 採 HTML5 Canvas 2D 高效渲染，提供暗黑高對比科技教學風格。
-   - 四大空間分區 (刺激 ➔ 受器 ➔ 神經 ➔ 大腦) 與微觀轉導嵌窗設計。
-   - 四時序狀態機 ($T \in [0, 1]$)，支援無段尋軌滑桿、暫停/播放、倍速控制與單步導引。
-3. **無縫整合方案**:
-   - 建議新增子頁面路徑: `neuro_physiology/receptors.html`。
-   - 保持與 `index.html` 風格高度一致的 Tailwind UI 導航系統與動態日誌面板。
+1. The visual styling and anatomical asset inventory of Page 1 is fully cataloged with exact hex color codes, SVG parameters, and dynamic morphology rules.
+2. The anatomical layouts and physiological mechanisms for Page 2 (Lymph node), Page 3 (Lymphatic ducts & vein confluence), and Page 4 (Bone marrow hematopoiesis & immune memory) are rigorously detailed in `report.md`.
+3. Spatial alignment conditions between Page 1 and Page 2 are mathematically locked at `(x=1000, y=268) ➔ (x=0, y=268)` with rightward flow vector.
+4. The visual report `report.md` serves as the authoritative anatomical and visual blueprint for the implementation track.
 
 ---
 
-## 6. 獨立驗證方法 (Verification Method)
+## 5. Verification Method
 
-接續執行的 Worker 與審查團隊可透過以下具體測試方法驗證本報告之實作成果：
+To independently verify the observations and data in this report:
 
-### 6.1 自動化 DOM 與功能性測試
-```powershell
-# 1. 檢查檔案結構與雙向導覽連結
-$indexHtml = Get-Content -Raw "c:\Users\User\Documents\GitHub\chihhsiangchien.github.io\neuro_physiology\index.html"
-$receptorsHtml = Get-Content -Raw "c:\Users\User\Documents\GitHub\chihhsiangchien.github.io\neuro_physiology\receptors.html"
+1. **Verify Initial Lymphatic Coordinates in Page 1**:
+   Run:
+   ```powershell
+   Select-String -Path "microDefend\index.html" -Pattern "lymph-capillary-lumen" -Context 2,4
+   Select-String -Path "microDefend\script.js" -Pattern "LYMPH_VESSEL_" -Context 1,2
+   ```
+   Check that `x=868, y=268` and `1000 248 ... 1000 288` match Section 1.1.
 
-# 驗證 index.html 是否包含 receptors.html 連結
-if ($indexHtml -match 'href="receptors\.html"') { Write-Host "PASS: index.html links to receptors.html" } else { Write-Host "FAIL: Missing link to receptors.html in index.html" }
+2. **Verify WBC Colors and Nuclei in Page 1**:
+   Run:
+   ```powershell
+   Select-String -Path "microDefend\script.js" -Pattern "getWbcColor" -Context 1,12
+   Select-String -Path "microDefend\script.js" -Pattern "drawWbcNucleus" -Context 1,24
+   ```
+   Check that all 8 WBC subtypes match Section 1.3.
 
-# 驗證 receptors.html 是否包含 index.html 連結
-if ($receptorsHtml -match 'href="index\.html"') { Write-Host "PASS: receptors.html links back to index.html" } else { Write-Host "FAIL: Missing link to index.html in receptors.html" }
-```
+3. **Verify Endothelial and RBC Specifications**:
+   Run:
+   ```powershell
+   Select-String -Path "microDefend\script.js" -Pattern "createBranchEndoCell" -Context 1,18
+   Select-String -Path "microDefend\script.js" -Pattern "renderPooledBleedRbc" -Context 1,20
+   ```
+   Check that `#f87171`, `#991b1b`, `#7f1d1d`, and `#dc2626` match Section 1.2 and 1.5.
 
-### 6.2 網頁控制台語法與繪圖完整性檢測
-使用 Node.js / Puppeteer 或本地瀏覽器載入 `receptors.html`，檢查：
-1. **Console 零報錯**: 確保無未捕獲之 JavaScript Error (`window.onerror` 未觸發)。
-2. **五大受器切換驗證**: 依序點擊「視覺、聽覺、嗅覺、味覺、皮膚」按鈕，確認 Canvas 成功重繪對應解剖圖樣，畫布無白屏或死循環。
-3. **播放控制鏈路驗證**:
-   - 點擊「暫停」：動畫時間軸停滯，脈衝粒子位置保持定格。
-   - 點擊「播放」：時間軸恢復遞增。
-   - 調整「速度倍率」：脈衝前進速率等比變化。
-   - 拖曳「進度滑桿」：畫面各粒子位置與大腦輝光狀態即時隨指定 $T$ 同步更新。
-4. **解剖文字正確性稽核**: 檢查頁面資訊面板中各感覺之名詞（如角膜、視紫質、耳蝸、柯蒂氏器毛細胞、上橄欖核、嗅球、篩骨篩板、味蕾、孤立束核、巴齊尼小體、薄束楔束、初級感覺皮質等）均無缺漏或錯置。
+4. **Invalidation Condition**:
+   If any of the quoted line numbers or hex colors in `report.md` do not match `microDefend/index.html` or `microDefend/script.js`, this survey's inventory table must be corrected accordingly.
