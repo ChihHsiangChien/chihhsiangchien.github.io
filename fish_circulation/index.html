@@ -1,0 +1,1610 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>小魚血液循環與尾鰭顯微動態模擬器</title>
+<style>
+  :root {
+    --bg-dark: #0f172a;
+    --panel-bg: #1e293b;
+    --panel-border: #334155;
+    --text-main: #f8fafc;
+    --text-muted: #94a3b8;
+    --accent: #38bdf8;
+    --accent-hover: #0284c7;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+  body {
+    font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+    background: var(--bg-dark);
+    color: var(--text-main);
+    height: 100vh; width: 100vw;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  header {
+    background: var(--panel-bg);
+    border-bottom: 1px solid var(--panel-border);
+    padding: 7px 12px;
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    gap: 8px; z-index: 20;
+  }
+  .brand-tabs { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .app-title { font-size: 1rem; font-weight: 700; color: #e2e8f0; white-space: nowrap; }
+  .tabs {
+    display: flex; background: #0f172a; padding: 3px;
+    border-radius: 8px; border: 1px solid var(--panel-border);
+  }
+  .tab-btn {
+    background: transparent; color: var(--text-muted); border: none;
+    padding: 5px 12px; border-radius: 6px; font-size: 0.88rem; font-weight: 600;
+    cursor: pointer; transition: 0.18s;
+  }
+  .tab-btn:hover { color: #fff; }
+  .tab-btn.active { background: var(--accent-hover); color: #fff; }
+  .toolbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .ctrl-btn {
+    background: #334155; color: #f1f5f9; border: 1px solid #475569;
+    padding: 5px 9px; border-radius: 6px; font-size: 0.82rem; font-weight: 500;
+    cursor: pointer; transition: 0.15s; white-space: nowrap;
+  }
+  .ctrl-btn:hover { background: #475569; }
+  .ctrl-btn.active { background: rgba(56,189,248,0.2); border-color: var(--accent); color: #7dd3fc; }
+  .ctrl-btn.track-active {
+    background: rgba(245,158,11,0.25); border-color: #f59e0b; color: #fde68a;
+  }
+  .slider-group {
+    display: flex; align-items: center; gap: 5px;
+    background: #0f172a; padding: 4px 8px; border-radius: 6px;
+    border: 1px solid var(--panel-border); font-size: 0.8rem; color: var(--text-muted);
+  }
+  .slider-group input[type="range"] { width: 70px; accent-color: var(--accent); cursor: pointer; }
+
+  #microSubBar {
+    background: rgba(15,23,42,0.95);
+    border-bottom: 1px solid var(--panel-border);
+    padding: 5px 12px; display: none; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 6px; z-index: 15;
+  }
+  #microSubBar.visible { display: flex; }
+  .nav-group { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+  .nav-label { font-size: 0.78rem; color: var(--text-muted); }
+  .jump-btn {
+    background: #1e293b; color: #cbd5e1; border: 1px solid #334155;
+    padding: 4px 8px; border-radius: 5px; font-size: 0.78rem; cursor: pointer;
+  }
+  .jump-btn:hover { background: #334155; color: #fff; border-color: var(--accent); }
+
+  main { flex: 1; position: relative; overflow: hidden; background: #0b1120; }
+  canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+  canvas:active { cursor: grabbing; }
+
+  #trackBanner {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    background: rgba(15,23,42,0.92); border: 1px solid #f59e0b; color: #fef3c7;
+    padding: 5px 14px; border-radius: 999px; font-size: 0.84rem; font-weight: 600;
+    display: none; align-items: center; gap: 8px; z-index: 12; white-space: nowrap;
+  }
+  #trackBanner.visible { display: flex; }
+
+  .info-card {
+    position: absolute; left: 12px; bottom: 12px; width: 335px; max-width: calc(100vw - 70px);
+    background: rgba(15,23,42,0.88); backdrop-filter: blur(8px);
+    border: 1px solid var(--panel-border); border-radius: 10px;
+    padding: 10px 13px; color: #e2e8f0; font-size: 0.8rem; line-height: 1.48; z-index: 10;
+  }
+  .info-card.collapsed .info-body { display: none; }
+  .info-card.collapsed { width: auto; padding: 7px 11px; }
+  .info-header {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    font-weight: 700; font-size: 0.86rem; color: #7dd3fc; cursor: pointer;
+  }
+  .info-body { margin-top: 7px; }
+  .legend-row {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin-bottom: 5px; padding-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.1);
+  }
+  .legend-item { display: flex; align-items: center; gap: 4px; font-size: 0.78rem; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; border: 1px solid rgba(255,255,255,0.4); }
+  .cycle-flow {
+    background: rgba(30,41,59,0.85); border-radius: 6px; padding: 5px 7px;
+    margin-top: 5px; font-size: 0.75rem; color: #cbd5e1; border-left: 3px solid var(--accent);
+  }
+  .hl-oxy { color: #ff6b81; font-weight: 700; }
+  .hl-deoxy { color: #c084fc; font-weight: 700; }
+
+  #zoomOverlay {
+    position: absolute; right: 12px; bottom: 12px;
+    display: none; flex-direction: column; gap: 6px; z-index: 10;
+  }
+  #zoomOverlay.visible { display: flex; }
+  .zoom-btn {
+    width: 36px; height: 36px; border-radius: 8px;
+    background: rgba(30,41,59,0.92); border: 1px solid var(--panel-border);
+    color: #f8fafc; font-size: 1.1rem; font-weight: 700; cursor: pointer;
+  }
+  .zoom-btn:hover { background: #334155; border-color: var(--accent); }
+  @media (max-width: 720px) { .app-title span { display: none; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand-tabs">
+    <div class="app-title">🐟 <span>小魚血液循環模擬器</span></div>
+    <div class="tabs">
+      <button class="tab-btn active" id="tabMacro" onclick="switchTab('macro')">🐟 整體魚體與單循環</button>
+      <button class="tab-btn" id="tabMicro" onclick="switchTab('micro')">🔬 顯微放大追蹤 (尾鰭➔心臟➔魚鰓)</button>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <button class="ctrl-btn" id="btnPlay" onclick="togglePlay()">⏸ 暫停</button>
+    <div class="slider-group" title="調整心跳速率與血流快慢">
+      <span>心跳</span>
+      <input type="range" id="bpmSlider" min="35" max="135" value="72" oninput="updateBPM(this.value)">
+      <span id="bpmVal">72 BPM</span>
+    </div>
+    <button class="ctrl-btn active" id="btnLabels" onclick="toggleLabels()" title="快捷鍵 L">🏷️ 文字標籤：顯示</button>
+    <button class="ctrl-btn active" id="btnArrows" onclick="toggleArrows()">➡️ 血流箭頭：顯示</button>
+    <button class="ctrl-btn active" id="btnColorMode" onclick="toggleColorMode()" title="切換血氧分色或課本橘紅原色(測驗用)">🎨 血氧分色：開</button>
+    <button class="ctrl-btn" id="btnCotton" onclick="toggleCotton()">🧫 濕棉花配置</button>
+  </div>
+</header>
+
+<div id="microSubBar">
+  <div class="nav-group">
+    <span class="nav-label">📍 沿血管快速移至：</span>
+    <button class="jump-btn" onclick="focusPreset('tail_textbook')">1. 尾鰭微血管網(課本圖)</button>
+    <button class="jump-btn" onclick="focusPreset('tail_overview')">2. 尾鰭與鰭條</button>
+    <button class="jump-btn" onclick="focusPreset('trunk')">3. 軀幹動靜脈</button>
+    <button class="jump-btn" onclick="focusPreset('heart')">4. 心臟搏動(全缺氧血)</button>
+    <button class="jump-btn" onclick="focusPreset('gills')">5. 魚鰓微血管(換氣)</button>
+  </div>
+  <div class="nav-group">
+    <button class="ctrl-btn" id="btnTrackRBC" onclick="toggleTrackRBC()">🎯 追蹤單一紅血球繞全身</button>
+    <button class="ctrl-btn" id="btnInvert" onclick="toggleInvert()">🔄 複式顯微鏡顛倒視野：關</button>
+  </div>
+</div>
+
+<main id="canvasContainer">
+  <canvas id="simCanvas"></canvas>
+
+  <div id="trackBanner">
+    <span>🎯 追蹤紅血球：<strong id="trackLocText">尾鰭微血管</strong></span>
+    <span id="trackOxyBadge" style="padding:2px 8px; border-radius:99px; background:#ef233c; color:#fff; font-size:0.75rem;">充氧血</span>
+    <button onclick="toggleTrackRBC()" style="background:transparent; border:1px solid #fbbf24; color:#fde68a; border-radius:4px; padding:1px 6px; cursor:pointer; font-size:0.74rem;">停止</button>
+  </div>
+
+  <div class="info-card" id="infoCard">
+    <div class="info-header" onclick="document.getElementById('infoCard').classList.toggle('collapsed')">
+      <span id="infoTitle">📖 魚類單循環與顯微觀察重點</span>
+      <span style="font-size:0.75rem; color:#94a3b8;">[收合]</span>
+    </div>
+    <div class="info-body">
+      <div class="legend-row">
+        <div class="legend-item"><span class="dot" style="background:#ef233c;"></span><span class="hl-oxy">充氧血</span>(鮮紅)</div>
+        <div class="legend-item"><span class="dot" style="background:#6d28d9;"></span><span class="hl-deoxy">缺氧血</span>(暗紫紅)</div>
+        <div class="legend-item"><span class="dot" style="background:#f59e56;"></span>血漿與管腔</div>
+      </div>
+      <div id="infoDesc">
+        • <b>心臟特性</b>：魚類為<b>一心房一心室</b>（含靜脈竇與彈性動脈球），心臟內流經的<b>全為暗紅色缺氧血</b>。<br>
+        • <b>魚鰓換氣</b>：缺氧血由腹大動脈送入<b>魚鰓微血管</b>獲得 O₂ 轉為充氧血後，<b>不回心臟</b>，直接匯入<b>背大動脈</b>流向尾鰭。<br>
+        • <b>判別血管</b>：小動脈（主幹流向分支）、微血管（紅血球<b>單行通過</b>）、小靜脈（分支匯入主幹）。
+      </div>
+      <div class="cycle-flow">
+        心室(<span class="hl-deoxy">缺氧</span>) ➔ 腹大動脈 ➔ <b>魚鰓</b>(換氣) ➔ 背大動脈(<span class="hl-oxy">充氧</span>) ➔ 尾鰭小動脈 ➔ <b>尾鰭微血管</b> ➔ 小靜脈/主靜脈 ➔ 心房
+      </div>
+    </div>
+  </div>
+
+  <div id="zoomOverlay">
+    <button class="zoom-btn" onclick="zoomBy(1.3)" title="放大">+</button>
+    <button class="zoom-btn" onclick="zoomBy(1/1.3)" title="縮小">−</button>
+    <button class="zoom-btn" onclick="focusPreset('tail_textbook')" title="回課本尾鰭視角" style="font-size:0.8rem;">尾</button>
+  </div>
+</main>
+
+<script>
+// ============================================================================
+// 1. 全域狀態設定
+// ============================================================================
+const WORLD_W = 3000;
+const WORLD_H = 1200;
+
+const state = {
+  tab: 'macro',
+  playing: true,
+  bpm: 72,
+  cardiacPhase: 0,
+  simTime: 0,
+  showLabels: true,
+  showArrows: true,
+  oxygenColorMode: true,
+  showWetCotton: false,
+  invertMicro: false,
+  trackRBCIndex: -1,
+
+  cam: { x: 2420, y: 580, zoom: 2.35 },
+  targetCam: { x: 2420, y: 580, zoom: 2.35 },
+  macroTransform: { scale: 1, offsetX: 0, offsetY: 0 },
+  minimapRect: { x: 0, y: 0, w: 0, h: 0 },
+
+  isDragging: false,
+  dragMinimap: false,
+  dragMacroLens: false,
+  lastPointer: { x: 0, y: 0 },
+  pinchDist: 0
+};
+
+const canvas = document.getElementById('simCanvas');
+const ctx = canvas.getContext('2d');
+
+// ============================================================================
+// 2. 樣條幾何與閉合血管網路建構 (尾鰭 <-> 軀幹 <-> 心臟 <-> 魚鰓)
+// ============================================================================
+function sampleSpline(ctrlPts, samplesPerSeg = 16) {
+  if (ctrlPts.length === 2) {
+    const out = [];
+    for (let i = 0; i <= samplesPerSeg; i++) {
+      const t = i / samplesPerSeg;
+      out.push({
+        x: ctrlPts[0][0] + (ctrlPts[1][0] - ctrlPts[0][0]) * t,
+        y: ctrlPts[0][1] + (ctrlPts[1][1] - ctrlPts[0][1]) * t
+      });
+    }
+    return out;
+  }
+  const pts = [ctrlPts[0], ...ctrlPts, ctrlPts[ctrlPts.length - 1]];
+  const res = [];
+  for (let i = 1; i < pts.length - 2; i++) {
+    const p0 = pts[i - 1], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2];
+    const limit = (i === pts.length - 3) ? samplesPerSeg : samplesPerSeg - 1;
+    for (let s = 0; s <= limit; s++) {
+      const t = s / samplesPerSeg, t2 = t * t, t3 = t2 * t;
+      res.push({
+        x: 0.5 * ((2 * p1[0]) + (-p0[0] + p2[0]) * t + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * t2 + (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * t3),
+        y: 0.5 * ((2 * p1[1]) + (-p0[1] + p2[1]) * t + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * t2 + (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * t3)
+      });
+    }
+  }
+  return res;
+}
+
+const vessels = {};
+const vesselList = [];
+
+function addVessel(cfg) {
+  const raw = sampleSpline(cfg.pts, cfg.samples || 15);
+  let len = 0;
+  const nodes = raw.map((pt, i) => {
+    if (i > 0) len += Math.hypot(pt.x - raw[i - 1].x, pt.y - raw[i - 1].y);
+    return { x: pt.x, y: pt.y, s: len, angle: 0 };
+  });
+  for (let i = 0; i < nodes.length; i++) {
+    const a = nodes[Math.max(0, i - 1)], b = nodes[Math.min(nodes.length - 1, i + 1)];
+    nodes[i].angle = Math.atan2(b.y - a.y, b.x - a.x);
+  }
+  const v = {
+    id: cfg.id, name: cfg.name || '', kind: cfg.kind, chamber: cfg.chamber || null,
+    nodes, length: Math.max(1, len),
+    rStart: cfg.rStart ?? cfg.r ?? 8, rEnd: cfg.rEnd ?? cfg.r ?? 8,
+    oxyStart: cfg.oxyStart ?? cfg.oxy ?? 1, oxyEnd: cfg.oxyEnd ?? cfg.oxy ?? 1,
+    speed: cfg.speed ?? 1, pulse: cfg.pulse ?? 0.1, lanes: cfg.lanes ?? 1,
+    next: cfg.next || [], arrowSpots: cfg.arrowSpots ?? [0.5], arrowSide: cfg.arrowSide ?? 0
+  };
+  vessels[v.id] = v;
+  vesselList.push(v);
+}
+
+function sampleVesselAt(v, s) {
+  const cs = Math.max(0, Math.min(v.length, s));
+  const nodes = v.nodes;
+  let lo = 0, hi = nodes.length - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (nodes[mid].s <= cs) lo = mid; else hi = mid;
+  }
+  const n0 = nodes[lo], n1 = nodes[hi];
+  const f = (cs - n0.s) / ((n1.s - n0.s) || 1);
+  const t = cs / v.length;
+  return {
+    x: n0.x + (n1.x - n0.x) * f,
+    y: n0.y + (n1.y - n0.y) * f,
+    angle: n0.angle,
+    r: v.rStart + (v.rEnd - v.rStart) * t,
+    oxy: v.oxyStart + (v.oxyEnd - v.oxyStart) * t,
+    t
+  };
+}
+
+function buildVascularSystem() {
+  // 1. 心臟四腔室：靜脈竇 ➔ 心房 ➔ 心室 ➔ 動脈球 (全為暗紅缺氧血 oxy=0.05)
+  addVessel({ id: 'h_sv', name: '心臟：靜脈竇(缺氧血)', kind: 'heart', chamber: 'sv', pts: [[930,678],[885,690],[842,695]], rStart: 15, rEnd: 19, oxy: 0.05, speed: 0.85, pulse: 0.25, lanes: 3, next: [{id:'h_atrium',w:1}], arrowSpots: [0.5] });
+  addVessel({ id: 'h_atrium', name: '心臟：心房(缺氧血)', kind: 'heart', chamber: 'atrium', pts: [[842,695],[798,676],[770,718]], rStart: 22, rEnd: 20, oxy: 0.05, speed: 0.9, pulse: 0.5, lanes: 3, next: [{id:'h_ventricle',w:1}], arrowSpots: [0.45] });
+  addVessel({ id: 'h_ventricle', name: '心臟：心室(缺氧血)', kind: 'heart', chamber: 'ventricle', pts: [[770,718],[750,768],[702,752]], rStart: 25, rEnd: 22, oxy: 0.05, speed: 1.05, pulse: 0.85, lanes: 3, next: [{id:'h_bulbus',w:1}], arrowSpots: [0.5] });
+  addVessel({ id: 'h_bulbus', name: '心臟：動脈球(彈性緩衝)', kind: 'heart', chamber: 'bulbus', pts: [[702,752],[668,735],[635,712]], rStart: 20, rEnd: 13, oxy: 0.05, speed: 1.25, pulse: 0.65, lanes: 3, next: [{id:'va_1',w:1}], arrowSpots: [0.55] });
+
+  // 2. 腹大動脈 ➔ 4對魚鰓微血管 (氣體交換 oxy: 0.05 -> 0.98)
+  addVessel({ id: 'va_1', name: '腹大動脈(缺氧血)', kind: 'aorta', pts: [[635,712],[605,696]], rStart: 12.5, rEnd: 11.5, oxy: 0.05, speed: 1.45, pulse: 0.55, lanes: 2, next: [{id:'gill4_a',w:0.14},{id:'gill4_b',w:0.14},{id:'va_2',w:0.72}], arrowSpots: [] });
+  addVessel({ id: 'va_2', name: '腹大動脈(缺氧血)', kind: 'aorta', pts: [[605,696],[560,684]], rStart: 11, rEnd: 10, oxy: 0.05, speed: 1.4, pulse: 0.55, lanes: 2, next: [{id:'gill3_a',w:0.18},{id:'gill3_b',w:0.18},{id:'va_3',w:0.64}], arrowSpots: [0.5] });
+  addVessel({ id: 'va_3', name: '腹大動脈(缺氧血)', kind: 'aorta', pts: [[560,684],[515,672]], rStart: 9.5, rEnd: 8.5, oxy: 0.05, speed: 1.35, pulse: 0.5, lanes: 2, next: [{id:'gill2_a',w:0.25},{id:'gill2_b',w:0.25},{id:'va_4',w:0.5}], arrowSpots: [] });
+  addVessel({ id: 'va_4', name: '入鰓動脈(缺氧血)', kind: 'aorta', pts: [[515,672],[470,656]], rStart: 8, rEnd: 7, oxy: 0.05, speed: 1.3, pulse: 0.45, lanes: 2, next: [{id:'gill1_a',w:0.5},{id:'gill1_b',w:0.5}], arrowSpots: [] });
+
+  [
+    { idx: 1, x: 470, yIn: 656, yOut: 474, nextId: 'eff_1' },
+    { idx: 2, x: 515, yIn: 672, yOut: 470, nextId: 'eff_2' },
+    { idx: 3, x: 560, yIn: 684, yOut: 476, nextId: 'eff_3' },
+    { idx: 4, x: 605, yIn: 696, yOut: 486, nextId: 'eff_4' }
+  ].forEach(g => {
+    const my = (g.yIn + g.yOut) / 2;
+    addVessel({ id: `gill${g.idx}_a`, name: '魚鰓微血管(氣體交換)', kind: 'gill', pts: [[g.x,g.yIn],[g.x-15,my+25],[g.x-13,my-28],[g.x,g.yOut]], r: 4.8, oxyStart: 0.05, oxyEnd: 0.98, speed: 0.58, pulse: 0.2, lanes: 1, next: [{id:g.nextId,w:1}], arrowSpots: [0.5] });
+    addVessel({ id: `gill${g.idx}_b`, name: '魚鰓微血管(氣體交換)', kind: 'gill', pts: [[g.x,g.yIn],[g.x+14,my+22],[g.x+15,my-25],[g.x,g.yOut]], r: 4.8, oxyStart: 0.05, oxyEnd: 0.98, speed: 0.58, pulse: 0.2, lanes: 1, next: [{id:g.nextId,w:1}], arrowSpots: [] });
+  });
+
+  // 出鰓動脈匯流與頭部支路
+  addVessel({ id: 'eff_1', name: '出鰓動脈(充氧血)', kind: 'aorta', pts: [[470,474],[515,470]], r: 7.5, oxy: 0.98, speed: 1.15, pulse: 0.3, lanes: 2, next: [{id:'eff_2',w:0.82},{id:'head_art',w:0.18}], arrowSpots: [] });
+  addVessel({ id: 'head_art', name: '頸動脈(往頭部)', kind: 'arteriole', pts: [[515,470],[415,442],[330,465]], rStart: 6, rEnd: 4.8, oxy: 0.98, speed: 1.05, pulse: 0.25, lanes: 1, next: [{id:'head_cap',w:1}], arrowSpots: [0.55] });
+  addVessel({ id: 'head_cap', name: '頭部微血管', kind: 'capillary', pts: [[330,465],[278,512],[318,578]], r: 4.5, oxyStart: 0.98, oxyEnd: 0.1, speed: 0.55, pulse: 0.05, lanes: 1, next: [{id:'head_vein',w:1}], arrowSpots: [0.5] });
+  addVessel({ id: 'head_vein', name: '前主靜脈', kind: 'vein', pts: [[318,578],[450,618],[735,645],[930,678]], rStart: 5.5, rEnd: 8, oxy: 0.08, speed: 0.82, pulse: 0.03, lanes: 2, next: [{id:'h_sv',w:1}], arrowSpots: [0.45] });
+
+  addVessel({ id: 'eff_2', name: '出鰓動脈匯流', kind: 'aorta', pts: [[515,470],[560,476]], rStart: 8.5, rEnd: 9.5, oxy: 0.98, speed: 1.2, pulse: 0.3, lanes: 2, next: [{id:'eff_3',w:1}], arrowSpots: [] });
+  addVessel({ id: 'eff_3', name: '出鰓動脈匯流', kind: 'aorta', pts: [[560,476],[605,486]], rStart: 10, rEnd: 11, oxy: 0.98, speed: 1.25, pulse: 0.32, lanes: 2, next: [{id:'eff_4',w:1}], arrowSpots: [] });
+  addVessel({ id: 'eff_4', name: '背大動脈(充氧血)', kind: 'aorta', pts: [[605,486],[700,502]], rStart: 11.5, rEnd: 12.5, oxy: 0.98, speed: 1.35, pulse: 0.35, lanes: 3, next: [{id:'da_1',w:1}], arrowSpots: [0.55] });
+
+  // 3. 軀幹背大動脈 ➔ 尾動脈
+  addVessel({ id: 'da_1', name: '背大動脈(充氧血)', kind: 'aorta', pts: [[700,502],[1120,512]], rStart: 12.5, rEnd: 11.8, oxy: 0.98, speed: 1.4, pulse: 0.35, lanes: 3, next: [{id:'da_2',w:0.88},{id:'trunk_cap1',w:0.12}], arrowSpots: [0.35,0.75] });
+  addVessel({ id: 'trunk_cap1', name: '軀幹肌肉微血管', kind: 'capillary', pts: [[1120,512],[1175,435],[1245,555],[1190,646]], r: 4.6, oxyStart: 0.96, oxyEnd: 0.1, speed: 0.55, pulse: 0.05, lanes: 1, next: [{id:'pcv_1',w:1}], arrowSpots: [0.35] });
+  addVessel({ id: 'da_2', name: '背大動脈(充氧血)', kind: 'aorta', pts: [[1120,512],[1600,526]], rStart: 11.8, rEnd: 10.8, oxy: 0.97, speed: 1.38, pulse: 0.33, lanes: 3, next: [{id:'da_3',w:0.88},{id:'trunk_cap2',w:0.12}], arrowSpots: [0.35,0.75] });
+  addVessel({ id: 'trunk_cap2', name: '軀幹肌肉微血管', kind: 'capillary', pts: [[1600,526],[1655,452],[1710,565],[1650,625]], r: 4.6, oxyStart: 0.95, oxyEnd: 0.1, speed: 0.55, pulse: 0.05, lanes: 1, next: [{id:'pcv_2',w:1}], arrowSpots: [0.35] });
+  addVessel({ id: 'da_3', name: '尾動脈(流向尾鰭)', kind: 'aorta', pts: [[1600,526],[2060,545]], rStart: 10.8, rEnd: 9.5, oxy: 0.96, speed: 1.35, pulse: 0.3, lanes: 2, next: [{id:'tail_upper_art',w:0.22},{id:'tb_art_in',w:0.56},{id:'tail_lower_art',w:0.22}], arrowSpots: [0.35,0.75] });
+
+  // 4. 尾鰭上下葉血管分支
+  addVessel({ id: 'tail_upper_art', name: '尾鰭上葉小動脈', kind: 'arteriole', pts: [[2060,545],[2280,415],[2590,325]], rStart: 6.8, rEnd: 5.2, oxy: 0.95, speed: 1.15, pulse: 0.25, lanes: 1, next: [{id:'tail_upper_cap',w:1}], arrowSpots: [0.45,0.8] });
+  addVessel({ id: 'tail_upper_cap', name: '尾鰭上葉微血管', kind: 'capillary', pts: [[2590,325],[2675,338],[2605,378]], r: 4.5, oxyStart: 0.95, oxyEnd: 0.12, speed: 0.52, pulse: 0.05, lanes: 1, next: [{id:'tail_upper_vein',w:1}], arrowSpots: [0.5] });
+  addVessel({ id: 'tail_upper_vein', name: '尾鰭上葉小靜脈', kind: 'venule', pts: [[2605,378],[2310,460],[2060,612]], rStart: 5.5, rEnd: 7.5, oxy: 0.1, speed: 0.82, pulse: 0.03, lanes: 2, next: [{id:'pcv_3',w:1}], arrowSpots: [0.35,0.75] });
+
+  addVessel({ id: 'tail_lower_art', name: '尾鰭下葉小動脈', kind: 'arteriole', pts: [[2060,545],[2290,725],[2575,818]], rStart: 6.8, rEnd: 5.2, oxy: 0.95, speed: 1.15, pulse: 0.25, lanes: 1, next: [{id:'tail_lower_cap',w:1}], arrowSpots: [0.45,0.8] });
+  addVessel({ id: 'tail_lower_cap', name: '尾鰭下葉微血管', kind: 'capillary', pts: [[2575,818],[2660,842],[2580,868]], r: 4.5, oxyStart: 0.95, oxyEnd: 0.12, speed: 0.52, pulse: 0.05, lanes: 1, next: [{id:'tail_lower_vein',w:1}], arrowSpots: [0.5] });
+  addVessel({ id: 'tail_lower_vein', name: '尾鰭下葉小靜脈', kind: 'venule', pts: [[2580,868],[2395,785],[2280,745],[2060,612]], rStart: 5.5, rEnd: 7.5, oxy: 0.1, speed: 0.82, pulse: 0.03, lanes: 2, next: [{id:'pcv_3',w:1}], arrowSpots: [0.4,0.8] });
+
+  // 5. 課本核心尾鰭微血管網 (高度還原題圖：上方動脈左➔右分支、中層微血管單行彎曲向下、下方靜脈右➔左匯流)
+  addVessel({ id: 'tb_art_in', name: '尾鰭小動脈', kind: 'arteriole', pts: [[2060,545],[2180,548],[2255,546]], rStart: 8.5, rEnd: 7.8, oxy: 0.95, speed: 1.22, pulse: 0.26, lanes: 2, next: [{id:'tb_art_up1',w:0.42},{id:'tb_art_mid1',w:0.58}], arrowSpots: [0.85], arrowSide: -1 });
+  addVessel({ id: 'tb_art_up1', name: '小動脈(動脈)', kind: 'arteriole', pts: [[2255,546],[2288,504],[2382,502]], rStart: 7.0, rEnd: 6.8, oxy: 0.95, speed: 1.18, pulse: 0.25, lanes: 1, next: [{id:'tb_art_up_twig1',w:0.15},{id:'tb_art_bridge',w:0.22},{id:'tb_art_up2',w:0.63}], arrowSpots: [0.22,0.7], arrowSide: -1 });
+  addVessel({ id: 'tb_art_up_twig1', name: '小動脈側枝', kind: 'capillary', pts: [[2292,504],[2298,468],[2310,460]], r: 4.6, oxyStart: 0.94, oxyEnd: 0.2, speed: 0.6, pulse: 0.1, lanes: 1, next: [{id:'tail_upper_vein',w:1}], arrowSpots: [] });
+  addVessel({ id: 'tb_art_up2', name: '小動脈(動脈)', kind: 'arteriole', pts: [[2382,502],[2445,502],[2605,504]], rStart: 6.8, rEnd: 6.2, oxy: 0.95, speed: 1.16, pulse: 0.24, lanes: 1, next: [{id:'tb_art_up_twig2',w:0.18},{id:'tb_tip_cap1',w:0.82}], arrowSpots: [0.62], arrowSide: -1 });
+  addVessel({ id: 'tb_art_up_twig2', name: '小動脈側枝', kind: 'capillary', pts: [[2442,502],[2446,466],[2380,458],[2310,460]], r: 4.6, oxyStart: 0.94, oxyEnd: 0.2, speed: 0.58, pulse: 0.1, lanes: 1, next: [{id:'tail_upper_vein',w:1}], arrowSpots: [] });
+  addVessel({ id: 'tb_art_bridge', name: '小動脈分支', kind: 'arteriole', pts: [[2382,502],[2388,544]], r: 6.2, oxy: 0.94, speed: 1.0, pulse: 0.22, lanes: 1, next: [{id:'tb_cap_1',w:0.5},{id:'tb_art_mid2',w:0.5}], arrowSpots: [] });
+
+  addVessel({ id: 'tb_art_mid1', name: '小動脈分支', kind: 'arteriole', pts: [[2255,546],[2290,545],[2388,544]], rStart: 7.2, rEnd: 6.8, oxy: 0.95, speed: 1.16, pulse: 0.24, lanes: 1, next: [{id:'tb_cap_left',w:0.26},{id:'tb_cap_1',w:0.34},{id:'tb_art_mid2',w:0.4}], arrowSpots: [0.58], arrowSide: 1 });
+  addVessel({ id: 'tb_art_mid2', name: '小動脈分支', kind: 'arteriole', pts: [[2388,544],[2438,545],[2525,546]], rStart: 6.6, rEnd: 6.2, oxy: 0.94, speed: 1.12, pulse: 0.22, lanes: 1, next: [{id:'tb_cap_2',w:0.42},{id:'tb_cap_3',w:0.38},{id:'tb_art_mid3',w:0.2}], arrowSpots: [] });
+  addVessel({ id: 'tb_art_mid3', name: '小動脈末梢', kind: 'arteriole', pts: [[2525,546],[2605,547]], rStart: 5.8, rEnd: 5.2, oxy: 0.93, speed: 1.05, pulse: 0.2, lanes: 1, next: [{id:'tb_tip_cap2',w:1}], arrowSpots: [] });
+
+  addVessel({ id: 'tb_tip_cap1', name: '尾鰭末梢微血管', kind: 'capillary', pts: [[2605,504],[2715,518],[2730,595],[2640,648]], r: 4.6, oxyStart: 0.94, oxyEnd: 0.14, speed: 0.56, pulse: 0.06, lanes: 1, next: [{id:'tb_vein_1',w:1}], arrowSpots: [0.5] });
+  addVessel({ id: 'tb_tip_cap2', name: '尾鰭末梢微血管', kind: 'capillary', pts: [[2605,547],[2678,565],[2680,625],[2640,648]], r: 4.6, oxyStart: 0.93, oxyEnd: 0.14, speed: 0.56, pulse: 0.06, lanes: 1, next: [{id:'tb_vein_1',w:1}], arrowSpots: [0.5] });
+
+  addVessel({ id: 'tb_cap_left', name: '微血管(單行通過)', kind: 'capillary', pts: [[2286,545],[2248,595],[2205,646]], r: 4.8, oxyStart: 0.94, oxyEnd: 0.14, speed: 0.55, pulse: 0.05, lanes: 1, next: [{id:'tb_vein_out',w:1}], arrowSpots: [0.5], arrowSide: 1 });
+  addVessel({ id: 'tb_cap_1', name: '微血管(單行通過)', kind: 'capillary', pts: [[2385,544],[2404,586],[2368,628],[2318,648]], r: 4.7, oxyStart: 0.94, oxyEnd: 0.12, speed: 0.52, pulse: 0.05, lanes: 1, next: [{id:'tb_vein_4',w:1}], arrowSpots: [0.35,0.78], arrowSide: -1 });
+  addVessel({ id: 'tb_cap_2', name: '微血管(單行通過)', kind: 'capillary', pts: [[2436,545],[2458,592],[2438,632],[2378,648]], r: 4.7, oxyStart: 0.94, oxyEnd: 0.12, speed: 0.52, pulse: 0.05, lanes: 1, next: [{id:'tb_vein_3',w:1}], arrowSpots: [0.38,0.8], arrowSide: -1 });
+  addVessel({ id: 'tb_cap_3', name: '微血管(單行通過)', kind: 'capillary', pts: [[2522,546],[2562,580],[2576,616]], r: 4.8, oxyStart: 0.94, oxyEnd: 0.28, speed: 0.54, pulse: 0.05, lanes: 1, next: [{id:'tb_cap_3a',w:0.62},{id:'tb_cap_3b',w:0.38}], arrowSpots: [0.55], arrowSide: 1 });
+  addVessel({ id: 'tb_cap_3a', name: '微血管(單行通過)', kind: 'capillary', pts: [[2576,616],[2584,650]], r: 4.8, oxyStart: 0.28, oxyEnd: 0.12, speed: 0.54, pulse: 0.04, lanes: 1, next: [{id:'tb_vein_2',w:1}], arrowSpots: [0.55], arrowSide: 1 });
+  addVessel({ id: 'tb_cap_3b', name: '微血管(單行通過)', kind: 'capillary', pts: [[2576,616],[2532,636],[2492,650]], r: 4.6, oxyStart: 0.28, oxyEnd: 0.12, speed: 0.52, pulse: 0.04, lanes: 1, next: [{id:'tb_vein_2b',w:1}], arrowSpots: [0.5], arrowSide: -1 });
+
+  addVessel({ id: 'tb_lower_trib', name: '小靜脈支流', kind: 'venule', pts: [[2290,725],[2445,705],[2462,686],[2428,650]], r: 5.0, oxyStart: 0.45, oxyEnd: 0.12, speed: 0.65, pulse: 0.04, lanes: 1, next: [{id:'tb_vein_3',w:1}], arrowSpots: [0.85], arrowSide: -1 });
+
+  addVessel({ id: 'tb_vein_1', name: '小靜脈(靜脈)', kind: 'venule', pts: [[2640,648],[2584,650]], rStart: 6.4, rEnd: 6.8, oxy: 0.12, speed: 0.82, pulse: 0.03, lanes: 1, next: [{id:'tb_vein_2',w:1}], arrowSpots: [0.5], arrowSide: -1 });
+  addVessel({ id: 'tb_vein_2', name: '小靜脈(靜脈)', kind: 'venule', pts: [[2584,650],[2492,650]], rStart: 7.0, rEnd: 7.4, oxy: 0.11, speed: 0.84, pulse: 0.03, lanes: 2, next: [{id:'tb_vein_2b',w:1}], arrowSpots: [0.55], arrowSide: -1 });
+  addVessel({ id: 'tb_vein_2b', name: '小靜脈(靜脈)', kind: 'venule', pts: [[2492,650],[2428,650]], rStart: 7.5, rEnd: 7.8, oxy: 0.11, speed: 0.85, pulse: 0.03, lanes: 2, next: [{id:'tb_vein_3',w:1}], arrowSpots: [] });
+  addVessel({ id: 'tb_vein_3', name: '小靜脈(靜脈)', kind: 'venule', pts: [[2428,650],[2378,648],[2318,648]], rStart: 8.0, rEnd: 8.4, oxy: 0.1, speed: 0.86, pulse: 0.03, lanes: 2, next: [{id:'tb_vein_4',w:1}], arrowSpots: [0.45], arrowSide: -1 });
+  addVessel({ id: 'tb_vein_4', name: '小靜脈(靜脈)', kind: 'venule', pts: [[2318,648],[2205,646]], rStart: 8.5, rEnd: 8.8, oxy: 0.1, speed: 0.88, pulse: 0.03, lanes: 2, next: [{id:'tb_vein_out',w:1}], arrowSpots: [0.35,0.78], arrowSide: -1 });
+  addVessel({ id: 'tb_vein_out', name: '尾鰭小靜脈匯流', kind: 'venule', pts: [[2205,646],[2060,612]], rStart: 8.8, rEnd: 9.8, oxy: 0.1, speed: 0.9, pulse: 0.03, lanes: 2, next: [{id:'pcv_3',w:1}], arrowSpots: [0.5] });
+
+  // 6. 尾靜脈 ➔ 後主靜脈 ➔ 回流心臟靜脈竇
+  addVessel({ id: 'pcv_3', name: '尾靜脈(流回魚頭)', kind: 'vein', pts: [[2060,612],[1650,625]], rStart: 10.5, rEnd: 11.5, oxy: 0.09, speed: 0.92, pulse: 0.03, lanes: 3, next: [{id:'pcv_2',w:1}], arrowSpots: [0.35,0.75] });
+  addVessel({ id: 'pcv_2', name: '後主靜脈(缺氧血)', kind: 'vein', pts: [[1650,625],[1190,646]], rStart: 11.5, rEnd: 12.8, oxy: 0.08, speed: 0.92, pulse: 0.03, lanes: 3, next: [{id:'pcv_1',w:1}], arrowSpots: [0.35,0.75] });
+  addVessel({ id: 'pcv_1', name: '後主靜脈(回流心臟)', kind: 'vein', pts: [[1190,646],[930,678]], rStart: 12.8, rEnd: 14.5, oxy: 0.06, speed: 0.9, pulse: 0.05, lanes: 3, next: [{id:'h_sv',w:1}], arrowSpots: [0.45] });
+}
+
+// ============================================================================
+// 3. 紅血球與水流溶氧粒子引擎
+// ============================================================================
+const rbcs = [];
+const waterParticles = [];
+const chromatophores = [];
+
+function initParticles() {
+  vesselList.forEach(v => {
+    const isFocal = v.id.startsWith('tb_');
+    const spacing = v.lanes === 1 ? (isFocal ? 17.5 : 23) : (isFocal ? 10.5 : 14.5);
+    const count = Math.max(2, Math.floor(v.length / spacing));
+    for (let i = 0; i < count; i++) {
+      rbcs.push({
+        vId: v.id,
+        s: (i + Math.random() * 0.65) * (v.length / count),
+        lane: v.lanes === 1 ? 0 : (Math.random() - 0.5) * 1.15
+      });
+    }
+  });
+
+  for (let i = 0; i < 45; i++) {
+    waterParticles.push({
+      x: 235 + Math.random() * 410,
+      y: 475 + Math.random() * 205,
+      vx: 68 + Math.random() * 35,
+      vy: (Math.random() - 0.5) * 12
+    });
+  }
+
+  const pseudoRand = n => { const x = Math.sin(n) * 9999; return x - Math.floor(x); };
+  for (let i = 0; i < 60; i++) {
+    const cx = 2080 + pseudoRand(i * 13 + 2) * 660;
+    const cy = 285 + pseudoRand(i * 29 + 5) * 620;
+    if (cx > 2195 && cx < 2645 && cy > 485 && cy < 668) continue;
+    chromatophores.push({
+      x: cx, y: cy,
+      size: 4 + pseudoRand(i * 41) * 6,
+      arms: 5 + Math.floor(pseudoRand(i * 19) * 3),
+      rot: pseudoRand(i * 53) * Math.PI * 2
+    });
+  }
+}
+
+function chooseNextVessel(v) {
+  if (!v.next.length) return v.id;
+  if (v.next.length === 1) return v.next[0].id;
+  const r = Math.random();
+  let acc = 0;
+  for (const branch of v.next) {
+    acc += branch.w;
+    if (r <= acc) return branch.id;
+  }
+  return v.next[v.next.length - 1].id;
+}
+
+function getChamberScale(chamber, phi) {
+  if (!chamber) return 1.0;
+  if (chamber === 'sv') return 1.0 + 0.08 * Math.sin(phi * Math.PI * 2 + 1.2);
+  if (chamber === 'atrium') return 1.08 - (phi < 0.28 ? 0.28 * Math.sin((phi / 0.28) * Math.PI) : 0);
+  if (chamber === 'ventricle') {
+    if (phi < 0.25) return 1.0 + 0.16 * Math.sin((phi / 0.25) * Math.PI * 0.5);
+    if (phi < 0.62) return 1.16 - 0.38 * Math.sin(((phi - 0.25) / 0.37) * Math.PI);
+    return 0.94 + 0.06 * ((phi - 0.62) / 0.38);
+  }
+  if (chamber === 'bulbus') {
+    if (phi >= 0.26 && phi < 0.65) return 0.95 + 0.26 * Math.sin(((phi - 0.26) / 0.39) * Math.PI);
+    if (phi >= 0.65) return 1.12 - 0.17 * ((phi - 0.65) / 0.35);
+    return 0.95;
+  }
+  return 1.0;
+}
+
+function updateSimulation(dt) {
+  if (!state.playing) return;
+  state.simTime += dt;
+  state.cardiacPhase = (state.cardiacPhase + dt * (state.bpm / 60)) % 1.0;
+  const phi = state.cardiacPhase;
+  const pulseWave = Math.max(0, Math.sin((phi - 0.24) * Math.PI * 2));
+  const baseSpeed = 58 * (state.bpm / 72);
+
+  for (let i = 0; i < rbcs.length; i++) {
+    const p = rbcs[i];
+    let v = vessels[p.vId];
+    let boost = 1.0 + v.pulse * pulseWave;
+    if (v.chamber === 'atrium') boost = (phi < 0.30 || phi > 0.82) ? 1.65 : 0.35;
+    else if (v.chamber === 'ventricle') boost = (phi >= 0.24 && phi <= 0.64) ? 1.95 : 0.30;
+    else if (v.chamber === 'bulbus') boost = (phi >= 0.28) ? 1.35 : 0.75;
+
+    p.s += baseSpeed * v.speed * boost * dt;
+    while (p.s >= v.length) {
+      const over = p.s - v.length;
+      const nextId = chooseNextVessel(v);
+      const nv = vessels[nextId];
+      p.vId = nextId;
+      p.s = over;
+      if (nv.lanes === 1) p.lane = 0;
+      else if (v.lanes === 1 && nv.lanes > 1) p.lane = (Math.random() - 0.5) * 1.1;
+      v = nv;
+    }
+  }
+
+  // 微血管單行防重疊約束
+  const capGroups = {};
+  for (let i = 0; i < rbcs.length; i++) {
+    const p = rbcs[i];
+    if (vessels[p.vId].lanes === 1) (capGroups[p.vId] || (capGroups[p.vId] = [])).push(p);
+  }
+  const minGap = 13.5;
+  for (const vid in capGroups) {
+    const list = capGroups[vid];
+    if (list.length < 2) continue;
+    list.sort((a, b) => b.s - a.s);
+    for (let j = 1; j < list.length; j++) {
+      if (list[j - 1].s - list[j].s < minGap) list[j].s = Math.max(0, list[j - 1].s - minGap);
+    }
+  }
+
+  for (const wp of waterParticles) {
+    wp.x += wp.vx * dt * (state.bpm / 72);
+    wp.y += wp.vy * dt;
+    if (wp.x > 655) {
+      wp.x = 225 + Math.random() * 35;
+      wp.y = 485 + Math.random() * 185;
+    }
+  }
+
+  if (state.trackRBCIndex >= 0 && state.trackRBCIndex < rbcs.length) {
+    const tp = rbcs[state.trackRBCIndex];
+    const tv = vessels[tp.vId];
+    const pos = sampleVesselAt(tv, tp.s);
+    state.targetCam.x = pos.x;
+    state.targetCam.y = pos.y;
+    document.getElementById('trackLocText').textContent = tv.name || '血管';
+    const badge = document.getElementById('trackOxyBadge');
+    if (pos.oxy > 0.65) { badge.textContent = '充氧血 (鮮紅)'; badge.style.background = '#ef233c'; }
+    else if (pos.oxy < 0.30) { badge.textContent = '缺氧血 (暗紫紅)'; badge.style.background = '#6d28d9'; }
+    else { badge.textContent = '氣體交換中'; badge.style.background = '#a855f7'; }
+  }
+}
+
+// ============================================================================
+// 4. 繪圖輔助：魚身構造、骨質分節鰭條、無縫血管、心臟瓣膜、紅血球、動態標籤
+// ============================================================================
+const finRays = [
+  [[2040,500],[2760,265]], [[2050,512],[2785,325]], [[2058,524],[2800,388]],
+  [[2065,536],[2795,455]], // 課本核心微血管網上方鰭條
+  [[2070,565],[2755,585]],
+  [[2068,595],[2795,692]], // 課本核心微血管網下方鰭條
+  [[2062,610],[2800,762]], [[2054,625],[2785,832]], [[2044,640],[2755,905]]
+];
+
+function drawFishBody(isMicro) {
+  ctx.save();
+  // 背鰭、胸鰭、腹鰭、臀鰭
+  ctx.fillStyle = isMicro ? 'rgba(234, 212, 168, 0.38)' : 'rgba(245, 198, 120, 0.55)';
+  ctx.strokeStyle = isMicro ? 'rgba(140, 110, 70, 0.45)' : 'rgba(180, 120, 55, 0.7)';
+  ctx.lineWidth = 3;
+
+  // 背鰭
+  ctx.beginPath();
+  ctx.moveTo(1080, 365); ctx.quadraticCurveTo(1320, 205, 1560, 395); ctx.closePath();
+  ctx.fill(); ctx.stroke();
+  // 腹鰭与臀鰭
+  ctx.beginPath();
+  ctx.moveTo(1120, 775); ctx.quadraticCurveTo(1210, 885, 1310, 770); ctx.closePath();
+  ctx.fill(); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(1560, 745); ctx.quadraticCurveTo(1710, 865, 1850, 705); ctx.closePath();
+  ctx.fill(); ctx.stroke();
+
+  // 尾鰭薄膜輪廓
+  ctx.fillStyle = isMicro ? 'rgba(252, 246, 232, 0.85)' : 'rgba(250, 218, 165, 0.62)';
+  ctx.strokeStyle = isMicro ? 'rgba(155, 125, 85, 0.5)' : 'rgba(195, 130, 65, 0.8)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(2030, 485);
+  ctx.quadraticCurveTo(2450, 330, 2790, 250);
+  ctx.quadraticCurveTo(2845, 290, 2765, 575);
+  ctx.quadraticCurveTo(2845, 865, 2780, 920);
+  ctx.quadraticCurveTo(2440, 835, 2030, 655);
+  ctx.closePath();
+  ctx.fill(); ctx.stroke();
+
+  // 繪製尾鰭骨質分節鰭條 (Lepidotrichia)
+  finRays.forEach(ray => {
+    const [p0, p1] = ray;
+    const dx = p1[0] - p0[0], dy = p1[1] - p0[1];
+    const dist = Math.hypot(dx, dy);
+    const angle = Math.atan2(dy, dx);
+
+    ctx.save();
+    ctx.strokeStyle = isMicro ? 'rgba(188, 162, 118, 0.58)' : 'rgba(210, 160, 95, 0.65)';
+    ctx.lineWidth = isMicro ? 14 : 9;
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(p0[0], p0[1]); ctx.lineTo(p1[0], p1[1]); ctx.stroke();
+
+    if (isMicro) {
+      ctx.strokeStyle = 'rgba(120, 95, 58, 0.55)';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      const nx = -Math.sin(angle) * 7, ny = Math.cos(angle) * 7;
+      ctx.moveTo(p0[0] + nx, p0[1] + ny); ctx.lineTo(p1[0] + nx, p1[1] + ny);
+      ctx.moveTo(p0[0] - nx, p0[1] - ny); ctx.lineTo(p1[0] - nx, p1[1] - ny);
+      ctx.stroke();
+
+      // 骨質分節橫紋
+      ctx.strokeStyle = 'rgba(115, 88, 52, 0.45)';
+      ctx.lineWidth = 1.4;
+      for (let d = 35; d < dist - 15; d += 32) {
+        const sx = p0[0] + Math.cos(angle) * d;
+        const sy = p0[1] + Math.sin(angle) * d;
+        ctx.beginPath();
+        ctx.moveTo(sx + nx, sy + ny);
+        ctx.lineTo(sx - nx, sy - ny);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  });
+
+  // 顯微視角繪製星狀色素細胞
+  if (isMicro) {
+    ctx.fillStyle = 'rgba(55, 42, 30, 0.28)';
+    for (const c of chromatophores) {
+      ctx.beginPath();
+      for (let k = 0; k < c.arms * 2; k++) {
+        const r = k % 2 === 0 ? c.size : c.size * 0.32;
+        const a = c.rot + (k * Math.PI) / c.arms;
+        const px = c.x + Math.cos(a) * r, py = c.y + Math.sin(a) * r;
+        if (k === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  // 魚身軀幹輪廓
+  const bodyGrad = ctx.createLinearGradient(0, 330, 0, 820);
+  if (isMicro) {
+    bodyGrad.addColorStop(0, 'rgba(222, 202, 165, 0.72)');
+    bodyGrad.addColorStop(0.5, 'rgba(244, 234, 212, 0.78)');
+    bodyGrad.addColorStop(1, 'rgba(235, 224, 202, 0.72)');
+  } else {
+    bodyGrad.addColorStop(0, 'rgba(232, 138, 56, 0.82)');
+    bodyGrad.addColorStop(0.55, 'rgba(248, 196, 112, 0.78)');
+    bodyGrad.addColorStop(1, 'rgba(252, 232, 192, 0.82)');
+  }
+  ctx.fillStyle = bodyGrad;
+  ctx.strokeStyle = isMicro ? 'rgba(115, 92, 65, 0.65)' : 'rgba(185, 105, 38, 0.9)';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(205, 575); // 吻端/口部
+  ctx.quadraticCurveTo(330, 395, 760, 365);
+  ctx.quadraticCurveTo(1420, 345, 2055, 492);
+  ctx.lineTo(2055, 648);
+  ctx.quadraticCurveTo(1450, 795, 780, 805);
+  ctx.quadraticCurveTo(360, 790, 215, 608);
+  ctx.quadraticCurveTo(255, 592, 205, 575);
+  ctx.closePath();
+  ctx.fill(); ctx.stroke();
+
+  // 脊椎骨暗示線 (背大動脈正上方)
+  ctx.strokeStyle = isMicro ? 'rgba(150, 130, 100, 0.42)' : 'rgba(255, 245, 220, 0.38)';
+  ctx.lineWidth = 8;
+  ctx.setLineDash([18, 6]);
+  ctx.beginPath();
+  ctx.moveTo(460, 445); ctx.quadraticCurveTo(1250, 482, 2055, 522);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // 圍心腔背景框 (突顯心臟位置)
+  ctx.fillStyle = isMicro ? 'rgba(120, 40, 65, 0.08)' : 'rgba(90, 25, 45, 0.14)';
+  ctx.strokeStyle = 'rgba(140, 60, 85, 0.32)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.ellipse(775, 725, 165, 72, -0.08, 0, Math.PI * 2);
+  ctx.fill(); ctx.stroke();
+
+  // 魚鰓腔與羽毛狀鰓絲底圖
+  ctx.fillStyle = isMicro ? 'rgba(180, 65, 85, 0.09)' : 'rgba(180, 55, 75, 0.16)';
+  ctx.beginPath();
+  ctx.ellipse(538, 575, 112, 132, 0, 0, Math.PI * 2);
+  ctx.fill();
+  [470, 515, 560, 605].forEach(gx => {
+    ctx.strokeStyle = 'rgba(215, 185, 140, 0.75)';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(gx, 472); ctx.quadraticCurveTo(gx - 12, 570, gx, 675);
+    ctx.stroke();
+  });
+
+  // 鰓蓋弧線
+  ctx.strokeStyle = isMicro ? 'rgba(120, 95, 65, 0.45)' : 'rgba(175, 100, 40, 0.75)';
+  ctx.lineWidth = 3.5;
+  ctx.beginPath();
+  ctx.moveTo(595, 415); ctx.quadraticCurveTo(670, 575, 595, 745);
+  ctx.stroke();
+
+  // 魚眼
+  ctx.fillStyle = '#fff';
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(348, 498, 28, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#0f172a';
+  ctx.beginPath(); ctx.arc(344, 498, 15, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(339, 492, 5, 0, Math.PI * 2); ctx.fill();
+
+  ctx.restore();
+}
+
+// 繪製魚鰓水流溶氧粒子
+function drawGillWaterFlow() {
+  ctx.save();
+  for (const wp of waterParticles) {
+    ctx.fillStyle = 'rgba(56, 189, 248, 0.55)';
+    ctx.beginPath();
+    ctx.arc(wp.x, wp.y, 3.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+// 兩階段無縫血管繪製 (Pass 1 外管壁 ➔ Pass 2 內血漿腔，交界處完全無接縫線)
+function strokeVesselPath(v, extraWidth, phi) {
+  const nodes = v.nodes;
+  const cScale = getChamberScale(v.chamber, phi);
+  // 若管徑前後差異小，單次描邊效能最佳；若漸變明顯則分段描邊
+  if (Math.abs(v.rStart - v.rEnd) < 1.5 && !v.chamber) {
+    ctx.lineWidth = (v.rStart + v.rEnd) * cScale + extraWidth;
+    ctx.beginPath();
+    ctx.moveTo(nodes[0].x, nodes[0].y);
+    for (let i = 1; i < nodes.length; i++) ctx.lineTo(nodes[i].x, nodes[i].y);
+    ctx.stroke();
+  } else {
+    for (let i = 0; i < nodes.length - 1; i++) {
+      const t = i / (nodes.length - 1);
+      const r = (v.rStart + (v.rEnd - v.rStart) * t) * cScale;
+      ctx.lineWidth = r * 2 + extraWidth;
+      ctx.beginPath();
+      ctx.moveTo(nodes[i].x, nodes[i].y);
+      ctx.lineTo(nodes[i + 1].x, nodes[i + 1].y);
+      ctx.stroke();
+    }
+  }
+}
+
+function drawVesselsAndHeart() {
+  const phi = state.cardiacPhase;
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  // 心室厚心肌外層特寫
+  const vent = vessels['h_ventricle'];
+  if (vent) {
+    ctx.strokeStyle = 'rgba(138, 35, 62, 0.55)';
+    strokeVesselPath(vent, 18, phi);
+  }
+  // 動脈球白色平滑肌彈性壁特寫
+  const bulb = vessels['h_bulbus'];
+  if (bulb) {
+    ctx.strokeStyle = 'rgba(226, 232, 240, 0.78)';
+    strokeVesselPath(bulb, 12, phi);
+  }
+
+  // Pass 1: 血管深色外管壁
+  ctx.strokeStyle = '#2d1b14';
+  for (const v of vesselList) {
+    const wallW = (v.kind === 'capillary' || v.kind === 'gill') ? 3.2 : (v.kind === 'heart' ? 5.5 : 4.4);
+    strokeVesselPath(v, wallW, phi);
+  }
+
+  // Pass 2: 血管橘紅血漿內腔 (呈現課本溫暖橘色管腔質感，並可微幅反映含氧色澤)
+  for (const v of vesselList) {
+    if (state.oxygenColorMode) {
+      const avgOxy = (v.oxyStart + v.oxyEnd) * 0.5;
+      if (v.chamber === 'bulbus') ctx.strokeStyle = '#d8b4c8';
+      else if (avgOxy > 0.65) ctx.strokeStyle = '#f69855';
+      else if (avgOxy < 0.25) ctx.strokeStyle = '#d9826c';
+      else {
+        const n0 = v.nodes[0], n1 = v.nodes[v.nodes.length - 1];
+        const grad = ctx.createLinearGradient(n0.x, n0.y, n1.x, n1.y);
+        const cStart = v.oxyStart > 0.5 ? '#f69855' : '#d9826c';
+        const cEnd = v.oxyEnd > 0.5 ? '#f69855' : '#d9826c';
+        grad.addColorStop(0, cStart);
+        grad.addColorStop(1, cEnd);
+        ctx.strokeStyle = grad;
+      }
+    } else {
+      ctx.strokeStyle = '#f5954e'; // 課本純橘色管腔模式
+    }
+    strokeVesselPath(v, 0, phi);
+  }
+
+  // 繪製心臟單向瓣膜動態開闔 (防止血液逆流)
+  drawHeartValve(842, 695, Math.PI, phi < 0.05 || phi > 0.65);     // 靜脈竇-心房瓣膜
+  drawHeartValve(770, 718, Math.PI * 0.68, phi < 0.28);           // 房室瓣
+  drawHeartValve(702, 752, Math.PI * 1.12, phi >= 0.25 && phi < 0.62); // 心室-動脈球瓣膜
+
+  ctx.restore();
+}
+
+function drawHeartValve(x, y, angle, isOpen) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.strokeStyle = '#fffbeb';
+  ctx.lineWidth = 3.2;
+  ctx.lineCap = 'round';
+  const spread = isOpen ? 0.68 : 0.06;
+  ctx.beginPath();
+  ctx.moveTo(0, -14);
+  ctx.lineTo(Math.cos(spread) * 13, -14 + Math.sin(spread) * 13);
+  ctx.moveTo(0, 14);
+  ctx.lineTo(Math.cos(-spread) * 13, 14 + Math.sin(-spread) * 13);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// 繪製紅血球 (魚類紅血球為橢圓形且具細胞核！)
+function drawRBCs(viewBounds, zoomLevel) {
+  ctx.save();
+  const phi = state.cardiacPhase;
+  const showNucleus = zoomLevel > 1.55;
+
+  for (let i = 0; i < rbcs.length; i++) {
+    const p = rbcs[i];
+    const v = vessels[p.vId];
+    const sample = sampleVesselAt(v, p.s);
+
+    if (sample.x < viewBounds.minX || sample.x > viewBounds.maxX ||
+        sample.y < viewBounds.minY || sample.y > viewBounds.maxY) continue;
+
+    const cScale = getChamberScale(v.chamber, phi);
+    const maxOffset = Math.max(0, sample.r * cScale - 4.8);
+    const nx = -Math.sin(sample.angle) * p.lane * maxOffset;
+    const ny = Math.cos(sample.angle) * p.lane * maxOffset;
+    const rx = sample.x + nx, ry = sample.y + ny;
+
+    // 血氧顏色計算
+    let fillCol = '#c91d22';
+    if (state.oxygenColorMode) {
+      const o = Math.max(0, Math.min(1, sample.oxy));
+      const r = Math.round(108 + 132 * o);
+      const g = Math.round(28 + 8 * o);
+      const b = Math.round(145 - 105 * o);
+      fillCol = `rgb(${r},${g},${b})`;
+    }
+
+    ctx.save();
+    ctx.translate(rx, ry);
+    ctx.rotate(sample.angle);
+
+    // 窄微血管內紅血球微幅拉長變形擠過管腔
+    const isNarrow = v.lanes === 1;
+    const radX = isNarrow ? 5.6 : 5.0;
+    const radY = isNarrow ? 3.3 : 3.8;
+
+    ctx.fillStyle = fillCol;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, radX, radY, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (showNucleus) {
+      ctx.fillStyle = state.oxygenColorMode ? 'rgba(45, 10, 35, 0.55)' : 'rgba(95, 12, 12, 0.55)';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 2.1, 1.35, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 被追蹤的目標紅血球高亮光環
+    if (i === state.trackRBCIndex) {
+      ctx.strokeStyle = '#fde047';
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.arc(0, 0, 10 + 2.5 * Math.sin(state.simTime * 7), 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+// 繪製血管旁血流方向箭頭 (如課本圖所示之黑色方向箭頭)
+function drawFlowArrows(viewBounds) {
+  if (!state.showArrows) return;
+  ctx.save();
+  for (const v of vesselList) {
+    if (!v.arrowSpots || !v.arrowSpots.length) continue;
+    for (const spot of v.arrowSpots) {
+      const s = v.length * spot;
+      const pt = sampleVesselAt(v, s);
+      if (pt.x < viewBounds.minX || pt.x > viewBounds.maxX ||
+          pt.y < viewBounds.minY || pt.y > viewBounds.maxY) continue;
+
+      let ax = pt.x, ay = pt.y;
+      if (v.arrowSide !== 0) {
+        const offset = pt.r + 11;
+        ax += -Math.sin(pt.angle) * offset * v.arrowSide;
+        ay += Math.cos(pt.angle) * offset * v.arrowSide;
+      }
+
+      ctx.save();
+      ctx.translate(ax, ay);
+      ctx.rotate(pt.angle);
+      ctx.strokeStyle = v.arrowSide !== 0 ? '#111827' : 'rgba(255,255,255,0.88)';
+      ctx.fillStyle = v.arrowSide !== 0 ? '#111827' : 'rgba(255,255,255,0.88)';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(-11, 0); ctx.lineTo(8, 0);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(12, 0); ctx.lineTo(4, -4.5); ctx.lineTo(4, 4.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+  ctx.restore();
+}
+
+// 繪製濕棉花與培養皿實驗配置 (生物實驗：濕棉花覆蓋魚鰓保濕、載玻片輕壓尾鰭)
+function drawWetCottonOverlay() {
+  if (!state.showWetCotton) return;
+  ctx.save();
+  // 培養皿外框
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.55)';
+  ctx.fillStyle = 'rgba(186, 230, 253, 0.08)';
+  ctx.lineWidth = 8;
+  ctx.beginPath();
+  ctx.ellipse(1520, 585, 1410, 520, 0, 0, Math.PI * 2);
+  ctx.fill(); ctx.stroke();
+
+  // 覆蓋魚頭魚鰓與軀幹的濕棉花團
+  ctx.fillStyle = 'rgba(248, 250, 252, 0.84)';
+  ctx.strokeStyle = 'rgba(203, 213, 225, 0.9)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.roundRect(185, 325, 1740, 515, 95);
+  ctx.fill(); ctx.stroke();
+
+  ctx.fillStyle = '#334155';
+  ctx.font = 'bold 28px sans-serif';
+  if (state.showLabels) {
+    ctx.fillText('濕棉花／濕紗布（保持魚鰓濕潤以維持呼吸與安定魚身）', 590, 395);
+  }
+
+  // 尾鰭蓋玻片／載玻片
+  ctx.fillStyle = 'rgba(224, 242, 254, 0.18)';
+  ctx.strokeStyle = 'rgba(125, 211, 252, 0.75)';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(2040, 235, 810, 710);
+  if (state.showLabels) {
+    ctx.fillStyle = '#0369a1';
+    ctx.font = 'bold 24px sans-serif';
+    ctx.fillText('載玻片／蓋玻片（攤平尾鰭以利顯微觀察）', 2160, 220);
+  }
+  ctx.restore();
+}
+
+// ============================================================================
+// 5. 智慧文字標籤系統 (支援 Toggle 顯示/隱藏，且在顛倒視野時保持文字正向易讀)
+// ============================================================================
+function worldToScreen(wx, wy) {
+  const cw = canvas.clientWidth, ch = canvas.clientHeight;
+  if (state.tab === 'macro') {
+    const { scale, offsetX, offsetY } = state.macroTransform;
+    return { x: offsetX + wx * scale, y: offsetY + wy * scale };
+  } else {
+    let dx = (wx - state.cam.x) * state.cam.zoom;
+    let dy = (wy - state.cam.y) * state.cam.zoom;
+    if (state.invertMicro) { dx = -dx; dy = -dy; }
+    return { x: cw / 2 + dx, y: ch / 2 + dy };
+  }
+}
+
+function screenToWorld(sx, sy) {
+  const cw = canvas.clientWidth, ch = canvas.clientHeight;
+  if (state.tab === 'macro') {
+    const { scale, offsetX, offsetY } = state.macroTransform;
+    return { x: (sx - offsetX) / scale, y: (sy - offsetY) / scale };
+  } else {
+    let dx = sx - cw / 2, dy = sy - ch / 2;
+    if (state.invertMicro) { dx = -dx; dy = -dy; }
+    return { x: state.cam.x + dx / state.cam.zoom, y: state.cam.y + dy / state.cam.zoom };
+  }
+}
+
+function drawPillTag(sx, sy, text, borderCol = '#38bdf8', bg = 'rgba(15,23,42,0.86)', fontSize = 13) {
+  ctx.save();
+  ctx.font = `700 ${fontSize}px "Noto Sans TC", sans-serif`;
+  const padX = 8, h = fontSize + 11;
+  const w = ctx.measureText(text).width + padX * 2;
+  ctx.fillStyle = bg;
+  ctx.strokeStyle = borderCol;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(sx - w / 2, sy - h / 2, w, h, 6);
+  ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#f8fafc';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, sx, sy + 0.5);
+  ctx.restore();
+}
+
+function drawLeaderCallout(wx, wy, labelXWorld, labelYWorld, text, subText = '') {
+  const p0 = worldToScreen(wx, wy);
+  const p1 = worldToScreen(labelXWorld, labelYWorld);
+  ctx.save();
+  ctx.strokeStyle = '#1e293b';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(p0.x, p0.y);
+  ctx.lineTo(p1.x, p1.y);
+  ctx.stroke();
+
+  ctx.fillStyle = '#1e293b';
+  ctx.beginPath();
+  ctx.arc(p0.x, p0.y, 3.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  const alignLeft = p1.x >= p0.x;
+  ctx.font = '700 16px "Noto Sans TC", sans-serif';
+  const fullText = subText ? `${text} ${subText}` : text;
+  const tw = ctx.measureText(fullText).width + 14;
+  const bx = alignLeft ? p1.x + 4 : p1.x - tw - 4;
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.roundRect(bx, p1.y - 14, tw, 28, 6);
+  ctx.fill(); ctx.stroke();
+
+  ctx.fillStyle = '#0f172a';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(fullText, bx + 7, p1.y + 0.5);
+  ctx.restore();
+}
+
+function drawLabelsOverlay() {
+  if (!state.showLabels) return;
+  const cw = canvas.clientWidth, ch = canvas.clientHeight;
+
+  if (state.tab === 'macro') {
+    const macroTags = [
+      { x: 255, y: 640, t: '口（水流帶入溶氧 O₂）', c: '#38bdf8' },
+      { x: 535, y: 405, t: '魚鰓（鰓絲微血管氣體交換：缺氧➔充氧）', c: '#f43f5e' },
+      { x: 775, y: 830, t: '心臟：一心房一心室（全為暗紅缺氧血）', c: '#a855f7' },
+      { x: 605, y: 765, t: '腹大動脈（缺氧血入鰓）', c: '#a855f7' },
+      { x: 1360, y: 472, t: '背大動脈（充氧血往全身與尾鰭）', c: '#ef4444' },
+      { x: 1380, y: 685, t: '後主靜脈／尾靜脈（缺氧血回流心臟）', c: '#8b5cf6' },
+      { x: 2430, y: 215, t: '尾鰭（薄而透明，適合顯微觀察血流）', c: '#f59e0b' }
+    ];
+    for (const m of macroTags) {
+      if (state.showWetCotton && m.x > 300 && m.x < 1850) continue;
+      const s = worldToScreen(m.x, m.y);
+      drawPillTag(s.x, s.y, m.t, m.c, 'rgba(15,23,42,0.88)', 13);
+    }
+    return;
+  }
+
+  // 顯微視角左右兩側「魚頭方向 / 魚尾方向」直書標示 (還原課本圖兩側標記；若開啟複式顯微鏡顛倒視野則自動對調！)
+  const leftText = state.invertMicro ? '魚尾方向' : '魚頭方向';
+  const rightText = state.invertMicro ? '魚頭方向' : '魚尾方向';
+  drawSideVerticalBanner(28, ch / 2, leftText, '⬅');
+  drawSideVerticalBanner(cw - 28, ch / 2, rightText, '➡');
+
+  const z = state.cam.zoom;
+
+  // 課本尾鰭微血管網專屬引線標註 (當鏡頭在尾鰭附近時顯示如參考圖的引線標籤)
+  const focalScreen = worldToScreen(2440, 575);
+  if (focalScreen.x > -200 && focalScreen.x < cw + 200 && focalScreen.y > -150 && focalScreen.y < ch + 150 && z > 1.15) {
+    drawLeaderCallout(2555, 503, 2675, 503, '動脈', '(小動脈：主幹➔分支)');
+    drawLeaderCallout(2510, 546, 2675, 552, '紅血球', '(具細胞核)');
+    drawLeaderCallout(2574, 602, 2675, 602, '微血管', '(紅血球單行通過)');
+    drawLeaderCallout(2570, 650, 2675, 652, '靜脈', '(小靜脈：分支➔主幹)');
+    drawLeaderCallout(2460, 444, 2530, 422, '鰭條', '(骨質分節)');
+    drawLeaderCallout(2460, 692, 2530, 725, '鰭條', '(支撐尾鰭)');
+  }
+
+  // 全魚沿途血管與器官動態標籤 (隨平移追蹤至軀幹、心臟、魚鰓時平滑顯示)
+  const worldLabels = [
+    { x: 2135, y: 525, t: '尾動脈分支 ➔ 小動脈', c: '#ef4444', minZ: 0.6 },
+    { x: 2135, y: 660, t: '小靜脈匯流 ➔ 尾靜脈', c: '#8b5cf6', minZ: 0.6 },
+    { x: 1820, y: 505, t: '尾動脈（充氧血 ➔ 往魚尾）', c: '#ef4444', minZ: 0.4 },
+    { x: 1820, y: 652, t: '尾靜脈（缺氧血 ➔ 回心臟）', c: '#8b5cf6', minZ: 0.4 },
+    { x: 1360, y: 485, t: '背大動脈（充氧血）', c: '#ef4444', minZ: 0.4 },
+    { x: 1360, y: 672, t: '後主靜脈（缺氧血回流心臟）', c: '#8b5cf6', minZ: 0.4 },
+    { x: 1215, y: 422, t: '軀幹體節微血管', c: '#f59e0b', minZ: 0.9 },
+
+    // 心臟細部標籤
+    { x: 888, y: 655, t: '1. 靜脈竇（收集全身缺氧血）', c: '#a855f7', minZ: 0.95 },
+    { x: 802, y: 642, t: '2. 心房（薄壁・收縮送血入心室）', c: '#a855f7', minZ: 0.8 },
+    { x: 750, y: 805, t: '3. 心室（厚肌壁・搏動主動力・缺氧血）', c: '#a855f7', minZ: 0.8 },
+    { x: 668, y: 775, t: '4. 動脈球（彈性腔緩衝血壓保護魚鰓）', c: '#cbd5e1', minZ: 0.95 },
+    { x: 770, y: 718, t: '瓣膜（防逆流）', c: '#fde047', minZ: 1.55 },
+
+    // 腹大動脈與魚鰓標籤
+    { x: 565, y: 722, t: '腹大動脈（缺氧血送入魚鰓）', c: '#a855f7', minZ: 0.8 },
+    { x: 538, y: 572, t: '魚鰓絲微血管（O₂ 進入紅血球：暗紅轉鮮紅）', c: '#f43f5e', minZ: 0.75 },
+    { x: 555, y: 442, t: '出鰓動脈 ➔ 直接匯入背大動脈（不回心臟！）', c: '#ef4444', minZ: 0.8 },
+    { x: 355, y: 565, t: '水流方向（含溶氧 O₂ 通過魚鰓）', c: '#38bdf8', minZ: 0.85 }
+  ];
+
+  for (const lb of worldLabels) {
+    if (z < lb.minZ) continue;
+    const s = worldToScreen(lb.x, lb.y);
+    if (s.x < 65 || s.x > cw - 65 || s.y < 25 || s.y > ch - 25) continue;
+    drawPillTag(s.x, s.y, lb.t, lb.c, 'rgba(15,23,42,0.86)', 13);
+  }
+}
+
+function drawSideVerticalBanner(sx, sy, text, arrowChar) {
+  ctx.save();
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.roundRect(sx - 20, sy - 86, 40, 172, 8);
+  ctx.fill(); ctx.stroke();
+
+  ctx.fillStyle = '#0f172a';
+  ctx.font = '700 20px "Noto Sans TC", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const chars = [arrowChar, ...text.split('')];
+  chars.forEach((ch, idx) => {
+    ctx.fillText(ch, sx, sy - 60 + idx * 30);
+  });
+  ctx.restore();
+}
+
+// ============================================================================
+// 6. 右上角互動導覽小地圖與比例尺 (顯微模式專用)
+// ============================================================================
+function drawMicroHUD() {
+  const cw = canvas.clientWidth, ch = canvas.clientHeight;
+
+  // 右上角魚體導覽小地圖 (可點擊/拖曳直接沿血管跳轉)
+  const mw = Math.min(250, cw * 0.32), mh = mw * (WORLD_H / WORLD_W);
+  const mx = cw - mw - 14, my = 12;
+  state.minimapRect = { x: mx, y: my, w: mw, h: mh };
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+  ctx.strokeStyle = '#475569';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(mx, my, mw, mh, 8);
+  ctx.fill(); ctx.stroke();
+
+  const sScale = mw / WORLD_W;
+  ctx.save();
+  ctx.translate(mx, my);
+  ctx.scale(sScale, sScale);
+
+  // 小地圖簡化魚輪廓與主幹血管
+  ctx.fillStyle = 'rgba(248, 196, 112, 0.35)';
+  ctx.beginPath();
+  ctx.moveTo(205,575); ctx.quadraticCurveTo(800,340,2055,492);
+  ctx.lineTo(2785,260); ctx.lineTo(2780,910); ctx.lineTo(2055,648);
+  ctx.quadraticCurveTo(800,820,205,575); ctx.fill();
+
+  ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 22;
+  ctx.beginPath(); ctx.moveTo(500,480); ctx.lineTo(2550,535); ctx.stroke();
+  ctx.strokeStyle = '#8b5cf6'; ctx.lineWidth = 22;
+  ctx.beginPath(); ctx.moveTo(2550,650); ctx.lineTo(750,695); ctx.stroke();
+  ctx.fillStyle = '#a855f7';
+  ctx.beginPath(); ctx.arc(760, 730, 55, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#f43f5e';
+  ctx.beginPath(); ctx.arc(538, 575, 55, 0, Math.PI * 2); ctx.fill();
+
+  // 當前顯微視野框
+  const vw = cw / state.cam.zoom, vh = ch / state.cam.zoom;
+  ctx.strokeStyle = '#38bdf8';
+  ctx.lineWidth = 26;
+  ctx.strokeRect(state.cam.x - vw / 2, state.cam.y - vh / 2, vw, vh);
+  ctx.restore();
+
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '600 11px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('🗺️ 點擊/拖曳小地圖可沿血管追蹤', mx + 6, my + mh + 14);
+
+  // 右下角動態顯微比例尺
+  const barPx = 90;
+  const umPerWorldPx = 3.5; // 約略比例：紅血球長徑 ~11px ≈ 12~15 μm，調整合理視覺比例
+  const worldUnits = barPx / state.cam.zoom;
+  const um = Math.round(worldUnits * 1.4);
+  const label = um >= 1000 ? `${(um / 1000).toFixed(1)} mm` : `${um} μm`;
+  const bx = cw - 70 - barPx, by = ch - 24;
+
+  ctx.fillStyle = 'rgba(15,23,42,0.75)';
+  ctx.beginPath(); ctx.roundRect(bx - 10, by - 22, barPx + 20, 30, 6); ctx.fill();
+  ctx.strokeStyle = '#f8fafc'; ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(bx, by - 4); ctx.lineTo(bx, by + 2);
+  ctx.lineTo(bx + barPx, by + 2); ctx.lineTo(bx + barPx, by - 4);
+  ctx.stroke();
+  ctx.fillStyle = '#f8fafc'; ctx.font = '600 11px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText(`${label} (${state.cam.zoom.toFixed(1)}x)`, bx + barPx / 2, by - 8);
+  ctx.restore();
+}
+
+// ============================================================================
+// 7. 主渲染迴圈
+// ============================================================================
+function render() {
+  const dpr = window.devicePixelRatio || 1;
+  const cw = canvas.clientWidth, ch = canvas.clientHeight;
+  if (canvas.width !== Math.floor(cw * dpr) || canvas.height !== Math.floor(ch * dpr)) {
+    canvas.width = Math.floor(cw * dpr);
+    canvas.height = Math.floor(ch * dpr);
+  }
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  if (state.tab === 'macro') {
+    // 宏觀背景
+    const bg = ctx.createRadialGradient(cw / 2, ch / 2, 50, cw / 2, ch / 2, Math.max(cw, ch));
+    bg.addColorStop(0, '#16243d');
+    bg.addColorStop(1, '#0b1120');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, cw, ch);
+
+    const pad = 30;
+    const scale = Math.min((cw - pad * 2) / WORLD_W, (ch - pad * 2) / WORLD_H);
+    const offsetX = (cw - WORLD_W * scale) / 2;
+    const offsetY = (ch - WORLD_H * scale) / 2 - 12;
+    state.macroTransform = { scale, offsetX, offsetY };
+
+    ctx.save();
+    ctx.translate(offsetX, offsetY);
+    ctx.scale(scale, scale);
+
+    drawFishBody(false);
+    drawGillWaterFlow();
+    drawVesselsAndHeart();
+    drawRBCs({ minX: 0, maxX: WORLD_W, minY: 0, maxY: WORLD_H }, scale * 2);
+    drawFlowArrows({ minX: 0, maxX: WORLD_W, minY: 0, maxY: WORLD_H });
+    drawWetCottonOverlay();
+
+    // 繪製可點擊/拖曳的「顯微鏡觀察框」
+    const lensW = 480, lensH = 260;
+    const lx = state.targetCam.x - lensW / 2, ly = state.targetCam.y - lensH / 2;
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 4 / scale;
+    ctx.setLineDash([10 / scale, 6 / scale]);
+    ctx.strokeRect(lx, ly, lensW, lensH);
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(56, 189, 248, 0.12)';
+    ctx.fillRect(lx, ly, lensW, lensH);
+
+    ctx.fillStyle = '#38bdf8';
+    ctx.font = `bold ${Math.round(14 / scale)}px "Noto Sans TC", sans-serif`;
+    ctx.fillText('🔬 點擊此處或上方分頁進入顯微放大觀察（可拖曳方框選位置）', lx, ly - 10 / scale);
+
+    ctx.restore();
+    drawLabelsOverlay();
+  } else {
+    // 顯微攝影機平滑插值
+    if (!state.isDragging && !state.dragMinimap) {
+      state.cam.x += (state.targetCam.x - state.cam.x) * 0.14;
+      state.cam.y += (state.targetCam.y - state.cam.y) * 0.14;
+    }
+    state.cam.zoom += (state.targetCam.zoom - state.cam.zoom) * 0.18;
+
+    // 顯微鏡明亮視野背景 (Brightfield illumination)
+    ctx.fillStyle = '#faf6ec';
+    ctx.fillRect(0, 0, cw, ch);
+
+    const halfW = (cw / 2) / state.cam.zoom + 80;
+    const halfH = (ch / 2) / state.cam.zoom + 80;
+    const viewBounds = {
+      minX: state.cam.x - halfW, maxX: state.cam.x + halfW,
+      minY: state.cam.y - halfH, maxY: state.cam.y + halfH
+    };
+
+    ctx.save();
+    ctx.translate(cw / 2, ch / 2);
+    if (state.invertMicro) ctx.rotate(Math.PI); // 複式顯微鏡上下顛倒、左右相反
+    ctx.scale(state.cam.zoom, state.cam.zoom);
+    ctx.translate(-state.cam.x, -state.cam.y);
+
+    drawFishBody(true);
+    drawGillWaterFlow();
+    drawVesselsAndHeart();
+    drawRBCs(viewBounds, state.cam.zoom);
+    drawFlowArrows(viewBounds);
+    ctx.restore();
+
+    // 顯微鏡柔和光學暗角
+    const vig = ctx.createRadialGradient(cw / 2, ch / 2, Math.min(cw, ch) * 0.36, cw / 2, ch / 2, Math.hypot(cw, ch) * 0.55);
+    vig.addColorStop(0, 'rgba(0,0,0,0)');
+    vig.addColorStop(1, 'rgba(15,23,42,0.28)');
+    ctx.fillStyle = vig;
+    ctx.fillRect(0, 0, cw, ch);
+
+    drawLabelsOverlay();
+    drawMicroHUD();
+  }
+}
+
+// ============================================================================
+// 8. 互動控制與事件監聽 (Pan / Zoom / 觸控雙指縮放 / 小地圖導覽 / 按鈕切換)
+// ============================================================================
+function switchTab(tab) {
+  state.tab = tab;
+  document.getElementById('tabMacro').classList.toggle('active', tab === 'macro');
+  document.getElementById('tabMicro').classList.toggle('active', tab === 'micro');
+  document.getElementById('microSubBar').classList.toggle('visible', tab === 'micro');
+  document.getElementById('zoomOverlay').classList.toggle('visible', tab === 'micro');
+  if (tab === 'macro' && state.trackRBCIndex >= 0) toggleTrackRBC();
+}
+
+function togglePlay() {
+  state.playing = !state.playing;
+  const btn = document.getElementById('btnPlay');
+  btn.textContent = state.playing ? '⏸ 暫停' : '▶ 播放';
+  btn.classList.toggle('active', !state.playing);
+}
+
+function updateBPM(val) {
+  state.bpm = Number(val);
+  document.getElementById('bpmVal').textContent = `${state.bpm} BPM`;
+}
+
+function toggleLabels() {
+  state.showLabels = !state.showLabels;
+  const btn = document.getElementById('btnLabels');
+  btn.textContent = `🏷️ 文字標籤：${state.showLabels ? '顯示' : '隱藏'}`;
+  btn.classList.toggle('active', state.showLabels);
+}
+
+function toggleArrows() {
+  state.showArrows = !state.showArrows;
+  const btn = document.getElementById('btnArrows');
+  btn.textContent = `➡️ 血流箭頭：${state.showArrows ? '顯示' : '隱藏'}`;
+  btn.classList.toggle('active', state.showArrows);
+}
+
+function toggleColorMode() {
+  state.oxygenColorMode = !state.oxygenColorMode;
+  const btn = document.getElementById('btnColorMode');
+  btn.textContent = state.oxygenColorMode ? '🎨 血氧分色：開' : '🎨 課本原色(測驗)';
+  btn.classList.toggle('active', state.oxygenColorMode);
+}
+
+function toggleCotton() {
+  state.showWetCotton = !state.showWetCotton;
+  if (state.tab !== 'macro') switchTab('macro');
+  document.getElementById('btnCotton').classList.toggle('active', state.showWetCotton);
+}
+
+function toggleInvert() {
+  state.invertMicro = !state.invertMicro;
+  const btn = document.getElementById('btnInvert');
+  btn.textContent = `🔄 複式顯微鏡顛倒視野：${state.invertMicro ? '開' : '關'}`;
+  btn.classList.toggle('active', state.invertMicro);
+}
+
+function toggleTrackRBC() {
+  if (state.trackRBCIndex >= 0) {
+    state.trackRBCIndex = -1;
+    document.getElementById('btnTrackRBC').classList.remove('track-active');
+    document.getElementById('trackBanner').classList.remove('visible');
+  } else {
+    if (state.tab !== 'micro') switchTab('micro');
+    // 優先選取課本尾鰭微血管區的一顆紅血球開始追蹤
+    let idx = rbcs.findIndex(r => r.vId === 'tb_art_up2' || r.vId === 'tb_cap_3');
+    if (idx < 0) idx = 0;
+    state.trackRBCIndex = idx;
+    state.targetCam.zoom = Math.max(1.45, Math.min(2.1, state.targetCam.zoom));
+    document.getElementById('btnTrackRBC').classList.add('track-active');
+    document.getElementById('trackBanner').classList.add('visible');
+  }
+}
+
+function focusPreset(key) {
+  if (state.tab !== 'micro') switchTab('micro');
+  if (state.trackRBCIndex >= 0) toggleTrackRBC();
+  const presets = {
+    tail_textbook: { x: 2450, y: 578, zoom: 2.35 },
+    tail_overview: { x: 2430, y: 585, zoom: 0.95 },
+    trunk:         { x: 1420, y: 575, zoom: 1.15 },
+    heart:         { x: 775,  y: 725, zoom: 2.05 },
+    gills:         { x: 535,  y: 575, zoom: 1.75 }
+  };
+  const p = presets[key];
+  if (p) {
+    state.targetCam.x = p.x;
+    state.targetCam.y = p.y;
+    state.targetCam.zoom = p.zoom;
+  }
+}
+
+function zoomBy(factor, pivotScreenX, pivotScreenY) {
+  const oldZ = state.targetCam.zoom;
+  const newZ = Math.max(0.38, Math.min(6.0, oldZ * factor));
+  if (pivotScreenX !== undefined && state.trackRBCIndex < 0) {
+    const before = screenToWorld(pivotScreenX, pivotScreenY);
+    state.cam.zoom = newZ;
+    state.targetCam.zoom = newZ;
+    const after = screenToWorld(pivotScreenX, pivotScreenY);
+    state.cam.x += before.x - after.x;
+    state.cam.y += before.y - after.y;
+    state.targetCam.x = state.cam.x;
+    state.targetCam.y = state.cam.y;
+  } else {
+    state.targetCam.zoom = newZ;
+  }
+}
+
+function clampCam() {
+  state.cam.x = Math.max(150, Math.min(2880, state.cam.x));
+  state.cam.y = Math.max(180, Math.min(1020, state.cam.y));
+  state.targetCam.x = Math.max(150, Math.min(2880, state.targetCam.x));
+  state.targetCam.y = Math.max(180, Math.min(1020, state.targetCam.y));
+}
+
+function jumpFromMinimap(sx, sy) {
+  const m = state.minimapRect;
+  if (sx >= m.x && sx <= m.x + m.w && sy >= m.y && sy <= m.y + m.h) {
+    if (state.trackRBCIndex >= 0) toggleTrackRBC();
+    const wx = ((sx - m.x) / m.w) * WORLD_W;
+    const wy = ((sy - m.y) / m.h) * WORLD_H;
+    state.cam.x = state.targetCam.x = wx;
+    state.cam.y = state.targetCam.y = wy;
+    clampCam();
+    return true;
+  }
+  return false;
+}
+
+// 滑鼠互動
+canvas.addEventListener('mousedown', e => {
+  const rect = canvas.getBoundingClientRect();
+  const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
+  state.lastPointer = { x: sx, y: sy };
+
+  if (state.tab === 'micro') {
+    if (jumpFromMinimap(sx, sy)) {
+      state.dragMinimap = true;
+      return;
+    }
+    if (state.trackRBCIndex >= 0) toggleTrackRBC();
+    state.isDragging = true;
+  } else {
+    const w = screenToWorld(sx, sy);
+    if (Math.abs(w.x - state.targetCam.x) < 250 && Math.abs(w.y - state.targetCam.y) < 140) {
+      state.dragMacroLens = true;
+      state.isDragging = false;
+    } else {
+      state.cam.x = state.targetCam.x = Math.max(250, Math.min(2750, w.x));
+      state.cam.y = state.targetCam.y = Math.max(250, Math.min(950, w.y));
+      switchTab('micro');
+    }
+  }
+});
+
+window.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
+
+  if (state.dragMinimap) {
+    jumpFromMinimap(sx, sy);
+    return;
+  }
+  if (state.dragMacroLens) {
+    const dx = sx - state.lastPointer.x, dy = sy - state.lastPointer.y;
+    if (Math.hypot(dx, dy) > 3) state.isDragging = true;
+    const w = screenToWorld(sx, sy);
+    state.cam.x = state.targetCam.x = Math.max(300, Math.min(2700, w.x));
+    state.cam.y = state.targetCam.y = Math.max(260, Math.min(940, w.y));
+    return;
+  }
+  if (state.isDragging && state.tab === 'micro') {
+    const sign = state.invertMicro ? -1 : 1;
+    const dx = (sx - state.lastPointer.x) * sign / state.cam.zoom;
+    const dy = (sy - state.lastPointer.y) * sign / state.cam.zoom;
+    state.cam.x -= dx;
+    state.cam.y -= dy;
+    state.targetCam.x = state.cam.x;
+    state.targetCam.y = state.cam.y;
+    clampCam();
+    state.lastPointer = { x: sx, y: sy };
+  }
+});
+
+window.addEventListener('mouseup', () => {
+  if (state.dragMacroLens && !state.isDragging) {
+    switchTab('micro'); // 單擊宏觀放大鏡框直接進入顯微視角
+  }
+  state.isDragging = false;
+  state.dragMinimap = false;
+  state.dragMacroLens = false;
+});
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  if (state.tab === 'macro') {
+    const rect = canvas.getBoundingClientRect();
+    const w = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+    state.cam.x = state.targetCam.x = w.x;
+    state.cam.y = state.targetCam.y = w.y;
+    switchTab('micro');
+    return;
+  }
+  const rect = canvas.getBoundingClientRect();
+  const factor = e.deltaY < 0 ? 1.14 : 1 / 1.14;
+  zoomBy(factor, e.clientX - rect.left, e.clientY - rect.top);
+}, { passive: false });
+
+// 觸控單指平移與雙指縮放
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  if (e.touches.length === 1) {
+    const sx = e.touches[0].clientX - rect.left, sy = e.touches[0].clientY - rect.top;
+    state.lastPointer = { x: sx, y: sy };
+    if (state.tab === 'micro') {
+      if (jumpFromMinimap(sx, sy)) { state.dragMinimap = true; return; }
+      if (state.trackRBCIndex >= 0) toggleTrackRBC();
+      state.isDragging = true;
+    } else {
+      const w = screenToWorld(sx, sy);
+      state.cam.x = state.targetCam.x = Math.max(300, Math.min(2700, w.x));
+      state.cam.y = state.targetCam.y = Math.max(260, Math.min(940, w.y));
+      switchTab('micro');
+    }
+  } else if (e.touches.length === 2 && state.tab === 'micro') {
+    state.isDragging = false;
+    state.pinchDist = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  if (e.touches.length === 1) {
+    const sx = e.touches[0].clientX - rect.left, sy = e.touches[0].clientY - rect.top;
+    if (state.dragMinimap) { jumpFromMinimap(sx, sy); return; }
+    if (state.isDragging && state.tab === 'micro') {
+      const sign = state.invertMicro ? -1 : 1;
+      state.cam.x -= (sx - state.lastPointer.x) * sign / state.cam.zoom;
+      state.cam.y -= (sy - state.lastPointer.y) * sign / state.cam.zoom;
+      state.targetCam.x = state.cam.x;
+      state.targetCam.y = state.cam.y;
+      clampCam();
+      state.lastPointer = { x: sx, y: sy };
+    }
+  } else if (e.touches.length === 2 && state.tab === 'micro') {
+    const dist = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+    if (state.pinchDist > 10) {
+      const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+      const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+      zoomBy(dist / state.pinchDist, midX, midY);
+    }
+    state.pinchDist = dist;
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchend', () => {
+  state.isDragging = false;
+  state.dragMinimap = false;
+  state.pinchDist = 0;
+});
+
+window.addEventListener('keydown', e => {
+  if (e.key === 'l' || e.key === 'L') toggleLabels();
+  if (e.key === ' ') { e.preventDefault(); togglePlay(); }
+});
+
+// ============================================================================
+// 9. 啟動初始化與動畫計時器
+// ============================================================================
+buildVascularSystem();
+initParticles();
+
+let lastTime = performance.now();
+function loop(now) {
+  const dt = Math.min(0.05, (now - lastTime) / 1000);
+  lastTime = now;
+  updateSimulation(dt);
+  render();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
