@@ -64,6 +64,72 @@
             aspect-ratio: 16 / 10;
             background: radial-gradient(circle at center, #1e1b4b 0%, #0f172a 100%);
             overflow: hidden;
+            cursor: grab;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+        }
+
+        .canvas-wrapper.is-panning {
+            cursor: grabbing;
+        }
+
+        .canvas-overlay-controls {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 6px;
+            pointer-events: none;
+            z-index: 20;
+        }
+
+        .zoom-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 8px;
+            padding: 4px 6px;
+            pointer-events: auto;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+        }
+
+        .zoom-toolbar button {
+            background: #334155;
+            border: 1px solid #475569;
+            color: #f8fafc;
+            padding: 5px 9px;
+            border-radius: 6px;
+            font-size: 0.82rem;
+            cursor: pointer;
+            line-height: 1;
+            transition: all 0.15s ease;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .zoom-toolbar button:hover {
+            background: #475569;
+            border-color: #38bdf8;
+            color: #38bdf8;
+        }
+
+        .canvas-hint {
+            background: rgba(15, 23, 42, 0.75);
+            color: #94a3b8;
+            font-size: 0.72rem;
+            padding: 3px 8px;
+            border-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(4px);
+            pointer-events: none;
         }
 
         canvas {
@@ -213,8 +279,16 @@
             <div class="day-counter" id="dayCounter">受精前 1 天</div>
         </div>
 
-        <div class="canvas-wrapper">
+        <div class="canvas-wrapper" id="canvasWrapper">
             <canvas id="simCanvas" width="1000" height="625"></canvas>
+            <div class="canvas-overlay-controls">
+                <div class="zoom-toolbar">
+                    <button id="zoomInBtn" title="放大視角 (滾輪向上 / 快捷鍵 +)">➕ 放大</button>
+                    <button id="zoomOutBtn" title="縮小視角 (滾輪向下 / 快捷鍵 -)">➖ 縮小</button>
+                    <button id="zoomResetBtn" title="重設縮放與位置 (雙擊畫布 / 快捷鍵 0)">↺ <span id="zoomLevelText">100%</span></button>
+                </div>
+                <div class="canvas-hint">💡 滑鼠滾輪縮放 • 拖曳平移 • 雙擊重設</div>
+            </div>
         </div>
 
         <div class="controls">
@@ -258,6 +332,7 @@
  */
 const canvas = document.getElementById('simCanvas');
 const ctx = canvas.getContext('2d');
+const canvasWrapper = document.getElementById('canvasWrapper');
 
 // 狀態變數
 let t = 0; // 0.0 ~ 1.0
@@ -266,6 +341,16 @@ let playbackSpeed = 1.0;
 let showLabels = true;
 const baseDuration = 45000; // 1x 速度下完整播放需 45 秒
 let lastTimestamp = 0;
+
+// Pan & Zoom (平移與縮放) 狀態
+let zoom = 1.0;
+let panX = 0;
+let panY = 0;
+let isPanning = false;
+let startX = 0;
+let startY = 0;
+const minZoom = 0.8;
+const maxZoom = 4.5;
 
 // UI 元素
 const timeline = document.getElementById('timeline');
@@ -278,6 +363,10 @@ const stageTitle = document.getElementById('stageTitle');
 const stageDesc = document.getElementById('stageDesc');
 const dayCounter = document.getElementById('dayCounter');
 const stageBtns = document.querySelectorAll('.stage-btn');
+const zoomInBtn = document.getElementById('zoomInBtn');
+const zoomOutBtn = document.getElementById('zoomOutBtn');
+const zoomResetBtn = document.getElementById('zoomResetBtn');
+const zoomLevelText = document.getElementById('zoomLevelText');
 
 // 定義階段資訊
 const stages = [
@@ -289,81 +378,134 @@ const stages = [
     { start: 0.78, end: 1.00, title: "階段 6：胚胎發育成胎兒 (Embryo to Fetus)", desc: "子宮內膜與滋養層共同形成胎盤，羊膜囊充滿羊水保護胚胎。器官迅速分化，心臟開始跳動，逐漸發育出頭、四肢與人形的胎兒。", day: (p) => `第 ${Math.floor(2 + p * 10)} 週` }
 ];
 
-// 路徑座標定義 (右側輸卵管路徑：卵巢 -> 傘部 -> 壺腹部 -> 峽部 -> 子宮腔 -> 著床點)
-const eggPath = [
-    { x: 755, y: 315 }, // 0: 卵巢內濾泡
-    { x: 785, y: 270 }, // 1: 剛排出，傘部附近
-    { x: 790, y: 205 }, // 2: 進入輸卵管轉彎處
-    { x: 730, y: 155 }, // 3: 輸卵管壺腹部 (受精點！ index=3)
-    { x: 650, y: 155 }, // 4: 輸卵管中段 (2-cell / 4-cell)
-    { x: 580, y: 175 }, // 5: 輸卵管峽部 (8-cell / 桑椹胚)
-    { x: 535, y: 205 }, // 6: 進入子宮腔 (早期囊胚)
-    { x: 525, y: 245 }, // 7: 子宮腔內游走 (晚期囊胚)
-    { x: 548, y: 265 }  // 8: 右側子宮內膜壁 (著床點！)
-];
-
-// 產生精子群體資料
-const numSperm = 45;
-const sperms = [];
-for (let i = 0; i < numSperm; i++) {
-    const goRight = i < 32; // 大部分游向有卵子的右側，少部分游向左側迷路
-    sperms.push({
-        id: i,
-        isWinner: i === 0, // 第0號是天選之子
-        goRight: goRight,
-        offsetX: (Math.random() - 0.5) * 28,
-        offsetY: (Math.random() - 0.5) * 20,
-        speedFactor: i === 0 ? 1.06 : 0.65 + Math.random() * 0.38,
-        phase: Math.random() * Math.PI * 2,
-        wiggleFreq: 15 + Math.random() * 10
-    });
-}
-
 // 輔助數學函數
 function lerp(a, b, u) { return a + (b - a) * u; }
 function clamp(val, min, max) { return Math.max(min, Math.min(max, val)); }
 function norm(val, min, max) { return clamp((val - min) / (max - min), 0, 1); }
 
-// 取得平滑路徑上的點 (Catmull-Rom 或分段線性平滑)
-function getPointOnPath(points, progress) {
-    const p = clamp(progress, 0, 1) * (points.length - 1);
-    const idx = Math.floor(p);
-    const frac = p - idx;
-    if (idx >= points.length - 1) return points[points.length - 1];
-    // 使用 smoothstep 讓轉折更柔和
-    const u = frac * frac * (3 - 2 * frac);
+// Catmull-Rom 樣條曲線計算函數 (平滑自然通過每個控制點)
+function getCatmullRomPoint(p0, p1, p2, p3, t) {
+    const t2 = t * t;
+    const t3 = t2 * t;
     return {
-        x: lerp(points[idx].x, points[idx + 1].x, u),
-        y: lerp(points[idx].y, points[idx + 1].y, u)
+        x: 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * t + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3),
+        y: 0.5 * ((2 * p1.y) + (-p0.y + p2.y) * t + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3)
     };
 }
 
-// 取得卵子/胚胎當前座標
+function getSplinePoint(pts, progress) {
+    const p = clamp(progress, 0, 1) * (pts.length - 1);
+    const i = Math.floor(p);
+    const frac = p - i;
+    if (i >= pts.length - 1) return pts[pts.length - 1];
+    const p0 = pts[Math.max(0, i - 1)];
+    const p1 = pts[i];
+    const p2 = pts[Math.min(pts.length - 1, i + 1)];
+    const p3 = pts[Math.min(pts.length - 1, i + 2)];
+    return getCatmullRomPoint(p0, p1, p2, p3, frac);
+}
+
+/**
+ * 輸卵管與生殖道標準中心線定義
+ * 輸卵管繪製、卵子路徑、精子游動全數依據此中心樣條曲線計算，徹底解決路徑不同步問題！
+ */
+const tubeWaypointsRight = [
+    { x: 762, y: 312 }, // 0: 卵巢內成熟濾泡破裂處
+    { x: 778, y: 282 }, // 1: 剛排出，輸卵管傘部捕獲處
+    { x: 796, y: 235 }, // 2: 輸卵管漏斗部彎曲處
+    { x: 775, y: 180 }, // 3: 進入壺腹部轉角
+    { x: 722, y: 156 }, // 4: 輸卵管壺腹部 (受精發生點！)
+    { x: 645, y: 156 }, // 5: 壺腹部中段 (卵裂期 2-cell / 4-cell)
+    { x: 585, y: 178 }, // 6: 輸卵管峽部 (卵裂期 8-cell / 桑椹胚)
+    { x: 538, y: 205 }, // 7: 輸卵管子宮口進入子宮腔 (早期囊胚)
+    { x: 528, y: 238 }, // 8: 子宮腔內游走 (晚期囊胚孵化)
+    { x: 550, y: 265 }  // 9: 右側子宮內膜壁 (著床點！)
+];
+
+// 精子從陰道到輸卵管口的下段路徑
+const lowerRouteRight = [
+    { x: 500, y: 555 }, // 0: 陰道底
+    { x: 500, y: 440 }, // 1: 陰道中段
+    { x: 500, y: 415 }, // 2: 子宮頸外口
+    { x: 504, y: 330 }, // 3: 子宮腔中段
+    { x: 520, y: 250 }, // 4: 子宮腔右上部
+    { x: 538, y: 205 }  // 5: 右輸卵管子宮口
+];
+
+// 取得卵子/胚胎當前精確座標
 function getEggPosition(time) {
     if (time < 0.02) {
-        return eggPath[0];
-    } else if (time <= 0.28) {
-        // 排卵並移動到壺腹部 (index 0 -> 3)
-        const u = norm(time, 0.02, 0.24);
-        return getPointOnPath(eggPath.slice(0, 4), u);
+        return tubeWaypointsRight[0];
+    } else if (time <= 0.14) {
+        // 階段 1：排卵排出並藉由傘部進入輸卵管壺腹部 (樣條進度 0.0 -> 4/9 ≈ 0.4444)
+        const u = norm(time, 0.02, 0.14);
+        const ease = u * u * (3 - 2 * u);
+        return getSplinePoint(tubeWaypointsRight, lerp(0.0, 0.4444, ease));
     } else if (time <= 0.46) {
-        // 受精期間停留在壺腹部 (index 3)
-        return eggPath[3];
-    } else if (time <= 0.68) {
-        // 卵裂並移動到著床點前 (index 3 -> 8)
-        const u = norm(time, 0.46, 0.68);
-        return getPointOnPath(eggPath.slice(3, 9), u);
+        // 階段 2 與 3：停留在輸卵管壺腹部等待受精 (index = 4)
+        return getSplinePoint(tubeWaypointsRight, 0.4444);
+    } else if (time <= 0.66) {
+        // 階段 4：卵裂同時移向子宮腔 (樣條進度 0.4444 -> 7/9 ≈ 0.7777)
+        const u = norm(time, 0.46, 0.66);
+        const ease = u * u * (3 - 2 * u);
+        return getSplinePoint(tubeWaypointsRight, lerp(0.4444, 0.7777, ease));
+    } else if (time <= 0.76) {
+        // 階段 5：在子宮腔游走並著床入子宮內膜 (樣條進度 0.7777 -> 1.0)
+        const u = norm(time, 0.66, 0.76);
+        const ease = u * u * (3 - 2 * u);
+        return getSplinePoint(tubeWaypointsRight, lerp(0.7777, 1.0, ease));
     } else {
-        // 著床並陷入子宮內膜
-        const u = norm(time, 0.68, 0.76);
-        return {
-            x: lerp(eggPath[8].x, 556, u),
-            y: lerp(eggPath[8].y, 265, u)
-        };
+        // 階段 6：著床點固定發育為胎兒
+        return tubeWaypointsRight[9];
     }
 }
 
-// 繪製解剖背景（子宮、輸卵管、卵巢、子宮內膜）
+// 取得精子游動路徑位置與切線方向
+function getSpermPosition(prog, goRight) {
+    let pt, tangent;
+    if (prog < 0.55) {
+        // 陰道 -> 子宮頸 -> 子宮腔 -> 輸卵管口
+        const u = prog / 0.55;
+        const lowerPts = goRight ? lowerRouteRight : lowerRouteRight.map(p => ({ x: 1000 - p.x, y: p.y }));
+        pt = getSplinePoint(lowerPts, u);
+        const ptNext = getSplinePoint(lowerPts, Math.min(1, u + 0.02));
+        tangent = { x: ptNext.x - pt.x, y: ptNext.y - pt.y };
+    } else {
+        // 進入輸卵管內部，沿著輸卵管樣條中心線逆流而上游向壺腹部卵子
+        const u = (prog - 0.55) / 0.45; // 0.0: 子宮口 -> 1.0: 壺腹部受精點
+        const splineProg = lerp(0.7777, 0.4444, u);
+        const rawPt = getSplinePoint(tubeWaypointsRight, splineProg);
+        const rawNext = getSplinePoint(tubeWaypointsRight, Math.max(0, splineProg - 0.015));
+        if (goRight) {
+            pt = rawPt;
+            tangent = { x: rawNext.x - rawPt.x, y: rawNext.y - rawPt.y };
+        } else {
+            pt = { x: 1000 - rawPt.x, y: rawPt.y };
+            tangent = { x: -(rawNext.x - rawPt.x), y: rawNext.y - rawPt.y };
+        }
+    }
+    return { pt, tangent };
+}
+
+// 產生精子群體資料
+const numSperm = 50;
+const sperms = [];
+for (let i = 0; i < numSperm; i++) {
+    const isWinner = i === 0;
+    const goRight = i < 38; // 大部分游向有卵子的右側，少部分游向左側迷路
+    sperms.push({
+        id: i,
+        isWinner: isWinner,
+        goRight: goRight,
+        lateralOffset: isWinner ? 0 : (Math.random() - 0.5) * 1.8, // 橫向隨機偏移比例
+        speedFactor: isWinner ? 1.05 : 0.70 + Math.random() * 0.35,
+        phase: Math.random() * Math.PI * 2,
+        tailLength: 8 + Math.floor(Math.random() * 4),
+        wiggleFreq: 18 + Math.random() * 10
+    });
+}
+
+// 繪製解剖背景（子宮、輸卵管、卵巢、子宮內膜、動態管壁纖毛）
 function drawAnatomy(time) {
     ctx.save();
 
@@ -383,12 +525,10 @@ function drawAnatomy(time) {
     ctx.stroke();
 
     // 2. 卵巢 (Ovaries) - 左右兩側
-    // 左側卵巢 (靜態濾泡)
-    drawOvary(245, 320, false, time);
-    // 右側卵巢 (動態排卵與黃體)
-    drawOvary(755, 320, true, time);
+    drawOvary(245, 320, false, time); // 左側靜態濾泡
+    drawOvary(755, 320, true, time);  // 右側動態排卵與黃體
 
-    // 3. 子宮外肌層與輸卵管外輪廓
+    // 3. 子宮外肌層與輸卵管外輪廓 (配合中心線調整壁厚與弧度)
     ctx.fillStyle = '#be5a6b';
     ctx.strokeStyle = '#883444';
     ctx.lineWidth = 3;
@@ -398,18 +538,21 @@ function drawAnatomy(time) {
     ctx.moveTo(430, 175);
     ctx.quadraticCurveTo(500, 150, 570, 175);
 
-    // 右側輸卵管上緣 -> 壺腹部 -> 傘部
-    ctx.bezierCurveTo(630, 135, 750, 125, 795, 185);
-    ctx.bezierCurveTo(818, 215, 815, 265, 795, 285);
-    // 右側傘部爪狀 (Fimbriae)
+    // 右側輸卵管上緣 -> 壺腹部 -> 傘部外緣
+    ctx.bezierCurveTo(625, 136, 735, 130, 792, 180);
+    ctx.bezierCurveTo(820, 212, 818, 265, 796, 285);
+
+    // 右側傘部爪狀 (Fimbriae) - 朝向卵巢開展的指狀突起
     const fimbriaWave = Math.sin(time * 60) * (time < 0.18 ? 4 : 1);
-    ctx.lineTo(782, 298 + fimbriaWave);
+    ctx.lineTo(782, 302 + fimbriaWave);
     ctx.lineTo(788, 278);
-    ctx.lineTo(770, 292 - fimbriaWave);
+    ctx.lineTo(770, 294 - fimbriaWave);
     ctx.lineTo(778, 272);
-    ctx.lineTo(760, 280 + fimbriaWave);
-    ctx.bezierCurveTo(780, 245, 782, 210, 765, 195);
-    ctx.bezierCurveTo(730, 165, 635, 170, 580, 208);
+    ctx.lineTo(760, 282 + fimbriaWave);
+
+    // 右側輸卵管下緣 (內側壁)
+    ctx.bezierCurveTo(778, 248, 778, 212, 762, 192);
+    ctx.bezierCurveTo(726, 170, 630, 172, 576, 206);
 
     // 右側子宮體外緣 -> 子宮頸 -> 陰道右壁
     ctx.bezierCurveTo(585, 280, 550, 355, 532, 415);
@@ -418,38 +561,98 @@ function drawAnatomy(time) {
     ctx.lineTo(468, 415);
 
     // 左側子宮體外緣
-    ctx.bezierCurveTo(450, 355, 415, 280, 420, 208);
+    ctx.bezierCurveTo(450, 355, 415, 280, 424, 206);
 
-    // 左側輸卵管下緣 -> 傘部 -> 上緣
-    ctx.bezierCurveTo(365, 170, 270, 165, 235, 195);
-    ctx.bezierCurveTo(218, 210, 220, 245, 240, 280);
+    // 左側輸卵管下緣 -> 傘部 -> 上緣 (對稱鏡像)
+    ctx.bezierCurveTo(370, 172, 274, 170, 238, 192);
+    ctx.bezierCurveTo(222, 212, 222, 248, 240, 282);
     ctx.lineTo(222, 272);
-    ctx.lineTo(230, 292);
+    ctx.lineTo(230, 294);
     ctx.lineTo(212, 278);
-    ctx.lineTo(218, 298);
-    ctx.lineTo(205, 285);
-    ctx.bezierCurveTo(185, 265, 182, 215, 205, 185);
-    ctx.bezierCurveTo(250, 125, 370, 135, 430, 175);
+    ctx.lineTo(218, 302);
+    ctx.lineTo(204, 285);
+    ctx.bezierCurveTo(182, 265, 180, 212, 208, 180);
+    ctx.bezierCurveTo(265, 130, 375, 136, 430, 175);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
 
-    // 4. 輸卵管內部通道 (Lumen)
-    ctx.strokeStyle = '#4c1d24';
-    ctx.lineWidth = 14;
+    // 4. 輸卵管內部通道 (Lumen) - 依據中心樣條精準繪製
+    // 右側管腔通道
+    ctx.strokeStyle = '#380c16';
+    ctx.lineWidth = 19;
     ctx.lineCap = 'round';
-    // 右管通道
+    ctx.lineJoin = 'round';
     ctx.beginPath();
-    ctx.moveTo(540, 205);
-    ctx.bezierCurveTo(610, 160, 735, 145, 782, 202);
-    ctx.bezierCurveTo(798, 222, 792, 255, 780, 275);
+    for (let s = 0.08; s <= 0.77; s += 0.02) {
+        const pt = getSplinePoint(tubeWaypointsRight, s);
+        if (s === 0.08) ctx.moveTo(pt.x, pt.y);
+        else ctx.lineTo(pt.x, pt.y);
+    }
     ctx.stroke();
-    // 左管通道
+
+    // 內壁黏膜襯層高光 (增加立體管道層次)
+    ctx.strokeStyle = '#5c1d28';
+    ctx.lineWidth = 13;
     ctx.beginPath();
-    ctx.moveTo(460, 205);
-    ctx.bezierCurveTo(390, 160, 265, 145, 218, 202);
-    ctx.bezierCurveTo(202, 222, 208, 255, 220, 275);
+    for (let s = 0.08; s <= 0.77; s += 0.02) {
+        const pt = getSplinePoint(tubeWaypointsRight, s);
+        if (s === 0.08) ctx.moveTo(pt.x, pt.y);
+        else ctx.lineTo(pt.x, pt.y);
+    }
     ctx.stroke();
+
+    // 左側管腔通道 (鏡像)
+    ctx.strokeStyle = '#380c16';
+    ctx.lineWidth = 19;
+    ctx.beginPath();
+    for (let s = 0.08; s <= 0.77; s += 0.02) {
+        const pt = getSplinePoint(tubeWaypointsRight, s);
+        const lx = 1000 - pt.x;
+        if (s === 0.08) ctx.moveTo(lx, pt.y);
+        else ctx.lineTo(lx, pt.y);
+    }
+    ctx.stroke();
+
+    ctx.strokeStyle = '#5c1d28';
+    ctx.lineWidth = 13;
+    ctx.beginPath();
+    for (let s = 0.08; s <= 0.77; s += 0.02) {
+        const pt = getSplinePoint(tubeWaypointsRight, s);
+        const lx = 1000 - pt.x;
+        if (s === 0.08) ctx.moveTo(lx, pt.y);
+        else ctx.lineTo(lx, pt.y);
+    }
+    ctx.stroke();
+
+    // 動態輸卵管纖毛 (Cilia) - 沿著管壁朝子宮方向波動擺動，真實呈現卵子運輸機制
+    ctx.strokeStyle = 'rgba(244, 114, 182, 0.45)';
+    ctx.lineWidth = 1.3;
+    ctx.lineCap = 'round';
+    for (let s = 0.12; s <= 0.74; s += 0.038) {
+        const pt = getSplinePoint(tubeWaypointsRight, s);
+        const nextPt = getSplinePoint(tubeWaypointsRight, Math.min(1, s + 0.015));
+        const dx = nextPt.x - pt.x;
+        const dy = nextPt.y - pt.y;
+        const len = Math.hypot(dx, dy) || 1;
+        const nx = -dy / len;
+        const ny = dx / len;
+        const cWave = Math.sin(time * 50 + s * 35) * 2.2;
+        const flowX = (nextPt.x - pt.x) / len * 3.5;
+        const flowY = (nextPt.y - pt.y) / len * 3.5;
+
+        // 上壁纖毛
+        ctx.beginPath();
+        ctx.moveTo(pt.x + nx * 8.5, pt.y + ny * 8.5);
+        ctx.lineTo(pt.x + nx * 4.5 + flowX + cWave * ny, pt.y + ny * 4.5 + flowY - cWave * nx);
+        ctx.stroke();
+
+        // 下壁纖毛
+        ctx.beginPath();
+        ctx.moveTo(pt.x - nx * 8.5, pt.y - ny * 8.5);
+        ctx.lineTo(pt.x - nx * 4.5 + flowX - cWave * ny, pt.y - ny * 4.5 + flowY + cWave * nx);
+        ctx.stroke();
+    }
 
     // 5. 子宮內膜 (Endometrium) - 隨排卵後黃體素分泌而增厚充血
     const endoThick = lerp(10, 24, norm(time, 0.0, 0.65));
@@ -558,73 +761,77 @@ function drawOvary(cx, cy, isActive, time) {
     ctx.restore();
 }
 
-// 繪製精子群游動
+// 繪製精子群游動 (嚴格沿著輸卵管中心線樣條前進)
 function drawSpermSwarm(time) {
     if (time < 0.12 || time > 0.52) return;
 
     const fade = time > 0.45 ? 1 - norm(time, 0.45, 0.52) : 1;
-    const baseProgress = norm(time, 0.13, 0.29); // 0=陰道底, 1=抵達壺腹部卵子處
-
-    // 右側正確路線座標點
-    const rightRoute = [
-        { x: 500, y: 555 },
-        { x: 500, y: 420 }, // 子宮頸
-        { x: 505, y: 310 }, // 子宮腔中段
-        { x: 535, y: 215 }, // 右輸卵管口
-        { x: 635, y: 162 }, // 輸卵管峽部
-        { x: 722, y: 155 }  // 壺腹部卵子旁
-    ];
-
-    // 左側迷路路線
-    const leftRoute = [
-        { x: 500, y: 555 },
-        { x: 500, y: 420 },
-        { x: 495, y: 310 },
-        { x: 465, y: 215 },
-        { x: 365, y: 162 },
-        { x: 280, y: 160 }
-    ];
+    // 0=陰道底, 1=抵達壺腹部卵子處
+    const baseProgress = norm(time, 0.13, 0.28);
 
     ctx.save();
     sperms.forEach(sp => {
         let p = baseProgress * sp.speedFactor;
         if (!sp.isWinner && p > 0.98) {
-            // 非贏家精子被擋在透明帶外圍打轉
-            p = 0.98 + Math.sin(time * 30 + sp.phase) * 0.015;
+            // 非贏家精子被擋在透明帶外圍打轉爭奪
+            p = 0.98 + Math.sin(time * 25 + sp.phase) * 0.012;
         }
         if (sp.isWinner && time > 0.36) {
-            // 贏家已經鑽入卵子內融合，宏觀視角隱藏
+            // 贏家已經鑽入卵子內融合，宏觀視角由卵細胞核呈現
             return;
         }
         p = clamp(p, 0, 1);
 
-        const route = sp.goRight ? rightRoute : leftRoute;
-        const pos = getPointOnPath(route, p);
-        const nextPos = getPointOnPath(route, clamp(p + 0.02, 0, 1));
-        let angle = Math.atan2(nextPos.y - pos.y, nextPos.x - pos.x);
+        const { pt, tangent } = getSpermPosition(p, sp.goRight);
+        let angle = Math.atan2(tangent.y, tangent.x);
 
-        // 在陰道與子宮腔較寬處加入分散偏移，在輸卵管內收斂
-        const spreadScale = p < 0.55 ? 1 : (1 - norm(p, 0.55, 0.85)) * 0.35;
-        const sx = pos.x + sp.offsetX * spreadScale;
-        const sy = pos.y + sp.offsetY * spreadScale;
+        // 橫向散開偏移：在陰道與子宮腔較寬，在輸卵管內嚴格限制在管腔直徑內
+        const len = Math.hypot(tangent.x, tangent.y) || 1;
+        const nx = -tangent.y / len;
+        const ny = tangent.x / len;
 
+        let maxSpread = 4.2; // 輸卵管內管徑半徑約 9px，散開半徑 4.2px 確保完全在管內
+        if (p < 0.25) {
+            maxSpread = 14; // 陰道腔寬度較寬
+        } else if (p < 0.55) {
+            maxSpread = lerp(14, 5, (p - 0.25) / 0.30); // 子宮腔往輸卵管口收斂
+        }
+
+        let sx = pt.x + nx * (sp.lateralOffset * maxSpread);
+        let sy = pt.y + ny * (sp.lateralOffset * maxSpread);
+
+        // 抵達壺腹部卵子周圍時聚集環繞
         if (p >= 0.97 && sp.goRight) {
-            // 圍繞著卵子朝向卵子中心
-            angle = Math.atan2(155 - sy, 730 - sx);
+            const eggAmpulla = { x: 722, y: 156 };
+            if (sp.isWinner) {
+                // 贏家直接游向卵子中心並穿入
+                const winP = norm(time, 0.27, 0.35);
+                const approachDist = lerp(18, 0, winP);
+                sx = eggAmpulla.x + approachDist * Math.cos(sp.phase * 0.2);
+                sy = eggAmpulla.y + approachDist * Math.sin(sp.phase * 0.2);
+                angle = Math.atan2(eggAmpulla.y - sy, eggAmpulla.x - sx);
+            } else {
+                // 其他精子在透明帶外圍打轉爭先恐後
+                const orbitR = 14 + (sp.id % 4) * 2;
+                const orbAng = sp.phase + time * (10 + (sp.id % 5) * 3);
+                sx = eggAmpulla.x + Math.cos(orbAng) * orbitR;
+                sy = eggAmpulla.y + Math.sin(orbAng) * orbitR;
+                angle = orbAng + Math.PI; // 面向卵子
+            }
         }
 
         ctx.save();
         ctx.translate(sx, sy);
         ctx.rotate(angle);
-        ctx.globalAlpha = fade * 0.9;
+        ctx.globalAlpha = fade * 0.92;
 
         // 精子尾巴擺動
-        ctx.strokeStyle = '#e2e8f0';
+        ctx.strokeStyle = sp.isWinner ? '#7dd3fc' : '#e2e8f0';
         ctx.lineWidth = 1.2;
         ctx.beginPath();
         ctx.moveTo(-3, 0);
-        for (let i = 1; i <= 10; i++) {
-            const wy = Math.sin(time * 90 + sp.phase - i * 0.7) * (i * 0.32);
+        for (let i = 1; i <= sp.tailLength; i++) {
+            const wy = Math.sin(time * sp.wiggleFreq + sp.phase - i * 0.65) * (i * 0.35);
             ctx.lineTo(-3 - i * 1.3, wy);
         }
         ctx.stroke();
@@ -632,7 +839,7 @@ function drawSpermSwarm(time) {
         // 精子頭部
         ctx.fillStyle = sp.isWinner ? '#38bdf8' : '#ffffff';
         ctx.beginPath();
-        ctx.ellipse(0, 0, 3.2, 2, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, 0, 3.2, 1.9, 0, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.restore();
@@ -760,31 +967,38 @@ function drawMacroEggAndEmbryo(time) {
 }
 
 // 繪製階段 3 的「顯微放大受精過程視窗 (PIP)」與階段 4 的「卵裂放大視窗」
-function drawMicroscopeZoom(time) {
-    // 在 t = 0.26 ~ 0.65 顯示顯微放大鏡，讓使用者看清楚受精與細胞分裂細節
+// 作為固定 HUD 繪製於螢幕空間，投影指引線自動貼合當前縮放平移後的卵子螢幕坐標
+function drawMicroscopeZoom(time, currentZoom, currentPanX, currentPanY) {
     if (time < 0.26 || time > 0.65) return;
 
     const alpha = time < 0.28 ? norm(time, 0.26, 0.28) : (time > 0.63 ? 1 - norm(time, 0.63, 0.65) : 1);
     const eggPos = getEggPosition(time);
 
-    const zoomX = 205;
-    const zoomY = 465;
-    const zoomR = 125;
+    // 固定 HUD 視窗坐標
+    const zoomX = 185;
+    const zoomY = 460;
+    const zoomR = 120;
+
+    // 計算宏觀卵子在畫布螢幕上的實際坐標
+    const eggScreenX = eggPos.x * currentZoom + currentPanX;
+    const eggScreenY = eggPos.y * currentZoom + currentPanY;
 
     ctx.save();
     ctx.globalAlpha = alpha;
 
-    // 繪製從宏觀卵子連接到顯微視窗的引導投影線
-    ctx.strokeStyle = 'rgba(56, 189, 248, 0.5)';
-    ctx.setLineDash([5, 5]);
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(eggPos.x, eggPos.y);
-    ctx.lineTo(zoomX + zoomR * 0.6, zoomY - zoomR * 0.8);
-    ctx.moveTo(eggPos.x, eggPos.y);
-    ctx.lineTo(zoomX + zoomR * 0.9, zoomY + zoomR * 0.2);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    // 繪製從宏觀卵子連接到顯微視窗的引導投影線 (若卵子在視野附近則繪製)
+    if (eggScreenX > -80 && eggScreenX < canvas.width + 80 && eggScreenY > -80 && eggScreenY < canvas.height + 80) {
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)';
+        ctx.setLineDash([5, 5]);
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(eggScreenX, eggScreenY);
+        ctx.lineTo(zoomX + zoomR * 0.6, zoomY - zoomR * 0.8);
+        ctx.moveTo(eggScreenX, eggScreenY);
+        ctx.lineTo(zoomX + zoomR * 0.9, zoomY + zoomR * 0.2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
 
     // 顯微圓形視窗背景與裁切
     ctx.save();
@@ -806,32 +1020,27 @@ function drawMicroscopeZoom(time) {
     if (time <= 0.46) {
         // ====== 顯微受精細節 ======
         const fertP = norm(time, 0.28, 0.45);
-        // fertP 0.0~0.35: 精子穿過放射冠與透明帶
-        // fertP 0.35~0.50: 接觸卵細胞膜，皮質反應波紋擴散(透明帶變硬阻止多精)
-        // fertP 0.50~0.90: 雌原核與雄原核靠近融合
-        // fertP 0.90~1.00: 受精卵(合子 Zygote)完成
-
         const corticalReaction = norm(fertP, 0.35, 0.55);
 
         // 1. 放射冠細胞 (Corona Radiata)
         for (let i = 0; i < 24; i++) {
             const a = (i / 24) * Math.PI * 2;
-            const cr = 84 + Math.sin(i * 3 + time * 10) * 2;
+            const cr = 82 + Math.sin(i * 3 + time * 10) * 2;
             ctx.fillStyle = 'rgba(253, 224, 71, 0.35)';
             ctx.strokeStyle = 'rgba(234, 179, 8, 0.6)';
             ctx.beginPath();
-            ctx.arc(zoomX + Math.cos(a) * cr, zoomY + Math.sin(a) * cr, 9, 0, Math.PI * 2);
+            ctx.arc(zoomX + Math.cos(a) * cr, zoomY + Math.sin(a) * cr, 8.5, 0, Math.PI * 2);
             ctx.fill();
             ctx.stroke();
         }
 
         // 2. 透明帶 (Zona Pellucida) - 皮質反應後由淡黃變為亮青色防護罩
-        ctx.lineWidth = 14;
+        ctx.lineWidth = 13;
         ctx.strokeStyle = corticalReaction > 0
             ? `rgba(56, 189, 248, ${0.35 + corticalReaction * 0.45})`
             : 'rgba(254, 240, 138, 0.35)';
         ctx.beginPath();
-        ctx.arc(zoomX, zoomY, 68, 0, Math.PI * 2);
+        ctx.arc(zoomX, zoomY, 66, 0, Math.PI * 2);
         ctx.stroke();
 
         // 皮質反應震波特效
@@ -839,7 +1048,7 @@ function drawMicroscopeZoom(time) {
             ctx.strokeStyle = `rgba(125, 211, 252, ${1 - corticalReaction})`;
             ctx.lineWidth = 4;
             ctx.beginPath();
-            ctx.arc(zoomX, zoomY, 60 + corticalReaction * 18, 0, Math.PI * 2);
+            ctx.arc(zoomX, zoomY, 58 + corticalReaction * 18, 0, Math.PI * 2);
             ctx.stroke();
         }
 
@@ -848,23 +1057,22 @@ function drawMicroscopeZoom(time) {
         ctx.strokeStyle = '#eab308';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(zoomX, zoomY, 58, 0, Math.PI * 2);
+        ctx.arc(zoomX, zoomY, 56, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
 
         // 極體 (Polar body)
         ctx.fillStyle = '#fde047';
-        ctx.beginPath(); ctx.arc(zoomX + 10, zoomY - 56, 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.arc(zoomX + 10, zoomY - 54, 5.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
         if (fertP > 0.4) {
-            // 完成第二次減數分裂排出第二極體
-            ctx.beginPath(); ctx.arc(zoomX + 22, zoomY - 54, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.beginPath(); ctx.arc(zoomX + 22, zoomY - 52, 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
         }
 
         // 4. 競爭失敗的其他精子 (被透明帶擋在外面)
         const loserAngles = [2.2, 2.9, -2.4, -1.6, 0.9];
         loserAngles.forEach((ang, idx) => {
             const approach = clamp(fertP * 2.2 - idx * 0.12, 0, 1);
-            const dist = lerp(125, 77, approach) + (corticalReaction > 0 ? corticalReaction * 6 : 0);
+            const dist = lerp(120, 75, approach) + (corticalReaction > 0 ? corticalReaction * 6 : 0);
             const lx = zoomX + Math.cos(ang) * dist;
             const ly = zoomY + Math.sin(ang) * dist;
             drawMicroSperm(lx, ly, ang + Math.PI, time, false);
@@ -873,10 +1081,9 @@ function drawMicroscopeZoom(time) {
         // 5. 冠軍精子穿透與原核融合
         if (fertP < 0.45) {
             const winApproach = norm(fertP, 0, 0.40);
-            const dist = lerp(115, 52, winApproach);
-            const wx = zoomX + dist; // 從正右方 (angle=0) 進入
+            const dist = lerp(110, 50, winApproach);
+            const wx = zoomX + dist;
             const wy = zoomY;
-            // 頂體反應酵素光芒
             if (winApproach > 0.2 && winApproach < 0.9) {
                 ctx.fillStyle = 'rgba(56, 189, 248, 0.6)';
                 ctx.beginPath();
@@ -889,19 +1096,19 @@ function drawMicroscopeZoom(time) {
         // 6. 雌原核與雄原核融合
         const mergeP = norm(fertP, 0.45, 0.88);
         if (mergeP < 1) {
-            // 雌原核 (左側往中間移動)
+            // 雌原核
             const femX = lerp(zoomX - 22, zoomX, mergeP);
             ctx.fillStyle = 'rgba(236, 72, 153, 0.85)';
             ctx.beginPath();
-            ctx.arc(femX, zoomY, 13, 0, Math.PI * 2);
+            ctx.arc(femX, zoomY, 12, 0, Math.PI * 2);
             ctx.fill();
 
-            // 雄原核 (精子進入後形成，從右側往中間移動)
+            // 雄原核
             if (fertP > 0.38) {
-                const maleX = lerp(zoomX + 42, zoomX, mergeP);
+                const maleX = lerp(zoomX + 40, zoomX, mergeP);
                 ctx.fillStyle = 'rgba(14, 165, 233, 0.85)';
                 ctx.beginPath();
-                ctx.arc(maleX, zoomY, 13, 0, Math.PI * 2);
+                ctx.arc(maleX, zoomY, 12, 0, Math.PI * 2);
                 ctx.fill();
             }
         } else {
@@ -911,26 +1118,26 @@ function drawMicroscopeZoom(time) {
             ctx.strokeStyle = '#e879f9';
             ctx.lineWidth = 2.5;
             ctx.beginPath();
-            ctx.arc(zoomX, zoomY, 18 + glow * 0.3, 0, Math.PI * 2);
+            ctx.arc(zoomX, zoomY, 17 + glow * 0.3, 0, Math.PI * 2);
             ctx.fill();
             ctx.stroke();
         }
 
         // 顯微視窗內部說明標籤
         if (showLabels) {
-            ctx.font = 'bold 12px sans-serif';
+            ctx.font = 'bold 11px sans-serif';
             ctx.fillStyle = '#38bdf8';
             ctx.textAlign = 'center';
             let statusStr = "精子釋放頂體酶穿透透明帶";
             if (fertP >= 0.35 && fertP < 0.55) statusStr = "皮質反應：透明帶硬化阻止多精受精";
             else if (fertP >= 0.55 && fertP < 0.88) statusStr = "雌原核 (n) 與 雄原核 (n) 融合";
             else if (fertP >= 0.88) statusStr = "受精完成：形成二倍體合子 (2n)";
-            ctx.fillText(statusStr, zoomX, zoomY + 102);
+            ctx.fillText(statusStr, zoomX, zoomY + 98);
 
-            ctx.font = '11px sans-serif';
+            ctx.font = '10px sans-serif';
             ctx.fillStyle = '#fde047';
-            ctx.fillText("透明帶", zoomX - 52, zoomY - 48);
-            ctx.fillText("放射冠", zoomX - 78, zoomY - 68);
+            ctx.fillText("透明帶", zoomX - 50, zoomY - 46);
+            ctx.fillText("放射冠", zoomX - 74, zoomY - 65);
         }
 
     } else {
@@ -939,56 +1146,56 @@ function drawMicroscopeZoom(time) {
 
         // 透明帶外圈
         ctx.strokeStyle = 'rgba(56, 189, 248, 0.7)';
-        ctx.lineWidth = 10;
+        ctx.lineWidth = 9;
         ctx.beginPath();
-        ctx.arc(zoomX, zoomY, 72, 0, Math.PI * 2);
+        ctx.arc(zoomX, zoomY, 70, 0, Math.PI * 2);
         ctx.stroke();
 
         let stageLabel = "";
         if (cleaveP < 0.22) {
             stageLabel = "2-細胞期 (2-Cell Stage)";
-            drawBlastomere(zoomX - 28, zoomY, 34);
-            drawBlastomere(zoomX + 28, zoomY, 34);
+            drawBlastomere(zoomX - 26, zoomY, 32);
+            drawBlastomere(zoomX + 26, zoomY, 32);
         } else if (cleaveP < 0.45) {
             stageLabel = "4-細胞期 (4-Cell Stage)";
-            drawBlastomere(zoomX - 24, zoomY - 24, 27);
-            drawBlastomere(zoomX + 24, zoomY - 24, 27);
-            drawBlastomere(zoomX - 24, zoomY + 24, 27);
-            drawBlastomere(zoomX + 24, zoomY + 24, 27);
+            drawBlastomere(zoomX - 22, zoomY - 22, 25);
+            drawBlastomere(zoomX + 22, zoomY - 22, 25);
+            drawBlastomere(zoomX - 22, zoomY + 22, 25);
+            drawBlastomere(zoomX + 22, zoomY + 22, 25);
         } else if (cleaveP < 0.68) {
             stageLabel = "8-細胞期 (8-Cell Stage)";
             for (let i = 0; i < 7; i++) {
                 const a = (i / 6) * Math.PI * 2;
-                const r = i === 6 ? 0 : 34;
-                drawBlastomere(zoomX + Math.cos(a) * r, zoomY + Math.sin(a) * r, 20);
+                const r = i === 6 ? 0 : 32;
+                drawBlastomere(zoomX + Math.cos(a) * r, zoomY + Math.sin(a) * r, 19);
             }
         } else if (cleaveP < 0.86) {
             stageLabel = "桑椹胚 (Morula, 16-32細胞)";
             for (let i = 0; i < 19; i++) {
                 const a = i * 2.4;
-                const r = Math.sqrt(i) * 12.5;
-                drawBlastomere(zoomX + Math.cos(a) * r, zoomY + Math.sin(a) * r, 14);
+                const r = Math.sqrt(i) * 12;
+                drawBlastomere(zoomX + Math.cos(a) * r, zoomY + Math.sin(a) * r, 13);
             }
         } else {
             stageLabel = "囊胚 (Blastocyst：具囊胚腔與內細胞群)";
             // 滋養層細胞環 (Trophoblast)
             for (let i = 0; i < 20; i++) {
                 const a = (i / 20) * Math.PI * 2;
-                drawBlastomere(zoomX + Math.cos(a) * 60, zoomY + Math.sin(a) * 60, 10, '#ec4899');
+                drawBlastomere(zoomX + Math.cos(a) * 58, zoomY + Math.sin(a) * 58, 9.5, '#ec4899');
             }
             // 內細胞群 (Inner Cell Mass)
             for (let i = 0; i < 10; i++) {
                 const a = i * 2.1;
-                const r = Math.sqrt(i) * 8;
-                drawBlastomere(zoomX + 25 + Math.cos(a) * r, zoomY + Math.sin(a) * r, 10, '#38bdf8');
+                const r = Math.sqrt(i) * 7.5;
+                drawBlastomere(zoomX + 24 + Math.cos(a) * r, zoomY + Math.sin(a) * r, 9.5, '#38bdf8');
             }
         }
 
         if (showLabels) {
-            ctx.font = 'bold 12px sans-serif';
+            ctx.font = 'bold 11px sans-serif';
             ctx.fillStyle = '#f472b6';
             ctx.textAlign = 'center';
-            ctx.fillText(stageLabel, zoomX, zoomY + 104);
+            ctx.fillText(stageLabel, zoomX, zoomY + 100);
         }
     }
 
@@ -996,19 +1203,19 @@ function drawMicroscopeZoom(time) {
 
     // 顯微鏡外框與標題
     ctx.strokeStyle = '#38bdf8';
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 3.5;
     ctx.beginPath();
     ctx.arc(zoomX, zoomY, zoomR, 0, Math.PI * 2);
     ctx.stroke();
 
     ctx.fillStyle = '#0284c7';
     ctx.beginPath();
-    ctx.roundRect(zoomX - 75, zoomY - zoomR - 14, 150, 26, 13);
+    ctx.roundRect(zoomX - 75, zoomY - zoomR - 14, 150, 25, 12);
     ctx.fill();
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 13px sans-serif';
+    ctx.font = 'bold 12px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(time <= 0.46 ? "🔬 顯微放大：受精過程" : "🔬 顯微放大：卵裂發育", zoomX, zoomY - zoomR + 4);
+    ctx.fillText(time <= 0.46 ? "🔬 顯微放大：受精過程" : "🔬 顯微放大：卵裂發育", zoomX, zoomY - zoomR + 3);
 
     ctx.restore();
 }
@@ -1063,14 +1270,14 @@ function drawBlastomere(x, y, r, color = '#f472b6') {
     ctx.fill();
 }
 
-// 繪製階段 6：胚胎發育成胎兒 (胎盤、羊膜囊、臍帶、跳動心臟與胎兒成形)
+// 繪製階段 6：胚胎發育成胎兒
 function drawFetalDevelopment(time) {
     if (time <= 0.78) return;
 
-    const p = norm(time, 0.78, 1.0); // 0.0 (第2週胚胎) -> 1.0 (第12週成形胎兒)
+    const p = norm(time, 0.78, 1.0);
 
     // 著床中心隨成長逐漸往子宮腔中央擴展
-    const cx = lerp(552, 502, clamp(p * 1.4, 0, 1));
+    const cx = lerp(550, 502, clamp(p * 1.4, 0, 1));
     const cy = lerp(265, 282, clamp(p * 1.4, 0, 1));
     const sacR = lerp(16, 68, p);
 
@@ -1081,7 +1288,7 @@ function drawFetalDevelopment(time) {
     ctx.strokeStyle = '#fb7185';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    const placX = lerp(558, 562, p);
+    const placX = lerp(556, 562, p);
     const placY = 268;
     ctx.ellipse(placX, placY, lerp(6, 16, p), lerp(18, 52, p), 0.12, -Math.PI * 0.5, Math.PI * 0.5);
     ctx.quadraticCurveTo(placX - lerp(8, 22, p), placY, placX, placY - lerp(18, 52, p));
@@ -1114,7 +1321,6 @@ function drawFetalDevelopment(time) {
     // 4. 胚胎 -> 胎兒形態動態演化
     ctx.save();
     ctx.translate(cx - sacR * 0.08, cy);
-    // 胎兒在羊水中輕微漂浮感
     ctx.rotate(Math.sin(time * 25) * 0.05);
 
     const fScale = lerp(0.22, 1.0, p);
@@ -1125,37 +1331,35 @@ function drawFetalDevelopment(time) {
     ctx.lineWidth = 2;
 
     if (p < 0.3) {
-        // 早期C型胚體 (Embryo：具鰓弓與體節雛形)
         ctx.beginPath();
-        ctx.arc(0, -14, 15, 0, Math.PI * 2); // 頭部突起
-        ctx.arc(-8, 10, 14, 0, Math.PI * 2); // 彎曲軀幹
+        ctx.arc(0, -14, 15, 0, Math.PI * 2);
+        ctx.arc(-8, 10, 14, 0, Math.PI * 2);
         ctx.fill();
     } else {
-        // 成形胎兒 (Fetus：大頭、捲曲軀幹、手腳芽長成四肢、眼睛)
         const limbGrowth = norm(p, 0.3, 0.85);
 
-        // 捲曲身體軀幹與臀部
+        // 捲曲軀幹與臀部
         ctx.beginPath();
         ctx.ellipse(-6, 16, 17, 24, -0.25, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
 
-        // 胎兒頭部 (朝上微傾)
+        // 胎兒頭部
         ctx.beginPath();
         ctx.arc(2, -18, 21, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
 
-        // 閉著的眼睛與耳點
+        // 閉眼弧線
         if (p > 0.45) {
             ctx.strokeStyle = '#881337';
             ctx.lineWidth = 1.8;
             ctx.beginPath();
-            ctx.arc(10, -20, 4, 0.2, Math.PI - 0.2); // 閉眼弧線
+            ctx.arc(10, -20, 4, 0.2, Math.PI - 0.2);
             ctx.stroke();
         }
 
-        // 手臂發育 (抱在胸前)
+        // 手臂
         ctx.fillStyle = '#fda4af';
         ctx.strokeStyle = '#f43f5e';
         ctx.lineWidth = 1.5;
@@ -1164,14 +1368,14 @@ function drawFetalDevelopment(time) {
         ctx.fill();
         ctx.stroke();
 
-        // 腿部發育 (屈膝捲曲)
+        // 腿部
         ctx.beginPath();
         ctx.ellipse(5, 32, 6 + limbGrowth * 9, 6, -0.4, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
     }
 
-    // 5. 跳動的胚胎心臟 (約第3~4週起開始搏動)
+    // 5. 跳動的胚胎心臟
     if (p > 0.15) {
         const beat = 1 + Math.sin(time * 160) * 0.28;
         ctx.fillStyle = '#e11d48';
@@ -1184,13 +1388,12 @@ function drawFetalDevelopment(time) {
     ctx.restore();
 }
 
-// 繪製解剖與動態過程文字標籤 (可透過按鈕 Toggle 顯示/隱藏)
+// 繪製解剖與動態過程文字標籤
 function drawLabels(time) {
     if (!showLabels) return;
 
     ctx.save();
 
-    // 通用標籤繪製器 (含引線與半透明膠囊底框)
     function label(text, targetX, targetY, labelX, labelY, color = '#f8fafc', borderColor = '#64748b') {
         ctx.font = 'bold 13px "Segoe UI", sans-serif';
         const metrics = ctx.measureText(text);
@@ -1198,7 +1401,6 @@ function drawLabels(time) {
         const boxW = metrics.width + padX * 2;
         const boxH = 26;
 
-        // 引導線
         ctx.strokeStyle = borderColor;
         ctx.lineWidth = 1.5;
         ctx.beginPath();
@@ -1206,13 +1408,11 @@ function drawLabels(time) {
         ctx.lineTo(labelX, labelY);
         ctx.stroke();
 
-        // 目標圓點
         ctx.fillStyle = borderColor;
         ctx.beginPath();
         ctx.arc(targetX, targetY, 3.5, 0, Math.PI * 2);
         ctx.fill();
 
-        // 文字背景框
         ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
         ctx.strokeStyle = borderColor;
         ctx.lineWidth = 1.2;
@@ -1221,7 +1421,6 @@ function drawLabels(time) {
         ctx.fill();
         ctx.stroke();
 
-        // 文字
         ctx.fillStyle = color;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -1236,15 +1435,15 @@ function drawLabels(time) {
     label("子宮頸 (Cervix)", 500, 420, 635, 435);
     label("陰道 (Vagina)", 500, 520, 635, 520);
 
-    label("輸卵管壺腹部", 720, 152, 755, 95);
-    label("輸卵管傘部", 792, 275, 895, 265);
+    label("輸卵管壺腹部", 685, 152, 660, 85);
+    label("輸卵管傘部", 780, 280, 895, 265);
     label("左側卵巢", 245, 320, 130, 320);
 
     // 右側卵巢動態標籤
     if (time < 0.06) {
-        label("右側卵巢 (成熟濾泡排卵)", 763, 312, 875, 355, '#fde047', '#eab308');
+        label("右側卵巢 (成熟濾泡排卵)", 762, 312, 875, 355, '#fde047', '#eab308');
     } else {
-        label("右側卵巢 (黃體形成)", 763, 314, 875, 355, '#fde047', '#eab308');
+        label("右側卵巢 (黃體形成)", 762, 314, 875, 355, '#fde047', '#eab308');
     }
 
     // --- 隨時間變化的動態主角標籤 ---
@@ -1257,13 +1456,12 @@ function drawLabels(time) {
         else if (time >= 0.62 && time < 0.68) dynamicText = "囊胚 (Blastocyst)";
         else if (time >= 0.68) dynamicText = "囊胚著床 (埋入子宮內膜)";
 
-        const offsetY = eggPos.y < 200 ? -55 : -48;
-        const offsetX = eggPos.x > 650 ? 35 : (eggPos.x > 530 ? 115 : 0);
+        const offsetY = eggPos.y < 200 ? -52 : -45;
+        const offsetX = eggPos.x > 660 ? 30 : (eggPos.x > 530 ? 110 : 0);
         label(dynamicText, eggPos.x, eggPos.y, eggPos.x + offsetX, eggPos.y + offsetY, '#38bdf8', '#0284c7');
     } else {
-        // 胎兒期專屬標籤
         const p = norm(time, 0.78, 1.0);
-        const cx = lerp(552, 502, clamp(p * 1.4, 0, 1));
+        const cx = lerp(550, 502, clamp(p * 1.4, 0, 1));
         label(p < 0.35 ? "發育中的胚胎" : "成形的胎兒 (Fetus)", cx - 5, 275, 345, 200, '#f472b6', '#ec4899');
         if (p > 0.25) {
             label("胎盤 (Placenta)", 562, 268, 690, 268, '#fda4af', '#e11d48');
@@ -1273,11 +1471,56 @@ function drawLabels(time) {
 
     // 精子游入提示標籤
     if (time >= 0.14 && time <= 0.27) {
-        const spY = lerp(520, 220, norm(time, 0.14, 0.27));
-        label("精子群游入尋找卵子", 510, spY, 355, 430, '#e2e8f0', '#94a3b8');
+        const spP = norm(time, 0.14, 0.27);
+        const { pt: spPt } = getSpermPosition(spP, true);
+        label("精子群游入尋找卵子", spPt.x, spPt.y, 355, 430, '#e2e8f0', '#94a3b8');
     }
 
     ctx.restore();
+}
+
+// 限制 Pan 範圍，防止內容平移出螢幕太遠
+function clampPan() {
+    const maxX = canvas.width * Math.max(0, zoom - 0.7);
+    const minX = -canvas.width * Math.max(0, zoom - 0.7);
+    const maxY = canvas.height * Math.max(0, zoom - 0.7);
+    const minY = -canvas.height * Math.max(0, zoom - 0.7);
+    panX = clamp(panX, minX, maxX);
+    panY = clamp(panY, minY, maxY);
+}
+
+// 更新縮放數值 UI
+function updateZoomUI() {
+    if (zoomLevelText) {
+        zoomLevelText.textContent = `${Math.round(zoom * 100)}%`;
+    }
+}
+
+// 重設 Pan 與 Zoom
+function resetZoomPan() {
+    zoom = 1.0;
+    panX = 0;
+    panY = 0;
+    updateZoomUI();
+}
+
+// 以指定客戶端像素坐標為中心進行縮放
+function zoomAt(clientX, clientY, factor) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const cx = (clientX - rect.left) * scaleX;
+    const cy = (clientY - rect.top) * scaleY;
+
+    const newZoom = clamp(zoom * factor, minZoom, maxZoom);
+    if (Math.abs(newZoom - zoom) < 0.001) return;
+
+    panX = cx - (cx - panX) * (newZoom / zoom);
+    panY = cy - (cy - panY) * (newZoom / zoom);
+    zoom = newZoom;
+
+    clampPan();
+    updateZoomUI();
 }
 
 // 更新上方資訊列與按鈕高亮狀態
@@ -1285,7 +1528,6 @@ function updateUI() {
     timeline.value = Math.round(t * 1000);
     progressText.textContent = `${Math.round(t * 100)}%`;
 
-    // 找出當前所屬階段
     let currentStageIdx = 0;
     for (let i = 0; i < stages.length; i++) {
         if (t >= stages[i].start && t <= stages[i].end) {
@@ -1324,13 +1566,22 @@ function animate(timestamp) {
     // 清除畫布
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // 依圖層順序繪製
+    // 1. 世界坐標系 (套用平移與縮放)
+    ctx.save();
+    ctx.translate(panX, panY);
+    ctx.scale(zoom, zoom);
+
+    // 依圖層順序繪製解剖實體與動態物件
     drawAnatomy(t);
     drawSpermSwarm(t);
     drawMacroEggAndEmbryo(t);
     drawFetalDevelopment(t);
-    drawMicroscopeZoom(t);
     drawLabels(t);
+
+    ctx.restore();
+
+    // 2. 螢幕坐標系 (固定 HUD 顯微受精/卵裂視窗)
+    drawMicroscopeZoom(t, zoom, panX, panY);
 
     requestAnimationFrame(animate);
 }
@@ -1375,8 +1626,158 @@ stageBtns.forEach(btn => {
     });
 });
 
+// --- Pan & Zoom 事件綁定 (滑鼠拖曳、滾輪縮放、雙擊重設、雙指縮放) ---
+canvas.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    isPanning = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    if (canvasWrapper) canvasWrapper.classList.add('is-panning');
+});
+
+window.addEventListener('mousemove', (e) => {
+    if (!isPanning) return;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+
+    const dx = (e.clientX - startX) * scaleX;
+    const dy = (e.clientY - startY) * scaleY;
+    startX = e.clientX;
+    startY = e.clientY;
+
+    panX += dx;
+    panY += dy;
+    clampPan();
+});
+
+window.addEventListener('mouseup', () => {
+    if (isPanning) {
+        isPanning = false;
+        if (canvasWrapper) canvasWrapper.classList.remove('is-panning');
+    }
+});
+
+canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.14 : 0.88;
+    zoomAt(e.clientX, e.clientY, factor);
+}, { passive: false });
+
+canvas.addEventListener('dblclick', () => {
+    resetZoomPan();
+});
+
+// 觸控手勢支援 (單指平移、雙指捏合縮放)
+let touchStartDist = 0;
+let lastTouch = null;
+
+canvas.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 1) {
+        lastTouch = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    } else if (e.touches.length === 2) {
+        touchStartDist = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+        );
+        lastTouch = {
+            x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+            y: (e.touches[0].clientY + e.touches[1].clientY) / 2
+        };
+    }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+
+    if (e.touches.length === 1 && lastTouch) {
+        const dx = (e.touches[0].clientX - lastTouch.x) * scaleX;
+        const dy = (e.touches[0].clientY - lastTouch.y) * scaleY;
+        lastTouch = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        panX += dx;
+        panY += dy;
+        clampPan();
+    } else if (e.touches.length === 2 && lastTouch) {
+        const dist = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+        );
+        const center = {
+            x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+            y: (e.touches[0].clientY + e.touches[1].clientY) / 2
+        };
+        if (touchStartDist > 0 && dist > 0) {
+            const factor = dist / touchStartDist;
+            zoomAt(center.x, center.y, factor);
+            touchStartDist = dist;
+        }
+        const dx = (center.x - lastTouch.x) * scaleX;
+        const dy = (center.y - lastTouch.y) * scaleY;
+        lastTouch = center;
+        panX += dx;
+        panY += dy;
+        clampPan();
+    }
+}, { passive: false });
+
+canvas.addEventListener('touchend', (e) => {
+    if (e.touches.length < 2) touchStartDist = 0;
+    if (e.touches.length === 1) {
+        lastTouch = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    } else {
+        lastTouch = null;
+    }
+});
+
+// 縮放工具列按鈕點擊
+if (zoomInBtn) {
+    zoomInBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const rect = canvas.getBoundingClientRect();
+        zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, 1.25);
+    });
+}
+
+if (zoomOutBtn) {
+    zoomOutBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const rect = canvas.getBoundingClientRect();
+        zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, 0.8);
+    });
+}
+
+if (zoomResetBtn) {
+    zoomResetBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        resetZoomPan();
+    });
+}
+
+// 快捷鍵支援 (+ / - 縮放, 0 / R 重設, 空白鍵播放/暫停)
+window.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+    const rect = canvas.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+
+    if (e.key === '+' || e.key === '=') {
+        zoomAt(cx, cy, 1.2);
+    } else if (e.key === '-' || e.key === '_') {
+        zoomAt(cx, cy, 0.83);
+    } else if (e.key === '0' || e.key === 'r' || e.key === 'R') {
+        resetZoomPan();
+    } else if (e.code === 'Space') {
+        e.preventDefault();
+        playPauseBtn.click();
+    }
+});
+
 // 啟動模擬器
 updateUI();
+updateZoomUI();
 requestAnimationFrame(animate);
 </script>
 </body>
