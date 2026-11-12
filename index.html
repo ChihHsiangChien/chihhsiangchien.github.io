@@ -12,6 +12,20 @@
 <body>
   <h1>玩生物學生物</h1>
   <div>作者：阿簡</div>
+
+  <nav class="floating-nav" id="floatingNav" aria-label="章節快速導覽">
+    <div class="nav-header">
+      <span class="nav-title">章節導覽</span>
+      <select id="chapterSelect" class="chapter-dropdown" aria-label="選擇章節跳轉">
+        <option value="" disabled selected>快速跳轉至...</option>
+      </select>
+    </div>
+    <div class="nav-scroll-container">
+      <div class="nav-items" id="navItems"></div>
+    </div>
+    <button type="button" class="nav-top-btn" id="scrollTopBtn" title="回到頂部">⬆ 頂部</button>
+  </nav>
+
   <div class="container">
     <h1>綜合使用</h1>
     <a href="sorting/index.html">排序活動</a>
@@ -368,6 +382,128 @@
     const versionElement = document.createElement('p');
     versionElement.textContent = `版本號碼: ${version}`;
     container.appendChild(versionElement);
+
+    // 懸浮導覽列初始化
+    (function () {
+      const headings = container.querySelectorAll('h1');
+      const navItems = document.getElementById('navItems');
+      const chapterSelect = document.getElementById('chapterSelect');
+      const scrollTopBtn = document.getElementById('scrollTopBtn');
+      const navScrollContainer = document.querySelector('.nav-scroll-container');
+
+      if (!headings.length || !navItems) return;
+
+      const links = [];
+
+      headings.forEach((h1, index) => {
+        if (!h1.id) {
+          h1.id = `section-${index + 1}`;
+        }
+        const id = h1.id;
+        const text = h1.textContent.trim();
+
+        // 建立膠囊按鈕
+        const btn = document.createElement('a');
+        btn.href = `#${id}`;
+        btn.className = 'nav-pill';
+        btn.textContent = text;
+        btn.dataset.targetId = id;
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          h1.scrollIntoView({ behavior: 'smooth' });
+          if (history.pushState) {
+            history.pushState(null, '', `#${id}`);
+          }
+        });
+        navItems.appendChild(btn);
+        links.push({ btn, target: h1 });
+
+        // 建立下拉選單選項
+        if (chapterSelect) {
+          const option = document.createElement('option');
+          option.value = id;
+          option.textContent = text;
+          chapterSelect.appendChild(option);
+        }
+      });
+
+      // 下拉選單跳轉
+      if (chapterSelect) {
+        chapterSelect.addEventListener('change', (e) => {
+          const targetId = e.target.value;
+          const target = document.getElementById(targetId);
+          if (target) {
+            target.scrollIntoView({ behavior: 'smooth' });
+            if (history.pushState) {
+              history.pushState(null, '', `#${targetId}`);
+            }
+          }
+        });
+      }
+
+      // 回頂部按鈕
+      if (scrollTopBtn) {
+        scrollTopBtn.addEventListener('click', () => {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          if (chapterSelect) chapterSelect.selectedIndex = 0;
+          if (history.pushState) {
+            history.pushState(null, '', window.location.pathname);
+          }
+        });
+      }
+
+      // 滾動偵測 (Scrollspy)
+      let ticking = false;
+      function updateActive() {
+        const threshold = 140; // 偏移偵測距離
+        let currentTarget = null;
+
+        for (let i = 0; i < headings.length; i++) {
+          const rect = headings[i].getBoundingClientRect();
+          if (rect.top <= threshold) {
+            currentTarget = headings[i];
+          } else {
+            break;
+          }
+        }
+
+        links.forEach(({ btn, target }) => {
+          if (currentTarget && target === currentTarget) {
+            if (!btn.classList.contains('active')) {
+              btn.classList.add('active');
+              // 保持 active 按鈕可見
+              if (navScrollContainer) {
+                const navRect = navScrollContainer.getBoundingClientRect();
+                const btnRect = btn.getBoundingClientRect();
+                if (btnRect.left < navRect.left || btnRect.right > navRect.right) {
+                  btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                }
+              }
+            }
+          } else {
+            btn.classList.remove('active');
+          }
+        });
+
+        if (chapterSelect && currentTarget) {
+          chapterSelect.value = currentTarget.id;
+        } else if (chapterSelect && window.scrollY < 100) {
+          chapterSelect.selectedIndex = 0;
+        }
+
+        ticking = false;
+      }
+
+      window.addEventListener('scroll', () => {
+        if (!ticking) {
+          window.requestAnimationFrame(updateActive);
+          ticking = true;
+        }
+      }, { passive: true });
+
+      // 初始執行一次
+      updateActive();
+    })();
   </script>
 
 
