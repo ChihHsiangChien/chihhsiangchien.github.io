@@ -115,9 +115,31 @@
   const fateFruitBtn = document.getElementById('fateFruitBtn');
   const fateShootBtn = document.getElementById('fateShootBtn');
 
+  const rootToRootGrowthBtn = document.getElementById('rootToRootGrowthBtn');
   const rootToFlowerBtn = document.getElementById('rootToFlowerBtn');
   const rootToFruitBtn = document.getElementById('rootToFruitBtn');
   const rootToShootBtn = document.getElementById('rootToShootBtn');
+
+  const zoomInBtn = document.getElementById('zoomInBtn');
+  const zoomOutBtn = document.getElementById('zoomOutBtn');
+  const zoomResetBtn = document.getElementById('zoomResetBtn');
+  const zoomPercent = document.getElementById('zoomPercent');
+  const panZoomHint = document.getElementById('panZoomHint');
+
+  // 視角平移與縮放狀態 (Pan & Zoom Camera)
+  const camera = {
+    x: 0,
+    y: 0,
+    zoom: 1.0,
+    minZoom: 0.5,
+    maxZoom: 3.5,
+    isDragging: false,
+    startX: 0,
+    startY: 0,
+    lastX: 0,
+    lastY: 0,
+    hasMoved: false
+  };
 
   const eqCO2 = document.getElementById('eqCO2');
   const eqH2O = document.getElementById('eqH2O');
@@ -883,8 +905,10 @@
     } else if (kind === 'root_growth' || kind === 'root_to_root_growth') {
       text = `${prefix} ➔ 根系生長與細胞伸長${qtyStr} 🌱`;
       x = geo.stemCenterX;
-      const rootOffset = Math.min(state.rootGrowthCount * 5, 25);
-      y = geo.rootTipY + rootOffset - 22;
+      const mainApexY = state.rootGrowthCount === 0
+        ? (geo.soilY + 95)
+        : (geo.soilY + 95 + Math.min(state.rootGrowthCount * 28, 145));
+      y = mainApexY - 22;
       color = '#4ade80';
       state.rootGrowthPulse = 1.0; // 觸發根系活躍生長光環
     }
@@ -912,7 +936,7 @@
       if (batch.kind === 'root') {
         state.rootStarchCount += batch.amount;
         updateRemobilizeButtonStates();
-      } else if (batch.kind === 'root_growth') {
+      } else if (batch.kind === 'root_growth' || batch.kind === 'root_to_root_growth') {
         state.rootGrowthCount += batch.amount;
         state.rootGrowthPulse = 1.0;
       } else if (batch.kind === 'flower' || batch.kind === 'root_to_flower') {
@@ -984,6 +1008,8 @@
         updateLoopStatusUI(`【根部再動員完成】儲藏澱粉已水解為蔗糖，全數送達花朵轉化為花蜜！(花朵累計: x${state.flowerEnergyCount})`);
       } else if (batch.kind === 'root_to_fruit') {
         updateLoopStatusUI(`【根部再動員完成】儲藏澱粉已水解為蔗糖，全數送達果實轉化為果糖並膨大！(果實累計: x${state.fruitSugarCount})`);
+      } else if (batch.kind === 'root_to_root_growth') {
+        updateLoopStatusUI(`【根部再動員完成】儲藏澱粉已水解為蔗糖，全數送達根系生長點，促進根系細胞分裂、深扎與側根萌生！(根系累計: x${state.rootGrowthCount})`);
       }
     }
   }
@@ -997,7 +1023,7 @@
         if (batch.kind === 'root') {
           state.rootStarchCount += batch.amount;
           updateRemobilizeButtonStates();
-        } else if (batch.kind === 'root_growth') {
+        } else if (batch.kind === 'root_growth' || batch.kind === 'root_to_root_growth') {
           state.rootGrowthCount += batch.amount;
           state.rootGrowthPulse = 1.0;
         } else if (batch.kind === 'flower' || batch.kind === 'root_to_flower') {
@@ -1031,14 +1057,15 @@
         { x: geo.rootTuberX, y: geo.rootTuberY }
       ];
     } else if (target === 'root_growth') {
-      const rootExtend = Math.min(state.rootGrowthCount * 5, 30);
-      const mainApexY = geo.h - 30 + rootExtend;
+      const mainApexY = state.rootGrowthCount === 0
+        ? (geo.soilY + 95)
+        : (geo.soilY + 95 + Math.min(state.rootGrowthCount * 28, 145));
       targetWaypoints = [
         ...baseWaypoints,
         { x: geo.phloemStemX, y: geo.soilY },
         { x: geo.stemCenterX, y: geo.soilY },
-        { x: geo.stemCenterX - 6, y: geo.soilY + 60 },
-        { x: geo.stemCenterX + 6, y: geo.soilY + 110 },
+        { x: geo.stemCenterX - 6, y: geo.soilY + 40 },
+        { x: geo.stemCenterX + 4, y: (geo.soilY + mainApexY) / 2 },
         { x: geo.stemCenterX, y: mainApexY }
       ];
     } else if (target === 'flower') {
@@ -1055,7 +1082,9 @@
         { x: geo.fruitBranchX, y: geo.fruitBranchY }
       ];
     } else if (target === 'shoot') {
-      const shootApexY = geo.shootY - Math.min(state.shootEnergyCount * 9, 45);
+      const shootApexY = state.shootEnergyCount === 0 
+        ? (geo.stemTopY + 16) 
+        : (geo.shootY - Math.min(state.shootEnergyCount * 9, 45));
       targetWaypoints = [
         ...baseWaypoints,
         { x: geo.phloemStemX, y: geo.stemTopY + 20 },
@@ -1124,7 +1153,7 @@
     });
   }
 
-  // 根部儲存養分再動員：將澱粉水解為蔗糖，沿韌皮部向上轉運至花、果或頂芽
+  // 根部儲存養分再動員：將澱粉水解為蔗糖，沿韌皮部轉運至花、果、頂芽或根系
   function remobilizeRootNutrient(target) {
     // 嚴格檢驗：若根部沒有儲備養分 (rootStarchCount <= 0)，絕對不可向上運送！
     if (state.rootStarchCount <= 0) {
@@ -1136,7 +1165,9 @@
     state.rootStarchCount--;
     updateRemobilizeButtonStates();
 
-    if (target === 'shoot') {
+    if (target === 'root_growth') {
+      updateLoopStatusUI(`【根部養分再動員】根部儲備澱粉 (剩餘 x${state.rootStarchCount}) 水解為蔗糖，正轉運至根系生長點支持細胞分裂與伸長生長...`);
+    } else if (target === 'shoot') {
       updateLoopStatusUI(`【根部養分再動員】根部儲備澱粉 (剩餘 x${state.rootStarchCount}) 水解為蔗糖，正沿韌皮部上運至頂芽促進生長...`);
     } else if (target === 'flower') {
       updateLoopStatusUI(`【根部養分再動員】根部儲備澱粉 (剩餘 x${state.rootStarchCount}) 水解為蔗糖，正沿韌皮部上運至花朵轉化為花蜜...`);
@@ -1148,7 +1179,19 @@
     const particleCount = 3;
     let waypoints = [];
 
-    if (target === 'flower') {
+    if (target === 'root_growth') {
+      const mainApexY = state.rootGrowthCount === 0
+        ? (geo.soilY + 95)
+        : (geo.soilY + 95 + Math.min(state.rootGrowthCount * 28, 145));
+      waypoints = [
+        { x: geo.rootTuberX, y: geo.rootTuberY },
+        { x: geo.phloemStemX + 40, y: geo.soilY + 45 },
+        { x: geo.phloemStemX, y: geo.soilY + 20 },
+        { x: geo.stemCenterX, y: geo.soilY + 35 },
+        { x: geo.stemCenterX - 4, y: geo.soilY + 70 },
+        { x: geo.stemCenterX, y: mainApexY }
+      ];
+    } else if (target === 'flower') {
       waypoints = [
         { x: geo.rootTuberX, y: geo.rootTuberY },
         { x: geo.phloemStemX, y: geo.soilY + 20 },
@@ -1164,7 +1207,9 @@
         { x: geo.fruitBranchX, y: geo.fruitBranchY }
       ];
     } else if (target === 'shoot') {
-      const shootApexY = geo.shootY - Math.min(state.shootEnergyCount * 9, 45);
+      const shootApexY = state.shootEnergyCount === 0 
+        ? (geo.stemTopY + 16) 
+        : (geo.shootY - Math.min(state.shootEnergyCount * 9, 45));
       waypoints = [
         { x: geo.rootTuberX, y: geo.rootTuberY },
         { x: geo.phloemStemX, y: geo.soilY + 20 },
@@ -1174,7 +1219,7 @@
       ];
     }
 
-    const batchKind = target === 'flower' ? 'root_to_flower' : (target === 'fruit' ? 'root_to_fruit' : 'root_to_shoot');
+    const batchKind = target === 'root_growth' ? 'root_to_root_growth' : (target === 'flower' ? 'root_to_flower' : (target === 'fruit' ? 'root_to_fruit' : 'root_to_shoot'));
 
     activeBatches.set(batchId, {
       batchId,
@@ -1323,6 +1368,7 @@
     state.rootEmptyAlertPulse = 0;
     state.loopCount = 1;
 
+    resetZoom();
     resetEquationHighlights();
 
     if (transpirationBtn) {
@@ -1353,6 +1399,10 @@
     rootToFlowerBtn.classList.toggle('disabled', !hasStarch);
     rootToFruitBtn.classList.toggle('disabled', !hasStarch);
     rootToShootBtn.classList.toggle('disabled', !hasStarch);
+    if (rootToRootGrowthBtn) {
+      rootToRootGrowthBtn.classList.toggle('disabled', !hasStarch);
+      rootToRootGrowthBtn.disabled = !hasStarch;
+    }
     
     // 同步原生的 disabled 屬性，確保在無澱粉時無法觸發點擊事件
     rootToFlowerBtn.disabled = !hasStarch;
@@ -1362,15 +1412,18 @@
     const flowerSmall = rootToFlowerBtn.querySelector('small');
     const fruitSmall = rootToFruitBtn.querySelector('small');
     const shootSmall = rootToShootBtn.querySelector('small');
+    const rootGrowthSmall = rootToRootGrowthBtn ? rootToRootGrowthBtn.querySelector('small') : null;
 
     if (hasStarch) {
       if (flowerSmall) flowerSmall.textContent = `水解為蔗糖上行 (根部儲備: x${state.rootStarchCount})`;
       if (fruitSmall) fruitSmall.textContent = `水解為蔗糖上行 (根部儲備: x${state.rootStarchCount})`;
       if (shootSmall) shootSmall.textContent = `水解為蔗糖上行 (根部儲備: x${state.rootStarchCount})`;
+      if (rootGrowthSmall) rootGrowthSmall.textContent = `水解為蔗糖運往根系 (根部儲備: x${state.rootStarchCount})`;
     } else {
       if (flowerSmall) flowerSmall.textContent = `根部無儲備澱粉 (需先經光合作用儲存)`;
       if (fruitSmall) fruitSmall.textContent = `根部無儲備澱粉 (需先經光合作用儲存)`;
       if (shootSmall) shootSmall.textContent = `根部無儲備澱粉 (需先經光合作用儲存)`;
+      if (rootGrowthSmall) rootGrowthSmall.textContent = `根部無儲備澱粉 (需先經光合作用儲存)`;
     }
   }
 
@@ -1555,6 +1608,11 @@
 
     ctx.clearRect(0, 0, geo.w, geo.h);
 
+    ctx.save();
+    // 應用視角平移與縮放 (Pan & Zoom)
+    ctx.translate(camera.x, camera.y);
+    ctx.scale(camera.zoom, camera.zoom);
+
     // 1. 環境背景與太陽/月色
     drawBackground();
 
@@ -1587,16 +1645,19 @@
     // 9. 所有動態粒子
     drawAllParticles();
 
-    // 10. 生理步驟即時解說字幕 (出現在 geo 畫布位置，可 toggle 顯示或隱藏)
+    ctx.restore();
+
+    // 10. 生理步驟即時解說字幕 (置於螢幕空間畫布底部中央，不隨平移縮放移出視野)
     drawStepSubtitleBar(now);
 
     requestAnimationFrame(render);
   }
 
-  // 背景繪製 (隨照光/黑暗環境切換)
+  // 背景繪製 (隨照光/黑暗環境切換，向外擴展避免平移縮放時邊界穿幫)
   function drawBackground() {
+    const extra = 3000;
     // 天空背景
-    const sky = ctx.createLinearGradient(0, 0, 0, geo.soilY);
+    const sky = ctx.createLinearGradient(0, -extra, 0, geo.soilY);
     if (state.isDay) {
       sky.addColorStop(0, '#03100a');
       sky.addColorStop(0.7, '#071f14');
@@ -1607,7 +1668,7 @@
       sky.addColorStop(1, '#091c1c');
     }
     ctx.fillStyle = sky;
-    ctx.fillRect(0, 0, geo.w, geo.soilY);
+    ctx.fillRect(-extra, -extra, geo.w + extra * 2, geo.soilY + extra);
 
     if (state.isDay) {
       // 照光環境：太陽與光芒
@@ -1641,23 +1702,22 @@
     }
 
     // 土壤
-    const soil = ctx.createLinearGradient(0, geo.soilY, 0, geo.h);
+    const soil = ctx.createLinearGradient(0, geo.soilY, 0, geo.h + extra);
     soil.addColorStop(0, '#26140b');
     soil.addColorStop(0.5, '#180d06');
     soil.addColorStop(1, '#0a0502');
     ctx.fillStyle = soil;
-    ctx.fillRect(0, geo.soilY, geo.w, geo.h - geo.soilY);
+    ctx.fillRect(-extra, geo.soilY, geo.w + extra * 2, geo.h - geo.soilY + extra);
 
     // 草地邊界線
     ctx.strokeStyle = state.isDay ? '#22c55e' : '#15803d';
     ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.moveTo(0, geo.soilY);
-    ctx.lineTo(geo.w, geo.soilY);
+    ctx.moveTo(-extra, geo.soilY);
+    ctx.lineTo(geo.w + extra, geo.soilY);
     ctx.stroke();
 
     drawBigLabel('土壤層', 40, geo.soilY + 36, '#e2e8f0', 18);
-    
   }
 
   // 持續照射的太陽光束 (黑暗中停止光照)
@@ -1876,6 +1936,7 @@
   // 繪製庫器官 1：花朵 (Flower - 位於右上側枝，避開木質部韌皮部標籤)
   function drawFlower(fx, fy) {
     ctx.save();
+    const count = state.flowerEnergyCount;
 
     // 綠色花梗 (從莖幹頂部優雅伸展至花朵)
     ctx.strokeStyle = '#15803d';
@@ -1899,38 +1960,152 @@
     ctx.quadraticCurveTo(geo.phloemStemX + 55, fy + 45, fx, fy + 10);
     ctx.stroke();
 
-    // 綠色花萼
-    ctx.fillStyle = '#22c55e';
-    ctx.beginPath();
-    ctx.ellipse(fx, fy + 18, 15, 9, 0, 0, Math.PI * 2);
-    ctx.fill();
+    if (count === 0) {
+      // 芽的狀態：幼嫩小花苞 (Bud，緊閉包裹，尚未開花)
+      ctx.save();
+      ctx.translate(fx, fy + 10);
 
-    // 5 片粉紅盛開花瓣
-    const petalGlow = state.fate === 'flower' && state.flowerEnergyCount > 0;
-    ctx.fillStyle = petalGlow ? '#f472b6' : '#ec4899';
-    for (let i = 0; i < 5; i++) {
-      const angle = (i * Math.PI * 2) / 5 - Math.PI / 2;
-      const px = fx + Math.cos(angle) * 20;
-      const py = fy + Math.sin(angle) * 20;
+      // 花苞花萼包被 (綠色花苞片，緊閉呈水滴芽形)
+      ctx.fillStyle = '#16a34a';
       ctx.beginPath();
-      ctx.arc(px, py, 15, 0, Math.PI * 2);
+      ctx.moveTo(0, 10);
+      ctx.quadraticCurveTo(-11, 2, -7, -11);
+      ctx.quadraticCurveTo(0, -18, 0, -21);
+      ctx.quadraticCurveTo(0, -18, 7, -11);
+      ctx.quadraticCurveTo(11, 2, 0, 10);
       ctx.fill();
-      ctx.strokeStyle = '#be185d';
-      ctx.lineWidth = 1.8;
+      ctx.strokeStyle = '#15803d';
+      ctx.lineWidth = 1.6;
       ctx.stroke();
+
+      // 花苞頂端微露的一抹淡粉色花瓣尖 (尚未綻放的芽尖)
+      ctx.fillStyle = '#f472b6';
+      ctx.beginPath();
+      ctx.moveTo(0, -23);
+      ctx.quadraticCurveTo(-4, -18, 0, -15);
+      ctx.quadraticCurveTo(4, -18, 0, -23);
+      ctx.fill();
+      ctx.restore();
+
+      drawBigLabel(`花芽 (花苞 x0)`, fx - 85, fy - 36, '#f472b6', 20);
+    } else if (count === 1) {
+      // 初綻花蕾 (花萼微張，花瓣開始舒展)
+      ctx.fillStyle = '#22c55e';
+      ctx.beginPath();
+      ctx.ellipse(fx, fy + 14, 13, 8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#166534';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // 4片初開小花瓣
+      ctx.fillStyle = '#f472b6';
+      for (let i = 0; i < 4; i++) {
+        const angle = (i * Math.PI * 2) / 4 - Math.PI / 2;
+        const px = fx + Math.cos(angle) * 13;
+        const py = fy + Math.sin(angle) * 13;
+        ctx.beginPath();
+        ctx.arc(px, py, 11, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#be185d';
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+      }
+
+      // 初露金色花蕊
+      ctx.fillStyle = '#fbbf24';
+      ctx.beginPath();
+      ctx.arc(fx, fy, 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#d97706';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      drawBigLabel(`花朵 (初開 x1)`, fx - 85, fy - 36, '#f472b6', 20);
+    } else {
+      // 盛開花朵 (隨養分累積增大與增多)
+      // 綠色花萼
+      ctx.fillStyle = '#22c55e';
+      ctx.beginPath();
+      ctx.ellipse(fx, fy + 18, 16, 9, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 若累積 >= 3，增多：在側邊長出第二朵盛開小花
+      if (count >= 3) {
+        const subFx = fx + 38;
+        const subFy = fy - 20;
+
+        // 次花梗
+        ctx.strokeStyle = '#15803d';
+        ctx.lineWidth = 7;
+        ctx.beginPath();
+        ctx.moveTo(fx, fy + 10);
+        ctx.quadraticCurveTo(fx + 20, fy - 6, subFx - 6, subFy + 8);
+        ctx.stroke();
+
+        // 次花萼
+        ctx.fillStyle = '#22c55e';
+        ctx.beginPath();
+        ctx.ellipse(subFx, subFy + 10, 10, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 次花花瓣
+        ctx.fillStyle = '#f472b6';
+        for (let i = 0; i < 5; i++) {
+          const angle = (i * Math.PI * 2) / 5 - Math.PI / 2;
+          const px = subFx + Math.cos(angle) * 11;
+          const py = subFy + Math.sin(angle) * 11;
+          ctx.beginPath();
+          ctx.arc(px, py, 9, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#be185d';
+          ctx.lineWidth = 1.4;
+          ctx.stroke();
+        }
+        // 次花花蕊
+        ctx.fillStyle = '#fbbf24';
+        ctx.beginPath();
+        ctx.arc(subFx, subFy, 6.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // 主花 5 片盛開花瓣 (隨養分增加動態增大)
+      const extraPetal = Math.min((count - 2) * 2, 7);
+      const petalDist = 20 + extraPetal * 0.7;
+      const petalR = 15 + extraPetal;
+
+      ctx.fillStyle = '#f472b6';
+      for (let i = 0; i < 5; i++) {
+        const angle = (i * Math.PI * 2) / 5 - Math.PI / 2;
+        const px = fx + Math.cos(angle) * petalDist;
+        const py = fy + Math.sin(angle) * petalDist;
+        ctx.beginPath();
+        ctx.arc(px, py, petalR, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#be185d';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+
+      // 金黃色花蕊中心 (雄蕊與雌蕊蜜腺)
+      const pistilR = 12 + Math.min((count - 2) * 1.2, 5);
+      ctx.fillStyle = '#fbbf24';
+      ctx.beginPath();
+      ctx.arc(fx, fy, pistilR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#d97706';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // 蜜腺花蜜光澤 (Nectar Glint)
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+      ctx.beginPath();
+      ctx.arc(fx - 3, fy - 3, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      const labelText = count >= 3 ? `花朵 (繁花簇聚 x${count})` : `花朵 (盛開積蜜 x${count})`;
+      drawBigLabel(labelText, fx - 100, fy - 36, '#f472b6', 20);
     }
-
-    // 金黃色花蕊中心 (雄蕊與雌蕊蜜腺)
-    ctx.fillStyle = '#fbbf24';
-    ctx.beginPath();
-    ctx.arc(fx, fy, 12, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#d97706';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    // 花朵大字標籤 (20px bold) - 清楚置於花朵上方
-    drawBigLabel(`花朵 (x${state.flowerEnergyCount})`, fx - 90, fy - 36, '#f472b6', 20);
 
     ctx.restore();
   }
@@ -1938,6 +2113,7 @@
   // 繪製庫器官 2：側枝果實 (Fruit)
   function drawFruit(rx, ry) {
     ctx.save();
+    const count = state.fruitSugarCount;
 
     // 綠色果枝
     ctx.strokeStyle = '#15803d';
@@ -1956,37 +2132,148 @@
     ctx.lineTo(rx - 25, ry);
     ctx.stroke();
 
-    // 綠色果蒂與果萼
-    ctx.fillStyle = '#16a34a';
-    ctx.beginPath();
-    ctx.ellipse(rx, ry - 22, 10, 5, 0, 0, Math.PI * 2);
-    ctx.fill();
+    if (count === 0) {
+      // 芽的狀態：瘦小嫩綠的初生幼果芽 (Tiny young fruit / ovary bud)
+      ctx.strokeStyle = '#15803d';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(rx - 25, ry);
+      ctx.lineTo(rx, ry - 10);
+      ctx.stroke();
 
-    // 碩大鮮紅果實本體 (隨積糖量動態膨大)
-    const extraSize = Math.min(state.fruitSugarCount * 4, 20);
-    const fruitR = 26 + extraSize;
+      // 嫩綠果萼
+      ctx.fillStyle = '#16a34a';
+      ctx.beginPath();
+      ctx.ellipse(rx, ry - 10, 6, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
 
-    const fruitGrad = ctx.createRadialGradient(rx - 6, ry - 6, 4, rx, ry, fruitR);
-    fruitGrad.addColorStop(0, '#fca5a5');
-    fruitGrad.addColorStop(0.4, '#ef4444');
-    fruitGrad.addColorStop(1, '#991b1b');
-    ctx.fillStyle = fruitGrad;
+      // 極小嫩綠果實本體 (瘦弱幼芽狀態)
+      const fruitR = 10;
+      const fruitGrad = ctx.createRadialGradient(rx - 2, ry - 2, 2, rx, ry, fruitR);
+      fruitGrad.addColorStop(0, '#d9f99d');
+      fruitGrad.addColorStop(0.5, '#4ade80');
+      fruitGrad.addColorStop(1, '#15803d');
+      ctx.fillStyle = fruitGrad;
 
-    ctx.beginPath();
-    ctx.arc(rx, ry, fruitR, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#7f1d1d';
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(rx, ry, fruitR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#166534';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
 
-    // 光澤高光
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
-    ctx.beginPath();
-    ctx.ellipse(rx - fruitR * 0.35, ry - fruitR * 0.35, fruitR * 0.25, fruitR * 0.15, -Math.PI / 4, 0, Math.PI * 2);
-    ctx.fill();
+      drawBigLabel(`果實 (幼果芽 x0)`, rx - 80, ry + fruitR + 25, '#86efac', 20);
+    } else if (count === 1) {
+      // 發育初期幼果 (微膨大，青黃轉紅)
+      ctx.strokeStyle = '#15803d';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(rx - 25, ry);
+      ctx.lineTo(rx, ry - 17);
+      ctx.stroke();
 
-    // 果實大字標籤 (20px bold)
-    drawBigLabel(`果實 (x${state.fruitSugarCount})`, rx - 80, ry + fruitR + 25, '#f87171', 20);
+      ctx.fillStyle = '#16a34a';
+      ctx.beginPath();
+      ctx.ellipse(rx, ry - 17, 8, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      const fruitR = 18;
+      const fruitGrad = ctx.createRadialGradient(rx - 4, ry - 4, 3, rx, ry, fruitR);
+      fruitGrad.addColorStop(0, '#fef08a');
+      fruitGrad.addColorStop(0.5, '#fb923c');
+      fruitGrad.addColorStop(1, '#dc2626');
+      ctx.fillStyle = fruitGrad;
+
+      ctx.beginPath();
+      ctx.arc(rx, ry, fruitR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#991b1b';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // 柔和光澤
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.beginPath();
+      ctx.ellipse(rx - fruitR * 0.35, ry - fruitR * 0.35, fruitR * 0.25, fruitR * 0.15, -Math.PI / 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      drawBigLabel(`果實 (發育中 x1)`, rx - 80, ry + fruitR + 25, '#fb923c', 20);
+    } else {
+      // 成熟膨大果實 (隨積糖量動態增大，count >= 3 增多結實成串)
+      // 若 count >= 3，增多：在側枝長出第二顆發育飽滿的果實
+      if (count >= 3) {
+        const subRx = rx - 35;
+        const subRy = ry + 26;
+        const subR = 16 + Math.min((count - 3) * 3, 10);
+
+        // 次果梗
+        ctx.strokeStyle = '#15803d';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(rx - 25, ry);
+        ctx.quadraticCurveTo(rx - 32, ry + 10, subRx, subRy - subR * 0.8);
+        ctx.stroke();
+
+        // 次果萼
+        ctx.fillStyle = '#16a34a';
+        ctx.beginPath();
+        ctx.ellipse(subRx, subRy - subR * 0.8, 7, 3.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 次果本體
+        const subGrad = ctx.createRadialGradient(subRx - 3, subRy - 3, 2, subRx, subRy, subR);
+        subGrad.addColorStop(0, '#fca5a5');
+        subGrad.addColorStop(0.5, '#ef4444');
+        subGrad.addColorStop(1, '#991b1b');
+        ctx.fillStyle = subGrad;
+        ctx.beginPath();
+        ctx.arc(subRx, subRy, subR, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#7f1d1d';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+
+      // 主果梗延伸
+      const extraSize = Math.min((count - 2) * 4.5, 18);
+      const fruitR = 26 + extraSize;
+
+      ctx.strokeStyle = '#15803d';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(rx - 25, ry);
+      ctx.lineTo(rx, ry - fruitR * 0.85);
+      ctx.stroke();
+
+      // 綠色果蒂與果萼
+      ctx.fillStyle = '#16a34a';
+      ctx.beginPath();
+      ctx.ellipse(rx, ry - fruitR * 0.85, 11, 5.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 碩大鮮紅果實本體 (隨積糖量動態膨大)
+      const fruitGrad = ctx.createRadialGradient(rx - 6, ry - 6, 4, rx, ry, fruitR);
+      fruitGrad.addColorStop(0, '#fca5a5');
+      fruitGrad.addColorStop(0.4, '#ef4444');
+      fruitGrad.addColorStop(1, '#991b1b');
+      ctx.fillStyle = fruitGrad;
+
+      ctx.beginPath();
+      ctx.arc(rx, ry, fruitR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#7f1d1d';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+
+      // 光澤高光
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+      ctx.beginPath();
+      ctx.ellipse(rx - fruitR * 0.35, ry - fruitR * 0.35, fruitR * 0.25, fruitR * 0.15, -Math.PI / 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      const labelText = count >= 3 ? `果實 (結實纍纍 x${count})` : `果實 (成熟膨大 x${count})`;
+      drawBigLabel(labelText, rx - 90, ry + fruitR + 25, '#f87171', 20);
+    }
 
     ctx.restore();
   }
@@ -1996,13 +2283,66 @@
     ctx.save();
 
     const count = state.shootEnergyCount;
-    // 隨生長次數節間伸長 (Internode Elongation)
-    const elongation = Math.min(count * 9, 45);
-    const apexY = ry - elongation;
     const baseStemY = geo.stemTopY + 20;
 
-    // 1. 伸長的主莖頂嫩莖 (從主莖頂部延伸向上，隨生長變得茁壯)
-    const stemW = 14 + Math.min(count * 1.5, 8);
+    if (count === 0) {
+      // 芽的狀態：頂芽嫩芽苞 (休眠芽苞，未開展，節間未伸長)
+      const apexY = baseStemY - 6;
+
+      // 1. 幼嫩短小莖端
+      ctx.strokeStyle = '#4d7c0f';
+      ctx.lineWidth = 8;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(rx, baseStemY);
+      ctx.lineTo(rx, apexY);
+      ctx.stroke();
+
+      // 2. 緊閉包裹的幼芽苞片 (兩片互抱的微小芽鱗嫩尖，長度僅 11px)
+      ctx.save();
+      ctx.fillStyle = '#65a30d';
+      // 左芽苞片
+      ctx.beginPath();
+      ctx.moveTo(rx - 2, apexY + 2);
+      ctx.quadraticCurveTo(rx - 7, apexY - 6, rx - 2, apexY - 12);
+      ctx.quadraticCurveTo(rx, apexY - 4, rx - 2, apexY + 2);
+      ctx.fill();
+      ctx.strokeStyle = '#3f6212';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+
+      // 右芽苞片
+      ctx.beginPath();
+      ctx.moveTo(rx + 2, apexY + 2);
+      ctx.quadraticCurveTo(rx + 7, apexY - 6, rx + 2, apexY - 12);
+      ctx.quadraticCurveTo(rx, apexY - 4, rx + 2, apexY + 2);
+      ctx.fill();
+      ctx.strokeStyle = '#3f6212';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      ctx.restore();
+
+      // 3. 頂端微小分生組織錐 (Apical Dome)
+      ctx.fillStyle = '#bef264';
+      ctx.beginPath();
+      ctx.ellipse(rx, apexY - 3, 4, 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#4d7c0f';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+
+      // 標籤
+      drawBigLabel(`頂芽 (休眠芽苞 x0)`, rx - 88, apexY - 24, '#bef264', 20);
+      ctx.restore();
+      return;
+    }
+
+    // count >= 1：節間伸長並層層開展新葉
+    const elongation = 12 + Math.min((count - 1) * 11, 38);
+    const apexY = ry - elongation;
+
+    // 1. 伸長的主莖頂嫩莖
+    const stemW = 12 + Math.min((count - 1) * 1.5, 8);
     const stemGrad = ctx.createLinearGradient(rx - stemW / 2, 0, rx + stemW / 2, 0);
     stemGrad.addColorStop(0, '#4d7c0f');
     stemGrad.addColorStop(0.5, '#65a30d');
@@ -2016,8 +2356,7 @@
     ctx.lineTo(rx, apexY);
     ctx.stroke();
 
-    // 2. 內部微細維管束延伸 (Xylem & Phloem Bundles)
-    // 木質部細管道 (左側藍色，提供水分子維持細胞膨壓)
+    // 2. 內部微細維管束延伸
     ctx.strokeStyle = '#38bdf8';
     ctx.lineWidth = 2.5;
     ctx.beginPath();
@@ -2025,7 +2364,6 @@
     ctx.lineTo(rx - 4, apexY + 8);
     ctx.stroke();
 
-    // 韌皮部細管道 (右側紫色，輸送蔗糖供細胞壁合成與生長能量)
     ctx.strokeStyle = '#c084fc';
     ctx.lineWidth = 2.5;
     ctx.beginPath();
@@ -2033,13 +2371,12 @@
     ctx.lineTo(rx + 4, apexY + 8);
     ctx.stroke();
 
-    // 3. 節 (Nodes) 與分層生長葉片 (Tiered Leaves)
+    // 3. 節與分層葉片
     function drawLeaflet(lx, ly, length, width, angle, color1, color2, veinColor) {
       ctx.save();
       ctx.translate(lx, ly);
       ctx.rotate(angle);
 
-      // 葉身漸層
       const leafGrad = ctx.createLinearGradient(0, -width / 2, 0, width / 2);
       leafGrad.addColorStop(0, color1);
       leafGrad.addColorStop(1, color2);
@@ -2054,7 +2391,6 @@
       ctx.lineWidth = 1.4;
       ctx.stroke();
 
-      // 主葉脈
       ctx.beginPath();
       ctx.moveTo(0, 0);
       ctx.quadraticCurveTo(length * 0.5, 0, length * 0.88, 0);
@@ -2062,7 +2398,6 @@
       ctx.lineWidth = 1.2;
       ctx.stroke();
 
-      // 微光高光
       ctx.fillStyle = 'rgba(255, 255, 255, 0.28)';
       ctx.beginPath();
       ctx.ellipse(length * 0.4, -width * 0.2, length * 0.22, width * 0.14, 0, 0, Math.PI * 2);
@@ -2071,29 +2406,36 @@
       ctx.restore();
     }
 
-    // 第 1 層 (基部成熟幼葉 - 隨生長逐漸展平茁壯)
-    const tier1Y = baseStemY - (baseStemY - apexY) * 0.35;
-    const tier1Scale = 1.0 + Math.min(count * 0.18, 0.9);
+    // 第 1 層葉片
+    const tier1Y = baseStemY - (baseStemY - apexY) * 0.32;
+    const tier1Scale = 0.85 + Math.min((count - 1) * 0.18, 0.8);
     drawLeaflet(rx - 5, tier1Y, 32 * tier1Scale, 14 * tier1Scale, -Math.PI * 0.78, '#84cc16', '#4d7c0f', '#365314');
     drawLeaflet(rx + 5, tier1Y, 32 * tier1Scale, 14 * tier1Scale, -Math.PI * 0.22, '#84cc16', '#4d7c0f', '#365314');
 
-    // 第 2 層 (中部伸長新葉 - count >= 1 時顯著展開)
-    if (count >= 1) {
-      const tier2Y = baseStemY - (baseStemY - apexY) * 0.7;
-      const tier2Scale = 0.85 + Math.min((count - 1) * 0.15, 0.7);
+    // 第 2 層葉片 (count >= 2)
+    if (count >= 2) {
+      const tier2Y = baseStemY - (baseStemY - apexY) * 0.65;
+      const tier2Scale = 0.85 + Math.min((count - 2) * 0.15, 0.7);
       drawLeaflet(rx - 4, tier2Y, 26 * tier2Scale, 12 * tier2Scale, -Math.PI * 0.68, '#a3e635', '#65a30d', '#3f6212');
       drawLeaflet(rx + 4, tier2Y, 26 * tier2Scale, 12 * tier2Scale, -Math.PI * 0.32, '#a3e635', '#65a30d', '#3f6212');
     }
 
-    // 第 3 層 (頂端最幼嫩初生葉 - count >= 2 時長出第三層分生嫩葉)
-    if (count >= 2) {
-      const tier3Y = apexY + 8;
-      const tier3Scale = 0.75 + Math.min((count - 2) * 0.12, 0.5);
-      drawLeaflet(rx - 3, tier3Y, 20 * tier3Scale, 9 * tier3Scale, -Math.PI * 0.6, '#bef264', '#84cc16', '#4d7c0f');
-      drawLeaflet(rx + 3, tier3Y, 20 * tier3Scale, 9 * tier3Scale, -Math.PI * 0.4, '#bef264', '#84cc16', '#4d7c0f');
+    // 第 3 層葉片 (count >= 3)
+    if (count >= 3) {
+      const tier3Y = apexY + 10;
+      const tier3Scale = 0.8 + Math.min((count - 3) * 0.12, 0.5);
+      drawLeaflet(rx - 3, tier3Y, 22 * tier3Scale, 10 * tier3Scale, -Math.PI * 0.6, '#bef264', '#84cc16', '#4d7c0f');
+      drawLeaflet(rx + 3, tier3Y, 22 * tier3Scale, 10 * tier3Scale, -Math.PI * 0.4, '#bef264', '#84cc16', '#4d7c0f');
     }
 
-    // 4. 頂端分生組織圓頂 (Apical Meristem Dome - 頂芽生長錐)
+    // 第 4 層頂端最幼嫩嫩葉 (count >= 4，增多繁盛)
+    if (count >= 4) {
+      const tier4Y = apexY + 2;
+      drawLeaflet(rx - 2, tier4Y, 16, 7, -Math.PI * 0.55, '#d9f99d', '#a3e635', '#4d7c0f');
+      drawLeaflet(rx + 2, tier4Y, 16, 7, -Math.PI * 0.45, '#d9f99d', '#a3e635', '#4d7c0f');
+    }
+
+    // 4. 頂端分生組織圓頂
     const meristemGrad = ctx.createRadialGradient(rx, apexY - 2, 2, rx, apexY, 12);
     meristemGrad.addColorStop(0, '#fef08a');
     meristemGrad.addColorStop(0.4, '#d9f99d');
@@ -2108,7 +2450,7 @@
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    // 5. 頂端生長細胞分裂光波脈衝 (當蔗糖注入或活躍生長時發出金綠色光環)
+    // 5. 頂端生長細胞分裂光波脈衝
     const activeGlow = (state.shootGrowthPulse || 0) + (state.fate === 'shoot' && !state.isDay ? 0.35 : 0);
     if (activeGlow > 0.05) {
       ctx.save();
@@ -2124,9 +2466,10 @@
       ctx.restore();
     }
 
-    // 6. 頂芽大字標籤 (高對比居中對齊，避開所有遮擋)
+    // 6. 標籤
     const labelY = apexY - 24;
-    drawBigLabel(`頂芽生長 (x${count})`, rx - 88, labelY, '#a3e635', 20);
+    const labelText = count === 1 ? `頂芽生長 (嫩葉開展 x1)` : (count >= 3 ? `頂芽生長 (旺盛抽梢 x${count})` : `頂芽生長 (x${count})`);
+    drawBigLabel(labelText, rx - 88, labelY, '#a3e635', 20);
 
     ctx.restore();
   }
@@ -2135,91 +2478,110 @@
   function drawRootsAndTuber() {
     ctx.save();
 
-    // 根系生長延伸量 (主根向下伸長)
-    const rootExtend = Math.min(state.rootGrowthCount * 5, 30);
-    const mainApexY = geo.h - 30 + rootExtend;
+    const rootCount = state.rootGrowthCount;
+    const starchCount = state.rootStarchCount;
 
-    // 所有根系統一使用自然根系深棕色 (主根、新生側根、吸水側根)
+    // 所有根系統一使用自然根系深棕色
     const rootColor = '#b45309';
 
+    // 1. 主根：在 count === 0 時處於瘦弱狀態 (較短、較細)
+    const isSlim = rootCount === 0;
+    const mainApexY = isSlim 
+      ? (geo.soilY + 95) 
+      : (geo.soilY + 95 + Math.min(rootCount * 28, 145));
+
     ctx.strokeStyle = rootColor;
-    ctx.lineWidth = 5;
+    ctx.lineWidth = isSlim ? 2.8 : Math.min(3.5 + rootCount * 0.5, 6.0);
     ctx.lineCap = 'round';
 
-    // 主根 (包含生長向下延伸)
     ctx.beginPath();
     ctx.moveTo(geo.stemCenterX, geo.soilY);
-    ctx.bezierCurveTo(geo.stemCenterX - 10, geo.soilY + 60, geo.stemCenterX + 10, geo.soilY + 110, geo.stemCenterX, mainApexY);
+    if (isSlim) {
+      ctx.quadraticCurveTo(geo.stemCenterX - 4, geo.soilY + 50, geo.stemCenterX, mainApexY);
+    } else {
+      ctx.bezierCurveTo(geo.stemCenterX - 10, geo.soilY + 60, geo.stemCenterX + 10, geo.soilY + 110, geo.stemCenterX, mainApexY);
+    }
     ctx.stroke();
 
-    // 側根分支群 (隨 rootGrowthCount 增加，根系不僅延長，更持續萌生新側根與二級分支，顯著增加根數量)
+    // 2. 側根分支群 (隨 rootGrowthCount 增加，根系深扎並持續萌生新側根與分枝)
     const lateralRootBranches = [
       // tier 1: 第一批初生側根 (左右各一)
-      { tier: 1, sx: geo.stemCenterX - 4, sy: geo.soilY + 95, cx: geo.stemCenterX - 24, cy: geo.soilY + 115, ex: geo.stemCenterX - 48, ey: geo.soilY + 132, w: 3.5 },
-      { tier: 1, sx: geo.stemCenterX + 6, sy: geo.soilY + 110, cx: geo.stemCenterX + 25, cy: geo.soilY + 130, ex: geo.stemCenterX + 45, ey: geo.soilY + 148, w: 3.5 },
-      // tier 2: 第二批側根 (深層展開及中高層展開，增加根系數量)
-      { tier: 2, sx: geo.stemCenterX - 5, sy: geo.soilY + 138, cx: geo.stemCenterX - 30, cy: geo.soilY + 160, ex: geo.stemCenterX - 58, ey: geo.soilY + 178, w: 3.2 },
-      { tier: 2, sx: geo.stemCenterX + 4, sy: geo.soilY + 75, cx: geo.stemCenterX + 22, cy: geo.soilY + 92, ex: geo.stemCenterX + 38, ey: geo.soilY + 106, w: 3.0 },
-      // tier 3: 第三批側根與二級分枝 (側根進一步分叉，增進吸收表面積)
-      { tier: 3, sx: geo.stemCenterX - 28, sy: geo.soilY + 115, cx: geo.stemCenterX - 38, cy: geo.soilY + 135, ex: geo.stemCenterX - 52, ey: geo.soilY + 152, w: 2.3 },
-      { tier: 3, sx: geo.stemCenterX + 6, sy: geo.soilY + 155, cx: geo.stemCenterX + 30, cy: geo.soilY + 175, ex: geo.stemCenterX + 54, ey: geo.soilY + 192, w: 3.0 },
-      // tier 4: 第四批側根 (深層側根與更多分枝)
-      { tier: 4, sx: geo.stemCenterX - 35, sy: geo.soilY + 158, cx: geo.stemCenterX - 48, cy: geo.soilY + 175, ex: geo.stemCenterX - 66, ey: geo.soilY + 188, w: 2.2 },
-      { tier: 4, sx: geo.stemCenterX - 3, sy: geo.soilY + 175, cx: geo.stemCenterX - 22, cy: geo.soilY + 195, ex: geo.stemCenterX - 42, ey: geo.soilY + 212, w: 2.6 },
-      // tier 5+: 第五批側根 (茂盛鬚根與深層幼嫩側根)
-      { tier: 5, sx: geo.stemCenterX + 28, sy: geo.soilY + 130, cx: geo.stemCenterX + 42, cy: geo.soilY + 148, ex: geo.stemCenterX + 58, ey: geo.soilY + 164, w: 2.0 },
-      { tier: 5, sx: geo.stemCenterX + 4, sy: geo.soilY + 192, cx: geo.stemCenterX + 22, cy: geo.soilY + 210, ex: geo.stemCenterX + 38, ey: geo.soilY + 224, w: 2.4 }
+      { tier: 1, sx: geo.stemCenterX - 4, sy: geo.soilY + 60, cx: geo.stemCenterX - 24, cy: geo.soilY + 75, ex: geo.stemCenterX - 45, ey: geo.soilY + 90, w: 3.2 },
+      { tier: 1, sx: geo.stemCenterX + 4, sy: geo.soilY + 75, cx: geo.stemCenterX + 22, cy: geo.soilY + 90, ex: geo.stemCenterX + 42, ey: geo.soilY + 105, w: 3.2 },
+      // tier 2: 第二批側根
+      { tier: 2, sx: geo.stemCenterX - 5, sy: geo.soilY + 105, cx: geo.stemCenterX - 28, cy: geo.soilY + 125, ex: geo.stemCenterX - 55, ey: geo.soilY + 142, w: 3.0 },
+      { tier: 2, sx: geo.stemCenterX + 4, sy: geo.soilY + 120, cx: geo.stemCenterX + 26, cy: geo.soilY + 140, ex: geo.stemCenterX + 50, ey: geo.soilY + 158, w: 3.0 },
+      // tier 3: 第三批側根與二級分枝
+      { tier: 3, sx: geo.stemCenterX - 26, sy: geo.soilY + 75, cx: geo.stemCenterX - 38, cy: geo.soilY + 95, ex: geo.stemCenterX - 54, ey: geo.soilY + 112, w: 2.2 },
+      { tier: 3, sx: geo.stemCenterX + 5, sy: geo.soilY + 150, cx: geo.stemCenterX + 28, cy: geo.soilY + 172, ex: geo.stemCenterX + 52, ey: geo.soilY + 190, w: 2.8 },
+      // tier 4: 第四批側根 (增多深層)
+      { tier: 4, sx: geo.stemCenterX - 32, sy: geo.soilY + 125, cx: geo.stemCenterX - 46, cy: geo.soilY + 145, ex: geo.stemCenterX - 64, ey: geo.soilY + 160, w: 2.2 },
+      { tier: 4, sx: geo.stemCenterX - 4, sy: geo.soilY + 165, cx: geo.stemCenterX - 24, cy: geo.soilY + 188, ex: geo.stemCenterX - 46, ey: geo.soilY + 208, w: 2.5 },
+      // tier 5+: 第五批側根與微細吸收鬚根
+      { tier: 5, sx: geo.stemCenterX + 26, sy: geo.soilY + 140, cx: geo.stemCenterX + 40, cy: geo.soilY + 158, ex: geo.stemCenterX + 58, ey: geo.soilY + 175, w: 2.0 },
+      { tier: 5, sx: geo.stemCenterX + 4, sy: geo.soilY + 190, cx: geo.stemCenterX + 24, cy: geo.soilY + 210, ex: geo.stemCenterX + 42, ey: geo.soilY + 225, w: 2.3 }
     ];
 
-    for (const b of lateralRootBranches) {
-      if (state.rootGrowthCount >= b.tier) {
-        // 生長進度 (0.0 ~ 1.0)
-        const prog = Math.min((state.rootGrowthCount - b.tier + 1) * 0.45, 1.0);
-        const curEx = b.sx + (b.ex - b.sx) * prog;
-        const curEy = b.sy + (b.ey - b.sy) * prog;
-        const curCx = b.sx + (b.cx - b.sx) * prog;
-        const curCy = b.sy + (b.cy - b.sy) * prog;
+    if (isSlim) {
+      // 瘦弱狀態：僅有一條極微小細弱初生根毛
+      ctx.strokeStyle = 'rgba(180, 83, 9, 0.55)';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(geo.stemCenterX - 2, geo.soilY + 50);
+      ctx.quadraticCurveTo(geo.stemCenterX - 12, geo.soilY + 62, geo.stemCenterX - 20, geo.soilY + 70);
+      ctx.stroke();
+    } else {
+      for (const b of lateralRootBranches) {
+        if (rootCount >= b.tier) {
+          const prog = Math.min((rootCount - b.tier + 1) * 0.45, 1.0);
+          const curEx = b.sx + (b.ex - b.sx) * prog;
+          const curEy = b.sy + (b.ey - b.sy) * prog;
+          const curCx = b.sx + (b.cx - b.sx) * prog;
+          const curCy = b.sy + (b.cy - b.sy) * prog;
 
-        ctx.strokeStyle = rootColor;
-        ctx.lineWidth = b.w;
-        ctx.beginPath();
-        ctx.moveTo(b.sx, b.sy);
-        ctx.quadraticCurveTo(curCx, curCy, curEx, curEy);
-        ctx.stroke();
-
-        // 側根端點幼嫩生長點 (生長脈衝活躍時微光)
-        if (state.rootGrowthPulse > 0 && prog < 1.0) {
-          ctx.save();
-          ctx.fillStyle = '#4ade80';
+          ctx.strokeStyle = rootColor;
+          ctx.lineWidth = b.w;
           ctx.beginPath();
-          ctx.arc(curEx, curEy, 2.5, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
+          ctx.moveTo(b.sx, b.sy);
+          ctx.quadraticCurveTo(curCx, curCy, curEx, curEy);
+          ctx.stroke();
+
+          // 側根端點幼嫩生長點 (生長脈衝活躍時微光)
+          if (state.rootGrowthPulse > 0 && prog < 1.0) {
+            ctx.save();
+            ctx.fillStyle = '#4ade80';
+            ctx.beginPath();
+            ctx.arc(curEx, curEy, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          }
         }
       }
     }
 
-    // 吸水側根 (連通木質部) - 所有根系均使用相同的根系顏色
+    // 吸水側根 (連通木質部)
     ctx.strokeStyle = rootColor;
-    ctx.lineWidth = 4;
+    ctx.lineWidth = isSlim ? 2.4 : 4;
     ctx.beginPath();
     ctx.moveTo(geo.xylemStemX, geo.soilY + 20);
     ctx.quadraticCurveTo(geo.xylemStemX - 60, geo.soilY + 60, geo.xylemStemX - 160, geo.soilY + 120);
     ctx.stroke();
 
-    ctx.beginPath();
-    ctx.moveTo(geo.xylemStemX - 50, geo.soilY + 50);
-    ctx.quadraticCurveTo(geo.xylemStemX - 100, geo.soilY + 100, geo.xylemStemX - 110, geo.h - 40);
-    ctx.stroke();
+    if (!isSlim) {
+      ctx.beginPath();
+      ctx.moveTo(geo.xylemStemX - 50, geo.soilY + 50);
+      ctx.quadraticCurveTo(geo.xylemStemX - 100, geo.soilY + 100, geo.xylemStemX - 110, geo.h - 40);
+      ctx.stroke();
+    }
 
     // 根毛吸水區專屬大字標籤 (由字幕按鈕統一管理)
     if (state.showSubtitles) {
       drawVascularLabel('【根毛吸水區】', '水分由此進入木質部', 410, geo.soilY + 125, geo.xylemStemX - 100, geo.soilY + 80, '#38bdf8', '#7dd3fc', 160);
     }
 
-    // 送往澱粉塊根之地下路徑 (使用與根系完全統一的自然顏色)
+    // 送往澱粉塊根之地下路徑
     ctx.strokeStyle = rootColor;
-    ctx.lineWidth = 4;
+    ctx.lineWidth = starchCount === 0 ? 2.4 : 4;
     ctx.beginPath();
     ctx.moveTo(geo.phloemStemX, geo.soilY + 20);
     ctx.quadraticCurveTo(geo.phloemStemX + 40, geo.soilY + 45, geo.rootTuberX, geo.rootTuberY);
@@ -2234,12 +2596,14 @@
       ctx.shadowColor = '#4ade80';
       ctx.shadowBlur = 14 * rootGlow;
     }
-    ctx.fillStyle = isRootGrowthTarget || state.rootGrowthCount > 0 ? '#4ade80' : '#b45309';
+    ctx.fillStyle = isRootGrowthTarget || rootCount > 0 ? '#4ade80' : '#b45309';
     ctx.beginPath();
-    ctx.ellipse(geo.stemCenterX, mainApexY, 7, 10, 0, 0, Math.PI * 2);
+    const tipRx = isSlim ? 4.5 : 7;
+    const tipRy = isSlim ? 6 : 10;
+    ctx.ellipse(geo.stemCenterX, mainApexY, tipRx, tipRy, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = '#22c55e';
-    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = isSlim ? '#78350f' : '#22c55e';
+    ctx.lineWidth = isSlim ? 1.5 : 2.5;
     ctx.stroke();
     ctx.restore();
 
@@ -2255,29 +2619,43 @@
       ctx.restore();
     }
 
-    // 根系生長大字標籤 (18px bold)
-    drawBigLabel(`根系生長 (伸長與增根 x${state.rootGrowthCount})`, geo.stemCenterX - 95, mainApexY + 20, isRootGrowthTarget ? '#86efac' : '#cbd5e1', 17);
+    // 根系生長大字標籤 (17px bold)
+    const rootLabel = isSlim 
+      ? `根系 (幼弱初生根 x0)` 
+      : (rootCount >= 4 ? `根系生長 (深扎繁茂 x${rootCount})` : `根系生長 (深扎與增根 x${rootCount})`);
+    drawBigLabel(rootLabel, geo.stemCenterX - 95, mainApexY + 20, isRootGrowthTarget ? '#86efac' : (isSlim ? '#94a3b8' : '#cbd5e1'), 17);
 
-    // 澱粉塊根 (隨澱粉累積膨大)
-    const tuberSize = Math.min(30 + state.rootStarchCount * 8, 66);
-    const tuberGrad = ctx.createRadialGradient(geo.rootTuberX, geo.rootTuberY, 6, geo.rootTuberX, geo.rootTuberY, tuberSize);
-    tuberGrad.addColorStop(0, '#fef08a');
-    tuberGrad.addColorStop(0.5, '#ca8a04');
-    tuberGrad.addColorStop(1, '#713f12');
-    ctx.fillStyle = tuberGrad;
+    // 3. 澱粉塊根 (Tuber) - count === 0 時處於瘦弱細根狀態，尚未膨大；隨澱粉累積膨大
+    if (starchCount === 0) {
+      // 瘦弱未膨大細根
+      const tuberSize = 10;
+      ctx.fillStyle = '#92400e';
+      ctx.beginPath();
+      ctx.ellipse(geo.rootTuberX, geo.rootTuberY, tuberSize, tuberSize * 0.65, Math.PI / 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#78350f';
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
 
-    ctx.beginPath();
-    ctx.ellipse(geo.rootTuberX, geo.rootTuberY, tuberSize, tuberSize * 0.72, Math.PI / 6, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#a16207';
-    ctx.lineWidth = 3;
-    ctx.stroke();
+      drawBigLabel(`儲藏根 (瘦弱未膨大 x0)`, geo.rootTuberX - 90, geo.rootTuberY + tuberSize + 25, '#94a3b8', 18);
+    } else {
+      const tuberSize = Math.min(18 + starchCount * 8, 66);
+      const tuberGrad = ctx.createRadialGradient(geo.rootTuberX, geo.rootTuberY, 6, geo.rootTuberX, geo.rootTuberY, tuberSize);
+      tuberGrad.addColorStop(0, '#fef08a');
+      tuberGrad.addColorStop(0.5, '#ca8a04');
+      tuberGrad.addColorStop(1, '#713f12');
+      ctx.fillStyle = tuberGrad;
 
-    // 塊根大字標籤 (20px bold)
-    drawBigLabel(`塊根 (澱粉儲藏組織 x${state.rootStarchCount})`, geo.rootTuberX - 90, geo.rootTuberY + tuberSize + 25, '#ffffff', 20);
+      ctx.beginPath();
+      ctx.ellipse(geo.rootTuberX, geo.rootTuberY, tuberSize, tuberSize * 0.72, Math.PI / 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#a16207';
+      ctx.lineWidth = 3;
+      ctx.stroke();
 
-    // 在根部內部畫出澱粉顆粒
-    if (state.rootStarchCount > 0) {
+      drawBigLabel(`塊根 (澱粉儲藏組織 x${starchCount})`, geo.rootTuberX - 90, geo.rootTuberY + tuberSize + 25, '#ffffff', 20);
+
+      // 在根部內部畫出澱粉顆粒
       const rootStarchGrains = [
         { dx: -8, dy: -5, rx: 18, ry: 12, rot: 0.1 },
         { dx: 14, dy: 6, rx: 16.5, ry: 10.5, rot: -0.2 },
@@ -2285,7 +2663,7 @@
         { dx: -22, dy: 8, rx: 14, ry: 10, rot: -0.15 },
         { dx: 16, dy: -16, rx: 14, ry: 10, rot: 0.15 }
       ];
-      const rootGrainCount = Math.min(state.rootStarchCount, rootStarchGrains.length);
+      const rootGrainCount = Math.min(starchCount, rootStarchGrains.length);
       for (let i = 0; i < rootGrainCount; i++) {
         const g = rootStarchGrains[i];
         drawStarchGrain(geo.rootTuberX + g.dx, geo.rootTuberY + g.dy, g.rx, g.ry, g.rot);
@@ -2294,19 +2672,18 @@
 
     // 若根部無養分且被觸發時，繪製警示光環與文字
     if (state.rootEmptyAlertPulse > 0) {
+      const currentSize = starchCount === 0 ? 12 : Math.min(18 + starchCount * 8, 66);
       ctx.save();
       ctx.strokeStyle = `rgba(239, 68, 68, ${state.rootEmptyAlertPulse})`;
       ctx.lineWidth = 4;
       ctx.beginPath();
-      ctx.arc(geo.rootTuberX, geo.rootTuberY, tuberSize + 14, 0, Math.PI * 2);
+      ctx.arc(geo.rootTuberX, geo.rootTuberY, currentSize + 14, 0, Math.PI * 2);
       ctx.stroke();
       
-      // 文字也跟著 alert pulse 的透明度淡出
       ctx.globalAlpha = state.rootEmptyAlertPulse;
-      drawBigLabel('根部無儲備澱粉！無法向上轉運', geo.rootTuberX - 120, geo.rootTuberY - tuberSize - 16, '#f87171', 18);
+      drawBigLabel('根部無儲備澱粉！無法轉運', geo.rootTuberX - 110, geo.rootTuberY - currentSize - 16, '#f87171', 18);
       ctx.restore();
 
-      // 每幀遞減透明度，約一秒多後消失
       state.rootEmptyAlertPulse = Math.max(0, state.rootEmptyAlertPulse - 0.015);
     }
 
@@ -3297,19 +3674,205 @@
       };
     }
 
-    // 點擊畫布字幕條區域亦可快速切換字幕顯示狀態
-    canvas.addEventListener('click', (e) => {
+    // =========================================================================
+    // 畫布視角平移 (Pan) 與縮放 (Zoom) 互動系統
+    // =========================================================================
+
+    function getCanvasCoords(e) {
       const rect = canvas.getBoundingClientRect();
-      const scaleX = canvas.width / rect.width;
-      const scaleY = canvas.height / rect.height;
-      const cx = (e.clientX - rect.left) * scaleX;
-      const cy = (e.clientY - rect.top) * scaleY;
+      const canvasRatio = canvas.width / canvas.height;
+      const rectRatio = rect.width / rect.height;
+      let drawW = rect.width;
+      let drawH = rect.height;
+      let offsetX = 0;
+      let offsetY = 0;
+
+      if (rectRatio > canvasRatio) {
+        drawW = rect.height * canvasRatio;
+        offsetX = (rect.width - drawW) / 2;
+      } else {
+        drawH = rect.width / canvasRatio;
+        offsetY = (rect.height - drawH) / 2;
+      }
+
+      const scale = canvas.width / drawW;
+      const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : rect.left + rect.width / 2);
+      const clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : rect.top + rect.height / 2);
+
+      const cx = (clientX - rect.left - offsetX) * scale;
+      const cy = (clientY - rect.top - offsetY) * scale;
+      return { cx, cy, scale, drawW, drawH };
+    }
+
+    function applyZoom(factor, centerX = geo.w / 2, centerY = geo.h / 2) {
+      const oldZoom = camera.zoom;
+      const targetZoom = Math.min(Math.max(oldZoom * factor, camera.minZoom), camera.maxZoom);
+      if (Math.abs(targetZoom - oldZoom) < 0.001) return;
+
+      camera.x = centerX - (centerX - camera.x) * (targetZoom / oldZoom);
+      camera.y = centerY - (centerY - camera.y) * (targetZoom / oldZoom);
+      camera.zoom = targetZoom;
+      updateZoomUI();
+    }
+
+    function resetZoom() {
+      camera.x = 0;
+      camera.y = 0;
+      camera.zoom = 1.0;
+      updateZoomUI();
+    }
+
+    function updateZoomUI() {
+      if (zoomPercent) {
+        zoomPercent.textContent = `${Math.round(camera.zoom * 100)}%`;
+      }
+    }
+
+    // 縮放按鈕監聽
+    if (zoomInBtn) {
+      zoomInBtn.onclick = () => applyZoom(1.22);
+    }
+    if (zoomOutBtn) {
+      zoomOutBtn.onclick = () => applyZoom(1 / 1.22);
+    }
+    if (zoomResetBtn) {
+      zoomResetBtn.onclick = resetZoom;
+    }
+
+    // 滑鼠滾輪縮放 (以滑鼠指針為中心)
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const coords = getCanvasCoords(e);
+      const factor = e.deltaY < 0 ? 1.14 : 0.88;
+      applyZoom(factor, coords.cx, coords.cy);
+    }, { passive: false });
+
+    // 滑鼠拖曳平移 (Pan)
+    canvas.addEventListener('mousedown', (e) => {
+      if (e.button !== 0 && e.button !== 1) return;
+      camera.isDragging = true;
+      camera.startX = e.clientX;
+      camera.startY = e.clientY;
+      camera.lastX = e.clientX;
+      camera.lastY = e.clientY;
+      camera.hasMoved = false;
+      canvas.style.cursor = 'grabbing';
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!camera.isDragging) return;
+      const dx = e.clientX - camera.lastX;
+      const dy = e.clientY - camera.lastY;
+      camera.lastX = e.clientX;
+      camera.lastY = e.clientY;
+
+      const coords = getCanvasCoords(e);
+      camera.x += dx * coords.scale;
+      camera.y += dy * coords.scale;
+
+      if (Math.hypot(e.clientX - camera.startX, e.clientY - camera.startY) > 6) {
+        camera.hasMoved = true;
+      }
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (camera.isDragging) {
+        camera.isDragging = false;
+        canvas.style.cursor = 'grab';
+      }
+    });
+
+    // 觸控手勢：單指拖曳平移、雙指捏合縮放 (Pinch-to-zoom & Pan)
+    let touchInitialDist = 0;
+    let touchInitialCenter = null;
+
+    canvas.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) {
+        const t = e.touches[0];
+        camera.isDragging = true;
+        camera.startX = t.clientX;
+        camera.startY = t.clientY;
+        camera.lastX = t.clientX;
+        camera.lastY = t.clientY;
+        camera.hasMoved = false;
+      } else if (e.touches.length === 2) {
+        camera.isDragging = false;
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        touchInitialDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        touchInitialCenter = {
+          clientX: (t1.clientX + t2.clientX) / 2,
+          clientY: (t1.clientY + t2.clientY) / 2
+        };
+      }
+    }, { passive: false });
+
+    canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      if (e.touches.length === 1 && camera.isDragging) {
+        const t = e.touches[0];
+        const dx = t.clientX - camera.lastX;
+        const dy = t.clientY - camera.lastY;
+        camera.lastX = t.clientX;
+        camera.lastY = t.clientY;
+        const coords = getCanvasCoords(t);
+        camera.x += dx * coords.scale;
+        camera.y += dy * coords.scale;
+        if (Math.hypot(t.clientX - camera.startX, t.clientY - camera.startY) > 6) {
+          camera.hasMoved = true;
+        }
+      } else if (e.touches.length === 2 && touchInitialDist > 0) {
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        const currentDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        const currentCenter = {
+          clientX: (t1.clientX + t2.clientX) / 2,
+          clientY: (t1.clientY + t2.clientY) / 2
+        };
+        const factor = currentDist / touchInitialDist;
+        const coords = getCanvasCoords(currentCenter);
+        applyZoom(factor, coords.cx, coords.cy);
+
+        if (touchInitialCenter) {
+          const dx = currentCenter.clientX - touchInitialCenter.clientX;
+          const dy = currentCenter.clientY - touchInitialCenter.clientY;
+          camera.x += dx * coords.scale;
+          camera.y += dy * coords.scale;
+        }
+
+        touchInitialDist = currentDist;
+        touchInitialCenter = currentCenter;
+        camera.hasMoved = true;
+      }
+    }, { passive: false });
+
+    canvas.addEventListener('touchend', (e) => {
+      if (e.touches.length === 0) {
+        camera.isDragging = false;
+        touchInitialDist = 0;
+        touchInitialCenter = null;
+      } else if (e.touches.length === 1) {
+        const t = e.touches[0];
+        camera.isDragging = true;
+        camera.startX = t.clientX;
+        camera.startY = t.clientY;
+        camera.lastX = t.clientX;
+        camera.lastY = t.clientY;
+        touchInitialDist = 0;
+        touchInitialCenter = null;
+      }
+    });
+
+    // 點擊畫布字幕條區域亦可切換字幕顯示狀態 (平移拖曳時不觸發)
+    canvas.addEventListener('click', (e) => {
+      if (camera.hasMoved) return;
+      const coords = getCanvasCoords(e);
 
       if (state.showSubtitles) {
         const barX = geo.subtitleX;
         const barY = geo.subtitleY;
         const halfW = 440;
-        if (cx >= barX - halfW && cx <= barX + halfW && cy >= barY - 24 && cy <= barY + 24) {
+        if (coords.cx >= barX - halfW && coords.cx <= barX + halfW && coords.cy >= barY - 24 && coords.cy <= barY + 24) {
           state.showSubtitles = false;
           updateSubtitleButtons();
         }
@@ -3352,7 +3915,10 @@
       updateFateButtons();
     };
 
-    // 根部養分再動員轉運至花朵、果實或頂芽
+    // 根部養分再動員轉運至根系、花朵、果實或頂芽
+    if (rootToRootGrowthBtn) {
+      rootToRootGrowthBtn.onclick = () => remobilizeRootNutrient('root_growth');
+    }
     if (rootToFlowerBtn) {
       rootToFlowerBtn.onclick = () => remobilizeRootNutrient('flower');
     }
@@ -3368,9 +3934,7 @@
     document.addEventListener('touchend', (e) => {
       const now = Date.now();
       if (now - lastTouchEndTime <= 350) {
-        // 阻止瀏覽器預設的雙擊放大視圖行為
         e.preventDefault();
-        // 若使用者連點的是按鈕或控制項，手動觸發點擊確保不漏失點擊操作
         const btn = e.target.closest('button, [role="button"], a');
         if (btn && typeof btn.click === 'function') {
           btn.click();
@@ -3379,17 +3943,24 @@
       lastTouchEndTime = now;
     }, { passive: false });
 
-    // 防止平板多指觸控縮放 (Pinch-to-zoom)
+    // 防止非畫布區域的平板多指觸控縮放 (Pinch-to-zoom)
     document.addEventListener('touchstart', (e) => {
+      if (e.target === canvas || canvas.contains(e.target)) return;
       if (e.touches && e.touches.length > 1) {
         e.preventDefault();
       }
     }, { passive: false });
 
-    // 防止 Safari 專屬手勢事件縮放視窗
-    document.addEventListener('gesturestart', (e) => e.preventDefault());
-    document.addEventListener('gesturechange', (e) => e.preventDefault());
-    document.addEventListener('gestureend', (e) => e.preventDefault());
+    // 防止 Safari 專屬手勢事件縮放視窗 (畫布手勢由 touchmove 自行管理)
+    document.addEventListener('gesturestart', (e) => {
+      if (e.target !== canvas) e.preventDefault();
+    });
+    document.addEventListener('gesturechange', (e) => {
+      if (e.target !== canvas) e.preventDefault();
+    });
+    document.addEventListener('gestureend', (e) => {
+      if (e.target !== canvas) e.preventDefault();
+    });
   }
 
   function updateFateButtons() {

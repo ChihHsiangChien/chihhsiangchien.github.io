@@ -1,0 +1,2464 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>3D 大氣動力與天氣系統互動模擬器</title>
+    <style>
+        :root {
+            --bg-deep: #070d19;
+            --panel-bg: rgba(15, 23, 42, 0.82);
+            --panel-border: rgba(148, 163, 184, 0.22);
+            --text-main: #f1f5f9;
+            --text-muted: #94a3b8;
+            --cold: #38bdf8;
+            --cold-dark: #0284c7;
+            --warm: #fb7185;
+            --warm-hot: #f97316;
+            --occluded: #c084fc;
+            --jet: #facc15;
+            --accent: #38bdf8;
+            --radius: 14px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: radial-gradient(circle at 50% 35%, #132038 0%, #070d19 75%);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+            color: var(--text-main);
+            touch-action: none;
+        }
+
+        #canvas-container {
+            position: fixed;
+            inset: 0;
+            z-index: 1;
+        }
+
+        /* 3D 浮動標籤層 */
+        #labels-container {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 2;
+            overflow: hidden;
+            transition: opacity 0.25s ease;
+        }
+
+        #labels-container.hidden {
+            opacity: 0;
+        }
+
+        .label-3d {
+            position: absolute;
+            transform: translate(-50%, -100%);
+            padding: 5px 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            line-height: 1.3;
+            white-space: nowrap;
+            background: rgba(10, 18, 34, 0.86);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #f8fafc;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+            backdrop-filter: blur(6px);
+            pointer-events: none;
+            transition: opacity 0.15s ease;
+        }
+
+        .label-3d::after {
+            content: "";
+            position: absolute;
+            left: 50%;
+            bottom: -5px;
+            transform: translateX(-50%);
+            border-width: 5px 5px 0 5px;
+            border-style: solid;
+            border-color: rgba(10, 18, 34, 0.86) transparent transparent transparent;
+        }
+
+        .label-3d .sub {
+            display: block;
+            font-size: 10px;
+            font-weight: 400;
+            color: #cbd5e1;
+            margin-top: 1px;
+        }
+
+        .label-3d.cold {
+            border-left: 3px solid var(--cold);
+        }
+
+        .label-3d.warm {
+            border-left: 3px solid var(--warm);
+        }
+
+        .label-3d.occluded {
+            border-left: 3px solid var(--occluded);
+        }
+
+        .label-3d.jet {
+            border-left: 3px solid var(--jet);
+        }
+
+        .label-3d.cloud {
+            border-left: 3px solid #e2e8f0;
+        }
+
+        /* 頂部導覽列 */
+        #top-bar {
+            position: fixed;
+            top: 10px;
+            left: 12px;
+            right: 12px;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            pointer-events: none;
+        }
+
+        .top-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .glass-bar {
+            pointer-events: auto;
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-radius: var(--radius);
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.38);
+        }
+
+        /* 主分頁 Tabs */
+        .cat-tabs {
+            display: flex;
+            padding: 4px;
+            gap: 4px;
+            overflow-x: auto;
+            max-width: 100%;
+            scrollbar-width: none;
+        }
+
+        .cat-tabs::-webkit-scrollbar {
+            display: none;
+        }
+
+        .cat-btn {
+            border: none;
+            background: transparent;
+            color: var(--text-muted);
+            padding: 8px 14px;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+        }
+
+        .cat-btn:hover {
+            color: var(--text-main);
+        }
+
+        .cat-btn.active {
+            background: linear-gradient(135deg, rgba(56, 189, 248, 0.25), rgba(99, 102, 241, 0.25));
+            color: #fff;
+            border: 1px solid rgba(56, 189, 248, 0.45);
+        }
+
+        /* 工具按鈕組 */
+        .tool-actions {
+            display: flex;
+            gap: 6px;
+            padding: 4px;
+        }
+
+        .icon-btn {
+            border: 1px solid transparent;
+            background: rgba(30, 41, 59, 0.65);
+            color: var(--text-main);
+            padding: 8px 12px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            white-space: nowrap;
+            transition: all 0.18s ease;
+        }
+
+        .icon-btn:hover {
+            background: rgba(51, 65, 85, 0.85);
+        }
+
+        .icon-btn.active {
+            background: rgba(56, 189, 248, 0.22);
+            border-color: rgba(56, 189, 248, 0.55);
+            color: #7dd3fc;
+        }
+
+        /* 子主題選擇列 */
+        .sub-tabs {
+            display: flex;
+            gap: 6px;
+            padding: 5px 6px;
+            overflow-x: auto;
+            max-width: fit-content;
+            scrollbar-width: none;
+        }
+
+        .sub-tabs::-webkit-scrollbar {
+            display: none;
+        }
+
+        .sub-btn {
+            border: 1px solid transparent;
+            background: rgba(30, 41, 59, 0.5);
+            color: #cbd5e1;
+            padding: 7px 13px;
+            border-radius: 9px;
+            font-size: 12.5px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+        }
+
+        .sub-btn:hover {
+            background: rgba(51, 65, 85, 0.7);
+        }
+
+        .sub-btn.active {
+            background: #0284c7;
+            color: #fff;
+            box-shadow: 0 2px 10px rgba(2, 132, 199, 0.45);
+        }
+
+        /* 右側觸控視角控制列 (Zoom / Pan / Rotate) */
+        #cam-dock {
+            position: fixed;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding: 6px;
+        }
+
+        .cam-btn {
+            width: 42px;
+            height: 42px;
+            border-radius: 10px;
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            background: rgba(15, 23, 42, 0.8);
+            color: #f8fafc;
+            font-size: 17px;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s ease;
+        }
+
+        .cam-btn:active {
+            transform: scale(0.93);
+        }
+
+        .cam-btn.mode-pan {
+            background: rgba(249, 115, 22, 0.25);
+            border-color: rgba(249, 115, 22, 0.65);
+            color: #fdba74;
+        }
+
+        .cam-hint {
+            font-size: 10px;
+            text-align: center;
+            color: var(--text-muted);
+            line-height: 1.1;
+            padding: 2px 0;
+        }
+
+        /* 圖例浮窗 */
+        #legend-card {
+            position: fixed;
+            top: 112px;
+            right: 12px;
+            z-index: 11;
+            padding: 12px 14px;
+            width: 220px;
+            font-size: 12px;
+            display: none;
+            flex-direction: column;
+            gap: 7px;
+        }
+
+        #legend-card.open {
+            display: flex;
+        }
+
+        .legend-title {
+            font-weight: 700;
+            color: #e2e8f0;
+            margin-bottom: 2px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #cbd5e1;
+        }
+
+        .swatch {
+            width: 14px;
+            height: 14px;
+            border-radius: 4px;
+            flex-shrink: 0;
+        }
+
+        /* 底部 Step-by-Step 控制面板 */
+        #bottom-dock {
+            position: fixed;
+            bottom: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: min(780px, calc(100% - 24px));
+            z-index: 10;
+            padding: 12px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .info-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .scene-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            background: rgba(56, 189, 248, 0.2);
+            color: #7dd3fc;
+            margin-right: 6px;
+        }
+
+        .step-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .step-desc {
+            font-size: 13px;
+            line-height: 1.5;
+            color: #cbd5e1;
+            margin-top: 4px;
+        }
+
+        #bottom-dock.collapsed .step-desc {
+            display: none;
+        }
+
+        /* 階段圓點按鈕條 */
+        .stepper-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+        }
+
+        .step-pill {
+            border: 1px solid rgba(148, 163, 184, 0.22);
+            background: rgba(30, 41, 59, 0.55);
+            color: #94a3b8;
+            padding: 7px 6px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            transition: all 0.18s ease;
+        }
+
+        .step-pill:hover {
+            background: rgba(51, 65, 85, 0.75);
+            color: #e2e8f0;
+        }
+
+        .step-pill.active {
+            background: rgba(56, 189, 248, 0.22);
+            border-color: #38bdf8;
+            color: #fff;
+            box-shadow: inset 0 0 10px rgba(56, 189, 248, 0.18);
+        }
+
+        /* 播放與進度軸控制列 */
+        .playback-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .ctrl-btn {
+            border: 1px solid rgba(148, 163, 184, 0.25);
+            background: rgba(30, 41, 59, 0.8);
+            color: #f8fafc;
+            padding: 8px 12px;
+            border-radius: 9px;
+            font-size: 12.5px;
+            font-weight: 700;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.15s ease;
+        }
+
+        .ctrl-btn:active {
+            transform: scale(0.95);
+        }
+
+        .ctrl-btn.primary {
+            background: linear-gradient(135deg, #0284c7, #2563eb);
+            border-color: #38bdf8;
+        }
+
+        .timeline-wrap {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        input[type="range"] {
+            flex: 1;
+            accent-color: #38bdf8;
+            height: 6px;
+            cursor: pointer;
+        }
+
+        .pct-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            width: 34px;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        @media (max-width: 680px) {
+            #cam-dock {
+                top: auto;
+                bottom: 225px;
+                transform: none;
+                right: 8px;
+                padding: 4px;
+            }
+
+            .cam-btn {
+                width: 38px;
+                height: 38px;
+                font-size: 15px;
+            }
+
+            #bottom-dock {
+                padding: 10px 12px;
+                gap: 8px;
+                bottom: 8px;
+                width: calc(100% - 16px);
+            }
+
+            .step-title {
+                font-size: 14px;
+            }
+
+            .step-desc {
+                font-size: 12px;
+            }
+
+            .step-pill {
+                font-size: 11px;
+                padding: 6px 4px;
+            }
+
+            .ctrl-btn {
+                padding: 7px 9px;
+                font-size: 12px;
+            }
+        }
+    </style>
+
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+
+<body>
+
+    <!-- 3D 畫布與浮動標籤層 -->
+    <div id="canvas-container"></div>
+    <div id="labels-container"></div>
+
+    <!-- 頂部多層分頁與全域工具 -->
+    <header id="top-bar">
+        <div class="top-row">
+            <nav class="cat-tabs glass-bar" id="cat-tabs"></nav>
+            <div class="tool-actions glass-bar">
+                <button class="icon-btn active" id="btn-toggle-labels" title="顯示或隱藏3D空間標籤">🏷️ 標籤: 開</button>
+                <button class="icon-btn" id="btn-toggle-legend" title="查看統一視覺色彩圖例">🎨 圖例</button>
+            </div>
+        </div>
+        <div class="sub-tabs glass-bar" id="sub-tabs"></div>
+    </header>
+
+    <!-- 統一視覺色彩圖例 -->
+    <aside id="legend-card" class="glass-bar">
+        <div class="legend-title">
+            <span>跨分頁統一視覺圖例</span>
+            <span style="cursor:pointer;color:#94a3b8" id="btn-close-legend">✕</span>
+        </div>
+        <div class="legend-item"><span class="swatch" style="background:#38bdf8"></span>冷氣團 / 冷鋒 / 下沉冷流</div>
+        <div class="legend-item"><span class="swatch" style="background:#fb7185"></span>暖氣團 / 暖鋒 / 上升暖流</div>
+        <div class="legend-item"><span class="swatch" style="background:#f97316"></span>乾絕熱增溫 (焚風) / 強熱對流</div>
+        <div class="legend-item"><span class="swatch" style="background:#c084fc"></span>閉塞鋒 (囚錮鋒) 混合區</div>
+        <div class="legend-item"><span class="swatch" style="background:#facc15"></span>高空噴射氣流 / 雷電閃光</div>
+        <div class="legend-item"><span class="swatch" style="background:#e2e8f0"></span>雲系發展與降水雨帶</div>
+    </aside>
+
+    <!-- 右側觸控友善 Zoom / Pan / Rotate 工具列 -->
+    <aside id="cam-dock" class="glass-bar">
+        <button class="cam-btn" id="btn-zoom-in" title="放大視角">＋</button>
+        <button class="cam-btn" id="btn-zoom-out" title="縮小視角">－</button>
+        <button class="cam-btn" id="btn-pan-mode" title="切換單指旋轉或平移">🔄</button>
+        <div class="cam-hint" id="pan-mode-label">旋轉</div>
+        <button class="cam-btn" id="btn-reset-cam" title="重置預設視角">🎯</button>
+    </aside>
+
+    <!-- 底部 Step-by-Step 流程控制面板 -->
+    <section id="bottom-dock" class="glass-bar">
+        <div class="info-header">
+            <div>
+                <span class="scene-badge" id="ui-scene-name">冷鋒</span>
+                <span class="step-title" id="ui-step-title">階段 1</span>
+                <p class="step-desc" id="ui-step-desc">說明載入中...</p>
+            </div>
+            <button class="icon-btn" id="btn-collapse-desc" title="收合或展開文字說明">▾</button>
+        </div>
+
+        <div class="stepper-row" id="stepper-row"></div>
+
+        <div class="playback-row">
+            <button class="ctrl-btn" id="btn-prev">⏮ 上一步</button>
+            <button class="ctrl-btn primary" id="btn-play">▶ 自動演進</button>
+            <button class="ctrl-btn" id="btn-next">下一步 ⏭</button>
+            <div class="timeline-wrap">
+                <input type="range" id="progress-slider" min="0" max="1000" value="150" />
+                <span class="pct-label" id="pct-label">15%</span>
+            </div>
+        </div>
+    </section>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // =========================================================================
+        // 1. 跨分頁統一色彩規範 (Visual Consistency Palette)
+        // =========================================================================
+        const PALETTE = {
+            cold: 0x38bdf8,
+            coldDeep: 0x0284c7,
+            warm: 0xfb7185,
+            warmHot: 0xf97316,
+            occluded: 0xc084fc,
+            jet: 0xfacc15,
+            rain: 0x7dd3fc,
+            lightning: 0xfef08a,
+            groundPlain: 0x1e293b,
+            groundLand: 0x2d4a3e,
+            groundSea: 0x0c3b5e
+        };
+
+        // =========================================================================
+        // 2. 課程與 10 大氣象模擬場景資料庫 (含 4 階段 Step-by-Step 流程)
+        // =========================================================================
+        const CATEGORIES = [
+            {
+                id: 'fronts',
+                name: '1. 鋒面系統',
+                scenes: [
+                    {
+                        id: 'cold_front',
+                        name: '冷鋒',
+                        camPos: [0, 9.5, 22],
+                        steps: [
+                            { p: 0.08, short: '1. 冷氣團逼近', title: '階段 1：冷氣團快速南下逼近', desc: '密度較大的冷空氣團在地面後方集結推進，前方則為溫暖潮濕的暖空氣團。' },
+                            { p: 0.38, short: '2. 楔形強迫抬升', title: '階段 2：冷空氣如楔子切入暖空氣下方', desc: '冷空氣重且移速快，形成陡峭鋒面坡度（約 1:50~1:100），迫使前方暖濕空氣劇烈垂直上升。' },
+                            { p: 0.70, short: '3. 積雨雲與雷雨', title: '階段 3：狹窄對流帶、積雨雲與強雷陣雨', desc: '猛烈上升氣流凝結成高聳入對流層頂的積雨雲（Cb），伴隨閃電、強陣風與狹窄但猛烈的暴雨帶。' },
+                            { p: 0.98, short: '4. 過境劇烈降溫', title: '階段 4：冷鋒過境，氣溫驟降轉乾冷', desc: '鋒面通過後，地面完全由乾冷氣團控制，氣壓上升、氣溫明顯驟降，對流雲帶隨鋒線東移。' }
+                        ]
+                    },
+                    {
+                        id: 'warm_front',
+                        name: '暖鋒',
+                        camPos: [0, 9.5, 22],
+                        steps: [
+                            { p: 0.08, short: '1. 暖氣團推進', title: '階段 1：暖濕氣團主動向冷區推進', desc: '暖空氣密度小，面對前方緩慢撤退的冷空氣楔，開始在交界面接觸。' },
+                            { p: 0.38, short: '2. 緩坡滑升', title: '階段 2：沿平緩冷空氣斜坡徐徐爬升', desc: '暖空氣沿著極平緩的斜坡（約 1:200）滑升，抬升速度溫和但涵蓋水平範圍極廣。' },
+                            { p: 0.70, short: '3. 梯次層狀雲系', title: '階段 3：高空至低空依序出現梯次雲層', desc: '鋒線前方數百公里依序可見：高空卷雲（Ci）➔ 中空高層雲（As）➔ 低空厚實雨層雲（Ns）。' },
+                            { p: 0.98, short: '4. 連續降雨回暖', title: '階段 4：寬廣連續性降雨與過境回暖', desc: '雨層雲帶來鋒前大範圍、長時間的綿綿細雨；待地面暖鋒線通過後，天氣轉暖且雨勢趨緩。' }
+                        ]
+                    },
+                    {
+                        id: 'stationary_front',
+                        name: '滯留鋒',
+                        camPos: [1, 11.5, 21],
+                        steps: [
+                            { p: 0.10, short: '1. 冷暖勢均力敵', title: '階段 1：南北冷暖氣團勢力相當', desc: '北方大陸冷氣團與南方海洋暖濕氣團交會，雙方推力相當，地面鋒線幾乎停滯不前。' },
+                            { p: 0.40, short: '2. 平行鋒線滑動', title: '階段 2：氣流平行於鋒線反向滑動', desc: '冷空氣偏東風、暖空氣偏西南風，氣流大致平行鋒面切變，暖濕空氣持續沿鋒面斜坡爬升。' },
+                            { p: 0.72, short: '3. 廣闊雲帶滯留', title: '階段 3：大範圍層狀與對流混合雲帶盤踞', desc: '水氣源源不絕供應，在鋒面帶上方形成東西向綿延的厚重雲雨帶（如東亞春夏之交的梅雨鋒面）。' },
+                            { p: 0.98, short: '4. 連日陰雨綿綿', title: '階段 4：長時間持續性降水與局部豪雨', desc: '由於鋒面南北微幅擺動滯留數日甚至數週，造成長時間陰雨綿綿與充沛累積雨量。' }
+                        ]
+                    },
+                    {
+                        id: 'occluded_front',
+                        name: '閉塞鋒',
+                        camPos: [0, 10, 22.5],
+                        steps: [
+                            { p: 0.08, short: '1. 冷鋒快速追趕', title: '階段 1：後方冷鋒移速快於前方暖鋒', desc: '在發展中的溫帶氣旋內，左後方冷氣團推進速度遠快於右前方的暖鋒，兩鋒距離迅速縮短。' },
+                            { p: 0.40, short: '2. 兩冷氣團接觸', title: '階段 2：冷鋒追上暖鋒底部', desc: '後方更冷的氣團追上前方次冷氣團，開始在地面將中間的暖空氣區向高空擠壓。' },
+                            { p: 0.72, short: '3. 暖空氣離地囚錮', title: '階段 3：暖空氣被完全抬離地面（閉塞）', desc: '暖空氣形成高空暖舌（V型暖槽），地面由紫色閉塞鋒取代，兼具積雨雲與層狀雲的複雜雲系。' },
+                            { p: 0.98, short: '4. 能量釋放消散', title: '階段 4：位能釋放完畢，氣旋步入末期', desc: '冷空氣全面鋪滿低層、暖空氣高居上方，大氣趨於穩定，大範圍降水後系統逐漸減弱消散。' }
+                        ]
+                    }
+                ]
+            },
+            {
+                id: 'circulation',
+                name: '2. 氣壓與大氣環流',
+                scenes: [
+                    {
+                        id: 'cyclone',
+                        name: '溫帶氣旋 (低壓)',
+                        camPos: [0, 14.5, 19.5],
+                        steps: [
+                            { p: 0.10, short: '1. 鋒面波動初生', title: '階段 1：鋒面帶產生低壓波動', desc: '冷暖氣團交界處受高空槽線擾動，地面氣壓下降形成低壓中心（L），等壓線開始閉合。' },
+                            { p: 0.40, short: '2. 逆時針旋入上升', title: '階段 2：北半球氣流逆時針向中心輻合上升', desc: '受氣壓梯度力、科氏力與摩擦力影響，近地面氣流呈逆時針向低壓中心旋入並強烈抬升。' },
+                            { p: 0.72, short: '3. 冷暖鋒與逗點雲', title: '階段 3：發展出典型逗點雲系與雙鋒結構', desc: '系統東側伴隨暖鋒（北移暖流），西側伴隨冷鋒（南下冷流），三維螺旋雲帶呈現巨大逗點狀。' },
+                            { p: 0.98, short: '4. 成熟期強風雨', title: '階段 4：氣旋達最強盛期並啟動閉塞', desc: '中心氣壓最低、等壓線最密集、風速最強，冷鋒逐漸追上暖鋒頂端，形成完整溫帶氣旋生命週期。' }
+                        ]
+                    },
+                    {
+                        id: 'anticyclone',
+                        name: '高氣壓 (反氣旋)',
+                        camPos: [0, 13.5, 20],
+                        steps: [
+                            { p: 0.10, short: '1. 高空空氣輻合', title: '階段 1：對流層高空空氣匯聚堆積', desc: '高空氣流在特定區域輻合，空氣質量增加，導致地面氣壓升高形成高氣壓中心（H）。' },
+                            { p: 0.40, short: '2. 中心氣流下沉', title: '階段 2：中心空氣緩慢絕熱下沉增溫', desc: '空氣由高空向地面緩慢下沉，過程中受壓縮增溫，水氣蒸發、相對濕度降低，抑制雲層發展。' },
+                            { p: 0.72, short: '3. 順時針向外輻散', title: '階段 3：北半球近地面順時針向外旋出擴散', desc: '下沉氣流抵達地面後向外擴散，受北半球科氏力偏轉影響，形成順時針向外輻散的穩定風場。' },
+                            { p: 0.98, short: '4. 晴朗穩定天氣', title: '階段 4：碧空萬里與下沉逆溫層', desc: '高壓中心天氣晴朗無雲、風速微弱；僅外圍輻散邊緣偶有零星晴天積雲。' }
+                        ]
+                    },
+                    {
+                        id: 'jet_stream',
+                        name: '高空噴射氣流',
+                        camPos: [0, 13, 21.5],
+                        steps: [
+                            { p: 0.10, short: '1. 南北溫差造強風', title: '階段 1：對流層頂的狹窄高速大氣長河', desc: '極區冷空氣與副熱帶暖空氣產生劇烈水平溫度梯度，在約 9~12 km 對流層頂形成高速西風噴流。' },
+                            { p: 0.40, short: '2. 羅斯貝波槽脊', title: '階段 2：噴射氣流產生南北蜿蜒波動', desc: '高速氣流發展出大型行星波（Rossby Wave），向南凹陷處為「高空槽」，向北隆起處為「高空脊」。' },
+                            { p: 0.72, short: '3. 槽前輻散生低壓', title: '階段 3：槽前高空輻散「抽氣」誘發地面氣旋', desc: '槽線東側（槽前）氣流加速輻散，抽吸低層空氣上升並誘發地面低壓（L）；槽後輻合則對應地面高壓（H）。' },
+                            { p: 0.98, short: '4. 導引天氣系統', title: '階段 4：驅動並導引地面鋒面與氣旋東移', desc: '噴射氣流如同大氣高速公路，不僅提供斜壓能量，更主導地面高低壓系統的移動路徑與速度。' }
+                        ]
+                    }
+                ]
+            },
+            {
+                id: 'local_severe',
+                name: '3. 劇烈天氣與特殊地形',
+                scenes: [
+                    {
+                        id: 'supercell',
+                        name: '雷暴與超級胞',
+                        camPos: [1, 10.5, 21.5],
+                        steps: [
+                            { p: 0.10, short: '1. 強烈熱力上升', title: '階段 1：低層暖濕不穩定空氣猛烈上升', desc: '地表受熱與充沛水氣提供龐大對流可用位能（CAPE），暖濕氣流高速向上衝刺凝結。' },
+                            { p: 0.40, short: '2. 中氣旋旋轉建立', title: '階段 2：垂直風切誘發旋轉上升氣流（中氣旋）', desc: '環境風速與風向隨高度改變（風切），使上升氣流扭轉成直徑數公里的劇烈旋轉柱「中氣旋（Mesocyclone）」。' },
+                            { p: 0.70, short: '3. 砧狀雲頂與雷電', title: '階段 3：撞擊對流層頂展開巨大砧狀雲（Anvil）', desc: '強勁上升流刺穿對流層頂形成「穿透雲頂」，其餘雲體水平外擴成鐵砧狀，內部伴隨密集閃電與冰雹。' },
+                            { p: 0.98, short: '4. 下衝流微爆氣流', title: '階段 4：降水拖曳與蒸發冷卻引發強烈下衝流', desc: '因旋轉使上升與下沉流分離，冷重空氣猛烈砸向地面並向四周爆發擴散（微爆氣流 Microburst），極具破壞力。' }
+                        ]
+                    },
+                    {
+                        id: 'sea_land_breeze',
+                        name: '海陸風環流',
+                        camPos: [0, 9.5, 21.5],
+                        steps: [
+                            { p: 0.08, short: '1. 白天陸地增溫', title: '階段 1【白天】：日照加熱，陸地升溫快於海洋', desc: '陸地比熱小，受太陽輻射後地表迅速增溫，陸地上方空氣受熱膨脹上升，近地面形成局部熱低壓。' },
+                            { p: 0.36, short: '2. 海風環流建立', title: '階段 2【午後】：海風吹向陸地，高空回流向海', desc: '海面較涼爽空氣由海洋吹向陸地（海風 Sea Breeze），調節沿岸高溫並在陸地內側凝結出午後積雲。' },
+                            { p: 0.68, short: '3. 入夜陸地冷卻', title: '階段 3【夜晚】：長波輻射冷卻，陸地降溫快於海洋', desc: '日落後陸地迅速散熱變冷，海洋因比熱大仍維持相對溫暖，海陸溫差與氣壓梯度開始反轉。' },
+                            { p: 0.96, short: '4. 陸風環流建立', title: '階段 4【深夜】：陸風吹向海洋，外海對流發展', desc: '陸地冷空氣下沉並吹向溫暖海面（陸風 Land Breeze），海面空氣微幅上升形成夜間海上雲層。' }
+                        ]
+                    },
+                    {
+                        id: 'foehn',
+                        name: '地形雨與焚風',
+                        camPos: [0, 9.5, 21.5],
+                        steps: [
+                            { p: 0.10, short: '1. 濕潤氣流迎山', title: '階段 1：溫暖濕潤氣流吹向高聳山脈', desc: '來自海面的潮濕氣流向內陸推進，遭遇高大山脈阻擋（如臺灣中央山脈）。' },
+                            { p: 0.40, short: '2. 迎風面地形雨', title: '階段 2：迎風坡強迫抬升，凝結降下豐沛地形雨', desc: '氣流被迫爬升冷卻，達露點後以「濕絕熱直減率（約 5~6°C/km）」緩慢降溫，水氣大量凝結成雲並降下大雨。' },
+                            { p: 0.70, short: '3. 越嶺水氣耗盡', title: '階段 3：氣流翻越山巔，水氣已大幅流失', desc: '降雨釋放大量潛熱並帶走水分，當氣流越過稜線山頂時，已轉變為相對乾燥的空氣，雲牆在山頂消散（焚風牆）。' },
+                            { p: 0.98, short: '4. 背風面乾熱焚風', title: '階段 4：背風坡乾絕熱下沉，形成乾熱焚風', desc: '乾燥空氣沿背風坡下沉，以「乾絕熱直減率（約 10°C/km）」快速增溫，抵達平地時變得異常炎熱乾燥（焚風 Foehn）。' }
+                        ]
+                    }
+                ]
+            }
+        ];
+
+        // =========================================================================
+        // 3. Three.js 核心渲染器與場景初始化
+        // =========================================================================
+        const container = document.getElementById('canvas-container');
+        const labelsContainer = document.getElementById('labels-container');
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+        const scene = new THREE.Scene();
+
+        const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.5, 150);
+        camera.position.set(0, 9.5, 22);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.07;
+        controls.enablePan = true;
+        controls.enableZoom = true;
+        controls.minDistance = 9;
+        controls.maxDistance = 42;
+        controls.maxPolarAngle = Math.PI * 0.49;
+        controls.target.set(0, 3.2, 0);
+
+        // 燈光系統（在海陸風日夜循環時可微調）
+        const ambientLight = new THREE.AmbientLight(0xdbeafe, 0.85);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.35);
+        dirLight.position.set(12, 22, 14);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.set(1024, 1024);
+        dirLight.shadow.camera.left = -16;
+        dirLight.shadow.camera.right = 16;
+        dirLight.shadow.camera.top = 16;
+        dirLight.shadow.camera.bottom = -16;
+        scene.add(dirLight);
+
+        const hemiLight = new THREE.HemisphereLight(0x93c5fd, 0x1e293b, 0.45);
+        scene.add(hemiLight);
+
+        // =========================================================================
+        // 4. 統一 3D 大氣剖面觀測台底座 (Diorama Base)
+        // =========================================================================
+        const baseGroup = new THREE.Group();
+        scene.add(baseGroup);
+
+        const SLAB_W = 24;
+        const SLAB_D = 14;
+
+        // 底座地殼塊
+        const slabGeo = new THREE.BoxGeometry(SLAB_W, 1.1, SLAB_D);
+        const slabMat = new THREE.MeshStandardMaterial({ color: PALETTE.groundPlain, roughness: 0.85, metalness: 0.1 });
+        const slabMesh = new THREE.Mesh(slabGeo, slabMat);
+        slabMesh.position.y = -0.55;
+        slabMesh.receiveShadow = true;
+        baseGroup.add(slabMesh);
+
+        // 底座邊框線與參考格線
+        const gridHelper = new THREE.GridHelper(SLAB_W, 12, 0x475569, 0x334155);
+        gridHelper.scale.z = SLAB_D / SLAB_W;
+        gridHelper.position.y = 0.01;
+        baseGroup.add(gridHelper);
+
+        // 對流層高度標尺框 (左後方柱 0km ~ 12km)
+        const rulerMat = new THREE.LineBasicMaterial({ color: 0x64748b, transparent: true, opacity: 0.55 });
+        const rulerPts = [
+            new THREE.Vector3(-12, 0, -7), new THREE.Vector3(-12, 10, -7),
+            new THREE.Vector3(-12, 10, -7), new THREE.Vector3(12, 10, -7),
+            new THREE.Vector3(-12, 3.33, -7), new THREE.Vector3(-11.4, 3.33, -7),
+            new THREE.Vector3(-12, 6.66, -7), new THREE.Vector3(-11.4, 6.66, -7)
+        ];
+        const rulerGeo = new THREE.BufferGeometry().setFromPoints(rulerPts);
+        baseGroup.add(new THREE.LineSegments(rulerGeo, rulerMat));
+
+        // 方位小標記 (N 北方在 -Z)
+        const northArrow = new THREE.Mesh(
+            new THREE.ConeGeometry(0.32, 0.9, 4),
+            new THREE.MeshBasicMaterial({ color: 0x38bdf8 })
+        );
+        northArrow.rotation.x = -Math.PI / 2;
+        northArrow.position.set(11.1, 0.12, -6.1);
+        baseGroup.add(northArrow);
+
+        // 動態模擬群組（切換分頁時自動回收並重建）
+        const simGroup = new THREE.Group();
+        scene.add(simGroup);
+
+        // 固定高度尺標籤
+        const staticLabels = [];
+        function createLabelElement(title, sub = '', type = 'cloud', isStatic = false) {
+            const el = document.createElement('div');
+            el.className = `label-3d ${type}`;
+            el.innerHTML = `${title}${sub ? `<span class="sub">${sub}</span>` : ''}`;
+            if (isStatic) {
+                el.style.fontSize = '10px';
+                el.style.padding = '2px 6px';
+                el.style.opacity = '0.75';
+            }
+            labelsContainer.appendChild(el);
+            return el;
+        }
+
+        staticLabels.push(
+            { pos: new THREE.Vector3(-12, 10.2, -7), el: createLabelElement('12 km 對流層頂', '', 'cloud', true) },
+            { pos: new THREE.Vector3(-12, 5.0, -7), el: createLabelElement('6 km 中層', '', 'cloud', true) },
+            { pos: new THREE.Vector3(11.1, 0.4, -6.5), el: createLabelElement('N 北', '', 'cold', true) }
+        );
+
+        // =========================================================================
+        // 5. 可重用 3D 氣象視覺元件庫 (Air Wedge, FlowStream, Clouds, Rain, FrontLine)
+        // =========================================================================
+        let activeLabels = [];
+        let disposables = [];
+
+        function trackDispose(obj) {
+            disposables.push(obj);
+            return obj;
+        }
+
+        function addSimLabel(title, sub, type, x, y, z) {
+            const el = createLabelElement(title, sub, type, false);
+            const item = { pos: new THREE.Vector3(x, y, z), el, visible: true };
+            activeLabels.push(item);
+            return item;
+        }
+
+        // (A) 3D 動態氣團剖面體積塊 (可即時更新頂面與底面曲面方程式)
+        class AirVolume {
+            constructor(color, opacity = 0.28, segX = 32, segZ = 14) {
+                const geo = trackDispose(new THREE.BoxGeometry(1, 1, 1, segX, 1, segZ));
+                const pos = geo.attributes.position;
+                this.meta = [];
+                for (let i = 0; i < pos.count; i++) {
+                    this.meta.push({
+                        u: pos.getX(i) + 0.5,       // 0..1
+                        top: pos.getY(i) > 0,       // true = 頂面, false = 底面
+                        v: pos.getZ(i) + 0.5        // 0..1
+                    });
+                }
+                const mat = trackDispose(new THREE.MeshPhysicalMaterial({
+                    color,
+                    transparent: true,
+                    opacity,
+                    roughness: 0.25,
+                    metalness: 0.05,
+                    side: THREE.DoubleSide,
+                    depthWrite: false
+                }));
+                this.mesh = new THREE.Mesh(geo, mat);
+                this.mesh.renderOrder = 2;
+                simGroup.add(this.mesh);
+            }
+
+            update(xMin, xMax, zMin, zMax, fnBottom, fnTop) {
+                if (xMax - xMin < 0.05 || zMax - zMin < 0.05) {
+                    this.mesh.visible = false;
+                    return;
+                }
+                this.mesh.visible = true;
+                const pos = this.mesh.geometry.attributes.position;
+                for (let i = 0; i < pos.count; i++) {
+                    const m = this.meta[i];
+                    const x = THREE.MathUtils.lerp(xMin, xMax, m.u);
+                    const z = THREE.MathUtils.lerp(zMin, zMax, m.v);
+                    const yBot = fnBottom(x, z);
+                    const yTop = Math.max(yBot + 0.02, fnTop(x, z));
+                    pos.setXYZ(i, x, m.top ? yTop : yBot, z);
+                }
+                pos.needsUpdate = true;
+                this.mesh.geometry.computeVertexNormals();
+            }
+        }
+
+        // (B) 3D 氣流流線與動態箭頭粒子系統
+        class FlowStream {
+            constructor({ pointsFn, color = PALETTE.cold, colorEnd = null, count = 5, speed = 0.35, size = 0.24, showLine = true }) {
+                this.pointsFn = typeof pointsFn === 'function' ? pointsFn : () => pointsFn;
+                this.baseColor = new THREE.Color(color);
+                this.endColor = colorEnd ? new THREE.Color(colorEnd) : null;
+                this.speed = speed;
+                this.opacityScale = 1;
+                this.group = new THREE.Group();
+                simGroup.add(this.group);
+
+                this.curve = new THREE.CatmullRomCurve3(this.pointsFn(0));
+
+                if (showLine) {
+                    const lineGeo = trackDispose(new THREE.BufferGeometry().setFromPoints(this.curve.getPoints(40)));
+                    this.lineMat = trackDispose(new THREE.LineBasicMaterial({
+                        color,
+                        transparent: true,
+                        opacity: 0.42
+                    }));
+                    this.line = new THREE.Line(lineGeo, this.lineMat);
+                    this.group.add(this.line);
+                }
+
+                const coneGeo = trackDispose(new THREE.ConeGeometry(size, size * 2.5, 10));
+                coneGeo.rotateX(Math.PI / 2);
+                this.arrows = [];
+                for (let i = 0; i < count; i++) {
+                    const mat = trackDispose(new THREE.MeshStandardMaterial({
+                        color,
+                        emissive: color,
+                        emissiveIntensity: 0.35,
+                        transparent: true,
+                        opacity: 0.9
+                    }));
+                    const mesh = new THREE.Mesh(coneGeo, mat);
+                    this.group.add(mesh);
+                    this.arrows.push({ mesh, mat, offset: i / count });
+                }
+            }
+
+            update(elapsed, p) {
+                if (this.opacityScale <= 0.02) {
+                    this.group.visible = false;
+                    return;
+                }
+                this.group.visible = true;
+                const pts = this.pointsFn(p);
+                this.curve = new THREE.CatmullRomCurve3(pts);
+
+                if (this.line) {
+                    this.line.geometry.setFromPoints(this.curve.getPoints(36));
+                    this.lineMat.opacity = 0.42 * this.opacityScale;
+                }
+
+                const up = new THREE.Vector3(0, 1, 0);
+                for (const a of this.arrows) {
+                    const t = (elapsed * this.speed + a.offset) % 1;
+                    const pos = this.curve.getPointAt(t);
+                    const tan = this.curve.getTangentAt(t).normalize();
+                    a.mesh.position.copy(pos);
+                    const target = pos.clone().add(tan);
+                    a.mesh.up.copy(up);
+                    a.mesh.lookAt(target);
+
+                    const edgeFade = Math.min(t * 6, (1 - t) * 6, 1);
+                    a.mat.opacity = edgeFade * 0.95 * this.opacityScale;
+
+                    if (this.endColor) {
+                        const c = this.baseColor.clone().lerp(this.endColor, t);
+                        a.mat.color.copy(c);
+                        a.mat.emissive.copy(c);
+                    }
+                }
+            }
+        }
+
+        // (C) 3D 立體雲團組件
+        class CloudCluster {
+            constructor({ x = 0, y = 5, z = 0, sx = 3, sy = 1.6, sz = 3, puffs = 14, darkness = 0.08 }) {
+                this.group = new THREE.Group();
+                this.group.position.set(x, y, z);
+                simGroup.add(this.group);
+
+                const baseBright = 1 - darkness;
+                const topColor = new THREE.Color(0.96, 0.98, 1.0);
+                const botColor = new THREE.Color(0.55 * baseBright, 0.62 * baseBright, 0.72 * baseBright);
+
+                const puffGeo = trackDispose(new THREE.IcosahedronGeometry(1, 2));
+                this.materials = [];
+                this.puffMeshes = [];
+
+                // 使用固定偽隨機確保切換一致美觀
+                for (let i = 0; i < puffs; i++) {
+                    const seed = (i * 9301 + 49297) % 233280 / 233280;
+                    const seed2 = ((i + 7) * 4321 + 12345) % 233280 / 233280;
+                    const seed3 = ((i + 13) * 7717 + 54321) % 233280 / 233280;
+
+                    const angle = seed * Math.PI * 2;
+                    const rad = Math.sqrt(seed2) * 0.5;
+                    const px = Math.cos(angle) * rad * sx;
+                    const pz = Math.sin(angle) * rad * sz;
+                    const py = (seed3 - 0.45) * sy;
+
+                    const c = botColor.clone().lerp(topColor, THREE.MathUtils.clamp((py / sy) + 0.55, 0, 1));
+                    const mat = trackDispose(new THREE.MeshStandardMaterial({
+                        color: c,
+                        roughness: 0.9,
+                        transparent: true,
+                        opacity: 0.92
+                    }));
+                    this.materials.push(mat);
+
+                    const m = new THREE.Mesh(puffGeo, mat);
+                    const rScale = (0.45 + (1 - rad) * 0.55) * Math.min(sx, sz) * 0.45 + 0.35;
+                    m.position.set(px, py, pz);
+                    m.scale.set(rScale * 1.15, rScale * (0.72 + sy * 0.12), rScale);
+                    m.castShadow = true;
+                    this.group.add(m);
+                    this.puffMeshes.push({ m, baseScale: m.scale.clone(), phase: i * 0.8 });
+                }
+            }
+
+            setState({ x, y, z, scale = 1, scaleY = null, opacity = 0.92, elapsed = 0 }) {
+                if (x !== undefined) this.group.position.x = x;
+                if (y !== undefined) this.group.position.y = y;
+                if (z !== undefined) this.group.position.z = z;
+                const s = Math.max(0.001, scale);
+                this.group.scale.set(s, scaleY !== null ? Math.max(0.001, scaleY) : s, s);
+                this.group.visible = opacity > 0.02 && s > 0.03;
+                for (const mat of this.materials) mat.opacity = opacity;
+                for (const pm of this.puffMeshes) {
+                    const breathe = 1 + Math.sin(elapsed * 1.6 + pm.phase) * 0.035;
+                    pm.m.scale.copy(pm.baseScale).multiplyScalar(breathe);
+                }
+            }
+        }
+
+        // (D) 3D 降雨與閃電粒子系統
+        class RainSystem {
+            constructor({ count = 220, width = 4, height = 5, depth = 8, slantX = 0.25 }) {
+                this.count = count;
+                this.width = width;
+                this.height = height;
+                this.depth = depth;
+                this.slantX = slantX;
+                this.intensity = 1;
+
+                this.drops = [];
+                const positions = new Float32Array(count * 6);
+                for (let i = 0; i < count; i++) {
+                    this.drops.push({
+                        u: Math.random() - 0.5,
+                        y: Math.random(),
+                        v: Math.random() - 0.5,
+                        speed: 1.4 + Math.random() * 0.9
+                    });
+                }
+                const geo = trackDispose(new THREE.BufferGeometry());
+                geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                this.mat = trackDispose(new THREE.LineBasicMaterial({
+                    color: PALETTE.rain,
+                    transparent: true,
+                    opacity: 0.65
+                }));
+                this.lines = new THREE.LineSegments(geo, this.mat);
+                simGroup.add(this.lines);
+            }
+
+            update(dt, cx, topY, cz, intensity = 1) {
+                this.intensity = intensity;
+                if (intensity <= 0.03) {
+                    this.lines.visible = false;
+                    return;
+                }
+                this.lines.visible = true;
+                this.mat.opacity = 0.7 * intensity;
+
+                const arr = this.lines.geometry.attributes.position.array;
+                const activeCount = Math.floor(this.count * Math.min(1, intensity));
+
+                for (let i = 0; i < this.count; i++) {
+                    const d = this.drops[i];
+                    d.y -= dt * d.speed;
+                    if (d.y < 0) d.y += 1;
+
+                    const idx = i * 6;
+                    if (i > activeCount) {
+                        arr[idx] = arr[idx + 3] = 0;
+                        arr[idx + 1] = arr[idx + 4] = -10;
+                        arr[idx + 2] = arr[idx + 5] = 0;
+                        continue;
+                    }
+                    const x = cx + d.u * this.width + (1 - d.y) * this.slantX;
+                    const y = Math.max(0.05, d.y * topY);
+                    const z = cz + d.v * this.depth;
+
+                    arr[idx] = x;
+                    arr[idx + 1] = y;
+                    arr[idx + 2] = z;
+                    arr[idx + 3] = x + this.slantX * 0.12;
+                    arr[idx + 4] = Math.max(0.02, y - 0.55);
+                    arr[idx + 5] = z;
+                }
+                this.lines.geometry.attributes.position.needsUpdate = true;
+            }
+        }
+
+        class LightningFlash {
+            constructor() {
+                const geo = trackDispose(new THREE.BufferGeometry().setFromPoints([
+                    new THREE.Vector3(0, 6, 0), new THREE.Vector3(0, 0, 0)
+                ]));
+                this.mat = trackDispose(new THREE.LineBasicMaterial({ color: PALETTE.lightning, transparent: true, opacity: 0 }));
+                this.bolt = new THREE.Line(geo, this.mat);
+                simGroup.add(this.bolt);
+
+                this.light = new THREE.PointLight(PALETTE.lightning, 0, 14);
+                simGroup.add(this.light);
+                this.timer = 0;
+            }
+
+            update(dt, cx, topY, cz, active = false) {
+                if (!active) {
+                    this.mat.opacity = 0;
+                    this.light.intensity = 0;
+                    return;
+                }
+                this.timer -= dt;
+                if (this.timer <= 0) {
+                    this.timer = 0.55 + Math.random() * 1.1;
+                    const pts = [];
+                    const segs = 7;
+                    const ox = cx + (Math.random() - 0.5) * 1.6;
+                    const oz = cz + (Math.random() - 0.5) * 3.5;
+                    for (let i = 0; i <= segs; i++) {
+                        const r = i / segs;
+                        pts.push(new THREE.Vector3(
+                            ox + (i === 0 || i === segs ? 0 : (Math.random() - 0.5) * 1.1),
+                            topY * (1 - r),
+                            oz + (i === 0 || i === segs ? 0 : (Math.random() - 0.5) * 1.1)
+                        ));
+                    }
+                    this.bolt.geometry.setFromPoints(pts);
+                    this.mat.opacity = 1.0;
+                    this.light.position.set(ox, topY * 0.55, oz);
+                    this.light.intensity = 5.5;
+                } else {
+                    this.mat.opacity = Math.max(0, this.mat.opacity - dt * 6.5);
+                    this.light.intensity = Math.max(0, this.light.intensity - dt * 32);
+                }
+            }
+        }
+
+        // (E) 地面氣象鋒面符號線 (冷鋒三角、暖鋒半圓、滯留鋒交替、閉塞鋒同側)
+        class SurfaceFrontLine {
+            constructor(type = 'cold', count = 8) {
+                this.type = type;
+                this.group = new THREE.Group();
+                simGroup.add(this.group);
+
+                const baseColor =
+                    type === 'cold' ? PALETTE.cold :
+                        type === 'warm' ? PALETTE.warm :
+                            type === 'occluded' ? PALETTE.occluded : 0xe2e8f0;
+
+                this.lineGeo = trackDispose(new THREE.BufferGeometry().setFromPoints([
+                    new THREE.Vector3(0, 0.06, -6), new THREE.Vector3(0, 0.06, 6)
+                ]));
+                this.lineMat = trackDispose(new THREE.LineBasicMaterial({ color: baseColor }));
+                this.line = new THREE.Line(this.lineGeo, this.lineMat);
+                this.group.add(this.line);
+
+                const triGeo = trackDispose(new THREE.ConeGeometry(0.32, 0.65, 3));
+                triGeo.rotateX(Math.PI / 2); // 預設指向 +Z
+
+                const semiGeo = trackDispose(new THREE.CylinderGeometry(0.32, 0.32, 0.1, 16, 1, false, 0, Math.PI));
+
+                this.markers = [];
+                for (let i = 0; i < count; i++) {
+                    let isTri = true;
+                    let mColor = baseColor;
+                    let flipSide = 1;
+
+                    if (type === 'warm') {
+                        isTri = false;
+                    } else if (type === 'stationary') {
+                        isTri = i % 2 === 0;
+                        mColor = isTri ? PALETTE.cold : PALETTE.warm;
+                        flipSide = isTri ? 1 : -1;
+                    } else if (type === 'occluded') {
+                        isTri = i % 2 === 0;
+                        mColor = PALETTE.occluded;
+                    }
+
+                    const mat = trackDispose(new THREE.MeshBasicMaterial({ color: mColor }));
+                    const mesh = new THREE.Mesh(isTri ? triGeo : semiGeo, mat);
+                    this.group.add(mesh);
+                    this.markers.push({ mesh, isTri, flipSide, u: (i + 0.5) / count });
+                }
+            }
+
+            updateCurve(points3D, normalSide = 1, visible = true) {
+                this.group.visible = visible;
+                if (!visible) return;
+
+                const curve = new THREE.CatmullRomCurve3(points3D);
+                this.line.geometry.setFromPoints(curve.getPoints(32));
+
+                const up = new THREE.Vector3(0, 1, 0);
+                for (const m of this.markers) {
+                    const pt = curve.getPointAt(m.u);
+                    const tan = curve.getTangentAt(m.u).normalize();
+                    const dir = new THREE.Vector3().crossVectors(up, tan).normalize().multiplyScalar(normalSide * m.flipSide);
+
+                    if (m.isTri) {
+                        m.mesh.position.copy(pt).addScaledVector(dir, 0.3);
+                        m.mesh.position.y = 0.08;
+                        m.mesh.lookAt(pt.clone().add(dir));
+                    } else {
+                        m.mesh.position.copy(pt);
+                        m.mesh.position.y = 0.07;
+                        const angle = Math.atan2(dir.x, dir.z);
+                        m.mesh.rotation.set(0, angle - Math.PI / 2, 0);
+                    }
+                }
+            }
+        }
+
+        // 地面等壓線圓環與 H / L 標記輔助函式
+        function createIsobarRing(rx, rz, color = 0x94a3b8, opacity = 0.45) {
+            const pts = [];
+            const segs = 64;
+            for (let i = 0; i <= segs; i++) {
+                const a = (i / segs) * Math.PI * 2;
+                pts.push(new THREE.Vector3(Math.cos(a) * rx, 0.05, Math.sin(a) * rz));
+            }
+            const geo = trackDispose(new THREE.BufferGeometry().setFromPoints(pts));
+            const mat = trackDispose(new THREE.LineBasicMaterial({ color, transparent: true, opacity }));
+            const line = new THREE.Line(geo, mat);
+            simGroup.add(line);
+            return { line, mat, rx, rz };
+        }
+
+        // =========================================================================
+        // 6. 10 大氣象主題 3D 場景建構器 (Scene Builders)
+        // =========================================================================
+        let currentSceneUpdater = null;
+
+        function resetEnvironmentDefaults() {
+            slabMat.color.setHex(PALETTE.groundPlain);
+            ambientLight.intensity = 0.85;
+            ambientLight.color.setHex(0xdbeafe);
+            dirLight.intensity = 1.35;
+            dirLight.color.setHex(0xffffff);
+            dirLight.position.set(12, 22, 14);
+        }
+
+        const SCENE_BUILDERS = {
+            // -----------------------------------------------------------------------
+            // 1-1 冷鋒 (Cold Front)
+            // -----------------------------------------------------------------------
+            cold_front() {
+                const coldWedge = new AirVolume(PALETTE.cold, 0.34);
+                const warmMass = new AirVolume(PALETTE.warm, 0.16);
+                const frontLine = new SurfaceFrontLine('cold', 8);
+
+                const cbTower = new CloudCluster({ x: 0, y: 5.2, z: 0, sx: 2.8, sy: 6.2, sz: 9.5, puffs: 24, darkness: 0.25 });
+                const anvilTop = new CloudCluster({ x: 1.5, y: 8.8, z: 0, sx: 5.0, sy: 1.2, sz: 9.5, puffs: 16, darkness: 0.05 });
+                const postCu = new CloudCluster({ x: -5, y: 2.5, z: -2, sx: 2.2, sy: 1.0, sz: 3.2, puffs: 8, darkness: 0.05 });
+
+                const rain = new RainSystem({ count: 260, width: 2.5, height: 5.5, depth: 10, slantX: -0.45 });
+                const lightning = new LightningFlash();
+
+                const coldStreams = [-4, 0, 4].map(z => new FlowStream({
+                    color: PALETTE.cold, count: 4, speed: 0.42,
+                    pointsFn: (p) => {
+                        const fx = THREE.MathUtils.lerp(-5.5, 4.5, p);
+                        return [
+                            new THREE.Vector3(-11.5, 1.3, z),
+                            new THREE.Vector3(fx - 4.5, 1.2, z),
+                            new THREE.Vector3(fx - 1.2, 0.7, z)
+                        ];
+                    }
+                }));
+
+                const warmStreams = [-3.5, 0, 3.5].map(z => new FlowStream({
+                    color: PALETTE.warm, count: 5, speed: 0.48,
+                    pointsFn: (p) => {
+                        const fx = THREE.MathUtils.lerp(-5.5, 4.5, p);
+                        const lift = THREE.MathUtils.smoothstep(p, 0.05, 0.35);
+                        return [
+                            new THREE.Vector3(11.5, 1.1, z),
+                            new THREE.Vector3(fx + 2.5, 1.2, z),
+                            new THREE.Vector3(fx + 0.3, 1.5 + lift * 2.2, z),
+                            new THREE.Vector3(fx - 0.8, 2.5 + lift * 5.8, z),
+                            new THREE.Vector3(fx + 2.2, 3.2 + lift * 6.2, z)
+                        ];
+                    }
+                }));
+
+                const lblCold = addSimLabel('冷氣團 (Cold Air)', '密度大・乾冷下沉推進', 'cold', -7, 3.2, 0);
+                const lblWarm = addSimLabel('暖濕氣團 (Warm Air)', '被迫劇烈垂直抬升', 'warm', 6, 3.0, 0);
+                const lblCb = addSimLabel('積雨雲 (Cb) 與狹窄對流帶', '強雷陣雨・陣風・劇烈降溫', 'cloud', 0, 9.8, 0);
+                const lblFront = addSimLabel('地面冷鋒線', '陡峭坡度 (~1:70)', 'cold', 0, 0.8, 5.2);
+
+                return (p, dt, elapsed) => {
+                    const fx = THREE.MathUtils.lerp(-5.5, 4.5, p);
+                    const conv = THREE.MathUtils.smoothstep(p, 0.18, 0.55);
+
+                    // 陡峭拋物線楔形冷氣團
+                    const wedgeH = (x) => {
+                        if (x > fx) return 0;
+                        return Math.min(5.6, Math.pow((fx - x) / 8.5, 0.62) * 5.4);
+                    };
+
+                    coldWedge.update(-12, fx, -6.8, 6.8, () => 0.02, (x) => wedgeH(x));
+                    warmMass.update(fx - 6, 12, -6.8, 6.8, (x) => wedgeH(x), () => 7.2);
+
+                    frontLine.updateCurve([
+                        new THREE.Vector3(fx, 0.06, -6.6),
+                        new THREE.Vector3(fx + 0.3, 0.06, 0),
+                        new THREE.Vector3(fx, 0.06, 6.6)
+                    ], -1, true);
+
+                    cbTower.setState({ x: fx - 0.6, y: 2.5 + conv * 2.9, z: 0, scale: 0.35 + conv * 0.65, scaleY: 0.25 + conv * 0.85, opacity: 0.3 + conv * 0.65, elapsed });
+                    anvilTop.setState({ x: fx + 1.1, y: 8.9, z: 0, scale: conv, opacity: conv * 0.88, elapsed });
+                    const postVis = THREE.MathUtils.smoothstep(p, 0.72, 0.95);
+                    postCu.setState({ x: fx - 6.5, y: 2.3, z: -1.5, scale: postVis, opacity: postVis * 0.75, elapsed });
+
+                    const rainInt = conv * (p > 0.88 ? 0.65 : 1.0);
+                    rain.update(dt, fx - 0.8, 5.2, 0, rainInt);
+                    lightning.update(dt, fx - 0.6, 7.2, 0, p > 0.45 && p < 0.88);
+
+                    coldStreams.forEach(s => s.update(elapsed, p));
+                    warmStreams.forEach(s => s.update(elapsed, p));
+
+                    lblCold.pos.set(Math.max(-9.5, fx - 5.2), 3.3, 0);
+                    lblWarm.pos.set(Math.min(9.5, fx + 4.5), 2.8, 0);
+                    lblCb.pos.set(fx + 0.2, 10.1, 0);
+                    lblCb.el.style.opacity = conv > 0.3 ? '1' : '0.25';
+                    lblFront.pos.set(fx, 0.85, 5.2);
+                };
+            },
+
+            // -----------------------------------------------------------------------
+            // 1-2 暖鋒 (Warm Front)
+            // -----------------------------------------------------------------------
+            warm_front() {
+                const coldRetreat = new AirVolume(PALETTE.cold, 0.30);
+                const warmAdv = new AirVolume(PALETTE.warm, 0.22);
+                const frontLine = new SurfaceFrontLine('warm', 8);
+
+                // 梯次雲系：卷雲(Ci) -> 高層雲(As) -> 雨層雲(Ns)
+                const cloudNs = new CloudCluster({ x: 0, y: 2.8, z: 0, sx: 4.5, sy: 1.8, sz: 9.5, puffs: 20, darkness: 0.22 });
+                const cloudAs = new CloudCluster({ x: 4, y: 5.3, z: 0, sx: 4.8, sy: 1.0, sz: 9.5, puffs: 16, darkness: 0.10 });
+                const cloudCi = new CloudCluster({ x: 8, y: 8.0, z: 0, sx: 4.2, sy: 0.45, sz: 9.2, puffs: 12, darkness: 0.0 });
+
+                const steadyRain = new RainSystem({ count: 280, width: 5.2, height: 2.8, depth: 10, slantX: 0.2 });
+
+                const warmStreams = [-3.8, 0, 3.8].map(z => new FlowStream({
+                    color: PALETTE.warm, count: 5, speed: 0.32,
+                    pointsFn: (p) => {
+                        const fx = THREE.MathUtils.lerp(-6.5, 2.5, p);
+                        return [
+                            new THREE.Vector3(-11.5, 1.0, z),
+                            new THREE.Vector3(fx - 1.5, 1.1, z),
+                            new THREE.Vector3(fx + 2.5, 2.6, z),
+                            new THREE.Vector3(fx + 6.5, 5.0, z),
+                            new THREE.Vector3(Math.min(11.8, fx + 10.5), 7.4, z)
+                        ];
+                    }
+                }));
+
+                const coldStreams = [-3, 3].map(z => new FlowStream({
+                    color: PALETTE.cold, count: 3, speed: 0.20,
+                    pointsFn: (p) => {
+                        const fx = THREE.MathUtils.lerp(-6.5, 2.5, p);
+                        return [
+                            new THREE.Vector3(fx + 2.5, 0.7, z),
+                            new THREE.Vector3(fx + 6.5, 0.9, z),
+                            new THREE.Vector3(11.5, 1.0, z)
+                        ];
+                    }
+                }));
+
+                const lblWarm = addSimLabel('暖氣團主動爬升', '沿平緩斜坡 (~1:200) 滑升', 'warm', -5, 3.2, 0);
+                const lblCold = addSimLabel('緩慢撤退冷空氣楔', '盤踞低層', 'cold', 6, 1.5, 0);
+                const lblNs = addSimLabel('雨層雲 (Ns)', '鋒前寬廣連續性降雨', 'cloud', 1, 4.3, -2);
+                const lblAs = addSimLabel('高層雲 (As)', '中層層狀雲幕', 'cloud', 5, 6.5, 0);
+                const lblCi = addSimLabel('卷雲 (Ci)', '高空冰晶前導雲', 'cloud', 8.5, 9.0, 2);
+
+                return (p, dt, elapsed) => {
+                    const fx = THREE.MathUtils.lerp(-6.5, 2.2, p);
+                    const slopeH = (x) => {
+                        if (x < fx) return 0;
+                        return Math.min(6.8, ((x - fx) / 13.5) * 6.5);
+                    };
+
+                    coldRetreat.update(fx, 12, -6.8, 6.8, () => 0.02, (x) => slopeH(x));
+                    warmAdv.update(-12, 12, -6.8, 6.8, (x) => slopeH(x), (x) => Math.max(4.5, slopeH(x) + 2.6));
+
+                    frontLine.updateCurve([
+                        new THREE.Vector3(fx, 0.06, -6.6),
+                        new THREE.Vector3(fx + 0.2, 0.06, 0),
+                        new THREE.Vector3(fx, 0.06, 6.6)
+                    ], -1, true);
+
+                    const cBuild = THREE.MathUtils.smoothstep(p, 0.15, 0.55);
+                    cloudNs.setState({ x: fx + 2.4, y: 2.7, z: 0, scale: 0.4 + cBuild * 0.6, opacity: 0.35 + cBuild * 0.58, elapsed });
+                    cloudAs.setState({ x: fx + 5.8, y: 5.2, z: 0, scale: 0.3 + cBuild * 0.7, opacity: 0.25 + cBuild * 0.58, elapsed });
+                    cloudCi.setState({ x: Math.min(9.8, fx + 9.0), y: 7.9, z: 0, scale: 0.3 + cBuild * 0.7, opacity: 0.2 + cBuild * 0.55, elapsed });
+
+                    const rainInt = THREE.MathUtils.smoothstep(p, 0.3, 0.68);
+                    steadyRain.update(dt, fx + 2.5, 2.5, 0, rainInt);
+
+                    warmStreams.forEach(s => s.update(elapsed, p));
+                    coldStreams.forEach(s => s.update(elapsed, p));
+
+                    lblWarm.pos.set(fx - 3.2, 3.0, 0);
+                    lblCold.pos.set(Math.min(9.8, fx + 6.5), 1.6, 0);
+                    lblNs.pos.set(fx + 2.4, 4.4, -2);
+                    lblAs.pos.set(fx + 5.8, 6.6, 0);
+                    lblCi.pos.set(Math.min(9.8, fx + 9.0), 9.0, 2);
+                };
+            },
+
+            // -----------------------------------------------------------------------
+            // 1-3 滯留鋒 (Stationary Front - 如梅雨鋒面，採南北交會視角)
+            // -----------------------------------------------------------------------
+            stationary_front() {
+                // 北方(-Z)冷氣團 vs 南方(+Z)暖氣團，鋒線沿東西向(X軸)延伸
+                const coldNorth = new AirVolume(PALETTE.cold, 0.30, 18, 28);
+                const warmSouth = new AirVolume(PALETTE.warm, 0.20, 18, 28);
+                const frontLine = new SurfaceFrontLine('stationary', 10);
+
+                const cloudBand1 = new CloudCluster({ x: -5, y: 4.0, z: -1.5, sx: 7.5, sy: 2.8, sz: 4.5, puffs: 20, darkness: 0.22 });
+                const cloudBand2 = new CloudCluster({ x: 5, y: 4.3, z: -1.5, sx: 7.5, sy: 3.2, sz: 4.5, puffs: 20, darkness: 0.24 });
+
+                const meiyuRain = new RainSystem({ count: 340, width: 18, height: 3.8, depth: 3.8, slantX: 0.1 });
+
+                // 平行於鋒線反向滑動的氣流：北方偏東風(右向左)，南方西南風(左前向右後爬升)
+                const coldParallel = [-4.8, -2.8].map(zOff => new FlowStream({
+                    color: PALETTE.cold, count: 5, speed: 0.34,
+                    pointsFn: (p) => {
+                        const osc = Math.sin(p * Math.PI * 3) * 0.7;
+                        return [
+                            new THREE.Vector3(11, 1.0, zOff + osc),
+                            new THREE.Vector3(0, 1.1, zOff + osc * 0.6),
+                            new THREE.Vector3(-11, 1.0, zOff + osc)
+                        ];
+                    }
+                }));
+
+                const warmParallel = [1.5, 4.2].map(zOff => new FlowStream({
+                    color: PALETTE.warm, count: 5, speed: 0.38,
+                    pointsFn: (p) => {
+                        const osc = Math.sin(p * Math.PI * 3) * 0.7;
+                        const lift = THREE.MathUtils.smoothstep(p, 0.15, 0.5) * 3.6;
+                        return [
+                            new THREE.Vector3(-11, 1.0, zOff + osc),
+                            new THREE.Vector3(-2, 1.4 + lift * 0.4, zOff - 1.5 + osc),
+                            new THREE.Vector3(8, 1.8 + lift, zOff - 3.6 + osc)
+                        ];
+                    }
+                }));
+
+                const lblNorth = addSimLabel('北方冷氣團 (偏東風)', '平行鋒線向西滑動', 'cold', -4, 2.2, -4.8);
+                const lblSouth = addSimLabel('南方暖濕氣團 (西南季風)', '源源不絕輸送水氣爬升', 'warm', 4, 2.2, 4.5);
+                const lblFront = addSimLabel('滯留鋒面 (如梅雨鋒面)', '冷暖勢均力敵・南北微幅擺動', 'occluded', 0, 0.9, 1.2);
+                const lblCloud = addSimLabel('綿延雲雨帶長期盤踞', '連日陰雨綿綿與局部豪雨', 'cloud', 0, 6.8, -1.8);
+
+                return (p, dt, elapsed) => {
+                    const fz = Math.sin(elapsed * 0.9) * 0.65 + Math.sin(p * Math.PI * 2) * 0.45;
+                    const slopeZ = (z) => {
+                        if (z > fz) return 0;
+                        return Math.min(5.8, ((fz - z) / 7.5) * 5.6);
+                    };
+
+                    coldNorth.update(-11.8, 11.8, -6.8, fz, () => 0.02, (x, z) => slopeZ(z));
+                    warmSouth.update(-11.8, 11.8, -6.8, 6.8, (x, z) => slopeZ(z), (x, z) => Math.max(4.5, slopeZ(z) + 2.4));
+
+                    frontLine.updateCurve([
+                        new THREE.Vector3(-11.5, 0.06, fz),
+                        new THREE.Vector3(0, 0.06, fz + 0.35),
+                        new THREE.Vector3(11.5, 0.06, fz)
+                    ], 1, true);
+
+                    const build = THREE.MathUtils.smoothstep(p, 0.2, 0.65);
+                    cloudBand1.setState({ x: -5.2, y: 4.1, z: fz - 1.8, scale: 0.45 + build * 0.55, opacity: 0.35 + build * 0.58, elapsed });
+                    cloudBand2.setState({ x: 5.2, y: 4.3, z: fz - 1.6, scale: 0.45 + build * 0.55, opacity: 0.35 + build * 0.58, elapsed });
+
+                    const rainInt = THREE.MathUtils.smoothstep(p, 0.35, 0.78);
+                    meiyuRain.update(dt, 0, 3.6, fz - 1.7, rainInt);
+
+                    coldParallel.forEach(s => s.update(elapsed, p));
+                    warmParallel.forEach(s => s.update(elapsed, p));
+
+                    lblFront.pos.set(0, 0.9, fz + 1.1);
+                    lblCloud.pos.set(0, 6.9, fz - 1.8);
+                };
+            },
+
+            // -----------------------------------------------------------------------
+            // 1-4 閉塞鋒 (Occluded Front / 囚錮鋒)
+            // -----------------------------------------------------------------------
+            occluded_front() {
+                const coldRear = new AirVolume(PALETTE.coldDeep, 0.36);   // 後方更冷氣團
+                const coldAhead = new AirVolume(PALETTE.cold, 0.26);      // 前方次冷氣團
+                const warmAloft = new AirVolume(PALETTE.warm, 0.28);      // 被抬離地面的暖舌
+
+                const coldFrontLine = new SurfaceFrontLine('cold', 7);
+                const warmFrontLine = new SurfaceFrontLine('warm', 7);
+                const occFrontLine = new SurfaceFrontLine('occluded', 8);
+
+                const complexCloud = new CloudCluster({ x: 0, y: 5.4, z: 0, sx: 6.5, sy: 4.5, sz: 9.5, puffs: 26, darkness: 0.24 });
+                const rain = new RainSystem({ count: 280, width: 5.5, height: 4.5, depth: 9.5, slantX: 0.0 });
+
+                const rearStream = new FlowStream({
+                    color: PALETTE.cold, count: 4, speed: 0.42,
+                    pointsFn: (p) => {
+                        const cx = THREE.MathUtils.lerp(-5.5, 1.5, p);
+                        return [new THREE.Vector3(-11, 1.1, -2), new THREE.Vector3(cx - 3.5, 1.2, -2), new THREE.Vector3(cx - 0.5, 0.8, -2)];
+                    }
+                });
+
+                const warmSqueezeStream = [-2.5, 2.5].map(z => new FlowStream({
+                    color: PALETTE.warm, count: 5, speed: 0.38,
+                    pointsFn: (p) => {
+                        const lift = THREE.MathUtils.smoothstep(p, 0.25, 0.75) * 3.4;
+                        const midX = THREE.MathUtils.lerp(-1.0, 1.5, p);
+                        return [
+                            new THREE.Vector3(midX - 2.5, 1.2 + lift, z),
+                            new THREE.Vector3(midX, 2.6 + lift * 1.15, z),
+                            new THREE.Vector3(midX + 3.8, 4.8 + lift * 0.8, z)
+                        ];
+                    }
+                }));
+
+                const lblRear = addSimLabel('後方更冷氣團', '移速快・楔入最底層', 'cold', -7, 2.8, 0);
+                const lblAhead = addSimLabel('前方次冷氣團', '退居右側低層', 'cold', 7.5, 2.0, 0);
+                const lblWarmTongue = addSimLabel('暖空氣被抬離地面 (囚錮)', '高空 V 型暖舌', 'warm', 0, 6.2, 0);
+                const lblOcc = addSimLabel('地面閉塞鋒 (紫色)', '溫帶氣旋發展末期特徵', 'occluded', 1, 0.9, 5.2);
+
+                return (p, dt, elapsed) => {
+                    // 冷鋒追趕暖鋒：在 p ≈ 0.42 追上並產生閉塞高度 liftY
+                    const coldX = THREE.MathUtils.lerp(-5.5, 2.2, p);
+                    const warmX = THREE.MathUtils.lerp(-0.5, 1.5, p);
+                    const occluded = coldX >= warmX;
+                    const meetX = occluded ? coldX : 0;
+                    const liftBase = occluded ? (coldX - warmX) * 1.65 : 0;
+
+                    const hRear = (x) => x > coldX ? 0 : Math.min(5.6, Math.pow((coldX - x) / 8.5, 0.65) * 5.2);
+                    const hAhead = (x) => x < warmX ? 0 : Math.min(5.2, ((x - warmX) / 10.5) * 5.0);
+
+                    coldRear.update(-12, coldX, -6.8, 6.8, () => 0.02, (x) => hRear(x));
+                    coldAhead.update(warmX, 12, -6.8, 6.8, (x) => hRear(x), (x) => Math.max(hRear(x), hAhead(x)));
+                    warmAloft.update(-8, 9, -6.8, 6.8,
+                        (x) => Math.max(hRear(x), hAhead(x), liftBase * 0.4),
+                        (x) => Math.max(hRear(x), hAhead(x)) + 2.6 * (1 - p * 0.25)
+                    );
+
+                    coldFrontLine.updateCurve([new THREE.Vector3(coldX, 0.06, -6.5), new THREE.Vector3(coldX, 0.06, 6.5)], -1, !occluded);
+                    warmFrontLine.updateCurve([new THREE.Vector3(warmX, 0.06, -6.5), new THREE.Vector3(warmX, 0.06, 6.5)], -1, !occluded);
+                    occFrontLine.updateCurve([new THREE.Vector3(meetX, 0.06, -6.5), new THREE.Vector3(meetX + 0.3, 0.06, 0), new THREE.Vector3(meetX, 0.06, 6.5)], -1, occluded);
+
+                    const cScale = 0.5 + THREE.MathUtils.smoothstep(p, 0.15, 0.65) * 0.5 - THREE.MathUtils.smoothstep(p, 0.85, 1.0) * 0.2;
+                    complexCloud.setState({ x: (coldX + warmX) * 0.5 + 0.8, y: 5.2, z: 0, scale: cScale, opacity: 0.88 * cScale, elapsed });
+
+                    const rainInt = THREE.MathUtils.smoothstep(p, 0.2, 0.65) * (1 - THREE.MathUtils.smoothstep(p, 0.85, 1.0) * 0.55);
+                    rain.update(dt, (coldX + warmX) * 0.5 + 0.8, 4.4, 0, rainInt);
+
+                    rearStream.update(elapsed, p);
+                    warmSqueezeStream.forEach(s => s.update(elapsed, p));
+
+                    lblWarmTongue.pos.set((coldX + warmX) * 0.5, 4.2 + liftBase * 1.2, 0);
+                    lblOcc.el.style.opacity = occluded ? '1' : '0.2';
+                    lblOcc.pos.set(meetX, 0.9, 5.2);
+                };
+            },
+
+            // -----------------------------------------------------------------------
+            // 2-1 溫帶氣旋 / 低氣壓系統 (Extra-tropical Cyclone - 北半球逆時針渦旋)
+            // -----------------------------------------------------------------------
+            cyclone() {
+                const rings = [
+                    createIsobarRing(2.2, 1.8, 0x38bdf8, 0.7),
+                    createIsobarRing(4.8, 3.8, 0x64748b, 0.5),
+                    createIsobarRing(7.8, 6.0, 0x475569, 0.35)
+                ];
+
+                const coldFront = new SurfaceFrontLine('cold', 6);
+                const warmFront = new SurfaceFrontLine('warm', 6);
+
+                // 北半球逆時針旋入並向中心抬升的 5 條螺旋氣流
+                const spiralStreams = [0, 1, 2, 3, 4].map(i => {
+                    const baseAngle = (i / 5) * Math.PI * 2;
+                    const isWarmSector = i === 1 || i === 2;
+                    return new FlowStream({
+                        color: isWarmSector ? PALETTE.warm : PALETTE.cold,
+                        count: 5,
+                        speed: 0.36,
+                        pointsFn: (p) => {
+                            const spin = p * 0.8;
+                            const pts = [];
+                            for (let k = 0; k <= 5; k++) {
+                                const t = k / 5; // 0(外圍低空) -> 1(中心高空)
+                                const r = THREE.MathUtils.lerp(8.5, 0.7, t);
+                                // 北半球俯視逆時針：角度在 X-Z 平面向負方向旋轉 (cos(a), -sin(a))
+                                const ang = baseAngle - spin - t * 2.1;
+                                const y = 0.4 + Math.pow(t, 1.7) * (2.5 + p * 4.5);
+                                pts.push(new THREE.Vector3(Math.cos(ang) * r, y, -Math.sin(ang) * r * 0.78));
+                            }
+                            return pts;
+                        }
+                    });
+                });
+
+                // 逗點狀雲系 (Comma Cloud: 氣旋中心雲團 + 暖鋒雲臂 + 冷鋒雲尾)
+                const commaHead = new CloudCluster({ x: -0.8, y: 6.0, z: -1.2, sx: 5.2, sy: 2.5, sz: 4.5, puffs: 18, darkness: 0.18 });
+                const warmArm = new CloudCluster({ x: 3.8, y: 4.8, z: -0.8, sx: 5.5, sy: 1.6, sz: 3.5, puffs: 14, darkness: 0.14 });
+                const coldTail = new CloudCluster({ x: -3.2, y: 4.5, z: 2.8, sx: 3.0, sy: 2.8, sz: 5.5, puffs: 15, darkness: 0.22 });
+                const rain = new RainSystem({ count: 240, width: 6.5, height: 4.5, depth: 5.5, slantX: 0.2 });
+
+                const lblLow = addSimLabel('L 低氣壓中心', '中心氣壓最低・強烈輻合上升', 'warm', 0, 1.2, 0);
+                const lblVortex = addSimLabel('北半球逆時針旋入氣流', '科氏力偏向 + 氣壓梯度力', 'cold', -6.5, 2.2, -3);
+                const lblComma = addSimLabel('三維逗點狀螺旋雲系', '結合東側暖鋒與西側冷鋒', 'cloud', 0, 8.2, -1.5);
+
+                return (p, dt, elapsed) => {
+                    const tighten = 1 - p * 0.22;
+                    rings.forEach((r, idx) => {
+                        r.line.scale.set(tighten, 1, tighten);
+                        r.mat.opacity = 0.25 + p * 0.45 - idx * 0.1;
+                    });
+
+                    // 冷鋒由中心向西南延伸並隨氣旋逆時針擺動；暖鋒向東偏南延伸
+                    const cfAngle = -2.2 - p * 0.65; // 西南轉正南追趕
+                    const wfAngle = -0.35 - p * 0.15;
+
+                    const showFronts = p > 0.18;
+                    coldFront.updateCurve([
+                        new THREE.Vector3(0, 0.07, 0),
+                        new THREE.Vector3(Math.cos(cfAngle) * 4.2, 0.07, -Math.sin(cfAngle) * 3.5),
+                        new THREE.Vector3(Math.cos(cfAngle - 0.2) * 8.2, 0.07, -Math.sin(cfAngle - 0.2) * 6.2)
+                    ], -1, showFronts);
+
+                    warmFront.updateCurve([
+                        new THREE.Vector3(0, 0.07, 0),
+                        new THREE.Vector3(Math.cos(wfAngle) * 4.5, 0.07, -Math.sin(wfAngle) * 3.5),
+                        new THREE.Vector3(Math.cos(wfAngle) * 8.8, 0.07, -Math.sin(wfAngle) * 5.8)
+                    ], 1, showFronts);
+
+                    const cVis = THREE.MathUtils.smoothstep(p, 0.22, 0.68);
+                    commaHead.setState({ x: -0.6, y: 5.8, z: -1.0, scale: cVis, opacity: cVis * 0.9, elapsed });
+                    warmArm.setState({ x: 3.6, y: 4.6, z: -0.5, scale: cVis, opacity: cVis * 0.85, elapsed });
+                    coldTail.setState({ x: Math.cos(cfAngle) * 4.2, y: 4.3, z: -Math.sin(cfAngle) * 3.3, scale: cVis, opacity: cVis * 0.88, elapsed });
+
+                    rain.update(dt, 0.5, 4.5, -0.5, cVis * 0.85);
+                    spiralStreams.forEach(s => s.update(elapsed, p));
+                };
+            },
+
+            // -----------------------------------------------------------------------
+            // 2-2 高氣壓系統 / 反氣旋 (Anticyclone - 下沉氣流與順時針向外輻散)
+            // -----------------------------------------------------------------------
+            anticyclone() {
+                const rings = [
+                    createIsobarRing(2.8, 2.2, 0x38bdf8, 0.65),
+                    createIsobarRing(5.8, 4.6, 0x64748b, 0.45),
+                    createIsobarRing(9.0, 6.4, 0x475569, 0.30)
+                ];
+
+                // 中心高空下沉 ➔ 近地面北半球順時針向外旋出輻散
+                const anticycloneStreams = [0, 1, 2, 3, 4, 5].map(i => {
+                    const baseAngle = (i / 6) * Math.PI * 2;
+                    return new FlowStream({
+                        color: PALETTE.cold,
+                        colorEnd: 0x93c5fd,
+                        count: 5,
+                        speed: 0.32,
+                        pointsFn: (p) => {
+                            const pts = [];
+                            for (let k = 0; k <= 5; k++) {
+                                const t = k / 5; // 0(高空中心匯聚) -> 1(地面外圍順時針擴散)
+                                const r = THREE.MathUtils.lerp(0.6, 9.2, Math.pow(t, 1.3));
+                                // 順時針：角度隨半徑向外遞增 (+ang)
+                                const ang = baseAngle + t * 1.85 + p * 0.5;
+                                const y = THREE.MathUtils.lerp(8.2, 0.45, Math.pow(t, 0.68));
+                                pts.push(new THREE.Vector3(Math.cos(ang) * r, y, -Math.sin(ang) * r * 0.72));
+                            }
+                            return pts;
+                        }
+                    });
+                });
+
+                // 外圍零星晴天小積雲（中心因下沉增溫完全晴朗無雲）
+                const fairClouds = [
+                    new CloudCluster({ x: -9.2, y: 2.4, z: -4.5, sx: 2.0, sy: 0.7, sz: 1.8, puffs: 6 }),
+                    new CloudCluster({ x: 9.2, y: 2.4, z: 4.2, sx: 2.0, sy: 0.7, sz: 1.8, puffs: 6 })
+                ];
+
+                // 中心清澈陽光柱視覺效果
+                const sunConeGeo = trackDispose(new THREE.CylinderGeometry(1.5, 5.5, 8.5, 24, 1, true));
+                const sunConeMat = trackDispose(new THREE.MeshBasicMaterial({
+                    color: 0xfef08a,
+                    transparent: true,
+                    opacity: 0.06,
+                    side: THREE.DoubleSide,
+                    depthWrite: false
+                }));
+                const sunCone = new THREE.Mesh(sunConeGeo, sunConeMat);
+                sunCone.position.y = 4.25;
+                simGroup.add(sunCone);
+
+                const lblHigh = addSimLabel('H 高氣壓中心', '天氣晴朗穩定・風速微弱', 'cold', 0, 1.2, 0);
+                const lblSub = addSimLabel('高空空氣匯聚下沉', '絕熱壓縮增溫・水氣蒸發無雲', 'warm', 0, 7.8, 0);
+                const lblDiv = addSimLabel('北半球順時針向外輻散', '低層空氣向四周擴散', 'cold', 6.5, 1.5, 3.8);
+
+                return (p, dt, elapsed) => {
+                    sunConeMat.opacity = 0.03 + THREE.MathUtils.smoothstep(p, 0.3, 0.9) * 0.07;
+                    rings.forEach(r => {
+                        const s = 0.85 + p * 0.18;
+                        r.line.scale.set(s, 1, s);
+                    });
+                    anticycloneStreams.forEach(s => s.update(elapsed, p));
+                    const edgeFade = 1 - THREE.MathUtils.smoothstep(p, 0.2, 0.7) * 0.45;
+                    fairClouds.forEach(c => c.setState({ scale: edgeFade, opacity: 0.55 * edgeFade, elapsed }));
+                };
+            },
+
+            // -----------------------------------------------------------------------
+            // 2-3 高空噴射氣流 (Jet Stream - 羅斯貝波與高低空耦合)
+            // -----------------------------------------------------------------------
+            jet_stream() {
+                // 北方極區冷空氣團 (低溫頂面較低)
+                const polarCold = new AirVolume(PALETTE.cold, 0.18, 28, 12);
+
+                // 蜿蜒的高空噴射氣流光帶 (TubeGeometry)
+                const jetMat = trackDispose(new THREE.MeshStandardMaterial({
+                    color: PALETTE.jet,
+                    emissive: 0xd97706,
+                    emissiveIntensity: 0.55,
+                    transparent: true,
+                    opacity: 0.72,
+                    roughness: 0.3
+                }));
+                const jetRibbon = new THREE.Mesh(new THREE.BufferGeometry(), jetMat);
+                simGroup.add(jetRibbon);
+
+                const jetCoreStream = new FlowStream({
+                    color: PALETTE.jet,
+                    count: 9,
+                    speed: 0.68,
+                    size: 0.30,
+                    showLine: false,
+                    pointsFn: (p) => getJetPoints(p, 0)
+                });
+
+                function getJetPoints(p, phaseShift = 0) {
+                    const amp = THREE.MathUtils.lerp(0.6, 3.6, THREE.MathUtils.smoothstep(p, 0.12, 0.55));
+                    const shift = p * 2.2 + phaseShift;
+                    const pts = [];
+                    for (let i = 0; i <= 16; i++) {
+                        const u = i / 16;
+                        const x = THREE.MathUtils.lerp(-11.8, 11.8, u);
+                        const z = Math.sin(u * Math.PI * 2 - shift) * amp;
+                        const y = 8.4 + Math.cos(u * Math.PI * 2 - shift) * 0.35;
+                        pts.push(new THREE.Vector3(x, y, z));
+                    }
+                    return pts;
+                }
+
+                // 槽前上升抽吸氣流 (連接地面氣旋 L 與高空噴流槽前輻散區)
+                const chimneyUp = new FlowStream({
+                    color: PALETTE.warm, count: 5, speed: 0.45,
+                    pointsFn: (p) => {
+                        const lx = THREE.MathUtils.lerp(-1.5, 4.5, p);
+                        return [
+                            new THREE.Vector3(lx - 1.5, 0.5, 2.2),
+                            new THREE.Vector3(lx, 2.8, 1.2),
+                            new THREE.Vector3(lx + 0.4, 6.2, 0.6),
+                            new THREE.Vector3(lx + 1.8, 8.3, -0.5)
+                        ];
+                    }
+                });
+
+                const sfcLowRing = createIsobarRing(2.4, 2.0, PALETTE.warm, 0.65);
+                const cycCloud = new CloudCluster({ x: 0, y: 4.8, z: 1.0, sx: 4.2, sy: 2.2, sz: 3.8, puffs: 14, darkness: 0.18 });
+
+                const lblJet = addSimLabel('高空噴射氣流 (Jet Stream)', '9~12km 對流層頂高速西風長河', 'jet', -4, 9.6, 0);
+                const lblTrough = addSimLabel('高空槽 (Trough) 與槽前輻散', '高空抽氣效應誘發地面氣旋', 'jet', 2, 8.8, 2.5);
+                const lblSfcL = addSimLabel('L 地面溫帶氣旋', '受噴射氣流導引向東移動', 'warm', 1, 1.1, 1.2);
+
+                return (p, dt, elapsed) => {
+                    const pts = getJetPoints(p, elapsed * 0.25);
+                    const curve = new THREE.CatmullRomCurve3(pts);
+
+                    if (jetRibbon.geometry) jetRibbon.geometry.dispose();
+                    jetRibbon.geometry = new THREE.TubeGeometry(curve, 64, 0.48, 10, false);
+
+                    // 北側極區冷空氣隨噴流南北蜿蜒
+                    polarCold.update(-11.8, 11.8, -6.8, 3.5, () => 0.02, (x, z) => {
+                        const u = (x + 11.8) / 23.6;
+                        const jetZ = curve.getPointAt(THREE.MathUtils.clamp(u, 0, 1)).z;
+                        return z < jetZ ? THREE.MathUtils.clamp((jetZ - z) * 1.4, 0, 7.5) : 0;
+                    });
+
+                    jetCoreStream.pointsFn = () => pts;
+                    jetCoreStream.update(elapsed, p);
+
+                    const couple = THREE.MathUtils.smoothstep(p, 0.45, 0.78);
+                    const lx = THREE.MathUtils.lerp(-1.5, 4.5, p);
+                    chimneyUp.opacityScale = couple;
+                    chimneyUp.update(elapsed, p);
+
+                    sfcLowRing.line.position.set(lx, 0, 1.0);
+                    sfcLowRing.mat.opacity = couple * 0.75;
+                    cycCloud.setState({ x: lx + 0.3, y: 4.8, z: 0.9, scale: couple, opacity: couple * 0.88, elapsed });
+
+                    lblJet.pos.copy(curve.getPointAt(0.22)).add(new THREE.Vector3(0, 1.1, 0));
+                    lblTrough.pos.copy(curve.getPointAt(0.62)).add(new THREE.Vector3(0, 1.0, 0));
+                    lblSfcL.pos.set(lx, 1.1, 1.2);
+                    lblSfcL.el.style.opacity = couple > 0.2 ? '1' : '0.2';
+                };
+            },
+
+            // -----------------------------------------------------------------------
+            // 3-1 雷暴與超級胞 (Supercell - 中氣旋旋轉上升與微爆下衝流)
+            // -----------------------------------------------------------------------
+            supercell() {
+                const cloudBase = new CloudCluster({ x: -1.2, y: 2.8, z: 0, sx: 5.5, sy: 1.6, sz: 5.5, puffs: 16, darkness: 0.32 });
+                const cloudTower = new CloudCluster({ x: -0.8, y: 5.8, z: 0, sx: 4.2, sy: 4.8, sz: 4.2, puffs: 20, darkness: 0.24 });
+                const cloudAnvil = new CloudCluster({ x: 1.8, y: 9.0, z: 0, sx: 9.5, sy: 1.5, sz: 7.5, puffs: 22, darkness: 0.08 });
+                const overshootingTop = new CloudCluster({ x: -0.8, y: 10.2, z: 0, sx: 2.6, sy: 1.2, sz: 2.6, puffs: 8, darkness: 0.02 });
+
+                // 雙股螺旋旋轉上升氣流 (Mesocyclone 中氣旋)
+                const mesoStreams = [0, Math.PI].map(phase => new FlowStream({
+                    color: PALETTE.warm,
+                    colorEnd: PALETTE.warmHot,
+                    count: 6,
+                    speed: 0.52,
+                    pointsFn: (p) => {
+                        const topH = THREE.MathUtils.lerp(4.0, 9.5, THREE.MathUtils.smoothstep(p, 0.05, 0.65));
+                        const turns = THREE.MathUtils.lerp(0.6, 2.8, THREE.MathUtils.smoothstep(p, 0.2, 0.6));
+                        const pts = [];
+                        for (let k = 0; k <= 8; k++) {
+                            const t = k / 8;
+                            const ang = phase + t * Math.PI * 2 * turns;
+                            const r = THREE.MathUtils.lerp(2.2, 0.9, t);
+                            pts.push(new THREE.Vector3(-1.0 + Math.cos(ang) * r, 0.5 + t * topH, Math.sin(ang) * r));
+                        }
+                        return pts;
+                    }
+                }));
+
+                // 下衝流與地面微爆擴散氣流 (Downdraft / Microburst)
+                const microburstStreams = [-1, 0, 1].map(dirZ => new FlowStream({
+                    color: PALETTE.cold, count: 4, speed: 0.58,
+                    pointsFn: () => [
+                        new THREE.Vector3(2.5, 6.2, dirZ * 0.8),
+                        new THREE.Vector3(2.8, 2.5, dirZ * 1.1),
+                        new THREE.Vector3(3.2, 0.45, dirZ * 1.6),
+                        new THREE.Vector3(6.8, 0.35, dirZ * 3.8)
+                    ]
+                }));
+
+                const heavyRain = new RainSystem({ count: 300, width: 3.2, height: 5.2, depth: 3.8, slantX: 0.35 });
+                const lightning = new LightningFlash();
+
+                // 地面微爆衝擊波環
+                const burstRing = createIsobarRing(1.0, 1.0, PALETTE.cold, 0.0);
+
+                const lblMeso = addSimLabel('旋轉上升氣流 (中氣旋 Mesocyclone)', '強烈垂直風切誘發渦旋柱', 'warm', -1.2, 5.2, 2.6);
+                const lblAnvil = addSimLabel('巨大砧狀雲頂 (Anvil) 與穿透雲頂', '猛烈對流撞擊對流層頂外擴', 'cloud', 2.2, 10.6, 0);
+                const lblBurst = addSimLabel('下衝流與微爆氣流 (Microburst)', '降水蒸發冷卻砸向地面向外爆發', 'cold', 4.5, 1.4, 2.5);
+
+                return (p, dt, elapsed) => {
+                    const towerBuild = THREE.MathUtils.smoothstep(p, 0.05, 0.55);
+                    const anvilBuild = THREE.MathUtils.smoothstep(p, 0.45, 0.78);
+                    const burstBuild = THREE.MathUtils.smoothstep(p, 0.72, 0.96);
+
+                    cloudBase.setState({ y: 2.6, scale: 0.5 + towerBuild * 0.5, opacity: 0.92, elapsed });
+                    cloudTower.setState({ y: 3.2 + towerBuild * 2.5, scale: 0.45 + towerBuild * 0.55, scaleY: 0.3 + towerBuild * 0.75, opacity: 0.92, elapsed });
+                    cloudTower.group.rotation.y = elapsed * 0.35 * THREE.MathUtils.smoothstep(p, 0.25, 0.6);
+
+                    cloudAnvil.setState({ x: 1.8, y: 8.9, scale: anvilBuild, opacity: anvilBuild * 0.9, elapsed });
+                    overshootingTop.setState({ y: 10.1, scale: anvilBuild, opacity: anvilBuild * 0.92, elapsed });
+
+                    mesoStreams.forEach(s => s.update(elapsed, p));
+                    microburstStreams.forEach(s => {
+                        s.opacityScale = burstBuild;
+                        s.update(elapsed, p);
+                    });
+
+                    heavyRain.update(dt, 2.8, 5.2, 0, burstBuild);
+                    lightning.update(dt, 0.5, 7.8, 0, p > 0.52);
+
+                    if (burstBuild > 0.05) {
+                        const pulse = (elapsed * 0.9) % 1;
+                        const s = 1.0 + pulse * 4.2;
+                        burstRing.line.position.set(3.2, 0.06, 0);
+                        burstRing.line.scale.set(s, 1, s);
+                        burstRing.mat.opacity = (1 - pulse) * 0.75 * burstBuild;
+                    } else {
+                        burstRing.mat.opacity = 0;
+                    }
+
+                    lblAnvil.el.style.opacity = anvilBuild > 0.25 ? '1' : '0.2';
+                    lblBurst.el.style.opacity = burstBuild > 0.2 ? '1' : '0.2';
+                };
+            },
+
+            // -----------------------------------------------------------------------
+            // 3-2 海陸風環流 (Sea & Land Breeze - 日夜熱力循環)
+            // -----------------------------------------------------------------------
+            sea_land_breeze() {
+                // 左半部：海洋 (-12 ~ 0)，右半部：陸地與緩丘 (0 ~ 12)
+                const seaMesh = new THREE.Mesh(
+                    trackDispose(new THREE.BoxGeometry(12, 0.16, SLAB_D)),
+                    trackDispose(new THREE.MeshStandardMaterial({ color: PALETTE.groundSea, roughness: 0.25, metalness: 0.3 }))
+                );
+                seaMesh.position.set(-6, 0.06, 0);
+                simGroup.add(seaMesh);
+
+                const landMesh = new THREE.Mesh(
+                    trackDispose(new THREE.BoxGeometry(12, 0.24, SLAB_D)),
+                    trackDispose(new THREE.MeshStandardMaterial({ color: PALETTE.groundLand, roughness: 0.85 }))
+                );
+                landMesh.position.set(6, 0.10, 0);
+                simGroup.add(landMesh);
+
+                // 太陽與月亮天體模型
+                const sunOrb = new THREE.Mesh(
+                    trackDispose(new THREE.SphereGeometry(0.85, 20, 20)),
+                    trackDispose(new THREE.MeshBasicMaterial({ color: 0xfde047 }))
+                );
+                const moonOrb = new THREE.Mesh(
+                    trackDispose(new THREE.SphereGeometry(0.65, 20, 20)),
+                    trackDispose(new THREE.MeshBasicMaterial({ color: 0xe2e8f0 }))
+                );
+                simGroup.add(sunOrb, moonOrb);
+
+                // 白天海風環流 (海洋 -> 陸地近地面，陸地上升 -> 高空回海下沉)
+                const seaBreezeLow = [-3, 3].map(z => new FlowStream({
+                    color: PALETTE.cold, colorEnd: PALETTE.warm, count: 5, speed: 0.38,
+                    pointsFn: () => [
+                        new THREE.Vector3(-6.5, 0.9, z),
+                        new THREE.Vector3(0, 0.8, z),
+                        new THREE.Vector3(6.5, 1.2, z),
+                        new THREE.Vector3(7.2, 4.8, z)
+                    ]
+                }));
+                const seaBreezeReturn = [-3, 3].map(z => new FlowStream({
+                    color: PALETTE.warm, colorEnd: PALETTE.cold, count: 5, speed: 0.35,
+                    pointsFn: () => [
+                        new THREE.Vector3(6.8, 5.4, z),
+                        new THREE.Vector3(0, 5.8, z),
+                        new THREE.Vector3(-6.8, 5.2, z),
+                        new THREE.Vector3(-7.2, 1.4, z)
+                    ]
+                }));
+
+                // 夜晚陸風環流 (陸地 -> 海洋近地面，海面上升 -> 高空回陸下沉)
+                const landBreezeLow = [-3, 3].map(z => new FlowStream({
+                    color: PALETTE.cold, colorEnd: PALETTE.warm, count: 5, speed: 0.34,
+                    pointsFn: () => [
+                        new THREE.Vector3(6.5, 0.9, z),
+                        new THREE.Vector3(0, 0.8, z),
+                        new THREE.Vector3(-6.5, 1.2, z),
+                        new THREE.Vector3(-7.2, 4.4, z)
+                    ]
+                }));
+                const landBreezeReturn = [-3, 3].map(z => new FlowStream({
+                    color: PALETTE.warm, colorEnd: PALETTE.cold, count: 5, speed: 0.32,
+                    pointsFn: () => [
+                        new THREE.Vector3(-6.8, 4.9, z),
+                        new THREE.Vector3(0, 5.3, z),
+                        new THREE.Vector3(6.8, 4.8, z),
+                        new THREE.Vector3(7.2, 1.4, z)
+                    ]
+                }));
+
+                const dayLandCloud = new CloudCluster({ x: 6.5, y: 6.2, z: 0, sx: 4.2, sy: 1.8, sz: 6.5, puffs: 14, darkness: 0.08 });
+                const nightSeaCloud = new CloudCluster({ x: -6.5, y: 5.6, z: 0, sx: 4.2, sy: 1.5, sz: 6.5, puffs: 12, darkness: 0.12 });
+
+                const lblSea = addSimLabel('海洋 (比熱大・溫差小)', '白天較涼 / 夜晚較暖', 'cold', -6.5, 0.6, 5.2);
+                const lblLand = addSimLabel('陸地 (比熱小・升降溫快)', '白天酷熱 / 夜晚冷卻快', 'warm', 6.5, 0.7, 5.2);
+                const lblBreeze = addSimLabel('海風 (Sea Breeze)', '白天近地面由海吹向陸', 'cold', 0, 2.0, 0);
+
+                return (p, dt, elapsed) => {
+                    const isNight = p >= 0.52;
+                    const dayStrength = !isNight ? THREE.MathUtils.smoothstep(p, 0.02, 0.32) * (1 - THREE.MathUtils.smoothstep(p, 0.44, 0.52)) : 0;
+                    const nightStrength = isNight ? THREE.MathUtils.smoothstep(p, 0.56, 0.85) : 0;
+
+                    // 日夜光照平滑切換
+                    const nightBlend = THREE.MathUtils.smoothstep(p, 0.46, 0.60);
+                    ambientLight.intensity = THREE.MathUtils.lerp(0.95, 0.38, nightBlend);
+                    dirLight.intensity = THREE.MathUtils.lerp(1.5, 0.45, nightBlend);
+                    dirLight.color.setHex(isNight ? 0x93c5fd : 0xfffbeb);
+
+                    sunOrb.visible = !isNight;
+                    sunOrb.position.set(4, 9.2, -5);
+                    moonOrb.visible = isNight;
+                    moonOrb.position.set(-4, 9.0, -5);
+
+                    seaBreezeLow.forEach(s => { s.opacityScale = dayStrength; s.update(elapsed, p); });
+                    seaBreezeReturn.forEach(s => { s.opacityScale = dayStrength; s.update(elapsed, p); });
+
+                    landBreezeLow.forEach(s => { s.opacityScale = nightStrength; s.update(elapsed, p); });
+                    landBreezeReturn.forEach(s => { s.opacityScale = nightStrength; s.update(elapsed, p); });
+
+                    dayLandCloud.setState({ scale: dayStrength, opacity: dayStrength * 0.9, elapsed });
+                    nightSeaCloud.setState({ scale: nightStrength, opacity: nightStrength * 0.85, elapsed });
+
+                    if (!isNight) {
+                        lblBreeze.el.innerHTML = `海風環流 (Sea Breeze)<span class="sub">白天陸地熱低壓上升・涼爽海風吹入陸地</span>`;
+                    } else {
+                        lblBreeze.el.innerHTML = `陸風環流 (Land Breeze)<span class="sub">夜晚陸地輻射冷卻下沉・陸風吹向溫暖海面</span>`;
+                    }
+                };
+            },
+
+            // -----------------------------------------------------------------------
+            // 3-3 地形雨與焚風效應 (Orographic Precipitation & Foehn Wind)
+            // -----------------------------------------------------------------------
+            foehn() {
+                // 中央高聳山脈 3D 地形網格 (高斯山脊 h(x) = 5.8 * exp(-(x/3.3)^2))
+                const mtnH = (x, z) => {
+                    const ridge = 5.8 * Math.exp(-Math.pow(x / 3.4, 2));
+                    const detail = Math.cos(z * 0.65) * 0.35 * Math.exp(-Math.pow(x / 4.2, 2));
+                    return Math.max(0, ridge + detail - 0.15);
+                };
+
+                const mtnGeo = trackDispose(new THREE.PlaneGeometry(SLAB_W, SLAB_D, 64, 32));
+                mtnGeo.rotateX(-Math.PI / 2);
+                const pos = mtnGeo.attributes.position;
+                const colors = [];
+                for (let i = 0; i < pos.count; i++) {
+                    const x = pos.getX(i);
+                    const z = pos.getZ(i);
+                    const y = mtnH(x, z);
+                    pos.setY(i, y);
+
+                    // 依高度著色：平原綠 -> 森林深綠 -> 高山岩灰 -> 山頂微雪色
+                    const c = new THREE.Color();
+                    if (y < 0.8) c.setHex(0x26463b);
+                    else if (y < 3.2) c.setHex(0x2f5241);
+                    else if (y < 4.9) c.setHex(0x475569);
+                    else c.setHex(0x94a3b8);
+                    colors.push(c.r, c.g, c.b);
+                }
+                mtnGeo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+                mtnGeo.computeVertexNormals();
+
+                const mtnMesh = new THREE.Mesh(
+                    mtnGeo,
+                    trackDispose(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88 }))
+                );
+                mtnMesh.receiveShadow = true;
+                mtnMesh.castShadow = true;
+                simGroup.add(mtnMesh);
+
+                // 迎風面雲牆 (止步於稜線 x ≈ 0.3，形成焚風牆 Foehn Wall)
+                const windwardCloud = new CloudCluster({ x: -3.6, y: 4.6, z: 0, sx: 5.2, sy: 2.6, sz: 10.5, puffs: 22, darkness: 0.22 });
+                const orographicRain = new RainSystem({ count: 280, width: 4.5, height: 4.2, depth: 10.5, slantX: 0.3 });
+
+                // 跨越山脈氣流：左側迎風濕涼 (青藍) -> 越嶺潛熱釋放 -> 右側背風乾絕熱下沉焚風 (橘紅)
+                const foehnStreams = [-4, 0, 4].map(z => new FlowStream({
+                    color: PALETTE.cold,
+                    colorEnd: PALETTE.warmHot,
+                    count: 7,
+                    speed: 0.38,
+                    pointsFn: (p) => {
+                        const maxReachX = THREE.MathUtils.lerp(-2.5, 11.5, THREE.MathUtils.smoothstep(p, 0.0, 0.85));
+                        const pts = [];
+                        for (let k = 0; k <= 10; k++) {
+                            const x = THREE.MathUtils.lerp(-11.5, maxReachX, k / 10);
+                            const y = mtnH(x, z) + 0.95 + (x < 0 ? 0.25 : 0.05);
+                            pts.push(new THREE.Vector3(x, y, z));
+                        }
+                        return pts;
+                    }
+                }));
+
+                // 背風坡乾熱暖空氣區視覺光暈
+                const leeHeatZone = new AirVolume(PALETTE.warmHot, 0.22);
+
+                const lblWindward = addSimLabel('迎風坡強迫抬升 (地形雨)', '濕絕熱冷卻 (~6°C/km)・水氣凝結降雨', 'cold', -5.2, 6.6, 0);
+                const lblCrest = addSimLabel('山頂焚風牆 (Foehn Wall)', '水氣耗盡・越嶺後雲層迅速消散', 'cloud', 0.2, 7.3, -2.5);
+                const lblLee = addSimLabel('背風坡乾熱焚風 (Foehn Wind)', '乾絕熱壓縮增溫 (~10°C/km)・高溫乾燥', 'warm', 6.8, 3.2, 0);
+
+                return (p, dt, elapsed) => {
+                    const rainBuild = THREE.MathUtils.smoothstep(p, 0.18, 0.52);
+                    const leeBuild = THREE.MathUtils.smoothstep(p, 0.62, 0.94);
+
+                    windwardCloud.setState({ x: -3.5, y: 4.6, z: 0, scale: 0.35 + rainBuild * 0.65, opacity: 0.3 + rainBuild * 0.65, elapsed });
+                    orographicRain.update(dt, -3.8, 4.2, 0, rainBuild);
+
+                    foehnStreams.forEach(s => s.update(elapsed, p));
+
+                    if (leeBuild > 0.02) {
+                        leeHeatZone.update(1.5, 11.8, -6.6, 6.6, (x, z) => mtnH(x, z) + 0.05, (x, z) => mtnH(x, z) + 2.5 * leeBuild);
+                    } else {
+                        leeHeatZone.mesh.visible = false;
+                    }
+
+                    lblCrest.el.style.opacity = p > 0.52 ? '1' : '0.25';
+                    lblLee.el.style.opacity = leeBuild > 0.2 ? '1' : '0.2';
+                };
+            }
+        };
+
+        // =========================================================================
+        // 7. 場景生命週期管理與記憶體安全釋放
+        // =========================================================================
+        let state = {
+            catIdx: 0,
+            sceneIdx: 0,
+            stepIdx: 0,
+            progress: 0.08,
+            targetProgress: 0.08,
+            isPlaying: false,
+            showLabels: true,
+            panMode: false
+        };
+
+        function clearCurrentSim() {
+            while (simGroup.children.length > 0) {
+                simGroup.remove(simGroup.children[0]);
+            }
+            for (const obj of disposables) {
+                if (obj && typeof obj.dispose === 'function') obj.dispose();
+            }
+            disposables = [];
+
+            for (const item of activeLabels) {
+                if (item.el && item.el.parentNode) item.el.parentNode.removeChild(item.el);
+            }
+            activeLabels = [];
+            resetEnvironmentDefaults();
+        }
+
+        // 平滑相機過渡目標
+        let camTargetPos = null;
+        function flyCameraTo(posArr) {
+            camTargetPos = new THREE.Vector3(posArr[0], posArr[1], posArr[2]);
+        }
+
+        function loadScene(catIdx, sceneIdx) {
+            state.catIdx = catIdx;
+            state.sceneIdx = sceneIdx;
+            state.isPlaying = false;
+            updatePlayBtnUI();
+
+            clearCurrentSim();
+
+            const sceneDef = CATEGORIES[catIdx].scenes[sceneIdx];
+            const builder = SCENE_BUILDERS[sceneDef.id];
+            currentSceneUpdater = builder ? builder() : null;
+
+            controls.target.set(0, 3.0, 0);
+            flyCameraTo(sceneDef.camPos);
+
+            renderTabsUI();
+            renderStepperUI();
+            jumpToStep(0, true);
+        }
+
+        // =========================================================================
+        // 8. UI 互動控制與 Step-by-Step 流程同步
+        // =========================================================================
+        const elCatTabs = document.getElementById('cat-tabs');
+        const elSubTabs = document.getElementById('sub-tabs');
+        const elStepperRow = document.getElementById('stepper-row');
+        const elSceneName = document.getElementById('ui-scene-name');
+        const elStepTitle = document.getElementById('ui-step-title');
+        const elStepDesc = document.getElementById('ui-step-desc');
+        const elSlider = document.getElementById('progress-slider');
+        const elPctLabel = document.getElementById('pct-label');
+        const elBtnPlay = document.getElementById('btn-play');
+
+        function renderTabsUI() {
+            elCatTabs.innerHTML = '';
+            CATEGORIES.forEach((cat, idx) => {
+                const btn = document.createElement('button');
+                btn.className = `cat-btn ${idx === state.catIdx ? 'active' : ''}`;
+                btn.textContent = cat.name;
+                btn.onclick = () => loadScene(idx, 0);
+                elCatTabs.appendChild(btn);
+            });
+
+            elSubTabs.innerHTML = '';
+            CATEGORIES[state.catIdx].scenes.forEach((sc, idx) => {
+                const btn = document.createElement('button');
+                btn.className = `sub-btn ${idx === state.sceneIdx ? 'active' : ''}`;
+                btn.textContent = sc.name;
+                btn.onclick = () => loadScene(state.catIdx, idx);
+                elSubTabs.appendChild(btn);
+            });
+        }
+
+        function renderStepperUI() {
+            const sceneDef = CATEGORIES[state.catIdx].scenes[state.sceneIdx];
+            elSceneName.textContent = sceneDef.name;
+            elStepperRow.innerHTML = '';
+
+            sceneDef.steps.forEach((st, idx) => {
+                const btn = document.createElement('button');
+                btn.className = `step-pill ${idx === state.stepIdx ? 'active' : ''}`;
+                btn.textContent = st.short;
+                btn.onclick = () => {
+                    state.isPlaying = false;
+                    updatePlayBtnUI();
+                    jumpToStep(idx, false);
+                };
+                elStepperRow.appendChild(btn);
+            });
+        }
+
+        function syncStepInfoFromProgress(p) {
+            const sceneDef = CATEGORIES[state.catIdx].scenes[state.sceneIdx];
+            let bestIdx = 0;
+            let minDist = Infinity;
+            sceneDef.steps.forEach((st, idx) => {
+                const d = Math.abs(p - st.p);
+                if (d < minDist) {
+                    minDist = d;
+                    bestIdx = idx;
+                }
+            });
+
+            if (bestIdx !== state.stepIdx) {
+                state.stepIdx = bestIdx;
+                Array.from(elStepperRow.children).forEach((el, idx) => {
+                    el.classList.toggle('active', idx === bestIdx);
+                });
+            }
+
+            const curStep = sceneDef.steps[state.stepIdx];
+            elStepTitle.textContent = curStep.title;
+            elStepDesc.textContent = curStep.desc;
+            elSlider.value = Math.round(p * 1000);
+            elPctLabel.textContent = `${Math.round(p * 100)}%`;
+        }
+
+        function jumpToStep(stepIdx, instant = false) {
+            const sceneDef = CATEGORIES[state.catIdx].scenes[state.sceneIdx];
+            const clamped = THREE.MathUtils.clamp(stepIdx, 0, sceneDef.steps.length - 1);
+            state.stepIdx = clamped;
+            state.targetProgress = sceneDef.steps[clamped].p;
+            if (instant) state.progress = state.targetProgress;
+
+            Array.from(elStepperRow.children).forEach((el, idx) => {
+                el.classList.toggle('active', idx === clamped);
+            });
+            syncStepInfoFromProgress(state.targetProgress);
+        }
+
+        function updatePlayBtnUI() {
+            elBtnPlay.textContent = state.isPlaying ? '⏸ 暫停演進' : '▶ 自動演進';
+        }
+
+        // 底部流程控制按鈕綁定
+        document.getElementById('btn-prev').onclick = () => {
+            state.isPlaying = false;
+            updatePlayBtnUI();
+            jumpToStep(state.stepIdx - 1);
+        };
+
+        document.getElementById('btn-next').onclick = () => {
+            state.isPlaying = false;
+            updatePlayBtnUI();
+            jumpToStep(state.stepIdx + 1);
+        };
+
+        elBtnPlay.onclick = () => {
+            state.isPlaying = !state.isPlaying;
+            if (state.isPlaying && state.progress >= 0.98) {
+                state.progress = 0.02;
+                state.targetProgress = 0.02;
+            }
+            updatePlayBtnUI();
+        };
+
+        elSlider.addEventListener('input', (e) => {
+            state.isPlaying = false;
+            updatePlayBtnUI();
+            const val = Number(e.target.value) / 1000;
+            state.progress = val;
+            state.targetProgress = val;
+            syncStepInfoFromProgress(val);
+        });
+
+        // 收合說明面板（小螢幕觸控友善）
+        const bottomDock = document.getElementById('bottom-dock');
+        const btnCollapse = document.getElementById('btn-collapse-desc');
+        btnCollapse.onclick = () => {
+            bottomDock.classList.toggle('collapsed');
+            btnCollapse.textContent = bottomDock.classList.contains('collapsed') ? '▴' : '▾';
+        };
+
+        // 文字標籤 Toggle 顯示 / 隱藏
+        const btnToggleLabels = document.getElementById('btn-toggle-labels');
+        btnToggleLabels.onclick = () => {
+            state.showLabels = !state.showLabels;
+            labelsContainer.classList.toggle('hidden', !state.showLabels);
+            btnToggleLabels.classList.toggle('active', state.showLabels);
+            btnToggleLabels.textContent = state.showLabels ? '🏷️ 標籤: 開' : '🏷️ 標籤: 關';
+        };
+
+        // 圖例浮窗開關
+        const legendCard = document.getElementById('legend-card');
+        document.getElementById('btn-toggle-legend').onclick = () => legendCard.classList.toggle('open');
+        document.getElementById('btn-close-legend').onclick = () => legendCard.classList.remove('open');
+
+        // 右側觸控友善 Zoom / Pan / Rotate 控制
+        document.getElementById('btn-zoom-in').onclick = () => {
+            const offset = camera.position.clone().sub(controls.target).multiplyScalar(0.82);
+            if (offset.length() >= controls.minDistance) {
+                camera.position.copy(controls.target).add(offset);
+            }
+            camTargetPos = null;
+        };
+
+        document.getElementById('btn-zoom-out').onclick = () => {
+            const offset = camera.position.clone().sub(controls.target).multiplyScalar(1.22);
+            if (offset.length() <= controls.maxDistance) {
+                camera.position.copy(controls.target).add(offset);
+            }
+            camTargetPos = null;
+        };
+
+        const btnPanMode = document.getElementById('btn-pan-mode');
+        const panModeLabel = document.getElementById('pan-mode-label');
+        btnPanMode.onclick = () => {
+            state.panMode = !state.panMode;
+            btnPanMode.classList.toggle('mode-pan', state.panMode);
+            btnPanMode.textContent = state.panMode ? '✋' : '🔄';
+            panModeLabel.textContent = state.panMode ? '平移' : '旋轉';
+
+            // 切換單指觸控與滑鼠左鍵行為（雙指觸控永遠支援 Pinch Zoom + Pan）
+            controls.touches.ONE = state.panMode ? THREE.TOUCH.PAN : THREE.TOUCH.ROTATE;
+            controls.mouseButtons.LEFT = state.panMode ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE;
+        };
+
+        document.getElementById('btn-reset-cam').onclick = () => {
+            const sceneDef = CATEGORIES[state.catIdx].scenes[state.sceneIdx];
+            controls.target.set(0, 3.0, 0);
+            flyCameraTo(sceneDef.camPos);
+        };
+
+        // 使用者手動觸控或拖曳畫布時，取消自動飛鏡插值以免搶奪控制權
+        renderer.domElement.addEventListener('pointerdown', () => {
+            camTargetPos = null;
+        });
+
+        // =========================================================================
+        // 9. 3D 空間座標投影至 HTML 浮動標籤與主動畫迴圈
+        // =========================================================================
+        const projVec = new THREE.Vector3();
+
+        function updateLabelsProjection() {
+            if (!state.showLabels) return;
+            const halfW = window.innerWidth * 0.5;
+            const halfH = window.innerHeight * 0.5;
+
+            const projectItem = (item) => {
+                projVec.copy(item.pos).project(camera);
+                if (projVec.z > 1 || projVec.z < -1) {
+                    item.el.style.display = 'none';
+                    return;
+                }
+                item.el.style.display = 'block';
+                const x = projVec.x * halfW + halfW;
+                const y = -(projVec.y * halfH) + halfH;
+                item.el.style.left = `${x}px`;
+                item.el.style.top = `${y}px`;
+            };
+
+            for (const st of staticLabels) projectItem(st);
+            for (const lb of activeLabels) projectItem(lb);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = Math.min(clock.getDelta(), 0.05);
+            const elapsed = clock.getElapsedTime();
+
+            // Step-by-step 平滑演進或自動連續播放
+            if (state.isPlaying) {
+                state.progress += dt * 0.095;
+                if (state.progress >= 1.0) {
+                    state.progress = 0.02; // 循環演進
+                }
+                state.targetProgress = state.progress;
+                syncStepInfoFromProgress(state.progress);
+            } else {
+                state.progress = THREE.MathUtils.lerp(state.progress, state.targetProgress, Math.min(1, dt * 6.5));
+            }
+
+            // 相機平滑切鏡
+            if (camTargetPos) {
+                camera.position.lerp(camTargetPos, Math.min(1, dt * 5.0));
+                if (camera.position.distanceTo(camTargetPos) < 0.08) {
+                    camTargetPos = null;
+                }
+            }
+
+            controls.update();
+
+            if (currentSceneUpdater) {
+                currentSceneUpdater(state.progress, dt, elapsed);
+            }
+
+            renderer.render(scene, camera);
+            updateLabelsProjection();
+        }
+
+        // 啟動預設第一個場景（冷鋒）與主迴圈
+        loadScene(0, 0);
+        animate();
+    </script>
+</body>
+
+</html>
