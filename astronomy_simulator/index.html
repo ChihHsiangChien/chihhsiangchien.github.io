@@ -645,7 +645,7 @@
 </head>
 <body>
 <div id="app">
-  <!-- 頂部導覽與 10 分頁切換器 -->
+  <!-- 頂部導覽與分頁切換器 -->
   <header>
     <div class="top-row">
       <div class="brand">
@@ -779,6 +779,149 @@
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   const lerp = (a, b, t) => a + (b - a) * t;
   const normDeg = (d) => ((d % 360) + 360) % 360;
+  const wrap180 = (d) => ((((d + 180) % 360) + 360) % 360) - 180;
+
+  /* ---------------------------------------------------------
+   * 1b. 共用天文資料：黃道帶背景恆星、行星星曆、季節公式
+   * --------------------------------------------------------- */
+  // 可重現的偽隨機背景恆星 (黃道座標 lon/lat, 星等 mag)
+  const SKY_STARS = (() => {
+    let seed = 20261112;
+    const rnd = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; };
+    const arr = [];
+    for (let i = 0; i < 520; i++) {
+      arr.push({ lon: rnd() * 360, lat: (rnd() * 2 - 1) * 17, mag: 2 + rnd() * 4 });
+    }
+    return arr;
+  })();
+  // 黃道附近亮星 (真實黃道座標)
+  const BRIGHT_STARS = [
+    { name: '畢宿五', lon: 69.8, lat: -5.5, mag: 0.9 },
+    { name: '昴宿星團', lon: 60.0, lat: 4.0, mag: 1.6 },
+    { name: '北河二', lon: 110.2, lat: 10.1, mag: 1.6 },
+    { name: '北河三', lon: 113.2, lat: 6.7, mag: 1.1 },
+    { name: '軒轅十四', lon: 149.8, lat: 0.5, mag: 1.4 },
+    { name: '角宿一', lon: 203.8, lat: -2.1, mag: 1.0 },
+    { name: '心宿二', lon: 249.8, lat: -4.6, mag: 1.0 },
+    { name: '北落師門', lon: 333.9, lat: -21.1, mag: 1.2 }
+  ];
+  // 黃道星座 (沿黃道的中心黃經)
+  const ZODIAC = [
+    { name: '雙魚座', lon: 10 }, { name: '白羊座', lon: 41 }, { name: '金牛座', lon: 71 },
+    { name: '雙子座', lon: 104 }, { name: '巨蟹座', lon: 128 }, { name: '獅子座', lon: 156 },
+    { name: '室女座', lon: 196 }, { name: '天秤座', lon: 230 }, { name: '天蠍座', lon: 245 },
+    { name: '蛇夫座', lon: 257 }, { name: '人馬座', lon: 283 }, { name: '摩羯座', lon: 314 },
+    { name: '寶瓶座', lon: 340 }
+  ];
+
+  // 分頁10：內/外行星逆行幾何 (真實會合週期比例，prog=0.5 為下合/衝，此時行星地心黃經=90°)
+  const RETRO_CFG = [
+    { name: '金星', a: 0.7233, dE: 575.5, dP: 935.5, eLon: 270, inc: 3.39, synodic: 583.9 },
+    { name: '火星', a: 1.5237, dE: 768.7, dP: 408.7, eLon: 90, inc: 1.85, synodic: 779.9 }
+  ];
+  function retroState(prog, mode) {
+    const c = RETRO_CFG[mode];
+    const t = prog - 0.5;
+    const eL = (c.eLon + t * c.dE) * DEG;
+    const pL = (c.eLon + t * c.dP) * DEG;
+    const node = (c.eLon - 65) * DEG; // 升交點：讓逆行時行星位於黃道北側，畫出「逆行迴圈」
+    const E = [Math.cos(eL), Math.sin(eL), 0];
+    const P = [c.a * Math.cos(pL), c.a * Math.sin(pL), c.a * Math.sin(c.inc * DEG) * Math.sin(pL - node)];
+    const D = [P[0] - E[0], P[1] - E[1], P[2] - E[2]];
+    const dist = Math.hypot(D[0], D[1], D[2]);
+    const lon = normDeg(Math.atan2(D[1], D[0]) * RAD);
+    const lat = Math.asin(clamp(D[2] / dist, -1, 1)) * RAD;
+    const sunLon = normDeg(Math.atan2(-E[1], -E[0]) * RAD);
+    const rSun = Math.hypot(P[0], P[1], P[2]);
+    // 相位角：行星->太陽 與 行星->地球 的夾角
+    const cosPh = ((-P[0]) * (-D[0]) + (-P[1]) * (-D[1]) + (-P[2]) * (-D[2])) / (rSun * dist);
+    const k = 0.5 * (1 + clamp(cosPh, -1, 1));
+    const elong = wrap180(sunLon - lon); // >0 代表太陽在行星東側
+    return { E, P, lon, lat, dist, k, sunLon, elong, litEast: elong > 0 };
+  }
+  function retroVelDegPerDay(prog, mode) {
+    const dq = 0.0015;
+    const a = retroState(prog - dq, mode), b = retroState(prog + dq, mode);
+    return wrap180(b.lon - a.lon) / (2 * dq * RETRO_CFG[mode].synodic);
+  }
+
+  // 分頁12：近似圓軌道行星星曆 (起算日 2026-01-01，平黃經取自 J2000 根數)
+  const EPOCH_DAYS_FROM_J2000 = 9496.5;
+  const PLANETS = {
+    venus:   { name: '金星', a: 0.7233, P: 224.701,  L0: 181.98, inc: 3.39, node: 76.68,  color: '#FDE047', hex: 0xFDE047, size: 0.36 },
+    earth:   { name: '地球', a: 1.0,    P: 365.256,  L0: 100.46, inc: 0,    node: 0,      color: '#38BDF8', hex: 0x38BDF8, size: 0.38 },
+    mars:    { name: '火星', a: 1.5237, P: 686.98,   L0: 355.45, inc: 1.85, node: 49.56,  color: '#FB7185', hex: 0xFB7185, size: 0.3 },
+    jupiter: { name: '木星', a: 5.2026, P: 4332.59,  L0: 34.40,  inc: 1.30, node: 100.47, color: '#FDBA74', hex: 0xFDBA74, size: 0.75 },
+    saturn:  { name: '土星', a: 9.5549, P: 10759.22, L0: 49.94,  inc: 2.49, node: 113.66, color: '#FDE68A', hex: 0xFDE68A, size: 0.62 }
+  };
+  const PLANET_KEYS = ['venus', 'mars', 'jupiter', 'saturn'];
+  function planetHelio(key, d) {
+    const p = PLANETS[key];
+    const L = (p.L0 + 360 * (EPOCH_DAYS_FROM_J2000 + d) / p.P) * DEG;
+    return [p.a * Math.cos(L), p.a * Math.sin(L), p.a * Math.sin(p.inc * DEG) * Math.sin(L - p.node * DEG)];
+  }
+  function planetGeo(key, d) {
+    const E = planetHelio('earth', d);
+    const P = planetHelio(key, d);
+    const D = [P[0] - E[0], P[1] - E[1], P[2] - E[2]];
+    const r = Math.hypot(D[0], D[1], D[2]);
+    return { lon: normDeg(Math.atan2(D[1], D[0]) * RAD), lat: Math.asin(clamp(D[2] / r, -1, 1)) * RAD, dist: r, D, E, P };
+  }
+  function sunGeoLon(d) {
+    const E = planetHelio('earth', d);
+    return normDeg(Math.atan2(-E[1], -E[0]) * RAD);
+  }
+  function fmtDateFromDays(d) {
+    const dt = new Date(Date.UTC(2026, 0, 1) + Math.round(d) * 86400000);
+    return `${dt.getUTCFullYear()}/${String(dt.getUTCMonth() + 1).padStart(2, '0')}/${String(dt.getUTCDate()).padStart(2, '0')}`;
+  }
+
+  // 季節：一年中的第幾天 -> 太陽黃經 (以真實二分二至日期分段內插，含公轉快慢效應)
+  const SEASON_KEYS = [
+    { day: 79, lon: 0, name: '春分', date: '3/20' },
+    { day: 172, lon: 90, name: '夏至', date: '6/21' },
+    { day: 266, lon: 180, name: '秋分', date: '9/23' },
+    { day: 355, lon: 270, name: '冬至', date: '12/21' }
+  ];
+  function dayToSolarLon(day) {
+    const keys = [...SEASON_KEYS, { day: 79 + 365, lon: 360 }];
+    let d = day;
+    if (d < 79) d += 365;
+    for (let i = 0; i < keys.length - 1; i++) {
+      if (d >= keys[i].day && d <= keys[i + 1].day) {
+        return normDeg(lerp(keys[i].lon, keys[i + 1].lon, (d - keys[i].day) / (keys[i + 1].day - keys[i].day)));
+      }
+    }
+    return 0;
+  }
+  const solarDecl = (lonDeg) => Math.asin(Math.sin(23.44 * DEG) * Math.sin(lonDeg * DEG)); // 弧度
+  // 太陽地平座標：phi 緯度、delta 赤緯、H 時角 (皆弧度)；az 由北起算向東為正
+  function sunAltAz(phi, delta, H) {
+    const sAlt = clamp(Math.sin(phi) * Math.sin(delta) + Math.cos(phi) * Math.cos(delta) * Math.cos(H), -1, 1);
+    const alt = Math.asin(sAlt);
+    const az = Math.atan2(-Math.cos(delta) * Math.sin(H), Math.sin(delta) * Math.cos(phi) - Math.cos(delta) * Math.sin(phi) * Math.cos(H));
+    return { alt, az: (az + TAU) % TAU };
+  }
+  function dayLengthHours(phi, delta) {
+    const cosH0 = -Math.tan(phi) * Math.tan(delta);
+    if (cosH0 <= -1) return 24;
+    if (cosH0 >= 1) return 0;
+    return (2 * Math.acos(cosH0) * RAD) / 15;
+  }
+  const fmtHM = (h) => {
+    const hh = ((h % 24) + 24) % 24;
+    let H = Math.floor(hh), M = Math.round((hh - H) * 60);
+    if (M === 60) { H = (H + 1) % 24; M = 0; }
+    return `${String(H).padStart(2, '0')}:${String(M).padStart(2, '0')}`;
+  };
+  const azName = (azRad) => {
+    const names = ['北', '北北東', '東北', '東北東', '東', '東南東', '東南', '南南東', '南', '南南西', '西南', '西南西', '西', '西北西', '西北', '北北西'];
+    return names[Math.round(normDeg(azRad * RAD) / 22.5) % 16];
+  };
+  function seasonNameOfDay(day) {
+    for (const k of SEASON_KEYS) if (Math.abs(day - k.day) <= 3) return k.name;
+    return '';
+  }
 
   /* =========================================================
    * 2. 十個科學主題分頁定義與 Step-by-Step 劇本
@@ -1021,37 +1164,71 @@
           if (Math.abs(d - 270) < 12) return '冬至 (南回歸線直射)';
           return `黃經 ${Math.round(d)}°`;
         }},
+        { key: 'localHour', label: '地方時 (控制一天中的時間)', min: 0, max: 24, step: 0.05, fmt: v => {
+          const h = normDeg(v * 15) / 15;
+          const tag = h < 5 ? '深夜' : h < 7 ? '清晨' : h < 11 ? '上午' : h < 13 ? '正午前後' : h < 17 ? '下午' : h < 19 ? '傍晚' : '夜晚';
+          return `${fmtHM(h)} (${tag})`;
+        }},
+        { type: 'presets', key: 'localHour', label: '快速切換時刻', options: [
+          { label: '06:00', val: 6 },
+          { label: '09:00', val: 9 },
+          { label: '12:00 正午', val: 12 },
+          { label: '15:00', val: 15 },
+          { label: '18:00', val: 18 },
+          { label: '00:00 午夜', val: 0 }
+        ]},
+        { type: 'presets', key: 'seasonDeg', label: '快速切換節氣', options: [
+          { label: '春分', val: 0 },
+          { label: '夏至', val: 90 },
+          { label: '秋分', val: 180 },
+          { label: '冬至', val: 270 }
+        ]},
         { type: 'presets', key: 'lat', label: '快速切換經典緯度', options: [
           { label: '赤道 0°', val: 0 },
           { label: '台灣 23.5°N', val: 23.5 },
           { label: '北極圈 66.5°N', val: 66.5 },
-          { label: '北極點 90°N', val: 90 }
+          { label: '北極點 90°N', val: 90 },
+          { label: '雪梨 33.9°S', val: -33.9 }
         ]}
       ],
       steps: [
         {
-          title: '步驟 1：台灣嘉義（23.5°N）夏至——東北東日出、正午天頂直射、晝長夜短',
-          desc: '夏至太陽直射北回歸線（23.5°N），台灣日出方位偏北（東北東升、西北西落），白晝長達約 13.5 小時，正午太陽高懸正頭頂（仰角 90°）。',
-          params: { lat: 23.5, seasonDeg: 90, localHour: 12 },
+          title: '步驟 1：一天之中的太陽——早上東方升起、正午最高、傍晚西方落下',
+          desc: '拖曳「地方時」滑桿或按時刻按鈕，可看到太陽沿金色軌跡移動：每個小點間隔 1 小時，觀測者腳下的紅色影子隨時間轉向並伸縮（影子永遠指向太陽的反方向，正午最短）。',
+          params: { lat: 23.5, seasonDeg: 0, localHour: 9 },
           cam: { theta: 0.15, phi: 1.22, radius: 16 },
           play: true
         },
         {
-          title: '步驟 2：台灣（23.5°N）冬至——東南東日出、晝短夜長',
+          title: '步驟 2：台灣嘉義（23.5°N）夏至——東北東日出、正午天頂直射、晝長夜短',
+          desc: '夏至太陽直射北回歸線（23.5°N），台灣日出方位偏北（東北東升、西北西落），白晝長達約 13.5 小時，正午太陽高懸正頭頂（仰角 90°），立竿無影。',
+          params: { lat: 23.5, seasonDeg: 90, localHour: 12 },
+          cam: { theta: 0.15, phi: 1.22, radius: 16 },
+          play: false
+        },
+        {
+          title: '步驟 2：台灣嘉義（23.5°N）夏至——東北東日出、正午天頂直射、晝長夜短',
+          desc: '夏至太陽直射北回歸線（23.5°N），台灣日出方位偏北（東北東升、西北西落），白晝長達約 13.5 小時，正午太陽高懸正頭頂（仰角 90°），立竿無影。',
+          params: { lat: 23.5, seasonDeg: 90, localHour: 12 },
+          cam: { theta: 0.15, phi: 1.22, radius: 16 },
+          play: false
+        },
+        {
+          title: '步驟 3：台灣（23.5°N）冬至——東南東日出、晝短夜長',
           desc: '冬至太陽直射南回歸線，北半球偏向背光側，日出方位轉為東南東升、西南西落，台灣白晝縮短至約 10.6 小時。',
           params: { lat: 23.5, seasonDeg: 270, localHour: 14 },
           cam: { theta: 0.15, phi: 1.22, radius: 16 },
           play: true
         },
         {
-          title: '步驟 3：赤道（0°）——全年正東升正西落，永遠晝夜等長（12h / 12h）',
+          title: '步驟 4：赤道（0°）——全年正東升正西落，永遠晝夜等長（12h / 12h）',
           desc: '晨昏圈永遠平分赤道！無論夏至或冬至，赤道地區全年日照皆為 12 小時，沒有極端晝夜長短差異。',
           params: { lat: 0, seasonDeg: 90, localHour: 8 },
           cam: { theta: 0.1, phi: 1.35, radius: 16 },
           play: true
         },
         {
-          title: '步驟 4：北極圈（66.5°N）與北極點（90°N）——永晝（午夜太陽）與永夜',
+          title: '步驟 5：北極圈（66.5°N）與北極點（90°N）——永晝（午夜太陽）與永夜',
           desc: '夏至時整個北極圈完全位在晨昏圈向光側，地球自轉一整圈太陽都不會落下地平線，形成 24 小時「永晝」（可切換冬至觀察「永夜」）。',
           params: { lat: 66.5, seasonDeg: 90, localHour: 0 },
           cam: { theta: 0.25, phi: 0.92, radius: 16 },
@@ -1213,42 +1390,180 @@
       cam: { theta: 0.0, phi: 0.68, radius: 26 },
       defaults: { synodicProg: 0.5, planetMode: 0 },
       controls: [
-        { key: 'synodicProg', label: '會合週期時間進度', min: 0, max: 1, step: 0.002, fmt: v => `${Math.round(v * 100)}% ${Math.abs(v - 0.5) < 0.06 ? '(逆行期!)' : '(順行期)'}` },
+        { key: 'synodicProg', label: '會合週期時間進度', min: 0, max: 1, step: 0.002, fmt: v => {
+          const mode = state.params[9].planetMode;
+          const days = Math.round((v - 0.5) * RETRO_CFG[mode].synodic);
+          const vel = retroVelDegPerDay(v, mode);
+          const tag = Math.abs(vel) < 0.06 ? '留' : vel < 0 ? '逆行中!' : '順行';
+          return `${days >= 0 ? '+' : ''}${days} 天 (${tag})`;
+        }},
         { type: 'chips', key: 'planetMode', label: '觀測目標行星', options: [{ label: '內行星：金星(含盈虧)', val: 0 }, { label: '外行星對比：火星逆行', val: 1 }] },
-        { type: 'presets', key: 'synodicProg', label: '金星關鍵相位時刻', options: [
-          { label: '上合附近 (小滿月順行)', val: 0.06 },
-          { label: '東大距 (弦月狀)', val: 0.37 },
-          { label: '下合逆行 (巨大眉月!)', val: 0.50 },
-          { label: '西大距 (殘月狀)', val: 0.63 }
+        { type: 'presets', key: 'synodicProg', label: '關鍵時刻 (金星/火星通用)', options: [
+          { label: '合日 (最遠、順行)', val: 0.06 },
+          { label: '大距/方照前後', val: 0.37 },
+          { label: '逆行前的「留」', val: 0.46 },
+          { label: '下合/衝 (逆行中點)', val: 0.50 },
+          { label: '逆行後的「留」', val: 0.54 }
         ]}
       ],
       steps: [
         {
           title: '步驟 1：上合附近——金星位於太陽遠側，呈「小而圓的滿月狀」且順行',
-          desc: '當金星在太陽另一側（距離地球最遠約 1.72 AU），向陽面朝向地球，望遠鏡中呈現視直徑極小的圓盤狀，在背景恆星間穩定由西向東「順行」。',
+          desc: '當金星在太陽另一側（距離地球最遠約 1.72 AU），向陽面朝向地球，望遠鏡中呈現視直徑極小的圓盤狀，在背景恆星間穩定由西向東「順行」（右側星圖中向左移動）。',
           params: { synodicProg: 0.08, planetMode: 0 },
           cam: { theta: 0.0, phi: 0.72, radius: 26 },
           play: true
         },
         {
           title: '步驟 2：東大距至接近地球——金星呈「半圓弦月狀」且視直徑明顯變大',
-          desc: '金星公轉角速度比地球快，逐漸追近地球，望遠鏡中相位由凸月變為弦月，且因距離拉近，視直徑放大超過 2.5 倍。',
+          desc: '金星公轉角速度比地球快，逐漸追近地球，望遠鏡中相位由凸月變為弦月，且因距離拉近，視直徑放大超過 2.5 倍。此時金星在太陽東側約 46°，是黃昏西方天空的「昏星」。',
           params: { synodicProg: 0.38, planetMode: 0 },
           cam: { theta: 0.1, phi: 0.75, radius: 24 },
           play: false
         },
         {
           title: '步驟 3：內合超車時刻——「留 → 逆行 → 留」與巨大纖細眉月！',
-          desc: '金星從日地之間內圈超車地球（下合附近，距離僅 0.28 AU）！視線向後擺動使金星在恆星背景短暫停滯（留）後向西倒退（紅色逆行段），同時呈現大上 6 倍的眉月狀！',
-          params: { synodicProg: 0.50, planetMode: 0 },
+          desc: '金星從日地之間內圈超車地球（下合附近，距離僅 0.28 AU）！視線向後擺動使金星在恆星背景短暫停滯（留）後向西倒退（紅色逆行段，約 41 天），同時呈現大上 6 倍的眉月狀！',
+          params: { synodicProg: 0.44, planetMode: 0 },
           cam: { theta: 0.12, phi: 0.65, radius: 23 },
           play: true
         },
         {
-          title: '步驟 4：歷史鐵證——為何伽利略觀測金星盈虧徹底推翻了托勒密地心說？',
+          title: '步驟 4：外行星對比——地球從內圈超車火星，「衝」前後火星逆行',
+          desc: '地球公轉比火星快，每 780 天在內圈追過火星一次（衝）。超車時從地球看去，火星在背景恆星間先「留」、再向西倒退約 72 天、再「留」，最後恢復順行，畫出逆行迴圈（迴圈的南北起伏來自火星軌道與黃道 1.85° 的傾角）。',
+          params: { synodicProg: 0.42, planetMode: 1 },
+          cam: { theta: 0.0, phi: 0.62, radius: 24 },
+          play: true
+        },
+        {
+          title: '步驟 5：歷史鐵證——為何伽利略觀測金星盈虧徹底推翻了托勒密地心說？',
           desc: '托勒密本輪地心說中金星永遠夾在地球與太陽之間，絕不可能出現「小滿月/凸月」相位；哥白尼日心說完美解釋了全部盈虧、視直徑 6 倍變化與逆行幾何！',
           params: { synodicProg: 0.58, planetMode: 0 },
           cam: { theta: 0.0, phi: 0.62, radius: 26 },
+          play: true
+        }
+      ]
+    },
+    {
+      id: 'seasons',
+      num: '11',
+      short: '二分二至與四季',
+      macroTitle: '太空視角：地軸傾斜方向固定 + 公轉 → 春分、夏至、秋分、冬至',
+      groundTitle: '地表與地圖視角：四個節氣的太陽軌跡、直射點與晝夜長短',
+      cam: { theta: 0.55, phi: 1.02, radius: 27 },
+      defaults: { dayOfYear: 79, lat: 23.5 },
+      controls: [
+        { key: 'dayOfYear', label: '日期 (地球公轉位置)', min: 1, max: 365, step: 1, fmt: v => {
+          const n = seasonNameOfDay(Math.round(v));
+          return `${fmtDayOfYear(v).replace(/ \(.*\)/, '')}${n ? ' ★' + n : ''} ｜ 黃經 ${Math.round(dayToSolarLon(v))}°`;
+        }},
+        { key: 'lat', label: '觀測地緯度', min: -90, max: 90, step: 0.5, fmt: v => v === 0 ? '0° 赤道' : `${Math.abs(v).toFixed(1)}°${v > 0 ? 'N' : 'S'}` },
+        { type: 'presets', key: 'dayOfYear', label: '二分二至快速切換', options: [
+          { label: '春分 3/20', val: 79 },
+          { label: '夏至 6/21', val: 172 },
+          { label: '秋分 9/23', val: 266 },
+          { label: '冬至 12/21', val: 355 }
+        ]},
+        { type: 'presets', key: 'lat', label: '觀測地', options: [
+          { label: '赤道', val: 0 },
+          { label: '台灣 23.5°N', val: 23.5 },
+          { label: '北京 40°N', val: 40 },
+          { label: '北極圈 66.5°N', val: 66.5 },
+          { label: '雪梨 33.9°S', val: -33.9 }
+        ]}
+      ],
+      steps: [
+        {
+          title: '步驟 1：四季的真正成因——地軸傾斜 23.5°，而且傾斜方向一年到頭都不變',
+          desc: '地球繞太陽公轉時，自轉軸永遠指向北極星（紫色軸線方向固定）。因此一年中有時北半球傾向太陽、有時背離太陽，陽光直射點在南北回歸線之間來回移動，形成四季。',
+          params: { dayOfYear: 79, lat: 23.5 },
+          cam: { theta: 0.55, phi: 0.95, radius: 28 },
+          play: true
+        },
+        {
+          title: '步驟 2：夏至（6/21）——北半球最傾向太陽，太陽直射北回歸線 23.5°N',
+          desc: '北半球白晝最長（台灣約 13.5 小時）、正午太陽最高，日出偏東北、日落偏西北；北極圈內出現永晝，南極圈內則是永夜。',
+          params: { dayOfYear: 172, lat: 23.5 },
+          cam: { theta: 1.45, phi: 1.2, radius: 24 },
+          play: false
+        },
+        {
+          title: '步驟 3：秋分（9/23）與春分（3/20）——太陽直射赤道，全球晝夜等長',
+          desc: '地軸既不偏向也不背離太陽，晨昏線通過南北兩極，全球各地都是晝夜各約 12 小時，太陽「正東升、正西落」。春分與秋分的太陽軌跡完全相同（白色軌跡）。',
+          params: { dayOfYear: 266, lat: 23.5 },
+          cam: { theta: 0.1, phi: 1.2, radius: 24 },
+          play: false
+        },
+        {
+          title: '步驟 4：冬至（12/21）——北半球背離太陽，太陽直射南回歸線 23.5°S',
+          desc: '北半球白晝最短（台灣約 10.6 小時）、正午太陽最低、影子最長，日出偏東南、日落偏西南；北極圈內出現永夜。有趣的是：此時地球反而接近近日點！',
+          params: { dayOfYear: 355, lat: 23.5 },
+          cam: { theta: -1.65, phi: 1.2, radius: 24 },
+          play: false
+        },
+        {
+          title: '步驟 5：南北半球季節相反——澳洲雪梨的「夏至」其實是冬天',
+          desc: '6 月時南半球背離太陽，雪梨（33.9°S）白晝短、正午太陽低（在北方天空），是寒冷的冬季；12 月則相反過著炎熱的聖誕節。可拖曳日期滑桿觀察整年變化。',
+          params: { dayOfYear: 172, lat: -33.9 },
+          cam: { theta: 1.45, phi: 1.35, radius: 24 },
+          play: false
+        }
+      ]
+    },
+    {
+      id: 'wanderers',
+      num: '12',
+      short: '行星：天空的漫遊者',
+      macroTitle: '太空視角：日心太陽系 + 由地球望向黃道十二星座的視線',
+      groundTitle: '星空視角：恆星組成固定星座，行星卻在星座之間「漫遊」',
+      cam: { theta: 0.35, phi: 0.62, radius: 22 },
+      defaults: { days: 0, target: 1, trailDays: 120 },
+      controls: [
+        { key: 'days', label: '日期 (2026 → 2033)', min: 0, max: 2920, step: 1, fmt: v => fmtDateFromDays(v) },
+        { key: 'trailDays', label: '疊圖：顯示過去幾天的位置', min: 0, max: 1460, step: 10, fmt: v => v === 0 ? '不疊圖' : `${Math.round(v)} 天 (約 ${(v / 30.4).toFixed(1)} 個月)` },
+        { type: 'chips', key: 'target', label: '追蹤行星', options: [
+          { label: '金星', val: 0 }, { label: '火星', val: 1 }, { label: '木星', val: 2 }, { label: '土星', val: 3 }
+        ]},
+        { type: 'presets', key: 'days', label: '精彩時刻', options: [
+          { label: '2026 金星逆行後', val: 335 },
+          { label: '2027 火星逆行後', val: 470 },
+          { label: '2027 木星逆行後', val: 480 }
+        ]}
+      ],
+      steps: [
+        {
+          title: '步驟 1：「行星」原意是希臘文 planētēs——「漫遊者」',
+          desc: '古人每晚觀星發現：絕大多數星星的相對位置永遠不變，排成固定的星座圖案（稱為「恆星」）；但有 5 顆亮星（水、金、火、木、土）會在星座之間慢慢移動，因此被稱為「行星」。按播放觀察：背景恆星不動，只有行星在走。',
+          params: { days: 0, target: 1, trailDays: 0 },
+          cam: { theta: 0.35, phi: 0.62, radius: 22 },
+          play: true
+        },
+        {
+          title: '步驟 2：每隔幾天在同一時間拍照疊圖——行星在恆星間留下一串足跡',
+          desc: '把數個月的照片疊在一起：恆星全部重合（因為距離遙遠，最近的恆星也比太陽遠 27 萬倍，相對位置幾乎不變），行星則留下一連串點，清楚顯示它相對於恆星背景的移動。',
+          params: { days: 240, target: 1, trailDays: 240 },
+          cam: { theta: 0.35, phi: 0.7, radius: 20 },
+          play: true
+        },
+        {
+          title: '步驟 3：為什麼行星會移動？因為它們和地球一起繞太陽公轉，而且比恆星近得多',
+          desc: '左側太空視角中，從地球望向行星的視線延伸到遙遠的黃道星座上。地球與行星都在公轉，視線方向不斷改變，行星的投影就在星座間移動。越遠的行星移動越慢：木星約 12 年繞黃道一圈（每年約移過一個星座），土星約 29.5 年。',
+          params: { days: 1200, target: 2, trailDays: 1200 },
+          cam: { theta: 0.35, phi: 0.75, radius: 46 },
+          play: true
+        },
+        {
+          title: '步驟 4：行星永遠只在「黃道帶」附近漫遊——因為太陽系幾乎是一個平面',
+          desc: '各行星的公轉軌道與地球軌道（黃道面）的夾角都只有幾度，所以從地球看去，所有行星與太陽、月亮都只會出現在黃道十二星座這條窄帶上，不會跑到北極星附近。',
+          params: { days: 700, target: 3, trailDays: 700 },
+          cam: { theta: 0.35, phi: 1.32, radius: 44 },
+          play: false
+        },
+        {
+          title: '步驟 5：漫遊的高潮——逆行！地球超車火星時，火星在獅子座畫出迴圈',
+          desc: '2027 年 2 月火星衝日前後，地球從內圈超車火星，火星在背景星空中先停留、再向西倒退約 2.5 個月（紅點）、又再停留，最後繼續向東順行。（原理詳見分頁 10；此處採圓軌道近似，日期誤差約數天）',
+          params: { days: 300, target: 1, trailDays: 200 },
+          cam: { theta: 0.35, phi: 0.62, radius: 16 },
           play: true
         }
       ]
@@ -2245,8 +2560,9 @@
             p.localHour = (p.localHour + dt * 2.2) % 24;
           }
           // 季節決定太陽相對於地軸傾斜方向的角度：seasonDeg=90(夏至)時太陽在 +X 側照亮北極!
+          // 地球由西向東自轉 (北極俯視逆時針，Three.js 中為繞 +Y 軸正向旋轉)：繞Y逆時針轉時 z 減少
           const sLon = (p.seasonDeg - 90) * DEG;
-          const sunDir = new THREE.Vector3(Math.cos(sLon), 0, Math.sin(sLon));
+          const sunDir = new THREE.Vector3(Math.cos(sLon), 0, -Math.sin(sLon));
           sunLight.position.copy(sunDir).multiplyScalar(25);
           sun.position.copy(sunDir).multiplyScalar(10.5);
 
@@ -2265,12 +2581,12 @@
           }
           latRingGeo.setFromPoints(pts);
 
-          // 地球自轉與觀測者地方時位置 (localHour=12 對準太陽方位)
-          const hAngle = (p.localHour - 12) * 15 * DEG - sLon;
-          earth.rotation.y = -hAngle;
+          // 地球由西向東自轉 (+Y 逆時針)：localHour 增加時 rotation.y 增加；localHour=12 對準太陽方位
+          const hAngle = (p.localHour - 12) * 15 * DEG + sLon;
+          earth.rotation.y = hAngle;
           const ox = Math.cos(hAngle) * Math.cos(latRad) * 3.24;
           const oy = Math.sin(latRad) * 3.24;
-          const oz = Math.sin(hAngle) * Math.cos(latRad) * 3.24;
+          const oz = -Math.sin(hAngle) * Math.cos(latRad) * 3.24;
           obsGroup.position.set(ox, oy, oz);
           const upNormal = obsGroup.position.clone().normalize();
           horizonDisc.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), upNormal);
@@ -2521,9 +2837,11 @@
         const sun = makeSunMesh(1.3);
         moduleRoot.add(sun);
 
-        const earthRing = makeOrbitRing(6.2, 6.2, PALETTE.earthHex);
-        const targetRing = new THREE.Group();
-        moduleRoot.add(earthRing, targetRing);
+        const RING_R = 16.5;
+        const Y_EXAG = 3.0; // 太空視角中將軌道傾角放大 3 倍以便觀察
+        const earthRingGrp = new THREE.Group();
+        const targetRingGrp = new THREE.Group();
+        moduleRoot.add(earthRingGrp, targetRingGrp);
 
         const earth = makeEarthMesh(0.65);
         const targetPlanet = new THREE.Mesh(
@@ -2532,107 +2850,339 @@
         );
         moduleRoot.add(earth, targetPlanet);
 
-        // 背景黃道恆星圓弧天球幕 (位於 -Z 側 R=16.5)
-        const screenGroup = new THREE.Group();
-        const arcPts = [];
-        for (let i = -70; i <= 70; i += 2) {
-          const a = (i - 90) * DEG;
-          arcPts.push(new THREE.Vector3(Math.cos(a) * 16.5, 0, Math.sin(a) * 16.5));
+        // 完整 360° 背景恆星天球環 (黃道帶)
+        const ringPts = [];
+        for (let i = 0; i <= 180; i++) {
+          const a = (i / 180) * TAU;
+          ringPts.push(new THREE.Vector3(Math.cos(a) * RING_R, 0, -Math.sin(a) * RING_R));
         }
-        screenGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(arcPts), new THREE.LineBasicMaterial({ color: 0x334155 })));
-        moduleRoot.add(screenGroup);
+        moduleRoot.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(ringPts), new THREE.LineBasicMaterial({ color: 0x475569, transparent: true, opacity: 0.7 })));
+        const starPos = [];
+        SKY_STARS.forEach(st => {
+          if (Math.abs(st.lat) > 12) return;
+          starPos.push(Math.cos(st.lon * DEG) * RING_R, Math.tan(st.lat * DEG) * RING_R, -Math.sin(st.lon * DEG) * RING_R);
+        });
+        const starGeo = new THREE.BufferGeometry();
+        starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
+        moduleRoot.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xE2E8F0, size: 0.22, transparent: true, opacity: 0.85 })));
+        // 投影區附近的星座名稱
+        ZODIAC.filter(z => Math.abs(wrap180(z.lon - 90)) < 50).forEach(z => {
+          const lb = addLabel3D(z.name, '#94A3B8', -1.4);
+          lb.worldPos.set(Math.cos(z.lon * DEG) * RING_R, 0, -Math.sin(z.lon * DEG) * RING_R);
+        });
 
-        // 視線投影線 (地球 -> 金星 -> 天球幕投影點)
+        // 視線投影線 (地球 -> 行星 -> 天球幕投影點)
         const sightGeo = new THREE.BufferGeometry();
         const sightLine = new THREE.Line(sightGeo, new THREE.LineDashedMaterial({ color: PALETTE.venusHex, dashSize: 0.35, gapSize: 0.2 }));
-        const projDot = new THREE.Mesh(new THREE.SphereGeometry(0.24, 16, 12), new THREE.MeshBasicMaterial({ color: PALETTE.nodeHex }));
+        const projDot = new THREE.Mesh(new THREE.SphereGeometry(0.28, 16, 12), new THREE.MeshBasicMaterial({ color: PALETTE.venusHex }));
         moduleRoot.add(sightLine, projDot);
 
-        // 天球幕上的視運動軌跡線
+        // 天球幕上的視運動軌跡線 (綠=順行 / 紅=逆行)
         const skyTrailGeo = new THREE.BufferGeometry();
-        const skyTrailLine = new THREE.Line(skyTrailGeo, new THREE.LineBasicMaterial({ color: PALETTE.nodeHex }));
+        const skyTrailLine = new THREE.Line(skyTrailGeo, new THREE.LineBasicMaterial({ vertexColors: true }));
         moduleRoot.add(skyTrailLine);
 
         const lbSun = addLabel3D('太陽', PALETTE.sun, 1.6);
         const lbEarth = addLabel3D('地球觀測者', PALETTE.earth, 0.9);
         const lbPlanet = addLabel3D('金星 Venus', PALETTE.venus, 0.85);
-        const lbProj = addLabel3D('背景恆星天球投影軌跡', PALETTE.node, 0.6);
+        const lbProj = addLabel3D('投影在背景恆星上的位置', PALETTE.node, 0.7);
 
-        let lastMode = -1;
-        function computePositions(prog, mode) {
-          // 讓 prog = 0.5 時恰好在 -Z 方向發生內合(金星)或衝(火星)，使視線完美投射在 R=16.5 的天球幕!
-          const t = prog - 0.5;
-          if (mode === 0) {
-            // 金星內行星: rV=4.48, rE=6.2
-            const eAng = -Math.PI / 2 + t * 2.1;
-            const vAng = -Math.PI / 2 + t * 5.52;
-            const ePos = new THREE.Vector3(Math.cos(eAng) * 6.2, 0, Math.sin(eAng) * 6.2);
-            const vPos = new THREE.Vector3(Math.cos(vAng) * 4.48, Math.sin(vAng) * 0.48, Math.sin(vAng) * 4.48);
-            return { ePos, pPos: vPos };
-          } else {
-            // 火星外行星對比: rE=4.6, rM=7.2
-            const eAng = -Math.PI / 2 + t * 4.2;
-            const mAng = -Math.PI / 2 + t * 2.23;
-            const ePos = new THREE.Vector3(Math.cos(eAng) * 4.6, 0, Math.sin(eAng) * 4.6);
-            const mPos = new THREE.Vector3(Math.cos(mAng) * 7.2, Math.sin(mAng) * 0.55, Math.sin(mAng) * 7.2);
-            return { ePos, pPos: mPos };
+        const toWorld = (v, s) => new THREE.Vector3(v[0] * s, v[2] * s * Y_EXAG, -v[1] * s);
+        const scaleOf = (mode) => mode === 0 ? 6.2 : 4.6;
+        function inclinedRing(mode, colorHex) {
+          const c = RETRO_CFG[mode];
+          const s = scaleOf(mode);
+          const node = (c.eLon - 65) * DEG;
+          const pts = [];
+          for (let i = 0; i <= 128; i++) {
+            const L = (i / 128) * TAU;
+            pts.push(toWorld([c.a * Math.cos(L), c.a * Math.sin(L), c.a * Math.sin(c.inc * DEG) * Math.sin(L - node)], s));
           }
+          return new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: colorHex, transparent: true, opacity: 0.85 }));
         }
-
-        function projectToScreen(ePos, pPos) {
+        function projectToRing(ePos, pPos) {
           const dir = new THREE.Vector3().subVectors(pPos, ePos).normalize();
-          // 求射線 ePos + s*dir 與 x² + z² = 16.5² 的交點 (s > 0)
           const A = dir.x * dir.x + dir.z * dir.z;
           const B = 2 * (ePos.x * dir.x + ePos.z * dir.z);
-          const C = ePos.x * ePos.x + ePos.z * ePos.z - 16.5 * 16.5;
-          const disc = Math.max(0, B * B - 4 * A * C);
-          const s = (-B + Math.sqrt(disc)) / (2 * A);
-          return ePos.clone().addScaledVector(dir, s);
+          const C = ePos.x * ePos.x + ePos.z * ePos.z - RING_R * RING_R;
+          const sHit = (-B + Math.sqrt(Math.max(0, B * B - 4 * A * C))) / (2 * A);
+          return ePos.clone().addScaledVector(dir, sHit);
         }
 
+        let lastMode = -1;
+        const colGreen = new THREE.Color(PALETTE.landHex), colRed = new THREE.Color(PALETTE.nodeHex);
         activeMacroUpdater = (p, dt) => {
           if (state.playing && !state.tween) {
-            p.synodicProg += dt * 0.065;
+            // 逆行附近放慢速度，方便觀察「留 → 逆行 → 留」
+            const nearConj = Math.abs(p.synodicProg - 0.5) < 0.09;
+            p.synodicProg += dt * (nearConj ? 0.018 : 0.05);
             if (p.synodicProg > 1) p.synodicProg = 0;
           }
-          if (p.planetMode !== lastMode) {
-            lastMode = p.planetMode;
-            disposeGroup(targetRing);
-            if (p.planetMode === 0) {
-              earthRing.scale.set(1, 1, 1);
-              targetRing.add(makeOrbitRing(4.48, 4.48, PALETTE.venusHex));
-              targetPlanet.material.color.setHex(PALETTE.venusHex);
-              lbPlanet.el.textContent = '內行星：金星 Venus';
-            } else {
-              earthRing.scale.set(4.6 / 6.2, 1, 4.6 / 6.2);
-              targetRing.add(makeOrbitRing(7.2, 7.2, PALETTE.nodeHex));
-              targetPlanet.material.color.setHex(0xFB7185);
-              lbPlanet.el.textContent = '外行星：火星 Mars';
-            }
+          const mode = p.planetMode;
+          const s = scaleOf(mode);
+          if (mode !== lastMode) {
+            lastMode = mode;
+            disposeGroup(targetRingGrp);
+            disposeGroup(earthRingGrp);
+            earthRingGrp.add(makeOrbitRing(s, s, PALETTE.earthHex));
+            const col = mode === 0 ? PALETTE.venusHex : 0xFB7185;
+            targetRingGrp.add(inclinedRing(mode, col));
+            targetPlanet.material.color.setHex(col);
+            sightLine.material.color.setHex(col);
+            projDot.material.color.setHex(col);
+            lbPlanet.el.textContent = mode === 0 ? '內行星：金星 Venus' : '外行星：火星 Mars';
           }
 
-          const { ePos, pPos } = computePositions(p.synodicProg, p.planetMode);
+          const st = retroState(p.synodicProg, mode);
+          const ePos = toWorld(st.E, s);
+          const pPos = toWorld(st.P, s);
           earth.position.copy(ePos);
           targetPlanet.position.copy(pPos);
 
-          const hit = projectToScreen(ePos, pPos);
+          const hit = projectToRing(ePos, pPos);
           projDot.position.copy(hit);
           sightGeo.setFromPoints([ePos, hit]);
           sightLine.computeLineDistances();
 
-          // 繪製從 0.22 到目前進度 (或逆行區間) 的天球視軌跡
-          const tPts = [];
-          const maxT = Math.max(0.24, Math.min(0.78, p.synodicProg));
-          for (let q = 0.22; q <= maxT; q += 0.008) {
-            const st = computePositions(q, p.planetMode);
-            if (st.pPos.z < st.ePos.z + 2.5) tPts.push(projectToScreen(st.ePos, st.pPos));
+          // 天球環上的視軌跡 (從逆行前 0.25 週期到目前進度)
+          const tPts = [], cols = [];
+          const q0 = 0.25;
+          if (p.synodicProg > q0) {
+            let prevLon = null;
+            for (let q = q0; q <= Math.min(p.synodicProg, 0.75); q += 0.003) {
+              const s2 = retroState(q, mode);
+              const h = projectToRing(toWorld(s2.E, s), toWorld(s2.P, s));
+              tPts.push(h);
+              const retro = prevLon !== null && wrap180(s2.lon - prevLon) < 0;
+              const c = retro ? colRed : colGreen;
+              cols.push(c.r, c.g, c.b);
+              prevLon = s2.lon;
+            }
           }
           skyTrailGeo.setFromPoints(tPts);
+          skyTrailGeo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
 
           lbSun.worldPos.set(0, 0, 0);
           lbEarth.worldPos.copy(ePos);
           lbPlanet.worldPos.copy(pPos);
           lbProj.worldPos.copy(hit);
+        };
+        break;
+      }
+
+      /* ---------------- 11 二分二至與四季 ---------------- */
+      case 10: {
+        const sunLight = new THREE.PointLight(0xffffff, 2.2, 140);
+        moduleRoot.add(sunLight);
+        const sun = makeSunMesh(1.5);
+        moduleRoot.add(sun);
+        const ORB_R = 9.5;
+        const EPS = 23.44 * DEG;
+        moduleRoot.add(makeOrbitRing(ORB_R, ORB_R, PALETTE.sunHex, true));
+
+        // 由太陽黃經求地球位置：地球日心黃經 = 太陽地心黃經 + 180°
+        const earthPosOf = (lonDeg) => {
+          const L = (lonDeg + 180) * DEG;
+          return new THREE.Vector3(Math.cos(L) * ORB_R, 0, -Math.sin(L) * ORB_R);
+        };
+
+        // 地球 (地軸向黃經 90° 方向傾斜 23.44°，方向固定指向北極星)
+        const tiltGroup = new THREE.Group();
+        tiltGroup.rotation.x = -EPS;
+        moduleRoot.add(tiltGroup);
+        const earthR = 1.25;
+        const earth = makeEarthMesh(earthR);
+        tiltGroup.add(earth);
+        const axisLine = new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, -2.3, 0), new THREE.Vector3(0, 2.6, 0)]),
+          new THREE.LineBasicMaterial({ color: PALETTE.lunarOrbHex })
+        );
+        tiltGroup.add(axisLine);
+        // 緯線：赤道、南北回歸線、南北極圈
+        const latCircle = (latDeg, colorHex, dashed) => {
+          const r = Math.cos(latDeg * DEG) * (earthR + 0.02);
+          const ring = makeOrbitRing(r, r, colorHex, dashed, 72);
+          ring.position.y = Math.sin(latDeg * DEG) * (earthR + 0.02);
+          return ring;
+        };
+        tiltGroup.add(latCircle(0, 0xF8FAFC, false));
+        tiltGroup.add(latCircle(23.44, PALETTE.sunHex, true));
+        tiltGroup.add(latCircle(-23.44, PALETTE.sunHex, true));
+        tiltGroup.add(latCircle(66.56, PALETTE.lunarOrbHex, true));
+        tiltGroup.add(latCircle(-66.56, PALETTE.lunarOrbHex, true));
+        // 觀測地緯線 (綠)
+        const obsRingGeo = new THREE.BufferGeometry();
+        const obsRing = new THREE.Line(obsRingGeo, new THREE.LineBasicMaterial({ color: PALETTE.landHex }));
+        tiltGroup.add(obsRing);
+
+        // 太陽直射點與陽光指示線
+        const subsolar = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 10), new THREE.MeshBasicMaterial({ color: PALETTE.nodeHex }));
+        moduleRoot.add(subsolar);
+        const rayGeo = new THREE.BufferGeometry();
+        moduleRoot.add(new THREE.Line(rayGeo, new THREE.LineBasicMaterial({ color: PALETTE.sunHex, transparent: true, opacity: 0.55 })));
+
+        // 四個節氣位置的地球殘影 (含固定方向的地軸)
+        SEASON_KEYS.forEach(k => {
+          const pos = earthPosOf(k.lon);
+          const g = new THREE.Group();
+          g.position.copy(pos);
+          g.rotation.x = -EPS;
+          const ghost = new THREE.Mesh(
+            new THREE.SphereGeometry(0.6, 20, 14),
+            new THREE.MeshBasicMaterial({ color: PALETTE.earthHex, wireframe: true, transparent: true, opacity: 0.28 })
+          );
+          const ax = new THREE.Line(
+            new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, -1.1, 0), new THREE.Vector3(0, 1.3, 0)]),
+            new THREE.LineBasicMaterial({ color: PALETTE.lunarOrbHex, transparent: true, opacity: 0.55 })
+          );
+          g.add(ghost, ax);
+          moduleRoot.add(g);
+          const lb = addLabel3D(`${k.name} ${k.date}`, k.lon === 90 ? '#FB923C' : k.lon === 270 ? '#60A5FA' : '#F8FAFC', -1.25);
+          lb.worldPos.copy(pos);
+        });
+
+        const lbSun = addLabel3D('太陽', PALETTE.sun, 1.9);
+        const lbAxis = addLabel3D('地軸永遠指向北極星 ↑', PALETTE.lunarOrb, 0.25);
+        const lbEarth = addLabel3D('地球', PALETTE.earth, 1.7);
+        const lbSub = addLabel3D('太陽直射點', PALETTE.node, 0.3);
+
+        activeMacroUpdater = (p, dt) => {
+          if (state.playing && !state.tween) {
+            p.dayOfYear += dt * 22;
+            if (p.dayOfYear > 365) p.dayOfYear -= 365;
+          }
+          const lam = dayToSolarLon(p.dayOfYear);
+          const ePos = earthPosOf(lam);
+          tiltGroup.position.copy(ePos);
+          earth.rotation.y += dt * 1.6;
+
+          // 觀測地緯線
+          const lr = Math.cos(p.lat * DEG) * (earthR + 0.03);
+          const ly = Math.sin(p.lat * DEG) * (earthR + 0.03);
+          const pts = [];
+          for (let i = 0; i <= 72; i++) {
+            const a = (i / 72) * TAU;
+            pts.push(new THREE.Vector3(Math.cos(a) * lr, ly, Math.sin(a) * lr));
+          }
+          obsRingGeo.setFromPoints(pts);
+
+          // 直射點：地心指向太陽方向與地表交點
+          const toSun = ePos.clone().negate().normalize();
+          subsolar.position.copy(ePos).addScaledVector(toSun, earthR + 0.05);
+          rayGeo.setFromPoints([new THREE.Vector3(0, 0, 0), subsolar.position.clone()]);
+
+          lbSun.worldPos.set(0, 0, 0);
+          lbEarth.worldPos.copy(ePos);
+          const axisTop = new THREE.Vector3(0, 2.6, 0).applyEuler(tiltGroup.rotation).add(ePos);
+          lbAxis.worldPos.copy(axisTop);
+          lbSub.worldPos.copy(subsolar.position);
+          const dec = solarDecl(lam) * RAD;
+          lbSub.el.textContent = `直射 ${Math.abs(dec).toFixed(1)}°${dec >= 0 ? 'N' : 'S'}`;
+        };
+        break;
+      }
+
+      /* ---------------- 12 行星：天空中的漫遊者 ---------------- */
+      case 11: {
+        const sunLight = new THREE.PointLight(0xffffff, 2.2, 200);
+        moduleRoot.add(sunLight);
+        const sun = makeSunMesh(0.85);
+        moduleRoot.add(sun);
+        const K = 2.0;       // 1 AU = 2 單位 (線性比例，方向完全正確)
+        const RING_R = 24;   // 黃道星座環
+        const toWorld = (v) => new THREE.Vector3(v[0] * K, v[2] * K, -v[1] * K);
+
+        // 黃道星座環與背景恆星
+        const ringPts = [];
+        for (let i = 0; i <= 240; i++) {
+          const a = (i / 240) * TAU;
+          ringPts.push(new THREE.Vector3(Math.cos(a) * RING_R, 0, -Math.sin(a) * RING_R));
+        }
+        moduleRoot.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(ringPts), new THREE.LineBasicMaterial({ color: 0x475569, transparent: true, opacity: 0.7 })));
+        const starPos = [];
+        SKY_STARS.forEach(st => {
+          starPos.push(Math.cos(st.lon * DEG) * RING_R, Math.tan(st.lat * DEG) * RING_R, -Math.sin(st.lon * DEG) * RING_R);
+        });
+        const starGeo = new THREE.BufferGeometry();
+        starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
+        moduleRoot.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xE2E8F0, size: 0.28, transparent: true, opacity: 0.85 })));
+        ZODIAC.forEach(z => {
+          const lb = addLabel3D(z.name, '#94A3B8', 0);
+          lb.worldPos.set(Math.cos(z.lon * DEG) * (RING_R + 1.6), 0, -Math.sin(z.lon * DEG) * (RING_R + 1.6));
+        });
+
+        // 行星與軌道
+        const bodies = {};
+        ['earth', ...PLANET_KEYS].forEach(key => {
+          const pl = PLANETS[key];
+          moduleRoot.add(makeOrbitRing(pl.a * K, pl.a * K, pl.hex, key !== 'earth', 160));
+          const mesh = key === 'earth' ? makeEarthMesh(pl.size) : new THREE.Mesh(
+            new THREE.SphereGeometry(pl.size, 24, 16),
+            new THREE.MeshStandardMaterial({ color: pl.hex, roughness: 0.6 })
+          );
+          if (key === 'saturn') {
+            const ring = new THREE.Mesh(
+              new THREE.RingGeometry(pl.size * 1.35, pl.size * 2.1, 40),
+              new THREE.MeshBasicMaterial({ color: 0xE7D7A3, side: THREE.DoubleSide, transparent: true, opacity: 0.7 })
+            );
+            ring.rotation.x = -Math.PI / 2 + 0.45;
+            mesh.add(ring);
+          }
+          moduleRoot.add(mesh);
+          const lb = addLabel3D(pl.name, pl.color, pl.size + 0.55);
+          let line = null, dot = null;
+          if (key !== 'earth') {
+            line = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: pl.hex, transparent: true, opacity: 0.4 }));
+            dot = new THREE.Mesh(new THREE.SphereGeometry(0.32, 12, 10), new THREE.MeshBasicMaterial({ color: pl.hex }));
+            moduleRoot.add(line, dot);
+          }
+          bodies[key] = { mesh, lb, line, dot };
+        });
+
+        // 追蹤行星在星座環上的足跡 (綠=順行 / 紅=逆行)
+        const trailGeo = new THREE.BufferGeometry();
+        const trailPts = new THREE.Points(trailGeo, new THREE.PointsMaterial({ size: 0.42, vertexColors: true }));
+        moduleRoot.add(trailPts);
+        const colGreen = new THREE.Color(PALETTE.landHex), colRed = new THREE.Color(PALETTE.nodeHex);
+        const ringPoint = (lonDeg, latDeg, r) => new THREE.Vector3(Math.cos(lonDeg * DEG) * r, Math.tan(latDeg * DEG) * r, -Math.sin(lonDeg * DEG) * r);
+
+        activeMacroUpdater = (p, dt) => {
+          if (state.playing && !state.tween) {
+            p.days += dt * (p.target >= 2 ? 40 : 12);
+            if (p.days > 2920) p.days = 0;
+          }
+          const ePos = toWorld(planetHelio('earth', p.days));
+          bodies.earth.mesh.position.copy(ePos);
+          bodies.earth.lb.worldPos.copy(ePos);
+          const targetKey = PLANET_KEYS[p.target];
+          PLANET_KEYS.forEach(key => {
+            const b = bodies[key];
+            const g = planetGeo(key, p.days);
+            const pPos = toWorld(g.P);
+            b.mesh.position.copy(pPos);
+            b.lb.worldPos.copy(pPos);
+            const hit = ringPoint(g.lon, g.lat, RING_R - 0.4);
+            b.dot.position.copy(hit);
+            b.line.geometry.setFromPoints([ePos, hit]);
+            const isT = key === targetKey;
+            b.line.material.opacity = isT ? 0.95 : 0.22;
+            b.dot.scale.setScalar(isT ? 1.3 : 0.8);
+          });
+
+          const tp = [], tc = [];
+          const span = Math.min(p.trailDays, p.days);
+          const stepD = Math.max(4, Math.round(span / 120));
+          let prevLon = null;
+          for (let d = p.days - span; d <= p.days; d += stepD) {
+            const g = planetGeo(targetKey, d);
+            tp.push(ringPoint(g.lon, g.lat, RING_R - 0.4));
+            const retro = prevLon !== null && wrap180(g.lon - prevLon) < 0;
+            const c = retro ? colRed : colGreen;
+            tc.push(c.r, c.g, c.b);
+            prevLon = g.lon;
+          }
+          trailGeo.setFromPoints(tp);
+          trailGeo.setAttribute('color', new THREE.Float32BufferAttribute(tc, 3));
         };
         break;
       }
@@ -2739,9 +3289,104 @@
     ctx.restore();
   }
 
+  // 斜視 3D 天球穹頂：北在左、南在右、東在遠側(上)、西在近側(下)
+  function drawSkyDome(ctx, { cx, cy, R, skyBright = 0.5, flat = 0.32 }) {
+    const proj = (altR, az, rScale = 1) => {
+      const rH = Math.cos(altR) * R * rScale;
+      const x = cx - Math.cos(az) * rH;
+      const z = Math.sin(az) * rH; // 東 (az=90°) 為 +z → 遠側
+      const y = cy - Math.sin(altR) * R - z * flat;
+      return { x, y };
+    };
+    const domeGrad = ctx.createRadialGradient(cx, cy - R * 0.4, 10, cx, cy, R * 1.15);
+    domeGrad.addColorStop(0, `rgba(56, 189, 248, ${0.06 + 0.28 * skyBright})`);
+    domeGrad.addColorStop(1, 'rgba(15, 23, 42, 0.1)');
+    ctx.fillStyle = domeGrad;
+    ctx.beginPath(); ctx.arc(cx, cy, R, Math.PI, 0); ctx.ellipse(cx, cy, R, R * flat, 0, 0, Math.PI); ctx.fill();
+
+    ctx.fillStyle = 'rgba(16, 185, 129, 0.14)';
+    ctx.strokeStyle = PALETTE.land;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(cx, cy, R, R * flat, 0, 0, TAU); ctx.fill(); ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(148,163,184,0.35)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(cx, cy, R, Math.PI, 0); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx, cy - R * flat); ctx.lineTo(cx, cy + R * flat); ctx.stroke();
+    return { proj, cx, cy, R, flat };
+  }
+
+  function drawDomeCompass(ctx, dome) {
+    const { cx, cy, R, flat } = dome;
+    drawPill2D(ctx, '北 N', cx - R - 24, cy, PALETTE.earth);
+    drawPill2D(ctx, '南 S', cx + R + 24, cy, PALETTE.earth);
+    drawPill2D(ctx, '東 E', cx, cy - R * flat - 13, PALETTE.muted);
+    drawPill2D(ctx, '西 W', cx, cy + R * flat + 15, PALETTE.muted);
+  }
+
+  function drawDomeObserver(ctx, dome) {
+    const { cx, cy } = dome;
+    ctx.fillStyle = PALETTE.land;
+    ctx.beginPath(); ctx.arc(cx, cy - 12, 5, 0, TAU); ctx.fill();
+    ctx.strokeStyle = PALETTE.land; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(cx, cy - 7); ctx.lineTo(cx, cy + 4); ctx.stroke();
+  }
+
+  // 太陽周日軌跡：地平線上實線、地平線下虛線；可選每小時刻度
+  function drawSunPath(ctx, dome, phi, delta, { color, width = 2.5, hourTicks = false, below = true }) {
+    for (let pass = 0; pass < 2; pass++) {
+      if (pass === 0 && !below) continue;
+      ctx.beginPath();
+      ctx.strokeStyle = pass === 1 ? color : 'rgba(148, 163, 184, 0.3)';
+      ctx.lineWidth = pass === 1 ? width : 1.3;
+      ctx.setLineDash(pass === 0 ? [4, 4] : []);
+      let started = false;
+      for (let i = 0; i <= 192; i++) {
+        const Hh = ((i / 192) * 24 - 12) * 15 * DEG;
+        const s = sunAltAz(phi, delta, Hh);
+        const above = s.alt >= -0.004;
+        if ((pass === 1 && above) || (pass === 0 && !above)) {
+          const pt = dome.proj(s.alt, s.az);
+          if (!started) { ctx.moveTo(pt.x, pt.y); started = true; } else ctx.lineTo(pt.x, pt.y);
+        } else started = false;
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    if (hourTicks) {
+      ctx.font = '600 10px -apple-system, "Noto Sans TC", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (let h = 0; h < 24; h++) {
+        const s = sunAltAz(phi, delta, (h - 12) * 15 * DEG);
+        if (s.alt < 0) continue;
+        const pt = dome.proj(s.alt, s.az);
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.arc(pt.x, pt.y, 3, 0, TAU); ctx.fill();
+        if (state.showLabels && h % 3 === 0) {
+          ctx.fillStyle = 'rgba(254, 243, 199, 0.85)';
+          ctx.fillText(`${h}時`, pt.x, pt.y - 11);
+        }
+      }
+    }
+  }
+
   /* =========================================================
    * 10. 各分頁專屬 2D 地表/光學微觀渲染器 (與 3D 即時同步)
    * ========================================================= */
+  const wanderView = { c: null, h: 30, target: -1, lastDays: 0 };
+  const ZODIAC_BOUNDS = [
+    [28.7, '雙魚座'], [53.4, '白羊座'], [90.1, '金牛座'], [118.0, '雙子座'], [138.0, '巨蟹座'],
+    [173.9, '獅子座'], [217.8, '室女座'], [241.0, '天秤座'], [247.7, '天蠍座'], [266.3, '蛇夫座'],
+    [299.7, '人馬座'], [327.6, '摩羯座'], [351.6, '寶瓶座'], [360.1, '雙魚座']
+  ];
+  function zodiacOf(lon) {
+    const L = normDeg(lon);
+    for (const [b, n] of ZODIAC_BOUNDS) if (L < b) return n;
+    return '雙魚座';
+  }
+
   function renderGroundView(tabIdx, p) {
     if (state.viewMode === 'macro') return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -3163,103 +3808,54 @@
       /* ---------------- 06 緯度效應：立體天球地平穹頂與極晝極夜 ---------------- */
       case 5: {
         const phi = p.lat * DEG;
-        const delta = Math.asin(Math.sin(23.44 * DEG) * Math.sin(p.seasonDeg * DEG));
-        const H = (p.localHour - 12) * 15 * DEG;
+        const delta = solarDecl(p.seasonDeg);
+        const hourNow = normDeg(p.localHour * 15) / 15;
+        const H = (hourNow - 12) * 15 * DEG;
+        const sunNow = sunAltAz(phi, delta, H);
+        const altNowDeg = sunNow.alt * RAD;
 
-        // 計算當前太陽仰角與晝長
-        const sinAltNow = Math.sin(phi) * Math.sin(delta) + Math.cos(phi) * Math.cos(delta) * Math.cos(H);
-        const altNowDeg = Math.asin(clamp(sinAltNow, -1, 1)) * RAD;
+        const dayHours = dayLengthHours(phi, delta);
+        let statusTag;
+        if (dayHours >= 24) statusTag = '☀️ 永晝現象 (24h 午夜太陽不落!)';
+        else if (dayHours <= 0) statusTag = '🌌 永夜現象 (24h 太陽不升起)';
+        else statusTag = `晝長 ${dayHours.toFixed(1)}h ｜ 夜長 ${(24 - dayHours).toFixed(1)}h ｜ 日出 ${fmtHM(12 - dayHours / 2)} 日落 ${fmtHM(12 + dayHours / 2)}`;
 
-        const cosH0 = -Math.tan(phi) * Math.tan(delta);
-        let dayHours = 12, statusTag = '';
-        if (cosH0 <= -1 || (Math.abs(p.lat) > 89.5 && p.lat * delta > 0)) {
-          dayHours = 24; statusTag = '☀️ 永晝現象 (24h 午夜太陽不落!)';
-        } else if (cosH0 >= 1 || (Math.abs(p.lat) > 89.5 && p.lat * delta < 0)) {
-          dayHours = 0; statusTag = '🌌 永夜現象 (24h 太陽不升起)';
-        } else {
-          dayHours = (2 * Math.acos(clamp(cosH0, -1, 1)) * RAD) / 15;
-          statusTag = `晝長 ${dayHours.toFixed(1)}h ｜ 夜長 ${(24 - dayHours).toFixed(1)}h`;
+        const dome = drawSkyDome(ctx, { cx: 0, cy: 52, R: 152, skyBright: clamp((altNowDeg + 8) / 35, 0, 1) });
+        // 全天 24h 太陽軌跡 + 每小時刻度點
+        drawSunPath(ctx, dome, phi, delta, { color: PALETTE.sun, width: 3, hourTicks: true });
+
+        // 觀測者影子 (指向太陽反方向，長度 ∝ cot(仰角))
+        if (altNowDeg > 0.5) {
+          const shadowLen = clamp(1 / Math.tan(sunNow.alt), 0, 4.5) * 0.17;
+          const tip = dome.proj(0, sunNow.az + Math.PI, shadowLen);
+          ctx.strokeStyle = 'rgba(244, 63, 94, 0.9)';
+          ctx.lineWidth = 4;
+          ctx.lineCap = 'round';
+          ctx.beginPath(); ctx.moveTo(dome.cx, dome.cy + 4); ctx.lineTo(tip.x, tip.y); ctx.stroke();
+          ctx.lineCap = 'butt';
         }
 
-        // 斜視 3D 天球穹頂投影函式 (北在左後、南在右前、東在遠側、西在近側)
-        const domeR = 152, domeCy = 52;
-        const projDome = (altR, azFromNorthEastPos) => {
-          // az: 0=北(左), 90°=東(裡), 180°=南(右), 270°=西(外)
-          const rHoriz = Math.cos(altR) * domeR;
-          const x = -Math.cos(azFromNorthEastPos) * rHoriz;
-          const z = Math.sin(azFromNorthEastPos) * rHoriz;
-          const y = domeCy - Math.sin(altR) * domeR + z * 0.32;
-          return { x, y, z };
-        };
-
-        // 天空穹頂半圓光暈 (依當前太陽仰角明暗變化)
-        const skyBright = clamp((altNowDeg + 8) / 35, 0, 1);
-        const domeGrad = ctx.createRadialGradient(0, domeCy - 60, 10, 0, domeCy, domeR * 1.15);
-        domeGrad.addColorStop(0, `rgba(56, 189, 248, ${0.06 + 0.28 * skyBright})`);
-        domeGrad.addColorStop(1, 'rgba(15, 23, 42, 0.1)');
-        ctx.fillStyle = domeGrad;
-        ctx.beginPath(); ctx.arc(0, domeCy, domeR, Math.PI, 0); ctx.ellipse(0, domeCy, domeR, domeR * 0.32, 0, 0, TAU); ctx.fill();
-
-        // 地平圈草地橢圓盤與東南西北十字
-        ctx.fillStyle = 'rgba(16, 185, 129, 0.14)';
-        ctx.strokeStyle = PALETTE.land;
-        ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.ellipse(0, domeCy, domeR, domeR * 0.32, 0, 0, TAU); ctx.fill(); ctx.stroke();
-
-        ctx.strokeStyle = 'rgba(148,163,184,0.35)';
-        ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.arc(0, domeCy, domeR, Math.PI, 0); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(-domeR, domeCy); ctx.lineTo(domeR, domeCy); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(0, domeCy - domeR * 0.32); ctx.lineTo(0, domeCy + domeR * 0.32); ctx.stroke();
-
-        // 繪製 24 小時太陽周日視運動軌跡 (地平線上金色實線、地平線下灰色虛線)
-        for (let pass = 0; pass < 2; pass++) {
-          ctx.beginPath();
-          ctx.strokeStyle = pass === 1 ? PALETTE.sun : 'rgba(148, 163, 184, 0.32)';
-          ctx.lineWidth = pass === 1 ? 3 : 1.5;
-          if (pass === 0) ctx.setLineDash([4, 4]); else ctx.setLineDash([]);
-          let started = false;
-          for (let i = 0; i <= 144; i++) {
-            const hrA = ((i / 144) * 24 - 12) * 15 * DEG;
-            const sAlt = clamp(Math.sin(phi) * Math.sin(delta) + Math.cos(phi) * Math.cos(delta) * Math.cos(hrA), -1, 1);
-            const alt = Math.asin(sAlt);
-            const cAz = (Math.sin(delta) - Math.sin(phi) * sAlt) / Math.max(0.0001, Math.cos(phi) * Math.cos(alt));
-            let az = Math.acos(clamp(cAz, -1, 1));
-            if (Math.sin(hrA) > 0) az = TAU - az; // 下午在西側
-            const above = alt >= -0.005;
-            if ((pass === 1 && above) || (pass === 0 && !above)) {
-              const pt = projDome(alt, az);
-              if (!started) { ctx.moveTo(pt.x, pt.y); started = true; } else ctx.lineTo(pt.x, pt.y);
-            } else {
-              started = false;
-            }
-          }
-          ctx.stroke();
+        // 太陽至觀測者的光線 + 當前太陽
+        const sunPt = dome.proj(sunNow.alt, sunNow.az);
+        if (altNowDeg >= 0) {
+          ctx.strokeStyle = 'rgba(251, 191, 36, 0.35)';
+          ctx.setLineDash([4, 4]); ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.moveTo(sunPt.x, sunPt.y); ctx.lineTo(dome.cx, dome.cy - 8); ctx.stroke();
           ctx.setLineDash([]);
+          const glow = ctx.createRadialGradient(sunPt.x, sunPt.y, 4, sunPt.x, sunPt.y, 26);
+          glow.addColorStop(0, 'rgba(255, 251, 235, 0.9)');
+          glow.addColorStop(1, 'rgba(251, 191, 36, 0)');
+          ctx.fillStyle = glow;
+          ctx.beginPath(); ctx.arc(sunPt.x, sunPt.y, 26, 0, TAU); ctx.fill();
         }
-
-        // 當前太陽位置圓球
-        const cAzNow = (Math.sin(delta) - Math.sin(phi) * sinAltNow) / Math.max(0.0001, Math.cos(phi) * Math.cos(altNowDeg * DEG));
-        let azNow = Math.acos(clamp(cAzNow, -1, 1));
-        if (Math.sin(H) > 0) azNow = TAU - azNow;
-        const sunPt = projDome(altNowDeg * DEG, azNow);
-
         ctx.fillStyle = altNowDeg >= 0 ? PALETTE.sun : '#64748B';
         ctx.beginPath(); ctx.arc(sunPt.x, sunPt.y, 11, 0, TAU); ctx.fill();
 
-        // 中心觀測者小人
-        ctx.fillStyle = PALETTE.land;
-        ctx.beginPath(); ctx.arc(0, domeCy - 12, 5, 0, TAU); ctx.fill();
-        ctx.strokeStyle = PALETTE.land; ctx.lineWidth = 2.5;
-        ctx.beginPath(); ctx.moveTo(0, domeCy - 7); ctx.lineTo(0, domeCy + 4); ctx.stroke();
-
-        // 方位標籤與晝夜長短進度條
-        drawPill2D(ctx, '北 N', -domeR - 26, domeCy, PALETTE.earth);
-        drawPill2D(ctx, '南 S', domeR + 26, domeCy, PALETTE.earth);
-        drawPill2D(ctx, '東 E', 0, domeCy - domeR * 0.32 - 14, PALETTE.muted);
-        drawPill2D(ctx, '西 W', 0, domeCy + domeR * 0.32 + 16, PALETTE.muted);
-        drawPill2D(ctx, statusTag, 0, -155, dayHours === 24 ? PALETTE.sun : dayHours === 0 ? PALETTE.lunarOrb : PALETTE.earth);
-        drawPill2D(ctx, `地方時 ${Math.floor(p.localHour).toString().padStart(2,'0')}:${Math.round((p.localHour%1)*60).toString().padStart(2,'0')} ｜ 太陽仰角 ${altNowDeg.toFixed(1)}°`, 0, 152, PALETTE.sun);
+        drawDomeObserver(ctx, dome);
+        drawDomeCompass(ctx, dome);
+        drawPill2D(ctx, statusTag, 0, -160, dayHours >= 24 ? PALETTE.sun : dayHours <= 0 ? PALETTE.lunarOrb : PALETTE.earth);
+        drawPill2D(ctx, `地方時 ${fmtHM(hourNow)} ｜ 太陽仰角 ${altNowDeg.toFixed(1)}° ｜ 方位 ${azName(sunNow.az)}`, 0, 158, altNowDeg >= 0 ? PALETTE.sun : PALETTE.muted);
+        if (altNowDeg < 0) drawPill2D(ctx, '太陽在地平線下 (夜晚)', sunPt.x, sunPt.y + 24, PALETTE.muted);
         break;
       }
 
@@ -3503,124 +4099,486 @@
 
       /* ---------------- 10 內行星(金星)逆行軌跡與伽利略望遠鏡盈虧 ---------------- */
       case 9: {
-        // 計算完整會合週期天球背景視座標 (經度偏移 lon, 緯度偏移 lat) 與行星相位 k、距離 d
-        const getPlanetSky = (prog, mode) => {
-          const t = prog - 0.5;
-          let ex, ez, px, py, pz;
-          if (mode === 0) {
-            const eA = -Math.PI / 2 + t * 2.1;
-            const vA = -Math.PI / 2 + t * 5.52;
-            ex = Math.cos(eA) * 1.0; ez = Math.sin(eA) * 1.0;
-            px = Math.cos(vA) * 0.723; py = Math.sin(vA) * 0.085; pz = Math.sin(vA) * 0.723;
-          } else {
-            const eA = -Math.PI / 2 + t * 4.2;
-            const mA = -Math.PI / 2 + t * 2.23;
-            ex = Math.cos(eA) * 1.0; ez = Math.sin(eA) * 1.0;
-            px = Math.cos(mA) * 1.524; py = Math.sin(mA) * 0.095; pz = Math.sin(mA) * 1.524;
-          }
-          const dx = px - ex, dy = py, dz = pz - ez;
-          const dist = Math.hypot(dx, dy, dz);
-          // 背景恆星黃經 (面向 -Z 為基準 0，西在右、東在左：順行向東即向左或設定標準星圖東在左!)
-          const lon = Math.atan2(dx, -dz) * RAD;
-          const lat = Math.asin(clamp(dy / dist, -1, 1)) * RAD;
+        const mode = p.planetMode;
+        const cfg = RETRO_CFG[mode];
+        const cur = retroState(p.synodicProg, mode);
+        const lonHalf = mode === 0 ? 34 : 26;
+        const latC = mode === 0 ? 3 : 2;
+        const hs = 262 / lonHalf;
+        // 視窗黃經中心：逆行區間 (|lon-90°|<=22°) 固定鎖定在 90° 使背景恆星不動以清楚看見逆行倒退；
+        // 遠離逆行區時平滑跟隨行星，確保整個會合週期 (0%~100%) 金星與火星永遠在畫面內可見！
+        const dLonFrom90 = wrap180(cur.lon - 90);
+        const panOffset = Math.abs(dLonFrom90) <= 18 ? 0 : (dLonFrom90 - Math.sign(dLonFrom90) * 18);
+        const LON0 = normDeg(90 + panOffset);
+        const mapPt = (lon, lat) => ({ x: -wrap180(lon - LON0) * hs, y: -72 - (lat - latC) * hs });
+        const inView = (lon) => Math.abs(wrap180(lon - LON0)) < lonHalf + 1.5;
+        const planetCol = mode === 0 ? PALETTE.venus : '#FB7185';
 
-          // 相位照明率 k = (1 + cos(太陽-行星-地球夾角)) / 2
-          // 向量 行星->太陽 = (-px, -py, -pz), 行星->地球 = (-dx, -dy, -dz)
-          const rSun = Math.hypot(px, py, pz);
-          const cosPhase = (px * dx + py * dy + pz * dz) / (rSun * dist);
-          const k = 0.5 * (1 + clamp(cosPhase, -1, 1));
-          const sunRightSide = (px * dz - pz * dx) > 0 ? 1 : -1;
-          return { lon, lat, dist, k, sunRightSide };
-        };
-
-        // 上半部：背景恆星座標系視運動軌跡圖 (標示順行:綠 / 留:金 / 逆行:紅!)
+        // 上半部：背景恆星座標系 (黃道座標，面向南方：東在左、西在右)
         ctx.fillStyle = '#070E1E';
-        ctx.beginPath(); ctx.roundRect(-280, -172, 560, 198, 12); ctx.fill();
-        ctx.strokeStyle = PALETTE.grid; ctx.stroke();
-
-        // 固定背景星座星點
-        ctx.fillStyle = 'rgba(226, 232, 240, 0.55)';
-        for (let i = 0; i < 28; i++) {
-          const sx = -255 + ((i * 79) % 510);
-          const sy = -155 + ((i * 47) % 165);
-          ctx.beginPath(); ctx.arc(sx, sy, (i % 3 === 0) ? 2.1 : 1.2, 0, TAU); ctx.fill();
-        }
-
-        const mapPt = (s) => ({ x: -s.lon * 4.1, y: -72 - s.lat * 11.5 });
-
-        // 繪製完整軌跡並自動著色「順行(綠)」與「逆行(紅)」段
-        for (let q = 0.16; q < 0.84; q += 0.006) {
-          const s1 = getPlanetSky(q, p.planetMode);
-          const s2 = getPlanetSky(q + 0.006, p.planetMode);
-          const dLon = s2.lon - s1.lon;
-          const isRetro = dLon < 0; // 黃經減少 = 逆行!
-          const p1 = mapPt(s1), p2 = mapPt(s2);
-          if (Math.abs(p1.x) < 268 && Math.abs(p2.x) < 268) {
-            ctx.strokeStyle = isRetro ? PALETTE.node : PALETTE.land;
-            ctx.lineWidth = isRetro ? 3.6 : 2.2;
-            ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
-          }
-        }
-
-        const cur = getPlanetSky(p.synodicProg, p.planetMode);
-        const nxt = getPlanetSky(clamp(p.synodicProg + 0.004, 0, 1), p.planetMode);
-        const vel = (nxt.lon - cur.lon) / 0.004;
-        const motionState = Math.abs(vel) < 12 ? '⏸ 留 (Stationary - 視覺停滯轉折點)'
-          : vel < 0 ? '◀ 逆行中 (Retrograde - 內圈超車倒退!)'
-          : '▶ 順行中 (Prograde - 正常向東移動)';
-
-        const cPt = mapPt(cur);
-        if (Math.abs(cPt.x) < 270) {
-          ctx.fillStyle = p.planetMode === 0 ? PALETTE.venus : PALETTE.node;
-          ctx.beginPath(); ctx.arc(cPt.x, cPt.y, 7.5, 0, TAU); ctx.fill();
-        }
-
-        drawPill2D(ctx, motionState, 0, -150, vel < 0 ? PALETTE.node : Math.abs(vel) < 12 ? PALETTE.sun : PALETTE.land);
-        drawPill2D(ctx, '東 East (順行方向 ←)                 背景恆星座標系                 (→ 逆行方向) 西 West', 0, 10, PALETTE.muted);
-
-        // 下半部：伽利略高倍率望遠鏡視窗 (呈現盈虧相位與 6 倍視直徑劇烈變化!)
-        ctx.fillStyle = '#0B1324';
-        ctx.beginPath(); ctx.roundRect(-280, 38, 560, 134, 12); ctx.fill();
-        ctx.strokeStyle = PALETTE.venus; ctx.stroke();
-
-        const teleCx = -115, teleCy = 105;
-        ctx.fillStyle = '#020617';
-        ctx.beginPath(); ctx.arc(teleCx, teleCy, 56, 0, TAU); ctx.fill();
-        ctx.strokeStyle = 'rgba(253, 224, 71, 0.45)'; ctx.lineWidth = 2; ctx.stroke();
-
-        // 計算視半徑：金星最近 0.277 AU (R=45px) vs 最遠 1.723 AU (R=7.5px) -> 超過 6 倍視直徑差異!
-        const appR = p.planetMode === 0 ? clamp(12.5 / cur.dist, 7.5, 45) : clamp(22 / cur.dist, 9, 38);
-
-        // 精準繪製行星明暗盈虧圓盤
+        ctx.beginPath(); ctx.roundRect(-285, -172, 570, 198, 12); ctx.fill();
+        ctx.strokeStyle = PALETTE.grid; ctx.lineWidth = 1; ctx.stroke();
         ctx.save();
-        ctx.translate(teleCx, teleCy);
-        // 暗面底盤
-        ctx.fillStyle = '#1E293B';
-        ctx.beginPath(); ctx.arc(0, 0, appR, 0, TAU); ctx.fill();
+        ctx.beginPath(); ctx.rect(-283, -170, 566, 194); ctx.clip();
 
-        // 亮面相位幾何 (使用半圓 + 晨昏橢圓合成任意相位 k ∈ [0, 1])
-        const litColor = p.planetMode === 0 ? '#FEF08A' : '#FB7185';
-        const side = cur.sunRightSide;
-        ctx.fillStyle = litColor;
-        ctx.beginPath();
-        if (side > 0) {
-          ctx.arc(0, 0, appR, -Math.PI / 2, Math.PI / 2, false);
-        } else {
-          ctx.arc(0, 0, appR, Math.PI / 2, -Math.PI / 2, false);
+        // 黃經格線
+        ctx.font = '600 9.5px -apple-system, "Noto Sans TC", sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        const baseL = Math.floor((LON0 - lonHalf) / 5) * 5;
+        for (let L = baseL; L <= LON0 + lonHalf + 5; L += 5) {
+          if (!inView(L)) continue;
+          const x = mapPt(L, 0).x;
+          ctx.strokeStyle = L % 10 === 0 ? 'rgba(148,163,184,0.16)' : 'rgba(148,163,184,0.07)';
+          ctx.beginPath(); ctx.moveTo(x, -170); ctx.lineTo(x, 24); ctx.stroke();
+          if (L % 10 === 0) { ctx.fillStyle = 'rgba(148,163,184,0.6)'; ctx.fillText(`${normDeg(L)}°`, x, -4); }
         }
-        ctx.fill();
+        // 黃道線
+        const eclY = mapPt(LON0, 0).y;
+        ctx.strokeStyle = 'rgba(251, 191, 36, 0.45)'; ctx.setLineDash([6, 5]);
+        ctx.beginPath(); ctx.moveTo(-283, eclY); ctx.lineTo(283, eclY); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = 'rgba(251, 191, 36, 0.75)'; ctx.textAlign = 'left';
+        ctx.fillText('黃道 (太陽的路徑)', -276, eclY + 9);
+        ctx.textAlign = 'center';
 
-        const ellW = Math.abs(2 * cur.k - 1) * appR;
-        ctx.fillStyle = cur.k >= 0.5 ? litColor : '#1E293B';
-        ctx.beginPath();
-        ctx.ellipse(0, 0, ellW, appR, 0, 0, TAU);
-        ctx.fill();
+        // 背景恆星與星座名 (位置永遠固定)
+        SKY_STARS.forEach(st => {
+          if (!inView(st.lon)) return;
+          const s = mapPt(st.lon, st.lat);
+          ctx.fillStyle = `rgba(226, 232, 240, ${clamp(1.15 - st.mag * 0.15, 0.25, 0.9)})`;
+          ctx.beginPath(); ctx.arc(s.x, s.y, clamp(2.4 - st.mag * 0.33, 0.6, 2.0), 0, TAU); ctx.fill();
+        });
+        BRIGHT_STARS.forEach(st => {
+          if (!inView(st.lon)) return;
+          const s = mapPt(st.lon, st.lat);
+          ctx.fillStyle = '#F1F5F9';
+          ctx.beginPath(); ctx.arc(s.x, s.y, 3.2, 0, TAU); ctx.fill();
+          ctx.fillStyle = 'rgba(203, 213, 225, 0.8)'; ctx.fillText(st.name, s.x, s.y + 11);
+        });
+        ctx.font = '700 11px -apple-system, "Noto Sans TC", sans-serif';
+        ZODIAC.forEach(z => {
+          if (!inView(z.lon)) return;
+          const s = mapPt(z.lon, latC - 10.5 * (22 / lonHalf) * (mode === 0 ? 0.85 : 1));
+          ctx.fillStyle = 'rgba(148, 163, 184, 0.55)'; ctx.fillText(z.name, s.x, Math.min(s.y, 14));
+        });
+
+        // 太陽在星圖上的位置 (金星永遠在太陽附近)
+        if (inView(cur.sunLon)) {
+          const sp = mapPt(cur.sunLon, 0);
+          const sg = ctx.createRadialGradient(sp.x, sp.y, 3, sp.x, sp.y, 30);
+          sg.addColorStop(0, 'rgba(255, 251, 235, 0.95)');
+          sg.addColorStop(0.4, 'rgba(251, 191, 36, 0.55)');
+          sg.addColorStop(1, 'rgba(251, 191, 36, 0)');
+          ctx.fillStyle = sg;
+          ctx.beginPath(); ctx.arc(sp.x, sp.y, 30, 0, TAU); ctx.fill();
+          drawPill2D(ctx, '太陽', sp.x, sp.y + 26, PALETTE.sun);
+        }
+
+        // 完整視軌跡：已走過(亮)/未來(淡)，綠=順行、紅=逆行；小點間隔約 1/100 會合週期
+        const dq = 0.002;
+        let prev = retroState(0, mode);
+        for (let q = dq; q <= 1.0001; q += dq) {
+          const s2 = retroState(q, mode);
+          if (inView(prev.lon) && inView(s2.lon)) {
+            const isRetro = wrap180(s2.lon - prev.lon) < 0;
+            const p1 = mapPt(prev.lon, prev.lat), p2 = mapPt(s2.lon, s2.lat);
+            ctx.globalAlpha = q <= p.synodicProg ? 1 : 0.25;
+            ctx.strokeStyle = isRetro ? PALETTE.node : PALETTE.land;
+            ctx.lineWidth = isRetro ? 3.4 : 2.2;
+            ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+            if (Math.round(q / dq) % 5 === 0 && q <= p.synodicProg) {
+              ctx.fillStyle = isRetro ? PALETTE.node : PALETTE.land;
+              ctx.beginPath(); ctx.arc(p2.x, p2.y, 2.6, 0, TAU); ctx.fill();
+            }
+          }
+          prev = s2;
+        }
+        ctx.globalAlpha = 1;
+        // 「留」的位置標記
+        [-1, 1].forEach(sgn => {
+          let lastV = retroVelDegPerDay(0.5, mode);
+          for (let q = 0.5; Math.abs(q - 0.5) < 0.2; q += sgn * 0.002) {
+            const v = retroVelDegPerDay(q, mode);
+            if (Math.sign(v) !== Math.sign(lastV)) {
+              const s = retroState(q, mode);
+              if (inView(s.lon)) {
+                const sp = mapPt(s.lon, s.lat);
+                ctx.strokeStyle = PALETTE.sun; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.arc(sp.x, sp.y, 7, 0, TAU); ctx.stroke();
+                ctx.fillStyle = PALETTE.sun; ctx.font = '700 11px -apple-system, "Noto Sans TC", sans-serif';
+                ctx.fillText('留', sp.x, sp.y - 15);
+              }
+              break;
+            }
+            lastV = v;
+          }
+        });
+
+        // 行星目前位置 (超出視野時顯示邊緣箭頭)
+        const vel = retroVelDegPerDay(p.synodicProg, mode);
+        if (inView(cur.lon)) {
+          const cPt = mapPt(cur.lon, cur.lat);
+          ctx.fillStyle = planetCol;
+          ctx.strokeStyle = '#0F172A'; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(cPt.x, cPt.y, 7.5, 0, TAU); ctx.fill(); ctx.stroke();
+          drawPill2D(ctx, cfg.name, cPt.x, cPt.y - 22, planetCol);
+        } else {
+          const side = wrap180(cur.lon - LON0) > 0 ? -1 : 1; // 黃經較大 → 東 → 左
+          const ax = side * 262, ay = clamp(mapPt(cur.lon, cur.lat).y, -130, 0);
+          ctx.fillStyle = planetCol;
+          ctx.beginPath(); ctx.moveTo(ax + side * 14, ay); ctx.lineTo(ax, ay - 9); ctx.lineTo(ax, ay + 9); ctx.closePath(); ctx.fill();
+          drawPill2D(ctx, `${cfg.name}在視野外 (${side < 0 ? '東' : '西'}方)`, ax - side * 70, ay, planetCol);
+        }
         ctx.restore();
 
-        const arcsec = p.planetMode === 0 ? (16.8 / cur.dist) : (9.4 / cur.dist);
-        drawPill2D(ctx, `望遠鏡相位: 照明率 ${(cur.k * 100).toFixed(0)}%`, 105, 76, PALETTE.venus);
-        drawPill2D(ctx, `地球距離: ${cur.dist.toFixed(2)} AU ｜ 視直徑: ${arcsec.toFixed(1)}″`, 105, 112, PALETTE.earth);
-        drawPill2D(ctx, p.planetMode === 0 ? '哥白尼鐵證：下合逆行時呈巨大眉月、上合呈小滿月' : '外行星火星：衝日逆行時最亮最大且永遠接近滿相', 105, 148, PALETTE.sun);
+        const motionState = Math.abs(vel) < 0.06 ? `⏸ 留 (Stationary)：每天移動僅 ${vel.toFixed(2)}°`
+          : vel < 0 ? `◀ 逆行中 (Retrograde)：每天向西 ${Math.abs(vel).toFixed(2)}°`
+          : `▶ 順行中 (Prograde)：每天向東 ${vel.toFixed(2)}°`;
+        drawPill2D(ctx, motionState, 0, -154, vel < 0 && Math.abs(vel) >= 0.06 ? PALETTE.node : Math.abs(vel) < 0.06 ? PALETTE.sun : PALETTE.land);
+        drawPill2D(ctx, '← 東 East（順行方向）　　背景恆星座標系（黃道座標，面向南方）　　西 West（逆行方向）→', 0, 13, PALETTE.muted);
+
+        // 下半部：伽利略高倍率望遠鏡視窗 (呈現盈虧相位與視直徑劇烈變化!)
+        ctx.fillStyle = '#0B1324';
+        ctx.beginPath(); ctx.roundRect(-285, 36, 570, 138, 12); ctx.fill();
+        ctx.strokeStyle = planetCol; ctx.lineWidth = 1; ctx.stroke();
+
+        const teleCx = -170, teleCy = 105;
+        ctx.fillStyle = '#020617';
+        ctx.beginPath(); ctx.arc(teleCx, teleCy, 58, 0, TAU); ctx.fill();
+        ctx.strokeStyle = 'rgba(253, 224, 71, 0.45)'; ctx.lineWidth = 2; ctx.stroke();
+
+        const appR = mode === 0 ? clamp(12.5 / cur.dist, 7, 46) : clamp(22 / cur.dist, 8, 42);
+        ctx.save();
+        ctx.translate(teleCx, teleCy);
+        ctx.fillStyle = '#1E293B';
+        ctx.beginPath(); ctx.arc(0, 0, appR, 0, TAU); ctx.fill();
+        const litColor = mode === 0 ? '#FEF08A' : '#FB7185';
+        ctx.fillStyle = litColor;
+        ctx.beginPath();
+        if (!cur.litEast) ctx.arc(0, 0, appR, -Math.PI / 2, Math.PI / 2, false); // 亮面朝西(右)
+        else ctx.arc(0, 0, appR, Math.PI / 2, -Math.PI / 2, false);             // 亮面朝東(左)
+        ctx.fill();
+        const ellW = Math.abs(2 * cur.k - 1) * appR;
+        ctx.fillStyle = cur.k >= 0.5 ? litColor : '#1E293B';
+        ctx.beginPath(); ctx.ellipse(0, 0, ellW, appR, 0, 0, TAU); ctx.fill();
+        ctx.restore();
+        if (state.showLabels) {
+          ctx.font = '600 10px -apple-system, "Noto Sans TC", sans-serif';
+          ctx.fillStyle = 'rgba(148,163,184,0.8)'; ctx.textAlign = 'center';
+          ctx.fillText('東', teleCx - 70, teleCy); ctx.fillText('西', teleCx + 70, teleCy);
+        }
+
+        const absE = Math.abs(cur.elong);
+        let elongTxt;
+        if (mode === 0) {
+          elongTxt = absE < 8 ? `與太陽距角 ${absE.toFixed(0)}°：太靠近太陽，淹沒在陽光中`
+            : `與太陽距角 ${absE.toFixed(0)}° → ${cur.elong < 0 ? '昏星 (黃昏見於西方天空)' : '晨星 (黎明見於東方天空)'}`;
+        } else {
+          elongTxt = absE > 168 ? `與太陽距角 ${absE.toFixed(0)}°：衝！整夜可見、最亮最大`
+            : absE < 15 ? `與太陽距角 ${absE.toFixed(0)}°：合，隱沒在陽光中`
+            : `與太陽距角 ${absE.toFixed(0)}° → ${cur.elong < 0 ? '入夜後見於東/南方天空' : '後半夜至黎明可見'}`;
+        }
+        const arcsec = mode === 0 ? (16.8 / cur.dist) : (9.4 / cur.dist);
+        const days = Math.round((p.synodicProg - 0.5) * cfg.synodic);
+        drawPill2D(ctx, `望遠鏡相位: 照明率 ${(cur.k * 100).toFixed(0)}% ｜ 距${mode === 0 ? '下合' : '衝'} ${days >= 0 ? '+' : ''}${days} 天`, 75, 60, planetCol);
+        drawPill2D(ctx, `地球距離: ${cur.dist.toFixed(2)} AU ｜ 視直徑: ${arcsec.toFixed(1)}″`, 75, 88, PALETTE.earth);
+        drawPill2D(ctx, elongTxt, 75, 116, PALETTE.sun);
+        drawPill2D(ctx, mode === 0 ? '哥白尼鐵證：下合逆行時呈巨大眉月、上合呈小滿月' : '外行星火星：衝日逆行時最亮最大且永遠接近滿相', 75, 148, PALETTE.lunarOrb);
+        break;
+      }
+
+      /* ---------------- 11 二分二至與四季 ---------------- */
+      case 10: {
+        const phi = p.lat * DEG;
+        const day = Math.round(clamp(p.dayOfYear, 1, 365));
+        const lam = dayToSolarLon(p.dayOfYear);
+        const delta = solarDecl(lam);
+        const decDeg = delta * RAD;
+        const EPS = 23.44 * DEG;
+        const pathDefs = [
+          { d: EPS, color: '#FB923C', name: '夏至' },
+          { d: 0, color: '#F8FAFC', name: '春秋分' },
+          { d: -EPS, color: '#60A5FA', name: '冬至' }
+        ];
+
+        // ===== 左：天球穹頂上的四個節氣太陽軌跡 =====
+        ctx.fillStyle = '#0A1426';
+        ctx.beginPath(); ctx.roundRect(-302, -178, 296, 356, 12); ctx.fill();
+        ctx.strokeStyle = PALETTE.grid; ctx.lineWidth = 1; ctx.stroke();
+        const noonAltNow = sunAltAz(phi, delta, 0).alt;
+        const dome = drawSkyDome(ctx, { cx: -154, cy: 58, R: 124, skyBright: 0.55, flat: 0.3 });
+        pathDefs.forEach(pd => {
+          drawSunPath(ctx, dome, phi, pd.d, { color: pd.color, width: 1.8, below: false });
+          const n = sunAltAz(phi, pd.d, 0);
+          if (n.alt > 0 && state.showLabels) {
+            const np = dome.proj(n.alt, n.az);
+            ctx.font = '700 10.5px -apple-system, "Noto Sans TC", sans-serif';
+            ctx.fillStyle = pd.color; ctx.textAlign = 'center';
+            ctx.fillText(pd.name, np.x + (p.lat >= 0 ? 22 : -22), np.y - 2);
+          }
+        });
+        drawSunPath(ctx, dome, phi, delta, { color: PALETTE.sun, width: 3.4, hourTicks: false });
+        // 今日正午太陽與日出點
+        const dl = dayLengthHours(phi, delta);
+        if (dl > 0 && dl < 24) {
+          const H0 = (dl / 2) * 15 * DEG;
+          const rise = sunAltAz(phi, delta, -H0), set = sunAltAz(phi, delta, H0);
+          [rise, set].forEach((r, i) => {
+            const rp = dome.proj(0, r.az);
+            ctx.fillStyle = i === 0 ? '#FB923C' : '#A78BFA';
+            ctx.beginPath(); ctx.arc(rp.x, rp.y, 4.5, 0, TAU); ctx.fill();
+          });
+        }
+        if (noonAltNow > 0) {
+          const nn = sunAltAz(phi, delta, 0);
+          const np = dome.proj(nn.alt, nn.az);
+          ctx.fillStyle = PALETTE.sun;
+          ctx.beginPath(); ctx.arc(np.x, np.y, 9, 0, TAU); ctx.fill();
+        }
+        drawDomeObserver(ctx, dome);
+        drawDomeCompass(ctx, dome);
+        const latTxt = p.lat === 0 ? '赤道 0°' : `${Math.abs(p.lat).toFixed(1)}°${p.lat > 0 ? 'N' : 'S'}`;
+        drawPill2D(ctx, `觀測地 ${latTxt}：四個節氣的太陽軌跡`, -154, -160, PALETTE.land);
+        const sName = seasonNameOfDay(day);
+        drawPill2D(ctx, `${fmtDayOfYear(day).replace(/ \(.*\)/, '')}${sName ? ' ★' + sName : ''} ｜ 太陽直射 ${Math.abs(decDeg).toFixed(1)}°${decDeg >= 0 ? 'N' : 'S'}`, -154, 132, PALETTE.sun);
+        let riseTxt = '無日出 (永夜)';
+        if (dl >= 24) riseTxt = '太陽不落 (永晝)';
+        else if (dl > 0) riseTxt = `日出${azName(sunAltAz(phi, delta, -(dl / 2) * 15 * DEG).az)}`;
+        drawPill2D(ctx, `正午仰角 ${Math.max(0, noonAltNow * RAD).toFixed(1)}° ｜ 晝長 ${dl.toFixed(1)}h ｜ ${riseTxt}`, -154, 160, PALETTE.earth);
+
+        // ===== 右上：世界地圖上的太陽直射點與晝夜分布 =====
+        ctx.fillStyle = '#0A1426';
+        ctx.beginPath(); ctx.roundRect(4, -178, 298, 172, 12); ctx.fill();
+        ctx.strokeStyle = PALETTE.grid; ctx.stroke();
+        const mx0 = 18, mx1 = 288, myC = -84, myH = 64;
+        const mX = (lon) => lerp(mx0, mx1, (lon + 180) / 360);
+        const mY = (lat) => myC - (lat / 90) * myH;
+        ctx.fillStyle = '#0C3A5E';
+        ctx.fillRect(mx0, myC - myH, mx1 - mx0, myH * 2);
+        // 夜半球陰影
+        const dEff = Math.abs(delta) < 0.003 ? 0.003 * (delta >= 0 ? 1 : -1) : delta;
+        ctx.fillStyle = 'rgba(2, 6, 23, 0.68)';
+        ctx.beginPath();
+        for (let lon = -180; lon <= 180; lon += 3) {
+          const latT = Math.atan(-Math.cos(lon * DEG) / Math.tan(dEff)) * RAD;
+          lon === -180 ? ctx.moveTo(mX(lon), mY(latT)) : ctx.lineTo(mX(lon), mY(latT));
+        }
+        const edgeY = dEff > 0 ? mY(-90) : mY(90);
+        ctx.lineTo(mx1, edgeY); ctx.lineTo(mx0, edgeY); ctx.closePath(); ctx.fill();
+        // 緯線
+        const latLine = (lat, color, dash, label) => {
+          ctx.strokeStyle = color; ctx.lineWidth = 1.2; ctx.setLineDash(dash);
+          ctx.beginPath(); ctx.moveTo(mx0, mY(lat)); ctx.lineTo(mx1, mY(lat)); ctx.stroke(); ctx.setLineDash([]);
+          if (label && state.showLabels) {
+            ctx.font = '600 9.5px -apple-system, "Noto Sans TC", sans-serif';
+            ctx.fillStyle = color; ctx.textAlign = 'left'; ctx.fillText(label, mx0 + 3, mY(lat) - 5);
+          }
+        };
+        latLine(66.56, 'rgba(167, 139, 250, 0.8)', [3, 3], '北極圈');
+        latLine(23.44, 'rgba(251, 191, 36, 0.85)', [4, 3], '北回歸線 23.5°N');
+        latLine(0, 'rgba(248, 250, 252, 0.7)', [], '赤道');
+        latLine(-23.44, 'rgba(251, 191, 36, 0.85)', [4, 3], '南回歸線 23.5°S');
+        latLine(-66.56, 'rgba(167, 139, 250, 0.8)', [3, 3], '南極圈');
+        ctx.strokeStyle = PALETTE.land; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(mx0, mY(p.lat)); ctx.lineTo(mx1, mY(p.lat)); ctx.stroke();
+        // 直射點
+        const ssx = mX(0), ssy = mY(decDeg);
+        const sg = ctx.createRadialGradient(ssx, ssy, 2, ssx, ssy, 18);
+        sg.addColorStop(0, 'rgba(255, 251, 235, 1)'); sg.addColorStop(1, 'rgba(251, 191, 36, 0)');
+        ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(ssx, ssy, 18, 0, TAU); ctx.fill();
+        ctx.fillStyle = PALETTE.node; ctx.beginPath(); ctx.arc(ssx, ssy, 4.5, 0, TAU); ctx.fill();
+        ctx.textAlign = 'center';
+        drawPill2D(ctx, '世界地圖：太陽直射點 ● 與晝夜半球', 153, -162, PALETTE.sun);
+        drawPill2D(ctx, `直射 ${Math.abs(decDeg).toFixed(1)}°${decDeg >= 0 ? 'N' : 'S'}`, ssx + 52, ssy, PALETTE.node);
+
+        // ===== 右下：全年晝長與正午太陽仰角曲線 =====
+        ctx.fillStyle = '#0A1426';
+        ctx.beginPath(); ctx.roundRect(4, 2, 298, 176, 12); ctx.fill();
+        ctx.strokeStyle = PALETTE.grid; ctx.stroke();
+        const gx0 = 22, gx1 = 286, gy0 = 140, gy1 = 36;
+        const gX = (d) => lerp(gx0, gx1, (d - 1) / 364);
+        const gY = (v) => lerp(gy0, gy1, v);
+        ctx.strokeStyle = 'rgba(148,163,184,0.2)'; ctx.lineWidth = 1;
+        [0, 0.5, 1].forEach(v => { ctx.beginPath(); ctx.moveTo(gx0, gY(v)); ctx.lineTo(gx1, gY(v)); ctx.stroke(); });
+        ctx.font = '600 9.5px -apple-system, "Noto Sans TC", sans-serif'; ctx.textAlign = 'center';
+        SEASON_KEYS.forEach(k => {
+          const x = gX(k.day);
+          ctx.strokeStyle = 'rgba(148,163,184,0.35)'; ctx.setLineDash([3, 3]);
+          ctx.beginPath(); ctx.moveTo(x, gy1 - 4); ctx.lineTo(x, gy0); ctx.stroke(); ctx.setLineDash([]);
+          ctx.fillStyle = k.lon === 90 ? '#FB923C' : k.lon === 270 ? '#60A5FA' : '#E2E8F0';
+          ctx.fillText(k.name, x, gy1 - 13);
+        });
+        ctx.fillStyle = 'rgba(148,163,184,0.7)';
+        for (let m = 1; m <= 12; m++) ctx.fillText(`${m}`, gX(1 + (m - 1) * 30.4 + 15), gy0 + 11);
+        const curve = (fn, color) => {
+          ctx.strokeStyle = color; ctx.lineWidth = 2.4; ctx.beginPath();
+          for (let d = 1; d <= 365; d += 2) {
+            const v = fn(solarDecl(dayToSolarLon(d)));
+            d === 1 ? ctx.moveTo(gX(d), gY(v)) : ctx.lineTo(gX(d), gY(v));
+          }
+          ctx.stroke();
+        };
+        const fDay = (dd) => dayLengthHours(phi, dd) / 24;
+        const fAlt = (dd) => Math.max(0, sunAltAz(phi, dd, 0).alt * RAD) / 90;
+        curve(fDay, PALETTE.earth);
+        curve(fAlt, PALETTE.sun);
+        const cx = gX(day);
+        ctx.strokeStyle = PALETTE.land; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(cx, gy1 - 4); ctx.lineTo(cx, gy0); ctx.stroke();
+        ctx.fillStyle = PALETTE.earth; ctx.beginPath(); ctx.arc(cx, gY(fDay(delta)), 5, 0, TAU); ctx.fill();
+        ctx.fillStyle = PALETTE.sun; ctx.beginPath(); ctx.arc(cx, gY(fAlt(delta)), 5, 0, TAU); ctx.fill();
+        drawPill2D(ctx, `晝長 ${dl.toFixed(1)} h (0~24h)`, 78, 165, PALETTE.earth);
+        drawPill2D(ctx, `正午仰角 ${Math.max(0, noonAltNow * RAD).toFixed(0)}° (0~90°)`, 222, 165, PALETTE.sun);
+        break;
+      }
+
+      /* ---------------- 12 行星：天空中的漫遊者 ---------------- */
+      case 11: {
+        const targetKey = PLANET_KEYS[p.target];
+        const tpl = PLANETS[targetKey];
+        const days = p.days;
+        const sunLon = sunGeoLon(days);
+        const geoNow = {};
+        PLANET_KEYS.forEach(k => { geoNow[k] = planetGeo(k, days); });
+        const span = Math.min(p.trailDays, days);
+        const stepD = Math.max(4, Math.round(span / 110));
+        const trail = [];
+        for (let d = days - span; d <= days + 0.01; d += stepD) {
+          const g = planetGeo(targetKey, d);
+          trail.push({ d, lon: g.lon, lat: g.lat });
+        }
+        for (let i = 0; i < trail.length; i++) {
+          const a = trail[Math.max(0, i - 1)], b = trail[Math.min(trail.length - 1, i + 1)];
+          trail[i].retro = wrap180(b.lon - a.lon) < 0;
+        }
+        const sF = ctx.font;
+
+        // ===== 上：黃道帶 360° 全景 =====
+        ctx.fillStyle = '#070E1E';
+        ctx.beginPath(); ctx.roundRect(-302, -180, 604, 122, 12); ctx.fill();
+        ctx.strokeStyle = PALETTE.grid; ctx.lineWidth = 1; ctx.stroke();
+        const sX = (lon) => 288 - normDeg(lon) * (576 / 360);
+        const sY = (lat) => -112 - lat * 2.4;
+        // 縮放視窗範圍提示 (稍後計算後再畫，先決定視窗)
+        const tl = geoNow[targetKey].lon;
+        let lo = 0, hi = 0;
+        trail.forEach(t => { const r = wrap180(t.lon - tl); lo = Math.min(lo, r); hi = Math.max(hi, r); });
+        const needHalf = clamp((hi - lo) / 2 + 10, 22, 180);
+        const needC = normDeg(tl + (lo + hi) / 2);
+        if (wanderView.c === null || wanderView.target !== p.target || Math.abs(days - wanderView.lastDays) > 200) {
+          wanderView.c = needC; wanderView.h = needHalf;
+        } else {
+          if (needHalf > wanderView.h || needHalf < wanderView.h * 0.55) wanderView.h += (needHalf - wanderView.h) * 0.12;
+          const outside = Math.abs(wrap180(tl + lo - wanderView.c)) > wanderView.h * 0.85 || Math.abs(wrap180(tl + hi - wanderView.c)) > wanderView.h * 0.85;
+          if (outside) wanderView.c = normDeg(wanderView.c + wrap180(needC - wanderView.c) * 0.1);
+        }
+        wanderView.target = p.target; wanderView.lastDays = days;
+        const vC = wanderView.c, vH = wanderView.h;
+
+        ctx.save();
+        ctx.beginPath(); ctx.rect(-300, -178, 600, 118); ctx.clip();
+        // 視窗範圍
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.08)';
+        if (vH >= 179) ctx.fillRect(-288, -174, 576, 110);
+        else {
+          const xa = sX(vC + vH), xb = sX(vC - vH);
+          if (xa < xb) ctx.fillRect(xa, -174, xb - xa, 110);
+          else { ctx.fillRect(-288, -174, xb + 288, 110); ctx.fillRect(xa, -174, 288 - xa, 110); }
+        }
+        SKY_STARS.forEach(st => {
+          if (Math.abs(st.lat) > 15) return;
+          ctx.fillStyle = `rgba(226, 232, 240, ${clamp(1.1 - st.mag * 0.16, 0.2, 0.8)})`;
+          ctx.fillRect(sX(st.lon), sY(st.lat), 1.4, 1.4);
+        });
+        ctx.strokeStyle = 'rgba(251, 191, 36, 0.35)'; ctx.setLineDash([5, 4]);
+        ctx.beginPath(); ctx.moveTo(-288, sY(0)); ctx.lineTo(288, sY(0)); ctx.stroke(); ctx.setLineDash([]);
+        ctx.font = '600 9.5px -apple-system, "Noto Sans TC", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ZODIAC.forEach(z => { ctx.fillStyle = 'rgba(148, 163, 184, 0.75)'; ctx.fillText(z.name.replace('座', ''), sX(z.lon), sY(-15.5)); });
+        trail.forEach(t => {
+          ctx.fillStyle = t.retro ? PALETTE.node : PALETTE.land;
+          ctx.fillRect(sX(t.lon) - 1, sY(t.lat) - 1, 2.4, 2.4);
+        });
+        // 太陽
+        ctx.fillStyle = PALETTE.sun;
+        ctx.beginPath(); ctx.arc(sX(sunLon), sY(0), 6, 0, TAU); ctx.fill();
+        ctx.fillText('太陽', sX(sunLon), sY(0) - 13);
+        PLANET_KEYS.forEach(k => {
+          const g = geoNow[k], pl = PLANETS[k];
+          ctx.fillStyle = pl.color;
+          ctx.beginPath(); ctx.arc(sX(g.lon), sY(g.lat), k === targetKey ? 5 : 3.6, 0, TAU); ctx.fill();
+          ctx.fillText(pl.name, sX(g.lon), sY(g.lat) + (k === targetKey ? 13 : 11));
+        });
+        ctx.restore();
+        drawPill2D(ctx, '黃道帶 360° 全景（東 ← → 西）　藍框 = 下方放大區', 0, -166, PALETTE.muted);
+
+        // ===== 下：放大星空 (同一時間每晚拍照疊圖) =====
+        ctx.fillStyle = '#050B18';
+        ctx.beginPath(); ctx.roundRect(-302, -50, 604, 194, 12); ctx.fill();
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)'; ctx.stroke();
+        const zhs = 290 / vH;
+        const zvs = Math.min(zhs, 7.2);
+        const zX = (lon) => -wrap180(lon - vC) * zhs;
+        const zY = (lat) => 47 - lat * zvs;
+        const zIn = (lon) => Math.abs(wrap180(lon - vC)) <= vH + 2;
+        ctx.save();
+        ctx.beginPath(); ctx.rect(-300, -48, 600, 190); ctx.clip();
+        const gridStep = vH > 90 ? 30 : vH > 45 ? 10 : 5;
+        ctx.font = '600 9.5px -apple-system, "Noto Sans TC", sans-serif';
+        for (let L = Math.ceil((vC - vH) / gridStep) * gridStep; L <= vC + vH; L += gridStep) {
+          const x = zX(L);
+          ctx.strokeStyle = 'rgba(148,163,184,0.09)';
+          ctx.beginPath(); ctx.moveTo(x, -48); ctx.lineTo(x, 142); ctx.stroke();
+          if (L % (gridStep * 2) === 0) { ctx.fillStyle = 'rgba(148,163,184,0.5)'; ctx.fillText(`${normDeg(L)}°`, x, 134); }
+        }
+        ctx.strokeStyle = 'rgba(251, 191, 36, 0.4)'; ctx.setLineDash([6, 5]);
+        ctx.beginPath(); ctx.moveTo(-300, zY(0)); ctx.lineTo(300, zY(0)); ctx.stroke(); ctx.setLineDash([]);
+        SKY_STARS.forEach(st => {
+          if (!zIn(st.lon)) return;
+          ctx.fillStyle = `rgba(226, 232, 240, ${clamp(1.15 - st.mag * 0.15, 0.25, 0.9)})`;
+          ctx.beginPath(); ctx.arc(zX(st.lon), zY(st.lat), clamp(2.5 - st.mag * 0.33, 0.6, 2.1), 0, TAU); ctx.fill();
+        });
+        BRIGHT_STARS.forEach(st => {
+          if (!zIn(st.lon)) return;
+          const x = zX(st.lon), y = zY(st.lat);
+          ctx.fillStyle = '#F8FAFC';
+          ctx.beginPath(); ctx.arc(x, y, 3.4, 0, TAU); ctx.fill();
+          ctx.strokeStyle = 'rgba(248,250,252,0.6)'; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(x - 7, y); ctx.lineTo(x + 7, y); ctx.moveTo(x, y - 7); ctx.lineTo(x, y + 7); ctx.stroke();
+          ctx.fillStyle = 'rgba(203, 213, 225, 0.85)'; ctx.fillText(st.name, x, y + 13);
+        });
+        ctx.font = '700 12px -apple-system, "Noto Sans TC", sans-serif';
+        ZODIAC.forEach(z => { if (zIn(z.lon)) { ctx.fillStyle = 'rgba(148, 163, 184, 0.5)'; ctx.fillText(z.name, zX(z.lon), zY(-10.5)); } });
+        if (zIn(sunLon)) {
+          const x = zX(sunLon), y = zY(0);
+          const g2 = ctx.createRadialGradient(x, y, 3, x, y, 26);
+          g2.addColorStop(0, 'rgba(255, 251, 235, 0.95)'); g2.addColorStop(1, 'rgba(251, 191, 36, 0)');
+          ctx.fillStyle = g2; ctx.beginPath(); ctx.arc(x, y, 26, 0, TAU); ctx.fill();
+          ctx.fillStyle = PALETTE.sun; ctx.fillText('太陽', x, y + 26);
+        }
+        // 疊圖足跡：越舊越淡
+        trail.forEach((t, i) => {
+          if (!zIn(t.lon)) return;
+          ctx.globalAlpha = 0.35 + 0.65 * (i / Math.max(1, trail.length - 1));
+          ctx.fillStyle = t.retro ? PALETTE.node : PALETTE.land;
+          ctx.beginPath(); ctx.arc(zX(t.lon), zY(t.lat), 3, 0, TAU); ctx.fill();
+        });
+        ctx.globalAlpha = 1;
+        PLANET_KEYS.forEach(k => {
+          const g = geoNow[k], pl = PLANETS[k];
+          if (!zIn(g.lon)) return;
+          const isT = k === targetKey;
+          ctx.fillStyle = pl.color; ctx.strokeStyle = '#0F172A'; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(zX(g.lon), zY(g.lat), isT ? 8 : 5.5, 0, TAU); ctx.fill(); ctx.stroke();
+          if (!isT) { ctx.font = '700 11px -apple-system, "Noto Sans TC", sans-serif'; ctx.fillStyle = pl.color; ctx.fillText(pl.name, zX(g.lon), zY(g.lat) - 13); }
+        });
+        ctx.restore();
+        ctx.font = sF;
+        const gT = geoNow[targetKey];
+        if (zIn(gT.lon)) drawPill2D(ctx, `${tpl.name}`, zX(gT.lon), zY(gT.lat) - 22, tpl.color);
+        const g1 = planetGeo(targetKey, days - 1), g2 = planetGeo(targetKey, days + 1);
+        const vel = wrap180(g2.lon - g1.lon) / 2;
+        const motion = Math.abs(vel) < 0.02 ? '⏸ 留' : vel < 0 ? '◀ 逆行 (向西)' : '▶ 順行 (向東)';
+        drawPill2D(ctx, `${fmtDateFromDays(days)} ｜ ${tpl.name}位於 ${zodiacOf(gT.lon)} ｜ ${motion} ${Math.abs(vel).toFixed(2)}°/天`, 0, -34, Math.abs(vel) < 0.02 ? PALETTE.sun : vel < 0 ? PALETTE.node : PALETTE.land);
+        drawPill2D(ctx, '★ 恆星：彼此相對位置永遠固定　　● 行星：在恆星之間漫遊（綠=順行、紅=逆行，越舊越淡）', 0, 162, PALETTE.muted);
         break;
       }
     }
