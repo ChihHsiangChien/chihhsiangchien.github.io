@@ -1,0 +1,2414 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>植物體內物質運輸互動模擬器 | Plant Transport Simulator</title>
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --panel-bg: rgba(30, 41, 59, 0.92);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent: #10b981;
+            --accent-hover: #059669;
+            --border: #334155;
+
+            /* 跨分頁統一生物學配色系統 */
+            --c-wall: #d6ccc2;
+            /* 細胞壁 / 質外體空間 */
+            --c-cyto: #fefae0;
+            /* 細胞質 / 共質體 */
+            --c-membrane: #d97706;
+            /* 細胞膜 */
+            --c-xylem-wall: #991b1b;
+            /* 木質化厚壁 */
+            --c-xylem-lumen: #e0f2fe;
+            /* 導管內腔 */
+            --c-phloem-wall: #15803d;
+            /* 韌皮部細胞壁 */
+            --c-casparian: #dc2626;
+            /* 凱氏帶 (木栓質) */
+            --c-water: #0284c7;
+            /* 水分子 H2O */
+            --c-sucrose: #f59e0b;
+            /* 蔗糖 */
+            --c-ion: #9333ea;
+            /* 礦物質離子 */
+            --c-atp: #ef4444;
+            /* ATP / 能量 */
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans TC", sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 頂部導覽與分頁列 */
+        header {
+            background: #1e293b;
+            border-bottom: 1px solid var(--border);
+            z-index: 20;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 16px;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .app-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #34d399;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .btn {
+            background: #334155;
+            color: var(--text-main);
+            border: 1px solid #475569;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.15s;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            touch-action: manipulation;
+        }
+
+        .btn:hover {
+            background: #475569;
+        }
+
+        .btn.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #022c22;
+            font-weight: 600;
+        }
+
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .tabs-nav {
+            display: flex;
+            overflow-x: auto;
+            scrollbar-width: none;
+            background: #0f172a;
+            padding: 0 8px;
+            border-top: 1px solid var(--border);
+        }
+
+        .tabs-nav::-webkit-scrollbar {
+            display: none;
+        }
+
+        .tab-btn {
+            flex: 0 0 auto;
+            background: transparent;
+            color: var(--text-muted);
+            border: none;
+            border-bottom: 3px solid transparent;
+            padding: 10px 14px;
+            font-size: 0.88rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-main);
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .tab-btn.active {
+            color: #34d399;
+            border-bottom-color: #34d399;
+            background: rgba(52, 211, 153, 0.08);
+            font-weight: 600;
+        }
+
+        /* 主視覺畫布區 */
+        #viewport {
+            position: relative;
+            flex: 1;
+            width: 100%;
+            overflow: hidden;
+            background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+            touch-action: none;
+        }
+
+        #canvas2d,
+        #canvas3d {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        #canvas3d {
+            display: none;
+        }
+
+        /* 3D HTML 浮動標籤容器 */
+        #labels3d {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: none;
+            overflow: hidden;
+        }
+
+        .label-3d {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            background: rgba(15, 23, 42, 0.85);
+            color: #f8fafc;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            border: 1px solid #475569;
+            white-space: nowrap;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+        }
+
+        /* 圖例面板 */
+        .legend-box {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            background: var(--panel-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 0.78rem;
+            z-index: 10;
+            backdrop-filter: blur(6px);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            max-width: calc(100% - 24px);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .rect-mark {
+            width: 12px;
+            height: 8px;
+            border-radius: 2px;
+            display: inline-block;
+        }
+
+        /* 操作提示浮水印 */
+        .gesture-hint {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: rgba(15, 23, 42, 0.7);
+            color: var(--text-muted);
+            padding: 5px 10px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        /* 分頁2專屬：路徑切換子按鈕 */
+        #sub-mode-bar {
+            position: absolute;
+            top: 52px;
+            left: 12px;
+            z-index: 12;
+            display: none;
+            gap: 6px;
+            background: var(--panel-bg);
+            padding: 6px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        /* 底部 Step-by-Step 解說與控制面板 */
+        .step-panel {
+            background: #1e293b;
+            border-top: 1px solid var(--border);
+            padding: 12px 18px;
+            z-index: 20;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .step-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .step-badge {
+            background: rgba(16, 185, 129, 0.2);
+            color: #34d399;
+            border: 1px solid rgba(52, 211, 153, 0.4);
+            padding: 2px 8px;
+            border-radius: 99px;
+            font-size: 0.78rem;
+            font-weight: 700;
+        }
+
+        .step-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #f1f5f9;
+            flex: 1;
+        }
+
+        .step-desc {
+            font-size: 0.9rem;
+            color: #cbd5e1;
+            line-height: 1.5;
+            min-height: 2.7em;
+        }
+
+        .step-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 2px;
+        }
+
+        .dots-nav {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .step-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #475569;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .step-dot.active {
+            background: #34d399;
+            transform: scale(1.3);
+        }
+
+        .nav-btns {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn-step {
+            padding: 8px 16px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #022c22;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: var(--accent-hover);
+        }
+
+        @media (max-width: 640px) {
+            .top-bar {
+                padding: 6px 10px;
+            }
+
+            .app-title {
+                font-size: 0.95rem;
+            }
+
+            .step-panel {
+                padding: 10px 12px;
+            }
+
+            .step-title {
+                font-size: 0.92rem;
+            }
+
+            .step-desc {
+                font-size: 0.84rem;
+            }
+
+            .gesture-hint {
+                display: none;
+            }
+
+            .legend-box {
+                font-size: 0.72rem;
+                padding: 6px 8px;
+                gap: 8px;
+            }
+        }
+    </style>
+    <!-- 載入 Three.js 與 OrbitControls (供立體凱氏帶分頁使用) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+
+<body>
+
+    <header>
+        <div class="top-bar">
+            <div class="app-title">🌱 植物運輸動態模擬器</div>
+            <div class="toolbar">
+                <button id="btn-toggle-labels" class="btn active" title="顯示或隱藏畫面上的解剖與分子標籤">🏷️ 標籤: 開啟</button>
+                <button id="btn-reset-view" class="btn" title="重置縮放與平移視角">🎯 重置視角</button>
+            </div>
+        </div>
+        <nav class="tabs-nav" id="tabs-nav">
+            <button class="tab-btn active" data-tab="0">1. 壓力流假說 (Münch)</button>
+            <button class="tab-btn" data-tab="1">2. 韌皮部裝載：質外體 vs 共質體</button>
+            <button class="tab-btn" data-tab="2">3. 根毛吸水與水通道蛋白</button>
+            <button class="tab-btn" data-tab="3">4. 凱氏帶立體構造 (3D)</button>
+            <button class="tab-btn" data-tab="4">5. 中柱薄壁細胞木質部裝載</button>
+            <button class="tab-btn" data-tab="5">6. 導管內聚力-張力向上運輸</button>
+            <button class="tab-btn" data-tab="6">7. 葉片蒸散與保衛細胞氣孔</button>
+        </nav>
+    </header>
+
+    <main id="viewport">
+        <canvas id="canvas2d"></canvas>
+        <div id="canvas3d"></div>
+        <div id="labels3d"></div>
+
+        <!-- 跨分頁統一視覺圖例 -->
+        <div class="legend-box" id="legend-box">
+            <span class="legend-item"><i class="dot" style="background:#0284c7"></i>水分子(H₂O)</span>
+            <span class="legend-item"><i class="dot" style="background:#f59e0b"></i>蔗糖(Sucrose)</span>
+            <span class="legend-item"><i class="dot" style="background:#9333ea"></i>礦物質離子</span>
+            <span class="legend-item"><i class="dot" style="background:#ef4444"></i>H⁺ / ATP耗能</span>
+            <span class="legend-item"><i class="rect-mark" style="background:#d6ccc2"></i>質外體(細胞壁)</span>
+            <span class="legend-item"><i class="rect-mark"
+                    style="background:#fefae0;border:1px solid #d97706"></i>共質體(細胞質)</span>
+            <span class="legend-item"><i class="rect-mark" style="background:#991b1b"></i>木質部</span>
+            <span class="legend-item"><i class="rect-mark" style="background:#15803d"></i>韌皮部</span>
+        </div>
+
+        <!-- 分頁2專屬子模式切換 -->
+        <div id="sub-mode-bar">
+            <button class="btn active" data-sub="apoplast">🅰️ 質外體途徑 (Apoplastic)</button>
+            <button class="btn" data-sub="symplast">🅱️ 共質體途徑 (Symplastic)</button>
+            <button class="btn" data-sub="compare">⚖️ 雙路徑上下對照</button>
+        </div>
+
+        <div class="gesture-hint" id="gesture-hint">🖱️ 滾輪縮放 / 拖曳平移 ｜ 📱 雙指縮放 / 單指拖曳</div>
+    </main>
+
+    <section class="step-panel">
+        <div class="step-header">
+            <span class="step-badge" id="step-badge">Step 1 / 6</span>
+            <div class="step-title" id="step-title">載入中...</div>
+        </div>
+        <div class="step-desc" id="step-desc"></div>
+        <div class="step-controls">
+            <div class="dots-nav" id="dots-nav"></div>
+            <div class="nav-btns">
+                <button id="btn-prev" class="btn btn-step">⬅ 上一步</button>
+                <button id="btn-next" class="btn btn-step btn-primary">下一步 ➡</button>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        /* =========================================================================
+           全域設定與跨分頁統一配色字典 (Visual Consistency Palette)
+           ========================================================================= */
+        const PALETTE = {
+            wall: '#d6ccc2',          // 細胞壁 (質外體途徑基底)
+            wallStroke: '#a89f91',
+            cyto: '#fefae0',          // 細胞質 (共質體基底)
+            vacuole: '#bae6fd',       // 液胞
+            membrane: '#d97706',      // 細胞膜
+            xylemWall: '#991b1b',     // 木質部厚壁 (木質素)
+            xylemLumen: '#e0f2fe',    // 木質部導管腔
+            phloemWall: '#15803d',    // 韌皮部細胞壁
+            phloemLumen: '#f0fdf4',   // 篩管內腔
+            companionCyto: '#dcfce7', // 伴細胞細胞質
+            casparian: '#dc2626',     // 凱氏帶 (木栓質)
+            chloroplast: '#16a34a',   // 葉綠體
+            water: '#0284c7',         // 水分子
+            waterLight: '#38bdf8',
+            sucrose: '#f59e0b',       // 蔗糖
+            polymer: '#d97706',       // 棉子糖/水蘇糖寡糖(大分子)
+            ion: '#9333ea',           // 礦物質離子 (K+, NO3- 等)
+            proton: '#ef4444',        // 質子 H+ / ATP
+            aquaporin: '#06b6d4',     // 水通道蛋白
+            labelBg: 'rgba(15, 23, 42, 0.86)',
+            labelText: '#f8fafc',
+            labelBorder: '#475569'
+        };
+
+        /* =========================================================================
+           7 大分頁與 Step-by-step 課程內容資料庫
+           ========================================================================= */
+        const TABS_DATA = [
+            // Tab 0: Münch 壓力流假說
+            {
+                title: "木質部與韌皮部相鄰：Münch 壓力流假說",
+                is3D: false,
+                steps: [
+                    {
+                        title: "解剖構造概覽：相鄰的木質部導管與韌皮部篩管",
+                        desc: "維管束中，左側「木質部導管」(死細胞中空管，負責向上輸水) 與右側「韌皮部篩管及伴細胞」(活細胞，具篩板) 緊密相鄰。上方為供應端 (Source，如成熟葉肉細胞)，下方為需求端 (Sink，如根部儲藏細胞)。"
+                    },
+                    {
+                        title: "供應端裝載：蔗糖主動運輸入伴細胞與篩管",
+                        desc: "成熟葉肉細胞行光合作用產生【蔗糖(橘色)】，消耗 ATP 能量將蔗糖主動運輸進入「伴細胞」，再經由原生質絲進入韌皮部「篩管」內。"
+                    },
+                    {
+                        title: "滲透吸水與膨壓升高：溶質增加導致水勢 (Ψs) 下降",
+                        desc: "篩管內蔗糖濃度飆升，使篩管內溶質勢與總水勢 (Ψw) 大幅下降！相鄰木質部導管內的高水勢【水分子(藍色)】便順著水勢梯度，經滲透作用大量湧入篩管，導致此處流體靜壓（膨壓 Ψp）急遽升高！"
+                    },
+                    {
+                        title: "壓力差驅動集流 (Bulk Flow)：養分由高壓流向低壓",
+                        desc: "供應端篩管的高膨壓 (High Ψp) 與下方需求端的低膨壓 (Low Ψp) 形成壓力梯度，推動水與蔗糖一起穿過篩板孔洞，產生高效率的「集流 (Mass/Bulk flow)」向下運送。"
+                    },
+                    {
+                        title: "需求端卸載 (Phloem Unloading)：蔗糖離開篩管",
+                        desc: "到達根部或果實等需求端細胞時，蔗糖由篩管經伴細胞被主動或被動卸載至儲藏細胞（並轉化為澱粉儲存或呼吸消耗），使下方篩管內的溶質濃度迅速降低。"
+                    },
+                    {
+                        title: "水勢回升與水分回流木質部：完成循環",
+                        desc: "需求端篩管失去蔗糖後，水勢 (Ψw) 回升（高於鄰近處於負壓張力的木質部），水分便由韌皮部滲透回流至相鄰的木質部導管，隨蒸散流再次向上循環！"
+                    }
+                ]
+            },
+
+            // Tab 1: 質外體 vs 共質體裝載路徑
+            {
+                title: "韌皮部裝載兩大路徑：質外體途徑 vs 共質體途徑",
+                is3D: false,
+                steps: [
+                    {
+                        title: "細胞解剖構造差異：原生質絲密度與轉運細胞特化",
+                        desc: "【可點擊左上角切換單獨檢視或上下對照】質外體植物（如馬鈴薯、蠶豆）伴細胞與葉肉間幾乎無原生質絲，伴細胞常特化為具內突細胞壁的「轉運細胞」以增加膜表面積；共質體植物（如南瓜、瓜類）則擁有極密集的分支原生質絲，伴細胞特化為「中間細胞 (Intermediary cell)」。"
+                    },
+                    {
+                        title: "步驟一：蔗糖離開葉肉細胞的方式",
+                        desc: "【質外體途徑】蔗糖由葉肉細胞經 SWEET 外排蛋白被動擴散至「細胞壁空間 (質外體)」；【共質體途徑】蔗糖完全不跨膜，直接順濃度梯度經由「原生質絲」滑入中間細胞（伴細胞）。"
+                    },
+                    {
+                        title: "步驟二：能量消耗與跨膜/聚合機制差異",
+                        desc: "【質外體途徑】伴細胞膜上的質子幫浦 (H⁺-ATPase) 耗能打入 H⁺ 建立質子梯度，再透過「SUC/SUT H⁺-蔗糖同向運輸蛋白」將蔗糖主動逆濃度塞入伴細胞！\n【共質體途徑】採用「聚合物陷阱機制 (Polymer trapping)」：消耗 ATP/UTP 將雙醣蔗糖合成更大的三醣「棉子糖」或四醣「水蘇糖」。"
+                    },
+                    {
+                        title: "步驟三：如何防止逆流並進入篩管？",
+                        desc: "【質外體途徑】靠細胞膜與主動運輸維持高濃度蔗糖不外漏，隨後經寬大的篩域孔進入篩管；【共質體途徑】合成出的棉子糖/水蘇糖分子體積太大，無法塞回葉肉側狹窄的原生質絲，只能單向通過伴細胞與篩管間較寬的原生質絲進入篩管！"
+                    },
+                    {
+                        title: "綜合比較：機制、耗能方式與解剖構造總整理",
+                        desc: "1. 跨膜次數：質外體需跨膜2次；共質體0次跨膜。\n2. 耗能點：質外體耗 ATP 於 H⁺ 質子幫浦建立電化學梯度；共質體耗能於酵素合成寡糖(棉子糖)。\n3. 運輸糖類：質外體主要運蔗糖；共質體主要運棉子糖族寡糖(RFOs)。"
+                    }
+                ]
+            },
+
+            // Tab 2: 根毛吸水與進入皮層
+            {
+                title: "根毛利用水通道蛋白吸收水分與礦物質並進入皮層",
+                is3D: false,
+                steps: [
+                    {
+                        title: "土壤微環境與根毛特化構造",
+                        desc: "表皮細胞向外延伸形成細長的「根毛」，大幅增加吸收表面積。土壤顆粒間隙充滿土壤溶液（高水勢 Ψw，但礦物質離子濃度通常低於根細胞內）。"
+                    },
+                    {
+                        title: "主動吸收礦物質離子：建立滲透梯度",
+                        desc: "根毛細胞膜上的質子幫浦消耗 ATP 排出 H⁺，藉由主動運輸與次級主動運輸將土壤中的礦物質離子（如 K⁺、NO₃⁻，紫色圓點）逆濃度梯度泵入細胞質與大液胞中。"
+                    },
+                    {
+                        title: "根毛細胞水勢下降，開啟水通道蛋白 (Aquaporins)",
+                        desc: "離子與有機溶質累積使根毛內水勢 (Ψw) 低於土壤溶液。細胞膜上鑲嵌著專一性的「水通道蛋白 (Aquaporins，青藍色通道)」，為極性水分子提供無阻力的快速跨膜通道。"
+                    },
+                    {
+                        title: "水分經水通道蛋白高速滲透進入根毛",
+                        desc: "水分子單列排隊高速穿過水通道蛋白（速率遠大於單純穿過磷脂雙層擴散），大量水分進入根毛細胞，提高根毛水勢。"
+                    },
+                    {
+                        title: "水分與離子雙路徑進入皮層 (Cortex)",
+                        desc: "進入根部後，水分與離子同時沿兩條路線向內側皮層移動：①【質外體途徑】沿疏鬆親水的細胞壁與細胞間隙快速流動；②【共質體途徑】經由細胞間相連的「原生質絲」在細胞質內逐一傳遞（或連續跨膜）。"
+                    }
+                ]
+            },
+
+            // Tab 3: 凱氏帶立體構造 (Three.js 3D)
+            {
+                title: "根部內皮層凱氏帶 (Casparian Strip) 立體構造與轉向機制 [3D]",
+                is3D: true,
+                steps: [
+                    {
+                        title: "3D 立體解剖：皮層與緊密排列的內皮層細胞",
+                        desc: "【可單指/滑鼠旋轉 3D 視角、雙指/滾輪縮放】內皮層 (Endodermis) 是皮層最內圈的單層細胞，如圓筒般包圍中央中柱。請觀察外圍紅色環繞每個內皮層細胞的「凱氏帶」。"
+                    },
+                    {
+                        title: "凱氏帶的特殊立體位置：徑向壁與橫壁的木栓質帶",
+                        desc: "凱氏帶由疏水性的「木栓質 (Suberin)」與木質素沉積於內皮層細胞的【上、下橫壁】與【左、右徑向壁】細胞壁內，像磚牆間的防水矽利康，將細胞壁縫隙完全封死（注意：面向皮層與中柱的切向壁沒有凱氏帶！）。"
+                    },
+                    {
+                        title: "質外體途徑受阻：水分與離子撞上防水凱氏帶",
+                        desc: "原本在皮層細胞壁（質外體）暢行無阻的水分子與礦物質離子（甚至包含有毒重金屬或病原體），流到內皮層細胞壁時，被不透水的紅色凱氏帶完全擋住，無法從細胞縫隙溜進中柱！"
+                    },
+                    {
+                        title: "強制跨膜轉入共質體：細胞膜的選擇性把關",
+                        desc: "由於細胞壁死路一條，質外體的水與離子被迫必須穿過內皮層面向外側的「細胞膜」（水經水通道蛋白、所需離子經專屬運輸蛋白篩選），正式由「質外體途徑」轉入「共質體途徑」（細胞質內）！"
+                    },
+                    {
+                        title: "通過內皮層進入中柱，並防止中柱水分與離子逆流外洩",
+                        desc: "通過細胞膜檢驗的離子與水分，在內皮層細胞質內繞過凱氏帶（或經原生質絲）進入中柱維管組織。同時，凱氏帶也像單向閥一樣，防止中柱累積的高濃度離子沿細胞壁縫隙漏回皮層，協助維持「根壓」！"
+                    }
+                ]
+            },
+
+            // Tab 4: 中柱薄壁細胞幫助水進入導管
+            {
+                title: "中柱內的木質部薄壁細胞如何幫助水分進入導管",
+                is3D: false,
+                steps: [
+                    {
+                        title: "中柱解剖：內皮層、周鞘、木質部薄壁細胞與中空導管",
+                        desc: "穿過內皮層後即進入「中柱 (Stele)」。中柱內的「木質部薄壁細胞」是具有完整細胞膜與代謝能力的活細胞，緊貼著已經死亡、僅剩木質化厚壁與壁孔的「木質部導管」。"
+                    },
+                    {
+                        title: "共質體輸送抵達木質部薄壁細胞",
+                        desc: "水分與礦物質離子透過「原生質絲」由內皮層一路經周鞘傳遞至木質部薄壁細胞的細胞質中。"
+                    },
+                    {
+                        title: "木質部裝載 (Xylem Loading)：主動排出離子至導管",
+                        desc: "木質部薄壁細胞消耗 ATP 運作質子幫浦 (H⁺-ATPase)，驅動離子通道與載體蛋白（如 SKOR 鉀離子外排通道），將礦物質離子主動泵出細胞膜，經由導管側壁未增厚的「壁孔 (Pits)」排入導管腔（質外體）！"
+                    },
+                    {
+                        title: "導管內溶質增加、水勢下降，吸引水分湧入導管",
+                        desc: "礦物質離子在導管腔內累積，使導管內溶質勢 (Ψs) 與水勢下降。薄壁細胞內的水分便順著水勢梯度，透過細胞膜上的水通道蛋白大量滲透穿過壁孔進入木質部導管！"
+                    },
+                    {
+                        title: "產生正靜水壓（根壓 Root Pressure）推升水柱",
+                        desc: "內皮層凱氏帶在後方封鎖退路，薄壁細胞在前方不斷泵入離子引水入導管，使導管內產生正向靜水壓——即「根壓」（夜晚蒸散弱時可造成葉緣泌液現象 Guttation），協助水分進入並推升導管水柱。"
+                    }
+                ]
+            },
+
+            // Tab 5: 導管內聚力向上運輸
+            {
+                title: "導管內水分向上運輸：內聚力-張力-附著力學說",
+                is3D: false,
+                steps: [
+                    {
+                        title: "宏觀與微觀雙重視角：連續不斷的木質部水柱",
+                        desc: "左側為木質部導管（具環紋/螺紋木質素增厚防止負壓塌陷），右側放大鏡展示微觀尺度的極性水分子 (H₂O：紅氧 δ⁻、白氫 δ⁺)。"
+                    },
+                    {
+                        title: "上方蒸散拉力產生「負壓張力 (Tension)」",
+                        desc: "葉片氣孔蒸散失水，使上方導管產生強大的負壓吸力（張力，Ψp 為負值），如同用吸管從頂端往上抽吸一般，對整條水柱施加向上的拉力。"
+                    },
+                    {
+                        title: "微觀「內聚力 (Cohesion)」：水分子間氫鍵手牽手",
+                        desc: "水分子具極性，一個水分子的氧原子(δ⁻)與相鄰水分子的氫原子(δ⁺)形成強韌的「氫鍵 (Hydrogen bonds，虛線閃光)」。內聚力讓無數水分子像鐵鍊般緊密拉住彼此，水柱在巨大張力下也不易斷裂！"
+                    },
+                    {
+                        title: "微觀「附著力 (Adhesion)」：水分子吸附親水性管壁",
+                        desc: "導管細胞壁富含親水性的纖維素，水分子與導管壁之間亦形成氫鍵產生「附著力」，幫助抵抗地心引力，防止水柱因重力下滑。"
+                    },
+                    {
+                        title: "克服重力集流向上：蒸散流 (Transpiration Stream)",
+                        desc: "在「蒸散張力牽引 + 水分子間內聚力 + 管壁附著力」三者協同下，植物無須在導管耗費任何代謝能量 (ATP)，即可將水與礦物質由根部高速拉升至數十公尺高的樹冠！"
+                    }
+                ]
+            },
+
+            // Tab 6: 保衛細胞與蒸散作用離開氣孔
+            {
+                title: "葉片導管至氣孔：水分蒸散與保衛細胞開闔機制",
+                is3D: false,
+                steps: [
+                    {
+                        title: "葉片橫切面解剖：葉脈導管、葉肉細胞、氣室與保衛細胞",
+                        desc: "上方為葉脈末端的「木質部導管」，中層為富含葉綠體與廣大細胞間隙（氣室）的柵狀與海綿「葉肉細胞」，下表皮則有一對腎形「保衛細胞」圍成的「氣孔 (Stoma)」。"
+                    },
+                    {
+                        title: "水分離開葉脈導管，濕潤葉肉細胞壁",
+                        desc: "來自根部的水分抵達葉脈木質部導管末端，滲透進入周圍葉肉細胞，並浸潤海綿組織細胞外層疏鬆的「微纖絲細胞壁」表面形成薄水膜。"
+                    },
+                    {
+                        title: "液態水蒸發為水蒸氣：產生表面張力",
+                        desc: "葉肉細胞壁表面的液態水吸收熱能，「蒸發」成氣態水蒸氣進入葉內「氣室」（使氣室相對濕度接近 100%）。微纖絲間隙液面內凹產生強大表面張力，這正是拉動全株木質部水柱的源頭動力！"
+                    },
+                    {
+                        title: "藍光活化保衛細胞：K⁺ 與水進入，氣孔張開！",
+                        desc: "白晝光照下，保衛細胞消耗 ATP 排出 H⁺，促使大量 K⁺ 離子（紫色）與 Cl⁻ 進入保衛細胞，水勢下降引發水分湧入。因保衛細胞「內側細胞壁較厚、外側較薄」，吸水膨脹時向外彎曲，撐開中央氣孔！"
+                    },
+                    {
+                        title: "水蒸氣經氣孔擴散離開葉片（蒸散作用完成）",
+                        desc: "氣孔打開後，葉內氣室的高水勢水蒸氣（高濕度）順著水氣濃度梯度，快速擴散穿過氣孔進入乾燥的大氣（極低水勢），完成植物體內水分運輸的最後一哩路！（缺水時則釋出 K⁺ 與水，保衛細胞萎縮關閉氣孔以保水）。"
+                    }
+                ]
+            }
+        ];
+
+        /* =========================================================================
+           應用程式狀態管理
+           ========================================================================= */
+        const state = {
+            currentTab: 0,
+            currentStep: 0,
+            showLabels: true,
+            subMode: 'apoplast', // Tab 1 專用: 'apoplast' | 'symplast' | 'compare'
+            time: 0,
+            // 2D Camera (Zoom & Pan)
+            cam: { x: 0, y: 0, scale: 1 },
+            isDragging: false,
+            lastPtr: { x: 0, y: 0 },
+            pinchDist: 0
+        };
+
+        // DOM 元素快取
+        const canvas2d = document.getElementById('canvas2d');
+        const ctx = canvas2d.getContext('2d');
+        const canvas3dContainer = document.getElementById('canvas3d');
+        const labels3dContainer = document.getElementById('labels3d');
+        const viewport = document.getElementById('viewport');
+        const subModeBar = document.getElementById('sub-mode-bar');
+        const btnToggleLabels = document.getElementById('btn-toggle-labels');
+        const btnResetView = document.getElementById('btn-reset-view');
+        const stepBadge = document.getElementById('step-badge');
+        const stepTitle = document.getElementById('step-title');
+        const stepDesc = document.getElementById('step-desc');
+        const dotsNav = document.getElementById('dots-nav');
+        const btnPrev = document.getElementById('btn-prev');
+        const btnNext = document.getElementById('btn-next');
+
+        // 邏輯畫布基準座標系 (1000 x 600)
+        const BASE_W = 1000;
+        const BASE_H = 600;
+
+        /* =========================================================================
+           2D 視角轉換與觸控/滑鼠 Zoom & Pan 控制器
+           ========================================================================= */
+        function resetCamera() {
+            const rect = viewport.getBoundingClientRect();
+            const scaleX = rect.width / BASE_W;
+            const scaleY = rect.height / BASE_H;
+            const fitScale = Math.min(scaleX, scaleY) * 0.94;
+            state.cam.scale = fitScale;
+            state.cam.x = (rect.width - BASE_W * fitScale) / 2;
+            state.cam.y = (rect.height - BASE_H * fitScale) / 2;
+            if (threeApp.controls && TABS_DATA[state.currentTab].is3D) {
+                threeApp.resetView();
+            }
+        }
+
+        function resizeAll() {
+            const rect = viewport.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            canvas2d.width = rect.width * dpr;
+            canvas2d.height = rect.height * dpr;
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            resetCamera();
+            if (threeApp.initialized) {
+                threeApp.resize(rect.width, rect.height);
+            }
+        }
+        window.addEventListener('resize', resizeAll);
+
+        // 滑鼠滾輪縮放 (以游標為中心)
+        canvas2d.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const rect = canvas2d.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
+            const zoomFactor = e.deltaY < 0 ? 1.12 : 0.89;
+            const newScale = Math.max(0.25, Math.min(5.0, state.cam.scale * zoomFactor));
+            state.cam.x = mx - (mx - state.cam.x) * (newScale / state.cam.scale);
+            state.cam.y = my - (my - state.cam.y) * (newScale / state.cam.scale);
+            state.cam.scale = newScale;
+        }, { passive: false });
+
+        // 滑鼠拖曳平移
+        canvas2d.addEventListener('mousedown', (e) => {
+            state.isDragging = true;
+            state.lastPtr = { x: e.clientX, y: e.clientY };
+        });
+        window.addEventListener('mousemove', (e) => {
+            if (!state.isDragging) return;
+            state.cam.x += e.clientX - state.lastPtr.x;
+            state.cam.y += e.clientY - state.lastPtr.y;
+            state.lastPtr = { x: e.clientX, y: e.clientY };
+        });
+        window.addEventListener('mouseup', () => { state.isDragging = false; });
+
+        // 觸控友善：單指拖曳 + 雙指捏合縮放 (Pinch-to-zoom)
+        canvas2d.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (e.touches.length === 1) {
+                state.isDragging = true;
+                state.lastPtr = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            } else if (e.touches.length === 2) {
+                state.isDragging = false;
+                state.pinchDist = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+            }
+        }, { passive: false });
+
+        canvas2d.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            const rect = canvas2d.getBoundingClientRect();
+            if (e.touches.length === 1 && state.isDragging) {
+                const tx = e.touches[0].clientX;
+                const ty = e.touches[0].clientY;
+                state.cam.x += tx - state.lastPtr.x;
+                state.cam.y += ty - state.lastPtr.y;
+                state.lastPtr = { x: tx, y: ty };
+            } else if (e.touches.length === 2) {
+                const t0 = e.touches[0], t1 = e.touches[1];
+                const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+                const cx = (t0.clientX + t1.clientX) / 2 - rect.left;
+                const cy = (t0.clientY + t1.clientY) / 2 - rect.top;
+                if (state.pinchDist > 0) {
+                    const factor = dist / state.pinchDist;
+                    const newScale = Math.max(0.25, Math.min(5.0, state.cam.scale * factor));
+                    state.cam.x = cx - (cx - state.cam.x) * (newScale / state.cam.scale);
+                    state.cam.y = cy - (cy - state.cam.y) * (newScale / state.cam.scale);
+                    state.cam.scale = newScale;
+                }
+                state.pinchDist = dist;
+            }
+        }, { passive: false });
+
+        canvas2d.addEventListener('touchend', (e) => {
+            if (e.touches.length === 0) state.isDragging = false;
+            if (e.touches.length === 1) {
+                state.isDragging = true;
+                state.lastPtr = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            }
+        });
+
+        /* =========================================================================
+           UI 互動控制綁定
+           ========================================================================= */
+        function updateUI() {
+            const tabInfo = TABS_DATA[state.currentTab];
+            const stepInfo = tabInfo.steps[state.currentStep];
+
+            // 分頁按鈕狀態
+            document.querySelectorAll('.tab-btn').forEach((btn, idx) => {
+                btn.classList.toggle('active', idx === state.currentTab);
+            });
+
+            // 子模式列 (僅在 Tab 1 顯示)
+            subModeBar.style.display = state.currentTab === 1 ? 'flex' : 'none';
+
+            // 2D / 3D 畫布切換
+            if (tabInfo.is3D) {
+                canvas2d.style.display = 'none';
+                canvas3dContainer.style.display = 'block';
+                labels3dContainer.style.display = state.showLabels ? 'block' : 'none';
+                if (!threeApp.initialized) threeApp.init();
+                threeApp.onStepChange(state.currentStep);
+                document.getElementById('gesture-hint').textContent = '🖱️ 左鍵旋轉 / 右鍵平移 / 滾輪縮放 ｜ 📱 單指旋轉 / 雙指縮放';
+            } else {
+                canvas2d.style.display = 'block';
+                canvas3dContainer.style.display = 'none';
+                labels3dContainer.style.display = 'none';
+                document.getElementById('gesture-hint').textContent = '🖱️ 滾輪縮放 / 拖曳平移 ｜ 📱 雙指縮放 / 單指拖曳';
+            }
+
+            // Step 資訊更新
+            stepBadge.textContent = `Step ${state.currentStep + 1} / ${tabInfo.steps.length}`;
+            stepTitle.textContent = stepInfo.title;
+            stepDesc.textContent = stepInfo.desc;
+
+            // 進度圓點
+            dotsNav.innerHTML = '';
+            tabInfo.steps.forEach((_, idx) => {
+                const d = document.createElement('div');
+                d.className = 'step-dot' + (idx === state.currentStep ? ' active' : '');
+                d.addEventListener('click', () => {
+                    state.currentStep = idx;
+                    updateUI();
+                });
+                dotsNav.appendChild(d);
+            });
+
+            btnPrev.disabled = state.currentStep === 0;
+            btnNext.disabled = state.currentStep === tabInfo.steps.length - 1;
+        }
+
+        document.getElementById('tabs-nav').addEventListener('click', (e) => {
+            const btn = e.target.closest('.tab-btn');
+            if (!btn) return;
+            state.currentTab = parseInt(btn.dataset.tab, 10);
+            state.currentStep = 0;
+            btn.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+            resetCamera();
+            updateUI();
+        });
+
+        subModeBar.addEventListener('click', (e) => {
+            const btn = e.target.closest('.btn');
+            if (!btn) return;
+            state.subMode = btn.dataset.sub;
+            subModeBar.querySelectorAll('.btn').forEach(b => b.classList.toggle('active', b === btn));
+        });
+
+        btnPrev.addEventListener('click', () => {
+            if (state.currentStep > 0) { state.currentStep--; updateUI(); }
+        });
+        btnNext.addEventListener('click', () => {
+            const max = TABS_DATA[state.currentTab].steps.length - 1;
+            if (state.currentStep < max) { state.currentStep++; updateUI(); }
+        });
+
+        btnToggleLabels.addEventListener('click', () => {
+            state.showLabels = !state.showLabels;
+            btnToggleLabels.classList.toggle('active', state.showLabels);
+            btnToggleLabels.textContent = state.showLabels ? '🏷️ 標籤: 開啟' : '🏷️ 標籤: 隱藏';
+            if (TABS_DATA[state.currentTab].is3D) {
+                labels3dContainer.style.display = state.showLabels ? 'block' : 'none';
+            }
+        });
+
+        btnResetView.addEventListener('click', resetCamera);
+
+        // 鍵盤左右鍵支援 Step 控制
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight') btnNext.click();
+            if (e.key === 'ArrowLeft') btnPrev.click();
+        });
+
+        /* =========================================================================
+           2D 共用繪圖輔助函式庫 (保持跨分頁高度視覺一致性)
+           ========================================================================= */
+        function drawRoundRect(x, y, w, h, r, fill, stroke, lineW = 2) {
+            ctx.beginPath();
+            ctx.roundRect(x, y, w, h, r);
+            if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+            if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lineW; ctx.stroke(); }
+        }
+
+        function drawPlantCell(x, y, w, h, opts = {}) {
+            const wallT = opts.wallThickness || 10;
+            // 細胞壁 (質外體)
+            drawRoundRect(x, y, w, h, opts.radius || 14, opts.wallColor || PALETTE.wall, opts.wallStroke || PALETTE.wallStroke, 2);
+            // 細胞質與細胞膜 (共質體)
+            drawRoundRect(x + wallT, y + wallT, w - wallT * 2, h - wallT * 2, Math.max(4, (opts.radius || 14) - 4), opts.cytoColor || PALETTE.cyto, PALETTE.membrane, 2.5);
+            // 液胞
+            if (opts.vacuole) {
+                const vx = x + wallT + (w - wallT * 2) * 0.18;
+                const vy = y + wallT + (h - wallT * 2) * 0.2;
+                const vw = (w - wallT * 2) * 0.64;
+                const vh = (h - wallT * 2) * 0.6;
+                drawRoundRect(vx, vy, vw, vh, 12, PALETTE.vacuole, '#38bdf8', 1.5);
+            }
+        }
+
+        function drawLabel(text, x, y, opts = {}) {
+            if (!state.showLabels) return;
+            ctx.save();
+            ctx.font = `${opts.bold ? '700' : '600'} ${opts.size || 13}px system-ui, -apple-system, sans-serif`;
+            const lines = text.split('\n');
+            let maxW = 0;
+            lines.forEach(l => { const m = ctx.measureText(l).width; if (m > maxW) maxW = m; });
+            const padX = 8, padY = 5;
+            const lineH = (opts.size || 13) + 5;
+            const boxW = maxW + padX * 2;
+            const boxH = lines.length * lineH + padY * 2 - 4;
+            const bx = opts.align === 'left' ? x : (opts.align === 'right' ? x - boxW : x - boxW / 2);
+            const by = y - boxH / 2;
+
+            // 指引線
+            if (opts.targetX !== undefined && opts.targetY !== undefined) {
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                ctx.lineTo(opts.targetX, opts.targetY);
+                ctx.strokeStyle = opts.borderColor || '#94a3b8';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([3, 3]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.beginPath();
+                ctx.arc(opts.targetX, opts.targetY, 3.5, 0, Math.PI * 2);
+                ctx.fillStyle = opts.borderColor || '#38bdf8';
+                ctx.fill();
+            }
+
+            drawRoundRect(bx, by, boxW, boxH, 6, opts.bg || PALETTE.labelBg, opts.borderColor || PALETTE.labelBorder, 1.5);
+            ctx.fillStyle = opts.color || PALETTE.labelText;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            lines.forEach((l, i) => {
+                ctx.fillText(l, bx + boxW / 2, by + padY + lineH * i + lineH / 2 - 2);
+            });
+            ctx.restore();
+        }
+
+        function drawArrow(x1, y1, x2, y2, color = '#38bdf8', width = 3, dashed = false) {
+            const headlen = 10 + width;
+            const angle = Math.atan2(y2 - y1, x2 - x1);
+            ctx.save();
+            ctx.strokeStyle = color;
+            ctx.fillStyle = color;
+            ctx.lineWidth = width;
+            if (dashed) ctx.setLineDash([6, 5]);
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2 - Math.cos(angle) * (headlen * 0.6), y2 - Math.sin(angle) * (headlen * 0.6));
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.beginPath();
+            ctx.moveTo(x2, y2);
+            ctx.lineTo(x2 - headlen * Math.cos(angle - Math.PI / 6), y2 - headlen * Math.sin(angle - Math.PI / 6));
+            ctx.lineTo(x2 - headlen * Math.cos(angle + Math.PI / 6), y2 - headlen * Math.sin(angle + Math.PI / 6));
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
+
+        // 統一分子繪製
+        function drawWaterDot(x, y, r = 5.5) {
+            ctx.beginPath();
+            ctx.arc(x, y, r, 0, Math.PI * 2);
+            ctx.fillStyle = PALETTE.water;
+            ctx.fill();
+            ctx.strokeStyle = '#bae6fd';
+            ctx.lineWidth = 1.2;
+            ctx.stroke();
+        }
+
+        function drawSucroseHex(x, y, r = 7) {
+            ctx.beginPath();
+            for (let i = 0; i < 6; i++) {
+                const a = (Math.PI / 3) * i;
+                const px = x + r * Math.cos(a);
+                const py = y + r * Math.sin(a);
+                if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+            }
+            ctx.closePath();
+            ctx.fillStyle = PALETTE.sucrose;
+            ctx.fill();
+            ctx.strokeStyle = '#fef3c7';
+            ctx.lineWidth = 1.3;
+            ctx.stroke();
+        }
+
+        function drawIonDot(x, y, r = 5.5) {
+            ctx.beginPath();
+            ctx.arc(x, y, r, 0, Math.PI * 2);
+            ctx.fillStyle = PALETTE.ion;
+            ctx.fill();
+            ctx.strokeStyle = '#f3e8ff';
+            ctx.lineWidth = 1.2;
+            ctx.stroke();
+        }
+
+        function drawATPBadge(x, y, scale = 1) {
+            const pulse = 1 + Math.sin(state.time * 6) * 0.12;
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale * pulse, scale * pulse);
+            ctx.beginPath();
+            for (let i = 0; i < 10; i++) {
+                const rad = i % 2 === 0 ? 18 : 9;
+                const a = (Math.PI / 5) * i - Math.PI / 2;
+                const px = Math.cos(a) * rad, py = Math.sin(a) * rad;
+                if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+            }
+            ctx.closePath();
+            ctx.fillStyle = '#ef4444';
+            ctx.fill();
+            ctx.strokeStyle = '#fef08a';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 9px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('ATP', 0, 1);
+            ctx.restore();
+        }
+
+        // 路徑點線性插值輔助
+        function samplePath(pts, u) {
+            const totalSegs = pts.length - 1;
+            const exact = Math.max(0, Math.min(0.9999, u)) * totalSegs;
+            const idx = Math.floor(exact);
+            const f = exact - idx;
+            return {
+                x: pts[idx][0] + (pts[idx + 1][0] - pts[idx][0]) * f,
+                y: pts[idx][1] + (pts[idx + 1][1] - pts[idx][1]) * f
+            };
+        }
+
+        /* =========================================================================
+           分頁 0：Münch 壓力流假說 (Xylem & Phloem 並排互動)
+           ========================================================================= */
+        function renderTab0(t, step) {
+            // 1. 左側：木質部導管 (Xylem Vessel) x: 200..310
+            drawRoundRect(200, 40, 110, 520, 8, PALETTE.xylemLumen, PALETTE.xylemWall, 10);
+            // 側壁壁孔間隙 (與韌皮部相通滲透水)
+            for (let py of [130, 165, 435, 470]) {
+                ctx.fillStyle = PALETTE.xylemLumen;
+                ctx.fillRect(302, py, 14, 16);
+            }
+            // 導管向上背景蒸散水流
+            for (let i = 0; i < 16; i++) {
+                const wy = 550 - ((t * 45 + i * 33) % 500);
+                const wx = 225 + (i % 3) * 28;
+                drawWaterDot(wx, wy, 5);
+            }
+            drawArrow(255, 360, 255, 220, 'rgba(2,132,199,0.45)', 5);
+
+            // 2. 中間：韌皮部篩管 (Sieve Tube) x: 325..445
+            // 依步驟動態渲染篩管內部水壓色彩
+            const topHighP = step >= 2;
+            const grad = ctx.createLinearGradient(0, 80, 0, 520);
+            grad.addColorStop(0, topHighP ? '#bae6fd' : PALETTE.phloemLumen);
+            grad.addColorStop(1, PALETTE.phloemLumen);
+            drawRoundRect(325, 40, 120, 520, 8, grad, PALETTE.phloemWall, 6);
+
+            // 篩板 (Sieve Plates) 具有篩孔
+            for (let sy of [210, 390]) {
+                ctx.strokeStyle = PALETTE.phloemWall;
+                ctx.lineWidth = 5;
+                for (let sx = 328; sx < 442; sx += 24) {
+                    ctx.beginPath();
+                    ctx.moveTo(sx, sy);
+                    ctx.lineTo(sx + 13, sy);
+                    ctx.stroke();
+                }
+            }
+
+            // 3. 伴細胞 (Companion Cells) x: 455..545 (上與下)
+            drawPlantCell(455, 85, 95, 115, { cytoColor: PALETTE.companionCyto, wallColor: '#bbf7d0', wallStroke: PALETTE.phloemWall, wallThickness: 7 });
+            drawPlantCell(455, 400, 95, 115, { cytoColor: PALETTE.companionCyto, wallColor: '#bbf7d0', wallStroke: PALETTE.phloemWall, wallThickness: 7 });
+            // 原生質絲通道 (篩管 <-> 伴細胞)
+            ctx.fillStyle = PALETTE.companionCyto;
+            ctx.fillRect(442, 132, 22, 14);
+            ctx.fillRect(442, 448, 22, 14);
+
+            // 4. 右上：供應端葉肉細胞 (Source Cell) x: 590..820
+            drawPlantCell(590, 65, 230, 155, { cytoColor: '#ecfccb', wallThickness: 10 });
+            // 葉綠體
+            for (let [cx, cy] of [[630, 100], [775, 105], [780, 175], [635, 180]]) {
+                ctx.beginPath(); ctx.ellipse(cx, cy, 16, 9, 0.2, 0, Math.PI * 2);
+                ctx.fillStyle = PALETTE.chloroplast; ctx.fill();
+            }
+
+            // 5. 右下：需求端根部儲藏細胞 (Sink Cell) x: 590..820
+            drawPlantCell(590, 380, 230, 155, { cytoColor: '#fef3c7', wallThickness: 10 });
+            // 澱粉粒
+            for (let [sx, sy] of [[740, 450], [775, 470], [750, 488]]) {
+                ctx.beginPath(); ctx.ellipse(sx, sy, 15, 11, -0.3, 0, Math.PI * 2);
+                ctx.fillStyle = '#fde68a'; ctx.fill();
+                ctx.strokeStyle = '#d97706'; ctx.lineWidth = 1.5; ctx.stroke();
+            }
+
+            // === 根據 Step 呈現動態粒子與箭頭 ===
+            // 葉肉細胞基礎蔗糖
+            for (let [sx, sy] of [[680, 120], [715, 145], [690, 170], [735, 125]]) {
+                drawSucroseHex(sx, sy, 7);
+            }
+
+            // Step >= 1: 供應端蔗糖主動運輸裝載入伴細胞與篩管
+            if (step >= 1) {
+                const loadPath = [[665, 140], [550, 140], [500, 140], [390, 140]];
+                for (let i = 0; i < 6; i++) {
+                    const p = samplePath(loadPath, (t * 0.45 + i / 6) % 1);
+                    drawSucroseHex(p.x, p.y, 7);
+                }
+                drawArrow(600, 140, 540, 140, '#f59e0b', 3.5);
+                drawATPBadge(572, 108, 0.95);
+                // 篩管上方高濃度蔗糖累積
+                const densePos = [[355, 105], [385, 95], [415, 115], [365, 155], [405, 165], [380, 130], [422, 145], [350, 180]];
+                densePos.forEach(([x, y], idx) => {
+                    drawSucroseHex(x + Math.sin(t * 2 + idx) * 3, y + Math.cos(t * 2.3 + idx) * 3, 7);
+                });
+            }
+
+            // Step >= 2: 溶質增加 -> 水勢下降 -> 木質部水分大量滲透進入篩管 (膨壓升高)
+            if (step >= 2) {
+                for (let i = 0; i < 6; i++) {
+                    const u = (t * 0.7 + i / 6) % 1;
+                    const yRow = i % 2 === 0 ? 138 : 173;
+                    drawWaterDot(275 + u * 110, yRow + Math.sin(u * Math.PI) * -4, 5.5);
+                }
+                drawArrow(285, 155, 348, 155, '#0284c7', 4);
+                // 膨壓向外推擠篩管壁的視覺箭頭
+                drawArrow(355, 120, 332, 120, '#ef4444', 2.5);
+                drawArrow(415, 120, 438, 120, '#ef4444', 2.5);
+            }
+
+            // Step >= 3: 壓力流集流 (Bulk Flow) 向下穿過篩板
+            if (step >= 3) {
+                drawArrow(385, 195, 385, 415, '#10b981', 6);
+                for (let i = 0; i < 9; i++) {
+                    const u = (t * 0.35 + i / 9) % 1;
+                    const fy = 160 + u * 290;
+                    const fx = 355 + (i % 3) * 30;
+                    drawSucroseHex(fx, fy, 6.5);
+                    drawWaterDot(fx + 10, fy + 12, 5);
+                }
+            }
+
+            // Step >= 4: 需求端卸載 (蔗糖進入伴細胞與根部儲藏細胞)
+            if (step >= 4) {
+                const unloadPath = [[395, 455], [500, 455], [670, 455]];
+                for (let i = 0; i < 5; i++) {
+                    const p = samplePath(unloadPath, (t * 0.45 + i / 5) % 1);
+                    drawSucroseHex(p.x, p.y, 7);
+                }
+                drawArrow(435, 455, 605, 455, '#f59e0b', 3.5);
+                if (step === 4) drawATPBadge(572, 422, 0.9);
+            }
+
+            // Step >= 5: 需求端篩管水勢回升，水分回流至木質部導管
+            if (step >= 5) {
+                for (let i = 0; i < 6; i++) {
+                    const u = (t * 0.7 + i / 6) % 1;
+                    const yRow = i % 2 === 0 ? 443 : 478;
+                    drawWaterDot(385 - u * 110, yRow, 5.5);
+                }
+                drawArrow(348, 460, 285, 460, '#0284c7', 4);
+            }
+
+            // === 解剖與水勢狀態標籤 ===
+            drawLabel("木質部導管\n(Xylem Vessel)", 255, 25, { bold: true, borderColor: PALETTE.xylemWall });
+            drawLabel("韌皮部篩管\n(Sieve Tube)", 385, 25, { bold: true, borderColor: PALETTE.phloemWall });
+            drawLabel("篩板 (Sieve Plate)", 200, 295, { targetX: 350, targetY: 210 });
+            drawLabel("伴細胞\n(Companion Cell)", 502, 62, { borderColor: PALETTE.phloemWall });
+            drawLabel("供應端：葉肉細胞 (Source)\n行光合作用產出蔗糖", 705, 42, { bold: true, borderColor: '#16a34a' });
+            drawLabel("需求端：根部細胞 (Sink)\n卸載並轉化為澱粉儲存", 705, 558, { bold: true, borderColor: '#d97706' });
+
+            if (step === 1) {
+                drawLabel("主動運輸裝載蔗糖", 575, 185, { borderColor: '#f59e0b' });
+            }
+            if (step >= 2) {
+                drawLabel("溶質 ↑ ➔ 水勢 Ψw 大幅下降\n滲透吸水使膨壓 Ψp 極高！", 385, 72, { bg: 'rgba(127,29,29,0.9)', borderColor: '#f87171' });
+            }
+            if (step >= 3) {
+                drawLabel("壓力差驅動集流\n(Bulk Flow 向下)", 515, 300, { targetX: 390, targetY: 300, borderColor: '#10b981' });
+            }
+            if (step >= 4) {
+                drawLabel("溶質卸載 ↓ ➔ 膨壓 Ψp 低\n水勢 Ψw 回升", 385, 535, { bg: 'rgba(30,58,138,0.9)', borderColor: '#60a5fa' });
+            }
+            if (step >= 5) {
+                drawLabel("水分滲透回流木質部", 215, 505, { targetX: 310, targetY: 460, borderColor: '#38bdf8' });
+            }
+        }
+
+        /* =========================================================================
+           分頁 1：質外體途徑 vs 共質體途徑 (支援單獨放大或上下同步對照)
+           ========================================================================= */
+        function drawApoplasticBand(y0, h, t, step, isCompact) {
+            // 標題橫幅
+            drawRoundRect(50, y0, 900, h, 14, 'rgba(30, 41, 59, 0.55)', '#475569', 1.5);
+            const cy = y0 + h * 0.54;
+            const ch = h * 0.68;
+            const topY = cy - ch / 2;
+
+            // 1. 葉肉細胞 (x: 80..310)
+            drawPlantCell(80, topY, 230, ch, { cytoColor: '#ecfccb', wallThickness: 12 });
+            // 2. 寬闊的質外體細胞壁空間 (x: 310..440)
+            drawRoundRect(305, topY, 140, ch, 4, PALETTE.wall, PALETTE.wallStroke, 2);
+            // 3. 伴細胞 (特化為轉運細胞 Transfer cell，具內突細胞壁增加膜表面積) (x: 440..690)
+            drawPlantCell(440, topY, 250, ch, { cytoColor: PALETTE.companionCyto, wallThickness: 12 });
+            // 繪製轉運細胞左側細胞壁手指狀內突 (Wall ingrowths)
+            ctx.fillStyle = PALETTE.wall;
+            ctx.strokeStyle = PALETTE.membrane;
+            ctx.lineWidth = 2.5;
+            const fingerCount = isCompact ? 4 : 6;
+            for (let i = 0; i < fingerCount; i++) {
+                const fy = topY + 22 + i * ((ch - 44) / Math.max(1, fingerCount - 1));
+                drawRoundRect(448, fy - 5, 28, 10, 5, PALETTE.wall, PALETTE.membrane, 2);
+            }
+
+            // 4. 篩管 (x: 690..910)
+            drawRoundRect(690, topY, 220, ch, 10, PALETTE.phloemLumen, PALETTE.phloemWall, 6);
+            // 伴細胞與篩管間的複合原生質絲
+            for (let py of [cy - 28, cy + 28]) {
+                ctx.fillStyle = PALETTE.companionCyto;
+                ctx.fillRect(676, py - 7, 22, 14);
+            }
+
+            // 膜轉運蛋白圖示：葉肉右側 SWEET 外排蛋白、伴細胞左側 H+-ATPase 與 SUC/SUT 同向運輸器
+            const sweetY = cy;
+            drawRoundRect(292, sweetY - 14, 24, 28, 6, '#38bdf8', '#0284c7', 2); // SWEET
+            const pumpY = cy - ch * 0.24;
+            const sutY = cy + ch * 0.2;
+            drawRoundRect(436, pumpY - 14, 26, 28, 6, '#ef4444', '#991b1b', 2); // H+-ATPase
+            drawRoundRect(436, sutY - 16, 26, 32, 6, '#f59e0b', '#b45309', 2);  // SUC/SUT
+
+            // Step 動畫
+            // 葉肉蔗糖
+            drawSucroseHex(150, cy - 20, 7);
+            drawSucroseHex(195, cy + 18, 7);
+
+            if (step >= 1) {
+                // 蔗糖經 SWEET 進入質外體 (細胞壁空間)
+                for (let i = 0; i < 4; i++) {
+                    const u = (t * 0.5 + i / 4) % 1;
+                    drawSucroseHex(230 + u * 145, sweetY + Math.sin(u * Math.PI * 2) * 8, 7);
+                }
+                drawArrow(255, sweetY - 22, 355, sweetY - 22, '#38bdf8', 2.5);
+            }
+
+            if (step >= 2) {
+                // H+-ATPase 耗 ATP 將 H+ 打入質外體
+                drawATPBadge(492, pumpY, isCompact ? 0.8 : 0.95);
+                for (let i = 0; i < 3; i++) {
+                    const u = (t * 0.8 + i / 3) % 1;
+                    const hx = 468 - u * 85;
+                    ctx.beginPath(); ctx.arc(hx, pumpY, 5, 0, Math.PI * 2);
+                    ctx.fillStyle = PALETTE.proton; ctx.fill();
+                }
+                drawArrow(468, pumpY - 18, 390, pumpY - 18, '#ef4444', 2.5);
+
+                // H+ 與 蔗糖 經由 SUC/SUT 共同進入伴細胞 (次級主動運輸)
+                for (let i = 0; i < 4; i++) {
+                    const u = (t * 0.55 + i / 4) % 1;
+                    const sx = 375 + u * 145;
+                    drawSucroseHex(sx, sutY - 4, 7);
+                    ctx.beginPath(); ctx.arc(sx, sutY + 9, 4.5, 0, Math.PI * 2);
+                    ctx.fillStyle = PALETTE.proton; ctx.fill();
+                }
+                drawArrow(385, sutY + 24, 510, sutY + 24, '#f59e0b', 3);
+            }
+
+            if (step >= 3) {
+                // 高濃度蔗糖由伴細胞經原生質絲進入篩管
+                for (let i = 0; i < 5; i++) {
+                    const u = (t * 0.5 + i / 5) % 1;
+                    const py = i % 2 === 0 ? cy - 28 : cy + 28;
+                    drawSucroseHex(565 + u * 230, py, 7);
+                }
+                drawArrow(800, cy - 35, 800, cy + 45, '#10b981', 4.5);
+            }
+
+            // 標籤
+            drawLabel("🅰️ 質外體途徑 (Apoplastic Pathway)：跨膜2次、H⁺-蔗糖同向主動運輸", 360, y0 + 18, { bold: true, borderColor: '#f59e0b' });
+            drawLabel("葉肉細胞", 160, topY + 18);
+            drawLabel("質外體\n(細胞壁空間)", 372, topY + 24, { borderColor: PALETTE.wallStroke });
+            drawLabel("轉運細胞 (伴細胞)\n具細胞壁內突增表面積", 575, topY + 24, { borderColor: PALETTE.phloemWall });
+            drawLabel("篩管", 800, topY + 18, { borderColor: PALETTE.phloemWall });
+            if (!isCompact || step <= 2) {
+                drawLabel("SWEET蛋白\n(被動外排)", 250, sweetY + 34, { targetX: 304, targetY: sweetY });
+                drawLabel("H⁺質子幫浦", 535, pumpY - 22, { targetX: 450, targetY: pumpY, borderColor: '#ef4444' });
+                drawLabel("SUC/SUT\nH⁺-蔗糖同向器", 565, sutY + 22, { targetX: 450, targetY: sutY, borderColor: '#f59e0b' });
+            }
+        }
+
+        function drawSymplasticBand(y0, h, t, step, isCompact) {
+            drawRoundRect(50, y0, 900, h, 14, 'rgba(30, 41, 59, 0.55)', '#475569', 1.5);
+            const cy = y0 + h * 0.54;
+            const ch = h * 0.68;
+            const topY = cy - ch / 2;
+
+            // 1. 葉肉細胞 (x: 80..340)
+            drawPlantCell(80, topY, 260, ch, { cytoColor: '#ecfccb', wallThickness: 12 });
+            // 2. 中間細胞 (Intermediary Cell - 特化伴細胞) (x: 350..660)
+            drawPlantCell(350, topY, 310, ch, { cytoColor: PALETTE.companionCyto, wallThickness: 12 });
+            // 3. 篩管 (x: 670..910)
+            drawRoundRect(670, topY, 240, ch, 10, PALETTE.phloemLumen, PALETTE.phloemWall, 6);
+
+            // 葉肉 <-> 中間細胞：極多但孔徑「狹窄」的分支原生質絲 (只容許雙醣蔗糖通過，擋住三醣/四醣)
+            for (let dy of [-42, -14, 14, 42]) {
+                if (Math.abs(dy) > ch * 0.36) continue;
+                ctx.fillStyle = '#ecfccb';
+                ctx.fillRect(326, cy + dy - 3.5, 38, 7);
+                ctx.strokeStyle = PALETTE.membrane;
+                ctx.lineWidth = 1.5;
+                ctx.strokeRect(326, cy + dy - 3.5, 38, 7);
+            }
+
+            // 中間細胞 <-> 篩管：孔徑「寬大」的原生質絲 (容許棉子糖/水蘇糖寡糖通過)
+            for (let dy of [-32, 32]) {
+                ctx.fillStyle = PALETTE.companionCyto;
+                ctx.fillRect(646, cy + dy - 10, 32, 20);
+                ctx.strokeStyle = PALETTE.membrane;
+                ctx.lineWidth = 2;
+                ctx.strokeRect(646, cy + dy - 10, 32, 20);
+            }
+
+            // 繪製三醣/四醣寡糖 (聚合物：三個相連六角形) 輔助函式
+            const drawPolymer = (px, py) => {
+                drawSucroseHex(px - 8, py - 4, 6);
+                drawSucroseHex(px + 4, py - 4, 6);
+                ctx.beginPath(); ctx.arc(px - 2, py + 6, 6, 0, Math.PI * 2);
+                ctx.fillStyle = '#ea580c'; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.2; ctx.stroke();
+            };
+
+            // Step 動畫
+            drawSucroseHex(160, cy - 18, 7);
+            drawSucroseHex(205, cy + 20, 7);
+
+            if (step >= 1) {
+                // 蔗糖不跨膜，直接經由狹窄原生質絲滑入中間細胞
+                for (let i = 0; i < 4; i++) {
+                    const u = (t * 0.5 + i / 4) % 1;
+                    const lane = i % 2 === 0 ? -14 : 14;
+                    drawSucroseHex(245 + u * 185, cy + lane, 6.5);
+                }
+                drawArrow(275, cy - 34, 415, cy - 34, '#10b981', 2.5);
+            }
+
+            if (step >= 2) {
+                // 聚合物陷阱機制：消耗 ATP/UTP 將蔗糖 + 半乳糖 合成更大的「棉子糖/水蘇糖」
+                drawATPBadge(505, cy - ch * 0.22, isCompact ? 0.8 : 0.95);
+                drawRoundRect(465, cy - 16, 85, 32, 8, 'rgba(234, 88, 12, 0.25)', '#ea580c', 2);
+                drawPolymer(508, cy);
+            }
+
+            if (step >= 3) {
+                // 展示棉子糖體積過大，向左撞到狹窄原生質絲彈回 (防止逆流！)
+                const bounce = Math.abs(Math.sin(t * 4)) * 22;
+                drawPolymer(382 + bounce, cy - 36);
+                ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 2.5;
+                ctx.beginPath(); ctx.moveTo(366, cy - 46); ctx.lineTo(366, cy - 26); ctx.stroke();
+
+                // 向右順暢通過寬大原生質絲進入篩管
+                for (let i = 0; i < 4; i++) {
+                    const u = (t * 0.48 + i / 4) % 1;
+                    const lane = i % 2 === 0 ? -32 : 32;
+                    drawPolymer(545 + u * 235, cy + lane);
+                }
+                drawArrow(800, cy - 35, 800, cy + 45, '#10b981', 4.5);
+            }
+
+            // 標籤
+            drawLabel("🅱️ 共質體途徑 (Symplastic Pathway)：全程經原生質絲、聚合物陷阱機制", 375, y0 + 18, { bold: true, borderColor: '#10b981' });
+            drawLabel("葉肉細胞", 160, topY + 18);
+            drawLabel("中間細胞 (特化伴細胞)\n合成棉子糖/水蘇糖寡糖", 505, topY + 24, { borderColor: '#ea580c' });
+            drawLabel("篩管", 790, topY + 18, { borderColor: PALETTE.phloemWall });
+            if (!isCompact || step <= 3) {
+                drawLabel("密集狹窄原生質絲\n(僅小分子蔗糖能進)", 280, topY + ch - 20, { targetX: 345, targetY: cy + 14 });
+                drawLabel("寬孔徑原生質絲\n(大分子寡糖單向入篩管)", 665, topY + ch - 20, { targetX: 660, targetY: cy + 32, borderColor: '#ea580c' });
+            }
+        }
+
+        function renderTab1(t, step) {
+            if (state.subMode === 'apoplast') {
+                drawApoplasticBand(95, 450, t, step, false);
+            } else if (state.subMode === 'symplast') {
+                drawSymplasticBand(95, 450, t, step, false);
+            } else {
+                drawApoplasticBand(68, 248, t, step, true);
+                drawSymplasticBand(330, 248, t, step, true);
+            }
+        }
+
+        /* =========================================================================
+           分頁 2：根毛利用水通道蛋白吸收土壤水分與礦物質並進入皮層
+           ========================================================================= */
+        function renderTab2(t, step) {
+            // 1. 左側：土壤顆粒與土壤溶液區 (x: 30..360)
+            drawRoundRect(30, 45, 340, 510, 14, 'rgba(3, 105, 161, 0.16)', '#0369a1', 1.5);
+            // 棕色土壤團粒
+            for (let [sx, sy, rx, ry] of [[95, 120, 45, 32], [210, 110, 38, 28], [85, 285, 50, 36], [110, 455, 52, 35], [235, 485, 42, 28], [185, 200, 32, 24]]) {
+                ctx.beginPath(); ctx.ellipse(sx, sy, rx, ry, 0.25, 0, Math.PI * 2);
+                ctx.fillStyle = '#57534e'; ctx.fill();
+                ctx.strokeStyle = '#78716c'; ctx.lineWidth = 2; ctx.stroke();
+            }
+
+            // 2. 表皮細胞與向外突出的長根毛 (Root Hair Cell)
+            // 繪製一體成型的L型/T型凸出根毛細胞壁與細胞膜
+            ctx.save();
+            // 外層細胞壁 (質外體)
+            ctx.fillStyle = PALETTE.wall;
+            ctx.strokeStyle = PALETTE.wallStroke;
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.roundRect(380, 120, 180, 360, 14);
+            ctx.roundRect(145, 255, 250, 95, [45, 0, 0, 45]);
+            ctx.fill();
+            // 內層細胞質與細胞膜 (共質體)
+            ctx.fillStyle = PALETTE.cyto;
+            ctx.strokeStyle = PALETTE.membrane;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.roundRect(392, 132, 156, 336, 10);
+            ctx.roundRect(157, 267, 250, 71, [35, 0, 0, 35]);
+            ctx.fill();
+            ctx.stroke();
+            // 消除交界線填補細胞質連續感
+            ctx.fillStyle = PALETTE.cyto;
+            ctx.fillRect(388, 269, 16, 67);
+            // 大中央液胞延伸至根毛
+            drawRoundRect(415, 165, 110, 270, 16, PALETTE.vacuole, '#38bdf8', 1.5);
+            drawRoundRect(220, 283, 210, 38, 16, PALETTE.vacuole, '#38bdf8', 1.5);
+            ctx.fillStyle = PALETTE.vacuole;
+            ctx.fillRect(410, 284, 16, 36);
+            ctx.restore();
+
+            // 3. 右側：皮層細胞群 (Cortex Cells 1 & 2)
+            drawPlantCell(560, 120, 185, 360, { vacuole: true, wallThickness: 12 });
+            drawPlantCell(745, 120, 195, 360, { vacuole: true, wallThickness: 12 });
+
+            // 細胞之間的原生質絲 (Plasmodesmata)
+            for (let py of [150, 450]) {
+                ctx.fillStyle = PALETTE.cyto;
+                ctx.fillRect(546, py - 6, 28, 12);
+                ctx.fillRect(731, py - 6, 28, 12);
+                ctx.strokeStyle = PALETTE.membrane; ctx.lineWidth = 1.5;
+                ctx.strokeRect(546, py - 6, 28, 12);
+                ctx.strokeRect(731, py - 6, 28, 12);
+            }
+
+            // 根毛膜上的主動離子幫浦 (上緣) 與 水通道蛋白 Aquaporins (下緣與前端)
+            for (let ix of [225, 305]) {
+                drawRoundRect(ix - 10, 259, 20, 16, 4, '#9333ea', '#581c87', 2);
+            }
+            const aqpPositions = [[157, 302, true], [215, 338, false], [275, 338, false], [335, 338, false]];
+            aqpPositions.forEach(([ax, ay, vert]) => {
+                const glow = step >= 2 ? 2.5 : 1.5;
+                if (vert) {
+                    drawRoundRect(ax - 8, ay - 12, 16, 24, 5, PALETTE.aquaporin, '#cffafe', glow);
+                    ctx.fillStyle = '#083344'; ctx.fillRect(ax - 8, ay - 3, 16, 6); // 中央水孔道
+                } else {
+                    drawRoundRect(ax - 12, ay - 8, 24, 16, 5, PALETTE.aquaporin, '#cffafe', glow);
+                    ctx.fillStyle = '#083344'; ctx.fillRect(ax - 3, ay - 8, 6, 16);
+                }
+            });
+
+            // 土壤中的基礎水分子與離子
+            for (let [wx, wy] of [[70, 195], [130, 215], [105, 365], [165, 405], [285, 420], [320, 195], [260, 165]]) {
+                drawWaterDot(wx + Math.sin(t * 2 + wx) * 3, wy + Math.cos(t * 2 + wy) * 3, 5.5);
+            }
+            for (let [ix, iy] of [[155, 160], [245, 210], [335, 225], [80, 235]]) {
+                drawIonDot(ix, iy, 5.5);
+            }
+
+            // === Step 動畫展示 ===
+            // Step >= 1: 耗能主動運輸吸收土壤礦物質離子進入根毛
+            if (step >= 1) {
+                drawATPBadge(265, 232, 0.9);
+                for (let ix of [225, 305]) {
+                    const u = (t * 0.6 + ix * 0.01) % 1;
+                    drawIonDot(ix, 215 + u * 85, 5.5);
+                }
+                drawArrow(225, 215, 225, 290, '#9333ea', 2.5);
+                drawArrow(305, 215, 305, 290, '#9333ea', 2.5);
+                // 根毛與液胞內累積的高濃度離子
+                for (let [lx, ly] of [[250, 302], [335, 300], [445, 220], [485, 270], [460, 345], [495, 390]]) {
+                    drawIonDot(lx + Math.sin(t * 3 + lx) * 2, ly, 5.5);
+                }
+            }
+
+            // Step >= 3: 水分子透過水通道蛋白 (Aquaporins) 排隊高速湧入根毛
+            if (step >= 3) {
+                // 前端水通道
+                for (let i = 0; i < 4; i++) {
+                    const u = (t * 0.85 + i / 4) % 1;
+                    drawWaterDot(105 + u * 110, 302, 5.5);
+                }
+                drawArrow(105, 302, 195, 302, '#06b6d4', 3);
+                // 下緣三個水通道蛋白
+                for (let ax of [215, 275, 335]) {
+                    for (let i = 0; i < 3; i++) {
+                        const u = (t * 0.85 + i / 3 + ax * 0.01) % 1;
+                        drawWaterDot(ax, 385 - u * 75, 5.5);
+                    }
+                    drawArrow(ax, 385, ax, 315, '#06b6d4', 2.5);
+                }
+            }
+
+            // Step >= 4: 水分與離子雙路徑進入皮層 (質外體沿細胞壁 + 共質體經原生質絲)
+            if (step >= 4) {
+                // 路徑 A: 質外體途徑 (沿上方細胞壁快速向右)
+                const apoPath = [[385, 126], [560, 126], [745, 126], [930, 126]];
+                for (let i = 0; i < 8; i++) {
+                    const p = samplePath(apoPath, (t * 0.45 + i / 8) % 1);
+                    drawWaterDot(p.x, p.y, 5);
+                }
+                drawArrow(410, 106, 890, 106, '#d97706', 3.5, true);
+
+                // 路徑 B: 共質體途徑 (經下方原生質絲在細胞質內傳遞)
+                const symPath = [[395, 450], [560, 450], [745, 450], [910, 450]];
+                for (let i = 0; i < 8; i++) {
+                    const p = samplePath(symPath, (t * 0.38 + i / 8) % 1);
+                    if (i % 3 === 0) drawIonDot(p.x, p.y, 5);
+                    else drawWaterDot(p.x, p.y, 5.5);
+                }
+                drawArrow(410, 450, 895, 450, '#10b981', 3.5);
+            }
+
+            // === 標籤 ===
+            drawLabel("土壤顆粒與土壤溶液\n(高水勢 Ψw)", 155, 72, { bold: true, borderColor: '#38bdf8' });
+            drawLabel("根毛 (Root Hair)\n表皮細胞向外延伸增表面積", 265, 495, { targetX: 250, targetY: 342, bold: true });
+            drawLabel("根表皮細胞", 470, 72);
+            drawLabel("皮層細胞 (Cortex)\n疏鬆排列傳遞水分", 745, 72, { bold: true });
+
+            if (step >= 1) {
+                drawLabel("主動運輸泵入礦物質\n使根毛水勢 Ψw 下降", 265, 182, { targetX: 265, targetY: 259, borderColor: '#9333ea' });
+            }
+            if (step >= 2) {
+                drawLabel("水通道蛋白 (Aquaporins)\n專一性高速輸水孔道", 285, 435, { targetX: 275, targetY: 346, borderColor: '#06b6d4', bold: true });
+            }
+            if (step >= 4) {
+                drawLabel("質外體途徑：沿親水細胞壁縫隙流動", 660, 88, { borderColor: '#d97706' });
+                drawLabel("共質體途徑：經原生質絲於細胞質內傳遞", 680, 515, { targetX: 745, targetY: 450, borderColor: '#10b981' });
+            }
+        }
+
+        /* =========================================================================
+           分頁 3：Three.js 3D 凱氏帶 (Casparian Strip) 立體構造與阻隔轉向機制
+           ========================================================================= */
+        const threeApp = {
+            initialized: false,
+            scene: null,
+            camera: null,
+            renderer: null,
+            controls: null,
+            casparianMeshes: [],
+            apoParticles: [],
+            symParticles: [],
+            anchors3D: [],
+
+            init() {
+                this.initialized = true;
+                const rect = viewport.getBoundingClientRect();
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(0x0f172a);
+
+                this.camera = new THREE.PerspectiveCamera(42, rect.width / rect.height, 0.1, 200);
+                this.resetView();
+
+                this.renderer = new THREE.WebGLRenderer({ antialias: true });
+                this.renderer.setSize(rect.width, rect.height);
+                this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+                canvas3dContainer.appendChild(this.renderer.domElement);
+
+                this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+                this.controls.enableDamping = true;
+                this.controls.dampingFactor = 0.07;
+                this.controls.maxDistance = 45;
+                this.controls.minDistance = 8;
+
+                // 燈光配置
+                this.scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+                const dirLight = new THREE.DirectionalLight(0xffffff, 0.85);
+                dirLight.position.set(12, 18, 14);
+                this.scene.add(dirLight);
+
+                // 參考底板：左側皮層區、中間內皮層、右側中柱維管束
+                const cortexFloor = new THREE.Mesh(
+                    new THREE.PlaneGeometry(10, 18),
+                    new THREE.MeshBasicMaterial({ color: 0x1e293b, side: THREE.DoubleSide })
+                );
+                cortexFloor.rotation.x = -Math.PI / 2;
+                cortexFloor.position.set(-6, -4.2, 0);
+                this.scene.add(cortexFloor);
+
+                const steleFloor = new THREE.Mesh(
+                    new THREE.PlaneGeometry(10, 18),
+                    new THREE.MeshBasicMaterial({ color: 0x172554, side: THREE.DoubleSide })
+                );
+                steleFloor.rotation.x = -Math.PI / 2;
+                steleFloor.position.set(6, -4.2, 0);
+                this.scene.add(steleFloor);
+
+                // 建立一排緊密排列的 3D 內皮層細胞 (磚牆狀排列於 x = 0，沿 z 與 y 堆疊)
+                // 每個內皮層細胞：外層半透明米色細胞壁 + 內層黃綠色細胞質/細胞膜 + 環繞上/下(橫壁)與前/後(徑向壁)的鮮紅凱氏帶！
+                const cellPositions = [
+                    [0, -1.8, -3.5], [0, -1.8, 0], [0, -1.8, 3.5],
+                    [0, 1.8, -3.5], [0, 1.8, 0], [0, 1.8, 3.5]
+                ];
+
+                const wallMat = new THREE.MeshLambertMaterial({ color: 0xd6ccc2, transparent: true, opacity: 0.35 });
+                const cytoMat = new THREE.MeshPhongMaterial({ color: 0xfefae0, emissive: 0xd97706, emissiveIntensity: 0.15, transparent: true, opacity: 0.88 });
+                const caspMat = new THREE.MeshPhongMaterial({ color: 0xdc2626, emissive: 0x991b1b, emissiveIntensity: 0.35 });
+
+                cellPositions.forEach(([cx, cy, cz]) => {
+                    const group = new THREE.Group();
+                    group.position.set(cx, cy, cz);
+
+                    // 細胞壁外殼 (x=3.0 切向厚, y=3.4 高, z=3.3 寬)
+                    const wallMesh = new THREE.Mesh(new THREE.BoxGeometry(3.0, 3.4, 3.3), wallMat);
+                    group.add(wallMesh);
+
+                    // 細胞膜與細胞質內核 (共質體)
+                    const cytoMesh = new THREE.Mesh(new THREE.BoxGeometry(2.5, 2.75, 2.75), cytoMat);
+                    group.add(cytoMesh);
+
+                    // 凱氏帶 (Casparian Strip)：鑲嵌於上橫壁、下橫壁、左徑向壁、右徑向壁的細胞壁中段 (x = 0 環狀框，切向壁完全不覆蓋！)
+                    const stripGroup = new THREE.Group();
+                    const topBar = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.36, 3.52), caspMat);
+                    topBar.position.set(0, 1.62, 0);
+                    const botBar = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.36, 3.52), caspMat);
+                    botBar.position.set(0, -1.62, 0);
+                    const leftBar = new THREE.Mesh(new THREE.BoxGeometry(0.65, 3.52, 0.36), caspMat);
+                    leftBar.position.set(0, 0, -1.66);
+                    const rightBar = new THREE.Mesh(new THREE.BoxGeometry(0.65, 3.52, 0.36), caspMat);
+                    rightBar.position.set(0, 0, 1.66);
+
+                    stripGroup.add(topBar, botBar, leftBar, rightBar);
+                    group.add(stripGroup);
+                    this.casparianMeshes.push(stripGroup);
+                    this.scene.add(group);
+                });
+
+                // 右側中柱木質部導管示意圓柱 (x = 6.5)
+                const xylemGeo = new THREE.CylinderGeometry(1.3, 1.3, 9, 24, 1, true);
+                const xylemMat = new THREE.MeshPhongMaterial({ color: 0x991b1b, side: THREE.DoubleSide, transparent: true, opacity: 0.75 });
+                const xylemTube = new THREE.Mesh(xylemGeo, xylemMat);
+                xylemTube.position.set(6.5, 0, 0);
+                this.scene.add(xylemTube);
+
+                // 建立動態水分子 (藍球) 與礦物質離子 (紫球) 粒子群
+                const waterGeo = new THREE.SphereGeometry(0.22, 14, 14);
+                const waterMat = new THREE.MeshPhongMaterial({ color: 0x0284c7, emissive: 0x0369a1, emissiveIntensity: 0.3 });
+                const ionGeo = new THREE.SphereGeometry(0.22, 14, 14);
+                const ionMat = new THREE.MeshPhongMaterial({ color: 0x9333ea, emissive: 0x6b21a8, emissiveIntensity: 0.3 });
+
+                // 24 顆原本走質外體細胞壁縫隙的粒子 (y = 0 或 z = ±1.75 的壁縫)
+                for (let i = 0; i < 24; i++) {
+                    const isIon = i % 3 === 0;
+                    const mesh = new THREE.Mesh(isIon ? ionGeo : waterGeo, isIon ? ionMat : waterMat);
+                    this.scene.add(mesh);
+                    this.apoParticles.push({
+                        mesh,
+                        phase: i / 24,
+                        laneZ: (i % 3 - 1) * 3.5,
+                        wallY: i % 2 === 0 ? 0.0 : 3.55,
+                        cellCenterY: i % 2 === 0 ? 1.8 : 1.8
+                    });
+                }
+
+                // 3D 浮動 HTML 標籤錨點建立
+                this.createLabel("皮層區 (Cortex)\n水分由左方進入", new THREE.Vector3(-6.2, 4.2, 0));
+                this.createLabel("內皮層細胞 (Endodermis)", new THREE.Vector3(0, 4.5, -3.5));
+                this.createLabel("凱氏帶 (Casparian Strip)\n木栓質封死橫壁與徑向壁縫隙", new THREE.Vector3(0, 3.8, 1.7));
+                this.createLabel("細胞膜篩選轉入共質體\n(被迫穿膜進入細胞質)", new THREE.Vector3(-1.9, 1.8, 0));
+                this.createLabel("中柱木質部導管\n(Stele / Xylem)", new THREE.Vector3(6.5, 4.6, 0));
+            },
+
+            createLabel(text, pos3D) {
+                const el = document.createElement('div');
+                el.className = 'label-3d';
+                el.innerHTML = text.replace('\n', '<br>');
+                labels3dContainer.appendChild(el);
+                this.anchors3D.push({ el, pos3D });
+            },
+
+            resetView() {
+                if (!this.camera) return;
+                this.camera.position.set(-12, 8.5, 14);
+                if (this.controls) {
+                    this.controls.target.set(0.5, 0, 0);
+                    this.controls.update();
+                }
+            },
+
+            onStepChange(step) {
+                if (!this.initialized) return;
+                // Step 1 強調凱氏帶視角
+                if (step === 1) {
+                    this.camera.position.set(-8, 7, 11);
+                } else if (step === 3) {
+                    this.camera.position.set(-9, 3.5, 9.5);
+                }
+            },
+
+            resize(w, h) {
+                if (!this.initialized) return;
+                this.camera.aspect = w / h;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(w, h);
+            },
+
+            render(t, step) {
+                if (!this.initialized) return;
+                this.controls.update();
+
+                // 凱氏帶在 Step >= 1 時脈動發光強調
+                const glow = step >= 1 ? 0.35 + Math.sin(t * 4) * 0.2 : 0.25;
+                this.casparianMeshes.forEach(g => {
+                    g.children.forEach(m => { m.material.emissiveIntensity = glow; });
+                });
+
+                // 更新水與離子 3D 軌跡
+                this.apoParticles.forEach((p, idx) => {
+                    const u = (t * 0.24 + p.phase) % 1;
+                    const z = p.laneZ;
+                    const cellY = idx % 2 === 0 ? 1.8 : -1.8;
+                    const seamY = 0.0; // 上下兩排內皮層細胞之間的水平細胞壁縫隙
+
+                    if (step <= 1) {
+                        // Step 0~1: 靜態/緩慢展示皮層水分子
+                        p.mesh.position.set(-7 + u * 4.5, seamY, z + (idx % 2 - 0.5) * 1.2);
+                    } else if (step === 2) {
+                        // Step 2: 沿細胞壁縫隙 (y=0) 衝向 x=0 凱氏帶，撞牆彈回！
+                        if (u < 0.7) {
+                            const x = -7.5 + (u / 0.7) * 7.1; // 走到 x = -0.4 撞上紅色凱氏帶
+                            p.mesh.position.set(x, seamY, z);
+                        } else {
+                            const back = (u - 0.7) / 0.3;
+                            p.mesh.position.set(-0.4 - back * 2.5, seamY + Math.sin(back * Math.PI) * 0.5, z);
+                        }
+                    } else if (step === 3) {
+                        // Step 3: 走到內皮層前方發現細胞壁不通，轉向穿過左側切向細胞膜 (x = -1.3) 進入細胞質中心 (y = cellY)！
+                        if (u < 0.35) {
+                            p.mesh.position.set(-7.5 + (u / 0.35) * 5.2, seamY, z); // 沿細胞壁走到 x = -2.3
+                        } else if (u < 0.6) {
+                            const f = (u - 0.35) / 0.25;
+                            p.mesh.position.set(-2.3 + f * 1.1, seamY + f * (cellY - seamY), z); // 轉彎跨膜進入細胞質
+                        } else {
+                            const f = (u - 0.6) / 0.4;
+                            p.mesh.position.set(-1.2 + f * 2.6, cellY, z); // 在共質體內順利通過凱氏帶平面 (x=0)！
+                        }
+                    } else {
+                        // Step 4: 完整通過內皮層進入中柱木質部導管並向上運輸！
+                        if (u < 0.25) {
+                            p.mesh.position.set(-7.5 + (u / 0.25) * 5.2, seamY, z);
+                        } else if (u < 0.45) {
+                            const f = (u - 0.25) / 0.2;
+                            p.mesh.position.set(-2.3 + f * 1.2, seamY + f * (cellY - seamY), z);
+                        } else if (u < 0.75) {
+                            const f = (u - 0.45) / 0.3;
+                            p.mesh.position.set(-1.1 + f * 7.6, cellY * (1 - f * 0.5), z * (1 - f * 0.85));
+                        } else {
+                            const f = (u - 0.75) / 0.25;
+                            p.mesh.position.set(6.5, -1.5 + f * 6.0, 0); // 進入木質部導管向上升！
+                        }
+                    }
+                });
+
+                this.renderer.render(this.scene, this.camera);
+
+                // 同步 3D 標籤螢幕投影位置
+                if (state.showLabels) {
+                    const rect = viewport.getBoundingClientRect();
+                    this.anchors3D.forEach((item, i) => {
+                        if (i === 3 && step < 3) { item.el.style.display = 'none'; return; }
+                        item.el.style.display = 'block';
+                        const v = item.pos3D.clone().project(this.camera);
+                        if (v.z > 1) { item.el.style.display = 'none'; return; }
+                        const sx = (v.x * 0.5 + 0.5) * rect.width;
+                        const sy = (-v.y * 0.5 + 0.5) * rect.height;
+                        item.el.style.left = `${sx}px`;
+                        item.el.style.top = `${sy}px`;
+                    });
+                }
+            }
+        };
+
+        /* =========================================================================
+           分頁 4：中柱內的薄壁細胞如何幫助水分進入導管 (Xylem Loading & 根壓)
+           ========================================================================= */
+        function renderTab4(t, step) {
+            // 中柱背景框 (內皮層右側即為中柱 Stele)
+            drawRoundRect(235, 35, 720, 530, 16, 'rgba(30, 58, 138, 0.14)', '#3b82f6', 1.5);
+
+            // 1. 內皮層細胞 (含上下紅色凱氏帶阻隔) x: 65..225
+            drawPlantCell(65, 110, 160, 380, { vacuole: false, wallThickness: 12 });
+            // 上下橫壁凱氏帶紅塊
+            drawRoundRect(128, 104, 34, 18, 3, PALETTE.casparian, '#fef2f2', 1.5);
+            drawRoundRect(128, 478, 34, 18, 3, PALETTE.casparian, '#fef2f2', 1.5);
+
+            // 2. 周鞘細胞 (Pericycle) x: 250..415
+            drawPlantCell(250, 110, 165, 380, { vacuole: true, wallThickness: 11 });
+
+            // 3. 木質部薄壁細胞 (Xylem Parenchyma Cell - 活細胞，富含粒線體與膜幫浦) x: 440..655
+            drawPlantCell(440, 110, 215, 380, { cytoColor: '#fef9c3', wallThickness: 11 });
+            // 粒線體圖示 (提供 ATP)
+            for (let [mx, my] of [[505, 175], [515, 420]]) {
+                ctx.beginPath(); ctx.ellipse(mx, my, 20, 11, 0.3, 0, Math.PI * 2);
+                ctx.fillStyle = '#fb923c'; ctx.fill();
+                ctx.strokeStyle = '#9a3412'; ctx.lineWidth = 1.5; ctx.stroke();
+            }
+
+            // 原生質絲連接 (內皮層 -> 周鞘 -> 木質部薄壁細胞)
+            for (let py of [230, 370]) {
+                ctx.fillStyle = PALETTE.cyto;
+                ctx.fillRect(213, py - 7, 50, 14);
+                ctx.fillRect(403, py - 7, 50, 14);
+                ctx.strokeStyle = PALETTE.membrane; ctx.lineWidth = 1.5;
+                ctx.strokeRect(213, py - 7, 50, 14);
+                ctx.strokeRect(403, py - 7, 50, 14);
+            }
+
+            // 4. 木質部導管 (Xylem Vessel - 死細胞，具厚木質素壁與壁孔 Pits) x: 680..910
+            const lumenColor = step >= 3 ? '#bae6fd' : PALETTE.xylemLumen;
+            drawRoundRect(680, 48, 230, 504, 8, lumenColor, PALETTE.xylemWall, 14);
+            // 左側導管壁開鑿多個「壁孔 (Pits)」供離子與水無阻礙進入導管腔
+            for (let py of [185, 295, 405]) {
+                ctx.fillStyle = PALETTE.wall;
+                ctx.fillRect(654, py - 18, 36, 36);
+            }
+
+            // 木質部薄壁細胞右側細胞膜上的轉運蛋白：H+-ATPase (紅)、離子外排通道 (紫)、水通道蛋白 (青)
+            drawRoundRect(632, 173, 22, 24, 5, '#ef4444', '#991b1b', 2); // H+ pump
+            drawRoundRect(632, 283, 22, 24, 5, '#9333ea', '#581c87', 2); // Ion channel (SKOR等)
+            drawRoundRect(632, 393, 22, 24, 5, PALETTE.aquaporin, '#cffafe', 2); // Aquaporin
+
+            // === Step 動態流程 ===
+            // Step >= 1: 共質體輸送由內皮層經原生質絲抵達木質部薄壁細胞
+            if (step >= 1) {
+                const symPath = [[120, 230], [330, 230], [540, 230]];
+                const symPath2 = [[120, 370], [330, 370], [540, 370]];
+                for (let i = 0; i < 6; i++) {
+                    const p1 = samplePath(symPath, (t * 0.45 + i / 6) % 1);
+                    const p2 = samplePath(symPath2, (t * 0.45 + (i + 0.5) / 6) % 1);
+                    drawIonDot(p1.x, p1.y, 5.5);
+                    drawWaterDot(p2.x, p2.y, 5.5);
+                }
+                drawArrow(145, 300, 520, 300, '#10b981', 3.5);
+            }
+
+            // Step >= 2: 薄壁細胞耗 ATP 主動將礦物質離子排入木質部導管腔 (Xylem Loading)
+            if (step >= 2) {
+                drawATPBadge(585, 185, 0.95);
+                // H+ 建立電化學梯度
+                for (let i = 0; i < 3; i++) {
+                    const u = (t * 0.75 + i / 3) % 1;
+                    ctx.beginPath(); ctx.arc(595 + u * 105, 185, 4.5, 0, Math.PI * 2);
+                    ctx.fillStyle = PALETTE.proton; ctx.fill();
+                }
+                // 礦物質離子經壁孔大量排入導管腔
+                for (let i = 0; i < 6; i++) {
+                    const u = (t * 0.6 + i / 6) % 1;
+                    drawIonDot(565 + u * 195, 295 + Math.sin(u * Math.PI) * 6, 6);
+                }
+                drawArrow(575, 268, 735, 268, '#9333ea', 3.5);
+                // 導管腔內累積的離子
+                for (let [ix, iy] of [[735, 220], [815, 250], [770, 330], [845, 310], [755, 440], [830, 395]]) {
+                    drawIonDot(ix + Math.sin(t * 2.5 + ix) * 3, iy, 5.5);
+                }
+            }
+
+            // Step >= 3: 導管內水勢下降，水分經水通道蛋白與壁孔大量湧入導管
+            if (step >= 3) {
+                for (let i = 0; i < 7; i++) {
+                    const u = (t * 0.75 + i / 7) % 1;
+                    drawWaterDot(555 + u * 215, 405 + Math.cos(u * Math.PI * 2) * 5, 6);
+                }
+                drawArrow(575, 432, 745, 432, '#0284c7', 4);
+            }
+
+            // Step >= 4: 產生正靜水壓 (根壓 Root Pressure) 向上推升水柱，且凱氏帶防止逆流
+            if (step >= 4) {
+                drawArrow(795, 490, 795, 110, '#0284c7', 7);
+                for (let i = 0; i < 14; i++) {
+                    const wy = 520 - ((t * 65 + i * 35) % 450);
+                    const wx = 725 + (i % 4) * 42;
+                    if (i % 4 === 1) drawIonDot(wx, wy, 5.5);
+                    else drawWaterDot(wx, wy, 5.5);
+                }
+                // 展示後方凱氏帶擋住離子外洩箭頭
+                drawArrow(215, 108, 168, 108, '#ef4444', 2.5);
+            }
+
+            // === 標籤 ===
+            drawLabel("內皮層\n(含紅色凱氏帶封鎖退路)", 145, 72, { borderColor: PALETTE.casparian });
+            drawLabel("周鞘細胞\n(Pericycle)", 332, 72);
+            drawLabel("木質部薄壁細胞 (活細胞)\n負責耗能將離子裝載入導管", 548, 72, { bold: true, borderColor: '#eab308' });
+            drawLabel("木質部導管 (死細胞中空管)\n具木質化厚壁與壁孔", 795, 25, { bold: true, borderColor: PALETTE.xylemWall });
+            drawLabel("壁孔 (Pit)\n未增厚薄壁通道", 665, 520, { targetX: 672, targetY: 405 });
+
+            if (step >= 2) {
+                drawLabel("H⁺質子幫浦與離子通道\n主動排出離子至導管腔", 545, 260, { targetX: 640, targetY: 285, borderColor: '#9333ea' });
+            }
+            if (step >= 3) {
+                drawLabel("導管內溶質 ↑ ➔ 水勢 Ψw ↓\n水分順水勢梯度湧入導管", 795, 485, { bg: 'rgba(12,74,110,0.9)', borderColor: '#38bdf8' });
+            }
+            if (step >= 4) {
+                drawLabel("產生正靜水壓：「根壓」\n推升水柱且凱氏帶防止外洩", 795, 145, { bold: true, bg: 'rgba(6,95,70,0.92)', borderColor: '#34d399' });
+            }
+        }
+
+        /* =========================================================================
+           分頁 5：導管內水分向上運輸與微觀內聚力/附著力 (宏觀導管 + 微觀 H2O 氫鍵放大鏡)
+           ========================================================================= */
+        function drawH2OMolecule(x, y, angle, showCharges) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(angle);
+            // 兩個氫原子 H (白球)
+            const h1 = { x: -13, y: 12 };
+            const h2 = { x: 13, y: 12 };
+            ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(h1.x, h1.y); ctx.moveTo(0, 0); ctx.lineTo(h2.x, h2.y); ctx.stroke();
+
+            // 氧原子 O (藍紅極性球)
+            ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI * 2);
+            ctx.fillStyle = '#0284c7'; ctx.fill();
+            ctx.strokeStyle = '#e0f2fe'; ctx.lineWidth = 1.5; ctx.stroke();
+
+            // 氫原子 H
+            for (let h of [h1, h2]) {
+                ctx.beginPath(); ctx.arc(h.x, h.y, 7.5, 0, Math.PI * 2);
+                ctx.fillStyle = '#f8fafc'; ctx.fill();
+                ctx.strokeStyle = '#64748b'; ctx.lineWidth = 1.5; ctx.stroke();
+            }
+
+            if (showCharges && state.showLabels) {
+                ctx.rotate(-angle);
+                ctx.font = 'bold 10px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#fef08a';
+                ctx.fillText('δ⁻', 0, -2);
+                ctx.fillStyle = '#0f172a';
+                ctx.fillText('+', Math.cos(angle + 2.35) * 17, Math.sin(angle + 2.35) * 17 + 3);
+            }
+            ctx.restore();
+        }
+
+        function renderTab5(t, step) {
+            // 1. 左側：宏觀木質部導管水柱 (x: 130..310, y: 55..545)
+            drawRoundRect(130, 55, 180, 490, 8, PALETTE.xylemLumen, PALETTE.xylemWall, 14);
+            // 環紋/螺紋木質素次生壁增厚環 (抵抗負壓張力防止導管內陷塌陷)
+            ctx.strokeStyle = 'rgba(153, 27, 27, 0.35)';
+            ctx.lineWidth = 8;
+            for (let ry = 95; ry <= 515; ry += 55) {
+                ctx.beginPath();
+                ctx.moveTo(136, ry);
+                ctx.bezierCurveTo(180, ry - 12, 260, ry + 12, 304, ry);
+                ctx.stroke();
+            }
+
+            // 宏觀水柱連續流動速度隨步驟啟動
+            const flowSpeed = step === 0 ? 12 : (step >= 4 ? 85 : 42);
+            for (let i = 0; i < 24; i++) {
+                const wy = 535 - ((t * flowSpeed + i * 20) % 470);
+                const wx = 160 + (i % 4) * 38 + Math.sin(wy * 0.04 + i) * 4;
+                drawWaterDot(wx, wy, 5.5);
+            }
+
+            // Step >= 1: 頂端蒸散拉力 (負壓張力 Tension) 視覺效果
+            if (step >= 1) {
+                drawArrow(220, 125, 220, 35, '#ef4444', 6);
+                // 負壓略微向內吸引管壁示意箭頭
+                drawArrow(110, 180, 134, 180, '#f87171', 2.5);
+                drawArrow(330, 180, 306, 180, '#f87171', 2.5);
+            }
+
+            // 2. 放大鏡連線至右側微觀視窗
+            drawRoundRect(195, 250, 110, 95, 8, 'rgba(56, 189, 248, 0.15)', '#38bdf8', 2.5);
+            ctx.save();
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.5)';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([6, 6]);
+            ctx.beginPath();
+            ctx.moveTo(305, 250); ctx.lineTo(460, 85);
+            ctx.moveTo(305, 345); ctx.lineTo(460, 515);
+            ctx.stroke();
+            ctx.restore();
+
+            // 3. 右側：微觀高倍率分子視窗 (x: 450..920, y: 65..535)
+            drawRoundRect(450, 65, 470, 470, 22, '#0c4a6e', '#38bdf8', 3);
+            // 微觀視窗左側：親水性纖維素導管壁 (x: 453..525)
+            drawRoundRect(453, 68, 72, 464, [20, 0, 0, 20], PALETTE.xylemWall, '#7f1d1d', 2);
+            // 纖維素親水基團 (-OH)
+            ctx.fillStyle = '#fca5a5';
+            ctx.font = 'bold 12px monospace';
+            for (let oy = 115; oy <= 490; oy += 75) {
+                ctx.fill
+
+            }
+
+            // 計算微觀水分子陣列座標 (2列向上同步牽引的水分子鏈)
+            ctx.save();
+            ctx.beginPath();
+            ctx.roundRect(450, 65, 470, 470, 22);
+            ctx.clip();
+
+            const microOffset = (t * (step >= 4 ? 58 : 26)) % 82;
+            const cols = [590, 720, 840];
+            const molList = [];
+            for (let c = 0; c < cols.length; c++) {
+                for (let r = -1; r < 6; r++) {
+                    const mx = cols[c] + Math.sin(t * 2 + r + c) * 5;
+                    const my = 110 + r * 82 - microOffset + (c % 2) * 28;
+                    molList.push({ x: mx, y: my, c, r });
+                }
+            }
+
+            // Step >= 2: 繪製水分子之間的「內聚力 (Cohesion) — 氫鍵虛線閃光」
+            if (step >= 2) {
+                ctx.save();
+                ctx.strokeStyle = '#fde047';
+                ctx.lineWidth = 2.4;
+                ctx.setLineDash([5, 5]);
+                for (let i = 0; i < molList.length; i++) {
+                    for (let j = i + 1; j < molList.length; j++) {
+                        const a = molList[i], b = molList[j];
+                        const d = Math.hypot(a.x - b.x, a.y - b.y);
+                        if (d < 142) {
+                            ctx.globalAlpha = Math.max(0.25, 1 - d / 150);
+                            ctx.beginPath();
+                            ctx.moveTo(a.x, a.y);
+                            ctx.lineTo(b.x, b.y);
+                            ctx.stroke();
+                        }
+                    }
+                }
+                ctx.restore();
+            }
+
+            // Step >= 3: 繪製水分子與親水性導管壁 (-OH) 之間的「附著力 (Adhesion) — 氫鍵」
+            if (step >= 3) {
+                ctx.save();
+                ctx.strokeStyle = '#34d399';
+                ctx.lineWidth = 2.8;
+                ctx.setLineDash([4, 4]);
+                molList.filter(m => m.c === 0).forEach(m => {
+                    // 找最近的管壁 -OH 基團連出附著力氫鍵
+                    const nearestOHY = Math.round((m.y - 115) / 75) * 75 + 115;
+                    if (nearestOHY >= 90 && nearestOHY <= 510 && Math.abs(m.y - nearestOHY) < 60) {
+                        ctx.beginPath();
+                        ctx.moveTo(522, nearestOHY - 4);
+                        ctx.lineTo(m.x - 12, m.y);
+                        ctx.stroke();
+                    }
+                });
+                ctx.restore();
+            }
+
+            // 繪製所有微觀極性 H2O 水分子本體
+            molList.forEach((m, idx) => {
+                const wobble = Math.sin(t * 2.5 + idx) * 0.14;
+                drawH2OMolecule(m.x, m.y, wobble, step >= 2);
+            });
+
+            // Step >= 4: 微觀視窗整體向上高速蒸散流大箭頭與重力對抗標示
+            if (step >= 4) {
+                drawArrow(780, 495, 780, 115, 'rgba(56, 189, 248, 0.55)', 9);
+                drawArrow(890, 220, 890, 340, 'rgba(248, 113, 113, 0.65)', 3.5); // 重力向下示意
+            }
+            ctx.restore();
+
+            // === 標籤 ===
+            drawLabel("木質部導管水柱\n(具木質素環紋增厚防塌陷)", 220, 568, { bold: true, borderColor: PALETTE.xylemWall });
+            drawLabel("微觀分子放大鏡：極性水分子 (H₂O)", 685, 42, { bold: true, borderColor: '#38bdf8' });
+            drawLabel("親水性纖維素管壁", 505, 558, { targetX: 490, targetY: 485, borderColor: PALETTE.xylemWall });
+
+            if (step >= 1) {
+                drawLabel("上方蒸散失水產生\n「負壓張力 (Tension, -Ψp)」", 220, 22, { bg: 'rgba(127,29,29,0.92)', borderColor: '#f87171', bold: true });
+            }
+            if (step >= 2) {
+                drawLabel("內聚力 (Cohesion)\n水分子間以氫鍵彼此拉住不斷裂", 745, 215, { bg: 'rgba(113,63,18,0.92)', borderColor: '#fde047', bold: true });
+            }
+            if (step >= 3) {
+                drawLabel("附著力 (Adhesion)\n水分子吸附親水管壁抵抗重力", 625, 415, { targetX: 545, targetY: 340, bg: 'rgba(6,78,59,0.92)', borderColor: '#34d399', bold: true });
+            }
+            if (step >= 4) {
+                drawLabel("地心引力 ↓", 865, 365, { borderColor: '#f87171' });
+                drawLabel("蒸散流集流向上 ↑\n(導管全程無須耗費 ATP)", 780, 568, { bold: true, borderColor: '#38bdf8' });
+            }
+        }
+
+        /* =========================================================================
+           分頁 6：葉片導管至氣孔 — 保衛細胞開闔與蒸散作用離開氣孔
+           ========================================================================= */
+        function renderTab6(t, step) {
+            // 氣孔開度隨步驟平滑呈現 (Step 0~2 微開/半閉，Step 3~4 吸水膨脹大開！)
+            const isOpen = step >= 3;
+            const poreHalfW = isOpen ? 36 + Math.sin(t * 2.5) * 3 : 7;
+
+            // 葉片內部背景 (氣室空間 Substomatal chamber)
+            drawRoundRect(70, 50, 860, 415, 16, 'rgba(30, 41, 59, 0.5)', '#334155', 1.5);
+
+            // 1. 左上：葉脈末端木質部導管 (Leaf Vein Xylem) x: 95..290, y: 75..160
+            drawRoundRect(95, 75, 195, 85, 8, PALETTE.xylemLumen, PALETTE.xylemWall, 9);
+            // 導管末端壁孔開口
+            ctx.fillStyle = PALETTE.xylemLumen;
+            ctx.fillRect(280, 98, 18, 38);
+            for (let i = 0; i < 6; i++) {
+                const wx = 115 + ((t * 50 + i * 30) % 165);
+                drawWaterDot(wx, 118 + (i % 2 - 0.5) * 18, 5.5);
+            }
+            drawArrow(120, 118, 255, 118, '#0284c7', 4);
+
+            // 2. 海綿與柵狀葉肉細胞群 (Spongy Mesophyll Cells - 圍繞廣大葉內氣室)
+            const mesophyllCells = [
+                { x: 320, y: 72, w: 175, h: 110 },
+                { x: 535, y: 75, w: 180, h: 108 },
+                { x: 745, y: 85, w: 155, h: 125 },
+                { x: 145, y: 215, w: 175, h: 120 },
+                { x: 695, y: 245, w: 185, h: 120 }
+            ];
+            mesophyllCells.forEach((mc, idx) => {
+                // Step >= 1 時，細胞壁外圍覆蓋一層明顯的藍色液態薄水膜！
+                if (step >= 1) {
+                    drawRoundRect(mc.x - 5, mc.y - 5, mc.w + 10, mc.h + 10, 24, 'rgba(56, 189, 248, 0.35)', '#0284c7', 2);
+                }
+                drawPlantCell(mc.x, mc.y, mc.w, mc.h, { radius: 20, cytoColor: '#ecfccb', vacuole: true, wallThickness: 9 });
+                // 葉綠體點綴
+                for (let k = 0; k < 4; k++) {
+                    const cx = mc.x + 25 + (k % 2) * (mc.w - 50);
+                    const cy = mc.y + 24 + Math.floor(k / 2) * (mc.h - 48);
+                    ctx.beginPath(); ctx.ellipse(cx, cy, 11, 6.5, 0.3 * k, 0, Math.PI * 2);
+                    ctx.fillStyle = PALETTE.chloroplast; ctx.fill();
+                }
+            });
+
+            // 3. 下表皮細胞 (Lower Epidermis) 與角質層 (Cuticle - 防止表皮直接失水)
+            // 左下表皮與右下表皮，中間留給保衛細胞與氣孔 (中心 x = 500, y = 455)
+            drawPlantCell(70, 425, 275, 62, { radius: 8, cytoColor: '#fef9c3', wallThickness: 7 });
+            drawPlantCell(655, 425, 275, 62, { radius: 8, cytoColor: '#fef9c3', wallThickness: 7 });
+            // 蠟質角質層 (黃色防水亮膜)
+            ctx.fillStyle = '#fde047';
+            ctx.fillRect(70, 487, 275, 6);
+            ctx.fillRect(655, 487, 275, 6);
+
+            // 4. 一對腎形保衛細胞 (Guard Cells) 圍成中央氣孔 (Stoma) — 中心 x = 500, y = 456
+            // 展現「內側細胞壁較厚、外側細胞壁較薄」的關鍵解剖特徵！
+            const drawGuardCell = (side) => {
+                // side: -1 左保衛細胞, +1 右保衛細胞
+                ctx.save();
+                const outerBow = isOpen ? 152 : 128;
+                const innerEdge = poreHalfW;
+                ctx.beginPath();
+                // 上端接合點 (500 + side*12, 422) -> 外弧彎曲 -> 下端接合點 (500 + side*12, 490) -> 內側厚壁弧線
+                ctx.moveTo(500 + side * 8, 422);
+                ctx.bezierCurveTo(
+                    500 + side * outerBow, 412,
+                    500 + side * outerBow, 500,
+                    500 + side * 8, 490
+                );
+                ctx.bezierCurveTo(
+                    500 + side * innerEdge, 476,
+                    500 + side * innerEdge, 436,
+                    500 + side * 8, 422
+                );
+                ctx.closePath();
+                ctx.fillStyle = isOpen ? '#dcfce7' : '#ecfccb';
+                ctx.fill();
+                // 外側薄細胞壁
+                ctx.strokeStyle = PALETTE.phloemWall;
+                ctx.lineWidth = 3;
+                ctx.stroke();
+
+                // 內側特化加厚細胞壁 (Thick inner cell wall)
+                ctx.beginPath();
+                ctx.moveTo(500 + side * 8, 424);
+                ctx.bezierCurveTo(
+                    500 + side * innerEdge, 436,
+                    500 + side * innerEdge, 476,
+                    500 + side * 8, 488
+                );
+                ctx.strokeStyle = '#14532d';
+                ctx.lineWidth = 8.5;
+                ctx.lineCap = 'round';
+                ctx.stroke();
+
+                // 保衛細胞具有葉綠體 (一般表皮細胞沒有！) 與液胞
+                for (let [gx, gy] of [[side * 68, 438], [side * 86, 456], [side * 66, 474]]) {
+                    ctx.beginPath(); ctx.ellipse(500 + gx, gy, 8, 5, 0.2, 0, Math.PI * 2);
+                    ctx.fillStyle = PALETTE.chloroplast; ctx.fill();
+                }
+                ctx.restore();
+            };
+            drawGuardCell(-1);
+            drawGuardCell(1);
+
+            // === Step 動態流程 ===
+            // Step >= 1: 液態水離開導管，沿葉肉細胞壁擴散浸潤表面
+            if (step >= 1) {
+                const filmPath1 = [[285, 118], [320, 125], [495, 130], [535, 130]];
+                const filmPath2 = [[285, 128], [235, 215], [320, 275]];
+                for (let i = 0; i < 6; i++) {
+                    const p1 = samplePath(filmPath1, (t * 0.5 + i / 6) % 1);
+                    const p2 = samplePath(filmPath2, (t * 0.5 + (i + 0.5) / 6) % 1);
+                    drawWaterDot(p1.x, p1.y, 5.5);
+                    drawWaterDot(p2.x, p2.y, 5.5);
+                }
+                drawArrow(275, 148, 345, 195, '#0284c7', 3);
+            }
+
+            // Step >= 2: 液態水在細胞壁表面蒸發為氣態水蒸氣 (淺藍半透明擴散霧氣球) 充滿氣室
+            const drawVapor = (vx, vy, r = 7, alpha = 0.75) => {
+                ctx.save();
+                ctx.globalAlpha = alpha;
+                ctx.beginPath(); ctx.arc(vx, vy, r, 0, Math.PI * 2);
+                ctx.fillStyle = '#7dd3fc'; ctx.fill();
+                ctx.strokeStyle = '#e0f2fe'; ctx.lineWidth = 1.2;
+                ctx.setLineDash([2, 2]); ctx.stroke();
+                ctx.restore();
+            };
+
+            if (step >= 2) {
+                // 蒸發動畫：由各葉肉細胞壁向中央氣室 (x:340..660, y:210..390) 飄散
+                const evapOrigins = [[410, 185], [610, 185], [322, 285], [692, 300]];
+                evapOrigins.forEach(([ox, oy], idx) => {
+                    for (let i = 0; i < 4; i++) {
+                        const u = (t * 0.45 + i / 4 + idx * 0.2) % 1;
+                        const tx = 500 + (idx - 1.5) * 45 + Math.sin(t * 3 + i) * 14;
+                        const ty = 320 + (i % 2) * 35;
+                        drawVapor(ox + (tx - ox) * u, oy + (ty - oy) * u, 6.5, 0.85);
+                    }
+                });
+                drawArrow(410, 192, 445, 255, '#38bdf8', 2.5, true);
+                drawArrow(610, 192, 575, 255, '#38bdf8', 2.5, true);
+            }
+
+            // Step >= 3: K+ 離子與水主動/滲透進入保衛細胞，膨壓升高撐開氣孔！
+            if (step >= 3) {
+                drawATPBadge(355, 405, 0.85);
+                drawATPBadge(645, 405, 0.85);
+                for (let side of [-1, 1]) {
+                    for (let i = 0; i < 3; i++) {
+                        const u = (t * 0.65 + i / 3) % 1;
+                        const startX = 500 + side * 185;
+                        const endX = 500 + side * 85;
+                        drawIonDot(startX + (endX - startX) * u, 448, 5);
+                        drawWaterDot(startX + (endX - startX) * ((u + 0.5) % 1), 466, 5);
+                    }
+                    drawArrow(500 + side * 175, 456, 500 + side * 115, 456, '#9333ea', 3);
+                    // 保衛細胞內累積的 K+ 離子
+                    drawIonDot(500 + side * 52, 448, 5);
+                    drawIonDot(500 + side * 52, 466, 5);
+                    drawIonDot(500 + side * 98, 456, 5);
+                }
+            }
+
+            // Step >= 4: 水蒸氣順水勢梯度快速穿過張開的氣孔擴散至外部乾燥大氣！
+            if (step >= 4) {
+                for (let i = 0; i < 14; i++) {
+                    const u = (t * 0.55 + i / 14) % 1;
+                    const startX = 500 + ((i % 5) - 2) * 18;
+                    const spreadX = 500 + ((i % 5) - 2) * (18 + u * 85);
+                    const vy = 355 + u * 225;
+                    // 在氣孔咽喉處收束再向外擴散
+                    const neckFactor = Math.exp(-Math.pow((vy - 456) / 36, 2));
+                    const actualX = spreadX * (1 - neckFactor * 0.65) + 500 * (neckFactor * 0.65);
+                    drawVapor(actualX, vy, 6.5 + u * 3, 1 - u * 0.55);
+                }
+                drawArrow(500, 385, 500, 565, '#38bdf8', 5.5, true);
+            }
+
+            // === 標籤 ===
+            drawLabel("葉脈木質部導管末端", 192, 52, { bold: true, borderColor: PALETTE.xylemWall });
+            drawLabel("葉肉細胞 (含葉綠體)", 625, 52, { borderColor: '#16a34a' });
+            drawLabel("葉內氣室 (Substomatal Chamber)\n高濕度、相對水勢較高", 500, 295, { borderColor: '#38bdf8' });
+            drawLabel("下表皮與角質層 (防水)", 190, 518, { targetX: 190, targetY: 490, borderColor: '#fde047' });
+            drawLabel("保衛細胞 (Guard Cells)\n內壁厚、外壁薄", 775, 522, { targetX: 605, targetY: 465, bold: true, borderColor: PALETTE.phloemWall });
+            drawLabel(isOpen ? "氣孔張開\n(Stoma Open)" : "氣孔微閉", 500, 402, { bold: true, borderColor: isOpen ? '#34d399' : '#94a3b8' });
+
+            if (step === 1) {
+                drawLabel("液態水浸潤葉肉細胞壁形成薄水膜", 425, 215, { targetX: 410, targetY: 184, borderColor: '#0284c7' });
+            }
+            if (step === 2) {
+                drawLabel("液態水吸收熱能「蒸發」為水蒸氣\n微纖絲彎月面產生拉動全株的表面張力！", 500, 232, { bg: 'rgba(12,74,110,0.92)', borderColor: '#7dd3fc', bold: true });
+            }
+            if (step === 3) {
+                drawLabel("耗能排 H⁺ 促使 K⁺ 與水進入\n膨壓升高使保衛細胞向外彎曲撐開氣孔！", 500, 555, { bg: 'rgba(59,7,100,0.92)', borderColor: '#c084fc', bold: true });
+            }
+            if (step === 4) {
+                drawLabel("外部大氣 (極低水勢 Ψw)：水蒸氣擴散離開完成蒸散作用！", 500, 578, { bg: 'rgba(6,95,70,0.92)', borderColor: '#34d399', bold: true });
+            }
+        }
+
+        /* =========================================================================
+           主渲染迴圈 (Animation Loop)
+           ========================================================================= */
+        let lastTimestamp = performance.now();
+
+        function animate(now) {
+            const dt = Math.min(0.05, (now - lastTimestamp) / 1000);
+            lastTimestamp = now;
+            state.time += dt;
+
+            const tabInfo = TABS_DATA[state.currentTab];
+            if (tabInfo.is3D) {
+                threeApp.render(state.time, state.currentStep);
+            } else {
+                const rect = viewport.getBoundingClientRect();
+                const dpr = window.devicePixelRatio || 1;
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                ctx.clearRect(0, 0, rect.width, rect.height);
+
+                // 套用 2D Zoom & Pan 矩陣
+                ctx.save();
+                ctx.translate(state.cam.x, state.cam.y);
+                ctx.scale(state.cam.scale, state.cam.scale);
+
+                // 繪製細緻科學座標背景網格
+                ctx.strokeStyle = 'rgba(148, 163, 184, 0.06)';
+                ctx.lineWidth = 1;
+                for (let gx = 0; gx <= BASE_W; gx += 50) {
+                    ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, BASE_H); ctx.stroke();
+                }
+                for (let gy = 0; gy <= BASE_H; gy += 50) {
+                    ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(BASE_W, gy); ctx.stroke();
+                }
+
+                switch (state.currentTab) {
+                    case 0: renderTab0(state.time, state.currentStep); break;
+                    case 1: renderTab1(state.time, state.currentStep); break;
+                    case 2: renderTab2(state.time, state.currentStep); break;
+                    case 4: renderTab4(state.time, state.currentStep); break;
+                    case 5: renderTab5(state.time, state.currentStep); break;
+                    case 6: renderTab6(state.time, state.currentStep); break;
+                }
+                ctx.restore();
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        // 初始化啟動
+        resizeAll();
+        updateUI();
+        requestAnimationFrame(animate);
+    </script>
+</body>
+
+</html>
