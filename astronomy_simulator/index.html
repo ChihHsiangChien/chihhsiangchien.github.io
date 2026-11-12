@@ -1,0 +1,3942 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>互動天體運動與觀測雙視角模擬器 | AstroLab Dual-View</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  :root {
+    --bg-deep: #060913;
+    --bg-panel: rgba(15, 23, 42, 0.92);
+    --bg-card: rgba(30, 41, 59, 0.72);
+    --border-subtle: rgba(148, 163, 184, 0.18);
+    --border-active: rgba(56, 189, 248, 0.65);
+    --text-main: #F1F5F9;
+    --text-muted: #94A3B8;
+
+    /* 跨分頁統一科學視覺色票 */
+    --c-sun: #FBBF24;       /* 太陽 / 黃道面 / 太陽光束 */
+    --c-earth: #38BDF8;     /* 地球 / 天球地平 / 海洋 */
+    --c-land: #10B981;      /* 地表觀測者 / 順行 / 陸地 */
+    --c-moon: #E2E8F0;      /* 月球本體 */
+    --c-lunar-orb: #A78BFA; /* 白道面 / 月球引力向量 */
+    --c-node: #F43F5E;      /* 交點線 / 食季 / 紅光折射 / 逆行 */
+    --c-tide: #06B6D4;      /* 潮汐海水 / 遠方恆星 */
+    --c-venus: #FDE047;     /* 金星 / 行星視運動 */
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+    background: var(--bg-deep);
+    color: var(--text-main);
+    font-family: -apple-system, BlinkMacSystemFont, "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+    font-size: 14px;
+  }
+
+  #app {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100dvh;
+  }
+
+  /* 頂部導覽列與分頁器 */
+  header {
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border-subtle);
+    backdrop-filter: blur(12px);
+    z-index: 30;
+    flex-shrink: 0;
+  }
+
+  .top-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    gap: 8px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+  }
+
+  .brand-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--c-sun);
+    box-shadow: 0 0 10px var(--c-sun);
+  }
+
+  .global-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: nowrap;
+  }
+
+  .btn-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    height: 32px;
+    padding: 0 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border-subtle);
+    background: rgba(30, 41, 59, 0.8);
+    color: var(--text-main);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+
+  .btn-pill:hover {
+    border-color: rgba(148, 163, 184, 0.45);
+    background: rgba(51, 65, 85, 0.85);
+  }
+
+  .btn-pill.active {
+    background: rgba(56, 189, 248, 0.18);
+    border-color: var(--c-earth);
+    color: #7DD3FC;
+  }
+
+  .btn-pill.label-on {
+    background: rgba(251, 191, 36, 0.16);
+    border-color: var(--c-sun);
+    color: #FDE68A;
+  }
+
+  .view-seg {
+    display: flex;
+    background: rgba(15, 23, 42, 0.9);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .view-seg button {
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    padding: 0 9px;
+    height: 30px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.15s;
+    white-space: nowrap;
+  }
+
+  .view-seg button.active {
+    background: rgba(56, 189, 248, 0.22);
+    color: #fff;
+  }
+
+  /* 分頁捲動列 */
+  .tabs-bar-wrap {
+    display: flex;
+    align-items: center;
+    position: relative;
+    padding: 4px 6px;
+    gap: 4px;
+  }
+
+  .tab-scroll-btn {
+    width: 28px;
+    height: 32px;
+    border-radius: 6px;
+    border: 1px solid var(--border-subtle);
+    background: rgba(30, 41, 59, 0.9);
+    color: var(--text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+  }
+
+  .tabs-strip {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    scroll-behavior: smooth;
+    scrollbar-width: none;
+    flex: 1;
+    padding: 2px 2px;
+  }
+  .tabs-strip::-webkit-scrollbar { display: none; }
+
+  .tab-btn {
+    flex-shrink: 0;
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border-subtle);
+    background: rgba(30, 41, 59, 0.55);
+    color: var(--text-muted);
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.18s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .tab-btn .num {
+    font-size: 10.5px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: rgba(148, 163, 184, 0.15);
+    color: #CBD5E1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tab-btn.active {
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.24), rgba(167, 139, 250, 0.22));
+    border-color: var(--c-earth);
+    color: #FFFFFF;
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
+  }
+
+  .tab-btn.active .num {
+    background: var(--c-earth);
+    color: #060913;
+    font-weight: 800;
+  }
+
+  /* 雙視角主舞台 */
+  #stage {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr;
+    min-height: 0;
+    position: relative;
+    background: var(--bg-deep);
+  }
+
+  #stage.mode-macro { grid-template-columns: 1fr; }
+  #stage.mode-macro #ground-pane { display: none; }
+  #stage.mode-ground { grid-template-columns: 1fr; }
+  #stage.mode-ground #macro-pane { display: none; }
+
+  .viewport-pane {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+    touch-action: none;
+  }
+
+  #macro-pane {
+    border-right: 1px solid var(--border-subtle);
+    background: radial-gradient(circle at 50% 50%, #0D162C 0%, #050811 100%);
+  }
+
+  #ground-pane {
+    background: #070C18;
+  }
+
+  .viewport-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    touch-action: none;
+  }
+
+  /* 視角左上角標題徽章 */
+  .pane-badge {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 12;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.82);
+    border: 1px solid var(--border-subtle);
+    backdrop-filter: blur(6px);
+    pointer-events: none;
+    max-width: calc(100% - 140px);
+  }
+
+  .pane-badge .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .pane-badge-text {
+    font-size: 12px;
+    font-weight: 700;
+    color: #E2E8F0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* 視角右上角 Zoom & Pan 觸控輔助工具列 */
+  .cam-tools {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 14;
+    display: flex;
+    gap: 4px;
+    background: rgba(15, 23, 42, 0.82);
+    border: 1px solid var(--border-subtle);
+    padding: 3px;
+    border-radius: 8px;
+    backdrop-filter: blur(6px);
+  }
+
+  .cam-btn {
+    width: 30px;
+    height: 30px;
+    border: none;
+    border-radius: 6px;
+    background: rgba(30, 41, 59, 0.85);
+    color: #E2E8F0;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: 0.15s;
+  }
+
+  .cam-btn:hover { background: rgba(51, 65, 85, 0.95); }
+  .cam-btn.active {
+    background: rgba(56, 189, 248, 0.28);
+    color: #7DD3FC;
+    box-shadow: inset 0 0 0 1px var(--c-earth);
+  }
+
+  /* 3D 浮動標籤層 */
+  #macro-labels {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+    z-index: 10;
+  }
+
+  .label-3d {
+    position: absolute;
+    transform: translate(-50%, -100%);
+    padding: 2px 7px;
+    border-radius: 5px;
+    font-size: 11.5px;
+    font-weight: 700;
+    background: rgba(9, 14, 28, 0.84);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    color: #F8FAFC;
+    white-space: nowrap;
+    pointer-events: none;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.55);
+    transition: opacity 0.15s;
+  }
+
+  /* 底部互動控制塢 (Step-by-Step + 參數控制 + 統一色票圖例) */
+  #dock {
+    background: var(--bg-panel);
+    border-top: 1px solid var(--border-subtle);
+    backdrop-filter: blur(14px);
+    z-index: 25;
+    flex-shrink: 0;
+    transition: max-height 0.25s ease;
+  }
+
+  .dock-header-strip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 12px;
+    background: rgba(15, 23, 42, 0.95);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+    gap: 8px;
+  }
+
+  .legend-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    font-size: 11.5px;
+    color: var(--text-muted);
+  }
+  .legend-row::-webkit-scrollbar { display: none; }
+
+  .leg-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+  }
+
+  .leg-swatch {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  .dock-toggle-btn {
+    background: rgba(30, 41, 59, 0.9);
+    border: 1px solid var(--border-subtle);
+    color: #CBD5E1;
+    border-radius: 6px;
+    padding: 3px 9px;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .dock-body {
+    display: grid;
+    grid-template-columns: 1.15fr 1fr;
+    gap: 10px;
+    padding: 8px 12px 10px;
+    max-height: 235px;
+    overflow-y: auto;
+  }
+
+  #dock.collapsed .dock-body {
+    display: none;
+  }
+
+  /* Step-by-Step 教學卡片 */
+  .step-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .step-controls-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .step-nav-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .step-btn {
+    height: 30px;
+    padding: 0 9px;
+    border-radius: 7px;
+    border: 1px solid var(--border-subtle);
+    background: rgba(15, 23, 42, 0.85);
+    color: var(--text-main);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .step-btn:hover { background: rgba(51, 65, 85, 0.9); }
+  .step-btn.play-on {
+    background: rgba(16, 185, 129, 0.2);
+    border-color: var(--c-land);
+    color: #6EE7B7;
+  }
+
+  .step-dots {
+    display: flex;
+    gap: 4px;
+  }
+
+  .step-dot {
+    height: 28px;
+    min-width: 30px;
+    padding: 0 7px;
+    border-radius: 6px;
+    border: 1px solid var(--border-subtle);
+    background: rgba(15, 23, 42, 0.65);
+    color: var(--text-muted);
+    font-size: 11.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: 0.15s;
+  }
+
+  .step-dot.active {
+    background: var(--c-earth);
+    border-color: var(--c-earth);
+    color: #060913;
+  }
+
+  .step-info-box {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .step-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #FDE68A;
+  }
+
+  .step-desc {
+    font-size: 12px;
+    line-height: 1.45;
+    color: #CBD5E1;
+    user-select: text;
+  }
+
+  /* 參數控制區 */
+  .params-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    justify-content: center;
+  }
+
+  .ctrl-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+    gap: 8px 12px;
+    align-items: center;
+  }
+
+  .ctrl-item {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .ctrl-label-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11.5px;
+    color: #CBD5E1;
+    font-weight: 600;
+  }
+
+  .ctrl-val {
+    color: #7DD3FC;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+  }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    border-radius: 4px;
+    background: rgba(148, 163, 184, 0.25);
+    outline: none;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--c-earth);
+    border: 2px solid #fff;
+    cursor: pointer;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.5);
+  }
+
+  .preset-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+
+  .preset-chip {
+    padding: 4px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--border-subtle);
+    background: rgba(15, 23, 42, 0.8);
+    color: #CBD5E1;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.15s;
+  }
+
+  .preset-chip.active, .preset-chip:hover {
+    border-color: var(--c-earth);
+    background: rgba(56, 189, 248, 0.22);
+    color: #fff;
+  }
+
+  /* 平板與手機響應式調整 */
+  @media (max-width: 900px) {
+    #stage {
+      grid-template-columns: 1fr;
+      grid-template-rows: 1fr 1fr;
+    }
+    #stage.mode-macro, #stage.mode-ground {
+      grid-template-rows: 1fr;
+    }
+    #macro-pane {
+      border-right: none;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .dock-body {
+      grid-template-columns: 1fr;
+      max-height: 220px;
+    }
+    .brand span.sub { display: none; }
+  }
+
+  @media (max-width: 520px) {
+    .top-row { padding: 5px 8px; }
+    .brand { font-size: 13.5px; }
+    .btn-pill { padding: 0 8px; font-size: 11.5px; height: 29px; }
+    .view-seg button { padding: 0 7px; font-size: 11.5px; height: 28px; }
+    .tab-scroll-btn { display: none; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- 頂部導覽與 10 分頁切換器 -->
+  <header>
+    <div class="top-row">
+      <div class="brand">
+        <span class="brand-dot"></span>
+        <span>天體運動雙視角模擬器</span>
+        <span class="sub" style="color:var(--text-muted);font-weight:500;font-size:12px;">Macro 3D × Ground Sky</span>
+      </div>
+      <div class="global-actions">
+        <div class="view-seg" role="group" aria-label="視角模式">
+          <button id="view-dual" class="active" title="雙視角同步並排">雙視角</button>
+          <button id="view-macro" title="僅顯示太空3D上帝視角">太空</button>
+          <button id="view-ground" title="僅顯示地表/光學微觀視角">地表</button>
+        </div>
+        <button id="btn-labels" class="btn-pill label-on" title="切換文字標籤顯示/隱藏 (快捷鍵 L)">
+          🏷️ 標籤: 開
+        </button>
+      </div>
+    </div>
+    <div class="tabs-bar-wrap">
+      <button class="tab-scroll-btn" id="tab-left" aria-label="向左捲動分頁">◀</button>
+      <div class="tabs-strip" id="tabs-strip"></div>
+      <button class="tab-scroll-btn" id="tab-right" aria-label="向右捲動分頁">▶</button>
+    </div>
+  </header>
+
+  <!-- 雙視角互動主舞台 -->
+  <main id="stage">
+    <!-- 左/上：太空上帝視角 (Three.js 3D) -->
+    <section id="macro-pane" class="viewport-pane">
+      <div class="pane-badge">
+        <span class="dot" style="background:var(--c-sun)"></span>
+        <span class="pane-badge-text" id="macro-title">太空上帝視角 (Macro 3D)</span>
+      </div>
+      <div class="cam-tools">
+        <button class="cam-btn" id="macro-pan-toggle" title="切換單指拖曳模式：旋轉視角 / 平移畫面">✢</button>
+        <button class="cam-btn" id="macro-zoom-in" title="放大太空視角">＋</button>
+        <button class="cam-btn" id="macro-zoom-out" title="縮小太空視角">－</button>
+        <button class="cam-btn" id="macro-reset" title="重置太空視角">↺</button>
+      </div>
+      <canvas id="macro-canvas" class="viewport-canvas"></canvas>
+      <div id="macro-labels"></div>
+    </section>
+
+    <!-- 右/下：地表沈浸與光學微觀視角 (2D Zoom/Pan Canvas) -->
+    <section id="ground-pane" class="viewport-pane">
+      <div class="pane-badge">
+        <span class="dot" style="background:var(--c-land)"></span>
+        <span class="pane-badge-text" id="ground-title">地表沈浸視角 (Ground View)</span>
+      </div>
+      <div class="cam-tools">
+        <button class="cam-btn" id="ground-zoom-in" title="放大地表視角">＋</button>
+        <button class="cam-btn" id="ground-zoom-out" title="縮小地表視角">－</button>
+        <button class="cam-btn" id="ground-reset" title="重置地表視角">↺</button>
+      </div>
+      <canvas id="ground-canvas" class="viewport-canvas"></canvas>
+    </section>
+  </main>
+
+  <!-- 底部控制塢：統一色票圖例 + Step-by-Step 流程控制 + 互動參數 -->
+  <footer id="dock">
+    <div class="dock-header-strip">
+      <div class="legend-row">
+        <span class="leg-item"><i class="leg-swatch" style="background:var(--c-sun)"></i>太陽 / 黃道</span>
+        <span class="leg-item"><i class="leg-swatch" style="background:var(--c-earth)"></i>地球 / 天球</span>
+        <span class="leg-item"><i class="leg-swatch" style="background:var(--c-lunar-orb)"></i>月球白道 / 引潮</span>
+        <span class="leg-item"><i class="leg-swatch" style="background:var(--c-node)"></i>交點 / 紅光 / 逆行</span>
+        <span class="leg-item"><i class="leg-swatch" style="background:var(--c-land)"></i>地表觀測者 / 順行</span>
+        <span class="leg-item"><i class="leg-swatch" style="background:var(--c-tide)"></i>海洋潮位 / 遠方恆星</span>
+      </div>
+      <button class="dock-toggle-btn" id="btn-dock-collapse">收合面板 ▼</button>
+    </div>
+    <div class="dock-body">
+      <!-- Step-by-Step 導覽區 -->
+      <div class="step-panel">
+        <div class="step-controls-row">
+          <div class="step-nav-group">
+            <button class="step-btn play-on" id="btn-play">⏸ 暫停</button>
+            <button class="step-btn" id="btn-prev-step">◀ 上一步</button>
+            <button class="step-btn" id="btn-next-step">下一步 ▶</button>
+          </div>
+          <div class="step-dots" id="step-dots"></div>
+        </div>
+        <div class="step-info-box">
+          <div class="step-title" id="step-title">步驟載入中...</div>
+          <div class="step-desc" id="step-desc"></div>
+        </div>
+      </div>
+
+      <!-- 動態參數控制區 -->
+      <div class="params-panel">
+        <div class="ctrl-grid" id="ctrl-container"></div>
+      </div>
+    </div>
+  </footer>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  /* =========================================================
+   * 1. 跨分頁統一色票與數學常數
+   * ========================================================= */
+  const PALETTE = {
+    sun: '#FBBF24',
+    sunHex: 0xFBBF24,
+    sunGlow: '#F59E0B',
+    earth: '#38BDF8',
+    earthHex: 0x38BDF8,
+    land: '#10B981',
+    landHex: 0x10B981,
+    moon: '#E2E8F0',
+    moonHex: 0xE2E8F0,
+    lunarOrb: '#A78BFA',
+    lunarOrbHex: 0xA78BFA,
+    node: '#F43F5E',
+    nodeHex: 0xF43F5E,
+    tide: '#06B6D4',
+    tideHex: 0x06B6D4,
+    venus: '#FDE047',
+    venusHex: 0xFDE047,
+    bgDark: '#070C18',
+    grid: 'rgba(148, 163, 184, 0.22)',
+    text: '#F8FAFC',
+    muted: '#94A3B8'
+  };
+
+  const DEG = Math.PI / 180;
+  const RAD = 180 / Math.PI;
+  const TAU = Math.PI * 2;
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const normDeg = (d) => ((d % 360) + 360) % 360;
+
+  /* =========================================================
+   * 2. 十個科學主題分頁定義與 Step-by-Step 劇本
+   * ========================================================= */
+  const MODULES = [
+    {
+      id: 'nodes',
+      num: '01',
+      short: '黃白交角與食季',
+      macroTitle: '太空視角：黃道面、白道面 5° 交角與交點線',
+      groundTitle: '地表視角：朔/望月在天球相對於太陽或地影的南北偏移',
+      cam: { theta: 0.65, phi: 1.08, radius: 24 },
+      defaults: { earthDeg: 45, moonPhaseDeg: 0, exaggerateTilt: 1, speed: 1.0 },
+      controls: [
+        { key: 'earthDeg', label: '地球公轉位置 (月份)', min: 0, max: 360, step: 1, fmt: v => `${(v / 30).toFixed(1)} 個月 (${Math.round(v)}°)` },
+        { key: 'moonPhaseDeg', label: '月相角 (0°朔 / 180°望)', min: 0, max: 360, step: 1, fmt: v => `${Math.round(v)}° ${v < 15 || v > 345 ? '(朔/新月)' : Math.abs(v - 180) < 15 ? '(望/滿月)' : ''}` },
+        { type: 'chips', key: 'exaggerateTilt', label: '白道傾角顯示比例', options: [{ label: '真實 5.1°', val: 0 }, { label: '教學放大 15°', val: 1 }] }
+      ],
+      steps: [
+        {
+          title: '步驟 1：認識黃道面（金）與白道面（紫）的 5° 夾角',
+          desc: '地球繞太陽公轉平面為「黃道面」，月球繞地球公轉平面為「白道面」，兩平面存在約 5.1° 夾角，相交於紅色的「交點線（Line of Nodes）」。',
+          params: { earthDeg: 55, moonPhaseDeg: 90, exaggerateTilt: 1 },
+          cam: { theta: 0.7, phi: 1.12, radius: 24 },
+          play: true
+        },
+        {
+          title: '步驟 2：一般月份的「朔」——新月偏離太陽，不發生日食',
+          desc: '當交點線未對準太陽時（非食季），新月雖位於日地連線上，但因白道傾斜，月球從太陽北側或南側掠過，月球影錐落空，故大多數月份沒有日食！',
+          params: { earthDeg: 90, moonPhaseDeg: 0, exaggerateTilt: 1 },
+          cam: { theta: 0.25, phi: 1.25, radius: 22 },
+          play: false
+        },
+        {
+          title: '步驟 3：進入「食季」的朔月——交點線指向太陽（發生日食）',
+          desc: '每半年地球運行至交點線對準太陽的區域稱為「食季（Eclipse Season）」。此時逢新月（0°），月球恰在升/降交點附近，遮蔽太陽形成日食！',
+          params: { earthDeg: 0, moonPhaseDeg: 0, exaggerateTilt: 1 },
+          cam: { theta: 0.45, phi: 1.15, radius: 21 },
+          play: false
+        },
+        {
+          title: '步驟 4：食季中的「望月」——月球穿過地球本影（發生月食）',
+          desc: '同在食季內，半個月後月球繞至滿月位置（180°）亦落在交點附近，直接穿入地球背光的陰影錐中，發生月食。',
+          params: { earthDeg: 180, moonPhaseDeg: 180, exaggerateTilt: 1 },
+          cam: { theta: -0.5, phi: 1.12, radius: 21 },
+          play: false
+        }
+      ]
+    },
+    {
+      id: 'umbra',
+      num: '02',
+      short: '本影半影與日食帶',
+      macroTitle: '太空視角：月球本影錐、半影錐與地表狹長全食帶移動',
+      groundTitle: '地表視角：太陽缺口、全食日冕與地表全食帶地圖',
+      cam: { theta: 0.35, phi: 1.22, radius: 16.5 },
+      defaults: { eclipseProg: 0, obsOffsetKm: 0, moonDistMode: 0 },
+      controls: [
+        { key: 'eclipseProg', label: '日食時間進程', min: -1, max: 1, step: 0.01, fmt: v => `${v >= 0 ? '+' : ''}${(v * 1.8).toFixed(2)} 小時` },
+        { key: 'obsOffsetKm', label: '觀測者偏離全食中心線', min: -2500, max: 2500, step: 25, fmt: v => `${v === 0 ? '中心線上 (0 km)' : (v > 0 ? '偏北 ' : '偏南 ') + Math.abs(v) + ' km'}` },
+        { type: 'chips', key: 'moonDistMode', label: '地月距離效應', options: [{ label: '近地：日全食(本影觸地)', val: 0 }, { label: '遠地：日環食(偽本影)', val: 1 }] }
+      ],
+      steps: [
+        {
+          title: '步驟 1：月球影錐結構——狹小本影與廣大半影',
+          desc: '太陽並非點光源，因此月球後方會形成完全無陽光直射的深色「本影錐（Umbra）」與部分陽光照射的「半影區（Penumbra）」。',
+          params: { eclipseProg: -0.75, obsOffsetKm: 0, moonDistMode: 0 },
+          cam: { theta: 0.55, phi: 1.25, radius: 18 },
+          play: false
+        },
+        {
+          title: '步驟 2：本影接觸地表——僅百公里寬的「全食帶」高速掃過',
+          desc: '本影投射到地表直徑僅約 100～250 公里，隨月球公轉與地球自轉在地表劃出一條狹長紅金色「全食帶」，中心觀測者可見壯麗日冕與鑽石環！',
+          params: { eclipseProg: 0.0, obsOffsetKm: 0, moonDistMode: 0 },
+          cam: { theta: 0.25, phi: 1.18, radius: 14.5 },
+          play: true
+        },
+        {
+          title: '步驟 3：偏離全食帶——廣大半影區僅見「日偏食」',
+          desc: '將觀測者移至中心線北側 1200 km（位於半影區內），月球僅遮住部分日面，解釋為何多數地區看日食都是偏食而非全食。',
+          params: { eclipseProg: 0.0, obsOffsetKm: 1200, moonDistMode: 0 },
+          cam: { theta: 0.25, phi: 1.18, radius: 14.5 },
+          play: false
+        },
+        {
+          title: '步驟 4：延伸對比——當月球較遠時本影未觸地（日環食）',
+          desc: '當月球位於遠地點附近，本影錐頂點在抵達地表前就交會完畢，延伸出「偽本影（Antumbra）」，地表中心將看見金光閃耀的「日環食」。',
+          params: { eclipseProg: 0.0, obsOffsetKm: 0, moonDistMode: 1 },
+          cam: { theta: 0.3, phi: 1.2, radius: 15.5 },
+          play: false
+        }
+      ]
+    },
+    {
+      id: 'bloodmoon',
+      num: '03',
+      short: '瑞利散射與紅月亮',
+      macroTitle: '太空視角：地球大氣邊緣藍光散射與紅光折射入本影',
+      groundTitle: '光學與望遠鏡視角：瑞利散射光路圖與月全食血月色澤',
+      cam: { theta: -0.45, phi: 1.28, radius: 19 },
+      defaults: { lunarProg: 0, dustLevel: 0.25 },
+      controls: [
+        { key: 'lunarProg', label: '月食穿影進程', min: -1, max: 1, step: 0.01, fmt: v => Math.abs(v) < 0.28 ? '食既～生光 (全食紅月)' : Math.abs(v) < 0.65 ? '初虧/復圓 (本影偏食)' : '半影月食區' },
+        { key: 'dustLevel', label: '地球大氣火山灰/塵埃濃度', min: 0, max: 1, step: 0.05, fmt: v => v < 0.35 ? '清澈大氣 (亮銅紅 L=4)' : v < 0.7 ? '普通大氣 (磚紅 L=2)' : '高濃度塵埃 (暗黑紅 L=0)' }
+      ],
+      steps: [
+        {
+          title: '步驟 1：月球初入半影與本影邊緣（月偏食階段）',
+          desc: '滿月由西向東逐漸進入地球本影，被地球遮擋的部分明顯變暗，可清楚看見地球圓弧形的陰影邊緣。',
+          params: { lunarProg: -0.52, dustLevel: 0.2 },
+          cam: { theta: -0.6, phi: 1.22, radius: 20 },
+          play: false
+        },
+        {
+          title: '步驟 2：大氣瑞利散射——濾除短波藍紫光',
+          desc: '太陽白光掠過地球周圍大氣層時，波長較短的藍綠光因「瑞利散射（散射強度 ∝ λ⁻⁴）」向四面八方散失（這也是地球天空呈藍色的原因）。',
+          params: { lunarProg: -0.15, dustLevel: 0.2 },
+          cam: { theta: -0.25, phi: 1.38, radius: 17 },
+          play: false
+        },
+        {
+          title: '步驟 3：長波紅光折射匯聚——照亮本影中的「紅月亮」',
+          desc: '穿透力強的紅橙長波光不易被散射，並受地球大氣層如透鏡般向內折射約 1.4° 進入地球本影，投射在月面上形成神祕的暗紅色「血月」！',
+          params: { lunarProg: 0.0, dustLevel: 0.2 },
+          cam: { theta: -0.45, phi: 1.25, radius: 18 },
+          play: true
+        },
+        {
+          title: '步驟 4：大氣塵埃與火山灰對血月亮度的影響（丹容等級）',
+          desc: '若地球剛發生大規模火山爆發或雲層濃厚，連紅光也會被大氣阻擋吸收，月全食將呈現極為幽暗的深褐甚至暗灰色。',
+          params: { lunarProg: 0.0, dustLevel: 0.85 },
+          cam: { theta: -0.45, phi: 1.25, radius: 18 },
+          play: false
+        }
+      ]
+    },
+    {
+      id: 'tides',
+      num: '04',
+      short: '引潮力與大小潮',
+      macroTitle: '太空視角：日地月引力疊加、引潮力向量與海洋潮汐橢球',
+      groundTitle: '海岸觀測視角：即時海水潮位標尺與 24h / 30日大小潮曲線',
+      cam: { theta: 0.2, phi: 0.72, radius: 21 },
+      defaults: { moonSynodic: 0, earthHour: 0, showVectors: 1 },
+      controls: [
+        { key: 'moonSynodic', label: '農曆月相角度', min: 0, max: 360, step: 1, fmt: v => `${Math.round(v)}° (${v < 20 || v > 340 ? '初一 朔' : Math.abs(v - 90) < 20 ? '初七 上弦' : Math.abs(v - 180) < 20 ? '十五 望' : Math.abs(v - 270) < 20 ? '廿二 下弦' : '過渡月相'})` },
+        { key: 'earthHour', label: '地球自轉時刻 (海岸站)', min: 0, max: 24, step: 0.1, fmt: v => `${Math.floor(v).toString().padStart(2,'0')}:${Math.round((v%1)*60).toString().padStart(2,'0')}` },
+        { type: 'chips', key: 'showVectors', label: '引潮力向量箭頭', options: [{ label: '顯示向量', val: 1 }, { label: '隱藏向量', val: 0 }] }
+      ],
+      steps: [
+        {
+          title: '步驟 1：引潮力雙隆起成因——向月側與背月側同時漲潮',
+          desc: '向月側海水受月球引力大於地心而隆起；背月側海水受引力小於地心（慣性離心效應）亦向外隆起，使全球海洋形成對稱的雙隆起橢球。',
+          params: { moonSynodic: 0, earthHour: 0, showVectors: 1 },
+          cam: { theta: 0.0, phi: 0.62, radius: 20 },
+          play: false
+        },
+        {
+          title: '步驟 2：朔與望（初一、十五）——日月引潮力疊加形成「大潮」',
+          desc: '當日、地、月排成一直線（朔 0° 或望 180°），太陽引潮力（約月球的 46%）與月球同向相加，滿潮最高、乾潮最低，潮差達到最大（Spring Tide）！',
+          params: { moonSynodic: 180, earthHour: 12, showVectors: 1 },
+          cam: { theta: 0.15, phi: 0.7, radius: 21 },
+          play: true
+        },
+        {
+          title: '步驟 3：上弦與下弦（初七、廿二）——直角抵銷形成「小潮」',
+          desc: '當太陽與月球對地球呈 90° 直角時，太陽引潮力分散並抵銷了部分月球引潮力，使漲退潮幅度縮減至最小，稱為「小潮（Neap Tide）」。',
+          params: { moonSynodic: 90, earthHour: 6, showVectors: 1 },
+          cam: { theta: 0.15, phi: 0.7, radius: 21 },
+          play: false
+        },
+        {
+          title: '步驟 4：地球自轉效應——海岸觀測站每日經歷兩次滿潮與乾潮',
+          desc: '隨著地球每 24 小時自轉一圈，地表綠色海岸站會依序穿過兩側潮汐隆起區與兩側低平區，產生半日潮週期變化。',
+          params: { moonSynodic: 0, earthHour: 6, showVectors: 1 },
+          cam: { theta: 0.4, phi: 0.95, radius: 18 },
+          play: true
+        }
+      ]
+    },
+    {
+      id: 'supermoon',
+      num: '05',
+      short: '橢圓軌道與超級月亮',
+      macroTitle: '太空視角：月球橢圓軌道、近地點/遠地點與地球焦點',
+      groundTitle: '地表視角：超級月亮 vs 最小滿月視直徑同框比對與潮位連動',
+      cam: { theta: 0.1, phi: 0.65, radius: 22 },
+      defaults: { anomalyDeg: 0, eccMode: 1, sunDirDeg: 180 },
+      controls: [
+        { key: 'anomalyDeg', label: '月球軌道位置 (0°近地點)', min: 0, max: 360, step: 1, fmt: v => `${Math.round(v)}° ${v < 18 || v > 342 ? '(近地點 Perigee)' : Math.abs(v - 180) < 18 ? '(遠地點 Apogee)' : ''}` },
+        { type: 'chips', key: 'eccMode', label: '橢圓軌道離心率', options: [{ label: '真實 e=0.055', val: 0 }, { label: '教學誇大 e=0.28', val: 1 }] },
+        { key: 'sunDirDeg', label: '太陽光方向角', min: 0, max: 360, step: 5, fmt: v => `${Math.round(v)}°` }
+      ],
+      steps: [
+        {
+          title: '步驟 1：打破正圓迷思——地球位於橢圓軌道的其中一個焦點',
+          desc: '月球公轉軌道並非正圓，而是離心率 e≈0.055 的橢圓：近地點距離約 35.6 萬公里，遠地點約 40.7 萬公里（切換誇大模式可清楚觀察幾何焦點）。',
+          params: { anomalyDeg: 60, eccMode: 1, sunDirDeg: 180 },
+          cam: { theta: 0.0, phi: 0.52, radius: 23 },
+          play: true
+        },
+        {
+          title: '步驟 2：近地點滿月——「超級月亮（Supermoon）」',
+          desc: '當滿月恰逢通過近地點（0°）時，地表所見月球視直徑達 33.5 角分，比遠地點滿月大了約 14%，視覺面積與亮度提升約 30%！',
+          params: { anomalyDeg: 0, eccMode: 1, sunDirDeg: 180 },
+          cam: { theta: 0.2, phi: 0.85, radius: 20 },
+          play: false
+        },
+        {
+          title: '步驟 3：遠地點滿月——「最小滿月（Micromoon）」',
+          desc: '當月球運行至遠地點（180°，調整陽光使該處為滿月），距離地球超過 40 萬公里，視直徑縮小至 29.4 角分，右側比對視窗可直觀看出差異。',
+          params: { anomalyDeg: 180, eccMode: 1, sunDirDeg: 0 },
+          cam: { theta: -0.2, phi: 0.85, radius: 21 },
+          play: false
+        },
+        {
+          title: '步驟 4：近地大潮連動——引潮力與距離「三次方」成反比',
+          desc: '引潮力 F ∝ 1/r³！近地點比遠地點近約 13%，引潮力卻暴增約 48%，若適逢朔望將引發沿海天文大潮（King Tide）。',
+          params: { anomalyDeg: 0, eccMode: 0, sunDirDeg: 180 },
+          cam: { theta: 0.25, phi: 0.9, radius: 19 },
+          play: false
+        }
+      ]
+    },
+    {
+      id: 'latitude',
+      num: '06',
+      short: '緯度與晝夜/極晝極夜',
+      macroTitle: '太空視角：23.5° 地軸傾斜、晨昏圈與觀測者緯度圈',
+      groundTitle: '地表天球視角：不同緯度日出沒方位角、晝夜長短與永晝永夜',
+      cam: { theta: 0.15, phi: 1.25, radius: 16.5 },
+      defaults: { lat: 23.5, seasonDeg: 90, localHour: 9.5 },
+      controls: [
+        { key: 'lat', label: '觀測者緯度', min: -90, max: 90, step: 0.5, fmt: v => v === 0 ? '0° 赤道' : `${Math.abs(v).toFixed(1)}°${v > 0 ? 'N' : 'S'}` },
+        { key: 'seasonDeg', label: '季節節氣 (太陽黃經)', min: 0, max: 360, step: 1, fmt: v => {
+          const d = normDeg(v);
+          if (Math.abs(d - 0) < 12 || d > 348) return '春分 (赤道直射)';
+          if (Math.abs(d - 90) < 12) return '夏至 (北回歸線直射)';
+          if (Math.abs(d - 180) < 12) return '秋分 (赤道直射)';
+          if (Math.abs(d - 270) < 12) return '冬至 (南回歸線直射)';
+          return `黃經 ${Math.round(d)}°`;
+        }},
+        { type: 'presets', key: 'lat', label: '快速切換經典緯度', options: [
+          { label: '赤道 0°', val: 0 },
+          { label: '台灣 23.5°N', val: 23.5 },
+          { label: '北極圈 66.5°N', val: 66.5 },
+          { label: '北極點 90°N', val: 90 }
+        ]}
+      ],
+      steps: [
+        {
+          title: '步驟 1：台灣嘉義（23.5°N）夏至——東北東日出、正午天頂直射、晝長夜短',
+          desc: '夏至太陽直射北回歸線（23.5°N），台灣日出方位偏北（東北東升、西北西落），白晝長達約 13.5 小時，正午太陽高懸正頭頂（仰角 90°）。',
+          params: { lat: 23.5, seasonDeg: 90, localHour: 12 },
+          cam: { theta: 0.15, phi: 1.22, radius: 16 },
+          play: true
+        },
+        {
+          title: '步驟 2：台灣（23.5°N）冬至——東南東日出、晝短夜長',
+          desc: '冬至太陽直射南回歸線，北半球偏向背光側，日出方位轉為東南東升、西南西落，台灣白晝縮短至約 10.6 小時。',
+          params: { lat: 23.5, seasonDeg: 270, localHour: 14 },
+          cam: { theta: 0.15, phi: 1.22, radius: 16 },
+          play: true
+        },
+        {
+          title: '步驟 3：赤道（0°）——全年正東升正西落，永遠晝夜等長（12h / 12h）',
+          desc: '晨昏圈永遠平分赤道！無論夏至或冬至，赤道地區全年日照皆為 12 小時，沒有極端晝夜長短差異。',
+          params: { lat: 0, seasonDeg: 90, localHour: 8 },
+          cam: { theta: 0.1, phi: 1.35, radius: 16 },
+          play: true
+        },
+        {
+          title: '步驟 4：北極圈（66.5°N）與北極點（90°N）——永晝（午夜太陽）與永夜',
+          desc: '夏至時整個北極圈完全位在晨昏圈向光側，地球自轉一整圈太陽都不會落下地平線，形成 24 小時「永晝」（可切換冬至觀察「永夜」）。',
+          params: { lat: 66.5, seasonDeg: 90, localHour: 0 },
+          cam: { theta: 0.25, phi: 0.92, radius: 16 },
+          play: true
+        }
+      ]
+    },
+    {
+      id: 'insolation',
+      num: '07',
+      short: '正午仰角與受熱影長',
+      macroTitle: '太空視角：平行太陽光束入射角與地球公轉遠近對比',
+      groundTitle: '地表實驗室：垂直竿正午影長與單位面積輻射能量密度網格',
+      cam: { theta: 0.08, phi: 1.32, radius: 16.5 },
+      defaults: { lat: 25.0, decl: 23.44 },
+      controls: [
+        { key: 'decl', label: '太陽直射赤緯 (季節)', min: -23.44, max: 23.44, step: 0.2, fmt: v => {
+          if (v > 22) return `+${v.toFixed(1)}° (夏至 7月遠日點)`;
+          if (v < -22) return `${v.toFixed(1)}° (冬至 1月近日點)`;
+          if (Math.abs(v) < 1.2) return `0.0° (春秋分)`;
+          return `${v >= 0 ? '+' : ''}${v.toFixed(1)}°`;
+        }},
+        { key: 'lat', label: '觀測地緯度', min: -66, max: 66, step: 0.5, fmt: v => `${Math.abs(v).toFixed(1)}°${v >= 0 ? 'N' : 'S'} ${Math.abs(v - 25) < 1 ? '(台北)' : Math.abs(v - 23.5) < 0.6 ? '(嘉義)' : ''}` },
+        { type: 'presets', key: 'decl', label: '節氣快速切換', options: [
+          { label: '夏至 (+23.4°)', val: 23.44 },
+          { label: '春秋分 (0°)', val: 0 },
+          { label: '冬至 (-23.4°)', val: -23.44 }
+        ]}
+      ],
+      steps: [
+        {
+          title: '步驟 1：破除迷思——北半球炎熱的 7 月其實在「遠日點」！',
+          desc: '地球 7 月距離太陽約 1.017 AU（遠日點），1 月反而較近（0.983 AU）。距離僅改變約 3%，證明四季冷熱主因絕非距離遠近，而是「陽光入射角」！',
+          params: { lat: 25.0, decl: 23.44 },
+          cam: { theta: 0.1, phi: 1.3, radius: 16.5 },
+          play: false
+        },
+        {
+          title: '步驟 2：台北（25°N）夏至正午——仰角高達 88.4°，影長極短、能量高度集中',
+          desc: '近乎垂直入射的光束集中照射在極小的地面網格上，單位面積受熱功率高達 99.9%（約 1320 W/m² 未計大氣衰減），立竿幾乎無影。',
+          params: { lat: 25.0, decl: 23.44 },
+          cam: { theta: 0.12, phi: 1.25, radius: 15.5 },
+          play: false
+        },
+        {
+          title: '步驟 3：台北（25°N）冬至正午——仰角降至 41.6°，影長拉長、能量分散',
+          desc: '同樣寬度的一束陽光斜射地面時，受照面積擴大為 1.51 倍，單位面積能量密度驟降至約 66%，竿影向北拉長至竿高的 1.13 倍，因此冬季寒冷。',
+          params: { lat: 25.0, decl: -23.44 },
+          cam: { theta: 0.12, phi: 1.25, radius: 15.5 },
+          play: false
+        },
+        {
+          title: '步驟 4：高緯度（60°N）冬季對比——極低仰角（6.6°）與嚴寒成因',
+          desc: '高緯度冬季正午太陽貼近地平線，光束被拉長攤平近 9 倍面積，單位面積受熱僅剩 11%，直觀解釋高緯度酷寒氣候。',
+          params: { lat: 60.0, decl: -23.44 },
+          cam: { theta: 0.18, phi: 1.12, radius: 15.5 },
+          play: false
+        }
+      ]
+    },
+    {
+      id: 'analemma',
+      num: '08',
+      short: '8字形軌跡與均時差',
+      macroTitle: '太空視角：橢圓公轉變速與地軸傾斜的周年同步快門',
+      groundTitle: '地表視角：全年正午 12:00 太陽「8字形軌跡 (Analemma)」與均時差',
+      cam: { theta: 0.55, phi: 0.85, radius: 23 },
+      defaults: { dayOfYear: 172, tiltOn: 1, eccOn: 1, obsLat: 25 },
+      controls: [
+        { key: 'dayOfYear', label: '一年中的日期', min: 1, max: 365, step: 1, fmt: v => fmtDayOfYear(v) },
+        { type: 'chips', key: 'tiltOn', label: '效應① 地軸傾斜 23.5°', options: [{ label: '開啟傾角', val: 1 }, { label: '關閉 (0°)', val: 0 }] },
+        { type: 'chips', key: 'eccOn', label: '效應② 軌道橢圓離心率', options: [{ label: '開啟橢圓', val: 1 }, { label: '關閉 (正圓)', val: 0 }] }
+      ],
+      steps: [
+        {
+          title: '步驟 1：真實太陽「8字形日行跡（Analemma）」——全年正午 12:00 定點攝影',
+          desc: '若每天手錶標準時間中午 12:00 在同一地點拍下太陽位置，一年 365 天並不會排成直線，而是描繪出一個上小下大的優美「8字形」！',
+          params: { dayOfYear: 305, tiltOn: 1, eccOn: 1, obsLat: 25 },
+          cam: { theta: 0.55, phi: 0.85, radius: 23 },
+          play: true
+        },
+        {
+          title: '步驟 2：拆解實驗 A——只開「地軸傾斜」、關閉橢圓軌道',
+          desc: '將軌道設為完美正圓（關閉離心率），可見地軸傾斜不僅造成太陽南北仰角變化，黃道投影至天球赤道也產生一年兩週期的均時差，形成「上下對稱的 8 字形」。',
+          params: { dayOfYear: 120, tiltOn: 1, eccOn: 0, obsLat: 25 },
+          cam: { theta: 0.55, phi: 0.85, radius: 23 },
+          play: true
+        },
+        {
+          title: '步驟 3：拆解實驗 B——只開「橢圓軌道」、關閉地軸傾斜',
+          desc: '關閉地軸傾角後南北仰角不再變化，但因克卜勒第二定律（近日點公轉快、遠日點慢），正午太陽會沿東西向來回擺動成一條水平線段。',
+          params: { dayOfYear: 45, tiltOn: 0, eccOn: 1, obsLat: 25 },
+          cam: { theta: 0.3, phi: 0.65, radius: 23 },
+          play: true
+        },
+        {
+          title: '步驟 4：雙效應疊加與均時差極值（11月初快 16 分、2月中慢 14 分）',
+          desc: '同時開啟兩項真實物理效應，1 月近日點公轉加速使上半環縮小、下半環擴大，造就真實世界不對稱的 8 字形軌跡與均時差曲線！',
+          params: { dayOfYear: 307, tiltOn: 1, eccOn: 1, obsLat: 25 },
+          cam: { theta: 0.55, phi: 0.85, radius: 23 },
+          play: false
+        }
+      ]
+    },
+    {
+      id: 'sidereal',
+      num: '09',
+      short: '恆星日與太陽日',
+      macroTitle: '太空俯視視角：自轉 360°（恆星日）與公轉約 1° 帶來的 4 分鐘差距',
+      groundTitle: '子午線中天視角：遠方恆星 vs 太陽通過正南上中天的時間差',
+      cam: { theta: 0.0, phi: 0.35, radius: 22 },
+      defaults: { rotHours: 0, exagOrbit: 1 },
+      controls: [
+        { key: 'rotHours', label: '經過太陽時 (0h ~ 24h00m)', min: 0, max: 24, step: 0.01, fmt: v => fmtSiderealClock(v) },
+        { type: 'chips', key: 'exagOrbit', label: '單日公轉角度幾何顯示', options: [{ label: '教學放大 (15°/日)', val: 1 }, { label: '真實比例 (0.99°/日)', val: 0 }] },
+        { type: 'presets', key: 'rotHours', label: '關鍵中天時刻定位', options: [
+          { label: '起點 00:00 (同時中天)', val: 0 },
+          { label: '恆星日 23h56m04s (自轉360°)', val: 23.9344 },
+          { label: '太陽日 24h00m00s (太陽中天)', val: 24.0 }
+        ]}
+      ],
+      steps: [
+        {
+          title: '步驟 1：起點對齊（00h 00m）——太陽與遠方恆星同時位於觀測者正上中天',
+          desc: '第 1 天正午，地表綠色觀測者的子午線箭頭同時對準「太陽（金）」與無限遠處的「參考恆星（青色平行光）」。',
+          params: { rotHours: 0, exagOrbit: 1 },
+          cam: { theta: 0.0, phi: 0.32, radius: 22 },
+          play: false
+        },
+        {
+          title: '步驟 2：地球自轉整整 360.0°——達成「恆星日（23 小時 56 分 04 秒）」',
+          desc: '遠方恆星距離無限遠，視線保持平行。當地球在太空中真正自轉滿一圈（360°）時，遠方恆星已再次抵達正上中天！但請看太陽在哪裡？',
+          params: { rotHours: 23.9344, exagOrbit: 1 },
+          cam: { theta: 0.12, phi: 0.32, radius: 19 },
+          play: false
+        },
+        {
+          title: '步驟 3：為什麼太陽還沒到正午？因為地球同時向前公轉了約 0.986°（≈1°）',
+          desc: '地球自轉的同時也在繞日公轉（360° ÷ 365.25天 ≈ 0.986°/天）。因此自轉 360° 時，太陽在天空中還差約 1° 才到達子午線。',
+          params: { rotHours: 23.9344, exagOrbit: 1 },
+          cam: { theta: 0.12, phi: 0.32, radius: 16 },
+          play: false
+        },
+        {
+          title: '步驟 4：多自轉約 4 分鐘（補齊 0.986°）——完成 24 小時「太陽日」！',
+          desc: '地球必須再多轉約 0.986°（耗時 3 分 56 秒 ≈ 4 分鐘，總自轉 360.986°），子午線才會重新對準太陽。這就是恆星每天提早 4 分鐘升起的原因！',
+          params: { rotHours: 24.0, exagOrbit: 1 },
+          cam: { theta: 0.12, phi: 0.32, radius: 16 },
+          play: false
+        }
+      ]
+    },
+    {
+      id: 'retrograde',
+      num: '10',
+      short: '內行星逆行與盈虧',
+      macroTitle: '太空視角：日心軌道、地球-金星視線投影與背景恆星天球幕',
+      groundTitle: '地表與望遠鏡視角：背景恆星順行/留/逆行軌跡與金星盈虧相位',
+      cam: { theta: 0.0, phi: 0.68, radius: 26 },
+      defaults: { synodicProg: 0.5, planetMode: 0 },
+      controls: [
+        { key: 'synodicProg', label: '會合週期時間進度', min: 0, max: 1, step: 0.002, fmt: v => `${Math.round(v * 100)}% ${Math.abs(v - 0.5) < 0.06 ? '(逆行期!)' : '(順行期)'}` },
+        { type: 'chips', key: 'planetMode', label: '觀測目標行星', options: [{ label: '內行星：金星(含盈虧)', val: 0 }, { label: '外行星對比：火星逆行', val: 1 }] },
+        { type: 'presets', key: 'synodicProg', label: '金星關鍵相位時刻', options: [
+          { label: '上合附近 (小滿月順行)', val: 0.06 },
+          { label: '東大距 (弦月狀)', val: 0.37 },
+          { label: '下合逆行 (巨大眉月!)', val: 0.50 },
+          { label: '西大距 (殘月狀)', val: 0.63 }
+        ]}
+      ],
+      steps: [
+        {
+          title: '步驟 1：上合附近——金星位於太陽遠側，呈「小而圓的滿月狀」且順行',
+          desc: '當金星在太陽另一側（距離地球最遠約 1.72 AU），向陽面朝向地球，望遠鏡中呈現視直徑極小的圓盤狀，在背景恆星間穩定由西向東「順行」。',
+          params: { synodicProg: 0.08, planetMode: 0 },
+          cam: { theta: 0.0, phi: 0.72, radius: 26 },
+          play: true
+        },
+        {
+          title: '步驟 2：東大距至接近地球——金星呈「半圓弦月狀」且視直徑明顯變大',
+          desc: '金星公轉角速度比地球快，逐漸追近地球，望遠鏡中相位由凸月變為弦月，且因距離拉近，視直徑放大超過 2.5 倍。',
+          params: { synodicProg: 0.38, planetMode: 0 },
+          cam: { theta: 0.1, phi: 0.75, radius: 24 },
+          play: false
+        },
+        {
+          title: '步驟 3：內合超車時刻——「留 → 逆行 → 留」與巨大纖細眉月！',
+          desc: '金星從日地之間內圈超車地球（下合附近，距離僅 0.28 AU）！視線向後擺動使金星在恆星背景短暫停滯（留）後向西倒退（紅色逆行段），同時呈現大上 6 倍的眉月狀！',
+          params: { synodicProg: 0.50, planetMode: 0 },
+          cam: { theta: 0.12, phi: 0.65, radius: 23 },
+          play: true
+        },
+        {
+          title: '步驟 4：歷史鐵證——為何伽利略觀測金星盈虧徹底推翻了托勒密地心說？',
+          desc: '托勒密本輪地心說中金星永遠夾在地球與太陽之間，絕不可能出現「小滿月/凸月」相位；哥白尼日心說完美解釋了全部盈虧、視直徑 6 倍變化與逆行幾何！',
+          params: { synodicProg: 0.58, planetMode: 0 },
+          cam: { theta: 0.0, phi: 0.62, radius: 26 },
+          play: true
+        }
+      ]
+    }
+  ];
+
+  function fmtDayOfYear(day) {
+    const months = [31,28,31,30,31,30,31,31,30,31,30,31];
+    let d = Math.round(clamp(day, 1, 365));
+    let m = 0;
+    while (m < 11 && d > months[m]) { d -= months[m]; m++; }
+    return `${m + 1}月${d}日 (第${Math.round(day)}天)`;
+  }
+
+  function fmtSiderealClock(h) {
+    const totalSec = Math.round(h * 3600);
+    const hh = Math.floor(totalSec / 3600);
+    const mm = Math.floor((totalSec % 3600) / 60);
+    const ss = totalSec % 60;
+    return `${String(hh).padStart(2,'0')}h ${String(mm).padStart(2,'0')}m ${String(ss).padStart(2,'0')}s`;
+  }
+
+  /* =========================================================
+   * 3. 全域應用程式狀態與平滑補間系統
+   * ========================================================= */
+  const state = {
+    tabIdx: 0,
+    stepIdx: 0,
+    playing: true,
+    showLabels: true,
+    viewMode: 'dual', // 'dual' | 'macro' | 'ground'
+    macroPanMode: false,
+    params: MODULES.map(m => ({ ...m.defaults })),
+    tween: null // { startParams, targetParams, startCam, targetCam, t, dur }
+  };
+
+  /* =========================================================
+   * 4. 程序化高質感星球材質產生器 (零外部圖片依賴)
+   * ========================================================= */
+  function createEarthTexture() {
+    const c = document.createElement('canvas');
+    c.width = 512; c.height = 256;
+    const ctx = c.getContext('2d');
+    // 海洋底色
+    const grad = ctx.createLinearGradient(0, 0, 0, 256);
+    grad.addColorStop(0, '#0F3A5D');
+    grad.addColorStop(0.5, '#094E82');
+    grad.addColorStop(1, '#0F3A5D');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 512, 256);
+
+    // 簡化大陸輪廓色塊 (有助觀察自轉與全食帶位置)
+    ctx.fillStyle = '#15803D';
+    const blobs = [
+      // 歐亞非
+      [270, 58, 95, 42], [355, 72, 65, 45], [272, 118, 48, 58],
+      // 台灣與東亞島弧亮點
+      [392, 92, 6, 10], [405, 76, 10, 14],
+      // 澳洲
+      [398, 168, 38, 26],
+      // 北美與南美
+      [105, 65, 65, 42], [148, 145, 36, 58]
+    ];
+    blobs.forEach(([x, y, rx, ry]) => {
+      ctx.beginPath();
+      ctx.ellipse(x, y, rx, ry, 0.2, 0, TAU);
+      ctx.fill();
+    });
+    // 台灣高亮綠點
+    ctx.fillStyle = '#34D399';
+    ctx.beginPath();
+    ctx.ellipse(428, 95, 4, 7, 0.2, 0, TAU);
+    ctx.fill();
+
+    // 南北極冰冠
+    ctx.fillStyle = 'rgba(241, 245, 249, 0.85)';
+    ctx.fillRect(0, 0, 512, 14);
+    ctx.fillRect(0, 242, 512, 14);
+
+    // 經緯度輔助淡格線 + 赤道/回歸線
+    ctx.strokeStyle = 'rgba(186, 230, 253, 0.18)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < 512; x += 512 / 12) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 256); ctx.stroke();
+    }
+    for (let y = 32; y < 256; y += 32) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(512, y); ctx.stroke();
+    }
+    // 赤道線
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.55)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(0, 128); ctx.lineTo(512, 128); ctx.stroke();
+
+    const tex = new THREE.CanvasTexture(c);
+    tex.needsUpdate = true;
+    return tex;
+  }
+
+  function createMoonTexture() {
+    const c = document.createElement('canvas');
+    c.width = 256; c.height = 128;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#CBD5E1';
+    ctx.fillRect(0, 0, 256, 128);
+    // 月海暗斑
+    const maria = [[70,52,24],[98,46,18],[125,64,22],[165,55,16],[60,78,15],[195,72,19]];
+    ctx.fillStyle = '#94A3B8';
+    maria.forEach(([x,y,r]) => {
+      ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+    });
+    // 隕石坑
+    for (let i = 0; i < 45; i++) {
+      const x = (i * 53) % 256;
+      const y = 12 + ((i * 37) % 104);
+      const r = 2 + (i % 5);
+      ctx.fillStyle = i % 2 ? '#E2E8F0' : '#64748B';
+      ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+    }
+    return new THREE.CanvasTexture(c);
+  }
+
+  function createGlowTexture(innerCol, outerCol) {
+    const c = document.createElement('canvas');
+    c.width = 128; c.height = 128;
+    const ctx = c.getContext('2d');
+    const g = ctx.createRadialGradient(64, 64, 4, 64, 64, 62);
+    g.addColorStop(0, innerCol);
+    g.addColorStop(0.35, outerCol);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 128, 128);
+    return new THREE.CanvasTexture(c);
+  }
+
+  /* =========================================================
+   * 5. Three.js 太空視角引擎 + 觸控友善 Zoom/Pan/Orbit 控制器
+   * ========================================================= */
+  const macroCanvas = document.getElementById('macro-canvas');
+  const macroPane = document.getElementById('macro-pane');
+  const macroLabelLayer = document.getElementById('macro-labels');
+
+  const renderer = new THREE.WebGLRenderer({ canvas: macroCanvas, antialias: true, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 500);
+
+  const sharedTextures = {
+    earth: createEarthTexture(),
+    moon: createMoonTexture(),
+    sunGlow: createGlowTexture('rgba(255,251,210,1)', 'rgba(251,191,36,0.38)'),
+    blueAtm: createGlowTexture('rgba(56,189,248,0.65)', 'rgba(14,165,233,0.12)')
+  };
+
+  // 背景星空粒子
+  (function addStarfield() {
+    const geo = new THREE.BufferGeometry();
+    const count = 900;
+    const pos = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      const r = 130 + Math.random() * 90;
+      const u = Math.random() * 2 - 1;
+      const a = Math.random() * TAU;
+      const s = Math.sqrt(1 - u * u);
+      pos[i * 3] = r * s * Math.cos(a);
+      pos[i * 3 + 1] = r * u;
+      pos[i * 3 + 2] = r * s * Math.sin(a);
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const mat = new THREE.PointsMaterial({ color: 0xCBD5E1, size: 0.55, transparent: true, opacity: 0.65 });
+    scene.add(new THREE.Points(geo, mat));
+  })();
+
+  // 相機軌道與平移 Rig
+  const camRig = {
+    theta: 0.5,
+    phi: 1.0,
+    radius: 22,
+    target: new THREE.Vector3(0, 0, 0),
+    updateCamera() {
+      this.phi = clamp(this.phi, 0.12, Math.PI - 0.12);
+      this.radius = clamp(this.radius, 5.5, 68);
+      const sinP = Math.sin(this.phi);
+      camera.position.set(
+        this.target.x + this.radius * sinP * Math.sin(this.theta),
+        this.target.y + this.radius * Math.cos(this.phi),
+        this.target.z + this.radius * sinP * Math.cos(this.theta)
+      );
+      camera.lookAt(this.target);
+    },
+    panByScreenDelta(dx, dy) {
+      const scale = this.radius * 0.0017;
+      const forward = new THREE.Vector3().subVectors(this.target, camera.position).normalize();
+      const right = new THREE.Vector3().crossVectors(forward, camera.up).normalize();
+      const up = new THREE.Vector3().crossVectors(right, forward).normalize();
+      this.target.addScaledVector(right, -dx * scale);
+      this.target.addScaledVector(up, dy * scale);
+    },
+    reset(spec) {
+      this.theta = spec.theta;
+      this.phi = spec.phi;
+      this.radius = spec.radius;
+      this.target.set(0, 0, 0);
+    }
+  };
+
+  // 滑鼠與多點觸控手勢綁定 (Macro 3D)
+  (function bindMacroInput() {
+    let dragging = false;
+    let isPanDrag = false;
+    let lastX = 0, lastY = 0;
+    let pinchDist = 0;
+    let pinchMidX = 0, pinchMidY = 0;
+
+    macroCanvas.addEventListener('contextmenu', e => e.preventDefault());
+    macroCanvas.addEventListener('mousedown', e => {
+      dragging = true;
+      isPanDrag = state.macroPanMode || e.button === 2 || e.button === 1 || e.shiftKey;
+      lastX = e.clientX; lastY = e.clientY;
+    });
+    window.addEventListener('mousemove', e => {
+      if (!dragging) return;
+      const dx = e.clientX - lastX;
+      const dy = e.clientY - lastY;
+      lastX = e.clientX; lastY = e.clientY;
+      state.tween = null;
+      if (isPanDrag) {
+        camRig.panByScreenDelta(dx, dy);
+      } else {
+        camRig.theta -= dx * 0.0065;
+        camRig.phi -= dy * 0.0065;
+      }
+    });
+    window.addEventListener('mouseup', () => { dragging = false; });
+
+    macroCanvas.addEventListener('wheel', e => {
+      e.preventDefault();
+      state.tween = null;
+      camRig.radius *= (1 + clamp(e.deltaY, -120, 120) * 0.0012);
+    }, { passive: false });
+
+    macroCanvas.addEventListener('touchstart', e => {
+      state.tween = null;
+      if (e.touches.length === 1) {
+        lastX = e.touches[0].clientX;
+        lastY = e.touches[0].clientY;
+      } else if (e.touches.length >= 2) {
+        const dx = e.touches[1].clientX - e.touches[0].clientX;
+        const dy = e.touches[1].clientY - e.touches[0].clientY;
+        pinchDist = Math.hypot(dx, dy);
+        pinchMidX = (e.touches[0].clientX + e.touches[1].clientX) * 0.5;
+        pinchMidY = (e.touches[0].clientY + e.touches[1].clientY) * 0.5;
+      }
+    }, { passive: false });
+
+    macroCanvas.addEventListener('touchmove', e => {
+      e.preventDefault();
+      if (e.touches.length === 1) {
+        const dx = e.touches[0].clientX - lastX;
+        const dy = e.touches[0].clientY - lastY;
+        lastX = e.touches[0].clientX;
+        lastY = e.touches[0].clientY;
+        if (state.macroPanMode) {
+          camRig.panByScreenDelta(dx, dy);
+        } else {
+          camRig.theta -= dx * 0.007;
+          camRig.phi -= dy * 0.007;
+        }
+      } else if (e.touches.length >= 2) {
+        const dx = e.touches[1].clientX - e.touches[0].clientX;
+        const dy = e.touches[1].clientY - e.touches[0].clientY;
+        const dist = Math.hypot(dx, dy);
+        const midX = (e.touches[0].clientX + e.touches[1].clientX) * 0.5;
+        const midY = (e.touches[0].clientY + e.touches[1].clientY) * 0.5;
+        if (pinchDist > 8) {
+          camRig.radius *= (pinchDist / dist);
+        }
+        camRig.panByScreenDelta(midX - pinchMidX, midY - pinchMidY);
+        pinchDist = dist;
+        pinchMidX = midX;
+        pinchMidY = midY;
+      }
+    }, { passive: false });
+  })();
+
+  /* =========================================================
+   * 6. 3D 浮動標籤投影系統 (支援一鍵顯示/隱藏)
+   * ========================================================= */
+  const activeLabels3D = [];
+  function clearLabels3D() {
+    activeLabels3D.length = 0;
+    macroLabelLayer.innerHTML = '';
+  }
+
+  function addLabel3D(text, colorHexStr, offsetY = 0) {
+    const el = document.createElement('div');
+    el.className = 'label-3d';
+    el.textContent = text;
+    el.style.borderColor = colorHexStr || 'rgba(255,255,255,0.28)';
+    el.style.color = colorHexStr || '#F8FAFC';
+    macroLabelLayer.appendChild(el);
+    const item = { el, worldPos: new THREE.Vector3(), offsetY, visible: true };
+    activeLabels3D.push(item);
+    return item;
+  }
+
+  const _projVec = new THREE.Vector3();
+  function syncLabels3D() {
+    if (!state.showLabels || state.viewMode === 'ground') {
+      macroLabelLayer.style.display = 'none';
+      return;
+    }
+    macroLabelLayer.style.display = 'block';
+    const w = macroCanvas.clientWidth;
+    const h = macroCanvas.clientHeight;
+    for (const lb of activeLabels3D) {
+      if (!lb.visible) { lb.el.style.display = 'none'; continue; }
+      _projVec.copy(lb.worldPos);
+      _projVec.y += lb.offsetY;
+      _projVec.project(camera);
+      if (_projVec.z > 1 || _projVec.z < -1) {
+        lb.el.style.display = 'none';
+        continue;
+      }
+      const x = (_projVec.x * 0.5 + 0.5) * w;
+      const y = (-_projVec.y * 0.5 + 0.5) * h;
+      lb.el.style.display = 'block';
+      lb.el.style.left = `${x}px`;
+      lb.el.style.top = `${y}px`;
+    }
+  }
+
+  /* =========================================================
+   * 7. 3D 幾何輔助建構函式
+   * ========================================================= */
+  function makeOrbitRing(rx, rz, colorHex, dashed = false, segments = 128) {
+    const pts = [];
+    for (let i = 0; i <= segments; i++) {
+      const a = (i / segments) * TAU;
+      pts.push(new THREE.Vector3(Math.cos(a) * rx, 0, Math.sin(a) * rz));
+    }
+    const geo = new THREE.BufferGeometry().setFromPoints(pts);
+    if (dashed) {
+      const mat = new THREE.LineDashedMaterial({ color: colorHex, dashSize: 0.4, gapSize: 0.25, transparent: true, opacity: 0.8 });
+      const line = new THREE.Line(geo, mat);
+      line.computeLineDistances();
+      return line;
+    }
+    return new THREE.Line(geo, new THREE.LineBasicMaterial({ color: colorHex, transparent: true, opacity: 0.85 }));
+  }
+
+  function makeSunMesh(radius = 1.6) {
+    const g = new THREE.Group();
+    const core = new THREE.Mesh(
+      new THREE.SphereGeometry(radius, 32, 24),
+      new THREE.MeshBasicMaterial({ color: PALETTE.sunHex })
+    );
+    const sprite = new THREE.Sprite(
+      new THREE.SpriteMaterial({ map: sharedTextures.sunGlow, color: 0xffffff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })
+    );
+    sprite.scale.set(radius * 4.6, radius * 4.6, 1);
+    g.add(core, sprite);
+    return g;
+  }
+
+  function makeEarthMesh(radius = 1.35) {
+    return new THREE.Mesh(
+      new THREE.SphereGeometry(radius, 40, 28),
+      new THREE.MeshStandardMaterial({ map: sharedTextures.earth, roughness: 0.72, metalness: 0.05 })
+    );
+  }
+
+  function makeMoonMesh(radius = 0.42) {
+    return new THREE.Mesh(
+      new THREE.SphereGeometry(radius, 28, 20),
+      new THREE.MeshStandardMaterial({ map: sharedTextures.moon, roughness: 0.9, metalness: 0.0 })
+    );
+  }
+
+  /* =========================================================
+   * 8. 各分頁專屬 Three.js 3D 場景建構與更新器
+   * ========================================================= */
+  const moduleRoot = new THREE.Group();
+  scene.add(moduleRoot);
+  let activeMacroUpdater = null;
+
+  function disposeGroup(grp) {
+    while (grp.children.length > 0) {
+      const ch = grp.children[0];
+      grp.remove(ch);
+      if (ch.children && ch.children.length) disposeGroup(ch);
+      if (ch.geometry) ch.geometry.dispose();
+      if (ch.material) {
+        if (Array.isArray(ch.material)) ch.material.forEach(m => m.dispose());
+        else ch.material.dispose();
+      }
+    }
+  }
+
+  function buildMacroScene(tabIdx) {
+    disposeGroup(moduleRoot);
+    clearLabels3D();
+    const ambient = new THREE.AmbientLight(0xffffff, 0.22);
+    moduleRoot.add(ambient);
+
+    switch (tabIdx) {
+      /* ---------------- 01 黃白交角與交點 ---------------- */
+      case 0: {
+        const sunLight = new THREE.PointLight(0xffffff, 1.8, 100);
+        moduleRoot.add(sunLight);
+        const sun = makeSunMesh(1.55);
+        moduleRoot.add(sun);
+
+        // 黃道面圓盤與軌道環
+        const eclipticDisc = new THREE.Mesh(
+          new THREE.CircleGeometry(8.5, 72),
+          new THREE.MeshBasicMaterial({ color: PALETTE.sunHex, transparent: true, opacity: 0.08, side: THREE.DoubleSide, depthWrite: false })
+        );
+        eclipticDisc.rotation.x = -Math.PI / 2;
+        const eclipticRing = makeOrbitRing(8.5, 8.5, PALETTE.sunHex);
+        moduleRoot.add(eclipticDisc, eclipticRing);
+
+        // 食季扇形提示區 (X軸兩端 ±17°)
+        const seasonMat = new THREE.MeshBasicMaterial({ color: PALETTE.nodeHex, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false });
+        const s1 = new THREE.Mesh(new THREE.RingGeometry(2.2, 8.9, 24, 1, -0.3, 0.6), seasonMat);
+        const s2 = new THREE.Mesh(new THREE.RingGeometry(2.2, 8.9, 24, 1, Math.PI - 0.3, 0.6), seasonMat);
+        s1.rotation.x = -Math.PI / 2;
+        s2.rotation.x = -Math.PI / 2;
+        moduleRoot.add(s1, s2);
+
+        // 地月系統樞紐
+        const earthSystem = new THREE.Group();
+        moduleRoot.add(earthSystem);
+
+        const earth = makeEarthMesh(0.95);
+        earthSystem.add(earth);
+
+        // 地球背日陰影錐
+        const earthShadow = new THREE.Mesh(
+          new THREE.ConeGeometry(0.92, 5.2, 24, 1, true),
+          new THREE.MeshBasicMaterial({ color: 0x050814, transparent: true, opacity: 0.58, side: THREE.DoubleSide, depthWrite: false })
+        );
+        earthSystem.add(earthShadow);
+
+        // 白道面群組 (固定空間指向，交點線沿 X 軸)
+        const lunarPlaneGrp = new THREE.Group();
+        earthSystem.add(lunarPlaneGrp);
+
+        const lunarDisc = new THREE.Mesh(
+          new THREE.CircleGeometry(3.2, 48),
+          new THREE.MeshBasicMaterial({ color: PALETTE.lunarOrbHex, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false })
+        );
+        lunarDisc.rotation.x = -Math.PI / 2;
+        const lunarRing = makeOrbitRing(3.2, 3.2, PALETTE.lunarOrbHex);
+        lunarPlaneGrp.add(lunarDisc, lunarRing);
+
+        // 紅色交點線 (Line of Nodes) 與升降交點球
+        const nodeLineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-3.8, 0, 0), new THREE.Vector3(3.8, 0, 0)]);
+        const nodeLine = new THREE.Line(nodeLineGeo, new THREE.LineBasicMaterial({ color: PALETTE.nodeHex }));
+        const nodeSphereGeo = new THREE.SphereGeometry(0.16, 16, 12);
+        const nodeMat = new THREE.MeshBasicMaterial({ color: PALETTE.nodeHex });
+        const ascNode = new THREE.Mesh(nodeSphereGeo, nodeMat);
+        const descNode = new THREE.Mesh(nodeSphereGeo, nodeMat);
+        ascNode.position.set(3.2, 0, 0);
+        descNode.position.set(-3.2, 0, 0);
+        earthSystem.add(nodeLine, ascNode, descNode);
+
+        const moon = makeMoonMesh(0.35);
+        lunarPlaneGrp.add(moon);
+
+        // 月球背日影錐
+        const moonShadow = new THREE.Mesh(
+          new THREE.ConeGeometry(0.34, 3.3, 18, 1, true),
+          new THREE.MeshBasicMaterial({ color: 0x020617, transparent: true, opacity: 0.68, side: THREE.DoubleSide, depthWrite: false })
+        );
+        earthSystem.add(moonShadow);
+
+        const lbSun = addLabel3D('太陽 Sun', PALETTE.sun, 1.9);
+        const lbEcl = addLabel3D('黃道面 (Ecliptic)', PALETTE.sun, 0.3);
+        const lbEarth = addLabel3D('地球', PALETTE.earth, 1.25);
+        const lbLunar = addLabel3D('白道面 (傾角 5°)', PALETTE.lunarOrb, 0.4);
+        const lbNodes = addLabel3D('交點線 (Line of Nodes)', PALETTE.node, 0.45);
+        const lbSeason = addLabel3D('食季區 (Eclipse Season)', PALETTE.node, 0.25);
+
+        activeMacroUpdater = (p, dt) => {
+          if (state.playing && !state.tween) {
+            p.moonPhaseDeg = normDeg(p.moonPhaseDeg + dt * 42);
+            p.earthDeg = normDeg(p.earthDeg + dt * 3.4);
+          }
+          const eRad = p.earthDeg * DEG;
+          const ex = Math.cos(eRad) * 8.5;
+          const ez = Math.sin(eRad) * 8.5;
+          earthSystem.position.set(ex, 0, ez);
+          earth.rotation.y += dt * 0.9;
+
+          const tiltRad = (p.exaggerateTilt ? 15.0 : 5.14) * DEG;
+          lunarPlaneGrp.rotation.set(tiltRad, 0, 0); // 繞 X 軸傾斜 -> 交點線永遠沿 X 軸!
+
+          // 月球世界角度 = 太陽方向(eRad + PI) + 月相角(moonPhaseDeg)
+          // 如此一來 moonPhaseDeg = 0 永遠是朔(新月在日地間)，180 永遠是望(滿月在背日側)!
+          const mWorldLon = eRad + Math.PI + p.moonPhaseDeg * DEG;
+          const mx = Math.cos(mWorldLon) * 3.2;
+          const mz = Math.sin(mWorldLon) * 3.2;
+          moon.position.set(mx, 0, mz);
+
+          // 背日方向向量
+          const awayDir = new THREE.Vector3(ex, 0, ez).normalize();
+          const qCone = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, -1, 0), awayDir);
+          earthShadow.quaternion.copy(qCone);
+          earthShadow.position.copy(awayDir).multiplyScalar(2.6);
+
+          const moonWorld = new THREE.Vector3();
+          moon.getWorldPosition(moonWorld);
+          const moonLocal = moonWorld.clone().sub(earthSystem.position);
+          moonShadow.quaternion.copy(qCone);
+          moonShadow.position.copy(moonLocal).addScaledVector(awayDir, 1.65);
+
+          lbSun.worldPos.set(0, 0, 0);
+          lbEcl.worldPos.set(0, 0, 8.5);
+          lbEarth.worldPos.copy(earthSystem.position);
+          lbLunar.textContent = p.exaggerateTilt ? '白道面 (教學放大15°)' : '白道面 (真實5.1°)';
+          lbLunar.el.textContent = lbLunar.textContent;
+          lbLunar.worldPos.set(ex, Math.sin(tiltRad) * 3.2, ez + 3.0);
+          lbNodes.worldPos.set(ex + 3.4, 0, ez);
+          lbSeason.worldPos.set(6.4, 0, 0.8);
+        };
+        break;
+      }
+
+      /* ---------------- 02 日食本影與半影地表投影 ---------------- */
+      case 1: {
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.6);
+        dirLight.position.set(0, 0, 30);
+        moduleRoot.add(dirLight);
+
+        // 遠處太陽光束方向示意
+        const sunIndicator = makeSunMesh(1.1);
+        sunIndicator.position.set(0, 0, 15.5);
+        moduleRoot.add(sunIndicator);
+
+        const earth = makeEarthMesh(3.2);
+        earth.rotation.y = -2.1; // 面向東亞與太平洋
+        moduleRoot.add(earth);
+
+        const moon = makeMoonMesh(0.82);
+        moduleRoot.add(moon);
+
+        // 本影錐 (Umbra) 與 半影錐 (Penumbra)
+        const umbraMat = new THREE.MeshBasicMaterial({ color: 0x02040A, transparent: true, opacity: 0.78, side: THREE.DoubleSide, depthWrite: false });
+        const penumbraMat = new THREE.MeshBasicMaterial({ color: 0x334155, transparent: true, opacity: 0.26, side: THREE.DoubleSide, depthWrite: false });
+        const umbraCone = new THREE.Mesh(new THREE.ConeGeometry(0.82, 6.2, 32, 1, true), umbraMat);
+        const penumbraCone = new THREE.Mesh(new THREE.CylinderGeometry(0.82, 2.25, 6.2, 32, 1, true), penumbraMat);
+        moduleRoot.add(umbraCone, penumbraCone);
+
+        // 地表本影黑點與半影環
+        const umbraSpot = new THREE.Mesh(
+          new THREE.CircleGeometry(0.22, 24),
+          new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide })
+        );
+        const penumbraSpot = new THREE.Mesh(
+          new THREE.CircleGeometry(1.55, 36),
+          new THREE.MeshBasicMaterial({ color: 0x0F172A, transparent: true, opacity: 0.48, side: THREE.DoubleSide, depthWrite: false })
+        );
+        const antumbraRing = new THREE.Mesh(
+          new THREE.RingGeometry(0.18, 0.28, 24),
+          new THREE.MeshBasicMaterial({ color: PALETTE.sunHex, side: THREE.DoubleSide })
+        );
+        moduleRoot.add(penumbraSpot, umbraSpot, antumbraRing);
+
+        // 地表狹長全食帶軌跡線
+        const trackPts = [];
+        for (let i = 0; i <= 60; i++) trackPts.push(new THREE.Vector3());
+        const trackGeo = new THREE.BufferGeometry().setFromPoints(trackPts);
+        const trackLine = new THREE.Line(trackGeo, new THREE.LineBasicMaterial({ color: PALETTE.nodeHex }));
+        moduleRoot.add(trackLine);
+
+        // 觀測者定位針
+        const obsPin = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 12), new THREE.MeshBasicMaterial({ color: PALETTE.landHex }));
+        moduleRoot.add(obsPin);
+
+        const lbMoon = addLabel3D('月球 Moon', PALETTE.moon, 1.0);
+        const lbUmbra = addLabel3D('本影錐 (Umbra)', PALETTE.node, 0.4);
+        const lbPen = addLabel3D('半影區 (Penumbra)', PALETTE.lunarOrb, 1.5);
+        const lbTrack = addLabel3D('地表狹長全食帶', PALETTE.sun, 0.35);
+        const lbObs = addLabel3D('地表觀測者', PALETTE.land, 0.32);
+
+        function shadowHitEarth(prog) {
+          const x = prog * 2.55;
+          const y = 0.55 + prog * 0.42;
+          const r2 = 3.2 * 3.2 - x * x - y * y;
+          if (r2 <= 0.05) return null;
+          return new THREE.Vector3(x, y, Math.sqrt(r2));
+        }
+
+        // 預先繪製完整全食帶弧線
+        const fullTrack = [];
+        for (let i = 0; i <= 60; i++) {
+          const t = -0.92 + (i / 60) * 1.84;
+          const pt = shadowHitEarth(t);
+          if (pt) fullTrack.push(pt.multiplyScalar(1.012));
+        }
+        trackLine.geometry.setFromPoints(fullTrack);
+
+        activeMacroUpdater = (p, dt) => {
+          if (state.playing && !state.tween) {
+            p.eclipseProg += dt * 0.22;
+            if (p.eclipseProg > 1) p.eclipseProg = -1;
+          }
+          const isAnnular = p.moonDistMode === 1;
+          const moonZ = isAnnular ? 9.9 : 8.5;
+          const mx = p.eclipseProg * 2.55;
+          const my = 0.55 + p.eclipseProg * 0.42;
+          moon.position.set(mx, my, moonZ);
+          earth.rotation.y = -2.1 + p.eclipseProg * 0.25;
+
+          const coneLen = isAnnular ? 5.6 : 6.2;
+          umbraCone.scale.set(1, coneLen / 6.2, 1);
+          umbraCone.rotation.x = -Math.PI / 2;
+          umbraCone.position.set(mx, my, moonZ - coneLen * 0.5);
+
+          const penLen = moonZ - 2.6;
+          penumbraCone.scale.set(1, penLen / 6.2, 1);
+          penumbraCone.rotation.x = Math.PI / 2;
+          penumbraCone.position.set(mx, my, moonZ - penLen * 0.5);
+
+          const hit = shadowHitEarth(p.eclipseProg);
+          if (hit) {
+            const norm = hit.clone().normalize();
+            const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), norm);
+            umbraSpot.visible = !isAnnular;
+            antumbraRing.visible = isAnnular;
+            penumbraSpot.visible = true;
+            umbraSpot.position.copy(hit).multiplyScalar(1.015);
+            umbraSpot.quaternion.copy(q);
+            antumbraRing.position.copy(hit).multiplyScalar(1.016);
+            antumbraRing.quaternion.copy(q);
+            penumbraSpot.position.copy(hit).multiplyScalar(1.008);
+            penumbraSpot.quaternion.copy(q);
+            lbTrack.visible = true;
+            lbTrack.worldPos.copy(hit).multiplyScalar(1.04);
+          } else {
+            umbraSpot.visible = false;
+            antumbraRing.visible = false;
+            penumbraSpot.visible = false;
+            lbTrack.visible = false;
+          }
+
+          // 觀測者位置 (位於 prog=0 附近，可南北偏移)
+          const obsY = 0.55 + (p.obsOffsetKm / 2500) * 1.45;
+          const obsZ = Math.sqrt(Math.max(0.2, 3.2 * 3.2 - obsY * obsY));
+          obsPin.position.set(0, obsY, obsZ * 1.02);
+
+          lbMoon.worldPos.copy(moon.position);
+          lbUmbra.el.textContent = isAnnular ? '本影錐頂點未觸地(偽本影)' : '本影錐 (Umbra 全食錐)';
+          lbUmbra.worldPos.set(mx, my, moonZ - 3.1);
+          lbPen.worldPos.set(mx + 1.3, my + 0.8, moonZ - 3.6);
+          lbObs.worldPos.copy(obsPin.position);
+        };
+        break;
+      }
+
+      /* ---------------- 03 地球大氣散射與月食紅月亮 ---------------- */
+      case 2: {
+        const sunLight = new THREE.DirectionalLight(0xffffff, 1.5);
+        sunLight.position.set(-20, 0, 0);
+        moduleRoot.add(sunLight);
+
+        const sun = makeSunMesh(1.5);
+        sun.position.set(-12.5, 0, 0);
+        moduleRoot.add(sun);
+
+        const earth = makeEarthMesh(2.0);
+        earth.position.set(-2.5, 0, 0);
+        moduleRoot.add(earth);
+
+        // 地球藍色瑞利散射大氣光暈環
+        const atmSprite = new THREE.Sprite(
+          new THREE.SpriteMaterial({ map: sharedTextures.blueAtm, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })
+        );
+        atmSprite.scale.set(5.4, 5.4, 1);
+        atmSprite.position.copy(earth.position);
+        moduleRoot.add(atmSprite);
+
+        // 地球暗本影錐 + 大氣折射紅光錐
+        const redConeMat = new THREE.MeshBasicMaterial({ color: 0xDC2626, transparent: true, opacity: 0.28, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false });
+        const redCone = new THREE.Mesh(new THREE.ConeGeometry(2.02, 13.5, 36, 1, true), redConeMat);
+        redCone.rotation.z = Math.PI / 2;
+        redCone.position.set(4.25, 0, 0);
+        moduleRoot.add(redCone);
+
+        // 太陽光線段 -> 大氣邊緣 -> 藍光向外散射 + 紅光向內折射
+        const rayGroup = new THREE.Group();
+        [-1, 1].forEach(sign => {
+          const yEdge = sign * 2.02;
+          // 入射白光
+          const wGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-11.2, yEdge, 0), new THREE.Vector3(-2.5, yEdge, 0)]);
+          rayGroup.add(new THREE.Line(wGeo, new THREE.LineBasicMaterial({ color: 0xFEF08A })));
+          // 散射藍光短線
+          for (let k = 0; k < 3; k++) {
+            const ang = sign * (0.45 + k * 0.38);
+            const bGeo = new THREE.BufferGeometry().setFromPoints([
+              new THREE.Vector3(-2.5, yEdge, 0),
+              new THREE.Vector3(-2.5 + Math.cos(ang) * 2.3, yEdge + Math.sin(ang) * 2.3, (k - 1) * 0.7)
+            ]);
+            rayGroup.add(new THREE.Line(bGeo, new THREE.LineBasicMaterial({ color: 0x38BDF8 })));
+          }
+          // 折射紅光匯聚至月球軌道
+          const rGeo = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(-2.5, yEdge, 0),
+            new THREE.Vector3(7.5, -sign * 0.35, 0)
+          ]);
+          rayGroup.add(new THREE.Line(rGeo, new THREE.LineBasicMaterial({ color: 0xF43F5E })));
+        });
+        moduleRoot.add(rayGroup);
+
+        const moonMat = new THREE.MeshBasicMaterial({ map: sharedTextures.moon, color: 0xffffff });
+        const moon = new THREE.Mesh(new THREE.SphereGeometry(0.68, 28, 20), moonMat);
+        moduleRoot.add(moon);
+
+        const lbSun = addLabel3D('太陽白光入射', PALETTE.sun, 1.8);
+        const lbBlue = addLabel3D('短波藍光：瑞利散射濾除', PALETTE.earth, 0.5);
+        const lbRed = addLabel3D('長波紅光：大氣折射入本影', PALETTE.node, 0.35);
+        const lbMoon = addLabel3D('月全食「紅月亮」', PALETTE.node, 0.95);
+
+        activeMacroUpdater = (p, dt) => {
+          if (state.playing && !state.tween) {
+            p.lunarProg += dt * 0.16;
+            if (p.lunarProg > 1) p.lunarProg = -1;
+          }
+          earth.rotation.y += dt * 0.4;
+          const mz = p.lunarProg * 3.8;
+          moon.position.set(6.2, 0.15 * p.lunarProg, mz);
+
+          // 根據與本影中心距離 + 大氣塵埃濃度計算月面血紅色澤
+          const distFromAxis = Math.hypot(moon.position.y, moon.position.z);
+          const inUmbra = clamp(1 - (distFromAxis - 0.85) / 1.1, 0, 1);
+          const dustFactor = 1 - p.dustLevel * 0.68;
+          const r = lerp(0.95, 0.88 * dustFactor, inUmbra);
+          const g = lerp(0.95, 0.22 * dustFactor, inUmbra);
+          const b = lerp(0.95, 0.12 * dustFactor, inUmbra);
+          moonMat.color.setRGB(r, g, b);
+          redConeMat.opacity = 0.14 + 0.22 * dustFactor;
+
+          lbSun.worldPos.copy(sun.position);
+          lbBlue.worldPos.set(-1.6, 3.1, 0);
+          lbRed.worldPos.set(2.5, 1.15, 0);
+          lbMoon.el.textContent = inUmbra > 0.65 ? '月全食「紅月亮 (Blood Moon)」' : '月球穿過地影';
+          lbMoon.worldPos.copy(moon.position);
+        };
+        break;
+      }
+
+      /* ---------------- 04 日地月引力與潮汐現象 ---------------- */
+      case 3: {
+        const sunLight = new THREE.DirectionalLight(0xffffff, 1.5);
+        sunLight.position.set(20, 2, 0);
+        moduleRoot.add(sunLight);
+
+        // 右側太陽方向指示
+        const sun = makeSunMesh(1.35);
+        sun.position.set(12.2, 0, 0);
+        moduleRoot.add(sun);
+
+        const earth = makeEarthMesh(1.85);
+        moduleRoot.add(earth);
+
+        // 海岸觀測站標記點 (隨地球自轉)
+        const stationPin = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 12), new THREE.MeshBasicMaterial({ color: PALETTE.landHex }));
+        moduleRoot.add(stationPin);
+
+        // 可即時四極變形的 3D 海洋潮汐橢球殼
+        const waterGeo = new THREE.SphereGeometry(2.05, 48, 32);
+        const basePos = Float32Array.from(waterGeo.attributes.position.array);
+        const waterMat = new THREE.MeshPhongMaterial({
+          color: PALETTE.tideHex,
+          emissive: 0x083344,
+          transparent: true,
+          opacity: 0.46,
+          shininess: 90
+        });
+        const waterShell = new THREE.Mesh(waterGeo, waterMat);
+        moduleRoot.add(waterShell);
+
+        const moonRing = makeOrbitRing(7.2, 7.2, PALETTE.lunarOrbHex, true);
+        moduleRoot.add(moonRing);
+        const moon = makeMoonMesh(0.6);
+        moduleRoot.add(moon);
+
+        // 赤道周圍 12 支引潮力差動向量箭頭
+        const arrows = [];
+        for (let i = 0; i < 12; i++) {
+          const arr = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(), 1, PALETTE.lunarOrbHex, 0.28, 0.18);
+          moduleRoot.add(arr);
+          arrows.push(arr);
+        }
+
+        const lbSun = addLabel3D('太陽引力方向', PALETTE.sun, 1.6);
+        const lbMoon = addLabel3D('月球 (主導引潮力)', PALETTE.lunarOrb, 0.85);
+        const lbTide = addLabel3D('大潮雙隆起', PALETTE.tide, 2.55);
+        const lbStation = addLabel3D('海岸潮位觀測站', PALETTE.land, 0.35);
+
+        activeMacroUpdater = (p, dt) => {
+          if (state.playing && !state.tween) {
+            p.earthHour = (p.earthHour + dt * 2.6) % 24;
+            p.moonSynodic = normDeg(p.moonSynodic + dt * 3.2);
+          }
+          // 太陽固定在 +X 方向 (角=0)，月球角度 = moonSynodic (0°朔在+X，180°望在-X)
+          const mRad = p.moonSynodic * DEG;
+          const mDir = new THREE.Vector3(Math.cos(mRad), 0, Math.sin(mRad));
+          const sDir = new THREE.Vector3(1, 0, 0);
+          moon.position.copy(mDir).multiplyScalar(7.2);
+
+          // 地球自轉與觀測站位置
+          const rotRad = (p.earthHour / 24) * TAU;
+          earth.rotation.y = rotRad;
+          stationPin.position.set(Math.cos(rotRad) * 1.92, 0.15, -Math.sin(rotRad) * 1.92);
+
+          // 即時變形 3D 海水殼 (勒壤得多項式 P2(cosψ) = 0.5*(3cos²ψ - 1))
+          const posAttr = waterGeo.attributes.position;
+          const v = new THREE.Vector3();
+          for (let i = 0; i < posAttr.count; i++) {
+            v.set(basePos[i * 3], basePos[i * 3 + 1], basePos[i * 3 + 2]);
+            const n = v.clone().normalize();
+            const cosM = n.dot(mDir);
+            const cosS = n.dot(sDir);
+            const tideM = 0.5 * (3 * cosM * cosM - 1) * 0.52;
+            const tideS = 0.5 * (3 * cosS * cosS - 1) * 0.24; // 太陽引潮力約月球 46%
+            const rScale = 1 + (tideM + tideS) * 0.42;
+            posAttr.setXYZ(i, basePos[i * 3] * rScale, basePos[i * 3 + 1] * rScale, basePos[i * 3 + 2] * rScale);
+          }
+          posAttr.needsUpdate = true;
+          waterGeo.computeVertexNormals();
+
+          // 更新差動引潮力向量箭頭
+          arrows.forEach((arr, i) => {
+            arr.visible = p.showVectors === 1;
+            if (!arr.visible) return;
+            const a = (i / 12) * TAU;
+            const u = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
+            // 潮汐力向量 F_tidal ∝ 3(u·d)d - u
+            const fM = mDir.clone().multiplyScalar(3 * u.dot(mDir)).sub(u).multiplyScalar(0.45);
+            const fS = sDir.clone().multiplyScalar(3 * u.dot(sDir)).sub(u).multiplyScalar(0.21);
+            const fTot = fM.add(fS);
+            const len = clamp(fTot.length(), 0.2, 1.55);
+            arr.position.copy(u).multiplyScalar(2.35);
+            arr.setDirection(fTot.normalize());
+            arr.setLength(len, 0.26, 0.16);
+          });
+
+          const isSpring = Math.abs(Math.cos(mRad)) > 0.78;
+          const isNeap = Math.abs(Math.cos(mRad)) < 0.35;
+          lbTide.el.textContent = isSpring ? '朔望「大潮 (Spring Tide)」引力疊加' : isNeap ? '弦月「小潮 (Neap Tide)」直角抵銷' : '潮汐橢球過渡態';
+          lbSun.worldPos.copy(sun.position);
+          lbMoon.worldPos.copy(moon.position);
+          lbTide.worldPos.set(0, 0, 0);
+          lbStation.worldPos.copy(stationPin.position);
+        };
+        break;
+      }
+
+      /* ---------------- 05 超級月亮與橢圓軌道離心率 ---------------- */
+      case 4: {
+        const sunLight = new THREE.DirectionalLight(0xffffff, 1.6);
+        moduleRoot.add(sunLight);
+
+        const earth = makeEarthMesh(1.45);
+        moduleRoot.add(earth);
+
+        // 海水潮位反應環
+        const tideRing = new THREE.Mesh(
+          new THREE.SphereGeometry(1.62, 32, 20),
+          new THREE.MeshBasicMaterial({ color: PALETTE.tideHex, transparent: true, opacity: 0.32 })
+        );
+        moduleRoot.add(tideRing);
+
+        // 動態橢圓軌道線 + 近地點/遠地點標記
+        const orbitGeo = new THREE.BufferGeometry();
+        const orbitLine = new THREE.Line(orbitGeo, new THREE.LineBasicMaterial({ color: PALETTE.lunarOrbHex }));
+        moduleRoot.add(orbitLine);
+
+        const periDot = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 12), new THREE.MeshBasicMaterial({ color: PALETTE.nodeHex }));
+        const apoDot = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 12), new THREE.MeshBasicMaterial({ color: PALETTE.earthHex }));
+        moduleRoot.add(periDot, apoDot);
+
+        const distLineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(5, 0, 0)]);
+        const distLine = new THREE.Line(distLineGeo, new THREE.LineDashedMaterial({ color: 0x94A3B8, dashSize: 0.3, gapSize: 0.2 }));
+        moduleRoot.add(distLine);
+
+        const moon = makeMoonMesh(0.58);
+        moduleRoot.add(moon);
+
+        const lbEarth = addLabel3D('地球 (位於橢圓焦點)', PALETTE.earth, 1.8);
+        const lbPeri = addLabel3D('近地點 Perigee (35.6萬km)', PALETTE.node, 0.45);
+        const lbApo = addLabel3D('遠地點 Apogee (40.7萬km)', PALETTE.earth, 0.45);
+        const lbMoon = addLabel3D('月球', PALETTE.moon, 0.85);
+
+        let lastEcc = -1;
+        activeMacroUpdater = (p, dt) => {
+          const e = p.eccMode === 1 ? 0.28 : 0.055;
+          const a = 7.8;
+          // 克卜勒第二定律：近地點角速度較快 (dν/dt ∝ (1 + e cosν)²)
+          if (state.playing && !state.tween) {
+            const nu = p.anomalyDeg * DEG;
+            const speedFactor = Math.pow(1 + e * Math.cos(nu), 2);
+            p.anomalyDeg = normDeg(p.anomalyDeg + dt * 28 * speedFactor);
+          }
+
+          if (e !== lastEcc) {
+            lastEcc = e;
+            const pts = [];
+            for (let i = 0; i <= 128; i++) {
+              const ang = (i / 128) * TAU;
+              const r = (a * (1 - e * e)) / (1 + e * Math.cos(ang));
+              pts.push(new THREE.Vector3(Math.cos(ang) * r, 0, Math.sin(ang) * r));
+            }
+            orbitGeo.setFromPoints(pts);
+            periDot.position.set(a * (1 - e), 0, 0);
+            apoDot.position.set(-a * (1 + e), 0, 0);
+          }
+
+          const sRad = p.sunDirDeg * DEG;
+          sunLight.position.set(Math.cos(sRad) * 25, 3, Math.sin(sRad) * 25);
+
+          const nu = p.anomalyDeg * DEG;
+          const rOrb = (a * (1 - e * e)) / (1 + e * Math.cos(nu));
+          moon.position.set(Math.cos(nu) * rOrb, 0, Math.sin(nu) * rOrb);
+          earth.rotation.y += dt * 0.7;
+
+          distLine.geometry.setFromPoints([new THREE.Vector3(0, 0, 0), moon.position.clone()]);
+          distLine.computeLineDistances();
+
+          // 近地引潮力 ∝ 1/r³ 視覺連動
+          const tideBoost = Math.pow(a / rOrb, 3);
+          tideRing.rotation.y = -nu;
+          tideRing.scale.set(1 + 0.16 * tideBoost, 0.96, 1 - 0.05 * tideBoost);
+
+          const realKm = Math.round(384400 * (1 - 0.055 * 0.055) / (1 + 0.055 * Math.cos(nu)));
+          lbMoon.el.textContent = `月球 (距離 ${(realKm / 10000).toFixed(1)} 萬km)`;
+          lbEarth.worldPos.set(0, 0, 0);
+          lbPeri.worldPos.copy(periDot.position);
+          lbApo.worldPos.copy(apoDot.position);
+          lbMoon.worldPos.copy(moon.position);
+        };
+        break;
+      }
+
+      /* ---------------- 06 緯度效應與晝夜長短、極晝極夜 ---------------- */
+      case 5: {
+        const sunLight = new THREE.DirectionalLight(0xffffff, 1.75);
+        moduleRoot.add(sunLight);
+
+        // 太陽光方向指示球
+        const sun = makeSunMesh(1.1);
+        moduleRoot.add(sun);
+
+        // 地軸傾斜群組 (固定向北極星傾斜 23.44°)
+        const tiltGroup = new THREE.Group();
+        tiltGroup.rotation.z = -23.44 * DEG;
+        moduleRoot.add(tiltGroup);
+
+        // 自轉軸線 (北極N - 南極S)
+        const axisGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, -4.6, 0), new THREE.Vector3(0, 4.6, 0)]);
+        tiltGroup.add(new THREE.Line(axisGeo, new THREE.LineBasicMaterial({ color: PALETTE.lunarOrbHex })));
+
+        const earth = makeEarthMesh(3.2);
+        tiltGroup.add(earth);
+
+        // 動態緯度平行圈 (顯示該緯度跨越向光側與背光側的比例!)
+        const latRingGeo = new THREE.BufferGeometry();
+        const latRing = new THREE.Line(latRingGeo, new THREE.LineBasicMaterial({ color: PALETTE.sunHex }));
+        tiltGroup.add(latRing);
+
+        // 觀測者定位點與切平面小圓盤
+        const obsGroup = new THREE.Group();
+        const obsDot = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 12), new THREE.MeshBasicMaterial({ color: PALETTE.landHex }));
+        const horizonDisc = new THREE.Mesh(
+          new THREE.CircleGeometry(0.65, 24),
+          new THREE.MeshBasicMaterial({ color: PALETTE.landHex, transparent: true, opacity: 0.35, side: THREE.DoubleSide })
+        );
+        obsGroup.add(obsDot, horizonDisc);
+        tiltGroup.add(obsGroup);
+
+        // 晨昏圈環 (永遠垂直於太陽光方向!)
+        const termRing = makeOrbitRing(3.26, 3.26, PALETTE.nodeHex);
+        moduleRoot.add(termRing);
+
+        const lbAxis = addLabel3D('北極 N (地軸傾角 23.5°)', PALETTE.lunarOrb, 0.3);
+        const lbTerm = addLabel3D('晨昏圈 (Terminator)', PALETTE.node, 0.35);
+        const lbLat = addLabel3D('觀測緯度圈', PALETTE.sun, 0.25);
+        const lbObs = addLabel3D('地表觀測者', PALETTE.land, 0.35);
+
+        activeMacroUpdater = (p, dt) => {
+          if (state.playing && !state.tween) {
+            p.localHour = (p.localHour + dt * 2.2) % 24;
+          }
+          // 季節決定太陽相對於地軸傾斜方向的角度：seasonDeg=90(夏至)時太陽在 +X 側照亮北極!
+          const sLon = (p.seasonDeg - 90) * DEG;
+          const sunDir = new THREE.Vector3(Math.cos(sLon), 0, Math.sin(sLon));
+          sunLight.position.copy(sunDir).multiplyScalar(25);
+          sun.position.copy(sunDir).multiplyScalar(10.5);
+
+          // 晨昏圈垂直於 sunDir
+          const qTerm = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), sunDir);
+          termRing.quaternion.copy(qTerm);
+
+          // 更新緯度圈
+          const latRad = p.lat * DEG;
+          const rLat = Math.cos(latRad) * 3.24;
+          const yLat = Math.sin(latRad) * 3.24;
+          const pts = [];
+          for (let i = 0; i <= 72; i++) {
+            const a = (i / 72) * TAU;
+            pts.push(new THREE.Vector3(Math.cos(a) * rLat, yLat, Math.sin(a) * rLat));
+          }
+          latRingGeo.setFromPoints(pts);
+
+          // 地球自轉與觀測者地方時位置 (localHour=12 對準太陽方位)
+          const hAngle = (p.localHour - 12) * 15 * DEG - sLon;
+          earth.rotation.y = -hAngle;
+          const ox = Math.cos(hAngle) * Math.cos(latRad) * 3.24;
+          const oy = Math.sin(latRad) * 3.24;
+          const oz = Math.sin(hAngle) * Math.cos(latRad) * 3.24;
+          obsGroup.position.set(ox, oy, oz);
+          const upNormal = obsGroup.position.clone().normalize();
+          horizonDisc.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), upNormal);
+
+          const northWorld = new THREE.Vector3(0, 4.6, 0).applyEuler(tiltGroup.rotation);
+          lbAxis.worldPos.copy(northWorld);
+          lbTerm.worldPos.set(0, 3.35, 0);
+          const latLabelWorld = new THREE.Vector3(-rLat, yLat, 0).applyEuler(tiltGroup.rotation);
+          lbLat.el.textContent = `緯度圈 ${Math.abs(p.lat).toFixed(1)}°${p.lat >= 0 ? 'N' : 'S'}`;
+          lbLat.worldPos.copy(latLabelWorld);
+          const obsWorld = new THREE.Vector3();
+          obsDot.getWorldPosition(obsWorld);
+          lbObs.worldPos.copy(obsWorld);
+        };
+        break;
+      }
+
+      /* ---------------- 07 正午太陽仰角與單位面積受熱量 ---------------- */
+      case 6: {
+        const sunLight = new THREE.DirectionalLight(0xffffff, 1.75);
+        sunLight.position.set(22, 0, 0);
+        moduleRoot.add(sunLight);
+
+        const earthGroup = new THREE.Group();
+        moduleRoot.add(earthGroup);
+        const earth = makeEarthMesh(3.3);
+        earthGroup.add(earth);
+
+        // 平行太陽光束組 (由右向左平行入射地球不同緯度)
+        const beamGroup = new THREE.Group();
+        for (let i = -3; i <= 3; i++) {
+          const y = i * 0.85;
+          const xHit = Math.sqrt(Math.max(0, 3.3 * 3.3 - y * y));
+          const geo = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(11.5, y, 0),
+            new THREE.Vector3(xHit, y, 0)
+          ]);
+          beamGroup.add(new THREE.Line(geo, new THREE.LineBasicMaterial({ color: PALETTE.sunHex, transparent: true, opacity: 0.72 })));
+        }
+        moduleRoot.add(beamGroup);
+
+        // 直射點標記與觀測者正午立竿標記
+        const subsolarDot = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 12), new THREE.MeshBasicMaterial({ color: PALETTE.sunHex }));
+        subsolarDot.position.set(3.34, 0, 0);
+        moduleRoot.add(subsolarDot);
+
+        const gnomonGroup = new THREE.Group();
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.75, 12), new THREE.MeshBasicMaterial({ color: PALETTE.landHex }));
+        pole.position.y = 0.375;
+        gnomonGroup.add(pole);
+        earthGroup.add(gnomonGroup);
+
+        const lbSub = addLabel3D('太陽直射點 (仰角 90°)', PALETTE.sun, 0.35);
+        const lbObs = addLabel3D('觀測地正午立竿', PALETTE.land, 0.55);
+        const lbDist = addLabel3D('日地距離提示', PALETTE.earth, 0.2);
+
+        activeMacroUpdater = (p, dt) => {
+          // 旋轉地球使太陽赤緯 decl 正對 +X 方向陽光
+          const declRad = p.decl * DEG;
+          earthGroup.rotation.z = -declRad;
+          earth.rotation.y = -0.35;
+
+          // 觀測者在正午子午線上 (X-Y 平面向陽側)
+          const latRad = p.lat * DEG;
+          const gx = Math.cos(latRad) * 3.3;
+          const gy = Math.sin(latRad) * 3.3;
+          gnomonGroup.position.set(gx, gy, 0);
+          gnomonGroup.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(Math.cos(latRad), Math.sin(latRad), 0));
+
+          const distAU = 1 - 0.0167 * Math.cos((p.decl + 23.44) / 46.88 * Math.PI);
+          lbDist.el.textContent = p.decl > 10 ? `北半球夏季：遠日點附近 (${distAU.toFixed(3)} AU)` : p.decl < -10 ? `北半球冬季：近日點附近 (${distAU.toFixed(3)} AU)` : `春秋分距離 (${distAU.toFixed(3)} AU)`;
+          lbDist.worldPos.set(7.2, -3.3, 0);
+          lbSub.worldPos.set(3.45, 0, 0);
+          const obsWorld = new THREE.Vector3();
+          pole.getWorldPosition(obsWorld);
+          lbObs.worldPos.copy(obsWorld);
+        };
+        break;
+      }
+
+      /* ---------------- 08 8字形太陽軌跡 (Analemma) 與均時差 ---------------- */
+      case 7: {
+        const sunLight = new THREE.PointLight(0xffffff, 1.9, 100);
+        moduleRoot.add(sunLight);
+        const sun = makeSunMesh(1.65);
+        moduleRoot.add(sun);
+
+        const orbitGeo = new THREE.BufferGeometry();
+        const orbitLine = new THREE.Line(orbitGeo, new THREE.LineBasicMaterial({ color: PALETTE.sunHex }));
+        moduleRoot.add(orbitLine);
+
+        const earthHolder = new THREE.Group();
+        moduleRoot.add(earthHolder);
+        const tiltHolder = new THREE.Group();
+        earthHolder.add(tiltHolder);
+        const earth = makeEarthMesh(1.05);
+        tiltHolder.add(earth);
+
+        const axisLine = new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, -1.8, 0), new THREE.Vector3(0, 1.8, 0)]),
+          new THREE.LineBasicMaterial({ color: PALETTE.lunarOrbHex })
+        );
+        tiltHolder.add(axisLine);
+
+        const periMarker = new THREE.Mesh(new THREE.SphereGeometry(0.16, 14, 10), new THREE.MeshBasicMaterial({ color: PALETTE.nodeHex }));
+        const apheMarker = new THREE.Mesh(new THREE.SphereGeometry(0.16, 14, 10), new THREE.MeshBasicMaterial({ color: PALETTE.earthHex }));
+        moduleRoot.add(periMarker, apheMarker);
+
+        const lbSun = addLabel3D('太陽 (位於焦點)', PALETTE.sun, 1.95);
+        const lbPeri = addLabel3D('1月初 近日點 (公轉最快)', PALETTE.node, 0.45);
+        const lbAphe = addLabel3D('7月初 遠日點 (公轉最慢)', PALETTE.earth, 0.45);
+        const lbEarth = addLabel3D('地球 (每日12:00快門)', PALETTE.land, 1.95);
+
+        let cachedEcc = -1;
+        activeMacroUpdater = (p, dt) => {
+          if (state.playing && !state.tween) {
+            p.dayOfYear = ((p.dayOfYear - 1 + dt * 36) % 365) + 1;
+          }
+          // 太空視覺適度放大橢圓度至 0.18 以便清楚看見焦點偏移與變速
+          const visE = p.eccOn ? 0.18 : 0.0;
+          const a = 8.6;
+          if (visE !== cachedEcc) {
+            cachedEcc = visE;
+            const pts = [];
+            for (let i = 0; i <= 128; i++) {
+              const nu = (i / 128) * TAU;
+              const r = (a * (1 - visE * visE)) / (1 + visE * Math.cos(nu));
+              pts.push(new THREE.Vector3(Math.cos(nu) * r, 0, Math.sin(nu) * r));
+            }
+            orbitGeo.setFromPoints(pts);
+            periMarker.position.set(a * (1 - visE), 0, 0);
+            apheMarker.position.set(-a * (1 + visE), 0, 0);
+          }
+          periMarker.visible = p.eccOn === 1;
+          apheMarker.visible = p.eccOn === 1;
+          lbPeri.visible = p.eccOn === 1;
+          lbAphe.visible = p.eccOn === 1;
+
+          const M = ((p.dayOfYear - 3) / 365) * TAU;
+          const nu = M + 2 * visE * Math.sin(M);
+          const r = (a * (1 - visE * visE)) / (1 + visE * Math.cos(nu));
+          earthHolder.position.set(Math.cos(nu) * r, 0, Math.sin(nu) * r);
+          tiltHolder.rotation.z = p.tiltOn ? -23.44 * DEG : 0;
+
+          lbSun.worldPos.set(0, 0, 0);
+          lbPeri.worldPos.copy(periMarker.position);
+          lbAphe.worldPos.copy(apheMarker.position);
+          lbEarth.worldPos.copy(earthHolder.position);
+        };
+        break;
+      }
+
+      /* ---------------- 09 恆星日與太陽日的 4 分鐘差異 ---------------- */
+      case 8: {
+        const sunLight = new THREE.PointLight(0xffffff, 1.8, 100);
+        moduleRoot.add(sunLight);
+
+        const sun = makeSunMesh(1.65);
+        sun.position.set(-6.5, 0, 0);
+        sunLight.position.copy(sun.position);
+        moduleRoot.add(sun);
+
+        // 地球公轉圓弧軌道 (以太陽為圓心，半徑 11)
+        const orbPts = [];
+        for (let i = -35; i <= 35; i++) {
+          const ang = (i * DEG);
+          orbPts.push(new THREE.Vector3(-6.5 + Math.cos(ang) * 11, 0, -Math.sin(ang) * 11));
+        }
+        moduleRoot.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(orbPts), new THREE.LineDashedMaterial({ color: PALETTE.sunHex, dashSize: 0.4, gapSize: 0.25 })));
+
+        // 起點地球殘影 (Day 0 位置: x = +4.5, z = 0)
+        const ghostEarth = new THREE.Mesh(
+          new THREE.SphereGeometry(1.15, 24, 16),
+          new THREE.MeshBasicMaterial({ color: PALETTE.earthHex, wireframe: true, transparent: true, opacity: 0.22 })
+        );
+        ghostEarth.position.set(4.5, 0, 0);
+        moduleRoot.add(ghostEarth);
+
+        // 動態地球與觀測者子午線箭頭
+        const earthGroup = new THREE.Group();
+        moduleRoot.add(earthGroup);
+        const earth = makeEarthMesh(1.2);
+        earthGroup.add(earth);
+
+        const meridianArrow = new THREE.ArrowHelper(new THREE.Vector3(-1, 0, 0), new THREE.Vector3(0, 0, 0), 3.6, PALETTE.landHex, 0.48, 0.3);
+        earthGroup.add(meridianArrow);
+
+        // 遠方參考恆星平行光參考線 (永遠朝 -X 方向!)
+        const starLineGeo = new THREE.BufferGeometry();
+        const starLine = new THREE.Line(starLineGeo, new THREE.LineDashedMaterial({ color: PALETTE.tideHex, dashSize: 0.35, gapSize: 0.2 }));
+        moduleRoot.add(starLine);
+
+        // 太陽連線 (地球 -> 太陽)
+        const sunLineGeo = new THREE.BufferGeometry();
+        const sunLine = new THREE.Line(sunLineGeo, new THREE.LineBasicMaterial({ color: PALETTE.sunHex, transparent: true, opacity: 0.75 }));
+        moduleRoot.add(sunLine);
+
+        const lbSun = addLabel3D('太陽 Sun', PALETTE.sun, 1.95);
+        const lbStar = addLabel3D('← 遠方恆星方向 (平行視線 ∞)', PALETTE.tide, 0.35);
+        const lbGhost = addLabel3D('起點位置 (00:00)', PALETTE.muted, 1.45);
+        const lbEarth = addLabel3D('地球與子午線箭頭', PALETTE.land, 1.55);
+
+        activeMacroUpdater = (p, dt) => {
+          if (state.playing && !state.tween) {
+            p.rotHours += dt * 3.2;
+            if (p.rotHours > 24) p.rotHours = 0;
+          }
+          // 恆星日 = 23.9344696 小時 (自轉整整 360°)
+          const siderealHours = 23.9344696;
+          const orbDegPerSolarDay = p.exagOrbit ? 16.0 : 0.9856;
+          const fracSolar = p.rotHours / 24.0;
+          const orbRad = fracSolar * orbDegPerSolarDay * DEG;
+
+          // 地球逆時針繞太陽公轉 (俯視由 +Y 看下去逆時針 => z 變負)
+          const ex = -6.5 + Math.cos(orbRad) * 11;
+          const ez = -Math.sin(orbRad) * 11;
+          earthGroup.position.set(ex, 0, ez);
+
+          // 自轉角度：在 t = siderealHours 時自轉恰好 2π (重新指向 -X 遠方恆星)；在 t = 24h 時自轉 2π + orbRad (重新指向太陽!)
+          const spinRad = (p.rotHours / siderealHours) * TAU * (1 + (orbDegPerSolarDay * DEG) / TAU) / (24.0 / siderealHours);
+          // 精確映射：讓 rotHours = siderealHours 時 spin = TAU，rotHours = 24.0 時 spin = TAU + orbRad!
+          let exactSpin;
+          if (p.rotHours <= siderealHours) {
+            exactSpin = (p.rotHours / siderealHours) * TAU;
+          } else {
+            exactSpin = TAU + ((p.rotHours - siderealHours) / (24.0 - siderealHours)) * orbRad;
+          }
+          earth.rotation.y = exactSpin;
+          const dirVec = new THREE.Vector3(-Math.cos(exactSpin), 0, Math.sin(exactSpin));
+          meridianArrow.setDirection(dirVec);
+
+          starLineGeo.setFromPoints([new THREE.Vector3(ex, 0, ez), new THREE.Vector3(ex - 11.5, 0, ez)]);
+          starLine.computeLineDistances();
+          sunLineGeo.setFromPoints([new THREE.Vector3(ex, 0, ez), sun.position.clone()]);
+
+          lbSun.worldPos.copy(sun.position);
+          lbStar.worldPos.set(ex - 7.8, 0, ez);
+          lbGhost.worldPos.set(4.5, 0, 0);
+          lbEarth.worldPos.set(ex, 0, ez);
+        };
+        break;
+      }
+
+      /* ---------------- 10 內行星(金星)逆行與相位變化 ---------------- */
+      case 9: {
+        const sunLight = new THREE.PointLight(0xffffff, 2.0, 120);
+        moduleRoot.add(sunLight);
+        const sun = makeSunMesh(1.3);
+        moduleRoot.add(sun);
+
+        const earthRing = makeOrbitRing(6.2, 6.2, PALETTE.earthHex);
+        const targetRing = new THREE.Group();
+        moduleRoot.add(earthRing, targetRing);
+
+        const earth = makeEarthMesh(0.65);
+        const targetPlanet = new THREE.Mesh(
+          new THREE.SphereGeometry(0.55, 28, 20),
+          new THREE.MeshStandardMaterial({ color: PALETTE.venusHex, roughness: 0.45 })
+        );
+        moduleRoot.add(earth, targetPlanet);
+
+        // 背景黃道恆星圓弧天球幕 (位於 -Z 側 R=16.5)
+        const screenGroup = new THREE.Group();
+        const arcPts = [];
+        for (let i = -70; i <= 70; i += 2) {
+          const a = (i - 90) * DEG;
+          arcPts.push(new THREE.Vector3(Math.cos(a) * 16.5, 0, Math.sin(a) * 16.5));
+        }
+        screenGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(arcPts), new THREE.LineBasicMaterial({ color: 0x334155 })));
+        moduleRoot.add(screenGroup);
+
+        // 視線投影線 (地球 -> 金星 -> 天球幕投影點)
+        const sightGeo = new THREE.BufferGeometry();
+        const sightLine = new THREE.Line(sightGeo, new THREE.LineDashedMaterial({ color: PALETTE.venusHex, dashSize: 0.35, gapSize: 0.2 }));
+        const projDot = new THREE.Mesh(new THREE.SphereGeometry(0.24, 16, 12), new THREE.MeshBasicMaterial({ color: PALETTE.nodeHex }));
+        moduleRoot.add(sightLine, projDot);
+
+        // 天球幕上的視運動軌跡線
+        const skyTrailGeo = new THREE.BufferGeometry();
+        const skyTrailLine = new THREE.Line(skyTrailGeo, new THREE.LineBasicMaterial({ color: PALETTE.nodeHex }));
+        moduleRoot.add(skyTrailLine);
+
+        const lbSun = addLabel3D('太陽', PALETTE.sun, 1.6);
+        const lbEarth = addLabel3D('地球觀測者', PALETTE.earth, 0.9);
+        const lbPlanet = addLabel3D('金星 Venus', PALETTE.venus, 0.85);
+        const lbProj = addLabel3D('背景恆星天球投影軌跡', PALETTE.node, 0.6);
+
+        let lastMode = -1;
+        function computePositions(prog, mode) {
+          // 讓 prog = 0.5 時恰好在 -Z 方向發生內合(金星)或衝(火星)，使視線完美投射在 R=16.5 的天球幕!
+          const t = prog - 0.5;
+          if (mode === 0) {
+            // 金星內行星: rV=4.48, rE=6.2
+            const eAng = -Math.PI / 2 + t * 2.1;
+            const vAng = -Math.PI / 2 + t * 5.52;
+            const ePos = new THREE.Vector3(Math.cos(eAng) * 6.2, 0, Math.sin(eAng) * 6.2);
+            const vPos = new THREE.Vector3(Math.cos(vAng) * 4.48, Math.sin(vAng) * 0.48, Math.sin(vAng) * 4.48);
+            return { ePos, pPos: vPos };
+          } else {
+            // 火星外行星對比: rE=4.6, rM=7.2
+            const eAng = -Math.PI / 2 + t * 4.2;
+            const mAng = -Math.PI / 2 + t * 2.23;
+            const ePos = new THREE.Vector3(Math.cos(eAng) * 4.6, 0, Math.sin(eAng) * 4.6);
+            const mPos = new THREE.Vector3(Math.cos(mAng) * 7.2, Math.sin(mAng) * 0.55, Math.sin(mAng) * 7.2);
+            return { ePos, pPos: mPos };
+          }
+        }
+
+        function projectToScreen(ePos, pPos) {
+          const dir = new THREE.Vector3().subVectors(pPos, ePos).normalize();
+          // 求射線 ePos + s*dir 與 x² + z² = 16.5² 的交點 (s > 0)
+          const A = dir.x * dir.x + dir.z * dir.z;
+          const B = 2 * (ePos.x * dir.x + ePos.z * dir.z);
+          const C = ePos.x * ePos.x + ePos.z * ePos.z - 16.5 * 16.5;
+          const disc = Math.max(0, B * B - 4 * A * C);
+          const s = (-B + Math.sqrt(disc)) / (2 * A);
+          return ePos.clone().addScaledVector(dir, s);
+        }
+
+        activeMacroUpdater = (p, dt) => {
+          if (state.playing && !state.tween) {
+            p.synodicProg += dt * 0.065;
+            if (p.synodicProg > 1) p.synodicProg = 0;
+          }
+          if (p.planetMode !== lastMode) {
+            lastMode = p.planetMode;
+            disposeGroup(targetRing);
+            if (p.planetMode === 0) {
+              earthRing.scale.set(1, 1, 1);
+              targetRing.add(makeOrbitRing(4.48, 4.48, PALETTE.venusHex));
+              targetPlanet.material.color.setHex(PALETTE.venusHex);
+              lbPlanet.el.textContent = '內行星：金星 Venus';
+            } else {
+              earthRing.scale.set(4.6 / 6.2, 1, 4.6 / 6.2);
+              targetRing.add(makeOrbitRing(7.2, 7.2, PALETTE.nodeHex));
+              targetPlanet.material.color.setHex(0xFB7185);
+              lbPlanet.el.textContent = '外行星：火星 Mars';
+            }
+          }
+
+          const { ePos, pPos } = computePositions(p.synodicProg, p.planetMode);
+          earth.position.copy(ePos);
+          targetPlanet.position.copy(pPos);
+
+          const hit = projectToScreen(ePos, pPos);
+          projDot.position.copy(hit);
+          sightGeo.setFromPoints([ePos, hit]);
+          sightLine.computeLineDistances();
+
+          // 繪製從 0.22 到目前進度 (或逆行區間) 的天球視軌跡
+          const tPts = [];
+          const maxT = Math.max(0.24, Math.min(0.78, p.synodicProg));
+          for (let q = 0.22; q <= maxT; q += 0.008) {
+            const st = computePositions(q, p.planetMode);
+            if (st.pPos.z < st.ePos.z + 2.5) tPts.push(projectToScreen(st.ePos, st.pPos));
+          }
+          skyTrailGeo.setFromPoints(tPts);
+
+          lbSun.worldPos.set(0, 0, 0);
+          lbEarth.worldPos.copy(ePos);
+          lbPlanet.worldPos.copy(pPos);
+          lbProj.worldPos.copy(hit);
+        };
+        break;
+      }
+    }
+  }
+
+  /* =========================================================
+   * 9. 2D 地表沈浸與光學視角引擎 (支援觸控 Pinch-Zoom & Pan)
+   * ========================================================= */
+  const groundCanvas = document.getElementById('ground-canvas');
+  const gCtx = groundCanvas.getContext('2d');
+
+  const groundCam = {
+    zoom: 1.0,
+    panX: 0,
+    panY: 0,
+    reset() { this.zoom = 1.0; this.panX = 0; this.panY = 0; }
+  };
+
+  (function bindGroundInput() {
+    let dragging = false;
+    let lx = 0, ly = 0;
+    let pDist = 0, pMidX = 0, pMidY = 0;
+
+    groundCanvas.addEventListener('mousedown', e => {
+      dragging = true; lx = e.clientX; ly = e.clientY;
+    });
+    window.addEventListener('mousemove', e => {
+      if (!dragging) return;
+      groundCam.panX += e.clientX - lx;
+      groundCam.panY += e.clientY - ly;
+      lx = e.clientX; ly = e.clientY;
+    });
+    window.addEventListener('mouseup', () => { dragging = false; });
+
+    groundCanvas.addEventListener('wheel', e => {
+      e.preventDefault();
+      const rect = groundCanvas.getBoundingClientRect();
+      const cx = e.clientX - rect.left - rect.width * 0.5;
+      const cy = e.clientY - rect.top - rect.height * 0.5;
+      const factor = e.deltaY < 0 ? 1.1 : 0.91;
+      const nextZ = clamp(groundCam.zoom * factor, 0.55, 3.8);
+      const ratio = nextZ / groundCam.zoom;
+      groundCam.panX = cx - (cx - groundCam.panX) * ratio;
+      groundCam.panY = cy - (cy - groundCam.panY) * ratio;
+      groundCam.zoom = nextZ;
+    }, { passive: false });
+
+    groundCanvas.addEventListener('touchstart', e => {
+      if (e.touches.length === 1) {
+        lx = e.touches[0].clientX; ly = e.touches[0].clientY;
+      } else if (e.touches.length >= 2) {
+        pDist = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
+        pMidX = (e.touches[0].clientX + e.touches[1].clientX) * 0.5;
+        pMidY = (e.touches[0].clientY + e.touches[1].clientY) * 0.5;
+      }
+    }, { passive: false });
+
+    groundCanvas.addEventListener('touchmove', e => {
+      e.preventDefault();
+      if (e.touches.length === 1) {
+        groundCam.panX += e.touches[0].clientX - lx;
+        groundCam.panY += e.touches[0].clientY - ly;
+        lx = e.touches[0].clientX; ly = e.touches[0].clientY;
+      } else if (e.touches.length >= 2) {
+        const d = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
+        const mx = (e.touches[0].clientX + e.touches[1].clientX) * 0.5;
+        const my = (e.touches[0].clientY + e.touches[1].clientY) * 0.5;
+        if (pDist > 8) {
+          groundCam.zoom = clamp(groundCam.zoom * (d / pDist), 0.55, 3.8);
+        }
+        groundCam.panX += mx - pMidX;
+        groundCam.panY += my - pMidY;
+        pDist = d; pMidX = mx; pMidY = my;
+      }
+    }, { passive: false });
+  })();
+
+  // 2D 標籤繪製輔助 (受全域 state.showLabels 開關控制)
+  function drawPill2D(ctx, text, x, y, color = '#F8FAFC', align = 'center') {
+    if (!state.showLabels) return;
+    ctx.save();
+    ctx.font = '700 12px -apple-system, "Noto Sans TC", sans-serif';
+    const padX = 8;
+    const tw = ctx.measureText(text).width + padX * 2;
+    const th = 22;
+    let bx = x - tw * 0.5;
+    if (align === 'left') bx = x;
+    if (align === 'right') bx = x - tw;
+    const by = y - th * 0.5;
+
+    ctx.fillStyle = 'rgba(9, 14, 28, 0.86)';
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.roundRect(bx, by, tw, th, 5);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = color;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, bx + tw * 0.5, by + th * 0.5 + 0.5);
+    ctx.restore();
+  }
+
+  /* =========================================================
+   * 10. 各分頁專屬 2D 地表/光學微觀渲染器 (與 3D 即時同步)
+   * ========================================================= */
+  function renderGroundView(tabIdx, p) {
+    if (state.viewMode === 'macro') return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = groundCanvas.clientWidth;
+    const h = groundCanvas.clientHeight;
+    if (w < 4 || h < 4) return;
+    if (groundCanvas.width !== Math.round(w * dpr) || groundCanvas.height !== Math.round(h * dpr)) {
+      groundCanvas.width = Math.round(w * dpr);
+      groundCanvas.height = Math.round(h * dpr);
+    }
+
+    const ctx = gCtx;
+    ctx.save();
+    ctx.scale(dpr, dpr);
+    ctx.fillStyle = PALETTE.bgDark;
+    ctx.fillRect(0, 0, w, h);
+
+    // 套用使用者 Pan & Zoom 座標變換 (以畫布中心為基準 640x440 邏輯空間自動縮放)
+    const baseScale = Math.min(w / 620, h / 430);
+    ctx.translate(w * 0.5 + groundCam.panX, h * 0.5 + groundCam.panY);
+    ctx.scale(baseScale * groundCam.zoom, baseScale * groundCam.zoom);
+
+    switch (tabIdx) {
+      /* ---------------- 01 黃白交角：天球交點與朔望偏移 ---------------- */
+      case 0: {
+        // 繪製天球局部視窗 (-290..290, -185..185)
+        ctx.strokeStyle = PALETTE.grid;
+        ctx.lineWidth = 1;
+        for (let gx = -240; gx <= 240; gx += 60) {
+          ctx.beginPath(); ctx.moveTo(gx, -165); ctx.lineTo(gx, 165); ctx.stroke();
+        }
+        for (let gy = -150; gy <= 150; gy += 50) {
+          ctx.beginPath(); ctx.moveTo(-275, gy); ctx.lineTo(275, gy); ctx.stroke();
+        }
+
+        // 黃道線 (水平金色)
+        ctx.strokeStyle = PALETTE.sun;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.moveTo(-275, 0); ctx.lineTo(275, 0); ctx.stroke();
+
+        const isFullHalf = p.moonPhaseDeg > 90 && p.moonPhaseDeg < 270;
+        const tiltDeg = p.exaggerateTilt ? 15 : 5.14;
+        // 交點相對於當前中心的黃經偏移
+        const targetLon = isFullHalf ? normDeg(p.earthDeg) : normDeg(p.earthDeg + 180);
+        // 距離最近交點 (0° 或 180°) 的有號角距離 (-90..+90)
+        let nodeOffset = ((targetLon + 90) % 180) - 90;
+        const nodeX = -nodeOffset * 2.8;
+
+        // 白道傾斜線 (紫色通過交點 nodeX)
+        const slope = Math.tan((p.exaggerateTilt ? 22 : 9) * DEG);
+        ctx.strokeStyle = PALETTE.lunarOrb;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(-275, (-275 - nodeX) * slope);
+        ctx.lineTo(275, (275 - nodeX) * slope);
+        ctx.stroke();
+
+        // 中心目標：朔月看「太陽圓盤」，望月看「地球本影圓盤」
+        if (!isFullHalf) {
+          const g = ctx.createRadialGradient(0, 0, 10, 0, 0, 56);
+          g.addColorStop(0, '#FFFBEB');
+          g.addColorStop(0.55, PALETTE.sun);
+          g.addColorStop(1, 'rgba(251,191,36,0)');
+          ctx.fillStyle = g;
+          ctx.beginPath(); ctx.arc(0, 0, 56, 0, TAU); ctx.fill();
+          ctx.fillStyle = PALETTE.sun;
+          ctx.beginPath(); ctx.arc(0, 0, 30, 0, TAU); ctx.fill();
+          drawPill2D(ctx, '太陽視圓盤 (黃道上)', 0, 52, PALETTE.sun);
+        } else {
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+          ctx.strokeStyle = PALETTE.node;
+          ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(0, 0, 44, 0, TAU); ctx.fill(); ctx.stroke();
+          drawPill2D(ctx, '地球本影區 (黃道中心)', 0, 62, PALETTE.node);
+        }
+
+        // 繪製交點標記 (若在視野內)
+        if (Math.abs(nodeX) < 265) {
+          ctx.fillStyle = PALETTE.node;
+          ctx.beginPath(); ctx.arc(nodeX, 0, 7, 0, TAU); ctx.fill();
+          drawPill2D(ctx, '黃白交點 (Node)', nodeX, -24, PALETTE.node);
+        }
+
+        // 計算月球當前相對於目標的東西向與南北向位置
+        let dPhase = isFullHalf ? (p.moonPhaseDeg - 180) : (p.moonPhaseDeg > 180 ? p.moonPhaseDeg - 360 : p.moonPhaseDeg);
+        const mx = clamp(dPhase * 3.2, -260, 260);
+        const my = (mx - nodeX) * slope;
+
+        // 月球圓盤
+        const hitDist = Math.hypot(mx, my);
+        const isEclipse = (!isFullHalf && hitDist < 54) || (isFullHalf && hitDist < 68);
+        ctx.fillStyle = isFullHalf ? (hitDist < 42 ? '#B91C1C' : PALETTE.moon) : '#0F172A';
+        ctx.strokeStyle = PALETTE.lunarOrb;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(mx, my, 29, 0, TAU); ctx.fill(); ctx.stroke();
+
+        // 南北偏移指示雙箭頭 (當朔或望接近中心時強調為何錯過!)
+        if (Math.abs(mx) < 40 && Math.abs(my) > 25) {
+          ctx.strokeStyle = '#F87171';
+          ctx.setLineDash([4, 3]);
+          ctx.beginPath(); ctx.moveTo(mx, 0); ctx.lineTo(mx, my); ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        const betaDeg = Math.abs(Math.sin(nodeOffset * DEG) * tiltDeg);
+        const statusTxt = isEclipse
+          ? (isFullHalf ? '⚡ 位於食季交點附近：發生月食！' : '⚡ 位於食季交點附近：發生日食！')
+          : `白道緯度偏移 ${betaDeg.toFixed(1)}°：月球南北掠過，不發生食相`;
+        drawPill2D(ctx, statusTxt, 0, -158, isEclipse ? PALETTE.node : PALETTE.earth);
+        drawPill2D(ctx, '黃道 Ecliptic', -215, 18, PALETTE.sun);
+        drawPill2D(ctx, `白道 Lunar Path (${tiltDeg}°)`, 190, (190 - nodeX) * slope - 20, PALETTE.lunarOrb);
+        break;
+      }
+
+      /* ---------------- 02 日食本影與半影：天空日冕與地表全食帶 ---------------- */
+      case 1: {
+        // 左側：觀測者仰望天空太陽視窗；右側：地表本影全食帶與半影俯視圖
+        const isAnnular = p.moonDistMode === 1;
+        const sunR = 72;
+        const moonR = isAnnular ? 64 : 75;
+        const skyCx = -135, skyCy = -10;
+
+        // 計算月球相對太陽偏移
+        const dx = p.eclipseProg * 145;
+        const dy = -(p.obsOffsetKm / 2500) * 88;
+        const sep = Math.hypot(dx, dy);
+        const isTotality = !isAnnular && sep <= (moonR - sunR + 2.5);
+        const isRing = isAnnular && sep <= (sunR - moonR + 2.5);
+
+        // 天空背景隨遮蔽率變暗
+        const cover = clamp(1 - sep / (sunR + moonR), 0, 1);
+        ctx.fillStyle = isTotality ? '#030612' : `rgb(${Math.round(lerp(18, 6, cover))}, ${Math.round(lerp(52, 12, cover))}, ${Math.round(lerp(96, 28, cover))})`;
+        ctx.beginPath(); ctx.roundRect(-285, -175, 295, 345, 12); ctx.fill();
+        ctx.strokeStyle = PALETTE.grid; ctx.stroke();
+
+        // 全食時綻放壯麗日冕與鑽石環!
+        if (isTotality) {
+          const cor = ctx.createRadialGradient(skyCx, skyCy, sunR * 0.9, skyCx, skyCy, sunR * 2.2);
+          cor.addColorStop(0, 'rgba(255,255,255,0.95)');
+          cor.addColorStop(0.3, 'rgba(186,230,253,0.45)');
+          cor.addColorStop(1, 'rgba(56,189,248,0)');
+          ctx.fillStyle = cor;
+          ctx.beginPath(); ctx.arc(skyCx, skyCy, sunR * 2.2, 0, TAU); ctx.fill();
+        }
+
+        // 太陽圓盤
+        ctx.fillStyle = PALETTE.sun;
+        ctx.beginPath(); ctx.arc(skyCx, skyCy, sunR, 0, TAU); ctx.fill();
+
+        // 月球黑圓盤遮擋
+        ctx.fillStyle = '#050814';
+        ctx.beginPath(); ctx.arc(skyCx + dx, skyCy + dy, moonR, 0, TAU); ctx.fill();
+        ctx.strokeStyle = 'rgba(148,163,184,0.35)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        const skyState = isTotality ? '🌑 日全食 (Total Eclipse - 日冕現身!)'
+          : isRing ? '💍 日環食 (Annular - 偽本影金環!)'
+          : sep < sunR + moonR ? '🌗 日偏食 (Partial Eclipse - 半影區)' : '☀️ 日食未開始 / 已復圓';
+        drawPill2D(ctx, skyState, skyCx, -148, isTotality || isRing ? PALETTE.node : PALETTE.sun);
+        drawPill2D(ctx, '觀測者仰望天空視角', skyCx, 145, PALETTE.land);
+
+        // 右側：地表投影俯視地圖
+        const mapCx = 155, mapCy = -10;
+        ctx.fillStyle = '#0B2540';
+        ctx.beginPath(); ctx.roundRect(25, -175, 260, 345, 12); ctx.fill();
+        ctx.strokeStyle = PALETTE.grid; ctx.stroke();
+
+        // 全食帶狹長紅金軌跡帶
+        ctx.fillStyle = 'rgba(244, 63, 94, 0.25)';
+        ctx.fillRect(35, mapCy - 11, 240, 22);
+        ctx.strokeStyle = PALETTE.node;
+        ctx.setLineDash([5, 4]);
+        ctx.beginPath(); ctx.moveTo(35, mapCy); ctx.lineTo(275, mapCy); ctx.stroke();
+        ctx.setLineDash([]);
+
+        // 半影大圓 (~3500km 半徑) 與 本影小黑點 (~180km 直徑)
+        const shadowX = mapCx + p.eclipseProg * 95;
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.58)';
+        ctx.strokeStyle = PALETTE.lunarOrb;
+        ctx.beginPath(); ctx.arc(shadowX, mapCy, 86, 0, TAU); ctx.fill(); ctx.stroke();
+
+        if (!isAnnular) {
+          ctx.fillStyle = '#000000';
+          ctx.beginPath(); ctx.arc(shadowX, mapCy, 10, 0, TAU); ctx.fill();
+        } else {
+          ctx.strokeStyle = PALETTE.sun;
+          ctx.lineWidth = 2.5;
+          ctx.beginPath(); ctx.arc(shadowX, mapCy, 10, 0, TAU); ctx.stroke();
+        }
+
+        // 觀測者綠點
+        const obsMapY = mapCy - (p.obsOffsetKm / 2500) * 88;
+        ctx.fillStyle = PALETTE.land;
+        ctx.beginPath(); ctx.arc(mapCx, obsMapY, 6.5, 0, TAU); ctx.fill();
+
+        drawPill2D(ctx, '地表投影：狹長全食帶 vs 廣大半影', mapCx, -148, PALETTE.earth);
+        drawPill2D(ctx, isAnnular ? '偽本影環食帶' : '本影全食帶 (~200km寬)', mapCx, mapCy + 28, PALETTE.node);
+        drawPill2D(ctx, '半影偏食區 (~6000km)', shadowX, mapCy - 72, PALETTE.lunarOrb);
+        drawPill2D(ctx, '觀測者位置', mapCx + 48, obsMapY, PALETTE.land);
+        break;
+      }
+
+      /* ---------------- 03 瑞利散射與紅月亮光學剖面 ---------------- */
+      case 2: {
+        // 上半部：大氣瑞利散射與紅光折射幾何光路；下半部：地面望遠鏡血月視場
+        ctx.strokeStyle = PALETTE.grid;
+        ctx.beginPath(); ctx.moveTo(-285, 10); ctx.lineTo(285, 10); ctx.stroke();
+
+        // 光學圖：太陽白光 -> 地球大氣層 -> 藍光散射 / 紅光折射入本影
+        const ex = -120, ey = -85, er = 44;
+        // 地球本影暗錐
+        ctx.fillStyle = 'rgba(220, 38, 38, 0.16)';
+        ctx.beginPath();
+        ctx.moveTo(ex, ey - er); ctx.lineTo(250, ey - 14); ctx.lineTo(250, ey + 14); ctx.lineTo(ex, ey + er);
+        ctx.closePath(); ctx.fill();
+
+        // 入射白光
+        [-1, 1].forEach(s => {
+          const y0 = ey + s * (er + 4);
+          ctx.strokeStyle = '#FEF08A'; ctx.lineWidth = 2.5;
+          ctx.beginPath(); ctx.moveTo(-275, y0); ctx.lineTo(ex, y0); ctx.stroke();
+          // 藍短波散射箭頭
+          ctx.strokeStyle = PALETTE.earth; ctx.lineWidth = 1.8;
+          for (let a = 0; a < 3; a++) {
+            const ang = s * (0.5 + a * 0.45);
+            ctx.beginPath(); ctx.moveTo(ex, y0);
+            ctx.lineTo(ex + Math.cos(ang) * 34, y0 + Math.sin(ang) * 34);
+            ctx.stroke();
+          }
+          // 紅長波向內折射
+          ctx.strokeStyle = PALETTE.node; ctx.lineWidth = 2.4;
+          ctx.beginPath(); ctx.moveTo(ex, y0); ctx.lineTo(185, ey - s * 10); ctx.stroke();
+        });
+
+        // 地球與藍色大氣環
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.75)';
+        ctx.lineWidth = 7;
+        ctx.beginPath(); ctx.arc(ex, ey, er + 3, 0, TAU); ctx.stroke();
+        ctx.fillStyle = '#0C4A6E';
+        ctx.beginPath(); ctx.arc(ex, ey, er, 0, TAU); ctx.fill();
+
+        drawPill2D(ctx, '① 太陽白光', -220, ey - 22, PALETTE.sun);
+        drawPill2D(ctx, '② 藍綠短波：瑞利散射濾除', ex + 10, ey - 76, PALETTE.earth);
+        drawPill2D(ctx, '③ 紅橙長波：折射匯聚本影', 95, ey - 45, PALETTE.node);
+
+        // 下半部：地面望遠鏡視場 (地球圓弧本影 vs 月球移動)
+        const ty = 102;
+        ctx.fillStyle = 'rgba(220, 38, 38, 0.18)';
+        ctx.strokeStyle = 'rgba(244, 63, 94, 0.55)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(0, ty, 66, 0, TAU); ctx.fill(); ctx.stroke();
+
+        const mx = p.lunarProg * 155;
+        const inUmb = clamp(1 - (Math.abs(mx) - 34) / 48, 0, 1);
+        const dust = 1 - p.dustLevel * 0.68;
+        const mr = Math.round(lerp(232, 205 * dust, inUmb));
+        const mg = Math.round(lerp(236, 48 * dust, inUmb));
+        const mb = Math.round(lerp(242, 32 * dust, inUmb));
+        ctx.fillStyle = `rgb(${mr},${mg},${mb})`;
+        ctx.beginPath(); ctx.arc(mx, ty, 28, 0, TAU); ctx.fill();
+
+        drawPill2D(ctx, '望遠鏡視角：地球本影截面與血月色澤變化', 0, 182, PALETTE.moon);
+        break;
+      }
+
+      /* ---------------- 04 引潮力與潮汐：海岸潮位站與曲線 ---------------- */
+      case 3: {
+        // 左側：海岸燈塔標尺即時水位；右側：24h 半日潮曲線 & 朔望大小潮比較
+        const mRad = p.moonSynodic * DEG;
+        const rotRad = (p.earthHour / 24) * TAU;
+        const calcHeight = (hHr, synDeg) => {
+          const r = (hHr / 24) * TAU;
+          const m = synDeg * DEG;
+          // 海岸站角度 r 與月球方向 m 的夾角為 (r - m)，太陽固定在 0
+          return Math.cos(2 * (r - m)) * 1.0 + Math.cos(2 * r) * 0.46; // 範圍 [-1.46, +1.46] 公尺
+        };
+        const curH = calcHeight(p.earthHour, p.moonSynodic);
+
+        // 左側海岸站水箱
+        ctx.fillStyle = '#0F172A';
+        ctx.beginPath(); ctx.roundRect(-280, -165, 195, 330, 10); ctx.fill();
+        ctx.strokeStyle = PALETTE.grid; ctx.stroke();
+
+        const waterTopY = 15 - curH * 58;
+        const wGrad = ctx.createLinearGradient(0, waterTopY, 0, 165);
+        wGrad.addColorStop(0, 'rgba(6, 182, 212, 0.85)');
+        wGrad.addColorStop(1, 'rgba(8, 51, 68, 0.95)');
+        ctx.fillStyle = wGrad;
+        ctx.beginPath();
+        ctx.moveTo(-279, 164);
+        ctx.lineTo(-279, waterTopY);
+        for (let wx = -279; wx <= -86; wx += 16) {
+          ctx.lineTo(wx, waterTopY + Math.sin(wx * 0.08 + p.earthHour * 3) * 3);
+        }
+        ctx.lineTo(-86, 164);
+        ctx.closePath();
+        ctx.fill();
+
+        // 岩岸碼頭與水位標尺
+        ctx.fillStyle = '#334155';
+        ctx.fillRect(-279, -45, 48, 209);
+        ctx.strokeStyle = '#CBD5E1';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(-115, -105); ctx.lineTo(-115, 125); ctx.stroke();
+        [-1.5, -1, 0, 1, 1.5].forEach(lv => {
+          const ly = 15 - lv * 58;
+          ctx.beginPath(); ctx.moveTo(-122, ly); ctx.lineTo(-108, ly); ctx.stroke();
+        });
+
+        drawPill2D(ctx, `即時潮位: ${curH >= 0 ? '+' : ''}${curH.toFixed(2)} m`, -182, -142, PALETTE.tide);
+        drawPill2D(ctx, '海岸潮位觀測站', -182, 145, PALETTE.land);
+
+        // 右側：24 小時潮汐曲線 (對比大潮極限虛線)
+        const gx0 = -45, gx1 = 270, gyMid = 15;
+        ctx.fillStyle = '#0F172A';
+        ctx.beginPath(); ctx.roundRect(-65, -165, 350, 330, 10); ctx.fill();
+        ctx.strokeStyle = PALETTE.grid; ctx.stroke();
+
+        // 平均海平面 0m 線
+        ctx.strokeStyle = 'rgba(148,163,184,0.35)';
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath(); ctx.moveTo(gx0, gyMid); ctx.lineTo(gx1, gyMid); ctx.stroke();
+        ctx.setLineDash([]);
+
+        // 朔望大潮參考淡曲線
+        ctx.strokeStyle = 'rgba(251, 191, 36, 0.28)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        for (let hr = 0; hr <= 24; hr += 0.25) {
+          const x = lerp(gx0, gx1, hr / 24);
+          const y = gyMid - calcHeight(hr, 0) * 58;
+          hr === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+
+        // 當前月相 24 小時潮汐實線
+        ctx.strokeStyle = PALETTE.tide;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        for (let hr = 0; hr <= 24; hr += 0.2) {
+          const x = lerp(gx0, gx1, hr / 24);
+          const y = gyMid - calcHeight(hr, p.moonSynodic) * 58;
+          hr === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+
+        // 當前時刻紅點
+        const curX = lerp(gx0, gx1, p.earthHour / 24);
+        ctx.fillStyle = PALETTE.land;
+        ctx.beginPath(); ctx.arc(curX, waterTopY, 6.5, 0, TAU); ctx.fill();
+
+        const amp = Math.hypot(1 + 0.46 * Math.cos(2 * mRad), 0.46 * Math.sin(2 * mRad));
+        const tideType = amp > 1.25 ? '🌊 大潮期 (Spring Tide - 日月疊加)' : amp < 0.72 ? '💧 小潮期 (Neap Tide - 直角抵銷)' : '🌊 中潮過渡期';
+        drawPill2D(ctx, tideType, 110, -142, amp > 1.25 ? PALETTE.sun : PALETTE.lunarOrb);
+        drawPill2D(ctx, '00:00      每日兩次滿潮與乾潮 (24h)      24:00', 110, 145, PALETTE.muted);
+        break;
+      }
+
+      /* ---------------- 05 超級月亮：視直徑同框比對與潮汐連動 ---------------- */
+      case 4: {
+        const nu = p.anomalyDeg * DEG;
+        // 真實視直徑比：近地點 33.5' vs 遠地點 29.4' (相差約 14%)；誇大模式更鮮明
+        const realE = 0.055;
+        const visE = p.eccMode ? 0.20 : 0.07;
+        const rFactor = (1 - visE * visE) / (1 + visE * Math.cos(nu));
+        const curR = 76 / rFactor;
+        const superR = 76 / (1 - visE);
+        const microR = 76 / (1 + visE);
+
+        // 左半圓 vs 右半圓經典天文對比圖 (近地超級月亮 vs 遠地最小滿月)
+        const cmpCx = -115, cmpCy = -5;
+        ctx.save();
+        ctx.beginPath(); ctx.rect(cmpCx - 150, cmpCy - 150, 150, 300); ctx.clip();
+        ctx.fillStyle = '#F8FAFC';
+        ctx.beginPath(); ctx.arc(cmpCx, cmpCy, superR, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#94A3B8';
+        ctx.beginPath(); ctx.arc(cmpCx - superR * 0.35, cmpCy - superR * 0.2, superR * 0.22, 0, TAU); ctx.fill();
+        ctx.restore();
+
+        ctx.save();
+        ctx.beginPath(); ctx.rect(cmpCx, cmpCy - 150, 150, 300); ctx.clip();
+        ctx.fillStyle = '#CBD5E1';
+        ctx.beginPath(); ctx.arc(cmpCx, cmpCy, microR, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#64748B';
+        ctx.beginPath(); ctx.arc(cmpCx + microR * 0.3, cmpCy + microR * 0.15, microR * 0.2, 0, TAU); ctx.fill();
+        ctx.restore();
+
+        ctx.strokeStyle = PALETTE.node;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(cmpCx, cmpCy - 125); ctx.lineTo(cmpCx, cmpCy + 125); ctx.stroke();
+
+        drawPill2D(ctx, '近地點超級月亮 (+14%直徑 / +30%亮度)', cmpCx - 15, -148, PALETTE.node);
+        drawPill2D(ctx, '左: 33.5′ 最大滿月 ｜ 右: 29.4′ 最小滿月', cmpCx, 148, PALETTE.moon);
+
+        // 右側：即時觀測月球視大小與近地引潮力增幅計量條
+        const liveCx = 148, liveCy = -22;
+        ctx.strokeStyle = 'rgba(244,63,94,0.35)';
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath(); ctx.arc(liveCx, liveCy, superR, 0, TAU); ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = '#E2E8F0';
+        ctx.beginPath(); ctx.arc(liveCx, liveCy, curR, 0, TAU); ctx.fill();
+
+        const realArcmin = 31.1 * (1 + realE * Math.cos(nu)) / (1 - realE * realE);
+        const tidalRel = Math.pow((1 + realE * Math.cos(nu)) / (1 - realE), 3); // 相對於遠地點最高可達 1.48x!
+        drawPill2D(ctx, `即時視直徑: ${realArcmin.toFixed(1)} 角分`, liveCx, -148, PALETTE.lunarOrb);
+
+        // 引潮力強度橫條
+        ctx.fillStyle = '#1E293B';
+        ctx.beginPath(); ctx.roundRect(45, 108, 210, 22, 6); ctx.fill();
+        ctx.fillStyle = PALETTE.tide;
+        ctx.beginPath(); ctx.roundRect(45, 108, clamp((tidalRel - 0.8) / 0.72, 0.15, 1) * 210, 22, 6); ctx.fill();
+        drawPill2D(ctx, `月球引潮力 (∝1/r³): 遠地點的 ${(tidalRel).toFixed(2)} 倍`, liveCx, 148, PALETTE.tide);
+        break;
+      }
+
+      /* ---------------- 06 緯度效應：立體天球地平穹頂與極晝極夜 ---------------- */
+      case 5: {
+        const phi = p.lat * DEG;
+        const delta = Math.asin(Math.sin(23.44 * DEG) * Math.sin(p.seasonDeg * DEG));
+        const H = (p.localHour - 12) * 15 * DEG;
+
+        // 計算當前太陽仰角與晝長
+        const sinAltNow = Math.sin(phi) * Math.sin(delta) + Math.cos(phi) * Math.cos(delta) * Math.cos(H);
+        const altNowDeg = Math.asin(clamp(sinAltNow, -1, 1)) * RAD;
+
+        const cosH0 = -Math.tan(phi) * Math.tan(delta);
+        let dayHours = 12, statusTag = '';
+        if (cosH0 <= -1 || (Math.abs(p.lat) > 89.5 && p.lat * delta > 0)) {
+          dayHours = 24; statusTag = '☀️ 永晝現象 (24h 午夜太陽不落!)';
+        } else if (cosH0 >= 1 || (Math.abs(p.lat) > 89.5 && p.lat * delta < 0)) {
+          dayHours = 0; statusTag = '🌌 永夜現象 (24h 太陽不升起)';
+        } else {
+          dayHours = (2 * Math.acos(clamp(cosH0, -1, 1)) * RAD) / 15;
+          statusTag = `晝長 ${dayHours.toFixed(1)}h ｜ 夜長 ${(24 - dayHours).toFixed(1)}h`;
+        }
+
+        // 斜視 3D 天球穹頂投影函式 (北在左後、南在右前、東在遠側、西在近側)
+        const domeR = 152, domeCy = 52;
+        const projDome = (altR, azFromNorthEastPos) => {
+          // az: 0=北(左), 90°=東(裡), 180°=南(右), 270°=西(外)
+          const rHoriz = Math.cos(altR) * domeR;
+          const x = -Math.cos(azFromNorthEastPos) * rHoriz;
+          const z = Math.sin(azFromNorthEastPos) * rHoriz;
+          const y = domeCy - Math.sin(altR) * domeR + z * 0.32;
+          return { x, y, z };
+        };
+
+        // 天空穹頂半圓光暈 (依當前太陽仰角明暗變化)
+        const skyBright = clamp((altNowDeg + 8) / 35, 0, 1);
+        const domeGrad = ctx.createRadialGradient(0, domeCy - 60, 10, 0, domeCy, domeR * 1.15);
+        domeGrad.addColorStop(0, `rgba(56, 189, 248, ${0.06 + 0.28 * skyBright})`);
+        domeGrad.addColorStop(1, 'rgba(15, 23, 42, 0.1)');
+        ctx.fillStyle = domeGrad;
+        ctx.beginPath(); ctx.arc(0, domeCy, domeR, Math.PI, 0); ctx.ellipse(0, domeCy, domeR, domeR * 0.32, 0, 0, TAU); ctx.fill();
+
+        // 地平圈草地橢圓盤與東南西北十字
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.14)';
+        ctx.strokeStyle = PALETTE.land;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.ellipse(0, domeCy, domeR, domeR * 0.32, 0, 0, TAU); ctx.fill(); ctx.stroke();
+
+        ctx.strokeStyle = 'rgba(148,163,184,0.35)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(0, domeCy, domeR, Math.PI, 0); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-domeR, domeCy); ctx.lineTo(domeR, domeCy); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, domeCy - domeR * 0.32); ctx.lineTo(0, domeCy + domeR * 0.32); ctx.stroke();
+
+        // 繪製 24 小時太陽周日視運動軌跡 (地平線上金色實線、地平線下灰色虛線)
+        for (let pass = 0; pass < 2; pass++) {
+          ctx.beginPath();
+          ctx.strokeStyle = pass === 1 ? PALETTE.sun : 'rgba(148, 163, 184, 0.32)';
+          ctx.lineWidth = pass === 1 ? 3 : 1.5;
+          if (pass === 0) ctx.setLineDash([4, 4]); else ctx.setLineDash([]);
+          let started = false;
+          for (let i = 0; i <= 144; i++) {
+            const hrA = ((i / 144) * 24 - 12) * 15 * DEG;
+            const sAlt = clamp(Math.sin(phi) * Math.sin(delta) + Math.cos(phi) * Math.cos(delta) * Math.cos(hrA), -1, 1);
+            const alt = Math.asin(sAlt);
+            const cAz = (Math.sin(delta) - Math.sin(phi) * sAlt) / Math.max(0.0001, Math.cos(phi) * Math.cos(alt));
+            let az = Math.acos(clamp(cAz, -1, 1));
+            if (Math.sin(hrA) > 0) az = TAU - az; // 下午在西側
+            const above = alt >= -0.005;
+            if ((pass === 1 && above) || (pass === 0 && !above)) {
+              const pt = projDome(alt, az);
+              if (!started) { ctx.moveTo(pt.x, pt.y); started = true; } else ctx.lineTo(pt.x, pt.y);
+            } else {
+              started = false;
+            }
+          }
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        // 當前太陽位置圓球
+        const cAzNow = (Math.sin(delta) - Math.sin(phi) * sinAltNow) / Math.max(0.0001, Math.cos(phi) * Math.cos(altNowDeg * DEG));
+        let azNow = Math.acos(clamp(cAzNow, -1, 1));
+        if (Math.sin(H) > 0) azNow = TAU - azNow;
+        const sunPt = projDome(altNowDeg * DEG, azNow);
+
+        ctx.fillStyle = altNowDeg >= 0 ? PALETTE.sun : '#64748B';
+        ctx.beginPath(); ctx.arc(sunPt.x, sunPt.y, 11, 0, TAU); ctx.fill();
+
+        // 中心觀測者小人
+        ctx.fillStyle = PALETTE.land;
+        ctx.beginPath(); ctx.arc(0, domeCy - 12, 5, 0, TAU); ctx.fill();
+        ctx.strokeStyle = PALETTE.land; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.moveTo(0, domeCy - 7); ctx.lineTo(0, domeCy + 4); ctx.stroke();
+
+        // 方位標籤與晝夜長短進度條
+        drawPill2D(ctx, '北 N', -domeR - 26, domeCy, PALETTE.earth);
+        drawPill2D(ctx, '南 S', domeR + 26, domeCy, PALETTE.earth);
+        drawPill2D(ctx, '東 E', 0, domeCy - domeR * 0.32 - 14, PALETTE.muted);
+        drawPill2D(ctx, '西 W', 0, domeCy + domeR * 0.32 + 16, PALETTE.muted);
+        drawPill2D(ctx, statusTag, 0, -155, dayHours === 24 ? PALETTE.sun : dayHours === 0 ? PALETTE.lunarOrb : PALETTE.earth);
+        drawPill2D(ctx, `地方時 ${Math.floor(p.localHour).toString().padStart(2,'0')}:${Math.round((p.localHour%1)*60).toString().padStart(2,'0')} ｜ 太陽仰角 ${altNowDeg.toFixed(1)}°`, 0, 152, PALETTE.sun);
+        break;
+      }
+
+      /* ---------------- 07 正午仰角與受熱影長實驗室 ---------------- */
+      case 6: {
+        const zenithDist = p.lat - p.decl; // >0 太陽在南天, <0 太陽在北天
+        const noonAlt = Math.max(0, 90 - Math.abs(zenithDist));
+        const altRad = noonAlt * DEG;
+        const fluxPct = Math.sin(altRad) * 100;
+
+        // 左側：垂直標竿 (Gnomon) 正午影長與量角器
+        const groundY = 95, poleX = -135, poleH = 115;
+        ctx.strokeStyle = '#64748B'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(-280, groundY); ctx.lineTo(15, groundY); ctx.stroke();
+
+        // 影子
+        const shadowDir = zenithDist >= 0 ? -1 : 1; // 太陽在南(右)則影子朝北(左)
+        const shadowLen = noonAlt > 3 ? clamp(poleH / Math.tan(altRad), 0, 145) : 145;
+        if (noonAlt > 0) {
+          ctx.strokeStyle = '#F43F5E'; ctx.lineWidth = 6;
+          ctx.beginPath(); ctx.moveTo(poleX, groundY); ctx.lineTo(poleX + shadowDir * shadowLen, groundY); ctx.stroke();
+
+          // 陽光斜射線通過竿頂至影端
+          ctx.strokeStyle = PALETTE.sun; ctx.lineWidth = 2; ctx.setLineDash([5, 4]);
+          const rayDx = -shadowDir * Math.cos(altRad) * 190;
+          const rayDy = -Math.sin(altRad) * 190;
+          ctx.beginPath();
+          ctx.moveTo(poleX + rayDx, groundY - poleH + rayDy);
+          ctx.lineTo(poleX + shadowDir * shadowLen, groundY);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        // 垂直綠竿
+        ctx.strokeStyle = PALETTE.land; ctx.lineWidth = 6;
+        ctx.beginPath(); ctx.moveTo(poleX, groundY); ctx.lineTo(poleX, groundY - poleH); ctx.stroke();
+
+        const ratioStr = noonAlt > 1 ? `${(1 / Math.tan(altRad)).toFixed(2)} 倍竿高` : '極長/永夜';
+        drawPill2D(ctx, `正午太陽仰角: ${noonAlt.toFixed(1)}°`, -135, -152, PALETTE.sun);
+        drawPill2D(ctx, `正午竿影長: ${ratioStr}`, -135, 138, PALETTE.node);
+        drawPill2D(ctx, '北 N', -260, groundY - 16, PALETTE.muted);
+        drawPill2D(ctx, '南 S', -5, groundY - 16, PALETTE.muted);
+
+        // 右側：等寬太陽光束投射面積與能量密度熱網格 (W/m²)
+        const bx = 155, by = 25;
+        const beamW = 54;
+        const spreadW = noonAlt > 8 ? clamp(beamW / Math.sin(altRad), beamW, 210) : 210;
+
+        // 平行光束帶
+        ctx.fillStyle = 'rgba(251, 191, 36, 0.22)';
+        const incAng = Math.max(8 * DEG, altRad);
+        const dxTop = Math.cos(incAng) * 135;
+        const dyTop = -Math.sin(incAng) * 135;
+        ctx.beginPath();
+        ctx.moveTo(bx - spreadW * 0.5 + dxTop, by + dyTop);
+        ctx.lineTo(bx + spreadW * 0.5 + dxTop, by + dyTop);
+        ctx.lineTo(bx + spreadW * 0.5, by);
+        ctx.lineTo(bx - spreadW * 0.5, by);
+        ctx.closePath();
+        ctx.fill();
+
+        // 地表受熱能量網格俯視圖 (位於下方 by+35..by+105)
+        const gridY = 65;
+        const heatR = Math.round(lerp(56, 251, fluxPct / 100));
+        const heatG = Math.round(lerp(130, 146, fluxPct / 100));
+        const heatB = Math.round(lerp(246, 36, fluxPct / 100));
+        ctx.fillStyle = `rgba(${heatR},${heatG},${heatB},0.45)`;
+        ctx.strokeStyle = `rgb(${heatR},${heatG},${heatB})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.rect(bx - spreadW * 0.5, gridY - 26, spreadW, 52); ctx.fill(); ctx.stroke();
+
+        // 單位面積格線 (每 18px 一單位面積)
+        ctx.strokeStyle = 'rgba(255,255,255,0.38)';
+        ctx.lineWidth = 1;
+        for (let gx = bx - spreadW * 0.5 + 18; gx < bx + spreadW * 0.5; gx += 18) {
+          ctx.beginPath(); ctx.moveTo(gx, gridY - 26); ctx.lineTo(gx, gridY + 26); ctx.stroke();
+        }
+        ctx.beginPath(); ctx.moveTo(bx - spreadW * 0.5, gridY); ctx.lineTo(bx + spreadW * 0.5, gridY); ctx.stroke();
+
+        drawPill2D(ctx, `單位面積能量密度: ${fluxPct.toFixed(0)}%`, bx, -152, PALETTE.sun);
+        drawPill2D(ctx, `同束陽光攤平面積: ${(1 / Math.max(0.12, Math.sin(altRad))).toFixed(2)}x`, bx, 138, PALETTE.earth);
+        break;
+      }
+
+      /* ---------------- 08 8字形太陽軌跡 (Analemma) 與均時差 ---------------- */
+      case 7: {
+        // 精準天文公式計算全年 365 天正午太陽赤緯與均時差 (可獨立開關傾角與離心率!)
+        const calcAnalemma = (day, tiltOn, eccOn) => {
+          const eps = tiltOn ? 23.44 * DEG : 0;
+          const e = eccOn ? 0.01671 : 0;
+          const M = TAU * (day - 3) / 365.25; // 1月3日近日點
+          const nu = M + 2 * e * Math.sin(M) + 1.25 * e * e * Math.sin(2 * M);
+          const periLon = 282.9 * DEG;
+          const meanLon = normDeg((M + periLon) * RAD) * DEG;
+          const trueLon = normDeg((nu + periLon) * RAD) * DEG;
+          const ra = Math.atan2(Math.cos(eps) * Math.sin(trueLon), Math.cos(trueLon));
+          let dLon = meanLon - ra;
+          while (dLon > Math.PI) dLon -= TAU;
+          while (dLon < -Math.PI) dLon += TAU;
+          const eotMin = dLon * RAD * 4; // 每度 = 4 分鐘!
+          const decl = Math.asin(Math.sin(eps) * Math.sin(trueLon)) * RAD;
+          return { eotMin, decl };
+        };
+
+        // 左側：南天正午 12:00 天空 8 字形軌跡視窗
+        const skyCx = -130, skyCy = 5;
+        ctx.fillStyle = '#0B192C';
+        ctx.beginPath(); ctx.roundRect(-280, -170, 295, 340, 12); ctx.fill();
+        ctx.strokeStyle = PALETTE.grid; ctx.stroke();
+
+        // 正南子午線與天球赤道高度十字線
+        ctx.strokeStyle = 'rgba(148,163,184,0.28)';
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath(); ctx.moveTo(skyCx, -155); ctx.lineTo(skyCx, 155); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-265, skyCy); ctx.lineTo(0, skyCy); ctx.stroke();
+        ctx.setLineDash([]);
+
+        // 繪製全年 365 點 8 字形 Analemma
+        ctx.strokeStyle = PALETTE.sun;
+        ctx.lineWidth = 2.6;
+        ctx.beginPath();
+        for (let d = 1; d <= 365; d += 2) {
+          const r = calcAnalemma(d, p.tiltOn, p.eccOn);
+          const x = skyCx - r.eotMin * 5.2; // 太陽快(eot>0)偏西(右)，太陽慢偏東(左)：面向南方時東在左、西在右 -> +eot 偏右!
+          const rx = skyCx + r.eotMin * 5.2;
+          const ry = skyCy - r.decl * 4.8;
+          d === 1 ? ctx.moveTo(rx, ry) : ctx.lineTo(rx, ry);
+        }
+        ctx.closePath();
+        ctx.stroke();
+
+        // 當前日期的太陽亮點
+        const cur = calcAnalemma(p.dayOfYear, p.tiltOn, p.eccOn);
+        const curSkyX = skyCx + cur.eotMin * 5.2;
+        const curSkyY = skyCy - cur.decl * 4.8;
+        ctx.fillStyle = PALETTE.node;
+        ctx.beginPath(); ctx.arc(curSkyX, curSkyY, 7.5, 0, TAU); ctx.fill();
+
+        drawPill2D(ctx, '每天中午 12:00 天空太陽軌跡 (面向南方)', skyCx, -148, PALETTE.sun);
+        drawPill2D(ctx, '東 E (偏慢)  ← 子午線 →  西 W (偏快)', skyCx, 148, PALETTE.muted);
+
+        // 右側：全年均時差曲線圖 (Equation of Time: -16m ~ +17m)
+        const gx0 = 42, gx1 = 272, gy0 = 5;
+        ctx.fillStyle = '#0F172A';
+        ctx.beginPath(); ctx.roundRect(25, -170, 262, 340, 12); ctx.fill();
+        ctx.strokeStyle = PALETTE.grid; ctx.stroke();
+
+        ctx.strokeStyle = 'rgba(148,163,184,0.35)';
+        ctx.beginPath(); ctx.moveTo(gx0, gy0); ctx.lineTo(gx1, gy0); ctx.stroke();
+
+        ctx.strokeStyle = PALETTE.earth;
+        ctx.lineWidth = 2.6;
+        ctx.beginPath();
+        for (let d = 1; d <= 365; d += 2) {
+          const r = calcAnalemma(d, p.tiltOn, p.eccOn);
+          const x = lerp(gx0, gx1, (d - 1) / 364);
+          const y = gy0 - r.eotMin * 6.2;
+          d === 1 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+
+        const cxGraph = lerp(gx0, gx1, (p.dayOfYear - 1) / 364);
+        const cyGraph = gy0 - cur.eotMin * 6.2;
+        ctx.fillStyle = PALETTE.node;
+        ctx.beginPath(); ctx.arc(cxGraph, cyGraph, 6.5, 0, TAU); ctx.fill();
+
+        drawPill2D(ctx, `均時差: ${cur.eotMin >= 0 ? '+' : ''}${cur.eotMin.toFixed(1)} 分鐘`, 156, -148, PALETTE.earth);
+        drawPill2D(ctx, `太陽赤緯: ${cur.decl >= 0 ? '+' : ''}${cur.decl.toFixed(1)}°`, 156, 148, PALETTE.node);
+        break;
+      }
+
+      /* ---------------- 09 恆星日與太陽日：上中天子午線通過視窗 ---------------- */
+      case 8: {
+        const siderealH = 23.9344696;
+        // 計算地球真正自轉度數：在 siderealH 恰好 360.0°，在 24.0h 為 360.986°
+        const spinDeg = (p.rotHours / siderealH) * 360.0;
+        const sunNeedDeg = 360.0 + (p.rotHours / 24.0) * 0.9856;
+
+        // 上方：觀測者仰望「正南上中天子午線」放大望遠鏡視窗
+        ctx.fillStyle = '#091426';
+        ctx.beginPath(); ctx.roundRect(-275, -168, 550, 220, 12); ctx.fill();
+        ctx.strokeStyle = PALETTE.grid; ctx.stroke();
+
+        // 綠色中央上中天子午線
+        ctx.strokeStyle = PALETTE.land;
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath(); ctx.moveTo(0, -165); ctx.lineTo(0, 50); ctx.stroke();
+        ctx.setLineDash([]);
+
+        // 將最後 1.5° 或最初 1.5° 放大顯示在視野中 (其餘時間顯示環繞進度)
+        const wrapDiff = (cur, target) => {
+          let d = (target - cur) % 360;
+          if (d > 180) d -= 360;
+          if (d < -180) d += 360;
+          return d;
+        };
+        const starDeltaDeg = wrapDiff(spinDeg % 360, 0);
+        const sunDeltaDeg = wrapDiff(spinDeg, sunNeedDeg);
+
+        // 放大倍率：1° = 95 px，讓 0.986° 的差距一目了然!
+        const starX = clamp(-starDeltaDeg * 95, -245, 245);
+        const sunX = clamp(-sunDeltaDeg * 95, -245, 245);
+
+        // 繪製遠方參考恆星 (青色十字星芒)
+        ctx.strokeStyle = PALETTE.tide; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.moveTo(starX - 14, -95); ctx.lineTo(starX + 14, -95); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(starX, -95 - 14); ctx.lineTo(starX, -95 + 14); ctx.stroke();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(starX, -95, 4.5, 0, TAU); ctx.fill();
+
+        // 繪製太陽圓盤 (位於下方軌道 y = -20)
+        ctx.fillStyle = PALETTE.sun;
+        ctx.beginPath(); ctx.arc(sunX, -20, 22, 0, TAU); ctx.fill();
+
+        // 當接近 23h56m 時標出 0.986° (約 4 分鐘) 差距雙箭頭!
+        if (p.rotHours > 22.5) {
+          ctx.strokeStyle = PALETTE.node; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.moveTo(starX, -58); ctx.lineTo(sunX, -58); ctx.stroke();
+          drawPill2D(ctx, '相差約 0.986° (需多轉 3分56秒!)', (starX + sunX) * 0.5, -58, PALETTE.node);
+        }
+
+        drawPill2D(ctx, '正南上中天子午線 (Meridian)', 0, -148, PALETTE.land);
+        drawPill2D(ctx, '遠方恆星', starX, -124, PALETTE.tide);
+        drawPill2D(ctx, '太陽', sunX, 18, PALETTE.sun);
+
+        // 下方：雙計時面板對照卡 (地球空間真實自轉角 vs 太陽時)
+        ctx.fillStyle = '#0F172A';
+        ctx.beginPath(); ctx.roundRect(-275, 68, 265, 98, 10); ctx.fill();
+        ctx.strokeStyle = PALETTE.tide; ctx.stroke();
+        drawPill2D(ctx, `空間真實自轉角: ${spinDeg.toFixed(2)}°`, -142, 96, PALETTE.tide);
+        drawPill2D(ctx, spinDeg >= 359.95 && spinDeg <= 360.08 ? '✅ 滿 360° 恆星日達成 (23h 56m 04s)' : '恆星日週期 = 23h 56m 04s', -142, 136, PALETTE.tide);
+
+        ctx.fillStyle = '#0F172A';
+        ctx.beginPath(); ctx.roundRect(10, 68, 265, 98, 10); ctx.fill();
+        ctx.strokeStyle = PALETTE.sun; ctx.stroke();
+        drawPill2D(ctx, `太陽時鐘: ${fmtSiderealClock(p.rotHours)}`, 142, 96, PALETTE.sun);
+        drawPill2D(ctx, p.rotHours >= 23.99 ? '✅ 360.99° 太陽日正午達成 (24h 00m)' : '太陽日週期 = 24h 00m 00s', 142, 136, PALETTE.sun);
+        break;
+      }
+
+      /* ---------------- 10 內行星(金星)逆行軌跡與伽利略望遠鏡盈虧 ---------------- */
+      case 9: {
+        // 計算完整會合週期天球背景視座標 (經度偏移 lon, 緯度偏移 lat) 與行星相位 k、距離 d
+        const getPlanetSky = (prog, mode) => {
+          const t = prog - 0.5;
+          let ex, ez, px, py, pz;
+          if (mode === 0) {
+            const eA = -Math.PI / 2 + t * 2.1;
+            const vA = -Math.PI / 2 + t * 5.52;
+            ex = Math.cos(eA) * 1.0; ez = Math.sin(eA) * 1.0;
+            px = Math.cos(vA) * 0.723; py = Math.sin(vA) * 0.085; pz = Math.sin(vA) * 0.723;
+          } else {
+            const eA = -Math.PI / 2 + t * 4.2;
+            const mA = -Math.PI / 2 + t * 2.23;
+            ex = Math.cos(eA) * 1.0; ez = Math.sin(eA) * 1.0;
+            px = Math.cos(mA) * 1.524; py = Math.sin(mA) * 0.095; pz = Math.sin(mA) * 1.524;
+          }
+          const dx = px - ex, dy = py, dz = pz - ez;
+          const dist = Math.hypot(dx, dy, dz);
+          // 背景恆星黃經 (面向 -Z 為基準 0，西在右、東在左：順行向東即向左或設定標準星圖東在左!)
+          const lon = Math.atan2(dx, -dz) * RAD;
+          const lat = Math.asin(clamp(dy / dist, -1, 1)) * RAD;
+
+          // 相位照明率 k = (1 + cos(太陽-行星-地球夾角)) / 2
+          // 向量 行星->太陽 = (-px, -py, -pz), 行星->地球 = (-dx, -dy, -dz)
+          const rSun = Math.hypot(px, py, pz);
+          const cosPhase = (px * dx + py * dy + pz * dz) / (rSun * dist);
+          const k = 0.5 * (1 + clamp(cosPhase, -1, 1));
+          const sunRightSide = (px * dz - pz * dx) > 0 ? 1 : -1;
+          return { lon, lat, dist, k, sunRightSide };
+        };
+
+        // 上半部：背景恆星座標系視運動軌跡圖 (標示順行:綠 / 留:金 / 逆行:紅!)
+        ctx.fillStyle = '#070E1E';
+        ctx.beginPath(); ctx.roundRect(-280, -172, 560, 198, 12); ctx.fill();
+        ctx.strokeStyle = PALETTE.grid; ctx.stroke();
+
+        // 固定背景星座星點
+        ctx.fillStyle = 'rgba(226, 232, 240, 0.55)';
+        for (let i = 0; i < 28; i++) {
+          const sx = -255 + ((i * 79) % 510);
+          const sy = -155 + ((i * 47) % 165);
+          ctx.beginPath(); ctx.arc(sx, sy, (i % 3 === 0) ? 2.1 : 1.2, 0, TAU); ctx.fill();
+        }
+
+        const mapPt = (s) => ({ x: -s.lon * 4.1, y: -72 - s.lat * 11.5 });
+
+        // 繪製完整軌跡並自動著色「順行(綠)」與「逆行(紅)」段
+        for (let q = 0.16; q < 0.84; q += 0.006) {
+          const s1 = getPlanetSky(q, p.planetMode);
+          const s2 = getPlanetSky(q + 0.006, p.planetMode);
+          const dLon = s2.lon - s1.lon;
+          const isRetro = dLon < 0; // 黃經減少 = 逆行!
+          const p1 = mapPt(s1), p2 = mapPt(s2);
+          if (Math.abs(p1.x) < 268 && Math.abs(p2.x) < 268) {
+            ctx.strokeStyle = isRetro ? PALETTE.node : PALETTE.land;
+            ctx.lineWidth = isRetro ? 3.6 : 2.2;
+            ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+          }
+        }
+
+        const cur = getPlanetSky(p.synodicProg, p.planetMode);
+        const nxt = getPlanetSky(clamp(p.synodicProg + 0.004, 0, 1), p.planetMode);
+        const vel = (nxt.lon - cur.lon) / 0.004;
+        const motionState = Math.abs(vel) < 12 ? '⏸ 留 (Stationary - 視覺停滯轉折點)'
+          : vel < 0 ? '◀ 逆行中 (Retrograde - 內圈超車倒退!)'
+          : '▶ 順行中 (Prograde - 正常向東移動)';
+
+        const cPt = mapPt(cur);
+        if (Math.abs(cPt.x) < 270) {
+          ctx.fillStyle = p.planetMode === 0 ? PALETTE.venus : PALETTE.node;
+          ctx.beginPath(); ctx.arc(cPt.x, cPt.y, 7.5, 0, TAU); ctx.fill();
+        }
+
+        drawPill2D(ctx, motionState, 0, -150, vel < 0 ? PALETTE.node : Math.abs(vel) < 12 ? PALETTE.sun : PALETTE.land);
+        drawPill2D(ctx, '東 East (順行方向 ←)                 背景恆星座標系                 (→ 逆行方向) 西 West', 0, 10, PALETTE.muted);
+
+        // 下半部：伽利略高倍率望遠鏡視窗 (呈現盈虧相位與 6 倍視直徑劇烈變化!)
+        ctx.fillStyle = '#0B1324';
+        ctx.beginPath(); ctx.roundRect(-280, 38, 560, 134, 12); ctx.fill();
+        ctx.strokeStyle = PALETTE.venus; ctx.stroke();
+
+        const teleCx = -115, teleCy = 105;
+        ctx.fillStyle = '#020617';
+        ctx.beginPath(); ctx.arc(teleCx, teleCy, 56, 0, TAU); ctx.fill();
+        ctx.strokeStyle = 'rgba(253, 224, 71, 0.45)'; ctx.lineWidth = 2; ctx.stroke();
+
+        // 計算視半徑：金星最近 0.277 AU (R=45px) vs 最遠 1.723 AU (R=7.5px) -> 超過 6 倍視直徑差異!
+        const appR = p.planetMode === 0 ? clamp(12.5 / cur.dist, 7.5, 45) : clamp(22 / cur.dist, 9, 38);
+
+        // 精準繪製行星明暗盈虧圓盤
+        ctx.save();
+        ctx.translate(teleCx, teleCy);
+        // 暗面底盤
+        ctx.fillStyle = '#1E293B';
+        ctx.beginPath(); ctx.arc(0, 0, appR, 0, TAU); ctx.fill();
+
+        // 亮面相位幾何 (使用半圓 + 晨昏橢圓合成任意相位 k ∈ [0, 1])
+        const litColor = p.planetMode === 0 ? '#FEF08A' : '#FB7185';
+        const side = cur.sunRightSide;
+        ctx.fillStyle = litColor;
+        ctx.beginPath();
+        if (side > 0) {
+          ctx.arc(0, 0, appR, -Math.PI / 2, Math.PI / 2, false);
+        } else {
+          ctx.arc(0, 0, appR, Math.PI / 2, -Math.PI / 2, false);
+        }
+        ctx.fill();
+
+        const ellW = Math.abs(2 * cur.k - 1) * appR;
+        ctx.fillStyle = cur.k >= 0.5 ? litColor : '#1E293B';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, ellW, appR, 0, 0, TAU);
+        ctx.fill();
+        ctx.restore();
+
+        const arcsec = p.planetMode === 0 ? (16.8 / cur.dist) : (9.4 / cur.dist);
+        drawPill2D(ctx, `望遠鏡相位: 照明率 ${(cur.k * 100).toFixed(0)}%`, 105, 76, PALETTE.venus);
+        drawPill2D(ctx, `地球距離: ${cur.dist.toFixed(2)} AU ｜ 視直徑: ${arcsec.toFixed(1)}″`, 105, 112, PALETTE.earth);
+        drawPill2D(ctx, p.planetMode === 0 ? '哥白尼鐵證：下合逆行時呈巨大眉月、上合呈小滿月' : '外行星火星：衝日逆行時最亮最大且永遠接近滿相', 105, 148, PALETTE.sun);
+        break;
+      }
+    }
+
+    ctx.restore();
+  }
+
+  /* =========================================================
+   * 11. UI 控制列、Step-by-Step 導覽與分頁切換綁定
+   * ========================================================= */
+  const tabsStrip = document.getElementById('tabs-strip');
+  const ctrlContainer = document.getElementById('ctrl-container');
+  const stepDotsEl = document.getElementById('step-dots');
+  const stepTitleEl = document.getElementById('step-title');
+  const stepDescEl = document.getElementById('step-desc');
+  const macroTitleEl = document.getElementById('macro-title');
+  const groundTitleEl = document.getElementById('ground-title');
+  const btnPlay = document.getElementById('btn-play');
+
+  // 建立 10 個分頁按鈕
+  MODULES.forEach((m, idx) => {
+    const btn = document.createElement('button');
+    btn.className = 'tab-btn' + (idx === 0 ? ' active' : '');
+    btn.innerHTML = `<span class="num">${m.num}</span><span>${m.short}</span>`;
+    btn.addEventListener('click', () => switchTab(idx));
+    tabsStrip.appendChild(btn);
+  });
+
+  document.getElementById('tab-left').addEventListener('click', () => { tabsStrip.scrollBy({ left: -220, behavior: 'smooth' }); });
+  document.getElementById('tab-right').addEventListener('click', () => { tabsStrip.scrollBy({ left: 220, behavior: 'smooth' }); });
+
+  // 建立動態參數控制器並維持即時數值同步
+  let uiValueUpdaters = [];
+  function buildControlsUI(tabIdx) {
+    ctrlContainer.innerHTML = '';
+    uiValueUpdaters = [];
+    const mod = MODULES[tabIdx];
+    const p = state.params[tabIdx];
+
+    mod.controls.forEach(c => {
+      const wrap = document.createElement('div');
+      wrap.className = 'ctrl-item';
+
+      if (c.type === 'chips' || c.type === 'presets') {
+        const lbl = document.createElement('div');
+        lbl.className = 'ctrl-label-row';
+        lbl.innerHTML = `<span>${c.label}</span>`;
+        const row = document.createElement('div');
+        row.className = 'preset-row';
+        const chips = [];
+        c.options.forEach(opt => {
+          const ch = document.createElement('button');
+          ch.className = 'preset-chip';
+          ch.textContent = opt.label;
+          ch.addEventListener('click', () => {
+            state.tween = null;
+            p[c.key] = opt.val;
+            syncControlsReadout();
+          });
+          row.appendChild(ch);
+          chips.push({ el: ch, val: opt.val });
+        });
+        wrap.appendChild(lbl);
+        wrap.appendChild(row);
+        uiValueUpdaters.push(() => {
+          chips.forEach(ch => ch.el.classList.toggle('active', Math.abs(p[c.key] - ch.val) < 0.05));
+        });
+      } else {
+        const lbl = document.createElement('div');
+        lbl.className = 'ctrl-label-row';
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = c.label;
+        const valSpan = document.createElement('span');
+        valSpan.className = 'ctrl-val';
+        lbl.append(nameSpan, valSpan);
+
+        const input = document.createElement('input');
+        input.type = 'range';
+        input.min = c.min;
+        input.max = c.max;
+        input.step = c.step;
+        input.value = p[c.key];
+        input.addEventListener('input', () => {
+          state.tween = null;
+          p[c.key] = parseFloat(input.value);
+          valSpan.textContent = c.fmt ? c.fmt(p[c.key]) : p[c.key];
+        });
+
+        wrap.append(lbl, input);
+        uiValueUpdaters.push(() => {
+          if (document.activeElement !== input) input.value = p[c.key];
+          valSpan.textContent = c.fmt ? c.fmt(p[c.key]) : p[c.key];
+        });
+      }
+
+      ctrlContainer.appendChild(wrap);
+    });
+    syncControlsReadout();
+  }
+
+  function syncControlsReadout() {
+    for (const fn of uiValueUpdaters) fn();
+  }
+
+  function updatePlayButtonUI() {
+    btnPlay.classList.toggle('play-on', state.playing);
+    btnPlay.textContent = state.playing ? '⏸ 暫停' : '▶ 播放';
+  }
+
+  // Step-by-Step 流程導覽切換 (自動平滑補間參數與 3D 相機視角)
+  function applyStep(stepIdx, animate = true) {
+    const mod = MODULES[state.tabIdx];
+    state.stepIdx = clamp(stepIdx, 0, mod.steps.length - 1);
+    const st = mod.steps[state.stepIdx];
+
+    stepTitleEl.textContent = st.title;
+    stepDescEl.textContent = st.desc;
+    state.playing = !!st.play;
+    updatePlayButtonUI();
+
+    // 更新步驟圓點高亮
+    Array.from(stepDotsEl.children).forEach((d, i) => d.classList.toggle('active', i === state.stepIdx));
+
+    const p = state.params[state.tabIdx];
+    if (!animate) {
+      Object.assign(p, st.params);
+      if (st.cam) camRig.reset(st.cam);
+      state.tween = null;
+      syncControlsReadout();
+    } else {
+      state.tween = {
+        startParams: { ...p },
+        targetParams: { ...st.params },
+        startCam: { theta: camRig.theta, phi: camRig.phi, radius: camRig.radius, tx: camRig.target.x, ty: camRig.target.y, tz: camRig.target.z },
+        targetCam: st.cam || mod.cam,
+        elapsed: 0,
+        duration: 0.62
+      };
+    }
+  }
+
+  function buildStepsUI(tabIdx) {
+    const mod = MODULES[tabIdx];
+    stepDotsEl.innerHTML = '';
+    mod.steps.forEach((_, idx) => {
+      const b = document.createElement('button');
+      b.className = 'step-dot' + (idx === 0 ? ' active' : '');
+      b.textContent = `S${idx + 1}`;
+      b.title = `跳至步驟 ${idx + 1}`;
+      b.addEventListener('click', () => applyStep(idx, true));
+      stepDotsEl.appendChild(b);
+    });
+  }
+
+  function switchTab(idx) {
+    state.tabIdx = idx;
+    state.tween = null;
+    const mod = MODULES[idx];
+
+    Array.from(tabsStrip.children).forEach((b, i) => {
+      const active = i === idx;
+      b.classList.toggle('active', active);
+      if (active) b.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    });
+
+    macroTitleEl.textContent = mod.macroTitle;
+    groundTitleEl.textContent = mod.groundTitle;
+    groundCam.reset();
+    camRig.reset(mod.cam);
+
+    buildMacroScene(idx);
+    buildControlsUI(idx);
+    buildStepsUI(idx);
+    applyStep(0, false);
+  }
+
+  // 全域按鈕事件
+  btnPlay.addEventListener('click', () => {
+    state.playing = !state.playing;
+    updatePlayButtonUI();
+  });
+
+  document.getElementById('btn-prev-step').addEventListener('click', () => {
+    const len = MODULES[state.tabIdx].steps.length;
+    applyStep((state.stepIdx - 1 + len) % len, true);
+  });
+
+  document.getElementById('btn-next-step').addEventListener('click', () => {
+    const len = MODULES[state.tabIdx].steps.length;
+    applyStep((state.stepIdx + 1) % len, true);
+  });
+
+  // 文字標籤顯示/隱藏開關
+  const btnLabels = document.getElementById('btn-labels');
+  function toggleLabels() {
+    state.showLabels = !state.showLabels;
+    btnLabels.classList.toggle('label-on', state.showLabels);
+    btnLabels.textContent = state.showLabels ? '🏷️ 標籤: 開' : '🏷️ 標籤: 關';
+  }
+  btnLabels.addEventListener('click', toggleLabels);
+  window.addEventListener('keydown', e => {
+    if (e.key === 'l' || e.key === 'L') toggleLabels();
+  });
+
+  // 視角模式切換 (雙視角 / 僅太空 / 僅地表)
+  const stageEl = document.getElementById('stage');
+  const viewBtns = {
+    dual: document.getElementById('view-dual'),
+    macro: document.getElementById('view-macro'),
+    ground: document.getElementById('view-ground')
+  };
+  function setViewMode(mode) {
+    state.viewMode = mode;
+    stageEl.className = mode === 'dual' ? '' : `mode-${mode}`;
+    Object.keys(viewBtns).forEach(k => viewBtns[k].classList.toggle('active', k === mode));
+    handleResize();
+  }
+  viewBtns.dual.addEventListener('click', () => setViewMode('dual'));
+  viewBtns.macro.addEventListener('click', () => setViewMode('macro'));
+  viewBtns.ground.addEventListener('click', () => setViewMode('ground'));
+
+  // 底部面板收合/展開 (行動裝置小螢幕友善)
+  const dockEl = document.getElementById('dock');
+  const btnDockCollapse = document.getElementById('btn-dock-collapse');
+  btnDockCollapse.addEventListener('click', () => {
+    const collapsed = dockEl.classList.toggle('collapsed');
+    btnDockCollapse.textContent = collapsed ? '展開控制面板 ▲' : '收合面板 ▼';
+    setTimeout(handleResize, 50);
+  });
+
+  // 視角右上角 Zoom / Pan 輔助按鈕
+  const macroPanBtn = document.getElementById('macro-pan-toggle');
+  macroPanBtn.addEventListener('click', () => {
+    state.macroPanMode = !state.macroPanMode;
+    macroPanBtn.classList.toggle('active', state.macroPanMode);
+  });
+  document.getElementById('macro-zoom-in').addEventListener('click', () => { camRig.radius *= 0.84; });
+  document.getElementById('macro-zoom-out').addEventListener('click', () => { camRig.radius *= 1.18; });
+  document.getElementById('macro-reset').addEventListener('click', () => { camRig.reset(MODULES[state.tabIdx].cam); });
+
+  document.getElementById('ground-zoom-in').addEventListener('click', () => { groundCam.zoom = clamp(groundCam.zoom * 1.2, 0.55, 3.8); });
+  document.getElementById('ground-zoom-out').addEventListener('click', () => { groundCam.zoom = clamp(groundCam.zoom / 1.2, 0.55, 3.8); });
+  document.getElementById('ground-reset').addEventListener('click', () => { groundCam.reset(); });
+
+  /* =========================================================
+   * 12. 視窗自適應縮放與 60fps 主模擬迴圈
+   * ========================================================= */
+  function handleResize() {
+    if (state.viewMode !== 'ground') {
+      const mw = macroPane.clientWidth;
+      const mh = macroPane.clientHeight;
+      if (mw > 2 && mh > 2) {
+        camera.aspect = mw / mh;
+        camera.updateProjectionMatrix();
+        renderer.setSize(mw, mh, false);
+      }
+    }
+  }
+  window.addEventListener('resize', handleResize);
+  if (window.ResizeObserver) {
+    const ro = new ResizeObserver(handleResize);
+    ro.observe(stageEl);
+  }
+
+  let lastTime = performance.now();
+  function animateLoop(now) {
+    requestAnimationFrame(animateLoop);
+    const dt = Math.min((now - lastTime) / 1000, 0.05);
+    lastTime = now;
+
+    const p = state.params[state.tabIdx];
+
+    // 處理 Step-by-Step 平滑補間動畫
+    if (state.tween) {
+      const tw = state.tween;
+      tw.elapsed += dt;
+      const rawT = clamp(tw.elapsed / tw.duration, 0, 1);
+      const ease = 1 - Math.pow(1 - rawT, 3); // Cubic Ease-Out
+
+      for (const k of Object.keys(tw.targetParams)) {
+        if (typeof tw.startParams[k] === 'number') {
+          p[k] = lerp(tw.startParams[k], tw.targetParams[k], ease);
+        } else {
+          p[k] = tw.targetParams[k];
+        }
+      }
+      camRig.theta = lerp(tw.startCam.theta, tw.targetCam.theta, ease);
+      camRig.phi = lerp(tw.startCam.phi, tw.targetCam.phi, ease);
+      camRig.radius = lerp(tw.startCam.radius, tw.targetCam.radius, ease);
+      camRig.target.set(
+        lerp(tw.startCam.tx, 0, ease),
+        lerp(tw.startCam.ty, 0, ease),
+        lerp(tw.startCam.tz, 0, ease)
+      );
+      if (rawT >= 1) state.tween = null;
+    }
+
+    if (activeMacroUpdater) activeMacroUpdater(p, dt);
+    syncControlsReadout();
+
+    if (state.viewMode !== 'ground') {
+      camRig.updateCamera();
+      renderer.render(scene, camera);
+      syncLabels3D();
+    } else {
+      macroLabelLayer.style.display = 'none';
+    }
+
+    renderGroundView(state.tabIdx, p);
+  }
+
+  // 初始化啟動第 01 分頁
+  switchTab(0);
+  handleResize();
+  requestAnimationFrame(animateLoop);
+})();
+</script>
+</body>
+</html>
