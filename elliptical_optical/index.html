@@ -1,0 +1,1617 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>橢圓焦點反射與遞迴粒子分裂模擬器 (1 → 1024)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap');
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #05050a;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            color: #f8fafc;
+            overscroll-behavior: none;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: crosshair;
+            touch-action: none;
+        }
+
+        /* 玻璃擬態面板與自訂捲軸 */
+        .glass-panel {
+            background: rgba(11, 13, 24, 0.82);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 25px rgba(99, 102, 241, 0.08);
+        }
+
+        .custom-scroll::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        .custom-scroll::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 9999px;
+        }
+
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 9999px;
+        }
+
+        .custom-scroll::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.35);
+        }
+
+        /* 自訂滑桿樣式 */
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.14);
+            border-radius: 999px;
+            outline: none;
+            transition: background 0.2s;
+        }
+
+        input[type="range"]:hover {
+            background: rgba(255, 255, 255, 0.25);
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #f5b041;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(245, 176, 65, 0.8);
+            border: 2px solid #ffffff;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.18);
+            box-shadow: 0 0 14px rgba(245, 176, 65, 1);
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #f5b041;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(245, 176, 65, 0.8);
+            border: 2px solid #ffffff;
+            transition: transform 0.15s ease;
+        }
+
+        .mono-num {
+            font-family: 'JetBrains Mono', monospace;
+            font-variant-numeric: tabular-nums;
+            font-feature-settings: "tnum";
+        }
+
+        /* 發光動畫按鈕 */
+        .btn-glow {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .btn-glow:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 0 18px rgba(245, 176, 65, 0.35);
+        }
+
+        .btn-glow:active {
+            transform: translateY(0px) scale(0.98);
+        }
+    </style>
+</head>
+
+<body class="relative select-none">
+
+    <!-- 主畫布 -->
+    <canvas id="simCanvas"></canvas>
+
+    <!-- 左上角即時狀態監控 HUD (已修正位數增加時的視覺跳躍，並支援手機與觸控螢幕) -->
+    <div class="fixed top-3 left-3 sm:top-4 sm:left-4 z-20 flex flex-col gap-2 pointer-events-none max-w-[calc(100vw-5.5rem)] sm:max-w-none">
+        <div class="glass-panel rounded-2xl px-3 py-2.5 sm:px-4 sm:py-3 pointer-events-auto flex flex-wrap items-center gap-2.5 sm:gap-6">
+            <!-- 粒子數：使用固定最小寬度與 tabular-nums 避免位數增加時版面位移跳躍 -->
+            <div class="min-w-[76px] sm:min-w-[110px]">
+                <div class="text-[10px] sm:text-[11px] uppercase tracking-wider text-slate-400 font-semibold">當前粒子數</div>
+                <div class="flex items-baseline gap-1">
+                    <span id="hudParticleCount"
+                        class="mono-num tabular-nums text-2xl sm:text-3xl font-bold text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.5)] inline-block min-w-[2.4ch] sm:min-w-[4ch] text-left">1</span>
+                    <span id="hudMaxParticles" class="mono-num tabular-nums text-[10px] sm:text-xs text-slate-400 shrink-0">/ 1024</span>
+                </div>
+            </div>
+
+            <div class="h-7 sm:h-8 w-[1px] bg-white/10"></div>
+
+            <!-- 世代數：固定 2 位元寬度避免 Gen 9 -> 10 時抖動 -->
+            <div class="min-w-[50px] sm:min-w-[70px]">
+                <div class="text-[10px] sm:text-[11px] uppercase tracking-wider text-slate-400 font-semibold">分裂世代</div>
+                <div class="flex items-baseline gap-1">
+                    <span class="text-[10px] sm:text-xs text-slate-400 shrink-0">Gen</span>
+                    <span id="hudGeneration" class="mono-num tabular-nums text-xl sm:text-2xl font-bold text-cyan-400 inline-block min-w-[2ch] text-left">0</span>
+                </div>
+            </div>
+
+            <div class="h-8 w-[1px] bg-white/10 hidden md:block"></div>
+
+            <div class="hidden md:block min-w-[95px] sm:min-w-[115px]">
+                <div class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">橢圓壁反射次數</div>
+                <div id="hudBounceCount" class="mono-num tabular-nums text-xl font-bold text-emerald-400 inline-block min-w-[5ch] text-left">0</div>
+            </div>
+
+            <div class="h-7 sm:h-8 w-[1px] bg-white/10"></div>
+
+            <!-- 頂部快捷控制按鈕：手機端緊湊圖標 + 電腦端完整文字 -->
+            <div class="flex items-center gap-1.5 sm:gap-2">
+                <button id="btnPlayPause"
+                    class="btn-glow flex items-center gap-1 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-300 font-semibold text-xs sm:text-sm">
+                    <span id="iconPlayPause">⏸<span class="hidden sm:inline ml-1">暫停</span></span>
+                </button>
+                <button id="btnRestart"
+                    class="btn-glow flex items-center gap-1 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-slate-200 font-semibold text-xs sm:text-sm"
+                    title="從 1 顆粒子重新發射">
+                    <span>↻<span class="hidden sm:inline ml-1">重置發射</span></span>
+                </button>
+                <button id="btnAudioToggle"
+                    class="btn-glow flex items-center gap-1 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-indigo-500/25 hover:bg-indigo-500/35 border border-indigo-400/40 text-indigo-200 font-semibold text-xs sm:text-sm"
+                    title="切換沉浸式音效">
+                    <span id="iconAudio">🔊<span class="hidden sm:inline ml-1">音效開</span></span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 互動提示膠囊 (手機適配) -->
+        <div id="aimHintBadge"
+            class="glass-panel rounded-xl px-3 py-1.5 text-[11px] sm:text-xs text-slate-300 flex items-center gap-2 self-start pointer-events-auto max-w-[calc(100vw-2rem)]">
+            <span class="inline-block w-2 h-2 rounded-full bg-amber-400 animate-ping shrink-0"></span>
+            <span class="truncate sm:whitespace-normal">💡 提示：單指拖曳調角度，雙指縮放平移，點擊焦點切換起點</span>
+        </div>
+    </div>
+
+    <!-- 右側可收合參數控制面板 (手機寬度自適應) -->
+    <div class="fixed top-3 right-3 sm:top-4 sm:right-4 z-30 flex flex-col items-end max-h-[calc(100vh-1.5rem)]">
+        <!-- 展開/收合按鈕 -->
+        <button id="btnTogglePanel"
+            class="glass-panel btn-glow mb-2 px-3 py-2 sm:px-3.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold text-slate-200 flex items-center gap-1.5 sm:gap-2 border border-white/15">
+            <span>⚙️<span class="hidden sm:inline ml-1">參數與音效控制台</span><span class="sm:hidden ml-1">設定</span></span>
+            <span id="panelToggleArrow" class="text-amber-400 transition-transform duration-300">▼</span>
+        </button>
+
+        <!-- 控制面板主體 -->
+        <div id="controlPanel"
+            class="glass-panel w-[calc(100vw-1.5rem)] max-w-sm sm:w-96 rounded-2xl p-4 sm:p-5 overflow-y-auto custom-scroll transition-all duration-300 origin-top-right space-y-5 max-h-[calc(100vh-5rem)]">
+
+            <!-- 區塊 1：粒子與遞迴分裂設定 -->
+            <div class="space-y-3">
+                <div class="flex items-center justify-between border-b border-white/10 pb-1.5">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                        <span>✨ 粒子與焦點分裂設定</span>
+                    </h3>
+                    <span class="text-[11px] text-slate-400">PF₁ + PF₂ = 2a</span>
+                </div>
+
+                <!-- 最大粒子數 (2^0 ~ 2^10 = 1024) -->
+                <div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <label for="sliderMaxGen" class="text-slate-300 font-medium">遞迴最大粒子數上限</label>
+                        <span id="valMaxParticles" class="mono-num text-amber-400 font-semibold">1024 (2¹⁰)</span>
+                    </div>
+                    <input id="sliderMaxGen" type="range" min="0" max="10" step="1" value="10">
+                    <div class="flex justify-between text-[10px] text-slate-500 mono-num mt-0.5">
+                        <span>1</span><span>4</span><span>16</span><span>64</span><span>256</span><span>1024</span>
+                    </div>
+                </div>
+
+                <!-- 焦點分裂幾何模式 -->
+                <div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <label for="selectSplitMode" class="text-slate-300 font-medium">到達焦點時分裂模式</label>
+                    </div>
+                    <select id="selectSplitMode"
+                        class="w-full bg-slate-900/90 border border-white/15 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-400">
+                        <option value="reverse180" selected>模式 A：原路徑直行 + 180°反向 (可調偏角 Δθ)</option>
+                        <option value="mirror180">模式 B：原路徑直行 + 外壁鏡像對稱展開</option>
+                        <option value="fan">模式 C：雙向對稱扇形分裂 (±Δθ)</option>
+                    </select>
+                </div>
+
+                <!-- 分裂角度微調 / 180°附加偏移角 -->
+                <div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <label for="sliderSplitSpread" class="text-slate-300 font-medium">180° 反向偏轉微調 (Δθ)</label>
+                        <span id="valSplitSpread" class="mono-num text-amber-400 font-semibold">12.0°</span>
+                    </div>
+                    <input id="sliderSplitSpread" type="range" min="-90" max="90" step="0.5" value="12.0">
+                    <div class="flex justify-between text-[10px] text-slate-500 mono-num mt-0.5">
+                        <span>-90°</span><span>-45°</span><span class="text-amber-400/80 font-bold">0°
+                            (180°反向)</span><span>+45°</span><span>+90°</span>
+                    </div>
+                </div>
+
+                <!-- 初始發射角度 -->
+                <div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <label for="sliderLaunchAngle" class="text-slate-300 font-medium">初始發射角度 (可拖曳畫布)</label>
+                        <span id="valLaunchAngle" class="mono-num text-cyan-400 font-semibold">38°</span>
+                    </div>
+                    <input id="sliderLaunchAngle" type="range" min="0" max="360" step="0.5" value="38">
+                </div>
+
+                <!-- 粒子飛行速度 -->
+                <div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <label for="sliderSpeed" class="text-slate-300 font-medium">粒子飛行速度</label>
+                        <span id="valSpeed" class="mono-num text-amber-400 font-semibold">1.0x</span>
+                    </div>
+                    <input id="sliderSpeed" type="range" min="0.15" max="3.0" step="0.05" value="1.0">
+                </div>
+            </div>
+
+            <!-- 區塊 2：拖曳彗尾與軌跡視覺效果 -->
+            <div class="space-y-3">
+                <div class="flex items-center justify-between border-b border-white/10 pb-1.5">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-cyan-400">☄️ 拖曳彗尾與軌跡視覺</h3>
+                    <button id="btnClearTrails"
+                        class="text-[11px] px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 text-slate-300 transition">清除底線</button>
+                </div>
+
+                <!-- 拖曳彗尾長度 -->
+                <div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <label for="sliderTailLength" class="text-slate-300 font-medium">粒子拖曳彗尾長度</label>
+                        <span id="valTailLength" class="mono-num text-cyan-400 font-semibold">135 px</span>
+                    </div>
+                    <input id="sliderTailLength" type="range" min="20" max="300" step="5" value="135">
+                </div>
+
+                <!-- 粒子光暈粗細 -->
+                <div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <label for="sliderParticleSize" class="text-slate-300 font-medium">彗尾光束粗細與輝光</label>
+                        <span id="valParticleSize" class="mono-num text-cyan-400 font-semibold">4.5 px</span>
+                    </div>
+                    <input id="sliderParticleSize" type="range" min="1.5" max="9.0" step="0.5" value="4.5">
+                </div>
+
+                <!-- 幾何軌跡細線透明度 -->
+                <div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <label for="sliderPathOpacity" class="text-slate-300 font-medium">幾何軌跡細線亮度</label>
+                        <span id="valPathOpacity" class="mono-num text-cyan-400 font-semibold">65%</span>
+                    </div>
+                    <input id="sliderPathOpacity" type="range" min="0" max="100" step="1" value="65">
+                </div>
+
+                <!-- 軌跡線殘留模式 -->
+                <div class="flex items-center justify-between pt-1">
+                    <span class="text-xs text-slate-300 font-medium">永久保留歷史軌跡線</span>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="chkKeepHistory" class="sr-only peer" checked>
+                        <div
+                            class="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500">
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <!-- 區塊 3：橢圓幾何參數 -->
+            <div class="space-y-3">
+                <div class="flex items-center justify-between border-b border-white/10 pb-1.5">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-emerald-400">📐 橢圓幾何結構</h3>
+                    <span id="valFocalDist" class="mono-num text-[11px] text-slate-400">e = 0.68</span>
+                </div>
+
+                <!-- 橢圓離心率 Eccentricity -->
+                <div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <label for="sliderEccentricity" class="text-slate-300 font-medium">橢圓離心率 (焦點間距)</label>
+                        <span id="valEccentricity" class="mono-num text-emerald-400 font-semibold">0.68</span>
+                    </div>
+                    <input id="sliderEccentricity" type="range" min="0.05" max="0.90" step="0.01" value="0.68">
+                </div>
+
+                <!-- 橢圓旋轉傾角 -->
+                <div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <label for="sliderTilt" class="text-slate-300 font-medium">橢圓旋轉傾角</label>
+                        <span id="valTilt" class="mono-num text-emerald-400 font-semibold">-10°</span>
+                    </div>
+                    <input id="sliderTilt" type="range" min="-90" max="90" step="1" value="-10">
+                </div>
+            </div>
+
+            <!-- 區塊 4：沉浸式物理聲學合成器 -->
+            <div class="space-y-3">
+                <div class="flex items-center justify-between border-b border-white/10 pb-1.5">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-indigo-400">🎵 沉浸式音效合成器</h3>
+                    <span id="audioStatusDot" class="text-[11px] text-indigo-300">Web Audio 合成</span>
+                </div>
+
+                <!-- 音色主題 -->
+                <div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <label for="selectSoundPreset" class="text-slate-300 font-medium">沉浸音色風格</label>
+                    </div>
+                    <select id="selectSoundPreset"
+                        class="w-full bg-slate-900/90 border border-white/15 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-400">
+                        <option value="crystal" selected>🔮 星際水晶豎琴 (五聲泛音 + 焦點共鳴)</option>
+                        <option value="ambient">🌌 深空環境合成器 (Lydian 夢幻和弦)</option>
+                        <option value="marimba">🪵 物理清脆木琴脈衝 (幾何打擊感)</option>
+                    </select>
+                </div>
+
+                <!-- 音量控制 -->
+                <div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <label for="sliderVolume" class="text-slate-300 font-medium">主音量大小</label>
+                        <span id="valVolume" class="mono-num text-indigo-300 font-semibold">70%</span>
+                    </div>
+                    <input id="sliderVolume" type="range" min="0" max="100" step="1" value="70">
+                </div>
+            </div>
+
+            <!-- 底部快速預設按鈕 -->
+            <div class="pt-2 border-t border-white/10 grid grid-cols-2 gap-2">
+                <button id="btnPresetClassic"
+                    class="btn-glow py-2 px-3 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/30 text-amber-300 text-xs font-semibold">
+                    🌟 經典參考圖視角
+                </button>
+                <button id="btnStepGen"
+                    class="btn-glow py-2 px-3 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-400/30 text-cyan-300 text-xs font-semibold">
+                    ⚡ 立即跳至下一代分裂
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * ============================================================================
+         * 橢圓焦點反射與遞迴粒子分裂模擬器 (1 → 1024 粒子)
+         * ============================================================================
+         * 數學核心原理：
+         * 1. 橢圓標準方程 (局部座標)： (x / b)^2 + (y / a)^2 = 1 （長軸為 Y 軸，半長軸 a，半短軸 b）
+         * 2. 兩焦點位置：F1 = (0, +c), F2 = (0, -c)，其中 c = sqrt(a^2 - b^2) = a * e
+         * 3. 橢圓光學定義：從焦點 F1 發出的任意光線，撞擊橢圓外周點 W 後，必定精確反射通過另一焦點 F2。
+         *    且總路徑長 |F1 -> W| + |W -> F2| === 2a (與發射角度完全無關！)。
+         * 4. 因此，同一個世代分裂出的所有粒子，儘管撞擊橢圓外壁的時間不同（形成瀑布般的琶音音效），
+         *    卻會在完全相同的時刻 (s = 2a) 匯聚於另一焦點並同時分裂成下一代 (1 -> 2 -> 4 ... -> 1024)！
+         */
+
+        // --- DOM 元素綁定 ---
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // HUD 元素
+        const hudParticleCount = document.getElementById('hudParticleCount');
+        const hudMaxParticles = document.getElementById('hudMaxParticles');
+        const hudGeneration = document.getElementById('hudGeneration');
+        const hudBounceCount = document.getElementById('hudBounceCount');
+        const btnPlayPause = document.getElementById('btnPlayPause');
+        const iconPlayPause = document.getElementById('iconPlayPause');
+        const btnRestart = document.getElementById('btnRestart');
+        const btnAudioToggle = document.getElementById('btnAudioToggle');
+        const iconAudio = document.getElementById('iconAudio');
+        const btnTogglePanel = document.getElementById('btnTogglePanel');
+        const panelToggleArrow = document.getElementById('panelToggleArrow');
+        const controlPanel = document.getElementById('controlPanel');
+
+        // 控制滑桿與選項
+        const sliderMaxGen = document.getElementById('sliderMaxGen');
+        const valMaxParticles = document.getElementById('valMaxParticles');
+        const selectSplitMode = document.getElementById('selectSplitMode');
+        const sliderSplitSpread = document.getElementById('sliderSplitSpread');
+        const valSplitSpread = document.getElementById('valSplitSpread');
+        const sliderLaunchAngle = document.getElementById('sliderLaunchAngle');
+        const valLaunchAngle = document.getElementById('valLaunchAngle');
+        const sliderSpeed = document.getElementById('sliderSpeed');
+        const valSpeed = document.getElementById('valSpeed');
+        const sliderTailLength = document.getElementById('sliderTailLength');
+        const valTailLength = document.getElementById('valTailLength');
+        const sliderParticleSize = document.getElementById('sliderParticleSize');
+        const valParticleSize = document.getElementById('valParticleSize');
+        const sliderPathOpacity = document.getElementById('sliderPathOpacity');
+        const valPathOpacity = document.getElementById('valPathOpacity');
+        const chkKeepHistory = document.getElementById('chkKeepHistory');
+        const btnClearTrails = document.getElementById('btnClearTrails');
+        const sliderEccentricity = document.getElementById('sliderEccentricity');
+        const valEccentricity = document.getElementById('valEccentricity');
+        const valFocalDist = document.getElementById('valFocalDist');
+        const sliderTilt = document.getElementById('sliderTilt');
+        const valTilt = document.getElementById('valTilt');
+        const selectSoundPreset = document.getElementById('selectSoundPreset');
+        const sliderVolume = document.getElementById('sliderVolume');
+        const valVolume = document.getElementById('valVolume');
+        const btnPresetClassic = document.getElementById('btnPresetClassic');
+        const btnStepGen = document.getElementById('btnStepGen');
+
+        // --- 全域模擬參數與狀態 ---
+        const state = {
+            isRunning: true,
+            maxGen: 10,                 // 2^10 = 1024
+            maxParticles: 1024,
+            splitMode: 'reverse180',    // 預設為原路徑直行 + 180°反向 (可調偏角 Δθ)
+            splitSpreadDeg: 12.0,        // 分裂角度參數 (0.0° 表示精確 180° 反向)
+            launchAngleDeg: 38.0,       // 從頂部焦點出發的初始角度 (度，0度為向上，順時針，匹配參考圖右上角發射)
+            startFocusIndex: 0,         // 0 為上方焦點 F1 (0, -c 在螢幕座標), 1 為下方焦點 F2 (0, +c)
+            speedMultiplier: 1.0,
+            tailLength: 135,            // 拖曳彗尾長度 (局部像素單位)
+            particleSize: 4.5,          // 彗尾粗細
+            pathOpacity: 0.65,          // 軌跡細線不透明度
+            keepHistory: true,          // 是否保留過往世代的歷史軌跡線
+            eccentricity: 0.68,         // 橢圓離心率 e
+            tiltDeg: -10,               // 橢圓逆時針傾角 (匹配參考圖微向左斜的視覺)
+            zoom: 1.0,
+            panX: 0,
+            panY: 0,
+
+            // 幾何計算快取 (以標準局部空間 a = 360 為基準)
+            a: 360,                     // 半長軸 (垂直方向)
+            b: 360 * Math.sqrt(1 - 0.68 * 0.68), // 半短軸 (水平方向)
+            c: 360 * 0.68,              // 焦點距離中心長度
+
+            // 統計與動態資料
+            generation: 0,
+            totalBounces: 0,
+            particles: [],
+            completedPaths: [],         // 已走完的軌跡線歷史紀錄 (最多保留適量避免卡頓)
+            focusFlashes: [],           // 焦點觸發分裂時的脈衝光環動畫
+            wallRipples: []             // 撞擊外周時的微光漣漪
+        };
+
+        // --- 色彩配置系統 (重現參考圖的紅、綠、紫、青及漸層彩虹光譜) ---
+        const classicPalette = [
+            { h: 4, s: 96, l: 58 },    // 鮮紅 (Red - 參考圖主粒子)
+            { h: 92, s: 95, l: 55 },   // 螢光綠 (Lime Green - 參考圖右下粒子)
+            { h: 276, s: 95, l: 64 },  // 霓虹紫 (Purple - 參考圖中左粒子)
+            { h: 190, s: 98, l: 56 }   // 電光青 (Cyan - 參考圖左下粒子)
+        ];
+
+        function getParticleColor(index, totalInGen, angleRad, generation) {
+            if (generation === 0) {
+                return classicPalette[0]; // 第一顆永遠為鮮紅
+            }
+            if (generation <= 2 && index < 4) {
+                return classicPalette[index % 4];
+            }
+            // 高世代 (8 ~ 1024) 根據粒子序號與发射角度分佈出璀璨不重複的全光譜霓虹色
+            const goldenRatioConjugate = 0.618033988749895;
+            const hue = ((index * goldenRatioConjugate * 360) + (angleRad * 180 / Math.PI) + 360) % 360;
+            return {
+                h: hue,
+                s: 94,
+                l: 58
+            };
+        }
+
+        function hslToCss(col, alpha = 1) {
+            return `hsla(${col.h.toFixed(1)}, ${col.s}%, ${col.l}%, ${alpha})`;
+        }
+
+        // ============================================================================
+        // Web Audio API 沉浸式聲學合成引擎 (零外部音檔依賴)
+        // ============================================================================
+        class ImmersiveAudioEngine {
+            constructor() {
+                this.ctx = null;
+                this.masterGain = null;
+                this.compressor = null;
+                this.enabled = true;
+                this.volume = 0.70;
+                this.preset = 'crystal';
+                this.lastWallPingTime = 0;
+                this.pingsInCurrentWindow = 0;
+
+                // 和諧五聲音階與 Lydian 宇宙音階頻率表 (Hz)
+                this.scales = {
+                    crystal: [261.63, 293.66, 329.63, 392.00, 440.00, 523.25, 587.33, 659.25, 783.99, 880.00, 1046.50, 1174.66, 1318.51, 1567.98],
+                    ambient: [196.00, 220.00, 246.94, 293.66, 329.63, 369.99, 392.00, 440.00, 493.88, 587.33, 659.25, 739.99, 783.99, 880.00],
+                    marimba: [220.00, 261.63, 329.63, 392.00, 440.00, 523.25, 659.25, 783.99, 880.00, 1046.50, 1318.51]
+                };
+            }
+
+            init() {
+                if (this.ctx) {
+                    if (this.ctx.state === 'suspended') {
+                        this.ctx.resume();
+                    }
+                    return;
+                }
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (!AudioCtx) return;
+
+                this.ctx = new AudioCtx();
+
+                // 動態壓縮器：確保 1024 顆粒子同時發聲時絕不爆音 (Clipping Protection)
+                this.compressor = this.ctx.createDynamicsCompressor();
+                this.compressor.threshold.setValueAtTime(-18, this.ctx.currentTime);
+                this.compressor.knee.setValueAtTime(12, this.ctx.currentTime);
+                this.compressor.ratio.setValueAtTime(8, this.ctx.currentTime);
+                this.compressor.attack.setValueAtTime(0.003, this.ctx.currentTime);
+                this.compressor.release.setValueAtTime(0.25, this.ctx.currentTime);
+
+                this.masterGain = this.ctx.createGain();
+                this.masterGain.gain.setValueAtTime(this.volume * 0.6, this.ctx.currentTime);
+
+                this.compressor.connect(this.masterGain);
+                this.masterGain.connect(this.ctx.destination);
+            }
+
+            setVolume(val) {
+                this.volume = val;
+                if (this.masterGain && this.ctx) {
+                    this.masterGain.gain.setTargetAtTime(this.enabled ? this.volume * 0.6 : 0, this.ctx.currentTime, 0.03);
+                }
+            }
+
+            toggle() {
+                this.enabled = !this.enabled;
+                if (this.enabled) {
+                    this.init();
+                }
+                if (this.masterGain && this.ctx) {
+                    this.masterGain.gain.setTargetAtTime(this.enabled ? this.volume * 0.6 : 0, this.ctx.currentTime, 0.03);
+                }
+                return this.enabled;
+            }
+
+            // 粒子撞擊橢圓外周時的清脆空間泛音
+            playWallBounce(normAngle, panX = 0, particleCount = 1) {
+                if (!this.enabled) return;
+                this.init();
+                if (!this.ctx || this.ctx.state !== 'running') return;
+
+                const now = this.ctx.currentTime;
+                // 高粒子數智慧節流：每秒最多觸發約 28 個晶體顆粒音，形成流暢琶音瀑布而不卡頓
+                if (now - this.lastWallPingTime < 0.022) {
+                    return;
+                }
+                this.lastWallPingTime = now;
+
+                const scale = this.scales[this.preset] || this.scales.crystal;
+                const idx = Math.floor(Math.abs(normAngle) * scale.length) % scale.length;
+                const freq = scale[idx];
+
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                // 根據音色設定波形與包絡
+                const densityScale = Math.max(0.18, 1 / Math.pow(particleCount, 0.22));
+                const peakGain = 0.16 * densityScale;
+
+                if (this.preset === 'crystal') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, now);
+                    gain.gain.setValueAtTime(0.0001, now);
+                    gain.gain.exponentialRampToValueAtTime(peakGain, now + 0.008);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.38);
+                } else if (this.preset === 'ambient') {
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq * 0.5, now);
+                    gain.gain.setValueAtTime(0.0001, now);
+                    gain.gain.exponentialRampToValueAtTime(peakGain * 0.85, now + 0.03);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.65);
+                } else {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq * 1.2, now);
+                    osc.frequency.exponentialRampToValueAtTime(freq * 0.98, now + 0.09);
+                    gain.gain.setValueAtTime(0.0001, now);
+                    gain.gain.exponentialRampToValueAtTime(peakGain * 1.2, now + 0.004);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
+                }
+
+                // 立體聲空間定位
+                if (this.ctx.createStereoPanner) {
+                    const panner = this.ctx.createStereoPanner();
+                    panner.pan.setValueAtTime(Math.max(-0.85, Math.min(0.85, panX)), now);
+                    osc.connect(gain);
+                    gain.connect(panner);
+                    panner.connect(this.compressor);
+                } else {
+                    osc.connect(gain);
+                    gain.connect(this.compressor);
+                }
+
+                osc.start(now);
+                osc.stop(now + 0.7);
+            }
+
+            // 粒子同時匯聚於焦點並分裂成下一代時的和弦共鳴音效
+            playFocusSplit(generation, newParticleCount) {
+                if (!this.enabled) return;
+                this.init();
+                if (!this.ctx || this.ctx.state !== 'running') return;
+
+                const now = this.ctx.currentTime;
+                const baseFreq = 130.81 * Math.pow(1.06, generation % 11); // C3 隨世代微幅上揚
+                const chordRatios = [1, 1.25, 1.5, 1.875, 2.0]; // 大七和弦泛音列
+
+                chordRatios.forEach((ratio, i) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+
+                    osc.type = i === 0 ? 'triangle' : 'sine';
+                    osc.frequency.setValueAtTime(baseFreq * ratio, now);
+                    // 分裂瞬間微妙的頻率展開感
+                    osc.frequency.exponentialRampToValueAtTime(baseFreq * ratio * (1 + i * 0.003), now + 0.55);
+
+                    const noteGain = (0.14 / chordRatios.length) * Math.min(1.4, 0.7 + generation * 0.08);
+                    gain.gain.setValueAtTime(0.0001, now);
+                    gain.gain.exponentialRampToValueAtTime(noteGain, now + 0.02 + i * 0.015);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.75 + i * 0.08);
+
+                    osc.connect(gain);
+                    gain.connect(this.compressor);
+
+                    osc.start(now);
+                    osc.stop(now + 0.9);
+                });
+            }
+        }
+
+        const audioEngine = new ImmersiveAudioEngine();
+
+        // ============================================================================
+        // 橢圓幾何與精確射線交點計算 (局部座標系統)
+        // ============================================================================
+        // 在局部座標系中：
+        // 橢圓中心在 (0, 0)，長軸沿著 Y 軸 (半長軸 a)，短軸沿著 X 軸 (半短軸 b)
+        // 上焦點 F0 = (0, -c)，下焦點 F1 = (0, +c)
+        function updateEllipseConstants() {
+            state.a = 360;
+            state.c = state.a * state.eccentricity;
+            state.b = Math.sqrt(Math.max(100, state.a * state.a - state.c * state.c));
+            valFocalDist.textContent = `e = ${state.eccentricity.toFixed(2)}`;
+        }
+
+        function getFocusPos(focusIndex) {
+            // focusIndex 0: 頂部焦點 (0, -c), focusIndex 1: 底部焦點 (0, +c)
+            return {
+                x: 0,
+                y: focusIndex === 0 ? -state.c : state.c
+            };
+        }
+
+        /**
+         * 計算從起點 P(px, py) 沿單位方向向量 D(dx, dy) 發射的射線，與橢圓 (x/b)^2 + (y/a)^2 = 1 的精確交點
+         */
+        function intersectRayEllipse(px, py, dx, dy) {
+            const a2 = state.a * state.a;
+            const b2 = state.b * state.b;
+
+            // 代入 (px + t*dx)^2 / b^2 + (py + t*dy)^2 / a^2 = 1
+            const A = (dx * dx) / b2 + (dy * dy) / a2;
+            const B = 2 * ((px * dx) / b2 + (py * dy) / a2);
+            const C = (px * px) / b2 + (py * py) / a2 - 1;
+
+            const disc = Math.max(0, B * B - 4 * A * C);
+            const t = (-B + Math.sqrt(disc)) / (2 * A);
+
+            return {
+                x: px + t * dx,
+                y: py + t * dy,
+                dist: t
+            };
+        }
+
+        /**
+         * 建立單一粒子從指定焦點出發、撞擊橢圓外壁並前往另一焦點的完整雙段式精確路徑
+         * @param {number} fromFocusIdx 出發焦點 (0 或 1)
+         * @param {number} launchAngleRad 發射方向角 (弧度，標準 atan2(dy, dx))
+         * @param {object} color HSL 顏色物件
+         * @param {number} generation 所屬分裂世代
+         */
+        function createParticle(fromFocusIdx, launchAngleRad, color, generation) {
+            const toFocusIdx = 1 - fromFocusIdx;
+            const F_start = getFocusPos(fromFocusIdx);
+            const F_end = getFocusPos(toFocusIdx);
+
+            const dx1 = Math.cos(launchAngleRad);
+            const dy1 = Math.sin(launchAngleRad);
+
+            // 1. 計算與橢圓外周的精確撞擊點 W
+            const hit = intersectRayEllipse(F_start.x, F_start.y, dx1, dy1);
+            const W = { x: hit.x, y: hit.y };
+            const L1 = hit.dist;
+
+            // 2. 根據橢圓光學性質，撞擊 W 後反射必精確指向另一焦點 F_end
+            const vx2 = F_end.x - W.x;
+            const vy2 = F_end.y - W.y;
+            const L2 = Math.hypot(vx2, vy2);
+            const arrivalAngleRad = Math.atan2(vy2, vx2);
+
+            return {
+                fromFocusIdx,
+                toFocusIdx,
+                F_start,
+                W,
+                F_end,
+                L1,
+                L2,
+                totalDist: L1 + L2, // 恆等於 2 * state.a !
+                traveled: 0,        // 當前已飛行距離 (0 -> 2a)
+                bouncedWall: false, // 是否已觸發本趟外壁反射
+                launchAngleRad,
+                arrivalAngleRad,
+                color,
+                generation
+            };
+        }
+
+        /**
+         * 取得粒子在行進距離 s (0 <= s <= 2a) 時的精確局部座標 (x, y)
+         */
+        function getPositionAlongParticlePath(p, s) {
+            const clampedS = Math.max(0, Math.min(p.totalDist, s));
+            if (clampedS <= p.L1) {
+                const t = p.L1 > 0 ? clampedS / p.L1 : 0;
+                return {
+                    x: p.F_start.x + (p.W.x - p.F_start.x) * t,
+                    y: p.F_start.y + (p.W.y - p.F_start.y) * t
+                };
+            } else {
+                const rem = clampedS - p.L1;
+                const t = p.L2 > 0 ? rem / p.L2 : 0;
+                return {
+                    x: p.W.x + (p.F_end.x - p.W.x) * t,
+                    y: p.W.y + (p.F_end.y - p.W.y) * t
+                };
+            }
+        }
+
+        // ============================================================================
+        // 模擬流程控制：初始化、推進世代與 1 → 1024 遞迴分裂
+        // ============================================================================
+        function resetSimulation(clearHistory = true) {
+            updateEllipseConstants();
+            state.generation = 0;
+            state.totalBounces = 0;
+            state.particles = [];
+            state.focusFlashes = [];
+            state.wallRipples = [];
+            if (clearHistory) {
+                state.completedPaths = [];
+            }
+
+            // 將 UI 顯示的角度 (0度朝上，順時針，符合視覺直覺) 轉為局部座標 atan2 弧度
+            const rad = (state.launchAngleDeg - 90) * (Math.PI / 180);
+            const firstColor = getParticleColor(0, 1, rad, 0);
+            const p0 = createParticle(state.startFocusIndex, rad, firstColor, 0);
+            state.particles.push(p0);
+
+            // 起始焦點光環特效
+            const fPos = getFocusPos(state.startFocusIndex);
+            state.focusFlashes.push({ x: fPos.x, y: fPos.y, radius: 4, maxRadius: 42, alpha: 0.9, color: '#f5b041' });
+
+            updateHUD();
+        }
+
+        /**
+         * 當整個世代的粒子同時抵達目標焦點 (traveled >= 2a) 時，執行分裂邏輯
+         */
+        function advanceGenerationSplit() {
+            const currentCount = state.particles.length;
+            if (currentCount === 0) return;
+
+            // 1. 將本世代完成的折線路徑存入歷史軌跡中（供背景幾何網繪製）
+            if (state.keepHistory && state.pathOpacity > 0) {
+                // 為確保 1024 粒子高速運行流暢，控制歷史線段緩衝區上限
+                const maxHistoryLines = 2048;
+                for (let i = 0; i < currentCount; i++) {
+                    const p = state.particles[i];
+                    state.completedPaths.push({
+                        x0: p.F_start.x, y0: p.F_start.y,
+                        wx: p.W.x, wy: p.W.y,
+                        x1: p.F_end.x, y1: p.F_end.y,
+                        color: p.color,
+                        generation: p.generation
+                    });
+                }
+                if (state.completedPaths.length > maxHistoryLines) {
+                    state.completedPaths.splice(0, state.completedPaths.length - maxHistoryLines);
+                }
+            }
+
+            const arrivedFocusIdx = state.particles[0].toFocusIdx;
+            const fPos = getFocusPos(arrivedFocusIdx);
+
+            // 觸發焦點匯聚光波與沉浸和弦音效
+            state.focusFlashes.push({
+                x: fPos.x,
+                y: fPos.y,
+                radius: 6,
+                maxRadius: 65 + Math.min(60, state.generation * 8),
+                alpha: 1.0,
+                color: '#f5b041'
+            });
+
+            const canSplit = currentCount < state.maxParticles;
+            const nextGen = canSplit ? state.generation + 1 : state.generation;
+            const nextCount = canSplit ? Math.min(state.maxParticles, currentCount * 2) : currentCount;
+
+            audioEngine.playFocusSplit(nextGen, nextCount);
+
+            const spreadRad = (state.splitSpreadDeg * Math.PI) / 180;
+            const nextParticles = [];
+
+            if (canSplit) {
+                state.generation = nextGen;
+                // 每一顆抵達焦點的粒子分裂為 2 顆新粒子 (1 -> 2 -> 4 -> 8 ... -> 1024)
+                for (let i = 0; i < currentCount; i++) {
+                    const parent = state.particles[i];
+                    const inAngle = parent.arrivalAngleRad; // 抵達焦點時的入射方向 (直接穿過焦點即為此角度)
+                    const outAngle = parent.launchAngleRad; // 前一焦點出發時的方向
+
+                    let angleChild1, angleChild2;
+                    // 根據世代調整微偏角，確保高達 1024 顆粒子時每一條軌跡都完全錯開不重疊
+                    const genScale = Math.pow(0.82, Math.max(0, nextGen - 1));
+
+                    if (state.splitMode === 'reverse180') {
+                        // 模式 A (預設)：
+                        // 子粒子 1：沿原入射方向直線穿透焦點繼續前進
+                        // 子粒子 2：預設走原路徑相反方向 (180° 反向)，並由 Δθ 控制偏轉角度
+                        angleChild1 = inAngle;
+                        angleChild2 = inAngle + Math.PI + spreadRad * genScale;
+                    } else if (state.splitMode === 'mirror180') {
+                        // 模式 B：原路徑直行 + 外壁鏡像對稱展開
+                        angleChild1 = inAngle;
+                        angleChild2 = Math.PI - outAngle + spreadRad * genScale;
+                    } else {
+                        // 模式 C：對稱扇形雙向分裂 (±Δθ)
+                        angleChild1 = inAngle - spreadRad * 0.5 * genScale;
+                        angleChild2 = inAngle + spreadRad * 0.5 * genScale;
+                    }
+
+                    const idx1 = i * 2;
+                    const idx2 = i * 2 + 1;
+
+                    const col1 = (idx1 === 0) ? parent.color : getParticleColor(idx1, nextCount, angleChild1, nextGen);
+                    const col2 = getParticleColor(idx2, nextCount, angleChild2, nextGen);
+
+                    nextParticles.push(createParticle(arrivedFocusIdx, angleChild1, col1, nextGen));
+                    if (nextParticles.length < state.maxParticles) {
+                        nextParticles.push(createParticle(arrivedFocusIdx, angleChild2, col2, nextGen));
+                    }
+                }
+            } else {
+                // 已達粒子數上限 (例如 1024 顆)：所有粒子直接穿越焦點繼續下一輪共振反射
+                for (let i = 0; i < currentCount; i++) {
+                    const parent = state.particles[i];
+                    nextParticles.push(createParticle(arrivedFocusIdx, parent.arrivalAngleRad, parent.color, state.generation));
+                }
+            }
+
+            state.particles = nextParticles;
+            updateHUD();
+        }
+
+        function updateHUD() {
+            hudParticleCount.textContent = state.particles.length;
+            hudMaxParticles.textContent = `/ ${state.maxParticles}`;
+            hudGeneration.textContent = state.generation;
+            hudBounceCount.textContent = state.totalBounces.toLocaleString();
+        }
+
+        // ============================================================================
+        // 座標轉換輔助函式 (螢幕座標 <-> 橢圓局部座標)
+        // ============================================================================
+        function getTransformMetrics() {
+            const w = canvas.width;
+            const h = canvas.height;
+            const cx = w * 0.5 + state.panX;
+            const cy = h * 0.5 + state.panY;
+            const baseScale = Math.min(w, h) / 860;
+            const scale = baseScale * state.zoom;
+            const tiltRad = (state.tiltDeg * Math.PI) / 180;
+            return { cx, cy, scale, tiltRad };
+        }
+
+        function screenToLocal(sx, sy) {
+            const { cx, cy, scale, tiltRad } = getTransformMetrics();
+            const dx = (sx - cx) / scale;
+            const dy = (sy - cy) / scale;
+            const cosT = Math.cos(-tiltRad);
+            const sinT = Math.sin(-tiltRad);
+            return {
+                x: dx * cosT - dy * sinT,
+                y: dx * sinT + dy * cosT
+            };
+        }
+
+        // ============================================================================
+        // 核心渲染管線 (重現參考圖的發光彗尾、焦點金環與彩色細線)
+        // ============================================================================
+        function renderScene() {
+            const w = canvas.width;
+            const h = canvas.height;
+
+            // 1. 深空背景渲染
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.fillStyle = '#05050a';
+            ctx.fillRect(0, 0, w, h);
+
+            // 背景微光氛圍漸層
+            const bgGrad = ctx.createRadialGradient(w * 0.5, h * 0.5, 10, w * 0.5, h * 0.5, Math.max(w, h) * 0.65);
+            bgGrad.addColorStop(0, 'rgba(18, 21, 42, 0.45)');
+            bgGrad.addColorStop(1, 'rgba(5, 5, 10, 0)');
+            ctx.fillStyle = bgGrad;
+            ctx.fillRect(0, 0, w, h);
+
+            const { cx, cy, scale, tiltRad } = getTransformMetrics();
+
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.scale(scale, scale);
+            ctx.rotate(tiltRad);
+
+            const pCount = state.particles.length;
+            // 當粒子數高達 256~1024 時自動微調線條透明度，維持絲滑雷射光網質感
+            const densityAlphaFactor = Math.max(0.14, Math.min(1.0, 12 / Math.pow(pCount, 0.55)));
+
+            // 2. 繪製歷史完成的幾何軌跡細線
+            if (state.keepHistory && state.pathOpacity > 0 && state.completedPaths.length > 0) {
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                const histAlpha = state.pathOpacity * 0.42 * densityAlphaFactor;
+                ctx.lineWidth = 1.15;
+
+                for (let i = 0; i < state.completedPaths.length; i++) {
+                    const path = state.completedPaths[i];
+                    ctx.strokeStyle = hslToCss(path.color, histAlpha);
+                    ctx.beginPath();
+                    ctx.moveTo(path.x0, path.y0);
+                    ctx.lineTo(path.wx, path.wy);
+                    ctx.lineTo(path.x1, path.y1);
+                    ctx.stroke();
+                }
+            }
+
+            // 3. 繪製當前世代粒子已經走過的折線軌跡 (如同參考圖中連接焦點與外壁的彩色細線)
+            if (state.pathOpacity > 0) {
+                const activeLineAlpha = Math.min(0.95, state.pathOpacity * (0.85 * densityAlphaFactor + 0.15));
+                ctx.lineWidth = pCount <= 16 ? 1.5 : 1.15;
+
+                for (let i = 0; i < pCount; i++) {
+                    const p = state.particles[i];
+                    const head = getPositionAlongParticlePath(p, p.traveled);
+
+                    ctx.strokeStyle = hslToCss(p.color, activeLineAlpha);
+                    ctx.beginPath();
+                    ctx.moveTo(p.F_start.x, p.F_start.y);
+                    if (p.traveled <= p.L1) {
+                        ctx.lineTo(head.x, head.y);
+                    } else {
+                        ctx.lineTo(p.W.x, p.W.y);
+                        ctx.lineTo(head.x, head.y);
+                    }
+                    ctx.stroke();
+                }
+            }
+
+            // 4. 繪製撞擊外壁時的漣漪微光
+            ctx.globalCompositeOperation = 'lighter';
+            for (let i = state.wallRipples.length - 1; i >= 0; i--) {
+                const rip = state.wallRipples[i];
+                ctx.strokeStyle = hslToCss(rip.color, rip.alpha * 0.65);
+                ctx.lineWidth = 1.6;
+                ctx.beginPath();
+                ctx.arc(rip.x, rip.y, rip.radius, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            // 5. 繪製每個粒子的分段式發光拖曳彗尾 (Segmented Glowing Comet Trail - 對應參考圖核心視覺)
+            const tailLen = state.tailLength;
+            const baseWidth = state.particleSize;
+            // 依據粒子數量自動調整分段精細度，兼顧 1024 顆粒子 60FPS 流暢度與極致竹節光束質感
+            const numSegments = pCount <= 64 ? 6 : (pCount <= 256 ? 4 : 3);
+
+            for (let i = 0; i < pCount; i++) {
+                const p = state.particles[i];
+                const headS = p.traveled;
+                const tailStartS = Math.max(0, headS - tailLen);
+
+                if (headS <= 0.1) continue;
+
+                // 分段繪製漸變粗細與亮度的拖曳尾跡（遇到橢圓外壁折角 W 時會自動精確轉折！）
+                for (let seg = 0; seg < numSegments; seg++) {
+                    const frac0 = seg / numSegments;
+                    const frac1 = (seg + 1) / numSegments;
+                    const s0 = tailStartS + (headS - tailStartS) * frac0;
+                    const s1 = tailStartS + (headS - tailStartS) * frac1;
+
+                    const pos0 = getPositionAlongParticlePath(p, s0);
+                    const pos1 = getPositionAlongParticlePath(p, s1);
+
+                    // 尾端細且透明，靠近頭部寬且明亮，呈現參考圖中的節狀光暈拖曳感
+                    const segProgress = frac1;
+                    const segAlpha = Math.pow(segProgress, 1.55) * (pCount > 256 ? 0.65 : 0.88);
+                    const segWidth = baseWidth * (0.28 + 0.95 * Math.pow(segProgress, 1.3));
+
+                    ctx.strokeStyle = hslToCss(p.color, segAlpha);
+                    ctx.lineWidth = segWidth;
+                    ctx.lineCap = 'round';
+                    ctx.lineJoin = 'round';
+
+                    ctx.beginPath();
+                    ctx.moveTo(pos0.x, pos0.y);
+                    // 若此分段跨越了外壁反射點 W，加入折點確保尾跡完美貼合反射角
+                    if (s0 < p.L1 && s1 > p.L1) {
+                        ctx.lineTo(p.W.x, p.W.y);
+                    }
+                    ctx.lineTo(pos1.x, pos1.y);
+                    ctx.stroke();
+                }
+
+                // 繪製粒子頭部外層彩色光暈與熾白核心圓點
+                const headPos = getPositionAlongParticlePath(p, headS);
+
+                // 外圈彩色輝光
+                ctx.fillStyle = hslToCss(p.color, pCount > 256 ? 0.55 : 0.85);
+                ctx.beginPath();
+                ctx.arc(headPos.x, headPos.y, baseWidth * 1.35, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 中心高亮白核
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(headPos.x, headPos.y, Math.max(1.6, baseWidth * 0.58), 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // 6. 繪製橢圓發光白色外周邊界
+            ctx.globalCompositeOperation = 'source-over';
+            // 外層柔和白光暈
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+            ctx.lineWidth = 6.5;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, state.b, state.a, 0, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // 內層銳利白色橢圓邊框
+            ctx.strokeStyle = '#f8fafc';
+            ctx.lineWidth = 2.4;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, state.b, state.a, 0, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // 7. 繪製焦點分裂脈衝光環
+            ctx.globalCompositeOperation = 'lighter';
+            for (let i = state.focusFlashes.length - 1; i >= 0; i--) {
+                const fl = state.focusFlashes[i];
+                ctx.strokeStyle = `rgba(245, 176, 65, ${fl.alpha})`;
+                ctx.lineWidth = 2.2;
+                ctx.beginPath();
+                ctx.arc(fl.x, fl.y, fl.radius, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            // 8. 繪製兩個黃金焦點標記 (F1 與 F2：金色外環 + 中心發光點，完全還原參考圖)
+            ctx.globalCompositeOperation = 'source-over';
+            const foci = [getFocusPos(0), getFocusPos(1)];
+            foci.forEach((f, idx) => {
+                // 焦點柔和金色光暈
+                const fGrad = ctx.createRadialGradient(f.x, f.y, 1, f.x, f.y, 18);
+                fGrad.addColorStop(0, 'rgba(245, 176, 65, 0.45)');
+                fGrad.addColorStop(1, 'rgba(245, 176, 65, 0)');
+                ctx.fillStyle = fGrad;
+                ctx.beginPath();
+                ctx.arc(f.x, f.y, 18, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 金色圓環
+                ctx.strokeStyle = '#f5b041';
+                ctx.lineWidth = 2.0;
+                ctx.beginPath();
+                ctx.arc(f.x, f.y, 10.5, 0, Math.PI * 2);
+                ctx.stroke();
+
+                // 焦點中心高亮圓點
+                ctx.fillStyle = '#fde68a';
+                ctx.beginPath();
+                ctx.arc(f.x, f.y, 2.5, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // 若使用者正在拖曳瞄準，繪製虛線瞄準導引線
+            if (isAimingDrag) {
+                const startF = getFocusPos(state.startFocusIndex);
+                const rad = (state.launchAngleDeg - 90) * (Math.PI / 180);
+                const hit = intersectRayEllipse(startF.x, startF.y, Math.cos(rad), Math.sin(rad));
+
+                ctx.strokeStyle = 'rgba(251, 191, 36, 0.55)';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([6, 6]);
+                ctx.beginPath();
+                ctx.moveTo(startF.x, startF.y);
+                ctx.lineTo(hit.x, hit.y);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            ctx.restore();
+        }
+
+        // ============================================================================
+        // 動畫更新主迴圈 (Physics Step & Animation Loop)
+        // ============================================================================
+        let lastFrameTime = performance.now();
+
+        function updateSimulation(dt) {
+            // 更新焦點與外壁特效動畫
+            for (let i = state.focusFlashes.length - 1; i >= 0; i--) {
+                const fl = state.focusFlashes[i];
+                fl.radius += dt * 140;
+                fl.alpha -= dt * 1.9;
+                if (fl.alpha <= 0 || fl.radius >= fl.maxRadius) {
+                    state.focusFlashes.splice(i, 1);
+                }
+            }
+
+            for (let i = state.wallRipples.length - 1; i >= 0; i--) {
+                const rip = state.wallRipples[i];
+                rip.radius += dt * 55;
+                rip.alpha -= dt * 2.6;
+                if (rip.alpha <= 0) {
+                    state.wallRipples.splice(i, 1);
+                }
+            }
+
+            if (!state.isRunning || state.particles.length === 0) return;
+
+            const baseSpeed = 340; // 局部空間每秒飛行像素速度
+            const stepDist = baseSpeed * state.speedMultiplier * dt;
+            const pCount = state.particles.length;
+
+            let allReachedFocus = true;
+
+            for (let i = 0; i < pCount; i++) {
+                const p = state.particles[i];
+                const prevTraveled = p.traveled;
+                p.traveled += stepDist;
+
+                // 檢測是否剛跨越橢圓外壁反射點 (prevTraveled < L1 && p.traveled >= L1)
+                if (!p.bouncedWall && prevTraveled < p.L1 && p.traveled >= p.L1) {
+                    p.bouncedWall = true;
+                    state.totalBounces++;
+
+                    // 外壁微光漣漪 (高粒子數時抽樣生成以維持極致效能)
+                    if (pCount <= 64 || i % Math.ceil(pCount / 48) === 0) {
+                        state.wallRipples.push({
+                            x: p.W.x,
+                            y: p.W.y,
+                            radius: 2.5,
+                            alpha: 0.85,
+                            color: p.color
+                        });
+                    }
+
+                    // 觸發沉浸式外壁反射泛音
+                    const normAngle = (p.launchAngleRad + Math.PI) / (Math.PI * 2);
+                    const panX = p.W.x / state.b;
+                    audioEngine.playWallBounce(normAngle, panX, pCount);
+                }
+
+                if (p.traveled < p.totalDist) {
+                    allReachedFocus = false;
+                }
+            }
+
+            hudBounceCount.textContent = state.totalBounces.toLocaleString();
+
+            // 當所有粒子走完 2a 總路徑匯聚於第二焦點時，執行遞迴分裂！
+            if (allReachedFocus) {
+                advanceGenerationSplit();
+            }
+        }
+
+        function animateLoop(now) {
+            const dt = Math.min(0.05, (now - lastFrameTime) / 1000);
+            lastFrameTime = now;
+
+            updateSimulation(dt);
+            renderScene();
+
+            requestAnimationFrame(animateLoop);
+        }
+
+        // ============================================================================
+        // 互動事件綁定 (滑桿、畫布拖曳瞄準、雙指縮放/平移與多點觸控支援)
+        // ============================================================================
+        const activePointers = new Map();
+        let isAimingDrag = false;
+        let isTwoFingerGesture = false;
+        let isMousePanning = false;
+        let mousePanStart = { x: 0, y: 0, panX: 0, panY: 0 };
+        let initialPinchDist = 0;
+        let initialZoom = 1.0;
+        let initialPanX = 0;
+        let initialPanY = 0;
+        let initialMidpoint = { x: 0, y: 0 };
+        let lastTapTime = 0;
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            renderScene();
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        // 畫布指標事件 (完整支援滑鼠、手機單指/雙指手勢)
+        function handlePointerDown(e) {
+            // 初次互動時解鎖瀏覽器 Web Audio
+            if (audioEngine.enabled) {
+                audioEngine.init();
+            }
+
+            try {
+                canvas.setPointerCapture(e.pointerId);
+            } catch (_) {}
+
+            activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+            // 桌機滑鼠中鍵或右鍵拖曳平移畫布
+            if (e.pointerType === 'mouse' && (e.button === 1 || e.button === 2)) {
+                isMousePanning = true;
+                mousePanStart = { x: e.clientX, y: e.clientY, panX: state.panX, panY: state.panY };
+                return;
+            }
+
+            // 手機/觸控螢幕：雙指手勢 (雙指縮放 + 平移)
+            if (activePointers.size === 2) {
+                isAimingDrag = false;
+                isTwoFingerGesture = true;
+                const pts = Array.from(activePointers.values());
+                initialPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+                initialZoom = state.zoom;
+                initialPanX = state.panX;
+                initialPanY = state.panY;
+                initialMidpoint = { x: (pts[0].x + pts[1].x) * 0.5, y: (pts[0].y + pts[1].y) * 0.5 };
+                return;
+            }
+
+            // 單指/單鍵點擊或拖曳
+            if (activePointers.size === 1) {
+                const now = performance.now();
+                // 雙擊畫布重置視角與平移
+                if (now - lastTapTime < 280) {
+                    state.zoom = 1.0;
+                    state.panX = 0;
+                    state.panY = 0;
+                    lastTapTime = 0;
+                    renderScene();
+                    return;
+                }
+                lastTapTime = now;
+
+                const rect = canvas.getBoundingClientRect();
+                const sx = e.clientX - rect.left;
+                const sy = e.clientY - rect.top;
+                const localPt = screenToLocal(sx, sy);
+
+                // 檢查是否點擊焦點切換起點 (手機觸控點擊寬容半徑擴大至 38px)
+                const f0 = getFocusPos(0);
+                const f1 = getFocusPos(1);
+                const d0 = Math.hypot(localPt.x - f0.x, localPt.y - f0.y);
+                const d1 = Math.hypot(localPt.x - f1.x, localPt.y - f1.y);
+
+                if (d0 < 38) {
+                    state.startFocusIndex = 0;
+                    resetSimulation(true);
+                    return;
+                } else if (d1 < 38) {
+                    state.startFocusIndex = 1;
+                    resetSimulation(true);
+                    return;
+                }
+
+                isAimingDrag = true;
+                updateAimFromPointer(localPt);
+            }
+        }
+
+        function handlePointerMove(e) {
+            if (!activePointers.has(e.pointerId)) return;
+            activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+            // 滑鼠中/右鍵平移
+            if (isMousePanning) {
+                state.panX = mousePanStart.panX + (e.clientX - mousePanStart.x);
+                state.panY = mousePanStart.panY + (e.clientY - mousePanStart.y);
+                return;
+            }
+
+            // 手機雙指手勢：同時支援雙指縮放與平移
+            if (isTwoFingerGesture && activePointers.size >= 2) {
+                const pts = Array.from(activePointers.values());
+                const currentDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+                if (initialPinchDist > 5) {
+                    const factor = currentDist / initialPinchDist;
+                    state.zoom = Math.max(0.4, Math.min(3.2, initialZoom * factor));
+                }
+                const currentMid = { x: (pts[0].x + pts[1].x) * 0.5, y: (pts[0].y + pts[1].y) * 0.5 };
+                state.panX = initialPanX + (currentMid.x - initialMidpoint.x);
+                state.panY = initialPanY + (currentMid.y - initialMidpoint.y);
+                return;
+            }
+
+            // 單指拖曳調整發射瞄準方向
+            if (isAimingDrag && activePointers.size === 1) {
+                const rect = canvas.getBoundingClientRect();
+                const sx = e.clientX - rect.left;
+                const sy = e.clientY - rect.top;
+                const localPt = screenToLocal(sx, sy);
+                updateAimFromPointer(localPt);
+            }
+        }
+
+        function handlePointerUp(e) {
+            try {
+                if (canvas.hasPointerCapture(e.pointerId)) {
+                    canvas.releasePointerCapture(e.pointerId);
+                }
+            } catch (_) {}
+
+            activePointers.delete(e.pointerId);
+
+            if (e.pointerType === 'mouse') {
+                isMousePanning = false;
+            }
+
+            if (activePointers.size < 2) {
+                isTwoFingerGesture = false;
+            }
+            if (activePointers.size === 0) {
+                isAimingDrag = false;
+                isMousePanning = false;
+            }
+        }
+
+        function updateAimFromPointer(localPt) {
+            const startF = getFocusPos(state.startFocusIndex);
+            const dx = localPt.x - startF.x;
+            const dy = localPt.y - startF.y;
+            if (Math.hypot(dx, dy) < 5) return;
+
+            const rad = Math.atan2(dy, dx);
+            let deg = (rad * 180 / Math.PI) + 90;
+            deg = ((deg % 360) + 360) % 360;
+
+            state.launchAngleDeg = deg;
+            sliderLaunchAngle.value = deg.toFixed(1);
+            valLaunchAngle.textContent = `${Math.round(deg)}°`;
+
+            resetSimulation(true);
+        }
+
+        canvas.addEventListener('pointerdown', handlePointerDown);
+        window.addEventListener('pointermove', handlePointerMove);
+        window.addEventListener('pointerup', handlePointerUp);
+        window.addEventListener('pointercancel', handlePointerUp);
+
+        // 避免右鍵拖曳時彈出瀏覽器選單
+        canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        // 滑鼠滾輪縮放視角
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomFactor = e.deltaY < 0 ? 1.08 : 0.92;
+            state.zoom = Math.max(0.4, Math.min(3.2, state.zoom * zoomFactor));
+        }, { passive: false });
+
+        // --- 控制面板 UI 事件 ---
+        btnPlayPause.addEventListener('click', () => {
+            state.isRunning = !state.isRunning;
+            iconPlayPause.innerHTML = state.isRunning
+                ? '⏸<span class="hidden sm:inline ml-1">暫停</span>'
+                : '▶<span class="hidden sm:inline ml-1">繼續</span>';
+        });
+
+        btnRestart.addEventListener('click', () => {
+            audioEngine.init();
+            resetSimulation(true);
+        });
+
+        btnAudioToggle.addEventListener('click', () => {
+            const isOn = audioEngine.toggle();
+            iconAudio.innerHTML = isOn
+                ? '🔊<span class="hidden sm:inline ml-1">音效開</span>'
+                : '🔇<span class="hidden sm:inline ml-1">靜音</span>';
+            btnAudioToggle.className = isOn
+                ? 'btn-glow flex items-center gap-1 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-indigo-500/25 hover:bg-indigo-500/35 border border-indigo-400/40 text-indigo-200 font-semibold text-xs sm:text-sm'
+                : 'btn-glow flex items-center gap-1 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl bg-slate-800/70 hover:bg-slate-700/70 border border-white/10 text-slate-400 font-semibold text-xs sm:text-sm';
+        });
+
+        // 手機螢幕預設收起面板以呈現全螢幕震撼視覺，電腦端預設展開
+        let panelOpen = window.innerWidth >= 768;
+        if (!panelOpen) {
+            controlPanel.classList.add('scale-95', 'opacity-0', 'pointer-events-none', 'hidden');
+            panelToggleArrow.style.transform = 'rotate(-90deg)';
+        }
+
+        btnTogglePanel.addEventListener('click', () => {
+            panelOpen = !panelOpen;
+            if (panelOpen) {
+                controlPanel.classList.remove('scale-95', 'opacity-0', 'pointer-events-none', 'hidden');
+                panelToggleArrow.style.transform = 'rotate(0deg)';
+            } else {
+                controlPanel.classList.add('scale-95', 'opacity-0', 'pointer-events-none', 'hidden');
+                panelToggleArrow.style.transform = 'rotate(-90deg)';
+            }
+        });
+
+        // 遞迴最大粒子數滑桿 (2^0 = 1 ~ 2^10 = 1024)
+        const superscripts = ['⁰', '¹', '²', '³', '⁴', '⁵', '⁶', '⁷', '⁸', '⁹', '¹⁰'];
+        sliderMaxGen.addEventListener('input', (e) => {
+            const gen = parseInt(e.target.value, 10);
+            state.maxGen = gen;
+            state.maxParticles = Math.pow(2, gen);
+            valMaxParticles.textContent = `${state.maxParticles} (2${superscripts[gen]})`;
+            hudMaxParticles.textContent = `/ ${state.maxParticles}`;
+            if (state.particles.length > state.maxParticles) {
+                resetSimulation(true);
+            }
+        });
+
+        selectSplitMode.addEventListener('change', (e) => {
+            state.splitMode = e.target.value;
+            resetSimulation(true);
+        });
+
+        sliderSplitSpread.addEventListener('input', (e) => {
+            state.splitSpreadDeg = parseFloat(e.target.value);
+            const sign = state.splitSpreadDeg > 0 ? '+' : '';
+            valSplitSpread.textContent = `${sign}${state.splitSpreadDeg.toFixed(1)}°`;
+            resetSimulation(true);
+        });
+
+        sliderLaunchAngle.addEventListener('input', (e) => {
+            state.launchAngleDeg = parseFloat(e.target.value);
+            valLaunchAngle.textContent = `${Math.round(state.launchAngleDeg)}°`;
+            resetSimulation(true);
+        });
+
+        sliderSpeed.addEventListener('input', (e) => {
+            state.speedMultiplier = parseFloat(e.target.value);
+            valSpeed.textContent = `${state.speedMultiplier.toFixed(2)}x`;
+        });
+
+        sliderTailLength.addEventListener('input', (e) => {
+            state.tailLength = parseInt(e.target.value, 10);
+            valTailLength.textContent = `${state.tailLength} px`;
+        });
+
+        sliderParticleSize.addEventListener('input', (e) => {
+            state.particleSize = parseFloat(e.target.value);
+            valParticleSize.textContent = `${state.particleSize.toFixed(1)} px`;
+        });
+
+        sliderPathOpacity.addEventListener('input', (e) => {
+            const pct = parseInt(e.target.value, 10);
+            state.pathOpacity = pct / 100;
+            valPathOpacity.textContent = `${pct}%`;
+        });
+
+        chkKeepHistory.addEventListener('change', (e) => {
+            state.keepHistory = e.target.checked;
+            if (!state.keepHistory) {
+                state.completedPaths = [];
+            }
+        });
+
+        btnClearTrails.addEventListener('click', () => {
+            state.completedPaths = [];
+        });
+
+        sliderEccentricity.addEventListener('input', (e) => {
+            state.eccentricity = parseFloat(e.target.value);
+            valEccentricity.textContent = state.eccentricity.toFixed(2);
+            resetSimulation(true);
+        });
+
+        sliderTilt.addEventListener('input', (e) => {
+            state.tiltDeg = parseInt(e.target.value, 10);
+            valTilt.textContent = `${state.tiltDeg}°`;
+        });
+
+        selectSoundPreset.addEventListener('change', (e) => {
+            audioEngine.preset = e.target.value;
+            audioEngine.init();
+        });
+
+        sliderVolume.addEventListener('input', (e) => {
+            const pct = parseInt(e.target.value, 10);
+            valVolume.textContent = `${pct}%`;
+            audioEngine.setVolume(pct / 100);
+        });
+
+        // 經典參考圖一鍵還原按鈕
+        btnPresetClassic.addEventListener('click', () => {
+            state.maxGen = 10;
+            state.maxParticles = 1024;
+            sliderMaxGen.value = 10;
+            valMaxParticles.textContent = '1024 (2¹⁰)';
+
+            state.splitMode = 'reverse180';
+            selectSplitMode.value = 'reverse180';
+
+            state.splitSpreadDeg = 12.0;
+            sliderSplitSpread.value = 0.0;
+            valSplitSpread.textContent = '0.0°';
+
+            state.launchAngleDeg = 38.0;
+            sliderLaunchAngle.value = 38.0;
+            valLaunchAngle.textContent = '38°';
+
+            state.eccentricity = 0.68;
+            sliderEccentricity.value = 0.68;
+            valEccentricity.textContent = '0.68';
+
+            state.tiltDeg = -10;
+            sliderTilt.value = -10;
+            valTilt.textContent = '-10°';
+
+            state.tailLength = 135;
+            sliderTailLength.value = 135;
+            valTailLength.textContent = '135 px';
+
+            state.zoom = 1.0;
+            state.panX = 0;
+            state.panY = 0;
+            state.startFocusIndex = 0;
+
+            resetSimulation(true);
+        });
+
+        // 立即跳至下一代分裂按鈕 (方便快速觀察 1 -> 2 -> 4 -> 8 ... -> 1024)
+        btnStepGen.addEventListener('click', () => {
+            audioEngine.init();
+            for (let i = 0; i < state.particles.length; i++) {
+                const p = state.particles[i];
+                if (!p.bouncedWall) {
+                    p.bouncedWall = true;
+                    state.totalBounces++;
+                }
+                p.traveled = p.totalDist;
+            }
+            advanceGenerationSplit();
+        });
+
+        // --- 啟動程式 ---
+        window.onload = function () {
+            resizeCanvas();
+            resetSimulation(true);
+            requestAnimationFrame(animateLoop);
+        };
+    </script>
+</body>
+
+</html>
