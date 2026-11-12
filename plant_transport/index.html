@@ -584,7 +584,7 @@
                     },
                     {
                         title: "水分與離子雙路徑進入皮層 (Cortex)",
-                        desc: "進入根部後，水分與離子同時沿兩條路線向內側皮層移動：①【質外體途徑】沿疏鬆親水的細胞壁與細胞間隙快速流動；②【共質體途徑】經由細胞間相連的「原生質絲」在細胞質內逐一傳遞（或連續跨膜）。"
+                        desc: "進入根部後，水分與離子同時沿兩條路線向內側皮層移動：①【質外體途徑 (Apoplastic)】未跨越細胞膜，沿疏鬆親水的細胞壁與細胞間隙快速擴散流動；②【共質體途徑 (Symplastic)】已進入根毛細胞質的水分與離子，經由細胞間相連的「原生質絲 (Plasmodesmata)」在細胞質內連續傳遞。"
                     }
                 ]
             },
@@ -951,7 +951,16 @@
             // 細胞質與細胞膜 (共質體)
             drawRoundRect(x + wallT, y + wallT, w - wallT * 2, h - wallT * 2, Math.max(4, (opts.radius || 14) - 4), opts.cytoColor || PALETTE.cyto, PALETTE.membrane, 2.5);
             // 液胞
-            if (opts.vacuole) {
+            if (opts.splitVacuole) {
+                // 上下雙液胞配置：中央保留寬闊的細胞質共質體通道 (供根毛原生質絲輸送)
+                const vw = (w - wallT * 2) * 0.72;
+                const vx = x + wallT + (w - wallT * 2 - vw) / 2;
+                const vh = (h - wallT * 2) * 0.28;
+                const vy1 = y + wallT + 12;
+                const vy2 = y + h - wallT - 12 - vh;
+                drawRoundRect(vx, vy1, vw, vh, 10, PALETTE.vacuole, '#38bdf8', 1.5);
+                drawRoundRect(vx, vy2, vw, vh, 10, PALETTE.vacuole, '#38bdf8', 1.5);
+            } else if (opts.vacuole) {
                 const vx = x + wallT + (w - wallT * 2) * 0.18;
                 const vy = y + wallT + (h - wallT * 2) * 0.2;
                 const vw = (w - wallT * 2) * 0.64;
@@ -1490,26 +1499,51 @@
             // 消除交界線填補細胞質連續感
             ctx.fillStyle = PALETTE.cyto;
             ctx.fillRect(388, 269, 16, 67);
-            // 大中央液胞延伸至根毛
-            drawRoundRect(415, 165, 110, 270, 16, PALETTE.vacuole, '#38bdf8', 1.5);
-            drawRoundRect(220, 283, 210, 38, 16, PALETTE.vacuole, '#38bdf8', 1.5);
-            ctx.fillStyle = PALETTE.vacuole;
-            ctx.fillRect(410, 284, 16, 36);
+
+            // 表皮細胞上下雙液胞：中央預留寬闊細胞質通道與根毛及皮層原生質絲完美接軌
+            drawRoundRect(415, 144, 110, 94, 10, PALETTE.vacuole, '#38bdf8', 1.5);
+            drawRoundRect(415, 362, 110, 94, 10, PALETTE.vacuole, '#38bdf8', 1.5);
+
+            // 根毛內部細長液胞 (偏上放置，保留中央共質體通道 y: 295..330)
+            drawRoundRect(220, 273, 155, 24, 10, PALETTE.vacuole, '#38bdf8', 1.5);
             ctx.restore();
 
             // 3. 右側：皮層細胞群 (Cortex Cells 1 & 2)
-            drawPlantCell(560, 120, 185, 360, { vacuole: true, wallThickness: 12 });
-            drawPlantCell(745, 120, 195, 360, { vacuole: true, wallThickness: 12 });
+            // 使用 splitVacuole 使中央保持寬敞的細胞質通道 (y: 240..360)，與根毛吸水通道對齊
+            drawPlantCell(560, 120, 185, 360, { splitVacuole: true, wallThickness: 12 });
+            drawPlantCell(745, 120, 195, 360, { splitVacuole: true, wallThickness: 12 });
 
-            // 細胞之間的原生質絲 (Plasmodesmata)
-            for (let py of [150, 450]) {
+            // 細胞之間的原生質絲通道 (Plasmodesmata Channels)
+            function drawPlasmodesma(cx, cy, w = 32, h = 24) {
+                // 貫穿細胞壁，填滿共質體細胞質
                 ctx.fillStyle = PALETTE.cyto;
-                ctx.fillRect(546, py - 6, 28, 12);
-                ctx.fillRect(731, py - 6, 28, 12);
-                ctx.strokeStyle = PALETTE.membrane; ctx.lineWidth = 1.5;
-                ctx.strokeRect(546, py - 6, 28, 12);
-                ctx.strokeRect(731, py - 6, 28, 12);
+                ctx.fillRect(cx - w / 2, cy - h / 2, w, h);
+                // 上下細胞膜壁 (維持兩端開口暢通相連)
+                ctx.strokeStyle = PALETTE.membrane;
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.moveTo(cx - w / 2, cy - h / 2); ctx.lineTo(cx + w / 2, cy - h / 2);
+                ctx.moveTo(cx - w / 2, cy + h / 2); ctx.lineTo(cx + w / 2, cy + h / 2);
+                ctx.stroke();
+                // 內質網微管 (Desmotubule) 中央微結構線
+                ctx.strokeStyle = 'rgba(217, 119, 6, 0.45)';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([3, 2]);
+                ctx.beginPath();
+                ctx.moveTo(cx - w / 2 + 2, cy); ctx.lineTo(cx + w / 2 - 2, cy);
+                ctx.stroke();
+                ctx.setLineDash([]);
             }
+
+            // 主要共質體通道 (中央 y = 302，直通根毛細胞質)
+            drawPlasmodesma(560, 302, 32, 28);
+            drawPlasmodesma(745, 302, 32, 28);
+
+            // 次要原生質絲 (上部 y = 185 與 下部 y = 415)
+            drawPlasmodesma(560, 185, 30, 14);
+            drawPlasmodesma(745, 185, 30, 14);
+            drawPlasmodesma(560, 415, 30, 14);
+            drawPlasmodesma(745, 415, 30, 14);
 
             // 根毛膜上的主動離子幫浦 (上緣) 與 水通道蛋白 Aquaporins (下緣與前端)
             for (let ix of [225, 305]) {
@@ -1546,7 +1580,7 @@
                 drawArrow(225, 215, 225, 290, '#9333ea', 2.5);
                 drawArrow(305, 215, 305, 290, '#9333ea', 2.5);
                 // 根毛與液胞內累積的高濃度離子
-                for (let [lx, ly] of [[250, 302], [335, 300], [445, 220], [485, 270], [460, 345], [495, 390]]) {
+                for (let [lx, ly] of [[250, 285], [335, 285], [445, 190], [485, 200], [460, 400], [495, 410], [465, 302]]) {
                     drawIonDot(lx + Math.sin(t * 3 + lx) * 2, ly, 5.5);
                 }
             }
@@ -1571,22 +1605,62 @@
 
             // Step >= 4: 水分與離子雙路徑進入皮層 (質外體沿細胞壁 + 共質體經原生質絲)
             if (step >= 4) {
-                // 路徑 A: 質外體途徑 (沿上方細胞壁快速向右)
-                const apoPath = [[385, 126], [560, 126], [745, 126], [930, 126]];
-                for (let i = 0; i < 8; i++) {
-                    const p = samplePath(apoPath, (t * 0.45 + i / 8) % 1);
-                    drawWaterDot(p.x, p.y, 5);
-                }
-                drawArrow(410, 106, 890, 106, '#d97706', 3.5, true);
+                // ==========================================
+                // 路徑 A: 質外體途徑 (Apoplastic Pathway)
+                // 水分與離子未跨越細胞膜，沿疏鬆親水細胞壁與細胞間隙擴散
+                // ==========================================
+                const apoPath = [
+                    [110, 205], // 土壤溶液
+                    [220, 255], // 根毛上方外層細胞壁
+                    [380, 255], // 表皮細胞壁外側轉折
+                    [380, 126], // 表皮頂部細胞壁
+                    [560, 126], // 皮層 1 頂部細胞壁
+                    [745, 126], // 皮層 2 頂部細胞壁
+                    [935, 126]  // 進入內皮層方向質外體
+                ];
+                // 質外體細胞間隙分流 (向下沿徑向細胞壁擴散)
+                const apoBranch1 = [[560, 126], [560, 220]];
+                const apoBranch2 = [[745, 126], [745, 220]];
 
-                // 路徑 B: 共質體途徑 (經下方原生質絲在細胞質內傳遞)
-                const symPath = [[395, 450], [560, 450], [745, 450], [910, 450]];
-                for (let i = 0; i < 8; i++) {
-                    const p = samplePath(symPath, (t * 0.38 + i / 8) % 1);
+                for (let i = 0; i < 9; i++) {
+                    const p = samplePath(apoPath, (t * 0.42 + i / 9) % 1);
                     if (i % 3 === 0) drawIonDot(p.x, p.y, 5);
+                    else drawWaterDot(p.x, p.y, 5);
+                }
+                for (let i = 0; i < 3; i++) {
+                    const p1 = samplePath(apoBranch1, (t * 0.35 + i / 3) % 1);
+                    const p2 = samplePath(apoBranch2, (t * 0.35 + i / 3) % 1);
+                    drawWaterDot(p1.x, p1.y, 4.5);
+                    drawWaterDot(p2.x, p2.y, 4.5);
+                }
+                // 質外體路徑引導虛線箭頭 (沿外層細胞壁與頂部細胞壁)
+                drawArrow(120, 215, 215, 255, '#d97706', 2.5, true);
+                drawArrow(400, 106, 915, 106, '#d97706', 3.5, true);
+
+                // ==========================================
+                // 路徑 B: 共質體途徑 (Symplastic Pathway)
+                // 水分與離子經水通道蛋白吸收進入根毛細胞質後，
+                // 由原生質絲在細胞質內連續傳遞
+                // ==========================================
+                const symPath = [
+                    [175, 302], // 根毛前端水通道蛋白吸水處
+                    [260, 310], // 根毛內部細胞質
+                    [385, 304], // 進入表皮細胞質
+                    [500, 302], // 表皮細胞內部
+                    [560, 302], // 通過第一道原生質絲 (Epidermis -> Cortex 1)
+                    [650, 302], // 皮層細胞 1 中央細胞質通道
+                    [745, 302], // 通過第二道原生質絲 (Cortex 1 -> Cortex 2)
+                    [840, 302], // 皮層細胞 2 中央細胞質通道
+                    [935, 302]  // 朝向內皮層方向
+                ];
+
+                for (let i = 0; i < 10; i++) {
+                    const p = samplePath(symPath, (t * 0.48 + i / 10) % 1);
+                    if (i % 3 === 0) drawIonDot(p.x, p.y, 5.5);
                     else drawWaterDot(p.x, p.y, 5.5);
                 }
-                drawArrow(410, 450, 895, 450, '#10b981', 3.5);
+                // 共質體路徑引導實線箭頭 (穿過原生質絲直通皮層)
+                drawArrow(200, 302, 915, 302, '#10b981', 3.5);
             }
 
             // === 標籤 ===
@@ -1602,8 +1676,9 @@
                 drawLabel("水通道蛋白 (Aquaporins)\n專一性高速輸水孔道", 285, 435, { targetX: 275, targetY: 346, borderColor: '#06b6d4', bold: true });
             }
             if (step >= 4) {
-                drawLabel("質外體途徑：沿親水細胞壁縫隙流動", 660, 88, { borderColor: '#d97706' });
-                drawLabel("共質體途徑：經原生質絲於細胞質內傳遞", 680, 515, { targetX: 745, targetY: 450, borderColor: '#10b981' });
+                drawLabel("🅰️ 質外體途徑 (Apoplastic)\n未跨越細胞膜，沿親水細胞壁與細胞間隙擴散", 660, 78, { targetX: 660, targetY: 126, borderColor: '#d97706', bold: true });
+                drawLabel("🅱️ 共質體途徑 (Symplastic)\n由根毛細胞質經原生質絲於細胞質內連續傳遞", 660, 505, { targetX: 660, targetY: 302, borderColor: '#10b981', bold: true });
+                drawLabel("原生質絲 (Plasmodesmata)\n細胞質相通管道", 560, 235, { targetX: 560, targetY: 288, borderColor: PALETTE.membrane, size: 12 });
             }
         }
 
