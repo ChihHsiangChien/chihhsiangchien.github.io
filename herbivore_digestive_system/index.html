@@ -1,0 +1,1901 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>草食動物消化模擬器：前腸發酵 vs 後腸發酵</title>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<style>
+  :root {
+    --bg-dark: #0b1120;
+    --bg-panel: rgba(15, 23, 42, 0.88);
+    --bg-card: rgba(30, 41, 59, 0.85);
+    --border-col: rgba(148, 163, 184, 0.22);
+    --text-main: #f1f5f9;
+    --text-muted: #94a3b8;
+    --accent: #38bdf8;
+
+    /* 跨分頁統一器官與粒子色票 */
+    --c-mouth: #94a3b8;       /* 口腔/食道 */
+    --c-ferment: #8b5cf6;     /* 發酵腔 (瘤胃/盲腸) */
+    --c-filter: #ec4899;      /* 過濾/分選 (重瓣胃/近端結腸) */
+    --c-acid: #ef4444;        /* 酸解真胃 (皺胃/單胃) */
+    --c-si: #06b6d4;          /* 小腸 (養分吸收) */
+    --c-colon: #d97706;       /* 遠端大腸/直腸 (水分回收) */
+
+    --p-fiber: #22c55e;       /* 植物纖維素 */
+    --p-vfa: #facc15;         /* 揮發性脂肪酸 VFA */
+    --p-microbe: #e879f9;     /* 共生微生物/菌體蛋白 */
+    --p-nutrient: #38bdf8;    /* 小分子養分(胺基酸/單醣) */
+    --p-waste: #a16207;       /* 殘渣/硬糞 */
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    background-color: var(--bg-dark);
+    color: var(--text-main);
+    height: 100dvh;
+    width: 100vw;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* 頂部導覽列 */
+  header {
+    background: var(--bg-panel);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border-col);
+    padding: 8px 12px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    z-index: 30;
+    flex-shrink: 0;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    font-size: clamp(0.95rem, 2.2vw, 1.15rem);
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+  }
+
+  .brand-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--p-fiber), var(--c-ferment));
+    box-shadow: 0 0 8px var(--c-ferment);
+  }
+
+  .tabs {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    max-width: 100%;
+    padding-bottom: 2px;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+
+  .tab-btn {
+    background: rgba(30, 41, 59, 0.7);
+    color: var(--text-muted);
+    border: 1px solid var(--border-col);
+    border-radius: 8px;
+    padding: 7px 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .tab-btn:hover {
+    color: var(--text-main);
+    border-color: rgba(148, 163, 184, 0.5);
+  }
+
+  .tab-btn.active {
+    background: rgba(56, 189, 248, 0.18);
+    color: #fff;
+    border-color: var(--accent);
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+  }
+
+  .top-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .tool-btn {
+    background: rgba(30, 41, 59, 0.85);
+    color: var(--text-main);
+    border: 1px solid var(--border-col);
+    border-radius: 8px;
+    padding: 7px 11px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.18s;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .tool-btn.active-toggle {
+    background: rgba(139, 92, 246, 0.25);
+    border-color: var(--c-ferment);
+    color: #ede9fe;
+  }
+
+  .tool-btn:active { transform: scale(0.95); }
+
+  /* 主互動視窗區 */
+  #stage-wrapper {
+    position: relative;
+    flex: 1;
+    width: 100%;
+    overflow: hidden;
+    touch-action: none;
+    background: radial-gradient(circle at 50% 45%, #162238 0%, #0b1120 78%);
+  }
+
+  /* 2D SVG 畫布 */
+  #svg-stage {
+    width: 100%;
+    height: 100%;
+    display: block;
+    cursor: grab;
+  }
+  #svg-stage:active { cursor: grabbing; }
+
+  /* 3D Three.js 畫布 */
+  #three-stage {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: none;
+  }
+
+  #three-labels {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+    display: none;
+  }
+
+  .label-3d {
+    position: absolute;
+    transform: translate(-50%, -100%);
+    background: rgba(15, 23, 42, 0.86);
+    border: 1px solid rgba(255,255,255,0.22);
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 0.74rem;
+    font-weight: 600;
+    white-space: nowrap;
+    color: #f8fafc;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.45);
+    transition: opacity 0.2s;
+  }
+
+  /* SVG 標籤與發光效果 */
+  .organ-shape {
+    transition: opacity 0.35s, filter 0.35s, stroke-width 0.35s;
+  }
+  .organ-active {
+    filter: drop-shadow(0 0 12px currentColor);
+  }
+  .svg-label-group {
+    transition: opacity 0.25s ease;
+    pointer-events: none;
+  }
+  .labels-hidden .svg-label-group,
+  .labels-hidden .label-3d {
+    opacity: 0 !important;
+  }
+
+  /* 左上生理監測 HUD */
+  .telemetry-hud {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    background: var(--bg-panel);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border-col);
+    border-radius: 10px;
+    padding: 10px 12px;
+    width: clamp(175px, 26vw, 235px);
+    z-index: 15;
+    pointer-events: none;
+  }
+
+  .hud-title {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .hud-organ-badge {
+    font-size: 0.82rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .hud-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    display: inline-block;
+  }
+
+  .metric-row {
+    margin-bottom: 6px;
+  }
+  .metric-row:last-child { margin-bottom: 0; }
+  .metric-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.72rem;
+    color: #cbd5e1;
+    margin-bottom: 3px;
+  }
+  .metric-bar {
+    height: 5px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 99px;
+    overflow: hidden;
+  }
+  .metric-fill {
+    height: 100%;
+    border-radius: 99px;
+    transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.35s;
+  }
+
+  /* 右上縮放控制列 */
+  .zoom-controls {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    z-index: 15;
+  }
+
+  .zoom-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 9px;
+    background: var(--bg-panel);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--border-col);
+    color: var(--text-main);
+    font-size: 1.1rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  }
+  .zoom-btn:active { transform: scale(0.92); }
+
+  /* 圖例浮動抽屜 */
+  .legend-drawer {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    background: var(--bg-panel);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border-col);
+    border-radius: 10px;
+    padding: 10px 12px;
+    z-index: 20;
+    max-width: min(330px, calc(100vw - 24px));
+    font-size: 0.75rem;
+    transition: opacity 0.25s, transform 0.25s;
+  }
+  .legend-drawer.hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(10px);
+  }
+  .legend-section-title {
+    font-weight: 700;
+    color: var(--text-muted);
+    margin: 4px 0 6px;
+    font-size: 0.72rem;
+  }
+  .legend-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 5px 10px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #e2e8f0;
+  }
+  .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .rect-swatch {
+    width: 12px;
+    height: 8px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  /* 底部流程控制面板 */
+  footer {
+    background: var(--bg-panel);
+    backdrop-filter: blur(14px);
+    border-top: 1px solid var(--border-col);
+    padding: 10px 14px 12px;
+    z-index: 30;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .step-track {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+  }
+
+  .step-node {
+    flex: 1;
+    height: 26px;
+    border-radius: 6px;
+    background: rgba(30, 41, 59, 0.8);
+    border: 1px solid var(--border-col);
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.2s;
+  }
+
+  .step-node.completed {
+    background: rgba(56, 189, 248, 0.14);
+    color: #bae6fd;
+    border-color: rgba(56, 189, 248, 0.4);
+  }
+
+  .step-node.current {
+    background: rgba(56, 189, 248, 0.28);
+    color: #fff;
+    border-color: var(--accent);
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+  }
+
+  .auto-progress {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 3px;
+    background: var(--accent);
+    width: 0%;
+  }
+
+  .bottom-main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .step-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .step-header-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 3px;
+  }
+
+  .step-badge {
+    background: var(--accent);
+    color: #0f172a;
+    font-size: 0.72rem;
+    font-weight: 800;
+    padding: 1px 7px;
+    border-radius: 99px;
+    white-space: nowrap;
+  }
+
+  .step-title {
+    font-size: clamp(0.9rem, 2.2vw, 1.05rem);
+    font-weight: 700;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .step-desc {
+    font-size: clamp(0.78rem, 1.9vw, 0.88rem);
+    color: #cbd5e1;
+    line-height: 1.42;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .playback-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .ctrl-btn {
+    min-width: 44px;
+    height: 42px;
+    padding: 0 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border-col);
+    background: var(--bg-card);
+    color: var(--text-main);
+    font-size: 0.85rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    transition: all 0.15s;
+  }
+  .ctrl-btn:hover { border-color: var(--accent); }
+  .ctrl-btn:active { transform: scale(0.94); }
+
+  .ctrl-btn.primary {
+    background: linear-gradient(135deg, #0284c7, #2563eb);
+    border-color: #38bdf8;
+    color: #fff;
+    min-width: 84px;
+  }
+
+  /* 手機小螢幕自適應調整 */
+  @media (max-width: 680px) {
+    header { padding: 6px 10px; gap: 6px; }
+    .brand { font-size: 0.9rem; }
+    .telemetry-hud {
+      padding: 7px 9px;
+      width: 162px;
+      top: 8px;
+      left: 8px;
+    }
+    .zoom-controls { top: 8px; right: 8px; }
+    .zoom-btn { width: 34px; height: 34px; font-size: 1rem; }
+    .bottom-main {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+    }
+    .playback-controls {
+      justify-content: space-between;
+    }
+    .ctrl-btn { flex: 1; height: 40px; }
+    .step-desc { -webkit-line-clamp: 3; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="brand-dot"></span>
+    <span>草食動物消化發酵模擬器</span>
+  </div>
+
+  <nav class="tabs" id="tab-bar">
+    <button class="tab-btn active" data-tab="cow">🐄 前腸：反芻 (牛)</button>
+    <button class="tab-btn" data-tab="horse">🐎 後腸：盲結腸 (馬)</button>
+    <button class="tab-btn" data-tab="rabbit">🐇 後腸：食糞 (兔)</button>
+    <button class="tab-btn" data-tab="three">🧬 3D 拓撲與對比</button>
+  </nav>
+
+  <div class="top-actions">
+    <button class="tool-btn active-toggle" id="btn-toggle-labels" title="顯示或隱藏文字標籤">
+      🏷️ 標籤: 開
+    </button>
+    <button class="tool-btn" id="btn-toggle-legend" title="顯示統一色票圖例">
+      🎨 圖例
+    </button>
+  </div>
+</header>
+
+<main id="stage-wrapper">
+  <!-- 左上即時生理指標 -->
+  <div class="telemetry-hud" id="hud">
+    <div class="hud-title">
+      <span>當前消化腔室狀態</span>
+      <span id="hud-ph" style="color:#38bdf8;font-weight:700;">pH 6.8</span>
+    </div>
+    <div class="hud-organ-badge" id="hud-organ">
+      <span class="hud-swatch" id="hud-swatch" style="background:var(--c-mouth)"></span>
+      <span id="hud-organ-name">口腔與食道</span>
+    </div>
+
+    <div class="metric-row">
+      <div class="metric-label"><span>微生物發酵活性</span><span id="val-ferm">10%</span></div>
+      <div class="metric-bar"><div class="metric-fill" id="bar-ferm" style="width:10%;background:var(--c-ferment)"></div></div>
+    </div>
+    <div class="metric-row">
+      <div class="metric-label"><span>VFA 能量吸收率</span><span id="val-vfa">0%</span></div>
+      <div class="metric-bar"><div class="metric-fill" id="bar-vfa" style="width:0%;background:var(--p-vfa)"></div></div>
+    </div>
+    <div class="metric-row">
+      <div class="metric-label"><span>菌體蛋白/胺基酸吸收</span><span id="val-prot">0%</span></div>
+      <div class="metric-bar"><div class="metric-fill" id="bar-prot" style="width:0%;background:var(--c-si)"></div></div>
+    </div>
+  </div>
+
+  <!-- 右上縮放與重置控制 -->
+  <div class="zoom-controls">
+    <button class="zoom-btn" id="btn-zoom-in" title="放大">＋</button>
+    <button class="zoom-btn" id="btn-zoom-out" title="縮小">－</button>
+    <button class="zoom-btn" id="btn-zoom-reset" title="重置視角" style="font-size:0.9rem;">⟲</button>
+  </div>
+
+  <!-- 右下統一色票圖例抽屜 -->
+  <div class="legend-drawer hidden" id="legend-drawer">
+    <div class="legend-section-title">器官功能分區（全分頁統一色票）</div>
+    <div class="legend-grid">
+      <div class="legend-item"><span class="rect-swatch" style="background:var(--c-mouth)"></span>口腔 / 食道</div>
+      <div class="legend-item"><span class="rect-swatch" style="background:var(--c-ferment)"></span>發酵室 (瘤胃/盲腸)</div>
+      <div class="legend-item"><span class="rect-swatch" style="background:var(--c-filter)"></span>篩選室 (重瓣/近結腸)</div>
+      <div class="legend-item"><span class="rect-swatch" style="background:var(--c-acid)"></span>酸解真胃 (皺胃/單胃)</div>
+      <div class="legend-item"><span class="rect-swatch" style="background:var(--c-si)"></span>小腸 (酵素與吸收)</div>
+      <div class="legend-item"><span class="rect-swatch" style="background:var(--c-colon)"></span>遠端大腸 (水分回收)</div>
+    </div>
+    <div class="legend-section-title" style="margin-top:8px;">流動粒子類型</div>
+    <div class="legend-grid">
+      <div class="legend-item"><span class="dot" style="background:var(--p-fiber)"></span>植物粗纖維</div>
+      <div class="legend-item"><span class="dot" style="background:var(--p-vfa)"></span>揮發性脂肪酸 (VFA)</div>
+      <div class="legend-item"><span class="dot" style="background:var(--p-microbe)"></span>共生微生物 (菌體蛋白)</div>
+      <div class="legend-item"><span class="dot" style="background:var(--p-nutrient)"></span>可吸收小分子養分</div>
+      <div class="legend-item"><span class="dot" style="background:var(--p-waste)"></span>難消化木質素殘渣</div>
+    </div>
+  </div>
+
+  <!-- 2D 互動 SVG 畫布 -->
+  <svg id="svg-stage" viewBox="0 0 1000 560" preserveAspectRatio="xMidYMid meet">
+    <defs>
+      <filter id="glow" x="-25%" y="-25%" width="150%" height="150%">
+        <feGaussianBlur stdDeviation="6" result="blur" />
+        <feMerge>
+          <feMergeNode in="blur" />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
+      <pattern id="grid-pattern" width="40" height="40" patternUnits="userSpaceOnUse">
+        <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(148,163,184,0.06)" stroke-width="1"/>
+      </pattern>
+      <marker id="arrow-vfa" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+        <path d="M 0 1 L 10 5 L 0 9 z" fill="#facc15"/>
+      </marker>
+      <marker id="arrow-nut" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+        <path d="M 0 1 L 10 5 L 0 9 z" fill="#38bdf8"/>
+      </marker>
+    </defs>
+
+    <g id="pan-zoom-group">
+      <rect x="-1500" y="-1500" width="4000" height="4000" fill="url(#grid-pattern)" />
+      <g id="silhouette-layer"></g>
+      <g id="organs-layer"></g>
+      <g id="flow-guides-layer"></g>
+      <g id="particles-layer"></g>
+      <g id="effects-layer"></g>
+      <g id="labels-layer"></g>
+    </g>
+  </svg>
+
+  <!-- 3D Three.js 畫布與標籤投影層 -->
+  <div id="three-stage"></div>
+  <div id="three-labels"></div>
+</main>
+
+<footer>
+  <div class="step-track" id="step-track"></div>
+  <div class="bottom-main">
+    <div class="step-info">
+      <div class="step-header-line">
+        <span class="step-badge" id="step-badge">STEP 1 / 6</span>
+        <span class="step-title" id="step-title">載入中...</span>
+      </div>
+      <div class="step-desc" id="step-desc"></div>
+    </div>
+    <div class="playback-controls">
+      <button class="ctrl-btn" id="btn-prev" title="上一步">⏮ 上一步</button>
+      <button class="ctrl-btn primary" id="btn-play" title="自動播放 / 暫停">▶ 自動播放</button>
+      <button class="ctrl-btn" id="btn-next" title="下一步">下一步 ⏭</button>
+    </div>
+  </div>
+</footer>
+
+<script>
+(() => {
+  // ==========================================
+  // 1. 全分頁統一視覺色票
+  // ==========================================
+  const COLORS = {
+    mouth:   '#94a3b8', // 口腔/食道
+    ferment: '#8b5cf6', // 發酵腔 (瘤胃/蜂巢胃/盲腸)
+    filter:  '#ec4899', // 篩選/濃縮 (重瓣胃/近端結腸)
+    acid:    '#ef4444', // 酸解真胃 (皺胃/單胃)
+    si:      '#06b6d4', // 小腸 (養分吸收)
+    colon:   '#d97706', // 遠端結腸/直腸 (水分吸收與排遺)
+
+    pFiber:   '#22c55e', // 粗纖維
+    pVfa:     '#facc15', // VFA 揮發性脂肪酸
+    pMicrobe: '#e879f9', // 共生菌體蛋白
+    pNut:     '#38bdf8', // 可吸收單醣/胺基酸
+    pWaste:   '#a16207'  // 糞便殘渣
+  };
+
+  // ==========================================
+  // 2. 各物種解剖模型與 Step-by-Step 資料庫
+  // ==========================================
+  const MODELS = {
+    cow: {
+      name: '前腸發酵：反芻動物（牛）',
+      silhouette: 'M 75,180 Q 115,135 160,155 L 220,175 Q 380,145 690,155 Q 830,160 875,215 L 885,390 L 845,390 L 835,285 Q 640,340 340,335 L 320,415 L 280,415 L 285,310 Q 190,295 155,245 L 85,235 Z',
+      organs: [
+        {
+          id: 'esophagus', name: '口腔與食道 (雙向反芻)', color: COLORS.mouth,
+          type: 'stroke', width: 16,
+          d: 'M 105,205 C 165,205 225,215 295,225',
+          labelPos: [175, 175]
+        },
+        {
+          id: 'rumen', name: '瘤胃與蜂巢胃 (主發酵池 150L)', color: COLORS.ferment,
+          type: 'fill',
+          d: 'M 285,215 C 275,165 485,155 525,205 C 555,245 535,345 445,355 C 345,365 260,335 265,275 C 268,245 280,230 285,215 Z',
+          labelPos: [405, 255]
+        },
+        {
+          id: 'omasum', name: '重瓣胃 (粒徑篩選與吸水)', color: COLORS.filter,
+          type: 'fill',
+          d: 'M 515,245 C 545,220 595,230 600,268 C 605,305 560,322 525,300 C 505,285 502,260 515,245 Z',
+          labelPos: [562, 208]
+        },
+        {
+          id: 'abomasum', name: '皺胃 (真胃：鹽酸與胃蛋白酶)', color: COLORS.acid,
+          type: 'fill',
+          d: 'M 545,308 C 575,305 645,325 655,365 C 660,395 600,412 550,390 C 515,375 520,320 545,308 Z',
+          labelPos: [590, 428]
+        },
+        {
+          id: 'si', name: '小腸 (吸收菌體蛋白與養分)', color: COLORS.si,
+          type: 'stroke', width: 15,
+          d: 'M 650,368 C 705,365 715,290 675,280 C 635,270 645,225 700,230 C 755,235 745,325 710,345 C 680,360 735,395 770,355',
+          labelPos: [705, 202]
+        },
+        {
+          id: 'colon', name: '盲腸與結腸 (次要發酵與吸水)', color: COLORS.colon,
+          type: 'stroke', width: 18,
+          d: 'M 770,355 C 795,325 780,245 815,235 C 845,225 855,255 885,255',
+          labelPos: [835, 205]
+        }
+      ],
+      paths: {
+        ingest:    'M 105,205 C 165,205 225,215 350,245',
+        ruminate:  'M 350,255 C 250,235 175,205 105,205 C 175,205 250,225 380,265',
+        ferment:   'M 330,245 C 370,195 475,195 485,260 C 495,320 365,335 320,285 C 295,260 310,255 330,245',
+        toOmasum:  'M 455,270 C 495,265 535,265 565,272',
+        toAbomasum:'M 565,272 C 570,310 575,345 605,365',
+        toSI:      'M 605,365 C 665,375 715,295 675,280 C 635,270 645,225 700,230 C 755,235 745,325 710,345 C 680,360 735,395 770,355',
+        toExit:    'M 770,355 C 795,325 780,245 815,235 C 845,225 855,255 885,255'
+      },
+      steps: [
+        {
+          title: '快速採食與初步吞嚥',
+          organId: 'esophagus', organName: '口腔與食道', color: COLORS.mouth,
+          ph: 'pH 8.2 (大量鹼性唾液)', ferm: 15, vfa: 5, prot: 0,
+          desc: '牛採食牧草時僅粗略咀嚼便吞入瘤胃，以縮短在開闊地暴露於天敵的時間。每日分泌逾 100 公升富含碳酸氫鹽的鹼性唾液，用以緩衝後續發酵產生的大量有機酸。',
+          activeOrgans: ['esophagus', 'rumen'],
+          particles: [{ path: 'ingest', color: COLORS.pFiber, size: 7, count: 10, speed: 0.45 }]
+        },
+        {
+          title: '瘤胃微生物發酵與 VFA 吸收',
+          organId: 'rumen', organName: '瘤胃 (前腸發酵核心)', color: COLORS.ferment,
+          ph: 'pH 6.2 - 6.8', ferm: 98, vfa: 85, prot: 10,
+          desc: '瘤胃內棲息高密度厭氧細菌、原蟲與真菌，分泌纖維素酶分解植物細胞壁，產生大量揮發性脂肪酸（VFA：乙酸、丙酸、丁酸），直接透過瘤胃壁吸收，提供牛隻約 70% 能量！',
+          activeOrgans: ['rumen'],
+          fluxArrows: [{ x1: 395, y1: 195, x2: 395, y2: 135, type: 'vfa', text: 'VFA 吸收 (70%能量)' }],
+          particles: [
+            { path: 'ferment', color: COLORS.pFiber, size: 6.5, count: 9, speed: 0.32 },
+            { path: 'ferment', color: COLORS.pMicrobe, size: 5, count: 10, speed: 0.48 },
+            { path: 'ferment', color: COLORS.pVfa, size: 4.5, count: 8, speed: 0.6 }
+          ]
+        },
+        {
+          title: '逆嘔與反芻咀嚼 (Rumination)',
+          organId: 'esophagus', organName: '蜂巢胃 ⇄ 口腔逆嘔迴路', color: COLORS.mouth,
+          ph: 'pH 6.8', ferm: 75, vfa: 55, prot: 10,
+          desc: '粗大纖維浮在瘤胃頂層刺激蜂巢胃，引發逆嘔將食團送回口腔細細磨碎，再次混入鹼性唾液後吞回。只有粒徑小於 1~2 mm 的細微顆粒才能通過篩選往下游前進。',
+          activeOrgans: ['esophagus', 'rumen'],
+          particles: [
+            { path: 'ruminate', color: COLORS.pFiber, size: 6, count: 11, speed: 0.42 },
+            { path: 'ferment', color: COLORS.pMicrobe, size: 4.5, count: 6, speed: 0.3 }
+          ]
+        },
+        {
+          title: '重瓣胃：百葉過濾與水分回收',
+          organId: 'omasum', organName: '重瓣胃 (Omasum)', color: COLORS.filter,
+          ph: 'pH 6.5', ferm: 40, vfa: 45, prot: 15,
+          desc: '書頁狀的黏膜皺褶（俗稱牛百葉）像篩網般攔截過粗纖維，同時吸收食糜中 60% 以上的水分、剩餘 VFA 與碳酸氫根離子，防止稀釋下一站「皺胃」的強酸。',
+          activeOrgans: ['omasum'],
+          particles: [
+            { path: 'toOmasum', color: COLORS.pFiber, size: 4.2, count: 8, speed: 0.38 },
+            { path: 'toOmasum', color: COLORS.pMicrobe, size: 5, count: 9, speed: 0.42 }
+          ]
+        },
+        {
+          title: '皺胃酸解：收割共生微生物蛋白！',
+          organId: 'abomasum', organName: '皺胃 (真胃 Abomasum)', color: COLORS.acid,
+          ph: 'pH 2.0 - 2.8 (強酸)', ferm: 5, vfa: 10, prot: 65,
+          desc: '前腸發酵最大演化優勢！隨食糜流下的數十億共生微生物在此被鹽酸與溶菌酶殺死並由胃蛋白酶分解，轉化為高品質「菌體蛋白」，讓牛吃低蛋白乾草也能合成充足胺基酸。',
+          activeOrgans: ['abomasum'],
+          particles: [
+            { path: 'toAbomasum', color: COLORS.pMicrobe, size: 5, count: 7, speed: 0.35 },
+            { path: 'toAbomasum', color: COLORS.pNut, size: 4.5, count: 8, speed: 0.45 }
+          ]
+        },
+        {
+          title: '小腸養分吸收與大腸排遺',
+          organId: 'si', organName: '小腸與結腸', color: COLORS.si,
+          ph: 'pH 7.2', ferm: 15, vfa: 15, prot: 96,
+          desc: '小腸高效吸收被分解的菌體胺基酸、脂質與維生素 B 群；殘餘木質素進入盲腸與結腸進行微量二次發酵並回收水分，最終排出細緻均勻的糞便（總滯留時間長達 50~70 小時）。',
+          activeOrgans: ['si', 'colon'],
+          fluxArrows: [{ x1: 705, y1: 230, x2: 705, y2: 165, type: 'nut', text: '菌體胺基酸吸收 (90%+)' }],
+          particles: [
+            { path: 'toSI', color: COLORS.pNut, size: 4.5, count: 12, speed: 0.45 },
+            { path: 'toExit', color: COLORS.pWaste, size: 5, count: 6, speed: 0.35 }
+          ]
+        }
+      ]
+    },
+
+    horse: {
+      name: '後腸發酵：盲結腸型（馬）',
+      silhouette: 'M 75,155 Q 125,115 170,135 L 245,185 Q 430,165 715,175 Q 845,180 880,235 L 885,405 L 850,405 L 840,295 Q 630,335 345,325 L 325,415 L 290,415 L 295,305 Q 205,280 170,220 L 90,205 Z',
+      organs: [
+        {
+          id: 'esophagus', name: '口腔細嚼與單向食道', color: COLORS.mouth,
+          type: 'stroke', width: 14,
+          d: 'M 105,175 C 185,185 245,215 315,245',
+          labelPos: [195, 165]
+        },
+        {
+          id: 'stomach', name: '單室真胃 (容量小・僅能裝10%)', color: COLORS.acid,
+          type: 'fill',
+          d: 'M 305,230 C 335,205 390,220 395,260 C 400,295 350,315 315,292 C 292,276 290,245 305,230 Z',
+          labelPos: [348, 332]
+        },
+        {
+          id: 'si', name: '發達小腸 (優先吸收可溶糖與蛋白質)', color: COLORS.si,
+          type: 'stroke', width: 16,
+          d: 'M 392,265 C 445,265 445,205 495,205 C 545,205 535,305 495,305 C 455,305 475,355 535,345 C 585,335 575,245 625,255',
+          labelPos: [505, 178]
+        },
+        {
+          id: 'cecum', name: '巨大盲腸 (後腸主發酵池 35L)', color: COLORS.ferment,
+          type: 'fill',
+          d: 'M 615,245 C 655,230 705,255 700,325 C 695,395 625,425 585,395 C 555,372 585,315 615,245 Z',
+          labelPos: [642, 432]
+        },
+        {
+          id: 'prox_colon', name: '大結腸/近端結腸 (深度發酵與VFA吸收)', color: COLORS.filter,
+          type: 'stroke', width: 24,
+          d: 'M 665,265 C 735,215 815,225 810,285 C 805,345 725,355 725,310 C 725,275 785,275 820,295',
+          labelPos: [755, 195]
+        },
+        {
+          id: 'dist_colon', name: '小結腸與直腸 (水分回收・排出菌體)', color: COLORS.colon,
+          type: 'stroke', width: 16,
+          d: 'M 820,295 C 845,305 855,255 890,255',
+          labelPos: [855, 332]
+        }
+      ],
+      paths: {
+        ingest:   'M 105,175 C 185,185 245,215 350,260',
+        stomach:  'M 325,250 C 355,235 378,255 365,280 C 345,295 320,275 350,260',
+        siFlow:   'M 385,265 C 445,265 445,205 495,205 C 545,205 535,305 495,305 C 455,305 475,355 535,345 C 585,335 575,245 630,265',
+        cecumMix: 'M 635,270 C 675,280 680,355 640,385 C 600,400 595,345 635,270',
+        colonFlow:'M 665,265 C 735,215 815,225 810,285 C 805,345 725,355 725,310 C 725,275 785,275 820,295',
+        exitFlow: 'M 820,295 C 845,305 855,255 890,255'
+      },
+      steps: [
+        {
+          title: '高齒冠臼齒徹底研磨（無反芻能力）',
+          organId: 'esophagus', organName: '口腔與單向食道', color: COLORS.mouth,
+          ph: 'pH 7.4', ferm: 0, vfa: 0, prot: 0,
+          desc: '馬沒有反芻機制（賁門括約肌極強無法逆嘔），因此在進食當下就必須利用高冠臼齒將牧草徹底磨碎以破壞細胞壁，再經食道送入單胃。',
+          activeOrgans: ['esophagus'],
+          particles: [{ path: 'ingest', color: COLORS.pFiber, size: 5.5, count: 10, speed: 0.5 }]
+        },
+        {
+          title: '單室真胃快速酸解與排空',
+          organId: 'stomach', organName: '單室真胃 (Stomach)', color: COLORS.acid,
+          ph: 'pH 2.0 - 3.5', ferm: 5, vfa: 0, prot: 25,
+          desc: '馬胃容積很小，食糜停留不到 1~2 小時便快速排入小腸。胃酸與蛋白酶在此先拆解植物細胞內本身含有的可溶性蛋白質，纖維素則原封不動通過。',
+          activeOrgans: ['stomach'],
+          particles: [
+            { path: 'stomach', color: COLORS.pFiber, size: 5.5, count: 6, speed: 0.55 },
+            { path: 'stomach', color: COLORS.pNut, size: 4.5, count: 6, speed: 0.65 }
+          ]
+        },
+        {
+          title: '小腸優先吸收植物澱粉、糖與蛋白質！',
+          organId: 'si', organName: '小腸 (發酵前直接吸收)', color: COLORS.si,
+          ph: 'pH 7.0 - 7.5', ferm: 5, vfa: 5, prot: 68,
+          desc: '後腸發酵的關鍵優勢：植物原本的單醣、澱粉、脂質與蛋白質不會先被微生物「抽稅」消耗掉，而是直接在小腸由宿主酵素分解吸收，能量轉換更直接！',
+          activeOrgans: ['si'],
+          fluxArrows: [{ x1: 505, y1: 205, x2: 505, y2: 145, type: 'nut', text: '直接吸收植物糖與蛋白' }],
+          particles: [
+            { path: 'siFlow', color: COLORS.pNut, size: 4.5, count: 10, speed: 0.52 },
+            { path: 'siFlow', color: COLORS.pFiber, size: 5.5, count: 8, speed: 0.45 }
+          ]
+        },
+        {
+          title: '巨大盲腸：纖維素的後腸微生物發酵',
+          organId: 'cecum', organName: '巨大盲腸 (Cecum)', color: COLORS.ferment,
+          ph: 'pH 6.5 - 7.0', ferm: 92, vfa: 75, prot: 68,
+          desc: '小腸無法消化的粗纖維全部湧入盲腸。厭氧微生物在此分解纖維素並產生大量揮發性脂肪酸（VFA），透過盲腸壁直接吸收進入血液提供馬匹持久耐力。',
+          activeOrgans: ['cecum'],
+          fluxArrows: [{ x1: 635, y1: 375, x2: 555, y2: 425, type: 'vfa', text: '盲腸吸收 VFA' }],
+          particles: [
+            { path: 'cecumMix', color: COLORS.pFiber, size: 5.5, count: 8, speed: 0.4 },
+            { path: 'cecumMix', color: COLORS.pMicrobe, size: 5, count: 9, speed: 0.48 },
+            { path: 'cecumMix', color: COLORS.pVfa, size: 4.5, count: 7, speed: 0.58 }
+          ]
+        },
+        {
+          title: '折疊大結腸：持續發酵與電解質回收',
+          organId: 'prox_colon', organName: '大結腸 (Large Colon)', color: COLORS.filter,
+          ph: 'pH 6.6', ferm: 85, vfa: 88, prot: 68,
+          desc: '馬的大結腸極為龐大且呈雙層馬蹄形折疊，繼續完成纖維發酵並吸收大量 VFA、水分與電解質。因為沒有重瓣胃攔截，粗劣牧草仍能快速通過而不阻塞採食量！',
+          activeOrgans: ['prox_colon'],
+          fluxArrows: [{ x1: 775, y1: 235, x2: 775, y2: 170, type: 'vfa', text: '結腸持續吸收 VFA' }],
+          particles: [
+            { path: 'colonFlow', color: COLORS.pVfa, size: 4.5, count: 8, speed: 0.48 },
+            { path: 'colonFlow', color: COLORS.pMicrobe, size: 5, count: 8, speed: 0.42 },
+            { path: 'colonFlow', color: COLORS.pWaste, size: 5.5, count: 7, speed: 0.42 }
+          ]
+        },
+        {
+          title: '排遺權衡：高流通率 vs 流失菌體蛋白',
+          organId: 'dist_colon', organName: '小結腸與直腸', color: COLORS.colon,
+          ph: 'pH 6.9', ferm: 20, vfa: 15, prot: 45,
+          desc: '因為發酵室位於酸解胃與小腸「之後」，後腸繁殖的大量共生微生物無法被消化吸收，只能隨粗纖維馬糞排出（滯留僅約 30~38 小時）。但馬可藉「多吃快排」在低質草原勝出！',
+          activeOrgans: ['dist_colon'],
+          particles: [
+            { path: 'exitFlow', color: COLORS.pWaste, size: 6, count: 8, speed: 0.55 },
+            { path: 'exitFlow', color: COLORS.pMicrobe, size: 4.5, count: 7, speed: 0.55 }
+          ]
+        }
+      ]
+    },
+
+    rabbit: {
+      name: '特化後腸發酵：食糞迴路（兔）',
+      silhouette: 'M 195,245 Q 165,165 195,135 Q 215,155 210,210 Q 245,150 270,130 Q 285,155 245,215 Q 375,180 595,195 Q 765,210 805,295 Q 835,335 815,375 Q 690,415 315,395 Q 215,375 195,245 Z',
+      organs: [
+        {
+          id: 'esophagus', name: '口腔與食道 (採食牧草 & 吞食盲腸便)', color: COLORS.mouth,
+          type: 'stroke', width: 13,
+          d: 'M 205,260 C 255,260 295,265 345,270',
+          labelPos: [255, 232]
+        },
+        {
+          id: 'stomach', name: '單胃 (極強酸殺菌 / 消化盲腸便菌體)', color: COLORS.acid,
+          type: 'fill',
+          d: 'M 335,245 C 365,222 420,235 425,275 C 430,315 375,332 342,308 C 320,292 318,262 335,245 Z',
+          labelPos: [380, 348]
+        },
+        {
+          id: 'si', name: '小腸 (吸收植物養分 + 第二輪菌體蛋白)', color: COLORS.si,
+          type: 'stroke', width: 14,
+          d: 'M 422,278 C 470,275 465,220 515,222 C 565,225 550,315 510,315 C 470,315 495,365 555,345 C 595,332 585,275 625,280',
+          labelPos: [518, 196]
+        },
+        {
+          id: 'fusus', name: '近端結腸紡錘部 (Fusus coli 雙向分選器)', color: COLORS.filter,
+          type: 'fill',
+          d: 'M 620,262 C 655,248 705,252 715,280 C 722,302 675,315 630,302 C 610,295 608,272 620,262 Z',
+          labelPos: [672, 232]
+        },
+        {
+          id: 'cecum', name: '螺旋大盲腸 (濃縮細微營養發酵室)', color: COLORS.ferment,
+          type: 'fill',
+          d: 'M 615,310 C 665,310 725,345 705,392 C 685,432 575,430 565,388 C 555,355 585,315 615,310 Z',
+          labelPos: [638, 444]
+        },
+        {
+          id: 'dist_colon', name: '遠端結腸與直腸 (切換排出硬糞 / 盲腸軟便)', color: COLORS.colon,
+          type: 'stroke', width: 14,
+          d: 'M 712,280 C 755,282 775,312 805,322',
+          labelPos: [775, 265]
+        },
+        {
+          id: 'cec_loop', name: '食糞外迴路 (Cecotrophy 直接由肛門接食)', color: COLORS.ferment,
+          type: 'dashed', width: 5,
+          d: 'M 805,330 C 835,475 595,515 425,495 C 245,475 165,385 205,268',
+          labelPos: [495, 515]
+        }
+      ],
+      paths: {
+        ingest:    'M 205,260 C 255,260 295,265 375,275',
+        siFlow:    'M 415,278 C 470,275 465,220 515,222 C 565,225 550,315 510,315 C 470,315 495,365 555,345 C 595,332 585,275 655,280',
+        hardExit:  'M 665,280 C 735,280 770,310 805,322',
+        retroToCec:'M 665,285 C 655,315 645,345 635,375',
+        cecumSpin: 'M 605,355 C 655,335 695,365 675,395 C 645,415 585,395 605,355',
+        cecotroph: 'M 655,365 C 685,320 745,295 805,325 C 835,475 595,515 425,495 C 245,475 165,385 205,268 C 255,260 315,268 375,275'
+      },
+      steps: [
+        {
+          title: '採食嫩草並通過單胃與小腸',
+          organId: 'si', organName: '口腔 → 單胃 → 小腸', color: COLORS.si,
+          ph: 'pH 1.5 (胃) → 7.2 (小腸)', ferm: 5, vfa: 5, prot: 45,
+          desc: '小型草食動物（兔、豚鼠）代謝率極高但體腔太小，裝不下龐大瘤胃。食物先在強酸胃與小腸快速消化吸收易分解的糖與植物蛋白，纖維素則快速推進至後腸。',
+          activeOrgans: ['esophagus', 'stomach', 'si'],
+          particles: [
+            { path: 'ingest', color: COLORS.pFiber, size: 5, count: 6, speed: 0.55 },
+            { path: 'siFlow', color: COLORS.pNut, size: 4.2, count: 8, speed: 0.52 },
+            { path: 'siFlow', color: COLORS.pFiber, size: 5.2, count: 7, speed: 0.48 }
+          ]
+        },
+        {
+          title: '結腸機械分選：粗纖維直接排出「硬糞」！',
+          organId: 'fusus', organName: '近端結腸紡錘部 (Fusus coli)', color: COLORS.filter,
+          ph: 'pH 6.8', ferm: 30, vfa: 20, prot: 45,
+          desc: '兔子演化出精密的「顆粒分選機制」：大於 0.5 mm 難消化的粗大木質素纖維，完全不浪費空間發酵，直接由結腸蠕動推向直腸壓乾排出，形成常見的圓形乾燥「硬糞」。',
+          activeOrgans: ['fusus', 'dist_colon'],
+          particles: [
+            { path: 'hardExit', color: COLORS.pWaste, size: 6.2, count: 9, speed: 0.58 },
+            { path: 'retroToCec', color: COLORS.pFiber, size: 3.8, count: 8, speed: 0.45 }
+          ]
+        },
+        {
+          title: '逆蠕動濃縮：細顆粒退回盲腸深度發酵',
+          organId: 'cecum', organName: '螺旋大盲腸 (Cecum)', color: COLORS.ferment,
+          ph: 'pH 6.0 - 6.4', ferm: 96, vfa: 82, prot: 50,
+          desc: '結腸壁藉由逆向蠕動（Retroperistalsis）與水流沖刷，將小於 0.3 mm 的可發酵細小纖維與水溶性養分「倒推」回大盲腸！微生物在此高效率合成 VFA、優質菌體蛋白與維生素 B、K。',
+          activeOrgans: ['fusus', 'cecum'],
+          fluxArrows: [{ x1: 585, y1: 395, x2: 515, y2: 430, type: 'vfa', text: '盲腸吸收 VFA' }],
+          particles: [
+            { path: 'retroToCec', color: COLORS.pFiber, size: 3.8, count: 6, speed: 0.42 },
+            { path: 'cecumSpin', color: COLORS.pMicrobe, size: 5, count: 10, speed: 0.5 },
+            { path: 'cecumSpin', color: COLORS.pVfa, size: 4.2, count: 8, speed: 0.6 }
+          ]
+        },
+        {
+          title: '排出黏液包覆的「盲腸便」並直接吞食！',
+          organId: 'cec_loop', organName: '食糞迴路 (Cecotrophy)', color: COLORS.ferment,
+          ph: '黏液保護層 pH 6.2', ferm: 85, vfa: 65, prot: 65,
+          desc: '定時（多在清晨或休息時）盲腸收縮，由結腸紡錘部包覆一層保護性「黏液膜」，形成葡萄串狀富含微生物的軟便（盲腸便 Cecotropes）。兔子直接低頭從肛門接食整顆吞下、不加咀嚼！',
+          activeOrgans: ['cecum', 'dist_colon', 'cec_loop', 'esophagus'],
+          particles: [
+            { path: 'cecotroph', color: COLORS.pMicrobe, size: 5.8, count: 14, speed : 0.35 }
+          ]
+        },
+        {
+          title: '第二輪消化：胃酸破壁與小腸完全回收菌體蛋白',
+          organId: 'stomach', organName: '單胃與小腸 (第二輪吸收)', color: COLORS.acid,
+          ph: 'pH 1.5 → 7.2', ferm: 25, vfa: 40, prot: 94,
+          desc: '吞入的盲腸便在胃底部停留發酵數小時後，黏液膜被強酸溶解，釋放出大量微生物與維生素 B 群，接著進入小腸被徹底消化吸收！完美克服後腸發酵流失菌體蛋白的缺陷。',
+          activeOrgans: ['stomach', 'si'],
+          fluxArrows: [{ x1: 518, y1: 222, x2: 518, y2: 155, type: 'nut', text: '回收菌體蛋白與維生素B' }],
+          particles: [
+            { path: 'ingest', color: COLORS.pMicrobe, size: 5.5, count: 7, speed: 0.45 },
+            { path: 'siFlow', color: COLORS.pNut, size: 4.6, count: 12, speed: 0.5 }
+          ]
+        }
+      ]
+    },
+
+    three: {
+      name: '3D 消化道拓撲與演化策略對比',
+      steps: [
+        {
+          title: '三大草食消化道 3D 空間拓撲總覽',
+          organId: 'all', organName: '三物種並列拓撲 (可拖曳旋轉/雙指縮放)', color: COLORS.ferment,
+          ph: '全系統比較', ferm: 85, vfa: 80, prot: 80,
+          desc: '上方為【牛：前腸發酵】、中間為【馬：後腸盲結腸發酵】、下方為【兔：後腸分選＋食糞外迴路】。注意紫色「發酵腔」與紅色「酸解真胃」、青色「小腸」的前後相對順序！',
+          focusLane: 'all', highlightType: 'all'
+        },
+        {
+          title: '關鍵差異 1：發酵室位於「真胃與小腸」之前或之後？',
+          organId: 'ferment', organName: '紫色：微生物發酵腔 vs 紅色：真胃', color: COLORS.ferment,
+          ph: '發酵腔 pH 6.4 / 真胃 pH 2.0', ferm: 98, vfa: 88, prot: 50,
+          desc: '牛的巨大瘤胃位於真胃之前（前腸），所有食物先給微生物發酵；馬與兔的盲腸則位於真胃與小腸之後（後腸），植物本身的可溶性糖與蛋白質可先由小腸直接吸收。',
+          focusLane: 'all', highlightType: 'ferment_acid'
+        },
+        {
+          title: '關鍵差異 2：前腸發酵（牛）直接收割菌體蛋白',
+          organId: 'cow_focus', organName: '牛：瘤胃 → 重瓣胃 → 皺胃 → 小腸', color: COLORS.si,
+          ph: 'pH 6.5 → 2.2 → 7.2', ferm: 92, vfa: 85, prot: 96,
+          desc: '觀察上方軌道：紫色菌體粒子離開瘤胃後，直接流入紅色皺胃酸解、再進入青色小腸轉化為藍色養分吸收。牛對中等品質牧草的養分榨取效率極高，但受限於重瓣胃粒徑篩選，流通較慢。',
+          focusLane: 'cow', highlightType: 'cow'
+        },
+        {
+          title: '關鍵差異 3：後腸發酵（馬）高流通量 vs 流失菌體',
+          organId: 'horse_focus', organName: '馬：單胃 → 小腸 → 盲腸/大結腸 → 排出', color: COLORS.colon,
+          ph: 'pH 2.5 → 7.2 → 6.6', ferm: 88, vfa: 84, prot: 45,
+          desc: '觀察中間軌道：馬雖然能吸收盲腸與結腸產生的金色 VFA，但紫色菌體誕生在小腸「下游」，無法倒流回小腸吸收而隨糞便排出。不過馬不受瘤胃篩選阻塞，能靠「大量採食粗草、快速排空」取勝！',
+          focusLane: 'horse', highlightType: 'horse'
+        },
+        {
+          title: '關鍵差異 4：小型後腸（兔）以「外迴路」破局',
+          organId: 'rabbit_focus', organName: '兔：結腸分選硬糞 + 盲腸軟便回食迴路', color: COLORS.filter,
+          ph: '雙軌分流與外循環', ferm: 94, vfa: 80, prot: 94,
+          desc: '觀察下方軌道：粉紅色結腸紡錘部將粗渣直接排走（輕量化體重便於奔逃），細微養分退回紫色盲腸發酵後，藉由底部「食糞外迴路」送回口腔重走一次紅胃與青色小腸，兼顧輕巧體型與高蛋白回收！',
+          focusLane: 'rabbit', highlightType: 'rabbit'
+        }
+      ]
+    }
+  };
+
+  // ==========================================
+  // 3. 全域應用程式狀態
+  // ==========================================
+  const state = {
+    tab: 'cow',
+    stepIdx: 0,
+    showLabels: true,
+    showLegend: false,
+    isPlaying: false,
+    stepTimer: 0,
+    stepDuration: 6500, // 自動播放每步毫秒數
+    // 2D Pan & Zoom 狀態
+    scale: 1,
+    tx: 0,
+    ty: 0
+  };
+
+  // DOM 參照
+  const stageWrapper = document.getElementById('stage-wrapper');
+  const svgStage = document.getElementById('svg-stage');
+  const panZoomGroup = document.getElementById('pan-zoom-group');
+  const silhouetteLayer = document.getElementById('silhouette-layer');
+  const organsLayer = document.getElementById('organs-layer');
+  const flowGuidesLayer = document.getElementById('flow-guides-layer');
+  const particlesLayer = document.getElementById('particles-layer');
+  const effectsLayer = document.getElementById('effects-layer');
+  const labelsLayer = document.getElementById('labels-layer');
+
+  const threeStage = document.getElementById('three-stage');
+  const threeLabels = document.getElementById('three-labels');
+
+  const stepTrack = document.getElementById('step-track');
+  const stepBadge = document.getElementById('step-badge');
+  const stepTitle = document.getElementById('step-title');
+  const stepDesc = document.getElementById('step-desc');
+  const btnPlay = document.getElementById('btn-play');
+
+  // ==========================================
+  // 4. 2D SVG 渲染與粒子系統
+  // ==========================================
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  let active2DParticles = [];
+  let cachedSvgPaths = {};
+
+  function elSvg(tag, attrs = {}) {
+    const el = document.createElementNS(SVG_NS, tag);
+    for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+    return el;
+  }
+
+  function render2DModel(tabKey) {
+    const model = MODELS[tabKey];
+    if (!model || !model.organs) return;
+
+    silhouetteLayer.innerHTML = '';
+    organsLayer.innerHTML = '';
+    flowGuidesLayer.innerHTML = '';
+    particlesLayer.innerHTML = '';
+    effectsLayer.innerHTML = '';
+    labelsLayer.innerHTML = '';
+    cachedSvgPaths = {};
+
+    // 動物身體輪廓剪影
+    if (model.silhouette) {
+      silhouetteLayer.appendChild(elSvg('path', {
+        d: model.silhouette,
+        fill: 'rgba(30, 41, 59, 0.42)',
+        stroke: 'rgba(148, 163, 184, 0.22)',
+        'stroke-width': '2',
+        'stroke-linejoin': 'round'
+      }));
+    }
+
+    // 繪製各器官
+    model.organs.forEach(org => {
+      const attrs = {
+        id: `organ-${org.id}`,
+        d: org.d,
+        class: 'organ-shape',
+        'stroke-linecap': 'round',
+        'stroke-linejoin': 'round'
+      };
+
+      if (org.type === 'fill') {
+        attrs.fill = org.color;
+        attrs['fill-opacity'] = '0.28';
+        attrs.stroke = org.color;
+        attrs['stroke-width'] = '3.5';
+      } else if (org.type === 'stroke') {
+        attrs.fill = 'none';
+        attrs.stroke = org.color;
+        attrs['stroke-width'] = org.width || 15;
+        attrs['stroke-opacity'] = '0.45';
+      } else if (org.type === 'dashed') {
+        attrs.fill = 'none';
+        attrs.stroke = org.color;
+        attrs['stroke-width'] = org.width || 5;
+        attrs['stroke-dasharray'] = '10 8';
+        attrs['stroke-opacity'] = '0.55';
+      }
+      organsLayer.appendChild(elSvg('path', attrs));
+
+      // 繪製解剖標籤
+      if (org.labelPos) {
+        const [lx, ly] = org.labelPos;
+        const g = elSvg('g', {
+          class: 'svg-label-group',
+          id: `label-${org.id}`,
+          transform: `translate(${lx}, ${ly})`
+        });
+        const textLen = org.name.length * 12.2 + 20;
+        g.appendChild(elSvg('rect', {
+          x: -textLen / 2, y: -14,
+          width: textLen, height: 26, rx: 6,
+          fill: 'rgba(15, 23, 42, 0.88)',
+          stroke: org.color,
+          'stroke-width': '1.4'
+        }));
+        const txt = elSvg('text', {
+          x: 0, y: 4,
+          'text-anchor': 'middle',
+          fill: '#f8fafc',
+          'font-size': '12',
+          'font-weight': '600'
+        });
+        txt.textContent = org.name;
+        g.appendChild(txt);
+        labelsLayer.appendChild(g);
+      }
+    });
+
+    // 建立隱藏路徑供 getPointAtLength 取樣粒子軌跡
+    if (model.paths) {
+      for (const [pKey, dStr] of Object.entries(model.paths)) {
+        const pEl = elSvg('path', {
+          d: dStr,
+          fill: 'none',
+          stroke: 'rgba(255,255,255,0.06)',
+          'stroke-width': '2',
+          'stroke-dasharray': '4 6'
+        });
+        flowGuidesLayer.appendChild(pEl);
+        cachedSvgPaths[pKey] = pEl;
+      }
+    }
+  }
+
+  function spawnStepParticlesAndEffects(step) {
+    particlesLayer.innerHTML = '';
+    effectsLayer.innerHTML = '';
+    active2DParticles = [];
+
+    if (!step) return;
+
+    // 吸收方向箭頭特效 (VFA / 小分子養分)
+    if (step.fluxArrows) {
+      step.fluxArrows.forEach(arr => {
+        const col = arr.type === 'vfa' ? COLORS.pVfa : COLORS.pNut;
+        const marker = arr.type === 'vfa' ? 'url(#arrow-vfa)' : 'url(#arrow-nut)';
+        const g = elSvg('g', { class: 'svg-label-group' });
+        g.appendChild(elSvg('line', {
+          x1: arr.x1, y1: arr.y1, x2: arr.x2, y2: arr.y2,
+          stroke: col, 'stroke-width': '3',
+          'stroke-dasharray': '6 4',
+          'marker-end': marker
+        }));
+        const badgeW = arr.text.length * 12 + 16;
+        g.appendChild(elSvg('rect', {
+          x: arr.x2 - badgeW / 2, y: arr.y2 - 24,
+          width: badgeW, height: 22, rx: 5,
+          fill: 'rgba(15,23,42,0.92)', stroke: col, 'stroke-width': '1.2'
+        }));
+        const t = elSvg('text', {
+          x: arr.x2, y: arr.y2 - 9,
+          'text-anchor': 'middle', fill: col,
+          'font-size': '11.5', 'font-weight': '700'
+        });
+        t.textContent = arr.text;
+        g.appendChild(t);
+        effectsLayer.appendChild(g);
+      });
+    }
+
+    // 生成流動粒子
+    if (step.particles) {
+      step.particles.forEach(group => {
+        const pathEl = cachedSvgPaths[group.path];
+        if (!pathEl) return;
+        const totalLen = pathEl.getTotalLength();
+        for (let i = 0; i < group.count; i++) {
+          const c = elSvg('circle', {
+            r: group.size,
+            fill: group.color,
+            stroke: '#0f172a',
+            'stroke-width': '1.2',
+            filter: 'url(#glow)'
+          });
+          particlesLayer.appendChild(c);
+          active2DParticles.push({
+            el: c,
+            pathEl,
+            totalLen,
+            progress: i / group.count,
+            speed: group.speed * (0.9 + Math.random() * 0.2),
+            jitterPhase: Math.random() * Math.PI * 2,
+            jitterAmp: 2.5 + Math.random() * 4
+          });
+        }
+      });
+    }
+  }
+
+  function update2DParticles(dtSec, nowSec) {
+    for (const p of active2DParticles) {
+      p.progress = (p.progress + dtSec * p.speed * 0.45) % 1;
+      const pt = p.pathEl.getPointAtLength(p.progress * p.totalLen);
+      const jx = Math.cos(nowSec * 4 + p.jitterPhase) * p.jitterAmp;
+      const jy = Math.sin(nowSec * 3.5 + p.jitterPhase) * p.jitterAmp;
+      p.el.setAttribute('cx', (pt.x + jx).toFixed(1));
+      p.el.setAttribute('cy', (pt.y + jy).toFixed(1));
+    }
+  }
+
+  // ==========================================
+  // 5. 2D 觸控友善 Pan & Zoom 控制器
+  // ==========================================
+  function apply2DTransform() {
+    panZoomGroup.setAttribute('transform', `translate(${state.tx.toFixed(1)}, ${state.ty.toFixed(1)}) scale(${state.scale.toFixed(3)})`);
+  }
+
+  function resetView() {
+    if (state.tab === 'three') {
+      resetThreeCamera();
+    } else {
+      state.scale = 1;
+      state.tx = 0;
+      state.ty = 0;
+      apply2DTransform();
+    }
+  }
+
+  function zoomByFactor(factor, clientX, clientY) {
+    if (state.tab === 'three') {
+      zoomThreeCamera(factor);
+      return;
+    }
+    const rect = svgStage.getBoundingClientRect();
+    const cx = clientX !== undefined ? clientX : rect.left + rect.width / 2;
+    const cy = clientY !== undefined ? clientY : rect.top + rect.height / 2;
+
+    // 將螢幕座標轉為 SVG viewBox (1000x560) 座標
+    const scaleX = 1000 / rect.width;
+    const scaleY = 560 / rect.height;
+    const k = Math.max(scaleX, scaleY);
+    const offsetX = (rect.width * k - 1000) / 2;
+    const offsetY = (rect.height * k - 560) / 2;
+    const svgX = (cx - rect.left) * k - offsetX;
+    const svgY = (cy - rect.top) * k - offsetY;
+
+    const newScale = Math.min(4.0, Math.max(0.45, state.scale * factor));
+    const ratio = newScale / state.scale;
+
+    state.tx = svgX - (svgX - state.tx) * ratio;
+    state.ty = svgY - (svgY - state.ty) * ratio;
+    state.scale = newScale;
+    apply2DTransform();
+  }
+
+  // 滑鼠拖曳與滾輪縮放 + 手機單指平移/雙指捏合縮放
+  let pointers = new Map();
+  let lastPinchDist = 0;
+  let lastPanMid = null;
+
+  svgStage.addEventListener('pointerdown', e => {
+    svgStage.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 2) {
+      const pts = [...pointers.values()];
+      lastPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      lastPanMid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+    }
+  });
+
+  svgStage.addEventListener('pointermove', e => {
+    if (!pointers.has(e.pointerId)) return;
+    const prev = pointers.get(e.pointerId);
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    const rect = svgStage.getBoundingClientRect();
+    const k = Math.max(1000 / rect.width, 560 / rect.height);
+
+    if (pointers.size === 1) {
+      const dx = (e.clientX - prev.x) * k;
+      const dy = (e.clientY - prev.y) * k;
+      state.tx += dx;
+      state.ty += dy;
+      apply2DTransform();
+    } else if (pointers.size === 2) {
+      const pts = [...pointers.values()];
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+      if (lastPinchDist > 10) {
+        zoomByFactor(dist / lastPinchDist, mid.x, mid.y);
+      }
+      if (lastPanMid) {
+        state.tx += (mid.x - lastPanMid.x) * k;
+        state.ty += (mid.y - lastPanMid.y) * k;
+        apply2DTransform();
+      }
+      lastPinchDist = dist;
+      lastPanMid = mid;
+    }
+  });
+
+  function removePointer(e) {
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) {
+      lastPinchDist = 0;
+      lastPanMid = null;
+    }
+  }
+  svgStage.addEventListener('pointerup', removePointer);
+  svgStage.addEventListener('pointercancel', removePointer);
+
+  svgStage.addEventListener('wheel', e => {
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.12 : 0.89;
+    zoomByFactor(factor, e.clientX, e.clientY);
+  }, { passive: false });
+
+  // ==========================================
+  // 6. Three.js 3D 立體拓撲與粒子流場景
+  // ==========================================
+  let threeInited = false;
+  let scene, camera, renderer, controls;
+  let threeMeshes = [];
+  let threeParticles = [];
+  let threeLabelItems = [];
+
+  function hexToThreeColor(hex) {
+    return new THREE.Color(hex);
+  }
+
+  function initThreeScene() {
+    if (threeInited) return;
+    threeInited = true;
+
+    scene = new THREE.Scene();
+    const w = stageWrapper.clientWidth || 800;
+    const h = stageWrapper.clientHeight || 500;
+
+    camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 200);
+    camera.position.set(0, 3.5, 22);
+
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(w, h);
+    threeStage.appendChild(renderer.domElement);
+
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.07;
+    controls.minDistance = 8;
+    controls.maxDistance = 42;
+
+    // 燈光配置
+    scene.add(new THREE.AmbientLight(0xffffff, 0.65));
+    const dir1 = new THREE.DirectionalLight(0xffffff, 0.85);
+    dir1.position.set(10, 18, 15);
+    scene.add(dir1);
+    const dir2 = new THREE.DirectionalLight(0x38bdf8, 0.35);
+    dir2.position.set(-12, -10, -8);
+    scene.add(dir2);
+
+    // 輔助底格線
+    const grid = new THREE.GridHelper(32, 16, 0x334155, 0x1e293b);
+    grid.position.y = -6.8;
+    scene.add(grid);
+
+    // 建立三條平行物種消化道拓撲 (Y = +4.2 牛, Y = 0 馬, Y = -4.2 兔)
+    build3DLane('cow', 4.2);
+    build3DLane('horse', 0.0);
+    build3DLane('rabbit', -4.2);
+  }
+
+  function addOrgan3D(lane, role, geom, pos, colorHex, labelText) {
+    const mat = new THREE.MeshStandardMaterial({
+      color: hexToThreeColor(colorHex),
+      roughness: 0.32,
+      metalness: 0.15,
+      transparent: true,
+      opacity: 0.88,
+      emissive: hexToThreeColor(colorHex),
+      emissiveIntensity: 0.18
+    });
+    const mesh = new THREE.Mesh(geom, mat);
+    mesh.position.set(pos[0], pos[1], pos[2]);
+    scene.add(mesh);
+    threeMeshes.push({ mesh, lane, role, baseColor: colorHex });
+
+    if (labelText) {
+      const div = document.createElement('div');
+      div.className = 'label-3d';
+      div.style.borderColor = colorHex;
+      div.textContent = labelText;
+      threeLabels.appendChild(div);
+      threeLabelItems.push({
+        el: div,
+        lane,
+        worldPos: new THREE.Vector3(pos[0], pos[1] + 1.05, pos[2])
+      });
+    }
+    return mesh;
+  }
+
+  function addTube3D(lane, role, pts, radius, colorHex, labelText, labelIdx) {
+    const curve = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(...p)));
+    const geom = new THREE.TubeGeometry(curve, 48, radius, 14, false);
+    const mat = new THREE.MeshStandardMaterial({
+      color: hexToThreeColor(colorHex),
+      roughness: 0.38,
+      metalness: 0.1,
+      transparent: true,
+      opacity: 0.78,
+      emissive: hexToThreeColor(colorHex),
+      emissiveIntensity: 0.14
+    });
+    const mesh = new THREE.Mesh(geom, mat);
+    scene.add(mesh);
+    threeMeshes.push({ mesh, lane, role, baseColor: colorHex });
+
+    if (labelText && labelIdx !== undefined) {
+      const lp = pts[labelIdx];
+      const div = document.createElement('div');
+      div.className = 'label-3d';
+      div.style.borderColor = colorHex;
+      div.textContent = labelText;
+      threeLabels.appendChild(div);
+      threeLabelItems.push({
+        el: div,
+        lane,
+        worldPos: new THREE.Vector3(lp[0], lp[1] + 0.85, lp[2])
+      });
+    }
+    return curve;
+  }
+
+  function add3DParticlesAlongCurve(lane, curve, count, colorTypes, speed) {
+    for (let i = 0; i < count; i++) {
+      const t = i / count;
+      const geom = new THREE.SphereGeometry(0.19, 10, 10);
+      const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      const sp = new THREE.Mesh(geom, mat);
+      scene.add(sp);
+      threeParticles.push({ mesh: sp, lane, curve, t, speed, colorTypes });
+    }
+  }
+
+  function build3DLane(lane, y) {
+    if (lane === 'cow') {
+      // 牛：食道 -> 大瘤胃(紫) -> 重瓣胃(粉) -> 皺胃(紅) -> 小腸(青) -> 結腸(橘)
+      addTube3D('cow', 'mouth', [[-9.5, y, 0], [-6.2, y, 0]], 0.22, COLORS.mouth, '🐄 牛：口腔/反芻食道', 0);
+      const rumen = addOrgan3D('cow', 'ferment', new THREE.SphereGeometry(1.45, 24, 20), [-4.3, y, 0], COLORS.ferment, '瘤胃 (前腸發酵池)');
+      rumen.scale.set(1.35, 0.95, 1.0);
+      addOrgan3D('cow', 'filter', new THREE.SphereGeometry(0.65, 18, 16), [-1.8, y + 0.2, 0], COLORS.filter, '重瓣胃');
+      const abo = addOrgan3D('cow', 'acid', new THREE.SphereGeometry(0.8, 18, 16), [-0.2, y - 0.35, 0], COLORS.acid, '皺胃 (酸解菌體)');
+      abo.scale.set(1.2, 0.8, 0.9);
+      addTube3D('cow', 'si', [[0.8, y - 0.3, 0], [2.4, y + 0.6, 0.7], [4.0, y - 0.5, -0.7], [5.8, y + 0.2, 0]], 0.26, COLORS.si, '小腸 (吸收菌體蛋白)', 1);
+      addTube3D('cow', 'colon', [[5.8, y + 0.2, 0], [7.8, y + 0.2, 0], [9.5, y, 0]], 0.32, COLORS.colon, '結腸', 1);
+
+      const flowCurve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(-9.5, y, 0), new THREE.Vector3(-4.3, y + 0.3, 0.5),
+        new THREE.Vector3(-1.8, y + 0.2, 0), new THREE.Vector3(-0.2, y - 0.35, 0),
+        new THREE.Vector3(2.4, y + 0.6, 0.7), new THREE.Vector3(4.0, y - 0.5, -0.7),
+        new THREE.Vector3(5.8, y + 0.2, 0), new THREE.Vector3(9.5, y, 0)
+      ]);
+      // 依序變色：綠纖維 -> 紫菌體/金VFA -> 藍小分子養分 -> 棕殘渣
+      add3DParticlesAlongCurve('cow', flowCurve, 18, [
+        [0.18, COLORS.pFiber], [0.42, COLORS.pMicrobe], [0.55, COLORS.pVfa], [0.82, COLORS.pNut], [1.0, COLORS.pWaste]
+      ], 0.09);
+    }
+
+    if (lane === 'horse') {
+      // 馬：食道 -> 單胃(紅) -> 小腸(青) -> 大盲腸(紫) -> 折疊大結腸(粉) -> 直腸(橘)
+      addTube3D('horse', 'mouth', [[-9.5, y, 0], [-6.5, y, 0]], 0.2, COLORS.mouth, '🐎 馬：口腔/單向食道', 0);
+      addOrgan3D('horse', 'acid', new THREE.SphereGeometry(0.75, 18, 16), [-5.5, y, 0], COLORS.acid, '單室真胃');
+      addTube3D('horse', 'si', [[-4.7, y, 0], [-2.8, y + 0.55, 0.6], [-1.0, y - 0.5, -0.6], [0.8, y, 0]], 0.26, COLORS.si, '小腸 (先吸收糖/蛋白)', 1);
+      const cecum = addOrgan3D('horse', 'ferment', new THREE.SphereGeometry(1.25, 22, 18), [2.5, y - 0.35, 0], COLORS.ferment, '巨大盲腸 (後腸發酵)');
+      cecum.scale.set(1.15, 1.05, 0.95);
+      addTube3D('horse', 'filter', [[3.5, y, 0], [5.4, y + 0.65, 0.8], [6.8, y - 0.4, -0.6], [7.8, y, 0]], 0.42, COLORS.filter, '折疊大結腸 (吸收VFA)', 1);
+      addTube3D('horse', 'colon', [[7.8, y, 0], [9.5, y, 0]], 0.26, COLORS.colon, '直腸 (排出菌體)', 1);
+
+      const flowCurve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(-9.5, y, 0), new THREE.Vector3(-5.5, y, 0),
+        new THREE.Vector3(-2.8, y + 0.55, 0.6), new THREE.Vector3(-1.0, y - 0.5, -0.6),
+        new THREE.Vector3(2.5, y - 0.35, 0), new THREE.Vector3(5.4, y + 0.65, 0.8),
+        new THREE.Vector3(6.8, y - 0.4, -0.6), new THREE.Vector3(9.5, y, 0)
+      ]);
+      add3DParticlesAlongCurve('horse', flowCurve, 18, [
+        [0.2, COLORS.pFiber], [0.48, COLORS.pNut], [0.72, COLORS.pVfa], [0.88, COLORS.pMicrobe], [1.0, COLORS.pWaste]
+      ], 0.12);
+    }
+
+    if (lane === 'rabbit') {
+      // 兔：食道 -> 單胃(紅) -> 小腸(青) -> 結腸分選器(粉) -> 螺旋盲腸(紫) + 食糞外迴路
+      addTube3D('rabbit', 'mouth', [[-9.5, y, 0], [-6.6, y, 0]], 0.18, COLORS.mouth, '🐇 兔：口腔/接食軟便', 0);
+      addOrgan3D('rabbit', 'acid', new THREE.SphereGeometry(0.7, 18, 16), [-5.6, y, 0], COLORS.acid, '強酸單胃');
+      addTube3D('rabbit', 'si', [[-4.8, y, 0], [-2.6, y + 0.45, 0.5], [-0.5, y - 0.4, -0.5], [1.5, y, 0]], 0.23, COLORS.si, '小腸 (雙輪吸收)', 1);
+      const fusus = addOrgan3D('rabbit', 'filter', new THREE.SphereGeometry(0.68, 18, 16), [2.6, y + 0.15, 0], COLORS.filter, '結腸分選器');
+      fusus.scale.set(1.3, 0.75, 0.8);
+      const rCecum = addOrgan3D('rabbit', 'ferment', new THREE.SphereGeometry(1.1, 22, 18), [4.2, y - 0.85, 0.4], COLORS.ferment, '螺旋大盲腸');
+      rCecum.scale.set(1.35, 0.85, 0.95);
+      addTube3D('rabbit', 'colon', [[3.4, y + 0.15, 0], [6.8, y + 0.15, 0], [9.2, y + 0.15, 0]], 0.23, COLORS.colon, '排硬糞 / 軟便出口', 1);
+
+      // 食糞外迴路管線
+      const loopCurve = addTube3D('rabbit', 'ferment', [
+        [8.8, y + 0.1, 0], [6.0, y - 2.1, 1.5], [0.0, y - 2.3, 1.8], [-6.5, y - 1.8, 1.2], [-9.2, y - 0.1, 0]
+      ], 0.14, COLORS.ferment, '食糞外迴路 (Cecotrophy)', 2);
+
+      const mainCurve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(-9.5, y, 0), new THREE.Vector3(-5.6, y, 0),
+        new THREE.Vector3(-2.6, y + 0.45, 0.5), new THREE.Vector3(2.6, y + 0.15, 0),
+        new THREE.Vector3(4.2, y - 0.85, 0.4), new THREE.Vector3(9.2, y + 0.15, 0)
+      ]);
+      add3DParticlesAlongCurve('rabbit', mainCurve, 14, [
+        [0.25, COLORS.pFiber], [0.55, COLORS.pNut], [0.82, COLORS.pVfa], [1.0, COLORS.pWaste]
+      ], 0.11);
+
+      add3DParticlesAlongCurve('rabbit', loopCurve, 10, [
+        [1.0, COLORS.pMicrobe]
+      ], 0.11);
+    }
+  }
+
+  function updateThreeStepHighlight(step) {
+    if (!threeInited || !step) return;
+
+    threeMeshes.forEach(item => {
+      let active = true;
+      if (step.highlightType === 'ferment_acid') {
+        active = (item.role === 'ferment' || item.role === 'acid');
+      } else if (step.highlightType === 'cow') {
+        active = (item.lane === 'cow');
+      } else if (step.highlightType === 'horse') {
+        active = (item.lane === 'horse');
+      } else if (step.highlightType === 'rabbit') {
+        active = (item.lane === 'rabbit');
+      }
+      item.mesh.material.opacity = active ? 0.92 : 0.18;
+      item.mesh.material.emissiveIntensity = active ? 0.32 : 0.03;
+    });
+
+    threeLabelItems.forEach(lbl => {
+      const laneMatch = step.focusLane === 'all' || step.focusLane === lbl.lane;
+      lbl.el.style.display = laneMatch ? 'block' : 'none';
+    });
+  }
+
+  function resetThreeCamera() {
+    if (!threeInited) return;
+    camera.position.set(0, 3.5, 22);
+    controls.target.set(0, -0.3, 0);
+    controls.update();
+  }
+
+  function zoomThreeCamera(factor) {
+    if (!threeInited) return;
+    const dir = new THREE.Vector3().subVectors(camera.position, controls.target);
+    const len = Math.min(40, Math.max(8, dir.length() / factor));
+    dir.setLength(len);
+    camera.position.copy(controls.target).add(dir);
+    controls.update();
+  }
+
+  function resizeThree() {
+    if (!threeInited) return;
+    const w = stageWrapper.clientWidth;
+    const h = stageWrapper.clientHeight;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+  }
+  window.addEventListener('resize', resizeThree);
+
+  function renderThreeFrame(dtSec) {
+    if (!threeInited || state.tab !== 'three') return;
+    controls.update();
+
+    for (const p of threeParticles) {
+      p.t = (p.t + dtSec * p.speed) % 1;
+      const pos = p.curve.getPointAt(p.t);
+      p.mesh.position.copy(pos);
+      for (const [thresh, colHex] of p.colorTypes) {
+        if (p.t <= thresh) {
+          p.mesh.material.color.set(colHex);
+          break;
+        }
+      }
+    }
+
+    renderer.render(scene, camera);
+
+    // 投影 3D 標籤至螢幕 2D 座標
+    const w = stageWrapper.clientWidth;
+    const h = stageWrapper.clientHeight;
+    for (const item of threeLabelItems) {
+      if (item.el.style.display === 'none') continue;
+      const v = item.worldPos.clone().project(camera);
+      if (v.z > 1) {
+        item.el.style.opacity = '0';
+      } else {
+        item.el.style.opacity = state.showLabels ? '1' : '0';
+        const sx = (v.x * 0.5 + 0.5) * w;
+        const sy = (-v.y * 0.5 + 0.5) * h;
+        item.el.style.left = `${sx.toFixed(1)}px`;
+        item.el.style.top = `${sy.toFixed(1)}px`;
+      }
+    }
+  }
+
+  // ==========================================
+  // 7. 分頁與 Step-by-Step 狀態切換
+  // ==========================================
+  function switchTab(tabKey) {
+    state.tab = tabKey;
+    state.stepIdx = 0;
+    state.stepTimer = 0;
+
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.tab === tabKey);
+    });
+
+    if (tabKey === 'three') {
+      svgStage.style.display = 'none';
+      threeStage.style.display = 'block';
+      threeLabels.style.display = 'block';
+      initThreeScene();
+      resizeThree();
+    } else {
+      svgStage.style.display = 'block';
+      threeStage.style.display = 'none';
+      threeLabels.style.display = 'none';
+      state.scale = 1; state.tx = 0; state.ty = 0;
+      apply2DTransform();
+      render2DModel(tabKey);
+    }
+
+    buildStepTrack();
+    applyCurrentStep();
+  }
+
+  function buildStepTrack() {
+    const steps = MODELS[state.tab].steps;
+    stepTrack.innerHTML = '';
+    steps.forEach((s, idx) => {
+      const node = document.createElement('button');
+      node.className = 'step-node';
+      node.innerHTML = `<span>${idx + 1}</span><div class="auto-progress"></div>`;
+      node.title = s.title;
+      node.addEventListener('click', () => {
+        state.stepIdx = idx;
+        state.stepTimer = 0;
+        applyCurrentStep();
+      });
+      stepTrack.appendChild(node);
+    });
+  }
+
+  function applyCurrentStep() {
+    const model = MODELS[state.tab];
+    const steps = model.steps;
+    const step = steps[state.stepIdx];
+
+    // 更新底部進度節點樣式
+    const nodes = stepTrack.querySelectorAll('.step-node');
+    nodes.forEach((node, idx) => {
+      node.classList.toggle('completed', idx < state.stepIdx);
+      node.classList.toggle('current', idx === state.stepIdx);
+      const bar = node.querySelector('.auto-progress');
+      if (bar) bar.style.width = idx < state.stepIdx ? '100%' : '0%';
+    });
+
+    // 更新底部文字區
+    stepBadge.textContent = `STEP ${state.stepIdx + 1} / ${steps.length}`;
+    stepTitle.textContent = step.title;
+    stepDesc.textContent = step.desc;
+
+    // 更新左上生理 HUD
+    document.getElementById('hud-ph').textContent = step.ph;
+    document.getElementById('hud-swatch').style.background = step.color;
+    document.getElementById('hud-organ-name').textContent = step.organName;
+
+    document.getElementById('val-ferm').textContent = `${step.ferm}%`;
+    document.getElementById('bar-ferm').style.width = `${step.ferm}%`;
+
+    document.getElementById('val-vfa').textContent = `${step.vfa}%`;
+    document.getElementById('bar-vfa').style.width = `${step.vfa}%`;
+
+    document.getElementById('val-prot').textContent = `${step.prot}%`;
+    document.getElementById('bar-prot').style.width = `${step.prot}%`;
+
+    if (state.tab === 'three') {
+      updateThreeStepHighlight(step);
+    } else {
+      // 更新 2D 器官高亮與非活躍淡化
+      model.organs.forEach(org => {
+        const el = document.getElementById(`organ-${org.id}`);
+        if (!el) return;
+        const isActive = step.activeOrgans && step.activeOrgans.includes(org.id);
+        el.style.opacity = isActive ? '1' : '0.32';
+        el.style.filter = isActive ? `drop-shadow(0 0 11px ${org.color})` : 'none';
+      });
+      spawnStepParticlesAndEffects(step);
+    }
+  }
+
+  function stepNext() {
+    const len = MODELS[state.tab].steps.length;
+    state.stepIdx = (state.stepIdx + 1) % len;
+    state.stepTimer = 0;
+    applyCurrentStep();
+  }
+
+  function stepPrev() {
+    const len = MODELS[state.tab].steps.length;
+    state.stepIdx = (state.stepIdx - 1 + len) % len;
+    state.stepTimer = 0;
+    applyCurrentStep();
+  }
+
+  function togglePlay() {
+    state.isPlaying = !state.isPlaying;
+    state.stepTimer = 0;
+    btnPlay.textContent = state.isPlaying ? '⏸ 暫停播放' : '▶ 自動播放';
+    if (!state.isPlaying) {
+      const curBar = stepTrack.querySelector('.step-node.current .auto-progress');
+      if (curBar) curBar.style.width = '0%';
+    }
+  }
+
+  // ==========================================
+  // 8. UI 按鈕與快捷鍵事件綁定
+  // ==========================================
+  document.getElementById('tab-bar').addEventListener('click', e => {
+    const btn = e.target.closest('.tab-btn');
+    if (btn && btn.dataset.tab) switchTab(btn.dataset.tab);
+  });
+
+  const btnToggleLabels = document.getElementById('btn-toggle-labels');
+  btnToggleLabels.addEventListener('click', () => {
+    state.showLabels = !state.showLabels;
+    stageWrapper.classList.toggle('labels-hidden', !state.showLabels);
+    btnToggleLabels.classList.toggle('active-toggle', state.showLabels);
+    btnToggleLabels.textContent = state.showLabels ? '🏷️ 標籤: 開' : '🏷️ 標籤: 關';
+  });
+
+  const btnToggleLegend = document.getElementById('btn-toggle-legend');
+  const legendDrawer = document.getElementById('legend-drawer');
+  btnToggleLegend.addEventListener('click', () => {
+    state.showLegend = !state.showLegend;
+    legendDrawer.classList.toggle('hidden', !state.showLegend);
+    btnToggleLegend.classList.toggle('active-toggle', state.showLegend);
+  });
+
+  document.getElementById('btn-zoom-in').addEventListener('click', () => zoomByFactor(1.22));
+  document.getElementById('btn-zoom-out').addEventListener('click', () => zoomByFactor(0.82));
+  document.getElementById('btn-zoom-reset').addEventListener('click', resetView);
+
+  document.getElementById('btn-prev').addEventListener('click', stepPrev);
+  document.getElementById('btn-next').addEventListener('click', stepNext);
+  btnPlay.addEventListener('click', togglePlay);
+
+  window.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight') stepNext();
+    else if (e.key === 'ArrowLeft') stepPrev();
+    else if (e.key === ' ') { e.preventDefault(); togglePlay(); }
+  });
+
+  // ==========================================
+  // 9. 主動畫迴圈 (2D 粒子 + 3D 渲染 + 自動播放計時)
+  // ==========================================
+  let lastTime = performance.now();
+
+  function mainLoop(now) {
+    const dtMs = Math.min(50, now - lastTime);
+    lastTime = now;
+    const dtSec = dtMs / 1000;
+
+    if (state.isPlaying) {
+      state.stepTimer += dtMs;
+      const pct = Math.min(100, (state.stepTimer / state.stepDuration) * 100);
+      const curBar = stepTrack.querySelector('.step-node.current .auto-progress');
+      if (curBar) curBar.style.width = `${pct}%`;
+      if (state.stepTimer >= state.stepDuration) {
+        stepNext();
+      }
+    }
+
+    if (state.tab === 'three') {
+      renderThreeFrame(dtSec);
+    } else {
+      update2DParticles(dtSec, now / 1000);
+    }
+
+    requestAnimationFrame(mainLoop);
+  }
+
+  // 啟動預設分頁
+  switchTab('cow');
+  requestAnimationFrame(mainLoop);
+})();
+</script>
+</body>
+</html>
