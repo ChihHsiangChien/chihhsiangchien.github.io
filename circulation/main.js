@@ -264,7 +264,7 @@ function drawTrackingReticle(ctx) {
 
   // 狀態提示標籤
   const isOxygenated = p.oxygenState && p.oxygenState.level === "oxygenated";
-  const statusText = `🎯 追蹤中 (#${trackedParticleIdx}) ${isOxygenated ? '充氧血球 鮮紅' : '缺氧血球 暗紅'}`;
+  const statusText = ` ${isOxygenated ? '充氧血球 鮮紅' : '缺氧血球 暗紅'}`;
   ctx.font = "bold 12px sans-serif";
   const tw = ctx.measureText(statusText).width;
   ctx.fillStyle = "rgba(0, 0, 0, 0.78)";
@@ -282,19 +282,19 @@ function drawTrackingReticle(ctx) {
 // === 解剖標籤資料與繪製 (Circulation Labels) ===
 const CIRCULATION_LABELS = [
   // 肺循環
-  { text: "肺部微血管網 / 肺泡", x: 300, y: 70, targetX: 340, targetY: 45, color: "#2e7d32" },
-  { text: "肺動脈 (流向肺部 / 缺氧血)", x: 70, y: 220, targetX: 160, targetY: 250, color: "#1976d2" },
-  { text: "肺靜脈 (回流左心房 / 充氧血)", x: 530, y: 220, targetX: 470, targetY: 260, color: "#c62828" },
+  { text: "肺部微血管", x: 550, y: 370, targetX: 550, targetY: 370, color: "#2e7d32" },
+  { text: "肺動脈", x: 320, y: 380, targetX: 320, targetY: 380, color: "#1976d2" },
+  { text: "肺靜脈", x: 510, y: 400, targetX: 510, targetY: 400, color: "#c62828" },
   
   // 心臟
-  { text: "左心房 (LA)", x: 450, y: 350, targetX: 395, targetY: 370, color: "#ad1457" },
-  { text: "左心室 (LV)", x: 450, y: 475, targetX: 395, targetY: 475, color: "#c62828" },
-  { text: "右心房 (RA)", x: 190, y: 395, targetX: 260, targetY: 415, color: "#1565c0" },
-  { text: "右心室 (RV)", x: 235, y: 535, targetX: 305, targetY: 495, color: "#0288d1" },
+  { text: "左心房", x: 405, y: 370, targetX: 405, targetY: 370, color: "#ad1457" },
+  { text: "左心室", x: 400, y: 475, targetX: 400, targetY: 475, color: "#c62828" },
+  { text: "右心房", x: 280, y: 415, targetX: 280, targetY: 415, color: "#1565c0" },
+  { text: "右心室", x: 325, y: 495, targetX: 325, targetY: 495, color: "#0288d1" },
 
   // 大血管
-  { text: "主動脈 (Aorta / 體循環動脈幹)", x: 440, y: 305, targetX: 360, targetY: 350, color: "#e53935" },
-  { text: "大靜脈 (上/下腔靜脈)", x: 140, y: 315, targetX: 230, targetY: 280, color: "#1565c0" },
+  { text: "主動脈", x: 370, y: 405, targetX: 370, targetY: 405, color: "#e53935" },
+  { text: "大靜脈", x: 280, y: 365, targetX: 280, targetY: 365, color: "#1565c0" },
 
   // 周邊微血管
   { text: "頭部與上肢微血管網", x: 460, y: 130, targetX: 430, targetY: 100, color: "#388e3c" },
