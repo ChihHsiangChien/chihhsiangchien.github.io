@@ -1,0 +1,2899 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>3D 地質斷層與板塊構造互動模擬器 | GeoFault 3D</title>
+    <script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+    <style>
+        :root {
+            --bg-dark: #0b1120;
+            --panel-bg: rgba(15, 23, 42, 0.86);
+            --panel-border: rgba(148, 163, 184, 0.22);
+            --text-main: #f1f5f9;
+            --text-muted: #94a3b8;
+            --accent: #38bdf8;
+            --accent-hover: #0ea5e9;
+
+            /* 跨分頁統一地質與力學色票 */
+            --geo-surface: #5c940d;
+            --geo-layer1: #eab308;
+            --geo-layer2: #a8a29e;
+            --geo-layer3: #c2410c;
+            --geo-basement: #57534e;
+            --geo-oceanic: #1e293b;
+            --geo-magma: #ef4444;
+            --geo-fault: #f43f5e;
+            --geo-water: #0ea5e9;
+
+            --stress-tension: #38bdf8;
+            --stress-compression: #fb7185;
+            --stress-shear: #c084fc;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+
+        body,
+        html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: var(--bg-dark);
+            color: var(--text-main);
+            font-family: system-ui, -apple-system, "Segoe UI", "Microsoft JhengHei", "PingFang TC", sans-serif;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 頂部主導覽列 */
+        header.top-nav {
+            background: rgba(11, 17, 32, 0.95);
+            border-bottom: 1px solid var(--panel-border);
+            padding: 8px 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+            z-index: 30;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 700;
+            font-size: 1rem;
+            letter-spacing: 0.5px;
+            color: #f8fafc;
+            white-space: nowrap;
+        }
+
+        .brand-badge {
+            background: linear-gradient(135deg, #f43f5e, #fb923c);
+            color: #fff;
+            font-size: 0.72rem;
+            padding: 2px 7px;
+            border-radius: 6px;
+            font-weight: 800;
+        }
+
+        .main-tabs {
+            display: flex;
+            gap: 6px;
+            overflow-x: auto;
+            touch-action: pan-x;
+            scrollbar-width: none;
+        }
+
+        .main-tabs::-webkit-scrollbar {
+            display: none;
+        }
+
+        .tab-btn {
+            background: rgba(30, 41, 59, 0.75);
+            border: 1px solid var(--panel-border);
+            color: var(--text-muted);
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+            min-height: 40px;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-main);
+            background: rgba(51, 65, 85, 0.8);
+        }
+
+        .tab-btn.active {
+            background: rgba(56, 189, 248, 0.18);
+            border-color: var(--accent);
+            color: #38bdf8;
+            box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
+        }
+
+        .top-actions {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .util-btn {
+            background: rgba(30, 41, 59, 0.85);
+            border: 1px solid var(--panel-border);
+            color: var(--text-main);
+            padding: 7px 12px;
+            border-radius: 8px;
+            font-size: 0.84rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            min-height: 40px;
+            transition: all 0.18s;
+            white-space: nowrap;
+        }
+
+        .util-btn.active {
+            background: rgba(16, 185, 129, 0.2);
+            border-color: #10b981;
+            color: #34d399;
+        }
+
+        /* 次級模型選擇列 */
+        .sub-nav {
+            background: rgba(15, 23, 42, 0.92);
+            border-bottom: 1px solid var(--panel-border);
+            padding: 7px 14px;
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            touch-action: pan-x;
+            scrollbar-width: none;
+            z-index: 25;
+        }
+
+        .sub-nav::-webkit-scrollbar {
+            display: none;
+        }
+
+        .sub-btn {
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            color: #cbd5e1;
+            padding: 7px 14px;
+            border-radius: 999px;
+            font-size: 0.84rem;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            min-height: 36px;
+            transition: all 0.2s;
+        }
+
+        .sub-btn:hover {
+            background: rgba(51, 65, 85, 0.8);
+        }
+
+        .sub-btn.active {
+            background: #38bdf8;
+            border-color: #38bdf8;
+            color: #0f172a;
+            font-weight: 700;
+        }
+
+        /* 主 3D 視窗區 */
+        .stage-wrap {
+            position: relative;
+            flex: 1;
+            width: 100%;
+            overflow: hidden;
+            touch-action: none;
+            background: radial-gradient(circle at 50% 35%, #1e293b 0%, #090d16 100%);
+        }
+
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* 3D 投影文字標籤層 */
+        #labels-layer {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            overflow: hidden;
+            z-index: 10;
+            transition: opacity 0.25s ease;
+        }
+
+        #labels-layer.hidden {
+            opacity: 0;
+            visibility: hidden;
+        }
+
+        .geo-label {
+            position: absolute;
+            transform: translate(-50%, -100%);
+            background: rgba(15, 23, 42, 0.88);
+            backdrop-filter: blur(6px);
+            border: 1.5px solid rgba(255, 255, 255, 0.35);
+            color: #f8fafc;
+            padding: 4px 9px;
+            border-radius: 6px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            white-space: nowrap;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: opacity 0.15s;
+        }
+
+        .geo-label::after {
+            content: "";
+            position: absolute;
+            bottom: -6px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-width: 6px 5px 0 5px;
+            border-style: solid;
+            border-color: rgba(15, 23, 42, 0.9) transparent transparent transparent;
+        }
+
+        .label-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        /* 左上資訊解說卡 */
+        .info-card {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            width: min(360px, calc(100vw - 80px));
+            background: var(--panel-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            padding: 12px 14px;
+            z-index: 15;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+            transition: transform 0.25s ease, opacity 0.25s ease;
+        }
+
+        .info-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+
+        .info-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #f8fafc;
+        }
+
+        .collapse-btn {
+            background: rgba(51, 65, 85, 0.7);
+            border: none;
+            color: #cbd5e1;
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
+
+        .badges-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 8px;
+        }
+
+        .stress-badge {
+            font-size: 0.74rem;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 999px;
+            border: 1px solid currentColor;
+        }
+
+        .step-Indicator-pill {
+            font-size: 0.74rem;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: rgba(56, 189, 248, 0.18);
+            color: #38bdf8;
+        }
+
+        .info-body {
+            font-size: 0.84rem;
+            line-height: 1.52;
+            color: #cbd5e1;
+        }
+
+        .info-step-title {
+            color: #fde047;
+            font-weight: 700;
+            margin-bottom: 3px;
+            font-size: 0.88rem;
+        }
+
+        .info-card.collapsed .info-content {
+            display: none;
+        }
+
+        /* 右側觸控友善視角控制列 */
+        .viewport-controls {
+            position: absolute;
+            right: 12px;
+            top: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 15;
+        }
+
+        .vp-btn {
+            width: 44px;
+            height: 44px;
+            border-radius: 10px;
+            background: var(--panel-bg);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--panel-border);
+            color: var(--text-main);
+            font-size: 1.15rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+            transition: all 0.15s;
+        }
+
+        .vp-btn:active {
+            transform: scale(0.93);
+        }
+
+        .vp-btn.mode-pan {
+            background: rgba(245, 158, 11, 0.25);
+            border-color: #f59e0b;
+            color: #fbbf24;
+        }
+
+        /* 彈出式統一色票圖例面板 */
+        .legend-panel {
+            position: absolute;
+            top: 12px;
+            right: 66px;
+            width: 230px;
+            background: var(--panel-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            padding: 12px;
+            z-index: 20;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+            display: none;
+        }
+
+        .legend-panel.open {
+            display: block;
+        }
+
+        .legend-title {
+            font-size: 0.84rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: #f8fafc;
+            border-bottom: 1px solid var(--panel-border);
+            padding-bottom: 5px;
+        }
+
+        .legend-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 5px;
+            font-size: 0.76rem;
+            color: #cbd5e1;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .swatch {
+            width: 14px;
+            height: 14px;
+            border-radius: 4px;
+            flex-shrink: 0;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+        }
+
+        /* 應變能計量條 (僅在彈性回跳模型顯示) */
+        .energy-meter {
+            position: absolute;
+            bottom: 14px;
+            left: 14px;
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 10px;
+            padding: 8px 12px;
+            width: 210px;
+            z-index: 15;
+            display: none;
+        }
+
+        .energy-meter.visible {
+            display: block;
+        }
+
+        .energy-label {
+            font-size: 0.76rem;
+            font-weight: 700;
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+
+        .energy-bar-bg {
+            width: 100%;
+            height: 10px;
+            background: rgba(30, 41, 59, 0.9);
+            border-radius: 999px;
+            overflow: hidden;
+        }
+
+        .energy-bar-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #38bdf8, #eab308, #ef4444);
+            transition: width 0.08s linear;
+        }
+
+        /* 底部 Step-by-Step 流程控制塢 */
+        footer.step-dock {
+            background: rgba(11, 17, 32, 0.96);
+            border-top: 1px solid var(--panel-border);
+            padding: 10px 16px 12px;
+            z-index: 30;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .stepper-track {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+        }
+
+        .step-node {
+            background: rgba(30, 41, 59, 0.7);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            color: var(--text-muted);
+            padding: 7px 8px;
+            border-radius: 8px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            min-height: 40px;
+            transition: all 0.18s;
+            overflow: hidden;
+        }
+
+        .step-node:hover {
+            background: rgba(51, 65, 85, 0.8);
+            color: #e2e8f0;
+        }
+
+        .step-node.active {
+            background: rgba(56, 189, 248, 0.2);
+            border-color: #38bdf8;
+            color: #f8fafc;
+        }
+
+        .step-node.passed {
+            border-color: rgba(56, 189, 248, 0.45);
+            color: #cbd5e1;
+        }
+
+        .step-num {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: rgba(15, 23, 42, 0.8);
+            color: #94a3b8;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-weight: 800;
+            flex-shrink: 0;
+        }
+
+        .step-node.active .step-num {
+            background: #38bdf8;
+            color: #0f172a;
+        }
+
+        .step-name-txt {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .playback-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .ctrl-btns {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .ctrl-btn {
+            background: rgba(30, 41, 59, 0.9);
+            border: 1px solid var(--panel-border);
+            color: var(--text-main);
+            padding: 8px 13px;
+            border-radius: 8px;
+            font-size: 0.84rem;
+            font-weight: 700;
+            cursor: pointer;
+            min-height: 42px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: all 0.15s;
+        }
+
+        .ctrl-btn:hover:not(:disabled) {
+            background: rgba(51, 65, 85, 0.95);
+            border-color: #64748b;
+        }
+
+        .ctrl-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .ctrl-btn.primary {
+            background: #0284c7;
+            border-color: #38bdf8;
+            color: #fff;
+        }
+
+        .ctrl-btn.primary:hover {
+            background: #0ea5e9;
+        }
+
+        .slider-wrap {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 180px;
+        }
+
+        input[type="range"].timeline-slider {
+            flex: 1;
+            -webkit-appearance: none;
+            appearance: none;
+            height: 8px;
+            border-radius: 999px;
+            background: rgba(51, 65, 85, 0.9);
+            outline: none;
+            cursor: pointer;
+        }
+
+        input[type="range"].timeline-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #38bdf8;
+            border: 3px solid #f8fafc;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+            cursor: grab;
+        }
+
+        .pct-readout {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: #94a3b8;
+            width: 42px;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .hint-tip {
+            position: absolute;
+            bottom: 10px;
+            right: 12px;
+            font-size: 0.73rem;
+            color: rgba(148, 163, 184, 0.7);
+            pointer-events: none;
+            z-index: 11;
+        }
+
+        @media (max-width: 768px) {
+            header.top-nav {
+                padding: 6px 10px;
+            }
+
+            .brand-title-long {
+                display: none;
+            }
+
+            .info-card {
+                width: calc(100vw - 74px);
+                padding: 9px 11px;
+            }
+
+            .stepper-track {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .hint-tip {
+                display: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- 頂部主分頁與工具列 -->
+    <header class="top-nav">
+        <div class="brand">
+            <span class="brand-badge">3D GEO</span>
+            <span>地質斷層模擬器<span class="brand-title-long">・板塊與地震動力學</span></span>
+        </div>
+
+        <nav class="main-tabs" id="main-tabs">
+            <button class="tab-btn active" data-cat="0">1. 基本斷層與幾何</button>
+            <button class="tab-btn" data-cat="1">2. 斷層動力與地震</button>
+            <button class="tab-btn" data-cat="2">3. 區域地質與板塊</button>
+        </nav>
+
+        <div class="top-actions">
+            <button class="util-btn active" id="btn-toggle-labels" title="顯示或隱藏 3D 文字標籤">
+                🏷️ 標籤: 開
+            </button>
+            <button class="util-btn" id="btn-toggle-legend" title="檢視跨分頁統一地質色票">
+                🎨 圖例
+            </button>
+        </div>
+    </header>
+
+    <!-- 次分頁（子模型選擇） -->
+    <div class="sub-nav" id="sub-nav"></div>
+
+    <!-- 3D 模擬互動舞台 -->
+    <main class="stage-wrap" id="stage-wrap">
+        <div id="canvas-container"></div>
+        <div id="labels-layer"></div>
+
+        <!-- 左上角解說資訊卡 -->
+        <aside class="info-card" id="info-card">
+            <div class="info-header">
+                <div class="info-title" id="info-model-title">正斷層 (Normal Fault)</div>
+                <button class="collapse-btn" id="btn-collapse-info" title="收合/展開說明">▾</button>
+            </div>
+            <div class="info-content">
+                <div class="badges-row">
+                    <span class="stress-badge" id="info-stress-badge">張裂應力 Tension</span>
+                    <span class="step-Indicator-pill" id="info-step-pill">階段 1 / 4</span>
+                </div>
+                <div class="info-step-title" id="info-step-title">初始水平岩層</div>
+                <div class="info-body" id="info-step-desc">地殼尚未受張力拉裂，各時代沉積岩層呈連續水平疊置。</div>
+            </div>
+        </aside>
+
+        <!-- 彈性應變能計量表（2.1 專用） -->
+        <div class="energy-meter" id="energy-meter">
+            <div class="energy-label">
+                <span>⚡ 斷層累積彈性應變能</span>
+                <span id="energy-val">0%</span>
+            </div>
+            <div class="energy-bar-bg">
+                <div class="energy-bar-fill" id="energy-fill"></div>
+            </div>
+        </div>
+
+        <!-- 統一視覺色票圖例 -->
+        <div class="legend-panel" id="legend-panel">
+            <div class="legend-title">統一地質岩層與應力圖例</div>
+            <div class="legend-grid">
+                <div class="legend-item"><span class="swatch" style="background:#5c940d"></span>地表植生與地形面</div>
+                <div class="legend-item"><span class="swatch" style="background:#eab308"></span>年輕沉積岩層（砂岩/沖積層）</div>
+                <div class="legend-item"><span class="swatch" style="background:#a8a29e"></span>中層沉積岩層（石灰岩/頁岩）</div>
+                <div class="legend-item"><span class="swatch" style="background:#c2410c"></span>古老岩層（紅棕色砂頁岩）</div>
+                <div class="legend-item"><span class="swatch" style="background:#57534e"></span>大陸結晶基盤岩 / 母岩</div>
+                <div class="legend-item"><span class="swatch" style="background:#1e293b"></span>高密度海洋地殼（玄武岩質）</div>
+                <div class="legend-item"><span class="swatch" style="background:#ef4444"></span>軟流圈地函 / 岩漿活動</div>
+                <div class="legend-item"><span class="swatch" style="background:#f43f5e"></span>斷層面 / 斷層泥核心</div>
+                <div class="legend-item"><span class="swatch" style="background:#0ea5e9"></span>水體（河流/湖泊/海洋/地下水）</div>
+                <div class="legend-item"><span class="swatch" style="background:#38bdf8"></span>張裂應力方向 (Tension)</div>
+                <div class="legend-item"><span class="swatch" style="background:#fb7185"></span>擠壓應力方向 (Compression)
+                </div>
+                <div class="legend-item"><span class="swatch" style="background:#c084fc"></span>剪切應力方向 (Shear)</div>
+            </div>
+        </div>
+
+        <!-- 右側觸控友善 Zoom / Pan / 重置按鈕 -->
+        <div class="viewport-controls">
+            <button class="vp-btn" id="btn-zoom-in" title="放大視角 (Zoom In)">➕</button>
+            <button class="vp-btn" id="btn-zoom-out" title="縮小視角 (Zoom Out)">➖</button>
+            <button class="vp-btn" id="btn-pan-mode" title="切換單指觸控/左鍵：旋轉 或 平移">🔄</button>
+            <button class="vp-btn" id="btn-reset-cam" title="重置最佳 3D 觀察視角">🎯</button>
+        </div>
+
+        <div class="hint-tip">💡 支援觸控雙指縮放平移・單指旋轉（右側按鈕可切換單指平移）</div>
+    </main>
+
+    <!-- 底部 Step-by-Step 流程控制面板 -->
+    <footer class="step-dock">
+        <div class="stepper-track" id="stepper-track"></div>
+        <div class="playback-row">
+            <div class="ctrl-btns">
+                <button class="ctrl-btn" id="btn-prev" title="上一個演進步驟">⏮ 上一步</button>
+                <button class="ctrl-btn primary" id="btn-play" title="自動播放或暫停演進動畫">▶ 播放流程</button>
+                <button class="ctrl-btn" id="btn-next" title="下一個演進步驟">下一步 ⏭</button>
+                <button class="ctrl-btn" id="btn-reset-sim" title="回到初始狀態">↺ 重置</button>
+            </div>
+            <div class="slider-wrap">
+                <input type="range" class="timeline-slider" id="timeline-slider" min="0" max="1000" value="0" />
+                <span class="pct-readout" id="pct-readout">0%</span>
+            </div>
+        </div>
+    </footer>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        /* =========================================================================
+           1. 跨分頁統一視覺色票與程序化地質紋理
+           ========================================================================= */
+        const PALETTE = {
+            surface: 0x5c940d,
+            highland: 0x3f6212,
+            alpine: 0x64748b,
+            layer1: 0xeab308,    // 年輕砂岩層
+            layer2: 0xa8a29e,    // 石灰岩層
+            layer3: 0xc2410c,    // 古老紅棕岩層
+            basement: 0x57534e,  // 大陸基盤岩
+            oceanic: 0x1e293b,   // 海洋玄武岩地殼
+            mantle: 0xb91c1c,    // 軟流圈地函
+            magma: 0xf97316,     // 岩漿
+            fault: 0xf43f5e,     // 斷層面 / 核心紅
+            gouge: 0x9f1239,     // 斷層泥深紅
+            breccia: 0xfb7185,   // 斷層角礫帶
+            water: 0x0ea5e9,     // 水體
+            tension: 0x38bdf8,   // 張裂藍
+            compress: 0xfb7185,  // 擠壓珊瑚紅
+            shear: 0xc084fc,     // 剪切紫
+            road: 0x334155
+        };
+
+        const HEX_STR = {
+            fault: '#f43f5e',
+            block: '#facc15',
+            landform: '#4ade80',
+            water: '#38bdf8',
+            tension: '#38bdf8',
+            compress: '#fb7185',
+            shear: '#c084fc',
+            magma: '#fb923c',
+            waveP: '#38bdf8',
+            waveS: '#fb923c'
+        };
+
+        // 建立細緻沉積層紋理，讓褶皺與錯動清晰可見
+        function createStrataTexture(baseHex, stripeHex) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = baseHex;
+            ctx.fillRect(0, 0, 64, 64);
+            ctx.fillStyle = stripeHex;
+            for (let y = 4; y < 64; y += 10) {
+                ctx.fillRect(0, y, 64, 2);
+            }
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.RepeatWrapping;
+            tex.repeat.set(3, 1);
+            return tex;
+        }
+
+        const TEX_CACHE = {
+            l1: createStrataTexture('#eab308', '#ca8a04'),
+            l2: createStrataTexture('#a8a29e', '#78716c'),
+            l3: createStrataTexture('#c2410c', '#9a3412'),
+            base: createStrataTexture('#57534e', '#44403c'),
+            ocean: createStrataTexture('#1e293b', '#0f172a')
+        };
+
+        const STANDARD_STRATA = [
+            { v0: 0.00, v1: 0.30, color: PALETTE.basement, tex: TEX_CACHE.base },
+            { v0: 0.30, v1: 0.56, color: PALETTE.layer3, tex: TEX_CACHE.l3 },
+            { v0: 0.56, v1: 0.78, color: PALETTE.layer2, tex: TEX_CACHE.l2 },
+            { v0: 0.78, v1: 0.94, color: PALETTE.layer1, tex: TEX_CACHE.l1 },
+            { v0: 0.94, v1: 1.00, color: PALETTE.surface, tex: null }
+        ];
+
+        /* =========================================================================
+           2. 三大類別、10 個互動模擬主題之課程與階段資料
+           ========================================================================= */
+        const CATEGORIES = [
+            {
+                name: '1. 基本斷層與幾何',
+                models: [
+                    {
+                        id: 'normal',
+                        name: '正斷層 (地壘與地塹)',
+                        stressText: '張裂應力 (Tension)',
+                        stressColor: HEX_STR.tension,
+                        camPos: [0, 5.8, 12.2],
+                        camTarget: [0, -0.2, 0],
+                        steps: [
+                            { name: '初始水平岩層', desc: '地殼尚未受到拉張，由老（深部基盤）至新（淺部砂岩與地表）的岩層呈水平連續排列。' },
+                            { name: '張裂應力與共軛破裂', desc: '兩側受到水平張裂應力（藍色箭頭）拉開，岩層內部產生高傾角的正斷層破裂面。' },
+                            { name: '上盤相對向下滑動', desc: '位於斷層面上方的「上盤（Hanging Wall）」受重力沿斷層面向下滑落，地殼水平拉長。' },
+                            { name: '地壘與地塹地形發育', desc: '下陷的上盤岩塊形成低窪「地塹（Graben）」並匯聚成河湖；兩側相對高聳的下盤則形成「地壘（Horst）」。' }
+                        ]
+                    },
+                    {
+                        id: 'reverse',
+                        name: '逆斷層 / 順衝斷層',
+                        stressText: '擠壓應力 (Compression)',
+                        stressColor: HEX_STR.compress,
+                        camPos: [0, 5.5, 11.4],
+                        camTarget: [0, 0.1, 0],
+                        steps: [
+                            { name: '初始水平沉積岩層', desc: '擠壓發生前，各時代沉積岩層依疊置定律由下（老）而上（新）水平分布。' },
+                            { name: '擠壓應力與微褶皺', desc: '兩側受到強烈水平擠壓（紅色箭頭），岩層產生微幅背斜彎曲，並發育低傾角順衝斷層面（約32°）。' },
+                            { name: '上盤逆衝向上推擠', desc: '上盤岩塊沿斷層面逆向往上推擠爬升，造成地殼水平縮短與垂直加厚。' },
+                            { name: '山脈隆起與老覆於新', desc: '上盤隆起形成斷塊山脈與陡峭斷層崖，剖面可見深部「古老紅棕岩層」推覆於「年輕黃砂岩層」之上。' }
+                        ]
+                    },
+                    {
+                        id: 'strikeslip',
+                        name: '平移 / 走滑斷層',
+                        stressText: '剪切應力 (Shear)',
+                        stressColor: HEX_STR.shear,
+                        camPos: [0, 7.2, 10.2],
+                        camTarget: [0, 0, 0],
+                        steps: [
+                            { name: '連續地景與河道道路', desc: '初始狀態下，地表河流與公路筆直橫越斷層帶，地下岩層亦無垂直落差。' },
+                            { name: '水平剪切力偶作用', desc: '兩側岩塊受到方向相反的水平剪切應力（紫色箭頭），形成近乎垂直（90°）的走滑斷層面。' },
+                            { name: '岩塊水平錯動（右移）', desc: '兩側岩塊沿垂直斷層面水平相對滑移。站在任一側看對岸向右移動，稱為「右移斷層」。' },
+                            { name: '錯位河道與線狀斷層谷', desc: '公路遭水平截斷錯位，河流呈閃電狀轉折（錯位河），破碎帶受侵蝕形成筆直的「線狀斷層谷」。' }
+                        ]
+                    },
+                    {
+                        id: 'oblique',
+                        name: '斜滑斷層 (複合運動)',
+                        stressText: '張裂＋剪切複合應力',
+                        stressColor: HEX_STR.shear,
+                        camPos: [1.5, 6.0, 11.2],
+                        camTarget: [0, -0.1, 0],
+                        steps: [
+                            { name: '初始完整岩塊', desc: '地表公路與河流連續對齊，地下岩層尚未發生傾斜或水平錯位。' },
+                            { name: '複合應力場作用', desc: '岩層同時承受水平張裂（傾向拉開）與水平剪切（走向錯動）的複合地應力。' },
+                            { name: '傾向垂直滑移分量', desc: '分解觀察第一分量：上盤沿斷層傾向往下滑落（正斷層分量），產生明顯地表斷層崖落差。' },
+                            { name: '疊加走向平移（完整斜滑）', desc: '疊加走向水平分量後，上盤呈現斜向滑移並留下斜向擦痕，道路同時具備高低落差與左右錯位。' }
+                        ]
+                    }
+                ]
+            },
+            {
+                name: '2. 斷層動力與地震',
+                models: [
+                    {
+                        id: 'rebound',
+                        name: '彈性回跳與地震成因',
+                        stressText: '板塊剪切與應變累積',
+                        stressColor: HEX_STR.shear,
+                        camPos: [0, 7.8, 9.6],
+                        camTarget: [0, 0.2, 0],
+                        steps: [
+                            { name: '無應力閉鎖初始態', desc: '地震週期起點：斷層面受摩擦力鎖死，橫跨斷層的圍籬、道路與應變網格皆呈筆直線條。' },
+                            { name: '彈性形變與能量累積', desc: '遠處板塊持續移動，但斷層中央鎖死，導致兩側岩層與圍籬發生「S形彈性彎曲」，應變能急遽累積。' },
+                            { name: '突破摩擦極限・瞬間發震', desc: '累積應力超過岩石摩擦強度，斷層瞬間破裂錯動！累積的彈性位能轉化為強烈地震波向外輻射。' },
+                            { name: '彈性回跳後新平衡', desc: '彎曲的岩層與圍籬「彈性回跳」恢復筆直，但兩側留下永久水平錯位，進入下一個地震孕震週期。' }
+                        ]
+                    },
+                    {
+                        id: 'hypocenter',
+                        name: '震源與震央三維波傳',
+                        stressText: '地震波三維球面擴散',
+                        stressColor: HEX_STR.fault,
+                        camPos: [3.2, 6.4, 11.8],
+                        camTarget: [0, 0, 0],
+                        steps: [
+                            { name: '地下震源破裂與震央定位', desc: '地下斷層面某點發生錯動破裂稱為「震源（Hypocenter）」，垂直投影至正上方地表即為「震央（Epicenter）」。' },
+                            { name: 'P波（壓縮縱波）率先擴散', desc: '波速最快的 P 波以同心球面率先向外擴散抵達近處城市，使建築物產生上下微幅震動。' },
+                            { name: 'S波（剪力橫波）球面抵達', desc: '波速次之但破壞力較強的 S 波球面緊接著抵達，造成近震央建築物明顯水平搖晃。' },
+                            { name: '表面波擴散與距離衰減', desc: '能量最強的表面波沿地表同心圓擴散；近震央建築劇烈搖晃，遠處建築震幅則隨距離明顯衰減。' }
+                        ]
+                    },
+                    {
+                        id: 'gouge',
+                        name: '斷層帶結構與泥化帶',
+                        stressText: '岩體研磨與水文阻隔',
+                        stressColor: HEX_STR.fault,
+                        camPos: [0, 5.2, 10.6],
+                        camTarget: [0, -0.1, 0],
+                        steps: [
+                            { name: '未變形結晶母岩', desc: '放大檢視斷層深部剖面：錯動初期僅有單一破裂面，兩側母岩（Protolith）尚稱完整。' },
+                            { name: '碎裂帶與斷層角礫岩', desc: '歷經多次地震錯動，斷層兩側發育密集裂隙網（碎裂帶 Damage Zone）與稜角狀「斷層角礫岩」。' },
+                            { name: '斷層泥核心區發育', desc: '滑移最集中的核心區經強烈研磨與水岩反應，形成極細緻、富含黏土且不透水的「斷層泥（Fault Gouge）」。' },
+                            { name: '地下水滲流與阻水湧泉', desc: '地下水沿高透水性碎裂帶快速下滲，但遭不透水斷層泥阻擋，迫使水流沿斷層帶轉向上湧形成「斷層泉」。' }
+                        ]
+                    }
+                ]
+            },
+            {
+                name: '3. 區域地質與板塊',
+                models: [
+                    {
+                        id: 'taiwan',
+                        name: '台灣造山運動與斷層系',
+                        stressText: '弧陸碰撞擠壓 (NW向聚合)',
+                        stressColor: HEX_STR.compress,
+                        camPos: [0.5, 6.2, 12.6],
+                        camTarget: [0, 0.1, 0],
+                        steps: [
+                            { name: '板塊聚合前大陸邊緣', desc: '西側歐亞板塊被動大陸邊緣堆積厚層沉積物；東側菲律賓海板塊攜帶呂宋火山島弧向西北逼近。' },
+                            { name: '弧陸碰撞與花東縱谷縫合', desc: '島弧撞擊歐亞大陸邊緣並拼貼成「海岸山脈」，交界處形成具逆衝兼左移性質的「花東縱谷斷層」。' },
+                            { name: '中央山脈變質岩快速隆起', desc: '持續強烈碰撞擠壓使深部變質岩層快速抬升並受剝蝕，隆起成為台灣脊樑「雪山與中央山脈」。' },
+                            { name: '西部麓山帶與車籠埔斷層', desc: '造山擠壓前緣向西推進，於西部麓山帶發育覆瓦狀順衝斷層系統（如 921 地震之車籠埔斷層）。' }
+                        ]
+                    },
+                    {
+                        id: 'subduction',
+                        name: '隱沒帶與增生楔構造',
+                        stressText: '板塊隱沒擠壓與脫水熔融',
+                        stressColor: HEX_STR.compress,
+                        camPos: [0, 5.8, 12.8],
+                        camTarget: [0, -0.3, 0],
+                        steps: [
+                            { name: '海洋板塊向海溝潛沒', desc: '高密度的海洋地殼攜帶表層深海沉積物，於海溝處彎曲並向大陸板塊下方隱沒。' },
+                            { name: '沉積物刮除與增生楔逆衝群', desc: '上覆板塊前緣如推土機般刮除海溝沉積物，形成一系列覆瓦狀逆衝斷層堆疊的「增生楔」。' },
+                            { name: '板塊脫水與地函楔熔融', desc: '隱沒板塊深入高溫高壓處釋放水份（藍色流體），降低上方地函楔熔點，誘發部分熔融產生岩漿。' },
+                            { name: '岩漿上升與火山弧噴發', desc: '熾熱岩漿穿透上覆地殼上升噴發，於隱沒帶後方形成成排的「火山弧（Volcanic Arc）」與弧前盆地。' }
+                        ]
+                    },
+                    {
+                        id: 'rift',
+                        name: '大陸張裂與裂谷盆地',
+                        stressText: '地函上湧與地殼張裂',
+                        stressColor: HEX_STR.tension,
+                        camPos: [0, 5.8, 12.6],
+                        camTarget: [0, -0.2, 0],
+                        steps: [
+                            { name: '地函熱柱上湧與地殼拱起', desc: '軟流圈熾熱地函物質向上湧升加熱，使上方大陸岩石圈受熱膨脹拱起並承受張裂應力。' },
+                            { name: '平行階梯狀正斷層發育', desc: '大陸地殼持續拉張變薄，兩側發育多組平行排列、向裂谷中央傾斜的正斷層群。' },
+                            { name: '中央裂谷盆地逐級陷落', desc: '中央岩塊沿多條正斷層逐級滑落陷沒，形成寬廣低窪的「大陸裂谷（如東非大裂谷）」與高聳裂谷肩。' },
+                            { name: '裂谷湖泊匯聚與火山活動', desc: '斷陷低窪處積水形成狹長深邃的巨型裂谷湖泊，地函減壓熔融岩漿亦沿張裂隙噴發形成裂谷火山。' }
+                        ]
+                    }
+                ]
+            }
+        ];
+
+        /* =========================================================================
+           3. Three.js 核心場景、燈光、相機與控制器初始化
+           ========================================================================= */
+        const container = document.getElementById('canvas-container');
+        const labelsLayer = document.getElementById('labels-layer');
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.localClippingEnabled = true;
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+        container.appendChild(renderer.domElement);
+
+        const scene = new THREE.Scene();
+
+        const camera = new THREE.PerspectiveCamera(42, container.clientWidth / container.clientHeight, 0.1, 150);
+        camera.position.set(0, 5.8, 12.2);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.07;
+        controls.minDistance = 4.2;
+        controls.maxDistance = 28;
+        controls.maxPolarAngle = Math.PI * 0.56;
+        controls.touches = {
+            ONE: THREE.TOUCH.ROTATE,
+            TWO: THREE.TOUCH.DOLLY_PAN
+        };
+
+        // 照明配置：讓傾斜斷層面與山脈起伏立體分明
+        const hemiLight = new THREE.HemisphereLight(0xf8fafc, 0x1e293b, 0.95);
+        scene.add(hemiLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.35);
+        dirLight.position.set(8, 14, 10);
+        scene.add(dirLight);
+
+        const rimLight = new THREE.DirectionalLight(0x93c5fd, 0.45);
+        rimLight.position.set(-10, 6, -8);
+        scene.add(rimLight);
+
+        // 底部空間參考網格
+        const baseGrid = new THREE.GridHelper(24, 24, 0x334155, 0x1e293b);
+        baseGrid.position.y = -2.6;
+        scene.add(baseGrid);
+
+        // 動態模型根節點
+        const modelRoot = new THREE.Group();
+        scene.add(modelRoot);
+
+        /* =========================================================================
+           4. 共用參數化 3D 地質岩塊與視覺元件建構器
+           ========================================================================= */
+
+        /**
+         * 參數化可變形地層岩塊：支援任意斷層傾角、彎曲褶皺、彈性回跳與地形隆起
+         * mapFn(u, v, w, outVec3) 將 [0,1]^3 正規化座標映射至 3D 世界座標
+         */
+        class StratifiedBlock {
+            constructor(layers = STANDARD_STRATA, segU = 22, segV = 3, segW = 14) {
+                this.group = new THREE.Group();
+                this.parts = [];
+
+                layers.forEach((layer) => {
+                    const geo = new THREE.BoxGeometry(1, 1, 1, segU, segV, segW);
+                    const pos = geo.attributes.position;
+                    const uvw = new Float32Array(pos.count * 3);
+                    for (let i = 0; i < pos.count; i++) {
+                        const lx = pos.getX(i) + 0.5;
+                        const ly = pos.getY(i) + 0.5;
+                        const lz = pos.getZ(i) + 0.5;
+                        uvw[i * 3] = lx;
+                        uvw[i * 3 + 1] = layer.v0 + ly * (layer.v1 - layer.v0);
+                        uvw[i * 3 + 2] = lz;
+                    }
+                    const mat = new THREE.MeshStandardMaterial({
+                        color: layer.color,
+                        map: layer.tex || null,
+                        roughness: 0.78,
+                        metalness: 0.06,
+                        transparent: Boolean(layer.opacity && layer.opacity < 1),
+                        opacity: layer.opacity ?? 1.0
+                    });
+                    const mesh = new THREE.Mesh(geo, mat);
+                    this.group.add(mesh);
+                    this.parts.push({ geo, uvw, mesh });
+                });
+            }
+
+            deform(mapFn) {
+                const tmp = new THREE.Vector3();
+                for (const part of this.parts) {
+                    const pos = part.geo.attributes.position;
+                    const uvw = part.uvw;
+                    for (let i = 0; i < pos.count; i++) {
+                        mapFn(uvw[i * 3], uvw[i * 3 + 1], uvw[i * 3 + 2], tmp);
+                        pos.setXYZ(i, tmp.x, tmp.y, tmp.z);
+                    }
+                    pos.needsUpdate = true;
+                    part.geo.computeVertexNormals();
+                }
+            }
+        }
+
+        // 建立立體應力方向箭頭（支援動態縮放與微脈動）
+        function createStressArrow(colorHex, length = 1.6) {
+            const group = new THREE.Group();
+            const mat = new THREE.MeshStandardMaterial({
+                color: colorHex,
+                emissive: colorHex,
+                emissiveIntensity: 0.35,
+                roughness: 0.3
+            });
+            const shaftLen = length * 0.62;
+            const headLen = length * 0.38;
+
+            const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, shaftLen, 14), mat);
+            shaft.rotation.z = -Math.PI / 2;
+            shaft.position.x = shaftLen * 0.5;
+
+            const head = new THREE.Mesh(new THREE.ConeGeometry(0.28, headLen, 16), mat);
+            head.rotation.z = -Math.PI / 2;
+            head.position.x = shaftLen + headLen * 0.5;
+
+            group.add(shaft, head);
+            return group;
+        }
+
+        // 建立半透明發光斷層面薄片
+        function createFaultSheet(width, height, color = PALETTE.fault, opacity = 0.42) {
+            const geo = new THREE.PlaneGeometry(width, height, 8, 8);
+            const mat = new THREE.MeshStandardMaterial({
+                color,
+                emissive: color,
+                emissiveIntensity: 0.28,
+                transparent: true,
+                opacity,
+                side: THREE.DoubleSide,
+                depthWrite: false
+            });
+            return new THREE.Mesh(geo, mat);
+        }
+
+        // 建立可隨地表變形的帶狀河流或道路
+        function createSurfaceRibbon(segX, widthZ, color, isRoad = false) {
+            const geo = new THREE.PlaneGeometry(1, widthZ, segX, 2);
+            geo.rotateX(-Math.PI / 2);
+            const mat = new THREE.MeshStandardMaterial({
+                color,
+                roughness: isRoad ? 0.85 : 0.22,
+                metalness: isRoad ? 0.05 : 0.35
+            });
+            return new THREE.Mesh(geo, mat);
+        }
+
+        // 建立 3D 建築物（供地震波搖晃展示）
+        function createCityCluster(buildingCount = 3, maxH = 1.1) {
+            const g = new THREE.Group();
+            const offsets = [
+                [-0.22, -0.15, 0.9],
+                [0.2, 0.12, 1.0],
+                [-0.05, 0.25, 0.65]
+            ];
+            for (let i = 0; i < buildingCount; i++) {
+                const [ox, oz, scaleH] = offsets[i % offsets.length];
+                const h = maxH * scaleH;
+                const mat = new THREE.MeshStandardMaterial({ color: i === 1 ? 0xe2e8f0 : 0x94a3b8, roughness: 0.5 });
+                const b = new THREE.Mesh(new THREE.BoxGeometry(0.28, h, 0.28), mat);
+                b.position.set(ox, h / 2, oz);
+                const roof = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.31, 0.05, 0.31),
+                    new THREE.MeshStandardMaterial({ color: 0xf43f5e })
+                );
+                roof.position.set(ox, h + 0.025, oz);
+                g.add(b, roof);
+            }
+            return g;
+        }
+
+        // 數學平滑插值輔助
+        const clamp01 = (v) => Math.max(0, Math.min(1, v));
+        const smoothstep = (e0, e1, x) => {
+            const t = clamp01((x - e0) / (e1 - e0));
+            return t * t * (3 - 2 * t);
+        };
+        const lerp = (a, b, t) => a + (b - a) * t;
+
+        /* =========================================================================
+           5. 十個模擬主題之 3D 場景建構函式
+           ========================================================================= */
+        const SCENE_BUILDERS = {
+
+            /* -----------------------------------------------------------------------
+               1.1 正斷層 (Normal Fault)：上盤/下盤、張裂應力、地壘(Horst)與地塹(Graben)
+               ----------------------------------------------------------------------- */
+            normal(root) {
+                baseGrid.visible = true;
+                // 4 岩塊系統同時呈現：下盤、地塹(上盤)、地壘(下盤)、右翼半地塹(上盤)
+                const blocks = [
+                    new StratifiedBlock(STANDARD_STRATA, 14, 3, 10),
+                    new StratifiedBlock(STANDARD_STRATA, 16, 3, 10),
+                    new StratifiedBlock(STANDARD_STRATA, 14, 3, 10),
+                    new StratifiedBlock(STANDARD_STRATA, 14, 3, 10)
+                ];
+                blocks.forEach(b => root.add(b.group));
+
+                // 共軛斷層面標示線/薄片
+                const fPlanes = [createFaultSheet(4.8, 3.2), createFaultSheet(4.8, 3.2), createFaultSheet(4.8, 3.2)];
+                fPlanes.forEach(fp => {
+                    fp.rotation.y = Math.PI / 2;
+                    root.add(fp);
+                });
+
+                // 地塹積水湖泊
+                const lake = new THREE.Mesh(
+                    new THREE.BoxGeometry(3.6, 0.38, 4.76),
+                    new THREE.MeshStandardMaterial({ color: PALETTE.water, transparent: true, opacity: 0.78, roughness: 0.15 })
+                );
+                root.add(lake);
+
+                // 張裂應力箭頭 (向外拉張)
+                const arrL = createStressArrow(PALETTE.tension, 1.5);
+                arrL.rotation.y = Math.PI;
+                const arrR = createStressArrow(PALETTE.tension, 1.5);
+                root.add(arrL, arrR);
+
+                const slope = 0.62;
+                const xF1 = (y) => -2.55 - y * slope; // 向右傾
+                const xF2 = (y) => 0.25 + y * slope; // 向左傾
+                const xF3 = (y) => 3.15 - y * slope; // 向右傾
+
+                const labels = [
+                    { text: '張裂應力 (Tension)', color: HEX_STR.tension, pos: new THREE.Vector3(-6.8, 0.2, 0), minP: 0.15 },
+                    { text: '上盤・地塹 (Hanging Wall / Graben)', color: HEX_STR.block, pos: new THREE.Vector3(-1.15, 1.35, 0) },
+                    { text: '下盤・地壘 (Footwall / Horst)', color: HEX_STR.landform, pos: new THREE.Vector3(1.7, 1.45, 0) },
+                    { text: '下盤 (Footwall)', color: HEX_STR.block, pos: new THREE.Vector3(-4.6, 1.35, 0) },
+                    { text: '正斷層面 (Normal Fault)', color: HEX_STR.fault, pos: new THREE.Vector3(-2.55, 0.2, 2.45), minP: 0.2 },
+                    { text: '地塹湖泊 (Graben Lake)', color: HEX_STR.water, pos: new THREE.Vector3(-1.15, 0.7, 1.3), minP: 0.78 }
+                ];
+
+                return {
+                    labels,
+                    update(p, time) {
+                        const faultVis = smoothstep(0.12, 0.32, p);
+                        const slip = smoothstep(0.33, 0.92, p);
+                        const lakeVis = smoothstep(0.72, 0.98, p);
+
+                        const dy = slip * 0.92;
+                        const dx = dy * slope; // 精準維持傾斜斷層面密合無縫隙
+                        const centerShift = -dx;
+
+                        // 岩塊 0: 左側下盤
+                        blocks[0].deform((u, v, w, out) => {
+                            const y0 = lerp(-1.5, 1.15, v);
+                            const xL = -5.6, xR = xF1(y0);
+                            out.set(lerp(xL, xR, u) - dx + centerShift, y0, lerp(-2.4, 2.4, w));
+                        });
+
+                        // 岩塊 1: 中央上盤（下陷形成地塹 Graben）
+                        blocks[1].deform((u, v, w, out) => {
+                            const y0 = lerp(-1.5, 1.15, v);
+                            const xL = xF1(y0), xR = xF2(y0);
+                            out.set(lerp(xL, xR, u) + centerShift, y0 - dy, lerp(-2.4, 2.4, w));
+                        });
+
+                        // 岩塊 2: 右側下盤（相對高聳形成地壘 Horst）
+                        blocks[2].deform((u, v, w, out) => {
+                            const y0 = lerp(-1.5, 1.15, v);
+                            const xL = xF2(y0), xR = xF3(y0);
+                            out.set(lerp(xL, xR, u) + dx + centerShift, y0, lerp(-2.4, 2.4, w));
+                        });
+
+                        // 岩塊 3: 最右側上盤（半地塹）
+                        blocks[3].deform((u, v, w, out) => {
+                            const y0 = lerp(-1.5, 1.15, v);
+                            const xL = xF3(y0), xR = 5.6;
+                            out.set(lerp(xL, xR, u) + 2 * dx + centerShift, y0 - dy, lerp(-2.4, 2.4, w));
+                        });
+
+                        // 更新斷層面視覺薄片
+                        const tilt = Math.atan(slope);
+                        fPlanes[0].position.set(xF1(-0.15) - dx + centerShift, -0.15, 0);
+                        fPlanes[0].rotation.set(0, Math.PI / 2, tilt);
+                        fPlanes[1].position.set(xF2(-0.15) + dx + centerShift, -0.15, 0);
+                        fPlanes[1].rotation.set(0, Math.PI / 2, -tilt);
+                        fPlanes[2].position.set(xF3(-0.15) + dx + centerShift, -0.15, 0);
+                        fPlanes[2].rotation.set(0, Math.PI / 2, tilt);
+                        fPlanes.forEach(fp => { fp.material.opacity = faultVis * 0.42; fp.visible = faultVis > 0.02; });
+
+                        // 地塹湖泊水位
+                        lake.visible = lakeVis > 0.02;
+                        lake.scale.set(1, Math.max(0.05, lakeVis), 1);
+                        lake.position.set(-1.15 + centerShift, 1.15 - dy + 0.16 * lakeVis, 0);
+
+                        // 兩側張裂箭頭
+                        const pulse = 1 + Math.sin(time * 3.5) * 0.05;
+                        arrL.visible = arrR.visible = faultVis > 0.05;
+                        arrL.scale.setScalar(faultVis * pulse);
+                        arrR.scale.setScalar(faultVis * pulse);
+                        arrL.position.set(-5.8 - dx + centerShift, -0.1, 0);
+                        arrR.position.set(5.8 + 2 * dx + centerShift, -0.1, 0);
+
+                        // 動態跟隨標籤位置
+                        labels[1].pos.set(-1.15 + centerShift, 1.35 - dy, 0);
+                        labels[2].pos.set(1.7 + dx + centerShift, 1.45, 0);
+                        labels[3].pos.set(-4.4 - dx + centerShift, 1.35, 0);
+                        labels[5].pos.set(-1.15 + centerShift, 1.35 - dy + 0.25, 1.2);
+                    }
+                };
+            },
+
+            /* -----------------------------------------------------------------------
+               1.2 逆斷層 / 順衝斷層 (Reverse / Thrust Fault)：擠壓、山脈隆起、老覆於新
+               ----------------------------------------------------------------------- */
+            reverse(root) {
+                baseGrid.visible = true;
+                const hanging = new StratifiedBlock(STANDARD_STRATA, 24, 3, 12);
+                const footwall = new StratifiedBlock(STANDARD_STRATA, 24, 3, 12);
+                root.add(hanging.group, footwall.group);
+
+                const invSlope = 1.42; // 低角度順衝斷層 (約35度)
+                const xFault = (y) => y * invSlope;
+
+                const fSheet = createFaultSheet(4.9, 4.8);
+                fSheet.rotation.set(0, Math.PI / 2, -Math.atan(invSlope));
+                root.add(fSheet);
+
+                const arrL = createStressArrow(PALETTE.compress, 1.55); // 向右擠壓
+                const arrR = createStressArrow(PALETTE.compress, 1.55); // 向左擠壓
+                arrR.rotation.y = Math.PI;
+                root.add(arrL, arrR);
+
+                const labels = [
+                    { text: '擠壓應力 (Compression)', color: HEX_STR.compress, pos: new THREE.Vector3(-6.7, -0.1, 0), minP: 0.12 },
+                    { text: '上盤・隆起山脈 (Hanging Wall)', color: HEX_STR.block, pos: new THREE.Vector3(-1.6, 1.5, 0) },
+                    { text: '下盤 (Footwall)', color: HEX_STR.block, pos: new THREE.Vector3(3.2, 1.35, 0) },
+                    { text: '順衝斷層面 (Thrust Fault)', color: HEX_STR.fault, pos: new THREE.Vector3(0.2, 0.1, 2.45), minP: 0.18 },
+                    { text: '老岩層覆於新岩層之上', color: HEX_STR.landform, pos: new THREE.Vector3(1.5, 1.45, 2.45), minP: 0.68 }
+                ];
+
+                return {
+                    labels,
+                    update(p, time) {
+                        const stressVis = smoothstep(0.08, 0.28, p);
+                        const fold = smoothstep(0.12, 0.45, p) * 0.22;
+                        const thrust = smoothstep(0.33, 0.96, p);
+
+                        const dy = thrust * 1.05;
+                        const dx = dy * invSlope;
+
+                        // 左側岩塊：上盤 (沿低角度斷層面向右上逆衝推擠，並伴隨背斜隆起)
+                        hanging.deform((u, v, w, out) => {
+                            const y0 = lerp(-1.5, 1.15, v);
+                            const x = lerp(-5.4, xFault(y0), u);
+                            const anticline = fold * Math.exp(-Math.pow((u - 0.78) * 3.5, 2)) * (0.4 + 0.6 * v);
+                            const peak = smoothstep(0.65, 1.0, p) * 0.25 * Math.exp(-Math.pow((u - 0.85) * 4.2, 2)) * (1 + 0.35 * Math.sin(w * Math.PI * 3)) * v;
+                            out.set(x + dx * 0.5, y0 + dy + anticline + peak, lerp(-2.4, 2.4, w));
+                        });
+
+                        // 右側岩塊：下盤 (受壓微幅向下撓曲形成前淵盆地)
+                        footwall.deform((u, v, w, out) => {
+                            const y0 = lerp(-1.5, 1.15, v);
+                            const x = lerp(xFault(y0), 5.4, u);
+                            const flex = -fold * 0.6 * Math.exp(-Math.pow(u * 3.2, 2));
+                            out.set(x - dx * 0.5, y0 + flex, lerp(-2.4, 2.4, w));
+                        });
+
+                        fSheet.visible = stressVis > 0.02;
+                        fSheet.material.opacity = stressVis * 0.42;
+                        fSheet.position.set(-dx * 0.5 + 0.05, -0.1, 0);
+
+                        const pulse = 1 + Math.sin(time * 4) * 0.05;
+                        arrL.visible = arrR.visible = stressVis > 0.05;
+                        arrL.scale.setScalar(stressVis * pulse);
+                        arrR.scale.setScalar(stressVis * pulse);
+                        arrL.position.set(-7.1 + dx * 0.5, -0.15, 0);
+                        arrR.position.set(7.1 - dx * 0.5, -0.15, 0);
+
+                        labels[1].pos.set(-1.3 + dx * 0.5, 1.45 + dy + fold, 0);
+                        labels[2].pos.set(3.3 - dx * 0.5, 1.3, 0);
+                        labels[4].pos.set(1.2 + dx * 0.5, 0.95 + dy * 0.65, 2.45);
+                    }
+                };
+            },
+
+            /* -----------------------------------------------------------------------
+               1.3 平移 / 走滑斷層 (Strike-Slip Fault)：水平剪切、錯位河道與線狀斷層谷
+               ----------------------------------------------------------------------- */
+            strikeslip(root) {
+                baseGrid.visible = true;
+                const leftBlock = new StratifiedBlock(STANDARD_STRATA, 18, 3, 20);
+                const rightBlock = new StratifiedBlock(STANDARD_STRATA, 18, 3, 20);
+                root.add(leftBlock.group, rightBlock.group);
+
+                const fSheet = createFaultSheet(5.6, 2.8);
+                fSheet.rotation.y = Math.PI / 2;
+                root.add(fSheet);
+
+                // 橫越斷層之公路與河流（分左右兩段隨岩塊錯動）
+                const roadL = createSurfaceRibbon(18, 0.48, PALETTE.road, true);
+                const roadR = createSurfaceRibbon(18, 0.48, PALETTE.road, true);
+                const riverL = createSurfaceRibbon(18, 0.62, PALETTE.water, false);
+                const riverR = createSurfaceRibbon(18, 0.62, PALETTE.water, false);
+                const streamLink = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.55, 0.06, 1),
+                    new THREE.MeshStandardMaterial({ color: PALETTE.water, roughness: 0.2 })
+                );
+                root.add(roadL, roadR, riverL, riverR, streamLink);
+
+                // 剪切力偶箭頭（沿 Z 軸反向）
+                const arrL = createStressArrow(PALETTE.shear, 1.6);
+                arrL.rotation.y = Math.PI / 2; // 指向 -Z
+                const arrR = createStressArrow(PALETTE.shear, 1.6);
+                arrR.rotation.y = -Math.PI / 2; // 指向 +Z
+                root.add(arrL, arrR);
+
+                const labels = [
+                    { text: '剪切應力偶 (Shear Stress)', color: HEX_STR.shear, pos: new THREE.Vector3(3.8, 1.4, -2.8), minP: 0.12 },
+                    { text: '垂直走滑斷層面 (Strike-Slip)', color: HEX_STR.fault, pos: new THREE.Vector3(0, 1.35, 2.5), minP: 0.16 },
+                    { text: '錯位公路 (Offset Road)', color: HEX_STR.block, pos: new THREE.Vector3(1.5, 1.3, 1.4), minP: 0.45 },
+                    { text: '錯位河道 (Offset River)', color: HEX_STR.water, pos: new THREE.Vector3(-1.5, 1.3, -1.2), minP: 0.45 },
+                    { text: '線狀斷層谷 (Linear Fault Valley)', color: HEX_STR.landform, pos: new THREE.Vector3(0, 1.25, -2.1), minP: 0.74 }
+                ];
+
+                return {
+                    labels,
+                    update(p, time) {
+                        const stressVis = smoothstep(0.08, 0.28, p);
+                        const slip = smoothstep(0.33, 0.92, p) * 1.15; // 右移錯動量
+                        const valley = smoothstep(0.68, 0.98, p) * 0.36; // 破碎帶侵蝕成線狀斷層谷
+
+                        const valleyDip = (x, v) => -valley * Math.exp(-Math.pow(x / 0.55, 2)) * smoothstep(0.5, 1.0, v);
+
+                        leftBlock.deform((u, v, w, out) => {
+                            const x = lerp(-4.8, 0, u);
+                            const y = lerp(-1.5, 1.15, v) + valleyDip(x, v);
+                            out.set(x, y, lerp(-2.6, 2.6, w) - slip);
+                        });
+
+                        rightBlock.deform((u, v, w, out) => {
+                            const x = lerp(0, 4.8, u);
+                            const y = lerp(-1.5, 1.15, v) + valleyDip(x, v);
+                            out.set(x, y, lerp(-2.6, 2.6, w) + slip);
+                        });
+
+                        // 更新地表公路與彎曲河流頂點
+                        const updateRibbon = (mesh, x0, x1, zBase, zShift, meander) => {
+                            const pos = mesh.geometry.attributes.position;
+                            for (let i = 0; i < pos.count; i++) {
+                                const u = (i % 19) / 18;
+                                const row = Math.floor(i / 19) - 1;
+                                const x = lerp(x0, x1, u);
+                                const width = meander ? 0.32 : 0.24;
+                                const zCurve = meander ? Math.sin(x * 0.65) * 0.35 : 0;
+                                const ySurf = 1.165 + valleyDip(x, 1.0);
+                                pos.setXYZ(i, x, ySurf, zBase + zCurve + row * width + zShift);
+                            }
+                            pos.needsUpdate = true;
+                            mesh.geometry.computeVertexNormals();
+                        };
+
+                        updateRibbon(roadL, -4.78, -0.02, 1.05, -slip, false);
+                        updateRibbon(roadR, 0.02, 4.78, 1.05, +slip, false);
+                        updateRibbon(riverL, -4.78, -0.02, -0.95, -slip, true);
+                        updateRibbon(riverR, 0.02, 4.78, -0.95, +slip, true);
+
+                        // 斷層谷中連接兩端錯位河道的截頭河段
+                        streamLink.visible = p > 0.68 && slip > 0.1;
+                        streamLink.scale.set(1, 1, Math.max(0.05, slip * 2 + 0.5));
+                        streamLink.position.set(0, 1.15 - valley + 0.02, -0.95);
+
+                        fSheet.visible = stressVis > 0.02;
+                        fSheet.material.opacity = stressVis * 0.38;
+                        fSheet.position.set(0, -0.15, 0);
+
+                        const pulse = 1 + Math.sin(time * 4) * 0.05;
+                        arrL.visible = arrR.visible = stressVis > 0.05;
+                        arrL.scale.setScalar(stressVis * pulse);
+                        arrR.scale.setScalar(stressVis * pulse);
+                        arrL.position.set(-2.6, 1.45, 0.8 - slip);
+                        arrR.position.set(2.6, 1.45, -0.8 + slip);
+
+                        labels[2].pos.set(1.8, 1.3, 1.05 + slip);
+                        labels[3].pos.set(-1.8, 1.3, -1.1 - slip);
+                    }
+                };
+            },
+
+            /* -----------------------------------------------------------------------
+               1.4 斜滑斷層 (Oblique-Slip Fault)：傾向垂直＋走向水平複合運動與向量分解
+               ----------------------------------------------------------------------- */
+            oblique(root) {
+                baseGrid.visible = true;
+                const footwall = new StratifiedBlock(STANDARD_STRATA, 18, 3, 16);
+                const hanging = new StratifiedBlock(STANDARD_STRATA, 18, 3, 16);
+                root.add(footwall.group, hanging.group);
+
+                const slope = 0.65;
+                const xFault = (y) => -y * slope; // 向右傾斜斷層面
+
+                const fSheet = createFaultSheet(6.2, 3.3);
+                fSheet.rotation.set(0, Math.PI / 2, Math.atan(slope));
+                root.add(fSheet);
+
+                const roadL = createSurfaceRibbon(18, 0.48, PALETTE.road, true);
+                const roadR = createSurfaceRibbon(18, 0.48, PALETTE.road, true);
+                root.add(roadL, roadR);
+
+                // 張裂 + 剪切複合應力箭頭
+                const arrTenL = createStressArrow(PALETTE.tension, 1.35);
+                arrTenL.rotation.y = Math.PI;
+                const arrTenR = createStressArrow(PALETTE.tension, 1.35);
+                const arrShrL = createStressArrow(PALETTE.shear, 1.35);
+                arrShrL.rotation.y = Math.PI / 2;
+                const arrShrR = createStressArrow(PALETTE.shear, 1.35);
+                arrShrR.rotation.y = -Math.PI / 2;
+                root.add(arrTenL, arrTenR, arrShrL, arrShrR);
+
+                // 斷層崖上之滑移向量分解線（傾向分量、走向分量、淨斜滑向量）
+                const vecMatDip = new THREE.LineBasicMaterial({ color: 0x38bdf8, linewidth: 2 });
+                const vecMatStr = new THREE.LineBasicMaterial({ color: 0xc084fc, linewidth: 2 });
+                const vecMatNet = new THREE.LineBasicMaterial({ color: 0xfacc15, linewidth: 3 });
+                const mkLine = (mat) => new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), mat);
+                const lineDip = mkLine(vecMatDip);
+                const lineStr = mkLine(vecMatStr);
+                const lineNet = mkLine(vecMatNet);
+                root.add(lineDip, lineStr, lineNet);
+
+                const labels = [
+                    { text: '下盤 (Footwall)', color: HEX_STR.block, pos: new THREE.Vector3(-2.8, 1.4, -1.2) },
+                    { text: '上盤・斜向滑移 (Hanging Wall)', color: HEX_STR.block, pos: new THREE.Vector3(2.5, 1.4, 1.0) },
+                    { text: '張裂分量 (Tension)', color: HEX_STR.tension, pos: new THREE.Vector3(5.6, 0, 0), minP: 0.14 },
+                    { text: '剪切分量 (Shear)', color: HEX_STR.shear, pos: new THREE.Vector3(2.4, 1.5, -2.2), minP: 0.14 },
+                    { text: '淨斜滑向量 (Net Oblique Slip)', color: '#facc15', pos: new THREE.Vector3(-0.3, 0.9, 0.5), minP: 0.55 }
+                ];
+
+                return {
+                    labels,
+                    update(p, time) {
+                        const stressVis = smoothstep(0.08, 0.28, p);
+                        const dipSlip = smoothstep(0.33, 0.67, p) * 0.95;    // 階段3：傾向垂直下滑
+                        const strikeSlip = smoothstep(0.66, 0.98, p) * 1.15; // 階段4：疊加走向平移
+
+                        const dy = dipSlip;
+                        const dx = dy * slope;
+
+                        footwall.deform((u, v, w, out) => {
+                            const y0 = lerp(-1.5, 1.15, v);
+                            out.set(lerp(-4.8, xFault(y0), u) - dx * 0.5, y0, lerp(-2.4, 2.4, w) - strikeSlip * 0.5);
+                        });
+
+                        hanging.deform((u, v, w, out) => {
+                            const y0 = lerp(-1.5, 1.15, v);
+                            out.set(lerp(xFault(y0), 4.8, u) + dx * 0.5, y0 - dy, lerp(-2.4, 2.4, w) + strikeSlip * 0.5);
+                        });
+
+                        const updRoad = (mesh, isRight) => {
+                            const pos = mesh.geometry.attributes.position;
+                            const xTopFault = xFault(1.15);
+                            for (let i = 0; i < pos.count; i++) {
+                                const u = (i % 19) / 18;
+                                const row = Math.floor(i / 19) - 1;
+                                const x = isRight ? lerp(xTopFault, 4.78, u) + dx * 0.5 : lerp(-4.78, xTopFault, u) - dx * 0.5;
+                                const y = isRight ? 1.165 - dy : 1.165;
+                                const z = 0.2 + row * 0.24 + (isRight ? strikeSlip * 0.5 : -strikeSlip * 0.5);
+                                pos.setXYZ(i, x, y, z);
+                            }
+                            pos.needsUpdate = true;
+                            mesh.geometry.computeVertexNormals();
+                        };
+                        updRoad(roadL, false);
+                        updRoad(roadR, true);
+
+                        // 更新斷層崖上之滑移向量三角形
+                        const p0 = new THREE.Vector3(xFault(1.15) - dx * 0.5 + 0.04, 1.16, 0.2 - strikeSlip * 0.5);
+                        const pMid = new THREE.Vector3(xFault(1.15) + dx * 0.5 + 0.04, 1.16 - dy, 0.2 - strikeSlip * 0.5);
+                        const pEnd = new THREE.Vector3(xFault(1.15) + dx * 0.5 + 0.04, 1.16 - dy, 0.2 + strikeSlip * 0.5);
+                        lineDip.geometry.setFromPoints([p0, pMid]);
+                        lineStr.geometry.setFromPoints([pMid, pEnd]);
+                        lineNet.geometry.setFromPoints([p0, pEnd]);
+                        lineDip.visible = dipSlip > 0.04;
+                        lineStr.visible = strikeSlip > 0.04;
+                        lineNet.visible = dipSlip > 0.04;
+
+                        fSheet.visible = stressVis > 0.02;
+                        fSheet.position.set(-dx * 0.5, -0.15, 0);
+
+                        const pulse = 1 + Math.sin(time * 4) * 0.05;
+                        [arrTenL, arrTenR, arrShrL, arrShrR].forEach(a => {
+                            a.visible = stressVis > 0.05;
+                            a.scale.setScalar(stressVis * pulse);
+                        });
+                        arrTenL.position.set(-5.0 - dx * 0.5, -0.1, 0);
+                        arrTenR.position.set(5.0 + dx * 0.5, -0.1 - dy * 0.5, 0);
+                        arrShrL.position.set(-2.4, 1.45, 0.9 - strikeSlip * 0.5);
+                        arrShrR.position.set(2.4, 1.45 - dy, -0.9 + strikeSlip * 0.5);
+
+                        labels[1].pos.set(2.4 + dx * 0.5, 1.35 - dy, 0.8 + strikeSlip * 0.5);
+                        labels[4].pos.copy(pEnd).add(new THREE.Vector3(0.2, 0.35, 0));
+                    }
+                };
+            },
+
+            /* -----------------------------------------------------------------------
+               2.1 彈性回跳理論 (Elastic Rebound Theory)：S形彎曲、能量累積、瞬間回跳發震
+               ----------------------------------------------------------------------- */
+            rebound(root) {
+                baseGrid.visible = true;
+                const leftBlock = new StratifiedBlock(STANDARD_STRATA, 26, 3, 18);
+                const rightBlock = new StratifiedBlock(STANDARD_STRATA, 26, 3, 18);
+                root.add(leftBlock.group, rightBlock.group);
+
+                // 橫跨斷層之道路
+                const roadL = createSurfaceRibbon(24, 0.5, PALETTE.road, true);
+                const roadR = createSurfaceRibbon(24, 0.5, PALETTE.road, true);
+                root.add(roadL, roadR);
+
+                // 經典 Reid 1906 跨斷層木圍籬樁柱 + 應變網格線
+                const fencePosts = [];
+                const postGeo = new THREE.CylinderGeometry(0.055, 0.055, 0.42, 8);
+                const postMat = new THREE.MeshStandardMaterial({ color: 0xfef08a, roughness: 0.6 });
+                for (let i = 0; i < 22; i++) {
+                    if (i === 10 || i === 11) continue;
+                    const u = i / 21;
+                    const x = lerp(-4.5, 4.5, u);
+                    const post = new THREE.Mesh(postGeo, postMat);
+                    root.add(post);
+                    fencePosts.push({ mesh: post, x });
+                }
+
+                // 地表應變參考白線
+                const gridLines = [];
+                const lineMat = new THREE.LineBasicMaterial({ color: 0xe2e8f0, transparent: true, opacity: 0.55 });
+                for (const z0 of [-1.8, -0.8, 1.7]) {
+                    for (const isRight of [false, true]) {
+                        const pts = Array.from({ length: 25 }, () => new THREE.Vector3());
+                        const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lineMat);
+                        root.add(l);
+                        gridLines.push({ line: l, z0, isRight });
+                    }
+                }
+
+                // 斷層應變發光帶與破裂地震波環
+                const strainGlow = createFaultSheet(5.3, 2.75, 0xf97316, 0.0);
+                strainGlow.rotation.y = Math.PI / 2;
+                strainGlow.position.set(0, -0.15, 0);
+                root.add(strainGlow);
+
+                const waveRing = new THREE.Mesh(
+                    new THREE.RingGeometry(0.3, 0.58, 48),
+                    new THREE.MeshBasicMaterial({ color: 0xfef08a, side: THREE.DoubleSide, transparent: true, opacity: 0 })
+                );
+                waveRing.rotation.x = -Math.PI / 2;
+                waveRing.position.y = 1.22;
+                root.add(waveRing);
+
+                const arrL = createStressArrow(PALETTE.shear, 1.55);
+                arrL.rotation.y = Math.PI / 2;
+                const arrR = createStressArrow(PALETTE.shear, 1.55);
+                arrR.rotation.y = -Math.PI / 2;
+                root.add(arrL, arrR);
+
+                const labels = [
+                    { text: '遠場板塊運動方向', color: HEX_STR.shear, pos: new THREE.Vector3(4.2, 1.5, -1.5), minP: 0.08 },
+                    { text: '閉鎖斷層・彈性彎曲變形區', color: '#fb923c', pos: new THREE.Vector3(0, 1.55, -0.9), minP: 0.16, maxP: 0.64 },
+                    { text: '⚡ 瞬間破裂釋放地震波！', color: '#fef08a', pos: new THREE.Vector3(0, 1.85, 0), minP: 0.58, maxP: 0.85 },
+                    { text: '彈性回跳後永久錯位圍籬', color: HEX_STR.landform, pos: new THREE.Vector3(0.9, 1.55, -0.8), minP: 0.72 }
+                ];
+
+                return {
+                    labels,
+                    hasEnergyMeter: true,
+                    update(p, time) {
+                        // 物理螺旋位錯模型：遠場位移 U 持續增加，斷層滑移 S 在階段3瞬間追上 U
+                        const farU = smoothstep(0.05, 0.58, p) * 1.45;
+                        const slipS = smoothstep(0.58, 0.72, p) * 1.45;
+                        const lockedStrain = Math.max(0, farU - slipS); // 累積彈性應變量
+
+                        // 計算任一點 x 之 Z 軸位移：鎖死時呈 arctan S形彎曲，破裂後變回直線但錯位
+                        const calcZShift = (x, isRight) => {
+                            const sign = isRight ? 1 : -1;
+                            const elasticPart = lockedStrain * (2 / Math.PI) * Math.atan(Math.abs(x) / 1.15);
+                            return sign * (slipS * 0.5 + elasticPart * 0.55);
+                        };
+
+                        // 發震瞬間微震動視覺效果
+                        const rupturePulse = (p > 0.58 && p < 0.82) ? Math.sin(time * 48) * 0.06 * (1 - (p - 0.58) / 0.24) : 0;
+
+                        leftBlock.deform((u, v, w, out) => {
+                            const x = lerp(-4.8, 0, u);
+                            out.set(x, lerp(-1.5, 1.15, v) + rupturePulse, lerp(-2.5, 2.5, w) + calcZShift(x, false));
+                        });
+
+                        rightBlock.deform((u, v, w, out) => {
+                            const x = lerp(0, 4.8, u);
+                            out.set(x, lerp(-1.5, 1.15, v) - rupturePulse, lerp(-2.5, 2.5, w) + calcZShift(x, true));
+                        });
+
+                        // 更新彎曲道路
+                        const updRoad = (mesh, isRight) => {
+                            const pos = mesh.geometry.attributes.position;
+                            for (let i = 0; i < pos.count; i++) {
+                                const u = (i % 25) / 24;
+                                const row = Math.floor(i / 25) - 1;
+                                const x = isRight ? lerp(0.01, 4.78, u) : lerp(-4.78, -0.01, u);
+                                pos.setXYZ(i, x, 1.168, 0.55 + row * 0.25 + calcZShift(x, isRight));
+                            }
+                            pos.needsUpdate = true;
+                        };
+                        updRoad(roadL, false);
+                        updRoad(roadR, true);
+
+                        // 更新圍籬木樁
+                        for (const fp of fencePosts) {
+                            const isR = fp.x > 0;
+                            fp.mesh.position.set(fp.x, 1.36, -0.8 + calcZShift(fp.x, isR));
+                        }
+
+                        // 更新地表應變參考線
+                        for (const g of gridLines) {
+                            const pos = g.line.geometry.attributes.position;
+                            for (let i = 0; i < 25; i++) {
+                                const u = i / 24;
+                                const x = g.isRight ? lerp(0.02, 4.78, u) : lerp(-4.78, -0.02, u);
+                                pos.setXYZ(i, x, 1.162, g.z0 + calcZShift(x, g.isRight));
+                            }
+                            pos.needsUpdate = true;
+                        }
+
+                        // 應變發光與地震波衝擊環
+                        const energyPct = clamp01(lockedStrain / 1.42);
+                        strainGlow.material.opacity = energyPct * 0.65;
+                        strainGlow.visible = energyPct > 0.03;
+
+                        if (p > 0.58 && p < 0.92) {
+                            const wp = (p - 0.58) / 0.34;
+                            waveRing.visible = true;
+                            waveRing.scale.setScalar(1 + wp * 11);
+                            waveRing.material.opacity = (1 - wp) * 0.85;
+                        } else {
+                            waveRing.visible = false;
+                        }
+
+                        arrL.visible = arrR.visible = p > 0.05;
+                        arrL.position.set(-4.3, 1.45, 0.8 + calcZShift(-4.3, false));
+                        arrR.position.set(4.3, 1.45, -0.8 + calcZShift(4.3, true));
+
+                        // 同步更新左下角彈性應變能計量條
+                        const fillEl = document.getElementById('energy-fill');
+                        const valEl = document.getElementById('energy-val');
+                        if (fillEl && valEl) {
+                            const pct = Math.round(energyPct * 100);
+                            fillEl.style.width = `${pct}%`;
+                            valEl.textContent = `${pct}%`;
+                        }
+                    }
+                };
+            },
+
+            /* -----------------------------------------------------------------------
+               2.2 震源與震央三維定位 (Hypocenter & Epicenter)：3D剖面球面P波、S波與建築搖晃
+               ----------------------------------------------------------------------- */
+            hypocenter(root) {
+                baseGrid.visible = true;
+
+                // 定義 6 個裁切平面，讓地下擴散的 3D P波與 S波球體精準裁切於半透明地殼方塊內部！
+                const clipPlanes = [
+                    new THREE.Plane(new THREE.Vector3(1, 0, 0), 5.6),
+                    new THREE.Plane(new THREE.Vector3(-1, 0, 0), 5.6),
+                    new THREE.Plane(new THREE.Vector3(0, 1, 0), 1.8),
+                    new THREE.Plane(new THREE.Vector3(0, -1, 0), 1.15),
+                    new THREE.Plane(new THREE.Vector3(0, 0, 1), 2.8),
+                    new THREE.Plane(new THREE.Vector3(0, 0, -1), 2.8)
+                ];
+
+                // 半透明透視地殼岩層
+                const transStrata = [
+                    { v0: 0.00, v1: 0.45, color: PALETTE.basement, opacity: 0.28 },
+                    { v0: 0.45, v1: 0.88, color: PALETTE.layer2, opacity: 0.25 },
+                    { v0: 0.88, v1: 1.00, color: PALETTE.surface, opacity: 0.72 }
+                ];
+                const crust = new StratifiedBlock(transStrata, 4, 2, 4);
+                crust.deform((u, v, w, out) => {
+                    out.set(lerp(-5.6, 5.6, u), lerp(-1.8, 1.15, v), lerp(-2.8, 2.8, w));
+                });
+                crust.parts.forEach(pt => { pt.mesh.material.depthWrite = false; });
+                root.add(crust.group);
+
+                // 地殼外框線強化三維立體透視感
+                const boxEdges = new THREE.LineSegments(
+                    new THREE.EdgesGeometry(new THREE.BoxGeometry(11.2, 2.95, 5.6)),
+                    new THREE.LineBasicMaterial({ color: 0x64748b, transparent: true, opacity: 0.65 })
+                );
+                boxEdges.position.y = -0.325;
+                root.add(boxEdges);
+
+                // 地下發震斷層面
+                const hypoPos = new THREE.Vector3(-2.1, -0.75, 0);
+                const epiPos = new THREE.Vector3(-2.1, 1.16, 0);
+
+                const faultPatch = createFaultSheet(3.2, 2.2, PALETTE.fault, 0.55);
+                faultPatch.position.copy(hypoPos);
+                faultPatch.rotation.set(0, Math.PI / 2, 0.52);
+                root.add(faultPatch);
+
+                // 震源發光核心 (Hypocenter) + 震央同心靶標 (Epicenter) + 震源深度投影虛線
+                const hypoStar = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.22, 20, 20),
+                    new THREE.MeshBasicMaterial({ color: 0xfef08a })
+                );
+                hypoStar.position.copy(hypoPos);
+                root.add(hypoStar);
+
+                const epiBullseye = new THREE.Mesh(
+                    new THREE.RingGeometry(0.14, 0.28, 32),
+                    new THREE.MeshBasicMaterial({ color: PALETTE.fault, side: THREE.DoubleSide })
+                );
+                epiBullseye.rotation.x = -Math.PI / 2;
+                epiBullseye.position.copy(epiPos);
+                root.add(epiBullseye);
+
+                const depthLine = new THREE.Line(
+                    new THREE.BufferGeometry().setFromPoints([hypoPos, epiPos]),
+                    new THREE.LineDashedMaterial({ color: 0xfef08a, dashSize: 0.16, gapSize: 0.1 })
+                );
+                depthLine.computeLineDistances();
+                root.add(depthLine);
+
+                // 三維球面 P 波 (快、藍色) 與 S 波 (較慢、橘紅色)
+                const pSphere = new THREE.Mesh(
+                    new THREE.SphereGeometry(1, 36, 28),
+                    new THREE.MeshStandardMaterial({
+                        color: PALETTE.tension,
+                        emissive: PALETTE.tension,
+                        emissiveIntensity: 0.45,
+                        transparent: true,
+                        opacity: 0.34,
+                        side: THREE.DoubleSide,
+                        depthWrite: false,
+                        clippingPlanes: clipPlanes
+                    })
+                );
+                pSphere.position.copy(hypoPos);
+
+                const sSphere = new THREE.Mesh(
+                    new THREE.SphereGeometry(1, 36, 28),
+                    new THREE.MeshStandardMaterial({
+                        color: PALETTE.magma,
+                        emissive: PALETTE.magma,
+                        emissiveIntensity: 0.5,
+                        transparent: true,
+                        opacity: 0.44,
+                        side: THREE.DoubleSide,
+                        depthWrite: false,
+                        clippingPlanes: clipPlanes
+                    })
+                );
+                sSphere.position.copy(hypoPos);
+                root.add(pSphere, sSphere);
+
+                // 地表表面波同心圓環 (Surface Waves)
+                const surfRings = [0, 1].map(() => {
+                    const m = new THREE.Mesh(
+                        new THREE.RingGeometry(0.88, 1.0, 48),
+                        new THREE.MeshBasicMaterial({
+                            color: 0xfacc15,
+                            side: THREE.DoubleSide,
+                            transparent: true,
+                            opacity: 0,
+                            clippingPlanes: [clipPlanes[0], clipPlanes[1], clipPlanes[4], clipPlanes[5]]
+                        })
+                    );
+                    m.rotation.x = -Math.PI / 2;
+                    m.position.set(epiPos.x, 1.17, epiPos.z);
+                    root.add(m);
+                    return m;
+                });
+
+                // 近、中、遠三組地表建築群（展示抵達時間差與距離衰減）
+                const cities = [
+                    { group: createCityCluster(3, 1.15), x: -1.6, z: 0.4, label: '近震央建築群' },
+                    { group: createCityCluster(3, 1.05), x: 1.3, z: -0.3, label: '中距離城鎮' },
+                    { group: createCityCluster(3, 0.95), x: 4.5, z: 0.2, label: '遠距離城鎮' }
+                ];
+                cities.forEach(c => {
+                    c.group.position.set(c.x, 1.15, c.z);
+                    c.hypoDist = hypoPos.distanceTo(new THREE.Vector3(c.x, 1.15, c.z));
+                    c.epiDist = Math.hypot(c.x - epiPos.x, c.z - epiPos.z);
+                    root.add(c.group);
+                });
+
+                const labels = [
+                    { text: '震源 (Hypocenter)', color: '#fef08a', pos: hypoPos.clone().add(new THREE.Vector3(0, -0.35, 0)) },
+                    { text: '震央 (Epicenter)', color: HEX_STR.fault, pos: epiPos.clone().add(new THREE.Vector3(0, 0.35, 0)) },
+                    { text: 'P波前緣 (壓縮縱波・最快)', color: HEX_STR.waveP, pos: new THREE.Vector3(0, 0, 0), minP: 0.12, maxP: 0.88 },
+                    { text: 'S波前緣 (剪力橫波・次快)', color: HEX_STR.waveS, pos: new THREE.Vector3(0, 0, 0), minP: 0.22, maxP: 0.96 },
+                    { text: '表面波擴散 (能量最強)', color: '#facc15', pos: new THREE.Vector3(0.5, 1.35, 1.5), minP: 0.65 },
+                    { text: '遠處震度隨距離衰減', color: HEX_STR.landform, pos: new THREE.Vector3(4.5, 2.35, 0.2), minP: 0.68 }
+                ];
+
+                return {
+                    labels,
+                    update(p, time) {
+                        const waveT = smoothstep(0.08, 1.0, p);
+                        const rP = waveT * 9.8;           // P 波速度最快
+                        const rS = Math.max(0.01, (waveT - 0.08) * 6.2); // S 波速度約 P波 / 1.7
+
+                        pSphere.visible = rP > 0.15;
+                        pSphere.scale.setScalar(Math.max(0.1, rP));
+
+                        sSphere.visible = rS > 0.15;
+                        sSphere.scale.setScalar(Math.max(0.1, rS));
+
+                        hypoStar.scale.setScalar(1 + Math.sin(time * 8) * 0.22);
+
+                        // 表面波：當 S 波抵達震央地表 (距離 1.91) 後沿地表擴散
+                        const focalDepth = epiPos.y - hypoPos.y;
+                        surfRings.forEach((ring, idx) => {
+                            const rSurf = Math.max(0, (rS - focalDepth * 0.85) * 1.15 - idx * 1.1);
+                            ring.visible = rSurf > 0.2;
+                            ring.scale.setScalar(Math.max(0.1, rSurf));
+                            ring.material.opacity = clamp01(1 - rSurf / 8.2) * 0.8;
+                        });
+
+                        // 建築物隨波抵達產生垂直(P波)與水平劇烈搖晃(S波/表面波)，並依距離衰減
+                        cities.forEach(c => {
+                            const pArrived = rP >= c.hypoDist && rP < c.hypoDist + 3.2;
+                            const sArrived = rS >= c.hypoDist;
+                            const atten = 1 / (1 + c.epiDist * 0.48); // 距離衰減係數
+
+                            let dy = 0, dx = 0, rotZ = 0;
+                            if (pArrived) {
+                                dy = Math.sin(time * 36) * 0.055 * atten;
+                            }
+                            if (sArrived) {
+                                const decay = clamp01(1.35 - (rS - c.hypoDist) * 0.18);
+                                dx = Math.sin(time * 24 + c.x) * 0.16 * atten * decay;
+                                rotZ = Math.sin(time * 24 + c.x) * 0.14 * atten * decay;
+                            }
+                            c.group.position.set(c.x + dx, 1.15 + dy, c.z);
+                            c.group.rotation.z = rotZ;
+                        });
+
+                        labels[2].pos.set(Math.min(5.2, hypoPos.x + rP * 0.92), -0.45, 1.8);
+                        labels[3].pos.set(Math.min(5.0, hypoPos.x + rS * 0.92), -0.95, 1.8);
+                    }
+                };
+            },
+
+            /* -----------------------------------------------------------------------
+               2.3 斷層帶結構與泥化帶 (Fault Zone & Fault Gouge)：碎裂帶、斷層泥與阻水滲流
+               ----------------------------------------------------------------------- */
+            gouge(root) {
+                baseGrid.visible = true;
+
+                // 放大觀察母岩地層
+                const hostLayers = [
+                    { v0: 0.00, v1: 0.45, color: PALETTE.basement, tex: TEX_CACHE.base },
+                    { v0: 0.45, v1: 0.92, color: PALETTE.layer2, tex: TEX_CACHE.l2 },
+                    { v0: 0.92, v1: 1.00, color: PALETTE.surface, tex: null }
+                ];
+                const leftHost = new StratifiedBlock(hostLayers, 14, 3, 10);
+                const rightHost = new StratifiedBlock(hostLayers, 14, 3, 10);
+                root.add(leftHost.group, rightHost.group);
+
+                const slope = 0.28; // 高角度斷層核心放大
+                const xCenter = (y) => -y * slope;
+
+                // 核心斷層泥帶 (Fault Core / Clay Gouge)
+                const gougeCore = new StratifiedBlock([{ v0: 0, v1: 1, color: PALETTE.gouge }], 4, 6, 8);
+                root.add(gougeCore.group);
+
+                // 斷層角礫岩塊群 (Angular Fault Breccia Clasts)
+                const brecciaGroup = new THREE.Group();
+                const clastMat = new THREE.MeshStandardMaterial({ color: 0xfda4af, flatShading: true, roughness: 0.8 });
+                for (let i = 0; i < 38; i++) {
+                    const y = lerp(-1.35, 1.0, (i * 0.618) % 1);
+                    const z = lerp(-2.25, 2.25, ((i * 0.37) % 1));
+                    const side = (i % 2 === 0 ? 1 : -1) * lerp(0.28, 0.72, (i * 0.29) % 1);
+                    const clast = new THREE.Mesh(new THREE.DodecahedronGeometry(0.11 + (i % 3) * 0.04, 0), clastMat);
+                    clast.position.set(xCenter(y) + side, y, z);
+                    clast.rotation.set(i, i * 2, 0);
+                    brecciaGroup.add(clast);
+                }
+                root.add(brecciaGroup);
+
+                // 兩側碎裂帶裂隙網 (Damage Zone Fractures)
+                const fracGroup = new THREE.Group();
+                const fracMat = new THREE.LineBasicMaterial({ color: 0x1e293b, transparent: true, opacity: 0.85 });
+                for (let i = 0; i < 44; i++) {
+                    const y0 = lerp(-1.4, 1.05, (i * 0.73) % 1);
+                    const side = i % 2 === 0 ? 1 : -1;
+                    const dx0 = side * lerp(0.3, 1.75, (i * 0.41) % 1);
+                    const isFront = i < 28;
+                    const z = isFront ? 2.32 : lerp(-2.3, 2.3, (i * 0.53) % 1);
+                    const p1 = new THREE.Vector3(xCenter(y0) + dx0, y0, z);
+                    const p2 = new THREE.Vector3(p1.x + side * 0.35, y0 - 0.42, z);
+                    fracGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([p1, p2]), fracMat));
+                }
+                root.add(fracGroup);
+
+                // 地下水滲流粒子群（沿右側高透水碎裂帶下滲 -> 受不透水斷層泥阻隔 -> 上湧成斷層泉）
+                const waterParticles = [];
+                const dropGeo = new THREE.SphereGeometry(0.068, 10, 10);
+                const dropMat = new THREE.MeshStandardMaterial({
+                    color: 0x38bdf8,
+                    emissive: 0x0284c7,
+                    emissiveIntensity: 0.6
+                });
+                for (let i = 0; i < 65; i++) {
+                    const m = new THREE.Mesh(dropGeo, dropMat);
+                    root.add(m);
+                    waterParticles.push({
+                        mesh: m,
+                        phase: i / 65,
+                        z: lerp(-2.1, 2.25, (i * 0.618) % 1),
+                        laneOffset: lerp(0.35, 1.45, (i * 0.31) % 1)
+                    });
+                }
+
+                // 地表斷層湧泉池
+                const springPool = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.55, 0.55, 0.08, 24),
+                    new THREE.MeshStandardMaterial({ color: PALETTE.water, roughness: 0.15 })
+                );
+                root.add(springPool);
+
+                const labels = [
+                    { text: '完整結晶母岩 (Host Rock)', color: '#cbd5e1', pos: new THREE.Vector3(-3.5, 0.4, 2.35) },
+                    { text: '碎裂帶與斷層角礫岩 (Damage Zone)', color: '#fda4af', pos: new THREE.Vector3(1.25, 0.2, 2.35), minP: 0.22 },
+                    { text: '不透水斷層泥核心 (Clay Fault Gouge)', color: HEX_STR.fault, pos: new THREE.Vector3(0, -0.3, 2.38), minP: 0.52 },
+                    { text: '地下水沿裂隙滲流受阻', color: HEX_STR.water, pos: new THREE.Vector3(1.3, -0.8, 2.35), minP: 0.72 },
+                    { text: '斷層湧泉 (Fault Spring)', color: HEX_STR.water, pos: new THREE.Vector3(0.45, 1.4, 0.6), minP: 0.75 }
+                ];
+
+                return {
+                    labels,
+                    update(p, time) {
+                        const damageVis = smoothstep(0.15, 0.45, p);
+                        const gougeVis = smoothstep(0.45, 0.72, p);
+                        const waterVis = smoothstep(0.68, 0.95, p);
+                        const coreHalfW = lerp(0.03, 0.32, gougeVis);
+                        const offset = smoothstep(0.15, 0.7, p) * 0.32;
+
+                        leftHost.deform((u, v, w, out) => {
+                            const y0 = lerp(-1.5, 1.15, v);
+                            out.set(lerp(-4.8, xCenter(y0) - coreHalfW, u), y0 + offset * 0.5, lerp(-2.3, 2.3, w));
+                        });
+
+                        rightHost.deform((u, v, w, out) => {
+                            const y0 = lerp(-1.5, 1.15, v);
+                            out.set(lerp(xCenter(y0) + coreHalfW, 4.8, u), y0 - offset * 0.5, lerp(-2.3, 2.3, w));
+                        });
+
+                        gougeCore.deform((u, v, w, out) => {
+                            const y0 = lerp(-1.5, 1.15, v);
+                            const xc = xCenter(y0);
+                            out.set(lerp(xc - coreHalfW, xc + coreHalfW, u), y0, lerp(-2.31, 2.31, w));
+                        });
+                        gougeCore.group.visible = p > 0.08;
+
+                        fracGroup.visible = damageVis > 0.04;
+                        fracMat.opacity = damageVis * 0.85;
+                        brecciaGroup.visible = damageVis > 0.1;
+                        brecciaGroup.children.forEach(c => c.scale.setScalar(damageVis));
+
+                        // 地下水滲流軌跡動畫：從右側地表下滲 -> 碰到斷層泥障壁 -> 貼著斷層泥外緣上湧成泉
+                        waterParticles.forEach(wp => {
+                            wp.mesh.visible = waterVis > 0.05;
+                            const t = (wp.phase + time * 0.24) % 1;
+                            let x, y;
+                            if (t < 0.52) {
+                                // 沿右側碎裂帶向下滲透
+                                const sub = t / 0.52;
+                                y = lerp(1.0, -1.2, sub);
+                                x = xCenter(y) + coreHalfW + lerp(wp.laneOffset + 0.5, 0.12, sub);
+                            } else {
+                                // 遇不透水斷層泥阻擋，沿斷層泥介面受壓向上湧出地表
+                                const sub = (t - 0.52) / 0.48;
+                                y = lerp(-1.2, 1.05, sub);
+                                x = xCenter(y) + coreHalfW + 0.1 + Math.sin(sub * 10) * 0.04;
+                            }
+                            wp.mesh.position.set(x, y, wp.z);
+                            wp.mesh.scale.setScalar(waterVis);
+                        });
+
+                        springPool.visible = waterVis > 0.1;
+                        springPool.scale.set(waterVis, 1, waterVis);
+                        springPool.position.set(xCenter(1.0) + coreHalfW + 0.25, 1.15 - offset * 0.5 + 0.03, 0.5);
+                    }
+                };
+            },
+
+            /* -----------------------------------------------------------------------
+               3.1 台灣造山運動與斷層系統 (Taiwan Tectonics)：弧陸碰撞、中央山脈、縱谷與車籠埔斷層
+               ----------------------------------------------------------------------- */
+            taiwan(root) {
+                baseGrid.visible = true;
+
+                // 西側：歐亞板塊大陸地殼與上部台灣西部麓山帶沉積岩層
+                const eurasiaLayers = [
+                    { v0: 0.00, v1: 0.55, color: PALETTE.basement, tex: TEX_CACHE.base },
+                    { v0: 0.55, v1: 0.80, color: PALETTE.layer3, tex: TEX_CACHE.l3 },
+                    { v0: 0.80, v1: 0.95, color: PALETTE.layer1, tex: TEX_CACHE.l1 },
+                    { v0: 0.95, v1: 1.00, color: PALETTE.surface, tex: null }
+                ];
+                const eurasia = new StratifiedBlock(eurasiaLayers, 24, 3, 12);
+
+                // 中央：雪山與中央山脈變質岩楔狀隆起體
+                const centralLayers = [
+                    { v0: 0.00, v1: 0.50, color: PALETTE.basement, tex: TEX_CACHE.base },
+                    { v0: 0.50, v1: 0.88, color: 0x64748b, tex: TEX_CACHE.l2 },
+                    { v0: 0.88, v1: 1.00, color: PALETTE.highland, tex: null }
+                ];
+                const centralRange = new StratifiedBlock(centralLayers, 22, 4, 14);
+
+                // 東側：菲律賓海板塊與北呂宋火山島弧（海岸山脈）
+                const philLayers = [
+                    { v0: 0.00, v1: 0.65, color: PALETTE.oceanic, tex: TEX_CACHE.ocean },
+                    { v0: 0.65, v1: 0.92, color: PALETTE.layer3, tex: TEX_CACHE.l3 },
+                    { v0: 0.92, v1: 1.00, color: PALETTE.surface, tex: null }
+                ];
+                const philPlate = new StratifiedBlock(philLayers, 18, 3, 12);
+
+                root.add(eurasia.group, centralRange.group, philPlate.group);
+
+                // 台灣海峽(西) 與 太平洋(東) 水體
+                const straitSea = new THREE.Mesh(
+                    new THREE.BoxGeometry(2.3, 0.35, 4.9),
+                    new THREE.MeshStandardMaterial({ color: PALETTE.water, transparent: true, opacity: 0.75 })
+                );
+                const pacificSea = new THREE.Mesh(
+                    new THREE.BoxGeometry(2.3, 0.85, 4.9),
+                    new THREE.MeshStandardMaterial({ color: 0x0284c7, transparent: true, opacity: 0.78 })
+                );
+                root.add(straitSea, pacificSea);
+
+                // 主要活動斷層面：車籠埔斷層（東傾順衝）與 花東縱谷斷層（東傾縫合帶）
+                const chelungpuFault = createFaultSheet(4.9, 2.4, PALETTE.fault, 0.65);
+                const lvfFault = createFaultSheet(4.9, 3.2, PALETTE.fault, 0.65);
+                root.add(chelungpuFault, lvfFault);
+
+                // 菲律賓海板塊西北向聚合箭頭
+                const convArrow = createStressArrow(PALETTE.compress, 1.7);
+                convArrow.rotation.y = Math.PI * 0.86; // 指向西北 (-X, -Z)
+                root.add(convArrow);
+
+                const labels = [
+                    { text: '歐亞板塊・台灣海峽 (西)', color: '#cbd5e1', pos: new THREE.Vector3(-4.8, 0.9, 0) },
+                    { text: '菲律賓海板塊 (NW向聚合)', color: HEX_STR.compress, pos: new THREE.Vector3(4.9, 0.9, 0) },
+                    { text: '花東縱谷斷層・海岸山脈', color: HEX_STR.fault, pos: new THREE.Vector3(2.1, 1.4, 1.5), minP: 0.25 },
+                    { text: '中央山脈變質岩隆起', color: HEX_STR.landform, pos: new THREE.Vector3(0.1, 2.35, 0), minP: 0.48 },
+                    { text: '西部麓山帶・車籠埔斷層', color: HEX_STR.fault, pos: new THREE.Vector3(-2.1, 1.35, 2.3), minP: 0.72 }
+                ];
+
+                return {
+                    labels,
+                    update(p, time) {
+                        const converge = smoothstep(0.05, 0.95, p);
+                        const suture = smoothstep(0.22, 0.6, p);
+                        const uplift = smoothstep(0.42, 0.95, p);
+                        const westThrust = smoothstep(0.66, 1.0, p);
+
+                        // 1. 西側歐亞板塊向東微幅潛沒於中央山脈之下，上部發育西部麓山帶逆衝褶皺
+                        eurasia.deform((u, v, w, out) => {
+                            const x = lerp(-6.2, 1.1, u);
+                            const bendDown = -converge * 1.05 * Math.pow(u, 2.1);
+                            // 西部麓山帶車籠埔覆瓦逆衝隆起
+                            const foothill = westThrust * 0.42 * Math.exp(-Math.pow((x + 2.1) / 0.75, 2)) * smoothstep(0.55, 1.0, v);
+                            const y = lerp(-1.8, 0.65, v) + bendDown + foothill;
+                            out.set(x, y, lerp(-2.45, 2.45, w));
+                        });
+
+                        // 2. 中央山脈楔狀擠壓快速抬升與山脊地形
+                        centralRange.deform((u, v, w, out) => {
+                            const yBase = lerp(-1.7, 0.65, v);
+                            const xL = lerp(-1.2, -2.1 * westThrust - 1.1 * (1 - westThrust), v);
+                            const xR = lerp(1.6, 2.15 - converge * 0.35, v);
+                            const x = lerp(xL, xR, u);
+                            const ridgeProfile = Math.sin(u * Math.PI);
+                            const jagged = 1 + 0.16 * Math.sin(w * Math.PI * 5 + u * 6);
+                            const mtnH = uplift * 1.85 * Math.pow(ridgeProfile, 0.85) * jagged * smoothstep(0.3, 1.0, v);
+                            out.set(x, yBase + mtnH, lerp(-2.45, 2.45, w));
+                        });
+
+                        // 3. 東側菲律賓海板塊與海岸山脈向西撞擊並具左移分量
+                        const eastShiftX = (1 - converge) * 1.15;
+                        const leftLatZ = -suture * 0.45;
+                        philPlate.deform((u, v, w, out) => {
+                            const y0 = lerp(-1.85, 0.45, v);
+                            const xL = (2.15 - converge * 0.35) + (1 - v) * 0.45 + eastShiftX;
+                            const xR = 6.2;
+                            const x = lerp(xL, xR, u);
+                            // 海岸山脈隆起（位於西緣 u 較小處）
+                            const coastalArc = (0.35 + suture * 0.65) * Math.exp(-Math.pow((u - 0.14) * 5.2, 2)) * smoothstep(0.5, 1.0, v);
+                            const oceanDip = -0.65 * smoothstep(0.32, 0.85, u) * smoothstep(0.5, 1.0, v);
+                            out.set(x, y0 + coastalArc + oceanDip, lerp(-2.45, 2.45, w) + leftLatZ);
+                        });
+
+                        straitSea.position.set(-5.05, 0.56, 0);
+                        pacificSea.position.set(5.05, 0.15, leftLatZ);
+
+                        // 車籠埔斷層面與花東縱谷斷層面標示
+                        chelungpuFault.visible = westThrust > 0.05;
+                        chelungpuFault.material.opacity = westThrust * 0.68;
+                        chelungpuFault.position.set(-2.05, 0.15, 0);
+                        chelungpuFault.rotation.set(0, Math.PI / 2, 0.92);
+
+                        lvfFault.visible = suture > 0.05;
+                        lvfFault.material.opacity = suture * 0.68;
+                        lvfFault.position.set(2.05 - converge * 0.3, -0.1, 0);
+                        lvfFault.rotation.set(0, Math.PI / 2, 0.38);
+
+                        const pulse = 1 + Math.sin(time * 4) * 0.06;
+                        convArrow.scale.setScalar(pulse);
+                        convArrow.position.set(6.4, 0.9, 0.9 + leftLatZ);
+
+                        labels[3].pos.set(0.0, 0.95 + uplift * 1.75, 0);
+                    }
+                };
+            },
+
+            /* -----------------------------------------------------------------------
+               3.2 隱沒帶與增生楔 (Subduction Zone & Accretionary Prism)：刮除逆衝群與火山弧
+               ----------------------------------------------------------------------- */
+            subduction(root) {
+                baseGrid.visible = true;
+
+                // 底部軟流圈地函楔 (Mantle Wedge)
+                const mantleWedge = new StratifiedBlock([{ v0: 0, v1: 1, color: PALETTE.mantle }], 14, 2, 8);
+
+                // 隱沒海洋板塊（玄武岩海洋地殼 + 薄層深海沉積物）
+                const slabLayers = [
+                    { v0: 0.00, v1: 0.82, color: PALETTE.oceanic, tex: TEX_CACHE.ocean },
+                    { v0: 0.82, v1: 1.00, color: PALETTE.layer1, tex: TEX_CACHE.l1 }
+                ];
+                const oceanSlab = new StratifiedBlock(slabLayers, 32, 3, 10);
+
+                // 上覆大陸板塊
+                const contPlate = new StratifiedBlock(STANDARD_STRATA, 18, 3, 10);
+                root.add(mantleWedge.group, oceanSlab.group, contPlate.group);
+
+                // 增生楔覆瓦狀逆衝岩片群 (Accretionary Prism Imbricate Slices)
+                const prismSlices = [];
+                for (let i = 0; i < 5; i++) {
+                    const mat = new THREE.MeshStandardMaterial({
+                        color: i % 2 === 0 ? PALETTE.layer1 : PALETTE.layer3,
+                        roughness: 0.8
+                    });
+                    const slice = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.85, 4.78), mat);
+                    root.add(slice);
+                    prismSlices.push(slice);
+                }
+
+                // 海溝深海水體
+                const oceanWater = new THREE.Mesh(
+                    new THREE.BoxGeometry(5.9, 0.95, 4.76),
+                    new THREE.MeshStandardMaterial({ color: PALETTE.water, transparent: true, opacity: 0.72 })
+                );
+                oceanWater.position.set(-3.25, 0.35, 0);
+                root.add(oceanWater);
+
+                // 火山弧錐體群 + 上升岩漿通道
+                const volcanoes = [-1.3, 0, 1.35].map((zOff, idx) => {
+                    const g = new THREE.Group();
+                    const h = idx === 1 ? 1.15 : 0.92;
+                    const cone = new THREE.Mesh(
+                        new THREE.ConeGeometry(0.75, h, 20),
+                        new THREE.MeshStandardMaterial({ color: 0x57534e, roughness: 0.85 })
+                    );
+                    cone.position.y = h * 0.5;
+                    const crater = new THREE.Mesh(
+                        new THREE.CylinderGeometry(0.16, 0.12, 0.08, 16),
+                        new THREE.MeshBasicMaterial({ color: 0xfef08a })
+                    );
+                    crater.position.y = h - 0.04;
+                    g.add(cone, crater);
+                    g.position.set(3.55, 0.82, zOff);
+                    root.add(g);
+                    return { group: g, h, zOff };
+                });
+
+                const magmaPlume = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.18, 0.52, 2.3, 16),
+                    new THREE.MeshBasicMaterial({ color: PALETTE.magma, transparent: true, opacity: 0.82 })
+                );
+                magmaPlume.position.set(3.55, -0.35, 2.39);
+                root.add(magmaPlume);
+
+                // 脫水流體水滴 + 火山噴煙粒子
+                const fluidDrops = Array.from({ length: 24 }, (_, i) => {
+                    const m = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 8), new THREE.MeshBasicMaterial({ color: 0x38bdf8 }));
+                    root.add(m);
+                    return { mesh: m, phase: i / 24, z: lerp(-2.1, 2.35, (i * 0.618) % 1) };
+                });
+
+                const ashPuffs = Array.from({ length: 21 }, (_, i) => {
+                    const m = new THREE.Mesh(
+                        new THREE.SphereGeometry(0.13, 8, 8),
+                        new THREE.MeshStandardMaterial({ color: 0x94a3b8, transparent: true, opacity: 0.7 })
+                    );
+                    root.add(m);
+                    return { mesh: m, phase: i / 21, vIdx: i % 3 };
+                });
+
+                const subArrow = createStressArrow(PALETTE.compress, 1.55);
+                root.add(subArrow);
+
+                const slabTopY = (x, dipFactor) => {
+                    if (x < -1.1) return -0.15;
+                    const d = x + 1.1;
+                    return -0.15 - (0.12 + dipFactor * 0.14) * Math.pow(d, 1.55);
+                };
+
+                const labels = [
+                    { text: '隱沒海洋板塊 (Subducting Slab)', color: '#cbd5e1', pos: new THREE.Vector3(-4.4, -0.2, 0) },
+                    { text: '海溝 (Oceanic Trench)', color: HEX_STR.water, pos: new THREE.Vector3(-0.9, 0.9, 1.5) },
+                    { text: '增生楔・覆瓦逆衝斷層群', color: '#facc15', pos: new THREE.Vector3(0.35, 1.25, 2.2), minP: 0.25 },
+                    { text: '板塊脫水誘發地函熔融', color: HEX_STR.water, pos: new THREE.Vector3(2.8, -1.2, 2.4), minP: 0.55 },
+                    { text: '火山弧噴發 (Volcanic Arc)', color: HEX_STR.magma, pos: new THREE.Vector3(3.55, 2.4, 0), minP: 0.78 }
+                ];
+
+                return {
+                    labels,
+                    update(p, time) {
+                        const subProg = smoothstep(0.0, 0.45, p);
+                        const prismProg = smoothstep(0.22, 0.65, p);
+                        const meltProg = smoothstep(0.52, 0.85, p);
+                        const arcProg = smoothstep(0.72, 1.0, p);
+
+                        // 1. 彎曲隱沒海洋板塊
+                        oceanSlab.deform((u, v, w, out) => {
+                            const xMax = lerp(2.8, 5.4, subProg);
+                            const x = lerp(-6.2, xMax, u);
+                            const yTop = slabTopY(x, subProg);
+                            const thick = 0.85;
+                            out.set(x, yTop - (1 - v) * thick, lerp(-2.4, 2.4, w));
+                        });
+
+                        // 2. 地函楔
+                        mantleWedge.deform((u, v, w, out) => {
+                            const x = lerp(0.5, 6.2, u);
+                            const yBot = Math.max(-2.55, slabTopY(x, subProg));
+                            out.set(x, lerp(yBot, -0.65, v), lerp(-2.38, 2.38, w));
+                        });
+
+                        // 3. 上覆大陸板塊
+                        contPlate.deform((u, v, w, out) => {
+                            const y0 = lerp(-0.68, 0.88, v);
+                            const xL = 0.75 + (1 - v) * 0.75;
+                            out.set(lerp(xL, 6.2, u), y0, lerp(-2.4, 2.4, w));
+                        });
+
+                        // 4. 增生楔覆瓦狀刮除堆疊岩片
+                        prismSlices.forEach((s, i) => {
+                            s.visible = prismProg > 0.03;
+                            const xPos = lerp(-0.55, 0.85, i / 4);
+                            const lift = prismProg * (0.18 + i * 0.11);
+                            s.scale.set(1, 0.35 + prismProg * 0.75, 1);
+                            s.position.set(xPos, -0.15 + lift, 0);
+                            s.rotation.z = -0.35 - prismProg * 0.42; // 陡傾覆瓦狀逆衝角
+                        });
+
+                        // 5. 板塊脫水上升流體粒子
+                        fluidDrops.forEach(fd => {
+                            fd.mesh.visible = meltProg > 0.05;
+                            const t = (fd.phase + time * 0.35) % 1;
+                            const x = lerp(2.2, 3.55, (fd.phase * 3) % 1);
+                            const yStart = slabTopY(x, subProg) + 0.05;
+                            fd.mesh.position.set(x, lerp(yStart, -0.6, t), fd.z);
+                            fd.mesh.scale.setScalar(meltProg * (1 - t * 0.4));
+                        });
+
+                        // 6. 岩漿通道與火山弧噴發
+                        magmaPlume.visible = meltProg > 0.15;
+                        magmaPlume.scale.set(1, Math.max(0.05, lerp(0.2, 1.0, arcProg * 0.7 + meltProg * 0.3)), 1);
+                        magmaPlume.position.set(3.55, lerp(-1.2, 0.15, arcProg), 2.39);
+
+                        volcanoes.forEach(vc => {
+                            vc.group.visible = arcProg > 0.04;
+                            vc.group.scale.set(1, Math.max(0.08, arcProg), 1);
+                        });
+
+                        ashPuffs.forEach(ap => {
+                            ap.mesh.visible = arcProg > 0.35;
+                            const vc = volcanoes[ap.vIdx];
+                            const t = (ap.phase + time * 0.38) % 1;
+                            ap.mesh.position.set(
+                                3.55 + Math.sin(t * 6 + ap.phase * 10) * 0.22,
+                                0.85 + vc.h * arcProg + t * 1.45,
+                                vc.zOff + Math.cos(t * 5) * 0.15
+                            );
+                            ap.mesh.scale.setScalar(0.5 + t * 1.4);
+                            ap.mesh.material.opacity = (1 - t) * 0.65 * arcProg;
+                        });
+
+                        subArrow.position.set(-5.8, 0.35, 0);
+                        subArrow.scale.setScalar(1 + Math.sin(time * 4) * 0.05);
+                    }
+                };
+            },
+
+            /* -----------------------------------------------------------------------
+               3.3 大陸張裂與裂谷盆地 (Rift Valley)：地函熱柱、階梯狀正斷層、裂谷湖泊與火山
+               ----------------------------------------------------------------------- */
+            rift(root) {
+                baseGrid.visible = true;
+
+                // 上湧軟流圈地函熱柱
+                const astheno = new StratifiedBlock([{ v0: 0, v1: 1, color: PALETTE.mantle }], 24, 3, 10);
+                root.add(astheno.group);
+
+                // 5 個大陸裂谷階梯狀正斷層岩塊（左裂谷肩、左階地、中央裂谷底、右階地、右裂谷肩）
+                const riftBlocks = Array.from({ length: 5 }, () => {
+                    const b = new StratifiedBlock(STANDARD_STRATA, 10, 3, 10);
+                    root.add(b.group);
+                    return b;
+                });
+
+                // 巨型裂谷湖泊
+                const riftLake = new THREE.Mesh(
+                    new THREE.BoxGeometry(3.2, 0.52, 4.76),
+                    new THREE.MeshStandardMaterial({ color: PALETTE.water, transparent: true, opacity: 0.78, roughness: 0.12 })
+                );
+                root.add(riftLake);
+
+                // 裂谷內張裂火山錐與岩漿脈
+                const riftCones = [-0.9, 1.0].map((zPos, i) => {
+                    const cone = new THREE.Mesh(
+                        new THREE.ConeGeometry(0.42, 0.68, 16),
+                        new THREE.MeshStandardMaterial({ color: 0x292524, roughness: 0.8 })
+                    );
+                    const lava = new THREE.Mesh(
+                        new THREE.SphereGeometry(0.12, 12, 12),
+                        new THREE.MeshBasicMaterial({ color: PALETTE.magma })
+                    );
+                    lava.position.y = 0.33;
+                    const g = new THREE.Group();
+                    g.add(cone, lava);
+                    g.position.set(i === 0 ? -0.35 : 0.35, 0, zPos);
+                    root.add(g);
+                    return g;
+                });
+
+                const dikeLine = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.18, 1.6, 0.1),
+                    new THREE.MeshBasicMaterial({ color: PALETTE.magma })
+                );
+                root.add(dikeLine);
+
+                const arrL = createStressArrow(PALETTE.tension, 1.55);
+                arrL.rotation.y = Math.PI;
+                const arrR = createStressArrow(PALETTE.tension, 1.55);
+                root.add(arrL, arrR);
+
+                const s = 0.55;
+                const f1 = (y) => -2.85 - y * s;
+                const f2 = (y) => -1.15 - y * s;
+                const f3 = (y) => 1.15 + y * s;
+                const f4 = (y) => 2.85 + y * s;
+
+                const labels = [
+                    { text: '軟流圈地函熱柱上湧', color: HEX_STR.magma, pos: new THREE.Vector3(0, -1.55, 2.45) },
+                    { text: '大陸張裂應力 (Divergence)', color: HEX_STR.tension, pos: new THREE.Vector3(-6.2, 0.2, 0) },
+                    { text: '階梯狀平行正斷層與裂谷肩', color: HEX_STR.block, pos: new THREE.Vector3(-3.2, 1.55, 0), minP: 0.28 },
+                    { text: '中央陷落裂谷盆地 (Rift Valley)', color: HEX_STR.fault, pos: new THREE.Vector3(0, 0.95, -1.5), minP: 0.52 },
+                    { text: '巨型裂谷湖泊與裂谷火山', color: HEX_STR.water, pos: new THREE.Vector3(0.2, 1.15, 1.0), minP: 0.78 }
+                ];
+
+                return {
+                    labels,
+                    update(p, time) {
+                        const dome = smoothstep(0.0, 0.33, p) * (1 - smoothstep(0.45, 0.85, p) * 0.6);
+                        const faultSlip = smoothstep(0.28, 0.88, p);
+                        const lakeProg = smoothstep(0.74, 1.0, p);
+
+                        const dOuter = faultSlip * 0.45;
+                        const dCenter = faultSlip * 1.05;
+                        const dx1 = dOuter * s;
+                        const dx2 = (dCenter - dOuter) * s;
+
+                        // 地函熱柱向中央拱起，使地殼底部拉薄
+                        const mantleTop = (x) => -1.55 + (0.35 + faultSlip * 0.55) * Math.exp(-Math.pow(x / 2.6, 2));
+
+                        astheno.deform((u, v, w, out) => {
+                            const x = lerp(-6.1, 6.1, u);
+                            out.set(x, lerp(-2.45, mantleTop(x), v), lerp(-2.38, 2.38, w));
+                        });
+
+                        const bounds = [
+                            { xL: () => -5.8, xR: f1, drop: -faultSlip * 0.18, shift: -(dx1 + dx2) }, // 左裂谷肩微隆起
+                            { xL: f1, xR: f2, drop: dOuter, shift: -dx2 },         // 左階地
+                            { xL: f2, xR: f3, drop: dCenter, shift: 0 },            // 中央裂谷底
+                            { xL: f3, xR: f4, drop: dOuter, shift: +dx2 },         // 右階地
+                            { xL: f4, xR: () => 5.8, drop: -faultSlip * 0.18, shift: +(dx1 + dx2) } // 右裂谷肩
+                        ];
+
+                        riftBlocks.forEach((blk, idx) => {
+                            const cfg = bounds[idx];
+                            blk.deform((u, v, w, out) => {
+                                const yTopInit = 1.05;
+                                const y0 = lerp(-1.45, yTopInit, v);
+                                const x = lerp(cfg.xL(y0), cfg.xR(y0), u) + cfg.shift;
+                                const thermalArch = dome * 0.32 * Math.exp(-Math.pow(x / 3.2, 2));
+                                const yBot = Math.max(-1.55, mantleTop(x));
+                                const yWorld = lerp(yBot, yTopInit - cfg.drop + thermalArch, v);
+                                out.set(x, yWorld, lerp(-2.4, 2.4, w));
+                            });
+                        });
+
+                        const centerFloorY = 1.05 - dCenter;
+                        riftLake.visible = lakeProg > 0.03;
+                        riftLake.scale.set(1, Math.max(0.05, lakeProg), 1);
+                        riftLake.position.set(0, centerFloorY + 0.24 * lakeProg, 0);
+
+                        riftCones.forEach((rc, idx) => {
+                            rc.visible = lakeProg > 0.12;
+                            const sc = smoothstep(0.75, 0.98, p);
+                            rc.scale.setScalar(Math.max(0.05, sc));
+                            rc.position.set(idx === 0 ? -0.45 : 0.45, centerFloorY + 0.32 * sc, idx === 0 ? -1.05 : 0.95);
+                        });
+
+                        dikeLine.visible = lakeProg > 0.12;
+                        dikeLine.position.set(0, centerFloorY - 0.55, 2.41);
+
+                        const pulse = 1 + Math.sin(time * 4) * 0.05;
+                        arrL.scale.setScalar(pulse);
+                        arrR.scale.setScalar(pulse);
+                        arrL.position.set(-5.9 - (dx1 + dx2), 0.0, 0);
+                        arrR.position.set(5.9 + (dx1 + dx2), 0.0, 0);
+                    }
+                };
+            }
+        };
+
+        /* =========================================================================
+           6. 狀態管理、場景切換、3D 投影標籤系統與觸控友善 UI 綁定
+           ========================================================================= */
+        const appState = {
+            catIdx: 0,
+            modelIdx: 0,
+            progress: 0,
+            targetProgress: 0,
+            isPlaying: false,
+            isScrubbing: false,
+            showLabels: true,
+            panMode: false,
+            activeInstance: null,
+            labelEls: []
+        };
+
+        // 安全釋放舊場景幾何體與材質，避免分頁切換造成記憶體洩漏
+        function clearModelRoot() {
+            modelRoot.traverse((obj) => {
+                if (obj.geometry) obj.geometry.dispose();
+                if (obj.material) {
+                    if (Array.isArray(obj.material)) {
+                        obj.material.forEach(m => m.dispose());
+                    } else {
+                        obj.material.dispose();
+                    }
+                }
+            });
+            while (modelRoot.children.length > 0) {
+                modelRoot.remove(modelRoot.children[0]);
+            }
+            labelsLayer.innerHTML = '';
+            appState.labelEls = [];
+        }
+
+        function getCurrentModelMeta() {
+            return CATEGORIES[appState.catIdx].models[appState.modelIdx];
+        }
+
+        function resetCameraToPreset() {
+            const meta = getCurrentModelMeta();
+            camera.position.set(...meta.camPos);
+            controls.target.set(...meta.camTarget);
+            controls.update();
+        }
+
+        function loadScenario(catIdx, modelIdx) {
+            appState.catIdx = catIdx;
+            appState.modelIdx = modelIdx;
+            appState.progress = 0;
+            appState.targetProgress = 0;
+            appState.isPlaying = false;
+            updatePlayBtnUI();
+
+            clearModelRoot();
+            const meta = getCurrentModelMeta();
+            const builder = SCENE_BUILDERS[meta.id];
+            appState.activeInstance = builder(modelRoot);
+
+            // 建立該場景之 HTML 3D 投影標籤元素
+            appState.labelEls = (appState.activeInstance.labels || []).map((lbl) => {
+                const el = document.createElement('div');
+                el.className = 'geo-label';
+                el.style.borderColor = lbl.color || '#ffffff';
+                el.innerHTML = `<span class="label-dot" style="background:${lbl.color || '#38bdf8'}"></span><span>${lbl.text}</span>`;
+                labelsLayer.appendChild(el);
+                return { meta: lbl, el };
+            });
+
+            // 彈性應變能計量表僅在 2.1 顯示
+            document.getElementById('energy-meter').classList.toggle('visible', Boolean(appState.activeInstance.hasEnergyMeter));
+
+            resetCameraToPreset();
+            renderNavigationUI();
+            syncProgressUI();
+            appState.activeInstance.update(0, 0);
+        }
+
+        // 取得目前對應階段索引 (0 ~ 3)
+        function getStepIndexFromProgress(p) {
+            if (p < 0.17) return 0;
+            if (p < 0.50) return 1;
+            if (p < 0.83) return 2;
+            return 3;
+        }
+
+        function renderNavigationUI() {
+            // 1. 主分頁按鈕高亮
+            document.querySelectorAll('.tab-btn').forEach((btn, idx) => {
+                btn.classList.toggle('active', idx === appState.catIdx);
+            });
+
+            // 2. 次分頁模型按鈕列
+            const subNav = document.getElementById('sub-nav');
+            subNav.innerHTML = '';
+            CATEGORIES[appState.catIdx].models.forEach((m, idx) => {
+                const b = document.createElement('button');
+                b.className = 'sub-btn' + (idx === appState.modelIdx ? ' active' : '');
+                b.textContent = m.name;
+                b.addEventListener('click', () => loadScenario(appState.catIdx, idx));
+                subNav.appendChild(b);
+            });
+
+            // 3. 底部 4 個 Step-by-Step 階段節點按鈕
+            const meta = getCurrentModelMeta();
+            const track = document.getElementById('stepper-track');
+            track.innerHTML = '';
+            meta.steps.forEach((st, sIdx) => {
+                const node = document.createElement('button');
+                node.className = 'step-node';
+                node.innerHTML = `<span class="step-num">${sIdx + 1}</span><span class="step-name-txt">${st.name}</span>`;
+                node.addEventListener('click', () => {
+                    appState.isPlaying = false;
+                    updatePlayBtnUI();
+                    appState.targetProgress = sIdx / 3;
+                });
+                track.appendChild(node);
+            });
+
+            // 4. 左上角模型標題與應力徽章
+            document.getElementById('info-model-title').textContent = meta.name;
+            const badge = document.getElementById('info-stress-badge');
+            badge.textContent = meta.stressText;
+            badge.style.color = meta.stressColor;
+        }
+
+        function syncProgressUI() {
+            const p = appState.progress;
+            const meta = getCurrentModelMeta();
+            const stepIdx = getStepIndexFromProgress(p);
+            const stepData = meta.steps[stepIdx];
+
+            document.getElementById('timeline-slider').value = Math.round(p * 1000);
+            document.getElementById('pct-readout').textContent = `${Math.round(p * 100)}%`;
+
+            document.getElementById('info-step-pill').textContent = `階段 ${stepIdx + 1} / 4`;
+            document.getElementById('info-step-title').textContent = `${stepIdx + 1}. ${stepData.name}`;
+            document.getElementById('info-step-desc').textContent = stepData.desc;
+
+            document.querySelectorAll('.step-node').forEach((node, idx) => {
+                node.classList.toggle('active', idx === stepIdx);
+                node.classList.toggle('passed', idx < stepIdx);
+            });
+
+            document.getElementById('btn-prev').disabled = stepIdx === 0 && p < 0.02;
+            document.getElementById('btn-next').disabled = stepIdx === 3 && p > 0.98;
+        }
+
+        function updatePlayBtnUI() {
+            const btn = document.getElementById('btn-play');
+            btn.innerHTML = appState.isPlaying ? '⏸ 暫停播放' : '▶ 播放流程';
+        }
+
+        // 將 3D 錨點即時投影至 2D 螢幕文字標籤
+        const projVec = new THREE.Vector3();
+        function updateProjectedLabels() {
+            if (!appState.showLabels) return;
+            const w = container.clientWidth;
+            const h = container.clientHeight;
+            const p = appState.progress;
+
+            for (const item of appState.labelEls) {
+                const { meta, el } = item;
+                if ((meta.minP !== undefined && p < meta.minP) || (meta.maxP !== undefined && p > meta.maxP)) {
+                    el.style.display = 'none';
+                    continue;
+                }
+                projVec.copy(meta.pos).project(camera);
+                if (projVec.z > 1 || projVec.x < -1.05 || projVec.x > 1.05 || projVec.y < -1.05 || projVec.y > 1.05) {
+                    el.style.display = 'none';
+                    continue;
+                }
+                el.style.display = 'flex';
+                const sx = (projVec.x * 0.5 + 0.5) * w;
+                const sy = (-projVec.y * 0.5 + 0.5) * h;
+                el.style.left = `${sx}px`;
+                el.style.top = `${sy}px`;
+            }
+        }
+
+        /* =========================================================================
+           7. UI 控制按鈕與觸控操作事件綁定
+           ========================================================================= */
+
+        // 主分頁切換
+        document.querySelectorAll('.tab-btn').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const cat = Number(btn.dataset.cat);
+                if (cat !== appState.catIdx) loadScenario(cat, 0);
+            });
+        });
+
+        // 標籤顯示 / 隱藏 Toggle
+        const btnToggleLabels = document.getElementById('btn-toggle-labels');
+        btnToggleLabels.addEventListener('click', () => {
+            appState.showLabels = !appState.showLabels;
+            labelsLayer.classList.toggle('hidden', !appState.showLabels);
+            btnToggleLabels.classList.toggle('active', appState.showLabels);
+            btnToggleLabels.textContent = appState.showLabels ? '🏷️ 標籤: 開' : '🏷️ 標籤: 關';
+        });
+
+        // 圖例面板 Toggle
+        const legendPanel = document.getElementById('legend-panel');
+        const btnToggleLegend = document.getElementById('btn-toggle-legend');
+        btnToggleLegend.addEventListener('click', () => {
+            const open = legendPanel.classList.toggle('open');
+            btnToggleLegend.classList.toggle('active', open);
+        });
+
+        // 說明資訊卡收合 / 展開
+        const infoCard = document.getElementById('info-card');
+        const btnCollapseInfo = document.getElementById('btn-collapse-info');
+        btnCollapseInfo.addEventListener('click', () => {
+            const collapsed = infoCard.classList.toggle('collapsed');
+            btnCollapseInfo.textContent = collapsed ? '▸' : '▾';
+        });
+
+        // 右側觸控友善視角按鈕：放大、縮小、單指平移/旋轉模式切換、重置視角
+        function dollyCamera(factor) {
+            const offset = camera.position.clone().sub(controls.target);
+            const newLen = Math.max(controls.minDistance, Math.min(controls.maxDistance, offset.length() * factor));
+            offset.setLength(newLen);
+            camera.position.copy(controls.target).add(offset);
+            controls.update();
+        }
+
+        document.getElementById('btn-zoom-in').addEventListener('click', () => dollyCamera(0.82));
+        document.getElementById('btn-zoom-out').addEventListener('click', () => dollyCamera(1.22));
+        document.getElementById('btn-reset-cam').addEventListener('click', resetCameraToPreset);
+
+        const btnPanMode = document.getElementById('btn-pan-mode');
+        btnPanMode.addEventListener('click', () => {
+            appState.panMode = !appState.panMode;
+            btnPanMode.classList.toggle('mode-pan', appState.panMode);
+            btnPanMode.textContent = appState.panMode ? '✋' : '🔄';
+            controls.touches.ONE = appState.panMode ? THREE.TOUCH.PAN : THREE.TOUCH.ROTATE;
+            controls.mouseButtons.LEFT = appState.panMode ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE;
+        });
+
+        // Step-by-Step 流程控制：上一步、下一步、自動播放、重置與時間軸滑桿
+        document.getElementById('btn-prev').addEventListener('click', () => {
+            appState.isPlaying = false;
+            updatePlayBtnUI();
+            const curStep = getStepIndexFromProgress(appState.targetProgress);
+            const prevStep = appState.targetProgress > curStep / 3 + 0.05 ? curStep : Math.max(0, curStep - 1);
+            appState.targetProgress = prevStep / 3;
+        });
+
+        document.getElementById('btn-next').addEventListener('click', () => {
+            appState.isPlaying = false;
+            updatePlayBtnUI();
+            const curStep = getStepIndexFromProgress(appState.targetProgress);
+            const nextStep = Math.min(3, curStep + 1);
+            appState.targetProgress = nextStep / 3;
+        });
+
+        document.getElementById('btn-play').addEventListener('click', () => {
+            if (!appState.isPlaying && appState.progress >= 0.995) {
+                appState.progress = 0;
+                appState.targetProgress = 0;
+            }
+            appState.isPlaying = !appState.isPlaying;
+            updatePlayBtnUI();
+        });
+
+        document.getElementById('btn-reset-sim').addEventListener('click', () => {
+            appState.isPlaying = false;
+            updatePlayBtnUI();
+            appState.targetProgress = 0;
+        });
+
+        const slider = document.getElementById('timeline-slider');
+        slider.addEventListener('input', () => {
+            appState.isPlaying = false;
+            appState.isScrubbing = true;
+            updatePlayBtnUI();
+            const v = Number(slider.value) / 1000;
+            appState.progress = v;
+            appState.targetProgress = v;
+            syncProgressUI();
+        });
+        slider.addEventListener('change', () => {
+            appState.isScrubbing = false;
+        });
+
+        // 視窗尺寸自適應
+        window.addEventListener('resize', () => {
+            const w = container.clientWidth;
+            const h = container.clientHeight;
+            camera.aspect = w / h;
+            camera.updateProjectionMatrix();
+            renderer.setSize(w, h);
+        });
+
+        /* =========================================================================
+           8. 主動畫渲染迴圈
+           ========================================================================= */
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = Math.min(clock.getDelta(), 0.05);
+            const elapsed = clock.elapsedTime;
+
+            if (appState.isPlaying) {
+                appState.targetProgress = Math.min(1, appState.targetProgress + dt * 0.14);
+                appState.progress = appState.targetProgress;
+                if (appState.progress >= 1) {
+                    appState.isPlaying = false;
+                    updatePlayBtnUI();
+                }
+                syncProgressUI();
+            } else if (!appState.isScrubbing) {
+                const diff = appState.targetProgress - appState.progress;
+                if (Math.abs(diff) > 0.0005) {
+                    const stepSpeed = Math.sign(diff) * Math.min(Math.abs(diff), Math.max(dt * 0.55, Math.abs(diff) * 6 * dt));
+                    appState.progress = clamp01(appState.progress + stepSpeed);
+                    syncProgressUI();
+                }
+            }
+
+            if (appState.activeInstance) {
+                appState.activeInstance.update(appState.progress, elapsed);
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+            updateProjectedLabels();
+        }
+
+        // 啟動預設場景（1.1 正斷層）
+        loadScenario(0, 0);
+        animate();
+    </script>
+</body>
+
+</html>
