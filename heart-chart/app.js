@@ -756,7 +756,7 @@ function initPanAndZoom() {
     document.getElementById("lungsGroup").style.display = displayVal;
     document.getElementById("pulmonaryLungBranches").style.display = displayVal;
     document.getElementById("lungLabelsGroup").style.display = displayVal;
-    toggleLungsBtn.textContent = state.showLungs ? "🫁 隱藏肺臟" : "🫁 顯示肺臟";
+    toggleLungsBtn.textContent = state.showLungs ? "隱藏肺臟" : "顯示肺臟";
     toggleLungsBtn.classList.toggle("active-tool", state.showLungs);
   });
 
@@ -810,13 +810,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   playPauseBtn.addEventListener("click", () => {
     state.isPlaying = !state.isPlaying;
-    playPauseBtn.textContent = state.isPlaying ? "⏸️ 暫停" : "▶️ 播放";
+    playPauseBtn.textContent = state.isPlaying ? "暫停" : "播放";
   });
 
   // 下一心動階段按鈕 (0.0~0.1s -> 0.1~0.4s -> 0.4~0.8s)
   document.getElementById("stepPhaseBtn").addEventListener("click", () => {
     state.isPlaying = false;
-    playPauseBtn.textContent = "▶️ 播放";
+    playPauseBtn.textContent = "播放";
     const beatOffset = state.journeyTime >= 0.8 ? 0.8 : 0.0;
     if (state.cycleTime < 0.1) state.cycleTime = 0.22;
     else if (state.cycleTime < 0.4) state.cycleTime = 0.60;
@@ -865,7 +865,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // 心動週期滑桿
   document.getElementById("cycleSlider").addEventListener("input", (e) => {
     state.isPlaying = false;
-    playPauseBtn.textContent = "▶️ 播放";
+    playPauseBtn.textContent = "播放";
     const beatOffset = state.journeyTime >= 0.8 ? 0.8 : 0.0;
     state.cycleTime = parseFloat(e.target.value);
     state.journeyTime = beatOffset + state.cycleTime;
