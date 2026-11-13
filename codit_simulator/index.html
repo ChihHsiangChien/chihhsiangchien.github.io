@@ -1,0 +1,3080 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>CODIT 樹木受傷組織隔絕模型與修剪解剖模擬器</title>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<style>
+  :root {
+    /* UI Base Colors */
+    --bg-app: #0f172a;
+    --bg-panel: #1e293b;
+    --bg-card: #273549;
+    --bg-stage: #0b1120;
+    --text-main: #f1f5f9;
+    --text-muted: #94a3b8;
+    --border-color: #334155;
+    --accent: #10b981;
+    --accent-hover: #059669;
+
+    /* Unified CODIT & Anatomy Palette (Consistent across all Tabs, SVG & 3D) */
+    --col-bark: #6d4c3d;
+    --col-cambium: #4ade80;
+    --col-sapwood: #f3dcb2;
+    --col-latewood: #c89662;
+    --col-heartwood: #a46b3e;
+    --col-decay: #9333ea;
+    --col-wall1: #38bdf8;
+    --col-wall2: #fbbf24;
+    --col-wall3: #f97316;
+    --col-wall4: #ef4444;
+    --col-callus: #a3e635;
+    --col-bpz: #14b8a6;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, -apple-system, sans-serif;
+    background-color: var(--bg-app);
+    color: var(--text-main);
+    line-height: 1.55;
+    overflow-x: hidden;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Header */
+  .app-header {
+    background: rgba(15, 23, 42, 0.95);
+    border-bottom: 1px solid var(--border-color);
+    padding: 10px 16px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(8px);
+  }
+
+  .brand-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .brand-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #059669, #0ea5e9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+    box-shadow: 0 2px 10px rgba(16, 185, 129, 0.3);
+  }
+
+  .brand-title h1 {
+    font-size: 1.08rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: #fff;
+  }
+
+  .brand-title p {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .btn {
+    background: var(--bg-card);
+    color: var(--text-main);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 8px 13px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.18s ease;
+    min-height: 38px;
+    user-select: none;
+  }
+
+  .btn:hover {
+    background: #334155;
+    border-color: #475569;
+  }
+
+  .btn:active {
+    transform: scale(0.97);
+  }
+
+  .btn.active-toggle {
+    background: rgba(16, 185, 129, 0.18);
+    border-color: var(--accent);
+    color: #6ee7b7;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #052e16;
+  }
+
+  .btn-primary:hover {
+    background: var(--accent-hover);
+    color: #fff;
+  }
+
+  /* Legend Bar */
+  .legend-drawer {
+    background: #152033;
+    border-bottom: 1px solid var(--border-color);
+    padding: 8px 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    align-items: center;
+    font-size: 0.78rem;
+    transition: all 0.25s ease;
+  }
+
+  .legend-drawer.hidden {
+    display: none;
+  }
+
+  .legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #cbd5e1;
+    white-space: nowrap;
+  }
+
+  .swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    display: inline-block;
+    border: 1px solid rgba(255,255,255,0.25);
+    flex-shrink: 0;
+  }
+
+  /* Navigation Tabs */
+  .tabs-nav {
+    display: flex;
+    gap: 6px;
+    padding: 10px 16px 0;
+    background: var(--bg-app);
+    border-bottom: 1px solid var(--border-color);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .tabs-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tab-btn {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid transparent;
+    border-bottom: none;
+    padding: 10px 16px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    border-radius: 10px 10px 0 0;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .tab-btn:hover {
+    color: var(--text-main);
+    background: rgba(255,255,255,0.03);
+  }
+
+  .tab-btn.active {
+    background: var(--bg-panel);
+    color: #34d399;
+    border-color: var(--border-color);
+    position: relative;
+  }
+
+  .tab-btn.active::after {
+    content: "";
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--bg-panel);
+  }
+
+  /* Main Tab Workspace */
+  .workspace {
+    flex: 1;
+    background: var(--bg-panel);
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .tab-panel {
+    display: none;
+    grid-template-columns: minmax(0, 1.75fr) minmax(320px, 1fr);
+    gap: 16px;
+    flex: 1;
+    align-items: start;
+  }
+
+  .tab-panel.active {
+    display: grid;
+  }
+
+  /* Stage Column (Viewport + Step Bar) */
+  .stage-column {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .viewport-box {
+    position: relative;
+    width: 100%;
+    height: 58vh;
+    min-height: 380px;
+    max-height: 620px;
+    background: radial-gradient(circle at 50% 45%, #172338 0%, #090e1a 100%);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none;
+  }
+
+  /* Sub-mode bar inside stage */
+  .submode-bar {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 20;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    max-width: calc(100% - 155px);
+  }
+
+  .pill-btn {
+    background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(6px);
+    color: #cbd5e1;
+    border: 1px solid #475569;
+    padding: 6px 11px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    min-height: 34px;
+    transition: all 0.15s;
+  }
+
+  .pill-btn.active {
+    background: #10b981;
+    color: #042f2e;
+    border-color: #34d399;
+  }
+
+  .pill-btn.danger-active {
+    background: #ef4444;
+    color: #fff;
+    border-color: #f87171;
+  }
+
+  /* Viewport Floating Zoom/Label Toolbar */
+  .viewport-tools {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .tool-icon-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 9px;
+    background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(6px);
+    border: 1px solid #475569;
+    color: #f8fafc;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+  }
+
+  .tool-icon-btn:hover {
+    background: #334155;
+  }
+
+  .tool-icon-btn:active {
+    transform: scale(0.93);
+  }
+
+  .gesture-hint {
+    position: absolute;
+    bottom: 10px;
+    left: 12px;
+    z-index: 15;
+    font-size: 0.74rem;
+    color: rgba(203, 213, 225, 0.78);
+    background: rgba(15, 23, 42, 0.72);
+    padding: 4px 10px;
+    border-radius: 14px;
+    border: 1px solid rgba(71, 85, 105, 0.5);
+    pointer-events: none;
+  }
+
+  /* 3D Floating Pin Labels */
+  .labels-overlay-3d {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+    z-index: 12;
+    transition: opacity 0.22s ease;
+  }
+
+  .labels-hidden .labels-overlay-3d,
+  .labels-hidden .svg-label-group {
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+
+  .svg-label-group {
+    transition: opacity 0.22s ease;
+  }
+
+  .pin-3d {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    background: rgba(15, 23, 42, 0.9);
+    border: 1px solid #64748b;
+    color: #f8fafc;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.45);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .pin-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* Step-by-Step Controller Bar */
+  .step-bar {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .step-controls-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .step-nav-btns {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .step-dots {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .step-dot {
+    min-width: 30px;
+    height: 30px;
+    padding: 0 8px;
+    border-radius: 15px;
+    border: 1px solid #475569;
+    background: #1e293b;
+    color: #94a3b8;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.18s;
+  }
+
+  .step-dot.active {
+    background: var(--accent);
+    color: #052e16;
+    border-color: #6ee7b7;
+    transform: scale(1.06);
+  }
+
+  .step-dot.completed {
+    border-color: var(--accent);
+    color: #6ee7b7;
+  }
+
+  .step-status-title {
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: #38bdf8;
+  }
+
+  /* Right Side Info & Control Cards */
+  .info-column {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .info-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 15px;
+  }
+
+  .info-card h3 {
+    font-size: 1rem;
+    color: #fff;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .info-card p {
+    font-size: 0.88rem;
+    color: #cbd5e1;
+    margin-bottom: 8px;
+  }
+
+  .info-card p:last-child {
+    margin-bottom: 0;
+  }
+
+  .badge-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 5px;
+    font-size: 0.74rem;
+    font-weight: 700;
+    margin-right: 5px;
+  }
+
+  .wall-toggles-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .layer-btn {
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid #475569;
+    background: #1e293b;
+    color: #e2e8f0;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    text-align: left;
+    min-height: 40px;
+  }
+
+  .layer-btn.active {
+    background: rgba(255,255,255,0.1);
+    border-color: #94a3b8;
+  }
+
+  .layer-btn.off {
+    opacity: 0.45;
+  }
+
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+    font-size: 0.83rem;
+    color: #cbd5e1;
+  }
+
+  .slider-row input[type="range"] {
+    flex: 1;
+    accent-color: var(--accent);
+    height: 6px;
+    cursor: pointer;
+  }
+
+  .callout-quote {
+    background: rgba(16, 185, 129, 0.1);
+    border-left: 3px solid var(--accent);
+    padding: 10px 12px;
+    border-radius: 0 8px 8px 0;
+    font-size: 0.83rem;
+    color: #d1fae5;
+    margin-top: 8px;
+  }
+
+  .warning-quote {
+    background: rgba(239, 68, 68, 0.12);
+    border-left: 3px solid #ef4444;
+    padding: 10px 12px;
+    border-radius: 0 8px 8px 0;
+    font-size: 0.83rem;
+    color: #fecaca;
+    margin-top: 8px;
+  }
+
+  /* PanZoom SVG Stage */
+  .svg-panzoom-stage {
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+    display: block;
+  }
+
+  .svg-panzoom-stage:active {
+    cursor: grabbing;
+  }
+
+  /* Quiz / Diagnostic Cards in Tab 4 */
+  .quiz-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .quiz-opt-btn {
+    background: #1e293b;
+    border: 1px solid #475569;
+    color: #f1f5f9;
+    padding: 10px 12px;
+    border-radius: 8px;
+    text-align: left;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .quiz-opt-btn:hover {
+    border-color: #94a3b8;
+  }
+
+  .quiz-opt-btn.correct {
+    background: rgba(16, 185, 129, 0.22);
+    border-color: #10b981;
+    color: #a7f3d0;
+  }
+
+  .quiz-opt-btn.wrong {
+    background: rgba(239, 68, 68, 0.22);
+    border-color: #ef4444;
+    color: #fecaca;
+  }
+
+  /* Responsive Mobile & Tablet */
+  @media (max-width: 960px) {
+    .tab-panel.active {
+      grid-template-columns: 1fr;
+    }
+
+    .viewport-box {
+      height: 48vh;
+      min-height: 330px;
+      max-height: 460px;
+    }
+
+    .brand-title h1 {
+      font-size: 0.96rem;
+    }
+
+    .brand-title p {
+      display: none;
+    }
+  }
+
+  @media (max-width: 560px) {
+    .app-header {
+      padding: 8px 12px;
+    }
+    .workspace {
+      padding: 10px;
+    }
+    .tab-btn {
+      padding: 8px 12px;
+      font-size: 0.83rem;
+    }
+    .btn {
+      padding: 6px 10px;
+      font-size: 0.8rem;
+    }
+    .wall-toggles-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+</head>
+<body>
+
+  <!-- Top Header -->
+  <header class="app-header">
+    <div class="brand-group">
+      <div class="brand-icon">🌳</div>
+      <div class="brand-title">
+        <h1>CODIT 樹木隔絕防禦與修剪解剖模擬器</h1>
+        <p>Dr. Alex Shigo (1977) · 樹木不會「治癒再生」，而是「隔絕封閉（Compartmentalize）」</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button id="btnToggleLabels" class="btn active-toggle" title="切換所有解剖與防線文字標籤顯示/隱藏">
+        🏷️ 標籤：<span id="labelStateText">顯示</span>
+      </button>
+      <button id="btnToggleLegend" class="btn active-toggle" title="顯示或隱藏跨分頁統一色票圖例">
+        🎨 色票圖例
+      </button>
+    </div>
+  </header>
+
+  <!-- Unified Color Legend Bar -->
+  <section id="legendBar" class="legend-drawer">
+    <span class="legend-item"><i class="swatch" style="background:var(--col-wall1)"></i>Wall 1 垂直防線(侵填體)</span>
+    <span class="legend-item"><i class="swatch" style="background:var(--col-wall2)"></i>Wall 2 向內防線(晚材切向壁)</span>
+    <span class="legend-item"><i class="swatch" style="background:var(--col-wall3)"></i>Wall 3 側向防線(木射線化學牆)</span>
+    <span class="legend-item"><i class="swatch" style="background:var(--col-wall4)"></i>Wall 4 屏障帶(最強特化層)</span>
+    <span class="legend-item"><i class="swatch" style="background:var(--col-cambium)"></i>形成層 Cambium</span>
+    <span class="legend-item"><i class="swatch" style="background:var(--col-callus)"></i>癒合木 Callus</span>
+    <span class="legend-item"><i class="swatch" style="background:var(--col-bpz)"></i>樹枝保護區 BPZ</span>
+    <span class="legend-item"><i class="swatch" style="background:var(--col-decay)"></i>腐朽菌入侵區</span>
+    <span class="legend-item"><i class="swatch" style="background:var(--col-sapwood)"></i>健康邊材</span>
+    <span class="legend-item"><i class="swatch" style="background:var(--col-heartwood)"></i>心材</span>
+  </section>
+
+  <!-- Multi-Tab Navigation -->
+  <nav class="tabs-nav" role="tablist">
+    <button class="tab-btn active" data-tab="tab1">🧊 1. 3D 四道牆立體解剖</button>
+    <button class="tab-btn" data-tab="tab2">🔬 2. 微觀機制與古樹演化</button>
+    <button class="tab-btn" data-tab="tab3">🪚 3. 枝領與修剪比較實驗</button>
+    <button class="tab-btn" data-tab="tab4">✂️ 4. 三刀法實戰與樹藝診斷</button>
+  </nav>
+
+  <!-- Main Workspace -->
+  <main id="appWorkspace" class="workspace">
+
+    <!-- ==================== TAB 1: 3D CODIT ANATOMY ==================== -->
+    <section id="tab1" class="tab-panel active">
+      <div class="stage-column">
+        <div class="viewport-box" id="viewport3d">
+          <div class="submode-bar">
+            <button class="pill-btn" id="btnXrayQuick">🔍 X光透視切換</button>
+          </div>
+          <div class="viewport-tools">
+            <button class="tool-icon-btn" data-zoom3d="in" title="放大視角">＋</button>
+            <button class="tool-icon-btn" data-zoom3d="out" title="縮小視角">－</button>
+            <button class="tool-icon-btn" data-zoom3d="reset" title="重置3D視角">⟲</button>
+            <button class="tool-icon-btn js-quick-label" title="切換文字標籤">🏷️</button>
+          </div>
+          <div id="labels3dContainer" class="labels-overlay-3d"></div>
+          <div class="gesture-hint">單指拖曳旋轉 · 雙指捏合縮放 / 平移</div>
+        </div>
+
+        <!-- Step-by-Step Controller -->
+        <div class="step-bar">
+          <div class="step-controls-row">
+            <div class="step-nav-btns">
+              <button class="btn" id="t1Prev">◀ 上一步</button>
+              <button class="btn btn-primary" id="t1Play">▶ 自動演示</button>
+              <button class="btn" id="t1Next">下一步 ▶</button>
+            </div>
+            <div class="step-dots" id="t1Dots"></div>
+          </div>
+          <div class="step-status-title" id="t1StepTitle">載入中...</div>
+        </div>
+      </div>
+
+      <div class="info-column">
+        <div class="info-card">
+          <h3 id="t1DetailHeading">解剖階段說明</h3>
+          <div id="t1DetailBody"></div>
+        </div>
+
+        <div class="info-card">
+          <h3>🎛️ 3D 結構透視與防線開關</h3>
+          <div class="slider-row">
+            <span>樹幹透視度：</span>
+            <input type="range" id="trunkOpacitySlider" min="20" max="100" value="92">
+            <span id="trunkOpacityVal">92%</span>
+          </div>
+          <div class="wall-toggles-grid">
+            <button class="layer-btn active" data-wall-toggle="wall1">
+              <i class="swatch" style="background:var(--col-wall1)"></i>Wall 1 垂直防線
+            </button>
+            <button class="layer-btn active" data-wall-toggle="wall2">
+              <i class="swatch" style="background:var(--col-wall2)"></i>Wall 2 向內防線
+            </button>
+            <button class="layer-btn active" data-wall-toggle="wall3">
+              <i class="swatch" style="background:var(--col-wall3)"></i>Wall 3 側向射線
+            </button>
+            <button class="layer-btn active" data-wall-toggle="wall4">
+              <i class="swatch" style="background:var(--col-wall4)"></i>Wall 4 最強屏障帶
+            </button>
+          </div>
+          <div class="callout-quote">
+            💡 <strong>操作提示：</strong>旋轉 3D 楔形切口，可同時觀察「頂部橫切面（扇形隔絕）」與「縱向剖面（上下垂直腐朽柱）」。調低樹幹透視度可像醫療斷層掃描般透視內部四道牆！
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 2: MICRO DEFENSE & ANCIENT HOLLOW TREE ==================== -->
+    <section id="tab2" class="tab-panel">
+      <div class="stage-column">
+        <div class="viewport-box" id="viewportTab2">
+          <div class="submode-bar">
+            <button class="pill-btn active" data-t2mode="micro">🔬 A. 四道牆細胞微觀</button>
+            <button class="pill-btn" data-t2mode="hollow">🌳 B. 百年古樹中空演化</button>
+          </div>
+          <div class="viewport-tools">
+            <button class="tool-icon-btn" data-pz-target="pz2" data-pz-act="in" title="放大">＋</button>
+            <button class="tool-icon-btn" data-pz-target="pz2" data-pz-act="out" title="縮小">－</button>
+            <button class="tool-icon-btn" data-pz-target="pz2" data-pz-act="reset" title="重置縮放平移">⟲</button>
+            <button class="tool-icon-btn js-quick-label" title="切換文字標籤">🏷️</button>
+          </div>
+          <svg id="svgTab2" class="svg-panzoom-stage" viewBox="0 0 860 540"></svg>
+          <div class="gesture-hint">支援滾輪 / 雙指捏合縮放 · 單指拖曳平移檢視微觀細胞</div>
+        </div>
+
+        <div class="step-bar">
+          <div class="step-controls-row">
+            <div class="step-nav-btns">
+              <button class="btn" id="t2Prev">◀ 上一步</button>
+              <button class="btn btn-primary" id="t2Play">▶ 自動演示</button>
+              <button class="btn" id="t2Next">下一步 ▶</button>
+            </div>
+            <div class="step-dots" id="t2Dots"></div>
+          </div>
+          <div class="step-status-title" id="t2StepTitle"></div>
+        </div>
+      </div>
+
+      <div class="info-column">
+        <div class="info-card">
+          <h3 id="t2DetailHeading"></h3>
+          <div id="t2DetailBody"></div>
+        </div>
+
+        <div class="info-card">
+          <h3>📖 CODIT 反應區 vs 屏障帶哲學</h3>
+          <p><span class="badge-tag" style="background:#38bdf8;color:#082f49">第一部分：反應區 (Walls 1~3)</span>由受傷當下<strong>已存在的既有木材</strong>啟動物理堵塞與化學分泌，強度為 <strong>Wall 3 &gt; Wall 2 &gt; Wall 1</strong>，目的是盡力拖延病菌擴散。</p>
+          <p><span class="badge-tag" style="background:#ef4444;color:#fff">第二部分：屏障帶 (Wall 4)</span>由受傷後的<strong>形成層全新分化製造</strong>，富含木質素與栓質（Suberin），徹底隔開「過去受傷的舊木」與「未來健康的新木」。</p>
+          <div class="callout-quote">
+            💡 <strong>與死共存：</strong>千年古樹內部即使因多次創傷而完全中空腐朽，只要外側有第四道牆保護的新生邊材與韌皮部持續輸水輸養，大樹依然能枝繁葉茂！
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 3: PRUNING & BRANCH COLLAR LAB ==================== -->
+    <section id="tab3" class="tab-panel">
+      <div class="stage-column">
+        <div class="viewport-box" id="viewportTab3">
+          <div class="submode-bar">
+            <button class="pill-btn active" data-cutmode="proper">✅ 正確修剪(保留枝領)</button>
+            <button class="pill-btn" data-cutmode="stub">❌ 留樹樁(Stub Cut)</button>
+            <button class="pill-btn" data-cutmode="flush">❌ 平貼切(Flush Cut)</button>
+          </div>
+          <div class="viewport-tools">
+            <button class="tool-icon-btn" data-pz-target="pz3" data-pz-act="in" title="放大">＋</button>
+            <button class="tool-icon-btn" data-pz-target="pz3" data-pz-act="out" title="縮小">－</button>
+            <button class="tool-icon-btn" data-pz-target="pz3" data-pz-act="reset" title="重置視角">⟲</button>
+            <button class="tool-icon-btn js-quick-label" title="切換文字標籤">🏷️</button>
+          </div>
+          <svg id="svgTab3" class="svg-panzoom-stage" viewBox="0 0 860 540"></svg>
+          <div class="gesture-hint">點擊左上切換三種切法 · 雙指縮放平移觀察縱切面纖維與防線</div>
+        </div>
+
+        <div class="step-bar">
+          <div class="step-controls-row">
+            <div class="step-nav-btns">
+              <button class="btn" id="t3Prev">◀ 上一步</button>
+              <button class="btn btn-primary" id="t3Play">▶ 自動演化</button>
+              <button class="btn" id="t3Next">下一步 ▶</button>
+            </div>
+            <div class="step-dots" id="t3Dots"></div>
+          </div>
+          <div class="step-status-title" id="t3StepTitle"></div>
+        </div>
+      </div>
+
+      <div class="info-column">
+        <div class="info-card">
+          <h3 id="t3DetailHeading"></h3>
+          <div id="t3DetailBody"></div>
+        </div>
+
+        <div class="info-card">
+          <h3>🔍 枝條聯結區三大解剖樞紐</h3>
+          <p><strong>1. 枝皮脊線 (BBR, Branch Bark Ridge)：</strong>主幹與側枝上方交會隆起的樹皮脊線，標示內部木質部交疊轉折處，絕對不可切破。</p>
+          <p><strong>2. 枝領 (Branch Collar)：</strong>主幹組織每年環抱側枝基部形成的膨大環狀領口，是啟動癒合組織（Callus）與第四道牆的總指揮部。</p>
+          <p><strong>3. 樹枝保護區 (BPZ)：</strong>位於枝領內部的錐狀特化區，富含單寧、多酚與樹脂，能阻止死枝病菌進入主幹。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 4: THREE-CUT METHOD & DIAGNOSTIC ==================== -->
+    <section id="tab4" class="tab-panel">
+      <div class="stage-column">
+        <div class="viewport-box" id="viewportTab4">
+          <div class="submode-bar">
+            <button class="pill-btn active" data-t4mode="threecut">✅ 標準「三刀法」流程</button>
+            <button class="pill-btn" data-t4mode="onecut">⚠️ 錯誤「一刀切」撕皮災難</button>
+            <button class="pill-btn" data-t4mode="clinic">🩺 樹藝臨床迷思診斷</button>
+          </div>
+          <div class="viewport-tools">
+            <button class="tool-icon-btn" data-pz-target="pz4" data-pz-act="in" title="放大">＋</button>
+            <button class="tool-icon-btn" data-pz-target="pz4" data-pz-act="out" title="縮小">－</button>
+            <button class="tool-icon-btn" data-pz-target="pz4" data-pz-act="reset" title="重置視角">⟲</button>
+            <button class="tool-icon-btn js-quick-label" title="切換文字標籤">🏷️</button>
+          </div>
+          <svg id="svgTab4" class="svg-panzoom-stage" viewBox="0 0 860 540"></svg>
+          <div class="gesture-hint">可逐步執行每一刀並放大檢視切口角度與癒合圈形態</div>
+        </div>
+
+        <div class="step-bar">
+          <div class="step-controls-row">
+            <div class="step-nav-btns">
+              <button class="btn" id="t4Prev">◀ 上一步</button>
+              <button class="btn btn-primary" id="t4Play">▶ 自動演示</button>
+              <button class="btn" id="t4Next">下一步 ▶</button>
+            </div>
+            <div class="step-dots" id="t4Dots"></div>
+          </div>
+          <div class="step-status-title" id="t4StepTitle"></div>
+        </div>
+      </div>
+
+      <div class="info-column">
+        <div class="info-card">
+          <h3 id="t4DetailHeading"></h3>
+          <div id="t4DetailBody"></div>
+          <div id="t4QuizContainer"></div>
+        </div>
+
+        <div class="info-card">
+          <h3>🎯 完美修剪落鋸口訣</h3>
+          <p><strong>第一刀（下切）：</strong>枝領外 20~30cm 由下往上鋸入 1/3，預先截斷下方韌皮部纖維。</p>
+          <p><strong>第二刀（卸重）：</strong>再往外 3~5cm 由上往下鋸斷，大枝斷落時裂痕在第一刀止步。</p>
+          <p><strong>第三刀（修整）：</strong>從<strong>枝皮脊線（BBR）外側</strong>順著<strong>枝領自然外緣</strong>斜切，不傷枝領、不留殘椿，催生均勻「甜甜圈狀癒合組織」！</p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* ============================================================================
+   1. SHARED CONSTANTS & GLOBAL STATE
+   ============================================================================ */
+const COLORS = {
+  bark: '#6d4c3d',
+  barkDark: '#432d23',
+  cambium: '#4ade80',
+  sapwood: '#f3dcb2',
+  latewood: '#c89662',
+  heartwood: '#a46b3e',
+  decay: '#9333ea',
+  decayDark: '#581c87',
+  wall1: '#38bdf8',
+  wall2: '#fbbf24',
+  wall3: '#f97316',
+  wall4: '#ef4444',
+  callus: '#a3e635',
+  bpz: '#14b8a6'
+};
+
+const appState = {
+  activeTab: 'tab1',
+  showLabels: true,
+  showLegend: true,
+  autoPlayTimer: null,
+  autoPlayTab: null,
+
+  // Tab 1 State (3D CODIT)
+  t1Step: 5,
+  trunkOpacity: 0.92,
+  wallsVisible: { wall1: true, wall2: true, wall3: true, wall4: true },
+
+  // Tab 2 State (Micro & Hollow Tree)
+  t2Mode: 'micro', // 'micro' | 'hollow'
+  t2Step: 0,
+
+  // Tab 3 State (Pruning Comparison)
+  t3CutMode: 'proper', // 'proper' | 'stub' | 'flush'
+  t3Step: 0,
+
+  // Tab 4 State (3-Cut & Clinic)
+  t4Mode: 'threecut', // 'threecut' | 'onecut' | 'clinic'
+  t4Step: 0,
+  clinicAnswers: {}
+};
+
+/* ============================================================================
+   2. REUSABLE TOUCH & MOUSE PAN-ZOOM ENGINE FOR 2D SVG VIEWPORTS
+   ============================================================================ */
+class SvgPanZoom {
+  constructor(svgEl) {
+    this.svg = svgEl;
+    this.baseVB = { x: 0, y: 0, w: 860, h: 540 };
+    this.scale = 1;
+    this.tx = 0;
+    this.ty = 0;
+    this.pointers = new Map();
+    this.lastPinchDist = null;
+    this.lastMid = null;
+    this.bindEvents();
+  }
+
+  ensureCameraGroup() {
+    let g = this.svg.querySelector('g.pz-camera');
+    if (!g) {
+      g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      g.setAttribute('class', 'pz-camera');
+      while (this.svg.firstChild) {
+        g.appendChild(this.svg.firstChild);
+      }
+      this.svg.appendChild(g);
+    }
+    this.applyTransform();
+  }
+
+  applyTransform() {
+    const g = this.svg.querySelector('g.pz-camera');
+    if (g) {
+      g.setAttribute('transform', `translate(${this.tx.toFixed(2)}, ${this.ty.toFixed(2)}) scale(${this.scale.toFixed(4)})`);
+    }
+  }
+
+  clientToSvg(clientX, clientY) {
+    const rect = this.svg.getBoundingClientRect();
+    if (!rect.width || !rect.height) return { x: 430, y: 270 };
+    const ratioX = this.baseVB.w / rect.width;
+    const ratioY = this.baseVB.h / rect.height;
+    const ratio = Math.max(ratioX, ratioY);
+    const offsetX = (rect.width * ratio - this.baseVB.w) / 2;
+    const offsetY = (rect.height * ratio - this.baseVB.h) / 2;
+    return {
+      x: (clientX - rect.left) * ratio - offsetX,
+      y: (clientY - rect.top) * ratio - offsetY
+    };
+  }
+
+  zoomAt(factor, cx = 430, cy = 270) {
+    const nextScale = Math.min(4.2, Math.max(0.55, this.scale * factor));
+    const actualFactor = nextScale / this.scale;
+    this.tx = cx - (cx - this.tx) * actualFactor;
+    this.ty = cy - (cy - this.ty) * actualFactor;
+    this.scale = nextScale;
+    this.clampPan();
+    this.applyTransform();
+  }
+
+  clampPan() {
+    const maxOffset = 550 * this.scale;
+    this.tx = Math.max(-maxOffset, Math.min(maxOffset, this.tx));
+    this.ty = Math.max(-maxOffset, Math.min(maxOffset, this.ty));
+  }
+
+  reset() {
+    this.scale = 1;
+    this.tx = 0;
+    this.ty = 0;
+    this.applyTransform();
+  }
+
+  bindEvents() {
+    this.svg.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const pt = this.clientToSvg(e.clientX, e.clientY);
+      const factor = e.deltaY < 0 ? 1.14 : 0.88;
+      this.zoomAt(factor, pt.x, pt.y);
+    }, { passive: false });
+
+    this.svg.addEventListener('pointerdown', (e) => {
+      this.svg.setPointerCapture(e.pointerId);
+      this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (this.pointers.size === 2) {
+        const pts = Array.from(this.pointers.values());
+        this.lastPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+        this.lastMid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+      }
+    });
+
+    this.svg.addEventListener('pointermove', (e) => {
+      if (!this.pointers.has(e.pointerId)) return;
+      const prev = this.pointers.get(e.pointerId);
+      const curr = { x: e.clientX, y: e.clientY };
+      this.pointers.set(e.pointerId, curr);
+
+      if (this.pointers.size === 1) {
+        const p0 = this.clientToSvg(prev.x, prev.y);
+        const p1 = this.clientToSvg(curr.x, curr.y);
+        this.tx += (p1.x - p0.x);
+        this.ty += (p1.y - p0.y);
+        this.clampPan();
+        this.applyTransform();
+      } else if (this.pointers.size === 2) {
+        const pts = Array.from(this.pointers.values());
+        const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+        const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+        if (this.lastPinchDist && this.lastMid) {
+          const svgMidPrev = this.clientToSvg(this.lastMid.x, this.lastMid.y);
+          const svgMidCurr = this.clientToSvg(mid.x, mid.y);
+          this.tx += (svgMidCurr.x - svgMidPrev.x);
+          this.ty += (svgMidCurr.y - svgMidPrev.y);
+          if (this.lastPinchDist > 8) {
+            this.zoomAt(dist / this.lastPinchDist, svgMidCurr.x, svgMidCurr.y);
+          }
+        }
+        this.lastPinchDist = dist;
+        this.lastMid = mid;
+      }
+    });
+
+    const endPointer = (e) => {
+      this.pointers.delete(e.pointerId);
+      if (this.pointers.size < 2) {
+        this.lastPinchDist = null;
+        this.lastMid = null;
+      }
+    };
+    this.svg.addEventListener('pointerup', endPointer);
+    this.svg.addEventListener('pointercancel', endPointer);
+  }
+}
+
+const pzInstances = {
+  pz2: new SvgPanZoom(document.getElementById('svgTab2')),
+  pz3: new SvgPanZoom(document.getElementById('svgTab3')),
+  pz4: new SvgPanZoom(document.getElementById('svgTab4'))
+};
+
+/* ============================================================================
+   3. TAB 1: THREE.JS 3D CODIT INTERACTIVE MODEL
+   ============================================================================ */
+const T1_STEPS = [
+  {
+    short: '0. 健康樹幹解剖',
+    title: '步驟 1/6：健康樹幹立體解剖結構',
+    heading: '🌿 受傷前的健康樹木解剖基礎',
+    body: `
+      <p>觀察樹幹的三維組織層次：最外層為保護性的<strong>外樹皮與韌皮部</strong>，緊貼其內側的是薄如蟬翼卻至關重要的<strong>形成層（Cambium，翠綠色環）</strong>。</p>
+      <p>木材內部包含負責垂直輸水的<strong>邊材（Sapwood）</strong>、中心較深色的<strong>心材（Heartwood）</strong>、一圈圈同心圓狀的<strong>年輪晚材切向壁</strong>，以及如車輪輻條般放射排列的<strong>木射線薄壁細胞（Rays）</strong>。這些天然解剖結構正是 CODIT 防線的預備基地。</p>
+    `
+  },
+  {
+    short: '1. 創傷與病菌入侵',
+    title: '步驟 2/6：遭受物理創傷與病原菌入侵',
+    heading: '⚡ 樹皮破損，腐朽菌乘虛而入',
+    body: `
+      <p>當樹幹遭受機械擦撞、動物啃咬或修剪傷口時，外樹皮與形成層破裂，原本密閉濕潤的<strong>邊材輸水管道直接暴露於空氣與微生物中</strong>。</p>
+      <p>自然界中的木材腐朽真菌（紫色區域）與細菌立即附著傷口，試圖沿著充滿水分與養分的管道向<strong>上下、向內、向兩側圓周</strong>全面擴散。樹木無法像哺乳動物一樣將壞死細胞替換再生，必須立刻啟動 CODIT 隔絕系統！</p>
+    `
+  },
+  {
+    short: '2. 第一道牆 Wall 1',
+    title: '步驟 3/6：啟動第一道牆（阻止上下垂直擴散）',
+    heading: '💧 第一道牆 (Wall 1)：堵塞垂直輸水導管【最弱防線】',
+    body: `
+      <p><span class="badge-tag" style="background:var(--col-wall1);color:#082f49">強度：最弱</span>針對木質部的垂直輸水管道（被子植物導管／裸子植物管胞）。</p>
+      <p>鄰近的活薄壁細胞迅速分泌<strong>樹膠（Gums）、樹脂</strong>，或向導管腔內擠出氣球狀突起塞子——<strong>侵填體（Tyloses，青色封蓋與管塞）</strong>，將傷口上下的縱向管道塞滿。雖然能延緩病菌，但垂直方向仍是腐朽柱延伸最長的路徑。</p>
+    `
+  },
+  {
+    short: '3. 第二道牆 Wall 2',
+    title: '步驟 4/6：啟動第二道牆（阻止向內深入心材）',
+    heading: '🛡️ 第二道牆 (Wall 2)：年輪晚材切向壁屏障【中等強度】',
+    body: `
+      <p><span class="badge-tag" style="background:var(--col-wall2);color:#451a03">強度：大於 Wall 1</span>利用每一輪生長季結束時形成的<strong>年輪交界處（切向壁 Tangential walls）</strong>。</p>
+      <p>生長季末期產生的<strong>晚材（Latewood，琥珀金色弧面）</strong>細胞壁極厚、管腔極小且排列緊密，加上薄壁細胞分泌的抑菌化學物質，形成一道弧形物理與化學雙重盾牌，阻止腐朽菌繼續往樹幹中心深入。</p>
+    `
+  },
+  {
+    short: '4. 第三道牆 Wall 3',
+    title: '步驟 5/6：啟動第三道牆（鎖定側向圓周扇形區）',
+    heading: '🧱 第三道牆 (Wall 3)：放射狀射線細胞化學牆【內部最強】',
+    body: `
+      <p><span class="badge-tag" style="background:var(--col-wall3);color:#fff">強度：內部三牆最強</span>利用呈車輪輻條放射狀排列的<strong>木射線薄壁細胞（Ray parenchyma，橘色放射牆）</strong>。</p>
+      <p>射線細胞原本富含澱粉，是病菌最想橫向擴散的捷徑；但樹木迅速將澱粉轉化為高濃度的<strong>多酚類、單寧與樹脂</strong>，築起兩道放射狀化學高牆，將腐朽死死鎖在單一<strong>圓周扇形區域（Pie sector）</strong>內，防止環繞樹幹一圈！</p>
+    `
+  },
+  {
+    short: '5. 第四道牆與新木包覆',
+    title: '步驟 6/6：建立第四道牆「屏障帶」與新生邊材包覆',
+    heading: '🔥 第四道牆 (Wall 4)：最強屏障帶 (Barrier Zone)【絕對防線】',
+    body: `
+      <p><span class="badge-tag" style="background:var(--col-wall4);color:#fff">強度：最厚、最強、最絕對</span>由<strong>形成層（Cambium）</strong>在受傷當下及之後全新分化出的特化保護層（猩紅色環帶）。</p>
+      <p>這層細胞排列極度緊密，富含<strong>木質素與栓質（Suberin）</strong>，徹底將「受傷前的舊木材」與「受傷後外側新生長的健康邊材」一刀兩斷！傷口邊緣同時長出<strong>癒合木（Callus，亮綠捲邊）</strong>逐步封口，完美實踐「放棄內部傷區、外側持續新生」的生命哲學。</p>
+    `
+  }
+];
+
+let threeCtx = null;
+
+function createCrossSectionTexture() {
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 512;
+  const ctx = c.getContext('2d');
+  const cx = 256, cy = 256;
+
+  ctx.fillStyle = COLORS.sapwood;
+  ctx.fillRect(0, 0, 512, 512);
+
+  // Heartwood center
+  const gradH = ctx.createRadialGradient(cx, cy, 8, cx, cy, 118);
+  gradH.addColorStop(0, '#8c562c');
+  gradH.addColorStop(0.88, COLORS.heartwood);
+  gradH.addColorStop(1, COLORS.sapwood);
+  ctx.fillStyle = gradH;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 120, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Concentric Growth Rings (Latewood tangential walls)
+  for (let r = 22; r <= 248; r += 24) {
+    ctx.strokeStyle = r < 118 ? 'rgba(90, 48, 18, 0.55)' : 'rgba(185, 130, 75, 0.65)';
+    ctx.lineWidth = 3.2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // Radial Wood Rays
+  ctx.strokeStyle = 'rgba(160, 108, 60, 0.32)';
+  ctx.lineWidth = 1.2;
+  for (let i = 0; i < 72; i++) {
+    const ang = (i / 72) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(ang) * 14, cy + Math.sin(ang) * 14);
+    ctx.lineTo(cx + Math.cos(ang) * 250, cy + Math.sin(ang) * 250);
+    ctx.stroke();
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function createBarkTexture() {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 256;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = COLORS.bark;
+  ctx.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 90; i++) {
+    const x = Math.random() * 256;
+    ctx.fillStyle = i % 2 === 0 ? '#4e3529' : '#7e5a49';
+    ctx.fillRect(x, 0, 2 + Math.random() * 4, 256);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(4, 2);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function createRadialCutTexture() {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 512;
+  const ctx = c.getContext('2d');
+  // x=0 is pith center, x=256 is outer sapwood
+  const grad = ctx.createLinearGradient(0, 0, 256, 0);
+  grad.addColorStop(0, '#8c562c');
+  grad.addColorStop(0.45, COLORS.heartwood);
+  grad.addColorStop(0.48, COLORS.sapwood);
+  grad.addColorStop(1, COLORS.sapwood);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 256, 512);
+
+  // Vertical latewood lines
+  for (let x = 24; x < 252; x += 26) {
+    ctx.fillStyle = 'rgba(175, 118, 65, 0.45)';
+    ctx.fillRect(x, 0, 3, 512);
+  }
+  // Horizontal ray flecks
+  ctx.fillStyle = 'rgba(165, 105, 55, 0.22)';
+  for (let y = 10; y < 505; y += 22) {
+    ctx.fillRect(10, y, 240, 5);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function initThreeScene() {
+  const container = document.getElementById('viewport3d');
+  const labelsContainer = document.getElementById('labels3dContainer');
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(40, container.clientWidth / container.clientHeight, 0.1, 100);
+  camera.position.set(4.8, 3.6, 5.8);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(container.clientWidth, container.clientHeight);
+  container.insertBefore(renderer.domElement, container.firstChild);
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.minDistance = 3.6;
+  controls.maxDistance = 13.5;
+  controls.target.set(0, 0, 0);
+
+  // Lighting
+  scene.add(new THREE.AmbientLight(0xffffff, 0.85));
+  const dirLight1 = new THREE.DirectionalLight(0xfff8eb, 1.15);
+  dirLight1.position.set(6, 9, 7);
+  scene.add(dirLight1);
+  const dirLight2 = new THREE.DirectionalLight(0x93c5fd, 0.45);
+  dirLight2.position.set(-6, -3, -5);
+  scene.add(dirLight2);
+
+  const root = new THREE.Group();
+  scene.add(root);
+
+  // Geometry Parameters
+  // Trunk cutaway: missing wedge from theta = -0.55 to +0.35 so viewer sees straight into theta = 0.35 cutaway face!
+  const H = 4.6;
+  const R_OLD = 1.95;
+  const R_BARK_OLD = 2.08;
+  const THETA_START = 0.35;
+  const THETA_LEN = Math.PI * 2 - 0.92; // ~307 deg trunk, 53 deg cutaway wedge
+  const COMP_THETA_START = 0.35;
+  const COMP_THETA_LEN = 0.72; // Injured compartment fan sector
+  const R_WALL2 = 1.08; // Latewood ring boundary
+
+  const crossTex = createCrossSectionTexture();
+  const barkTex = createBarkTexture();
+  const radialTex = createRadialCutTexture();
+
+  const trunkMats = [];
+  const makeWoodMat = (opts) => {
+    const m = new THREE.MeshStandardMaterial({
+      roughness: 0.75,
+      metalness: 0.05,
+      transparent: true,
+      opacity: appState.trunkOpacity,
+      ...opts
+    });
+    trunkMats.push(m);
+    return m;
+  };
+
+  // 1. Old Sapwood + Heartwood Cylinder (open-ended so we place custom textured caps)
+  const woodCylGeo = new THREE.CylinderGeometry(R_OLD, R_OLD, H, 64, 1, true, THETA_START, THETA_LEN);
+  const woodSideMat = makeWoodMat({ color: 0xecd2a4, side: THREE.DoubleSide });
+  const woodCyl = new THREE.Mesh(woodCylGeo, woodSideMat);
+  root.add(woodCyl);
+
+  // Top & Bottom Cross-Section Discs
+  const topCapGeo = new THREE.CircleGeometry(R_OLD, 64, THETA_START - Math.PI / 2, THETA_LEN);
+  // Note: CircleGeometry lies in XY plane; rotated -PI/2 around X puts angle 0 along +X. Let's align angle carefully:
+  // In CylinderGeometry: x = r * sin(theta), z = r * cos(theta).
+  // If we build custom ShapeGeometry or rotate properly:
+  function buildSectorDisc(rInner, rOuter, thetaStart, thetaLen, yPos, mat, flipBottom = false) {
+    const geo = new THREE.RingGeometry(rInner, rOuter, 64, 1, 0, thetaLen);
+    // RingGeometry in XY: x = r*cos(phi), y = r*sin(phi).
+    // After rotateX(-PI/2): x = r*cos(phi), z = -r*sin(phi).
+    // To match Cylinder (x = r*sin(theta), z = r*cos(theta)), notice:
+    // Let's compute vertices directly for 100% exact alignment with CylinderGeometry!
+    const segs = 56;
+    const positions = [];
+    const uvs = [];
+    const indices = [];
+    for (let i = 0; i <= segs; i++) {
+      const t = thetaStart + (i / segs) * thetaLen;
+      const sinT = Math.sin(t), cosT = Math.cos(t);
+      // Inner vertex
+      positions.push(rInner * sinT, yPos, rInner * cosT);
+      uvs.push(0.5 + (rInner / (R_OLD * 1.02)) * 0.5 * sinT, 0.5 + (rInner / (R_OLD * 1.02)) * 0.5 * cosT);
+      // Outer vertex
+      positions.push(rOuter * sinT, yPos, rOuter * cosT);
+      uvs.push(0.5 + (rOuter / (R_OLD * 1.02)) * 0.5 * sinT, 0.5 + (rOuter / (R_OLD * 1.02)) * 0.5 * cosT);
+    }
+    for (let i = 0; i < segs; i++) {
+      const a = i * 2, b = a + 1, c = a + 2, d = a + 3;
+      if (!flipBottom) {
+        indices.push(a, b, c, b, d, c);
+      } else {
+        indices.push(a, c, b, b, c, d);
+      }
+    }
+    const customGeo = new THREE.BufferGeometry();
+    customGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    customGeo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    customGeo.setIndex(indices);
+    customGeo.computeVertexNormals();
+    return new THREE.Mesh(customGeo, mat);
+  }
+
+  const crossMat = makeWoodMat({ map: crossTex });
+  root.add(buildSectorDisc(0.001, R_OLD, THETA_START, THETA_LEN, H / 2, crossMat, false));
+  root.add(buildSectorDisc(0.001, R_OLD, THETA_START, THETA_LEN, -H / 2, crossMat, true));
+
+  // Two Radial Cutaway Planes for Trunk (at THETA_START and THETA_START + THETA_LEN)
+  function buildRadialPlane(theta, rInner, rOuter, height, mat) {
+    const w = rOuter - rInner;
+    const midR = (rInner + rOuter) / 2;
+    const geo = new THREE.PlaneGeometry(w, height);
+    const mesh = new THREE.Mesh(geo, mat);
+    // Align plane radially along theta
+    const group = new THREE.Group();
+    mesh.position.set(midR, 0, 0);
+    group.add(mesh);
+    // Group +X axis at rotation.y = phi points to (cos(phi), 0, -sin(phi)).
+    // We want +X axis to point to (sin(theta), 0, cos(theta)) -> phi = theta - PI/2 -> cos(theta-PI/2)=sin(theta), -sin(theta-PI/2)=cos(theta)!
+    group.rotation.y = theta - Math.PI / 2;
+    return group;
+  }
+
+  const radialCutMat = makeWoodMat({ map: radialTex, side: THREE.DoubleSide });
+  root.add(buildRadialPlane(THETA_START, 0, R_OLD, H, radialCutMat));
+  root.add(buildRadialPlane(THETA_START + THETA_LEN, 0, R_OLD, H, radialCutMat));
+
+  // Cambium Thin Green Sleeve (at r = R_OLD + 0.015)
+  const cambiumGroup = new THREE.Group();
+  const cambiumMat = new THREE.MeshStandardMaterial({
+    color: COLORS.cambium,
+    emissive: 0x166534,
+    emissiveIntensity: 0.35,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.9
+  });
+  const cambiumCyl = new THREE.Mesh(
+    new THREE.CylinderGeometry(R_OLD + 0.015, R_OLD + 0.015, H + 0.005, 64, 1, true, THETA_START + 0.25, THETA_LEN - 0.25),
+    cambiumMat
+  );
+  cambiumGroup.add(cambiumCyl);
+  root.add(cambiumGroup);
+
+  // Outer Bark (with a gap at the Wound site when step >= 1!)
+  const barkMat = makeWoodMat({ map: barkTex, side: THREE.DoubleSide });
+  // Healthy bark main wrap (excluding wound sector [0.35, 0.88])
+  const barkHealthy = new THREE.Mesh(
+    new THREE.CylinderGeometry(R_BARK_OLD, R_BARK_OLD, H, 56, 1, true, THETA_START + 0.52, THETA_LEN - 0.52),
+    barkMat
+  );
+  root.add(barkHealthy);
+  root.add(buildSectorDisc(R_OLD, R_BARK_OLD, THETA_START + 0.52, THETA_LEN - 0.52, H / 2, new THREE.MeshStandardMaterial({ color: COLORS.bark, side: THREE.DoubleSide }), false));
+
+  // Pre-injury intact bark patch over wound zone (only shown at Step 0!)
+  const intactBarkPatch = new THREE.Group();
+  intactBarkPatch.add(new THREE.Mesh(
+    new THREE.CylinderGeometry(R_BARK_OLD, R_BARK_OLD, H, 18, 1, true, THETA_START, 0.52),
+    barkMat
+  ));
+  intactBarkPatch.add(new THREE.Mesh(
+    new THREE.CylinderGeometry(R_OLD + 0.015, R_OLD + 0.015, H + 0.005, 18, 1, true, THETA_START, 0.25),
+    cambiumMat
+  ));
+  root.add(intactBarkPatch);
+
+  // Post-injury top & bottom bark above/below wound (shown when step >= 1)
+  const injuredBarkEnds = new THREE.Group();
+  const upperBark = new THREE.Mesh(
+    new THREE.CylinderGeometry(R_BARK_OLD, R_BARK_OLD, 1.55, 18, 1, true, THETA_START, 0.52),
+    barkMat
+  );
+  upperBark.position.y = (H - 1.55) / 2;
+  const lowerBark = upperBark.clone();
+  lowerBark.position.y = -(H - 1.55) / 2;
+  injuredBarkEnds.add(upperBark, lowerBark);
+
+  // Exposed dark bruised wound scar on outer sapwood at y in [-0.75, +0.75], theta in [0.35, 0.87]
+  const woundScarMesh = new THREE.Mesh(
+    new THREE.CylinderGeometry(R_OLD + 0.012, R_OLD + 0.012, 1.48, 18, 1, true, THETA_START, 0.52),
+    new THREE.MeshStandardMaterial({ color: 0x3b1d36, roughness: 0.9, side: THREE.DoubleSide })
+  );
+  injuredBarkEnds.add(woundScarMesh);
+  root.add(injuredBarkEnds);
+
+  // ==================== DECAY COLUMN (Purple) ====================
+  const decayGroup = new THREE.Group();
+  const decayMat = new THREE.MeshStandardMaterial({
+    color: COLORS.decay,
+    emissive: 0x4c1d95,
+    emissiveIntensity: 0.35,
+    roughness: 0.6,
+    side: THREE.DoubleSide
+  });
+  const DECAY_H = 3.1;
+  // Curved outer & inner shell + top/bottom + radial face of decay column
+  decayGroup.add(new THREE.Mesh(
+    new THREE.CylinderGeometry(R_OLD - 0.02, R_OLD - 0.02, DECAY_H, 20, 1, true, COMP_THETA_START + 0.01, COMP_THETA_LEN - 0.02),
+    decayMat
+  ));
+  decayGroup.add(new THREE.Mesh(
+    new THREE.CylinderGeometry(R_WALL2 + 0.03, R_WALL2 + 0.03, DECAY_H, 20, 1, true, COMP_THETA_START + 0.01, COMP_THETA_LEN - 0.02),
+    decayMat
+  ));
+  decayGroup.add(buildRadialPlane(COMP_THETA_START + 0.008, R_WALL2 + 0.03, R_OLD - 0.02, DECAY_H, decayMat));
+  // Top discoloration visible on top cross section (slightly faded column tip reaching top or inner view)
+  decayGroup.add(buildSectorDisc(R_WALL2 + 0.02, R_OLD - 0.02, COMP_THETA_START + 0.01, COMP_THETA_LEN - 0.02, H / 2 + 0.008,
+    new THREE.MeshStandardMaterial({ color: 0x7e22ce, transparent: true, opacity: 0.55, side: THREE.DoubleSide }), false));
+  root.add(decayGroup);
+
+  // ==================== WALL 1: Vertical Vessel Plugs (Cyan) ====================
+  const wall1Group = new THREE.Group();
+  const wall1Mat = new THREE.MeshStandardMaterial({
+    color: COLORS.wall1,
+    emissive: 0x0284c7,
+    emissiveIntensity: 0.45,
+    roughness: 0.3,
+    side: THREE.DoubleSide
+  });
+  // Upper & lower horizontal barrier discs capping the decay column
+  wall1Group.add(buildSectorDisc(R_WALL2 + 0.02, R_OLD - 0.01, COMP_THETA_START, COMP_THETA_LEN, DECAY_H / 2 + 0.04, wall1Mat, false));
+  wall1Group.add(buildSectorDisc(R_WALL2 + 0.02, R_OLD - 0.01, COMP_THETA_START, COMP_THETA_LEN, -DECAY_H / 2 - 0.04, wall1Mat, true));
+  // Tyloses plug capsules along vessels at top & bottom of decay column
+  const plugGeo = new THREE.CapsuleGeometry(0.055, 0.22, 6, 10);
+  for (let i = 0; i < 6; i++) {
+    const t = COMP_THETA_START + 0.07 + (i % 3) * 0.24;
+    const r = R_WALL2 + 0.22 + Math.floor(i / 3) * 0.42;
+    const pTop = new THREE.Mesh(plugGeo, wall1Mat);
+    pTop.position.set(r * Math.sin(t), DECAY_H / 2 + 0.14, r * Math.cos(t));
+    const pBot = pTop.clone();
+    pBot.position.y = -DECAY_H / 2 - 0.14;
+    wall1Group.add(pTop, pBot);
+  }
+  root.add(wall1Group);
+
+  // ==================== WALL 2: Latewood Tangential Ring Shield (Gold) ====================
+  const wall2Group = new THREE.Group();
+  const wall2Mat = new THREE.MeshStandardMaterial({
+    color: COLORS.wall2,
+    emissive: 0xb45309,
+    emissiveIntensity: 0.4,
+    roughness: 0.35,
+    side: THREE.DoubleSide
+  });
+  // Curved inner wall at R_WALL2 + top cross-section arc highlight
+  wall2Group.add(new THREE.Mesh(
+    new THREE.CylinderGeometry(R_WALL2, R_WALL2, H + 0.02, 28, 1, true, COMP_THETA_START - 0.01, COMP_THETA_LEN + 0.02),
+    wall2Mat
+  ));
+  wall2Group.add(buildSectorDisc(R_WALL2 - 0.05, R_WALL2 + 0.04, COMP_THETA_START - 0.01, COMP_THETA_LEN + 0.02, H / 2 + 0.015, wall2Mat, false));
+  root.add(wall2Group);
+
+  // ==================== WALL 3: Radial Ray Chemical Walls (Orange) ====================
+  const wall3Group = new THREE.Group();
+  const wall3Mat = new THREE.MeshStandardMaterial({
+    color: COLORS.wall3,
+    emissive: 0xc2410c,
+    emissiveIntensity: 0.42,
+    roughness: 0.35,
+    transparent: true,
+    opacity: 0.92,
+    side: THREE.DoubleSide
+  });
+  // Two radial ray walls bounding COMP_THETA_START and COMP_THETA_START + COMP_THETA_LEN
+  // Slightly inset at front cutaway edge so we still see the purple decay face right next to it, plus strong top-cap radial strips!
+  wall3Group.add(buildRadialPlane(COMP_THETA_START + COMP_THETA_LEN, R_WALL2, R_OLD, H + 0.02, wall3Mat));
+  // Front edge Wall 3 strip on upper/lower parts + top bar so user sees both fan walls AND interior decay!
+  const frontW3 = buildRadialPlane(COMP_THETA_START + 0.003, R_WALL2, R_OLD, H + 0.02,
+    new THREE.MeshStandardMaterial({ color: COLORS.wall3, emissive: 0xc2410c, emissiveIntensity: 0.35, transparent: true, opacity: 0.38, side: THREE.DoubleSide }));
+  wall3Group.add(frontW3);
+  wall3Group.add(buildSectorDisc(R_WALL2, R_OLD, COMP_THETA_START - 0.015, 0.045, H / 2 + 0.018, wall3Mat, false));
+  wall3Group.add(buildSectorDisc(R_WALL2, R_OLD, COMP_THETA_START + COMP_THETA_LEN - 0.025, 0.045, H / 2 + 0.018, wall3Mat, false));
+  root.add(wall3Group);
+
+  // ==================== WALL 4 (Crimson Barrier Zone) & NEW WOOD + CALLUS ====================
+  const wall4Group = new THREE.Group();
+  const wall4Mat = new THREE.MeshStandardMaterial({
+    color: COLORS.wall4,
+    emissive: 0x991b1b,
+    emissiveIntensity: 0.5,
+    roughness: 0.3,
+    side: THREE.DoubleSide
+  });
+  const R_WALL4 = R_OLD + 0.03;
+  // Barrier zone wraps around the cambial perimeter (except right over the open dead wound face)
+  wall4Group.add(new THREE.Mesh(
+    new THREE.CylinderGeometry(R_WALL4, R_WALL4, H + 0.03, 64, 1, true, THETA_START + 0.50, THETA_LEN - 0.50),
+    wall4Mat
+  ));
+  // Also above & below the wound face
+  const w4Upper = new THREE.Mesh(
+    new THREE.CylinderGeometry(R_WALL4, R_WALL4, 1.56, 20, 1, true, THETA_START, 0.50),
+    wall4Mat
+  );
+  w4Upper.position.y = (H - 1.55) / 2;
+  const w4Lower = w4Upper.clone();
+  w4Lower.position.y = -(H - 1.55) / 2;
+  wall4Group.add(w4Upper, w4Lower);
+  // Crisp red Barrier Zone ring on Top Cross-Section!
+  wall4Group.add(buildSectorDisc(R_OLD - 0.01, R_WALL4 + 0.045, THETA_START, THETA_LEN, H / 2 + 0.022, wall4Mat, false));
+
+  // New Healthy Sapwood Ring grown OUTSIDE Wall 4 + Lime Callus Woundwood Roll!
+  const R_NEW = R_OLD + 0.34;
+  const newWoodMat = makeWoodMat({ color: 0xfaf0d7, side: THREE.DoubleSide });
+  const newWoodShell = new THREE.Group();
+  newWoodShell.add(new THREE.Mesh(
+    new THREE.CylinderGeometry(R_NEW, R_NEW, H, 64, 1, true, THETA_START + 0.44, THETA_LEN - 0.44),
+    barkMat
+  ));
+  newWoodShell.add(buildSectorDisc(R_WALL4 + 0.04, R_NEW, THETA_START + 0.44, THETA_LEN - 0.44, H / 2 + 0.01, newWoodMat, false));
+  newWoodShell.add(buildRadialPlane(THETA_START + THETA_LEN, R_WALL4 + 0.02, R_NEW, H, newWoodMat));
+
+  // Callus / Woundwood rolling inward around wound margin (Lime Green)
+  const callusMat = new THREE.MeshStandardMaterial({
+    color: COLORS.callus,
+    emissive: 0x3f6212,
+    emissiveIntensity: 0.3,
+    roughness: 0.45
+  });
+  const callusRollRight = new THREE.Mesh(new THREE.CapsuleGeometry(0.14, 1.45, 8, 16), callusMat);
+  const cTheta = THETA_START + 0.47;
+  callusRollRight.position.set((R_OLD + 0.14) * Math.sin(cTheta), 0, (R_OLD + 0.14) * Math.cos(cTheta));
+  newWoodShell.add(callusRollRight);
+
+  wall4Group.add(newWoodShell);
+  root.add(wall4Group);
+
+  // ==================== 3D FLOATING PIN ANCHORS ====================
+  const labelDefs = [
+    { id: 'lbl-wound', text: '⚡ 創傷暴露區', color: '#c084fc', pos: new THREE.Vector3(1.42, 0.1, 1.52), minStep: 1 },
+    { id: 'lbl-decay', text: '🟣 腐朽擴散柱', color: COLORS.decay, pos: new THREE.Vector3(0.65, 0.5, 1.38), minStep: 1 },
+    { id: 'lbl-w1', text: 'Wall 1 垂直管塞 (最弱)', color: COLORS.wall1, pos: new THREE.Vector3(0.75, 1.72, 1.35), minStep: 2, wallKey: 'wall1' },
+    { id: 'lbl-w2', text: 'Wall 2 晚材切向壁', color: COLORS.wall2, pos: new THREE.Vector3(0.55, 2.34, 0.92), minStep: 3, wallKey: 'wall2' },
+    { id: 'lbl-w3', text: 'Wall 3 木射線化學牆', color: COLORS.wall3, pos: new THREE.Vector3(1.36, 2.34, 0.78), minStep: 4, wallKey: 'wall3' },
+    { id: 'lbl-w4', text: 'Wall 4 最強屏障帶', color: COLORS.wall4, pos: new THREE.Vector3(-1.35, 2.35, 1.48), minStep: 5, wallKey: 'wall4' },
+    { id: 'lbl-callus', text: '🌱 癒合木與健康新邊材', color: COLORS.callus, pos: new THREE.Vector3(1.62, -0.55, 1.48), minStep: 5, wallKey: 'wall4' },
+    { id: 'lbl-heart', text: '心材 Heartwood', color: COLORS.heartwood, pos: new THREE.Vector3(-0.35, 2.32, -0.35), minStep: 0, maxStep: 2 },
+    { id: 'lbl-cambium', text: '形成層 Cambium', color: COLORS.cambium, pos: new THREE.Vector3(0.4, 1.2, -2.02), minStep: 0, maxStep: 1 }
+  ];
+
+  labelDefs.forEach(def => {
+    const el = document.createElement('div');
+    el.className = 'pin-3d';
+    el.innerHTML = `<span class="pin-dot" style="background:${def.color}"></span><span>${def.text}</span>`;
+    labelsContainer.appendChild(el);
+    def.el = el;
+  });
+
+  threeCtx = {
+    scene, camera, renderer, controls, container, root, trunkMats,
+    intactBarkPatch, injuredBarkEnds, decayGroup,
+    wall1Group, wall2Group, wall3Group, wall4Group,
+    labelDefs
+  };
+
+  // Handle Resize
+  const ro = new ResizeObserver(() => {
+    if (!container.clientWidth || !container.clientHeight) return;
+    camera.aspect = container.clientWidth / container.clientHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(container.clientWidth, container.clientHeight);
+  });
+  ro.observe(container);
+
+  // Animation Loop
+  const tempV = new THREE.Vector3();
+  function animate() {
+    requestAnimationFrame(animate);
+    if (appState.activeTab !== 'tab1') return;
+
+    controls.update();
+    renderer.render(scene, camera);
+
+    // Update 3D HTML Labels
+    if (appState.showLabels) {
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      labelDefs.forEach(def => {
+        const stepOk = appState.t1Step >= def.minStep && (def.maxStep === undefined || appState.t1Step <= def.maxStep);
+        const wallOk = !def.wallKey || appState.wallsVisible[def.wallKey];
+        if (!stepOk || !wallOk) {
+          def.el.style.display = 'none';
+          return;
+        }
+        tempV.copy(def.pos);
+        tempV.project(camera);
+        if (tempV.z > 1) {
+          def.el.style.display = 'none';
+          return;
+        }
+        const x = (tempV.x * 0.5 + 0.5) * w;
+        const y = (-tempV.y * 0.5 + 0.5) * h;
+        def.el.style.display = 'flex';
+        def.el.style.left = `${x}px`;
+        def.el.style.top = `${y}px`;
+      });
+    }
+  }
+  animate();
+  syncTab1View();
+}
+
+function syncTab1View() {
+  if (!threeCtx) return;
+  const s = appState.t1Step;
+  threeCtx.intactBarkPatch.visible = (s === 0);
+  threeCtx.injuredBarkEnds.visible = (s >= 1);
+  threeCtx.decayGroup.visible = (s >= 1);
+  threeCtx.decayGroup.scale.y = s === 1 ? 0.45 : 1.0;
+
+  threeCtx.wall1Group.visible = (s >= 2) && appState.wallsVisible.wall1;
+  threeCtx.wall2Group.visible = (s >= 3) && appState.wallsVisible.wall2;
+  threeCtx.wall3Group.visible = (s >= 4) && appState.wallsVisible.wall3;
+  threeCtx.wall4Group.visible = (s >= 5) && appState.wallsVisible.wall4;
+
+  threeCtx.trunkMats.forEach(m => {
+    m.opacity = appState.trunkOpacity;
+    m.depthWrite = appState.trunkOpacity > 0.82;
+  });
+
+  // Update Step Bar & Info Card
+  const info = T1_STEPS[s];
+  document.getElementById('t1StepTitle').textContent = info.title;
+  document.getElementById('t1DetailHeading').innerHTML = info.heading;
+  document.getElementById('t1DetailBody').innerHTML = info.body;
+  renderStepDots('t1Dots', T1_STEPS.length, s, (idx) => {
+    stopAutoPlay();
+    appState.t1Step = idx;
+    syncTab1View();
+  });
+}
+
+/* ============================================================================
+   4. TAB 2: MICROSCOPIC CELLULAR DEFENSE & HOLLOW ANCIENT TREE TIMELINE
+   ============================================================================ */
+const T2_MICRO_STEPS = [
+  {
+    title: '步驟 1/5：核心哲學對比 — 動物「再生治癒」vs 樹木「隔絕封閉」',
+    heading: '🧬 Heal (治癒再生) vs. Seal / Compartmentalize (隔絕封閉)',
+    body: `
+      <p><strong>哺乳動物（皮膚肌肉）：</strong>受傷後會分解清除壞死細胞，並透過細胞分裂在<strong>原位置再生（Regenerate / Heal）</strong>出相同的新組織修復傷口。</p>
+      <p><strong>樹木（木質化細胞壁）：</strong>木材細胞受木質素固定，無法移動或原位替換！樹木採取的是 <strong>CODIT 隔絕策略</strong>——像潛水艇遇襲時「關閉水密艙門」一樣，放棄受損艙室並建立四道牆鎖死病菌，再由外側形成層長出全新健康組織將其包覆。</p>
+    `
+  },
+  {
+    title: '步驟 2/5：第一道牆微觀機制 — 侵填體（Tyloses）與樹膠堵塞垂直導管',
+    heading: '💧 Wall 1 微觀解剖：導管內的氣球狀塞子「侵填體」',
+    body: `
+      <p>被子植物的<strong>導管（Vessels）</strong>或裸子植物的<strong>管胞（Tracheids）</strong>是上下貫通的高速輸水管道。一旦受傷失壓或偵測到病菌：</p>
+      <p>緊鄰導管的活<strong>軸向薄壁細胞</strong>會穿過壁孔（Pits），向導管腔內膨大擠出囊泡狀的<strong>侵填體（Tyloses）</strong>並分泌樹膠與樹脂，塞住上下通道。但因真菌菌絲仍能分泌酵素緩慢穿透塞子，故為四牆中最弱的一道。</p>
+    `
+  },
+  {
+    title: '步驟 3/5：第二道牆微觀機制 — 晚材厚壁細胞切向屏障',
+    heading: '🛡️ Wall 2 微觀解剖：早材 vs 晚材的年輪切向壁',
+    body: `
+      <p>樹木在春夏生長季初期形成的<strong>早材（Earlywood）</strong>細胞腔大壁薄；而在秋冬生長季末期形成的<strong>晚材（Latewood）</strong>細胞則<strong>細胞壁極厚、管腔極狹窄、木質化程度高</strong>。</p>
+      <p>當腐朽菌試圖往樹心方向推進時，這些緊密排列的晚材<strong>切向細胞壁（Tangential walls）</strong>配合抑菌酚類物質，構成堅實的第二道防線。</p>
+    `
+  },
+  {
+    title: '步驟 4/5：第三道牆微觀機制 — 木射線薄壁細胞轉化化學高牆',
+    heading: '🧱 Wall 3 微觀解剖：射線細胞合成多酚與單寧酸',
+    body: `
+      <p><strong>木射線薄壁細胞（Ray parenchyma）</strong>在樹幹中呈放射狀成排延伸，平時儲存大量澱粉養分。受傷警訊傳達後，射線細胞立刻啟動代謝轉換：</p>
+      <p>將原本供給病菌的澱粉迅速合成為高毒性的<strong>多酚類（Polyphenols）、單寧（Tannins）與萜類樹脂</strong>，形成內部三道牆中最強的放射狀化學防線，將腐朽死鎖在扇形區內。</p>
+    `
+  },
+  {
+    title: '步驟 5/5：第四道牆微觀機制 — 形成層特化栓質化「屏障帶」',
+    heading: '🔥 Wall 4 微觀解剖：形成層分化出富含栓質（Suberin）的絕對防線',
+    body: `
+      <p>受傷瞬間，外圍存活的<strong>形成層（Cambium）</strong>立即改變細胞分裂與分化程式：不再製造一般輸水導管，而是密集製造出一層富含<strong>栓質（Suberin，軟木脂防水抗腐成分）與高木質素</strong>的特化薄壁細胞層——<strong>屏障帶（Barrier Zone）</strong>。</p>
+      <p>任何內部腐朽菌皆無法跨越這道防水抗酵素的絕對邊界，確保此後每年向外新生的邊材 100% 健康無虞！</p>
+    `
+  }
+];
+
+const T2_HOLLOW_STEPS = [
+  {
+    title: '第 0 年：壯年健康樹幹橫切面',
+    heading: '🌲 第 0 年：完整無傷的健康樹幹',
+    body: `<p>樹皮與形成層完整環繞樹幹，一圈圈同心年輪穩定累積，中央為深色心材，外圍為負責輸水的淡色邊材，放射狀木射線均勻分布。</p>`
+  },
+  {
+    title: '第 1 年：遭受大型撕裂創傷，病菌入侵',
+    heading: '⚡ 第 1 年：暴風斷枝或機械撞擊造成大傷口',
+    body: `<p>右側樹皮與形成層大面積剝落，暴露的邊材立即遭受空氣氧化與木材腐朽真菌（紫色）入侵。</p>`
+  },
+  {
+    title: '第 3 年：CODIT 四道牆全面啟動，傷口邊緣開始捲入',
+    heading: '🛡️ 第 3 年：鎖定扇形腐朽區 ＋ 建立紅色 Wall 4 屏障帶',
+    body: `<p>內部由 <strong>Wall 2（晚材弧線）</strong>與 <strong>Wall 3（兩側木射線牆）</strong>將腐朽侷限在扇形區；外圍形成層立刻築起紅色 <strong>Wall 4 屏障帶</strong>，傷口兩側長出亮綠色<strong>羊角狀癒合木（Ram's horns）</strong>開始向傷口中心包捲。</p>`
+  },
+  {
+    title: '第 15 年：癒合組織完全封口，外側包裹健康新年輪',
+    heading: '🌿 第 15 年：傷口封閉，腐朽被永久封印在內部',
+    body: `<p>兩側癒合木終於在傷口中央會合封閉，恢復連續的形成層環！此後每年長出的新年輪都位於 <strong>Wall 4 外側</strong>，完全不受內部舊腐朽區影響。</p>`
+  },
+  {
+    title: '第 45 年：再次遭受新創傷，內部舊防線漸被突破',
+    heading: '🍄 第 45 年：歲月累積多次創傷，心材開始腐朽分解',
+    body: `<p>數十年間樹木左上方又遭遇另一處雷擊斷枝新傷口（建立第二道新的 Wall 4！）。同時，內部較弱的舊 Wall 2 經數十年真菌酵素侵蝕而突破，缺乏活細胞的心材開始腐朽瓦解。</p>`
+  },
+  {
+    title: '第 100+ 年：千年古樹「與死共存」— 內部中空卻枝繁葉茂',
+    heading: '🏛️ 第 100+ 年：外活內空的千年古樹奇蹟',
+    body: `<p>古老的心材與早期受傷木已完全分解成<strong>中空樹洞</strong>（甚至成為貓頭鷹與松鼠的棲所），但古樹並未死亡！因為<strong>多道紅色 Wall 4 屏障帶死守邊界</strong>，最外圈的新生邊材、形成層與韌皮部依然生機勃勃，支撐整座樹冠繁茂生長。</p>`
+  }
+];
+
+function renderTab2() {
+  const svg = document.getElementById('svgTab2');
+  const stepsArr = appState.t2Mode === 'micro' ? T2_MICRO_STEPS : T2_HOLLOW_STEPS;
+  if (appState.t2Step >= stepsArr.length) appState.t2Step = 0;
+  const s = appState.t2Step;
+
+  let inner = '';
+  if (appState.t2Mode === 'micro') {
+    inner = buildTab2MicroSvg(s);
+  } else {
+    inner = buildTab2HollowSvg(s);
+  }
+
+  svg.innerHTML = `<g class="pz-camera">${inner}</g>`;
+  pzInstances.pz2.applyTransform();
+
+  const info = stepsArr[s];
+  document.getElementById('t2StepTitle').textContent = info.title;
+  document.getElementById('t2DetailHeading').innerHTML = info.heading;
+  document.getElementById('t2DetailBody').innerHTML = info.body;
+  renderStepDots('t2Dots', stepsArr.length, s, (idx) => {
+    stopAutoPlay();
+    appState.t2Step = idx;
+    renderTab2();
+  });
+}
+
+function buildTab2MicroSvg(step) {
+  if (step === 0) {
+    // Heal vs Seal side-by-side comparison
+    return `
+      <rect x="30" y="55" width="380" height="430" rx="16" fill="#17253a" stroke="#334155" stroke-width="2"/>
+      <rect x="450" y="55" width="380" height="430" rx="16" fill="#17253a" stroke="#10b981" stroke-width="2"/>
+
+      <!-- Left: Mammal Regeneration (Heal) -->
+      <circle cx="220" cy="245" r="105" fill="#fca5a5" stroke="#ef4444" stroke-width="6"/>
+      <path d="M 195 140 L 220 205 L 245 140" fill="#7f1d1d" opacity="0.25"/>
+      <!-- New dividing cells replacing wound -->
+      <g fill="#f87171" stroke="#fff" stroke-width="1.5">
+        <circle cx="210" cy="162" r="11"/><circle cx="230" cy="162" r="11"/>
+        <circle cx="220" cy="182" r="11"/><circle cx="202" cy="184" r="10"/><circle cx="238" cy="184" r="10"/>
+      </g>
+      <path d="M 165 170 Q 190 170 198 170" stroke="#fff" stroke-width="2.5" marker-end="url(#arrowW)"/>
+      <path d="M 275 170 Q 250 170 242 170" stroke="#fff" stroke-width="2.5"/>
+
+      <!-- Right: Tree CODIT Compartmentalization (Seal) -->
+      <circle cx="640" cy="255" r="122" fill="${COLORS.sapwood}" stroke="${COLORS.bark}" stroke-width="12"/>
+      <circle cx="640" cy="255" r="96" fill="#e8cfa1" stroke="${COLORS.wall4}" stroke-width="6"/>
+      <circle cx="640" cy="255" r="52" fill="${COLORS.heartwood}" stroke="${COLORS.latewood}" stroke-width="2"/>
+      <!-- Sealed Decay Pie Sector inside Wall 4 -->
+      <path d="M 640 255 L 688 172 A 96 96 0 0 1 734 272 Z" fill="${COLORS.decay}" opacity="0.88"/>
+      <path d="M 666 210 A 52 52 0 0 1 691 264" fill="none" stroke="${COLORS.wall2}" stroke-width="6"/>
+      <line x1="666" y1="210" x2="688" y2="172" stroke="${COLORS.wall3}" stroke-width="6"/>
+      <line x1="691" y1="264" x2="734" y2="272" stroke="${COLORS.wall3}" stroke-width="6"/>
+      <!-- Callus closing outside -->
+      <path d="M 744 205 Q 765 232 746 258" fill="none" stroke="${COLORS.callus}" stroke-width="10" stroke-linecap="round"/>
+
+      <g class="svg-label-group" font-family="sans-serif">
+        <text x="220" y="95" text-anchor="middle" fill="#fda4af" font-size="20" font-weight="700">哺乳動物：治癒再生 (Heal)</text>
+        <text x="220" y="120" text-anchor="middle" fill="#cbd5e1" font-size="13">清除壞死組織，細胞分裂「原位替換修復」</text>
+        <rect x="130" y="380" width="180" height="36" rx="8" fill="#0f172a" stroke="#f87171"/>
+        <text x="220" y="403" text-anchor="middle" fill="#fecaca" font-size="14" font-weight="600">傷口消失、恢復原狀</text>
+
+        <text x="640" y="95" text-anchor="middle" fill="#6ee7b7" font-size="20" font-weight="700">樹木：隔絕封閉 (CODIT Seal)</text>
+        <text x="640" y="120" text-anchor="middle" fill="#cbd5e1" font-size="13">木質化細胞無法替換，築四道牆「永久封印傷區」</text>
+        <text x="720" y="232" fill="#fff" font-size="12" font-weight="700">腐朽鎖死</text>
+        <text x="605" y="148" fill="${COLORS.wall4}" font-size="13" font-weight="700">Wall 4 隔開新舊木</text>
+        <rect x="530" y="400" width="220" height="36" rx="8" fill="#0f172a" stroke="#10b981"/>
+        <text x="640" y="423" text-anchor="middle" fill="#a7f3d0" font-size="14" font-weight="600">傷區永留內部，外側新生包覆</text>
+      </g>
+    `;
+  }
+
+  if (step === 1) {
+    // Wall 1 Microscopic: Vertical Xylem Vessels + Parenchyma squeezing Tyloses balloons & Gum plugs
+    return `
+      <rect x="60" y="50" width="740" height="440" rx="16" fill="#142033" stroke="${COLORS.wall1}" stroke-width="2.5"/>
+      <!-- Adjacent Living Axial Parenchyma Columns -->
+      <g fill="#dcfce7" stroke="#22c55e" stroke-width="2">
+        <rect x="170" y="85" width="75" height="115" rx="8"/><rect x="170" y="208" width="75" height="115" rx="8"/><rect x="170" y="331" width="75" height="115" rx="8"/>
+        <rect x="575" y="85" width="75" height="115" rx="8"/><rect x="575" y="208" width="75" height="115" rx="8"/><rect x="575" y="331" width="75" height="115" rx="8"/>
+      </g>
+      <!-- Two Wide Vertical Xylem Vessels -->
+      <rect x="255" y="80" width="145" height="375" fill="#fef3c7" stroke="#b45309" stroke-width="5"/>
+      <rect x="420" y="80" width="145" height="375" fill="#fef3c7" stroke="#b45309" stroke-width="5"/>
+
+      <!-- Fungal Hyphae invading from middle wound (Purple) -->
+      <rect x="258" y="220" width="304" height="90" fill="${COLORS.decay}" opacity="0.82"/>
+      <path d="M 325 225 C 315 198, 345 188, 330 172" stroke="#e9d5ff" stroke-width="4" fill="none" stroke-linecap="round"/>
+      <path d="M 485 305 C 495 330, 470 342, 488 358" stroke="#e9d5ff" stroke-width="4" fill="none" stroke-linecap="round"/>
+
+      <!-- Wall 1 Tyloses (Balloon-like outgrowths squeezing from parenchyma pits into vessel lumen!) & Gum Plugs -->
+      <g fill="${COLORS.wall1}" stroke="#0369a1" stroke-width="3">
+        <!-- Upper Plugs -->
+        <ellipse cx="298" cy="158" rx="46" ry="26"/>
+        <ellipse cx="356" cy="148" rx="44" ry="25"/>
+        <ellipse cx="322" cy="130" rx="50" ry="22" fill="#7dd3fc"/>
+        <ellipse cx="522" cy="156" rx="46" ry="26"/>
+        <ellipse cx="466" cy="146" rx="45" ry="24"/>
+        <!-- Lower Plugs -->
+        <ellipse cx="300" cy="368" rx="46" ry="26"/>
+        <ellipse cx="355" cy="378" rx="44" ry="25"/>
+        <ellipse cx="520" cy="368" rx="46" ry="26"/>
+        <ellipse cx="468" cy="380" rx="45" ry="24"/>
+      </g>
+
+      <g class="svg-label-group" font-family="sans-serif">
+        <text x="430" y="38" text-anchor="middle" fill="${COLORS.wall1}" font-size="20" font-weight="700">第一道牆 (Wall 1) 微觀：侵填體 (Tyloses) 與樹膠堵塞垂直導管</text>
+        <text x="207" y="145" text-anchor="middle" fill="#14532d" font-size="13" font-weight="700">活薄壁</text>
+        <text x="207" y="165" text-anchor="middle" fill="#14532d" font-size="13" font-weight="700">細胞</text>
+        <text x="328" y="106" text-anchor="middle" fill="#0c4a6e" font-size="14" font-weight="700">健康輸水導管腔</text>
+        <rect x="272" y="136" width="276" height="32" rx="6" fill="rgba(8,47,73,0.85)" stroke="${COLORS.wall1}"/>
+        <text x="410" y="157" text-anchor="middle" fill="#bae6fd" font-size="14" font-weight="700">⬆ Wall 1：侵填體氣球塞子 ＋ 樹膠封鎖</text>
+        <text x="410" y="270" text-anchor="middle" fill="#fff" font-size="16" font-weight="700">⚡ 傷口處：腐朽真菌菌絲試圖上下竄流</text>
+        <rect x="272" y="356" width="276" height="32" rx="6" fill="rgba(8,47,73,0.85)" stroke="${COLORS.wall1}"/>
+        <text x="410" y="377" text-anchor="middle" fill="#bae6fd" font-size="14" font-weight="700">⬇ Wall 1：下方導管同步堵塞（最弱防線）</text>
+      </g>
+    `;
+  }
+
+  if (step === 2) {
+    // Wall 2 Microscopic: Earlywood large thin-walled cells vs Latewood thick tangential cell walls blocking inward hyphae
+    let cells = '';
+    // Left side: Heartwood / Previous Ring Earlywood (healthy)
+    for (let r = 0; r < 5; r++) {
+      for (let c = 0; c < 3; c++) {
+        cells += `<rect x="${110 + c * 62}" y="${105 + r * 68}" width="56" height="62" rx="10" fill="${COLORS.sapwood}" stroke="#c28e5c" stroke-width="3"/>`;
+      }
+    }
+    // Middle Band: WALL 2 - Dense thick-walled Latewood Tangential Barrier (Gold/Amber)
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 3; c++) {
+        cells += `<rect x="${312 + c * 34}" y="${105 + r * 42}" width="28" height="36" rx="4" fill="#fde68a" stroke="#b45309" stroke-width="8"/>`;
+      }
+    }
+    // Right side: Outer Injured Earlywood (Invaded by purple decay fungi, stopped at Wall 2!)
+    for (let r = 0; r < 5; r++) {
+      for (let c = 0; c < 4; c++) {
+        const infected = c >= 0;
+        cells += `<rect x="${435 + c * 70}" y="${105 + r * 68}" width="64" height="62" rx="12" fill="${infected ? '#d8b4fe' : COLORS.sapwood}" stroke="${infected ? COLORS.decay : '#c28e5c'}" stroke-width="3"/>`;
+      }
+    }
+
+    return `
+      <rect x="60" y="50" width="740" height="440" rx="16" fill="#142033" stroke="${COLORS.wall2}" stroke-width="2.5"/>
+      ${cells}
+      <!-- Wall 2 Highlight Frame -->
+      <rect x="304" y="96" width="112" height="354" rx="8" fill="none" stroke="${COLORS.wall2}" stroke-width="4" stroke-dasharray="8 4"/>
+      <!-- Fungal invasion arrows blocked at Wall 2 -->
+      <path d="M 695 270 L 426 270" stroke="${COLORS.decay}" stroke-width="8" stroke-linecap="round"/>
+      <polygon points="424,270 446,254 446,286" fill="${COLORS.decay}"/>
+      <circle cx="418" cy="270" r="18" fill="#ef4444"/>
+      <text x="418" y="276" text-anchor="middle" fill="#fff" font-size="18" font-weight="700">✕</text>
+
+      <g class="svg-label-group" font-family="sans-serif">
+        <text x="430" y="38" text-anchor="middle" fill="${COLORS.wall2}" font-size="20" font-weight="700">第二道牆 (Wall 2) 微觀：年輪晚材「厚壁切向細胞」阻擋向內深入</text>
+        <text x="200" y="86" text-anchor="middle" fill="#fde68a" font-size="15" font-weight="700">⬅ 內側（往心材方向：安全）</text>
+        <text x="360" y="86" text-anchor="middle" fill="${COLORS.wall2}" font-size="15" font-weight="700">Wall 2 晚材帶</text>
+        <text x="580" y="86" text-anchor="middle" fill="#e9d5ff" font-size="15" font-weight="700">外側受傷早材（腔大壁薄，遭病菌入侵）</text>
+        <rect x="255" y="454" width="230" height="28" rx="6" fill="#451a03" stroke="${COLORS.wall2}"/>
+        <text x="370" y="473" text-anchor="middle" fill="#fef08a" font-size="13" font-weight="700">晚材細胞壁極厚、腔極小，阻斷向內蔓延</text>
+      </g>
+    `;
+  }
+
+  if (step === 3) {
+    // Wall 3 Microscopic: Radial Ray Parenchyma bricks converting starch into Phenols/Tannins
+    let rayBricks = '';
+    for (let row = 0; row < 3; row++) {
+      for (let col = 0; col < 7; col++) {
+        rayBricks += `
+          <rect x="${125 + col * 88}" y="${205 + row * 38}" width="84" height="34" rx="5" fill="${COLORS.wall3}" stroke="#7c2d12" stroke-width="3"/>
+          <circle cx="${152 + col * 88}" cy="${222 + row * 38}" r="6" fill="#fef08a"/>
+          <circle cx="${182 + col * 88}" cy="${222 + row * 38}" r="5" fill="#ffedd5"/>
+        `;
+      }
+    }
+    return `
+      <rect x="60" y="50" width="740" height="440" rx="16" fill="#142033" stroke="${COLORS.wall3}" stroke-width="2.5"/>
+      <!-- Top Sector: Infected Xylem -->
+      <rect x="115" y="85" width="630" height="108" rx="10" fill="#6b21a8" opacity="0.78" stroke="#c084fc" stroke-width="2"/>
+      <!-- Middle Radial Wall 3: Ray Parenchyma Chemical Shield -->
+      ${rayBricks}
+      <!-- Bottom Sector: Healthy Adjacent Xylem -->
+      <rect x="115" y="330" width="630" height="115" rx="10" fill="${COLORS.sapwood}" stroke="#c89662" stroke-width="2"/>
+
+      <g class="svg-label-group" font-family="sans-serif">
+        <text x="430" y="38" text-anchor="middle" fill="${COLORS.wall3}" font-size="20" font-weight="700">第三道牆 (Wall 3) 微觀：木射線薄壁細胞合成「多酚、單寧與樹脂」</text>
+        <text x="430" y="145" text-anchor="middle" fill="#fff" font-size="16" font-weight="700">🟣 受感染扇形區（腐朽菌試圖橫向跨越圓周擴散 ⬇）</text>
+        <rect x="195" y="242" width="470" height="38" rx="8" fill="rgba(67,20,7,0.9)" stroke="#fed7aa" stroke-width="1.5"/>
+        <text x="430" y="266" text-anchor="middle" fill="#ffedd5" font-size="15" font-weight="700">🧱 Wall 3 木射線化學長城：澱粉轉化為高毒性多酚與單寧（內部最強！）</text>
+        <text x="430" y="393" text-anchor="middle" fill="#451a03" font-size="16" font-weight="700">🟢 鄰近圓周健康邊材扇形區（成功保全，未受感染）</text>
+      </g>
+    `;
+  }
+
+  // Step 4: Wall 4 Microscopic: Cambium differentiating Suberin + Lignin Barrier Zone separating old wood & new wood
+  let barrierCells = '';
+  for (let r = 0; r < 9; r++) {
+    barrierCells += `<rect x="385" y="${90 + r * 40}" width="58" height="36" rx="4" fill="${COLORS.wall4}" stroke="#7f1d1d" stroke-width="4"/>`;
+    barrierCells += `<rect x="447" y="${90 + r * 40}" width="32" height="36" rx="4" fill="#fb7185" stroke="#881337" stroke-width="3"/>`;
+  }
+  return `
+    <rect x="60" y="50" width="740" height="440" rx="16" fill="#142033" stroke="${COLORS.wall4}" stroke-width="2.5"/>
+    <!-- Left: Old Pre-Injury Infected Wood -->
+    <rect x="105" y="90" width="270" height="356" rx="10" fill="#581c87" stroke="#a855f7" stroke-width="2"/>
+    <!-- Center: Wall 4 Barrier Zone (Suberized & Lignified) -->
+    ${barrierCells}
+    <!-- Right: Newly Formed Healthy Sapwood + Green Cambium + Bark -->
+    <rect x="488" y="90" width="175" height="356" rx="8" fill="#fef9e7" stroke="#d4a373" stroke-width="2"/>
+    <rect x="670" y="90" width="28" height="356" rx="4" fill="${COLORS.cambium}" stroke="#15803d" stroke-width="2"/>
+    <rect x="705" y="90" width="60" height="356" rx="6" fill="${COLORS.bark}" stroke="#3e2723" stroke-width="2"/>
+
+    <g class="svg-label-group" font-family="sans-serif">
+      <text x="430" y="38" text-anchor="middle" fill="${COLORS.wall4}" font-size="20" font-weight="700">第四道牆 (Wall 4) 微觀：形成層全新打造栓質化「屏障帶 (Barrier Zone)」</text>
+      <text x="240" y="255" text-anchor="middle" fill="#f3e8ff" font-size="16" font-weight="700">受傷前既有舊木材</text>
+      <text x="240" y="280" text-anchor="middle" fill="#d8b4fe" font-size="13">（即使內部完全腐朽也無法外越）</text>
+
+      <rect x="332" y="454" width="205" height="30" rx="6" fill="#7f1d1d" stroke="${COLORS.wall4}"/>
+      <text x="434" y="474" text-anchor="middle" fill="#fecaca" font-size="13" font-weight="700">Wall 4：高栓質(Suberin)+木質素</text>
+
+      <text x="575" y="255" text-anchor="middle" fill="#451a03" font-size="16" font-weight="700">受傷後新生健康邊材</text>
+      <text x="575" y="280" text-anchor="middle" fill="#78350f" font-size="13">（100% 無菌健康輸水）</text>
+      <text x="684" y="270" text-anchor="middle" fill="#052e16" font-size="13" font-weight="700" transform="rotate(-90 684 270)">形成層 Cambium</text>
+      <text x="735" y="270" text-anchor="middle" fill="#fff" font-size="14" font-weight="700" transform="rotate(-90 735 270)">外樹皮與韌皮部</text>
+    </g>
+  `;
+}
+
+function buildTab2HollowSvg(step) {
+  const cx = 430, cy = 270;
+  // Radii grow over 100 years!
+  const radiiByStep = [135, 135, 150, 175, 202, 226];
+  const R = radiiByStep[step];
+
+  // Helper for polar point
+  const pt = (r, deg) => {
+    const rad = (deg * Math.PI) / 180;
+    return `${(cx + r * Math.cos(rad)).toFixed(1)} ${(cy + r * Math.sin(rad)).toFixed(1)}`;
+  };
+  const sectorPath = (rIn, rOut, a1, a2) => {
+    const large = (a2 - a1) > 180 ? 1 : 0;
+    return `M ${pt(rIn, a1)} L ${pt(rOut, a1)} A ${rOut} ${rOut} 0 ${large} 1 ${pt(rOut, a2)} L ${pt(rIn, a2)} A ${rIn} ${rIn} 0 ${large} 0 ${pt(rIn, a1)} Z`;
+  };
+
+  let rings = '';
+  for (let r = 28; r < R; r += 22) {
+    rings += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="rgba(165,110,60,0.45)" stroke-width="2"/>`;
+  }
+  let rays = '';
+  for (let a = 0; a < 360; a += 20) {
+    rays += `<line x1="${cx}" y1="${cy}" x2="${cx + R * Math.cos(a * Math.PI / 180)}" y2="${cy + R * Math.sin(a * Math.PI / 180)}" stroke="rgba(150,95,45,0.22)" stroke-width="1"/>`;
+  }
+
+  let specialLayers = '';
+  let labels = '';
+
+  if (step === 0) {
+    // Healthy Year 0
+    specialLayers += `
+      <circle cx="${cx}" cy="${cy}" r="${R}" fill="${COLORS.sapwood}" stroke="${COLORS.bark}" stroke-width="14"/>
+      <circle cx="${cx}" cy="${cy}" r="${R - 7}" fill="none" stroke="${COLORS.cambium}" stroke-width="3"/>
+      <circle cx="${cx}" cy="${cy}" r="62" fill="${COLORS.heartwood}"/>
+      ${rings}${rays}
+    `;
+    labels = `
+      <text x="${cx}" y="${cy + 5}" text-anchor="middle" fill="#fff" font-size="14" font-weight="700">健康心材</text>
+      <text x="${cx}" y="${cy - 92}" text-anchor="middle" fill="#451a03" font-size="14" font-weight="700">健康邊材年輪</text>
+      <text x="${cx + R + 18}" y="${cy}" fill="${COLORS.cambium}" font-size="14" font-weight="700">形成層與樹皮完整</text>
+    `;
+  } else if (step === 1) {
+    // Year 1: Large Wound on Right (-32 deg to +32 deg)
+    specialLayers += `
+      <circle cx="${cx}" cy="${cy}" r="${R}" fill="${COLORS.sapwood}"/>
+      <circle cx="${cx}" cy="${cy}" r="62" fill="${COLORS.heartwood}"/>
+      ${rings}${rays}
+      <path d="${sectorPath(108, R + 2, -32, 32)}" fill="${COLORS.decay}" opacity="0.85"/>
+      <path d="${sectorPath(R - 1, R + 12, 32, 328)}" fill="${COLORS.bark}"/>
+      <circle cx="${cx}" cy="${cy}" r="${R - 2}" fill="none" stroke="${COLORS.cambium}" stroke-width="3" stroke-dasharray="620 180" transform="rotate(32 ${cx} ${cy})"/>
+    `;
+    labels = `
+      <text x="${cx + R + 16}" y="${cy - 8}" fill="#e9d5ff" font-size="15" font-weight="700">⚡ 大型創傷缺口</text>
+      <text x="${cx + R + 16}" y="${cy + 14}" fill="#c084fc" font-size="13">樹皮剝落、腐朽菌入侵</text>
+    `;
+  } else if (step === 2) {
+    // Year 3: Wall 2, Wall 3, Wall 4 established + Callus Ram's horns starting
+    specialLayers += `
+      <circle cx="${cx}" cy="${cy}" r="${R}" fill="${COLORS.sapwood}" stroke="${COLORS.bark}" stroke-width="12"/>
+      <!-- Open wound notch on right -->
+      <path d="${sectorPath(132, R + 15, -22, 22)}" fill="#0b1120"/>
+      <circle cx="${cx}" cy="${cy}" r="62" fill="${COLORS.heartwood}"/>
+      ${rings}${rays}
+      <!-- Confined Decay Sector inside R=135 -->
+      <path d="${sectorPath(78, 135, -32, 32)}" fill="${COLORS.decay}" opacity="0.9"/>
+      <!-- Wall 2 Arc -->
+      <path d="M ${pt(78, -32)} A 78 78 0 0 1 ${pt(78, 32)}" fill="none" stroke="${COLORS.wall2}" stroke-width="6"/>
+      <!-- Wall 3 Rays -->
+      <line x1="${cx + 78 * Math.cos(-32 * Math.PI / 180)}" y1="${cy + 78 * Math.sin(-32 * Math.PI / 180)}" x2="${cx + 135 * Math.cos(-32 * Math.PI / 180)}" y2="${cy + 135 * Math.sin(-32 * Math.PI / 180)}" stroke="${COLORS.wall3}" stroke-width="6"/>
+      <line x1="${cx + 78 * Math.cos(32 * Math.PI / 180)}" y1="${cy + 78 * Math.sin(32 * Math.PI / 180)}" x2="${cx + 135 * Math.cos(32 * Math.PI / 180)}" y2="${cy + 135 * Math.sin(32 * Math.PI / 180)}" stroke="${COLORS.wall3}" stroke-width="6"/>
+      <!-- Wall 4 Red Circle at R=135 -->
+      <path d="M ${pt(135, 30)} A 135 135 0 1 1 ${pt(135, 330)}" fill="none" stroke="${COLORS.wall4}" stroke-width="6"/>
+      <!-- Callus Ram's Horns at wound lips -->
+      <circle cx="${cx + 142 * Math.cos(-24 * Math.PI / 180)}" cy="${cy + 142 * Math.sin(-24 * Math.PI / 180)}" r="12" fill="${COLORS.callus}" stroke="#15803d" stroke-width="2"/>
+      <circle cx="${cx + 142 * Math.cos(24 * Math.PI / 180)}" cy="${cy + 142 * Math.sin(24 * Math.PI / 180)}" r="12" fill="${COLORS.callus}" stroke="#15803d" stroke-width="2"/>
+    `;
+    labels = `
+      <text x="${cx - 195}" y="${cy - 115}" fill="${COLORS.wall4}" font-size="14" font-weight="700">Wall 4 屏障帶建立</text>
+      <text x="${cx + 162}" y="${cy - 48}" fill="${COLORS.callus}" font-size="14" font-weight="700">羊角狀癒合木捲入</text>
+      <text x="${cx + 106}" y="${cy + 5}" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">扇形封鎖</text>
+    `;
+  } else if (step === 3) {
+    // Year 15: Wound completely closed outside! Decay sealed inside R=135
+    specialLayers += `
+      <circle cx="${cx}" cy="${cy}" r="${R}" fill="#faf0d7" stroke="${COLORS.bark}" stroke-width="13"/>
+      <circle cx="${cx}" cy="${cy}" r="${R - 7}" fill="none" stroke="${COLORS.cambium}" stroke-width="3"/>
+      <circle cx="${cx}" cy="${cy}" r="135" fill="${COLORS.sapwood}"/>
+      <circle cx="${cx}" cy="${cy}" r="62" fill="${COLORS.heartwood}"/>
+      ${rings}${rays}
+      <path d="${sectorPath(78, 135, -32, 32)}" fill="${COLORS.decay}" opacity="0.92"/>
+      <path d="M ${pt(78, -32)} A 78 78 0 0 1 ${pt(78, 32)}" fill="none" stroke="${COLORS.wall2}" stroke-width="6"/>
+      <line x1="${cx + 78 * Math.cos(-32 * Math.PI / 180)}" y1="${cy + 78 * Math.sin(-32 * Math.PI / 180)}" x2="${cx + 135 * Math.cos(-32 * Math.PI / 180)}" y2="${cy + 135 * Math.sin(-32 * Math.PI / 180)}" stroke="${COLORS.wall3}" stroke-width="6"/>
+      <line x1="${cx + 78 * Math.cos(32 * Math.PI / 180)}" y1="${cy + 78 * Math.sin(32 * Math.PI / 180)}" x2="${cx + 135 * Math.cos(32 * Math.PI / 180)}" y2="${cy + 135 * Math.sin(32 * Math.PI / 180)}" stroke="${COLORS.wall3}" stroke-width="6"/>
+      <circle cx="${cx}" cy="${cy}" r="135" fill="none" stroke="${COLORS.wall4}" stroke-width="6"/>
+      <!-- Closed Callus Seam -->
+      <line x1="${cx + 136}" y1="${cy}" x2="${cx + R - 6}" y2="${cy}" stroke="${COLORS.callus}" stroke-width="5"/>
+    `;
+    labels = `
+      <text x="${cx + R + 16}" y="${cy + 4}" fill="${COLORS.callus}" font-size="14" font-weight="700">✅ 癒合木會合封閉傷口</text>
+      <text x="${cx}" y="${cy - 148}" text-anchor="middle" fill="#451a03" font-size="14" font-weight="700">外側長出健康新年輪</text>
+    `;
+  } else if (step === 4) {
+    // Year 45: Second wound at top-left (205 deg to 255 deg) + inner Wall 2 breached -> Heart rot starting!
+    specialLayers += `
+      <circle cx="${cx}" cy="${cy}" r="${R}" fill="#faf0d7" stroke="${COLORS.bark}" stroke-width="14"/>
+      ${rings}${rays}
+      <!-- Second newer Wall 4 at R=182 -->
+      <circle cx="${cx}" cy="${cy}" r="182" fill="none" stroke="${COLORS.wall4}" stroke-width="5" stroke-dasharray="10 4"/>
+      <path d="${sectorPath(135, 182, 205, 255)}" fill="${COLORS.decay}" opacity="0.88"/>
+      <!-- First Wall 4 at R=135 still holding firm outward! -->
+      <circle cx="${cx}" cy="${cy}" r="135" fill="none" stroke="${COLORS.wall4}" stroke-width="6"/>
+      <!-- Inner Wall 2 breached: Decay floods Heartwood! -->
+      <path d="${sectorPath(0, 135, -35, 35)}" fill="${COLORS.decay}"/>
+      <circle cx="${cx}" cy="${cy}" r="72" fill="#581c87" stroke="${COLORS.decay}" stroke-width="4"/>
+    `;
+    labels = `
+      <text x="${cx - 195}" y="${cy - 165}" fill="#e9d5ff" font-size="14" font-weight="700">⚡ 第二次新傷口與新 Wall 4</text>
+      <text x="${cx}" y="${cy + 5}" text-anchor="middle" fill="#f3e8ff" font-size="14" font-weight="700">舊 Wall 2 突破：心材腐朽</text>
+      <text x="${cx + 150}" y="${cy + 145}" fill="${COLORS.wall4}" font-size="13" font-weight="700">Wall 4 依然死守外圍！</text>
+    `;
+  } else {
+    // Year 100+: Ancient Hollow Tree! Dark hollow cavity inside R=135, thriving healthy outer sapwood ring outside Wall 4!
+    specialLayers += `
+      <circle cx="${cx}" cy="${cy}" r="${R}" fill="#faf0d7" stroke="${COLORS.bark}" stroke-width="16"/>
+      <circle cx="${cx}" cy="${cy}" r="${R - 8}" fill="none" stroke="${COLORS.cambium}" stroke-width="4"/>
+      ${rings}${rays}
+      <!-- Outer second Wall 4 -->
+      <circle cx="${cx}" cy="${cy}" r="182" fill="none" stroke="${COLORS.wall4}" stroke-width="5"/>
+      <!-- Primary Wall 4 holding the hollow boundary -->
+      <circle cx="${cx}" cy="${cy}" r="142" fill="#2e1065" stroke="${COLORS.wall4}" stroke-width="8"/>
+      <!-- Irregular Completely Hollow Cavity Center -->
+      <circle cx="${cx}" cy="${cy}" r="126" fill="#090d16"/>
+      <path d="M ${cx - 95} ${cy - 40} Q ${cx - 125} ${cy + 30} ${cx - 60} ${cy + 95} Q ${cx + 25} ${cy + 128} ${cx + 98} ${cy + 65} Q ${cx + 125} ${cy - 20} ${cx + 65} ${cy - 95} Q ${cx - 20} ${cy - 122} ${cx - 95} ${cy - 40} Z" fill="#05080f" stroke="#4c1d95" stroke-width="4"/>
+    `;
+    labels = `
+      <text x="${cx}" y="${cy - 8}" text-anchor="middle" fill="#94a3b8" font-size="18" font-weight="700">🏛️ 內部完全中空（樹洞）</text>
+      <text x="${cx}" y="${cy + 18}" text-anchor="middle" fill="#64748b" font-size="13">古老受傷木與心材已分解殆盡</text>
+      <text x="${cx}" y="${cy - 154}" text-anchor="middle" fill="${COLORS.wall4}" font-size="14" font-weight="700">Wall 4 絕對防線守護外側</text>
+      <text x="${cx}" y="${cy + 206}" text-anchor="middle" fill="#15803d" font-size="15" font-weight="700">🌿 外圈健康邊材與形成層持續支撐繁茂樹冠！</text>
+    `;
+  }
+
+  return `
+    ${specialLayers}
+    <g class="svg-label-group" font-family="sans-serif">
+      <text x="430" y="32" text-anchor="middle" fill="#f8fafc" font-size="19" font-weight="700">CODIT「與死共存」百年古樹橫切面演化模擬</text>
+      ${labels}
+    </g>
+  `;
+}
+
+/* ============================================================================
+   5. TAB 3: PRUNING & BRANCH COLLAR ANATOMY LAB
+   ============================================================================ */
+const T3_DATA = {
+  proper: {
+    name: '✅ 標準修剪（順應枝領外緣）',
+    steps: [
+      {
+        title: '階段 1/4：精準落鋸於枝皮脊線（BBR）外側與枝領外緣',
+        heading: '✅ 正確落鋸：完整保留「枝領」與「樹枝保護區 (BPZ)」',
+        body: `<p>鋸切線精準落在上方<strong>枝皮脊線（BBR）外側</strong>，順著下方膨大的<strong>枝領（Branch Collar）自然外緣</strong>斜切。</p><p>此時傷口截面積最小（接近正圓形），且主幹形成層與內部的藍綠色<strong>樹枝保護區（BPZ）</strong>毫髮無傷！</p>`
+      },
+      {
+        title: '階段 2/4：樹枝保護區（BPZ）迅速啟動高濃度化學防線',
+        heading: '🧪 BPZ 化學鎖死：病菌被擋在主幹門外',
+        body: `<p>切口暴露後，枝領基部內建的<strong>樹枝保護區（BPZ，藍綠色錐狀帶）</strong>立即釋放高濃度多酚、單寧與樹脂，與 CODIT 第一、三道牆協同封鎖切面，真菌孢子無法深入主幹木質部。</p>`
+      },
+      {
+        title: '階段 3/4：環狀形成層啟動 Wall 4 與均勻癒合木（Callus）',
+        heading: '🌱 環狀包覆：上下左右同步長出「水餃摺 / 甜甜圈」癒合木',
+        body: `<p>因為枝領周圍的<strong>分生組織樞紐（形成層）</strong>完整保留，傷口四周開始均勻向中心捲入亮綠色的<strong>癒合組織（Callus / Woundwood）</strong>，同時主幹內側建立連續的紅色 <strong>Wall 4 屏障帶</strong>。</p>`
+      },
+      {
+        title: '階段 4/4：數年後完美封閉傷口，主幹 100% 免於心材腐朽',
+        heading: '🏆 長期結果：傷口徹底密封，主幹健康強壯',
+        body: `<p>癒合木從四面八方完美合攏，外表形成漂亮的圓形封口，新生的健康邊材年復一年包覆其外，腐朽被徹底隔絕在極淺的切口表層，主幹結構零受損！</p>`
+      }
+    ]
+  },
+  stub: {
+    name: '❌ 留樹樁（Stub Cut 齊頭留殘椿）',
+    steps: [
+      {
+        title: '階段 1/4：錯誤齊頭切斷，留下一大截凸出「樹樁 (Stub)」',
+        heading: '❌ 致命錯誤一：遠離枝領齊頭鋸斷，留下殘椿',
+        body: `<p>修剪者因不敢靠近主幹，在遠離枝領處隨意鋸斷，留下一截長長的枝條殘樁。這截樹樁已失去側芽與葉片養分交流，即將成為沒有活細胞防禦的死木。</p>`
+      },
+      {
+        title: '階段 2/4：殘樁迅速乾枯死亡，淪為木材腐朽菌的完美溫床',
+        heading: '🍄 死木大道：腐朽真菌在殘樁內毫無阻礙大量繁殖',
+        body: `<p>脫離主幹養分供應的樹樁迅速壞死。木材腐朽菌最愛這種毫無活細胞抵抗的死木頭，菌絲在樹樁內大量增殖、分解纖維素與木質素，累積龐大感染勢能！</p><div class="warning-quote">⚠️ 此時位於基部的枝領形成層也被死樹樁卡住，根本無法包覆封閉傷口！</div>`
+      },
+      {
+        title: '階段 3/4：高濃度腐朽菌長驅直入，突破或繞過樹枝保護區',
+        heading: '💥 防線潰敗：真菌累積強大酵素勢能衝破枝領防線',
+        body: `<p>當龐大的腐朽菌團在長樹樁內培育成熟、推進至主幹交界時，由於距離過遠且菌量過大，天然的 BPZ 與 CODIT 第一、三道牆反應不及或被酵素瓦解，病菌直接攻入主幹！</p>`
+      },
+      {
+        title: '階段 4/4：引發主幹深層「心材腐朽 (Heart Rot)」與中空危機',
+        heading: '☠️ 長期災難：死椿腐爛脫落，留下直通主幹樹心的腐朽空洞',
+        body: `<p>數年後死樹樁腐朽斷落，但腐朽菌早已在主幹中心上下蔓延，造成嚴重的<strong>主幹心材腐朽（Heart rot）</strong>與結構空洞，大幅增加強風折斷風險！</p>`
+      }
+    ]
+  },
+  flush: {
+    name: '❌ 平貼切（Flush Cut 切毀枝領）',
+    steps: [
+      {
+        title: '階段 1/4：緊貼主幹平平鋸下，一刀割除枝領與枝皮脊線',
+        heading: '❌ 致命錯誤二：追求「平整美觀」而切毀枝領防禦總部',
+        body: `<p>修剪者誤以為切得越平貼主幹越乾淨，結果鋸片直接切穿<strong>枝皮脊線（BBR）與整個枝領</strong>！</p><p>這不僅切斷了主幹自身的輸水木質部，更讓<strong>傷口截面積暴增為原本的 2～3 倍大</strong>！</p>`
+      },
+      {
+        title: '階段 2/4：樹枝保護區 (BPZ) 與形成層指揮部雙雙遭到摧毀',
+        heading: '🚨 防線真空：主幹木質部完全赤裸暴露於病菌中',
+        body: `<p>原本儲存在枝領內的藍綠色<strong>樹枝保護區（BPZ）被整塊鋸掉</strong>，且傷口上下方的主幹形成層嚴重受損壞死（Dieback），無法在傷口上下端順利建立完整的第四道牆。</p>`
+      },
+      {
+        title: '階段 3/4：僅兩側長出畸形「C字/牛耳狀癒合木」，上下持續腐爛',
+        heading: '🩹 癒合失能：上下端形成層死亡，病菌直入主幹上下擴散',
+        body: `<p>臨床樹藝師一眼就能認出平貼切的後遺症：傷口只有左右兩側勉強長出腫大的條狀癒合木，<strong>上下兩端卻凹陷壞死無法合攏</strong>，腐朽菌毫無阻礙地在主幹內部上下竄流（突破微弱的 Wall 1）！</p>`
+      },
+      {
+        title: '階段 4/4：主幹形成巨大開放性腐朽凹洞與縱向裂縫',
+        heading: '☠️ 長期災難：主幹外層支撐力受損（比心材腐朽更危險！）',
+        body: `<p>平貼切直接破壞主幹最外圈力學強度最高的邊材與形成層，形成永遠無法癒合的巨大腐朽凹洞，甚至引發凍裂或日燒縱裂，嚴重危及整棵樹的結構安全。</p>`
+      }
+    ]
+  }
+};
+
+function renderTab3() {
+  const svg = document.getElementById('svgTab3');
+  const modeData = T3_DATA[appState.t3CutMode];
+  const s = appState.t3Step;
+
+  svg.innerHTML = `<g class="pz-camera">${buildTab3PruningSvg(appState.t3CutMode, s)}</g>`;
+  pzInstances.pz3.applyTransform();
+
+  const info = modeData.steps[s];
+  document.getElementById('t3StepTitle').textContent = `${modeData.name} — ${info.title}`;
+  document.getElementById('t3DetailHeading').innerHTML = info.heading;
+  document.getElementById('t3DetailBody').innerHTML = info.body;
+  renderStepDots('t3Dots', 4, s, (idx) => {
+    stopAutoPlay();
+    appState.t3Step = idx;
+    renderTab3();
+  });
+}
+
+function buildTab3PruningSvg(mode, step) {
+  // Longitudinal Trunk + Branch Collar Anatomy Coordinates
+  // Main trunk: x from 140 to 390, y from 30 to 510
+  // Heartwood center of trunk: x from 225 to 305
+  // Branch Collar bulges out on right side of trunk around y=195..365:
+  //   BBR (Branch Bark Ridge) top notch at (388, 205) -> ridge line inward to (355, 232)
+  //   Swollen lower Branch Collar shoulder at (442, 342) curving back to trunk at (390, 395)
+  //   Natural Target Pruning Line: from (395, 206) to (442, 338)!
+  //   Flush Cut Line: vertical straight through collar from (385, 175) to (385, 405)!
+  //   Stub Cut Line: far out on branch from (585, 132) to (625, 248)!
+
+  let branchStubRemains = '';
+  let cutLineOverlay = '';
+  let defenseAndDecay = '';
+  let callusOverlay = '';
+  let modeSpecificLabels = '';
+
+  // Does distal branch still show lightly in step 0 as ghost reference? Yes, dashed ghost of removed branch!
+  const ghostBranch = `
+    <path d="M 395 206 L 730 75 L 765 178 L 442 338 Z" fill="rgba(243,220,178,0.12)" stroke="rgba(203,213,225,0.3)" stroke-width="2" stroke-dasharray="7 5"/>
+  `;
+
+  if (mode === 'proper') {
+    // Intact Collar up to (395,206)-(442,338)
+    branchStubRemains = `
+      <path d="M 380 205 L 395 206 L 442 338 L 380 390 Z" fill="${COLORS.sapwood}"/>
+      <!-- Intact BPZ (Teal Cone inside Branch Collar) -->
+      <polygon points="393,214 436,332 342,308 345,248" fill="${COLORS.bpz}" opacity="${step >= 1 ? 0.92 : 0.55}"/>
+      <!-- Upper & Lower Collar Bark + Cambium -->
+      <path d="M 384 196 L 397 204" stroke="${COLORS.bark}" stroke-width="12" stroke-linecap="round"/>
+      <path d="M 442 338 Q 418 370 386 398" fill="none" stroke="${COLORS.bark}" stroke-width="14" stroke-linecap="round"/>
+      <path d="M 436 335 Q 414 366 382 395" fill="none" stroke="${COLORS.cambium}" stroke-width="4"/>
+    `;
+    cutLineOverlay = `<line x1="392" y1="188" x2="449" y2="355" stroke="#10b981" stroke-width="4" stroke-dasharray="8 4"/>`;
+
+    if (step >= 1) {
+      // Shallow surface discoloration stopped cold by BPZ!
+      defenseAndDecay += `<polygon points="395,208 441,336 426,332 387,214" fill="${COLORS.decay}" opacity="0.75"/>`;
+    }
+    if (step >= 2) {
+      // Wall 4 red line along trunk cambium & collar base
+      defenseAndDecay += `<path d="M 378 80 L 378 205 M 432 340 Q 408 368 378 396 L 378 495" fill="none" stroke="${COLORS.wall4}" stroke-width="5"/>`;
+      // Growing Callus lobes top & bottom
+      const rSize = step === 2 ? 18 : 42;
+      if (step === 2) {
+        callusOverlay = `
+          <ellipse cx="402" cy="222" rx="16" ry="${rSize}" transform="rotate(-20 402 222)" fill="${COLORS.callus}" stroke="#15803d" stroke-width="3"/>
+          <ellipse cx="434" cy="320" rx="16" ry="${rSize}" transform="rotate(-20 434 320)" fill="${COLORS.callus}" stroke="#15803d" stroke-width="3"/>
+        `;
+      } else {
+        // Step 3: Completely sealed woundwood arch + new sapwood ring!
+        callusOverlay = `
+          <path d="M 382 80 L 398 80 L 398 196 Q 445 265 452 338 Q 422 372 398 400 L 398 495 L 382 495 Z" fill="#faf0d7" stroke="${COLORS.bark}" stroke-width="8"/>
+          <path d="M 396 202 Q 456 268 444 338 Z" fill="${COLORS.callus}" stroke="#15803d" stroke-width="3"/>
+        `;
+      }
+    }
+    modeSpecificLabels = `
+      <text x="468" y="200" fill="#6ee7b7" font-size="15" font-weight="700">✅ 正確切線（枝領外緣）</text>
+      <text x="368" y="282" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">BPZ 保護區</text>
+    `;
+
+  } else if (mode === 'stub') {
+    // Long protruding Stub out to (585, 132) - (625, 248)
+    const stubColor = step === 0 ? COLORS.sapwood : (step === 1 ? '#cbb292' : '#6b21a8');
+    branchStubRemains = `
+      <polygon points="380,205 585,132 625,248 442,338 380,390" fill="${stubColor}" stroke="${COLORS.bark}" stroke-width="11" stroke-linejoin="round"/>
+      <polygon points="393,214 436,332 342,308 345,248" fill="${COLORS.bpz}" opacity="${step <= 1 ? 0.55 : 0.2}"/>
+    `;
+    cutLineOverlay = `<line x1="578" y1="112" x2="632" y2="268" stroke="#ef4444" stroke-width="4" stroke-dasharray="8 4"/>`;
+
+    if (step === 1) {
+      defenseAndDecay = `
+        <polygon points="480,170 583,134 622,246 515,299" fill="${COLORS.decay}" opacity="0.82"/>
+      `;
+    } else if (step === 2) {
+      // Decay overwhelms BPZ and enters trunk!
+      defenseAndDecay = `
+        <polygon points="315,235 583,134 622,246 315,345" fill="${COLORS.decay}" opacity="0.9"/>
+        <path d="M 378 80 L 378 200 M 378 395 L 378 495" stroke="${COLORS.wall4}" stroke-width="4"/>
+      `;
+      // Tiny frustrated callus stuck at base of dead stub!
+      callusOverlay = `
+        <circle cx="402" cy="202" r="11" fill="${COLORS.callus}" stroke="#15803d" stroke-width="2"/>
+        <circle cx="445" cy="340" r="11" fill="${COLORS.callus}" stroke="#15803d" stroke-width="2"/>
+      `;
+    } else if (step === 3) {
+      // Massive Heart Rot column up and down main trunk!
+      defenseAndDecay = `
+        <path d="M 230 95 Q 270 70 315 95 L 345 230 L 580 140 L 615 242 L 345 355 L 315 470 Q 270 495 230 470 Z" fill="${COLORS.decay}" opacity="0.93"/>
+        <ellipse cx="275" cy="285" rx="34" ry="125" fill="#1e0936" stroke="#c084fc" stroke-width="2"/>
+      `;
+      callusOverlay = `
+        <circle cx="406" cy="200" r="15" fill="${COLORS.callus}" stroke="#15803d" stroke-width="2"/>
+        <circle cx="448" cy="342" r="15" fill="${COLORS.callus}" stroke="#15803d" stroke-width="2"/>
+      `;
+    }
+    modeSpecificLabels = `
+      <text x="642" y="185" fill="#fca5a5" font-size="15" font-weight="700">❌ 殘留死樹樁 (Stub)</text>
+      ${step >= 2 ? `<text x="485" y="232" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">死木溫床突破防線 ⬅</text>` : ''}
+      ${step === 3 ? `<text x="275" y="288" text-anchor="middle" fill="#f3e8ff" font-size="14" font-weight="700">主幹心材腐朽中空！</text>` : ''}
+    `;
+
+  } else {
+    // FLUSH CUT: Sliced straight vertically at x = 382, completely removing Branch Collar, BBR, and BPZ!
+    branchStubRemains = `
+      <!-- Collar sliced off! Huge vertical wound from y=182 to y=396 -->
+      <line x1="382" y1="182" x2="382" y2="396" stroke="#7f1d1d" stroke-width="6"/>
+    `;
+    cutLineOverlay = `<line x1="382" y1="152" x2="382" y2="425" stroke="#ef4444" stroke-width="4" stroke-dasharray="8 4"/>`;
+
+    if (step >= 1) {
+      // Cambial dieback above & below flush cut + rapid decay invading outer sapwood vertically!
+      const spreadY = step === 1 ? 35 : (step === 2 ? 85 : 135);
+      defenseAndDecay = `
+        <path d="M 381 ${182 - spreadY} L 381 ${396 + spreadY} L 295 ${365 + spreadY * 0.5} L 295 ${210 - spreadY * 0.5} Z" fill="${COLORS.decay}" opacity="0.9"/>
+      `;
+    }
+    if (step >= 2) {
+      // Deformed side-only callus rolls, failing to close top & bottom, leaving sunken rotting cavity!
+      callusOverlay = `
+        <path d="M 382 178 Q 395 288 382 400" fill="none" stroke="${COLORS.callus}" stroke-width="${step === 2 ? 7 : 11}" stroke-dasharray="18 14"/>
+      `;
+      if (step === 3) {
+        defenseAndDecay += `<ellipse cx="352" cy="290" rx="28" ry="88" fill="#180828" stroke="#f87171" stroke-width="2"/>`;
+      }
+    }
+    modeSpecificLabels = `
+      <text x="405" y="172" fill="#fca5a5" font-size="15" font-weight="700">❌ 平貼切（割除枝領與 BBR）</text>
+      <text x="405" y="290" fill="#fda4af" font-size="14" font-weight="700">巨大開放傷口（無 BPZ 防護）</text>
+      ${step >= 2 ? `<text x="340" y="135" text-anchor="middle" fill="#e9d5ff" font-size="13" font-weight="700">⬆ 上下形成層壞死、腐朽縱向蔓延 ⬇</text>` : ''}
+    `;
+  }
+
+  return `
+    <!-- Main Trunk Longitudinal Section -->
+    <rect x="148" y="45" width="234" height="450" fill="${COLORS.sapwood}"/>
+    <!-- Trunk Heartwood -->
+    <rect x="225" y="45" width="80" height="450" fill="${COLORS.heartwood}"/>
+    <!-- Trunk Vertical Wood Grain Fibers -->
+    <g stroke="rgba(165,105,50,0.35)" stroke-width="2" fill="none">
+      <line x1="175" y1="45" x2="175" y2="495"/><line x1="200" y1="45" x2="200" y2="495"/>
+      <line x1="330" y1="45" x2="330" y2="495"/><line x1="355" y1="45" x2="355" y2="495"/>
+    </g>
+    <!-- Left Bark & Cambium -->
+    <rect x="134" y="45" width="14" height="450" fill="${COLORS.bark}"/>
+    <line x1="148" y1="45" x2="148" y2="495" stroke="${COLORS.cambium}" stroke-width="4"/>
+    <!-- Right Bark & Cambium (above & below junction) -->
+    <rect x="382" y="45" width="14" height="145" fill="${COLORS.bark}"/>
+    <line x1="380" y1="45" x2="380" y2="190" stroke="${COLORS.cambium}" stroke-width="4"/>
+    <rect x="382" y="395" width="14" height="100" fill="${COLORS.bark}"/>
+    <line x1="380" y1="395" x2="380" y2="495" stroke="${COLORS.cambium}" stroke-width="4"/>
+
+    ${ghostBranch}
+    ${branchStubRemains}
+    <!-- Branch Bark Ridge (BBR) dark line if not flush cut -->
+    ${mode !== 'flush' ? `<path d="M 388 192 L 355 232" stroke="#3e2723" stroke-width="6" stroke-linecap="round"/>` : ''}
+    ${defenseAndDecay}
+    ${callusOverlay}
+    ${cutLineOverlay}
+
+    <g class="svg-label-group" font-family="sans-serif">
+      <text x="265" y="30" text-anchor="middle" fill="#f8fafc" font-size="18" font-weight="700">主幹與側枝聯結區（Branch Collar）縱切面解剖</text>
+      <text x="265" y="72" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">主幹心材</text>
+      <text x="188" y="72" text-anchor="middle" fill="#451a03" font-size="13" font-weight="700">主幹邊材</text>
+      ${mode !== 'flush' ? `
+        <text x="320" y="195" text-anchor="end" fill="#fde68a" font-size="13" font-weight="700">枝皮脊線 (BBR) ➔</text>
+        <text x="462" y="372" fill="#fde68a" font-size="13" font-weight="700">↖ 膨大枝領基部</text>
+      ` : ''}
+      ${modeSpecificLabels}
+    </g>
+  `;
+}
+
+/* ============================================================================
+   6. TAB 4: THREE-CUT METHOD HANDS-ON SIMULATOR & ARBORIST DIAGNOSTIC CLINIC
+   ============================================================================ */
+const T4_THREECUT_STEPS = [
+  {
+    title: '步驟 1/5：落鋸前定位 — 辨識枝皮脊線（BBR）、枝領與枝條重力張力',
+    heading: '🔍 落鋸前評估：為什麼粗重側枝不能直接切在枝領外緣？',
+    body: `<p>觀察右側粗重側枝：沉重的枝葉重量會在枝條下方樹皮產生強大的壓縮與拉扯應力。若直接在枝領外緣一刀往下鋸，鋸到一半時枝條會因重力折斷，<strong>順勢把主幹下方的樹皮與形成層整片撕扯下來</strong>！因此必須採用專業「三刀法」。</p>`
+  },
+  {
+    title: '步驟 2/5：第一刀（下切口 Undercut）— 建立「止裂安全斷點」',
+    heading: '🪚 第一刀（下切口）：距枝領外約 20~30cm 處由下往上切入 1/3',
+    body: `<p>在距離枝領外約 20～30 公分處，將鋸子<strong>由下往上鋸入枝條直徑約 1/4 至 1/3 深度</strong>（勿切太深以免夾鋸）。</p><p>這一刀預先切斷了枝條下側連續的樹皮與木質纖維，為主幹樹皮設下絕對安全的「止裂防火牆」！</p>`
+  },
+  {
+    title: '步驟 3/5：第二刀（上切口 Top Cut）— 安全卸除沉重側枝重量',
+    heading: '🪵 第二刀（卸重切口）：第一刀外側 3~5cm 由上往下鋸斷',
+    body: `<p>在第一刀再往外約 3～5 公分處<strong>由上往下鋸斷</strong>。當鋸至一半、沉重大枝因重力折斷墜落時，縱向劈裂線會精準傳導至第一刀缺口處瞬間止步！主幹枝領毫髮無傷，僅留下一小截輕巧短樁。</p>`
+  },
+  {
+    title: '步驟 4/5：第三刀（最終切口 Final Cut）— 順應枝領自然外緣移除短樁',
+    heading: '✨ 第三刀（精準修整）：從 BBR 外側順著枝領外緣斜切',
+    body: `<p>此時殘留短樁已毫無下墜重量負擔，可從容對準<strong>枝皮脊線（BBR）外側至枝領下緣外側</strong>平順鋸下。切口平滑乾淨、不留殘椿、不傷枝領！</p>`
+  },
+  {
+    title: '步驟 5/5：完美癒合檢視 — 形成「甜甜圈狀（Donut Callus）」環狀封口',
+    heading: '🍩 黃金標準驗證：正面檢視均勻「甜甜圈狀癒合圈」',
+    body: `<p>正面觀察切口：由於枝領周圍形成層 360° 完整無損，樹木迅速建立內部 <strong>Wall 4 屏障帶</strong>，並在傷口四周長出厚度均勻、飽滿圓潤的<strong>甜甜圈狀癒合木（Donut-shaped woundwood）</strong>，在最短時間內完成自然封口！</p>`
+  }
+];
+
+const T4_ONECUT_STEPS = [
+  {
+    title: '災難步驟 1/3：直接在靠近主幹處「由上往下」單刀直鋸',
+    heading: '⚠️ 錯誤示範：未做下切口，直接從上方一刀往下鋸',
+    body: `<p>修剪者貪圖省事，直接在枝領附近由上往下單刀鋸切。當鋸片切過枝條直徑約 2/3 時，剩餘的下方木質部已撐不住遠端沉重的枝葉力矩……</p>`
+  },
+  {
+    title: '災難步驟 2/3：枝條重力瞬間扯裂下方樹皮，撕開主幹形成層！',
+    heading: '💥 撕皮慘劇（Bark Rip）：主幹被扯出長達數十公分的縱向傷口',
+    body: `<p>沉重大枝轟然下墜，連帶將下方韌皮部、形成層與邊材像撕香蕉皮一樣<strong>沿著主幹一路往下撕裂</strong>！原本只需要碗口大小的修剪切口，瞬間變成巨大的主幹撕裂傷。</p>`
+  },
+  {
+    title: '災難步驟 3/3：形成層大面積喪失，腐朽菌直入主幹下半部',
+    heading: '☠️ 嚴重後果：失去枝領保護，形成永久性腐朽縱溝',
+    body: `<p>下方枝領與主幹形成層已被徹底扯毀，無法啟動完整的 CODIT 第四道牆，腐朽菌從長條撕裂面長驅直入，嚴重破壞樹木輸導系統與結構力學！</p>`
+  }
+];
+
+const T4_CLINIC_CASES = [
+  {
+    title: '臨床診斷 1/3：修剪後該不該塗抹「傷口塗抹劑 / 油漆（Wound Paint）」？',
+    heading: '🩺 樹藝迷思診斷題 1：大型修剪傷口需要塗黑漆或癒合膏防水防菌嗎？',
+    body: `<p>傳統園藝常在修剪切口塗抹厚厚一層柏油、油漆或人工樹脂，認為可以「消毒防水」。根據 Dr. Alex Shigo 的 CODIT 解剖研究與現代國際樹藝學會（ISA）實證，您認為正確作法是？</p>`,
+    options: [
+      { text: 'A. 應該厚塗油漆或柏油，才能幫樹木封住傷口防止病菌進入', correct: false },
+      { text: 'B. 一般修剪不應塗抹封閉性塗料！塗料會龜裂鎖住水氣、阻礙木質部氧化防禦並成為真菌溫室，只要切對枝領讓樹木自然啟動 CODIT 即可', correct: true },
+      { text: 'C. 應該先切平枝領再塗水泥封死最牢固', correct: false }
+    ],
+    explanation: '✅ 正確解析：Dr. Shigo 經數千棵解剖實驗證實，人工封閉塗料很快會產生微小裂縫，反而將雨水與凝結水鎖在塗層下方，提供腐朽真菌陰暗潮濕的完美培養皿，並干擾形成層有氧呼吸與癒合木發育！正確保留枝領的自然切口才是最強防線。（註：僅極少數特定疫區如北美橡樹萎凋病傳播季才需特殊保護）。'
+  },
+  {
+    title: '臨床診斷 2/3：從傷口癒合形狀「看圖辦案」— 甜甜圈 vs C字牛耳疤',
+    heading: '🩺 臨床判讀題 2：觀察樹幹上這兩處舊傷口的癒合木形狀，何者代表當年修剪正確？',
+    body: `<p>檢視畫面中左、右兩個修剪三年後的傷口正面照：左側呈現<strong>360度均勻圓環（甜甜圈狀）</strong>；右側則呈現<strong>僅左右兩側隆起、上下端凹陷潰爛的「C字／牛耳狀」</strong>。請問右側發生了什麼事？</p>`,
+    options: [
+      { text: 'A. 右側是因為留了太長的樹樁（Stub Cut）', correct: false },
+      { text: 'B. 右側當年遭受了「平貼切除（Flush Cut）」，上下端的枝皮脊線與枝領形成層被切毀，導致上下無法長出癒合木', correct: true },
+      { text: 'C. 右側是正常的自然老化現象', correct: false }
+    ],
+    explanation: '✅ 正確解析：這是專業樹藝師現場勘驗的經典指標！完整保留枝領的切口會形成 360° 均勻的「甜甜圈癒合圈（Donut callus）」；而「平貼切」割斷了主幹上下向的維管束與形成層，造成上下端壞死凹陷，只能靠左右兩側勉強長出條狀癒合木。'
+  },
+  {
+    title: '臨床診斷 3/3：老樹樹洞裡有腐朽木，該把腐木挖乾淨並灌水泥補起來嗎？',
+    heading: '🩺 樹藝迷思診斷題 3：古樹樹洞「清創挖刮＋灌水泥填補」救樹還是害樹？',
+    body: `<p>早期常見人們拿鐵鑿把古樹樹洞內的腐朽木「刮到見白肉」，再灌入水泥或磚塊填平。若從 <strong>CODIT 第四道牆（Barrier Zone）</strong>的解剖原理來看，這樣做會發生什麼後果？</p>`,
+    options: [
+      { text: 'A. 刮除腐木至健康白木會直接鑿穿「第四道牆（Wall 4）」，讓原本被封印的腐朽菌瞬間攻入外圈唯一存活的健康新邊材，且堅硬水泥在風吹搖晃時會磨破內壁防線！', correct: true },
+      { text: 'B. 水泥硬度高，能代替心材幫古樹增加抗風彈性並殺死真菌', correct: false },
+      { text: 'C. 只要把內部腐木全部挖光就能像補牙一樣讓樹木內部重新長滿木頭', correct: false }
+    ],
+    explanation: '✅ 正確解析：大忌！樹木不是牙齒，刮到「健康白木」等於親手鑿破樹木賴以維生的 CODIT 第四道牆（猩紅色屏障帶），導致腐朽全面侵入外圈活邊材！此外，樹木隨風擺動具柔韌性，死硬不透氣的水泥塊會積水並反覆擠壓磨破內部防線，加速古樹死亡。'
+  }
+];
+
+function renderTab4() {
+  const svg = document.getElementById('svgTab4');
+  const quizBox = document.getElementById('t4QuizContainer');
+  let stepsArr;
+
+  if (appState.t4Mode === 'threecut') stepsArr = T4_THREECUT_STEPS;
+  else if (appState.t4Mode === 'onecut') stepsArr = T4_ONECUT_STEPS;
+  else stepsArr = T4_CLINIC_CASES;
+
+  if (appState.t4Step >= stepsArr.length) appState.t4Step = 0;
+  const s = appState.t4Step;
+
+  svg.innerHTML = `<g class="pz-camera">${buildTab4Svg(appState.t4Mode, s)}</g>`;
+  pzInstances.pz4.applyTransform();
+
+  const info = stepsArr[s];
+  document.getElementById('t4StepTitle').textContent = info.title;
+  document.getElementById('t4DetailHeading').innerHTML = info.heading;
+  document.getElementById('t4DetailBody').innerHTML = info.body;
+
+  // Render Quiz UI if in clinic mode
+  if (appState.t4Mode === 'clinic') {
+    const chosen = appState.clinicAnswers[s];
+    let html = '<div class="quiz-options">';
+    info.options.forEach((opt, idx) => {
+      let cls = 'quiz-opt-btn';
+      if (chosen !== undefined) {
+        if (opt.correct) cls += ' correct';
+        else if (chosen === idx) cls += ' wrong';
+      }
+      html += `<button class="${cls}" data-qidx="${idx}">${opt.text}</button>`;
+    });
+    html += '</div>';
+    if (chosen !== undefined) {
+      html += `<div class="callout-quote" style="margin-top:10px">${info.explanation}</div>`;
+    }
+    quizBox.innerHTML = html;
+    quizBox.querySelectorAll('.quiz-opt-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        appState.clinicAnswers[s] = Number(btn.dataset.qidx);
+        renderTab4();
+      });
+    });
+  } else {
+    quizBox.innerHTML = '';
+  }
+
+  renderStepDots('t4Dots', stepsArr.length, s, (idx) => {
+    stopAutoPlay();
+    appState.t4Step = idx;
+    renderTab4();
+  });
+}
+
+function buildTab4Svg(mode, step) {
+  if (mode === 'threecut') {
+    if (step === 4) {
+      // Face-on Donut Callus view + side inset
+      return `
+        <rect x="60" y="50" width="740" height="440" rx="16" fill="#142033" stroke="#10b981" stroke-width="2"/>
+        <!-- Trunk Bark Front View -->
+        <rect x="255" y="52" width="350" height="436" fill="${COLORS.bark}"/>
+        <g stroke="#4e3529" stroke-width="4">
+          <line x1="290" y1="52" x2="290" y2="488"/><line x1="340" y1="52" x2="340" y2="488"/>
+          <line x1="520" y1="52" x2="520" y2="488"/><line x1="570" y1="52" x2="570" y2="488"/>
+        </g>
+        <!-- BBR Eyebrow Arch above wound -->
+        <path d="M 335 168 Q 430 128 525 168" fill="none" stroke="#2c1b12" stroke-width="10" stroke-linecap="round"/>
+        <!--Wall 4 Red Protection Halo -->
+        <circle cx="430" cy="280" r="98" fill="none" stroke="${COLORS.wall4}" stroke-width="6" stroke-dasharray="10 5"/>
+        <!-- 360-degree Donut Callus Ring! -->
+        <circle cx="430" cy="280" r="84" fill="${COLORS.callus}" stroke="#15803d" stroke-width="5"/>
+        <!-- Inner Exposed Sealed Wood shrinking -->
+        <circle cx="430" cy="280" r="42" fill="#d4a373" stroke="#78350f" stroke-width="3"/>
+        <circle cx="430" cy="280" r="22" fill="${COLORS.bpz}" opacity="0.65"/>
+
+        <g class="svg-label-group" font-family="sans-serif">
+          <text x="430" y="36" text-anchor="middle" fill="#6ee7b7" font-size="20" font-weight="700">三刀法完美成果：360° 均勻「甜甜圈狀癒合組織 (Donut Callus)」</text>
+          <text x="430" y="132" text-anchor="middle" fill="#fde68a" font-size="14" font-weight="700">完整保留的枝皮脊線 (BBR)</text>
+          <text x="615" y="245" fill="${COLORS.callus}" font-size="15" font-weight="700">⬅ 環狀均勻癒合木向內包覆</text>
+          <text x="615" y="275" fill="${COLORS.wall4}" font-size="14" font-weight="700">⬅ 內部建立連續 Wall 4 屏障帶</text>
+          <text x="430" y="420" text-anchor="middle" fill="#fff" font-size="14" font-weight="700">切口小而圓整 · 內部 BPZ 鎖死病菌</text>
+        </g>
+      `;
+    }
+
+    // Steps 0..3 of Three-Cut Method
+    // Trunk on left (x: 110..310), heavy branch extending up-right to x=790
+    const showHeavyBranch = (step <= 1);
+    const showFallingBranch = (step === 2);
+    const showShortStub = (step === 2);
+    const finalClean = (step === 3);
+
+    return `
+      <!-- Main Trunk -->
+      <rect x="120" y="45" width="185" height="450" fill="${COLORS.sapwood}" stroke="${COLORS.bark}" stroke-width="14"/>
+      <line x1="130" y1="45" x2="130" y2="495" stroke="${COLORS.cambium}" stroke-width="4"/>
+      <path d="M 300 45 L 300 198 M 300 375 L 300 495" stroke="${COLORS.cambium}" stroke-width="4"/>
+
+      <!-- Branch Collar Base (always intact!) -->
+      <polygon points="298,198 318,202 360,328 298,378" fill="${COLORS.sapwood}"/>
+      <polygon points="315,208 355,322 282,300 285,235" fill="${COLORS.bpz}" opacity="0.65"/>
+      <path d="M 306 192 L 278 228" stroke="#3e2723" stroke-width="6" stroke-linecap="round"/>
+      <path d="M 360 328 Q 332 356 303 382" fill="none" stroke="${COLORS.bark}" stroke-width="14" stroke-linecap="round"/>
+
+      ${showHeavyBranch ? `
+        <!-- Full Heavy Lateral Branch -->
+        <polygon points="318,202 775,75 805,172 360,328" fill="${COLORS.sapwood}" stroke="${COLORS.bark}" stroke-width="12" stroke-linejoin="round"/>
+        <!-- Gravity Weight Arrow -->
+        <path d="M 705 190 L 705 275" stroke="#fbbf24" stroke-width="6" stroke-linecap="round"/>
+        <polygon points="705,290 690,268 720,268" fill="#fbbf24"/>
+        ${step === 1 ? `
+          <!-- Cut 1: Undercut notch 1/3 up from bottom at x~520 -->
+          <line x1="538" y1="266" x2="522" y2="220" stroke="#090d16" stroke-width="8"/>
+          <line x1="544" y1="286" x2="518" y2="210" stroke="#38bdf8" stroke-width="4" stroke-dasharray="6 4"/>
+        ` : ''}
+      ` : ''}
+
+      ${showShortStub ? `
+        <!-- Short Stub Remaining after Cut 2 -->
+        <polygon points="318,202 552,137 572,195 522,220 538,266 360,328" fill="${COLORS.sapwood}" stroke="${COLORS.bark}" stroke-width="11" stroke-linejoin="round"/>
+        <!-- Falling Heavy Branch Detached cleanly at Cut 1->2 step! -->
+        <g transform="translate(55, 105) rotate(18 620 180)">
+          <polygon points="556,136 775,75 805,172 542,264 526,218 575,195" fill="${COLORS.sapwood}" stroke="${COLORS.bark}" stroke-width="11" opacity="0.85"/>
+        </g>
+        <line x1="548" y1="115" x2="582" y2="215" stroke="#f97316" stroke-width="4" stroke-dasharray="6 4"/>
+      ` : ''}
+
+      ${finalClean ? `
+        <!-- Clean Final Cut 3 along Branch Collar outer edge! -->
+        <line x1="312" y1="178" x2="368" y2="348" stroke="#10b981" stroke-width="5" stroke-dasharray="8 4"/>
+        <!-- Falling tiny stub -->
+        <g transform="translate(75, 130) rotate(28 450 250)" opacity="0.55">
+          <polygon points="318,202 552,137 538,266 360,328" fill="${COLORS.sapwood}" stroke="${COLORS.bark}" stroke-width="10"/>
+        </g>
+      ` : ''}
+
+      <!-- Target Guide Lines -->
+      <line x1="318" y1="202" x2="360" y2="328" stroke="#10b981" stroke-width="3" stroke-dasharray="5 4"/>
+
+      <g class="svg-label-group" font-family="sans-serif">
+        <text x="430" y="34" text-anchor="middle" fill="#f8fafc" font-size="19" font-weight="700">專業修剪「三刀法」Step-by-Step 實戰模擬</text>
+        <text x="272" y="185" text-anchor="end" fill="#fde68a" font-size="13" font-weight="700">枝皮脊線(BBR)</text>
+        <text x="392" y="358" fill="#6ee7b7" font-size="13" font-weight="700">↖ 第三刀目標線（枝領外緣）</text>
+        ${step === 0 ? `<text x="705" y="315" text-anchor="middle" fill="#fbbf24" font-size="14" font-weight="700">沉重側枝重力下墜張力</text>` : ''}
+        ${step === 1 ? `
+          <rect x="440" y="295" width="215" height="34" rx="8" fill="#082f49" stroke="#38bdf8"/>
+          <text x="547" y="317" text-anchor="middle" fill="#bae6fd" font-size="14" font-weight="700">① 第一刀：由下往上鋸 1/3 止裂</text>
+        ` : ''}
+        ${step === 2 ? `
+          <rect x="465" y="72" width="235" height="34" rx="8" fill="#431407" stroke="#f97316"/>
+          <text x="582" y="94" text-anchor="middle" fill="#ffedd5" font-size="14" font-weight="700">② 第二刀：外側鋸斷卸重，裂痕止步！</text>
+        ` : ''}
+        ${step === 3 ? `
+          <rect x="378" y="220" width="245" height="36" rx="8" fill="#064e3b" stroke="#10b981"/>
+          <text x="500" y="243" text-anchor="middle" fill="#a7f3d0" font-size="14" font-weight="700">③ 第三刀：無重力下精準順枝領斜切</text>
+        ` : ''}
+      </g>
+    `;
+  }
+
+  if (mode === 'onecut') {
+    // 1-Cut Bark Tear Disaster!
+    return `
+      <rect x="120" y="45" width="185" height="450" fill="${COLORS.sapwood}" stroke="${COLORS.bark}" stroke-width="14"/>
+      <polygon points="298,198 318,202 360,328 298,378" fill="${COLORS.sapwood}"/>
+
+      ${step === 0 ? `
+        <polygon points="318,202 775,75 805,172 360,328" fill="${COLORS.sapwood}" stroke="${COLORS.bark}" stroke-width="12"/>
+        <!-- Sawing straight down near collar without undercut! -->
+        <line x1="330" y1="198" x2="352" y2="285" stroke="#ef4444" stroke-width="7"/>
+        <path d="M 705 190 L 705 285" stroke="#ef4444" stroke-width="7"/>
+        <polygon points="705,302 688,278 722,278" fill="#ef4444"/>
+      ` : ''}
+
+      ${step >= 1 ? `
+        <!-- Ripped Bark Strip hanging down trunk + Falling branch attached to torn bark! -->
+        <rect x="292" y="315" width="24" height="175" fill="#7f1d1d"/>
+        ${step === 2 ? `<polygon points="245,305 305,295 305,492 255,492" fill="${COLORS.decay}" opacity="0.9"/>` : ''}
+        <g transform="translate(20, 45) rotate(36 355 325)">
+          <polygon points="335,235 755,115 785,208 360,328" fill="${COLORS.sapwood}" stroke="${COLORS.bark}" stroke-width="11"/>
+        </g>
+        <!-- Torn bark ribbon ripped down main trunk -->
+        <path d="M 304 485 Q 345 435 385 455" fill="none" stroke="${COLORS.bark}" stroke-width="14" stroke-linecap="round"/>
+      ` : ''}
+
+      <g class="svg-label-group" font-family="sans-serif">
+        <text x="430" y="34" text-anchor="middle" fill="#fca5a5" font-size="19" font-weight="700">⚠️ 錯誤「一刀切」引發主幹樹皮撕裂災難 (Bark Tear)</text>
+        ${step === 0 ? `<text x="485" y="135" fill="#fca5a5" font-size="15" font-weight="700">❌ 未做第一刀下切，直接由上往下鋸...</text>` : ''}
+        ${step === 1 ? `<text x="485" y="425" fill="#fecaca" font-size="16" font-weight="700">💥 重力折斷瞬間，整片主幹樹皮與形成層被扯裂剝落！</text>` : ''}
+        ${step === 2 ? `<text x="495" y="445" fill="#e9d5ff" font-size="15" font-weight="700">☠️ 主幹長條裸露傷口失去 Wall 4 防護，腐朽全面入侵！</text>` : ''}
+      </g>
+    `;
+  }
+
+  // Clinic Diagnostic Cases Visuals (Steps 0, 1, 2)
+  if (step === 0) {
+    // Wound Paint trapping moisture & decay vs Natural CODIT
+    return `
+      <rect x="45" y="55" width="365" height="425" rx="14" fill="#17253a" stroke="#ef4444" stroke-width="2"/>
+      <rect x="450" y="55" width="365" height="425" rx="14" fill="#17253a" stroke="#10b981" stroke-width="2"/>
+
+      <!-- Left: Painted Wound (Cracked black paint + trapped water droplets + booming purple decay) -->
+      <rect x="115" y="130" width="160" height="290" fill="${COLORS.sapwood}" stroke="${COLORS.bark}" stroke-width="10"/>
+      <polygon points="185,180 272,180 272,360 175,360" fill="${COLORS.decay}"/>
+      <!-- Thick Black Wound Paint with Cracks -->
+      <path d="M 276 168 L 276 252 M 276 264 L 276 372" stroke="#090d16" stroke-width="14" stroke-linecap="round"/>
+      <!-- Trapped Moisture Droplets -->
+      <circle cx="262" cy="215" r="6" fill="#38bdf8"/><circle cx="262" cy="295" r="6" fill="#38bdf8"/><circle cx="262" cy="330" r="6" fill="#38bdf8"/>
+
+      <!-- Right: Unpainted Proper Cut (Dry aerated surface + strong BPZ + healthy Callus) -->
+      <rect x="520" y="130" width="160" height="290" fill="${COLORS.sapwood}" stroke="${COLORS.bark}" stroke-width="10"/>
+      <polygon points="645,185 678,185 678,355 645,355" fill="${COLORS.bpz}"/>
+      <ellipse cx="680" cy="200" rx="12" ry="22" fill="${COLORS.callus}" stroke="#15803d" stroke-width="2"/>
+      <ellipse cx="680" cy="340" rx="12" ry="22" fill="${COLORS.callus}" stroke="#15803d" stroke-width="2"/>
+
+      <g class="svg-label-group" font-family="sans-serif">
+        <text x="227" y="95" text-anchor="middle" fill="#fca5a5" font-size="17" font-weight="700">塗抹封閉黑漆 / 傷口塗料</text>
+        <text x="335" y="260" fill="#bae6fd" font-size="13" font-weight="700">⬅ 塗層龜裂滲水</text>
+        <text x="335" y="282" fill="#e9d5ff" font-size="13" font-weight="700">⬅ 鎖住濕氣養大腐朽菌</text>
+
+        <text x="632" y="95" text-anchor="middle" fill="#6ee7b7" font-size="17" font-weight="700">自然透氣 ＋ 正確枝領切口</text>
+        <text x="705" y="268" fill="#99f6e4" font-size="13" font-weight="700">⬅ 有氧啟動 BPZ 與癒合木</text>
+      </g>
+    `;
+  }
+
+  if (step === 1) {
+    // Donut Callus vs Flush-Cut C-shaped Callus
+    return `
+      <rect x="45" y="55" width="365" height="425" rx="14" fill="#17253a" stroke="#10b981" stroke-width="2"/>
+      <rect x="450" y="55" width="365" height="425" rx="14" fill="#17253a" stroke="#ef4444" stroke-width="2"/>
+
+      <!-- Left: 360 Donut Callus -->
+      <rect x="110" y="120" width="235" height="310" rx="12" fill="${COLORS.bark}"/>
+      <circle cx="227" cy="275" r="72" fill="${COLORS.callus}" stroke="#15803d" stroke-width="4"/>
+      <circle cx="227" cy="275" r="32" fill="#d4a373"/>
+
+      <!-- Right: Flush Cut Oval Cavity with Side-Only Callus Ribs -->
+      <rect x="515" y="120" width="235" height="310" rx="12" fill="${COLORS.bark}"/>
+      <ellipse cx="632" cy="275" rx="58" ry="118" fill="#3b0764" stroke="#7e22ce" stroke-width="3"/>
+      <!-- Only left and right side ribs of callus! Top & bottom dead & sunken -->
+      <path d="M 578 195 Q 552 275 578 355" fill="none" stroke="${COLORS.callus}" stroke-width="20" stroke-linecap="round"/>
+      <path d="M 686 195 Q 712 275 686 355" fill="none" stroke="${COLORS.callus}" stroke-width="20" stroke-linecap="round"/>
+
+      <g class="svg-label-group" font-family="sans-serif">
+        <text x="227" y="95" text-anchor="middle" fill="#6ee7b7" font-size="17" font-weight="700">左側傷口：360° 甜甜圈癒合圈</text>
+        <text x="632" y="95" text-anchor="middle" fill="#fca5a5" font-size="17" font-weight="700">右側傷口：僅兩側隆起、上下潰爛</text>
+        <text x="632" y="150" text-anchor="middle" fill="#fecaca" font-size="13" font-weight="700">⬆ 上下端壞死凹陷 ⬇</text>
+      </g>
+    `;
+  }
+
+  // Clinic Step 2: Hollow Tree Cavity Scraping + Concrete Filling breaching Wall 4!
+  return `
+    <circle cx="430" cy="275" r="205" fill="#faf0d7" stroke="${COLORS.bark}" stroke-width="15"/>
+    <circle cx="430" cy="275" r="196" fill="none" stroke="${COLORS.cambium}" stroke-width="4"/>
+    <!-- Wall 4 Red Barrier Ring -->
+    <circle cx="430" cy="275" r="138" fill="#1e1b4b" stroke="${COLORS.wall4}" stroke-width="9"/>
+    <!-- Concrete Plug Filled Inside + Chisel Breaches breaking Wall 4! -->
+    <circle cx="430" cy="275" r="128" fill="#64748b" stroke="#94a3b8" stroke-width="4"/>
+    <!-- Breached Wall 4 points where chisel scraped "to white wood", letting purple decay invade healthy outer ring! -->
+    <path d="M 555 215 L 605 185 L 615 245 Z" fill="${COLORS.decay}"/>
+    <path d="M 298 315 L 245 348 L 268 282 Z" fill="${COLORS.decay}"/>
+    <path d="M 410 140 L 385 88 L 455 92 Z" fill="${COLORS.decay}"/>
+
+    <g class="svg-label-group" font-family="sans-serif">
+      <text x="430" y="34" text-anchor="middle" fill="#fca5a5" font-size="19" font-weight="700">古樹樹洞「清創刮白木＋灌水泥」對 CODIT 第四道牆的破壞</text>
+      <text x="430" y="272" text-anchor="middle" fill="#f8fafc" font-size="18" font-weight="700">🧱 堅硬死重的水泥填塊</text>
+      <text x="430" y="298" text-anchor="middle" fill="#cbd5e1" font-size="13">（不透氣積水，隨風搖晃時擠壓磨破內壁）</text>
+      <text x="635" y="218" fill="#e9d5ff" font-size="14" font-weight="700">💥 刮穿 Wall 4！腐朽菌攻入外圈活邊材</text>
+    </g>
+  `;
+}
+
+/* ============================================================================
+   7. UI CONTROLS, STEP DOTS, AUTO-PLAY & GLOBAL BINDINGS
+   ============================================================================ */
+function renderStepDots(containerId, total, activeIdx, onSelect) {
+  const box = document.getElementById(containerId);
+  box.innerHTML = '';
+  for (let i = 0; i < total; i++) {
+    const btn = document.createElement('button');
+    btn.className = 'step-dot' + (i === activeIdx ? ' active' : (i < activeIdx ? ' completed' : ''));
+    btn.textContent = i + 1;
+    btn.title = `跳至步驟 ${i + 1}`;
+    btn.addEventListener('click', () => onSelect(i));
+    box.appendChild(btn);
+  }
+}
+
+function stopAutoPlay() {
+  if (appState.autoPlayTimer) {
+    clearInterval(appState.autoPlayTimer);
+    appState.autoPlayTimer = null;
+  }
+  ['t1Play', 't2Play', 't3Play', 't4Play'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = '▶ 自動演示';
+  });
+  appState.autoPlayTab = null;
+}
+
+function toggleAutoPlay(tabKey, playBtnId, stepGetter, stepSetter, maxGetter, syncFn) {
+  if (appState.autoPlayTimer && appState.autoPlayTab === tabKey) {
+    stopAutoPlay();
+    return;
+  }
+  stopAutoPlay();
+  appState.autoPlayTab = tabKey;
+  document.getElementById(playBtnId).textContent = '⏸ 暫停演示';
+  appState.autoPlayTimer = setInterval(() => {
+    const next = (stepGetter() + 1) % maxGetter();
+    stepSetter(next);
+    syncFn();
+  }, 2600);
+}
+
+function setupEventListeners() {
+  // Global Label Toggle
+  const toggleLabels = () => {
+    appState.showLabels = !appState.showLabels;
+    const ws = document.getElementById('appWorkspace');
+    ws.classList.toggle('labels-hidden', !appState.showLabels);
+    document.getElementById('labelStateText').textContent = appState.showLabels ? '顯示' : '隱藏';
+    document.getElementById('btnToggleLabels').classList.toggle('active-toggle', appState.showLabels);
+  };
+  document.getElementById('btnToggleLabels').addEventListener('click', toggleLabels);
+  document.querySelectorAll('.js-quick-label').forEach(btn => btn.addEventListener('click', toggleLabels));
+
+  // Global Legend Toggle
+  document.getElementById('btnToggleLegend').addEventListener('click', (e) => {
+    appState.showLegend = !appState.showLegend;
+    document.getElementById('legendBar').classList.toggle('hidden', !appState.showLegend);
+    e.currentTarget.classList.toggle('active-toggle', appState.showLegend);
+  });
+
+  // Tab Switching
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      stopAutoPlay();
+      const target = btn.dataset.tab;
+      appState.activeTab = target;
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === target));
+      if (target === 'tab1' && threeCtx) {
+        const c = threeCtx.container;
+        threeCtx.camera.aspect = c.clientWidth / c.clientHeight;
+        threeCtx.camera.updateProjectionMatrix();
+        threeCtx.renderer.setSize(c.clientWidth, c.clientHeight);
+      }
+    });
+  });
+
+  // 2D Viewport Zoom/Reset Toolbar Buttons
+  document.querySelectorAll('[data-pz-target]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const pz = pzInstances[btn.dataset.pzTarget];
+      const act = btn.dataset.pzAct;
+      if (act === 'in') pz.zoomAt(1.25);
+      else if (act === 'out') pz.zoomAt(0.8);
+      else pz.reset();
+    });
+  });
+
+  // 3D Viewport Zoom/Reset & X-Ray Controls
+  document.querySelectorAll('[data-zoom3d]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!threeCtx) return;
+      const act = btn.dataset.zoom3d;
+      if (act === 'reset') {
+        threeCtx.camera.position.set(4.8, 3.6, 5.8);
+        threeCtx.controls.target.set(0, 0, 0);
+        threeCtx.controls.update();
+      } else {
+        const factor = act === 'in' ? 0.84 : 1.18;
+        threeCtx.camera.position.multiplyScalar(factor);
+        threeCtx.controls.update();
+      }
+    });
+  });
+
+  const opacitySlider = document.getElementById('trunkOpacitySlider');
+  const opacityVal = document.getElementById('trunkOpacityVal');
+  const btnXrayQuick = document.getElementById('btnXrayQuick');
+
+  opacitySlider.addEventListener('input', () => {
+    appState.trunkOpacity = Number(opacitySlider.value) / 100;
+    opacityVal.textContent = `${opacitySlider.value}%`;
+    btnXrayQuick.classList.toggle('active', appState.trunkOpacity < 0.55);
+    syncTab1View();
+  });
+
+  btnXrayQuick.addEventListener('click', () => {
+    const isXray = appState.trunkOpacity < 0.55;
+    appState.trunkOpacity = isXray ? 0.92 : 0.32;
+    opacitySlider.value = Math.round(appState.trunkOpacity * 100);
+    opacityVal.textContent = `${opacitySlider.value}%`;
+    btnXrayQuick.classList.toggle('active', !isXray);
+    syncTab1View();
+  });
+
+  // Tab 1 Wall Visibility Toggles
+  document.querySelectorAll('[data-wall-toggle]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const k = btn.dataset.wallToggle;
+      appState.wallsVisible[k] = !appState.wallsVisible[k];
+      btn.classList.toggle('active', appState.wallsVisible[k]);
+      btn.classList.toggle('off', !appState.wallsVisible[k]);
+      syncTab1View();
+    });
+  });
+
+  // Tab 1 Step Controls
+  document.getElementById('t1Prev').addEventListener('click', () => {
+    stopAutoPlay();
+    appState.t1Step = (appState.t1Step - 1 + T1_STEPS.length) % T1_STEPS.length;
+    syncTab1View();
+  });
+  document.getElementById('t1Next').addEventListener('click', () => {
+    stopAutoPlay();
+    appState.t1Step = (appState.t1Step + 1) % T1_STEPS.length;
+    syncTab1View();
+  });
+  document.getElementById('t1Play').addEventListener('click', () => {
+    toggleAutoPlay('tab1', 't1Play', () => appState.t1Step, v => appState.t1Step = v, () => T1_STEPS.length, syncTab1View);
+  });
+
+  // Tab 2 Sub-mode & Step Controls
+  document.querySelectorAll('[data-t2mode]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      stopAutoPlay();
+      appState.t2Mode = btn.dataset.t2mode;
+      appState.t2Step = 0;
+      document.querySelectorAll('[data-t2mode]').forEach(b => b.classList.toggle('active', b === btn));
+      pzInstances.pz2.reset();
+      renderTab2();
+    });
+  });
+  const t2Max = () => (appState.t2Mode === 'micro' ? T2_MICRO_STEPS.length : T2_HOLLOW_STEPS.length);
+  document.getElementById('t2Prev').addEventListener('click', () => {
+    stopAutoPlay();
+    appState.t2Step = (appState.t2Step - 1 + t2Max()) % t2Max();
+    renderTab2();
+  });
+  document.getElementById('t2Next').addEventListener('click', () => {
+    stopAutoPlay();
+    appState.t2Step = (appState.t2Step + 1) % t2Max();
+    renderTab2();
+  });
+  document.getElementById('t2Play').addEventListener('click', () => {
+    toggleAutoPlay('tab2', 't2Play', () => appState.t2Step, v => appState.t2Step = v, t2Max, renderTab2);
+  });
+
+  // Tab 3 Cut Mode & Step Controls
+  document.querySelectorAll('[data-cutmode]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      stopAutoPlay();
+      appState.t3CutMode = btn.dataset.cutmode;
+      document.querySelectorAll('[data-cutmode]').forEach(b => {
+        b.classList.remove('active', 'danger-active');
+        if (b === btn) {
+          b.classList.add(appState.t3CutMode === 'proper' ? 'active' : 'danger-active');
+        }
+      });
+      renderTab3();
+    });
+  });
+  document.getElementById('t3Prev').addEventListener('click', () => {
+    stopAutoPlay();
+    appState.t3Step = (appState.t3Step - 1 + 4) % 4;
+    renderTab3();
+  });
+  document.getElementById('t3Next').addEventListener('click', () => {
+    stopAutoPlay();
+    appState.t3Step = (appState.t3Step + 1) % 4;
+    renderTab3();
+  });
+  document.getElementById('t3Play').addEventListener('click', () => {
+    toggleAutoPlay('tab3', 't3Play', () => appState.t3Step, v => appState.t3Step = v, () => 4, renderTab3);
+  });
+
+  // Tab 4 Sub-mode & Step Controls
+  document.querySelectorAll('[data-t4mode]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      stopAutoPlay();
+      appState.t4Mode = btn.dataset.t4mode;
+      appState.t4Step = 0;
+      document.querySelectorAll('[data-t4mode]').forEach(b => {
+        b.classList.remove('active', 'danger-active');
+        if (b === btn) {
+          b.classList.add(appState.t4Mode === 'onecut' ? 'danger-active' : 'active');
+        }
+      });
+      pzInstances.pz4.reset();
+      renderTab4();
+    });
+  });
+  const t4Max = () => (appState.t4Mode === 'threecut' ? T4_THREECUT_STEPS.length : (appState.t4Mode === 'onecut' ? T4_ONECUT_STEPS.length : T4_CLINIC_CASES.length));
+  document.getElementById('t4Prev').addEventListener('click', () => {
+    stopAutoPlay();
+    appState.t4Step = (appState.t4Step - 1 + t4Max()) % t4Max();
+    renderTab4();
+  });
+  document.getElementById('t4Next').addEventListener('click', () => {
+    stopAutoPlay();
+    appState.t4Step = (appState.t4Step + 1) % t4Max();
+    renderTab4();
+  });
+  document.getElementById('t4Play').addEventListener('click', () => {
+    toggleAutoPlay('tab4', 't4Play', () => appState.t4Step, v => appState.t4Step = v, t4Max, renderTab4);
+  });
+}
+
+/* ============================================================================
+   8. BOOTSTRAP APPLICATION
+   ============================================================================ */
+setupEventListeners();
+renderTab2();
+renderTab3();
+renderTab4();
+
+try {
+  initThreeScene();
+} catch (err) {
+  console.error('3D WebGL init fallback:', err);
+  document.getElementById('viewport3d').innerHTML = `
+    <div style="padding:32px;text-align:center;color:#cbd5e1;">
+      <p style="font-size:1.1rem;margin-bottom:8px;">⚠️ 此裝置瀏覽器未啟用 WebGL 3D 加速</p>
+      <p style="font-size:0.85rem;color:#94a3b8;">請切換至分頁 2、3、4 體驗完整高解析向量互動模擬。</p>
+    </div>
+  `;
+}
+</script>
+</body>
+</html>

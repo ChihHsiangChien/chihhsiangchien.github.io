@@ -1,0 +1,1965 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>樹藝學互動模擬器：斷頭修剪（Topping）與結構力學危機</title>
+<style>
+  :root {
+    /* 介面基礎色票 */
+    --bg-dark: #0f172a;
+    --bg-panel: rgba(30, 41, 59, 0.92);
+    --bg-card: #1e293b;
+    --text-main: #f8fafc;
+    --text-muted: #94a3b8;
+    --border-color: #334155;
+    --accent: #10b981;
+    --accent-hover: #059669;
+
+    /* 樹木解剖與荷爾蒙統一視覺色票 */
+    --col-bark: #5c4033;         /* 外樹皮 */
+    --col-included-bark: #3b2316;/* 夾皮死組織 */
+    --col-cambium: #4ade80;      /* 形成層 / 癒傷組織 */
+    --col-wood: #eab308;         /* 正常木質部 */
+    --col-wood-light: #fef08a;   /* 新生木質部 */
+    --col-pith: #78350f;         /* 髓心與芽跡 */
+    --col-auxin: #38bdf8;        /* 生長素 Auxin (壓制) */
+    --col-cytokinin: #f472b6;    /* 細胞分裂素 Cytokinin (喚醒) */
+    --col-epicormic: #fb923c;    /* 潛伏芽 / 徒長枝 */
+    --col-adventitious: #c084fc; /* 不定芽 */
+    --col-axillary: #2dd4bf;     /* 腋芽 */
+    --col-danger: #ef4444;       /* 危險 / 斷裂應力 */
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", sans-serif;
+    background-color: var(--bg-dark); color: var(--text-main);
+    user-select: none; -webkit-user-select: none;
+  }
+
+  /* 頂部導覽列 */
+  #app { display: flex; flex-direction: column; width: 100%; height: 100%; }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 14px; background: #020617; border-bottom: 1px solid var(--border-color);
+    gap: 10px; z-index: 20; flex-shrink: 0;
+  }
+  .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 1rem; white-space: nowrap; }
+  .brand-badge { background: var(--col-danger); color: #fff; font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; }
+
+  /* 分頁籤 (支援手機橫向捲動) */
+  .tabs {
+    display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none;
+    -ms-overflow-style: none; flex: 1; padding: 2px 0;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab-btn {
+    background: var(--bg-card); color: var(--text-muted); border: 1px solid var(--border-color);
+    padding: 7px 12px; border-radius: 8px; font-size: 0.85rem; font-weight: 600;
+    cursor: pointer; white-space: nowrap; transition: all 0.2s;
+  }
+  .tab-btn:hover { color: var(--text-main); border-color: #64748b; }
+  .tab-btn.active {
+    background: rgba(16, 185, 129, 0.18); color: #34d399; border-color: #10b981;
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.2);
+  }
+
+  /* 全域標籤切換鈕 */
+  .global-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .toggle-btn {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--bg-card); color: var(--text-main); border: 1px solid var(--border-color);
+    padding: 7px 11px; border-radius: 8px; font-size: 0.82rem; font-weight: 600; cursor: pointer;
+  }
+  .toggle-btn.on { border-color: var(--col-auxin); background: rgba(56, 189, 248, 0.15); color: #7dd3fc; }
+
+  /* 主工作區 */
+  main {
+    flex: 1; display: flex; position: relative; overflow: hidden;
+  }
+  .canvas-area {
+    flex: 1; position: relative; overflow: hidden; background: radial-gradient(circle at 50% 35%, #1e293b 0%, #090d16 100%);
+    touch-action: none; /* 重要：防止手機預設捲動干擾 Zoom/Pan */
+  }
+  canvas.sim-canvas { width: 100%; height: 100%; display: block; }
+  #three-container { width: 100%; height: 100%; display: none; position: relative; }
+
+  /* 浮動視角控制工具列 (Zoom / Pan Reset) */
+  .viewport-tools {
+    position: absolute; top: 12px; left: 12px; display: flex; flex-direction: column; gap: 6px; z-index: 12;
+  }
+  .tool-btn {
+    width: 38px; height: 38px; border-radius: 8px; border: 1px solid var(--border-color);
+    background: var(--bg-panel); color: var(--text-main); font-size: 1.05rem; font-weight: bold;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(6px); box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+  }
+  .tool-btn:active { transform: scale(0.94); }
+  .gesture-hint {
+    position: absolute; bottom: 12px; left: 12px; z-index: 11;
+    background: rgba(15, 23, 42, 0.78); border: 1px solid var(--border-color);
+    color: var(--text-muted); font-size: 0.75rem; padding: 5px 10px; border-radius: 6px;
+    pointer-events: none; backdrop-filter: blur(4px);
+  }
+
+  /* 圖例膠囊列 */
+  .legend-bar {
+    position: absolute; top: 12px; right: 12px; z-index: 11;
+    display: flex; flex-wrap: wrap; gap: 6px; max-width: calc(100% - 65px); justify-content: flex-end;
+    pointer-events: none;
+  }
+  .legend-pill {
+    display: flex; align-items: center; gap: 5px; background: rgba(15, 23, 42, 0.85);
+    border: 1px solid var(--border-color); padding: 4px 8px; border-radius: 999px;
+    font-size: 0.74rem; color: #e2e8f0; backdrop-filter: blur(4px);
+  }
+  .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+
+  /* 3D 浮動 HTML 標籤層 */
+  #labels-3d {
+    position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 10;
+  }
+  .label-tag-3d {
+    position: absolute; transform: translate(-50%, -50%);
+    background: rgba(15, 23, 42, 0.9); border: 1px solid #475569; color: #f8fafc;
+    padding: 4px 8px; border-radius: 6px; font-size: 0.76rem; font-weight: 600;
+    white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,0.45);
+    transition: opacity 0.15s;
+  }
+
+  /* 右側 / 底部 互動控制與解說面板 */
+  aside.control-panel {
+    width: 380px; background: var(--bg-panel); border-left: 1px solid var(--border-color);
+    display: flex; flex-direction: column; z-index: 15; overflow-y: auto; flex-shrink: 0;
+  }
+  .panel-header {
+    padding: 14px 16px; border-bottom: 1px solid var(--border-color);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .panel-title { font-size: 1rem; font-weight: 700; color: #34d399; }
+  .panel-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; }
+
+  /* 步驟控制卡片 */
+  .stepper-box {
+    background: #0f172a; border: 1px solid var(--border-color); border-radius: 10px; padding: 12px;
+  }
+  .step-dots { display: flex; gap: 6px; margin-bottom: 10px; }
+  .step-dot {
+    flex: 1; height: 6px; border-radius: 3px; background: #334155; cursor: pointer; transition: 0.25s;
+  }
+  .step-dot.active { background: var(--accent); }
+  .step-dot.done { background: #059669; }
+  .step-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .step-badge { font-size: 0.75rem; font-weight: 700; color: #38bdf8; background: rgba(56,189,248,0.15); padding: 2px 8px; border-radius: 4px; }
+  .step-name { font-size: 0.95rem; font-weight: 700; margin-bottom: 6px; color: #fff; }
+  .step-desc { font-size: 0.85rem; line-height: 1.55; color: #cbd5e1; }
+  .step-nav { display: flex; gap: 8px; margin-top: 12px; }
+  .btn-primary, .btn-secondary, .btn-danger {
+    flex: 1; padding: 9px 12px; border-radius: 8px; font-size: 0.85rem; font-weight: 600;
+    cursor: pointer; border: 1px solid transparent; text-align: center; transition: 0.18s;
+  }
+  .btn-primary { background: var(--accent); color: #022c22; }
+  .btn-primary:hover { background: var(--accent-hover); color: #fff; }
+  .btn-secondary { background: #1e293b; color: #e2e8f0; border-color: #475569; }
+  .btn-secondary:hover { background: #334155; }
+  .btn-danger { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border-color: #ef4444; }
+  .btn-danger:hover { background: rgba(239, 68, 68, 0.35); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* 滑桿與選項群組 */
+  .control-group {
+    background: #0f172a; border: 1px solid var(--border-color); border-radius: 10px; padding: 12px;
+    display: flex; flex-direction: column; gap: 9px;
+  }
+  .control-label { display: flex; justify-content: space-between; font-size: 0.84rem; font-weight: 600; color: #e2e8f0; }
+  input[type="range"] {
+    width: 100%; accent-color: var(--accent); height: 6px; cursor: pointer;
+  }
+  .seg-group { display: flex; gap: 6px; }
+  .seg-btn {
+    flex: 1; padding: 8px 8px; font-size: 0.8rem; font-weight: 600; border-radius: 7px;
+    border: 1px solid #475569; background: #1e293b; color: #cbd5e1; cursor: pointer;
+  }
+  .seg-btn.active { background: rgba(56, 189, 248, 0.2); border-color: #38bdf8; color: #fff; }
+  .seg-btn.danger-active { background: rgba(239, 68, 68, 0.22); border-color: #ef4444; color: #fecaca; }
+
+  /* 知識延伸卡片 */
+  .info-card {
+    background: rgba(15, 23, 42, 0.7); border-left: 3px solid var(--accent);
+    border-radius: 6px; padding: 10px 12px; font-size: 0.82rem; line-height: 1.55; color: #cbd5e1;
+  }
+  .info-card.warn { border-left-color: var(--col-danger); background: rgba(127, 29, 29, 0.2); }
+  .info-card strong { color: #fff; }
+
+  /* 響應式：平板與手機改為上下配置 */
+  @media (max-width: 860px) {
+    header { flex-wrap: wrap; padding: 6px 10px; }
+    .brand { font-size: 0.92rem; }
+    .tabs { order: 3; width: 100%; flex: none; margin-top: 2px; }
+    main { flex-direction: column; }
+    aside.control-panel {
+      width: 100%; height: 43%; border-left: none; border-top: 1px solid var(--border-color);
+    }
+    .gesture-hint { font-size: 0.7rem; padding: 3px 7px; bottom: 8px; left: 8px; }
+    .legend-bar { top: 8px; right: 8px; gap: 4px; }
+    .legend-pill { font-size: 0.68rem; padding: 3px 6px; }
+  }
+</style>
+<!-- 載入 Three.js 與 OrbitControls -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="app">
+  <!-- 頂部導覽 -->
+  <header>
+    <div class="brand">
+      <span>🌳 樹藝學結構模擬</span>
+      <span class="brand-badge">禁止斷頭 Topping</span>
+    </div>
+    <nav class="tabs" id="tab-nav">
+      <button class="tab-btn active" data-tab="0">1. 斷頭與荷爾蒙應變</button>
+      <button class="tab-btn" data-tab="1">2. 潛伏芽 vs 不定芽解剖</button>
+      <button class="tab-btn" data-tab="2">3. 偽結構枝與強風撕裂</button>
+      <button class="tab-btn" data-tab="3">4. 3D 夾皮與楔子效應</button>
+    </nav>
+    <div class="global-actions">
+      <button class="toggle-btn on" id="toggle-labels-btn" title="顯示或隱藏畫面中的所有文字指標">
+        <span>🏷️ 標籤: 開啟</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- 互動主畫面 -->
+  <main>
+    <div class="canvas-area" id="canvas-wrap">
+      <!-- 2D 模擬畫布 -->
+      <canvas id="sim2d" class="sim-canvas"></canvas>
+      <!-- 3D 模擬容器 (Tab 4 使用) -->
+      <div id="three-container">
+        <div id="labels-3d"></div>
+      </div>
+
+      <!-- 縮放平移輔助按鈕 -->
+      <div class="viewport-tools">
+        <button class="tool-btn" id="btn-zoom-in" title="放大">＋</button>
+        <button class="tool-btn" id="btn-zoom-out" title="縮小">－</button>
+        <button class="tool-btn" id="btn-zoom-reset" title="重置視角">⟲</button>
+      </div>
+
+      <!-- 動態圖例區 -->
+      <div class="legend-bar" id="legend-bar"></div>
+
+      <!-- 操作提示 -->
+      <div class="gesture-hint" id="gesture-hint">🖐️ 單指拖曳平移 ｜ 🤏 雙指捏合/滾輪縮放</div>
+    </div>
+
+    <!-- 右側/下方 控制與步驟解說區 -->
+    <aside class="control-panel">
+      <div class="panel-header">
+        <div class="panel-title" id="panel-title">載入中...</div>
+      </div>
+      <div class="panel-body" id="panel-body"></div>
+    </aside>
+  </main>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* ============================================================================
+ * 全域色票與共用狀態 (確保所有分頁顏色與視覺語彙完全一致)
+ * ============================================================================ */
+const COLORS = {
+  bark: '#5c4033',
+  barkDark: '#3b2316',
+  cambium: '#4ade80',
+  wood: '#eab308',
+  woodLight: '#fef08a',
+  woodRing: '#ca8a04',
+  pith: '#78350f',
+  auxin: '#38bdf8',
+  cytokinin: '#f472b6',
+  epicormic: '#fb923c',
+  adventitious: '#c084fc',
+  axillary: '#2dd4bf',
+  leaf: '#22c55e',
+  danger: '#ef4444'
+};
+
+const state = {
+  activeTab: 0,
+  showLabels: true,
+  time: 0,
+
+  // Tab 0: 斷頭與荷爾蒙應變 (Step 0 ~ 4)
+  tab0: {
+    step: 0,
+    cutAnim: 0,
+    sproutGrowth: 0,
+    particles: []
+  },
+
+  // Tab 1: 潛伏芽 vs 不定芽橫切面解剖 (Step 0 ~ 3)
+  tab1: {
+    step: 0,
+    focusMode: 'both', // 'both' | 'epicormic' | 'adventitious'
+    pulse: 0
+  },
+
+  // Tab 2: 結構枝 vs 偽結構枝力學測試
+  tab2: {
+    mode: 'compare', // 'structural' | 'watersprout' | 'compare'
+    step: 0,         // 0: 內部木質纖維觀察, 1: 強風力學槓桿測試, 2: 極端陣風破壞結果
+    wind: 25,        // 0 ~ 100
+    torn: false,     // 偽結構枝是否已撕裂脫落
+    tearAngle: 0
+  },
+
+  // Tab 3: 3D 夾皮 (Included Bark) 與楔子效應
+  tab3: {
+    unionType: 'v_included', // 'u_healthy' | 'v_included'
+    crossSection: true,      // 剖面觀察內部夾皮
+    step: 0,                 // 0: 分叉形態, 1: 內部夾皮解剖, 2: 風力槓桿與楔子劈裂
+    wind: 20,                // 0 ~ 100
+    splitProgress: 0         // 劈裂程度 0 ~ 1
+  }
+};
+
+/* ============================================================================
+ * 觸控友善 2D Zoom & Pan 視角控制器 (支援滑鼠滾輪、拖曳、手機雙指 Pinch)
+ * ============================================================================ */
+class Viewport2D {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.scale = 1;
+    this.minScale = 0.45;
+    this.maxScale = 3.8;
+    this.offsetX = 0;
+    this.offsetY = 0;
+
+    this.pointers = new Map();
+    this.lastPinchDist = null;
+    this.lastCenter = null;
+
+    this.bindEvents();
+  }
+
+  reset() {
+    this.scale = 1;
+    this.offsetX = 0;
+    this.offsetY = 0;
+  }
+
+  zoomAt(factor, clientX, clientY) {
+    const rect = this.canvas.getBoundingClientRect();
+    const cx = clientX - rect.left - rect.width / 2;
+    const cy = clientY - rect.top - rect.height / 2;
+
+    const newScale = Math.min(this.maxScale, Math.max(this.minScale, this.scale * factor));
+    const ratio = newScale / this.scale;
+
+    this.offsetX = cx - (cx - this.offsetX) * ratio;
+    this.offsetY = cy - (cy - this.offsetY) * ratio;
+    this.scale = newScale;
+  }
+
+  bindEvents() {
+    this.canvas.addEventListener('wheel', (e) => {
+      if (state.activeTab === 3) return;
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.12 : 0.89;
+      this.zoomAt(factor, e.clientX, e.clientY);
+    }, { passive: false });
+
+    this.canvas.addEventListener('pointerdown', (e) => {
+      if (state.activeTab === 3) return;
+      this.canvas.setPointerCapture(e.pointerId);
+      this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (this.pointers.size === 2) {
+        const pts = Array.from(this.pointers.values());
+        this.lastPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+        this.lastCenter = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+      }
+    });
+
+    this.canvas.addEventListener('pointermove', (e) => {
+      if (state.activeTab === 3 || !this.pointers.has(e.pointerId)) return;
+      const prev = this.pointers.get(e.pointerId);
+      const curr = { x: e.clientX, y: e.clientY };
+      this.pointers.set(e.pointerId, curr);
+
+      if (this.pointers.size === 1) {
+        this.offsetX += curr.x - prev.x;
+        this.offsetY += curr.y - prev.y;
+      } else if (this.pointers.size === 2) {
+        const pts = Array.from(this.pointers.values());
+        const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+        const center = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+
+        if (this.lastPinchDist && this.lastPinchDist > 10) {
+          const factor = dist / this.lastPinchDist;
+          this.zoomAt(factor, center.x, center.y);
+        }
+        if (this.lastCenter) {
+          this.offsetX += center.x - this.lastCenter.x;
+          this.offsetY += center.y - this.lastCenter.y;
+        }
+        this.lastPinchDist = dist;
+        this.lastCenter = center;
+      }
+    });
+
+    const endPointer = (e) => {
+      this.pointers.delete(e.pointerId);
+      if (this.pointers.size < 2) {
+        this.lastPinchDist = null;
+        this.lastCenter = null;
+      }
+    };
+    this.canvas.addEventListener('pointerup', endPointer);
+    this.canvas.addEventListener('pointercancel', endPointer);
+  }
+
+  applyTransform(ctx, width, height) {
+    // 基準設計座標系為 800x600，自動適應手機或寬螢幕比例
+    const baseScale = Math.min(width / 760, height / 580);
+    ctx.translate(width / 2 + this.offsetX, height / 2 + this.offsetY);
+    ctx.scale(baseScale * this.scale, baseScale * this.scale);
+  }
+}
+
+/* ============================================================================
+ * Canvas 2D 繪圖輔助函式 (統一風格標籤與引線)
+ * ============================================================================ */
+const canvas2d = document.getElementById('sim2d');
+const ctx = canvas2d.getContext('2d');
+const vp2d = new Viewport2D(canvas2d);
+
+function resize2D() {
+  const wrap = document.getElementById('canvas-wrap');
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas2d.width = wrap.clientWidth * dpr;
+  canvas2d.height = wrap.clientHeight * dpr;
+}
+
+function drawCallout(ctx, targetX, targetY, boxX, boxY, title, subtitle = '', borderColor = '#475569') {
+  if (!state.showLabels) return;
+  ctx.save();
+  // 引線
+  ctx.beginPath();
+  ctx.moveTo(targetX, targetY);
+  ctx.lineTo(boxX, boxY);
+  ctx.strokeStyle = borderColor;
+  ctx.lineWidth = 1.8;
+  ctx.stroke();
+
+  // 目標圓點
+  ctx.beginPath();
+  ctx.arc(targetX, targetY, 4.5, 0, Math.PI * 2);
+  ctx.fillStyle = borderColor;
+  ctx.fill();
+  ctx.strokeStyle = '#0f172a';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // 計算文字寬度
+  ctx.font = 'bold 13px "Noto Sans TC", sans-serif';
+  const w1 = ctx.measureText(title).width;
+  ctx.font = '11.5px "Noto Sans TC", sans-serif';
+  const w2 = subtitle ? ctx.measureText(subtitle).width : 0;
+  const padX = 10;
+  const boxW = Math.max(w1, w2) + padX * 2;
+  const boxH = subtitle ? 42 : 26;
+
+  const rx = boxX - boxW / 2;
+  const ry = boxY - boxH / 2;
+
+  // 背景框
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+  ctx.strokeStyle = borderColor;
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.roundRect(rx, ry, boxW, boxH, 7);
+  ctx.fill();
+  ctx.stroke();
+
+  // 文字
+  ctx.fillStyle = '#f8fafc';
+  ctx.font = 'bold 13px "Noto Sans TC", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  if (subtitle) {
+    ctx.fillText(title, boxX, ry + 14);
+    ctx.fillStyle = '#cbd5e1';
+    ctx.font = '11.5px "Noto Sans TC", sans-serif';
+    ctx.fillText(subtitle, boxX, ry + 31);
+  } else {
+    ctx.fillText(title, boxX, boxY + 1);
+  }
+  ctx.restore();
+}
+
+/* ============================================================================
+ * 分頁 0：斷頭與荷爾蒙急難應變生長機制 (5 Steps)
+ * ============================================================================ */
+function initTab0Particles() {
+  state.tab0.particles = [];
+  for (let i = 0; i < 42; i++) {
+    state.tab0.particles.push({
+      y: -180 + Math.random() * 380,
+      xOffset: (Math.random() - 0.5) * 32,
+      speed: 0.7 + Math.random() * 0.6,
+      type: i % 3 === 0 ? 'cytokinin' : 'auxin'
+    });
+  }
+}
+initTab0Particles();
+
+function renderTab0(ctx, dt) {
+  const s = state.tab0;
+  // 平滑動畫過渡
+  const targetCut = s.step >= 1 ? 1 : 0;
+  s.cutAnim += (targetCut - s.cutAnim) * Math.min(1, dt * 5);
+
+  let targetSprout = 0;
+  if (s.step === 3) targetSprout = 0.38;
+  if (s.step === 4) targetSprout = 1.0;
+  s.sproutGrowth += (targetSprout - s.sproutGrowth) * Math.min(1, dt * 3.5);
+
+  // 地面
+  ctx.fillStyle = '#1e293b';
+  ctx.beginPath();
+  ctx.ellipse(0, 225, 250, 26, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 主幹剖面結構 (呈現樹皮、形成層、木質部、中央髓心)
+  // 外樹皮
+  ctx.fillStyle = COLORS.bark;
+  ctx.beginPath();
+  ctx.moveTo(-48, 220);
+  ctx.lineTo(-36, -55);
+  ctx.lineTo(36, -55);
+  ctx.lineTo(48, 220);
+  ctx.closePath();
+  ctx.fill();
+
+  // 形成層線條
+  ctx.fillStyle = COLORS.cambium;
+  ctx.beginPath();
+  ctx.moveTo(-41, 220);
+  ctx.lineTo(-30, -55);
+  ctx.lineTo(30, -55);
+  ctx.lineTo(41, 220);
+  ctx.closePath();
+  ctx.fill();
+
+  // 木質部
+  ctx.fillStyle = COLORS.wood;
+  ctx.beginPath();
+  ctx.moveTo(-38, 220);
+  ctx.lineTo(-27, -55);
+  ctx.lineTo(27, -55);
+  ctx.lineTo(38, 220);
+  ctx.closePath();
+  ctx.fill();
+
+  // 中央髓心 (Pith)
+  ctx.fillStyle = COLORS.pith;
+  ctx.fillRect(-5, -55, 10, 275);
+
+  // 潛伏芽跡 (Bud traces 連通髓心到樹皮下)
+  const epicormicNodes = [
+    { side: -1, y: -25 },
+    { side: 1, y: -12 },
+    { side: -1, y: 38 },
+    { side: 1, y: 72 }
+  ];
+  epicormicNodes.forEach(n => {
+    const barkX = n.side * (33 + (n.y + 55) * 0.04);
+    ctx.strokeStyle = COLORS.pith;
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([3, 2]);
+    ctx.beginPath();
+    ctx.moveTo(0, n.y + 8);
+    ctx.lineTo(barkX, n.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 潛伏芽點
+    const awake = s.step >= 2;
+    ctx.beginPath();
+    ctx.arc(barkX, n.y, awake ? 6.5 : 4.5, 0, Math.PI * 2);
+    ctx.fillStyle = awake ? COLORS.epicormic : '#9a3412';
+    ctx.fill();
+    if (awake) {
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+  });
+
+  // 左下殘存低矮側枝與腋芽 (Axillary Bud)
+  ctx.save();
+  ctx.strokeStyle = COLORS.bark;
+  ctx.lineWidth = 16;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-38, 115);
+  ctx.quadraticCurveTo(-95, 95, -140, 82);
+  ctx.stroke();
+
+  ctx.strokeStyle = COLORS.wood;
+  ctx.lineWidth = 9;
+  ctx.beginPath();
+  ctx.moveTo(-36, 115);
+  ctx.quadraticCurveTo(-95, 95, -138, 82);
+  ctx.stroke();
+
+  // 側枝葉片
+  ctx.fillStyle = COLORS.leaf;
+  ctx.beginPath();
+  ctx.ellipse(-152, 78, 16, 9, -0.3, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 側枝腋芽
+  const axX = -102, axY = 90;
+  ctx.beginPath();
+  ctx.arc(axX, axY, s.step >= 2 ? 6.5 : 4.5, 0, Math.PI * 2);
+  ctx.fillStyle = COLORS.axillary;
+  ctx.fill();
+
+  // Step 3~4: 腋芽失去頂端壓制，轉為向上狂飆接管新頂芽
+  if (s.sproutGrowth > 0.02) {
+    const g = s.sproutGrowth;
+    ctx.strokeStyle = COLORS.axillary;
+    ctx.lineWidth = 6 + g * 3;
+    ctx.beginPath();
+    ctx.moveTo(axX, axY);
+    ctx.quadraticCurveTo(axX - 8, axY - 60 * g, axX + 10 * g, axY - 145 * g);
+    ctx.stroke();
+
+    if (g > 0.3) {
+      ctx.fillStyle = COLORS.leaf;
+      ctx.beginPath();
+      ctx.arc(axX + 10 * g, axY - 145 * g, 14 * g, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+
+  // 上半部健康樹冠 (Step 0 顯示，Step 1 鋸斷移開)
+  if (s.cutAnim < 0.98) {
+    ctx.save();
+    ctx.globalAlpha = 1 - s.cutAnim;
+    ctx.translate(s.cutAnim * 130, -s.cutAnim * 35);
+    ctx.rotate(s.cutAnim * 0.32);
+
+    // 上段主幹
+    ctx.fillStyle = COLORS.bark;
+    ctx.beginPath();
+    ctx.moveTo(-36, -55);
+    ctx.lineTo(-14, -200);
+    ctx.lineTo(14, -200);
+    ctx.lineTo(36, -55);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = COLORS.wood;
+    ctx.beginPath();
+    ctx.moveTo(-26, -55);
+    ctx.lineTo(-8, -195);
+    ctx.lineTo(8, -195);
+    ctx.lineTo(26, -55);
+    ctx.closePath();
+    ctx.fill();
+
+    // 自然樹冠葉團
+    const crownCircles = [
+      [0, -210, 68], [-58, -175, 50], [58, -175, 50],
+      [-38, -235, 45], [38, -235, 45], [0, -258, 42]
+    ];
+    ctx.fillStyle = 'rgba(22, 163, 74, 0.88)';
+    crownCircles.forEach(([cx, cy, r]) => {
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // 頂芽亮點
+    ctx.beginPath();
+    ctx.arc(0, -255, 8, 0, Math.PI * 2);
+    ctx.fillStyle = COLORS.auxin;
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  // 斷頭鋸口切面與癒合組織 / 不定芽 (Step >= 1)
+  if (s.step >= 1) {
+    // 裸露鋸口橢圓切面
+    ctx.fillStyle = COLORS.bark;
+    ctx.beginPath();
+    ctx.ellipse(0, -55, 36, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 形成層環 / 癒合組織 Callus
+    ctx.fillStyle = COLORS.cambium;
+    ctx.beginPath();
+    ctx.ellipse(0, -55, 31, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = COLORS.woodLight;
+    ctx.beginPath();
+    ctx.ellipse(0, -55, 26, 6.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 鋸痕警告線 (Step 1)
+    if (s.step === 1) {
+      ctx.strokeStyle = COLORS.danger;
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(-75, -55);
+      ctx.lineTo(75, -55);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // Step 2+: 傷口邊緣薄壁細胞去分化產生「不定芽 (Adventitious Buds)」
+    if (s.step >= 2) {
+      const advPositions = [-29, -22, 22, 29];
+      advPositions.forEach((ax, idx) => {
+        ctx.beginPath();
+        ctx.arc(ax, -56, 5.5, 0, Math.PI * 2);
+        ctx.fillStyle = COLORS.adventitious;
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+
+        // 不定芽向上叢生細枝
+        if (s.sproutGrowth > 0.02) {
+          const g = s.sproutGrowth;
+          const spread = (idx < 2 ? -1 : 1) * (12 + idx * 5);
+          ctx.strokeStyle = COLORS.adventitious;
+          ctx.lineWidth = 4.5 + g * 2.5;
+          ctx.beginPath();
+          ctx.moveTo(ax, -56);
+          ctx.quadraticCurveTo(ax + spread * 0.4, -56 - 65 * g, ax + spread, -56 - 135 * g);
+          ctx.stroke();
+        }
+      });
+    }
+  }
+
+  // Step 3~4: 潛伏芽爆發長出粗長直立的「徒長枝 (Watersprouts)」
+  if (s.sproutGrowth > 0.02) {
+    const g = s.sproutGrowth;
+    epicormicNodes.forEach((n, i) => {
+      const barkX = n.side * (33 + (n.y + 55) * 0.04);
+      const endX = barkX + n.side * (42 + i * 10) * g;
+      const endY = n.y - (165 + (3 - i) * 18) * g;
+
+      // 徒長枝枝幹 (浮貼於樹皮表面，無深層嵌合)
+      ctx.strokeStyle = COLORS.epicormic;
+      ctx.lineWidth = 6 + g * 5;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(barkX, n.y);
+      ctx.quadraticCurveTo(barkX + n.side * 28 * g, n.y - 40 * g, endX, endY);
+      ctx.stroke();
+
+      // 徒長枝頭重腳輕的大葉團
+      if (g > 0.25) {
+        ctx.fillStyle = 'rgba(34, 197, 94, 0.85)';
+        ctx.beginPath();
+        ctx.arc(endX, endY, 22 * g, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Step 4 標示基部脆弱危險紅圈
+      if (s.step === 4) {
+        const pulseR = 10 + Math.sin(state.time * 5) * 3;
+        ctx.strokeStyle = COLORS.danger;
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.arc(barkX, n.y, pulseR, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    });
+  }
+
+  // 荷爾蒙流動粒子動畫
+  s.particles.forEach(p => {
+    if (s.step === 0) {
+      // 頂端優勢：高濃度 Auxin 由頂芽往下運送壓制潛伏芽
+      p.y += p.speed * 1.4;
+      if (p.y > 210) p.y = -240;
+      ctx.beginPath();
+      ctx.arc(p.xOffset * 0.7, p.y, 3.8, 0, Math.PI * 2);
+      ctx.fillStyle = COLORS.auxin;
+      ctx.fill();
+    } else if (s.step >= 1) {
+      // 斷頭後：Auxin 歸零，根部送上的細胞分裂素 Cytokinin 向上暴增
+      if (p.y < -52) p.y = 215;
+      p.y -= p.speed * (s.step === 2 ? 2.1 : 1.1);
+      if (p.y < -52) p.y = 215;
+      ctx.beginPath();
+      ctx.arc(p.xOffset * 0.75, p.y, s.step === 2 ? 4.5 : 3.3, 0, Math.PI * 2);
+      ctx.fillStyle = COLORS.cytokinin;
+      ctx.fill();
+    }
+  });
+
+  // 動態文字引線標籤
+  if (s.step === 0) {
+    drawCallout(ctx, 0, -255, 165, -245, '頂端優勢 (Apical Dominance)', '頂芽持續向下輸送生長素 Auxin', COLORS.auxin);
+    drawCallout(ctx, 34, -12, 175, -10, '潛伏芽 / 隱芽 (封印中)', '受高濃度生長素壓制而不發育', COLORS.epicormic);
+    drawCallout(ctx, -102, 90, -185, 35, '側枝腋芽', '維持溫和橫向生長', COLORS.axillary);
+  } else if (s.step === 1) {
+    drawCallout(ctx, 0, -55, 0, -135, '⚠️ 斷頭破壞 (Topping)', '主幹頂端消失，生長素瞬間歸零！', COLORS.danger);
+    drawCallout(ctx, 0, 80, 175, 80, '細胞分裂素相對暴增', '由根部向上湧入，準備解除封印', COLORS.cytokinin);
+  } else if (s.step === 2) {
+    drawCallout(ctx, 29, -56, 175, -105, '② 不定芽 (無中生有)', '傷口形成層薄壁細胞去分化形成', COLORS.adventitious);
+    drawCallout(ctx, 34, -12, 185, -10, '① 潛伏芽喚醒 (最主要來源)', '連通髓心芽跡，封印瞬間解除', COLORS.epicormic);
+    drawCallout(ctx, -102, 90, -185, 30, '③ 殘存側枝腋芽接管', '失去最高點壓制，準備轉向直立', COLORS.axillary);
+  } else if (s.step === 3) {
+    drawCallout(ctx, 52, -95, 195, -95, '徒長枝 (Watersprouts)', '一年可狂飆數公尺搶奪陽光', COLORS.epicormic);
+    drawCallout(ctx, -28, -105, -175, -115, '傷口叢生不定枝', '密集簇生於鋸口腐朽邊緣', COLORS.adventitious);
+    drawCallout(ctx, -98, 25, -195, 25, '側枝轉向向上狂飆', '試圖取代消失的主幹樹冠', COLORS.axillary);
+  } else if (s.step === 4) {
+    drawCallout(ctx, 34, -12, 195, 15, '⚠️ 黏貼式脆弱基部', '僅浮貼於外層，缺乏枝條聯結區', COLORS.danger);
+    drawCallout(ctx, 78, -185, 195, -175, '頭重腳輕・高風阻', '強風吹襲極易整支撕裂砸落', COLORS.danger);
+  }
+}
+
+/* ============================================================================
+ * 分頁 1：潛伏芽 (Epicormic) vs 不定芽 (Adventitious) 微觀橫切面解剖
+ * ============================================================================ */
+function renderTab1(ctx, dt) {
+  const s = state.tab1;
+  s.pulse += dt * 3;
+
+  const R_OUTER = 195;
+  const R_CAMBIUM = 168;
+  const R_WOOD = 160;
+  const R_PITH = 18;
+
+  // 鋸口傷口缺口角度 (右上角約 -55度 ~ -15度 呈現受損與癒傷組織)
+  const woundStart = -0.95;
+  const woundEnd = -0.25;
+
+  // 1. 外樹皮環
+  ctx.fillStyle = COLORS.bark;
+  ctx.beginPath();
+  ctx.arc(0, 15, R_OUTER, woundEnd, woundStart + Math.PI * 2);
+  ctx.lineTo(Math.cos(woundStart) * R_WOOD, 15 + Math.sin(woundStart) * R_WOOD);
+  ctx.arc(0, 15, R_WOOD, woundStart, woundEnd, false);
+  ctx.closePath();
+  ctx.fill();
+
+  // 樹皮粗糙紋理線
+  ctx.strokeStyle = COLORS.barkDark;
+  ctx.lineWidth = 3;
+  for (let a = woundEnd + 0.15; a < woundStart + Math.PI * 2 - 0.1; a += 0.22) {
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * (R_OUTER - 12), 15 + Math.sin(a) * (R_OUTER - 12));
+    ctx.lineTo(Math.cos(a + 0.05) * R_OUTER, 15 + Math.sin(a + 0.05) * R_OUTER);
+    ctx.stroke();
+  }
+
+  // 2. 形成層 (Cambium) 亮綠細環
+  ctx.strokeStyle = COLORS.cambium;
+  ctx.lineWidth = 7;
+  ctx.beginPath();
+  ctx.arc(0, 15, R_CAMBIUM - 4, woundEnd, woundStart + Math.PI * 2);
+  ctx.stroke();
+
+  // 3. 木質部與年輪 (Xylem & Growth Rings)
+  ctx.fillStyle = COLORS.wood;
+  ctx.beginPath();
+  ctx.arc(0, 15, R_WOOD, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = COLORS.woodRing;
+  ctx.lineWidth = 2;
+  [45, 75, 105, 135].forEach(r => {
+    ctx.beginPath();
+    ctx.arc(0, 15, r, 0, Math.PI * 2);
+    ctx.stroke();
+  });
+
+  // 4. 中央髓心 (Pith)
+  ctx.fillStyle = COLORS.pith;
+  ctx.beginPath();
+  ctx.arc(0, 15, R_PITH, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 5. 左側：潛伏芽 / 隱芽 (Epicormic Bud) 與髓心維管束芽跡 (Bud Trace)
+  const epiAngle = Math.PI * 0.92; // 左側偏上
+  const epiDim = (s.focusMode === 'adventitious') ? 0.25 : 1;
+  ctx.save();
+  ctx.globalAlpha = epiDim;
+
+  const traceEndX = Math.cos(epiAngle) * (R_CAMBIUM + 4);
+  const traceEndY = 15 + Math.sin(epiAngle) * (R_CAMBIUM + 4);
+
+  // 芽跡：從樹幹中心髓心隨樹木逐年長粗而延伸的微小維管束連線
+  ctx.strokeStyle = COLORS.pith;
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.moveTo(0, 15);
+  ctx.lineTo(traceEndX, traceEndY);
+  ctx.stroke();
+
+  ctx.strokeStyle = COLORS.epicormic;
+  ctx.lineWidth = 2.5;
+  ctx.setLineDash([5, 4]);
+  ctx.beginPath();
+  ctx.moveTo(0, 15);
+  ctx.lineTo(traceEndX, traceEndY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // 潛伏芽本體（埋藏在樹皮下方、緊貼木質部）
+  ctx.beginPath();
+  ctx.arc(traceEndX, traceEndY, 13, 0, Math.PI * 2);
+  ctx.fillStyle = COLORS.epicormic;
+  ctx.fill();
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+
+  // 若步驟 >= 2 展示潛伏芽衝破樹皮變徒長枝，但僅浮貼於最外圈年輪
+  if (s.step >= 2) {
+    const outX = Math.cos(epiAngle) * (R_OUTER + 68);
+    const outY = 15 + Math.sin(epiAngle) * (R_OUTER + 68);
+    ctx.strokeStyle = COLORS.epicormic;
+    ctx.lineWidth = 14;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(traceEndX, traceEndY);
+    ctx.lineTo(outX, outY);
+    ctx.stroke();
+
+    // 浮貼警示
+    if (s.step === 3) {
+      ctx.strokeStyle = COLORS.danger;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(traceEndX, traceEndY, 22 + Math.sin(s.pulse) * 3, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+
+  // 6. 右上角傷口處：癒傷組織 (Callus) 薄壁細胞去分化形成「不定芽 (Adventitious Buds)」
+  const advDim = (s.focusMode === 'epicormic') ? 0.25 : 1;
+  ctx.save();
+  ctx.globalAlpha = advDim;
+
+  // 傷口暴露木質部暗化區
+  ctx.fillStyle = '#a16207';
+  ctx.beginPath();
+  ctx.moveTo(0, 15);
+  ctx.arc(0, 15, R_WOOD, woundStart, woundEnd);
+  ctx.closePath();
+  ctx.fill();
+
+  // 傷口兩側捲起膨大的癒合組織 (Callus / 薄壁細胞團)
+  [woundStart, woundEnd].forEach((ang, idx) => {
+    const cx = Math.cos(ang) * (R_CAMBIUM + 2);
+    const cy = 15 + Math.sin(ang) * (R_CAMBIUM + 2);
+
+    // 癒合組織團塊
+    ctx.fillStyle = COLORS.cambium;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 20, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Step >= 1：薄壁細胞去分化「無中生有」捏出不定芽 (完全沒有連通髓心的芽跡！)
+    if (s.step >= 1) {
+      const bx = cx + Math.cos(ang) * 10;
+      const by = cy + Math.sin(ang) * 10;
+      ctx.beginPath();
+      ctx.arc(bx, by, 10, 0, Math.PI * 2);
+      ctx.fillStyle = COLORS.adventitious;
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      if (s.step >= 2) {
+        const sx = bx + Math.cos(ang - 0.15 + idx * 0.3) * 65;
+        const sy = by + Math.sin(ang - 0.15 + idx * 0.3) * 65;
+        ctx.strokeStyle = COLORS.adventitious;
+        ctx.lineWidth = 10;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(bx, by);
+        ctx.lineTo(sx, sy);
+        ctx.stroke();
+      }
+    }
+  });
+  ctx.restore();
+
+  // 標籤解說
+  drawCallout(ctx, 0, 15, -15, 125, '中央髓心 (Pith)', '幼年枝條時期的核心組織', COLORS.pith);
+
+  if (s.focusMode !== 'adventitious') {
+    drawCallout(ctx, -95, -5, -185, -135, '維管束「芽跡 (Bud Trace)」', '隨年輪增粗向外延伸，保持連線', COLORS.epicormic);
+    drawCallout(ctx, traceEndX, traceEndY, -215, 75, '潛伏芽 / 隱芽 (Epicormic Bud)', '早年即存在，深埋樹皮下緊貼木質部', COLORS.epicormic);
+  }
+
+  if (s.focusMode !== 'epicormic') {
+    const c1x = Math.cos(woundStart) * R_CAMBIUM;
+    const c1y = 15 + Math.sin(woundStart) * R_CAMBIUM;
+    drawCallout(ctx, c1x, c1y, 175, -185, '癒合組織 (Callus) 與形成層', '具全能性的薄壁細胞重新「去分化」', COLORS.cambium);
+    if (s.step >= 1) {
+      const c2x = Math.cos(woundEnd) * (R_CAMBIUM + 10);
+      const c2y = 15 + Math.sin(woundEnd) * (R_CAMBIUM + 10);
+      drawCallout(ctx, c2x, c2y, 225, -35, '不定芽 (Adventitious Bud)', '傷口周邊「無中生有」，無髓心芽跡！', COLORS.adventitious);
+    }
+  }
+
+  if (s.step === 3) {
+    drawCallout(ctx, traceEndX, traceEndY, -180, 185, '⚠️ 缺乏深層木質嵌合', '新枝僅附著於最外層年輪表面', COLORS.danger);
+  }
+}
+
+/* ============================================================================
+ * 分頁 2：真正的結構枝 vs 斷頭「偽結構枝（徒長枝）」木材解剖與強風力學槓桿
+ * ============================================================================ */
+function drawTreeUnionComparison(ctx, centerX, isStructural, windVal, step, dt) {
+  ctx.save();
+  ctx.translate(centerX, 30);
+
+  // 計算風力造成的彎曲力矩與槓桿搖晃
+  const gust = Math.sin(state.time * 4.5) * 0.25 + 0.75;
+  const effectiveWind = (windVal / 100) * gust;
+
+  // 若是偽結構枝且風力超過臨界點 (wind >= 72)，觸發撕裂脫落！
+  if (!isStructural && windVal >= 72) {
+    state.tab2.torn = true;
+  }
+  if (!isStructural && state.tab2.torn) {
+    state.tab2.tearAngle = Math.min(1.35, state.tab2.tearAngle + dt * 2.8);
+  } else if (!isStructural) {
+    state.tab2.tearAngle = 0;
+  }
+
+  // 風吹氣流線
+  if (windVal > 5) {
+    ctx.strokeStyle = `rgba(56, 189, 248, ${0.18 + (windVal / 100) * 0.5})`;
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 4; i++) {
+      const wy = -195 + i * 36;
+      const wx = -135 + ((state.time * (80 + windVal * 2) + i * 45) % 160);
+      ctx.beginPath();
+      ctx.moveTo(wx, wy);
+      ctx.lineTo(wx + 28 + windVal * 0.25, wy);
+      ctx.stroke();
+    }
+  }
+
+  // 主幹縱切面
+  const trunkW = 36;
+  // 左側樹皮
+  ctx.fillStyle = COLORS.bark;
+  ctx.fillRect(-trunkW - 8, -150, 8, 330);
+  // 右側樹皮 (偽結構枝在斷頭切口下方)
+  const topY = isStructural ? -170 : -60;
+  ctx.fillRect(trunkW, topY, 8, 180 - topY);
+
+  // 主幹木質部
+  ctx.fillStyle = COLORS.wood;
+  ctx.fillRect(-trunkW, topY, trunkW * 2, 180 - topY);
+
+  // 主幹年輪縱紋
+  ctx.strokeStyle = COLORS.woodRing;
+  ctx.lineWidth = 1.6;
+  [-24, -14, 14, 24].forEach(rx => {
+    ctx.beginPath();
+    ctx.moveTo(rx, topY);
+    ctx.lineTo(rx, 180);
+    ctx.stroke();
+  });
+
+  // 主幹髓心
+  ctx.fillStyle = COLORS.pith;
+  ctx.fillRect(-4, topY, 8, 180 - topY);
+
+  if (isStructural) {
+    /* ---------------- 左圖：真正的結構枝 (True Structural Branch) ---------------- */
+    const bend = effectiveWind * 0.12;
+
+    // 枝領 (Branch Collar) 膨大互鎖結構
+    ctx.fillStyle = COLORS.wood;
+    ctx.beginPath();
+    ctx.moveTo(12, 35);
+    ctx.quadraticCurveTo(55, 25, 62, -10);
+    ctx.lineTo(36, -52);
+    ctx.lineTo(12, -25);
+    ctx.closePath();
+    ctx.fill();
+
+    // 枝條本體隨風微幅彈性彎曲
+    ctx.save();
+    ctx.translate(36, -12);
+    ctx.rotate(bend);
+
+    // 枝條樹皮與內部木質
+    ctx.strokeStyle = COLORS.bark;
+    ctx.lineWidth = 28;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.quadraticCurveTo(55, -55, 108, -125);
+    ctx.stroke();
+
+    ctx.strokeStyle = COLORS.wood;
+    ctx.lineWidth = 18;
+    ctx.beginPath();
+    ctx.moveTo(-18, 18); // 深入主幹內部！
+    ctx.quadraticCurveTo(55, -55, 108, -125);
+    ctx.stroke();
+
+    // 關鍵解剖：層層交織重疊的木質部纖維 (Overlapping Collar Fibers)
+    ctx.strokeStyle = '#b45309';
+    ctx.lineWidth = 2.2;
+    for (let k = -2; k <= 2; k++) {
+      ctx.beginPath();
+      ctx.moveTo(-20 + k * 4, 48);
+      ctx.quadraticCurveTo(10 + k * 3, 5 + k * 3, 75, -82 + k * 3);
+      ctx.stroke();
+    }
+
+    // 健康分散樹葉
+    ctx.fillStyle = 'rgba(34, 197, 94, 0.88)';
+    [[95, -118, 28], [120, -138, 25], [82, -142, 22]].forEach(([lx, ly, lr]) => {
+      ctx.beginPath(); ctx.arc(lx, ly, lr, 0, Math.PI * 2); ctx.fill();
+    });
+    ctx.restore();
+
+    // 枝皮脊線 (BBR) 隆起標記
+    ctx.fillStyle = COLORS.barkDark;
+    ctx.beginPath();
+    ctx.arc(37, -34, 6, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 標題與標籤
+    ctx.fillStyle = '#34d399';
+    ctx.font = 'bold 15px "Noto Sans TC", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('✅ 真正的結構枝 (Structural Branch)', 0, -210);
+
+    drawCallout(ctx, 25, 5, -5, 95, '堅固枝領 (Branch Collar)', '木質纖維層層交織深入主幹', '#34d399');
+
+  } else {
+    /* ---------------- 右圖：斷頭後的偽結構枝 / 徒長枝 ---------------- */
+    // 斷頭腐朽水平大鋸口
+    ctx.fillStyle = '#78350f';
+    ctx.beginPath();
+    ctx.ellipse(0, -60, 44, 9, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // 鋸口下方三角形腐朽區 (Discolored/decayed wood)
+    ctx.fillStyle = 'rgba(120, 53, 15, 0.55)';
+    ctx.beginPath();
+    ctx.moveTo(-34, -58);
+    ctx.lineTo(34, -58);
+    ctx.lineTo(0, 20);
+    ctx.closePath();
+    ctx.fill();
+
+    // 薄薄一層外圍新生木質層
+    ctx.fillStyle = COLORS.woodLight;
+    ctx.fillRect(trunkW - 5, -58, 5, 238);
+
+    const attachX = trunkW + 2;
+    const attachY = -42;
+    const bend = state.tab2.torn ? state.tab2.tearAngle : effectiveWind * 0.36;
+
+    ctx.save();
+    ctx.translate(attachX, attachY);
+    ctx.rotate(bend);
+
+    // 若發生撕裂，連帶撕下一大片外樹皮
+    if (state.tab2.torn) {
+      ctx.fillStyle = COLORS.bark;
+      ctx.beginPath();
+      ctx.moveTo(-4, 0);
+      ctx.lineTo(6, 75);
+      ctx.lineTo(-4, 75);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // 又長又粗、快速暴長的徒長枝（僅黏貼於外表面，未深入內部木質部！）
+    ctx.strokeStyle = COLORS.epicormic;
+    ctx.lineWidth = 22;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.quadraticCurveTo(38, -85, 68, -185);
+    ctx.stroke();
+
+    ctx.strokeStyle = COLORS.woodLight;
+    ctx.lineWidth = 13;
+    ctx.beginPath();
+    ctx.moveTo(1, -2); // 完全停在表面，沒有深入主幹！
+    ctx.quadraticCurveTo(38, -85, 68, -185);
+    ctx.stroke();
+
+    // 頭重腳輕的巨大高風阻葉團
+    ctx.fillStyle = 'rgba(34, 197, 94, 0.9)';
+    [[58, -178, 38], [86, -195, 34], [42, -205, 30], [72, -220, 28]].forEach(([lx, ly, lr]) => {
+      ctx.beginPath(); ctx.arc(lx, ly, lr, 0, Math.PI * 2); ctx.fill();
+    });
+
+    // 槓桿力臂箭頭
+    if (windVal > 20 && !state.tab2.torn) {
+      ctx.strokeStyle = COLORS.danger;
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([5, 3]);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(68, -185);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    ctx.restore();
+
+    // 基部應力集中紅光閃爍
+    const stressAlpha = Math.min(1, windVal / 65);
+    if (stressAlpha > 0.15) {
+      ctx.beginPath();
+      ctx.arc(attachX, attachY, 14 + stressAlpha * 10, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(239, 68, 68, ${0.35 * stressAlpha})`;
+      ctx.fill();
+      ctx.strokeStyle = COLORS.danger;
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = '#fca5a5';
+    ctx.font = 'bold 15px "Noto Sans TC", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('⚠️ 斷頭「偽結構枝」(徒長枝)', 0, -210);
+
+    if (state.tab2.torn) {
+      drawCallout(ctx, attachX, attachY + 15, 10, 115, '💥 連皮帶肉撕裂脫落！', '缺乏嵌合結構，無法承受風力槓桿', COLORS.danger);
+    } else {
+      drawCallout(ctx, attachX, attachY, 15, 95, '「黏貼式」脆弱基部', '僅浮貼於外層新生木質，無枝領嵌合', COLORS.danger);
+      if (windVal >= 30) {
+        drawCallout(ctx, attachX + 65, -190, -15, -135, '極端力學槓桿 & 高風阻', '頭重腳輕，應力全集中在黏貼點', COLORS.epicormic);
+      }
+    }
+  }
+
+  ctx.restore();
+}
+
+function renderTab2(ctx, dt) {
+  const mode = state.tab2.mode;
+  const w = state.tab2.wind;
+
+  if (mode === 'compare') {
+    // 分隔虛線
+    ctx.strokeStyle = '#334155';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 6]);
+    ctx.beginPath();
+    ctx.moveTo(0, -240);
+    ctx.lineTo(0, 240);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    drawTreeUnionComparison(ctx, -185, true, w, state.tab2.step, dt);
+    drawTreeUnionComparison(ctx, 185, false, w, state.tab2.step, dt);
+  } else if (mode === 'structural') {
+    drawTreeUnionComparison(ctx, 0, true, w, state.tab2.step, dt);
+  } else {
+    drawTreeUnionComparison(ctx, 0, false, w, state.tab2.step, dt);
+  }
+}
+
+/* ============================================================================
+ * 分頁 3：Three.js 3D 立體模擬 — 夾皮 (Included Bark) 與楔子效應 (Wedge Effect)
+ * ============================================================================ */
+let threeScene, threeCamera, threeRenderer, threeControls;
+let stemGroup, leftStemPivot, rightStemPivot, wedgeMesh, bbrMesh, crackGlowMesh;
+let threeInitialized = false;
+const labels3DData = [];
+
+function initThreeScene() {
+  if (threeInitialized) return;
+  threeInitialized = true;
+
+  const container = document.getElementById('three-container');
+  threeScene = new THREE.Scene();
+
+  threeCamera = new THREE.PerspectiveCamera(42, container.clientWidth / container.clientHeight, 0.1, 100);
+  threeCamera.position.set(0, 3.2, 9.5);
+
+  threeRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  threeRenderer.setSize(container.clientWidth, container.clientHeight);
+  container.appendChild(threeRenderer.domElement);
+
+  threeControls = new OrbitControls(threeCamera, threeRenderer.domElement);
+  threeControls.enableDamping = true;
+  threeControls.dampingFactor = 0.08;
+  threeControls.target.set(0, 2.3, 0);
+  threeControls.minDistance = 4;
+  threeControls.maxDistance = 18;
+
+  // 燈光配置
+  const ambient = new THREE.AmbientLight(0xffffff, 0.75);
+  threeScene.add(ambient);
+
+  const dirLight = new THREE.DirectionalLight(0xfffbeb, 1.35);
+  dirLight.position.set(5, 10, 7);
+  threeScene.add(dirLight);
+
+  const backLight = new THREE.DirectionalLight(0x38bdf8, 0.45);
+  backLight.position.set(-6, 4, -6);
+  threeScene.add(backLight);
+
+  // 地面圓盤
+  const groundGeo = new THREE.CylinderGeometry(3.6, 3.8, 0.2, 36);
+  const groundMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.9 });
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.position.y = -0.1;
+  threeScene.add(ground);
+
+  build3DForkModel();
+}
+
+function build3DForkModel() {
+  if (stemGroup) threeScene.remove(stemGroup);
+  stemGroup = new THREE.Group();
+  threeScene.add(stemGroup);
+
+  const isIncluded = state.tab3.unionType === 'v_included';
+  const halfCut = state.tab3.crossSection;
+  const thetaLen = halfCut ? Math.PI : Math.PI * 2;
+  const thetaStart = halfCut ? Math.PI : 0; // 切開前半部以露出內部剖面
+
+  const barkMat = new THREE.MeshStandardMaterial({ color: 0x5c4033, roughness: 0.92, side: THREE.DoubleSide });
+  const woodMat = new THREE.MeshStandardMaterial({ color: 0xeab308, roughness: 0.65, side: THREE.DoubleSide });
+  const innerCutMat = new THREE.MeshStandardMaterial({ color: 0xfef08a, roughness: 0.55, side: THREE.DoubleSide });
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.75 });
+
+  // 下方基部主幹 (高度 0 ~ 2.2)
+  const baseOuter = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.92, 2.2, 28, 1, false, thetaStart, thetaLen), barkMat);
+  baseOuter.position.y = 1.1;
+  stemGroup.add(baseOuter);
+
+  const baseWood = new THREE.Mesh(new THREE.CylinderGeometry(0.66, 0.82, 2.21, 28, 1, false, thetaStart, thetaLen), woodMat);
+  baseWood.position.y = 1.1;
+  stemGroup.add(baseWood);
+
+  if (halfCut) {
+    // 封閉主幹縱切平面，讓木材解剖面清晰可見
+    const planeGeo = new THREE.PlaneGeometry(1.48, 2.2);
+    const cutPlane = new THREE.Mesh(planeGeo, innerCutMat);
+    cutPlane.position.set(0, 1.1, 0);
+    stemGroup.add(cutPlane);
+
+    // 中央髓心線
+    const pithPlane = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 2.2), new THREE.MeshBasicMaterial({ color: 0x78350f, side: THREE.DoubleSide }));
+    pithPlane.position.set(0, 1.1, 0.01);
+    stemGroup.add(pithPlane);
+  }
+
+  // 建立左右雙分叉主幹 Pivot (繞分叉中心點旋轉，模擬強風搖晃與劈裂)
+  leftStemPivot = new THREE.Group();
+  rightStemPivot = new THREE.Group();
+  leftStemPivot.position.set(isIncluded ? -0.12 : -0.32, 2.1, 0);
+  rightStemPivot.position.set(isIncluded ? 0.12 : 0.32, 2.1, 0);
+  stemGroup.add(leftStemPivot);
+  stemGroup.add(rightStemPivot);
+
+  const baseAngle = isIncluded ? 0.24 : 0.62; // V型狹窄夾角 (<30度) vs U型健康開闊夾角
+
+  [
+    { pivot: leftStemPivot, sign: -1 },
+    { pivot: rightStemPivot, sign: 1 }
+  ].forEach(({ pivot, sign }) => {
+    const branchHolder = new THREE.Group();
+    branchHolder.rotation.z = -sign * baseAngle;
+    pivot.add(branchHolder);
+
+    // 若是健康 U 型，底部有圓弧彎曲過渡
+    const len = 3.6;
+    const bBark = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.56, len, 24, 1, false, thetaStart, thetaLen), barkMat);
+    bBark.position.y = len / 2;
+    branchHolder.add(bBark);
+
+    const bWood = new THREE.Mesh(new THREE.CylinderGeometry(0.30, 0.49, len + 0.01, 24, 1, false, thetaStart, thetaLen), woodMat);
+    bWood.position.y = len / 2;
+    branchHolder.add(bWood);
+
+    if (halfCut) {
+      const bPlane = new THREE.Mesh(new THREE.PlaneGeometry(0.82, len), innerCutMat);
+      bPlane.position.set(0, len / 2, 0);
+      branchHolder.add(bPlane);
+    }
+
+    // 頂端高風阻樹冠葉團 (槓桿受風面)
+    const crown = new THREE.Group();
+    crown.position.y = len + 0.2;
+    [
+      [0, 0.3, 0, 1.05],
+      [sign * 0.6, 0.1, 0.3, 0.8],
+      [-sign * 0.3, 0.5, -0.3, 0.75]
+    ].forEach(([cx, cy, cz, cr]) => {
+      const lMesh = new THREE.Mesh(new THREE.IcosahedronGeometry(cr, 1), leafMat);
+      lMesh.position.set(cx, cy, cz);
+      crown.add(lMesh);
+    });
+    branchHolder.add(crown);
+  });
+
+  if (isIncluded) {
+    // 異常 V 字型：中間夾入一層深褐色死樹皮楔子 (Included Bark Wedge)
+    const wedgeShape = new THREE.Shape();
+    wedgeShape.moveTo(0, 0.85);   // 向下深入主幹內部！
+    wedgeShape.lineTo(-0.18, 2.55);
+    wedgeShape.lineTo(0.18, 2.55);
+    wedgeShape.closePath();
+
+    const extrudeSettings = { depth: halfCut ? 0.55 : 1.1, bevelEnabled: false };
+    const wedgeGeo = new THREE.ExtrudeGeometry(wedgeShape, extrudeSettings);
+    wedgeGeo.translate(0, 0, halfCut ? -0.55 : -0.55);
+
+    const incBarkMat = new THREE.MeshStandardMaterial({ color: 0x29150c, roughness: 1.0 });
+    wedgeMesh = new THREE.Mesh(wedgeGeo, incBarkMat);
+    wedgeMesh.position.set(0, 0.4, 0.02);
+    stemGroup.add(wedgeMesh);
+
+    // 劈裂紅色警戒裂縫光效
+    const crackGeo = new THREE.PlaneGeometry(0.16, 1.8);
+    const crackMat = new THREE.MeshBasicMaterial({ color: 0xef4444, transparent: true, opacity: 0, side: THREE.DoubleSide });
+    crackGlowMesh = new THREE.Mesh(crackGeo, crackMat);
+    crackGlowMesh.position.set(0, 1.1, 0.04);
+    stemGroup.add(crackGlowMesh);
+  } else {
+    // 正常 U 字型：分叉處具橫向互鎖木質部與明顯隆起的「枝皮脊線 (Branch Bark Ridge, BBR)」
+    const uBridge = new THREE.Mesh(
+      new THREE.TorusGeometry(0.45, 0.28, 14, 24, Math.PI),
+      halfCut ? woodMat : barkMat
+    );
+    uBridge.rotation.z = Math.PI;
+    uBridge.position.set(0, 2.38, 0);
+    stemGroup.add(uBridge);
+
+    // 隆起枝皮脊線 (BBR)
+    const bbrGeo = new THREE.TorusGeometry(0.52, 0.07, 10, 20, Math.PI * 0.7);
+    const bbrMat = new THREE.MeshStandardMaterial({ color: 0x10b981, emissive: 0x064e3b });
+    bbrMesh = new THREE.Mesh(bbrGeo, bbrMat);
+    bbrMesh.rotation.y = Math.PI / 2;
+    bbrMesh.position.set(0, 2.1, 0.15);
+    stemGroup.add(bbrMesh);
+  }
+
+  setup3DLabels();
+}
+
+function setup3DLabels() {
+  const container = document.getElementById('labels-3d');
+  container.innerHTML = '';
+  labels3DData.length = 0;
+
+  const addTag = (pos, text, borderCol) => {
+    const el = document.createElement('div');
+    el.className = 'label-tag-3d';
+    el.style.borderColor = borderCol;
+    el.textContent = text;
+    container.appendChild(el);
+    labels3DData.push({ pos: pos.clone(), el });
+  };
+
+  if (state.tab3.unionType === 'v_included') {
+    addTag(new THREE.Vector3(0, 2.55, 0.2), '⚠️ V 字型狹窄夾角 (<45°)', COLORS.danger);
+    addTag(new THREE.Vector3(0, 1.65, 0.25), '夾皮 (Included Bark)：死樹皮捲入木頭間', '#fb923c');
+    addTag(new THREE.Vector3(1.65, 4.9, 0), '同勢主幹長槓桿受風面', COLORS.auxin);
+    addTag(new THREE.Vector3(0, 0.75, 0.25), '⚡ 楔子效應向下撕裂點', COLORS.danger);
+  } else {
+    addTag(new THREE.Vector3(0, 2.75, 0.2), '✅ U 字型健康開闊分叉', '#10b981');
+    addTag(new THREE.Vector3(0, 2.05, 0.55), '隆起枝皮脊線 (BBR)：木質部向外互鎖', '#10b981');
+    addTag(new THREE.Vector3(-1.8, 4.6, 0), '彈性分散風力載荷', COLORS.auxin);
+  }
+}
+
+function updateThreeScene(dt) {
+  if (!threeInitialized) return;
+  threeControls.update();
+
+  const w = state.tab3.wind / 100;
+  const isIncluded = state.tab3.unionType === 'v_included';
+  const osc = Math.sin(state.time * 5.2) * 0.5 + 0.5;
+
+  if (leftStemPivot && rightStemPivot) {
+    if (isIncluded) {
+      // V 型夾皮：兩根同勢主幹產生相對位移與楔子張開效應
+      const targetSplit = w > 0.68 ? Math.min(1, state.tab3.splitProgress + dt * 1.6) : w * 0.22;
+      if (w <= 0.68) state.tab3.splitProgress = targetSplit;
+      else state.tab3.splitProgress = targetSplit;
+
+      const s = state.tab3.splitProgress;
+      const sway = w * 0.08 * Math.sin(state.time * 6);
+      leftStemPivot.rotation.z = s * 0.55 + sway;
+      rightStemPivot.rotation.z = -s * 0.55 - sway * 0.8;
+      leftStemPivot.position.x = -0.12 - s * 0.35;
+      rightStemPivot.position.x = 0.12 + s * 0.35;
+
+      if (crackGlowMesh) {
+        crackGlowMesh.material.opacity = Math.min(0.95, w * 0.9 + s * 0.5 * osc);
+        crackGlowMesh.scale.x = 1 + s * 3.5;
+      }
+    } else {
+      // U 型健康分叉：兩側木質緊密嵌合，整體協調微幅搖擺而不裂開
+      const sway = w * 0.11 * Math.sin(state.time * 4.5);
+      leftStemPivot.rotation.z = sway;
+      rightStemPivot.rotation.z = sway;
+    }
+  }
+
+  threeRenderer.render(threeScene, threeCamera);
+
+  // 更新 3D 空間投影至 2D HTML 標籤座標
+  const rect = threeRenderer.domElement.getBoundingClientRect();
+  labels3DData.forEach(item => {
+    if (!state.showLabels) {
+      item.el.style.opacity = '0';
+      return;
+    }
+    const v = item.pos.clone().project(threeCamera);
+    if (v.z > 1) {
+      item.el.style.opacity = '0';
+      return;
+    }
+    const x = (v.x * 0.5 + 0.5) * rect.width;
+    const y = (-v.y * 0.5 + 0.5) * rect.height;
+    item.el.style.opacity = '1';
+    item.el.style.left = `${x}px`;
+    item.el.style.top = `${y}px`;
+  });
+}
+
+function resizeThree() {
+  if (!threeInitialized) return;
+  const container = document.getElementById('three-container');
+  if (container.clientWidth === 0 || container.clientHeight === 0) return;
+  threeCamera.aspect = container.clientWidth / container.clientHeight;
+  threeCamera.updateProjectionMatrix();
+  threeRenderer.setSize(container.clientWidth, container.clientHeight);
+}
+
+/* ============================================================================
+ * UI 面板與 Step-by-Step 流程資料控制
+ * ============================================================================ */
+const TAB0_STEPS = [
+  {
+    badge: 'Step 1 / 5',
+    name: '平時的封印：頂端優勢 (Apical Dominance)',
+    desc: '健康樹冠的頂芽會持續合成並向下運送高濃度的<strong>生長素（Auxin，藍點）</strong>。這道荷爾蒙梯度像「封印」一樣壓制樹皮下的潛伏芽，使養分優先供應正常結構生長。'
+  },
+  {
+    badge: 'Step 2 / 5',
+    name: '遭受「斷頭（Topping）」破壞與荷爾蒙翻轉',
+    desc: '當主幹頂端被強制鋸斷，頂芽瞬間消失，<strong>生長素供應瞬間歸零</strong>！此時由根部持續向上輸送的<strong>細胞分裂素（Cytokinin，粉紅點）</strong>相對暴增，啟動急難應變機制。'
+  },
+  {
+    badge: 'Step 3 / 5',
+    name: '三大急難芽體同時解除封印',
+    desc: '荷爾蒙劇烈翻轉喚醒三處芽源：<br>① <strong>潛伏芽（橘）</strong>：樹皮下連通髓心的生還者預備隊。<br>② <strong>不定芽（紫）</strong>：鋸口形成層薄壁細胞「去分化」無中生有。<br>③ <strong>殘存側枝腋芽（青）</strong>：接管新頂芽地位。'
+  },
+  {
+    badge: 'Step 4 / 5',
+    name: '徒長枝（Watersprouts）失控狂飆',
+    desc: '為了緊急製造葉片行光合作用避免餓死，潛伏芽與不定芽長出俗稱的<strong>徒長枝</strong>，一年可暴長數公尺；殘存側枝腋芽也由橫向改為垂直向上狂飆。'
+  },
+  {
+    badge: 'Step 5 / 5',
+    name: '⚠️ 樹藝學警示：製造滿樹定時炸彈',
+    desc: '斷頭看似讓樹「重生」，實則致命！徒長枝<strong>直接浮貼在樹皮與外層木質表面</strong>，缺乏正常的枝條聯結區，且頭重腳輕，幾年後一場強風就會從基部整支撕裂砸落。'
+  }
+];
+
+const TAB1_STEPS = [
+  {
+    badge: 'Step 1 / 4',
+    name: '正常樹幹橫切面與「潛伏芽」解剖位置',
+    desc: '觀察左側：<strong>潛伏芽 / 隱芽（Epicormic Bud）</strong>在樹木幼年小枝時期就已形成，隨年輪增粗深埋在樹皮下方、緊貼木質部，並透過一條微小的維管束<strong>「芽跡（Bud Trace）」</strong>與中心的髓心保持連線。'
+  },
+  {
+    badge: 'Step 2 / 4',
+    name: '創傷邊緣「無中生有」：不定芽的去分化',
+    desc: '觀察右上鋸口：植物<strong>薄壁細胞（Parenchyma）</strong>具高度全能性（Totipotency）。受傷後，靠近形成層與癒合組織（Callus）的成熟細胞會<strong>去分化（Dedifferentiation）</strong>，恢復分生狀態直接捏出<strong>不定芽（紫色）</strong>——注意它完全沒有連通髓心的芽跡！'
+  },
+  {
+    badge: 'Step 3 / 4',
+    name: '衝破樹皮：新枝向外暴長',
+    desc: '失去頂端壓制後，潛伏芽與不定芽雙雙向外萌發。潛伏芽是樹木最主要的「生還者預備隊」，不定芽則是傷口邊緣的急難補強。'
+  },
+  {
+    badge: 'Step 4 / 4',
+    name: '致命解剖缺陷：僅附著於最外圈木質',
+    desc: '從橫切面可清楚看穿：無論潛伏芽或不定芽長出的新枝，其木質部<strong>只附著在最外圈的新生年輪上</strong>，完全沒有深入樹幹內部與舊木質部嵌合。'
+  }
+];
+
+function renderLegend() {
+  const bar = document.getElementById('legend-bar');
+  const items = [
+    ['外樹皮/夾皮', COLORS.bark],
+    ['形成層/癒傷', COLORS.cambium],
+    ['木質部', COLORS.wood],
+    ['髓心/芽跡', COLORS.pith]
+  ];
+  if (state.activeTab === 0) {
+    items.push(['生長素 Auxin', COLORS.auxin], ['細胞分裂素', COLORS.cytokinin], ['潛伏芽/徒長枝', COLORS.epicormic], ['不定芽', COLORS.adventitious], ['腋芽', COLORS.axillary]);
+  } else if (state.activeTab === 1) {
+    items.push(['潛伏芽 (連髓心)', COLORS.epicormic], ['不定芽 (去分化)', COLORS.adventitious]);
+  } else if (state.activeTab === 2) {
+    items.push(['偽結構徒長枝', COLORS.epicormic], ['撕裂應力集中', COLORS.danger]);
+  } else if (state.activeTab === 3) {
+    items.push(['健康枝皮脊線 BBR', '#10b981'], ['楔子劈裂應力', COLORS.danger]);
+  }
+
+  bar.innerHTML = items.map(([name, col]) =>
+    `<div class="legend-pill"><span class="dot" style="background:${col}"></span>${name}</div>`
+  ).join('');
+}
+
+function renderControlPanel() {
+  const titleEl = document.getElementById('panel-title');
+  const bodyEl = document.getElementById('panel-body');
+  renderLegend();
+
+  if (state.activeTab === 0) {
+    titleEl.textContent = '1. 斷頭修剪與急難應變機制';
+    const cur = TAB0_STEPS[state.tab0.step];
+    bodyEl.innerHTML = `
+      <div class="stepper-box">
+        <div class="step-dots">
+          ${TAB0_STEPS.map((_, i) => `<div class="step-dot ${i === state.tab0.step ? 'active' : (i < state.tab0.step ? 'done' : '')}" data-step="${i}"></div>`).join('')}
+        </div>
+        <div class="step-header-row">
+          <span class="step-badge">${cur.badge}</span>
+        </div>
+        <div class="step-name">${cur.name}</div>
+        <div class="step-desc">${cur.desc}</div>
+        <div class="step-nav">
+          <button class="btn-secondary" id="t0-prev" ${state.tab0.step === 0 ? 'disabled' : ''}>◀ 上一步</button>
+          <button class="btn-primary" id="t0-next" ${state.tab0.step === TAB0_STEPS.length - 1 ? 'disabled' : ''}>下一步 ▶</button>
+        </div>
+      </div>
+      <div class="info-card">
+        <strong>💡 延伸知識：荷爾蒙比例決定命運</strong><br>
+        頂芽存在時「高生長素 / 低細胞分裂素」維持秩序；斷頭後比例瞬間逆轉，加上大傷口無法有效啟動 CODIT（樹木腐朽區隔化），腐朽菌將沿鋸口長驅直入主幹中心。
+      </div>
+    `;
+
+    bodyEl.querySelectorAll('.step-dot').forEach(dot => {
+      dot.onclick = () => { state.tab0.step = Number(dot.dataset.step); renderControlPanel(); };
+    });
+    document.getElementById('t0-prev').onclick = () => { if (state.tab0.step > 0) { state.tab0.step--; renderControlPanel(); } };
+    document.getElementById('t0-next').onclick = () => { if (state.tab0.step < TAB0_STEPS.length - 1) { state.tab0.step++; renderControlPanel(); } };
+
+  } else if (state.activeTab === 1) {
+    titleEl.textContent = '2. 潛伏芽 vs 不定芽橫切面解剖';
+    const cur = TAB1_STEPS[state.tab1.step];
+    bodyEl.innerHTML = `
+      <div class="stepper-box">
+        <div class="step-dots">
+          ${TAB1_STEPS.map((_, i) => `<div class="step-dot ${i === state.tab1.step ? 'active' : (i < state.tab1.step ? 'done' : '')}" data-step="${i}"></div>`).join('')}
+        </div>
+        <div class="step-header-row">
+          <span class="step-badge">${cur.badge}</span>
+        </div>
+        <div class="step-name">${cur.name}</div>
+        <div class="step-desc">${cur.desc}</div>
+        <div class="step-nav">
+          <button class="btn-secondary" id="t1-prev" ${state.tab1.step === 0 ? 'disabled' : ''}>◀ 上一步</button>
+          <button class="btn-primary" id="t1-next" ${state.tab1.step === TAB1_STEPS.length - 1 ? 'disabled' : ''}>下一步 ▶</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <div class="control-label"><span>🔍 視覺聚焦比較</span></div>
+        <div class="seg-group">
+          <button class="seg-btn ${state.tab1.focusMode === 'both' ? 'active' : ''}" data-focus="both">雙重對比</button>
+          <button class="seg-btn ${state.tab1.focusMode === 'epicormic' ? 'active' : ''}" data-focus="epicormic">只看潛伏芽</button>
+          <button class="seg-btn ${state.tab1.focusMode === 'adventitious' ? 'active' : ''}" data-focus="adventitious">只看不定芽</button>
+        </div>
+      </div>
+
+      <div class="info-card">
+        <strong>🔬 如何分辨潛伏芽與不定芽？</strong><br>
+        切開木材橫切面看<strong>「有無芽跡連通髓心」</strong>即可一目了然：潛伏芽是預留的舊芽，有芽跡一路連回樹心；不定芽則是受傷後由薄壁細胞全能性臨時捏出來的，沒有芽跡。
+      </div>
+    `;
+
+    bodyEl.querySelectorAll('.step-dot').forEach(dot => {
+      dot.onclick = () => { state.tab1.step = Number(dot.dataset.step); renderControlPanel(); };
+    });
+    document.getElementById('t1-prev').onclick = () => { if (state.tab1.step > 0) { state.tab1.step--; renderControlPanel(); } };
+    document.getElementById('t1-next').onclick = () => { if (state.tab1.step < TAB1_STEPS.length - 1) { state.tab1.step++; renderControlPanel(); } };
+    bodyEl.querySelectorAll('[data-focus]').forEach(btn => {
+      btn.onclick = () => { state.tab1.focusMode = btn.dataset.focus; renderControlPanel(); };
+    });
+
+  } else if (state.activeTab === 2) {
+    titleEl.textContent = '3. 結構枝 vs 偽結構枝力學測試';
+    bodyEl.innerHTML = `
+      <div class="control-group">
+        <div class="control-label"><span>📐 檢視模式</span></div>
+        <div class="seg-group">
+          <button class="seg-btn ${state.tab2.mode === 'compare' ? 'active' : ''}" data-mode="compare">並排對比</button>
+          <button class="seg-btn ${state.tab2.mode === 'structural' ? 'active' : ''}" data-mode="structural">正常結構枝</button>
+          <button class="seg-btn ${state.tab2.mode === 'watersprout' ? 'danger-active' : ''}" data-mode="watersprout">斷頭偽結構枝</button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <div class="control-label">
+          <span>🌬️ 強風級數 (力學槓桿負載)</span>
+          <span id="wind2-val" style="color:${state.tab2.wind >= 72 ? COLORS.danger : '#38bdf8'}">${state.tab2.wind}% ${state.tab2.wind >= 72 ? '(暴風撕裂!)' : ''}</span>
+        </div>
+        <input type="range" id="wind2-slider" min="0" max="100" value="${state.tab2.wind}">
+        <div class="step-nav">
+          <button class="btn-secondary" id="btn-breeze">微風 (20%)</button>
+          <button class="btn-danger" id="btn-typhoon">颱風強陣風 (85%)</button>
+          ${state.tab2.torn ? `<button class="btn-primary" id="btn-repair">復原枝條</button>` : ''}
+        </div>
+      </div>
+
+      <div class="info-card">
+        <strong>✅ 真正的結構枝：</strong>幼年即與主幹同步生長，木質纖維每年交替重疊包覆，形成堅固的<strong>枝領（Branch Collar）</strong>。
+      </div>
+      <div class="info-card warn">
+        <strong>⚠️ 斷頭偽結構枝（定時炸彈）：</strong>像用強力膠「黏」在樹幹外表面，加上快速搶陽光形成長力臂與濃密樹冠，強風一吹便連皮帶肉<strong>撕裂脫落</strong>！
+      </div>
+    `;
+
+    bodyEl.querySelectorAll('[data-mode]').forEach(btn => {
+      btn.onclick = () => { state.tab2.mode = btn.dataset.mode; renderControlPanel(); };
+    });
+    const slider = document.getElementById('wind2-slider');
+    slider.oninput = (e) => {
+      state.tab2.wind = Number(e.target.value);
+      if (state.tab2.wind < 60 && state.tab2.torn) state.tab2.torn = false;
+      const lbl = document.getElementById('wind2-val');
+      lbl.textContent = `${state.tab2.wind}% ${state.tab2.wind >= 72 ? '(暴風撕裂!)' : ''}`;
+      lbl.style.color = state.tab2.wind >= 72 ? COLORS.danger : '#38bdf8';
+    };
+    document.getElementById('btn-breeze').onclick = () => {
+      state.tab2.wind = 20; state.tab2.torn = false; renderControlPanel();
+    };
+    document.getElementById('btn-typhoon').onclick = () => {
+      state.tab2.wind = 85; renderControlPanel();
+    };
+    const repairBtn = document.getElementById('btn-repair');
+    if (repairBtn) {
+      repairBtn.onclick = () => { state.tab2.wind = 20; state.tab2.torn = false; renderControlPanel(); };
+    }
+
+  } else if (state.activeTab === 3) {
+    titleEl.textContent = '4. 3D 夾皮 (Included Bark) 與楔子效應';
+    const isInc = state.tab3.unionType === 'v_included';
+    bodyEl.innerHTML = `
+      <div class="control-group">
+        <div class="control-label"><span>🌳 分叉結構類型切換</span></div>
+        <div class="seg-group">
+          <button class="seg-btn ${!isInc ? 'active' : ''}" id="btn-u-fork">✅ U 型正常分叉</button>
+          <button class="seg-btn ${isInc ? 'danger-active' : ''}" id="btn-v-fork">⚠️ V 型同勢主幹夾皮</button>
+        </div>
+        <button class="btn-secondary" id="btn-toggle-cut" style="margin-top:4px;">
+          🔪 內部縱剖面透視：${state.tab3.crossSection ? '開啟中' : '已關閉（外觀）'}
+        </button>
+      </div>
+
+      <div class="control-group">
+        <div class="control-label">
+          <span>🌬️ 側風槓桿推力測試</span>
+          <span id="wind3-val" style="color:${state.tab3.wind > 68 && isInc ? COLORS.danger : '#38bdf8'}">${state.tab3.wind}%</span>
+        </div>
+        <input type="range" id="wind3-slider" min="0" max="100" value="${state.tab3.wind}">
+        <div class="step-nav">
+          <button class="btn-secondary" id="btn-3d-calm">平靜 (15%)</button>
+          <button class="btn-danger" id="btn-3d-storm">狂風劈裂測試 (85%)</button>
+        </div>
+      </div>
+
+      ${isInc ? `
+      <div class="info-card warn">
+        <strong>致命三大原因（V 字型夾皮）：</strong><br>
+        ① <strong>無木質交聯</strong>：中間夾著一層像軟木屑的死樹皮，抗張與抗剪力趨近零。<br>
+        ② <strong>楔子效應（Wedge Effect）</strong>：雙主幹受風搖晃如兩支長槓桿，中間夾皮像天然木楔子不斷向下撬開木頭。<br>
+        ③ <strong>中心斷開</strong>：兩側木質無法融合，一旦剪應力超標就會瞬間「劈裂到底」。
+      </div>` : `
+      <div class="info-card">
+        <strong>健康 U 字型分叉與枝皮脊線 (BBR)：</strong><br>
+        兩側木質部增粗時將樹皮向外推擠，形成明顯隆起的<strong>枝皮脊線（Branch Bark Ridge）</strong>。內部木頭緊密互鎖黏合，能安全分散百年強風載荷。
+      </div>`}
+    `;
+
+    document.getElementById('btn-u-fork').onclick = () => {
+      state.tab3.unionType = 'u_healthy';
+      state.tab3.splitProgress = 0;
+      build3DForkModel();
+      renderControlPanel();
+    };
+    document.getElementById('btn-v-fork').onclick = () => {
+      state.tab3.unionType = 'v_included';
+      state.tab3.splitProgress = 0;
+      build3DForkModel();
+      renderControlPanel();
+    };
+    document.getElementById('btn-toggle-cut').onclick = () => {
+      state.tab3.crossSection = !state.tab3.crossSection;
+      build3DForkModel();
+      renderControlPanel();
+    };
+    const w3 = document.getElementById('wind3-slider');
+    w3.oninput = (e) => {
+      state.tab3.wind = Number(e.target.value);
+      const lbl = document.getElementById('wind3-val');
+      lbl.textContent = `${state.tab3.wind}%`;
+      lbl.style.color = (state.tab3.wind > 68 && state.tab3.unionType === 'v_included') ? COLORS.danger : '#38bdf8';
+    };
+    document.getElementById('btn-3d-calm').onclick = () => {
+      state.tab3.wind = 15; state.tab3.splitProgress = 0; renderControlPanel();
+    };
+    document.getElementById('btn-3d-storm').onclick = () => {
+      state.tab3.wind = 85; renderControlPanel();
+    };
+  }
+}
+
+/* ============================================================================
+ * 分頁切換、頂部按鈕與主動畫迴圈
+ * ============================================================================ */
+function switchTab(idx) {
+  state.activeTab = idx;
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.toggle('active', Number(b.dataset.tab) === idx);
+  });
+
+  const threeCont = document.getElementById('three-container');
+  const hintEl = document.getElementById('gesture-hint');
+
+  if (idx === 3) {
+    canvas2d.style.display = 'none';
+    threeCont.style.display = 'block';
+    hintEl.textContent = '🖐️ 單指旋轉 3D 模型 ｜ 🤏 雙指縮放與平移';
+    initThreeScene();
+    resizeThree();
+  } else {
+    canvas2d.style.display = 'block';
+    threeCont.style.display = 'none';
+    hintEl.textContent = '🖐️ 單指拖曳平移 ｜ 🤏 雙指捏合/滾輪縮放';
+    vp2d.reset();
+    resize2D();
+  }
+
+  renderControlPanel();
+}
+
+document.getElementById('tab-nav').addEventListener('click', (e) => {
+  const btn = e.target.closest('.tab-btn');
+  if (!btn) return;
+  switchTab(Number(btn.dataset.tab));
+});
+
+// 全域文字標籤開關
+document.getElementById('toggle-labels-btn').addEventListener('click', (e) => {
+  state.showLabels = !state.showLabels;
+  const btn = e.currentTarget;
+  btn.classList.toggle('on', state.showLabels);
+  btn.innerHTML = `<span>🏷️ 標籤: ${state.showLabels ? '開啟' : '隱藏'}</span>`;
+});
+
+// 視角縮放與重置工具列 (同時支援 2D 與 3D)
+document.getElementById('btn-zoom-in').addEventListener('click', () => {
+  if (state.activeTab === 3 && threeInitialized) {
+    threeCamera.position.multiplyScalar(0.84);
+  } else {
+    const rect = canvas2d.getBoundingClientRect();
+    vp2d.zoomAt(1.22, rect.left + rect.width / 2, rect.top + rect.height / 2);
+  }
+});
+
+document.getElementById('btn-zoom-out').addEventListener('click', () => {
+  if (state.activeTab === 3 && threeInitialized) {
+    threeCamera.position.multiplyScalar(1.18);
+  } else {
+    const rect = canvas2d.getBoundingClientRect();
+    vp2d.zoomAt(0.82, rect.left + rect.width / 2, rect.top + rect.height / 2);
+  }
+});
+
+document.getElementById('btn-zoom-reset').addEventListener('click', () => {
+  if (state.activeTab === 3 && threeInitialized) {
+    threeCamera.position.set(0, 3.2, 9.5);
+    threeControls.target.set(0, 2.3, 0);
+  } else {
+    vp2d.reset();
+  }
+});
+
+window.addEventListener('resize', () => {
+  resize2D();
+  resizeThree();
+});
+
+// 啟動渲染迴圈
+let lastTime = performance.now();
+function animate(now) {
+  const dt = Math.min(0.05, (now - lastTime) / 1000);
+  lastTime = now;
+  state.time += dt;
+
+  if (state.activeTab === 3) {
+    updateThreeScene(dt);
+  } else {
+    const w = canvas2d.width;
+    const h = canvas2d.height;
+    ctx.save();
+    ctx.clearRect(0, 0, w, h);
+    vp2d.applyTransform(ctx, w, h);
+
+    if (state.activeTab === 0) renderTab0(ctx, dt);
+    else if (state.activeTab === 1) renderTab1(ctx, dt);
+    else if (state.activeTab === 2) renderTab2(ctx, dt);
+
+    ctx.restore();
+  }
+
+  requestAnimationFrame(animate);
+}
+
+// 初始化執行
+resize2D();
+renderControlPanel();
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>
