@@ -1,0 +1,2933 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>人體的呼吸 — 互動動態生理模擬器</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <style>
+    :root {
+      --bg-deep: #080f1e;
+      --bg-panel: rgba(15, 23, 42, 0.88);
+      --bg-card: rgba(30, 41, 59, 0.78);
+      --border-subtle: rgba(148, 163, 184, 0.2);
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+
+      /* 跨分頁統一解剖與生理色票 */
+      --col-airway: #f472b6;
+      /* 呼吸道黏膜：粉紅 */
+      --col-cartilage: #22d3ee;
+      /* 軟骨(會厭/喉/C型環/肋軟骨)：青藍 */
+      --col-lung: #fb7185;
+      /* 肺臟/肺泡組織：鮭魚粉紅 */
+      --col-muscle: #e11d48;
+      /* 橫膈/肌肉：深肌紅 */
+      --col-o2: #ef4444;
+      /* 氧氣 / 充氧血：鮮紅 */
+      --col-co2: #3b82f6;
+      /* 二氧化碳 / 缺氧血：靜脈藍 */
+      --col-mucus: #facc15;
+      /* 黏液：琥珀黃 */
+      --col-bolus: #84cc16;
+      /* 食團：草綠 */
+      --col-neural: #f59e0b;
+      /* 腦幹呼吸中樞 / 神經訊號：神經金 */
+      --col-dust: #a855f7;
+      /* 異物微粒/病菌：紫灰 */
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      height: 100dvh;
+      overflow: hidden;
+      background: var(--bg-deep);
+      color: var(--text-main);
+      font-family: 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', -apple-system, BlinkMacSystemFont, sans-serif;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* 頂部導覽與全域控制列 */
+    header {
+      flex-shrink: 0;
+      background: var(--bg-panel);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 8px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      z-index: 30;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      font-size: 1.02rem;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+
+    .brand-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--col-lung);
+      box-shadow: 0 0 10px var(--col-lung);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-pill {
+      background: rgba(51, 65, 85, 0.7);
+      color: var(--text-main);
+      border: 1px solid var(--border-subtle);
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.18s ease;
+      min-height: 34px;
+      white-space: nowrap;
+    }
+
+    .btn-pill:hover {
+      background: rgba(71, 85, 105, 0.85);
+    }
+
+    .btn-pill.active {
+      background: rgba(56, 189, 248, 0.22);
+      border-color: var(--accent);
+      color: #7dd3fc;
+    }
+
+    /* 統一色彩圖例列 */
+    .legend-bar {
+      flex-shrink: 0;
+      background: rgba(15, 23, 42, 0.95);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 6px 14px;
+      display: none;
+      flex-wrap: wrap;
+      gap: 10px 14px;
+      font-size: 0.76rem;
+      color: var(--text-muted);
+      z-index: 28;
+    }
+
+    .legend-bar.open {
+      display: flex;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .legend-swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+      display: inline-block;
+    }
+
+    /* 多分頁切換列 */
+    nav.tabs-nav {
+      flex-shrink: 0;
+      display: flex;
+      overflow-x: auto;
+      scrollbar-width: none;
+      background: rgba(11, 18, 34, 0.92);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 0 8px;
+      gap: 4px;
+      z-index: 25;
+    }
+
+    nav.tabs-nav::-webkit-scrollbar {
+      display: none;
+    }
+
+    .tab-btn {
+      flex: 0 0 auto;
+      background: transparent;
+      color: var(--text-muted);
+      border: none;
+      border-bottom: 3px solid transparent;
+      padding: 10px 12px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+
+    .tab-btn:hover {
+      color: var(--text-main);
+    }
+
+    .tab-btn.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+      background: linear-gradient(to top, rgba(56, 189, 248, 0.12), transparent);
+    }
+
+    /* 主互動視窗區 */
+    main.stage-wrapper {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background: radial-gradient(circle at 50% 45%, #13203b 0%, #070d19 100%);
+      touch-action: none;
+    }
+
+    .tab-stage {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: none;
+      touch-action: none;
+    }
+
+    .tab-stage.active {
+      display: block;
+    }
+
+    .sim-svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+      touch-action: none;
+      cursor: grab;
+    }
+
+    .sim-svg:active {
+      cursor: grabbing;
+    }
+
+    /* 文字標籤顯示/隱藏控制 */
+    body.hide-labels .anat-label,
+    body.hide-labels .label-3d {
+      opacity: 0 !important;
+      pointer-events: none !important;
+    }
+
+    .anat-label {
+      transition: opacity 0.22s ease;
+    }
+
+    /* Three.js 3D 浮動標籤 */
+    #labels3dContainer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+    }
+
+    .label-3d {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      background: rgba(15, 23, 42, 0.86);
+      border: 1px solid rgba(56, 189, 248, 0.45);
+      color: #f8fafc;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 0.76rem;
+      font-weight: 600;
+      white-space: nowrap;
+      pointer-events: auto;
+      cursor: pointer;
+      transition: opacity 0.2s, border-color 0.2s, transform 0.2s;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+    }
+
+    .label-3d.highlight {
+      border-color: #facc15;
+      background: rgba(30, 41, 59, 0.96);
+      color: #fef08a;
+      transform: translate(-50%, -50%) scale(1.1);
+      z-index: 5;
+    }
+
+    /* 情境專用浮動控制卡 (左上) */
+    .context-panel {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 18;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-width: min(330px, calc(100vw - 70px));
+      pointer-events: none;
+    }
+
+    .context-card {
+      pointer-events: auto;
+      background: var(--bg-panel);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 8px 11px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+      font-size: 0.8rem;
+    }
+
+    .seg-group {
+      display: flex;
+      background: rgba(15, 23, 42, 0.8);
+      border-radius: 8px;
+      padding: 2px;
+      border: 1px solid var(--border-subtle);
+      gap: 2px;
+    }
+
+    .seg-btn {
+      flex: 1;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      padding: 6px 8px;
+      border-radius: 6px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.18s;
+    }
+
+    .seg-btn.active {
+      background: rgba(56, 189, 248, 0.22);
+      color: #7dd3fc;
+    }
+
+    .slider-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 6px;
+    }
+
+    .slider-row label {
+      font-size: 0.76rem;
+      color: #cbd5e1;
+      white-space: nowrap;
+    }
+
+    .slider-row input[type="range"] {
+      flex: 1;
+      accent-color: var(--accent);
+      height: 5px;
+      cursor: pointer;
+    }
+
+    .action-btn {
+      background: linear-gradient(135deg, #0284c7, #0369a1);
+      color: #fff;
+      border: 1px solid rgba(125, 211, 252, 0.4);
+      border-radius: 8px;
+      padding: 7px 11px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      width: 100%;
+      margin-top: 5px;
+    }
+
+    .action-btn:active {
+      transform: scale(0.98);
+    }
+
+    /* 右下角 Zoom / Pan 控制組 */
+    .zoom-hud {
+      position: absolute;
+      right: 10px;
+      bottom: 10px;
+      z-index: 18;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      background: var(--bg-panel);
+      backdrop-filter: blur(8px);
+      padding: 5px;
+      border-radius: 10px;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .zoom-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 7px;
+      border: 1px solid var(--border-subtle);
+      background: rgba(30, 41, 59, 0.85);
+      color: var(--text-main);
+      font-size: 1.05rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .zoom-btn:active {
+      background: rgba(56, 189, 248, 0.3);
+    }
+
+    .zoom-hint {
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      text-align: center;
+      line-height: 1.1;
+      padding-top: 2px;
+    }
+
+    /* 底部 Step-by-Step 流程控制塢 */
+    footer.step-dock {
+      flex-shrink: 0;
+      background: var(--bg-panel);
+      backdrop-filter: blur(14px);
+      border-top: 1px solid var(--border-subtle);
+      padding: 8px 14px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      z-index: 25;
+    }
+
+    .step-top-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .step-dots {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-wrap: wrap;
+    }
+
+    .step-dot {
+      min-width: 28px;
+      height: 26px;
+      padding: 0 7px;
+      border-radius: 999px;
+      border: 1px solid var(--border-subtle);
+      background: rgba(30, 41, 59, 0.8);
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.18s;
+    }
+
+    .step-dot.active {
+      background: var(--accent);
+      color: #082f49;
+      border-color: #bae6fd;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.45);
+    }
+
+    .step-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .ctrl-btn {
+      background: rgba(51, 65, 85, 0.85);
+      color: var(--text-main);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 5px 11px;
+      min-height: 34px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .ctrl-btn.play-btn {
+      background: rgba(14, 165, 233, 0.25);
+      border-color: rgba(56, 189, 248, 0.55);
+      color: #7dd3fc;
+    }
+
+    .ctrl-btn:active {
+      transform: scale(0.96);
+    }
+
+    .step-desc-box {
+      background: rgba(15, 23, 42, 0.65);
+      border-left: 3px solid var(--accent);
+      border-radius: 0 7px 7px 0;
+      padding: 6px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .step-title {
+      font-size: 0.86rem;
+      font-weight: 700;
+      color: #e0f2fe;
+    }
+
+    .step-text {
+      font-size: 0.8rem;
+      color: #cbd5e1;
+      line-height: 1.42;
+    }
+
+    /* 手機版微調 */
+    @media (max-width: 640px) {
+      header {
+        padding: 6px 10px;
+      }
+
+      .brand span.sub {
+        display: none;
+      }
+
+      .tab-btn {
+        padding: 8px 10px;
+        font-size: 0.8rem;
+      }
+
+      footer.step-dock {
+        padding: 7px 10px 9px;
+      }
+
+      .step-title {
+        font-size: 0.82rem;
+      }
+
+      .step-text {
+        font-size: 0.76rem;
+      }
+
+      .context-panel {
+        max-width: calc(100vw - 64px);
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- 頂部標題與全域標籤/圖例切換 -->
+  <header>
+    <div class="brand">
+      <span class="brand-dot"></span>
+      <span>人體的呼吸</span>
+      <span class="sub" style="font-weight:400;font-size:0.8rem;color:var(--text-muted);">｜互動動態生理模擬器</span>
+    </div>
+    <div class="header-actions">
+      <button id="btnToggleLegend" class="btn-pill" title="顯示跨分頁統一顏色圖例">🎨 圖例</button>
+      <button id="btnToggleLabels" class="btn-pill active" title="切換顯示或隱藏所有文字標籤">🏷️ 標籤：顯示</button>
+    </div>
+  </header>
+
+  <!-- 跨分頁統一視覺色票圖例 -->
+  <div id="legendBar" class="legend-bar">
+    <span class="legend-item"><i class="legend-swatch" style="background:var(--col-airway)"></i>呼吸道黏膜</span>
+    <span class="legend-item"><i class="legend-swatch"
+        style="background:var(--col-cartilage)"></i>軟骨(會厭/喉/C型環/肋軟骨)</span>
+    <span class="legend-item"><i class="legend-swatch" style="background:var(--col-lung)"></i>肺臟 / 肺泡</span>
+    <span class="legend-item"><i class="legend-swatch" style="background:var(--col-muscle)"></i>橫膈 / 呼吸肌</span>
+    <span class="legend-item"><i class="legend-swatch" style="background:var(--col-o2)"></i>氧氣 (O₂) / 充氧血</span>
+    <span class="legend-item"><i class="legend-swatch" style="background:var(--col-co2)"></i>二氧化碳 (CO₂) / 缺氧血</span>
+    <span class="legend-item"><i class="legend-swatch" style="background:var(--col-mucus)"></i>氣管黏液</span>
+    <span class="legend-item"><i class="legend-swatch" style="background:var(--col-bolus)"></i>食團</span>
+    <span class="legend-item"><i class="legend-swatch" style="background:var(--col-neural)"></i>腦幹呼吸中樞 / 神經訊號</span>
+  </div>
+
+  <!-- 六大分頁列 -->
+  <nav class="tabs-nav" id="tabsNav">
+    <button class="tab-btn active" data-tab="0">🧊 1. 呼吸系統總覽 (3D)</button>
+    <button class="tab-btn" data-tab="1">🗣️ 2. 會厭軟骨與聲帶</button>
+    <button class="tab-btn" data-tab="2">🧹 3. 氣管纖毛與黏液</button>
+    <button class="tab-btn" data-tab="3">🫧 4. 肺泡氣體交換</button>
+    <button class="tab-btn" data-tab="4">🫁 5. 胸腔與呼吸運動</button>
+    <button class="tab-btn" data-tab="5">⚡ 6. 運動與腦幹調節</button>
+  </nav>
+
+  <!-- 主畫布區 -->
+  <main class="stage-wrapper" id="stageWrapper">
+
+    <!-- 左上角情境互動面板 (依分頁動態更新) -->
+    <div class="context-panel" id="contextPanel"></div>
+
+    <!-- 分頁 0：Three.js 3D 呼吸系統總覽 -->
+    <section class="tab-stage active" id="stage0">
+      <div id="threeContainer" style="width:100%;height:100%;"></div>
+      <div id="labels3dContainer"></div>
+    </section>
+
+    <!-- 分頁 1：咽喉分流（會厭軟骨/喉頭上升）與發聲（聲帶振動） -->
+    <section class="tab-stage" id="stage1">
+      <svg class="sim-svg" id="svg1" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet">
+        <rect class="pz-ref" width="1" height="1" opacity="0" />
+        <g class="pz-world" id="world1"></g>
+      </svg>
+    </section>
+
+    <!-- 分頁 2：氣管壁纖毛與黏液排異物 -->
+    <section class="tab-stage" id="stage2">
+      <svg class="sim-svg" id="svg2" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet">
+        <rect class="pz-ref" width="1" height="1" opacity="0" />
+        <g class="pz-world" id="world2"></g>
+      </svg>
+    </section>
+
+    <!-- 分頁 3：肺泡與微血管氣體擴散 -->
+    <section class="tab-stage" id="stage3">
+      <svg class="sim-svg" id="svg3" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet">
+        <rect class="pz-ref" width="1" height="1" opacity="0" />
+        <g class="pz-world" id="world3"></g>
+      </svg>
+    </section>
+
+    <!-- 分頁 4：胸腔、肋骨、橫膈與呼吸運動 -->
+    <section class="tab-stage" id="stage4">
+      <svg class="sim-svg" id="svg4" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet">
+        <rect class="pz-ref" width="1" height="1" opacity="0" />
+        <g class="pz-world" id="world4"></g>
+      </svg>
+    </section>
+
+    <!-- 分頁 5：激烈運動、CO2 與腦幹呼吸中樞 -->
+    <section class="tab-stage" id="stage5">
+      <svg class="sim-svg" id="svg5" viewBox="0 0 1000 600" preserveAspectRatio="xMidYMid meet">
+        <rect class="pz-ref" width="1" height="1" opacity="0" />
+        <g class="pz-world" id="world5"></g>
+      </svg>
+    </section>
+
+    <!-- 右下角通用縮放與重置視角控制 -->
+    <div class="zoom-hud">
+      <button class="zoom-btn" id="btnZoomIn" title="放大">＋</button>
+      <button class="zoom-btn" id="btnZoomOut" title="縮小">－</button>
+      <button class="zoom-btn" id="btnZoomReset" title="重置縮放與位置" style="font-size:0.78rem;">重置</button>
+      <div class="zoom-hint">雙指縮放<br>拖曳平移</div>
+    </div>
+  </main>
+
+  <!-- 底部逐步流程控制器 -->
+  <footer class="step-dock">
+    <div class="step-top-row">
+      <div class="step-dots" id="stepDots"></div>
+      <div class="step-controls">
+        <button class="ctrl-btn" id="btnPrevStep">⏮ 上一步</button>
+        <button class="ctrl-btn play-btn" id="btnPlayPause">⏸ 自動播放中</button>
+        <button class="ctrl-btn" id="btnNextStep">下一步 ⏭</button>
+      </div>
+    </div>
+    <div class="step-desc-box">
+      <div class="step-title" id="stepTitle">載入中...</div>
+      <div class="step-text" id="stepText">...</div>
+    </div>
+  </footer>
+
+  <script>
+    (() => {
+      'use strict';
+
+      /* =========================================================
+         跨分頁統一色票常數
+         ========================================================= */
+      const PALETTE = {
+        airway: '#f472b6',
+        airwayDark: '#be185d',
+        cartilage: '#22d3ee',
+        cartilageDark: '#0891b2',
+        lung: '#fb7185',
+        lungLight: '#fda4af',
+        muscle: '#e11d48',
+        o2: '#ef4444',
+        co2: '#3b82f6',
+        mucus: '#facc15',
+        bolus: '#84cc16',
+        neural: '#f59e0b',
+        dust: '#a855f7',
+        bone: '#cbd5e1'
+      };
+
+      /* =========================================================
+         全域狀態管理
+         ========================================================= */
+      const STATE = {
+        activeTab: 0,
+        showLabels: true,
+        autoPlay: true,
+        stepIndex: 0,
+        stepTimer: 0,
+        stepDuration: 3.8, // 秒
+
+        // 分頁 1 子狀態：'swallow' (吞嚥與會厭軟骨) | 'voice' (發聲與聲帶振動)
+        tab1Mode: 'swallow',
+        voicePitch: 0.55,    // 0..1 聲帶緊繃度
+        voiceAirflow: 0.7,   // 0..1 氣流強度
+        audioEnabled: false,
+
+        // 分頁 2 子狀態：氣管纖毛擺動速率
+        ciliaSpeed: 1.0,
+
+        // 分頁 4 子狀態：使用者是否手動拖曳橫膈
+        manualDiaphragm: false,
+        breathPhase: 0, // 0(呼氣末/縮小) .. 1(吸氣末/擴大)
+
+        // 分頁 5 子狀態：運動強度 0=靜息, 1=慢跑, 2=激烈運動
+        exerciseLevel: 2
+      };
+
+      /* =========================================================
+         各分頁 Step-by-Step 流程定義
+         ========================================================= */
+      const TAB_STEPS = {
+        0: [
+          { title: '步驟 1／6：鼻（Nasal Cavity）— 氣體入口與過濾溫暖', text: '空氣由鼻孔進入鼻腔，鼻毛與溫暖潮濕的黏膜可初步過濾灰塵、溫暖並濕潤吸入的空氣。', focusId: 'nose' },
+          { title: '步驟 2／6：咽（Pharynx）— 消化與呼吸的交會通道', text: '氣流向後經由咽部。咽是食物與空氣共同經過的十字路口，下方分別連接前方的喉與後方的食道。', focusId: 'pharynx' },
+          { title: '步驟 3／6：喉（Larynx）— 會厭軟骨守門與聲帶發聲', text: '空氣進入由軟骨構成的喉部。頂端有「會厭軟骨」防止食物誤入；內部有「聲帶」，氣流通過時振動發聲。', focusId: 'larynx' },
+          { title: '步驟 4／6：氣管（Trachea）— C型軟骨支撐與纖毛排異物', text: '氣流向下通過氣管。C型軟骨環維持管道暢通不塌陷；內壁纖毛與黏液持續朝外擺動清除微粒。', focusId: 'trachea' },
+          { title: '步驟 5／6：支氣管（Bronchi）— 左右分枝深入肺臟', text: '氣管在胸腔分為左、右支氣管進入左肺與右肺，並不斷分支為細支氣管，將氣體導引至各肺葉。', focusId: 'bronchi' },
+          { title: '步驟 6／6：肺與橫膈（Lungs & Diaphragm）— 肺泡氣體交換', text: '肺由無數布滿微血管的「肺泡」組成，進行氧氣與二氧化碳擴散交換；底部的橫膈與肋骨協同帶動呼吸。', focusId: 'lungs' }
+        ],
+        '1_swallow': [
+          { title: '步驟 1／4：正常呼吸狀態 — 會厭軟骨直立、氣管暢通', text: '未吞嚥時，喉頭位於原位，會厭軟骨直立開啟，吸入的空氣由鼻咽順利進入前方的氣管，聲門張開。' },
+          { title: '步驟 2／4：食團推入咽部 — 啟動吞嚥反射', text: '舌根將咀嚼後的食團（綠色）向後推入咽部，觸發吞嚥反射，軟顎上抬封閉鼻咽，呼吸暫停。' },
+          { title: '步驟 3／4：喉頭上升 ＆ 會厭軟骨蓋住氣管入口', text: '關鍵機制：吞嚥時「喉頭明顯上升」，帶動「會厭軟骨向下蓋住喉口（氣管入口）」，食團安全滑入後方的食道，絕不誤入氣管！' },
+          { title: '步驟 4／4：食團進入食道 — 喉頭下降恢復呼吸', text: '食團藉由食道蠕動往下推進；喉頭下降回原位，會厭軟骨彈回直立狀態，氣管重新開放恢復順暢呼吸。' }
+        ],
+        '1_voice': [
+          { title: '步驟 1／4：深吸氣準備 — 聲帶外展、聲門大開', text: '不發聲且吸氣時，兩側聲帶向外分開，中央的「聲門」呈寬闊三角形，讓空氣無阻力地進出氣管。' },
+          { title: '步驟 2／4：發聲預備 — 兩側聲帶向內靠攏', text: '準備說話或唱歌時，喉部肌肉收縮使兩側聲帶向中央靠攏（內收），聲門變窄形成細縫。' },
+          { title: '步驟 3／4：氣流衝擊 — 聲帶快速振動產生聲音', text: '肺部呼出的氣流向上衝過狹窄聲門，使聲帶產生每秒數百次的週期性開合振動，激發空氣產生聲波！' },
+          { title: '步驟 4／4：音調與音量調節 — 張力改變頻率', text: '聲帶拉得越緊（可在左上調整滑桿），振動頻率越高、音調越高；呼出氣流越強，振動幅度越大、音量越大。' }
+        ],
+        2: [
+          { title: '步驟 1／4：吸入空氣中的異物微粒與病菌', text: '日常吸入的空氣中常夾帶灰塵、花粉與細菌（紫色微粒），隨氣流進入氣管腔內。' },
+          { title: '步驟 2／4：杯狀細胞分泌黏液 — 黏附異物', text: '氣管壁上皮中的杯狀細胞分泌金黃色「黏液（Mucus）」覆蓋表面，像捕蠅紙一樣將落下的灰塵與病菌牢牢黏住。' },
+          { title: '步驟 3／4：纖毛朝向「外（咽喉方向）」規律擺動', text: '氣管壁柱狀上皮細胞頂端密布「纖毛」，會一致地朝向咽喉（向外）方向強力擺動，推動整層黏液毯向上移動。' },
+          { title: '步驟 4／4：異物推至咽部排出（咳痰或吞入胃酸分解）', text: '包裹異物的黏液被推進至咽喉部，形成「痰」咳出體外，或吞入食道由胃酸殺菌分解，保護脆弱的肺泡！' }
+        ],
+        3: [
+          { title: '步驟 1／4：缺氧血流入肺泡微血管網', text: '肺由無數葡萄串狀的「肺泡」組成，表面布滿微血管。富含二氧化碳（CO₂ 濃度高、O₂ 濃度低）的缺氧血流入微血管。' },
+          { title: '步驟 2／4：氧氣（O₂）經擴散作用進入微血管', text: '吸氣使肺泡內 O₂ 濃度高於血液，O₂ 分子直接藉由「擴散作用」穿過極薄的單層肺泡壁與薄微血管壁進入紅血球！' },
+          { title: '步驟 3／4：二氧化碳（CO₂）經擴散作用排入肺泡', text: '同時微血管血液中 CO₂ 濃度高於肺泡，CO₂ 藉由「擴散作用」反向穿過薄微血管壁與薄肺泡壁進入肺泡腔。' },
+          { title: '步驟 4／4：氣體交換完成 — 充氧血送往全身、CO₂ 呼出', text: '紅血球結合氧氣轉為鮮紅充氧血，流回心臟送往全身細胞；肺泡內的 CO₂ 則隨呼氣排出體外。' }
+        ],
+        4: [
+          { title: '步驟 1／4：吸氣啟動 — 肋骨上舉、橫膈收縮下降', text: '肋間肌收縮使「肋骨上舉外展」，同時「橫膈肌收縮下降」由圓頂狀變平（您也可直接拖曳畫面中的橫膈控制柄！）。' },
+          { title: '步驟 2／4：胸腔擴大 ➔ 肺隨之擴大完成吸氣', text: '肋骨上舉與橫膈下降使密閉「胸腔體積擴大」，胸腔內壓低於外界大氣壓，不具肌肉的肺被動「擴大」，空氣流入肺中。' },
+          { title: '步驟 3／4：呼氣啟動 — 肋骨下降、橫膈舒張上升', text: '肋間肌舒張使「肋骨下降內縮」，同時「橫膈肌舒張上升」恢復向上拱起的圓頂狀。' },
+          { title: '步驟 4／4：胸腔縮小 ➔ 肺隨之縮小完成呼氣', text: '肋骨下降與橫膈上升使「胸腔體積縮小」，胸腔內壓高於外界大氣壓，壓迫肺臟「縮小」，將氣體排出體外。' }
+        ],
+        5: [
+          { title: '步驟 1／5：激烈運動 — 肌肉細胞產生大量二氧化碳', text: '當人體進行激烈運動時，骨骼肌細胞加速進行呼吸作用以產生能量，同時釋放出大量「二氧化碳（CO₂）」進入血液。' },
+          { title: '步驟 2／5：血液中二氧化碳濃度顯著升高', text: '大量 CO₂ 溶入靜脈血隨循環運輸，導致動脈血液中的 CO₂ 濃度明顯上升（血液略微偏酸）。' },
+          { title: '步驟 3／5：高濃度 CO₂ 刺激「腦幹中的呼吸中樞」', text: '注意生理重點：並非缺氧直接主導，而是「血液中增加的二氧化碳」流經腦部時，強烈刺激「腦幹（延腦）中的呼吸中樞」！' },
+          { title: '步驟 4／5：腦幹發出密集神經衝動至呼吸肌', text: '受刺激的腦幹呼吸中樞提高放電頻率，沿運動神經傳遞密集訊號至肋間肌與橫膈肌。' },
+          { title: '步驟 5／5：呼吸變快且加深 — 加速排出 CO₂ 維持恆定', text: '肋骨與橫膈收縮頻率加快、幅度加深，使肺部換氣量大增，迅速排出過多的 CO₂ 並補充 O₂，維持體內恆定！' }
+        ]
+      };
+
+      function getCurrentSteps() {
+        if (STATE.activeTab === 1) {
+          return STATE.tab1Mode === 'swallow' ? TAB_STEPS['1_swallow'] : TAB_STEPS['1_voice'];
+        }
+        return TAB_STEPS[STATE.activeTab];
+      }
+
+      /* =========================================================
+         通用 2D SVG 縮放與平移控制器 (支援滑鼠滾輪、拖曳、觸控雙指縮放)
+         ========================================================= */
+      class PanZoomSVG {
+        constructor(svgEl) {
+          this.svg = svgEl;
+          this.ref = svgEl.querySelector('.pz-ref');
+          this.world = svgEl.querySelector('.pz-world');
+          this.scale = 1;
+          this.tx = 0;
+          this.ty = 0;
+          this.minScale = 0.55;
+          this.maxScale = 4.2;
+
+          this.pointers = new Map();
+          this.lastPinchDist = 0;
+          this.lastMid = null;
+
+          this._bindEvents();
+        }
+
+        clientToSvg(clientX, clientY) {
+          const pt = this.svg.createSVGPoint();
+          pt.x = clientX;
+          pt.y = clientY;
+          const ctm = this.ref.getScreenCTM();
+          if (!ctm) return { x: 500, y: 300 };
+          return pt.matrixTransform(ctm.inverse());
+        }
+
+        apply() {
+          this.world.setAttribute('transform', `translate(${this.tx.toFixed(2)}, ${this.ty.toFixed(2)}) scale(${this.scale.toFixed(4)})`);
+        }
+
+        zoomAt(factor, svgX, svgY) {
+          const newScale = Math.max(this.minScale, Math.min(this.maxScale, this.scale * factor));
+          const wx = (svgX - this.tx) / this.scale;
+          const wy = (svgY - this.ty) / this.scale;
+          this.scale = newScale;
+          this.tx = svgX - wx * this.scale;
+          this.ty = svgY - wy * this.scale;
+          this.apply();
+        }
+
+        reset() {
+          this.scale = 1;
+          this.tx = 0;
+          this.ty = 0;
+          this.apply();
+        }
+
+        _bindEvents() {
+          this.svg.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const p = this.clientToSvg(e.clientX, e.clientY);
+            const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+            this.zoomAt(factor, p.x, p.y);
+          }, { passive: false });
+
+          this.svg.addEventListener('pointerdown', (e) => {
+            if (e.target.closest('[data-interactive="true"]')) return;
+            this.svg.setPointerCapture(e.pointerId);
+            this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+            if (this.pointers.size === 2) {
+              const pts = Array.from(this.pointers.values());
+              this.lastPinchDist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+              this.lastMid = this.clientToSvg((pts[0].x + pts[1].x) / 2, (pts[0].y + pts[1].y) / 2);
+            }
+          });
+
+          this.svg.addEventListener('pointermove', (e) => {
+            if (!this.pointers.has(e.pointerId)) return;
+            const prev = this.pointers.get(e.pointerId);
+            const curr = { x: e.clientX, y: e.clientY };
+            this.pointers.set(e.pointerId, curr);
+
+            if (this.pointers.size === 1) {
+              const p0 = this.clientToSvg(prev.x, prev.y);
+              const p1 = this.clientToSvg(curr.x, curr.y);
+              this.tx += (p1.x - p0.x);
+              this.ty += (p1.y - p0.y);
+              this.apply();
+            } else if (this.pointers.size === 2) {
+              const pts = Array.from(this.pointers.values());
+              const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+              const mid = this.clientToSvg((pts[0].x + pts[1].x) / 2, (pts[0].y + pts[1].y) / 2);
+              if (this.lastPinchDist > 5) {
+                const factor = dist / this.lastPinchDist;
+                if (this.lastMid) {
+                  this.tx += (mid.x - this.lastMid.x);
+                  this.ty += (mid.y - this.lastMid.y);
+                }
+                this.zoomAt(factor, mid.x, mid.y);
+              }
+              this.lastPinchDist = dist;
+              this.lastMid = mid;
+            }
+          });
+
+          const endPtr = (e) => {
+            this.pointers.delete(e.pointerId);
+            if (this.pointers.size < 2) {
+              this.lastPinchDist = 0;
+              this.lastMid = null;
+            }
+          };
+          this.svg.addEventListener('pointerup', endPtr);
+          this.svg.addEventListener('pointercancel', endPtr);
+        }
+      }
+
+      const pzControllers = {};
+      [1, 2, 3, 4, 5].forEach(i => {
+        pzControllers[i] = new PanZoomSVG(document.getElementById(`svg${i}`));
+      });
+
+      /* SVG 輔助建立函式 */
+      const SVG_NS = 'http://www.w3.org/2000/svg';
+      function svgEl(tag, attrs = {}, parent = null) {
+        const el = document.createElementNS(SVG_NS, tag);
+        for (const [k, v] of Object.entries(attrs)) {
+          el.setAttribute(k, v);
+        }
+        if (parent) parent.appendChild(el);
+        return el;
+      }
+
+      function createCalloutLabel(parent, x1, y1, x2, y2, text, subText = '', borderCol = PALETTE.cartilage) {
+        const g = svgEl('g', { class: 'anat-label' }, parent);
+        svgEl('line', {
+          x1, y1, x2, y2,
+          stroke: borderCol, 'stroke-width': 1.6, 'stroke-dasharray': '3,2', opacity: 0.85
+        }, g);
+        svgEl('circle', { cx: x1, cy: y1, r: 3.5, fill: borderCol }, g);
+
+        const w = Math.max(text.length * 14 + 20, subText ? subText.length * 11 + 20 : 80);
+        const h = subText ? 38 : 24;
+        const rx = x2 >= x1 ? x2 : x2 - w;
+        const ry = y2 - h / 2;
+
+        svgEl('rect', {
+          x: rx, y: ry, width: w, height: h, rx: 6,
+          fill: 'rgba(15, 23, 42, 0.9)', stroke: borderCol, 'stroke-width': 1.3
+        }, g);
+        const t1 = svgEl('text', {
+          x: rx + w / 2, y: ry + (subText ? 15 : 16),
+          fill: '#f8fafc', 'font-size': 12.5, 'font-weight': '700', 'text-anchor': 'middle'
+        }, g);
+        t1.textContent = text;
+        if (subText) {
+          const t2 = svgEl('text', {
+            x: rx + w / 2, y: ry + 31,
+            fill: '#94a3b8', 'font-size': 10.2, 'text-anchor': 'middle'
+          }, g);
+          t2.textContent = subText;
+        }
+        return g;
+      }
+
+      /* =========================================================
+         分頁 0：Three.js 3D 呼吸系統總覽
+         ========================================================= */
+      const Tab0_3D = (() => {
+        const container = document.getElementById('threeContainer');
+        const labelsContainer = document.getElementById('labels3dContainer');
+        let scene, camera, renderer;
+        let lungLeftGroup, lungRightGroup, diaphragmMesh;
+        const organMeshes = {};
+        const labelItems = [];
+        const airParticles = [];
+        let airCurveLeft, airCurveRight;
+
+        // 自訂觸控與滑鼠 3D 旋轉 / 雙指縮放 / 平移狀態
+        const camCtrl = {
+          theta: 0.25,
+          phi: 1.42,
+          radius: 13.5,
+          target: new THREE.Vector3(0, 0.7, 0),
+          goalTarget: new THREE.Vector3(0, 0.7, 0),
+          pointers: new Map(),
+          lastDist: 0,
+          lastMid: null
+        };
+
+        function init() {
+          if (typeof THREE === 'undefined') {
+            container.innerHTML = '<div style="padding:30px;text-align:center;color:#94a3b8;">無法載入 Three.js，請確認網路連線或切換至其他 2D 分頁。</div>';
+            return;
+          }
+
+          scene = new THREE.Scene();
+          camera = new THREE.PerspectiveCamera(42, container.clientWidth / Math.max(1, container.clientHeight), 0.1, 100);
+
+          renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+          renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+          renderer.setSize(container.clientWidth, container.clientHeight);
+          container.appendChild(renderer.domElement);
+
+          // 燈光設定
+          scene.add(new THREE.AmbientLight(0xffffff, 0.68));
+          const dir1 = new THREE.DirectionalLight(0xffffff, 0.85);
+          dir1.position.set(6, 10, 9);
+          scene.add(dir1);
+          const dir2 = new THREE.DirectionalLight(0x38bdf8, 0.4);
+          dir2.position.set(-8, -3, -6);
+          scene.add(dir2);
+
+          // 半透明人體頭頸胸輪廓參考線框
+          const torsoMat = new THREE.MeshPhongMaterial({
+            color: 0x64748b, transparent: true, opacity: 0.11, side: THREE.DoubleSide, depthWrite: false
+          });
+          const chestGeo = new THREE.CylinderGeometry(3.4, 3.0, 5.2, 28, 1, true);
+          chestGeo.scale(1.15, 1, 0.72);
+          const chestSilhouette = new THREE.Mesh(chestGeo, torsoMat);
+          chestSilhouette.position.set(0, -0.7, 0);
+          scene.add(chestSilhouette);
+
+          const headGeo = new THREE.SphereGeometry(1.45, 24, 20);
+          headGeo.scale(0.88, 1.12, 0.98);
+          const headSilhouette = new THREE.Mesh(headGeo, torsoMat);
+          headSilhouette.position.set(0, 4.45, 0.25);
+          scene.add(headSilhouette);
+
+          // 材質（嚴格對齊跨分頁色票）
+          const matAirway = new THREE.MeshPhongMaterial({ color: 0xf472b6, shininess: 45, transparent: true, opacity: 0.9 });
+          const matCartilage = new THREE.MeshPhongMaterial({ color: 0x22d3ee, shininess: 70 });
+          const matLung = new THREE.MeshPhongMaterial({ color: 0xfb7185, shininess: 35, transparent: true, opacity: 0.82 });
+          const matDiaphragm = new THREE.MeshPhongMaterial({ color: 0xe11d48, shininess: 30, side: THREE.DoubleSide, transparent: true, opacity: 0.85 });
+
+          // 1. 鼻腔 (Nasal Cavity)
+          const noseCurve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(0, 4.05, 1.45),
+            new THREE.Vector3(0, 4.35, 0.85),
+            new THREE.Vector3(0, 4.18, 0.05)
+          ]);
+          const noseMesh = new THREE.Mesh(new THREE.TubeGeometry(noseCurve, 20, 0.34, 14, false), matAirway.clone());
+          scene.add(noseMesh);
+          organMeshes.nose = [noseMesh];
+
+          // 2. 咽 (Pharynx)
+          const pharynxCurve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(0, 4.18, 0.05),
+            new THREE.Vector3(0, 3.45, -0.1),
+            new THREE.Vector3(0, 2.82, 0.05)
+          ]);
+          const pharynxMesh = new THREE.Mesh(new THREE.TubeGeometry(pharynxCurve, 16, 0.3, 14, false), matAirway.clone());
+          scene.add(pharynxMesh);
+          organMeshes.pharynx = [pharynxMesh];
+
+          // 3. 喉 (Larynx + 會厭軟骨)
+          const larynxGroup = new THREE.Group();
+          const thyroidShield = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.35, 0.68, 16), matCartilage.clone());
+          thyroidShield.position.set(0, 2.38, 0.12);
+          larynxGroup.add(thyroidShield);
+
+          const epiglottisGeo = new THREE.SphereGeometry(0.26, 12, 10);
+          epiglottisGeo.scale(0.85, 1.45, 0.25);
+          const epiglottisMesh = new THREE.Mesh(epiglottisGeo, matCartilage.clone());
+          epiglottisMesh.position.set(0, 2.82, 0.22);
+          epiglottisMesh.rotation.x = -0.35;
+          larynxGroup.add(epiglottisMesh);
+          scene.add(larynxGroup);
+          organMeshes.larynx = [thyroidShield, epiglottisMesh];
+
+          // 4. 氣管 (Trachea + C型軟骨環)
+          const tracheaGroup = new THREE.Group();
+          const tracheaTube = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 2.15, 18), matAirway.clone());
+          tracheaTube.position.set(0, 1.0, 0.12);
+          tracheaGroup.add(tracheaTube);
+
+          const cRingMeshes = [tracheaTube];
+          for (let i = 0; i < 8; i++) {
+            const ring = new THREE.Mesh(new THREE.TorusGeometry(0.31, 0.045, 8, 20, Math.PI * 1.55), matCartilage.clone());
+            ring.rotation.x = Math.PI / 2;
+            ring.rotation.z = -Math.PI * 0.27;
+            ring.position.set(0, 1.92 - i * 0.25, 0.12);
+            tracheaGroup.add(ring);
+            cRingMeshes.push(ring);
+          }
+          scene.add(tracheaGroup);
+          organMeshes.trachea = cRingMeshes;
+
+          // 5. 左右支氣管與分支樹 (Bronchi)
+          const bronchiGroup = new THREE.Group();
+          const bronchiList = [];
+          function addBranch(pts, r) {
+            const c = new THREE.CatmullRomCurve3(pts);
+            const m = new THREE.Mesh(new THREE.TubeGeometry(c, 14, r, 10, false), matCartilage.clone());
+            bronchiGroup.add(m);
+            bronchiList.push(m);
+          }
+          // 右支氣管 (畫面左側，解剖右側 x < 0)
+          addBranch([new THREE.Vector3(0, -0.05, 0.12), new THREE.Vector3(-0.75, -0.55, 0.08), new THREE.Vector3(-1.45, -0.95, 0.05)], 0.2);
+          addBranch([new THREE.Vector3(-0.95, -0.68, 0.08), new THREE.Vector3(-1.55, -0.25, 0.15)], 0.11);
+          addBranch([new THREE.Vector3(-1.25, -0.85, 0.06), new THREE.Vector3(-1.85, -1.55, 0.05)], 0.11);
+          // 左支氣管 (畫面右側，解剖左側 x > 0)
+          addBranch([new THREE.Vector3(0, -0.05, 0.12), new THREE.Vector3(0.82, -0.6, 0.08), new THREE.Vector3(1.5, -1.02, 0.05)], 0.19);
+          addBranch([new THREE.Vector3(1.05, -0.72, 0.08), new THREE.Vector3(1.6, -0.28, 0.15)], 0.11);
+          addBranch([new THREE.Vector3(1.3, -0.88, 0.06), new THREE.Vector3(1.82, -1.58, 0.05)], 0.11);
+          scene.add(bronchiGroup);
+          organMeshes.bronchi = bronchiList;
+
+          // 6. 左肺與右肺 + 橫膈 (Lungs & Diaphragm)
+          lungRightGroup = new THREE.Group(); // 解剖右肺 (三葉)
+          const rUpper = new THREE.Mesh(new THREE.SphereGeometry(1.15, 24, 20), matLung.clone());
+          rUpper.scale.set(0.95, 1.35, 0.85);
+          rUpper.position.set(-1.55, -0.45, 0.05);
+          const rLower = new THREE.Mesh(new THREE.SphereGeometry(1.22, 24, 20), matLung.clone());
+          rLower.scale.set(1.02, 1.15, 0.88);
+          rLower.position.set(-1.65, -1.45, 0.05);
+          lungRightGroup.add(rUpper, rLower);
+          scene.add(lungRightGroup);
+
+          lungLeftGroup = new THREE.Group(); // 解剖左肺 (兩葉，略窄讓位心臟)
+          const lUpper = new THREE.Mesh(new THREE.SphereGeometry(1.08, 24, 20), matLung.clone());
+          lUpper.scale.set(0.9, 1.35, 0.85);
+          lUpper.position.set(1.58, -0.45, 0.05);
+          const lLower = new THREE.Mesh(new THREE.SphereGeometry(1.14, 24, 20), matLung.clone());
+          lLower.scale.set(0.95, 1.15, 0.88);
+          lLower.position.set(1.65, -1.48, 0.05);
+          lungLeftGroup.add(lUpper, lLower);
+          scene.add(lungLeftGroup);
+
+          // 橫膈圓頂
+          const diaGeo = new THREE.SphereGeometry(2.85, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.42);
+          diaGeo.scale(1.12, 0.45, 0.72);
+          diaphragmMesh = new THREE.Mesh(diaGeo, matDiaphragm);
+          diaphragmMesh.position.set(0, -3.15, 0.05);
+          scene.add(diaphragmMesh);
+
+          organMeshes.lungs = [rUpper, rLower, lUpper, lLower, diaphragmMesh];
+
+          // 氣體流動路徑與粒子 (紅 O2 吸入、藍 CO2 呼出)
+          airCurveRight = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(0, 4.02, 1.55),
+            new THREE.Vector3(0, 4.32, 0.82),
+            new THREE.Vector3(0, 3.5, -0.05),
+            new THREE.Vector3(0, 2.35, 0.12),
+            new THREE.Vector3(0, 0.1, 0.12),
+            new THREE.Vector3(-1.45, -1.0, 0.1),
+            new THREE.Vector3(-1.7, -1.5, 0.15)
+          ]);
+          airCurveLeft = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(0, 4.02, 1.55),
+            new THREE.Vector3(0, 4.32, 0.82),
+            new THREE.Vector3(0, 3.5, -0.05),
+            new THREE.Vector3(0, 2.35, 0.12),
+            new THREE.Vector3(0, 0.1, 0.12),
+            new THREE.Vector3(1.45, -1.0, 0.1),
+            new THREE.Vector3(1.7, -1.5, 0.15)
+          ]);
+
+          const pGeo = new THREE.SphereGeometry(0.085, 8, 8);
+          for (let i = 0; i < 28; i++) {
+            const m = new THREE.Mesh(pGeo, new THREE.MeshBasicMaterial({ color: 0xef4444 }));
+            scene.add(m);
+            airParticles.push({
+              mesh: m,
+              offset: i / 28,
+              leftSide: i % 2 === 0
+            });
+          }
+
+          // 建立 3D 投影文字標籤
+          const labelDefs = [
+            { id: 'nose', text: '鼻腔 (溫暖/過濾空氣)', pos: new THREE.Vector3(0.4, 4.35, 1.1), step: 0 },
+            { id: 'pharynx', text: '咽 (食道與氣管交會)', pos: new THREE.Vector3(-0.7, 3.55, 0.0), step: 1 },
+            { id: 'larynx', text: '喉 (含會厭軟骨與聲帶)', pos: new THREE.Vector3(0.75, 2.55, 0.25), step: 2 },
+            { id: 'trachea', text: '氣管 (C型軟骨支撐)', pos: new THREE.Vector3(-0.85, 1.15, 0.2), step: 3 },
+            { id: 'bronchi', text: '支氣管 (左右分支入肺)', pos: new THREE.Vector3(0.95, -0.35, 0.35), step: 4 },
+            { id: 'lungs', text: '右肺與左肺 (肺泡組成)', pos: new THREE.Vector3(-2.35, -0.95, 0.3), step: 5 },
+            { id: 'diaphragm', text: '橫膈 (呼吸運動肌肉)', pos: new THREE.Vector3(1.85, -2.75, 0.4), step: 5 }
+          ];
+
+          labelDefs.forEach(def => {
+            const el = document.createElement('div');
+            el.className = 'label-3d';
+            el.textContent = def.text;
+            el.addEventListener('click', () => {
+              setStep(def.step, false);
+            });
+            labelsContainer.appendChild(el);
+            labelItems.push({ ...def, el });
+          });
+
+          bindOrbitEvents(renderer.domElement);
+          window.addEventListener('resize', onResize);
+        }
+
+        function bindOrbitEvents(dom) {
+          dom.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            camCtrl.radius = Math.max(5.5, Math.min(24, camCtrl.radius * (e.deltaY < 0 ? 0.9 : 1.1)));
+          }, { passive: false });
+
+          dom.addEventListener('pointerdown', (e) => {
+            dom.setPointerCapture(e.pointerId);
+            camCtrl.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+            if (camCtrl.pointers.size === 2) {
+              const pts = Array.from(camCtrl.pointers.values());
+              camCtrl.lastDist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+              camCtrl.lastMid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+            }
+          });
+
+          dom.addEventListener('pointermove', (e) => {
+            if (!camCtrl.pointers.has(e.pointerId)) return;
+            const prev = camCtrl.pointers.get(e.pointerId);
+            const curr = { x: e.clientX, y: e.clientY };
+            camCtrl.pointers.set(e.pointerId, curr);
+
+            if (camCtrl.pointers.size === 1) {
+              const dx = curr.x - prev.x;
+              const dy = curr.y - prev.y;
+              if (e.shiftKey || e.buttons === 2) {
+                // 平移
+                camCtrl.goalTarget.x -= dx * 0.012;
+                camCtrl.goalTarget.y += dy * 0.012;
+              } else {
+                // 旋轉
+                camCtrl.theta -= dx * 0.008;
+                camCtrl.phi = Math.max(0.45, Math.min(2.65, camCtrl.phi - dy * 0.008));
+              }
+            } else if (camCtrl.pointers.size === 2) {
+              const pts = Array.from(camCtrl.pointers.values());
+              const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+              const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+              if (camCtrl.lastDist > 5) {
+                camCtrl.radius = Math.max(5.5, Math.min(24, camCtrl.radius * (camCtrl.lastDist / dist)));
+              }
+              if (camCtrl.lastMid) {
+                camCtrl.goalTarget.x -= (mid.x - camCtrl.lastMid.x) * 0.012;
+                camCtrl.goalTarget.y += (mid.y - camCtrl.lastMid.y) * 0.012;
+              }
+              camCtrl.lastDist = dist;
+              camCtrl.lastMid = mid;
+            }
+          });
+
+          const up = (e) => {
+            camCtrl.pointers.delete(e.pointerId);
+            if (camCtrl.pointers.size < 2) {
+              camCtrl.lastDist = 0;
+              camCtrl.lastMid = null;
+            }
+          };
+          dom.addEventListener('pointerup', up);
+          dom.addEventListener('pointercancel', up);
+          dom.addEventListener('contextmenu', e => e.preventDefault());
+        }
+
+        function onResize() {
+          if (!renderer || !camera) return;
+          const w = container.clientWidth || window.innerWidth;
+          const h = container.clientHeight || window.innerHeight;
+          camera.aspect = w / Math.max(1, h);
+          camera.updateProjectionMatrix();
+          renderer.setSize(w, h);
+        }
+
+        function focusOrgan(focusId) {
+          const yMap = { nose: 3.9, pharynx: 3.3, larynx: 2.4, trachea: 1.0, bronchi: -0.5, lungs: -1.1 };
+          if (yMap[focusId] !== undefined) {
+            camCtrl.goalTarget.set(0, yMap[focusId] * 0.45 + 0.3, 0);
+          }
+        }
+
+        function zoomBy(factor) {
+          camCtrl.radius = Math.max(5.5, Math.min(24, camCtrl.radius / factor));
+        }
+
+        function resetView() {
+          camCtrl.theta = 0.25;
+          camCtrl.phi = 1.42;
+          camCtrl.radius = 13.5;
+          camCtrl.goalTarget.set(0, 0.7, 0);
+        }
+
+        function update(t) {
+          if (!renderer) return;
+
+          // 呼吸律動：吸氣與呼氣週期
+          const breathWave = Math.sin(t * 1.7); // -1..1
+          const inhale = Math.cos(t * 1.7) > 0; // 正在吸氣或呼氣
+          const scaleVal = 1 + breathWave * 0.065;
+          lungRightGroup.scale.set(scaleVal, scaleVal, scaleVal);
+          lungLeftGroup.scale.set(scaleVal, scaleVal, scaleVal);
+
+          // 橫膈收縮下降(吸氣) / 舒張上升(呼氣)
+          diaphragmMesh.position.y = -3.12 - breathWave * 0.24;
+          diaphragmMesh.scale.y = 0.45 - breathWave * 0.12;
+
+          // 高亮目前步驟器官
+          const steps = TAB_STEPS[0];
+          const activeFocus = steps[STATE.stepIndex]?.focusId;
+          for (const [id, list] of Object.entries(organMeshes)) {
+            const isFocus = id === activeFocus;
+            const pulse = isFocus ? 0.28 + 0.18 * Math.sin(t * 5) : 0;
+            list.forEach(m => {
+              if (m.material && m.material.emissive) {
+                m.material.emissive.setRGB(pulse * 0.9, pulse * 0.7, pulse * 0.2);
+              }
+            });
+          }
+
+          // 氣體粒子流動 (吸氣紅O2向下、呼氣藍CO2向上)
+          airParticles.forEach(p => {
+            let u = (p.offset + (inhale ? 1 : -1) * (t * 0.28)) % 1;
+            if (u < 0) u += 1;
+            // 讓粒子隨正弦往復更自然
+            const cycleU = Math.min(0.99, Math.max(0.01, (p.offset + 0.5 * (breathWave + 1) * 0.55) % 1));
+            const curve = p.leftSide ? airCurveLeft : airCurveRight;
+            const pos = curve.getPointAt(cycleU);
+            p.mesh.position.copy(pos);
+            p.mesh.material.color.setHex(inhale ? 0xef4444 : 0x3b82f6);
+          });
+
+          // 相機平滑過渡
+          camCtrl.target.lerp(camCtrl.goalTarget, 0.08);
+          camera.position.x = camCtrl.target.x + camCtrl.radius * Math.sin(camCtrl.phi) * Math.sin(camCtrl.theta);
+          camera.position.y = camCtrl.target.y + camCtrl.radius * Math.cos(camCtrl.phi);
+          camera.position.z = camCtrl.target.z + camCtrl.radius * Math.sin(camCtrl.phi) * Math.cos(camCtrl.theta);
+          camera.lookAt(camCtrl.target);
+
+          renderer.render(scene, camera);
+
+          // 更新 3D 浮動標籤座標
+          const w = container.clientWidth;
+          const h = container.clientHeight;
+          labelItems.forEach(item => {
+            const v = item.pos.clone().project(camera);
+            if (v.z > 1) {
+              item.el.style.display = 'none';
+            } else {
+              item.el.style.display = 'block';
+              item.el.style.left = `${(v.x * 0.5 + 0.5) * w}px`;
+              item.el.style.top = `${(-v.y * 0.5 + 0.5) * h}px`;
+              const isHi = (item.id === activeFocus) || (activeFocus === 'lungs' && item.id === 'diaphragm');
+              item.el.classList.toggle('highlight', isHi);
+            }
+          });
+        }
+
+        return { init, update, onResize, focusOrgan, zoomBy, resetView };
+      })();
+
+      /* =========================================================
+         分頁 1：會厭軟骨吞嚥分流 ＆ 聲帶振動發聲
+         ========================================================= */
+      const Tab1_PharynxVoice = (() => {
+        const world = document.getElementById('world1');
+        let larynxGroup, epiglottisGroup, softPalatePath, bolusCircle, tonguePath;
+        let glottisLeftCord, glottisRightCord, sagittalCordLine, wavePath;
+        let larynxUpBadge, epiglottisSealBadge;
+        const airDots = [];
+        let audioCtx = null, osc = null, gainNode = null;
+
+        // 動畫插值狀態
+        const anim = {
+          larynxY: 0,
+          epiAngle: -22,
+          palateAngle: 0,
+          bolusProgress: -1,
+          cordGap: 18
+        };
+
+        function init() {
+          // 背景分區卡：左側矢狀切面，右側喉鏡俯視圖與聲波卡
+          svgEl('rect', {
+            x: 24, y: 20, width: 555, height: 560, rx: 16,
+            fill: 'rgba(15, 23, 42, 0.65)', stroke: 'rgba(148,163,184,0.22)'
+          }, world);
+          svgEl('text', {
+            x: 44, y: 50, fill: '#e2e8f0', 'font-size': 15, 'font-weight': '700'
+          }, world).textContent = '頭頸部矢狀切面（前：氣管 ／ 後：食道）';
+
+          svgEl('rect', {
+            x: 598, y: 20, width: 378, height: 560, rx: 16,
+            fill: 'rgba(15, 23, 42, 0.65)', stroke: 'rgba(148,163,184,0.22)'
+          }, world);
+          svgEl('text', {
+            x: 787, y: 50, fill: '#e2e8f0', 'font-size': 15, 'font-weight': '700', 'text-anchor': 'middle'
+          }, world).textContent = '喉鏡俯視圖：聲帶與聲門狀態';
+
+          // 頭頸輪廓與鼻腔、口腔、咽、食道、氣管
+          svgEl('path', {
+            d: 'M 210 75 C 165 80, 145 125, 110 165 C 98 180, 118 192, 138 194 L 135 232 C 120 245, 125 275, 145 285 C 155 315, 210 325, 245 335 L 252 560 L 470 560 L 470 95 C 430 65, 290 60, 210 75 Z',
+            fill: 'rgba(244, 114, 182, 0.12)', stroke: 'rgba(244, 114, 182, 0.45)', 'stroke-width': 2
+          }, world);
+
+          // 鼻腔通道
+          svgEl('path', {
+            d: 'M 135 186 Q 225 130 335 162 Q 372 175 385 215 L 335 212 Q 260 198 155 198 Z',
+            fill: 'rgba(244, 114, 182, 0.3)', stroke: PALETTE.airway, 'stroke-width': 2
+          }, world);
+
+          // 硬顎 + 可動軟顎 (Soft Palate)
+          svgEl('path', {
+            d: 'M 158 205 Q 245 202 315 210',
+            fill: 'none', stroke: '#fbcfe8', 'stroke-width': 9, 'stroke-linecap': 'round'
+          }, world);
+          softPalatePath = svgEl('path', {
+            d: 'M 315 210 Q 345 220 356 245',
+            fill: 'none', stroke: PALETTE.airway, 'stroke-width': 9, 'stroke-linecap': 'round'
+          }, world);
+
+          // 口腔與舌頭
+          tonguePath = svgEl('path', {
+            d: 'M 160 272 Q 235 230 315 268 Q 332 285 322 315 L 185 312 Z',
+            fill: 'rgba(2fb, 113, 133, 0.45)', style: 'fill:rgba(251,113,133,0.48)', stroke: PALETTE.lung, 'stroke-width': 2
+          }, world);
+
+          // 後咽壁與食道 (後方管道 x ~ 395..432)
+          svgEl('path', {
+            d: 'M 412 162 L 424 555',
+            fill: 'none', stroke: PALETTE.airway, 'stroke-width': 4
+          }, world);
+          // 食道管腔
+          svgEl('path', {
+            d: 'M 382 345 L 392 555 L 424 555 L 415 345 Z',
+            fill: 'rgba(225, 29, 72, 0.24)', stroke: PALETTE.muscle, 'stroke-width': 2
+          }, world);
+
+          // 前方氣管下半段固定段 + 彈性連結
+          svgEl('path', {
+            d: 'M 308 355 L 308 555 L 366 555 L 366 355 Z',
+            fill: 'rgba(34, 211, 238, 0.14)', stroke: PALETTE.airway, 'stroke-width': 2.2
+          }, world);
+          // 氣管 C型軟骨環 (前方橫條)
+          for (let y = 395; y <= 535; y += 26) {
+            svgEl('rect', {
+              x: 302, y, width: 14, height: 14, rx: 4,
+              fill: PALETTE.cartilage, stroke: PALETTE.cartilageDark, 'stroke-width': 1
+            }, world);
+          }
+
+          // 可上升/下降的「喉頭 (Larynx) 群組」：包含甲狀軟骨、聲帶、會厭軟骨
+          larynxGroup = svgEl('g', {}, world);
+
+          // 喉腔內壁與甲狀軟骨護盾
+          svgEl('path', {
+            d: 'M 304 315 L 370 322 L 366 378 L 308 378 Z',
+            fill: 'rgba(34, 211, 238, 0.22)', stroke: PALETTE.cartilage, 'stroke-width': 2.5
+          }, larynxGroup);
+          // 前方喉結軟骨塊
+          svgEl('path', {
+            d: 'M 292 318 L 310 315 L 310 372 L 298 368 L 288 340 Z',
+            fill: PALETTE.cartilage, opacity: 0.9
+          }, larynxGroup);
+
+          // 矢狀面聲帶示意線
+          sagittalCordLine = svgEl('line', {
+            x1: 312, y1: 346, x2: 362, y2: 346,
+            stroke: '#fef08a', 'stroke-width': 4.5, 'stroke-linecap': 'round'
+          }, larynxGroup);
+
+          // 會厭軟骨 (以 x=316, y=312 為支點旋轉：直立開啟 vs 下蓋封閉氣管口)
+          epiglottisGroup = svgEl('g', { transform: 'translate(316, 312) rotate(-22)' }, larynxGroup);
+          svgEl('path', {
+            d: 'M 0 0 C 8 -26, 22 -52, 34 -56 C 42 -58, 44 -46, 34 -24 C 24 -6, 10 2, 0 4 Z',
+            fill: PALETTE.cartilage, stroke: '#cffafe', 'stroke-width': 1.8
+          }, epiglottisGroup);
+
+          // 動態提示徽章：喉頭上升 ⬆
+          larynxUpBadge = svgEl('g', { opacity: 0 }, larynxGroup);
+          svgEl('path', {
+            d: 'M 268 360 L 268 322 M 260 332 L 268 320 L 276 332',
+            fill: 'none', stroke: '#facc15', 'stroke-width': 3.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+          }, larynxUpBadge);
+          const upTxt = svgEl('text', {
+            x: 256, y: 346, fill: '#fde047', 'font-size': 12.5, 'font-weight': '700', 'text-anchor': 'end'
+          }, larynxUpBadge);
+          upTxt.textContent = '喉頭上升';
+
+          epiglottisSealBadge = svgEl('g', { opacity: 0 }, world);
+          svgEl('rect', {
+            x: 165, y: 378, width: 132, height: 28, rx: 6,
+            fill: 'rgba(234, 179, 8, 0.2)', stroke: '#facc15'
+          }, epiglottisSealBadge);
+          svgEl('text', {
+            x: 231, y: 396, fill: '#fef08a', 'font-size': 11.5, 'font-weight': '700', 'text-anchor': 'middle'
+          }, epiglottisSealBadge).textContent = '會厭下蓋封閉氣管！';
+
+          // 食團 (Bolus)
+          bolusCircle = svgEl('ellipse', {
+            cx: 230, cy: 235, rx: 19, ry: 13,
+            fill: PALETTE.bolus, stroke: '#ecfccb', 'stroke-width': 2, opacity: 0
+          }, world);
+
+          // 氣流粒子
+          for (let i = 0; i < 16; i++) {
+            const c = svgEl('circle', { r: 4, fill: PALETTE.o2, opacity: 0.85 }, world);
+            airDots.push({ el: c, offset: i / 16 });
+          }
+
+          // 解剖文字標籤 (矢狀面)
+          createCalloutLabel(world, 235, 168, 85, 118, '鼻腔', '溫暖濕潤空氣', PALETTE.airway);
+          createCalloutLabel(world, 385, 255, 455, 215, '咽 (Pharynx)', '食團與空氣交會', PALETTE.airway);
+          createCalloutLabel(world, 336, 282, 448, 280, '會厭軟骨', '控制食團不入氣管', PALETTE.cartilage);
+          createCalloutLabel(world, 300, 342, 182, 342, '喉頭與聲帶', '吞嚥時上升／氣流振動', PALETTE.cartilage);
+          createCalloutLabel(world, 335, 470, 215, 490, '氣管 (前方)', 'C型軟骨維持暢通', PALETTE.cartilage);
+          createCalloutLabel(world, 406, 470, 458, 490, '食道 (後方)', '運送食團入胃', PALETTE.muscle);
+
+          // ========= 右側：喉鏡俯視圖（聲帶與聲門）=========
+          const cx = 787, cy = 225;
+          svgEl('circle', {
+            cx, cy, r: 126, fill: '#1e1024', stroke: PALETTE.cartilage, 'stroke-width': 3
+          }, world);
+          svgEl('circle', {
+            cx, cy, r: 108, fill: 'rgba(244, 114, 182, 0.22)', stroke: PALETTE.airway, 'stroke-width': 2
+          }, world);
+          // 上方會厭軟骨邊緣示意
+          svgEl('path', {
+            d: `M ${cx - 58} ${cy - 78} Q ${cx} ${cy - 108} ${cx + 58} ${cy - 78} Q ${cx} ${cy - 64} ${cx - 58} ${cy - 78} Z`,
+            fill: PALETTE.cartilage, opacity: 0.85
+          }, world);
+
+          // 聲門深色開口背景
+          svgEl('polygon', {
+            points: `${cx},${cy - 66} ${cx - 42},${cy + 68} ${cx + 42},${cy + 68}`,
+            fill: '#050811'
+          }, world);
+
+          // 左右兩片珍珠白聲帶 (Vocal Cords)
+          glottisLeftCord = svgEl('path', {
+            d: `M ${cx - 2} ${cy - 66} L ${cx - 28} ${cy + 68} L ${cx - 46} ${cy + 68} L ${cx - 16} ${cy - 66} Z`,
+            fill: '#f8fafc', stroke: '#fde047', 'stroke-width': 1.5
+          }, world);
+          glottisRightCord = svgEl('path', {
+            d: `M ${cx + 2} ${cy - 66} L ${cx + 28} ${cy + 68} L ${cx + 46} ${cy + 68} L ${cx + 16} ${cy - 66} Z`,
+            fill: '#f8fafc', stroke: '#fde047', 'stroke-width': 1.5
+          }, world);
+
+          createCalloutLabel(world, cx - 18, cy + 10, cx - 155, cy + 125, '聲帶 (Vocal Cords)', '氣流通過時快速振動', '#fde047');
+          createCalloutLabel(world, cx, cy - 82, cx + 68, cy - 125, '會厭軟骨(俯視)', '前上方軟骨瓣', PALETTE.cartilage);
+
+          // 右下：即時聲波與發聲狀態儀表
+          svgEl('rect', {
+            x: 626, y: 392, width: 322, height: 158, rx: 12,
+            fill: 'rgba(9, 14, 28, 0.85)', stroke: 'rgba(148,163,184,0.25)'
+          }, world);
+          svgEl('text', {
+            x: 644, y: 418, fill: '#94a3b8', 'font-size': 12.5, 'font-weight': '600'
+          }, world).textContent = '聲帶振動聲波模擬（頻率＝音調／振幅＝音量）';
+
+          wavePath = svgEl('path', {
+            d: 'M 644 480 L 930 480',
+            fill: 'none', stroke: '#fde047', 'stroke-width': 2.6
+          }, world);
+        }
+
+        function toggleAudio(enable) {
+          STATE.audioEnabled = enable;
+          if (enable) {
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContextClass) return;
+            if (!audioCtx) {
+              audioCtx = new AudioContextClass();
+              osc = audioCtx.createOscillator();
+              gainNode = audioCtx.createGain();
+              osc.type = 'triangle';
+              gainNode.gain.value = 0;
+              osc.connect(gainNode);
+              gainNode.connect(audioCtx.destination);
+              osc.start();
+            }
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+          } else if (gainNode && audioCtx) {
+            gainNode.gain.setTargetAtTime(0, audioCtx.currentTime, 0.05);
+          }
+        }
+
+        function update(t) {
+          let targetLarynxY = 0;
+          let targetEpiAngle = -22; // 直立開啟
+          let targetCordGap = 24;
+          let vibrating = false;
+          let airFlowMode = 'inhale'; // 'inhale' | 'exhale' | 'paused'
+          let targetBolus = -1;
+
+          if (STATE.tab1Mode === 'swallow') {
+            if (STATE.stepIndex === 0) {
+              targetLarynxY = 0;
+              targetEpiAngle = -22;
+              targetCordGap = 24;
+              targetBolus = -1;
+              airFlowMode = Math.sin(t * 2) > 0 ? 'inhale' : 'exhale';
+            } else if (STATE.stepIndex === 1) {
+              targetLarynxY = -6;
+              targetEpiAngle = 8;
+              targetCordGap = 10;
+              targetBolus = 0.35; // 推進咽口
+              airFlowMode = 'paused';
+            } else if (STATE.stepIndex === 2) {
+              // 喉頭上升 + 會厭軟骨下蓋封住氣管口！
+              targetLarynxY = -26;
+              targetEpiAngle = 78;
+              targetCordGap = 1; // 聲門緊閉雙重保護
+              targetBolus = 0.68 + 0.14 * Math.sin(t * 2.2); // 滑過會厭上方進入食道入口
+              airFlowMode = 'paused';
+            } else {
+              targetLarynxY = 0;
+              targetEpiAngle = -22;
+              targetCordGap = 24;
+              targetBolus = 0.98; // 食道下段
+              airFlowMode = 'inhale';
+            }
+          } else {
+            // 發聲模式
+            targetLarynxY = -4;
+            targetEpiAngle = -24;
+            if (STATE.stepIndex === 0) {
+              targetCordGap = 32;
+              airFlowMode = 'inhale';
+            } else if (STATE.stepIndex === 1) {
+              targetCordGap = 5;
+              airFlowMode = 'paused';
+            } else {
+              targetCordGap = 3.5;
+              vibrating = true;
+              airFlowMode = 'exhale';
+            }
+          }
+
+          anim.larynxY += (targetLarynxY - anim.larynxY) * 0.12;
+          anim.epiAngle += (targetEpiAngle - anim.epiAngle) * 0.14;
+          anim.cordGap += (targetCordGap - anim.cordGap) * 0.15;
+
+          larynxGroup.setAttribute('transform', `translate(0, ${anim.larynxY.toFixed(2)})`);
+          epiglottisGroup.setAttribute('transform', `translate(316, 312) rotate(${anim.epiAngle.toFixed(1)})`);
+
+          // 喉頭上升與會厭封閉徽章顯示
+          const isSwallowPeak = (STATE.tab1Mode === 'swallow' && STATE.stepIndex === 2);
+          larynxUpBadge.setAttribute('opacity', isSwallowPeak ? '1' : '0');
+          epiglottisSealBadge.setAttribute('opacity', isSwallowPeak ? '1' : '0');
+          softPalatePath.setAttribute('d', (STATE.tab1Mode === 'swallow' && (STATE.stepIndex === 1 || STATE.stepIndex === 2))
+            ? 'M 315 210 Q 365 208 408 205' // 軟顎上抬封住鼻咽
+            : 'M 315 210 Q 345 220 356 245');
+
+          // 食團路徑插值 (口腔 -> 咽 -> 越過蓋住的會厭 -> 後方食道)
+          if (targetBolus < 0) {
+            bolusCircle.setAttribute('opacity', '0');
+          } else {
+            bolusCircle.setAttribute('opacity', '1');
+            // 分段路徑
+            let bx = 240, by = 236, ang = 10;
+            if (targetBolus <= 0.4) {
+              const k = targetBolus / 0.4;
+              bx = 235 + k * 125;
+              by = 236 + k * 28;
+              ang = 15;
+            } else if (targetBolus <= 0.78) {
+              const k = (targetBolus - 0.4) / 0.38;
+              bx = 360 + k * 38;
+              by = 264 + k * 95;
+              ang = 68;
+            } else {
+              const k = ((t * 0.45) % 1);
+              bx = 402;
+              by = 365 + k * 175;
+              ang = 86;
+            }
+            bolusCircle.setAttribute('cx', bx.toFixed(1));
+            bolusCircle.setAttribute('cy', by.toFixed(1));
+            bolusCircle.setAttribute('transform', `rotate(${ang}, ${bx.toFixed(1)}, ${by.toFixed(1)})`);
+          }
+
+          // 聲帶俯視振動與音波
+          const freq = 10 + STATE.voicePitch * 26;
+          const vibAmp = vibrating ? (2.5 + STATE.voiceAirflow * 8.5) * Math.abs(Math.sin(t * freq)) : 0;
+          const gap = anim.cordGap + vibAmp;
+          const cx = 787, cy = 225;
+          // 緊繃時聲帶略拉長變細
+          const cordLen = vibrating || STATE.tab1Mode === 'voice' ? 62 + STATE.voicePitch * 14 : 64;
+
+          glottisLeftCord.setAttribute('d', `M ${cx - 1.5} ${cy - cordLen} Q ${cx - gap * 0.65} ${cy} ${cx - gap} ${cy + cordLen} L ${cx - gap - 16} ${cy + cordLen} L ${cx - 15} ${cy - cordLen} Z`);
+          glottisRightCord.setAttribute('d', `M ${cx + 1.5} ${cy - cordLen} Q ${cx + gap * 0.65} ${cy} ${cx + gap} ${cy + cordLen} L ${cx + gap + 16} ${cy + cordLen} L ${cx + 15} ${cy - cordLen} Z`);
+
+          // 矢狀面聲帶振動線
+          const sagVib = vibrating ? Math.sin(t * freq * 1.4) * (2.5 + STATE.voiceAirflow * 3.5) : 0;
+          sagittalCordLine.setAttribute('y1', (346 + sagVib).toFixed(1));
+          sagittalCordLine.setAttribute('y2', (346 - sagVib).toFixed(1));
+
+          // 右下音波曲線
+          let dWave = 'M 644 480';
+          for (let x = 644; x <= 930; x += 6) {
+            const u = (x - 644) / 286;
+            const y = vibrating
+              ? 480 + Math.sin(u * (8 + STATE.voicePitch * 22) - t * 18) * (8 + STATE.voiceAirflow * 36) * Math.sin(u * Math.PI)
+              : 480;
+            dWave += ` L ${x} ${y.toFixed(1)}`;
+          }
+          wavePath.setAttribute('d', dWave);
+
+          // Web Audio 合成聲帶頻率
+          if (STATE.audioEnabled && audioCtx && osc && gainNode) {
+            if (STATE.activeTab === 1 && vibrating) {
+              osc.frequency.setTargetAtTime(130 + STATE.voicePitch * 290, audioCtx.currentTime, 0.04);
+              gainNode.gain.setTargetAtTime(0.02 + STATE.voiceAirflow * 0.08, audioCtx.currentTime, 0.04);
+            } else {
+              gainNode.gain.setTargetAtTime(0, audioCtx.currentTime, 0.04);
+            }
+          }
+
+          // 呼吸道氣體粒子流動 (鼻腔 <-> 咽 <-> 氣管)
+          const airPts = [
+            { x: 140, y: 188 }, { x: 255, y: 175 }, { x: 365, y: 215 },
+            { x: 365, y: 285 }, { x: 337, y: 345 }, { x: 337, y: 540 }
+          ];
+          airDots.forEach(dot => {
+            if (airFlowMode === 'paused') {
+              dot.el.setAttribute('opacity', '0.12');
+              return;
+            }
+            dot.el.setAttribute('opacity', '0.88');
+            const dir = airFlowMode === 'inhale' ? 1 : -1;
+            let u = (dot.offset + dir * t * (0.32 + (vibrating ? STATE.voiceAirflow * 0.35 : 0))) % 1;
+            if (u < 0) u += 1;
+            const segFloat = u * (airPts.length - 1);
+            const idx = Math.min(airPts.length - 2, Math.floor(segFloat));
+            const frac = segFloat - idx;
+            const px = airPts[idx].x + (airPts[idx + 1].x - airPts[idx].x) * frac;
+            const py = airPts[idx].y + (airPts[idx + 1].y - airPts[idx].y) * frac;
+            dot.el.setAttribute('cx', px.toFixed(1));
+            dot.el.setAttribute('cy', py.toFixed(1));
+            dot.el.setAttribute('fill', airFlowMode === 'inhale' ? PALETTE.o2 : PALETTE.co2);
+          });
+        }
+
+        return { init, update, toggleAudio };
+      })();
+
+      /* =========================================================
+         分頁 2：氣管壁纖毛與黏液（朝外擺動排出異物）
+         ========================================================= */
+      const Tab2_CiliaMucus = (() => {
+        const world = document.getElementById('world2');
+        const ciliaPaths = [];
+        const mucusBlobs = [];
+        const dustParticles = [];
+        let mucusLayerGroup, dustGroup;
+
+        function init() {
+          // 左側：宏觀氣管定位圖（清楚標示向上＝朝向咽喉體外方向）
+          svgEl('rect', {
+            x: 24, y: 24, width: 225, height: 552, rx: 16,
+            fill: 'rgba(15, 23, 42, 0.7)', stroke: 'rgba(148,163,184,0.22)'
+          }, world);
+          svgEl('text', {
+            x: 136, y: 54, fill: '#e2e8f0', 'font-size': 14.5, 'font-weight': '700', 'text-anchor': 'middle'
+          }, world).textContent = '氣管宏觀方向定位';
+
+          // 喉與氣管簡圖
+          svgEl('path', {
+            d: 'M 106 110 L 166 110 L 166 155 L 106 155 Z',
+            fill: 'rgba(34,211,238,0.28)', stroke: PALETTE.cartilage, 'stroke-width': 2
+          }, world);
+          svgEl('text', {
+            x: 136, y: 95, fill: '#fde047', 'font-size': 12.5, 'font-weight': '700', 'text-anchor': 'middle'
+          }, world).textContent = '⬆ 咽喉出口（向外排出）';
+
+          svgEl('rect', {
+            x: 112, y: 155, width: 48, height: 270,
+            fill: 'rgba(244,114,182,0.2)', stroke: PALETTE.airway, 'stroke-width': 2.5
+          }, world);
+          for (let y = 170; y <= 400; y += 32) {
+            svgEl('rect', { x: 108, y, width: 56, height: 12, rx: 5, fill: PALETTE.cartilage, opacity: 0.75 }, world);
+          }
+          // 氣管內朝上排出箭頭
+          svgEl('path', {
+            d: 'M 136 390 L 136 180 M 126 196 L 136 178 L 146 196',
+            fill: 'none', stroke: PALETTE.mucus, 'stroke-width': 3.5, 'stroke-dasharray': '7,5'
+          }, world);
+
+          svgEl('text', {
+            x: 136, y: 460, fill: '#94a3b8', 'font-size': 12, 'text-anchor': 'middle'
+          }, world).textContent = '⬇ 通往支氣管與肺深處';
+
+          // 放大框連線
+          svgEl('rect', {
+            x: 145, y: 255, width: 26, height: 42, rx: 4,
+            fill: 'none', stroke: '#38bdf8', 'stroke-width': 2
+          }, world);
+          svgEl('line', { x1: 171, y1: 255, x2: 272, y2: 40, stroke: '#38bdf8', 'stroke-dasharray': '4,4', opacity: 0.6 }, world);
+          svgEl('line', { x1: 171, y1: 297, x2: 272, y2: 565, stroke: '#38bdf8', 'stroke-dasharray': '4,4', opacity: 0.6 }, world);
+
+          // 右側主視窗：氣管壁顯微放大圖
+          svgEl('rect', {
+            x: 270, y: 24, width: 706, height: 552, rx: 16,
+            fill: 'rgba(15, 23, 42, 0.72)', stroke: 'rgba(148,163,184,0.25)'
+          }, world);
+
+          // 頂部明確方向橫幅：左(肺深處) ➔ 右(朝向咽喉向外排出)
+          svgEl('rect', {
+            x: 295, y: 44, width: 656, height: 42, rx: 10,
+            fill: 'rgba(250, 204, 21, 0.12)', stroke: 'rgba(250, 204, 21, 0.45)'
+          }, world);
+          svgEl('text', {
+            x: 315, y: 70, fill: '#94a3b8', 'font-size': 13, 'font-weight': '600'
+          }, world).textContent = '◀ 肺部深處方向';
+          svgEl('text', {
+            x: 623, y: 70, fill: '#fde047', 'font-size': 14.5, 'font-weight': '700', 'text-anchor': 'middle'
+          }, world).textContent = '纖毛擺動與黏液推進方向 ➔ ➔ ➔';
+          svgEl('text', {
+            x: 932, y: 70, fill: '#fef08a', 'font-size': 13.5, 'font-weight': '700', 'text-anchor': 'end'
+          }, world).textContent = '朝向咽喉（向外排出）▶';
+
+          // 底層：C型透明軟骨層 (Hyaline Cartilage) + 基底膜
+          svgEl('rect', {
+            x: 295, y: 505, width: 656, height: 50, rx: 10,
+            fill: 'rgba(34, 211, 238, 0.25)', stroke: PALETTE.cartilage, 'stroke-width': 2
+          }, world);
+          for (let x = 335; x <= 915; x += 72) {
+            svgEl('ellipse', { cx: x, cy: 530, rx: 16, ry: 9, fill: 'rgba(34,211,238,0.45)', stroke: '#cffafe' }, world);
+          }
+          svgEl('line', {
+            x1: 295, y1: 496, x2: 951, y2: 496,
+            stroke: '#f472b6', 'stroke-width': 4
+          }, world);
+
+          // 中層：氣管柱狀上皮細胞 + 杯狀細胞 (分泌黏液)
+          const cellCount = 15;
+          const startX = 298;
+          const cellW = 650 / cellCount;
+          for (let i = 0; i < cellCount; i++) {
+            const cx = startX + i * cellW;
+            const isGoblet = (i === 3 || i === 8 || i === 12);
+            if (isGoblet) {
+              // 杯狀細胞 (Goblet Cell)
+              svgEl('path', {
+                d: `M ${cx + 3} 494 L ${cx + 8} 395 Q ${cx + cellW / 2} 365 ${cx + cellW - 8} 395 L ${cx + cellW - 3} 494 Z`,
+                fill: 'rgba(250, 204, 21, 0.35)', stroke: PALETTE.mucus, 'stroke-width': 2
+              }, world);
+              // 黏液分泌顆粒
+              svgEl('circle', { cx: cx + cellW / 2, cy: 398, r: 6, fill: PALETTE.mucus }, world);
+              svgEl('circle', { cx: cx + cellW / 2 - 5, cy: 414, r: 5, fill: PALETTE.mucus }, world);
+              svgEl('circle', { cx: cx + cellW / 2 + 6, cy: 416, r: 4.5, fill: PALETTE.mucus }, world);
+              svgEl('ellipse', { cx: cx + cellW / 2, cy: 468, rx: 8, ry: 11, fill: '#be185d' }, world);
+            } else {
+              // 纖毛柱狀上皮細胞
+              svgEl('rect', {
+                x: cx + 1.5, y: 382, width: cellW - 3, height: 112, rx: 6,
+                fill: 'rgba(244, 114, 182, 0.38)', stroke: PALETTE.airway, 'stroke-width': 1.6
+              }, world);
+              // 細胞核
+              svgEl('ellipse', {
+                cx: cx + cellW / 2, cy: 448 + (i % 2) * 10, rx: 9, ry: 15,
+                fill: 'rgba(190, 24, 93, 0.85)', stroke: '#fbcfe8', 'stroke-width': 1
+              }, world);
+
+              // 每個上皮細胞頂端長出 4 根動態纖毛
+              for (let c = 0; c < 4; c++) {
+                const bx = cx + 6 + c * ((cellW - 12) / 3);
+                const path = svgEl('path', {
+                  d: `M ${bx} 382 Q ${bx} 340 ${bx} 305`,
+                  fill: 'none', stroke: '#fbcfe8', 'stroke-width': 3.2, 'stroke-linecap': 'round'
+                }, world);
+                ciliaPaths.push({ el: path, baseX: bx, baseY: 382, phaseOffset: (bx - 298) * 0.022 });
+              }
+            }
+          }
+
+          // 上層：流動的金黃色黏液毯 (Mucus Blanket)
+          mucusLayerGroup = svgEl('g', {}, world);
+          const mucusBand = svgEl('path', {
+            d: 'M 295 268 Q 460 258 625 268 T 951 268 L 951 312 Q 780 320 625 312 T 295 312 Z',
+            fill: 'rgba(250, 204, 21, 0.42)', stroke: PALETTE.mucus, 'stroke-width': 2
+          }, mucusLayerGroup);
+          mucusBlobs.push(mucusBand);
+
+          for (let i = 0; i < 9; i++) {
+            const b = svgEl('ellipse', {
+              rx: 26, ry: 8, fill: 'rgba(254, 240, 138, 0.45)'
+            }, mucusLayerGroup);
+            mucusBlobs.push({ el: b, offset: i / 9 });
+          }
+
+          // 灰塵與細菌異物群組
+          dustGroup = svgEl('g', {}, world);
+          for (let i = 0; i < 14; i++) {
+            spawnDustParticle(true);
+          }
+
+          // 咽喉排出收集區示意
+          svgEl('rect', {
+            x: 882, y: 185, width: 68, height: 72, rx: 10,
+            fill: 'rgba(250,204,21,0.14)', stroke: '#fde047', 'stroke-dasharray': '4,3'
+          }, world);
+          svgEl('text', {
+            x: 916, y: 215, fill: '#fef08a', 'font-size': 11.5, 'font-weight': '700', 'text-anchor': 'middle'
+          }, world).textContent = '推至咽部';
+          svgEl('text', {
+            x: 916, y: 235, fill: '#cbd5e1', 'font-size': 10.5, 'text-anchor': 'middle'
+          }, world).textContent = '(形成痰排出)';
+
+          // 文字標籤
+          createCalloutLabel(world, 455, 165, 340, 132, '異物微粒與病菌', '隨吸入空氣進入氣管', PALETTE.dust);
+          createCalloutLabel(world, 610, 286, 650, 198, '黏液層 (Mucus)', '黏附灰塵、花粉與細菌', PALETTE.mucus);
+          createCalloutLabel(world, 520, 342, 345, 342, '纖毛 (Cilia)', '朝向外(咽喉)規律擺動', '#fbcfe8');
+          createCalloutLabel(world, 450, 405, 485, 435, '杯狀細胞', '分泌黏液至氣管表面', PALETTE.mucus);
+          createCalloutLabel(world, 735, 530, 775, 530, 'C型軟骨層', '支撐氣管壁不塌陷', PALETTE.cartilage);
+        }
+
+        function spawnDustParticle(randomX = false) {
+          const g = svgEl('g', {}, dustGroup);
+          const isBacteria = Math.random() > 0.5;
+          if (isBacteria) {
+            svgEl('rect', {
+              x: -9, y: -5, width: 18, height: 10, rx: 5,
+              fill: PALETTE.dust, stroke: '#e9d5ff', 'stroke-width': 1.5
+            }, g);
+          } else {
+            svgEl('polygon', {
+              points: '-8,-6 2,-9 9,-2 5,8 -6,7',
+              fill: '#9333ea', stroke: '#f3e8ff', 'stroke-width': 1.5
+            }, g);
+          }
+          dustParticles.push({
+            el: g,
+            x: randomX ? 310 + Math.random() * 560 : 315 + Math.random() * 240,
+            y: randomX ? (Math.random() > 0.35 ? 278 + Math.random() * 20 : 120 + Math.random() * 110) : 105 + Math.random() * 45,
+            trapped: false
+          });
+          if (dustParticles.length > 28) {
+            const old = dustParticles.shift();
+            old.el.remove();
+          }
+        }
+
+        function update(t, dt) {
+          // 根據步驟調整速度視覺重點
+          const stepFactor = (STATE.stepIndex === 0) ? 0.35 : STATE.ciliaSpeed;
+          const waveTime = t * 5.2 * stepFactor;
+
+          // 1. 纖毛不對稱動力衝程 (Power stroke 挺直向右掃動 ➔ Recovery stroke 彎低向左收回)
+          ciliaPaths.forEach(c => {
+            const phase = (waveTime - c.phaseOffset) % (Math.PI * 2);
+            const normP = (phase + Math.PI * 2) % (Math.PI * 2);
+            let tipDx, tipDy, ctrlDx, ctrlDy;
+
+            if (normP < Math.PI) {
+              // Power stroke：高聳挺直向右（朝向咽喉體外方向）強力推進！
+              const s = normP / Math.PI; // 0 -> 1
+              tipDx = -18 + s * 42;
+              tipDy = -74 + Math.abs(s - 0.5) * 12;
+              ctrlDx = tipDx * 0.55;
+              ctrlDy = -42;
+            } else {
+              // Recovery stroke：壓低彎曲收回，避免把黏液往回推
+              const s = (normP - Math.PI) / Math.PI; // 0 -> 1
+              tipDx = 24 - s * 42;
+              tipDy = -52 + Math.sin(s * Math.PI) * 14;
+              ctrlDx = tipDx * 0.3 - 8;
+              ctrlDy = -26;
+            }
+
+            c.el.setAttribute('d', `M ${c.baseX.toFixed(1)} ${c.baseY} Q ${(c.baseX + ctrlDx).toFixed(1)} ${(c.baseY + ctrlDy).toFixed(1)} ${(c.baseX + tipDx).toFixed(1)} ${(c.baseY + tipDy).toFixed(1)}`);
+          });
+
+          // 2. 黏液層向右（咽喉出口方向）穩定平移
+          for (let i = 1; i < mucusBlobs.length; i++) {
+            const b = mucusBlobs[i];
+            const u = (b.offset + t * 0.11 * stepFactor) % 1;
+            const bx = 315 + u * 615;
+            const by = 288 + Math.sin(u * 12 + t * 3) * 4;
+            b.el.setAttribute('cx', bx.toFixed(1));
+            b.el.setAttribute('cy', by.toFixed(1));
+          }
+
+          // 3. 異物微粒：落下 -> 被黏液黏住 -> 被纖毛朝外推向咽喉出口
+          dustParticles.forEach(p => {
+            if (p.y < 276) {
+              p.y += dt * (48 + (STATE.stepIndex === 1 ? 35 : 0));
+              p.x += Math.sin(t * 3 + p.y * 0.05) * 0.5;
+            } else {
+              p.trapped = true;
+              p.x += dt * 74 * stepFactor;
+              p.y = 282 + Math.sin(p.x * 0.05) * 5;
+            }
+
+            // 抵達右側咽喉出口後循環補充
+            if (p.x > 938) {
+              p.x = 315 + Math.random() * 140;
+              p.y = 115 + Math.random() * 65;
+              p.trapped = false;
+            }
+            p.el.setAttribute('transform', `translate(${p.x.toFixed(1)}, ${p.y.toFixed(1)})`);
+          });
+        }
+
+        return { init, update, spawnDustParticle };
+      })();
+
+      /* =========================================================
+         分頁 3：肺泡與微血管氣體交換（擴散作用）
+         ========================================================= */
+      const Tab3_AlveoliDiffusion = (() => {
+        const world = document.getElementById('world3');
+        const rbcs = [];
+        const o2Dots = [];
+        const co2Dots = [];
+        let capillaryPath;
+
+        function init() {
+          // 左側：肺由無數肺泡組成，肺泡表面布滿微血管網
+          svgEl('rect', {
+            x: 22, y: 22, width: 318, height: 556, rx: 16,
+            fill: 'rgba(15, 23, 42, 0.72)', stroke: 'rgba(148,163,184,0.22)'
+          }, world);
+          svgEl('text', {
+            x: 181, y: 52, fill: '#e2e8f0', 'font-size': 14.5, 'font-weight': '700', 'text-anchor': 'middle'
+          }, world).textContent = '肺泡群與表面微血管網';
+
+          // 細支氣管分支
+          svgEl('path', {
+            d: 'M 180 88 L 180 195 M 180 165 L 125 225 M 180 165 L 235 225',
+            fill: 'none', stroke: PALETTE.airway, 'stroke-width': 14, 'stroke-linecap': 'round'
+          }, world);
+
+          // 葡萄串狀肺泡囊 (Alveolar Sacs)
+          const sacCenters = [
+            [115, 255, 28], [92, 290, 26], [135, 295, 27], [112, 330, 26],
+            [180, 235, 28], [165, 278, 29], [198, 282, 28], [180, 322, 30],
+            [242, 255, 27], [265, 292, 26], [228, 302, 27], [248, 334, 26]
+          ];
+          sacCenters.forEach(([cx, cy, r]) => {
+            svgEl('circle', {
+              cx, cy, r, fill: PALETTE.lung, stroke: '#fecdd3', 'stroke-width': 1.5, opacity: 0.88
+            }, world);
+          });
+
+          // 包覆肺泡表面的微血管網（藍缺氧血 -> 紅充氧血漸層網格）
+          const defs = svgEl('defs', {}, world);
+          const gradCap = svgEl('linearGradient', { id: 'capMeshGrad', x1: '0%', y1: '0%', x2: '100%', y2: '0%' }, defs);
+          svgEl('stop', { offset: '0%', 'stop-color': PALETTE.co2 }, gradCap);
+          svgEl('stop', { offset: '50%', 'stop-color': '#a855f7' }, gradCap);
+          svgEl('stop', { offset: '100%', 'stop-color': PALETTE.o2 }, gradCap);
+
+          svgEl('path', {
+            d: 'M 72 245 Q 140 275 180 250 T 288 265 M 75 305 Q 150 280 195 315 T 285 305 M 98 340 Q 175 355 268 338 M 115 235 L 122 350 M 182 220 L 178 355 M 242 235 L 245 355',
+            fill: 'none', stroke: 'url(#capMeshGrad)', 'stroke-width': 4.2, 'stroke-linecap': 'round', opacity: 0.92
+          }, world);
+
+          svgEl('text', { x: 85, y: 405, fill: '#93c5fd', 'font-size': 12, 'font-weight': '700' }, world).textContent = '● 肺動脈分支 (缺氧血)';
+          svgEl('text', { x: 85, y: 430, fill: '#fca5a5', 'font-size': 12, 'font-weight': '700' }, world).textContent = '● 肺靜脈分支 (充氧血)';
+          svgEl('text', { x: 44, y: 472, fill: '#cbd5e1', 'font-size': 12 }, world).textContent = '數億個肺泡大幅增加氣體交換表面積！';
+
+          // 放大框引導線至右側單一肺泡切面
+          svgEl('circle', { cx: 248, cy: 334, r: 32, fill: 'none', stroke: '#38bdf8', 'stroke-width': 2, 'stroke-dasharray': '4,3' }, world);
+          svgEl('line', { x1: 278, y1: 318, x2: 362, y2: 60, stroke: '#38bdf8', 'stroke-dasharray': '4,4', opacity: 0.55 }, world);
+          svgEl('line', { x1: 278, y1: 350, x2: 362, y2: 550, stroke: '#38bdf8', 'stroke-dasharray': '4,4', opacity: 0.55 }, world);
+
+          // ========= 右側主視窗：單一肺泡與微血管「擴散作用」微觀切面 =========
+          svgEl('rect', {
+            x: 360, y: 22, width: 618, height: 556, rx: 16,
+            fill: 'rgba(15, 23, 42, 0.75)', stroke: 'rgba(148,163,184,0.25)'
+          }, world);
+          svgEl('text', {
+            x: 669, y: 52, fill: '#e2e8f0', 'font-size': 15, 'font-weight': '700', 'text-anchor': 'middle'
+          }, world).textContent = '單一肺泡與微血管切面 — 擴散作用（高濃度 ➔ 低濃度）';
+
+          // 肺泡腔與開口通道 (cx=670, cy=252, r=136)
+          svgEl('path', {
+            d: 'M 632 82 L 632 122 A 136 136 0 1 0 708 122 L 708 82 Z',
+            fill: 'rgba(251, 113, 133, 0.12)', stroke: PALETTE.lung, 'stroke-width': 8, 'stroke-linejoin': 'round'
+          }, world);
+
+          // 繪製單層扁平肺泡壁細胞核點綴（強調「薄肺泡壁：僅一層細胞厚」）
+          for (let deg = -55; deg <= 235; deg += 28) {
+            const rad = deg * Math.PI / 180;
+            const nx = 670 + 136 * Math.cos(rad);
+            const ny = 252 + 136 * Math.sin(rad);
+            svgEl('circle', { cx: nx, cy: ny, r: 3.5, fill: '#be123c' }, world);
+          }
+
+          // 緊貼肺泡下緣的彎曲微血管 (薄微血管壁：僅一層細胞厚)
+          // 外管壁與內管壁呈現單層內皮
+          svgEl('path', {
+            d: 'M 392 335 C 475 335, 515 412, 670 412 C 825 412, 865 335, 948 335',
+            fill: 'none', stroke: 'url(#capMeshGrad)', 'stroke-width': 54, 'stroke-linecap': 'round', opacity: 0.25
+          }, world);
+          svgEl('path', {
+            d: 'M 392 308 C 478 308, 520 385, 670 385 C 820 385, 862 308, 948 308',
+            fill: 'none', stroke: '#fda4af', 'stroke-width': 3.5, 'stroke-dasharray': '14,3'
+          }, world);
+          svgEl('path', {
+            d: 'M 392 362 C 472 362, 510 439, 670 439 C 830 439, 868 362, 948 362',
+            fill: 'none', stroke: '#fda4af', 'stroke-width': 3.5, 'stroke-dasharray': '14,3'
+          }, world);
+
+          // 紅血球運動軌跡參考路徑
+          capillaryPath = svgEl('path', {
+            d: 'M 392 335 C 475 335, 515 412, 670 412 C 825 412, 865 335, 948 335',
+            fill: 'none', stroke: 'none'
+          }, world);
+
+          // 建立 9 顆紅血球 (由藍紫缺氧血 ➔ 鮮紅充氧血)
+          for (let i = 0; i < 9; i++) {
+            const g = svgEl('g', {}, world);
+            const outer = svgEl('ellipse', { rx: 18, ry: 11, fill: PALETTE.co2, stroke: '#f8fafc', 'stroke-width': 1 }, g);
+            const inner = svgEl('ellipse', { rx: 9, ry: 5, fill: 'rgba(0,0,0,0.22)' }, g);
+            rbcs.push({ g, outer, inner, offset: i / 9 });
+          }
+
+          // O2 擴散粒子 (紅：肺泡腔 -> 穿過兩層薄壁 -> 紅血球)
+          for (let i = 0; i < 16; i++) {
+            const c = svgEl('circle', { r: 5, fill: PALETTE.o2, stroke: '#fee2e2', 'stroke-width': 1 }, world);
+            o2Dots.push({ el: c, offset: i / 16, lane: (i % 5) - 2 });
+          }
+
+          // CO2 擴散粒子 (藍：微血管 -> 穿過兩層薄壁 -> 肺泡腔呼出)
+          for (let i = 0; i < 16; i++) {
+            const c = svgEl('circle', { r: 5, fill: PALETTE.co2, stroke: '#dbeafe', 'stroke-width': 1 }, world);
+            co2Dots.push({ el: c, offset: i / 16, lane: (i % 5) - 2 });
+          }
+
+          // 濃度梯度提示卡
+          svgEl('rect', {
+            x: 575, y: 185, width: 190, height: 64, rx: 10,
+            fill: 'rgba(15, 23, 42, 0.78)', stroke: 'rgba(255,255,255,0.18)'
+          }, world);
+          svgEl('text', { x: 670, y: 208, fill: '#fca5a5', 'font-size': 12.5, 'font-weight': '700', 'text-anchor': 'middle' }, world).textContent = '肺泡腔：O₂ 高 ／ CO₂ 低';
+          svgEl('text', { x: 670, y: 232, fill: '#93c5fd', 'font-size': 12, 'text-anchor': 'middle' }, world).textContent = '擴散作用不耗能（自然進出）';
+
+          // 文字標籤
+          createCalloutLabel(world, 632, 96, 480, 96, '吸入 O₂ ／ 呼出 CO₂', '經支氣管進出肺泡', PALETTE.airway);
+          createCalloutLabel(world, 552, 318, 435, 240, '薄肺泡壁', '僅一層扁平細胞厚', PALETTE.lung);
+          createCalloutLabel(world, 582, 376, 435, 488, '薄微血管壁', '僅一層內皮細胞厚', '#fda4af');
+          createCalloutLabel(world, 435, 335, 435, 542, '缺氧血流入 (高CO₂)', '來自肺動脈分支', PALETTE.co2);
+          createCalloutLabel(world, 895, 335, 845, 542, '充氧血流出 (高O₂)', '送回左心房至全身', PALETTE.o2);
+          createCalloutLabel(world, 785, 250, 885, 210, '肺泡腔', '充滿新鮮吸入氣體', PALETTE.lung);
+        }
+
+        function lerpColor(u) {
+          // u: 0(藍 #3b82f6) -> 1(紅 #ef4444)
+          const c = Math.max(0, Math.min(1, (u - 0.25) / 0.5));
+          const r = Math.round(59 + (239 - 59) * c);
+          const g = Math.round(130 + (68 - 130) * c);
+          const b = Math.round(246 + (68 - 246) * c);
+          return `rgb(${r},${g},${b})`;
+        }
+
+        function update(t) {
+          const totalLen = capillaryPath.getTotalLength();
+
+          // 1. 紅血球沿微血管前進並由藍變紅
+          rbcs.forEach(item => {
+            const u = (item.offset + t * 0.11) % 1;
+            const p = capillaryPath.getPointAtLength(u * totalLen);
+            const pNext = capillaryPath.getPointAtLength(Math.min(totalLen, u * totalLen + 4));
+            const ang = Math.atan2(pNext.y - p.y, pNext.x - p.x) * 180 / Math.PI;
+            item.g.setAttribute('transform', `translate(${p.x.toFixed(1)}, ${p.y.toFixed(1)}) rotate(${ang.toFixed(1)})`);
+            item.outer.setAttribute('fill', lerpColor(u));
+          });
+
+          // 根據步驟凸顯 O2 或 CO2 擴散
+          const highlightO2 = (STATE.stepIndex === 1) ? 1 : (STATE.stepIndex === 2 ? 0.35 : 0.9);
+          const highlightCO2 = (STATE.stepIndex === 2) ? 1 : (STATE.stepIndex === 1 ? 0.35 : 0.9);
+
+          // 2. O2 分子：由上方支氣管進入肺泡 -> 向下擴散穿過薄肺泡壁與薄微血管壁進入紅血球
+          o2Dots.forEach(d => {
+            const u = (d.offset + t * 0.22) % 1;
+            let x, y;
+            if (u < 0.35) {
+              const k = u / 0.35;
+              x = 656 + d.lane * 5 + d.lane * 14 * k;
+              y = 85 + k * 175;
+            } else {
+              const k = (u - 0.35) / 0.65;
+              x = 670 + d.lane * 28 + k * 25;
+              y = 260 + k * 150;
+            }
+            d.el.setAttribute('cx', x.toFixed(1));
+            d.el.setAttribute('cy', y.toFixed(1));
+            d.el.setAttribute('opacity', (highlightO2 * Math.sin(u * Math.PI)).toFixed(2));
+          });
+
+          // 3. CO2 分子：由微血管缺氧血 -> 向上擴散穿過薄微血管壁與薄肺泡壁 -> 經肺泡開口呼出
+          co2Dots.forEach(d => {
+            const u = (d.offset + t * 0.22) % 1;
+            let x, y;
+            if (u < 0.55) {
+              const k = u / 0.55;
+              x = 625 + d.lane * 24 + k * 15;
+              y = 408 - k * 148;
+            } else {
+              const k = (u - 0.55) / 0.45;
+              x = 640 + d.lane * 12 * (1 - k) + 42 * k;
+              y = 260 - k * 175;
+            }
+            d.el.setAttribute('cx', x.toFixed(1));
+            d.el.setAttribute('cy', y.toFixed(1));
+            d.el.setAttribute('opacity', (highlightCO2 * Math.sin(u * Math.PI)).toFixed(2));
+          });
+        }
+
+        return { init, update };
+      })();
+
+      /* =========================================================
+         分頁 4：胸腔、肋骨、橫膈與呼吸運動（支援觸控直接拖曳橫膈！）
+         ========================================================= */
+      const Tab4_Mechanics = (() => {
+        const world = document.getElementById('world4');
+        const svg4 = document.getElementById('svg4');
+        let frontPleura, frontLungL, frontLungR, frontDiaphragm, frontRibsGroup, dragHandleGroup;
+        let sideSternum, sideDiaphragm, sideLung, sideRibLines = [];
+        let volBarFill, pressNeedle, statusBadgeText, airArrowPath;
+        let isDraggingDia = false;
+
+        function init() {
+          // 左側：正面胸廓解剖圖 (肋骨、胸腔、左右肺、橫膈)
+          svgEl('rect', {
+            x: 22, y: 22, width: 495, height: 556, rx: 16,
+            fill: 'rgba(15, 23, 42, 0.72)', stroke: 'rgba(148,163,184,0.22)'
+          }, world);
+          svgEl('text', {
+            x: 270, y: 52, fill: '#e2e8f0', 'font-size': 15, 'font-weight': '700', 'text-anchor': 'middle'
+          }, world).textContent = '正面視角：肋骨、胸腔、肺與橫膈聯動';
+
+          // 氣管與支氣管
+          svgEl('path', {
+            d: 'M 270 74 L 270 175 M 270 165 L 215 215 M 270 165 L 325 215',
+            fill: 'none', stroke: PALETTE.cartilage, 'stroke-width': 13, 'stroke-linecap': 'round'
+          }, world);
+
+          // 進出氣流方向大箭頭
+          airArrowPath = svgEl('path', {
+            d: 'M 270 68 L 270 125',
+            fill: 'none', stroke: PALETTE.o2, 'stroke-width': 5, 'stroke-linecap': 'round'
+          }, world);
+
+          // 密閉胸腔輪廓
+          frontPleura = svgEl('path', { fill: 'rgba(56, 189, 248, 0.08)', stroke: '#38bdf8', 'stroke-width': 2, 'stroke-dasharray': '5,4' }, world);
+
+          // 右肺與左肺
+          frontLungR = svgEl('path', { fill: PALETTE.lung, opacity: 0.85, stroke: '#fecdd3', 'stroke-width': 2 }, world);
+          frontLungL = svgEl('path', { fill: PALETTE.lung, opacity: 0.85, stroke: '#fecdd3', 'stroke-width': 2 }, world);
+
+          // 正面肋骨與胸骨群組
+          frontRibsGroup = svgEl('g', {}, world);
+
+          // 橫膈肌 (圓頂狀 <-> 收縮下降變平)
+          frontDiaphragm = svgEl('path', {
+            fill: 'none', stroke: PALETTE.muscle, 'stroke-width': 12, 'stroke-linecap': 'round'
+          }, world);
+
+          // 可觸控拖曳的橫膈互動控制柄！
+          dragHandleGroup = svgEl('g', {
+            'data-interactive': 'true',
+            style: 'cursor: ns-resize;'
+          }, world);
+          svgEl('rect', {
+            x: -74, y: -16, width: 148, height: 32, rx: 16,
+            fill: 'rgba(225, 29, 72, 0.92)', stroke: '#fda4af', 'stroke-width': 2
+          }, dragHandleGroup);
+          svgEl('text', {
+            x: 0, y: 5, fill: '#fff', 'font-size': 12, 'font-weight': '700', 'text-anchor': 'middle'
+          }, dragHandleGroup).textContent = '⇅ 拖曳橫膈體驗呼吸';
+
+          // 綁定橫膈直接觸控拖曳事件
+          dragHandleGroup.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
+            dragHandleGroup.setPointerCapture(e.pointerId);
+            isDraggingDia = true;
+            STATE.manualDiaphragm = true;
+            STATE.autoPlay = false;
+            updatePlayButtonUI();
+          });
+          dragHandleGroup.addEventListener('pointermove', (e) => {
+            if (!isDraggingDia) return;
+            e.stopPropagation();
+            const pt = pzControllers[4].clientToSvg(e.clientX, e.clientY);
+            const worldY = (pt.y - pzControllers[4].ty) / pzControllers[4].scale;
+            // worldY 405 (呼氣拱起 phase=0) .. 485 (吸氣下降 phase=1)
+            STATE.breathPhase = Math.max(0, Math.min(1, (worldY - 405) / 80));
+          });
+          const stopDrag = (e) => {
+            if (!isDraggingDia) return;
+            isDraggingDia = false;
+          };
+          dragHandleGroup.addEventListener('pointerup', stopDrag);
+          dragHandleGroup.addEventListener('pointercancel', stopDrag);
+
+          // ========= 右側：側面胸廓運動圖 ＆ 胸腔體積/壓力儀表 =========
+          svgEl('rect', {
+            x: 535, y: 22, width: 443, height: 332, rx: 16,
+            fill: 'rgba(15, 23, 42, 0.72)', stroke: 'rgba(148,163,184,0.22)'
+          }, world);
+          svgEl('text', {
+            x: 756, y: 52, fill: '#e2e8f0', 'font-size': 14.5, 'font-weight': '700', 'text-anchor': 'middle'
+          }, world).textContent = '側面視角：肋骨上舉外展 ＆ 橫膈升降';
+
+          // 脊柱固定軸 (右側後方 x=840)
+          svgEl('line', {
+            x1: 840, y1: 85, x2: 840, y2: 325,
+            stroke: '#94a3b8', 'stroke-width': 12, 'stroke-linecap': 'round', 'stroke-dasharray': '14,5'
+          }, world);
+
+          sideLung = svgEl('path', { fill: 'rgba(251, 113, 133, 0.55)', stroke: PALETTE.lung, 'stroke-width': 2 }, world);
+          for (let i = 0; i < 5; i++) {
+            sideRibLines.push(svgEl('line', { stroke: PALETTE.cartilage, 'stroke-width': 5, 'stroke-linecap': 'round' }, world));
+          }
+          sideSternum = svgEl('line', { stroke: '#e2e8f0', 'stroke-width': 9, 'stroke-linecap': 'round' }, world);
+          sideDiaphragm = svgEl('path', { fill: 'none', stroke: PALETTE.muscle, 'stroke-width': 8, 'stroke-linecap': 'round' }, world);
+
+          // 右下：即時胸腔體積與壓力變化儀表板
+          svgEl('rect', {
+            x: 535, y: 370, width: 443, height: 208, rx: 16,
+            fill: 'rgba(15, 23, 42, 0.82)', stroke: 'rgba(148,163,184,0.25)'
+          }, world);
+
+          statusBadgeText = svgEl('text', {
+            x: 756, y: 404, fill: '#fde047', 'font-size': 15, 'font-weight': '700', 'text-anchor': 'middle'
+          }, world);
+
+          svgEl('text', { x: 562, y: 446, fill: '#cbd5e1', 'font-size': 13, 'font-weight': '600' }, world).textContent = '胸腔與肺體積：';
+          svgEl('rect', { x: 672, y: 432, width: 270, height: 18, rx: 9, fill: '#1e293b' }, world);
+          volBarFill = svgEl('rect', { x: 672, y: 432, width: 150, height: 18, rx: 9, fill: PALETTE.lung }, world);
+
+          svgEl('text', { x: 562, y: 496, fill: '#cbd5e1', 'font-size': 13, 'font-weight': '600' }, world).textContent = '胸腔內壓 (相較大氣壓)：';
+          svgEl('rect', { x: 720, y: 482, width: 222, height: 18, rx: 9, fill: '#1e293b' }, world);
+          // 中線 = 1 atm 大氣壓 (x=831)
+          svgEl('line', { x1: 831, y1: 476, x2: 831, y2: 506, stroke: '#f8fafc', 'stroke-width': 2 }, world);
+          svgEl('text', { x: 831, y: 522, fill: '#94a3b8', 'font-size': 10.5, 'text-anchor': 'middle' }, world).textContent = '低壓(吸氣) ◀ 大氣壓 ▶ 高壓(呼氣)';
+          pressNeedle = svgEl('circle', { cx: 831, cy: 491, r: 8, fill: '#38bdf8', stroke: '#fff', 'stroke-width': 2 }, world);
+
+          svgEl('text', {
+            x: 756, y: 556, fill: '#94a3b8', 'font-size': 12, 'text-anchor': 'middle'
+          }, world).textContent = '重點觀念：肺本身沒有肌肉，是隨「胸腔擴大與縮小」而被動脹縮！';
+
+          // 解剖文字標籤
+          createCalloutLabel(world, 155, 250, 82, 165, '肋骨 (Ribs)', '吸氣上舉／呼氣下降', PALETTE.cartilage);
+          createCalloutLabel(world, 365, 285, 430, 165, '肺臟 (Lungs)', '隨胸腔擴大或縮小', PALETTE.lung);
+          createCalloutLabel(world, 165, 390, 95, 495, '胸腔 (密閉腔室)', '體積改變引發壓力差', '#38bdf8');
+          createCalloutLabel(world, 368, 412, 415, 500, '橫膈 (Diaphragm)', '收縮下降／舒張上升', PALETTE.muscle);
+          createCalloutLabel(world, 675, 200, 595, 118, '胸骨前推上舉', '前後徑擴大', '#e2e8f0');
+        }
+
+        function update(t, dt) {
+          let prevPhase = STATE.breathPhase;
+
+          if (!STATE.manualDiaphragm) {
+            if (STATE.autoPlay) {
+              // 連續平滑呼吸並同步狀態
+              STATE.breathPhase = 0.5 - 0.5 * Math.cos(t * 1.65);
+            } else {
+              // 單步模式對應精確階段目標
+              const targets = [0.55, 1.0, 0.45, 0.0];
+              const goal = targets[STATE.stepIndex] ?? 0.5;
+              STATE.breathPhase += (goal - STATE.breathPhase) * 0.1;
+            }
+          }
+
+          const p = STATE.breathPhase; // 0 = 呼氣末(最小), 1 = 吸氣末(最大)
+          const dPhase = p - prevPhase;
+          const isInhaling = Math.abs(dPhase) > 0.0005 ? dPhase > 0 : (STATE.stepIndex <= 1);
+
+          // 1. 正面胸腔、肺、肋骨、橫膈幾何形變
+          const expX = p * 26;      // 肋骨外展寬度
+          const ribLift = p * 18;   // 肋骨上舉高度
+          const diaApexY = 352 + p * 68; // 橫膈圓頂高度：352(高拱呼氣) -> 420(下降變平吸氣)
+          const diaEdgeY = 428 + p * 18;
+
+          frontPleura.setAttribute('d', `M 235 168 C ${142 - expX} 175, ${118 - expX} 320, ${126 - expX * 0.8} ${diaEdgeY} Q 270 ${diaApexY - 12} ${414 + expX * 0.8} ${diaEdgeY} C ${422 + expX} 320, ${398 + expX} 175, 305 168 Z`);
+
+          frontLungR.setAttribute('d', `M 256 185 C ${165 - expX * 0.9} 190, ${136 - expX * 0.9} 315, ${142 - expX * 0.75} ${diaEdgeY - 10} Q 205 ${diaApexY - 18} 256 ${diaApexY - 8} Z`);
+          frontLungL.setAttribute('d', `M 284 185 C ${375 + expX * 0.9} 190, ${404 + expX * 0.9} 315, ${398 + expX * 0.75} ${diaEdgeY - 10} Q 335 ${diaApexY - 18} 284 ${diaApexY - 8} Z`);
+
+          frontDiaphragm.setAttribute('d', `M ${122 - expX * 0.8} ${diaEdgeY + 6} Q 270 ${diaApexY} ${418 + expX * 0.8} ${diaEdgeY + 6}`);
+          dragHandleGroup.setAttribute('transform', `translate(270, ${(diaApexY + 42).toFixed(1)})`);
+
+          // 重繪正面肋骨弧線
+          frontRibsGroup.innerHTML = '';
+          svgEl('rect', { x: 261, y: 182 - ribLift, width: 18, height: 145, rx: 6, fill: '#e2e8f0', opacity: 0.82 }, frontRibsGroup);
+          for (let i = 0; i < 5; i++) {
+            const ry = 205 + i * 32 - ribLift;
+            const w = (108 + i * 7) + expX * 0.85;
+            svgEl('path', {
+              d: `M 261 ${ry} Q ${261 - w * 0.75} ${ry - 8} ${261 - w} ${ry + 18}`,
+              fill: 'none', stroke: PALETTE.cartilage, 'stroke-width': 6.5, 'stroke-linecap': 'round', opacity: 0.78
+            }, frontRibsGroup);
+            svgEl('path', {
+              d: `M 279 ${ry} Q ${279 + w * 0.75} ${ry - 8} ${279 + w} ${ry + 18}`,
+              fill: 'none', stroke: PALETTE.cartilage, 'stroke-width': 6.5, 'stroke-linecap': 'round', opacity: 0.78
+            }, frontRibsGroup);
+          }
+
+          // 2. 側面視角更新 (脊柱 x=840，胸骨往前 x 減小並上舉 y 減小)
+          const sternTopX = 705 - p * 30;
+          const sternTopY = 128 - p * 18;
+          const sternBotX = 695 - p * 34;
+          const sternBotY = 258 - p * 18;
+
+          sideSternum.setAttribute('x1', sternTopX.toFixed(1));
+          sideSternum.setAttribute('y1', sternTopY.toFixed(1));
+          sideSternum.setAttribute('x2', sternBotX.toFixed(1));
+          sideSternum.setAttribute('y2', sternBotY.toFixed(1));
+
+          sideRibLines.forEach((line, i) => {
+            const sy = 125 + i * 32;
+            const fx = sternTopX - (i * 2);
+            const fy = sternTopY + i * 31;
+            line.setAttribute('x1', '836');
+            line.setAttribute('y1', sy);
+            line.setAttribute('x2', fx.toFixed(1));
+            line.setAttribute('y2', fy.toFixed(1));
+          });
+
+          const sideDiaPeakY = 242 + p * 52;
+          sideDiaphragm.setAttribute('d', `M ${sternBotX} ${sternBotY + 26} Q 765 ${sideDiaPeakY - 22} 836 306`);
+          sideLung.setAttribute('d', `M 828 115 L ${sternTopX + 12} ${sternTopY + 8} L ${sternBotX + 10} ${sternBotY + 18} Q 765 ${sideDiaPeakY - 24} 828 296 Z`);
+
+          // 3. 氣流箭頭與儀表板
+          if (isInhaling) {
+            airArrowPath.setAttribute('d', 'M 270 66 L 270 135 M 260 120 L 270 136 L 280 120');
+            airArrowPath.setAttribute('stroke', PALETTE.o2);
+            statusBadgeText.textContent = '【吸氣過程】肋骨上舉、橫膈下降 ➔ 胸腔擴大、肺擴大';
+            statusBadgeText.setAttribute('fill', '#fca5a5');
+          } else {
+            airArrowPath.setAttribute('d', 'M 270 136 L 270 66 M 260 82 L 270 66 L 280 82');
+            airArrowPath.setAttribute('stroke', PALETTE.co2);
+            statusBadgeText.textContent = '【呼氣過程】肋骨下降、橫膈上升 ➔ 胸腔縮小、肺縮小';
+            statusBadgeText.setAttribute('fill', '#93c5fd');
+          }
+
+          volBarFill.setAttribute('width', (110 + p * 155).toFixed(1));
+          // 壓力指針：正在吸氣時 < 大氣壓(偏左)，正在呼氣時 > 大氣壓(偏右)
+          const vel = STATE.manualDiaphragm ? dPhase * 18 : Math.sin(t * 1.65);
+          const needleOffset = isInhaling ? -52 : 52;
+          const curX = parseFloat(pressNeedle.getAttribute('cx'));
+          pressNeedle.setAttribute('cx', (curX + (831 + needleOffset - curX) * 0.1).toFixed(1));
+        }
+
+        return { init, update };
+      })();
+
+      /* =========================================================
+         分頁 5：運動激烈、CO2 增加刺激腦幹呼吸中樞、呼吸變快
+         ========================================================= */
+      const Tab5_BrainstemControl = (() => {
+        const world = document.getElementById('world5');
+        let brainstemGlow, muscleGroup, lungAnimGroup, diaAnimPath;
+        let spiroPath, co2MeterFill, bpmValueText, co2ValueText;
+        const co2BloodDots = [];
+        const neuralSparks = [];
+        const spiroHistory = new Array(110).fill(0);
+        let breathAngle = 0;
+
+        function init() {
+          // 1. 左上區：大腦與「腦幹呼吸中樞」
+          svgEl('rect', {
+            x: 24, y: 22, width: 315, height: 265, rx: 16,
+            fill: 'rgba(15, 23, 42, 0.75)', stroke: 'rgba(148,163,184,0.22)'
+          }, world);
+          svgEl('text', {
+            x: 181, y: 50, fill: '#e2e8f0', 'font-size': 14.5, 'font-weight': '700', 'text-anchor': 'middle'
+          }, world).textContent = '中樞偵測：腦幹（呼吸中樞）';
+
+          // 大腦與小腦輪廓
+          svgEl('path', {
+            d: 'M 110 155 C 88 120, 115 72, 178 72 C 238 72, 268 108, 255 152 C 272 162, 268 195, 235 198 L 210 192 Z',
+            fill: 'rgba(148, 163, 184, 0.2)', stroke: '#94a3b8', 'stroke-width': 2
+          }, world);
+
+          // 腦幹與脊髓延伸（高亮金黃色）
+          brainstemGlow = svgEl('circle', {
+            cx: 186, cy: 192, r: 28,
+            fill: 'rgba(245, 158, 11, 0.35)'
+          }, world);
+          svgEl('path', {
+            d: 'M 168 162 L 200 165 L 212 248 L 184 248 Z',
+            fill: PALETTE.neural, stroke: '#fef08a', 'stroke-width': 2.2
+          }, world);
+
+          // 2. 中央區：肺部與橫膈（受神經訊號驅動）
+          svgEl('rect', {
+            x: 356, y: 22, width: 288, height: 345, rx: 16,
+            fill: 'rgba(15, 23, 42, 0.75)', stroke: 'rgba(148,163,184,0.22)'
+          }, world);
+          svgEl('text', {
+            x: 500, y: 50, fill: '#e2e8f0', 'font-size': 14.5, 'font-weight': '700', 'text-anchor': 'middle'
+          }, world).textContent = '動器反應：呼吸肌與肺換氣';
+
+          svgEl('path', {
+            d: 'M 500 72 L 500 135 M 500 128 L 462 162 M 500 128 L 538 162',
+            fill: 'none', stroke: PALETTE.cartilage, 'stroke-width': 9, 'stroke-linecap': 'round'
+          }, world);
+
+          lungAnimGroup = svgEl('g', {}, world);
+          svgEl('path', {
+            d: 'M 488 140 C 428 145, 412 225, 418 265 Q 455 258 488 262 Z',
+            fill: PALETTE.lung, opacity: 0.88
+          }, lungAnimGroup);
+          svgEl('path', {
+            d: 'M 512 140 C 572 145, 588 225, 582 265 Q 545 258 512 262 Z',
+            fill: PALETTE.lung, opacity: 0.88
+          }, lungAnimGroup);
+
+          diaAnimPath = svgEl('path', {
+            d: 'M 412 276 Q 500 245 588 276',
+            fill: 'none', stroke: PALETTE.muscle, 'stroke-width': 9, 'stroke-linecap': 'round'
+          }, world);
+
+          bpmValueText = svgEl('text', {
+            x: 500, y: 338, fill: '#fde047', 'font-size': 15, 'font-weight': '700', 'text-anchor': 'middle'
+          }, world);
+
+          // 3. 右側區：運動骨骼肌細胞（消耗 O2、產生大量 CO2）
+          svgEl('rect', {
+            x: 662, y: 22, width: 314, height: 345, rx: 16,
+            fill: 'rgba(15, 23, 42, 0.75)', stroke: 'rgba(148,163,184,0.22)'
+          }, world);
+          svgEl('text', {
+            x: 819, y: 50, fill: '#e2e8f0', 'font-size': 14.5, 'font-weight': '700', 'text-anchor': 'middle'
+          }, world).textContent = '代謝來源：運動中的骨骼肌';
+
+          muscleGroup = svgEl('g', {}, world);
+          // 梭形肌肉束
+          svgEl('path', {
+            d: 'M 710 190 Q 819 115 928 190 Q 819 265 710 190 Z',
+            fill: PALETTE.muscle, stroke: '#fda4af', 'stroke-width': 2.5
+          }, muscleGroup);
+          svgEl('path', {
+            d: 'M 738 190 Q 819 148 900 190 M 738 190 Q 819 232 900 190 M 725 190 L 912 190',
+            fill: 'none', stroke: '#fecdd3', 'stroke-width': 2, opacity: 0.65
+          }, muscleGroup);
+
+          svgEl('text', {
+            x: 819, y: 315, fill: '#93c5fd', 'font-size': 13, 'font-weight': '700', 'text-anchor': 'middle'
+          }, world).textContent = '細胞呼吸作用：O₂ + 葡萄糖 ➔ 能量 + 大量 CO₂';
+
+          // 4. 連接血管迴路（肌肉釋放 CO2 隨血液流向腦幹與肺）+ 神經傳導路徑
+          // 血液循環管道：肌肉 -> 下方靜脈主幹 -> 分支向上刺激腦幹 & 進入肺部排出
+          svgEl('path', {
+            d: 'M 819 245 L 819 398 L 186 398 L 186 220',
+            fill: 'none', stroke: 'rgba(59, 130, 246, 0.35)', 'stroke-width': 14, 'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+          }, world);
+          svgEl('path', {
+            d: 'M 500 398 L 500 292',
+            fill: 'none', stroke: 'rgba(59, 130, 246, 0.35)', 'stroke-width': 12
+          }, world);
+
+          // 神經束路徑：腦幹 (198, 225) -> 肋間肌與橫膈 (425, 268)
+          svgEl('path', {
+            d: 'M 202 222 C 280 235, 345 255, 422 268',
+            fill: 'none', stroke: PALETTE.neural, 'stroke-width': 3.5, 'stroke-dasharray': '6,4'
+          }, world);
+
+          // CO2 血液粒子池
+          for (let i = 0; i < 32; i++) {
+            const c = svgEl('circle', { r: 4.5, fill: PALETTE.co2, stroke: '#dbeafe', 'stroke-width': 1 }, world);
+            co2BloodDots.push({ el: c, offset: i / 32, toLung: i % 3 === 0 });
+          }
+
+          // 神經衝動光點
+          for (let i = 0; i < 8; i++) {
+            const c = svgEl('circle', { r: 5, fill: '#fef08a' }, world);
+            neuralSparks.push({ el: c, offset: i / 8 });
+          }
+
+          // 5. 底部儀表區：血液 CO2 濃度計 + 即時呼吸運動紀錄波紋圖 (Spirogram)
+          svgEl('rect', {
+            x: 24, y: 428, width: 350, height: 150, rx: 14,
+            fill: 'rgba(15, 23, 42, 0.85)', stroke: 'rgba(148,163,184,0.25)'
+          }, world);
+          svgEl('text', { x: 46, y: 460, fill: '#e2e8f0', 'font-size': 13.5, 'font-weight': '700' }, world).textContent = '血液二氧化碳（CO₂）濃度監測';
+          svgEl('rect', { x: 46, y: 482, width: 304, height: 22, rx: 11, fill: '#1e293b' }, world);
+          co2MeterFill = svgEl('rect', { x: 46, y: 482, width: 120, height: 22, rx: 11, fill: PALETTE.co2 }, world);
+          co2ValueText = svgEl('text', { x: 46, y: 535, fill: '#93c5fd', 'font-size': 13, 'font-weight': '700' }, world);
+
+          svgEl('rect', {
+            x: 392, y: 428, width: 584, height: 150, rx: 14,
+            fill: 'rgba(15, 23, 42, 0.85)', stroke: 'rgba(148,163,184,0.25)'
+          }, world);
+          svgEl('text', { x: 414, y: 456, fill: '#e2e8f0', 'font-size': 13.5, 'font-weight': '700' }, world).textContent = '即時呼吸波紋紀錄圖（頻率越密＝呼吸越快／振幅越高＝呼吸越深）';
+          svgEl('line', { x1: 414, y1: 518, x2: 954, y2: 518, stroke: 'rgba(148,163,184,0.2)', 'stroke-dasharray': '4,4' }, world);
+          spiroPath = svgEl('path', { fill: 'none', stroke: '#38bdf8', 'stroke-width': 2.8 }, world);
+
+          // 文字標籤
+          createCalloutLabel(world, 188, 192, 62, 252, '腦幹呼吸中樞', '受血液高 CO₂ 刺激', PALETTE.neural);
+          createCalloutLabel(world, 315, 246, 295, 165, '運動神經訊號', '下達加快呼吸指令', '#fef08a');
+          createCalloutLabel(world, 645, 398, 695, 355, '高 CO₂ 血液運輸', '刺激腦幹並送往肺排出', PALETTE.co2);
+        }
+
+        function update(t, dt) {
+          // 依運動強度設定生理參數：0=靜息(14次/分), 1=慢跑(26次/分), 2=激烈運動(44次/分)
+          const configs = [
+            { bpm: 14, speed: 1.5, amp: 0.35, co2Ratio: 0.34, co2Label: '正常基準 (40 mmHg) — 腦幹維持平穩節律', activeDots: 10 },
+            { bpm: 26, speed: 3.1, amp: 0.65, co2Ratio: 0.64, co2Label: '中度上升 (46 mmHg) — 刺激腦幹加快換氣', activeDots: 20 },
+            { bpm: 44, speed: 5.4, amp: 1.0, co2Ratio: 0.92, co2Label: '顯著升高 (54 mmHg) — 強烈刺激腦幹呼吸中樞！', activeDots: 32 }
+          ];
+          const cfg = configs[STATE.exerciseLevel];
+
+          breathAngle += dt * cfg.speed;
+          const wave = Math.sin(breathAngle); // -1..1
+
+          // 1. 肌肉收縮動畫
+          const mScaleX = 1 - Math.abs(Math.sin(t * cfg.speed * 1.1)) * (0.05 + STATE.exerciseLevel * 0.06);
+          const mScaleY = 1 + Math.abs(Math.sin(t * cfg.speed * 1.1)) * (0.06 + STATE.exerciseLevel * 0.08);
+          muscleGroup.setAttribute('transform', `translate(819, 190) scale(${mScaleX.toFixed(3)}, ${mScaleY.toFixed(3)}) translate(-819, -190)`);
+
+          // 2. 腦幹發光脈動
+          const glowR = 24 + STATE.exerciseLevel * 8 + Math.sin(t * cfg.speed * 2) * 5;
+          brainstemGlow.setAttribute('r', glowR.toFixed(1));
+          brainstemGlow.setAttribute('fill', STATE.exerciseLevel === 2 ? 'rgba(245, 158, 11, 0.58)' : 'rgba(245, 158, 11, 0.28)');
+
+          // 3. 肺與橫膈跳動速率
+          const lungScale = 1 + wave * (0.04 + cfg.amp * 0.08);
+          lungAnimGroup.setAttribute('transform', `translate(500, 205) scale(${lungScale.toFixed(3)}) translate(-500, -205)`);
+          const diaY = 252 + wave * (8 + cfg.amp * 18);
+          diaAnimPath.setAttribute('d', `M 412 278 Q 500 ${diaY.toFixed(1)} 588 278`);
+          bpmValueText.textContent = `目前呼吸頻率：約 ${cfg.bpm} 次／分鐘`;
+
+          // 4. 血液 CO2 粒子流動 (肌肉 -> 腦幹呼吸中樞 & 肺)
+          co2BloodDots.forEach((d, idx) => {
+            if (idx >= cfg.activeDots) {
+              d.el.setAttribute('opacity', '0');
+              return;
+            }
+            d.el.setAttribute('opacity', '0.92');
+            const u = (d.offset + t * (0.14 + STATE.exerciseLevel * 0.14)) % 1;
+            let x, y;
+            if (d.toLung) {
+              // 肌肉(819,245) -> (819,398) -> (500,398) -> 肺(500,275)
+              if (u < 0.28) { x = 819; y = 245 + (u / 0.28) * 153; }
+              else if (u < 0.72) { x = 819 - ((u - 0.28) / 0.44) * 319; y = 398; }
+              else { x = 500; y = 398 - ((u - 0.72) / 0.28) * 123; }
+            } else {
+              // 肌肉(819,245) -> (819,398) -> (186,398) -> 刺激腦幹(186,210)
+              if (u < 0.2) { x = 819; y = 245 + (u / 0.2) * 153; }
+              else if (u < 0.78) { x = 819 - ((u - 0.2) / 0.58) * 633; y = 398; }
+              else { x = 186; y = 398 - ((u - 0.78) / 0.22) * 188; }
+            }
+            d.el.setAttribute('cx', x.toFixed(1));
+            d.el.setAttribute('cy', y.toFixed(1));
+          });
+
+          // 5. 神經訊號火花 (腦幹 -> 橫膈與肋間肌)
+          const activeSparks = 2 + STATE.exerciseLevel * 3;
+          neuralSparks.forEach((s, idx) => {
+            if (idx >= activeSparks) {
+              s.el.setAttribute('opacity', '0');
+              return;
+            }
+            s.el.setAttribute('opacity', '1');
+            const u = (s.offset + t * (0.35 + STATE.exerciseLevel * 0.45)) % 1;
+            const x = 202 + u * 220;
+            const y = 222 + u * 46 + Math.sin(u * Math.PI) * -6;
+            s.el.setAttribute('cx', x.toFixed(1));
+            s.el.setAttribute('cy', y.toFixed(1));
+          });
+
+          // 6. 更新底部 CO2 濃度條與呼吸波紋紀錄圖
+          const curW = parseFloat(co2MeterFill.getAttribute('width'));
+          const goalW = 304 * cfg.co2Ratio;
+          co2MeterFill.setAttribute('width', (curW + (goalW - curW) * 0.08).toFixed(1));
+          co2ValueText.textContent = cfg.co2Label;
+
+          spiroHistory.push(wave * (12 + cfg.amp * 30));
+          if (spiroHistory.length > 110) spiroHistory.shift();
+          let dStr = '';
+          for (let i = 0; i < spiroHistory.length; i++) {
+            const sx = 414 + (i / 109) * 540;
+            const sy = 518 - spiroHistory[i];
+            dStr += (i === 0 ? `M ${sx.toFixed(1)} ${sy.toFixed(1)}` : ` L ${sx.toFixed(1)} ${sy.toFixed(1)}`);
+          }
+          spiroPath.setAttribute('d', dStr);
+        }
+
+        return { init, update };
+      })();
+
+      /* =========================================================
+         左上角情境互動面板渲染 (依分頁切換專屬控制項)
+         ========================================================= */
+      const contextPanel = document.getElementById('contextPanel');
+
+      function renderContextPanel() {
+        contextPanel.innerHTML = '';
+
+        if (STATE.activeTab === 0) {
+          const card = document.createElement('div');
+          card.className = 'context-card';
+          card.innerHTML = `<div style="color:#bae6fd;font-weight:700;margin-bottom:3px;">🧊 3D 互動操作提示</div>
+        <div style="color:#94a3b8;font-size:0.75rem;line-height:1.35;">單指拖曳旋轉視角、雙指縮放與平移；亦可點擊模型上的器官標籤聚焦觀察。</div>`;
+          contextPanel.appendChild(card);
+        }
+        else if (STATE.activeTab === 1) {
+          const card = document.createElement('div');
+          card.className = 'context-card';
+          card.innerHTML = `
+        <div class="seg-group">
+          <button class="seg-btn ${STATE.tab1Mode === 'swallow' ? 'active' : ''}" id="modeSwallowBtn">🍽️ 吞嚥與會厭軟骨</button>
+          <button class="seg-btn ${STATE.tab1Mode === 'voice' ? 'active' : ''}" id="modeVoiceBtn">🗣️ 發聲與聲帶振動</button>
+        </div>
+        ${STATE.tab1Mode === 'voice' ? `
+          <div class="slider-row">
+            <label>聲帶緊繃度(音調)</label>
+            <input type="range" min="0" max="1" step="0.02" value="${STATE.voicePitch}" id="sliderPitch">
+          </div>
+          <div class="slider-row">
+            <label>呼氣氣流(音量)</label>
+            <input type="range" min="0" max="1" step="0.02" value="${STATE.voiceAirflow}" id="sliderAirflow">
+          </div>
+          <button class="action-btn" id="btnToggleVoiceAudio">${STATE.audioEnabled ? '🔊 關閉模擬發聲音效' : '🔈 開啟模擬聲帶音效'}</button>
+        ` : `<div style="color:#94a3b8;font-size:0.75rem;margin-top:6px;">提示：觀察步驟 3 吞嚥瞬間「喉頭上升」與「會厭軟骨下蓋氣管」的聯動！</div>`}
+      `;
+          contextPanel.appendChild(card);
+
+          card.querySelector('#modeSwallowBtn').addEventListener('click', () => {
+            STATE.tab1Mode = 'swallow';
+            Tab1_PharynxVoice.toggleAudio(false);
+            setStep(0, true);
+            renderContextPanel();
+          });
+          card.querySelector('#modeVoiceBtn').addEventListener('click', () => {
+            STATE.tab1Mode = 'voice';
+            setStep(2, true); // 直接跳至振動步驟方便立即體驗
+            renderContextPanel();
+          });
+          if (STATE.tab1Mode === 'voice') {
+            card.querySelector('#sliderPitch').addEventListener('input', e => { STATE.voicePitch = parseFloat(e.target.value); });
+            card.querySelector('#sliderAirflow').addEventListener('input', e => { STATE.voiceAirflow = parseFloat(e.target.value); });
+            card.querySelector('#btnToggleVoiceAudio').addEventListener('click', () => {
+              Tab1_PharynxVoice.toggleAudio(!STATE.audioEnabled);
+              renderContextPanel();
+            });
+          }
+        }
+        else if (STATE.activeTab === 2) {
+          const card = document.createElement('div');
+          card.className = 'context-card';
+          card.innerHTML = `
+        <div style="font-weight:700;color:#fde047;">🧹 氣管纖毛排異物互動</div>
+        <button class="action-btn" id="btnSpawnDust">＋ 吸入更多灰塵與病菌</button>
+        <div class="slider-row">
+          <label>纖毛擺動活性</label>
+          <input type="range" min="0.2" max="2.0" step="0.1" value="${STATE.ciliaSpeed}" id="sliderCilia">
+        </div>
+      `;
+          contextPanel.appendChild(card);
+          card.querySelector('#btnSpawnDust').addEventListener('click', () => {
+            for (let i = 0; i < 5; i++) Tab2_CiliaMucus.spawnDustParticle(false);
+          });
+          card.querySelector('#sliderCilia').addEventListener('input', e => {
+            STATE.ciliaSpeed = parseFloat(e.target.value);
+          });
+        }
+        else if (STATE.activeTab === 4) {
+          const card = document.createElement('div');
+          card.className = 'context-card';
+          card.innerHTML = `
+        <div style="font-weight:700;color:#fda4af;">🫁 橫膈與肋骨控制</div>
+        <div style="color:#cbd5e1;font-size:0.75rem;margin-top:3px;">可直接用手指拖曳畫面中的「⇅ 拖曳橫膈」紅色拉柄，或點擊下方恢復自動呼吸：</div>
+        ${STATE.manualDiaphragm ? `<button class="action-btn" id="btnResumeBreath">▶ 恢復自動呼吸週期</button>` : ''}
+      `;
+          contextPanel.appendChild(card);
+          const resumeBtn = card.querySelector('#btnResumeBreath');
+          if (resumeBtn) {
+            resumeBtn.addEventListener('click', () => {
+              STATE.manualDiaphragm = false;
+              STATE.autoPlay = true;
+              updatePlayButtonUI();
+              renderContextPanel();
+            });
+          }
+        }
+        else if (STATE.activeTab === 5) {
+          const card = document.createElement('div');
+          card.className = 'context-card';
+          card.innerHTML = `
+        <div style="font-weight:700;color:#fde047;margin-bottom:5px;">⚡ 切換身體活動強度</div>
+        <div class="seg-group">
+          <button class="seg-btn ${STATE.exerciseLevel === 0 ? 'active' : ''}" data-lv="0">🧘 靜息</button>
+          <button class="seg-btn ${STATE.exerciseLevel === 1 ? 'active' : ''}" data-lv="1">🏃 慢跑</button>
+          <button class="seg-btn ${STATE.exerciseLevel === 2 ? 'active' : ''}" data-lv="2">🔥 激烈運動</button>
+        </div>
+      `;
+          contextPanel.appendChild(card);
+          card.querySelectorAll('.seg-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+              STATE.exerciseLevel = parseInt(btn.dataset.lv, 10);
+              renderContextPanel();
+            });
+          });
+        }
+      }
+
+      /* =========================================================
+         Step-by-Step 流程控制與 UI 綁定
+         ========================================================= */
+      const stepDotsEl = document.getElementById('stepDots');
+      const stepTitleEl = document.getElementById('stepTitle');
+      const stepTextEl = document.getElementById('stepText');
+      const btnPlayPause = document.getElementById('btnPlayPause');
+
+      function updatePlayButtonUI() {
+        btnPlayPause.textContent = STATE.autoPlay ? '⏸ 自動播放中' : '▶ 自動播放';
+        btnPlayPause.classList.toggle('play-btn', STATE.autoPlay);
+      }
+
+      function renderStepDock() {
+        const steps = getCurrentSteps();
+        if (STATE.stepIndex >= steps.length) STATE.stepIndex = 0;
+
+        stepDotsEl.innerHTML = '';
+        steps.forEach((s, idx) => {
+          const b = document.createElement('button');
+          b.className = `step-dot ${idx === STATE.stepIndex ? 'active' : ''}`;
+          b.textContent = `${idx + 1}`;
+          b.title = s.title;
+          b.addEventListener('click', () => setStep(idx, false));
+          stepDotsEl.appendChild(b);
+        });
+
+        const cur = steps[STATE.stepIndex];
+        stepTitleEl.textContent = cur.title;
+        stepTextEl.textContent = cur.text;
+
+        if (STATE.activeTab === 0 && cur.focusId) {
+          Tab0_3D.focusOrgan(cur.focusId);
+        }
+      }
+
+      function setStep(index, keepPlayState = false) {
+        const steps = getCurrentSteps();
+        STATE.stepIndex = (index + steps.length) % steps.length;
+        STATE.stepTimer = 0;
+        if (!keepPlayState) {
+          STATE.autoPlay = false;
+          STATE.manualDiaphragm = false;
+          updatePlayButtonUI();
+          if (STATE.activeTab === 4) renderContextPanel();
+        }
+        renderStepDock();
+      }
+
+      document.getElementById('btnPrevStep').addEventListener('click', () => setStep(STATE.stepIndex - 1, false));
+      document.getElementById('btnNextStep').addEventListener('click', () => setStep(STATE.stepIndex + 1, false));
+      btnPlayPause.addEventListener('click', () => {
+        STATE.autoPlay = !STATE.autoPlay;
+        if (STATE.autoPlay) STATE.manualDiaphragm = false;
+        updatePlayButtonUI();
+        if (STATE.activeTab === 4) renderContextPanel();
+      });
+
+      /* 頂部標籤顯示/隱藏 & 圖例開關 */
+      const btnToggleLabels = document.getElementById('btnToggleLabels');
+      btnToggleLabels.addEventListener('click', () => {
+        STATE.showLabels = !STATE.showLabels;
+        document.body.classList.toggle('hide-labels', !STATE.showLabels);
+        btnToggleLabels.classList.toggle('active', STATE.showLabels);
+        btnToggleLabels.textContent = STATE.showLabels ? '🏷️ 標籤：顯示' : '🏷️ 標籤：隱藏';
+      });
+
+      const btnToggleLegend = document.getElementById('btnToggleLegend');
+      const legendBar = document.getElementById('legendBar');
+      btnToggleLegend.addEventListener('click', () => {
+        legendBar.classList.toggle('open');
+        btnToggleLegend.classList.toggle('active', legendBar.classList.contains('open'));
+        setTimeout(() => Tab0_3D.onResize(), 50);
+      });
+
+      /* 右下角縮放與重置視角按鈕 */
+      document.getElementById('btnZoomIn').addEventListener('click', () => {
+        if (STATE.activeTab === 0) Tab0_3D.zoomBy(1.22);
+        else pzControllers[STATE.activeTab].zoomAt(1.22, 500, 300);
+      });
+      document.getElementById('btnZoomOut').addEventListener('click', () => {
+        if (STATE.activeTab === 0) Tab0_3D.zoomBy(1 / 1.22);
+        else pzControllers[STATE.activeTab].zoomAt(1 / 1.22, 500, 300);
+      });
+      document.getElementById('btnZoomReset').addEventListener('click', () => {
+        if (STATE.activeTab === 0) Tab0_3D.resetView();
+        else pzControllers[STATE.activeTab].reset();
+      });
+
+      /* 分頁切換邏輯 */
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const nextTab = parseInt(btn.dataset.tab, 10);
+          if (nextTab === STATE.activeTab) return;
+
+          if (STATE.activeTab === 1 && STATE.audioEnabled) {
+            Tab1_PharynxVoice.toggleAudio(false);
+          }
+
+          STATE.activeTab = nextTab;
+          STATE.stepIndex = 0;
+          STATE.stepTimer = 0;
+          STATE.manualDiaphragm = false;
+
+          document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', parseInt(b.dataset.tab, 10) === nextTab));
+          document.querySelectorAll('.tab-stage').forEach((st, idx) => st.classList.toggle('active', idx === nextTab));
+
+          if (nextTab === 0) Tab0_3D.onResize();
+          renderContextPanel();
+          renderStepDock();
+        });
+      });
+
+      /* =========================================================
+         初始化所有模擬模組與主動畫迴圈
+         ========================================================= */
+      Tab0_3D.init();
+      Tab1_PharynxVoice.init();
+      Tab2_CiliaMucus.init();
+      Tab3_AlveoliDiffusion.init();
+      Tab4_Mechanics.init();
+      Tab5_BrainstemControl.init();
+
+      renderContextPanel();
+      renderStepDock();
+      updatePlayButtonUI();
+
+      let lastTime = performance.now();
+      function animate(now) {
+        const dt = Math.min(0.05, (now - lastTime) / 1000);
+        lastTime = now;
+        const t = now / 1000;
+
+        // 自動播放時推進 Step-by-Step 流程
+        if (STATE.autoPlay) {
+          STATE.stepTimer += dt;
+          if (STATE.stepTimer >= STATE.stepDuration) {
+            STATE.stepTimer = 0;
+            const steps = getCurrentSteps();
+            STATE.stepIndex = (STATE.stepIndex + 1) % steps.length;
+            renderStepDock();
+          }
+        }
+
+        // 僅更新當前顯示的分頁以兼顧手機平板流暢度與省電
+        switch (STATE.activeTab) {
+          case 0: Tab0_3D.update(t, dt); break;
+          case 1: Tab1_PharynxVoice.update(t, dt); break;
+          case 2: Tab2_CiliaMucus.update(t, dt); break;
+          case 3: Tab3_AlveoliDiffusion.update(t, dt); break;
+          case 4: Tab4_Mechanics.update(t, dt); break;
+          case 5: Tab5_BrainstemControl.update(t, dt); break;
+        }
+
+        requestAnimationFrame(animate);
+      }
+
+      requestAnimationFrame(animate);
+    })();
+  </script>
+</body>
+
+</html>
