@@ -1,0 +1,2174 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>植物輸水細胞演化與流體力學互動模擬器</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  :root {
+    --bg-dark: #0b1120;
+    --bg-panel: rgba(15, 23, 42, 0.88);
+    --bg-card: rgba(30, 41, 59, 0.85);
+    --border-subtle: rgba(148, 163, 184, 0.22);
+    --text-main: #f1f5f9;
+    --text-muted: #94a3b8;
+    --accent: #38bdf8;
+    --accent-hover: #0284c7;
+
+    /* 跨分頁統一解剖構造色票 */
+    --col-wall: #d97706;       /* 木質化次生細胞壁 */
+    --col-fiber: #78350f;      /* 木質支撐纖維 */
+    --col-water: #38bdf8;      /* 水分子 / 蒸散流 */
+    --col-membrane: #10b981;   /* 紋孔膜 / 膜緣 Margo */
+    --col-torus: #fbbf24;      /* 圓枕 Torus */
+    --col-embolism: #f43f5e;   /* 氣穴現象 / 氣泡 */
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans TC", sans-serif;
+    background: var(--bg-dark); color: var(--text-main);
+    user-select: none; -webkit-user-select: none;
+  }
+
+  #app {
+    display: flex; flex-direction: column; width: 100%; height: 100%;
+  }
+
+  /* 頂部導覽列 */
+  header {
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border-subtle);
+    backdrop-filter: blur(12px);
+    padding: 8px 12px;
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    gap: 8px; z-index: 30;
+  }
+
+  .brand {
+    display: flex; align-items: center; gap: 8px;
+    font-weight: 700; font-size: 1rem; letter-spacing: 0.02em;
+    color: #e2e8f0; white-space: nowrap;
+  }
+  .brand-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--col-water);
+    box-shadow: 0 0 10px var(--col-water);
+  }
+
+  .tabs-nav {
+    display: flex; gap: 6px; overflow-x: auto;
+    scrollbar-width: none; -ms-overflow-style: none;
+    max-width: 100%; padding-bottom: 2px;
+  }
+  .tabs-nav::-webkit-scrollbar { display: none; }
+
+  .tab-btn {
+    background: rgba(30, 41, 59, 0.7);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-muted);
+    padding: 8px 13px; border-radius: 8px;
+    font-size: 0.86rem; font-weight: 600;
+    cursor: pointer; white-space: nowrap;
+    transition: all 0.2s ease;
+    min-height: 38px;
+  }
+  .tab-btn:hover { color: var(--text-main); border-color: rgba(56, 189, 248, 0.4); }
+  .tab-btn.active {
+    background: rgba(56, 189, 248, 0.18);
+    color: #7dd3fc;
+    border-color: var(--accent);
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
+  }
+
+  .header-actions {
+    display: flex; align-items: center; gap: 6px;
+  }
+
+  .action-toggle {
+    background: rgba(30, 41, 59, 0.85);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-main);
+    padding: 7px 12px; border-radius: 8px;
+    font-size: 0.82rem; font-weight: 600;
+    cursor: pointer; display: flex; align-items: center; gap: 6px;
+    min-height: 38px; white-space: nowrap;
+    transition: all 0.2s;
+  }
+  .action-toggle.active {
+    background: rgba(16, 185, 129, 0.2);
+    border-color: #10b981; color: #6ee7b7;
+  }
+
+  /* 統一色票圖例列 */
+  .legend-bar {
+    background: rgba(15, 23, 42, 0.92);
+    border-bottom: 1px solid var(--border-subtle);
+    padding: 5px 14px;
+    display: flex; align-items: center; gap: 14px;
+    overflow-x: auto; white-space: nowrap;
+    font-size: 0.76rem; color: #cbd5e1; z-index: 25;
+    scrollbar-width: none;
+  }
+  .legend-bar::-webkit-scrollbar { display: none; }
+  .legend-bar.hidden { display: none; }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .swatch {
+    width: 11px; height: 11px; border-radius: 3px; display: inline-block;
+    border: 1px solid rgba(255,255,255,0.25);
+  }
+
+  /* 主畫布互動區 */
+  main {
+    flex: 1; position: relative; overflow: hidden;
+    touch-action: none;
+    background: radial-gradient(circle at 50% 45%, #162238 0%, #0b1120 100%);
+  }
+
+  #simCanvas, #threeContainer {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    display: block; touch-action: none;
+  }
+  #threeContainer.hidden, #simCanvas.hidden { display: none; }
+
+  /* 浮動文字標籤層 (支援 2D 與 3D 同步切換) */
+  #labelLayer {
+    position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 12;
+  }
+  #labelLayer.hidden { display: none; }
+
+  .FloatingLabel {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    background: rgba(15, 23, 42, 0.88);
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    border-left: 3px solid var(--accent);
+    color: #f8fafc;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 0.76rem;
+    font-weight: 600;
+    line-height: 1.25;
+    white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.45);
+    backdrop-filter: blur(4px);
+    transition: opacity 0.15s;
+  }
+  .FloatingLabel small {
+    display: block; font-weight: 400; font-size: 0.68rem; color: #94a3b8;
+  }
+
+  /* 左上互動參數控制盒 */
+  .hud-panel {
+    position: absolute; top: 12px; left: 12px; z-index: 20;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-subtle);
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    padding: 10px 13px;
+    width: min(290px, calc(100vw - 76px));
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    font-size: 0.82rem;
+  }
+  .hud-header {
+    display: flex; justify-content: space-between; align-items: center;
+    font-weight: 700; color: #7dd3fc; margin-bottom: 6px; cursor: pointer;
+  }
+  .hud-body { display: flex; flex-direction: column; gap: 8px; }
+  .hud-panel.collapsed .hud-body { display: none; }
+  .hud-panel.collapsed .hud-header { margin-bottom: 0; }
+
+  .metric-row {
+    display: flex; justify-content: space-between; align-items: center;
+    background: rgba(30, 41, 59, 0.65); padding: 5px 8px; border-radius: 6px;
+  }
+  .metric-val { font-weight: 700; font-variant-numeric: tabular-nums; color: #38bdf8; }
+
+  .slider-group { display: flex; flex-direction: column; gap: 4px; }
+  .slider-group input[type="range"] {
+    width: 100%; accent-color: var(--accent); height: 22px; cursor: pointer;
+  }
+
+  .mini-btn {
+    background: rgba(56, 189, 248, 0.16);
+    border: 1px solid rgba(56, 189, 248, 0.45);
+    color: #e0f2fe; padding: 7px 10px; border-radius: 7px;
+    font-size: 0.8rem; font-weight: 600; cursor: pointer;
+    transition: all 0.15s; text-align: center; min-height: 36px;
+  }
+  .mini-btn:hover { background: rgba(56, 189, 248, 0.3); }
+  .mini-btn.danger {
+    background: rgba(244, 63, 94, 0.18);
+    border-color: rgba(244, 63, 94, 0.5); color: #fecdd3;
+  }
+
+  /* 右側 Zoom / Pan 輔助按鈕 */
+  .viewport-controls {
+    position: absolute; top: 12px; right: 12px; z-index: 20;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .vp-btn {
+    width: 42px; height: 42px;
+    border-radius: 10px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-main);
+    font-size: 1.15rem; font-weight: 700;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+    backdrop-filter: blur(8px);
+    transition: background 0.15s, transform 0.1s;
+  }
+  .vp-btn:active { transform: scale(0.93); }
+  .vp-btn:hover { border-color: var(--accent); color: #7dd3fc; }
+
+  .gesture-hint {
+    position: absolute; bottom: 12px; right: 12px; z-index: 15;
+    font-size: 0.72rem; color: rgba(148, 163, 184, 0.75);
+    background: rgba(15, 23, 42, 0.65);
+    padding: 4px 9px; border-radius: 99px;
+    pointer-events: none;
+  }
+
+  /* 底部 Step-by-Step 流程控制塢 */
+  .step-dock {
+    background: var(--bg-panel);
+    border-top: 1px solid var(--border-subtle);
+    backdrop-filter: blur(12px);
+    padding: 10px 14px;
+    z-index: 30;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+
+  .step-top {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  }
+  .step-badge {
+    background: rgba(56, 189, 248, 0.2);
+    color: #7dd3fc; border: 1px solid rgba(56, 189, 248, 0.4);
+    padding: 2px 8px; border-radius: 99px; font-size: 0.75rem; font-weight: 700;
+    white-space: nowrap;
+  }
+  .step-title {
+    font-weight: 700; font-size: 0.95rem; color: #f8fafc; flex: 1;
+  }
+  .step-dots {
+    display: flex; gap: 6px; align-items: center;
+  }
+  .step-dot {
+    width: 24px; height: 24px; border-radius: 50%;
+    background: rgba(51, 65, 85, 0.8);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-muted); font-size: 0.72rem; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .step-dot.active {
+    background: var(--accent); color: #0f172a; border-color: #bae6fd;
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+  }
+
+  .step-desc {
+    font-size: 0.84rem; line-height: 1.48; color: #cbd5e1;
+    min-height: 2.5em;
+  }
+
+  .step-controls {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .ctrl-btn {
+    background: rgba(30, 41, 59, 0.9);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-main);
+    padding: 8px 14px; border-radius: 8px;
+    font-size: 0.84rem; font-weight: 600;
+    cursor: pointer; min-height: 40px;
+    display: flex; align-items: center; gap: 5px;
+    transition: all 0.15s;
+  }
+  .ctrl-btn:hover:not(:disabled) { border-color: var(--accent); color: #7dd3fc; }
+  .ctrl-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .ctrl-btn.primary {
+    background: rgba(2, 132, 199, 0.35);
+    border-color: var(--accent); color: #e0f2fe;
+  }
+  .ctrl-btn.playing {
+    background: rgba(245, 158, 11, 0.28);
+    border-color: #fbbf24; color: #fde68a;
+  }
+
+  @media (max-width: 680px) {
+    header { padding: 6px 10px; }
+    .brand span { font-size: 0.9rem; }
+    .hud-panel { padding: 8px 10px; font-size: 0.78rem; width: min(245px, calc(100vw - 70px)); }
+    .step-dock { padding: 8px 10px; gap: 6px; }
+    .step-title { font-size: 0.88rem; }
+    .step-desc { font-size: 0.79rem; }
+    .ctrl-btn { padding: 7px 11px; font-size: 0.79rem; flex: 1; justify-content: center; }
+    .gesture-hint { display: none; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- 頂部導覽與全局開關 -->
+  <header>
+    <div class="brand">
+      <span class="brand-dot"></span>
+      <span>植物輸水細胞演化模擬器</span>
+    </div>
+
+    <nav class="tabs-nav" id="tabsNav">
+      <button class="tab-btn active" data-tab="fern">1. 蕨類管胞</button>
+      <button class="tab-btn" data-tab="gymno">2. 裸子植物閥門</button>
+      <button class="tab-btn" data-tab="angio">3. 被子植物導管</button>
+      <button class="tab-btn" data-tab="three">4. 3D 立體演化比較</button>
+    </nav>
+
+    <div class="header-actions">
+      <button class="action-toggle active" id="toggleLabelsBtn" title="顯示或隱藏解剖文字標籤">
+        <span>🏷️ 標籤：顯示</span>
+      </button>
+      <button class="action-toggle active" id="toggleLegendBtn" title="顯示或隱藏統一色票圖例">
+        <span>🎨 圖例</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- 跨分頁統一色票圖例 -->
+  <div class="legend-bar" id="legendBar">
+    <div class="legend-item"><span class="swatch" style="background:var(--col-wall)"></span>木質化次生壁 (支撐/防水)</div>
+    <div class="legend-item"><span class="swatch" style="background:var(--col-fiber)"></span>木質纖維細胞 (專職支撐)</div>
+    <div class="legend-item"><span class="swatch" style="background:var(--col-water)"></span>蒸散水分粒子</div>
+    <div class="legend-item"><span class="swatch" style="background:var(--col-membrane)"></span>紋孔膜 / 膜緣 (Margo)</div>
+    <div class="legend-item"><span class="swatch" style="background:var(--col-torus)"></span>圓枕閥門 (Torus)</div>
+    <div class="legend-item"><span class="swatch" style="background:var(--col-embolism)"></span>氣穴氣泡 (Cavitation)</div>
+  </div>
+
+  <!-- 主互動視窗 -->
+  <main id="viewportArea">
+    <canvas id="simCanvas"></canvas>
+    <div id="threeContainer" class="hidden"></div>
+    <svg id="leaderSvg" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:11;"></svg>
+    <div id="labelLayer"></div>
+
+    <!-- 左上動態實驗參數面板 -->
+    <div class="hud-panel" id="hudPanel">
+      <div class="hud-header" id="hudToggle">
+        <span id="hudTitle">即時流體參數</span>
+        <span id="hudArrow">▾</span>
+      </div>
+      <div class="hud-body" id="hudBody"></div>
+    </div>
+
+    <!-- 右側 Zoom & Pan 按鈕 -->
+    <div class="viewport-controls">
+      <button class="vp-btn" id="zoomInBtn" title="放大視角">＋</button>
+      <button class="vp-btn" id="zoomOutBtn" title="縮小視角">－</button>
+      <button class="vp-btn" id="resetViewBtn" title="重置縮放與平移">⟲</button>
+    </div>
+
+    <div class="gesture-hint" id="gestureHint">支援單指拖曳平移・雙指捏合／滾輪縮放</div>
+  </main>
+
+  <!-- 底部 Step-by-Step 流程控制列 -->
+  <section class="step-dock">
+    <div class="step-top">
+      <span class="step-badge" id="stepBadge">步驟 1 / 4</span>
+      <div class="step-title" id="stepTitle">載入中...</div>
+      <div class="step-dots" id="stepDots"></div>
+    </div>
+    <div class="step-desc" id="stepDesc"></div>
+    <div class="step-controls">
+      <button class="ctrl-btn" id="prevStepBtn">◀ 上一步</button>
+      <button class="ctrl-btn" id="autoPlayBtn">▶ 自動演示</button>
+      <button class="ctrl-btn primary" id="nextStepBtn">下一步 ▶</button>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  /* =========================================================
+     1. 跨分頁統一色票與主題常數
+     ========================================================= */
+  const THEME = {
+    wall: '#d97706',
+    wallLight: '#f59e0b',
+    wallDark: '#92400e',
+    fiber: '#78350f',
+    fiberStroke: '#b45309',
+    lumen: '#132036',
+    water: '#38bdf8',
+    waterBright: '#bae6fd',
+    membrane: '#10b981',
+    torus: '#fbbf24',
+    embolism: '#f43f5e',
+    embolismFill: 'rgba(244, 63, 94, 0.28)'
+  };
+
+  /* =========================================================
+     2. 各分頁 Step-by-Step 流程資料定義
+     ========================================================= */
+  const TAB_DATA = {
+    fern: {
+      hudTitle: '蕨類管胞流體監測',
+      steps: [
+        {
+          title: '單細胞紡錘結構與木質化',
+          desc: '蕨類（及早期泥盆紀維管束植物）木質部由「管胞（Tracheids）」構成。每個管胞是獨立長紡錘形單細胞，兩端尖銳；成熟後細胞凋亡中空，次生壁厚實木質化以同時負責「支撐體重」與「輸水」。'
+        },
+        {
+          title: '蒸散拉力與狹窄內徑限制',
+          desc: '葉片蒸散產生負壓拉力牽引水柱上升。但因管胞必須兼顧機械支撐，細胞壁極厚，壓縮了內部管腔（Lumen）空間，基礎輸水通道狹窄。'
+        },
+        {
+          title: '穿越紋孔膜：極高流體阻力',
+          desc: '管胞上下兩端封閉無穿孔！水分每流完一個細胞，就必須橫向擠過側壁狹窄的「紋孔膜（Pit membrane）」（綠色虛線處）才能進入下個管胞，呈之字形減速，產生極大流體阻力。'
+        },
+        {
+          title: '局部氣穴與紋孔隔離',
+          desc: '當乾旱導致單一管胞發生氣穴現象（產生玫紅色氣泡）時，緻密的均質紋孔膜能阻擋氣泡輕易穿過，但該管胞即失去輸水能力，整體輸水速率仍相當緩慢。'
+        }
+      ]
+    },
+    gymno: {
+      hudTitle: '具緣紋孔與閥門壓差計',
+      steps: [
+        {
+          title: '具緣紋孔與圓枕-膜緣結構',
+          desc: '針葉樹等裸子植物演化出精妙的「具緣紋孔（Bordered pit）」：中央有厚實不透水的金色「圓枕（Torus）」，周圍由富含孔隙的網狀綠色「膜緣（Margo）」懸吊支撐。'
+        },
+        {
+          title: '正常輸水：繞過圓枕低阻通行',
+          desc: '兩側管胞皆充滿水並處於正常負壓張力平衡（ΔP ≈ 0）。圓枕穩定置中，水分透過多孔網狀的膜緣（Margo）順暢流過，阻力比蕨類均質紋孔膜更低。'
+        },
+        {
+          title: '乾旱極限與氣穴爆發 (Cavitation)',
+          desc: '嚴重乾旱使左側管胞張力超過水柱內聚力極限，水柱瞬間斷裂產生氣泡（壓力驟升至接近 0 MPa 大氣壓），與右側正常負壓管胞（-3.2 MPa）形成巨大壓差！'
+        },
+        {
+          title: '圓枕閥門自動封死（超高安全性）',
+          desc: '強大壓力差將彈性膜緣拉向低壓側，使不透水的「圓枕（Torus）」像閥門一樣緊緊吸住右側紋孔口！完美封死氣泡擴散路徑，保護整棵巨木不致癱瘓。'
+        }
+      ]
+    },
+    angio: {
+      hudTitle: '哈根-泊肅葉定律 (Q ∝ r⁴)',
+      steps: [
+        {
+          title: '任務分工：木質纖維 vs 導管分子',
+          desc: '被子植物在白堊紀掀起「水管革命」：將機械支撐交給極厚壁的深褐色「木質纖維細胞」，讓「導管分子（Vessel elements）」得以減薄細胞壁並大幅擴張管腔半徑！'
+        },
+        {
+          title: '端壁溶解：形成縱向貫通穿孔板',
+          desc: '上下相連的導管細胞端壁部分或完全溶解消失，形成貫通的「穿孔板（Perforation plates）」。無數細胞首尾相接，組成長達數公尺的連續無阻礙微型水管。'
+        },
+        {
+          title: '哈根-泊肅葉定律：r⁴ 流量大爆發',
+          desc: '根據流體力學 Q ∝ r⁴，圓管流量與半徑四次方成正比！半徑只要加倍（2×），輸水效率就暴增 16 倍！（請拖曳左上角「導管半徑滑桿」體驗流速變化）'
+        },
+        {
+          title: '伴隨的代價：整條氣穴癱瘓與冗餘網路',
+          desc: '因為沒有端壁阻攔，一旦發生氣穴，氣泡會瞬間沿穿孔板貫穿並癱瘓整條長導管！被子植物因此演化出側壁紋孔隔離與「多重並列冗餘導管」繞道輸水，平衡效率與風險。'
+        }
+      ]
+    },
+    three: {
+      hudTitle: '3D 顯微解剖視角控制',
+      steps: [
+        {
+          title: '泥盆紀起源：蕨類管胞 3D 剖面',
+          desc: '左側模型展示長紡錘形尖端管胞：厚實琥珀色次生壁兼顧支撐，青色水分子必須減速橫向穿過綠色階紋紋孔膜進入相鄰細胞。'
+        },
+        {
+          title: '裸子植物突破：3D 具緣紋孔與圓枕閥門',
+          desc: '中央放大模型展示雙側隆起的具緣紋孔腔（Pit chamber）：金色圓枕（Torus）懸吊於綠色放射狀膜緣絲（Margo）中央，受壓差驅動自動封閉紋孔口。'
+        },
+        {
+          title: '白堊紀革命：被子植物巨型導管與纖維束',
+          desc: '右側模型展示寬闊貫通的導管分子（內部可見環狀穿孔板邊緣）與旁側深褐色細長木質纖維束，水分子呈直線高速奔流。'
+        },
+        {
+          title: '演化全景比較：效率與安全性的權衡',
+          desc: '自由旋轉、縮放比較三者：從「單細胞高阻兼職（蕨類）」→「單細胞高安全自動閥門（裸子）」→「多細胞縱向貫通 r⁴ 極速分工（被子）」。'
+        }
+      ]
+    }
+  };
+
+  /* =========================================================
+     3. 全局應用狀態
+     ========================================================= */
+  const state = {
+    tab: 'fern',
+    step: 0,
+    showLabels: true,
+    showLegend: true,
+    autoPlay: false,
+    autoTimer: null,
+    time: 0,
+
+    // 蕨類模擬狀態
+    fernTension: 1.0,
+    fernCavitated: false,
+
+    // 裸子圓枕閥門模擬狀態
+    torusOffset: 0,        // 0 = 中央, 1 = 緊貼右側紋孔口
+    torusTarget: 0,
+    gymnoLeftBubble: 0,    // 0 ~ 1 氣泡大小
+    gymnoPressureL: -1.8,
+    gymnoPressureR: -1.8,
+
+    // 被子導管模擬狀態
+    vesselRadiusRatio: 2.0, // 相對於管胞半徑倍率 (1.0 ~ 2.5)
+    endWallDissolve: 1.0,   // 0 = 完整端壁, 1 = 完全穿孔貫通
+    angioMainCavitated: false,
+    angioBubbleProgress: 0
+  };
+
+  /* =========================================================
+     4. DOM 元素綁定
+     ========================================================= */
+  const canvas = document.getElementById('simCanvas');
+  const ctx = canvas.getContext('2d');
+  const threeContainer = document.getElementById('threeContainer');
+  const labelLayer = document.getElementById('labelLayer');
+  const leaderSvg = document.getElementById('leaderSvg');
+  const hudPanel = document.getElementById('hudPanel');
+  const hudTitle = document.getElementById('hudTitle');
+  const hudBody = document.getElementById('hudBody');
+  const stepBadge = document.getElementById('stepBadge');
+  const stepTitle = document.getElementById('stepTitle');
+  const stepDesc = document.getElementById('stepDesc');
+  const stepDots = document.getElementById('stepDots');
+  const prevStepBtn = document.getElementById('prevStepBtn');
+  const nextStepBtn = document.getElementById('nextStepBtn');
+  const autoPlayBtn = document.getElementById('autoPlayBtn');
+
+  /* =========================================================
+     5. 2D 視角控制器 (支援滑鼠滾輪、拖曳、觸控單指 Pan、雙指 Pinch Zoom)
+     ========================================================= */
+  const vp2d = {
+    x: 0, y: 0, scale: 1,
+    minScale: 0.45, maxScale: 3.2,
+    pointers: new Map(),
+    lastPinchDist: 0,
+    lastPinchMid: null,
+
+    reset(w, h) {
+      // 邏輯世界座標固定以 900 x 560 為基準置中適配
+      const sx = w / 940;
+      const sy = h / 580;
+      this.scale = Math.max(0.5, Math.min(1.35, Math.min(sx, sy)));
+      this.x = w * 0.5;
+      this.y = h * 0.52;
+    },
+    worldToScreen(wx, wy) {
+      return {
+        x: this.x + wx * this.scale,
+        y: this.y + wy * this.scale
+      };
+    },
+    zoomAt(factor, sx, sy) {
+      const nextScale = Math.max(this.minScale, Math.min(this.maxScale, this.scale * factor));
+      const ratio = nextScale / this.scale;
+      this.x = sx - (sx - this.x) * ratio;
+      this.y = sy - (sy - this.y) * ratio;
+      this.scale = nextScale;
+    }
+  };
+
+  function setup2DGestures() {
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      const factor = e.deltaY < 0 ? 1.12 : 0.89;
+      vp2d.zoomAt(factor, sx, sy);
+    }, { passive: false });
+
+    canvas.addEventListener('pointerdown', (e) => {
+      canvas.setPointerCapture(e.pointerId);
+      vp2d.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (vp2d.pointers.size === 2) {
+        const pts = Array.from(vp2d.pointers.values());
+        vp2d.lastPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+        vp2d.lastPinchMid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+      }
+    });
+
+    canvas.addEventListener('pointermove', (e) => {
+      if (!vp2d.pointers.has(e.pointerId)) return;
+      const prev = vp2d.pointers.get(e.pointerId);
+      const curr = { x: e.clientX, y: e.clientY };
+      vp2d.pointers.set(e.pointerId, curr);
+
+      const rect = canvas.getBoundingClientRect();
+      if (vp2d.pointers.size === 1) {
+        vp2d.x += curr.x - prev.x;
+        vp2d.y += curr.y - prev.y;
+      } else if (vp2d.pointers.size === 2) {
+        const pts = Array.from(vp2d.pointers.values());
+        const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+        const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+        if (vp2d.lastPinchDist > 10) {
+          vp2d.x += mid.x - vp2d.lastPinchMid.x;
+          vp2d.y += mid.y - vp2d.lastPinchMid.y;
+          vp2d.zoomAt(dist / vp2d.lastPinchDist, mid.x - rect.left, mid.y - rect.top);
+        }
+        vp2d.lastPinchDist = dist;
+        vp2d.lastPinchMid = mid;
+      }
+    });
+
+    const endPtr = (e) => {
+      vp2d.pointers.delete(e.pointerId);
+      vp2d.lastPinchDist = 0;
+    };
+    canvas.addEventListener('pointerup', endPtr);
+    canvas.addEventListener('pointercancel', endPtr);
+  }
+
+  /* =========================================================
+     6. 2D 粒子系統初始化 (蕨類 / 裸子 / 被子)
+     ========================================================= */
+  const fernParticles = [];
+  for (let i = 0; i < 65; i++) {
+    fernParticles.push({ t: Math.random(), lane: (Math.random() - 0.5) * 0.7, pathIdx: i % 2 });
+  }
+
+  const gymnoMacroParticles = [];
+  for (let i = 0; i < 42; i++) {
+    gymnoMacroParticles.push({ y: (Math.random() - 0.5) * 420, side: i % 2, xJit: (Math.random() - 0.5) * 20 });
+  }
+
+  const gymnoMicroParticles = [];
+  for (let i = 0; i < 36; i++) {
+    gymnoMicroParticles.push({ prog: Math.random(), branch: i % 2 === 0 ? -1 : 1, jit: (Math.random() - 0.5) * 8 });
+  }
+
+  const angioParticles = [];
+  for (let i = 0; i < 95; i++) {
+    angioParticles.push({
+      y: (Math.random() - 0.5) * 460,
+      rFrac: (Math.random() * 2 - 1) * 0.82,
+      inBackup: i >= 72
+    });
+  }
+
+  /* =========================================================
+     7. 標籤渲染引擎 (自動繪製引線與浮動文字框)
+     ========================================================= */
+  let activeLabels = []; // { wx, wy, ox, oy, title, sub, color }
+
+  function renderLabelsOverlay() {
+    if (!state.showLabels || activeLabels.length === 0) {
+      labelLayer.innerHTML = '';
+      leaderSvg.innerHTML = '';
+      return;
+    }
+
+    let svgHtml = '';
+    let domHtml = '';
+    const w = canvas.clientWidth || threeContainer.clientWidth;
+    const h = canvas.clientHeight || threeContainer.clientHeight;
+
+    for (const lb of activeLabels) {
+      let sx, sy;
+      if (lb.screenCoords) {
+        sx = lb.sx; sy = lb.sy;
+      } else {
+        const p = vp2d.worldToScreen(lb.wx, lb.wy);
+        sx = p.x; sy = p.y;
+      }
+      const tx = sx + (lb.ox || 0);
+      const ty = sy + (lb.oy || 0);
+
+      if (tx < -80 || tx > w + 80 || ty < -40 || ty > h + 40) continue;
+
+      const strokeCol = lb.color || THEME.water;
+      svgHtml += `<line x1="${sx.toFixed(1)}" y1="${sy.toFixed(1)}" x2="${tx.toFixed(1)}" y2="${ty.toFixed(1)}" stroke="${strokeCol}" stroke-width="1.6" stroke-dasharray="3,2" opacity="0.85"/>`;
+      svgHtml += `<circle cx="${sx.toFixed(1)}" cy="${sy.toFixed(1)}" r="3.6" fill="${strokeCol}" stroke="#0f172a" stroke-width="1.2"/>`;
+
+      domHtml += `<div class="FloatingLabel" style="left:${tx.toFixed(1)}px;top:${ty.toFixed(1)}px;border-left-color:${strokeCol}">
+        ${lb.title}${lb.sub ? `<small>${lb.sub}</small>` : ''}
+      </div>`;
+    }
+
+    leaderSvg.innerHTML = svgHtml;
+    labelLayer.innerHTML = domHtml;
+  }
+
+  /* =========================================================
+     8. 分頁 1：蕨類管胞 (Fern Tracheids) 繪製與邏輯
+     ========================================================= */
+  function drawSpindleTracheid(cx, cy, halfW, halfH, wallThick, pitYsLeft, pitYsRight, isCavitated) {
+    // 繪製木質化厚外壁紡錘體
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - halfH);
+    ctx.quadraticCurveTo(cx + halfW * 1.12, cy - halfH * 0.38, cx + halfW, cy);
+    ctx.quadraticCurveTo(cx + halfW * 1.12, cy + halfH * 0.38, cx, cy + halfH);
+    ctx.quadraticCurveTo(cx - halfW * 1.12, cy + halfH * 0.38, cx - halfW, cy);
+    ctx.quadraticCurveTo(cx - halfW * 1.12, cy - halfH * 0.38, cx, cy - halfH);
+    ctx.closePath();
+
+    const grad = ctx.createLinearGradient(cx - halfW, cy, cx + halfW, cy);
+    grad.addColorStop(0, THEME.wallDark);
+    grad.addColorStop(0.5, THEME.wallLight);
+    grad.addColorStop(1, THEME.wallDark);
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = '#fbbf24';
+    ctx.stroke();
+
+    // 繪製內部狹窄管腔 (Lumen)
+    const iw = Math.max(10, halfW - wallThick);
+    const ih = Math.max(30, halfH - wallThick * 2.2);
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - ih);
+    ctx.quadraticCurveTo(cx + iw * 1.08, cy - ih * 0.38, cx + iw, cy);
+    ctx.quadraticCurveTo(cx + iw * 1.08, cy + ih * 0.38, cx, cy + ih);
+    ctx.quadraticCurveTo(cx - iw * 1.08, cy + ih * 0.38, cx - iw, cy);
+    ctx.quadraticCurveTo(cx - iw * 1.08, cy - ih * 0.38, cx, cy - ih);
+    ctx.closePath();
+    ctx.fillStyle = isCavitated ? '#2a1222' : THEME.lumen;
+    ctx.fill();
+
+    // 若發生氣穴，繪製氣泡栓塞
+    if (isCavitated) {
+      ctx.save();
+      ctx.clip();
+      ctx.fillStyle = THEME.embolismFill;
+      ctx.fillRect(cx - iw * 2, cy - ih, iw * 4, ih * 2);
+      for (let b = -2; b <= 2; b++) {
+        const by = cy + b * 42 + Math.sin(state.time * 2.5 + b) * 5;
+        ctx.beginPath();
+        ctx.ellipse(cx, by, iw * 0.72, 22, 0, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(244, 63, 94, 0.35)';
+        ctx.fill();
+        ctx.strokeStyle = THEME.embolism;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // 挖空側壁紋孔通道並畫上綠色紋孔膜
+    const drawPits = (ys, sideSign) => {
+      for (const py of ys) {
+        const dyNorm = Math.abs(py - cy) / halfH;
+        const xOuter = cx + sideSign * halfW * (1 - dyNorm * dyNorm * 0.55);
+        const xInner = cx + sideSign * iw * (1 - dyNorm * dyNorm * 0.55);
+        ctx.fillStyle = THEME.lumen;
+        ctx.fillRect(Math.min(xOuter, xInner) - 2, py - 5, Math.abs(xOuter - xInner) + 4, 10);
+
+        // 紋孔膜
+        ctx.beginPath();
+        ctx.moveTo(xOuter, py - 6);
+        ctx.lineTo(xOuter, py + 6);
+        ctx.strokeStyle = THEME.membrane;
+        ctx.lineWidth = 3;
+        ctx.setLineDash([3, 2]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    };
+    drawPits(pitYsLeft, -1);
+    drawPits(pitYsRight, 1);
+
+    // 繪製階紋木質化橫紋裝飾 (表現蕨類階紋管胞質感)
+    ctx.strokeStyle = 'rgba(217, 119, 6, 0.22)';
+    ctx.lineWidth = 2;
+    for (let y = cy - ih + 18; y < cy + ih - 18; y += 14) {
+      const r = iw * (1 - Math.pow((y - cy) / ih, 2) * 0.65);
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.8, y);
+      ctx.lineTo(cx + r * 0.8, y);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  function updateAndDrawFern(dt) {
+    const wallThick = 17; // 厚實細胞壁 (兼顧支撐)
+    // 三個交錯疊合的紡錘形管胞：下中(A) -> 中左(B) / 中右(C) -> 上中(D)
+    const cells = [
+      { cx: -36, cy: 135, hw: 44, hh: 155, pitsL: [], pitsR: [55, 78, 101], cav: false },
+      { cx: 36,  cy: 0,   hw: 44, hh: 155, pitsL: [55, 78, 101, -55, -78, -101], pitsR: [], cav: state.fernCavitated },
+      { cx: -36, cy: -135,hw: 44, hh: 155, pitsL: [], pitsR: [-55, -78, -101], cav: false },
+      { cx: -108,cy: 0,   hw: 42, hh: 150, pitsL: [], pitsR: [55, 78, -55, -78], cav: false }
+    ];
+
+    // 左側輔助管胞連接下中與上中
+    cells[0].pitsL = [55, 78];
+    cells[2].pitsL = [-55, -78];
+
+    for (const c of cells) {
+      drawSpindleTracheid(c.cx, c.cy, c.hw, c.hh, wallThick, c.pitsL, c.pitsR, c.cav);
+    }
+
+    // 繪製阻力減速熱區光暈 (Step 2+)
+    if (state.step >= 2) {
+      const glowPts = [[0, 78], [0, -78], [-72, 66], [-72, -66]];
+      for (const [gx, gy] of glowPts) {
+        const g = ctx.createRadialGradient(gx, gy, 3, gx, gy, 26);
+        g.addColorStop(0, 'rgba(16, 185, 129, 0.42)');
+        g.addColorStop(1, 'rgba(16, 185, 129, 0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(gx, gy, 26, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // 水分子之字形路徑模擬 (穿越紋孔時速度驟降 75%)
+    const baseFlow = state.step === 0 ? 0.06 : 0.22 * state.fernTension;
+    for (const p of fernParticles) {
+      // 若右側管胞氣穴，右側路徑停止並改走左側管胞
+      const useLeftPath = state.fernCavitated ? true : (p.pathIdx === 1);
+      // 定義分段路徑節點 (由下往上)
+      const pts = useLeftPath
+        ? [[-36, 245], [-36, 68], [-108, 68], [-108, -68], [-36, -68], [-36, -245]]
+        : [[-36, 245], [-36, 78], [36, 78],   [36, -78],   [-36, -78], [-36, -245]];
+
+      // 區段 1 與 3 是穿越紋孔膜區段，阻力極大，流速降為 0.25x
+      const segWeights = [1.0, 2.8, 1.0, 2.8, 1.0]; // 時間權重越高代表走越慢
+      const totalW = 8.6;
+      p.t = (p.t + dt * baseFlow) % 1;
+
+      let targetW = p.t * totalW;
+      let seg = 0;
+      while (seg < 4 && targetW > segWeights[seg]) {
+        targetW -= segWeights[seg];
+        seg++;
+      }
+      const localT = targetW / segWeights[seg];
+      const x0 = pts[seg][0], y0 = pts[seg][1];
+      const x1 = pts[seg + 1][0], y1 = pts[seg + 1][1];
+
+      const isPitCrossing = (seg === 1 || seg === 3);
+      const laneOffset = isPitCrossing ? p.lane * 5 : p.lane * 18;
+      const wx = x0 + (x1 - x0) * localT + (isPitCrossing ? 0 : laneOffset);
+      const wy = y0 + (y1 - y0) * localT + (isPitCrossing ? laneOffset : 0);
+
+      ctx.beginPath();
+      ctx.arc(wx, wy, isPitCrossing ? 3.2 : 4.2, 0, Math.PI * 2);
+      ctx.fillStyle = isPitCrossing ? '#6ee7b7' : THEME.water;
+      ctx.fill();
+      if (!isPitCrossing && state.step >= 1) {
+        ctx.beginPath();
+        ctx.moveTo(wx, wy);
+        ctx.lineTo(wx, wy + 9);
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    }
+
+    // 右側資訊圖解框 (世界座標內)
+    ctx.save();
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.78)';
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.3)';
+    ctx.lineWidth = 1.5;
+    roundRect(ctx, 135, -155, 255, 310, 12);
+    ctx.fill(); ctx.stroke();
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = 'bold 15px system-ui, sans-serif';
+    ctx.fillText('蕨類管胞流體特徵剖析', 155, -124);
+
+    ctx.font = '13px system-ui, sans-serif';
+    ctx.fillStyle = '#cbd5e1';
+    const bullets = [
+      ['● 細胞型態：', '單一紡錘形死細胞，兩端封閉尖銳'],
+      ['● 雙重任務：', '厚壁兼顧機械支撐＋水分運輸'],
+      ['● 跨細胞阻力：', '水每流經一細胞必穿越狹窄紋孔膜'],
+      ['● 相對輸水效率：', state.fernCavitated ? '約 0.6x (局部氣穴受阻)' : '1.0x (基準值，流速緩慢)']
+    ];
+    let by = -90;
+    for (const [k, v] of bullets) {
+      ctx.fillStyle = '#7dd3fc';
+      ctx.fillText(k, 155, by);
+      ctx.fillStyle = '#e2e8f0';
+      ctx.fillText(v, 155, by + 20);
+      by += 52;
+    }
+
+    // 流線阻力示意條
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText('紋孔膜流體阻力佔比 (~70%)', 155, 122);
+    ctx.fillStyle = '#1e293b';
+    roundRect(ctx, 155, 130, 215, 10, 5); ctx.fill();
+    ctx.fillStyle = THEME.membrane;
+    roundRect(ctx, 155, 130, 155, 10, 5); ctx.fill();
+    ctx.restore();
+
+    // 設定文字標籤座標
+    activeLabels = [
+      { wx: -36, wy: -255, ox: 0, oy: -28, title: '尖銳封閉端壁 (Tapered End)', sub: '無穿孔板，水無法縱向直通', color: THEME.wallLight },
+      { wx: 0, wy: 78, ox: 95, oy: 24, title: '均質紋孔膜 (Pit Membrane)', sub: '水被迫橫向滲透・高流體阻力', color: THEME.membrane },
+      { wx: -76, wy: 155, ox: -95, oy: 26, title: '厚實木質化次生壁', sub: '兼負支撐體重，壓縮內部管腔', color: THEME.wall },
+      { wx: -36, wy: 155, ox: 75, oy: 42, title: '狹窄管胞腔 (Lumen)', sub: '單細胞獨立輸水空間', color: THEME.water }
+    ];
+    if (state.fernCavitated) {
+      activeLabels.push({ wx: 36, wy: -10, ox: 92, oy: -25, title: '氣穴栓塞 (Cavitation)', sub: '氣泡被紋孔膜限制於單一管胞', color: THEME.embolism });
+    }
+  }
+
+  /* =========================================================
+     9. 分頁 2：裸子植物管胞與 Torus-Margo 閥門繪製與邏輯
+     ========================================================= */
+  function updateAndDrawGymno(dt) {
+    // 平滑物理過渡：圓枕位置與氣泡膨脹
+    state.torusOffset += (state.torusTarget - state.torusOffset) * Math.min(1, dt * 7.5);
+    const targetBubble = (state.step >= 2) ? 1 : 0;
+    state.gymnoLeftBubble += (targetBubble - state.gymnoLeftBubble) * Math.min(1, dt * 5.0);
+
+    // 根據步驟計算左右管胞水壓 (MPa)
+    const targetPL = state.step === 0 ? -1.6 : (state.step === 1 ? -2.4 : (state.step >= 2 ? -0.05 : -1.6));
+    const targetPR = state.step === 0 ? -1.6 : (state.step === 1 ? -2.5 : -3.2);
+    state.gymnoPressureL += (targetPL - state.gymnoPressureL) * Math.min(1, dt * 6);
+    state.gymnoPressureR += (targetPR - state.gymnoPressureR) * Math.min(1, dt * 6);
+
+    // -------- 左半部：相鄰針葉樹管胞宏觀視圖 (wx: -270) --------
+    const macroX = -265;
+    // 左管胞與右管胞
+    drawConiferTracheid(macroX - 48, 0, 44, 225, state.gymnoLeftBubble);
+    drawConiferTracheid(macroX + 48, 0, 44, 225, 0);
+
+    // 共同壁上的三個具緣紋孔小圖示
+    for (const py of [-95, 0, 95]) {
+      ctx.fillStyle = THEME.lumen;
+      ctx.beginPath();
+      ctx.ellipse(macroX, py, 15, 22, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = THEME.wallLight;
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+
+      // 微型圓枕位置同步
+      const tx = macroX + state.torusOffset * 9;
+      ctx.strokeStyle = THEME.membrane;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(macroX, py - 20); ctx.lineTo(tx, py); ctx.lineTo(macroX, py + 20); ctx.stroke();
+      ctx.fillStyle = THEME.torus;
+      ctx.beginPath(); ctx.ellipse(tx, py, 3.5, 9, 0, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // 宏觀粒子流
+    for (const mp of gymnoMacroParticles) {
+      const blocked = mp.side === 0 && state.gymnoLeftBubble > 0.4;
+      if (!blocked) {
+        mp.y -= dt * (mp.side === 1 ? 85 : 75);
+        if (mp.y < -200) mp.y = 200;
+      }
+      const px = (mp.side === 0 ? macroX - 48 : macroX + 48) + mp.xJit;
+      ctx.beginPath();
+      ctx.arc(px, mp.y, 3.2, 0, Math.PI * 2);
+      ctx.fillStyle = blocked ? 'rgba(244,63,94,0.4)' : THEME.water;
+      ctx.fill();
+    }
+
+    // 放大鏡引線連接宏觀紋孔與右側顯微橫切面
+    ctx.save();
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)';
+    ctx.setLineDash([5, 4]);
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.arc(macroX, 0, 26, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(macroX + 24, -12); ctx.lineTo(-40, -175);
+    ctx.moveTo(macroX + 24, 12);  ctx.lineTo(-40, 175);
+    ctx.stroke();
+    ctx.restore();
+
+    // -------- 右半部：具緣紋孔 (Bordered Pit) 高倍顯微橫切面 (中心 wx: 135, wy: 0) --------
+    const cx = 135, cy = 0;
+    const boxW = 350, boxH = 360;
+
+    // 背景管腔底色 (左側管胞腔 vs 右側管胞腔)
+    ctx.save();
+    roundRect(ctx, cx - boxW / 2, cy - boxH / 2, boxW, boxH, 16);
+    ctx.clip();
+
+    // 左管胞腔背景
+    ctx.fillStyle = state.gymnoLeftBubble > 0.2 ? '#291322' : '#112238';
+    ctx.fillRect(cx - boxW / 2, cy - boxH / 2, boxW / 2, boxH);
+    // 右管胞腔背景 (始終安全含水)
+    ctx.fillStyle = '#0f2742';
+    ctx.fillRect(cx, cy - boxH / 2, boxW / 2, boxH);
+
+    // 左側氣穴大氣泡動畫
+    if (state.gymnoLeftBubble > 0.02) {
+      const rBub = state.gymnoLeftBubble * 165;
+      const wob = Math.sin(state.time * 5) * 3;
+      const bGrad = ctx.createRadialGradient(cx - 115, cy, 10, cx - 115, cy, rBub);
+      bGrad.addColorStop(0, 'rgba(244, 63, 94, 0.55)');
+      bGrad.addColorStop(0.8, 'rgba(244, 63, 94, 0.22)');
+      bGrad.addColorStop(1, 'rgba(244, 63, 94, 0)');
+      ctx.fillStyle = bGrad;
+      ctx.beginPath();
+      ctx.arc(cx - 110, cy, rBub + wob, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = THEME.embolism;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(cx - 110, cy, Math.min(110, rBub * 0.68) + wob, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.fillStyle = '#fda4af';
+      ctx.font = 'bold 13px system-ui, sans-serif';
+      ctx.fillText('氣穴氣泡 (Air Embolism)', cx - 165, cy - 125);
+    }
+
+    // 繪製上下拱起的具緣紋孔次生細胞壁 (Overarching Pit Borders)
+    // 紋孔口 (Pit Aperture) 半高度 = 38px，紋孔腔最大半高度 = 120px
+    const apertureHalf = 36;
+    const chamberHalfW = 56;
+    const chamberHalfH = 122;
+
+    const drawBorderArch = (dirY) => {
+      // dirY = -1 (上方拱壁), +1 (下方拱壁)
+      ctx.beginPath();
+      ctx.moveTo(cx - 22, dirY * boxH * 0.5);
+      ctx.lineTo(cx + 22, dirY * boxH * 0.5);
+      // 往中央延伸形成拱形具緣紋孔壁
+      ctx.lineTo(cx + 22, dirY * chamberHalfH);
+      ctx.quadraticCurveTo(cx + chamberHalfW + 14, dirY * (chamberHalfH * 0.68), cx + chamberHalfW, dirY * apertureHalf);
+      ctx.arc(cx + chamberHalfW - 9, dirY * (apertureHalf + 4), 9, 0, Math.PI * 2, dirY < 0);
+      ctx.restore;
+
+      // 重新用乾淨對稱貝茲曲線繪製具緣紋孔雙側拱壁
+      ctx.beginPath();
+      ctx.moveTo(cx - 18, dirY * 180);
+      ctx.lineTo(cx + 18, dirY * 180);
+      ctx.lineTo(cx + 18, dirY * 126);
+      // 右側拱形紋孔緣
+      ctx.bezierCurveTo(cx + 66, dirY * 110, cx + 68, dirY * 55, cx + 52, dirY * apertureHalf);
+      ctx.quadraticCurveTo(cx + 42, dirY * (apertureHalf - 4), cx + 36, dirY * (apertureHalf + 10));
+      ctx.bezierCurveTo(cx + 44, dirY * 62, cx + 38, dirY * 102, cx + 6, dirY * 118);
+      // 中膠層基座
+      ctx.lineTo(cx - 6, dirY * 118);
+      // 左側拱形紋孔緣
+      ctx.bezierCurveTo(cx - 38, dirY * 102, cx - 44, dirY * 62, cx - 36, dirY * (apertureHalf + 10));
+      ctx.quadraticCurveTo(cx - 42, dirY * (apertureHalf - 4), cx - 52, dirY * apertureHalf);
+      ctx.bezierCurveTo(cx - 68, dirY * 55, cx - 66, dirY * 110, cx - 18, dirY * 126);
+      ctx.closePath();
+
+      const wGrad = ctx.createLinearGradient(cx - 60, 0, cx + 60, 0);
+      wGrad.addColorStop(0, THEME.wallDark);
+      wGrad.addColorStop(0.5, THEME.wallLight);
+      wGrad.addColorStop(1, THEME.wallDark);
+      ctx.fillStyle = wGrad;
+      ctx.fill();
+      ctx.strokeStyle = '#fcd34d';
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+    };
+
+    drawBorderArch(-1);
+    drawBorderArch(1);
+
+    // 計算圓枕 (Torus) 當前 X 偏移：封閉時精準緊貼右側紋孔口 (cx + 40)
+    const torusX = cx + state.torusOffset * 40;
+    const torusHalfH = 50; // 大於紋孔口半徑 36，確保完全封死！
+
+    // 繪製彈性網狀膜緣 (Margo) 連接上下基座 (cx, ±118) 到圓枕邊緣 (torusX, ±46)
+    ctx.save();
+    ctx.strokeStyle = THEME.membrane;
+    ctx.lineWidth = 3;
+    ctx.setLineDash([6, 5]); // 表現網狀孔隙可供水穿過
+    ctx.beginPath();
+    ctx.moveTo(cx, -118);
+    ctx.quadraticCurveTo((cx + torusX) * 0.5, -82, torusX, -torusHalfH + 4);
+    ctx.moveTo(cx, 118);
+    ctx.quadraticCurveTo((cx + torusX) * 0.5, 82, torusX, torusHalfH - 4);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 膜緣纖維細絲光點
+    for (let s = 0.2; s <= 0.85; s += 0.22) {
+      for (const sgn of [-1, 1]) {
+        const mx = cx + (torusX - cx) * s;
+        const my = sgn * (118 - (118 - torusHalfH) * s);
+        ctx.fillStyle = '#34d399';
+        ctx.beginPath(); ctx.arc(mx, my, 2.5, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    ctx.restore();
+
+    // 繪製中央厚實不透水圓枕 (Torus)
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(torusX, cy, 11, torusHalfH, 0, 0, Math.PI * 2);
+    const tGrad = ctx.createLinearGradient(torusX - 11, cy, torusX + 11, cy);
+    tGrad.addColorStop(0, '#d97706');
+    tGrad.addColorStop(0.5, THEME.torus);
+    tGrad.addColorStop(1, '#f59e0b');
+    ctx.fillStyle = tGrad;
+    ctx.fill();
+    ctx.lineWidth = 2.2;
+    ctx.strokeStyle = '#fef08a';
+    ctx.stroke();
+    ctx.restore();
+
+    // 若閥門已封閉，顯示氣密鎖死光環
+    const isSealed = state.torusOffset > 0.82;
+    if (isSealed) {
+      ctx.strokeStyle = '#fbbf24';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(torusX + 6, -apertureHalf - 4, 8, 0, Math.PI * 2);
+      ctx.arc(torusX + 6, apertureHalf + 4, 8, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // 顯微水流粒子動畫 (正常時由左穿過紋孔口 -> 繞過圓枕經膜緣 -> 右側紋孔口流出；閥門關閉時停止穿越)
+    for (const p of gymnoMicroParticles) {
+      if (!isSealed && state.gymnoLeftBubble < 0.65) {
+        p.prog = (p.prog + dt * 0.42) % 1;
+      } else {
+        // 封閉後右側管胞內水分子改為垂直向上蒸散流動
+        p.prog = (p.prog + dt * 0.35) % 1;
+      }
+
+      let wx, wy;
+      if (!isSealed && state.gymnoLeftBubble < 0.65) {
+        // S 型穿過具緣紋孔與 Margo 網孔
+        const t = p.prog;
+        wx = (cx - 145) + t * 290;
+        // 在中間區域上下分流繞過圓枕並穿過 Margo (y 約 ±75)
+        const bell = Math.exp(-Math.pow((t - 0.5) / 0.22, 2));
+        wy = p.branch * bell * 76 + p.jit;
+      } else {
+        // 閥門封閉！右側管胞安全獨立維持向上輸水
+        wx = cx + 95 + p.branch * 28 + p.jit;
+        wy = 155 - p.prog * 310;
+      }
+
+      ctx.beginPath();
+      ctx.arc(wx, wy, 3.8, 0, Math.PI * 2);
+      ctx.fillStyle = THEME.water;
+      ctx.fill();
+    }
+
+    // 壓差箭頭提示 (當氣穴發生產生正壓差推向低壓側)
+    if (state.step >= 2) {
+      ctx.save();
+      ctx.fillStyle = THEME.embolism;
+      ctx.strokeStyle = THEME.embolism;
+      ctx.lineWidth = 3;
+      const arrowEnd = torusX - 16;
+      ctx.beginPath();
+      ctx.moveTo(cx - 70, cy);
+      ctx.lineTo(arrowEnd, cy);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(arrowEnd, cy);
+      ctx.lineTo(arrowEnd - 10, cy - 7);
+      ctx.lineTo(arrowEnd - 10, cy + 7);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#fecdd3';
+      ctx.font = 'bold 12px system-ui, sans-serif';
+      ctx.fillText('ΔP 壓差吸力', cx - 78, cy - 12);
+      ctx.restore();
+    }
+
+    // 頂部兩側壓力讀數橫幅
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+    ctx.fillRect(cx - boxW / 2, cy - boxH / 2, boxW, 34);
+    ctx.font = 'bold 12.5px system-ui, sans-serif';
+    ctx.fillStyle = state.gymnoLeftBubble > 0.3 ? '#fda4af' : '#7dd3fc';
+    ctx.fillText(`左管胞壓力: ${state.gymnoPressureL.toFixed(2)} MPa`, cx - 162, cy - 158);
+    ctx.fillStyle = '#7dd3fc';
+    ctx.fillText(`右管胞壓力: ${state.gymnoPressureR.toFixed(2)} MPa`, cx + 16, cy - 158);
+
+    ctx.restore(); // 結束顯微視窗 clip
+
+    // 顯微視窗外框
+    ctx.strokeStyle = isSealed ? THEME.torus : 'rgba(56, 189, 248, 0.5)';
+    ctx.lineWidth = 2;
+    roundRect(ctx, cx - boxW / 2, cy - boxH / 2, boxW, boxH, 16);
+    ctx.stroke();
+
+    // 設定文字標籤
+    activeLabels = [
+      { wx: torusX, wy: 0, ox: 92, oy: -28, title: isSealed ? '圓枕 (Torus) — 已封死紋孔口' : '圓枕 (Torus)', sub: '中央加厚不透水閥門結構', color: THEME.torus },
+      { wx: (cx + torusX) * 0.5, wy: -84, ox: -95, oy: -38, title: '膜緣 (Margo)', sub: '彈性網狀纖維・正常時透水', color: THEME.membrane },
+      { wx: cx + 48, wy: 44, ox: 95, oy: 48, title: '拱形具緣紋孔壁 (Pit Border)', sub: '形成紋孔腔並提供閥門密合口', color: THEME.wallLight },
+      { wx: macroX, wy: -95, ox: -85, oy: -36, title: '針葉樹管胞群', sub: '靠具緣紋孔橫向傳遞水分', color: THEME.water }
+    ];
+  }
+
+  function drawConiferTracheid(cx, cy, hw, hh, bubbleAmt) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - hh);
+    ctx.lineTo(cx + hw, cy - hh * 0.72);
+    ctx.lineTo(cx + hw, cy + hh * 0.72);
+    ctx.lineTo(cx, cy + hh);
+    ctx.lineTo(cx - hw, cy + hh * 0.72);
+    ctx.lineTo(cx - hw, cy - hh * 0.72);
+    ctx.closePath();
+    ctx.fillStyle = THEME.wall;
+    ctx.fill();
+
+    const iw = hw - 11, ih = hh - 22;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - ih);
+    ctx.lineTo(cx + iw, cy - ih * 0.72);
+    ctx.lineTo(cx + iw, cy + ih * 0.72);
+    ctx.lineTo(cx, cy + ih);
+    ctx.lineTo(cx - iw, cy + ih * 0.72);
+    ctx.lineTo(cx - iw, cy - ih * 0.72);
+    ctx.closePath();
+    ctx.fillStyle = bubbleAmt > 0.3 ? '#2b1323' : THEME.lumen;
+    ctx.fill();
+
+    if (bubbleAmt > 0.05) {
+      ctx.fillStyle = 'rgba(244, 63, 94, 0.38)';
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, iw * 0.78 * bubbleAmt, ih * 0.65 * bubbleAmt, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = THEME.embolism;
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /* =========================================================
+     10. 分頁 3：被子植物導管與 Hagen-Poiseuille (r⁴) 定律
+     ========================================================= */
+  function updateAndDrawAngio(dt) {
+    // 端壁溶解動畫過渡
+    const targetDissolve = state.step === 0 ? 0.12 : 1.0;
+    state.endWallDissolve += (targetDissolve - state.endWallDissolve) * Math.min(1, dt * 4.5);
+
+    // 氣穴瞬間貫穿整條導管動畫
+    const targetCav = state.angioMainCavitated ? 1.0 : 0.0;
+    state.angioBubbleProgress += (targetCav - state.angioBubbleProgress) * Math.min(1, dt * 5.5);
+
+    const rRatio = state.vesselRadiusRatio; // 1.0x ~ 2.5x
+    const qFlow = Math.pow(rRatio, 4);      // Q ∝ r⁴ (例如 r=2 -> Q=16x)
+
+    // 1. 左側：專職機械支撐的木質纖維細胞束 (Libriform Fibers)
+    const fiberXs = [-305, -272, -239];
+    for (let i = 0; i < fiberXs.length; i++) {
+      const fx = fiberXs[i];
+      const fyOff = (i % 2 === 0 ? -25 : 25);
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(fx, -215 + fyOff);
+      ctx.lineTo(fx + 14, -150 + fyOff);
+      ctx.lineTo(fx + 14, 150 + fyOff);
+      ctx.lineTo(fx, 215 + fyOff);
+      ctx.lineTo(fx - 14, 150 + fyOff);
+      ctx.lineTo(fx - 14, -150 + fyOff);
+      ctx.closePath();
+      ctx.fillStyle = THEME.fiber;
+      ctx.fill();
+      ctx.strokeStyle = THEME.fiberStroke;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // 極度狹窄的纖維中空縫隙 (幾乎全為厚實次生壁)
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(fx, -135 + fyOff);
+      ctx.lineTo(fx, 135 + fyOff);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // 2. 中央：主導管 (Main Vessel) — 半徑隨滑桿即時縮放！
+    const mainX = -65;
+    const baseHalfR = 26;
+    const vesselHalfR = baseHalfR * rRatio; // 26px ~ 65px
+    const wallW = 8; // 薄壁化 (因支撐已交給纖維細胞)
+    const topY = -225, botY = 225;
+
+    // 導管腔底色
+    ctx.fillStyle = state.angioBubbleProgress > 0.2 ? '#291224' : THEME.lumen;
+    ctx.fillRect(mainX - vesselHalfR, topY, vesselHalfR * 2, botY - topY);
+
+    // 若發生氣穴，氣泡毫無阻礙瞬間貫穿整條長導管！
+    if (state.angioBubbleProgress > 0.02) {
+      const bh = (botY - topY) * state.angioBubbleProgress;
+      const by = botY - bh;
+      const bGrad = ctx.createLinearGradient(mainX - vesselHalfR, 0, mainX + vesselHalfR, 0);
+      bGrad.addColorStop(0, 'rgba(244, 63, 94, 0.18)');
+      bGrad.addColorStop(0.5, 'rgba(244, 63, 94, 0.48)');
+      bGrad.addColorStop(1, 'rgba(244, 63, 94, 0.18)');
+      ctx.fillStyle = bGrad;
+      ctx.fillRect(mainX - vesselHalfR + 2, by, vesselHalfR * 2 - 4, bh);
+
+      for (let k = -2; k <= 2; k++) {
+        const cyBub = k * 82 + ((state.time * 90) % 82) - 41;
+        if (cyBub > by + 20 && cyBub < botY - 20) {
+          ctx.strokeStyle = THEME.embolism;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.ellipse(mainX, cyBub, vesselHalfR * 0.75, 26, 0, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+    }
+
+    // 導管左右木質化薄壁與側壁紋孔列
+    for (const side of [-1, 1]) {
+      const wx = side < 0 ? mainX - vesselHalfR - wallW : mainX + vesselHalfR;
+      ctx.fillStyle = THEME.wall;
+      ctx.fillRect(wx, topY, wallW, botY - topY);
+      ctx.strokeStyle = THEME.wallLight;
+      ctx.lineWidth = 1.2;
+      ctx.strokeRect(wx, topY, wallW, botY - topY);
+
+      // 右側壁與相鄰冗餘導管之間的側壁紋孔網
+      if (side > 0) {
+        for (let py = -180; py <= 180; py += 45) {
+          ctx.fillStyle = THEME.lumen;
+          ctx.fillRect(wx - 1, py - 5, wallW + 2, 10);
+          ctx.strokeStyle = THEME.membrane;
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.moveTo(wx + wallW * 0.5, py - 6);
+          ctx.lineTo(wx + wallW * 0.5, py + 6);
+          ctx.stroke();
+        }
+      }
+    }
+
+    // 繪製三個導管分子接合處的「穿孔板 (Perforation Plates)」(y = -75, +75)
+    const plateYs = [-75, 75];
+    for (const py of plateYs) {
+      // 兩側殘留的穿孔板環邊 (Perforation rim)
+      const rimLen = 11 + (1 - state.endWallDissolve) * (vesselHalfR - 11);
+      ctx.fillStyle = THEME.wallLight;
+      ctx.fillRect(mainX - vesselHalfR, py - 3.5, rimLen, 7);
+      ctx.fillRect(mainX + vesselHalfR - rimLen, py - 3.5, rimLen, 7);
+
+      // 若在步驟 1 尚未完全溶解，顯示正在水解消失的原生端壁虛線
+      if (state.endWallDissolve < 0.95) {
+        ctx.save();
+        ctx.globalAlpha = 1 - state.endWallDissolve;
+        ctx.strokeStyle = '#fde68a';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([6, 5]);
+        ctx.beginPath();
+        ctx.moveTo(mainX - vesselHalfR + rimLen, py);
+        ctx.lineTo(mainX + vesselHalfR - rimLen, py);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    // 3. 右側並列：冗餘備援導管網路 (Redundant Parallel Vessel)
+    const backupX = 88;
+    const backupHalfR = 30;
+    ctx.fillStyle = THEME.lumen;
+    ctx.fillRect(backupX - backupHalfR, topY, backupHalfR * 2, botY - topY);
+    ctx.fillStyle = THEME.wall;
+    ctx.fillRect(backupX - backupHalfR - 7, topY, 7, botY - topY);
+    ctx.fillRect(backupX + backupHalfR, topY, 7, botY - topY);
+    for (const py of plateYs) {
+      ctx.fillStyle = THEME.wallLight;
+      ctx.fillRect(backupX - backupHalfR, py - 3, 9, 6);
+      ctx.fillRect(backupX + backupHalfR - 9, py - 3, 9, 6);
+    }
+
+    // 側向繞道連結通道 (當主導管氣穴時，水分經側壁紋孔切換至備援導管)
+    if (state.angioMainCavitated) {
+      ctx.save();
+      ctx.strokeStyle = THEME.water;
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      ctx.moveTo(mainX + vesselHalfR + wallW, 180);
+      ctx.quadraticCurveTo((mainX + vesselHalfR + backupX - backupHalfR) * 0.5, 155, backupX - backupHalfR, 135);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // 4. 繪製遵循泊肅葉拋物線速度剖面的高速水流粒子
+    // 中心流速最快 v(r) = v_max * (1 - (r/R)^2)，且視覺速度隨 r⁴ 大幅提升！
+    const visualSpeedScale = state.step === 0 ? 22 : (48 * Math.pow(rRatio, 2.35)); // 視覺平滑映射避免過快閃爍，數據面板精確顯示 r⁴
+    for (const p of angioParticles) {
+      const useBackup = p.inBackup || state.angioMainCavitated;
+      const cxCur = useBackup ? backupX : mainX;
+      const radCur = useBackup ? backupHalfR - 5 : vesselHalfR - 5;
+
+      const parabolic = 1 - 0.55 * p.rFrac * p.rFrac;
+      const spd = (useBackup ? 135 : visualSpeedScale) * parabolic;
+      p.y -= dt * spd;
+      if (p.y < topY + 8) p.y = botY - 8;
+
+      const wx = cxCur + p.rFrac * radCur;
+      const wy = p.y;
+      const streak = Math.min(26, spd * 0.055);
+
+      ctx.strokeStyle = useBackup && state.angioMainCavitated ? '#67e8f9' : THEME.water;
+      ctx.lineWidth = 3.2;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(wx, wy);
+      ctx.lineTo(wx, wy + streak);
+      ctx.stroke();
+
+      ctx.fillStyle = THEME.waterBright;
+      ctx.beginPath();
+      ctx.arc(wx, wy, 2.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 5. 右側 Hagen-Poiseuille 定律即時公式與對照圖表卡片 (wx: 165 ~ 415)
+    ctx.save();
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
+    ctx.lineWidth = 1.5;
+    roundRect(ctx, 155, -185, 255, 370, 14);
+    ctx.fill(); ctx.stroke();
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = 'bold 15px system-ui, sans-serif';
+    ctx.fillText('哈根-泊肅葉定律 (r⁴ 效應)', 173, -153);
+
+    ctx.fillStyle = '#7dd3fc';
+    ctx.font = 'bold 16px Georgia, serif';
+    ctx.fillText('Q = (π · ΔP · r⁴) / (8 · η · L)', 173, -122);
+
+    ctx.font = '13px system-ui, sans-serif';
+    ctx.fillStyle = '#cbd5e1';
+    ctx.fillText(`目前導管半徑倍率：${rRatio.toFixed(2)} ×`, 173, -86);
+    ctx.fillStyle = '#38bdf8';
+    ctx.font = 'bold 15px system-ui, sans-serif';
+    ctx.fillText(`單管輸水流量 Q：${qFlow.toFixed(1)} 倍！`, 173, -60);
+
+    // 管胞 vs 導管 長條對比圖
+    const barBaseY = 105;
+    const maxBarH = 135;
+    const fernH = Math.max(6, (1 / 39.06) * maxBarH);
+    const angioH = Math.min(maxBarH, (qFlow / 39.06) * maxBarH);
+
+    // 基準管胞條
+    ctx.fillStyle = THEME.membrane;
+    roundRect(ctx, 195, barBaseY - fernH, 52, fernH, 4); ctx.fill();
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '12px system-ui, sans-serif';
+    ctx.fillText('管胞 (1r)', 195, barBaseY + 20);
+    ctx.fillText('1.0×', 206, barBaseY - fernH - 8);
+
+    // 被子導管條
+    const barGrad = ctx.createLinearGradient(0, barBaseY - angioH, 0, barBaseY);
+    barGrad.addColorStop(0, '#38bdf8');
+    barGrad.addColorStop(1, '#0284c7');
+    ctx.fillStyle = barGrad;
+    roundRect(ctx, 295, barBaseY - angioH, 62, angioH, 5); ctx.fill();
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = 'bold 12px system-ui, sans-serif';
+    ctx.fillText(`導管 (${rRatio.toFixed(1)}r)`, 292, barBaseY + 20);
+    ctx.fillStyle = '#7dd3fc';
+    ctx.fillText(`${qFlow.toFixed(1)}×`, 308, barBaseY - angioH - 8);
+
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '12px system-ui, sans-serif';
+    ctx.fillText(state.angioMainCavitated
+      ? '⚠️ 主導管已氣穴癱瘓！備援導管接手輸水'
+      : '✓ 纖維專職支撐，導管得以極大化內徑', 173, 158);
+    ctx.restore();
+
+    // 設定文字標籤
+    activeLabels = [
+      { wx: -272, wy: -95, ox: -55, oy: -45, title: '木質纖維細胞 (Fibers)', sub: '極厚壁專職機械支撐・分工合作', color: THEME.fiberStroke },
+      { wx: mainX - vesselHalfR + 8, wy: -75, ox: -98, oy: -25, title: '穿孔板 (Perforation Plate)', sub: '上下端壁溶解・形成連續長水管', color: THEME.wallLight },
+      { wx: mainX, wy: 0, ox: -85, oy: 42, title: `寬闊導管分子 (${rRatio.toFixed(1)}r)`, sub: `流量暴增為 ${qFlow.toFixed(1)} 倍 (Q ∝ r⁴)`, color: THEME.water },
+      { wx: backupX, wy: -135, ox: 65, oy: -48, title: '並列冗餘導管網路', sub: state.angioMainCavitated ? '側壁紋孔隔離氣泡・安全繞道輸水' : '多重備援管道平衡氣穴風險', color: THEME.membrane }
+    ];
+    if (state.angioMainCavitated) {
+      activeLabels.push({ wx: mainX, wy: 115, ox: -90, oy: 36, title: '整條導管瞬間氣穴癱瘓', sub: '無端壁阻擋，氣泡迅速縱向蔓延', color: THEME.embolism });
+    }
+  }
+
+  function roundRect(c, x, y, w, h, r) {
+    c.beginPath();
+    c.moveTo(x + r, y);
+    c.arcTo(x + w, y, x + w, y + h, r);
+    c.arcTo(x + w, y + h, x, y + h, r);
+    c.arcTo(x, y + h, x, y, r);
+    c.arcTo(x, y, x + w, y, r);
+    c.closePath();
+  }
+
+  /* =========================================================
+     11. 分頁 4：Three.js 3D 立體顯微解剖與演化比較
+     ========================================================= */
+  let threeApp = null;
+
+  function initThreeScene() {
+    if (threeApp || typeof THREE === 'undefined') return;
+
+    const w = threeContainer.clientWidth || window.innerWidth;
+    const h = threeContainer.clientHeight || window.innerHeight;
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(42, w / h, 0.1, 200);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(w, h);
+    threeContainer.appendChild(renderer.domElement);
+
+    // 燈光配置
+    const amb = new THREE.AmbientLight(0xffffff, 0.68);
+    scene.add(amb);
+    const dir1 = new THREE.DirectionalLight(0xfffbeb, 0.95);
+    dir1.position.set(12, 18, 16);
+    scene.add(dir1);
+    const dir2 = new THREE.DirectionalLight(0x38bdf8, 0.45);
+    dir2.position.set(-14, -8, 10);
+    scene.add(dir2);
+
+    // 統一色票材質 (與 2D 分頁完全一致)
+    const matWall = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.45, metalness: 0.1, side: THREE.DoubleSide });
+    const matFiber = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.55, side: THREE.DoubleSide });
+    const matMembrane = new THREE.MeshStandardMaterial({ color: 0x10b981, roughness: 0.3, transparent: true, opacity: 0.82, side: THREE.DoubleSide });
+    const matTorus = new THREE.MeshStandardMaterial({ color: 0xfbbf24, roughness: 0.25, metalness: 0.25 });
+    const matWater = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+    const matBubble = new THREE.MeshStandardMaterial({ color: 0xf43f5e, transparent: true, opacity: 0.55, roughness: 0.15 });
+
+    // ---------- 模型 A (x = -7.5)：蕨類紡錘形管胞 3D 剖面 ----------
+    const fernGroup = new THREE.Group();
+    fernGroup.position.set(-7.5, 0, 0);
+    scene.add(fernGroup);
+
+    // 使用 LatheGeometry 製作兩端尖銳且正面剖開 (thetaLength = 1.45π) 的厚壁紡錘體
+    const fernPts = [
+      new THREE.Vector2(0.01, -4.8),
+      new THREE.Vector2(0.75, -2.6),
+      new THREE.Vector2(0.95, 0),
+      new THREE.Vector2(0.75, 2.6),
+      new THREE.Vector2(0.01, 4.8)
+    ];
+    const fernOuter = new THREE.Mesh(new THREE.LatheGeometry(fernPts, 28, 0.35 * Math.PI, 1.35 * Math.PI), matWall);
+    fernGroup.add(fernOuter);
+
+    // 階紋紋孔膜環帶
+    for (let y = -2.4; y <= 2.4; y += 0.8) {
+      const pDisc = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.08, 16), matMembrane);
+      pDisc.rotation.z = Math.PI * 0.5;
+      pDisc.position.set(0.76, y, 0);
+      fernGroup.add(pDisc);
+    }
+
+    // ---------- 模型 B (x = 0)：裸子植物具緣紋孔 + 動態圓枕閥門 3D 剖面 ----------
+    const gymnoGroup = new THREE.Group();
+    gymnoGroup.position.set(0, 0, 0);
+    scene.add(gymnoGroup);
+
+    // 具緣紋孔左右拱形隆起腔室 (Lathe 剖面旋轉繞 X 軸)
+    for (const side of [-1, 1]) {
+      const domePts = [
+        new THREE.Vector2(0.72, 0.95), // 紋孔口邊緣 (Aperture)
+        new THREE.Vector2(1.45, 0.78),
+        new THREE.Vector2(2.15, 0.32),
+        new THREE.Vector2(2.35, 0.0)   // 連接中膠層基座
+      ];
+      const domeGeo = new THREE.LatheGeometry(domePts, 32, -Math.PI * 0.15, Math.PI * 1.3);
+      const domeMesh = new THREE.Mesh(domeGeo, matWall);
+      domeMesh.rotation.z = side > 0 ? -Math.PI * 0.5 : Math.PI * 0.5;
+      gymnoGroup.add(domeMesh);
+    }
+
+    // 中央圓枕 (Torus)
+    const torusDiscGeo = new THREE.CylinderGeometry(1.05, 1.05, 0.24, 28);
+    torusDiscGeo.rotateZ(Math.PI * 0.5);
+    const torusMesh = new THREE.Mesh(torusDiscGeo, matTorus);
+    gymnoGroup.add(torusMesh);
+
+    // 放射狀彈性膜緣絲 (Margo strands)
+    const margoLinesMat = new THREE.LineBasicMaterial({ color: 0x10b981, linewidth: 2 });
+    const margoGeo = new THREE.BufferGeometry();
+    const strandCount = 18;
+    const margoPositions = new Float32Array(strandCount * 2 * 3);
+    margoGeo.setAttribute('position', new THREE.BufferAttribute(margoPositions, 3));
+    const margoLines = new THREE.LineSegments(margoGeo, margoLinesMat);
+    gymnoGroup.add(margoLines);
+
+    // 氣穴紅氣泡 (Step 1 聚焦裸子時動態脹縮示範)
+    const bubble3D = new THREE.Mesh(new THREE.SphereGeometry(1.15, 24, 24), matBubble);
+    bubble3D.position.set(-2.1, 0, 0);
+    gymnoGroup.add(bubble3D);
+
+    // ---------- 模型 C (x = 7.8)：被子植物寬闊導管分子 + 穿孔板 + 支撐纖維束 ----------
+    const angioGroup = new THREE.Group();
+    angioGroup.position.set(7.8, 0, 0);
+    scene.add(angioGroup);
+
+    // 寬闊導管半剖圓柱 (半徑 2.15，遠大於蕨類管胞 0.95)
+    const vesselGeo = new THREE.CylinderGeometry(2.15, 2.15, 9.2, 36, 1, true, 0.35 * Math.PI, 1.3 * Math.PI);
+    const vesselMesh = new THREE.Mesh(vesselGeo, matWall);
+    angioGroup.add(vesselMesh);
+
+    // 兩個縱向貫通的穿孔板環圈 (Perforation plate rims)
+    for (const py of [-1.8, 1.8]) {
+      const rimGeo = new THREE.TorusGeometry(2.02, 0.16, 12, 36, Math.PI * 1.35);
+      const rim = new THREE.Mesh(rimGeo, new THREE.MeshStandardMaterial({ color: 0xfbbf24, roughness: 0.35 }));
+      rim.rotation.x = Math.PI * 0.5;
+      rim.rotation.z = -0.15 * Math.PI;
+      rim.position.y = py;
+      angioGroup.add(rim);
+    }
+
+    // 旁側專職支撐的細長深褐色木質纖維細胞束
+    const fiberOffsets = [[-2.75, -0.6], [-2.55, 0.85], [-3.1, 0.2]];
+    for (const [fx, fz] of fiberOffsets) {
+      const fGeo = new THREE.CylinderGeometry(0.28, 0.28, 8.6, 12);
+      const fMesh = new THREE.Mesh(fGeo, matFiber);
+      fMesh.position.set(fx, 0, fz);
+      // 兩端尖錐
+      const coneTop = new THREE.Mesh(new THREE.ConeGeometry(0.28, 1.2, 12), matFiber);
+      coneTop.position.y = 4.9;
+      const coneBot = new THREE.Mesh(new THREE.ConeGeometry(0.28, 1.2, 12), matFiber);
+      coneBot.rotation.x = Math.PI;
+      coneBot.position.y = -4.9;
+      fMesh.add(coneTop); fMesh.add(coneBot);
+      angioGroup.add(fMesh);
+    }
+
+    // 3D 水分子粒子群
+    const waterSpheres = [];
+    const sphereGeo = new THREE.SphereGeometry(0.14, 10, 10);
+    // 蕨類慢速粒子 (14顆) + 被子高速粒子 (34顆) + 裸子紋孔粒子 (14顆)
+    for (let i = 0; i < 62; i++) {
+      const m = new THREE.Mesh(sphereGeo, matWater);
+      const type = i < 14 ? 'fern' : (i < 28 ? 'gymno' : 'angio');
+      scene.add(m);
+      waterSpheres.push({
+        mesh: m,
+        type,
+        prog: Math.random(),
+        ang: Math.random() * Math.PI * 2,
+        rad: Math.random()
+      });
+    }
+
+    // 底部輔助基準網格
+    const grid = new THREE.GridHelper(28, 28, 0x1e3a5f, 0x15233b);
+    grid.position.y = -5.5;
+    scene.add(grid);
+
+    // 自製零相依性觸控友善 3D 相機控制器 (支援單指旋轉、雙指捏合縮放與平移、滾輪)
+    const camCtrl = {
+      target: new THREE.Vector3(0, 0, 0),
+      goalTarget: new THREE.Vector3(0, 0, 0),
+      radius: 22,
+      goalRadius: 22,
+      theta: 0.12,
+      phi: 1.38,
+      pointers: new Map(),
+      lastDist: 0,
+      lastMid: null,
+
+      focusStep(stepIdx) {
+        if (stepIdx === 0) { this.goalTarget.set(-7.5, 0, 0); this.goalRadius = 12.5; }
+        else if (stepIdx === 1) { this.goalTarget.set(0, 0, 0); this.goalRadius = 9.5; }
+        else if (stepIdx === 2) { this.goalTarget.set(7.4, 0, 0); this.goalRadius = 13.5; }
+        else { this.goalTarget.set(0, 0, 0); this.goalRadius = 23.5; }
+      },
+      reset() {
+        this.theta = 0.12; this.phi = 1.38;
+        this.focusStep(state.step);
+      },
+      update(dt) {
+        this.target.lerp(this.goalTarget, Math.min(1, dt * 5));
+        this.radius += (this.goalRadius - this.radius) * Math.min(1, dt * 6);
+        const sinP = Math.sin(this.phi);
+        camera.position.set(
+          this.target.x + this.radius * sinP * Math.sin(this.theta),
+          this.target.y + this.radius * Math.cos(this.phi),
+          this.target.z + this.radius * sinP * Math.cos(this.theta)
+        );
+        camera.lookAt(this.target);
+      }
+    };
+
+    const domEl = renderer.domElement;
+    domEl.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      camCtrl.goalRadius = Math.max(5.5, Math.min(38, camCtrl.goalRadius * (e.deltaY > 0 ? 1.1 : 0.9)));
+    }, { passive: false });
+
+    domEl.addEventListener('pointerdown', (e) => {
+      domEl.setPointerCapture(e.pointerId);
+      camCtrl.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (camCtrl.pointers.size === 2) {
+        const pts = Array.from(camCtrl.pointers.values());
+        camCtrl.lastDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+        camCtrl.lastMid = { x: (pts[0].x + pts[1].x) * 0.5, y: (pts[0].y + pts[1].y) * 0.5 };
+      }
+    });
+
+    domEl.addEventListener('pointermove', (e) => {
+      if (!camCtrl.pointers.has(e.pointerId)) return;
+      const prev = camCtrl.pointers.get(e.pointerId);
+      const curr = { x: e.clientX, y: e.clientY };
+      camCtrl.pointers.set(e.pointerId, curr);
+
+      if (camCtrl.pointers.size === 1) {
+        camCtrl.theta -= (curr.x - prev.x) * 0.007;
+        camCtrl.phi = Math.max(0.35, Math.min(2.75, camCtrl.phi - (curr.y - prev.y) * 0.007));
+      } else if (camCtrl.pointers.size === 2) {
+        const pts = Array.from(camCtrl.pointers.values());
+        const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+        const mid = { x: (pts[0].x + pts[1].x) * 0.5, y: (pts[0].y + pts[1].y) * 0.5 };
+        if (camCtrl.lastDist > 10) {
+          camCtrl.goalRadius = Math.max(5.5, Math.min(38, camCtrl.goalRadius * (camCtrl.lastDist / dist)));
+          const panScale = camCtrl.radius * 0.0018;
+          camCtrl.goalTarget.x -= (mid.x - camCtrl.lastMid.x) * panScale;
+          camCtrl.goalTarget.y += (mid.y - camCtrl.lastMid.y) * panScale;
+        }
+        camCtrl.lastDist = dist;
+        camCtrl.lastMid = mid;
+      }
+    });
+
+    const up3D = (e) => { camCtrl.pointers.delete(e.pointerId); camCtrl.lastDist = 0; };
+    domEl.addEventListener('pointerup', up3D);
+    domEl.addEventListener('pointercancel', up3D);
+
+    threeApp = {
+      scene, camera, renderer, camCtrl,
+      torusMesh, margoGeo, strandCount, bubble3D, waterSpheres,
+      valveCycle: false
+    };
+    camCtrl.focusStep(state.step);
+  }
+
+  function updateAndRenderThree(dt) {
+    if (!threeApp) initThreeScene();
+    if (!threeApp) return;
+
+    const { scene, camera, renderer, camCtrl, torusMesh, margoGeo, strandCount, bubble3D, waterSpheres } = threeApp;
+    camCtrl.update(dt);
+
+    // 3D 圓枕閥門動態週期演示 (在 Step 1 或手動開啟氣穴演示時自動吸入封閉)
+    const demoCav = threeApp.valveCycle ? (Math.sin(state.time * 1.6) > -0.1) : (state.step === 1 && Math.sin(state.time * 1.5) > 0);
+    const targetTx = demoCav ? 0.82 : 0.0;
+    torusMesh.position.x += (targetTx - torusMesh.position.x) * Math.min(1, dt * 6);
+
+    const bScale = demoCav ? 1.0 : 0.01;
+    bubble3D.scale.lerp(new THREE.Vector3(bScale, bScale, bScale), Math.min(1, dt * 6));
+    bubble3D.visible = bubble3D.scale.x > 0.05;
+
+    // 更新放射狀 Margo 網絲頂點連接圓枕與外環
+    const posArr = margoGeo.attributes.position.array;
+    for (let i = 0; i < strandCount; i++) {
+      const a = (i / strandCount) * Math.PI * 1.4 - Math.PI * 0.2;
+      const idx = i * 6;
+      posArr[idx]     = 0;
+      posArr[idx + 1] = Math.cos(a) * 2.28;
+      posArr[idx + 2] = Math.sin(a) * 2.28;
+
+      posArr[idx + 3] = torusMesh.position.x;
+      posArr[idx + 4] = Math.cos(a) * 0.98;
+      posArr[idx + 5] = Math.sin(a) * 0.98;
+    }
+    margoGeo.attributes.position.needsUpdate = true;
+
+    // 更新三組模型的 3D 水分子流速差異 (蕨類慢速 vs 被子導管極速)
+    const sealed = torusMesh.position.x > 0.6;
+    for (const wp of waterSpheres) {
+      if (wp.type === 'fern') {
+        wp.prog = (wp.prog + dt * 0.16) % 1;
+        const y = -4.2 + wp.prog * 8.4;
+        const r = (1 - Math.abs(y) / 5.0) * 0.52 * wp.rad;
+        wp.mesh.position.set(-7.5 + Math.cos(wp.ang) * r, y, Math.sin(wp.ang) * r);
+      } else if (wp.type === 'gymno') {
+        if (!sealed) {
+          wp.prog = (wp.prog + dt * 0.36) % 1;
+          const x = -1.8 + wp.prog * 3.6;
+          const flare = Math.exp(-Math.pow(x / 0.8, 2)) * 1.45;
+          wp.mesh.position.set(x, Math.cos(wp.ang) * flare, Math.sin(wp.ang) * flare * 0.5);
+          wp.mesh.visible = true;
+        } else {
+          wp.mesh.visible = false;
+        }
+      } else {
+        // 被子導管高速奔流 (流速遠高於蕨類管胞)
+        wp.prog = (wp.prog + dt * 0.85) % 1;
+        const y = -4.4 + wp.prog * 8.8;
+        const r = wp.rad * 1.65;
+        wp.mesh.position.set(7.8 + Math.cos(wp.ang) * r, y, Math.sin(wp.ang) * r);
+      }
+    }
+
+    renderer.render(scene, camera);
+
+    // 投影 3D 世界錨點至螢幕座標供統一標籤引擎繪製
+    const w = threeContainer.clientWidth;
+    const h = threeContainer.clientHeight;
+    const proj = (x, y, z) => {
+      const v = new THREE.Vector3(x, y, z).project(camera);
+      return { sx: (v.x * 0.5 + 0.5) * w, sy: (-v.y * 0.5 + 0.5) * h, behind: v.z > 1 };
+    };
+
+    const anchors = [
+      { p: proj(-7.5, 2.8, 0), ox: -30, oy: -45, title: '蕨類紡錘管胞 (3D 剖面)', sub: '厚壁小內徑・階紋紋孔滲透', color: THEME.wallLight },
+      { p: proj(torusMesh.position.x, 0.3, 0), ox: 0, oy: -65, title: sealed ? '圓枕閥門 (已吸入封死)' : '裸子具緣紋孔與圓枕', sub: 'Torus-Margo 自動抗氣穴閥', color: THEME.torus },
+      { p: proj(7.8, 1.8, 1.5), ox: 45, oy: -42, title: '被子導管與穿孔板', sub: '大管徑 r⁴ 極速縱向貫通', color: THEME.water },
+      { p: proj(5.1, -2.0, 0.4), ox: -60, oy: 42, title: '木質支撐纖維束', sub: '專職機械支撐分工', color: THEME.fiberStroke }
+    ];
+
+    activeLabels = anchors.filter(a => !a.p.behind).map(a => ({
+      screenCoords: true, sx: a.p.sx, sy: a.p.sy,
+      ox: a.ox, oy: a.oy, title: a.title, sub: a.sub, color: a.color
+    }));
+  }
+
+  /* =========================================================
+     12. 左上角動態參數控制面板 (HUD) 與 Step 連動
+     ========================================================= */
+  function syncStepPhysics() {
+    if (state.tab === 'fern') {
+      state.fernCavitated = (state.step === 3);
+      state.fernTension = state.step === 0 ? 0.5 : (state.step >= 1 ? 1.25 : 1.0);
+    } else if (state.tab === 'gymno') {
+      state.torusTarget = (state.step === 3) ? 1.0 : 0.0;
+    } else if (state.tab === 'angio') {
+      state.angioMainCavitated = (state.step === 3);
+      if (state.step === 2 && state.vesselRadiusRatio < 1.8) {
+        state.vesselRadiusRatio = 2.0;
+      }
+    } else if (state.tab === 'three' && threeApp) {
+      threeApp.camCtrl.focusStep(state.step);
+    }
+    buildHudControls();
+  }
+
+  function buildHudControls() {
+    const info = TAB_DATA[state.tab];
+    hudTitle.textContent = info.hudTitle;
+
+    if (state.tab === 'fern') {
+      hudBody.innerHTML = `
+        <div class="metric-row"><span>管腔有效半徑</span><span class="metric-val">1.0 r (基準)</span></div>
+        <div class="metric-row"><span>紋孔膜流體阻力</span><span class="metric-val" style="color:#34d399">極高 (橫向滲透)</span></div>
+        <div class="slider-group">
+          <label style="display:flex;justify-content:space-between"><span>蒸散拉力強度</span><b id="fernTenVal">${state.fernTension.toFixed(1)}×</b></label>
+          <input type="range" id="fernTenSlider" min="0.4" max="2.2" step="0.1" value="${state.fernTension}">
+        </div>
+        <button class="mini-btn ${state.fernCavitated ? 'danger' : ''}" id="fernCavBtn">
+          ${state.fernCavitated ? '💧 修復管胞氣穴栓塞' : '⚡ 手動觸發單一管胞氣穴'}
+        </button>
+      `;
+      document.getElementById('fernTenSlider').addEventListener('input', (e) => {
+        state.fernTension = parseFloat(e.target.value);
+        document.getElementById('fernTenVal').textContent = state.fernTension.toFixed(1) + '×';
+      });
+      document.getElementById('fernCavBtn').addEventListener('click', () => {
+        state.fernCavitated = !state.fernCavitated;
+        buildHudControls();
+      });
+
+    } else if (state.tab === 'gymno') {
+      const isClosed = state.torusTarget > 0.5;
+      hudBody.innerHTML = `
+        <div class="metric-row"><span>圓枕閥門狀態</span><span class="metric-val" style="color:${isClosed ? '#fbbf24' : '#34d399'}">${isClosed ? '🔒 緊密吸附封死' : '🟢 置中開放通行'}</span></div>
+        <div class="metric-row"><span>抗氣穴擴散安全性</span><span class="metric-val">極高 (自動物理閥)</span></div>
+        <button class="mini-btn ${isClosed ? '' : 'danger'}" id="gymnoToggleBtn">
+          ${isClosed ? '💧 解除乾旱・恢復圓枕置中' : '🔥 模擬乾旱氣穴・吸合圓枕閥門'}
+        </button>
+      `;
+      document.getElementById('gymnoToggleBtn').addEventListener('click', () => {
+        if (state.torusTarget > 0.5) {
+          setStep(1);
+        } else {
+          setStep(3);
+        }
+      });
+
+    } else if (state.tab === 'angio') {
+      const q = Math.pow(state.vesselRadiusRatio, 4);
+      hudBody.innerHTML = `
+        <div class="slider-group">
+          <label style="display:flex;justify-content:space-between">
+            <span>導管半徑 (r)</span>
+            <b id="angioRVal" style="color:#7dd3fc">${state.vesselRadiusRatio.toFixed(2)} × 管胞</b>
+          </label>
+          <input type="range" id="angioRSlider" min="1.0" max="2.5" step="0.05" value="${state.vesselRadiusRatio}">
+        </div>
+        <div class="metric-row"><span>流量倍率 (Q ∝ r⁴)</span><span class="metric-val" id="angioQVal">${q.toFixed(1)} ×</span></div>
+        <button class="mini-btn ${state.angioMainCavitated ? '' : 'danger'}" id="angioCavBtn">
+          ${state.angioMainCavitated ? '💧 充水修復主導管栓塞' : '⚡ 觸發氣穴 (測試整條癱瘓與繞道)'}
+        </button>
+      `;
+      document.getElementById('angioRSlider').addEventListener('input', (e) => {
+        state.vesselRadiusRatio = parseFloat(e.target.value);
+        const newQ = Math.pow(state.vesselRadiusRatio, 4);
+        document.getElementById('angioRVal').textContent = state.vesselRadiusRatio.toFixed(2) + ' × 管胞';
+        document.getElementById('angioQVal').textContent = newQ.toFixed(1) + ' ×';
+      });
+      document.getElementById('angioCavBtn').addEventListener('click', () => {
+        state.angioMainCavitated = !state.angioMainCavitated;
+        buildHudControls();
+      });
+
+    } else if (state.tab === 'three') {
+      const cyc = threeApp && threeApp.valveCycle;
+      hudBody.innerHTML = `
+        <div class="metric-row"><span>3D 操作手勢</span><span class="metric-val">單指旋轉 / 雙指縮放平移</span></div>
+        <button class="mini-btn ${cyc ? 'danger' : ''}" id="threeValveBtn">
+          ${cyc ? '⏹ 停止圓枕閥門循環演示' : '🔄 啟動 3D 圓枕閥門開閉循環'}
+        </button>
+      `;
+      document.getElementById('threeValveBtn').addEventListener('click', () => {
+        if (threeApp) {
+          threeApp.valveCycle = !threeApp.valveCycle;
+          buildHudControls();
+        }
+      });
+    }
+  }
+
+  /* =========================================================
+     13. 分頁切換與 Step-by-Step 流程控制邏輯
+     ========================================================= */
+  function renderStepUI() {
+    const steps = TAB_DATA[state.tab].steps;
+    const cur = steps[state.step];
+    stepBadge.textContent = `步驟 ${state.step + 1} / ${steps.length}`;
+    stepTitle.textContent = cur.title;
+    stepDesc.textContent = cur.desc;
+
+    prevStepBtn.disabled = (state.step === 0);
+    nextStepBtn.disabled = (state.step === steps.length - 1);
+
+    stepDots.innerHTML = steps.map((_, idx) =>
+      `<button class="step-dot ${idx === state.step ? 'active' : ''}" data-step="${idx}" title="跳至步驟 ${idx + 1}">${idx + 1}</button>`
+    ).join('');
+
+    stepDots.querySelectorAll('.step-dot').forEach(btn => {
+      btn.addEventListener('click', () => {
+        stopAutoPlay();
+        setStep(parseInt(btn.dataset.step, 10));
+      });
+    });
+  }
+
+  function setStep(idx) {
+    const maxIdx = TAB_DATA[state.tab].steps.length - 1;
+    state.step = Math.max(0, Math.min(maxIdx, idx));
+    syncStepPhysics();
+    renderStepUI();
+  }
+
+  function switchTab(tabId) {
+    stopAutoPlay();
+    state.tab = tabId;
+    state.step = 0;
+
+    document.querySelectorAll('.tab-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.tab === tabId);
+    });
+
+    const is3D = (tabId === 'three');
+    canvas.classList.toggle('hidden', is3D);
+    threeContainer.classList.toggle('hidden', !is3D);
+    document.getElementById('gestureHint').textContent = is3D
+      ? '3D 模式：單指旋轉・雙指捏合縮放與拖曳平移'
+      : '支援單指拖曳平移・雙指捏合／滾輪縮放';
+
+    handleResize();
+    if (!is3D) {
+      vp2d.reset(canvas.clientWidth, canvas.clientHeight);
+    } else {
+      initThreeScene();
+      if (threeApp) threeApp.camCtrl.reset();
+    }
+
+    syncStepPhysics();
+    renderStepUI();
+  }
+
+  function startAutoPlay() {
+    state.autoPlay = true;
+    autoPlayBtn.classList.add('playing');
+    autoPlayBtn.textContent = '⏸ 暫停演示';
+    state.autoTimer = setInterval(() => {
+      const total = TAB_DATA[state.tab].steps.length;
+      setStep((state.step + 1) % total);
+    }, 4200);
+  }
+
+  function stopAutoPlay() {
+    state.autoPlay = false;
+    autoPlayBtn.classList.remove('playing');
+    autoPlayBtn.textContent = '▶ 自動演示';
+    if (state.autoTimer) {
+      clearInterval(state.autoTimer);
+      state.autoTimer = null;
+    }
+  }
+
+  /* =========================================================
+     14. 事件監聽綁定與視窗自適應
+     ========================================================= */
+  document.getElementById('tabsNav').addEventListener('click', (e) => {
+    const btn = e.target.closest('.tab-btn');
+    if (btn && btn.dataset.tab) switchTab(btn.dataset.tab);
+  });
+
+  prevStepBtn.addEventListener('click', () => { stopAutoPlay(); setStep(state.step - 1); });
+  nextStepBtn.addEventListener('click', () => { stopAutoPlay(); setStep(state.step + 1); });
+  autoPlayBtn.addEventListener('click', () => {
+    if (state.autoPlay) stopAutoPlay(); else startAutoPlay();
+  });
+
+  // 標籤顯示 / 隱藏 Toggle
+  const toggleLabelsBtn = document.getElementById('toggleLabelsBtn');
+  toggleLabelsBtn.addEventListener('click', () => {
+    state.showLabels = !state.showLabels;
+    toggleLabelsBtn.classList.toggle('active', state.showLabels);
+    toggleLabelsBtn.querySelector('span').textContent = state.showLabels ? '🏷️ 標籤：顯示' : '🏷️ 標籤：隱藏';
+    renderLabelsOverlay();
+  });
+
+  // 圖例列顯示 / 隱藏 Toggle
+  const toggleLegendBtn = document.getElementById('toggleLegendBtn');
+  const legendBar = document.getElementById('legendBar');
+  toggleLegendBtn.addEventListener('click', () => {
+    state.showLegend = !state.showLegend;
+    legendBar.classList.toggle('hidden', !state.showLegend);
+    toggleLegendBtn.classList.toggle('active', state.showLegend);
+    handleResize();
+  });
+
+  // 左上 HUD 摺疊支援 (友善手機小螢幕)
+  document.getElementById('hudToggle').addEventListener('click', () => {
+    hudPanel.classList.toggle('collapsed');
+    document.getElementById('hudArrow').textContent = hudPanel.classList.contains('collapsed') ? '▸' : '▾';
+  });
+
+  // 右側 Zoom / Reset 輔助按鈕
+  document.getElementById('zoomInBtn').addEventListener('click', () => {
+    if (state.tab === 'three' && threeApp) {
+      threeApp.camCtrl.goalRadius = Math.max(5.5, threeApp.camCtrl.goalRadius * 0.82);
+    } else {
+      vp2d.zoomAt(1.22, canvas.clientWidth * 0.5, canvas.clientHeight * 0.5);
+    }
+  });
+  document.getElementById('zoomOutBtn').addEventListener('click', () => {
+    if (state.tab === 'three' && threeApp) {
+      threeApp.camCtrl.goalRadius = Math.min(38, threeApp.camCtrl.goalRadius * 1.22);
+    } else {
+      vp2d.zoomAt(0.82, canvas.clientWidth * 0.5, canvas.clientHeight * 0.5);
+    }
+  });
+  document.getElementById('resetViewBtn').addEventListener('click', () => {
+    if (state.tab === 'three' && threeApp) {
+      threeApp.camCtrl.reset();
+    } else {
+      vp2d.reset(canvas.clientWidth, canvas.clientHeight);
+    }
+  });
+
+  function handleResize() {
+    const area = document.getElementById('viewportArea');
+    const w = area.clientWidth;
+    const h = area.clientHeight;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+    canvas.width = Math.floor(w * dpr);
+    canvas.height = Math.floor(h * dpr);
+
+    if (threeApp) {
+      threeApp.camera.aspect = w / Math.max(1, h);
+      threeApp.camera.updateProjectionMatrix();
+      threeApp.renderer.setSize(w, h);
+    }
+  }
+
+  window.addEventListener('resize', () => {
+    handleResize();
+    if (state.tab !== 'three') vp2d.reset(canvas.clientWidth, canvas.clientHeight);
+  });
+
+  /* =========================================================
+     15. 主動畫迴圈
+     ========================================================= */
+  let lastTime = performance.now();
+
+  function animate(now) {
+    const dt = Math.min(0.05, (now - lastTime) / 1000);
+    lastTime = now;
+    state.time += dt;
+
+    if (state.tab !== 'three') {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+
+      // 套用 2D 世界 Zoom & Pan 矩陣
+      ctx.save();
+      ctx.translate(vp2d.x, vp2d.y);
+      ctx.scale(vp2d.scale, vp2d.scale);
+
+      // 繪製細微背景生物顯微刻度格線
+      drawMicroGrid();
+
+      if (state.tab === 'fern') updateAndDrawFern(dt);
+      else if (state.tab === 'gymno') updateAndDrawGymno(dt);
+      else if (state.tab === 'angio') updateAndDrawAngio(dt);
+
+      ctx.restore();
+    } else {
+      updateAndRenderThree(dt);
+    }
+
+    renderLabelsOverlay();
+    requestAnimationFrame(animate);
+  }
+
+  function drawMicroGrid() {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.06)';
+    ctx.lineWidth = 1;
+    for (let x = -600; x <= 600; x += 60) {
+      ctx.beginPath(); ctx.moveTo(x, -400); ctx.lineTo(x, 400); ctx.stroke();
+    }
+    for (let y = -400; y <= 400; y += 60) {
+      ctx.beginPath(); ctx.moveTo(-600, y); ctx.lineTo(600, y); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // 啟動初始化
+  setup2DGestures();
+  handleResize();
+  vp2d.reset(canvas.clientWidth, canvas.clientHeight);
+  if (window.innerWidth < 560) {
+    hudPanel.classList.add('collapsed');
+    document.getElementById('hudArrow').textContent = '▸';
+  }
+  syncStepPhysics();
+  renderStepUI();
+  requestAnimationFrame(animate);
+})();
+</script>
+</body>
+</html>
