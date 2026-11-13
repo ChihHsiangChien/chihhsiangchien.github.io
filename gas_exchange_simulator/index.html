@@ -1,0 +1,1952 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>生物氣體交換構造 - 互動動態模擬器</title>
+    <style>
+        :root {
+            --bg-dark: #0b1120;
+            --bg-panel: #151f32;
+            --bg-card: #1e293b;
+            --text-main: #f1f5f9;
+            --text-muted: #94a3b8;
+            --accent: #38bdf8;
+            --accent-hover: #0284c7;
+            /* 跨分頁嚴格統一視覺色彩 */
+            --c-o2: #00e5ff;
+            /* 氧氣 O2：亮青藍 */
+            --c-co2: #ff5722;
+            /* 二氧化碳 CO2：鮮橘紅 */
+            --c-h2o: #60a5fa;
+            /* 水流/水氣：柔和藍 */
+            --c-blood-hi: #ef4444;
+            /* 充氧血：鮮紅 */
+            --c-blood-lo: #6366f1;
+            /* 缺氧血：紫藍 */
+            --border-c: #334155;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            height: 100vh;
+            height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* 頂部標題與分頁導覽 */
+        header {
+            background-color: var(--bg-panel);
+            border-bottom: 1px solid var(--border-c);
+            padding: 8px 12px 0 12px;
+            flex-shrink: 0;
+            z-index: 20;
+        }
+
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .app-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* 統一圖例列 */
+        .legend-bar {
+            display: flex;
+            gap: 12px;
+            font-size: 0.8rem;
+            background: rgba(0, 0, 0, 0.25);
+            padding: 4px 10px;
+            border-radius: 20px;
+            border: 1px solid var(--border-c);
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            color: var(--text-muted);
+        }
+
+        .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .dot-o2 {
+            background: var(--c-o2);
+            box-shadow: 0 0 6px var(--c-o2);
+        }
+
+        .dot-co2 {
+            background: var(--c-co2);
+            box-shadow: 0 0 6px var(--c-co2);
+        }
+
+        .dot-b-hi {
+            background: var(--c-blood-hi);
+        }
+
+        .dot-b-lo {
+            background: var(--c-blood-lo);
+        }
+
+        /* 分頁按鈕 */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            overflow-x: auto;
+            scrollbar-width: none;
+        }
+
+        .tabs::-webkit-scrollbar {
+            display: none;
+        }
+
+        .tab-btn {
+            background: transparent;
+            color: var(--text-muted);
+            border: none;
+            border-bottom: 3px solid transparent;
+            padding: 8px 14px;
+            font-size: 0.92rem;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s;
+            border-radius: 6px 6px 0 0;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-main);
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        .tab-btn.active {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+            background: rgba(56, 189, 248, 0.08);
+        }
+
+        /* 主內容區 (RWD: 電腦左右，手機上下) */
+        main {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* 互動畫布容器 */
+        .viewport {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            background: radial-gradient(circle at center, #162238 0%, #090e1a 100%);
+            touch-action: none;
+            /* 關鍵：攔截預設觸控以支援自訂 Zoom/Pan */
+            cursor: grab;
+        }
+
+        .viewport:active {
+            cursor: grabbing;
+        }
+
+        #main-svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        /* 畫布懸浮控制工具列 */
+        .floating-tools {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 10;
+        }
+
+        .tool-group {
+            display: flex;
+            background: rgba(21, 31, 50, 0.85);
+            backdrop-filter: blur(6px);
+            border: 1px solid var(--border-c);
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        }
+
+        .icon-btn {
+            background: transparent;
+            color: var(--text-main);
+            border: none;
+            padding: 9px 12px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: background 0.15s;
+        }
+
+        .icon-btn+.icon-btn {
+            border-left: 1px solid var(--border-c);
+        }
+
+        .icon-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .icon-btn:active {
+            background: rgba(56, 189, 248, 0.25);
+        }
+
+        .icon-btn.active-toggle {
+            background: rgba(56, 189, 248, 0.2);
+            color: var(--accent);
+        }
+
+        /* 左下角縮放提示 */
+        .hint-badge {
+            position: absolute;
+            bottom: 10px;
+            left: 12px;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            background: rgba(15, 23, 42, 0.7);
+            padding: 4px 10px;
+            border-radius: 12px;
+            pointer-events: none;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        /* 側邊/底部 Step-by-Step 流程控制面板 */
+        .control-panel {
+            width: 340px;
+            background: var(--bg-panel);
+            border-left: 1px solid var(--border-c);
+            display: flex;
+            flex-direction: column;
+            padding: 16px;
+            gap: 14px;
+            overflow-y: auto;
+            z-index: 15;
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .organ-badge {
+            font-size: 0.75rem;
+            padding: 3px 8px;
+            border-radius: 4px;
+            background: rgba(56, 189, 248, 0.15);
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        /* 子視圖切換器 (例如：整體 vs 局部放大) */
+        .subview-switch {
+            display: flex;
+            background: var(--bg-dark);
+            padding: 3px;
+            border-radius: 8px;
+            border: 1px solid var(--border-c);
+        }
+
+        .subview-btn {
+            flex: 1;
+            background: transparent;
+            color: var(--text-muted);
+            border: none;
+            padding: 6px 8px;
+            font-size: 0.82rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: 0.2s;
+        }
+
+        .subview-btn.active {
+            background: var(--bg-card);
+            color: var(--text-main);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        }
+
+        /* 步驟進度指示點 */
+        .step-dots {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .step-dot {
+            flex: 1;
+            height: 6px;
+            background: var(--border-c);
+            border-radius: 3px;
+            cursor: pointer;
+            transition: 0.25s;
+        }
+
+        .step-dot.active {
+            background: var(--accent);
+            box-shadow: 0 0 8px rgba(56, 189, 248, 0.5);
+        }
+
+        /* 步驟內容卡片 */
+        .step-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-c);
+            border-radius: 10px;
+            padding: 14px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .step-num {
+            font-size: 0.78rem;
+            color: var(--accent);
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+
+        .step-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .step-desc {
+            font-size: 0.9rem;
+            line-height: 1.55;
+            color: #cbd5e1;
+        }
+
+        .feature-box {
+            margin-top: auto;
+            padding-top: 10px;
+            border-top: 1px dashed var(--border-c);
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            line-height: 1.4;
+        }
+
+        .feature-box strong {
+            color: #e2e8f0;
+        }
+
+        /* 流程按鈕組 */
+        .step-controls {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            gap: 8px;
+        }
+
+        .ctrl-btn {
+            background: var(--bg-card);
+            color: var(--text-main);
+            border: 1px solid var(--border-c);
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+        }
+
+        .ctrl-btn:hover {
+            background: #283548;
+            border-color: #475569;
+        }
+
+        .ctrl-btn:active {
+            transform: scale(0.98);
+        }
+
+        .ctrl-btn.primary {
+            background: var(--accent-hover);
+            border-color: var(--accent);
+            color: #fff;
+        }
+
+        .ctrl-btn.primary:hover {
+            background: #0369a1;
+        }
+
+        /* SVG 內部標籤樣式與 Toggle 控制 */
+        .svg-label-group {
+            transition: opacity 0.25s ease;
+            pointer-events: none;
+        }
+
+        body.hide-labels .svg-label-group {
+            opacity: 0 !important;
+        }
+
+        .label-bg {
+            fill: rgba(11, 17, 32, 0.85);
+            stroke: #475569;
+            stroke-width: 1.2px;
+            rx: 5px;
+        }
+
+        .label-text {
+            fill: #f8fafc;
+            font-size: 13px;
+            font-weight: 600;
+            dominant-baseline: middle;
+            text-anchor: middle;
+        }
+
+        .label-line {
+            stroke: #94a3b8;
+            stroke-width: 1.5px;
+            stroke-dasharray: 3, 2;
+            fill: none;
+        }
+
+        .label-dot {
+            fill: #38bdf8;
+            stroke: #0b1120;
+            stroke-width: 1.5px;
+        }
+
+        /* 手機與直向平板響應式設計 */
+        @media (max-width: 820px) {
+            main {
+                flex-direction: column;
+            }
+
+            .control-panel {
+                width: 100%;
+                height: 44%;
+                min-height: 240px;
+                border-left: none;
+                border-top: 1px solid var(--border-c);
+                padding: 12px;
+                gap: 10px;
+            }
+
+            .legend-bar {
+                display: none;
+            }
+
+            /* 手機頂部空間精簡，畫布內已有清楚顏色標示 */
+            .app-title {
+                font-size: 1rem;
+            }
+
+            .tab-btn {
+                padding: 7px 11px;
+                font-size: 0.85rem;
+            }
+
+            .step-card {
+                padding: 10px 12px;
+            }
+
+            .step-title {
+                font-size: 0.95rem;
+            }
+
+            .step-desc {
+                font-size: 0.84rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <div class="top-bar">
+            <div class="app-title">
+                <span>🫁 生物氣體交換構造動態模擬</span>
+            </div>
+            <div class="legend-bar">
+                <span class="legend-item"><i class="dot dot-o2"></i>氧氣 (O₂)</span>
+                <span class="legend-item"><i class="dot dot-co2"></i>二氧化碳 (CO₂)</span>
+                <span class="legend-item"><i class="dot dot-b-hi"></i>充氧血</span>
+                <span class="legend-item"><i class="dot dot-b-lo"></i>缺氧血</span>
+            </div>
+        </div>
+        <nav class="tabs" id="tabs-nav">
+            <button class="tab-btn active" data-tab="fish">🐟 魚的鰓</button>
+            <button class="tab-btn" data-tab="locust">🦗 蝗蟲的氣管</button>
+            <button class="tab-btn" data-tab="salamander">🦎 山椒魚的肺與皮膚</button>
+            <button class="tab-btn" data-tab="plant">🌿 植物的氣孔與皮孔</button>
+        </nav>
+    </header>
+
+    <main>
+        <!-- 互動 SVG 視窗 (支援 Pan & Zoom) -->
+        <div class="viewport" id="viewport">
+            <div class="floating-tools">
+                <div class="tool-group">
+                    <button class="icon-btn active-toggle" id="btn-toggle-labels" title="顯示或隱藏構造名稱標籤">
+                        <span>🏷️ 標籤: 開</span>
+                    </button>
+                </div>
+                <div class="tool-group">
+                    <button class="icon-btn" id="btn-zoom-in" title="放大">➕</button>
+                    <button class="icon-btn" id="btn-zoom-out" title="縮小">➖</button>
+                    <button class="icon-btn" id="btn-zoom-reset" title="重置視角">⟲ 重置</button>
+                </div>
+            </div>
+
+            <div class="hint-badge">💡 單指拖曳平移・雙指捏合/滾輪縮放</div>
+
+            <svg id="main-svg" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <!-- 共用漸層：缺氧血 -> 充氧血 (逆流交換與微血管網一致使用) -->
+                    <linearGradient id="grad-blood-lr" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stop-color="#6366f1" />
+                        <stop offset="50%" stop-color="#a855f7" />
+                        <stop offset="100%" stop-color="#ef4444" />
+                    </linearGradient>
+                    <linearGradient id="grad-blood-rl" x1="100%" y1="0%" x2="0%" y2="0%">
+                        <stop offset="0%" stop-color="#6366f1" />
+                        <stop offset="50%" stop-color="#a855f7" />
+                        <stop offset="100%" stop-color="#ef4444" />
+                    </linearGradient>
+                    <filter id="glow-o2" x="-50%" y="-50%" width="200%" height="200%">
+                        <feGaussianBlur stdDeviation="2.5" result="blur" />
+                        <feMerge>
+                            <feMergeNode in="blur" />
+                            <feMergeNode in="SourceGraphic" />
+                        </feMerge>
+                    </filter>
+                    <!-- 箭頭標記 -->
+                    <marker id="arrow-water" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6"
+                        orient="auto-start-reverse">
+                        <path d="M 0 1 L 10 5 L 0 9 z" fill="#60a5fa" />
+                    </marker>
+                    <marker id="arrow-blood" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6"
+                        orient="auto-start-reverse">
+                        <path d="M 0 1 L 10 5 L 0 9 z" fill="#f43f5e" />
+                    </marker>
+                    <marker id="arrow-o2" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5"
+                        orient="auto-start-reverse">
+                        <path d="M 0 1 L 10 5 L 0 9 z" fill="#00e5ff" />
+                    </marker>
+                    <marker id="arrow-co2" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5"
+                        orient="auto-start-reverse">
+                        <path d="M 0 1 L 10 5 L 0 9 z" fill="#ff5722" />
+                    </marker>
+                </defs>
+
+                <!-- 縮放平移的主群組 -->
+                <g id="camera-group">
+                    <!-- 背景參考網格 -->
+                    <g id="grid-layer" opacity="0.12"></g>
+                    <!-- 器官繪圖層 -->
+                    <g id="scene-layer"></g>
+                    <!-- 動態氣體粒子層 -->
+                    <g id="particle-layer"></g>
+                    <!-- 文字標籤層 (可一鍵 Toggle) -->
+                    <g id="label-layer" class="svg-label-group"></g>
+                </g>
+            </svg>
+        </div>
+
+        <!-- Step-by-Step 流程控制與解說面板 -->
+        <aside class="control-panel">
+            <div class="panel-header">
+                <span class="organ-badge" id="organ-category">水生動物呼吸構造</span>
+                <span style="font-size:0.8rem; color:var(--text-muted);" id="step-counter">步驟 1 / 4</span>
+            </div>
+
+            <!-- 局部視角快速切換 (部分分頁提供微觀放大或部位切換) -->
+            <div class="subview-switch" id="subview-container" style="display:none;"></div>
+
+            <div class="step-dots" id="step-dots"></div>
+
+            <div class="step-card">
+                <div class="step-num" id="step-num-title">STEP 01</div>
+                <div class="step-title" id="step-title">載入中...</div>
+                <div class="step-desc" id="step-desc"></div>
+                <div class="feature-box" id="feature-box"></div>
+            </div>
+
+            <div class="step-controls">
+                <button class="ctrl-btn" id="btn-prev">◀ 上一步</button>
+                <button class="ctrl-btn" id="btn-play-pause" title="暫停/播放動態粒子">⏸</button>
+                <button class="ctrl-btn primary" id="btn-next">下一步 ▶</button>
+            </div>
+        </aside>
+    </main>
+
+    <script>
+        /**
+         * 生物氣體交換構造動態模擬器 (Vanilla JS 單檔架構)
+         * 視覺一致性規範：
+         * - O2 氧氣粒子：#00e5ff (亮青藍)
+         * - CO2 二氧化碳粒子：#ff5722 (鮮橘紅)
+         * - 充氧血：#ef4444 | 缺氧血：#6366f1
+         * - 濕潤水膜/水流：#60a5fa
+         */
+
+        const SVG_NS = "http://www.w3.org/2000/svg";
+        const SCENE_W = 800;
+        const SCENE_H = 520;
+
+        // 應用程式全域狀態
+        const state = {
+            currentTab: 'fish',
+            subView: 0,       // 子視角索引
+            step: 0,          // 0 ~ 3 步驟控制
+            isPlaying: true,  // 動態動畫開關
+            showLabels: true, // 標籤顯示開關
+            time: 0,          // 連續動畫計時器 (秒)
+            particles: [],    // 氣體與水分子粒子陣列
+            // Zoom & Pan 鏡頭狀態
+            cam: { x: 0, y: 0, scale: 1 }
+        };
+
+        // 四大分頁資料庫（包含步驟流程、構造特點、子模式）
+        const TABS_DATA = {
+            fish: {
+                category: "水生動物｜鰓 (Gills)",
+                subViews: ["整體換氣與鰓弓", "鰓絲逆流交換放大"],
+                feature: "<strong>共同構造特徵：</strong>大量絲狀與片狀摺疊（鰓絲、鰓小片）極大化表面積；表面僅單層扁平上皮且密布微血管；水中環境自然維持濕潤。",
+                steps: [
+                    {
+                        title: "口腔張開吸水（鰓蓋緊閉）",
+                        desc: "魚口張開、口腔底部下降使體積擴大、壓力降低；此時兩側「鰓蓋膜」受水壓緊閉，富含溶氧 (O₂) 的水由口部單向吸入咽腔。"
+                    },
+                    {
+                        title: "水流通過鰓弓與鰓絲",
+                        desc: "口部閉合、口腔壓縮，推動水流經過梳狀排列的「鰓弓」與紅色的「鰓絲」。鰓絲展開於水中，避免黏結以維持最大接觸面積。"
+                    },
+                    {
+                        title: "鰓小片逆流交換 (Countercurrent)",
+                        desc: "【建議切換上方「逆流交換放大」觀察】鰓小片內的微血管血流方向與水流方向「完全相反」，使全程維持濃度梯度，可吸收水中高達 80% 以上的氧氣！"
+                    },
+                    {
+                        title: "鰓蓋張開排出含 CO₂ 水流",
+                        desc: "完成氣體交換後，血液帶走 O₂ 變為鮮紅充氧血送往全身；溶入大量 CO₂ 的水流則推開「鰓蓋」由後方排出體外，完成單向水流換氣。"
+                    }
+                ]
+            },
+            locust: {
+                category: "陸生節肢動物｜氣管系 (Tracheal System)",
+                subViews: ["腹部氣門與主氣管", "微氣管與組織細胞放大"],
+                feature: "<strong>特別注意：</strong>昆蟲的開放式循環系統（血液/血淋巴）<strong>不負責運輸氧氣</strong>！氣管系統直接分支深入全身，將 O₂ 直接送達每個組織細胞。",
+                steps: [
+                    {
+                        title: "體壁氣門開啟 (Spiracles)",
+                        desc: "蝗蟲胸腹部兩側具有成對的「氣門」，內有瓣膜可控制開閉（減少陸地水分蒸散）。氣門開啟時，外界富含 O₂ 的空氣進入氣管系統。"
+                    },
+                    {
+                        title: "腹部放鬆與氣囊擴張（吸氣）",
+                        desc: "腹部肌肉放鬆使體節舒張，體內縱橫交錯的「氣管」與薄壁「氣囊」擴張，產生負壓協助新鮮空氣深入體內各分支。"
+                    },
+                    {
+                        title: "微氣管末端液體直接氣體交換",
+                        desc: "【可切換「微氣管放大」觀察】氣管不斷分支為極細的「微氣管 (Tracheoles)」，末端充滿少許組織液（維持濕潤），O₂ 溶於液體後直接擴散進入肌肉細胞，不經血液！"
+                    },
+                    {
+                        title: "腹部收縮擠壓排出 CO₂（呼氣）",
+                        desc: "細胞呼吸產生的 CO₂ 逆向擴散回微氣管與主氣管；藉由腹部肌肉收縮壓迫氣囊，將富含 CO₂ 的廢氣經由氣門排出體外。"
+                    }
+                ]
+            },
+            salamander: {
+                category: "兩生類｜肺與濕潤皮膚雙重呼吸",
+                subViews: ["全身肺與皮膚協同", "皮膚黏液與微血管放大"],
+                feature: "<strong>構造演變：</strong>兩生類肺部構造簡單（囊狀、摺皺少、表面積不足），必須依賴<strong>薄而富含黏液腺與微血管網的濕潤皮膚</strong>進行大量氣體交換（皮膚呼吸佔極高比例）。",
+                steps: [
+                    {
+                        title: "鼻孔吸氣與口腔底下降",
+                        desc: "兩生類沒有橫膈膜，採「正壓吞氣式呼吸」。首先口緊閉、外鼻孔張開，口腔底部下降將外界含 O₂ 空氣吸入口腔。"
+                    },
+                    {
+                        title: "正壓壓氣入囊狀肺",
+                        desc: "外鼻孔關閉，口腔底部向上抬升產生正壓，將空氣強行壓入構造簡單的「囊狀肺」，在肺壁微血管進行初步 O₂ / CO₂ 交換。"
+                    },
+                    {
+                        title: "濕潤皮膚黏液層持續氣體交換",
+                        desc: "【可切換「皮膚放大」觀察】山椒魚表皮極薄且有「黏液腺」分泌黏液保持濕潤。空氣或水中的 O₂ 先溶解於表面黏液膜，再擴散進入真皮層密布的微血管網。"
+                    },
+                    {
+                        title: "雙途徑排出二氧化碳 (CO₂)",
+                        desc: "體循環送回的缺氧血中，大量的 CO₂ 透過薄皮膚直接擴散至外界（甚至多於肺部），同時肺部彈性回縮配合鼻孔開啟排出廢氣。"
+                    }
+                ]
+            },
+            plant: {
+                category: "陸生植物｜葉片氣孔與木本莖皮孔",
+                subViews: ["葉片氣孔 (Stomata)", "木本莖皮孔 (Lenticels)"],
+                feature: "<strong>植物無呼吸運動器官：</strong>植物完全依賴擴散作用交換氣體。草本莖與葉靠可調控開關的<strong>氣孔</strong>；木本植物老莖表皮被不透氣木栓層取代，則靠常開的<strong>皮孔</strong>。",
+                steps: [
+                    {
+                        title: "白晝光照：保衛細胞吸水膨脹（氣孔開）",
+                        desc: "白天藍光刺激使鉀離子與水分進入腎形的「保衛細胞」。因內側細胞壁較厚、外側較薄，吸水膨脹時向外彎曲，拉開中央的「氣孔」。"
+                    },
+                    {
+                        title: "白晝氣體交換：吸收 CO₂、釋放 O₂",
+                        desc: "白天葉肉細胞光合作用速率遠大於呼吸作用。大量 CO₂ 由氣孔進入葉肉氣室；產生的 O₂ 與蒸散水氣則由氣孔擴散至大氣。"
+                    },
+                    {
+                        title: "夜晚無光：保衛細胞失水（氣孔關閉或微開）",
+                        desc: "夜晚無光合作用，保衛細胞失水恢復原狀使氣孔縮小關閉以減少水分散失；此時植物僅行呼吸作用，消耗少量 O₂ 並釋出 CO₂。"
+                    },
+                    {
+                        title: "木本莖皮孔：木栓層裂隙常態通氣",
+                        desc: "【自動切換至「木本莖皮孔」視角】木本植物樹皮（周皮木栓層）不透水也不透氣，在表面形成凸起裂隙稱為「皮孔」，內為疏鬆排列的補充細胞，不分日夜讓內部活細胞吸 O₂ 排 CO₂。"
+                    }
+                ]
+            }
+        };
+
+        // DOM 元素快取
+        const els = {
+            viewport: document.getElementById('viewport'),
+            svg: document.getElementById('main-svg'),
+            camGroup: document.getElementById('camera-group'),
+            gridLayer: document.getElementById('grid-layer'),
+            sceneLayer: document.getElementById('scene-layer'),
+            particleLayer: document.getElementById('particle-layer'),
+            labelLayer: document.getElementById('label-layer'),
+            tabsNav: document.getElementById('tabs-nav'),
+            organCategory: document.getElementById('organ-category'),
+            stepCounter: document.getElementById('step-counter'),
+            subviewContainer: document.getElementById('subview-container'),
+            stepDots: document.getElementById('step-dots'),
+            stepNumTitle: document.getElementById('step-num-title'),
+            stepTitle: document.getElementById('step-title'),
+            stepDesc: document.getElementById('step-desc'),
+            featureBox: document.getElementById('feature-box'),
+            btnPrev: document.getElementById('btn-prev'),
+            btnNext: document.getElementById('btn-next'),
+            btnPlayPause: document.getElementById('btn-play-pause'),
+            btnToggleLabels: document.getElementById('btn-toggle-labels'),
+            btnZoomIn: document.getElementById('btn-zoom-in'),
+            btnZoomOut: document.getElementById('btn-zoom-out'),
+            btnZoomReset: document.getElementById('btn-zoom-reset')
+        };
+
+        // 建立 SVG 元素的輔助函式
+        function svgEl(tag, attrs = {}, textContent = null) {
+            const el = document.createElementNS(SVG_NS, tag);
+            for (const [k, v] of Object.entries(attrs)) {
+                el.setAttribute(k, v);
+            }
+            if (textContent !== null) el.textContent = textContent;
+            return el;
+        }
+
+        // 建立統一風格的可隱藏引線標籤
+        function addLabel(targetX, targetY, boxX, boxY, text, borderColor = "#475569") {
+            const g = svgEl('g');
+            const paddingX = 10;
+            const approxWidth = text.length * 13.5 + paddingX * 2;
+            const boxH = 26;
+
+            // 引線與錨點
+            if (targetX !== null && targetY !== null) {
+                g.appendChild(svgEl('line', {
+                    x1: targetX, y1: targetY, x2: boxX, y2: boxY,
+                    class: 'label-line'
+                }));
+                g.appendChild(svgEl('circle', {
+                    cx: targetX, cy: targetY, r: 3.5,
+                    class: 'label-dot'
+                }));
+            }
+
+            // 標籤底框
+            const rect = svgEl('rect', {
+                x: boxX - approxWidth / 2,
+                y: boxY - boxH / 2,
+                width: approxWidth,
+                height: boxH,
+                class: 'label-bg'
+            });
+            rect.style.stroke = borderColor;
+            g.appendChild(rect);
+
+            // 文字
+            g.appendChild(svgEl('text', {
+                x: boxX, y: boxY + 1,
+                class: 'label-text'
+            }, text));
+
+            els.labelLayer.appendChild(g);
+        }
+
+        // 初始化背景細網格
+        function initGrid() {
+            const step = 40;
+            for (let x = -200; x <= SCENE_W + 200; x += step) {
+                els.gridLayer.appendChild(svgEl('line', { x1: x, y1: -200, x2: x, y2: SCENE_H + 200, stroke: '#64748b', 'stroke-width': 0.5 }));
+            }
+            for (let y = -200; y <= SCENE_H + 200; y += step) {
+                els.gridLayer.appendChild(svgEl('line', { x1: -200, y1: y, x2: SCENE_W + 200, y2: y, stroke: '#64748b', 'stroke-width': 0.5 }));
+            }
+        }
+
+        /* =========================================================
+         * ZOOM & PAN 觸控與滑鼠互動控制器
+         * ========================================================= */
+        function resetCamera() {
+            const rect = els.viewport.getBoundingClientRect();
+            if (rect.width === 0 || rect.height === 0) return;
+            const scaleX = rect.width / SCENE_W;
+            const scaleY = rect.height / SCENE_H;
+            const fitScale = Math.min(scaleX, scaleY) * 0.94;
+            state.cam.scale = fitScale;
+            state.cam.x = (rect.width - SCENE_W * fitScale) / 2;
+            state.cam.y = (rect.height - SCENE_H * fitScale) / 2;
+            applyCamera();
+        }
+
+        function applyCamera() {
+            els.camGroup.setAttribute('transform', `translate(${state.cam.x.toFixed(1)}, ${state.cam.y.toFixed(1)}) scale(${state.cam.scale.toFixed(3)})`);
+        }
+
+        function zoomAt(factor, clientX, clientY) {
+            const rect = els.viewport.getBoundingClientRect();
+            const px = clientX !== undefined ? clientX - rect.left : rect.width / 2;
+            const py = clientY !== undefined ? clientY - rect.top : rect.height / 2;
+
+            const minScale = 0.35;
+            const maxScale = 4.5;
+            const newScale = Math.min(maxScale, Math.max(minScale, state.cam.scale * factor));
+            const ratio = newScale / state.cam.scale;
+
+            state.cam.x = px - (px - state.cam.x) * ratio;
+            state.cam.y = py - (py - state.cam.y) * ratio;
+            state.cam.scale = newScale;
+            applyCamera();
+        }
+
+        function initZoomPanEvents() {
+            let pointers = new Map();
+            let lastDist = 0;
+            let lastMid = null;
+
+            els.viewport.addEventListener('pointerdown', (e) => {
+                if (e.target.closest('.floating-tools')) return;
+                els.viewport.setPointerCapture(e.pointerId);
+                pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+                if (pointers.size === 2) {
+                    const pts = Array.from(pointers.values());
+                    lastDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+                    lastMid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+                }
+            });
+
+            els.viewport.addEventListener('pointermove', (e) => {
+                if (!pointers.has(e.pointerId)) return;
+                const prev = pointers.get(e.pointerId);
+                const curr = { x: e.clientX, y: e.clientY };
+                pointers.set(e.pointerId, curr);
+
+                if (pointers.size === 1) {
+                    // 單指平移 Pan
+                    state.cam.x += curr.x - prev.x;
+                    state.cam.y += curr.y - prev.y;
+                    applyCamera();
+                } else if (pointers.size === 2) {
+                    // 雙指捏合縮放 + 平移 Pinch Zoom
+                    const pts = Array.from(pointers.values());
+                    const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+                    const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+                    if (lastDist > 10) {
+                        zoomAt(dist / lastDist, mid.x, mid.y);
+                    }
+                    if (lastMid) {
+                        state.cam.x += mid.x - lastMid.x;
+                        state.cam.y += mid.y - lastMid.y;
+                        applyCamera();
+                    }
+                    lastDist = dist;
+                    lastMid = mid;
+                }
+            });
+
+            const endPointer = (e) => {
+                pointers.delete(e.pointerId);
+                lastDist = 0;
+                lastMid = null;
+            };
+            els.viewport.addEventListener('pointerup', endPointer);
+            els.viewport.addEventListener('pointercancel', endPointer);
+
+            // 滑鼠滾輪縮放
+            els.viewport.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                const factor = e.deltaY < 0 ? 1.12 : 0.89;
+                zoomAt(factor, e.clientX, e.clientY);
+            }, { passive: false });
+
+            window.addEventListener('resize', resetCamera);
+        }
+
+        /* =========================================================
+         * UI 狀態更新與分頁渲染分派
+         * ========================================================= */
+        function updateUI() {
+            const data = TABS_DATA[state.currentTab];
+            const stepInfo = data.steps[state.step];
+
+            // 分頁按鈕樣式
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.tab === state.currentTab);
+            });
+
+            // 面板文字更新
+            els.organCategory.textContent = data.category;
+            els.stepCounter.textContent = `步驟 ${state.step + 1} / ${data.steps.length}`;
+            els.stepNumTitle.textContent = `STEP 0${state.step + 1}`;
+            els.stepTitle.textContent = stepInfo.title;
+            els.stepDesc.textContent = stepInfo.desc;
+            els.featureBox.innerHTML = data.feature;
+
+            // 子視角切換器
+            if (data.subViews && data.subViews.length > 1) {
+                els.subviewContainer.style.display = 'flex';
+                els.subviewContainer.innerHTML = '';
+                data.subViews.forEach((svName, idx) => {
+                    const b = document.createElement('button');
+                    b.className = 'subview-btn' + (state.subView === idx ? ' active' : '');
+                    b.textContent = svName;
+                    b.onclick = () => {
+                        state.subView = idx;
+                        rebuildScene();
+                        updateUI();
+                    };
+                    els.subviewContainer.appendChild(b);
+                });
+            } else {
+                els.subviewContainer.style.display = 'none';
+            }
+
+            // 步驟圓點
+            els.stepDots.innerHTML = '';
+            data.steps.forEach((_, idx) => {
+                const d = document.createElement('div');
+                d.className = 'step-dot' + (state.step === idx ? ' active' : '');
+                d.title = `跳至步驟 ${idx + 1}`;
+                d.onclick = () => setStep(idx);
+                els.stepDots.appendChild(d);
+            });
+        }
+
+        function setStep(newStep) {
+            const data = TABS_DATA[state.currentTab];
+            state.step = (newStep + data.steps.length) % data.steps.length;
+
+            // 智慧聯動子視角：讓使用者在關鍵步驟直接看到對應構造細節
+            if (state.currentTab === 'fish' && state.step === 2) state.subView = 1;
+            else if (state.currentTab === 'fish' && state.step === 0) state.subView = 0;
+
+            if (state.currentTab === 'plant' && state.step === 3) state.subView = 1;
+            else if (state.currentTab === 'plant' && state.step < 3) state.subView = 0;
+
+            rebuildScene();
+            updateUI();
+        }
+
+        /* =========================================================
+         * 四大主題 SVG 場景建構與動態更新
+         * ========================================================= */
+        function rebuildScene() {
+            els.sceneLayer.innerHTML = '';
+            els.particleLayer.innerHTML = '';
+            els.labelLayer.innerHTML = '';
+            state.particles = [];
+
+            if (state.currentTab === 'fish') buildFishScene();
+            else if (state.currentTab === 'locust') buildLocustScene();
+            else if (state.currentTab === 'salamander') buildSalamanderScene();
+            else if (state.currentTab === 'plant') buildPlantScene();
+        }
+
+        /* ---------------------------------------------------------
+         * 1. 魚的鰓 (Fish Gills)
+         * --------------------------------------------------------- */
+        function buildFishScene() {
+            if (state.subView === 0) {
+                // 子視角 0：魚頭橫切面（口部、咽腔、鰓弓、鰓絲、鰓蓋開合）
+                const g = els.sceneLayer;
+
+                // 水環境背景框
+                g.appendChild(svgEl('rect', { x: 40, y: 40, width: 720, height: 440, rx: 18, fill: '#0c1e35', stroke: '#1e3a5f', 'stroke-width': 2 }));
+
+                // 魚頭輪廓上半部
+                g.appendChild(svgEl('path', {
+                    d: "M 130,235 Q 200,105 420,95 L 690,115 L 690,405 L 420,425 Q 210,415 145,315 L 220,295 L 430,330 L 430,190 L 220,225 Z",
+                    fill: '#233854', stroke: '#476b96', 'stroke-width': 3
+                }));
+                // 魚眼
+                g.appendChild(svgEl('circle', { cx: 235, cy: 165, r: 18, fill: '#0f172a', stroke: '#94a3b8', 'stroke-width': 3 }));
+                g.appendChild(svgEl('circle', { cx: 230, cy: 160, r: 5, fill: '#ffffff' }));
+
+                // 口腔內壁通道
+                g.appendChild(svgEl('path', {
+                    d: "M 140,245 Q 290,230 520,175 L 520,345 Q 290,290 145,285 Z",
+                    fill: '#132842'
+                }));
+
+                // 動態下顎群組 (隨步驟 0 開口、步驟 1~3 閉口)
+                const jawGroup = svgEl('g', { id: 'fish-jaw' });
+                jawGroup.appendChild(svgEl('path', {
+                    d: "M 132,272 Q 190,345 290,340 L 275,295 Q 195,295 145,268 Z",
+                    fill: '#2c4668', stroke: '#6085b5', 'stroke-width': 2.5
+                }));
+                g.appendChild(jawGroup);
+
+                // 4 組梳狀鰓弓 + 富含微血管的鰓絲
+                const archPositions = [
+                    { x: 370, y: 195 }, { x: 415, y: 185 }, { x: 460, y: 185 }, { x: 505, y: 195 }
+                ];
+                archPositions.forEach((pos, i) => {
+                    // 扇形鮮紅/紫漸層鰓絲 (Filaments)
+                    for (let f = -4; f <= 4; f++) {
+                        const fy = pos.y + 65 + f * 12;
+                        g.appendChild(svgEl('path', {
+                            d: `M ${pos.x},${pos.y + 65} Q ${pos.x + 38},${fy - 4} ${pos.x + 68},${fy}`,
+                            stroke: 'url(#grad-blood-rl)', 'stroke-width': 5, 'stroke-linecap': 'round', fill: 'none'
+                        }));
+                    }
+                    // 白色軟骨/硬骨鰓弓 (Gill Arch)
+                    g.appendChild(svgEl('ellipse', {
+                        cx: pos.x, cy: pos.y + 65, rx: 10, ry: 56,
+                        fill: '#e2e8f0', stroke: '#64748b', 'stroke-width': 2
+                    }));
+                    // 入鰓缺氧血管 & 出鰓充氧血管點
+                    g.appendChild(svgEl('circle', { cx: pos.x - 3, cy: pos.y + 45, r: 4, fill: '#6366f1' }));
+                    g.appendChild(svgEl('circle', { cx: pos.x + 3, cy: pos.y + 85, r: 4, fill: '#ef4444' }));
+                });
+
+                // 動態兩側鰓蓋 (Operculum) - 上下對稱展示橫切開合
+                const opTop = svgEl('g', { id: 'fish-op-top' });
+                opTop.appendChild(svgEl('path', {
+                    d: "M 340,125 Q 485,115 605,172 L 595,186 Q 475,140 340,145 Z",
+                    fill: '#334e73', stroke: '#7da2ce', 'stroke-width': 2.5
+                }));
+                g.appendChild(opTop);
+
+                const opBot = svgEl('g', { id: 'fish-op-bot' });
+                opBot.appendChild(svgEl('path', {
+                    d: "M 340,395 Q 485,405 605,348 L 595,334 Q 475,380 340,375 Z",
+                    fill: '#334e73', stroke: '#7da2ce', 'stroke-width': 2.5
+                }));
+                g.appendChild(opBot);
+
+                // 水流導引虛線
+                g.appendChild(svgEl('path', {
+                    d: "M 65,260 L 345,260 Q 470,220 650,155",
+                    stroke: '#60a5fa', 'stroke-width': 2.5, 'stroke-dasharray': '7,5', fill: 'none', 'marker-end': 'url(#arrow-water)', opacity: 0.65
+                }));
+                g.appendChild(svgEl('path', {
+                    d: "M 345,260 Q 470,300 650,365",
+                    stroke: '#60a5fa', 'stroke-width': 2.5, 'stroke-dasharray': '7,5', fill: 'none', 'marker-end': 'url(#arrow-water)', opacity: 0.65
+                }));
+
+                // 產生水流氣體粒子
+                for (let i = 0; i < 34; i++) {
+                    state.particles.push({
+                        type: 'fish_flow',
+                        prog: Math.random(),
+                        branch: i % 2 === 0 ? 1 : -1,
+                        offsetY: (Math.random() - 0.5) * 26,
+                        el: svgEl('circle', { r: 4.5, fill: '#00e5ff' })
+                    });
+                    els.particleLayer.appendChild(state.particles[i].el);
+                }
+
+                // 標籤
+                addLabel(135, 260, 115, 195, "口部 (單向進水)", "#60a5fa");
+                addLabel(280, 260, 280, 75, "口腔與咽腔", "#94a3b8");
+                addLabel(415, 215, 405, 75, "鰓弓 (支撐構造)", "#cbd5e1");
+                addLabel(535, 260, 655, 260, "鰓絲 (密布微血管)", "#ef4444");
+                addLabel(575, 165, 635, 85, "鰓蓋 (控制出水)", "#7da2ce");
+
+            } else {
+                // 子視角 1：鰓小片逆流交換機制放大 (Countercurrent Exchange)
+                const g = els.sceneLayer;
+
+                g.appendChild(svgEl('rect', { x: 40, y: 35, width: 720, height: 450, rx: 18, fill: '#0d1b2e', stroke: '#1e3a5f', 'stroke-width': 2 }));
+
+                // 左側鰓弓橫切與入/出鰓動脈
+                g.appendChild(svgEl('rect', { x: 80, y: 110, width: 70, height: 300, rx: 30, fill: '#cbd5e1', stroke: '#64748b', 'stroke-width': 3 }));
+                // 缺氧血管(藍紫)由右往左還是左往右？我們設定：水流【由左向右】，血液【由右向左】清楚展現逆流！
+                g.appendChild(svgEl('path', { d: "M 135,280 L 660,280", stroke: '#475569', 'stroke-width': 22, 'stroke-linecap': 'round' }));
+
+                // 3 片立體排列的半透明鰓小片 (Gill Lamellae)
+                const lamellaeX = [230, 390, 550];
+                lamellaeX.forEach((lx, idx) => {
+                    // 鰓小片薄壁外框
+                    g.appendChild(svgEl('rect', {
+                        x: lx - 55, y: 135, width: 125, height: 150, rx: 22,
+                        fill: 'url(#grad-blood-rl)', opacity: 0.88, stroke: '#f8fafc', 'stroke-width': 2
+                    }));
+                    // 內部微血管網線條 (血液由右往左：缺氧紫藍 -> 充氧鮮紅)
+                    for (let r = 0; r < 3; r++) {
+                        const ry = 168 + r * 40;
+                        g.appendChild(svgEl('path', {
+                            d: `M ${lx + 62},${ry} L ${lx - 46},${ry}`,
+                            stroke: '#ffffff', 'stroke-width': 2, 'stroke-dasharray': '5,4', opacity: 0.55, 'marker-end': 'url(#arrow-blood)'
+                        }));
+                    }
+                });
+
+                // 上方水流大箭頭 (左 -> 右)
+                g.appendChild(svgEl('path', {
+                    d: "M 165,92 L 645,92",
+                    stroke: '#60a5fa', 'stroke-width': 5, 'marker-end': 'url(#arrow-water)'
+                }));
+                // 下方血流大箭頭 (右 -> 左 逆流)
+                g.appendChild(svgEl('path', {
+                    d: "M 645,335 L 165,335",
+                    stroke: 'url(#grad-blood-rl)', 'stroke-width': 6, 'marker-end': 'url(#arrow-blood)'
+                }));
+
+                // 底部逆流氧分壓梯度數據圖卡
+                g.appendChild(svgEl('rect', { x: 155, y: 372, width: 505, height: 88, rx: 10, fill: '#152338', stroke: '#334155' }));
+                const pctCols = [
+                    { x: 215, w: "100%", b: "85%" },
+                    { x: 350, w: "70%", b: "55%" },
+                    { x: 485, w: "40%", b: "25%" },
+                    { x: 605, w: "15%", b: "5%" }
+                ];
+                g.appendChild(svgEl('text', { x: 170, y: 403, fill: '#60a5fa', 'font-size': 13, 'font-weight': 'bold' }, "水中 O₂:"));
+                g.appendChild(svgEl('text', { x: 170, y: 440, fill: '#f87171', 'font-size': 13, 'font-weight': 'bold' }, "血液 O₂:"));
+                pctCols.forEach(c => {
+                    g.appendChild(svgEl('text', { x: c.x + 35, y: 403, fill: '#00e5ff', 'font-size': 14, 'font-weight': 'bold' }, c.w));
+                    g.appendChild(svgEl('text', { x: c.x + 35, y: 440, fill: '#fca5a5', 'font-size': 14, 'font-weight': 'bold' }, c.b));
+                    // 垂直 O2 擴散小箭頭 (全程水 > 血)
+                    g.appendChild(svgEl('line', { x1: c.x + 50, y1: 408, x2: c.x + 50, y2: 426, stroke: '#00e5ff', 'stroke-width': 2, 'marker-end': 'url(#arrow-o2)' }));
+                });
+
+                // 逆流交換動態粒子 (水流 O2 由左往右並滲入鰓小片；CO2 釋出)
+                for (let i = 0; i < 32; i++) {
+                    const isO2 = i < 22;
+                    const pEl = svgEl('circle', { r: isO2 ? 4.5 : 4, fill: isO2 ? '#00e5ff' : '#ff5722' });
+                    els.particleLayer.appendChild(pEl);
+                    state.particles.push({
+                        type: 'countercurrent',
+                        isO2,
+                        prog: Math.random(),
+                        laneY: 145 + Math.random() * 125,
+                        el: pEl
+                    });
+                }
+
+                addLabel(115, 200, 115, 70, "鰓弓支撐桿", "#cbd5e1");
+                addLabel(400, 92, 400, 58, "水流方向 (左 → 右)", "#60a5fa");
+                addLabel(390, 195, 675, 155, "鰓小片 (單層扁平細胞)", "#f8fafc");
+                addLabel(610, 280, 675, 240, "入鰓缺氧血 (低 O₂)", "#6366f1");
+                addLabel(185, 280, 115, 345, "出鰓充氧血 (高 O₂)", "#ef4444");
+                addLabel(400, 335, 400, 358, "微血管血流方向 (右 → 左 逆流)", "#ef4444");
+            }
+        }
+
+        /* ---------------------------------------------------------
+         * 2. 蝗蟲的氣管 (Locust Tracheal System)
+         * --------------------------------------------------------- */
+        function buildLocustScene() {
+            const g = els.sceneLayer;
+
+            if (state.subView === 0) {
+                // 子視角 0：蝗蟲側面輪廓、氣門、氣囊與分支氣管網
+                g.appendChild(svgEl('rect', { x: 40, y: 40, width: 720, height: 440, rx: 18, fill: '#141e19', stroke: '#2d4739', 'stroke-width': 2 }));
+
+                // 頭部與胸部外骨骼
+                g.appendChild(svgEl('path', {
+                    d: "M 155,215 Q 110,220 105,275 Q 108,325 155,320 L 285,325 L 285,195 Q 210,185 155,215 Z",
+                    fill: '#365314', stroke: '#84cc16', 'stroke-width': 2.5
+                }));
+                // 複眼與觸角
+                g.appendChild(svgEl('ellipse', { cx: 132, cy: 242, rx: 12, ry: 18, fill: '#1e293b', stroke: '#bef264', 'stroke-width': 2 }));
+                g.appendChild(svgEl('path', { d: "M 122,222 Q 95,170 65,155", stroke: '#a3e635', 'stroke-width': 2.5, fill: 'none' }));
+
+                // 動態伸縮腹部群組 (Abdomen)
+                const abdGroup = svgEl('g', { id: 'locust-abdomen' });
+                abdGroup.appendChild(svgEl('path', {
+                    d: "M 282,198 Q 485,175 685,238 Q 715,265 685,295 Q 485,342 282,322 Z",
+                    fill: '#3f6212', stroke: '#84cc16', 'stroke-width': 2.5
+                }));
+                // 腹部體節線
+                [350, 415, 480, 545, 610].forEach(sx => {
+                    abdGroup.appendChild(svgEl('line', { x1: sx, y1: 195, x2: sx, y2: 322, stroke: '#65a30d', 'stroke-width': 1.8, opacity: 0.6 }));
+                });
+
+                // 內部薄壁氣囊 (Air Sacs - 隨呼吸膨脹收縮)
+                const sacGroup = svgEl('g', { id: 'locust-sacs' });
+                [255, 385, 515].forEach(sx => {
+                    sacGroup.appendChild(svgEl('ellipse', {
+                        cx: sx, cy: 235, rx: 38, ry: 18,
+                        fill: 'rgba(186, 230, 253, 0.28)', stroke: '#7dd3fc', 'stroke-width': 1.8
+                    }));
+                });
+                abdGroup.appendChild(sacGroup);
+
+                // 縱走主氣管幹與分支氣管 (Tracheae - 銀白螺旋環紋感)
+                abdGroup.appendChild(svgEl('path', {
+                    d: "M 165,260 L 645,265 M 240,235 L 610,240",
+                    stroke: '#e0f2fe', 'stroke-width': 7, 'stroke-linecap': 'round', fill: 'none', opacity: 0.85
+                }));
+                // 通往肌肉組織的細分支
+                const spiracleX = [255, 325, 390, 455, 520, 585];
+                spiracleX.forEach(px => {
+                    abdGroup.appendChild(svgEl('path', {
+                        d: `M ${px},298 L ${px},262 L ${px - 18},220 M ${px},262 L ${px + 16},218`,
+                        stroke: '#bae6fd', 'stroke-width': 3.2, fill: 'none'
+                    }));
+                });
+
+                // 體側氣門 (Spiracles) 具開合狀態視覺
+                const spiracleOpen = (state.step !== 2);
+                spiracleX.forEach(px => {
+                    abdGroup.appendChild(svgEl('ellipse', {
+                        cx: px, cy: 300, rx: 7, ry: spiracleOpen ? 5 : 1.8,
+                        fill: spiracleOpen ? '#00e5ff' : '#1e293b', stroke: '#fef08a', 'stroke-width': 2
+                    }));
+                });
+
+                g.appendChild(abdGroup);
+
+                // 氣門進出氣體粒子
+                for (let i = 0; i < 30; i++) {
+                    const spIdx = i % spiracleX.length;
+                    const isO2 = (state.step <= 2) ? (i % 4 !== 0) : (i % 4 === 0);
+                    const pEl = svgEl('circle', { r: 4, fill: isO2 ? '#00e5ff' : '#ff5722' });
+                    els.particleLayer.appendChild(pEl);
+                    state.particles.push({
+                        type: 'locust_body',
+                        spX: spiracleX[spIdx],
+                        isO2,
+                        prog: Math.random(),
+                        spreadX: (Math.random() - 0.5) * 36,
+                        el: pEl
+                    });
+                }
+
+                addLabel(132, 242, 115, 130, "頭部與胸部", "#84cc16");
+                addLabel(385, 222, 385, 110, "氣囊 (協助壓縮換氣)", "#7dd3fc");
+                addLabel(495, 263, 625, 135, "主氣管幹 (幾丁質環支撐)", "#e0f2fe");
+                addLabel(390, 302, 390, 415, "氣門 (體壁通氣口・具瓣膜)", "#fef08a");
+                addLabel(585, 230, 650, 395, "腹部體節 (伸縮產生氣流)", "#a3e635");
+
+            } else {
+                // 子視角 1：微氣管與體細胞直接氣體交換放大（強調不經過血液！）
+                const g = els.sceneLayer;
+                g.appendChild(svgEl('rect', { x: 40, y: 40, width: 720, height: 440, rx: 18, fill: '#171f24', stroke: '#334155', 'stroke-width': 2 }));
+
+                // 右側蝗蟲肌肉組織細胞群
+                const cellCoords = [
+                    { y: 105 }, { y: 215 }, { y: 325 }
+                ];
+                cellCoords.forEach(c => {
+                    g.appendChild(svgEl('rect', {
+                        x: 455, y: c.y, width: 245, height: 92, rx: 20,
+                        fill: '#4c1d24', stroke: '#f43f5e', 'stroke-width': 2.5
+                    }));
+                    // 細胞核與粒線體示意
+                    g.appendChild(svgEl('ellipse', { cx: 635, cy: c.y + 46, rx: 22, ry: 14, fill: '#881337', stroke: '#fda4af', 'stroke-width': 1.5 }));
+                    g.appendChild(svgEl('ellipse', { cx: 535, cy: c.y + 32, rx: 12, ry: 7, fill: '#fb923c', opacity: 0.8 }));
+                    g.appendChild(svgEl('ellipse', { cx: 550, cy: c.y + 62, rx: 12, ry: 7, fill: '#fb923c', opacity: 0.8 }));
+                });
+
+                // 左側氣門入口與幾丁質螺旋氣管 (Trachea)
+                g.appendChild(svgEl('rect', { x: 75, y: 120, width: 24, height: 280, fill: '#4d7c0f', rx: 6 }));
+                // 氣門開口
+                g.appendChild(svgEl('rect', { x: 70, y: 225, width: 34, height: 70, fill: '#0f172a' }));
+
+                // 主氣管與三個微氣管分支 (Tracheoles)
+                g.appendChild(svgEl('path', {
+                    d: "M 75,260 L 265,260 M 265,260 Q 350,150 455,150 M 265,260 L 455,260 M 265,260 Q 350,370 455,370",
+                    stroke: '#cbd5e1', 'stroke-width': 26, 'stroke-linecap': 'round', fill: 'none'
+                }));
+                g.appendChild(svgEl('path', {
+                    d: "M 70,260 L 265,260 M 265,260 Q 350,150 458,150 M 265,260 L 458,260 M 265,260 Q 350,370 458,370",
+                    stroke: '#0f172a', 'stroke-width': 18, 'stroke-linecap': 'round', fill: 'none'
+                }));
+
+                // 氣管幾丁質環紋 (防止氣管塌陷)
+                for (let rx = 115; rx <= 245; rx += 22) {
+                    g.appendChild(svgEl('line', { x1: rx, y1: 247, x2: rx, y2: 273, stroke: '#94a3b8', 'stroke-width': 3 }));
+                }
+
+                // 微氣管末端的藍色濕潤液體層 (Tracheolar fluid - 氣體溶解界面)
+                [150, 260, 370].forEach(my => {
+                    g.appendChild(svgEl('ellipse', {
+                        cx: 452, cy: my, rx: 16, ry: 12,
+                        fill: '#38bdf8', opacity: 0.65
+                    }));
+                });
+
+                // 提示框：無微血管參與 O2 運送
+                g.appendChild(svgEl('rect', { x: 115, y: 420, width: 575, height: 38, rx: 8, fill: 'rgba(234, 179, 8, 0.14)', stroke: '#eab308' }));
+                g.appendChild(svgEl('text', { x: 402, y: 444, fill: '#fef08a', 'font-size': 13.5, 'font-weight': 'bold', 'text-anchor': 'middle' },
+                    "⚡ 關鍵觀念：微氣管直接接觸細胞，O₂ 與 CO₂ 不經由昆蟲血液（血淋巴）運輸！"));
+
+                // 氣管直達細胞粒子
+                for (let i = 0; i < 30; i++) {
+                    const branchIdx = i % 3;
+                    const isO2 = i < 18;
+                    const pEl = svgEl('circle', { r: 4.5, fill: isO2 ? '#00e5ff' : '#ff5722' });
+                    els.particleLayer.appendChild(pEl);
+                    state.particles.push({
+                        type: 'tracheole_zoom',
+                        branchIdx,
+                        isO2,
+                        prog: Math.random(),
+                        el: pEl
+                    });
+                }
+
+                addLabel(86, 225, 135, 85, "體壁與氣門開口", "#84cc16");
+                addLabel(180, 248, 225, 165, "氣管 (具螺旋環支撐)", "#cbd5e1");
+                addLabel(360, 175, 330, 85, "微氣管分支", "#94a3b8");
+                addLabel(452, 260, 365, 315, "末端濕潤組織液 (溶解 O₂)", "#60a5fa");
+                addLabel(580, 150, 585, 72, "肌肉組織細胞 (直接獲氧)", "#f43f5e");
+            }
+        }
+
+        /* ---------------------------------------------------------
+         * 3. 山椒魚的肺和濕潤皮膚 (Salamander Lungs & Moist Skin)
+         * --------------------------------------------------------- */
+        function buildSalamanderScene() {
+            const g = els.sceneLayer;
+
+            if (state.subView === 0) {
+                // 子視角 0：山椒魚全身橫切（正壓口腔吞氣、簡單囊狀肺 + 全身濕潤皮膚微血管）
+                g.appendChild(svgEl('rect', { x: 40, y: 40, width: 720, height: 440, rx: 18, fill: '#101d29', stroke: '#1e3a5f', 'stroke-width': 2 }));
+
+                // 外部水藍色濕潤黏液光暈層 (Mucus Layer)
+                g.appendChild(svgEl('path', {
+                    d: "M 95,245 Q 105,175 215,175 L 545,180 Q 675,190 725,245 Q 675,305 545,320 L 225,325 Q 115,325 95,245 Z",
+                    fill: 'none', stroke: '#38bdf8', 'stroke-width': 12, opacity: 0.35
+                }));
+
+                // 山椒魚身體主輪廓
+                g.appendChild(svgEl('path', {
+                    d: "M 98,245 Q 108,180 215,180 L 545,185 Q 670,195 720,245 Q 670,300 545,315 L 225,320 Q 118,320 98,245 Z",
+                    fill: '#292524', stroke: '#a8a29e', 'stroke-width': 2.5
+                }));
+                // 山椒魚皮膚斑紋與眼睛
+                g.appendChild(svgEl('circle', { cx: 148, cy: 212, r: 9, fill: '#090d16', stroke: '#facc15', 'stroke-width': 2 }));
+                [290, 390, 490, 590].forEach(bx => {
+                    g.appendChild(svgEl('ellipse', { cx: bx, cy: 196, rx: 14, ry: 5, fill: '#eab308', opacity: 0.65 }));
+                });
+
+                // 皮下密布微血管網 (Cutaneous Capillaries - 緊貼背部與腹部薄皮膚下)
+                g.appendChild(svgEl('path', {
+                    d: "M 235,188 L 625,194",
+                    stroke: 'url(#grad-blood-lr)', 'stroke-width': 5, 'stroke-dasharray': '10,4', fill: 'none'
+                }));
+                g.appendChild(svgEl('path', {
+                    d: "M 245,312 L 615,307",
+                    stroke: 'url(#grad-blood-lr)', 'stroke-width': 5, 'stroke-dasharray': '10,4', fill: 'none'
+                }));
+
+                // 鼻孔通道 (Nostril) 與動態口腔底 (Buccal Cavity)
+                const nostrilOpen = (state.step === 0 || state.step === 3);
+                g.appendChild(svgEl('circle', {
+                    cx: 115, cy: 222, r: nostrilOpen ? 5.5 : 2,
+                    fill: nostrilOpen ? '#00e5ff' : '#ef4444', stroke: '#f8fafc', 'stroke-width': 1.5
+                }));
+
+                const buccalGroup = svgEl('g', { id: 'sal-buccal' });
+                buccalGroup.appendChild(svgEl('path', {
+                    id: 'sal-buccal-path',
+                    d: "M 115,226 Q 165,235 245,248 Q 175,295 112,262 Z",
+                    fill: '#3f2e3e', stroke: '#f472b6', 'stroke-width': 2
+                }));
+                g.appendChild(buccalGroup);
+
+                // 構造簡單的「囊狀肺」(Simple Sac-like Lung - 中空少皺褶，隨步驟 1 充氣放大)
+                const lungGroup = svgEl('g', { id: 'sal-lung' });
+                lungGroup.appendChild(svgEl('path', {
+                    d: "M 242,248 L 295,248 Q 385,212 495,230 Q 525,250 495,272 Q 385,288 295,256 Z",
+                    fill: 'rgba(244, 63, 94, 0.32)', stroke: 'url(#grad-blood-lr)', 'stroke-width': 5
+                }));
+                g.appendChild(lungGroup);
+
+                // 雙途徑粒子：1. 鼻孔->口腔->囊狀肺  2. 全身濕潤皮膚直接穿透交換
+                for (let i = 0; i < 34; i++) {
+                    const isSkin = i >= 14; // 大量經由皮膚交換
+                    const isO2 = i % 2 === 0;
+                    const pEl = svgEl('circle', { r: 4.2, fill: isO2 ? '#00e5ff' : '#ff5722' });
+                    els.particleLayer.appendChild(pEl);
+                    state.particles.push({
+                        type: isSkin ? 'sal_skin_macro' : 'sal_lung_macro',
+                        isO2,
+                        prog: Math.random(),
+                        skinX: 250 + Math.random() * 350,
+                        topSide: i % 3 !== 0,
+                        el: pEl
+                    });
+                }
+
+                addLabel(115, 220, 125, 115, "外鼻孔 (控制進排氣)", "#f8fafc");
+                addLabel(180, 275, 185, 395, "口腔底 (升降正壓吞氣)", "#f472b6");
+                addLabel(410, 250, 415, 395, "囊狀肺 (皺褶少・表面積小)", "#ef4444");
+                addLabel(445, 178, 435, 95, "濕潤薄皮膚 + 表面黏液層", "#38bdf8");
+                addLabel(565, 192, 645, 125, "皮下微血管網 (主要氣體交換)", "#a855f7");
+
+            } else {
+                // 子視角 1：山椒魚濕潤皮膚橫切微觀放大（黏液腺、黏液水膜、薄表皮、真皮微血管）
+                const g = els.sceneLayer;
+                g.appendChild(svgEl('rect', { x: 40, y: 40, width: 720, height: 440, rx: 18, fill: '#0e1926', stroke: '#1e3a5f', 'stroke-width': 2 }));
+
+                // 1. 外界空氣層標示 (y: 40 ~ 165)
+                g.appendChild(svgEl('text', { x: 105, y: 82, fill: '#94a3b8', 'font-size': 14, 'font-weight': 'bold' }, "外界潮濕空氣 / 水環境"));
+
+                // 2. 表面濕潤黏液膜 (Mucus Film, y: 165 ~ 200)
+                g.appendChild(svgEl('rect', {
+                    x: 70, y: 165, width: 660, height: 35, rx: 8,
+                    fill: 'rgba(56, 189, 248, 0.35)', stroke: '#38bdf8', 'stroke-width': 2
+                }));
+
+                // 3. 極薄無角質化活表皮層 (Thin Epidermis, y: 200 ~ 252)
+                g.appendChild(svgEl('rect', { x: 70, y: 200, width: 660, height: 52, fill: '#44403c', stroke: '#78716c', 'stroke-width': 2 }));
+                for (let cx = 95; cx < 710; cx += 52) {
+                    if (Math.abs(cx - 395) < 35) continue; // 留給黏液腺開口
+                    g.appendChild(svgEl('rect', { x: cx - 22, y: 206, width: 44, height: 40, rx: 8, fill: '#57534e', stroke: '#a8a29e' }));
+                    g.appendChild(svgEl('circle', { cx: cx, cy: 226, r: 6, fill: '#292524' }));
+                }
+
+                // 4. 真皮層與瓶狀「黏液腺」(Mucous Gland, 中央分泌黏液至表面)
+                g.appendChild(svgEl('rect', { x: 70, y: 252, width: 660, height: 205, rx: 8, fill: '#292524' }));
+                g.appendChild(svgEl('path', {
+                    d: "M 382,200 L 382,258 Q 340,285 352,332 Q 395,365 438,332 Q 450,285 408,258 L 408,200 Z",
+                    fill: '#0ea5e9', fillOpacity: 0.35, stroke: '#7dd3fc', 'stroke-width': 2.5
+                }));
+
+                // 5. 緊貼表皮下方的微血管橫向網 (缺氧血 -> 充氧血)
+                g.appendChild(svgEl('path', {
+                    d: "M 95,390 L 695,390",
+                    stroke: 'url(#grad-blood-lr)', 'stroke-width': 32, 'stroke-linecap': 'round'
+                }));
+                // 紅血球示意
+                [160, 280, 410, 540, 650].forEach((rx, idx) => {
+                    const rColor = idx < 2 ? '#818cf8' : (idx === 2 ? '#c084fc' : '#f87171');
+                    g.appendChild(svgEl('ellipse', { cx: rx, cy: 390, rx: 14, ry: 8, fill: rColor }));
+                });
+
+                // 氣體先溶解於黏液、再擴散入微血管粒子
+                for (let i = 0; i < 32; i++) {
+                    const isO2 = i < 18;
+                    const pEl = svgEl('circle', { r: 4.8, fill: isO2 ? '#00e5ff' : '#ff5722' });
+                    els.particleLayer.appendChild(pEl);
+                    state.particles.push({
+                        type: 'sal_skin_zoom',
+                        isO2,
+                        xBase: isO2 ? (115 + (i % 9) * 62) : (145 + (i % 8) * 68),
+                        prog: Math.random(),
+                        el: pEl
+                    });
+                }
+
+                addLabel(220, 182, 220, 118, "表面黏液層 (保持濕潤以溶解 O₂)", "#38bdf8");
+                addLabel(395, 305, 555, 295, "黏液腺 (持續分泌黏液)", "#7dd3fc");
+                addLabel(195, 226, 175, 295, "薄表皮層 (無厚角質阻擋)", "#a8a29e");
+                addLabel(150, 390, 165, 445, "缺氧血流入", "#6366f1");
+                addLabel(640, 390, 630, 445, "充氧血流出", "#ef4444");
+            }
+        }
+
+        /* ---------------------------------------------------------
+         * 4. 植物的氣孔與莖上皮孔 (Plant Stomata & Lenticels)
+         * --------------------------------------------------------- */
+        function buildPlantScene() {
+            const g = els.sceneLayer;
+
+            if (state.subView === 0) {
+                // 子視角 0：葉片橫切面 + 下表皮氣孔放大（支援日/夜膨壓開關動態）
+                const isNight = (state.step === 2);
+                const bgFill = isNight ? '#090d1a' : '#10231c';
+                g.appendChild(svgEl('rect', { x: 40, y: 40, width: 720, height: 440, rx: 18, fill: bgFill, stroke: '#2d4f3e', 'stroke-width': 2 }));
+
+                // 右上日夜狀態圖示
+                if (isNight) {
+                    g.appendChild(svgEl('circle', { cx: 695, cy: 90, r: 22, fill: '#fef08a' }));
+                    g.appendChild(svgEl('circle', { cx: 705, cy: 82, r: 20, fill: bgFill }));
+                } else {
+                    g.appendChild(svgEl('circle', { cx: 695, cy: 90, r: 22, fill: '#facc15', stroke: '#fde047', 'stroke-width': 4 }));
+                }
+
+                // 左半部：葉片橫切面 (角質層、上表皮、柵狀組織、海綿組織氣室、下表皮氣孔)
+                // 角質層 + 上表皮
+                g.appendChild(svgEl('rect', { x: 75, y: 85, width: 350, height: 8, fill: '#fde047', opacity: 0.55 }));
+                g.appendChild(svgEl('rect', { x: 75, y: 93, width: 350, height: 26, fill: '#65a30d', stroke: '#a3e635' }));
+
+                // 柵狀葉肉組織 (富含葉綠體)
+                for (let px = 85; px < 415; px += 34) {
+                    g.appendChild(svgEl('rect', { x: px, y: 122, width: 28, height: 74, rx: 8, fill: '#15803d', stroke: '#4ade80', 'stroke-width': 1.5 }));
+                }
+                // 海綿組織與大型細胞間隙(氣室 Air Space)
+                const spongyCells = [
+                    { x: 110, y: 230 }, { x: 185, y: 218 }, { x: 315, y: 225 }, { x: 385, y: 245 },
+                    { x: 135, y: 285 }, { x: 345, y: 292 }
+                ];
+                spongyCells.forEach(sc => {
+                    g.appendChild(svgEl('ellipse', { cx: sc.x, cy: sc.y, rx: 26, ry: 18, fill: '#166534', stroke: '#4ade80', 'stroke-width': 1.5 }));
+                });
+
+                // 下表皮（中央留出氣孔通道 x: 225 ~ 275）
+                g.appendChild(svgEl('rect', { x: 75, y: 332, width: 142, height: 26, fill: '#65a30d', stroke: '#a3e635' }));
+                g.appendChild(svgEl('rect', { x: 283, y: 332, width: 142, height: 26, fill: '#65a30d', stroke: '#a3e635' }));
+
+                // 下表皮兩顆保衛細胞橫切 (隨氣孔開合改變間距)
+                const poreOpen = !isNight;
+                const gap = poreOpen ? 16 : 2;
+                g.appendChild(svgEl('ellipse', { cx: 250 - gap - 10, cy: 345, rx: 13, ry: 15, fill: '#22c55e', stroke: '#bbf7d0', 'stroke-width': 2.5 }));
+                g.appendChild(svgEl('ellipse', { cx: 250 + gap + 10, cy: 345, rx: 13, ry: 15, fill: '#22c55e', stroke: '#bbf7d0', 'stroke-width': 2.5 }));
+
+                // 右半部：保衛細胞正面放大特寫框 (清楚呈現內厚外薄細胞壁與葉綠體)
+                g.appendChild(svgEl('rect', { x: 465, y: 145, width: 265, height: 285, rx: 16, fill: 'rgba(15, 23, 42, 0.72)', stroke: '#475569', 'stroke-dasharray': '5,4' }));
+                g.appendChild(svgEl('text', { x: 597, y: 173, fill: '#cbd5e1', 'font-size': 13, 'font-weight': 'bold', 'text-anchor': 'middle' },
+                    poreOpen ? "【正面特寫】吸水膨脹 → 氣孔張開" : "【正面特寫】失水鬆弛 → 氣孔關閉"));
+
+                const curve = poreOpen ? 34 : 5;
+                // 左腎形保衛細胞
+                g.appendChild(svgEl('path', {
+                    d: `M 595,205 C ${520 - curve * 0.5},205 ${520 - curve * 0.5},375 595,375 C ${595 - curve},335 ${595 - curve},245 595,205 Z`,
+                    fill: '#15803d', stroke: '#86efac', 'stroke-width': 2.5
+                }));
+                // 右腎形保衛細胞
+                g.appendChild(svgEl('path', {
+                    d: `M 599,205 C ${674 + curve * 0.5},205 ${674 + curve * 0.5},375 599,375 C ${599 + curve},335 ${599 + curve},245 599,205 Z`,
+                    fill: '#15803d', stroke: '#86efac', 'stroke-width': 2.5
+                }));
+                // 內側較厚的細胞壁標示
+                g.appendChild(svgEl('path', {
+                    d: `M 595,215 C ${595 - curve},248 ${595 - curve},332 595,365`,
+                    stroke: '#dcfce7', 'stroke-width': 5, fill: 'none', 'stroke-linecap': 'round'
+                }));
+                g.appendChild(svgEl('path', {
+                    d: `M 599,215 C ${599 + curve},248 ${599 + curve},332 599,365`,
+                    stroke: '#dcfce7', 'stroke-width': 5, fill: 'none', 'stroke-linecap': 'round'
+                }));
+                // 保衛細胞內的葉綠體與細胞核
+                [-32, 32].forEach(dx => {
+                    const shift = dx < 0 ? -curve * 0.35 : curve * 0.35;
+                    g.appendChild(svgEl('circle', { cx: 597 + dx + shift, cy: 290, r: 8, fill: '#064e3b', stroke: '#a7f3d0' }));
+                    [-42, -20, 22, 44].forEach(dy => {
+                        g.appendChild(svgEl('ellipse', { cx: 597 + dx * 0.85 + shift, cy: 290 + dy, rx: 5, ry: 3.5, fill: '#4ade80' }));
+                    });
+                });
+
+                // 氣孔氣體交換粒子 (白天 CO2 進、O2 出；夜晚微開時少量 O2 進、CO2 出)
+                const count = isNight ? 10 : 30;
+                for (let i = 0; i < count; i++) {
+                    const isO2 = i % 2 === 0;
+                    const goingIn = isNight ? isO2 : !isO2; // 白天 CO2 進入、O2 釋出；夜晚相反
+                    const pEl = svgEl('circle', { r: 4.5, fill: isO2 ? '#00e5ff' : '#ff5722' });
+                    els.particleLayer.appendChild(pEl);
+                    state.particles.push({
+                        type: 'stomata_flow',
+                        goingIn,
+                        prog: Math.random(),
+                        spreadX: (Math.random() - 0.5) * 120,
+                        el: pEl
+                    });
+                }
+
+                addLabel(240, 89, 240, 62, "角質層與上表皮 (防止水分散失)", "#fde047");
+                addLabel(150, 155, 165, 198, "葉肉柵狀組織", "#4ade80");
+                addLabel(250, 265, 250, 265, "葉肉氣室", "#94a3b8");
+                addLabel(250, 348, 250, 425, "氣孔 (氣體與水氣通道)", "#00e5ff");
+                addLabel(545, 290, 597, 452, "保衛細胞 (具葉綠體・內壁厚外壁薄)", "#86efac");
+
+            } else {
+                // 子視角 1：木本植物莖上的「皮孔」(Lenticel) 橫切面放大
+                const g = els.sceneLayer;
+                g.appendChild(svgEl('rect', { x: 40, y: 40, width: 720, height: 440, rx: 18, fill: '#1c1917', stroke: '#57534e', 'stroke-width': 2 }));
+
+                // 下層：莖內部綠皮層活細胞 (Cortex Parenchyma - 需進行呼吸作用吸 O2 排 CO2)
+                g.appendChild(svgEl('rect', { x: 75, y: 295, width: 650, height: 150, rx: 12, fill: '#14532d', stroke: '#22c55e', 'stroke-width': 2 }));
+                for (let cx = 105; cx <= 695; cx += 58) {
+                    for (let cy = 325; cy <= 415; cy += 42) {
+                        g.appendChild(svgEl('ellipse', { cx, cy, rx: 24, ry: 16, fill: '#166534', stroke: '#4ade80' }));
+                    }
+                }
+
+                // 木栓形成層 (Cork Cambium)
+                g.appendChild(svgEl('rect', { x: 75, y: 272, width: 650, height: 22, fill: '#a16207' }));
+
+                // 左右兩側：致密不透水、不透氣的「木栓層 / 樹皮」(Cork Layer)
+                // 左側木栓層向中央火山口狀隆起裂開
+                g.appendChild(svgEl('path', {
+                    d: "M 75,185 L 245,185 Q 305,175 330,138 L 342,272 L 75,272 Z",
+                    fill: '#5c3a21', stroke: '#a8764c', 'stroke-width': 2.5
+                }));
+                // 右側木栓層隆起裂開
+                g.appendChild(svgEl('path', {
+                    d: "M 725,185 L 555,185 Q 495,175 470,138 L 458,272 L 725,272 Z",
+                    fill: '#5c3a21', stroke: '#a8764c', 'stroke-width': 2.5
+                }));
+                // 木栓死細胞磚牆紋理
+                [120, 185, 250, 550, 615, 675].forEach(bx => {
+                    g.appendChild(svgEl('rect', { x: bx - 24, y: 205, width: 46, height: 22, fill: '#452714', stroke: '#7c4d2b' }));
+                    g.appendChild(svgEl('rect', { x: bx - 24, y: 235, width: 46, height: 22, fill: '#452714', stroke: '#7c4d2b' }));
+                });
+
+                // 中央皮孔裂隙內的「補充細胞」(Complementary cells - 圓球狀疏鬆排列，具大量細胞間隙供通氣)
+                const compCells = [
+                    { x: 365, y: 252 }, { x: 400, y: 256 }, { x: 435, y: 250 },
+                    { x: 355, y: 218 }, { x: 392, y: 222 }, { x: 428, y: 216 },
+                    { x: 372, y: 185 }, { x: 415, y: 182 }, { x: 395, y: 155 }
+                ];
+                compCells.forEach(cc => {
+                    g.appendChild(svgEl('circle', {
+                        cx: cc.x, cy: cc.y, r: 12,
+                        fill: '#ca8a04', stroke: '#fef08a', 'stroke-width': 1.5
+                    }));
+                });
+
+                // 皮孔常態雙向擴散粒子 (木本莖活細胞全天呼吸：O2 進入皮孔、CO2 由皮孔排出)
+                for (let i = 0; i < 28; i++) {
+                    const isO2 = i % 2 === 0;
+                    const pEl = svgEl('circle', { r: 4.5, fill: isO2 ? '#00e5ff' : '#ff5722' });
+                    els.particleLayer.appendChild(pEl);
+                    state.particles.push({
+                        type: 'lenticel_flow',
+                        isO2, // O2 往下進入活皮層；CO2 往上排出至大氣
+                        prog: Math.random(),
+                        laneOffset: (Math.random() - 0.5) * 65,
+                        el: pEl
+                    });
+                }
+
+                addLabel(400, 142, 400, 78, "皮孔 (木本莖表皮隆起裂隙・常開無法關閉)", "#fef08a");
+                addLabel(185, 225, 175, 130, "木栓層 (死細胞・不透氣不透水)", "#a8764c");
+                addLabel(415, 215, 605, 130, "疏鬆補充細胞 (具通氣間隙)", "#fde047");
+                addLabel(580, 283, 625, 283, "木栓形成層", "#eab308");
+                addLabel(400, 375, 400, 455, "莖內皮層活細胞 (行呼吸作用吸 O₂ 排 CO₂)", "#4ade80");
+            }
+        }
+
+        /* =========================================================
+         * 連續動態引擎 (requestAnimationFrame)
+         * 同步驅動器官運動與 O2 / CO2 分子粒子流
+         * ========================================================= */
+        let lastFrameTs = performance.now();
+
+        function animateLoop(now) {
+            const dt = Math.min(0.05, (now - lastFrameTs) / 1000);
+            lastFrameTs = now;
+
+            if (state.isPlaying) {
+                state.time += dt;
+                updateOrganMotion();
+                updateParticles(dt);
+            }
+
+            requestAnimationFrame(animateLoop);
+        }
+
+        // 根據當前分頁與步驟，平滑驅動構造機械運動
+        function updateOrganMotion() {
+            const t = state.time;
+
+            if (state.currentTab === 'fish' && state.subView === 0) {
+                const jaw = document.getElementById('fish-jaw');
+                const opTop = document.getElementById('fish-op-top');
+                const opBot = document.getElementById('fish-op-bot');
+                if (!jaw || !opTop || !opBot) return;
+
+                // 依步驟呈現明確角度，並疊加微幅呼吸律動
+                let jawAngle = 0;
+                let opAngle = 0;
+                if (state.step === 0) {
+                    jawAngle = -18 + Math.sin(t * 4) * 3; // 口大開吸水
+                    opAngle = 0;                          // 鰓蓋緊閉
+                } else if (state.step === 1 || state.step === 2) {
+                    jawAngle = -2;                        // 口閉合壓水過鰓
+                    opAngle = 4 + Math.sin(t * 4) * 2;
+                } else {
+                    jawAngle = 0;
+                    opAngle = 15 + Math.sin(t * 4) * 3;   // 鰓蓋張開排水
+                }
+                jaw.setAttribute('transform', `rotate(${jawAngle}, 275, 310)`);
+                opTop.setAttribute('transform', `rotate(${-opAngle}, 345, 135)`);
+                opBot.setAttribute('transform', `rotate(${opAngle}, 345, 385)`);
+            }
+
+            if (state.currentTab === 'locust' && state.subView === 0) {
+                const abd = document.getElementById('locust-abdomen');
+                const sacs = document.getElementById('locust-sacs');
+                if (!abd || !sacs) return;
+
+                let scaleY = 1;
+                let sacScale = 1;
+                if (state.step === 1) {
+                    // 吸氣擴張
+                    scaleY = 1.06 + Math.sin(t * 3.5) * 0.03;
+                    sacScale = 1.18 + Math.sin(t * 3.5) * 0.06;
+                } else if (state.step === 3) {
+                    // 呼氣收縮擠壓
+                    scaleY = 0.90 + Math.sin(t * 3.5) * 0.03;
+                    sacScale = 0.76 + Math.sin(t * 3.5) * 0.05;
+                } else {
+                    scaleY = 1 + Math.sin(t * 2.5) * 0.025;
+                    sacScale = 1 + Math.sin(t * 2.5) * 0.05;
+                }
+                abd.setAttribute('transform', `translate(0, ${(1 - scaleY) * 260}) scale(1, ${scaleY})`);
+                sacs.setAttribute('transform', `translate(0, ${(1 - sacScale) * 235}) scale(1, ${sacScale})`);
+            }
+
+            if (state.currentTab === 'salamander' && state.subView === 0) {
+                const buccalPath = document.getElementById('sal-buccal-path');
+                const lung = document.getElementById('sal-lung');
+                if (!buccalPath || !lung) return;
+
+                // 步驟 0：口腔底下降吸氣；步驟 1：口腔底抬升將氣壓入囊狀肺
+                let floorY = 295;
+                let lungScale = 1;
+                if (state.step === 0) {
+                    floorY = 316 + Math.sin(t * 4) * 4;
+                    lungScale = 0.88;
+                } else if (state.step === 1) {
+                    floorY = 266 + Math.sin(t * 4) * 3;
+                    lungScale = 1.15 + Math.sin(t * 4) * 0.04;
+                } else {
+                    floorY = 288 + Math.sin(t * 3) * 5;
+                    lungScale = 1.0 + Math.sin(t * 3) * 0.04;
+                }
+                buccalPath.setAttribute('d', `M 115,226 Q 165,235 245,248 Q 175,${floorY} 112,262 Z`);
+                lung.setAttribute('transform', `translate(${(1 - lungScale) * 295}, ${(1 - lungScale) * 250}) scale(${lungScale})`);
+            }
+        }
+
+        // 更新所有氣體分子位置與顏色狀態
+        function updateParticles(dt) {
+            const speed = 0.28;
+
+            for (const p of state.particles) {
+                p.prog += dt * speed;
+                if (p.prog > 1) p.prog -= 1;
+                const u = p.prog;
+
+                if (p.type === 'fish_flow') {
+                    // 根據步驟調整粒子活動區間，同時保持流暢動態
+                    let x, y;
+                    if (u < 0.48) {
+                        const k = u / 0.48;
+                        x = 65 + k * 335;
+                        y = 260 + p.offsetY * 0.6;
+                        p.el.setAttribute('fill', '#00e5ff'); // 富含 O2 進水
+                    } else {
+                        const k = (u - 0.48) / 0.52;
+                        x = 400 + k * 255;
+                        y = 260 + p.branch * (k * 108) + p.offsetY * 0.4;
+                        // 經過鰓絲後，部分轉為排出的 CO2 (橘紅)
+                        p.el.setAttribute('fill', (p.branch > 0 ? k > 0.25 : k > 0.35) ? '#ff5722' : '#38bdf8');
+                    }
+                    p.el.setAttribute('cx', x);
+                    p.el.setAttribute('cy', y);
+
+                } else if (p.type === 'countercurrent') {
+                    if (p.isO2) {
+                        // 水中 O2 由左往右流，並往下擴散進入逆流微血管
+                        const x = 165 + u * 450;
+                        const y = p.laneY + Math.pow(u, 1.6) * 85;
+                        p.el.setAttribute('cx', x);
+                        p.el.setAttribute('cy', y);
+                        p.el.setAttribute('opacity', u > 0.88 ? (1 - u) * 8 : 1);
+                    } else {
+                        // 血液中的 CO2 釋出至水流向右帶走
+                        const x = 220 + u * 430;
+                        const y = 275 - u * 115;
+                        p.el.setAttribute('cx', x);
+                        p.el.setAttribute('cy', y);
+                    }
+
+                } else if (p.type === 'locust_body') {
+                    // 氣門 <-> 主氣管 <-> 組織
+                    const k = p.isO2 ? u : (1 - u);
+                    const x = p.spX + k * p.spreadX;
+                    const y = 335 - k * 110;
+                    p.el.setAttribute('cx', x);
+                    p.el.setAttribute('cy', y);
+                    p.el.setAttribute('opacity', Math.sin(u * Math.PI));
+
+                } else if (p.type === 'tracheole_zoom') {
+                    const targetYs = [150, 260, 370];
+                    const ty = targetYs[p.branchIdx];
+                    const k = p.isO2 ? u : (1 - u);
+                    let x, y;
+                    if (k < 0.42) {
+                        x = 75 + (k / 0.42) * 190;
+                        y = 260;
+                    } else {
+                        const b = (k - 0.42) / 0.58;
+                        x = 265 + b * 255;
+                        y = 260 + (ty - 260) * Math.sin(b * Math.PI * 0.5);
+                    }
+                    p.el.setAttribute('cx', x);
+                    p.el.setAttribute('cy', y);
+
+                } else if (p.type === 'sal_lung_macro') {
+                    const k = p.isO2 ? u : (1 - u);
+                    let x, y;
+                    if (k < 0.4) {
+                        x = 105 + (k / 0.4) * 145;
+                        y = 205 + (k / 0.4) * 45;
+                    } else {
+                        const b = (k - 0.4) / 0.6;
+                        x = 250 + b * 230;
+                        y = 250 + Math.sin(b * 6) * 12;
+                    }
+                    p.el.setAttribute('cx', x);
+                    p.el.setAttribute('cy', y);
+
+                } else if (p.type === 'sal_skin_macro') {
+                    // 穿透濕潤皮膚與微血管
+                    const k = p.isO2 ? u : (1 - u);
+                    const x = p.skinX;
+                    const y = p.topSide ? (142 + k * 52) : (355 - k * 48);
+                    p.el.setAttribute('cx', x);
+                    p.el.setAttribute('cy', y);
+                    p.el.setAttribute('opacity', Math.sin(u * Math.PI));
+
+                } else if (p.type === 'sal_skin_zoom') {
+                    // 外界 (110) <-> 黏液膜 (180) <-> 薄表皮 (225) <-> 微血管 (385)
+                    const k = p.isO2 ? u : (1 - u);
+                    const x = p.xBase + Math.sin(k * 5) * 8;
+                    const y = 105 + k * 280;
+                    p.el.setAttribute('cx', x);
+                    p.el.setAttribute('cy', y);
+                    p.el.setAttribute('opacity', Math.sin(u * Math.PI));
+
+                } else if (p.type === 'stomata_flow') {
+                    // 氣孔內外擴散 (x=250, y=345 為氣孔中心)
+                    const k = p.goingIn ? u : (1 - u);
+                    let x, y;
+                    if (k < 0.5) {
+                        const b = k / 0.5;
+                        x = 250 + (1 - b) * p.spreadX * 0.7;
+                        y = 435 - b * 90;
+                    } else {
+                        const b = (k - 0.5) / 0.5;
+                        x = 250 + b * p.spreadX;
+                        y = 345 - b * 145;
+                    }
+                    p.el.setAttribute('cx', x);
+                    p.el.setAttribute('cy', y);
+                    p.el.setAttribute('opacity', Math.sin(u * Math.PI));
+
+                } else if (p.type === 'lenticel_flow') {
+                    // 皮孔裂隙 (x=395, y=140 ~ 360)
+                    const k = p.isO2 ? u : (1 - u);
+                    const spreadFactor = Math.abs(k - 0.45) * 1.4;
+                    const x = 395 + p.laneOffset * (0.35 + spreadFactor);
+                    const y = 95 + k * 275;
+                    p.el.setAttribute('cx', x);
+                    p.el.setAttribute('cy', y);
+                    p.el.setAttribute('opacity', Math.sin(u * Math.PI));
+                }
+            }
+        }
+
+        /* =========================================================
+         * 事件綁定與啟動初始化
+         * ========================================================= */
+        function bindControls() {
+            // 分頁切換
+            els.tabsNav.addEventListener('click', (e) => {
+                const btn = e.target.closest('.tab-btn');
+                if (!btn) return;
+                state.currentTab = btn.dataset.tab;
+                state.subView = 0;
+                state.step = 0;
+                rebuildScene();
+                updateUI();
+                resetCamera();
+            });
+
+            // 上一步 / 下一步 / 播放暫停
+            els.btnPrev.addEventListener('click', () => setStep(state.step - 1));
+            els.btnNext.addEventListener('click', () => setStep(state.step + 1));
+            els.btnPlayPause.addEventListener('click', () => {
+                state.isPlaying = !state.isPlaying;
+                els.btnPlayPause.textContent = state.isPlaying ? '⏸' : '▶';
+            });
+
+            // 文字標籤 Toggle 顯示/隱藏
+            els.btnToggleLabels.addEventListener('click', () => {
+                state.showLabels = !state.showLabels;
+                document.body.classList.toggle('hide-labels', !state.showLabels);
+                els.btnToggleLabels.classList.toggle('active-toggle', state.showLabels);
+                els.btnToggleLabels.innerHTML = state.showLabels ? '<span>🏷️ 標籤: 開</span>' : '<span>🏷️ 標籤: 關</span>';
+            });
+
+            // 縮放與重置視角按鈕
+            els.btnZoomIn.addEventListener('click', () => zoomAt(1.25));
+            els.btnZoomOut.addEventListener('click', () => zoomAt(0.8));
+            els.btnZoomReset.addEventListener('click', resetCamera);
+
+            // 鍵盤左右鍵支援 Step 控制
+            window.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowRight') setStep(state.step + 1);
+                else if (e.key === 'ArrowLeft') setStep(state.step - 1);
+            });
+        }
+
+        // 啟動模擬器
+        function init() {
+            initGrid();
+            initZoomPanEvents();
+            bindControls();
+            rebuildScene();
+            updateUI();
+            // 等待首次版面計算後置中視角
+            requestAnimationFrame(() => {
+                resetCamera();
+                requestAnimationFrame(animateLoop);
+            });
+        }
+
+        init();
+    </script>
+</body>
+
+</html>
