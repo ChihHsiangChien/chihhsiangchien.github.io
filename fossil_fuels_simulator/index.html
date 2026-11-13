@@ -1,0 +1,3295 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>化石燃料的形成 — 互動動態模擬器</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        :root {
+            --bg-main: #090e17;
+            --bg-panel: #111827;
+            --bg-card: #1e293b;
+            --bg-card-hover: #283548;
+            --border-subtle: rgba(148, 163, 184, 0.18);
+            --text-main: #f1f5f9;
+            --text-muted: #94a3b8;
+
+            /* 跨分頁統一視覺色票 (Visual Consistency Palette) */
+            --c-cellulose: #4ade80;
+            /* 纖維素：翠綠 */
+            --c-lignin: #f59e0b;
+            /* 木質素：琥珀木色 */
+            --c-bacteria: #38bdf8;
+            /* 細菌/纖維素酶：青藍 */
+            --c-fungi: #e879f9;
+            /* 白腐真菌/過氧化物酶：紫洋紅 */
+            --c-coal: #334155;
+            /* 煤炭：深炭黑 */
+            --c-coal-glow: #fb923c;
+            /* 煤炭燃燒能量：熾橘 */
+            --c-plankton: #2dd4bf;
+            /* 浮游藻類/矽藻：藍綠 */
+            --c-lipid: #facc15;
+            /* 生物脂質/油母質：金黃 */
+            --c-oil: #b45309;
+            /* 液態石油：深琥珀棕 */
+            --c-gas: #fb7185;
+            /* 天然氣(甲烷)：珊瑚紅 */
+            --c-water: #0284c7;
+            /* 水體：深海藍 */
+            --c-rock-source: #475569;
+            /* 源岩/頁岩 */
+            --c-rock-cap: #1e293b;
+            /* 緻密蓋層 */
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+            background: var(--bg-main);
+            color: var(--text-main);
+            height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* 頂部標題與全域控制列 */
+        header {
+            background: rgba(17, 24, 39, 0.95);
+            border-bottom: 1px solid var(--border-subtle);
+            padding: 8px 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            flex-shrink: 0;
+            z-index: 30;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 0;
+        }
+
+        .brand-icon {
+            width: 34px;
+            height: 34px;
+            border-radius: 9px;
+            background: linear-gradient(135deg, var(--c-lignin), var(--c-gas));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            flex-shrink: 0;
+            box-shadow: 0 0 14px rgba(245, 158, 11, 0.35);
+        }
+
+        .brand-title {
+            font-size: 1.02rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .brand-sub {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            display: block;
+        }
+
+        .global-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .btn-pill {
+            background: var(--bg-card);
+            color: var(--text-main);
+            border: 1px solid var(--border-subtle);
+            border-radius: 999px;
+            padding: 7px 13px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.18s ease;
+            min-height: 36px;
+        }
+
+        .btn-pill:hover {
+            background: var(--bg-card-hover);
+        }
+
+        .btn-pill.active {
+            background: rgba(56, 189, 248, 0.18);
+            border-color: #38bdf8;
+            color: #bae6fd;
+        }
+
+        /* 分頁導覽列 */
+        .tabs-bar {
+            display: flex;
+            gap: 6px;
+            padding: 6px 14px;
+            background: #0d1422;
+            border-bottom: 1px solid var(--border-subtle);
+            overflow-x: auto;
+            scrollbar-width: none;
+            flex-shrink: 0;
+        }
+
+        .tabs-bar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .tab-btn {
+            background: transparent;
+            color: var(--text-muted);
+            border: 1px solid transparent;
+            border-radius: 10px;
+            padding: 8px 14px;
+            font-size: 0.86rem;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            transition: all 0.2s;
+            min-height: 40px;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-main);
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        .tab-btn.active {
+            background: var(--bg-card);
+            color: #fff;
+            border-color: rgba(245, 158, 11, 0.5);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+        }
+
+        .tab-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        /* 主工作區 */
+        main {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .tab-view {
+            display: none;
+            width: 100%;
+            height: 100%;
+        }
+
+        .tab-view.active {
+            display: flex;
+            flex-direction: row;
+        }
+
+        /* 左側/上方互動模擬視窗 */
+        .sim-stage {
+            flex: 1;
+            position: relative;
+            background: #070b12;
+            overflow: hidden;
+            touch-action: none;
+            /* 確保雙指縮放與平移流暢 */
+        }
+
+        .sim-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            cursor: grab;
+        }
+
+        .sim-canvas:active {
+            cursor: grabbing;
+        }
+
+        /* 3D 投影標籤層 */
+        .overlay-labels {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        .label-3d {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            background: rgba(15, 23, 42, 0.86);
+            border: 1px solid rgba(148, 163, 184, 0.45);
+            color: #f8fafc;
+            padding: 4px 9px;
+            border-radius: 6px;
+            font-size: 0.76rem;
+            font-weight: 600;
+            white-space: nowrap;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+            transition: opacity 0.15s;
+        }
+
+        /* 視窗內懸浮圖例與縮放按鈕 */
+        .hud-top-left {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            max-width: calc(100% - 20px);
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .legend-chip {
+            background: rgba(15, 23, 42, 0.82);
+            border: 1px solid var(--border-subtle);
+            border-radius: 999px;
+            padding: 4px 10px;
+            font-size: 0.73rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            backdrop-filter: blur(4px);
+            color: #e2e8f0;
+        }
+
+        .swatch {
+            width: 10px;
+            height: 10px;
+            border-radius: 3px;
+            flex-shrink: 0;
+        }
+
+        .hud-bottom-right {
+            position: absolute;
+            bottom: 12px;
+            right: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            z-index: 12;
+        }
+
+        .zoom-box {
+            display: flex;
+            align-items: center;
+            background: rgba(15, 23, 42, 0.9);
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+            overflow: hidden;
+            backdrop-filter: blur(6px);
+        }
+
+        .zoom-btn {
+            background: transparent;
+            color: var(--text-main);
+            border: none;
+            width: 38px;
+            height: 38px;
+            font-size: 1.05rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .zoom-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .zoom-readout {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            padding: 0 6px;
+            min-width: 46px;
+            text-align: center;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .touch-hint {
+            position: absolute;
+            bottom: 14px;
+            left: 12px;
+            background: rgba(15, 23, 42, 0.75);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            padding: 4px 9px;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        /* 右側/下方解說與流程控制面板 */
+        .control-sidebar {
+            width: 390px;
+            background: var(--bg-panel);
+            border-left: 1px solid var(--border-subtle);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            flex-shrink: 0;
+            user-select: text;
+        }
+
+        .step-nav-box {
+            padding: 12px 14px;
+            background: rgba(30, 41, 59, 0.55);
+            border-bottom: 1px solid var(--border-subtle);
+            position: sticky;
+            top: 0;
+            z-index: 5;
+            backdrop-filter: blur(8px);
+        }
+
+        .step-dots {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 10px;
+        }
+
+        .step-pill {
+            flex: 1;
+            height: 32px;
+            border-radius: 8px;
+            border: 1px solid var(--border-subtle);
+            background: var(--bg-card);
+            color: var(--text-muted);
+            font-weight: 700;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.18s;
+        }
+
+        .step-pill.active {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: #090e17;
+            border-color: #fbbf24;
+            box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
+        }
+
+        .step-pill.oil-theme.active {
+            background: linear-gradient(135deg, #2dd4bf, #0284c7);
+            color: #04131d;
+            border-color: #5eead4;
+            box-shadow: 0 0 12px rgba(45, 212, 191, 0.4);
+        }
+
+        .step-btns {
+            display: flex;
+            gap: 8px;
+        }
+
+        .ctrl-btn {
+            flex: 1;
+            min-height: 40px;
+            border-radius: 9px;
+            border: 1px solid var(--border-subtle);
+            background: var(--bg-card);
+            color: var(--text-main);
+            font-size: 0.84rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            transition: background 0.18s;
+        }
+
+        .ctrl-btn:hover:not(:disabled) {
+            background: var(--bg-card-hover);
+        }
+
+        .ctrl-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .ctrl-btn.play-active {
+            background: rgba(74, 222, 128, 0.2);
+            border-color: var(--c-cellulose);
+            color: #bbf7d0;
+        }
+
+        .narrative-box {
+            padding: 15px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .era-badge {
+            display: inline-block;
+            align-self: flex-start;
+            padding: 3px 10px;
+            border-radius: 999px;
+            font-size: 0.74rem;
+            font-weight: 700;
+            background: rgba(245, 158, 11, 0.16);
+            color: #fcd34d;
+            border: 1px solid rgba(245, 158, 11, 0.35);
+        }
+
+        .step-heading {
+            font-size: 1.12rem;
+            font-weight: 700;
+            line-height: 1.35;
+            color: #fff;
+        }
+
+        .info-points {
+            display: flex;
+            flex-direction: column;
+            gap: 9px;
+        }
+
+        .info-item {
+            background: rgba(30, 41, 59, 0.55);
+            border: 1px solid var(--border-subtle);
+            border-left: 3px solid var(--c-lignin);
+            border-radius: 8px;
+            padding: 9px 11px;
+            font-size: 0.86rem;
+            line-height: 1.55;
+            color: #e2e8f0;
+        }
+
+        .info-item strong {
+            color: #fff;
+        }
+
+        /* 互動實驗控制盒 */
+        .lab-widget {
+            background: rgba(15, 23, 42, 0.85);
+            border: 1px solid rgba(56, 189, 248, 0.35);
+            border-radius: 10px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 9px;
+        }
+
+        .lab-widget-title {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: #7dd3fc;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .action-btn {
+            width: 100%;
+            min-height: 42px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            background: linear-gradient(135deg, #2563eb, #0284c7);
+            color: #fff;
+            font-weight: 700;
+            font-size: 0.86rem;
+            cursor: pointer;
+            transition: transform 0.12s, filter 0.15s;
+        }
+
+        .action-btn:hover {
+            filter: brightness(1.1);
+        }
+
+        .action-btn:active {
+            transform: scale(0.98);
+        }
+
+        input[type="range"] {
+            width: 100%;
+            accent-color: #38bdf8;
+            height: 26px;
+            cursor: pointer;
+        }
+
+        .mode-switch-group {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .mode-switch-btn {
+            flex: 1;
+            padding: 9px 10px;
+            border-radius: 9px;
+            border: 1px solid var(--border-subtle);
+            background: var(--bg-card);
+            color: var(--text-muted);
+            font-size: 0.82rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .mode-switch-btn.active {
+            background: rgba(232, 121, 249, 0.18);
+            border-color: var(--c-fungi);
+            color: #f5d0fe;
+        }
+
+        /* 第4分頁：時間軸與雙雄對照 */
+        .compare-layout {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+            overflow-y: auto;
+            background: var(--bg-main);
+        }
+
+        .timeline-stage {
+            position: relative;
+            height: 300px;
+            min-height: 260px;
+            background: #070b12;
+            border-bottom: 1px solid var(--border-subtle);
+            touch-action: none;
+            flex-shrink: 0;
+        }
+
+        .compare-grid-wrap {
+            padding: 16px;
+            max-width: 1280px;
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        .compare-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        .compare-table {
+            display: grid;
+            grid-template-columns: 140px 1fr 1fr;
+            gap: 10px;
+        }
+
+        .cmp-cell {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+            padding: 12px 14px;
+            font-size: 0.87rem;
+            line-height: 1.55;
+        }
+
+        .cmp-label {
+            background: rgba(30, 41, 59, 0.75);
+            font-weight: 700;
+            color: #cbd5e1;
+            display: flex;
+            align-items: center;
+        }
+
+        .cmp-col-coal {
+            border-top: 3px solid var(--c-lignin);
+        }
+
+        .cmp-col-oil {
+            border-top: 3px solid var(--c-plankton);
+        }
+
+        /* 響應式手機與平板支援 */
+        @media (max-width: 920px) {
+            .tab-view.active {
+                flex-direction: column;
+            }
+
+            .sim-stage {
+                height: 50dvh;
+                min-height: 270px;
+                flex: none;
+            }
+
+            .control-sidebar {
+                width: 100%;
+                flex: 1;
+                border-left: none;
+                border-top: 1px solid var(--border-subtle);
+            }
+
+            .brand-sub {
+                display: none;
+            }
+
+            .compare-table {
+                grid-template-columns: 1fr;
+            }
+
+            .cmp-label {
+                padding: 7px 12px;
+                background: #1e293b;
+                color: #fbbf24;
+            }
+
+            .touch-hint {
+                font-size: 0.66rem;
+                padding: 3px 7px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <div class="brand">
+            <div class="brand-icon">🔥</div>
+            <div>
+                <div class="brand-title">化石燃料的形成：生物演化與地質煉金術</div>
+                <span class="brand-sub">單檔互動模擬器・支援觸控縮放平移・Step-by-Step 流程控制</span>
+            </div>
+        </div>
+        <div class="global-actions">
+            <button id="btnToggleLabels" class="btn-pill active" title="顯示或隱藏所有視覺文字標籤">
+                <span>🏷️ 標籤：<strong id="labelStateText">顯示</strong></span>
+            </button>
+            <button id="btnResetGlobalView" class="btn-pill" title="重置當前畫面的縮放與平移位置">
+                <span>⟲ 重置視角</span>
+            </button>
+        </div>
+    </header>
+
+    <nav class="tabs-bar" aria-label="模擬器分頁">
+        <button class="tab-btn active" data-tab="coal">
+            <span class="tab-dot" style="background: var(--c-lignin)"></span>
+            1. 陸地植物與煤炭紀元 (5階段)
+        </button>
+        <button class="tab-btn" data-tab="oil">
+            <span class="tab-dot" style="background: var(--c-plankton)"></span>
+            2. 海洋微觀與石油天然氣 (4階段)
+        </button>
+        <button class="tab-btn" data-tab="three">
+            <span class="tab-dot" style="background: var(--c-fungi)"></span>
+            3. 3D 分子與背斜構造透視 (Three.js)
+        </button>
+        <button class="tab-btn" data-tab="compare">
+            <span class="tab-dot" style="background: var(--c-lipid)"></span>
+            4. 地質時間軸與雙雄對照
+        </button>
+    </nav>
+
+    <main>
+        <!-- ==================== 分頁 1：煤炭形成 ==================== -->
+        <section id="tab-coal" class="tab-view active">
+            <div class="sim-stage" id="stageCoal">
+                <canvas id="canvasCoal" class="sim-canvas"></canvas>
+                <div class="hud-top-left" id="legendCoal">
+                    <span class="legend-chip"><i class="swatch" style="background:var(--c-cellulose)"></i>纖維素</span>
+                    <span class="legend-chip"><i class="swatch" style="background:var(--c-lignin)"></i>木質素</span>
+                    <span class="legend-chip"><i class="swatch" style="background:var(--c-bacteria)"></i>纖維素酶細菌</span>
+                    <span class="legend-chip"><i class="swatch" style="background:var(--c-fungi)"></i>白腐真菌酵素</span>
+                    <span class="legend-chip"><i class="swatch"
+                            style="background:#0f172a;border:1px solid #fb923c"></i>石炭紀煤層</span>
+                </div>
+                <div class="touch-hint">🖐️ 拖曳平移・滾輪/雙指縮放</div>
+                <div class="hud-bottom-right">
+                    <div class="zoom-box">
+                        <button class="zoom-btn" data-zoom-target="coal" data-dir="-1" aria-label="縮小">−</button>
+                        <span class="zoom-readout" id="zoomReadoutCoal">100%</span>
+                        <button class="zoom-btn" data-zoom-target="coal" data-dir="1" aria-label="放大">+</button>
+                        <button class="zoom-btn" data-zoom-target="coal" data-dir="0" title="重置視角">⟲</button>
+                    </div>
+                </div>
+            </div>
+
+            <aside class="control-sidebar">
+                <div class="step-nav-box">
+                    <div class="step-dots" id="coalStepDots"></div>
+                    <div class="step-btns">
+                        <button class="ctrl-btn" id="coalPrevBtn">◀ 上一步</button>
+                        <button class="ctrl-btn" id="coalPlayBtn">▶ 自動播放</button>
+                        <button class="ctrl-btn" id="coalNextBtn">下一步 ▶</button>
+                    </div>
+                </div>
+                <div class="narrative-box" id="coalNarrative"></div>
+            </aside>
+        </section>
+
+        <!-- ==================== 分頁 2：石油與天然氣 ==================== -->
+        <section id="tab-oil" class="tab-view">
+            <div class="sim-stage" id="stageOil">
+                <canvas id="canvasOil" class="sim-canvas"></canvas>
+                <div class="hud-top-left" id="legendOil">
+                    <span class="legend-chip"><i class="swatch" style="background:var(--c-plankton)"></i>藻類/矽藻</span>
+                    <span class="legend-chip"><i class="swatch" style="background:var(--c-lipid)"></i>脂質/油母質</span>
+                    <span class="legend-chip"><i class="swatch" style="background:var(--c-oil)"></i>液態石油</span>
+                    <span class="legend-chip"><i class="swatch" style="background:var(--c-gas)"></i>天然氣(甲烷)</span>
+                    <span class="legend-chip"><i class="swatch" style="background:var(--c-water)"></i>地層水</span>
+                </div>
+                <div class="touch-hint">🖐️ 拖曳平移・滾輪/雙指縮放</div>
+                <div class="hud-bottom-right">
+                    <div class="zoom-box">
+                        <button class="zoom-btn" data-zoom-target="oil" data-dir="-1" aria-label="縮小">−</button>
+                        <span class="zoom-readout" id="zoomReadoutOil">100%</span>
+                        <button class="zoom-btn" data-zoom-target="oil" data-dir="1" aria-label="放大">+</button>
+                        <button class="zoom-btn" data-zoom-target="oil" data-dir="0" title="重置視角">⟲</button>
+                    </div>
+                </div>
+            </div>
+
+            <aside class="control-sidebar">
+                <div class="step-nav-box">
+                    <div class="step-dots" id="oilStepDots"></div>
+                    <div class="step-btns">
+                        <button class="ctrl-btn" id="oilPrevBtn">◀ 上一步</button>
+                        <button class="ctrl-btn" id="oilPlayBtn">▶ 自動播放</button>
+                        <button class="ctrl-btn" id="oilNextBtn">下一步 ▶</button>
+                    </div>
+                </div>
+                <div class="narrative-box" id="oilNarrative"></div>
+            </aside>
+        </section>
+
+        <!-- ==================== 分頁 3：Three.js 3D 實驗室 ==================== -->
+        <section id="tab-three" class="tab-view">
+            <div class="sim-stage" id="stageThree">
+                <canvas id="canvasThree" class="sim-canvas"></canvas>
+                <div id="threeOverlayLabels" class="overlay-labels"></div>
+                <div class="hud-top-left" id="legendThree"></div>
+                <div class="touch-hint">🔄 單指旋轉・雙指/右鍵平移與縮放</div>
+                <div class="hud-bottom-right">
+                    <div class="zoom-box">
+                        <button class="zoom-btn" data-zoom-target="three" data-dir="-1" aria-label="縮小">−</button>
+                        <span class="zoom-readout" id="zoomReadoutThree">100%</span>
+                        <button class="zoom-btn" data-zoom-target="three" data-dir="1" aria-label="放大">+</button>
+                        <button class="zoom-btn" data-zoom-target="three" data-dir="0" title="重置視角">⟲</button>
+                    </div>
+                </div>
+            </div>
+
+            <aside class="control-sidebar">
+                <div class="step-nav-box">
+                    <div class="mode-switch-group">
+                        <button class="mode-switch-btn active" data-three-mode="lignin">🧬 細胞壁與白腐菌</button>
+                        <button class="mode-switch-btn" data-three-mode="anticline">⛰️ 3D 背斜油氣藏</button>
+                    </div>
+                    <div class="step-dots" id="threeStepDots"></div>
+                    <div class="step-btns">
+                        <button class="ctrl-btn" id="threePrevBtn">◀ 上一步</button>
+                        <button class="ctrl-btn" id="threeNextBtn">下一步 ▶</button>
+                    </div>
+                </div>
+                <div class="narrative-box" id="threeNarrative"></div>
+            </aside>
+        </section>
+
+        <!-- ==================== 分頁 4：時間軸與雙雄對照 ==================== -->
+        <section id="tab-compare" class="tab-view">
+            <div class="compare-layout">
+                <div class="timeline-stage" id="stageTimeline">
+                    <canvas id="canvasTimeline" class="sim-canvas"></canvas>
+                    <div class="hud-top-left">
+                        <span class="legend-chip"><i class="swatch" style="background:var(--c-lignin)"></i>煤炭沉積高峰
+                            (石炭紀窗口)</span>
+                        <span class="legend-chip"><i class="swatch"
+                                style="background:var(--c-fungi)"></i>白腐菌演化閉合循環</span>
+                        <span class="legend-chip"><i class="swatch"
+                                style="background:var(--c-plankton)"></i>海洋浮游生物油氣生成</span>
+                    </div>
+                    <div class="touch-hint">🖐️ 時間軸支援縮放與平移・點擊節點高亮</div>
+                    <div class="hud-bottom-right">
+                        <div class="zoom-box">
+                            <button class="zoom-btn" data-zoom-target="timeline" data-dir="-1">−</button>
+                            <span class="zoom-readout" id="zoomReadoutTimeline">100%</span>
+                            <button class="zoom-btn" data-zoom-target="timeline" data-dir="1">+</button>
+                            <button class="zoom-btn" data-zoom-target="timeline" data-dir="0">⟲</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="compare-grid-wrap">
+                    <div class="compare-header">
+                        <div>
+                            <h2 style="font-size:1.15rem;color:#fff;">煤炭 vs. 石油與天然氣：本質差異對照</h2>
+                            <p style="font-size:0.83rem;color:var(--text-muted);margin-top:2px;">
+                                煤炭是「陸地植物的木質素化石」，石油與天然氣則是「海洋微觀生物的脂質液化」。
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="compare-table">
+                        <div class="cmp-cell cmp-label">比較維度</div>
+                        <div class="cmp-cell cmp-col-coal"><strong style="color:var(--c-lignin);font-size:0.98rem;">🪨
+                                煤炭 (Coal)</strong></div>
+                        <div class="cmp-cell cmp-col-oil"><strong style="color:var(--c-plankton);font-size:0.98rem;">🛢️
+                                石油與天然氣 (Oil & Gas)</strong></div>
+
+                        <div class="cmp-cell cmp-label">生物來源</div>
+                        <div class="cmp-cell"><strong>陸地高等維管束植物</strong>：泥盆紀至石炭紀的巨型石松、木賊與早期高大蕨類森林。</div>
+                        <div class="cmp-cell"><strong>海洋與湖泊微觀浮游生物</strong>：古代藻類（Algae）、矽藻（Diatoms）及浮游動植物。</div>
+
+                        <div class="cmp-cell cmp-label">關鍵化學組分</div>
+                        <div class="cmp-cell"><span
+                                style="color:var(--c-lignin);font-weight:700;">木質素（Lignin）</span>：高度交聯的苯丙烷高分子聚合物，具極強剛性、抗壓與防水性。
+                        </div>
+                        <div class="cmp-cell"><span
+                                style="color:var(--c-lipid);font-weight:700;">生物脂質（Lipids）與蛋白質</span>：先轉化為蠟狀中間產物<strong>油母質（Kerogen）</strong>，再裂解為液態或氣態烴類。
+                        </div>
+
+                        <div class="cmp-cell cmp-label">保存與沉積環境</div>
+                        <div class="cmp-cell">溫暖潮濕的<strong>淹水泥炭沼澤</strong>；加上當時缺乏能分解木質素的微生物酵素（演化盲點）。</div>
+                        <div class="cmp-cell">
+                            <strong>缺氧（Anoxic）海盆或湖底</strong>，避免好氧細菌分解，並由泥沙、黏土迅速掩埋形成<strong>頁岩源岩</strong>。
+                        </div>
+
+                        <div class="cmp-cell cmp-label">熱力學轉化條件</div>
+                        <div class="cmp-cell">地殼下沉伴隨數千萬年高溫高壓的<strong>物理壓實與化學碳化（Carbonification）</strong>：泥炭 → 褐煤 → 煙煤 →
+                            無煙煤。</div>
+                        <div class="cmp-cell">依地溫梯度（約 <strong>30°C/km</strong>）進入熱裂解：<br>• <strong>油窗</strong>（2–4 km,
+                            60–120°C）→ 液態石油<br>• <strong>氣窗</strong>（>4 km, >120–150°C）→ 天然氣（甲烷）</div>
+
+                        <div class="cmp-cell cmp-label">儲存型態與構造</div>
+                        <div class="cmp-cell"><strong>原地固態層狀堆積</strong>：直接保留於原沉積盆地地層中，形成厚重連續的固態煤層。</div>
+                        <div class="cmp-cell">
+                            <strong>流體向上運移與構造封閉</strong>：因密度小於水而沿多孔隙岩層上浮，受<strong>不滲透蓋層</strong>與<strong>背斜構造 /
+                                斷層</strong>阻擋聚集。
+                        </div>
+
+                        <div class="cmp-cell cmp-label">地質歷史窗口</div>
+                        <div class="cmp-cell">
+                            高度集中於<strong>石炭紀（3.6億–3億年前）</strong>；待二疊紀初<strong>白腐真菌</strong>演化出木質素過氧化物酶與漆酶後，巨量成煤窗口隨之關閉。
+                        </div>
+                        <div class="cmp-cell">只要具備「浮游生物繁盛 + 缺氧掩埋 + 油氣窗地溫 + 儲集蓋層構造」，於古生代、中生代至新生代海洋盆地皆可發生。</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        (() => {
+            'use strict';
+
+            /* =========================================================================
+               全域色票與狀態管理 (Visual Consistency across all Tabs)
+               ========================================================================= */
+            const COLORS = {
+                cellulose: '#4ade80',
+                lignin: '#f59e0b',
+                ligninDark: '#b45309',
+                bacteria: '#38bdf8',
+                fungi: '#e879f9',
+                coal: '#1e293b',
+                coalRim: '#64748b',
+                coalFire: '#fb923c',
+                plankton: '#2dd4bf',
+                lipid: '#facc15',
+                kerogen: '#eab308',
+                oil: '#92400e',
+                oilStroke: '#f59e0b',
+                gas: '#fb7185',
+                water: '#0284c7',
+                shale: '#475569',
+                sandstone: '#a8a29e',
+                caprock: '#1e293b'
+            };
+
+            const state = {
+                activeTab: 'coal',
+                showLabels: true,
+                time: 0,
+
+                // 分頁 1：煤炭 (0..4 對應 5 階段)
+                coalStep: 0,
+                coalPlaying: false,
+                coalTimer: 0,
+                coalPressure: 0.78,   // Step 3 碳化程度 0~1
+                steamPower: 0.75,     // Step 4 蒸汽機火力 0~1
+
+                // 分頁 2：石油與天然氣 (0..3 對應 4 階段)
+                oilStep: 0,
+                oilPlaying: false,
+                oilTimer: 0,
+                anoxicMode: true,     // Step 2 缺氧 vs 有氧實驗
+                burialDepthKm: 3.1,   // Step 3 埋藏深度 (0.5 ~ 5.5 km)
+                oilDrilled: false,    // Step 4 鑽井開採示範
+
+                // 分頁 3：3D 實驗室
+                threeMode: 'lignin',  // 'lignin' | 'anticline'
+                threeStep: 0,         // 0..2
+
+                // 分頁 4：時間軸選中節點
+                selectedEraIndex: 2
+            };
+
+            /* =========================================================================
+               通用 2D 縮放與平移控制器 (支援滑鼠滾輪、拖曳、觸控單指平移與雙指捏合縮放)
+               ========================================================================= */
+            class PanZoom2D {
+                constructor(canvas, worldW, worldH, readoutEl) {
+                    this.canvas = canvas;
+                    this.ctx = canvas.getContext('2d');
+                    this.worldW = worldW;
+                    this.worldH = worldH;
+                    this.readoutEl = readoutEl;
+
+                    this.scale = 1;
+                    this.baseScale = 1;
+                    this.offsetX = 0;
+                    this.offsetY = 0;
+                    this.minZoom = 0.55;
+                    this.maxZoom = 3.5;
+
+                    this.pointers = new Map();
+                    this.lastPinchDist = 0;
+                    this.lastPinchMid = null;
+                    this.onTapCallback = null;
+                    this.downPos = null;
+
+                    this._bindEvents();
+                    this.resize();
+                }
+
+                resize() {
+                    const rect = this.canvas.parentElement.getBoundingClientRect();
+                    if (rect.width === 0 || rect.height === 0) return;
+                    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+                    this.canvas.width = Math.round(rect.width * dpr);
+                    this.canvas.height = Math.round(rect.height * dpr);
+                    this.dpr = dpr;
+                    this.viewW = rect.width;
+                    this.viewH = rect.height;
+
+                    const prevRelZoom = this.baseScale > 0 ? (this.scale / this.baseScale) : 1;
+                    this.baseScale = Math.min(this.viewW / this.worldW, this.viewH / this.worldH);
+                    if (prevRelZoom === 1 && this.offsetX === 0 && this.offsetY === 0) {
+                        this.reset();
+                    } else {
+                        this.scale = this.baseScale * prevRelZoom;
+                        this._updateReadout();
+                    }
+                }
+
+                reset() {
+                    const rect = this.canvas.parentElement.getBoundingClientRect();
+                    if (rect.width > 0 && rect.height > 0) {
+                        this.viewW = rect.width;
+                        this.viewH = rect.height;
+                        this.baseScale = Math.min(this.viewW / this.worldW, this.viewH / this.worldH);
+                    }
+                    this.scale = this.baseScale;
+                    this.offsetX = (this.viewW - this.worldW * this.scale) * 0.5;
+                    this.offsetY = (this.viewH - this.worldH * this.scale) * 0.5;
+                    this._updateReadout();
+                }
+
+                zoomBy(factor, cx = this.viewW * 0.5, cy = this.viewH * 0.5) {
+                    const targetScale = Math.max(
+                        this.baseScale * this.minZoom,
+                        Math.min(this.baseScale * this.maxZoom, this.scale * factor)
+                    );
+                    const wx = (cx - this.offsetX) / this.scale;
+                    const wy = (cy - this.offsetY) / this.scale;
+                    this.scale = targetScale;
+                    this.offsetX = cx - wx * this.scale;
+                    this.offsetY = cy - wy * this.scale;
+                    this._updateReadout();
+                }
+
+                screenToWorld(sx, sy) {
+                    return {
+                        x: (sx - this.offsetX) / this.scale,
+                        y: (sy - this.offsetY) / this.scale
+                    };
+                }
+
+                beginTransform() {
+                    const ctx = this.ctx;
+                    ctx.save();
+                    ctx.scale(this.dpr, this.dpr);
+                    ctx.clearRect(0, 0, this.viewW, this.viewH);
+                    ctx.translate(this.offsetX, this.offsetY);
+                    ctx.scale(this.scale, this.scale);
+                }
+
+                endTransform() {
+                    this.ctx.restore();
+                }
+
+                _updateReadout() {
+                    if (this.readoutEl && this.baseScale > 0) {
+                        const pct = Math.round((this.scale / this.baseScale) * 100);
+                        this.readoutEl.textContent = `${pct}%`;
+                    }
+                }
+
+                _bindEvents() {
+                    this.canvas.addEventListener('wheel', (e) => {
+                        e.preventDefault();
+                        const rect = this.canvas.getBoundingClientRect();
+                        const cx = e.clientX - rect.left;
+                        const cy = e.clientY - rect.top;
+                        const factor = e.deltaY < 0 ? 1.12 : 0.89;
+                        this.zoomBy(factor, cx, cy);
+                    }, { passive: false });
+
+                    this.canvas.addEventListener('pointerdown', (e) => {
+                        this.canvas.setPointerCapture(e.pointerId);
+                        const rect = this.canvas.getBoundingClientRect();
+                        const pt = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+                        this.pointers.set(e.pointerId, pt);
+                        if (this.pointers.size === 1) {
+                            this.downPos = { ...pt };
+                        } else if (this.pointers.size === 2) {
+                            const pts = Array.from(this.pointers.values());
+                            this.lastPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+                            this.lastPinchMid = { x: (pts[0].x + pts[1].x) * 0.5, y: (pts[0].y + pts[1].y) * 0.5 };
+                            this.downPos = null;
+                        }
+                    });
+
+                    this.canvas.addEventListener('pointermove', (e) => {
+                        if (!this.pointers.has(e.pointerId)) return;
+                        const rect = this.canvas.getBoundingClientRect();
+                        const prev = this.pointers.get(e.pointerId);
+                        const curr = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+                        this.pointers.set(e.pointerId, curr);
+
+                        if (this.pointers.size === 1) {
+                            this.offsetX += curr.x - prev.x;
+                            this.offsetY += curr.y - prev.y;
+                        } else if (this.pointers.size === 2) {
+                            const pts = Array.from(this.pointers.values());
+                            const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+                            const mid = { x: (pts[0].x + pts[1].x) * 0.5, y: (pts[0].y + pts[1].y) * 0.5 };
+                            if (this.lastPinchMid) {
+                                this.offsetX += mid.x - this.lastPinchMid.x;
+                                this.offsetY += mid.y - this.lastPinchMid.y;
+                            }
+                            if (this.lastPinchDist > 10) {
+                                this.zoomBy(dist / this.lastPinchDist, mid.x, mid.y);
+                            }
+                            this.lastPinchDist = dist;
+                            this.lastPinchMid = mid;
+                        }
+                    });
+
+                    const endPointer = (e) => {
+                        if (this.pointers.size === 1 && this.downPos && this.onTapCallback) {
+                            const rect = this.canvas.getBoundingClientRect();
+                            const up = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+                            if (Math.hypot(up.x - this.downPos.x, up.y - this.downPos.y) < 8) {
+                                this.onTapCallback(this.screenToWorld(up.x, up.y));
+                            }
+                        }
+                        this.pointers.delete(e.pointerId);
+                        this.lastPinchDist = 0;
+                        this.lastPinchMid = null;
+                    };
+
+                    this.canvas.addEventListener('pointerup', endPointer);
+                    this.canvas.addEventListener('pointercancel', endPointer);
+                }
+            }
+
+            /* 繪製統一風格的 Canvas 標籤氣泡 (受 state.showLabels 控制) */
+            function drawCallout(ctx, x, y, text, borderColor = '#94a3b8', targetX = null, targetY = null) {
+                if (!state.showLabels) return;
+                ctx.save();
+                if (targetX !== null && targetY !== null) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, y);
+                    ctx.lineTo(targetX, targetY);
+                    ctx.strokeStyle = borderColor;
+                    ctx.lineWidth = 1.6;
+                    ctx.setLineDash([4, 3]);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+
+                    ctx.beginPath();
+                    ctx.arc(targetX, targetY, 3.5, 0, Math.PI * 2);
+                    ctx.fillStyle = borderColor;
+                    ctx.fill();
+                }
+
+                ctx.font = '600 14px -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", sans-serif';
+                const padX = 10;
+                const w = ctx.measureText(text).width + padX * 2;
+                const h = 28;
+                const rx = x - w * 0.5;
+                const ry = y - h * 0.5;
+
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+                ctx.strokeStyle = borderColor;
+                ctx.lineWidth = 1.5;
+                roundRect(ctx, rx, ry, w, h, 7);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = '#f8fafc';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(text, x, y + 0.5);
+                ctx.restore();
+            }
+
+            function roundRect(ctx, x, y, w, h, r) {
+                ctx.beginPath();
+                ctx.moveTo(x + r, y);
+                ctx.arcTo(x + w, y, x + w, y + h, r);
+                ctx.arcTo(x + w, y + h, x, y + h, r);
+                ctx.arcTo(x, y + h, x, y, r);
+                ctx.arcTo(x, y, x + w, y, r);
+                ctx.closePath();
+            }
+
+            /* =========================================================================
+               分頁 1：陸地植物與煤炭紀元 (5 階段資料庫與動態引擎)
+               ========================================================================= */
+            const COAL_STEPS = [
+                {
+                    era: '階段 1 / 5 ・ 志留紀～早泥盆紀',
+                    title: '早期植物的限制與纖維素的順暢循環',
+                    points: [
+                        '<strong>細胞壁構造：</strong>植物初登陸地時矮小纖細，細胞壁主要由<strong>纖維素（Cellulose）</strong>構成。',
+                        '<strong>當時的生態：</strong>自然界中早已存在許多細菌與微生物，演化出分泌<strong>「纖維素酶」</strong>的基因與能力。',
+                        '<strong>物質順暢循環：</strong>植物死後被微生物輕易分解為養分與 CO₂ 回歸大地，<strong>不會有大量植物殘骸堆積</strong>。'
+                    ],
+                    widgetHtml: `
+        <div class="lab-widget">
+          <div class="lab-widget-title"><span>🧪 生態實驗</span><span>纖維素循環</span></div>
+          <button class="action-btn" id="btnSpawnBacteria">🦠 投放大量「纖維素酶」細菌加速分解</button>
+        </div>`
+                },
+                {
+                    era: '階段 2 / 5 ・ 泥盆紀 (約 3.8 億年前)',
+                    title: '木質素的演化：植物的「世紀發明」與微生物盲點',
+                    points: [
+                        '<strong>爭奪陽光空間：</strong>為長得更高更粗壯，植物演化出全新高分子聚合物——<strong>木質素（Lignin）</strong>。',
+                        '<strong>木質素的作用：</strong>填補纖維素空隙，提供極強剛性、抗壓與防水性，讓巨型石松、木賊與早期蕨類長成數十公尺參天大樹。',
+                        '<strong>演化的盲點：</strong>木質素具高度交聯的苯丙烷結構，當時<strong>沒有任何細菌或真菌擁有分解它的酵素</strong>，大樹死後無法腐爛！'
+                    ],
+                    widgetHtml: `
+        <div class="lab-widget">
+          <div class="lab-widget-title"><span>🌲 演化實驗</span><span>木質素防禦</span></div>
+          <button class="action-btn" id="btnDropLigninLog" style="background:linear-gradient(135deg,#d97706,#b45309);">🪵 倒下巨型木質素樹幹（觀察細菌受阻）</button>
+        </div>`
+                },
+                {
+                    era: '階段 3 / 5 ・ 石炭紀 (3.6 億～3 億年前)',
+                    title: '石炭紀：地球史上唯一的「煤炭大冰封」',
+                    points: [
+                        '<strong>屍體大量堆積：</strong>溫暖潮濕的巨型森林遍布全球沼澤，樹木死後倒在淹水缺氧的沼澤中，既無法被微生物吃掉，也無法腐爛。',
+                        '<strong>泥炭至煤炭形成：</strong>層層疊疊的植物殘骸越積越厚，經數千萬年<strong>地質變動、地殼下沉</strong>，受高溫高壓物理與化學作用（<strong>碳化過程</strong>），最終壓實轉化為豐富的煤炭藏量。'
+                    ],
+                    widgetHtml: `
+        <div class="lab-widget">
+          <div class="lab-widget-title">
+            <span>🌡️ 地殼下沉與碳化壓力</span>
+            <span id="coalPressureVal">78% (煙煤～無煙煤)</span>
+          </div>
+          <input type="range" id="sliderCoalPressure" min="10" max="100" value="78">
+        </div>`
+                },
+                {
+                    era: '階段 4 / 5 ・ 18 世紀～現代',
+                    title: '煤炭的埋藏與工業革命的引爆',
+                    points: [
+                        '<strong>關鍵能源寶庫：</strong>這場長達數千萬年的「分解危機」，為人類文明在地層深處封存了龐大的遠古太陽能。',
+                        '<strong>引爆工業革命：</strong>18 世紀人類大規模開採石炭紀煤炭，燃燒釋放的巨大能量驅動了<strong>蒸汽機、火車與工廠</strong>。',
+                        '<strong>歷史啟示：</strong>今日現代化社會，很大程度上是靠燃燒<strong>「遠古無法被分解的木質素」</strong>來運轉的。'
+                    ],
+                    widgetHtml: `
+        <div class="lab-widget">
+          <div class="lab-widget-title">
+            <span>🚂 蒸汽機鍋爐火力</span>
+            <span id="steamPowerVal">75% 運轉</span>
+          </div>
+          <input type="range" id="sliderSteamPower" min="10" max="100" value="75">
+        </div>`
+                },
+                {
+                    era: '階段 5 / 5 ・ 石炭紀末期～二疊紀',
+                    title: '真菌的逆襲：白腐菌與煤炭紀元的終結',
+                    points: [
+                        '<strong>分解酵素誕生：</strong>祖先型<strong>白腐真菌（White-rot fungi）</strong>演化出全新基因家族，能分泌破壞木質素的<strong>木質素過氧化物酶（Lignin peroxidase）</strong>與<strong>漆酶（Laccase）</strong>。',
+                        '<strong>生態重新閉環：</strong>木材終於能順利腐爛回歸土壤，地球碳循環重新閉合。',
+                        '<strong>歷史窗口關閉：</strong>大規模殘骸堆積成厚煤層的「石炭紀條件」不復存在，絕大部分煤炭皆在此特定地質窗口期完成沉積。'
+                    ],
+                    widgetHtml: `
+        <div class="lab-widget">
+          <div class="lab-widget-title"><span>🍄 演化修正</span><span>白腐菌酵素脈衝</span></div>
+          <button class="action-btn" id="btnFungiPulse" style="background:linear-gradient(135deg,#c026d3,#9333ea);">✨ 釋放「過氧化物酶 / 漆酶」分解木質素</button>
+        </div>`
+                }
+            ];
+
+            const pzCoal = new PanZoom2D(
+                document.getElementById('canvasCoal'),
+                1100, 680,
+                document.getElementById('zoomReadoutCoal')
+            );
+
+            // 煤炭模擬粒子池
+            const coalSim = {
+                microbes: [],
+                nutrients: [],
+                logs: [],
+                sparks: [],
+                steamPuffs: [],
+                wheelAngle: 0
+            };
+
+            function initCoalEntities() {
+                coalSim.microbes = [];
+                coalSim.nutrients = [];
+                coalSim.logs = [];
+                coalSim.sparks = [];
+                coalSim.steamPuffs = [];
+
+                for (let i = 0; i < 26; i++) {
+                    coalSim.microbes.push({
+                        x: 180 + Math.random() * 740,
+                        y: 350 + Math.random() * 90,
+                        vx: (Math.random() - 0.5) * 1.6,
+                        vy: (Math.random() - 0.5) * 1.1,
+                        type: 'bacteria'
+                    });
+                }
+                for (let i = 0; i < 7; i++) {
+                    coalSim.logs.push({
+                        x: 220 + i * 95 + (Math.random() - 0.5) * 30,
+                        y: 382 + (i % 3) * 14,
+                        angle: (Math.random() - 0.5) * 0.18,
+                        decay: 0
+                    });
+                }
+            }
+            initCoalEntities();
+
+            function drawCoalWorld(dt) {
+                const ctx = pzCoal.ctx;
+                const step = state.coalStep;
+                pzCoal.beginTransform();
+
+                // 背景天空與地下地層剖面
+                const skyGrad = ctx.createLinearGradient(0, 0, 0, 410);
+                if (step === 3) {
+                    skyGrad.addColorStop(0, '#1e293b');
+                    skyGrad.addColorStop(1, '#334155');
+                } else if (step === 2) {
+                    skyGrad.addColorStop(0, '#0f292e');
+                    skyGrad.addColorStop(1, '#164e63');
+                } else {
+                    skyGrad.addColorStop(0, '#0c1e35');
+                    skyGrad.addColorStop(1, '#153b50');
+                }
+                ctx.fillStyle = skyGrad;
+                ctx.fillRect(0, 0, 1100, 410);
+
+                // 太陽（象徵遠古太陽能固定於植物）
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(980, 78, 34, 0, Math.PI * 2);
+                ctx.fillStyle = step === 3 ? 'rgba(251, 191, 36, 0.45)' : '#fde047';
+                ctx.shadowColor = '#facc15';
+                ctx.shadowBlur = 28;
+                ctx.fill();
+                ctx.restore();
+
+                // 地下岩層基底
+                ctx.fillStyle = '#292524';
+                ctx.fillRect(0, 410, 1100, 270);
+                ctx.fillStyle = '#1c1917';
+                ctx.fillRect(0, 520, 1100, 160);
+
+                // 依據不同步驟繪製專屬動態場景
+                if (step === 0) {
+                    // 階段 1：矮小早期植物 + 纖維素順暢分解循環
+                    ctx.fillStyle = '#365314';
+                    ctx.fillRect(0, 395, 1100, 24);
+
+                    // 矮小早期維管束植物 (Cooksonia 風格)
+                    for (let i = 0; i < 11; i++) {
+                        const px = 120 + i * 85;
+                        const sway = Math.sin(state.time * 2 + i) * 4;
+                        ctx.strokeStyle = COLORS.cellulose;
+                        ctx.lineWidth = 5;
+                        ctx.beginPath();
+                        ctx.moveTo(px, 398);
+                        ctx.quadraticCurveTo(px + sway * 0.5, 355, px + sway, 325);
+                        ctx.moveTo(px + sway * 0.6, 355);
+                        ctx.lineTo(px - 14 + sway, 332);
+                        ctx.moveTo(px + sway * 0.6, 355);
+                        ctx.lineTo(px + 15 + sway, 335);
+                        ctx.stroke();
+
+                        ctx.fillStyle = '#86efac';
+                        ctx.beginPath();
+                        ctx.arc(px + sway, 323, 5, 0, Math.PI * 2);
+                        ctx.arc(px - 14 + sway, 330, 4, 0, Math.PI * 2);
+                        ctx.arc(px + 15 + sway, 333, 4, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+
+                    // 地面少量纖維素碎屑正被分解
+                    for (let i = 0; i < 6; i++) {
+                        const lx = 200 + i * 135;
+                        const pulse = 0.5 + 0.5 * Math.sin(state.time * 3 + i);
+                        ctx.fillStyle = `rgba(74, 222, 128, ${0.35 + pulse * 0.4})`;
+                        roundRect(ctx, lx - 22, 392, 44, 9, 4);
+                        ctx.fill();
+                    }
+
+                    // 細菌游動並釋放綠色養分粒子上升
+                    coalSim.microbes.forEach((m, idx) => {
+                        m.x += m.vx;
+                        m.y += m.vy;
+                        if (m.x < 100 || m.x > 980) m.vx *= -1;
+                        if (m.y < 382 || m.y > 432) m.vy *= -1;
+
+                        ctx.fillStyle = COLORS.bacteria;
+                        ctx.beginPath();
+                        ctx.ellipse(m.x, m.y, 7, 4, Math.atan2(m.vy, m.vx), 0, Math.PI * 2);
+                        ctx.fill();
+
+                        if (Math.random() < 0.06) {
+                            coalSim.nutrients.push({ x: m.x, y: m.y - 5, vy: -0.9 - Math.random() * 0.7, life: 1 });
+                        }
+                    });
+
+                    drawUpdateNutrients(ctx, COLORS.cellulose);
+
+                    // 循環箭頭示意
+                    ctx.strokeStyle = 'rgba(74, 222, 128, 0.45)';
+                    ctx.lineWidth = 3;
+                    ctx.setLineDash([8, 6]);
+                    ctx.beginPath();
+                    ctx.arc(550, 310, 120, 0.2, Math.PI - 0.2, true);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+
+                    drawCallout(ctx, 290, 265, '早期矮小陸生植物（細胞壁：纖維素）', COLORS.cellulose, 290, 328);
+                    drawCallout(ctx, 780, 465, '細菌分泌「纖維素酶」迅速分解殘骸', COLORS.bacteria, 680, 405);
+                    drawCallout(ctx, 550, 165, '♻️ 養分與碳循環順暢・無殘骸堆積', COLORS.cellulose);
+
+                } else if (step === 1) {
+                    // 階段 2：泥盆紀高大木質素森林 + 微生物受阻彈開
+                    ctx.fillStyle = '#3f2e18';
+                    ctx.fillRect(0, 395, 1100, 25);
+
+                    // 參天巨樹（巨型石松、木賊）
+                    const treeXs = [150, 360, 620, 860];
+                    treeXs.forEach((tx, idx) => {
+                        drawGiantCarboniferousTree(ctx, tx, 398, 255 + (idx % 2) * 35);
+                    });
+
+                    // 倒地堆積且無法腐爛的木質素樹幹
+                    coalSim.logs.forEach((lg) => {
+                        drawLigninLog(ctx, lg.x, lg.y, 92, 18, lg.angle, 1);
+                    });
+
+                    // 細菌撞擊木質素樹幹並彈開（演化的盲點）
+                    coalSim.microbes.forEach((m) => {
+                        m.x += m.vx * 1.4;
+                        m.y += m.vy * 1.4;
+                        if (m.x < 120 || m.x > 960) m.vx *= -1;
+                        if (m.y < 340 || m.y > 425) m.vy *= -1;
+
+                        // 碰撞樹幹反彈特效
+                        if (m.y > 370 && m.y < 402 && Math.random() < 0.08) {
+                            m.vy = -Math.abs(m.vy) - 0.6;
+                            coalSim.sparks.push({ x: m.x, y: m.y, life: 1 });
+                        }
+
+                        ctx.fillStyle = COLORS.bacteria;
+                        ctx.beginPath();
+                        ctx.ellipse(m.x, m.y, 6.5, 4, 0, 0, Math.PI * 2);
+                        ctx.fill();
+                    });
+
+                    // 繪製無法分解的受阻火花
+                    for (let i = coalSim.sparks.length - 1; i >= 0; i--) {
+                        const sp = coalSim.sparks[i];
+                        sp.life -= dt * 1.8;
+                        if (sp.life <= 0) { coalSim.sparks.splice(i, 1); continue; }
+                        ctx.strokeStyle = `rgba(248, 113, 113, ${sp.life})`;
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.moveTo(sp.x - 5, sp.y - 5); ctx.lineTo(sp.x + 5, sp.y + 5);
+                        ctx.moveTo(sp.x + 5, sp.y - 5); ctx.lineTo(sp.x - 5, sp.y + 5);
+                        ctx.stroke();
+                    }
+
+                    drawCallout(ctx, 360, 88, '巨型石松與木賊（木質素支撐長達數十公尺）', COLORS.lignin, 360, 145);
+                    drawCallout(ctx, 540, 325, '木質素（苯丙烷交聯結構）：細菌無酵素可分解！', '#f87171', 510, 382);
+                    drawCallout(ctx, 540, 468, '⚠️ 演化盲點：死後樹木無法腐爛，開始大量堆積', COLORS.lignin);
+
+                } else if (step === 2) {
+                    // 階段 3：石炭紀淹水沼澤 + 地殼下沉高溫高壓碳化
+                    const p = state.coalPressure; // 0.1 ~ 1.0
+                    const subsidence = p * 125;   // 下沉深度位移
+
+                    // 潮濕沼澤水體
+                    ctx.fillStyle = 'rgba(2, 132, 199, 0.48)';
+                    ctx.fillRect(0, 335, 1100, 78);
+
+                    // 沼澤森林
+                    [130, 290, 480, 700, 900].forEach((tx, idx) => {
+                        drawGiantCarboniferousTree(ctx, tx, 385, 220 + (idx % 2) * 30);
+                    });
+
+                    // 泥炭層 (Peat)
+                    ctx.fillStyle = '#5c3a1e';
+                    ctx.fillRect(80, 392, 940, 48);
+                    for (let i = 0; i < 9; i++) {
+                        drawLigninLog(ctx, 135 + i * 102, 412 + (i % 2) * 10, 85, 14, (i % 3 - 1) * 0.08, 0.75);
+                    }
+
+                    // 覆蓋沉積岩層（隨下沉增厚）
+                    ctx.fillStyle = '#475569';
+                    ctx.fillRect(80, 440, 940, subsidence);
+
+                    // 下沉中的轉化煤層（顏色隨碳化程度由琥珀棕轉為烏亮黑炭）
+                    const seamY = 440 + subsidence;
+                    const r = Math.round(140 * (1 - p) + 15);
+                    const g = Math.round(80 * (1 - p) + 23);
+                    const b = Math.round(30 * (1 - p) + 42);
+                    ctx.fillStyle = `rgb(${r},${g},${b})`;
+                    ctx.strokeStyle = p > 0.65 ? COLORS.coalFire : COLORS.lignin;
+                    ctx.lineWidth = 2.5;
+                    roundRect(ctx, 80, seamY, 940, 58, 8);
+                    ctx.fill();
+                    ctx.stroke();
+
+                    // 煤炭光澤紋理
+                    ctx.strokeStyle = `rgba(251, 191, 36, ${0.15 + p * 0.35})`;
+                    ctx.lineWidth = 1.5;
+                    for (let x = 120; x < 980; x += 75) {
+                        ctx.beginPath();
+                        ctx.moveTo(x, seamY + 18);
+                        ctx.lineTo(x + 42, seamY + 22);
+                        ctx.moveTo(x + 15, seamY + 40);
+                        ctx.lineTo(x + 55, seamY + 38);
+                        ctx.stroke();
+                    }
+
+                    // 下沉高壓與地熱箭頭
+                    drawForceArrows(ctx, seamY, p);
+
+                    drawCallout(ctx, 270, 355, '石炭紀淹水缺氧泥炭沼澤', COLORS.water, 270, 395);
+                    drawCallout(ctx, 550, seamY + 29, `石炭紀厚重煤層（碳化度 ${Math.round(p * 100)}%）`, COLORS.coalFire);
+                    drawCallout(ctx, 850, 638, '🔥 地熱高溫 ＋ ⬇️ 地殼下沉高壓（數千萬年碳化）', '#fb923c');
+
+                } else if (step === 3) {
+                    // 階段 4：煤炭埋藏與 18 世紀工業革命蒸汽機
+                    // 地表草地與岩層
+                    ctx.fillStyle = '#3f6212';
+                    ctx.fillRect(0, 390, 1100, 20);
+                    ctx.fillStyle = '#475569';
+                    ctx.fillRect(0, 410, 1100, 130);
+
+                    // 深處石炭紀煤層
+                    ctx.fillStyle = '#0f172a';
+                    ctx.strokeStyle = '#64748b';
+                    ctx.lineWidth = 2;
+                    ctx.fillRect(60, 540, 980, 68);
+                    ctx.strokeRect(60, 540, 980, 68);
+
+                    // 煤礦豎井與升降機
+                    ctx.fillStyle = '#090d16';
+                    ctx.fillRect(250, 390, 64, 195);
+                    ctx.strokeStyle = '#94a3b8';
+                    ctx.strokeRect(250, 390, 64, 195);
+
+                    // 井架
+                    ctx.strokeStyle = '#cbd5e1';
+                    ctx.lineWidth = 4;
+                    ctx.beginPath();
+                    ctx.moveTo(235, 390); ctx.lineTo(282, 295); ctx.lineTo(329, 390);
+                    ctx.stroke();
+
+                    const liftCycle = (state.time * (0.4 + state.steamPower * 0.9)) % 1;
+                    const liftY = 545 - liftCycle * 150;
+                    ctx.strokeStyle = '#e2e8f0';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(282, 298); ctx.lineTo(282, liftY);
+                    ctx.stroke();
+
+                    // 運煤吊籠
+                    ctx.fillStyle = '#334155';
+                    ctx.fillRect(262, liftY, 40, 26);
+                    ctx.fillStyle = '#0f172a';
+                    ctx.beginPath();
+                    ctx.arc(274, liftY, 7, 0, Math.PI * 2);
+                    ctx.arc(290, liftY + 2, 7, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // 蒸汽機與工廠鍋爐
+                    drawSteamEngine(ctx, 560, 390, dt);
+
+                    drawCallout(ctx, 282, 262, '18世紀煤礦豎井開採', '#cbd5e1', 282, 298);
+                    drawCallout(ctx, 690, 200, '燃燒「遠古未分解的木質素」驅動蒸汽機與工業文明', COLORS.coalFire, 650, 295);
+                    drawCallout(ctx, 640, 574, '深埋地底 3 億年的石炭紀煤層', COLORS.lignin);
+
+                } else if (step === 4) {
+                    // 階段 5：白腐真菌演化出過氧化物酶與漆酶 -> 煤炭紀元終結
+                    ctx.fillStyle = '#365314';
+                    ctx.fillRect(0, 395, 1100, 25);
+
+                    // 地底深處仍封存著先前的石炭紀煤層
+                    ctx.fillStyle = '#0f172a';
+                    ctx.strokeStyle = '#475569';
+                    ctx.fillRect(80, 555, 940, 52);
+                    ctx.strokeRect(80, 555, 940, 52);
+
+                    // 地表樹木
+                    [160, 520, 880].forEach((tx) => drawGiantCarboniferousTree(ctx, tx, 398, 215));
+
+                    // 倒地樹幹被白腐菌分解
+                    coalSim.logs.slice(0, 5).forEach((lg, i) => {
+                        const lx = 230 + i * 155;
+                        const ly = 388;
+                        lg.decay = (lg.decay + dt * 0.22) % 1;
+                        const alpha = 1 - lg.decay * 0.65;
+                        drawLigninLog(ctx, lx, ly, 90, 17, 0.03, alpha);
+
+                        // 白腐真菌子實體與紫色菌絲網
+                        ctx.strokeStyle = COLORS.fungi;
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.moveTo(lx - 25, ly);
+                        ctx.quadraticCurveTo(lx, ly - 18, lx + 28, ly + 2);
+                        ctx.stroke();
+
+                        // 菇傘
+                        ctx.fillStyle = '#f5d0fe';
+                        ctx.beginPath();
+                        ctx.arc(lx - 10, ly - 10, 8, Math.PI, 0);
+                        ctx.arc(lx + 14, ly - 8, 7, Math.PI, 0);
+                        ctx.fill();
+
+                        if (Math.random() < 0.14) {
+                            coalSim.nutrients.push({
+                                x: lx + (Math.random() - 0.5) * 60,
+                                y: ly - 6,
+                                vy: -0.8 - Math.random() * 0.8,
+                                life: 1,
+                                enzyme: Math.random() < 0.5
+                            });
+                        }
+                    });
+
+                    // 紫色酵素分解與綠色養分回歸雙粒子
+                    for (let i = coalSim.nutrients.length - 1; i >= 0; i--) {
+                        const p = coalSim.nutrients[i];
+                        p.y += p.vy;
+                        p.life -= dt * 0.55;
+                        if (p.life <= 0) { coalSim.nutrients.splice(i, 1); continue; }
+                        ctx.fillStyle = p.enzyme ? COLORS.fungi : COLORS.cellulose;
+                        ctx.globalAlpha = p.life;
+                        ctx.beginPath();
+                        ctx.arc(p.x, p.y, p.enzyme ? 4.5 : 3.5, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.globalAlpha = 1;
+                    }
+
+                    drawCallout(ctx, 385, 315, '白腐真菌分泌「木質素過氧化物酶、漆酶」瓦解木質素', COLORS.fungi, 385, 378);
+                    drawCallout(ctx, 720, 245, '♻️ 碳循環重新閉合・大規模成煤歷史窗口關閉！', COLORS.cellulose);
+                    drawCallout(ctx, 550, 581, '先前石炭紀已形成的煤層永久封存於深處地層', '#94a3b8');
+                }
+
+                pzCoal.endTransform();
+            }
+
+            function drawUpdateNutrients(ctx, color) {
+                for (let i = coalSim.nutrients.length - 1; i >= 0; i--) {
+                    const n = coalSim.nutrients[i];
+                    n.y += n.vy;
+                    n.life -= 0.012;
+                    if (n.life <= 0) { coalSim.nutrients.splice(i, 1); continue; }
+                    ctx.fillStyle = color;
+                    ctx.globalAlpha = n.life;
+                    ctx.beginPath();
+                    ctx.arc(n.x, n.y, 3.8, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.globalAlpha = 1;
+                }
+            }
+
+            function drawGiantCarboniferousTree(ctx, x, baseY, height) {
+                const topY = baseY - height;
+                // 木質素強化樹幹（外層琥珀木質素裝甲，內芯綠色維管束）
+                ctx.fillStyle = COLORS.ligninDark;
+                ctx.beginPath();
+                ctx.moveTo(x - 16, baseY);
+                ctx.lineTo(x - 7, topY);
+                ctx.lineTo(x + 7, topY);
+                ctx.lineTo(x + 16, baseY);
+                ctx.closePath();
+                ctx.fill();
+
+                // 菱形鱗木葉座紋理
+                ctx.strokeStyle = COLORS.lignin;
+                ctx.lineWidth = 1.2;
+                for (let y = baseY - 18; y > topY + 20; y -= 22) {
+                    ctx.beginPath();
+                    ctx.moveTo(x - 8, y);
+                    ctx.lineTo(x + 8, y - 8);
+                    ctx.stroke();
+                }
+
+                // 樹冠蕨葉分枝
+                ctx.fillStyle = '#15803d';
+                ctx.beginPath();
+                ctx.ellipse(x, topY, 48, 24, 0, 0, Math.PI * 2);
+                ctx.ellipse(x - 32, topY + 12, 28, 14, -0.3, 0, Math.PI * 2);
+                ctx.ellipse(x + 32, topY + 12, 28, 14, 0.3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            function drawLigninLog(ctx, x, y, len, thick, angle, alpha = 1) {
+                ctx.save();
+                ctx.globalAlpha = alpha;
+                ctx.translate(x, y);
+                ctx.rotate(angle);
+                ctx.fillStyle = '#92400e';
+                ctx.strokeStyle = COLORS.lignin;
+                ctx.lineWidth = 2;
+                roundRect(ctx, -len * 0.5, -thick * 0.5, len, thick, 5);
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            function drawForceArrows(ctx, seamY, p) {
+                ctx.save();
+                ctx.strokeStyle = '#38bdf8';
+                ctx.fillStyle = '#38bdf8';
+                ctx.lineWidth = 3;
+                [220, 550, 880].forEach((ax) => {
+                    // 上方下沉壓力箭頭
+                    ctx.beginPath();
+                    ctx.moveTo(ax, seamY - 42);
+                    ctx.lineTo(ax, seamY - 10);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(ax - 7, seamY - 16);
+                    ctx.lineTo(ax, seamY - 6);
+                    ctx.lineTo(ax + 7, seamY - 16);
+                    ctx.fill();
+                });
+
+                // 下方地熱波紋
+                ctx.strokeStyle = `rgba(251, 146, 60, ${0.4 + p * 0.5})`;
+                [320, 550, 780].forEach((hx) => {
+                    ctx.beginPath();
+                    ctx.moveTo(hx - 20, seamY + 86);
+                    ctx.quadraticCurveTo(hx - 10, seamY + 74, hx, seamY + 86);
+                    ctx.quadraticCurveTo(hx + 10, seamY + 98, hx + 20, seamY + 86);
+                    ctx.stroke();
+                });
+                ctx.restore();
+            }
+
+            function drawSteamEngine(ctx, x, groundY, dt) {
+                coalSim.wheelAngle += dt * (1.5 + state.steamPower * 5.5);
+
+                // 工廠底座與鍋爐
+                ctx.fillStyle = '#334155';
+                roundRect(ctx, x, groundY - 95, 190, 95, 10);
+                ctx.fill();
+                ctx.strokeStyle = '#94a3b8';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // 燃燒室（燃燒石炭紀木質素煤炭）
+                const glow = 0.6 + 0.4 * Math.sin(state.time * 10);
+                ctx.fillStyle = `rgba(249, 115, 22, ${0.55 + state.steamPower * 0.4 * glow})`;
+                roundRect(ctx, x + 18, groundY - 48, 72, 36, 6);
+                ctx.fill();
+
+                // 煙囪與蒸汽煙團
+                ctx.fillStyle = '#1e293b';
+                ctx.fillRect(x + 32, groundY - 155, 28, 60);
+                if (Math.random() < 0.12 + state.steamPower * 0.25) {
+                    coalSim.steamPuffs.push({
+                        x: x + 46,
+                        y: groundY - 160,
+                        vx: 0.7 + Math.random() * 0.8,
+                        vy: -1.1 - state.steamPower * 1.1,
+                        r: 9,
+                        life: 1
+                    });
+                }
+                for (let i = coalSim.steamPuffs.length - 1; i >= 0; i--) {
+                    const sp = coalSim.steamPuffs[i];
+                    sp.x += sp.vx;
+                    sp.y += sp.vy;
+                    sp.r += 0.28;
+                    sp.life -= dt * 0.55;
+                    if (sp.life <= 0) { coalSim.steamPuffs.splice(i, 1); continue; }
+                    ctx.fillStyle = `rgba(226, 232, 240, ${sp.life * 0.55})`;
+                    ctx.beginPath();
+                    ctx.arc(sp.x, sp.y, sp.r, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                // 大飛輪與連桿
+                const wx = x + 245;
+                const wy = groundY - 52;
+                const wr = 46;
+                ctx.strokeStyle = '#f59e0b';
+                ctx.lineWidth = 5;
+                ctx.beginPath();
+                ctx.arc(wx, wy, wr, 0, Math.PI * 2);
+                ctx.stroke();
+
+                for (let k = 0; k < 6; k++) {
+                    const a = coalSim.wheelAngle + (k * Math.PI) / 3;
+                    ctx.lineWidth = 2.5;
+                    ctx.beginPath();
+                    ctx.moveTo(wx, wy);
+                    ctx.lineTo(wx + Math.cos(a) * wr, wy + Math.sin(a) * wr);
+                    ctx.stroke();
+                }
+
+                // 活塞連桿
+                const pinX = wx + Math.cos(coalSim.wheelAngle) * 28;
+                const pinY = wy + Math.sin(coalSim.wheelAngle) * 28;
+                ctx.strokeStyle = '#e2e8f0';
+                ctx.lineWidth = 5;
+                ctx.beginPath();
+                ctx.moveTo(x + 145, wy);
+                ctx.lineTo(pinX, pinY);
+                ctx.stroke();
+            }
+
+            /* =========================================================================
+               分頁 2：海洋微觀與石油天然氣 (4 階段資料庫與動態引擎)
+               ========================================================================= */
+            const OIL_STEPS = [
+                {
+                    era: '階段 1 / 4 ・ 生物繁盛與海盆沉積',
+                    title: '微觀浮游生物繁盛與海洋有機雪沉降',
+                    points: [
+                        '<strong>微觀生物來源：</strong>不同於陸地巨木形成煤炭，石油與天然氣源自古代海洋或大型湖泊中的<strong>藻類（Algae）、矽藻（Diatoms）與浮游動植物</strong>。',
+                        '<strong>富含脂質能量：</strong>這些微觀生物體內富含高能量的<strong>脂質（Lipids）</strong>與蛋白質。死亡後，屍體如雪花般大量沉降到水體底部。'
+                    ],
+                    widgetHtml: `
+        <div class="lab-widget">
+          <div class="lab-widget-title"><span>☀️ 海洋表層生態</span><span>浮游生物藻華</span></div>
+          <button class="action-btn" id="btnPlanktonBloom" style="background:linear-gradient(135deg,#0d9488,#0284c7);">🦠 觸發「藻類與矽藻」大量繁盛沉降</button>
+        </div>`
+                },
+                {
+                    era: '階段 2 / 4 ・ 缺氧環境與沉積掩埋',
+                    title: '缺氧水底保存與頁岩「源岩」形成',
+                    points: [
+                        '<strong>缺氧關鍵條件：</strong>有機碎屑必須落在<strong>缺氧（Anoxic）</strong>的水底，避免被好氧細菌徹底分解殆盡。',
+                        '<strong>層層掩埋成岩：</strong>源源不絕的泥沙與黏土將有機殘骸層層掩埋、隔絕氧氣，最終壓實形成富含有機質的<strong>源岩（Source Rock，如頁岩 Shale）</strong>。'
+                    ],
+                    widgetHtml: `
+        <div class="lab-widget">
+          <div class="lab-widget-title">
+            <span>🧪 對照實驗：底層水體含氧量</span>
+            <span id="anoxicStatusText" style="color:#4ade80;">缺氧保存 (Anoxic)</span>
+          </div>
+          <button class="action-btn" id="btnToggleAnoxic">🔄 切換「缺氧保存 vs. 有氧細菌分解」</button>
+        </div>`
+                },
+                {
+                    era: '階段 3 / 4 ・ 熱降解與「油氣窗」',
+                    title: '地溫梯度煉金術：油母質、油窗與氣窗',
+                    points: [
+                        '<strong>地溫梯度升溫：</strong>隨地層不斷下沉，溫度每公里約升高 <strong>30°C</strong>。有機質先轉化為稠密蠟狀中間產物——<strong>油母質（Kerogen）</strong>。',
+                        '<strong>油窗（Oil Window）：</strong>深度 <strong>2～4 公里、溫度 60°C～120°C</strong>，油母質裂解為<strong>液態石油</strong>。',
+                        '<strong>氣窗（Gas Window）：</strong>深度超過 <strong>4 公里、溫度 >120°C～150°C</strong>，熱裂解將重質油與殘餘有機質進一步分解為氣態烴類——<strong>天然氣（甲烷）</strong>。'
+                    ],
+                    widgetHtml: `
+        <div class="lab-widget">
+          <div class="lab-widget-title">
+            <span>🌡️ 調整埋藏深度 (地溫梯度 +30°C/km)</span>
+            <span id="depthTempReadout">3.1 km / 108°C</span>
+          </div>
+          <input type="range" id="sliderBurialDepth" min="0.8" max="5.5" step="0.1" value="3.1">
+          <div id="windowPhaseBadge" style="font-size:0.8rem;color:#fcd34d;font-weight:700;">目前區間：油窗 (Oil Window) → 生成液態石油</div>
+        </div>`
+                },
+                {
+                    era: '階段 4 / 4 ・ 運移與儲集構造',
+                    title: '浮力向上運移與「背斜構造」封閉儲集',
+                    points: [
+                        '<strong>向上運移（Migration）：</strong>生成的石油與天然氣<strong>密度小於水</strong>，在地層壓力與浮力驅動下，沿多孔隙儲集岩（如砂岩）向上運移。',
+                        '<strong>蓋層與背斜圈閉：</strong>當遇到不滲透緻密岩層——<strong>蓋層（Seal / Caprock）</strong>，且受<strong>背斜構造（Anticline）</strong>或斷層阻擋時，便依密度由上而下聚集為<strong>「天然氣 → 石油 → 地層水」</strong>的油氣藏。'
+                    ],
+                    widgetHtml: `
+        <div class="lab-widget">
+          <div class="lab-widget-title"><span>⛏️ 勘探工程示範</span><span>背斜頂部鑽探</span></div>
+          <button class="action-btn" id="btnToggleDrill" style="background:linear-gradient(135deg,#d97706,#dc2626);">🗼 鑽穿緻密蓋層・測試油氣藏壓力</button>
+        </div>`
+                }
+            ];
+
+            const pzOil = new PanZoom2D(
+                document.getElementById('canvasOil'),
+                1100, 680,
+                document.getElementById('zoomReadoutOil')
+            );
+
+            const oilSim = {
+                snow: [],
+                thermalParticles: [],
+                migrating: []
+            };
+
+            function initOilEntities() {
+                oilSim.snow = [];
+                for (let i = 0; i < 45; i++) {
+                    oilSim.snow.push({
+                        x: 130 + Math.random() * 860,
+                        y: 80 + Math.random() * 390,
+                        vy: 0.55 + Math.random() * 0.85,
+                        kind: i % 2 === 0 ? 'diatom' : 'algae'
+                    });
+                }
+                oilSim.thermalParticles = [];
+                for (let i = 0; i < 52; i++) {
+                    oilSim.thermalParticles.push({
+                        x: 200 + Math.random() * 760,
+                        y: 0,
+                        vx: (Math.random() - 0.5) * 1.2,
+                        vy: (Math.random() - 0.5) * 1.0,
+                        phaseOffset: Math.random() * Math.PI * 2
+                    });
+                }
+                oilSim.migrating = [];
+                for (let i = 0; i < 42; i++) {
+                    oilSim.migrating.push({
+                        t: Math.random(),
+                        side: i % 2 === 0 ? -1 : 1,
+                        isGas: i % 3 === 0,
+                        jitter: (Math.random() - 0.5) * 26
+                    });
+                }
+            }
+            initOilEntities();
+
+            function drawOilWorld(dt) {
+                const ctx = pzOil.ctx;
+                const step = state.oilStep;
+                pzOil.beginTransform();
+
+                if (step === 0 || step === 1) {
+                    // 階段 1 & 2：海洋水體剖面
+                    const seaGrad = ctx.createLinearGradient(0, 60, 0, 500);
+                    seaGrad.addColorStop(0, '#0ea5e9');
+                    seaGrad.addColorStop(0.45, '#0369a1');
+                    seaGrad.addColorStop(1, step === 1 && state.anoxicMode ? '#1e1b4b' : '#0c4a6e');
+                    ctx.fillStyle = '#081221';
+                    ctx.fillRect(0, 0, 1100, 65);
+                    ctx.fillStyle = seaGrad;
+                    ctx.fillRect(0, 65, 1100, 435);
+
+                    // 陽光光束穿透表層海水
+                    ctx.fillStyle = 'rgba(253, 224, 71, 0.08)';
+                    for (let i = 0; i < 5; i++) {
+                        ctx.beginPath();
+                        ctx.moveTo(180 + i * 190, 65);
+                        ctx.lineTo(120 + i * 190, 260);
+                        ctx.lineTo(250 + i * 190, 260);
+                        ctx.closePath();
+                        ctx.fill();
+                    }
+
+                    // 表層浮游生物群落（藻類與幾何矽藻）
+                    for (let i = 0; i < 16; i++) {
+                        const px = 110 + i * 60 + Math.sin(state.time * 1.5 + i) * 8;
+                        const py = 95 + (i % 3) * 18;
+                        if (i % 2 === 0) {
+                            // 矽藻菱形殼 + 金黃脂質滴
+                            ctx.strokeStyle = COLORS.plankton;
+                            ctx.lineWidth = 2;
+                            ctx.beginPath();
+                            ctx.moveTo(px - 10, py); ctx.lineTo(px, py - 6);
+                            ctx.lineTo(px + 10, py); ctx.lineTo(px, py + 6);
+                            ctx.closePath();
+                            ctx.stroke();
+                            ctx.fillStyle = COLORS.lipid;
+                            ctx.beginPath();
+                            ctx.arc(px, py, 2.8, 0, Math.PI * 2);
+                            ctx.fill();
+                        } else {
+                            ctx.fillStyle = COLORS.plankton;
+                            ctx.beginPath();
+                            ctx.arc(px, py, 5.5, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                    }
+
+                    // 沉降中的有機殘骸雪 (Marine Snow)
+                    oilSim.snow.forEach((s) => {
+                        s.y += s.vy;
+                        if (s.y > 495) {
+                            s.y = 95;
+                            s.x = 120 + Math.random() * 860;
+                        }
+                        ctx.fillStyle = s.kind === 'diatom' ? COLORS.lipid : COLORS.plankton;
+                        ctx.beginPath();
+                        ctx.arc(s.x, s.y, 3.2, 0, Math.PI * 2);
+                        ctx.fill();
+                    });
+
+                    // 海盆底部沉積層
+                    ctx.fillStyle = '#334155';
+                    ctx.fillRect(0, 500, 1100, 180);
+
+                    if (step === 0) {
+                        // 底部初步有機軟泥
+                        ctx.fillStyle = 'rgba(250, 204, 21, 0.38)';
+                        ctx.fillRect(80, 492, 940, 18);
+
+                        drawCallout(ctx, 550, 108, '表層陽光帶：藻類（Algae）與矽藻（Diatoms）大量繁盛', COLORS.plankton);
+                        drawCallout(ctx, 760, 290, '死亡浮游生物（富含脂質）沉降向海盆底部', COLORS.lipid, 660, 290);
+                        drawCallout(ctx, 550, 540, '古代海盆或大型湖泊底部有機軟泥堆積', COLORS.lipid, 550, 500);
+                    } else {
+                        // 階段 2：缺氧水底 + 泥沙黏土層層掩埋形成頁岩源岩
+                        if (state.anoxicMode) {
+                            // 缺氧深紫保護帶 + 泥沙掩埋層 + 富含有機質頁岩源岩
+                            ctx.fillStyle = 'rgba(88, 28, 135, 0.38)';
+                            ctx.fillRect(0, 385, 1100, 115);
+
+                            // 泥沙黏土掩埋層
+                            ctx.fillStyle = '#64748b';
+                            ctx.fillRect(60, 488, 980, 42);
+
+                            // 富含有機質源岩 (頁岩 Source Rock)
+                            ctx.fillStyle = '#1e293b';
+                            ctx.strokeStyle = COLORS.lipid;
+                            ctx.lineWidth = 2;
+                            ctx.fillRect(60, 530, 980, 64);
+                            ctx.strokeRect(60, 530, 980, 64);
+
+                            // 源岩內保存完好的金色脂質微粒
+                            ctx.fillStyle = COLORS.lipid;
+                            for (let x = 95; x < 1010; x += 38) {
+                                ctx.beginPath();
+                                ctx.arc(x, 552 + (x % 3) * 8, 3, 0, Math.PI * 2);
+                                ctx.fill();
+                            }
+
+                            drawCallout(ctx, 550, 425, '缺氧水底（Anoxic Zone, O₂ ≈ 0）：阻止好氧細菌分解有機質', '#c084fc');
+                            drawCallout(ctx, 310, 508, '泥沙與黏土持續掩埋隔絕氧氣', '#cbd5e1');
+                            drawCallout(ctx, 620, 562, '富含有機質的「源岩」（Source Rock，如頁岩）', COLORS.lipid);
+                        } else {
+                            // 對照實驗：若水底有氧，好氧細菌吃光脂質，無法形成源岩！
+                            for (let i = 0; i < 20; i++) {
+                                const bx = 140 + i * 44 + Math.sin(state.time * 4 + i) * 14;
+                                const by = 468 + Math.cos(state.time * 3 + i) * 14;
+                                ctx.fillStyle = COLORS.bacteria;
+                                ctx.beginPath();
+                                ctx.ellipse(bx, by, 7, 4, 0, 0, Math.PI * 2);
+                                ctx.fill();
+                            }
+                            ctx.fillStyle = '#475569';
+                            ctx.fillRect(60, 530, 980, 64);
+                            drawCallout(ctx, 550, 440, '⚠️ 有氧環境對照：好氧細菌迅速吃光有機脂質！', COLORS.bacteria);
+                            drawCallout(ctx, 550, 562, '貧有機質岩層（無法成為油氣源岩）', '#94a3b8');
+                        }
+                    }
+
+                } else if (step === 2) {
+                    // 階段 3：地溫梯度尺標 (0 ~ 6 km) 與「油氣窗」熱裂解模擬
+                    ctx.fillStyle = '#1c1917';
+                    ctx.fillRect(0, 0, 1100, 680);
+
+                    // 繪製深度區間背景色帶 (0~6 km 對應 Y: 50 ~ 630)
+                    const kmToY = (km) => 50 + (km / 6) * 580;
+
+                    // 淺層成岩帶 (0 - 2 km, <60°C)：油母質生成
+                    ctx.fillStyle = 'rgba(71, 85, 105, 0.55)';
+                    ctx.fillRect(140, kmToY(0), 910, kmToY(2) - kmToY(0));
+
+                    // 油窗區間 (2 - 4 km, 60°C - 120°C)
+                    ctx.fillStyle = 'rgba(180, 83, 9, 0.34)';
+                    ctx.fillRect(140, kmToY(2), 910, kmToY(4) - kmToY(2));
+                    ctx.strokeStyle = 'rgba(245, 158, 11, 0.6)';
+                    ctx.strokeRect(140, kmToY(2), 910, kmToY(4) - kmToY(2));
+
+                    // 氣窗區間 (4 - 6 km, 120°C - 195°C)
+                    ctx.fillStyle = 'rgba(225, 29, 72, 0.28)';
+                    ctx.fillRect(140, kmToY(4), 910, kmToY(6) - kmToY(4));
+                    ctx.strokeStyle = 'rgba(251, 113, 133, 0.6)';
+                    ctx.strokeRect(140, kmToY(4), 910, kmToY(6) - kmToY(4));
+
+                    // 左側深度與地溫梯度計 (+30°C/km，地表基準 15°C)
+                    ctx.fillStyle = '#0f172a';
+                    ctx.fillRect(20, 35, 112, 610);
+                    ctx.strokeStyle = '#475569';
+                    ctx.strokeRect(20, 35, 112, 610);
+
+                    ctx.font = '600 12px sans-serif';
+                    ctx.fillStyle = '#cbd5e1';
+                    ctx.textAlign = 'left';
+                    for (let km = 0; km <= 6; km++) {
+                        const y = kmToY(km);
+                        const temp = Math.round(15 + km * 30);
+                        ctx.beginPath();
+                        ctx.moveTo(118, y); ctx.lineTo(138, y);
+                        ctx.strokeStyle = '#94a3b8';
+                        ctx.stroke();
+                        ctx.fillText(`${km}km (${temp}°C)`, 28, y + 4);
+                    }
+
+                    // 當前源岩埋藏深度匣
+                    const d = state.burialDepthKm;
+                    const tempNow = Math.round(15 + d * 30);
+                    const boxY = kmToY(d);
+
+                    ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+                    ctx.strokeStyle = d < 2 ? COLORS.lipid : (d <= 4 ? COLORS.oilStroke : COLORS.gas);
+                    ctx.lineWidth = 3;
+                    roundRect(ctx, 180, boxY - 46, 830, 92, 12);
+                    ctx.fill();
+                    ctx.stroke();
+
+                    // 源岩匣內分子動態（依深度顯示油母質塊 / 液態石油滴 / 天然氣甲烷高速粒子）
+                    oilSim.thermalParticles.forEach((p, idx) => {
+                        const speedMult = d < 2 ? 0.35 : (d <= 4 ? 1.15 : 2.7);
+                        p.x += p.vx * speedMult;
+                        if (p.x < 205 || p.x > 985) p.vx *= -1;
+                        const py = boxY + Math.sin(state.time * speedMult * 2 + p.phaseOffset) * 28;
+
+                        if (d < 2) {
+                            // 稠密蠟狀油母質 (Kerogen) 多邊形團塊
+                            ctx.fillStyle = COLORS.kerogen;
+                            ctx.fillRect(p.x - 6, py - 5, 12, 10);
+                        } else if (d <= 4) {
+                            // 油窗：液態石油水滴 + 少量伴生油母質
+                            ctx.fillStyle = idx % 5 === 0 ? COLORS.kerogen : COLORS.oil;
+                            ctx.strokeStyle = COLORS.oilStroke;
+                            ctx.lineWidth = 1.5;
+                            ctx.beginPath();
+                            ctx.arc(p.x, py, 6.5, 0, Math.PI * 2);
+                            ctx.fill();
+                            ctx.stroke();
+                        } else {
+                            // 氣窗：熱裂解為更簡單的氣態甲烷小分子高速運動
+                            ctx.fillStyle = COLORS.gas;
+                            ctx.beginPath();
+                            ctx.arc(p.x, py, 4.2, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                    });
+
+                    drawCallout(ctx, 840, kmToY(1.0), '淺層 (<2km, <60°C)：形成蠟狀「油母質 Kerogen」', COLORS.lipid);
+                    drawCallout(ctx, 840, kmToY(3.0), '油窗 (2–4km, 60–120°C)：裂解為「液態石油」', COLORS.oilStroke);
+                    drawCallout(ctx, 840, kmToY(5.0), '氣窗 (>4km, >120–150°C)：熱裂解為「天然氣（甲烷）」', COLORS.gas);
+                    drawCallout(ctx, 430, boxY - 62, `目前源岩深度 ${d.toFixed(1)} km ・ 地溫約 ${tempNow}°C`, '#38bdf8');
+
+                } else if (step === 3) {
+                    // 階段 4：向上運移與「背斜構造 (Anticline) + 緻密蓋層」儲集
+                    ctx.fillStyle = '#0f172a';
+                    ctx.fillRect(0, 0, 1100, 95); // 地表天空
+                    ctx.fillStyle = '#3f6212';
+                    ctx.fillRect(0, 90, 1100, 16); // 地表植被
+
+                    // 上覆一般岩層
+                    ctx.fillStyle = '#334155';
+                    ctx.fillRect(0, 106, 1100, 574);
+
+                    // 定義背斜構造褶皺曲線函數 archY(x)
+                    const archY = (x) => {
+                        const dx = (x - 550) / 360;
+                        return 190 + dx * dx * 220;
+                    };
+
+                    // 1. 不滲透緻密蓋層 (Caprock / Seal)
+                    ctx.beginPath();
+                    for (let x = 60; x <= 1040; x += 20) {
+                        const y = archY(x) - 48;
+                        if (x === 60) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                    }
+                    for (let x = 1040; x >= 60; x -= 20) {
+                        ctx.lineTo(x, archY(x));
+                    }
+                    ctx.closePath();
+                    ctx.fillStyle = '#0f172a';
+                    ctx.fill();
+                    ctx.strokeStyle = '#94a3b8';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+
+                    // 2. 多孔隙儲集岩層 (砂岩 Reservoir Rock) — 先填滿地層水基底，再用 clip 分層畫出氣帽與油層！
+                    ctx.save();
+                    ctx.beginPath();
+                    for (let x = 60; x <= 1040; x += 20) {
+                        const y = archY(x);
+                        if (x === 60) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                    }
+                    for (let x = 1040; x >= 60; x -= 20) {
+                        ctx.lineTo(x, archY(x) + 165);
+                    }
+                    ctx.closePath();
+                    ctx.clip();
+
+                    // 底層孔隙水（藍色砂岩儲集層）
+                    ctx.fillStyle = '#075985';
+                    ctx.fillRect(60, 180, 980, 420);
+
+                    // 最頂部：天然氣帽 (Gas Cap，密度最小)
+                    ctx.fillStyle = COLORS.gas;
+                    ctx.fillRect(280, 185, 540, 72);
+
+                    // 中間層：液態石油層 (Oil Zone，密度小於水、大於氣)
+                    ctx.fillStyle = COLORS.oil;
+                    ctx.fillRect(240, 257, 620, 68);
+                    ctx.strokeStyle = COLORS.oilStroke;
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(240, 257); ctx.lineTo(860, 257);
+                    ctx.moveTo(200, 325); ctx.lineTo(900, 325);
+                    ctx.stroke();
+
+                    // 沿多孔隙岩層兩翼向上運移的油氣滴
+                    oilSim.migrating.forEach((m) => {
+                        m.t = (m.t + dt * 0.24) % 1;
+                        const x = 550 + m.side * (420 * (1 - m.t));
+                        const y = archY(x) + 95 - m.t * 45 + m.jitter * 0.4;
+                        if (y > 322) {
+                            ctx.fillStyle = m.isGas ? COLORS.gas : COLORS.oilStroke;
+                            ctx.beginPath();
+                            ctx.arc(x, y, m.isGas ? 4 : 5, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                    });
+                    ctx.restore();
+
+                    // 3. 深處富含有機質頁岩源岩 (Source Rock)
+                    ctx.beginPath();
+                    for (let x = 60; x <= 1040; x += 20) {
+                        const y = archY(x) + 165;
+                        if (x === 60) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                    }
+                    ctx.lineTo(1040, 680);
+                    ctx.lineTo(60, 680);
+                    ctx.closePath();
+                    ctx.fillStyle = '#27272a';
+                    ctx.fill();
+
+                    // 右側斷層線示意 (Fault)
+                    ctx.strokeStyle = '#facc15';
+                    ctx.lineWidth = 2.5;
+                    ctx.setLineDash([7, 5]);
+                    ctx.beginPath();
+                    ctx.moveTo(930, 120);
+                    ctx.lineTo(845, 620);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+
+                    // 若開啟鑽井勘探示範
+                    if (state.oilDrilled) {
+                        ctx.strokeStyle = '#e2e8f0';
+                        ctx.lineWidth = 4;
+                        ctx.beginPath();
+                        ctx.moveTo(532, 90); ctx.lineTo(550, 28); ctx.lineTo(568, 90);
+                        ctx.stroke();
+                        ctx.fillStyle = '#e2e8f0';
+                        ctx.fillRect(547, 90, 6, 185);
+
+                        // 井口油氣噴發流體示範
+                        const jetH = 14 + Math.sin(state.time * 12) * 5;
+                        ctx.fillStyle = COLORS.oilStroke;
+                        ctx.beginPath();
+                        ctx.arc(550, 22, jetH * 0.55, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+
+                    drawCallout(ctx, 310, 145, '緻密不滲透「蓋層」（Seal / Caprock）阻擋逸散', '#cbd5e1', 420, 165);
+                    drawCallout(ctx, 550, 224, '1. 天然氣帽（甲烷・密度最小）', COLORS.gas);
+                    drawCallout(ctx, 550, 292, '2. 液態石油層（密度小於水）', COLORS.oilStroke);
+                    drawCallout(ctx, 550, 362, '3. 多孔隙砂岩底層地層水', COLORS.water);
+                    drawCallout(ctx, 220, 480, '浮力驅動油氣沿多孔隙岩層「向上運移」', COLORS.oilStroke, 260, 420);
+                    drawCallout(ctx, 880, 560, '深部頁岩源岩持續生烴 ＋ 斷層構造', COLORS.lipid, 882, 430);
+                }
+
+                pzOil.endTransform();
+            }
+
+            /* =========================================================================
+               分頁 3：Three.js 3D 微觀分子與地層構造實驗室
+               ========================================================================= */
+            const THREE_MODES = {
+                lignin: {
+                    legend: [
+                        { color: 'var(--c-cellulose)', text: '纖維素微纖絲' },
+                        { color: 'var(--c-lignin)', text: '木質素交聯網' },
+                        { color: 'var(--c-bacteria)', text: '纖維素酶細菌' },
+                        { color: 'var(--c-fungi)', text: '白腐菌絲與過氧化物酶' }
+                    ],
+                    steps: [
+                        {
+                            era: '3D 分子視角 ・ 步驟 1 / 3',
+                            title: '早期植物細胞壁：純纖維素微纖絲與細菌分解',
+                            points: [
+                                '<strong>線性結晶束：</strong>綠色圓柱代表<strong>纖維素（Cellulose）</strong>微纖絲，結構規則。',
+                                '<strong>細菌分解順暢：</strong>青藍色微生物早已具備<strong>纖維素酶</strong>，能直接貼近並瓦解纖維素鏈，釋放養分回歸生態系。'
+                            ]
+                        },
+                        {
+                            era: '3D 分子視角 ・ 步驟 2 / 3',
+                            title: '木質素交聯裝甲：高度複雜苯丙烷網與演化盲點',
+                            points: [
+                                '<strong>剛性防水填充：</strong>琥珀色多面體與交聯鍵結代表<strong>木質素（Lignin）</strong>，緊密包覆在纖維素空隙外圍。',
+                                '<strong>微生物碰壁：</strong>細菌的纖維素酶無法接觸內層纖維素，也無法切斷複雜的苯丙烷共價交聯，導致石炭紀樹木死後無法腐爛！'
+                            ]
+                        },
+                        {
+                            era: '3D 分子視角 ・ 步驟 3 / 3',
+                            title: '白腐真菌逆襲：木質素過氧化物酶與漆酶裂解',
+                            points: [
+                                '<strong>真菌酵素武器：</strong>紫紅色分支代表<strong>白腐真菌（White-rot fungi）</strong>菌絲，釋放高氧化力的過氧化物酶與漆酶脈衝環。',
+                                '<strong>打通碳循環：</strong>木質素交聯鍵結在 3D 空間中被氧化切斷，內層纖維素重見天日並順利分解，終結了巨量成煤紀元。'
+                            ]
+                        }
+                    ]
+                },
+                anticline: {
+                    legend: [
+                        { color: 'var(--c-gas)', text: '天然氣帽 (頂層)' },
+                        { color: 'var(--c-lignin)', text: '液態石油 (中層)' },
+                        { color: 'var(--c-water)', text: '孔隙地層水 (底層)' },
+                        { color: '#64748b', text: '不滲透蓋層 / 頁岩源岩' }
+                    ],
+                    steps: [
+                        {
+                            era: '3D 地質構造 ・ 步驟 1 / 3',
+                            title: '深部頁岩源岩受地熱催化生烴',
+                            points: [
+                                '<strong>立體盆地源岩：</strong>模型最底層暗灰色褶皺為富含有機質的<strong>頁岩源岩（Source Rock）</strong>。',
+                                '<strong>進入油氣窗：</strong>地熱能由下方加熱，油母質開始裂解出金棕色<strong>石油滴</strong>與珊瑚紅<strong>天然氣泡</strong>。'
+                            ]
+                        },
+                        {
+                            era: '3D 地質構造 ・ 步驟 2 / 3',
+                            title: '密度差浮力驅動：沿 3D 背斜兩翼向上運移',
+                            points: [
+                                '<strong>多孔隙通道：</strong>中間半透明岩層為具孔隙與滲透率的<strong>儲集砂岩</strong>（內含地層水）。',
+                                '<strong>立體上浮：</strong>生成的油氣因密度低於水，沿著 3D <strong>背斜構造（Anticline）</strong>的雙翼斜面持續向穹窿最高處運移。'
+                            ]
+                        },
+                        {
+                            era: '3D 地質構造 ・ 步驟 3 / 3',
+                            title: '緻密蓋層封閉：形成分層油氣藏',
+                            points: [
+                                '<strong>蓋層阻擋：</strong>上方拱形暗色岩層為不滲透的<strong>蓋層（Seal / Caprock）</strong>，封鎖了油氣繼續向地表逸散的路徑。',
+                                '<strong>重力分異儲集：</strong>在 3D 背斜穹頂內自動按密度分層：最頂端為<strong>天然氣帽</strong>，中段為<strong>石油環帶</strong>，下方為<strong>底水</strong>。'
+                            ]
+                        }
+                    ]
+                }
+            };
+
+            let threeApp = null;
+
+            function initThreeLab() {
+                if (typeof THREE === 'undefined') {
+                    document.getElementById('threeOverlayLabels').innerHTML =
+                        '<div style="padding:20px;color:#fca5a5;">無法載入 Three.js CDN，請確認網路連線以檢視 3D 模型（其餘 2D 分頁可離線正常運作）。</div>';
+                    return;
+                }
+
+                const canvas = document.getElementById('canvasThree');
+                const stage = document.getElementById('stageThree');
+                const overlay = document.getElementById('threeOverlayLabels');
+                const zoomReadout = document.getElementById('zoomReadoutThree');
+
+                const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+                renderer.setClearColor(0x070b12, 1);
+                renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
+                const scene = new THREE.Scene();
+                const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 200);
+
+                // 燈光配置
+                const ambLight = new THREE.AmbientLight(0xffffff, 0.65);
+                scene.add(ambLight);
+                const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+                dirLight.position.set(12, 18, 14);
+                scene.add(dirLight);
+                const ptLight = new THREE.PointLight(0xf59e0b, 0.7, 45);
+                ptLight.position.set(-8, -6, 8);
+                scene.add(ptLight);
+
+                const rootGroup = new THREE.Group();
+                scene.add(rootGroup);
+
+                // 自訂全平台觸控友善 3D Orbit + Pan + Pinch-Zoom 控制器
+                const camCtrl = {
+                    theta: 0.55,
+                    phi: 1.12,
+                    radius: 17,
+                    baseRadius: 17,
+                    target: new THREE.Vector3(0, 0, 0),
+                    pointers: new Map(),
+                    lastDist: 0,
+                    lastMid: null,
+                    updateCamera() {
+                        this.phi = Math.max(0.18, Math.min(Math.PI - 0.18, this.phi));
+                        this.radius = Math.max(6.5, Math.min(38, this.radius));
+                        camera.position.x = this.target.x + this.radius * Math.sin(this.phi) * Math.sin(this.theta);
+                        camera.position.y = this.target.y + this.radius * Math.cos(this.phi);
+                        camera.position.z = this.target.z + this.radius * Math.sin(this.phi) * Math.cos(this.theta);
+                        camera.lookAt(this.target);
+                        if (zoomReadout) {
+                            zoomReadout.textContent = `${Math.round((this.baseRadius / this.radius) * 100)}%`;
+                        }
+                    },
+                    reset() {
+                        this.theta = state.threeMode === 'lignin' ? 0.62 : 0.48;
+                        this.phi = state.threeMode === 'lignin' ? 1.15 : 1.08;
+                        this.radius = state.threeMode === 'lignin' ? 16.5 : 19.5;
+                        this.baseRadius = this.radius;
+                        this.target.set(0, 0, 0);
+                        this.updateCamera();
+                    }
+                };
+
+                canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+                canvas.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    camCtrl.radius *= e.deltaY > 0 ? 1.1 : 0.9;
+                    camCtrl.updateCamera();
+                }, { passive: false });
+
+                canvas.addEventListener('pointerdown', (e) => {
+                    canvas.setPointerCapture(e.pointerId);
+                    camCtrl.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, button: e.button });
+                    if (camCtrl.pointers.size === 2) {
+                        const pts = Array.from(camCtrl.pointers.values());
+                        camCtrl.lastDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+                        camCtrl.lastMid = { x: (pts[0].x + pts[1].x) * 0.5, y: (pts[0].y + pts[1].y) * 0.5 };
+                    }
+                });
+
+                canvas.addEventListener('pointermove', (e) => {
+                    if (!camCtrl.pointers.has(e.pointerId)) return;
+                    const prev = camCtrl.pointers.get(e.pointerId);
+                    const curr = { x: e.clientX, y: e.clientY, button: prev.button };
+                    camCtrl.pointers.set(e.pointerId, curr);
+
+                    if (camCtrl.pointers.size === 1) {
+                        const dx = curr.x - prev.x;
+                        const dy = curr.y - prev.y;
+                        if (curr.button === 2 || e.shiftKey) {
+                            // 右鍵或 Shift 拖曳平移
+                            const panScale = camCtrl.radius * 0.0018;
+                            const right = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 0);
+                            const up = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 1);
+                            camCtrl.target.addScaledVector(right, -dx * panScale);
+                            camCtrl.target.addScaledVector(up, dy * panScale);
+                        } else {
+                            // 單指 / 左鍵旋轉
+                            camCtrl.theta -= dx * 0.0075;
+                            camCtrl.phi -= dy * 0.0075;
+                        }
+                        camCtrl.updateCamera();
+                    } else if (camCtrl.pointers.size === 2) {
+                        // 雙指捏合縮放 + 雙指同步平移
+                        const pts = Array.from(camCtrl.pointers.values());
+                        const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+                        const mid = { x: (pts[0].x + pts[1].x) * 0.5, y: (pts[0].y + pts[1].y) * 0.5 };
+                        if (camCtrl.lastDist > 10) {
+                            camCtrl.radius *= camCtrl.lastDist / dist;
+                        }
+                        if (camCtrl.lastMid) {
+                            const panScale = camCtrl.radius * 0.0018;
+                            const right = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 0);
+                            const up = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 1);
+                            camCtrl.target.addScaledVector(right, -(mid.x - camCtrl.lastMid.x) * panScale);
+                            camCtrl.target.addScaledVector(up, (mid.y - camCtrl.lastMid.y) * panScale);
+                        }
+                        camCtrl.lastDist = dist;
+                        camCtrl.lastMid = mid;
+                        camCtrl.updateCamera();
+                    }
+                });
+
+                const upPtr = (e) => {
+                    camCtrl.pointers.delete(e.pointerId);
+                    camCtrl.lastDist = 0;
+                    camCtrl.lastMid = null;
+                };
+                canvas.addEventListener('pointerup', upPtr);
+                canvas.addEventListener('pointercancel', upPtr);
+
+                threeApp = {
+                    renderer, scene, camera, rootGroup, camCtrl, overlay,
+                    anchors: [],
+                    dynamicRefs: {},
+                    resize() {
+                        const rect = stage.getBoundingClientRect();
+                        if (rect.width === 0 || rect.height === 0) return;
+                        renderer.setSize(rect.width, rect.height, false);
+                        camera.aspect = rect.width / rect.height;
+                        camera.updateProjectionMatrix();
+                        camCtrl.updateCamera();
+                    },
+                    rebuildScene() {
+                        while (rootGroup.children.length > 0) {
+                            rootGroup.remove(rootGroup.children[0]);
+                        }
+                        overlay.innerHTML = '';
+                        this.anchors = [];
+                        this.dynamicRefs = {};
+
+                        if (state.threeMode === 'lignin') {
+                            buildLignin3DScene(this);
+                        } else {
+                            buildAnticline3DScene(this);
+                        }
+                        this.updateLabels();
+                    },
+                    addLabel(posVec3, text, borderColor) {
+                        const el = document.createElement('div');
+                        el.className = 'label-3d';
+                        el.style.borderColor = borderColor;
+                        el.textContent = text;
+                        overlay.appendChild(el);
+                        this.anchors.push({ pos: posVec3, el });
+                    },
+                    updateLabels() {
+                        if (!state.showLabels) {
+                            overlay.style.display = 'none';
+                            return;
+                        }
+                        overlay.style.display = 'block';
+                        const rect = stage.getBoundingClientRect();
+                        const tmp = new THREE.Vector3();
+                        this.anchors.forEach((a) => {
+                            tmp.copy(a.pos).project(camera);
+                            if (tmp.z > 1) {
+                                a.el.style.opacity = '0';
+                                return;
+                            }
+                            const x = (tmp.x * 0.5 + 0.5) * rect.width;
+                            const y = (-tmp.y * 0.5 + 0.5) * rect.height;
+                            a.el.style.opacity = '1';
+                            a.el.style.left = `${x}px`;
+                            a.el.style.top = `${y}px`;
+                        });
+                    },
+                    animate(dt) {
+                        animateThreeDynamic(this, dt);
+                        this.updateLabels();
+                        renderer.render(scene, camera);
+                    }
+                };
+
+                threeApp.resize();
+                camCtrl.reset();
+                threeApp.rebuildScene();
+            }
+
+            function buildLignin3DScene(app) {
+                const g = app.rootGroup;
+                const step = state.threeStep;
+
+                // 1. 綠色纖維素微纖絲束 (3x3 陣列長圓柱)
+                const cellMat = new THREE.MeshStandardMaterial({ color: 0x4ade80, roughness: 0.35, metalness: 0.1 });
+                const cellCylinders = [];
+                for (let ix = -1; ix <= 1; ix++) {
+                    for (let iz = -1; iz <= 1; iz++) {
+                        const geo = new THREE.CylinderGeometry(0.42, 0.42, 9.5, 16);
+                        const mesh = new THREE.Mesh(geo, cellMat);
+                        mesh.position.set(ix * 1.45, 0, iz * 1.45);
+                        g.add(mesh);
+                        cellCylinders.push(mesh);
+                    }
+                }
+
+                // 2. 木質素苯丙烷交聯網 (Step 1 & 2 出現)
+                const ligninNodes = [];
+                if (step >= 1) {
+                    const ligMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.3, metalness: 0.25 });
+                    const bondMat = new THREE.MeshBasicMaterial({ color: 0xd97706 });
+                    for (let i = 0; i < 38; i++) {
+                        const angle = (i / 38) * Math.PI * 8;
+                        const y = -4.2 + (i / 38) * 8.4;
+                        const r = 2.35 + (i % 2) * 0.45;
+                        const node = new THREE.Mesh(new THREE.OctahedronGeometry(0.42, 0), ligMat.clone());
+                        node.position.set(Math.cos(angle) * r, y, Math.sin(angle) * r);
+                        node.userData = { basePos: node.position.clone(), phase: i * 0.4 };
+                        g.add(node);
+                        ligninNodes.push(node);
+
+                        // 橫向交聯化學鍵
+                        const bond = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.8, 6), bondMat);
+                        bond.position.copy(node.position).multiplyScalar(0.75);
+                        bond.lookAt(0, y, 0);
+                        bond.rotateX(Math.PI * 0.5);
+                        node.userData.bond = bond;
+                        g.add(bond);
+                    }
+                }
+
+                // 3. 青藍色纖維素酶細菌
+                const bacteriaList = [];
+                const bacMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0284c7, emissiveIntensity: 0.35 });
+                for (let i = 0; i < 10; i++) {
+                    const bac = new THREE.Mesh(new THREE.SphereGeometry(0.45, 16, 12), bacMat);
+                    bac.scale.set(1.4, 0.85, 0.85);
+                    bac.userData = { angle: (i / 10) * Math.PI * 2, y: -3.5 + i * 0.78 };
+                    g.add(bac);
+                    bacteriaList.push(bac);
+                }
+
+                // 4. 白腐真菌紫色菌絲與過氧化物酶脈衝環 (Step 2 即第3步出現)
+                const enzymeRings = [];
+                if (step === 2) {
+                    const fungiMat = new THREE.MeshStandardMaterial({ color: 0xe879f9, emissive: 0xa21caf, emissiveIntensity: 0.4 });
+                    for (let k = 0; k < 4; k++) {
+                        const curvePts = [];
+                        const baseA = (k * Math.PI) / 2;
+                        for (let s = 0; s <= 10; s++) {
+                            const t = s / 10;
+                            const a = baseA + t * 1.8;
+                            const rad = 4.6 - t * 1.5;
+                            curvePts.push(new THREE.Vector3(Math.cos(a) * rad, -4.5 + t * 9, Math.sin(a) * rad));
+                        }
+                        const tubeGeo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(curvePts), 24, 0.16, 8, false);
+                        g.add(new THREE.Mesh(tubeGeo, fungiMat));
+                    }
+
+                    for (let r = 0; r < 3; r++) {
+                        const ringMat = new THREE.MeshBasicMaterial({ color: 0xf0abfc, transparent: true, opacity: 0.8, side: THREE.DoubleSide });
+                        const ring = new THREE.Mesh(new THREE.RingGeometry(1.5, 1.85, 32), ringMat);
+                        ring.rotation.x = Math.PI * 0.5;
+                        ring.userData = { offset: r / 3 };
+                        g.add(ring);
+                        enzymeRings.push(ring);
+                    }
+                }
+
+                app.dynamicRefs = { cellCylinders, ligninNodes, bacteriaList, enzymeRings };
+
+                // 3D 空間投影標籤
+                app.addLabel(new THREE.Vector3(0, 5.3, 0), '纖維素微纖絲束 (Cellulose)', COLORS.cellulose);
+                if (step === 0) {
+                    app.addLabel(new THREE.Vector3(3.5, 0.5, 2.5), '纖維素酶細菌順利分解細胞壁', COLORS.bacteria);
+                } else if (step === 1) {
+                    app.addLabel(new THREE.Vector3(-3.2, 2.2, 2.2), '木質素高度交聯苯丙烷網 (Lignin)', COLORS.lignin);
+                    app.addLabel(new THREE.Vector3(4.2, -1.5, 2.0), '細菌無對應酵素・被阻擋在外！', '#f87171');
+                } else {
+                    app.addLabel(new THREE.Vector3(-4.0, 2.6, 2.0), '白腐真菌菌絲 (White-rot Fungi)', COLORS.fungi);
+                    app.addLabel(new THREE.Vector3(3.6, -1.8, 2.2), '木質素過氧化物酶與漆酶切斷交聯！', COLORS.fungi);
+                }
+            }
+
+            function buildAnticline3DScene(app) {
+                const g = app.rootGroup;
+                const step = state.threeStep;
+
+                // 建立 3D 背斜褶皺曲面網格輔助函式
+                function createFoldLayer(yOffset, thickness, colorHex, opacity = 1) {
+                    const segX = 36, segZ = 18;
+                    const width = 14, depth = 8;
+                    const geo = new THREE.PlaneGeometry(width, depth, segX, segZ);
+                    geo.rotateX(-Math.PI * 0.5);
+                    const pos = geo.attributes.position;
+                    for (let i = 0; i < pos.count; i++) {
+                        const x = pos.getX(i);
+                        const z = pos.getZ(i);
+                        const arch = 3.2 * Math.exp(-(x * x) / 18) * Math.exp(-(z * z) / 48);
+                        pos.setY(i, yOffset + arch);
+                    }
+                    geo.computeVertexNormals();
+                    const mat = new THREE.MeshStandardMaterial({
+                        color: colorHex,
+                        transparent: opacity < 1,
+                        opacity,
+                        side: THREE.DoubleSide,
+                        roughness: 0.65
+                    });
+                    const topMesh = new THREE.Mesh(geo, mat);
+                    topMesh.position.y = thickness * 0.5;
+                    g.add(topMesh);
+                    return topMesh;
+                }
+
+                // 底層頁岩源岩、中層多孔隙砂岩儲集層、頂部緻密蓋層
+                createFoldLayer(-3.6, 0.8, 0x334155, 0.95); // 源岩 (Shale Source Rock)
+                createFoldLayer(-1.2, 1.2, 0x0369a1, 0.32); // 含水多孔隙砂岩 (Porous Reservoir)
+                createFoldLayer(1.3, 0.7, 0x1e293b, 0.82);  // 不滲透緻密蓋層 (Caprock / Seal)
+
+                // 輔助剖面網格線讓背斜弧度更清晰
+                const wireGeo = new THREE.PlaneGeometry(14, 8, 20, 8);
+                wireGeo.rotateX(-Math.PI * 0.5);
+                const wPos = wireGeo.attributes.position;
+                for (let i = 0; i < wPos.count; i++) {
+                    const x = wPos.getX(i), z = wPos.getZ(i);
+                    wPos.setY(i, 1.65 + 3.2 * Math.exp(-(x * x) / 18) * Math.exp(-(z * z) / 48));
+                }
+                const wire = new THREE.Mesh(wireGeo, new THREE.MeshBasicMaterial({ color: 0x94a3b8, wireframe: true, transparent: true, opacity: 0.3 }));
+                g.add(wire);
+
+                // 3D 油氣粒子群 (珊瑚紅天然氣 + 琥珀金液態石油)
+                const hcParticles = [];
+                const gasMat = new THREE.MeshStandardMaterial({ color: 0xfb7185, emissive: 0xe11d48, emissiveIntensity: 0.35 });
+                const oilMat = new THREE.MeshStandardMaterial({ color: 0xd97706, emissive: 0x92400e, emissiveIntensity: 0.25 });
+
+                for (let i = 0; i < 95; i++) {
+                    const isGas = i % 3 === 0;
+                    const p = new THREE.Mesh(new THREE.SphereGeometry(isGas ? 0.19 : 0.23, 10, 10), isGas ? gasMat : oilMat);
+                    p.userData = {
+                        isGas,
+                        progress: Math.random(),
+                        startX: (Math.random() - 0.5) * 12.5,
+                        z: (Math.random() - 0.5) * 6.4,
+                        jitter: (Math.random() - 0.5) * 0.45
+                    };
+                    g.add(p);
+                    hcParticles.push(p);
+                }
+
+                app.dynamicRefs = { hcParticles };
+
+                app.addLabel(new THREE.Vector3(0, 5.1, 0), '緻密不滲透蓋層 (Caprock / Seal)', '#cbd5e1');
+                if (step === 0) {
+                    app.addLabel(new THREE.Vector3(0, -2.5, 2.5), '深部頁岩源岩受地熱裂解生成油氣', COLORS.lipid);
+                } else if (step === 1) {
+                    app.addLabel(new THREE.Vector3(-4.2, 0.2, 2.0), '浮力驅動油氣沿背斜兩翼向上運移', COLORS.oilStroke);
+                } else {
+                    app.addLabel(new THREE.Vector3(0, 3.6, 0), '頂部：天然氣帽 (甲烷)', COLORS.gas);
+                    app.addLabel(new THREE.Vector3(2.2, 2.3, 1.5), '中段：液態石油儲集帶', COLORS.oilStroke);
+                    app.addLabel(new THREE.Vector3(-3.8, -0.5, 2.0), '下方：多孔隙岩層底水', COLORS.water);
+                }
+            }
+
+            function animateThreeDynamic(app, dt) {
+                const refs = app.dynamicRefs;
+                const step = state.threeStep;
+
+                if (state.threeMode === 'lignin' && refs.bacteriaList) {
+                    app.rootGroup.rotation.y += dt * 0.15;
+
+                    // 細菌行為：Step 0 進入內部吃纖維素；Step 1 被木質素彈在外面；Step 2 白腐菌打開通道後共同分解
+                    refs.bacteriaList.forEach((bac, idx) => {
+                        bac.userData.angle += dt * 1.1;
+                        let rad = 2.0;
+                        if (step === 0) {
+                            rad = 1.6 + Math.sin(state.time * 3 + idx) * 0.7;
+                        } else if (step === 1) {
+                            // 撞到木質素外圍反彈
+                            rad = 3.55 + Math.abs(Math.sin(state.time * 4.5 + idx)) * 0.9;
+                        } else {
+                            rad = 2.1 + Math.sin(state.time * 2.5 + idx) * 0.9;
+                        }
+                        bac.position.set(
+                            Math.cos(bac.userData.angle) * rad,
+                            bac.userData.y + Math.sin(state.time * 2 + idx) * 0.3,
+                            Math.sin(bac.userData.angle) * rad
+                        );
+                        bac.lookAt(0, bac.position.y, 0);
+                    });
+
+                    // Step 2 白腐菌酵素環掃描並瓦解木質素節點
+                    if (step === 2 && refs.enzymeRings) {
+                        refs.enzymeRings.forEach((ring) => {
+                            const cycle = (state.time * 0.45 + ring.userData.offset) % 1;
+                            ring.position.y = 4.5 - cycle * 9.0;
+                            const sc = 1 + Math.sin(cycle * Math.PI) * 0.9;
+                            ring.scale.set(sc, sc, 1);
+                            ring.material.opacity = Math.sin(cycle * Math.PI) * 0.85;
+                        });
+                        refs.ligninNodes.forEach((nd) => {
+                            const explode = 1 + 0.35 * (0.5 + 0.5 * Math.sin(state.time * 2.5 + nd.userData.phase));
+                            nd.position.copy(nd.userData.basePos).multiplyScalar(explode);
+                            nd.rotation.x += dt * 2;
+                            nd.rotation.y += dt * 2;
+                            if (nd.userData.bond) nd.userData.bond.visible = explode < 1.22;
+                        });
+                    }
+                } else if (state.threeMode === 'anticline' && refs.hcParticles) {
+                    refs.hcParticles.forEach((p) => {
+                        const u = p.userData;
+                        if (step === 0) {
+                            // 源岩層內生成微幅震盪
+                            const x = u.startX;
+                            const z = u.z;
+                            const arch = 3.2 * Math.exp(-(x * x) / 18) * Math.exp(-(z * z) / 48);
+                            p.position.set(x, -2.8 + arch + Math.sin(state.time * 3 + x) * 0.2, z);
+                        } else if (step === 1) {
+                            // 沿背斜兩翼向上運移至穹頂
+                            u.progress = (u.progress + dt * (u.isGas ? 0.38 : 0.24)) % 1;
+                            const x = u.startX * (1 - u.progress * 0.82);
+                            const z = u.z * (1 - u.progress * 0.45);
+                            const arch = 3.2 * Math.exp(-(x * x) / 18) * Math.exp(-(z * z) / 48);
+                            p.position.set(x, -1.6 + u.progress * 2.1 + arch * 0.92, z);
+                        } else {
+                            // 聚集在背斜頂部並按密度分層：氣帽在最頂、石油在中段
+                            const spreadX = u.isGas ? u.startX * 0.22 : u.startX * 0.38;
+                            const spreadZ = u.z * 0.45;
+                            const arch = 3.2 * Math.exp(-(spreadX * spreadX) / 18) * Math.exp(-(spreadZ * spreadZ) / 48);
+                            const layerY = u.isGas ? 0.95 : 0.15;
+                            p.position.set(
+                                spreadX + Math.sin(state.time * 1.5 + u.jitter * 10) * 0.08,
+                                layerY + arch * 0.88 + u.jitter * 0.22,
+                                spreadZ
+                            );
+                        }
+                    });
+                }
+            }
+
+            /* =========================================================================
+               分頁 4：地質年代碳封存時間軸 (可 Zoom / Pan / 點擊互動)
+               ========================================================================= */
+            const TIMELINE_EVENTS = [
+                { ma: 430, x: 130, label: '志留紀 (~4.3億年前)', sub: '早期陸生植物（纖維素）循環順暢', color: COLORS.cellulose, coalRate: 0.08 },
+                { ma: 380, x: 295, label: '泥盆紀 (~3.8億年前)', sub: '木質素演化！巨木出現・微生物分解盲點', color: COLORS.lignin, coalRate: 0.45 },
+                { ma: 330, x: 480, label: '石炭紀 (3.6億–3億年前)', sub: '地球史上唯一「煤炭大冰封」沉積最高峰', color: '#fb923c', coalRate: 0.96 },
+                { ma: 295, x: 665, label: '石炭紀末～二疊紀 (~3億年前)', sub: '白腐真菌演化過氧化物酶・成煤窗口關閉', color: COLORS.fungi, coalRate: 0.16 },
+                { ma: 150, x: 855, label: '中生代～新生代海盆', sub: '海洋浮游藻類與矽藻繁盛・大量生成石油天然氣', color: COLORS.plankton, coalRate: 0.14 },
+                { ma: 0, x: 1025, label: '18世紀工業革命～現代', sub: '開採燃燒遠古木質素與海洋脂質驅動文明', color: COLORS.gas, coalRate: 0.10 }
+            ];
+
+            const pzTimeline = new PanZoom2D(
+                document.getElementById('canvasTimeline'),
+                1150, 290,
+                document.getElementById('zoomReadoutTimeline')
+            );
+
+            pzTimeline.onTapCallback = (worldPt) => {
+                TIMELINE_EVENTS.forEach((ev, idx) => {
+                    if (Math.hypot(worldPt.x - ev.x, worldPt.y - 185) < 36) {
+                        state.selectedEraIndex = idx;
+                    }
+                });
+            };
+
+            function drawTimelineWorld() {
+                const ctx = pzTimeline.ctx;
+                pzTimeline.beginTransform();
+
+                ctx.fillStyle = '#090f1c';
+                ctx.fillRect(0, 0, 1150, 290);
+
+                // 繪製石炭紀成煤高峰填充曲線
+                ctx.beginPath();
+                ctx.moveTo(90, 215);
+                TIMELINE_EVENTS.forEach((ev) => {
+                    const y = 215 - ev.coalRate * 145;
+                    ctx.lineTo(ev.x, y);
+                });
+                ctx.lineTo(1060, 215);
+                ctx.closePath();
+                const areaGrad = ctx.createLinearGradient(0, 60, 0, 215);
+                areaGrad.addColorStop(0, 'rgba(245, 158, 11, 0.48)');
+                areaGrad.addColorStop(1, 'rgba(245, 158, 11, 0.03)');
+                ctx.fillStyle = areaGrad;
+                ctx.fill();
+
+                // 海洋油氣生成示意曲線（古生代亦有，中生代侏羅-白堊紀達高峰）
+                ctx.beginPath();
+                ctx.moveTo(130, 208);
+                ctx.bezierCurveTo(380, 195, 700, 185, 855, 92);
+                ctx.bezierCurveTo(930, 95, 980, 165, 1025, 195);
+                ctx.strokeStyle = COLORS.plankton;
+                ctx.lineWidth = 3;
+                ctx.stroke();
+
+                // 主時間軸橫線
+                ctx.strokeStyle = '#64748b';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(80, 215);
+                ctx.lineTo(1070, 215);
+                ctx.stroke();
+
+                // 各節點與說明標籤
+                TIMELINE_EVENTS.forEach((ev, idx) => {
+                    const peakY = 215 - ev.coalRate * 145;
+                    const isSel = idx === state.selectedEraIndex;
+
+                    ctx.strokeStyle = ev.color;
+                    ctx.lineWidth = isSel ? 2.5 : 1.3;
+                    ctx.beginPath();
+                    ctx.moveTo(ev.x, 215);
+                    ctx.lineTo(ev.x, peakY);
+                    ctx.stroke();
+
+                    ctx.fillStyle = ev.color;
+                    ctx.beginPath();
+                    ctx.arc(ev.x, 215, isSel ? 10 : 7, 0, Math.PI * 2);
+                    ctx.fill();
+                    if (isSel) {
+                        ctx.strokeStyle = '#fff';
+                        ctx.lineWidth = 2.5;
+                        ctx.stroke();
+                    }
+
+                    if (state.showLabels) {
+                        ctx.font = '700 12.5px sans-serif';
+                        ctx.fillStyle = isSel ? '#fff' : '#cbd5e1';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(ev.label, ev.x, 242);
+                    }
+                });
+
+                const selEv = TIMELINE_EVENTS[state.selectedEraIndex];
+                drawCallout(
+                    ctx,
+                    Math.max(230, Math.min(920, selEv.x)),
+                    42,
+                    `📌 ${selEv.label}：${selEv.sub}`,
+                    selEv.color,
+                    selEv.x,
+                    215 - selEv.coalRate * 145
+                );
+
+                pzTimeline.endTransform();
+            }
+
+            /* =========================================================================
+               UI 面板渲染與互動事件綁定
+               ========================================================================= */
+            function renderCoalUI() {
+                const dotsEl = document.getElementById('coalStepDots');
+                dotsEl.innerHTML = COAL_STEPS.map((_, i) =>
+                    `<button class="step-pill ${i === state.coalStep ? 'active' : ''}" data-coal-step="${i}">${i + 1}</button>`
+                ).join('');
+
+                dotsEl.querySelectorAll('[data-coal-step]').forEach((btn) => {
+                    btn.addEventListener('click', () => {
+                        state.coalStep = Number(btn.dataset.coalStep);
+                        state.coalPlaying = false;
+                        renderCoalUI();
+                    });
+                });
+
+                document.getElementById('coalPrevBtn').disabled = state.coalStep === 0;
+                document.getElementById('coalNextBtn').disabled = state.coalStep === COAL_STEPS.length - 1;
+
+                const playBtn = document.getElementById('coalPlayBtn');
+                playBtn.textContent = state.coalPlaying ? '⏸ 暫停播放' : '▶ 自動播放';
+                playBtn.classList.toggle('play-active', state.coalPlaying);
+
+                const data = COAL_STEPS[state.coalStep];
+                const narEl = document.getElementById('coalNarrative');
+                narEl.innerHTML = `
+      <span class="era-badge">${data.era}</span>
+      <h2 class="step-heading">${data.title}</h2>
+      ${data.widgetHtml || ''}
+      <div class="info-points">
+        ${data.points.map((p) => `<div class="info-item">${p}</div>`).join('')}
+      </div>
+    `;
+
+                // 綁定當前步驟專屬實驗控制器
+                const btnSpawnBac = document.getElementById('btnSpawnBacteria');
+                if (btnSpawnBac) {
+                    btnSpawnBac.addEventListener('click', () => {
+                        for (let i = 0; i < 12; i++) {
+                            coalSim.microbes.push({
+                                x: 200 + Math.random() * 700,
+                                y: 388 + Math.random() * 28,
+                                vx: (Math.random() - 0.5) * 2.2,
+                                vy: (Math.random() - 0.5) * 1.4
+                            });
+                            coalSim.nutrients.push({ x: 220 + Math.random() * 660, y: 390, vy: -1.4, life: 1 });
+                        }
+                        if (coalSim.microbes.length > 55) coalSim.microbes.splice(0, 12);
+                    });
+                }
+
+                const btnDropLog = document.getElementById('btnDropLigninLog');
+                if (btnDropLog) {
+                    btnDropLog.addEventListener('click', () => {
+                        coalSim.logs.push({
+                            x: 180 + Math.random() * 740,
+                            y: 368 + Math.random() * 32,
+                            angle: (Math.random() - 0.5) * 0.25,
+                            decay: 0
+                        });
+                        if (coalSim.logs.length > 16) coalSim.logs.shift();
+                    });
+                }
+
+                const sliderPressure = document.getElementById('sliderCoalPressure');
+                if (sliderPressure) {
+                    sliderPressure.value = Math.round(state.coalPressure * 100);
+                    const updatePText = () => {
+                        const v = Number(sliderPressure.value);
+                        state.coalPressure = v / 100;
+                        const rank = v < 35 ? '泥炭～褐煤' : (v < 70 ? '次煙煤～煙煤' : '高熱值煙煤～無煙煤');
+                        document.getElementById('coalPressureVal').textContent = `${v}% (${rank})`;
+                    };
+                    updatePText();
+                    sliderPressure.addEventListener('input', updatePText);
+                }
+
+                const sliderSteam = document.getElementById('sliderSteamPower');
+                if (sliderSteam) {
+                    sliderSteam.value = Math.round(state.steamPower * 100);
+                    sliderSteam.addEventListener('input', () => {
+                        state.steamPower = Number(sliderSteam.value) / 100;
+                        document.getElementById('steamPowerVal').textContent = `${sliderSteam.value}% 運轉`;
+                    });
+                }
+
+                const btnFungi = document.getElementById('btnFungiPulse');
+                if (btnFungi) {
+                    btnFungi.addEventListener('click', () => {
+                        for (let i = 0; i < 28; i++) {
+                            coalSim.nutrients.push({
+                                x: 200 + Math.random() * 680,
+                                y: 386,
+                                vy: -1.1 - Math.random() * 1.4,
+                                life: 1,
+                                enzyme: i % 2 === 0
+                            });
+                        }
+                    });
+                }
+            }
+
+            function renderOilUI() {
+                const dotsEl = document.getElementById('oilStepDots');
+                dotsEl.innerHTML = OIL_STEPS.map((_, i) =>
+                    `<button class="step-pill oil-theme ${i === state.oilStep ? 'active' : ''}" data-oil-step="${i}">${i + 1}</button>`
+                ).join('');
+
+                dotsEl.querySelectorAll('[data-oil-step]').forEach((btn) => {
+                    btn.addEventListener('click', () => {
+                        state.oilStep = Number(btn.dataset.oilStep);
+                        state.oilPlaying = false;
+                        renderOilUI();
+                    });
+                });
+
+                document.getElementById('oilPrevBtn').disabled = state.oilStep === 0;
+                document.getElementById('oilNextBtn').disabled = state.oilStep === OIL_STEPS.length - 1;
+
+                const playBtn = document.getElementById('oilPlayBtn');
+                playBtn.textContent = state.oilPlaying ? '⏸ 暫停播放' : '▶ 自動播放';
+                playBtn.classList.toggle('play-active', state.oilPlaying);
+
+                const data = OIL_STEPS[state.oilStep];
+                const narEl = document.getElementById('oilNarrative');
+                narEl.innerHTML = `
+      <span class="era-badge" style="color:#5eead4;border-color:rgba(45,212,191,0.4);background:rgba(45,212,191,0.14);">${data.era}</span>
+      <h2 class="step-heading">${data.title}</h2>
+      ${data.widgetHtml || ''}
+      <div class="info-points">
+        ${data.points.map((p) => `<div class="info-item" style="border-left-color:var(--c-plankton);">${p}</div>`).join('')}
+      </div>
+    `;
+
+                const btnBloom = document.getElementById('btnPlanktonBloom');
+                if (btnBloom) {
+                    btnBloom.addEventListener('click', () => {
+                        for (let i = 0; i < 24; i++) {
+                            oilSim.snow.push({
+                                x: 120 + Math.random() * 860,
+                                y: 85 + Math.random() * 60,
+                                vy: 0.9 + Math.random() * 1.1,
+                                kind: i % 2 === 0 ? 'diatom' : 'algae'
+                            });
+                        }
+                        if (oilSim.snow.length > 95) oilSim.snow.splice(0, 24);
+                    });
+                }
+
+                const btnAnoxic = document.getElementById('btnToggleAnoxic');
+                if (btnAnoxic) {
+                    const refreshAnoxicLabel = () => {
+                        const st = document.getElementById('anoxicStatusText');
+                        st.textContent = state.anoxicMode ? '缺氧保存 (Anoxic)' : '有氧分解 (Oxic)';
+                        st.style.color = state.anoxicMode ? '#4ade80' : '#f87171';
+                    };
+                    refreshAnoxicLabel();
+                    btnAnoxic.addEventListener('click', () => {
+                        state.anoxicMode = !state.anoxicMode;
+                        refreshAnoxicLabel();
+                    });
+                }
+
+                const sliderDepth = document.getElementById('sliderBurialDepth');
+                if (sliderDepth) {
+                    sliderDepth.value = state.burialDepthKm;
+                    const refreshDepthInfo = () => {
+                        const d = Number(sliderDepth.value);
+                        state.burialDepthKm = d;
+                        const temp = Math.round(15 + d * 30);
+                        document.getElementById('depthTempReadout').textContent = `${d.toFixed(1)} km / ${temp}°C`;
+                        const badge = document.getElementById('windowPhaseBadge');
+                        if (d < 2) {
+                            badge.textContent = '目前區間：淺層未成熟帶 (<60°C) → 形成蠟狀油母質 (Kerogen)';
+                            badge.style.color = COLORS.lipid;
+                        } else if (d <= 4) {
+                            badge.textContent = '目前區間：油窗 (Oil Window, 60–120°C) → 裂解生成液態石油！';
+                            badge.style.color = COLORS.oilStroke;
+                        } else {
+                            badge.textContent = '目前區間：氣窗 (Gas Window, >120–150°C) → 熱裂解為天然氣（甲烷）！';
+                            badge.style.color = COLORS.gas;
+                        }
+                    };
+                    refreshDepthInfo();
+                    sliderDepth.addEventListener('input', refreshDepthInfo);
+                }
+
+                const btnDrill = document.getElementById('btnToggleDrill');
+                if (btnDrill) {
+                    btnDrill.textContent = state.oilDrilled ? '🔧 收起鑽探井架' : '🗼 鑽穿緻密蓋層・測試油氣藏壓力';
+                    btnDrill.addEventListener('click', () => {
+                        state.oilDrilled = !state.oilDrilled;
+                        btnDrill.textContent = state.oilDrilled ? '🔧 收起鑽探井架' : '🗼 鑽穿緻密蓋層・測試油氣藏壓力';
+                    });
+                }
+            }
+
+            function renderThreeUI() {
+                const cfg = THREE_MODES[state.threeMode];
+
+                document.querySelectorAll('[data-three-mode]').forEach((b) => {
+                    b.classList.toggle('active', b.dataset.threeMode === state.threeMode);
+                });
+
+                const legEl = document.getElementById('legendThree');
+                legEl.innerHTML = cfg.legend.map((item) =>
+                    `<span class="legend-chip"><i class="swatch" style="background:${item.color}"></i>${item.text}</span>`
+                ).join('');
+
+                const dotsEl = document.getElementById('threeStepDots');
+                dotsEl.innerHTML = cfg.steps.map((_, i) =>
+                    `<button class="step-pill ${i === state.threeStep ? 'active' : ''}" data-three-step="${i}">${i + 1}</button>`
+                ).join('');
+
+                dotsEl.querySelectorAll('[data-three-step]').forEach((btn) => {
+                    btn.addEventListener('click', () => {
+                        state.threeStep = Number(btn.dataset.threeStep);
+                        renderThreeUI();
+                        if (threeApp) threeApp.rebuildScene();
+                    });
+                });
+
+                document.getElementById('threePrevBtn').disabled = state.threeStep === 0;
+                document.getElementById('threeNextBtn').disabled = state.threeStep === cfg.steps.length - 1;
+
+                const data = cfg.steps[state.threeStep];
+                document.getElementById('threeNarrative').innerHTML = `
+      <span class="era-badge" style="color:#f5d0fe;border-color:rgba(232,121,249,0.45);background:rgba(232,121,249,0.14);">${data.era}</span>
+      <h2 class="step-heading">${data.title}</h2>
+      <div class="info-points">
+        ${data.points.map((p) => `<div class="info-item" style="border-left-color:var(--c-fungi);">${p}</div>`).join('')}
+      </div>
+    `;
+            }
+
+            /* =========================================================================
+               分頁切換、全域控制與主渲染迴圈
+               ========================================================================= */
+            document.querySelectorAll('.tab-btn').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const target = btn.dataset.tab;
+                    state.activeTab = target;
+                    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b === btn));
+                    document.querySelectorAll('.tab-view').forEach((v) => v.classList.toggle('active', v.id === `tab-${target}`));
+
+                    requestAnimationFrame(() => {
+                        if (target === 'coal') pzCoal.resize();
+                        else if (target === 'oil') pzOil.resize();
+                        else if (target === 'three') {
+                            if (!threeApp) initThreeLab();
+                            else threeApp.resize();
+                        } else if (target === 'compare') {
+                            pzTimeline.resize();
+                        }
+                    });
+                });
+            });
+
+            // 全域文字標籤顯示/隱藏切換
+            document.getElementById('btnToggleLabels').addEventListener('click', (e) => {
+                state.showLabels = !state.showLabels;
+                const btn = e.currentTarget;
+                btn.classList.toggle('active', state.showLabels);
+                document.getElementById('labelStateText').textContent = state.showLabels ? '顯示' : '隱藏';
+                // 同步控制左上角圖例在極簡模式下的透明度或保持清晰，並即時更新 3D 標籤
+                if (threeApp) threeApp.updateLabels();
+            });
+
+            // 全域重置視角按鈕
+            function resetActiveViewport() {
+                if (state.activeTab === 'coal') pzCoal.reset();
+                else if (state.activeTab === 'oil') pzOil.reset();
+                else if (state.activeTab === 'three' && threeApp) threeApp.camCtrl.reset();
+                else if (state.activeTab === 'compare') pzTimeline.reset();
+            }
+            document.getElementById('btnResetGlobalView').addEventListener('click', resetActiveViewport);
+
+            // 各視窗右下角 +/-/⟲ 縮放按鈕
+            document.querySelectorAll('[data-zoom-target]').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const target = btn.dataset.zoomTarget;
+                    const dir = Number(btn.dataset.dir);
+                    if (target === 'coal') {
+                        dir === 0 ? pzCoal.reset() : pzCoal.zoomBy(dir > 0 ? 1.22 : 0.82);
+                    } else if (target === 'oil') {
+                        dir === 0 ? pzOil.reset() : pzOil.zoomBy(dir > 0 ? 1.22 : 0.82);
+                    } else if (target === 'timeline') {
+                        dir === 0 ? pzTimeline.reset() : pzTimeline.zoomBy(dir > 0 ? 1.22 : 0.82);
+                    } else if (target === 'three' && threeApp) {
+                        if (dir === 0) threeApp.camCtrl.reset();
+                        else {
+                            threeApp.camCtrl.radius *= dir > 0 ? 0.82 : 1.22;
+                            threeApp.camCtrl.updateCamera();
+                        }
+                    }
+                });
+            });
+
+            // 步驟上一步 / 下一步 / 自動播放事件
+            document.getElementById('coalPrevBtn').addEventListener('click', () => {
+                if (state.coalStep > 0) { state.coalStep--; state.coalPlaying = false; renderCoalUI(); }
+            });
+            document.getElementById('coalNextBtn').addEventListener('click', () => {
+                if (state.coalStep < COAL_STEPS.length - 1) { state.coalStep++; state.coalPlaying = false; renderCoalUI(); }
+            });
+            document.getElementById('coalPlayBtn').addEventListener('click', () => {
+                state.coalPlaying = !state.coalPlaying;
+                state.coalTimer = 0;
+                renderCoalUI();
+            });
+
+            document.getElementById('oilPrevBtn').addEventListener('click', () => {
+                if (state.oilStep > 0) { state.oilStep--; state.oilPlaying = false; renderOilUI(); }
+            });
+            document.getElementById('oilNextBtn').addEventListener('click', () => {
+                if (state.oilStep < OIL_STEPS.length - 1) { state.oilStep++; state.oilPlaying = false; renderOilUI(); }
+            });
+            document.getElementById('oilPlayBtn').addEventListener('click', () => {
+                state.oilPlaying = !state.oilPlaying;
+                state.oilTimer = 0;
+                renderOilUI();
+            });
+
+            document.querySelectorAll('[data-three-mode]').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    state.threeMode = btn.dataset.threeMode;
+                    state.threeStep = 0;
+                    renderThreeUI();
+                    if (threeApp) {
+                        threeApp.camCtrl.reset();
+                        threeApp.rebuildScene();
+                    }
+                });
+            });
+            document.getElementById('threePrevBtn').addEventListener('click', () => {
+                if (state.threeStep > 0) {
+                    state.threeStep--;
+                    renderThreeUI();
+                    if (threeApp) threeApp.rebuildScene();
+                }
+            });
+            document.getElementById('threeNextBtn').addEventListener('click', () => {
+                const maxS = THREE_MODES[state.threeMode].steps.length - 1;
+                if (state.threeStep < maxS) {
+                    state.threeStep++;
+                    renderThreeUI();
+                    if (threeApp) threeApp.rebuildScene();
+                }
+            });
+
+            window.addEventListener('resize', () => {
+                if (state.activeTab === 'coal') pzCoal.resize();
+                else if (state.activeTab === 'oil') pzOil.resize();
+                else if (state.activeTab === 'three' && threeApp) threeApp.resize();
+                else if (state.activeTab === 'compare') pzTimeline.resize();
+            });
+
+            // 初始化各分頁面板
+            renderCoalUI();
+            renderOilUI();
+            renderThreeUI();
+            pzCoal.reset();
+
+            // 主動畫迴圈
+            let lastTs = performance.now();
+            function tick(now) {
+                const dt = Math.min((now - lastTs) / 1000, 0.05);
+                lastTs = now;
+                state.time += dt;
+
+                // 自動播放計時推進
+                if (state.coalPlaying && state.activeTab === 'coal') {
+                    state.coalTimer += dt;
+                    if (state.coalTimer > 6.5) {
+                        state.coalTimer = 0;
+                        state.coalStep = (state.coalStep + 1) % COAL_STEPS.length;
+                        renderCoalUI();
+                    }
+                }
+                if (state.oilPlaying && state.activeTab === 'oil') {
+                    state.oilTimer += dt;
+                    if (state.oilTimer > 6.5) {
+                        state.oilTimer = 0;
+                        state.oilStep = (state.oilStep + 1) % OIL_STEPS.length;
+                        renderOilUI();
+                    }
+                }
+
+                if (state.activeTab === 'coal') {
+                    drawCoalWorld(dt);
+                } else if (state.activeTab === 'oil') {
+                    drawOilWorld(dt);
+                } else if (state.activeTab === 'three' && threeApp) {
+                    threeApp.animate(dt);
+                } else if (state.activeTab === 'compare') {
+                    drawTimelineWorld();
+                }
+
+                requestAnimationFrame(tick);
+            }
+            requestAnimationFrame(tick);
+        })();
+    </script>
+</body>
+
+</html>
