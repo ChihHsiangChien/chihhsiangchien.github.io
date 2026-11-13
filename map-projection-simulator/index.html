@@ -1,0 +1,3024 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>地圖投影互動動態模擬器 | Map Projection Lab</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        :root {
+            --bg-app: #090e1a;
+            --bg-panel: #111827;
+            --bg-card: #1e293b;
+            --bg-card-hover: #283548;
+            --border: #334155;
+            --text-main: #f1f5f9;
+            --text-muted: #94a3b8;
+
+            /* 跨分頁一致視覺色彩系統 */
+            --c-ocean: #0c223a;
+            --c-land: #10b981;
+            --c-land-stroke: #6ee7b7;
+            --c-graticule: #38bdf8;
+            --c-surface: #f59e0b;
+            /* 投影面 */
+            --c-tangent: #fde047;
+            /* 相切線/標準緯線 */
+            --c-tissot: #f43f5e;
+            /* 底索變形圓 */
+            --c-greatcircle: #38bdf8;
+            /* 大圓航線 */
+            --c-rhumb: #fb7185;
+            /* 等角航線 */
+
+            /* 分類徽章色彩 */
+            --badge-conformal: #3b82f6;
+            --badge-equalarea: #10b981;
+            --badge-equidistant: #a855f7;
+            --badge-compromise: #f59e0b;
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--bg-app);
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* 整體結構 */
+        .app-shell {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            width: 100%;
+        }
+
+        /* 頂部導覽與全域控制 */
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 8px 14px;
+            background: var(--bg-panel);
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+            flex-wrap: wrap;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 700;
+            font-size: 1rem;
+            letter-spacing: 0.3px;
+        }
+
+        .brand-badge {
+            font-size: 0.7rem;
+            padding: 2px 7px;
+            border-radius: 999px;
+            background: rgba(56, 189, 248, 0.15);
+            color: var(--c-graticule);
+            border: 1px solid rgba(56, 189, 248, 0.35);
+            font-weight: 600;
+        }
+
+        .global-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .toggle-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: var(--bg-card);
+            color: var(--text-main);
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .toggle-pill.active {
+            background: rgba(16, 185, 129, 0.18);
+            border-color: var(--c-land);
+            color: #6ee7b7;
+        }
+
+        .toggle-pill:active {
+            transform: scale(0.96);
+        }
+
+        /* 分頁列 */
+        .tabbar {
+            display: flex;
+            gap: 6px;
+            padding: 8px 14px;
+            background: #0d1424;
+            border-bottom: 1px solid var(--border);
+            overflow-x: auto;
+            scrollbar-width: none;
+            flex-shrink: 0;
+        }
+
+        .tabbar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .tab-btn {
+            flex: 0 0 auto;
+            padding: 8px 14px;
+            border-radius: 10px;
+            border: 1px solid transparent;
+            background: transparent;
+            color: var(--text-muted);
+            font-size: 0.86rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.18s ease;
+            white-space: nowrap;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-main);
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        .tab-btn.active {
+            background: var(--bg-card);
+            color: #fff;
+            border-color: var(--c-graticule);
+            box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.25);
+        }
+
+        /* 主工作區 */
+        .workspace {
+            flex: 1;
+            display: flex;
+            min-height: 0;
+            position: relative;
+        }
+
+        .tab-view {
+            display: none;
+            width: 100%;
+            height: 100%;
+            flex-direction: row;
+        }
+
+        .tab-view.active {
+            display: flex;
+        }
+
+        /* 視覺畫布區 */
+        .stage-area {
+            flex: 1;
+            position: relative;
+            background: radial-gradient(circle at center, #11223b 0%, #070c17 100%);
+            overflow: hidden;
+            min-width: 0;
+            min-height: 0;
+        }
+
+        canvas.interactive-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            touch-action: none;
+            cursor: grab;
+        }
+
+        canvas.interactive-canvas:active {
+            cursor: grabbing;
+        }
+
+        /* 3D HTML 疊加標籤層 */
+        .overlay-labels {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        .map-label-tag {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            background: rgba(9, 14, 26, 0.78);
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            color: #f8fafc;
+            font-size: 0.72rem;
+            padding: 2px 6px;
+            border-radius: 5px;
+            white-space: nowrap;
+            backdrop-filter: blur(4px);
+            transition: opacity 0.15s;
+        }
+
+        .map-label-tag.gold {
+            border-color: var(--c-tangent);
+            color: var(--c-tangent);
+        }
+
+        .map-label-tag.amber {
+            border-color: var(--c-surface);
+            color: #fcd34d;
+        }
+
+        /* 懸浮視角控制 HUD */
+        .viewport-hud {
+            position: absolute;
+            right: 12px;
+            bottom: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            z-index: 15;
+        }
+
+        .hud-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: rgba(17, 24, 39, 0.88);
+            backdrop-filter: blur(8px);
+            color: var(--text-main);
+            font-size: 1.1rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+        }
+
+        .hud-btn:active {
+            transform: scale(0.92);
+            background: var(--bg-card);
+        }
+
+        .hud-btn.text-sm {
+            font-size: 0.75rem;
+        }
+
+        /* 懸浮步驟進度提示卡 */
+        .stage-banner {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            right: 64px;
+            max-width: 460px;
+            background: rgba(15, 23, 42, 0.86);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            backdrop-filter: blur(8px);
+            border-radius: 12px;
+            padding: 10px 14px;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .stage-banner-step {
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: var(--c-graticule);
+            text-transform: uppercase;
+            margin-bottom: 2px;
+        }
+
+        .stage-banner-title {
+            font-size: 0.94rem;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 3px;
+        }
+
+        .stage-banner-desc {
+            font-size: 0.8rem;
+            color: #cbd5e1;
+            line-height: 1.4;
+        }
+
+        /* 一致性色彩圖例條 */
+        .legend-bar {
+            position: absolute;
+            left: 12px;
+            bottom: 12px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            background: rgba(15, 23, 42, 0.82);
+            border: 1px solid var(--border);
+            backdrop-filter: blur(6px);
+            padding: 6px 10px;
+            border-radius: 9px;
+            font-size: 0.72rem;
+            color: #cbd5e1;
+            pointer-events: none;
+            max-width: calc(100% - 76px);
+            z-index: 10;
+        }
+
+        .legend-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        /* 右側/下方控制側欄 */
+        .control-panel {
+            width: 360px;
+            background: var(--bg-panel);
+            border-left: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            padding: 14px;
+            gap: 14px;
+            flex-shrink: 0;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .card-title {
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        /* 選項按鈕網格 */
+        .pill-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 7px;
+        }
+
+        .opt-btn {
+            padding: 9px 10px;
+            border-radius: 9px;
+            border: 1px solid var(--border);
+            background: #131c2e;
+            color: var(--text-main);
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: left;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            transition: all 0.15s;
+        }
+
+        .opt-btn:hover {
+            background: var(--bg-card-hover);
+        }
+
+        .opt-btn.active {
+            border-color: var(--c-graticule);
+            background: rgba(56, 189, 248, 0.14);
+            box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.35);
+        }
+
+        .opt-sub {
+            font-size: 0.69rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .prop-tag {
+            display: inline-block;
+            font-size: 0.65rem;
+            padding: 1px 6px;
+            border-radius: 999px;
+            font-weight: 700;
+            color: #fff;
+            width: fit-content;
+        }
+
+        .tag-conformal {
+            background: var(--badge-conformal);
+        }
+
+        .tag-equalarea {
+            background: var(--badge-equalarea);
+        }
+
+        .tag-equidistant {
+            background: var(--badge-equidistant);
+        }
+
+        .tag-compromise {
+            background: var(--badge-compromise);
+            color: #111;
+        }
+
+        /* Step-by-Step 控制器 */
+        .stepper-box {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .step-dots {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+        }
+
+        .step-dot {
+            padding: 7px 4px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: #0f172a;
+            color: var(--text-muted);
+            font-size: 0.74rem;
+            font-weight: 700;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .step-dot.active {
+            background: var(--c-graticule);
+            color: #090e1a;
+            border-color: var(--c-graticule);
+        }
+
+        .step-dot.done {
+            border-color: rgba(56, 189, 248, 0.45);
+            color: var(--c-graticule);
+        }
+
+        .step-nav-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 9px 10px;
+            border-radius: 9px;
+            border: 1px solid var(--border);
+            background: #131c2e;
+            color: var(--text-main);
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+        }
+
+        .btn:active {
+            transform: scale(0.97);
+        }
+
+        .btn-primary {
+            background: #0284c7;
+            border-color: #38bdf8;
+            color: #fff;
+        }
+
+        .btn-amber {
+            background: rgba(245, 158, 11, 0.18);
+            border-color: var(--c-surface);
+            color: #fcd34d;
+        }
+
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        /* 滑桿與開關 */
+        .slider-row {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .slider-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.78rem;
+            color: #cbd5e1;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            accent-color: var(--c-graticule);
+            height: 6px;
+            cursor: pointer;
+        }
+
+        .switch-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.82rem;
+            color: #e2e8f0;
+            cursor: pointer;
+            padding: 4px 0;
+        }
+
+        /* 數值讀取面板 */
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+        }
+
+        .metric-box {
+            background: #0f172a;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px;
+        }
+
+        .metric-label {
+            font-size: 0.68rem;
+            color: var(--text-muted);
+        }
+
+        .metric-val {
+            font-size: 0.98rem;
+            font-weight: 700;
+            color: #fff;
+            margin-top: 2px;
+        }
+
+        /* Tab 4 雙圖對比與表格 */
+        .dual-stage {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            min-height: 0;
+            overflow-y: auto;
+            background: var(--bg-app);
+        }
+
+        .dual-maps-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            padding: 10px;
+            height: 55%;
+            min-height: 290px;
+        }
+
+        .dual-pane {
+            position: relative;
+            background: radial-gradient(circle at center, #11223b 0%, #070c17 100%);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .dual-pane-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 10px;
+            background: rgba(17, 24, 39, 0.9);
+            border-bottom: 1px solid var(--border);
+            gap: 8px;
+            z-index: 5;
+        }
+
+        .dual-select {
+            background: var(--bg-card);
+            color: #fff;
+            border: 1px solid var(--border);
+            border-radius: 7px;
+            padding: 5px 8px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            max-width: 100%;
+        }
+
+        .dual-canvas-wrap {
+            flex: 1;
+            position: relative;
+            min-height: 0;
+        }
+
+        .matrix-wrap {
+            padding: 10px 14px 20px;
+        }
+
+        .preset-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 10px;
+        }
+
+        .chip-btn {
+            padding: 6px 10px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: var(--bg-card);
+            color: #e2e8f0;
+            font-size: 0.76rem;
+            cursor: pointer;
+        }
+
+        .chip-btn:hover {
+            border-color: var(--c-graticule);
+        }
+
+        table.comp-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.78rem;
+            background: var(--bg-panel);
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+
+        .comp-table th,
+        .comp-table td {
+            padding: 9px 10px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .comp-table th {
+            background: var(--bg-card);
+            color: var(--text-muted);
+            font-weight: 700;
+        }
+
+        .comp-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* 響應式：手機與直向平板 */
+        @media (max-width: 900px) {
+            .tab-view.active {
+                flex-direction: column;
+            }
+
+            .stage-area {
+                flex: none;
+                height: 48vh;
+                min-height: 260px;
+            }
+
+            .control-panel {
+                width: 100%;
+                flex: 1;
+                border-left: none;
+                border-top: 1px solid var(--border);
+            }
+
+            .stage-banner {
+                max-width: none;
+                padding: 7px 10px;
+            }
+
+            .stage-banner-desc {
+                display: none;
+                /* 手機保留標題與步驟名以防遮蔽畫布 */
+            }
+
+            .legend-bar {
+                font-size: 0.66rem;
+                padding: 4px 8px;
+                gap: 6px;
+            }
+
+            .dual-maps-row {
+                grid-template-columns: 1fr;
+                height: auto;
+            }
+
+            .dual-pane {
+                height: 250px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-shell">
+        <!-- 頂部導覽 -->
+        <header class="topbar">
+            <div class="brand">
+                <span>🌍 地圖投影互動動態模擬器</span>
+                <span class="brand-badge">觸控 / 縮放支援</span>
+            </div>
+            <div class="global-actions">
+                <button id="btnGlobalLabels" class="toggle-pill active" onclick="toggleGlobalLabels()">
+                    <span>🏷️</span>
+                    <span id="lblToggleText">文字標籤：開</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- 分頁切換 -->
+        <nav class="tabbar" role="tablist">
+            <button class="tab-btn active" data-tab="tab1" onclick="switchTab('tab1')">
+                <span>🧊</span> 1. 投影面與 3D 展開
+            </button>
+            <button class="tab-btn" data-tab="tab2" onclick="switchTab('tab2')">
+                <span>📐</span> 2. 保持特性與變形實測
+            </button>
+            <button class="tab-btn" data-tab="tab3" onclick="switchTab('tab3')">
+                <span>🧭</span> 3. 麥卡托專題與延伸
+            </button>
+            <button class="tab-btn" data-tab="tab4" onclick="switchTab('tab4')">
+                <span>⚖️</span> 4. 雙圖同步對比與總表
+            </button>
+        </nav>
+
+        <!-- 主內容區 -->
+        <main class="workspace">
+
+            <!-- ==================== 分頁 1：3D 投影面與展開 ==================== -->
+            <section id="tab1" class="tab-view active">
+                <div class="stage-area" id="t1Stage">
+                    <canvas id="t1Canvas" class="interactive-canvas"></canvas>
+                    <div id="t1Labels" class="overlay-labels"></div>
+
+                    <div class="stage-banner">
+                        <div class="stage-banner-step" id="t1BannerStep">STEP 1 / 4</div>
+                        <div class="stage-banner-title" id="t1BannerTitle">球體地球與投影光源</div>
+                        <div class="stage-banner-desc" id="t1BannerDesc">觀察三維球面經緯網格與主要大陸分佈。單指旋轉視角，雙指捏合縮放。</div>
+                    </div>
+
+                    <div class="legend-bar">
+                        <span class="legend-item"><i class="dot" style="background:var(--c-land)"></i>陸地</span>
+                        <span class="legend-item"><i class="dot" style="background:var(--c-graticule)"></i>經緯線</span>
+                        <span class="legend-item"><i class="dot" style="background:var(--c-surface)"></i>可展投影面</span>
+                        <span class="legend-item"><i class="dot" style="background:var(--c-tangent)"></i>相切線/標準線</span>
+                    </div>
+
+                    <div class="viewport-hud">
+                        <button class="hud-btn" onclick="t1Zoom(1.2)" title="放大">+</button>
+                        <button class="hud-btn" onclick="t1Zoom(0.83)" title="縮小">−</button>
+                        <button class="hud-btn text-sm" onclick="t1ResetView()" title="重置視角">重置</button>
+                    </div>
+                </div>
+
+                <aside class="control-panel">
+                    <div class="card">
+                        <div class="card-title">
+                            <span>依「投影面（可展表面）」分類</span>
+                        </div>
+                        <div class="pill-grid">
+                            <button class="opt-btn active" data-surf="cylindrical"
+                                onclick="t1SetSurface('cylindrical')">
+                                <span>🧻 圓柱投影</span>
+                                <span class="opt-sub">Cylindrical · 網格狀</span>
+                            </button>
+                            <button class="opt-btn" data-surf="conic" onclick="t1SetSurface('conic')">
+                                <span>🍦 圓錐投影</span>
+                                <span class="opt-sub">Conic · 扇形放射</span>
+                            </button>
+                            <button class="opt-btn" data-surf="azimuthal" onclick="t1SetSurface('azimuthal')">
+                                <span>📄 方位/平面投影</span>
+                                <span class="opt-sub">Azimuthal · 極地同心圓</span>
+                            </button>
+                            <button class="opt-btn" data-surf="pseudo" onclick="t1SetSurface('pseudo')">
+                                <span>🍊 偽圓柱/折衷</span>
+                                <span class="opt-sub">Pseudocylindrical · 曲經線</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">
+                            <span>Step-by-Step 流程控制</span>
+                            <span id="t1EngineBadge" style="font-size:0.7rem;color:var(--c-graticule);">Three.js
+                                3D</span>
+                        </div>
+                        <div class="stepper-box">
+                            <div class="step-dots">
+                                <button class="step-dot active" onclick="t1GoStep(1)">1.球體</button>
+                                <button class="step-dot" onclick="t1GoStep(2)">2.套面</button>
+                                <button class="step-dot" onclick="t1GoStep(3)">3.投射</button>
+                                <button class="step-dot" onclick="t1GoStep(4)">4.攤平</button>
+                            </div>
+                            <div class="step-nav-row">
+                                <button class="btn" id="t1PrevBtn" onclick="t1GoStep(t1State.step - 1)">◀ 上一步</button>
+                                <button class="btn btn-amber" id="t1PlayBtn" onclick="t1ToggleAuto()">▶ 自動演示</button>
+                                <button class="btn btn-primary" id="t1NextBtn" onclick="t1GoStep(t1State.step + 1)">下一步
+                                    ▶</button>
+                            </div>
+                            <div class="slider-row">
+                                <div class="slider-header">
+                                    <span>投影面展開進度 (Unroll)</span>
+                                    <strong id="t1UnrollVal">0%</strong>
+                                </div>
+                                <input type="range" id="t1UnrollSlider" min="0" max="100" value="0"
+                                    oninput="t1OnSliderUnroll(this.value)">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title"><span>幾何特徵與適用範圍</span></div>
+                        <div id="t1SurfaceInfo" style="font-size:0.81rem; line-height:1.55; color:#cbd5e1;"></div>
+                    </div>
+                </aside>
+            </section>
+
+            <!-- ==================== 分頁 2：保持特性與變形分析 ==================== -->
+            <section id="tab2" class="tab-view">
+                <div class="stage-area">
+                    <canvas id="t2Canvas" class="interactive-canvas"></canvas>
+
+                    <div class="stage-banner">
+                        <div class="stage-banner-step" id="t2BannerStep">STEP 1 / 4</div>
+                        <div class="stage-banner-title" id="t2BannerTitle">經緯網格幾何觀察</div>
+                        <div class="stage-banner-desc" id="t2BannerDesc">點擊地圖上任意位置（或下方預設地點）可量測局部面積與角度變形。</div>
+                    </div>
+
+                    <div class="legend-bar">
+                        <span class="legend-item"><i class="dot" style="background:var(--c-land)"></i>陸地</span>
+                        <span class="legend-item"><i class="dot" style="background:var(--c-tissot)"></i>底索變形圓
+                            (Tissot)</span>
+                        <span class="legend-item"><i class="dot"
+                                style="background:var(--c-tangent)"></i>零變形切線/取樣點</span>
+                    </div>
+
+                    <div class="viewport-hud">
+                        <button class="hud-btn" onclick="t2Camera.zoomBy(1.25)">+</button>
+                        <button class="hud-btn" onclick="t2Camera.zoomBy(0.8)">−</button>
+                        <button class="hud-btn text-sm" onclick="t2Camera.reset()">重置</button>
+                    </div>
+                </div>
+
+                <aside class="control-panel">
+                    <div class="card">
+                        <div class="card-title"><span>依「保持的特性」選擇投影法</span></div>
+                        <div class="pill-grid">
+                            <button class="opt-btn active" data-proj="mercator" onclick="t2SetProj('mercator')">
+                                <span class="prop-tag tag-conformal">等角 Conformal</span>
+                                <span>麥卡托投影</span>
+                                <span class="opt-sub">Mercator · 圓柱</span>
+                            </button>
+                            <button class="opt-btn" data-proj="gallpeters" onclick="t2SetProj('gallpeters')">
+                                <span class="prop-tag tag-equalarea">等積 Equal-Area</span>
+                                <span>高爾-彼得斯</span>
+                                <span class="opt-sub">Gall-Peters · 圓柱</span>
+                            </button>
+                            <button class="opt-btn" data-proj="albers" onclick="t2SetProj('albers')">
+                                <span class="prop-tag tag-equalarea">等積 Equal-Area</span>
+                                <span>阿爾伯斯投影</span>
+                                <span class="opt-sub">Albers · 雙割圓錐</span>
+                            </button>
+                            <button class="opt-btn" data-proj="azimuthal_eq" onclick="t2SetProj('azimuthal_eq')">
+                                <span class="prop-tag tag-equidistant">等距 Equidistant</span>
+                                <span>等距方位投影</span>
+                                <span class="opt-sub">極方位 · UN 標誌</span>
+                            </button>
+                            <button class="opt-btn" data-proj="robinson" onclick="t2SetProj('robinson')">
+                                <span class="prop-tag tag-compromise">折衷 Compromise</span>
+                                <span>羅賓遜投影</span>
+                                <span class="opt-sub">Robinson · 偽圓柱</span>
+                            </button>
+                            <button class="opt-btn" data-proj="winkel" onclick="t2SetProj('winkel')">
+                                <span class="prop-tag tag-compromise">折衷 Compromise</span>
+                                <span>溫克爾三重</span>
+                                <span class="opt-sub">Winkel Tripel · 世界圖</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title"><span>Step-by-Step 變形檢驗流程</span></div>
+                        <div class="stepper-box">
+                            <div class="step-dots">
+                                <button class="step-dot active" onclick="t2GoStep(1)">1.網格</button>
+                                <button class="step-dot" onclick="t2GoStep(2)">2.變形圓</button>
+                                <button class="step-dot" onclick="t2GoStep(3)">3.實測</button>
+                                <button class="step-dot" onclick="t2GoStep(4)">4.結論</button>
+                            </div>
+                            <div class="step-nav-row">
+                                <button class="btn" onclick="t2GoStep(t2State.step - 1)">◀ 上一步</button>
+                                <button class="btn btn-primary" onclick="t2GoStep(t2State.step + 1)">下一步 ▶</button>
+                            </div>
+                        </div>
+                        <label class="switch-row">
+                            <span>顯示全域底索變形圓 (Tissot)</span>
+                            <input type="checkbox" id="t2ChkTissot" onchange="t2ToggleTissot(this.checked)">
+                        </label>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">
+                            <span>取樣點變形數據（點擊地圖可移動）</span>
+                        </div>
+                        <div style="display:flex; gap:5px; flex-wrap:wrap;">
+                            <button class="chip-btn" onclick="t2InspectPoint(121.5, 23.8, '台灣 (23.8°N)')">🇹🇼
+                                台灣</button>
+                            <button class="chip-btn" onclick="t2InspectPoint(-42, 72, '格陵蘭 (72°N)')">❄️ 格陵蘭</button>
+                            <button class="chip-btn" onclick="t2InspectPoint(20, 0, '剛果盆地 (0°)')">🌴 赤道非洲</button>
+                            <button class="chip-btn" onclick="t2InspectPoint(-98, 39, '美國本土 (39°N)')">🦅 北美中緯</button>
+                        </div>
+                        <div class="metric-grid">
+                            <div class="metric-box">
+                                <div class="metric-label">取樣緯度 / 位置</div>
+                                <div class="metric-val" id="t2LocName">格陵蘭 (72°N)</div>
+                            </div>
+                            <div class="metric-box">
+                                <div class="metric-label">面積放大倍率</div>
+                                <div class="metric-val" id="t2AreaScale">10.5x</div>
+                            </div>
+                            <div class="metric-box">
+                                <div class="metric-label">最大角度失真 (ω)</div>
+                                <div class="metric-val" id="t2AngleDist">0.0°</div>
+                            </div>
+                            <div class="metric-box">
+                                <div class="metric-label">東西 / 南北比例</div>
+                                <div class="metric-val" id="t2AxisRatio">1.00 : 1</div>
+                            </div>
+                        </div>
+                        <div id="t2ProjSummary" style="font-size:0.79rem; color:#cbd5e1; line-height:1.5;"></div>
+                    </div>
+                </aside>
+            </section>
+
+            <!-- ==================== 分頁 3：麥卡托專題與延伸 ==================== -->
+            <section id="tab3" class="tab-view">
+                <div class="stage-area">
+                    <canvas id="t3Canvas" class="interactive-canvas"></canvas>
+
+                    <div class="stage-banner">
+                        <div class="stage-banner-step" id="t3BannerStep">LAB A · 面積錯覺</div>
+                        <div class="stage-banner-title" id="t3BannerTitle">高緯度面積放大真相 (sec φ)</div>
+                        <div class="stage-banner-desc" id="t3BannerDesc">滑動緯度將真實面積多邊形移往極區，觀察為何格陵蘭看起來跟非洲一樣大！</div>
+                    </div>
+
+                    <div class="legend-bar">
+                        <span class="legend-item"><i class="dot" style="background:var(--c-land)"></i>地圖陸地</span>
+                        <span class="legend-item"><i class="dot" style="background:var(--c-rhumb)"></i>等角航線 /
+                            膨脹輪廓</span>
+                        <span class="legend-item"><i class="dot" style="background:var(--c-greatcircle)"></i>大圓航線 / UTM
+                            低變形帶</span>
+                        <span class="legend-item"><i class="dot" style="background:var(--c-tangent)"></i>切線 / 目標點</span>
+                    </div>
+
+                    <div class="viewport-hud">
+                        <button class="hud-btn" onclick="t3Camera.zoomBy(1.25)">+</button>
+                        <button class="hud-btn" onclick="t3Camera.zoomBy(0.8)">−</button>
+                        <button class="hud-btn text-sm" onclick="t3Camera.reset()">重置</button>
+                    </div>
+                </div>
+
+                <aside class="control-panel">
+                    <div class="card">
+                        <div class="card-title"><span>麥卡托專題模組切換</span></div>
+                        <div class="pill-grid" style="grid-template-columns: repeat(3, 1fr);">
+                            <button class="opt-btn active" data-lab="area" onclick="t3SetLab('area')">
+                                <span>🔍 面積膨脹</span>
+                                <span class="opt-sub">格陵蘭錯覺</span>
+                            </button>
+                            <button class="opt-btn" data-lab="route" onclick="t3SetLab('route')">
+                                <span>✈️ 航線對決</span>
+                                <span class="opt-sub">恆向 vs 大圓</span>
+                            </button>
+                            <button class="opt-btn" data-lab="ext" onclick="t3SetLab('ext')">
+                                <span>🌐 延伸應用</span>
+                                <span class="opt-sub">橫麥卡托/Web</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Lab A Controls -->
+                    <div id="t3PanelArea" class="card">
+                        <div class="card-title"><span>Step-by-Step：緯度與真實大小實驗</span></div>
+                        <div class="step-dots" style="grid-template-columns: repeat(3, 1fr);">
+                            <button class="step-dot active" onclick="t3AreaStep(1)">1.赤道基準</button>
+                            <button class="step-dot" onclick="t3AreaStep(2)">2.移至中緯</button>
+                            <button class="step-dot" onclick="t3AreaStep(3)">3.極區膨脹</button>
+                        </div>
+                        <div style="display:flex; gap:6px; margin-top:4px;">
+                            <button class="chip-btn" onclick="t3SetSampleCountry('greenland')">格陵蘭 (216萬 km²)</button>
+                            <button class="chip-btn" onclick="t3SetSampleCountry('taiwan')">台灣 (3.6萬 km²)</button>
+                            <button class="chip-btn" onclick="t3SetSampleCountry('australia')">澳洲 (769萬 km²)</button>
+                        </div>
+                        <div class="slider-row">
+                            <div class="slider-header">
+                                <span>拖曳比較輪廓所在緯度</span>
+                                <strong id="t3LatVal">0° (赤道)</strong>
+                            </div>
+                            <input type="range" id="t3LatSlider" min="-75" max="75" value="0"
+                                oninput="t3OnLatSlide(this.value)">
+                        </div>
+                        <div class="metric-grid">
+                            <div class="metric-box">
+                                <div class="metric-label">線性尺度放大 (sec φ)</div>
+                                <div class="metric-val" id="t3ScaleLin">1.00x</div>
+                            </div>
+                            <div class="metric-box">
+                                <div class="metric-label">視覺面積放大 (sec² φ)</div>
+                                <div class="metric-val" id="t3ScaleArea">1.00x</div>
+                            </div>
+                        </div>
+                        <div style="font-size:0.78rem; color:#cbd5e1; line-height:1.5;">
+                            💡 <b>關鍵真相</b>：非洲實際面積為 <b>3,037 萬 km²</b>，是格陵蘭（<b>216 萬 km²</b>）的 <b>14 倍</b>！但位於北緯 72°
+                            的格陵蘭在麥卡托地圖上被放大超過 10 倍，視覺上幾乎等大。
+                        </div>
+                    </div>
+
+                    <!-- Lab B Controls -->
+                    <div id="t3PanelRoute" class="card" style="display:none;">
+                        <div class="card-title"><span>Step-by-Step：航海與飛航路線對決</span></div>
+                        <div class="step-dots" style="grid-template-columns: repeat(3, 1fr);">
+                            <button class="step-dot active" onclick="t3RouteStep(1)">1.等角航線</button>
+                            <button class="step-dot" onclick="t3RouteStep(2)">2.大圓航線</button>
+                            <button class="step-dot" onclick="t3RouteStep(3)">3.雙機競速</button>
+                        </div>
+                        <div class="step-nav-row">
+                            <button class="btn" onclick="t3SetRoute('tpe_sfo')">台北 → 舊金山</button>
+                            <button class="btn" onclick="t3SetRoute('lon_nyc')">倫敦 → 紐約</button>
+                            <button class="btn" onclick="t3SetRoute('tok_syd')">東京 → 雪梨</button>
+                        </div>
+                        <div class="step-nav-row">
+                            <button class="btn btn-primary" id="t3PlayRouteBtn" onclick="t3ToggleRouteAnim()">▶
+                                啟動飛行/航行模擬</button>
+                        </div>
+                        <div class="metric-grid">
+                            <div class="metric-box">
+                                <div class="metric-label" style="color:var(--c-rhumb)">等角航線 (直線/恆向)</div>
+                                <div class="metric-val" id="t3DistRhumb">— km</div>
+                            </div>
+                            <div class="metric-box">
+                                <div class="metric-label" style="color:var(--c-greatcircle)">大圓航線 (弧線/最短)</div>
+                                <div class="metric-val" id="t3DistGC">— km</div>
+                            </div>
+                        </div>
+                        <div style="font-size:0.78rem; color:#cbd5e1; line-height:1.5;">
+                            🧭 <b>為何麥卡托是航海神器？</b>
+                            因為圓柱等角投影中，所有與經線維持固定夾角（羅盤固定方位）的航線都剛好是一條<b>直線</b>；但地球是球體，真正最短的「大圓航線」在平面圖上會向極區彎曲。
+                        </div>
+                    </div>
+
+                    <!-- Lab C Controls -->
+                    <div id="t3PanelExt" class="card" style="display:none;">
+                        <div class="card-title"><span>Step-by-Step：麥卡托的兩大現代延伸</span></div>
+                        <div class="step-dots" style="grid-template-columns: repeat(3, 1fr);">
+                            <button class="step-dot active" onclick="t3ExtStep(1)">1.標準赤道</button>
+                            <button class="step-dot" onclick="t3ExtStep(2)">2.橫麥卡托UTM</button>
+                            <button class="step-dot" onclick="t3ExtStep(3)">3.Web麥卡托</button>
+                        </div>
+                        <div class="slider-row" id="t3MeridianRow">
+                            <div class="slider-header">
+                                <span>橫麥卡托中央經線 (相切經線)</span>
+                                <strong id="t3MeridianVal">121°E (台灣 TM2)</strong>
+                            </div>
+                            <input type="range" id="t3MeridianSlider" min="-180" max="180" value="121"
+                                oninput="t3OnMeridianSlide(this.value)">
+                        </div>
+                        <div style="display:flex; gap:6px;">
+                            <button class="chip-btn" onclick="t3SnapMeridian(121)">🇹🇼 台灣 121°E</button>
+                            <button class="chip-btn" onclick="t3SnapMeridian(0)">🇬🇧 格林威治 0°</button>
+                            <button class="chip-btn" onclick="t3SnapMeridian(-75)">🇺🇸 美東 75°W</button>
+                        </div>
+                        <div id="t3ExtDesc" style="font-size:0.79rem; color:#cbd5e1; line-height:1.55;"></div>
+                    </div>
+                </aside>
+            </section>
+
+            <!-- ==================== 分頁 4：雙圖同步對比與總表 ==================== -->
+            <section id="tab4" class="tab-view">
+                <div class="dual-stage">
+                    <div class="dual-maps-row">
+                        <div class="dual-pane">
+                            <div class="dual-pane-header">
+                                <span style="font-size:0.78rem; font-weight:700; color:var(--c-graticule);">左視窗</span>
+                                <select id="t4LeftSelect" class="dual-select" onchange="t4RenderBoth()">
+                                    <option value="mercator" selected>麥卡托 (等角 · 圓柱)</option>
+                                    <option value="gallpeters">高爾-彼得斯 (等積 · 圓柱)</option>
+                                    <option value="albers">阿爾伯斯 (等積 · 圓錐)</option>
+                                    <option value="azimuthal_eq">等距方位 (等距 · 平面)</option>
+                                    <option value="robinson">羅賓遜 (折衷 · 偽圓柱)</option>
+                                    <option value="winkel">溫克爾三重 (折衷)</option>
+                                </select>
+                            </div>
+                            <div class="dual-canvas-wrap">
+                                <canvas id="t4CanvasL" class="interactive-canvas"></canvas>
+                            </div>
+                        </div>
+
+                        <div class="dual-pane">
+                            <div class="dual-pane-header">
+                                <span style="font-size:0.78rem; font-weight:700; color:var(--c-surface);">右視窗
+                                    (同步縮放平移)</span>
+                                <select id="t4RightSelect" class="dual-select" onchange="t4RenderBoth()">
+                                    <option value="mercator">麥卡托 (等角 · 圓柱)</option>
+                                    <option value="gallpeters" selected>高爾-彼得斯 (等積 · 圓柱)</option>
+                                    <option value="albers">阿爾伯斯 (等積 · 圓錐)</option>
+                                    <option value="azimuthal_eq">等距方位 (等距 · 平面)</option>
+                                    <option value="robinson">羅賓遜 (折衷 · 偽圓柱)</option>
+                                    <option value="winkel">溫克爾三重 (折衷)</option>
+                                </select>
+                            </div>
+                            <div class="dual-canvas-wrap">
+                                <canvas id="t4CanvasR" class="interactive-canvas"></canvas>
+                                <div class="viewport-hud" style="bottom:8px; right:8px;">
+                                    <button class="hud-btn" style="width:34px;height:34px;"
+                                        onclick="t4Camera.zoomBy(1.25)">+</button>
+                                    <button class="hud-btn" style="width:34px;height:34px;"
+                                        onclick="t4Camera.zoomBy(0.8)">−</button>
+                                    <button class="hud-btn text-sm" style="width:34px;height:34px;"
+                                        onclick="t4Camera.reset()">重置</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="matrix-wrap">
+                        <div
+                            style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
+                            <strong style="font-size:0.9rem;">快速對比組合（或勾選顯示變形圓）：</strong>
+                            <label style="font-size:0.8rem; display:flex; align-items:center; gap:6px; cursor:pointer;">
+                                <input type="checkbox" id="t4ChkTissot" checked onchange="t4RenderBoth()"> 顯示底索變形圓
+                            </label>
+                        </div>
+                        <div class="preset-chips">
+                            <button class="chip-btn" onclick="t4Preset('mercator','gallpeters')">等角 vs 等積（麥卡托 vs
+                                高爾-彼得斯）</button>
+                            <button class="chip-btn" onclick="t4Preset('mercator','robinson')">航海網格 vs 世界全圖（麥卡托 vs
+                                羅賓遜）</button>
+                            <button class="chip-btn" onclick="t4Preset('albers','azimuthal_eq')">中緯圓錐 vs 極地平面（阿爾伯斯 vs
+                                等距方位）</button>
+                            <button class="chip-btn" onclick="t4Preset('robinson','winkel')">兩大折衷投影（羅賓遜 vs
+                                溫克爾三重）</button>
+                        </div>
+
+                        <div style="overflow-x:auto;">
+                            <table class="comp-table">
+                                <thead>
+                                    <tr>
+                                        <th>投影法</th>
+                                        <th>投影面分類</th>
+                                        <th>保持特性</th>
+                                        <th>主要優點</th>
+                                        <th>主要失真 / 限制</th>
+                                        <th>典型應用</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><b>麥卡托 (Mercator)</b></td>
+                                        <td>圓柱投影</td>
+                                        <td><span class="prop-tag tag-conformal">等角</span></td>
+                                        <td>局部形狀與方向完全正確，等角航線為直線</td>
+                                        <td>高緯度面積劇烈膨脹，無法繪製極點</td>
+                                        <td>海洋導航、Web 地圖基礎 (EPSG:3857)</td>
+                                    </tr>
+                                    <tr>
+                                        <td><b>高爾-彼得斯 (Gall-Peters)</b></td>
+                                        <td>圓柱投影</td>
+                                        <td><span class="prop-tag tag-equalarea">等積</span></td>
+                                        <td>各大陸與國家面積比例 100% 正確</td>
+                                        <td>赤道南北拉長、高緯度東西壓扁變形</td>
+                                        <td>全球統計分布、公平面積教育地圖</td>
+                                    </tr>
+                                    <tr>
+                                        <td><b>阿爾伯斯 (Albers)</b></td>
+                                        <td>圓錐投影</td>
+                                        <td><span class="prop-tag tag-equalarea">等積</span></td>
+                                        <td>中緯度東西向大國面積正確且形狀失真極低</td>
+                                        <td>僅適合單半球或中緯區域，不適合全球</td>
+                                        <td>美國/中國/歐洲區域統計與國土製圖</td>
+                                    </tr>
+                                    <tr>
+                                        <td><b>等距方位 (Azimuthal Eq.)</b></td>
+                                        <td>方位/平面投影</td>
+                                        <td><span class="prop-tag tag-equidistant">等距</span></td>
+                                        <td>由中心點出發的距離與方位角皆精確</td>
+                                        <td>邊緣地區面積與形狀被嚴重拉扯變形</td>
+                                        <td>極地航線、聯合國徽章、無線電/飛航半徑</td>
+                                    </tr>
+                                    <tr>
+                                        <td><b>羅賓遜 / 溫克爾三重</b></td>
+                                        <td>偽圓柱 / 折衷</td>
+                                        <td><span class="prop-tag tag-compromise">折衷</span></td>
+                                        <td>面積、形狀與距離整體失真最小、視覺自然</td>
+                                        <td>嚴格來說既非完全等角亦非完全等積</td>
+                                        <td>世界全圖、國家地理學會、教科書</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <script>
+        /* ============================================================================
+           1. 全球共享資料與地理座標資料庫 (內建獨立離線運作，含台灣與主要大陸)
+           ============================================================================ */
+        const COLORS = {
+            ocean: '#0c223a',
+            land: '#10b981',
+            landFill: 'rgba(16, 185, 129, 0.42)',
+            landStroke: '#6ee7b7',
+            graticule: 'rgba(56, 189, 248, 0.25)',
+            equator: 'rgba(56, 189, 248, 0.65)',
+            surface: '#f59e0b',
+            tangent: '#fde047',
+            tissotFill: 'rgba(244, 63, 94, 0.28)',
+            tissotStroke: '#f43f5e',
+            greatCircle: '#38bdf8',
+            rhumb: '#fb7185'
+        };
+
+        const D2R = Math.PI / 180;
+        const R2D = 180 / Math.PI;
+        const EARTH_R_KM = 6371;
+
+        let globalShowLabels = true;
+        let activeTabId = 'tab1';
+
+        // 簡化但具高度辨識度的全球大陸與重要島嶼多邊形 [lon, lat]
+        const WORLD_POLYGONS = [
+            { name: '北美洲', labelPos: [-100, 45], pts: [[-168, 65], [-162, 70], [-140, 70], [-125, 71], [-95, 70], [-82, 66], [-78, 62], [-94, 58], [-82, 53], [-79, 62], [-65, 60], [-56, 52], [-60, 46], [-70, 42], [-76, 35], [-81, 31], [-80, 25], [-83, 29], [-90, 29], [-97, 26], [-96, 19], [-90, 21], [-87, 21], [-88, 16], [-83, 15], [-83, 10], [-78, 8], [-80, 7], [-85, 10], [-92, 14], [-105, 20], [-110, 24], [-114, 31], [-117, 32], [-122, 38], [-124, 48], [-131, 54], [-138, 59], [-150, 60], [-162, 55], [-166, 60], [-168, 65]] },
+            { name: '格陵蘭', labelPos: [-42, 72], pts: [[-72, 77], [-60, 82], [-30, 83], [-18, 81], [-21, 70], [-36, 65], [-44, 60], [-51, 64], [-54, 70], [-60, 75], [-72, 77]] },
+            { name: '南美洲', labelPos: [-58, -14], pts: [[-78, 9], [-72, 12], [-62, 10], [-50, 1], [-35, -6], [-38, -14], [-41, -22], [-48, -26], [-53, -34], [-58, -38], [-65, -43], [-68, -52], [-67, -55], [-74, -53], [-74, -43], [-71, -30], [-70, -18], [-77, -12], [-81, -5], [-79, 2], [-78, 9]] },
+            { name: '非洲', labelPos: [20, 4], pts: [[-17, 15], [-13, 28], [-6, 36], [10, 37], [11, 33], [20, 31], [32, 31], [34, 27], [43, 12], [51, 12], [41, 2], [40, -10], [35, -20], [32, -26], [28, -33], [18, -35], [15, -26], [12, -15], [9, -4], [9, 4], [2, 6], [-8, 4], [-14, 9], [-17, 15]] },
+            { name: '馬達加斯加', labelPos: null, pts: [[49, -12], [50, -16], [47, -25], [44, -25], [44, -18], [49, -12]] },
+            { name: '英國', labelPos: null, pts: [[-6, 50], [-2, 51], [1, 52], [-1, 55], [-3, 58], [-6, 58], [-5, 54], [-6, 50]] },
+            { name: '歐亞大陸', labelPos: [82, 48], pts: [[-9, 37], [-9, 43], [-2, 43], [-4, 48], [2, 51], [8, 54], [9, 58], [5, 61], [15, 69], [28, 71], [42, 68], [58, 69], [70, 73], [90, 76], [105, 77], [125, 73], [150, 71], [176, 67], [170, 60], [160, 52], [156, 51], [162, 56], [142, 54], [135, 44], [129, 35], [126, 38], [124, 40], [118, 39], [122, 37], [120, 34], [122, 31], [118, 24], [113, 22], [108, 21], [109, 13], [104, 10], [100, 13], [104, 2], [102, 3], [98, 10], [96, 17], [90, 22], [82, 16], [78, 8], [72, 20], [67, 24], [60, 25], [56, 27], [51, 25], [49, 30], [56, 24], [60, 22], [53, 16], [44, 13], [35, 28], [36, 36], [27, 37], [26, 41], [23, 37], [19, 40], [14, 45], [16, 40], [12, 42], [9, 44], [3, 43], [-2, 37], [-9, 37]] },
+            { name: '日本', labelPos: null, pts: [[130, 31], [132, 34], [136, 35], [141, 38], [141, 41], [145, 44], [141, 45], [140, 42], [137, 37], [132, 35], [130, 33], [130, 31]] },
+            { name: '台灣', labelPos: [121, 23.6], pts: [[120.1, 23.0], [120.8, 21.9], [121.6, 23.8], [122.0, 25.1], [121.4, 25.2], [120.5, 24.3], [120.1, 23.0]] },
+            { name: '蘇門答臘', labelPos: null, pts: [[95, 5], [99, 3], [105, -5], [103, -6], [98, 1], [95, 5]] },
+            { name: '婆羅洲', labelPos: null, pts: [[109, 1], [115, 6], [119, 5], [117, -3], [111, -3], [109, 1]] },
+            { name: '新幾內亞', labelPos: null, pts: [[131, -2], [141, -2], [150, -10], [144, -9], [136, -5], [131, -2]] },
+            { name: '澳洲', labelPos: [134, -25], pts: [[114, -22], [122, -17], [131, -12], [136, -12], [136, -15], [141, -17], [142, -11], [146, -18], [153, -26], [151, -34], [148, -38], [140, -38], [135, -34], [129, -32], [121, -34], [115, -34], [113, -26], [114, -22]] },
+            { name: '紐西蘭', labelPos: null, pts: [[172, -35], [178, -38], [175, -41], [168, -46], [167, -45], [173, -40], [172, -35]] },
+            { name: '南極洲', labelPos: [0, -78], pts: [[-179, -78], [-150, -77], [-120, -74], [-90, -73], [-60, -64], [-55, -65], [-55, -74], [-20, -75], [20, -70], [60, -68], [100, -66], [140, -67], [170, -72], [179, -78], [179, -85], [-179, -85], [-179, -78]] }
+        ];
+
+        // 羅賓遜投影標準內插表 (0° 到 90° 每 5° 間隔)
+        const ROB_PLEN = [1.0000, 0.9986, 0.9954, 0.9900, 0.9822, 0.9730, 0.9600, 0.9427, 0.9216, 0.8962, 0.8679, 0.8350, 0.7986, 0.7597, 0.7186, 0.6732, 0.6213, 0.5722, 0.5322];
+        const ROB_PDFE = [0.0000, 0.0620, 0.1240, 0.1860, 0.2480, 0.3100, 0.3720, 0.4340, 0.4958, 0.5571, 0.6176, 0.6769, 0.7346, 0.7903, 0.8435, 0.8936, 0.9394, 0.9761, 1.0000];
+
+        function lerp(a, b, t) { return a + (b - a) * t; }
+        function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+        /* ============================================================================
+           2. 數學地圖投影引擎 (正投影、逆投影與底索 Jacobian 變形計算)
+           ============================================================================ */
+        const PROJECTIONS = {
+            mercator: {
+                id: 'mercator',
+                name: '麥卡托投影 (Mercator)',
+                surface: '圓柱投影',
+                prop: '等角 (Conformal)',
+                maxLat: 82,
+                project(lonDeg, latDeg) {
+                    const lam = lonDeg * D2R;
+                    const phi = clamp(latDeg, -82, 82) * D2R;
+                    return [lam, Math.log(Math.tan(Math.PI / 4 + phi / 2))];
+                },
+                inverse(x, y) {
+                    const lon = x * R2D;
+                    const lat = (2 * Math.atan(Math.exp(y)) - Math.PI / 2) * R2D;
+                    if (Math.abs(lon) > 180 || Math.abs(lat) > 85) return null;
+                    return [lon, lat];
+                },
+                bounds: { x: Math.PI, y: 2.65 },
+                summary: '在赤道相切圓柱，保持局部角度與形狀完全正確，經緯線垂直正交；但高緯度面積以 sec²(φ) 倍率劇烈膨脹。'
+            },
+
+            gallpeters: {
+                id: 'gallpeters',
+                name: '高爾-彼得斯投影 (Gall-Peters)',
+                surface: '雙割圓柱投影',
+                prop: '等積 (Equal-Area)',
+                maxLat: 89.5,
+                project(lonDeg, latDeg) {
+                    const c45 = Math.SQRT1_2;
+                    const lam = lonDeg * D2R;
+                    const phi = clamp(latDeg, -89.5, 89.5) * D2R;
+                    return [lam * c45, Math.sin(phi) / c45];
+                },
+                inverse(x, y) {
+                    const c45 = Math.SQRT1_2;
+                    const lon = (x / c45) * R2D;
+                    const s = y * c45;
+                    if (Math.abs(lon) > 180 || Math.abs(s) > 1) return null;
+                    return [lon, Math.asin(s) * R2D];
+                },
+                bounds: { x: Math.PI * Math.SQRT1_2, y: Math.SQRT2 },
+                summary: '標準緯線設於 ±45° 的圓柱等積投影，完整保留各大陸真實面積比例，但赤道被南北拉長、高緯度東西壓扁。'
+            },
+
+            albers: {
+                id: 'albers',
+                name: '阿爾伯斯等積圓錐 (Albers)',
+                surface: '雙標準緯線圓錐',
+                prop: '等積 (Equal-Area)',
+                maxLat: 89.5,
+                _c: (() => {
+                    const p1 = 20 * D2R, p2 = 50 * D2R;
+                    const n = 0.5 * (Math.sin(p1) + Math.sin(p2));
+                    const C = Math.cos(p1) ** 2 + 2 * n * Math.sin(p1);
+                    const rho0 = Math.sqrt(C - 2 * n * Math.sin(30 * D2R)) / n;
+                    return { n, C, rho0 };
+                })(),
+                project(lonDeg, latDeg) {
+                    const { n, C, rho0 } = this._c;
+                    const lam = lonDeg * D2R;
+                    const phi = clamp(latDeg, -70, 89.5) * D2R;
+                    const inside = Math.max(0.0001, C - 2 * n * Math.sin(phi));
+                    const rho = Math.sqrt(inside) / n;
+                    const theta = n * lam;
+                    return [rho * Math.sin(theta), rho0 - rho * Math.cos(theta)];
+                },
+                inverse(x, y) {
+                    const { n, C, rho0 } = this._c;
+                    const dy = rho0 - y;
+                    const rho = Math.hypot(x, dy);
+                    const theta = Math.atan2(x, dy);
+                    const lon = (theta / n) * R2D;
+                    const s = (C - (rho * n) ** 2) / (2 * n);
+                    if (Math.abs(lon) > 180 || Math.abs(s) > 1) return null;
+                    return [lon, Math.asin(s) * R2D];
+                },
+                bounds: { x: 2.75, y: 2.1 },
+                summary: '利用套在北半球中緯度（20°N 與 50°N 雙割）的圓錐展開，在保持等積同時將中緯度形狀失真降至最低。'
+            },
+
+            azimuthal_eq: {
+                id: 'azimuthal_eq',
+                name: '等距方位投影 (Azimuthal Equidistant)',
+                surface: '極方位平面投影',
+                prop: '等距 (Equidistant)',
+                maxLat: 89.9,
+                project(lonDeg, latDeg) {
+                    // 以北極 (90°N) 為中心
+                    const lam = lonDeg * D2R;
+                    const rho = Math.PI / 2 - clamp(latDeg, -85, 90) * D2R;
+                    return [rho * Math.sin(lam), -rho * Math.cos(lam)];
+                },
+                inverse(x, y) {
+                    const rho = Math.hypot(x, y);
+                    if (rho > Math.PI * 0.97) return null;
+                    const lat = (Math.PI / 2 - rho) * R2D;
+                    const lon = Math.atan2(x, -y) * R2D;
+                    return [lon, lat];
+                },
+                bounds: { x: Math.PI, y: Math.PI },
+                summary: '以北極點為中心投影至水平平面。從中心點出發到地球上任意點的距離與方位角皆精確無誤（聯合國徽章採用）。'
+            },
+
+            robinson: {
+                id: 'robinson',
+                name: '羅賓遜投影 (Robinson)',
+                surface: '偽圓柱投影',
+                prop: '折衷 (Compromise)',
+                maxLat: 89.5,
+                project(lonDeg, latDeg) {
+                    const lam = lonDeg * D2R;
+                    const absLat = clamp(Math.abs(latDeg), 0, 90);
+                    const idx = Math.min(17, Math.floor(absLat / 5));
+                    const f = (absLat - idx * 5) / 5;
+                    const plen = lerp(ROB_PLEN[idx], ROB_PLEN[idx + 1], f);
+                    const pdfe = lerp(ROB_PDFE[idx], ROB_PDFE[idx + 1], f);
+                    const x = 0.8487 * plen * lam;
+                    const y = 1.3523 * pdfe * (latDeg >= 0 ? 1 : -1);
+                    return [x, y];
+                },
+                inverse(x, y) {
+                    // 快速數值反求用於點擊互動
+                    const sign = y >= 0 ? 1 : -1;
+                    const targetPdfe = Math.abs(y) / 1.3523;
+                    if (targetPdfe > 1) return null;
+                    let lat = 45;
+                    for (let i = 0; i < 18; i++) {
+                        if (targetPdfe >= ROB_PDFE[i] && targetPdfe <= ROB_PDFE[i + 1]) {
+                            const f = (targetPdfe - ROB_PDFE[i]) / (ROB_PDFE[i + 1] - ROB_PDFE[i]);
+                            lat = (i * 5 + f * 5) * sign;
+                            const plen = lerp(ROB_PLEN[i], ROB_PLEN[i + 1], f);
+                            const lon = (x / (0.8487 * plen)) * R2D;
+                            if (Math.abs(lon) > 180) return null;
+                            return [lon, lat];
+                        }
+                    }
+                    return null;
+                },
+                bounds: { x: 0.8487 * Math.PI, y: 1.36 },
+                summary: '不堅持嚴格等角或等積，透過經驗內插讓兩極呈現平直短線、經線溫和彎曲，達到視覺最自然的世界全圖平衡。'
+            },
+
+            winkel: {
+                id: 'winkel',
+                name: '溫克爾三重投影 (Winkel Tripel)',
+                surface: '改進方位/折衷',
+                prop: '折衷 (Compromise)',
+                maxLat: 89.5,
+                project(lonDeg, latDeg) {
+                    const lam = lonDeg * D2R;
+                    const phi = clamp(latDeg, -89.5, 89.5) * D2R;
+                    const alpha = Math.acos(clamp(Math.cos(phi) * Math.cos(lam / 2), -1, 1));
+                    const sinc = alpha < 1e-6 ? 1 : Math.sin(alpha) / alpha;
+                    const xAit = (2 * Math.cos(phi) * Math.sin(lam / 2)) / sinc;
+                    const yAit = Math.sin(phi) / sinc;
+                    const xEq = lam * (2 / Math.PI);
+                    const yEq = phi;
+                    return [0.5 * (xAit + xEq), 0.5 * (yAit + yEq)];
+                },
+                inverse(x, y) {
+                    // 簡易近似點擊（牛頓迭代 5 次）
+                    let lon = clamp(x * R2D * 0.85, -179, 179);
+                    let lat = clamp(y * R2D * 0.9, -89, 89);
+                    for (let i = 0; i < 6; i++) {
+                        const p = this.project(lon, lat);
+                        const dx = x - p[0], dy = y - p[1];
+                        lon = clamp(lon + dx * R2D * 0.7, -180, 180);
+                        lat = clamp(lat + dy * R2D * 0.7, -89.5, 89.5);
+                    }
+                    const check = this.project(lon, lat);
+                    if (Math.hypot(check[0] - x, check[1] - y) > 0.25) return null;
+                    return [lon, lat];
+                },
+                bounds: { x: 2.6, y: 1.6 },
+                summary: '取艾托夫方位投影與等距圓柱投影的平均值，把面積、方向與距離三項誤差綜合降至最低（國家地理學會標準）。'
+            }
+        };
+
+        // 數值計算任意經緯度的底索變形參數 (Jacobian + 2x2 SVD)
+        function computeDistortion(proj, lonDeg, latDeg) {
+            const safeLat = clamp(latDeg, -84, 84);
+            const epsDeg = 0.05;
+            const epsRad = epsDeg * D2R;
+            const cosPhi = Math.max(0.05, Math.cos(safeLat * D2R));
+
+            const p0 = proj.project(lonDeg, safeLat);
+            const pLon = proj.project(lonDeg + epsDeg, safeLat);
+            const pLat = proj.project(lonDeg, safeLat + epsDeg);
+
+            // 標準化到球面正交單位基 (ds_lon = cos(phi)*d_lam, ds_lat = d_phi)
+            const m00 = (pLon[0] - p0[0]) / (epsRad * cosPhi);
+            const m10 = (pLon[1] - p0[1]) / (epsRad * cosPhi);
+            const m01 = (pLat[0] - p0[0]) / epsRad;
+            const m11 = (pLat[1] - p0[1]) / epsRad;
+
+            // 計算 M^T M 的特徵值
+            const A = m00 * m00 + m10 * m10;
+            const B = m00 * m01 + m10 * m11;
+            const C = m01 * m01 + m11 * m11;
+            const trace = A + C;
+            const disc = Math.sqrt(Math.max(0, (A - C) * (A - C) + 4 * B * B));
+            const l1 = Math.max(0.0001, (trace + disc) / 2);
+            const l2 = Math.max(0.0001, (trace - disc) / 2);
+
+            const a = Math.sqrt(l1);
+            const b = Math.sqrt(l2);
+            const areaScale = Math.abs(m00 * m11 - m01 * m10);
+            const ratio = clamp((a - b) / (a + b), 0, 0.9999);
+            const maxAngleDeg = 2 * Math.asin(ratio) * R2D;
+
+            return { a, b, areaScale, maxAngleDeg, axisRatio: a / b };
+        }
+
+        // 繪製底索變形圓（投影真實球面小圓，直觀準確）
+        function drawTissotCircle(ctx, proj, lonDeg, latDeg, toScreen, radiusDeg = 4.8, highlight = false) {
+            const latR = latDeg * D2R;
+            const lonR = lonDeg * D2R;
+            const rR = radiusDeg * D2R;
+
+            ctx.beginPath();
+            let first = true;
+            let prevX = 0;
+            const steps = 36;
+            for (let i = 0; i <= steps; i++) {
+                const az = (i / steps) * Math.PI * 2;
+                // 球面三角求距離中心 rR、方位角 az 的點
+                const pLatR = Math.asin(
+                    Math.sin(latR) * Math.cos(rR) + Math.cos(latR) * Math.sin(rR) * Math.cos(az)
+                );
+                const pLonR = lonR + Math.atan2(
+                    Math.sin(az) * Math.sin(rR) * Math.cos(latR),
+                    Math.cos(rR) - Math.sin(latR) * Math.sin(pLatR)
+                );
+                let pLonD = pLonR * R2D;
+                if (pLonD > 180) pLonD -= 360;
+                if (pLonD < -180) pLonD += 360;
+                const pLatD = clamp(pLatR * R2D, -84, 84);
+
+                const pt = proj.project(pLonD, pLatD);
+                const sc = toScreen(pt[0], pt[1]);
+                if (first || Math.abs(sc[0] - prevX) > ctx.canvas.clientWidth * 0.4) {
+                    ctx.moveTo(sc[0], sc[1]);
+                    first = false;
+                } else {
+                    ctx.lineTo(sc[0], sc[1]);
+                }
+                prevX = sc[0];
+            }
+            ctx.fillStyle = highlight ? 'rgba(253, 224, 71, 0.38)' : COLORS.tissotFill;
+            ctx.strokeStyle = highlight ? COLORS.tangent : COLORS.tissotStroke;
+            ctx.lineWidth = highlight ? 2.2 : 1.3;
+            ctx.fill();
+            ctx.stroke();
+        }
+
+        /* ============================================================================
+           3. 通用觸控與滑鼠 2D Zoom/Pan 攝影機控制器
+           ============================================================================ */
+        class PanZoomController {
+            constructor(canvas, onRender, onClickPoint) {
+                this.canvas = canvas;
+                this.onRender = onRender;
+                this.onClickPoint = onClickPoint;
+                this.zoom = 1;
+                this.panX = 0;
+                this.panY = 0;
+                this.pointers = new Map();
+                this.lastPinchDist = null;
+                this.lastPinchMid = null;
+                this.dragStart = null;
+                this.moved = false;
+                this._bind();
+            }
+
+            reset() {
+                this.zoom = 1;
+                this.panX = 0;
+                this.panY = 0;
+                this.onRender();
+            }
+
+            zoomBy(factor, cx, cy) {
+                const rect = this.canvas.getBoundingClientRect();
+                const centerX = cx ?? rect.width / 2;
+                const centerY = cy ?? rect.height / 2;
+                const oldZoom = this.zoom;
+                const newZoom = clamp(oldZoom * factor, 0.5, 14);
+                const ratio = newZoom / oldZoom;
+                // 以指標中心縮放
+                this.panX = centerX - (centerX - this.panX) * ratio - (rect.width / 2) * (1 - ratio) * 0;
+                // 簡化精準公式：螢幕中心為原點 + pan
+                const dx = centerX - rect.width / 2 - this.panX;
+                const dy = centerY - rect.height / 2 - this.panY;
+                this.panX = centerX - rect.width / 2 - dx * ratio;
+                this.panY = centerY - rect.height / 2 - dy * ratio;
+                this.zoom = newZoom;
+                this.onRender();
+            }
+
+            _bind() {
+                const el = this.canvas;
+                el.addEventListener('pointerdown', (e) => {
+                    el.setPointerCapture(e.pointerId);
+                    this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+                    this.moved = false;
+                    if (this.pointers.size === 1) {
+                        this.dragStart = { x: e.clientX, y: e.clientY, px: this.panX, py: this.panY };
+                    } else if (this.pointers.size === 2) {
+                        const pts = [...this.pointers.values()];
+                        this.lastPinchDist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+                        this.lastPinchMid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+                    }
+                });
+
+                el.addEventListener('pointermove', (e) => {
+                    if (!this.pointers.has(e.pointerId)) return;
+                    this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+                    if (this.pointers.size === 1 && this.dragStart) {
+                        const dx = e.clientX - this.dragStart.x;
+                        const dy = e.clientY - this.dragStart.y;
+                        if (Math.hypot(dx, dy) > 4) this.moved = true;
+                        this.panX = this.dragStart.px + dx;
+                        this.panY = this.dragStart.py + dy;
+                        this.onRender();
+                    } else if (this.pointers.size === 2) {
+                        this.moved = true;
+                        const pts = [...this.pointers.values()];
+                        const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+                        const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+                        if (this.lastPinchDist && dist > 0) {
+                            const rect = el.getBoundingClientRect();
+                            this.panX += mid.x - this.lastPinchMid.x;
+                            this.panY += mid.y - this.lastPinchMid.y;
+                            this.zoomBy(dist / this.lastPinchDist, mid.x - rect.left, mid.y - rect.top);
+                        }
+                        this.lastPinchDist = dist;
+                        this.lastPinchMid = mid;
+                    }
+                });
+
+                const endPtr = (e) => {
+                    if (this.pointers.size === 1 && !this.moved && this.onClickPoint) {
+                        const rect = el.getBoundingClientRect();
+                        this.onClickPoint(e.clientX - rect.left, e.clientY - rect.top);
+                    }
+                    this.pointers.delete(e.pointerId);
+                    if (this.pointers.size < 2) {
+                        this.lastPinchDist = null;
+                        this.lastPinchMid = null;
+                    }
+                    if (this.pointers.size === 1) {
+                        const p = [...this.pointers.values()][0];
+                        this.dragStart = { x: p.x, y: p.y, px: this.panX, py: this.panY };
+                    } else {
+                        this.dragStart = null;
+                    }
+                };
+                el.addEventListener('pointerup', endPtr);
+                el.addEventListener('pointercancel', endPtr);
+
+                el.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    const rect = el.getBoundingClientRect();
+                    const factor = e.deltaY < 0 ? 1.12 : 0.89;
+                    this.zoomBy(factor, e.clientX - rect.left, e.clientY - rect.top);
+                }, { passive: false });
+            }
+        }
+
+        /* 通用高清 Canvas 尺寸同步 */
+        function prepCanvas(canvas) {
+            const dpr = Math.min(window.devicePixelRatio || 1, 2);
+            const w = canvas.clientWidth || 400;
+            const h = canvas.clientHeight || 300;
+            if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
+                canvas.width = Math.floor(w * dpr);
+                canvas.height = Math.floor(h * dpr);
+            }
+            const ctx = canvas.getContext('2d');
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            return { ctx, w, h };
+        }
+
+        /* 通用 2D 地圖底圖繪製（背景、經緯網格、大陸多邊形、文字標籤） */
+        function renderBaseMap(ctx, w, h, proj, cam, opts = {}) {
+            ctx.clearRect(0, 0, w, h);
+
+            // 計算基底縮放讓投影剛好填滿視野 86%
+            const bx = proj.bounds.x;
+            const by = proj.bounds.y;
+            const baseScale = Math.min((w * 0.44) / bx, (h * 0.43) / by) * cam.zoom;
+            const cx = w / 2 + cam.panX;
+            const cy = h / 2 + cam.panY;
+
+            const toScreen = (mx, my) => [cx + mx * baseScale, cy - my * baseScale];
+            const fromScreen = (sx, sy) => [(sx - cx) / baseScale, -(sy - cy) / baseScale];
+
+            // 繪製外框地球輪廓 / 海洋底色
+            ctx.save();
+            ctx.beginPath();
+            const minLat = -proj.maxLat, maxLat = proj.maxLat;
+            const borderPts = [];
+            for (let lat = minLat; lat <= maxLat; lat += 4) borderPts.push(proj.project(180, lat));
+            for (let lon = 180; lon >= -180; lon -= 6) borderPts.push(proj.project(lon, maxLat));
+            for (let lat = maxLat; lat >= minLat; lat -= 4) borderPts.push(proj.project(-180, lat));
+            for (let lon = -180; lon <= 180; lon += 6) borderPts.push(proj.project(lon, minLat));
+
+            if (proj.id === 'azimuthal_eq') {
+                const r = Math.PI * 0.96 * baseScale;
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+            } else {
+                borderPts.forEach((p, i) => {
+                    const sc = toScreen(p[0], p[1]);
+                    if (i === 0) ctx.moveTo(sc[0], sc[1]);
+                    else ctx.lineTo(sc[0], sc[1]);
+                });
+                ctx.closePath();
+            }
+            ctx.fillStyle = COLORS.ocean;
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            ctx.clip();
+
+            // 經緯線網格
+            const jumpLimit = w * 0.42;
+            for (let lon = -180; lon <= 180; lon += 30) {
+                ctx.beginPath();
+                let prev = null;
+                for (let lat = -84; lat <= 84; lat += 4) {
+                    const p = proj.project(lon, lat);
+                    const sc = toScreen(p[0], p[1]);
+                    if (!prev || Math.abs(sc[0] - prev[0]) > jumpLimit) ctx.moveTo(sc[0], sc[1]);
+                    else ctx.lineTo(sc[0], sc[1]);
+                    prev = sc;
+                }
+                ctx.strokeStyle = lon === 0 ? COLORS.equator : COLORS.graticule;
+                ctx.lineWidth = lon === 0 ? 1.1 : 0.8;
+                ctx.stroke();
+            }
+
+            for (let lat = -75; lat <= 75; lat += 15) {
+                ctx.beginPath();
+                let prev = null;
+                for (let lon = -180; lon <= 180; lon += 5) {
+                    const p = proj.project(lon, lat);
+                    const sc = toScreen(p[0], p[1]);
+                    if (!prev || Math.abs(sc[0] - prev[0]) > jumpLimit) ctx.moveTo(sc[0], sc[1]);
+                    else ctx.lineTo(sc[0], sc[1]);
+                    prev = sc;
+                }
+                const isTangent =
+                    (proj.id === 'mercator' && lat === 0) ||
+                    (proj.id === 'gallpeters' && Math.abs(lat) === 45) ||
+                    (proj.id === 'albers' && (lat === 15 || lat === 45)); // 示意標準緯線附近
+                ctx.strokeStyle = lat === 0 ? COLORS.equator : COLORS.graticule;
+                ctx.lineWidth = lat === 0 ? 1.2 : 0.8;
+                ctx.stroke();
+            }
+
+            // 若為阿爾伯斯或高爾-彼得斯或麥卡托，繪製準確的標準相切線 (金色虛線)
+            const stdLats = proj.id === 'mercator' ? [0] : proj.id === 'gallpeters' ? [-45, 45] : proj.id === 'albers' ? [20, 50] : [];
+            stdLats.forEach(sLat => {
+                ctx.beginPath();
+                ctx.setLineDash([5, 4]);
+                let prev = null;
+                for (let lon = -180; lon <= 180; lon += 5) {
+                    const p = proj.project(lon, sLat);
+                    const sc = toScreen(p[0], p[1]);
+                    if (!prev || Math.abs(sc[0] - prev[0]) > jumpLimit) ctx.moveTo(sc[0], sc[1]);
+                    else ctx.lineTo(sc[0], sc[1]);
+                    prev = sc;
+                }
+                ctx.strokeStyle = COLORS.tangent;
+                ctx.lineWidth = 1.6;
+                ctx.stroke();
+                ctx.setLineDash([]);
+            });
+
+            // 繪製世界大陸
+            WORLD_POLYGONS.forEach(poly => {
+                // 在北極方位投影中略過南極底部封閉線避免橫跨圓盤
+                if (proj.id === 'azimuthal_eq' && poly.name === '南極洲') return;
+                ctx.beginPath();
+                let prev = null;
+                poly.pts.forEach((pt, idx) => {
+                    const p = proj.project(pt[0], clamp(pt[1], -proj.maxLat, proj.maxLat));
+                    const sc = toScreen(p[0], p[1]);
+                    if (idx === 0 || !prev || Math.hypot(sc[0] - prev[0], sc[1] - prev[1]) > jumpLimit) {
+                        ctx.moveTo(sc[0], sc[1]);
+                    } else {
+                        ctx.lineTo(sc[0], sc[1]);
+                    }
+                    prev = sc;
+                });
+                ctx.fillStyle = COLORS.landFill;
+                ctx.strokeStyle = COLORS.landStroke;
+                ctx.lineWidth = 1.1;
+                ctx.fill();
+                ctx.stroke();
+            });
+
+            // 繪製底索變形圓
+            if (opts.showTissot) {
+                const lats = proj.id === 'azimuthal_eq' ? [0, 30, 60] : [-60, -30, 0, 30, 60];
+                const lons = [-120, -60, 0, 60, 120];
+                lats.forEach(la => {
+                    lons.forEach(lo => {
+                        drawTissotCircle(ctx, proj, lo, la, toScreen, 4.6, false);
+                    });
+                });
+                if (proj.id === 'azimuthal_eq') {
+                    drawTissotCircle(ctx, proj, 0, 89.5, toScreen, 4.6, false);
+                }
+            }
+
+            // 文字標籤
+            if (globalShowLabels) {
+                ctx.font = '600 11px "Noto Sans TC", sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                WORLD_POLYGONS.forEach(poly => {
+                    if (!poly.labelPos) return;
+                    if (proj.id === 'azimuthal_eq' && poly.labelPos[1] < -40) return;
+                    const p = proj.project(poly.labelPos[0], poly.labelPos[1]);
+                    const sc = toScreen(p[0], p[1]);
+                    const text = poly.name;
+                    const tw = ctx.measureText(text).width + 8;
+                    ctx.fillStyle = 'rgba(9, 14, 26, 0.72)';
+                    ctx.fillRect(sc[0] - tw / 2, sc[1] - 9, tw, 18);
+                    ctx.fillStyle = poly.name === '台灣' ? '#fde047' : '#e2e8f0';
+                    ctx.fillText(text, sc[0], sc[1]);
+                });
+
+                // 緯度標記
+                ctx.fillStyle = 'rgba(148, 163, 184, 0.85)';
+                ctx.font = '500 10px sans-serif';
+                [-60, -30, 0, 30, 60].forEach(lat => {
+                    const p = proj.project(-175, lat);
+                    const sc = toScreen(p[0], p[1]);
+                    ctx.fillText(`${lat === 0 ? '0° 赤道' : lat > 0 ? lat + '°N' : Math.abs(lat) + '°S'}`, sc[0] + 14, sc[1] - 7);
+                });
+            }
+
+            ctx.restore();
+            return { toScreen, fromScreen, baseScale, cx, cy };
+        }
+
+        /* ============================================================================
+           4. 全域分頁切換與標籤控制
+           ============================================================================ */
+        function toggleGlobalLabels() {
+            globalShowLabels = !globalShowLabels;
+            const btn = document.getElementById('btnGlobalLabels');
+            const txt = document.getElementById('lblToggleText');
+            btn.classList.toggle('active', globalShowLabels);
+            txt.textContent = globalShowLabels ? '文字標籤：開' : '文字標籤：關';
+            refreshActiveTab();
+        }
+
+        function switchTab(tabId) {
+            activeTabId = tabId;
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
+            document.querySelectorAll('.tab-view').forEach(v => v.classList.toggle('active', v.id === tabId));
+            requestAnimationFrame(() => refreshActiveTab());
+        }
+
+        function refreshActiveTab() {
+            if (activeTabId === 'tab1') { t1Resize(); t1Render(); }
+            else if (activeTabId === 'tab2') { t2Render(); }
+            else if (activeTabId === 'tab3') { t3Render(); }
+            else if (activeTabId === 'tab4') { t4RenderBoth(); }
+        }
+
+        window.addEventListener('resize', () => refreshActiveTab());
+
+        /* ============================================================================
+           5. 分頁 1：Three.js 3D 可展表面與物理等距攤平模擬 (含離線 Canvas 備援)
+           ============================================================================ */
+        const t1State = {
+            surface: 'cylindrical', // cylindrical | conic | azimuthal | pseudo
+            step: 1,                // 1..4
+            unroll: 0,              // 0..1
+            targetUnroll: 0,
+            autoPlay: false,
+            yaw: 0.45,
+            pitch: 0.28,
+            camDist: 4.3,
+            hasThree: typeof THREE !== 'undefined'
+        };
+
+        const T1_SURFACE_META = {
+            cylindrical: {
+                info: '<b>🧻 圓柱投影 (Cylindrical)</b><br>將一張紙捲成圓柱包住地球赤道（金色相切線）。光線由地心向外投射後，將圓柱沿背面 180° 切開攤平，經緯線呈正交網格狀。適合赤道或全球導航基礎。',
+                steps: [
+                    ['球體與投影光源', '建立 3D 地球儀，中心點設有假想光源，赤道為未來與圓柱的相切線。'],
+                    ['套入可展圓柱面', '將琥珀色圓柱體包覆地球，金黃色圓環代表「標準緯線（赤道）」，該線處變形為零。'],
+                    ['光線投射至圓柱壁', '中心光源將地球的經緯網與各大洲投射到圓柱內壁上成像。'],
+                    ['切開並攤平為 2D 地圖', '沿背面切開圓柱並等距展開成平面，觀察經緯線如何形成垂直網格。']
+                ]
+            },
+            conic: {
+                info: '<b>🍦 圓錐投影 (Conic)</b><br>將紙捲成圓錐套在北半球中緯度（金色標準緯線 45°N）。展開後經線呈由極點向外的放射狀直線，緯線則為同心圓弧，極適合中緯度東西向國家（如美國、中國、歐亞）。',
+                steps: [
+                    ['球體與中緯目標區', '建立 3D 地球儀，標定北緯 45°N 作為圓錐相切的中緯度帶。'],
+                    ['套入可展圓錐體', '圓錐體帽套在地球上方，金黃色線圈為 45°N 標準相切緯線。'],
+                    ['投射圓錐扇形網格', '光線將球面陸地與經緯格投射至圓錐表面，越靠近相切線失真越小。'],
+                    ['展開為扇形平面地圖', '將圓錐側面剪開並物理等距攤平！觀察經線呈放射狀、緯線呈同心圓弧。']
+                ]
+            },
+            azimuthal: {
+                info: '<b>📄 方位／平面投影 (Azimuthal / Planar)</b><br>將平坦紙張直接相切於北極點（金色切點）。所有經線由極點向外輻射，緯線形成完整的同心圓。最適合表現極地與以特定中心向外的所有方向/距離。',
+                steps: [
+                    ['球體與極地中心點', '建立 3D 地球儀，選定北極點 (90°N) 作為平面相切點。'],
+                    ['貼合水平投影平面', '將琥珀色平面切於地球北極頂端，接觸處形成零變形點。'],
+                    ['極地放射投射成像', '將球面點對映至平面上，形成以北極為中心的同心圓緯線與放射經線。'],
+                    ['轉正成為 2D 極地地圖', '將水平投影平面翻轉面向觀察者，呈現完整的極方位地圖視角。']
+                ]
+            },
+            pseudo: {
+                info: '<b>🍊 偽圓柱／折衷投影 (Pseudocylindrical)</b><br>嚴格來說並無實體可展幾何紙張能直接捲成此形狀！它是透過數學公式直接把球面「橘子瓣式」向兩側曲線展開，中央經線維持直線，其餘經線向極點優雅彎曲以減少高緯面積失真。',
+                steps: [
+                    ['球體地球儀基準', '觀察球面上原本向兩極收斂的經線與大洲真實比例。'],
+                    ['建立數學曲面網格', '顯示偽圓柱（羅賓遜式）數學包絡網格，兩極不再是一個點而是短線段。'],
+                    ['球面陸地對映準備', '標記中央經線（0°）為基準軸線，準備將球殼沿背面剖開。'],
+                    ['非可展曲面直接展開', '球殼直接數學形變攤平為羅賓遜世界地圖，兼顧視覺自然與面積平衡。']
+                ]
+            }
+        };
+
+        // Three.js 物件容器
+        let t1Renderer, t1Scene, t1Camera, t1GlobeGroup, t1SurfaceMesh, t1SurfaceGridLines, t1SurfaceLandLines, t1TangentLine, t1RaysLines, t1SurfaceGeo, t1GridSegMeta, t1LandSegMeta;
+
+        function t1InitThree() {
+            const canvas = document.getElementById('t1Canvas');
+            if (!t1State.hasThree) {
+                document.getElementById('t1EngineBadge').textContent = 'Canvas 3D 備援';
+                return;
+            }
+            try {
+                t1Renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+                t1Renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+                t1Scene = new THREE.Scene();
+                t1Camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+
+                const amb = new THREE.AmbientLight(0xffffff, 0.72);
+                t1Scene.add(amb);
+                const dir = new THREE.DirectionalLight(0xbae6fd, 0.85);
+                dir.position.set(4, 5, 5);
+                t1Scene.add(dir);
+
+                t1GlobeGroup = new THREE.Group();
+                t1Scene.add(t1GlobeGroup);
+
+                // 1. 3D 地球球體 (R=1)
+                const sphereGeo = new THREE.SphereGeometry(0.99, 48, 32);
+                const sphereMat = new THREE.MeshPhongMaterial({
+                    color: 0x0c2d4d,
+                    emissive: 0x061629,
+                    shininess: 18,
+                    transparent: true,
+                    opacity: 0.94
+                });
+                t1GlobeGroup.add(new THREE.Mesh(sphereGeo, sphereMat));
+
+                // 地心光源球
+                const lightCore = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.06, 16, 16),
+                    new THREE.MeshBasicMaterial({ color: 0xfde047 })
+                );
+                t1GlobeGroup.add(lightCore);
+
+                // 球面經緯網格
+                const gPos = [];
+                for (let lon = -180; lon < 180; lon += 30) {
+                    for (let lat = -85; lat < 85; lat += 5) {
+                        const a = sphToVec3(lon, lat, 1.003);
+                        const b = sphToVec3(lon, lat + 5, 1.003);
+                        gPos.push(a.x, a.y, a.z, b.x, b.y, b.z);
+                    }
+                }
+                for (let lat = -60; lat <= 60; lat += 30) {
+                    for (let lon = -180; lon < 180; lon += 6) {
+                        const a = sphToVec3(lon, lat, 1.003);
+                        const b = sphToVec3(lon + 6, lat, 1.003);
+                        gPos.push(a.x, a.y, a.z, b.x, b.y, b.z);
+                    }
+                }
+                const gGeo = new THREE.BufferGeometry();
+                gGeo.setAttribute('position', new THREE.Float32BufferAttribute(gPos, 3));
+                t1GlobeGroup.add(new THREE.LineSegments(gGeo, new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.35 })));
+
+                // 球面大陸輪廓線
+                const lPos = [];
+                WORLD_POLYGONS.forEach(poly => {
+                    for (let i = 0; i < poly.pts.length - 1; i++) {
+                        const a = sphToVec3(poly.pts[i][0], poly.pts[i][1], 1.008);
+                        const b = sphToVec3(poly.pts[i + 1][0], poly.pts[i + 1][1], 1.008);
+                        lPos.push(a.x, a.y, a.z, b.x, b.y, b.z);
+                    }
+                });
+                const lGeo = new THREE.BufferGeometry();
+                lGeo.setAttribute('position', new THREE.Float32BufferAttribute(lPos, 3));
+                t1GlobeGroup.add(new THREE.LineSegments(lGeo, new THREE.LineBasicMaterial({ color: 0x34d399 })));
+
+                // 2. 動態可變形投影面網格 (U: 48 段經度, V: 24 段緯度)
+                t1BuildSurfaceMeshes();
+                t1Resize();
+            } catch (err) {
+                t1State.hasThree = false;
+                document.getElementById('t1EngineBadge').textContent = 'Canvas 3D 備援';
+            }
+        }
+
+        function sphToVec3(lonDeg, latDeg, r = 1) {
+            const lam = lonDeg * D2R;
+            const phi = latDeg * D2R;
+            return new THREE.Vector3(
+                r * Math.cos(phi) * Math.sin(lam),
+                r * Math.sin(phi),
+                r * Math.cos(phi) * Math.cos(lam)
+            );
+        }
+
+        // 核心數學：計算給定 (surfaceType, lonDeg, latDeg, unroll u) 在 3D 空間中的精確座標！
+        function evalSurfacePoint3D(type, lonDeg, latDeg, u) {
+            const lam = lonDeg * D2R;
+            const phi = clamp(latDeg, -78, 78) * D2R;
+
+            if (type === 'cylindrical') {
+                const R = 1.04;
+                // 壓縮一點極區高度使畫面優雅
+                const y = R * clamp(Math.log(Math.tan(Math.PI / 4 + phi / 2)), -1.55, 1.55);
+                const k = 1 - u;
+                if (k < 0.001) {
+                    return [R * lam, y, R];
+                }
+                const Reff = R / k;
+                const ang = lam * k;
+                return [Reff * Math.sin(ang), y, R - Reff * (1 - Math.cos(ang))];
+            }
+
+            if (type === 'conic') {
+                const R = 1.04;
+                const phi0 = 45 * D2R;
+                const n0 = Math.sin(phi0); // cone constant
+                const s0 = R / Math.tan(phi0); // slant distance to tangent parallel
+                const yApex = R / Math.sin(phi0);
+                // 沿圓錐斜邊對映緯度
+                const s = clamp(s0 - R * Math.tan(phi - phi0), 0.12, 2.35);
+                const gamma = lerp(phi0, Math.PI / 2, u);
+                const sinG = Math.sin(gamma);
+                const cosG = Math.cos(gamma);
+                const psi = lam * (n0 / sinG);
+
+                const lx = s * sinG * Math.sin(psi);
+                const ly = -s * cosG;
+                const lz = s * sinG * Math.cos(psi);
+
+                // 平滑旋轉讓攤平後的扇形面對觀眾 (+Z 方向)
+                const rotX = lerp(0, Math.PI / 2, u);
+                const cosR = Math.cos(rotX), sinR = Math.sin(rotX);
+                const ry = ly * cosR - lz * sinR;
+                const rz = ly * sinR + lz * cosR;
+                const apexY = lerp(yApex, 1.15, u);
+                const apexZ = lerp(0, 0.9, u);
+                return [lx, apexY + ry, apexZ + rz];
+            }
+
+            if (type === 'azimuthal') {
+                const R = 1.04;
+                const rho = clamp((Math.PI / 2 - clamp(latDeg, -45, 90) * D2R) * 0.72, 0, 1.65);
+                const px = rho * Math.sin(lam);
+                const pz = -rho * Math.cos(lam);
+                const py = 0; // 相對於北極切點
+                // u=0 時在頂端 (0, R, 0) 水平；u=1 時翻轉面對 +Z
+                const tilt = lerp(0, Math.PI / 2, u);
+                const ry = py * Math.cos(tilt) - pz * Math.sin(tilt);
+                const rz = py * Math.sin(tilt) + pz * Math.cos(tilt);
+                return [px, lerp(R, 0, u) + ry, lerp(0, 1.05, u) + rz];
+            }
+
+            // pseudocylindrical: 由球殼直接平滑展開為羅賓遜地圖
+            const sVec = sphToVec3(lonDeg, latDeg, 1.04);
+            const rob = PROJECTIONS.robinson.project(lonDeg, latDeg);
+            return [
+                lerp(sVec.x, rob[0] * 0.92, u),
+                lerp(sVec.y, rob[1] * 0.92, u),
+                lerp(sVec.z, 0.9, u)
+            ];
+        }
+
+        function t1BuildSurfaceMeshes() {
+            if (t1SurfaceMesh) t1Scene.remove(t1SurfaceMesh);
+            if (t1SurfaceGridLines) t1Scene.remove(t1SurfaceGridLines);
+            if (t1SurfaceLandLines) t1Scene.remove(t1SurfaceLandLines);
+            if (t1TangentLine) t1Scene.remove(t1TangentLine);
+            if (t1RaysLines) t1Scene.remove(t1RaysLines);
+
+            const segU = 48, segV = 22;
+            t1SurfaceGeo = new THREE.BufferGeometry();
+            const verts = new Float32Array((segU + 1) * (segV + 1) * 3);
+            const indices = [];
+            for (let iv = 0; iv < segV; iv++) {
+                for (let iu = 0; iu < segU; iu++) {
+                    const a = iv * (segU + 1) + iu;
+                    const b = a + 1;
+                    const c = a + (segU + 1);
+                    const d = c + 1;
+                    indices.push(a, b, d, a, d, c);
+                }
+            }
+            t1SurfaceGeo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+            t1SurfaceGeo.setIndex(indices);
+            t1SurfaceMesh = new THREE.Mesh(t1SurfaceGeo, new THREE.MeshBasicMaterial({
+                color: 0xf59e0b,
+                transparent: true,
+                opacity: 0.22,
+                side: THREE.DoubleSide,
+                depthWrite: false
+            }));
+            t1Scene.add(t1SurfaceMesh);
+
+            // 投影面上的網格線 metadata
+            t1GridSegMeta = [];
+            for (let lon = -180; lon <= 180; lon += 30) {
+                for (let lat = -75; lat < 75; lat += 5) {
+                    t1GridSegMeta.push([lon, lat, lon, lat + 5]);
+                }
+            }
+            for (let lat = -60; lat <= 60; lat += 30) {
+                for (let lon = -180; lon < 180; lon += 10) {
+                    t1GridSegMeta.push([lon, lat, lon + 10, lat]);
+                }
+            }
+            const sgGeo = new THREE.BufferGeometry();
+            sgGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(t1GridSegMeta.length * 6), 3));
+            t1SurfaceGridLines = new THREE.LineSegments(sgGeo, new THREE.LineBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.5 }));
+            t1Scene.add(t1SurfaceGridLines);
+
+            // 投影面上的大陸線
+            t1LandSegMeta = [];
+            WORLD_POLYGONS.forEach(poly => {
+                if (poly.name === '南極洲') return;
+                for (let i = 0; i < poly.pts.length - 1; i++) {
+                    t1LandSegMeta.push([poly.pts[i][0], poly.pts[i][1], poly.pts[i + 1][0], poly.pts[i + 1][1]]);
+                }
+            });
+            const slGeo = new THREE.BufferGeometry();
+            slGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(t1LandSegMeta.length * 6), 3));
+            t1SurfaceLandLines = new THREE.LineSegments(slGeo, new THREE.LineBasicMaterial({ color: 0x34d399, transparent: true, opacity: 0.95 }));
+            t1Scene.add(t1SurfaceLandLines);
+
+            // 相切線 (金色)
+            const tanGeo = new THREE.BufferGeometry();
+            tanGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(72 * 6), 3));
+            t1TangentLine = new THREE.LineSegments(tanGeo, new THREE.LineBasicMaterial({ color: 0xfde047 }));
+            t1Scene.add(t1TangentLine);
+
+            // 光線投射線
+            const rayGeo = new THREE.BufferGeometry();
+            rayGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(12 * 6), 3));
+            t1RaysLines = new THREE.LineSegments(rayGeo, new THREE.LineBasicMaterial({ color: 0xfde047, transparent: true, opacity: 0.65 }));
+            t1Scene.add(t1RaysLines);
+        }
+
+        function t1UpdateGeometry() {
+            if (!t1State.hasThree || !t1SurfaceGeo) return;
+            const type = t1State.surface;
+            const u = t1State.unroll;
+            const step = t1State.step;
+
+            // 可見度控制
+            const showSurface = step >= 2;
+            const showProjected = step >= 3;
+            const showRays = step === 3 && u < 0.05;
+
+            t1SurfaceMesh.visible = showSurface;
+            t1SurfaceGridLines.visible = showSurface;
+            t1TangentLine.visible = showSurface;
+            t1SurfaceLandLines.visible = showProjected;
+            t1RaysLines.visible = showRays;
+
+            // 攤平時球體漸淡退後
+            t1GlobeGroup.position.z = -u * 0.65;
+            t1GlobeGroup.scale.setScalar(lerp(1, 0.55, u));
+            t1GlobeGroup.visible = u < 0.95;
+
+            // 更新表面頂點
+            const segU = 48, segV = 22;
+            const posArr = t1SurfaceGeo.attributes.position.array;
+            let ptr = 0;
+            const latMin = type === 'azimuthal' ? -25 : type === 'conic' ? -15 : -75;
+            const latMax = type === 'azimuthal' ? 89.5 : 75;
+            for (let iv = 0; iv <= segV; iv++) {
+                const lat = lerp(latMin, latMax, iv / segV);
+                for (let iu = 0; iu <= segU; iu++) {
+                    const lon = lerp(-180, 180, iu / segU);
+                    const p = evalSurfacePoint3D(type, lon, lat, u);
+                    posArr[ptr++] = p[0];
+                    posArr[ptr++] = p[1];
+                    posArr[ptr++] = p[2];
+                }
+            }
+            t1SurfaceGeo.attributes.position.needsUpdate = true;
+
+            // 更新表面網格
+            const gArr = t1SurfaceGridLines.geometry.attributes.position.array;
+            ptr = 0;
+            t1GridSegMeta.forEach(s => {
+                const a = evalSurfacePoint3D(type, s[0], s[1], u);
+                const b = evalSurfacePoint3D(type, s[2], s[3], u);
+                gArr[ptr++] = a[0]; gArr[ptr++] = a[1]; gArr[ptr++] = a[2];
+                gArr[ptr++] = b[0]; gArr[ptr++] = b[1]; gArr[ptr++] = b[2];
+            });
+            t1SurfaceGridLines.geometry.attributes.position.needsUpdate = true;
+
+            // 更新投射大陸線
+            if (showProjected) {
+                const lArr = t1SurfaceLandLines.geometry.attributes.position.array;
+                ptr = 0;
+                t1LandSegMeta.forEach(s => {
+                    const a = evalSurfacePoint3D(type, s[0], s[1], u);
+                    const b = evalSurfacePoint3D(type, s[2], s[3], u);
+                    lArr[ptr++] = a[0]; lArr[ptr++] = a[1]; lArr[ptr++] = a[2];
+                    lArr[ptr++] = b[0]; lArr[ptr++] = b[1]; lArr[ptr++] = b[2];
+                });
+                t1SurfaceLandLines.geometry.attributes.position.needsUpdate = true;
+            }
+
+            // 更新金色相切線
+            const tArr = t1TangentLine.geometry.attributes.position.array;
+            const tanLat = type === 'cylindrical' ? 0 : type === 'conic' ? 45 : type === 'azimuthal' ? 88 : 0;
+            ptr = 0;
+            for (let i = 0; i < 72; i++) {
+                const lonA = -180 + i * 5;
+                const lonB = lonA + 5;
+                const a = type === 'pseudo'
+                    ? evalSurfacePoint3D(type, 0, lerp(-75, 75, i / 72), u)
+                    : evalSurfacePoint3D(type, lonA, tanLat, u);
+                const b = type === 'pseudo'
+                    ? evalSurfacePoint3D(type, 0, lerp(-75, 75, (i + 1) / 72), u)
+                    : evalSurfacePoint3D(type, lonB, tanLat, u);
+                tArr[ptr++] = a[0]; tArr[ptr++] = a[1]; tArr[ptr++] = a[2];
+                tArr[ptr++] = b[0]; tArr[ptr++] = b[1]; tArr[ptr++] = b[2];
+            }
+            t1TangentLine.geometry.attributes.position.needsUpdate = true;
+
+            // 更新投射光線
+            if (showRays) {
+                const rArr = t1RaysLines.geometry.attributes.position.array;
+                ptr = 0;
+                const sampleLons = [-120, -60, 0, 60, 120, 180];
+                const sampleLats = [25, -25];
+                let k = 0;
+                sampleLats.forEach(la => {
+                    sampleLons.forEach(lo => {
+                        if (k >= 12) return;
+                        const orig = type === 'azimuthal' ? [0, -1, 0] : [0, 0, 0];
+                        const target = evalSurfacePoint3D(type, lo, type === 'azimuthal' ? 45 : la, 0);
+                        rArr[ptr++] = orig[0]; rArr[ptr++] = orig[1]; rArr[ptr++] = orig[2];
+                        rArr[ptr++] = target[0]; rArr[ptr++] = target[1]; rArr[ptr++] = target[2];
+                        k++;
+                    });
+                });
+                t1RaysLines.geometry.attributes.position.needsUpdate = true;
+            }
+        }
+
+        function t1UpdateLabels3D() {
+            const container = document.getElementById('t1Labels');
+            container.innerHTML = '';
+            if (!globalShowLabels || !t1State.hasThree || !t1Camera) return;
+
+            const w = container.clientWidth, h = container.clientHeight;
+            const addTag = (vec3, text, cls = '') => {
+                const v = vec3.clone().project(t1Camera);
+                if (v.z > 1) return;
+                const x = (v.x * 0.5 + 0.5) * w;
+                const y = (-v.y * 0.5 + 0.5) * h;
+                if (x < 10 || x > w - 10 || y < 10 || y > h - 10) return;
+                const el = document.createElement('div');
+                el.className = `map-label-tag ${cls}`;
+                el.style.left = x + 'px';
+                el.style.top = y + 'px';
+                el.textContent = text;
+                container.appendChild(el);
+            };
+
+            if (t1State.unroll < 0.7) {
+                addTag(new THREE.Vector3(0, 0, t1GlobeGroup.position.z), '光源中心', 'gold');
+            }
+            if (t1State.step >= 2) {
+                const tanLabel =
+                    t1State.surface === 'cylindrical' ? '相切線：赤道 0°' :
+                        t1State.surface === 'conic' ? '標準緯線：45°N' :
+                            t1State.surface === 'azimuthal' ? '切點：北極 90°N' : '基準中央經線 0°';
+                const p = evalSurfacePoint3D(t1State.surface, 20, t1State.surface === 'conic' ? 45 : t1State.surface === 'azimuthal' ? 88 : 0, t1State.unroll);
+                addTag(new THREE.Vector3(p[0], p[1], p[2]), tanLabel, 'amber');
+            }
+            const twP = evalSurfacePoint3D(t1State.surface, 121.5, 24, t1State.unroll);
+            if (t1State.step >= 3) addTag(new THREE.Vector3(twP[0], twP[1], twP[2]), '台灣', 'gold');
+        }
+
+        function t1Resize() {
+            const canvas = document.getElementById('t1Canvas');
+            const w = canvas.clientWidth || 400;
+            const h = canvas.clientHeight || 300;
+            if (t1State.hasThree && t1Renderer) {
+                t1Renderer.setSize(w, h, false);
+                t1Camera.aspect = w / h;
+                t1Camera.updateProjectionMatrix();
+            }
+        }
+
+        function t1Render() {
+            if (!t1State.hasThree) {
+                // 若離線無 Three.js，使用簡潔 2D 投影展開動畫作為備援
+                const { ctx, w, h } = prepCanvas(document.getElementById('t1Canvas'));
+                const mapProj = t1State.surface === 'conic' ? PROJECTIONS.albers : t1State.surface === 'azimuthal' ? PROJECTIONS.azimuthal_eq : t1State.surface === 'pseudo' ? PROJECTIONS.robinson : PROJECTIONS.mercator;
+                renderBaseMap(ctx, w, h, mapProj, { zoom: 1, panX: 0, panY: 0 }, { showTissot: t1State.step >= 3 });
+                return;
+            }
+            t1UpdateGeometry();
+            const r = t1State.camDist;
+            const cp = Math.cos(t1State.pitch), sp = Math.sin(t1State.pitch);
+            const cy = Math.cos(t1State.yaw), sy = Math.sin(t1State.yaw);
+            t1Camera.position.set(r * cp * sy, r * sp, r * cp * cy);
+            t1Camera.lookAt(0, 0, 0);
+            t1Renderer.render(t1Scene, t1Camera);
+            t1UpdateLabels3D();
+        }
+
+        // Tab 1 觸控與滑鼠 3D 軌道控制
+        (() => {
+            const canvas = document.getElementById('t1Canvas');
+            const ptrs = new Map();
+            let lastDist = null;
+            let lastPos = null;
+
+            canvas.addEventListener('pointerdown', (e) => {
+                canvas.setPointerCapture(e.pointerId);
+                ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+                if (ptrs.size === 1) lastPos = { x: e.clientX, y: e.clientY };
+                else if (ptrs.size === 2) {
+                    const a = [...ptrs.values()];
+                    lastDist = Math.hypot(a[1].x - a[0].x, a[1].y - a[0].y);
+                }
+            });
+            canvas.addEventListener('pointermove', (e) => {
+                if (!ptrs.has(e.pointerId)) return;
+                ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+                if (ptrs.size === 1 && lastPos) {
+                    const dx = e.clientX - lastPos.x;
+                    const dy = e.clientY - lastPos.y;
+                    t1State.yaw -= dx * 0.009;
+                    t1State.pitch = clamp(t1State.pitch + dy * 0.008, -1.35, 1.35);
+                    lastPos = { x: e.clientX, y: e.clientY };
+                    t1Render();
+                } else if (ptrs.size === 2) {
+                    const a = [...ptrs.values()];
+                    const dist = Math.hypot(a[1].x - a[0].x, a[1].y - a[0].y);
+                    if (lastDist && dist > 0) {
+                        t1State.camDist = clamp(t1State.camDist * (lastDist / dist), 2.1, 9.5);
+                        t1Render();
+                    }
+                    lastDist = dist;
+                }
+            });
+            const end = (e) => {
+                ptrs.delete(e.pointerId);
+                if (ptrs.size === 1) lastPos = [...ptrs.values()][0];
+                else { lastPos = null; lastDist = null; }
+            };
+            canvas.addEventListener('pointerup', end);
+            canvas.addEventListener('pointercancel', end);
+            canvas.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                t1State.camDist = clamp(t1State.camDist * (e.deltaY > 0 ? 1.08 : 0.92), 2.1, 9.5);
+                t1Render();
+            }, { passive: false });
+        })();
+
+        function t1Zoom(factor) {
+            t1State.camDist = clamp(t1State.camDist / factor, 2.1, 9.5);
+            t1Render();
+        }
+        function t1ResetView() {
+            t1State.yaw = t1State.step === 4 ? 0 : 0.45;
+            t1State.pitch = t1State.step === 4 ? 0.05 : 0.28;
+            t1State.camDist = 4.3;
+            t1Render();
+        }
+
+        function t1SetSurface(surf) {
+            t1State.surface = surf;
+            document.querySelectorAll('#tab1 .opt-btn').forEach(b => b.classList.toggle('active', b.dataset.surf === surf));
+            t1UpdateUI();
+            t1Render();
+        }
+
+        function t1GoStep(s) {
+            t1State.step = clamp(s, 1, 4);
+            t1State.targetUnroll = t1State.step === 4 ? 1 : 0;
+            if (t1State.step === 4) {
+                // 平滑正面視角方便觀看展開後的 2D 地圖
+                t1AnimateTo(1, 0, 0.06, 4.9);
+            } else {
+                t1AnimateTo(0, t1State.surface === 'azimuthal' ? 0.35 : 0.45, t1State.surface === 'azimuthal' ? 0.65 : 0.28, 4.3);
+            }
+            t1UpdateUI();
+        }
+
+        function t1OnSliderUnroll(val) {
+            t1State.unroll = Number(val) / 100;
+            if (t1State.unroll > 0.02 && t1State.step < 4) {
+                t1State.step = 4;
+                t1UpdateUI(true);
+            }
+            document.getElementById('t1UnrollVal').textContent = `${Math.round(val)}%`;
+            t1Render();
+        }
+
+        let t1AnimHandle = null;
+        function t1AnimateTo(targetU, targetYaw, targetPitch, targetDist) {
+            if (t1AnimHandle) cancelAnimationFrame(t1AnimHandle);
+            const startU = t1State.unroll, startY = t1State.yaw, startP = t1State.pitch, startD = t1State.camDist;
+            const t0 = performance.now();
+            const dur = 750;
+            const tick = (now) => {
+                const p = Math.min(1, (now - t0) / dur);
+                const ease = 1 - Math.pow(1 - p, 3);
+                t1State.unroll = lerp(startU, targetU, ease);
+                t1State.yaw = lerp(startY, targetYaw, ease);
+                t1State.pitch = lerp(startP, targetPitch, ease);
+                t1State.camDist = lerp(startD, targetDist, ease);
+                document.getElementById('t1UnrollSlider').value = Math.round(t1State.unroll * 100);
+                document.getElementById('t1UnrollVal').textContent = `${Math.round(t1State.unroll * 100)}%`;
+                t1Render();
+                if (p < 1) t1AnimHandle = requestAnimationFrame(tick);
+            };
+            t1AnimHandle = requestAnimationFrame(tick);
+        }
+
+        let t1AutoTimer = null;
+        function t1ToggleAuto() {
+            t1State.autoPlay = !t1State.autoPlay;
+            const btn = document.getElementById('t1PlayBtn');
+            if (t1State.autoPlay) {
+                btn.textContent = '⏸ 暫停演示';
+                t1GoStep(1);
+                let cur = 1;
+                t1AutoTimer = setInterval(() => {
+                    cur = cur >= 4 ? 1 : cur + 1;
+                    t1GoStep(cur);
+                }, 2100);
+            } else {
+                btn.textContent = '▶ 自動演示';
+                clearInterval(t1AutoTimer);
+            }
+        }
+
+        function t1UpdateUI(skipSlider = false) {
+            const meta = T1_SURFACE_META[t1State.surface];
+            const sInfo = meta.steps[t1State.step - 1];
+            document.getElementById('t1BannerStep').textContent = `STEP ${t1State.step} / 4`;
+            document.getElementById('t1BannerTitle').textContent = sInfo[0];
+            document.getElementById('t1BannerDesc').textContent = sInfo[1];
+            document.getElementById('t1SurfaceInfo').innerHTML = meta.info;
+
+            document.querySelectorAll('#tab1 .step-dot').forEach((d, idx) => {
+                d.classList.toggle('active', idx + 1 === t1State.step);
+                d.classList.toggle('done', idx + 1 < t1State.step);
+            });
+            document.getElementById('t1PrevBtn').disabled = t1State.step <= 1;
+            document.getElementById('t1NextBtn').disabled = t1State.step >= 4;
+            if (!skipSlider) {
+                document.getElementById('t1UnrollSlider').value = Math.round(t1State.unroll * 100);
+                document.getElementById('t1UnrollVal').textContent = `${Math.round(t1State.unroll * 100)}%`;
+            }
+        }
+
+        /* ============================================================================
+           6. 分頁 2：保持特性與底索變形實測
+           ============================================================================ */
+        const t2State = {
+            projId: 'mercator',
+            step: 1,
+            showTissot: false,
+            inspectLon: -42,
+            inspectLat: 72,
+            inspectName: '格陵蘭 (72°N)'
+        };
+
+        let t2LastLayout = null;
+        const t2Camera = new PanZoomController(
+            document.getElementById('t2Canvas'),
+            () => t2Render(),
+            (sx, sy) => {
+                if (!t2LastLayout) return;
+                const proj = PROJECTIONS[t2State.projId];
+                const [mx, my] = t2LastLayout.fromScreen(sx, sy);
+                const geo = proj.inverse(mx, my);
+                if (geo) {
+                    t2InspectPoint(geo[0], geo[1], `${geo[1] >= 0 ? geo[1].toFixed(1) + '°N' : Math.abs(geo[1]).toFixed(1) + '°S'}, ${geo[0] >= 0 ? geo[0].toFixed(1) + '°E' : Math.abs(geo[0]).toFixed(1) + '°W'}`);
+                }
+            }
+        );
+
+        function t2SetProj(id) {
+            t2State.projId = id;
+            document.querySelectorAll('#tab2 .opt-btn').forEach(b => b.classList.toggle('active', b.dataset.proj === id));
+            t2UpdateMetrics();
+            t2Render();
+        }
+
+        function t2GoStep(s) {
+            t2State.step = clamp(s, 1, 4);
+            if (t2State.step >= 2) {
+                t2State.showTissot = true;
+                document.getElementById('t2ChkTissot').checked = true;
+            } else {
+                t2State.showTissot = false;
+                document.getElementById('t2ChkTissot').checked = false;
+            }
+            const banners = [
+                ['經緯網格幾何觀察', '觀察投影後的經線與緯線是直線正交、放射圓弧，還是柔和曲線。金色虛線為零變形標準線。'],
+                ['投放底索變形圓 (Tissot)', '在地球上放置大小完全相同的正圓並進行投影：若保持正圓代表「等角」；若面積相同但變扁代表「等積」。'],
+                ['點擊地圖實測失真數值', '點選地圖任一處（或上方快速按鈕），即時查看該處的面積膨脹倍率與最大角度失真。'],
+                ['投影特性與應用總結', '沒有十全十美的地圖投影！製圖師必須依據需求在「角度、面積、距離」之間取捨。']
+            ];
+            document.getElementById('t2BannerStep').textContent = `STEP ${t2State.step} / 4`;
+            document.getElementById('t2BannerTitle').textContent = banners[t2State.step - 1][0];
+            document.getElementById('t2BannerDesc').textContent = banners[t2State.step - 1][1];
+            document.querySelectorAll('#tab2 .step-dot').forEach((d, i) => {
+                d.classList.toggle('active', i + 1 === t2State.step);
+                d.classList.toggle('done', i + 1 < t2State.step);
+            });
+            t2Render();
+        }
+
+        function t2ToggleTissot(checked) {
+            t2State.showTissot = checked;
+            t2Render();
+        }
+
+        function t2InspectPoint(lon, lat, label) {
+            t2State.inspectLon = lon;
+            t2State.inspectLat = lat;
+            t2State.inspectName = label;
+            if (t2State.step < 3) t2GoStep(3);
+            t2UpdateMetrics();
+            t2Render();
+        }
+
+        function t2UpdateMetrics() {
+            const proj = PROJECTIONS[t2State.projId];
+            const d = computeDistortion(proj, t2State.inspectLon, t2State.inspectLat);
+            document.getElementById('t2LocName').textContent = t2State.inspectName;
+            document.getElementById('t2AreaScale').textContent = `${d.areaScale.toFixed(2)}x`;
+            document.getElementById('t2AngleDist').textContent = `${d.maxAngleDeg.toFixed(1)}°`;
+            document.getElementById('t2AxisRatio').textContent = `${d.axisRatio.toFixed(2)} : 1`;
+            document.getElementById('t2ProjSummary').innerHTML = `<b>${proj.name}</b>（${proj.surface} · ${proj.prop}）：${proj.summary}`;
+        }
+
+        function t2Render() {
+            const { ctx, w, h } = prepCanvas(document.getElementById('t2Canvas'));
+            const proj = PROJECTIONS[t2State.projId];
+            t2LastLayout = renderBaseMap(ctx, w, h, proj, t2Camera, { showTissot: t2State.showTissot });
+
+            // 繪製使用者實測點的金色高亮底索圓與十字準星
+            const clampedLat = clamp(t2State.inspectLat, -proj.maxLat, proj.maxLat);
+            drawTissotCircle(ctx, proj, t2State.inspectLon, clampedLat, t2LastLayout.toScreen, 4.8, true);
+            const p = proj.project(t2State.inspectLon, clampedLat);
+            const sc = t2LastLayout.toScreen(p[0], p[1]);
+            ctx.beginPath();
+            ctx.arc(sc[0], sc[1], 4, 0, Math.PI * 2);
+            ctx.fillStyle = COLORS.tangent;
+            ctx.fill();
+        }
+
+        /* ============================================================================
+           7. 分頁 3：麥卡托專題與延伸應用 (面積膨脹 / 航線對決 / 橫麥卡托 & Web)
+           ============================================================================ */
+        const t3State = {
+            lab: 'area', // area | route | ext
+            areaStep: 1,
+            sampleCountry: 'greenland',
+            sampleLat: 0,
+            routeStep: 1,
+            routeId: 'tpe_sfo',
+            routeAnimPlaying: false,
+            routeProgress: 0.45,
+            extStep: 2,
+            centralMeridian: 121
+        };
+
+        const T3_COUNTRIES = {
+            greenland: { name: '格陵蘭 (216萬 km²)', baseLon: -42, baseLat: 72, poly: WORLD_POLYGONS.find(p => p.name === '格陵蘭').pts },
+            taiwan: { name: '台灣 (3.6萬 km²)', baseLon: 121, baseLat: 23.6, poly: WORLD_POLYGONS.find(p => p.name === '台灣').pts },
+            australia: { name: '澳洲 (769萬 km²)', baseLon: 134, baseLat: -25, poly: WORLD_POLYGONS.find(p => p.name === '澳洲').pts }
+        };
+
+        const T3_ROUTES = {
+            tpe_sfo: { name: '台北 TPE → 舊金山 SFO', a: [121.5, 25.0], b: [-122.4, 37.7] },
+            lon_nyc: { name: '倫敦 LON → 紐約 NYC', a: [-0.1, 51.5], b: [-74.0, 40.7] },
+            tok_syd: { name: '東京 TYO → 雪梨 SYD', a: [139.7, 35.7], b: [151.2, -33.9] }
+        };
+
+        const t3Camera = new PanZoomController(document.getElementById('t3Canvas'), () => t3Render());
+
+        function t3SetLab(lab) {
+            t3State.lab = lab;
+            document.querySelectorAll('#tab3 .opt-btn').forEach(b => b.classList.toggle('active', b.dataset.lab === lab));
+            document.getElementById('t3PanelArea').style.display = lab === 'area' ? 'flex' : 'none';
+            document.getElementById('t3PanelRoute').style.display = lab === 'route' ? 'flex' : 'none';
+            document.getElementById('t3PanelExt').style.display = lab === 'ext' ? 'flex' : 'none';
+            if (lab === 'route') t3UpdateRouteStats();
+            if (lab === 'ext') t3ExtStep(t3State.extStep);
+            if (lab === 'area') t3AreaStep(t3State.areaStep);
+            t3Render();
+        }
+
+        // Lab A: 面積膨脹
+        function t3AreaStep(s) {
+            t3State.areaStep = s;
+            document.querySelectorAll('#t3PanelArea .step-dot').forEach((d, i) => d.classList.toggle('active', i + 1 === s));
+            const targetLat = s === 1 ? 0 : s === 2 ? 40 : 72;
+            t3State.sampleLat = targetLat;
+            document.getElementById('t3LatSlider').value = targetLat;
+            t3UpdateAreaUI();
+            t3Render();
+        }
+        function t3SetSampleCountry(c) {
+            t3State.sampleCountry = c;
+            t3Render();
+        }
+        function t3OnLatSlide(v) {
+            t3State.sampleLat = Number(v);
+            t3UpdateAreaUI();
+            t3Render();
+        }
+        function t3UpdateAreaUI() {
+            const lat = t3State.sampleLat;
+            const sec = 1 / Math.cos(clamp(lat, -80, 80) * D2R);
+            document.getElementById('t3LatVal').textContent = lat === 0 ? '0° (赤道)' : `${Math.abs(lat)}°${lat > 0 ? 'N' : 'S'}`;
+            document.getElementById('t3ScaleLin').textContent = `${sec.toFixed(2)}x`;
+            document.getElementById('t3ScaleArea').textContent = `${(sec * sec).toFixed(2)}x`;
+            document.getElementById('t3BannerStep').textContent = 'LAB A · 面積膨脹真相';
+            document.getElementById('t3BannerTitle').textContent = `緯度 ${Math.abs(lat)}° 面積放大 ${(sec * sec).toFixed(1)} 倍`;
+            document.getElementById('t3BannerDesc').textContent = '粉紅虛線是把選定地區依「真實地球面積」搬移到該緯度後，在麥卡托地圖上呈現的大小！';
+        }
+
+        // Lab B: 航線計算與動畫
+        function calcGreatCircle(a, b, steps = 64) {
+            const lat1 = a[1] * D2R, lon1 = a[0] * D2R;
+            const lat2 = b[1] * D2R, lon2 = b[0] * D2R;
+            const d = 2 * Math.asin(Math.sqrt(Math.sin((lat2 - lat1) / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin((lon2 - lon1) / 2) ** 2));
+            const pts = [];
+            for (let i = 0; i <= steps; i++) {
+                const f = i / steps;
+                const A = Math.sin((1 - f) * d) / Math.sin(d);
+                const B = Math.sin(f * d) / Math.sin(d);
+                const x = A * Math.cos(lat1) * Math.cos(lon1) + B * Math.cos(lat2) * Math.cos(lon2);
+                const y = A * Math.cos(lat1) * Math.sin(lon1) + B * Math.cos(lat2) * Math.sin(lon2);
+                const z = A * Math.sin(lat1) + B * Math.sin(lat2);
+                const lat = Math.atan2(z, Math.hypot(x, y)) * R2D;
+                const lon = Math.atan2(y, x) * R2D;
+                pts.push([lon, lat]);
+            }
+            return { pts, distKm: d * EARTH_R_KM };
+        }
+
+        function calcRhumbLine(a, b, steps = 64) {
+            const lat1 = a[1] * D2R, lon1 = a[0] * D2R;
+            const lat2 = b[1] * D2R, lon2 = b[0] * D2R;
+            // 在麥卡托空間中為直線，但若橫跨太平洋 (lon 差 > 180) 取較近的經度差
+            let dLon = lon2 - lon1;
+            if (Math.abs(dLon) > Math.PI) dLon = dLon > 0 ? -(2 * Math.PI - dLon) : (2 * Math.PI + dLon);
+            const dPhi = Math.log(Math.tan(Math.PI / 4 + lat2 / 2) / Math.tan(Math.PI / 4 + lat1 / 2));
+            const q = Math.abs(dPhi) > 1e-10 ? (lat2 - lat1) / dPhi : Math.cos(lat1);
+            const distKm = Math.hypot(lat2 - lat1, q * dLon) * EARTH_R_KM;
+
+            const y1 = Math.log(Math.tan(Math.PI / 4 + lat1 / 2));
+            const y2 = Math.log(Math.tan(Math.PI / 4 + lat2 / 2));
+            const pts = [];
+            for (let i = 0; i <= steps; i++) {
+                const f = i / steps;
+                let lon = (lon1 + dLon * f) * R2D;
+                if (lon > 180) lon -= 360;
+                if (lon < -180) lon += 360;
+                const y = lerp(y1, y2, f);
+                const lat = (2 * Math.atan(Math.exp(y)) - Math.PI / 2) * R2D;
+                pts.push([lon, lat]);
+            }
+            return { pts, distKm };
+        }
+
+        function t3SetRoute(id) {
+            t3State.routeId = id;
+            t3UpdateRouteStats();
+            t3Render();
+        }
+        function t3RouteStep(s) {
+            t3State.routeStep = s;
+            document.querySelectorAll('#t3PanelRoute .step-dot').forEach((d, i) => d.classList.toggle('active', i + 1 === s));
+            if (s === 3 && !t3State.routeAnimPlaying) t3ToggleRouteAnim(true);
+            t3UpdateRouteStats();
+            t3Render();
+        }
+        function t3UpdateRouteStats() {
+            const r = T3_ROUTES[t3State.routeId];
+            const gc = calcGreatCircle(r.a, r.b);
+            const rh = calcRhumbLine(r.a, r.b);
+            document.getElementById('t3DistGC').textContent = `${Math.round(gc.distKm).toLocaleString()} km`;
+            document.getElementById('t3DistRhumb').textContent = `${Math.round(rh.distKm).toLocaleString()} km`;
+            document.getElementById('t3BannerStep').textContent = `LAB B · ${r.name}`;
+            document.getElementById('t3BannerTitle').textContent = '等角航線 (直線) vs 大圓航線 (最短距離)';
+            document.getElementById('t3BannerDesc').textContent = `大圓比等角航線省下 ${Math.round(rh.distKm - gc.distKm).toLocaleString()} km！因此現代長途飛航在麥卡托地圖上呈向上彎曲的弧線。`;
+        }
+        let t3RouteRaf = null;
+        function t3ToggleRouteAnim(forceOn) {
+            t3State.routeAnimPlaying = forceOn ?? !t3State.routeAnimPlaying;
+            document.getElementById('t3PlayRouteBtn').textContent = t3State.routeAnimPlaying ? '⏸ 暫停飛行模擬' : '▶ 啟動飛行/航行模擬';
+            if (t3RouteRaf) cancelAnimationFrame(t3RouteRaf);
+            if (t3State.routeAnimPlaying) {
+                const loop = () => {
+                    if (!t3State.routeAnimPlaying || activeTabId !== 'tab3' || t3State.lab !== 'route') return;
+                    t3State.routeProgress = (t3State.routeProgress + 0.004) % 1;
+                    t3Render();
+                    t3RouteRaf = requestAnimationFrame(loop);
+                };
+                t3RouteRaf = requestAnimationFrame(loop);
+            }
+        }
+
+        // Lab C: 麥卡托的延伸
+        function t3ExtStep(s) {
+            t3State.extStep = s;
+            document.querySelectorAll('#t3PanelExt .step-dot').forEach((d, i) => d.classList.toggle('active', i + 1 === s));
+            document.getElementById('t3MeridianRow').style.display = s === 2 ? 'flex' : 'none';
+
+            const desc = document.getElementById('t3ExtDesc');
+            if (s === 1) {
+                document.getElementById('t3BannerStep').textContent = 'LAB C · 標準麥卡托';
+                document.getElementById('t3BannerTitle').textContent = '標準圓柱相切於赤道 (0°)';
+                document.getElementById('t3BannerDesc').textContent = '僅在赤道附近零失真，適合低緯度東西向範圍。';
+                desc.innerHTML = '<b>標準麥卡托</b>：圓柱垂直套在地球上，與赤道相切。距離赤道越遠，尺度誤差越大。';
+            } else if (s === 2) {
+                document.getElementById('t3BannerStep').textContent = 'LAB C · 橫麥卡托 (Transverse Mercator / UTM)';
+                document.getElementById('t3BannerTitle').textContent = `圓柱橫轉 90° 相切於中央經線 ${t3State.centralMeridian}°`;
+                document.getElementById('t3BannerDesc').textContent = '在相切經線左右 ±3°（6° 分帶）內尺度誤差小於 0.1%！台灣二度分帶 (TWD97 / TM2) 即以 121°E 為中央經線。';
+                desc.innerHTML = '<b>橫麥卡托 (TM / UTM)</b>：將圓柱橫躺 90° 改與某條「經線」相切！世界分 60 個 6° 狹長帶（UTM），而台灣因南北狹長，以 <b>121°E（TM2 二度分帶）</b>為基準即可獲得極高精度國土測量座標。';
+            } else {
+                document.getElementById('t3BannerStep').textContent = 'LAB C · Web 麥卡托 (EPSG:3857)';
+                document.getElementById('t3BannerTitle').textContent = 'Google Maps / OpenStreetMap 正方形瓦片標準';
+                document.getElementById('t3BannerDesc').textContent = '強制裁切於 ±85.0511° 緯度，讓整個世界剛好變成 1:1 正方形（256×256 像素四叉樹切圖）！';
+                desc.innerHTML = '<b>Web 麥卡托 (EPSG:3857)</b>：為了讓網路地圖能高效切割為正方形四叉樹圖磚（Tile Pyramid），將南北極裁切在 <b>±85.0511°</b> 使地圖寬高比精確為 1:1，並保持路口轉彎角度正確（等角）方便街道導航。';
+            }
+            t3Render();
+        }
+        function t3OnMeridianSlide(v) {
+            t3State.centralMeridian = Number(v);
+            document.getElementById('t3MeridianVal').textContent = `${v >= 0 ? v + '°E' : Math.abs(v) + '°W'}${Number(v) === 121 ? ' (台灣 TM2)' : ''}`;
+            t3ExtStep(2);
+        }
+        function t3SnapMeridian(v) {
+            document.getElementById('t3MeridianSlider').value = v;
+            t3OnMeridianSlide(v);
+        }
+
+        // 動態建立以 centralMeridian 為中心的麥卡托 / 橫麥卡托檢視投影
+        function t3Render() {
+            const { ctx, w, h } = prepCanvas(document.getElementById('t3Canvas'));
+
+            if (t3State.lab === 'ext' && t3State.extStep === 2) {
+                // 橫麥卡托專屬渲染：展示橫切圓柱 6° / 30° 帶與中央經線
+                const cm = t3State.centralMeridian;
+                const tmProj = {
+                    id: 'tm_demo',
+                    maxLat: 82,
+                    bounds: { x: 2.3, y: 2.2 },
+                    project(lonDeg, latDeg) {
+                        let dLon = lonDeg - cm;
+                        if (dLon > 180) dLon -= 360;
+                        if (dLon < -180) dLon += 360;
+                        // 避免奇異點無限大，展示 ±70° 範圍內的橫麥卡托展開
+                        dLon = clamp(dLon, -72, 72) * D2R;
+                        const phi = latDeg * D2R;
+                        const B = clamp(Math.cos(phi) * Math.sin(dLon), -0.96, 0.96);
+                        const x = 0.5 * Math.log((1 + B) / (1 - B));
+                        const y = Math.atan2(Math.tan(phi), Math.cos(dLon));
+                        return [x, y];
+                    }
+                };
+                const lay = renderBaseMap(ctx, w, h, tmProj, t3Camera, { showTissot: false });
+                // 畫出 6° UTM / 台灣低變形條帶高亮
+                const pL = tmProj.project(cm - 3, 75), pR = tmProj.project(cm + 3, 75);
+                const pLB = tmProj.project(cm - 3, -75), pRB = tmProj.project(cm + 3, -75);
+                const sL = lay.toScreen(pL[0], pL[1]), sR = lay.toScreen(pR[0], pR[1]);
+                const sLB = lay.toScreen(pLB[0], pLB[1]), sRB = lay.toScreen(pRB[0], pRB[1]);
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(sL[0], sL[1]); ctx.lineTo(sR[0], sR[1]);
+                ctx.lineTo(sRB[0], sRB[1]); ctx.lineTo(sLB[0], sLB[1]);
+                ctx.closePath();
+                ctx.fillStyle = 'rgba(56, 189, 248, 0.22)';
+                ctx.fill();
+                ctx.strokeStyle = COLORS.tangent;
+                ctx.lineWidth = 2;
+                ctx.setLineDash([6, 4]);
+                const cTop = lay.toScreen(0, Math.PI / 2), cBot = lay.toScreen(0, -Math.PI / 2);
+                ctx.beginPath(); ctx.moveTo(cTop[0], cTop[1]); ctx.lineTo(cBot[0], cBot[1]); ctx.stroke();
+                ctx.setLineDash([]);
+                if (globalShowLabels) {
+                    ctx.fillStyle = COLORS.tangent;
+                    ctx.font = '700 12px "Noto Sans TC", sans-serif';
+                    ctx.fillText(`中央相切經線 ${cm}°（低變形UTM帶）`, cTop[0] + 10, 34);
+                }
+                ctx.restore();
+                return;
+            }
+
+            // Lab A, B, 或 Lab C (標準/Web 麥卡托)
+            const proj = PROJECTIONS.mercator;
+            const lay = renderBaseMap(ctx, w, h, proj, t3Camera, { showTissot: false });
+
+            if (t3State.lab === 'area') {
+                // 繪製將真實面積國家輪廓移動到 sampleLat 後的視覺放大形狀！
+                const c = T3_COUNTRIES[t3State.sampleCountry];
+                const cosOrig = Math.cos(c.baseLat * D2R);
+                const scaleFactor = 1 / Math.cos(clamp(t3State.sampleLat, -78, 78) * D2R);
+                const targetLon = 0; // 放在大西洋中央空白處方便對比非洲與歐美
+
+                ctx.save();
+                ctx.beginPath();
+                c.poly.forEach((pt, idx) => {
+                    // 先還原為赤道等積真實角大小，再套用目標緯度的麥卡托水平/垂直擴張
+                    const dLonTrue = (pt[0] - c.baseLon) * cosOrig;
+                    const dLatTrue = pt[1] - c.baseLat;
+                    const newLon = targetLon + dLonTrue / Math.cos(clamp(t3State.sampleLat, -78, 78) * D2R);
+                    const newLat = clamp(t3State.sampleLat + dLatTrue, -82, 82);
+                    const mp = proj.project(newLon, newLat);
+                    const sc = lay.toScreen(mp[0], mp[1]);
+                    if (idx === 0) ctx.moveTo(sc[0], sc[1]);
+                    else ctx.lineTo(sc[0], sc[1]);
+                });
+                ctx.closePath();
+                ctx.fillStyle = 'rgba(251, 113, 133, 0.42)';
+                ctx.strokeStyle = COLORS.rhumb;
+                ctx.lineWidth = 2.2;
+                ctx.fill();
+                ctx.stroke();
+
+                if (globalShowLabels) {
+                    const centerP = proj.project(targetLon, t3State.sampleLat);
+                    const cSc = lay.toScreen(centerP[0], centerP[1]);
+                    ctx.fillStyle = '#fff';
+                    ctx.font = '700 11px "Noto Sans TC", sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(`真實面積@${t3State.sampleLat}° (${(scaleFactor * scaleFactor).toFixed(1)}x)`, cSc[0], cSc[1]);
+                }
+                ctx.restore();
+            }
+
+            if (t3State.lab === 'route') {
+                const r = T3_ROUTES[t3State.routeId];
+                const gc = calcGreatCircle(r.a, r.b);
+                const rh = calcRhumbLine(r.a, r.b);
+                const drawPath = (pts, color, dash = []) => {
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.setLineDash(dash);
+                    let prev = null;
+                    pts.forEach((pt, i) => {
+                        const mp = proj.project(pt[0], pt[1]);
+                        const sc = lay.toScreen(mp[0], mp[1]);
+                        if (i === 0 || !prev || Math.abs(sc[0] - prev[0]) > w * 0.4) ctx.moveTo(sc[0], sc[1]);
+                        else ctx.lineTo(sc[0], sc[1]);
+                        prev = sc;
+                    });
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 2.8;
+                    ctx.stroke();
+                    ctx.restore();
+                };
+
+                drawPath(rh.pts, COLORS.rhumb, [7, 5]);
+                if (t3State.routeStep >= 2) drawPath(gc.pts, COLORS.greatCircle);
+
+                // 起終點標記
+                [r.a, r.b].forEach((pt, idx) => {
+                    const mp = proj.project(pt[0], pt[1]);
+                    const sc = lay.toScreen(mp[0], mp[1]);
+                    ctx.beginPath();
+                    ctx.arc(sc[0], sc[1], 5, 0, Math.PI * 2);
+                    ctx.fillStyle = COLORS.tangent;
+                    ctx.fill();
+                });
+
+                // 雙機/雙船進度點
+                const iIdx = Math.min(gc.pts.length - 1, Math.floor(t3State.routeProgress * (gc.pts.length - 1)));
+                const rhPt = rh.pts[iIdx], gcPt = gc.pts[iIdx];
+                const rhSc = lay.toScreen(...proj.project(rhPt[0], rhPt[1]));
+                const gcSc = lay.toScreen(...proj.project(gcPt[0], gcPt[1]));
+
+                ctx.beginPath(); ctx.arc(rhSc[0], rhSc[1], 6, 0, Math.PI * 2); ctx.fillStyle = COLORS.rhumb; ctx.fill();
+                if (t3State.routeStep >= 2) {
+                    ctx.beginPath(); ctx.arc(gcSc[0], gcSc[1], 6, 0, Math.PI * 2); ctx.fillStyle = COLORS.greatCircle; ctx.fill();
+                }
+            }
+
+            if (t3State.lab === 'ext' && t3State.extStep === 3) {
+                // Web Mercator 1:1 正方形框示意
+                const topL = lay.toScreen(-Math.PI, Math.PI);
+                const botR = lay.toScreen(Math.PI, -Math.PI);
+                ctx.save();
+                ctx.strokeStyle = COLORS.tangent;
+                ctx.lineWidth = 2.4;
+                ctx.strokeRect(topL[0], topL[1], botR[0] - topL[0], botR[1] - topL[1]);
+                if (globalShowLabels) {
+                    ctx.fillStyle = COLORS.tangent;
+                    ctx.font = '700 12px "Noto Sans TC", sans-serif';
+                    ctx.fillText('EPSG:3857 Web 正方形裁切邊界 (±85.05°)', (topL[0] + botR[0]) / 2, topL[1] + 16);
+                }
+                ctx.restore();
+            }
+        }
+
+        /* ============================================================================
+           8. 分頁 4：雙圖同步縮放對比
+           ============================================================================ */
+        const t4Camera = {
+            zoom: 1, panX: 0, panY: 0,
+            reset() { this.zoom = 1; this.panX = 0; this.panY = 0; t4RenderBoth(); },
+            zoomBy(f) { this.zoom = clamp(this.zoom * f, 0.5, 10); t4RenderBoth(); }
+        };
+
+        function bindDualSync(canvas) {
+            const ptrs = new Map();
+            let lastDist = null, dragStart = null;
+            canvas.addEventListener('pointerdown', (e) => {
+                canvas.setPointerCapture(e.pointerId);
+                ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+                if (ptrs.size === 1) dragStart = { x: e.clientX, y: e.clientY, px: t4Camera.panX, py: t4Camera.panY };
+                else if (ptrs.size === 2) {
+                    const a = [...ptrs.values()];
+                    lastDist = Math.hypot(a[1].x - a[0].x, a[1].y - a[0].y);
+                }
+            });
+            canvas.addEventListener('pointermove', (e) => {
+                if (!ptrs.has(e.pointerId)) return;
+                ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+                if (ptrs.size === 1 && dragStart) {
+                    t4Camera.panX = dragStart.px + (e.clientX - dragStart.x);
+                    t4Camera.panY = dragStart.py + (e.clientY - dragStart.y);
+                    t4RenderBoth();
+                } else if (ptrs.size === 2) {
+                    const a = [...ptrs.values()];
+                    const dist = Math.hypot(a[1].x - a[0].x, a[1].y - a[0].y);
+                    if (lastDist && dist > 0) {
+                        t4Camera.zoom = clamp(t4Camera.zoom * (dist / lastDist), 0.5, 10);
+                        t4RenderBoth();
+                    }
+                    lastDist = dist;
+                }
+            });
+            const end = (e) => { ptrs.delete(e.pointerId); dragStart = null; lastDist = null; };
+            canvas.addEventListener('pointerup', end);
+            canvas.addEventListener('pointercancel', end);
+            canvas.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                t4Camera.zoomBy(e.deltaY < 0 ? 1.12 : 0.89);
+            }, { passive: false });
+        }
+        bindDualSync(document.getElementById('t4CanvasL'));
+        bindDualSync(document.getElementById('t4CanvasR'));
+
+        function t4Preset(leftId, rightId) {
+            document.getElementById('t4LeftSelect').value = leftId;
+            document.getElementById('t4RightSelect').value = rightId;
+            t4Camera.reset();
+        }
+
+        function t4RenderBoth() {
+            const showT = document.getElementById('t4ChkTissot').checked;
+            const lId = document.getElementById('t4LeftSelect').value;
+            const rId = document.getElementById('t4RightSelect').value;
+            const { ctx: ctxL, w: wL, h: hL } = prepCanvas(document.getElementById('t4CanvasL'));
+            const { ctx: ctxR, w: wR, h: hR } = prepCanvas(document.getElementById('t4CanvasR'));
+            renderBaseMap(ctxL, wL, hL, PROJECTIONS[lId], t4Camera, { showTissot: showT });
+            renderBaseMap(ctxR, wR, hR, PROJECTIONS[rId], t4Camera, { showTissot: showT });
+        }
+
+        /* ============================================================================
+           9. 初始化啟動
+           ============================================================================ */
+        t1InitThree();
+        t1UpdateUI();
+        t1Render();
+        t2UpdateMetrics();
+        t3UpdateAreaUI();
+    </script>
+</body>
+
+</html>

@@ -17,6 +17,8 @@ const state = {
   journeyDuration: 1.6,
   speed: 0.4,
   particleMode: "both",   // "both" | "single" | "swarm"
+  veinPreference: "auto", // "auto" | "ivc" | "svc"
+  currentVein: "ivc",     // "ivc" (下大靜脈) | "svc" (上大靜脈)
   lungPreference: "auto", // "auto" | "right" | "left"
   currentLung: "right",   // "right" (畫面左側右肺) | "left" (畫面右側左肺)
   showLungs: true,
@@ -208,22 +210,40 @@ const SINGLE_PARTICLE_STAGES = [
   }
 ];
 
-function getSingleParticleWaypoints(stageIdx, lungSide, showLungs) {
+function getSingleParticleWaypoints(stageIdx, lungSide, showLungs, veinSide = "ivc") {
   const useRightLung = lungSide === "right";
+  const useSvc = veinSide === "svc";
   switch (stageIdx) {
-    case 0: // ① 來自全身 -> 下大靜脈 -> 右心房底部開口
-      return [
-        [128, 590],
-        [123, 490],
-        [127, 390],
-        [152, 285]
-      ];
+    case 0: // ① 來自全身 -> 大靜脈 (下大靜脈或上大靜脈) -> 右心房開口
+      if (useSvc) {
+        return [
+          [155, 55],
+          [155, 115],
+          [155, 165],
+          [155, 216]
+        ];
+      } else {
+        return [
+          [128, 590],
+          [123, 490],
+          [127, 390],
+          [152, 285]
+        ];
+      }
     case 1: // ② 右心房 -> 三尖瓣口
-      return [
-        [152, 285],
-        [156, 240],
-        [188, 298]
-      ];
+      if (useSvc) {
+        return [
+          [155, 216],
+          [160, 255],
+          [188, 298]
+        ];
+      } else {
+        return [
+          [152, 285],
+          [156, 240],
+          [188, 298]
+        ];
+      }
     case 2: // ③ 右心室腔內 -> 肺動脈瓣口 (248, 248)
       return [
         [188, 298],
@@ -329,7 +349,7 @@ function getSingleParticleWaypoints(stageIdx, lungSide, showLungs) {
         [505, 595]
       ];
     default:
-      return [[128, 590], [152, 285]];
+      return useSvc ? [[155, 55], [155, 216]] : [[128, 590], [152, 285]];
   }
 }
 
@@ -376,8 +396,19 @@ function evaluateSingleParticle(journeyTime) {
       break;
     }
   }
+
+  // 若為第 0 站 (大靜脈)，根據當前靜脈路徑動態更新標籤與名稱
+  if (stage.index === 0) {
+    const isSvc = state.currentVein === "svc";
+    stage = {
+      ...stage,
+      name: isSvc ? "① 來自全身 (上大靜脈)" : "① 來自全身 (下大靜脈)",
+      shortTag: isSvc ? "① 上大靜脈 CO₂" : "① 下大靜脈 CO₂"
+    };
+  }
+
   const localT = (jt - stage.tStart) / (stage.tEnd - stage.tStart);
-  const waypoints = getSingleParticleWaypoints(stage.index, state.currentLung, state.showLungs);
+  const waypoints = getSingleParticleWaypoints(stage.index, state.currentLung, state.showLungs, state.currentVein);
   const [x, y] = getPointOnPolyline(waypoints, localT);
 
   let color = "#2563eb";
@@ -623,58 +654,13 @@ function updateArrowsAndParticles(phaseKey, dt, singleState) {
   }
 }
 
-// ==================== 5. 更新頂部、9站流程列與底部 UI ====================
-function updateUI(phase, singleState) {
-  const phaseTitle = document.getElementById("phaseTitle");
-  phaseTitle.textContent = phase.title;
-  phaseTitle.style.backgroundColor = phase.bg;
-  phaseTitle.style.color = phase.color;
+// ==================== 5. 更新底部週期與分頁 UI ====================
+function updateUI(phase) {
+  const cycleTimeText = document.getElementById("cycleTimeText");
+  if (cycleTimeText) cycleTimeText.textContent = state.cycleTime.toFixed(2);
 
-  const avPill = document.getElementById("avPill");
-  const slPill = document.getElementById("slPill");
-  avPill.textContent = phase.avOpen ? "房室瓣：開啟" : "房室瓣：關閉 (防逆流)";
-  slPill.textContent = phase.slOpen ? "動脈瓣(半月瓣)：開啟" : "動脈瓣(半月瓣)：關閉 (防逆流)";
-
-  // 單一粒子當前階段膠囊與說明
-  const st = singleState.stage;
-  const particleStagePill = document.getElementById("particleStagePill");
-  const particleStatusText = document.getElementById("particleStatusText");
-  const stageDescBar = document.getElementById("stageDescBar");
-
-  particleStagePill.textContent = `🩸 單一粒子：${st.name}`;
-  particleStatusText.textContent = `目前狀態：${st.statusText}`;
-  stageDescBar.innerHTML = st.desc;
-
-  if (st.type === "deox") {
-    particleStagePill.style.backgroundColor = "#dbeafe";
-    particleStagePill.style.color = "#1e40af";
-    particleStagePill.style.borderColor = "#93c5fd";
-    particleStatusText.style.backgroundColor = "#dbeafe";
-    particleStatusText.style.color = "#1d4ed8";
-    stageDescBar.style.borderLeftColor = "#2563eb";
-  } else if (st.type === "exchange") {
-    particleStagePill.style.backgroundColor = "#f3e8ff";
-    particleStagePill.style.color = "#6b21a8";
-    particleStagePill.style.borderColor = "#c084fc";
-    particleStatusText.style.backgroundColor = "#f3e8ff";
-    particleStatusText.style.color = "#7e22ce";
-    stageDescBar.style.borderLeftColor = "#9333ea";
-  } else {
-    particleStagePill.style.backgroundColor = "#fee2e2";
-    particleStagePill.style.color = "#991b1b";
-    particleStagePill.style.borderColor = "#fca5a5";
-    particleStatusText.style.backgroundColor = "#fee2e2";
-    particleStatusText.style.color = "#b91c1c";
-    stageDescBar.style.borderLeftColor = "#dc2626";
-  }
-
-  document.querySelectorAll(".step-chip").forEach((chip) => {
-    const idx = parseInt(chip.dataset.step, 10);
-    chip.classList.toggle("active", idx === st.index);
-  });
-
-  document.getElementById("cycleTimeText").textContent = state.cycleTime.toFixed(2);
-  document.getElementById("cycleSlider").value = state.cycleTime;
+  const cycleSlider = document.getElementById("cycleSlider");
+  if (cycleSlider) cycleSlider.value = state.cycleTime;
 
   document.querySelectorAll(".phase-tab").forEach((tab) => {
     tab.classList.toggle("active", tab.dataset.phase === phase.key);
@@ -795,9 +781,14 @@ function animate(now) {
     state.journeyTime = (state.journeyTime + dt * state.speed * 0.45) % state.journeyDuration;
     state.cycleTime = state.journeyTime % state.cycleDuration;
 
-    // 每完成一次 9 站完整循環，若設定為左右肺交替，切換下一次進入的肺臟
-    if (state.journeyTime < prevJourney && state.lungPreference === "auto") {
-      state.currentLung = state.currentLung === "right" ? "left" : "right";
+    // 每完成一次 1.6s 完整循環，若設定為交替模式，切換下一次進入的血管路徑
+    if (state.journeyTime < prevJourney) {
+      if (state.lungPreference === "auto") {
+        state.currentLung = state.currentLung === "right" ? "left" : "right";
+      }
+      if (state.veinPreference === "auto") {
+        state.currentVein = state.currentVein === "ivc" ? "svc" : "ivc";
+      }
     }
   }
 
@@ -807,7 +798,7 @@ function animate(now) {
   updateValveGeometry(phase.avOpen, phase.slOpen);
   updateContractionTransform(state.cycleTime);
   updateArrowsAndParticles(phase.key, state.isPlaying ? dt : 0, singleState);
-  updateUI(phase, singleState);
+  updateUI(phase);
 
   requestAnimationFrame(animate);
 }
@@ -833,25 +824,6 @@ document.addEventListener("DOMContentLoaded", () => {
     state.journeyTime = beatOffset + state.cycleTime;
   });
 
-  // 單一粒子下一站按鈕
-  document.getElementById("nextParticleStepBtn").addEventListener("click", () => {
-    const curStage = evaluateSingleParticle(state.journeyTime).stage;
-    const nextIdx = (curStage.index + 1) % SINGLE_PARTICLE_STAGES.length;
-    const target = SINGLE_PARTICLE_STAGES[nextIdx];
-    state.journeyTime = target.tStart + 0.01;
-    state.cycleTime = state.journeyTime % state.cycleDuration;
-  });
-
-  // 點擊 9 站流程膠囊直接跳轉至該站（並自動對應正確的心房/心室收縮時間點）
-  document.querySelectorAll(".step-chip").forEach((chip) => {
-    chip.addEventListener("click", () => {
-      const idx = parseInt(chip.dataset.step, 10);
-      const target = SINGLE_PARTICLE_STAGES[idx];
-      state.journeyTime = target.tStart + (target.tEnd - target.tStart) * 0.35;
-      state.cycleTime = state.journeyTime % state.cycleDuration;
-    });
-  });
-
   // 點擊原本的三階段心動週期分頁
   document.querySelectorAll(".phase-tab").forEach((tab) => {
     tab.addEventListener("click", () => {
@@ -865,6 +837,17 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("particleModeSelect").addEventListener("change", (e) => {
     state.particleMode = e.target.value;
   });
+
+  // 大靜脈路徑選擇 (上下交替 / 下大靜脈 / 上大靜脈)
+  const veinSelect = document.getElementById("veinSelect");
+  if (veinSelect) {
+    veinSelect.addEventListener("change", (e) => {
+      state.veinPreference = e.target.value;
+      if (state.veinPreference !== "auto") {
+        state.currentVein = state.veinPreference;
+      }
+    });
+  }
 
   // 肺路徑選擇
   document.getElementById("lungSelect").addEventListener("change", (e) => {
