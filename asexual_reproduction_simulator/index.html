@@ -1,0 +1,3668 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>無性生殖互動動態模擬器</title>
+    <style>
+        :root {
+            --bg-deep: #09111e;
+            --bg-panel: rgba(15, 23, 42, 0.88);
+            --bg-card: rgba(30, 41, 59, 0.85);
+            --border-subtle: rgba(148, 163, 184, 0.2);
+            --border-active: rgba(45, 212, 191, 0.7);
+            --text-main: #f1f5f9;
+            --text-muted: #94a3b8;
+            --accent: #2dd4bf;
+            --accent-glow: rgba(45, 212, 191, 0.25);
+
+            /* Consistent Biological Semantic Palette */
+            --bio-dna: #f472b6;
+            --bio-cyto: #38bdf8;
+            --bio-wall: #fbbf24;
+            --bio-plant: #22c55e;
+            --bio-new: #fde047;
+            --bio-spore: #c084fc;
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100dvh;
+            overflow: hidden;
+            background-color: var(--bg-deep);
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .app-shell {
+            display: flex;
+            flex-direction: column;
+            height: 100dvh;
+            width: 100%;
+            background: radial-gradient(circle at 50% 35%, #11223a 0%, #09111e 75%);
+        }
+
+        /* Top Header */
+        .top-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            background: rgba(9, 17, 30, 0.92);
+            border-bottom: 1px solid var(--border-subtle);
+            gap: 8px;
+            flex-shrink: 0;
+            z-index: 20;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .brand-icon {
+            width: 30px;
+            height: 30px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, rgba(45, 212, 191, 0.25), rgba(56, 189, 248, 0.25));
+            border: 1px solid var(--border-active);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 16px;
+        }
+
+        .brand-title {
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+
+        .btn-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            height: 34px;
+            padding: 0 11px;
+            border-radius: 999px;
+            border: 1px solid var(--border-subtle);
+            background: var(--bg-card);
+            color: var(--text-main);
+            font-size: 12.5px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.18s ease;
+            white-space: nowrap;
+        }
+
+        .btn-pill:hover {
+            border-color: rgba(148, 163, 184, 0.5);
+            background: rgba(51, 65, 85, 0.9);
+        }
+
+        .btn-pill.active {
+            border-color: var(--accent);
+            background: rgba(45, 212, 191, 0.18);
+            color: #99f6e4;
+            box-shadow: 0 0 12px var(--accent-glow);
+        }
+
+        /* Main Category Tabs */
+        .tabs-bar {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 12px;
+            background: rgba(15, 23, 42, 0.78);
+            border-bottom: 1px solid var(--border-subtle);
+            overflow-x: auto;
+            overflow-y: hidden;
+            touch-action: pan-x;
+            scrollbar-width: none;
+            flex-shrink: 0;
+            z-index: 19;
+        }
+
+        .tabs-bar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .cat-tab {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 13px;
+            border-radius: 10px;
+            border: 1px solid transparent;
+            background: rgba(30, 41, 59, 0.55);
+            color: var(--text-muted);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+        }
+
+        .cat-tab:hover {
+            color: var(--text-main);
+            background: rgba(51, 65, 85, 0.7);
+        }
+
+        .cat-tab.active {
+            color: #ffffff;
+            background: linear-gradient(135deg, rgba(45, 212, 191, 0.24), rgba(56, 189, 248, 0.18));
+            border-color: var(--border-active);
+            box-shadow: 0 2px 10px rgba(45, 212, 191, 0.15);
+        }
+
+        /* Organism Sub-selector Bar */
+        .sub-bar {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: rgba(15, 23, 42, 0.52);
+            border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+            overflow-x: auto;
+            touch-action: pan-x;
+            scrollbar-width: none;
+            flex-shrink: 0;
+            z-index: 18;
+        }
+
+        .sub-bar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .sub-label {
+            font-size: 11.5px;
+            color: var(--text-muted);
+            margin-right: 2px;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .org-pill {
+            padding: 5px 12px;
+            border-radius: 999px;
+            border: 1px solid var(--border-subtle);
+            background: rgba(15, 23, 42, 0.65);
+            color: var(--text-muted);
+            font-size: 12.5px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.18s ease;
+            flex-shrink: 0;
+        }
+
+        .org-pill:hover {
+            color: var(--text-main);
+        }
+
+        .org-pill.active {
+            background: var(--accent);
+            color: #042f2e;
+            border-color: var(--accent);
+            box-shadow: 0 0 10px var(--accent-glow);
+        }
+
+        /* Viewport Stage */
+        .stage-wrap {
+            position: relative;
+            flex: 1;
+            min-height: 180px;
+            overflow: hidden;
+            touch-action: none;
+            cursor: grab;
+        }
+
+        .stage-wrap:active {
+            cursor: grabbing;
+        }
+
+        canvas#simCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+
+        /* Stage Overlays */
+        .hud-top-left {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            pointer-events: none;
+            max-width: calc(100% - 140px);
+            z-index: 10;
+        }
+
+        .bio-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 10px;
+            border-radius: 8px;
+            background: rgba(15, 23, 42, 0.78);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid var(--border-subtle);
+            font-size: 12px;
+            color: #e2e8f0;
+            width: fit-content;
+        }
+
+        .bio-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent);
+            box-shadow: 0 0 8px var(--accent);
+            flex-shrink: 0;
+        }
+
+        .interactive-cta {
+            pointer-events: auto;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 999px;
+            background: rgba(250, 204, 21, 0.16);
+            border: 1px solid rgba(250, 204, 21, 0.55);
+            color: #fef08a;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            width: fit-content;
+            backdrop-filter: blur(6px);
+            animation: pulseGlow 2s infinite;
+        }
+
+        .interactive-cta.hidden {
+            display: none;
+        }
+
+        @keyframes pulseGlow {
+
+            0%,
+            100% {
+                box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.25);
+            }
+
+            50% {
+                box-shadow: 0 0 12px 2px rgba(250, 204, 21, 0.35);
+            }
+        }
+
+        .hud-zoom {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            z-index: 10;
+        }
+
+        .zoom-btn {
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            border: 1px solid var(--border-subtle);
+            background: rgba(15, 23, 42, 0.82);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            color: var(--text-main);
+            font-size: 17px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .zoom-btn:hover {
+            background: rgba(30, 41, 59, 0.95);
+        }
+
+        .zoom-btn:active {
+            transform: scale(0.95);
+        }
+
+        .zoom-readout {
+            font-size: 10.5px;
+            text-align: center;
+            color: var(--text-muted);
+            background: rgba(15, 23, 42, 0.72);
+            border-radius: 6px;
+            padding: 2px 4px;
+            pointer-events: none;
+        }
+
+        .touch-hint {
+            position: absolute;
+            bottom: 8px;
+            right: 10px;
+            font-size: 11px;
+            color: rgba(148, 163, 184, 0.72);
+            background: rgba(15, 23, 42, 0.55);
+            padding: 3px 8px;
+            border-radius: 6px;
+            pointer-events: none;
+        }
+
+        /* Legend Popover */
+        .legend-popover {
+            position: absolute;
+            top: 52px;
+            right: 12px;
+            width: 240px;
+            padding: 12px;
+            border-radius: 12px;
+            background: rgba(15, 23, 42, 0.96);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-active);
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.55);
+            z-index: 50;
+            display: none;
+        }
+
+        .legend-popover.open {
+            display: block;
+        }
+
+        .legend-title {
+            font-size: 13px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: var(--accent);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: #e2e8f0;
+            margin-bottom: 6px;
+        }
+
+        .legend-swatch {
+            width: 12px;
+            height: 12px;
+            border-radius: 4px;
+            flex-shrink: 0;
+        }
+
+        /* Bottom Step-by-Step Control Dock */
+        .control-dock {
+            background: rgba(15, 23, 42, 0.94);
+            border-top: 1px solid var(--border-subtle);
+            padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex-shrink: 0;
+            z-index: 20;
+        }
+
+        .step-info-card {
+            background: rgba(30, 41, 59, 0.65);
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            border-radius: 10px;
+            padding: 8px 11px;
+            transition: all 0.2s ease;
+        }
+
+        .step-info-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            cursor: pointer;
+        }
+
+        .step-title-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .step-badge {
+            padding: 2px 8px;
+            border-radius: 6px;
+            background: rgba(45, 212, 191, 0.18);
+            border: 1px solid rgba(45, 212, 191, 0.45);
+            color: #5eead4;
+            font-size: 11.5px;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+
+        .step-title {
+            font-size: 13.5px;
+            font-weight: 700;
+            color: #f8fafc;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .collapse-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 12px;
+            cursor: pointer;
+            padding: 2px 6px;
+            flex-shrink: 0;
+        }
+
+        .step-desc {
+            margin-top: 5px;
+            font-size: 12.5px;
+            line-height: 1.48;
+            color: #cbd5e1;
+        }
+
+        .step-info-card.collapsed .step-desc {
+            display: none;
+        }
+
+        /* Timeline & Transport */
+        .timeline-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .step-dots {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            flex-shrink: 0;
+        }
+
+        .step-dot-btn {
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            border: 1px solid var(--border-subtle);
+            background: rgba(30, 41, 59, 0.8);
+            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.16s;
+        }
+
+        .step-dot-btn.active {
+            background: var(--accent);
+            color: #042f2e;
+            border-color: var(--accent);
+            box-shadow: 0 0 10px var(--accent-glow);
+        }
+
+        .step-dot-btn.passed {
+            border-color: rgba(45, 212, 191, 0.45);
+            color: #99f6e4;
+        }
+
+        .scrubber-wrap {
+            flex: 1;
+            display: flex;
+            align-items: center;
+        }
+
+        input[type="range"].timeline-slider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 6px;
+            border-radius: 999px;
+            background: rgba(148, 163, 184, 0.25);
+            outline: none;
+            cursor: pointer;
+        }
+
+        input[type="range"].timeline-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--accent);
+            border: 2px solid #0f172a;
+            box-shadow: 0 0 10px var(--accent-glow);
+            cursor: pointer;
+        }
+
+        input[type="range"].timeline-slider::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--accent);
+            border: 2px solid #0f172a;
+            cursor: pointer;
+        }
+
+        .transport-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+        }
+
+        .transport-btn {
+            flex: 1;
+            height: 38px;
+            border-radius: 10px;
+            border: 1px solid var(--border-subtle);
+            background: rgba(30, 41, 59, 0.85);
+            color: var(--text-main);
+            font-size: 13px;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            cursor: pointer;
+            transition: all 0.16s;
+        }
+
+        .transport-btn:hover:not(:disabled) {
+            background: rgba(51, 65, 85, 0.95);
+            border-color: rgba(148, 163, 184, 0.45);
+        }
+
+        .transport-btn:active:not(:disabled) {
+            transform: scale(0.97);
+        }
+
+        .transport-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .transport-btn.primary {
+            flex: 1.35;
+            background: linear-gradient(135deg, #14b8a6, #0d9488);
+            border-color: #2dd4bf;
+            color: #ffffff;
+        }
+
+        .transport-btn.primary.playing {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            border-color: #fbbf24;
+        }
+
+        @media (max-width: 600px) {
+            .brand-title {
+                font-size: 14px;
+            }
+
+            .btn-pill {
+                padding: 0 9px;
+                font-size: 12px;
+                height: 32px;
+            }
+
+            .cat-tab {
+                padding: 6px 10px;
+                font-size: 12.5px;
+            }
+
+            .step-desc {
+                font-size: 12px;
+            }
+
+            .transport-btn {
+                height: 36px;
+                font-size: 12.5px;
+            }
+
+            .touch-hint {
+                display: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-shell">
+        <!-- Top Header -->
+        <header class="top-header">
+            <div class="brand">
+                <div class="brand-icon">🧬</div>
+                <div class="brand-title">無性生殖互動模擬器</div>
+            </div>
+            <div class="header-actions">
+                <button id="btnLegend" class="btn-pill" type="button" title="顏色圖例">🎨 圖例</button>
+                <button id="btnLabels" class="btn-pill active" type="button" title="顯示或隱藏文字標籤">🏷️ 標籤：開</button>
+            </div>
+        </header>
+
+        <!-- Legend Popover -->
+        <div id="legendPopover" class="legend-popover">
+            <div class="legend-title">全分頁一致視覺色碼</div>
+            <div class="legend-item"><span class="legend-swatch" style="background: var(--bio-dna);"></span>細胞核 / 遺傳物質
+                (DNA)</div>
+            <div class="legend-item"><span class="legend-swatch" style="background: var(--bio-cyto);"></span>細胞質 /
+                動物・原生生物體</div>
+            <div class="legend-item"><span class="legend-swatch" style="background: var(--bio-wall);"></span>細胞壁 (細菌・真菌)
+            </div>
+            <div class="legend-item"><span class="legend-swatch" style="background: var(--bio-plant);"></span>植物營養器官 /
+                葉綠體</div>
+            <div class="legend-item"><span class="legend-swatch" style="background: var(--bio-new);"></span>新生組織 / 芽體 /
+                再生芽基</div>
+            <div class="legend-item"><span class="legend-swatch" style="background: var(--bio-spore);"></span>孢子 / 生殖單元
+            </div>
+        </div>
+
+        <!-- Category Tabs -->
+        <nav id="tabsBar" class="tabs-bar" aria-label="無性生殖分類"></nav>
+
+        <!-- Organism Selector -->
+        <div id="subBar" class="sub-bar" aria-label="代表生物"></div>
+
+        <!-- Interactive Viewport -->
+        <main id="stageWrap" class="stage-wrap">
+            <canvas id="simCanvas"></canvas>
+
+            <div class="hud-top-left">
+                <div class="bio-badge">
+                    <span class="bio-dot"></span>
+                    <span id="geneticNote">子代遺傳物質與親代完全相同</span>
+                </div>
+                <button id="interactiveCta" class="interactive-cta hidden" type="button"></button>
+            </div>
+
+            <div class="hud-zoom">
+                <button id="btnZoomIn" class="zoom-btn" type="button" aria-label="放大">＋</button>
+                <div id="zoomReadout" class="zoom-readout">100%</div>
+                <button id="btnZoomOut" class="zoom-btn" type="button" aria-label="縮小">－</button>
+                <button id="btnZoomReset" class="zoom-btn" type="button" aria-label="重置視角" title="重置視角">⌖</button>
+            </div>
+
+            <div class="touch-hint">拖曳移動 • 滾輪 / 雙指縮放</div>
+        </main>
+
+        <!-- Bottom Step-by-Step Controls -->
+        <footer class="control-dock">
+            <div id="stepCard" class="step-info-card">
+                <div id="stepHeader" class="step-info-header">
+                    <div class="step-title-wrap">
+                        <span id="stepBadge" class="step-badge">步驟 1 / 4</span>
+                        <span id="stepTitle" class="step-title">親代準備</span>
+                    </div>
+                    <button id="btnCollapse" class="collapse-btn" type="button">▾ 收合</button>
+                </div>
+                <div id="stepDesc" class="step-desc"></div>
+            </div>
+
+            <div class="timeline-row">
+                <div id="stepDots" class="step-dots"></div>
+                <div class="scrubber-wrap">
+                    <input id="timelineSlider" class="timeline-slider" type="range" min="0" max="3" step="0.005"
+                        value="0" aria-label="生殖流程進度" />
+                </div>
+            </div>
+
+            <div class="transport-row">
+                <button id="btnReset" class="transport-btn" type="button">↺ 重設</button>
+                <button id="btnPrev" class="transport-btn" type="button">◀ 上一步</button>
+                <button id="btnPlay" class="transport-btn primary" type="button">▶ 播放</button>
+                <button id="btnNext" class="transport-btn" type="button">下一步 ▶</button>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        (() => {
+            'use strict';
+
+            // ==========================================
+            // 1. UNIFIED VISUAL PALETTE & BIOLOGY DATA
+            // ==========================================
+            const P = {
+                dna: '#f472b6',
+                dnaDark: '#db2777',
+                cyto: '#38bdf8',
+                cytoDark: '#0284c7',
+                membrane: '#7dd3fc',
+                wall: '#fbbf24',
+                wallDark: '#b45309',
+                plant: '#22c55e',
+                plantDark: '#15803d',
+                plantLight: '#86efac',
+                newTissue: '#fde047',
+                spore: '#c084fc',
+                sporeDark: '#7e22ce',
+                vacuole: '#a5f3fc',
+                root: '#d97706',
+                tuber: '#fde68a',
+                soil: '#452b18',
+                soilTop: '#6b4226',
+                agar: '#2dd4bf',
+                glass: 'rgba(186, 230, 253, 0.35)'
+            };
+
+            const CATEGORIES = [
+                {
+                    id: 'fission',
+                    name: '分裂生殖',
+                    icon: '🦠',
+                    organisms: [
+                        {
+                            id: 'bacteria',
+                            name: '細菌',
+                            badge: '原核生物 • 橫二分裂（雙子代基因完全相同）',
+                            steps: [
+                                { title: '成熟親代細菌', desc: '細菌為無核膜的原核生物，細胞內具有一條大型環狀 DNA，外圍有細胞壁與細胞膜保護。' },
+                                { title: '環狀 DNA 複製', desc: '細胞吸收養分成長，環狀 DNA 進行複製成為兩份完全相同的遺傳物質，並附著於細胞膜上。' },
+                                { title: '細胞延長與分裂溝形成', desc: '細菌體積拉長，兩份環狀 DNA 向細胞兩端分離；中央細胞膜向內凹陷並合成新的細胞壁隔板。' },
+                                { title: '分裂成兩個子細胞', desc: '中央完全分隔，產生兩個體積相近、遺傳物質與親代完全相同的子代細菌。' }
+                            ]
+                        },
+                        {
+                            id: 'paramecium',
+                            name: '草履蟲',
+                            badge: '單細胞真核生物 • 橫向二分裂',
+                            steps: [
+                                { title: '親代草履蟲', desc: '具有控制日常代謝的「大核」與掌管生殖遺傳的「小核」，體表覆滿纖毛，並有口溝與星狀伸縮泡。' },
+                                { title: '細胞核與胞器複製', desc: '小核進行有絲分裂、大核拉長並一分為二；同時伸縮泡與口溝各自複製出一套新結構。' },
+                                { title: '細胞質橫向縊縮', desc: '細胞中央出現橫向凹陷（分裂溝），兩套細胞核與伸縮泡分別移動到前後兩端。' },
+                                { title: '形成兩個獨立草履蟲', desc: '細胞質完全切斷，產生兩個構造完整且基因完全相同的子代草履蟲。' }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    id: 'budding',
+                    name: '出芽生殖',
+                    icon: '🪸',
+                    organisms: [
+                        {
+                            id: 'hydra',
+                            name: '水螅',
+                            badge: '多細胞刺絲胞動物 • 體壁出芽',
+                            steps: [
+                                { title: '成熟親代水螅', desc: '水螅附著於水底基質上，具有中空的消化腔與多條可擺動捕食的觸手。' },
+                                { title: '體壁隆起形成芽體', desc: '養分充足時，親代水螅體壁下側細胞快速進行有絲分裂，向外突起形成小「芽體」。' },
+                                { title: '芽體發育出觸手與口', desc: '芽體持續長大，頂端分化出小口與環狀觸手，此時其消化腔仍暫時與母體相通獲取養分。' },
+                                { title: '脫離母體獨立生活', desc: '芽體基部收縮與母體分離，成為基因與親代完全相同的獨立小水螅。' }
+                            ]
+                        },
+                        {
+                            id: 'yeast',
+                            name: '酵母菌',
+                            badge: '單細胞真菌 • 不均等出芽分裂',
+                            steps: [
+                                { title: '成熟親代酵母菌', desc: '單細胞卵圓形真菌，具有細胞壁、單一細胞核與大型液泡。' },
+                                { title: '芽體萌出與核分裂', desc: '母細胞一側細胞壁局部軟化凸起形成小芽；細胞核移向頸部並進行有絲分裂。' },
+                                { title: '子核移入芽體長大', desc: '其中一個子核與部分細胞質、小液泡進入芽體中，芽體逐漸成長（仍小於母細胞）。' },
+                                { title: '形成隔膜與脫離', desc: '芽體與母細胞之間形成細胞壁隔膜並脫離，產生體型較小的子代酵母菌（不均等分裂）。' }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    id: 'fragmentation',
+                    name: '斷裂生殖',
+                    icon: '⭐',
+                    organisms: [
+                        {
+                            id: 'planaria',
+                            name: '渦蟲',
+                            badge: '扁形動物 • 斷裂與幹細胞再生',
+                            cta: '✂️ 點擊切斷渦蟲',
+                            steps: [
+                                { title: '完整親代渦蟲', desc: '渦蟲體內富含未分化的幹細胞（新母細胞），頭部有眼點與耳突，中央具可伸出的咽與分支腸道。' },
+                                { title: '蟲體受外力斷裂', desc: '渦蟲因水流衝擊或外力橫向斷裂為頭部段與尾部段兩塊獨立斷片。' },
+                                { title: '傷口形成再生芽基', desc: '兩段切口迅速癒合，幹細胞聚集形成淡黃色的「再生芽基」，開始分化缺損的器官。' },
+                                { title: '各自長成完整個體', desc: '頭部段長出新尾部，尾部段分化出新眼點與頭部，成為兩隻基因完全相同的渦蟲。' }
+                            ]
+                        },
+                        {
+                            id: 'spirogyra',
+                            name: '水綿',
+                            badge: '絲狀綠藻 • 斷片細胞延長',
+                            cta: '✂️ 點擊切斷水綿',
+                            steps: [
+                                { title: '完整水綿絲狀體', desc: '由許多圓柱狀細胞單列串連而成的絲狀綠藻，每個細胞內皆有帶狀「螺旋狀葉綠體」。' },
+                                { title: '絲狀體斷裂成數段', desc: '受水流或動物擾動，長條水綿斷裂為數個較短的細胞斷片。' },
+                                { title: '斷片細胞分裂延長', desc: '各斷片中的細胞分別進行有絲分裂，細胞數量增加並使絲狀體重新拉長。' },
+                                { title: '長成多條完整水綿', desc: '每個斷片都獨立發育為一條長長的完整水綿絲狀體，遺傳物質完全一致。' }
+                            ]
+                        },
+                        {
+                            id: 'starfish',
+                            name: '海星',
+                            badge: '棘皮動物 • 需含部分中央盤才能再生',
+                            cta: '✂️ 點擊切開海星',
+                            steps: [
+                                { title: '完整五腕海星', desc: '海星由中央盤與五條輻射對稱的腕足組成，具有極強的組織再生能力。' },
+                                { title: '包含中央盤的斷裂', desc: '海星受外力裂解成兩部分，且斷離的腕足至少帶有一部分「中央盤」（無中央盤的單獨斷腕極難長成新個體）。' },
+                                { title: '傷口癒合與芽基萌發', desc: '兩部分的中央盤傷口處形成再生芽基，開始向缺失的方向萌發新腕足雛形。' },
+                                { title: '再生為兩隻完整海星', desc: '兩塊斷片各自長回缺失的腕足，最終恢復五腕對稱構造，成為兩隻基因相同的海星。' }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    id: 'spore',
+                    name: '孢子繁殖',
+                    icon: '🍄',
+                    organisms: [
+                        {
+                            id: 'rhizopus',
+                            name: '黑黴菌',
+                            badge: '接合菌 • 孢子囊內生單倍體孢子',
+                            cta: '💨 點擊釋放孢子',
+                            steps: [
+                                { title: '菌絲體與孢子囊柄發育', desc: '黑黴菌的無隔膜菌絲以「假根」固定並吸收麵包等基質養分，向上長出直立的孢子囊柄。' },
+                                { title: '孢子囊內形成大量孢子', desc: '孢子囊柄頂端膨大成球狀「孢子囊」，內部細胞核分裂形成數以千計的黑色單倍體孢子。' },
+                                { title: '孢子囊破裂散播孢子', desc: '成熟後孢子囊壁破裂，輕盈的孢子隨氣流飛散到空氣中廣泛傳播。' },
+                                { title: '孢子萌發為新菌絲體', desc: '孢子降落在溫暖潮濕且富含養分的有機物上，吸收水分並萌發長出新的菌絲與假根。' }
+                            ]
+                        },
+                        {
+                            id: 'penicillium',
+                            name: '青黴菌',
+                            badge: '子囊菌（不完全菌）• 掃帚狀分生孢子',
+                            cta: '💨 點擊釋放孢子',
+                            steps: [
+                                { title: '有隔菌絲長出掃帚狀枝', desc: '青黴菌具有明顯「細胞隔膜」的菌絲，直立的分生孢子梗頂端重複分枝，形成特徵性的「掃帚狀」結構。' },
+                                { title: '頂端產生串狀分生孢子', desc: '掃帚狀末端的瓶狀小梗不斷切出圓形青綠色的「分生孢子」，排列成一串串念珠狀（無外包囊壁）。' },
+                                { title: '分生孢子脫落隨風飄散', desc: '成熟的分生孢子極易脫落，隨氣流飄散至環境各處。' },
+                                { title: '孢子萌發形成新菌落', desc: '落於適宜環境的分生孢子萌發伸出菌絲，長成基因完全相同的新青黴菌菌落。' }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    id: 'vegetative',
+                    name: '營養器官繁殖',
+                    icon: '🌱',
+                    organisms: [
+                        {
+                            id: 'bryophyllum',
+                            name: '落地生根 (葉)',
+                            badge: '葉繁殖 • 葉緣缺刻處長出不定芽與不定根',
+                            steps: [
+                                { title: '肥厚葉片與葉緣缺刻', desc: '落地生根的肉質葉片邊緣具有波浪狀「葉緣缺刻」，該處保留具有分裂能力的分生組織。' },
+                                { title: '缺刻處萌發小芽體', desc: '受光線與濕度刺激，葉緣缺刻處長出綠色對生的小芽點（不定芽）。' },
+                                { title: '長出不定根形成小植株', desc: '小芽發育成迷你葉片，下方同時長出細長的「不定根」，宛如掛在母葉上的小植物。' },
+                                { title: '掉落地面紮根獨立', desc: '完整小植株從母葉缺刻處脫落到土壤上，不定根迅速深入土中吸收養分，獨立長大。' }
+                            ]
+                        },
+                        {
+                            id: 'echeveria',
+                            name: '石蓮 (葉)',
+                            badge: '葉繁殖（葉插）• 葉基部長出新芽與不定根',
+                            steps: [
+                                { title: '健康母葉置於疏鬆土壤', desc: '將完整剝下的飽滿石蓮（多肉植物）葉片平放於微濕透氣的培養土表層，傷口自然風乾癒合。' },
+                                { title: '葉基部萌發不定根與芽點', desc: '葉片基部維管束癒合處受到刺激，長出粉白色的「不定根」深入土中，並冒出微小的蓮座芽點。' },
+                                { title: '新葉展開並消耗母葉養分', desc: '小石蓮葉片層層展開形成蓮座狀，生長初期主要仰賴肥厚母葉內儲存的水分與養分。' },
+                                { title: '母葉枯萎，新株獨立', desc: '待母葉養分耗盡乾枯後，新生的石蓮植株已建立完整根系，可自行行光合作用獨立生長。' }
+                            ]
+                        },
+                        {
+                            id: 'strawberry',
+                            name: '草莓 (匍匐莖)',
+                            badge: '莖繁殖 • 匍匐莖的「節」產生新植株',
+                            steps: [
+                                { title: '親代草莓長出匍匐莖', desc: '成熟草莓植株從基部向地面水平伸出細長的「匍匐莖」（特化的地面莖）。' },
+                                { title: '匍匐莖的節觸土生根芽', desc: '當匍匐莖上的「節」接觸潮濕土壤時，節上分生組織向下長出不定根、向上冒出新芽。' },
+                                { title: '發育為子代草莓植株', desc: '節處長出三出複葉與發達根系，此階段仍由匍匐莖自親代輸送部分水分與養分支援。' },
+                                { title: '匍匐莖枯斷後獨立生活', desc: '子代植株成長穩固後，相連的匍匐莖自然老化枯萎（或人工剪斷），成為獨立新個體。' }
+                            ]
+                        },
+                        {
+                            id: 'sweetpotato',
+                            name: '番薯 (塊根)',
+                            badge: '根繁殖 • 肥大塊根長出不定芽與新枝',
+                            steps: [
+                                { title: '富含養分的番薯塊根', desc: '番薯食用部位為儲藏大量澱粉的地下「塊根」，塊根本身沒有節與芽眼的構造。' },
+                                { title: '塊根表面萌發不定芽', desc: '在溫暖潮濕環境下，塊根表皮下潛伏細胞分化出「不定芽」，向上抽出紫綠色的嫩芽。' },
+                                { title: '枝葉伸長並長出新根', desc: '嫩芽迅速長成帶葉的蔓莖，基部與塊根處長出鬚狀新根，同時塊根養分逐漸被消耗。' },
+                                { title: '可剪取枝條扦插或分株', desc: '新長出的健康番薯藤蔓可大量行光合作用，農民常剪下帶節的藤蔓扦插，快速繁殖大量番薯。' }
+                            ]
+                        },
+                        {
+                            id: 'potato',
+                            name: '馬鈴薯 (塊莖)',
+                            badge: '莖繁殖 • 地下塊莖「芽眼」為節與腋芽',
+                            steps: [
+                                { title: '具「芽眼」的馬鈴薯塊莖', desc: '馬鈴薯為肥大的地下「塊莖」，表面凹陷的「芽眼」其實就是莖的「節」與「腋芽」。' },
+                                { title: '芽眼處幼芽萌發', desc: '休眠結束後，各芽眼內的腋芽吸收塊莖內儲存的澱粉，向上萌發出粗壯的幼芽。' },
+                                { title: '長出莖葉與基部不定根', desc: '幼芽向上穿出土壤長成綠色複葉，同時在幼芽基部節處（非塊莖表面）長出大量不定根。' },
+                                { title: '形成完整新植株', desc: '新植株開展葉片行光合作用（並於地下再結新塊莖），原本的老塊莖養分耗盡後皺縮。' }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    id: 'tissue',
+                    name: '組織培養',
+                    icon: '🧪',
+                    organisms: [
+                        {
+                            id: 'orchid',
+                            name: '蘭花',
+                            badge: '無菌微體繁殖 • 單一細胞全能性（大量複製優良性狀）',
+                            steps: [
+                                { title: '1. 取材與表面滅菌', desc: '切取優良蘭花親代的「莖頂分生組織」（生長點，細胞分裂旺盛且常無病毒），經酒精與次氯酸鈉消毒後取出微小培植體。' },
+                                { title: '2. 誘導癒傷組織 (PLB)', desc: '將培植體接種於含養分與「植物激素」的無菌洋菜培養基，細胞快速分裂形成未分化的團塊——癒傷組織 / 擬原球體。' },
+                                { title: '3. 調整激素促使器官分化', desc: '調整培養基中細胞分裂素與生長素的比例，誘導芽與根分化，在無菌瓶內長成眾多翠綠健康的蘭花小苗。' },
+                                { title: '4. 溫室馴化與大量移植', desc: '將基因完全相同的無菌小苗移出培養瓶，洗淨洋菜並經溫室馴化後種入水苔盆栽，短時間內獲得大量性狀一致的蘭花。' }
+                            ]
+                        }
+                    ]
+                }
+            ];
+
+            // ==========================================
+            // 2. APPLICATION STATE & CAMERA
+            // ==========================================
+            const state = {
+                catIdx: 0,
+                orgIdx: 0,
+                animProgress: 0,      // continuous [0..3]
+                targetProgress: 0,    // tween target
+                isTweening: false,
+                isPlaying: false,
+                playPauseTimer: 0,
+                labelsVisible: true,
+                collapsed: false,
+                burstParticles: [],   // interactive spore puffs / sparks
+                slashFlash: 0,        // interactive cut flash
+
+                // Camera (world space ~720x460 centered at 0,0)
+                camX: 0,
+                camY: 0,
+                camZoom: 1.0,
+                viewW: 800,
+                viewH: 500,
+                dpr: Math.min(window.devicePixelRatio || 1, 2.5)
+            };
+
+            const getActiveCat = () => CATEGORIES[state.catIdx];
+            const getActiveOrg = () => getActiveCat().organisms[state.orgIdx];
+
+            // Math helpers
+            const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+            const lerp = (a, b, t) => a + (b - a) * t;
+            const ease = (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+            const phase = (p, a, b) => clamp((p - a) / (b - a), 0, 1);
+            const ePhase = (p, a, b) => ease(phase(p, a, b));
+
+            function getBaseScale() {
+                return Math.min(state.viewW / 740, state.viewH / 470);
+            }
+
+            function worldToScreen(wx, wy) {
+                const s = getBaseScale() * state.camZoom;
+                return {
+                    x: state.viewW * 0.5 + (wx - state.camX) * s,
+                    y: state.viewH * 0.5 + (wy - state.camY) * s
+                };
+            }
+
+            function screenToWorld(sx, sy) {
+                const s = getBaseScale() * state.camZoom;
+                return {
+                    x: (sx - state.viewW * 0.5) / s + state.camX,
+                    y: (sy - state.viewH * 0.5) / s + state.camY
+                };
+            }
+
+            // ==========================================
+            // 3. CANVAS PRIMITIVES & LABEL SYSTEM
+            // ==========================================
+            let frameLabels = [];
+            function addLabel(wx, wy, text, dx, dy, color = '#2dd4bf') {
+                frameLabels.push({ wx, wy, text, dx, dy, color });
+            }
+
+            function drawRoundedRectPath(ctx, x, y, w, h, r) {
+                const rr = Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2);
+                ctx.beginPath();
+                ctx.moveTo(x + rr, y);
+                ctx.lineTo(x + w - rr, y);
+                ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
+                ctx.lineTo(x + w, y + h - rr);
+                ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+                ctx.lineTo(x + rr, y + h);
+                ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
+                ctx.lineTo(x, y + rr);
+                ctx.quadraticCurveTo(x, y, x + rr, y);
+                ctx.closePath();
+            }
+
+            function drawSoilBed(ctx, yTop, width = 760, height = 220) {
+                ctx.save();
+                const grad = ctx.createLinearGradient(0, yTop, 0, yTop + height);
+                grad.addColorStop(0, P.soilTop);
+                grad.addColorStop(0.22, P.soil);
+                grad.addColorStop(1, '#22140b');
+                ctx.fillStyle = grad;
+                ctx.fillRect(-width / 2, yTop, width, height);
+
+                ctx.strokeStyle = '#855836';
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.moveTo(-width / 2, yTop);
+                for (let x = -width / 2; x <= width / 2; x += 24) {
+                    ctx.lineTo(x, yTop + Math.sin(x * 0.08) * 2.5);
+                }
+                ctx.stroke();
+
+                // Soil pebbles
+                ctx.fillStyle = 'rgba(253, 230, 138, 0.12)';
+                for (let i = 0; i < 28; i++) {
+                    const px = ((i * 97) % (width - 40)) - (width - 40) / 2;
+                    const py = yTop + 16 + ((i * 53) % 90);
+                    ctx.beginPath();
+                    ctx.arc(px, py, 2 + (i % 3), 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.restore();
+            }
+
+            function drawCutLine(ctx, x1, y1, x2, y2, time, cutProgress) {
+                if (cutProgress > 0.35) return;
+                ctx.save();
+                const alpha = 1 - cutProgress / 0.35;
+                ctx.strokeStyle = `rgba(253, 224, 71, ${0.85 * alpha})`;
+                ctx.lineWidth = 2.5;
+                ctx.setLineDash([7, 5]);
+                ctx.lineDashOffset = -time * 24;
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Scissors icon indicator
+                ctx.fillStyle = `rgba(253, 224, 71, ${alpha})`;
+                ctx.font = '18px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('✂️', x1, y1 - 8);
+                ctx.restore();
+            }
+
+            function drawLeafShape(ctx, len, wid, color, veinColor) {
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.bezierCurveTo(len * 0.3, -wid, len * 0.78, -wid * 0.85, len, 0);
+                ctx.bezierCurveTo(len * 0.78, wid * 0.85, len * 0.3, wid, 0, 0);
+                ctx.closePath();
+                ctx.fillStyle = color;
+                ctx.fill();
+                if (veinColor) {
+                    ctx.strokeStyle = veinColor;
+                    ctx.lineWidth = 1.6;
+                    ctx.beginPath();
+                    ctx.moveTo(2, 0);
+                    ctx.lineTo(len * 0.86, 0);
+                    ctx.stroke();
+                }
+            }
+
+            function drawCircularDNA(ctx, cx, cy, r, rot, color) {
+                ctx.save();
+                ctx.translate(cx, cy);
+                ctx.rotate(rot);
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 3;
+                ctx.shadowColor = color;
+                ctx.shadowBlur = 8;
+                ctx.beginPath();
+                for (let a = 0; a <= Math.PI * 2 + 0.1; a += 0.15) {
+                    const rr = r * (1 + 0.18 * Math.sin(a * 5) + 0.1 * Math.cos(a * 3));
+                    const px = Math.cos(a) * rr;
+                    const py = Math.sin(a) * rr * 0.72;
+                    if (a === 0) ctx.moveTo(px, py);
+                    else ctx.lineTo(px, py);
+                }
+                ctx.closePath();
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // Draw a pinched capsule cell for binary fission
+            function drawPinchedCell(ctx, cx, cy, halfLen, r, pinch, fill, stroke, lineW) {
+                // pinch: 0 = full capsule, 1 = completely pinched at center
+                const neckR = Math.max(1.5, r * (1 - pinch * 0.96));
+                ctx.beginPath();
+                // Top profile from left cap to right cap
+                ctx.arc(cx - halfLen, cy, r, Math.PI * 0.5, Math.PI * 1.5);
+                ctx.bezierCurveTo(
+                    cx - halfLen * 0.35, cy - r,
+                    cx - halfLen * 0.2, cy - neckR,
+                    cx, cy - neckR
+                );
+                ctx.bezierCurveTo(
+                    cx + halfLen * 0.2, cy - neckR,
+                    cx + halfLen * 0.35, cy - r,
+                    cx + halfLen, cy - r
+                );
+                ctx.arc(cx + halfLen, cy, r, -Math.PI * 0.5, Math.PI * 0.5);
+                ctx.bezierCurveTo(
+                    cx + halfLen * 0.35, cy + r,
+                    cx + halfLen * 0.2, cy + neckR,
+                    cx, cy + neckR
+                );
+                ctx.bezierCurveTo(
+                    cx - halfLen * 0.2, cy + neckR,
+                    cx - halfLen * 0.35, cy + r,
+                    cx - halfLen, cy + r
+                );
+                ctx.closePath();
+                if (fill) {
+                    ctx.fillStyle = fill;
+                    ctx.fill();
+                }
+                if (stroke) {
+                    ctx.strokeStyle = stroke;
+                    ctx.lineWidth = lineW || 3;
+                    ctx.stroke();
+                }
+            }
+
+            function drawContractileVacuole(ctx, x, y, r, pulse) {
+                const s = r * (0.8 + 0.25 * Math.sin(pulse));
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.strokeStyle = P.vacuole;
+                ctx.fillStyle = 'rgba(165, 243, 252, 0.35)';
+                ctx.lineWidth = 1.6;
+                ctx.beginPath();
+                const rays = 8;
+                for (let i = 0; i < rays * 2; i++) {
+                    const ang = (i * Math.PI) / rays;
+                    const rad = i % 2 === 0 ? s * 1.45 : s * 0.55;
+                    const px = Math.cos(ang) * rad;
+                    const py = Math.sin(ang) * rad;
+                    if (i === 0) ctx.moveTo(px, py);
+                    else ctx.lineTo(px, py);
+                }
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // ==========================================
+            // 4. ORGANISM SIMULATION DRAWERS (ALL 15)
+            // ==========================================
+            const DRAWERS = {
+                // 1A. 細菌 (Bacteria)
+                bacteria(ctx, p, time) {
+                    const rep = ePhase(p, 0.15, 0.95);   // DNA replication
+                    const elong = ePhase(p, 1.0, 1.9);   // Cell elongation
+                    const pinch = ePhase(p, 1.25, 2.25); // Pinching
+                    const split = ePhase(p, 2.25, 3.0);  // Separation
+
+                    const bob = Math.sin(time * 2) * 3;
+                    const baseHalfLen = lerp(65, 130, elong);
+                    const cellR = 52;
+
+                    const drawOneBacterium = (cx, cy, hLen, dnaOffset, showFlagLeft, showFlagRight) => {
+                        // Flagella
+                        ctx.save();
+                        ctx.strokeStyle = 'rgba(251, 191, 36, 0.7)';
+                        ctx.lineWidth = 3;
+                        ctx.lineCap = 'round';
+                        if (showFlagLeft) {
+                            ctx.beginPath();
+                            ctx.moveTo(cx - hLen - cellR, cy);
+                            for (let i = 1; i <= 18; i++) {
+                                const fx = cx - hLen - cellR - i * 4.5;
+                                const fy = cy + Math.sin(time * 7 + i * 0.55) * (3 + i * 0.45);
+                                ctx.lineTo(fx, fy);
+                            }
+                            ctx.stroke();
+                        }
+                        if (showFlagRight) {
+                            ctx.beginPath();
+                            ctx.moveTo(cx + hLen + cellR, cy);
+                            for (let i = 1; i <= 18; i++) {
+                                const fx = cx + hLen + cellR + i * 4.5;
+                                const fy = cy + Math.sin(time * 7 - i * 0.55) * (3 + i * 0.45);
+                                ctx.lineTo(fx, fy);
+                            }
+                            ctx.stroke();
+                        }
+                        ctx.restore();
+
+                        // Outer Cell Wall (Amber)
+                        drawPinchedCell(ctx, cx, cy, hLen, cellR, split > 0 ? 0 : pinch, 'rgba(251, 191, 36, 0.12)', P.wall, 5);
+                        // Inner Membrane + Cytoplasm (Cyan)
+                        drawPinchedCell(ctx, cx, cy, hLen - 2, cellR - 8, split > 0 ? 0 : pinch, 'rgba(56, 189, 248, 0.22)', P.membrane, 2.2);
+                    };
+
+                    if (split < 0.02) {
+                        drawOneBacterium(0, bob, baseHalfLen, 0, true, false);
+                        // DNA
+                        if (rep < 0.05) {
+                            drawCircularDNA(ctx, 0, bob, 24, time * 0.4, P.dna);
+                            addLabel(0, bob - 20, '環狀 DNA', 0, -70, P.dna);
+                        } else {
+                            const sepDist = lerp(8, 86, ePhase(p, 0.35, 1.85));
+                            drawCircularDNA(ctx, -sepDist, bob, 22, time * 0.4, P.dna);
+                            drawCircularDNA(ctx, sepDist, bob, 22, -time * 0.4 + 1, P.dna);
+                            addLabel(-sepDist, bob - 18, '複製後的環狀 DNA', -50, -72, P.dna);
+                            addLabel(sepDist, bob - 18, '環狀 DNA (完全相同)', 55, -72, P.dna);
+                        }
+                        if (pinch > 0.2) {
+                            addLabel(0, bob - cellR * (1 - pinch * 0.6), '分裂溝與新細胞壁', 0, 108, P.newTissue);
+                        }
+                        addLabel(-baseHalfLen - cellR - 35, bob + 8, '鞭毛', -35, 58, P.wall);
+                        addLabel(baseHalfLen + 10, bob - cellR, '細胞壁', 55, -42, P.wall);
+                        addLabel(baseHalfLen + 15, bob + cellR - 10, '細胞質 / 細胞膜', 58, 42, P.cyto);
+                    } else {
+                        // Two separated bacteria
+                        const gap = lerp(95, 155, split);
+                        const hLen = 62;
+                        drawOneBacterium(-gap, bob, hLen, 0, true, false);
+                        drawOneBacterium(gap, bob, hLen, 0, false, true);
+                        drawCircularDNA(ctx, -gap, bob, 22, time * 0.4, P.dna);
+                        drawCircularDNA(ctx, gap, bob, 22, -time * 0.4 + 1, P.dna);
+
+                        addLabel(-gap, bob - cellR, '子代細菌 A (2n)', 0, -52, P.newTissue);
+                        addLabel(gap, bob - cellR, '子代細菌 B (2n)', 0, -52, P.newTissue);
+                        addLabel(-gap, bob + 10, '完全相同的環狀 DNA', 0, 82, P.dna);
+                        addLabel(gap, bob + cellR - 6, '新形成細胞壁', 30, 52, P.wall);
+                    }
+                },
+
+                // 1B. 草履蟲 (Paramecium)
+                paramecium(ctx, p, time) {
+                    const nucRep = ePhase(p, 0.1, 0.95);
+                    const pinch = ePhase(p, 1.05, 2.2);
+                    const split = ePhase(p, 2.2, 3.0);
+                    const bob = Math.sin(time * 2.1) * 4;
+
+                    const drawParameciumBody = (cx, cy, scaleX, scaleY, pinchAmt, ciliaCount) => {
+                        ctx.save();
+                        ctx.translate(cx, cy);
+                        // Cilia fringe
+                        ctx.strokeStyle = 'rgba(125, 211, 252, 0.65)';
+                        ctx.lineWidth = 1.6;
+                        const halfW = 120 * scaleX;
+                        const maxH = 56 * scaleY;
+
+                        // Body outline helper
+                        const bodyPt = (t) => {
+                            // t in [0, 2pi]
+                            const cos = Math.cos(t);
+                            const sin = Math.sin(t);
+                            const pinchFactor = 1 - pinchAmt * 0.94 * Math.exp(-Math.pow(cos * 3.2, 2));
+                            // slight slipper asymmetry
+                            const asym = 1 + 0.14 * cos;
+                            return {
+                                x: cos * halfW,
+                                y: sin * maxH * asym * pinchFactor
+                            };
+                        };
+
+                        for (let i = 0; i < ciliaCount; i++) {
+                            const t = (i / ciliaCount) * Math.PI * 2;
+                            const pt = bodyPt(t);
+                            const pt2 = bodyPt(t + 0.05);
+                            const nx = -(pt2.y - pt.y);
+                            const ny = pt2.x - pt.x;
+                            const len = Math.hypot(nx, ny) || 1;
+                            const wave = Math.sin(time * 9 + i * 0.5) * 4;
+                            ctx.beginPath();
+                            ctx.moveTo(pt.x, pt.y);
+                            ctx.lineTo(pt.x + (nx / len) * 11 + wave * 0.4, pt.y + (ny / len) * 11);
+                            ctx.stroke();
+                        }
+
+                        // Fill body
+                        ctx.beginPath();
+                        for (let i = 0; i <= 80; i++) {
+                            const t = (i / 80) * Math.PI * 2;
+                            const pt = bodyPt(t);
+                            if (i === 0) ctx.moveTo(pt.x, pt.y);
+                            else ctx.lineTo(pt.x, pt.y);
+                        }
+                        ctx.closePath();
+                        ctx.fillStyle = 'rgba(56, 189, 248, 0.24)';
+                        ctx.fill();
+                        ctx.strokeStyle = P.membrane;
+                        ctx.lineWidth = 3;
+                        ctx.stroke();
+                        ctx.restore();
+                    };
+
+                    if (split < 0.02) {
+                        const stretch = lerp(1.0, 1.48, ePhase(p, 0.8, 1.9));
+                        drawParameciumBody(0, bob, stretch, 1.0, pinch, 66);
+
+                        // Macronucleus & Micronucleus
+                        const sep = lerp(0, 78, ePhase(p, 0.25, 1.8));
+                        if (nucRep < 0.45) {
+                            // Single elongating macronucleus
+                            ctx.save();
+                            ctx.fillStyle = P.dna;
+                            ctx.beginPath();
+                            ctx.ellipse(0, bob - 4, lerp(26, 46, nucRep / 0.45), 16, 0, 0, Math.PI * 2);
+                            ctx.fill();
+                            // Micronucleus
+                            ctx.fillStyle = '#fdf4ff';
+                            ctx.beginPath();
+                            ctx.arc(-8, bob + 14, 5.5, 0, Math.PI * 2);
+                            ctx.fill();
+                            ctx.restore();
+                            addLabel(0, bob - 14, '大核 / 小核', 10, -78, P.dna);
+                        } else {
+                            // Two separating nuclei
+                            ctx.fillStyle = P.dna;
+                            ctx.beginPath();
+                            ctx.ellipse(-sep, bob - 4, 22, 14, 0, 0, Math.PI * 2);
+                            ctx.fill();
+                            ctx.beginPath();
+                            ctx.ellipse(sep, bob - 4, 22, 14, 0, 0, Math.PI * 2);
+                            ctx.fill();
+                            ctx.fillStyle = '#fdf4ff';
+                            ctx.beginPath();
+                            ctx.arc(-sep + 12, bob + 12, 5, 0, Math.PI * 2);
+                            ctx.arc(sep - 12, bob + 12, 5, 0, Math.PI * 2);
+                            ctx.fill();
+                            addLabel(-sep, bob - 14, '複製後的大核/小核', -35, -75, P.dna);
+                            addLabel(sep, bob - 14, '複製後的大核/小核', 45, -75, P.dna);
+                        }
+
+                        // Contractile Vacuoles
+                        const vacAlpha = ePhase(p, 0.2, 0.9);
+                        drawContractileVacuole(ctx, -85 * stretch, bob - 12, 12, time * 3);
+                        drawContractileVacuole(ctx, 85 * stretch, bob - 12, 12, time * 3 + 1.5);
+                        if (vacAlpha > 0.1) {
+                            ctx.save();
+                            ctx.globalAlpha = vacAlpha;
+                            drawContractileVacuole(ctx, -22, bob + 18, 10, time * 3 + 0.7);
+                            drawContractileVacuole(ctx, 22, bob + 18, 10, time * 3 + 2.2);
+                            ctx.restore();
+                        }
+
+                        // Oral groove
+                        ctx.strokeStyle = 'rgba(253, 224, 71, 0.65)';
+                        ctx.lineWidth = 3;
+                        ctx.beginPath();
+                        ctx.arc(-18 * stretch, bob + 38, 28, Math.PI * 1.15, Math.PI * 1.85);
+                        ctx.stroke();
+
+                        addLabel(-85 * stretch, bob - 22, '伸縮泡', -45, -45, P.vacuole);
+                        addLabel(105 * stretch, bob + 30, '纖毛', 55, 45, P.membrane);
+                        addLabel(-18 * stretch, bob + 42, '口溝', -55, 58, P.newTissue);
+                        if (pinch > 0.2) {
+                            addLabel(0, bob - 48 * (1 - pinch * 0.6), '橫向分裂溝', 0, 105, P.newTissue);
+                        }
+                    } else {
+                        const gap = lerp(96, 155, split);
+                        drawParameciumBody(-gap, bob, 0.92, 0.96, 0, 48);
+                        drawParameciumBody(gap, bob, 0.92, 0.96, 0, 48);
+
+                        // Nuclei & vacuoles in both
+                        [-gap, gap].forEach((gx, idx) => {
+                            ctx.fillStyle = P.dna;
+                            ctx.beginPath();
+                            ctx.ellipse(gx, bob - 4, 21, 13, 0, 0, Math.PI * 2);
+                            ctx.fill();
+                            ctx.fillStyle = '#fdf4ff';
+                            ctx.beginPath();
+                            ctx.arc(gx + 10, bob + 12, 4.8, 0, Math.PI * 2);
+                            ctx.fill();
+                            drawContractileVacuole(ctx, gx - 68, bob - 10, 10, time * 3 + idx);
+                            drawContractileVacuole(ctx, gx + 68, bob - 10, 10, time * 3 + 1.5 + idx);
+                        });
+
+                        addLabel(-gap, bob - 56, '子代草履蟲 A', 0, -45, P.newTissue);
+                        addLabel(gap, bob - 56, '子代草履蟲 B', 0, -45, P.newTissue);
+                        addLabel(-gap, bob + 4, '完全相同的遺傳物質', 0, 86, P.dna);
+                    }
+                },
+
+                // 2A. 水螅 (Hydra)
+                hydra(ctx, p, time) {
+                    const budGrow = ePhase(p, 0.15, 1.35);
+                    const tentGrow = ePhase(p, 1.0, 2.0);
+                    const detach = ePhase(p, 2.1, 3.0);
+
+                    // Water substrate rock
+                    ctx.save();
+                    ctx.fillStyle = '#334155';
+                    ctx.beginPath();
+                    ctx.moveTo(-340, 175);
+                    ctx.quadraticCurveTo(-180, 148, 0, 162);
+                    ctx.quadraticCurveTo(180, 145, 340, 175);
+                    ctx.lineTo(340, 230);
+                    ctx.lineTo(-340, 230);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.strokeStyle = '#475569';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    ctx.restore();
+
+                    const drawPolyp = (bx, by, scale, swayPhase, bodyColor, tentAmt, isBud) => {
+                        ctx.save();
+                        ctx.translate(bx, by);
+                        ctx.scale(scale, scale);
+
+                        const sway = Math.sin(time * 1.8 + swayPhase) * 10;
+                        const topX = sway;
+                        const topY = -185;
+
+                        // Body column
+                        ctx.beginPath();
+                        ctx.moveTo(-22, 0);
+                        ctx.quadraticCurveTo(-16 + sway * 0.3, -90, -14 + topX, topY);
+                        ctx.quadraticCurveTo(topX, topY - 12, 14 + topX, topY);
+                        ctx.quadraticCurveTo(16 + sway * 0.3, -90, 22, 0);
+                        ctx.closePath();
+                        ctx.fillStyle = bodyColor;
+                        ctx.fill();
+                        ctx.strokeStyle = P.membrane;
+                        ctx.lineWidth = 2.6;
+                        ctx.stroke();
+
+                        // Gastrovascular cavity (inner dashed/soft tube)
+                        ctx.beginPath();
+                        ctx.moveTo(-6, -10);
+                        ctx.quadraticCurveTo(-5 + sway * 0.3, -90, -4 + topX, topY + 6);
+                        ctx.lineTo(4 + topX, topY + 6);
+                        ctx.quadraticCurveTo(5 + sway * 0.3, -90, 6, -10);
+                        ctx.closePath();
+                        ctx.fillStyle = 'rgba(244, 114, 182, 0.25)';
+                        ctx.fill();
+
+                        // Tentacles
+                        if (tentAmt > 0.05) {
+                            const tAngles = [-1.25, -0.75, -0.25, 0.25, 0.75, 1.25];
+                            tAngles.forEach((ang, idx) => {
+                                const len = 72 * tentAmt;
+                                const wave = Math.sin(time * 2.5 + idx * 0.9 + swayPhase) * 14;
+                                const ex = topX + Math.sin(ang) * len + wave;
+                                const ey = topY - Math.cos(ang) * len * 0.75;
+                                ctx.beginPath();
+                                ctx.moveTo(topX + ang * 8, topY - 4);
+                                ctx.quadraticCurveTo(
+                                    topX + Math.sin(ang) * len * 0.5 - wave * 0.4,
+                                    topY - Math.cos(ang) * len * 0.55,
+                                    ex, ey
+                                );
+                                ctx.strokeStyle = isBud ? P.newTissue : P.cyto;
+                                ctx.lineWidth = 4.2;
+                                ctx.lineCap = 'round';
+                                ctx.stroke();
+                            });
+                        }
+                        ctx.restore();
+                    };
+
+                    // Parent Hydra
+                    const parentX = lerp(-30, -90, detach);
+                    drawPolyp(parentX, 160, 1.0, 0, 'rgba(56, 189, 248, 0.34)', 1.0, false);
+
+                    // Budding Hydra
+                    if (budGrow > 0.02) {
+                        if (detach < 0.05) {
+                            // Attached to parent body wall
+                            const attachX = parentX + 14;
+                            const attachY = 85;
+                            ctx.save();
+                            ctx.translate(attachX, attachY);
+                            ctx.rotate(lerp(1.15, 0.72, budGrow));
+                            const budScale = lerp(0.15, 0.58, budGrow);
+                            drawPolyp(0, 0, budScale, 1.2, 'rgba(253, 224, 71, 0.32)', tentGrow, true);
+                            ctx.restore();
+
+                            const budTipX = attachX + Math.sin(lerp(1.15, 0.72, budGrow)) * (185 * budScale);
+                            const budTipY = attachY - Math.cos(lerp(1.15, 0.72, budGrow)) * (185 * budScale);
+                            addLabel(attachX + 20, attachY - 15, '芽體 (細胞有絲分裂隆起)', 75, -18, P.newTissue);
+                            if (tentGrow > 0.3) {
+                                addLabel(budTipX, budTipY, '芽體觸手與口', 75, -38, P.newTissue);
+                            }
+                        } else {
+                            // Detaching & settling to the right
+                            const budX = lerp(parentX + 45, 115, detach);
+                            const budY = lerp(85, 162, Math.pow(detach, 0.8));
+                            const budAngle = lerp(0.72, 0, detach);
+                            ctx.save();
+                            ctx.translate(budX, budY);
+                            ctx.rotate(budAngle);
+                            drawPolyp(0, 0, lerp(0.58, 0.72, detach), 1.5, 'rgba(253, 224, 71, 0.36)', 1.0, true);
+                            ctx.restore();
+
+                            addLabel(budX, budY - 125, '獨立新水螅 (基因與親代相同)', 40, -35, P.newTissue);
+                        }
+                    }
+
+                    addLabel(parentX - 10, -25, '親代觸手', -95, -20, P.cyto);
+                    addLabel(parentX, 55, '消化腔', -88, 12, P.dna);
+                    addLabel(parentX - 15, 130, '親代水螅', -95, 22, P.membrane);
+                },
+
+                // 2B. 酵母菌 (Yeast)
+                yeast(ctx, p, time) {
+                    const budEmerg = ePhase(p, 0.1, 1.1);
+                    const nucDiv = ePhase(p, 0.65, 1.85);
+                    const budGrow = ePhase(p, 1.0, 2.2);
+                    const detach = ePhase(p, 2.2, 3.0);
+
+                    const bob = Math.sin(time * 2) * 3;
+                    const parentX = lerp(-20, -75, detach);
+
+                    const drawYeastCell = (cx, cy, rx, ry, rot, wallCol, hasVac, vacScale) => {
+                        ctx.save();
+                        ctx.translate(cx, cy);
+                        ctx.rotate(rot);
+                        // Outer cell wall
+                        ctx.beginPath();
+                        ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+                        ctx.fillStyle = 'rgba(251, 191, 36, 0.16)';
+                        ctx.fill();
+                        ctx.strokeStyle = wallCol;
+                        ctx.lineWidth = 4.5;
+                        ctx.stroke();
+
+                        // Inner cytoplasm
+                        ctx.beginPath();
+                        ctx.ellipse(0, 0, rx - 5, ry - 5, 0, 0, Math.PI * 2);
+                        ctx.fillStyle = 'rgba(56, 189, 248, 0.15)';
+                        ctx.fill();
+
+                        // Vacuole
+                        if (hasVac) {
+                            ctx.beginPath();
+                            ctx.ellipse(-rx * 0.25, ry * 0.15, rx * 0.34 * vacScale, ry * 0.34 * vacScale, 0.2, 0, Math.PI * 2);
+                            ctx.fillStyle = 'rgba(165, 243, 252, 0.35)';
+                            ctx.fill();
+                            ctx.strokeStyle = P.vacuole;
+                            ctx.lineWidth = 1.8;
+                            ctx.stroke();
+                        }
+                        ctx.restore();
+                    };
+
+                    // Parent yeast
+                    drawYeastCell(parentX, bob, 82, 66, -0.1, P.wall, true, 1.0);
+
+                    // Bud
+                    if (budEmerg > 0.02) {
+                        const budRx = lerp(10, 48, budGrow * 0.65 + budEmerg * 0.35);
+                        const budRy = lerp(10, 39, budGrow * 0.65 + budEmerg * 0.35);
+                        const distAttached = 74 + budRx * 0.68;
+                        const bx = parentX + Math.cos(-0.42) * distAttached + detach * 68;
+                        const by = bob + Math.sin(-0.42) * distAttached + detach * 18;
+                        drawYeastCell(bx, by, budRx, budRy, -0.25, detach > 0.6 ? P.wall : P.newTissue, budGrow > 0.4, budGrow);
+
+                        // Nucleus division
+                        const pNucX = lerp(parentX + 18, parentX + 48, Math.sin(nucDiv * Math.PI * 0.5) * (1 - detach));
+                        const pNucY = lerp(bob - 12, bob - 26, Math.sin(nucDiv * Math.PI * 0.5) * (1 - detach));
+
+                        if (nucDiv < 0.55) {
+                            // Stretching nucleus
+                            ctx.save();
+                            ctx.translate(pNucX, pNucY);
+                            ctx.rotate(-0.42);
+                            ctx.fillStyle = P.dna;
+                            ctx.beginPath();
+                            ctx.ellipse(0, 0, lerp(16, 30, nucDiv / 0.55), 12, 0, 0, Math.PI * 2);
+                            ctx.fill();
+                            ctx.restore();
+                            addLabel(pNucX, pNucY, '細胞核進行分裂', -20, -68, P.dna);
+                        } else {
+                            // Two separated nuclei
+                            const tSplit = phase(nucDiv, 0.55, 1.0);
+                            const n1x = lerp(parentX + 42, parentX + 15, tSplit);
+                            const n1y = lerp(bob - 22, bob - 10, tSplit);
+                            const n2x = lerp(parentX + 58, bx - 4, tSplit);
+                            const n2y = lerp(bob - 30, by, tSplit);
+
+                            ctx.fillStyle = P.dna;
+                            ctx.beginPath();
+                            ctx.arc(n1x, n1y, 14, 0, Math.PI * 2);
+                            ctx.fill();
+                            ctx.beginPath();
+                            ctx.arc(n2x, n2y, 11, 0, Math.PI * 2);
+                            ctx.fill();
+
+                            addLabel(n2x, n2y, '子細胞核移入芽體', 48, -56, P.dna);
+                        }
+
+                        if (detach < 0.5) {
+                            addLabel(bx + budRx * 0.4, by - budRy * 0.5, '芽體 (小於母細胞)', 65, -35, P.newTissue);
+                        } else {
+                            addLabel(bx, by - budRy, '子代酵母菌 (較小)', 35, -48, P.newTissue);
+                            addLabel((parentX + bx) / 2, (bob + by) / 2 + 25, '隔膜分離 (不均等分裂)', 0, 65, P.wall);
+                        }
+                    } else {
+                        ctx.fillStyle = P.dna;
+                        ctx.beginPath();
+                        ctx.arc(parentX + 18, bob - 10, 16, 0, Math.PI * 2);
+                        ctx.fill();
+                        addLabel(parentX + 18, bob - 10, '細胞核', 35, -62, P.dna);
+                    }
+
+                    addLabel(parentX - 24, bob + 12, '液泡', -68, 56, P.vacuole);
+                    addLabel(parentX - 65, bob - 48, '母細胞 (細胞壁)', -45, -45, P.wall);
+                },
+
+                // 3A. 渦蟲 (Planaria)
+                planaria(ctx, p, time) {
+                    const cutAmt = ePhase(p, 0.25, 0.95);
+                    const blastema = ePhase(p, 1.0, 2.0);
+                    const regen = ePhase(p, 1.85, 3.0);
+
+                    const drawPlanariaHalf = (x, y, isHead, regenAmt, blastAmt) => {
+                        ctx.save();
+                        ctx.translate(x, y);
+
+                        // Body shape
+                        ctx.beginPath();
+                        if (isHead) {
+                            // Head + upper torso + regenerating tail
+                            const tailLen = lerp(12, 130, regenAmt);
+                            ctx.moveTo(0, -125); // head tip
+                            ctx.lineTo(-42, -92); // left auricle
+                            ctx.quadraticCurveTo(-30, -76, -33, -45);
+                            ctx.lineTo(-33, 5); // cut line
+                            // regenerating tail
+                            ctx.quadraticCurveTo(-28 * (1 - regenAmt * 0.35), 5 + tailLen * 0.6, 0, 5 + tailLen);
+                            ctx.quadraticCurveTo(28 * (1 - regenAmt * 0.35), 5 + tailLen * 0.6, 33, 5);
+                            ctx.lineTo(33, -45);
+                            ctx.quadraticCurveTo(30, -76, 42, -92);
+                            ctx.closePath();
+                        } else {
+                            // Regenerating head + lower torso + tail
+                            const headLen = lerp(12, 128, regenAmt);
+                            const auricleW = lerp(33, 42, regenAmt);
+                            ctx.moveTo(0, -5 - headLen);
+                            ctx.lineTo(-auricleW, -5 - headLen * 0.72);
+                            ctx.quadraticCurveTo(-31, -5 - headLen * 0.55, -33, -5);
+                            ctx.lineTo(-32, 65);
+                            ctx.quadraticCurveTo(-24, 115, 0, 135);
+                            ctx.quadraticCurveTo(24, 115, 32, 65);
+                            ctx.lineTo(33, -5);
+                            ctx.quadraticCurveTo(31, -5 - headLen * 0.55, auricleW, -5 - headLen * 0.72);
+                            ctx.closePath();
+                        }
+                        ctx.fillStyle = 'rgba(56, 189, 248, 0.3)';
+                        ctx.fill();
+                        ctx.strokeStyle = P.membrane;
+                        ctx.lineWidth = 3;
+                        ctx.stroke();
+
+                        // Blastema highlight at wound
+                        if (blastAmt > 0.05 && regenAmt < 0.92) {
+                            ctx.save();
+                            ctx.globalAlpha = blastAmt * (1 - regenAmt * 0.85);
+                            ctx.fillStyle = P.newTissue;
+                            ctx.beginPath();
+                            ctx.ellipse(0, isHead ? 10 : -10, 30, 12 + regenAmt * 18, 0, 0, Math.PI * 2);
+                            ctx.fill();
+                            ctx.restore();
+                        }
+
+                        // Eyespots
+                        if (isHead || regenAmt > 0.35) {
+                            const eyeAlpha = isHead ? 1 : phase(regenAmt, 0.35, 0.85);
+                            const eyeY = isHead ? -88 : -5 - lerp(12, 128, regenAmt) * 0.7;
+                            ctx.save();
+                            ctx.globalAlpha = eyeAlpha;
+                            [-12, 12].forEach((ex) => {
+                                ctx.fillStyle = '#ffffff';
+                                ctx.beginPath();
+                                ctx.arc(ex, eyeY, 7, 0, Math.PI * 2);
+                                ctx.fill();
+                                ctx.fillStyle = '#0f172a';
+                                ctx.beginPath();
+                                ctx.arc(ex * 0.82, eyeY, 3.6, 0, Math.PI * 2);
+                                ctx.fill();
+                            });
+                            ctx.restore();
+                        }
+
+                        // Pharynx / gut hint
+                        ctx.strokeStyle = 'rgba(244, 114, 182, 0.45)';
+                        ctx.lineWidth = 3;
+                        ctx.beginPath();
+                        if (isHead) {
+                            ctx.moveTo(0, -68);
+                            ctx.lineTo(0, -8);
+                        } else {
+                            ctx.moveTo(0, 10);
+                            ctx.lineTo(0, 88);
+                        }
+                        ctx.stroke();
+
+                        ctx.restore();
+                    };
+
+                    if (cutAmt < 0.05) {
+                        // Whole planaria gliding gently
+                        const bob = Math.sin(time * 2) * 5;
+                        ctx.save();
+                        ctx.translate(0, bob);
+                        ctx.beginPath();
+                        ctx.moveTo(0, -135);
+                        ctx.lineTo(-42, -100);
+                        ctx.quadraticCurveTo(-30, -82, -33, -45);
+                        ctx.lineTo(-32, 60);
+                        ctx.quadraticCurveTo(-24, 112, 0, 136);
+                        ctx.quadraticCurveTo(24, 112, 32, 60);
+                        ctx.lineTo(33, -45);
+                        ctx.quadraticCurveTo(30, -82, 42, -100);
+                        ctx.closePath();
+                        ctx.fillStyle = 'rgba(56, 189, 248, 0.3)';
+                        ctx.fill();
+                        ctx.strokeStyle = P.membrane;
+                        ctx.lineWidth = 3;
+                        ctx.stroke();
+
+                        // Eyespots
+                        [-12, 12].forEach((ex) => {
+                            ctx.fillStyle = '#fff';
+                            ctx.beginPath();
+                            ctx.arc(ex, -95, 7, 0, Math.PI * 2);
+                            ctx.fill();
+                            ctx.fillStyle = '#0f172a';
+                            ctx.beginPath();
+                            ctx.arc(ex * 0.82, -95, 3.6, 0, Math.PI * 2);
+                            ctx.fill();
+                        });
+                        // Pharynx
+                        ctx.strokeStyle = 'rgba(244, 114, 182, 0.55)';
+                        ctx.lineWidth = 3.5;
+                        ctx.beginPath();
+                        ctx.moveTo(0, -72);
+                        ctx.lineTo(0, 82);
+                        ctx.stroke();
+                        ctx.restore();
+
+                        drawCutLine(ctx, -78, bob, 78, bob, time, 0);
+                        addLabel(12, bob - 95, '眼點', 75, -25, '#ffffff');
+                        addLabel(-42, bob - 100, '耳突', -75, -18, P.cyto);
+                        addLabel(0, bob + 20, '咽 / 腸道', 85, 22, P.dna);
+                        addLabel(-72, bob, '橫切斷線', -78, 35, P.newTissue);
+                    } else {
+                        // Two regenerating halves placed side by side
+                        const sepX = lerp(0, 128, cutAmt);
+                        const yShiftH = lerp(-4, 0, regen);
+                        const yShiftT = lerp(16, 0, regen);
+
+                        drawPlanariaHalf(-sepX, yShiftH, true, regen, blastema);
+                        drawPlanariaHalf(sepX, yShiftT, false, regen, blastema);
+
+                        if (cutAmt < 0.9) {
+                            drawCutLine(ctx, -78, 0, 78, 0, time, cutAmt);
+                        }
+
+                        if (regen < 0.85) {
+                            addLabel(-sepX, yShiftH + 8, '再生芽基 (長出尾部)', -45, 72, P.newTissue);
+                            addLabel(sepX, yShiftT - 8, '再生芽基 (長出頭部)', 55, -75, P.newTissue);
+                        } else {
+                            addLabel(-sepX, yShiftH - 90, '新個體 A (頭段再生尾)', -20, -48, P.newTissue);
+                            addLabel(sepX, yShiftT - 90, '新個體 B (尾段再生頭)', 20, -48, P.newTissue);
+                            addLabel(sepX + 12, yShiftT - 95, '再生眼點', 85, -12, '#ffffff');
+                        }
+                    }
+                },
+
+                // 3B. 水綿 (Spirogyra)
+                spirogyra(ctx, p, time) {
+                    const breakAmt = ePhase(p, 0.2, 0.95);
+                    const growAmt = ePhase(p, 1.05, 3.0);
+
+                    const drawFilament = (cx, cy, cells, cellW, cellH, rot) => {
+                        ctx.save();
+                        ctx.translate(cx, cy);
+                        ctx.rotate(rot);
+                        const totalW = cells * cellW;
+                        const startX = -totalW / 2;
+
+                        for (let i = 0; i < cells; i++) {
+                            const x = startX + i * cellW;
+                            // Cell wall box
+                            ctx.fillStyle = 'rgba(34, 197, 94, 0.14)';
+                            ctx.fillRect(x, -cellH / 2, cellW, cellH);
+                            ctx.strokeStyle = P.plantLight;
+                            ctx.lineWidth = 2.4;
+                            ctx.strokeRect(x, -cellH / 2, cellW, cellH);
+
+                            // Spiral chloroplast ribbon
+                            ctx.save();
+                            ctx.beginPath();
+                            ctx.rect(x + 2, -cellH / 2 + 2, cellW - 4, cellH - 4);
+                            ctx.clip();
+
+                            ctx.strokeStyle = P.plant;
+                            ctx.lineWidth = 5;
+                            ctx.lineCap = 'round';
+                            ctx.beginPath();
+                            for (let s = 0; s <= 24; s++) {
+                                const t = s / 24;
+                                const sx = x + 3 + t * (cellW - 6);
+                                const sy = Math.sin(t * Math.PI * 3 + i) * (cellH * 0.32);
+                                if (s === 0) ctx.moveTo(sx, sy);
+                                else ctx.lineTo(sx, sy);
+                            }
+                            ctx.stroke();
+                            ctx.restore();
+
+                            // Central nucleus
+                            ctx.fillStyle = P.dna;
+                            ctx.beginPath();
+                            ctx.arc(x + cellW / 2, 0, 5.5, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                        ctx.restore();
+                    };
+
+                    const cellW = 54;
+                    const cellH = 44;
+                    const bob = Math.sin(time * 1.8) * 3;
+
+                    if (breakAmt < 0.05) {
+                        drawFilament(0, bob, 8, cellW, cellH, 0);
+                        drawCutLine(ctx, -cellW * 1.3, bob - 48, -cellW * 1.3, bob + 48, time, 0);
+                        drawCutLine(ctx, cellW * 1.3, bob - 48, cellW * 1.3, bob + 48, time, 0);
+
+                        addLabel(0, bob - cellH / 2, '細胞壁', -95, -52, P.plantLight);
+                        addLabel(cellW * 0.5, bob, '螺旋狀葉綠體', 55, -62, P.plant);
+                        addLabel(-cellW * 0.5, bob, '細胞核', -35, 68, P.dna);
+                    } else {
+                        // 3 fragments separating vertically & horizontally, then growing more cells
+                        const extraCells = Math.floor(growAmt * 4);
+                        const spreadY = lerp(0, 88, breakAmt);
+                        const spreadX = lerp(60, 0, growAmt);
+
+                        // Top fragment
+                        drawFilament(-spreadX, -spreadY + bob, 3 + extraCells, cellW, cellH, lerp(-0.08, 0, growAmt));
+                        // Middle fragment
+                        drawFilament(0, bob, 2 + extraCells, cellW, cellH, lerp(0.06, 0, growAmt));
+                        // Bottom fragment
+                        drawFilament(spreadX, spreadY + bob, 3 + extraCells, cellW, cellH, lerp(-0.05, 0, growAmt));
+
+                        if (growAmt < 0.35) {
+                            addLabel(0, -spreadY / 2, '水流外力斷裂成數段', 110, -18, P.newTissue);
+                        } else {
+                            addLabel(0, -spreadY - 24, '斷片 1：細胞有絲分裂延長', 0, -38, P.newTissue);
+                            addLabel(0, bob + 24, '斷片 2：螺旋葉綠體與核同步分裂', 0, 36, P.plant);
+                            addLabel(0, spreadY + 24, '斷片 3：獨立為新水綿絲狀體', 0, 38, P.newTissue);
+                        }
+                    }
+                },
+
+                // 3C. 海星 (Starfish)
+                starfish(ctx, p, time) {
+                    const cutAmt = ePhase(p, 0.25, 0.95);
+                    const blastema = ePhase(p, 1.0, 1.9);
+                    const regen = ePhase(p, 1.85, 3.0);
+
+                    // Helper to draw a starfish with specific arm lengths [0..1] for each of 5 arms
+                    const drawStarfish = (cx, cy, armLens, rot, discFill, isMinorPiece, minorCut) => {
+                        ctx.save();
+                        ctx.translate(cx, cy);
+                        ctx.rotate(rot);
+
+                        const outerR = 112;
+                        const innerR = 36;
+
+                        ctx.beginPath();
+                        for (let i = 0; i < 5; i++) {
+                            const baseAng = (i * Math.PI * 2) / 5 - Math.PI / 2;
+                            const nextAng = ((i + 1) * Math.PI * 2) / 5 - Math.PI / 2;
+                            const midAng = (baseAng + nextAng) / 2;
+
+                            const armFactor = armLens[i];
+                            const tipR = lerp(innerR * 0.88, outerR, armFactor);
+                            const tipX = Math.cos(baseAng) * tipR;
+                            const tipY = Math.sin(baseAng) * tipR;
+
+                            const valleyR = innerR;
+                            const vx = Math.cos(midAng) * valleyR;
+                            const vy = Math.sin(midAng) * valleyR;
+
+                            if (i === 0) {
+                                const prevMid = baseAng - Math.PI / 5;
+                                ctx.moveTo(Math.cos(prevMid) * valleyR, Math.sin(prevMid) * valleyR);
+                            }
+                            ctx.quadraticCurveTo(
+                                Math.cos(baseAng - 0.14) * tipR * 0.72,
+                                Math.sin(baseAng - 0.14) * tipR * 0.72,
+                                tipX, tipY
+                            );
+                            ctx.quadraticCurveTo(
+                                Math.cos(baseAng + 0.14) * tipR * 0.72,
+                                Math.sin(baseAng + 0.14) * tipR * 0.72,
+                                vx, vy
+                            );
+                        }
+                        ctx.closePath();
+                        ctx.fillStyle = discFill;
+                        ctx.fill();
+                        ctx.strokeStyle = P.membrane;
+                        ctx.lineWidth = 3;
+                        ctx.stroke();
+
+                        // Central disc ring
+                        ctx.beginPath();
+                        ctx.arc(0, 0, 21, 0, Math.PI * 2);
+                        ctx.fillStyle = 'rgba(244, 114, 182, 0.35)';
+                        ctx.fill();
+                        ctx.strokeStyle = P.dna;
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+
+                        // Regenerating blastema highlights on growing arms
+                        for (let i = 0; i < 5; i++) {
+                            if (armLens[i] > 0.05 && armLens[i] < 0.92 && blastema > 0.1) {
+                                const ang = (i * Math.PI * 2) / 5 - Math.PI / 2;
+                                const r = lerp(innerR * 0.9, outerR, armLens[i]);
+                                ctx.fillStyle = `rgba(253, 224, 71, ${0.85 * (1 - regen * 0.8)})`;
+                                ctx.beginPath();
+                                ctx.arc(Math.cos(ang) * r * 0.78, Math.sin(ang) * r * 0.78, 9, 0, Math.PI * 2);
+                                ctx.fill();
+                            }
+                        }
+
+                        ctx.restore();
+                    };
+
+                    if (cutAmt < 0.05) {
+                        drawStarfish(0, 5, [1, 1, 1, 1, 1], 0, 'rgba(56, 189, 248, 0.28)', false, false);
+                        drawCutLine(ctx, 22, -105, 38, 115, time, 0);
+
+                        addLabel(0, 5, '中央盤', -115, -18, P.dna);
+                        addLabel(-95, -25, '腕足', -55, -52, P.cyto);
+                        addLabel(32, 85, '含部分中央盤之斷裂線', 95, 38, P.newTissue);
+                    } else {
+                        const sep = lerp(0, 145, cutAmt);
+                        // Left piece keeps arms 0, 3, 4; regrows arms 1, 2
+                        const leftArms = [1, regen, regen, 1, 1];
+                        // Right piece keeps arms 1, 2; regrows arms 0, 3, 4
+                        const rightArms = [regen, 1, 1, regen, regen];
+
+                        drawStarfish(-sep, 8, leftArms, 0, 'rgba(56, 189, 248, 0.28)', false, false);
+                        drawStarfish(sep, 8, rightArms, 0, 'rgba(253, 224, 71, 0.22)', true, true);
+
+                        if (cutAmt < 0.85) {
+                            drawCutLine(ctx, 0, -100, 0, 115, time, cutAmt);
+                        }
+
+                        if (regen < 0.85) {
+                            addLabel(-sep + 30, 8, '保留3腕 + 部分中央盤', -40, -130, P.cyto);
+                            addLabel(sep - 30, 8, '保留2腕 + 部分中央盤', 40, -130, P.newTissue);
+                            addLabel(sep - 15, 25, '再生芽基萌發新腕足', 20, 125, P.newTissue);
+                        } else {
+                            addLabel(-sep, -110, '完整新海星 A', 0, -32, P.cyto);
+                            addLabel(sep, -110, '完整新海星 B', 0, -32, P.newTissue);
+                            addLabel(0, 140, '兩者遺傳物質完全相同', 0, 22, P.dna);
+                        }
+                    }
+                },
+
+                // 4A. 黑黴菌 (Rhizopus / Black Mold)
+                rhizopus(ctx, p, time) {
+                    const swell = ePhase(p, 0.15, 1.0);
+                    const sporeFill = ePhase(p, 0.65, 1.5);
+                    const burst = ePhase(p, 1.45, 2.35);
+                    const germ = ePhase(p, 2.15, 3.0);
+
+                    // Bread / organic substrate
+                    ctx.save();
+                    drawRoundedRectPath(ctx, -330, 125, 660, 72, 16);
+                    ctx.fillStyle = '#5c3a21';
+                    ctx.fill();
+                    ctx.strokeStyle = '#925e36';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                    ctx.restore();
+
+                    // Stolon & Rhizoids (non-septate hyphae)
+                    ctx.save();
+                    ctx.strokeStyle = P.wall;
+                    ctx.lineWidth = 4;
+                    ctx.lineCap = 'round';
+                    // Stolon
+                    ctx.beginPath();
+                    ctx.moveTo(-220, 123);
+                    ctx.quadraticCurveTo(-80, 112, 60, 123);
+                    ctx.stroke();
+
+                    // Rhizoids branching down into bread
+                    const drawRhizoid = (rx, ry, s = 1) => {
+                        ctx.save();
+                        ctx.translate(rx, ry);
+                        ctx.scale(s, s);
+                        ctx.strokeStyle = 'rgba(251, 191, 36, 0.8)';
+                        ctx.lineWidth = 2.4;
+                        [-26, -10, 8, 24].forEach((tx, idx) => {
+                            ctx.beginPath();
+                            ctx.moveTo(0, 0);
+                            ctx.quadraticCurveTo(tx * 0.4, 22, tx, 42 + (idx % 2) * 12);
+                            ctx.stroke();
+                        });
+                        ctx.restore();
+                    };
+                    drawRhizoid(-160, 124, 1);
+                    drawRhizoid(-40, 122, 0.85);
+
+                    // Tall Sporangiophore
+                    const stalkX = -160;
+                    const stalkTopY = -65;
+                    ctx.strokeStyle = P.wall;
+                    ctx.lineWidth = 5;
+                    ctx.beginPath();
+                    ctx.moveTo(stalkX, 122);
+                    ctx.quadraticCurveTo(stalkX - 8, 30, stalkX, stalkTopY);
+                    ctx.stroke();
+
+                    // Sporangium
+                    const spR = lerp(22, 42, swell);
+                    if (burst < 0.35) {
+                        ctx.beginPath();
+                        ctx.arc(stalkX, stalkTopY - spR * 0.5, spR, 0, Math.PI * 2);
+                        ctx.fillStyle = sporeFill > 0.3 ? 'rgba(126, 34, 206, 0.72)' : 'rgba(251, 191, 36, 0.25)';
+                        ctx.fill();
+                        ctx.strokeStyle = P.wall;
+                        ctx.lineWidth = 2.6;
+                        ctx.stroke();
+                    } else {
+                        // Ruptured sporangium + columella
+                        ctx.beginPath();
+                        ctx.arc(stalkX, stalkTopY - spR * 0.5, spR, Math.PI * 0.2, Math.PI * 0.8);
+                        ctx.strokeStyle = P.wall;
+                        ctx.lineWidth = 2.5;
+                        ctx.stroke();
+                        // Columella dome
+                        ctx.beginPath();
+                        ctx.arc(stalkX, stalkTopY - 8, 14, Math.PI, 0);
+                        ctx.fillStyle = 'rgba(251, 191, 36, 0.45)';
+                        ctx.fill();
+                    }
+
+                    // Spores inside or dispersing
+                    for (let i = 0; i < 36; i++) {
+                        const ang = (i * 2.39996);
+                        const dist = Math.sqrt(i / 36) * (spR - 6);
+                        let sx = stalkX + Math.cos(ang) * dist;
+                        let sy = (stalkTopY - spR * 0.5) + Math.sin(ang) * dist;
+
+                        if (burst > 0.05) {
+                            const fly = clamp((burst - (i % 6) * 0.05) / 0.75, 0, 1);
+                            const windX = (90 + (i * 29) % 240) * fly;
+                            const windY = (-70 + ((i * 41) % 180)) * fly + fly * fly * 125;
+                            sx = lerp(sx, stalkX + windX, fly);
+                            sy = lerp(sy, stalkTopY - 20 + windY, fly);
+                        }
+                        if (sporeFill > 0.05) {
+                            ctx.fillStyle = P.spore;
+                            ctx.beginPath();
+                            ctx.arc(sx, sy, 3.6, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                    }
+
+                    // Germinating landed spores on the right
+                    if (germ > 0.05) {
+                        const spots = [115, 205];
+                        spots.forEach((gx, idx) => {
+                            const gAmt = clamp((germ - idx * 0.15) / 0.85, 0, 1);
+                            if (gAmt <= 0) return;
+                            ctx.fillStyle = P.spore;
+                            ctx.beginPath();
+                            ctx.arc(gx, 121, 5.5, 0, Math.PI * 2);
+                            ctx.fill();
+
+                            // Growing new hyphae
+                            ctx.strokeStyle = P.newTissue;
+                            ctx.lineWidth = 3;
+                            ctx.beginPath();
+                            ctx.moveTo(gx, 121);
+                            ctx.quadraticCurveTo(gx + 10 * gAmt, 121 - 35 * gAmt, gx + 4 * gAmt, 121 - 65 * gAmt);
+                            ctx.stroke();
+                            if (gAmt > 0.4) {
+                                drawRhizoid(gx, 124, gAmt * 0.75);
+                            }
+                        });
+                        addLabel(160, 75, '孢子萌發為新菌絲', 45, -45, P.newTissue);
+                    }
+
+                    ctx.restore();
+
+                    addLabel(-160, stalkTopY - spR * 0.9, '孢子囊 (含大量單倍體孢子)', -15, -48, P.spore);
+                    addLabel(-160, 28, '孢子囊柄 (直立菌絲)', -92, -12, P.wall);
+                    addLabel(-65, 115, '匍匐菌絲 (無隔膜)', 15, -35, P.wall);
+                    addLabel(-160, 152, '假根 (固定與吸收養分)', -60, 48, P.wall);
+                    if (burst > 0.2) {
+                        addLabel(-25, -45, '孢子隨氣流散播', 35, -45, P.spore);
+                    }
+                },
+
+                // 4B. 青黴菌 (Penicillium)
+                penicillium(ctx, p, time) {
+                    const branchGrow = ePhase(p, 0.1, 0.9);
+                    const chainGrow = ePhase(p, 0.75, 1.75);
+                    const disperse = ePhase(p, 1.65, 2.45);
+                    const germ = ePhase(p, 2.25, 3.0);
+
+                    // Substrate
+                    ctx.save();
+                    drawRoundedRectPath(ctx, -330, 130, 660, 66, 14);
+                    ctx.fillStyle = '#334155';
+                    ctx.fill();
+                    ctx.strokeStyle = '#64748b';
+                    ctx.lineWidth = 2.5;
+                    ctx.stroke();
+
+                    // Septate hyphae along substrate
+                    const drawSeptateSegment = (x1, y1, x2, y2, segs) => {
+                        ctx.strokeStyle = P.wall;
+                        ctx.lineWidth = 5;
+                        ctx.beginPath();
+                        ctx.moveTo(x1, y1);
+                        ctx.lineTo(x2, y2);
+                        ctx.stroke();
+                        // Septa cross-walls
+                        ctx.strokeStyle = '#0f172a';
+                        ctx.lineWidth = 2;
+                        for (let i = 1; i < segs; i++) {
+                            const t = i / segs;
+                            const px = lerp(x1, x2, t);
+                            const py = lerp(y1, y2, t);
+                            const ang = Math.atan2(y2 - y1, x2 - x1) + Math.PI / 2;
+                            ctx.beginPath();
+                            ctx.moveTo(px - Math.cos(ang) * 3.5, py - Math.sin(ang) * 3.5);
+                            ctx.lineTo(px + Math.cos(ang) * 3.5, py + Math.sin(ang) * 3.5);
+                            ctx.stroke();
+                        }
+                    };
+
+                    drawSeptateSegment(-260, 127, 40, 127, 8);
+                    // Erect Conidiophore (Septate)
+                    const cx = -135;
+                    drawSeptateSegment(cx, 127, cx, -12, 5);
+
+                    // Broom-like branches (Metulae + Phialides)
+                    const branches = [-28, 0, 28];
+                    const subAngles = [-14, 14];
+                    branches.forEach((bx) => {
+                        const bLen = lerp(12, 42, branchGrow);
+                        ctx.strokeStyle = P.wall;
+                        ctx.lineWidth = 4;
+                        ctx.beginPath();
+                        ctx.moveTo(cx, -12);
+                        ctx.lineTo(cx + bx * branchGrow, -12 - bLen);
+                        ctx.stroke();
+
+                        if (branchGrow > 0.35) {
+                            subAngles.forEach((sxOff, sIdx) => {
+                                const px1 = cx + bx * branchGrow;
+                                const py1 = -12 - bLen;
+                                const px2 = px1 + sxOff * 0.8;
+                                const py2 = py1 - 28;
+                                ctx.strokeStyle = P.plantLight;
+                                ctx.lineWidth = 3;
+                                ctx.beginPath();
+                                ctx.moveTo(px1, py1);
+                                ctx.lineTo(px2, py2);
+                                ctx.stroke();
+
+                                // Chains of Conidiospores (green-violet)
+                                const numSpores = Math.floor(chainGrow * 5);
+                                for (let k = 0; k < numSpores; k++) {
+                                    let spX = px2 + sxOff * 0.14 * (k + 1);
+                                    let spY = py2 - 11 * (k + 1);
+
+                                    if (disperse > 0.05 && k >= 1) {
+                                        const fly = clamp((disperse - (4 - k) * 0.12) / 0.7, 0, 1);
+                                        if (fly > 0) {
+                                            spX += fly * (135 + (k * 37 + sIdx * 55));
+                                            spY += fly * (-45 + (bx + k * 24)) + fly * fly * 115;
+                                        }
+                                    }
+                                    ctx.fillStyle = (k % 2 === 0) ? P.plant : P.spore;
+                                    ctx.beginPath();
+                                    ctx.arc(spX, spY, 5, 0, Math.PI * 2);
+                                    ctx.fill();
+                                    ctx.strokeStyle = '#0f172a';
+                                    ctx.lineWidth = 1;
+                                    ctx.stroke();
+                                }
+                            });
+                        }
+                    });
+
+                    // Germinating conidia on the right
+                    if (germ > 0.05) {
+                        [115, 205].forEach((gx, idx) => {
+                            const g = clamp((germ - idx * 0.15) / 0.85, 0, 1);
+                            if (g <= 0) return;
+                            ctx.fillStyle = P.plant;
+                            ctx.beginPath();
+                            ctx.arc(gx, 125, 5.5, 0, Math.PI * 2);
+                            ctx.fill();
+                            drawSeptateSegment(gx, 125, gx + 48 * g, 125 - 45 * g, 3);
+                        });
+                        addLabel(165, 88, '分生孢子萌發為有隔菌絲', 45, -45, P.newTissue);
+                    }
+
+                    ctx.restore();
+
+                    addLabel(cx, 55, '分生孢子梗 (具細胞隔膜)', -110, -10, P.wall);
+                    addLabel(cx, -50, '掃帚狀分枝', -105, -20, P.plantLight);
+                    addLabel(cx + 15, -115, '串狀分生孢子 (外生無囊壁)', 55, -35, P.spore);
+                    addLabel(-65, 127, '有隔膜菌絲', -40, 48, P.wall);
+                },
+
+                // 5A. 落地生根 (Bryophyllum - Leaf)
+                bryophyllum(ctx, p, time) {
+                    const budAmt = ePhase(p, 0.2, 1.15);
+                    const rootAmt = ePhase(p, 1.0, 2.05);
+                    const dropAmt = ePhase(p, 2.05, 3.0);
+
+                    drawSoilBed(ctx, 115);
+
+                    // Main fleshy Bryophyllum leaf
+                    ctx.save();
+                    ctx.translate(-35, -35);
+                    ctx.rotate(-0.18);
+
+                    // Scalloped leaf path
+                    const notchPts = [];
+                    ctx.beginPath();
+                    ctx.moveTo(-155, 0);
+                    for (let i = 0; i <= 4; i++) {
+                        const x1 = lerp(-140, 145, i / 5);
+                        const x2 = lerp(-140, 145, (i + 1) / 5);
+                        const xm = (x1 + x2) / 2;
+                        const yEdge = -Math.sin(((i + 0.5) / 5) * Math.PI) * 76 - 10;
+                        const yNotch = -Math.sin(((i + 1) / 5) * Math.PI) * 62 - 6;
+                        ctx.quadraticCurveTo(xm, yEdge - 14, x2, yNotch);
+                        if (i < 4) notchPts.push({ x: x2, y: yNotch, side: -1 });
+                    }
+                    ctx.quadraticCurveTo(175, 0, 155, 14);
+                    for (let i = 4; i >= 0; i--) {
+                        const x1 = lerp(-140, 145, (i + 1) / 5);
+                        const x2 = lerp(-140, 145, i / 5);
+                        const xm = (x1 + x2) / 2;
+                        const yEdge = Math.sin(((i + 0.5) / 5) * Math.PI) * 76 + 10;
+                        const yNotch = Math.sin((i / 5) * Math.PI) * 62 + 6;
+                        ctx.quadraticCurveTo(xm, yEdge + 14, x2, yNotch);
+                        if (i > 0) notchPts.push({ x: x2, y: yNotch, side: 1 });
+                    }
+                    ctx.closePath();
+                    ctx.fillStyle = P.plantDark;
+                    ctx.fill();
+                    ctx.strokeStyle = P.plantLight;
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+
+                    // Midrib vein
+                    ctx.strokeStyle = 'rgba(134, 239, 172, 0.45)';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(-165, 0);
+                    ctx.lineTo(148, 0);
+                    ctx.stroke();
+
+                    // Plantlets at leaf notches
+                    const drawPlantlet = (px, py, scale, roots, color) => {
+                        ctx.save();
+                        ctx.translate(px, py);
+                        ctx.scale(scale, scale);
+                        // Roots
+                        if (roots > 0.05) {
+                            ctx.strokeStyle = P.newTissue;
+                            ctx.lineWidth = 1.8;
+                            [-6, 0, 6].forEach((rx) => {
+                                ctx.beginPath();
+                                ctx.moveTo(0, 2);
+                                ctx.quadraticCurveTo(rx * 0.5, 14 * roots, rx, 26 * roots);
+                                ctx.stroke();
+                            });
+                        }
+                        // Tiny stem & 2 pairs of leaves
+                        ctx.fillStyle = color;
+                        ctx.beginPath();
+                        ctx.ellipse(-10, -8, 11, 5.5, -0.45, 0, Math.PI * 2);
+                        ctx.ellipse(10, -8, 11, 5.5, 0.45, 0, Math.PI * 2);
+                        ctx.ellipse(0, -15, 6, 9, 0, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.restore();
+                    };
+
+                    // Keep upper plantlets on leaf, drop bottom ones to soil!
+                    notchPts.forEach((pt, idx) => {
+                        if (idx % 2 === 0 && budAmt > 0.05) {
+                            if (pt.side === 1 && dropAmt > 0.05) {
+                                // Dropping onto soil
+                                ctx.save();
+                                ctx.rotate(0.18); // unrotate into world space roughly
+                                ctx.restore();
+                            } else {
+                                drawPlantlet(pt.x, pt.y, lerp(0.2, 1.05, budAmt), rootAmt, P.plantLight);
+                            }
+                        }
+                    });
+                    ctx.restore();
+
+                    // Dropped plantlets on soil surface
+                    if (dropAmt > 0.05 || budAmt > 0.1) {
+                        const spots = [-105, 15, 125];
+                        spots.forEach((sx, idx) => {
+                            if (dropAmt > 0.02) {
+                                const startY = 30 + idx * 5;
+                                const curY = lerp(startY, 112, dropAmt);
+                                const curScale = lerp(0.95, 1.4, dropAmt);
+                                ctx.save();
+                                ctx.translate(sx, curY);
+                                ctx.scale(curScale, curScale);
+                                ctx.strokeStyle = P.newTissue;
+                                ctx.lineWidth = 2;
+                                [-8, -2, 4, 9].forEach((rx) => {
+                                    ctx.beginPath();
+                                    ctx.moveTo(0, 2);
+                                    ctx.quadraticCurveTo(rx * 0.5, 18, rx * 1.1, 32);
+                                    ctx.stroke();
+                                });
+                                ctx.fillStyle = P.plant;
+                                ctx.beginPath();
+                                ctx.ellipse(-12, -9, 13, 6.5, -0.45, 0, Math.PI * 2);
+                                ctx.ellipse(12, -9, 13, 6.5, 0.45, 0, Math.PI * 2);
+                                ctx.ellipse(0, -17, 7, 10, 0, 0, Math.PI * 2);
+                                ctx.fill();
+                                ctx.restore();
+                            }
+                        });
+                    }
+
+                    addLabel(-90, -5, '肥厚葉片 (營養器官)', -110, 52, P.plant);
+                    addLabel(-45, -108, '葉緣缺刻處長出小芽體', -65, -45, P.newTissue);
+                    if (rootAmt > 0.25) {
+                        addLabel(45, -90, '不定根', 85, -42, P.newTissue);
+                    }
+                    if (dropAmt > 0.3) {
+                        addLabel(125, 105, '掉落土中成為獨立新植株', 45, -52, P.plantLight);
+                    }
+                },
+
+                // 5B. 石蓮 (Echeveria - Leaf)
+                echeveria(ctx, p, time) {
+                    const rootAmt = ePhase(p, 0.2, 1.2);
+                    const sproutAmt = ePhase(p, 0.85, 2.2);
+                    const witherAmt = ePhase(p, 2.1, 3.0);
+
+                    drawSoilBed(ctx, 85);
+
+                    // Parent succulent leaf lying on soil
+                    ctx.save();
+                    ctx.translate(-30, 62);
+                    const shrink = 1 - witherAmt * 0.42;
+                    ctx.scale(shrink, shrink * (1 - witherAmt * 0.35));
+                    ctx.beginPath();
+                    ctx.moveTo(100, 12); // leaf base (callus)
+                    ctx.bezierCurveTo(60, -32, -80, -38, -145, -8);
+                    ctx.bezierCurveTo(-110, 26, 20, 32, 100, 12);
+                    ctx.closePath();
+                    ctx.fillStyle = witherAmt > 0.5 ? '#6b7280' : '#34d399';
+                    ctx.fill();
+                    ctx.strokeStyle = witherAmt > 0.5 ? '#9ca3af' : P.plantLight;
+                    ctx.lineWidth = 2.8;
+                    ctx.stroke();
+                    ctx.restore();
+
+                    const basePointX = 70 - witherAmt * 42;
+                    const basePointY = 74;
+
+                    // Adventitious roots into soil
+                    if (rootAmt > 0.05) {
+                        ctx.save();
+                        ctx.strokeStyle = P.dna;
+                        ctx.lineWidth = 2.6;
+                        const roots = [-32, -14, 4, 22, 42];
+                        roots.forEach((rx, idx) => {
+                            const rLen = lerp(5, 78, clamp(rootAmt + witherAmt * 0.3, 0, 1.2));
+                            ctx.beginPath();
+                            ctx.moveTo(basePointX, basePointY + 6);
+                            ctx.quadraticCurveTo(
+                                basePointX + rx * 0.5,
+                                basePointY + rLen * 0.5,
+                                basePointX + rx,
+                                basePointY + rLen + (idx % 2) * 10
+                            );
+                            ctx.stroke();
+                        });
+                        ctx.restore();
+                        addLabel(basePointX + 12, basePointY + 42, '不定根 (深入土壤)', 85, 32, P.dna);
+                    }
+
+                    // New rosette of succulent leaves
+                    if (sproutAmt > 0.05) {
+                        const s = lerp(0.15, 1.15, clamp(sproutAmt + witherAmt * 0.25, 0, 1.25));
+                        ctx.save();
+                        ctx.translate(basePointX, basePointY + 2);
+                        ctx.scale(s, s);
+                        const angles = [-1.15, -0.65, 0.65, 1.15, -0.32, 0.32, 0];
+                        angles.forEach((ang, idx) => {
+                            ctx.save();
+                            ctx.rotate(ang);
+                            ctx.beginPath();
+                            ctx.moveTo(0, 0);
+                            ctx.bezierCurveTo(-16, -24, -14, -56, 0, -68);
+                            ctx.bezierCurveTo(14, -56, 16, -24, 0, 0);
+                            ctx.closePath();
+                            ctx.fillStyle = idx >= 4 ? P.plantLight : P.plant;
+                            ctx.fill();
+                            ctx.strokeStyle = P.plantDark;
+                            ctx.lineWidth = 1.8;
+                            ctx.stroke();
+                            ctx.restore();
+                        });
+                        ctx.restore();
+                        addLabel(basePointX, basePointY - 52 * s, '蓮座狀新植株', 55, -45, P.newTissue);
+                    }
+
+                    addLabel(-95, 55, witherAmt > 0.6 ? '母葉養分耗盡枯萎' : '飽滿母葉 (葉插)', -45, -62, P.plantLight);
+                },
+
+                // 5C. 草莓 (Strawberry - Stolon)
+                strawberry(ctx, p, time) {
+                    const stolonAmt = ePhase(p, 0.1, 1.1);
+                    const rootAmt = ePhase(p, 1.0, 2.05);
+                    const severAmt = ePhase(p, 2.15, 3.0);
+
+                    drawSoilBed(ctx, 90);
+
+                    const drawStrawberryPlant = (cx, cy, scale, hasBerry) => {
+                        ctx.save();
+                        ctx.translate(cx, cy);
+                        ctx.scale(scale, scale);
+
+                        // Fibrous roots
+                        ctx.strokeStyle = P.root;
+                        ctx.lineWidth = 2.4;
+                        [-28, -12, 0, 14, 30].forEach((rx, idx) => {
+                            ctx.beginPath();
+                            ctx.moveTo(0, 0);
+                            ctx.quadraticCurveTo(rx * 0.5, 28, rx, 58 + (idx % 2) * 14);
+                            ctx.stroke();
+                        });
+
+                        // Stems & trifoliate leaves
+                        const stems = [-0.65, -0.2, 0.25, 0.65];
+                        stems.forEach((ang, idx) => {
+                            const tipX = Math.sin(ang) * 78;
+                            const tipY = -Math.cos(ang) * 78;
+                            ctx.strokeStyle = P.plantDark;
+                            ctx.lineWidth = 3.5;
+                            ctx.beginPath();
+                            ctx.moveTo(0, 0);
+                            ctx.quadraticCurveTo(tipX * 0.4, tipY * 0.6, tipX, tipY);
+                            ctx.stroke();
+
+                            ctx.save();
+                            ctx.translate(tipX, tipY);
+                            ctx.rotate(ang);
+                            drawLeafShape(ctx, 32, 13, P.plant, P.plantLight);
+                            ctx.rotate(-0.85);
+                            drawLeafShape(ctx, 26, 11, P.plant, P.plantLight);
+                            ctx.rotate(1.7);
+                            drawLeafShape(ctx, 26, 11, P.plant, P.plantLight);
+                            ctx.restore();
+                        });
+
+                        if (hasBerry) {
+                            ctx.strokeStyle = P.plantDark;
+                            ctx.lineWidth = 2.5;
+                            ctx.beginPath();
+                            ctx.moveTo(-12, -5);
+                            ctx.quadraticCurveTo(-48, -22, -52, 2);
+                            ctx.stroke();
+                            // Red strawberry
+                            ctx.fillStyle = '#ef4444';
+                            ctx.beginPath();
+                            ctx.moveTo(-58, 2);
+                            ctx.bezierCurveTo(-66, 12, -58, 28, -52, 28);
+                            ctx.bezierCurveTo(-46, 28, -38, 12, -46, 2);
+                            ctx.closePath();
+                            ctx.fill();
+                        }
+                        ctx.restore();
+                    };
+
+                    const parentX = -145;
+                    const childX = 125;
+
+                    // Parent plant
+                    drawStrawberryPlant(parentX, 90, 1.05, true);
+
+                    // Stolon (Runner)
+                    if (stolonAmt > 0.05) {
+                        const endX = lerp(parentX + 15, childX, stolonAmt);
+                        const midX = (parentX + endX) / 2;
+                        ctx.save();
+                        ctx.strokeStyle = severAmt > 0.5 ? '#92400e' : P.newTissue;
+                        ctx.lineWidth = 4.5;
+                        if (severAmt > 0.45) {
+                            ctx.setLineDash([8, 8]);
+                            ctx.globalAlpha = 1 - (severAmt - 0.45) * 1.4;
+                        }
+                        ctx.beginPath();
+                        ctx.moveTo(parentX + 8, 86);
+                        ctx.quadraticCurveTo(midX, 32, endX, 88);
+                        ctx.stroke();
+                        ctx.restore();
+
+                        if (severAmt < 0.7) {
+                            addLabel(midX, 55, '匍匐莖 (水平特化莖)', 0, -48, P.newTissue);
+                        }
+                    }
+
+                    // Node & Daughter plant
+                    if (rootAmt > 0.05) {
+                        // Node dot
+                        ctx.fillStyle = P.newTissue;
+                        ctx.beginPath();
+                        ctx.arc(childX, 88, 6, 0, Math.PI * 2);
+                        ctx.fill();
+
+                        drawStrawberryPlant(childX, 90, lerp(0.15, 0.92, clamp(rootAmt + severAmt * 0.2, 0, 1.1)), false);
+                        addLabel(childX, 88, '節 (接觸土壤生根長芽)', 45, 58, P.newTissue);
+                        addLabel(childX, 22, '子代草莓植株', 40, -35, P.plantLight);
+                    }
+
+                    addLabel(parentX, 12, '親代草莓植株', -40, -42, P.plant);
+                },
+
+                // 5D. 番薯 (Sweet Potato - Tuberous Root)
+                sweetpotato(ctx, p, time) {
+                    const budAmt = ePhase(p, 0.15, 1.1);
+                    const shootAmt = ePhase(p, 0.85, 2.15);
+                    const leafAmt = ePhase(p, 1.75, 3.0);
+
+                    drawSoilBed(ctx, 45);
+
+                    // Swollen tuberous root embedded in soil
+                    ctx.save();
+                    ctx.translate(-10, 92);
+                    ctx.rotate(-0.08);
+                    ctx.beginPath();
+                    ctx.moveTo(-145, 0);
+                    ctx.bezierCurveTo(-95, -52, 85, -54, 150, 0);
+                    ctx.bezierCurveTo(95, 54, -85, 52, -145, 0);
+                    ctx.closePath();
+                    ctx.fillStyle = '#9d174d'; // purple-red sweet potato skin
+                    ctx.fill();
+                    ctx.strokeStyle = '#f472b6';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+
+                    // Cream starch interior hint / sheen
+                    ctx.beginPath();
+                    ctx.ellipse(0, -14, 95, 16, 0, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(253, 230, 138, 0.15)';
+                    ctx.fill();
+                    ctx.restore();
+
+                    // New fibrous roots below tuber
+                    if (shootAmt > 0.15) {
+                        ctx.save();
+                        ctx.strokeStyle = P.tuber;
+                        ctx.lineWidth = 2.2;
+                        [-75, -25, 20, 68].forEach((rx, idx) => {
+                            const rLen = lerp(4, 52, shootAmt);
+                            ctx.beginPath();
+                            ctx.moveTo(rx, 132);
+                            ctx.quadraticCurveTo(rx - 10, 132 + rLen * 0.6, rx + (idx % 2 ? 14 : -14), 132 + rLen);
+                            ctx.stroke();
+                        });
+                        ctx.restore();
+                        addLabel(15, 162, '新長出的鬚根', 95, 25, P.tuber);
+                    }
+
+                    // Adventitious buds & leafy vines sprouting upward
+                    const sproutSpots = [{ x: -55, y: 55, dir: -0.22 }, { x: 25, y: 48, dir: 0.18 }];
+                    sproutSpots.forEach((sp, idx) => {
+                        if (budAmt > 0.05) {
+                            const h = lerp(10, 165, clamp(shootAmt + leafAmt * 0.25, 0, 1.2));
+                            ctx.save();
+                            ctx.translate(sp.x, sp.y);
+                            // Vine stem
+                            ctx.strokeStyle = P.plant;
+                            ctx.lineWidth = 5;
+                            ctx.lineCap = 'round';
+                            ctx.beginPath();
+                            ctx.moveTo(0, 0);
+                            const tipX = Math.sin(sp.dir) * h;
+                            const tipY = -h;
+                            ctx.quadraticCurveTo(tipX * 0.25 - 12, -h * 0.5, tipX, tipY);
+                            ctx.stroke();
+
+                            // Heart-shaped sweet potato leaves
+                            if (shootAmt > 0.2) {
+                                const numLeaves = Math.floor(lerp(1, 5, clamp(shootAmt * 0.6 + leafAmt * 0.5, 0, 1)));
+                                for (let k = 1; k <= numLeaves; k++) {
+                                    const t = k / (numLeaves + 0.5);
+                                    const lx = tipX * t;
+                                    const ly = tipY * t;
+                                    ctx.save();
+                                    ctx.translate(lx, ly);
+                                    ctx.rotate(k % 2 === 0 ? 0.65 : -2.45);
+                                    const lScale = lerp(0.4, 1.0, leafAmt * 0.6 + 0.4);
+                                    ctx.scale(lScale, lScale);
+                                    drawLeafShape(ctx, 42, 18, P.plant, P.plantLight);
+                                    ctx.restore();
+                                }
+                            }
+                            ctx.restore();
+                        }
+                    });
+
+                    addLabel(-85, 95, '塊根 (儲存大量澱粉)', -95, 58, P.dna);
+                    if (budAmt > 0.15) {
+                        addLabel(-55, 52, '不定芽萌發', -98, -32, P.newTissue);
+                    }
+                    if (shootAmt > 0.35) {
+                        addLabel(45, -45, '新蔓莖與葉 (可剪下扦插)', 75, -38, P.plantLight);
+                    }
+                },
+
+                // 5E. 馬鈴薯 (Potato - Stem Tuber)
+                potato(ctx, p, time) {
+                    const sproutAmt = ePhase(p, 0.2, 1.25);
+                    const rootAmt = ePhase(p, 1.0, 2.2);
+                    const canopyAmt = ePhase(p, 1.8, 3.0);
+
+                    drawSoilBed(ctx, 35);
+
+                    // Underground stem tuber (Potato)
+                    ctx.save();
+                    ctx.translate(0, 108);
+                    ctx.beginPath();
+                    ctx.ellipse(0, 0, 118, 58, -0.05, 0, Math.PI * 2);
+                    ctx.fillStyle = '#ca8a04';
+                    ctx.fill();
+                    ctx.strokeStyle = '#fde047';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+
+                    // Potato eyes (nodes & axillary buds)
+                    const eyes = [
+                        { x: -62, y: -32 },
+                        { x: 18, y: -44 },
+                        { x: 74, y: -22 },
+                        { x: -35, y: 12 },
+                        { x: 42, y: 18 }
+                    ];
+                    eyes.forEach((ey) => {
+                        ctx.strokeStyle = '#713f12';
+                        ctx.lineWidth = 2.5;
+                        ctx.beginPath();
+                        ctx.arc(ey.x, ey.y + 4, 11, Math.PI * 1.15, Math.PI * 1.85);
+                        ctx.stroke();
+                        ctx.fillStyle = P.newTissue;
+                        ctx.beginPath();
+                        ctx.arc(ey.x, ey.y, 4, 0, Math.PI * 2);
+                        ctx.fill();
+                    });
+                    ctx.restore();
+
+                    // Sprouting shoots from upper eyes
+                    const activeEyes = [{ x: -62, y: 76, lean: -28 }, { x: 18, y: 64, lean: 18 }];
+                    activeEyes.forEach((ey, idx) => {
+                        if (sproutAmt > 0.05) {
+                            const h = lerp(10, 195, clamp(sproutAmt * 0.55 + canopyAmt * 0.55, 0, 1.15));
+                            ctx.save();
+                            ctx.translate(ey.x, ey.y);
+                            ctx.strokeStyle = P.plant;
+                            ctx.lineWidth = 6;
+                            ctx.lineCap = 'round';
+                            ctx.beginPath();
+                            ctx.moveTo(0, 0);
+                            ctx.quadraticCurveTo(ey.lean * 0.4, -h * 0.5, ey.lean, -h);
+                            ctx.stroke();
+
+                            // Adventitious roots growing from the BASE OF THE NEW SPROUT (below soil, above tuber)
+                            if (rootAmt > 0.1) {
+                                ctx.strokeStyle = P.tuber;
+                                ctx.lineWidth = 2;
+                                [-22, -10, 12, 24].forEach((rx) => {
+                                    const rScale = rootAmt;
+                                    ctx.beginPath();
+                                    ctx.moveTo(ey.lean * 0.1, -14);
+                                    ctx.quadraticCurveTo(rx * 0.6 * rScale, -4, rx * rScale, 18 * rScale);
+                                    ctx.stroke();
+                                });
+                            }
+
+                            // Leaves above soil (y < 35 in world, so relative y < 35 - ey.y)
+                            if (canopyAmt > 0.1 || sproutAmt > 0.75) {
+                                const lGrow = clamp((h - 45) / 140, 0, 1);
+                                if (lGrow > 0.05) {
+                                    for (let k = 0; k < 4; k++) {
+                                        const ly = -55 - k * 34 * lGrow;
+                                        const lx = ey.lean * (0.4 + k * 0.18);
+                                        ctx.save();
+                                        ctx.translate(lx, ly);
+                                        ctx.rotate(k % 2 === 0 ? -0.55 : -2.55);
+                                        ctx.scale(lGrow, lGrow);
+                                        drawLeafShape(ctx, 38, 15, P.plant, P.plantLight);
+                                        ctx.restore();
+                                    }
+                                }
+                            }
+                            ctx.restore();
+                        }
+                    });
+
+                    addLabel(74, 86, '芽眼 (塊莖的節與腋芽)', 88, 22, P.newTissue);
+                    addLabel(-5, 138, '塊莖 (地下莖，儲存養分)', -85, 52, P.wall);
+                    if (rootAmt > 0.25) {
+                        addLabel(-48, 66, '幼芽基部長出不定根', -115, -22, P.tuber);
+                    }
+                    if (canopyAmt > 0.25) {
+                        addLabel(35, -75, '新植株莖葉', 85, -25, P.plantLight);
+                    }
+                },
+
+                // 6. 組織培養 - 蘭花 (Tissue Culture - Orchid)
+                orchid(ctx, p, time) {
+                    const s1 = ePhase(p, 0.05, 0.95); // Step 1 -> 2 (Explant into Callus/PLB)
+                    const s2 = ePhase(p, 1.0, 2.0);   // Step 2 -> 3 (Hormone differentiation -> shoots & roots)
+                    const s3 = ePhase(p, 2.0, 3.0);   // Step 3 -> 4 (Acclimatization -> Potted identical clones)
+
+                    // Helper to draw a sterile Erlenmeyer / Culture Flask
+                    const drawCultureFlask = (fx, fy, scale) => {
+                        ctx.save();
+                        ctx.translate(fx, fy);
+                        ctx.scale(scale, scale);
+
+                        // Agar medium inside bottom
+                        ctx.beginPath();
+                        ctx.moveTo(-72, 62);
+                        ctx.lineTo(72, 62);
+                        ctx.quadraticCurveTo(82, 92, 62, 102);
+                        ctx.lineTo(-62, 102);
+                        ctx.quadraticCurveTo(-82, 92, -72, 62);
+                        ctx.closePath();
+                        ctx.fillStyle = 'rgba(45, 212, 191, 0.38)';
+                        ctx.fill();
+                        ctx.strokeStyle = P.agar;
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+
+                        // Flask glass outline
+                        ctx.beginPath();
+                        ctx.moveTo(-26, -108);
+                        ctx.lineTo(-26, -42);
+                        ctx.lineTo(-78, 72);
+                        ctx.quadraticCurveTo(-86, 106, -58, 106);
+                        ctx.lineTo(58, 106);
+                        ctx.quadraticCurveTo(86, 106, 78, 72);
+                        ctx.lineTo(26, -42);
+                        ctx.lineTo(26, -108);
+                        ctx.closePath();
+                        ctx.fillStyle = 'rgba(186, 230, 253, 0.08)';
+                        ctx.fill();
+                        ctx.strokeStyle = 'rgba(186, 230, 253, 0.65)';
+                        ctx.lineWidth = 3;
+                        ctx.stroke();
+
+                        // Sterile cotton/foil cap
+                        drawRoundedRectPath(ctx, -30, -126, 60, 22, 8);
+                        ctx.fillStyle = '#94a3b8';
+                        ctx.fill();
+                        ctx.strokeStyle = '#cbd5e1';
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+
+                        ctx.restore();
+                    };
+
+                    const drawOrchidFlower = (ox, oy, scale, col = '#e879f9') => {
+                        ctx.save();
+                        ctx.translate(ox, oy);
+                        ctx.scale(scale, scale);
+                        // Petals
+                        const pAngs = [-0.9, 0.9, -2.1, 2.1, 0];
+                        pAngs.forEach((a, i) => {
+                            ctx.save();
+                            ctx.rotate(a);
+                            ctx.fillStyle = col;
+                            ctx.beginPath();
+                            ctx.ellipse(0, -14, i === 4 ? 7 : 9, 14, 0, 0, Math.PI * 2);
+                            ctx.fill();
+                            ctx.restore();
+                        });
+                        // Lip (labellum)
+                        ctx.fillStyle = P.dnaDark;
+                        ctx.beginPath();
+                        ctx.ellipse(0, 7, 7, 9, 0, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.fillStyle = P.newTissue;
+                        ctx.beginPath();
+                        ctx.arc(0, 0, 3.5, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.restore();
+                    };
+
+                    if (p < 0.75) {
+                        // Stage 1: Parent Orchid + Meristem excision
+                        const fadeOut = 1 - phase(p, 0.45, 0.75);
+                        ctx.save();
+                        ctx.globalAlpha = fadeOut;
+
+                        // Parent orchid pot on left
+                        drawRoundedRectPath(ctx, -230, 80, 110, 82, 10);
+                        ctx.fillStyle = '#78350f';
+                        ctx.fill();
+                        ctx.strokeStyle = '#b45309';
+                        ctx.lineWidth = 2.5;
+                        ctx.stroke();
+
+                        // Leaves
+                        [-1, 1].forEach((d) => {
+                            ctx.save();
+                            ctx.translate(-175, 80);
+                            ctx.rotate(d * 0.55 - Math.PI / 2);
+                            drawLeafShape(ctx, 88, 22, P.plant, P.plantLight);
+                            ctx.restore();
+                        });
+                        // Flower spike
+                        ctx.strokeStyle = P.plantDark;
+                        ctx.lineWidth = 4;
+                        ctx.beginPath();
+                        ctx.moveTo(-175, 80);
+                        ctx.quadraticCurveTo(-165, -20, -125, -75);
+                        ctx.stroke();
+                        drawOrchidFlower(-125, -75, 1.0);
+                        drawOrchidFlower(-152, -32, 0.85);
+
+                        // Zoomed Meristem Tip on right
+                        ctx.strokeStyle = 'rgba(45, 212, 191, 0.5)';
+                        ctx.setLineDash([5, 5]);
+                        ctx.beginPath();
+                        ctx.arc(-175, 65, 22, 0, Math.PI * 2);
+                        ctx.stroke();
+                        ctx.setLineDash([]);
+
+                        // Magnified circle
+                        ctx.beginPath();
+                        ctx.arc(105, -10, 92, 0, Math.PI * 2);
+                        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+                        ctx.fill();
+                        ctx.strokeStyle = P.agar;
+                        ctx.lineWidth = 3;
+                        ctx.stroke();
+
+                        // Shoot apical meristem inside circle
+                        ctx.fillStyle = P.plant;
+                        ctx.beginPath();
+                        ctx.moveTo(65, 45);
+                        ctx.quadraticCurveTo(105, -55, 145, 45);
+                        ctx.closePath();
+                        ctx.fill();
+                        // Meristem dome (bright yellow-green)
+                        ctx.fillStyle = P.newTissue;
+                        ctx.beginPath();
+                        ctx.arc(105, -20, 20, 0, Math.PI * 2);
+                        ctx.fill();
+
+                        // Scalpel cut line
+                        drawCutLine(ctx, 55, -2, 155, -2, time, 0);
+                        ctx.restore();
+
+                        addLabel(-175, 65, '取親代莖頂分生組織', -85, -45, P.plantLight);
+                        addLabel(105, -25, '生長點 (無病毒培植體)', 85, -62, P.newTissue);
+                        addLabel(105, 52, '表面消毒滅菌', 75, 45, P.agar);
+                    }
+
+                    if (p >= 0.4 && p < 2.65) {
+                        // Stage 2 & 3: Sterile Culture Flask (Callus -> Organogenesis)
+                        const fadeIn = phase(p, 0.4, 0.75);
+                        const fadeOut = 1 - phase(p, 2.35, 2.65);
+                        ctx.save();
+                        ctx.globalAlpha = fadeIn * fadeOut;
+
+                        drawCultureFlask(-35, 12, 1.25);
+
+                        // Contents inside agar (around y = 86)
+                        if (s2 < 0.25) {
+                            // Callus / PLB proliferation
+                            const blobs = Math.floor(lerp(1, 9, s1));
+                            for (let i = 0; i < blobs; i++) {
+                                const bx = -35 + ((i % 3) - 1) * 24 + Math.sin(i * 2.1) * 6;
+                                const by = 84 - Math.floor(i / 3) * 12;
+                                ctx.fillStyle = i % 2 === 0 ? P.newTissue : P.plantLight;
+                                ctx.beginPath();
+                                ctx.arc(bx, by, lerp(9, 13, s1), 0, Math.PI * 2);
+                                ctx.fill();
+                            }
+                            addLabel(-35, 72, '癒傷組織 / 擬原球體 (PLB)', 145, -25, P.newTissue);
+                        } else {
+                            // Differentiating multiple plantlets inside flask!
+                            const plantX = [-72, -35, 2];
+                            plantX.forEach((px) => {
+                                const g = s2;
+                                // Roots in agar
+                                ctx.strokeStyle = '#f8fafc';
+                                ctx.lineWidth = 2.2;
+                                [-8, 0, 8].forEach((rx) => {
+                                    ctx.beginPath();
+                                    ctx.moveTo(px, 86);
+                                    ctx.lineTo(px + rx * g, 86 + 26 * g);
+                                    ctx.stroke();
+                                });
+                                // Shoots & leaves
+                                [-0.5, 0.5, 0].forEach((ang, li) => {
+                                    ctx.save();
+                                    ctx.translate(px, 86);
+                                    ctx.rotate(ang - Math.PI / 2);
+                                    ctx.scale(g * 0.55, g * 0.55);
+                                    drawLeafShape(ctx, li === 2 ? 78 : 65, 16, P.plant, P.plantLight);
+                                    ctx.restore();
+                                });
+                            });
+                            addLabel(-25, 42, '無菌小苗 (分化出芽與根)', 155, -28, P.plantLight);
+                        }
+
+                        addLabel(-35, 118, '無菌洋菜培養基 (含養分與激素)', -155, 48, P.agar);
+
+                        // Hormone Ratio Indicator Card in world space on the right
+                        ctx.save();
+                        drawRoundedRectPath(ctx, 130, -90, 175, 115, 12);
+                        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+                        ctx.fill();
+                        ctx.strokeStyle = 'rgba(45, 212, 191, 0.45)';
+                        ctx.lineWidth = 1.8;
+                        ctx.stroke();
+
+                        ctx.fillStyle = '#e2e8f0';
+                        ctx.font = 'bold 12px sans-serif';
+                        ctx.fillText('植物激素比例調控', 144, -68);
+
+                        // Cytokinin bar
+                        const cytoRatio = s2 < 0.25 ? 0.55 : 0.82;
+                        const auxinRatio = s2 < 0.25 ? 0.55 : 0.68;
+                        ctx.fillStyle = '#94a3b8';
+                        ctx.font = '11px sans-serif';
+                        ctx.fillText('細胞分裂素 (促長芽)', 144, -44);
+                        ctx.fillStyle = 'rgba(148,163,184,0.2)';
+                        ctx.fillRect(144, -36, 145, 8);
+                        ctx.fillStyle = P.plant;
+                        ctx.fillRect(144, -36, 145 * cytoRatio, 8);
+
+                        ctx.fillStyle = '#94a3b8';
+                        ctx.fillText('生長素 (促發根)', 144, -8);
+                        ctx.fillStyle = 'rgba(148,163,184,0.2)';
+                        ctx.fillRect(144, 0, 145, 8);
+                        ctx.fillStyle = P.dna;
+                        ctx.fillRect(144, 0, 145 * auxinRatio, 8);
+                        ctx.restore();
+
+                        ctx.restore();
+                    }
+
+                    if (p >= 2.35) {
+                        // Stage 4: Acclimatization & Identical Cloned Orchids in Pots!
+                        const fadeIn = phase(p, 2.35, 2.75);
+                        ctx.save();
+                        ctx.globalAlpha = fadeIn;
+
+                        const pots = [-190, 0, 190];
+                        pots.forEach((px, idx) => {
+                            const g = clamp(s3 * 1.15, 0.35, 1);
+                            // Pot
+                            drawRoundedRectPath(ctx, px - 48, 86, 96, 72, 10);
+                            ctx.fillStyle = '#78350f';
+                            ctx.fill();
+                            ctx.strokeStyle = '#d97706';
+                            ctx.lineWidth = 2.5;
+                            ctx.stroke();
+
+                            // Sphagnum moss top
+                            ctx.fillStyle = '#a16207';
+                            ctx.beginPath();
+                            ctx.ellipse(px, 86, 46, 10, 0, 0, Math.PI * 2);
+                            ctx.fill();
+
+                            // Identical Orchid leaves
+                            [-0.65, 0.65, -0.25, 0.25].forEach((ang) => {
+                                ctx.save();
+                                ctx.translate(px, 84);
+                                ctx.rotate(ang - Math.PI / 2);
+                                ctx.scale(g, g);
+                                drawLeafShape(ctx, 72, 18, P.plant, P.plantLight);
+                                ctx.restore();
+                            });
+
+                            // Flower spike
+                            ctx.strokeStyle = P.plantDark;
+                            ctx.lineWidth = 3.5;
+                            ctx.beginPath();
+                            ctx.moveTo(px, 84);
+                            ctx.quadraticCurveTo(px + 8, 5, px + 24, -48 * g);
+                            ctx.stroke();
+
+                            if (g > 0.65) {
+                                drawOrchidFlower(px + 24, -48 * g, 0.82 * g);
+                            }
+                        });
+
+                        ctx.restore();
+
+                        addLabel(-190, 115, '水苔盆栽馴化移植', -25, 62, P.root);
+                        addLabel(0, -52, '大量基因完全相同的蘭花複製株', 0, -48, P.dna);
+                        addLabel(190, 45, '優良性狀一致呈現', 25, 65, P.plantLight);
+                    }
+                }
+            };
+
+            // ==========================================
+            // 5. MAIN RENDER LOOP & SCREEN-SPACE LABELS
+            // ==========================================
+            const canvas = document.getElementById('simCanvas');
+            const ctx = canvas.getContext('2d');
+            const stageWrap = document.getElementById('stageWrap');
+
+            function resizeCanvas() {
+                const rect = stageWrap.getBoundingClientRect();
+                state.viewW = Math.max(100, rect.width);
+                state.viewH = Math.max(100, rect.height);
+                state.dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+                canvas.width = Math.floor(state.viewW * state.dpr);
+                canvas.height = Math.floor(state.viewH * state.dpr);
+            }
+
+            function drawBackgroundGrid() {
+                ctx.save();
+                ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
+                ctx.clearRect(0, 0, state.viewW, state.viewH);
+
+                // Subtle microscopy grid in world space
+                const s = getBaseScale() * state.camZoom;
+                const step = 48 * s;
+                if (step > 12) {
+                    const offsetX = (state.viewW * 0.5 - state.camX * s) % step;
+                    const offsetY = (state.viewH * 0.5 - state.camY * s) % step;
+                    ctx.strokeStyle = 'rgba(56, 189, 248, 0.055)';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    for (let x = offsetX; x < state.viewW; x += step) {
+                        ctx.moveTo(x, 0);
+                        ctx.lineTo(x, state.viewH);
+                    }
+                    for (let y = offsetY; y < state.viewH; y += step) {
+                        ctx.moveTo(0, y);
+                        ctx.lineTo(state.viewW, y);
+                    }
+                    ctx.stroke();
+                }
+                ctx.restore();
+            }
+
+            function drawScreenLabels() {
+                if (!state.labelsVisible || frameLabels.length === 0) return;
+                ctx.save();
+                ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
+
+                const fontSize = Math.round(clamp(11.5 * Math.sqrt(getBaseScale() + 0.15), 11, 13.5));
+                ctx.font = `600 ${fontSize}px -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif`;
+
+                for (const lbl of frameLabels) {
+                    const anchor = worldToScreen(lbl.wx, lbl.wy);
+                    const textPt = worldToScreen(lbl.wx + lbl.dx, lbl.wy + lbl.dy);
+
+                    // Skip if far off screen
+                    if (
+                        textPt.x < -120 || textPt.x > state.viewW + 120 ||
+                        textPt.y < -60 || textPt.y > state.viewH + 60
+                    ) {
+                        continue;
+                    }
+
+                    // Leader line
+                    ctx.strokeStyle = lbl.color;
+                    ctx.globalAlpha = 0.72;
+                    ctx.lineWidth = 1.4;
+                    ctx.beginPath();
+                    ctx.moveTo(anchor.x, anchor.y);
+                    ctx.lineTo(textPt.x, textPt.y);
+                    ctx.stroke();
+
+                    // Anchor dot
+                    ctx.globalAlpha = 1;
+                    ctx.fillStyle = lbl.color;
+                    ctx.beginPath();
+                    ctx.arc(anchor.x, anchor.y, 3.6, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Pill badge
+                    const tw = ctx.measureText(lbl.text).width;
+                    const padX = 8;
+                    const boxW = tw + padX * 2;
+                    const boxH = fontSize + 10;
+                    const bx = clamp(textPt.x - boxW / 2, 6, state.viewW - boxW - 6);
+                    const by = clamp(textPt.y - boxH / 2, 6, state.viewH - boxH - 6);
+
+                    drawRoundedRectPath(ctx, bx, by, boxW, boxH, 7);
+                    ctx.fillStyle = 'rgba(9, 17, 30, 0.88)';
+                    ctx.fill();
+                    ctx.strokeStyle = lbl.color;
+                    ctx.lineWidth = 1.2;
+                    ctx.stroke();
+
+                    ctx.fillStyle = '#f8fafc';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(lbl.text, bx + boxW / 2, by + boxH / 2 + 0.5);
+                }
+
+                ctx.restore();
+            }
+
+            function updateAndDrawParticles(dt) {
+                if (state.burstParticles.length === 0 && state.slashFlash <= 0) return;
+
+                for (let i = state.burstParticles.length - 1; i >= 0; i--) {
+                    const pt = state.burstParticles[i];
+                    pt.x += pt.vx * dt;
+                    pt.y += pt.vy * dt;
+                    pt.vy += 40 * dt;
+                    pt.life -= dt;
+                    if (pt.life <= 0) {
+                        state.burstParticles.splice(i, 1);
+                    } else {
+                        ctx.save();
+                        ctx.globalAlpha = clamp(pt.life / pt.maxLife, 0, 1);
+                        ctx.fillStyle = pt.color;
+                        ctx.beginPath();
+                        ctx.arc(pt.x, pt.y, pt.r, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.restore();
+                    }
+                }
+
+                if (state.slashFlash > 0) {
+                    state.slashFlash = Math.max(0, state.slashFlash - dt * 3);
+                    ctx.save();
+                    ctx.strokeStyle = `rgba(253, 224, 71, ${state.slashFlash})`;
+                    ctx.lineWidth = 5;
+                    ctx.beginPath();
+                    ctx.moveTo(-120, -20);
+                    ctx.lineTo(120, 20);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            }
+
+            let lastTs = performance.now();
+            function renderLoop(now) {
+                const dt = Math.min((now - lastTs) / 1000, 0.05);
+                lastTs = now;
+                const timeSec = now / 1000;
+
+                // Playback & step tweening
+                if (state.isPlaying) {
+                    if (state.playPauseTimer > 0) {
+                        state.playPauseTimer -= dt;
+                    } else {
+                        const prevStep = Math.floor(state.animProgress + 0.0001);
+                        state.animProgress += dt * 0.52;
+                        const nextStep = Math.floor(state.animProgress + 0.0001);
+                        if (state.animProgress >= 3) {
+                            state.animProgress = 3;
+                            state.isPlaying = false;
+                            syncTimelineUI();
+                        } else if (nextStep > prevStep) {
+                            state.animProgress = nextStep;
+                            state.playPauseTimer = 1.05; // Brief pause at each biological step
+                        }
+                        syncTimelineUI();
+                    }
+                } else if (state.isTweening) {
+                    const diff = state.targetProgress - state.animProgress;
+                    if (Math.abs(diff) < 0.004) {
+                        state.animProgress = state.targetProgress;
+                        state.isTweening = false;
+                    } else {
+                        state.animProgress += diff * Math.min(1, dt * 8.5);
+                    }
+                    syncTimelineUI();
+                }
+
+                drawBackgroundGrid();
+
+                // World Transform
+                frameLabels = [];
+                const s = getBaseScale() * state.camZoom;
+                ctx.save();
+                ctx.setTransform(
+                    s * state.dpr, 0,
+                    0, s * state.dpr,
+                    (state.viewW * 0.5 - state.camX * s) * state.dpr,
+                    (state.viewH * 0.5 - state.camY * s) * state.dpr
+                );
+
+                const org = getActiveOrg();
+                const drawer = DRAWERS[org.id];
+                if (drawer) {
+                    drawer(ctx, state.animProgress, timeSec);
+                }
+                updateAndDrawParticles(dt);
+                ctx.restore();
+
+                drawScreenLabels();
+                requestAnimationFrame(renderLoop);
+            }
+
+            // ==========================================
+            // 6. ZOOM, PAN & TOUCH GESTURE ENGINE
+            // ==========================================
+            const pointers = new Map();
+            let lastPinchDist = null;
+            let lastPinchMid = null;
+            let tapStart = null;
+
+            function setZoomAtScreenPoint(newZoom, sx, sy) {
+                const clamped = clamp(newZoom, 0.45, 4.0);
+                const before = screenToWorld(sx, sy);
+                state.camZoom = clamped;
+                const s = getBaseScale() * state.camZoom;
+                state.camX = before.x - (sx - state.viewW * 0.5) / s;
+                state.camY = before.y - (sy - state.viewH * 0.5) / s;
+                updateZoomUI();
+            }
+
+            function resetCamera() {
+                state.camX = 0;
+                state.camY = 0;
+                state.camZoom = 1.0;
+                updateZoomUI();
+            }
+
+            function updateZoomUI() {
+                document.getElementById('zoomReadout').textContent = `${Math.round(state.camZoom * 100)}%`;
+            }
+
+            canvas.addEventListener('pointerdown', (e) => {
+                canvas.setPointerCapture(e.pointerId);
+                const rect = canvas.getBoundingClientRect();
+                const sx = e.clientX - rect.left;
+                const sy = e.clientY - rect.top;
+                pointers.set(e.pointerId, { x: sx, y: sy });
+
+                if (pointers.size === 1) {
+                    tapStart = { x: sx, y: sy, time: performance.now() };
+                    lastPinchDist = null;
+                    lastPinchMid = null;
+                } else if (pointers.size === 2) {
+                    tapStart = null;
+                    const pts = Array.from(pointers.values());
+                    lastPinchDist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+                    lastPinchMid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+                }
+            });
+
+            canvas.addEventListener('pointermove', (e) => {
+                if (!pointers.has(e.pointerId)) return;
+                const rect = canvas.getBoundingClientRect();
+                const sx = e.clientX - rect.left;
+                const sy = e.clientY - rect.top;
+                const prev = pointers.get(e.pointerId);
+                const dx = sx - prev.x;
+                const dy = sy - prev.y;
+                pointers.set(e.pointerId, { x: sx, y: sy });
+
+                if (pointers.size === 1) {
+                    const s = getBaseScale() * state.camZoom;
+                    state.camX -= dx / s;
+                    state.camY -= dy / s;
+                    if (tapStart && Math.hypot(sx - tapStart.x, sy - tapStart.y) > 8) {
+                        tapStart = null;
+                    }
+                } else if (pointers.size === 2) {
+                    const pts = Array.from(pointers.values());
+                    const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+                    const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+                    if (lastPinchDist && lastPinchMid && dist > 10) {
+                        const worldBefore = screenToWorld(lastPinchMid.x, lastPinchMid.y);
+                        state.camZoom = clamp(state.camZoom * (dist / lastPinchDist), 0.45, 4.0);
+                        const s = getBaseScale() * state.camZoom;
+                        state.camX = worldBefore.x - (mid.x - state.viewW * 0.5) / s;
+                        state.camY = worldBefore.y - (mid.y - state.viewH * 0.5) / s;
+                        updateZoomUI();
+                    }
+                    lastPinchDist = dist;
+                    lastPinchMid = mid;
+                }
+            });
+
+            function handlePointerEnd(e) {
+                if (pointers.size === 1 && tapStart && (performance.now() - tapStart.time) < 280) {
+                    handleCanvasTap(tapStart.x, tapStart.y);
+                }
+                pointers.delete(e.pointerId);
+                if (pointers.size < 2) {
+                    lastPinchDist = null;
+                    lastPinchMid = null;
+                }
+                tapStart = null;
+            }
+
+            canvas.addEventListener('pointerup', handlePointerEnd);
+            canvas.addEventListener('pointercancel', handlePointerEnd);
+
+            canvas.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                const rect = canvas.getBoundingClientRect();
+                const sx = e.clientX - rect.left;
+                const sy = e.clientY - rect.top;
+                const factor = e.deltaY < 0 ? 1.12 : 0.89;
+                setZoomAtScreenPoint(state.camZoom * factor, sx, sy);
+            }, { passive: false });
+
+            function handleCanvasTap(sx, sy) {
+                const org = getActiveOrg();
+                const w = screenToWorld(sx, sy);
+
+                // Fragmentation interactive cut
+                if (['planaria', 'spirogyra', 'starfish'].includes(org.id) && state.animProgress < 0.8) {
+                    triggerInteractiveAction();
+                    return;
+                }
+                // Spore interactive puff
+                if (['rhizopus', 'penicillium'].includes(org.id)) {
+                    spawnSporePuff(w.x, w.y, org.id === 'rhizopus' ? P.spore : P.plant);
+                    if (state.animProgress < 1.5) {
+                        tweenToStep(2);
+                    }
+                }
+            }
+
+            function spawnSporePuff(wx, wy, col) {
+                for (let i = 0; i < 18; i++) {
+                    const ang = Math.random() * Math.PI * 2;
+                    const spd = 30 + Math.random() * 110;
+                    state.burstParticles.push({
+                        x: wx,
+                        y: wy,
+                        vx: Math.cos(ang) * spd + 35,
+                        vy: Math.sin(ang) * spd - 35,
+                        r: 2.8 + Math.random() * 2.5,
+                        color: col,
+                        life: 1.4,
+                        maxLife: 1.4
+                    });
+                }
+            }
+
+            function triggerInteractiveAction() {
+                const org = getActiveOrg();
+                if (['planaria', 'spirogyra', 'starfish'].includes(org.id)) {
+                    state.slashFlash = 1.0;
+                    tweenToStep(1);
+                } else if (['rhizopus', 'penicillium'].includes(org.id)) {
+                    spawnSporePuff(-150, -80, org.id === 'rhizopus' ? P.spore : P.plant);
+                    tweenToStep(2);
+                }
+            }
+
+            // ==========================================
+            // 7. STEP-BY-STEP CONTROLS & UI SYNC
+            // ==========================================
+            const tabsBar = document.getElementById('tabsBar');
+            const subBar = document.getElementById('subBar');
+            const stepDotsEl = document.getElementById('stepDots');
+            const timelineSlider = document.getElementById('timelineSlider');
+            const btnPlay = document.getElementById('btnPlay');
+            const btnPrev = document.getElementById('btnPrev');
+            const btnNext = document.getElementById('btnNext');
+            const btnReset = document.getElementById('btnReset');
+            const btnLabels = document.getElementById('btnLabels');
+            const btnLegend = document.getElementById('btnLegend');
+            const legendPopover = document.getElementById('legendPopover');
+            const interactiveCta = document.getElementById('interactiveCta');
+
+            function tweenToStep(stepIdx) {
+                state.isPlaying = false;
+                state.targetProgress = clamp(stepIdx, 0, 3);
+                state.isTweening = true;
+                syncTimelineUI();
+            }
+
+            function renderTabs() {
+                tabsBar.innerHTML = '';
+                CATEGORIES.forEach((cat, idx) => {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = `cat-tab ${idx === state.catIdx ? 'active' : ''}`;
+                    btn.innerHTML = `<span>${cat.icon}</span><span>${cat.name}</span>`;
+                    btn.addEventListener('click', () => {
+                        if (state.catIdx === idx) return;
+                        state.catIdx = idx;
+                        state.orgIdx = 0;
+                        resetSimulationState();
+                        renderTabs();
+                        renderSubBar();
+                        syncTimelineUI();
+                    });
+                    tabsBar.appendChild(btn);
+                });
+            }
+
+            function renderSubBar() {
+                subBar.innerHTML = '<span class="sub-label">代表生物：</span>';
+                const orgs = getActiveCat().organisms;
+                orgs.forEach((org, idx) => {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = `org-pill ${idx === state.orgIdx ? 'active' : ''}`;
+                    btn.textContent = org.name;
+                    btn.addEventListener('click', () => {
+                        if (state.orgIdx === idx) return;
+                        state.orgIdx = idx;
+                        resetSimulationState();
+                        renderSubBar();
+                        syncTimelineUI();
+                    });
+                    subBar.appendChild(btn);
+                });
+            }
+
+            function renderStepDots() {
+                stepDotsEl.innerHTML = '';
+                for (let i = 0; i < 4; i++) {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'step-dot-btn';
+                    btn.textContent = `${i + 1}`;
+                    btn.title = `跳至步驟 ${i + 1}`;
+                    btn.addEventListener('click', () => tweenToStep(i));
+                    stepDotsEl.appendChild(btn);
+                }
+            }
+
+            function resetSimulationState() {
+                state.isPlaying = false;
+                state.isTweening = false;
+                state.animProgress = 0;
+                state.targetProgress = 0;
+                state.burstParticles = [];
+                state.slashFlash = 0;
+                resetCamera();
+            }
+
+            function syncTimelineUI() {
+                const org = getActiveOrg();
+                const p = state.animProgress;
+                // Determine nearest/active step index cleanly
+                const stepIdx = clamp(Math.round(p), 0, 3);
+                const stepData = org.steps[stepIdx];
+
+                document.getElementById('geneticNote').textContent = org.badge;
+                document.getElementById('stepBadge').textContent = `步驟 ${stepIdx + 1} / 4`;
+                document.getElementById('stepTitle').textContent = stepData.title;
+                document.getElementById('stepDesc').textContent = stepData.desc;
+
+                timelineSlider.value = p.toFixed(3);
+
+                // Dots styling
+                const dots = stepDotsEl.querySelectorAll('.step-dot-btn');
+                dots.forEach((d, i) => {
+                    d.classList.toggle('active', i === stepIdx);
+                    d.classList.toggle('passed', i < stepIdx);
+                });
+
+                // Buttons
+                btnPrev.disabled = p <= 0.02;
+                btnNext.disabled = p >= 2.98;
+                btnPlay.classList.toggle('playing', state.isPlaying);
+                btnPlay.textContent = state.isPlaying ? '⏸ 暫停' : (p >= 2.98 ? '↺ 重播' : '▶ 播放');
+
+                // Interactive CTA pill
+                if (org.cta && (
+                    (['planaria', 'spirogyra', 'starfish'].includes(org.id) && p < 0.8) ||
+                    (['rhizopus', 'penicillium'].includes(org.id) && p >= 0.8 && p < 2.2)
+                )) {
+                    interactiveCta.textContent = org.cta;
+                    interactiveCta.classList.remove('hidden');
+                } else {
+                    interactiveCta.classList.add('hidden');
+                }
+            }
+
+            // Wire controls
+            interactiveCta.addEventListener('click', triggerInteractiveAction);
+
+            timelineSlider.addEventListener('input', (e) => {
+                state.isPlaying = false;
+                state.isTweening = false;
+                state.animProgress = parseFloat(e.target.value);
+                syncTimelineUI();
+            });
+
+            btnPrev.addEventListener('click', () => {
+                const cur = state.isTweening ? state.targetProgress : state.animProgress;
+                const target = Math.max(0, Math.ceil(cur - 0.05) - 1);
+                tweenToStep(target);
+            });
+
+            btnNext.addEventListener('click', () => {
+                const cur = state.isTweening ? state.targetProgress : state.animProgress;
+                const target = Math.min(3, Math.floor(cur + 0.05) + 1);
+                tweenToStep(target);
+            });
+
+            btnPlay.addEventListener('click', () => {
+                if (state.isPlaying) {
+                    state.isPlaying = false;
+                } else {
+                    if (state.animProgress >= 2.98) {
+                        state.animProgress = 0;
+                    }
+                    state.isTweening = false;
+                    state.playPauseTimer = 0.25;
+                    state.isPlaying = true;
+                }
+                syncTimelineUI();
+            });
+
+            btnReset.addEventListener('click', () => {
+                state.isPlaying = false;
+                tweenToStep(0);
+            });
+
+            btnLabels.addEventListener('click', () => {
+                state.labelsVisible = !state.labelsVisible;
+                btnLabels.classList.toggle('active', state.labelsVisible);
+                btnLabels.textContent = state.labelsVisible ? '🏷️ 標籤：開' : '🏷️ 標籤：關';
+            });
+
+            btnLegend.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const open = legendPopover.classList.toggle('open');
+                btnLegend.classList.toggle('active', open);
+            });
+
+            document.addEventListener('click', (e) => {
+                if (legendPopover.classList.contains('open') && !legendPopover.contains(e.target) && e.target !== btnLegend) {
+                    legendPopover.classList.remove('open');
+                    btnLegend.classList.remove('active');
+                }
+            });
+
+            document.getElementById('stepHeader').addEventListener('click', () => {
+                state.collapsed = !state.collapsed;
+                const card = document.getElementById('stepCard');
+                card.classList.toggle('collapsed', state.collapsed);
+                document.getElementById('btnCollapse').textContent = state.collapsed ? '▸ 展開' : '▾ 收合';
+                requestAnimationFrame(resizeCanvas);
+            });
+
+            document.getElementById('btnZoomIn').addEventListener('click', () => {
+                setZoomAtScreenPoint(state.camZoom * 1.25, state.viewW * 0.5, state.viewH * 0.5);
+            });
+            document.getElementById('btnZoomOut').addEventListener('click', () => {
+                setZoomAtScreenPoint(state.camZoom * 0.8, state.viewW * 0.5, state.viewH * 0.5);
+            });
+            document.getElementById('btnZoomReset').addEventListener('click', resetCamera);
+
+            window.addEventListener('resize', resizeCanvas);
+
+            // Initialize
+            renderTabs();
+            renderSubBar();
+            renderStepDots();
+            resizeCanvas();
+            updateZoomUI();
+            syncTimelineUI();
+            requestAnimationFrame(renderLoop);
+        })();
+    </script>
+</body>
+
+</html>

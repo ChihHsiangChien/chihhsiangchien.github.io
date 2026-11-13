@@ -1,0 +1,3313 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+    <title>生物技術互動動態模擬器 | Biotechnology Simulator</title>
+    <!-- Three.js r128 UMD (相容於所有瀏覽器與單檔離線/本地開啟) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        :root {
+            /* 一致性視覺設計系統 (各分頁共用色票) */
+            --bg-app: #070d19;
+            --bg-panel: #0f172a;
+            --bg-card: #1e293b;
+            --bg-hover: #283548;
+            --border-subtle: rgba(148, 163, 184, 0.18);
+            --border-active: rgba(56, 189, 248, 0.6);
+
+            /* 生物分子與元素標準色 (跨分頁一致) */
+            --c-dna: #38bdf8;
+            /* DNA / 染色體 (天藍) */
+            --c-gene: #fbbf24;
+            /* 目標基因 / 外源基因 (琥珀金) */
+            --c-plasmid: #14b8a6;
+            /* 質體 / 載體 (青綠) */
+            --c-enzyme: #a78bfa;
+            /* 酵素 / Cas9 / 催化劑 (紫羅蘭) */
+            --c-rna: #fb923c;
+            /* mRNA / sgRNA (亮橘) */
+            --c-cell: #34d399;
+            /* 微生物 / 植物 / 宿主細胞 (翡翠綠) */
+            --c-animal: #f472b6;
+            /* 動物體細胞 / 卵子 / 哺乳類 (粉紅) */
+            --c-pathogen: #fb7185;
+            /* 病毒 / 癌細胞 / 害蟲 (玫紅) */
+            --c-protein: #22d3ee;
+            /* 蛋白質 / 抗體 / 疫苗抗原 (青藍) */
+
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --text-dim: #64748b;
+
+            --radius-lg: 16px;
+            --radius-md: 10px;
+            --radius-sm: 6px;
+            --shadow-glow: 0 8px 30px rgba(0, 0, 0, 0.45);
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            background: var(--bg-app);
+            color: var(--text-main);
+            font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, -apple-system, sans-serif;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* 頂部導覽列 */
+        .app-header {
+            background: rgba(15, 23, 42, 0.92);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border-subtle);
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            padding: 10px 16px;
+        }
+
+        .header-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            max-width: 1480px;
+            margin: 0 auto;
+            flex-wrap: wrap;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .brand-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, var(--c-dna), var(--c-enzyme));
+            display: grid;
+            place-items: center;
+            font-size: 20px;
+            box-shadow: 0 0 16px rgba(56, 189, 248, 0.35);
+            flex-shrink: 0;
+        }
+
+        .brand h1 {
+            font-size: 1.08rem;
+            margin: 0;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+
+        .brand p {
+            margin: 0;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .global-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            appearance: none;
+            border: 1px solid var(--border-subtle);
+            background: var(--bg-card);
+            color: var(--text-main);
+            padding: 8px 13px;
+            border-radius: var(--radius-md);
+            font-size: 0.84rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            min-height: 38px;
+            transition: all 0.18s ease;
+            user-select: none;
+        }
+
+        .btn:hover {
+            background: var(--bg-hover);
+            border-color: rgba(148, 163, 184, 0.38);
+        }
+
+        .btn:active {
+            transform: scale(0.97);
+        }
+
+        .btn.active {
+            background: rgba(56, 189, 248, 0.18);
+            border-color: var(--c-dna);
+            color: #e0f2fe;
+            box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #0284c7, #6366f1);
+            border-color: transparent;
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            filter: brightness(1.1);
+        }
+
+        .btn-icon {
+            width: 38px;
+            height: 38px;
+            padding: 0;
+            font-size: 1.05rem;
+        }
+
+        /* 主分頁導覽列 (水平可滑動，觸控友善) */
+        .tabs-bar {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding: 10px 16px 6px;
+            max-width: 1480px;
+            margin: 0 auto;
+            scrollbar-width: none;
+        }
+
+        .tabs-bar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .tab-btn {
+            flex: 0 0 auto;
+            background: var(--bg-panel);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-muted);
+            padding: 9px 15px;
+            border-radius: 999px;
+            font-size: 0.86rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            transition: all 0.2s ease;
+            min-height: 40px;
+            white-space: nowrap;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-main);
+            background: var(--bg-card);
+        }
+
+        .tab-btn.active {
+            background: linear-gradient(135deg, rgba(56, 189, 248, 0.22), rgba(167, 139, 250, 0.22));
+            border-color: var(--c-dna);
+            color: #fff;
+            box-shadow: 0 4px 16px rgba(56, 189, 248, 0.2);
+        }
+
+        /* 主容器 */
+        .workspace {
+            max-width: 1480px;
+            margin: 0 auto;
+            padding: 8px 16px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        /* 子模組切換列 */
+        .submodules-bar {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+            background: var(--bg-panel);
+            padding: 8px 12px;
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border-subtle);
+        }
+
+        .sub-pill {
+            padding: 7px 14px;
+            border-radius: var(--radius-md);
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--text-muted);
+            font-size: 0.84rem;
+            font-weight: 600;
+            cursor: pointer;
+            min-height: 36px;
+            transition: all 0.16s ease;
+        }
+
+        .sub-pill:hover {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-main);
+        }
+
+        .sub-pill.active {
+            background: var(--bg-card);
+            border-color: var(--c-plasmid);
+            color: #ccfbf1;
+        }
+
+        /* 模擬器主佈局 (桌機左右 / 平板手機上下) */
+        .sim-grid {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 14px;
+            align-items: stretch;
+        }
+
+        @media (max-width: 1024px) {
+            .sim-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* 互動視口 (支援 Zoom / Pan / Pinch) */
+        .viewport-card {
+            position: relative;
+            background: radial-gradient(circle at 50% 30%, #111c33 0%, #070d19 100%);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            min-height: 520px;
+            height: 62vh;
+            max-height: 680px;
+            box-shadow: var(--shadow-glow);
+            touch-action: none;
+            /* 重要：防止手機雙指縮放劫持 */
+            user-select: none;
+        }
+
+        @media (max-width: 768px) {
+            .viewport-card {
+                min-height: 410px;
+                height: 52vh;
+            }
+        }
+
+        /* 背景科學網格 */
+        .viewport-grid-bg {
+            position: absolute;
+            inset: 0;
+            background-image:
+                linear-gradient(to right, rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
+            background-size: 36px 36px;
+            pointer-events: none;
+        }
+
+        /* 2D 變換舞台 */
+        .stage-2d-wrapper {
+            position: absolute;
+            inset: 0;
+            transform-origin: 0 0;
+            will-change: transform;
+        }
+
+        .stage-2d-wrapper svg,
+        .stage-2d-wrapper canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* 3D 舞台容器與 3D 投影標籤層 */
+        .stage-3d-wrapper {
+            position: absolute;
+            inset: 0;
+            display: none;
+        }
+
+        .stage-3d-wrapper canvas {
+            display: block;
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        .labels-3d-overlay {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        .pin-3d {
+            position: absolute;
+            transform: translate(-50%, -100%);
+            background: rgba(15, 23, 42, 0.88);
+            border: 1px solid rgba(56, 189, 248, 0.55);
+            color: #f8fafc;
+            padding: 4px 9px;
+            border-radius: 6px;
+            font-size: 0.74rem;
+            font-weight: 600;
+            white-space: nowrap;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            transition: opacity 0.2s ease;
+        }
+
+        .pin-3d::after {
+            content: "";
+            position: absolute;
+            left: 50%;
+            bottom: -5px;
+            transform: translateX(-50%);
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 5px solid rgba(56, 189, 248, 0.65);
+        }
+
+        /* 文字標籤顯示/隱藏全域控制 */
+        .bio-label {
+            transition: opacity 0.22s ease;
+        }
+
+        body.hide-labels .bio-label {
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+
+        /* 視口角落浮動控制列 (Zoom / Pan / 提示) */
+        .viewport-hud-top {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            right: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            pointer-events: none;
+            z-index: 15;
+            gap: 8px;
+        }
+
+        .hud-badge {
+            pointer-events: auto;
+            background: rgba(15, 23, 42, 0.82);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--border-subtle);
+            padding: 6px 11px;
+            border-radius: 999px;
+            font-size: 0.76rem;
+            color: var(--text-muted);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .hud-badge strong {
+            color: var(--text-main);
+        }
+
+        .viewport-zoom-controls {
+            position: absolute;
+            bottom: 12px;
+            right: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            z-index: 15;
+        }
+
+        .zoom-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            background: rgba(15, 23, 42, 0.86);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-main);
+            font-size: 1.1rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: grid;
+            place-items: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        }
+
+        .zoom-btn:hover {
+            background: var(--bg-hover);
+            border-color: var(--c-dna);
+        }
+
+        .zoom-btn:active {
+            transform: scale(0.94);
+        }
+
+        /* 視口內自訂互動浮動工具列 (例如 UV燈、風速、快速切換) */
+        .viewport-quick-bar {
+            position: absolute;
+            bottom: 12px;
+            left: 12px;
+            right: 64px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            z-index: 15;
+            pointer-events: none;
+        }
+
+        .viewport-quick-bar>* {
+            pointer-events: auto;
+        }
+
+        /* 右側 / 下方 控制與說明面板 */
+        .control-panel {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            box-shadow: var(--shadow-glow);
+        }
+
+        .panel-header {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            border-bottom: 1px solid var(--border-subtle);
+            padding-bottom: 10px;
+        }
+
+        .panel-tag {
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--c-dna);
+        }
+
+        .panel-title {
+            margin: 0;
+            font-size: 1.08rem;
+            font-weight: 700;
+        }
+
+        /* Step-by-step 流程控制器 */
+        .step-controller {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .step-dots {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .step-dot {
+            flex: 1;
+            min-width: 28px;
+            height: 30px;
+            border-radius: 6px;
+            background: rgba(15, 23, 42, 0.7);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-muted);
+            font-size: 0.78rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: grid;
+            place-items: center;
+            transition: all 0.16s ease;
+        }
+
+        .step-dot.active {
+            background: var(--c-dna);
+            color: #07101f;
+            border-color: var(--c-dna);
+            box-shadow: 0 0 10px rgba(56, 189, 248, 0.45);
+        }
+
+        .step-dot.done {
+            border-color: rgba(52, 211, 153, 0.5);
+            color: var(--c-cell);
+        }
+
+        .step-nav-btns {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr auto;
+            gap: 6px;
+        }
+
+        .step-info-box {
+            background: rgba(7, 13, 25, 0.65);
+            border-left: 3px solid var(--c-dna);
+            padding: 10px 12px;
+            border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+        }
+
+        .step-info-box h4 {
+            margin: 0 0 4px;
+            font-size: 0.92rem;
+            color: #e0f2fe;
+        }
+
+        .step-info-box p {
+            margin: 0;
+            font-size: 0.83rem;
+            line-height: 1.55;
+            color: var(--text-muted);
+        }
+
+        /* 參數互動控制區 */
+        .params-box {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .param-row {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            padding: 10px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .param-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.82rem;
+            font-weight: 600;
+        }
+
+        .param-label span:last-child {
+            color: var(--c-dna);
+            font-variant-numeric: tabular-nums;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            accent-color: var(--c-dna);
+            height: 6px;
+            cursor: pointer;
+        }
+
+        .chip-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .chip-btn {
+            padding: 6px 10px;
+            border-radius: 8px;
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-muted);
+            font-size: 0.78rem;
+            font-weight: 600;
+            cursor: pointer;
+            min-height: 34px;
+            transition: all 0.15s ease;
+        }
+
+        .chip-btn.active {
+            background: rgba(20, 184, 166, 0.22);
+            border-color: var(--c-plasmid);
+            color: #ccfbf1;
+        }
+
+        /* 重點比較與知識卡 */
+        .knowledge-card {
+            background: rgba(167, 139, 250, 0.08);
+            border: 1px solid rgba(167, 139, 250, 0.28);
+            border-radius: var(--radius-md);
+            padding: 11px 12px;
+            font-size: 0.81rem;
+            line-height: 1.55;
+            color: #e2e8f0;
+        }
+
+        .knowledge-card strong {
+            color: var(--c-gene);
+        }
+
+        /* 色彩圖例 Modal */
+        .legend-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.65);
+            backdrop-filter: blur(4px);
+            z-index: 100;
+            display: none;
+            place-items: center;
+            padding: 16px;
+        }
+
+        .legend-modal.open {
+            display: grid;
+        }
+
+        .legend-content {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            max-width: 520px;
+            width: 100%;
+            box-shadow: var(--shadow-glow);
+        }
+
+        .legend-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(195px, 1fr));
+            gap: 10px;
+            margin: 14px 0;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--bg-card);
+            padding: 8px 10px;
+            border-radius: 8px;
+            font-size: 0.82rem;
+        }
+
+        .swatch {
+            width: 16px;
+            height: 16px;
+            border-radius: 4px;
+            flex-shrink: 0;
+        }
+
+        /* SVG 動畫輔助 */
+        @keyframes floatSlow {
+
+            0%,
+            100% {
+                transform: translateY(0px);
+            }
+
+            50% {
+                transform: translateY(-6px);
+            }
+        }
+
+        @keyframes pulseGlow {
+
+            0%,
+            100% {
+                opacity: 0.65;
+            }
+
+            50% {
+                opacity: 1;
+            }
+        }
+
+        @keyframes riseBubble {
+            0% {
+                transform: translateY(0) scale(0.8);
+                opacity: 0;
+            }
+
+            25% {
+                opacity: 0.85;
+            }
+
+            100% {
+                transform: translateY(-90px) scale(1.2);
+                opacity: 0;
+            }
+        }
+
+        .anim-float {
+            animation: floatSlow 3.2s ease-in-out infinite;
+        }
+
+        .anim-pulse {
+            animation: pulseGlow 2s ease-in-out infinite;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- 頂部導覽 -->
+    <header class="app-header">
+        <div class="header-top">
+            <div class="brand">
+                <div class="brand-icon">🧬</div>
+                <div>
+                    <h1>生物技術互動動態模擬器</h1>
+                    <p>Biotechnology Interactive Lab · 支援觸控縮放平移 &amp; 3D 即時模擬</p>
+                </div>
+            </div>
+            <div class="global-actions">
+                <button id="btn-toggle-labels" class="btn active" title="顯示或隱藏圖面上的文字標籤">
+                    🏷️ <span id="label-toggle-text">標籤：顯示</span>
+                </button>
+                <button id="btn-open-legend" class="btn">
+                    🎨 色彩圖例
+                </button>
+            </div>
+        </div>
+
+        <!-- 主分頁 -->
+        <nav class="tabs-bar" id="tabs-bar" aria-label="生物技術主題分頁"></nav>
+    </header>
+
+    <!-- 主工作區 -->
+    <main class="workspace">
+        <!-- 子模組切換列 -->
+        <div class="submodules-bar" id="submodules-bar"></div>
+
+        <!-- 模擬器舞台 + 控制面板 -->
+        <section class="sim-grid">
+            <!-- 互動視口 -->
+            <div class="viewport-card" id="viewport">
+                <div class="viewport-grid-bg"></div>
+
+                <!-- 頂部浮動資訊 -->
+                <div class="viewport-hud-top">
+                    <div class="hud-badge" id="hud-mode-badge">
+                        <span>👆</span>
+                        <span id="hud-gesture-hint">單指/拖曳平移 · 雙指/滾輪縮放</span>
+                    </div>
+                    <div class="hud-badge" id="hud-zoom-readout">100%</div>
+                </div>
+
+                <!-- 2D SVG / HTML / Canvas 舞台 -->
+                <div class="stage-2d-wrapper" id="stage-2d"></div>
+
+                <!-- 3D Three.js 舞台 -->
+                <div class="stage-3d-wrapper" id="stage-3d">
+                    <div id="three-canvas-host" style="width:100%;height:100%;"></div>
+                    <div class="labels-3d-overlay" id="labels-3d-overlay"></div>
+                </div>
+
+                <!-- 視口左下快速控制列 -->
+                <div class="viewport-quick-bar" id="viewport-quick-bar"></div>
+
+                <!-- 視口右下縮放重設按鈕 -->
+                <div class="viewport-zoom-controls">
+                    <button class="zoom-btn" id="btn-zoom-in" title="放大">+</button>
+                    <button class="zoom-btn" id="btn-zoom-out" title="縮小">−</button>
+                    <button class="zoom-btn" id="btn-zoom-reset" title="重設視角">⌖</button>
+                </div>
+            </div>
+
+            <!-- 右側控制與知識面板 -->
+            <aside class="control-panel">
+                <div class="panel-header">
+                    <span class="panel-tag" id="panel-tag">模組</span>
+                    <h2 class="panel-title" id="panel-title">載入中...</h2>
+                </div>
+
+                <!-- Step-by-Step 流程控制 -->
+                <div class="step-controller" id="step-controller">
+                    <div class="step-dots" id="step-dots"></div>
+                    <div class="step-nav-btns">
+                        <button class="btn" id="btn-step-prev">◀ 上一步</button>
+                        <button class="btn btn-primary" id="btn-step-play">▶ 自動播放</button>
+                        <button class="btn" id="btn-step-next">下一步 ▶</button>
+                        <button class="btn btn-icon" id="btn-step-reset" title="回到第一步">↺</button>
+                    </div>
+                    <div class="step-info-box">
+                        <h4 id="step-title">步驟標題</h4>
+                        <p id="step-desc">步驟說明</p>
+                    </div>
+                </div>
+
+                <!-- 動態參數控制區 -->
+                <div class="params-box" id="params-box"></div>
+
+                <!-- 重點知識與比較卡片 -->
+                <div class="knowledge-card" id="knowledge-card"></div>
+            </aside>
+        </section>
+    </main>
+
+    <!-- 一致性色彩圖例彈窗 -->
+    <div class="legend-modal" id="legend-modal">
+        <div class="legend-content">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+                <h3 style="margin:0;">🎨 跨分頁一致性色彩圖例</h3>
+                <button class="btn btn-icon" id="btn-close-legend">✕</button>
+            </div>
+            <p style="font-size:0.84rem;color:var(--text-muted);margin:8px 0 0;">
+                本模擬器在所有 2D 與 3D 分頁中採用統一的生物分子視覺編碼，幫助您快速辨識結構與功能：
+            </p>
+            <div class="legend-grid">
+                <div class="legend-item"><span class="swatch" style="background:var(--c-dna)"></span>DNA / 染色體</div>
+                <div class="legend-item"><span class="swatch" style="background:var(--c-gene)"></span>目標基因 / 外源基因</div>
+                <div class="legend-item"><span class="swatch" style="background:var(--c-plasmid)"></span>質體 / 基因載體</div>
+                <div class="legend-item"><span class="swatch" style="background:var(--c-enzyme)"></span>酵素 / Cas9 / 限制酶
+                </div>
+                <div class="legend-item"><span class="swatch" style="background:var(--c-rna)"></span>mRNA / sgRNA</div>
+                <div class="legend-item"><span class="swatch" style="background:var(--c-cell)"></span>微生物 / 植物細胞</div>
+                <div class="legend-item"><span class="swatch" style="background:var(--c-animal)"></span>動物體細胞 / 卵細胞
+                </div>
+                <div class="legend-item"><span class="swatch" style="background:var(--c-pathogen)"></span>病原體 / 癌細胞 / 害蟲
+                </div>
+                <div class="legend-item"><span class="swatch" style="background:var(--c-protein)"></span>蛋白質 / 抗體 / 抗原
+                </div>
+            </div>
+            <button class="btn btn-primary" style="width:100%;" id="btn-close-legend-2">了解，開始探索</button>
+        </div>
+    </div>
+
+    <script>
+        (() => {
+            'use strict';
+
+            /* =========================================================
+               1. 全域一致色彩與基礎工具
+               ========================================================= */
+            const THEME = {
+                dna: '#38bdf8',
+                gene: '#fbbf24',
+                plasmid: '#14b8a6',
+                enzyme: '#a78bfa',
+                rna: '#fb923c',
+                cell: '#34d399',
+                animal: '#f472b6',
+                pathogen: '#fb7185',
+                protein: '#22d3ee',
+                bgDark: '#0b1120',
+                text: '#f8fafc',
+                muted: '#94a3b8'
+            };
+
+            const SVG_NS = 'http://www.w3.org/2000/svg';
+
+            function createSVG(viewBox = '0 0 900 540') {
+                const svg = document.createElementNS(SVG_NS, 'svg');
+                svg.setAttribute('viewBox', viewBox);
+                svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+                return svg;
+            }
+
+            function svgEl(tag, attrs = {}, parent = null) {
+                const el = document.createElementNS(SVG_NS, tag);
+                for (const [k, v] of Object.entries(attrs)) {
+                    el.setAttribute(k, v);
+                }
+                if (parent) parent.appendChild(el);
+                return el;
+            }
+
+            function svgLabel(x, y, text, color = '#f8fafc', anchor = 'middle', parent = null, bg = 'rgba(15,23,42,0.85)') {
+                const g = svgEl('g', { class: 'bio-label', transform: `translate(${x}, ${y})` }, parent);
+                const estWidth = Math.max(46, text.length * 13 + 18);
+                svgEl('rect', {
+                    x: anchor === 'middle' ? -estWidth / 2 : (anchor === 'start' ? -6 : -estWidth + 6),
+                    y: -13,
+                    width: estWidth,
+                    height: 24,
+                    rx: 6,
+                    fill: bg,
+                    stroke: color,
+                    'stroke-width': 1.2
+                }, g);
+                const t = svgEl('text', {
+                    x: 0,
+                    y: 3,
+                    fill: color,
+                    'font-size': 12.5,
+                    'font-weight': 700,
+                    'text-anchor': anchor,
+                    'font-family': 'Noto Sans TC, system-ui, sans-serif'
+                }, g);
+                t.textContent = text;
+                return g;
+            }
+
+            /* =========================================================
+               2. 統一 2D / 3D 觸控與滑鼠 Zoom & Pan 引擎
+               ========================================================= */
+            class UnifiedViewport {
+                constructor(containerEl, stage2DEl, stage3DEl, readoutEl) {
+                    this.container = containerEl;
+                    this.stage2D = stage2DEl;
+                    this.stage3D = stage3DEl;
+                    this.readout = readoutEl;
+
+                    this.mode = '2d'; // '2d' | '3d'
+                    // 2D 狀態
+                    this.tx = 0;
+                    this.ty = 0;
+                    this.scale = 1;
+
+                    // 3D 軌道相機狀態
+                    this.orbit = { theta: 0.45, phi: 1.18, radius: 13.5, targetX: 0, targetY: 0, targetZ: 0 };
+
+                    this.pointers = new Map();
+                    this.lastPinchDist = null;
+                    this.lastMid = null;
+                    this.on3DCameraUpdate = null;
+
+                    this.bindEvents();
+                }
+
+                setMode(mode) {
+                    this.mode = mode;
+                    if (mode === '3d') {
+                        this.stage2D.style.display = 'none';
+                        this.stage3D.style.display = 'block';
+                        document.getElementById('hud-gesture-hint').textContent = '單指旋轉 3D · 雙指縮放平移 · 拖曳視角';
+                    } else {
+                        this.stage3D.style.display = 'none';
+                        this.stage2D.style.display = 'block';
+                        document.getElementById('hud-gesture-hint').textContent = '單指/拖曳平移 · 雙指/滾輪縮放';
+                    }
+                    this.reset();
+                }
+
+                reset() {
+                    this.tx = 0;
+                    this.ty = 0;
+                    this.scale = 1;
+                    this.orbit = { theta: 0.38, phi: 1.22, radius: 13.5, targetX: 0, targetY: 0, targetZ: 0 };
+                    this.applyTransform();
+                }
+
+                zoomBy(factor, cx = null, cy = null) {
+                    if (this.mode === '2d') {
+                        const rect = this.container.getBoundingClientRect();
+                        const px = cx !== null ? cx - rect.left : rect.width / 2;
+                        const py = cy !== null ? cy - rect.top : rect.height / 2;
+                        const nextScale = Math.min(3.5, Math.max(0.45, this.scale * factor));
+                        const ratio = nextScale / this.scale;
+                        this.tx = px - (px - this.tx) * ratio;
+                        this.ty = py - (py - this.ty) * ratio;
+                        this.scale = nextScale;
+                    } else {
+                        this.orbit.radius = Math.min(26, Math.max(5.5, this.orbit.radius / factor));
+                    }
+                    this.applyTransform();
+                }
+
+                applyTransform() {
+                    if (this.mode === '2d') {
+                        this.stage2D.style.transform = `translate(${this.tx}px, ${this.ty}px) scale(${this.scale})`;
+                        this.readout.textContent = `${Math.round(this.scale * 100)}%`;
+                    } else {
+                        const pct = Math.round((13.5 / this.orbit.radius) * 100);
+                        this.readout.textContent = `3D · ${pct}%`;
+                        if (this.on3DCameraUpdate) this.on3DCameraUpdate(this.orbit);
+                    }
+                }
+
+                bindEvents() {
+                    this.container.addEventListener('pointerdown', (e) => {
+                        if (e.target.closest('button, input, select, .viewport-quick-bar, .viewport-zoom-controls')) return;
+                        this.container.setPointerCapture(e.pointerId);
+                        this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, button: e.button });
+                        this.lastPinchDist = null;
+                        this.lastMid = null;
+                    });
+
+                    this.container.addEventListener('pointermove', (e) => {
+                        if (!this.pointers.has(e.pointerId)) return;
+                        const prev = this.pointers.get(e.pointerId);
+                        const dx = e.clientX - prev.x;
+                        const dy = e.clientY - prev.y;
+                        this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, button: prev.button });
+
+                        if (this.pointers.size === 1) {
+                            if (this.mode === '2d') {
+                                this.tx += dx;
+                                this.ty += dy;
+                            } else {
+                                if (e.shiftKey || prev.button === 2) {
+                                    // 3D 平移
+                                    this.orbit.targetX -= dx * 0.015;
+                                    this.orbit.targetY += dy * 0.015;
+                                } else {
+                                    // 3D 旋轉
+                                    this.orbit.theta -= dx * 0.008;
+                                    this.orbit.phi = Math.min(2.65, Math.max(0.35, this.orbit.phi - dy * 0.008));
+                                }
+                            }
+                            this.applyTransform();
+                        } else if (this.pointers.size === 2) {
+                            const pts = Array.from(this.pointers.values());
+                            const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+                            const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+
+                            if (this.lastPinchDist !== null && this.lastMid !== null) {
+                                const zoomFactor = dist / this.lastPinchDist;
+                                const panX = mid.x - this.lastMid.x;
+                                const panY = mid.y - this.lastMid.y;
+
+                                if (this.mode === '2d') {
+                                    this.tx += panX;
+                                    this.ty += panY;
+                                    this.zoomBy(zoomFactor, mid.x, mid.y);
+                                } else {
+                                    this.orbit.targetX -= panX * 0.014;
+                                    this.orbit.targetY += panY * 0.014;
+                                    this.zoomBy(zoomFactor);
+                                }
+                            }
+                            this.lastPinchDist = dist;
+                            this.lastMid = mid;
+                        }
+                    });
+
+                    const endPointer = (e) => {
+                        this.pointers.delete(e.pointerId);
+                        this.lastPinchDist = null;
+                        this.lastMid = null;
+                    };
+                    this.container.addEventListener('pointerup', endPointer);
+                    this.container.addEventListener('pointercancel', endPointer);
+                    this.container.addEventListener('contextmenu', (e) => e.preventDefault());
+
+                    this.container.addEventListener('wheel', (e) => {
+                        e.preventDefault();
+                        const factor = e.deltaY < 0 ? 1.12 : 0.89;
+                        this.zoomBy(factor, e.clientX, e.clientY);
+                    }, { passive: false });
+                }
+            }
+
+            /* =========================================================
+               3. Three.js 3D 引擎管理 (支援基因編輯 CRISPR & mRNA 疫苗)
+               ========================================================= */
+            class ThreeSceneManager {
+                constructor(hostEl, labelsOverlayEl, viewport) {
+                    this.host = hostEl;
+                    this.labelsEl = labelsOverlayEl;
+                    this.viewport = viewport;
+                    this.renderer = null;
+                    this.scene = null;
+                    this.camera = null;
+                    this.rafId = null;
+                    this.tickFn = null;
+                    this.trackedLabels = [];
+                    this.available = typeof THREE !== 'undefined';
+
+                    if (this.available) {
+                        this.init();
+                    }
+                }
+
+                init() {
+                    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+                    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                    this.host.appendChild(this.renderer.domElement);
+
+                    this.scene = new THREE.Scene();
+                    this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+
+                    this.resize();
+                    if (window.ResizeObserver) {
+                        new ResizeObserver(() => this.resize()).observe(this.host);
+                    } else {
+                        window.addEventListener('resize', () => this.resize());
+                    }
+
+                    this.viewport.on3DCameraUpdate = (orb) => this.updateCamera(orb);
+                }
+
+                resize() {
+                    if (!this.renderer || !this.host) return;
+                    const w = this.host.clientWidth || 600;
+                    const h = this.host.clientHeight || 420;
+                    this.renderer.setSize(w, h);
+                    this.camera.aspect = w / h;
+                    this.camera.updateProjectionMatrix();
+                }
+
+                updateCamera(orb) {
+                    if (!this.camera) return;
+                    const x = orb.targetX + orb.radius * Math.sin(orb.phi) * Math.sin(orb.theta);
+                    const y = orb.targetY + orb.radius * Math.cos(orb.phi);
+                    const z = orb.targetZ + orb.radius * Math.sin(orb.phi) * Math.cos(orb.theta);
+                    this.camera.position.set(x, y, z);
+                    this.camera.lookAt(orb.targetX, orb.targetY, orb.targetZ);
+                }
+
+                clearScene() {
+                    if (!this.scene) return;
+                    while (this.scene.children.length > 0) {
+                        const obj = this.scene.children[0];
+                        this.scene.remove(obj);
+                    }
+                    this.labelsEl.innerHTML = '';
+                    this.trackedLabels = [];
+                }
+
+                addPin(objOrVec, text, color = THEME.dna) {
+                    const div = document.createElement('div');
+                    div.className = 'pin-3d bio-label';
+                    div.textContent = text;
+                    div.style.borderColor = color;
+                    this.labelsEl.appendChild(div);
+                    this.trackedLabels.push({ target: objOrVec, el: div });
+                    return div;
+                }
+
+                start(tickFn) {
+                    this.stop();
+                    if (!this.available) {
+                        this.host.innerHTML = `<div style="padding:32px;text-align:center;color:#94a3b8;">⚠️ 無法載入 Three.js 3D 函式庫，請確認網路連線。</div>`;
+                        return;
+                    }
+                    this.resize();
+                    this.updateCamera(this.viewport.orbit);
+                    this.tickFn = tickFn;
+                    const clock = new THREE.Clock();
+                    const loop = () => {
+                        this.rafId = requestAnimationFrame(loop);
+                        const dt = clock.getDelta();
+                        const t = clock.getElapsedTime();
+                        if (this.tickFn) this.tickFn(t, dt);
+                        this.renderer.render(this.scene, this.camera);
+                        this.projectLabels();
+                    };
+                    loop();
+                }
+
+                projectLabels() {
+                    const w = this.host.clientWidth;
+                    const h = this.host.clientHeight;
+                    const v = new THREE.Vector3();
+                    for (const item of this.trackedLabels) {
+                        if (item.target.isObject3D) {
+                            item.target.getWorldPosition(v);
+                        } else {
+                            v.copy(item.target);
+                        }
+                        v.project(this.camera);
+                        if (v.z > 1) {
+                            item.el.style.display = 'none';
+                        } else {
+                            item.el.style.display = 'block';
+                            item.el.style.left = `${(v.x * 0.5 + 0.5) * w}px`;
+                            item.el.style.top = `${(-v.y * 0.5 + 0.5) * h}px`;
+                        }
+                    }
+                }
+
+                stop() {
+                    if (this.rafId) {
+                        cancelAnimationFrame(this.rafId);
+                        this.rafId = null;
+                    }
+                    this.tickFn = null;
+                }
+            }
+
+            /* =========================================================
+               4. 全域狀態與清理管理
+               ========================================================= */
+            const App = {
+                tabIdx: 0,
+                subIdx: 0,
+                stepIdx: 0,
+                isPlaying: false,
+                playTimer: null,
+                showLabels: true,
+                activeLoopId: null, // 2D Canvas/SVG requestAnimationFrame ID
+                state: {}           // 模組專屬狀態暫存
+            };
+
+            function stopModuleLoops() {
+                if (App.activeLoopId) {
+                    cancelAnimationFrame(App.activeLoopId);
+                    App.activeLoopId = null;
+                }
+                threeMgr.stop();
+            }
+
+            function stopAutoPlay() {
+                App.isPlaying = false;
+                if (App.playTimer) {
+                    clearInterval(App.playTimer);
+                    App.playTimer = null;
+                }
+                const playBtn = document.getElementById('btn-step-play');
+                if (playBtn) playBtn.textContent = '▶ 自動播放';
+            }
+
+            /* =========================================================
+               5. 六大生物技術分頁與互動模組定義
+               ========================================================= */
+            const TABS = [
+                /* -------------------------------------------------------
+                   分頁 1：傳統發酵、酵素與人為育種
+                   ------------------------------------------------------- */
+                {
+                    id: 'traditional',
+                    label: '🍞 傳統生技與育種',
+                    submodules: [
+                        {
+                            id: 'fermentation',
+                            name: '發酵食品 (麵包/酒/醬油/優酪乳)',
+                            tag: '傳統微生物發酵',
+                            title: '微生物發酵工廠：麵包、酒、醬油、優酪乳',
+                            mode: '2d',
+                            knowledge: '傳統生物技術利用天然微生物的<strong>酵素與代謝途徑</strong>將原料轉化為風味食品與酒精，無須改變生物體基因，人類已應用數千年。',
+                            steps: [
+                                { title: '1. 準備基質與原料', desc: '依食品種類準備富含醣類或蛋白質的原料（麵粉澱粉、葡萄果糖、黃豆小麥、鮮乳乳糖）。' },
+                                { title: '2. 接種特定微生物', desc: '加入對應菌種：酵母菌（麵包/釀酒）、米麴菌（醬油）、乳酸菌（優酪乳）。' },
+                                { title: '3. 酵素分解與無氧/好氧發酵', desc: '微生物分泌澱粉酶、蛋白酶或進行發酵代謝，產生氣體、酒精、胺基酸或乳酸。' },
+                                { title: '4. 風味熟成與產物生成', desc: 'CO₂ 使麵包膨鬆、乙醇成酒、胺基酸賦予醬油鮮味、乳酸使酪蛋白凝固成優酪乳。' }
+                            ],
+                            initState: () => ({ product: 'bread', temp: 35 }),
+                            mount(ctx) {
+                                const products = {
+                                    bread: { name: '🍞 麵包 (酵母菌)', microbe: '酵母菌 Saccharomyces', sub: '澱粉 / 葡萄糖', prod: 'CO₂ 氣泡 (膨鬆麵團)', eq: 'C₆H₁₂O₆ → 2 C₂H₅OH + 2 CO₂↑', optTemp: 35, color: THEME.gene },
+                                    wine: { name: '🍷 釀酒 (酵母菌)', microbe: '酵母菌 (無氧發酵)', sub: '葡萄果糖 / 麥芽糖', prod: '乙醇 (酒精) + CO₂', eq: 'C₆H₁₂O₆ → 2 C₂H₅OH (酒精) + 2 CO₂', optTemp: 25, color: THEME.pathogen },
+                                    soy: { name: '🥢 醬油 (米麴菌)', microbe: '米麴菌 Aspergillus', sub: '黃豆蛋白質 + 小麥澱粉', prod: '胺基酸 (鮮味) + 醣類', eq: '蛋白質 —(蛋白酶)→ 胜肽 → 胺基酸', optTemp: 30, color: THEME.rna },
+                                    yogurt: { name: '🥛 優酪乳 (乳酸菌)', microbe: '乳酸菌 Lactobacillus', sub: '鮮乳乳糖', prod: '乳酸 → 酪蛋白凝固', eq: '乳糖 → 乳酸 (pH下降至4.5凝固)', optTemp: 42, color: THEME.protein }
+                                };
+
+                                const renderParams = () => {
+                                    const p = products[App.state.product];
+                                    ctx.paramsEl.innerHTML = `
+                <div class="param-row">
+                  <div class="param-label"><span>選擇發酵食品</span><span>${p.microbe}</span></div>
+                  <div class="chip-group">
+                    ${Object.entries(products).map(([k, v]) => `
+                      <button class="chip-btn ${App.state.product === k ? 'active' : ''}" data-prod="${k}">${v.name}</button>
+                    `).join('')}
+                  </div>
+                </div>
+                <div class="param-row">
+                  <div class="param-label"><span>發酵槽溫度 (最適 ${p.optTemp}°C)</span><span id="val-temp">${App.state.temp}°C</span></div>
+                  <input type="range" min="5" max="65" value="${App.state.temp}" id="rng-temp" />
+                </div>
+              `;
+                                    ctx.paramsEl.querySelectorAll('[data-prod]').forEach(btn => {
+                                        btn.onclick = () => { App.state.product = btn.dataset.prod; App.state.temp = products[App.state.product].optTemp; renderParams(); draw(); };
+                                    });
+                                    ctx.paramsEl.querySelector('#rng-temp').oninput = (e) => {
+                                        App.state.temp = +e.target.value;
+                                        ctx.paramsEl.querySelector('#val-temp').textContent = `${App.state.temp}°C`;
+                                        draw();
+                                    };
+                                };
+
+                                const draw = () => {
+                                    const p = products[App.state.product];
+                                    const step = App.stepIdx;
+                                    const diff = Math.abs(App.state.temp - p.optTemp);
+                                    const activity = Math.max(0.08, Math.exp(-(diff * diff) / 260));
+                                    const isHot = App.state.temp > 55;
+
+                                    const svg = createSVG('0 0 900 520');
+                                    // 發酵槽背景
+                                    svgEl('rect', { x: 250, y: 70, width: 400, height: 370, rx: 32, fill: '#111c33', stroke: '#475569', 'stroke-width': 4 }, svg);
+                                    // 槽內液體/基質
+                                    const liquidFill = step === 0 ? '#1e293b' : (App.state.product === 'yogurt' ? '#e2e8f0' : (App.state.product === 'soy' ? '#451a03' : (App.state.product === 'wine' ? '#4c0519' : '#78350f')));
+                                    svgEl('rect', { x: 262, y: 150, width: 376, height: 278, rx: 22, fill: liquidFill, opacity: 0.78 }, svg);
+
+                                    // 溫度計條
+                                    svgEl('rect', { x: 690, y: 110, width: 28, height: 280, rx: 14, fill: '#1e293b', stroke: '#64748b', 'stroke-width': 2 }, svg);
+                                    const tHeight = (App.state.temp / 65) * 260;
+                                    svgEl('rect', { x: 696, y: 384 - tHeight, width: 16, height: tHeight, rx: 8, fill: isHot ? THEME.pathogen : (activity > 0.7 ? THEME.cell : THEME.gene) }, svg);
+                                    svgLabel(704, 88, `溫度 ${App.state.temp}°C`, isHot ? THEME.pathogen : THEME.text, 'middle', svg);
+
+                                    // 原料粒
+                                    for (let i = 0; i < 12; i++) {
+                                        const cx = 300 + (i % 4) * 95 + (i * 13 % 25);
+                                        const cy = 220 + Math.floor(i / 4) * 65;
+                                        svgEl('circle', { cx, cy, r: step >= 2 ? 7 : 12, fill: p.color, opacity: step >= 3 ? 0.35 : 0.85 }, svg);
+                                    }
+
+                                    // 微生物 (步驟 >= 1)
+                                    if (step >= 1) {
+                                        const count = 9;
+                                        for (let i = 0; i < count; i++) {
+                                            const mx = 310 + (i % 3) * 125 + Math.sin(i * 2) * 20;
+                                            const my = 200 + Math.floor(i / 3) * 75;
+                                            const mColor = isHot ? '#64748b' : THEME.cell;
+                                            const g = svgEl('g', { transform: `translate(${mx}, ${my})`, class: activity > 0.4 ? 'anim-float' : '' }, svg);
+                                            if (App.state.product === 'yogurt') {
+                                                svgEl('rect', { x: -16, y: -7, width: 32, height: 14, rx: 7, fill: mColor, stroke: '#fff', 'stroke-width': 1.2 }, g);
+                                            } else if (App.state.product === 'soy') {
+                                                svgEl('circle', { cx: 0, cy: 0, r: 10, fill: mColor }, g);
+                                                for (let a = 0; a < 6; a++) {
+                                                    const ang = (a * Math.PI) / 3;
+                                                    svgEl('line', { x1: 0, y1: 0, x2: Math.cos(ang) * 20, y2: Math.sin(ang) * 20, stroke: mColor, 'stroke-width': 2.5 }, g);
+                                                }
+                                            } else {
+                                                svgEl('ellipse', { cx: 0, cy: 0, rx: 14, ry: 10, fill: mColor, stroke: '#fff', 'stroke-width': 1.2 }, g);
+                                                svgEl('circle', { cx: 12, cy: -5, r: 5, fill: mColor }, g); // 出芽
+                                            }
+                                        }
+                                    }
+
+                                    // 反應產物與氣泡 (步驟 >= 2)
+                                    if (step >= 2 && !isHot) {
+                                        const bubbleCount = Math.max(2, Math.round(activity * 14));
+                                        for (let i = 0; i < bubbleCount; i++) {
+                                            const bx = 290 + ((i * 53) % 320);
+                                            const by = 360 - ((i * 37) % 170);
+                                            const c = svgEl('circle', {
+                                                cx: bx, cy: by, r: 5 + (i % 4) * 2.5,
+                                                fill: App.state.product === 'bread' || App.state.product === 'wine' ? '#e0f2fe' : p.color,
+                                                opacity: 0.75
+                                            }, svg);
+                                            c.style.animation = `riseBubble ${(2.6 - activity * 1.3).toFixed(2)}s linear ${(i * 0.2) % 2}s infinite`;
+                                        }
+                                    }
+
+                                    // 反應方程式與活性表
+                                    svgEl('rect', { x: 180, y: 458, width: 540, height: 42, rx: 10, fill: 'rgba(15,23,42,0.9)', stroke: p.color, 'stroke-width': 1.5 }, svg);
+                                    const eqT = svgEl('text', { x: 450, y: 484, fill: '#f8fafc', 'font-size': 15, 'font-weight': 700, 'text-anchor': 'middle' }, svg);
+                                    eqT.textContent = p.eq;
+
+                                    svgLabel(450, 42, `${p.name} — 發酵活性：${isHot ? '酵素熱變性失活！' : Math.round(activity * 100) + '%'}`, isHot ? THEME.pathogen : THEME.cell, 'middle', svg);
+                                    if (step >= 0) svgLabel(135, 220, `原料：${p.sub}`, p.color, 'middle', svg);
+                                    if (step >= 1) svgLabel(135, 290, `菌種：${p.microbe}`, THEME.cell, 'middle', svg);
+                                    if (step >= 3) svgLabel(450, 130, `產物：${p.prod}`, THEME.protein, 'middle', svg);
+
+                                    ctx.stage2D.innerHTML = '';
+                                    ctx.stage2D.appendChild(svg);
+                                };
+
+                                renderParams();
+                                draw();
+                                return { renderStep: draw };
+                            }
+                        },
+                        {
+                            id: 'enzymes_bio',
+                            name: '酵素工程 / 生質塑膠 / 生質酒精',
+                            tag: '工業與環境生技',
+                            title: '酵素工程、生質塑膠 (PHA/PLA) 與生質酒精',
+                            mode: '2d',
+                            knowledge: '透過基因改良或篩選高效率微生物與酵素，能以<strong>低耗能、低碳排</strong>方式取代石化工業，生產日常清潔酵素與可分解生質材料。',
+                            steps: [
+                                { title: '1. 選擇生物催化劑/原料', desc: '利用微生物分泌專一性酵素（洗衣精酵素）或取用植物澱粉/纖維素作為生質原料。' },
+                                { title: '2. 專一性催化與發酵轉化', desc: '酵素以「鎖鑰模型」精準結合污漬或糖分；工程菌在發酵槽內累積 PHA 顆粒或轉化為乙醇。' },
+                                { title: '3. 純化應用與環境循環', desc: '生質塑膠可被土壤微生物完全分解回 CO₂ 與水，達成永續碳循環。' }
+                            ],
+                            initState: () => ({ mode: 'detergent' }),
+                            mount(ctx) {
+                                const modes = {
+                                    detergent: { name: '🫧 洗衣精人工酵素', sub: '蛋白質/油脂污漬', enz: '基因工程蛋白酶 / 脂肪酶', prod: '小分子水溶性胺基酸/脂肪酸 (低溫去污)', color: THEME.enzyme },
+                                    bioplastic: { name: '♻️ 生質塑膠 (PHA/PLA)', sub: '玉米澱粉 / 葡萄糖', enz: '工程微生物聚羥基烷酸酯合成路徑', prod: '生物可分解塑膠 → 堆肥回歸自然', color: THEME.cell },
+                                    bioethanol: { name: '⛽ 生質酒精 (Bioethanol)', sub: '甘蔗 / 纖維素生質物', enz: '纖維素酶 + 高耐醇酵母菌', prod: '生質乙醇燃料 (取代部分汽油)', color: THEME.gene }
+                                };
+
+                                const renderParams = () => {
+                                    ctx.paramsEl.innerHTML = `
+                <div class="param-row">
+                  <div class="param-label"><span>選擇生技應用</span><span>工業/環境</span></div>
+                  <div class="chip-group">
+                    ${Object.entries(modes).map(([k, v]) => `
+                      <button class="chip-btn ${App.state.mode === k ? 'active' : ''}" data-m="${k}">${v.name}</button>
+                    `).join('')}
+                  </div>
+                </div>
+              `;
+                                    ctx.paramsEl.querySelectorAll('[data-m]').forEach(b => {
+                                        b.onclick = () => { App.state.mode = b.dataset.m; renderParams(); draw(); };
+                                    });
+                                };
+
+                                const draw = () => {
+                                    const m = modes[App.state.mode];
+                                    const step = App.stepIdx;
+                                    const svg = createSVG('0 0 900 520');
+
+                                    // 左側：原料/污漬
+                                    svgEl('rect', { x: 60, y: 150, width: 200, height: 210, rx: 20, fill: '#1e293b', stroke: m.color, 'stroke-width': 2.5 }, svg);
+                                    if (App.state.mode === 'detergent') {
+                                        // 布料與污漬分子
+                                        svgEl('path', { d: 'M100,230 Q140,190 190,230 Q220,270 160,300 Q100,280 100,230 Z', fill: '#9f1239', opacity: step === 2 ? 0.25 : 0.9 }, svg);
+                                        svgLabel(160, 130, '衣物血漬/油漬大分子', THEME.pathogen, 'middle', svg);
+                                    } else {
+                                        svgEl('circle', { cx: 160, cy: 255, r: 52, fill: m.color, opacity: 0.25 }, svg);
+                                        svgEl('text', { x: 160, y: 268, 'font-size': 48, 'text-anchor': 'middle' }, svg).textContent = App.state.mode === 'bioplastic' ? '🌽' : '🌾';
+                                        svgLabel(160, 130, m.sub, m.color, 'middle', svg);
+                                    }
+
+                                    // 箭頭 1
+                                    svgEl('path', { d: 'M275,255 L340,255', stroke: THEME.muted, 'stroke-width': 4, 'marker-end': 'url(#arr)' }, svg);
+                                    const defs = svgEl('defs', {}, svg);
+                                    const mk = svgEl('marker', { id: 'arr', markerWidth: 10, markerHeight: 10, refX: 6, refY: 3, orient: 'auto' }, defs);
+                                    svgEl('path', { d: 'M0,0 L0,6 L8,3 z', fill: THEME.muted }, mk);
+
+                                    // 中央：酵素/微生物反應區
+                                    const active = step >= 1;
+                                    svgEl('circle', { cx: 450, cy: 255, r: 95, fill: active ? 'rgba(167,139,250,0.16)' : '#0f172a', stroke: THEME.enzyme, 'stroke-width': active ? 4 : 2, 'stroke-dasharray': active ? 'none' : '8 6' }, svg);
+                                    // 鎖鑰酵素圖形
+                                    svgEl('path', { d: 'M410,220 A45,45 0 1,1 410,290 L445,255 Z', fill: THEME.enzyme, opacity: active ? 0.95 : 0.4 }, svg);
+                                    if (active) {
+                                        svgEl('circle', { cx: 468, cy: 255, r: 18, fill: m.color, class: 'anim-pulse' }, svg);
+                                    }
+                                    svgLabel(450, 130, m.enz, THEME.enzyme, 'middle', svg);
+
+                                    // 箭頭 2
+                                    svgEl('path', { d: 'M560,255 L625,255', stroke: THEME.muted, 'stroke-width': 4, 'marker-end': 'url(#arr)' }, svg);
+
+                                    // 右側：產物與永續循環
+                                    const done = step >= 2;
+                                    svgEl('rect', { x: 640, y: 150, width: 200, height: 210, rx: 20, fill: done ? 'rgba(52,211,153,0.15)' : '#1e293b', stroke: done ? THEME.cell : '#475569', 'stroke-width': 2.5 }, svg);
+                                    if (done) {
+                                        for (let i = 0; i < 6; i++) {
+                                            svgEl('circle', { cx: 690 + (i % 3) * 45, cy: 230 + Math.floor(i / 3) * 50, r: 12, fill: THEME.cell, class: 'anim-float' }, svg);
+                                        }
+                                    }
+                                    svgLabel(740, 130, done ? m.prod : '等待催化反應...', done ? THEME.cell : THEME.muted, 'middle', svg);
+
+                                    // 永續循環標註
+                                    if (App.state.mode !== 'detergent') {
+                                        svgEl('path', { d: 'M740,375 Q450,475 160,375', fill: 'none', stroke: THEME.cell, 'stroke-width': 2.5, 'stroke-dasharray': '7 6', opacity: done ? 1 : 0.3 }, svg);
+                                        svgLabel(450, 445, '♻️ 生物可分解與低碳植物光合作用循環', THEME.cell, 'middle', svg);
+                                    } else {
+                                        svgLabel(450, 445, '⚡ 人工改良酵素耐鹼且 30°C 低溫即可高效分解，節省洗衣電能', THEME.protein, 'middle', svg);
+                                    }
+
+                                    ctx.stage2D.innerHTML = '';
+                                    ctx.stage2D.appendChild(svg);
+                                };
+
+                                renderParams();
+                                draw();
+                                return { renderStep: draw };
+                            }
+                        },
+                        {
+                            id: 'breeding',
+                            name: '人為篩選育種 (甘藍菜 / 金魚)',
+                            tag: '傳統人為篩選育種',
+                            title: '人為篩選育種：野生甘藍與鯽魚的多樣化演變',
+                            mode: '2d',
+                            knowledge: '<strong>人為篩選育種</strong>透過挑選符合人類需求的自然變異個體進行多代交配。相較於「基因轉殖」可直接跨物種引入外源基因，人為篩選耗時數十至數百年且限於同種交配。',
+                            steps: [
+                                { title: '1. 野生祖先族群', desc: '野生甘藍菜或野生灰褐色鯽魚，族群內偶發產生外觀與器官大小微幅變異的個體。' },
+                                { title: '2. 鎖定目標性狀並淘汰其餘', desc: '人類刻意挑選具有特殊性狀（如紅橘色鱗片、肥大花蕾或頂芽）的個體進行近親交配。' },
+                                { title: '3. 多世代累積分化出新品種', desc: '經過數十代篩選，同一祖先分化出高麗菜、青花菜、大頭菜，或琉金、獅頭等多樣金魚！' }
+                            ],
+                            initState: () => ({ species: 'cabbage', cabbageType: 'broccoli', goldfishType: 'ryukin', gen: 2 }),
+                            mount(ctx) {
+                                const renderParams = () => {
+                                    const s = App.state.species;
+                                    ctx.paramsEl.innerHTML = `
+                <div class="param-row">
+                  <div class="param-label"><span>育種物種案例</span><span>傳統篩選</span></div>
+                  <div class="chip-group">
+                    <button class="chip-btn ${s === 'cabbage' ? 'active' : ''}" data-sp="cabbage">🥬 野生甘藍菜家族</button>
+                    <button class="chip-btn ${s === 'goldfish' ? 'active' : ''}" data-sp="goldfish">🐠 鯽魚 → 多樣金魚</button>
+                  </div>
+                </div>
+                ${s === 'cabbage' ? `
+                <div class="param-row">
+                  <div class="param-label"><span>篩選目標部位</span><span>性狀選擇</span></div>
+                  <div class="chip-group">
+                    <button class="chip-btn ${App.state.cabbageType === 'broccoli' ? 'active' : ''}" data-cab="broccoli">🥦 青花菜 (選育花蕾)</button>
+                    <button class="chip-btn ${App.state.cabbageType === 'cabbage' ? 'active' : ''}" data-cab="cabbage">🥬 高麗菜 (選育頂芽)</button>
+                    <button class="chip-btn ${App.state.cabbageType === 'kohlrabi' ? 'active' : ''}" data-cab="kohlrabi">🥗 大頭菜 (選育莖部)</button>
+                  </div>
+                </div>` : `
+                <div class="param-row">
+                  <div class="param-label"><span>篩選變異性狀</span><span>金魚品系</span></div>
+                  <div class="chip-group">
+                    <button class="chip-btn ${App.state.goldfishType === 'ryukin' ? 'active' : ''}" data-gf="ryukin">琉金 (圓身雙尾鰭)</button>
+                    <button class="chip-btn ${App.state.goldfishType === 'oranda' ? 'active' : ''}" data-gf="oranda">獅頭 (頭頂肉瘤)</button>
+                    <button class="chip-btn ${App.state.goldfishType === 'telescope' ? 'active' : ''}" data-gf="telescope">龍睛 (凸眼黑橘)</button>
+                  </div>
+                </div>`}
+              `;
+                                    ctx.paramsEl.querySelectorAll('[data-sp]').forEach(b => {
+                                        b.onclick = () => { App.state.species = b.dataset.sp; renderParams(); draw(); };
+                                    });
+                                    ctx.paramsEl.querySelectorAll('[data-cab]').forEach(b => {
+                                        b.onclick = () => { App.state.cabbageType = b.dataset.cab; draw(); renderParams(); };
+                                    });
+                                    ctx.paramsEl.querySelectorAll('[data-gf]').forEach(b => {
+                                        b.onclick = () => { App.state.goldfishType = b.dataset.gf; draw(); renderParams(); };
+                                    });
+                                };
+
+                                const draw = () => {
+                                    const step = App.stepIdx;
+                                    const svg = createSVG('0 0 900 520');
+                                    const progress = step === 0 ? 0 : (step === 1 ? 0.45 : 1);
+
+                                    // 左側野生祖先
+                                    svgEl('rect', { x: 55, y: 120, width: 230, height: 280, rx: 18, fill: '#111c33', stroke: '#475569', 'stroke-width': 2 }, svg);
+                                    svgLabel(170, 95, App.state.species === 'cabbage' ? '野生甘藍菜 (祖先)' : '野生鯽魚 (灰褐祖先)', THEME.muted, 'middle', svg);
+
+                                    if (App.state.species === 'cabbage') {
+                                        // 野生甘藍 SVG
+                                        svgEl('path', { d: 'M170,360 L170,220', stroke: THEME.cell, 'stroke-width': 8, 'stroke-linecap': 'round' }, svg);
+                                        svgEl('ellipse', { cx: 130, cy: 290, rx: 38, ry: 18, fill: '#15803d', transform: 'rotate(-20 130 290)' }, svg);
+                                        svgEl('ellipse', { cx: 210, cy: 280, rx: 38, ry: 18, fill: '#15803d', transform: 'rotate(20 210 280)' }, svg);
+                                        svgEl('circle', { cx: 170, cy: 205, r: 10, fill: '#facc15' }, svg);
+
+                                        // 中間篩選進程箭頭
+                                        svgEl('path', { d: 'M310,260 L540,260', stroke: THEME.gene, 'stroke-width': 5, 'stroke-dasharray': step === 0 ? '8 8' : 'none' }, svg);
+                                        svgLabel(425, 225, step === 0 ? '自然變異潛力' : '人類世代篩選交配 (F1 → F30)', THEME.gene, 'middle', svg);
+
+                                        // 右側育種成果
+                                        svgEl('rect', { x: 565, y: 100, width: 280, height: 320, rx: 20, fill: '#111c33', stroke: THEME.cell, 'stroke-width': 3 }, svg);
+                                        const ct = App.state.cabbageType;
+                                        if (ct === 'broccoli') {
+                                            svgEl('path', { d: `M705,370 L705,${270 - progress * 20}`, stroke: '#4ade80', 'stroke-width': 14 + progress * 10, 'stroke-linecap': 'round' }, svg);
+                                            const r = 16 + progress * 38;
+                                            svgEl('circle', { cx: 705, cy: 225, r, fill: '#15803d' }, svg);
+                                            svgEl('circle', { cx: 672, cy: 240, r: r * 0.72, fill: '#166534' }, svg);
+                                            svgEl('circle', { cx: 738, cy: 240, r: r * 0.72, fill: '#166534' }, svg);
+                                            svgLabel(705, 80, step === 2 ? '🥦 青花菜 (花蕾極度發達)' : '選育花蕾發育', THEME.cell, 'middle', svg);
+                                        } else if (ct === 'cabbage') {
+                                            const r = 24 + progress * 55;
+                                            svgEl('circle', { cx: 705, cy: 265, r, fill: '#4ade80', stroke: '#166534', 'stroke-width': 4 }, svg);
+                                            svgEl('path', { d: `M${705 - r * 0.7},265 Q705,${265 - r * 0.8} ${705 + r * 0.7},265`, fill: 'none', stroke: '#bbf7d0', 'stroke-width': 3 }, svg);
+                                            svgLabel(705, 80, step === 2 ? '🥬 高麗菜 (頂芽層層包捲)' : '選育頂芽肥大', THEME.cell, 'middle', svg);
+                                        } else {
+                                            const rx = 18 + progress * 48;
+                                            svgEl('ellipse', { cx: 705, cy: 290, rx, ry: rx * 0.85, fill: '#a3e635', stroke: '#4d7c0f', 'stroke-width': 3 }, svg);
+                                            svgEl('path', { d: 'M705,240 L670,185 M705,240 L740,185', stroke: '#22c55e', 'stroke-width': 6 }, svg);
+                                            svgLabel(705, 80, step === 2 ? '🥗 大頭菜/球莖甘藍 (莖部膨大)' : '選育莖部儲藏養分', THEME.cell, 'middle', svg);
+                                        }
+                                    } else {
+                                        // 野生鯽魚
+                                        svgEl('ellipse', { cx: 170, cy: 260, rx: 58, ry: 26, fill: '#64748b', stroke: '#94a3b8', 'stroke-width': 2 }, svg);
+                                        svgEl('polygon', { points: '225,260 258,238 258,282', fill: '#64748b' }, svg);
+                                        svgEl('circle', { cx: 132, cy: 254, r: 4, fill: '#fff' }, svg);
+                                        svgEl('circle', { cx: 131, cy: 254, r: 2, fill: '#000' }, svg);
+
+                                        svgEl('path', { d: 'M310,260 L540,260', stroke: THEME.gene, 'stroke-width': 5 }, svg);
+                                        svgLabel(425, 225, step === 0 ? '野生灰褐體色' : '選育突變體色、雙尾鰭與頭部性狀', THEME.gene, 'middle', svg);
+
+                                        // 右側多樣金魚
+                                        svgEl('rect', { x: 565, y: 100, width: 280, height: 320, rx: 20, fill: '#111c33', stroke: THEME.rna, 'stroke-width': 3 }, svg);
+                                        const gf = App.state.goldfishType;
+                                        const bodyColor = step === 0 ? '#64748b' : (gf === 'telescope' ? '#f97316' : '#fb923c');
+                                        const rx = 56 - progress * 8;
+                                        const ry = 26 + progress * 24;
+                                        // 雙尾鰭
+                                        svgEl('path', { d: `M${705 + rx * 0.8},265 Q${775 + progress * 25},${220 - progress * 20} ${790 + progress * 15},255 Q760,265 ${790 + progress * 15},295 Q775,320 ${705 + rx * 0.8},275 Z`, fill: bodyColor, opacity: 0.85 }, svg);
+                                        svgEl('ellipse', { cx: 705, cy: 265, rx, ry, fill: bodyColor, stroke: '#fff', 'stroke-width': 1.8 }, svg);
+                                        if (gf === 'oranda' && progress > 0.3) {
+                                            svgEl('circle', { cx: 656, cy: 245, r: 10 * progress, fill: '#ef4444' }, svg);
+                                            svgEl('circle', { cx: 666, cy: 240, r: 8 * progress, fill: '#ef4444' }, svg);
+                                        }
+                                        if (gf === 'telescope') {
+                                            svgEl('circle', { cx: 665, cy: 252, r: 6 + progress * 8, fill: '#f8fafc', stroke: '#000', 'stroke-width': 2 }, svg);
+                                            svgEl('circle', { cx: 665, cy: 252, r: 4, fill: '#000' }, svg);
+                                        } else {
+                                            svgEl('circle', { cx: 668, cy: 256, r: 5, fill: '#fff' }, svg);
+                                            svgEl('circle', { cx: 667, cy: 256, r: 2.5, fill: '#000' }, svg);
+                                        }
+                                        const gfNames = { ryukin: '琉金金魚 (圓腹雙尾)', oranda: '獅頭金魚 (頭頂肉瘤)', telescope: '龍睛金魚 (突眼特徵)' };
+                                        svgLabel(705, 80, step === 2 ? `🐠 ${gfNames[gf]}` : '逐步累積觀賞性狀', THEME.rna, 'middle', svg);
+                                    }
+
+                                    ctx.stage2D.innerHTML = '';
+                                    ctx.stage2D.appendChild(svg);
+                                };
+
+                                renderParams();
+                                draw();
+                                return { renderStep: draw };
+                            }
+                        }
+                    ]
+                },
+
+                /* -------------------------------------------------------
+                   分頁 2：基因轉殖、疫苗與生態安全
+                   ------------------------------------------------------- */
+                {
+                    id: 'transgenic',
+                    label: '🧫 基因轉殖與生物安全',
+                    submodules: [
+                        {
+                            id: 'recombinant_dna',
+                            name: '重組DNA工廠 (胰島素/生長激素/B肝疫苗)',
+                            tag: '微生物基因轉殖',
+                            title: '基因轉殖微生物生產激素與 B 型肝炎疫苗',
+                            mode: '2d',
+                            knowledge: '透過<strong>重組 DNA 技術</strong>，將人類胰島素、生長激素基因殖入大腸桿菌，或將 B 型肝炎病毒表面抗原基因殖入酵母菌，可安全且大量製造醫療蛋白質，取代過去從動物胰臟或人血萃取的高風險作法。',
+                            steps: [
+                                { title: '1. 提取目標基因與載體質體', desc: '從人類細胞分離出目標基因（如胰島素或生長激素基因），並從細菌取出環狀質體 DNA 作為載體。' },
+                                { title: '2. 限制酶精準切割', desc: '使用相同的「限制酶」切割目標基因兩端與質體，製造出互補的黏性末端。' },
+                                { title: '3. DNA 連接酶接合重組質體', desc: '加入 DNA 連接酶將目標基因與質體黏合，完成「重組 DNA」。' },
+                                { title: '4. 轉形送入宿主微生物', desc: '將重組質體送入大腸桿菌（生產激素）或酵母菌（生產 B 肝疫苗抗原）。' },
+                                { title: '5. 發酵大量表現與純化', desc: '微生物快速分裂並表現大量目標蛋白，經純化後製成胰島素注射劑或 B 肝疫苗。' }
+                            ],
+                            initState: () => ({ target: 'insulin' }),
+                            mount(ctx) {
+                                const targets = {
+                                    insulin: { name: '💉 人類胰島素', host: '大腸桿菌', gene: '胰島素基因', prod: '人類胰島素 (治療糖尿病)' },
+                                    gh: { name: '📏 人類生長激素', host: '大腸桿菌', gene: '生長激素基因', prod: '重組生長激素 (治療侏儒症)' },
+                                    hepb: { name: '🛡️ B型肝炎疫苗', host: '酵母菌', gene: 'HBV 表面抗原基因 (HBsAg)', prod: 'B肝表面抗原疫苗 (安全無病毒)' }
+                                };
+
+                                const renderParams = () => {
+                                    ctx.paramsEl.innerHTML = `
+                <div class="param-row">
+                  <div class="param-label"><span>選擇轉殖目標產物</span><span>${targets[App.state.target].host}</span></div>
+                  <div class="chip-group">
+                    ${Object.entries(targets).map(([k, v]) => `
+                      <button class="chip-btn ${App.state.target === k ? 'active' : ''}" data-t="${k}">${v.name}</button>
+                    `).join('')}
+                  </div>
+                </div>
+              `;
+                                    ctx.paramsEl.querySelectorAll('[data-t]').forEach(b => {
+                                        b.onclick = () => { App.state.target = b.dataset.t; renderParams(); draw(); };
+                                    });
+                                };
+
+                                const draw = () => {
+                                    const t = targets[App.state.target];
+                                    const step = App.stepIdx;
+                                    const svg = createSVG('0 0 900 520');
+
+                                    // 步驟 1-2: 上方雙源
+                                    // 人類/病毒基因來源
+                                    svgEl('rect', { x: 50, y: 55, width: 220, height: 150, rx: 16, fill: '#111c33', stroke: THEME.animal, 'stroke-width': 2 }, svg);
+                                    svgEl('path', { d: 'M85,130 Q125,95 160,130 T235,130', fill: 'none', stroke: THEME.dna, 'stroke-width': 6 }, svg);
+                                    svgEl('path', { d: 'M135,118 L185,142', stroke: THEME.gene, 'stroke-width': 9, 'stroke-linecap': 'round' }, svg);
+                                    svgLabel(160, 44, t.gene, THEME.gene, 'middle', svg);
+
+                                    // 細菌質體來源
+                                    svgEl('rect', { x: 50, y: 270, width: 220, height: 165, rx: 16, fill: '#111c33', stroke: THEME.cell, 'stroke-width': 2 }, svg);
+                                    const cutGap = step >= 1 ? 35 : 0;
+                                    svgEl('circle', {
+                                        cx: 160, cy: 352, r: 44, fill: 'none', stroke: THEME.plasmid, 'stroke-width': 8,
+                                        'stroke-dasharray': cutGap ? '235 45' : 'none'
+                                    }, svg);
+                                    svgLabel(160, 258, '細菌環狀質體 (載體)', THEME.plasmid, 'middle', svg);
+
+                                    // 限制酶剪刀圖示 (Step 1)
+                                    if (step === 1) {
+                                        svgLabel(290, 215, '✂️ 相同限制酶切割黏性端', THEME.enzyme, 'middle', svg);
+                                    }
+
+                                    // Step 2-3: 重組質體
+                                    if (step >= 2) {
+                                        svgEl('path', { d: 'M285,135 L395,220 M285,352 L395,260', stroke: THEME.muted, 'stroke-width': 3, 'stroke-dasharray': '5 5' }, svg);
+                                        svgEl('circle', { cx: 455, cy: 245, r: 52, fill: 'none', stroke: THEME.plasmid, 'stroke-width': 9 }, svg);
+                                        svgEl('path', { d: 'M455,193 A52,52 0 0,1 507,245', fill: 'none', stroke: THEME.gene, 'stroke-width': 11, 'stroke-linecap': 'round' }, svg);
+                                        svgLabel(455, 168, step === 2 ? '🔗 DNA 連接酶接合重組 DNA' : '重組質體', THEME.enzyme, 'middle', svg);
+                                    }
+
+                                    // Step 3-4: 宿主細胞與發酵量產
+                                    if (step >= 3) {
+                                        svgEl('path', { d: 'M520,245 L595,245', stroke: THEME.muted, 'stroke-width': 4 }, svg);
+                                        const cellColor = App.state.target === 'hepb' ? '#f59e0b' : THEME.cell;
+                                        svgEl('rect', { x: 605, y: 120, width: 250, height: 260, rx: 45, fill: 'rgba(52,211,153,0.1)', stroke: cellColor, 'stroke-width': 4 }, svg);
+                                        // 菌體內重組質體
+                                        svgEl('circle', { cx: 690, cy: 240, r: 28, fill: 'none', stroke: THEME.plasmid, 'stroke-width': 6 }, svg);
+                                        svgEl('path', { d: 'M690,212 A28,28 0 0,1 718,240', fill: 'none', stroke: THEME.gene, 'stroke-width': 8 }, svg);
+                                        svgLabel(730, 100, `宿主：${t.host}`, cellColor, 'middle', svg);
+
+                                        if (step >= 4) {
+                                            // 大量表現目標蛋白質
+                                            for (let i = 0; i < 8; i++) {
+                                                const px = 745 + (i % 2) * 52;
+                                                const py = 175 + Math.floor(i / 2) * 45;
+                                                svgEl('circle', { cx: px, cy: py, r: 10, fill: THEME.protein, class: 'anim-float' }, svg);
+                                            }
+                                            svgLabel(730, 415, `大量產出：${t.prod}`, THEME.protein, 'middle', svg);
+                                        }
+                                    }
+
+                                    ctx.stage2D.innerHTML = '';
+                                    ctx.stage2D.appendChild(svg);
+                                };
+
+                                renderParams();
+                                draw();
+                                return { renderStep: draw };
+                            }
+                        },
+                        {
+                            id: 'vaccines_hpv_flu',
+                            name: 'HPV 疫苗與流感病毒疫苗製程',
+                            tag: '現代基因與細胞疫苗',
+                            title: '基因工程 HPV 疫苗 (VLP) 與流感病毒疫苗',
+                            mode: '2d',
+                            knowledge: '<strong>HPV 疫苗</strong>採用基因工程表現病毒 L1 外殼蛋白，自動組裝成不含病毒遺傳物質的「類病毒顆粒 (VLP)」；<strong>流感疫苗</strong>則因應病毒株每年變異，透過雞胚蛋、細胞培養或重組抗原生產。',
+                            steps: [
+                                { title: '1. 選定目標病毒與抗原', desc: 'HPV 鎖定 L1 殼蛋白基因；流感則依 WHO 每年預測的流行病毒株取得表面抗原 (HA/NA)。' },
+                                { title: '2. 培養擴增或基因表現', desc: 'HPV 將 L1 基因轉殖入酵母菌/昆蟲細胞表現；流感將病毒接種於無特定病原雞胚蛋或生物反應器細胞中大量複製。' },
+                                { title: '3. 純化組裝與去活化檢驗', desc: 'HPV L1 蛋白自組裝為無DNA空殼 VLP；流感病毒經化學去活化並純化出表面抗原，製成安全疫苗。' }
+                            ],
+                            initState: () => ({ vtype: 'hpv' }),
+                            mount(ctx) {
+                                const renderParams = () => {
+                                    ctx.paramsEl.innerHTML = `
+                <div class="param-row">
+                  <div class="param-label"><span>選擇疫苗製程</span><span>免疫預防</span></div>
+                  <div class="chip-group">
+                    <button class="chip-btn ${App.state.vtype === 'hpv' ? 'active' : ''}" data-v="hpv">🧬 HPV 疫苗 (VLP類病毒顆粒)</button>
+                    <button class="chip-btn ${App.state.vtype === 'flu' ? 'active' : ''}" data-v="flu">🦠 流感病毒疫苗</button>
+                  </div>
+                </div>
+              `;
+                                    ctx.paramsEl.querySelectorAll('[data-v]').forEach(b => {
+                                        b.onclick = () => { App.state.vtype = b.dataset.v; renderParams(); draw(); };
+                                    });
+                                };
+
+                                const draw = () => {
+                                    const step = App.stepIdx;
+                                    const isHPV = App.state.vtype === 'hpv';
+                                    const svg = createSVG('0 0 900 520');
+
+                                    // 左側病毒原型
+                                    svgEl('circle', { cx: 155, cy: 250, r: 64, fill: 'rgba(251,113,133,0.16)', stroke: THEME.pathogen, 'stroke-width': 3 }, svg);
+                                    for (let a = 0; a < 10; a++) {
+                                        const ang = (a * Math.PI * 2) / 10;
+                                        svgEl('circle', { cx: 155 + Math.cos(ang) * 70, cy: 250 + Math.sin(ang) * 70, r: 8, fill: THEME.protein }, svg);
+                                    }
+                                    svgEl('path', { d: 'M125,250 Q155,220 185,250 Q155,280 125,250', fill: 'none', stroke: THEME.gene, 'stroke-width': 4 }, svg);
+                                    svgLabel(155, 145, isHPV ? 'HPV 病毒 (取 L1 基因)' : 'WHO 預測流感病毒株', THEME.pathogen, 'middle', svg);
+
+                                    // 中央培養平台
+                                    if (step >= 1) {
+                                        svgEl('path', { d: 'M245,250 L330,250', stroke: THEME.muted, 'stroke-width': 4 }, svg);
+                                        if (isHPV) {
+                                            svgEl('rect', { x: 345, y: 150, width: 210, height: 200, rx: 24, fill: '#111c33', stroke: THEME.cell, 'stroke-width': 3 }, svg);
+                                            for (let i = 0; i < 6; i++) {
+                                                svgEl('polygon', { points: `${395 + (i % 3) * 52},${220 + Math.floor(i / 3) * 60} ${410 + (i % 3) * 52},${235 + Math.floor(i / 3) * 60} ${380 + (i % 3) * 52},${235 + Math.floor(i / 3) * 60}`, fill: THEME.protein, class: 'anim-float' }, svg);
+                                            }
+                                            svgLabel(450, 125, '重組酵母菌表現大量 L1 蛋白', THEME.cell, 'middle', svg);
+                                        } else {
+                                            // 雞胚蛋與生物反應器
+                                            svgEl('ellipse', { cx: 450, cy: 255, rx: 78, ry: 98, fill: '#fef3c7', stroke: '#f59e0b', 'stroke-width': 4 }, svg);
+                                            svgEl('circle', { cx: 450, cy: 255, r: 35, fill: 'rgba(251,113,133,0.4)' }, svg);
+                                            svgLabel(450, 125, '雞胚蛋 / 細胞培養大量增殖', THEME.gene, 'middle', svg);
+                                        }
+                                    }
+
+                                    // 右側純化產物
+                                    if (step >= 2) {
+                                        svgEl('path', { d: 'M570,250 L645,250', stroke: THEME.muted, 'stroke-width': 4 }, svg);
+                                        svgEl('rect', { x: 655, y: 135, width: 200, height: 230, rx: 20, fill: 'rgba(34,211,238,0.1)', stroke: THEME.protein, 'stroke-width': 3 }, svg);
+                                        if (isHPV) {
+                                            // 空心 VLP (無遺傳物質)
+                                            svgEl('circle', { cx: 755, cy: 245, r: 52, fill: 'none', stroke: THEME.protein, 'stroke-width': 8, 'stroke-dasharray': '14 6' }, svg);
+                                            svgLabel(755, 248, '無DNA空殼', THEME.cell, 'middle', svg);
+                                            svgLabel(755, 112, '類病毒顆粒 (VLP) 疫苗', THEME.protein, 'middle', svg);
+                                        } else {
+                                            // 裂解表面抗原 (HA/NA)
+                                            for (let i = 0; i < 6; i++) {
+                                                svgEl('line', { x1: 710 + (i % 3) * 45, y1: 215 + Math.floor(i / 3) * 60, x2: 710 + (i % 3) * 45, y2: 240 + Math.floor(i / 3) * 60, stroke: THEME.protein, 'stroke-width': 6, 'stroke-linecap': 'round' }, svg);
+                                                svgEl('circle', { cx: 710 + (i % 3) * 45, cy: 210 + Math.floor(i / 3) * 60, r: 7, fill: THEME.pathogen }, svg);
+                                            }
+                                            svgLabel(755, 112, '去活化純化 HA/NA 抗原疫苗', THEME.protein, 'middle', svg);
+                                        }
+                                        svgLabel(755, 395, '💉 刺激抗體生成 · 不具致病力', THEME.cell, 'middle', svg);
+                                    }
+
+                                    ctx.stage2D.innerHTML = '';
+                                    ctx.stage2D.appendChild(svg);
+                                };
+
+                                renderParams();
+                                draw();
+                                return { renderStep: draw };
+                            }
+                        },
+                        {
+                            id: 'transgenic_agro',
+                            name: '動植物基因轉殖 (Bt玉米/抗旱稻/組織培養/螢光魚/鮭魚/GMO)',
+                            tag: '農業與水產基因轉殖',
+                            title: '動植物基因轉殖：抗蟲、抗旱、組織培養、螢光魚與超級鮭魚',
+                            mode: '2d',
+                            knowledge: '將外源有益基因轉殖入農作物或水產動物（如 Bt 抗蟲基因減少農藥、抗旱基因提升水稻產量、水母螢光基因用於觀賞魚、生長激素基因加速鮭魚成長），並配合「無病毒組織培養苗」快速繁殖優良種苗，是現代基因改造食品(GMO)與農業生技的核心。',
+                            steps: [
+                                { title: '1. 選擇外源功能基因', desc: '依需求挑選基因：蘇力菌 Bt 抗蟲基因、植物抗旱基因、珊瑚/水母螢光蛋白基因 (GFP/RFP) 或鮭魚生長激素基因。' },
+                                { title: '2. 農桿菌法或顯微注射轉殖', desc: '植物常利用農桿菌質體轉殖並以「莖頂組織培養」產生無病毒幼苗；魚類則對受精卵進行顯微注射。' },
+                                { title: '3. 性狀表現與田間/養殖評估', desc: '作物抗蟲減藥、耐旱高產；螢光魚於紫外光下發光；基改鮭魚成長速度大幅超越野生鮭魚。' }
+                            ],
+                            initState: () => ({ showcase: 'bt', uvOn: true, drought: 70, months: 12 }),
+                            mount(ctx) {
+                                const items = {
+                                    bt: '🌽 抗蟲Bt植物 (減農藥)',
+                                    rice: '🌾 抗旱高產水稻 & 組織培養',
+                                    glofish: '🐠 螢光基因觀賞魚',
+                                    salmon: '🐟 生長激素快速鮭魚',
+                                    gmo: '🥗 基因改造食品 (GMO) 總覽'
+                                };
+
+                                const renderParams = () => {
+                                    const sc = App.state.showcase;
+                                    ctx.paramsEl.innerHTML = `
+                <div class="param-row">
+                  <div class="param-label"><span>切換轉殖應用案例</span><span>動植物生技</span></div>
+                  <div class="chip-group">
+                    ${Object.entries(items).map(([k, v]) => `
+                      <button class="chip-btn ${sc === k ? 'active' : ''}" data-sc="${k}">${v}</button>
+                    `).join('')}
+                  </div>
+                </div>
+                ${sc === 'glofish' ? `
+                <div class="param-row">
+                  <div class="param-label"><span>水族箱光源切換</span><span>${App.state.uvOn ? 'UV 藍紫光開啟' : '一般白光'}</span></div>
+                  <button class="btn ${App.state.uvOn ? 'btn-primary' : ''}" id="btn-uv">${App.state.uvOn ? '🔦 關閉 UV 紫外光' : '✨ 開啟 UV 紫外光激發螢光'}</button>
+                </div>` : ''}
+                ${sc === 'rice' ? `
+                <div class="param-row">
+                  <div class="param-label"><span>環境乾旱逆境強度</span><span>${App.state.drought}%</span></div>
+                  <input type="range" min="0" max="100" value="${App.state.drought}" id="rng-drought" />
+                </div>` : ''}
+                ${sc === 'salmon' ? `
+                <div class="param-row">
+                  <div class="param-label"><span>養殖月齡比較</span><span>${App.state.months} 個月</span></div>
+                  <input type="range" min="2" max="18" value="${App.state.months}" id="rng-months" />
+                </div>` : ''}
+              `;
+                                    ctx.paramsEl.querySelectorAll('[data-sc]').forEach(b => {
+                                        b.onclick = () => { App.state.showcase = b.dataset.sc; renderParams(); draw(); };
+                                    });
+                                    const uvBtn = ctx.paramsEl.querySelector('#btn-uv');
+                                    if (uvBtn) uvBtn.onclick = () => { App.state.uvOn = !App.state.uvOn; renderParams(); draw(); };
+                                    const dr = ctx.paramsEl.querySelector('#rng-drought');
+                                    if (dr) dr.oninput = (e) => { App.state.drought = +e.target.value; renderParams(); draw(); };
+                                    const mo = ctx.paramsEl.querySelector('#rng-months');
+                                    if (mo) mo.oninput = (e) => { App.state.months = +e.target.value; renderParams(); draw(); };
+                                };
+
+                                const draw = () => {
+                                    const sc = App.state.showcase;
+                                    const step = App.stepIdx;
+                                    const svg = createSVG('0 0 900 520');
+
+                                    if (sc === 'bt') {
+                                        // 左：傳統噴農藥；右：Bt 轉殖抗蟲玉米
+                                        svgEl('rect', { x: 50, y: 70, width: 370, height: 390, rx: 18, fill: '#111c33', stroke: THEME.pathogen, 'stroke-width': 2 }, svg);
+                                        svgLabel(235, 52, '傳統非基改作物 (需頻繁噴灑農藥)', THEME.pathogen, 'middle', svg);
+                                        svgEl('rect', { x: 215, y: 170, width: 40, height: 210, rx: 14, fill: '#facc15' }, svg);
+                                        svgEl('circle', { cx: 235, cy: 230, r: 16, fill: '#0b1120' }, svg); // 蟲咬洞
+                                        // 害蟲啃食
+                                        svgEl('ellipse', { cx: 185, cy: 230, rx: 28, ry: 11, fill: THEME.pathogen, class: 'anim-float' }, svg);
+                                        svgLabel(235, 425, '⚠️ 農藥殘留風險 + 環境生態負擔', THEME.pathogen, 'middle', svg);
+
+                                        svgEl('rect', { x: 480, y: 70, width: 370, height: 390, rx: 18, fill: '#111c33', stroke: THEME.cell, 'stroke-width': 3 }, svg);
+                                        svgLabel(665, 52, '🌽 植入 Bt 抗蟲基因作物 (減少農藥)', THEME.cell, 'middle', svg);
+                                        svgEl('rect', { x: 645, y: 170, width: 40, height: 210, rx: 14, fill: '#facc15', stroke: THEME.gene, 'stroke-width': 3 }, svg);
+                                        if (step >= 1) {
+                                            // 害蟲試圖啃食即死亡
+                                            svgEl('ellipse', { cx: 590, cy: 250, rx: 24, ry: 10, fill: '#64748b', transform: 'rotate(25 590 250)' }, svg);
+                                            svgLabel(590, 290, 'Bt蛋白破壞害蟲腸道', THEME.gene, 'middle', svg);
+                                        }
+                                        svgLabel(665, 425, '✅ 農藥噴灑量大幅降低 60~80%', THEME.cell, 'middle', svg);
+                                    } else if (sc === 'rice') {
+                                        const dry = App.state.drought;
+                                        // 左：抗旱高產水稻比較
+                                        svgEl('rect', { x: 45, y: 65, width: 430, height: 400, rx: 18, fill: '#111c33', stroke: THEME.gene, 'stroke-width': 2 }, svg);
+                                        svgLabel(260, 48, `抗旱高產基因轉殖水稻 (乾旱度 ${dry}%)`, THEME.gene, 'middle', svg);
+                                        // 一般水稻 (乾旱枯萎)
+                                        const wilt = dry > 50 ? 0.45 : 1;
+                                        svgEl('path', { d: `M150,360 Q${150 + (1 - wilt) * 40},${260} ${150 + (1 - wilt) * 70},${210 + (1 - wilt) * 80}`, fill: 'none', stroke: dry > 60 ? '#a16207' : '#22c55e', 'stroke-width': 7 }, svg);
+                                        svgLabel(155, 395, dry > 60 ? '一般水稻：缺水枯萎' : '一般水稻', dry > 60 ? THEME.pathogen : THEME.muted, 'middle', svg);
+                                        // 轉殖抗旱水稻 (深根繁茂)
+                                        svgEl('path', { d: 'M340,360 L340,185', stroke: THEME.cell, 'stroke-width': 8 }, svg);
+                                        svgEl('path', { d: 'M340,360 L315,435 M340,360 L340,445 M340,360 L365,435', stroke: THEME.gene, 'stroke-width': 3 }, svg);
+                                        svgEl('circle', { cx: 340, cy: 175, r: 16, fill: '#facc15' }, svg);
+                                        svgLabel(340, 140, '深根鎖水 · 高產稻穗', THEME.cell, 'middle', svg);
+
+                                        // 右：無病毒組織培養苗
+                                        svgEl('rect', { x: 505, y: 65, width: 350, height: 400, rx: 18, fill: '#111c33', stroke: THEME.plasmid, 'stroke-width': 2.5 }, svg);
+                                        svgLabel(680, 48, '🧪 無病毒組織培養苗 (植物微繁)', THEME.plasmid, 'middle', svg);
+                                        // 培養瓶
+                                        svgEl('path', { d: 'M620,165 L740,165 L765,380 Q765,405 735,405 L625,405 Q595,405 595,380 Z', fill: 'rgba(20,184,166,0.12)', stroke: '#94a3b8', 'stroke-width': 3 }, svg);
+                                        svgEl('rect', { x: 602, y: 340, width: 156, height: 60, rx: 12, fill: '#0f766e', opacity: 0.65 }, svg); // 洋菜培養基
+                                        svgEl('path', { d: 'M680,345 L680,255 M680,295 L650,270 M680,285 L710,260', stroke: THEME.cell, 'stroke-width': 5, 'stroke-linecap': 'round' }, svg);
+                                        svgLabel(680, 215, '取無病毒「莖頂分生組織」', THEME.protein, 'middle', svg);
+                                        svgLabel(680, 435, '培養基含植物荷爾蒙 → 複製健康種苗', THEME.cell, 'middle', svg);
+                                    } else if (sc === 'glofish') {
+                                        const uv = App.state.uvOn;
+                                        svgEl('rect', { x: 80, y: 65, width: 740, height: 390, rx: 24, fill: uv ? '#090726' : '#0f2942', stroke: uv ? '#818cf8' : '#38bdf8', 'stroke-width': 4 }, svg);
+                                        if (uv) {
+                                            svgEl('rect', { x: 220, y: 72, width: 460, height: 14, rx: 7, fill: '#a855f7', class: 'anim-pulse' }, svg);
+                                            svgLabel(450, 112, '✨ UV 紫外光激發水母 GFP / 珊瑚 RFP 螢光蛋白', '#e879f9', 'middle', svg);
+                                        } else {
+                                            svgLabel(450, 112, '一般白光下的螢光觀賞魚 (開啟 UV 可見強烈螢光)', THEME.text, 'middle', svg);
+                                        }
+
+                                        const fishes = [
+                                            { x: 260, y: 230, c: uv ? '#4ade80' : '#86efac', lbl: 'GFP 綠螢光魚' },
+                                            { x: 470, y: 310, c: uv ? '#fb7185' : '#fda4af', lbl: 'RFP 紅螢光魚' },
+                                            { x: 640, y: 215, c: uv ? '#facc15' : '#fde047', lbl: 'YFP 黃螢光魚' }
+                                        ];
+                                        fishes.forEach((f, idx) => {
+                                            const g = svgEl('g', { transform: `translate(${f.x}, ${f.y})`, class: 'anim-float' }, svg);
+                                            if (uv) {
+                                                svgEl('ellipse', { cx: 0, cy: 0, rx: 64, ry: 34, fill: f.c, opacity: 0.28 }, g);
+                                            }
+                                            svgEl('polygon', { points: '42,0 74,-20 74,20', fill: f.c }, g);
+                                            svgEl('ellipse', { cx: 0, cy: 0, rx: 46, ry: 20, fill: f.c, stroke: '#fff', 'stroke-width': 1.5 }, g);
+                                            svgEl('circle', { cx: -25, cy: -4, r: 4, fill: '#000' }, g);
+                                            svgLabel(f.x, f.y + 44, f.lbl, f.c, 'middle', svg);
+                                        });
+                                        svgLabel(450, 485, '植入螢光基因增加觀賞價值（需嚴格避免棄養進入自然水域！）', THEME.gene, 'middle', svg);
+                                    } else if (sc === 'salmon') {
+                                        const m = App.state.months;
+                                        const gmScale = 0.45 + (m / 18) * 1.15;
+                                        const wtScale = 0.45 + (m / 18) * 0.48;
+                                        svgEl('rect', { x: 60, y: 65, width: 780, height: 390, rx: 20, fill: '#0c1b33', stroke: THEME.dna, 'stroke-width': 2 }, svg);
+                                        svgLabel(450, 48, `生長激素基因轉殖鮭魚 vs 野生鮭魚 (${m} 個月大)`, THEME.dna, 'middle', svg);
+
+                                        // 基改鮭魚 (上)
+                                        const g1 = svgEl('g', { transform: `translate(360, 185) scale(${gmScale})` }, svg);
+                                        svgEl('polygon', { points: '70,0 105,-24 105,24', fill: THEME.gene }, g1);
+                                        svgEl('ellipse', { cx: 0, cy: 0, rx: 78, ry: 28, fill: '#38bdf8', stroke: THEME.gene, 'stroke-width': 3 }, g1);
+                                        svgEl('circle', { cx: -48, cy: -6, r: 4, fill: '#000' }, g1);
+                                        svgLabel(690, 185, `基改快速鮭魚 (全長成長約 ${Math.round(gmScale * 48)} cm)`, THEME.gene, 'middle', svg);
+
+                                        // 野生鮭魚 (下)
+                                        const g2 = svgEl('g', { transform: `translate(360, 335) scale(${wtScale})` }, svg);
+                                        svgEl('polygon', { points: '70,0 105,-24 105,24', fill: '#64748b' }, g2);
+                                        svgEl('ellipse', { cx: 0, cy: 0, rx: 78, ry: 28, fill: '#94a3b8' }, g2);
+                                        svgEl('circle', { cx: -48, cy: -6, r: 4, fill: '#000' }, g2);
+                                        svgLabel(690, 335, `野生一般鮭魚 (全長約 ${Math.round(wtScale * 48)} cm)`, THEME.muted, 'middle', svg);
+
+                                        svgLabel(450, 430, '📌 持續表現啟動子驅動生長激素全年分泌 → 縮短一半上市時間', THEME.protein, 'middle', svg);
+                                    } else {
+                                        // GMO 總覽
+                                        svgEl('rect', { x: 80, y: 75, width: 740, height: 370, rx: 22, fill: '#111c33', stroke: THEME.plasmid, 'stroke-width': 2.5 }, svg);
+                                        svgLabel(450, 52, '基因改造食品 (GMO) 安全評估與透明標示', THEME.plasmid, 'middle', svg);
+                                        const cards = [
+                                            { x: 210, y: 200, icon: '🌽', t: '耐除草劑/抗蟲玉米大豆', s: '全球飼料與食用油主力' },
+                                            { x: 450, y: 200, icon: '🍅', t: '延遲軟化基改番茄/木瓜', s: '抗輪點病毒 · 耐儲運' },
+                                            { x: 690, y: 200, icon: '🌾', t: '黃金米 (富含β-胡蘿蔔素)', s: '改善開發中國家維生素A缺乏' }
+                                        ];
+                                        cards.forEach(c => {
+                                            svgEl('rect', { x: c.x - 105, y: c.y - 75, width: 210, height: 175, rx: 14, fill: '#1e293b', stroke: THEME.gene, 'stroke-width': 1.5 }, svg);
+                                            svgEl('text', { x: c.x, y: c.y - 10, 'font-size': 44, 'text-anchor': 'middle' }, svg).textContent = c.icon;
+                                            svgLabel(c.x, c.y + 40, c.t, THEME.text, 'middle', svg);
+                                            svgLabel(c.x, c.y + 74, c.s, THEME.muted, 'middle', svg);
+                                        });
+                                        svgLabel(450, 415, '🛡️ 上市前須經實質等同性、過敏原與毒理評估，並依法強制標示「基因改造」', THEME.cell, 'middle', svg);
+                                    }
+
+                                    ctx.stage2D.innerHTML = '';
+                                    ctx.stage2D.appendChild(svg);
+                                };
+
+                                renderParams();
+                                draw();
+                                return { renderStep: draw };
+                            }
+                        },
+                        {
+                            id: 'biosafety_risks',
+                            name: '基因轉殖的危害 (花粉飄散 / 生態競爭滅絕)',
+                            tag: '生物安全與生態風險模擬',
+                            title: '基因轉殖的潛在危害：基因污染與強勢競爭排擠野生種',
+                            mode: '2d',
+                            knowledge: '基改作物釋出環境可能引發兩大生態危機：<strong>(1) 花粉隨風或昆蟲傳播</strong>，與野生近緣種雜交改變野生種基因庫（產生超級雜草）；<strong>(2) 基改生物生長/繁殖競爭力過強</strong>，排擠原生物種導致野生種瀕危甚至滅絕。',
+                            steps: [
+                                { title: '1. 隔離觀察初始狀態', desc: '左側為基改作物與基改強勢魚種；右側為天然野生種族群。嘗試調高下方「花粉風速」與「競爭力優勢」。' },
+                                { title: '2. 花粉傳播造成基因污染', desc: '基改植物的花粉飄散至野生種區域，受粉後野生種後代開始帶有外源基因（黃色標記），破壞原本基因多樣性。' },
+                                { title: '3. 競爭排擠導致野生種驟減', desc: '若生長快速或抗逆境的基改生物逃逸進入棲地，將搶奪食物與資源，使野生種族群大幅萎縮甚至滅絕！' }
+                            ],
+                            initState: () => ({ wind: 65, compAdvantage: 75 }),
+                            mount(ctx) {
+                                const canvas = document.createElement('canvas');
+                                canvas.width = 900;
+                                canvas.height = 520;
+                                ctx.stage2D.innerHTML = '';
+                                ctx.stage2D.appendChild(canvas);
+                                const g = canvas.getContext('2d');
+
+                                const renderParams = () => {
+                                    ctx.paramsEl.innerHTML = `
+                <div class="param-row">
+                  <div class="param-label"><span>🌬️ 花粉傳播風速 (基因漂變)</span><span id="val-wind">${App.state.wind}%</span></div>
+                  <input type="range" min="0" max="100" value="${App.state.wind}" id="rng-wind" />
+                </div>
+                <div class="param-row">
+                  <div class="param-label"><span>⚡ 基改種競爭力優勢 (資源掠奪)</span><span id="val-comp">${App.state.compAdvantage}%</span></div>
+                  <input type="range" min="0" max="100" value="${App.state.compAdvantage}" id="rng-comp" />
+                </div>
+                <button class="btn" id="btn-reset-eco">↺ 重新釋放模擬族群</button>
+              `;
+                                    ctx.paramsEl.querySelector('#rng-wind').oninput = (e) => {
+                                        App.state.wind = +e.target.value;
+                                        ctx.paramsEl.querySelector('#val-wind').textContent = `${App.state.wind}%`;
+                                    };
+                                    ctx.paramsEl.querySelector('#rng-comp').oninput = (e) => {
+                                        App.state.compAdvantage = +e.target.value;
+                                        ctx.paramsEl.querySelector('#val-comp').textContent = `${App.state.compAdvantage}%`;
+                                    };
+                                    ctx.paramsEl.querySelector('#btn-reset-eco').onclick = () => initSim();
+                                };
+
+                                let pollens = [];
+                                let wildPlants = [];
+                                let historyWild = [];
+                                let historyGM = [];
+                                let wildPop = 85;
+                                let gmPop = 15;
+                                let frame = 0;
+
+                                function initSim() {
+                                    pollens = [];
+                                    wildPlants = Array.from({ length: 16 }, (_, i) => ({
+                                        x: 520 + (i % 4) * 85 + (Math.random() * 20 - 10),
+                                        y: 120 + Math.floor(i / 4) * 52,
+                                        contaminated: false
+                                    }));
+                                    wildPop = 85;
+                                    gmPop = 15;
+                                    historyWild = [wildPop];
+                                    historyGM = [gmPop];
+                                    frame = 0;
+                                }
+                                initSim();
+                                renderParams();
+
+                                const loop = () => {
+                                    App.activeLoopId = requestAnimationFrame(loop);
+                                    frame++;
+                                    g.clearRect(0, 0, 900, 520);
+
+                                    // 分區背景
+                                    g.fillStyle = 'rgba(251,191,36,0.06)';
+                                    g.fillRect(30, 50, 340, 270);
+                                    g.strokeStyle = THEME.gene;
+                                    g.lineWidth = 2;
+                                    g.strokeRect(30, 50, 340, 270);
+
+                                    g.fillStyle = 'rgba(52,211,153,0.06)';
+                                    g.fillRect(470, 50, 400, 270);
+                                    g.strokeStyle = THEME.cell;
+                                    g.strokeRect(470, 50, 400, 270);
+
+                                    // 畫左側基改植株
+                                    for (let i = 0; i < 9; i++) {
+                                        const px = 85 + (i % 3) * 105;
+                                        const py = 120 + Math.floor(i / 3) * 70;
+                                        g.fillStyle = THEME.gene;
+                                        g.beginPath();
+                                        g.arc(px, py, 14, 0, Math.PI * 2);
+                                        g.fill();
+                                    }
+
+                                    // 產生花粉粒子 (Step >= 1)
+                                    const windActive = App.stepIdx >= 1 ? App.state.wind : 0;
+                                    if (windActive > 5 && frame % Math.max(3, Math.round(25 - windActive * 0.2)) === 0) {
+                                        pollens.push({
+                                            x: 100 + Math.random() * 220,
+                                            y: 90 + Math.random() * 200,
+                                            vx: 1.5 + (windActive / 100) * 4.5,
+                                            vy: (Math.random() - 0.5) * 1.2
+                                        });
+                                    }
+
+                                    // 更新花粉與基因污染
+                                    for (let i = pollens.length - 1; i >= 0; i--) {
+                                        const p = pollens[i];
+                                        p.x += p.vx;
+                                        p.y += p.vy;
+                                        g.fillStyle = '#fde047';
+                                        g.beginPath();
+                                        g.arc(p.x, p.y, 4, 0, Math.PI * 2);
+                                        g.fill();
+
+                                        for (const wp of wildPlants) {
+                                            if (!wp.contaminated && Math.hypot(p.x - wp.x, p.y - wp.y) < 18) {
+                                                wp.contaminated = true;
+                                            }
+                                        }
+                                        if (p.x > 880) pollens.splice(i, 1);
+                                    }
+
+                                    // 畫右側野生種 (被污染則中心變黃)
+                                    let contaminatedCount = 0;
+                                    for (const wp of wildPlants) {
+                                        if (wp.contaminated) contaminatedCount++;
+                                        g.fillStyle = wp.contaminated ? THEME.gene : THEME.cell;
+                                        g.beginPath();
+                                        g.arc(wp.x, wp.y, 13, 0, Math.PI * 2);
+                                        g.fill();
+                                        if (wp.contaminated) {
+                                            g.strokeStyle = THEME.pathogen;
+                                            g.lineWidth = 2.5;
+                                            g.stroke();
+                                        }
+                                    }
+
+                                    // 族群競爭折線圖 (Step >= 2)
+                                    if (App.stepIdx >= 2 && frame % 12 === 0) {
+                                        const adv = App.state.compAdvantage / 100;
+                                        if (gmPop < 96) {
+                                            const shift = (0.3 + adv * 1.4) * (wildPop / 100);
+                                            gmPop = Math.min(98, gmPop + shift);
+                                            wildPop = Math.max(1, wildPop - shift * 1.05);
+                                        }
+                                        historyWild.push(wildPop);
+                                        historyGM.push(gmPop);
+                                        if (historyWild.length > 90) { historyWild.shift(); historyGM.shift(); }
+                                    }
+
+                                    // 繪製底部生態族群競爭圖表
+                                    g.fillStyle = '#0f172a';
+                                    g.fillRect(30, 345, 840, 150);
+                                    g.strokeStyle = 'rgba(148,163,184,0.3)';
+                                    g.strokeRect(30, 345, 840, 150);
+
+                                    const drawCurve = (arr, color) => {
+                                        if (arr.length < 2) return;
+                                        g.strokeStyle = color;
+                                        g.lineWidth = 3;
+                                        g.beginPath();
+                                        arr.forEach((v, idx) => {
+                                            const cx = 50 + (idx / 89) * 800;
+                                            const cy = 480 - (v / 100) * 115;
+                                            if (idx === 0) g.moveTo(cx, cy); else g.lineTo(cx, cy);
+                                        });
+                                        g.stroke();
+                                    };
+                                    drawCurve(historyWild, THEME.cell);
+                                    drawCurve(historyGM, THEME.pathogen);
+
+                                    // 文字標籤 (受 App.showLabels 控制)
+                                    if (App.showLabels) {
+                                        g.font = 'bold 14px "Noto Sans TC", sans-serif';
+                                        g.fillStyle = THEME.gene;
+                                        g.fillText('基改作物/高競爭基改生物區', 45, 36);
+                                        g.fillStyle = THEME.cell;
+                                        g.fillText(`野生近緣種區 (基因污染率: ${Math.round((contaminatedCount / wildPlants.length) * 100)}%)`, 480, 36);
+
+                                        g.fillStyle = THEME.text;
+                                        g.fillText(`📉 生態競爭動態：野生種生存率 ${Math.round(wildPop)}% vs 基改種佔比 ${Math.round(gmPop)}%`, 48, 368);
+                                        if (wildPop < 15) {
+                                            g.fillStyle = THEME.pathogen;
+                                            g.fillText('⚠️ 警告：野生原生種面臨滅絕危機！', 600, 368);
+                                        }
+                                    }
+                                };
+                                loop();
+
+                                return {
+                                    renderStep: () => {
+                                        if (App.stepIdx === 0) initSim();
+                                    }
+                                };
+                            }
+                        }
+                    ]
+                },
+
+                /* -------------------------------------------------------
+                   分頁 3：基因編輯 (CRISPR-Cas9 / TALEN / ZFN - 3D Three.js)
+                   ------------------------------------------------------- */
+                {
+                    id: 'gene_editing',
+                    label: '✂️ 基因編輯 (3D)',
+                    submodules: [
+                        {
+                            id: 'crispr_3d',
+                            name: 'CRISPR-Cas9 / TALEN / ZFN 與基因驅動',
+                            tag: '3D 精準基因編輯',
+                            title: '基因編輯技術 (3D)：精準剪下、貼上或修改，不需外源基因',
+                            mode: '3d',
+                            knowledge: '<strong>核心特色：</strong>CRISPR-Cas9 以短 RNA 導引（精準度極高、成本大幅降低），可在生物體基因組進行<strong>精準剪下、貼上或修改，不一定要導入外源基因</strong>（與傳統基因轉殖不同）。應用包含治療遺傳病、抗病作物及基因驅動 (Gene Drive)。',
+                            steps: [
+                                { title: '1. 合成導引分子並鎖定目標區', desc: '設計與目標基因互補的 sgRNA 並與 Cas9 蛋白結合（ZFN 與 TALEN 則以蛋白質胺基酸模組辨識 DNA）。' },
+                                { title: '2. 辨識 PAM 序列與雙股解旋', desc: 'Cas9 沿著 3D DNA 雙螺旋掃描，鎖定黃色發光的 PAM (5\'-NGG-3\') 序列並拉開雙股螺旋。' },
+                                { title: '3. 核酸內切酶精準剪斷 (DSB)', desc: 'Cas9 內切酶活化，在目標位點造成 DNA 雙股斷裂 (Double-Strand Break)。' },
+                                { title: '4. 細胞修復：NHEJ 剔除 vs HDR 精準貼上', desc: '可切換修復模式：NHEJ 直接接合導致基因剔除 (Knock-out)；HDR 依模板精準修正突變（如治療鐮刀型貧血或無外源DNA抗病育種）。' }
+                            ],
+                            initState: () => ({ tech: 'CRISPR', repair: 'HDR', appMode: 'medical' }),
+                            mount(ctx) {
+                                const techs = {
+                                    CRISPR: { name: 'CRISPR-Cas9', guide: 'sgRNA 導引 (RNA-DNA配對)', cost: '極低 · 設計快速', acc: '極高' },
+                                    TALEN: { name: 'TALEN', guide: 'TALE 蛋白模組辨識', cost: '中等 · 需組裝蛋白', acc: '高' },
+                                    ZFN: { name: 'ZFN (鋅指核酸酶)', guide: '鋅指蛋白模組', cost: '較高 · 易有脫靶', acc: '中' }
+                                };
+
+                                const renderParams = () => {
+                                    const t = techs[App.state.tech];
+                                    ctx.paramsEl.innerHTML = `
+                <div class="param-row">
+                  <div class="param-label"><span>核心基因編輯技術比較</span><span>${t.cost}</span></div>
+                  <div class="chip-group">
+                    ${Object.keys(techs).map(k => `
+                      <button class="chip-btn ${App.state.tech === k ? 'active' : ''}" data-tech="${k}">${k}</button>
+                    `).join('')}
+                  </div>
+                  <div style="font-size:0.78rem;color:var(--text-muted);margin-top:4px;">辨識機制：${t.guide} · 精準度：${t.acc}</div>
+                </div>
+                <div class="param-row">
+                  <div class="param-label"><span>步驟4 細胞修復路徑</span><span>${App.state.repair}</span></div>
+                  <div class="chip-group">
+                    <button class="chip-btn ${App.state.repair === 'NHEJ' ? 'active' : ''}" data-rep="NHEJ">✂️ NHEJ (精準剪除/剔除基因)</button>
+                    <button class="chip-btn ${App.state.repair === 'HDR' ? 'active' : ''}" data-rep="HDR">🩹 HDR (同源重組/精準貼上修正)</button>
+                  </div>
+                </div>
+                <div class="param-row">
+                  <div class="param-label"><span>應用領域預覽</span><span>基因編輯應用</span></div>
+                  <div class="chip-group">
+                    <button class="chip-btn ${App.state.appMode === 'medical' ? 'active' : ''}" data-app="medical">🩺 遺傳病治療 (鐮刀型貧血)</button>
+                    <button class="chip-btn ${App.state.appMode === 'crop' ? 'active' : ''}" data-app="crop">🌾 抗病作物 (無外源基因)</button>
+                    <button class="chip-btn ${App.state.appMode === 'drive' ? 'active' : ''}" data-app="drive">🦟 基因驅動研究 (Gene Drive)</button>
+                  </div>
+                  <div id="app-detail-box" style="font-size:0.78rem;color:#cbd5e1;background:#0f172a;padding:8px;border-radius:6px;margin-top:4px;"></div>
+                </div>
+              `;
+                                    const appDesc = {
+                                        medical: '利用病人自體造血幹細胞，以 CRISPR 精準修正血紅素基因單點突變（HDR），治癒鐮刀型貧血症與β-地中海貧血。',
+                                        crop: '直接「剔除」作物體內讓病原菌入侵的感病基因（NHEJ），完全不需導入其他物種的外源基因，即可獲得抗病高產作物！',
+                                        drive: '🦟 基因驅動：將 Cas9 與目標抗瘧疾基因同時寫入染色體，使後代 99% 以上繼承編輯基因（突破孟德爾 50% 遺傳率），快速改造病媒蚊族群。'
+                                    };
+                                    ctx.paramsEl.querySelector('#app-detail-box').textContent = appDesc[App.state.appMode];
+
+                                    ctx.paramsEl.querySelectorAll('[data-tech]').forEach(b => {
+                                        b.onclick = () => { App.state.tech = b.dataset.tech; renderParams(); buildScene(); };
+                                    });
+                                    ctx.paramsEl.querySelectorAll('[data-rep]').forEach(b => {
+                                        b.onclick = () => { App.state.repair = b.dataset.rep; renderParams(); };
+                                    });
+                                    ctx.paramsEl.querySelectorAll('[data-app]').forEach(b => {
+                                        b.onclick = () => { App.state.appMode = b.dataset.app; renderParams(); };
+                                    });
+                                };
+
+                                let cas9Group, targetBaseGroup, donorMesh, cutFlash;
+                                let leftHelix, rightHelix;
+
+                                const buildScene = () => {
+                                    threeMgr.clearScene();
+                                    if (!threeMgr.available) return;
+                                    const scene = threeMgr.scene;
+
+                                    // 燈光
+                                    scene.add(new THREE.AmbientLight(0xffffff, 0.72));
+                                    const dir = new THREE.DirectionalLight(0x38bdf8, 1.1);
+                                    dir.position.set(6, 10, 8);
+                                    scene.add(dir);
+                                    const rim = new THREE.PointLight(0xa78bfa, 1.2, 30);
+                                    rim.position.set(-6, -4, 5);
+                                    scene.add(rim);
+
+                                    // 建立 3D DNA 雙螺旋 (分成左右兩段以表現雙股斷裂 DSB)
+                                    leftHelix = new THREE.Group();
+                                    rightHelix = new THREE.Group();
+                                    scene.add(leftHelix);
+                                    scene.add(rightHelix);
+
+                                    const matStrandA = new THREE.MeshPhongMaterial({ color: 0x38bdf8, shininess: 80 });
+                                    const matStrandB = new THREE.MeshPhongMaterial({ color: 0x818cf8, shininess: 80 });
+                                    const matPAM = new THREE.MeshPhongMaterial({ color: 0xfbbf24, emissive: 0x78350f });
+                                    const matCut = new THREE.MeshPhongMaterial({ color: 0xfb7185, emissive: 0x881337 });
+
+                                    const totalBP = 24;
+                                    for (let i = 0; i < totalBP; i++) {
+                                        const x = (i - totalBP / 2) * 0.55;
+                                        const angle = i * 0.55;
+                                        const r = 1.25;
+                                        const y1 = Math.sin(angle) * r;
+                                        const z1 = Math.cos(angle) * r;
+                                        const y2 = -y1;
+                                        const z2 = -z1;
+
+                                        const isLeft = i < totalBP / 2;
+                                        const targetGrp = isLeft ? leftHelix : rightHelix;
+
+                                        // 骨架球
+                                        const s1 = new THREE.Mesh(new THREE.SphereGeometry(0.18, 14, 14), matStrandA);
+                                        s1.position.set(x, y1, z1);
+                                        const s2 = new THREE.Mesh(new THREE.SphereGeometry(0.18, 14, 14), matStrandB);
+                                        s2.position.set(x, y2, z2);
+                                        targetGrp.add(s1, s2);
+
+                                        // 鹼基對橫桿
+                                        const isPAM = (i === 13 || i === 14);
+                                        const isCutSite = (i === 11 || i === 12);
+                                        const rungMat = isPAM ? matPAM : (isCutSite ? matCut : new THREE.MeshPhongMaterial({ color: i % 2 ? 0x22d3ee : 0x34d399 }));
+                                        const rung = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, r * 2, 10), rungMat);
+                                        rung.position.set(x, 0, 0);
+                                        rung.lookAt(x, y1, z1);
+                                        rung.rotateX(Math.PI / 2);
+                                        targetGrp.add(rung);
+                                    }
+
+                                    // Cas9 / TALEN / ZFN 酵素複合體
+                                    cas9Group = new THREE.Group();
+                                    const enzColor = App.state.tech === 'CRISPR' ? 0xa78bfa : (App.state.tech === 'TALEN' ? 0x14b8a6 : 0xf472b6);
+                                    const lobeMat = new THREE.MeshPhongMaterial({ color: enzColor, transparent: true, opacity: 0.58, shininess: 90 });
+                                    const lobe1 = new THREE.Mesh(new THREE.SphereGeometry(2.1, 24, 24), lobeMat);
+                                    lobe1.scale.set(1.1, 0.85, 0.9);
+                                    lobe1.position.y = 0.8;
+                                    const lobe2 = new THREE.Mesh(new THREE.SphereGeometry(1.75, 24, 24), lobeMat);
+                                    lobe2.scale.set(1.0, 0.8, 0.9);
+                                    lobe2.position.y = -0.8;
+                                    cas9Group.add(lobe1, lobe2);
+
+                                    // sgRNA 橘色導引鏈 (僅 CRISPR)
+                                    if (App.state.tech === 'CRISPR') {
+                                        const rnaCurve = new THREE.CatmullRomCurve3([
+                                            new THREE.Vector3(-1.8, 0.2, 0.8),
+                                            new THREE.Vector3(-0.6, 0.4, 0.5),
+                                            new THREE.Vector3(0.6, -0.2, 0.4),
+                                            new THREE.Vector3(1.4, 0.9, -0.6)
+                                        ]);
+                                        const rnaGeo = new THREE.TubeGeometry(rnaCurve, 32, 0.12, 10, false);
+                                        const rnaMesh = new THREE.Mesh(rnaGeo, new THREE.MeshPhongMaterial({ color: 0xfb923c, emissive: 0x7c2d12 }));
+                                        cas9Group.add(rnaMesh);
+                                    }
+                                    scene.add(cas9Group);
+
+                                    // 修復模板 Donor DNA (HDR 模式顯示)
+                                    donorMesh = new THREE.Mesh(
+                                        new THREE.CylinderGeometry(0.18, 0.18, 1.4, 16),
+                                        new THREE.MeshPhongMaterial({ color: 0x14b8a6, emissive: 0x0f766e })
+                                    );
+                                    donorMesh.rotation.z = Math.PI / 2;
+                                    donorMesh.position.set(0, 3.2, 0);
+                                    donorMesh.visible = false;
+                                    scene.add(donorMesh);
+
+                                    // 切斷閃光環
+                                    cutFlash = new THREE.Mesh(
+                                        new THREE.TorusGeometry(1.6, 0.08, 12, 32),
+                                        new THREE.MeshBasicMaterial({ color: 0xfb7185, transparent: true, opacity: 0 })
+                                    );
+                                    cutFlash.rotation.y = Math.PI / 2;
+                                    scene.add(cutFlash);
+
+                                    // 3D 追蹤文字標籤
+                                    const pamAnchor = new THREE.Object3D();
+                                    pamAnchor.position.set(1.2, 1.4, 0);
+                                    rightHelix.add(pamAnchor);
+                                    threeMgr.addPin(pamAnchor, 'PAM 辨識位點 (NGG)', THEME.gene);
+                                    threeMgr.addPin(cas9Group, `${App.state.tech} 複合體`, THEME.enzyme);
+                                    const dnaPin = new THREE.Object3D();
+                                    dnaPin.position.set(-4.5, 1.5, 0);
+                                    leftHelix.add(dnaPin);
+                                    threeMgr.addPin(dnaPin, '目標基因組 DNA', THEME.dna);
+                                };
+
+                                renderParams();
+                                buildScene();
+
+                                threeMgr.start((t) => {
+                                    if (!cas9Group) return;
+                                    const s = App.stepIdx;
+                                    // 步驟動態平滑內插
+                                    let targetCasX = s === 0 ? -4.5 : (s >= 1 ? 0 : -4.5);
+                                    let targetCasY = s === 0 ? 2.5 : (s === 3 ? 2.6 : 0);
+                                    cas9Group.position.x += (targetCasX - cas9Group.position.x) * 0.08;
+                                    cas9Group.position.y += (targetCasY - cas9Group.position.y) * 0.08;
+                                    cas9Group.rotation.z = Math.sin(t * 1.2) * 0.05;
+
+                                    // 步驟 2 (切斷 DSB) 與 步驟 3 (修復)
+                                    let gap = 0;
+                                    if (s === 2) gap = 0.85;
+                                    if (s === 3) gap = App.state.repair === 'NHEJ' ? 0.15 : 0.65;
+
+                                    leftHelix.position.x += (-gap - leftHelix.position.x) * 0.1;
+                                    rightHelix.position.x += (gap - rightHelix.position.x) * 0.1;
+
+                                    // 切斷光環閃爍
+                                    if (s === 2) {
+                                        cutFlash.material.opacity = 0.45 + Math.sin(t * 8) * 0.4;
+                                    } else {
+                                        cutFlash.material.opacity = 0;
+                                    }
+
+                                    // HDR 模板貼上動畫
+                                    if (s === 3 && App.state.repair === 'HDR') {
+                                        donorMesh.visible = true;
+                                        donorMesh.position.y += (0 - donorMesh.position.y) * 0.08;
+                                    } else {
+                                        donorMesh.visible = false;
+                                        donorMesh.position.y = 3.2;
+                                    }
+                                });
+
+                                return { renderStep: () => { } };
+                            }
+                        }
+                    ]
+                },
+
+                /* -------------------------------------------------------
+                   分頁 4：生物複製、瀕危保育與再生醫學
+                   ------------------------------------------------------- */
+                {
+                    id: 'cloning_regen',
+                    label: '🐑 生物複製與幹細胞',
+                    submodules: [
+                        {
+                            id: 'scnt_cloning',
+                            name: '體細胞核轉殖 (桃莉羊 / 馬豬牛猴 / 瀕危保育)',
+                            tag: '體細胞核植入 (SCNT)',
+                            title: '生物複製：桃莉羊、馬、豬、牛、猴與瀕危動物保育',
+                            mode: '2d',
+                            knowledge: '<strong>體細胞核轉殖 (SCNT)</strong>不需要精子受精，而是將成年體細胞的雙套 (2n) 細胞核植入「去核的未受精卵」中，培育出與體細胞供體基因幾乎完全相同的個體，廣泛應用於畜牧良種、醫學模式動物及<strong>瀕危動物保育</strong>。',
+                            steps: [
+                                { title: '1. 取得體細胞 (2n) 與未受精卵', desc: '從想複製的個體取出體細胞（桃莉羊取乳腺細胞；靈長類/瀕危動物常取皮膚成纖維細胞），並從另一隻雌性取得未受精卵。' },
+                                { title: '2. 顯微吸管去除卵細胞核', desc: '在顯微鏡下利用超細玻璃吸管吸除卵母細胞原本的細胞核（只保留細胞質中的重編程因子與粒線體）。' },
+                                { title: '3. 細胞核植入與電脈衝融合', desc: '將 2n 體細胞核注入去核卵內，並以微弱電脈衝刺激細胞融合與啟動胚胎發育。' },
+                                { title: '4. 體外培養形成早期胚胎 (囊胚)', desc: '融合後的重組細胞開始有絲分裂，發育為多細胞囊胚。' },
+                                { title: '5. 植入代理孕母誕生複製個體', desc: '將胚胎移入代理孕母子宮著床懷孕，最終產下與「體細胞供體」基因相同的複製動物！' }
+                            ],
+                            initState: () => ({ animal: 'sheep' }),
+                            mount(ctx) {
+                                const animals = {
+                                    sheep: { name: '🐑 桃莉羊 (Dolly, 1996)', cell: '白面芬蘭多塞特母羊乳腺細胞', egg: '蘇格蘭黑面羊去核卵', note: '世界首隻以成年體細胞複製成功的哺乳動物' },
+                                    monkey: { name: '🐒 複製猴 (中中/華華)', cell: '獼猴體細胞 (加表觀遺傳調控)', egg: '獼猴去核卵', note: '突破靈長類複製難關，助於人類腦疾病研究' },
+                                    livestock: { name: '🐎🐷🐄 複製馬/豬/牛', cell: '優良賽馬/高產乳牛/器官移植豬體細胞', egg: '同種雌性去核卵', note: '保留頂尖運動基因、育種或異種器官移植研究' },
+                                    endangered: { name: '🐼 瀕危動物保育 (雪貂/野牛)', cell: '冷凍庫保存之瀕危物種皮膚細胞', egg: '近緣物種雌性去核卵與代理孕母', note: '挽救極度瀕危或局部滅絕物種的遺傳多樣性' }
+                                };
+
+                                const renderParams = () => {
+                                    ctx.paramsEl.innerHTML = `
+                <div class="param-row">
+                  <div class="param-label"><span>選擇複製物種 / 應用</span><span>SCNT 技術</span></div>
+                  <div class="chip-group">
+                    ${Object.entries(animals).map(([k, v]) => `
+                      <button class="chip-btn ${App.state.animal === k ? 'active' : ''}" data-an="${k}">${v.name}</button>
+                    `).join('')}
+                  </div>
+                  <div style="font-size:0.78rem;color:var(--text-muted);margin-top:4px;">📌 ${animals[App.state.animal].note}</div>
+                </div>
+              `;
+                                    ctx.paramsEl.querySelectorAll('[data-an]').forEach(b => {
+                                        b.onclick = () => { App.state.animal = b.dataset.an; renderParams(); draw(); };
+                                    });
+                                };
+
+                                const draw = () => {
+                                    const a = animals[App.state.animal];
+                                    const step = App.stepIdx;
+                                    const svg = createSVG('0 0 900 520');
+
+                                    // 供體 1：體細胞 (粉色核)
+                                    svgEl('circle', { cx: 145, cy: 135, r: 52, fill: 'rgba(244,114,182,0.16)', stroke: THEME.animal, 'stroke-width': 3 }, svg);
+                                    svgEl('circle', { cx: 145, cy: 135, r: 22, fill: THEME.gene }, svg);
+                                    svgLabel(145, 65, `體細胞供體 (2n核)`, THEME.animal, 'middle', svg);
+
+                                    // 供體 2：卵細胞
+                                    svgEl('circle', { cx: 145, cy: 365, r: 58, fill: 'rgba(56,189,248,0.12)', stroke: THEME.dna, 'stroke-width': 3 }, svg);
+                                    if (step === 0) {
+                                        svgEl('circle', { cx: 145, cy: 365, r: 16, fill: '#64748b' }, svg);
+                                    } else {
+                                        // 吸管吸出原卵核
+                                        svgEl('rect', { x: 40, y: 356, width: 70, height: 18, fill: 'rgba(226,232,240,0.35)', stroke: '#cbd5e1', 'stroke-width': 1.5 }, svg);
+                                        svgEl('circle', { cx: 65, cy: 365, r: 11, fill: '#64748b', opacity: 0.6 }, svg);
+                                    }
+                                    svgLabel(145, 448, step >= 1 ? '去核卵母細胞 (含粒線體)' : '未受精卵母細胞', THEME.dna, 'middle', svg);
+
+                                    // Step 2: 細胞核植入與電融合
+                                    if (step >= 2) {
+                                        svgEl('path', { d: 'M215,155 L350,235 M215,355 L350,275', stroke: THEME.muted, 'stroke-width': 3 }, svg);
+                                        svgEl('circle', { cx: 430, cy: 255, r: 62, fill: 'rgba(244,114,182,0.15)', stroke: THEME.dna, 'stroke-width': 4 }, svg);
+                                        svgEl('circle', { cx: 430, cy: 255, r: 22, fill: THEME.gene, class: 'anim-pulse' }, svg);
+                                        if (step === 2) {
+                                            svgLabel(430, 170, '⚡ 電融合植入 2n 細胞核', THEME.gene, 'middle', svg);
+                                        } else {
+                                            svgLabel(430, 170, '重組胚胎細胞', THEME.gene, 'middle', svg);
+                                        }
+                                    }
+
+                                    // Step 3: 囊胚分裂
+                                    if (step >= 3) {
+                                        svgEl('path', { d: 'M505,255 L565,255', stroke: THEME.muted, 'stroke-width': 3 }, svg);
+                                        svgEl('circle', { cx: 625, cy: 255, r: 52, fill: 'rgba(52,211,153,0.15)', stroke: THEME.cell, 'stroke-width': 3 }, svg);
+                                        for (let i = 0; i < 7; i++) {
+                                            const ang = (i * Math.PI * 2) / 7;
+                                            svgEl('circle', { cx: 625 + Math.cos(ang) * 24, cy: 255 + Math.sin(ang) * 24, r: 12, fill: THEME.gene, opacity: 0.85 }, svg);
+                                        }
+                                        svgLabel(625, 180, '早期胚胎 (囊胚)', THEME.cell, 'middle', svg);
+                                    }
+
+                                    // Step 4: 代理孕母與誕生
+                                    if (step >= 4) {
+                                        svgEl('path', { d: 'M688,255 L735,255', stroke: THEME.muted, 'stroke-width': 3 }, svg);
+                                        svgEl('rect', { x: 740, y: 155, width: 130, height: 200, rx: 20, fill: '#111c33', stroke: THEME.gene, 'stroke-width': 3 }, svg);
+                                        const icon = a.name.split(' ')[0];
+                                        svgEl('text', { x: 805, y: 258, 'font-size': 56, 'text-anchor': 'middle' }, svg).textContent = icon;
+                                        svgLabel(805, 132, '代理孕母產下複製體', THEME.gene, 'middle', svg);
+                                        svgLabel(805, 385, '基因與體細胞供體相同', THEME.cell, 'middle', svg);
+                                    }
+
+                                    ctx.stage2D.innerHTML = '';
+                                    ctx.stage2D.appendChild(svg);
+                                };
+
+                                renderParams();
+                                draw();
+                                return { renderStep: draw };
+                            }
+                        },
+                        {
+                            id: 'stem_tissue',
+                            name: '幹細胞再生醫學與組織工程',
+                            tag: '再生醫學與組織工程',
+                            title: '幹細胞分化潛能與組織工程三要素 (細胞/支架/訊號)',
+                            mode: '2d',
+                            knowledge: '<strong>誘導性多潛能幹細胞 (iPSC)</strong>可由成體細胞逆轉獲得，避開胚胎倫理爭議且不會產生免疫排斥。結合<strong>組織工程三大要素（幹細胞 + 生物可降解支架 + 生長因子）</strong>，能培育人工皮膚、軟骨或類器官修復受損組織。',
+                            steps: [
+                                { title: '1. 取得多潛能幹細胞 (ESC / iPSC)', desc: '提取胚胎幹細胞，或將患者皮膚細胞導入山中因子逆轉為 iPSC 誘導性多潛能幹細胞。' },
+                                { title: '2. 植入生物可降解立體支架 (Scaffold)', desc: '將幹細胞播種至多孔性生醫材料支架上，提供細胞附著與三維生長的空間結構。' },
+                                { title: '3. 添加特定生長因子誘導分化', desc: '加入特定訊號分子，精準誘導幹細胞分化為心肌細胞、神經細胞或軟骨組織，支架隨之降解完成組織再生！' }
+                            ],
+                            initState: () => ({ targetTissue: 'cardiac' }),
+                            mount(ctx) {
+                                const tissues = {
+                                    cardiac: { name: '❤️ 心肌細胞修補', factor: 'BMP4 + Activin A 生長因子', color: THEME.pathogen },
+                                    neural: { name: '🧠 神經細胞再生', factor: '維生素A酸 + 神經營養因子', color: THEME.dna },
+                                    cartilage: { name: '🦴 關節軟骨組織工程', factor: 'TGF-β 生長因子 + 多孔支架', color: THEME.cell }
+                                };
+
+                                const renderParams = () => {
+                                    ctx.paramsEl.innerHTML = `
+                <div class="param-row">
+                  <div class="param-label"><span>選擇再生修復目標組織</span><span>iPSC 誘導分化</span></div>
+                  <div class="chip-group">
+                    ${Object.entries(tissues).map(([k, v]) => `
+                      <button class="chip-btn ${App.state.targetTissue === k ? 'active' : ''}" data-ts="${k}">${v.name}</button>
+                    `).join('')}
+                  </div>
+                </div>
+              `;
+                                    ctx.paramsEl.querySelectorAll('[data-ts]').forEach(b => {
+                                        b.onclick = () => { App.state.targetTissue = b.dataset.ts; renderParams(); draw(); };
+                                    });
+                                };
+
+                                const draw = () => {
+                                    const t = tissues[App.state.targetTissue];
+                                    const step = App.stepIdx;
+                                    const svg = createSVG('0 0 900 520');
+
+                                    // 左：幹細胞 / iPSC
+                                    svgEl('circle', { cx: 155, cy: 255, r: 68, fill: 'rgba(167,139,250,0.16)', stroke: THEME.enzyme, 'stroke-width': 3 }, svg);
+                                    svgEl('circle', { cx: 155, cy: 255, r: 28, fill: THEME.enzyme, class: 'anim-pulse' }, svg);
+                                    svgLabel(155, 160, 'iPSC / 多潛能幹細胞', THEME.enzyme, 'middle', svg);
+
+                                    // 中：生物支架
+                                    if (step >= 1) {
+                                        svgEl('path', { d: 'M235,255 L325,255', stroke: THEME.muted, 'stroke-width': 4 }, svg);
+                                        svgEl('rect', { x: 340, y: 155, width: 210, height: 200, rx: 16, fill: 'rgba(20,184,166,0.1)', stroke: THEME.plasmid, 'stroke-width': 3, 'stroke-dasharray': step === 2 ? '8 6' : 'none' }, svg);
+                                        // 網狀多孔支架線
+                                        for (let k = 0; k < 4; k++) {
+                                            svgEl('line', { x1: 350, y1: 195 + k * 40, x2: 540, y2: 195 + k * 40, stroke: THEME.plasmid, 'stroke-width': 1.5, opacity: 0.45 }, svg);
+                                            svgEl('line', { x1: 380 + k * 45, y1: 165, x2: 380 + k * 45, y2: 345, stroke: THEME.plasmid, 'stroke-width': 1.5, opacity: 0.45 }, svg);
+                                        }
+                                        for (let i = 0; i < 6; i++) {
+                                            svgEl('circle', { cx: 385 + (i % 3) * 60, cy: 215 + Math.floor(i / 3) * 75, r: 16, fill: step >= 2 ? t.color : THEME.enzyme }, svg);
+                                        }
+                                        svgLabel(445, 130, '組織工程支架 (Scaffold) + 細胞播種', THEME.plasmid, 'middle', svg);
+                                    }
+
+                                    // 右：分化成熟組織
+                                    if (step >= 2) {
+                                        svgEl('path', { d: 'M565,255 L640,255', stroke: THEME.muted, 'stroke-width': 4 }, svg);
+                                        svgEl('rect', { x: 650, y: 145, width: 205, height: 220, rx: 22, fill: '#111c33', stroke: t.color, 'stroke-width': 3 }, svg);
+                                        svgLabel(602, 225, `➕ ${t.factor}`, THEME.gene, 'middle', svg);
+
+                                        for (let r = 0; r < 3; r++) {
+                                            svgEl('rect', { x: 685, y: 185 + r * 52, width: 135, height: 34, rx: 12, fill: t.color, opacity: 0.85, class: 'anim-float' }, svg);
+                                        }
+                                        svgLabel(752, 120, `再生出：${t.name}`, t.color, 'middle', svg);
+                                        svgLabel(752, 398, '✅ 可移植修復患者器官 · 無排斥風險', THEME.cell, 'middle', svg);
+                                    }
+
+                                    ctx.stage2D.innerHTML = '';
+                                    ctx.stage2D.appendChild(svg);
+                                };
+
+                                renderParams();
+                                draw();
+                                return { renderStep: draw };
+                            }
+                        }
+                    ]
+                },
+
+                /* -------------------------------------------------------
+                   分頁 5：現代精準生醫 (mRNA疫苗 3D / 單株抗體 / CAR-T)
+                   ------------------------------------------------------- */
+                {
+                    id: 'biomedicine',
+                    label: '💊 現代精準生醫 (3D)',
+                    submodules: [
+                        {
+                            id: 'mrna_3d',
+                            name: 'mRNA 疫苗與脂質奈米顆粒 (3D)',
+                            tag: '3D 核酸疫苗模擬',
+                            title: 'mRNA 疫苗機制 (3D)：脂質奈米顆粒遞送與細胞轉譯',
+                            mode: '3d',
+                            knowledge: '<strong>mRNA 疫苗</strong>不直接注射病毒，而是將編碼病毒棘蛋白的 mRNA 包覆在<strong>脂質奈米顆粒 (LNP)</strong> 中送入人體細胞質，借用人體自身的核糖體合成抗原，進而喚醒強大免疫記憶，且 mRNA 不會進入細胞核改變人類 DNA。',
+                            steps: [
+                                { title: '1. 脂質奈米顆粒 (LNP) 保護 mRNA', desc: '脆弱的橘色 mRNA 必須由雙層微脂粒奈米外殼 (LNP) 包覆，才能避免在血液中被酵素分解並順利穿過細胞膜。' },
+                                { title: '2. 胞吞進入細胞並釋放 mRNA', desc: 'LNP 與宿主細胞膜融合後破裂，將病毒抗原密碼 mRNA 釋放至細胞質（全程不進入細胞核）。' },
+                                { title: '3. 核糖體讀取轉譯出病毒棘蛋白', desc: '細胞內的核糖體沿著 mRNA 序列進行轉譯，製造出無害的病毒棘蛋白片段 (Spike Protein)。' },
+                                { title: '4. 細胞表面呈現抗原並活化免疫', desc: '棘蛋白被運送至細胞表面呈現，誘導 B 細胞產生中和抗體與 T 細胞建立長期免疫記憶。' }
+                            ],
+                            initState: () => ({}),
+                            mount(ctx) {
+                                ctx.paramsEl.innerHTML = `
+              <div class="param-row">
+                <div class="param-label"><span>3D 模型導覽</span><span>脂質奈米顆粒 LNP</span></div>
+                <div style="font-size:0.8rem;color:var(--text-muted);line-height:1.5;">
+                  🟠 橘色螺旋：編碼抗原之 mRNA<br>
+                  🔵 青藍色球體：脂質奈米顆粒 (LNP)<br>
+                  🟣 紫羅蘭複合體：細胞質核糖體 (Ribosome)<br>
+                  🩵 青色凸起：合成出的病毒棘蛋白抗原
+                </div>
+              </div>
+            `;
+
+                                threeMgr.clearScene();
+                                let lnpShell, mrnaGroup, ribosome, spikeGroup, membrane;
+                                if (threeMgr.available) {
+                                    const scene = threeMgr.scene;
+                                    scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+                                    const light = new THREE.DirectionalLight(0x22d3ee, 1.15);
+                                    light.position.set(5, 8, 6);
+                                    scene.add(light);
+
+                                    // 細胞膜平面
+                                    membrane = new THREE.Mesh(
+                                        new THREE.CylinderGeometry(8, 8, 0.25, 36),
+                                        new THREE.MeshPhongMaterial({ color: 0x34d399, transparent: true, opacity: 0.28 })
+                                    );
+                                    membrane.position.y = -2.2;
+                                    scene.add(membrane);
+
+                                    // LNP 外殼 (半球剖面看清內部 mRNA)
+                                    lnpShell = new THREE.Group();
+                                    const lnpMat = new THREE.MeshPhongMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.45, side: THREE.DoubleSide });
+                                    const shellGeo = new THREE.SphereGeometry(2.1, 28, 28, 0, Math.PI * 1.45);
+                                    const shellMesh = new THREE.Mesh(shellGeo, lnpMat);
+                                    lnpShell.add(shellMesh);
+                                    // 脂質分子裝飾球
+                                    const headMat = new THREE.MeshPhongMaterial({ color: 0x14b8a6 });
+                                    for (let i = 0; i < 18; i++) {
+                                        const phi = Math.acos(1 - 2 * (i + 0.5) / 18);
+                                        const theta = Math.PI * (1 + Math.sqrt(5)) * i;
+                                        const dot = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 10), headMat);
+                                        dot.position.setFromSphericalCoords(2.1, phi, theta);
+                                        if (dot.position.z > -0.5) lnpShell.add(dot);
+                                    }
+                                    scene.add(lnpShell);
+
+                                    // 內部 mRNA 橘色螺旋
+                                    mrnaGroup = new THREE.Group();
+                                    const pts = [];
+                                    for (let i = 0; i <= 40; i++) {
+                                        const a = i * 0.35;
+                                        pts.push(new THREE.Vector3((i - 20) * 0.08, Math.sin(a) * 0.65, Math.cos(a) * 0.65));
+                                    }
+                                    const rnaMesh = new THREE.Mesh(
+                                        new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 48, 0.11, 10, false),
+                                        new THREE.MeshPhongMaterial({ color: 0xfb923c, emissive: 0x7c2d12 })
+                                    );
+                                    mrnaGroup.add(rnaMesh);
+                                    scene.add(mrnaGroup);
+
+                                    // 核糖體 (大小次單元)
+                                    ribosome = new THREE.Group();
+                                    const rMat = new THREE.MeshPhongMaterial({ color: 0xa78bfa, transparent: true, opacity: 0.85 });
+                                    const bigSub = new THREE.Mesh(new THREE.SphereGeometry(1.05, 20, 20), rMat);
+                                    bigSub.scale.set(1.2, 0.85, 1);
+                                    bigSub.position.y = 0.5;
+                                    const smallSub = new THREE.Mesh(new THREE.SphereGeometry(0.72, 20, 20), rMat);
+                                    smallSub.position.y = -0.55;
+                                    ribosome.add(bigSub, smallSub);
+                                    ribosome.position.set(2.8, -0.8, 0);
+                                    scene.add(ribosome);
+
+                                    // 棘蛋白產物
+                                    spikeGroup = new THREE.Group();
+                                    const spMat = new THREE.MeshPhongMaterial({ color: 0x22d3ee, emissive: 0x0e7490 });
+                                    for (let i = 0; i < 3; i++) {
+                                        const sp = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1.1, 14), spMat);
+                                        sp.position.set((i - 1) * 1.4, -1.5, (i % 2 ? 0.8 : -0.8));
+                                        spikeGroup.add(sp);
+                                    }
+                                    spikeGroup.visible = false;
+                                    scene.add(spikeGroup);
+
+                                    threeMgr.addPin(lnpShell, '脂質奈米顆粒 (LNP)', THEME.dna);
+                                    threeMgr.addPin(mrnaGroup, 'mRNA 遺傳訊息', THEME.rna);
+                                    threeMgr.addPin(ribosome, '細胞質核糖體', THEME.enzyme);
+                                    threeMgr.addPin(membrane, '宿主細胞膜', THEME.cell);
+                                }
+
+                                threeMgr.start((t) => {
+                                    if (!lnpShell) return;
+                                    const s = App.stepIdx;
+                                    lnpShell.rotation.y = t * 0.35;
+                                    lnpShell.visible = s <= 1;
+                                    lnpShell.scale.setScalar(s === 1 ? 0.55 : 1);
+
+                                    const targetRnaY = s === 0 ? 0.8 : -0.8;
+                                    const targetRnaX = s >= 2 ? 2.5 : 0;
+                                    mrnaGroup.position.y += (targetRnaY - mrnaGroup.position.y) * 0.08;
+                                    mrnaGroup.position.x += (targetRnaX - mrnaGroup.position.x) * 0.08;
+                                    if (s === 0) lnpShell.position.y = 0.8;
+
+                                    if (s === 2) {
+                                        ribosome.position.x = 2.5 + Math.sin(t * 2.5) * 0.7;
+                                    } else {
+                                        ribosome.position.x += (2.8 - ribosome.position.x) * 0.08;
+                                    }
+
+                                    spikeGroup.visible = s >= 3;
+                                    if (s >= 3) {
+                                        spikeGroup.position.y = Math.sin(t * 2) * 0.12;
+                                    }
+                                });
+
+                                return { renderStep: () => { } };
+                            }
+                        },
+                        {
+                            id: 'mab_therapy',
+                            name: '單株抗體藥物 (Monoclonal Antibody)',
+                            tag: '標靶精準醫療',
+                            title: '單株抗體藥物：精準鎖定腫瘤抗原與免疫標記 (ADCC)',
+                            mode: '2d',
+                            knowledge: '<strong>單株抗體 (mAb)</strong>由單一 B 細胞株選殖大量製造，所有抗體結構完全一致，能像「生物導彈」精準辨識癌細胞或病毒表面的特定抗原，達成阻斷生長訊號、中和毒素或召喚免疫細胞消滅腫瘤之功效，副作用遠低於傳統化療。',
+                            steps: [
+                                { title: '1. 辨識癌細胞表面特異性抗原', desc: '癌細胞常過度表現特定受體抗原（如乳癌 HER2），正常細胞含量極少，成為單株抗體的精準靶點。' },
+                                { title: '2. 單株抗體精準結合並阻斷訊號', desc: 'Y 字型單株抗體的兩端可變區高親和力鎖定腫瘤抗原，阻斷癌細胞增殖訊號傳遞。' },
+                                { title: '3. 啟動 ADCC 效應摧毀癌細胞', desc: '抗體尾端 (Fc段) 如同信號旗，召喚自然殺手細胞 (NK cell) 或巨噬細胞前來精準摧毀被標記的癌細胞！' }
+                            ],
+                            initState: () => ({}),
+                            mount(ctx) {
+                                ctx.paramsEl.innerHTML = `
+              <div class="param-row">
+                <div class="param-label"><span>臨床應用代表</span><span>精準標靶</span></div>
+                <div style="font-size:0.8rem;color:var(--text-muted);line-height:1.55;">
+                  • 癌症標靶治療（如賀癌平抗 HER2、PD-1 免疫檢查點抑制劑）<br>
+                  • 自體免疫疾病（抗 TNF-α 治療類風濕性關節炎）
+                </div>
+              </div>
+            `;
+
+                                const draw = () => {
+                                    const step = App.stepIdx;
+                                    const svg = createSVG('0 0 900 520');
+
+                                    // 癌細胞本體
+                                    svgEl('circle', { cx: 520, cy: 265, r: step === 2 ? 105 : 120, fill: 'rgba(251,113,133,0.18)', stroke: THEME.pathogen, 'stroke-width': 4, 'stroke-dasharray': step === 2 ? '12 8' : 'none' }, svg);
+                                    svgEl('circle', { cx: 520, cy: 265, r: 42, fill: 'rgba(251,113,133,0.35)' }, svg);
+                                    svgLabel(520, 270, step === 2 ? '癌細胞凋亡瓦解' : '目標癌細胞', THEME.pathogen, 'middle', svg);
+
+                                    // 癌細胞表面抗原受體
+                                    const angles = [-0.8, -0.3, 0.3, 0.8, 2.6, 3.6];
+                                    angles.forEach((ang, idx) => {
+                                        const ax = 520 + Math.cos(ang) * 124;
+                                        const ay = 265 + Math.sin(ang) * 124;
+                                        svgEl('circle', { cx: ax, cy: ay, r: 11, fill: THEME.gene }, svg);
+
+                                        // Y 型單株抗體結合 (Step >= 1)
+                                        if (step >= 1) {
+                                            const bx = 520 + Math.cos(ang) * 165;
+                                            const by = 265 + Math.sin(ang) * 165;
+                                            const deg = (ang * 180) / Math.PI + 90;
+                                            const yg = svgEl('g', { transform: `translate(${bx}, ${by}) rotate(${deg})` }, svg);
+                                            svgEl('path', { d: 'M0,0 L0,24 M0,0 L-13,-15 M0,0 L13,-15', stroke: THEME.protein, 'stroke-width': 5, 'stroke-linecap': 'round', fill: 'none' }, yg);
+                                        }
+                                    });
+                                    svgLabel(675, 115, '癌細胞表面特定抗原 (靶點)', THEME.gene, 'middle', svg);
+
+                                    if (step === 0) {
+                                        // 待命中抗體
+                                        for (let i = 0; i < 3; i++) {
+                                            const yg = svgEl('g', { transform: `translate(165, ${160 + i * 95}) rotate(90)`, class: 'anim-float' }, svg);
+                                            svgEl('path', { d: 'M0,0 L0,26 M0,0 L-14,-16 M0,0 L14,-16', stroke: THEME.protein, 'stroke-width': 5, 'stroke-linecap': 'round', fill: 'none' }, yg);
+                                        }
+                                        svgLabel(165, 100, '高專一性單株抗體藥物', THEME.protein, 'middle', svg);
+                                    } else {
+                                        svgLabel(520, 62, '單株抗體精準鎖定抗原並阻斷增殖訊號', THEME.protein, 'middle', svg);
+                                    }
+
+                                    // Step 2: 免疫細胞 (NK Cell) 抵達攻擊
+                                    if (step >= 2) {
+                                        svgEl('circle', { cx: 215, cy: 265, r: 62, fill: 'rgba(52,211,153,0.2)', stroke: THEME.cell, 'stroke-width': 4, class: 'anim-float' }, svg);
+                                        svgEl('path', { d: 'M285,265 L370,265', stroke: THEME.cell, 'stroke-width': 4, 'stroke-dasharray': '6 5' }, svg);
+                                        svgLabel(215, 180, '自然殺手細胞 (NK cell)', THEME.cell, 'middle', svg);
+                                        svgLabel(215, 355, '釋放穿孔素消滅被標記腫瘤', THEME.cell, 'middle', svg);
+                                    }
+
+                                    ctx.stage2D.innerHTML = '';
+                                    ctx.stage2D.appendChild(svg);
+                                };
+
+                                draw();
+                                return { renderStep: draw };
+                            }
+                        },
+                        {
+                            id: 'cart_therapy',
+                            name: 'CAR-T 細胞免疫療法',
+                            tag: '個人化活細胞藥物',
+                            title: 'CAR-T 細胞療法：幫患者 T 細胞裝上腫瘤雷達',
+                            mode: '2d',
+                            knowledge: '<strong>CAR-T 細胞療法</strong>結合基因工程與免疫治療：抽取患者自身 T 細胞，在體外植入「嵌合抗原受體 (CAR)」基因後擴增回輸，使 T 細胞能不經傳統 MHC 辨識就直接精準追殺血癌/淋巴癌細胞，屬於個人化「活的藥物」。',
+                            steps: [
+                                { title: '1. 白血球分離術抽取患者 T 細胞', desc: '從癌症患者血液中分離出免疫 T 細胞。' },
+                                { title: '2. 病毒載體轉殖 CAR 基因', desc: '在實驗室利用慢病毒載體將「嵌合抗原受體 (CAR)」基因寫入 T 細胞，使其表面長出專一性腫瘤受體。' },
+                                { title: '3. 體外培養大量擴增 CAR-T 細胞', desc: '將改造完成的 CAR-T 細胞在無菌生物反應器中擴增至數億個。' },
+                                { title: '4. 回輸患者體內鎖定並摧毀癌細胞', desc: '回輸體內後，CAR-T 細胞精準結合癌細胞表面抗原 (如 CD19)，釋放細胞毒素溶解腫瘤並維持長期記憶防護。' }
+                            ],
+                            initState: () => ({}),
+                            mount(ctx) {
+                                ctx.paramsEl.innerHTML = `
+              <div class="param-row">
+                <div class="param-label"><span>CAR 嵌合抗原受體構造</span><span>活體免疫療法</span></div>
+                <div style="font-size:0.8rem;color:var(--text-muted);line-height:1.55;">
+                  • 胞外段：類似抗體的辨識片段，直接鎖定癌細胞抗原。<br>
+                  • 胞內段：活化訊號傳導區，一旦結合立即啟動殺傷功能！
+                </div>
+              </div>
+            `;
+
+                                const draw = () => {
+                                    const step = App.stepIdx;
+                                    const svg = createSVG('0 0 900 520');
+
+                                    // 患者血液與初始 T 細胞 (Step 0)
+                                    svgEl('circle', { cx: 135, cy: 255, r: 58, fill: 'rgba(56,189,248,0.16)', stroke: THEME.dna, 'stroke-width': 3 }, svg);
+                                    svgLabel(135, 175, '患者原生 T 細胞', THEME.dna, 'middle', svg);
+
+                                    // Step 1: 植入 CAR 基因
+                                    if (step >= 1) {
+                                        svgEl('path', { d: 'M205,255 L285,255', stroke: THEME.muted, 'stroke-width': 3 }, svg);
+                                        svgEl('circle', { cx: 365, cy: 255, r: 62, fill: 'rgba(20,184,166,0.18)', stroke: THEME.plasmid, 'stroke-width': 3.5 }, svg);
+                                        // 長出 CAR 受體 (Y型金色/青色雷達)
+                                        for (let a = 0; a < 5; a++) {
+                                            const ang = (a * Math.PI * 2) / 5;
+                                            const rx = 365 + Math.cos(ang) * 65;
+                                            const ry = 255 + Math.sin(ang) * 65;
+                                            svgEl('line', { x1: rx, y1: ry, x2: 365 + Math.cos(ang) * 86, y2: 255 + Math.sin(ang) * 86, stroke: THEME.gene, 'stroke-width': 4 }, svg);
+                                            svgEl('circle', { cx: 365 + Math.cos(ang) * 88, cy: 255 + Math.sin(ang) * 88, r: 6, fill: THEME.protein }, svg);
+                                        }
+                                        svgLabel(365, 130, '植入 CAR 基因 → 長出腫瘤辨識受體', THEME.gene, 'middle', svg);
+                                    }
+
+                                    // Step 2: 大量擴增
+                                    if (step >= 2) {
+                                        svgEl('path', { d: 'M460,255 L520,255', stroke: THEME.muted, 'stroke-width': 3 }, svg);
+                                        svgEl('rect', { x: 530, y: 145, width: 140, height: 220, rx: 20, fill: '#111c33', stroke: THEME.cell, 'stroke-width': 2.5 }, svg);
+                                        for (let i = 0; i < 6; i++) {
+                                            svgEl('circle', { cx: 575 + (i % 2) * 52, cy: 195 + Math.floor(i / 2) * 58, r: 18, fill: THEME.plasmid, stroke: THEME.gene, 'stroke-width': 2, class: 'anim-float' }, svg);
+                                        }
+                                        svgLabel(600, 120, '體外擴增數億大軍', THEME.cell, 'middle', svg);
+                                    }
+
+                                    // Step 3: 回輸殺滅癌細胞
+                                    if (step >= 3) {
+                                        svgEl('path', { d: 'M680,255 L730,255', stroke: THEME.muted, 'stroke-width': 3 }, svg);
+                                        svgEl('circle', { cx: 805, cy: 255, r: 58, fill: 'rgba(251,113,133,0.16)', stroke: THEME.pathogen, 'stroke-width': 3, 'stroke-dasharray': '10 6' }, svg);
+                                        svgEl('circle', { cx: 745, cy: 255, r: 24, fill: THEME.plasmid, stroke: THEME.gene, 'stroke-width': 3 }, svg);
+                                        svgLabel(805, 175, '精準溶解癌細胞', THEME.pathogen, 'middle', svg);
+                                        svgLabel(805, 345, '✅ 持續免疫記憶巡邏', THEME.cell, 'middle', svg);
+                                    }
+
+                                    ctx.stage2D.innerHTML = '';
+                                    ctx.stage2D.appendChild(svg);
+                                };
+
+                                draw();
+                                return { renderStep: draw };
+                            }
+                        }
+                    ]
+                },
+
+                /* -------------------------------------------------------
+                   分頁 6：海洋生技與微藻固碳生質能源
+                   ------------------------------------------------------- */
+                {
+                    id: 'marine_algal',
+                    label: '🌊 海洋與微藻生技',
+                    submodules: [
+                        {
+                            id: 'marine_cancer',
+                            name: '海綿與海洋微生物萃取抗癌藥物',
+                            tag: '藍色海洋生物技術',
+                            title: '從深海海綿或海洋微生物萃取新型抗癌藥物',
+                            mode: '2d',
+                            knowledge: '海洋覆蓋地球 70% 面積，海綿等無脊椎動物因無法逃避掠食者，與體內<strong>共生海洋微生物</strong>演化出結構獨特、活性極強的化學防禦物質（如軟海綿素 Halichondrin B、海鞘素 Trabectedin），已成功開發為臨床抗癌藥物。',
+                            steps: [
+                                { title: '1. 深海採集海綿與分離共生微生物', desc: '採集極少量的深海海綿樣本，並分離培養其體內真正負責合成活性分子的共生海洋細菌/真菌。' },
+                                { title: '2. 天然物萃取與層析純化', desc: '利用有機溶劑與高效液相層析 (HPLC) 分離出結構獨特的海洋天然化合物。' },
+                                { title: '3. 高通量癌細胞毒殺活性篩選', desc: '測試化合物對腫瘤細胞株的作用機制（例如抑制微管聚合、阻斷癌細胞有絲分裂）。' },
+                                { title: '4. 微生物發酵或化學合成量產新藥', desc: '為保護海洋生態不大量採集野生海綿，改以發酵槽或化學半合成大量生產抗癌藥物！' }
+                            ],
+                            initState: () => ({}),
+                            mount(ctx) {
+                                ctx.paramsEl.innerHTML = `
+              <div class="param-row">
+                <div class="param-label"><span>代表性海洋抗癌藥物</span><span>永續供應</span></div>
+                <div style="font-size:0.8rem;color:var(--text-muted);line-height:1.55;">
+                  • <strong>Eribulin (艾瑞布林)</strong>：源自黑色軟海綿，抑制腫瘤微管生長，用於轉移性乳癌。<br>
+                  • 永續關鍵：找出共生微生物基因叢集或化學合成，避免破壞珊瑚礁與海綿生態。
+                </div>
+              </div>
+            `;
+
+                                const draw = () => {
+                                    const step = App.stepIdx;
+                                    const svg = createSVG('0 0 900 520');
+
+                                    // 深海漸層背景
+                                    svgEl('rect', { x: 40, y: 60, width: 820, height: 400, rx: 22, fill: 'rgba(14,116,144,0.12)', stroke: '#0284c7', 'stroke-width': 2 }, svg);
+
+                                    // Step 0: 海綿與共生菌
+                                    svgEl('path', { d: 'M100,360 Q95,250 140,210 Q180,190 205,250 Q235,280 215,360 Z', fill: '#f59e0b', opacity: 0.75 }, svg);
+                                    svgEl('circle', { cx: 155, cy: 265, r: 10, fill: '#78350f' }, svg);
+                                    svgEl('circle', { cx: 175, cy: 300, r: 8, fill: '#78350f' }, svg);
+                                    svgEl('circle', { cx: 145, cy: 315, r: 12, fill: THEME.cell, class: 'anim-pulse' }, svg);
+                                    svgLabel(158, 175, '海洋海綿與共生微生物', THEME.gene, 'middle', svg);
+
+                                    // Step 1: 萃取純化分子
+                                    if (step >= 1) {
+                                        svgEl('path', { d: 'M245,275 L315,275', stroke: THEME.muted, 'stroke-width': 3 }, svg);
+                                        svgEl('rect', { x: 325, y: 195, width: 150, height: 155, rx: 16, fill: '#111c33', stroke: THEME.protein, 'stroke-width': 2.5 }, svg);
+                                        // 六角化學結構示意
+                                        svgEl('polygon', { points: '400,235 430,252 430,287 400,304 370,287 370,252', fill: 'none', stroke: THEME.protein, 'stroke-width': 3.5 }, svg);
+                                        svgLabel(400, 175, '萃取高活性抗癌天然物', THEME.protein, 'middle', svg);
+                                    }
+
+                                    // Step 2: 抑制癌細胞分裂
+                                    if (step >= 2) {
+                                        svgEl('path', { d: 'M485,275 L545,275', stroke: THEME.muted, 'stroke-width': 3 }, svg);
+                                        svgEl('circle', { cx: 615, cy: 275, r: 58, fill: 'rgba(251,113,133,0.16)', stroke: THEME.pathogen, 'stroke-width': 3, 'stroke-dasharray': '8 6' }, svg);
+                                        svgEl('line', { x1: 580, y1: 245, x2: 650, y2: 305, stroke: THEME.protein, 'stroke-width': 4 }, svg);
+                                        svgLabel(615, 195, '阻斷癌細胞微管分裂', THEME.pathogen, 'middle', svg);
+                                    }
+
+                                    // Step 3: 發酵量產藥劑 (保護海洋)
+                                    if (step >= 3) {
+                                        svgEl('path', { d: 'M680,275 L730,275', stroke: THEME.muted, 'stroke-width': 3 }, svg);
+                                        svgEl('rect', { x: 740, y: 185, width: 95, height: 170, rx: 14, fill: 'rgba(52,211,153,0.14)', stroke: THEME.cell, 'stroke-width': 3 }, svg);
+                                        svgLabel(788, 275, '💊 新藥量產', THEME.cell, 'middle', svg);
+                                        svgLabel(788, 385, '微生物發酵保護野生海綿', THEME.cell, 'middle', svg);
+                                    }
+
+                                    ctx.stage2D.innerHTML = '';
+                                    ctx.stage2D.appendChild(svg);
+                                };
+
+                                draw();
+                                return { renderStep: draw };
+                            }
+                        },
+                        {
+                            id: 'microalgae_biodiesel',
+                            name: '微藻固碳與生質柴油 (光生物反應器)',
+                            tag: '碳捕捉與生質能源',
+                            title: '微藻固碳與生質柴油生產互動模擬器',
+                            mode: '2d',
+                            knowledge: '<strong>微藻</strong>生長極快且不與糧食作物搶地，能高效率吸收工業廢氣中的 <strong>CO₂ 進行光合作用固碳</strong>；在「低氮飢餓」逆境誘導下，微藻會大量累積三酸甘油酯 (油脂)，經萃取與轉酯化反應即可製成潔淨的<strong>生質柴油 (Biodiesel)</strong>！',
+                            steps: [
+                                { title: '1. 注入廢氣 CO₂ 與光照培養', desc: '微藻在光生物反應器中吸收太陽光與工廠排放的二氧化碳，快速進行光合作用增殖並釋放氧氣。' },
+                                { title: '2. 氮源飢餓誘導油脂累積', desc: '調降培養液氮源或提高「氮飢餓誘導」滑桿，微藻停止細胞分裂並將能量轉存為大量油脂滴！' },
+                                { title: '3. 採收油脂並轉酯化產出生質柴油', desc: '萃取微藻細胞內油脂並與甲醇進行轉酯化反應，產出低碳排的生質柴油替代化石燃料。' }
+                            ],
+                            initState: () => ({ light: 80, co2: 75, nStarve: 65 }),
+                            mount(ctx) {
+                                const canvas = document.createElement('canvas');
+                                canvas.width = 900;
+                                canvas.height = 520;
+                                ctx.stage2D.innerHTML = '';
+                                ctx.stage2D.appendChild(canvas);
+                                const g = canvas.getContext('2d');
+
+                                const renderParams = () => {
+                                    ctx.paramsEl.innerHTML = `
+                <div class="param-row">
+                  <div class="param-label"><span>☀️ 光照強度</span><span id="v-lt">${App.state.light}%</span></div>
+                  <input type="range" min="10" max="100" value="${App.state.light}" id="r-lt" />
+                </div>
+                <div class="param-row">
+                  <div class="param-label"><span>🫧 工廠廢氣 CO₂ 注入量</span><span id="v-co2">${App.state.co2}%</span></div>
+                  <input type="range" min="10" max="100" value="${App.state.co2}" id="r-co2" />
+                </div>
+                <div class="param-row">
+                  <div class="param-label"><span>🧪 氮源飢餓誘導 (促油脂累積)</span><span id="v-ns">${App.state.nStarve}%</span></div>
+                  <input type="range" min="0" max="100" value="${App.state.nStarve}" id="r-ns" />
+                </div>
+              `;
+                                    ctx.paramsEl.querySelector('#r-lt').oninput = (e) => { App.state.light = +e.target.value; ctx.paramsEl.querySelector('#v-lt').textContent = `${App.state.light}%`; };
+                                    ctx.paramsEl.querySelector('#r-co2').oninput = (e) => { App.state.co2 = +e.target.value; ctx.paramsEl.querySelector('#v-co2').textContent = `${App.state.co2}%`; };
+                                    ctx.paramsEl.querySelector('#r-ns').oninput = (e) => { App.state.nStarve = +e.target.value; ctx.paramsEl.querySelector('#v-ns').textContent = `${App.state.nStarve}%`; };
+                                };
+                                renderParams();
+
+                                const bubbles = Array.from({ length: 28 }, () => ({
+                                    x: 240 + Math.random() * 240,
+                                    y: 120 + Math.random() * 310,
+                                    r: 3 + Math.random() * 5,
+                                    spd: 0.8 + Math.random() * 1.5
+                                }));
+
+                                let t = 0;
+                                const loop = () => {
+                                    App.activeLoopId = requestAnimationFrame(loop);
+                                    t += 0.04;
+                                    g.clearRect(0, 0, 900, 520);
+
+                                    const lt = App.state.light / 100;
+                                    const co2 = App.state.co2 / 100;
+                                    const ns = App.state.nStarve / 100;
+
+                                    const fixRate = Math.round(lt * co2 * (1 - ns * 0.25) * 100);
+                                    const lipidPct = Math.round(15 + (App.stepIdx >= 1 ? ns * 52 : 10) * lt);
+                                    const dieselYield = Math.round((fixRate * 0.4 + lipidPct * 0.8));
+
+                                    // 左：太陽與 CO2 進氣
+                                    g.fillStyle = `rgba(250, 204, 21, ${0.2 + lt * 0.7})`;
+                                    g.beginPath();
+                                    g.arc(105, 115, 38, 0, Math.PI * 2);
+                                    g.fill();
+
+                                    // 中央光生物反應器圓柱
+                                    const greenR = Math.round(20 + ns * 140);
+                                    const greenG = Math.round(140 + lt * 70);
+                                    g.fillStyle = `rgba(${greenR}, ${greenG}, 80, 0.35)`;
+                                    g.fillRect(220, 85, 280, 360);
+                                    g.strokeStyle = THEME.cell;
+                                    g.lineWidth = 4;
+                                    g.strokeRect(220, 85, 280, 360);
+
+                                    // CO2 氣泡與微藻細胞
+                                    for (const b of bubbles) {
+                                        b.y -= b.spd * (0.4 + co2 * 1.6);
+                                        if (b.y < 95) b.y = 435;
+                                        g.fillStyle = 'rgba(224,242,254,0.65)';
+                                        g.beginPath();
+                                        g.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+                                        g.fill();
+                                    }
+
+                                    // 微藻內部放大視窗 (顯示油脂累積)
+                                    g.fillStyle = '#0f172a';
+                                    g.beginPath();
+                                    g.arc(690, 200, 92, 0, Math.PI * 2);
+                                    g.fill();
+                                    g.strokeStyle = THEME.cell;
+                                    g.lineWidth = 4;
+                                    g.stroke();
+
+                                    // 細胞內黃色油脂滴隨 lipidPct 變大
+                                    const oilR = 10 + (lipidPct / 100) * 34;
+                                    g.fillStyle = THEME.gene;
+                                    g.beginPath();
+                                    g.arc(672, 195, oilR * 0.65, 0, Math.PI * 2);
+                                    g.arc(712, 215, oilR * 0.52, 0, Math.PI * 2);
+                                    g.fill();
+
+                                    // 右下產率儀表板
+                                    g.fillStyle = '#111c33';
+                                    g.fillRect(555, 325, 290, 125);
+                                    g.strokeStyle = THEME.gene;
+                                    g.lineWidth = 2;
+                                    g.strokeRect(555, 325, 290, 125);
+
+                                    g.font = 'bold 14px "Noto Sans TC", sans-serif';
+                                    g.fillStyle = THEME.protein;
+                                    g.fillText(`🫧 CO₂ 固碳效率：${fixRate}%`, 575, 358);
+                                    g.fillStyle = THEME.gene;
+                                    g.fillText(`💧 微藻含油量：${lipidPct}%`, 575, 390);
+                                    g.fillStyle = THEME.cell;
+                                    g.fillText(`⛽ 生質柴油產率指數：${dieselYield}`, 575, 424);
+
+                                    if (App.showLabels) {
+                                        g.fillStyle = '#fde047';
+                                        g.fillText('☀️ 光照', 82, 175);
+                                        g.fillStyle = THEME.cell;
+                                        g.fillText('微藻光生物反應器 (釋放 O₂)', 260, 68);
+                                        g.fillStyle = THEME.gene;
+                                        g.fillText('🔍 微藻細胞放大 (黃色為油脂)', 592, 92);
+                                    }
+                                };
+                                loop();
+
+                                return { renderStep: () => { } };
+                            }
+                        }
+                    ]
+                }
+            ];
+
+            /* =========================================================
+               6. 初始化視口、3D管理器與 UI 渲染協調器
+               ========================================================= */
+            const viewportEl = document.getElementById('viewport');
+            const stage2DEl = document.getElementById('stage-2d');
+            const stage3DEl = document.getElementById('stage-3d');
+            const readoutEl = document.getElementById('hud-zoom-readout');
+
+            const viewport = new UnifiedViewport(viewportEl, stage2DEl, stage3DEl, readoutEl);
+            const threeMgr = new ThreeSceneManager(
+                document.getElementById('three-canvas-host'),
+                document.getElementById('labels-3d-overlay'),
+                viewport
+            );
+
+            let currentModuleInstance = null;
+
+            function renderTabs() {
+                const bar = document.getElementById('tabs-bar');
+                bar.innerHTML = TABS.map((t, i) => `
+      <button class="tab-btn ${i === App.tabIdx ? 'active' : ''}" data-tab="${i}">${t.label}</button>
+    `).join('');
+                bar.querySelectorAll('[data-tab]').forEach(b => {
+                    b.onclick = () => selectTab(+b.dataset.tab);
+                });
+            }
+
+            function renderSubmodules() {
+                const subs = TABS[App.tabIdx].submodules;
+                const bar = document.getElementById('submodules-bar');
+                bar.innerHTML = subs.map((s, i) => `
+      <button class="sub-pill ${i === App.subIdx ? 'active' : ''}" data-sub="${i}">${s.name}</button>
+    `).join('');
+                bar.querySelectorAll('[data-sub]').forEach(b => {
+                    b.onclick = () => selectSubmodule(+b.dataset.sub);
+                });
+            }
+
+            function updateStepUI() {
+                const mod = TABS[App.tabIdx].submodules[App.subIdx];
+                const steps = mod.steps;
+                const dotsEl = document.getElementById('step-dots');
+                dotsEl.innerHTML = steps.map((_, i) => `
+      <button class="step-dot ${i === App.stepIdx ? 'active' : (i < App.stepIdx ? 'done' : '')}" data-step="${i}">${i + 1}</button>
+    `).join('');
+                dotsEl.querySelectorAll('[data-step]').forEach(b => {
+                    b.onclick = () => goToStep(+b.dataset.step);
+                });
+
+                const cur = steps[App.stepIdx];
+                document.getElementById('step-title').textContent = cur.title;
+                document.getElementById('step-desc').textContent = cur.desc;
+
+                document.getElementById('btn-step-prev').disabled = App.stepIdx === 0;
+                document.getElementById('btn-step-next').disabled = App.stepIdx === steps.length - 1;
+            }
+
+            function goToStep(idx) {
+                const mod = TABS[App.tabIdx].submodules[App.subIdx];
+                App.stepIdx = Math.max(0, Math.min(mod.steps.length - 1, idx));
+                updateStepUI();
+                if (currentModuleInstance && currentModuleInstance.renderStep) {
+                    currentModuleInstance.renderStep(App.stepIdx);
+                }
+            }
+
+            function selectTab(tabIdx) {
+                App.tabIdx = tabIdx;
+                App.subIdx = 0;
+                renderTabs();
+                selectSubmodule(0);
+            }
+
+            function selectSubmodule(subIdx) {
+                stopAutoPlay();
+                stopModuleLoops();
+
+                App.subIdx = subIdx;
+                App.stepIdx = 0;
+                renderSubmodules();
+
+                const mod = TABS[App.tabIdx].submodules[App.subIdx];
+                App.state = mod.initState ? mod.initState() : {};
+
+                document.getElementById('panel-tag').textContent = mod.tag;
+                document.getElementById('panel-title').textContent = mod.title;
+                document.getElementById('knowledge-card').innerHTML = `💡 <strong>核心重點：</strong>${mod.knowledge}`;
+                document.getElementById('viewport-quick-bar').innerHTML = '';
+
+                viewport.setMode(mod.mode);
+                updateStepUI();
+
+                currentModuleInstance = mod.mount({
+                    stage2D: stage2DEl,
+                    paramsEl: document.getElementById('params-box'),
+                    quickBarEl: document.getElementById('viewport-quick-bar')
+                });
+            }
+
+            /* =========================================================
+               7. 全域控制按鈕綁定
+               ========================================================= */
+            document.getElementById('btn-zoom-in').onclick = () => viewport.zoomBy(1.22);
+            document.getElementById('btn-zoom-out').onclick = () => viewport.zoomBy(0.82);
+            document.getElementById('btn-zoom-reset').onclick = () => viewport.reset();
+
+            document.getElementById('btn-step-prev').onclick = () => { stopAutoPlay(); goToStep(App.stepIdx - 1); };
+            document.getElementById('btn-step-next').onclick = () => { stopAutoPlay(); goToStep(App.stepIdx + 1); };
+            document.getElementById('btn-step-reset').onclick = () => { stopAutoPlay(); goToStep(0); };
+
+            document.getElementById('btn-step-play').onclick = () => {
+                const mod = TABS[App.tabIdx].submodules[App.subIdx];
+                if (App.isPlaying) {
+                    stopAutoPlay();
+                } else {
+                    App.isPlaying = true;
+                    document.getElementById('btn-step-play').textContent = '⏸ 暫停播放';
+                    if (App.stepIdx >= mod.steps.length - 1) goToStep(0);
+                    App.playTimer = setInterval(() => {
+                        if (App.stepIdx < mod.steps.length - 1) {
+                            goToStep(App.stepIdx + 1);
+                        } else {
+                            stopAutoPlay();
+                        }
+                    }, 2400);
+                }
+            };
+
+            // 文字標籤顯示/隱藏切換
+            const labelToggleBtn = document.getElementById('btn-toggle-labels');
+            labelToggleBtn.onclick = () => {
+                App.showLabels = !App.showLabels;
+                document.body.classList.toggle('hide-labels', !App.showLabels);
+                labelToggleBtn.classList.toggle('active', App.showLabels);
+                document.getElementById('label-toggle-text').textContent = App.showLabels ? '標籤：顯示' : '標籤：隱藏';
+            };
+
+            // 色彩圖例彈窗
+            const modal = document.getElementById('legend-modal');
+            document.getElementById('btn-open-legend').onclick = () => modal.classList.add('open');
+            document.getElementById('btn-close-legend').onclick = () => modal.classList.remove('open');
+            document.getElementById('btn-close-legend-2').onclick = () => modal.classList.remove('open');
+            modal.onclick = (e) => { if (e.target === modal) modal.classList.remove('open'); };
+
+            // 啟動應用程式
+            renderTabs();
+            selectSubmodule(0);
+        })();
+    </script>
+</body>
+
+</html>
