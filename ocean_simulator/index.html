@@ -1,0 +1,3362 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>海洋與地球系統 3D 互動動態模擬器 (12 大核心主題)</title>
+<style>
+  :root {
+    --bg-abyss: #040b16;
+    --panel-bg: rgba(8, 20, 38, 0.82);
+    --panel-border: rgba(0, 212, 255, 0.25);
+    --text-main: #eaf6ff;
+    --text-muted: #8ab4d8;
+    --accent-cyan: #00e5ff;
+    --accent-warm: #ff6d00;
+    --accent-cold: #2979ff;
+    --accent-bio: #00e676;
+    --accent-coral: #ff4081;
+    --accent-warn: #ffd600;
+    --radius-lg: 14px;
+    --radius-sm: 8px;
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg-abyss);
+    color: var(--text-main);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  }
+
+  #canvas-container {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    touch-action: none;
+  }
+
+  /* 3D 浮動標籤層 */
+  #labels-container {
+    position: fixed;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    overflow: hidden;
+    transition: opacity 0.25s ease;
+  }
+  #labels-container.hidden {
+    opacity: 0 !important;
+  }
+
+  .label-3d {
+    position: absolute;
+    left: 0;
+    top: 0;
+    transform: translate(-50%, -100%);
+    background: rgba(5, 16, 32, 0.86);
+    border: 1px solid rgba(0, 229, 255, 0.45);
+    border-left: 3px solid var(--accent-cyan);
+    color: #fff;
+    padding: 4px 9px;
+    border-radius: 6px;
+    font-size: 12px;
+    line-height: 1.35;
+    white-space: nowrap;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    transition: opacity 0.2s ease;
+  }
+  .label-3d .lbl-sub {
+    display: block;
+    font-size: 10.5px;
+    color: var(--text-muted);
+  }
+  .label-3d::after {
+    content: '';
+    position: absolute;
+    bottom: -5px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-width: 5px 5px 0;
+    border-style: solid;
+    border-color: rgba(0, 229, 255, 0.55) transparent transparent;
+  }
+
+  /* 頂部導覽與工具列 */
+  #top-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(180deg, rgba(4,11,22,0.95) 0%, rgba(4,11,22,0.75) 80%, transparent 100%);
+    padding: 8px 12px 6px;
+    gap: 8px;
+    pointer-events: none;
+  }
+
+  .top-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    pointer-events: auto;
+  }
+
+  .brand-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0, 229, 255, 0.14);
+    border: 1px solid rgba(0, 229, 255, 0.4);
+    color: var(--text-main);
+    padding: 7px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    white-space: nowrap;
+  }
+  .brand-btn:active { transform: scale(0.97); }
+
+  .tool-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: nowrap;
+  }
+
+  .icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-height: 36px;
+    min-width: 36px;
+    padding: 0 10px;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    color: var(--text-main);
+    border-radius: var(--radius-sm);
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+  .icon-btn:hover { border-color: var(--accent-cyan); }
+  .icon-btn:active { transform: scale(0.95); }
+  .icon-btn.active {
+    background: rgba(0, 229, 255, 0.22);
+    border-color: var(--accent-cyan);
+    color: #fff;
+  }
+
+  /* 水平多分頁選單 */
+  #tabs-scroll {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    pointer-events: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  #tabs-scroll::-webkit-scrollbar { display: none; }
+
+  .tab-pill {
+    flex: 0 0 auto;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: rgba(10, 25, 48, 0.78);
+    border: 1px solid rgba(138, 180, 216, 0.25);
+    color: var(--text-muted);
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  .tab-pill:hover {
+    color: #fff;
+    border-color: rgba(0, 229, 255, 0.5);
+  }
+  .tab-pill.active {
+    background: linear-gradient(135deg, rgba(0, 180, 216, 0.45), rgba(0, 119, 182, 0.65));
+    border-color: var(--accent-cyan);
+    color: #fff;
+    font-weight: 600;
+    box-shadow: 0 0 12px rgba(0, 229, 255, 0.35);
+  }
+
+  /* 手勢提示氣泡 */
+  #gesture-toast {
+    position: fixed;
+    top: 98px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9;
+    background: rgba(5, 18, 36, 0.85);
+    border: 1px solid rgba(0, 229, 255, 0.35);
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-size: 12px;
+    color: var(--text-muted);
+    pointer-events: none;
+    transition: opacity 0.6s ease;
+    white-space: nowrap;
+  }
+
+  /* 底部 / 側邊控制與敘事面板 */
+  #hud-panel {
+    position: fixed;
+    z-index: 10;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: var(--radius-lg);
+    padding: 12px 14px;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.65);
+    transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.25s ease, max-height 0.3s ease;
+  }
+  #hud-panel.collapsed .hud-collapsible {
+    display: none;
+  }
+  #hud-panel.collapsed {
+    padding: 8px 12px;
+  }
+
+  .hud-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+    flex-shrink: 0;
+  }
+  #hud-panel.collapsed .hud-header {
+    margin-bottom: 0;
+  }
+
+  .hud-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  /* 收合時可直接切換步驟的迷你控制器 */
+  .hud-mini-stepper {
+    display: none;
+    align-items: center;
+    gap: 3px;
+    background: rgba(0, 229, 255, 0.12);
+    border: 1px solid rgba(0, 229, 255, 0.32);
+    border-radius: var(--radius-sm);
+    padding: 2px 5px;
+  }
+  #hud-panel.collapsed .hud-mini-stepper {
+    display: inline-flex;
+  }
+  .mini-step-btn {
+    background: transparent;
+    border: none;
+    color: var(--accent-cyan);
+    font-size: 11px;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease;
+  }
+  .mini-step-btn:hover {
+    background: rgba(0, 229, 255, 0.25);
+  }
+  .mini-step-btn:active {
+    transform: scale(0.92);
+  }
+  .mini-step-text {
+    font-size: 11px;
+    font-weight: 700;
+    color: #fff;
+    min-width: 26px;
+    text-align: center;
+  }
+
+  .theme-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    cursor: pointer;
+  }
+  .theme-badge {
+    flex: 0 0 auto;
+    background: rgba(0, 229, 255, 0.2);
+    border: 1px solid var(--accent-cyan);
+    color: var(--accent-cyan);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 5px;
+  }
+  #theme-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #fff;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .concept-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-bottom: 8px;
+  }
+  .concept-tag {
+    font-size: 11px;
+    color: #b3e5fc;
+    background: rgba(41, 121, 255, 0.18);
+    border: 1px solid rgba(41, 121, 255, 0.35);
+    padding: 2px 8px;
+    border-radius: 99px;
+  }
+
+  /* 步驟進度軌 */
+  .steps-track {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .step-node {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 7px;
+    padding: 6px 8px;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.2s ease;
+    color: var(--text-muted);
+  }
+  .step-node:hover {
+    background: rgba(0, 229, 255, 0.1);
+  }
+  .step-node.active {
+    background: rgba(0, 229, 255, 0.22);
+    border-color: var(--accent-cyan);
+    color: #fff;
+    box-shadow: inset 0 0 10px rgba(0, 229, 255, 0.18);
+  }
+  .step-num {
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--accent-cyan);
+    margin-bottom: 1px;
+  }
+  .step-name {
+    display: block;
+    font-size: 11.5px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .narrative-box {
+    background: rgba(3, 10, 20, 0.65);
+    border-left: 3px solid var(--accent-cyan);
+    border-radius: 6px;
+    padding: 8px 11px;
+    font-size: 13px;
+    line-height: 1.55;
+    color: #dceefb;
+    margin-bottom: 10px;
+    min-height: 52px;
+    user-select: text;
+  }
+
+  /* 底部控制列與互動滑桿 */
+  .controls-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .step-btns {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .ctrl-btn {
+    min-height: 38px;
+    padding: 0 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(0, 229, 255, 0.35);
+    background: rgba(0, 180, 216, 0.16);
+    color: #fff;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.15s ease;
+  }
+  .ctrl-btn:hover { background: rgba(0, 229, 255, 0.28); }
+  .ctrl-btn:active { transform: scale(0.96); }
+  .ctrl-btn.play-active {
+    background: rgba(0, 230, 118, 0.25);
+    border-color: var(--accent-bio);
+    color: #b9f6ca;
+  }
+
+  .slider-box {
+    flex: 1 1 230px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    padding: 6px 11px;
+    border-radius: 8px;
+  }
+  .slider-label {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+  .slider-val {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent-cyan);
+    min-width: 56px;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  input[type="range"] {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 6px;
+    border-radius: 99px;
+    background: rgba(138, 180, 216, 0.3);
+    outline: none;
+    cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--accent-cyan);
+    border: 2px solid #fff;
+    box-shadow: 0 0 8px rgba(0, 229, 255, 0.7);
+  }
+
+  /* 12 主題總覽抽屜 Modal */
+  #drawer-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    background: rgba(2, 8, 18, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  #drawer-modal.open { display: flex; }
+
+  .drawer-card {
+    width: min(880px, 100%);
+    max-height: 88vh;
+    background: rgba(8, 22, 42, 0.96);
+    border: 1px solid var(--panel-border);
+    border-radius: 16px;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    overflow: hidden;
+  }
+  .drawer-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .drawer-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 10px;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .drawer-item {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(138, 180, 216, 0.2);
+    border-radius: 10px;
+    padding: 11px 12px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+  }
+  .drawer-item:hover, .drawer-item.active {
+    background: rgba(0, 229, 255, 0.16);
+    border-color: var(--accent-cyan);
+  }
+  .drawer-item .di-num {
+    font-size: 11px;
+    color: var(--accent-cyan);
+    font-weight: 700;
+  }
+  .drawer-item .di-title {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: #fff;
+    margin: 3px 0 4px;
+  }
+  .drawer-item .di-sub {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    line-height: 1.35;
+  }
+
+  /* 視覺一致性色票圖例小條 */
+  .legend-strip {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+  .leg-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 4px;
+  }
+
+  /* 桌面寬螢幕 (>= 900px)：面板移至右側懸浮，3D 主畫面中央與左側完全開闊 */
+  @media (min-width: 900px) {
+    #hud-panel {
+      top: 96px;
+      right: 20px;
+      bottom: 20px;
+      left: auto;
+      transform: none;
+      width: 380px;
+      max-height: calc(100vh - 116px);
+      display: flex;
+      flex-direction: column;
+    }
+    #hud-panel.collapsed {
+      bottom: auto;
+      max-height: none;
+      width: auto;
+      min-width: 290px;
+      max-width: 420px;
+    }
+    #hud-panel .hud-collapsible {
+      overflow-y: auto;
+      padding-right: 4px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(0, 229, 255, 0.35) transparent;
+    }
+    #hud-panel .hud-collapsible::-webkit-scrollbar {
+      width: 4px;
+    }
+    #hud-panel .hud-collapsible::-webkit-scrollbar-thumb {
+      background: rgba(0, 229, 255, 0.35);
+      border-radius: 99px;
+    }
+    #hud-panel .steps-track {
+      grid-template-columns: repeat(2, 1fr);
+    }
+    #hud-panel .controls-row {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+    }
+    #hud-panel .step-btns {
+      width: 100%;
+      justify-content: space-between;
+    }
+    #hud-panel .ctrl-btn {
+      flex: 1;
+      justify-content: center;
+      padding: 0 6px;
+    }
+    #hud-panel .slider-box {
+      width: 100%;
+      flex: none;
+    }
+  }
+
+  /* 行動端與中小型螢幕 (< 900px)：置於底部，緊湊排版不遮蔽過半螢幕 */
+  @media (max-width: 899px) {
+    #hud-panel {
+      bottom: calc(10px + var(--safe-bottom));
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(680px, calc(100vw - 16px));
+      max-height: 50vh;
+      display: flex;
+      flex-direction: column;
+    }
+    #hud-panel.collapsed {
+      max-height: none;
+      width: min(560px, calc(100vw - 16px));
+    }
+    #hud-panel .hud-collapsible {
+      overflow-y: auto;
+      max-height: calc(50vh - 46px);
+      padding-right: 3px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(0, 229, 255, 0.3) transparent;
+    }
+    #hud-panel .hud-collapsible::-webkit-scrollbar {
+      width: 4px;
+    }
+    #hud-panel .hud-collapsible::-webkit-scrollbar-thumb {
+      background: rgba(0, 229, 255, 0.3);
+      border-radius: 99px;
+    }
+    .narrative-box {
+      max-height: 80px;
+      overflow-y: auto;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .brand-text-long { display: none; }
+    .steps-track { grid-template-columns: repeat(2, 1fr); }
+    #hud-panel { padding: 8px 10px; bottom: calc(6px + var(--safe-bottom)); max-height: 52vh; }
+    #hud-panel .hud-collapsible { max-height: calc(52vh - 44px); }
+    .narrative-box { font-size: 12px; padding: 6px 8px; line-height: 1.45; max-height: 70px; }
+    .ctrl-btn { padding: 0 6px; font-size: 11.5px; min-height: 34px; }
+    .slider-box { padding: 4px 7px; }
+    #gesture-toast { top: 92px; font-size: 11px; }
+  }
+</style>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+
+<div id="canvas-container"></div>
+<div id="labels-container"></div>
+
+<!-- 頂部導覽與工具列 -->
+<header id="top-bar">
+  <div class="top-row">
+    <button class="brand-btn" id="btn-open-drawer" title="開啟 12 大主題目錄">
+      <span>☰ 主題總覽</span>
+      <span class="brand-text-long" style="color:var(--accent-cyan);font-weight:400;">| 海洋地科 3D 模擬器</span>
+    </button>
+
+    <div class="tool-group">
+      <button class="icon-btn active" id="btn-toggle-labels" title="顯示或隱藏 3D 文字標籤">🏷️ 標籤: 開</button>
+      <button class="icon-btn" id="btn-zoom-in" title="放大視角">＋</button>
+      <button class="icon-btn" id="btn-zoom-out" title="縮小視角">－</button>
+      <button class="icon-btn" id="btn-reset-cam" title="重置當前步驟最佳視角">🎯 視角</button>
+      <button class="icon-btn" id="btn-toggle-hud" title="收合或展開下方解說面板">▾ 面板</button>
+    </div>
+  </div>
+
+  <nav id="tabs-scroll" aria-label="12大海洋科學主題分頁"></nav>
+</header>
+
+<div id="gesture-toast">👆 單指拖曳旋轉 · 雙指縮放與平移 (支援滑鼠滾輪/右鍵平移)</div>
+
+<!-- 底部 / 側邊敘事與互動控制面板 -->
+<section id="hud-panel">
+  <div class="hud-header">
+    <div class="theme-title-wrap" title="點擊收合或展開詳細說明">
+      <span class="theme-badge" id="theme-badge">主題 01 / 12</span>
+      <h1 id="theme-title">海底黑煙囪與地球內部熱循環</h1>
+    </div>
+    <div class="hud-header-actions">
+      <!-- 迷你步驟指示與切換 (收合時亦可輕鬆切換步驟) -->
+      <div class="hud-mini-stepper" id="hud-mini-stepper" title="目前步驟 (點擊箭頭可切換)">
+        <button class="mini-step-btn" id="btn-mini-prev" title="上一步">◀</button>
+        <span class="mini-step-text" id="mini-step-text">1/4</span>
+        <button class="mini-step-btn" id="btn-mini-next" title="下一步">▶</button>
+      </div>
+      <button class="icon-btn" id="btn-hud-mini" style="min-height:28px;padding:0 8px;font-size:11.5px;">收合</button>
+    </div>
+  </div>
+
+  <div class="hud-collapsible">
+    <div class="concept-tags" id="concept-tags"></div>
+
+    <div class="legend-strip">
+      <span><i class="leg-dot" style="background:#ff6d00;"></i>高溫熱液/暖流/岩漿</span>
+      <span><i class="leg-dot" style="background:#00e5ff;"></i>低溫深海水/湧升流</span>
+      <span><i class="leg-dot" style="background:#00e676;"></i>生物/化學物質/風場</span>
+      <span><i class="leg-dot" style="background:#ff4081;"></i>珊瑚/重要指標</span>
+    </div>
+
+    <div class="steps-track" id="steps-track"></div>
+
+    <div class="narrative-box" id="narrative-text"></div>
+
+    <div class="controls-row">
+      <div class="step-btns">
+        <button class="ctrl-btn" id="btn-prev">⏮ 上一步</button>
+        <button class="ctrl-btn" id="btn-play">▶ 自動導覽</button>
+        <button class="ctrl-btn" id="btn-next">下一步 ⏭</button>
+      </div>
+
+      <div class="slider-box">
+        <span class="slider-label" id="slider-label">參數</span>
+        <input type="range" id="param-slider" min="0" max="100" value="50">
+        <span class="slider-val" id="slider-val">50%</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 12 大主題快速切換總覽視窗 -->
+<div id="drawer-modal">
+  <div class="drawer-card">
+    <div class="drawer-top">
+      <h2 style="font-size:17px;color:#fff;">🌊 12 大海洋與地球科學互動主題</h2>
+      <button class="icon-btn" id="btn-close-drawer">✕ 關閉</button>
+    </div>
+    <div class="drawer-grid" id="drawer-grid"></div>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* =========================================================================
+   1. 統一視覺色票系統 (跨 12 分頁完全一致)
+   ========================================================================= */
+const PALETTE = {
+  bgAbyss: 0x040b16,
+  waterSurface: 0x00b4d8,
+  waterMid: 0x0077b6,
+  waterDeep: 0x051937,
+  magma: 0xff4500,
+  warmCurrent: 0xff6d00,
+  coldCurrent: 0x00e5ff,
+  crustBasalt: 0x24303c,
+  crustFracture: 0x16202a,
+  mantleRock: 0x4a180c,
+  sediment: 0xc8b58a,
+  landGreen: 0x2d6a4f,
+  bioGreen: 0x00e676,
+  coralHealthy: 0xff4081,
+  coralAlt: 0xff9e00,
+  coralBleached: 0xf1f5f9,
+  acidIon: 0xffea00,
+  methane: 0x64ffda,
+  windGold: 0xffd166,
+  iceWhite: 0xe0f7fa
+};
+
+/* =========================================================================
+   2. 12 大主題完整敘事資料、鏡頭腳本與物理滑桿定義
+   ========================================================================= */
+const THEMES = [
+  {
+    id: 1,
+    shortName: '01 黑煙囪熱循環',
+    title: '海底黑煙囪與地球內部熱循環',
+    concepts: ['中洋脊板塊張裂', '深層海水裂隙滲透', '金屬硫化物溶出沉澱', '深海化學合成生態系'],
+    slider: { label: '岩漿庫熱源強度', min: 20, max: 100, val: 75, unit: '%' },
+    steps: [
+      {
+        name: '中洋脊宏觀下潛',
+        cam: [0, 26, 30], target: [0, 14, 0],
+        desc: '鏡頭從全球大洋與中洋脊張裂帶（上方發光紅線）的宏觀視角出發，準備向下穿透數千公尺深的漆黑冰冷海水，直達海底玄武岩地殼。'
+      },
+      {
+        name: '裂隙滲透與加熱溶出',
+        cam: [0, -2, 22], target: [0, -5, 0],
+        desc: '約 2°C 的冰冷底層海水（藍青色粒子）沿著密集的玄武岩裂隙不斷向下滲漏，深入接近熾熱岩漿庫時被劇烈加熱膨脹，並溶出岩石中的銅、鐵、鋅等金屬硫化物（轉為橘金色）。'
+      },
+      {
+        name: '350°C 噴發與黑煙囪',
+        cam: [6, 5, 14], target: [0, 2.5, 0],
+        desc: '高達 350°C 的高溫礦物熱液沿噴口急速向上噴湧！接觸到冰冷深海水瞬間凝結沉澱出黑色金屬硫化物微粒，日積月累堆疊成數公尺高的「黑煙囪」結構。'
+      },
+      {
+        name: '化學合成深海綠洲',
+        cam: [4.2, 2.2, 6.2], target: [0, 1.0, 0],
+        desc: '拉近至煙囪周圍：不靠陽光的「化學合成細菌」（螢光綠微粒）將硫化氫轉化為有機養分，孕育出巨型紅冠管蟲、盲蝦與白蟹繁盛共生的獨特深海綠洲。'
+      }
+    ]
+  },
+  {
+    id: 2,
+    shortName: '02 全球大洋輸送帶',
+    title: '大洋輸送帶的全球壯遊 (溫鹽環流)',
+    concepts: ['表層洋流風力驅動', '極區冷卻與海冰增鹽', '北大西洋深海沉降流', '千年全球熱鹽平衡'],
+    slider: { label: '極區冷卻沉降速率', min: 15, max: 100, val: 70, unit: '%' },
+    steps: [
+      {
+        name: '赤道暖流北上增鹽',
+        cam: [-6, 7, 21], target: [-2, 3, 2],
+        desc: '溫暖發光的表層海水粒子（橘紅色）從陽光普照的赤道海域出發，隨信風與灣流一路向北推進；沿途水分持續蒸發（白色水氣），使表層海水鹽度微幅上升。'
+      },
+      {
+        name: '格陵蘭極區垂直沉降',
+        cam: [-2, 16, 13], target: [-1.5, 9.2, 3.2],
+        desc: '抵達北大西洋格陵蘭海域時，嚴寒氣候與海冰生成排鹽使海水急速冷卻、密度暴增，引發壯觀的「垂直下沉瀑布」——大量海水直墜數千公尺深海！'
+      },
+      {
+        name: '深海淵流南下繞行',
+        cam: [4, -6, 22], target: [2, -3, 2],
+        desc: '沉入深淵的冰冷高密度海水（冰藍色）沿著大西洋海底緩慢南下，繞過非洲好望角，進入印度洋與南大洋深淵通道。'
+      },
+      {
+        name: '太平洋湧升千年閉環',
+        cam: [-19, 6, -12], target: [0, 0, 0],
+        desc: '深層冷流最終在北太平洋與印度洋透過大尺度「湧升作用」重回溫暖表層（由藍轉橘），完成歷時約一千年的全球溫鹽大循環閉環。'
+      }
+    ]
+  },
+  {
+    id: 3,
+    shortName: '03 海嘯襲岸四重奏',
+    title: '海嘯襲岸的時空四重奏',
+    concepts: ['海底逆斷層錯動', '長週期淺水波極速傳播', '大陸棚煞車效應 (Shoaling)', '異常退潮與海岸溯升'],
+    slider: { label: '海底斷層錯動規模', min: 30, max: 100, val: 80, unit: '%' },
+    steps: [
+      {
+        name: '海底逆斷層錯動',
+        cam: [-14, 4, 18], target: [-14, -3, 0],
+        desc: '深海海床發生大規模逆斷層瞬間錯動！左側海床岩塊猛烈向上彈起，將上方整層數千公尺厚的水體瞬間推擠抬升，形成初始海嘯波。',
+        presetVal: 80
+      },
+      {
+        name: '深海極速隱形傳播',
+        cam: [-5, 5, 16], target: [-6, 0, 0],
+        desc: '海嘯波在數千公尺深洋中以噴射機般高速（時速約 700–800 公里）擴散；此時波長極長（逾百公里）、波高僅數十公分，海面船隻幾乎毫無察覺。'
+      },
+      {
+        name: '大陸棚煞車與波高飆升',
+        cam: [4, 4.5, 14], target: [4, 0, 0],
+        desc: '波前進入大陸棚淺水區，海床底部產生強烈摩擦使前端減速；後方高速波浪追上擠壓，導致波長急遽壓縮、波高瞬間瘋狂飆升（淺化效應 Shoaling）！'
+      },
+      {
+        name: '海水急退與巨浪襲岸',
+        cam: [13, 6, 14], target: [12, 1, 0],
+        desc: '襲岸前海岸線先出現異常「海水急遽退去」露出海床的預警現象，緊接著高聳的巨型水牆轟然衝上陸地（溯升 Run-up），淹沒沿海港口與城鎮。'
+      }
+    ]
+  },
+  {
+    id: 4,
+    shortName: '04 海洋酸化與珊瑚',
+    title: '海洋酸化與碳酸鈣骨骼的消融',
+    concepts: ['大氣 CO₂ 溶入海水', '碳酸平衡連鎖反應', '氫離子 H⁺ 激增搶奪 CO₃²⁻', '珊瑚白化與骨骼崩解'],
+    slider: { label: '大氣 CO₂ 濃度', min: 280, max: 800, val: 320, unit: ' ppm' },
+    steps: [
+      {
+        name: '人為 CO₂ 溶入海表',
+        cam: [0, 8, 19], target: [0, 5.5, 0],
+        desc: '工廠與城市排放的大量二氧化碳（CO₂ 紅灰分子）在海氣交界面源源不絕溶入表層海水，打破海洋千萬年來的酸鹼平衡。',
+        presetVal: 360
+      },
+      {
+        name: '微觀碳酸平衡崩壞',
+        cam: [0, 3, 12], target: [0, 2.5, 0],
+        desc: 'CO₂ 與水生成碳酸並解離釋放大量氫離子（H⁺ 亮黃綠粒子），同時搶走並消耗海洋生物造殼必需的關鍵原料——碳酸根離子（CO₃²⁻ 藍色粒子）。',
+        presetVal: 500
+      },
+      {
+        name: '共生藻逃逸與珊瑚白化',
+        cam: [0, -2, 11], target: [0, -3.5, 0],
+        desc: '鏡頭拉至海底珊瑚礁：在酸化與升溫雙重壓力下，提供養分與色彩的「共生藻」（綠光微粒）紛紛逃逸，原本繽紛健康的珊瑚急速轉為慘白。',
+        presetVal: 650
+      },
+      {
+        name: '碳酸鈣侵蝕與礁體崩解',
+        cam: [3, -2.5, 9], target: [0, -4.2, 0],
+        desc: '碳酸鈣飽和度過低使珊瑚無法修復骨骼，酸性海水進一步侵蝕溶解白色碳酸鈣骨架，最終使完整的立體礁體斷裂崩解為海底碎屑。',
+        presetVal: 780
+      }
+    ]
+  },
+  {
+    id: 5,
+    shortName: '05 聖嬰與反聖嬰',
+    title: '聖嬰與反聖嬰現象的太平洋擺盪 (ENSO)',
+    concepts: ['赤道太平洋信風', '沃克環流 (Walker Circulation)', '東西岸溫躍層傾斜', '秘魯湧升流與氣候異常'],
+    slider: { label: 'ENSO 擺盪指數', min: -100, max: 100, val: 0, unit: '' },
+    steps: [
+      {
+        name: '正常年：東風與西太暖池',
+        cam: [0, 7, 26], target: [0, 0, 0],
+        desc: '正常年份：強勁東風（信風）將溫暖表層海水吹向西太平洋（印尼側）堆積成深厚暖池並帶來豐沛降雨；東岸（秘魯外海）深層冷水上湧，形成富饒漁場。',
+        presetVal: 0
+      },
+      {
+        name: '聖嬰過渡：信風減弱東潰',
+        cam: [0, 6, 24], target: [0, -1, 0],
+        desc: '進入聖嬰發展期：赤道東風突然減弱甚至轉為西風，原本堆積在西太平洋的龐大暖水層失去支撐，如海底雪崩般沿赤道向東回流！',
+        presetVal: -55
+      },
+      {
+        name: '聖嬰高峰：湧升中斷災變',
+        cam: [4, 5, 22], target: [3, -1, 0],
+        desc: '聖嬰年高峰：東太平洋溫躍層被強行壓深，秘魯冷水湧升戛然而止，漁場崩潰且降下致災暴雨；西太平洋則因暖水東移陷入嚴重乾旱與森林大火。',
+        presetVal: -100
+      },
+      {
+        name: '反聖嬰年：極端信風強化',
+        cam: [-3, 6, 24], target: [0, -1, 0],
+        desc: '反聖嬰年：信風異常增強，將暖水更推擠至西太平洋（印尼豪雨成災），東太平洋溫躍層極度貼近海表，秘魯外海冷湧升流與寒害達到極致。',
+        presetVal: 100
+      }
+    ]
+  },
+  {
+    id: 6,
+    shortName: '06 海底擴張與枕狀熔岩',
+    title: '海底熱液管與板塊擴張',
+    concepts: ['中洋脊擴張軸心', '地函岩漿湧出', '枕狀熔岩 (Pillow Lava) 急冷', '黑白煙囪與硫化物礦床'],
+    slider: { label: '海洋板塊擴張速率', min: 10, max: 100, val: 65, unit: ' mm/yr' },
+    steps: [
+      {
+        name: '中央地塹與板塊張裂',
+        cam: [0, 11, 22], target: [0, 0, 0],
+        desc: '沿著深海中央地塹（Rift Valley）俯瞰：左右兩側海洋岩石圈板塊受張力不斷向外拉裂擴張，形成階梯狀正斷層地形。'
+      },
+      {
+        name: '擴張軸心岩漿擠壓上湧',
+        cam: [0, 3, 15], target: [0, -2, 0],
+        desc: '在板塊張裂減壓的軸心處，下方地函軟流圈的熾熱玄武岩質岩漿（Magma）沿垂直岩脈不斷向上擠壓並撕裂海床湧出。'
+      },
+      {
+        name: '急冷凝固「枕狀熔岩」',
+        cam: [3.5, 2.8, 8.5], target: [0, 0.2, 0],
+        desc: '當 1200°C 滾燙岩漿接觸冰冷深海水時，外殼瞬間冷卻凝結成玻璃質硬殼，內部岩漿繼續撐破擠出，堆疊成一顆顆圓鼓獨特的「枕狀熔岩（Pillow Lava）」。'
+      },
+      {
+        name: '黑白煙柱與深海礦床',
+        cam: [-6, 4.5, 13], target: [0, 1.5, 0],
+        desc: '伴隨張裂斷層，高溫處噴發富含鐵銅硫化物的「黑煙囪」，較低溫外圍則冒出含鋇鈣矽的乳白「白煙囪」，共同沉積出珍貴的海底塊狀硫化物礦床。'
+      }
+    ]
+  },
+  {
+    id: 7,
+    shortName: '07 潮汐與大小潮',
+    title: '潮汐的成因與大潮／小潮',
+    concepts: ['月球與太陽引潮力', '向月與背月雙水包隆起', '地球自轉雙日潮', '朔望大潮與上下弦小潮'],
+    slider: { label: '月球公轉相位角', min: 0, max: 360, val: 0, unit: '°' },
+    steps: [
+      {
+        name: '月球引潮力與雙水包',
+        cam: [0, 16, 22], target: [0, 0, 0],
+        desc: '月球萬有引力與地月系統離心效應的合力（引潮力），將向月面與背月面的海水同時拉扯隆起成兩個水包（潮波），構成全球潮汐的基礎。',
+        presetVal: 0
+      },
+      {
+        name: '地球自轉與每日漲退潮',
+        cam: [0, 8, 13], target: [0, 0, 0],
+        desc: '觀察地球表面紅色海岸觀測站：隨著地球每 24 小時自轉一圈，海岸線會依序穿過兩次水包隆起（滿潮）與兩次低谷（乾潮），形成「半日潮」。',
+        presetVal: 35
+      },
+      {
+        name: '朔望連線：引力疊加「大潮」',
+        cam: [-4, 22, 18], target: [-3, 0, 0],
+        desc: '當太陽、地球、月球連成一直線（農曆初一新月 0° 或十五滿月 180°，即朔望），太陽與月球引潮力正向疊加，海水隆起最高、潮差最大，稱為「大潮（Spring Tide）」。',
+        presetVal: 180
+      },
+      {
+        name: '上下弦直角：抵銷「小潮」',
+        cam: [0, 24, 16], target: [0, 0, 0],
+        desc: '當日、地、月呈 90° 直角（農曆初七/八上弦月或廿二/廿三下弦月），太陽與月球的引潮力互相垂直牽制抵銷，潮水隆起幅度最小，稱為「小潮（Neap Tide）」。',
+        presetVal: 90
+      }
+    ]
+  },
+  {
+    id: 8,
+    shortName: '08 海岸地形與波浪折射',
+    title: '海岸地形與波浪折射 (Wave Refraction)',
+    concepts: ['淺水波速隨水深減慢', '波峰線彎曲折射', '海岬波能聚焦侵蝕', '海灣能量發散與沙灘沉積'],
+    slider: { label: '外海波浪能量強度', min: 25, max: 100, val: 75, unit: '%' },
+    steps: [
+      {
+        name: '深海平行波峰線推進',
+        cam: [0, 18, 22], target: [0, 0, 0],
+        desc: '外海深水區中，一列列平行的海浪波峰線（亮青色波紋）以均勻速度向交錯著凸出「海岬」與凹入「海灣」的不規則海岸線推進。'
+      },
+      {
+        name: '淺水減速與波浪折射',
+        cam: [0, 14, 15], target: [0, 0, -2],
+        desc: '波峰率先進入海岬前方的淺水海床，受底部摩擦減速；而位於深水海灣處的同一波峰仍高速前進，導致整條波峰線向海岸輪廓發生明顯「彎曲折射」！'
+      },
+      {
+        name: '海岬波能聚焦與侵蝕',
+        cam: [-8, 6, 6], target: [-8, 0.5, -4],
+        desc: '波浪正交能量線（橘紅箭頭）向凸出的海岬強烈聚焦匯集！猛烈碎浪不斷拍擊掏空岩壁，發育出海蝕崖、海蝕洞、海蝕拱門與海蝕柱。'
+      },
+      {
+        name: '海灣能量發散與沙灘發育',
+        cam: [0, 6, 6], target: [0, 0.2, -7.5],
+        desc: '相對地，進入凹陷海灣的波浪能量線向外發散（綠箭頭），水流平緩減弱，使沿岸搬運來的泥沙得以在灣內穩定沉積，孕育出金黃色新月形沙灘。'
+      }
+    ]
+  },
+  {
+    id: 9,
+    shortName: '09 科氏力與艾克曼螺線',
+    title: '科氏力與表層洋流偏轉 (Ekman Spiral)',
+    concepts: ['地球自轉科氏力南北差異', '海表風吹流 45° 偏轉', '深層摩擦遞減與艾克曼螺線', '垂直風向 90° 艾克曼淨輸送'],
+    slider: { label: '觀測海域緯度 (負南/正北)', min: -60, max: 60, val: 35, unit: '°' },
+    steps: [
+      {
+        name: '地球自轉與南北半球偏轉',
+        cam: [-5, 7, 20], target: [-3, 1, 0],
+        desc: '左側地球儀展示：受地球自轉產生的「科氏力」影響，運動流體在北半球恆向右偏轉，在南半球則向左偏轉（赤道處科氏力為零）。可拖曳滑桿切換南北半球！',
+        presetVal: 35
+      },
+      {
+        name: '盛行風與表層 45° 水流',
+        cam: [9, 9, 13], target: [3, 4.5, 0],
+        desc: '聚焦右側海洋水柱：當穩定的盛行風（上方金色箭頭）吹拂海面時，最表層海水受風摩擦與科氏力平衡，並非順著風向流，而是偏向風向「右側 45°」（北半球）。',
+        presetVal: 35
+      },
+      {
+        name: '深層傳遞與艾克曼螺線',
+        cam: [12, 4, 12], target: [3, 0, 0],
+        desc: '表層流帶動下層海水：隨深度增加，每一層水體不僅流速因摩擦遞減，受科氏力影響偏轉角度也逐層加大，在立體剖面中旋轉交織成優美的「艾克曼螺線（Ekman Spiral）」。',
+        presetVal: 35
+      },
+      {
+        name: '90° 垂直淨輸送 (Ekman Transport)',
+        cam: [5, 13, 11], target: [3, 1, 0],
+        desc: '將整層艾克曼摩擦層的水流向量總和積分後，整體水體的「淨輸送方向」（粗亮粉紅箭頭）竟剛好垂直於盛行風向（北半球向右 90°、南半球向左 90°），是沿岸湧升流的關鍵推手！',
+        presetVal: 35
+      }
+    ]
+  },
+  {
+    id: 10,
+    shortName: '10 海水鹽度與密度分層',
+    title: '海水鹽度、溫度與密度的垂直分層',
+    concepts: ['海表日照蒸發與風浪攪拌', '表層混合層 (Mixed Layer)', '溫鹽密躍層屏障', '高密度冰冷深海層'],
+    slider: { label: '海域緯度 (0°熱帶 → 75°極區)', min: 0, max: 75, val: 15, unit: '°' },
+    steps: [
+      {
+        name: '海表陽光照射與蒸發降雨',
+        cam: [0, 8, 17], target: [1, 5.5, 0],
+        desc: '海洋表面直接吸收太陽輻射增溫，並伴隨蒸發（提高鹽度）與降雨（降低鹽度），同時海面風浪持續對上層水體進行劇烈機械攪拌。',
+        presetVal: 12
+      },
+      {
+        name: '表層混合層 (Mixed Layer)',
+        cam: [1, 5, 16], target: [1, 4.2, 0],
+        desc: '水深約 0–200 公尺處受風浪充分混合，形成溫度高、密度低且上下性質均勻的「混合層」（對照右側紅=溫度、黃=鹽度、青=密度垂直曲線）。',
+        presetVal: 12
+      },
+      {
+        name: '溫鹽躍層 (阻絕上下交換)',
+        cam: [1, 1.5, 16], target: [1, 1.2, 0],
+        desc: '水深約 200–1000 公尺處，溫度隨深度驟降（溫躍層 Thermocline）、密度急遽攀升（密躍層 Pycnocline）；上輕下重的強烈穩定分層如同無形天花板，阻絕上下水體對流交換。',
+        presetVal: 12
+      },
+      {
+        name: '冰冷高密度深海層',
+        cam: [1, -2, 21], target: [1, -1, 0],
+        desc: '1000 公尺以下佔海洋總體積約 80% 的「深海層」，終年漆黑、水溫僅 1–3°C 且密度最高（源自極區沉降流）。試著將滑桿拉往高緯度極區，觀察躍層消失的均質水柱！',
+        presetVal: 12
+      }
+    ]
+  },
+  {
+    id: 11,
+    shortName: '11 可燃冰與甲烷釋放',
+    title: '海洋資源與氣候變遷：可燃冰與甲烷釋放',
+    concepts: ['深海大陸坡高壓低溫', '甲烷水合物籠狀晶體', '深層海水增溫解體', '甲烷噴發與溫室正回饋'],
+    slider: { label: '深層海水增溫幅度', min: 0, max: 40, val: 5, unit: ' (×0.1°C)' },
+    steps: [
+      {
+        name: '大陸坡高壓低溫沉積帶',
+        cam: [0, 3, 20], target: [0, -2, 0],
+        desc: '潛入水深逾 300–500 公尺的大陸坡沉積物剖面：在極高水壓與接近冰點的低溫環境下，地層中蘊藏著厚實潔白的固態「甲烷水合物（可燃冰）」穩定帶。',
+        presetVal: 3
+      },
+      {
+        name: '「籠狀晶體」微觀分子結構',
+        cam: [-4, 3.8, 9.5], target: [-4.5, 3.2, 1],
+        desc: '微觀放大視角：水分子（青色節點）透過氫鍵結成堅固的立體多面體「冰籠（Clathrate Cage）」，將高濃度甲烷氣體分子（CH₄ 亮綠橘球）緊緊囚禁於晶格中心。',
+        presetVal: 5
+      },
+      {
+        name: '深海增溫與晶體融化解體',
+        cam: [-2, 2, 14], target: [-2, 0.5, 0],
+        desc: '當全球暖化導致溫暖洋流觸及大陸坡底床（調高增溫滑桿），溫度突破相平衡臨界點，水分子冰籠劇烈震盪斷裂，可燃冰晶體迅速融化解體！',
+        presetVal: 24
+      },
+      {
+        name: '甲烷氣泡湧升與暖化正回饋',
+        cam: [2, 4, 21], target: [0, 1, 0],
+        desc: '大量游離甲烷氣泡衝破沉積物（甚至誘發海底山崩），穿透海水上湧至大氣；由於甲烷溫室效應高達二氧化碳的 28 倍以上，將引發加劇全球暖化的危險「正回饋機制」。',
+        presetVal: 38
+      }
+    ]
+  },
+  {
+    id: 12,
+    shortName: '12 環礁與達爾文沉降論',
+    title: '環礁的形成與達爾文沉降理論',
+    concepts: ['熱帶火山島誕生', '邊緣礁 (Fringing Reef)', '地殼冷卻沉降與障壁礁', '火山沒入與環礁 (Atoll)'],
+    slider: { label: '地質演化時間軸', min: 0, max: 100, val: 0, unit: ' (×10萬年)' },
+    steps: [
+      {
+        name: '火山島與邊緣礁 (裙礁)',
+        cam: [0, 9, 19], target: [0, 1, 0],
+        desc: '數百萬年前的熱帶海洋，一座年輕玄武岩火山島噴發冒出海面；溫暖清澈的淺水岸邊迅速附著生長出一圈緊貼陸地的「邊緣礁（Fringing Reef）」。',
+        presetVal: 0
+      },
+      {
+        name: '板塊冷卻沉降與向上造礁',
+        cam: [6, 7, 17], target: [0, 0, 0],
+        desc: '隨著下方海洋岩石圈冷卻收縮與緩慢下陷，火山島逐漸變小下沉；但需要陽光的珊瑚蟲不斷奮力向上生長堆疊碳酸鈣礁盤，與海平面保持同步。',
+        presetVal: 36
+      },
+      {
+        name: '障壁礁 (堡礁) 與環島潟湖',
+        cam: [0, 10, 17], target: [0, 0, 0],
+        desc: '外圍生長旺盛的珊瑚礁與不斷縮小的中央火山島拉開距離，演化為環繞島嶼的「障壁礁（Barrier Reef）」，兩者之間隔著一圈平靜湛藍的淺水潟湖（Lagoon）。',
+        presetVal: 68
+      },
+      {
+        name: '火山完全沒入與完美環礁',
+        cam: [0, 11, 16], target: [0, -0.5, 0],
+        desc: '最終古老火山錐完全沉沒於海面之下（由前方剖面可見深埋的平頂火山與厚達千米的白色碳酸鹽岩帽），海面上只剩一圈璀璨的圓形珊瑚礁環與中央潟湖，成為完美的「環礁（Atoll）」。',
+        presetVal: 100
+      }
+    ]
+  }
+];
+
+/* =========================================================================
+   3. Three.js 核心引擎、鏡頭平滑導覽與 3D 標籤投影系統
+   ========================================================================= */
+const container = document.getElementById('canvas-container');
+const labelsContainer = document.getElementById('labels-container');
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+container.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(PALETTE.bgAbyss);
+scene.fog = new THREE.FogExp2(PALETTE.bgAbyss, 0.012);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 300);
+camera.position.set(0, 12, 24);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.07;
+controls.enableZoom = true;
+controls.enablePan = true;
+controls.screenSpacePanning = true;
+controls.minDistance = 2.5;
+controls.maxDistance = 85;
+
+// 全域基礎光源
+const hemiLight = new THREE.HemisphereLight(0x90e0ef, 0x0a1628, 1.15);
+scene.add(hemiLight);
+
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.4);
+dirLight.position.set(15, 28, 18);
+scene.add(dirLight);
+
+let activeGroup = new THREE.Group();
+scene.add(activeGroup);
+
+// 狀態管理
+let currentThemeIdx = 0;
+let currentStepIdx = 0;
+let paramValue = 50;
+let labelsVisible = true;
+let autoPlayTimer = null;
+let activeSceneController = null;
+let activeLabels = [];
+
+// 鏡頭平滑飛行狀態 (一旦使用者手動拖曳/縮放即自動讓出控制權)
+const camRig = {
+  active: false,
+  goalPos: new THREE.Vector3(),
+  goalTarget: new THREE.Vector3()
+};
+
+function flyCameraTo(posArr, targetArr) {
+  camRig.goalPos.set(posArr[0], posArr[1], posArr[2]);
+  camRig.goalTarget.set(targetArr[0], targetArr[1], targetArr[2]);
+  camRig.active = true;
+}
+
+controls.addEventListener('start', () => {
+  camRig.active = false;
+});
+
+/* 3D 標籤管理 */
+function add3DLabel(pos, title, sub = '', borderColor = '#00e5ff', steps = null, parentObj = null) {
+  const el = document.createElement('div');
+  el.className = 'label-3d';
+  el.style.borderLeftColor = borderColor;
+  el.innerHTML = `<strong>${title}</strong>${sub ? `<span class="lbl-sub">${sub}</span>` : ''}`;
+  labelsContainer.appendChild(el);
+  const item = {
+    el,
+    pos: pos instanceof THREE.Vector3 ? pos.clone() : new THREE.Vector3(...pos),
+    steps,
+    parentObj
+  };
+  activeLabels.push(item);
+  return item;
+}
+
+const _projVec = new THREE.Vector3();
+function update3DLabels() {
+  if (!labelsVisible) return;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  for (const lbl of activeLabels) {
+    if (lbl.steps && !lbl.steps.includes(currentStepIdx)) {
+      lbl.el.style.display = 'none';
+      continue;
+    }
+    _projVec.copy(lbl.pos);
+    if (lbl.parentObj) {
+      lbl.parentObj.localToWorld(_projVec);
+    }
+    _projVec.project(camera);
+    if (_projVec.z > 1 || _projVec.z < -1) {
+      lbl.el.style.display = 'none';
+      continue;
+    }
+    const x = (_projVec.x * 0.5 + 0.5) * w;
+    const y = (-_projVec.y * 0.5 + 0.5) * h;
+    lbl.el.style.display = 'block';
+    lbl.el.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) translate(-50%, -115%)`;
+  }
+}
+
+/* 清除並釋放前一個主題的 GPU 記憶體 */
+function disposeActiveScene() {
+  activeLabels.forEach(l => l.el.remove());
+  activeLabels = [];
+  scene.remove(activeGroup);
+  activeGroup.traverse(obj => {
+    if (obj.geometry) obj.geometry.dispose();
+    if (obj.material) {
+      if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+      else obj.material.dispose();
+    }
+  });
+  activeGroup = new THREE.Group();
+  scene.add(activeGroup);
+  dirLight.intensity = 1.4;
+  dirLight.position.set(15, 28, 18);
+  hemiLight.intensity = 1.15;
+  scene.fog.density = 0.011;
+}
+
+/* =========================================================================
+   4. 共用程序化幾何與地球貼圖產生器 (確保零外部圖片依賴且高速載入)
+   ========================================================================= */
+let cachedEarthTex = null;
+function getProceduralEarthTexture() {
+  if (cachedEarthTex) return cachedEarthTex;
+  const c = document.createElement('canvas');
+  c.width = 1024;
+  c.height = 512;
+  const ctx = c.getContext('2d');
+
+  // 深海漸層底圖
+  const grad = ctx.createLinearGradient(0, 0, 0, 512);
+  grad.addColorStop(0, '#0a2540');
+  grad.addColorStop(0.5, '#071c38');
+  grad.addColorStop(1, '#0a2540');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 1024, 512);
+
+  // 經緯網格細線
+  ctx.strokeStyle = 'rgba(0, 229, 255, 0.08)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= 1024; x += 64) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 512); ctx.stroke(); }
+  for (let y = 0; y <= 512; y += 64) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(1024, y); ctx.stroke(); }
+
+  const ll2xy = (lon, lat) => [((lon + 180) / 360) * 1024, ((90 - lat) / 180) * 512];
+  const drawPoly = (coords, fill, stroke = '#4895ef') => {
+    ctx.beginPath();
+    coords.forEach(([lon, lat], i) => {
+      const [x, y] = ll2xy(lon, lat);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  };
+
+  const landCol = '#2a5c43';
+  // 北美洲
+  drawPoly([[-165,65],[-130,70],[-80,72],[-60,50],[-80,25],[-95,18],[-82,9],[-105,20],[-123,38],[-140,60]], landCol);
+  // 格陵蘭
+  drawPoly([[-55,60],[-20,65],[-18,81],[-52,82],[-60,72]], '#a8dadc', '#e0fbfc');
+  // 南美洲
+  drawPoly([[-80,10],[-60,8],[-35,-6],[-42,-23],[-58,-38],[-70,-54],[-75,-42],[-71,-18],[-81,-4]], landCol);
+  // 歐亞大陸
+  drawPoly([[-10,36],[0,52],[15,68],[60,72],[130,72],[170,65],[142,45],[122,32],[105,10],[96,16],[80,8],[70,22],[55,24],[42,12],[34,30],[26,38],[12,42]], landCol);
+  // 非洲
+  drawPoly([[-17,15],[-6,35],[12,34],[33,30],[50,12],[40,-12],[30,-34],[18,-34],[12,-15],[8,4],[-8,5]], landCol);
+  // 澳洲與印尼群島
+  drawPoly([[114,-22],[130,-12],[145,-15],[153,-28],[144,-38],[130,-33],[115,-34]], '#386641');
+  drawPoly([[98,4],[106,-6],[118,-8],[115,2]], landCol);
+  drawPoly([[132,-2],[148,-6],[146,-9],[134,-5]], landCol);
+  // 南極洲
+  drawPoly([[-180,-72],[180,-72],[180,-90],[-180,-90]], '#cfe8ef', '#ffffff');
+
+  cachedEarthTex = new THREE.CanvasTexture(c);
+  cachedEarthTex.colorSpace = THREE.SRGBColorSpace;
+  return cachedEarthTex;
+}
+
+// 經緯度轉 3D 球座標 (與 Three.js SphereGeometry UV 完全對齊)
+function latLonToVec3(lat, lon, radius) {
+  const phi = (90 - lat) * (Math.PI / 180);
+  const theta = (lon + 180) * (Math.PI / 180);
+  return new THREE.Vector3(
+    -radius * Math.sin(phi) * Math.cos(theta),
+    radius * Math.cos(phi),
+    radius * Math.sin(phi) * Math.sin(theta)
+  );
+}
+
+// 建立 3D 立體箭頭
+function createArrow3D(from, to, color = PALETTE.accentCyan, shaftRadius = 0.1, headLen = 0.55, headRad = 0.28) {
+  const dir = new THREE.Vector3().subVectors(to, from);
+  const len = dir.length();
+  const grp = new THREE.Group();
+  if (len < 0.001) return grp;
+
+  const mat = new THREE.MeshStandardMaterial({
+    color,
+    emissive: color,
+    emissiveIntensity: 0.35,
+    roughness: 0.3
+  });
+  const sLen = Math.max(0.05, len - headLen);
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(shaftRadius, shaftRadius, sLen, 12), mat);
+  shaft.position.y = sLen * 0.5;
+  grp.add(shaft);
+
+  const head = new THREE.Mesh(new THREE.ConeGeometry(headRad, headLen, 14), mat);
+  head.position.y = sLen + headLen * 0.5;
+  grp.add(head);
+
+  grp.position.copy(from);
+  grp.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+  return grp;
+}
+
+// 建立沿曲線運動的發光粒子流
+function createCurveParticleStream(curve, count, color, size = 0.26) {
+  const geo = new THREE.BufferGeometry();
+  const positions = new Float32Array(count * 3);
+  const offsets = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    offsets[i] = i / count;
+    const p = curve.getPointAt(offsets[i]);
+    positions[i * 3] = p.x;
+    positions[i * 3 + 1] = p.y;
+    positions[i * 3 + 2] = p.z;
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const mat = new THREE.PointsMaterial({
+    color,
+    size,
+    transparent: true,
+    opacity: 0.92,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  });
+  const pts = new THREE.Points(geo, mat);
+  return {
+    mesh: pts,
+    update(dt, speed = 0.15) {
+      const arr = geo.attributes.position.array;
+      for (let i = 0; i < count; i++) {
+        offsets[i] = (offsets[i] + dt * speed) % 1;
+        if (offsets[i] < 0) offsets[i] += 1;
+        const p = curve.getPointAt(offsets[i]);
+        arr[i * 3] = p.x;
+        arr[i * 3 + 1] = p.y;
+        arr[i * 3 + 2] = p.z;
+      }
+      geo.attributes.position.needsUpdate = true;
+    }
+  };
+}
+
+/* =========================================================================
+   5. 12 大主題專屬 3D 模擬場景建構器 (Builders & Dynamic Updaters)
+   ========================================================================= */
+const SCENE_BUILDERS = [
+  /* ---------------- 主題 01：海底黑煙囪與地球內部熱循環 ---------------- */
+  function buildTheme1(group) {
+    scene.fog.density = 0.013;
+
+    // 1. 上方宏觀地球與中洋脊示意球 (Step 0 視覺焦點)
+    const macroGlobeGrp = new THREE.Group();
+    macroGlobeGrp.position.set(0, 20, 0);
+    const globe = new THREE.Mesh(
+      new THREE.SphereGeometry(4.2, 40, 28),
+      new THREE.MeshStandardMaterial({ map: getProceduralEarthTexture(), roughness: 0.65 })
+    );
+    macroGlobeGrp.add(globe);
+    // 發光中洋脊曲線
+    const ridgeCurve = new THREE.CatmullRomCurve3([
+      latLonToVec3(65, -18, 4.26), latLonToVec3(30, -40, 4.26),
+      latLonToVec3(0, -25, 4.26), latLonToVec3(-35, -15, 4.26),
+      latLonToVec3(-48, 35, 4.26), latLonToVec3(-20, 70, 4.26)
+    ]);
+    const ridgeTube = new THREE.Mesh(
+      new THREE.TubeGeometry(ridgeCurve, 48, 0.09, 8, false),
+      new THREE.MeshBasicMaterial({ color: PALETTE.magma })
+    );
+    macroGlobeGrp.add(ridgeTube);
+    group.add(macroGlobeGrp);
+
+    // 下潛導引光束
+    const diveBeam = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.15, 1.8, 18, 16, 1, true),
+      new THREE.MeshBasicMaterial({ color: PALETTE.coldCurrent, transparent: true, opacity: 0.12, side: THREE.DoubleSide })
+    );
+    diveBeam.position.set(0, 9, 0);
+    group.add(diveBeam);
+
+    // 2. 玄武岩地殼剖面與岩漿庫
+    const crustMat = new THREE.MeshStandardMaterial({ color: PALETTE.crustBasalt, roughness: 0.85 });
+    const leftBlock = new THREE.Mesh(new THREE.BoxGeometry(8.5, 7, 9), crustMat);
+    leftBlock.position.set(-4.8, -4.2, 0);
+    const rightBlock = new THREE.Mesh(new THREE.BoxGeometry(8.5, 7, 9), crustMat);
+    rightBlock.position.set(4.8, -4.2, 0);
+    group.add(leftBlock, rightBlock);
+
+    // 底部熾熱岩漿庫
+    const magmaMat = new THREE.MeshStandardMaterial({
+      color: PALETTE.magma, emissive: 0xff3300, emissiveIntensity: 1.4, roughness: 0.4
+    });
+    const magmaChamber = new THREE.Mesh(new THREE.SphereGeometry(4.6, 32, 20), magmaMat);
+    magmaChamber.scale.set(1.8, 0.55, 1.2);
+    magmaChamber.position.set(0, -8.3, 0);
+    group.add(magmaChamber);
+
+    const magmaLight = new THREE.PointLight(0xff4500, 12, 18);
+    magmaLight.position.set(0, -6.5, 2);
+    group.add(magmaLight);
+
+    // 裂隙滲透流 (左右兩側冷水下滲 -> 加熱上湧)
+    const seepLeftCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(-6.5, 1.5, 1.5), new THREE.Vector3(-5.2, -2.5, 1.2),
+      new THREE.Vector3(-3.2, -6.2, 0.6), new THREE.Vector3(-0.6, -6.5, 0.2)
+    ]);
+    const seepRightCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(6.5, 1.5, 1.5), new THREE.Vector3(5.2, -2.5, 1.2),
+      new THREE.Vector3(3.2, -6.2, 0.6), new THREE.Vector3(0.6, -6.5, 0.2)
+    ]);
+    const upCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0, -6.6, 0), new THREE.Vector3(0, -3.0, 0),
+      new THREE.Vector3(0, 0.5, 0), new THREE.Vector3(0, 4.2, 0)
+    ]);
+
+    // 裂隙發光管線
+    const crackMat = new THREE.MeshBasicMaterial({ color: 0x1a3a5c, transparent: true, opacity: 0.45 });
+    group.add(new THREE.Mesh(new THREE.TubeGeometry(seepLeftCurve, 30, 0.22, 8, false), crackMat));
+    group.add(new THREE.Mesh(new THREE.TubeGeometry(seepRightCurve, 30, 0.22, 8, false), crackMat));
+    group.add(new THREE.Mesh(new THREE.TubeGeometry(upCurve, 30, 0.35, 8, false),
+      new THREE.MeshBasicMaterial({ color: PALETTE.warmCurrent, transparent: true, opacity: 0.45 })));
+
+    const coldStreamL = createCurveParticleStream(seepLeftCurve, 55, PALETTE.coldCurrent, 0.28);
+    const coldStreamR = createCurveParticleStream(seepRightCurve, 55, PALETTE.coldCurrent, 0.28);
+    const hotStreamUp = createCurveParticleStream(upCurve, 65, PALETTE.warmCurrent, 0.34);
+    group.add(coldStreamL.mesh, coldStreamR.mesh, hotStreamUp.mesh);
+
+    // 3. 黑煙囪錐體與濃密黑色硫化物煙柱
+    const chimneyGrp = new THREE.Group();
+    chimneyGrp.position.set(0, -0.7, 0);
+    const chimneyMat = new THREE.MeshStandardMaterial({ color: 0x1c1f24, roughness: 0.95, metalness: 0.25 });
+    for (let i = 0; i < 4; i++) {
+      const seg = new THREE.Mesh(new THREE.CylinderGeometry(0.45 - i * 0.06, 0.95 - i * 0.12, 1.15, 14), chimneyMat);
+      seg.position.y = 0.55 + i * 0.92;
+      chimneyGrp.add(seg);
+    }
+    // 噴口紅光環
+    const ventGlow = new THREE.PointLight(0xff6d00, 6, 8);
+    ventGlow.position.set(0, 4.2, 0);
+    chimneyGrp.add(ventGlow);
+    group.add(chimneyGrp);
+
+    // 黑煙粒子系統
+    const smokeCount = 260;
+    const smokeGeo = new THREE.BufferGeometry();
+    const smokePos = new Float32Array(smokeCount * 3);
+    const smokeSeed = new Float32Array(smokeCount);
+    for (let i = 0; i < smokeCount; i++) smokeSeed[i] = Math.random();
+    smokeGeo.setAttribute('position', new THREE.BufferAttribute(smokePos, 3));
+    const smokeMat = new THREE.PointsMaterial({ color: 0x22262c, size: 0.75, transparent: true, opacity: 0.85 });
+    const smokePts = new THREE.Points(smokeGeo, smokeMat);
+    group.add(smokePts);
+
+    // 4. 深海化學合成生態系 (巨型管蟲、化學合成菌、盲蝦、白蟹)
+    const ecoGrp = new THREE.Group();
+    const stalkMat = new THREE.MeshStandardMaterial({ color: 0xeae2d6, roughness: 0.6 });
+    const plumeMat = new THREE.MeshStandardMaterial({ color: 0xff1744, emissive: 0x770011, roughness: 0.4 });
+    for (let i = 0; i < 26; i++) {
+      const ang = (i / 26) * Math.PI * 2 + (Math.random() - 0.5) * 0.3;
+      const rad = 1.35 + Math.random() * 1.9;
+      const h = 0.8 + Math.random() * 1.1;
+      const worm = new THREE.Group();
+      const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.07, h, 8), stalkMat);
+      tube.position.y = h / 2;
+      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.32, 8), plumeMat);
+      tip.position.y = h + 0.12;
+      tip.rotation.x = Math.PI;
+      worm.add(tube, tip);
+      worm.position.set(Math.cos(ang) * rad, -0.7, Math.sin(ang) * rad);
+      worm.rotation.z = (Math.random() - 0.5) * 0.35;
+      ecoGrp.add(worm);
+    }
+    // 白蟹
+    const crabMat = new THREE.MeshStandardMaterial({ color: 0xf8f9fa, roughness: 0.5 });
+    const crabs = [];
+    for (let i = 0; i < 8; i++) {
+      const crab = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), crabMat);
+      crab.scale.set(1.3, 0.55, 1.0);
+      const a = (i / 8) * Math.PI * 2;
+      crab.userData = { baseAngle: a, dist: 2.2 + (i % 3) * 0.65 };
+      ecoGrp.add(crab);
+      crabs.push(crab);
+    }
+    // 盲蝦群與螢光化學合成細菌
+    const shrimpGeo = new THREE.BufferGeometry();
+    const shrimpCount = 45;
+    const shrimpPos = new Float32Array(shrimpCount * 3);
+    shrimpGeo.setAttribute('position', new THREE.BufferAttribute(shrimpPos, 3));
+    const shrimpPts = new THREE.Points(shrimpGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.22 }));
+    ecoGrp.add(shrimpPts);
+
+    const bacGeo = new THREE.BufferGeometry();
+    const bacCount = 120;
+    const bacPos = new Float32Array(bacCount * 3);
+    for (let i = 0; i < bacCount; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = 0.8 + Math.random() * 3.0;
+      bacPos[i * 3] = Math.cos(a) * r;
+      bacPos[i * 3 + 1] = -0.5 + Math.random() * 2.5;
+      bacPos[i * 3 + 2] = Math.sin(a) * r;
+    }
+    bacGeo.setAttribute('position', new THREE.BufferAttribute(bacPos, 3));
+    const bacPts = new THREE.Points(bacGeo, new THREE.PointsMaterial({
+      color: PALETTE.bioGreen, size: 0.16, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending
+    }));
+    ecoGrp.add(bacPts);
+    group.add(ecoGrp);
+
+    // 3D 標籤
+    add3DLabel([0, 24.8, 0], '全球中洋脊張裂帶', '海底熱液循環發源地', '#ff6d00', [0]);
+    add3DLabel([-5.2, -1.5, 1.5], '冰冷深海水下滲 (~2°C)', '沿玄武岩裂隙深入地殼', '#00e5ff', [1, 2]);
+    add3DLabel([0, -7.8, 2.2], '熾熱岩漿庫熱源', '加熱海水並溶出 Cu/Fe/Zn 硫化物', '#ff4500', [1]);
+    add3DLabel([0, 4.6, 0], '350°C 黑煙囪噴口', '遇冷瞬間沉澱金屬硫化物', '#ff6d00', [2, 3]);
+    add3DLabel([2.2, 0.6, 1.6], '深海化學合成綠洲', '硫化菌 · 巨型管蟲 · 盲蝦 · 白蟹', '#00e676', [3]);
+
+    return {
+      update(dt, elapsed) {
+        const heat = paramValue / 100;
+        macroGlobeGrp.rotation.y = elapsed * 0.18;
+        coldStreamL.update(dt, 0.15 + heat * 0.25);
+        coldStreamR.update(dt, 0.15 + heat * 0.25);
+        hotStreamUp.update(dt, 0.25 + heat * 0.45);
+        magmaMat.emissiveIntensity = 0.8 + heat * 1.1 + Math.sin(elapsed * 3) * 0.15;
+
+        const chimneyScale = 0.55 + heat * 0.55;
+        chimneyGrp.scale.y = chimneyScale;
+
+        // 更新黑煙柱
+        const ventTopY = -0.7 + 4.1 * chimneyScale;
+        const sArr = smokeGeo.attributes.position.array;
+        for (let i = 0; i < smokeCount; i++) {
+          smokeSeed[i] = (smokeSeed[i] + dt * (0.22 + heat * 0.38)) % 1;
+          const p = smokeSeed[i];
+          const spread = p * (1.8 + heat * 1.2);
+          const a = i * 2.399 + elapsed * 1.5;
+          sArr[i * 3] = Math.cos(a) * spread * 0.45;
+          sArr[i * 3 + 1] = ventTopY + p * (5.5 + heat * 4.0);
+          sArr[i * 3 + 2] = Math.sin(a) * spread * 0.45;
+        }
+        smokeGeo.attributes.position.needsUpdate = true;
+
+        // 盲蝦與白蟹動態
+        const shArr = shrimpGeo.attributes.position.array;
+        for (let i = 0; i < shrimpCount; i++) {
+          const a = elapsed * (1.2 + (i % 5) * 0.2) + i;
+          const r = 0.85 + (i % 4) * 0.28;
+          shArr[i * 3] = Math.cos(a) * r;
+          shArr[i * 3 + 1] = 0.2 + (i % 7) * 0.35 + Math.sin(elapsed * 3 + i) * 0.1;
+          shArr[i * 3 + 2] = Math.sin(a) * r;
+        }
+        shrimpGeo.attributes.position.needsUpdate = true;
+
+        crabs.forEach((c, idx) => {
+          const a = c.userData.baseAngle + Math.sin(elapsed * 0.7 + idx) * 0.25;
+          c.position.set(Math.cos(a) * c.userData.dist, -0.58, Math.sin(a) * c.userData.dist);
+        });
+      }
+    };
+  },
+
+  /* ---------------- 主題 02：大洋輸送帶的全球壯遊 ---------------- */
+  function buildTheme2(group) {
+    scene.fog.density = 0.005;
+    const R_INNER = 9.2;  // 深海海床半徑
+    const R_DEEP = 9.48;  // 深海沉降流軌道
+    const R_SURF = 10.18; // 表層暖流軌道
+
+    // 內核陸地地球 + 半透明深海層殼 (讓深層洋流與垂直沉降瀑布一覽無遺)
+    const innerEarth = new THREE.Mesh(
+      new THREE.SphereGeometry(R_INNER, 64, 48),
+      new THREE.MeshStandardMaterial({ map: getProceduralEarthTexture(), roughness: 0.75 })
+    );
+    group.add(innerEarth);
+
+    const oceanShell = new THREE.Mesh(
+      new THREE.SphereGeometry(R_SURF, 64, 48),
+      new THREE.MeshPhysicalMaterial({
+        color: 0x0077b6, transparent: true, opacity: 0.22, roughness: 0.15, depthWrite: false
+      })
+    );
+    group.add(oceanShell);
+
+    // 北大西洋格陵蘭白色海冰蓋
+    const iceCap = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.4, 1.6, 0.16, 16),
+      new THREE.MeshStandardMaterial({ color: PALETTE.iceWhite, roughness: 0.3 })
+    );
+    const greenlandPos = latLonToVec3(68, -22, R_SURF + 0.05);
+    iceCap.position.copy(greenlandPos);
+    iceCap.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), greenlandPos.clone().normalize());
+    group.add(iceCap);
+
+    // 表層暖流路徑 (北太平洋湧升 -> 印尼穿越流 -> 印度洋 -> 好望角 -> 赤道大西洋 -> 墨西哥灣流 -> 格陵蘭)
+    const warmWaypoints = [
+      [38, -155], [15, -175], [2, 128], [-12, 85], [-34, 24],
+      [-10, -12], [18, -58], [36, -70], [52, -38], [67, -18]
+    ].map(([lat, lon]) => latLonToVec3(lat, lon, R_SURF));
+
+    // 垂直沉降瀑布過渡點 (格陵蘭表層 R_SURF 直墜 R_DEEP)
+    const sinkTop = latLonToVec3(67, -18, R_SURF);
+    const sinkMid = latLonToVec3(65, -19, (R_SURF + R_DEEP) * 0.5);
+    const sinkBot = latLonToVec3(62, -20, R_DEEP);
+
+    // 深海淵流路徑 (北大西洋深淵南下 -> 繞好望角 -> 印度洋/南大洋 -> 北太平洋深處上湧)
+    const deepWaypoints = [
+      [62, -20], [35, -36], [0, -24], [-36, -15], [-46, 22],
+      [-45, 85], [-42, 150], [-10, -168], [22, -162], [38, -155]
+    ].map(([lat, lon]) => latLonToVec3(lat, lon, R_DEEP));
+
+    const warmCurve = new THREE.CatmullRomCurve3(warmWaypoints);
+    const sinkCurve = new THREE.CatmullRomCurve3([sinkTop, sinkMid, sinkBot]);
+    const deepCurve = new THREE.CatmullRomCurve3(deepWaypoints);
+    const upwellCurve = new THREE.CatmullRomCurve3([
+      latLonToVec3(38, -155, R_DEEP),
+      latLonToVec3(38, -155, (R_SURF + R_DEEP) * 0.5),
+      latLonToVec3(38, -155, R_SURF)
+    ]);
+
+    group.add(new THREE.Mesh(new THREE.TubeGeometry(warmCurve, 90, 0.14, 10, false),
+      new THREE.MeshBasicMaterial({ color: PALETTE.warmCurrent, transparent: true, opacity: 0.65 })));
+    group.add(new THREE.Mesh(new THREE.TubeGeometry(sinkCurve, 24, 0.22, 12, false),
+      new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.85 })));
+    group.add(new THREE.Mesh(new THREE.TubeGeometry(deepCurve, 90, 0.14, 10, false),
+      new THREE.MeshBasicMaterial({ color: PALETTE.coldCurrent, transparent: true, opacity: 0.65 })));
+    group.add(new THREE.Mesh(new THREE.TubeGeometry(upwellCurve, 20, 0.18, 10, false),
+      new THREE.MeshBasicMaterial({ color: PALETTE.bioGreen, transparent: true, opacity: 0.7 })));
+
+    const warmStream = createCurveParticleStream(warmCurve, 130, 0xffaa00, 0.42);
+    const sinkStream = createCurveParticleStream(sinkCurve, 45, 0x80ffff, 0.48);
+    const deepStream = createCurveParticleStream(deepCurve, 130, 0x00d5ff, 0.40);
+    const upStream = createCurveParticleStream(upwellCurve, 30, 0x00e676, 0.42);
+    group.add(warmStream.mesh, sinkStream.mesh, deepStream.mesh, upStream.mesh);
+
+    // 赤道與副熱帶蒸發白色水氣微粒
+    const evapGeo = new THREE.BufferGeometry();
+    const evapCount = 50;
+    const evapPos = new Float32Array(evapCount * 3);
+    evapGeo.setAttribute('position', new THREE.BufferAttribute(evapPos, 3));
+    const evapPts = new THREE.Points(evapGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.25, transparent: true, opacity: 0.65 }));
+    group.add(evapPts);
+
+    add3DLabel(latLonToVec3(24, -62, R_SURF + 0.6), '表層溫暖洋流北上', '水分蒸發使鹽度微幅升高', '#ff6d00', [0, 1]);
+    add3DLabel(latLonToVec3(67, -18, R_SURF + 0.8), '北大西洋深海沉降流', '極區冷卻結冰 → 密度暴增直墜深海', '#00e5ff', [1]);
+    add3DLabel(latLonToVec3(-38, 22, R_DEEP + 0.6), '深海寒流繞行好望角', '沿大西洋底部南下進入印度洋', '#00e5ff', [2]);
+    add3DLabel(latLonToVec3(38, -155, R_SURF + 0.7), '北太平洋大尺度湧升', '深層水回升表層完成千年閉環', '#00e676', [3]);
+
+    return {
+      update(dt, elapsed) {
+        const rate = paramValue / 100;
+        warmStream.update(dt, 0.05 + rate * 0.11);
+        sinkStream.update(dt, 0.25 + rate * 0.55);
+        deepStream.update(dt, 0.04 + rate * 0.09);
+        upStream.update(dt, 0.18 + rate * 0.35);
+
+        // 蒸發水氣上升動畫
+        const eArr = evapGeo.attributes.position.array;
+        for (let i = 0; i < evapCount; i++) {
+          const t = (i / evapCount) * 0.45 + 0.52;
+          const lift = ((elapsed * 0.4 + i * 0.13) % 1) * 0.9;
+          const base = warmCurve.getPointAt(t).normalize().multiplyScalar(R_SURF + lift);
+          eArr[i * 3] = base.x;
+          eArr[i * 3 + 1] = base.y;
+          eArr[i * 3 + 2] = base.z;
+        }
+        evapGeo.attributes.position.needsUpdate = true;
+      }
+    };
+  },
+
+  /* ---------------- 主題 03：海嘯襲岸的時空四重奏 ---------------- */
+  function buildTheme3(group) {
+    scene.fog.density = 0.008;
+
+    // 海床與大陸棚、海岸陸地剖面 (x: -22 深海 -> +20 沿海城鎮)
+    const bedShape = new THREE.Shape();
+    bedShape.moveTo(-22, -9);
+    bedShape.lineTo(-22, -6.2);
+    bedShape.lineTo(-4, -6.0);   // 深海平原
+    bedShape.lineTo(8, -1.2);    // 大陸坡與大陸棚淺化區
+    bedShape.lineTo(11.5, 0.2);  // 海岸沙灘
+    bedShape.lineTo(20, 2.2);    // 沿海陸地
+    bedShape.lineTo(20, -9);
+    bedShape.closePath();
+
+    const bedGeo = new THREE.ExtrudeGeometry(bedShape, { depth: 7, bevelEnabled: false });
+    bedGeo.translate(0, 0, -3.5);
+    const bedMesh = new THREE.Mesh(bedGeo, new THREE.MeshStandardMaterial({ color: PALETTE.crustBasalt, roughness: 0.85 }));
+    group.add(bedMesh);
+
+    // 左側可錯動的海底逆斷層上盤岩塊
+    const faultBlock = new THREE.Mesh(
+      new THREE.BoxGeometry(7.5, 2.2, 7.02),
+      new THREE.MeshStandardMaterial({ color: 0x3b4d5e, emissive: 0x331100, roughness: 0.75 })
+    );
+    faultBlock.position.set(-15.5, -5.8, 0);
+    faultBlock.rotation.z = 0.08;
+    group.add(faultBlock);
+
+    // 逆斷層紅線與震源光圈
+    const quakeLight = new THREE.PointLight(0xff3d00, 0, 14);
+    quakeLight.position.set(-14, -4.5, 2);
+    group.add(quakeLight);
+
+    // 沿海城鎮小建築與燈塔
+    const townGrp = new THREE.Group();
+    const bldgMat = new THREE.MeshStandardMaterial({ color: 0xd8e2dc, roughness: 0.5 });
+    [[13.2, 0.9, -1.2, 0.8, 1.3], [14.4, 1.1, 0.8, 0.9, 1.7], [15.8, 1.4, -0.5, 1.0, 2.0], [17.2, 1.7, 1.1, 0.9, 1.4]].forEach(([x, y, z, w, h]) => {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), bldgMat);
+      b.position.set(x, y + h * 0.3, z);
+      townGrp.add(b);
+    });
+    group.add(townGrp);
+
+    // 深海船隻 (展示長波長小波高下幾乎無感)
+    const boatGrp = new THREE.Group();
+    const hull = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.35, 0.55), new THREE.MeshStandardMaterial({ color: 0xff9f1c }));
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.35, 0.4), new THREE.MeshStandardMaterial({ color: 0xffffff }));
+    cabin.position.y = 0.32;
+    boatGrp.add(hull, cabin);
+    boatGrp.position.set(-7, 0.15, 0);
+    group.add(boatGrp);
+
+    // 動態高解析度海嘯水體網格
+    const segX = 150;
+    const waterGeo = new THREE.BoxGeometry(39, 6, 6.9, segX, 1, 1);
+    const posAttr = waterGeo.attributes.position;
+    const basePos = new Float32Array(posAttr.array);
+    const waterMat = new THREE.MeshPhysicalMaterial({
+      color: PALETTE.waterSurface, transparent: true, opacity: 0.72, roughness: 0.15, transmission: 0.2
+    });
+    const waterMesh = new THREE.Mesh(waterGeo, waterMat);
+    group.add(waterMesh);
+
+    // 大陸棚底部摩擦減速箭頭群 (Step 2 顯示)
+    const frictionArrows = new THREE.Group();
+    for (let i = 0; i < 4; i++) {
+      const x = 1.5 + i * 1.8;
+      const y = -4.2 + i * 0.75;
+      frictionArrows.add(createArrow3D(new THREE.Vector3(x + 1.1, y, 3.6), new THREE.Vector3(x, y, 3.6), PALETTE.warmCurrent, 0.06, 0.35, 0.18));
+    }
+    group.add(frictionArrows);
+
+    add3DLabel([-15, -4.2, 2], '海底逆斷層瞬間錯動', '海床彈起抬升整層海水', '#ff6d00', [0]);
+    add3DLabel([-7, 1.3, 0], '深海船隻幾乎無感', '波長逾百公里 · 波高僅數十公分', '#00e5ff', [1]);
+    add3DLabel([4.2, 2.8, 0], '大陸棚淺化效應 (Shoaling)', '底部摩擦減速 → 波長壓縮、波高暴增', '#ff6d00', [2]);
+    add3DLabel([11.2, 3.6, 0], '先異常退潮 → 巨浪溯升襲岸', '水牆衝上沿海城鎮', '#ff4081', [3]);
+
+    // 計算對應海床深度
+    function getBedY(x) {
+      if (x < -4) return -6.0;
+      if (x < 8) return -6.0 + ((x + 4) / 12) * 4.8;
+      if (x < 11.5) return -1.2 + ((x - 8) / 3.5) * 1.4;
+      return 0.2 + ((x - 11.5) / 8.5) * 2.0;
+    }
+
+    return {
+      update(dt, elapsed) {
+        const mag = paramValue / 100;
+        frictionArrows.visible = (currentStepIdx === 2);
+
+        // 依當前步驟鎖定或循環最佳海嘯波前位置 waveCenter
+        let waveX = -14;
+        if (currentStepIdx === 0) {
+          const cycle = (elapsed * 0.7) % 1;
+          const uplift = Math.min(1, cycle * 3.5) * mag;
+          faultBlock.position.y = -5.8 + uplift * 0.95;
+          quakeLight.intensity = (cycle < 0.35) ? 12 * mag : 1;
+          waveX = -15 + cycle * 5;
+        } else if (currentStepIdx === 1) {
+          faultBlock.position.y = -5.0;
+          waveX = -13 + ((elapsed * 4.5) % 12);
+        } else if (currentStepIdx === 2) {
+          faultBlock.position.y = -5.0;
+          waveX = 1.5 + ((elapsed * 1.6) % 6.5);
+        } else {
+          faultBlock.position.y = -5.0;
+          waveX = 7.5 + ((elapsed * 1.5) % 8.5);
+        }
+
+        // 更新水體每個 X 斷面的頂點高度與海岸溯升
+        const arr = posAttr.array;
+        for (let i = 0; i < posAttr.count; i++) {
+          const bx = basePos[i * 3];      // -19.5 .. +19.5
+          const by = basePos[i * 3 + 1];  // +3 (頂) 或 -3 (底)
+          const wx = bx - 2.5;            // 世界座標 X: -22 .. +17
+          const bedY = getBedY(wx);
+
+          if (by < 0) {
+            arr[i * 3] = wx;
+            arr[i * 3 + 1] = bedY;
+          } else {
+            // 隨水深變淺：波長 sigma 壓縮、波高 amp 飆高
+            const depth = Math.max(0.25, -bedY);
+            const shoalFactor = Math.pow(6.0 / depth, 0.52);
+            const sigma = Math.max(1.05, 4.6 / shoalFactor);
+            const amp = (0.38 + mag * 0.45) * shoalFactor;
+
+            // 前導退潮槽 (Drawback trough) + 主波峰
+            const dx = wx - waveX;
+            const crest = amp * Math.exp(-(dx * dx) / (2 * sigma * sigma));
+            const troughDx = wx - (waveX + sigma * 1.45);
+            const trough = -amp * 0.48 * Math.exp(-(troughDx * troughDx) / (2 * sigma * sigma));
+
+            let surfY = crest + trough + Math.sin(wx * 1.5 - elapsed * 3) * 0.03;
+            // 陸地乾涸裁剪
+            if (wx > 10.5 && surfY < bedY + 0.05) {
+              surfY = bedY - 0.02;
+            }
+            arr[i * 3] = wx;
+            arr[i * 3 + 1] = Math.max(bedY - 0.02, surfY);
+          }
+        }
+        posAttr.needsUpdate = true;
+        waterGeo.computeVertexNormals();
+
+        // 船隻隨深海微小波幅起伏
+        const boatDx = -7 - waveX;
+        boatGrp.position.y = 0.18 + (0.38 + mag * 0.45) * Math.exp(-(boatDx * boatDx) / 36);
+      }
+    };
+  },
+
+  /* ---------------- 主題 04：海洋酸化與碳酸鈣骨骼的消融 ---------------- */
+  function buildTheme4(group) {
+    scene.fog.density = 0.012;
+
+    // 1. 上方工業煙囪與海氣交界面
+    const platform = new THREE.Mesh(new THREE.BoxGeometry(5, 0.8, 4), new THREE.MeshStandardMaterial({ color: 0x334155 }));
+    platform.position.set(-6.5, 6.2, 0);
+    group.add(platform);
+
+    for (let i = 0; i < 2; i++) {
+      const stack = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.45, 2.4, 14), new THREE.MeshStandardMaterial({ color: 0x64748b }));
+      stack.position.set(-7.2 + i * 1.3, 7.6, 0);
+      group.add(stack);
+    }
+
+    // 波動海平面
+    const seaPlaneGeo = new THREE.PlaneGeometry(24, 14, 32, 20);
+    seaPlaneGeo.rotateX(-Math.PI / 2);
+    const seaPlane = new THREE.Mesh(seaPlaneGeo, new THREE.MeshPhysicalMaterial({
+      color: PALETTE.waterSurface, transparent: true, opacity: 0.42, side: THREE.DoubleSide, roughness: 0.15
+    }));
+    seaPlane.position.y = 5.5;
+    group.add(seaPlane);
+
+    // 2. CO2 分子溶入曲線與水下微觀離子粒子 (H+ 與 CO3^2-)
+    const co2Curve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(-6.5, 9.0, 0), new THREE.Vector3(-3.0, 9.5, 0),
+      new THREE.Vector3(-0.5, 6.5, 0), new THREE.Vector3(0.5, 3.2, 0)
+    ]);
+    const co2Stream = createCurveParticleStream(co2Curve, 40, 0xff5252, 0.45);
+    group.add(co2Stream.mesh);
+
+    // 氫離子 H+ (隨 CO2 增加而激增) 與 碳酸根離子 CO3^2- (隨酸化而減少)
+    const maxIons = 140;
+    const hGeo = new THREE.BufferGeometry();
+    const hPos = new Float32Array(maxIons * 3);
+    for (let i = 0; i < maxIons; i++) {
+      hPos[i * 3] = (Math.random() - 0.5) * 12;
+      hPos[i * 3 + 1] = -3.5 + Math.random() * 8.5;
+      hPos[i * 3 + 2] = (Math.random() - 0.5) * 7;
+    }
+    hGeo.setAttribute('position', new THREE.BufferAttribute(hPos, 3));
+    const hPts = new THREE.Points(hGeo, new THREE.PointsMaterial({ color: PALETTE.acidIon, size: 0.28, transparent: true, opacity: 0.9 }));
+    group.add(hPts);
+
+    const co3Geo = new THREE.BufferGeometry();
+    const co3Pos = new Float32Array(90 * 3);
+    for (let i = 0; i < 90; i++) {
+      co3Pos[i * 3] = (Math.random() - 0.5) * 11;
+      co3Pos[i * 3 + 1] = -2.5 + Math.random() * 7.0;
+      co3Pos[i * 3 + 2] = (Math.random() - 0.5) * 6;
+    }
+    co3Geo.setAttribute('position', new THREE.BufferAttribute(co3Pos, 3));
+    const co3Pts = new THREE.Points(co3Geo, new THREE.PointsMaterial({ color: PALETTE.coldCurrent, size: 0.34 }));
+    group.add(co3Pts);
+
+    // 3. 海底珊瑚礁群、共生藻微粒與崩解碎屑
+    const seabed = new THREE.Mesh(new THREE.CylinderGeometry(8.5, 9.5, 1.2, 32), new THREE.MeshStandardMaterial({ color: PALETTE.sediment, roughness: 0.9 }));
+    seabed.position.y = -5.2;
+    group.add(seabed);
+
+    const coralMat1 = new THREE.MeshStandardMaterial({ color: PALETTE.coralHealthy, roughness: 0.5 });
+    const coralMat2 = new THREE.MeshStandardMaterial({ color: PALETTE.coralAlt, roughness: 0.5 });
+    const coralBranches = [];
+
+    // 建立鹿角珊瑚與腦珊瑚群
+    for (let c = 0; c < 7; c++) {
+      const cx = (c - 3) * 1.65;
+      const cz = (c % 2 === 0 ? 0.6 : -0.7);
+      const cluster = new THREE.Group();
+      cluster.position.set(cx, -4.6, cz);
+      const mat = c % 2 === 0 ? coralMat1 : coralMat2;
+
+      for (let b = 0; b < 6; b++) {
+        const branch = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.16, 1.8, 8), mat);
+        branch.position.set((Math.random() - 0.5) * 0.5, 0.85, (Math.random() - 0.5) * 0.5);
+        branch.rotation.set((Math.random() - 0.5) * 0.7, b * 1.0, (Math.random() - 0.5) * 0.7);
+        cluster.add(branch);
+      }
+      group.add(cluster);
+      coralBranches.push(cluster);
+    }
+
+    // 共生藻綠光粒子 (白化時向上逃逸)
+    const algaeCount = 110;
+    const algaeGeo = new THREE.BufferGeometry();
+    const algaeBase = new Float32Array(algaeCount * 3);
+    const algaePos = new Float32Array(algaeCount * 3);
+    for (let i = 0; i < algaeCount; i++) {
+      algaeBase[i * 3] = (Math.random() - 0.5) * 10;
+      algaeBase[i * 3 + 1] = -4.2 + Math.random() * 1.5;
+      algaeBase[i * 3 + 2] = (Math.random() - 0.5) * 3;
+    }
+    algaeGeo.setAttribute('position', new THREE.BufferAttribute(algaePos, 3));
+    const algaePts = new THREE.Points(algaeGeo, new THREE.PointsMaterial({ color: PALETTE.bioGreen, size: 0.22, transparent: true, opacity: 0.9 }));
+    group.add(algaePts);
+
+    // 底部崩解碳酸鈣碎屑
+    const rubbleGrp = new THREE.Group();
+    const rubbleMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.9 });
+    for (let i = 0; i < 36; i++) {
+      const r = new THREE.Mesh(new THREE.DodecahedronGeometry(0.16 + Math.random() * 0.14, 0), rubbleMat);
+      r.position.set((Math.random() - 0.5) * 9.5, -4.55, (Math.random() - 0.5) * 3.5);
+      r.scale.y = 0.5;
+      rubbleGrp.add(r);
+    }
+    group.add(rubbleGrp);
+
+    add3DLabel([-3.5, 7.8, 0], '人為排放 CO₂ 溶入海表', 'CO₂ + H₂O ⇌ H₂CO₃', '#ff5252', [0, 1]);
+    add3DLabel([1.5, 2.5, 0], '氫離子 H⁺ 激增 (海水酸化)', '消耗造殼原料碳酸根 CO₃²⁻', '#ffea00', [1]);
+    add3DLabel([0, -2.1, 0], '共生藻逃逸 → 珊瑚白化', '珊瑚失去色彩與能量來源', '#00e676', [2]);
+    add3DLabel([0, -3.8, 1.2], '碳酸鈣骨骼腐蝕崩解', '礁體結構碎裂瓦解為碎屑', '#f1f5f9', [3]);
+
+    const cHealthy1 = new THREE.Color(PALETTE.coralHealthy);
+    const cHealthy2 = new THREE.Color(PALETTE.coralAlt);
+    const cWhite = new THREE.Color(PALETTE.coralBleached);
+
+    return {
+      update(dt, elapsed) {
+        // 酸化程度 norm: 0 (280ppm 健康) -> 1 (800ppm 嚴重酸化崩解)
+        const norm = THREE.MathUtils.clamp((paramValue - 280) / (800 - 280), 0, 1);
+        co2Stream.update(dt, 0.15 + norm * 0.45);
+
+        // 控制 H+ 與 CO3^2- 粒子數量呈現化學消長
+        hGeo.setDrawRange(0, Math.floor(15 + norm * (maxIons - 15)));
+        co3Geo.setDrawRange(0, Math.floor(90 * (1 - norm * 0.82)));
+
+        // 珊瑚白化顏色過渡
+        const bleachFactor = THREE.MathUtils.smoothstep(norm, 0.25, 0.68);
+        coralMat1.color.copy(cHealthy1).lerp(cWhite, bleachFactor);
+        coralMat2.color.copy(cHealthy2).lerp(cWhite, bleachFactor);
+
+        // 共生藻逃逸動畫
+        const aArr = algaeGeo.attributes.position.array;
+        for (let i = 0; i < algaeCount; i++) {
+          const flee = bleachFactor * (((elapsed * 0.6 + i * 0.07) % 1) * 5.5);
+          aArr[i * 3] = algaeBase[i * 3] + Math.sin(elapsed * 2 + i) * 0.15;
+          aArr[i * 3 + 1] = algaeBase[i * 3 + 1] + flee;
+          aArr[i * 3 + 2] = algaeBase[i * 3 + 2];
+        }
+        algaeGeo.attributes.position.needsUpdate = true;
+        algaePts.material.opacity = Math.max(0.12, 1 - norm * 0.8);
+
+        // 骨骼侵蝕萎縮與崩解傾倒 (norm > 0.65)
+        const dissolve = THREE.MathUtils.smoothstep(norm, 0.6, 1.0);
+        coralBranches.forEach((cl, idx) => {
+          const s = 1 - dissolve * 0.52;
+          cl.scale.set(s, Math.max(0.25, 1 - dissolve * 0.68), s);
+          cl.rotation.z = dissolve * (idx % 2 === 0 ? 0.45 : -0.45);
+        });
+        rubbleGrp.scale.setScalar(0.01 + dissolve * 1.05);
+        rubbleGrp.visible = dissolve > 0.05;
+      }
+    };
+  },
+
+  /* ---------------- 主題 05：聖嬰與反聖嬰現象的太平洋擺盪 ---------------- */
+  function buildTheme5(group) {
+    scene.fog.density = 0.008;
+
+    // 西岸 (印尼/澳洲 x = -13) 與 東岸 (南美洲秘魯 x = +13) 陸塊
+    const westLand = new THREE.Mesh(new THREE.BoxGeometry(3.5, 7.5, 9), new THREE.MeshStandardMaterial({ color: PALETTE.landGreen, roughness: 0.8 }));
+    westLand.position.set(-13.2, -2.5, 0);
+    const eastLand = new THREE.Mesh(new THREE.BoxGeometry(3.5, 8.8, 9), new THREE.MeshStandardMaterial({ color: 0x6c584c, roughness: 0.85 }));
+    eastLand.position.set(13.2, -1.9, 0);
+    group.add(westLand, eastLand);
+
+    // 下層深海冷水塊
+    const coldBox = new THREE.Mesh(
+      new THREE.BoxGeometry(23, 6.2, 8.8),
+      new THREE.MeshPhysicalMaterial({ color: 0x00509d, transparent: true, opacity: 0.58, roughness: 0.2 })
+    );
+    coldBox.position.set(0, -3.2, 0);
+    group.add(coldBox);
+
+    // 動態傾斜溫躍層曲面 (Thermocline) 與 上層暖水池 (Warm Pool)
+    const thermoGeo = new THREE.PlaneGeometry(23, 8.8, 32, 4);
+    thermoGeo.rotateX(-Math.PI / 2);
+    const thermoMat = new THREE.MeshStandardMaterial({
+      color: PALETTE.warmCurrent, emissive: 0xaa3300, emissiveIntensity: 0.35, side: THREE.DoubleSide, transparent: true, opacity: 0.88
+    });
+    const thermoMesh = new THREE.Mesh(thermoGeo, thermoMat);
+    group.add(thermoMesh);
+
+    // 海表暖池顏色網格
+    const surfGeo = new THREE.PlaneGeometry(23, 8.8, 32, 4);
+    surfGeo.rotateX(-Math.PI / 2);
+    const surfColors = new Float32Array(surfGeo.attributes.position.count * 3);
+    surfGeo.setAttribute('color', new THREE.BufferAttribute(surfColors, 3));
+    const surfMesh = new THREE.Mesh(surfGeo, new THREE.MeshStandardMaterial({
+      vertexColors: true, transparent: true, opacity: 0.72, side: THREE.DoubleSide, roughness: 0.2
+    }));
+    surfMesh.position.y = 0.05;
+    group.add(surfMesh);
+
+    // 赤道信風粒子流 (依 ENSO 正負改變流速甚至反轉吹西風！)
+    const windCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(10.5, 1.4, 0), new THREE.Vector3(0, 1.4, 0), new THREE.Vector3(-10.5, 1.4, 0)
+    ]);
+    const windStream = createCurveParticleStream(windCurve, 55, PALETTE.windGold, 0.42);
+    group.add(windStream.mesh);
+
+    // 對流積雨雲團 + 降雨粒子 (隨暖池東西移動)
+    const cloudGrp = new THREE.Group();
+    const cloudMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.7 });
+    [[-1.1, 0, 0, 1.3], [0, 0.4, 0.3, 1.6], [1.2, 0.1, -0.2, 1.25], [0.3, 0.2, -0.8, 1.1]].forEach(([x, y, z, r]) => {
+      const puff = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), cloudMat);
+      puff.position.set(x, y, z);
+      cloudGrp.add(puff);
+    });
+    cloudGrp.position.set(-8.5, 5.5, 0);
+    group.add(cloudGrp);
+
+    const rainGeo = new THREE.BufferGeometry();
+    const rainCount = 80;
+    const rainPos = new Float32Array(rainCount * 3);
+    rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
+    const rainPts = new THREE.Points(rainGeo, new THREE.PointsMaterial({ color: 0x90e0ef, size: 0.22 }));
+    group.add(rainPts);
+
+    // 秘魯外海深層冷湧升流與魚群
+    const upwellCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(9.5, -5.2, 0), new THREE.Vector3(10.6, -2.5, 0), new THREE.Vector3(9.2, -0.3, 0)
+    ]);
+    const upwellStream = createCurveParticleStream(upwellCurve, 40, PALETTE.coldCurrent, 0.36);
+    group.add(upwellStream.mesh);
+
+    // 印尼乾旱森林野火紅光 (聖嬰年觸發)
+    const fireLight = new THREE.PointLight(0xff3300, 0, 8);
+    fireLight.position.set(-12.5, 2.2, 0);
+    group.add(fireLight);
+
+    add3DLabel([-12.5, 2.4, 0], '西太平洋 (印尼／澳洲)', '暖池與季風降雨區', '#00e676');
+    add3DLabel([12.5, 3.0, 0], '東太平洋 (南美洲秘魯)', '湧升流漁場區', '#00e5ff');
+    add3DLabel([0, 1.9, 2.5], '赤道太平洋信風帶', '控制表層暖水推擠方向', '#ffd166');
+    add3DLabel([0, -2.6, 4.5], '溫躍層 (Thermocline)', '暖水與深層冷水分界面', '#ff6d00');
+
+    const cWarm = new THREE.Color(0xff4d00);
+    const cCool = new THREE.Color(0x00b4d8);
+
+    return {
+      update(dt, elapsed) {
+        // enso: -1 (強聖嬰 El Niño) <-> 0 (正常) <-> +1 (強反聖嬰 La Niña)
+        const enso = paramValue / 100;
+
+        // 溫躍層左右深度：正常時西深(-4.2)東淺(-1.2)；聖嬰時西淺(-2.2)東壓深(-3.8)；反聖嬰時西極深(-5.4)東極淺(-0.3)
+        const westY = -3.8 - enso * 1.6;
+        const eastY = -2.1 + enso * 1.7;
+
+        const tPos = thermoGeo.attributes.position;
+        const sCol = surfGeo.attributes.color;
+        for (let i = 0; i < tPos.count; i++) {
+          const x = tPos.getX(i); // -11.5 .. +11.5
+          const u = (x + 11.5) / 23; // 0 (西) -> 1 (東)
+          const ty = THREE.MathUtils.lerp(westY, eastY, u) + Math.sin(x * 0.4 + elapsed * 2) * 0.08;
+          tPos.setY(i, ty);
+
+          // 海表溫度顏色隨溫躍層厚薄變化
+          const warmth = THREE.MathUtils.clamp((-ty - 0.8) / 3.5, 0, 1);
+          const col = cCool.clone().lerp(cWarm, warmth);
+          sCol.setXYZ(i, col.r, col.g, col.b);
+        }
+        tPos.needsUpdate = true;
+        sCol.needsUpdate = true;
+        thermoGeo.computeVertexNormals();
+
+        // 信風速度與方向 (聖嬰時減弱甚至逆轉向東吹)
+        const windSpeed = 0.22 + enso * 0.34; // enso = -1 時為負值(吹西風！)
+        windStream.update(dt, windSpeed);
+
+        // 對流雨雲位置跟隨最暖海域移動
+        const targetCloudX = -6.5 - enso * 3.2 + (enso < 0 ? Math.abs(enso) * 13.5 : 0);
+        cloudGrp.position.x = THREE.MathUtils.lerp(cloudGrp.position.x, targetCloudX, 0.08);
+        const rArr = rainGeo.attributes.position.array;
+        for (let i = 0; i < rainCount; i++) {
+          rArr[i * 3] = cloudGrp.position.x + ((i % 9) - 4) * 0.55;
+          rArr[i * 3 + 1] = 5.2 - ((elapsed * 5 + i * 0.37) % 5.2);
+          rArr[i * 3 + 2] = ((i % 5) - 2) * 0.7;
+        }
+        rainGeo.attributes.position.needsUpdate = true;
+
+        // 秘魯湧升流在聖嬰年減弱消失，反聖嬰年極度強勁
+        const upStrength = THREE.MathUtils.clamp(0.55 + enso * 0.55, 0.02, 1.1);
+        upwellStream.mesh.visible = upStrength > 0.1;
+        upwellStream.update(dt, upStrength * 0.4);
+
+        // 聖嬰年印尼乾旱野火警示
+        fireLight.intensity = enso < -0.4 ? Math.abs(enso + 0.4) * 18 * (0.8 + 0.2 * Math.sin(elapsed * 12)) : 0;
+        westLand.material.color.setHex(enso < -0.45 ? 0x7f5539 : PALETTE.landGreen);
+      }
+    };
+  },
+
+  /* ---------------- 主題 06：海底熱液管與板塊擴張 ---------------- */
+  function buildTheme6(group) {
+    scene.fog.density = 0.014;
+
+    // 左右張裂海洋地殼階梯正斷層岩塊
+    const plateLeft = new THREE.Group();
+    const plateRight = new THREE.Group();
+    const basaltMat = new THREE.MeshStandardMaterial({ color: PALETTE.crustBasalt, roughness: 0.88 });
+
+    for (let i = 0; i < 3; i++) {
+      const blkL = new THREE.Mesh(new THREE.BoxGeometry(3.2, 4.2 + i * 0.7, 12), basaltMat);
+      blkL.position.set(-2.6 - i * 3.1, -2.5 + i * 0.35, 0);
+      plateLeft.add(blkL);
+
+      const blkR = new THREE.Mesh(new THREE.BoxGeometry(3.2, 4.2 + i * 0.7, 12), basaltMat);
+      blkR.position.set(2.6 + i * 3.1, -2.5 + i * 0.35, 0);
+      plateRight.add(blkR);
+    }
+    group.add(plateLeft, plateRight);
+
+    // 張裂方向大箭頭
+    group.add(createArrow3D(new THREE.Vector3(-3, 0.8, 5.2), new THREE.Vector3(-7.5, 0.8, 5.2), PALETTE.coldCurrent, 0.12, 0.7, 0.35));
+    group.add(createArrow3D(new THREE.Vector3(3, 0.8, 5.2), new THREE.Vector3(7.5, 0.8, 5.2), PALETTE.coldCurrent, 0.12, 0.7, 0.35));
+
+    // 中央地塹軸心岩漿湧升楔
+    const magmaWedge = new THREE.Mesh(
+      new THREE.ConeGeometry(2.8, 6.2, 4),
+      new THREE.MeshStandardMaterial({ color: PALETTE.magma, emissive: 0xff3300, emissiveIntensity: 1.2 })
+    );
+    magmaWedge.rotation.y = Math.PI / 4;
+    magmaWedge.position.set(0, -3.2, 0);
+    group.add(magmaWedge);
+
+    const riftLight = new THREE.PointLight(0xff5500, 10, 14);
+    riftLight.position.set(0, 1.2, 0);
+    group.add(riftLight);
+
+    // 枕狀熔岩群 (Pillow Lavas：圓球狀堆疊，新生熔岩泛橘紅裂紋光澤，冷卻轉黑玄武岩)
+    const pillows = [];
+    for (let i = 0; i < 28; i++) {
+      const pMat = new THREE.MeshStandardMaterial({
+        color: 0x1b2028, emissive: 0xff4500, emissiveIntensity: 0.5, roughness: 0.65
+      });
+      const p = new THREE.Mesh(new THREE.SphereGeometry(0.45 + (i % 3) * 0.12, 16, 12), pMat);
+      p.scale.set(1.25, 0.78, 1.05);
+      const row = (i % 7) - 3;
+      const layer = Math.floor(i / 7);
+      p.position.set((Math.random() - 0.5) * 1.8, -0.8 + layer * 0.42, row * 1.35);
+      p.userData = { phase: i * 0.37 };
+      group.add(p);
+      pillows.push(p);
+    }
+
+    // 兩側裂隙的黑煙囪與白煙囪礦床
+    const moundMat = new THREE.MeshStandardMaterial({ color: 0xb58328, roughness: 0.7, metalness: 0.5 }); // 黃銅礦/硫化物礦丘
+    const blackVent = new THREE.Mesh(new THREE.ConeGeometry(0.65, 2.4, 12), new THREE.MeshStandardMaterial({ color: 0x1f242b }));
+    blackVent.position.set(-4.2, 0.8, -1.5);
+    const whiteVent = new THREE.Mesh(new THREE.ConeGeometry(0.55, 2.0, 12), new THREE.MeshStandardMaterial({ color: 0xd8e2dc }));
+    whiteVent.position.set(4.2, 0.6, 1.2);
+    const sulfideMound = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.8, 0.8, 16), moundMat);
+    sulfideMound.position.set(-4.2, -0.3, -1.5);
+    group.add(blackVent, whiteVent, sulfideMound);
+
+    // 黑煙與白煙粒子流
+    const bSmokeCurve = new THREE.CatmullRomCurve3([new THREE.Vector3(-4.2, 2.0, -1.5), new THREE.Vector3(-4.0, 4.8, -1.2), new THREE.Vector3(-3.5, 7.5, -0.8)]);
+    const wSmokeCurve = new THREE.CatmullRomCurve3([new THREE.Vector3(4.2, 1.6, 1.2), new THREE.Vector3(4.4, 4.2, 1.0), new THREE.Vector3(4.8, 6.8, 0.6)]);
+    const bSmoke = createCurveParticleStream(bSmokeCurve, 45, 0x343a40, 0.65);
+    const wSmoke = createCurveParticleStream(wSmokeCurve, 45, 0xf8f9fa, 0.58);
+    group.add(bSmoke.mesh, wSmoke.mesh);
+
+    add3DLabel([-6.2, 1.5, 5.2], '海洋板塊向外張裂', '中央地塹正斷層擴張', '#00e5ff', [0, 1]);
+    add3DLabel([0, -2.5, 2.5], '地函軟流圈岩漿上湧', '減壓部分熔融補注新地殼', '#ff4500', [1]);
+    add3DLabel([0, 1.2, 0], '枕狀熔岩 (Pillow Lava)', '滾燙岩漿接觸冰冷海水瞬間急冷堆疊', '#ff6d00', [2]);
+    add3DLabel([-4.2, 3.2, -1.5], '黑煙囪與硫化物礦床', '富含鐵、銅、鋅金屬沉積', '#ffd166', [3]);
+    add3DLabel([4.2, 2.8, 1.2], '白煙囪熱液柱', '富含鋇、鈣、矽酸鹽白色微粒', '#ffffff', [3]);
+
+    return {
+      update(dt, elapsed) {
+        const rate = paramValue / 100;
+        const spreadOffset = ((elapsed * rate * 0.45) % 1) * 0.85;
+        plateLeft.position.x = -spreadOffset;
+        plateRight.position.x = spreadOffset;
+
+        // 枕狀熔岩鼓起與冷卻明暗脈動
+        pillows.forEach(p => {
+          const glow = Math.max(0, Math.sin(elapsed * (1.2 + rate * 2) + p.userData.phase));
+          p.material.emissiveIntensity = glow * (0.4 + rate * 0.9);
+          const pulse = 1 + glow * 0.12;
+          p.scale.set(1.25 * pulse, 0.78 * pulse, 1.05 * pulse);
+        });
+
+        bSmoke.update(dt, 0.25 + rate * 0.35);
+        wSmoke.update(dt, 0.20 + rate * 0.28);
+      }
+    };
+  },
+
+  /* ---------------- 主題 07：潮汐的成因與大潮／小潮 ---------------- */
+  function buildTheme7(group) {
+    scene.fog.density = 0.002;
+    dirLight.intensity = 0.35; // 改由左側太陽主光源照亮日地月相位
+    hemiLight.intensity = 0.55;
+
+    // 星空背景
+    const starGeo = new THREE.BufferGeometry();
+    const starPos = new Float32Array(600 * 3);
+    for (let i = 0; i < 600; i++) {
+      const r = 55 + Math.random() * 40;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      starPos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      starPos[i * 3 + 1] = r * Math.cos(phi);
+      starPos[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+    }
+    starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+    group.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.28 })));
+
+    // 左側遠方太陽與太陽光照明 (-X 方向代表太陽方位，對應相位角 0° 新月在 -X)
+    const sunMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(3.2, 32, 24),
+      new THREE.MeshBasicMaterial({ color: 0xffbe0b })
+    );
+    sunMesh.position.set(-28, 0, 0);
+    group.add(sunMesh);
+
+    const sunLight = new THREE.DirectionalLight(0xfff3b0, 2.6);
+    sunLight.position.set(-28, 2, 0);
+    group.add(sunLight);
+
+    // 中心自轉地球 + 海岸觀測站紅標
+    const earthRadius = 3.6;
+    const earth = new THREE.Mesh(
+      new THREE.SphereGeometry(earthRadius, 48, 36),
+      new THREE.MeshStandardMaterial({ map: getProceduralEarthTexture(), roughness: 0.7 })
+    );
+    const gaugePin = new THREE.Mesh(
+      new THREE.ConeGeometry(0.22, 0.7, 12),
+      new THREE.MeshStandardMaterial({ color: PALETTE.coralHealthy, emissive: 0xaa0033 })
+    );
+    gaugePin.rotation.z = -Math.PI / 2;
+    gaugePin.position.set(earthRadius + 0.3, 0.8, 0);
+    earth.add(gaugePin);
+    group.add(earth);
+
+    // 動態潮汐水包橢球網格 (疊加月球引潮位 P2 + 太陽引潮位 0.46*P2)
+    const tideGeo = new THREE.SphereGeometry(earthRadius + 0.25, 64, 48);
+    const tideBase = new Float32Array(tideGeo.attributes.position.array);
+    const tideMesh = new THREE.Mesh(tideGeo, new THREE.MeshPhysicalMaterial({
+      color: PALETTE.coldCurrent, transparent: true, opacity: 0.46, roughness: 0.1, side: THREE.DoubleSide
+    }));
+    group.add(tideMesh);
+
+    // 月球公轉軌道線與月球本體
+    const orbitR = 11.5;
+    const orbitRing = new THREE.Mesh(
+      new THREE.RingGeometry(orbitR - 0.05, orbitR + 0.05, 96),
+      new THREE.MeshBasicMaterial({ color: 0x4895ef, side: THREE.DoubleSide, transparent: true, opacity: 0.35 })
+    );
+    orbitRing.rotation.x = Math.PI / 2;
+    group.add(orbitRing);
+
+    const moonMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(1.05, 32, 24),
+      new THREE.MeshStandardMaterial({ color: 0xd8e2dc, roughness: 0.9 })
+    );
+    group.add(moonMesh);
+
+    add3DLabel([-25, 3.8, 0], '太陽引潮力 (~月球的 46%)', '平行太陽光與引力方向', '#ffbe0b', [2, 3]);
+    const moonLbl = add3DLabel([-11.5, 1.8, 0], '月球 (主導引潮力)', '拉出向月與背月雙水包', '#ffffff');
+    add3DLabel([0, 5.2, 0], '全球潮汐水包 (雙日潮)', '地球自轉每日經歷兩次滿乾潮', '#00e5ff');
+
+    const sunDir = new THREE.Vector3(-1, 0, 0);
+    const moonDir = new THREE.Vector3(-1, 0, 0);
+    const vNorm = new THREE.Vector3();
+
+    return {
+      update(dt, elapsed) {
+        earth.rotation.y = elapsed * 0.65;
+
+        // 月球角度 (0° = 新月朔在太陽方向 -X；90° = 上弦月；180° = 滿月望在 +X；270° = 下弦月)
+        const rad = (paramValue * Math.PI) / 180;
+        const mx = -Math.cos(rad) * orbitR;
+        const mz = Math.sin(rad) * orbitR;
+        moonMesh.position.set(mx, 0, mz);
+        moonLbl.pos.set(mx, 1.7, mz);
+        moonDir.set(mx, 0, mz).normalize();
+
+        // 即時計算地球每個頂點的合成潮高 (勒讓德多項式 3*cos^2(theta) - 1)
+        const pos = tideGeo.attributes.position;
+        for (let i = 0; i < pos.count; i++) {
+          const bx = tideBase[i * 3];
+          const by = tideBase[i * 3 + 1];
+          const bz = tideBase[i * 3 + 2];
+          vNorm.set(bx, by, bz).normalize();
+
+          const cosM = vNorm.dot(moonDir);
+          const cosS = vNorm.dot(sunDir);
+          const lunarBulge = 0.55 * (1.5 * cosM * cosM - 0.5);
+          const solarBulge = 0.26 * (1.5 * cosS * cosS - 0.5);
+          const r = earthRadius + 0.45 + Math.max(-0.28, lunarBulge + solarBulge);
+
+          pos.setXYZ(i, vNorm.x * r, vNorm.y * r, vNorm.z * r);
+        }
+        pos.needsUpdate = true;
+        tideGeo.computeVertexNormals();
+      }
+    };
+  },
+
+  /* ---------------- 主題 08：海岸地形與波浪折射 ---------------- */
+  function buildTheme8(group) {
+    scene.fog.density = 0.009;
+
+    // 海岸輪廓函數：x = ±8 為凸出海岬 (Headlands, z 延伸至 -2.2)，x = 0 為凹入海灣 (Bay, z = -8.5)
+    function coastZ(x) {
+      return -5.4 + 3.2 * Math.cos((x / 8) * Math.PI);
+    }
+
+    // 1. 建立不規則海岬與海灣陸地地形
+    const landGeo = new THREE.PlaneGeometry(26, 10, 80, 24);
+    landGeo.rotateX(-Math.PI / 2);
+    const lPos = landGeo.attributes.position;
+    const lCol = new Float32Array(lPos.count * 3);
+    const cCliff = new THREE.Color(0x4a5759);
+    const cGrass = new THREE.Color(PALETTE.landGreen);
+    const cSand = new THREE.Color(0xf4d35e);
+
+    for (let i = 0; i < lPos.count; i++) {
+      const x = lPos.getX(i);
+      const v = (lPos.getZ(i) + 5) / 10; // 0 (北側內陸) -> 1 (海岸前緣)
+      const cz = coastZ(x);
+      const z = THREE.MathUtils.lerp(-12.5, cz, v);
+      const isBay = Math.abs(x) < 4.2;
+      const elev = (1 - v) * (isBay ? 1.6 : 4.2) + (v > 0.85 && !isBay ? 1.1 : 0);
+
+      lPos.setXYZ(i, x, elev, z);
+      const col = (v > 0.78 && isBay) ? cSand : (elev > 1.8 ? cCliff : cGrass);
+      lCol[i * 3] = col.r; lCol[i * 3 + 1] = col.g; lCol[i * 3 + 2] = col.b;
+    }
+    landGeo.setAttribute('color', new THREE.BufferAttribute(lCol, 3));
+    landGeo.computeVertexNormals();
+    group.add(new THREE.Mesh(landGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 })));
+
+    // 海岬前方的海蝕柱 (Sea Stack)
+    const seaStack = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.65, 2.2, 10), new THREE.MeshStandardMaterial({ color: 0x4a5759, roughness: 0.9 }));
+    seaStack.position.set(-8.0, 0.6, -1.0);
+    group.add(seaStack);
+
+    // 海灣新月形金黃沙灘沉積扇 (在 Step 3 明顯發育擴大)
+    const beachMesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(3.8, 4.2, 0.25, 28, 1, false, -Math.PI * 0.45, Math.PI * 0.9),
+      new THREE.MeshStandardMaterial({ color: 0xf4d35e, roughness: 0.75 })
+    );
+    beachMesh.rotation.y = Math.PI;
+    beachMesh.position.set(0, 0.06, -6.8);
+    group.add(beachMesh);
+
+    // 2. 動態折射波浪海面網格 + 6 條高對比波峰線 (Wave Crests)
+    const oceanGeo = new THREE.PlaneGeometry(26, 22, 90, 60);
+    oceanGeo.rotateX(-Math.PI / 2);
+    oceanGeo.translate(0, 0, 1);
+    const oceanMesh = new THREE.Mesh(oceanGeo, new THREE.MeshPhysicalMaterial({
+      color: PALETTE.waterMid, transparent: true, opacity: 0.82, roughness: 0.18
+    }));
+    group.add(oceanMesh);
+
+    // 波浪正交能量聚焦與發散箭頭
+    const energyArrows = new THREE.Group();
+    // 聚焦左海岬 (x = -8)
+    energyArrows.add(createArrow3D(new THREE.Vector3(-10.5, 0.45, 5), new THREE.Vector3(-8.5, 0.45, -1.2), PALETTE.warmCurrent, 0.09, 0.55, 0.26));
+    energyArrows.add(createArrow3D(new THREE.Vector3(-5.5, 0.45, 5), new THREE.Vector3(-7.4, 0.45, -1.2), PALETTE.warmCurrent, 0.09, 0.55, 0.26));
+    // 聚焦右海岬 (x = +8)
+    energyArrows.add(createArrow3D(new THREE.Vector3(5.5, 0.45, 5), new THREE.Vector3(7.4, 0.45, -1.2), PALETTE.warmCurrent, 0.09, 0.55, 0.26));
+    energyArrows.add(createArrow3D(new THREE.Vector3(10.5, 0.45, 5), new THREE.Vector3(8.5, 0.45, -1.2), PALETTE.warmCurrent, 0.09, 0.55, 0.26));
+    // 海灣能量發散 (x = 0)
+    energyArrows.add(createArrow3D(new THREE.Vector3(-1.2, 0.45, 5), new THREE.Vector3(-2.8, 0.45, -5.8), PALETTE.bioGreen, 0.08, 0.5, 0.24));
+    energyArrows.add(createArrow3D(new THREE.Vector3(1.2, 0.45, 5), new THREE.Vector3(2.8, 0.45, -5.8), PALETTE.bioGreen, 0.08, 0.5, 0.24));
+    group.add(energyArrows);
+
+    // 海岬碎浪白色水花粒子
+    const sprayGeo = new THREE.BufferGeometry();
+    const sprayPos = new Float32Array(70 * 3);
+    sprayGeo.setAttribute('position', new THREE.BufferAttribute(sprayPos, 3));
+    const sprayPts = new THREE.Points(sprayGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.32, transparent: true, opacity: 0.85 }));
+    group.add(sprayPts);
+
+    add3DLabel([0, 1.5, 9.5], '外海平行波峰線', '深水區波速均勻一致', '#00e5ff', [0, 1]);
+    add3DLabel([-8.0, 2.5, -1.8], '海岬：波能聚焦與強烈侵蝕', '發育海蝕崖與海蝕柱', '#ff6d00', [1, 2]);
+    add3DLabel([0, 1.8, -7.5], '海灣：能量發散與泥沙沉積', '水流減緩形成新月沙灘', '#00e676', [1, 3]);
+
+    return {
+      update(dt, elapsed) {
+        const wavePower = paramValue / 100;
+        energyArrows.visible = currentStepIdx >= 1;
+        beachMesh.scale.set(1, 1, currentStepIdx === 3 ? 1.25 : 0.85);
+
+        // 波浪折射相位計算：靠近海岬 (coastZ 較大 = 淺水較早出現) 相位延遲彎曲
+        const oPos = oceanGeo.attributes.position;
+        for (let i = 0; i < oPos.count; i++) {
+          const x = oPos.getX(i);
+          const z = oPos.getZ(i);
+          const cz = coastZ(x);
+          // 距離岸線越近水越淺，海岬處相位提前累積使波峰線向岸彎曲折射！
+          const distToShore = Math.max(0.1, z - cz);
+          const refractionLag = z < 7.5 ? Math.pow(Math.max(0, (7.5 - z) / 10), 1.6) * (cz + 5.4) * 0.85 : 0;
+          const phase = (z + refractionLag) * 1.35 + elapsed * (2.2 + wavePower * 1.8);
+          // 海岬聚焦增幅，海灣減弱
+          const focusAmp = z < 4 ? (1 + (cz + 5.4) * 0.14) : 1;
+          const y = distToShore > 0.2 ? Math.sin(phase) * (0.22 + wavePower * 0.28) * focusAmp : -0.2;
+          oPos.setY(i, y);
+        }
+        oPos.needsUpdate = true;
+        oceanGeo.computeVertexNormals();
+
+        // 海岬浪花飛濺動畫
+        const spArr = sprayGeo.attributes.position.array;
+        for (let i = 0; i < 70; i++) {
+          const side = i < 35 ? -8.0 : 8.0;
+          const t = (elapsed * 1.8 + i * 0.11) % 1;
+          spArr[i * 3] = side + ((i % 7) - 3) * 0.45;
+          spArr[i * 3 + 1] = 0.2 + Math.sin(t * Math.PI) * (1.2 + wavePower * 1.3);
+          spArr[i * 3 + 2] = -2.0 + (i % 5) * 0.35;
+        }
+        sprayGeo.attributes.position.needsUpdate = true;
+      }
+    };
+  },
+
+  /* ---------------- 主題 09：科氏力與表層洋流的偏轉 (Ekman Spiral) ---------------- */
+  function buildTheme9(group) {
+    scene.fog.density = 0.008;
+
+    // 1. 左側：自轉地球與南北半球科氏力偏轉軌跡示意球
+    const globeGrp = new THREE.Group();
+    globeGrp.position.set(-7.5, 1.0, 0);
+    const earth = new THREE.Mesh(
+      new THREE.SphereGeometry(4.2, 40, 32),
+      new THREE.MeshStandardMaterial({ map: getProceduralEarthTexture(), roughness: 0.7 })
+    );
+    globeGrp.add(earth);
+
+    // 北半球向右偏弧線、南半球向左偏弧線
+    const northDeflect = new THREE.CatmullRomCurve3([
+      latLonToVec3(12, 0, 4.3), latLonToVec3(28, 5, 4.3), latLonToVec3(42, 22, 4.3), latLonToVec3(50, 45, 4.3)
+    ]);
+    const southDeflect = new THREE.CatmullRomCurve3([
+      latLonToVec3(-12, 0, 4.3), latLonToVec3(-28, 5, 4.3), latLonToVec3(-42, 22, 4.3), latLonToVec3(-50, 45, 4.3)
+    ]);
+    globeGrp.add(new THREE.Mesh(new THREE.TubeGeometry(northDeflect, 24, 0.09, 8, false), new THREE.MeshBasicMaterial({ color: PALETTE.warmCurrent })));
+    globeGrp.add(new THREE.Mesh(new THREE.TubeGeometry(southDeflect, 24, 0.09, 8, false), new THREE.MeshBasicMaterial({ color: PALETTE.coldCurrent })));
+    group.add(globeGrp);
+
+    // 2. 右側主角：3D 透明分層水柱與艾克曼螺線向量階梯
+    const colCenter = new THREE.Vector3(3.5, 0, 0);
+    const colBox = new THREE.Mesh(
+      new THREE.BoxGeometry(7.2, 10, 7.2),
+      new THREE.MeshPhysicalMaterial({ color: PALETTE.waterMid, transparent: true, opacity: 0.18, roughness: 0.1, depthWrite: false })
+    );
+    colBox.position.copy(colCenter);
+    group.add(colBox);
+
+    // 中心垂直基準軸
+    const axisPole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 10.6, 10), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    axisPole.position.copy(colCenter);
+    group.add(axisPole);
+
+    // 上方盛行風金色大箭頭 (固定向 -Z 北方吹拂)
+    const windGrp = new THREE.Group();
+    for (let i = -1; i <= 1; i++) {
+      windGrp.add(createArrow3D(
+        new THREE.Vector3(3.5 + i * 2.0, 6.2, 2.8),
+        new THREE.Vector3(3.5 + i * 2.0, 6.2, -2.8),
+        PALETTE.windGold, 0.11, 0.65, 0.32
+      ));
+    }
+    group.add(windGrp);
+
+    // 10 層深度切片與動態旋轉水流向量箭頭
+    const layerCount = 10;
+    const layerArrows = [];
+    for (let i = 0; i < layerCount; i++) {
+      const y = 4.6 - i * 0.95;
+      // 水平薄切片框
+      const slice = new THREE.Mesh(
+        new THREE.BoxGeometry(6.8, 0.04, 6.8),
+        new THREE.MeshBasicMaterial({ color: 0x00b4d8, transparent: true, opacity: 0.14 })
+      );
+      slice.position.set(3.5, y, 0);
+      group.add(slice);
+
+      const holder = new THREE.Group();
+      holder.position.set(3.5, y, 0);
+      const len = 3.4 * Math.exp(-i * 0.22);
+      const col = new THREE.Color().setHSL(0.52 - i * 0.03, 0.95, 0.55);
+      const arr = createArrow3D(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -len), col, 0.09, 0.45, 0.24);
+      holder.add(arr);
+      group.add(holder);
+      layerArrows.push({ holder, len, index: i, y });
+    }
+
+    // 連接各層箭頭尖端的 3D 螺線光帶
+    let spiralRibbon = null;
+
+    // 整體 90° 艾克曼淨輸送巨型箭頭 (Ekman Transport)
+    const netArrowHolder = new THREE.Group();
+    netArrowHolder.position.set(3.5, 2.2, 0);
+    const netArrow = createArrow3D(new THREE.Vector3(0, 0, 0), new THREE.Vector3(4.4, 0, 0), PALETTE.coralHealthy, 0.22, 0.95, 0.52);
+    netArrowHolder.add(netArrow);
+    group.add(netArrowHolder);
+
+    add3DLabel([-7.5, 5.6, 0], '地球自轉科氏力', '北半球向右偏 · 南半球向左偏', '#00e5ff', [0]);
+    add3DLabel([3.5, 6.9, 0], '海面盛行風向 (吹向正前方)', '提供表層海水剪應力', '#ffd166', [1, 2, 3]);
+    const surfLbl = add3DLabel([5.8, 4.7, -2.0], '表層流偏轉 45°', '風力與科氏力平衡', '#00e5ff', [1, 2]);
+    add3DLabel([3.5, -1.8, 2.2], '艾克曼螺線 (Ekman Spiral)', '隨深度流速遞減、偏轉角遞增', '#00e676', [2, 3]);
+    const netLbl = add3DLabel([7.8, 2.5, 0], '90° 艾克曼淨輸送', '整層水體總和垂直於風向！', '#ff4081', [3]);
+
+    let lastLat = null;
+    return {
+      update(dt, elapsed) {
+        earth.rotation.y = elapsed * 0.25;
+        netArrowHolder.visible = (currentStepIdx === 3);
+
+        // 根據緯度滑桿 (-60° 南半球 ~ +60° 北半球) 即時翻轉偏轉方向與幅度
+        const lat = paramValue;
+        const hemiSign = lat >= 0 ? -1 : 1; // Three.js 繞 Y 軸旋轉：向 -Z 前進時，順時針向右偏對應 rotation.y < 0
+        const coriolisStrength = THREE.MathUtils.clamp(Math.abs(lat) / 35, 0.12, 1.25);
+
+        layerArrows.forEach(item => {
+          const baseDeflectDeg = (45 * Math.min(1, coriolisStrength)) + item.index * 18 * coriolisStrength;
+          item.holder.rotation.y = hemiSign * THREE.MathUtils.degToRad(baseDeflectDeg);
+          item.holder.visible = currentStepIdx === 1 ? (item.index === 0) : true;
+        });
+
+        // 更新淨輸送大箭頭方向 (北半球向右 +X，南半球向左 -X，赤道趨近 0)
+        netArrowHolder.rotation.y = lat >= 0 ? 0 : Math.PI;
+        const netScale = THREE.MathUtils.clamp(Math.abs(lat) / 20, 0.15, 1.0);
+        netArrowHolder.scale.setScalar(netScale);
+        netLbl.pos.set(3.5 + (lat >= 0 ? 4.2 : -4.2) * netScale, 2.6, 0);
+        surfLbl.pos.set(3.5 + (lat >= 0 ? 2.4 : -2.4), 4.7, -2.0);
+
+        // 當緯度改變時重建 3D 螺線連接管
+        if (lastLat !== lat) {
+          lastLat = lat;
+          if (spiralRibbon) {
+            group.remove(spiralRibbon);
+            spiralRibbon.geometry.dispose();
+          }
+          const tipPoints = layerArrows.map(item => {
+            const ang = item.holder.rotation.y;
+            return new THREE.Vector3(
+              3.5 - Math.sin(ang) * item.len,
+              item.y,
+              -Math.cos(ang) * item.len
+            );
+          });
+          const curve = new THREE.CatmullRomCurve3(tipPoints);
+          spiralRibbon = new THREE.Mesh(
+            new THREE.TubeGeometry(curve, 50, 0.07, 8, false),
+            new THREE.MeshBasicMaterial({ color: PALETTE.bioGreen })
+          );
+          group.add(spiralRibbon);
+        }
+        if (spiralRibbon) spiralRibbon.visible = (currentStepIdx >= 2);
+      }
+    };
+  },
+
+  /* ---------------- 主題 10：海水鹽度、溫度與密度的垂直分層 ---------------- */
+  function buildTheme10(group) {
+    scene.fog.density = 0.008;
+
+    // 1. 左側：萬米深海垂直三層水柱剖面 (y: +6 海表 -> -6 深海)
+    const colGeo = new THREE.BoxGeometry(5.6, 12, 5.6, 1, 48, 1);
+    const cPos = colGeo.attributes.position;
+    const cCol = new Float32Array(cPos.count * 3);
+    colGeo.setAttribute('color', new THREE.BufferAttribute(cCol, 3));
+    const colMesh = new THREE.Mesh(colGeo, new THREE.MeshStandardMaterial({
+      vertexColors: true, transparent: true, opacity: 0.78, roughness: 0.2
+    }));
+    colMesh.position.set(-3.2, 0, 0);
+    group.add(colMesh);
+
+    // 太陽光束與海表混合渦流粒子
+    const sunBeam = new THREE.Mesh(
+      new THREE.ConeGeometry(3.2, 4.5, 16, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0xffe66d, transparent: true, opacity: 0.18, side: THREE.DoubleSide })
+    );
+    sunBeam.position.set(-3.2, 7.8, 0);
+    group.add(sunBeam);
+
+    // 混合層與深海層運動粒子 (展示躍層阻絕上下交換)
+    const mixGeo = new THREE.BufferGeometry();
+    const mixCount = 90;
+    const mixPos = new Float32Array(mixCount * 3);
+    mixGeo.setAttribute('position', new THREE.BufferAttribute(mixPos, 3));
+    const mixPts = new THREE.Points(mixGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.22, transparent: true, opacity: 0.8 }));
+    group.add(mixPts);
+
+    // 2. 右側：即時動態 3D 科學剖面座標架 (溫度=紅、鹽度=金黃、密度=亮青)
+    const graphOrigin = new THREE.Vector3(2.2, -6, 0);
+    const frameMat = new THREE.LineBasicMaterial({ color: 0x64748b });
+    const framePts = [
+      new THREE.Vector3(2.2, 6, 0), new THREE.Vector3(2.2, -6, 0),
+      new THREE.Vector3(9.2, -6, 0), new THREE.Vector3(9.2, 6, 0), new THREE.Vector3(2.2, 6, 0)
+    ];
+    group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(framePts), frameMat));
+
+    // 分層水平虛線指標 (混合層底界 y=+3.5，躍層底界 y=-0.5)
+    const divider1 = new THREE.Mesh(new THREE.BoxGeometry(13, 0.04, 0.04), new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.5 }));
+    divider1.position.set(2.8, 3.6, 0);
+    const divider2 = new THREE.Mesh(new THREE.BoxGeometry(13, 0.04, 0.04), new THREE.MeshBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.5 }));
+    divider2.position.set(2.8, -0.2, 0);
+    group.add(divider1, divider2);
+
+    let tempTube = null, salTube = null, densTube = null;
+    let cachedLat = null;
+
+    add3DLabel([-3.2, 6.6, 0], '陽光輻射 · 蒸發與風浪攪拌', '控制表層熱量與鹽度收支', '#ffd166', [0, 1]);
+    add3DLabel([-3.2, 4.7, 2.9], '① 表層混合層 (0–200m)', '水溫高、密度低且垂直均勻', '#ff6d00', [1, 2, 3]);
+    add3DLabel([-3.2, 1.7, 2.9], '② 溫鹽密躍層 (200–1000m)', '溫度驟降、密度驟升 → 阻絕上下對流', '#00e676', [2, 3]);
+    add3DLabel([-3.2, -3.5, 2.9], '③ 冰冷深海層 (>1000m)', '佔總體積 80%，高密度極區水填充', '#00e5ff', [3]);
+    add3DLabel([5.7, 6.5, 0], '垂直剖面曲線 (紅:溫度 黃:鹽度 青:密度)', '可拖曳緯度滑桿比較熱帶與極區！', '#ffffff');
+
+    const colTopWarm = new THREE.Color(0x00d2ff);
+    const colHot = new THREE.Color(0xff7b00);
+    const colAbyss = new THREE.Color(0x051937);
+
+    return {
+      update(dt, elapsed) {
+        // latFactor: 0 (赤道熱帶強分層) -> 1 (75°極區寒冷無躍層)
+        const latFactor = paramValue / 75;
+
+        // 混合層攪拌渦流粒子動畫
+        const mArr = mixGeo.attributes.position.array;
+        for (let i = 0; i < mixCount; i++) {
+          if (i < 55) {
+            // 混合層內快速翻滾 (不穿透躍層 y=3.6)
+            const a = elapsed * 2.2 + i;
+            mArr[i * 3] = -3.2 + Math.cos(a) * ((i % 5) * 0.45);
+            mArr[i * 3 + 1] = 4.8 + Math.sin(a * 1.3) * 1.0;
+            mArr[i * 3 + 2] = Math.sin(a * 0.7) * 2.0;
+          } else {
+            // 深海層極緩慢水平漂移
+            mArr[i * 3] = -5.6 + ((elapsed * 0.35 + i * 0.4) % 4.8);
+            mArr[i * 3 + 1] = -5.5 + (i % 10) * 0.48;
+            mArr[i * 3 + 2] = ((i % 4) - 1.5) * 1.2;
+          }
+        }
+        mixGeo.attributes.position.needsUpdate = true;
+
+        // 當緯度滑桿改變時更新水柱漸層色與三條 3D 物理曲線
+        if (cachedLat !== paramValue) {
+          cachedLat = paramValue;
+          [tempTube, salTube, densTube].forEach(t => { if (t) { group.remove(t); t.geometry.dispose(); } });
+
+          const tPts = [], sPts = [], dPts = [];
+          const steps = 28;
+          for (let i = 0; i <= steps; i++) {
+            const u = i / steps; // 0 (海表 y=+6) -> 1 (深海 y=-6)
+            const y = 6 - u * 12;
+
+            // 物理剖面模型：混合層(u < 0.2) -> 躍層(0.2..0.52) -> 深海層(>0.52)
+            const transition = THREE.MathUtils.smoothstep(u, 0.18, 0.52);
+            const surfTemp = THREE.MathUtils.lerp(0.95, 0.12, latFactor); // 熱帶高溫 vs 極區低溫
+            const tempNorm = THREE.MathUtils.lerp(surfTemp, 0.08, transition);
+            const surfSal = THREE.MathUtils.lerp(0.78, 0.42, latFactor);
+            const salNorm = THREE.MathUtils.lerp(surfSal, 0.55, transition);
+            const densNorm = THREE.MathUtils.clamp(1.0 - tempNorm * 0.78 + salNorm * 0.15, 0.12, 0.95);
+
+            tPts.push(new THREE.Vector3(2.4 + tempNorm * 6.5, y, 0.2));
+            sPts.push(new THREE.Vector3(2.4 + salNorm * 6.5, y, 0));
+            dPts.push(new THREE.Vector3(2.4 + densNorm * 6.5, y, -0.2));
+          }
+
+          tempTube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(tPts), 40, 0.09, 8, false), new THREE.MeshBasicMaterial({ color: 0xff4d4d }));
+          salTube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(sPts), 40, 0.08, 8, false), new THREE.MeshBasicMaterial({ color: 0xffd166 }));
+          densTube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(dPts), 40, 0.09, 8, false), new THREE.MeshBasicMaterial({ color: 0x00e5ff }));
+          group.add(tempTube, salTube, densTube);
+
+          // 同步更新左側水柱各深度顏色
+          const colArr = colGeo.attributes.color.array;
+          for (let i = 0; i < cPos.count; i++) {
+            const y = cPos.getY(i);
+            const u = (6 - y) / 12;
+            const tr = THREE.MathUtils.smoothstep(u, 0.18, 0.52);
+            const topCol = colHot.clone().lerp(colTopWarm, latFactor * 0.85 + 0.15);
+            const finalCol = topCol.lerp(colAbyss, THREE.MathUtils.lerp(tr, 0.85, latFactor * 0.7));
+            colArr[i * 3] = finalCol.r; colArr[i * 3 + 1] = finalCol.g; colArr[i * 3 + 2] = finalCol.b;
+          }
+          colGeo.attributes.color.needsUpdate = true;
+          divider1.visible = divider2.visible = (latFactor < 0.72);
+        }
+      }
+    };
+  },
+
+  /* ---------------- 主題 11：可燃冰與海底甲烷釋放 ---------------- */
+  function buildTheme11(group) {
+    scene.fog.density = 0.011;
+
+    // 1. 大陸坡沉積地層剖面與白色可燃冰結晶夾層
+    const slopeShape = new THREE.Shape();
+    slopeShape.moveTo(-14, -7);
+    slopeShape.lineTo(-14, 1.2);
+    slopeShape.lineTo(-5, 0.5);
+    slopeShape.lineTo(7, -4.5);
+    slopeShape.lineTo(14, -5.2);
+    slopeShape.lineTo(14, -7);
+    slopeShape.closePath();
+
+    const slopeGeo = new THREE.ExtrudeGeometry(slopeShape, { depth: 7, bevelEnabled: false });
+    slopeGeo.translate(0, 0, -3.5);
+    const slopeMesh = new THREE.Mesh(slopeGeo, new THREE.MeshStandardMaterial({ color: 0x4a4e69, roughness: 0.9 }));
+    group.add(slopeMesh);
+
+    // 埋藏於大陸坡內的白色可燃冰礦體層
+    const hydrateLayer = new THREE.Mesh(
+      new THREE.BoxGeometry(9.5, 0.85, 7.1),
+      new THREE.MeshStandardMaterial({ color: PALETTE.iceWhite, emissive: 0x00b4d8, emissiveIntensity: 0.35, transparent: true, opacity: 0.92 })
+    );
+    hydrateLayer.position.set(0.5, -2.4, 0);
+    hydrateLayer.rotation.z = -0.39;
+    group.add(hydrateLayer);
+
+    // 上方海平面 (展示甲烷進入大氣溫室效應)
+    const skySurface = new THREE.Mesh(
+      new THREE.PlaneGeometry(28, 10),
+      new THREE.MeshPhysicalMaterial({ color: PALETTE.waterSurface, transparent: true, opacity: 0.35, side: THREE.DoubleSide })
+    );
+    skySurface.rotation.x = -Math.PI / 2;
+    skySurface.position.y = 6.2;
+    group.add(skySurface);
+
+    // 2. 微觀放大舞台：3D 水分子十二面體「籠狀晶體 (Clathrate Cage)」包裹甲烷分子 CH4
+    const cageStage = new THREE.Group();
+    cageStage.position.set(-4.5, 3.2, 1.0);
+
+    const dodecaGeo = new THREE.DodecahedronGeometry(1.45, 0);
+    const edgesGeo = new THREE.EdgesGeometry(dodecaGeo);
+    const cageLinesMat = new THREE.LineBasicMaterial({ color: PALETTE.coldCurrent, transparent: true, opacity: 0.95 });
+    const cageWire = new THREE.LineSegments(edgesGeo, cageLinesMat);
+    cageStage.add(cageWire);
+
+    // 冰籠頂點的水分子節點
+    const h2oNodes = [];
+    const vAttr = dodecaGeo.attributes.position;
+    const seen = new Set();
+    const h2oMat = new THREE.MeshStandardMaterial({ color: 0x90e0ef, emissive: 0x0077b6, emissiveIntensity: 0.5 });
+    for (let i = 0; i < vAttr.count; i++) {
+      const key = `${vAttr.getX(i).toFixed(2)},${vAttr.getY(i).toFixed(2)},${vAttr.getZ(i).toFixed(2)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const sp = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 10), h2oMat);
+      sp.userData.base = new THREE.Vector3(vAttr.getX(i), vAttr.getY(i), vAttr.getZ(i));
+      sp.position.copy(sp.userData.base);
+      cageStage.add(sp);
+      h2oNodes.push(sp);
+    }
+
+    // 中心囚禁的 CH4 四面體分子 (1 碳 + 4 氫)
+    const ch4Grp = new THREE.Group();
+    const carbon = new THREE.Mesh(new THREE.SphereGeometry(0.36, 16, 14), new THREE.MeshStandardMaterial({ color: PALETTE.bioGreen, emissive: 0x007744 }));
+    ch4Grp.add(carbon);
+    [[0.4,0.4,0.4],[-0.4,-0.4,0.4],[-0.4,0.4,-0.4],[0.4,-0.4,-0.4]].forEach(([x,y,z]) => {
+      const h = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 10), new THREE.MeshStandardMaterial({ color: 0xffffff }));
+      h.position.set(x, y, z);
+      ch4Grp.add(h);
+    });
+    cageStage.add(ch4Grp);
+    group.add(cageStage);
+
+    // 3. 溫暖底層洋流入侵流束 + 噴發甲烷氣泡群
+    const warmFlowCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(9, -3.2, 1.5), new THREE.Vector3(3, -1.6, 1.5), new THREE.Vector3(-3, 0.8, 1.5)
+    ]);
+    const warmBottomStream = createCurveParticleStream(warmFlowCurve, 45, PALETTE.warmCurrent, 0.38);
+    group.add(warmBottomStream.mesh);
+
+    const bubbleCount = 150;
+    const bubbleGeo = new THREE.BufferGeometry();
+    const bubblePos = new Float32Array(bubbleCount * 3);
+    bubbleGeo.setAttribute('position', new THREE.BufferAttribute(bubblePos, 3));
+    const bubblePts = new THREE.Points(bubbleGeo, new THREE.PointsMaterial({
+      color: PALETTE.methane, size: 0.32, transparent: true, opacity: 0.88, blending: THREE.AdditiveBlending
+    }));
+    group.add(bubblePts);
+
+    add3DLabel([0.5, -1.8, 2.2], '大陸坡可燃冰沉積層', '高壓低溫穩定帶 (GHSZ)', '#e0f7fa', [0, 2, 3]);
+    add3DLabel([-4.5, 5.1, 1.0], '甲烷水合物「籠狀晶體」', '水分子氫鍵冰籠包裹 CH₄', '#00e676', [1, 2]);
+    add3DLabel([4.2, -1.5, 1.8], '深層海水增溫入侵', '打破高壓低溫穩定條件', '#ff6d00', [2, 3]);
+    add3DLabel([1.2, 4.5, 0], '大量甲烷氣泡湧升入大氣', '強效溫室氣體 → 加劇暖化正回饋', '#64ffda', [3]);
+
+    return {
+      update(dt, elapsed) {
+        // warming: 0 (+0.0°C 穩定) -> 1 (+4.0°C 劇烈解體噴發)
+        const warming = paramValue / 40;
+        cageStage.rotation.y = elapsed * 0.45;
+
+        // 冰籠受熱震盪與解體動畫
+        const melt = THREE.MathUtils.smoothstep(warming, 0.3, 0.9);
+        cageWire.scale.setScalar(1 + melt * 0.85);
+        cageLinesMat.opacity = Math.max(0.08, 1 - melt * 0.9);
+        cageLinesMat.color.setHex(melt > 0.3 ? PALETTE.warmCurrent : PALETTE.coldCurrent);
+
+        h2oNodes.forEach((sp, i) => {
+          const jitter = warming * 0.12 * Math.sin(elapsed * 14 + i);
+          sp.position.copy(sp.userData.base).multiplyScalar(1 + melt * 0.95).addScalar(jitter);
+        });
+        ch4Grp.position.set(
+          Math.sin(elapsed * (4 + warming * 12)) * (0.08 + melt * 0.4),
+          melt * (((elapsed * 1.2) % 1) * 2.2),
+          0
+        );
+
+        // 大陸坡暖流與可燃冰層消融、甲烷氣泡噴發
+        warmBottomStream.mesh.visible = warming > 0.15;
+        warmBottomStream.update(dt, 0.15 + warming * 0.4);
+        hydrateLayer.scale.y = Math.max(0.25, 1 - melt * 0.65);
+
+        const activeBubbles = Math.floor(melt * bubbleCount);
+        bubbleGeo.setDrawRange(0, activeBubbles);
+        const bArr = bubbleGeo.attributes.position.array;
+        for (let i = 0; i < activeBubbles; i++) {
+          const t = (elapsed * (0.35 + warming * 0.35) + i * 0.073) % 1;
+          const startX = -2.5 + (i % 12) * 0.58;
+          const startY = -1.2 - (startX + 2.5) * 0.38;
+          bArr[i * 3] = startX + Math.sin(elapsed * 3 + i) * 0.25;
+          bArr[i * 3 + 1] = startY + t * (7.8 - startY);
+          bArr[i * 3 + 2] = ((i % 5) - 2) * 0.9;
+        }
+        bubbleGeo.attributes.position.needsUpdate = true;
+      }
+    };
+  },
+
+  /* ---------------- 主題 12：環礁的形成與達爾文沉降理論 ---------------- */
+  function buildTheme12(group) {
+    scene.fog.density = 0.008;
+
+    // 半透明熱帶湛藍海面 (y = 0)
+    const oceanSurface = new THREE.Mesh(
+      new THREE.CylinderGeometry(13, 13, 0.12, 64),
+      new THREE.MeshPhysicalMaterial({ color: 0x00b4d8, transparent: true, opacity: 0.56, roughness: 0.12 })
+    );
+    oceanSurface.position.y = 0;
+    group.add(oceanSurface);
+
+    // 隨岩石圈沉降的基底與中央火山島 (設定 300° 扇形微剖面讓使用者同時看清海面環礁與水下火山基底！)
+    const subsidingGroup = new THREE.Group();
+
+    const crustPlate = new THREE.Mesh(
+      new THREE.CylinderGeometry(11.5, 11.5, 1.8, 48),
+      new THREE.MeshStandardMaterial({ color: PALETTE.crustBasalt, roughness: 0.9 })
+    );
+    crustPlate.position.y = -4.2;
+    subsidingGroup.add(crustPlate);
+
+    // 玄武岩火山錐 (含山頂火山口與山坡植被色帶)
+    const volcanoGeo = new THREE.CylinderGeometry(0.7, 6.2, 8.2, 48, 16);
+    const vPos = volcanoGeo.attributes.position;
+    const vCol = new Float32Array(vPos.count * 3);
+    const cRock = new THREE.Color(0x3d405b);
+    const cLush = new THREE.Color(0x2d6a4f);
+    for (let i = 0; i < vPos.count; i++) {
+      const x = vPos.getX(i), y = vPos.getY(i), z = vPos.getZ(i);
+      const r = Math.hypot(x, z);
+      // 自然火山溝谷紋理
+      const ridge = 1 + 0.07 * Math.sin(Math.atan2(z, x) * 9);
+      vPos.setX(i, x * ridge);
+      vPos.setZ(i, z * ridge);
+      const col = y > -0.2 ? cLush : cRock;
+      vCol[i * 3] = col.r; vCol[i * 3 + 1] = col.g; vCol[i * 3 + 2] = col.b;
+    }
+    volcanoGeo.setAttribute('color', new THREE.BufferAttribute(vCol, 3));
+    volcanoGeo.computeVertexNormals();
+    const volcanoMesh = new THREE.Mesh(volcanoGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82 }));
+    volcanoMesh.position.y = 0.8; // 初始山頂在 y = +4.9
+    subsidingGroup.add(volcanoMesh);
+
+    // 地殼沉降向下指示箭頭
+    subsidingGroup.add(createArrow3D(new THREE.Vector3(-7.5, -2.5, 4), new THREE.Vector3(-7.5, -5.2, 4), PALETTE.warmCurrent, 0.12, 0.65, 0.32));
+    subsidingGroup.add(createArrow3D(new THREE.Vector3(7.5, -2.5, 4), new THREE.Vector3(7.5, -5.2, 4), PALETTE.warmCurrent, 0.12, 0.65, 0.32));
+    group.add(subsidingGroup);
+
+    // 向上生長的白色碳酸鈣礁盤基座 + 海平面活珊瑚環與碎浪白沫環
+    const limestoneMat = new THREE.MeshStandardMaterial({ color: 0xe8ecef, roughness: 0.75 });
+    const coralCrownMat = new THREE.MeshStandardMaterial({ color: PALETTE.coralHealthy, roughness: 0.45 });
+    const lagoonMat = new THREE.MeshBasicMaterial({ color: 0x48cae4, transparent: true, opacity: 0.62 });
+
+    // 外環礁體 (頂端始終維持在海平面 y = +0.12，底部隨火山下沉而向下加厚)
+    const reefWall = new THREE.Mesh(new THREE.CylinderGeometry(4.4, 5.2, 1, 56, 1, true), limestoneMat);
+    const coralRing = new THREE.Mesh(new THREE.TorusGeometry(4.35, 0.36, 14, 64), coralCrownMat);
+    coralRing.rotation.x = Math.PI / 2;
+    coralRing.position.y = 0.1;
+
+    // 白色碎浪環
+    const surfRing = new THREE.Mesh(
+      new THREE.RingGeometry(4.65, 5.05, 64),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 0.7 })
+    );
+    surfRing.rotation.x = -Math.PI / 2;
+    surfRing.position.y = 0.09;
+
+    // 中央淺水綠松石潟湖水盤
+    const lagoonDisk = new THREE.Mesh(new THREE.CircleGeometry(4.2, 48), lagoonMat);
+    lagoonDisk.rotation.x = -Math.PI / 2;
+    lagoonDisk.position.y = 0.05;
+
+    group.add(reefWall, coralRing, surfRing, lagoonDisk);
+
+    const islandLbl = add3DLabel([0, 5.2, 0], '年輕熱帶火山島', '隨岩石圈冷卻緩慢下陷', '#00e676');
+    add3DLabel([4.5, 0.8, 0], '造礁珊瑚向上追光生長', '邊緣礁 → 障壁礁 → 環礁', '#ff4081');
+    const lagoonLbl = add3DLabel([-2.2, 0.6, 1.8], '平靜淺水潟湖 (Lagoon)', '火山下沉後留下的環內水域', '#00e5ff', [2, 3]);
+    add3DLabel([-7.5, -3.8, 4], '海洋地殼緩慢沉降', '達爾文沉降理論核心動力', '#ff6d00', [1, 2, 3]);
+
+    return {
+      update(dt, elapsed) {
+        // t: 0.0 (邊緣礁) -> 0.36 (沉降中) -> 0.68 (障壁礁) -> 1.0 (火山完全沒入的完美環礁)
+        const t = paramValue / 100;
+        const sinkAmount = t * 5.8; // 火山共下沉 5.8 單位 (山頂從 +4.9 降至 -0.9 沒入海面下！)
+        subsidingGroup.position.y = -sinkAmount;
+
+        // 珊瑚礁碳酸鹽岩基座從下沉的火山斜坡一路向上生長至 y = 0.1
+        const reefHeight = 1.2 + sinkAmount * 0.78;
+        reefWall.scale.set(1 + t * 0.12, reefHeight, 1 + t * 0.12);
+        reefWall.position.y = 0.1 - reefHeight * 0.5;
+
+        const ringScale = 1 + t * 0.12;
+        coralRing.scale.set(ringScale, ringScale, 1);
+        lagoonDisk.scale.setScalar(ringScale);
+        lagoonDisk.material.opacity = THREE.MathUtils.smoothstep(t, 0.15, 0.65) * 0.68;
+
+        const surfPulse = ringScale * (1 + Math.sin(elapsed * 2.8) * 0.02);
+        surfRing.scale.setScalar(surfPulse);
+
+        const peakY = 4.9 - sinkAmount;
+        islandLbl.pos.set(0, Math.max(0.6, peakY + 0.6), 0);
+        islandLbl.el.innerHTML = peakY > 0.15
+          ? `<strong>中央火山島 (${t < 0.25 ? '邊緣礁階段' : '逐漸沉降縮小'})</strong><span class="lbl-sub">海拔隨板塊下陷持續降低</span>`
+          : `<strong>火山島已完全沒入水下</strong><span class="lbl-sub">上方由環礁與中央潟湖取代</span>`;
+      }
+    };
+  }
+];
+
+/* =========================================================================
+   6. UI 狀態同步、分頁切換與 Step-by-Step 流程控制
+   ========================================================================= */
+const tabsScroll = document.getElementById('tabs-scroll');
+const drawerGrid = document.getElementById('drawer-grid');
+const drawerModal = document.getElementById('drawer-modal');
+const themeBadge = document.getElementById('theme-badge');
+const themeTitle = document.getElementById('theme-title');
+const conceptTags = document.getElementById('concept-tags');
+const stepsTrack = document.getElementById('steps-track');
+const narrativeText = document.getElementById('narrative-text');
+const sliderLabel = document.getElementById('slider-label');
+const paramSlider = document.getElementById('param-slider');
+const sliderVal = document.getElementById('slider-val');
+const btnPlay = document.getElementById('btn-play');
+const hudPanel = document.getElementById('hud-panel');
+
+// 初始化頂部 12 分頁膠囊與總覽抽屜卡片
+THEMES.forEach((th, idx) => {
+  const pill = document.createElement('button');
+  pill.className = 'tab-pill';
+  pill.textContent = th.shortName;
+  pill.addEventListener('click', () => loadTheme(idx));
+  tabsScroll.appendChild(pill);
+
+  const card = document.createElement('div');
+  card.className = 'drawer-item';
+  card.innerHTML = `
+    <div class="di-num">主題 ${String(th.id).padStart(2, '0')}</div>
+    <div class="di-title">${th.title}</div>
+    <div class="di-sub">${th.concepts.join(' · ')}</div>
+  `;
+  card.addEventListener('click', () => {
+    drawerModal.classList.remove('open');
+    loadTheme(idx);
+  });
+  drawerGrid.appendChild(card);
+});
+
+function formatSliderText(theme, val) {
+  if (theme.id === 5) {
+    if (val < -25) return `聖嬰 (${val})`;
+    if (val > 25) return `反聖嬰 (+${val})`;
+    return `正常 (${val})`;
+  }
+  return `${val}${theme.slider.unit}`;
+}
+
+function setSliderValue(val) {
+  const th = THEMES[currentThemeIdx];
+  paramValue = Number(val);
+  paramSlider.value = paramValue;
+  sliderVal.textContent = formatSliderText(th, paramValue);
+}
+
+function goToStep(stepIdx) {
+  const th = THEMES[currentThemeIdx];
+  currentStepIdx = (stepIdx + th.steps.length) % th.steps.length;
+  const st = th.steps[currentStepIdx];
+
+  // 更新步驟按鈕高亮與敘事內文
+  Array.from(stepsTrack.children).forEach((el, i) => {
+    el.classList.toggle('active', i === currentStepIdx);
+  });
+  narrativeText.textContent = st.desc;
+
+  // 更新收合狀態下的迷你步驟計數器
+  const miniStepText = document.getElementById('mini-step-text');
+  if (miniStepText) {
+    miniStepText.textContent = `${currentStepIdx + 1}/${th.steps.length}`;
+  }
+
+  // 若該步驟有對應物理預設狀態，同步更新模擬滑桿
+  if (typeof st.presetVal === 'number') {
+    setSliderValue(st.presetVal);
+  }
+
+  // 平滑運鏡至該步驟最佳觀察角度
+  flyCameraTo(st.cam, st.target);
+}
+
+function loadTheme(idx) {
+  stopAutoPlay();
+  currentThemeIdx = idx;
+  const th = THEMES[idx];
+
+  // 更新分頁按鈕狀態並自動捲動置中
+  Array.from(tabsScroll.children).forEach((pill, i) => {
+    pill.classList.toggle('active', i === idx);
+    if (i === idx) pill.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  });
+  Array.from(drawerGrid.children).forEach((card, i) => {
+    card.classList.toggle('active', i === idx);
+  });
+
+  // 更新標題與核心概念標籤
+  themeBadge.textContent = `主題 ${String(th.id).padStart(2, '0')} / 12`;
+  themeTitle.textContent = th.title;
+  conceptTags.innerHTML = th.concepts.map(c => `<span class="concept-tag">${c}</span>`).join('');
+
+  // 初始化物理滑桿
+  sliderLabel.textContent = th.slider.label;
+  paramSlider.min = th.slider.min;
+  paramSlider.max = th.slider.max;
+  setSliderValue(th.slider.val);
+
+  // 建立 4 個步驟節點
+  stepsTrack.innerHTML = '';
+  th.steps.forEach((st, sIdx) => {
+    const btn = document.createElement('button');
+    btn.className = 'step-node';
+    btn.innerHTML = `<span class="step-num">STEP ${sIdx + 1}</span><span class="step-name">${st.name}</span>`;
+    btn.addEventListener('click', () => {
+      stopAutoPlay();
+      goToStep(sIdx);
+    });
+    stepsTrack.appendChild(btn);
+  });
+
+  // 重建 3D 場景
+  disposeActiveScene();
+  activeSceneController = SCENE_BUILDERS[idx](activeGroup);
+
+  // 進入第 1 步並直接定位初始視角
+  goToStep(0);
+  camera.position.set(...th.steps[0].cam);
+  controls.target.set(...th.steps[0].target);
+  controls.update();
+}
+
+/* 自動導覽播放控制 */
+function stopAutoPlay() {
+  if (autoPlayTimer) {
+    clearInterval(autoPlayTimer);
+    autoPlayTimer = null;
+  }
+  btnPlay.classList.remove('play-active');
+  btnPlay.textContent = '▶ 自動導覽';
+}
+
+function toggleAutoPlay() {
+  if (autoPlayTimer) {
+    stopAutoPlay();
+  } else {
+    btnPlay.classList.add('play-active');
+    btnPlay.textContent = '⏸ 導覽中';
+    autoPlayTimer = setInterval(() => {
+      goToStep(currentStepIdx + 1);
+    }, 6000);
+  }
+}
+
+/* =========================================================================
+   7. 事件綁定 (觸控按鈕、Zoom/Pan、文字標籤 Toggle、面板收合)
+   ========================================================================= */
+document.getElementById('btn-prev').addEventListener('click', () => {
+  stopAutoPlay();
+  goToStep(currentStepIdx - 1);
+});
+document.getElementById('btn-next').addEventListener('click', () => {
+  stopAutoPlay();
+  goToStep(currentStepIdx + 1);
+});
+btnPlay.addEventListener('click', toggleAutoPlay);
+
+paramSlider.addEventListener('input', (e) => {
+  setSliderValue(e.target.value);
+});
+
+// 文字標籤顯示/隱藏 Toggle
+const btnToggleLabels = document.getElementById('btn-toggle-labels');
+btnToggleLabels.addEventListener('click', () => {
+  labelsVisible = !labelsVisible;
+  labelsContainer.classList.toggle('hidden', !labelsVisible);
+  btnToggleLabels.classList.toggle('active', labelsVisible);
+  btnToggleLabels.textContent = labelsVisible ? '🏷️ 標籤: 開' : '🏷️ 標籤: 關';
+});
+
+// 畫面縮放與重置視角按鈕 (輔助單指觸控操作)
+function zoomCamera(factor) {
+  camRig.active = false;
+  const offset = new THREE.Vector3().subVectors(camera.position, controls.target);
+  offset.multiplyScalar(factor);
+  const len = offset.length();
+  if (len >= controls.minDistance && len <= controls.maxDistance) {
+    camera.position.copy(controls.target).add(offset);
+  }
+}
+document.getElementById('btn-zoom-in').addEventListener('click', () => zoomCamera(0.8));
+document.getElementById('btn-zoom-out').addEventListener('click', () => zoomCamera(1.25));
+document.getElementById('btn-reset-cam').addEventListener('click', () => {
+  const st = THEMES[currentThemeIdx].steps[currentStepIdx];
+  flyCameraTo(st.cam, st.target);
+});
+
+// 解說面板展開/收合 (讓手機螢幕可全畫面檢視 3D 模型)
+const btnToggleHud = document.getElementById('btn-toggle-hud');
+const btnHudMini = document.getElementById('btn-hud-mini');
+function toggleHudPanel() {
+  const isCollapsed = hudPanel.classList.toggle('collapsed');
+  btnHudMini.textContent = isCollapsed ? '展開' : '收合';
+  btnToggleHud.textContent = isCollapsed ? '▴ 面板' : '▾ 面板';
+}
+btnToggleHud.addEventListener('click', toggleHudPanel);
+btnHudMini.addEventListener('click', toggleHudPanel);
+
+// 點擊標題列快速展開
+const themeTitleWrap = hudPanel.querySelector('.theme-title-wrap');
+if (themeTitleWrap) {
+  themeTitleWrap.addEventListener('click', () => {
+    if (hudPanel.classList.contains('collapsed')) {
+      toggleHudPanel();
+    }
+  });
+}
+
+// 收合狀態下的迷你步驟快捷切換
+const btnMiniPrev = document.getElementById('btn-mini-prev');
+const btnMiniNext = document.getElementById('btn-mini-next');
+if (btnMiniPrev) {
+  btnMiniPrev.addEventListener('click', (e) => {
+    e.stopPropagation();
+    stopAutoPlay();
+    goToStep(currentStepIdx - 1);
+  });
+}
+if (btnMiniNext) {
+  btnMiniNext.addEventListener('click', (e) => {
+    e.stopPropagation();
+    stopAutoPlay();
+    goToStep(currentStepIdx + 1);
+  });
+}
+
+// 12 主題總覽抽屜開關
+document.getElementById('btn-open-drawer').addEventListener('click', () => drawerModal.classList.add('open'));
+document.getElementById('btn-close-drawer').addEventListener('click', () => drawerModal.classList.remove('open'));
+drawerModal.addEventListener('click', (e) => {
+  if (e.target === drawerModal) drawerModal.classList.remove('open');
+});
+
+// 5 秒後自動淡出手勢提示氣泡
+setTimeout(() => {
+  const toast = document.getElementById('gesture-toast');
+  if (toast) toast.style.opacity = '0';
+}, 5500);
+
+// 響應式視窗縮放支援 (手機/平板旋轉螢幕自動調適)
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+/* =========================================================================
+   8. 主動畫渲染迴圈
+   ========================================================================= */
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const elapsed = clock.getElapsedTime();
+
+  // 步驟切換時的平滑鏡頭過渡
+  if (camRig.active) {
+    camera.position.lerp(camRig.goalPos, 0.065);
+    controls.target.lerp(camRig.goalTarget, 0.08);
+    if (
+      camera.position.distanceTo(camRig.goalPos) < 0.08 &&
+      controls.target.distanceTo(camRig.goalTarget) < 0.08
+    ) {
+      camRig.active = false;
+    }
+  }
+
+  controls.update();
+
+  if (activeSceneController && activeSceneController.update) {
+    activeSceneController.update(dt, elapsed);
+  }
+
+  renderer.render(scene, camera);
+  update3DLabels();
+}
+
+// 啟動預設主題一並開始即時模擬
+loadTheme(0);
+animate();
+</script>
+</body>
+</html>
