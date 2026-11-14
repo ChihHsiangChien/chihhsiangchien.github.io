@@ -4,56 +4,250 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>腎臟過濾與再吸收視覺化模型</title>
+    <title>腎臟過濾、再吸收與分泌視覺化模型</title>
     <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
-    <div class="container">
-        <h1>腎臟過濾與再吸收視覺化模型</h1>
-        <div class="controls">
-            <button id="startBtn">開始</button>
-            <button id="resetBtn">重置</button>
-            <button id="toggleLabelsBtn">顯示分子標籤</button>
-            <button id="toggleTooltipsBtn">總是顯示說明</button>
-            <div class="pathology-group">
-                <button id="hyperglycemiaBtn" class="pathology-btn" title="高血糖：葡萄糖載體飽和，出現葡萄糖尿">高血糖</button>
-                <button id="proteinuriaBtn" class="pathology-btn" title="蛋白尿：過濾障壁受損，蛋白質漏出至濾液">蛋白尿</button>
+    <div class="app-layout">
+        <!-- 左側控制面板 (Left Sidebar Panel) -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1>腎元過濾・再吸收・分泌</h1>
+                <span class="subtitle">解剖流向與生理動態模擬</span>
             </div>
-            <div class="legend">
-                <div class="legend-item"><span class="dot water"></span>水分子 (H₂O)</div>
-                <div class="legend-item"><span class="dot salt"></span>鹽類 (Salts)</div>
-                <div class="legend-item"><span class="dot urea"></span>尿素 (Urea)</div>
-                <div class="legend-item"><span class="dot protein"></span>蛋白質 (Protein)</div>
-                <div class="legend-item"><span class="dot glucose"></span>葡萄糖 (Glucose)</div>
+
+            <!-- 狀態提示框 -->
+            <div class="info-panel">
+                <p id="info-text">點擊「開始模擬」觀察血液過濾、管周微血管再吸收/分泌與尿液濃縮排出。</p>
             </div>
-        </div>
-        <div class="info-panel"><p id="info-text">點擊「開始」以啟動模擬。</p></div>
-        <div class="visualization">
-            <svg id="nephron-svg" viewBox="0 0 800 600">
-                <!-- Nephron structure will be drawn here -->
+
+            <!-- 1. 分子篩選顯示 (最優先區塊，預設只顯示水分子) -->
+            <div class="control-section">
+                <div class="section-title">
+                    <span>分子顯示篩選</span>
+                    <button id="toggleAllMoleculesBtn" class="mini-link-btn">全選</button>
+                </div>
+                <div class="molecule-list">
+                    <button class="legend-item-btn active" data-type="water" title="點擊切換水分子顯示">
+                        <span class="dot water"></span>
+                        <span class="mol-name">水分子 (H₂O)</span>
+                        <span class="mol-desc">滲透再吸收</span>
+                    </button>
+                    <button class="legend-item-btn inactive" data-type="glucose" title="點擊切換葡萄糖顯示">
+                        <span class="dot glucose"></span>
+                        <span class="mol-name">葡萄糖 (Glucose)</span>
+                        <span class="mol-desc">近曲100%回收</span>
+                    </button>
+                    <button class="legend-item-btn inactive" data-type="salt" title="點擊切換鹽類顯示">
+                        <span class="dot salt"></span>
+                        <span class="mol-name">鹽類離子 (Na⁺/Cl⁻)</span>
+                        <span class="mol-desc">主動/被動回收</span>
+                    </button>
+                    <button class="legend-item-btn inactive" data-type="urea" title="點擊切換尿素顯示">
+                        <span class="dot urea"></span>
+                        <span class="mol-name">尿素 (Urea)</span>
+                        <span class="mol-desc">過濾與部分再吸收</span>
+                    </button>
+                    <button class="legend-item-btn inactive" data-type="toxin" title="點擊切換分泌物/藥物/氫離子顯示">
+                        <span class="dot toxin"></span>
+                        <span class="mol-name">分泌物 (H⁺/K⁺/藥物)</span>
+                        <span class="mol-desc">微血管主動分泌入小管</span>
+                    </button>
+                    <button class="legend-item-btn inactive" data-type="protein" title="點擊切換蛋白質顯示">
+                        <span class="dot protein"></span>
+                        <span class="mol-name">大分子蛋白質</span>
+                        <span class="mol-desc">無法通過過濾障壁</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 2. 模擬播放與速度控制 (次高順位) -->
+            <div class="control-section">
+                <div class="section-title">模擬控制</div>
+                <div class="btn-row">
+                    <button id="startBtn" class="primary-btn">▶ 開始模擬</button>
+                    <button id="resetBtn" class="secondary-btn">↺ 重置</button>
+                </div>
+                <div class="speed-control">
+                    <label for="speedRange">模擬速率：<span id="speedValue">1.0x</span></label>
+                    <input type="range" id="speedRange" min="0.4" max="2.5" step="0.1" value="1.0">
+                </div>
+                <div class="btn-row">
+                    <button id="toggleLabelsBtn" class="toggle-btn">顯示分子標籤</button>
+                    <button id="toggleFxBtn" class="toggle-btn active">過濾/分泌特效</button>
+                </div>
+            </div>
+
+            <!-- 3. 單一分子特寫追蹤功能 -->
+            <div class="control-section track-section">
+                <div class="section-title">
+                    <span>單一分子特寫追蹤</span>
+                    <button id="clearTrackBtn" class="mini-link-btn">取消追蹤</button>
+                </div>
+                <div class="track-desc">點擊下方按鈕或直接點擊畫面上的分子即可鎖定追蹤其路徑：</div>
+                <div class="track-btn-grid">
+                    <button class="track-btn" data-track="water">💧 追蹤水分子</button>
+                    <button class="track-btn" data-track="glucose">🍬 追蹤葡萄糖</button>
+                    <button class="track-btn" data-track="salt">🧂 追蹤鹽類</button>
+                    <button class="track-btn" data-track="toxin">🧪 追蹤分泌物(H⁺)</button>
+                    <button class="track-btn" data-track="urea">🟡 追蹤尿素</button>
+                    <button class="track-btn" data-track="protein">🟣 追蹤蛋白質</button>
+                </div>
+                <div id="track-status-badge" class="track-status-badge hidden">
+                    正在追蹤：<strong id="trackedMolName">水分子</strong>
+                    <span id="trackedMolState">（血液流動中）</span>
+                </div>
+            </div>
+
+            <!-- 4. 生理與病理情境模擬 -->
+            <div class="control-section">
+                <div class="section-title">生理與病理情境</div>
+                <div class="pathology-grid">
+                    <button id="acidosisBtn" class="pathology-btn acidosis-btn" title="酸中毒 (促排酸)：遠曲小管加強分泌 H⁺ 進入尿液，維持血液 pH 恆定">
+                        ⚡ 酸中毒 (加速H⁺分泌)
+                    </button>
+                    <button id="hyperglycemiaBtn" class="pathology-btn" title="高血糖：近曲小管葡萄糖載體飽和，出現葡萄糖尿">
+                        🍬 高血糖 (糖尿)
+                    </button>
+                    <button id="proteinuriaBtn" class="pathology-btn" title="蛋白尿：腎小球過濾障壁受損，大分子蛋白質漏出">
+                        🫧 蛋白尿 (障壁受損)
+                    </button>
+                    <button id="adhBtn" class="pathology-btn adh-btn" title="抗利尿激素(ADH)分泌增加：集尿管水通道開啟，加強水分回收濃縮尿液">
+                        💧 抗利尿激素 (ADH+)
+                    </button>
+                </div>
+            </div>
+
+            <!-- 5. 腎臟巨觀解剖位置圖 -->
+            <div class="control-section macro-section">
+                <div class="section-title">
+                    <span>腎臟巨觀位置對照</span>
+                    <button id="toggleMacroBtn" class="mini-link-btn">收合</button>
+                </div>
+                <div class="macro-body" id="macroBody">
+                    <svg id="kidney-macro-svg" viewBox="0 0 240 210">
+                        <path d="M 10 95 C 45 95, 70 100, 95 100" stroke="#e05a47" stroke-width="9" fill="none" stroke-linecap="round"/>
+                        <path d="M 95 114 C 65 114, 45 120, 10 120" stroke="#2980b9" stroke-width="9" fill="none" stroke-linecap="round"/>
+                        <path d="M 92 120 C 80 145, 70 175, 68 205" stroke="#f5cba7" stroke-width="8" fill="none" stroke-linecap="round"/>
+                        <path d="M 92 120 C 80 145, 70 175, 68 205" stroke="#d35400" stroke-width="8" fill="none" stroke-linecap="round" opacity="0.35"/>
+
+                        <path d="M 98 22 
+                                 C 155 18, 205 52, 205 105 
+                                 C 205 158, 155 192, 98 188 
+                                 C 78 186, 75 142, 92 112 
+                                 C 75 82, 78 24, 98 22 Z" 
+                              fill="#c0392b" stroke="#7b241c" stroke-width="2.5"/>
+
+                        <path d="M 100 27 
+                                 C 150 24, 198 55, 198 105 
+                                 C 198 155, 150 185, 100 183
+                                 C 112 150, 112 60, 100 27 Z" 
+                              fill="#eb984e" opacity="0.45"/>
+
+                        <path d="M 122 55 L 165 45 L 172 75 L 125 82 Z" fill="#8e2820" opacity="0.9"/>
+                        <path d="M 126 92 L 178 90 L 178 120 L 126 118 Z" fill="#8e2820" opacity="0.9"/>
+                        <path d="M 122 128 L 172 135 L 165 165 L 120 152 Z" fill="#8e2820" opacity="0.9"/>
+
+                        <path d="M 90 96 Q 115 105 125 105 Q 110 120 90 125 Z" fill="#fdebd0" opacity="0.9"/>
+
+                        <g id="macro-nephron-locator">
+                            <circle cx="165" cy="52" r="3" fill="#f1c40f"/>
+                            <path d="M 165 52 Q 178 52 175 65 L 145 72 L 172 68 L 135 80" fill="none" stroke="#fdebd0" stroke-width="1.5"/>
+                            <rect x="132" y="36" width="56" height="52" rx="5" fill="rgba(255, 235, 59, 0.18)" stroke="#f1c40f" stroke-width="2" stroke-dasharray="3,2">
+                                <animate attributeName="stroke-opacity" values="1;0.3;1" dur="1.8s" repeatCount="indefinite"/>
+                            </rect>
+                        </g>
+
+                        <text x="8" y="86" font-size="10" fill="#c0392b" font-weight="bold">腎動脈</text>
+                        <text x="8" y="136" font-size="10" fill="#2471a3" font-weight="bold">腎靜脈</text>
+                        <text x="22" y="198" font-size="10" fill="#b9770e" font-weight="bold">輸尿管</text>
+                        <text x="150" y="31" font-size="9.5" fill="#7e5109" font-weight="bold">📍 右側放大區 (腎元)</text>
+                        <text x="172" y="108" font-size="9" fill="#fadbd8" font-weight="bold" text-anchor="end">腎髓質</text>
+                        <text x="193" y="148" font-size="9" fill="#fdebd0" font-weight="bold" text-anchor="end">腎皮質</text>
+                    </svg>
+                    <div class="macro-caption">
+                        腎臟血管分支：動脈血經弓狀動脈轉入小葉間動脈，入球小動脈進入腎小球過濾；回流靜脈血經小葉間靜脈匯集至腎靜脈離開。
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 右側最大化繪圖區 (Maximized Visualization Area) -->
+        <main class="canvas-container" id="visualization-box">
+
+            <svg id="nephron-svg" viewBox="0 0 1000 860" preserveAspectRatio="xMidYMid meet">
                 <defs>
-                    <marker id="arrow" markerWidth="10" markerHeight="10" refX="0" refY="3" orient="auto"
-                        markerUnits="strokeWidth">
-                        <path d="M0,0 L0,6 L9,3 z" fill="#f00" />
+                    <!-- 腎皮質/髓質背景漸層 -->
+                    <linearGradient id="bg-cortex-medulla" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stop-color="#fdfaf6" />
+                        <stop offset="44%" stop-color="#fbf4eb" />
+                        <stop offset="46%" stop-color="#f7ebf0" />
+                        <stop offset="100%" stop-color="#f0dce5" />
+                    </linearGradient>
+
+                    <!-- 鮑氏囊球體立體黃色漸層 -->
+                    <radialGradient id="bowman-sphere-grad" cx="42%" cy="38%" r="58%">
+                        <stop offset="0%" stop-color="#fff9c4" />
+                        <stop offset="55%" stop-color="#ffe082" />
+                        <stop offset="85%" stop-color="#ffca28" />
+                        <stop offset="100%" stop-color="#e6a100" />
+                    </radialGradient>
+
+                    <!-- 鮑氏囊內部凹陷陰影 -->
+                    <radialGradient id="bowman-inner-grad" cx="48%" cy="48%" r="50%">
+                        <stop offset="0%" stop-color="#fbe9e7" />
+                        <stop offset="70%" stop-color="#ffccbc" />
+                        <stop offset="100%" stop-color="#d98880" />
+                    </radialGradient>
+
+                    <!-- 立體光澤濾鏡 -->
+                    <filter id="tube-shadow" x="-10%" y="-10%" width="120%" height="120%">
+                        <feDropShadow dx="1" dy="2" stdDeviation="1.5" flood-color="#000000" flood-opacity="0.18"/>
+                    </filter>
+
+                    <!-- 追蹤光圈發光效果 -->
+                    <filter id="glow-track" x="-40%" y="-40%" width="180%" height="180%">
+                        <feGaussianBlur stdDeviation="3" result="blur" />
+                        <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                    </filter>
+
+                    <!-- 箭頭標記 -->
+                    <marker id="arrow-red" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                        <path d="M0,0 L6,3 L0,6 z" fill="#c0392b" />
+                    </marker>
+                    <marker id="arrow-blue" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                        <path d="M0,0 L6,3 L0,6 z" fill="#1565c0" />
+                    </marker>
+                    <marker id="arrow-urine" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                        <path d="M0,0 L6,3 L0,6 z" fill="#d35400" />
                     </marker>
                 </defs>
 
-                <!-- Background structures -->
-                <g id="structure-layer"></g>
+                <!-- 可縮放平移視口群組 -->
+                <g id="viewport-group">
+                    <!-- 1. 背景分區層 (皮質/髓質) -->
+                    <g id="zone-layer"></g>
 
-                <!-- Flow paths (invisible) -->
-                <g id="path-layer"></g>
+                    <!-- 2. 解剖管路結構層 -->
+                    <g id="structure-layer"></g>
 
-                <!-- Particles -->
-                <g id="particle-layer"></g>
+                    <!-- 3. 路徑轉換特效層 (過濾/再吸收/分泌波紋) -->
+                    <g id="fx-layer"></g>
 
-                <!-- Labels -->
-                <g id="label-layer"></g>
+                    <!-- 4. 粒子運動與再吸收/分泌層 -->
+                    <g id="particle-layer"></g>
+
+                    <!-- 5. 追蹤標記層 (高亮圓環與精準十字準心) -->
+                    <g id="tracker-layer"></g>
+
+                    <!-- 6. 解剖引線標籤與流向說明層 -->
+                    <g id="label-layer"></g>
+                </g>
             </svg>
-        </div>
-
+        </main>
     </div>
+
     <script src="script.js"></script>
 </body>
 
