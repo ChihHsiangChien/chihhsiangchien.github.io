@@ -446,6 +446,35 @@
             color: #bbf7d0;
         }
 
+        .stage-scrub-row {
+            margin-top: 10px;
+            padding-top: 8px;
+            border-top: 1px dashed rgba(148, 163, 184, 0.2);
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .stage-scrub-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.74rem;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        .stage-scrub-slider {
+            width: 100%;
+            height: 20px;
+            accent-color: #f59e0b;
+            cursor: pointer;
+        }
+
+        .stage-scrub-slider.oil-theme {
+            accent-color: #2dd4bf;
+        }
+
         .narrative-box {
             padding: 15px 16px;
             display: flex;
@@ -744,6 +773,13 @@
                         <button class="ctrl-btn" id="coalPlayBtn">▶ 自動播放</button>
                         <button class="ctrl-btn" id="coalNextBtn">下一步 ▶</button>
                     </div>
+                    <div class="stage-scrub-row">
+                        <div class="stage-scrub-header">
+                            <span>🎞️ 連續地質演化進度（可拖曳觀察跨幕漸變）</span>
+                            <span id="coalScrubReadout">階段 1.0 / 5</span>
+                        </div>
+                        <input type="range" class="stage-scrub-slider" id="coalScrubSlider" min="0" max="4" step="0.01" value="0">
+                    </div>
                 </div>
                 <div class="narrative-box" id="coalNarrative"></div>
             </aside>
@@ -778,6 +814,13 @@
                         <button class="ctrl-btn" id="oilPrevBtn">◀ 上一步</button>
                         <button class="ctrl-btn" id="oilPlayBtn">▶ 自動播放</button>
                         <button class="ctrl-btn" id="oilNextBtn">下一步 ▶</button>
+                    </div>
+                    <div class="stage-scrub-row">
+                        <div class="stage-scrub-header">
+                            <span>🎞️ 連續沉積與運移進度（可拖曳觀察跨幕漸變）</span>
+                            <span id="oilScrubReadout">階段 1.0 / 4</span>
+                        </div>
+                        <input type="range" class="stage-scrub-slider oil-theme" id="oilScrubSlider" min="0" max="3" step="0.01" value="0">
                     </div>
                 </div>
                 <div class="narrative-box" id="oilNarrative"></div>
@@ -933,15 +976,19 @@
                 showLabels: true,
                 time: 0,
 
-                // 分頁 1：煤炭 (0..4 對應 5 階段)
+                // 分頁 1：煤炭 (0..4 對應 5 階段，coalProgress 支援跨幕連續漸變)
                 coalStep: 0,
+                coalProgress: 0,
+                coalScrubbing: false,
                 coalPlaying: false,
                 coalTimer: 0,
                 coalPressure: 0.78,   // Step 3 碳化程度 0~1
                 steamPower: 0.75,     // Step 4 蒸汽機火力 0~1
 
-                // 分頁 2：石油與天然氣 (0..3 對應 4 階段)
+                // 分頁 2：石油與天然氣 (0..3 對應 4 階段，oilProgress 支援跨幕連續漸變)
                 oilStep: 0,
+                oilProgress: 0,
+                oilScrubbing: false,
                 oilPlaying: false,
                 oilTimer: 0,
                 anoxicMode: true,     // Step 2 缺氧 vs 有氧實驗
@@ -1126,10 +1173,24 @@
                 }
             }
 
-            /* 繪製統一風格的 Canvas 標籤氣泡 (受 state.showLabels 控制) */
-            function drawCallout(ctx, x, y, text, borderColor = '#94a3b8', targetX = null, targetY = null) {
-                if (!state.showLabels) return;
+            /* 數學輔助：平滑過渡與階段權重 */
+            function clamp(v, lo = 0, hi = 1) {
+                return Math.max(lo, Math.min(hi, v));
+            }
+            function smoothstep(edge0, edge1, x) {
+                const t = clamp((x - edge0) / (edge1 - edge0), 0, 1);
+                return t * t * (3 - 2 * t);
+            }
+            function stageWeight(progress, targetStep) {
+                const d = Math.abs(progress - targetStep);
+                return d >= 1 ? 0 : smoothstep(1, 0, d);
+            }
+
+            /* 繪製統一風格的 Canvas 標籤氣泡 (受 state.showLabels 控制，支援 alpha 跨幕淡入淡出) */
+            function drawCallout(ctx, x, y, text, borderColor = '#94a3b8', targetX = null, targetY = null, alpha = 1) {
+                if (!state.showLabels || alpha <= 0.03) return;
                 ctx.save();
+                ctx.globalAlpha *= alpha;
                 if (targetX !== null && targetY !== null) {
                     ctx.beginPath();
                     ctx.moveTo(x, y);
@@ -1178,7 +1239,7 @@
             }
 
             /* =========================================================================
-               分頁 1：陸地植物與煤炭紀元 (5 階段資料庫與動態引擎)
+               分頁 1：陸地植物與煤炭紀元 (5 階段資料庫與連續演化動態引擎)
                ========================================================================= */
             const COAL_STEPS = [
                 {
@@ -1201,12 +1262,12 @@
                     points: [
                         '<strong>爭奪陽光空間：</strong>為長得更高更粗壯，植物演化出全新高分子聚合物——<strong>木質素（Lignin）</strong>。',
                         '<strong>木質素的作用：</strong>填補纖維素空隙，提供極強剛性、抗壓與防水性，讓巨型石松、木賊與早期蕨類長成數十公尺參天大樹。',
-                        '<strong>演化的盲點：</strong>木質素具高度交聯的苯丙烷結構，當時<strong>沒有任何細菌或真菌擁有分解它的酵素</strong>，大樹死後無法腐爛！'
+                        '<strong>演化的盲點：</strong>木質素具高度交聯的苯丙烷結構，當時<strong>沒有任何細菌或真菌擁有分解它的酵素</strong>，土壤細菌釋放的纖維素酶被木質素外殼阻擋，大樹死後無法腐爛！'
                     ],
                     widgetHtml: `
         <div class="lab-widget">
           <div class="lab-widget-title"><span>🌲 演化實驗</span><span>木質素防禦</span></div>
-          <button class="action-btn" id="btnDropLigninLog" style="background:linear-gradient(135deg,#d97706,#b45309);">🪵 倒下巨型木質素樹幹（觀察細菌受阻）</button>
+          <button class="action-btn" id="btnDropLigninLog" style="background:linear-gradient(135deg,#d97706,#b45309);">🪵 倒下巨型木質素樹幹（觀察酶受阻與堆積）</button>
         </div>`
                 },
                 {
@@ -1264,12 +1325,12 @@
                 document.getElementById('zoomReadoutCoal')
             );
 
-            // 煤炭模擬粒子池
+            // 煤炭模擬粒子池（土壤微生物沿地表與倒木游移，不再詭異跳躍升空）
             const coalSim = {
                 microbes: [],
                 nutrients: [],
                 logs: [],
-                sparks: [],
+                enzymeRings: [],
                 steamPuffs: [],
                 wheelAngle: 0
             };
@@ -1278,24 +1339,25 @@
                 coalSim.microbes = [];
                 coalSim.nutrients = [];
                 coalSim.logs = [];
-                coalSim.sparks = [];
+                coalSim.enzymeRings = [];
                 coalSim.steamPuffs = [];
 
-                for (let i = 0; i < 26; i++) {
+                for (let i = 0; i < 24; i++) {
                     coalSim.microbes.push({
-                        x: 180 + Math.random() * 740,
-                        y: 350 + Math.random() * 90,
-                        vx: (Math.random() - 0.5) * 1.6,
-                        vy: (Math.random() - 0.5) * 1.1,
-                        type: 'bacteria'
+                        x: 150 + (i / 24) * 780 + (Math.random() - 0.5) * 20,
+                        y: 392 + Math.random() * 26,
+                        vx: (Math.random() < 0.5 ? -1 : 1) * (0.35 + Math.random() * 0.45),
+                        phase: Math.random() * Math.PI * 2,
+                        cooldown: Math.random() * 2.5
                     });
                 }
                 for (let i = 0; i < 7; i++) {
                     coalSim.logs.push({
-                        x: 220 + i * 95 + (Math.random() - 0.5) * 30,
-                        y: 382 + (i % 3) * 14,
-                        angle: (Math.random() - 0.5) * 0.18,
-                        decay: 0
+                        x: 205 + i * 112 + (Math.random() - 0.5) * 18,
+                        y: 386 + (i % 3) * 8,
+                        angle: (Math.random() - 0.5) * 0.12,
+                        decay: (i * 0.17) % 1,
+                        shieldFlash: 0
                     });
                 }
             }
@@ -1303,238 +1365,342 @@
 
             function drawCoalWorld(dt) {
                 const ctx = pzCoal.ctx;
-                const step = state.coalStep;
+                const p = state.coalProgress; // 0.0 ~ 4.0 連續演化進度
+                const w0 = stageWeight(p, 0); // 階段 1：早期矮小纖維素植物
+                const w1 = stageWeight(p, 1); // 階段 2：泥盆紀參天木質素森林 + 細菌酶受阻
+                const w2 = stageWeight(p, 2); // 階段 3：石炭紀淹水沼澤 + 泥炭下沉碳化
+                const w3 = stageWeight(p, 3); // 階段 4：深部煤層封存 + 18世紀煤礦與蒸汽機
+                const w4 = stageWeight(p, 4); // 階段 5：白腐真菌分解地表木材 + 深部石炭紀煤層封存
+
                 pzCoal.beginTransform();
 
-                // 背景天空與地下地層剖面
+                // 1. 連續漸變的天空與大氣背景
                 const skyGrad = ctx.createLinearGradient(0, 0, 0, 410);
-                if (step === 3) {
-                    skyGrad.addColorStop(0, '#1e293b');
-                    skyGrad.addColorStop(1, '#334155');
-                } else if (step === 2) {
-                    skyGrad.addColorStop(0, '#0f292e');
-                    skyGrad.addColorStop(1, '#164e63');
-                } else {
-                    skyGrad.addColorStop(0, '#0c1e35');
-                    skyGrad.addColorStop(1, '#153b50');
-                }
+                skyGrad.addColorStop(0, w3 > 0.4 ? '#1e293b' : (w2 > 0.4 ? '#0f292e' : '#0c1e35'));
+                skyGrad.addColorStop(1, w3 > 0.4 ? '#334155' : (w2 > 0.4 ? '#164e63' : '#153b50'));
                 ctx.fillStyle = skyGrad;
                 ctx.fillRect(0, 0, 1100, 410);
 
-                // 太陽（象徵遠古太陽能固定於植物）
+                // 太陽（象徵遠古太陽能固定於植物，工業革命時被煙霧略微遮蔽）
                 ctx.save();
                 ctx.beginPath();
                 ctx.arc(980, 78, 34, 0, Math.PI * 2);
-                ctx.fillStyle = step === 3 ? 'rgba(251, 191, 36, 0.45)' : '#fde047';
+                ctx.fillStyle = `rgba(253, 224, 71, ${1 - w3 * 0.52})`;
                 ctx.shadowColor = '#facc15';
-                ctx.shadowBlur = 28;
+                ctx.shadowBlur = 28 * (1 - w3 * 0.5);
                 ctx.fill();
                 ctx.restore();
 
-                // 地下岩層基底
+                // 2. 地下岩層基底與連續演化的表土層
                 ctx.fillStyle = '#292524';
                 ctx.fillRect(0, 410, 1100, 270);
                 ctx.fillStyle = '#1c1917';
                 ctx.fillRect(0, 520, 1100, 160);
 
-                // 依據不同步驟繪製專屬動態場景
-                if (step === 0) {
-                    // 階段 1：矮小早期植物 + 纖維素順暢分解循環
-                    ctx.fillStyle = '#365314';
-                    ctx.fillRect(0, 395, 1100, 24);
+                // 地表土壤帶
+                ctx.fillStyle = w1 + w2 > 0.5 ? '#3f2e18' : '#365314';
+                ctx.fillRect(0, 392, 1100, 24);
 
-                    // 矮小早期維管束植物 (Cooksonia 風格)
+                // 3. 階段 1 ➔ 2 ➔ 3 ➔ 5 連續森林演化
+                // (A) 階段 1 早期矮小維管束植物 (Cooksonia)，隨進入階段 2 逐漸被參天巨木取代
+                if (w0 > 0.01) {
+                    ctx.save();
+                    ctx.globalAlpha = w0;
                     for (let i = 0; i < 11; i++) {
                         const px = 120 + i * 85;
                         const sway = Math.sin(state.time * 2 + i) * 4;
+                        const hScale = 0.35 + 0.65 * w0;
+                        const topY = 398 - 73 * hScale;
+                        const midY = 398 - 43 * hScale;
                         ctx.strokeStyle = COLORS.cellulose;
                         ctx.lineWidth = 5;
                         ctx.beginPath();
                         ctx.moveTo(px, 398);
-                        ctx.quadraticCurveTo(px + sway * 0.5, 355, px + sway, 325);
-                        ctx.moveTo(px + sway * 0.6, 355);
-                        ctx.lineTo(px - 14 + sway, 332);
-                        ctx.moveTo(px + sway * 0.6, 355);
-                        ctx.lineTo(px + 15 + sway, 335);
+                        ctx.quadraticCurveTo(px + sway * 0.5, midY, px + sway, topY);
+                        ctx.moveTo(px + sway * 0.6, midY);
+                        ctx.lineTo(px - 14 + sway, topY + 7);
+                        ctx.moveTo(px + sway * 0.6, midY);
+                        ctx.lineTo(px + 15 + sway, topY + 10);
                         ctx.stroke();
 
                         ctx.fillStyle = '#86efac';
                         ctx.beginPath();
-                        ctx.arc(px + sway, 323, 5, 0, Math.PI * 2);
-                        ctx.arc(px - 14 + sway, 330, 4, 0, Math.PI * 2);
-                        ctx.arc(px + 15 + sway, 333, 4, 0, Math.PI * 2);
+                        ctx.arc(px + sway, topY - 2, 5, 0, Math.PI * 2);
+                        ctx.arc(px - 14 + sway, topY + 5, 4, 0, Math.PI * 2);
+                        ctx.arc(px + 15 + sway, topY + 8, 4, 0, Math.PI * 2);
                         ctx.fill();
                     }
 
-                    // 地面少量纖維素碎屑正被分解
+                    // 地面綠色纖維素殘骸正被細菌分解（平滑溶解脈動）
                     for (let i = 0; i < 6; i++) {
                         const lx = 200 + i * 135;
                         const pulse = 0.5 + 0.5 * Math.sin(state.time * 3 + i);
-                        ctx.fillStyle = `rgba(74, 222, 128, ${0.35 + pulse * 0.4})`;
+                        ctx.fillStyle = `rgba(74, 222, 128, ${(0.35 + pulse * 0.4) * w0})`;
                         roundRect(ctx, lx - 22, 392, 44, 9, 4);
                         ctx.fill();
                     }
 
-                    // 細菌游動並釋放綠色養分粒子上升
-                    coalSim.microbes.forEach((m, idx) => {
-                        m.x += m.vx;
-                        m.y += m.vy;
-                        if (m.x < 100 || m.x > 980) m.vx *= -1;
-                        if (m.y < 382 || m.y > 432) m.vy *= -1;
-
-                        ctx.fillStyle = COLORS.bacteria;
-                        ctx.beginPath();
-                        ctx.ellipse(m.x, m.y, 7, 4, Math.atan2(m.vy, m.vx), 0, Math.PI * 2);
-                        ctx.fill();
-
-                        if (Math.random() < 0.06) {
-                            coalSim.nutrients.push({ x: m.x, y: m.y - 5, vy: -0.9 - Math.random() * 0.7, life: 1 });
-                        }
-                    });
-
-                    drawUpdateNutrients(ctx, COLORS.cellulose);
-
-                    // 循環箭頭示意
-                    ctx.strokeStyle = 'rgba(74, 222, 128, 0.45)';
+                    // 碳循環順暢虛線圓弧
+                    ctx.strokeStyle = `rgba(74, 222, 128, ${0.45 * w0})`;
                     ctx.lineWidth = 3;
                     ctx.setLineDash([8, 6]);
                     ctx.beginPath();
                     ctx.arc(550, 310, 120, 0.2, Math.PI - 0.2, true);
                     ctx.stroke();
                     ctx.setLineDash([]);
+                    ctx.restore();
+                }
 
-                    drawCallout(ctx, 290, 265, '早期矮小陸生植物（細胞壁：纖維素）', COLORS.cellulose, 290, 328);
-                    drawCallout(ctx, 780, 465, '細菌分泌「纖維素酶」迅速分解殘骸', COLORS.bacteria, 680, 405);
-                    drawCallout(ctx, 550, 165, '♻️ 養分與碳循環順暢・無殘骸堆積', COLORS.cellulose);
-
-                } else if (step === 1) {
-                    // 階段 2：泥盆紀高大木質素森林 + 微生物受阻彈開
-                    ctx.fillStyle = '#3f2e18';
-                    ctx.fillRect(0, 395, 1100, 25);
-
-                    // 參天巨樹（巨型石松、木賊）
-                    const treeXs = [150, 360, 620, 860];
-                    treeXs.forEach((tx, idx) => {
-                        drawGiantCarboniferousTree(ctx, tx, 398, 255 + (idx % 2) * 35);
+                // (B) 參天木質素森林（階段 1->2 拔地長高，延續至階段 3 石炭紀沼澤，階段 4 工業革命退場，階段 5 森林重現）
+                const treePresence = clamp(smoothstep(0.15, 0.85, p) - smoothstep(2.15, 2.85, p) + smoothstep(3.15, 3.85, p), 0, 1);
+                if (treePresence > 0.01) {
+                    const treePositions = [145, 330, 520, 710, 890];
+                    treePositions.forEach((tx, idx) => {
+                        // 在階段 5 略微疏開以便清楚觀察地面白腐真菌
+                        if (w4 > 0.5 && (idx === 1 || idx === 3)) return;
+                        const maxH = 235 + (idx % 2) * 35;
+                        const curH = maxH * (0.2 + 0.8 * treePresence);
+                        const baseY = 398 - w2 * 10;
+                        ctx.save();
+                        ctx.globalAlpha = treePresence;
+                        drawGiantCarboniferousTree(ctx, tx, baseY, curH);
+                        ctx.restore();
                     });
+                }
 
-                    // 倒地堆積且無法腐爛的木質素樹幹
-                    coalSim.logs.forEach((lg) => {
-                        drawLigninLog(ctx, lg.x, lg.y, 92, 18, lg.angle, 1);
-                    });
+                // 4. 階段 2 -> 3：石炭紀淹水缺氧沼澤水體（連續水位上升與退去）
+                if (w2 > 0.01) {
+                    const waterH = 76 * w2;
+                    ctx.fillStyle = `rgba(2, 132, 199, ${0.48 * w2})`;
+                    ctx.fillRect(0, 408 - waterH, 1100, waterH);
+                }
 
-                    // 細菌撞擊木質素樹幹並彈開（演化的盲點）
-                    coalSim.microbes.forEach((m) => {
-                        m.x += m.vx * 1.4;
-                        m.y += m.vy * 1.4;
-                        if (m.x < 120 || m.x > 960) m.vx *= -1;
-                        if (m.y < 340 || m.y > 425) m.vy *= -1;
+                // 5. 連續的「地面倒木 ➔ 泥炭層 ➔ 下沉深埋石炭紀煤層」跨幕演化！
+                // 當 p 由 1 -> 2 時，原本堆積在地表的木質素樹幹層被泥沙覆蓋並連續下沉壓實為深部煤層；
+                // 當 p 由 2 -> 3 -> 4 時，這條石炭紀煤層永久保存在地底深處 (y ≈ 545)！
+                const burialProgress = smoothstep(1.1, 2.0, p); // 0 (地表泥炭) -> 1 (下沉至深部煤層)
+                if (p > 1.05) {
+                    const carbFactor = p < 2.5 ? state.coalPressure : Math.max(state.coalPressure, smoothstep(2.0, 3.0, p));
+                    const subsidence = burialProgress * (45 + carbFactor * 110);
+                    const seamY = 396 + subsidence;
+                    const seamH = 44 + burialProgress * 18;
 
-                        // 碰撞樹幹反彈特效
-                        if (m.y > 370 && m.y < 402 && Math.random() < 0.08) {
-                            m.vy = -Math.abs(m.vy) - 0.6;
-                            coalSim.sparks.push({ x: m.x, y: m.y, life: 1 });
+                    // 上覆沉積岩層（隨地殼下沉而連續增厚）
+                    if (seamY > 412) {
+                        ctx.fillStyle = '#475569';
+                        ctx.fillRect(60, 410, 980, seamY - 410);
+                    }
+
+                    // 階段 3 專屬：地表過渡泥炭層 (Peat)
+                    if (w2 > 0.02) {
+                        ctx.save();
+                        ctx.globalAlpha = w2;
+                        ctx.fillStyle = '#5c3a1e';
+                        ctx.fillRect(80, 392, 940, 44);
+                        for (let i = 0; i < 8; i++) {
+                            drawLigninLog(ctx, 140 + i * 112, 412 + (i % 2) * 8, 84, 13, (i % 3 - 1) * 0.07, 0.75);
                         }
-
-                        ctx.fillStyle = COLORS.bacteria;
-                        ctx.beginPath();
-                        ctx.ellipse(m.x, m.y, 6.5, 4, 0, 0, Math.PI * 2);
-                        ctx.fill();
-                    });
-
-                    // 繪製無法分解的受阻火花
-                    for (let i = coalSim.sparks.length - 1; i >= 0; i--) {
-                        const sp = coalSim.sparks[i];
-                        sp.life -= dt * 1.8;
-                        if (sp.life <= 0) { coalSim.sparks.splice(i, 1); continue; }
-                        ctx.strokeStyle = `rgba(248, 113, 113, ${sp.life})`;
-                        ctx.lineWidth = 2;
-                        ctx.beginPath();
-                        ctx.moveTo(sp.x - 5, sp.y - 5); ctx.lineTo(sp.x + 5, sp.y + 5);
-                        ctx.moveTo(sp.x + 5, sp.y - 5); ctx.lineTo(sp.x - 5, sp.y + 5);
-                        ctx.stroke();
+                        ctx.restore();
                     }
 
-                    drawCallout(ctx, 360, 88, '巨型石松與木賊（木質素支撐長達數十公尺）', COLORS.lignin, 360, 145);
-                    drawCallout(ctx, 540, 325, '木質素（苯丙烷交聯結構）：細菌無酵素可分解！', '#f87171', 510, 382);
-                    drawCallout(ctx, 540, 468, '⚠️ 演化盲點：死後樹木無法腐爛，開始大量堆積', COLORS.lignin);
-
-                } else if (step === 2) {
-                    // 階段 3：石炭紀淹水沼澤 + 地殼下沉高溫高壓碳化
-                    const p = state.coalPressure; // 0.1 ~ 1.0
-                    const subsidence = p * 125;   // 下沉深度位移
-
-                    // 潮濕沼澤水體
-                    ctx.fillStyle = 'rgba(2, 132, 199, 0.48)';
-                    ctx.fillRect(0, 335, 1100, 78);
-
-                    // 沼澤森林
-                    [130, 290, 480, 700, 900].forEach((tx, idx) => {
-                        drawGiantCarboniferousTree(ctx, tx, 385, 220 + (idx % 2) * 30);
-                    });
-
-                    // 泥炭層 (Peat)
-                    ctx.fillStyle = '#5c3a1e';
-                    ctx.fillRect(80, 392, 940, 48);
-                    for (let i = 0; i < 9; i++) {
-                        drawLigninLog(ctx, 135 + i * 102, 412 + (i % 2) * 10, 85, 14, (i % 3 - 1) * 0.08, 0.75);
-                    }
-
-                    // 覆蓋沉積岩層（隨下沉增厚）
-                    ctx.fillStyle = '#475569';
-                    ctx.fillRect(80, 440, 940, subsidence);
-
-                    // 下沉中的轉化煤層（顏色隨碳化程度由琥珀棕轉為烏亮黑炭）
-                    const seamY = 440 + subsidence;
-                    const r = Math.round(140 * (1 - p) + 15);
-                    const g = Math.round(80 * (1 - p) + 23);
-                    const b = Math.round(30 * (1 - p) + 42);
+                    // 下沉轉化中的主煤層（顏色由琥珀木質素棕 ➔ 泥炭褐煤 ➔ 烏亮石炭紀煙煤/無煙煤）
+                    const maturity = clamp(burialProgress * carbFactor, 0, 1);
+                    const r = Math.round(146 * (1 - maturity) + 15);
+                    const g = Math.round(64 * (1 - maturity) + 23);
+                    const b = Math.round(14 * (1 - maturity) + 42);
                     ctx.fillStyle = `rgb(${r},${g},${b})`;
-                    ctx.strokeStyle = p > 0.65 ? COLORS.coalFire : COLORS.lignin;
-                    ctx.lineWidth = 2.5;
-                    roundRect(ctx, 80, seamY, 940, 58, 8);
+                    ctx.strokeStyle = maturity > 0.6 ? COLORS.coalFire : COLORS.lignin;
+                    ctx.lineWidth = 2.2;
+                    roundRect(ctx, 70, seamY, 960, seamH, 8);
                     ctx.fill();
                     ctx.stroke();
 
-                    // 煤炭光澤紋理
-                    ctx.strokeStyle = `rgba(251, 191, 36, ${0.15 + p * 0.35})`;
+                    // 煤層內部殘留木質紋理轉化為烏亮煤層光澤
+                    ctx.strokeStyle = `rgba(251, 191, 36, ${0.18 + maturity * 0.32})`;
                     ctx.lineWidth = 1.5;
-                    for (let x = 120; x < 980; x += 75) {
+                    for (let x = 115; x < 985; x += 78) {
                         ctx.beginPath();
-                        ctx.moveTo(x, seamY + 18);
-                        ctx.lineTo(x + 42, seamY + 22);
-                        ctx.moveTo(x + 15, seamY + 40);
-                        ctx.lineTo(x + 55, seamY + 38);
+                        ctx.moveTo(x, seamY + seamH * 0.32);
+                        ctx.lineTo(x + 44, seamY + seamH * 0.38);
+                        ctx.moveTo(x + 16, seamY + seamH * 0.68);
+                        ctx.lineTo(x + 56, seamY + seamH * 0.65);
                         ctx.stroke();
                     }
 
-                    // 下沉高壓與地熱箭頭
-                    drawForceArrows(ctx, seamY, p);
+                    // 階段 3 下沉高壓與地熱箭頭
+                    if (w2 > 0.05) {
+                        ctx.save();
+                        ctx.globalAlpha = w2;
+                        drawForceArrows(ctx, seamY, carbFactor);
+                        ctx.restore();
+                    }
+                }
 
-                    drawCallout(ctx, 270, 355, '石炭紀淹水缺氧泥炭沼澤', COLORS.water, 270, 395);
-                    drawCallout(ctx, 550, seamY + 29, `石炭紀厚重煤層（碳化度 ${Math.round(p * 100)}%）`, COLORS.coalFire);
-                    drawCallout(ctx, 850, 638, '🔥 地熱高溫 ＋ ⬇️ 地殼下沉高壓（數千萬年碳化）', '#fb923c');
+                // 6. 地表倒木與微生物互動（階段 2 細菌纖維素酶受阻 vs. 階段 5 白腐真菌過氧化物酶分解）
+                const surfaceLogsAlpha = clamp(w1 + w4, 0, 1);
+                if (surfaceLogsAlpha > 0.01) {
+                    coalSim.logs.forEach((lg, i) => {
+                        if (w4 > 0.2 && i >= 5) return;
+                        const lx = w4 > 0.3 ? (210 + i * 165) : lg.x;
+                        const ly = w4 > 0.3 ? 388 : lg.y;
 
-                } else if (step === 3) {
-                    // 階段 4：煤炭埋藏與 18 世紀工業革命蒸汽機
-                    // 地表草地與岩層
-                    ctx.fillStyle = '#3f6212';
-                    ctx.fillRect(0, 390, 1100, 20);
-                    ctx.fillStyle = '#475569';
-                    ctx.fillRect(0, 410, 1100, 130);
+                        // 在階段 5 白腐真菌作用下，木質素樹幹平滑腐朽變薄；在階段 2 則完好無損且具有木質素護盾
+                        if (w4 > 0.1) {
+                            lg.decay = (lg.decay + dt * 0.2 * w4) % 1;
+                        } else {
+                            lg.decay = 0;
+                        }
+                        if (lg.shieldFlash > 0) lg.shieldFlash = Math.max(0, lg.shieldFlash - dt * 2.2);
 
-                    // 深處石炭紀煤層
-                    ctx.fillStyle = '#0f172a';
-                    ctx.strokeStyle = '#64748b';
-                    ctx.lineWidth = 2;
-                    ctx.fillRect(60, 540, 980, 68);
-                    ctx.strokeRect(60, 540, 980, 68);
+                        const logAlpha = surfaceLogsAlpha * (1 - lg.decay * 0.68 * w4);
+                        const logScale = 1 - lg.decay * 0.28 * w4;
+                        drawLigninLog(ctx, lx, ly, 94 * logScale, 18 * logScale, lg.angle, logAlpha);
 
-                    // 煤礦豎井與升降機
+                        // 階段 2：當細菌貼近釋放纖維素酶時，樹幹表面浮現琥珀紅「木質素交聯障壁」防護波紋（不腐爛）
+                        if (w1 > 0.05 && lg.shieldFlash > 0.02) {
+                            ctx.save();
+                            ctx.globalAlpha = w1 * lg.shieldFlash;
+                            ctx.translate(lx, ly);
+                            ctx.rotate(lg.angle);
+                            ctx.strokeStyle = '#fb7185';
+                            ctx.lineWidth = 2.5;
+                            roundRect(ctx, -50, -12, 100, 24, 7);
+                            ctx.stroke();
+                            ctx.restore();
+                        }
+
+                        // 階段 5：白腐真菌紫色菌絲網與子實體包覆樹幹並釋放過氧化物酶分解
+                        if (w4 > 0.05) {
+                            ctx.save();
+                            ctx.globalAlpha = w4;
+                            ctx.strokeStyle = COLORS.fungi;
+                            ctx.lineWidth = 2;
+                            ctx.beginPath();
+                            ctx.moveTo(lx - 28, ly + 2);
+                            ctx.quadraticCurveTo(lx, ly - 16, lx + 30, ly + 2);
+                            ctx.stroke();
+
+                            ctx.fillStyle = '#f5d0fe';
+                            ctx.beginPath();
+                            ctx.arc(lx - 10, ly - 9, 8, Math.PI, 0);
+                            ctx.arc(lx + 14, ly - 7, 7, Math.PI, 0);
+                            ctx.fill();
+                            ctx.restore();
+
+                            if (Math.random() < 0.14 * w4) {
+                                coalSim.nutrients.push({
+                                    x: lx + (Math.random() - 0.5) * 60,
+                                    y: ly - 6,
+                                    vy: -0.75 - Math.random() * 0.7,
+                                    life: 1,
+                                    enzyme: Math.random() < 0.5
+                                });
+                            }
+                        }
+                    });
+                }
+
+                // 7. 土壤細菌（階段 1 & 2 連續存在於表土層中，平滑游動，絕不跳躍飛天！）
+                const bacAlpha = clamp(w0 + w1, 0, 1);
+                if (bacAlpha > 0.01) {
+                    ctx.save();
+                    ctx.globalAlpha = bacAlpha;
+                    coalSim.microbes.forEach((m, idx) => {
+                        // 僅在表土與倒木底部之間平緩水平游移 (y: 392 ~ 420)
+                        m.x += m.vx;
+                        if (m.x < 120 || m.x > 960) m.vx *= -1;
+                        const targetY = 398 + Math.sin(state.time * 1.8 + m.phase) * 9;
+                        m.y += (targetY - m.y) * 0.1;
+
+                        // 繪製青藍色土壤細菌
+                        ctx.fillStyle = COLORS.bacteria;
+                        ctx.beginPath();
+                        ctx.ellipse(m.x, m.y, 7, 4, 0, 0, Math.PI * 2);
+                        ctx.fill();
+
+                        // 階段 1：順利分解纖維素，產生綠色養分氣泡上升
+                        if (w0 > 0.25 && Math.random() < 0.055 * w0) {
+                            coalSim.nutrients.push({
+                                x: m.x,
+                                y: m.y - 5,
+                                vy: -0.85 - Math.random() * 0.6,
+                                life: 1,
+                                enzyme: false
+                            });
+                        }
+
+                        // 階段 2：細菌貼近倒木底部分泌「纖維素酶脈衝環」，但被木質素外殼阻擋消散
+                        m.cooldown -= dt;
+                        if (w1 > 0.25 && m.cooldown <= 0) {
+                            // 尋找最近的一根倒木
+                            let nearLog = null;
+                            let minDist = 999;
+                            for (let k = 0; k < coalSim.logs.length; k++) {
+                                const d = Math.abs(m.x - coalSim.logs[k].x);
+                                if (d < minDist) { minDist = d; nearLog = coalSim.logs[k]; }
+                            }
+                            if (nearLog && minDist < 46) {
+                                m.cooldown = 1.6 + Math.random() * 1.8;
+                                nearLog.shieldFlash = 1.0;
+                                coalSim.enzymeRings.push({
+                                    x: m.x,
+                                    y: nearLog.y + 7,
+                                    r: 3,
+                                    life: 1
+                                });
+                            }
+                        }
+                    });
+
+                    // 繪製階段 2 細菌分泌的纖維素酶接觸木質素外殼時受阻消散的波紋
+                    for (let i = coalSim.enzymeRings.length - 1; i >= 0; i--) {
+                        const er = coalSim.enzymeRings[i];
+                        er.r += dt * 18;
+                        er.life -= dt * 1.4;
+                        if (er.life <= 0) { coalSim.enzymeRings.splice(i, 1); continue; }
+                        ctx.strokeStyle = `rgba(56, 189, 248, ${er.life * w1})`;
+                        ctx.lineWidth = 1.8;
+                        ctx.beginPath();
+                        ctx.arc(er.x, er.y, er.r, Math.PI, Math.PI * 2);
+                        ctx.stroke();
+
+                        // 接觸點微小的琥珀紅阻擋橫線（表示酶無法切斷苯丙烷鍵結）
+                        ctx.strokeStyle = `rgba(251, 113, 133, ${er.life * w1})`;
+                        ctx.beginPath();
+                        ctx.moveTo(er.x - 8, er.y - 2);
+                        ctx.lineTo(er.x + 8, er.y - 2);
+                        ctx.stroke();
+                    }
+                    ctx.restore();
+                }
+
+                // 更新並繪製養分與酵素回歸粒子 (階段 1 & 階段 5)
+                for (let i = coalSim.nutrients.length - 1; i >= 0; i--) {
+                    const n = coalSim.nutrients[i];
+                    n.y += n.vy;
+                    n.life -= dt * 0.52;
+                    if (n.life <= 0) { coalSim.nutrients.splice(i, 1); continue; }
+                    ctx.save();
+                    ctx.fillStyle = n.enzyme ? COLORS.fungi : COLORS.cellulose;
+                    ctx.globalAlpha = n.life * clamp(w0 + w4, 0, 1);
+                    ctx.beginPath();
+                    ctx.arc(n.x, n.y, n.enzyme ? 4.4 : 3.6, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                }
+
+                // 8. 階段 4：18 世紀工業革命煤礦豎井開採深部石炭紀煤層 + 蒸汽機運轉
+                if (w3 > 0.01) {
+                    ctx.save();
+                    ctx.globalAlpha = w3;
+
+                    // 煤礦豎井直通剛才階段 3 形成的深部石炭紀煤層 (y = 545)
+                    const shaftDepth = 185 * smoothstep(0, 0.7, w3);
                     ctx.fillStyle = '#090d16';
-                    ctx.fillRect(250, 390, 64, 195);
+                    ctx.fillRect(250, 390, 64, shaftDepth);
                     ctx.strokeStyle = '#94a3b8';
-                    ctx.strokeRect(250, 390, 64, 195);
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(250, 390, 64, shaftDepth);
 
                     // 井架
                     ctx.strokeStyle = '#cbd5e1';
@@ -1544,7 +1710,7 @@
                     ctx.stroke();
 
                     const liftCycle = (state.time * (0.4 + state.steamPower * 0.9)) % 1;
-                    const liftY = 545 - liftCycle * 150;
+                    const liftY = (390 + shaftDepth - 30) - liftCycle * Math.max(10, shaftDepth - 35);
                     ctx.strokeStyle = '#e2e8f0';
                     ctx.lineWidth = 2;
                     ctx.beginPath();
@@ -1562,76 +1728,36 @@
 
                     // 蒸汽機與工廠鍋爐
                     drawSteamEngine(ctx, 560, 390, dt);
+                    ctx.restore();
+                }
 
-                    drawCallout(ctx, 282, 262, '18世紀煤礦豎井開採', '#cbd5e1', 282, 298);
-                    drawCallout(ctx, 690, 200, '燃燒「遠古未分解的木質素」驅動蒸汽機與工業文明', COLORS.coalFire, 650, 295);
-                    drawCallout(ctx, 640, 574, '深埋地底 3 億年的石炭紀煤層', COLORS.lignin);
-
-                } else if (step === 4) {
-                    // 階段 5：白腐真菌演化出過氧化物酶與漆酶 -> 煤炭紀元終結
-                    ctx.fillStyle = '#365314';
-                    ctx.fillRect(0, 395, 1100, 25);
-
-                    // 地底深處仍封存著先前的石炭紀煤層
-                    ctx.fillStyle = '#0f172a';
-                    ctx.strokeStyle = '#475569';
-                    ctx.fillRect(80, 555, 940, 52);
-                    ctx.strokeRect(80, 555, 940, 52);
-
-                    // 地表樹木
-                    [160, 520, 880].forEach((tx) => drawGiantCarboniferousTree(ctx, tx, 398, 215));
-
-                    // 倒地樹幹被白腐菌分解
-                    coalSim.logs.slice(0, 5).forEach((lg, i) => {
-                        const lx = 230 + i * 155;
-                        const ly = 388;
-                        lg.decay = (lg.decay + dt * 0.22) % 1;
-                        const alpha = 1 - lg.decay * 0.65;
-                        drawLigninLog(ctx, lx, ly, 90, 17, 0.03, alpha);
-
-                        // 白腐真菌子實體與紫色菌絲網
-                        ctx.strokeStyle = COLORS.fungi;
-                        ctx.lineWidth = 2;
-                        ctx.beginPath();
-                        ctx.moveTo(lx - 25, ly);
-                        ctx.quadraticCurveTo(lx, ly - 18, lx + 28, ly + 2);
-                        ctx.stroke();
-
-                        // 菇傘
-                        ctx.fillStyle = '#f5d0fe';
-                        ctx.beginPath();
-                        ctx.arc(lx - 10, ly - 10, 8, Math.PI, 0);
-                        ctx.arc(lx + 14, ly - 8, 7, Math.PI, 0);
-                        ctx.fill();
-
-                        if (Math.random() < 0.14) {
-                            coalSim.nutrients.push({
-                                x: lx + (Math.random() - 0.5) * 60,
-                                y: ly - 6,
-                                vy: -0.8 - Math.random() * 0.8,
-                                life: 1,
-                                enzyme: Math.random() < 0.5
-                            });
-                        }
-                    });
-
-                    // 紫色酵素分解與綠色養分回歸雙粒子
-                    for (let i = coalSim.nutrients.length - 1; i >= 0; i--) {
-                        const p = coalSim.nutrients[i];
-                        p.y += p.vy;
-                        p.life -= dt * 0.55;
-                        if (p.life <= 0) { coalSim.nutrients.splice(i, 1); continue; }
-                        ctx.fillStyle = p.enzyme ? COLORS.fungi : COLORS.cellulose;
-                        ctx.globalAlpha = p.life;
-                        ctx.beginPath();
-                        ctx.arc(p.x, p.y, p.enzyme ? 4.5 : 3.5, 0, Math.PI * 2);
-                        ctx.fill();
-                        ctx.globalAlpha = 1;
-                    }
-
-                    drawCallout(ctx, 385, 315, '白腐真菌分泌「木質素過氧化物酶、漆酶」瓦解木質素', COLORS.fungi, 385, 378);
-                    drawCallout(ctx, 720, 245, '♻️ 碳循環重新閉合・大規模成煤歷史窗口關閉！', COLORS.cellulose);
-                    drawCallout(ctx, 550, 581, '先前石炭紀已形成的煤層永久封存於深處地層', '#94a3b8');
+                // 9. 各階段平滑淡入淡出的說明標籤
+                if (w0 > 0.05) {
+                    drawCallout(ctx, 290, 265, '早期矮小陸生植物（細胞壁：纖維素）', COLORS.cellulose, 290, 328, w0);
+                    drawCallout(ctx, 780, 465, '土壤細菌分泌「纖維素酶」順利分解殘骸', COLORS.bacteria, 680, 405, w0);
+                    drawCallout(ctx, 550, 165, '♻️ 養分與碳循環順暢・無殘骸堆積', COLORS.cellulose, null, null, w0);
+                }
+                if (w1 > 0.05) {
+                    drawCallout(ctx, 330, 88, '巨型石松與木賊（木質素支撐長達數十公尺）', COLORS.lignin, 330, 155, w1);
+                    drawCallout(ctx, 550, 322, '木質素交聯外殼：土壤細菌的纖維素酶接觸後受阻失效！', '#fb7185', 515, 382, w1);
+                    drawCallout(ctx, 550, 468, '⚠️ 演化盲點：死後巨木無法腐爛，於地表層層堆積', COLORS.lignin, null, null, w1);
+                }
+                if (w2 > 0.05) {
+                    const carbP = state.coalPressure;
+                    const seamY = 396 + smoothstep(1.1, 2.0, p) * (45 + carbP * 110);
+                    drawCallout(ctx, 270, 352, '石炭紀淹水缺氧泥炭沼澤', COLORS.water, 270, 395, w2);
+                    drawCallout(ctx, 550, seamY + 29, `下沉轉化中之石炭紀煤層（碳化度 ${Math.round(carbP * 100)}%）`, COLORS.coalFire, null, null, w2);
+                    drawCallout(ctx, 840, 638, '🔥 地熱高溫 ＋ ⬇️ 地殼下沉高壓（數千萬年連續碳化）', '#fb923c', null, null, w2);
+                }
+                if (w3 > 0.05) {
+                    drawCallout(ctx, 282, 262, '18世紀煤礦豎井直通深部石炭紀煤層', '#cbd5e1', 282, 298, w3);
+                    drawCallout(ctx, 690, 200, '燃燒「遠古未分解的木質素」驅動蒸汽機與工業文明', COLORS.coalFire, 650, 295, w3);
+                    drawCallout(ctx, 640, 574, '同一條深埋地底 3 億年的石炭紀煤層', COLORS.lignin, null, null, w3);
+                }
+                if (w4 > 0.05) {
+                    drawCallout(ctx, 375, 315, '白腐真菌分泌「木質素過氧化物酶、漆酶」瓦解地表木材', COLORS.fungi, 375, 378, w4);
+                    drawCallout(ctx, 720, 245, '♻️ 碳循環重新閉合・大規模成煤歷史窗口關閉！', COLORS.cellulose, null, null, w4);
+                    drawCallout(ctx, 550, 581, '先前石炭紀已形成的厚煤層則永久封存於深部地層', '#94a3b8', null, null, w4);
                 }
 
                 pzCoal.endTransform();
@@ -1912,134 +2038,136 @@
 
             function drawOilWorld(dt) {
                 const ctx = pzOil.ctx;
-                const step = state.oilStep;
+                const p = state.oilProgress; // 0.0 ~ 3.0 連續沉積、深埋裂解與背斜運移進度
+                const w0 = stageWeight(p, 0); // 階段 1：海洋浮游生物繁盛與有機雪沉降
+                const w1 = stageWeight(p, 1); // 階段 2：缺氧水底保存與泥沙掩埋形成頁岩源岩
+                const w2 = stageWeight(p, 2); // 階段 3：地層深埋下沉與「油氣窗」熱裂解
+                const w3 = stageWeight(p, 3); // 階段 4：背斜構造褶皺成形、向上運移與分層儲集
+
+                const burialToSource = smoothstep(0.05, 0.95, p); // 階段 1 -> 2：有機軟泥被泥沙掩埋成頁岩源岩
+                const deepPan = smoothstep(1.0, 2.0, p);         // 階段 2 -> 3：視角隨地殼下沉推進至 0~6 km 深部盆地
+                const foldProgress = smoothstep(2.0, 3.0, p);    // 階段 3 -> 4：地層受擠壓隆起為背斜構造，油氣上浮儲集
+
                 pzOil.beginTransform();
 
-                if (step === 0 || step === 1) {
-                    // 階段 1 & 2：海洋水體剖面
-                    const seaGrad = ctx.createLinearGradient(0, 60, 0, 500);
+                // 底層深部地殼岩石背景
+                ctx.fillStyle = '#1c1917';
+                ctx.fillRect(0, 0, 1100, 680);
+
+                // =========================================================================
+                // A. 海洋水體與表層生態（階段 1 & 2 完整呈現；階段 2 -> 3 隨地層下沉平滑退往頂部地表）
+                // =========================================================================
+                const seaBottomY = Math.round(500 - deepPan * 435); // p=0..1 時為 500；p=2 時退至頂部 y=65
+                if (seaBottomY > 10) {
+                    const skyH = Math.max(0, Math.round(65 * (1 - deepPan * 0.85)));
+                    ctx.fillStyle = '#081221';
+                    ctx.fillRect(0, 0, 1100, skyH);
+
+                    const seaGrad = ctx.createLinearGradient(0, skyH, 0, Math.max(skyH + 20, seaBottomY));
                     seaGrad.addColorStop(0, '#0ea5e9');
                     seaGrad.addColorStop(0.45, '#0369a1');
-                    seaGrad.addColorStop(1, step === 1 && state.anoxicMode ? '#1e1b4b' : '#0c4a6e');
-                    ctx.fillStyle = '#081221';
-                    ctx.fillRect(0, 0, 1100, 65);
+                    seaGrad.addColorStop(1, (burialToSource > 0.3 && state.anoxicMode) ? '#1e1b4b' : '#0c4a6e');
                     ctx.fillStyle = seaGrad;
-                    ctx.fillRect(0, 65, 1100, 435);
+                    ctx.fillRect(0, skyH, 1100, Math.max(0, seaBottomY - skyH));
 
-                    // 陽光光束穿透表層海水
-                    ctx.fillStyle = 'rgba(253, 224, 71, 0.08)';
-                    for (let i = 0; i < 5; i++) {
-                        ctx.beginPath();
-                        ctx.moveTo(180 + i * 190, 65);
-                        ctx.lineTo(120 + i * 190, 260);
-                        ctx.lineTo(250 + i * 190, 260);
-                        ctx.closePath();
-                        ctx.fill();
-                    }
+                    const oceanDetailAlpha = 1 - deepPan;
+                    if (oceanDetailAlpha > 0.02) {
+                        ctx.save();
+                        ctx.globalAlpha = oceanDetailAlpha;
 
-                    // 表層浮游生物群落（藻類與幾何矽藻）
-                    for (let i = 0; i < 16; i++) {
-                        const px = 110 + i * 60 + Math.sin(state.time * 1.5 + i) * 8;
-                        const py = 95 + (i % 3) * 18;
-                        if (i % 2 === 0) {
-                            // 矽藻菱形殼 + 金黃脂質滴
-                            ctx.strokeStyle = COLORS.plankton;
-                            ctx.lineWidth = 2;
+                        // 陽光光束穿透表層海水
+                        ctx.fillStyle = 'rgba(253, 224, 71, 0.08)';
+                        for (let i = 0; i < 5; i++) {
                             ctx.beginPath();
-                            ctx.moveTo(px - 10, py); ctx.lineTo(px, py - 6);
-                            ctx.lineTo(px + 10, py); ctx.lineTo(px, py + 6);
+                            ctx.moveTo(180 + i * 190, skyH);
+                            ctx.lineTo(120 + i * 190, skyH + 195);
+                            ctx.lineTo(250 + i * 190, skyH + 195);
                             ctx.closePath();
-                            ctx.stroke();
-                            ctx.fillStyle = COLORS.lipid;
-                            ctx.beginPath();
-                            ctx.arc(px, py, 2.8, 0, Math.PI * 2);
-                            ctx.fill();
-                        } else {
-                            ctx.fillStyle = COLORS.plankton;
-                            ctx.beginPath();
-                            ctx.arc(px, py, 5.5, 0, Math.PI * 2);
                             ctx.fill();
                         }
-                    }
 
-                    // 沉降中的有機殘骸雪 (Marine Snow)
-                    oilSim.snow.forEach((s) => {
-                        s.y += s.vy;
-                        if (s.y > 495) {
-                            s.y = 95;
-                            s.x = 120 + Math.random() * 860;
-                        }
-                        ctx.fillStyle = s.kind === 'diatom' ? COLORS.lipid : COLORS.plankton;
-                        ctx.beginPath();
-                        ctx.arc(s.x, s.y, 3.2, 0, Math.PI * 2);
-                        ctx.fill();
-                    });
-
-                    // 海盆底部沉積層
-                    ctx.fillStyle = '#334155';
-                    ctx.fillRect(0, 500, 1100, 180);
-
-                    if (step === 0) {
-                        // 底部初步有機軟泥
-                        ctx.fillStyle = 'rgba(250, 204, 21, 0.38)';
-                        ctx.fillRect(80, 492, 940, 18);
-
-                        drawCallout(ctx, 550, 108, '表層陽光帶：藻類（Algae）與矽藻（Diatoms）大量繁盛', COLORS.plankton);
-                        drawCallout(ctx, 760, 290, '死亡浮游生物（富含脂質）沉降向海盆底部', COLORS.lipid, 660, 290);
-                        drawCallout(ctx, 550, 540, '古代海盆或大型湖泊底部有機軟泥堆積', COLORS.lipid, 550, 500);
-                    } else {
-                        // 階段 2：缺氧水底 + 泥沙黏土層層掩埋形成頁岩源岩
-                        if (state.anoxicMode) {
-                            // 缺氧深紫保護帶 + 泥沙掩埋層 + 富含有機質頁岩源岩
-                            ctx.fillStyle = 'rgba(88, 28, 135, 0.38)';
-                            ctx.fillRect(0, 385, 1100, 115);
-
-                            // 泥沙黏土掩埋層
-                            ctx.fillStyle = '#64748b';
-                            ctx.fillRect(60, 488, 980, 42);
-
-                            // 富含有機質源岩 (頁岩 Source Rock)
-                            ctx.fillStyle = '#1e293b';
-                            ctx.strokeStyle = COLORS.lipid;
-                            ctx.lineWidth = 2;
-                            ctx.fillRect(60, 530, 980, 64);
-                            ctx.strokeRect(60, 530, 980, 64);
-
-                            // 源岩內保存完好的金色脂質微粒
-                            ctx.fillStyle = COLORS.lipid;
-                            for (let x = 95; x < 1010; x += 38) {
+                        // 表層浮游生物群落（藻類與幾何矽藻）
+                        for (let i = 0; i < 16; i++) {
+                            const px = 110 + i * 60 + Math.sin(state.time * 1.5 + i) * 8;
+                            const py = skyH + 30 + (i % 3) * 18;
+                            if (i % 2 === 0) {
+                                ctx.strokeStyle = COLORS.plankton;
+                                ctx.lineWidth = 2;
                                 ctx.beginPath();
-                                ctx.arc(x, 552 + (x % 3) * 8, 3, 0, Math.PI * 2);
+                                ctx.moveTo(px - 10, py); ctx.lineTo(px, py - 6);
+                                ctx.lineTo(px + 10, py); ctx.lineTo(px, py + 6);
+                                ctx.closePath();
+                                ctx.stroke();
+                                ctx.fillStyle = COLORS.lipid;
+                                ctx.beginPath();
+                                ctx.arc(px, py, 2.8, 0, Math.PI * 2);
+                                ctx.fill();
+                            } else {
+                                ctx.fillStyle = COLORS.plankton;
+                                ctx.beginPath();
+                                ctx.arc(px, py, 5.5, 0, Math.PI * 2);
                                 ctx.fill();
                             }
+                        }
 
-                            drawCallout(ctx, 550, 425, '缺氧水底（Anoxic Zone, O₂ ≈ 0）：阻止好氧細菌分解有機質', '#c084fc');
-                            drawCallout(ctx, 310, 508, '泥沙與黏土持續掩埋隔絕氧氣', '#cbd5e1');
-                            drawCallout(ctx, 620, 562, '富含有機質的「源岩」（Source Rock，如頁岩）', COLORS.lipid);
-                        } else {
-                            // 對照實驗：若水底有氧，好氧細菌吃光脂質，無法形成源岩！
-                            for (let i = 0; i < 20; i++) {
-                                const bx = 140 + i * 44 + Math.sin(state.time * 4 + i) * 14;
-                                const by = 468 + Math.cos(state.time * 3 + i) * 14;
-                                ctx.fillStyle = COLORS.bacteria;
+                        // 沉降中的有機殘骸雪 (Marine Snow)
+                        oilSim.snow.forEach((s) => {
+                            s.y += s.vy;
+                            if (s.y > seaBottomY - 6) {
+                                s.y = skyH + 28;
+                                s.x = 120 + Math.random() * 860;
+                            }
+                            if (s.y > skyH && s.y < seaBottomY) {
+                                ctx.fillStyle = s.kind === 'diatom' ? COLORS.lipid : COLORS.plankton;
                                 ctx.beginPath();
-                                ctx.ellipse(bx, by, 7, 4, 0, 0, Math.PI * 2);
+                                ctx.arc(s.x, s.y, 3.2, 0, Math.PI * 2);
                                 ctx.fill();
                             }
-                            ctx.fillStyle = '#475569';
-                            ctx.fillRect(60, 530, 980, 64);
-                            drawCallout(ctx, 550, 440, '⚠️ 有氧環境對照：好氧細菌迅速吃光有機脂質！', COLORS.bacteria);
-                            drawCallout(ctx, 550, 562, '貧有機質岩層（無法成為油氣源岩）', '#94a3b8');
+                        });
+
+                        // 階段 1 -> 2：缺氧深紫保護水層 vs. 有氧細菌分解對照
+                        if (burialToSource > 0.02) {
+                            if (state.anoxicMode) {
+                                ctx.fillStyle = `rgba(88, 28, 135, ${0.4 * burialToSource})`;
+                                ctx.fillRect(0, seaBottomY - 115, 1100, 115);
+                            } else {
+                                for (let i = 0; i < 20; i++) {
+                                    const bx = 140 + i * 44 + Math.sin(state.time * 4 + i) * 14;
+                                    const by = seaBottomY - 32 + Math.cos(state.time * 3 + i) * 12;
+                                    ctx.fillStyle = `rgba(56, 189, 248, ${burialToSource})`;
+                                    ctx.beginPath();
+                                    ctx.ellipse(bx, by, 7, 4, 0, 0, Math.PI * 2);
+                                    ctx.fill();
+                                }
+                            }
                         }
+                        ctx.restore();
                     }
+                }
 
-                } else if (step === 2) {
-                    // 階段 3：地溫梯度尺標 (0 ~ 6 km) 與「油氣窗」熱裂解模擬
-                    ctx.fillStyle = '#1c1917';
-                    ctx.fillRect(0, 0, 1100, 680);
+                // =========================================================================
+                // B. 連續地層剖面：海盆沉積層 (階段1-2) ➔ 油氣窗深埋地溫帶 (階段3) ➔ 背斜構造圈閉 (階段4)
+                // =========================================================================
+                // 海床/地表以下基底岩層
+                ctx.fillStyle = '#334155';
+                ctx.fillRect(0, seaBottomY, 1100, 680 - seaBottomY);
 
-                    // 繪製深度區間背景色帶 (0~6 km 對應 Y: 50 ~ 630)
-                    const kmToY = (km) => 50 + (km / 6) * 580;
+                // 階段 4 地表植被帶（當進入階段 4 陸相/淺海背斜構造時於頂部浮現）
+                if (foldProgress > 0.02) {
+                    ctx.save();
+                    ctx.globalAlpha = foldProgress;
+                    ctx.fillStyle = '#0f172a';
+                    ctx.fillRect(0, 0, 1100, 92);
+                    ctx.fillStyle = '#3f6212';
+                    ctx.fillRect(0, 88, 1100, 16);
+                    ctx.restore();
+                }
+
+                // 階段 3：深度區間色帶 (0~6 km) 與左側地溫梯度計（隨 w2 平滑浮現）
+                const kmToY = (km) => 55 + (km / 6) * 575;
+                if (w2 > 0.01) {
+                    ctx.save();
+                    ctx.globalAlpha = w2;
 
                     // 淺層成岩帶 (0 - 2 km, <60°C)：油母質生成
                     ctx.fillStyle = 'rgba(71, 85, 105, 0.55)';
@@ -2057,7 +2185,7 @@
                     ctx.strokeStyle = 'rgba(251, 113, 133, 0.6)';
                     ctx.strokeRect(140, kmToY(4), 910, kmToY(6) - kmToY(4));
 
-                    // 左側深度與地溫梯度計 (+30°C/km，地表基準 15°C)
+                    // 左側深度與地溫梯度計 (+30°C/km)
                     ctx.fillStyle = '#0f172a';
                     ctx.fillRect(20, 35, 112, 610);
                     ctx.strokeStyle = '#475569';
@@ -2075,78 +2203,58 @@
                         ctx.stroke();
                         ctx.fillText(`${km}km (${temp}°C)`, 28, y + 4);
                     }
+                    ctx.restore();
+                }
 
-                    // 當前源岩埋藏深度匣
-                    const d = state.burialDepthKm;
-                    const tempNow = Math.round(15 + d * 30);
-                    const boxY = kmToY(d);
+                // =========================================================================
+                // C. 同一條「有機軟泥 ➔ 頁岩源岩 ➔ 油氣窗裂解層 ➔ 背斜深部源岩」的連續垂直與褶皺演化！
+                // =========================================================================
+                const dKm = state.burialDepthKm;
+                const stage1Y = 496;                        // 階段 1：海床表面有機軟泥位置
+                const stage2Y = 548;                        // 階段 2：泥沙掩埋後之淺層頁岩源岩位置
+                const stage3Y = kmToY(dKm);                 // 階段 3：依埋藏深度滑桿下沉至油氣窗位置
+                const stage4BaseY = 365;                    // 階段 4：背斜構造底部源岩基準高度
 
-                    ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
-                    ctx.strokeStyle = d < 2 ? COLORS.lipid : (d <= 4 ? COLORS.oilStroke : COLORS.gas);
-                    ctx.lineWidth = 3;
-                    roundRect(ctx, 180, boxY - 46, 830, 92, 12);
-                    ctx.fill();
-                    ctx.stroke();
+                // 計算當前源岩中心深度曲線 sourceY(x)
+                const baseFlatY = p <= 1
+                    ? stage1Y + (stage2Y - stage1Y) * burialToSource
+                    : (p <= 2
+                        ? stage2Y + (stage3Y - stage2Y) * deepPan
+                        : stage3Y + (stage4BaseY - stage3Y) * foldProgress);
 
-                    // 源岩匣內分子動態（依深度顯示油母質塊 / 液態石油滴 / 天然氣甲烷高速粒子）
-                    oilSim.thermalParticles.forEach((p, idx) => {
-                        const speedMult = d < 2 ? 0.35 : (d <= 4 ? 1.15 : 2.7);
-                        p.x += p.vx * speedMult;
-                        if (p.x < 205 || p.x > 985) p.vx *= -1;
-                        const py = boxY + Math.sin(state.time * speedMult * 2 + p.phaseOffset) * 28;
+                // 背斜褶皺隆起位移函數：當 foldProgress (階段 3->4) 增加時，岩層中央向上拱起形成背斜穹窿！
+                const archOffset = (x) => {
+                    const dx = (x - 550) / 360;
+                    return (dx * dx - 0.35) * 220 * foldProgress;
+                };
 
-                        if (d < 2) {
-                            // 稠密蠟狀油母質 (Kerogen) 多邊形團塊
-                            ctx.fillStyle = COLORS.kerogen;
-                            ctx.fillRect(p.x - 6, py - 5, 12, 10);
-                        } else if (d <= 4) {
-                            // 油窗：液態石油水滴 + 少量伴生油母質
-                            ctx.fillStyle = idx % 5 === 0 ? COLORS.kerogen : COLORS.oil;
-                            ctx.strokeStyle = COLORS.oilStroke;
-                            ctx.lineWidth = 1.5;
-                            ctx.beginPath();
-                            ctx.arc(p.x, py, 6.5, 0, Math.PI * 2);
-                            ctx.fill();
-                            ctx.stroke();
-                        } else {
-                            // 氣窗：熱裂解為更簡單的氣態甲烷小分子高速運動
-                            ctx.fillStyle = COLORS.gas;
-                            ctx.beginPath();
-                            ctx.arc(p.x, py, 4.2, 0, Math.PI * 2);
-                            ctx.fill();
-                        }
-                    });
+                // 階段 1 -> 2：上覆泥沙與黏土掩埋層（隨 burialToSource 增厚，阻絕氧氣）
+                if (p < 1.95 && burialToSource > 0.01) {
+                    const mudAlpha = burialToSource * (1 - deepPan);
+                    if (mudAlpha > 0.01) {
+                        ctx.save();
+                        ctx.globalAlpha = mudAlpha;
+                        ctx.fillStyle = '#64748b';
+                        ctx.fillRect(60, seaBottomY - 6, 980, Math.max(12, baseFlatY - seaBottomY - 22));
+                        ctx.restore();
+                    }
+                }
 
-                    drawCallout(ctx, 840, kmToY(1.0), '淺層 (<2km, <60°C)：形成蠟狀「油母質 Kerogen」', COLORS.lipid);
-                    drawCallout(ctx, 840, kmToY(3.0), '油窗 (2–4km, 60–120°C)：裂解為「液態石油」', COLORS.oilStroke);
-                    drawCallout(ctx, 840, kmToY(5.0), '氣窗 (>4km, >120–150°C)：熱裂解為「天然氣（甲烷）」', COLORS.gas);
-                    drawCallout(ctx, 430, boxY - 62, `目前源岩深度 ${d.toFixed(1)} km ・ 地溫約 ${tempNow}°C`, '#38bdf8');
+                // 階段 3 -> 4：多孔隙儲集砂岩層 (Porous Reservoir) 與不滲透緻密蓋層 (Caprock) 在源岩上方連續摺皺成形！
+                if (foldProgress > 0.02) {
+                    ctx.save();
+                    ctx.globalAlpha = foldProgress;
 
-                } else if (step === 3) {
-                    // 階段 4：向上運移與「背斜構造 (Anticline) + 緻密蓋層」儲集
-                    ctx.fillStyle = '#0f172a';
-                    ctx.fillRect(0, 0, 1100, 95); // 地表天空
-                    ctx.fillStyle = '#3f6212';
-                    ctx.fillRect(0, 90, 1100, 16); // 地表植被
-
-                    // 上覆一般岩層
-                    ctx.fillStyle = '#334155';
-                    ctx.fillRect(0, 106, 1100, 574);
-
-                    // 定義背斜構造褶皺曲線函數 archY(x)
-                    const archY = (x) => {
-                        const dx = (x - 550) / 360;
-                        return 190 + dx * dx * 220;
-                    };
+                    const capBotY = (x) => 190 + ((x - 550) / 360) ** 2 * 220 * foldProgress;
 
                     // 1. 不滲透緻密蓋層 (Caprock / Seal)
                     ctx.beginPath();
                     for (let x = 60; x <= 1040; x += 20) {
-                        const y = archY(x) - 48;
+                        const y = capBotY(x) - 48;
                         if (x === 60) ctx.moveTo(x, y); else ctx.lineTo(x, y);
                     }
                     for (let x = 1040; x >= 60; x -= 20) {
-                        ctx.lineTo(x, archY(x));
+                        ctx.lineTo(x, capBotY(x));
                     }
                     ctx.closePath();
                     ctx.fillStyle = '#0f172a';
@@ -2155,43 +2263,47 @@
                     ctx.lineWidth = 2;
                     ctx.stroke();
 
-                    // 2. 多孔隙儲集岩層 (砂岩 Reservoir Rock) — 先填滿地層水基底，再用 clip 分層畫出氣帽與油層！
+                    // 2. 多孔隙儲集砂岩層（內含底水，以及從下方源岩上浮聚集的石油層與天然氣帽）
                     ctx.save();
                     ctx.beginPath();
                     for (let x = 60; x <= 1040; x += 20) {
-                        const y = archY(x);
+                        const y = capBotY(x);
                         if (x === 60) ctx.moveTo(x, y); else ctx.lineTo(x, y);
                     }
                     for (let x = 1040; x >= 60; x -= 20) {
-                        ctx.lineTo(x, archY(x) + 165);
+                        ctx.lineTo(x, capBotY(x) + 165);
                     }
                     ctx.closePath();
                     ctx.clip();
 
-                    // 底層孔隙水（藍色砂岩儲集層）
+                    // 底層孔隙地層水
                     ctx.fillStyle = '#075985';
-                    ctx.fillRect(60, 180, 980, 420);
+                    ctx.fillRect(60, 140, 980, 460);
 
-                    // 最頂部：天然氣帽 (Gas Cap，密度最小)
-                    ctx.fillStyle = COLORS.gas;
-                    ctx.fillRect(280, 185, 540, 72);
+                    // 隨背斜隆起逐漸聚集增厚的頂部天然氣帽 (Gas Cap) 與中段液態石油層 (Oil Zone)
+                    const accum = smoothstep(0.25, 0.95, foldProgress);
+                    if (accum > 0.02) {
+                        const gasH = 72 * accum;
+                        const oilH = 68 * accum;
+                        ctx.fillStyle = COLORS.gas;
+                        ctx.fillRect(280, 185, 540, gasH);
 
-                    // 中間層：液態石油層 (Oil Zone，密度小於水、大於氣)
-                    ctx.fillStyle = COLORS.oil;
-                    ctx.fillRect(240, 257, 620, 68);
-                    ctx.strokeStyle = COLORS.oilStroke;
-                    ctx.lineWidth = 2;
-                    ctx.beginPath();
-                    ctx.moveTo(240, 257); ctx.lineTo(860, 257);
-                    ctx.moveTo(200, 325); ctx.lineTo(900, 325);
-                    ctx.stroke();
+                        ctx.fillStyle = COLORS.oil;
+                        ctx.fillRect(240, 185 + gasH, 620, oilH);
+                        ctx.strokeStyle = COLORS.oilStroke;
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.moveTo(240, 185 + gasH); ctx.lineTo(860, 185 + gasH);
+                        ctx.moveTo(200, 185 + gasH + oilH); ctx.lineTo(900, 185 + gasH + oilH);
+                        ctx.stroke();
+                    }
 
-                    // 沿多孔隙岩層兩翼向上運移的油氣滴
+                    // 沿多孔隙砂岩兩翼由深部源岩向上運移的油氣滴
                     oilSim.migrating.forEach((m) => {
                         m.t = (m.t + dt * 0.24) % 1;
                         const x = 550 + m.side * (420 * (1 - m.t));
-                        const y = archY(x) + 95 - m.t * 45 + m.jitter * 0.4;
-                        if (y > 322) {
+                        const y = capBotY(x) + 145 - m.t * 85 + m.jitter * 0.4;
+                        if (y > 185 + 140 * accum) {
                             ctx.fillStyle = m.isGas ? COLORS.gas : COLORS.oilStroke;
                             ctx.beginPath();
                             ctx.arc(x, y, m.isGas ? 4 : 5, 0, Math.PI * 2);
@@ -2199,20 +2311,90 @@
                         }
                     });
                     ctx.restore();
+                    ctx.restore();
+                }
 
-                    // 3. 深處富含有機質頁岩源岩 (Source Rock)
-                    ctx.beginPath();
-                    for (let x = 60; x <= 1040; x += 20) {
-                        const y = archY(x) + 165;
-                        if (x === 60) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-                    }
-                    ctx.lineTo(1040, 680);
-                    ctx.lineTo(60, 680);
-                    ctx.closePath();
-                    ctx.fillStyle = '#27272a';
-                    ctx.fill();
+                // 繪製貫穿全 4 階段的核心「有機質源岩層 (Source Rock)」及其內部流體粒子演化！
+                const layerHalfH = 14 + burialToSource * 24 + deepPan * 8;
+                const leftX = 70 + w2 * 95;
+                const rightX = 1030 - w2 * 20;
 
-                    // 右側斷層線示意 (Fault)
+                ctx.save();
+                ctx.beginPath();
+                for (let x = leftX; x <= rightX; x += 20) {
+                    const y = baseFlatY + archOffset(x) - layerHalfH;
+                    if (x === leftX) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                }
+                for (let x = rightX; x >= leftX; x -= 20) {
+                    const y = baseFlatY + archOffset(x) + layerHalfH + foldProgress * 120;
+                    ctx.lineTo(x, y);
+                }
+                ctx.closePath();
+
+                // 源岩底色：由階段 1 金黃軟泥 ➔ 階段 2 深灰頁岩源岩 ➔ 階段 3 油氣窗反應層 ➔ 階段 4 深部背斜源岩
+                if (p < 0.4 && state.anoxicMode) {
+                    ctx.fillStyle = 'rgba(250, 204, 21, 0.42)';
+                } else if (!state.anoxicMode && p < 1.5) {
+                    ctx.fillStyle = '#475569';
+                } else {
+                    ctx.fillStyle = w3 > 0.5 ? '#27272a' : '#131c2e';
+                }
+                ctx.fill();
+
+                ctx.strokeStyle = (!state.anoxicMode && p < 1.5)
+                    ? '#64748b'
+                    : (deepPan > 0.4
+                        ? (dKm < 2 ? COLORS.lipid : (dKm <= 4 ? COLORS.oilStroke : COLORS.gas))
+                        : COLORS.lipid);
+                ctx.lineWidth = 2.2;
+                ctx.stroke();
+
+                // 源岩層內部有機質微粒的連續轉化（階段 1-2 金色脂質微粒 ➔ 階段 3-4 油母質塊 / 液態石油滴 / 天然氣泡）
+                if (state.anoxicMode || p > 1.3) {
+                    oilSim.thermalParticles.forEach((pt, idx) => {
+                        const effDepth = p < 1.2 ? 1.0 : dKm;
+                        const speedMult = effDepth < 2 ? 0.32 : (effDepth <= 4 ? 1.15 : 2.6);
+                        pt.x += pt.vx * speedMult;
+                        if (pt.x < leftX + 20) { pt.x = leftX + 20; pt.vx = Math.abs(pt.vx); }
+                        if (pt.x > rightX - 20) { pt.x = rightX - 20; pt.vx = -Math.abs(pt.vx); }
+
+                        const centerY = baseFlatY + archOffset(pt.x);
+                        const py = centerY + Math.sin(state.time * speedMult * 2 + pt.phaseOffset) * (layerHalfH * 0.62);
+
+                        if (p < 1.25) {
+                            // 階段 1 & 2：保存於海床軟泥與頁岩源岩中的金色生物脂質微粒
+                            ctx.fillStyle = COLORS.lipid;
+                            ctx.beginPath();
+                            ctx.arc(pt.x, py, 3.3, 0, Math.PI * 2);
+                            ctx.fill();
+                        } else if (effDepth < 2) {
+                            // 階段 3 淺層 (<2 km)：聚合成稠密蠟狀油母質 (Kerogen) 團塊
+                            ctx.fillStyle = COLORS.kerogen;
+                            ctx.fillRect(pt.x - 6, py - 5, 12, 10);
+                        } else if (effDepth <= 4) {
+                            // 階段 3 油窗 (2~4 km)：裂解為液態石油滴
+                            ctx.fillStyle = idx % 5 === 0 ? COLORS.kerogen : COLORS.oil;
+                            ctx.strokeStyle = COLORS.oilStroke;
+                            ctx.lineWidth = 1.4;
+                            ctx.beginPath();
+                            ctx.arc(pt.x, py, 6, 0, Math.PI * 2);
+                            ctx.fill();
+                            ctx.stroke();
+                        } else {
+                            // 階段 3 氣窗 (>4 km)：熱裂解為高速運動的天然氣甲烷小分子
+                            ctx.fillStyle = COLORS.gas;
+                            ctx.beginPath();
+                            ctx.arc(pt.x, py, 4.2, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                    });
+                }
+                ctx.restore();
+
+                // 階段 4：右側斷層線與鑽井平台示範
+                if (w3 > 0.05) {
+                    ctx.save();
+                    ctx.globalAlpha = w3;
                     ctx.strokeStyle = '#facc15';
                     ctx.lineWidth = 2.5;
                     ctx.setLineDash([7, 5]);
@@ -2222,7 +2404,6 @@
                     ctx.stroke();
                     ctx.setLineDash([]);
 
-                    // 若開啟鑽井勘探示範
                     if (state.oilDrilled) {
                         ctx.strokeStyle = '#e2e8f0';
                         ctx.lineWidth = 4;
@@ -2232,20 +2413,47 @@
                         ctx.fillStyle = '#e2e8f0';
                         ctx.fillRect(547, 90, 6, 185);
 
-                        // 井口油氣噴發流體示範
                         const jetH = 14 + Math.sin(state.time * 12) * 5;
                         ctx.fillStyle = COLORS.oilStroke;
                         ctx.beginPath();
                         ctx.arc(550, 22, jetH * 0.55, 0, Math.PI * 2);
                         ctx.fill();
                     }
+                    ctx.restore();
+                }
 
-                    drawCallout(ctx, 310, 145, '緻密不滲透「蓋層」（Seal / Caprock）阻擋逸散', '#cbd5e1', 420, 165);
-                    drawCallout(ctx, 550, 224, '1. 天然氣帽（甲烷・密度最小）', COLORS.gas);
-                    drawCallout(ctx, 550, 292, '2. 液態石油層（密度小於水）', COLORS.oilStroke);
-                    drawCallout(ctx, 550, 362, '3. 多孔隙砂岩底層地層水', COLORS.water);
-                    drawCallout(ctx, 220, 480, '浮力驅動油氣沿多孔隙岩層「向上運移」', COLORS.oilStroke, 260, 420);
-                    drawCallout(ctx, 880, 560, '深部頁岩源岩持續生烴 ＋ 斷層構造', COLORS.lipid, 882, 430);
+                // =========================================================================
+                // D. 隨階段平滑淡入淡出的說明標籤
+                // =========================================================================
+                if (w0 > 0.05) {
+                    drawCallout(ctx, 550, 108, '表層陽光帶：藻類（Algae）與矽藻（Diatoms）大量繁盛', COLORS.plankton, null, null, w0);
+                    drawCallout(ctx, 760, 290, '死亡浮游生物（富含脂質）如海洋雪沉降', COLORS.lipid, 660, 290, w0);
+                    drawCallout(ctx, 550, 555, '古代海盆或大型湖泊底部有機軟泥堆積', COLORS.lipid, 550, baseFlatY, w0);
+                }
+                if (w1 > 0.05) {
+                    if (state.anoxicMode) {
+                        drawCallout(ctx, 550, 422, '缺氧水底（Anoxic Zone, O₂ ≈ 0）：阻止好氧細菌分解有機質', '#c084fc', null, null, w1);
+                        drawCallout(ctx, 310, 504, '泥沙與黏土持續掩埋隔絕氧氣', '#cbd5e1', null, null, w1);
+                        drawCallout(ctx, 620, baseFlatY + 4, '壓實形成富含有機質的「頁岩源岩」（Source Rock）', COLORS.lipid, null, null, w1);
+                    } else {
+                        drawCallout(ctx, 550, 435, '⚠️ 有氧環境對照：好氧細菌迅速吃光有機脂質！', COLORS.bacteria, null, null, w1);
+                        drawCallout(ctx, 550, baseFlatY + 4, '貧有機質岩層（無法成為油氣源岩）', '#94a3b8', null, null, w1);
+                    }
+                }
+                if (w2 > 0.05) {
+                    const tempNow = Math.round(15 + dKm * 30);
+                    drawCallout(ctx, 835, kmToY(1.0), '淺層 (<2km, <60°C)：形成蠟狀「油母質 Kerogen」', COLORS.lipid, null, null, w2);
+                    drawCallout(ctx, 835, kmToY(3.0), '油窗 (2–4km, 60–120°C)：裂解為「液態石油」', COLORS.oilStroke, null, null, w2);
+                    drawCallout(ctx, 835, kmToY(5.0), '氣窗 (>4km, >120–150°C)：熱裂解為「天然氣（甲烷）」', COLORS.gas, null, null, w2);
+                    drawCallout(ctx, 430, Math.max(45, baseFlatY - 58), `同一頁岩源岩下沉至 ${dKm.toFixed(1)} km ・ 地溫約 ${tempNow}°C`, '#38bdf8', null, null, w2);
+                }
+                if (w3 > 0.05) {
+                    drawCallout(ctx, 310, 145, '緻密不滲透「蓋層」（Seal / Caprock）阻擋逸散', '#cbd5e1', 420, 165, w3);
+                    drawCallout(ctx, 550, 222, '1. 天然氣帽（甲烷・密度最小）', COLORS.gas, null, null, w3);
+                    drawCallout(ctx, 550, 290, '2. 液態石油層（密度小於水）', COLORS.oilStroke, null, null, w3);
+                    drawCallout(ctx, 550, 358, '3. 多孔隙砂岩底層地層水', COLORS.water, null, null, w3);
+                    drawCallout(ctx, 230, 475, '浮力驅動油氣沿多孔隙砂岩翼部「向上運移」', COLORS.oilStroke, 270, 415, w3);
+                    drawCallout(ctx, 860, 565, '深部頁岩源岩持續生烴 ＋ 斷層封閉', COLORS.lipid, 865, 445, w3);
                 }
 
                 pzOil.endTransform();
@@ -2898,6 +3106,7 @@
                 dotsEl.querySelectorAll('[data-coal-step]').forEach((btn) => {
                     btn.addEventListener('click', () => {
                         state.coalStep = Number(btn.dataset.coalStep);
+                        state.coalScrubbing = false;
                         state.coalPlaying = false;
                         renderCoalUI();
                     });
@@ -2925,16 +3134,17 @@
                 const btnSpawnBac = document.getElementById('btnSpawnBacteria');
                 if (btnSpawnBac) {
                     btnSpawnBac.addEventListener('click', () => {
-                        for (let i = 0; i < 12; i++) {
+                        for (let i = 0; i < 10; i++) {
                             coalSim.microbes.push({
-                                x: 200 + Math.random() * 700,
-                                y: 388 + Math.random() * 28,
-                                vx: (Math.random() - 0.5) * 2.2,
-                                vy: (Math.random() - 0.5) * 1.4
+                                x: 180 + Math.random() * 720,
+                                y: 394 + Math.random() * 20,
+                                vx: (Math.random() < 0.5 ? -1 : 1) * (0.4 + Math.random() * 0.45),
+                                phase: Math.random() * Math.PI * 2,
+                                cooldown: Math.random() * 1.5
                             });
-                            coalSim.nutrients.push({ x: 220 + Math.random() * 660, y: 390, vy: -1.4, life: 1 });
+                            coalSim.nutrients.push({ x: 220 + Math.random() * 660, y: 390, vy: -1.3, life: 1, enzyme: false });
                         }
-                        if (coalSim.microbes.length > 55) coalSim.microbes.splice(0, 12);
+                        if (coalSim.microbes.length > 48) coalSim.microbes.splice(0, 10);
                     });
                 }
 
@@ -2943,11 +3153,12 @@
                     btnDropLog.addEventListener('click', () => {
                         coalSim.logs.push({
                             x: 180 + Math.random() * 740,
-                            y: 368 + Math.random() * 32,
-                            angle: (Math.random() - 0.5) * 0.25,
-                            decay: 0
+                            y: 378 + Math.random() * 18,
+                            angle: (Math.random() - 0.5) * 0.16,
+                            decay: 0,
+                            shieldFlash: 1.0
                         });
-                        if (coalSim.logs.length > 16) coalSim.logs.shift();
+                        if (coalSim.logs.length > 14) coalSim.logs.shift();
                     });
                 }
 
@@ -2998,6 +3209,7 @@
                 dotsEl.querySelectorAll('[data-oil-step]').forEach((btn) => {
                     btn.addEventListener('click', () => {
                         state.oilStep = Number(btn.dataset.oilStep);
+                        state.oilScrubbing = false;
                         state.oilPlaying = false;
                         renderOilUI();
                     });
@@ -3185,29 +3397,83 @@
                 });
             });
 
-            // 步驟上一步 / 下一步 / 自動播放事件
+            // 步驟上一步 / 下一步 / 自動播放 / 連續拖曳時間軸事件
             document.getElementById('coalPrevBtn').addEventListener('click', () => {
-                if (state.coalStep > 0) { state.coalStep--; state.coalPlaying = false; renderCoalUI(); }
+                if (state.coalStep > 0) {
+                    state.coalStep--;
+                    state.coalScrubbing = false;
+                    state.coalPlaying = false;
+                    renderCoalUI();
+                }
             });
             document.getElementById('coalNextBtn').addEventListener('click', () => {
-                if (state.coalStep < COAL_STEPS.length - 1) { state.coalStep++; state.coalPlaying = false; renderCoalUI(); }
+                if (state.coalStep < COAL_STEPS.length - 1) {
+                    state.coalStep++;
+                    state.coalScrubbing = false;
+                    state.coalPlaying = false;
+                    renderCoalUI();
+                }
             });
             document.getElementById('coalPlayBtn').addEventListener('click', () => {
                 state.coalPlaying = !state.coalPlaying;
+                state.coalScrubbing = false;
                 state.coalTimer = 0;
                 renderCoalUI();
             });
 
+            const coalScrubSlider = document.getElementById('coalScrubSlider');
+            const coalScrubReadout = document.getElementById('coalScrubReadout');
+            coalScrubSlider.addEventListener('input', () => {
+                state.coalPlaying = false;
+                state.coalScrubbing = true;
+                state.coalProgress = Number(coalScrubSlider.value);
+                const nearest = Math.round(state.coalProgress);
+                if (nearest !== state.coalStep) {
+                    state.coalStep = nearest;
+                    renderCoalUI();
+                }
+            });
+            coalScrubSlider.addEventListener('change', () => {
+                state.coalScrubbing = false;
+            });
+
             document.getElementById('oilPrevBtn').addEventListener('click', () => {
-                if (state.oilStep > 0) { state.oilStep--; state.oilPlaying = false; renderOilUI(); }
+                if (state.oilStep > 0) {
+                    state.oilStep--;
+                    state.oilScrubbing = false;
+                    state.oilPlaying = false;
+                    renderOilUI();
+                }
             });
             document.getElementById('oilNextBtn').addEventListener('click', () => {
-                if (state.oilStep < OIL_STEPS.length - 1) { state.oilStep++; state.oilPlaying = false; renderOilUI(); }
+                if (state.oilStep < OIL_STEPS.length - 1) {
+                    state.oilStep++;
+                    state.oilScrubbing = false;
+                    state.oilPlaying = false;
+                    renderOilUI();
+                }
             });
             document.getElementById('oilPlayBtn').addEventListener('click', () => {
                 state.oilPlaying = !state.oilPlaying;
+                state.oilScrubbing = false;
                 state.oilTimer = 0;
                 renderOilUI();
+            });
+
+            const oilScrubSlider = document.getElementById('oilScrubSlider');
+            const oilScrubReadout = document.getElementById('oilScrubReadout');
+            oilScrubSlider.addEventListener('input', () => {
+                state.oilPlaying = false;
+                state.oilScrubbing = true;
+                state.oilProgress = Number(oilScrubSlider.value);
+                const nearest = Math.round(state.oilProgress);
+                if (nearest !== state.oilStep) {
+                    state.oilStep = nearest;
+                    renderOilUI();
+                }
+            });
+            oilScrubSlider.addEventListener('change', () => {
+                state.oilScrubbing = false;
             });
 
             document.querySelectorAll('[data-three-mode]').forEach((btn) => {
@@ -3274,6 +3540,31 @@
                         renderOilUI();
                     }
                 }
+
+                // 跨幕連續演化進度平滑插值 (Smooth Continuous Morphing)
+                if (!state.coalScrubbing) {
+                    const diffC = state.coalStep - state.coalProgress;
+                    if (Math.abs(diffC) > 0.002) {
+                        const stepC = Math.sign(diffC) * Math.min(Math.abs(diffC), dt * (1.15 + Math.abs(diffC) * 1.4));
+                        state.coalProgress += stepC;
+                    } else {
+                        state.coalProgress = state.coalStep;
+                    }
+                    coalScrubSlider.value = state.coalProgress.toFixed(2);
+                }
+                coalScrubReadout.textContent = `階段 ${(state.coalProgress + 1).toFixed(1)} / 5`;
+
+                if (!state.oilScrubbing) {
+                    const diffO = state.oilStep - state.oilProgress;
+                    if (Math.abs(diffO) > 0.002) {
+                        const stepO = Math.sign(diffO) * Math.min(Math.abs(diffO), dt * (1.15 + Math.abs(diffO) * 1.4));
+                        state.oilProgress += stepO;
+                    } else {
+                        state.oilProgress = state.oilStep;
+                    }
+                    oilScrubSlider.value = state.oilProgress.toFixed(2);
+                }
+                oilScrubReadout.textContent = `階段 ${(state.oilProgress + 1).toFixed(1)} / 4`;
 
                 if (state.activeTab === 'coal') {
                     drawCoalWorld(dt);
