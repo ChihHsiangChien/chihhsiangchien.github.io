@@ -1,0 +1,2891 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>壞血病病理、膠原蛋白3D機制與林德臨床試驗互動模擬器</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  :root {
+    --bg-deep: #08111e;
+    --bg-stage: #0b1628;
+    --bg-panel: #111f36;
+    --bg-card: #172946;
+    --border-subtle: rgba(148, 163, 184, 0.2);
+    --text-main: #f1f5f9;
+    --text-muted: #94a3b8;
+
+    /* 跨分頁統一語意色票 */
+    --c-vitc: #fbbf24;          /* 維生素C / 柑橘：亮金黃 */
+    --c-collagen-ok: #2dd4bf;   /* 健康膠原蛋白：青綠藍 */
+    --c-collagen-bad: #64748b;  /* 崩解膠原蛋白：灰藍紫 */
+    --c-blood: #ef4444;         /* 紅血球 / 出血：鮮紅 */
+    --c-purpura: #a855f7;       /* 皮下紫斑 / 瘀血：紫羅蘭 */
+    --c-fe2: #10b981;           /* 活化態 Fe2+ / 正常酶：翠綠 */
+    --c-fe3: #f97316;           /* 氧化失活 Fe3+ / 熱破壞：鏽橘 */
+    --c-accent: #38bdf8;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100dvh;
+    overflow: hidden;
+    background: var(--bg-deep);
+    color: var(--text-main);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    user-select: none;
+  }
+
+  #app {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100dvh;
+  }
+
+  /* 頂部導覽與全域控制列 */
+  #topbar {
+    flex-shrink: 0;
+    background: rgba(13, 25, 43, 0.96);
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    gap: 8px;
+    z-index: 30;
+  }
+
+  .nav-tabs {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .nav-tabs::-webkit-scrollbar { display: none; }
+
+  .tab-btn {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-muted);
+    border: 1px solid transparent;
+    padding: 7px 13px;
+    border-radius: 8px;
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .tab-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-main);
+  }
+  .tab-btn.active {
+    background: rgba(45, 212, 191, 0.16);
+    color: var(--c-collagen-ok);
+    border-color: rgba(45, 212, 191, 0.55);
+    box-shadow: 0 0 12px rgba(45, 212, 191, 0.15);
+  }
+
+  .global-tools {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .tool-btn {
+    background: var(--bg-card);
+    color: var(--text-main);
+    border: 1px solid var(--border-subtle);
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.18s ease;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .tool-btn:hover { border-color: var(--c-accent); }
+  .tool-btn.active-toggle {
+    background: rgba(251, 191, 36, 0.16);
+    border-color: rgba(251, 191, 36, 0.6);
+    color: var(--c-vitc);
+  }
+  .tool-btn.panel-toggle.active-toggle {
+    background: rgba(56, 189, 248, 0.18);
+    border-color: rgba(56, 189, 248, 0.6);
+    color: var(--c-accent);
+  }
+
+  /* 中央主工作區（畫布 + 可收合說明面板，絕不重疊遮擋） */
+  #workspace {
+    flex: 1;
+    display: flex;
+    flex-direction: row;
+    min-height: 0;
+    min-width: 0;
+    position: relative;
+  }
+
+  #stage-container {
+    flex: 1;
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+    background: radial-gradient(circle at 50% 45%, #11223d 0%, #08111e 100%);
+    overflow: hidden;
+    touch-action: none;
+  }
+
+  #canvas2d {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  #three-container {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: none;
+    overflow: hidden;
+  }
+
+  #labels-3d {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  .label-3d-tag {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    background: rgba(8, 17, 30, 0.86);
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 11.5px;
+    font-weight: 600;
+    white-space: nowrap;
+    pointer-events: none;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    transition: opacity 0.15s;
+  }
+
+  /* 畫布角落統一視覺圖例與縮放輔助鈕 */
+  #legend-bar {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    background: rgba(8, 17, 30, 0.76);
+    backdrop-filter: blur(6px);
+    border: 1px solid var(--border-subtle);
+    padding: 5px 10px;
+    border-radius: 8px;
+    font-size: 11px;
+    color: var(--text-muted);
+    pointer-events: none;
+    z-index: 10;
+  }
+  .leg-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .leg-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  #zoom-controls {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    display: flex;
+    gap: 5px;
+    z-index: 12;
+  }
+  .mini-ctrl-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    border: 1px solid var(--border-subtle);
+    background: rgba(15, 28, 48, 0.85);
+    color: var(--text-main);
+    font-size: 15px;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  .mini-ctrl-btn:active { transform: scale(0.94); }
+  .mini-ctrl-btn.pan-mode-active {
+    background: rgba(56, 189, 248, 0.25);
+    border-color: var(--c-accent);
+    color: var(--c-accent);
+  }
+
+  #gesture-hint {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    background: rgba(8, 17, 30, 0.72);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-muted);
+    padding: 4px 9px;
+    border-radius: 6px;
+    font-size: 11px;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  /* 可收合控制與說明面板（獨立佔位，不遮擋畫布） */
+  #side-panel {
+    width: 380px;
+    flex-shrink: 0;
+    background: var(--bg-panel);
+    border-left: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: width 0.24s ease, height 0.24s ease;
+    z-index: 20;
+  }
+  #side-panel.collapsed {
+    display: none;
+  }
+
+  .panel-header {
+    padding: 10px 14px;
+    background: rgba(8, 17, 30, 0.55);
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .panel-header h2 {
+    font-size: 14.5px;
+    font-weight: 700;
+    color: var(--c-collagen-ok);
+  }
+
+  .panel-body {
+    padding: 12px 14px;
+    overflow-y: auto;
+    flex: 1;
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
+    user-select: text;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .sub-selector {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .sub-btn {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-muted);
+    padding: 7px 8px;
+    border-radius: 7px;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.15s;
+  }
+  .sub-btn.active {
+    background: rgba(45, 212, 191, 0.15);
+    border-color: var(--c-collagen-ok);
+    color: #fff;
+  }
+
+  .info-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 9px;
+    padding: 11px 12px;
+  }
+  .info-card .step-badge {
+    display: inline-block;
+    background: rgba(251, 191, 36, 0.18);
+    color: var(--c-vitc);
+    border: 1px solid rgba(251, 191, 36, 0.45);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 5px;
+    margin-bottom: 6px;
+  }
+  .info-card h3 {
+    font-size: 14.5px;
+    color: #fff;
+    margin-bottom: 6px;
+    line-height: 1.35;
+  }
+  .info-card p {
+    font-size: 13px;
+    color: #cbd5e1;
+    line-height: 1.6;
+    margin-bottom: 6px;
+  }
+  .info-card p:last-child { margin-bottom: 0; }
+
+  .highlight-box {
+    background: rgba(8, 17, 30, 0.6);
+    border-left: 3px solid var(--c-vitc);
+    padding: 8px 10px;
+    border-radius: 0 6px 6px 0;
+    font-size: 12.5px;
+    color: #e2e8f0;
+    line-height: 1.55;
+  }
+
+  .slider-box {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 9px;
+    padding: 10px 12px;
+  }
+  .slider-box label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--c-vitc);
+    margin-bottom: 6px;
+  }
+  .slider-box input[type=range] {
+    width: 100%;
+    accent-color: var(--c-vitc);
+    cursor: pointer;
+  }
+
+  .group-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 5px;
+  }
+  .group-chip {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-muted);
+    padding: 6px 5px;
+    border-radius: 6px;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+  }
+  .group-chip.active {
+    border-color: var(--c-vitc);
+    background: rgba(251, 191, 36, 0.16);
+    color: #fff;
+  }
+
+  /* 側欄頂部集中式流程控制區（固定於說明面板上方，滾動時不遮擋） */
+  #stepbar {
+    flex-shrink: 0;
+    background: rgba(13, 23, 40, 0.95);
+    border-bottom: 1px solid var(--border-subtle);
+    padding: 10px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 5;
+  }
+
+  .step-title-readout {
+    font-size: 12.5px;
+    color: var(--c-vitc);
+    font-weight: 700;
+    line-height: 1.35;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .step-dots {
+    display: flex;
+    gap: 6px;
+    width: 100%;
+  }
+
+  .step-dot {
+    flex: 1;
+    height: 30px;
+    border-radius: 7px;
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-card);
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.18s ease;
+  }
+  .step-dot:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-main);
+    border-color: var(--c-collagen-ok);
+  }
+  .step-dot.active {
+    background: var(--c-collagen-ok);
+    color: #06131f;
+    border-color: var(--c-collagen-ok);
+    box-shadow: 0 0 10px rgba(45, 212, 191, 0.35);
+  }
+
+  .step-controls {
+    display: flex;
+    gap: 6px;
+    width: 100%;
+  }
+
+  .step-btn {
+    flex: 1;
+    min-height: 34px;
+    background: var(--bg-card);
+    color: var(--text-main);
+    border: 1px solid var(--border-subtle);
+    padding: 6px 8px;
+    border-radius: 7px;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    transition: all 0.18s ease;
+  }
+  .step-btn:hover:not(:disabled) {
+    border-color: var(--c-collagen-ok);
+    color: var(--c-collagen-ok);
+    background: rgba(45, 212, 191, 0.08);
+  }
+  .step-btn:disabled {
+    opacity: 0.38;
+    cursor: not-allowed;
+  }
+  .step-btn.play-active {
+    background: rgba(45, 212, 191, 0.2);
+    border-color: var(--c-collagen-ok);
+    color: var(--c-collagen-ok);
+  }
+
+  /* 直向手機與平板響應式設計：控制與說明面板改為下方停駐，畫布自動在上方最大化 */
+  @media (max-aspect-ratio: 1/1), (max-width: 820px) {
+    #topbar {
+      flex-wrap: wrap;
+      padding: 6px 8px;
+      gap: 6px;
+    }
+    .nav-tabs {
+      order: 2;
+      width: 100%;
+      justify-content: space-between;
+    }
+    .tab-btn {
+      flex: 1;
+      justify-content: center;
+      padding: 6px 6px;
+      font-size: 12px;
+    }
+    .global-tools {
+      order: 1;
+      width: 100%;
+      justify-content: flex-end;
+    }
+    #workspace {
+      flex-direction: column;
+    }
+    #side-panel {
+      width: 100%;
+      height: 44dvh;
+      border-left: none;
+      border-top: 1px solid var(--border-subtle);
+    }
+    #stepbar {
+      padding: 8px 10px;
+      gap: 6px;
+    }
+    .step-dot {
+      height: 28px;
+      font-size: 11.5px;
+    }
+    .step-btn {
+      min-height: 32px;
+      font-size: 12px;
+      padding: 5px 6px;
+    }
+    .step-title-readout {
+      font-size: 11.5px;
+    }
+    #legend-bar {
+      font-size: 10px;
+      padding: 4px 7px;
+      gap: 6px;
+    }
+    #gesture-hint {
+      display: none;
+    }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- 頂部導覽與控制 -->
+  <header id="topbar">
+    <nav class="nav-tabs" aria-label="主題分頁">
+      <button class="tab-btn active" data-tab="0">1. 水手病症與「壞血」病理</button>
+      <button class="tab-btn" data-tab="1">2. 維生素C與膠原蛋白 (3D)</button>
+      <button class="tab-btn" data-tab="2">3. 林德 1747 臨床試驗</button>
+    </nav>
+    <div class="global-tools">
+      <button id="btn-toggle-labels" class="tool-btn active-toggle" title="顯示或隱藏畫面文字標籤">🏷️ 標籤: 開</button>
+      <button id="btn-reset-view" class="tool-btn" title="重置縮放與平移視角">🔍 重置視角</button>
+      <button id="btn-toggle-panel" class="tool-btn panel-toggle active-toggle" title="顯示或隱藏控制與說明面板">🎛️ 控制與說明: 開</button>
+    </div>
+  </header>
+
+  <!-- 中央主工作區 -->
+  <main id="workspace">
+    <div id="stage-container">
+      <!-- 跨分頁統一色票圖例 -->
+      <div id="legend-bar">
+        <span class="leg-item"><i class="leg-dot" style="background:var(--c-vitc)"></i>維生素C / 柑橘</span>
+        <span class="leg-item"><i class="leg-dot" style="background:var(--c-collagen-ok)"></i>強韌膠原蛋白</span>
+        <span class="leg-item"><i class="leg-dot" style="background:var(--c-collagen-bad)"></i>解體膠原纖維</span>
+        <span class="leg-item"><i class="leg-dot" style="background:var(--c-blood)"></i>紅血球 / 滲血</span>
+        <span class="leg-item"><i class="leg-dot" style="background:var(--c-purpura)"></i>皮下紫斑</span>
+      </div>
+
+      <!-- 2D 動態模擬畫布 (Tab 1 & Tab 3) -->
+      <canvas id="canvas2d"></canvas>
+
+      <!-- 3D Three.js 容器 (Tab 2) -->
+      <div id="three-container">
+        <div id="labels-3d"></div>
+      </div>
+
+      <!-- 左下角觸控友善縮放與平移模式鈕 -->
+      <div id="zoom-controls">
+        <button class="mini-ctrl-btn" id="btn-zoom-in" title="放大">＋</button>
+        <button class="mini-ctrl-btn" id="btn-zoom-out" title="縮小">－</button>
+        <button class="mini-ctrl-btn" id="btn-3d-pan-mode" style="display:none; width:auto; padding:0 9px; font-size:12px;" title="切換單指旋轉或平移">🔄 單指: 旋轉</button>
+      </div>
+
+      <div id="gesture-hint">支援滑鼠拖曳/滾輪縮放・觸控雙指縮放與平移</div>
+    </div>
+
+    <!-- 右側/底部 集中式控制與說明面板 -->
+    <aside id="side-panel">
+      <div class="panel-header">
+        <h2 id="panel-main-title">水手病症與微觀病理</h2>
+      </div>
+
+      <!-- 集中化流程控制區（固定於頂端，不隨解說滾動被遮擋） -->
+      <div id="stepbar">
+        <div class="step-title-readout" id="step-readout-text">步驟 1 / 4</div>
+        <div class="step-dots" id="step-dots-container"></div>
+        <div class="step-controls">
+          <button class="step-btn" id="btn-prev-step">◀ 上一步</button>
+          <button class="step-btn" id="btn-play-step">▶ 自動演示</button>
+          <button class="step-btn" id="btn-next-step">下一步 ▶</button>
+        </div>
+      </div>
+
+      <div class="panel-body" id="panel-content"></div>
+    </aside>
+  </main>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  /* =========================================================
+     全域色彩常數（確保三個分頁視覺語意一致）
+  ========================================================= */
+  const COLORS = {
+    vitC: '#fbbf24',
+    vitCGlow: 'rgba(251, 191, 36, 0.35)',
+    collagenOk: '#2dd4bf',
+    collagenOkDim: 'rgba(45, 212, 191, 0.32)',
+    collagenBad: '#64748b',
+    blood: '#ef4444',
+    bloodDark: '#991b1b',
+    purpura: '#a855f7',
+    fe2: '#10b981',
+    fe3: '#f97316',
+    panelBg: '#111f36',
+    textMain: '#f8fafc',
+    textMuted: '#94a3b8'
+  };
+
+  /* =========================================================
+     各分頁知識內容與步驟資料庫
+  ========================================================= */
+  const TAB1_MODES = [
+    {
+      id: 'gums',
+      name: '🦷 1. 牙齦出血',
+      subtitle: '齦乳頭微血管網與牙周膜崩解',
+      steps: [
+        {
+          title: '健康狀態：膠原蛋白穩固支撐牙周與微血管',
+          desc: '牙齦（齦乳頭）含有極為豐富的微血管網，高度依賴成纖維細胞合成「第一型與第四型膠原蛋白（青綠色網）」來固定牙周膜並緊密包覆微血管壁。紅血球穩定在管腔內流動。',
+          key: '關鍵結構：第 I 型膠原蛋白固定牙周膜與牙齒；第 IV 型膠原蛋白強化微血管基底膜。'
+        },
+        {
+          title: '長期缺乏維生素 C：成纖維細胞停產穩固纖維',
+          desc: '水手遠洋航行數月缺乏新鮮蔬果，血液中維生素 C（金色微粒）耗盡。成纖維細胞無法合成具備交聯強度的膠原蛋白，原有的牙周韌帶與血管支撐網逐漸鬆散脆化（轉為灰暗斷裂狀）。',
+          key: '病理變化：結締組織支撐崩解，微血管壁失去外圍保護網，變得極度脆弱。'
+        },
+        {
+          title: '輕微機械摩擦：日常咀嚼造成壓力衝擊',
+          desc: '當水手啃咬硬餅乾或日常咀嚼時，輕微的機械摩擦與咬合壓力傳導至缺乏膠原緩衝的牙齦乳頭與微血管壁。',
+          key: '誘發因子：正常組織可輕鬆承受的輕微咀嚼摩擦，對壞血病牙齦卻是致命衝擊。'
+        },
+        {
+          title: '微血管破裂滲血：牙齦紅腫潰爛與牙齒鬆動',
+          desc: '脆弱的牙齦微血管瞬間破裂！紅血球大量滲出至組織間隙，引發牙齦劇烈紅腫、紫暗發炎與自發性出血；同時牙周膜失去第 I 型膠原固定，導致牙齒嚴重鬆動甚至脫落。',
+          key: '臨床表徵：牙齦海綿狀腫脹出血、局部組織壞死萎縮、牙齒鬆動脫落。'
+        }
+      ]
+    },
+    {
+      id: 'scar',
+      name: '🩹 2. 舊傷口裂開',
+      subtitle: '膠原蛋白動態汰換失衡與疤痕解體',
+      steps: [
+        {
+          title: '動態平衡：已癒合疤痕並非一勞永逸',
+          desc: '許多人以為傷口癒合後就永久固定，事實上疤痕的細胞外基質（ECM）處於「持續分解與重建」的動態平衡：舊膠原纖維不斷被水解淘汰，同時成纖維細胞需依賴維生素 C 持續補上新纖維以維持張力。',
+          key: '生理機制：舊膠原水解速率 ＝ 新膠原合成速率，維持疤痕抗拉強度。'
+        },
+        {
+          title: '輔酶失效：新纖維停產、舊膠原持續水解',
+          desc: '缺乏維生素 C 時，脯胺酸羥化酶（P4H）失去還原劑而失活（轉為橘色 Fe³⁺），無法生成任何穩固的新膠原纖維；但體內對舊膠原蛋白的水解代謝仍在進行，使疤痕深層支撐網逐漸掏空。',
+          key: '失衡關鍵：只拆不建！細胞外基質（ECM）膠原密度急遽下降。'
+        },
+        {
+          title: '張力負荷：皮膚日常伸展拉扯舊疤痕',
+          desc: '隨著水手拉繩索或肢體活動，皮膚兩側產生正常的橫向張力。失去膠原網交聯的舊疤痕與新生血管已無法承受這股拉力。',
+          key: '力學崩潰：失去膠原三股螺旋的抗拉韌性，疤痕組織張力趨近於零。'
+        },
+        {
+          title: '舊傷「復活」：重新裂開、潰爛並伴隨出血',
+          desc: '數年前早已癒合的舊傷口竟然重新裂開！伴隨底層脆弱微血管斷裂滲血，且因缺乏膠原蛋白無法啟動修復，傷口進一步潰爛、壞死。',
+          key: '航海紀錄：大航海時代水手常驚恐發現十幾年前的舊刀傷在海上無故崩裂流血。'
+        }
+      ]
+    },
+    {
+      id: 'purpura',
+      name: '🟣 3. 皮下瘀血紫斑',
+      subtitle: '血管內皮失黏著與基底膜斷裂',
+      steps: [
+        {
+          title: '健康微血管：內皮細胞黏著與膠原基底膜',
+          desc: '皮下微血管由單層「內皮細胞」緊密排列組成，外覆一層強韌的膠原蛋白「基底膜（Basement Membrane）」。維生素 C 既維持基底膜交聯，也保護內皮細胞免受氧化壓力損傷。',
+          key: '雙重保護：膠原基底膜提供外層彈性韌性；抗氧化作用維持內皮細胞間緊密接合。'
+        },
+        {
+          title: '基底膜脆化與氧化壓力：內皮細胞出現縫隙',
+          desc: '嚴重缺乏維生素 C 時，氧化壓力上升使血管內皮細胞萎縮、失去彼此黏著力；外層膠原基底膜同時變薄、脆化並出現結構裂隙。',
+          key: '微觀病變：微血管從「強韌彈性軟管」退化為「佈滿裂紋的薄脆玻璃管」。'
+        },
+        {
+          title: '微小創傷：肌肉微幅收縮或衣物輕壓',
+          desc: '完全不需要劇烈撞擊——僅僅是日常行走時小腿肌肉的微幅收縮，或是衣物、吊床對皮膚的輕微壓迫，就會對脆弱微血管造成剪切力。',
+          key: '無故瘀青原因：日常生理活動的微小壓力即超過脆化血管壁的承受極限。'
+        },
+        {
+          title: '紅血球外滲：形成點狀出血與大片皮下紫斑',
+          desc: '微血管壁斷裂，紅血球大量滲漏（Extravasation）至皮下組織與毛囊周圍，形成肉眼可見的針頭狀「點狀出血（Petechiae）」與大片紫黑色「紫斑（Purpura）／瘀血」。',
+          key: '典型體徵：下肢與毛囊周圍率先出現大量紫紅色出血斑點，融合成大片瘀斑。'
+        }
+      ]
+    },
+    {
+      id: 'meaning',
+      name: '🧱 4.「壞血」的真諦',
+      subtitle: '失去鋼筋的混凝土：全身組織崩壞',
+      steps: [
+        {
+          title: '建築比喻：膠原蛋白就是人體的「鋼筋」',
+          desc: '「壞血病」並非血液本身變臭腐敗！人體的細胞與組織好比「混凝土」，而膠原蛋白三股螺旋網則是賦予抗拉強度的「鋼筋」。維生素 C 充足時，鋼筋混凝土結構堅不可摧。',
+          key: '字義核心：「壞」在病理學與古漢語中，意指「組織結構崩壞、腐敗與功能喪失（Degeneration & Breakdown）」。'
+        },
+        {
+          title: '第 1 層病理：血管結構的物理崩壞 (Degeneration)',
+          desc: '當缺乏維生素 C 抽走人體內的「膠原鋼筋」，微血管壁與結締組織的微觀結構全面脆化、崩解並失去張力。這是「壞」字最根本的物理結構意涵。',
+          key: '結構崩壞：失去鋼筋支撐的混凝土建築，在承受自身張力時便開始出現裂縫。'
+        },
+        {
+          title: '第 2 層病理：血液滲漏與局部壞死 (Extravasation & Necrosis)',
+          desc: '因為血管壁到處破洞，血液滲漏到不該去的地方（皮下紫斑、牙齦滲血）；失去膠原支撐與血流供應的局部組織無法修復，引發萎縮、潰爛與壞死。',
+          key: '連鎖惡化：血管破裂滲漏 ➔ 局部缺氧與發炎 ➔ 組織潰爛壞死。'
+        },
+        {
+          title: '第 3 層臨床總結：全身支撐系統同步敗壞',
+          desc: '古代醫者觀察到患者不只是流血，而是從骨骼、牙齒、關節軟骨到皮膚的支撐系統全面「敗壞」崩塌，伴隨極度虛弱、貧血、黃疸與心肺衰竭，最終走向死亡。',
+          key: '系統性災難：凡是承受張力與微血管密布的部位，皆因缺乏膠原交聯而全面崩塌。'
+        }
+      ]
+    }
+  ];
+
+  const TAB2_STEPS = [
+    {
+      title: '合成前驅鏈：富含脯胺酸與離胺酸的鬆散多肽鏈',
+      desc: '成纖維細胞首先合成三條前膠原 α 多肽鏈（Pro-α chains），鏈上帶有大量「脯胺酸（Proline）」與「離胺酸（Lysine）」殘基。此時尚未修飾，三條鏈彼此鬆散搖晃，無法鎖定成型。',
+      key: '初始狀態：未經羥基化修飾的多肽鏈缺乏鏈間氫鍵，無法承受體溫與機械張力。',
+      vitCLevel: 50,
+      phase: 'loose'
+    },
+    {
+      title: '羥基化反應：P4H 酶接上羥基 (-OH)，鐵離子被氧化',
+      desc: '關鍵酵素「脯胺酸 4-羥化酶（Prolyl 4-hydroxylase, P4H）」利用活性中心的亞鐵離子（綠色 Fe²⁺），將羥基（-OH）精準安裝到脯胺酸上。但催化後，鐵離子會氧化成失活的三價鐵（橘色 Fe³⁺）！',
+      key: '催化瓶頸：每完成一次催化循環，酶中心的 Fe²⁺ 易被氧化為無活性的 Fe³⁺ 而卡死。',
+      vitCLevel: 65,
+      phase: 'oxidized'
+    },
+    {
+      title: '維生素 C 救援：不可或缺的電子還原劑',
+      desc: '維生素 C（抗壞血酸，金色分子）進入酶活性中心，捐出電子將失活的橘色 Fe³⁺ 還原回翠綠色活化態 Fe²⁺！這讓 P4H 與離胺酸羥化酶得以持續運作，源源不絕為多肽鏈加上 -OH 基團。',
+      key: '核心生化角色：維生素 C 並非膠原蛋白的原料，而是維持羥化酶活性的「專屬還原劑（輔因子）」。',
+      vitCLevel: 100,
+      phase: 'rescue'
+    },
+    {
+      title: '健康交聯：密集氫鍵鎖定「三股螺旋」強韌鋼筋',
+      desc: '充足的羥基（-OH）在三條多肽鏈之間形成高密度的「鏈間氫鍵（青色光橋）」，將三條鬆散鏈緊密纏繞鎖定成超強韌的「膠原蛋白三股螺旋（Triple Helix）」，進一步交聯成血管壁的鋼筋網！',
+      key: '結構奇蹟：羥基化使三股螺旋的熱穩定度大幅提升，在體溫 37°C 下依然堅韌無比。',
+      vitCLevel: 100,
+      phase: 'healthy'
+    },
+    {
+      title: '壞血病狀態：缺乏維生素 C 導致酶失活與螺旋崩解',
+      desc: '當嚴重缺乏維生素 C，P4H 酶永久卡在橘色 Fe³⁺ 失活狀態。未羥基化的多肽鏈沒有 -OH 氫鍵支撐，在正常體溫下便鬆脫解體並遭細胞內外酵素快速水解——人體瞬間失去「鋼筋」！',
+      key: '提示：您也可以拖動面板中的「維生素 C 濃度滑桿」，即時觀察 3D 三股螺旋鎖定與崩解！',
+      vitCLevel: 0,
+      phase: 'scurvy'
+    }
+  ];
+
+  const TAB3_GROUPS = [
+    { id: 0, name: '第 1 組：蘋果酒', dose: '每日 1 品脫 (約570ml) Cider', vitC: 15, outcome: '輕微改善', detail: '未經高溫煮沸的天然發酵蘋果酒殘留極微量維生素 C，兩週後水手症狀有微幅緩解，但遠不足以痊癒。', color: '#a3e635' },
+    { id: 1, name: '第 2 組：稀釋硫酸', dose: '每日 25 滴 Elixir of Vitriol', vitC: 0, outcome: '無效惡化', detail: '當時醫界誤以為「酸味」本身能防腐抗敗血，但無機硫酸不含任何抗壞血酸，僅刺激口腔潰瘍，病情持續惡化。', color: '#94a3b8' },
+    { id: 2, name: '第 3 組：辛香糊劑', dose: '大蒜、芥末籽、辣根混合糊', vitC: 0, outcome: '無效惡化', detail: '乾燥香料與加工糊劑中維生素 C 早已氧化殆盡，對膠原蛋白合成毫無幫助，水手牙齦與紫斑持續惡化。', color: '#d97706' },
+    { id: 3, name: '第 4 組：食醋', dose: '每日 6 匙 Vinegar', vitC: 0, outcome: '無效惡化', detail: '海軍長期迷信醋能清潔體液與船艙，但醋酸（Acetic acid）完全無法替代抗壞血酸（Ascorbic acid），毫無療效。', color: '#f472b6' },
+    { id: 4, name: '第 5 組：海水', dose: '每日半品脫 Seawater', vitC: 0, outcome: '嚴重惡化', detail: '當時偏方認為海水能「通便排毒」，結果高濃度鹽分造成脫水與腎臟負擔，水手病情惡化最為慘重。', color: '#38bdf8' },
+    { id: 5, name: '第 6 組：柑橘水果', dose: '每日 2 柳橙 + 1 檸檬', vitC: 100, outcome: '奇蹟迅速康復！', detail: '新鮮柑橘富含高活性維生素 C！僅短短 6 天（船上水果耗盡前），1 名水手已完全恢復體力重返崗位，另一人更康復到能照顧其他病患！', color: '#fbbf24' }
+  ];
+
+  const TAB3_STEPS = [
+    {
+      title: '1747 年 5 月：索爾茲伯里號疫情與眾說紛紜的偏方',
+      desc: '英國皇家海軍軍艦索爾茲伯里號（HMS Salisbury）在大西洋巡邏時爆發嚴重壞血病。當時醫界充斥喝醋、稀硫酸、海水、香料糊等無效偏方。首席外科醫師詹姆斯·林德（James Lind）決定以科學實驗檢驗真相。',
+      key: '歷史痛點：18 世紀大航海時代，死於壞血病的海軍人數甚至遠超過海戰陣亡人數。'
+    },
+    {
+      title: '醫學史首場「臨床對照試驗」：嚴格控制變因 (Day 0)',
+      desc: '林德挑選 12 名病情極度相似的重症壞血病水手（牙齦腐爛、紫斑、膝關節僵硬），分成 6 組（每組 2 人）。關鍵安排：所有人住在「同一艙房」、呼吸「相同空氣」、吃「完全相同的基礎飲食（稀粥、糖漿、大麥湯）」。',
+      key: '科學方法里程碑：排除環境、空氣與基礎飲食干擾，確保實驗公平可比較（Controlled Trial）。'
+    },
+    {
+      title: '單一操縱變因：6 組每日定量給予不同補充劑 (Day 1–3)',
+      desc: '在相同基礎飲食外，每組每天只改變「單一變因」：第 1 組喝蘋果酒、第 2 組滴稀硫酸、第 3 組吃大蒜芥末糊、第 4 組喝醋、第 5 組喝海水、第 6 組吃 2 顆柳橙與 1 顆檸檬。點擊船艙各組可查看細節！',
+      key: '單一變因測試：唯有第 6 組獲得大量金色維生素 C 分子，第 1 組獲得微量，其餘四組為 0。'
+    },
+    {
+      title: '懸殊的實驗結果：第 6 天柑橘組奇蹟康復！(Day 6)',
+      desc: '短短 6 天就分出壓倒性高下！第 6 組（柑橘組）膠原蛋白迅速修復，一人康復重返甲板值勤，另一人甚至強健到能照顧其他病重同袍；第 1 組（蘋果酒）僅微幅改善；其餘 4 組毫無療效且持續惡化。',
+      key: '科學實證：人類史上首次透過嚴謹對照實驗，精準鎖定柑橘類水果對壞血病的特效療效。'
+    },
+    {
+      title: '歷史的遺憾 (1753–1794)：保存難題與「熬煮濃縮」錯誤',
+      desc: '林德於 1753 年發表《論壞血病》，但海軍卻遲遲未全面採納！原因有二：① 當時無巴斯德殺菌法，鮮檸檬汁數週即酸敗；② 海軍將檸檬汁「煮沸熬成濃縮膏（Rob）」以便攜帶，高溫與氧化徹底摧毀了維生素 C 活性，導致療效消失、高層誤判！',
+      key: '生化教訓：抗壞血酸（維生素 C）極怕高溫加熱與長時間氧化，熬煮濃縮膏幾乎不含有效成分。'
+    },
+    {
+      title: '1795 年後勤奇蹟：強制配給檸檬汁與擊敗拿破崙',
+      desc: '直到 1795 年，海軍醫師吉爾伯特·布萊恩（Gilbert Blane）力爭改革，英國皇家海軍正式強制遠洋水手每日定量飲用妥善保存的檸檬汁（常混入萊姆酒防腐）。壞血病瞬間絕跡，讓英軍能長年封鎖歐洲港口，成為戰勝拿破崙法軍的關鍵後勤奇蹟！',
+      key: '歷史影響：英國水手因此獲得「Limey（萊姆佬）」綽號，科學方法徹底改寫了世界海權史。'
+    }
+  ];
+
+  /* =========================================================
+     應用程式狀態管理
+  ========================================================= */
+  const state = {
+    activeTab: 0,          // 0: 病症病理, 1: 3D膠原機制, 2: 林德臨床試驗
+    showLabels: true,
+    showPanel: true,
+    isPlaying: false,
+    playAccum: 0,
+
+    // Tab 1 狀態
+    tab1Mode: 0,           // 0:牙齦, 1:舊傷, 2:紫斑, 3:壞血定義
+    tab1Step: 0,
+    tab1Lerp: 0,           // 平滑動畫過渡 0..3
+
+    // Tab 2 (3D) 狀態
+    tab2Step: 0,
+    vitCSlider: 50,        // 0..100 互動濃度
+    helixStability: 0.25,  // 0(解體) .. 1(緊密三股螺旋)
+    feActiveLerp: 0.5,     // 0(橘Fe3+) .. 1(綠Fe2+)
+    threePanMode: false,
+
+    // Tab 3 狀態
+    tab3Step: 0,
+    tab3Lerp: 0,
+    selectedTrialGroup: 5, // 預設高亮第 6 組（柑橘組 index 5）
+
+    time: 0
+  };
+
+  /* =========================================================
+     DOM 元素參照
+  ========================================================= */
+  const elStage = document.getElementById('stage-container');
+  const canvas2d = document.getElementById('canvas2d');
+  const ctx = canvas2d.getContext('2d');
+  const elThreeWrap = document.getElementById('three-container');
+  const elLabels3d = document.getElementById('labels-3d');
+  const elSidePanel = document.getElementById('side-panel');
+  const elPanelTitle = document.getElementById('panel-main-title');
+  const elPanelContent = document.getElementById('panel-content');
+  const elStepDots = document.getElementById('step-dots-container');
+  const elStepReadout = document.getElementById('step-readout-text');
+
+  const btnToggleLabels = document.getElementById('btn-toggle-labels');
+  const btnResetView = document.getElementById('btn-reset-view');
+  const btnTogglePanel = document.getElementById('btn-toggle-panel');
+  const btnPrevStep = document.getElementById('btn-prev-step');
+  const btnPlayStep = document.getElementById('btn-play-step');
+  const btnNextStep = document.getElementById('btn-next-step');
+  const btnZoomIn = document.getElementById('btn-zoom-in');
+  const btnZoomOut = document.getElementById('btn-zoom-out');
+  const btn3dPanMode = document.getElementById('btn-3d-pan-mode');
+
+  /* =========================================================
+     2D 畫布通用 Zoom & Pan 視角控制器 (支援滑鼠與多點觸控)
+  ========================================================= */
+  const vp2d = {
+    worldW: 1120,
+    worldH: 640,
+    scale: 1,
+    minScale: 0.4,
+    maxScale: 3.8,
+    tx: 0,
+    ty: 0,
+    userModified: false,
+    hitRegions: [], // { x, y, w, h, onClick }
+
+    fit(cw, ch) {
+      if (!cw || !ch) return;
+      const padX = 28;
+      const padY = 44;
+      const sx = (cw - padX * 2) / this.worldW;
+      const sy = (ch - padY * 2) / this.worldH;
+      this.scale = Math.max(0.25, Math.min(sx, sy));
+      this.minScale = this.scale * 0.55;
+      this.maxScale = Math.max(3.2, this.scale * 4.0);
+      this.tx = (cw - this.worldW * this.scale) * 0.5;
+      this.ty = (ch - this.worldH * this.scale) * 0.5 + 10;
+      this.userModified = false;
+    },
+
+    zoomAt(factor, screenX, screenY) {
+      const prevScale = this.scale;
+      const nextScale = Math.max(this.minScale, Math.min(this.maxScale, prevScale * factor));
+      const ratio = nextScale / prevScale;
+      this.tx = screenX - (screenX - this.tx) * ratio;
+      this.ty = screenY - (screenY - this.ty) * ratio;
+      this.scale = nextScale;
+      this.userModified = true;
+    },
+
+    screenToWorld(sx, sy) {
+      return {
+        x: (sx - this.tx) / this.scale,
+        y: (sy - this.ty) / this.scale
+      };
+    }
+  };
+
+  /* =========================================================
+     Three.js 3D 分子場景初始化與自訂觸控 Orbit + Pan + Pinch 控制器
+  ========================================================= */
+  let threeApp = null;
+
+  function initThreeScene() {
+    if (!window.THREE || threeApp) return;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    elThreeWrap.insertBefore(renderer.domElement, elLabels3d);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+
+    // 燈光配置
+    const ambLight = new THREE.AmbientLight(0xffffff, 0.68);
+    scene.add(ambLight);
+    const dirLight1 = new THREE.DirectionalLight(0xffffff, 0.85);
+    dirLight1.position.set(6, 10, 8);
+    scene.add(dirLight1);
+    const dirLight2 = new THREE.PointLight(0x2dd4bf, 0.6, 25);
+    dirLight2.position.set(-6, -4, 6);
+    scene.add(dirLight2);
+
+    const rootGroup = new THREE.Group();
+    scene.add(rootGroup);
+
+    // 三條 α 多肽鏈 Mesh
+    const chainColors = [0x2dd4bf, 0x38bdf8, 0x14b8a6];
+    const chainMeshes = chainColors.map((col) => {
+      const mat = new THREE.MeshStandardMaterial({
+        color: col,
+        roughness: 0.32,
+        metalness: 0.18
+      });
+      const mesh = new THREE.Mesh(new THREE.BufferGeometry(), mat);
+      rootGroup.add(mesh);
+      return mesh;
+    });
+
+    // 脯胺酸/離胺酸殘基球 + 羥基(-OH) + 鏈間氫鍵橋
+    const residueGroup = new THREE.Group();
+    rootGroup.add(residueGroup);
+    const residues = [];
+    const numResidues = 15;
+    const proGeo = new THREE.SphereGeometry(0.19, 14, 14);
+    const ohGeo = new THREE.SphereGeometry(0.13, 12, 12);
+    const hBondGeo = new THREE.CylinderGeometry(0.035, 0.035, 1, 8);
+
+    for (let i = 0; i < numResidues; i++) {
+      const chainIdx = i % 3;
+      const proMat = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, roughness: 0.4 });
+      const proMesh = new THREE.Mesh(proGeo, proMat);
+
+      const ohMat = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        emissive: 0x2dd4bf,
+        emissiveIntensity: 0.55,
+        roughness: 0.2
+      });
+      const ohMesh = new THREE.Mesh(ohGeo, ohMat);
+
+      const hBondMat = new THREE.MeshBasicMaterial({
+        color: 0x5eead4,
+        transparent: true,
+        opacity: 0.75
+      });
+      const hBondMesh = new THREE.Mesh(hBondGeo, hBondMat);
+
+      residueGroup.add(proMesh, ohMesh, hBondMesh);
+      residues.push({ i, chainIdx, proMesh, ohMesh, hBondMesh });
+    }
+
+    // P4H 脯胺酸 4-羥化酶 催化複合體 (環繞在螺旋外圍的半透明雙葉酵素)
+    const enzymeGroup = new THREE.Group();
+    enzymeGroup.position.set(0, -0.4, 1.35);
+    rootGroup.add(enzymeGroup);
+
+    const enzMat = new THREE.MeshPhysicalMaterial({
+      color: 0x6366f1,
+      roughness: 0.35,
+      metalness: 0.1,
+      transparent: true,
+      opacity: 0.52
+    });
+    const lobeL = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.34, 16, 32, Math.PI * 1.35), enzMat);
+    lobeL.rotation.z = Math.PI * 0.32;
+    enzymeGroup.add(lobeL);
+
+    // 酶活性中心鐵離子 (Fe2+ 綠 / Fe3+ 橘)
+    const feMat = new THREE.MeshStandardMaterial({
+      color: 0x10b981,
+      emissive: 0x10b981,
+      emissiveIntensity: 0.65,
+      roughness: 0.2
+    });
+    const feCore = new THREE.Mesh(new THREE.SphereGeometry(0.32, 20, 20), feMat);
+    feCore.position.set(0, 0.15, 0.35);
+    enzymeGroup.add(feCore);
+
+    const feRingMat = new THREE.MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.6 });
+    const feRing = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.03, 10, 32), feRingMat);
+    feRing.position.copy(feCore.position);
+    enzymeGroup.add(feRing);
+
+    // 維生素 C (抗壞血酸) 金色分子群與電子傳遞光束
+    const vitCGroup = new THREE.Group();
+    rootGroup.add(vitCGroup);
+    const vitCMolecules = [];
+    const vitCMat = new THREE.MeshStandardMaterial({
+      color: 0xfbbf24,
+      emissive: 0xf59e0b,
+      emissiveIntensity: 0.55,
+      roughness: 0.25
+    });
+    const vitCHexGeo = new THREE.CylinderGeometry(0.28, 0.28, 0.12, 5);
+
+    for (let k = 0; k < 5; k++) {
+      const m = new THREE.Mesh(vitCHexGeo, vitCMat);
+      m.rotation.x = Math.PI / 2;
+      const sub = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 10), new THREE.MeshBasicMaterial({ color: 0xfef08a }));
+      sub.position.set(0.26, 0, 0.1);
+      m.add(sub);
+      vitCGroup.add(m);
+      vitCMolecules.push({ mesh: m, phase: k * 1.25 });
+    }
+
+    // 電子還原光束 (Vit C -> Fe3+)
+    const beamGeo = new THREE.CylinderGeometry(0.05, 0.05, 1, 8);
+    const beamMat = new THREE.MeshBasicMaterial({ color: 0xfef08a, transparent: true, opacity: 0 });
+    const electronBeam = new THREE.Mesh(beamGeo, beamMat);
+    rootGroup.add(electronBeam);
+
+    // 3D 標籤錨點建立
+    const labelDefs = [
+      { id: 'helix', text: '膠原蛋白三股螺旋 (Triple Helix)', color: '#2dd4bf', pos: new THREE.Vector3(0, 2.55, 0) },
+      { id: 'oh', text: '羥基 (-OH) 與鏈間氫鍵交聯', color: '#e2e8f0', pos: new THREE.Vector3(-1.35, 1.05, 0.4) },
+      { id: 'p4h', text: '脯胺酸羥化酶 (P4H)', color: '#a5b4fc', pos: new THREE.Vector3(-1.35, -0.8, 1.35) },
+      { id: 'fe', text: '活性中心 Fe²⁺ (活化)', color: '#10b981', pos: new THREE.Vector3(0.45, -0.1, 1.85) },
+      { id: 'vitc', text: '維生素 C (抗壞血酸還原劑)', color: '#fbbf24', pos: new THREE.Vector3(2.1, 0.35, 1.6) }
+    ];
+
+    labelDefs.forEach((ld) => {
+      const div = document.createElement('div');
+      div.className = 'label-3d-tag';
+      div.style.borderColor = ld.color;
+      div.style.color = ld.color;
+      div.textContent = ld.text;
+      elLabels3d.appendChild(div);
+      ld.el = div;
+    });
+
+    threeApp = {
+      renderer,
+      scene,
+      camera,
+      rootGroup,
+      chainMeshes,
+      residues,
+      enzymeGroup,
+      feCore,
+      feRing,
+      feMat,
+      feRingMat,
+      vitCMolecules,
+      electronBeam,
+      beamMat,
+      labelDefs,
+      lastBuiltStability: -999,
+      lastBuiltWave: -999,
+      // 球面座標相機控制狀態
+      cam: {
+        theta: 0.25,
+        phi: 1.42,
+        radius: 9.2,
+        target: new THREE.Vector3(0, 0.15, 0),
+        reset() {
+          this.theta = 0.25;
+          this.phi = 1.42;
+          this.radius = 9.2;
+          this.target.set(0, 0.15, 0);
+        }
+      },
+      resize(w, h) {
+        if (!w || !h) return;
+        renderer.setSize(w, h);
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+      }
+    };
+  }
+
+  // 根據三股螺旋穩定度計算第 c 條多肽鏈在參數 u (-1..1) 的 3D 座標
+  function sampleChainPoint(c, u, stability, t) {
+    const y = u * 3.1;
+    // 穩定時緊密纏繞，缺乏維生素 C 時鬆散張開並受熱擾動搖晃
+    const baseAngle = u * Math.PI * (1.2 + 2.6 * stability) + (c * Math.PI * 2) / 3;
+    const spread = 0.42 + (1 - stability) * (0.78 + 0.45 * Math.abs(u));
+    const wobble = (1 - stability) * 0.22 * Math.sin(t * 2.8 + u * 5 + c * 2.1);
+    const x = Math.cos(baseAngle) * spread + wobble;
+    const z = Math.sin(baseAngle) * spread + Math.cos(t * 2.2 + u * 4 + c) * (1 - stability) * 0.18;
+    return new THREE.Vector3(x, y, z);
+  }
+
+  function updateThreeScene(dt) {
+    if (!threeApp) return;
+    const t = state.time;
+
+    // 目標穩定度與鐵離子狀態依據滑桿與步驟平滑過渡
+    let targetStab = state.vitCSlider / 100;
+    let targetFe = state.vitCSlider / 100;
+    const stepPhase = TAB2_STEPS[state.tab2Step].phase;
+    if (stepPhase === 'loose') {
+      targetStab = Math.min(targetStab, 0.12);
+      targetFe = 0.85;
+    } else if (stepPhase === 'oxidized') {
+      targetStab = 0.42;
+      targetFe = 0.05;
+    }
+
+    state.helixStability += (targetStab - state.helixStability) * Math.min(1, dt * 4.5);
+    state.feActiveLerp += (targetFe - state.feActiveLerp) * Math.min(1, dt * 5.0);
+
+    const stab = state.helixStability;
+    const feAct = state.feActiveLerp;
+
+    // 更新三條多肽鏈幾何與顏色（健康青綠 vs 壞血灰暗）
+    const okColors = [new THREE.Color(0x2dd4bf), new THREE.Color(0x38bdf8), new THREE.Color(0x14b8a6)];
+    const badColor = new THREE.Color(0x64748b);
+
+    threeApp.chainMeshes.forEach((mesh, c) => {
+      const pts = [];
+      const segs = 40;
+      for (let s = 0; s <= segs; s++) {
+        const u = -1 + (2 * s) / segs;
+        pts.push(sampleChainPoint(c, u, stab, t));
+      }
+      const curve = new THREE.CatmullRomCurve3(pts);
+      const newGeo = new THREE.TubeGeometry(curve, 48, 0.135, 10, false);
+      mesh.geometry.dispose();
+      mesh.geometry = newGeo;
+      mesh.material.color.copy(badColor).lerp(okColors[c], stab);
+    });
+
+    // 更新脯胺酸殘基、-OH 羥基與鏈間氫鍵光橋
+    threeApp.residues.forEach((r) => {
+      const u = -0.82 + (1.64 * r.i) / (threeApp.residues.length - 1);
+      const p1 = sampleChainPoint(r.chainIdx, u, stab, t);
+      const p2 = sampleChainPoint((r.chainIdx + 1) % 3, u + 0.03, stab, t);
+
+      const outward = new THREE.Vector3(p1.x, 0, p1.z).normalize();
+      r.proMesh.position.copy(p1).addScaledVector(outward, 0.16);
+
+      // -OH 隨羥基化程度縮放顯示
+      const ohScale = Math.max(0.001, Math.min(1, (stab - 0.12) * 1.35));
+      r.ohMesh.scale.setScalar(ohScale);
+      const inward = new THREE.Vector3().subVectors(p2, p1);
+      const dist = inward.length();
+      r.ohMesh.position.copy(p1).addScaledVector(inward.clone().normalize(), 0.22);
+
+      // 鏈間氫鍵僅在羥基化充足且距離緊密時顯現
+      if (stab > 0.35) {
+        r.hBondMesh.visible = true;
+        const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
+        r.hBondMesh.position.copy(mid);
+        r.hBondMesh.scale.set(1, dist, 1);
+        r.hBondMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), inward.clone().normalize());
+        r.hBondMesh.material.opacity = Math.min(0.82, (stab - 0.35) * 1.3);
+      } else {
+        r.hBondMesh.visible = false;
+      }
+    });
+
+    // 更新 P4H 酶活性中心鐵離子 (綠 Fe2+ <-> 橘 Fe3+)
+    const colFe3 = new THREE.Color(0xf97316);
+    const colFe2 = new THREE.Color(0x10b981);
+    const curFeCol = colFe3.clone().lerp(colFe2, feAct);
+    threeApp.feMat.color.copy(curFeCol);
+    threeApp.feMat.emissive.copy(curFeCol);
+    threeApp.feRingMat.color.copy(curFeCol);
+    threeApp.feRing.rotation.x = t * (0.6 + feAct * 2.5);
+    threeApp.feRing.rotation.y = t * (0.8 + feAct * 2.0);
+
+    // 維生素 C 分子環繞與電子傳遞動畫
+    const vitRatio = state.vitCSlider / 100;
+    const feWorld = new THREE.Vector3(0, -0.25, 1.7);
+    let closestVitPos = null;
+
+    threeApp.vitCMolecules.forEach((vm, idx) => {
+      const visibleCount = Math.round(vitRatio * 5);
+      vm.mesh.visible = idx < visibleCount;
+      if (!vm.mesh.visible) return;
+
+      const ang = t * 1.35 + vm.phase;
+      const rad = 1.45 + 0.35 * Math.sin(t * 1.9 + idx);
+      const vx = Math.cos(ang) * rad + 0.9;
+      const vy = Math.sin(ang * 0.8) * 1.1 - 0.15;
+      const vz = 1.55 + Math.sin(ang) * 0.55;
+      vm.mesh.position.set(vx, vy, vz);
+      vm.mesh.rotation.z = t * 1.5 + idx;
+      if (idx === 0) closestVitPos = vm.mesh.position.clone();
+    });
+
+    // 電子還原脈衝光束
+    if (closestVitPos && vitRatio > 0.15 && stepPhase !== 'loose') {
+      const pulse = 0.5 + 0.5 * Math.sin(t * 7.5);
+      threeApp.beamMat.opacity = pulse * 0.8 * vitRatio;
+      const diff = new THREE.Vector3().subVectors(feWorld, closestVitPos);
+      threeApp.electronBeam.position.copy(closestVitPos).addScaledVector(diff, 0.5);
+      threeApp.electronBeam.scale.set(1, diff.length(), 1);
+      threeApp.electronBeam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), diff.normalize());
+      threeApp.electronBeam.visible = true;
+    } else {
+      threeApp.electronBeam.visible = false;
+    }
+
+    // 緩慢自轉展示立體感
+    threeApp.rootGroup.rotation.y = Math.sin(t * 0.35) * 0.18;
+
+    // 更新相機位置
+    const c = threeApp.cam;
+    c.phi = Math.max(0.25, Math.min(Math.PI - 0.25, c.phi));
+    c.radius = Math.max(4.2, Math.min(18.0, c.radius));
+    threeApp.camera.position.set(
+      c.target.x + c.radius * Math.sin(c.phi) * Math.sin(c.theta),
+      c.target.y + c.radius * Math.cos(c.phi),
+      c.target.z + c.radius * Math.sin(c.phi) * Math.cos(c.theta)
+    );
+    threeApp.camera.lookAt(c.target);
+
+    threeApp.renderer.render(threeApp.scene, threeApp.camera);
+
+    // 更新 3D 投影文字標籤
+    const rect = elThreeWrap.getBoundingClientRect();
+    threeApp.labelDefs.forEach((ld) => {
+      if (!state.showLabels) {
+        ld.el.style.display = 'none';
+        return;
+      }
+      if (ld.id === 'vitc' && vitRatio < 0.1) {
+        ld.el.style.display = 'none';
+        return;
+      }
+      if (ld.id === 'fe') {
+        ld.el.textContent = feAct > 0.5 ? '活性中心 Fe²⁺ (還原活化態)' : '活性中心 Fe³⁺ (氧化失活態)';
+        ld.el.style.color = feAct > 0.5 ? COLORS.fe2 : COLORS.fe3;
+        ld.el.style.borderColor = feAct > 0.5 ? COLORS.fe2 : COLORS.fe3;
+      }
+      if (ld.id === 'helix') {
+        ld.el.textContent = stab > 0.55 ? '穩固膠原蛋白三股螺旋 (鋼筋)' : '未羥基化鬆散多肽鏈 (解體)';
+        ld.el.style.color = stab > 0.55 ? COLORS.collagenOk : '#cbd5e1';
+      }
+
+      const worldPos = ld.pos.clone().applyMatrix4(threeApp.rootGroup.matrixWorld);
+      worldPos.project(threeApp.camera);
+      if (worldPos.z > 1) {
+        ld.el.style.display = 'none';
+        return;
+      }
+      const sx = (worldPos.x * 0.5 + 0.5) * rect.width;
+      const sy = (-worldPos.y * 0.5 + 0.5) * rect.height;
+      ld.el.style.display = 'block';
+      ld.el.style.left = `${sx}px`;
+      ld.el.style.top = `${sy}px`;
+    });
+  }
+
+  /* =========================================================
+     繪製輔助工具 (Canvas 2D)
+  ========================================================= */
+  function roundRect(ctx, x, y, w, h, r) {
+    const rr = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + rr, y);
+    ctx.arcTo(x + w, y, x + w, y + h, rr);
+    ctx.arcTo(x + w, y + h, x, y + h, rr);
+    ctx.arcTo(x, y + h, x, y, rr);
+    ctx.arcTo(x, y, x + w, y, rr);
+    ctx.closePath();
+  }
+
+  function drawCallout(ctx, anchorX, anchorY, boxX, boxY, text, borderColor = COLORS.collagenOk) {
+    if (!state.showLabels) return;
+    ctx.save();
+    ctx.font = '600 13px -apple-system, BlinkMacSystemFont, "Microsoft JhengHei", sans-serif';
+    const padX = 10;
+    const tw = ctx.measureText(text).width + padX * 2;
+    const th = 28;
+    const bx = boxX - tw / 2;
+    const by = boxY - th / 2;
+
+    // 引線
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = 1.6;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    ctx.moveTo(anchorX, anchorY);
+    ctx.lineTo(boxX, boxY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = borderColor;
+    ctx.beginPath();
+    ctx.arc(anchorX, anchorY, 3.8, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 標籤底框
+    ctx.fillStyle = 'rgba(8, 17, 30, 0.9)';
+    roundRect(ctx, bx, by, tw, th, 7);
+    ctx.fill();
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = 1.3;
+    ctx.stroke();
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, boxX, boxY + 0.5);
+    ctx.restore();
+  }
+
+  function drawCollagenStrand(ctx, x1, y1, x2, y2, integrity, seed = 0) {
+    // integrity: 1 = 強韌雙股交織青綠纖維, 0 = 斷裂灰暗殘絲
+    ctx.save();
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const len = Math.hypot(dx, dy);
+    const ang = Math.atan2(dy, dx);
+    ctx.translate(x1, y1);
+    ctx.rotate(ang);
+
+    if (integrity > 0.35) {
+      ctx.strokeStyle = integrity > 0.65 ? COLORS.collagenOk : '#5eead4';
+      ctx.globalAlpha = 0.4 + 0.55 * integrity;
+      ctx.lineWidth = 2.2 * integrity + 0.8;
+      for (let strand = -1; strand <= 1; strand += 2) {
+        ctx.beginPath();
+        for (let i = 0; i <= 18; i++) {
+          const px = (len * i) / 18;
+          const py = Math.sin(i * 0.9 + seed) * 3.2 * strand * integrity;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+      }
+    } else {
+      // 斷裂水解的灰暗短絲
+      ctx.strokeStyle = COLORS.collagenBad;
+      ctx.globalAlpha = 0.55;
+      ctx.lineWidth = 1.6;
+      const drift = (0.35 - integrity) * 26;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(len * 0.32, -drift * 0.5 + Math.sin(state.time * 2 + seed) * 3);
+      ctx.moveTo(len * 0.68, drift * 0.5 - Math.cos(state.time * 2 + seed) * 3);
+      ctx.lineTo(len, 0);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawRBC(ctx, x, y, r = 6.5, angle = 0) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    ctx.fillStyle = COLORS.blood;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, r, r * 0.68, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#b91c1c';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, r * 0.45, r * 0.28, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawVitCParticle(ctx, x, y, r = 4.5) {
+    ctx.save();
+    ctx.fillStyle = COLORS.vitCGlow;
+    ctx.beginPath();
+    ctx.arc(x, y, r * 2.1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = COLORS.vitC;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /* =========================================================
+     TAB 1 繪圖引擎：水手病症熱點 + 動態組織病理顯微視窗
+  ========================================================= */
+  function renderTab1(ctx) {
+    vp2d.hitRegions = [];
+    const t = state.time;
+    // 平滑過渡步驟數值 0..3
+    state.tab1Lerp += (state.tab1Step - state.tab1Lerp) * 0.09;
+    const p = state.tab1Lerp;
+    const integrity = Math.max(0, 1 - Math.min(1, p * 0.92)); // Step 0=1, Step 1+=下降
+    const stressAmt = p > 1.5 && p < 2.6 ? Math.sin((p - 1.5) * Math.PI) : (p >= 2.6 ? 0.5 : 0);
+    const bleedAmt = Math.max(0, Math.min(1, p - 2.05));
+
+    // 左側：18世紀水手解剖熱點區 (x: 30..330, y: 40..595)
+    ctx.save();
+    roundRect(ctx, 28, 42, 295, 560, 16);
+    ctx.fillStyle = 'rgba(17, 31, 54, 0.85)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = '700 15px -apple-system, BlinkMacSystemFont, "Microsoft JhengHei", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('點擊水手部位切換微觀病理', 175, 72);
+
+    // 繪製水手半身輪廓
+    const sx = 175;
+    // 軀幹與海魂衫
+    ctx.fillStyle = '#1e3a5f';
+    roundRect(ctx, sx - 78, 250, 156, 225, 32);
+    ctx.fill();
+    // 白色條紋
+    ctx.fillStyle = 'rgba(241, 245, 249, 0.22)';
+    for (let sy = 285; sy < 450; sy += 26) {
+      ctx.fillRect(sx - 72, sy, 144, 9);
+    }
+    // 手臂露出皮膚（展示舊傷口與皮下紫斑）
+    ctx.fillStyle = bleedAmt > 0.2 ? '#d6bcab' : '#eac7b0';
+    roundRect(ctx, sx - 112, 270, 42, 195, 18); // 右臂(畫面左)
+    ctx.fill();
+    roundRect(ctx, sx + 70, 270, 42, 195, 18);  // 左臂(畫面右)
+    ctx.fill();
+
+    // 頸部與頭部
+    ctx.fillStyle = '#eac7b0';
+    ctx.fillRect(sx - 22, 215, 44, 42);
+    ctx.beginPath();
+    ctx.arc(sx, 168, 54, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 水手帽
+    ctx.fillStyle = '#0f172a';
+    ctx.beginPath();
+    ctx.ellipse(sx, 122, 62, 18, 0, Math.PI, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#38bdf8';
+    ctx.fillRect(sx - 54, 118, 108, 7);
+
+    // 眼睛（隨病情疲憊）
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 2.4;
+    const droop = p * 1.5;
+    ctx.beginPath();
+    ctx.moveTo(sx - 24, 156 + droop); ctx.lineTo(sx - 10, 155);
+    ctx.moveTo(sx + 10, 155); ctx.lineTo(sx + 24, 156 + droop);
+    ctx.stroke();
+
+    // 嘴巴與牙齦狀態
+    ctx.fillStyle = '#450a0a';
+    roundRect(ctx, sx - 20, 184, 40, 18, 7);
+    ctx.fill();
+    ctx.fillStyle = p > 2 ? '#ef4444' : '#f472b6';
+    ctx.fillRect(sx - 18, 184, 36, 6);
+    if (bleedAmt > 0.1) {
+      ctx.fillStyle = COLORS.blood;
+      ctx.beginPath();
+      ctx.arc(sx - 8, 198, 3.5 * bleedAmt, 0, Math.PI * 2);
+      ctx.arc(sx + 7, 200, 4 * bleedAmt, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 右臂：舊傷口裂開標記
+    ctx.strokeStyle = p > 2 ? COLORS.blood : '#b48a78';
+    ctx.lineWidth = p > 2 ? 4.5 : 2;
+    ctx.beginPath();
+    ctx.moveTo(sx - 102, 340);
+    ctx.lineTo(sx - 80, 362);
+    ctx.stroke();
+
+    // 左臂：皮下紫斑標記
+    if (p > 1.2) {
+      const purpAlpha = Math.min(0.8, (p - 1.2) * 0.45);
+      ctx.fillStyle = `rgba(147, 51, 234, ${purpAlpha})`;
+      ctx.beginPath();
+      ctx.arc(sx + 88, 355, 11, 0, Math.PI * 2);
+      ctx.arc(sx + 96, 385, 8, 0, Math.PI * 2);
+      ctx.arc(sx + 82, 405, 6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 4 個互動熱點按鈕
+    const hotspots = [
+      { mode: 0, x: sx, y: 192, label: '1. 牙齦出血' },
+      { mode: 1, x: sx - 91, y: 352, label: '2. 舊傷裂開' },
+      { mode: 2, x: sx + 91, y: 375, label: '3. 皮下紫斑' },
+      { mode: 3, x: sx, y: 532, label: '4.「壞血」本質：失去鋼筋' }
+    ];
+
+    hotspots.forEach((hs) => {
+      const isAct = state.tab1Mode === hs.mode;
+      const pulse = isAct ? 4 * Math.sin(t * 5) : 0;
+
+      if (hs.mode < 3) {
+        ctx.beginPath();
+        ctx.arc(hs.x, hs.y, 19 + pulse * 0.4, 0, Math.PI * 2);
+        ctx.strokeStyle = isAct ? COLORS.vitC : 'rgba(56, 189, 248, 0.7)';
+        ctx.lineWidth = isAct ? 3 : 1.8;
+        ctx.fillStyle = isAct ? 'rgba(251, 191, 36, 0.22)' : 'rgba(15, 23, 42, 0.45)';
+        ctx.fill();
+        ctx.stroke();
+
+        if (state.showLabels) {
+          ctx.font = '600 11.5px -apple-system, sans-serif';
+          const tw = ctx.measureText(hs.label).width + 12;
+          roundRect(ctx, hs.x - tw / 2, hs.y + 23, tw, 20, 5);
+          ctx.fillStyle = isAct ? COLORS.vitC : 'rgba(8,17,30,0.88)';
+          ctx.fill();
+          ctx.fillStyle = isAct ? '#09111e' : '#f1f5f9';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(hs.label, hs.x, hs.y + 33);
+        }
+
+        vp2d.hitRegions.push({
+          x: hs.x - 28, y: hs.y - 28, w: 56, h: 70,
+          onClick: () => selectTab1Mode(hs.mode)
+        });
+      } else {
+        // 底部大型切換鈕：壞血本質
+        roundRect(ctx, sx - 122, hs.y - 22, 244, 44, 10);
+        ctx.fillStyle = isAct ? 'rgba(45, 212, 191, 0.22)' : 'rgba(23, 41, 70, 0.9)';
+        ctx.fill();
+        ctx.strokeStyle = isAct ? COLORS.collagenOk : 'rgba(148, 163, 184, 0.4)';
+        ctx.lineWidth = isAct ? 2.4 : 1.3;
+        ctx.stroke();
+
+        ctx.fillStyle = isAct ? COLORS.collagenOk : '#e2e8f0';
+        ctx.font = '700 13.5px -apple-system, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('🧱 ' + hs.label, sx, hs.y);
+
+        vp2d.hitRegions.push({
+          x: sx - 122, y: hs.y - 22, w: 244, h: 44,
+          onClick: () => selectTab1Mode(3)
+        });
+      }
+    });
+    ctx.restore();
+
+    // 右側：高倍率動態組織病理切片視窗 (x: 348..1092, y: 42..602)
+    const vx = 348, vy = 42, vw = 744, vh = 560;
+    ctx.save();
+    roundRect(ctx, vx, vy, vw, vh, 18);
+    ctx.fillStyle = '#0d1b30';
+    ctx.fill();
+    ctx.clip();
+
+    // 顯微格線背景
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.06)';
+    ctx.lineWidth = 1;
+    for (let gx = vx; gx < vx + vw; gx += 36) {
+      ctx.beginPath(); ctx.moveTo(gx, vy); ctx.lineTo(gx, vy + vh); ctx.stroke();
+    }
+    for (let gy = vy; gy < vy + vh; gy += 36) {
+      ctx.beginPath(); ctx.moveTo(vx, gy); ctx.lineTo(vx + vw, gy); ctx.stroke();
+    }
+
+    if (state.tab1Mode === 0) {
+      drawHistologyGums(ctx, vx, vy, vw, vh, integrity, stressAmt, bleedAmt, t);
+    } else if (state.tab1Mode === 1) {
+      drawHistologyScar(ctx, vx, vy, vw, vh, integrity, stressAmt, bleedAmt, t);
+    } else if (state.tab1Mode === 2) {
+      drawHistologyPurpura(ctx, vx, vy, vw, vh, integrity, stressAmt, bleedAmt, t);
+    } else {
+      drawHistologyMeaning(ctx, vx, vy, vw, vh, p, t);
+    }
+
+    // 視窗標題列
+    ctx.fillStyle = 'rgba(8, 17, 30, 0.82)';
+    ctx.fillRect(vx, vy, vw, 44);
+    ctx.fillStyle = COLORS.collagenOk;
+    ctx.font = '700 15.5px -apple-system, BlinkMacSystemFont, "Microsoft JhengHei", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`🔬 微觀組織切片模擬｜${TAB1_MODES[state.tab1Mode].name} — ${TAB1_MODES[state.tab1Mode].subtitle}`, vx + 18, vy + 22);
+
+    ctx.restore();
+
+    // 外框描邊
+    ctx.save();
+    roundRect(ctx, vx, vy, vw, vh, 18);
+    ctx.strokeStyle = 'rgba(45, 212, 191, 0.35)';
+    ctx.lineWidth = 1.8;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // 子場景 1-0：牙齦出血 (牙齒 + 牙周膜第I型膠原 + 齦乳頭微血管網第IV型膠原)
+  function drawHistologyGums(ctx, vx, vy, vw, vh, integrity, stressAmt, bleedAmt, t) {
+    const toothShake = bleedAmt > 0.2 ? Math.sin(t * 9) * 5 * bleedAmt : (stressAmt * Math.sin(t * 18) * 2.5);
+
+    // 牙齦結締組織底色（發炎時轉紅腫）
+    const swell = bleedAmt * 24;
+    ctx.fillStyle = bleedAmt > 0.2 ? 'rgba(153, 27, 27, 0.38)' : 'rgba(244, 114, 182, 0.14)';
+    ctx.beginPath();
+    ctx.moveTo(vx + 220, vy + 145 - swell);
+    ctx.quadraticCurveTo(vx + 450, vy + 95 - swell * 1.3, vx + vw, vy + 165);
+    ctx.lineTo(vx + vw, vy + vh);
+    ctx.lineTo(vx + 220, vy + vh);
+    ctx.closePath();
+    ctx.fill();
+
+    // 牙齦上皮層弧線
+    ctx.strokeStyle = bleedAmt > 0.3 ? '#f87171' : '#f472b6';
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.moveTo(vx + 225, vy + 150 - swell);
+    ctx.quadraticCurveTo(vx + 450, vy + 95 - swell * 1.3, vx + vw, vy + 165);
+    ctx.stroke();
+
+    // 左側：牙齒切面 (牙冠 + 牙根)
+    ctx.save();
+    ctx.translate(toothShake, stressAmt * 6);
+    ctx.fillStyle = '#f8fafc';
+    roundRect(ctx, vx + 55, vy + 75, 170, 175, 28);
+    ctx.fill();
+    ctx.fillStyle = '#fde68a'; // 象牙質/牙根
+    roundRect(ctx, vx + 78, vy + 220, 124, 310, 40);
+    ctx.fill();
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.restore();
+
+    // 牙周膜：第一型膠原蛋白束（連接牙根與牙槽骨/牙齦）
+    for (let i = 0; i < 9; i++) {
+      const yPos = vy + 235 + i * 32;
+      drawCollagenStrand(ctx, vx + 202 + toothShake, yPos, vx + 335, yPos + 14, integrity, i);
+    }
+
+    // 齦乳頭豐富微血管環 (Capillary Loops) 與外覆第四型膠原蛋白網
+    const loops = [
+      { cx: vx + 430, topY: vy + 175 },
+      { cx: vx + 575, topY: vy + 185 }
+    ];
+
+    loops.forEach((lp, idx) => {
+      // 微血管管腔路徑
+      ctx.save();
+      ctx.strokeStyle = bleedAmt > 0.2 ? 'rgba(239, 68, 68, 0.5)' : 'rgba(248, 113, 113, 0.78)';
+      ctx.lineWidth = 22;
+      ctx.lineCap = 'round';
+      if (bleedAmt > 0.25) ctx.setLineDash([24, 12]); // 破裂缺口
+      ctx.beginPath();
+      ctx.moveTo(lp.cx - 38, vy + vh);
+      ctx.lineTo(lp.cx - 38, lp.topY + 40);
+      ctx.arc(lp.cx, lp.topY + 40, 38, Math.PI, 0, false);
+      ctx.lineTo(lp.cx + 38, vy + vh);
+      ctx.stroke();
+      ctx.restore();
+
+      // 包覆微血管的第 IV 型膠原蛋白支撐網
+      for (let k = 0; k < 6; k++) {
+        const yy = lp.topY + 45 + k * 52;
+        drawCollagenStrand(ctx, lp.cx - 64, yy, lp.cx + 64, yy - 12, integrity, k + idx * 5);
+      }
+
+      // 管腔內流動紅血球與維生素 C
+      for (let r = 0; r < 7; r++) {
+        const prog = ((t * 0.35 + r / 7 + idx * 0.3) % 1);
+        let rx, ry;
+        if (prog < 0.4) {
+          rx = lp.cx - 38;
+          ry = vy + vh - (prog / 0.4) * (vy + vh - lp.topY - 40);
+        } else if (prog < 0.6) {
+          const a = Math.PI + ((prog - 0.4) / 0.2) * Math.PI;
+          rx = lp.cx + Math.cos(a) * 38;
+          ry = lp.topY + 40 + Math.sin(a) * 38;
+        } else {
+          rx = lp.cx + 38;
+          ry = lp.topY + 40 + ((prog - 0.6) / 0.4) * (vy + vh - lp.topY - 40);
+        }
+        drawRBC(ctx, rx, ry, 6.5, prog * Math.PI * 2);
+        if (integrity > 0.6 && r % 2 === 0) {
+          drawVitCParticle(ctx, rx + 5, ry - 8, 4);
+        }
+      }
+
+      // Step 4 破裂滲血至牙齦乳頭與口腔！
+      if (bleedAmt > 0.05) {
+        ctx.fillStyle = `rgba(220, 38, 38, ${0.42 * bleedAmt})`;
+        ctx.beginPath();
+        ctx.arc(lp.cx, lp.topY + 20, 58 * bleedAmt, 0, Math.PI * 2);
+        ctx.fill();
+
+        for (let b = 0; b < 12; b++) {
+          const ang = -Math.PI * 0.9 + (b / 11) * Math.PI * 0.8;
+          const dist = ((t * 38 + b * 19) % 75) * bleedAmt;
+          drawRBC(ctx, lp.cx + Math.cos(ang) * dist, lp.topY + 15 + Math.sin(ang) * dist, 5.8, b);
+        }
+      }
+    });
+
+    // 成纖維細胞 (Fibroblasts)
+    [ [vx + 325, vy + 310], [vx + 505, vy + 420] ].forEach(([fx, fy]) => {
+      ctx.fillStyle = integrity > 0.5 ? '#14b8a6' : '#64748b';
+      ctx.beginPath();
+      ctx.ellipse(fx, fy, 24, 11, 0.25, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#0f172a';
+      ctx.beginPath();
+      ctx.arc(fx, fy, 5, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // Step 3 咀嚼機械摩擦壓力波
+    if (stressAmt > 0.05) {
+      ctx.save();
+      ctx.strokeStyle = COLORS.vitC;
+      ctx.lineWidth = 3;
+      for (let w = 0; w < 3; w++) {
+        const wy = vy + 72 + ((t * 60 + w * 22) % 55);
+        ctx.globalAlpha = stressAmt * (1 - (wy - vy - 72) / 60);
+        ctx.beginPath();
+        ctx.arc(vx + 360, wy, 45 + w * 18, 0.2, Math.PI - 0.2);
+        ctx.stroke();
+      }
+      ctx.fillStyle = COLORS.vitC;
+      ctx.globalAlpha = stressAmt;
+      ctx.font = '700 14px sans-serif';
+      ctx.fillText('⬇ 咀嚼機械摩擦與咬合壓力 ⬇', vx + 330, vy + 76);
+      ctx.restore();
+    }
+
+    // 解剖標籤
+    drawCallout(ctx, vx + 140 + toothShake, vy + 160, vx + 140, vy + 100, bleedAmt > 0.3 ? '牙齒失去固定而鬆動' : '牙冠與牙根', '#e2e8f0');
+    drawCallout(ctx, vx + 268, vy + 332, vx + 275, vy + 530, integrity > 0.5 ? '第 I 型膠原蛋白 (穩固牙周膜)' : '牙周膜膠原纖維崩解斷裂', integrity > 0.5 ? COLORS.collagenOk : COLORS.collagenBad);
+    drawCallout(ctx, vx + 430, vy + 195, vx + 465, vy + 92, bleedAmt > 0.3 ? '微血管破裂滲血・牙齦紅腫潰爛' : '齦乳頭微血管網 + 第 IV 型膠原', bleedAmt > 0.3 ? COLORS.blood : COLORS.collagenOk);
+    drawCallout(ctx, vx + 505, vy + 420, vx + 615, vy + 525, integrity > 0.5 ? '成纖維細胞 (正常合成膠原)' : '成纖維細胞 (缺維生素C停產)', integrity > 0.5 ? COLORS.fe2 : COLORS.fe3);
+  }
+
+  // 子場景 1-1：舊傷口重新裂開 (ECM 動態汰換失衡 + 疤痕重新撕裂)
+  function drawHistologyScar(ctx, vx, vy, vw, vh, integrity, stressAmt, bleedAmt, t) {
+    const cx = vx + vw * 0.5;
+    // 裂口寬度：健康時完全閉合(4px)，缺乏維生素C張力拉扯時大裂開(130px)
+    const gapHalf = 3 + stressAmt * 16 + bleedAmt * 66;
+
+    // 左半側與右半側真皮組織塊
+    ctx.fillStyle = 'rgba(234, 199, 176, 0.16)';
+    ctx.fillRect(vx + 30, vy + 135, (cx - gapHalf) - (vx + 30), vh - 170);
+    ctx.fillRect(cx + gapHalf, vy + 135, (vx + vw - 30) - (cx + gapHalf), vh - 170);
+
+    // 表皮層與舊疤痕凹痕
+    ctx.strokeStyle = '#eab308';
+    ctx.lineWidth = 10;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(vx + 30, vy + 135);
+    ctx.lineTo(cx - gapHalf, vy + 142);
+    ctx.moveTo(cx + gapHalf, vy + 142);
+    ctx.lineTo(vx + vw - 30, vy + 135);
+    ctx.stroke();
+
+    // 跨越舊傷口縫隙的細胞外基質 (ECM) 膠原蛋白張力網
+    for (let row = 0; row < 8; row++) {
+      const yy = vy + 178 + row * 44;
+      // 動態汰換動畫：Step 0 時閃爍金色維生素 C 協助修補新纖維
+      const localInt = integrity;
+      drawCollagenStrand(ctx, cx - 125 - gapHalf * 0.4, yy, cx + 125 + gapHalf * 0.4, yy + (row % 2 ? 10 : -10), localInt, row * 1.7);
+
+      if (integrity > 0.6 && row % 2 === 0) {
+        const sparkX = cx - 80 + ((t * 55 + row * 35) % 160);
+        drawVitCParticle(ctx, sparkX, yy, 4.2);
+      }
+    }
+
+    // 傷口底部微血管分支
+    ctx.strokeStyle = COLORS.blood;
+    ctx.lineWidth = 14;
+    ctx.beginPath();
+    ctx.moveTo(vx + 60, vy + 495);
+    ctx.lineTo(cx - gapHalf, vy + 465);
+    ctx.moveTo(cx + gapHalf, vy + 465);
+    ctx.lineTo(vx + vw - 60, vy + 495);
+    ctx.stroke();
+
+    // 若裂開，血液湧入裂口形成潰爛血池
+    if (bleedAmt > 0.08) {
+      const grad = ctx.createLinearGradient(cx, vy + 145, cx, vy + 500);
+      grad.addColorStop(0, 'rgba(220, 38, 38, 0.85)');
+      grad.addColorStop(1, 'rgba(127, 29, 29, 0.45)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(cx - gapHalf, vy + 142);
+      ctx.lineTo(cx + gapHalf, vy + 142);
+      ctx.lineTo(cx + gapHalf * 0.65, vy + 490);
+      ctx.lineTo(cx - gapHalf * 0.65, vy + 490);
+      ctx.closePath();
+      ctx.fill();
+
+      for (let b = 0; b < 16; b++) {
+        const by = vy + 465 - ((t * 48 + b * 22) % 310) * bleedAmt;
+        const bx = cx + Math.sin(t * 3 + b) * gapHalf * 0.55;
+        drawRBC(ctx, bx, by, 6, b);
+      }
+    }
+
+    // P4H 輔酶狀態指示器（成纖維細胞內）
+    const p4hActive = integrity > 0.5;
+    [ [cx - 210, vy + 300], [cx + 210, vy + 300] ].forEach(([fx, fy]) => {
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+      roundRect(ctx, fx - 68, fy - 28, 136, 56, 10);
+      ctx.fill();
+      ctx.strokeStyle = p4hActive ? COLORS.fe2 : COLORS.fe3;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.fillStyle = p4hActive ? COLORS.fe2 : COLORS.fe3;
+      ctx.font = '700 12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(p4hActive ? 'P4H 羥化酶：活化 (Fe²⁺)' : 'P4H 羥化酶：失效 (Fe³⁺)', fx, fy - 7);
+      ctx.fillStyle = '#cbd5e1';
+      ctx.font = '11.5px sans-serif';
+      ctx.fillText(p4hActive ? '新膠原補充 ＝ 舊網水解' : '新纖維停產・舊網持續水解', fx, fy + 13);
+    });
+
+    // 皮膚兩側橫向張力箭頭
+    if (stressAmt > 0.05 || bleedAmt > 0.05) {
+      const pull = Math.max(stressAmt, bleedAmt);
+      ctx.save();
+      ctx.fillStyle = COLORS.vitC;
+      ctx.strokeStyle = COLORS.vitC;
+      ctx.lineWidth = 4;
+      ctx.globalAlpha = Math.min(1, pull * 1.2);
+      // 左拉箭頭
+      ctx.beginPath();
+      ctx.moveTo(cx - 95 - gapHalf, vy + 102); ctx.lineTo(cx - 175 - gapHalf, vy + 102);
+      ctx.lineTo(cx - 160 - gapHalf, vy + 92); ctx.moveTo(cx - 175 - gapHalf, vy + 102); ctx.lineTo(cx - 160 - gapHalf, vy + 112);
+      // 右拉箭頭
+      ctx.moveTo(cx + 95 + gapHalf, vy + 102); ctx.lineTo(cx + 175 + gapHalf, vy + 102);
+      ctx.lineTo(cx + 160 + gapHalf, vy + 92); ctx.moveTo(cx + 175 + gapHalf, vy + 102); ctx.lineTo(cx + 160 + gapHalf, vy + 112);
+      ctx.stroke();
+      ctx.font = '700 13.5px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('← 皮膚日常伸展張力 →', cx, vy + 106);
+      ctx.restore();
+    }
+
+    drawCallout(ctx, cx, vy + 145, cx, vy + 74, bleedAmt > 0.3 ? '已癒合舊傷口重新崩裂潰爛！' : '曾癒合的舊傷口疤痕表面', bleedAmt > 0.3 ? COLORS.blood : '#eab308');
+    drawCallout(ctx, cx, vy + 310, cx, vy + 532, integrity > 0.5 ? '細胞外基質 (ECM) 動態汰換平衡' : '膠原網水解掏空・喪失抗拉張力', integrity > 0.5 ? COLORS.collagenOk : COLORS.collagenBad);
+  }
+
+  // 子場景 1-2：皮下瘀血與紫斑 (內皮細胞 + 基底膜 + 紅血球外滲形成紫斑)
+  function drawHistologyPurpura(ctx, vx, vy, vw, vh, integrity, stressAmt, bleedAmt, t) {
+    // 上方皮膚表皮層（當紫斑形成時，皮下透出紫紅斑塊）
+    ctx.fillStyle = '#d6b199';
+    ctx.fillRect(vx + 30, vy + 95, vw - 60, 36);
+
+    if (bleedAmt > 0.05) {
+      // 皮下瘀血池 (Purpura & Petechiae)
+      const purpGrad = ctx.createRadialGradient(vx + vw * 0.5, vy + 245, 15, vx + vw * 0.5, vy + 245, 220 * bleedAmt + 20);
+      purpGrad.addColorStop(0, `rgba(147, 51, 234, ${0.72 * bleedAmt})`);
+      purpGrad.addColorStop(0.55, `rgba(185, 28, 28, ${0.52 * bleedAmt})`);
+      purpGrad.addColorStop(1, 'rgba(147, 51, 234, 0)');
+      ctx.fillStyle = purpGrad;
+      ctx.fillRect(vx + 30, vy + 130, vw - 60, 250);
+
+      // 表皮俯視可見的紫斑與點狀出血
+      ctx.fillStyle = `rgba(126, 34, 206, ${0.82 * bleedAmt})`;
+      ctx.beginPath();
+      ctx.ellipse(vx + vw * 0.5, vy + 113, 88 * bleedAmt, 14, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(vx + 220, vy + 113, 9 * bleedAmt, 0, Math.PI * 2);
+      ctx.arc(vx + 590, vy + 113, 7 * bleedAmt, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 橫向皮下微血管橫切面 (y = vy + 360, 管徑 84)
+    const vTop = vy + 320 + stressAmt * 10;
+    const vBot = vy + 410 - stressAmt * 10;
+
+    // 外層：膠原蛋白構成的「基底膜 (Basement Membrane)」
+    for (let i = 0; i < 12; i++) {
+      const sx = vx + 55 + i * 54;
+      drawCollagenStrand(ctx, sx, vTop - 16, sx + 50, vTop - 16, integrity, i);
+      drawCollagenStrand(ctx, sx, vBot + 16, sx + 50, vBot + 16, integrity, i + 20);
+    }
+
+    // 內層：血管內皮細胞 (Endothelial Cells) 排列
+    const cellCount = 9;
+    const cellW = (vw - 110) / cellCount;
+    for (let c = 0; c < cellCount; c++) {
+      const cx = vx + 55 + c * cellW;
+      // 缺乏維生素 C 時內皮細胞受氧化壓力萎縮、彼此失去黏著產生裂隙！
+      const shrink = (1 - integrity) * 9 + (bleedAmt > 0.1 && (c === 3 || c === 5) ? 16 : 0);
+
+      // 上管壁內皮細胞
+      ctx.fillStyle = integrity > 0.5 ? '#fb7185' : '#9f1239';
+      roundRect(ctx, cx + shrink * 0.5, vTop - 6, cellW - shrink - 2, 16, 7);
+      ctx.fill();
+      // 下管壁內皮細胞
+      roundRect(ctx, cx + shrink * 0.5, vBot - 10, cellW - shrink - 2, 16, 7);
+      ctx.fill();
+    }
+
+    // 管腔內紅血球與抗氧化維生素 C 流動
+    for (let r = 0; r < 14; r++) {
+      const rx = vx + 60 + ((t * 110 + r * 48) % (vw - 120));
+      const ry = (vTop + vBot) * 0.5 + Math.sin(t * 3 + r) * 16;
+      drawRBC(ctx, rx, ry, 7.5, Math.sin(r));
+      if (integrity > 0.6 && r % 2 === 0) {
+        drawVitCParticle(ctx, rx + 14, ry - 10, 4.5);
+      }
+    }
+
+    // 破裂處紅血球大量外滲 (Extravasation) 進入皮下組織
+    if (bleedAmt > 0.05) {
+      const leakSites = [vx + 55 + 3.5 * cellW, vx + 55 + 5.5 * cellW];
+      leakSites.forEach((lx, sIdx) => {
+        for (let e = 0; e < 11; e++) {
+          const prog = ((t * 0.45 + e / 11 + sIdx * 0.5) % 1);
+          const spreadX = Math.sin(e * 2.3 + sIdx) * 115 * prog;
+          const escapeY = vTop - 10 - prog * 175 * bleedAmt;
+          drawRBC(ctx, lx + spreadX, escapeY, 6.5, prog * 5);
+        }
+      });
+    }
+
+    // 下方肌肉層微幅收縮壓力示意
+    ctx.fillStyle = 'rgba(185, 28, 28, 0.28)';
+    roundRect(ctx, vx + 40, vy + 475 - stressAmt * 14, vw - 80, 62, 14);
+    ctx.fill();
+    if (stressAmt > 0.05) {
+      ctx.fillStyle = COLORS.vitC;
+      ctx.font = '700 13.5px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('⬆ 日常肌肉微幅收縮 / 輕微壓迫 ⬆', vx + vw * 0.5, vy + 510 - stressAmt * 14);
+    }
+
+    drawCallout(ctx, vx + vw * 0.5, vy + 113, vx + vw * 0.5, vy + 68, bleedAmt > 0.3 ? '皮下紫斑 (Purpura) 與點狀出血 (Petechiae)' : '正常皮膚表層', bleedAmt > 0.3 ? COLORS.purpura : '#eab308');
+    drawCallout(ctx, vx + 220, vTop - 16, vx + 190, vy + 235, integrity > 0.5 ? '膠原蛋白基底膜 (強韌有彈性)' : '基底膜失去彈性脆化斷裂', integrity > 0.5 ? COLORS.collagenOk : COLORS.collagenBad);
+    drawCallout(ctx, vx + 540, vTop + 2, vx + 560, vy + 235, integrity > 0.5 ? '血管內皮細胞緊密黏著 (抗氧化保護)' : '內皮細胞失去黏著・破裂滲血', integrity > 0.5 ? '#fb7185' : COLORS.blood);
+  }
+
+  // 子場景 1-3：「壞血」的病理定義（鋼筋混凝土結構對比 + 全身組織崩壞三層次）
+  function drawHistologyMeaning(ctx, vx, vy, vw, vh, p, t) {
+    const integrity = Math.max(0, 1 - p * 0.42);
+    const crackAmt = Math.max(0, Math.min(1, (p - 0.5) * 0.55));
+    const necrosisAmt = Math.max(0, Math.min(1, (p - 1.5) * 0.65));
+
+    // 上半部：建築力學直觀比喻（左：混凝土 = 細胞組織；中：鋼筋 = 膠原蛋白網）
+    const bx = vx + 55, by = vy + 78, bw = vw - 110, bh = 210;
+    roundRect(ctx, bx, by, bw, bh, 14);
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.72)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
+    ctx.stroke();
+
+    // 繪製血管/組織混凝土拱樑
+    const beamX = bx + 45, beamY = by + 58, beamW = bw - 90, beamH = 110;
+    const sag = crackAmt * 22;
+
+    ctx.save();
+    ctx.fillStyle = necrosisAmt > 0.3 ? '#334155' : '#475569';
+    ctx.beginPath();
+    ctx.moveTo(beamX, beamY);
+    ctx.quadraticCurveTo(beamX + beamW * 0.5, beamY + sag, beamX + beamW, beamY);
+    ctx.lineTo(beamX + beamW, beamY + beamH);
+    ctx.quadraticCurveTo(beamX + beamW * 0.5, beamY + beamH + sag, beamX, beamY + beamH);
+    ctx.closePath();
+    ctx.fill();
+
+    // 內部「膠原蛋白鋼筋網 (Rebar)」
+    for (let r = 0; r < 3; r++) {
+      const ry = beamY + 24 + r * 30 + sag * 0.5;
+      drawCollagenStrand(ctx, beamX + 12, ry, beamX + beamW - 12, ry, integrity, r * 3);
+    }
+    for (let v = 0; v < 9; v++) {
+      const rx = beamX + 35 + v * 62;
+      drawCollagenStrand(ctx, rx, beamY + 12, rx, beamY + beamH - 12, integrity, v);
+    }
+
+    // 失去鋼筋後的混凝土裂縫與血液外滲
+    if (crackAmt > 0.1) {
+      ctx.strokeStyle = '#09111e';
+      ctx.lineWidth = 4.5 * crackAmt;
+      [0.28, 0.52, 0.74].forEach((pos) => {
+        const cx = beamX + beamW * pos;
+        ctx.beginPath();
+        ctx.moveTo(cx, beamY + sag * 0.6);
+        ctx.lineTo(cx - 14, beamY + 45 + sag);
+        ctx.lineTo(cx + 10, beamY + beamH + sag * 0.8);
+        ctx.stroke();
+
+        if (necrosisAmt > 0.05) {
+          ctx.fillStyle = `rgba(239, 68, 68, ${0.75 * necrosisAmt})`;
+          ctx.beginPath();
+          ctx.arc(cx, beamY + beamH + 14 + sag, 18 * necrosisAmt, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      });
+    }
+    ctx.restore();
+
+    ctx.fillStyle = integrity > 0.6 ? COLORS.collagenOk : COLORS.vitC;
+    ctx.font = '700 14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(
+      integrity > 0.6
+        ? '🧱 結構比喻：健康組織 ＝ 混凝土（細胞基質）＋ 強韌鋼筋（膠原蛋白三股螺旋）'
+        : '⚠️ 抽走維生素 C ＝ 鋼筋鏽蝕消失！混凝土建築（微血管與結締組織）承受張力即全面崩塌',
+      bx + bw * 0.5, by + 30
+    );
+
+    // 下半部：「壞血」三大病理層次卡片視覺化
+    const cards = [
+      {
+        stepReq: 0.8,
+        title: '1. 結構崩壞 (Degeneration)',
+        sub: '微血管與結締組織失去膠原交聯，脆化崩解、張力喪失——「壞」的物理本義。',
+        col: COLORS.collagenOk
+      },
+      {
+        stepReq: 1.8,
+        title: '2. 滲漏與壞死 (Extravasation)',
+        sub: '血管破洞使血液外滲（紫斑/滲血），失養組織無法修復而萎縮、潰爛與壞死。',
+        col: COLORS.blood
+      },
+      {
+        stepReq: 2.7,
+        title: '3. 全身支撐敗壞 (Systemic)',
+        sub: '並非血液變臭，而是骨骼、牙齒、關節、皮膚同步敗壞，伴隨貧血虛弱致死。',
+        col: COLORS.purpura
+      }
+    ];
+
+    const cw = (vw - 130) / 3;
+    cards.forEach((cd, idx) => {
+      const cx = vx + 50 + idx * (cw + 15);
+      const cy = vy + 315;
+      const active = p >= cd.stepReq || (idx === 0 && p >= 0);
+
+      roundRect(ctx, cx, cy, cw, 210, 12);
+      ctx.fillStyle = active ? 'rgba(23, 41, 70, 0.95)' : 'rgba(15, 23, 42, 0.5)';
+      ctx.fill();
+      ctx.strokeStyle = active ? cd.col : 'rgba(148, 163, 184, 0.2)';
+      ctx.lineWidth = active ? 2.2 : 1;
+      ctx.stroke();
+
+      ctx.fillStyle = active ? cd.col : '#64748b';
+      ctx.font = '700 13.5px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(cd.title, cx + 14, cy + 32);
+
+      // 斷行繪製說明文字
+      ctx.fillStyle = active ? '#e2e8f0' : '#64748b';
+      ctx.font = '12.5px sans-serif';
+      wrapText(ctx, cd.sub, cx + 14, cy + 62, cw - 28, 21);
+    });
+  }
+
+  function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+    let line = '';
+    let curY = y;
+    for (let n = 0; n < text.length; n++) {
+      const testLine = line + text[n];
+      if (ctx.measureText(testLine).width > maxWidth && n > 0) {
+        ctx.fillText(line, x, curY);
+        line = text[n];
+        curY += lineHeight;
+      } else {
+        line = testLine;
+      }
+    }
+    ctx.fillText(line, x, curY);
+  }
+
+  /* =========================================================
+     TAB 3 繪圖引擎：1747 林德臨床對照試驗 (索爾茲伯里號) & 1795 歷史轉折
+  ========================================================= */
+  function renderTab3(ctx) {
+    vp2d.hitRegions = [];
+    const t = state.time;
+    state.tab3Lerp += (state.tab3Step - state.tab3Lerp) * 0.09;
+    const stepVal = state.tab3Lerp;
+
+    // 海洋背景波浪
+    ctx.save();
+    ctx.fillStyle = 'rgba(14, 116, 144, 0.16)';
+    ctx.beginPath();
+    ctx.moveTo(0, 560);
+    for (let x = 0; x <= 1120; x += 40) {
+      ctx.lineTo(x, 565 + Math.sin(x * 0.015 + t * 1.8) * 10);
+    }
+    ctx.lineTo(1120, 640);
+    ctx.lineTo(0, 640);
+    ctx.closePath();
+    ctx.fill();
+
+    // 英國皇家海軍軍艦「索爾茲伯里號 (HMS Salisbury, 1747)」木質船艙剖面
+    roundRect(ctx, 32, 34, 1056, 568, 24);
+    ctx.fillStyle = '#162235';
+    ctx.fill();
+    ctx.strokeStyle = '#78350f';
+    ctx.lineWidth = 6;
+    ctx.stroke();
+
+    // 頂部控制變因橫幅 (Controlled Variables Banner)
+    roundRect(ctx, 56, 52, 1008, 56, 12);
+    ctx.fillStyle = stepVal >= 0.7 ? 'rgba(16, 185, 129, 0.16)' : 'rgba(30, 41, 59, 0.8)';
+    ctx.fill();
+    ctx.strokeStyle = stepVal >= 0.7 ? COLORS.fe2 : 'rgba(148, 163, 184, 0.3)';
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = '700 14.5px -apple-system, BlinkMacSystemFont, "Microsoft JhengHei", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('⚓ 1747.05 索爾茲伯里號 (HMS Salisbury) 病艙', 74, 80);
+
+    ctx.fillStyle = stepVal >= 0.7 ? '#6ee7b7' : '#94a3b8';
+    ctx.font = '600 13px sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText('【嚴格控制變因】12人同住一艙・呼吸相同空氣・相同日常飲食（稀粥 / 糖漿 / 大麥湯）', 1046, 80);
+
+    // 若進入 Step 4.4+ (步驟 5 與 6：1753–1795 保存難題、煮沸濃縮錯誤 vs 常溫鮮檸檬汁改革)，左半顯示試驗結果，右半展開歷史實驗室比較！
+    const showHistorySplit = stepVal > 3.55;
+    const gridW = showHistorySplit ? 630 : 1008;
+
+    // 繪製 6 個臨床試驗對照組艙位 (3列 x 2排)
+    const cols = 3, rows = 2;
+    const gap = 14;
+    const cardW = (gridW - gap * (cols - 1)) / cols;
+    const cardH = 222;
+
+    TAB3_GROUPS.forEach((grp, idx) => {
+      const c = idx % cols;
+      const r = Math.floor(idx / cols);
+      const gx = 56 + c * (cardW + gap);
+      const gy = 124 + r * (cardH + gap);
+      const isSelected = state.selectedTrialGroup === idx;
+
+      // 計算該組在當前實驗步驟下的健康度 / 膠原蛋白完整度 (0..1)
+      // Day 0 (step <= 1): 全員重症 0.25
+      let health = 0.25;
+      if (stepVal > 1.2) {
+        const trialProg = Math.min(1, (stepVal - 1.2) / 1.8); // Day 1 -> Day 6
+        if (idx === 5) health = 0.25 + 0.73 * trialProg;        // 柑橘組奇蹟康復 -> 0.98!
+        else if (idx === 0) health = 0.25 + 0.14 * trialProg;   // 蘋果酒組微幅改善 -> 0.39
+        else if (idx === 4) health = 0.25 - 0.19 * trialProg;   // 海水組嚴重惡化 -> 0.06
+        else health = 0.25 - 0.12 * trialProg;                  // 其餘無效惡化 -> 0.13
+      }
+
+      roundRect(ctx, gx, gy, cardW, cardH, 12);
+      ctx.fillStyle = isSelected ? 'rgba(30, 48, 78, 0.96)' : 'rgba(17, 30, 50, 0.9)';
+      ctx.fill();
+      ctx.strokeStyle = isSelected ? COLORS.vitC : (idx === 5 && stepVal >= 2.6 ? COLORS.collagenOk : 'rgba(148, 163, 184, 0.26)');
+      ctx.lineWidth = isSelected ? 2.6 : 1.4;
+      ctx.stroke();
+
+      // 組別標題與單一變因劑量
+      ctx.fillStyle = grp.color;
+      ctx.font = '700 13.5px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(grp.name, gx + 12, gy + 24);
+
+      if (!showHistorySplit || state.showLabels) {
+        ctx.fillStyle = '#cbd5e1';
+        ctx.font = '11.5px sans-serif';
+        const shortDose = showHistorySplit ? grp.dose.split(' ')[0] + ' ' + (grp.dose.split(' ')[1] || '') : grp.dose;
+        ctx.fillText('單一變因：' + shortDose, gx + 12, gy + 43);
+      }
+
+      // 繪製組內 2 名水手動態角色
+      for (let s = 0; s < 2; s++) {
+        const sx = gx + cardW * (s === 0 ? 0.3 : 0.68);
+        const sy = gy + 118;
+        drawTrialSailor(ctx, sx, sy, health, idx === 5 && s === 0 && health > 0.8, t + idx + s);
+      }
+
+      // 投藥動畫 (Step 2 ~ 3 時飄入補充劑粒子)
+      if (stepVal >= 1.6 && stepVal <= 3.4) {
+        if (grp.vitC > 0) {
+          const pCount = grp.vitC === 100 ? 5 : 1;
+          for (let k = 0; k < pCount; k++) {
+            const py = gy + 62 + ((t * 42 + k * 18) % 65);
+            drawVitCParticle(ctx, gx + cardW * 0.5 + (k - 2) * 18, py, 4.2);
+          }
+        }
+      }
+
+      // 底部：膠原蛋白與臨床狀態指標條
+      const barX = gx + 12, barY = gy + cardH - 44, barW = cardW - 24;
+      ctx.fillStyle = 'rgba(8, 17, 30, 0.75)';
+      roundRect(ctx, barX, barY, barW, 10, 5);
+      ctx.fill();
+
+      const fillCol = health > 0.65 ? COLORS.collagenOk : (health > 0.32 ? '#a3e635' : COLORS.blood);
+      ctx.fillStyle = fillCol;
+      roundRect(ctx, barX, barY, Math.max(8, barW * health), 10, 5);
+      ctx.fill();
+
+      if (state.showLabels) {
+        ctx.fillStyle = health > 0.65 ? COLORS.collagenOk : (health < 0.2 ? '#fca5a5' : '#cbd5e1');
+        ctx.font = '600 11.5px sans-serif';
+        ctx.textAlign = 'left';
+        const statusTxt = stepVal < 1.3
+          ? '初始重症 (壞血病)'
+          : (idx === 5 && health > 0.75 ? '★ 奇蹟康復！可照顧同袍' : grp.outcome);
+        ctx.fillText(statusTxt, barX, barY + 26);
+      }
+
+      // 註冊點擊互動區
+      vp2d.hitRegions.push({
+        x: gx, y: gy, w: cardW, h: cardH,
+        onClick: () => {
+          state.selectedTrialGroup = idx;
+          renderSidePanel();
+        }
+      });
+    });
+
+    // 右側展開區（步驟 5 & 6）：1753–1795 保存難題、煮沸濃縮失敗 vs 1795 強制配給檸檬汁
+    if (showHistorySplit) {
+      const hx = 704, hy = 124, hw = 360, hh = 458;
+      roundRect(ctx, hx, hy, hw, hh, 14);
+      ctx.fillStyle = 'rgba(13, 24, 42, 0.96)';
+      ctx.fill();
+      ctx.strokeStyle = stepVal > 4.5 ? COLORS.vitC : COLORS.fe3;
+      ctx.lineWidth = 2.2;
+      ctx.stroke();
+
+      const is1795 = stepVal > 4.55;
+      ctx.fillStyle = is1795 ? COLORS.vitC : COLORS.fe3;
+      ctx.font = '700 15px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(
+        is1795 ? '🏆 1795 海軍強制配給檸檬汁改革' : '⚠️ 1753–1794 為何延誤40年？加熱破壞謎團',
+        hx + hw * 0.5, hy + 30
+      );
+
+      // 上框：煮沸熬成濃縮膏 (Rob) -> 維生素C熱破壞失效
+      const b1y = hy + 52;
+      roundRect(ctx, hx + 18, b1y, hw - 36, 178, 10);
+      ctx.fillStyle = 'rgba(30, 41, 59, 0.75)';
+      ctx.fill();
+
+      // 銅鍋與火焰動畫
+      const potX = hx + 95, potY = b1y + 108;
+      ctx.fillStyle = '#7c2d12';
+      ctx.beginPath();
+      ctx.arc(potX, potY, 36, 0, Math.PI);
+      ctx.fill();
+      // 火焰
+      ctx.fillStyle = COLORS.fe3;
+      for (let f = -2; f <= 2; f++) {
+        const fh = 12 + Math.sin(t * 10 + f * 2) * 5;
+        ctx.beginPath();
+        ctx.arc(potX + f * 11, potY + 44, fh * 0.45, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // 蒸汽與被破壞變灰的維生素 C
+      for (let m = 0; m < 5; m++) {
+        const my = potY - 12 - ((t * 32 + m * 16) % 68);
+        const broken = my < potY - 35;
+        ctx.fillStyle = broken ? COLORS.collagenBad : COLORS.vitC;
+        ctx.beginPath();
+        ctx.arc(potX + Math.sin(m * 2 + t * 2) * 20, my, 4.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.fillStyle = '#fca5a5';
+      ctx.font = '700 13px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('❌ 錯誤加工：煮沸濃縮檸檬膏', hx + 155, b1y + 38);
+      ctx.fillStyle = '#cbd5e1';
+      ctx.font = '12px sans-serif';
+      wrapText(ctx, '鮮果汁數週易酸敗；海軍將其煮沸濃縮，高溫徹底破壞抗壞血酸活性，導致後續試驗無效！', hx + 155, b1y + 64, 172, 19);
+
+      // 下框：1795 吉爾伯特·布萊恩 (Gilbert Blane) 常溫保存檸檬汁配給
+      const b2y = hy + 248;
+      roundRect(ctx, hx + 18, b2y, hw - 36, 190, 10);
+      ctx.fillStyle = is1795 ? 'rgba(45, 212, 191, 0.14)' : 'rgba(30, 41, 59, 0.45)';
+      ctx.fill();
+      if (is1795) {
+        ctx.strokeStyle = COLORS.collagenOk;
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+      }
+
+      // 檸檬汁木桶/玻璃瓶保存活性
+      const jarX = hx + 88, jarY = b2y + 98;
+      roundRect(ctx, jarX - 24, jarY - 38, 48, 76, 10);
+      ctx.fillStyle = 'rgba(251, 191, 36, 0.28)';
+      ctx.fill();
+      ctx.strokeStyle = COLORS.vitC;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      for (let g = 0; g < 5; g++) {
+        drawVitCParticle(ctx, jarX + Math.sin(t * 2 + g) * 11, jarY - 18 + g * 10, 4);
+      }
+
+      ctx.fillStyle = is1795 ? COLORS.vitC : '#94a3b8';
+      ctx.font = '700 13px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('✅ 1795 吉爾伯特·布萊恩改革', hx + 145, b2y + 38);
+      ctx.fillStyle = '#e2e8f0';
+      ctx.font = '12px sans-serif';
+      wrapText(ctx, '強制全海軍每日定量飲用未煮沸檸檬汁！壞血病瞬間絕跡，維持英軍海上封鎖戰力並最終擊敗拿破崙法軍。', hx + 145, b2y + 64, 182, 19);
+    }
+
+    ctx.restore();
+  }
+
+  function drawTrialSailor(ctx, x, y, health, isStandingNurse, t) {
+    ctx.save();
+    // 健康度低時身體蜷縮顫抖；康復時挺直活力
+    const slump = (1 - health) * 12;
+    const shiver = health < 0.22 ? Math.sin(t * 18) * 1.6 : 0;
+    ctx.translate(x + shiver, y + (isStandingNurse ? -8 : slump * 0.5));
+
+    // 身體
+    ctx.fillStyle = isStandingNurse ? '#0d9488' : '#1e3a5f';
+    roundRect(ctx, -18, -6, 36, 34, 9);
+    ctx.fill();
+
+    // 頭部
+    ctx.fillStyle = health > 0.6 ? '#f1c6ad' : '#cbb6a8';
+    ctx.beginPath();
+    ctx.arc(0, -20 + slump * 0.3, 14, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 病容紫斑點 vs 紅潤笑臉
+    if (health < 0.35) {
+      ctx.fillStyle = COLORS.purpura;
+      ctx.beginPath();
+      ctx.arc(-6, -18 + slump * 0.3, 2.5, 0, Math.PI * 2);
+      ctx.arc(7, -15 + slump * 0.3, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+      // 出血嘴角
+      ctx.strokeStyle = COLORS.blood;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-4, -13 + slump * 0.3);
+      ctx.lineTo(4, -13 + slump * 0.3);
+      ctx.stroke();
+    } else if (health > 0.7) {
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.arc(0, -18, 5.5, 0.15, Math.PI - 0.15);
+      ctx.stroke();
+    }
+
+    if (isStandingNurse && state.showLabels) {
+      ctx.fillStyle = COLORS.vitC;
+      ctx.font = '700 10.5px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('康復照護中', 0, -40);
+    }
+    ctx.restore();
+  }
+
+  /* =========================================================
+     說明與控制面板渲染邏輯
+  ========================================================= */
+  function getCurrentStepsArray() {
+    if (state.activeTab === 0) return TAB1_MODES[state.tab1Mode].steps;
+    if (state.activeTab === 1) return TAB2_STEPS;
+    return TAB3_STEPS;
+  }
+
+  function getCurrentStepIndex() {
+    if (state.activeTab === 0) return state.tab1Step;
+    if (state.activeTab === 1) return state.tab2Step;
+    return state.tab3Step;
+  }
+
+  function setStepIndex(idx) {
+    const arr = getCurrentStepsArray();
+    const clamped = Math.max(0, Math.min(arr.length - 1, idx));
+    if (state.activeTab === 0) {
+      state.tab1Step = clamped;
+    } else if (state.activeTab === 1) {
+      state.tab2Step = clamped;
+      state.vitCSlider = TAB2_STEPS[clamped].vitCLevel;
+    } else {
+      state.tab3Step = clamped;
+    }
+    renderStepBar();
+    renderSidePanel();
+  }
+
+  function selectTab1Mode(mIdx) {
+    state.tab1Mode = mIdx;
+    renderStepBar();
+    renderSidePanel();
+  }
+
+  function renderStepBar() {
+    const steps = getCurrentStepsArray();
+    const cur = getCurrentStepIndex();
+
+    btnPrevStep.disabled = cur <= 0;
+    btnNextStep.disabled = cur >= steps.length - 1;
+    btnPlayStep.textContent = state.isPlaying ? '⏸ 暫停演示' : '▶ 自動演示';
+    btnPlayStep.classList.toggle('play-active', state.isPlaying);
+
+    elStepReadout.textContent = `步驟 ${cur + 1} / ${steps.length}：${steps[cur].title}`;
+
+    elStepDots.innerHTML = '';
+    steps.forEach((_, i) => {
+      const dot = document.createElement('button');
+      dot.className = 'step-dot' + (i === cur ? ' active' : '');
+      dot.textContent = `步驟 ${i + 1}`;
+      dot.title = steps[i].title;
+      dot.addEventListener('click', () => {
+        state.isPlaying = false;
+        setStepIndex(i);
+      });
+      elStepDots.appendChild(dot);
+    });
+  }
+
+  function renderSidePanel() {
+    const steps = getCurrentStepsArray();
+    const cur = getCurrentStepIndex();
+    const stepObj = steps[cur];
+
+    if (state.activeTab === 0) {
+      elPanelTitle.textContent = '1. 水手病症與「壞血」病理';
+      let html = `<div class="sub-selector">`;
+      TAB1_MODES.forEach((m, idx) => {
+        html += `<button class="sub-btn ${state.tab1Mode === idx ? 'active' : ''}" data-t1mode="${idx}">${m.name}</button>`;
+      });
+      html += `</div>`;
+
+      html += `
+        <div class="info-card">
+          <span class="step-badge">病理流程 步驟 ${cur + 1} / ${steps.length}</span>
+          <h3>${stepObj.title}</h3>
+          <p>${stepObj.desc}</p>
+          <div class="highlight-box">${stepObj.key}</div>
+        </div>
+      `;
+      elPanelContent.innerHTML = html;
+
+      elPanelContent.querySelectorAll('[data-t1mode]').forEach((b) => {
+        b.addEventListener('click', () => selectTab1Mode(Number(b.dataset.t1mode)));
+      });
+
+    } else if (state.activeTab === 1) {
+      elPanelTitle.textContent = '2. 維生素 C 與膠原蛋白 3D 機制';
+      elPanelContent.innerHTML = `
+        <div class="slider-box">
+          <label>
+            <span>🍋 互動維生素 C 濃度測試</span>
+            <span id="vitc-val-label">${state.vitCSlider}%</span>
+          </label>
+          <input type="range" id="vitc-range" min="0" max="100" value="${state.vitCSlider}">
+        </div>
+        <div class="info-card">
+          <span class="step-badge">分子機制 步驟 ${cur + 1} / ${steps.length}</span>
+          <h3>${stepObj.title}</h3>
+          <p>${stepObj.desc}</p>
+          <div class="highlight-box">${stepObj.key}</div>
+        </div>
+        <div class="info-card">
+          <h3>核心機制總結</h3>
+          <p>維生素 C（抗壞血酸）是<strong>脯胺酸與離胺酸羥基化（Hydroxylation）</strong>不可或缺的還原劑，負責將羥化酶中心的 Fe³⁺ 還原為活化態 Fe²⁺，使三股螺旋得以穩固交聯。缺乏它，人體就像失去了鋼筋的混凝土建築。</p>
+        </div>
+      `;
+
+      const rangeEl = document.getElementById('vitc-range');
+      const valLabel = document.getElementById('vitc-val-label');
+      rangeEl.addEventListener('input', (e) => {
+        state.isPlaying = false;
+        btnPlayStep.classList.remove('play-active');
+        btnPlayStep.textContent = '▶ 自動演示';
+        state.vitCSlider = Number(e.target.value);
+        valLabel.textContent = `${state.vitCSlider}%`;
+      });
+
+    } else {
+      elPanelTitle.textContent = '3. 林德 1747 臨床對照試驗';
+      const selGrp = TAB3_GROUPS[state.selectedTrialGroup];
+
+      let chipsHtml = `<div class="group-grid">`;
+      TAB3_GROUPS.forEach((g, idx) => {
+        chipsHtml += `<button class="group-chip ${state.selectedTrialGroup === idx ? 'active' : ''}" data-grp="${idx}">${g.name.replace('第 ', '組').replace(' 組：', ' ')}</button>`;
+      });
+      chipsHtml += `</div>`;
+
+      elPanelContent.innerHTML = `
+        <div class="info-card">
+          <span class="step-badge">科學史流程 步驟 ${cur + 1} / ${steps.length}</span>
+          <h3>${stepObj.title}</h3>
+          <p>${stepObj.desc}</p>
+          <div class="highlight-box">${stepObj.key}</div>
+        </div>
+        <div class="info-card">
+          <span class="step-badge" style="border-color:${selGrp.color}; color:${selGrp.color};">點擊船艙或下方檢視各組對照</span>
+          ${chipsHtml}
+          <h3 style="margin-top:9px; color:${selGrp.color};">${selGrp.name}（每組 2 人）</h3>
+          <p><strong>每日補充劑：</strong>${selGrp.dose}<br><strong>實驗結果：</strong>${selGrp.outcome}</p>
+          <p>${selGrp.detail}</p>
+        </div>
+      `;
+
+      elPanelContent.querySelectorAll('[data-grp]').forEach((b) => {
+        b.addEventListener('click', () => {
+          state.selectedTrialGroup = Number(b.dataset.grp);
+          renderSidePanel();
+        });
+      });
+    }
+  }
+
+  /* =========================================================
+     分頁切換與視窗自適應縮放 (ResizeObserver 確保零遮擋置中)
+  ========================================================= */
+  function switchTab(tabIdx) {
+    state.activeTab = tabIdx;
+    state.isPlaying = false;
+
+    document.querySelectorAll('.tab-btn').forEach((btn) => {
+      btn.classList.toggle('active', Number(btn.dataset.tab) === tabIdx);
+    });
+
+    if (tabIdx === 1) {
+      canvas2d.style.display = 'none';
+      elThreeWrap.style.display = 'block';
+      btn3dPanMode.style.display = 'flex';
+      initThreeScene();
+      const rect = elStage.getBoundingClientRect();
+      if (threeApp) threeApp.resize(rect.width, rect.height);
+    } else {
+      canvas2d.style.display = 'block';
+      elThreeWrap.style.display = 'none';
+      btn3dPanMode.style.display = 'none';
+      resizeStage(true);
+    }
+
+    renderStepBar();
+    renderSidePanel();
+  }
+
+  function resizeStage(forceFit = false) {
+    const rect = elStage.getBoundingClientRect();
+    const w = rect.width;
+    const h = rect.height;
+    if (!w || !h) return;
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas2d.width = Math.round(w * dpr);
+    canvas2d.height = Math.round(h * dpr);
+
+    if (forceFit || !vp2d.userModified) {
+      vp2d.fit(w, h);
+    }
+    if (threeApp) {
+      threeApp.resize(w, h);
+    }
+  }
+
+  const ro = new ResizeObserver(() => {
+    // 當面板展開或隱藏改變畫布區域寬高時，自動重新置中適應，使動畫永遠佔滿主要可視空間且絕不遮擋
+    resizeStage(!vp2d.userModified);
+  });
+  ro.observe(elStage);
+
+  /* =========================================================
+     指標與觸控手勢系統 (2D & 3D 共用流暢 Pinch Zoom / Pan / Tap)
+  ========================================================= */
+  const activePointers = new Map();
+  let pointerDownPos = null;
+  let maxMoveDist = 0;
+  let lastPinchDist = 0;
+  let lastPinchMid = null;
+
+  elStage.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('#zoom-controls')) return;
+    elStage.setPointerCapture(e.pointerId);
+    activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (activePointers.size === 1) {
+      pointerDownPos = { x: e.clientX, y: e.clientY };
+      maxMoveDist = 0;
+    } else if (activePointers.size === 2) {
+      const pts = Array.from(activePointers.values());
+      lastPinchDist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+      lastPinchMid = { x: (pts[0].x + pts[1].x) * 0.5, y: (pts[0].y + pts[1].y) * 0.5 };
+    }
+  });
+
+  elStage.addEventListener('pointermove', (e) => {
+    if (!activePointers.has(e.pointerId)) return;
+    const prev = activePointers.get(e.pointerId);
+    const cur = { x: e.clientX, y: e.clientY };
+    activePointers.set(e.pointerId, cur);
+
+    const rect = elStage.getBoundingClientRect();
+
+    if (activePointers.size === 1) {
+      const dx = cur.x - prev.x;
+      const dy = cur.y - prev.y;
+      if (pointerDownPos) {
+        maxMoveDist = Math.max(maxMoveDist, Math.hypot(cur.x - pointerDownPos.x, cur.y - pointerDownPos.y));
+      }
+
+      if (state.activeTab === 1 && threeApp) {
+        // 3D 模式：右鍵、Shift 或開啟單指平移模式時進行 Pan，否則進行旋轉 Orbit
+        const isPan = state.threePanMode || e.buttons === 2 || e.shiftKey;
+        if (isPan) {
+          panThreeCamera(dx, dy);
+        } else {
+          threeApp.cam.theta -= dx * 0.0075;
+          threeApp.cam.phi -= dy * 0.0075;
+        }
+      } else {
+        // 2D 模式：單指/滑鼠拖曳平移
+        vp2d.tx += dx;
+        vp2d.ty += dy;
+        vp2d.userModified = true;
+      }
+    } else if (activePointers.size === 2) {
+      // 雙指觸控：捏合縮放 + 雙指中心平移
+      const pts = Array.from(activePointers.values());
+      const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+      const mid = { x: (pts[0].x + pts[1].x) * 0.5, y: (pts[0].y + pts[1].y) * 0.5 };
+
+      if (lastPinchDist > 10) {
+        const factor = dist / lastPinchDist;
+        const mdx = mid.x - lastPinchMid.x;
+        const mdy = mid.y - lastPinchMid.y;
+
+        if (state.activeTab === 1 && threeApp) {
+          threeApp.cam.radius /= factor;
+          panThreeCamera(mdx, mdy);
+        } else {
+          vp2d.tx += mdx;
+          vp2d.ty += mdy;
+          vp2d.zoomAt(factor, mid.x - rect.left, mid.y - rect.top);
+        }
+      }
+      lastPinchDist = dist;
+      lastPinchMid = mid;
+      maxMoveDist = 999;
+    }
+  });
+
+  function panThreeCamera(dx, dy) {
+    if (!threeApp) return;
+    const cam = threeApp.camera;
+    const panSpeed = threeApp.cam.radius * 0.0014;
+    const right = new THREE.Vector3();
+    const up = new THREE.Vector3();
+    cam.matrix.extractBasis(right, up, new THREE.Vector3());
+    threeApp.cam.target.addScaledVector(right, -dx * panSpeed);
+    threeApp.cam.target.addScaledVector(up, dy * panSpeed);
+  }
+
+  function onPointerEnd(e) {
+    if (!activePointers.has(e.pointerId)) return;
+    activePointers.delete(e.pointerId);
+
+    // 輕點偵測 (Tap / Click) 觸發 2D 畫布內熱點
+    if (activePointers.size === 0 && maxMoveDist < 9 && state.activeTab !== 1) {
+      const rect = elStage.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      const wp = vp2d.screenToWorld(sx, sy);
+
+      for (let i = vp2d.hitRegions.length - 1; i >= 0; i--) {
+        const hr = vp2d.hitRegions[i];
+        if (wp.x >= hr.x && wp.x <= hr.x + hr.w && wp.y >= hr.y && wp.y <= hr.y + hr.h) {
+          hr.onClick();
+          break;
+        }
+      }
+    }
+    if (activePointers.size < 2) {
+      lastPinchDist = 0;
+    }
+  }
+
+  elStage.addEventListener('pointerup', onPointerEnd);
+  elStage.addEventListener('pointercancel', onPointerEnd);
+  elStage.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  // 滑鼠滾輪縮放
+  elStage.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.12 : 0.89;
+    if (state.activeTab === 1 && threeApp) {
+      threeApp.cam.radius /= factor;
+    } else {
+      const rect = elStage.getBoundingClientRect();
+      vp2d.zoomAt(factor, e.clientX - rect.left, e.clientY - rect.top);
+    }
+  }, { passive: false });
+
+  /* =========================================================
+     UI 按鈕事件綁定
+  ========================================================= */
+  document.querySelectorAll('.tab-btn').forEach((btn) => {
+    btn.addEventListener('click', () => switchTab(Number(btn.dataset.tab)));
+  });
+
+  btnToggleLabels.addEventListener('click', () => {
+    state.showLabels = !state.showLabels;
+    btnToggleLabels.textContent = state.showLabels ? '🏷️ 標籤: 開' : '🏷️ 標籤: 關';
+    btnToggleLabels.classList.toggle('active-toggle', state.showLabels);
+  });
+
+  function togglePanel(forceState) {
+    state.showPanel = typeof forceState === 'boolean' ? forceState : !state.showPanel;
+    elSidePanel.classList.toggle('collapsed', !state.showPanel);
+    btnTogglePanel.textContent = state.showPanel ? '🎛️ 控制與說明: 開' : '🎛️ 控制與說明: 關';
+    btnTogglePanel.classList.toggle('active-toggle', state.showPanel);
+    // 面板切換後自動重新調整畫布中心
+    requestAnimationFrame(() => resizeStage(!vp2d.userModified));
+  }
+
+  btnTogglePanel.addEventListener('click', () => togglePanel());
+
+  btnResetView.addEventListener('click', () => {
+    if (state.activeTab === 1 && threeApp) {
+      threeApp.cam.reset();
+    } else {
+      const rect = elStage.getBoundingClientRect();
+      vp2d.fit(rect.width, rect.height);
+    }
+  });
+
+  btnZoomIn.addEventListener('click', () => {
+    if (state.activeTab === 1 && threeApp) {
+      threeApp.cam.radius *= 0.84;
+    } else {
+      const rect = elStage.getBoundingClientRect();
+      vp2d.zoomAt(1.2, rect.width * 0.5, rect.height * 0.5);
+    }
+  });
+
+  btnZoomOut.addEventListener('click', () => {
+    if (state.activeTab === 1 && threeApp) {
+      threeApp.cam.radius *= 1.18;
+    } else {
+      const rect = elStage.getBoundingClientRect();
+      vp2d.zoomAt(0.84, rect.width * 0.5, rect.height * 0.5);
+    }
+  });
+
+  btn3dPanMode.addEventListener('click', () => {
+    state.threePanMode = !state.threePanMode;
+    btn3dPanMode.textContent = state.threePanMode ? '✋ 單指: 平移' : '🔄 單指: 旋轉';
+    btn3dPanMode.classList.toggle('pan-mode-active', state.threePanMode);
+  });
+
+  btnPrevStep.addEventListener('click', () => {
+    state.isPlaying = false;
+    setStepIndex(getCurrentStepIndex() - 1);
+  });
+
+  btnNextStep.addEventListener('click', () => {
+    state.isPlaying = false;
+    setStepIndex(getCurrentStepIndex() + 1);
+  });
+
+  btnPlayStep.addEventListener('click', () => {
+    state.isPlaying = !state.isPlaying;
+    state.playAccum = 0;
+    if (state.isPlaying) {
+      const steps = getCurrentStepsArray();
+      if (getCurrentStepIndex() >= steps.length - 1) {
+        setStepIndex(0);
+      }
+    }
+    renderStepBar();
+  });
+
+  /* =========================================================
+     主動畫迴圈 (Main Animation Loop)
+  ========================================================= */
+  let lastTime = performance.now();
+
+  function animate(now) {
+    const dt = Math.min(0.05, (now - lastTime) / 1000);
+    lastTime = now;
+    state.time += dt;
+
+    // 自動演示計時推進
+    if (state.isPlaying) {
+      state.playAccum += dt;
+      if (state.playAccum >= 4.2) {
+        state.playAccum = 0;
+        const steps = getCurrentStepsArray();
+        const cur = getCurrentStepIndex();
+        if (cur < steps.length - 1) {
+          setStepIndex(cur + 1);
+        } else {
+          state.isPlaying = false;
+          renderStepBar();
+        }
+      }
+    }
+
+    if (state.activeTab === 1) {
+      updateThreeScene(dt);
+    } else {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, canvas2d.width / dpr, canvas2d.height / dpr);
+
+      ctx.save();
+      ctx.translate(vp2d.tx, vp2d.ty);
+      ctx.scale(vp2d.scale, vp2d.scale);
+
+      if (state.activeTab === 0) {
+        renderTab1(ctx);
+      } else if (state.activeTab === 2) {
+        renderTab3(ctx);
+      }
+      ctx.restore();
+    }
+
+    requestAnimationFrame(animate);
+  }
+
+  // 初始化啟動
+  resizeStage(true);
+  renderStepBar();
+  renderSidePanel();
+  requestAnimationFrame(animate);
+})();
+</script>
+</body>
+</html>

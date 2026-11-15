@@ -1,0 +1,2530 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>神經可塑性與動作自動化模擬器：皮質序列控制 → 小腦平行迴路</title>
+    <style>
+        :root {
+            --bg-dark: #0b0f17;
+            --panel-bg: #131a26;
+            --panel-border: #243044;
+            --text-main: #e6edf3;
+            --text-muted: #8b9bb4;
+            --accent-blue: #38bdf8;
+            --accent-cortex: #fb7185;
+            --accent-cerebellum: #2dd4bf;
+            --accent-dendrite: #00f5d4;
+            --accent-axon: #ffb703;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        body {
+            margin: 0;
+            padding: 14px 18px;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: system-ui, -apple-system, "Segoe UI", "Microsoft JhengHei", sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            gap: 12px;
+        }
+
+        /* 頂部標題與動作切換列 */
+        .top-bar {
+            width: 100%;
+            max-width: 1360px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            background: var(--panel-bg);
+            padding: 10px 18px;
+            border-radius: 14px;
+            border: 1px solid var(--panel-border);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+        }
+
+        .title-group h1 {
+            margin: 0;
+            font-size: 1.25rem;
+            color: #f0f6fc;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .title-group p {
+            margin: 3px 0 0 0;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .task-tabs {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .task-btn {
+            background: #1c2638;
+            color: #cbd5e1;
+            border: 1px solid #2e3e58;
+            padding: 7px 14px;
+            border-radius: 10px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .task-btn:hover {
+            background: #25334a;
+            border-color: #475f84;
+        }
+
+        .task-btn.active {
+            background: linear-gradient(135deg, #0284c7, #0ea5e9);
+            color: #fff;
+            border-color: #38bdf8;
+            box-shadow: 0 0 14px rgba(56, 189, 248, 0.4);
+        }
+
+        /* 主視覺區：左側大型神經網路 + 右側動作與微觀面板 */
+        .workspace {
+            width: 100%;
+            max-width: 1360px;
+            display: grid;
+            grid-template-columns: 1fr 310px;
+            gap: 12px;
+            align-items: stretch;
+        }
+
+        @media (max-width: 1120px) {
+            .workspace {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .network-card {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 14px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+            display: flex;
+            flex-direction: column;
+        }
+
+        #netCanvas {
+            width: 100%;
+            height: auto;
+            aspect-ratio: 980 / 610;
+            display: block;
+            cursor: grab;
+            touch-action: none;
+        }
+
+        .canvas-toolbar {
+            position: absolute;
+            top: 12px;
+            left: 14px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            z-index: 5;
+        }
+
+        .zoom-controls {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            background: rgba(15, 23, 42, 0.88);
+            border: 1px solid #334155;
+            padding: 3px 5px;
+            border-radius: 9px;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+            backdrop-filter: blur(4px);
+        }
+
+        .tool-btn {
+            background: #1e293b;
+            color: #cbd5e1;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            padding: 3px 8px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            user-select: none;
+            line-height: 1.2;
+        }
+
+        .tool-btn:hover {
+            background: #334155;
+            border-color: #475569;
+            color: #38bdf8;
+        }
+
+        .tool-btn.reset-btn {
+            font-size: 0.76rem;
+            padding: 3px 7px;
+            font-family: monospace;
+            color: #94a3b8;
+        }
+
+        .tool-btn.reset-btn:hover {
+            color: #f8fafc;
+        }
+
+        .canvas-hint {
+            position: absolute;
+            bottom: 10px;
+            left: 14px;
+            background: rgba(15, 23, 42, 0.86);
+            border: 1px solid #334155;
+            padding: 5px 11px;
+            border-radius: 20px;
+            font-size: 0.76rem;
+            color: #cbd5e1;
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .legend-dot {
+            display: inline-block;
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            margin-right: 4px;
+        }
+
+        .clear-select-btn {
+            position: absolute;
+            top: 12px;
+            right: 14px;
+            background: rgba(251, 113, 133, 0.18);
+            color: #fda4af;
+            border: 1px solid #fb7185;
+            border-radius: 8px;
+            padding: 4px 10px;
+            font-size: 0.78rem;
+            cursor: pointer;
+            display: none;
+            z-index: 5;
+        }
+
+        .clear-select-btn:hover {
+            background: rgba(251, 113, 133, 0.35);
+        }
+
+        /* 右側側邊欄 */
+        .side-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .side-card {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 14px;
+            padding: 11px 13px;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        }
+
+        .side-card h3 {
+            margin: 0 0 8px 0;
+            font-size: 0.86rem;
+            color: #93c5fd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .badge {
+            font-size: 0.72rem;
+            padding: 2px 7px;
+            border-radius: 10px;
+            background: #1e293b;
+            color: #cbd5e1;
+            font-weight: normal;
+        }
+
+        #actionCanvas {
+            width: 100%;
+            height: auto;
+            aspect-ratio: 284 / 175;
+            background: #0d131f;
+            border-radius: 10px;
+            border: 1px solid #263449;
+            display: block;
+        }
+
+        /* 腦區主導權量表 */
+        .shift-bars {
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+            margin-top: 4px;
+        }
+
+        .bar-row {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .bar-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: #cbd5e1;
+        }
+
+        .bar-track {
+            height: 7px;
+            background: #0d131f;
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid #1e293b;
+        }
+
+        .bar-fill {
+            height: 100%;
+            border-radius: 6px;
+            transition: width 0.15s ease;
+        }
+
+        /* 微觀突觸與選取細胞檢視器 */
+        #synapseCanvas {
+            width: 100%;
+            height: auto;
+            aspect-ratio: 284 / 118;
+            background: #0d131f;
+            border-radius: 8px;
+            border: 1px solid #263449;
+            display: block;
+            margin-bottom: 6px;
+        }
+
+        .inspector-info {
+            font-size: 0.76rem;
+            line-height: 1.45;
+            color: #cbd5e1;
+        }
+
+        .inspector-info strong {
+            color: #f8fafc;
+        }
+
+        /* 底部學習進度控制列 */
+        .control-bar {
+            width: 100%;
+            max-width: 1360px;
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 14px;
+            padding: 11px 20px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+        }
+
+        .slider-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex: 1;
+            min-width: 280px;
+        }
+
+        .slider-group label {
+            font-size: 0.9rem;
+            font-weight: 600;
+            white-space: nowrap;
+            min-width: 155px;
+        }
+
+        #progressText {
+            color: var(--accent-blue);
+            font-family: monospace;
+            font-size: 1rem;
+        }
+
+        input[type="range"] {
+            flex: 1;
+            accent-color: var(--accent-blue);
+            height: 6px;
+            cursor: pointer;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .ctrl-btn {
+            background: #1e293b;
+            color: #e2e8f0;
+            border: 1px solid #334155;
+            padding: 7px 13px;
+            border-radius: 9px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.18s;
+        }
+
+        .ctrl-btn:hover {
+            background: #334155;
+        }
+
+        .ctrl-btn.primary {
+            background: linear-gradient(135deg, #10b981, #059669);
+            border-color: #34d399;
+            color: #fff;
+        }
+
+        .ctrl-btn.primary.playing {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            border-color: #f87171;
+        }
+
+        .status-banner {
+            font-size: 0.82rem;
+            color: #94a3b8;
+            max-width: 430px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 頂部標題與多動作選擇 -->
+    <div class="top-bar">
+        <div class="title-group">
+            <h1>🧠 神經可塑性與運動學習模擬器</h1>
+            <p>左至右傳導：視覺輸入 ➔ 大腦皮質（初期意識序列控制）➔ 小腦與基底核（後期平行自動化）➔ 多肌群協同輸出</p>
+        </div>
+        <div class="task-tabs" id="taskTabs">
+            <button class="task-btn active" data-task="bike">🚲 騎腳踏車</button>
+            <button class="task-btn" data-task="basketball">🏀 籃球投籃</button>
+            <button class="task-btn" data-task="pingpong">🏓 桌球對打</button>
+            <button class="task-btn" data-task="juggling">🤹 三球雜耍</button>
+        </div>
+    </div>
+
+    <!-- 中央主工作區 -->
+    <div class="workspace">
+        <!-- 左側：高密度神經網路與突觸可塑性畫布 -->
+        <div class="network-card">
+            <div class="canvas-toolbar">
+                <div class="zoom-controls">
+                    <button class="tool-btn" id="zoomInBtn" title="放大 (亦可使用滾輪)">＋</button>
+                    <button class="tool-btn" id="zoomOutBtn" title="縮小 (亦可使用滾輪)">－</button>
+                    <button class="tool-btn reset-btn" id="zoomResetBtn" title="重設縮放 (雙擊畫布空白處亦可重設)">⟲ <span id="zoomLevelText">100%</span></button>
+                </div>
+            </div>
+            <button class="clear-select-btn" id="clearSelectBtn">✕ 取消細胞高亮</button>
+            <canvas id="netCanvas" width="980" height="610"></canvas>
+            <div class="canvas-hint">
+                <span>🔍 <strong>滾輪縮放 / 拖曳平移 (Pan & Zoom)</strong> · 點擊細胞高亮迴路</span>
+                <span><i class="legend-dot" style="background:#00f5d4;"></i>樹突接收</span>
+                <span><i class="legend-dot" style="background:#ffb703;"></i>軸突輸出</span>
+            </div>
+        </div>
+
+        <!-- 右側：縮小版動作模擬 + 控制權轉移 + 微觀突觸放大鏡 -->
+        <div class="side-panel">
+            <div class="side-card">
+                <h3>
+                    <span>🎯 動作輸出表現模擬</span>
+                    <span class="badge" id="taskBadge">騎腳踏車</span>
+                </h3>
+                <canvas id="actionCanvas" width="284" height="175"></canvas>
+            </div>
+
+            <div class="side-card">
+                <h3>
+                    <span>⚖️ 中樞控制權轉移 (神經可塑性)</span>
+                    <span class="badge" id="phaseBadge">意識摸索期</span>
+                </h3>
+                <div class="shift-bars">
+                    <div class="bar-row">
+                        <div class="bar-label">
+                            <span>🧠 大腦皮質 (序列意識控制 / 慢速)</span>
+                            <span id="cortexPct">88%</span>
+                        </div>
+                        <div class="bar-track">
+                            <div class="bar-fill" id="cortexBar" style="width: 88%; background: linear-gradient(90deg, #fb7185, #f43f5e);"></div>
+                        </div>
+                    </div>
+                    <div class="bar-row">
+                        <div class="bar-label">
+                            <span>⚡ 小腦與基底核 (平行自動化 / 高速)</span>
+                            <span id="cerebPct">12%</span>
+                        </div>
+                        <div class="bar-track">
+                            <div class="bar-fill" id="cerebBar" style="width: 12%; background: linear-gradient(90deg, #2dd4bf, #0ea5e9);"></div>
+                        </div>
+                    </div>
+                    <div class="bar-row">
+                        <div class="bar-label">
+                            <span>🔗 專精突觸強化與髓鞘化 (LTP)</span>
+                            <span id="ltpPct">5%</span>
+                        </div>
+                        <div class="bar-track">
+                            <div class="bar-fill" id="ltpBar" style="width: 5%; background: linear-gradient(90deg, #f59e0b, #fde047);"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="side-card" style="flex:1;">
+                <h3>
+                    <span>🔬 細胞解剖與突觸微觀檢視</span>
+                    <span class="badge" id="inspectorBadge">全網概覽</span>
+                </h3>
+                <canvas id="synapseCanvas" width="284" height="118"></canvas>
+                <div class="inspector-info" id="inspectorText">
+                    點擊左側任一顆<strong>神經元細胞體</strong>，即可觀察其<strong>樹突分支（接收端）</strong>、<strong>軸丘與軸突髓鞘（傳導纖維）</strong>及<strong>突觸終扣（釋放神經傳導物質）</strong>的可塑性變化。
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 底部訓練滑桿與快速對比控制 -->
+    <div class="control-bar">
+        <div class="slider-group">
+            <label for="learningSlider">訓練熟練度: <span id="progressText">0%</span></label>
+            <input type="range" id="learningSlider" min="0" max="100" value="0">
+        </div>
+        <div class="btn-group">
+            <button class="ctrl-btn" data-preset="0">0% 初學混亂</button>
+            <button class="ctrl-btn" data-preset="45">45% 誤差修正期</button>
+            <button class="ctrl-btn" data-preset="100" title="設為100%後切換上方不同運動，觀察不同突觸迴路！">100% 專精自動化</button>
+            <button class="ctrl-btn primary" id="autoPlayBtn">▶ 自動學習演進</button>
+            <button class="ctrl-btn" id="pickSampleBtn">🔍 點選神經元</button>
+        </div>
+        <div class="status-banner" id="statusBanner">
+            狀態：初期由<strong>大腦皮質逐層序列思考</strong>，訊號延遲且溢散至錯誤肌肉，動作笨拙搖晃。
+        </div>
+    </div>
+
+<script>
+(() => {
+    // ===================== 畫布與高解析度初始化 =====================
+    const netCanvas = document.getElementById('netCanvas');
+    const netCtx = netCanvas.getContext('2d');
+    const actCanvas = document.getElementById('actionCanvas');
+    const actCtx = actCanvas.getContext('2d');
+    const synCanvas = document.getElementById('synapseCanvas');
+    const synCtx = synCanvas.getContext('2d');
+
+    const LOGICAL_W = 980;
+    const LOGICAL_H = 610;
+
+    function setupHiDPI(canvas, ctx, w, h) {
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        canvas.width = w * dpr;
+        canvas.height = h * dpr;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    setupHiDPI(netCanvas, netCtx, LOGICAL_W, LOGICAL_H);
+    setupHiDPI(actCanvas, actCtx, 284, 175);
+    setupHiDPI(synCanvas, synCtx, 284, 118);
+
+    // ===================== 動作任務定義（同輸入輸出，不同內部突觸指紋） =====================
+    const TASKS = {
+        bike: {
+            name: '騎腳踏車',
+            icon: '🚲',
+            desc: '依賴動態光流與周邊水平視覺，經小腦前庭脊髓迴路，自動化維持核心穩定與雙腿節律踩踏。',
+            // 視覺輸入權重 (V0~V3)
+            sensoryDrive: [1.0, 0.35, 0.95, 0.65],
+            // 小腦顆粒層活躍節點 (0~6) 與 浦肯野/深核活躍節點 (0~6)
+            cb1Active: [0, 2, 5],
+            cb2Active: [0, 3, 6],
+            // 大腦皮質熟練後僅保留極低階視線監督節點
+            cortexSupervise: [0],
+            // 肌肉群目標協同 (M0眼頸, M1肩部, M2上臂, M3手腕手指, M4軀幹核心, M5下肢肌群)
+            muscleTarget: [0.55, 0.50, 0.40, 0.25, 0.92, 1.0],
+            // 特定連線配對偏好 (讓不同運動的強化神經束明顯不同)
+             preferredPairs: {
+                'S0-CB1_0': 1.0, 'S2-CB1_2': 1.0, 'S2-CB1_5': 0.9, 'S0-CB1_2': 0.85,
+                'CB1_0-CB2_0': 1.0, 'CB1_2-CB2_3': 1.0, 'CB1_5-CB2_6': 1.0, 'CB1_2-CB2_6': 0.85,
+                'CB2_0-M0': 0.8, 'CB2_0-M1': 0.75, 'CB2_3-M4': 1.0, 'CB2_6-M5': 1.0, 'CB2_3-M5': 0.9
+            }
+        },
+        basketball: {
+            name: '籃球投籃',
+            icon: '🏀',
+            desc: '高度依賴籃框深度距離與拋物線誤差回授，小腦串聯下肢起跳、上臂伸展至手腕壓腕的精準動力鏈。',
+            sensoryDrive: [0.30, 1.0, 0.40, 0.95],
+            cb1Active: [1, 3, 6],
+            cb2Active: [1, 4, 5],
+            cortexSupervise: [1],
+            muscleTarget: [0.80, 0.82, 0.95, 1.0, 0.65, 0.85],
+            preferredPairs: {
+                'S1-CB1_1': 1.0, 'S1-CB1_3': 0.95, 'S3-CB1_6': 1.0, 'S3-CB1_3': 0.85,
+                'CB1_1-CB2_1': 1.0, 'CB1_3-CB2_4': 1.0, 'CB1_6-CB2_5': 1.0, 'CB1_1-CB2_4': 0.85,
+                'CB2_1-M0': 0.85, 'CB2_1-M2': 0.95, 'CB2_4-M3': 1.0, 'CB2_4-M1': 0.85, 'CB2_5-M5': 0.95, 'CB2_5-M4': 0.75
+            }
+        },
+        pingpong: {
+            name: '桌球對打',
+            icon: '🏓',
+            desc: '高速球體軌跡流與落點深度預判，繞過緩慢意識思考，直接由小腦驅動轉腰、揮臂與手腕摩擦控拍。',
+            sensoryDrive: [0.95, 1.0, 0.45, 0.85],
+            cb1Active: [0, 4, 6],
+            cb2Active: [2, 3, 5],
+            cortexSupervise: [1, 2],
+            muscleTarget: [0.90, 0.88, 1.0, 0.95, 0.82, 0.68],
+            preferredPairs: {
+                'S0-CB1_0': 0.95, 'S1-CB1_4': 1.0, 'S3-CB1_6': 0.95, 'S0-CB1_4': 0.9,
+                'CB1_0-CB2_2': 1.0, 'CB1_4-CB2_3': 1.0, 'CB1_6-CB2_5': 0.9, 'CB1_4-CB2_2': 0.95,
+                'CB2_2-M2': 1.0, 'CB2_2-M3': 1.0, 'CB2_3-M1': 0.9, 'CB2_3-M4': 0.88, 'CB2_5-M5': 0.8, 'CB2_2-M0': 0.85
+            }
+        },
+        juggling: {
+            name: '三球雜耍',
+            icon: '🤹',
+            desc: '凝視拋物線頂點並運用周邊視覺追蹤多球，小腦建立雙側前臂與手指的精密節律振盪器。',
+            sensoryDrive: [0.85, 0.75, 1.0, 0.70],
+            cb1Active: [1, 2, 4, 5],
+            cb2Active: [0, 1, 4],
+            cortexSupervise: [2],
+            muscleTarget: [0.85, 0.45, 0.92, 1.0, 0.50, 0.25],
+            preferredPairs: {
+                'S2-CB1_2': 1.0, 'S2-CB1_5': 0.95, 'S0-CB1_1': 0.9, 'S1-CB1_4': 0.9,
+                'CB1_2-CB2_0': 0.95, 'CB1_1-CB2_1': 1.0, 'CB1_4-CB2_4': 1.0, 'CB1_5-CB2_4': 0.9,
+                'CB2_0-M0': 0.9, 'CB2_1-M2': 1.0, 'CB2_4-M3': 1.0, 'CB2_1-M3': 0.92
+            }
+        }
+    };
+
+    // ===================== 狀態變數 =====================
+    let currentTaskKey = 'bike';
+    let progress = 0;          // 0 ~ 100
+    let isAutoPlaying = false;
+    let selectedNeuron = null;
+    let hoveredNeuron = null;
+    let simTime = 0;
+
+    // ===================== 建立神經元與樹突解剖結構 =====================
+    // 偽隨機產生器，確保樹突形狀與初始雜亂突觸穩定美觀
+    let seed = 42;
+    function seededRandom() {
+        seed = (seed * 1664525 + 1013904223) % 4294967296;
+        return seed / 4294967296;
+    }
+
+    const neurons = [];
+    const neuronMap = {};
+
+    function createNeuron(id, x, y, region, subLayer, label, roleDesc, radius = 11.5) {
+        // 產生左側分岔樹突 (Dendritic Tree)
+        const dendrites = [];
+        const spinePoints = [];
+
+        if (region !== 'sensory') {
+            const branchCount = region === 'cerebellum2' ? 5 : 4; // 浦肯野氏細胞樹突特別茂密
+            for (let i = 0; i < branchCount; i++) {
+                // 由上而下產生左側樹突主幹 (1.32π 為左上，0.68π 為左下)
+                const baseAngle = Math.PI * 1.32 - (i / (branchCount - 1)) * Math.PI * 0.64 + (seededRandom() - 0.5) * 0.06;
+                const trunkLen = radius + 8 + seededRandom() * 4;
+                const midX = x + Math.cos(baseAngle) * trunkLen;
+                const midY = y + Math.sin(baseAngle) * trunkLen;
+
+                const twigs = [];
+                for (let t = 1; t >= -1; t -= 2) {
+                    const twigAngle = baseAngle + t * (0.20 + seededRandom() * 0.10);
+                    const twigLen = 7 + seededRandom() * 4;
+                    const tipX = midX + Math.cos(twigAngle) * twigLen;
+                    const tipY = midY + Math.sin(twigAngle) * twigLen;
+                    twigs.push({ x: tipX, y: tipY });
+                    spinePoints.push({ x: tipX, y: tipY, angle: twigAngle });
+                }
+                dendrites.push({ midX, midY, twigs });
+            }
+            // 確保樹突棘接收點嚴格依 Y 座標由上而下排序，避免輸入連線上下錯位交叉
+            spinePoints.sort((a, b) => a.y - b.y);
+        } else {
+            // 視覺輸入細胞左側繪製視網膜感光受器扇形 (由上而下排序)
+            for (let i = 2; i >= 0; i--) {
+                const a = Math.PI * 0.76 + i * 0.24 * Math.PI;
+                spinePoints.push({ x: x + Math.cos(a) * (radius + 10), y: y + Math.sin(a) * (radius + 10), angle: a });
+            }
+        }
+
+        const n = {
+            id, x, y, region, subLayer, label, roleDesc, radius,
+            dendrites,
+            spinePoints,
+            activation: 0,
+            incoming: [],
+            outgoing: []
+        };
+        neurons.push(n);
+        neuronMap[id] = n;
+        return n;
+    }
+
+    // 1. 左側：視覺感覺輸入層 (4 顆)
+    const sensoryMeta = [
+        { id: 'S0', y: 150, label: '動態光流視覺', desc: '偵測環境移動速度、身體傾斜與球體飛行軌跡流 (V5/MT區輸入)' },
+        { id: 'S1', y: 262, label: '目標深度距離', desc: '雙眼立體視覺判讀籃框距離、桌球落點與空間深度' },
+        { id: 'S2', y: 374, label: '周邊空間邊界', desc: '廣角視野監控車道邊界、身體平衡基準線與多球相對位置' },
+        { id: 'S3', y: 486, label: '視覺誤差回授', desc: '比對預期動作結果與實際視覺偏差，產生攀援纖維誤差訊號訓練小腦！' }
+    ];
+    sensoryMeta.forEach(m => createNeuron(m.id, 82, m.y, 'sensory', 0, m.label, m.desc, 13));
+
+    // 2. 中上方：大腦皮質區 (意識序列控制：3 個序列子層，共 15 顆)
+    // 子層 C1: 頂葉視覺空間解析 (5顆)
+    const c1Labels = ['空間座標解析', '速度向量估計', '身體姿態意識', '目標距離計算', '注意力聚焦'];
+    for (let i = 0; i < 5; i++) {
+        createNeuron(`C1_${i}`, 265, 104 + i * 40, 'cortex', 1, c1Labels[i],
+            '大腦頂葉聯絡皮質：在學習初期負責有意識地解析視覺空間資訊（步驟 1）', 10.5);
+    }
+    // 子層 C2: 前額葉意識決策 (5顆)
+    const c2Labels = ['動作策略選擇', '有意識修正計算', '順序記憶排程', '抑制過度出力', '風險與平衡評估'];
+    for (let i = 0; i < 5; i++) {
+        createNeuron(`C2_${i}`, 445, 104 + i * 40, 'cortex', 2, c2Labels[i],
+            '前額葉與運動前區：初學時逐一思考「現在手要往哪轉？腳要踩多少力？」速度慢且耗費心力（步驟 2）', 10.5);
+    }
+    // 子層 C3: 初級運動皮質 M1 序列發令 (5顆)
+    const c3Labels = ['皮質脊髓束-上肢', '皮質脊髓束-手部', '皮質脊髓束-核心', '皮質脊髓束-下肢', '全身僵直共收縮'];
+    for (let i = 0; i < 5; i++) {
+        createNeuron(`C3_${i}`, 625, 104 + i * 40, 'cortex', 3, c3Labels[i],
+            '初級運動皮質 (M1)：初期直接發送生硬的序列指令給肌肉，常因延遲而造成過度修正（步驟 3）', 10.5);
+    }
+
+    // 3. 中下方：小腦與基底核區 (平行自動化迴路：2 個高速平行層，共 14 顆)
+    // 子層 CB1: 小腦顆粒細胞層 / 苔狀纖維輸入組 (7顆)
+    const cb1Labels = ['前庭平衡編碼', '深度時序編碼', '周邊姿態編碼', '動力鏈相位器', '高速軌跡預測', '雙側節律振盪', '誤差比對顆粒群'];
+    for (let i = 0; i < 7; i++) {
+        createNeuron(`CB1_${i}`, 345, 370 + i * 33, 'cerebellum1', 1, cb1Labels[i],
+            '小腦皮質顆粒細胞群：將感覺輸入展開為高維度時空密碼，經反覆練習篩選出特定動作特徵', 10.5);
+    }
+    // 子層 CB2: 浦肯野氏細胞與小腦深部核團 (7顆)
+    const cb2Labels = ['前庭脊髓平衡核', '上肢拋投協調核', '高速揮拍反射核', '軀幹核心穩定核', '手指精細時序核', '下肢推進動力核', '雙腿節律自動化核'];
+    for (let i = 0; i < 7; i++) {
+        createNeuron(`CB2_${i}`, 575, 370 + i * 33, 'cerebellum2', 2, cb2Labels[i],
+            '小腦浦肯野氏細胞／深部核團：透過長期增益與抑制可塑性，儲存專精運動程式，高速平行輸出！', 12);
+    }
+
+    // 4. 右側：多肌群運動神經元池 (6 顆輸出)
+    const muscleMeta = [
+        { id: 'M0', y: 110, label: '眼頸視線穩定肌', short: '眼頸穩定' },
+        { id: 'M1', y: 194, label: '肩部三角肌群',   short: '肩三角肌' },
+        { id: 'M2', y: 278, label: '上臂屈伸肌群',   short: '上臂二三頭' },
+        { id: 'M3', y: 362, label: '手腕與手指肌群', short: '手腕手指' },
+        { id: 'M4', y: 446, label: '軀幹核心穩定肌', short: '軀幹核心' },
+        { id: 'M5', y: 530, label: '下肢股四頭小腿肌', short: '下肢肌群' }
+    ];
+    muscleMeta.forEach(m => createNeuron(m.id, 835, m.y, 'motor', 4, m.label,
+        `脊髓 α 運動神經元池（支配${m.label}）：整合皮質或小腦指令，直接驅動肌肉收縮。`, 13));
+
+    // ===================== 建立突觸連結與軸突幾何 =====================
+    const connections = [];
+    const pulses = []; // 動作電位傳導粒子
+
+    function addConnection(fromId, toId, pathwayType, baseChaoticWeight) {
+        const from = neuronMap[fromId];
+        const to = neuronMap[toId];
+        if (!from || !to) return;
+
+        const conn = {
+            key: `${fromId}-${toId}`,
+            from,
+            to,
+            pathwayType, // 'cortical', 'cerebellar', 'error_climbing', 'cortico_cerebellar'
+            spineIdx: 0,
+            spine: to.spinePoints[0],
+            startX: 0, startY: 0,
+            boutonX: 0, boutonY: 0,
+            cp1x: 0, cp1y: 0, cp2x: 0, cp2y: 0,
+            chaoticWeight: baseChaoticWeight,
+            currentWeight: baseChaoticWeight,
+            targetWeight: baseChaoticWeight,
+            lastFlash: 0
+        };
+
+        connections.push(conn);
+        from.outgoing.push(conn);
+        to.incoming.push(conn);
+    }
+
+    // 依據上下游神經元的 Y 座標排序，精準對齊每個神經元的右側軸丘輸出與左側樹突棘輸入，消除 Y 軸錯位
+    function finalizeConnectionGeometry() {
+        // 1. 對每個目標神經元的輸入連線，依來源 Y 座標由上而下分配對應高度的樹突棘 (spinePoints 已按 Y 排序)
+        neurons.forEach(to => {
+            if (to.incoming.length === 0 || to.spinePoints.length === 0) return;
+            const sortedIn = [...to.incoming].sort((a, b) => {
+                const dy = a.from.y - b.from.y;
+                return Math.abs(dy) > 1 ? dy : (a.from.x - b.from.x);
+            });
+            const spineCount = to.spinePoints.length;
+            sortedIn.forEach((conn, idx) => {
+                const ratio = sortedIn.length === 1 ? 0.5 : idx / (sortedIn.length - 1);
+                const sIdx = Math.min(spineCount - 1, Math.round(ratio * (spineCount - 1)));
+                conn.spineIdx = sIdx;
+                conn.spine = to.spinePoints[sIdx];
+            });
+        });
+
+        // 2. 對每個來源神經元的輸出連線，對齊右側軸丘尖端 (from.x + from.radius + 6, from.y)，並計算平滑無折角的貝茲曲線
+        neurons.forEach(from => {
+            if (from.outgoing.length === 0) return;
+            const sortedOut = [...from.outgoing].sort((a, b) => a.spine.y - b.spine.y);
+            sortedOut.forEach((conn, idx) => {
+                const ratio = sortedOut.length === 1 ? 0 : (idx / (sortedOut.length - 1) - 0.5);
+                // 嚴格鎖定在軸丘尖端 Y 座標附近 (±1.4px 內)，不再因遠端目標 Y 差而偏離軸丘
+                conn.startX = from.x + from.radius + 6;
+                conn.startY = from.y + ratio * 2.6;
+
+                const chosenSpine = conn.spine;
+                // 計算進入樹突棘的自然傾角，讓突觸前終扣與曲線切線完全共線對準樹突棘
+                const rawDx = Math.max(40, chosenSpine.x - conn.startX);
+                const rawDy = chosenSpine.y - conn.startY;
+                const approachAngle = Math.atan2(rawDy * 0.45, rawDx);
+
+                // 突觸前終扣停在樹突棘末梢前 4.5px，留出突觸間隙
+                conn.boutonX = chosenSpine.x - Math.cos(approachAngle) * 4.5;
+                conn.boutonY = chosenSpine.y - Math.sin(approachAngle) * 4.5;
+
+                const dx = conn.boutonX - conn.startX;
+                const dy = conn.boutonY - conn.startY;
+                const dist = Math.hypot(dx, dy);
+
+                // 第一控制點：順著軸丘水平微傾延伸而出
+                conn.cp1x = conn.startX + dx * 0.38;
+                conn.cp1y = conn.startY + dy * 0.14;
+
+                // 第二控制點：沿著 approachAngle 反向延伸，確保曲線末端切線精準指向 chosenSpine
+                const tailLen = Math.min(dx * 0.36, dist * 0.28);
+                conn.cp2x = conn.boutonX - Math.cos(approachAngle) * tailLen;
+                conn.cp2y = conn.boutonY - Math.sin(approachAngle) * tailLen;
+            });
+        });
+    }
+
+    // A. 視覺 -> 大腦皮質 C1 (初期意識感知通道)
+    for (let s = 0; s < 4; s++) {
+        for (let c = 0; c < 5; c++) {
+            if (Math.abs(s * 1.2 - c) <= 2.1) {
+                addConnection(`S${s}`, `C1_${c}`, 'cortical', 0.48 + seededRandom() * 0.25);
+            }
+        }
+    }
+    // B. 皮質內部序列連結 C1 -> C2 -> C3
+    for (let i = 0; i < 5; i++) {
+        for (let j = 0; j < 5; j++) {
+            if (Math.abs(i - j) <= 2) {
+                addConnection(`C1_${i}`, `C2_${j}`, 'cortical', 0.45 + seededRandom() * 0.3);
+                addConnection(`C2_${i}`, `C3_${j}`, 'cortical', 0.45 + seededRandom() * 0.3);
+            }
+        }
+    }
+    // C. 皮質 C3 -> 肌肉輸出 M0~M5 (初期生硬控制，連結廣泛混亂)
+    for (let i = 0; i < 5; i++) {
+        for (let m = 0; m < 6; m++) {
+            if (Math.abs(i * 1.15 - m) <= 2.3) {
+                addConnection(`C3_${i}`, `M${m}`, 'cortical', 0.42 + seededRandom() * 0.32);
+            }
+        }
+    }
+    // D. 皮質 C1/C2 -> 小腦 CB1/CB2 (橋腦核順向轉接：意識練習協助引導小腦)
+    for (let i = 0; i < 5; i++) {
+        for (let cb = 0; cb < 7; cb++) {
+            if ((i + cb) % 3 === 0) {
+                addConnection(`C1_${i}`, `CB1_${cb}`, 'cortico_cerebellar', 0.32 + seededRandom() * 0.15);
+            }
+            if ((i + cb) % 4 === 0) {
+                addConnection(`C2_${i}`, `CB2_${cb}`, 'cortico_cerebellar', 0.30 + seededRandom() * 0.15);
+            }
+        }
+    }
+    // E. 視覺 S0~S2 -> 小腦顆粒層 CB1 (高速苔狀纖維直接輸入) & S3 -> CB1/CB2 (攀援纖維誤差教學訊號)
+    for (let s = 0; s < 3; s++) {
+        for (let cb = 0; cb < 7; cb++) {
+            addConnection(`S${s}`, `CB1_${cb}`, 'cerebellar', 0.16 + seededRandom() * 0.12);
+        }
+    }
+    for (let cb = 0; cb < 7; cb++) {
+        addConnection(`S3`, `CB1_${cb}`, 'error_climbing', 0.22 + seededRandom() * 0.12);
+        if (cb % 2 === 1) {
+            addConnection(`S3`, `CB2_${cb}`, 'error_climbing', 0.25 + seededRandom() * 0.1);
+        }
+    }
+    // F. 小腦內部 CB1 -> CB2 (平行纖維 -> 浦肯野/深核：神經可塑性核心區！)
+    for (let i = 0; i < 7; i++) {
+        for (let j = 0; j < 7; j++) {
+            if (Math.abs(i - j) <= 3) {
+                addConnection(`CB1_${i}`, `CB2_${j}`, 'cerebellar', 0.15 + seededRandom() * 0.12);
+            }
+        }
+    }
+    // G. 小腦深核 CB2 -> 多肌群輸出 M0~M5 (高速自動化輸出通道)
+    for (let j = 0; j < 7; j++) {
+        for (let m = 0; m < 6; m++) {
+            if (Math.abs(j * 0.85 - m) <= 2.6) {
+                addConnection(`CB2_${j}`, `M${m}`, 'cerebellar', 0.14 + seededRandom() * 0.12);
+            }
+        }
+    }
+    finalizeConnectionGeometry();
+
+    // ===================== 計算神經可塑性目標突觸權重 =====================
+    function updateTargetWeights() {
+        const p = progress / 100;
+        const task = TASKS[currentTaskKey];
+
+        connections.forEach(conn => {
+            let matureW = 0.06; // 預設未使用的突觸會被修剪 (Synaptic Pruning)
+
+            if (conn.pathwayType === 'cortical') {
+                // 熟練後大腦皮質僅保留極少數監督路徑，其餘退居幕後
+                const isSupervised =
+                    (conn.from.id === `S${task.cortexSupervise[0] || 0}` && conn.to.id === 'C1_0') ||
+                    (conn.from.id === 'C1_0' && conn.to.id === 'C2_0') ||
+                    (conn.from.id === 'C2_0' && conn.to.id === 'C3_0') ||
+                    (conn.from.id === 'C3_0' && conn.to.id === 'M0');
+                matureW = isSupervised ? 0.36 : 0.07;
+            } else if (conn.pathwayType === 'cortico_cerebellar') {
+                // 練習中段 (p ~ 0.5) 橋腦皮質往小腦引導最強，完全自動化後降低
+                const midBell = Math.sin(p * Math.PI);
+                conn.targetWeight = 0.12 + midBell * 0.48;
+                return;
+            } else if (conn.pathwayType === 'error_climbing') {
+                // 誤差訊號在初學與轉移期強烈閃爍以塑造小腦，100% 熟練誤差極小時平息
+                const errBell = Math.max(0.08, (1 - p) * 0.78);
+                const explicit = task.preferredPairs[conn.key];
+                conn.targetWeight = explicit ? (0.2 + p * 0.65) : errBell * 0.55;
+                return;
+            } else if (conn.pathwayType === 'cerebellar') {
+                // 檢查是否屬於當前動作專屬的強化神經迴路 (LTP)
+                if (task.preferredPairs[conn.key] !== undefined) {
+                    matureW = task.preferredPairs[conn.key];
+                } else {
+                    // 次要輔助路徑微幅保留，無關路徑修剪至 0.04
+                    const fIdx = parseInt(conn.from.id.split('_')[1] ?? conn.from.id.slice(1));
+                    const tIdx = parseInt(conn.to.id.split('_')[1] ?? conn.to.id.slice(1));
+                    let match = false;
+                    if (conn.from.region === 'sensory' && task.sensoryDrive[fIdx] > 0.8 && task.cb1Active.includes(tIdx)) match = true;
+                    if (conn.from.region === 'cerebellum1' && task.cb1Active.includes(fIdx) && task.cb2Active.includes(tIdx)) match = true;
+                    if (conn.from.region === 'cerebellum2' && task.cb2Active.includes(fIdx) && task.muscleTarget[tIdx] > 0.85) match = true;
+                    matureW = match ? 0.54 : 0.04;
+                }
+            }
+
+            // 由 p=0 的混亂初始狀態，平滑演進至 p=1 的專精迴路
+            conn.targetWeight = conn.chaoticWeight * (1 - p) + matureW * p;
+        });
+    }
+    updateTargetWeights();
+
+    // 貝茲曲線座標工具
+    function bezierPoint(conn, t) {
+        const inv = 1 - t;
+        const x = inv * inv * inv * conn.startX +
+                  3 * inv * inv * t * conn.cp1x +
+                  3 * inv * t * t * conn.cp2x +
+                  t * t * t * conn.boutonX;
+        const y = inv * inv * inv * conn.startY +
+                  3 * inv * inv * t * conn.cp1y +
+                  3 * inv * t * t * conn.cp2y +
+                  t * t * t * conn.boutonY;
+        return { x, y };
+    }
+
+    function bezierTangentAngle(conn, t) {
+        const dt = 0.02;
+        const p1 = bezierPoint(conn, Math.max(0, t - dt));
+        const p2 = bezierPoint(conn, Math.min(1, t + dt));
+        return Math.atan2(p2.y - p1.y, p2.x - p1.x);
+    }
+
+    // ===================== 發射動作電位脈衝 =====================
+    function spawnPulse(conn, color, speed) {
+        if (pulses.length > 260) return;
+        pulses.push({
+            conn,
+            t: 0,
+            speed,
+            color,
+            size: 2.1 + conn.currentWeight * 2.2
+        });
+        conn.from.activation = Math.min(1, conn.from.activation + 0.45);
+    }
+
+    let lastCorticalBeat = -1;
+
+    function stepSimulation(dt) {
+        simTime += dt;
+        const p = progress / 100;
+        const task = TASKS[currentTaskKey];
+
+        // 平滑插值突觸權重 (切換運動或拉動滑桿時展現有機可塑性過渡)
+        connections.forEach(c => {
+            c.currentWeight += (c.targetWeight - c.currentWeight) * Math.min(1, dt * 7);
+        });
+
+        // 神經元活化自然衰減
+        neurons.forEach(n => {
+            n.activation *= Math.pow(0.06, dt);
+        });
+
+        // 1. 大腦皮質「意識序列控制」(Serial Step-by-Step Control)
+        // 在低熟練度時主導：訊號必須一拍一拍依序走過 S -> C1 -> C2 -> C3 -> M
+        const corticalDominance = Math.pow(1 - p, 0.85);
+        const beatIndex = Math.floor(simTime * 3.4) % 4; // 0:視覺->C1, 1:C1->C2, 2:C2->C3, 3:C3->M
+        if (beatIndex !== lastCorticalBeat) {
+            lastCorticalBeat = beatIndex;
+            connections.forEach(conn => {
+                if (conn.pathwayType !== 'cortical') return;
+                let matchStep = false;
+                if (beatIndex === 0 && conn.from.region === 'sensory') matchStep = true;
+                if (beatIndex === 1 && conn.from.subLayer === 1) matchStep = true;
+                if (beatIndex === 2 && conn.from.subLayer === 2) matchStep = true;
+                if (beatIndex === 3 && conn.from.subLayer === 3) matchStep = true;
+
+                if (matchStep) {
+                    const fireProb = (0.12 + corticalDominance * 0.75) * conn.currentWeight;
+                    if (Math.random() < fireProb) {
+                        // 無髓鞘皮質序列訊號速度較慢
+                        spawnPulse(conn, '#fb7185', 1.35 + Math.random() * 0.25);
+                    }
+                }
+            });
+
+            // 練習期誤差訊號 (S3 視覺誤差 -> 小腦攀援纖維)
+            if (beatIndex === 1 && p < 0.92) {
+                const errRate = (1 - p) * 0.85;
+                connections.forEach(conn => {
+                    if (conn.pathwayType === 'error_climbing' && Math.random() < errRate * 0.55) {
+                        spawnPulse(conn, '#ff4d6d', 1.9);
+                    }
+                });
+            }
+        }
+
+        // 2. 小腦與基底核「平行自動化控制」(Fast Parallel Myelinated Control)
+        // 隨熟練度 p 提升，高速平行連續發放，直接精準驅動對應肌群
+        if (p > 0.08) {
+            const parallelDrive = Math.pow(p, 1.1);
+            connections.forEach(conn => {
+                if (conn.pathwayType === 'cerebellar' && conn.currentWeight > 0.32) {
+                    const prob = parallelDrive * conn.currentWeight * dt * 5.8;
+                    if (Math.random() < prob) {
+                        // 髓鞘化軸突傳導速度極快 (跳躍傳導)
+                        const speed = 2.4 + conn.currentWeight * 1.4;
+                        spawnPulse(conn, '#2dd4bf', speed);
+                    }
+                } else if (conn.pathwayType === 'cortico_cerebellar' && p > 0.15 && p < 0.85) {
+                    if (Math.random() < dt * 1.8 * conn.currentWeight) {
+                        spawnPulse(conn, '#c084fc', 1.8);
+                    }
+                }
+            });
+        }
+
+        // 更新所有脈衝粒子位置，抵達突觸終扣時觸發突觸間隙閃光與下游樹突活化
+        for (let i = pulses.length - 1; i >= 0; i--) {
+            const pulse = pulses[i];
+            pulse.t += pulse.speed * dt;
+            if (pulse.t >= 1) {
+                pulse.conn.lastFlash = 1.0;
+                pulse.conn.to.activation = Math.min(1, pulse.conn.to.activation + pulse.conn.currentWeight * 0.55);
+                pulses.splice(i, 1);
+            }
+        }
+
+        connections.forEach(c => {
+            if (c.lastFlash > 0) c.lastFlash = Math.max(0, c.lastFlash - dt * 3.5);
+        });
+
+        // 確保感覺輸入端依任務持續呈現視覺刺激亮起
+        for (let s = 0; s < 4; s++) {
+            const base = s === 3 ? (1 - p * 0.7) : task.sensoryDrive[s];
+            neuronMap[`S${s}`].activation = Math.max(neuronMap[`S${s}`].activation, 0.35 + 0.45 * base * (0.7 + 0.3 * Math.sin(simTime * 5 + s)));
+        }
+    }
+
+    // ===================== 主神經網路畫布繪製 =====================
+    function getRegionColor(region) {
+        switch (region) {
+            case 'sensory': return '#a78bfa';     // 視覺紫
+            case 'cortex': return '#fb7185';      // 大腦皮質珊瑚紅
+            case 'cerebellum1': return '#38bdf8'; // 小腦顆粒層亮藍
+            case 'cerebellum2': return '#2dd4bf'; // 小腦深核青綠
+            case 'motor': return '#4ade80';       // 肌肉運動池翠綠
+            default: return '#94a3b8';
+        }
+    }
+
+    function drawNetwork() {
+        const ctx = netCtx;
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        ctx.save();
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, LOGICAL_W, LOGICAL_H);
+
+        // 套用視角平移與縮放 (Zoom & Pan)
+        ctx.translate(panX, panY);
+        ctx.scale(zoom, zoom);
+
+        const p = progress / 100;
+        const beatIndex = Math.floor(simTime * 3.4) % 4;
+
+        // 1. 繪製四大功能分區背景框與序列步驟指示器
+        // (a) 左側視覺區
+        drawZoneBox(ctx, 18, 48, 130, 525, 'rgba(167, 139, 250, 0.05)', 'rgba(167, 139, 250, 0.28)', '👁️ 視覺感覺輸入', '視網膜與視皮質');
+
+        // (b) 中上方：大腦皮質區 (序列意識控制)
+        const cortexAlpha = 0.04 + (1 - p) * 0.07;
+        drawZoneBox(ctx, 185, 16, 530, 282, `rgba(251, 113, 133, ${cortexAlpha})`,
+            p < 0.5 ? 'rgba(251, 113, 133, 0.5)' : 'rgba(251, 113, 133, 0.2)',
+            '🧠 大腦皮質區 (意識序列控制 · 慢速高耗能)',
+            p < 0.45 ? '⚠️ 目前主導：逐層序列思考，產生動作延遲' : '✓ 已釋放認知負荷，僅維持低階監控',
+            true);
+
+        // 皮質三階段序列指示燈
+        const stepLabels = [
+            { x: 265, text: '1.空間解析' },
+            { x: 445, text: '2.意識決策' },
+            { x: 625, text: '3.序列發令' }
+        ];
+        stepLabels.forEach((st, idx) => {
+            const isBeat = (beatIndex === idx + 1) && (p < 0.75);
+            ctx.save();
+            ctx.fillStyle = isBeat ? 'rgba(251, 113, 133, 0.32)' : 'rgba(30, 41, 59, 0.7)';
+            ctx.strokeStyle = isBeat ? '#fb7185' : '#334155';
+            ctx.lineWidth = 1;
+            roundRect(ctx, st.x - 42, 48, 84, 20, 10);
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = isBeat ? '#fff' : '#94a3b8';
+            ctx.font = 'bold 11px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(st.text, st.x, 62);
+            ctx.restore();
+        });
+
+        // (c) 中下方：小腦與基底核區 (平行自動化處理)
+        const cerebAlpha = 0.04 + p * 0.09;
+        drawZoneBox(ctx, 185, 308, 530, 290, `rgba(45, 212, 191, ${cerebAlpha})`,
+            p >= 0.5 ? 'rgba(45, 212, 191, 0.55)' : 'rgba(45, 212, 191, 0.22)',
+            '⚡ 小腦與基底核區 (自動化平行迴路 · 高速精準)',
+            p > 0.65 ? `★ 專精運動記憶已固化：${TASKS[currentTaskKey].name}專屬迴路` : '正在透過視覺誤差修剪雜訊、強化特定突觸...',
+            true);
+
+        // (d) 右側：多肌群運動輸出區
+        drawZoneBox(ctx, 755, 48, 208, 525, 'rgba(74, 222, 128, 0.05)', 'rgba(74, 222, 128, 0.28)', '💪 多肌群輸出端', '脊髓運動池與肌電活性');
+
+        // 2. 繪製所有軸突纖維、髓鞘與突觸終扣
+        const activeCell = selectedNeuron;
+
+        connections.forEach(conn => {
+            const isIncomingSel = activeCell && conn.to === activeCell;
+            const isOutgoingSel = activeCell && conn.from === activeCell;
+            const isRelated = isIncomingSel || isOutgoingSel;
+
+            // 若有選取細胞，無關連線大幅淡化以凸顯目標細胞纖維
+            if (activeCell && !isRelated) {
+                ctx.save();
+                ctx.strokeStyle = 'rgba(100, 116, 139, 0.06)';
+                ctx.lineWidth = 0.8;
+                ctx.beginPath();
+                ctx.moveTo(conn.startX, conn.startY);
+                ctx.bezierCurveTo(conn.cp1x, conn.cp1y, conn.cp2x, conn.cp2y, conn.boutonX, conn.boutonY);
+                ctx.stroke();
+                ctx.restore();
+                return;
+            }
+
+            const w = conn.currentWeight;
+            if (!activeCell && w < 0.09) {
+                // 被修剪掉的微弱突觸以極淡虛線呈現可塑性修剪痕跡
+                ctx.save();
+                ctx.strokeStyle = 'rgba(148, 163, 184, 0.07)';
+                ctx.setLineDash([3, 4]);
+                ctx.lineWidth = 0.7;
+                ctx.beginPath();
+                ctx.moveTo(conn.startX, conn.startY);
+                ctx.bezierCurveTo(conn.cp1x, conn.cp1y, conn.cp2x, conn.cp2y, conn.boutonX, conn.boutonY);
+                ctx.stroke();
+                ctx.restore();
+                return;
+            }
+
+            let fiberColor = '#64748b';
+            if (isIncomingSel) {
+                fiberColor = '#00f5d4'; // 上游輸入軸突 -> 青綠色
+            } else if (isOutgoingSel) {
+                fiberColor = '#ffb703'; // 本體輸出軸突 -> 琥珀金
+            } else if (conn.pathwayType === 'cortical') {
+                fiberColor = '#fb7185';
+            } else if (conn.pathwayType === 'error_climbing') {
+                fiberColor = '#f43f5e';
+            } else if (conn.pathwayType === 'cortico_cerebellar') {
+                fiberColor = '#c084fc';
+            } else {
+                fiberColor = w > 0.65 ? '#2dd4bf' : '#38bdf8';
+            }
+
+            const alpha = isRelated ? (0.45 + w * 0.55) : (0.08 + Math.pow(w, 1.35) * 0.78);
+            const lineW = isRelated ? (1.4 + w * 3.0) : (0.6 + Math.pow(w, 1.5) * 3.2);
+
+            ctx.save();
+            ctx.strokeStyle = fiberColor;
+            ctx.globalAlpha = Math.min(1, alpha);
+            ctx.lineWidth = lineW;
+
+            if (conn.pathwayType === 'error_climbing' && !isRelated) {
+                ctx.setLineDash([4, 4]);
+            }
+
+            ctx.beginPath();
+            ctx.moveTo(conn.startX, conn.startY);
+            ctx.bezierCurveTo(conn.cp1x, conn.cp1y, conn.cp2x, conn.cp2y, conn.boutonX, conn.boutonY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // 繪製髓鞘節段 (Myelin Sheath)：強化後的神經纖維(w > 0.58)長出白色/金色髓鞘節，代表高速傳導
+            if (w > 0.58 || (isOutgoingSel && w > 0.35)) {
+                const segCount = 4;
+                for (let s = 1; s <= segCount; s++) {
+                    const t = s / (segCount + 1);
+                    const pt = bezierPoint(conn, t);
+                    const ang = bezierTangentAngle(conn, t);
+                    ctx.save();
+                    ctx.translate(pt.x, pt.y);
+                    ctx.rotate(ang);
+                    ctx.fillStyle = isOutgoingSel ? 'rgba(255, 214, 102, 0.85)' : 'rgba(165, 243, 252, 0.72)';
+                    roundRect(ctx, -5.5, -(lineW * 0.75 + 1.3), 11, (lineW * 0.75 + 1.3) * 2, 2.5);
+                    ctx.fill();
+                    ctx.restore();
+                }
+            }
+
+            // 繪製突觸前終扣 (Synaptic Bouton) 對接於目標樹突棘之前
+            const boutonRadius = (isRelated ? 2.8 : 1.5) + w * 2.6 + conn.lastFlash * 1.6;
+            const cleftAngle = Math.atan2(conn.spine.y - conn.boutonY, conn.spine.x - conn.boutonX);
+            ctx.save();
+            ctx.translate(conn.boutonX, conn.boutonY);
+            ctx.rotate(cleftAngle);
+            ctx.fillStyle = conn.lastFlash > 0.2 ? '#ffffff' : fiberColor;
+            ctx.beginPath();
+            // 杯狀突觸終扣造型
+            ctx.arc(0, 0, boutonRadius, Math.PI * 0.55, Math.PI * 1.45, false);
+            ctx.lineTo(boutonRadius * 0.7, -boutonRadius * 0.85);
+            ctx.lineTo(boutonRadius * 0.7, boutonRadius * 0.85);
+            ctx.closePath();
+            ctx.fill();
+
+            // 突觸間隙神經傳導物質釋放閃光
+            if (conn.lastFlash > 0.1 || isRelated) {
+                ctx.globalAlpha = isRelated ? Math.max(0.45, conn.lastFlash) : conn.lastFlash;
+                ctx.fillStyle = '#fde047';
+                ctx.beginPath();
+                ctx.arc(2.4, -1.2, 1.1, 0, Math.PI * 2);
+                ctx.arc(2.8, 1.2, 1.1, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+
+            ctx.restore();
+        });
+
+        // 3. 繪製傳導中的動作電位粒子 (Action Potentials)
+        pulses.forEach(pulse => {
+            if (activeCell && pulse.conn.from !== activeCell && pulse.conn.to !== activeCell) return;
+            const pt = bezierPoint(pulse.conn, pulse.t);
+            ctx.save();
+            ctx.shadowColor = pulse.color;
+            ctx.shadowBlur = 8;
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(pt.x, pt.y, pulse.size, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        });
+
+        // 4. 繪製所有多極神經元（樹突、細胞體、細胞核、軸丘）
+        neurons.forEach(n => {
+            const isSelected = activeCell === n;
+            const isUpstream = activeCell && activeCell.incoming.some(c => c.from === n);
+            const isDownstream = activeCell && activeCell.outgoing.some(c => c.to === n);
+            const isDimmed = activeCell && !isSelected && !isUpstream && !isDownstream;
+
+            const baseColor = getRegionColor(n.region);
+            ctx.save();
+            ctx.globalAlpha = isDimmed ? 0.14 : 1.0;
+
+            // (a) 繪製樹突分支 (Dendrites)
+            if (n.region !== 'sensory') {
+                const dendriteColor = isSelected ? '#00f5d4' : (isDownstream ? '#ffb703' : baseColor);
+                ctx.strokeStyle = dendriteColor;
+                ctx.lineCap = 'round';
+                n.dendrites.forEach(d => {
+                    ctx.lineWidth = isSelected ? 2.4 : 1.35;
+                    ctx.beginPath();
+                    ctx.moveTo(n.x, n.y);
+                    ctx.lineTo(d.midX, d.midY);
+                    ctx.stroke();
+
+                    ctx.lineWidth = isSelected ? 1.8 : 1.0;
+                    d.twigs.forEach(tw => {
+                        ctx.beginPath();
+                        ctx.moveTo(d.midX, d.midY);
+                        ctx.lineTo(tw.x, tw.y);
+                        ctx.stroke();
+
+                        // 樹突棘受體小點 (Post-synaptic spine head)
+                        ctx.fillStyle = dendriteColor;
+                        ctx.beginPath();
+                        ctx.arc(tw.x, tw.y, isSelected ? 2.2 : 1.3, 0, Math.PI * 2);
+                        ctx.fill();
+                    });
+                });
+            } else {
+                // 視覺受器左側感光錐 (由細胞體圓周沿受器角度放射延伸，消除 Y 偏移)
+                ctx.strokeStyle = isSelected ? '#00f5d4' : '#a78bfa';
+                ctx.lineWidth = 1.6;
+                n.spinePoints.forEach(sp => {
+                    ctx.beginPath();
+                    ctx.moveTo(n.x + Math.cos(sp.angle) * n.radius, n.y + Math.sin(sp.angle) * n.radius);
+                    ctx.lineTo(sp.x, sp.y);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.arc(sp.x, sp.y, 2.5, 0, Math.PI * 2);
+                    ctx.stroke();
+                });
+            }
+
+            // (b) 繪製右側軸丘 (Axon Hillock - 軸突起始錐)
+            if (n.region !== 'motor') {
+                ctx.fillStyle = isSelected ? '#ffb703' : baseColor;
+                ctx.beginPath();
+                ctx.moveTo(n.x + n.radius * 0.65, n.y - 4.5);
+                ctx.lineTo(n.x + n.radius + 6.5, n.y);
+                ctx.lineTo(n.x + n.radius * 0.65, n.y + 4.5);
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            // (c) 繪製細胞體 (Soma) 與活化光暈
+            if (n.activation > 0.15 || isSelected || hoveredNeuron === n) {
+                ctx.shadowColor = isSelected ? '#ffffff' : baseColor;
+                ctx.shadowBlur = isSelected ? 18 : (8 + n.activation * 10);
+            }
+
+            ctx.fillStyle = '#111827';
+            ctx.strokeStyle = isSelected ? '#ffffff' : baseColor;
+            ctx.lineWidth = isSelected ? 3.0 : (hoveredNeuron === n ? 2.4 : 1.8);
+
+            ctx.beginPath();
+            ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // 細胞質活化填充與細胞核 (Nucleus)
+            ctx.fillStyle = baseColor;
+            ctx.globalAlpha = (isDimmed ? 0.14 : 1) * (0.2 + n.activation * 0.65);
+            ctx.beginPath();
+            ctx.arc(n.x, n.y, n.radius - 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.globalAlpha = isDimmed ? 0.14 : 0.92;
+            ctx.fillStyle = isSelected ? '#fff' : baseColor;
+            ctx.beginPath();
+            ctx.arc(n.x, n.y, 3.6, 0, Math.PI * 2);
+            ctx.fill();
+
+            // (d) 左側視覺標籤 與 右側肌肉即時收縮條
+            if (n.region === 'sensory') {
+                ctx.font = 'bold 11px sans-serif';
+                ctx.fillStyle = '#e2e8f0';
+                ctx.textAlign = 'center';
+                ctx.fillText(n.label, n.x, n.y + n.radius + 15);
+            } else if (n.region === 'motor') {
+                const mInfo = muscleMeta.find(m => m.id === n.id);
+                ctx.font = 'bold 11px sans-serif';
+                ctx.fillStyle = '#e2e8f0';
+                ctx.textAlign = 'left';
+                ctx.fillText(mInfo.short, n.x + 19, n.y - 3);
+
+                // 肌肉收縮強度條 (EMG)
+                const barW = 78;
+                const barH = 6;
+                ctx.fillStyle = '#0f172a';
+                roundRect(ctx, n.x + 19, n.y + 3, barW, barH, 3);
+                ctx.fill();
+
+                const emg = Math.min(1, n.activation * 1.15);
+                ctx.fillStyle = p > 0.5 ? '#4ade80' : '#fb7185';
+                roundRect(ctx, n.x + 19, n.y + 3, barW * emg, barH, 3);
+                ctx.fill();
+            }
+
+            ctx.restore();
+        });
+
+        // 結束縮放矩陣
+        ctx.restore();
+
+        // 5. 若使用者點選或懸停某顆神經元，在畫布上以清晰銳利的螢幕像素繪製解剖標籤
+        const targetLabelCell = selectedNeuron || hoveredNeuron;
+        if (targetLabelCell) {
+            drawAnatomicalCallout(ctx, targetLabelCell, !!selectedNeuron);
+        }
+    }
+
+    function drawAnatomicalCallout(ctx, n, isPinned) {
+        ctx.save();
+        const boxW = 190;
+        const boxH = isPinned ? 42 : 28;
+
+        // 將神經元邏輯座標轉換至當前畫面實際螢幕像素座標
+        const screenX = n.x * zoom + panX;
+        const screenY = n.y * zoom + panY;
+        const screenR = n.radius * zoom;
+
+        let bx = screenX - boxW / 2;
+        let by = screenY - screenR - boxH - 10;
+        if (by < 10) by = screenY + screenR + 12;
+        bx = Math.max(12, Math.min(LOGICAL_W - boxW - 12, bx));
+
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
+        ctx.strokeStyle = isPinned ? '#38bdf8' : '#64748b';
+        ctx.lineWidth = 1.4;
+        roundRect(ctx, bx, by, boxW, boxH, 8);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = 'bold 12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${n.label} (${n.id})`, bx + boxW / 2, isPinned ? by + 17 : by + 18);
+
+        if (isPinned) {
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '11px sans-serif';
+            ctx.fillText(`輸入突觸: ${n.incoming.length}  |  輸出突觸: ${n.outgoing.length}`, bx + boxW / 2, by + 33);
+        }
+        ctx.restore();
+    }
+
+    function drawZoneBox(ctx, x, y, w, h, fill, stroke, title, subtitle, inlineSubtitle = false) {
+        ctx.save();
+        ctx.fillStyle = fill;
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = 1.2;
+        roundRect(ctx, x, y, w, h, 12);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#e2e8f0';
+        ctx.font = 'bold 12.5px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(title, x + 12, y + 20);
+
+        if (subtitle) {
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '11px sans-serif';
+            if (inlineSubtitle) {
+                ctx.textAlign = 'right';
+                ctx.fillText(subtitle, x + w - 12, y + 20);
+            } else {
+                ctx.fillText(subtitle, x + 12, y + 36);
+            }
+        }
+        ctx.restore();
+    }
+
+    function roundRect(ctx, x, y, w, h, r) {
+        if (w <= 0) return;
+        r = Math.min(r, w / 2, h / 2);
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
+    }
+
+    // ===================== 右側縮小版多動作物理動畫 =====================
+    function drawActionViewport() {
+        const ctx = actCtx;
+        const W = 284, H = 175;
+        ctx.clearRect(0, 0, W, H);
+        const p = progress / 100;
+        const err = 1 - p;
+
+        // 地面基準線
+        ctx.strokeStyle = '#263449';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(12, 148);
+        ctx.lineTo(W - 12, 148);
+        ctx.stroke();
+
+        if (currentTaskKey === 'bike') {
+            drawBikeMini(ctx, W, H, p, err);
+        } else if (currentTaskKey === 'basketball') {
+            drawBasketballMini(ctx, W, H, p, err);
+        } else if (currentTaskKey === 'pingpong') {
+            drawPingPongMini(ctx, W, H, p, err);
+        } else if (currentTaskKey === 'juggling') {
+            drawJugglingMini(ctx, W, H, p, err);
+        }
+    }
+
+    // 1. 騎腳踏車縮小動畫
+    function drawBikeMini(ctx, W, H, p, err) {
+        // 移動路面速度線
+        const speed = 35 + p * 140;
+        ctx.strokeStyle = '#334155';
+        ctx.lineWidth = 2;
+        for (let i = 0; i < 6; i++) {
+            const lx = ((W - (simTime * speed + i * 52) % (W + 40)));
+            ctx.beginPath();
+            ctx.moveTo(lx, 155);
+            ctx.lineTo(lx + 18, 155);
+            ctx.stroke();
+        }
+
+        // 上方傾角平衡儀
+        const tilt = err * (Math.sin(simTime * 5.2) * 0.34 + Math.cos(simTime * 8.3) * 0.14);
+        ctx.save();
+        ctx.translate(W / 2, 22);
+        ctx.strokeStyle = '#334155';
+        ctx.beginPath();
+        ctx.arc(0, 12, 26, Math.PI * 1.15, Math.PI * 1.85);
+        ctx.stroke();
+        ctx.rotate(tilt);
+        ctx.strokeStyle = p > 0.65 ? '#2dd4bf' : '#fb7185';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(0, 12);
+        ctx.lineTo(0, -11);
+        ctx.stroke();
+        ctx.restore();
+
+        const jitterX = err * Math.sin(simTime * 6.5) * 14;
+        const cx = W / 2 + jitterX;
+        const cy = 128;
+        const wheelR = 19;
+        const wheelRot = simTime * (2.5 + p * 8);
+
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(tilt * 0.65);
+
+        const mainColor = p > 0.65 ? '#38bdf8' : (p > 0.35 ? '#fbbf24' : '#fb7185');
+        ctx.strokeStyle = mainColor;
+        ctx.lineWidth = 2.6;
+
+        // 前後輪與輻條
+        [-38, 38].forEach(wx => {
+            ctx.beginPath();
+            ctx.arc(wx, 0, wheelR, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.save();
+            ctx.translate(wx, 0);
+            ctx.rotate(wheelRot);
+            ctx.lineWidth = 1;
+            for (let k = 0; k < 4; k++) {
+                ctx.rotate(Math.PI / 4);
+                ctx.beginPath();
+                ctx.moveTo(-wheelR + 2, 0);
+                ctx.lineTo(wheelR - 2, 0);
+                ctx.stroke();
+            }
+            ctx.restore();
+            ctx.lineWidth = 2.6;
+        });
+
+        // 車架
+        ctx.beginPath();
+        ctx.moveTo(-38, 0);
+        ctx.lineTo(-12, -26);
+        ctx.lineTo(24, -26);
+        ctx.lineTo(0, 0);
+        ctx.closePath();
+        ctx.moveTo(38, 0);
+        ctx.lineTo(20, -36);
+        ctx.lineTo(12, -38);
+        ctx.stroke();
+
+        // 騎士身體與踩踏腿部
+        const pedalAngle = wheelRot * 0.85;
+        const footX = Math.cos(pedalAngle) * 9;
+        const footY = Math.sin(pedalAngle) * 9;
+        ctx.strokeStyle = '#e2e8f0';
+        ctx.lineWidth = 2.8;
+        ctx.beginPath();
+        // 腿
+        ctx.moveTo(-12, -28);
+        ctx.lineTo(-2 + footX * 0.5, -13 + footY * 0.4);
+        ctx.lineTo(footX, footY);
+        // 軀幹與手臂
+        ctx.moveTo(-12, -28);
+        ctx.lineTo(4, -52);
+        ctx.lineTo(20, -36);
+        ctx.stroke();
+
+        // 騎士頭部
+        ctx.beginPath();
+        ctx.arc(8, -62, 8.5, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+
+        drawMiniCaption(ctx, p > 0.7 ? '穩定直線巡航・小腦自動平衡' : '皮質修正延遲・龍頭劇烈搖晃', p);
+    }
+
+    // 2. 籃球投籃縮小動畫
+    function drawBasketballMini(ctx, W, H, p, err) {
+        const cycle = (simTime * 0.72) % 1; // 投籃週期 0 ~ 1
+        // 用週期序號產生初學時的隨機偏差
+        const shotIdx = Math.floor(simTime * 0.72);
+        const shotBias = Math.sin(shotIdx * 12.9898) * err;
+
+        // 繪製右側籃板與籃框
+        const hoopX = 228, hoopY = 66;
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(250, 34);
+        ctx.lineTo(250, 82); // 籃板
+        ctx.moveTo(250, 148);
+        ctx.lineTo(250, 82); // 籃柱
+        ctx.stroke();
+
+        ctx.strokeStyle = '#f97316';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(hoopX - 11, hoopY);
+        ctx.lineTo(249, hoopY);
+        ctx.stroke();
+
+        // 籃網 (進球時擺動)
+        const swishWave = (p > 0.68 && cycle > 0.78 && cycle < 0.95) ? Math.sin((cycle - 0.78) * 35) * 4 : 0;
+        ctx.strokeStyle = 'rgba(226, 232, 240, 0.65)';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(hoopX - 10, hoopY);
+        ctx.lineTo(hoopX - 6 + swishWave, hoopY + 18);
+        ctx.lineTo(hoopX + 6 + swishWave, hoopY + 18);
+        ctx.lineTo(hoopX + 10, hoopY);
+        ctx.stroke();
+
+        // 左側球員動作動力鏈 (蹲 -> 跳伸臂 -> 壓腕)
+        const crouch = cycle < 0.3 ? Math.sin((cycle / 0.3) * Math.PI) * 12 : 0;
+        const jump = (cycle >= 0.25 && cycle < 0.65) ? Math.sin(((cycle - 0.25) / 0.4) * Math.PI) * (4 + p * 12) : 0;
+        const px = 58, py = 148 - jump;
+
+        ctx.strokeStyle = '#e2e8f0';
+        ctx.lineWidth = 2.8;
+        ctx.beginPath();
+        // 下肢屈膝起跳
+        ctx.moveTo(px - 6, 148 - jump * 0.6);
+        ctx.lineTo(px + 4, py - 22 + crouch * 0.6);
+        ctx.lineTo(px, py - 44 + crouch);
+        // 軀幹
+        ctx.lineTo(px + 2, py - 72 + crouch);
+        ctx.stroke();
+        // 頭
+        ctx.beginPath();
+        ctx.arc(px + 4, py - 82 + crouch, 8, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // 手臂與手腕壓腕跟隨動作
+        const releasePhase = Math.min(1, Math.max(0, (cycle - 0.2) / 0.22));
+        const armAngle = -0.3 - releasePhase * 0.95 + err * Math.sin(simTime * 14) * 0.15;
+        const shoulderX = px + 2, shoulderY = py - 68 + crouch;
+        const handX = shoulderX + Math.cos(armAngle) * 26;
+        const handY = shoulderY + Math.sin(armAngle) * 26;
+
+        ctx.strokeStyle = p > 0.65 ? '#2dd4bf' : '#fb7185';
+        ctx.beginPath();
+        ctx.moveTo(shoulderX, shoulderY);
+        ctx.lineTo(handX, handY);
+        // 手腕壓腕 (Gooseneck)
+        ctx.lineTo(handX + 6, handY + (releasePhase > 0.8 ? 5 : -3));
+        ctx.stroke();
+
+        // 籃球拋物線軌跡
+        let bx, by;
+        if (cycle < 0.35) {
+            bx = handX + 5;
+            by = handY - 4;
+        } else {
+            const ft = (cycle - 0.35) / 0.55; // 飛行 0 ~ 1
+            const targetX = hoopX + shotBias * 34;
+            const targetY = hoopY + 4 + shotBias * 24;
+            const startBX = px + 18, startBY = 68;
+            bx = startBX + (targetX - startBX) * Math.min(1.12, ft);
+            const arcHeight = 56 + p * 14 - Math.abs(shotBias) * 22;
+            by = startBY + (targetY - startBY) * Math.min(1.12, ft) - Math.sin(Math.min(1.12, ft) * Math.PI) * arcHeight;
+
+            // 若初學偏差大撞框彈開
+            if (ft > 0.92 && Math.abs(shotBias) > 0.22) {
+                bx += (ft - 0.92) * (shotBias > 0 ? 40 : -95);
+                by -= (ft - 0.92) * 35;
+            }
+        }
+
+        ctx.fillStyle = '#f97316';
+        ctx.beginPath();
+        ctx.arc(bx, by, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#7c2d12';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        drawMiniCaption(ctx, p > 0.7 ? '空心入網！動力鏈與壓腕精準協調' : '力量與出手角度不穩・頻繁打鐵偏差', p);
+    }
+
+    // 3. 桌球對打縮小動畫
+    function drawPingPongMini(ctx, W, H, p, err) {
+        // 球桌與球網
+        ctx.fillStyle = '#1e3a8a';
+        roundRect(ctx, 56, 108, 174, 8, 2);
+        ctx.fill();
+        ctx.strokeStyle = '#e2e8f0';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(56, 108);
+        ctx.lineTo(230, 108);
+        ctx.moveTo(143, 95);
+        ctx.lineTo(143, 108); // 網
+        ctx.moveTo(78, 116); ctx.lineTo(78, 148);
+        ctx.moveTo(208, 116); ctx.lineTo(208, 148);
+        ctx.stroke();
+
+        // 對練回球擋板/對手拍 (右側穩定回擊)
+        const rallySpeed = 1.1 + p * 1.4;
+        const phase = (simTime * rallySpeed) % 2; // 0~1 去程, 1~2 回程
+        const goingRight = phase < 1;
+        const t = goingRight ? phase : (phase - 1);
+
+        // 乒乓球位置
+        let ballX, ballY;
+        const missThisCycle = (err > 0.35) && (Math.sin(Math.floor(simTime * rallySpeed) * 7.7) > (1 - err * 1.1));
+
+        if (goingRight) {
+            ballX = 56 + t * 172;
+            const bounce = Math.abs(Math.sin(t * Math.PI * 1.55));
+            ballY = 104 - bounce * (26 + err * 18);
+            if (missThisCycle && t > 0.45) {
+                // 初學擊球掛網或出界
+                ballX = 56 + 0.48 * 172 + (t - 0.45) * 15;
+                ballY = 102 + (t - 0.45) * 60;
+            }
+        } else {
+            ballX = 228 - t * 172;
+            const bounce = Math.abs(Math.sin(t * Math.PI * 1.55));
+            ballY = 104 - bounce * 26;
+        }
+
+        // 右側回球拍
+        ctx.strokeStyle = '#60a5fa';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(234, ballY - 9);
+        ctx.lineTo(234, ballY + 9);
+        ctx.stroke();
+
+        // 左側學習者與揮拍 (皮質控制時揮拍反應明顯慢半拍!)
+        const reactionLag = err * 0.38;
+        const swingWave = Math.sin((phase - reactionLag) * Math.PI * 2);
+        const px = 36;
+        ctx.strokeStyle = '#e2e8f0';
+        ctx.lineWidth = 2.6;
+        ctx.beginPath();
+        ctx.arc(px, 64, 7.5, 0, Math.PI * 2);
+        ctx.moveTo(px, 72);
+        ctx.lineTo(px - 2, 112);
+        ctx.lineTo(px - 10, 148);
+        ctx.moveTo(px - 2, 112);
+        ctx.lineTo(px + 8, 148);
+        ctx.stroke();
+
+        // 揮拍手臂與紅色球拍
+        const handX = px + 14 + swingWave * 11;
+        const handY = 90 - swingWave * 7 + err * Math.sin(simTime * 11) * 10;
+        ctx.strokeStyle = p > 0.65 ? '#2dd4bf' : '#fb7185';
+        ctx.lineWidth = 2.6;
+        ctx.beginPath();
+        ctx.moveTo(px, 80);
+        ctx.lineTo(handX, handY);
+        ctx.stroke();
+
+        ctx.fillStyle = '#ef4444';
+        ctx.beginPath();
+        ctx.arc(handX + 4, handY - 3, 6, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 乒乓球
+        ctx.fillStyle = '#fbbf24';
+        ctx.beginPath();
+        ctx.arc(ballX, ballY, 4.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        drawMiniCaption(ctx, p > 0.7 ? '高速預判對拉・小腦反射零延遲' : '意識反應慢半拍・揮空與掛網失誤', p);
+    }
+
+    // 4. 三球雜耍縮小動畫 (初學掉球混亂 vs 熟練小腦8字自動化)
+    function drawJugglingMini(ctx, W, H, p, err) {
+        const cx = W / 2, groundY = 148;
+        const dropSeverity = Math.max(0, (err - 0.20) / 0.80); // 0 (熟練) ~ 1 (初學嚴重失誤)
+
+        // 身體與頭部晃動 (初學時重心不穩、狼狽前傾與側彎)
+        const bodyLean = err * Math.sin(simTime * 4.2) * 11;
+        const bodyCrouch = dropSeverity * (Math.sin(simTime * 3.5) > 0 ? Math.sin(simTime * 3.5) * 10 : 0);
+        const headX = cx + bodyLean * 0.75;
+        const headY = 74 + bodyCrouch * 0.6;
+        const chestX = cx + bodyLean * 0.45;
+        const chestY = 92 + bodyCrouch * 0.7;
+        const hipX = cx + bodyLean * 0.15;
+        const hipY = 130;
+
+        // 表演者身體骨架
+        ctx.strokeStyle = '#e2e8f0';
+        ctx.lineWidth = 2.6;
+        ctx.beginPath();
+        // 頭
+        ctx.arc(headX, headY, 8.5, 0, Math.PI * 2);
+        // 軀幹
+        ctx.moveTo(headX, headY + 8.5);
+        ctx.lineTo(chestX, chestY);
+        ctx.lineTo(hipX, hipY);
+        // 雙腿
+        ctx.moveTo(hipX, hipY);
+        ctx.lineTo(cx - 14, groundY);
+        ctx.moveTo(hipX, hipY);
+        ctx.lineTo(cx + 14, groundY);
+        // 肩線
+        ctx.moveTo(chestX - 17, chestY - 1);
+        ctx.lineTo(chestX + 17, chestY - 1);
+        ctx.stroke();
+
+        // 初學慌張流汗冒水滴圖示
+        if (dropSeverity > 0.45) {
+            ctx.fillStyle = '#38bdf8';
+            ctx.beginPath();
+            ctx.arc(headX + 12, headY - 5, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(headX + 12, headY - 8);
+            ctx.lineTo(headX + 10, headY - 5);
+            ctx.lineTo(headX + 14, headY - 5);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        // 雙手位置計算
+        // 熟練時：雙手以小幅度 (半徑 8px) 規律內轉舀球 (Scoop)
+        // 初學時：右手慌張往地板試圖撈掉落的球，左手慌亂揮舞甚至僵直
+        const rhythm = simTime * (3.4 + p * 1.8);
+        let lHandX = cx - 26 + Math.cos(rhythm) * (8 - dropSeverity * 3);
+        let lHandY = 112 + Math.sin(rhythm) * (6 - dropSeverity * 2);
+        let rHandX = cx + 26 + Math.cos(rhythm + Math.PI) * (8 - dropSeverity * 3);
+        let rHandY = 112 + Math.sin(rhythm + Math.PI) * (6 - dropSeverity * 2);
+
+        if (dropSeverity > 0.35) {
+            // 右手著急往下抓掉落的球
+            rHandX += dropSeverity * 16;
+            rHandY = 112 + dropSeverity * 26 + Math.sin(simTime * 7) * 8;
+            // 左手慌張向上伸或僵直
+            lHandX -= dropSeverity * 12;
+            lHandY = 100 - dropSeverity * 16 + Math.cos(simTime * 8) * 8;
+        }
+
+        // 繪製雙臂
+        ctx.strokeStyle = p > 0.65 ? '#2dd4bf' : '#fb7185';
+        ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        // 左臂
+        ctx.moveTo(chestX - 17, chestY - 1);
+        ctx.lineTo(chestX - 25 + bodyLean * 0.2, 108 + bodyCrouch * 0.5);
+        ctx.lineTo(lHandX, lHandY);
+        // 右臂
+        ctx.moveTo(chestX + 17, chestY - 1);
+        ctx.lineTo(chestX + 25 + bodyLean * 0.2, 108 + bodyCrouch * 0.5);
+        ctx.lineTo(rHandX, rHandY);
+        ctx.stroke();
+
+        // 熟練時的 8 字形完美軌跡虛線 (小腦時序振盪器成型)
+        if (p > 0.5) {
+            ctx.save();
+            ctx.strokeStyle = `rgba(45, 212, 191, ${(p - 0.5) * 0.45})`;
+            ctx.setLineDash([3, 3]);
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            for (let a = 0; a <= Math.PI * 2; a += 0.12) {
+                const tx = cx + Math.sin(a) * 30;
+                const ty = 78 + Math.sin(a * 2) * 28 + Math.cos(a) * 12;
+                if (a === 0) ctx.moveTo(tx, ty);
+                else ctx.lineTo(tx, ty);
+            }
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        // 三顆彩球位置與物理計算
+        const ballColors = ['#fb7185', '#fbbf24', '#38bdf8'];
+        const cyclePeriod = 2.1 - p * 0.5;
+        const globalTime = simTime / cyclePeriod;
+
+        for (let b = 0; b < 3; b++) {
+            let bx, by;
+
+            if (b === 2 && dropSeverity > 0.38) {
+                // 【球 2（藍球）：初學嚴重失誤・漏接掉落並在地面彈跳】
+                const dropCycle = (simTime * 0.85) % 1.7; // 1.7 秒一輪掉球循環
+                if (dropCycle < 0.45) {
+                    // 拋出但偏離過遠
+                    const u = dropCycle / 0.45;
+                    bx = cx + 8 + u * 40;
+                    by = 100 - Math.sin(u * Math.PI) * 26 + u * 24;
+                } else if (dropCycle < 0.9) {
+                    // 垂直墜落砸向地面
+                    const u = (dropCycle - 0.45) / 0.45;
+                    bx = cx + 48 + u * 12;
+                    by = 118 + u * (groundY - 5 - 118);
+                } else {
+                    // 在地面反覆彈跳衰減
+                    const u = (dropCycle - 0.9) / 0.8;
+                    bx = cx + 60 + u * 16;
+                    const bounce = Math.abs(Math.sin(u * Math.PI * 3.5)) * Math.max(0, 1 - u * 1.1) * 16;
+                    by = groundY - 5 - bounce;
+
+                    // 地面彈跳震波線
+                    if (bounce < 4 && u < 0.8) {
+                        ctx.strokeStyle = 'rgba(251, 113, 133, 0.45)';
+                        ctx.lineWidth = 1;
+                        ctx.beginPath();
+                        ctx.ellipse(bx, groundY - 1, 8, 2.5, 0, 0, Math.PI * 2);
+                        ctx.stroke();
+                    }
+                }
+            } else if (b === 1 && dropSeverity > 0.70) {
+                // 【球 1（黃球）：初學極度混亂・在左腳邊滾動卡死】
+                const rollCycle = (simTime * 0.65) % 1;
+                bx = cx - 36 - Math.sin(rollCycle * Math.PI * 2) * 14;
+                const bounce = Math.abs(Math.sin(simTime * 8)) * 8;
+                by = groundY - 5 - bounce;
+
+                // 地面失誤警示漣漪
+                ctx.strokeStyle = 'rgba(253, 224, 71, 0.4)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.ellipse(bx, groundY - 1, 7, 2, 0, 0, Math.PI * 2);
+                ctx.stroke();
+            } else {
+                // 【正常雜耍級聯拋物線 (Cascade Flight)】
+                const ballPhase = (globalTime + b / 3) % 1;
+                const isLeftToRight = ballPhase < 0.5;
+                const subT = isLeftToRight ? (ballPhase / 0.5) : ((ballPhase - 0.5) / 0.5);
+
+                const startX = isLeftToRight ? (cx - 25) : (cx + 25);
+                const endX   = isLeftToRight ? (cx + 25) : (cx - 25);
+
+                if (subT < 0.82) {
+                    // 空中拋物線飛行階段
+                    const u = subT / 0.82;
+                    bx = startX + (endX - startX) * u;
+                    const peakH = 62 + (1 - err) * 6;
+                    by = 110 - Math.sin(u * Math.PI) * peakH;
+                } else {
+                    // 手部舀球承接準備下一拋
+                    const u = (subT - 0.82) / 0.18;
+                    const scoopX = endX + (isLeftToRight ? -6 : 6) * Math.sin(u * Math.PI);
+                    bx = scoopX;
+                    by = 110 + Math.sin(u * Math.PI) * 5;
+                }
+
+                // 若處於初學摸索期，飛行弧度產生嚴重歪斜抖動
+                if (err > 0.15) {
+                    bx += err * Math.sin(simTime * 6.5 + b * 2.8) * 18;
+                    by += err * Math.cos(simTime * 7.2 + b * 1.9) * 20;
+                    by = Math.min(groundY - 6, Math.max(22, by));
+                }
+            }
+
+            // 繪製彩球
+            ctx.fillStyle = ballColors[b];
+            ctx.beginPath();
+            ctx.arc(bx, by, 5.8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#0f172a';
+            ctx.lineWidth = 1.2;
+            ctx.stroke();
+        }
+
+        // 掉球紅字標籤提示
+        if (dropSeverity > 0.38) {
+            ctx.fillStyle = '#fb7185';
+            ctx.font = 'bold 10px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('❌ 漏接掉球！', cx + 64, groundY - 24);
+        }
+
+        // 底部說明文字
+        const caption = p > 0.75
+            ? '★ 完美8字交替・小腦自動節律振盪'
+            : (p > 0.4
+                ? '雙手不同步・拋球高度不均難以維持'
+                : '⚠️ 手忙腳亂・頻繁掉球（尚未建立小腦時序）');
+        drawMiniCaption(ctx, caption, p);
+    }
+
+    function drawMiniCaption(ctx, text, p) {
+        ctx.fillStyle = p > 0.68 ? '#2dd4bf' : (p > 0.35 ? '#fbbf24' : '#fb7185');
+        ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(text, 142, 168);
+    }
+
+    // ===================== 右下：突觸微觀放大鏡 (LTP 與受體增生視覺化) =====================
+    function drawMicroSynapse() {
+        const ctx = synCtx;
+        const W = 284, H = 118;
+        ctx.clearRect(0, 0, W, H);
+
+        // 決定要放大展示的突觸權重：若有選取細胞，取其最強的一條關聯突觸；否則隨整體進度 p 顯示小腦代表突觸
+        let synWeight = 0.18 + (progress / 100) * 0.78;
+        let preColor = '#ffb703';
+        let postColor = '#00f5d4';
+
+        if (selectedNeuron) {
+            const pool = [...selectedNeuron.outgoing, ...selectedNeuron.incoming];
+            if (pool.length > 0) {
+                synWeight = Math.max(...pool.map(c => c.currentWeight));
+            }
+        }
+
+        const isPotentiated = synWeight > 0.55;
+
+        // 左側：突觸前軸突終扣 (Pre-synaptic Axon Terminal Bouton)
+        const boutR = 20 + synWeight * 13;
+        ctx.save();
+        ctx.fillStyle = 'rgba(255, 183, 3, 0.14)';
+        ctx.strokeStyle = preColor;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(12, 46);
+        ctx.lineTo(68, 46);
+        ctx.quadraticCurveTo(108, 22, 114, 59);
+        ctx.quadraticCurveTo(108, 96, 68, 72);
+        ctx.lineTo(12, 72);
+        ctx.stroke();
+        ctx.fill();
+
+        // 髓鞘示意 (左側軸突頸部)
+        if (isPotentiated) {
+            ctx.fillStyle = 'rgba(253, 224, 71, 0.75)';
+            roundRect(ctx, 22, 39, 26, 6, 3); ctx.fill();
+            roundRect(ctx, 22, 73, 26, 6, 3); ctx.fill();
+        }
+
+        // 突觸小泡 (Vesicles) 與神經傳導物質釋放至突觸間隙 (Synaptic Cleft)
+        const releaseRate = 0.3 + synWeight * 0.7;
+        for (let v = 0; v < 7; v++) {
+            const vx = 78 + ((simTime * 38 * releaseRate + v * 19) % 62);
+            const vy = 42 + Math.sin(v * 2.4 + simTime * 4) * (15 * (vx < 114 ? 1 : 0.75));
+            ctx.fillStyle = vx > 113 ? '#fde047' : '#fb923c';
+            ctx.beginPath();
+            ctx.arc(vx, vy + 16, vx > 113 ? 2.1 : 3.2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // 右側：突觸後樹突棘 (Post-synaptic Dendritic Spine) 與 AMPA受體增生
+        const spineSize = 18 + synWeight * 14;
+        ctx.fillStyle = 'rgba(0, 245, 212, 0.13)';
+        ctx.strokeStyle = postColor;
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.moveTo(272, 48);
+        ctx.lineTo(205, 48);
+        ctx.quadraticCurveTo(160, 59 - spineSize, 152, 59 - spineSize * 0.75);
+        ctx.lineTo(152, 59 + spineSize * 0.75);
+        ctx.quadraticCurveTo(160, 59 + spineSize, 205, 70);
+        ctx.lineTo(272, 70);
+        ctx.stroke();
+        ctx.fill();
+
+        // 樹突膜上的受體通道數量 (隨長期增益 LTP 顯著增加！)
+        const receptorCount = Math.max(2, Math.round(synWeight * 7));
+        ctx.fillStyle = '#00f5d4';
+        for (let r = 0; r < receptorCount; r++) {
+            const ry = 59 - (receptorCount - 1) * 4 + r * 8;
+            roundRect(ctx, 148, ry - 2.5, 7, 5, 1.5);
+            ctx.fill();
+        }
+
+        // 微觀解剖文字標註
+        ctx.font = '10.5px sans-serif';
+        ctx.fillStyle = '#fcd34d';
+        ctx.textAlign = 'left';
+        ctx.fillText(isPotentiated ? '軸突終扣 (髓鞘化)' : '軸突終扣 (微弱)', 12, 18);
+
+        ctx.fillStyle = '#94a3b8';
+        ctx.textAlign = 'center';
+        ctx.fillText('突觸間隙', 133, 108);
+
+        ctx.fillStyle = '#5eead4';
+        ctx.textAlign = 'right';
+        ctx.fillText(isPotentiated ? '樹突棘肥大・受體增生(LTP)' : '樹突棘 (受體稀疏)', 274, 18);
+        ctx.restore();
+    }
+
+    // ===================== UI 資訊面板同步更新 =====================
+    const cortexPctEl = document.getElementById('cortexPct');
+    const cerebPctEl = document.getElementById('cerebPct');
+    const ltpPctEl = document.getElementById('ltpPct');
+    const cortexBarEl = document.getElementById('cortexBar');
+    const cerebBarEl = document.getElementById('cerebBar');
+    const ltpBarEl = document.getElementById('ltpBar');
+    const phaseBadgeEl = document.getElementById('phaseBadge');
+    const statusBannerEl = document.getElementById('statusBanner');
+    const inspectorBadgeEl = document.getElementById('inspectorBadge');
+    const inspectorTextEl = document.getElementById('inspectorText');
+    const clearSelectBtn = document.getElementById('clearSelectBtn');
+
+    function syncReadouts() {
+        const p = progress / 100;
+        const cortexLoad = Math.round(88 - p * 74); // 88% -> 14%
+        const cerebLoad = 100 - cortexLoad;        // 12% -> 86%
+        const ltpLevel = Math.round(5 + Math.pow(p, 1.05) * 95);
+
+        cortexPctEl.textContent = `${cortexLoad}%`;
+        cerebPctEl.textContent = `${cerebLoad}%`;
+        ltpPctEl.textContent = `${ltpLevel}%`;
+        cortexBarEl.style.width = `${cortexLoad}%`;
+        cerebBarEl.style.width = `${cerebLoad}%`;
+        ltpBarEl.style.width = `${ltpLevel}%`;
+
+        const task = TASKS[currentTaskKey];
+        if (p < 0.3) {
+            phaseBadgeEl.textContent = '皮質序列摸索期';
+            phaseBadgeEl.style.color = '#fda4af';
+            statusBannerEl.innerHTML = `狀態：<strong>${task.name}初學期</strong> — 大腦皮質逐層序列思考，突觸尚未分化且傳導慢，造成肌肉僵硬與動作搖晃。`;
+        } else if (p < 0.75) {
+            phaseBadgeEl.textContent = '突觸重塑轉移期';
+            phaseBadgeEl.style.color = '#fde047';
+            statusBannerEl.innerHTML = `狀態：<strong>誤差修正與修剪期</strong> — 視覺誤差回授驅動小腦長期增益（LTP），強化專屬突觸並修剪多餘雜訊連結。`;
+        } else {
+            phaseBadgeEl.textContent = '小腦平行自動化';
+            phaseBadgeEl.style.color = '#5eead4';
+            statusBannerEl.innerHTML = `狀態：<strong>專精自動化完成！</strong> — 髓鞘化小腦迴路高速平行協調肌群（可切換上方不同運動，對比截然不同的突觸強化路線！）`;
+        }
+
+        updateInspectorPanel();
+    }
+
+    function updateInspectorPanel() {
+        if (!selectedNeuron) {
+            clearSelectBtn.style.display = 'none';
+            inspectorBadgeEl.textContent = '全網概覽';
+            inspectorTextEl.innerHTML = `目前動作：<strong>${TASKS[currentTaskKey].icon} ${TASKS[currentTaskKey].name}</strong> — ${TASKS[currentTaskKey].desc}<br><span style="color:#38bdf8;">👉 點擊畫布任一神經細胞，可高亮檢視其樹突、軸突與突觸！</span>`;
+            return;
+        }
+
+        clearSelectBtn.style.display = 'block';
+        const n = selectedNeuron;
+        const strongIn = n.incoming.filter(c => c.currentWeight > 0.55).length;
+        const strongOut = n.outgoing.filter(c => c.currentWeight > 0.55).length;
+
+        const regionNames = {
+            sensory: '視覺感覺輸入層',
+            cortex: '大腦皮質 (意識序列區)',
+            cerebellum1: '小腦顆粒細胞層',
+            cerebellum2: '小腦浦肯野／深核區',
+            motor: '脊髓運動神經元池'
+        };
+
+        inspectorBadgeEl.textContent = n.id;
+        inspectorTextEl.innerHTML = `
+            <strong>${n.label}</strong> <span style="color:#94a3b8;">[${regionNames[n.region]}]</span><br>
+            • <span style="color:#00f5d4;">樹突接收突觸</span>：共 ${n.incoming.length} 個（LTP強化：${strongIn} 個）<br>
+            • <span style="color:#ffb703;">軸突輸出突觸</span>：共 ${n.outgoing.length} 個（髓鞘化強化：${strongOut} 個）<br>
+            • <strong>功能</strong>：${n.roleDesc}
+        `;
+    }
+
+    // ===================== 畫布視角縮放與平移 (Zoom & Pan) =====================
+    let zoom = 1.0;
+    let panX = 0;
+    let panY = 0;
+    const MIN_ZOOM = 0.55;
+    const MAX_ZOOM = 3.6;
+
+    const zoomLevelText = document.getElementById('zoomLevelText');
+
+    function updateZoomDisplay() {
+        if (zoomLevelText) {
+            zoomLevelText.textContent = `${Math.round(zoom * 100)}%`;
+        }
+    }
+
+    function clampPan() {
+        // 限制平移範圍，確保主要網路內容不會完全漂移出視野
+        const marginX = LOGICAL_W * 0.75;
+        const marginY = LOGICAL_H * 0.75;
+        const minX = LOGICAL_W - (LOGICAL_W * zoom) - marginX;
+        const maxX = marginX;
+        const minY = LOGICAL_H - (LOGICAL_H * zoom) - marginY;
+        const maxY = marginY;
+        panX = Math.max(minX, Math.min(maxX, panX));
+        panY = Math.max(minY, Math.min(maxY, panY));
+    }
+
+    function setZoom(newZoom, focalX = LOGICAL_W / 2, focalY = LOGICAL_H / 2) {
+        newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newZoom));
+        if (Math.abs(newZoom - zoom) < 0.001) return;
+        panX = focalX - (focalX - panX) * (newZoom / zoom);
+        panY = focalY - (focalY - panY) * (newZoom / zoom);
+        zoom = newZoom;
+        clampPan();
+        updateZoomDisplay();
+    }
+
+    function resetZoom() {
+        zoom = 1.0;
+        panX = 0;
+        panY = 0;
+        updateZoomDisplay();
+    }
+
+    // 縮放工具列按鈕綁定
+    document.getElementById('zoomInBtn').addEventListener('click', () => setZoom(zoom * 1.25));
+    document.getElementById('zoomOutBtn').addEventListener('click', () => setZoom(zoom / 1.25));
+    document.getElementById('zoomResetBtn').addEventListener('click', resetZoom);
+
+    // ===================== 滑鼠與觸控互動：縮放、平移與細胞選取 =====================
+    function getCanvasMousePos(e) {
+        const rect = netCanvas.getBoundingClientRect();
+        const canvasX = (e.clientX - rect.left) * (LOGICAL_W / rect.width);
+        const canvasY = (e.clientY - rect.top) * (LOGICAL_H / rect.height);
+        return {
+            x: (canvasX - panX) / zoom,
+            y: (canvasY - panY) / zoom
+        };
+    }
+
+    function findNeuronAt(x, y) {
+        const hitPadding = 7 / Math.min(1, zoom);
+        for (const n of neurons) {
+            if (Math.hypot(x - n.x, y - n.y) <= n.radius + hitPadding) {
+                return n;
+            }
+        }
+        return null;
+    }
+
+    // 滑鼠滾輪縮放 (以游標位置為縮放中心)
+    netCanvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const rect = netCanvas.getBoundingClientRect();
+        const canvasX = (e.clientX - rect.left) * (LOGICAL_W / rect.width);
+        const canvasY = (e.clientY - rect.top) * (LOGICAL_H / rect.height);
+        const zoomFactor = e.deltaY < 0 ? 1.15 : (1 / 1.15);
+        setZoom(zoom * zoomFactor, canvasX, canvasY);
+    }, { passive: false });
+
+    // 滑鼠拖曳平移 (Pan) 與點選判定
+    let isMouseDown = false;
+    let isDragging = false;
+    let startMouseX = 0;
+    let startMouseY = 0;
+    let startPanX = 0;
+    let startPanY = 0;
+
+    netCanvas.addEventListener('mousedown', (e) => {
+        if (e.button !== 0 && e.button !== 1) return;
+        isMouseDown = true;
+        isDragging = false;
+        startMouseX = e.clientX;
+        startMouseY = e.clientY;
+        startPanX = panX;
+        startPanY = panY;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (!isMouseDown) return;
+        const rect = netCanvas.getBoundingClientRect();
+        const dx = (e.clientX - startMouseX) * (LOGICAL_W / rect.width);
+        const dy = (e.clientY - startMouseY) * (LOGICAL_H / rect.height);
+        if (!isDragging && Math.hypot(e.clientX - startMouseX, e.clientY - startMouseY) > 4) {
+            isDragging = true;
+        }
+        if (isDragging) {
+            panX = startPanX + dx;
+            panY = startPanY + dy;
+            clampPan();
+            netCanvas.style.cursor = 'grabbing';
+        }
+    });
+
+    window.addEventListener('mouseup', () => {
+        if (isMouseDown) {
+            isMouseDown = false;
+            if (isDragging) {
+                netCanvas.style.cursor = 'grab';
+                // 延遲結束拖曳狀態，避免 mouseup 後瞬間觸發 click 誤選神經元
+                setTimeout(() => { isDragging = false; }, 40);
+            }
+        }
+    });
+
+    netCanvas.addEventListener('mousemove', (e) => {
+        if (isDragging) return;
+        const pos = getCanvasMousePos(e);
+        hoveredNeuron = findNeuronAt(pos.x, pos.y);
+        netCanvas.style.cursor = hoveredNeuron ? 'pointer' : 'grab';
+    });
+
+    netCanvas.addEventListener('mouseleave', () => {
+        hoveredNeuron = null;
+        if (!isDragging) {
+            netCanvas.style.cursor = 'grab';
+        }
+    });
+
+    netCanvas.addEventListener('click', (e) => {
+        if (isDragging) return;
+        const pos = getCanvasMousePos(e);
+        const hit = findNeuronAt(pos.x, pos.y);
+        selectedNeuron = (selectedNeuron === hit) ? null : hit;
+        updateInspectorPanel();
+    });
+
+    // 雙擊快捷：雙擊細胞放大至該細胞，雙擊畫布空白重設視角
+    netCanvas.addEventListener('dblclick', (e) => {
+        const pos = getCanvasMousePos(e);
+        const hit = findNeuronAt(pos.x, pos.y);
+        if (hit) {
+            selectedNeuron = hit;
+            updateInspectorPanel();
+            setZoom(1.8, LOGICAL_W / 2, LOGICAL_H / 2);
+            panX = LOGICAL_W / 2 - hit.x * zoom;
+            panY = LOGICAL_H / 2 - hit.y * zoom;
+            clampPan();
+        } else {
+            resetZoom();
+        }
+    });
+
+    // 支援觸控螢幕單指拖曳平移與雙指捏合縮放 (Touch Pinch & Pan)
+    let touchStartDist = 0;
+    let touchStartZoom = 1.0;
+    let touchStartCenter = { x: 0, y: 0 };
+    let touchLastPos = { x: 0, y: 0 };
+    let isTouching = false;
+    let touchMoved = false;
+
+    netCanvas.addEventListener('touchstart', (e) => {
+        const rect = netCanvas.getBoundingClientRect();
+        if (e.touches.length === 1) {
+            isTouching = true;
+            touchMoved = false;
+            touchLastPos = {
+                x: (e.touches[0].clientX - rect.left) * (LOGICAL_W / rect.width),
+                y: (e.touches[0].clientY - rect.top) * (LOGICAL_H / rect.height)
+            };
+        } else if (e.touches.length === 2) {
+            isTouching = true;
+            touchMoved = true;
+            const dx = e.touches[0].clientX - e.touches[1].clientX;
+            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            touchStartDist = Math.hypot(dx, dy);
+            touchStartZoom = zoom;
+            touchStartCenter = {
+                x: ((e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left) * (LOGICAL_W / rect.width),
+                y: ((e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top) * (LOGICAL_H / rect.height)
+            };
+        }
+    }, { passive: false });
+
+    netCanvas.addEventListener('touchmove', (e) => {
+        if (!isTouching) return;
+        e.preventDefault();
+        const rect = netCanvas.getBoundingClientRect();
+        if (e.touches.length === 1) {
+            const curX = (e.touches[0].clientX - rect.left) * (LOGICAL_W / rect.width);
+            const curY = (e.touches[0].clientY - rect.top) * (LOGICAL_H / rect.height);
+            const dx = curX - touchLastPos.x;
+            const dy = curY - touchLastPos.y;
+            if (Math.hypot(dx, dy) > 4) touchMoved = true;
+            panX += dx;
+            panY += dy;
+            touchLastPos = { x: curX, y: curY };
+            clampPan();
+        } else if (e.touches.length === 2) {
+            touchMoved = true;
+            const dx = e.touches[0].clientX - e.touches[1].clientX;
+            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            const dist = Math.hypot(dx, dy);
+            if (touchStartDist > 0) {
+                const factor = dist / touchStartDist;
+                const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, touchStartZoom * factor));
+                panX = touchStartCenter.x - (touchStartCenter.x - panX) * (newZoom / zoom);
+                panY = touchStartCenter.y - (touchStartCenter.y - panY) * (newZoom / zoom);
+                zoom = newZoom;
+                clampPan();
+                updateZoomDisplay();
+            }
+        }
+    }, { passive: false });
+
+    netCanvas.addEventListener('touchend', (e) => {
+        if (!touchMoved && e.changedTouches.length === 1) {
+            const rect = netCanvas.getBoundingClientRect();
+            const canvasX = (e.changedTouches[0].clientX - rect.left) * (LOGICAL_W / rect.width);
+            const canvasY = (e.changedTouches[0].clientY - rect.top) * (LOGICAL_H / rect.height);
+            const pos = {
+                x: (canvasX - panX) / zoom,
+                y: (canvasY - panY) / zoom
+            };
+            const hit = findNeuronAt(pos.x, pos.y);
+            selectedNeuron = (selectedNeuron === hit) ? null : hit;
+            updateInspectorPanel();
+        }
+        if (e.touches.length === 0) {
+            isTouching = false;
+            touchMoved = false;
+        }
+    });
+
+    clearSelectBtn.addEventListener('click', () => {
+        selectedNeuron = null;
+        updateInspectorPanel();
+    });
+
+    document.getElementById('pickSampleBtn').addEventListener('click', () => {
+        // 挑選當前運動在小腦中最核心的一顆強化細胞展示給使用者看
+        const task = TASKS[currentTaskKey];
+        const sampleList = [
+            ...task.cb2Active.map(i => neuronMap[`CB2_${i}`]),
+            ...task.cb1Active.map(i => neuronMap[`CB1_${i}`])
+        ];
+        const nextIdx = (sampleList.indexOf(selectedNeuron) + 1) % sampleList.length;
+        selectedNeuron = sampleList[nextIdx];
+        if (selectedNeuron) {
+            // 若當前選取的細胞位於視野邊緣之外，平滑平移至中央視角
+            const screenX = selectedNeuron.x * zoom + panX;
+            const screenY = selectedNeuron.y * zoom + panY;
+            if (screenX < 80 || screenX > LOGICAL_W - 80 || screenY < 80 || screenY > LOGICAL_H - 80) {
+                panX = LOGICAL_W / 2 - selectedNeuron.x * zoom;
+                panY = LOGICAL_H / 2 - selectedNeuron.y * zoom;
+                clampPan();
+            }
+        }
+        updateInspectorPanel();
+    });
+
+    // ===================== 控制項事件綁定 =====================
+    const slider = document.getElementById('learningSlider');
+    const progressText = document.getElementById('progressText');
+    const autoPlayBtn = document.getElementById('autoPlayBtn');
+
+    function setProgress(val) {
+        progress = Math.max(0, Math.min(100, val));
+        slider.value = Math.round(progress);
+        progressText.textContent = `${Math.round(progress)}%`;
+        updateTargetWeights();
+        syncReadouts();
+    }
+
+    slider.addEventListener('input', (e) => {
+        if (isAutoPlaying) toggleAutoPlay(false);
+        setProgress(parseFloat(e.target.value));
+    });
+
+    document.querySelectorAll('[data-preset]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (isAutoPlaying) toggleAutoPlay(false);
+            setProgress(parseFloat(btn.dataset.preset));
+        });
+    });
+
+    function toggleAutoPlay(forceState) {
+        isAutoPlaying = forceState !== undefined ? forceState : !isAutoPlaying;
+        if (isAutoPlaying) {
+            if (progress >= 99.5) setProgress(0);
+            autoPlayBtn.textContent = '⏸ 暫停訓練演進';
+            autoPlayBtn.classList.add('playing');
+        } else {
+            autoPlayBtn.textContent = '▶ 自動學習演進';
+            autoPlayBtn.classList.remove('playing');
+        }
+    }
+
+    autoPlayBtn.addEventListener('click', () => toggleAutoPlay());
+
+    // 動作任務分頁切換
+    document.querySelectorAll('.task-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.task-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentTaskKey = btn.dataset.task;
+            document.getElementById('taskBadge').textContent = TASKS[currentTaskKey].name;
+            updateTargetWeights();
+            syncReadouts();
+        });
+    });
+
+    // ===================== 主動畫迴圈 (60fps) =====================
+    let lastTimestamp = performance.now();
+
+    function animate(now) {
+        const dt = Math.min(0.05, (now - lastTimestamp) / 1000);
+        lastTimestamp = now;
+
+        if (isAutoPlaying) {
+            const nextP = progress + dt * 13.5; // 約 7.4 秒完整演進 0% -> 100%
+            if (nextP >= 100) {
+                setProgress(100);
+                toggleAutoPlay(false);
+            } else {
+                setProgress(nextP);
+            }
+        }
+
+        stepSimulation(dt);
+        drawNetwork();
+        drawActionViewport();
+        drawMicroSynapse();
+
+        requestAnimationFrame(animate);
+    }
+
+    syncReadouts();
+    requestAnimationFrame(animate);
+})();
+</script>
+</body>
+</html>
