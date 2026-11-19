@@ -115,9 +115,18 @@
 ## 技術棧
 
 *   HTML5
-*   CSS3
-*   JavaScript (ES5/ES6)
-*   HTML5 Canvas API
+*   CSS3 (Cyberpunk HUD 視覺與發光動效)
+*   JavaScript (ES6, 60FPS Game Loop 動畫物理引擎)
+*   HTML5 Canvas API (透視 3D 翻轉、數位消散粒子系統、全息雷射掃描)
+
+## 酷炫科技風 (Cyberpunk / Sci-Fi HUD) 動效特性
+
+框架已全面升級為 60FPS 科技風動效引擎，全站所有單元同步支援：
+1. **偽 3D 全息翻牌**：基於幾何透視變換與陰影計算，實現卡牌翻面時的立體旋轉與雷射掃描解碼。
+2. **數位矩陣粒子消散 (Disintegration)**：配對消除時觸發 30+ 顆彩色方塊微粒與星芒爆發，卡牌同時旋轉縮小淡出。
+3. **電磁故障抖動 (EMP Malfunction Shake)**：配對錯誤或順序錯誤時，卡牌邊框切換為警戒紅光並進行高頻震顫抖動，同時顯示錯誤提示。
+4. **即時浮動得分 (Floating Score)**：成功時浮動飄散 `+100 PTS`，失敗時顯示提示文字。
+5. **通關勝利慶典 (System Cleared)**：過關時觸發全螢幕 HUD 結算介面與持續噴發的霓虹彩帶雨。
 
 ---
 
