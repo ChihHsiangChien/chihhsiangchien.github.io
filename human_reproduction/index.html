@@ -241,9 +241,66 @@
             border-color: #38bdf8;
         }
 
-        .stage-btn {
+        .mode-bar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 10px 14px;
+            background: rgba(15, 23, 42, 0.55);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+        }
+
+        .mode-group {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .mode-label {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            font-weight: 600;
+            margin-right: 2px;
+        }
+
+        .mode-btn, .placenta-btn {
             font-size: 0.8rem;
             padding: 5px 10px;
+            background-color: #1e293b;
+            border: 1px solid #475569;
+            color: #cbd5e1;
+        }
+
+        .mode-btn.active {
+            background-color: rgba(236, 72, 153, 0.2);
+            border-color: #f472b6;
+            color: #fce7f3;
+            font-weight: 600;
+        }
+
+        .placenta-btn.active {
+            background-color: rgba(14, 165, 233, 0.22);
+            border-color: #38bdf8;
+            color: #e0f2fe;
+            font-weight: 600;
+        }
+
+        .placenta-badge {
+            font-size: 0.78rem;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: rgba(56, 189, 248, 0.14);
+            border: 1px solid rgba(56, 189, 248, 0.45);
+            color: #bae6fd;
+        }
+
+        .stage-btn {
+            font-size: 0.78rem;
+            padding: 5px 8px;
             background-color: #1e293b;
         }
 
@@ -267,16 +324,16 @@
 <body>
 
     <header>
-        <h1>人類生殖、受精與胚胎發育動態模擬器</h1>
+        <h1>人類生殖、受精、胚胎發育與分娩動態模擬器</h1>
     </header>
 
     <div class="simulator-container">
         <div class="stage-banner">
             <div>
-                <div class="stage-title" id="stageTitle">階段 1：排卵期 (Ovulation)</div>
+                <div class="stage-title" id="stageTitle">階段 1：排卵 (Ovulation)</div>
                 <div class="stage-desc" id="stageDesc">卵巢中的成熟濾泡破裂，釋出次級卵母細胞（卵子），經由輸卵管傘部進入輸卵管。</div>
             </div>
-            <div class="day-counter" id="dayCounter">受精前 1 天</div>
+            <div class="day-counter" id="dayCounter">排卵日 (Day 0)</div>
         </div>
 
         <div class="canvas-wrapper" id="canvasWrapper">
@@ -292,6 +349,22 @@
         </div>
 
         <div class="controls">
+            <div class="mode-bar">
+                <div class="mode-group">
+                    <span class="mode-label">顯示模式：</span>
+                    <button class="mode-btn active" data-mode="singleton">單胞胎</button>
+                    <button class="mode-btn" data-mode="identical">同卵雙胞胎 (同卵雙生)</button>
+                    <button class="mode-btn" data-mode="fraternal">異卵雙胞胎 (異卵雙生)</button>
+                </div>
+                <div class="mode-group" id="placentaSelectorGroup">
+                    <span class="mode-label">胎盤方式：</span>
+                    <span class="placenta-badge" id="placentaFixedBadge">單一胎盤・單一羊膜囊</span>
+                    <button class="placenta-btn active" data-placenta="mcda" style="display:none;" title="第4-8天分裂，約佔同卵70%">共用胎盤・獨立羊膜囊 (MCDA)</button>
+                    <button class="placenta-btn" data-placenta="mcma" style="display:none;" title="第8-12天分裂，罕見約1-2%">共用胎盤・共用羊膜囊 (MCMA)</button>
+                    <button class="placenta-btn" data-placenta="dcda" style="display:none;" title="第1-3天早期分裂，約佔同卵25-30%">獨立胎盤・獨立羊膜囊 (DCDA)</button>
+                </div>
+            </div>
+
             <div class="timeline-container">
                 <span style="font-size: 0.85rem; color: var(--text-muted);">進度</span>
                 <input type="range" id="timeline" min="0" max="1000" value="0">
@@ -311,11 +384,13 @@
 
                 <div class="stage-jumps">
                     <button class="stage-btn current" data-time="0">1.排卵</button>
-                    <button class="stage-btn" data-time="140">2.精子游入</button>
-                    <button class="stage-btn" data-time="280">3.顯微受精</button>
-                    <button class="stage-btn" data-time="460">4.卵裂發育</button>
-                    <button class="stage-btn" data-time="660">5.著床</button>
-                    <button class="stage-btn" data-time="780">6.胎兒發育</button>
+                    <button class="stage-btn" data-time="100">2.精子游入</button>
+                    <button class="stage-btn" data-time="200">3.顯微受精</button>
+                    <button class="stage-btn" data-time="340">4.卵裂發育</button>
+                    <button class="stage-btn" data-time="490">5.著床</button>
+                    <button class="stage-btn" data-time="590">6.胎兒發育</button>
+                    <button class="stage-btn" data-time="760">7.分娩</button>
+                    <button class="stage-btn" data-time="900">8.排出胎盤</button>
                 </div>
 
                 <div class="right-btns">
@@ -339,8 +414,20 @@ let t = 0; // 0.0 ~ 1.0
 let isPlaying = true;
 let playbackSpeed = 1.0;
 let showLabels = true;
-const baseDuration = 45000; // 1x 速度下完整播放需 45 秒
+let pregnancyMode = 'singleton'; // 'singleton' | 'identical' | 'fraternal'
+let placentaType = 'mcda';       // 'mcda' | 'mcma' | 'dcda' (同卵雙胞胎用)
+const baseDuration = 60000;      // 1x 速度下完整播放需 60 秒
 let lastTimestamp = 0;
+
+function isTwinMode() {
+    return pregnancyMode !== 'singleton';
+}
+
+function getEffectivePlacentaType() {
+    if (pregnancyMode === 'singleton') return 'single';
+    if (pregnancyMode === 'fraternal') return 'dcda';
+    return placentaType;
+}
 
 // Pan & Zoom (平移與縮放) 狀態
 let zoom = 1.0;
@@ -363,33 +450,137 @@ const stageTitle = document.getElementById('stageTitle');
 const stageDesc = document.getElementById('stageDesc');
 const dayCounter = document.getElementById('dayCounter');
 const stageBtns = document.querySelectorAll('.stage-btn');
+const modeBtns = document.querySelectorAll('.mode-btn');
+const placentaBtns = document.querySelectorAll('.placenta-btn');
+const placentaFixedBadge = document.getElementById('placentaFixedBadge');
 const zoomInBtn = document.getElementById('zoomInBtn');
 const zoomOutBtn = document.getElementById('zoomOutBtn');
 const zoomResetBtn = document.getElementById('zoomResetBtn');
 const zoomLevelText = document.getElementById('zoomLevelText');
 
-// 定義階段資訊
+// 定義 8 個階段資訊 (支援單胞胎 / 同卵雙生 / 異卵雙生與胎盤方式動態說明)
 const stages = [
-    { start: 0.00, end: 0.14, title: "階段 1：排卵 (Ovulation)", desc: "卵巢內的成熟濾泡（格拉夫氏濾泡）破裂，排出卵子。輸卵管傘部擺動將卵子吸入輸卵管壺腹部，破裂濾泡轉變為黃體。", day: () => "排卵日 (Day 0)" },
-    { start: 0.14, end: 0.28, title: "階段 2：精子游入 (Sperm Migration)", desc: "數以千萬計的精子從陰道經過子宮頸進入子宮腔，少數強壯的精子游向排卵側的輸卵管壺腹部尋找卵子。", day: () => "受精前數小時" },
-    { start: 0.28, end: 0.46, title: "階段 3：受精過程 - 顯微放大 (Fertilization)", desc: "精子釋放頂體酶穿過放射冠與透明帶。一旦單一精子進入卵細胞質，透明帶立即發生「皮質反應」硬化，阻止其他精子進入，隨後雌雄原核融合。", day: () => "第 1 天 (受精)" },
-    { start: 0.46, end: 0.66, title: "階段 4：卵裂與囊胚形成 (Cleavage & Blastocyst)", desc: "受精卵藉輸卵管纖毛擺動移向子宮，同時進行有絲分裂：2細胞 → 4細胞 → 8細胞 → 桑椹胚(16-32細胞) → 形成具空腔的囊胚。", day: (p) => `第 ${Math.floor(2 + p * 4)} 天` },
-    { start: 0.66, end: 0.78, title: "階段 5：著床 (Implantation)", desc: "囊胚抵達子宮腔，透明帶消失（孵化），滋養層細胞分泌酵素並侵入增厚且富含血管的子宮內膜，完成著床。", day: (p) => `第 ${Math.floor(6 + p * 4)} 天` },
-    { start: 0.78, end: 1.00, title: "階段 6：胚胎發育成胎兒 (Embryo to Fetus)", desc: "子宮內膜與滋養層共同形成胎盤，羊膜囊充滿羊水保護胚胎。器官迅速分化，心臟開始跳動，逐漸發育出頭、四肢與人形的胎兒。", day: (p) => `第 ${Math.floor(2 + p * 10)} 週` }
+    {
+        start: 0.00, end: 0.10,
+        title: (m) => m === 'fraternal' ? "階段 1：雙側排卵 (Dual Ovulation)" : "階段 1：排卵 (Ovulation)",
+        desc: (m) => m === 'fraternal'
+            ? "左右兩側卵巢同時各有一個成熟濾泡破裂，排出兩顆獨立的卵子，分別由左右輸卵管傘部吸入壺腹部，破裂濾泡轉變為黃體。"
+            : "卵巢內的成熟濾泡（格拉夫氏濾泡）破裂，排出單顆卵子。輸卵管傘部擺動將卵子吸入輸卵管壺腹部，破裂濾泡轉變為黃體。",
+        day: () => "排卵日 (Day 0)"
+    },
+    {
+        start: 0.10, end: 0.20,
+        title: () => "階段 2：精子游入 (Sperm Migration)",
+        desc: (m) => m === 'fraternal'
+            ? "數以千萬計的精子經陰道與子宮頸游入子宮腔，兵分兩路游向左右兩側輸卵管壺腹部，分別尋找兩顆卵子。"
+            : "數以千萬計的精子從陰道經過子宮頸進入子宮腔，少數強壯的精子游向排卵側的輸卵管壺腹部尋找卵子。",
+        day: () => "受精前數小時"
+    },
+    {
+        start: 0.20, end: 0.34,
+        title: (m) => m === 'fraternal' ? "階段 3：雙卵受精 - 顯微放大 (Dizygotic Fertilization)" : "階段 3：受精過程 - 顯微放大 (Fertilization)",
+        desc: (m) => {
+            if (m === 'fraternal') return "左右兩顆卵子各自與一隻不同的精子結合，透明帶各自硬化阻止多精受精，形成兩顆基因獨立的受精卵（異卵雙生）。";
+            if (m === 'identical') return "單一精子穿透單顆卵子並發生皮質反應，雌雄原核融合形成單一受精卵（即將在早期發育中分裂為基因相同的同卵雙胞胎）。";
+            return "精子釋放頂體酶穿過放射冠與透明帶。單一精子進入後，透明帶立即發生「皮質反應」硬化阻止其他精子進入，雌雄原核融合形成合子。";
+        },
+        day: () => "第 1 天 (受精)"
+    },
+    {
+        start: 0.34, end: 0.49,
+        title: (m) => m === 'identical' ? "階段 4：卵裂與同卵分裂 (Cleavage & Splitting)" : "階段 4：卵裂與囊胚形成 (Cleavage & Blastocyst)",
+        desc: (m, pt) => {
+            if (m === 'fraternal') return "兩顆獨立受精卵分別在左右輸卵管進行卵裂（2→4→8細胞→桑椹胚→囊胚），各自形成獨立的滋養層與內細胞群。";
+            if (m === 'identical') {
+                if (pt === 'dcda') return "受精卵在極早期（第 1–3 天，卵裂期）完全分裂為兩個獨立胚胎，分別發育為兩顆獨立囊胚，未來各自形成獨立胎盤與羊膜囊（DCDA）。";
+                if (pt === 'mcda') return "受精卵先發育為單一囊胚（共用滋養層），於第 4–8 天時「內細胞群」分裂為二，未來將共用同一胎盤但各自擁有獨立羊膜囊（MCDA，最常見）。";
+                return "受精卵發育為單一囊胚並共用滋養層與內細胞群，預計於著床後較晚時期（第 8–12 天）才分裂，未來將共用胎盤與單一羊膜囊（MCMA，罕見）。";
+            }
+            return "受精卵藉輸卵管纖毛擺動移向子宮，同時進行有絲分裂：2細胞 → 4細胞 → 8細胞 → 桑椹胚(16-32細胞) → 形成具空腔的囊胚。";
+        },
+        day: (p) => `第 ${Math.floor(2 + p * 4)} 天`
+    },
+    {
+        start: 0.49, end: 0.59,
+        title: () => "階段 5：著床 (Implantation)",
+        desc: (m, pt) => {
+            if (m === 'fraternal') return "兩顆獨立囊胚分別進入子宮腔並孵化，各自侵入子宮左右兩側增厚的內膜壁，準備建立兩個完全獨立的胎盤。";
+            if (m === 'identical' && pt === 'dcda') return "早期分裂出的兩顆基因相同囊胚進入子宮腔後分開著床於左右兩側內膜，各自發育獨立胎盤（DCDA）。";
+            if (m === 'identical' && pt === 'mcda') return "單一囊胚（內含兩組內細胞群）著床於子宮內膜同一位置，共用同一層滋養層發育為單一共用胎盤，並各自形成獨立羊膜囊。";
+            if (m === 'identical' && pt === 'mcma') return "單一囊胚著床於子宮內膜，並在單一羊膜腔形成後分裂為兩個胚胎，共同使用同一個胎盤與同一個羊膜囊。";
+            return "囊胚抵達子宮腔，透明帶消失（孵化），滋養層細胞分泌酵素並侵入增厚且富含血管的子宮內膜，完成著床。";
+        },
+        day: (p) => `第 ${Math.floor(6 + p * 4)} 天`
+    },
+    {
+        start: 0.59, end: 0.76,
+        title: (m) => m === 'singleton' ? "階段 6：胚胎發育成胎兒 (Embryo to Fetus)" : "階段 6：雙胞胎發育與胎盤使用 (Twin Development)",
+        desc: (m, pt) => {
+            if (m === 'fraternal') return "異卵雙胞胎（DCDA）：兩胎兒各有獨立胎盤與獨立羊膜囊，兩條臍帶分別連接各自胎盤；基因約 50% 相同（如一般手足）。足月前轉為頭位準備分娩。";
+            if (m === 'identical') {
+                if (pt === 'dcda') return "同卵雙胞胎（DCDA 獨立胎盤）：兩胎兒基因 100% 相同，各自擁有獨立胎盤、臍帶與羊膜囊，營養供應互不干擾。";
+                if (pt === 'mcda') return "同卵雙胞胎（MCDA 共用胎盤・獨立羊膜囊）：兩條臍帶共同連接於同一個大型胎盤以獲取養分，中間由「羊膜隔膜」隔開為兩個獨立羊水空間。";
+                return "同卵雙胞胎（MCMA 共用胎盤・共用羊膜囊）：兩胎兒共享同一個胎盤並同處於單一羊膜囊內（無隔膜），兩條臍帶皆接於同一胎盤。";
+            }
+            return "子宮內膜與滋養層共同形成胎盤，羊膜囊充滿羊水保護胚胎。胎兒器官迅速分化成熟，心臟跳動，足月前逐漸轉為頭朝下姿勢準備分娩。";
+        },
+        day: (p) => `第 ${Math.floor(2 + p * 36)} 週`
+    },
+    {
+        start: 0.76, end: 0.90,
+        title: (m) => m === 'singleton' ? "階段 7：分娩 (Labor & Delivery)" : "階段 7：雙胞胎分娩 (Twin Labor & Delivery)",
+        desc: (m) => m === 'singleton'
+            ? "子宮肌層出現規律宮縮波，子宮頸逐漸擴張（開指至全開），羊膜囊破裂（破水）流出羊水，胎兒頭部朝下經由產道順利娩出，隨後夾斷臍帶。"
+            : "子宮規律收縮且子宮頸完全擴張，羊膜破裂流出羊水。雙胞胎依序經由產道娩出：先由大寶（胎兒 A）頭位娩出並夾斷臍帶，接著二寶（胎兒 B）下降娩出。",
+        day: () => "第 39–40 週 (分娩)"
+    },
+    {
+        start: 0.90, end: 1.00,
+        title: () => "階段 8：排出胎盤 (Placental Delivery / 第三產程)",
+        desc: (m, pt) => {
+            if (m === 'singleton') return "胎兒出生後子宮持續收縮縮小（子宮復原），使胎盤與子宮內膜壁剝離，隨後胎盤連同殘餘胎膜與臍帶經由產道完整排出，完成分娩。";
+            if (pt === 'dcda') return "兩名新生兒娩出後，子宮收縮縮小，左右兩側「各自獨立的兩個胎盤」先後自子宮壁剝離，連同各自的臍帶與胎膜經由產道完整排出。";
+            return "兩名新生兒娩出後，子宮收縮縮小，這一個「雙胞胎共用的大型胎盤」（上方連接著兩條已夾斷的臍帶）自子宮壁剝離，經由產道一併完整排出。";
+        },
+        day: () => "產後 5–30 分鐘"
+    }
 ];
 
 // 輔助數學函數
 function lerp(a, b, u) { return a + (b - a) * u; }
 function clamp(val, min, max) { return Math.max(min, Math.min(max, val)); }
 function norm(val, min, max) { return clamp((val - min) / (max - min), 0, 1); }
+function smoothstep(u) { const c = clamp(u, 0, 1); return c * c * (3 - 2 * c); }
+
+// 取得子宮隨懷孕與產後復原的縮放比例
+function getPregScale(time) {
+    const maxScale = isTwinMode() ? 1.24 : 1.18;
+    if (time <= 0.59) return 1.0;
+    if (time <= 0.76) return lerp(1.0, maxScale, smoothstep(norm(time, 0.59, 0.76)));
+    if (time <= 0.90) {
+        const laborP = norm(time, 0.76, 0.90);
+        const squeeze = Math.pow(Math.sin(laborP * Math.PI * 6), 2) * 0.018;
+        return maxScale - squeeze;
+    }
+    return lerp(maxScale, 1.04, smoothstep(norm(time, 0.90, 1.00)));
+}
+
+// 取得子宮頸與陰道在分娩期的擴張程度 (0.0 ~ 1.0)
+function getCervixDilate(time) {
+    if (time < 0.76) return 0;
+    if (time <= 0.80) return smoothstep(norm(time, 0.76, 0.80));
+    if (time <= 0.90) return 1.0;
+    if (time <= 0.97) return lerp(1.0, 0.65, norm(time, 0.90, 0.97));
+    return lerp(0.65, 0.22, norm(time, 0.97, 1.00));
+}
 
 // Catmull-Rom 樣條曲線計算函數 (平滑自然通過每個控制點)
-function getCatmullRomPoint(p0, p1, p2, p3, t) {
-    const t2 = t * t;
-    const t3 = t2 * t;
+function getCatmullRomPoint(p0, p1, p2, p3, u) {
+    const u2 = u * u;
+    const u3 = u2 * u;
     return {
-        x: 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * t + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3),
-        y: 0.5 * ((2 * p1.y) + (-p0.y + p2.y) * t + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3)
+        x: 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * u + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * u2 + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * u3),
+        y: 0.5 * ((2 * p1.y) + (-p0.y + p2.y) * u + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * u2 + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * u3)
     };
 }
 
@@ -407,7 +598,6 @@ function getSplinePoint(pts, progress) {
 
 /**
  * 輸卵管與生殖道標準中心線定義
- * 輸卵管繪製、卵子路徑、精子游動全數依據此中心樣條曲線計算，徹底解決路徑不同步問題！
  */
 const tubeWaypointsRight = [
     { x: 762, y: 312 }, // 0: 卵巢內成熟濾泡破裂處
@@ -424,7 +614,7 @@ const tubeWaypointsRight = [
 
 // 精子從陰道到輸卵管口的下段路徑
 const lowerRouteRight = [
-    { x: 500, y: 555 }, // 0: 陰道底
+    { x: 500, y: 535 }, // 0: 陰道底
     { x: 500, y: 440 }, // 1: 陰道中段
     { x: 500, y: 415 }, // 2: 子宮頸外口
     { x: 504, y: 330 }, // 3: 子宮腔中段
@@ -432,47 +622,43 @@ const lowerRouteRight = [
     { x: 538, y: 205 }  // 5: 右輸卵管子宮口
 ];
 
-// 取得卵子/胚胎當前精確座標
-function getEggPosition(time) {
-    if (time < 0.02) {
-        return tubeWaypointsRight[0];
-    } else if (time <= 0.14) {
-        // 階段 1：排卵排出並藉由傘部進入輸卵管壺腹部 (樣條進度 0.0 -> 4/9 ≈ 0.4444)
-        const u = norm(time, 0.02, 0.14);
-        const ease = u * u * (3 - 2 * u);
-        return getSplinePoint(tubeWaypointsRight, lerp(0.0, 0.4444, ease));
-    } else if (time <= 0.46) {
-        // 階段 2 與 3：停留在輸卵管壺腹部等待受精 (index = 4)
-        return getSplinePoint(tubeWaypointsRight, 0.4444);
-    } else if (time <= 0.66) {
-        // 階段 4：卵裂同時移向子宮腔 (樣條進度 0.4444 -> 7/9 ≈ 0.7777)
-        const u = norm(time, 0.46, 0.66);
-        const ease = u * u * (3 - 2 * u);
-        return getSplinePoint(tubeWaypointsRight, lerp(0.4444, 0.7777, ease));
-    } else if (time <= 0.76) {
-        // 階段 5：在子宮腔游走並著床入子宮內膜 (樣條進度 0.7777 -> 1.0)
-        const u = norm(time, 0.66, 0.76);
-        const ease = u * u * (3 - 2 * u);
-        return getSplinePoint(tubeWaypointsRight, lerp(0.7777, 1.0, ease));
+// 取得右側（或鏡像左側）卵子/胚胎當前精確座標
+function getEggPosition(time, side = 'right') {
+    let pt;
+    if (time < 0.015) {
+        pt = tubeWaypointsRight[0];
+    } else if (time <= 0.10) {
+        // 階段 1：排卵進入輸卵管壺腹部
+        const ease = smoothstep(norm(time, 0.015, 0.10));
+        pt = getSplinePoint(tubeWaypointsRight, lerp(0.0, 0.4444, ease));
+    } else if (time <= 0.34) {
+        // 階段 2 與 3：停留在輸卵管壺腹部等待受精
+        pt = getSplinePoint(tubeWaypointsRight, 0.4444);
+    } else if (time <= 0.49) {
+        // 階段 4：卵裂同時移向子宮腔
+        const ease = smoothstep(norm(time, 0.34, 0.49));
+        pt = getSplinePoint(tubeWaypointsRight, lerp(0.4444, 0.7777, ease));
+    } else if (time <= 0.58) {
+        // 階段 5：在子宮腔游走並著床入子宮內膜
+        const ease = smoothstep(norm(time, 0.49, 0.58));
+        pt = getSplinePoint(tubeWaypointsRight, lerp(0.7777, 1.0, ease));
     } else {
-        // 階段 6：著床點固定發育為胎兒
-        return tubeWaypointsRight[9];
+        pt = tubeWaypointsRight[9];
     }
+    return side === 'left' ? { x: 1000 - pt.x, y: pt.y } : pt;
 }
 
 // 取得精子游動路徑位置與切線方向
 function getSpermPosition(prog, goRight) {
     let pt, tangent;
     if (prog < 0.55) {
-        // 陰道 -> 子宮頸 -> 子宮腔 -> 輸卵管口
         const u = prog / 0.55;
         const lowerPts = goRight ? lowerRouteRight : lowerRouteRight.map(p => ({ x: 1000 - p.x, y: p.y }));
         pt = getSplinePoint(lowerPts, u);
         const ptNext = getSplinePoint(lowerPts, Math.min(1, u + 0.02));
         tangent = { x: ptNext.x - pt.x, y: ptNext.y - pt.y };
     } else {
-        // 進入輸卵管內部，沿著輸卵管樣條中心線逆流而上游向壺腹部卵子
-        const u = (prog - 0.55) / 0.45; // 0.0: 子宮口 -> 1.0: 壺腹部受精點
+        const u = (prog - 0.55) / 0.45;
         const splineProg = lerp(0.7777, 0.4444, u);
         const rawPt = getSplinePoint(tubeWaypointsRight, splineProg);
         const rawNext = getSplinePoint(tubeWaypointsRight, Math.max(0, splineProg - 0.015));
@@ -488,29 +674,29 @@ function getSpermPosition(prog, goRight) {
 }
 
 // 產生精子群體資料
-const numSperm = 50;
+const numSperm = 56;
 const sperms = [];
 for (let i = 0; i < numSperm; i++) {
-    const isWinner = i === 0;
-    const goRight = i < 38; // 大部分游向有卵子的右側，少部分游向左側迷路
     sperms.push({
         id: i,
-        isWinner: isWinner,
-        goRight: goRight,
-        lateralOffset: isWinner ? 0 : (Math.random() - 0.5) * 1.8, // 橫向隨機偏移比例
-        speedFactor: isWinner ? 1.05 : 0.70 + Math.random() * 0.35,
+        defaultGoRight: i < 42,
+        fraternalGoRight: i % 2 === 0,
+        lateralOffset: (i === 0 || i === 1) ? 0 : (Math.random() - 0.5) * 1.8,
+        speedFactor: (i === 0 || i === 1) ? 1.05 : 0.70 + Math.random() * 0.35,
         phase: Math.random() * Math.PI * 2,
         tailLength: 8 + Math.floor(Math.random() * 4),
         wiggleFreq: 18 + Math.random() * 10
     });
 }
 
-// 繪製解剖背景（子宮、輸卵管、卵巢、子宮內膜、動態管壁纖毛）
+// 繪製解剖背景（子宮、輸卵管、卵巢、子宮內膜、動態管壁纖毛、分娩期宮縮與子宮頸擴張）
 function drawAnatomy(time) {
     ctx.save();
 
-    // 計算子宮隨懷孕稍微脹大的比例
-    const pregScale = time > 0.78 ? 1 + norm(time, 0.78, 1.0) * 0.16 : 1;
+    const pregScale = getPregScale(time);
+    const dilate = getCervixDilate(time);
+    const isFraternal = pregnancyMode === 'fraternal';
+
     ctx.translate(500, 300);
     ctx.scale(pregScale, pregScale);
     ctx.translate(-500, -300);
@@ -524,11 +710,31 @@ function drawAnatomy(time) {
     ctx.moveTo(575, 240); ctx.lineTo(735, 315);
     ctx.stroke();
 
-    // 2. 卵巢 (Ovaries) - 左右兩側
-    drawOvary(245, 320, false, time); // 左側靜態濾泡
-    drawOvary(755, 320, true, time);  // 右側動態排卵與黃體
+    // 2. 卵巢 (Ovaries) - 左右兩側（異卵雙胞胎時左右雙側皆排卵！）
+    drawOvary(245, 320, isFraternal, time, 'left');
+    drawOvary(755, 320, true, time, 'right');
 
-    // 3. 子宮外肌層與輸卵管外輪廓 (配合中心線調整壁厚與弧度)
+    // 3. 分娩與產後宮縮波光暈 (Uterine Contraction Waves)
+    if (time >= 0.76 && time <= 0.97) {
+        const pulse = Math.pow(Math.sin(time * 85), 2);
+        ctx.save();
+        ctx.strokeStyle = `rgba(244, 63, 94, ${0.18 + pulse * 0.42})`;
+        ctx.lineWidth = 6 + pulse * 8;
+        ctx.beginPath();
+        ctx.moveTo(424, 175);
+        ctx.quadraticCurveTo(500, 142 - pulse * 6, 576, 175);
+        ctx.bezierCurveTo(596, 265, 560 + dilate * 16, 355, 536 + dilate * 22, 415);
+        ctx.moveTo(424, 175);
+        ctx.bezierCurveTo(404, 265, 440 - dilate * 16, 355, 464 - dilate * 22, 415);
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    // 4. 子宮外肌層與輸卵管外輪廓
+    const cervixOuterW = dilate * 22;
+    const vagOuterW = dilate * 20;
+    const vagBottomY = 540;
+
     ctx.fillStyle = '#be5a6b';
     ctx.strokeStyle = '#883444';
     ctx.lineWidth = 3;
@@ -542,34 +748,35 @@ function drawAnatomy(time) {
     ctx.bezierCurveTo(625, 136, 735, 130, 792, 180);
     ctx.bezierCurveTo(820, 212, 818, 265, 796, 285);
 
-    // 右側傘部爪狀 (Fimbriae) - 朝向卵巢開展的指狀突起
-    const fimbriaWave = Math.sin(time * 60) * (time < 0.18 ? 4 : 1);
-    ctx.lineTo(782, 302 + fimbriaWave);
+    // 右側傘部爪狀 (Fimbriae)
+    const fimbriaWaveR = Math.sin(time * 70) * (time < 0.14 ? 4 : 1);
+    ctx.lineTo(782, 302 + fimbriaWaveR);
     ctx.lineTo(788, 278);
-    ctx.lineTo(770, 294 - fimbriaWave);
+    ctx.lineTo(770, 294 - fimbriaWaveR);
     ctx.lineTo(778, 272);
-    ctx.lineTo(760, 282 + fimbriaWave);
+    ctx.lineTo(760, 282 + fimbriaWaveR);
 
-    // 右側輸卵管下緣 (內側壁)
+    // 右側輸卵管下緣
     ctx.bezierCurveTo(778, 248, 778, 212, 762, 192);
     ctx.bezierCurveTo(726, 170, 630, 172, 576, 206);
 
-    // 右側子宮體外緣 -> 子宮頸 -> 陰道右壁
-    ctx.bezierCurveTo(585, 280, 550, 355, 532, 415);
-    ctx.lineTo(538, 560);
-    ctx.lineTo(462, 560);
-    ctx.lineTo(468, 415);
+    // 右側子宮體外緣 -> 子宮頸 (分娩期擴張) -> 陰道右壁
+    ctx.bezierCurveTo(585, 280, 552 + cervixOuterW * 0.5, 355, 532 + cervixOuterW, 415);
+    ctx.lineTo(538 + vagOuterW, vagBottomY);
+    ctx.lineTo(462 - vagOuterW, vagBottomY);
+    ctx.lineTo(468 - cervixOuterW, 415);
 
     // 左側子宮體外緣
-    ctx.bezierCurveTo(450, 355, 415, 280, 424, 206);
+    ctx.bezierCurveTo(448 - cervixOuterW * 0.5, 355, 415, 280, 424, 206);
 
-    // 左側輸卵管下緣 -> 傘部 -> 上緣 (對稱鏡像)
+    // 左側輸卵管下緣 -> 傘部 -> 上緣
+    const fimbriaWaveL = Math.sin(time * 70 + 1.2) * (isFraternal && time < 0.14 ? 4 : 1);
     ctx.bezierCurveTo(370, 172, 274, 170, 238, 192);
     ctx.bezierCurveTo(222, 212, 222, 248, 240, 282);
     ctx.lineTo(222, 272);
-    ctx.lineTo(230, 294);
+    ctx.lineTo(230, 294 - fimbriaWaveL);
     ctx.lineTo(212, 278);
-    ctx.lineTo(218, 302);
+    ctx.lineTo(218, 302 + fimbriaWaveL);
     ctx.lineTo(204, 285);
     ctx.bezierCurveTo(182, 265, 180, 212, 208, 180);
     ctx.bezierCurveTo(265, 130, 375, 136, 430, 175);
@@ -577,111 +784,91 @@ function drawAnatomy(time) {
     ctx.fill();
     ctx.stroke();
 
-    // 4. 輸卵管內部通道 (Lumen) - 依據中心樣條精準繪製
-    // 右側管腔通道
-    ctx.strokeStyle = '#380c16';
-    ctx.lineWidth = 19;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.beginPath();
-    for (let s = 0.08; s <= 0.77; s += 0.02) {
-        const pt = getSplinePoint(tubeWaypointsRight, s);
-        if (s === 0.08) ctx.moveTo(pt.x, pt.y);
-        else ctx.lineTo(pt.x, pt.y);
+    // 5. 輸卵管內部通道 (Lumen)
+    function drawTubeLumen(mirror) {
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        [
+            { color: '#380c16', width: 19 },
+            { color: '#5c1d28', width: 13 }
+        ].forEach(layer => {
+            ctx.strokeStyle = layer.color;
+            ctx.lineWidth = layer.width;
+            ctx.beginPath();
+            for (let s = 0.08; s <= 0.77; s += 0.02) {
+                const pt = getSplinePoint(tubeWaypointsRight, s);
+                const px = mirror ? 1000 - pt.x : pt.x;
+                if (s === 0.08) ctx.moveTo(px, pt.y);
+                else ctx.lineTo(px, pt.y);
+            }
+            ctx.stroke();
+        });
     }
-    ctx.stroke();
+    drawTubeLumen(false);
+    drawTubeLumen(true);
 
-    // 內壁黏膜襯層高光 (增加立體管道層次)
-    ctx.strokeStyle = '#5c1d28';
-    ctx.lineWidth = 13;
-    ctx.beginPath();
-    for (let s = 0.08; s <= 0.77; s += 0.02) {
-        const pt = getSplinePoint(tubeWaypointsRight, s);
-        if (s === 0.08) ctx.moveTo(pt.x, pt.y);
-        else ctx.lineTo(pt.x, pt.y);
+    // 動態輸卵管纖毛 (Cilia)
+    function drawTubeCilia(mirror) {
+        ctx.strokeStyle = 'rgba(244, 114, 182, 0.45)';
+        ctx.lineWidth = 1.3;
+        ctx.lineCap = 'round';
+        for (let s = 0.12; s <= 0.74; s += 0.038) {
+            const pt = getSplinePoint(tubeWaypointsRight, s);
+            const nextPt = getSplinePoint(tubeWaypointsRight, Math.min(1, s + 0.015));
+            const px = mirror ? 1000 - pt.x : pt.x;
+            const npx = mirror ? 1000 - nextPt.x : nextPt.x;
+            const dx = npx - px;
+            const dy = nextPt.y - pt.y;
+            const len = Math.hypot(dx, dy) || 1;
+            const nx = -dy / len;
+            const ny = dx / len;
+            const cWave = Math.sin(time * 55 + s * 35) * 2.2;
+            const flowX = dx / len * 3.5;
+            const flowY = dy / len * 3.5;
+
+            ctx.beginPath();
+            ctx.moveTo(px + nx * 8.5, pt.y + ny * 8.5);
+            ctx.lineTo(px + nx * 4.5 + flowX + cWave * ny, pt.y + ny * 4.5 + flowY - cWave * nx);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(px - nx * 8.5, pt.y - ny * 8.5);
+            ctx.lineTo(px - nx * 4.5 + flowX - cWave * ny, pt.y - ny * 4.5 + flowY + cWave * nx);
+            ctx.stroke();
+        }
     }
-    ctx.stroke();
+    drawTubeCilia(false);
+    if (isFraternal) drawTubeCilia(true);
 
-    // 左側管腔通道 (鏡像)
-    ctx.strokeStyle = '#380c16';
-    ctx.lineWidth = 19;
-    ctx.beginPath();
-    for (let s = 0.08; s <= 0.77; s += 0.02) {
-        const pt = getSplinePoint(tubeWaypointsRight, s);
-        const lx = 1000 - pt.x;
-        if (s === 0.08) ctx.moveTo(lx, pt.y);
-        else ctx.lineTo(lx, pt.y);
-    }
-    ctx.stroke();
+    // 6. 子宮內膜 (Endometrium)
+    const endoThick = lerp(10, 24, norm(time, 0.0, 0.50));
+    const cervixInnerW = dilate * 28;
+    const vagInnerW = dilate * 20;
 
-    ctx.strokeStyle = '#5c1d28';
-    ctx.lineWidth = 13;
-    ctx.beginPath();
-    for (let s = 0.08; s <= 0.77; s += 0.02) {
-        const pt = getSplinePoint(tubeWaypointsRight, s);
-        const lx = 1000 - pt.x;
-        if (s === 0.08) ctx.moveTo(lx, pt.y);
-        else ctx.lineTo(lx, pt.y);
-    }
-    ctx.stroke();
-
-    // 動態輸卵管纖毛 (Cilia) - 沿著管壁朝子宮方向波動擺動，真實呈現卵子運輸機制
-    ctx.strokeStyle = 'rgba(244, 114, 182, 0.45)';
-    ctx.lineWidth = 1.3;
-    ctx.lineCap = 'round';
-    for (let s = 0.12; s <= 0.74; s += 0.038) {
-        const pt = getSplinePoint(tubeWaypointsRight, s);
-        const nextPt = getSplinePoint(tubeWaypointsRight, Math.min(1, s + 0.015));
-        const dx = nextPt.x - pt.x;
-        const dy = nextPt.y - pt.y;
-        const len = Math.hypot(dx, dy) || 1;
-        const nx = -dy / len;
-        const ny = dx / len;
-        const cWave = Math.sin(time * 50 + s * 35) * 2.2;
-        const flowX = (nextPt.x - pt.x) / len * 3.5;
-        const flowY = (nextPt.y - pt.y) / len * 3.5;
-
-        // 上壁纖毛
-        ctx.beginPath();
-        ctx.moveTo(pt.x + nx * 8.5, pt.y + ny * 8.5);
-        ctx.lineTo(pt.x + nx * 4.5 + flowX + cWave * ny, pt.y + ny * 4.5 + flowY - cWave * nx);
-        ctx.stroke();
-
-        // 下壁纖毛
-        ctx.beginPath();
-        ctx.moveTo(pt.x - nx * 8.5, pt.y - ny * 8.5);
-        ctx.lineTo(pt.x - nx * 4.5 + flowX - cWave * ny, pt.y - ny * 4.5 + flowY + cWave * nx);
-        ctx.stroke();
-    }
-
-    // 5. 子宮內膜 (Endometrium) - 隨排卵後黃體素分泌而增厚充血
-    const endoThick = lerp(10, 24, norm(time, 0.0, 0.65));
-    ctx.fillStyle = '#9f1239'; // 深紅充血內膜
+    ctx.fillStyle = '#9f1239';
     ctx.beginPath();
     ctx.moveTo(440, 195);
     ctx.quadraticCurveTo(500, 182, 560, 195);
-    ctx.quadraticCurveTo(555, 300, 515, 405);
-    ctx.lineTo(485, 405);
+    ctx.quadraticCurveTo(555, 300, 515 + cervixInnerW * 0.9, 405);
+    ctx.lineTo(485 - cervixInnerW * 0.9, 405);
     ctx.quadraticCurveTo(445, 300, 440, 195);
     ctx.fill();
 
-    // 6. 子宮腔 (Uterine Cavity) & 陰道腔 (Vagina)
+    // 7. 子宮腔 (Uterine Cavity) & 陰道腔 (Vagina) — 分娩期隨子宮頸擴張平滑張開
     ctx.fillStyle = '#3b0a18';
     ctx.beginPath();
     ctx.moveTo(440 + endoThick * 0.6, 202);
     ctx.quadraticCurveTo(500, 195 + endoThick * 0.2, 560 - endoThick * 0.6, 202);
-    ctx.quadraticCurveTo(545 - endoThick * 0.7, 295, 508, 405);
-    // 子宮頸管 (Cervical canal)
-    ctx.lineTo(506, 435);
-    // 陰道腔
-    ctx.lineTo(522, 560);
-    ctx.lineTo(478, 560);
-    ctx.lineTo(494, 435);
-    ctx.lineTo(492, 405);
-    ctx.quadraticCurveTo(455 + endoThick * 0.7, 295, 440 + endoThick * 0.6, 202);
+    ctx.quadraticCurveTo(545 - endoThick * 0.7 + dilate * 10, 295, 508 + cervixInnerW, 405);
+    ctx.lineTo(506 + cervixInnerW, 435);
+    ctx.lineTo(522 + vagInnerW, vagBottomY);
+    ctx.lineTo(478 - vagInnerW, vagBottomY);
+    ctx.lineTo(494 - cervixInnerW, 435);
+    ctx.lineTo(492 - cervixInnerW, 405);
+    ctx.quadraticCurveTo(455 + endoThick * 0.7 - dilate * 10, 295, 440 + endoThick * 0.6, 202);
     ctx.fill();
 
-    // 繪製內膜微血管紋理 (增加真實感)
+    // 內膜微血管紋理
     if (endoThick > 14) {
         ctx.strokeStyle = 'rgba(244, 63, 94, 0.35)';
         ctx.lineWidth = 1.5;
@@ -701,14 +888,13 @@ function drawAnatomy(time) {
 }
 
 // 繪製卵巢與濾泡/黃體變化
-function drawOvary(cx, cy, isActive, time) {
+function drawOvary(cx, cy, isActive, time, side = 'right') {
     ctx.save();
-    // 卵巢本體
     ctx.fillStyle = '#fde68a';
     ctx.strokeStyle = '#b45309';
     ctx.lineWidth = 2.5;
     ctx.beginPath();
-    ctx.ellipse(cx, cy, 42, 28, isActive ? -0.2 : 0.2, 0, Math.PI * 2);
+    ctx.ellipse(cx, cy, 42, 28, side === 'right' ? -0.2 : 0.2, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
 
@@ -722,33 +908,32 @@ function drawOvary(cx, cy, isActive, time) {
     });
 
     if (isActive) {
-        if (time < 0.05) {
-            // 成熟格拉夫氏濾泡腫脹並破裂
-            const swell = norm(time, 0, 0.03);
+        const fx = side === 'right' ? cx + 8 : cx - 8;
+        const fy = cy - 8;
+        if (time < 0.035) {
+            const swell = norm(time, 0, 0.025);
             ctx.fillStyle = '#fef3c7';
             ctx.strokeStyle = '#d97706';
             ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.arc(cx + 8, cy - 8, 12 + swell * 5, 0, Math.PI * 2);
+            ctx.arc(fx, fy, 12 + swell * 5, 0, Math.PI * 2);
             ctx.fill();
             ctx.stroke();
-            // 濾泡液腔
+
             ctx.fillStyle = '#bae6fd';
             ctx.beginPath();
-            ctx.arc(cx + 8, cy - 8, 8 + swell * 4, 0, Math.PI * 2);
+            ctx.arc(fx, fy, 8 + swell * 4, 0, Math.PI * 2);
             ctx.fill();
         } else {
-            // 排卵後轉變為黃體 (Corpus Luteum) - 分泌黃體素維持內膜
-            const clGrowth = norm(time, 0.05, 0.25);
+            const clGrowth = norm(time, 0.035, 0.20);
             const clSize = lerp(10, 16, clGrowth);
             ctx.fillStyle = '#eab308';
             ctx.strokeStyle = '#ca8a04';
             ctx.lineWidth = 3;
             ctx.beginPath();
-            // 皺褶狀黃體
             for (let a = 0; a < Math.PI * 2; a += 0.4) {
                 const r = clSize + Math.sin(a * 5) * 2.5;
-                const px = cx + 8 + Math.cos(a) * r;
+                const px = fx + Math.cos(a) * r;
                 const py = cy - 6 + Math.sin(a) * r;
                 if (a === 0) ctx.moveTo(px, py);
                 else ctx.lineTo(px, py);
@@ -761,62 +946,57 @@ function drawOvary(cx, cy, isActive, time) {
     ctx.restore();
 }
 
-// 繪製精子群游動 (嚴格沿著輸卵管中心線樣條前進)
+// 繪製精子群游動 (支援單側排卵與異卵雙側排卵)
 function drawSpermSwarm(time) {
-    if (time < 0.12 || time > 0.52) return;
+    if (time < 0.09 || time > 0.39) return;
 
-    const fade = time > 0.45 ? 1 - norm(time, 0.45, 0.52) : 1;
-    // 0=陰道底, 1=抵達壺腹部卵子處
-    const baseProgress = norm(time, 0.13, 0.28);
+    const fade = time > 0.33 ? 1 - norm(time, 0.33, 0.39) : 1;
+    const baseProgress = norm(time, 0.10, 0.21);
+    const isFraternal = pregnancyMode === 'fraternal';
 
     ctx.save();
     sperms.forEach(sp => {
+        const goRight = isFraternal ? sp.fraternalGoRight : sp.defaultGoRight;
+        const isWinner = (sp.id === 0) || (isFraternal && sp.id === 1);
+
         let p = baseProgress * sp.speedFactor;
-        if (!sp.isWinner && p > 0.98) {
-            // 非贏家精子被擋在透明帶外圍打轉爭奪
-            p = 0.98 + Math.sin(time * 25 + sp.phase) * 0.012;
+        if (!isWinner && p > 0.98) {
+            p = 0.98 + Math.sin(time * 28 + sp.phase) * 0.012;
         }
-        if (sp.isWinner && time > 0.36) {
-            // 贏家已經鑽入卵子內融合，宏觀視角由卵細胞核呈現
+        if (isWinner && time > 0.27) {
             return;
         }
         p = clamp(p, 0, 1);
 
-        const { pt, tangent } = getSpermPosition(p, sp.goRight);
+        const { pt, tangent } = getSpermPosition(p, goRight);
         let angle = Math.atan2(tangent.y, tangent.x);
 
-        // 橫向散開偏移：在陰道與子宮腔較寬，在輸卵管內嚴格限制在管腔直徑內
         const len = Math.hypot(tangent.x, tangent.y) || 1;
         const nx = -tangent.y / len;
         const ny = tangent.x / len;
 
-        let maxSpread = 4.2; // 輸卵管內管徑半徑約 9px，散開半徑 4.2px 確保完全在管內
-        if (p < 0.25) {
-            maxSpread = 14; // 陰道腔寬度較寬
-        } else if (p < 0.55) {
-            maxSpread = lerp(14, 5, (p - 0.25) / 0.30); // 子宮腔往輸卵管口收斂
-        }
+        let maxSpread = 4.2;
+        if (p < 0.25) maxSpread = 14;
+        else if (p < 0.55) maxSpread = lerp(14, 5, (p - 0.25) / 0.30);
 
         let sx = pt.x + nx * (sp.lateralOffset * maxSpread);
         let sy = pt.y + ny * (sp.lateralOffset * maxSpread);
 
-        // 抵達壺腹部卵子周圍時聚集環繞
-        if (p >= 0.97 && sp.goRight) {
-            const eggAmpulla = { x: 722, y: 156 };
-            if (sp.isWinner) {
-                // 贏家直接游向卵子中心並穿入
-                const winP = norm(time, 0.27, 0.35);
+        const hasEggHere = goRight || isFraternal;
+        if (p >= 0.97 && hasEggHere) {
+            const eggAmpulla = goRight ? { x: 722, y: 156 } : { x: 278, y: 156 };
+            if (isWinner) {
+                const winP = norm(time, 0.20, 0.26);
                 const approachDist = lerp(18, 0, winP);
                 sx = eggAmpulla.x + approachDist * Math.cos(sp.phase * 0.2);
                 sy = eggAmpulla.y + approachDist * Math.sin(sp.phase * 0.2);
                 angle = Math.atan2(eggAmpulla.y - sy, eggAmpulla.x - sx);
             } else {
-                // 其他精子在透明帶外圍打轉爭先恐後
                 const orbitR = 14 + (sp.id % 4) * 2;
                 const orbAng = sp.phase + time * (10 + (sp.id % 5) * 3);
                 sx = eggAmpulla.x + Math.cos(orbAng) * orbitR;
                 sy = eggAmpulla.y + Math.sin(orbAng) * orbitR;
-                angle = orbAng + Math.PI; // 面向卵子
+                angle = orbAng + Math.PI;
             }
         }
 
@@ -825,8 +1005,8 @@ function drawSpermSwarm(time) {
         ctx.rotate(angle);
         ctx.globalAlpha = fade * 0.92;
 
-        // 精子尾巴擺動
-        ctx.strokeStyle = sp.isWinner ? '#7dd3fc' : '#e2e8f0';
+        const isLeftWinner = isFraternal && sp.id === 1;
+        ctx.strokeStyle = isLeftWinner ? '#6ee7b7' : (isWinner ? '#7dd3fc' : '#e2e8f0');
         ctx.lineWidth = 1.2;
         ctx.beginPath();
         ctx.moveTo(-3, 0);
@@ -836,8 +1016,7 @@ function drawSpermSwarm(time) {
         }
         ctx.stroke();
 
-        // 精子頭部
-        ctx.fillStyle = sp.isWinner ? '#38bdf8' : '#ffffff';
+        ctx.fillStyle = isLeftWinner ? '#10b981' : (isWinner ? '#38bdf8' : '#ffffff');
         ctx.beginPath();
         ctx.ellipse(0, 0, 3.2, 1.9, 0, 0, Math.PI * 2);
         ctx.fill();
@@ -847,25 +1026,32 @@ function drawSpermSwarm(time) {
     ctx.restore();
 }
 
-// 繪製宏觀視角下的卵子、卵裂胚胎、囊胚
-function drawMacroEggAndEmbryo(time) {
-    if (time > 0.78) return; // 0.78之後交給胎兒發育繪圖函數
+// 繪製單顆宏觀卵子/卵裂/囊胚實體
+function drawSingleMacroEmbryo(x, y, time, opts = {}) {
+    const {
+        cellFill = '#f472b6',
+        cellStroke = '#be185d',
+        icmColor = '#38bdf8',
+        maleColor = '#0284c7',
+        zygoteColor = '#9333ea',
+        dualICM = false,
+        implantSide = 'right',
+        scale = 1.0
+    } = opts;
 
-    const pos = getEggPosition(time);
     ctx.save();
-    ctx.translate(pos.x, pos.y);
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
 
-    if (time < 0.46) {
-        // 排卵 ~ 受精階段的卵子
-        // 放射冠光暈
+    if (time < 0.34) {
+        // 排卵 ~ 受精階段
         ctx.fillStyle = 'rgba(253, 224, 71, 0.25)';
         ctx.beginPath();
         ctx.arc(0, 0, 14, 0, Math.PI * 2);
         ctx.fill();
 
-        // 透明帶 (受精後變亮藍表示皮質反應硬化)
-        const fertilized = time > 0.35;
-        ctx.strokeStyle = fertilized ? '#38bdf8' : '#fde047';
+        const fertilized = time > 0.26;
+        ctx.strokeStyle = fertilized ? icmColor : '#fde047';
         ctx.lineWidth = 2.5;
         ctx.fillStyle = '#fef08a';
         ctx.beginPath();
@@ -873,23 +1059,20 @@ function drawMacroEggAndEmbryo(time) {
         ctx.fill();
         ctx.stroke();
 
-        // 細胞核 / 原核
-        ctx.fillStyle = '#ca8a04';
-        if (time > 0.35 && time < 0.43) {
-            // 雙原核接近
-            const merge = norm(time, 0.35, 0.43);
+        if (time > 0.26 && time < 0.32) {
+            const merge = norm(time, 0.26, 0.32);
+            ctx.fillStyle = '#ca8a04';
             ctx.beginPath(); ctx.arc(-3 * (1 - merge), 0, 2.5, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = '#0284c7';
+            ctx.fillStyle = maleColor;
             ctx.beginPath(); ctx.arc(3 * (1 - merge), 0, 2.5, 0, Math.PI * 2); ctx.fill();
         } else {
-            ctx.fillStyle = fertilized ? '#9333ea' : '#ca8a04';
+            ctx.fillStyle = fertilized ? zygoteColor : '#ca8a04';
             ctx.beginPath(); ctx.arc(0, 0, 3.2, 0, Math.PI * 2); ctx.fill();
         }
-    } else if (time < 0.62) {
-        // 階段 4：卵裂期 (2 -> 4 -> 8 -> 桑椹胚)
-        const cleaveP = norm(time, 0.46, 0.62);
-        // 透明帶依然包裹
-        ctx.strokeStyle = '#38bdf8';
+    } else if (time < 0.46) {
+        // 卵裂期
+        const cleaveP = norm(time, 0.34, 0.46);
+        ctx.strokeStyle = icmColor;
         ctx.lineWidth = 2;
         ctx.fillStyle = 'rgba(30, 41, 59, 0.5)';
         ctx.beginPath();
@@ -897,29 +1080,25 @@ function drawMacroEggAndEmbryo(time) {
         ctx.fill();
         ctx.stroke();
 
-        ctx.fillStyle = '#f472b6';
-        ctx.strokeStyle = '#be185d';
+        ctx.fillStyle = cellFill;
+        ctx.strokeStyle = cellStroke;
         ctx.lineWidth = 1;
 
         if (cleaveP < 0.25) {
-            // 2-細胞期
             [-4, 4].forEach(ox => {
                 ctx.beginPath(); ctx.arc(ox, 0, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
             });
         } else if (cleaveP < 0.50) {
-            // 4-細胞期
             [[-3.5, -3.5], [3.5, -3.5], [-3.5, 3.5], [3.5, 3.5]].forEach(([ox, oy]) => {
                 ctx.beginPath(); ctx.arc(ox, oy, 4.2, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
             });
         } else if (cleaveP < 0.75) {
-            // 8-細胞期
             for (let i = 0; i < 7; i++) {
                 const a = (i / 6) * Math.PI * 2;
                 const r = i === 6 ? 0 : 4.8;
                 ctx.beginPath(); ctx.arc(Math.cos(a) * r, Math.sin(a) * r, 3.3, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
             }
         } else {
-            // 桑椹胚 (Morula, 16~32細胞緊密排列)
             for (let i = 0; i < 14; i++) {
                 const a = i * 2.4;
                 const r = Math.sqrt(i) * 2.1;
@@ -927,66 +1106,128 @@ function drawMacroEggAndEmbryo(time) {
             }
         }
     } else {
-        // 囊胚期 (Blastocyst) 與 著床 (Implantation)
-        const implantP = norm(time, 0.68, 0.78);
+        // 囊胚期與著床
+        const implantP = norm(time, 0.51, 0.59);
         const radius = lerp(12, 16, implantP);
 
-        // 著床時滋養層侵入子宮內膜的根狀突起
         if (implantP > 0.1) {
-            ctx.strokeStyle = '#f472b6';
+            ctx.strokeStyle = cellFill;
             ctx.lineWidth = 2;
+            const baseAngle = implantSide === 'left' ? Math.PI : 0;
             for (let a = -0.9; a <= 0.9; a += 0.3) {
+                const ang = baseAngle + a;
                 ctx.beginPath();
-                ctx.moveTo(Math.cos(a) * radius * 0.8, Math.sin(a) * radius * 0.8);
-                ctx.lineTo(Math.cos(a) * (radius + implantP * 9), Math.sin(a) * (radius + implantP * 9));
+                ctx.moveTo(Math.cos(ang) * radius * 0.8, Math.sin(ang) * radius * 0.8);
+                ctx.lineTo(Math.cos(ang) * (radius + implantP * 9), Math.sin(ang) * (radius + implantP * 9));
                 ctx.stroke();
             }
         }
 
-        // 囊胚腔
         ctx.fillStyle = '#1e293b';
-        ctx.strokeStyle = '#ec4899';
+        ctx.strokeStyle = cellFill;
         ctx.lineWidth = 3;
         ctx.beginPath();
         ctx.arc(0, 0, radius, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
 
-        // 內細胞群 (Inner Cell Mass - 將發育為胎兒本體)
-        ctx.fillStyle = '#38bdf8';
-        for (let i = 0; i < 7; i++) {
-            const ox = 4 + (i % 3) * 2.5 - 2;
-            const oy = (Math.floor(i / 3) - 1) * 3;
-            ctx.beginPath();
-            ctx.arc(ox, oy, 2.8, 0, Math.PI * 2);
-            ctx.fill();
+        // 內細胞群 (Inner Cell Mass)
+        ctx.fillStyle = icmColor;
+        if (dualICM) {
+            // MCDA 同卵雙生：單一囊胚內出現兩個內細胞群！
+            [-5, 5].forEach(cyOff => {
+                for (let i = 0; i < 4; i++) {
+                    const ox = 3 + (i % 2) * 3 - 1.5;
+                    const oy = cyOff + (Math.floor(i / 2) - 0.5) * 2.8;
+                    ctx.beginPath();
+                    ctx.arc(ox, oy, 2.4, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            });
+        } else {
+            const xDir = implantSide === 'left' ? -1 : 1;
+            for (let i = 0; i < 7; i++) {
+                const ox = xDir * (4 + (i % 3) * 2.5 - 2);
+                const oy = (Math.floor(i / 3) - 1) * 3;
+                ctx.beginPath();
+                ctx.arc(ox, oy, 2.8, 0, Math.PI * 2);
+                ctx.fill();
+            }
         }
     }
 
     ctx.restore();
 }
 
-// 繪製階段 3 的「顯微放大受精過程視窗 (PIP)」與階段 4 的「卵裂放大視窗」
-// 作為固定 HUD 繪製於螢幕空間，投影指引線自動貼合當前縮放平移後的卵子螢幕坐標
+// 繪製宏觀視角下的卵子、卵裂胚胎、囊胚 (依模式呈現單胞胎/同卵分裂/異卵雙顆)
+function drawMacroEggAndEmbryo(time) {
+    if (time > 0.59) return;
+
+    const pType = getEffectivePlacentaType();
+
+    if (pregnancyMode === 'singleton') {
+        const pos = getEggPosition(time, 'right');
+        drawSingleMacroEmbryo(pos.x, pos.y, time, { implantSide: 'right' });
+    } else if (pregnancyMode === 'fraternal') {
+        // 異卵雙胞胎：左右輸卵管各一顆，不同基因代表色
+        const posR = getEggPosition(time, 'right');
+        const posL = getEggPosition(time, 'left');
+        drawSingleMacroEmbryo(posR.x, posR.y, time, {
+            cellFill: '#f472b6', cellStroke: '#be185d', icmColor: '#38bdf8',
+            maleColor: '#0284c7', zygoteColor: '#9333ea', implantSide: 'right'
+        });
+        drawSingleMacroEmbryo(posL.x, posL.y, time, {
+            cellFill: '#fbbf24', cellStroke: '#b45309', icmColor: '#34d399',
+            maleColor: '#10b981', zygoteColor: '#059669', implantSide: 'left'
+        });
+    } else {
+        // 同卵雙胞胎
+        const posR = getEggPosition(time, 'right');
+        if (pType === 'dcda' && time >= 0.37) {
+            // 早期分裂 (Day 1-3)：分裂為兩個獨立胚胎，進入子宮腔後分別著床於左右兩側
+            if (time < 0.49) {
+                const splitP = smoothstep(norm(time, 0.37, 0.43));
+                const sep = splitP * 9;
+                drawSingleMacroEmbryo(posR.x - sep, posR.y - sep * 0.4, time, { scale: 0.85, implantSide: 'left' });
+                drawSingleMacroEmbryo(posR.x + sep, posR.y + sep * 0.4, time, { scale: 0.85, implantSide: 'right' });
+            } else {
+                // 進入子宮腔後，一個往右側著床，一個橫越子宮腔往左側著床
+                const impU = smoothstep(norm(time, 0.49, 0.58));
+                const leftTarget = { x: 450, y: 265 };
+                const startEntry = { x: 530, y: 210 };
+                const lx = lerp(startEntry.x, leftTarget.x, impU);
+                const ly = lerp(startEntry.y, leftTarget.y, impU);
+                drawSingleMacroEmbryo(lx, ly, time, { scale: 0.9, implantSide: 'left' });
+                drawSingleMacroEmbryo(posR.x, posR.y, time, { scale: 0.9, implantSide: 'right' });
+            }
+        } else {
+            // MCDA (單一囊胚雙內細胞群) 或 MCMA (單一囊胚著床後分裂)
+            drawSingleMacroEmbryo(posR.x, posR.y, time, {
+                dualICM: pType === 'mcda' && time >= 0.46,
+                implantSide: 'right'
+            });
+        }
+    }
+}
+
+// 繪製階段 3 與階段 4 的顯微放大視窗 (PIP)
 function drawMicroscopeZoom(time, currentZoom, currentPanX, currentPanY) {
-    if (time < 0.26 || time > 0.65) return;
+    if (time < 0.18 || time > 0.50) return;
 
-    const alpha = time < 0.28 ? norm(time, 0.26, 0.28) : (time > 0.63 ? 1 - norm(time, 0.63, 0.65) : 1);
-    const eggPos = getEggPosition(time);
+    const alpha = time < 0.20 ? norm(time, 0.18, 0.20) : (time > 0.48 ? 1 - norm(time, 0.48, 0.50) : 1);
+    const eggPos = getEggPosition(time, 'right');
 
-    // 固定 HUD 視窗坐標
     const zoomX = 185;
     const zoomY = 460;
     const zoomR = 120;
 
-    // 計算宏觀卵子在畫布螢幕上的實際坐標
     const eggScreenX = eggPos.x * currentZoom + currentPanX;
     const eggScreenY = eggPos.y * currentZoom + currentPanY;
 
     ctx.save();
     ctx.globalAlpha = alpha;
 
-    // 繪製從宏觀卵子連接到顯微視窗的引導投影線 (若卵子在視野附近則繪製)
+    // 投影指引線
     if (eggScreenX > -80 && eggScreenX < canvas.width + 80 && eggScreenY > -80 && eggScreenY < canvas.height + 80) {
         ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)';
         ctx.setLineDash([5, 5]);
@@ -1000,13 +1241,12 @@ function drawMicroscopeZoom(time, currentZoom, currentPanX, currentPanY) {
         ctx.setLineDash([]);
     }
 
-    // 顯微圓形視窗背景與裁切
+    // 圓形視窗裁切
     ctx.save();
     ctx.beginPath();
     ctx.arc(zoomX, zoomY, zoomR, 0, Math.PI * 2);
     ctx.clip();
 
-    // 顯微鏡深色背景與格線
     ctx.fillStyle = '#090d16';
     ctx.fillRect(zoomX - zoomR, zoomY - zoomR, zoomR * 2, zoomR * 2);
 
@@ -1017,182 +1257,100 @@ function drawMicroscopeZoom(time, currentZoom, currentPanX, currentPanY) {
         ctx.beginPath(); ctx.moveTo(zoomX - zoomR, zoomY + g); ctx.lineTo(zoomX + zoomR, zoomY + g); ctx.stroke();
     }
 
-    if (time <= 0.46) {
+    const pType = getEffectivePlacentaType();
+
+    if (time <= 0.34) {
         // ====== 顯微受精細節 ======
-        const fertP = norm(time, 0.28, 0.45);
+        const fertP = norm(time, 0.20, 0.33);
         const corticalReaction = norm(fertP, 0.35, 0.55);
 
-        // 1. 放射冠細胞 (Corona Radiata)
-        for (let i = 0; i < 24; i++) {
-            const a = (i / 24) * Math.PI * 2;
-            const cr = 82 + Math.sin(i * 3 + time * 10) * 2;
-            ctx.fillStyle = 'rgba(253, 224, 71, 0.35)';
-            ctx.strokeStyle = 'rgba(234, 179, 8, 0.6)';
-            ctx.beginPath();
-            ctx.arc(zoomX + Math.cos(a) * cr, zoomY + Math.sin(a) * cr, 8.5, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
-        }
+        if (pregnancyMode === 'fraternal') {
+            // 異卵雙生：雙顆獨立卵子各自受精
+            drawMicroFertilizationEgg(zoomX - 50, zoomY - 4, 0.54, fertP, corticalReaction, time, '#38bdf8', '#9333ea', '卵子 A');
+            drawMicroFertilizationEgg(zoomX + 50, zoomY - 4, 0.54, fertP, corticalReaction, time, '#34d399', '#059669', '卵子 B');
 
-        // 2. 透明帶 (Zona Pellucida) - 皮質反應後由淡黃變為亮青色防護罩
-        ctx.lineWidth = 13;
-        ctx.strokeStyle = corticalReaction > 0
-            ? `rgba(56, 189, 248, ${0.35 + corticalReaction * 0.45})`
-            : 'rgba(254, 240, 138, 0.35)';
-        ctx.beginPath();
-        ctx.arc(zoomX, zoomY, 66, 0, Math.PI * 2);
-        ctx.stroke();
-
-        // 皮質反應震波特效
-        if (corticalReaction > 0 && corticalReaction < 1) {
-            ctx.strokeStyle = `rgba(125, 211, 252, ${1 - corticalReaction})`;
-            ctx.lineWidth = 4;
-            ctx.beginPath();
-            ctx.arc(zoomX, zoomY, 58 + corticalReaction * 18, 0, Math.PI * 2);
-            ctx.stroke();
-        }
-
-        // 3. 卵細胞質 (Ooplasm) & 第一極體
-        ctx.fillStyle = '#fef08a';
-        ctx.strokeStyle = '#eab308';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(zoomX, zoomY, 56, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-
-        // 極體 (Polar body)
-        ctx.fillStyle = '#fde047';
-        ctx.beginPath(); ctx.arc(zoomX + 10, zoomY - 54, 5.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-        if (fertP > 0.4) {
-            ctx.beginPath(); ctx.arc(zoomX + 22, zoomY - 52, 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-        }
-
-        // 4. 競爭失敗的其他精子 (被透明帶擋在外面)
-        const loserAngles = [2.2, 2.9, -2.4, -1.6, 0.9];
-        loserAngles.forEach((ang, idx) => {
-            const approach = clamp(fertP * 2.2 - idx * 0.12, 0, 1);
-            const dist = lerp(120, 75, approach) + (corticalReaction > 0 ? corticalReaction * 6 : 0);
-            const lx = zoomX + Math.cos(ang) * dist;
-            const ly = zoomY + Math.sin(ang) * dist;
-            drawMicroSperm(lx, ly, ang + Math.PI, time, false);
-        });
-
-        // 5. 冠軍精子穿透與原核融合
-        if (fertP < 0.45) {
-            const winApproach = norm(fertP, 0, 0.40);
-            const dist = lerp(110, 50, winApproach);
-            const wx = zoomX + dist;
-            const wy = zoomY;
-            if (winApproach > 0.2 && winApproach < 0.9) {
-                ctx.fillStyle = 'rgba(56, 189, 248, 0.6)';
-                ctx.beginPath();
-                ctx.arc(wx - 8, wy, 7 + Math.sin(time * 80) * 2, 0, Math.PI * 2);
-                ctx.fill();
-            }
-            drawMicroSperm(wx, wy, Math.PI, time, true);
-        }
-
-        // 6. 雌原核與雄原核融合
-        const mergeP = norm(fertP, 0.45, 0.88);
-        if (mergeP < 1) {
-            // 雌原核
-            const femX = lerp(zoomX - 22, zoomX, mergeP);
-            ctx.fillStyle = 'rgba(236, 72, 153, 0.85)';
-            ctx.beginPath();
-            ctx.arc(femX, zoomY, 12, 0, Math.PI * 2);
-            ctx.fill();
-
-            // 雄原核
-            if (fertP > 0.38) {
-                const maleX = lerp(zoomX + 40, zoomX, mergeP);
-                ctx.fillStyle = 'rgba(14, 165, 233, 0.85)';
-                ctx.beginPath();
-                ctx.arc(maleX, zoomY, 12, 0, Math.PI * 2);
-                ctx.fill();
+            if (showLabels) {
+                ctx.font = 'bold 11px sans-serif';
+                ctx.fillStyle = '#34d399';
+                ctx.textAlign = 'center';
+                let statusStr = "兩顆卵子各自被不同精子穿透";
+                if (fertP >= 0.35 && fertP < 0.55) statusStr = "雙卵各自發生皮質反應硬化";
+                else if (fertP >= 0.55 && fertP < 0.88) statusStr = "各自進行雌雄原核融合";
+                else if (fertP >= 0.88) statusStr = "形成兩顆基因獨立的合子 (異卵)";
+                ctx.fillText(statusStr, zoomX, zoomY + 96);
             }
         } else {
-            // 融合完成：單一二倍體合子核 (2n)
-            const glow = Math.sin(time * 25) * 3;
-            ctx.fillStyle = '#9333ea';
-            ctx.strokeStyle = '#e879f9';
-            ctx.lineWidth = 2.5;
-            ctx.beginPath();
-            ctx.arc(zoomX, zoomY, 17 + glow * 0.3, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
+            drawMicroFertilizationEgg(zoomX, zoomY, 1.0, fertP, corticalReaction, time, '#38bdf8', '#9333ea', '');
+
+            if (showLabels) {
+                ctx.font = 'bold 11px sans-serif';
+                ctx.fillStyle = '#38bdf8';
+                ctx.textAlign = 'center';
+                let statusStr = "精子釋放頂體酶穿透透明帶";
+                if (fertP >= 0.35 && fertP < 0.55) statusStr = "皮質反應：透明帶硬化阻止多精受精";
+                else if (fertP >= 0.55 && fertP < 0.88) statusStr = "雌原核 (n) 與 雄原核 (n) 融合";
+                else if (fertP >= 0.88) statusStr = pregnancyMode === 'identical'
+                    ? "形成單一合子 (即將分裂為同卵雙生)"
+                    : "受精完成：形成二倍體合子 (2n)";
+                ctx.fillText(statusStr, zoomX, zoomY + 98);
+
+                ctx.font = '10px sans-serif';
+                ctx.fillStyle = '#fde047';
+                ctx.fillText("透明帶", zoomX - 50, zoomY - 46);
+                ctx.fillText("放射冠", zoomX - 74, zoomY - 65);
+            }
         }
-
-        // 顯微視窗內部說明標籤
-        if (showLabels) {
-            ctx.font = 'bold 11px sans-serif';
-            ctx.fillStyle = '#38bdf8';
-            ctx.textAlign = 'center';
-            let statusStr = "精子釋放頂體酶穿透透明帶";
-            if (fertP >= 0.35 && fertP < 0.55) statusStr = "皮質反應：透明帶硬化阻止多精受精";
-            else if (fertP >= 0.55 && fertP < 0.88) statusStr = "雌原核 (n) 與 雄原核 (n) 融合";
-            else if (fertP >= 0.88) statusStr = "受精完成：形成二倍體合子 (2n)";
-            ctx.fillText(statusStr, zoomX, zoomY + 98);
-
-            ctx.font = '10px sans-serif';
-            ctx.fillStyle = '#fde047';
-            ctx.fillText("透明帶", zoomX - 50, zoomY - 46);
-            ctx.fillText("放射冠", zoomX - 74, zoomY - 65);
-        }
-
     } else {
-        // ====== 顯微卵裂細節 (t = 0.46 ~ 0.65) ======
-        const cleaveP = norm(time, 0.46, 0.65);
-
-        // 透明帶外圈
-        ctx.strokeStyle = 'rgba(56, 189, 248, 0.7)';
-        ctx.lineWidth = 9;
-        ctx.beginPath();
-        ctx.arc(zoomX, zoomY, 70, 0, Math.PI * 2);
-        ctx.stroke();
-
+        // ====== 顯微卵裂與雙胞胎分裂細節 (t = 0.34 ~ 0.50) ======
+        const cleaveP = norm(time, 0.34, 0.49);
         let stageLabel = "";
-        if (cleaveP < 0.22) {
-            stageLabel = "2-細胞期 (2-Cell Stage)";
-            drawBlastomere(zoomX - 26, zoomY, 32);
-            drawBlastomere(zoomX + 26, zoomY, 32);
-        } else if (cleaveP < 0.45) {
-            stageLabel = "4-細胞期 (4-Cell Stage)";
-            drawBlastomere(zoomX - 22, zoomY - 22, 25);
-            drawBlastomere(zoomX + 22, zoomY - 22, 25);
-            drawBlastomere(zoomX - 22, zoomY + 22, 25);
-            drawBlastomere(zoomX + 22, zoomY + 22, 25);
-        } else if (cleaveP < 0.68) {
-            stageLabel = "8-細胞期 (8-Cell Stage)";
-            for (let i = 0; i < 7; i++) {
-                const a = (i / 6) * Math.PI * 2;
-                const r = i === 6 ? 0 : 32;
-                drawBlastomere(zoomX + Math.cos(a) * r, zoomY + Math.sin(a) * r, 19);
+
+        if (pregnancyMode === 'fraternal') {
+            // 異卵雙胞胎：兩個獨立卵裂胚胎
+            drawMicroCleavageCluster(zoomX - 48, zoomY - 4, 0.54, cleaveP, '#f472b6', '#38bdf8', false);
+            drawMicroCleavageCluster(zoomX + 48, zoomY - 4, 0.54, cleaveP, '#fbbf24', '#34d399', false);
+            stageLabel = cleaveP < 0.78 ? "兩顆受精卵各自獨立卵裂" : "兩個獨立囊胚 → 各自獨立胎盤";
+        } else if (pregnancyMode === 'identical' && pType === 'dcda') {
+            // 同卵 DCDA：早期分裂為兩個獨立胚胎與囊胚
+            const splitU = smoothstep(norm(cleaveP, 0.22, 0.50));
+            if (cleaveP < 0.22) {
+                drawMicroCleavageCluster(zoomX, zoomY, 0.9, cleaveP, '#f472b6', '#38bdf8', false);
+                stageLabel = "2-細胞期：即將完全分裂為二";
+            } else {
+                const offset = lerp(16, 48, splitU);
+                const sc = lerp(0.75, 0.54, splitU);
+                drawMicroCleavageCluster(zoomX - offset, zoomY - 4, sc, cleaveP, '#f472b6', '#38bdf8', false);
+                drawMicroCleavageCluster(zoomX + offset, zoomY - 4, sc, cleaveP, '#f472b6', '#38bdf8', false);
+                stageLabel = cleaveP < 0.78 ? "早期分裂 (Day 1–3)：一分為二" : "兩個同卵獨立囊胚 → 各自獨立胎盤";
             }
-        } else if (cleaveP < 0.86) {
-            stageLabel = "桑椹胚 (Morula, 16-32細胞)";
-            for (let i = 0; i < 19; i++) {
-                const a = i * 2.4;
-                const r = Math.sqrt(i) * 12;
-                drawBlastomere(zoomX + Math.cos(a) * r, zoomY + Math.sin(a) * r, 13);
-            }
+        } else if (pregnancyMode === 'identical' && pType === 'mcda') {
+            // 同卵 MCDA：單一囊胚，內細胞群分裂為二
+            drawMicroCleavageCluster(zoomX, zoomY, 1.0, cleaveP, '#f472b6', '#38bdf8', true);
+            if (cleaveP < 0.22) stageLabel = "2-細胞期 (2-Cell Stage)";
+            else if (cleaveP < 0.45) stageLabel = "4-細胞期 (4-Cell Stage)";
+            else if (cleaveP < 0.68) stageLabel = "8-細胞期 (8-Cell Stage)";
+            else if (cleaveP < 0.80) stageLabel = "桑椹胚 (Morula)";
+            else stageLabel = "內細胞群分裂為二 → 共用胎盤・獨立羊膜";
+        } else if (pregnancyMode === 'identical' && pType === 'mcma') {
+            // 同卵 MCMA：單一囊胚，晚期分裂
+            drawMicroCleavageCluster(zoomX, zoomY, 1.0, cleaveP, '#f472b6', '#38bdf8', false);
+            if (cleaveP < 0.22) stageLabel = "2-細胞期 (2-Cell Stage)";
+            else if (cleaveP < 0.45) stageLabel = "4-細胞期 (4-Cell Stage)";
+            else if (cleaveP < 0.68) stageLabel = "8-細胞期 (8-Cell Stage)";
+            else if (cleaveP < 0.82) stageLabel = "桑椹胚 (Morula)";
+            else stageLabel = "單一囊胚 (著床後晚期分裂 → 共用胎盤羊膜)";
         } else {
-            stageLabel = "囊胚 (Blastocyst：具囊胚腔與內細胞群)";
-            // 滋養層細胞環 (Trophoblast)
-            for (let i = 0; i < 20; i++) {
-                const a = (i / 20) * Math.PI * 2;
-                drawBlastomere(zoomX + Math.cos(a) * 58, zoomY + Math.sin(a) * 58, 9.5, '#ec4899');
-            }
-            // 內細胞群 (Inner Cell Mass)
-            for (let i = 0; i < 10; i++) {
-                const a = i * 2.1;
-                const r = Math.sqrt(i) * 7.5;
-                drawBlastomere(zoomX + 24 + Math.cos(a) * r, zoomY + Math.sin(a) * r, 9.5, '#38bdf8');
-            }
+            // 單胞胎
+            drawMicroCleavageCluster(zoomX, zoomY, 1.0, cleaveP, '#f472b6', '#38bdf8', false);
+            if (cleaveP < 0.22) stageLabel = "2-細胞期 (2-Cell Stage)";
+            else if (cleaveP < 0.45) stageLabel = "4-細胞期 (4-Cell Stage)";
+            else if (cleaveP < 0.68) stageLabel = "8-細胞期 (8-Cell Stage)";
+            else if (cleaveP < 0.84) stageLabel = "桑椹胚 (Morula, 16-32細胞)";
+            else stageLabel = "囊胚 (Blastocyst：具囊胚腔與內細胞群)";
         }
 
         if (showLabels) {
-            ctx.font = 'bold 11px sans-serif';
+            ctx.font = 'bold 10.5px sans-serif';
             ctx.fillStyle = '#f472b6';
             ctx.textAlign = 'center';
             ctx.fillText(stageLabel, zoomX, zoomY + 100);
@@ -1210,24 +1368,191 @@ function drawMicroscopeZoom(time, currentZoom, currentPanX, currentPanY) {
 
     ctx.fillStyle = '#0284c7';
     ctx.beginPath();
-    ctx.roundRect(zoomX - 75, zoomY - zoomR - 14, 150, 25, 12);
+    ctx.roundRect(zoomX - 88, zoomY - zoomR - 14, 176, 25, 12);
     ctx.fill();
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 12px sans-serif';
+    ctx.font = 'bold 11.5px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(time <= 0.46 ? "🔬 顯微放大：受精過程" : "🔬 顯微放大：卵裂發育", zoomX, zoomY - zoomR + 3);
+    let hudTitle = time <= 0.34 ? "🔬 顯微放大：受精過程" : "🔬 顯微放大：卵裂發育";
+    if (pregnancyMode === 'fraternal') hudTitle = time <= 0.34 ? "🔬 顯微放大：異卵雙受精" : "🔬 顯微放大：異卵雙胚卵裂";
+    else if (pregnancyMode === 'identical' && time > 0.34) hudTitle = "🔬 顯微放大：同卵分裂過程";
+    ctx.fillText(hudTitle, zoomX, zoomY - zoomR + 3);
+
+    ctx.restore();
+}
+
+// 顯微受精單顆卵子繪製輔助
+function drawMicroFertilizationEgg(cx, cy, scale, fertP, corticalReaction, time, maleColor, zygoteColor, caption) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(scale, scale);
+
+    // 放射冠細胞
+    for (let i = 0; i < 20; i++) {
+        const a = (i / 20) * Math.PI * 2;
+        const cr = 82 + Math.sin(i * 3 + time * 10) * 2;
+        ctx.fillStyle = 'rgba(253, 224, 71, 0.35)';
+        ctx.strokeStyle = 'rgba(234, 179, 8, 0.6)';
+        ctx.beginPath();
+        ctx.arc(Math.cos(a) * cr, Math.sin(a) * cr, 8.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+    }
+
+    // 透明帶
+    ctx.lineWidth = 13;
+    ctx.strokeStyle = corticalReaction > 0
+        ? `rgba(56, 189, 248, ${0.35 + corticalReaction * 0.45})`
+        : 'rgba(254, 240, 138, 0.35)';
+    ctx.beginPath();
+    ctx.arc(0, 0, 66, 0, Math.PI * 2);
+    ctx.stroke();
+
+    if (corticalReaction > 0 && corticalReaction < 1) {
+        ctx.strokeStyle = `rgba(125, 211, 252, ${1 - corticalReaction})`;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(0, 0, 58 + corticalReaction * 18, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+
+    // 卵細胞質
+    ctx.fillStyle = '#fef08a';
+    ctx.strokeStyle = '#eab308';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, 56, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // 極體
+    ctx.fillStyle = '#fde047';
+    ctx.beginPath(); ctx.arc(10, -54, 5.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    if (fertP > 0.4) {
+        ctx.beginPath(); ctx.arc(22, -52, 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    }
+
+    // 競爭失敗精子
+    const loserAngles = [2.2, 2.9, -2.4, -1.6, 0.9];
+    loserAngles.forEach((ang, idx) => {
+        const approach = clamp(fertP * 2.2 - idx * 0.12, 0, 1);
+        const dist = lerp(120, 75, approach) + (corticalReaction > 0 ? corticalReaction * 6 : 0);
+        drawMicroSperm(Math.cos(ang) * dist, Math.sin(ang) * dist, ang + Math.PI, time, false, maleColor);
+    });
+
+    // 冠軍精子穿透
+    if (fertP < 0.45) {
+        const winApproach = norm(fertP, 0, 0.40);
+        const dist = lerp(110, 50, winApproach);
+        if (winApproach > 0.2 && winApproach < 0.9) {
+            ctx.fillStyle = 'rgba(56, 189, 248, 0.6)';
+            ctx.beginPath();
+            ctx.arc(dist - 8, 0, 7 + Math.sin(time * 80) * 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        drawMicroSperm(dist, 0, Math.PI, time, true, maleColor);
+    }
+
+    // 原核融合
+    const mergeP = norm(fertP, 0.45, 0.88);
+    if (mergeP < 1) {
+        const femX = lerp(-22, 0, mergeP);
+        ctx.fillStyle = 'rgba(236, 72, 153, 0.85)';
+        ctx.beginPath(); ctx.arc(femX, 0, 12, 0, Math.PI * 2); ctx.fill();
+
+        if (fertP > 0.38) {
+            const maleX = lerp(40, 0, mergeP);
+            ctx.fillStyle = maleColor;
+            ctx.beginPath(); ctx.arc(maleX, 0, 12, 0, Math.PI * 2); ctx.fill();
+        }
+    } else {
+        const glow = Math.sin(time * 25) * 3;
+        ctx.fillStyle = zygoteColor;
+        ctx.strokeStyle = '#e879f9';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(0, 0, 17 + glow * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+    }
+
+    if (caption && showLabels) {
+        ctx.font = 'bold 18px sans-serif';
+        ctx.fillStyle = '#e2e8f0';
+        ctx.textAlign = 'center';
+        ctx.fillText(caption, 0, -96);
+    }
+
+    ctx.restore();
+}
+
+// 顯微卵裂繪製輔助
+function drawMicroCleavageCluster(cx, cy, scale, cleaveP, cellColor, icmColor, splitICM) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(scale, scale);
+
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.7)';
+    ctx.lineWidth = 9;
+    ctx.beginPath();
+    ctx.arc(0, 0, 70, 0, Math.PI * 2);
+    ctx.stroke();
+
+    if (cleaveP < 0.22) {
+        drawBlastomere(-26, 0, 32, cellColor);
+        drawBlastomere(26, 0, 32, cellColor);
+    } else if (cleaveP < 0.45) {
+        drawBlastomere(-22, -22, 25, cellColor);
+        drawBlastomere(22, -22, 25, cellColor);
+        drawBlastomere(-22, 22, 25, cellColor);
+        drawBlastomere(22, 22, 25, cellColor);
+    } else if (cleaveP < 0.68) {
+        for (let i = 0; i < 7; i++) {
+            const a = (i / 6) * Math.PI * 2;
+            const r = i === 6 ? 0 : 32;
+            drawBlastomere(Math.cos(a) * r, Math.sin(a) * r, 19, cellColor);
+        }
+    } else if (cleaveP < 0.82) {
+        for (let i = 0; i < 19; i++) {
+            const a = i * 2.4;
+            const r = Math.sqrt(i) * 12;
+            drawBlastomere(Math.cos(a) * r, Math.sin(a) * r, 13, cellColor);
+        }
+    } else {
+        // 囊胚滋養層細胞環
+        for (let i = 0; i < 20; i++) {
+            const a = (i / 20) * Math.PI * 2;
+            drawBlastomere(Math.cos(a) * 58, Math.sin(a) * 58, 9.5, cellColor);
+        }
+        // 內細胞群
+        if (splitICM) {
+            // MCDA：兩組獨立的內細胞群
+            [-22, 22].forEach(yOff => {
+                for (let i = 0; i < 6; i++) {
+                    const a = i * 2.1;
+                    const r = Math.sqrt(i) * 6.5;
+                    drawBlastomere(22 + Math.cos(a) * r, yOff + Math.sin(a) * r, 8.5, icmColor);
+                }
+            });
+        } else {
+            for (let i = 0; i < 10; i++) {
+                const a = i * 2.1;
+                const r = Math.sqrt(i) * 7.5;
+                drawBlastomere(24 + Math.cos(a) * r, Math.sin(a) * r, 9.5, icmColor);
+            }
+        }
+    }
 
     ctx.restore();
 }
 
 // 繪製顯微視角下的單隻精子
-function drawMicroSperm(x, y, angle, time, isWinner) {
+function drawMicroSperm(x, y, angle, time, isWinner, winColor = '#38bdf8') {
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(angle);
 
-    // 尾巴
-    ctx.strokeStyle = isWinner ? '#7dd3fc' : '#cbd5e1';
+    ctx.strokeStyle = isWinner ? winColor : '#cbd5e1';
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(-8, 0);
@@ -1236,7 +1561,6 @@ function drawMicroSperm(x, y, angle, time, isWinner) {
     }
     ctx.stroke();
 
-    // 中段 (粒線體鞘)
     ctx.strokeStyle = '#f59e0b';
     ctx.lineWidth = 3.5;
     ctx.beginPath();
@@ -1244,8 +1568,7 @@ function drawMicroSperm(x, y, angle, time, isWinner) {
     ctx.lineTo(-8, 0);
     ctx.stroke();
 
-    // 頭部與頂體
-    ctx.fillStyle = isWinner ? '#38bdf8' : '#f8fafc';
+    ctx.fillStyle = isWinner ? winColor : '#f8fafc';
     ctx.beginPath();
     ctx.ellipse(2, 0, 6, 3.8, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -1263,80 +1586,39 @@ function drawBlastomere(x, y, r, color = '#f472b6') {
     ctx.fill();
     ctx.stroke();
 
-    // 細胞核
     ctx.fillStyle = 'rgba(15, 23, 42, 0.35)';
     ctx.beginPath();
     ctx.arc(x, y, r * 0.38, 0, Math.PI * 2);
     ctx.fill();
 }
 
-// 繪製階段 6：胚胎發育成胎兒
-function drawFetalDevelopment(time) {
-    if (time <= 0.78) return;
-
-    const p = norm(time, 0.78, 1.0);
-
-    // 著床中心隨成長逐漸往子宮腔中央擴展
-    const cx = lerp(550, 502, clamp(p * 1.4, 0, 1));
-    const cy = lerp(265, 282, clamp(p * 1.4, 0, 1));
-    const sacR = lerp(16, 68, p);
+// 繪製單一胎兒輔助函數
+function drawSingleFetus(x, y, scale, rotation, devP, time, opts = {}) {
+    const {
+        flipX = false,
+        skinColor = '#fecdd3',
+        strokeColor = '#f43f5e',
+        limbColor = '#fda4af',
+        badge = ''
+    } = opts;
 
     ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rotation);
+    if (flipX) ctx.scale(-1, 1);
+    ctx.scale(scale, scale);
 
-    // 1. 胎盤 (Placenta) - 附著在右側子宮內膜壁上
-    ctx.fillStyle = '#be123c';
-    ctx.strokeStyle = '#fb7185';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    const placX = lerp(556, 562, p);
-    const placY = 268;
-    ctx.ellipse(placX, placY, lerp(6, 16, p), lerp(18, 52, p), 0.12, -Math.PI * 0.5, Math.PI * 0.5);
-    ctx.quadraticCurveTo(placX - lerp(8, 22, p), placY, placX, placY - lerp(18, 52, p));
-    ctx.fill();
-    ctx.stroke();
-
-    // 2. 羊膜囊與羊水 (Amniotic Sac & Fluid)
-    const grad = ctx.createRadialGradient(cx - sacR * 0.2, cy - sacR * 0.2, 5, cx, cy, sacR);
-    grad.addColorStop(0, 'rgba(56, 189, 248, 0.35)');
-    grad.addColorStop(1, 'rgba(14, 116, 144, 0.65)');
-    ctx.fillStyle = grad;
-    ctx.strokeStyle = 'rgba(186, 230, 253, 0.8)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, sacR * 0.88, sacR, 0.05, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-
-    // 3. 臍帶 (Umbilical Cord) - 連接胎兒腹部與胎盤
-    if (p > 0.12) {
-        ctx.strokeStyle = '#fda4af';
-        ctx.lineWidth = lerp(2, 5.5, p);
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(cx + 4, cy + sacR * 0.12);
-        ctx.bezierCurveTo(cx + sacR * 0.5, cy + sacR * 0.35, placX - 25, placY - 15, placX - 8, placY);
-        ctx.stroke();
-    }
-
-    // 4. 胚胎 -> 胎兒形態動態演化
-    ctx.save();
-    ctx.translate(cx - sacR * 0.08, cy);
-    ctx.rotate(Math.sin(time * 25) * 0.05);
-
-    const fScale = lerp(0.22, 1.0, p);
-    ctx.scale(fScale, fScale);
-
-    ctx.fillStyle = '#fecdd3';
-    ctx.strokeStyle = '#f43f5e';
+    ctx.fillStyle = skinColor;
+    ctx.strokeStyle = strokeColor;
     ctx.lineWidth = 2;
 
-    if (p < 0.3) {
+    if (devP < 0.28) {
         ctx.beginPath();
         ctx.arc(0, -14, 15, 0, Math.PI * 2);
         ctx.arc(-8, 10, 14, 0, Math.PI * 2);
         ctx.fill();
     } else {
-        const limbGrowth = norm(p, 0.3, 0.85);
+        const limbGrowth = norm(devP, 0.28, 0.85);
 
         // 捲曲軀幹與臀部
         ctx.beginPath();
@@ -1351,7 +1633,7 @@ function drawFetalDevelopment(time) {
         ctx.stroke();
 
         // 閉眼弧線
-        if (p > 0.45) {
+        if (devP > 0.42) {
             ctx.strokeStyle = '#881337';
             ctx.lineWidth = 1.8;
             ctx.beginPath();
@@ -1360,8 +1642,8 @@ function drawFetalDevelopment(time) {
         }
 
         // 手臂
-        ctx.fillStyle = '#fda4af';
-        ctx.strokeStyle = '#f43f5e';
+        ctx.fillStyle = limbColor;
+        ctx.strokeStyle = strokeColor;
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.ellipse(6, 6, 5 + limbGrowth * 7, 5, 0.5, 0, Math.PI * 2);
@@ -1375,8 +1657,8 @@ function drawFetalDevelopment(time) {
         ctx.stroke();
     }
 
-    // 5. 跳動的胚胎心臟
-    if (p > 0.15) {
+    // 跳動心臟
+    if (devP > 0.14) {
         const beat = 1 + Math.sin(time * 160) * 0.28;
         ctx.fillStyle = '#e11d48';
         ctx.beginPath();
@@ -1385,6 +1667,461 @@ function drawFetalDevelopment(time) {
     }
 
     ctx.restore();
+
+    // 雙胞胎編號小徽章 (A / B)
+    if (badge && showLabels && devP > 0.35) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(x, y - 34 * scale, 10, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(badge, x, y - 34 * scale);
+        ctx.restore();
+    }
+}
+
+// 繪製胎盤 (附著於子宮壁或剝離排出中)
+function drawPlacentaShape(x, y, rx, ry, angle, isShared = false, detaching = 0) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+
+    // 剝離時的出血微血管斷裂提示
+    if (detaching > 0.05 && detaching < 0.95) {
+        ctx.strokeStyle = `rgba(225, 29, 72, ${0.7 * (1 - detaching)})`;
+        ctx.lineWidth = 1.6;
+        for (let i = -3; i <= 3; i++) {
+            ctx.beginPath();
+            ctx.moveTo(rx * 0.6, i * ry * 0.24);
+            ctx.lineTo(rx * 0.6 + 8 + detaching * 10, i * ry * 0.24);
+            ctx.stroke();
+        }
+    }
+
+    ctx.fillStyle = '#be123c';
+    ctx.strokeStyle = '#fb7185';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // 胎盤絨毛葉與血管分支紋理
+    ctx.strokeStyle = 'rgba(253, 164, 175, 0.55)';
+    ctx.lineWidth = 1.3;
+    for (let i = -2; i <= 2; i++) {
+        ctx.beginPath();
+        ctx.moveTo(-rx * 0.45, i * ry * 0.3);
+        ctx.quadraticCurveTo(0, i * ry * 0.22, rx * 0.5, i * ry * 0.35);
+        ctx.stroke();
+    }
+
+    // 共用胎盤特別標示兩個臍帶附著點
+    if (isShared) {
+        ctx.fillStyle = '#fda4af';
+        ctx.beginPath();
+        ctx.arc(-rx * 0.35, -ry * 0.28, 3.8, 0, Math.PI * 2);
+        ctx.arc(-rx * 0.35, ry * 0.28, 3.8, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    ctx.restore();
+}
+
+// 繪製臍帶 (含靜脈/動脈雙色紋理，娩出後可繪製臍帶夾)
+function drawUmbilicalCord(x1, y1, cx1, cy1, cx2, cy2, x2, y2, width, clamped = false) {
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#fda4af';
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.bezierCurveTo(cx1, cy1, cx2, cy2, x2, y2);
+    ctx.stroke();
+
+    // 臍帶血管紋理 (細藍虛線)
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.55)';
+    ctx.lineWidth = Math.max(1, width * 0.32);
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.bezierCurveTo(cx1, cy1, cx2, cy2, x2, y2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 臍帶夾 (已夾斷標記)
+    if (clamped) {
+        ctx.fillStyle = '#f8fafc';
+        ctx.strokeStyle = '#0284c7';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.roundRect(x2 - 6, y2 - 3, 12, 6, 2);
+        ctx.fill();
+        ctx.stroke();
+    }
+    ctx.restore();
+}
+
+// 繪製破水時流出的羊水水滴動畫
+function drawWaterBreak(ruptureP, time) {
+    if (ruptureP <= 0 || ruptureP >= 1) return;
+    ctx.save();
+    const alpha = Math.sin(ruptureP * Math.PI);
+    ctx.fillStyle = `rgba(125, 211, 252, ${alpha * 0.8})`;
+    for (let i = 0; i < 9; i++) {
+        const dropP = (ruptureP * 1.8 + i * 0.11) % 1;
+        const dx = 500 + Math.sin(i * 2.7 + time * 15) * (10 + dropP * 16);
+        const dy = lerp(385, 585, dropP);
+        const r = lerp(3.5, 5.5, 1 - dropP);
+        ctx.beginPath();
+        ctx.ellipse(dx, dy, r * 0.7, r * 1.3, 0, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    ctx.restore();
+}
+
+// 繪製階段 6 (胎兒發育與胎盤)、階段 7 (分娩) 與階段 8 (排出胎盤)
+function drawFetalLaborAndPlacenta(time) {
+    if (time <= 0.59) return;
+
+    const pType = getEffectivePlacentaType();
+    const isFraternal = pregnancyMode === 'fraternal';
+    const pregScale = getPregScale(time);
+
+    // 階段進度
+    const devP = norm(time, 0.59, 0.76);       // 0 -> 1 (胎兒成長)
+    const laborP = norm(time, 0.76, 0.90);     // 0 -> 1 (分娩)
+    const expP = norm(time, 0.90, 1.00);       // 0 -> 1 (排出胎盤)
+
+    // 依當前子宮縮放計算子宮壁參考點
+    const rightWallX = 500 + (558 - 500) * pregScale;
+    const leftWallX = 500 - (558 - 500) * pregScale;
+
+    ctx.save();
+
+    if (pType === 'single') {
+        // ==================== 單胞胎 ====================
+        const placAttachX = lerp(554, rightWallX - 6, devP);
+        const placAttachY = 268;
+        const placRx = lerp(7, 15, devP);
+        const placRy = lerp(18, 48, devP);
+
+        // 胎盤位置 (階段 8 剝離並沿產道排出)
+        let placX = placAttachX;
+        let placY = placAttachY;
+        let placAngle = 0.12;
+        let detachP = 0;
+
+        if (time > 0.90) {
+            detachP = norm(expP, 0, 0.30);
+            const slideP = smoothstep(norm(expP, 0.22, 0.96));
+            placX = lerp(placAttachX, 500, smoothstep(norm(expP, 0.10, 0.45)));
+            placY = lerp(placAttachY, 578, slideP);
+            placAngle = lerp(0.12, Math.PI * 0.5, slideP);
+        }
+
+        // 羊膜囊 (階段 6 成長，階段 7 破水後漸消)
+        const sacCx = lerp(550, 500, clamp(devP * 1.4, 0, 1));
+        const sacCy = lerp(265, 286, clamp(devP * 1.4, 0, 1));
+        const sacR = lerp(16, 72, devP);
+        const sacAlpha = time < 0.76 ? 1 : (1 - norm(laborP, 0.05, 0.30));
+
+        if (sacAlpha > 0.02) {
+            ctx.save();
+            ctx.globalAlpha = sacAlpha;
+            const grad = ctx.createRadialGradient(sacCx - sacR * 0.2, sacCy - sacR * 0.2, 5, sacCx, sacCy, sacR);
+            grad.addColorStop(0, 'rgba(56, 189, 248, 0.32)');
+            grad.addColorStop(1, 'rgba(14, 116, 144, 0.62)');
+            ctx.fillStyle = grad;
+            ctx.strokeStyle = 'rgba(186, 230, 253, 0.85)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.ellipse(sacCx, sacCy, sacR * 0.9, sacR, 0.04, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        // 破水動畫
+        if (time >= 0.76 && time <= 0.83) {
+            drawWaterBreak(norm(time, 0.76, 0.83), time);
+        }
+
+        // 胎盤繪製
+        drawPlacentaShape(placX, placY, placRx, placRy, placAngle, false, detachP);
+
+        // 胎兒位置與旋轉 (階段 6 末期轉為頭朝下，階段 7 經產道娩出)
+        let fx = sacCx - sacR * 0.06;
+        let fy = sacCy;
+        let fRot = Math.sin(time * 22) * 0.05;
+        let fScale = lerp(0.22, 0.95, devP);
+
+        // 階段 6 最後 25% 逐漸轉為頭朝下 (Math.PI)
+        const turnU = smoothstep(norm(devP, 0.72, 1.0));
+        fRot = lerp(fRot, Math.PI, turnU);
+
+        let cordClamped = false;
+        if (time >= 0.76 && time <= 0.90) {
+            const descU = smoothstep(norm(laborP, 0.16, 0.88));
+            fx = lerp(sacCx, 500, smoothstep(norm(laborP, 0, 0.25)));
+            fy = lerp(sacCy, 582, descU);
+            fRot = Math.PI + Math.sin(laborP * 14) * 0.04;
+            fScale = lerp(0.95, 0.88, descU);
+            cordClamped = laborP > 0.84;
+        }
+
+        // 臍帶繪製
+        if (devP > 0.12) {
+            if (time <= 0.90) {
+                const cordEndX = cordClamped ? 500 : fx + 4;
+                const cordEndY = cordClamped ? 535 : fy - (turnU > 0.5 ? 10 : -8);
+                drawUmbilicalCord(
+                    placX - 8, placY,
+                    lerp(placX - 28, 515, laborP), lerp(placY + 10, 390, laborP),
+                    lerp(fx + 28, 504, laborP), lerp(fy + 16, 460, laborP),
+                    cordEndX, cordEndY,
+                    lerp(2, 5.2, devP),
+                    cordClamped
+                );
+            } else {
+                // 階段 8：夾斷的臍帶隨胎盤一起排出
+                const tailEndY = Math.min(615, placY + 38);
+                drawUmbilicalCord(
+                    placX, placY + 10,
+                    placX + 12, placY + 20,
+                    placX - 10, placY + 30,
+                    placX + 2, tailEndY,
+                    4.6,
+                    true
+                );
+            }
+        }
+
+        // 繪製胎兒 (階段 8 胎兒已抱離產道，專注呈現胎盤排出)
+        if (time <= 0.90) {
+            drawSingleFetus(fx, fy, fScale, fRot, devP, time);
+        }
+
+    } else {
+        // ==================== 雙胞胎 (DCDA / MCDA / MCMA) ====================
+        const isSharedPlacenta = (pType === 'mcda' || pType === 'mcma');
+        const isSharedSac = (pType === 'mcma');
+
+        const twinAOpts = {
+            skinColor: '#fecdd3', strokeColor: '#f43f5e', limbColor: '#fda4af', badge: 'A'
+        };
+        const twinBOpts = isFraternal
+            ? { skinColor: '#fef3c7', strokeColor: '#d97706', limbColor: '#fcd34d', badge: 'B', flipX: true }
+            : { skinColor: '#fecdd3', strokeColor: '#f43f5e', limbColor: '#fda4af', badge: 'B', flipX: true };
+
+        // 1. 胎盤幾何計算
+        let placRX, placRY, placRAngle, placLX, placLY, placLAngle;
+        let detachP = 0;
+
+        if (isSharedPlacenta) {
+            // 共用單一大型胎盤 (附著於右上方子宮壁)
+            const attachX = lerp(552, rightWallX - 8, devP);
+            const attachY = 256;
+            placRX = attachX; placRY = attachY; placRAngle = 0.14;
+            if (time > 0.90) {
+                detachP = norm(expP, 0, 0.30);
+                const slideP = smoothstep(norm(expP, 0.22, 0.96));
+                placRX = lerp(attachX, 500, smoothstep(norm(expP, 0.10, 0.45)));
+                placRY = lerp(attachY, 576, slideP);
+                placRAngle = lerp(0.14, Math.PI * 0.5, slideP);
+            }
+        } else {
+            // DCDA：兩個各自獨立胎盤 (左側壁 + 右側壁)
+            const attachRX = lerp(552, rightWallX - 6, devP);
+            const attachLX = lerp(448, leftWallX + 6, devP);
+            placRX = attachRX; placRY = 272; placRAngle = 0.12;
+            placLX = attachLX; placLY = 272; placLAngle = -0.12;
+            if (time > 0.90) {
+                detachP = norm(expP, 0, 0.28);
+                const slideR = smoothstep(norm(expP, 0.18, 0.85));
+                const slideL = smoothstep(norm(expP, 0.32, 0.98));
+                placRX = lerp(attachRX, 504, smoothstep(norm(expP, 0.08, 0.40)));
+                placRY = lerp(272, 588, slideR);
+                placRAngle = lerp(0.12, Math.PI * 0.5, slideR);
+
+                placLX = lerp(attachLX, 496, smoothstep(norm(expP, 0.22, 0.55)));
+                placLY = lerp(272, 548, slideL);
+                placLAngle = lerp(-0.12, -Math.PI * 0.5, slideL);
+            }
+        }
+
+        // 2. 羊膜囊繪製 (階段 6 成長，階段 7 依序破水)
+        const sacAlphaA = time < 0.76 ? 1 : (1 - norm(laborP, 0.02, 0.22));
+        const sacAlphaB = time < 0.76 ? 1 : (isSharedSac ? sacAlphaA : (1 - norm(laborP, 0.48, 0.65)));
+
+        const sacAx = lerp(548, 534, clamp(devP * 1.3, 0, 1));
+        const sacAy = lerp(266, 290, clamp(devP * 1.3, 0, 1));
+        const sacBx = isSharedPlacenta
+            ? lerp(542, 466, clamp(devP * 1.3, 0, 1))
+            : lerp(452, 466, clamp(devP * 1.3, 0, 1));
+        const sacBy = lerp(266, 286, clamp(devP * 1.3, 0, 1));
+
+        if (isSharedSac) {
+            // MCMA：單一大型共用羊膜囊 (無隔膜！)
+            if (sacAlphaA > 0.02) {
+                ctx.save();
+                ctx.globalAlpha = sacAlphaA;
+                const bigR = lerp(18, 82, devP);
+                const grad = ctx.createRadialGradient(500, 272, 8, 500, 286, bigR);
+                grad.addColorStop(0, 'rgba(56, 189, 248, 0.30)');
+                grad.addColorStop(1, 'rgba(14, 116, 144, 0.60)');
+                ctx.fillStyle = grad;
+                ctx.strokeStyle = 'rgba(186, 230, 253, 0.9)';
+                ctx.lineWidth = 2.4;
+                ctx.beginPath();
+                ctx.ellipse(lerp(546, 500, clamp(devP * 1.4, 0, 1)), 286, bigR * 1.02, bigR * 0.95, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+            }
+        } else {
+            // DCDA 或 MCDA：兩個獨立羊膜囊
+            const rEach = lerp(14, 52, devP);
+            if (sacAlphaB > 0.02) {
+                ctx.save();
+                ctx.globalAlpha = sacAlphaB;
+                const gB = ctx.createRadialGradient(sacBx, sacBy - 10, 4, sacBx, sacBy, rEach);
+                gB.addColorStop(0, isFraternal ? 'rgba(52, 211, 153, 0.30)' : 'rgba(56, 189, 248, 0.32)');
+                gB.addColorStop(1, isFraternal ? 'rgba(6, 95, 70, 0.58)' : 'rgba(14, 116, 144, 0.58)');
+                ctx.fillStyle = gB;
+                ctx.strokeStyle = isFraternal ? 'rgba(167, 243, 208, 0.85)' : 'rgba(186, 230, 253, 0.85)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.ellipse(sacBx, sacBy, rEach * 0.78, rEach * 1.25, -0.05, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+            }
+            if (sacAlphaA > 0.02) {
+                ctx.save();
+                ctx.globalAlpha = sacAlphaA;
+                const gA = ctx.createRadialGradient(sacAx, sacAy - 10, 4, sacAx, sacAy, rEach);
+                gA.addColorStop(0, 'rgba(56, 189, 248, 0.32)');
+                gA.addColorStop(1, 'rgba(14, 116, 144, 0.58)');
+                ctx.fillStyle = gA;
+                ctx.strokeStyle = 'rgba(186, 230, 253, 0.85)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.ellipse(sacAx, sacAy, rEach * 0.78, rEach * 1.25, 0.05, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+            }
+            // MCDA 特別強調中央「羊膜隔膜」
+            if (pType === 'mcda' && devP > 0.35 && sacAlphaA > 0.15) {
+                ctx.save();
+                ctx.globalAlpha = sacAlphaA;
+                ctx.strokeStyle = '#e0f2fe';
+                ctx.lineWidth = 2.6;
+                ctx.setLineDash([5, 3]);
+                ctx.beginPath();
+                ctx.moveTo(500, sacAy - rEach * 1.12);
+                ctx.lineTo(500, sacAy + rEach * 1.12);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.restore();
+            }
+        }
+
+        // 破水動畫
+        if (time >= 0.76 && time <= 0.81) drawWaterBreak(norm(time, 0.76, 0.81), time);
+        if (!isSharedSac && time >= 0.83 && time <= 0.87) drawWaterBreak(norm(time, 0.83, 0.87), time);
+
+        // 3. 繪製胎盤
+        if (isSharedPlacenta) {
+            drawPlacentaShape(placRX, placRY, lerp(8, 17, devP), lerp(20, 56, devP), placRAngle, true, detachP);
+        } else {
+            drawPlacentaShape(placRX, placRY, lerp(6, 13, devP), lerp(16, 42, devP), placRAngle, false, detachP);
+            drawPlacentaShape(placLX, placLY, lerp(6, 13, devP), lerp(16, 42, devP), placLAngle, false, detachP);
+        }
+
+        // 4. 計算胎兒 A & B 位置、旋轉與分娩順序
+        const turnU = smoothstep(norm(devP, 0.72, 1.0));
+        let fAx = sacAx - 2, fAy = sacAy + 2;
+        let fBx = sacBx + 2, fBy = sacBy - 2;
+        let fARot = lerp(Math.sin(time * 20) * 0.05, Math.PI, turnU);
+        let fBRot = lerp(-Math.sin(time * 20 + 1) * 0.05, Math.PI, turnU);
+        let fScale = lerp(0.18, 0.68, devP);
+
+        let clampA = false, clampB = false;
+
+        if (time >= 0.76 && time <= 0.90) {
+            // 胎兒 A 先娩出 (laborP 0.00 -> 0.50)
+            const descA = smoothstep(norm(laborP, 0.08, 0.48));
+            fAx = lerp(sacAx, 500, smoothstep(norm(laborP, 0.0, 0.18)));
+            fAy = lerp(sacAy, 582, descA);
+            if (laborP > 0.48) {
+                // 娩出後微移往右下側讓出產道給胎兒 B
+                const asideA = smoothstep(norm(laborP, 0.48, 0.62));
+                fAx = lerp(500, 568, asideA);
+                fAy = 582;
+            }
+            clampA = laborP > 0.46;
+
+            // 胎兒 B 接著娩出 (laborP 0.50 -> 0.96)
+            const shiftB = smoothstep(norm(laborP, 0.42, 0.60));
+            const descB = smoothstep(norm(laborP, 0.54, 0.95));
+            fBx = lerp(sacBx, 500, shiftB);
+            fBy = lerp(sacBy, 582, descB);
+            clampB = laborP > 0.92;
+        }
+
+        // 5. 繪製兩條臍帶
+        if (devP > 0.14) {
+            const cordW = lerp(1.8, 4.2, devP);
+            if (time <= 0.90) {
+                if (isSharedPlacenta) {
+                    // 共用胎盤：兩條臍帶皆連向同一個胎盤 (上/下兩個附著點)
+                    const insAX = placRX - 8, insAY = placRY + 14;
+                    const insBX = placRX - 8, insBY = placRY - 14;
+                    const endAX = clampA ? 520 : fAx;
+                    const endAY = clampA ? 530 : fAy - 6;
+                    const endBX = clampB ? 495 : fBx;
+                    const endBY = clampB ? 535 : fBy - 6;
+
+                    drawUmbilicalCord(insAX, insAY, insAX - 18, insAY + 25, endAX + 12, (insAY + endAY) * 0.5, endAX, endAY, cordW, clampA);
+                    drawUmbilicalCord(insBX, insBY, insBX - 36, insBY - 12, endBX + 20, (insBY + endBY) * 0.5 - 10, endBX, endBY, cordW, clampB);
+                } else {
+                    // 獨立胎盤：A 接右胎盤，B 接左胎盤
+                    const endAX = clampA ? 516 : fAx + 4;
+                    const endAY = clampA ? 530 : fAy - 6;
+                    const endBX = clampB ? 488 : fBx - 4;
+                    const endBY = clampB ? 534 : fBy - 6;
+
+                    drawUmbilicalCord(placRX - 6, placRY, placRX - 24, placRY + 20, endAX + 12, (placRY + endAY) * 0.5, endAX, endAY, cordW, clampA);
+                    drawUmbilicalCord(placLX + 6, placLY, placLX + 24, placLY + 20, endBX - 12, (placLY + endBY) * 0.5, endBX, endBY, cordW, clampB);
+                }
+            } else {
+                // 階段 8：胎盤與已夾斷的兩條臍帶一併排出
+                if (isSharedPlacenta) {
+                    drawUmbilicalCord(placRX - 10, placRY + 10, placRX - 16, placRY + 26, placRX - 8, placRY + 36, placRX - 12, Math.min(616, placRY + 44), 4.0, true);
+                    drawUmbilicalCord(placRX + 10, placRY + 10, placRX + 18, placRY + 26, placRX + 8, placRY + 36, placRX + 12, Math.min(616, placRY + 44), 4.0, true);
+                } else {
+                    drawUmbilicalCord(placRX, placRY + 8, placRX + 10, placRY + 20, placRX + 4, placRY + 28, placRX + 6, Math.min(616, placRY + 34), 3.8, true);
+                    drawUmbilicalCord(placLX, placLY + 8, placLX - 10, placLY + 20, placLX - 4, placLY + 28, placLX - 6, Math.min(616, placLY + 34), 3.8, true);
+                }
+            }
+        }
+
+        // 6. 繪製兩名胎兒 (階段 8 專注呈現胎盤排出)
+        if (time <= 0.90) {
+            drawSingleFetus(fBx, fBy, fScale, fBRot, devP, time, twinBOpts);
+            drawSingleFetus(fAx, fAy, fScale, fARot, devP, time, twinAOpts);
+        }
+    }
+
     ctx.restore();
 }
 
@@ -1395,11 +2132,11 @@ function drawLabels(time) {
     ctx.save();
 
     function label(text, targetX, targetY, labelX, labelY, color = '#f8fafc', borderColor = '#64748b') {
-        ctx.font = 'bold 13px "Segoe UI", sans-serif';
+        ctx.font = 'bold 12.5px "Segoe UI", sans-serif';
         const metrics = ctx.measureText(text);
-        const padX = 10;
+        const padX = 9;
         const boxW = metrics.width + padX * 2;
-        const boxH = 26;
+        const boxH = 25;
 
         ctx.strokeStyle = borderColor;
         ctx.lineWidth = 1.5;
@@ -1410,7 +2147,7 @@ function drawLabels(time) {
 
         ctx.fillStyle = borderColor;
         ctx.beginPath();
-        ctx.arc(targetX, targetY, 3.5, 0, Math.PI * 2);
+        ctx.arc(targetX, targetY, 3.2, 0, Math.PI * 2);
         ctx.fill();
 
         ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
@@ -1427,55 +2164,167 @@ function drawLabels(time) {
         ctx.fillText(text, labelX, labelY);
     }
 
+    const pType = getEffectivePlacentaType();
+    const isFraternal = pregnancyMode === 'fraternal';
+
     // --- 固定解剖構造標籤 ---
-    label("子宮底 (Fundus)", 500, 168, 500, 110);
-    label("子宮腔", 495, 265, 355, 255);
-    label("子宮內膜 (增厚)", 548, 310, 665, 385, '#fda4af', '#f43f5e');
-    label("子宮肌層", 438, 315, 345, 315);
-    label("子宮頸 (Cervix)", 500, 420, 635, 435);
-    label("陰道 (Vagina)", 500, 520, 635, 520);
-
-    label("輸卵管壺腹部", 685, 152, 660, 85);
-    label("輸卵管傘部", 780, 280, 895, 265);
-    label("左側卵巢", 245, 320, 130, 320);
-
-    // 右側卵巢動態標籤
-    if (time < 0.06) {
-        label("右側卵巢 (成熟濾泡排卵)", 762, 312, 875, 355, '#fde047', '#eab308');
-    } else {
-        label("右側卵巢 (黃體形成)", 762, 314, 875, 355, '#fde047', '#eab308');
+    label("子宮底 (Fundus)", 500, 165, 500, 108);
+    if (time < 0.59) {
+        label("子宮腔", 495, 265, 355, 255);
+        label("子宮內膜 (增厚)", 548, 310, 668, 385, '#fda4af', '#f43f5e');
     }
+    label("子宮肌層", 436, 315, 338, 315);
+    label(time >= 0.76 && time <= 0.90 ? "子宮頸 (擴張全開)" : "子宮頸 (Cervix)", 508, 420, 650, 430, time >= 0.76 && time <= 0.90 ? '#fda4af' : '#f8fafc', time >= 0.76 && time <= 0.90 ? '#f43f5e' : '#64748b');
+    label(time >= 0.76 ? "產道 (陰道擴張)" : "陰道 (Vagina)", 508, 505, 650, 505);
 
-    // --- 隨時間變化的動態主角標籤 ---
-    if (time < 0.78) {
-        const eggPos = getEggPosition(time);
-        let dynamicText = "次級卵母細胞 (卵子)";
-        if (time >= 0.28 && time < 0.46) dynamicText = "受精處 (精子穿透卵子)";
-        else if (time >= 0.46 && time < 0.54) dynamicText = "卵裂：2~4 細胞期";
-        else if (time >= 0.54 && time < 0.62) dynamicText = "桑椹胚 (Morula)";
-        else if (time >= 0.62 && time < 0.68) dynamicText = "囊胚 (Blastocyst)";
-        else if (time >= 0.68) dynamicText = "囊胚著床 (埋入子宮內膜)";
+    label("輸卵管壺腹部", 685, 152, 670, 82);
+    label("輸卵管傘部", 780, 280, 895, 265);
 
-        const offsetY = eggPos.y < 200 ? -52 : -45;
-        const offsetX = eggPos.x > 660 ? 30 : (eggPos.x > 530 ? 110 : 0);
-        label(dynamicText, eggPos.x, eggPos.y, eggPos.x + offsetX, eggPos.y + offsetY, '#38bdf8', '#0284c7');
+    // 左右卵巢動態標籤
+    if (isFraternal) {
+        label(time < 0.04 ? "左側卵巢 (同步排卵)" : "左側卵巢 (黃體形成)", 238, 312, 125, 355, '#fde047', '#eab308');
     } else {
-        const p = norm(time, 0.78, 1.0);
-        const cx = lerp(550, 502, clamp(p * 1.4, 0, 1));
-        label(p < 0.35 ? "發育中的胚胎" : "成形的胎兒 (Fetus)", cx - 5, 275, 345, 200, '#f472b6', '#ec4899');
-        if (p > 0.25) {
-            label("胎盤 (Placenta)", 562, 268, 690, 268, '#fda4af', '#e11d48');
-            label("羊膜囊與羊水", cx + 25, 315, 675, 330, '#7dd3fc', '#0284c7');
+        label("左側卵巢", 245, 320, 130, 320);
+    }
+    label(time < 0.04 ? "右側卵巢 (成熟濾泡排卵)" : "右側卵巢 (黃體形成)", 762, 312, 875, 355, '#fde047', '#eab308');
+
+    // --- 隨時間與模式變化的動態標籤 ---
+    if (time <= 0.59) {
+        const eggPos = getEggPosition(time, 'right');
+        let dynamicText = isFraternal ? "右側卵子 (卵子 A)" : "次級卵母細胞 (卵子)";
+        if (time >= 0.20 && time < 0.34) dynamicText = isFraternal ? "雙側獨立受精" : "受精處 (精子穿透卵子)";
+        else if (time >= 0.34 && time < 0.42) dynamicText = (pregnancyMode === 'identical' && pType === 'dcda') ? "早期同卵分裂 (一分為二)" : "卵裂：2~8 細胞期";
+        else if (time >= 0.42 && time < 0.47) dynamicText = "桑椹胚 (Morula)";
+        else if (time >= 0.47 && time < 0.51) dynamicText = (pregnancyMode === 'identical' && pType === 'mcda') ? "單一囊胚 (雙內細胞群)" : "囊胚 (Blastocyst)";
+        else if (time >= 0.51) dynamicText = isTwinMode() && pType === 'dcda' ? "雙囊胚分別著床" : "囊胚著床 (埋入子宮內膜)";
+
+        const offsetY = eggPos.y < 200 ? -50 : -44;
+        const offsetX = eggPos.x > 660 ? 35 : (eggPos.x > 530 ? 115 : 0);
+        label(dynamicText, eggPos.x, eggPos.y, eggPos.x + offsetX, eggPos.y + offsetY, '#38bdf8', '#0284c7');
+
+        if (isFraternal && time < 0.51) {
+            const eggPosL = getEggPosition(time, 'left');
+            label("左側卵子 / 胚胎 B", eggPosL.x, eggPosL.y, eggPosL.x - 45, eggPosL.y - 48, '#34d399', '#10b981');
+        }
+    } else if (time <= 0.76) {
+        const devP = norm(time, 0.59, 0.76);
+        if (pType === 'single') {
+            label(devP < 0.35 ? "發育中的胚胎" : "成形的胎兒 (Fetus)", 495, 275, 345, 200, '#f472b6', '#ec4899');
+            if (devP > 0.22) {
+                label("胎盤 (Placenta)", 565, 268, 705, 268, '#fda4af', '#e11d48');
+                label("羊膜囊與羊水", 525, 325, 695, 330, '#7dd3fc', '#0284c7');
+            }
+        } else if (pType === 'dcda') {
+            label("獨立胎盤 A (供胎兒 A)", 568, 272, 725, 255, '#fda4af', '#e11d48');
+            label("獨立胎盤 B (供胎兒 B)", 432, 272, 278, 245, '#fda4af', '#e11d48');
+            label("各自獨立羊膜囊與臍帶", 535, 335, 710, 330, '#7dd3fc', '#0284c7');
+        } else if (pType === 'mcda') {
+            label("共用大型胎盤 (兩條臍帶皆接於此)", 568, 256, 755, 248, '#fda4af', '#e11d48');
+            label("羊膜隔膜 (隔開兩獨立羊膜囊)", 500, 222, 310, 210, '#e0f2fe', '#38bdf8');
+            label("兩條臍帶共用同一胎盤", 532, 320, 718, 325, '#7dd3fc', '#0284c7');
+        } else {
+            label("共用大型胎盤 (兩條臍帶皆接於此)", 568, 256, 755, 248, '#fda4af', '#e11d48');
+            label("單一共用羊膜囊 (無隔膜)", 465, 222, 305, 210, '#7dd3fc', '#38bdf8');
+        }
+    } else if (time <= 0.90) {
+        // 階段 7：分娩標籤
+        label("子宮規律收縮 (宮縮波)", 420, 225, 285, 215, '#fb7185', '#e11d48');
+        const laborP = norm(time, 0.76, 0.90);
+        if (laborP < 0.25) {
+            label("羊膜破裂 (破水)", 500, 445, 345, 445, '#7dd3fc', '#0284c7');
+        } else {
+            const birthText = isTwinMode()
+                ? (laborP < 0.52 ? "胎兒 A 頭位經產道娩出" : "胎兒 B 接續經產道娩出")
+                : "胎兒頭位經產道順利娩出";
+            label(birthText, 500, 565, 320, 565, '#f472b6', '#ec4899');
+        }
+    } else {
+        // 階段 8：排出胎盤標籤
+        const expP = norm(time, 0.90, 1.00);
+        label("子宮收縮縮小 (復原)", 430, 235, 290, 225, '#fb7185', '#e11d48');
+        if (expP < 0.32) {
+            label(pType === 'dcda' ? "兩個獨立胎盤自子宮壁剝離" : "胎盤自子宮壁剝離", 545, 270, 725, 265, '#fda4af', '#e11d48');
+        } else {
+            const expText = pType === 'dcda'
+                ? "兩個獨立胎盤與臍帶完整排出"
+                : (isTwinMode() ? "共用大型胎盤 (含兩條臍帶) 完整排出" : "胎盤連同臍帶經產道完整排出");
+            label(expText, 500, lerp(340, 565, norm(expP, 0.32, 0.95)), 725, 565, '#fda4af', '#e11d48');
         }
     }
 
     // 精子游入提示標籤
-    if (time >= 0.14 && time <= 0.27) {
-        const spP = norm(time, 0.14, 0.27);
+    if (time >= 0.10 && time <= 0.20) {
+        const spP = norm(time, 0.10, 0.20);
         const { pt: spPt } = getSpermPosition(spP, true);
-        label("精子群游入尋找卵子", spPt.x, spPt.y, 355, 430, '#e2e8f0', '#94a3b8');
+        label(isFraternal ? "精子兵分兩路游向左右輸卵管" : "精子群游入尋找卵子", spPt.x, spPt.y, 335, 430, '#e2e8f0', '#94a3b8');
     }
 
+    ctx.restore();
+}
+
+// 繪製左上角「雙胞胎與胎盤使用方式資訊卡」HUD (螢幕坐標系)
+function drawTwinInfoHUD() {
+    if (!isTwinMode() || !showLabels) return;
+
+    const pType = getEffectivePlacentaType();
+    let title = "";
+    let lines = [];
+
+    if (pregnancyMode === 'fraternal') {
+        title = "👯 異卵雙胞胎｜雙絨毛膜雙羊膜 (DCDA)";
+        lines = [
+            "• 形成：2 顆卵子 × 2 隻精子（各自受精）",
+            "• 胎盤：各自擁有 1 個獨立胎盤（共 2 個）",
+            "• 羊膜：各自擁有獨立羊膜囊（共 2 個）",
+            "• 基因：約 50% 相同（性別可同可異）"
+        ];
+    } else if (pType === 'mcda') {
+        title = "👯 同卵雙胞胎｜單絨毛膜雙羊膜 (MCDA)";
+        lines = [
+            "• 分裂：第 4–8 天（囊胚內細胞群分裂，佔 ~70%）",
+            "• 胎盤：共用 1 個大型胎盤（兩條臍帶相連）",
+            "• 羊膜：2 個獨立羊膜囊（中央具羊膜隔膜）",
+            "• 基因：100% 相同（同性別、外觀一致）"
+        ];
+    } else if (pType === 'mcma') {
+        title = "👯 同卵雙胞胎｜單絨毛膜單羊膜 (MCMA)";
+        lines = [
+            "• 分裂：第 8–12 天（晚期分裂，罕見 ~1–2%）",
+            "• 胎盤：共用 1 個大型胎盤（兩條臍帶相連）",
+            "• 羊膜：共用 1 個羊膜囊（無羊膜隔膜）",
+            "• 基因：100% 相同（同性別、外觀一致）"
+        ];
+    } else {
+        title = "👯 同卵雙胞胎｜雙絨毛膜雙羊膜 (DCDA)";
+        lines = [
+            "• 分裂：第 1–3 天（極早期卵裂分裂，佔 ~25%）",
+            "• 胎盤：各自擁有 1 個獨立胎盤（共 2 個）",
+            "• 羊膜：各自擁有獨立羊膜囊（共 2 個）",
+            "• 基因：100% 相同（同性別、外觀一致）"
+        ];
+    }
+
+    ctx.save();
+    const x = 14, y = 14, w = 296, h = 112;
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.86)';
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 8);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#38bdf8';
+    ctx.font = 'bold 12px "Segoe UI", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(title, x + 12, y + 10);
+
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = '11.5px "Segoe UI", sans-serif';
+    lines.forEach((line, idx) => {
+        ctx.fillText(line, x + 12, y + 32 + idx * 18);
+    });
     ctx.restore();
 }
 
@@ -1523,6 +2372,30 @@ function zoomAt(clientX, clientY, factor) {
     updateZoomUI();
 }
 
+// 更新模式與胎盤選擇按鈕狀態
+function updateModeUI() {
+    modeBtns.forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.mode === pregnancyMode);
+    });
+
+    if (pregnancyMode === 'identical') {
+        placentaFixedBadge.style.display = 'none';
+        placentaBtns.forEach(btn => {
+            btn.style.display = 'inline-flex';
+            btn.classList.toggle('active', btn.dataset.placenta === placentaType);
+        });
+    } else {
+        placentaBtns.forEach(btn => {
+            btn.style.display = 'none';
+        });
+        placentaFixedBadge.style.display = 'inline-block';
+        placentaFixedBadge.textContent = pregnancyMode === 'fraternal'
+            ? '各自獨立胎盤・獨立羊膜囊 (DCDA)'
+            : '單一胎盤・單一羊膜囊';
+    }
+    updateUI();
+}
+
 // 更新上方資訊列與按鈕高亮狀態
 function updateUI() {
     timeline.value = Math.round(t * 1000);
@@ -1537,9 +2410,10 @@ function updateUI() {
     }
     const st = stages[currentStageIdx];
     const localP = norm(t, st.start, st.end);
+    const pType = getEffectivePlacentaType();
 
-    stageTitle.textContent = st.title;
-    stageDesc.textContent = st.desc;
+    stageTitle.textContent = typeof st.title === 'function' ? st.title(pregnancyMode, pType) : st.title;
+    stageDesc.textContent = typeof st.desc === 'function' ? st.desc(pregnancyMode, pType) : st.desc;
     dayCounter.textContent = st.day(localP);
 
     stageBtns.forEach((btn, idx) => {
@@ -1575,18 +2449,33 @@ function animate(timestamp) {
     drawAnatomy(t);
     drawSpermSwarm(t);
     drawMacroEggAndEmbryo(t);
-    drawFetalDevelopment(t);
+    drawFetalLaborAndPlacenta(t);
     drawLabels(t);
 
     ctx.restore();
 
-    // 2. 螢幕坐標系 (固定 HUD 顯微受精/卵裂視窗)
+    // 2. 螢幕坐標系 (固定 HUD：左上角雙胞胎/胎盤資訊卡、顯微受精/卵裂視窗)
+    drawTwinInfoHUD();
     drawMicroscopeZoom(t, zoom, panX, panY);
 
     requestAnimationFrame(animate);
 }
 
 // --- 事件綁定 ---
+modeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        pregnancyMode = btn.dataset.mode;
+        updateModeUI();
+    });
+});
+
+placentaBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        placentaType = btn.dataset.placenta;
+        updateModeUI();
+    });
+});
+
 playPauseBtn.addEventListener('click', () => {
     if (t >= 1.0) {
         t = 0;
