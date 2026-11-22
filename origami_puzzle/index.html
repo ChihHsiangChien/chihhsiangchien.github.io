@@ -1,0 +1,2916 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>折紙拼圖設計與解題系統 (Origami Grid Puzzle Designer & Solver)</title>
+  <style>
+    :root {
+      --bg-main: #f5f3ec;
+      --bg-panel: #ffffff;
+      --bg-subtle: #eae6db;
+      --border-color: #d1cbbe;
+      --border-focus: #4f46e5;
+      --text-main: #27272a;
+      --text-muted: #71717a;
+      --text-light: #a1a1aa;
+      --primary: #4338ca;
+      --primary-hover: #3730a3;
+      --primary-light: #e0e7ff;
+      --accent-valley: #dc2626;
+      --accent-valley-bg: #fee2e2;
+      --accent-mountain: #2563eb;
+      --accent-mountain-bg: #dbeafe;
+      --accent-success: #15803d;
+      --accent-success-bg: #dcfce7;
+      --accent-warning: #b45309;
+      --accent-warning-bg: #fef3c7;
+      --paper-front: #faf9f6;
+      --paper-back: #e8ecf4;
+      --shadow-paper: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 16px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* Header */
+    header {
+      background: var(--bg-panel);
+      border-bottom: 1px solid var(--border-color);
+      padding: 10px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, var(--accent-valley), var(--primary));
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: bold;
+      font-size: 20px;
+      box-shadow: 0 2px 6px rgba(67, 56, 202, 0.3);
+    }
+
+    .brand-text h1 {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--text-main);
+      line-height: 1.2;
+    }
+
+    .brand-text span {
+      font-size: 11px;
+      color: var(--text-muted);
+      letter-spacing: 0.5px;
+    }
+
+    .nav-tabs {
+      display: flex;
+      gap: 6px;
+      background: var(--bg-subtle);
+      padding: 4px;
+      border-radius: var(--radius-md);
+    }
+
+    .nav-tab-btn {
+      padding: 8px 16px;
+      border: none;
+      background: transparent;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 44px;
+      transition: all 0.2s ease;
+    }
+
+    .nav-tab-btn.active {
+      background: var(--bg-panel);
+      color: var(--primary);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+    }
+
+    .nav-tab-btn:hover:not(.active) {
+      color: var(--text-main);
+    }
+
+    /* Main Layout */
+    .app-container {
+      display: flex;
+      flex: 1;
+      height: calc(100vh - 65px);
+      overflow: hidden;
+    }
+
+    /* Sidebar controls */
+    .sidebar {
+      width: 400px;
+      background: var(--bg-panel);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      z-index: 20;
+      flex-shrink: 0;
+    }
+
+    .sidebar-section {
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .sidebar-title {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--text-main);
+    }
+
+    .sidebar-title .badge {
+      font-size: 11px;
+      font-weight: normal;
+      background: var(--primary-light);
+      color: var(--primary);
+      padding: 2px 8px;
+      border-radius: 999px;
+    }
+
+    .form-group {
+      margin-bottom: 14px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .form-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .input-text, .select-input, textarea.input-text {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      color: var(--text-main);
+      background: #fafaf9;
+      transition: border-color 0.15s ease;
+      min-height: 44px;
+    }
+
+    .input-text:focus, .select-input:focus, textarea.input-text:focus {
+      outline: none;
+      border-color: var(--border-focus);
+      background: #ffffff;
+      box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: var(--radius-sm);
+      border: 1px solid transparent;
+      cursor: pointer;
+      min-height: 44px;
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+    .btn-primary:hover {
+      background: var(--primary-hover);
+    }
+
+    .btn-secondary {
+      background: var(--bg-subtle);
+      color: var(--text-main);
+      border-color: var(--border-color);
+    }
+    .btn-secondary:hover {
+      background: #e2ddd0;
+    }
+
+    .btn-danger {
+      background: var(--accent-valley-bg);
+      color: var(--accent-valley);
+      border-color: #fca5a5;
+    }
+    .btn-danger:hover {
+      background: #fecaca;
+    }
+
+    .btn-success {
+      background: var(--accent-success-bg);
+      color: var(--accent-success);
+      border-color: #86efac;
+    }
+    .btn-success:hover {
+      background: #bbf7d0;
+    }
+
+    .btn-block {
+      width: 100%;
+    }
+
+    /* Target groups & Trap badges */
+    .target-group-card {
+      background: #fafaf9;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 12px;
+      margin-bottom: 10px;
+      position: relative;
+    }
+
+    .target-group-card.active {
+      border-color: var(--primary);
+      background: #f8fafc;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.04);
+    }
+
+    .group-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .group-name {
+      font-size: 13px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .color-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .chars-display {
+      display: flex;
+      gap: 6px;
+    }
+
+    .char-badge {
+      width: 32px;
+      height: 32px;
+      background: white;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 15px;
+    }
+
+    /* Candidate Trap Card */
+    .candidate-card {
+      background: #fafaf9;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 8px;
+    }
+    .candidate-card.is-trap {
+      border-color: #f87171;
+      background: #fff1f2;
+    }
+    .candidate-card.is-valid {
+      border-color: #4ade80;
+      background: #f0fdf4;
+    }
+
+    /* Canvas Area */
+    .canvas-container {
+      flex: 1;
+      position: relative;
+      background: radial-gradient(circle at center, #fbfbfa 0%, #ece8de 100%);
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: none;
+      user-select: none;
+    }
+
+    canvas#origamiCanvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+      cursor: grab;
+    }
+
+    canvas#origamiCanvas:active {
+      cursor: grabbing;
+    }
+
+    /* Floating View Controls */
+    .floating-tools {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 4px;
+      z-index: 30;
+    }
+
+    .tool-btn {
+      width: 44px;
+      height: 44px;
+      border: none;
+      background: transparent;
+      border-radius: var(--radius-sm);
+      color: var(--text-main);
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+
+    .tool-btn:hover {
+      background: var(--bg-subtle);
+    }
+
+    .zoom-readout {
+      font-size: 10px;
+      text-align: center;
+      font-weight: 700;
+      padding: 4px 0;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border-color);
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    /* Target Preview HUD */
+    .target-preview-hud {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+      padding: 12px 14px;
+      z-index: 30;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .target-preview-hud h4 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .target-grids-wrapper {
+      display: flex;
+      gap: 12px;
+    }
+
+    .target-grid-mini {
+      display: grid;
+      grid-template-columns: repeat(2, 34px);
+      grid-template-rows: repeat(2, 34px);
+      gap: 4px;
+    }
+
+    .target-cell-mini {
+      background: var(--paper-front);
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 15px;
+      color: var(--primary);
+      position: relative;
+    }
+
+    .target-cell-mini .cell-order {
+      position: absolute;
+      top: 1px;
+      left: 2px;
+      font-size: 8px;
+      color: var(--text-light);
+    }
+
+    /* Bottom Player Bar */
+    .player-dock {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255, 255, 255, 0.96);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 10px 18px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      z-index: 30;
+      max-width: 90vw;
+    }
+
+    .fold-style-toggle {
+      display: flex;
+      background: var(--bg-subtle);
+      border-radius: var(--radius-sm);
+      padding: 2px;
+      gap: 2px;
+    }
+
+    .fold-style-btn {
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      border: none;
+      background: transparent;
+      border-radius: 4px;
+      cursor: pointer;
+      min-height: 40px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s;
+    }
+
+    .fold-style-btn.valley.active {
+      background: var(--accent-valley);
+      color: white;
+    }
+
+    .fold-style-btn.mountain.active {
+      background: var(--accent-mountain);
+      color: white;
+    }
+
+    .step-controls {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .step-btn {
+      width: 44px;
+      height: 44px;
+      border: 1px solid var(--border-color);
+      background: white;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      color: var(--text-main);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .step-btn:hover:not(:disabled) {
+      background: var(--bg-subtle);
+      border-color: #b8b2a5;
+    }
+
+    .step-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .step-info {
+      font-size: 13px;
+      font-weight: 700;
+      padding: 0 8px;
+      min-width: 75px;
+      text-align: center;
+      color: var(--text-main);
+    }
+
+    /* Modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 20px;
+    }
+
+    .modal-backdrop.open {
+      display: flex;
+    }
+
+    .modal-window {
+      background: var(--bg-panel);
+      width: 100%;
+      max-width: 780px;
+      max-height: 90vh;
+      border-radius: var(--radius-lg);
+      box-shadow: 0 20px 40px rgba(0,0,0,0.25);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .modal-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-header h3 {
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .modal-close {
+      width: 36px;
+      height: 36px;
+      border: none;
+      background: transparent;
+      font-size: 22px;
+      cursor: pointer;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-body {
+      padding: 20px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .modal-footer {
+      padding: 14px 20px;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      background: #fafaf9;
+    }
+
+    /* Solution card */
+    .solution-item {
+      background: #fafaf9;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 12px 16px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .solution-item:hover, .solution-item.active {
+      border-color: var(--primary);
+      background: #f5f3ff;
+    }
+
+    .solution-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .solution-steps {
+      font-size: 12px;
+      color: var(--text-muted);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .step-tag {
+      background: white;
+      border: 1px solid var(--border-color);
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-weight: 600;
+      font-size: 11px;
+    }
+
+    .step-tag.valley {
+      color: var(--accent-valley);
+      border-color: #fca5a5;
+    }
+
+    .step-tag.mountain {
+      color: var(--accent-mountain);
+      border-color: #93c5fd;
+    }
+
+    /* Responsive */
+    @media (max-width: 900px) {
+      .app-container {
+        flex-direction: column;
+      }
+      .sidebar {
+        width: 100%;
+        max-height: 40vh;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+      }
+      .nav-tabs {
+        overflow-x: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-icon">折</div>
+      <div class="brand-text">
+        <h1>折紙拼圖設計與解題系統</h1>
+        <span>ORIGAMI GRID PUZZLE DESIGNER & SOLVER</span>
+      </div>
+    </div>
+
+    <nav class="nav-tabs">
+      <button class="nav-tab-btn active" data-tab="design">🎨 關卡設計</button>
+      <button class="nav-tab-btn" data-tab="solve">🔍 求解與五圖驗證</button>
+      <button class="nav-tab-btn" data-tab="presets">📚 經典題庫</button>
+      <button class="nav-tab-btn" data-tab="help">📖 規格與操作說明</button>
+    </nav>
+  </header>
+
+  <!-- Main Container -->
+  <div class="app-container">
+
+    <!-- Sidebar Controls -->
+    <aside class="sidebar">
+
+      <!-- DESIGN TAB -->
+      <div class="tab-panel" id="panel-design">
+        <div class="sidebar-section">
+          <div class="sidebar-title">
+            <span>網格與印製規格</span>
+            <span class="badge" id="gridBadge">4 × 4 雙面模式</span>
+          </div>
+          <div class="form-group">
+            <label class="form-label">紙張網格尺寸</label>
+            <div class="form-row">
+              <select id="gridDimSelect" class="select-input">
+                <option value="4x4" selected>4 × 4 (標準 16 格)</option>
+                <option value="3x3">3 × 3 (簡易 9 格)</option>
+                <option value="4x3">4 × 3 (矩形 12 格)</option>
+                <option value="6x6">6 × 6 (大型 36 格)</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">印製模式</label>
+            <select id="paperModeSelect" class="select-input">
+              <option value="single">單面模式 (Single-Sided)</option>
+              <option value="double" selected>雙面模式 (Double-Sided: 正反雙面印製)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">目標折疊視窗尺寸</label>
+            <select id="targetDimSelect" class="select-input">
+              <option value="2x2" selected>2 × 2 四字／圖案視窗</option>
+              <option value="1x1">1 × 1 單格視窗</option>
+              <option value="1x2">1 × 2 雙格視窗</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">折疊規則約束</label>
+            <select id="ruleModeSelect" class="select-input">
+              <option value="strict" selected>僅限既有紙格 (嚴謹物理折紙)</option>
+              <option value="free">允許折向框內空白格 (自由平移)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-title">
+            <span>題目輸入與原紙編輯</span>
+          </div>
+          <button class="btn btn-primary btn-block" id="btnOpenGridEditor" style="margin-bottom: 8px;">
+            ✏️ 輸入／修改 16 格題目內容 (正反面快速填寫)
+          </button>
+          <div class="form-row">
+            <button class="btn btn-secondary btn-block" id="btnStampWorkflow" title="先將白紙折疊至目標尺寸，在表面蓋章填字，再展開獲取原紙">
+              🏷️ 先折後填
+            </button>
+            <button class="btn btn-secondary btn-block" id="btnFlipPaperAction" title="將原紙翻面">
+              🔄 原紙翻面
+            </button>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-title">
+            <span>目標成語／圖案配置</span>
+            <span class="badge" id="coverageBadge">4 組目標</span>
+          </div>
+          <div id="targetGroupsContainer">
+            <!-- Dynamically populated target groups -->
+          </div>
+          <button class="btn btn-secondary btn-block" id="btnAddGroup" style="margin-top: 6px;">
+            ➕ 新增目標成語／圖案
+          </button>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-title">
+            <span>陷阱成語防呆 (Collision Trap)</span>
+            <span class="badge" style="background:#fee2e2;color:#dc2626;">防呆保護</span>
+          </div>
+          <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">
+            設定干擾詞。系統找解時將遍歷所有合法折疊終態，嚴格確保陷阱詞不會在任何折疊中被意外湊出！
+          </p>
+          <div class="form-group">
+            <input type="text" id="trapIdiomsInput" class="input-text" placeholder="多組陷阱詞以逗號分隔，例如：妖魔鬼怪, 風雨交加" value="妖魔鬼怪, 偷天換日">
+          </div>
+          <button class="btn btn-danger btn-block" id="btnCheckTraps">
+            🛡️ 執行陷阱碰撞安全檢查
+          </button>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="form-row">
+            <button class="btn btn-primary btn-block" id="btnExportPrint">
+              🖨️ 匯出列印原紙
+            </button>
+            <button class="btn btn-secondary btn-block" id="btnSaveJSON">
+              💾 匯出 JSON
+            </button>
+          </div>
+          <input type="file" id="fileLoadJSON" accept=".json" style="display: none;">
+          <button class="btn btn-secondary btn-block" id="btnLoadJSON" style="margin-top: 8px;">
+            📂 載入題庫 JSON
+          </button>
+        </div>
+      </div>
+
+      <!-- SOLVE TAB -->
+      <div class="tab-panel" id="panel-solve" style="display: none;">
+        <!-- 5-Pattern Candidates & Trap Resolver -->
+        <div class="sidebar-section" style="background: #fdfaf3; border-bottom: 2px solid #e2ded4;">
+          <div class="sidebar-title">
+            <span>🎯 五圖驗證器：四真目標與一陷阱過濾</span>
+            <span class="badge" style="background:#fef3c7; color:#b45309;">經典題型破解</span>
+          </div>
+          <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">
+            若題目提供 5 張 2×2 目標圖，但其中 1 張為干擾陷阱，點擊下方即可自動遍歷狀態空間，辨別哪 4 個可折出、哪 1 個為假目標！
+          </p>
+          <div id="fiveCandidatesContainer">
+            <!-- 5 Candidate inputs -->
+          </div>
+          <button class="btn btn-primary btn-block" id="btnFilterFiveTargets" style="margin-top: 6px;">
+            🚀 一鍵檢驗五圖可達性 (自動剔除陷阱)
+          </button>
+          <div id="fiveFilterReport" style="margin-top: 10px; display: none;"></div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-title">
+            <span>BFS 狀態空間找解器</span>
+          </div>
+          <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
+            搜尋當前選定目標之所有折疊路徑，計算最短步數、山谷摺順序與唯一性。
+          </p>
+          <button class="btn btn-primary btn-block" id="btnRunSolver">
+            ⚡ 啟動全狀態搜尋 (Auto Solve)
+          </button>
+          <div id="solverStatusBox" style="margin-top: 12px; display: none;">
+            <!-- Results stats -->
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-title">
+            <span>搜尋解法清單</span>
+            <span class="badge" id="solutionsCountBadge">0 組</span>
+          </div>
+          <div id="solutionsListContainer">
+            <div style="font-size: 12px; color: var(--text-muted); text-align: center; padding: 20px 0;">
+              點擊上方「啟動全狀態搜尋」開始解題
+            </div>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-title">
+            <span>互斥分割檢驗 (16格全覆蓋)</span>
+          </div>
+          <button class="btn btn-success btn-block" id="btnValidateMutual">
+            🔍 檢驗所有目標是否完全獨立可解
+          </button>
+          <div id="mutualResultBox" style="margin-top: 10px; font-size: 12px; display: none;"></div>
+        </div>
+      </div>
+
+      <!-- PRESETS TAB -->
+      <div class="tab-panel" id="panel-presets" style="display: none;">
+        <div class="sidebar-section">
+          <div class="sidebar-title">
+            <span>官方經典題庫範例</span>
+          </div>
+          <div id="presetsListContainer">
+            <!-- Preset Cards -->
+          </div>
+        </div>
+      </div>
+
+      <!-- HELP TAB -->
+      <div class="tab-panel" id="panel-help" style="display: none;">
+        <div class="sidebar-section" style="font-size: 13px; line-height: 1.6;">
+          <h4 style="margin-bottom: 8px; font-size: 14px;">📖 如何解「雙面4×4折出雙面2×2、五圖取四」題目？</h4>
+          <p><strong>步驟一：輸入題目原紙</strong></p>
+          <p style="margin-bottom: 8px;">
+            切換至「🎨 關卡設計」，確認印製模式為「雙面模式」，點擊「✏️ 輸入／修改 16 格題目內容」，將題目正面 16 格與反面 16 格的字或圖案填入。
+          </p>
+          <p><strong>步驟二：設定目標圖或使用五圖驗證器</strong></p>
+          <p style="margin-bottom: 8px;">
+            切換至「🔍 求解與五圖驗證」，在上方「五圖驗證器」中填入題目給予的 5 張目標圖案。若目標要求雙面，可同時指定正面 4 格與反面 4 格。
+          </p>
+          <p><strong>步驟三：一鍵剔除陷阱並獲取解法</strong></p>
+          <p style="margin-bottom: 8px;">
+            點擊「🚀 一鍵檢驗五圖可達性」，系統會自動進行 BFS 狀態探索：
+            <br>• 4 個真目標：立刻顯示最短步數與「載入演練」按鈕。
+            <br>• 1 個假目標：自動標記紅色警告「🚫 陷阱干擾項」，證實其拓撲不可達。
+          </p>
+          <p><strong>步驟四：動態演示與手動折疊</strong></p>
+          <p>
+            點選解法後，利用底部播放列單步播放（山摺藍線、谷摺紅線），即可輕鬆跟著折出成品！
+          </p>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- Canvas Workspace -->
+    <main class="canvas-container" id="canvasContainer">
+      <canvas id="origamiCanvas"></canvas>
+
+      <!-- Target HUD Preview -->
+      <div class="target-preview-hud">
+        <h4>
+          <span>目標視窗 (2×2)</span>
+          <span id="targetHUDName" style="color:var(--primary); font-weight:bold;">風調雨順</span>
+        </h4>
+        <div class="target-grids-wrapper">
+          <div>
+            <div style="font-size:9px; color:var(--text-muted); margin-bottom:2px;">正面</div>
+            <div class="target-grid-mini" id="targetHUDGridFront">
+              <div class="target-cell-mini"><span class="cell-order">①</span>風</div>
+              <div class="target-cell-mini"><span class="cell-order">②</span>調</div>
+              <div class="target-cell-mini"><span class="cell-order">③</span>雨</div>
+              <div class="target-cell-mini"><span class="cell-order">④</span>順</div>
+            </div>
+          </div>
+          <div id="targetHUDBackCol" style="display:none;">
+            <div style="font-size:9px; color:var(--text-muted); margin-bottom:2px;">反面 (翻轉時)</div>
+            <div class="target-grid-mini" id="targetHUDGridBack">
+              <div class="target-cell-mini" style="background:var(--paper-back);"><span class="cell-order">①</span>-</div>
+              <div class="target-cell-mini" style="background:var(--paper-back);"><span class="cell-order">②</span>-</div>
+              <div class="target-cell-mini" style="background:var(--paper-back);"><span class="cell-order">③</span>-</div>
+              <div class="target-cell-mini" style="background:var(--paper-back);"><span class="cell-order">④</span>-</div>
+            </div>
+          </div>
+        </div>
+        <div style="font-size:10px; color:var(--text-muted); display:flex; justify-content:space-between; margin-top:4px;">
+          <span>狀態:</span>
+          <span id="matchStatusBadge" style="color:var(--accent-warning); font-weight:bold;">未達成</span>
+        </div>
+      </div>
+
+      <!-- Floating Canvas Navigation Controls -->
+      <div class="floating-tools">
+        <button class="tool-btn" id="btnZoomIn" title="放大 (+)">🔍+</button>
+        <button class="tool-btn" id="btnZoomOut" title="縮小 (-)">🔍−</button>
+        <div class="zoom-readout" id="zoomReadout">100%</div>
+        <button class="tool-btn" id="btnResetView" title="重設視角 (100% 置中)">🎯</button>
+        <button class="tool-btn" id="btnFlipPaper" title="將整張紙翻面 (正反對調)">🔄</button>
+      </div>
+
+      <!-- Bottom Interactive Player & Stepper -->
+      <div class="player-dock">
+        <div class="fold-style-toggle" title="切換目前手動折疊的山谷摺屬性">
+          <button class="fold-style-btn valley active" id="btnToggleValley">
+            <span style="font-size:14px;">☵</span> 谷摺 (Valley)
+          </button>
+          <button class="fold-style-btn mountain" id="btnToggleMountain">
+            <span style="font-size:14px;">☲</span> 山摺 (Mountain)
+          </button>
+        </div>
+
+        <div style="width:1px; height:28px; background:var(--border-color);"></div>
+
+        <div class="step-controls">
+          <button class="step-btn" id="btnStepFirst" title="回到初始原紙狀態">|◀</button>
+          <button class="step-btn" id="btnStepPrev" title="上一步 (Undo)">◀</button>
+          <button class="step-btn" id="btnStepPlay" title="播放 / 暫停解題動畫" style="background:var(--primary); color:white; border-color:var(--primary);">▶</button>
+          <button class="step-btn" id="btnStepNext" title="下一步 (Redo)">▶</button>
+          <button class="step-btn" id="btnStepLast" title="直接前往終態">▶|</button>
+        </div>
+
+        <div class="step-info" id="stepInfo">步數: 0 / 0</div>
+
+        <div style="width:1px; height:28px; background:var(--border-color);"></div>
+
+        <button class="btn btn-secondary" id="btnHint" style="padding:6px 12px; font-size:12px;" title="提示下一步最佳折線">
+          💡 提示
+        </button>
+        <button class="btn btn-danger" id="btnResetPuzzle" style="padding:6px 12px; font-size:12px;" title="重新展平為原紙">
+          展開原紙
+        </button>
+      </div>
+    </main>
+
+  </div>
+
+  <!-- Interactive 16-Cell Grid Editor Modal -->
+  <div class="modal-backdrop" id="gridEditorModal">
+    <div class="modal-window">
+      <div class="modal-header">
+        <h3>✏️ 題目原紙編輯器 (4×4 雙面格位內容)</h3>
+        <button class="modal-close" id="btnCloseGridEditor">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <div class="nav-tabs" style="margin:0;">
+            <button class="nav-tab-btn active" id="tabEditFront">正面 16 格 (Front)</button>
+            <button class="nav-tab-btn" id="tabEditBack">反面 16 格 (Back)</button>
+          </div>
+          <button class="btn btn-secondary" id="btnQuickFillPrompt" style="padding:4px 10px; font-size:12px;">
+            ⚡ 批次貼上 16 字
+          </button>
+        </div>
+
+        <p style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">
+          點選下方格子可直接修改字元／符號。原紙正面 (0,0) 為左上角；反面印刷配置以水平翻頁對應。
+        </p>
+
+        <div id="gridEditorContainer" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; max-width:480px; margin:0 auto;">
+          <!-- 16 editable cells -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="btnSaveGridEditor">儲存並套用至畫布</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Printable Export Modal -->
+  <div class="modal-backdrop" id="exportModal">
+    <div class="modal-window">
+      <div class="modal-header">
+        <h3>🖨️ 折紙原紙印刷與配置展開圖</h3>
+        <button class="modal-close" id="btnCloseExportModal">&times;</button>
+      </div>
+      <div class="modal-body" id="exportModalBody">
+        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
+          以下為折紙原紙各格面之正面與反面字樣、旋轉角度 (rot) 與鏡像狀態。可直接列印或截圖製作實體折紙拼圖。
+        </p>
+        <div id="printSheetContainer" style="display: flex; gap: 20px; flex-wrap: wrap; justify-content: center;">
+          <!-- SVG / HTML Printable Layout rendered here -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btnPrintPage">直接列印 (Print)</button>
+        <button class="btn btn-primary" id="btnCopyJSON">複製配置 JSON</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /**
+     * Origami Grid Puzzle Designer & Solver
+     * Full implementation supporting Double-Sided Puzzles, 5-Candidate Trap Identification, and D4 symmetries.
+     */
+
+    // --- 1. D4 Mathematical Symmetry ---
+    const D4 = {
+      addRot(rot, delta) {
+        return (rot + delta + 360) % 360;
+      },
+      flipVertical(rot, mirrored) {
+        return {
+          rot: (360 - rot) % 360,
+          mirrored: !mirrored
+        };
+      },
+      flipHorizontal(rot, mirrored) {
+        return {
+          rot: (180 - rot + 360) % 360,
+          mirrored: !mirrored
+        };
+      }
+    };
+
+    // --- 2. StateStore ---
+    const StateStore = {
+      gridW: 4,
+      gridH: 4,
+      targetW: 2,
+      targetH: 2,
+      paperMode: 'double', // 'single' | 'double'
+      ruleMode: 'strict',
+      currentFoldStyle: 'valley',
+      cells: [],
+      
+      targetGroups: [
+        { id: 1, name: '目標一 (風調雨順)', chars: ['風', '調', '雨', '順'], backChars: ['國', '泰', '民', '安'], color: '#ef4444', cellIds: [0, 1, 4, 5] },
+        { id: 2, name: '目標二 (國泰民安)', chars: ['國', '泰', '民', '安'], backChars: ['風', '調', '雨', '順'], color: '#3b82f6', cellIds: [2, 3, 6, 7] },
+        { id: 3, name: '目標三 (心想事成)', chars: ['心', '想', '事', '成'], backChars: ['萬', '事', '如', '意'], color: '#10b981', cellIds: [8, 9, 12, 13] },
+        { id: 4, name: '目標四 (萬事如意)', chars: ['萬', '事', '如', '意'], backChars: ['心', '想', '事', '成'], color: '#f59e0b', cellIds: [10, 11, 14, 15] }
+      ],
+      activeGroupId: 1,
+      trapIdioms: ['妖魔鬼怪', '偷天換日'],
+      
+      // Five candidate patterns for 5-target trap puzzle
+      fiveCandidates: [
+        { id: 1, name: '候選圖 A', chars: ['風', '調', '雨', '順'], backChars: ['國', '泰', '民', '安'] },
+        { id: 2, name: '候選圖 B', chars: ['國', '泰', '民', '安'], backChars: ['風', '調', '雨', '順'] },
+        { id: 3, name: '候選圖 C', chars: ['心', '想', '事', '成'], backChars: ['萬', '事', '如', '意'] },
+        { id: 4, name: '候選圖 D', chars: ['萬', '事', '如', '意'], backChars: ['心', '想', '事', '成'] },
+        { id: 5, name: '候選圖 E (陷阱嫌疑)', chars: ['風', '泰', '事', '順'], backChars: ['妖', '魔', '鬼', '怪'] }
+      ],
+
+      grid: [],
+      foldHistory: [],
+      currentStepIndex: 0,
+      solutions: [],
+      activeSolutionIndex: -1,
+      isPlaying: false,
+      playTimer: null,
+      view: {
+        scale: 1.0,
+        offsetX: 0,
+        offsetY: 0
+      },
+
+      initDefaultGrid() {
+        this.cells = [];
+        let idCounter = 0;
+        for (let y = 0; y < this.gridH; y++) {
+          for (let x = 0; x < this.gridW; x++) {
+            let grp = this.targetGroups.find(g => g.cellIds && g.cellIds.includes(idCounter));
+            let charIndex = grp ? grp.cellIds.indexOf(idCounter) : 0;
+            let frontChar = grp ? grp.chars[charIndex] || '' : '';
+            let backChar = grp && grp.backChars ? grp.backChars[charIndex] || '' : '';
+            let color = grp ? grp.color : '#64748b';
+
+            this.cells.push({
+              id: idCounter,
+              x: x,
+              y: y,
+              frontChar: frontChar,
+              frontRot: 0,
+              frontColor: color,
+              backChar: backChar,
+              backRot: 0,
+              backColor: '#94a3b8'
+            });
+            idCounter++;
+          }
+        }
+        this.resetFoldState();
+      },
+
+      resetFoldState() {
+        this.grid = [];
+        for (let x = 0; x < this.gridW; x++) {
+          this.grid[x] = [];
+          for (let y = 0; y < this.gridH; y++) {
+            this.grid[x][y] = [];
+          }
+        }
+        this.cells.forEach(c => {
+          this.grid[c.x][c.y] = [{
+            cellId: c.id,
+            face: 'front',
+            rot: c.frontRot,
+            mirrored: false
+          }];
+        });
+        this.foldHistory = [];
+        this.currentStepIndex = 0;
+      }
+    };
+
+    // --- 3. FoldEngine ---
+    const FoldEngine = {
+      cloneGrid(grid, w = StateStore.gridW, h = StateStore.gridH) {
+        const copy = [];
+        for (let x = 0; x < w; x++) {
+          copy[x] = [];
+          for (let y = 0; y < h; y++) {
+            copy[x][y] = (grid[x] && grid[x][y]) ? grid[x][y].map(item => ({ ...item })) : [];
+          }
+        }
+        return copy;
+      },
+
+      getBoundingBox(grid, w = StateStore.gridW, h = StateStore.gridH) {
+        let minX = w, maxX = -1, minY = h, maxY = -1;
+        for (let x = 0; x < w; x++) {
+          for (let y = 0; y < h; y++) {
+            if (grid[x] && grid[x][y] && grid[x][y].length > 0) {
+              if (x < minX) minX = x;
+              if (x > maxX) maxX = x;
+              if (y < minY) minY = y;
+              if (y > maxY) maxY = y;
+            }
+          }
+        }
+        if (maxX === -1) return { minX: 0, maxX: 0, minY: 0, maxY: 0, width: 0, height: 0 };
+        return {
+          minX, maxX, minY, maxY,
+          width: maxX - minX + 1,
+          height: maxY - minY + 1
+        };
+      },
+
+      applyFold(currentGrid, action, gridW = StateStore.gridW, gridH = StateStore.gridH) {
+        const nextGrid = this.cloneGrid(currentGrid, gridW, gridH);
+        const { type, line, dir, style } = action;
+
+        if (type === 'V') {
+          if (dir === 'L2R') {
+            for (let x = 0; x < line; x++) {
+              const targetX = 2 * line - 1 - x;
+              for (let y = 0; y < gridH; y++) {
+                const movingStack = nextGrid[x][y];
+                if (movingStack.length === 0) continue;
+
+                if (targetX >= gridW) {
+                  if (StateStore.ruleMode === 'strict') return null;
+                  continue;
+                }
+
+                const flippedStack = [];
+                for (let i = movingStack.length - 1; i >= 0; i--) {
+                  const item = { ...movingStack[i] };
+                  item.face = (item.face === 'front') ? 'back' : 'front';
+                  const d4 = D4.flipVertical(item.rot, item.mirrored);
+                  item.rot = d4.rot;
+                  item.mirrored = d4.mirrored;
+                  flippedStack.push(item);
+                }
+
+                if (style === 'valley') {
+                  nextGrid[targetX][y] = nextGrid[targetX][y].concat(flippedStack);
+                } else {
+                  nextGrid[targetX][y] = flippedStack.concat(nextGrid[targetX][y]);
+                }
+                nextGrid[x][y] = [];
+              }
+            }
+          } else if (dir === 'R2L') {
+            for (let x = line; x < gridW; x++) {
+              const targetX = 2 * line - 1 - x;
+              for (let y = 0; y < gridH; y++) {
+                const movingStack = nextGrid[x][y];
+                if (movingStack.length === 0) continue;
+
+                if (targetX < 0) {
+                  if (StateStore.ruleMode === 'strict') return null;
+                  continue;
+                }
+
+                const flippedStack = [];
+                for (let i = movingStack.length - 1; i >= 0; i--) {
+                  const item = { ...movingStack[i] };
+                  item.face = (item.face === 'front') ? 'back' : 'front';
+                  const d4 = D4.flipVertical(item.rot, item.mirrored);
+                  item.rot = d4.rot;
+                  item.mirrored = d4.mirrored;
+                  flippedStack.push(item);
+                }
+
+                if (style === 'valley') {
+                  nextGrid[targetX][y] = nextGrid[targetX][y].concat(flippedStack);
+                } else {
+                  nextGrid[targetX][y] = flippedStack.concat(nextGrid[targetX][y]);
+                }
+                nextGrid[x][y] = [];
+              }
+            }
+          }
+        } else if (type === 'H') {
+          if (dir === 'T2B') {
+            for (let y = 0; y < line; y++) {
+              const targetY = 2 * line - 1 - y;
+              for (let x = 0; x < gridW; x++) {
+                const movingStack = nextGrid[x][y];
+                if (movingStack.length === 0) continue;
+
+                if (targetY >= gridH) {
+                  if (StateStore.ruleMode === 'strict') return null;
+                  continue;
+                }
+
+                const flippedStack = [];
+                for (let i = movingStack.length - 1; i >= 0; i--) {
+                  const item = { ...movingStack[i] };
+                  item.face = (item.face === 'front') ? 'back' : 'front';
+                  const d4 = D4.flipHorizontal(item.rot, item.mirrored);
+                  item.rot = d4.rot;
+                  item.mirrored = d4.mirrored;
+                  flippedStack.push(item);
+                }
+
+                if (style === 'valley') {
+                  nextGrid[x][targetY] = nextGrid[x][targetY].concat(flippedStack);
+                } else {
+                  nextGrid[x][targetY] = flippedStack.concat(nextGrid[x][targetY]);
+                }
+                nextGrid[x][y] = [];
+              }
+            }
+          } else if (dir === 'B2T') {
+            for (let y = line; y < gridH; y++) {
+              const targetY = 2 * line - 1 - y;
+              for (let x = 0; x < gridW; x++) {
+                const movingStack = nextGrid[x][y];
+                if (movingStack.length === 0) continue;
+
+                if (targetY < 0) {
+                  if (StateStore.ruleMode === 'strict') return null;
+                  continue;
+                }
+
+                const flippedStack = [];
+                for (let i = movingStack.length - 1; i >= 0; i--) {
+                  const item = { ...movingStack[i] };
+                  item.face = (item.face === 'front') ? 'back' : 'front';
+                  const d4 = D4.flipHorizontal(item.rot, item.mirrored);
+                  item.rot = d4.rot;
+                  item.mirrored = d4.mirrored;
+                  flippedStack.push(item);
+                }
+
+                if (style === 'valley') {
+                  nextGrid[x][targetY] = nextGrid[x][targetY].concat(flippedStack);
+                } else {
+                  nextGrid[x][targetY] = flippedStack.concat(nextGrid[x][targetY]);
+                }
+                nextGrid[x][y] = [];
+              }
+            }
+          }
+        }
+
+        return nextGrid;
+      },
+
+      flipEntirePaper(grid, gridW = StateStore.gridW, gridH = StateStore.gridH) {
+        const nextGrid = [];
+        for (let x = 0; x < gridW; x++) {
+          nextGrid[x] = [];
+          for (let y = 0; y < gridH; y++) {
+            nextGrid[x][y] = [];
+          }
+        }
+        for (let x = 0; x < gridW; x++) {
+          const targetX = gridW - 1 - x;
+          for (let y = 0; y < gridH; y++) {
+            const stack = grid[x][y];
+            if (!stack || stack.length === 0) continue;
+            const flippedStack = [];
+            for (let i = stack.length - 1; i >= 0; i--) {
+              const item = { ...stack[i] };
+              item.face = (item.face === 'front') ? 'back' : 'front';
+              const d4 = D4.flipVertical(item.rot, item.mirrored);
+              item.rot = d4.rot;
+              item.mirrored = d4.mirrored;
+              flippedStack.push(item);
+            }
+            nextGrid[targetX][y] = flippedStack;
+          }
+        }
+        return nextGrid;
+      },
+
+      getLegalFolds(grid, gridW = StateStore.gridW, gridH = StateStore.gridH) {
+        const bbox = this.getBoundingBox(grid, gridW, gridH);
+        if (bbox.width <= 1 && bbox.height <= 1) return [];
+
+        const actions = [];
+        const styles = ['valley', 'mountain'];
+
+        for (let line = bbox.minX + 1; line <= bbox.maxX; line++) {
+          let hasLeft = false;
+          for (let x = bbox.minX; x < line; x++) {
+            for (let y = bbox.minY; y <= bbox.maxY; y++) {
+              if (grid[x][y] && grid[x][y].length > 0) { hasLeft = true; break; }
+            }
+            if (hasLeft) break;
+          }
+
+          let hasRight = false;
+          for (let x = line; x <= bbox.maxX; x++) {
+            for (let y = bbox.minY; y <= bbox.maxY; y++) {
+              if (grid[x][y] && grid[x][y].length > 0) { hasRight = true; break; }
+            }
+            if (hasRight) break;
+          }
+
+          if (hasLeft) {
+            styles.forEach(style => actions.push({ type: 'V', line, dir: 'L2R', style }));
+          }
+          if (hasRight) {
+            styles.forEach(style => actions.push({ type: 'V', line, dir: 'R2L', style }));
+          }
+        }
+
+        for (let line = bbox.minY + 1; line <= bbox.maxY; line++) {
+          let hasTop = false;
+          for (let y = bbox.minY; y < line; y++) {
+            for (let x = bbox.minX; x <= bbox.maxX; x++) {
+              if (grid[x][y] && grid[x][y].length > 0) { hasTop = true; break; }
+            }
+            if (hasTop) break;
+          }
+
+          let hasBottom = false;
+          for (let y = line; y <= bbox.maxY; y++) {
+            for (let x = bbox.minX; x <= bbox.maxX; x++) {
+              if (grid[x][y] && grid[x][y].length > 0) { hasBottom = true; break; }
+            }
+            if (hasBottom) break;
+          }
+
+          if (hasTop) {
+            styles.forEach(style => actions.push({ type: 'H', line, dir: 'T2B', style }));
+          }
+          if (hasBottom) {
+            styles.forEach(style => actions.push({ type: 'H', line, dir: 'B2T', style }));
+          }
+        }
+
+        return actions;
+      }
+    };
+
+    // --- 4. SolverValidator ---
+    const SolverValidator = {
+      getCanonicalKey(grid, gridW = StateStore.gridW, gridH = StateStore.gridH) {
+        let key = '';
+        for (let x = 0; x < gridW; x++) {
+          for (let y = 0; y < gridH; y++) {
+            const stack = grid[x][y];
+            if (stack && stack.length > 0) {
+              key += `${x},${y}:`;
+              for (let i = 0; i < stack.length; i++) {
+                const it = stack[i];
+                key += `${it.cellId}_${it.face[0]}_${it.rot}_${it.mirrored ? 1 : 0};`;
+              }
+              key += '|';
+            }
+          }
+        }
+        return key;
+      },
+
+      // Check if grid matches target idiom in the target window (Supports Double-Sided verification!)
+      matchesTarget(grid, targetGroup, targetW = StateStore.targetW, targetH = StateStore.targetH) {
+        const bbox = FoldEngine.getBoundingBox(grid);
+        if (bbox.width !== targetW || bbox.height !== targetH) return false;
+
+        // 1. Verify FRONT side (top layer of each cell)
+        const visibleFrontChars = [];
+        for (let y = bbox.minY; y <= bbox.maxY; y++) {
+          for (let x = bbox.minX; x <= bbox.maxX; x++) {
+            const stack = grid[x][y];
+            if (!stack || stack.length === 0) return false;
+            const topItem = stack[stack.length - 1];
+            const cellDef = StateStore.cells[topItem.cellId];
+            if (!cellDef) return false;
+
+            const char = (topItem.face === 'front') ? cellDef.frontChar : cellDef.backChar;
+            if (topItem.rot !== 0 || topItem.mirrored) return false;
+            visibleFrontChars.push(char);
+          }
+        }
+
+        if (visibleFrontChars.length !== targetGroup.chars.length) return false;
+        for (let i = 0; i < visibleFrontChars.length; i++) {
+          if (visibleFrontChars[i] !== targetGroup.chars[i]) return false;
+        }
+
+        // 2. If target specifies BACK side (Double-sided puzzle), verify BACK side!
+        if (targetGroup.backChars && targetGroup.backChars.length === (targetW * targetH)) {
+          const visibleBackChars = [];
+          for (let r = 0; r < targetH; r++) {
+            for (let c = 0; c < targetW; c++) {
+              // When flipped horizontally, column c corresponds to world (maxX - c)
+              const worldX = bbox.maxX - c;
+              const worldY = bbox.minY + r;
+
+              const stack = grid[worldX][worldY];
+              if (!stack || stack.length === 0) return false;
+
+              // Visible layer from the back is the bottom layer of stack
+              const bottomItem = stack[0];
+              const cellDef = StateStore.cells[bottomItem.cellId];
+              if (!cellDef) return false;
+
+              // Facing from back is opposite of front
+              const backFace = (bottomItem.face === 'front') ? 'back' : 'front';
+              const char = (backFace === 'front') ? cellDef.frontChar : cellDef.backChar;
+
+              // Effective rotation when flipped horizontally
+              const rotBack = (360 - bottomItem.rot) % 360;
+              const mirroredBack = !bottomItem.mirrored;
+
+              if (rotBack !== 0 || mirroredBack) return false;
+              visibleBackChars.push(char);
+            }
+          }
+
+          for (let i = 0; i < visibleBackChars.length; i++) {
+            if (visibleBackChars[i] !== targetGroup.backChars[i]) return false;
+          }
+        }
+
+        return true;
+      },
+
+      getVisibleWord(grid) {
+        const bbox = FoldEngine.getBoundingBox(grid);
+        if (bbox.width !== 2 || bbox.height !== 2) return null;
+        let word = '';
+        for (let y = bbox.minY; y <= bbox.maxY; y++) {
+          for (let x = bbox.minX; x <= bbox.maxX; x++) {
+            const stack = grid[x][y];
+            if (!stack || stack.length === 0) return null;
+            const topItem = stack[stack.length - 1];
+            const cellDef = StateStore.cells[topItem.cellId];
+            const char = (topItem.face === 'front') ? cellDef.frontChar : cellDef.backChar;
+            word += char;
+          }
+        }
+        return word;
+      },
+
+      solveTarget(targetGroup, maxDepth = 6) {
+        const initialGrid = StateStore.grid;
+        const initialKey = this.getCanonicalKey(initialGrid);
+
+        const queue = [{
+          grid: initialGrid,
+          path: []
+        }];
+        const visited = new Set([initialKey]);
+        const solutions = [];
+
+        while (queue.length > 0) {
+          const current = queue.shift();
+
+          if (this.matchesTarget(current.grid, targetGroup)) {
+            solutions.push({
+              path: current.path,
+              stepsCount: current.path.length,
+              finalGrid: current.grid
+            });
+            if (solutions.length >= 8) break;
+          }
+
+          if (current.path.length >= maxDepth) continue;
+
+          const legalFolds = FoldEngine.getLegalFolds(current.grid);
+          for (let action of legalFolds) {
+            const nextGrid = FoldEngine.applyFold(current.grid, action);
+            if (!nextGrid) continue;
+
+            const key = this.getCanonicalKey(nextGrid);
+            if (!visited.has(key)) {
+              visited.add(key);
+              queue.push({
+                grid: nextGrid,
+                path: [...current.path, action]
+              });
+            }
+          }
+        }
+
+        return solutions;
+      },
+
+      checkTrapCollisions(maxDepth = 5) {
+        const traps = StateStore.trapIdioms.map(t => t.trim()).filter(t => t.length > 0);
+        if (traps.length === 0) return { collided: false, message: '尚未設定任何陷阱成語。' };
+
+        const queue = [{ grid: StateStore.grid, path: [] }];
+        const visited = new Set([this.getCanonicalKey(StateStore.grid)]);
+        const collisions = [];
+
+        while (queue.length > 0) {
+          const current = queue.shift();
+          const word = this.getVisibleWord(current.grid);
+          if (word && traps.includes(word)) {
+            collisions.push({
+              trapWord: word,
+              path: current.path
+            });
+            if (collisions.length >= 3) break;
+          }
+
+          if (current.path.length >= maxDepth) continue;
+
+          const legalFolds = FoldEngine.getLegalFolds(current.grid);
+          for (let action of legalFolds) {
+            const nextGrid = FoldEngine.applyFold(current.grid, action);
+            if (!nextGrid) continue;
+
+            const key = this.getCanonicalKey(nextGrid);
+            if (!visited.has(key)) {
+              visited.add(key);
+              queue.push({
+                grid: nextGrid,
+                path: [...current.path, action]
+              });
+            }
+          }
+        }
+
+        if (collisions.length > 0) {
+          const col = collisions[0];
+          const pathStr = col.path.map(p => `${p.type}${p.line}-${p.dir}(${p.style === 'valley' ? '谷' : '山'})`).join(' → ');
+          return {
+            collided: true,
+            message: `⚠️ 碰撞警告！陷阱成語「${col.trapWord}」在合法折疊路徑中被意外拼出！\n路徑：${pathStr || '初始狀態'}`
+          };
+        }
+
+        return {
+          collided: false,
+          message: `✅ 安全通過！已驗證所有合法折疊終態，陷阱成語 [${traps.join(', ')}] 皆無被意外湊出！`
+        };
+      },
+
+      validateMutualExclusivity() {
+        const results = [];
+        let allSolvable = true;
+
+        for (let grp of StateStore.targetGroups) {
+          const sols = this.solveTarget(grp, 5);
+          results.push({
+            group: grp,
+            solutionsCount: sols.length,
+            shortestSteps: sols.length > 0 ? sols[0].stepsCount : -1,
+            solvable: sols.length > 0
+          });
+          if (sols.length === 0) allSolvable = false;
+        }
+
+        const usedCellIds = new Set();
+        let overlap = false;
+        StateStore.targetGroups.forEach(grp => {
+          if (grp.cellIds) {
+            grp.cellIds.forEach(id => {
+              if (usedCellIds.has(id)) overlap = true;
+              usedCellIds.add(id);
+            });
+          }
+        });
+
+        return {
+          allSolvable,
+          overlap,
+          totalCellsUsed: usedCellIds.size,
+          groupResults: results
+        };
+      }
+    };
+
+    // --- 5. CanvasRenderer ---
+    const CanvasRenderer = {
+      canvas: null,
+      ctx: null,
+      cellSize: 90,
+
+      init() {
+        this.canvas = document.getElementById('origamiCanvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.resize();
+        window.addEventListener('resize', () => {
+          this.resize();
+          this.render();
+        });
+      },
+
+      resize() {
+        const rect = this.canvas.parentElement.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        this.canvas.width = rect.width * dpr;
+        this.canvas.height = rect.height * dpr;
+        this.canvas.style.width = `${rect.width}px`;
+        this.canvas.style.height = `${rect.height}px`;
+        this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      },
+
+      worldToScreen(wx, wy) {
+        const { scale, offsetX, offsetY } = StateStore.view;
+        const cx = this.canvas.parentElement.clientWidth / 2;
+        const cy = this.canvas.parentElement.clientHeight / 2;
+        return {
+          x: cx + offsetX + wx * scale,
+          y: cy + offsetY + wy * scale
+        };
+      },
+
+      screenToWorld(sx, sy) {
+        const { scale, offsetX, offsetY } = StateStore.view;
+        const cx = this.canvas.parentElement.clientWidth / 2;
+        const cy = this.canvas.parentElement.clientHeight / 2;
+        return {
+          x: (sx - cx - offsetX) / scale,
+          y: (sy - cy - offsetY) / scale
+        };
+      },
+
+      resetView() {
+        StateStore.view.scale = 1.0;
+        StateStore.view.offsetX = 0;
+        StateStore.view.offsetY = 0;
+        this.render();
+      },
+
+      render() {
+        if (!this.ctx) return;
+        const w = this.canvas.parentElement.clientWidth;
+        const h = this.canvas.parentElement.clientHeight;
+        const ctx = this.ctx;
+
+        ctx.clearRect(0, 0, w, h);
+
+        const { scale, offsetX, offsetY } = StateStore.view;
+        const cx = w / 2;
+        const cy = h / 2;
+
+        ctx.save();
+        ctx.translate(cx + offsetX, cy + offsetY);
+        ctx.scale(scale, scale);
+
+        const paperW = StateStore.gridW * this.cellSize;
+        const paperH = StateStore.gridH * this.cellSize;
+        const originX = -paperW / 2;
+        const originY = -paperH / 2;
+
+        // Background reference
+        ctx.strokeStyle = '#e2ded4';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(originX, originY, paperW, paperH);
+
+        // Paper Stacks
+        for (let x = 0; x < StateStore.gridW; x++) {
+          for (let y = 0; y < StateStore.gridH; y++) {
+            const stack = StateStore.grid[x][y];
+            if (stack && stack.length > 0) {
+              const px = originX + x * this.cellSize;
+              const py = originY + y * this.cellSize;
+              this.renderCellStack(ctx, px, py, stack, x, y);
+            }
+          }
+        }
+
+        // Crease / Fold Lines
+        this.renderCreaseLines(ctx, originX, originY);
+
+        ctx.restore();
+        this.updateHUD();
+      },
+
+      renderCellStack(ctx, px, py, stack, gridX, gridY) {
+        const size = this.cellSize;
+        const pad = 3;
+        const topItem = stack[stack.length - 1];
+        const cellDef = StateStore.cells[topItem.cellId];
+        const layerCount = stack.length;
+
+        ctx.save();
+
+        const shadowOffset = Math.min(layerCount * 1.5, 8);
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.12)';
+        ctx.shadowBlur = 6 + layerCount * 2;
+        ctx.shadowOffsetX = shadowOffset;
+        ctx.shadowOffsetY = shadowOffset;
+
+        const isBack = topItem.face === 'back';
+        ctx.fillStyle = isBack ? '#e8edf5' : '#fdfdfb';
+        ctx.beginPath();
+        ctx.roundRect(px + pad, py + pad, size - pad * 2, size - pad * 2, 8);
+        ctx.fill();
+
+        ctx.shadowColor = 'transparent';
+
+        ctx.strokeStyle = isBack ? '#94a3b8' : '#d1cbbe';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        ctx.save();
+        ctx.translate(px + size / 2, py + size / 2);
+
+        ctx.rotate((topItem.rot * Math.PI) / 180);
+        if (topItem.mirrored) {
+          ctx.scale(-1, 1);
+        }
+
+        const char = isBack ? (cellDef.backChar || '•') : (cellDef.frontChar || '•');
+        ctx.font = 'bold 36px -apple-system, "Noto Sans TC", sans-serif';
+        ctx.fillStyle = cellDef ? cellDef.frontColor : '#1e293b';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(char, 0, -2);
+
+        ctx.fillStyle = '#94a3b8';
+        ctx.beginPath();
+        ctx.arc(-size / 2 + 12, -size / 2 + 12, 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+
+        if (layerCount > 1) {
+          ctx.fillStyle = 'rgba(39, 39, 42, 0.85)';
+          ctx.beginPath();
+          ctx.roundRect(px + size - 28, py + 6, 22, 16, 4);
+          ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 10px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(`×${layerCount}`, px + size - 17, py + 14);
+        }
+
+        ctx.fillStyle = isBack ? '#3b82f6' : '#f59e0b';
+        ctx.beginPath();
+        ctx.roundRect(px + 6, py + 6, 18, 16, 4);
+        ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(isBack ? '反' : '正', px + 15, py + 14);
+
+        ctx.restore();
+      },
+
+      renderCreaseLines(ctx, originX, originY) {
+        const bbox = FoldEngine.getBoundingBox(StateStore.grid);
+        if (bbox.width <= 1 && bbox.height <= 1) return;
+
+        const style = StateStore.currentFoldStyle;
+        const isValley = (style === 'valley');
+        ctx.lineWidth = 2.5;
+
+        for (let line = bbox.minX + 1; line <= bbox.maxX; line++) {
+          const lx = originX + line * this.cellSize;
+          const y1 = originY + bbox.minY * this.cellSize;
+          const y2 = originY + (bbox.maxY + 1) * this.cellSize;
+
+          ctx.save();
+          if (isValley) {
+            ctx.strokeStyle = '#dc2626';
+            ctx.setLineDash([8, 5]);
+          } else {
+            ctx.strokeStyle = '#2563eb';
+            ctx.setLineDash([12, 4, 3, 4]);
+          }
+          ctx.beginPath();
+          ctx.moveTo(lx, y1);
+          ctx.lineTo(lx, y2);
+          ctx.stroke();
+
+          this.drawCreaseHandle(ctx, lx, y1 - 12, 'V', line, 'L2R');
+          this.drawCreaseHandle(ctx, lx, y2 + 12, 'V', line, 'R2L');
+          ctx.restore();
+        }
+
+        for (let line = bbox.minY + 1; line <= bbox.maxY; line++) {
+          const ly = originY + line * this.cellSize;
+          const x1 = originX + bbox.minX * this.cellSize;
+          const x2 = originX + (bbox.maxX + 1) * this.cellSize;
+
+          ctx.save();
+          if (isValley) {
+            ctx.strokeStyle = '#dc2626';
+            ctx.setLineDash([8, 5]);
+          } else {
+            ctx.strokeStyle = '#2563eb';
+            ctx.setLineDash([12, 4, 3, 4]);
+          }
+          ctx.beginPath();
+          ctx.moveTo(x1, ly);
+          ctx.lineTo(x2, ly);
+          ctx.stroke();
+
+          this.drawCreaseHandle(ctx, x1 - 12, ly, 'H', line, 'T2B');
+          this.drawCreaseHandle(ctx, x2 + 12, ly, 'H', line, 'B2T');
+          ctx.restore();
+        }
+      },
+
+      drawCreaseHandle(ctx, hx, hy, type, line, dir) {
+        ctx.save();
+        ctx.setLineDash([]);
+        const isValley = (StateStore.currentFoldStyle === 'valley');
+        ctx.fillStyle = isValley ? '#fee2e2' : '#dbeafe';
+        ctx.strokeStyle = isValley ? '#dc2626' : '#2563eb';
+        ctx.lineWidth = 1.5;
+
+        ctx.beginPath();
+        ctx.arc(hx, hy, 12, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = isValley ? '#dc2626' : '#2563eb';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const arrow = (dir === 'L2R' ? '▶' : (dir === 'R2L' ? '◀' : (dir === 'T2B' ? '▼' : '▲')));
+        ctx.fillText(arrow, hx, hy);
+        ctx.restore();
+      },
+
+      updateHUD() {
+        const zoomEl = document.getElementById('zoomReadout');
+        if (zoomEl) {
+          zoomEl.innerText = `${Math.round(StateStore.view.scale * 100)}%`;
+        }
+
+        const activeGroup = StateStore.targetGroups.find(g => g.id === StateStore.activeGroupId);
+        if (activeGroup) {
+          document.getElementById('targetHUDName').innerText = activeGroup.name;
+          const miniGridFront = document.getElementById('targetHUDGridFront');
+          miniGridFront.innerHTML = activeGroup.chars.map((ch, idx) => `
+            <div class="target-cell-mini" style="color:${activeGroup.color};">
+              <span class="cell-order">${idx + 1}</span>${ch}
+            </div>
+          `).join('');
+
+          const backCol = document.getElementById('targetHUDBackCol');
+          if (activeGroup.backChars && activeGroup.backChars.length === 4) {
+            backCol.style.display = 'block';
+            const miniGridBack = document.getElementById('targetHUDGridBack');
+            miniGridBack.innerHTML = activeGroup.backChars.map((ch, idx) => `
+              <div class="target-cell-mini" style="background:var(--paper-back); color:#3b82f6;">
+                <span class="cell-order">${idx + 1}</span>${ch}
+              </div>
+            `).join('');
+          } else {
+            backCol.style.display = 'none';
+          }
+
+          const isMatched = SolverValidator.matchesTarget(StateStore.grid, activeGroup);
+          const badge = document.getElementById('matchStatusBadge');
+          if (isMatched) {
+            badge.innerText = '🎉 已成功拼出！';
+            badge.style.color = 'var(--accent-success)';
+          } else {
+            badge.innerText = '未達成';
+            badge.style.color = 'var(--accent-warning)';
+          }
+        }
+
+        const stepInfo = document.getElementById('stepInfo');
+        if (stepInfo) {
+          stepInfo.innerText = `步數: ${StateStore.currentStepIndex} / ${StateStore.foldHistory.length}`;
+        }
+      }
+    };
+
+    // --- 6. InputController ---
+    const InputController = {
+      activePointers: new Map(),
+      isPanning: false,
+      startPanX: 0,
+      startPanY: 0,
+      initialPinchDist: 0,
+      initialScale: 1.0,
+
+      init() {
+        const canvas = CanvasRenderer.canvas;
+
+        canvas.addEventListener('pointerdown', (e) => this.onPointerDown(e));
+        canvas.addEventListener('pointermove', (e) => this.onPointerMove(e));
+        canvas.addEventListener('pointerup', (e) => this.onPointerUp(e));
+        canvas.addEventListener('pointercancel', (e) => this.onPointerUp(e));
+        canvas.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
+
+        document.getElementById('btnZoomIn').addEventListener('click', () => this.zoom(1.2));
+        document.getElementById('btnZoomOut').addEventListener('click', () => this.zoom(0.8));
+        document.getElementById('btnResetView').addEventListener('click', () => CanvasRenderer.resetView());
+        document.getElementById('btnFlipPaper').addEventListener('click', () => {
+          StateStore.grid = FoldEngine.flipEntirePaper(StateStore.grid);
+          CanvasRenderer.render();
+        });
+        document.getElementById('btnFlipPaperAction').addEventListener('click', () => {
+          StateStore.grid = FoldEngine.flipEntirePaper(StateStore.grid);
+          CanvasRenderer.render();
+        });
+      },
+
+      onPointerDown(e) {
+        e.preventDefault();
+        CanvasRenderer.canvas.setPointerCapture(e.pointerId);
+        this.activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+        if (this.activePointers.size === 1) {
+          const rect = CanvasRenderer.canvas.getBoundingClientRect();
+          const screenX = e.clientX - rect.left;
+          const screenY = e.clientY - rect.top;
+          const world = CanvasRenderer.screenToWorld(screenX, screenY);
+
+          const clickedHandle = this.findCreaseHandle(world.x, world.y);
+          if (clickedHandle) {
+            this.executeFold(clickedHandle);
+            return;
+          }
+
+          this.isPanning = true;
+          this.startPanX = e.clientX - StateStore.view.offsetX;
+          this.startPanY = e.clientY - StateStore.view.offsetY;
+        } else if (this.activePointers.size === 2) {
+          this.isPanning = false;
+          const pts = Array.from(this.activePointers.values());
+          this.initialPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+          this.initialScale = StateStore.view.scale;
+        }
+      },
+
+      onPointerMove(e) {
+        if (!this.activePointers.has(e.pointerId)) return;
+        this.activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+        if (this.activePointers.size === 1 && this.isPanning) {
+          StateStore.view.offsetX = e.clientX - this.startPanX;
+          StateStore.view.offsetY = e.clientY - this.startPanY;
+          CanvasRenderer.render();
+        } else if (this.activePointers.size === 2) {
+          const pts = Array.from(this.activePointers.values());
+          const currentDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+          if (this.initialPinchDist > 0) {
+            const factor = currentDist / this.initialPinchDist;
+            const newScale = Math.max(0.3, Math.min(3.5, this.initialScale * factor));
+            StateStore.view.scale = newScale;
+            CanvasRenderer.render();
+          }
+        }
+      },
+
+      onPointerUp(e) {
+        this.activePointers.delete(e.pointerId);
+        if (this.activePointers.size === 0) {
+          this.isPanning = false;
+        } else if (this.activePointers.size === 1) {
+          const remaining = Array.from(this.activePointers.values())[0];
+          this.isPanning = true;
+          this.startPanX = remaining.x - StateStore.view.offsetX;
+          this.startPanY = remaining.y - StateStore.view.offsetY;
+        }
+      },
+
+      onWheel(e) {
+        e.preventDefault();
+        const zoomFactor = e.deltaY < 0 ? 1.12 : 0.89;
+        this.zoom(zoomFactor, e.clientX, e.clientY);
+      },
+
+      zoom(factor, anchorScreenX, anchorScreenY) {
+        const oldScale = StateStore.view.scale;
+        const newScale = Math.max(0.35, Math.min(3.5, oldScale * factor));
+
+        if (anchorScreenX !== undefined && anchorScreenY !== undefined) {
+          const rect = CanvasRenderer.canvas.getBoundingClientRect();
+          const sx = anchorScreenX - rect.left - rect.width / 2;
+          const sy = anchorScreenY - rect.top - rect.height / 2;
+
+          StateStore.view.offsetX -= (sx - StateStore.view.offsetX) * (newScale / oldScale - 1);
+          StateStore.view.offsetY -= (sy - StateStore.view.offsetY) * (newScale / oldScale - 1);
+        }
+
+        StateStore.view.scale = newScale;
+        CanvasRenderer.render();
+      },
+
+      findCreaseHandle(wx, wy) {
+        const cellSize = CanvasRenderer.cellSize;
+        const paperW = StateStore.gridW * cellSize;
+        const paperH = StateStore.gridH * cellSize;
+        const originX = -paperW / 2;
+        const originY = -paperH / 2;
+
+        const bbox = FoldEngine.getBoundingBox(StateStore.grid);
+        if (bbox.width <= 1 && bbox.height <= 1) return null;
+
+        for (let line = bbox.minX + 1; line <= bbox.maxX; line++) {
+          const lx = originX + line * cellSize;
+          const y1 = originY + bbox.minY * cellSize - 12;
+          const y2 = originY + (bbox.maxY + 1) * cellSize + 12;
+
+          if (Math.hypot(wx - lx, wy - y1) <= 16) {
+            return { type: 'V', line, dir: 'L2R', style: StateStore.currentFoldStyle };
+          }
+          if (Math.hypot(wx - lx, wy - y2) <= 16) {
+            return { type: 'V', line, dir: 'R2L', style: StateStore.currentFoldStyle };
+          }
+        }
+
+        for (let line = bbox.minY + 1; line <= bbox.maxY; line++) {
+          const ly = originY + line * cellSize;
+          const x1 = originX + bbox.minX * cellSize - 12;
+          const x2 = originX + (bbox.maxX + 1) * cellSize + 12;
+
+          if (Math.hypot(wx - x1, wy - ly) <= 16) {
+            return { type: 'H', line, dir: 'T2B', style: StateStore.currentFoldStyle };
+          }
+          if (Math.hypot(wx - x2, wy - ly) <= 16) {
+            return { type: 'H', line, dir: 'B2T', style: StateStore.currentFoldStyle };
+          }
+        }
+
+        return null;
+      },
+
+      executeFold(action) {
+        const nextGrid = FoldEngine.applyFold(StateStore.grid, action);
+        if (!nextGrid) {
+          alert('此折線超出邊界或不符合目前折疊規則！');
+          return;
+        }
+
+        StateStore.foldHistory.push(action);
+        StateStore.currentStepIndex = StateStore.foldHistory.length;
+        StateStore.grid = nextGrid;
+        CanvasRenderer.render();
+      }
+    };
+
+    // --- 7. Presets ---
+    const Presets = [
+      {
+        id: 'p0',
+        title: '🌟 五圖取四雙面陷阱實戰神題 (4真目標 + 1假陷阱)',
+        desc: '雙面 4×4 印製，提供 5 組目標候選圖，其中 4 組可解出，第 5 組為設計者刻意佈置的陷阱干擾項！',
+        gridW: 4, gridH: 4, paperMode: 'double',
+        targetGroups: [
+          { id: 1, name: '目標一 (風調雨順)', chars: ['風', '調', '雨', '順'], backChars: ['國', '泰', '民', '安'], color: '#ef4444', cellIds: [0, 1, 4, 5] },
+          { id: 2, name: '目標二 (國泰民安)', chars: ['國', '泰', '民', '安'], backChars: ['風', '調', '雨', '順'], color: '#3b82f6', cellIds: [2, 3, 6, 7] },
+          { id: 3, name: '目標三 (心想事成)', chars: ['心', '想', '事', '成'], backChars: ['萬', '事', '如', '意'], color: '#10b981', cellIds: [8, 9, 12, 13] },
+          { id: 4, name: '目標四 (萬事如意)', chars: ['萬', '事', '如', '意'], backChars: ['心', '想', '事', '成'], color: '#f59e0b', cellIds: [10, 11, 14, 15] }
+        ],
+        fiveCandidates: [
+          { id: 1, name: '候選圖 A (真)', chars: ['風', '調', '雨', '順'], backChars: ['國', '泰', '民', '安'] },
+          { id: 2, name: '候選圖 B (真)', chars: ['國', '泰', '民', '安'], backChars: ['風', '調', '雨', '順'] },
+          { id: 3, name: '候選圖 C (真)', chars: ['心', '想', '事', '成'], backChars: ['萬', '事', '如', '意'] },
+          { id: 4, name: '候選圖 D (真)', chars: ['萬', '事', '如', '意'], backChars: ['心', '想', '事', '成'] },
+          { id: 5, name: '候選圖 E (陷阱干擾)', chars: ['風', '泰', '事', '順'], backChars: ['妖', '魔', '鬼', '怪'] }
+        ],
+        traps: ['風泰事順', '妖魔鬼怪']
+      },
+      {
+        id: 'p1',
+        title: '經典四成語互斥神級折紙 (4×4 單面)',
+        desc: '16格全覆蓋，包含「風調雨順、國泰民安、心想事成、萬事如意」4組解，互不重疊且折法獨立。',
+        gridW: 4, gridH: 4, paperMode: 'single',
+        targetGroups: [
+          { id: 1, name: '風調雨順', chars: ['風', '調', '雨', '順'], color: '#ef4444', cellIds: [0, 1, 4, 5] },
+          { id: 2, name: '國泰民安', chars: ['國', '泰', '民', '安'], color: '#3b82f6', cellIds: [2, 3, 6, 7] },
+          { id: 3, name: '心想事成', chars: ['心', '想', '事', '成'], color: '#10b981', cellIds: [8, 9, 12, 13] },
+          { id: 4, name: '萬事如意', chars: ['萬', '事', '如', '意'], color: '#f59e0b', cellIds: [10, 11, 14, 15] }
+        ],
+        fiveCandidates: [],
+        traps: ['妖魔鬼怪', '偷天換日']
+      },
+      {
+        id: 'p2',
+        title: '分散跳格高難度挑戰 (Dispersed 4×4)',
+        desc: '非連續相鄰排列，需經由多次翻轉與山谷對稱疊合才能拼合為 2×2 成語。',
+        gridW: 4, gridH: 4, paperMode: 'single',
+        targetGroups: [
+          { id: 1, name: '日新月異', chars: ['日', '新', '月', '異'], color: '#8b5cf6', cellIds: [0, 3, 12, 15] },
+          { id: 2, name: '萬象更新', chars: ['萬', '象', '更', '新'], color: '#06b6d4', cellIds: [5, 6, 9, 10] },
+          { id: 3, name: '吉祥如意', chars: ['吉', '祥', '如', '意'], color: '#10b981', cellIds: [1, 2, 4, 7] },
+          { id: 4, name: '四季平安', chars: ['四', '季', '平', '安'], color: '#f97316', cellIds: [8, 11, 13, 14] }
+        ],
+        fiveCandidates: [],
+        traps: ['風火連天']
+      }
+    ];
+
+    // --- 8. UIController ---
+    const UIController = {
+      editFace: 'front', // 'front' | 'back'
+
+      init() {
+        this.bindNavTabs();
+        this.bindDesignerControls();
+        this.bindSolverControls();
+        this.bindPlayerControls();
+        this.bindExportModal();
+        this.bindGridEditor();
+        this.renderPresets();
+        this.renderTargetGroups();
+        this.renderFiveCandidateInputs();
+      },
+
+      bindNavTabs() {
+        const tabs = document.querySelectorAll('.nav-tab-btn');
+        tabs.forEach(tab => {
+          tab.addEventListener('click', () => {
+            tabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+
+            const tabName = tab.dataset.tab;
+            document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
+            const targetPanel = document.getElementById(`panel-${tabName}`);
+            if (targetPanel) targetPanel.style.display = 'block';
+          });
+        });
+      },
+
+      bindDesignerControls() {
+        document.getElementById('gridDimSelect').addEventListener('change', (e) => {
+          const [w, h] = e.target.value.split('x').map(Number);
+          StateStore.gridW = w;
+          StateStore.gridH = h;
+          document.getElementById('gridBadge').innerText = `${w} × ${h} ${StateStore.paperMode === 'single' ? '單面' : '雙面'}`;
+          StateStore.initDefaultGrid();
+          CanvasRenderer.render();
+          this.renderTargetGroups();
+        });
+
+        document.getElementById('paperModeSelect').addEventListener('change', (e) => {
+          StateStore.paperMode = e.target.value;
+          document.getElementById('gridBadge').innerText = `${StateStore.gridW} × ${StateStore.gridH} ${StateStore.paperMode === 'single' ? '單面' : '雙面'}`;
+          CanvasRenderer.render();
+        });
+
+        document.getElementById('ruleModeSelect').addEventListener('change', (e) => {
+          StateStore.ruleMode = e.target.value;
+        });
+
+        document.getElementById('btnCheckTraps').addEventListener('click', () => {
+          const input = document.getElementById('trapIdiomsInput').value;
+          StateStore.trapIdioms = input.split(',').map(s => s.trim()).filter(Boolean);
+          const result = SolverValidator.checkTrapCollisions(5);
+          alert(result.message);
+        });
+
+        document.getElementById('btnAddGroup').addEventListener('click', () => {
+          const name = prompt('請輸入新增成語名稱（4字）：', '心想事成');
+          if (!name || name.trim().length !== 4) return;
+          const newId = StateStore.targetGroups.length + 1;
+          const colors = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
+          const color = colors[newId % colors.length];
+          StateStore.targetGroups.push({
+            id: newId,
+            name: name.trim(),
+            chars: name.trim().split(''),
+            backChars: [],
+            color: color,
+            cellIds: []
+          });
+          this.renderTargetGroups();
+        });
+
+        document.getElementById('btnStampWorkflow').addEventListener('click', () => {
+          alert('【先折後填模式】\n請先在畫布上自由試折紙張至 2×2 目標尺寸。折好後，點擊畫布上的四格直接蓋印目標文字，最後點擊「展開原紙」即可自動反求原紙印製配置！');
+        });
+      },
+
+      // 16-Cell Visual Editor
+      bindGridEditor() {
+        const modal = document.getElementById('gridEditorModal');
+        const btnOpen = document.getElementById('btnOpenGridEditor');
+        const btnClose = document.getElementById('btnCloseGridEditor');
+        const btnSave = document.getElementById('btnSaveGridEditor');
+
+        btnOpen.addEventListener('click', () => {
+          this.editFace = 'front';
+          document.getElementById('tabEditFront').classList.add('active');
+          document.getElementById('tabEditBack').classList.remove('active');
+          this.renderGridEditorCells();
+          modal.classList.add('open');
+        });
+
+        btnClose.addEventListener('click', () => modal.classList.remove('open'));
+
+        document.getElementById('tabEditFront').addEventListener('click', () => {
+          this.editFace = 'front';
+          document.getElementById('tabEditFront').classList.add('active');
+          document.getElementById('tabEditBack').classList.remove('active');
+          this.renderGridEditorCells();
+        });
+
+        document.getElementById('tabEditBack').addEventListener('click', () => {
+          this.editFace = 'back';
+          document.getElementById('tabEditBack').classList.add('active');
+          document.getElementById('tabEditFront').classList.remove('active');
+          this.renderGridEditorCells();
+        });
+
+        btnSave.addEventListener('click', () => {
+          modal.classList.remove('open');
+          StateStore.resetFoldState();
+          CanvasRenderer.render();
+          this.renderTargetGroups();
+          alert('已成功儲存題目原紙配置！');
+        });
+
+        document.getElementById('btnQuickFillPrompt').addEventListener('click', () => {
+          const text = prompt(`請輸入 ${this.editFace === 'front' ? '正面' : '反面'} 16 格的連續 16 個文字或符號（依左至右、上至下排列）：`, '風調雨順國泰民安心想事成萬事如意');
+          if (text && text.trim().length >= 16) {
+            const chars = text.trim().split('');
+            for (let i = 0; i < 16; i++) {
+              if (StateStore.cells[i]) {
+                if (this.editFace === 'front') {
+                  StateStore.cells[i].frontChar = chars[i];
+                } else {
+                  StateStore.cells[i].backChar = chars[i];
+                }
+              }
+            }
+            this.renderGridEditorCells();
+          }
+        });
+      },
+
+      renderGridEditorCells() {
+        const container = document.getElementById('gridEditorContainer');
+        container.innerHTML = '';
+
+        StateStore.cells.forEach(cell => {
+          const cellBox = document.createElement('div');
+          cellBox.style.background = (this.editFace === 'front') ? '#faf9f6' : '#e8edf5';
+          cellBox.style.border = '1px solid var(--border-color)';
+          cellBox.style.borderRadius = '6px';
+          cellBox.style.padding = '8px';
+          cellBox.style.display = 'flex';
+          cellBox.style.flexDirection = 'column';
+          cellBox.style.alignItems = 'center';
+          cellBox.style.gap = '4px';
+
+          const val = (this.editFace === 'front') ? (cell.frontChar || '') : (cell.backChar || '');
+          cellBox.innerHTML = `
+            <div style="font-size:10px; color:var(--text-muted); width:100%; display:flex; justify-content:space-between;">
+              <span>#${cell.id}</span>
+              <span>(${cell.x},${cell.y})</span>
+            </div>
+            <input type="text" maxlength="2" value="${val}" style="width:40px; height:40px; text-align:center; font-size:20px; font-weight:bold; border:1px solid #cbd5e1; border-radius:4px;" data-cell-id="${cell.id}">
+          `;
+
+          const input = cellBox.querySelector('input');
+          input.addEventListener('input', (e) => {
+            const v = e.target.value.trim();
+            if (this.editFace === 'front') {
+              cell.frontChar = v;
+            } else {
+              cell.backChar = v;
+            }
+          });
+
+          container.appendChild(cellBox);
+        });
+      },
+
+      renderTargetGroups() {
+        const container = document.getElementById('targetGroupsContainer');
+        if (!container) return;
+        container.innerHTML = '';
+
+        StateStore.targetGroups.forEach(grp => {
+          const card = document.createElement('div');
+          card.className = `target-group-card ${grp.id === StateStore.activeGroupId ? 'active' : ''}`;
+          card.innerHTML = `
+            <div class="group-header">
+              <span class="group-name">
+                <span class="color-dot" style="background:${grp.color};"></span>
+                ${grp.name}
+              </span>
+              <span style="font-size:11px; color:var(--text-muted);">${grp.cellIds ? grp.cellIds.length : 4} 格</span>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:4px;">
+              <div class="chars-display">
+                <span style="font-size:10px; color:var(--text-muted); align-self:center; width:28px;">正：</span>
+                ${grp.chars.map(c => `<div class="char-badge" style="color:${grp.color};">${c}</div>`).join('')}
+              </div>
+              ${grp.backChars && grp.backChars.length > 0 ? `
+              <div class="chars-display">
+                <span style="font-size:10px; color:var(--text-muted); align-self:center; width:28px;">反：</span>
+                ${grp.backChars.map(c => `<div class="char-badge" style="color:#3b82f6; background:#e8edf5;">${c}</div>`).join('')}
+              </div>
+              ` : ''}
+            </div>
+          `;
+          card.addEventListener('click', () => {
+            StateStore.activeGroupId = grp.id;
+            this.renderTargetGroups();
+            CanvasRenderer.render();
+          });
+          container.appendChild(card);
+        });
+
+        document.getElementById('coverageBadge').innerText = `${StateStore.targetGroups.length} 組目標`;
+      },
+
+      renderFiveCandidateInputs() {
+        const container = document.getElementById('fiveCandidatesContainer');
+        if (!container) return;
+        container.innerHTML = '';
+
+        StateStore.fiveCandidates.forEach((cand, idx) => {
+          const div = document.createElement('div');
+          div.className = 'candidate-card';
+          div.id = `candCard_${cand.id}`;
+          div.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <span style="font-weight:bold; font-size:12px;">${cand.name}</span>
+              <span class="cand-badge" style="font-size:10px; color:var(--text-muted);">候選中</span>
+            </div>
+            <div class="form-row">
+              <input type="text" class="input-text" style="font-size:12px; min-height:36px;" value="${cand.chars.join('')}" placeholder="正面 4 字" data-cand-id="${cand.id}" data-type="front">
+              <input type="text" class="input-text" style="font-size:12px; min-height:36px;" value="${cand.backChars ? cand.backChars.join('') : ''}" placeholder="反面 4 字 (可選)" data-cand-id="${cand.id}" data-type="back">
+            </div>
+          `;
+
+          const frontInp = div.querySelector('input[data-type="front"]');
+          frontInp.addEventListener('change', (e) => {
+            cand.chars = e.target.value.trim().split('');
+          });
+
+          const backInp = div.querySelector('input[data-type="back"]');
+          backInp.addEventListener('change', (e) => {
+            cand.backChars = e.target.value.trim().split('');
+          });
+
+          container.appendChild(div);
+        });
+      },
+
+      bindSolverControls() {
+        // Run Solver
+        document.getElementById('btnRunSolver').addEventListener('click', () => {
+          const activeGroup = StateStore.targetGroups.find(g => g.id === StateStore.activeGroupId);
+          if (!activeGroup) return;
+
+          const statusBox = document.getElementById('solverStatusBox');
+          statusBox.style.display = 'block';
+          statusBox.innerHTML = '<div style="font-size:12px; color:var(--primary); font-weight:bold;">⚡ 搜尋狀態圖中...</div>';
+
+          setTimeout(() => {
+            const solutions = SolverValidator.solveTarget(activeGroup, 6);
+            StateStore.solutions = solutions;
+            this.renderSolutionsList(solutions);
+
+            const isUnique = (solutions.length === 1);
+            statusBox.innerHTML = `
+              <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:10px; font-size:12px;">
+                <div>🎯 目標：<b>${activeGroup.name}</b></div>
+                <div>🔍 找到可行折疊路徑：<b>${solutions.length}</b> 組</div>
+                <div>⚡ 最短步數：<b>${solutions.length > 0 ? solutions[0].stepsCount : '無解'}</b> 步</div>
+                <div>🛡️ 路徑唯一性：<b>${solutions.length === 0 ? '無解' : (isUnique ? '唯一解 (難度高)' : '多組解')}</b></div>
+              </div>
+            `;
+          }, 30);
+        });
+
+        // Five Targets Batch Filter & Trap Identifier
+        document.getElementById('btnFilterFiveTargets').addEventListener('click', () => {
+          const reportBox = document.getElementById('fiveFilterReport');
+          reportBox.style.display = 'block';
+          reportBox.innerHTML = '<div style="font-size:12px; color:var(--primary); font-weight:bold;">⚡ 正在探索全狀態空間並比對五張目標圖...</div>';
+
+          setTimeout(() => {
+            let validCount = 0;
+            let trapCount = 0;
+            const results = [];
+
+            StateStore.fiveCandidates.forEach(cand => {
+              const sols = SolverValidator.solveTarget(cand, 6);
+              const isSolvable = (sols.length > 0);
+              const cardEl = document.getElementById(`candCard_${cand.id}`);
+
+              if (isSolvable) {
+                validCount++;
+                if (cardEl) {
+                  cardEl.className = 'candidate-card is-valid';
+                  cardEl.querySelector('.cand-badge').innerHTML = `<b style="color:#15803d;">✅ 可折出 (${sols[0].stepsCount} 步)</b>`;
+                }
+                results.push({ cand, solvable: true, shortest: sols[0].stepsCount, path: sols[0].path });
+              } else {
+                trapCount++;
+                if (cardEl) {
+                  cardEl.className = 'candidate-card is-trap';
+                  cardEl.querySelector('.cand-badge').innerHTML = `<b style="color:#dc2626;">❌ 陷阱干擾項！</b>`;
+                }
+                results.push({ cand, solvable: false, shortest: -1 });
+              }
+            });
+
+            let html = `
+              <div style="background:#fafaf9; border:1px solid var(--border-color); border-radius:8px; padding:12px; font-size:12px;">
+                <div style="font-weight:bold; font-size:13px; margin-bottom:8px;">
+                  📊 五圖分析結果：找到 ${validCount} 個真目標，確認 ${trapCount} 個陷阱！
+                </div>
+            `;
+
+            results.forEach((r, i) => {
+              if (r.solvable) {
+                html += `
+                  <div style="margin-bottom:6px; color:#15803d; display:flex; justify-content:space-between; align-items:center;">
+                    <span><b>${r.cand.name}</b>：最短 ${r.shortest} 步可折出</span>
+                    <button class="btn btn-secondary" style="padding:2px 8px; min-height:26px; font-size:10px;" onclick="UIController.loadDirectPath(${i})">載入演練</button>
+                  </div>
+                `;
+              } else {
+                html += `
+                  <div style="margin-bottom:6px; color:#dc2626;">
+                    <span><b>${r.cand.name}</b>：🚫 經全搜尋確定為【陷阱干擾項】，任何折法皆無法湊出！</span>
+                  </div>
+                `;
+              }
+            });
+
+            html += `</div>`;
+            reportBox.innerHTML = html;
+            window._fiveResults = results;
+          }, 30);
+        });
+
+        // Validate Mutually Exclusive
+        document.getElementById('btnValidateMutual').addEventListener('click', () => {
+          const res = SolverValidator.validateMutualExclusivity();
+          const box = document.getElementById('mutualResultBox');
+          box.style.display = 'block';
+
+          let html = `
+            <div style="background:#fafaf9; border:1px solid var(--border-color); border-radius:8px; padding:10px;">
+              <div style="font-weight:bold; margin-bottom:6px;">
+                ${res.allSolvable ? '✅ 全數目標可解' : '⚠️ 部分目標無解'} ｜ 格面獨立性：${res.overlap ? '❌ 有重疊格' : '✅ 互不重疊完全獨立'}
+              </div>
+              <ul style="padding-left:18px;">
+          `;
+          res.groupResults.forEach(r => {
+            html += `<li>「${r.group.name}」：${r.solvable ? `最短 ${r.shortestSteps} 步可成` : '無解'}</li>`;
+          });
+          html += `</ul></div>`;
+          box.innerHTML = html;
+        });
+      },
+
+      loadDirectPath(candidateIndex) {
+        if (!window._fiveResults || !window._fiveResults[candidateIndex]) return;
+        const res = window._fiveResults[candidateIndex];
+        if (!res.solvable) return;
+
+        StateStore.resetFoldState();
+        StateStore.foldHistory = [...res.path];
+        StateStore.currentStepIndex = 0;
+        CanvasRenderer.render();
+        alert(`已載入「${res.cand.name}」之 ${res.path.length} 步折疊路徑！可點擊底部播放列 ▶ 逐步觀看。`);
+      },
+
+      renderSolutionsList(solutions) {
+        const container = document.getElementById('solutionsListContainer');
+        document.getElementById('solutionsCountBadge').innerText = `${solutions.length} 組`;
+        container.innerHTML = '';
+
+        if (solutions.length === 0) {
+          container.innerHTML = `
+            <div style="font-size: 12px; color: var(--accent-valley); text-align: center; padding: 20px 0;">
+              未找到在 6 步內拼出此目標的折疊路徑！請檢查原紙文字配置或確認是否為陷阱項。
+            </div>
+          `;
+          return;
+        }
+
+        solutions.forEach((sol, idx) => {
+          const card = document.createElement('div');
+          card.className = `solution-item ${idx === StateStore.activeSolutionIndex ? 'active' : ''}`;
+          card.innerHTML = `
+            <div class="solution-header">
+              <span>解法 #${idx + 1} (${sol.stepsCount} 步)</span>
+              <button class="btn btn-secondary" style="padding:2px 8px; min-height:28px; font-size:11px;">載入演練</button>
+            </div>
+            <div class="solution-steps">
+              ${sol.path.map((p, pIdx) => `
+                <span class="step-tag ${p.style}">
+                  ${pIdx + 1}. ${p.type}${p.line} ${p.dir} (${p.style === 'valley' ? '谷摺' : '山摺'})
+                </span>
+              `).join('')}
+            </div>
+          `;
+          card.addEventListener('click', () => {
+            StateStore.activeSolutionIndex = idx;
+            document.querySelectorAll('.solution-item').forEach(el => el.classList.remove('active'));
+            card.classList.add('active');
+            this.loadSolutionToPlayer(sol);
+          });
+          container.appendChild(card);
+        });
+      },
+
+      loadSolutionToPlayer(sol) {
+        StateStore.resetFoldState();
+        StateStore.foldHistory = [...sol.path];
+        StateStore.currentStepIndex = 0;
+        CanvasRenderer.render();
+      },
+
+      bindPlayerControls() {
+        const btnValley = document.getElementById('btnToggleValley');
+        const btnMountain = document.getElementById('btnToggleMountain');
+
+        btnValley.addEventListener('click', () => {
+          StateStore.currentFoldStyle = 'valley';
+          btnValley.classList.add('active');
+          btnMountain.classList.remove('active');
+          CanvasRenderer.render();
+        });
+
+        btnMountain.addEventListener('click', () => {
+          StateStore.currentFoldStyle = 'mountain';
+          btnMountain.classList.add('active');
+          btnValley.classList.remove('active');
+          CanvasRenderer.render();
+        });
+
+        document.getElementById('btnStepFirst').addEventListener('click', () => {
+          StateStore.resetFoldState();
+          CanvasRenderer.render();
+        });
+
+        document.getElementById('btnStepPrev').addEventListener('click', () => {
+          if (StateStore.currentStepIndex > 0) {
+            StateStore.currentStepIndex--;
+            this.rebuildGridToStep(StateStore.currentStepIndex);
+            CanvasRenderer.render();
+          }
+        });
+
+        document.getElementById('btnStepNext').addEventListener('click', () => {
+          if (StateStore.currentStepIndex < StateStore.foldHistory.length) {
+            const action = StateStore.foldHistory[StateStore.currentStepIndex];
+            StateStore.grid = FoldEngine.applyFold(StateStore.grid, action);
+            StateStore.currentStepIndex++;
+            CanvasRenderer.render();
+          }
+        });
+
+        document.getElementById('btnStepLast').addEventListener('click', () => {
+          while (StateStore.currentStepIndex < StateStore.foldHistory.length) {
+            const action = StateStore.foldHistory[StateStore.currentStepIndex];
+            StateStore.grid = FoldEngine.applyFold(StateStore.grid, action);
+            StateStore.currentStepIndex++;
+          }
+          CanvasRenderer.render();
+        });
+
+        const btnPlay = document.getElementById('btnStepPlay');
+        btnPlay.addEventListener('click', () => {
+          if (StateStore.isPlaying) {
+            clearInterval(StateStore.playTimer);
+            StateStore.isPlaying = false;
+            btnPlay.innerText = '▶';
+          } else {
+            if (StateStore.currentStepIndex >= StateStore.foldHistory.length) {
+              StateStore.resetFoldState();
+            }
+            StateStore.isPlaying = true;
+            btnPlay.innerText = '⏸';
+            StateStore.playTimer = setInterval(() => {
+              if (StateStore.currentStepIndex < StateStore.foldHistory.length) {
+                const action = StateStore.foldHistory[StateStore.currentStepIndex];
+                StateStore.grid = FoldEngine.applyFold(StateStore.grid, action);
+                StateStore.currentStepIndex++;
+                CanvasRenderer.render();
+              } else {
+                clearInterval(StateStore.playTimer);
+                StateStore.isPlaying = false;
+                btnPlay.innerText = '▶';
+              }
+            }, 800);
+          }
+        });
+
+        document.getElementById('btnHint').addEventListener('click', () => {
+          const activeGroup = StateStore.targetGroups.find(g => g.id === StateStore.activeGroupId);
+          if (!activeGroup) return;
+          const sols = SolverValidator.solveTarget(activeGroup, 5);
+          if (sols.length > 0) {
+            const nextAction = sols[0].path[0];
+            const typeStr = (nextAction.type === 'V') ? `垂直第 ${nextAction.line} 線` : `水平第 ${nextAction.line} 線`;
+            const styleStr = (nextAction.style === 'valley') ? '谷摺' : '山摺';
+            alert(`💡 提示下一步：\n沿著「${typeStr}」執行【${styleStr}】(${nextAction.dir})！`);
+          } else {
+            alert('目前狀態無有效解法，建議重設展開！');
+          }
+        });
+
+        document.getElementById('btnResetPuzzle').addEventListener('click', () => {
+          StateStore.resetFoldState();
+          CanvasRenderer.render();
+        });
+      },
+
+      rebuildGridToStep(targetStep) {
+        StateStore.resetFoldState();
+        for (let i = 0; i < targetStep; i++) {
+          const act = StateStore.foldHistory[i];
+          StateStore.grid = FoldEngine.applyFold(StateStore.grid, act);
+        }
+        StateStore.currentStepIndex = targetStep;
+      },
+
+      renderPresets() {
+        const container = document.getElementById('presetsListContainer');
+        if (!container) return;
+        container.innerHTML = '';
+
+        Presets.forEach(preset => {
+          const card = document.createElement('div');
+          card.className = 'target-group-card';
+          card.innerHTML = `
+            <div class="group-header">
+              <span class="group-name">${preset.title}</span>
+              <span class="badge" style="background:#e0e7ff;color:#4338ca;">載入</span>
+            </div>
+            <p style="font-size:12px; color:var(--text-muted); margin-bottom:8px;">${preset.desc}</p>
+            <div style="font-size:11px; color:#475569;">
+              包含成語：${preset.targetGroups.map(g => g.name).join('、')}
+            </div>
+          `;
+          card.addEventListener('click', () => {
+            this.loadPreset(preset);
+          });
+          container.appendChild(card);
+        });
+      },
+
+      loadPreset(preset) {
+        StateStore.gridW = preset.gridW;
+        StateStore.gridH = preset.gridH;
+        StateStore.paperMode = preset.paperMode || 'single';
+        StateStore.targetGroups = JSON.parse(JSON.stringify(preset.targetGroups));
+        StateStore.trapIdioms = [...preset.traps];
+        StateStore.activeGroupId = preset.targetGroups[0].id;
+        if (preset.fiveCandidates && preset.fiveCandidates.length > 0) {
+          StateStore.fiveCandidates = JSON.parse(JSON.stringify(preset.fiveCandidates));
+        }
+
+        document.getElementById('gridDimSelect').value = `${preset.gridW}x${preset.gridH}`;
+        document.getElementById('paperModeSelect').value = StateStore.paperMode;
+        document.getElementById('gridBadge').innerText = `${preset.gridW} × ${preset.gridH} ${StateStore.paperMode === 'single' ? '單面' : '雙面'}`;
+        document.getElementById('trapIdiomsInput').value = preset.traps.join(', ');
+
+        StateStore.initDefaultGrid();
+        this.renderTargetGroups();
+        this.renderFiveCandidateInputs();
+        CanvasRenderer.render();
+        alert(`已成功載入題庫：${preset.title}`);
+      },
+
+      bindExportModal() {
+        const modal = document.getElementById('exportModal');
+        document.getElementById('btnExportPrint').addEventListener('click', () => {
+          this.generatePrintableLayout();
+          modal.classList.add('open');
+        });
+
+        document.getElementById('btnCloseExportModal').addEventListener('click', () => {
+          modal.classList.remove('open');
+        });
+
+        document.getElementById('btnPrintPage').addEventListener('click', () => {
+          window.print();
+        });
+
+        document.getElementById('btnCopyJSON').addEventListener('click', () => {
+          const data = {
+            gridW: StateStore.gridW,
+            gridH: StateStore.gridH,
+            paperMode: StateStore.paperMode,
+            targetGroups: StateStore.targetGroups,
+            fiveCandidates: StateStore.fiveCandidates,
+            trapIdioms: StateStore.trapIdioms,
+            cells: StateStore.cells
+          };
+          navigator.clipboard.writeText(JSON.stringify(data, null, 2)).then(() => {
+            alert('原紙配置 JSON 已成功複製至剪貼簿！');
+          });
+        });
+
+        document.getElementById('btnSaveJSON').addEventListener('click', () => {
+          const data = {
+            gridW: StateStore.gridW,
+            gridH: StateStore.gridH,
+            paperMode: StateStore.paperMode,
+            targetGroups: StateStore.targetGroups,
+            fiveCandidates: StateStore.fiveCandidates,
+            trapIdioms: StateStore.trapIdioms,
+            cells: StateStore.cells
+          };
+          const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `origami_puzzle_${StateStore.gridW}x${StateStore.gridH}.json`;
+          a.click();
+        });
+
+        const fileInput = document.getElementById('fileLoadJSON');
+        document.getElementById('btnLoadJSON').addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = (evt) => {
+            try {
+              const data = JSON.parse(evt.target.result);
+              StateStore.gridW = data.gridW;
+              StateStore.gridH = data.gridH;
+              StateStore.paperMode = data.paperMode || 'single';
+              StateStore.targetGroups = data.targetGroups;
+              if (data.fiveCandidates) StateStore.fiveCandidates = data.fiveCandidates;
+              StateStore.trapIdioms = data.trapIdioms || [];
+              StateStore.cells = data.cells;
+              StateStore.resetFoldState();
+              this.renderTargetGroups();
+              this.renderFiveCandidateInputs();
+              CanvasRenderer.render();
+              alert('成功載入題庫 JSON！');
+            } catch (err) {
+              alert('JSON 解析失敗，請確認檔案格式正確。');
+            }
+          };
+          reader.readAsText(file);
+        });
+      },
+
+      generatePrintableLayout() {
+        const container = document.getElementById('printSheetContainer');
+        container.innerHTML = '';
+
+        const frontDiv = document.createElement('div');
+        frontDiv.innerHTML = `<h4 style="margin-bottom:8px; text-align:center;">正面印製配置 (Front Side)</h4>`;
+        const frontGrid = document.createElement('div');
+        frontGrid.style.display = 'grid';
+        frontGrid.style.gridTemplateColumns = `repeat(${StateStore.gridW}, 55px)`;
+        frontGrid.style.gap = '2px';
+        frontGrid.style.border = '2px solid #27272a';
+        frontGrid.style.padding = '4px';
+        frontGrid.style.background = '#faf9f6';
+
+        StateStore.cells.forEach(c => {
+          const cellEl = document.createElement('div');
+          cellEl.style.width = '55px';
+          cellEl.style.height = '55px';
+          cellEl.style.border = '1px dashed #d1cbbe';
+          cellEl.style.display = 'flex';
+          cellEl.style.flexDirection = 'column';
+          cellEl.style.alignItems = 'center';
+          cellEl.style.justifyContent = 'center';
+          cellEl.style.position = 'relative';
+
+          cellEl.innerHTML = `
+            <span style="font-size:9px; color:#94a3b8; position:absolute; top:2px; left:2px;">#${c.id}</span>
+            <span style="font-size:22px; font-weight:bold; color:${c.frontColor};">${c.frontChar || ''}</span>
+            <span style="font-size:8px; color:#64748b; position:absolute; bottom:2px; right:2px;">0°</span>
+          `;
+          frontGrid.appendChild(cellEl);
+        });
+        frontDiv.appendChild(frontGrid);
+        container.appendChild(frontDiv);
+
+        if (StateStore.paperMode === 'double') {
+          const backDiv = document.createElement('div');
+          backDiv.innerHTML = `<h4 style="margin-bottom:8px; text-align:center;">反面印製配置 (Back Side)</h4>`;
+          const backGrid = document.createElement('div');
+          backGrid.style.display = 'grid';
+          backGrid.style.gridTemplateColumns = `repeat(${StateStore.gridW}, 55px)`;
+          backGrid.style.gap = '2px';
+          backGrid.style.border = '2px solid #27272a';
+          backGrid.style.padding = '4px';
+          backGrid.style.background = '#e8ecf4';
+
+          for (let y = 0; y < StateStore.gridH; y++) {
+            for (let x = StateStore.gridW - 1; x >= 0; x--) {
+              const c = StateStore.cells.find(cell => cell.x === x && cell.y === y);
+              const cellEl = document.createElement('div');
+              cellEl.style.width = '55px';
+              cellEl.style.height = '55px';
+              cellEl.style.border = '1px dashed #94a3b8';
+              cellEl.style.display = 'flex';
+              cellEl.style.flexDirection = 'column';
+              cellEl.style.alignItems = 'center';
+              cellEl.style.justifyContent = 'center';
+              cellEl.style.position = 'relative';
+
+              cellEl.innerHTML = `
+                <span style="font-size:9px; color:#94a3b8; position:absolute; top:2px; left:2px;">#${c ? c.id : ''}</span>
+                <span style="font-size:22px; font-weight:bold; color:#1e293b;">${(c && c.backChar) || '•'}</span>
+                <span style="font-size:8px; color:#64748b; position:absolute; bottom:2px; right:2px;">反</span>
+              `;
+              backGrid.appendChild(cellEl);
+            }
+          }
+          backDiv.appendChild(backGrid);
+          container.appendChild(backDiv);
+        }
+      }
+    };
+
+    window.addEventListener('DOMContentLoaded', () => {
+      StateStore.initDefaultGrid();
+      CanvasRenderer.init();
+      InputController.init();
+      UIController.init();
+      CanvasRenderer.render();
+    });
+  </script>
+</body>
+</html>
