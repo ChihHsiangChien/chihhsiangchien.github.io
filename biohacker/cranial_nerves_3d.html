@@ -1,0 +1,1633 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>3D 腦神經與腦幹神經核互動圖譜 (Cranial Nerves & Nuclei Matrix)</title>
+    <style>
+        :root {
+            --bg-dark: #0b0f19;
+            --panel-bg: rgba(16, 23, 41, 0.85);
+            --border-color: rgba(255, 255, 255, 0.12);
+            --text-main: #e2e8f0;
+            --text-muted: #94a3b8;
+            --accent: #38bdf8;
+            --matrix-text-size: 13px;
+            /* 功能分類顏色 */
+            --c-gse: #ef4444; /* 一般軀體運動 - 紅 */
+            --c-sve: #f97316; /* 特殊內臟運動(鰓弓) - 橘 */
+            --c-gve: #eab308; /* 一般內臟運動(副交感) - 黃 */
+            --c-gva: #10b981; /* 一般內臟感覺 - 綠 */
+            --c-sva: #14b8a6; /* 特殊內臟感覺(味覺/嗅覺) - 青 */
+            --c-gsa: #3b82f6; /* 一般軀體感覺 - 藍 */
+            --c-ssa: #a855f7; /* 特殊軀體感覺(視/聽/前庭) - 紫 */
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+        body, html {
+            width: 100%; height: 100%; overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft JhengHei", sans-serif;
+            background-color: var(--bg-dark); color: var(--text-main);
+            touch-action: none; /* 防止觸控螢幕預設捲動，交給 Three.js 處理 */
+        }
+
+        #canvas-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
+
+        /* 3D HTML 標籤層 */
+        #labels-container {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 2; overflow: hidden;
+            display: none; /* 預設關閉標籤以提升流暢度 */
+        }
+        .label-3d {
+            position: absolute; top: 0; left: 0;
+            will-change: transform;
+            padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 600;
+            background: rgba(15, 23, 42, 0.88); color: #fff;
+            border: 1px solid rgba(255,255,255,0.2);
+            white-space: nowrap; pointer-events: auto; cursor: pointer;
+            transition: opacity 0.2s, background 0.2s;
+        }
+        .label-3d:hover { background: rgba(56, 189, 248, 0.95); color: #000; z-index: 10; }
+        .label-3d.cn-tag { border-left: 3px solid var(--accent); font-weight: 700; }
+        .label-3d.dimmed { opacity: 0.12; pointer-events: none; }
+        .label-3d.highlighted { background: #fff; color: #000; border-color: var(--accent); box-shadow: 0 0 10px var(--accent); z-index: 20; }
+
+        /* 3D 腦部節段標籤 */
+        .label-region {
+            position: absolute; top: 0; left: 0;
+            will-change: transform;
+            padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 700;
+            background: rgba(15, 23, 42, 0.92); color: #38bdf8;
+            border: 1px solid rgba(56, 189, 248, 0.5);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            white-space: nowrap; pointer-events: auto; cursor: pointer;
+            transition: background 0.2s, border-color 0.2s, color 0.2s;
+            display: none;
+        }
+        .label-region:hover, .label-region.active {
+            background: #38bdf8; color: #0b0f19; border-color: #fff;
+            box-shadow: 0 0 12px rgba(56, 189, 248, 0.85);
+        }
+
+        /* 頂部導覽列 */
+        header {
+            position: absolute; top: 12px; left: 12px; right: 12px; z-index: 10;
+            display: flex; justify-content: space-between; align-items: center; gap: 10px;
+            pointer-events: none; flex-wrap: wrap;
+        }
+        .title-box, .top-controls {
+            pointer-events: auto; background: var(--panel-bg);
+            backdrop-filter: blur(10px); border: 1px solid var(--border-color);
+            padding: 8px 14px; border-radius: 10px; display: flex; align-items: center; gap: 10px;
+        }
+        .title-box h1 { font-size: 15px; font-weight: 700; letter-spacing: 0.5px; color: #fff; }
+        .title-box span { font-size: 12px; color: var(--text-muted); }
+
+        button {
+            background: rgba(255,255,255,0.08); color: var(--text-main);
+            border: 1px solid var(--border-color); padding: 6px 10px;
+            border-radius: 6px; font-size: 12px; cursor: pointer; transition: all 0.2s;
+            white-space: nowrap;
+        }
+        button:hover, button.active { background: var(--accent); color: #0b0f19; font-weight: 600; border-color: var(--accent); }
+
+        /* 左側控制與篩選面板 */
+        #left-panel {
+            position: absolute; top: 68px; left: 12px; bottom: 12px; width: 295px;
+            z-index: 10; background: var(--panel-bg); backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color); border-radius: 12px;
+            display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden;
+            transition: transform 0.3s ease;
+        }
+        #left-panel.collapsed { transform: translateX(calc(-100% - 20px)); }
+        .panel-section { padding: 12px; border-bottom: 1px solid var(--border-color); flex-shrink: 0; }
+        .panel-title { font-size: 12px; font-weight: 700; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; display: flex; justify-content: space-between; align-items: center;}
+        
+        /* 腦部節段結構列表 */
+        .region-grid { display: flex; flex-direction: column; gap: 4px; }
+        .region-row {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 4px 7px; background: rgba(255,255,255,0.04); border-radius: 6px;
+            font-size: 11.5px; border-left: 3px solid #38bdf8; transition: background 0.15s;
+        }
+        .region-row:hover, .region-row.active { background: rgba(56, 189, 248, 0.16); }
+        .region-name-btn { cursor: pointer; flex: 1; font-weight: 600; display: flex; align-items: center; gap: 5px; }
+        .region-name-btn:hover { color: var(--accent); }
+        .region-actions { display: flex; gap: 3px; align-items: center; }
+        .region-actions button { padding: 2px 6px; font-size: 10px; border-radius: 4px; }
+        
+        /* 功能分類按鈕 (7種纖維) */
+        .modality-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+        .mod-btn {
+            display: flex; align-items: center; gap: 6px; font-size: 11px; padding: 5px 8px;
+            text-align: left; border-radius: 5px; background: rgba(255,255,255,0.04);
+        }
+        .mod-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+        
+        /* 腦神經快速選擇 */
+        .cn-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+        .cn-btn { padding: 6px 4px; font-size: 12px; font-weight: 700; text-align: center; }
+
+        /* 神經核列表 */
+        .nuclei-list { flex: 1; overflow-y: auto; padding: 10px 12px; touch-action: pan-y; }
+        .nuclei-item {
+            padding: 7px 9px; margin-bottom: 5px; border-radius: 6px;
+            background: rgba(255,255,255,0.04); border-left: 3px solid transparent;
+            cursor: pointer; font-size: 12px; display: flex; justify-content: space-between; align-items: center;
+        }
+        .nuclei-item:hover, .nuclei-item.active { background: rgba(56, 189, 248, 0.18); }
+
+        /* 右下角詳細資訊卡 */
+        #info-panel {
+            position: absolute; bottom: 12px; right: 12px; width: 340px; max-height: 55vh;
+            z-index: 10; background: var(--panel-bg); backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color); border-radius: 12px;
+            padding: 15px; overflow-y: auto; touch-action: pan-y;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        #info-panel h2 { font-size: 16px; color: #fff; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+        #info-panel .sub { font-size: 12px; color: var(--accent); margin-bottom: 10px; }
+        .badge { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-right: 4px; margin-bottom: 4px; color: #000; }
+        .info-row { margin-top: 8px; font-size: 12.5px; line-height: 1.5; color: #cbd5e1; }
+        .info-row strong { color: #fff; }
+        .related-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+        .chip { background: rgba(255,255,255,0.1); padding: 3px 8px; border-radius: 12px; font-size: 11px; cursor: pointer; border: 1px solid rgba(255,255,255,0.15); }
+        .chip:hover { background: var(--accent); color: #000; }
+
+        /* 2D 矩陣視窗 (Modal) */
+        #matrix-modal {
+            position: fixed; inset: 0; z-index: 50; background: rgba(5, 8, 16, 0.94);
+            backdrop-filter: blur(8px); display: none; flex-direction: column; padding: 16px 20px;
+        }
+        #matrix-modal.open { display: flex; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-shrink: 0; }
+        .matrix-wrapper { flex: 1; overflow: auto; border: 1px solid var(--border-color); border-radius: 8px; touch-action: pan-x pan-y; background: #0f172a; width: 100%; }
+        
+        table.matrix-table {
+            border-collapse: separate; border-spacing: 0;
+            font-size: var(--matrix-text-size, 13px);
+            width: max-content; min-width: 100%;
+        }
+        .matrix-table th, .matrix-table td {
+            border: 1px solid #334155; padding: 8px 10px;
+            vertical-align: top; box-sizing: border-box;
+        }
+        .matrix-table thead th {
+            top: 0; position: sticky; z-index: 30;
+            background-color: #1e293b; color: #f8fafc; font-weight: 600;
+        }
+        .matrix-table tbody th {
+            position: sticky; left: 0; z-index: 20;
+            background-color: #1e293b; text-align: left; min-width: 170px;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.25);
+        }
+        .matrix-table thead th:first-child {
+            left: 0; top: 0; z-index: 40; background-color: #1e293b;
+        }
+        .matrix-table td {
+            background-color: #0b1221; min-width: 200px;
+            transition: background-color 0.15s;
+        }
+        .matrix-table td.has-cell:hover {
+            background-color: #1e293b; cursor: pointer;
+        }
+        .cell-function { font-weight: 600; color: #38bdf8; margin-bottom: 3px; font-size: 1.02em; }
+        .cell-desc { color: #94a3b8; font-size: 0.82em; line-height: 1.4; }
+        .cell-type {
+            display: inline-block; padding: 1px 5px; border-radius: 4px;
+            font-size: 0.72em; margin-top: 4px; background-color: #334155; color: #e2e8f0; font-weight: 600;
+        }
+        .tag-S { background-color: #065f46; color: #a7f3d0; }
+        .tag-M { background-color: #7f1d1d; color: #fecaca; }
+        .parasym-cell {
+            background-color: rgba(139, 92, 246, 0.14) !important;
+            border: 1px solid rgba(139, 92, 246, 0.45) !important;
+        }
+        .parasym-cell .cell-function { color: #c4b5fd !important; }
+
+        /* 行動裝置與觸控提示 */
+        #mobile-toggle { display: none; }
+        .hint-bar {
+            position: absolute; bottom: 12px; left: 315px; z-index: 5;
+            font-size: 11px; color: var(--text-muted); pointer-events: none;
+            background: rgba(15,23,42,0.65); padding: 5px 10px; border-radius: 6px;
+        }
+
+        @media (max-width: 860px) {
+            #mobile-toggle { display: inline-block; }
+            #left-panel { width: 270px; top: 62px; }
+            #info-panel { width: calc(100% - 24px); left: 12px; right: 12px; max-height: 36vh; padding: 12px; }
+            .hint-bar { display: none; }
+            .title-box span { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="canvas-container"></div>
+<div id="labels-container"></div>
+
+<!-- 頂部導覽 -->
+<header>
+    <div class="title-box">
+        <button id="mobile-toggle" onclick="toggleLeftPanel()">選單</button>
+        <h1>腦神經與神經核 3D 視覺化圖譜</h1>
+        <span>支援滑鼠與觸控 Pan / Zoom / Rotate</span>
+    </div>
+    <div class="top-controls">
+        <button onclick="setCameraView('front')">正面(腹側)</button>
+        <button onclick="setCameraView('side')">側面</button>
+        <button onclick="setCameraView('back')">背面(背側)</button>
+        <button onclick="toggleAllRegionLabels()" id="btn-top-region-labels">腦區標籤: 關</button>
+        <button onclick="toggleAllRegionHighlight()" id="btn-top-region-highlight">腦區高亮: 關</button>
+        <button onclick="toggleLabels()" id="btn-labels">神經標籤: 關</button>
+        <button onclick="resetSelection()">全部顯示</button>
+        <button onclick="toggleMatrixModal()" style="background: rgba(56,189,248,0.2); border-color: var(--accent);">腦神經矩陣表</button>
+    </div>
+</header>
+
+<!-- 左側篩選器 -->
+<aside id="left-panel">
+    <div class="panel-section">
+        <div class="panel-title">
+            <span>0. 腦部節段 (標籤與高亮)</span>
+            <div style="display:flex; gap:4px;">
+                <button onclick="toggleAllRegionLabels()" id="btn-toggle-all-reg-labels" style="padding:2px 5px; font-size:10px;">標籤: 關</button>
+                <button onclick="toggleAllRegionHighlight()" id="btn-toggle-all-highlight" style="padding:2px 5px; font-size:10px;">高亮: 關</button>
+            </div>
+        </div>
+        <div class="region-grid" id="region-buttons"></div>
+    </div>
+
+    <div class="panel-section">
+        <div class="panel-title">
+            <span>1. 感覺 / 運動功能分類 (7種)</span>
+        </div>
+        <div class="modality-grid" id="modality-buttons"></div>
+    </div>
+
+    <div class="panel-section">
+        <div class="panel-title"><span>2. 12對腦神經 (CN I - XII)</span></div>
+        <div class="cn-grid" id="cn-buttons"></div>
+    </div>
+
+    <div class="panel-title" style="padding: 10px 12px 0 12px;">
+        <span>3. 腦幹神經核團列表</span>
+        <span style="font-size:10px; color:#64748b;">運動(內) / 感覺(外)</span>
+    </div>
+    <div class="nuclei-list" id="nuclei-list"></div>
+</aside>
+
+<!-- 右下資訊面板 -->
+<section id="info-panel">
+    <h2 id="info-title">互動式腦神經與神經核解剖模型</h2>
+    <div class="sub" id="info-sub">間腦 · 中腦 · 橋腦 · 延腦 · 高位脊髓</div>
+    <div id="info-badges"></div>
+    <div class="info-row" id="info-desc">
+        點擊左側或 3D 畫面中的<strong>腦神經 (CN I–XII)</strong>、<strong>神經核</strong>或<strong>功能分類</strong>，即可高亮顯示其立體解剖位置與神經纖維傳導路徑。<br><br>
+        <strong>解剖空間排列原則（界溝 Sulcus Limitans）：</strong><br>
+        • <strong>內側 → 外側（運動核）</strong>：GSE (最內側) → SVE (鰓弓，偏腹側) → GVE (副交感)<br>
+        • <strong>內側 → 外側（感覺核）</strong>：GVA/SVA (孤束核) → GSA (三叉神經核群) → SSA (最外側/背側)<br>
+        • <strong>觸控操作</strong>：單指旋轉、雙指縮放(Zoom)、雙指拖曳平移(Pan)。
+    </div>
+    <div class="info-row" id="info-relations"></div>
+</section>
+
+<div class="hint-bar">左鍵/單指：旋轉 ｜ 滾輪/雙指捏合：縮放 (Zoom) ｜ 右鍵/雙指拖曳：平移 (Pan) ｜ 點擊節點檢視詳情</div>
+
+<!-- 2D 腦神經功能矩陣 Modal (整合自 cranial_nerves_matrix) -->
+<div id="matrix-modal">
+    <div class="modal-header">
+        <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+            <div>
+                <h2 style="font-size:17px; color:#fff; font-weight:700;">腦神經 x 神經核 對照矩陣表 (Cranial Nerves Matrix)</h2>
+                <p style="font-size:12px; color:var(--text-muted);">點擊表格內任一欄位、神經核或儲存格，立即連動 3D 腦幹模型定位聚焦；支援拖曳欄列與自訂排序</p>
+            </div>
+            <!-- 字級縮放滑桿 (整合自 cranial_nerves_matrix.html) -->
+            <div style="display:flex; align-items:center; gap:6px; background:#1e293b; padding:4px 10px; border-radius:20px; border:1px solid #334155;">
+                <span style="font-size:11px; color:#94a3b8;">Aa</span>
+                <input type="range" min="11" max="20" value="13" style="width:75px; accent-color:#38bdf8; height:4px; cursor:pointer;" 
+                       oninput="document.documentElement.style.setProperty('--matrix-text-size', this.value + 'px')">
+                <span style="font-size:15px; color:#94a3b8;">Aa</span>
+            </div>
+        </div>
+        <button onclick="toggleMatrixModal()" style="padding: 6px 14px; font-size:13px; background:#334155; border:1px solid #475569;">關閉視窗</button>
+    </div>
+    <div class="matrix-wrapper" id="matrix-root"></div>
+</div>
+
+<!-- 引入 Three.js 與 OrbitControls -->
+<script type="importmap">
+{
+    "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ==========================================
+// 1. 神經解剖資料庫 (Modalities, Nuclei, Cranial Nerves)
+// ==========================================
+const MODALITIES = {
+    GSE: { code: 'GSE', name: '一般軀體運動', type: '運動 (Efferent)', color: '#ef4444', hex: 0xef4444, desc: '支配源自肌節(Somites)的骨骼肌：外眼肌、舌肌。核團位於腦幹最內側近中線處。' },
+    SVE: { code: 'SVE', name: '特殊內臟運動 (鰓弓)', type: '運動 (Efferent)', color: '#f97316', hex: 0xf97316, desc: '支配源自咽弓(鰓弓)的骨骼肌：咀嚼肌、顏面表情肌、咽喉肌、胸鎖乳突肌與斜方肌。' },
+    GVE: { code: 'GVE', name: '一般內臟運動 (副交感)', type: '運動 (Efferent)', color: '#eab308', hex: 0xeab308, desc: '顱部副交感神經節前纖維 (CN III, VII, IX, X)，支配平滑肌、心肌與腺體分泌。' },
+    GVA: { code: 'GVA', name: '一般內臟感覺', type: '感覺 (Afferent)', color: '#10b981', hex: 0x10b981, desc: '傳遞咽、喉、胸腹腔內臟的一般感覺、頸動脈竇血壓與化學受器訊號（匯入孤束核下部）。' },
+    SVA: { code: 'SVA', name: '特殊內臟感覺', type: '感覺 (Afferent)', color: '#14b8a6', hex: 0x14b8a6, desc: '嗅覺 (CN I) 與味覺 (CN VII, IX, X，匯入孤束核吻側味覺區)。' },
+    GSA: { code: 'GSA', name: '一般軀體感覺', type: '感覺 (Afferent)', color: '#3b82f6', hex: 0x3b82f6, desc: '傳遞顏面、口腔、鼻腔、硬腦膜與外耳的觸壓、痛溫與本體感覺（全數匯入三叉神經核群）。' },
+    SSA: { code: 'SSA', name: '特殊軀體感覺', type: '感覺 (Afferent)', color: '#a855f7', hex: 0xa855f7, desc: '視覺 (CN II)、聽覺與前庭平衡覺 (CN VIII)。核團位於腦幹最外側/背側或間腦。' }
+};
+
+// 3D 座標規範：
+// Y軸 (上下 Rostral-Caudal): 間腦(+8~+11), 中腦(+4.2~+7.2), 橋腦(-0.5~+3.8), 延腦(-5.8~-0.8), 脊髓(-9.5~-6.0)
+// X軸 (左右 Medial-Lateral): 腦幹核團主要繪製於右側(X < 0 為解剖右側，面對正面時在畫面左側；為直覺學習亦鏡像微調，此處設定 X > 0 為畫面右側呈現全套神經核，腦神經雙側呈現或右側為主以保持清晰)
+// 我們在 X > 0 側精準放置右側神經核柱，X < 0 側放置淡化對稱核影，使結構既立體又不雜亂！
+// Z軸 (前後 Ventral-Dorsal): 腹側/前方 Z > 0，背側/後方 Z < 0
+
+const NUCLEI = [
+    // --- 前腦 / 間腦相關 ---
+    { id: 'olf_bulb', name: '嗅球 (Olfactory Bulb)', en: 'Olfactory Bulb', mod: 'SVA', level: '端腦 (Telencephalon)', pos: [1.2, 10.2, 4.2], scale: [0.45, 0.3, 0.9], cns: ['CNI'], func: '接收鼻腔嗅黏膜嗅細胞軸突，為嗅覺第一級中繼站。' },
+    { id: 'lgn', name: '外側膝狀體核 (LGN)', en: 'Lateral Geniculate Nucleus', mod: 'SSA', level: '間腦視丘 (Thalamus)', pos: [2.8, 8.2, -0.8], scale: [0.65, 0.55, 0.65], cns: ['CNII'], func: '視神經/視束的主要皮質下視覺中繼核，投射至枕葉初級視覺皮質 (V1)。' },
+
+    // --- 中腦 (Midbrain) ---
+    { id: 'ew_nuc', name: '愛-威二氏核 (Edinger-Westphal)', en: 'Edinger-Westphal Nucleus', mod: 'GVE', level: '中腦上丘高度', pos: [0.75, 6.4, -0.7], scale: [0.28, 0.35, 0.28], cns: ['CNIII'], func: '副交感核團，經睫狀神經節支配瞳孔括約肌（縮瞳）與睫狀肌（水晶體調節）。' },
+    { id: 'cn3_nuc', name: '動眼神經核 (Oculomotor Nuc.)', en: 'Oculomotor Nucleus', mod: 'GSE', level: '中腦上丘高度', pos: [0.42, 6.0, -0.4], scale: [0.35, 0.45, 0.35], cns: ['CNIII'], func: '支配上直肌、下直肌、內直肌、下斜肌及提上眼瞼肌。' },
+    { id: 'cn4_nuc', name: '滑車神經核 (Trochlear Nuc.)', en: 'Trochlear Nucleus', mod: 'GSE', level: '中腦下丘高度', pos: [0.42, 4.7, -0.5], scale: [0.32, 0.35, 0.32], cns: ['CNIV'], func: '支配對側上斜肌（纖維於中腦背側交叉並由背側穿出）。' },
+    { id: 'mes_v', name: '三叉神經中腦核 (Mesencephalic V)', en: 'Mesencephalic Nucleus of V', mod: 'GSA', level: '中腦至橋腦上部', pos: [1.65, 5.2, -1.0], scale: [0.24, 1.8, 0.24], cns: ['CNV'], func: '中樞神經內唯一保留初級感覺神經元本體的核團，負責咀嚼肌與牙周韌帶本體感覺（下頷反射）。' },
+
+    // --- 橋腦 (Pons) ---
+    { id: 'prin_v', name: '三叉神經主感覺核 (Principal Sensory V)', en: 'Principal Sensory Nucleus of V', mod: 'GSA', level: '橋腦中部', pos: [1.95, 2.2, -0.5], scale: [0.42, 0.7, 0.42], cns: ['CNV'], func: '負責顏面部的精細觸覺與兩點辨別覺。' },
+    { id: 'mot_v', name: '三叉神經運動核 (Motor Nuc. of V)', en: 'Motor Nucleus of Trigeminal', mod: 'SVE', level: '橋腦中部', pos: [1.35, 2.3, -0.2], scale: [0.38, 0.55, 0.38], cns: ['CNV'], func: '支配第一咽弓衍生物：咀嚼肌群（咬肌、顳肌、內外翼肌）、鼓膜張肌、顎帆張肌等。' },
+    { id: 'cn6_nuc', name: '外展神經核 (Abducens Nuc.)', en: 'Abducens Nucleus', mod: 'GSE', level: '橋腦下部（顏面神經丘）', pos: [0.5, 0.4, -0.8], scale: [0.36, 0.38, 0.36], cns: ['CNVI'], func: '支配同側外直肌使眼球外展，並藉內側縱束(MLF)協調水平共軛注視。' },
+    { id: 'cn7_nuc', name: '顏面神經運動核 (Facial Motor Nuc.)', en: 'Facial Motor Nucleus', mod: 'SVE', level: '橋腦下部', pos: [1.25, 0.2, 0.35], scale: [0.42, 0.48, 0.42], cns: ['CNVII'], func: '支配第二咽弓肌肉：顏面表情肌、鐙骨肌、二腹肌後腹與莖突舌骨肌（軸突繞過外展神經核形成內膝）。' },
+    { id: 'sup_sal', name: '上泌涎核 (Superior Salivatory Nuc.)', en: 'Superior Salivatory Nucleus', mod: 'GVE', level: '橋腦延腦交界', pos: [0.92, -0.2, -0.2], scale: [0.28, 0.32, 0.28], cns: ['CNVII'], func: '副交感分泌運動：支配淚腺、下頷下腺、舌下腺及鼻顎黏膜腺體。' },
+
+    // --- 橋腦延腦交界 (Pontomedullary Junction) ---
+    { id: 'vest_nuc', name: '前庭神經核群 (Vestibular Nuclei)', en: 'Vestibular Nuclei Complex', mod: 'SSA', level: '橋腦下部至延腦上部', pos: [2.25, -0.5, -1.0], scale: [0.48, 1.35, 0.42], cns: ['CNVIII'], func: '包含上、下、內、外四個亞核，處理頭部角加速度、線加速度與身體平衡姿勢反射。' },
+    { id: 'coch_nuc', name: '耳蝸神經核 (Cochlear Nuclei)', en: 'Dorsal & Ventral Cochlear Nuclei', mod: 'SSA', level: '小腦下腳表面 (橋延交界)', pos: [2.65, -0.4, -0.5], scale: [0.38, 0.65, 0.45], cns: ['CNVIII'], func: '分為腹側與背側耳蝸核，接收柯氏器聽覺訊號並向上投射至上橄欖核與下丘。' },
+
+    // --- 延腦 (Medulla) 至 高位脊髓 ---
+    { id: 'inf_sal', name: '下泌涎核 (Inferior Salivatory Nuc.)', en: 'Inferior Salivatory Nucleus', mod: 'GVE', level: '延腦上部', pos: [0.92, -1.2, -0.3], scale: [0.28, 0.32, 0.28], cns: ['CNIX'], func: '副交感神經核，經耳神經節支配腮腺（Parotid gland）唾液分泌。' },
+    { id: 'dmnx', name: '迷走神經背運動核 (Dorsal Motor Nuc. of X)', en: 'Dorsal Motor Nucleus of Vagus', mod: 'GVE', level: '延腦（迷走神經三角深部）', pos: [0.85, -3.1, -0.85], scale: [0.3, 1.6, 0.3], cns: ['CNX'], func: '全身最大的副交感核團，支配胸腹腔臟器（咽喉氣管平滑肌、腸胃道蠕動與消化腺分泌）。' },
+    { id: 'nuc_amb', name: '疑核 (Nucleus Ambiguus)', en: 'Nucleus Ambiguus', mod: 'SVE', level: '延腦腹外側縱柱', pos: [1.3, -3.0, 0.25], scale: [0.32, 1.75, 0.32], cns: ['CNIX', 'CNX', 'CNXI'], func: '支配第 3、4、6 咽弓肌肉：莖突咽肌(IX)、軟顎咽喉橫紋肌(X/顱根XI)，負責吞嚥與發聲；亦含部分心臟副交感神經元。' },
+    { id: 'sol_rost', name: '孤束核吻側 (味覺核 Gustatory Nuc.)', en: 'Rostral Solitary Nucleus (Gustatory)', mod: 'SVA', level: '延腦上部', pos: [1.55, -1.5, -0.65], scale: [0.32, 0.75, 0.32], cns: ['CNVII', 'CNIX', 'CNX'], func: '接收舌前2/3(VII)、舌後1/3(IX)及會厭部(X)的味覺傳入纖維。' },
+    { id: 'sol_caud', name: '孤束核尾側 (心肺內臟感覺)', en: 'Caudal Solitary Nucleus (Cardiorespiratory)', mod: 'GVA', level: '延腦中下部', pos: [1.5, -3.6, -0.7], scale: [0.32, 1.45, 0.32], cns: ['CNIX', 'CNX'], func: '接收頸動脈竇/體(IX)、主動脈弓及胸腹內臟(X)的壓力與化學一般內臟感覺。' },
+    { id: 'cn12_nuc', name: '舌下神經核 (Hypoglossal Nuc.)', en: 'Hypoglossal Nucleus', mod: 'GSE', level: '延腦中線旁（舌下神經三角）', pos: [0.38, -3.2, -0.65], scale: [0.28, 1.65, 0.28], cns: ['CNXII'], func: '支配舌內肌與舌外肌（除顎舌肌由迷走神經支配外），控制伸舌與構音吞嚥。' },
+    { id: 'spin_v', name: '三叉神經脊髓核 (Spinal Trigeminal Nuc.)', en: 'Spinal Nucleus of Trigeminal (V)', mod: 'GSA', level: '橋腦下部、延腦全程至 C2 脊髓', pos: [1.4, -3.7, -0.45], scale: [0.3, 3.5, 0.3], cns: ['CNV', 'CNVII', 'CNIX', 'CNX'], func: '負責頭面部、口腔及外耳道的痛覺與溫度覺（CN V 主導，VII, IX, X 外耳與咽部軀體感覺亦匯入此核）。' },
+    { id: 'acc_nuc', name: '副神經脊髓核 (Spinal Accessory Nuc.)', en: 'Spinal Accessory Nucleus (C1-C5)', mod: 'SVE', level: '高位頸髓前角 (C1 - C5)', pos: [0.95, -7.5, 0.35], scale: [0.32, 1.9, 0.32], cns: ['CNXI'], func: '軸突由頸髓側面穿出後上行經枕骨大孔入顱再由頸靜脈孔出顱，支配胸鎖乳突肌與斜方肌。' }
+];
+
+// 12對腦神經穿出腦幹/前腦的表面錨點與屬性
+const CRANIAL_NERVES = [
+    { id: 'CNI', num: 'I', name: '嗅神經', en: 'Olfactory Nerve', exitPos: [1.3, 10.2, 5.4], dir: [0.1, -0.3, 1.2], exitZone: '篩骨篩板 → 嗅球', mods: ['SVA'], summary: '純特殊內臟感覺神經（嗅覺），不經視丘直接投射至初級嗅覺皮質。' },
+    { id: 'CNII', num: 'II', name: '視神經', en: 'Optic Nerve', exitPos: [1.4, 8.5, 2.2], dir: [0.9, 0.1, 1.5], exitZone: '視神經管 → 視交叉 → 外側膝狀體', mods: ['SSA'], summary: '純特殊軀體感覺神經（視覺），胚胎學上屬於間腦延伸出的中樞神經束。' },
+    { id: 'CNIII', num: 'III', name: '動眼神經', en: 'Oculomotor Nerve', exitPos: [0.55, 5.7, 1.35], dir: [0.7, -0.2, 1.6], exitZone: '中腦大腦腳間窩 (Interpeduncular fossa)', mods: ['GSE', 'GVE'], summary: '混合運動神經：支配多數眼外肌、提上眼瞼肌，並含縮瞳與調節的副交感纖維。' },
+    { id: 'CNIV', num: 'IV', name: '滑車神經', en: 'Trochlear Nerve', exitPos: [0.8, 4.5, -1.55], dir: [1.6, -0.2, 1.2], dorsalExit: true, exitZone: '中腦背側（下丘下方，唯一背側穿出的腦神經）', mods: ['GSE'], summary: '最細且唯一由腦幹背側穿出並完全交叉的腦神經，支配上斜肌。' },
+    { id: 'CNV', num: 'V', name: '三叉神經', en: 'Trigeminal Nerve', exitPos: [2.35, 2.1, 1.15], dir: [1.5, 0.1, 1.3], exitZone: '橋腦腹外側（橋腦臂交界）', mods: ['GSA', 'SVE'], summary: '腦幹最粗大的腦神經，分為眼支(V1)、上頷支(V2)、下頷支(V3)，司顏面感覺與咀嚼運動。' },
+    { id: 'CNVI', num: 'VI', name: '外展神經', en: 'Abducens Nerve', exitPos: [0.65, -0.45, 1.55], dir: [0.5, -0.2, 1.6], exitZone: '橋腦延腦溝內側（錐體上方）', mods: ['GSE'], summary: '顱內路徑長，支配外直肌使眼球外展。' },
+    { id: 'CNVII', num: 'VII', name: '顏面神經', en: 'Facial Nerve', exitPos: [2.15, -0.5, 0.9], dir: [1.6, -0.1, 1.0], exitZone: '橋腦延腦溝外側（小腦橋腦角 CPA）', mods: ['SVE', 'GVE', 'SVA', 'GSA'], summary: '支配顏面表情肌、淚腺與唾液腺分泌、舌前2/3味覺及外耳部分感覺。' },
+    { id: 'CNVIII', num: 'VIII', name: '前庭耳蝸神經', en: 'Vestibulocochlear Nerve', exitPos: [2.65, -0.55, 0.45], dir: [1.8, -0.1, 0.6], exitZone: '橋腦延腦溝最外側（小腦橋腦角 CPA）', mods: ['SSA'], summary: '純特殊軀體感覺神經，傳導內耳耳蝸聽覺與半規管/耳石器平衡覺。' },
+    { id: 'CNIX', num: 'IX', name: '舌咽神經', en: 'Glossopharyngeal Nerve', exitPos: [1.85, -1.65, 0.65], dir: [1.6, -0.2, 0.8], exitZone: '延腦橄欖後溝上部 (Postolivary sulcus)', mods: ['SVE', 'GVE', 'GVA', 'SVA', 'GSA'], summary: '包含5種纖維：支配莖突咽肌、腮腺分泌、舌後1/3味覺與一般感覺、頸動脈竇反射。' },
+    { id: 'CNX', num: 'X', name: '迷走神經', en: 'Vagus Nerve', exitPos: [1.85, -2.95, 0.55], dir: [1.6, -0.3, 0.7], exitZone: '延腦橄欖後溝中部', mods: ['SVE', 'GVE', 'GVA', 'SVA', 'GSA'], summary: '分布最廣的腦神經：支配咽喉發聲吞嚥肌，並提供胸腹腔臟器主要的副交感與內臟感覺。' },
+    { id: 'CNXI', num: 'XI', name: '副神經', en: 'Accessory Nerve', exitPos: [1.65, -5.8, 0.35], dir: [1.7, 0.8, 0.5], exitZone: '延腦橄欖後溝下部與 C1–C5 頸髓外側', mods: ['SVE'], summary: '支配胸鎖乳突肌（轉頭）與斜方肌（聳肩）。' },
+    { id: 'CNXII', num: 'XII', name: '舌下神經', en: 'Hypoglossal Nerve', exitPos: [0.85, -3.1, 1.15], dir: [0.9, -0.3, 1.4], exitZone: '延腦前外側溝（錐體與下橄欖核之間）', mods: ['GSE'], summary: '純軀體運動神經，於錐體與橄欖間穿出，支配舌肌運動。' }
+];
+
+// 5 大腦部節段結構資料庫 (間腦、中腦、橋腦、延腦、高位脊髓)
+const BRAIN_REGIONS = [
+    {
+        id: 'diencephalon',
+        name: '間腦 (視丘)',
+        en: 'Diencephalon',
+        pos: [-3.8, 8.4, 0],
+        yTarget: 8.4,
+        cns: ['CNII'],
+        nuclei: ['lgn'],
+        desc: '包含視丘與下視丘，為大腦皮質下最核心的感覺訊息中繼站（除嗅覺外）。視神經 (CN II) 在此處投射至外側膝狀體 (LGN)。'
+    },
+    {
+        id: 'midbrain',
+        name: '中腦',
+        en: 'Midbrain',
+        pos: [-3.8, 5.5, 0],
+        yTarget: 5.5,
+        cns: ['CNIII', 'CNIV'],
+        nuclei: ['ew_nuc', 'cn3_nuc', 'cn4_nuc', 'mes_v'],
+        desc: '腦幹最上段，腹側為大腦腳（皮質脊髓束通過），背側為頂蓋四疊體（上丘負責視覺反射、下丘負責聽覺反射）。出入動眼神經 (CN III) 與滑車神經 (CN IV)。'
+    },
+    {
+        id: 'pons',
+        name: '橋腦',
+        en: 'Pons',
+        pos: [-4.2, 1.65, 0.5],
+        yTarget: 1.65,
+        cns: ['CNV', 'CNVI', 'CNVII', 'CNVIII'],
+        nuclei: ['prin_v', 'mot_v', 'cn6_nuc', 'cn7_nuc', 'sup_sal', 'vest_nuc', 'coch_nuc'],
+        desc: '腹側明顯膨大，由橫行橋腦小腦纖維構成；背側為第四腦室底菱形窩上半部。三叉神經 (CN V) 由腹外側穿出；橋腦延腦溝穿出外展 (VI)、顏面 (VII) 與前庭耳蝸神經 (VIII)。'
+    },
+    {
+        id: 'medulla',
+        name: '延腦',
+        en: 'Medulla',
+        pos: [-3.8, -3.3, 0],
+        yTarget: -3.3,
+        cns: ['CNIX', 'CNX', 'CNXI', 'CNXII'],
+        nuclei: ['inf_sal', 'dmnx', 'nuc_amb', 'sol_rost', 'sol_caud', 'cn12_nuc', 'spin_v'],
+        desc: '腦幹最下段，調節心跳、呼吸、血管舒縮與吞嚥反射的生命中樞。腹側具錐體、錐體交叉與下橄欖核。出入舌咽 (IX)、迷走 (X)、副神經顱根 (XI) 與舌下神經 (XII)。'
+    },
+    {
+        id: 'spinal_cord',
+        name: '高位脊髓',
+        en: 'Spinal Cord',
+        pos: [-3.0, -7.9, 0],
+        yTarget: -7.9,
+        cns: ['CNXI'],
+        nuclei: ['acc_nuc'],
+        desc: '由枕骨大孔向下延續為頸段脊髓 (C1–C5)。頸髓前角腹外側發出副神經脊髓根 (CN XI)，向上經枕骨大孔入顱後再穿出頸靜脈孔，支配胸鎖乳突肌與斜方肌。'
+    }
+];
+
+// ==========================================
+// 2. Three.js 場景初始化
+// ==========================================
+const container = document.getElementById('canvas-container');
+const labelsContainer = document.getElementById('labels-container');
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x0b0f19, 0.018);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 200);
+camera.position.set(11, 2.5, 19);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+container.appendChild(renderer.domElement);
+
+// OrbitControls：完美支援滑鼠與觸控 Pan / Zoom / Rotate
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.enablePan = true;
+controls.screenSpacePanning = true; // 平移時沿螢幕上下左右直覺移動
+controls.minDistance = 5;
+controls.maxDistance = 45;
+controls.target.set(0, 0.8, 0);
+controls.touches = {
+    ONE: THREE.TOUCH.ROTATE,
+    TWO: THREE.TOUCH.DOLLY_PAN // 觸控雙指同時支援縮放與平移
+};
+
+// 燈光配置
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.75);
+scene.add(ambientLight);
+
+const dirLight1 = new THREE.DirectionalLight(0xe0f2fe, 1.4);
+dirLight1.position.set(12, 18, 15);
+scene.add(dirLight1);
+
+const dirLight2 = new THREE.DirectionalLight(0x818cf8, 0.8);
+dirLight2.position.set(-15, -8, -12);
+scene.add(dirLight2);
+
+// 輔助空間參考網格 (底部)
+const gridHelper = new THREE.GridHelper(24, 24, 0x1e293b, 0x131c2e);
+gridHelper.position.y = -10.2;
+scene.add(gridHelper);
+
+// ==========================================
+// 3. 建立立體半透明腦幹解剖外殼
+// ==========================================
+const brainstemGroup = new THREE.Group();
+scene.add(brainstemGroup);
+
+function createShellMat() {
+    return new THREE.MeshStandardMaterial({
+        color: 0x64748b,
+        transparent: true,
+        opacity: 0.16,
+        roughness: 0.3,
+        metalness: 0.1,
+        depthWrite: false,
+        side: THREE.DoubleSide
+    });
+}
+
+const wireMat = new THREE.LineBasicMaterial({ color: 0x475569, transparent: true, opacity: 0.18 });
+
+const regionMaterials = {
+    diencephalon: createShellMat(),
+    midbrain: createShellMat(),
+    pons: createShellMat(),
+    medulla: createShellMat(),
+    spinal_cord: createShellMat()
+};
+
+const regionMeshes = {
+    diencephalon: [],
+    midbrain: [],
+    pons: [],
+    medulla: [],
+    spinal_cord: []
+};
+
+function addBrainRegion(geo, pos, rot = [0,0,0], scale = [1,1,1], regionId = null) {
+    const mat = (regionId && regionMaterials[regionId]) ? regionMaterials[regionId] : createShellMat();
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(...pos);
+    mesh.rotation.set(...rot);
+    mesh.scale.set(...scale);
+    mesh.userData = { type: 'region', regionId: regionId };
+    brainstemGroup.add(mesh);
+
+    const edges = new THREE.EdgesGeometry(geo, 25);
+    const line = new THREE.LineSegments(edges, wireMat);
+    mesh.add(line);
+
+    if (regionId && regionMeshes[regionId]) {
+        regionMeshes[regionId].push(mesh);
+    }
+    return mesh;
+}
+
+// 1) 間腦視丘 (雙側橢球)
+const thalGeo = new THREE.SphereGeometry(2.1, 24, 18);
+addBrainRegion(thalGeo, [1.85, 8.4, -0.4], [0, 0, -0.15], [1.15, 0.85, 1.25], 'diencephalon');
+addBrainRegion(thalGeo, [-1.85, 8.4, -0.4], [0, 0, 0.15], [1.15, 0.85, 1.25], 'diencephalon');
+
+// 2) 中腦 (Midbrain + 大腦腳 Cerebral Peduncles)
+const midGeo = new THREE.CylinderGeometry(2.2, 2.0, 3.1, 28, 1);
+addBrainRegion(midGeo, [0, 5.5, -0.2], [0, 0, 0], [1.15, 1, 0.95], 'midbrain');
+// 大腦腳腹側隆起
+const pedGeo = new THREE.CylinderGeometry(0.95, 0.8, 2.9, 18);
+addBrainRegion(pedGeo, [1.15, 5.5, 0.75], [0, 0, 0.12], [1, 1, 0.8], 'midbrain');
+addBrainRegion(pedGeo, [-1.15, 5.5, 0.75], [0, 0, -0.12], [1, 1, 0.8], 'midbrain');
+
+// 3) 橋腦 (Pons - 腹側明顯膨大)
+const ponsGeo = new THREE.SphereGeometry(2.75, 28, 22);
+addBrainRegion(ponsGeo, [0, 1.65, 0.25], [0, 0, 0], [1.12, 0.88, 0.92], 'pons');
+
+// 4) 第四腦室底菱形窩參考面 (Rhomboid fossa / Sulcus limitans 參考)
+const ventricleGeo = new THREE.PlaneGeometry(3.2, 4.8);
+const ventricleMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.06, side: THREE.DoubleSide, depthWrite: false });
+const ventricleMesh = new THREE.Mesh(ventricleGeo, ventricleMat);
+ventricleMesh.position.set(0, -0.4, -1.15);
+ventricleMesh.rotation.x = 0.08;
+brainstemGroup.add(ventricleMesh);
+regionMeshes.pons.push(ventricleMesh);
+
+// 5) 延腦 (Medulla Oblongata)
+const medGeo = new THREE.CylinderGeometry(2.2, 1.55, 5.2, 28, 1);
+addBrainRegion(medGeo, [0, -3.3, -0.15], [0, 0, 0], [1.08, 1, 0.95], 'medulla');
+
+// 6) 高位頸髓 (Spinal Cord C1-C5)
+const cordGeo = new THREE.CylinderGeometry(1.45, 1.25, 4.2, 24, 1);
+addBrainRegion(cordGeo, [0, -7.9, -0.15], [0, 0, 0], [1.05, 1, 0.9], 'spinal_cord');
+
+// 中線與界溝(Sulcus Limitans)參考虛線
+const midlineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 9.8, 0), new THREE.Vector3(0, -10, 0)]);
+const midline = new THREE.Line(midlineGeo, new THREE.LineBasicMaterial({ color: 0x334155, transparent: true, opacity: 0.45 }));
+scene.add(midline);
+
+// ==========================================
+// 4. 建立神經核、腦神經與連結路徑 (3D Meshes & Curves)
+// ==========================================
+const interactiveMeshes = [];
+const nucleiObjects = {};   // id -> { mesh, mirrorMesh, labelEl, data }
+const cnObjects = {};       // id -> { rootMesh, nerveTube, mirrorTube, labelEl, data }
+const regionObjects = {};   // id -> { data, labelEl, visibleLabel, isHighlighted }
+const pathwayLines = [];    // { line, nucId, cnId, mod }
+
+// 4.0 建立 5 大腦幹節段 3D 浮動標籤
+BRAIN_REGIONS.forEach(reg => {
+    const labelEl = document.createElement('div');
+    labelEl.className = 'label-region';
+    labelEl.id = `label-reg-${reg.id}`;
+    labelEl.innerHTML = `<strong>${reg.name}</strong> <span style="font-size:9.5px; opacity:0.8;">${reg.en}</span>`;
+    labelEl.onclick = (e) => { e.stopPropagation(); selectBrainRegion(reg.id); };
+    labelsContainer.appendChild(labelEl);
+
+    regionObjects[reg.id] = {
+        data: reg,
+        labelEl: labelEl,
+        visibleLabel: false,
+        isHighlighted: false
+    };
+});
+
+// 4.1 建立神經核 (右側主顯示 + 左側淡化鏡像維持立體對稱感)
+NUCLEI.forEach(nuc => {
+    const modInfo = MODALITIES[nuc.mod];
+    const geo = new THREE.CapsuleGeometry(1, 1, 12, 20);
+    // 調整膠囊比例
+    const mat = new THREE.MeshStandardMaterial({
+        color: modInfo.hex,
+        emissive: modInfo.hex,
+        emissiveIntensity: 0.35,
+        roughness: 0.3,
+        metalness: 0.1,
+        transparent: true,
+        opacity: 0.95
+    });
+
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(...nuc.pos);
+    // CapsuleGeometry 高度原本為 radius*2 + length，縮放以精準控制外型
+    mesh.scale.set(nuc.scale[0], nuc.scale[1] * 0.55, nuc.scale[2]);
+    mesh.userData = { type: 'nucleus', id: nuc.id, data: nuc };
+    scene.add(mesh);
+    interactiveMeshes.push(mesh);
+
+    // 左側對稱半透明參考核團 (解剖對稱美感)
+    const mirrorMat = mat.clone();
+    mirrorMat.opacity = 0.22;
+    mirrorMat.emissiveIntensity = 0.1;
+    const mirrorMesh = new THREE.Mesh(geo, mirrorMat);
+    mirrorMesh.position.set(-nuc.pos[0], nuc.pos[1], nuc.pos[2]);
+    mirrorMesh.scale.copy(mesh.scale);
+    scene.add(mirrorMesh);
+
+    // 3D 浮動標籤
+    const labelEl = document.createElement('div');
+    labelEl.className = 'label-3d';
+    labelEl.style.borderLeft = `3px solid ${modInfo.color}`;
+    labelEl.textContent = nuc.name.split(' ')[0];
+    labelEl.onclick = (e) => { e.stopPropagation(); selectNucleus(nuc.id); };
+    labelsContainer.appendChild(labelEl);
+
+    nucleiObjects[nuc.id] = { mesh, mirrorMesh, labelEl, data: nuc, origEmissive: 0.35 };
+});
+
+// 4.2 建立 12 對腦神經穿出點與神經束
+CRANIAL_NERVES.forEach(cn => {
+    // 主要穿出神經節點
+    const rootGeo = new THREE.SphereGeometry(0.24, 16, 16);
+    const rootMat = new THREE.MeshStandardMaterial({
+        color: 0xf8fafc,
+        emissive: 0x38bdf8,
+        emissiveIntensity: 0.55,
+        transparent: true,
+        opacity: 0.95
+    });
+    const rootMesh = new THREE.Mesh(rootGeo, rootMat);
+    rootMesh.position.set(...cn.exitPos);
+    rootMesh.userData = { type: 'cn', id: cn.id, data: cn };
+    scene.add(rootMesh);
+    interactiveMeshes.push(rootMesh);
+
+    // 建立向外延伸的腦神經幹曲線
+    const p0 = new THREE.Vector3(...cn.exitPos);
+    let curvePts = [];
+    if (cn.dorsalExit) {
+        // CN IV 滑車神經：背側穿出後繞過中腦外側向前方行進
+        curvePts = [
+            p0,
+            new THREE.Vector3(p0.x + 1.4, p0.y - 0.1, p0.z + 0.6),
+            new THREE.Vector3(p0.x + 1.9, p0.y - 0.25, 0.5),
+            new THREE.Vector3(p0.x + 1.8, p0.y - 0.4, 2.3)
+        ];
+    } else {
+        const d = new THREE.Vector3(...cn.dir);
+        curvePts = [
+            p0,
+            p0.clone().add(d.clone().multiplyScalar(0.55)),
+            p0.clone().add(d.clone().multiplyScalar(1.15).add(new THREE.Vector3(0, -0.15, 0)))
+        ];
+    }
+    const nerveCurve = new THREE.CatmullRomCurve3(curvePts);
+    const tubeGeo = new THREE.TubeGeometry(nerveCurve, 20, 0.11, 10, false);
+    const tubeMat = new THREE.MeshStandardMaterial({
+        color: 0xe2e8f0,
+        emissive: 0x38bdf8,
+        emissiveIntensity: 0.35,
+        roughness: 0.3,
+        transparent: true,
+        opacity: 0.92
+    });
+    const nerveTube = new THREE.Mesh(tubeGeo, tubeMat);
+    nerveTube.userData = { type: 'cn', id: cn.id, data: cn };
+    scene.add(nerveTube);
+    interactiveMeshes.push(nerveTube);
+
+    // 左側對稱腦神經束 (視覺平衡)
+    const mirrorPts = curvePts.map(pt => new THREE.Vector3(-pt.x, pt.y, pt.z));
+    const mirrorCurve = new THREE.CatmullRomCurve3(mirrorPts);
+    const mirrorTubeGeo = new THREE.TubeGeometry(mirrorCurve, 16, 0.08, 8, false);
+    const mirrorTubeMat = tubeMat.clone();
+    mirrorTubeMat.opacity = 0.25;
+    const mirrorTube = new THREE.Mesh(mirrorTubeGeo, mirrorTubeMat);
+    scene.add(mirrorTube);
+
+    // 腦神經末端標籤位置
+    const tipPos = curvePts[curvePts.length - 1];
+    const labelEl = document.createElement('div');
+    labelEl.className = 'label-3d cn-tag';
+    labelEl.textContent = `CN ${cn.num} ${cn.name}`;
+    labelEl.onclick = (e) => { e.stopPropagation(); selectCN(cn.id); };
+    labelsContainer.appendChild(labelEl);
+
+    cnObjects[cn.id] = { rootMesh, nerveTube, mirrorTube, labelEl, tipPos, data: cn };
+});
+
+// 4.3 建立「神經核 ↔ 腦神經穿出點」的腦幹內神經纖維束路徑
+NUCLEI.forEach(nuc => {
+    const modInfo = MODALITIES[nuc.mod];
+    const startPos = new THREE.Vector3(...nuc.pos);
+
+    nuc.cns.forEach(cnId => {
+        const cnObj = cnObjects[cnId];
+        if (!cnObj) return;
+        const endPos = new THREE.Vector3(...cnObj.data.exitPos);
+
+        let pts = [];
+        // 特殊經典神經解剖路徑1：顏面神經內膝 (Internal Genu of CN VII 繞過外展神經核背側)
+        if (nuc.id === 'cn7_nuc' && cnId === 'CNVII') {
+            const cn6Pos = new THREE.Vector3(0.5, 0.4, -0.8);
+            pts = [
+                startPos,
+                new THREE.Vector3(0.55, 0.45, -1.18), // 向背內側繞過 CN VI 核形成顏面神經丘
+                new THREE.Vector3(1.4, 0.1, -0.3),
+                endPos
+            ];
+        }
+        // 特殊經典神經解剖路徑2：滑車神經向背側穿出
+        else if (nuc.id === 'cn4_nuc' && cnId === 'CNIV') {
+            pts = [
+                startPos,
+                new THREE.Vector3(0.0, 4.6, -1.2), // 背側交叉示意
+                endPos
+            ];
+        } else {
+            const mid = startPos.clone().lerp(endPos, 0.5);
+            mid.x += 0.15;
+            pts = [startPos, mid, endPos];
+        }
+
+        const curve = new THREE.CatmullRomCurve3(pts);
+        const tubeGeo = new THREE.TubeGeometry(curve, 20, 0.042, 8, false);
+        const tubeMat = new THREE.MeshBasicMaterial({
+            color: modInfo.hex,
+            transparent: true,
+            opacity: 0.55
+        });
+        const pathMesh = new THREE.Mesh(tubeGeo, tubeMat);
+        scene.add(pathMesh);
+
+        pathwayLines.push({ mesh: pathMesh, nucId: nuc.id, cnId: cnId, mod: nuc.mod });
+    });
+});
+
+// ==========================================
+// 5. UI 建構與狀態連動邏輯
+// ==========================================
+let currentFilter = { type: 'all', id: null };
+let showLabels = false; // 預設關閉神經與神經核文字標籤
+let showRegionLabels = false; // 預設關閉腦區標籤
+let allShellsVisible = true; // 腦幹外殼預設開啟
+
+// 生成 5 大腦部節段結構按鈕 (標籤在前，高亮在後，維持畫面一致)
+const regionBtnContainer = document.getElementById('region-buttons');
+BRAIN_REGIONS.forEach(reg => {
+    const div = document.createElement('div');
+    div.className = 'region-row';
+    div.id = `region-row-${reg.id}`;
+    div.innerHTML = `
+        <div class="region-name-btn" onclick="selectBrainRegion('${reg.id}')" title="聚焦 ${reg.name}">
+            <span>${reg.name}</span>
+        </div>
+        <div class="region-actions">
+            <button id="btn-reg-label-${reg.id}" title="切換此節段3D標籤" onclick="toggleSingleRegionLabel('${reg.id}', this)">標籤</button>
+            <button id="btn-reg-highlight-${reg.id}" title="切換此節段外殼高亮" onclick="toggleRegionHighlight('${reg.id}', this)">高亮</button>
+        </div>
+    `;
+    regionBtnContainer.appendChild(div);
+});
+
+// 生成 7 種感覺運動分類按鈕
+const modBtnContainer = document.getElementById('modality-buttons');
+Object.values(MODALITIES).forEach(m => {
+    const btn = document.createElement('button');
+    btn.className = 'mod-btn';
+    btn.id = `btn-mod-${m.code}`;
+    btn.innerHTML = `<span class="mod-dot" style="background:${m.color}"></span><span><strong>${m.code}</strong> ${m.name.replace(/\(.*\)/, '')}</span>`;
+    btn.onclick = () => selectModality(m.code);
+    modBtnContainer.appendChild(btn);
+});
+
+// 生成 12 對腦神經按鈕
+const cnBtnContainer = document.getElementById('cn-buttons');
+CRANIAL_NERVES.forEach(cn => {
+    const btn = document.createElement('button');
+    btn.className = 'cn-btn';
+    btn.id = `btn-cn-${cn.id}`;
+    btn.textContent = `CN ${cn.num}`;
+    btn.title = `${cn.name} (${cn.en})`;
+    btn.onclick = () => selectCN(cn.id);
+    cnBtnContainer.appendChild(btn);
+});
+
+// 生成神經核清單
+const nucleiListContainer = document.getElementById('nuclei-list');
+NUCLEI.forEach(nuc => {
+    const mod = MODALITIES[nuc.mod];
+    const div = document.createElement('div');
+    div.className = 'nuclei-item';
+    div.id = `item-nuc-${nuc.id}`;
+    div.style.borderLeftColor = mod.color;
+    div.innerHTML = `<span>${nuc.name.split(' (')[0]}</span><span style="font-size:10px; color:${mod.color}; font-weight:700;">${nuc.mod}</span>`;
+    div.onclick = () => selectNucleus(nuc.id);
+    nucleiListContainer.appendChild(div);
+});
+
+// 重設所有按鈕樣式
+function clearActiveUI() {
+    document.querySelectorAll('.mod-btn, .cn-btn, .nuclei-item, .region-row').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.label-3d, .label-region').forEach(el => el.classList.remove('highlighted', 'dimmed', 'active'));
+}
+
+// 更新 3D 物件透明度與高亮狀態
+function applyVisualFilter(activeNucIds, activeCnIds) {
+    const isAll = (activeNucIds === null && activeCnIds === null);
+
+    Object.entries(nucleiObjects).forEach(([id, obj]) => {
+        const active = isAll || activeNucIds.has(id);
+        obj.mesh.material.opacity = active ? 0.98 : 0.08;
+        obj.mesh.material.emissiveIntensity = active ? (isAll ? 0.35 : 0.75) : 0.05;
+        obj.mirrorMesh.material.opacity = active ? 0.25 : 0.03;
+        obj.labelEl.classList.toggle('dimmed', !active);
+        obj.labelEl.classList.toggle('highlighted', !isAll && active);
+    });
+
+    Object.entries(cnObjects).forEach(([id, obj]) => {
+        const active = isAll || activeCnIds.has(id);
+        obj.rootMesh.material.opacity = active ? 1.0 : 0.1;
+        obj.nerveTube.material.opacity = active ? 0.95 : 0.08;
+        obj.nerveTube.material.emissiveIntensity = active ? (isAll ? 0.35 : 0.8) : 0.05;
+        obj.mirrorTube.material.opacity = active ? 0.25 : 0.03;
+        obj.labelEl.classList.toggle('dimmed', !active);
+        obj.labelEl.classList.toggle('highlighted', !isAll && active);
+    });
+
+    pathwayLines.forEach(p => {
+        const active = isAll || (activeNucIds.has(p.nucId) && activeCnIds.has(p.cnId));
+        p.mesh.material.opacity = active ? (isAll ? 0.5 : 0.95) : 0.03;
+    });
+}
+
+// 平滑移動相機觀察目標高度
+let targetLookAt = new THREE.Vector3(0, 0.8, 0);
+function focusTargetY(yVal) {
+    targetLookAt.set(0, THREE.MathUtils.clamp(yVal, -7.5, 8.5), 0);
+}
+
+// A. 選擇特定「腦神經」
+window.selectCN = function(cnId) {
+    clearActiveUI();
+    const cn = cnObjects[cnId].data;
+    document.getElementById(`btn-cn-${cnId}`)?.classList.add('active');
+
+    const relatedNucs = NUCLEI.filter(n => n.cns.includes(cnId));
+    const nucSet = new Set(relatedNucs.map(n => n.id));
+    const cnSet = new Set([cnId]);
+
+    relatedNucs.forEach(n => document.getElementById(`item-nuc-${n.id}`)?.classList.add('active'));
+    applyVisualFilter(nucSet, cnSet);
+    focusTargetY(cn.exitPos[1]);
+
+    // 更新右側資訊卡
+    document.getElementById('info-title').textContent = `CN ${cn.num}：${cn.name} (${cn.en})`;
+    document.getElementById('info-sub').textContent = `穿出位置：${cn.exitZone}`;
+    document.getElementById('info-badges').innerHTML = cn.mods.map(m =>
+        `<span class="badge" style="background:${MODALITIES[m].color}">${m} · ${MODALITIES[m].name}</span>`
+    ).join('');
+    document.getElementById('info-desc').innerHTML = `${cn.summary}`;
+    document.getElementById('info-relations').innerHTML = `<strong>關聯腦幹/前腦神經核 (${relatedNucs.length})：</strong>
+        <div class="related-chips">
+            ${relatedNucs.map(n => `<span class="chip" style="border-left:3px solid ${MODALITIES[n.mod].color}" onclick="selectNucleus('${n.id}')">${n.name.split(' (')[0]} (${n.mod})</span>`).join('')}
+        </div>`;
+};
+
+// B. 選擇特定「神經核」
+window.selectNucleus = function(nucId) {
+    clearActiveUI();
+    const nuc = nucleiObjects[nucId].data;
+    const mod = MODALITIES[nuc.mod];
+    document.getElementById(`item-nuc-${nucId}`)?.classList.add('active');
+    document.getElementById(`item-nuc-${nucId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    const nucSet = new Set([nucId]);
+    const cnSet = new Set(nuc.cns);
+    nuc.cns.forEach(cid => document.getElementById(`btn-cn-${cid}`)?.classList.add('active'));
+
+    applyVisualFilter(nucSet, cnSet);
+    focusTargetY(nuc.pos[1]);
+
+    document.getElementById('info-title').textContent = nuc.name;
+    document.getElementById('info-sub').textContent = `解剖高度：${nuc.level}`;
+    document.getElementById('info-badges').innerHTML = `<span class="badge" style="background:${mod.color}">${mod.code} · ${mod.name}</span>`;
+    document.getElementById('info-desc').innerHTML = `${nuc.func}`;
+    document.getElementById('info-relations').innerHTML = `<strong>出入此核團的腦神經：</strong>
+        <div class="related-chips">
+            ${nuc.cns.map(cid => {
+                const c = cnObjects[cid].data;
+                return `<span class="chip" onclick="selectCN('${cid}')">CN ${c.num} ${c.name}</span>`;
+            }).join('')}
+        </div>`;
+};
+
+// C. 選擇特定「感覺/運動功能分類」
+window.selectModality = function(modCode) {
+    clearActiveUI();
+    const mod = MODALITIES[modCode];
+    document.getElementById(`btn-mod-${modCode}`)?.classList.add('active');
+
+    const matchedNucs = NUCLEI.filter(n => n.mod === modCode);
+    const nucSet = new Set(matchedNucs.map(n => n.id));
+    const cnSet = new Set();
+    matchedNucs.forEach(n => {
+        document.getElementById(`item-nuc-${n.id}`)?.classList.add('active');
+        n.cns.forEach(c => {
+            cnSet.add(c);
+            document.getElementById(`btn-cn-${c}`)?.classList.add('active');
+        });
+    });
+
+    applyVisualFilter(nucSet, cnSet);
+    focusTargetY(0.8);
+
+    document.getElementById('info-title').textContent = `${mod.code}：${mod.name}`;
+    document.getElementById('info-sub').textContent = mod.type;
+    document.getElementById('info-badges').innerHTML = `<span class="badge" style="background:${mod.color}">${mod.code} 功能柱</span>`;
+    document.getElementById('info-desc').innerHTML = `${mod.desc}`;
+    document.getElementById('info-relations').innerHTML = `<strong>屬於此功能柱的神經核 (${matchedNucs.length})：</strong>
+        <div class="related-chips">
+            ${matchedNucs.map(n => `<span class="chip" onclick="selectNucleus('${n.id}')">${n.name.split(' (')[0]}</span>`).join('')}
+        </div>`;
+};
+
+// D. 選擇特定「腦部節段 (間腦/中腦/橋腦/延腦/脊髓)」
+window.selectBrainRegion = function(regId) {
+    clearActiveUI();
+    const reg = regionObjects[regId]?.data;
+    if (!reg) return;
+
+    document.getElementById(`region-row-${regId}`)?.classList.add('active');
+    document.getElementById(`label-reg-${regId}`)?.classList.add('active');
+
+    const nucSet = new Set(reg.nuclei);
+    const cnSet = new Set(reg.cns);
+
+    reg.cns.forEach(c => document.getElementById(`btn-cn-${c}`)?.classList.add('active'));
+    reg.nuclei.forEach(n => document.getElementById(`item-nuc-${n}`)?.classList.add('active'));
+
+    applyVisualFilter(nucSet, cnSet);
+    focusTargetY(reg.yTarget);
+
+    document.getElementById('info-title').textContent = `${reg.name} (${reg.en})`;
+    document.getElementById('info-sub').textContent = `解剖高度 Y: ${reg.yTarget}`;
+    document.getElementById('info-badges').innerHTML = `
+        <span class="badge" style="background:#38bdf8;">腦幹解剖節段</span>
+        <span class="badge" style="background:#818cf8;">出入神經：${reg.cns.map(c => c.replace('CN', 'CN ')).join(', ')}</span>
+    `;
+    document.getElementById('info-desc').innerHTML = `
+        ${reg.desc}<br><br>
+        <strong>出入此節段的腦神經 (${reg.cns.length})：</strong><br>
+        • ${reg.cns.map(c => {
+            const cnObj = cnObjects[c]?.data;
+            return `<strong>CN ${cnObj.num} ${cnObj.name}</strong> (${cnObj.mods.join('/')})`;
+        }).join('<br>• ')}<br><br>
+        <strong>位於此節段的核心神經核 (${reg.nuclei.length})：</strong><br>
+        • ${reg.nuclei.map(n => {
+            const nucObj = nucleiObjects[n]?.data;
+            return `<strong>${nucObj.name}</strong> [${nucObj.mod}]`;
+        }).join('<br>• ')}
+    `;
+    document.getElementById('info-relations').innerHTML = `
+        <strong>快速切換節段內元素：</strong>
+        <div class="related-chips">
+            ${reg.cns.map(c => `<span class="chip" onclick="selectCN('${c}')">CN ${cnObjects[c].data.num} ${cnObjects[c].data.name}</span>`).join('')}
+            ${reg.nuclei.map(n => `<span class="chip" onclick="selectNucleus('${n}')">${nucleiObjects[n].data.name.split(' (')[0]}</span>`).join('')}
+        </div>
+    `;
+
+    // 聚焦時自動高亮此節段的外殼
+    Object.keys(regionObjects).forEach(id => {
+        const isTarget = (id === regId);
+        regionObjects[id].isHighlighted = isTarget;
+        applyRegionHighlight(id, isTarget);
+        const btn = document.getElementById(`btn-reg-highlight-${id}`);
+        if (btn) btn.classList.toggle('active', isTarget);
+    });
+    const topBtn = document.getElementById('btn-top-region-highlight');
+    if (topBtn) {
+        topBtn.textContent = '腦區高亮: 開';
+        topBtn.classList.add('active');
+    }
+    const panelBtn = document.getElementById('btn-toggle-all-highlight');
+    if (panelBtn) {
+        panelBtn.textContent = '高亮: 開';
+        panelBtn.classList.add('active');
+    }
+};
+
+// 套用單一節段外殼高亮材質
+function applyRegionHighlight(regId, isHigh) {
+    const mat = regionMaterials[regId];
+    if (mat) {
+        mat.opacity = isHigh ? 0.42 : 0.16;
+        mat.color.setHex(isHigh ? 0x38bdf8 : 0x64748b);
+        mat.emissive.setHex(isHigh ? 0x0284c7 : 0x000000);
+        mat.emissiveIntensity = isHigh ? 0.5 : 0;
+    }
+}
+
+// 切換特定節段高亮
+window.toggleRegionHighlight = function(regId, btn) {
+    const obj = regionObjects[regId];
+    if (!obj) return;
+    const isHigh = !obj.isHighlighted;
+    obj.isHighlighted = isHigh;
+
+    applyRegionHighlight(regId, isHigh);
+    if (btn) btn.classList.toggle('active', isHigh);
+
+    const anyHigh = Object.values(regionObjects).some(o => o.isHighlighted);
+    const topBtn = document.getElementById('btn-top-region-highlight');
+    if (topBtn) {
+        topBtn.textContent = `腦區高亮: ${anyHigh ? '開' : '關'}`;
+        topBtn.classList.toggle('active', anyHigh);
+    }
+    const panelBtn = document.getElementById('btn-toggle-all-highlight');
+    if (panelBtn) {
+        panelBtn.textContent = `高亮: ${anyHigh ? '開' : '關'}`;
+        panelBtn.classList.toggle('active', anyHigh);
+    }
+};
+
+// 切換全部節段高亮
+window.toggleAllRegionHighlight = function() {
+    const anyHigh = Object.values(regionObjects).some(o => o.isHighlighted);
+    const targetState = !anyHigh;
+
+    Object.keys(regionObjects).forEach(regId => {
+        regionObjects[regId].isHighlighted = targetState;
+        applyRegionHighlight(regId, targetState);
+        const btn = document.getElementById(`btn-reg-highlight-${regId}`);
+        if (btn) btn.classList.toggle('active', targetState);
+    });
+
+    const topBtn = document.getElementById('btn-top-region-highlight');
+    if (topBtn) {
+        topBtn.textContent = `腦區高亮: ${targetState ? '開' : '關'}`;
+        topBtn.classList.toggle('active', targetState);
+    }
+    const panelBtn = document.getElementById('btn-toggle-all-highlight');
+    if (panelBtn) {
+        panelBtn.textContent = `高亮: ${targetState ? '開' : '關'}`;
+        panelBtn.classList.toggle('active', targetState);
+    }
+};
+
+// 切換特定節段標籤
+window.toggleSingleRegionLabel = function(regId, btn) {
+    const obj = regionObjects[regId];
+    if (!obj) return;
+    obj.visibleLabel = !obj.visibleLabel;
+    if (btn) btn.classList.toggle('active', obj.visibleLabel);
+
+    if (obj.visibleLabel) {
+        showRegionLabels = true;
+        labelsContainer.style.display = 'block';
+        updateRegionLabels();
+    } else {
+        if (obj.labelEl) obj.labelEl.style.display = 'none';
+        const anyOpen = Object.values(regionObjects).some(o => o.visibleLabel);
+        if (!anyOpen) {
+            showRegionLabels = false;
+            if (!showLabels) labelsContainer.style.display = 'none';
+        }
+    }
+    const topBtn = document.getElementById('btn-top-region-labels');
+    if (topBtn) {
+        topBtn.textContent = `腦區標籤: ${showRegionLabels ? '開' : '關'}`;
+        topBtn.classList.toggle('active', showRegionLabels);
+    }
+    const panelBtn = document.getElementById('btn-toggle-all-reg-labels');
+    if (panelBtn) {
+        panelBtn.textContent = `標籤: ${showRegionLabels ? '開' : '關'}`;
+        panelBtn.classList.toggle('active', showRegionLabels);
+    }
+};
+
+// 切換全部節段標籤
+window.toggleAllRegionLabels = function() {
+    showRegionLabels = !showRegionLabels;
+    labelsContainer.style.display = (showLabels || showRegionLabels) ? 'block' : 'none';
+
+    BRAIN_REGIONS.forEach(reg => {
+        if (regionObjects[reg.id]) {
+            regionObjects[reg.id].visibleLabel = showRegionLabels;
+            const btn = document.getElementById(`btn-reg-label-${reg.id}`);
+            if (btn) btn.classList.toggle('active', showRegionLabels);
+        }
+    });
+
+    const topBtn = document.getElementById('btn-top-region-labels');
+    if (topBtn) {
+        topBtn.textContent = `腦區標籤: ${showRegionLabels ? '開' : '關'}`;
+        topBtn.classList.toggle('active', showRegionLabels);
+    }
+    const panelBtn = document.getElementById('btn-toggle-all-reg-labels');
+    if (panelBtn) {
+        panelBtn.textContent = `標籤: ${showRegionLabels ? '開' : '關'}`;
+        panelBtn.classList.toggle('active', showRegionLabels);
+    }
+
+    if (showRegionLabels) {
+        updateRegionLabels();
+    } else {
+        BRAIN_REGIONS.forEach(reg => {
+            if (regionObjects[reg.id]?.labelEl) regionObjects[reg.id].labelEl.style.display = 'none';
+        });
+    }
+};
+
+// E. 重設全部顯示
+window.resetSelection = function() {
+    clearActiveUI();
+    applyVisualFilter(null, null);
+    focusTargetY(0.8);
+
+    // 重設腦區高亮
+    Object.keys(regionObjects).forEach(id => {
+        regionObjects[id].isHighlighted = false;
+        applyRegionHighlight(id, false);
+        const btn = document.getElementById(`btn-reg-highlight-${id}`);
+        if (btn) btn.classList.remove('active');
+    });
+    const topBtn = document.getElementById('btn-top-region-highlight');
+    if (topBtn) {
+        topBtn.textContent = '腦區高亮: 關';
+        topBtn.classList.remove('active');
+    }
+    const panelBtn = document.getElementById('btn-toggle-all-highlight');
+    if (panelBtn) {
+        panelBtn.textContent = '高亮: 關';
+        panelBtn.classList.remove('active');
+    }
+
+    document.getElementById('info-title').textContent = '互動式腦神經與神經核解剖模型';
+    document.getElementById('info-sub').textContent = '間腦 · 中腦 · 橋腦 · 延腦 · 高位脊髓';
+    document.getElementById('info-badges').innerHTML = '';
+    document.getElementById('info-desc').innerHTML = '已顯示全部 <strong>12對腦神經</strong>、<strong>21組核心神經核團</strong> 與 <strong>5大腦幹節段</strong>。請點擊任一項目或開啟右上角「腦神經矩陣表」進行交叉比對。';
+    document.getElementById('info-relations').innerHTML = '';
+};
+
+// 視角快速切換
+window.setCameraView = function(view) {
+    targetLookAt.set(0, 0.8, 0);
+    if (view === 'front') camera.position.set(0, 1.5, 22);
+    else if (view === 'side') camera.position.set(22, 1.5, 0);
+    else if (view === 'back') camera.position.set(0, 1.5, -22);
+};
+
+window.toggleLabels = function() {
+    showLabels = !showLabels;
+    labelsContainer.style.display = (showLabels || showRegionLabels) ? 'block' : 'none';
+    const btn = document.getElementById('btn-labels');
+    btn.textContent = `神經標籤: ${showLabels ? '開' : '關'}`;
+    btn.classList.toggle('active', showLabels);
+    if (showLabels) {
+        updateLabels();
+    } else {
+        Object.values(nucleiObjects).forEach(o => o.labelEl.style.display = 'none');
+        Object.values(cnObjects).forEach(o => o.labelEl.style.display = 'none');
+    }
+};
+
+window.toggleLeftPanel = function() {
+    document.getElementById('left-panel').classList.toggle('collapsed');
+};
+
+// ==========================================
+// 6. 整合 cranial_nerves_matrix.html 之完整互動矩陣
+// ==========================================
+const RAW_MATRIX_DATA = [
+  {"詳細功能說明":"傳導嗅覺訊息","方向 (廣義)":"感覺 (SVA)","功能類別":"特殊內臟感覺","系統性質 (自主 vs 軀體)":"內臟感覺系統","神經核 (Nucleus)":"嗅球","腦神經":"I 嗅神經","位置層次":"端腦","cnId":"CNI","nucId":"olf_bulb"},
+  {"詳細功能說明":"傳導視覺訊息","方向 (廣義)":"感覺 (SSA)","功能類別":"特殊軀體感覺","系統性質 (自主 vs 軀體)":"軀體感覺系統","神經核 (Nucleus)":"外側膝狀體","腦神經":"II 視神經","位置層次":"間腦","cnId":"CNII","nucId":"lgn"},
+  {"詳細功能說明":"瞳孔收縮、睫狀肌調節 (副交感控制平滑肌)","方向 (廣義)":"運動 (GVE)","功能類別":"內臟運動","系統性質 (自主 vs 軀體)":"自主神經 (副交感)","神經核 (Nucleus)":"埃-韋二氏核","腦神經":"III 動眼神經","位置層次":"中腦","cnId":"CNIII","nucId":"ew_nuc"},
+  {"詳細功能說明":"控制眼球運動（上、下、內直肌、下斜肌）及提上瞼肌","方向 (廣義)":"運動 (GSE)","功能類別":"軀體運動","系統性質 (自主 vs 軀體)":"軀體運動系統","神經核 (Nucleus)":"動眼神經核","腦神經":"III 動眼神經","位置層次":"中腦","cnId":"CNIII","nucId":"cn3_nuc"},
+  {"詳細功能說明":"傳導頭面部深層本體感覺 (如肌肉壓力)","方向 (廣義)":"感覺 (GSA)","功能類別":"軀體感覺","系統性質 (自主 vs 軀體)":"軀體感覺系統","神經核 (Nucleus)":"三叉神經中腦核","腦神經":"V 三叉神經","位置層次":"中腦","cnId":"CNV","nucId":"mes_v"},
+  {"詳細功能說明":"控制眼球運動（上斜肌）","方向 (廣義)":"運動 (GSE)","功能類別":"軀體運動","系統性質 (自主 vs 軀體)":"軀體運動系統","神經核 (Nucleus)":"滑車神經核","腦神經":"IV 滑車神經","位置層次":"中腦","cnId":"CNIV","nucId":"cn4_nuc"},
+  {"詳細功能說明":"支配咀嚼肌、下頜舌骨肌、二腹肌前腹","方向 (廣義)":"運動 (SVE)","功能類別":"軀體運動 (特殊)","系統性質 (自主 vs 軀體)":"軀體運動系統","神經核 (Nucleus)":"三叉神經運動核","腦神經":"V 三叉神經","位置層次":"橋腦","cnId":"CNV","nucId":"mot_v"},
+  {"詳細功能說明":"傳導頭面部皮膚、口腔黏膜之觸覺/壓力覺","方向 (廣義)":"感覺 (GSA)","功能類別":"軀體感覺","系統性質 (自主 vs 軀體)":"軀體感覺系統","神經核 (Nucleus)":"三叉神經主感覺核","腦神經":"V 三叉神經","位置層次":"橋腦","cnId":"CNV","nucId":"prin_v"},
+  {"詳細功能說明":"控制眼球運動（外直肌）","方向 (廣義)":"運動 (GSE)","功能類別":"軀體運動","系統性質 (自主 vs 軀體)":"軀體運動系統","神經核 (Nucleus)":"外展神經核","腦神經":"VI 外展神經","位置層次":"橋腦","cnId":"CNVI","nucId":"cn6_nuc"},
+  {"詳細功能說明":"支配表情肌、鐙骨肌、二腹肌後腹","方向 (廣義)":"運動 (SVE)","功能類別":"軀體運動 (特殊)","系統性質 (自主 vs 軀體)":"軀體運動系統","神經核 (Nucleus)":"面神經運動核","腦神經":"VII 面神經","位置層次":"橋腦","cnId":"CNVII","nucId":"cn7_nuc"},
+  {"詳細功能說明":"支配淚腺、鼻腺、下頜下、舌下腺分泌 (副交感)","方向 (廣義)":"運動 (GVE)","功能類別":"內臟運動","系統性質 (自主 vs 軀體)":"自主神經 (副交感)","神經核 (Nucleus)":"上唾液核","腦神經":"VII 面神經","位置層次":"橋腦","cnId":"CNVII","nucId":"sup_sal"},
+  {"詳細功能說明":"傳導平衡覺（包含線性與旋轉加速度）","方向 (廣義)":"感覺 (SSA)","功能類別":"特殊軀體感覺","系統性質 (自主 vs 軀體)":"軀體感覺系統","神經核 (Nucleus)":"前庭神經核","腦神經":"VIII 前庭耳蝸神經","位置層次":"橋腦/延髓","cnId":"CNVIII","nucId":"vest_nuc"},
+  {"詳細功能說明":"傳導聽覺訊息","方向 (廣義)":"感覺 (SSA)","功能類別":"特殊軀體感覺","系統性質 (自主 vs 軀體)":"軀體感覺系統","神經核 (Nucleus)":"蝸神經核","腦神經":"VIII 前庭耳蝸神經","位置層次":"橋腦/延髓","cnId":"CNVIII","nucId":"coch_nuc"},
+  {"詳細功能說明":"支配腮腺分泌 (副交感控制腺體)","方向 (廣義)":"運動 (GVE)","功能類別":"內臟運動","系統性質 (自主 vs 軀體)":"自主神經 (副交感)","神經核 (Nucleus)":"下唾液核","腦神經":"IX 舌咽神經","位置層次":"延髓","cnId":"CNIX","nucId":"inf_sal"},
+  {"詳細功能說明":"支配莖突咽肌 (輔助吞嚥)","方向 (廣義)":"運動 (SVE)","功能類別":"軀體運動 (特殊)","系統性質 (自主 vs 軀體)":"軀體運動系統","神經核 (Nucleus)":"疑核","腦神經":"IX 舌咽神經","位置層次":"延髓","cnId":"CNIX","nucId":"nuc_amb"},
+  {"詳細功能說明":"支配咽喉肌肉（吞嚥、發音）與食道上段","方向 (廣義)":"運動 (SVE)","功能類別":"軀體運動 (特殊)","系統性質 (自主 vs 軀體)":"軀體運動系統","神經核 (Nucleus)":"疑核","腦神經":"X 迷走神經","位置層次":"延髓","cnId":"CNX","nucId":"nuc_amb"},
+  {"詳細功能說明":"傳導舌前 2/3 之味覺","方向 (廣義)":"感覺 (SVA)","功能類別":"特殊內臟感覺","系統性質 (自主 vs 軀體)":"內臟感覺系統","神經核 (Nucleus)":"孤束核 (首端)","腦神經":"VII 面神經","位置層次":"延髓","cnId":"CNVII","nucId":"sol_rost"},
+  {"詳細功能說明":"傳導舌後 1/3 之味覺","方向 (廣義)":"感覺 (SVA)","功能類別":"特殊內臟感覺","系統性質 (自主 vs 軀體)":"內臟感覺系統","神經核 (Nucleus)":"孤束核 (首端)","腦神經":"IX 舌咽神經","位置層次":"延髓","cnId":"CNIX","nucId":"sol_rost"},
+  {"詳細功能說明":"傳導會厭部區域之味覺","方向 (廣義)":"感覺 (SVA)","功能類別":"特殊內臟感覺","系統性質 (自主 vs 軀體)":"內臟感覺系統","神經核 (Nucleus)":"孤束核 (首端)","腦神經":"X 迷走神經","位置層次":"延髓","cnId":"CNX","nucId":"sol_rost"},
+  {"詳細功能說明":"監測頸動脈竇 (血壓) 與頸動脈體 (化學受器)","方向 (廣義)":"感覺 (GVA)","功能類別":"內臟感覺","系統性質 (自主 vs 軀體)":"內臟感覺系統","神經核 (Nucleus)":"孤束核 (尾端)","腦神經":"IX 舌咽神經","位置層次":"延髓","cnId":"CNIX","nucId":"sol_caud"},
+  {"詳細功能說明":"監測主動脈弓受器及胸腹腔內臟器官感覺","方向 (廣義)":"感覺 (GVA)","功能類別":"內臟感覺","系統性質 (自主 vs 軀體)":"內臟感覺系統","神經核 (Nucleus)":"孤束核 (尾端)","腦神經":"X 迷走神經","位置層次":"延髓","cnId":"CNX","nucId":"sol_caud"},
+  {"詳細功能說明":"支配胸腹腔內臟平滑肌、腺體與心肌活動 (副交感)","方向 (廣義)":"運動 (GVE)","功能類別":"內臟運動","系統性質 (自主 vs 軀體)":"自主神經 (副交感)","神經核 (Nucleus)":"迷走神經背核","腦神經":"X 迷走神經","位置層次":"延髓","cnId":"CNX","nucId":"dmnx"},
+  {"詳細功能說明":"控制舌肌運動（舌內肌與大部分舌外肌）","方向 (廣義)":"運動 (GSE)","功能類別":"軀體運動","系統性質 (自主 vs 軀體)":"軀體運動系統","神經核 (Nucleus)":"舌下神經核","腦神經":"XII 舌下神經","位置層次":"延髓","cnId":"CNXII","nucId":"cn12_nuc"},
+  {"詳細功能說明":"傳導頭面部之一般感覺 (痛覺、溫度覺)","方向 (廣義)":"感覺 (GSA)","功能類別":"軀體感覺","系統性質 (自主 vs 軀體)":"軀體感覺系統","神經核 (Nucleus)":"三叉神經脊髓核","腦神經":"V 三叉神經","位置層次":"延髓至頸髓","cnId":"CNV","nucId":"spin_v"},
+  {"詳細功能說明":"傳導耳廓、外耳道部分區域之一般感覺","方向 (廣義)":"感覺 (GSA)","功能類別":"軀體感覺","系統性質 (自主 vs 軀體)":"軀體感覺系統","神經核 (Nucleus)":"三叉神經脊髓核","腦神經":"VII 面神經","位置層次":"延髓至頸髓","cnId":"CNVII","nucId":"spin_v"},
+  {"詳細功能說明":"傳導耳後、外耳道、中耳、咽部之一般感覺","方向 (廣義)":"感覺 (GSA)","功能類別":"軀體感覺","系統性質 (自主 vs 軀體)":"軀體感覺系統","神經核 (Nucleus)":"三叉神經脊髓核","腦神經":"IX 舌咽神經","位置層次":"延髓至頸髓","cnId":"CNIX","nucId":"spin_v"},
+  {"詳細功能說明":"傳導外耳道、咽部、喉部、後顱窩腦膜之感覺","方向 (廣義)":"感覺 (GSA)","功能類別":"軀體感覺","系統性質 (自主 vs 軀體)":"軀體感覺系統","神經核 (Nucleus)":"三叉神經脊髓核","腦神經":"X 迷走神經","位置層次":"延髓至頸髓","cnId":"CNX","nucId":"spin_v"},
+  {"詳細功能說明":"支配胸鎖乳突肌、斜方肌（負責轉頭與聳肩）","方向 (廣義)":"運動 (SVE)","功能類別":"軀體運動 (特殊)","系統性質 (自主 vs 軀體)":"軀體運動系統","神經核 (Nucleus)":"副神經核 (脊髓部)","腦神經":"XI 副神經","位置層次":"上段頸髓","cnId":"CNXI","nucId":"acc_nuc"}
+];
+
+const romanMap = {
+    "I": 1, "II": 2, "III": 3, "IV": 4, "V": 5, "VI": 6, 
+    "VII": 7, "VIII": 8, "IX": 9, "X": 10, "XI": 11, "XII": 12
+};
+function getNerveNumber(n) {
+    const match = n.match(/^([IVX]+)\s/);
+    return match ? romanMap[match[1]] : 99;
+}
+const locOrder = ["端腦", "間腦", "中腦", "橋腦", "橋腦/延髓", "延髓", "延髓至頸髓", "上段頸髓"];
+function getLocIndex(loc) {
+    const ind = locOrder.indexOf(loc);
+    return ind === -1 ? 99 : ind;
+}
+
+const nervesMap = new Map();
+RAW_MATRIX_DATA.forEach(d => {
+    if (!nervesMap.has(d['腦神經'])) {
+        nervesMap.set(d['腦神經'], { name: d['腦神經'], number: getNerveNumber(d['腦神經']), cnId: d.cnId });
+    }
+});
+let matrixNervesList = Array.from(nervesMap.values()).sort((a,b) => a.number - b.number);
+
+const nucleiMap = new Map();
+RAW_MATRIX_DATA.forEach(d => {
+    const name = d['神經核 (Nucleus)'];
+    if (!nucleiMap.has(name)) {
+        nucleiMap.set(name, { name: name, location: d['位置層次'], nucId: d.nucId });
+    }
+});
+let matrixNucleiList = Array.from(nucleiMap.values()).sort((a,b) => {
+    const diff = getLocIndex(a.location) - getLocIndex(b.location);
+    return diff !== 0 ? diff : a.name.localeCompare(b.name);
+});
+
+const initialMatrixNervesList = [...matrixNervesList];
+const initialMatrixNucleiList = [...matrixNucleiList];
+
+let matrixState = {
+    colSort: 'number', colSortDir: 1, colSortTarget: null,
+    rowSort: 'location', rowSortDir: 1, rowSortTarget: null,
+    isManualCol: false, isManualRow: false
+};
+
+let draggedItem = null;
+let draggedType = null;
+
+function applyMatrixSort() {
+    if (!matrixState.isManualCol) {
+        matrixNervesList.sort((a, b) => {
+            if (matrixState.colSort === 'number') {
+                return (a.number - b.number) * matrixState.colSortDir;
+            } else if (matrixState.colSort === 'dom-asc' && matrixState.colSortTarget) {
+                const hasA = RAW_MATRIX_DATA.some(d => d['腦神經'] === a.name && d['神經核 (Nucleus)'] === matrixState.colSortTarget);
+                const hasB = RAW_MATRIX_DATA.some(d => d['腦神經'] === b.name && d['神經核 (Nucleus)'] === matrixState.colSortTarget);
+                if (hasA && !hasB) return -1 * matrixState.colSortDir;
+                if (!hasA && hasB) return 1 * matrixState.colSortDir;
+                return (a.number - b.number);
+            }
+            return 0;
+        });
+    }
+
+    if (!matrixState.isManualRow) {
+        matrixNucleiList.sort((a, b) => {
+            if (matrixState.rowSort === 'name') {
+                return a.name.localeCompare(b.name) * matrixState.rowSortDir;
+            } else if (matrixState.rowSort === 'location') {
+                const diff = getLocIndex(a.location) - getLocIndex(b.location);
+                if (diff !== 0) return diff * matrixState.rowSortDir;
+                return a.name.localeCompare(b.name);
+            } else if (matrixState.rowSort === 'dom-asc' && matrixState.rowSortTarget) {
+                const hasA = RAW_MATRIX_DATA.some(d => d['腦神經'] === matrixState.rowSortTarget && d['神經核 (Nucleus)'] === a.name);
+                const hasB = RAW_MATRIX_DATA.some(d => d['腦神經'] === matrixState.rowSortTarget && d['神經核 (Nucleus)'] === b.name);
+                if (hasA && !hasB) return -1 * matrixState.rowSortDir;
+                if (!hasA && hasB) return 1 * matrixState.rowSortDir;
+                return getLocIndex(a.location) - getLocIndex(b.location);
+            }
+            return 0;
+        });
+    }
+}
+
+function renderMatrixTable() {
+    applyMatrixSort();
+    const root = document.getElementById('matrix-root');
+    if (!root) return;
+
+    const table = document.createElement('table');
+    table.className = 'matrix-table';
+    const thead = document.createElement('thead');
+    const tbody = document.createElement('tbody');
+
+    const trHead = document.createElement('tr');
+    const thCorner = document.createElement('th');
+    thCorner.style.minWidth = '200px';
+
+    const divCorner = document.createElement('div');
+    divCorner.style.cssText = 'display:flex; flex-direction:column; gap:6px; font-size:11px; font-weight:normal; text-align:left;';
+    divCorner.innerHTML = `
+        <div style="cursor:pointer; color:#94a3b8; display:flex; justify-content:space-between;" id="btn-toggle-row-sort">
+            <span>R: 神經核 ${matrixState.isManualRow ? '(自訂)' : (matrixState.rowSort === 'location' ? '(依位置)' : '(依名稱)')} ${!matrixState.isManualRow ? (matrixState.rowSortDir === 1 ? '↓' : '↑') : ''}</span>
+        </div>
+        <div style="cursor:pointer; color:#94a3b8; display:flex; justify-content:space-between;" id="btn-toggle-col-sort">
+            <span>C: 腦神經 ${matrixState.isManualCol ? '(自訂)' : (matrixState.colSort === 'number' ? '(依順序)' : '(依關聯)')} ${!matrixState.isManualCol ? (matrixState.colSortDir === 1 ? '→' : '←') : ''}</span>
+        </div>
+        <button id="btn-matrix-reset" style="padding:2px 6px; font-size:10px; background:#334155; border:1px solid #475569; border-radius:4px; color:#cbd5e1; cursor:pointer;">重設排序 (Reset)</button>
+    `;
+    thCorner.appendChild(divCorner);
+    trHead.appendChild(thCorner);
+
+    matrixNervesList.forEach(nerve => {
+        const th = document.createElement('th');
+        th.draggable = true;
+        th.style.cursor = 'grab';
+        th.title = '點擊在 3D 中定位此腦神經；拖曳可重新排列順序';
+        th.innerHTML = `<div style="font-size:13px; font-weight:700; color:#38bdf8;">${nerve.name.split(' ')[0]}</div><div style="font-size:11px; font-weight:500; color:#e2e8f0;">${nerve.name.split(' ')[1]}</div>`;
+
+        th.ondragstart = (e) => { draggedItem = nerve; draggedType = 'nerve'; e.dataTransfer.effectAllowed = 'move'; };
+        th.ondragover = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; return false; };
+        th.ondrop = (e) => {
+            e.stopPropagation(); e.preventDefault();
+            if (draggedItem === nerve || draggedType !== 'nerve') return;
+            const from = matrixNervesList.indexOf(draggedItem);
+            const to = matrixNervesList.indexOf(nerve);
+            if (from >= 0 && to >= 0) {
+                matrixNervesList.splice(from, 1);
+                matrixNervesList.splice(to, 0, draggedItem);
+                matrixState.isManualCol = true;
+                renderMatrixTable();
+            }
+            return false;
+        };
+
+        th.onclick = (e) => {
+            toggleMatrixModal();
+            selectCN(nerve.cnId);
+        };
+
+        if (!matrixState.isManualRow && matrixState.rowSort === 'dom-asc' && matrixState.rowSortTarget === nerve.name) {
+            th.style.backgroundColor = '#334155';
+        }
+        trHead.appendChild(th);
+    });
+    thead.appendChild(trHead);
+    table.appendChild(thead);
+
+    matrixNucleiList.forEach(nuc => {
+        const tr = document.createElement('tr');
+        const thNucleus = document.createElement('th');
+        thNucleus.draggable = true;
+        thNucleus.style.cursor = 'grab';
+        thNucleus.title = '點擊在 3D 中定位此神經核；拖曳可重新排列順序';
+        thNucleus.innerHTML = `
+            <div style="font-size:12px; font-weight:600; color:#f8fafc;">${nuc.name}</div>
+            <div style="font-size:10px; color:#94a3b8; font-weight:normal; margin-top:2px;">${nuc.location}</div>
+        `;
+
+        thNucleus.ondragstart = (e) => { draggedItem = nuc; draggedType = 'nucleus'; e.dataTransfer.effectAllowed = 'move'; };
+        thNucleus.ondragover = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; return false; };
+        thNucleus.ondrop = (e) => {
+            e.stopPropagation(); e.preventDefault();
+            if (draggedItem === nuc || draggedType !== 'nucleus') return;
+            const from = matrixNucleiList.indexOf(draggedItem);
+            const to = matrixNucleiList.indexOf(nuc);
+            if (from >= 0 && to >= 0) {
+                matrixNucleiList.splice(from, 1);
+                matrixNucleiList.splice(to, 0, draggedItem);
+                matrixState.isManualRow = true;
+                renderMatrixTable();
+            }
+            return false;
+        };
+
+        thNucleus.onclick = () => {
+            toggleMatrixModal();
+            selectNucleus(nuc.nucId);
+        };
+
+        if (!matrixState.isManualCol && matrixState.colSort === 'dom-asc' && matrixState.colSortTarget === nuc.name) {
+            thNucleus.style.backgroundColor = '#334155';
+        }
+        tr.appendChild(thNucleus);
+
+        matrixNervesList.forEach(nerve => {
+            const td = document.createElement('td');
+            const match = RAW_MATRIX_DATA.find(d => d['腦神經'] === nerve.name && d['神經核 (Nucleus)'] === nuc.name);
+
+            if (match) {
+                td.className = 'has-cell';
+                td.title = '點擊在 3D 中聚焦此神經核與腦神經';
+                const divFunc = document.createElement('div');
+                divFunc.className = 'cell-function';
+                divFunc.textContent = match['功能類別'];
+
+                const divDesc = document.createElement('div');
+                divDesc.className = 'cell-desc';
+                divDesc.textContent = match['詳細功能說明'];
+
+                const divType = document.createElement('div');
+                divType.className = 'cell-type';
+                divType.textContent = match['方向 (廣義)'];
+                if (match['方向 (廣義)'].includes('感覺')) divType.classList.add('tag-S');
+                if (match['方向 (廣義)'].includes('運動')) divType.classList.add('tag-M');
+
+                if (match['系統性質 (自主 vs 軀體)'] && match['系統性質 (自主 vs 軀體)'].includes('自主')) {
+                    td.classList.add('parasym-cell');
+                }
+
+                td.appendChild(divFunc);
+                td.appendChild(divDesc);
+                td.appendChild(divType);
+
+                td.onclick = () => {
+                    toggleMatrixModal();
+                    selectNucleus(match.nucId);
+                    selectCN(match.cnId);
+                };
+            }
+            tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+    });
+
+    table.appendChild(tbody);
+    root.innerHTML = '';
+    root.appendChild(table);
+
+    document.getElementById('btn-toggle-row-sort').onclick = () => {
+        matrixState.isManualRow = false;
+        if (matrixState.rowSort === 'location' && matrixState.rowSortDir === 1) matrixState.rowSortDir = -1;
+        else if (matrixState.rowSort === 'location' && matrixState.rowSortDir === -1) { matrixState.rowSort = 'name'; matrixState.rowSortDir = 1; }
+        else if (matrixState.rowSort === 'name' && matrixState.rowSortDir === 1) matrixState.rowSortDir = -1;
+        else { matrixState.rowSort = 'location'; matrixState.rowSortDir = 1; }
+        renderMatrixTable();
+    };
+
+    document.getElementById('btn-toggle-col-sort').onclick = () => {
+        matrixState.isManualCol = false;
+        matrixState.colSort = 'number';
+        matrixState.colSortDir = matrixState.colSortDir === 1 ? -1 : 1;
+        renderMatrixTable();
+    };
+
+    document.getElementById('btn-matrix-reset').onclick = () => {
+        matrixNervesList = [...initialMatrixNervesList];
+        matrixNucleiList = [...initialMatrixNucleiList];
+        matrixState = {
+            colSort: 'number', colSortDir: 1, colSortTarget: null,
+            rowSort: 'location', rowSortDir: 1, rowSortTarget: null,
+            isManualCol: false, isManualRow: false
+        };
+        renderMatrixTable();
+    };
+}
+renderMatrixTable();
+
+window.toggleMatrixModal = function() {
+    document.getElementById('matrix-modal').classList.toggle('open');
+};
+
+// ==========================================
+// 7. 3D Raycaster 點擊與觸控選取支援
+// ==========================================
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+let pointerDownPos = { x: 0, y: 0 };
+
+renderer.domElement.addEventListener('pointerdown', (e) => {
+    pointerDownPos = { x: e.clientX, y: e.clientY };
+});
+
+renderer.domElement.addEventListener('pointerup', (e) => {
+    // 區分拖曳旋轉(Pan/Rotate)與輕點選取(Tap/Click)
+    const dx = e.clientX - pointerDownPos.x;
+    const dy = e.clientY - pointerDownPos.y;
+    if (Math.hypot(dx, dy) > 6) return;
+
+    pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+    pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+    raycaster.setFromCamera(pointer, camera);
+    const intersects = raycaster.intersectObjects(interactiveMeshes, false);
+
+    if (intersects.length > 0) {
+        const hit = intersects[0].object.userData;
+        if (hit.type === 'nucleus') selectNucleus(hit.id);
+        else if (hit.type === 'cn') selectCN(hit.id);
+    }
+});
+
+// ==========================================
+// 8. 標籤投影與動畫迴圈
+// ==========================================
+const tempV = new THREE.Vector3();
+
+function updateLabels() {
+    if (!showLabels) return;
+    const halfW = window.innerWidth / 2;
+    const halfH = window.innerHeight / 2;
+
+    // 更新神經核標籤 (使用 GPU 硬體加速 translate3d 取代 top/left，避免觸發 Layout/Reflow)
+    const nucList = Object.values(nucleiObjects);
+    for (let i = 0; i < nucList.length; i++) {
+        const obj = nucList[i];
+        tempV.copy(obj.mesh.position);
+        tempV.project(camera);
+        if (tempV.z > 1) {
+            obj.labelEl.style.display = 'none';
+            continue;
+        }
+        const x = Math.round((tempV.x * halfW) + halfW);
+        const y = Math.round(-(tempV.y * halfH) + halfH);
+        obj.labelEl.style.display = 'block';
+        obj.labelEl.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -50%)`;
+    }
+
+    // 更新腦神經標籤
+    const cnList = Object.values(cnObjects);
+    for (let i = 0; i < cnList.length; i++) {
+        const obj = cnList[i];
+        tempV.copy(obj.tipPos);
+        tempV.project(camera);
+        if (tempV.z > 1) {
+            obj.labelEl.style.display = 'none';
+            continue;
+        }
+        const x = Math.round((tempV.x * halfW) + halfW);
+        const y = Math.round(-(tempV.y * halfH) + halfH);
+        obj.labelEl.style.display = 'block';
+        obj.labelEl.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -50%)`;
+    }
+}
+
+// 更新 5 大腦幹節段 3D 浮動標籤
+function updateRegionLabels() {
+    if (!showRegionLabels) return;
+    const halfW = window.innerWidth / 2;
+    const halfH = window.innerHeight / 2;
+
+    BRAIN_REGIONS.forEach(reg => {
+        const obj = regionObjects[reg.id];
+        if (!obj || !obj.visibleLabel) {
+            if (obj && obj.labelEl) obj.labelEl.style.display = 'none';
+            return;
+        }
+        tempV.set(...reg.pos);
+        tempV.project(camera);
+        if (tempV.z > 1) {
+            obj.labelEl.style.display = 'none';
+            return;
+        }
+        const x = Math.round((tempV.x * halfW) + halfW);
+        const y = Math.round(-(tempV.y * halfH) + halfH);
+        obj.labelEl.style.display = 'block';
+        obj.labelEl.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -50%)`;
+    });
+}
+
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// 初始針對小螢幕自動收合側欄避免遮擋
+if (window.innerWidth <= 860) {
+    document.getElementById('left-panel').classList.add('collapsed');
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+    controls.target.lerp(targetLookAt, 0.08);
+    controls.update();
+    updateLabels();
+    updateRegionLabels();
+    renderer.render(scene, camera);
+}
+
+animate();
+</script>
+</body>
+</html>

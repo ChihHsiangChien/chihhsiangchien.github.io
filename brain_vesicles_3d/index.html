@@ -1,0 +1,2126 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>胚胎腦泡演變至成人腦部與腦室系統 3D 模擬</title>
+
+  <!-- 載入 Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- 載入繁體中文與無襯線字體 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- Three.js ES Module Importmap -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Noto Sans TC"', 'Inter', 'system-ui', 'sans-serif'],
+          },
+        },
+      },
+    };
+  </script>
+
+  <style>
+    /* 防止行動裝置與平板誤觸捲動或彈跳 */
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #070d19;
+      color: #f1f5f9;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    /* 3D 視口背景：醫療科學深藍徑向漸層 */
+    #viewport3d {
+      background: radial-gradient(circle at 48% 45%, #16243d 0%, #0c1527 56%, #060b16 100%);
+      touch-action: none;
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    #viewport3d canvas {
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+      touch-action: none;
+      outline: none;
+    }
+
+    /* 觸控友善大圓點滑桿 */
+    input[type="range"].custom-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      background: transparent;
+      cursor: pointer;
+    }
+    input[type="range"].custom-slider::-webkit-slider-runnable-track {
+      height: 6px;
+      border-radius: 9999px;
+      background: rgba(148, 163, 184, 0.28);
+    }
+    input[type="range"].custom-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 22px;
+      height: 22px;
+      border-radius: 9999px;
+      background: #22d3ee;
+      border: 3px solid #070d19;
+      box-shadow: 0 0 12px rgba(34, 211, 238, 0.75);
+      margin-top: -8px;
+      transition: transform 0.15s ease;
+    }
+    input[type="range"].custom-slider::-webkit-slider-thumb:hover,
+    input[type="range"].custom-slider::-webkit-slider-thumb:active {
+      transform: scale(1.18);
+    }
+
+    /* 3D 投影浮動標註 */
+    .label-3d {
+      position: absolute;
+      top: 0;
+      left: 0;
+      transform: translate(-50%, -50%);
+      pointer-events: auto;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: opacity 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
+    }
+
+    /* 自訂捲軸 */
+    .custom-scroll::-webkit-scrollbar {
+      width: 6px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.35);
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: rgba(100, 116, 139, 0.5);
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans flex flex-col h-screen w-screen overflow-hidden">
+
+  <!-- ==================== 頂部標題與狀態列 ==================== -->
+  <header class="z-30 flex items-center justify-between px-3 sm:px-5 py-2.5 bg-slate-900/90 backdrop-blur-md border-b border-slate-700/60 shrink-0">
+    <div class="flex items-center gap-2.5 min-w-0">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-400 via-sky-500 to-indigo-500 flex items-center justify-center shadow-lg shadow-cyan-500/20 shrink-0">
+        <svg class="w-5 h-5 text-slate-950" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
+        </svg>
+      </div>
+      <div class="min-w-0">
+        <div class="flex items-center gap-2">
+          <h1 class="text-sm sm:text-base md:text-lg font-bold tracking-wide text-slate-50 truncate">
+            胚胎腦泡演變至成人腦部與腦室系統 3D 模擬
+          </h1>
+          <span class="hidden sm:inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 shrink-0">
+            Three.js 3D
+          </span>
+        </div>
+        <p class="text-[11px] text-slate-400 truncate hidden md:block">
+          神經管三腦泡連續形變・100% 腦實質包覆腦室・矢狀剖視與 CSF 粒子流
+        </p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2 shrink-0">
+      <div class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-cyan-500/15 border border-cyan-400/35 text-cyan-200 text-xs font-semibold">
+        <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+        <span id="topStageBadge">第 4 週｜初級腦泡（三腦泡）</span>
+      </div>
+
+      <!-- 平板／手機側邊抽屜開關 -->
+      <button id="toggleDrawerBtn" type="button"
+        class="lg:hidden min-w-[44px] min-h-[44px] px-3 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-600/70 text-xs sm:text-sm font-medium text-cyan-300 flex items-center gap-1.5 transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h10" />
+        </svg>
+        <span>控制與對應表</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ==================== 主視口 + 可收合右側面板 ==================== -->
+  <div class="relative flex-1 flex overflow-hidden">
+
+    <!-- 左側主 3D 互動區 -->
+    <main class="relative flex-1 flex flex-col overflow-hidden">
+      <div id="viewport3d" class="flex-1">
+        <!-- WebGL 錯誤備援訊息盒（絕不使用 alert） -->
+        <div id="webglErrorBox" class="hidden absolute inset-0 z-50 flex items-center justify-center p-6 bg-slate-950/90">
+          <div class="max-w-md rounded-2xl bg-slate-900 border border-rose-500/50 p-5 text-center space-y-2 shadow-2xl">
+            <h2 class="text-base font-bold text-rose-300">無法初始化 3D WebGL 畫面</h2>
+            <p id="webglErrorMsg" class="text-xs text-slate-300 leading-relaxed">
+              請確認瀏覽器已啟用 WebGL 加速。
+            </p>
+          </div>
+        </div>
+
+        <!-- 3D 浮動標註容器 -->
+        <div id="labelsLayer" class="pointer-events-none absolute inset-0 z-10 overflow-hidden"></div>
+
+        <!-- 左上角：當前階段解說浮動卡 -->
+        <div class="pointer-events-none absolute top-3 left-3 z-20 max-w-[250px] sm:max-w-xs">
+          <div class="pointer-events-auto bg-slate-900/80 backdrop-blur-md border border-slate-700/70 rounded-2xl px-3.5 py-2.5 shadow-xl">
+            <div class="flex items-center justify-between gap-2">
+              <span id="hudWeek" class="text-xs font-bold text-cyan-400 tracking-wide">胚胎第 4 週</span>
+              <span id="hudPercent" class="text-[11px] font-mono text-slate-300 bg-slate-800/90 px-2 py-0.5 rounded-md">0%</span>
+            </div>
+            <div id="hudTitle" class="text-sm sm:text-base font-bold text-white mt-0.5">初級腦泡（三腦泡）</div>
+            <p id="hudDesc" class="text-[11px] sm:text-xs text-slate-300 leading-relaxed mt-1">
+              單一連續神經管，前端形成前腦、中腦與菱腦三個串珠狀球囊膨大，中央貫穿連續管腔。
+            </p>
+          </div>
+        </div>
+
+        <!-- 右側：44x44px 觸控友善縮放與標準視角按鈕 -->
+        <div class="absolute top-3 right-3 z-20 flex flex-col items-end gap-2">
+          <div class="flex flex-col bg-slate-900/85 backdrop-blur-md border border-slate-700/70 rounded-2xl p-1.5 shadow-xl gap-1">
+            <button id="btnZoomIn" type="button" title="放大"
+              class="w-11 h-11 rounded-xl bg-slate-800/85 hover:bg-slate-700 active:scale-95 text-slate-100 flex items-center justify-center transition">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12h14" />
+              </svg>
+            </button>
+            <button id="btnZoomOut" type="button" title="縮小"
+              class="w-11 h-11 rounded-xl bg-slate-800/85 hover:bg-slate-700 active:scale-95 text-slate-100 flex items-center justify-center transition">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14" />
+              </svg>
+            </button>
+            <button id="btnResetCam" type="button" title="重置視角"
+              class="w-11 h-11 rounded-xl bg-slate-800/85 hover:bg-slate-700 active:scale-95 text-cyan-300 flex items-center justify-center transition">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+          </div>
+
+          <div class="flex flex-col bg-slate-900/85 backdrop-blur-md border border-slate-700/70 rounded-2xl p-1.5 shadow-xl gap-1">
+            <button data-cam="right" type="button" title="右側視角"
+              class="cam-preset-btn w-11 h-11 rounded-xl bg-slate-800/85 hover:bg-slate-700 active:scale-95 text-[11px] font-bold text-slate-200 flex items-center justify-center transition">
+              右側
+            </button>
+            <button data-cam="front" type="button" title="正面視角"
+              class="cam-preset-btn w-11 h-11 rounded-xl bg-slate-800/85 hover:bg-slate-700 active:scale-95 text-[11px] font-bold text-slate-200 flex items-center justify-center transition">
+              正面
+            </button>
+            <button data-cam="top" type="button" title="俯視視角"
+              class="cam-preset-btn w-11 h-11 rounded-xl bg-slate-800/85 hover:bg-slate-700 active:scale-95 text-[11px] font-bold text-slate-200 flex items-center justify-center transition">
+              俯視
+            </button>
+            <button data-cam="oblique" type="button" title="3/4 斜角"
+              class="cam-preset-btn w-11 h-11 rounded-xl bg-cyan-500/20 border border-cyan-400/40 hover:bg-cyan-500/30 active:scale-95 text-[11px] font-bold text-cyan-200 flex items-center justify-center transition">
+              3/4
+            </button>
+          </div>
+        </div>
+
+        <!-- 左下角（視口內）：四種視圖與剖面模式快捷列 -->
+        <div class="absolute bottom-3 left-3 z-20 hidden sm:flex items-center gap-1.5 bg-slate-900/85 backdrop-blur-md border border-slate-700/70 rounded-2xl p-1.5 shadow-xl">
+          <button data-viewmode="hybrid" type="button"
+            class="viewmode-btn min-h-[36px] px-3 rounded-xl text-xs font-semibold bg-cyan-500/25 text-cyan-200 border border-cyan-400/50 transition">
+            綜合透視
+          </button>
+          <button data-viewmode="sagittal" type="button"
+            class="viewmode-btn min-h-[36px] px-3 rounded-xl text-xs font-semibold bg-slate-800/80 text-slate-300 border border-transparent hover:bg-slate-700 transition">
+            半腦矢狀剖視
+          </button>
+          <button data-viewmode="ventricle" type="button"
+            class="viewmode-btn min-h-[36px] px-3 rounded-xl text-xs font-semibold bg-slate-800/80 text-slate-300 border border-transparent hover:bg-slate-700 transition">
+            純腦室系統
+          </button>
+          <button data-viewmode="solid" type="button"
+            class="viewmode-btn min-h-[36px] px-3 rounded-xl text-xs font-semibold bg-slate-800/80 text-slate-300 border border-transparent hover:bg-slate-700 transition">
+            腦組織實心
+          </button>
+        </div>
+
+        <!-- 底部右側觸控提示 -->
+        <div class="pointer-events-none absolute bottom-3 right-3 z-20 hidden xl:block">
+          <div class="bg-slate-900/75 backdrop-blur-sm border border-slate-700/50 rounded-xl px-3 py-1.5 text-[11px] text-slate-400">
+            左鍵／單指旋轉・滾輪／雙指捏合縮放・右鍵／雙指平移・點擊腦區高亮
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== 底部時間軸與播放控制列 ==================== -->
+      <section class="z-20 bg-slate-900/95 backdrop-blur-md border-t border-slate-700/70 px-3 sm:px-5 py-2.5 shrink-0">
+        <div class="flex items-center gap-3 mb-2">
+          <button id="btnPlayPause" type="button"
+            class="min-w-[44px] min-h-[44px] rounded-xl bg-cyan-400 hover:bg-cyan-300 active:scale-95 text-slate-950 font-bold flex items-center justify-center shadow-lg shadow-cyan-500/25 transition shrink-0">
+            <svg id="iconPlay" class="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+            <svg id="iconPause" class="w-5 h-5 hidden" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M6 5h4v14H6zm8 0h4v14h-4z" />
+            </svg>
+          </button>
+
+          <div class="flex-1 flex flex-col justify-center">
+            <input id="timelineSlider" type="range" min="0" max="1000" value="0" class="custom-slider w-full" />
+            <div class="flex justify-between text-[10px] sm:text-[11px] text-slate-400 mt-1 px-0.5 font-medium">
+              <span>0% 三腦泡</span>
+              <span>33% 五腦泡</span>
+              <span>66% 胎兒期</span>
+              <span>100% 成人腦</span>
+            </div>
+          </div>
+
+          <button id="btnSpeed" type="button"
+            class="min-w-[48px] min-h-[44px] px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-600/70 text-xs font-mono font-bold text-cyan-300 transition shrink-0">
+            1.0x
+          </button>
+        </div>
+
+        <div class="grid grid-cols-4 gap-1.5 sm:gap-2 max-w-2xl">
+          <button data-jump="0" type="button"
+            class="stage-jump-btn min-h-[38px] px-2 py-1.5 rounded-xl text-xs font-semibold bg-cyan-500/25 border border-cyan-400/60 text-cyan-200 transition active:scale-95">
+            1. 三腦泡
+          </button>
+          <button data-jump="0.33" type="button"
+            class="stage-jump-btn min-h-[38px] px-2 py-1.5 rounded-xl text-xs font-semibold bg-slate-800/90 border border-slate-700 text-slate-300 hover:bg-slate-700 transition active:scale-95">
+            2. 五腦泡
+          </button>
+          <button data-jump="0.66" type="button"
+            class="stage-jump-btn min-h-[38px] px-2 py-1.5 rounded-xl text-xs font-semibold bg-slate-800/90 border border-slate-700 text-slate-300 hover:bg-slate-700 transition active:scale-95">
+            3. 胎兒期
+          </button>
+          <button data-jump="1.0" type="button"
+            class="stage-jump-btn min-h-[38px] px-2 py-1.5 rounded-xl text-xs font-semibold bg-slate-800/90 border border-slate-700 text-slate-300 hover:bg-slate-700 transition active:scale-95">
+            4. 成人腦
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <!-- ==================== 右側控制與對應表面板（平板／手機為抽屜） ==================== -->
+    <div id="drawerBackdrop" class="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-30 hidden lg:hidden"></div>
+    <aside id="sidePanel"
+      class="fixed lg:static top-0 right-0 h-full w-[88vw] max-w-[370px] lg:w-[355px] xl:w-[380px] z-40 bg-slate-900/95 backdrop-blur-xl border-l border-slate-700/70 flex flex-col transform translate-x-full lg:translate-x-0 transition-transform duration-300 ease-out shadow-2xl lg:shadow-none">
+
+      <div class="flex items-center justify-between px-4 py-3 border-b border-slate-700/60 shrink-0">
+        <div>
+          <h2 class="text-sm font-bold text-white flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+            3D 顯示控制與構造對應表
+          </h2>
+          <p class="text-[11px] text-slate-400 mt-0.5">點擊任一構造同步高亮管壁與對應腦室</p>
+        </div>
+        <button id="closeDrawerBtn" type="button"
+          class="lg:hidden w-11 h-11 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto custom-scroll p-3.5 space-y-3.5">
+
+        <!-- A. 視圖模式與透明度控制 -->
+        <div class="rounded-2xl bg-slate-800/60 border border-slate-700/70 p-3 space-y-3">
+          <div class="text-xs font-bold text-slate-200">視圖與剖面透視</div>
+
+          <div class="grid grid-cols-2 gap-1.5">
+            <button data-viewmode="hybrid" type="button"
+              class="viewmode-btn-panel min-h-[38px] px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-cyan-500/25 text-cyan-200 border border-cyan-400/50 transition">
+              綜合透視
+            </button>
+            <button data-viewmode="sagittal" type="button"
+              class="viewmode-btn-panel min-h-[38px] px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-900/70 text-slate-300 border border-slate-700 hover:bg-slate-700 transition">
+              半腦矢狀剖視
+            </button>
+            <button data-viewmode="ventricle" type="button"
+              class="viewmode-btn-panel min-h-[38px] px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-900/70 text-slate-300 border border-slate-700 hover:bg-slate-700 transition">
+              純腦室系統
+            </button>
+            <button data-viewmode="solid" type="button"
+              class="viewmode-btn-panel min-h-[38px] px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-900/70 text-slate-300 border border-slate-700 hover:bg-slate-700 transition">
+              腦組織實心
+            </button>
+          </div>
+
+          <div class="space-y-1">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-slate-300">腦組織不透明度</span>
+              <span id="opacityValText" class="font-mono text-cyan-300 font-semibold">40%</span>
+            </div>
+            <input id="opacitySlider" type="range" min="0" max="100" value="40" class="custom-slider w-full" />
+          </div>
+
+          <div class="grid grid-cols-2 gap-2 pt-0.5">
+            <button id="toggleCsfBtn" type="button"
+              class="min-h-[40px] px-2.5 rounded-xl text-xs font-semibold bg-cyan-500/20 border border-cyan-400/50 text-cyan-200 flex items-center justify-center gap-1.5 transition active:scale-95">
+              <span class="w-2 h-2 rounded-full bg-cyan-300 shadow-[0_0_8px_#22d3ee]"></span>
+              <span>CSF 粒子：開</span>
+            </button>
+            <button id="toggleLabelsBtn" type="button"
+              class="min-h-[40px] px-2.5 rounded-xl text-xs font-semibold bg-sky-500/20 border border-sky-400/50 text-sky-200 flex items-center justify-center gap-1.5 transition active:scale-95">
+              <span>3D 標註：開</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- B. 選中構造的詳細解剖解說卡 -->
+        <div id="detailCard" class="rounded-2xl bg-gradient-to-br from-slate-800/90 to-slate-900/95 border border-slate-600/70 p-3.5 shadow-lg">
+          <div class="flex items-start justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <span id="detailDot" class="w-3.5 h-3.5 rounded-full bg-cyan-400 shrink-0 shadow-sm"></span>
+              <h3 id="detailTitle" class="text-sm font-bold text-white">點選 3D 構造檢視解說</h3>
+            </div>
+            <button id="btnClearSelect" type="button"
+              class="hidden text-[11px] text-slate-300 hover:text-white px-2 py-0.5 rounded-md bg-slate-700/80">
+              取消高亮
+            </button>
+          </div>
+          <div id="detailBody" class="mt-2.5 text-xs text-slate-300 leading-relaxed space-y-2">
+            <p>點擊 3D 畫面中的任一腦泡、成人腦區或內部發光腦室，或選擇下方對應表，即可同步高亮其「管壁」與「管腔」。</p>
+            <div class="p-2.5 rounded-xl bg-cyan-950/45 border border-cyan-500/30 text-cyan-200/95 text-[11px]">
+              <strong>解剖包覆驗證：</strong>拖曳至 100% 並切換<strong>「腦組織實心」</strong>，可旋轉各視角確認所有腦室皆完全包覆於腦實質中；再切換<strong>「半腦矢狀剖視」</strong>即可直擊正中切面內的第三腦室、導水管與第四腦室。
+            </div>
+          </div>
+        </div>
+
+        <!-- C. 腦泡—成人腦—腦室對應表 -->
+        <div class="space-y-1.5">
+          <div class="text-xs font-bold text-slate-300 px-0.5">腦泡－成人腦－腦室對應表</div>
+          <div id="structureList" class="space-y-2"></div>
+        </div>
+
+      </div>
+    </aside>
+  </div>
+
+  <!-- ==================== Three.js 3D 參數化幾何與互動引擎 ==================== -->
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // =========================================================================
+    // 1. 神經胚胎學構造資料與配色
+    // =========================================================================
+    const STRUCTURES = [
+      {
+        id: 'telencephalon',
+        primary: '前腦泡 (Prosencephalon)',
+        secondary: '端腦 (Telencephalon)',
+        adultWall: '左右大腦半球（額、頂、枕、顳葉）',
+        ventricle: '左右側腦室（C 字形）與室間孔',
+        colorHex: 0xfb7185,
+        cssColor: '#fb7185',
+        desc: '第 5 週自前腦泡兩側萌出，隨後向前後及下方劇烈擴張捲曲並覆蓋間腦與小腦上方；左右內側面緊貼正中縱裂，將立體 C 字形側腦室（前角、體部、後角、下角）完全包覆於實質深處。'
+      },
+      {
+        id: 'diencephalon',
+        primary: '前腦泡 (Prosencephalon)',
+        secondary: '間腦 (Diencephalon)',
+        adultWall: '左右視丘、下視丘、上視丘',
+        ventricle: '第三腦室（正中狹縫狀）',
+        colorHex: 0xfbbf24,
+        cssColor: '#fbbf24',
+        desc: '第 4 週為單一圓潤的前腦泡主體，分化後位於大腦半球正中深處；左右視丘向內急劇增厚，將間腦管腔左右夾扁成正中垂直狹縫狀的「第三腦室」。'
+      },
+      {
+        id: 'mesencephalon',
+        primary: '中腦泡 (Mesencephalon)',
+        secondary: '中腦 (Mesencephalon)',
+        adultWall: '中腦（四疊體、大腦腳）',
+        ventricle: '大腦導水管 (Sylvius 導水管)',
+        colorHex: 0x34d399,
+        cssColor: '#34d399',
+        desc: '五個次級腦泡中變化最小者，處於胚胎頭曲頂點；四周管壁大幅均勻增厚，使中央管腔縮窄為穿行於中腦實質內的細長「大腦導水管」。'
+      },
+      {
+        id: 'metencephalon',
+        primary: '菱腦泡 (Rhombencephalon)',
+        secondary: '後腦 (Metencephalon)',
+        adultWall: '橋腦 (Pons) 與 小腦 (Cerebellum)',
+        ventricle: '第四腦室（上半部）',
+        colorHex: 0x38bdf8,
+        cssColor: '#38bdf8',
+        desc: '菱腦泡受橋腦曲折疊，腹側增厚膨大成橋腦，背側長出橫紋狀小腦半球與蚓部（位於枕葉正下方），將帳篷狀第四腦室上半部嚴密夾於橋腦與小腦之間。'
+      },
+      {
+        id: 'myelencephalon',
+        primary: '菱腦泡 (Rhombencephalon)',
+        secondary: '末腦 (Myelencephalon)',
+        adultWall: '延腦 (Medulla Oblongata)',
+        ventricle: '第四腦室（下半部）',
+        colorHex: 0xa78bfa,
+        cssColor: '#a78bfa',
+        desc: '菱腦尾端發育成掌管生命中樞的延腦，其背側與小腦共同包覆第四腦室下半部，並向下平滑收窄銜接脊髓中央管。'
+      },
+      {
+        id: 'spinalcord',
+        primary: '神經管尾端',
+        secondary: '脊髓 (Spinal Cord)',
+        adultWall: '脊髓實質（灰質與白質）',
+        ventricle: '中央管 (Central Canal)',
+        colorHex: 0x94a3b8,
+        cssColor: '#94a3b8',
+        desc: '神經管尾端維持細長圓柱狀，管壁增厚成脊髓實質，中央原始管腔縮窄為貫穿正中的細長「中央管」。'
+      }
+    ];
+
+    const STAGE_INFO = [
+      {
+        min: 0.0, max: 0.22,
+        week: '胚胎第 4 週',
+        badge: '第 4 週｜初級腦泡（三腦泡）',
+        title: '初級腦泡（三腦泡）',
+        desc: '單一連續圓潤的神經管，前端膨大為前腦泡、中腦泡與梭形菱腦泡三個串珠球囊，中央貫穿連續管腔。'
+      },
+      {
+        min: 0.22, max: 0.52,
+        week: '胚胎第 5 週',
+        badge: '第 5 週｜次級腦泡（五腦泡）',
+        title: '次級腦泡（五腦泡）',
+        desc: '前腦兩側開始萌出端腦泡、中央為間腦；神經軸出現明顯頭曲、橋腦曲與頸曲，管腔同步分叉出側腦室芽與菱形第四腦室。'
+      },
+      {
+        min: 0.52, max: 0.84,
+        week: '胚胎第 8–12 週',
+        badge: '胎兒期｜半球擴張與捲曲',
+        title: '胎兒期擴張與捲曲',
+        desc: '左右大腦半球向前後與下方劇烈捲曲擴張並包覆間腦，側腦室拉扯彎曲為 C 字形，後腦背側長出小腦。'
+      },
+      {
+        min: 0.84, max: 1.01,
+        week: '成熟期（3D 解剖）',
+        badge: '成人腦部｜100% 包覆腦室系統',
+        title: '成人腦部與 3D 腦室系統',
+        desc: '飽滿的大腦半球（具腦迴與極窄縱裂）、深埋的間腦、腦幹與橫紋小腦，將整個 3D 腦室系統嚴密包覆於實質內部。'
+      }
+    ];
+
+    const KEY_T = [0.0, 0.33, 0.66, 1.0];
+
+    // =========================================================================
+    // 2. 狀態管理
+    // =========================================================================
+    const state = {
+      t: 0.0,
+      targetJumpT: null,
+      isPlaying: false,
+      speed: 1.0,
+      viewMode: 'hybrid',       // 'hybrid' | 'sagittal' | 'ventricle' | 'solid'
+      tissueOpacity: 0.40,      // 綜合透視預設 40%
+      showCsf: true,
+      showLabels: true,
+      selectedId: null,
+      needsMorphUpdate: true
+    };
+
+    // =========================================================================
+    // 3. 數學插值工具
+    // =========================================================================
+    function clamp(v, min, max) {
+      return Math.max(min, Math.min(max, v));
+    }
+    function lerp(a, b, t) {
+      return a + (b - a) * t;
+    }
+    function smoothstep(e0, e1, x) {
+      const k = clamp((x - e0) / (e1 - e0), 0, 1);
+      return k * k * (3 - 2 * k);
+    }
+    function getSegment(t) {
+      const p = clamp(t, 0, 1);
+      for (let i = 0; i < KEY_T.length - 1; i++) {
+        if (p >= KEY_T[i] && p <= KEY_T[i + 1]) {
+          const raw = (p - KEY_T[i]) / (KEY_T[i + 1] - KEY_T[i]);
+          return { i0: i, i1: i + 1, a: raw * raw * (3 - 2 * raw) };
+        }
+      }
+      return { i0: 2, i1: 3, a: 1 };
+    }
+    function evalKeyNum(arr, t) {
+      const s = getSegment(t);
+      return lerp(arr[s.i0], arr[s.i1], s.a);
+    }
+
+    // =========================================================================
+    // 4. 核心設計：單一共軸神經管（保證 0% 三腦泡完全無縫、自然縊縮、串珠膨大）
+    //    整條主神經軸參數 u ∈ [0, 1]：
+    //      [0.00, 0.24] -> spinalcord      (脊髓神經管)
+    //      [0.24, 0.42] -> myelencephalon  (菱腦泡下半 -> 延腦)
+    //      [0.42, 0.59] -> metencephalon   (菱腦泡上半 -> 橋腦)
+    //      [0.59, 0.76] -> mesencephalon   (中腦泡 -> 中腦)
+    //      [0.76, 1.00] -> diencephalon    (0% 時為完整單一球狀前腦泡 -> 成人時轉為間腦視丘/下視丘)
+    // =========================================================================
+    const AXIS_CTRL_KEYFRAMES = [
+      // 0% 三腦泡（胚胎第4週）：修長微彎 C 形神經管
+      [
+        [0, -3.25, -0.35],
+        [0, -2.20, -0.32],
+        [0, -1.15, -0.22],
+        [0, -0.10, -0.05],
+        [0,  0.90,  0.22],
+        [0,  1.80,  0.65],
+        [0,  2.55,  1.15]
+      ],
+      // 33% 五腦泡（胚胎第5週）：清晰頭曲 (Cephalic)、橋腦曲 (Pontine) 與頸曲 (Cervical)
+      [
+        [0, -3.25, -0.78],
+        [0, -2.25, -0.68],
+        [0, -1.28, -0.25], // 頸曲
+        [0, -0.35,  0.40], // 橋腦曲向腹側凸
+        [0,  0.78,  0.30], // 中腦上升
+        [0,  1.38,  0.95], // 頭曲轉折
+        [0,  1.12,  1.72]  // 間腦向前彎折
+      ],
+      // 66% 胎兒期：腦幹漸直立於大腦半球下方
+      [
+        [0, -3.30, -0.74],
+        [0, -2.42, -0.62],
+        [0, -1.62, -0.42],
+        [0, -0.82, -0.08],
+        [0, -0.05,  0.10],
+        [0,  0.52,  0.24],
+        [0,  0.92,  0.48]
+      ],
+      // 100% 成人腦部：垂直略前傾的成熟腦幹 + 深埋大腦中心的間腦
+      [
+        [0, -3.35, -0.68],
+        [0, -2.50, -0.58],
+        [0, -1.72, -0.40],
+        [0, -0.86, -0.05],
+        [0, -0.06,  0.12],
+        [0,  0.52,  0.22],
+        [0,  0.96,  0.32]
+      ]
+    ];
+
+    /**
+     * 計算 0% 三腦泡的經典串珠狀外管半徑曲線 r(u)
+     * 確保三個膨大（前腦泡、中腦泡、梭形菱腦泡）與其間的縊縮一目瞭然
+     */
+    function threeVesicleWallRadius(u) {
+      // 基礎細管半徑（脊髓）
+      let r = 0.25;
+      // 1. 菱腦泡（梭形膨大，中心 u=0.44，涵蓋延腦+後腦）
+      r += 0.38 * Math.exp(-Math.pow((u - 0.44) / 0.115, 2));
+      // 2. 中腦泡（圓潤球囊，中心 u=0.675）
+      r += 0.44 * Math.exp(-Math.pow((u - 0.675) / 0.062, 2));
+      // 3. 前腦泡（最大圓潤單一球囊，中心 u=0.885）
+      r += 0.62 * Math.exp(-Math.pow((u - 0.885) / 0.085, 2));
+      // 前端閉合圓頂 (u -> 1.0)
+      if (u > 0.94) {
+        const cap = clamp((1.0 - u) / 0.06, 0, 1);
+        r *= Math.sqrt(cap);
+      }
+      return Math.max(0.005, r);
+    }
+
+    /**
+     * 計算主神經軸各位置 u 在任意時間 t 的外管截面 (rx, ry, oz)
+     * 確保在 t=0 為完美串珠三腦泡，在 t=1 為成熟脊髓/延腦/橋腦/中腦/間腦，且各段邊界嚴格連續！
+     */
+    function evalAxisWallProfile(u, t) {
+      const r0 = threeVesicleWallRadius(u);
+
+      // 33% 五腦泡階段：前腦與菱腦略微再細分，橋腦處腹側微膨
+      let r33 = 0.25;
+      r33 += 0.28 * Math.exp(-Math.pow((u - 0.36) / 0.08, 2));   // 末腦
+      r33 += 0.38 * Math.exp(-Math.pow((u - 0.50) / 0.075, 2));  // 後腦
+      r33 += 0.42 * Math.exp(-Math.pow((u - 0.675) / 0.065, 2)); // 中腦
+      r33 += 0.52 * Math.exp(-Math.pow((u - 0.87) / 0.095, 2));  // 間腦
+      if (u > 0.95) r33 *= Math.sqrt(clamp((1.0 - u) / 0.05, 0, 1));
+
+      // 100% 成人腦幹與間腦軸向輪廓
+      let rx100 = 0.28;
+      let ry100 = 0.26;
+      let oy100 = 0.0; // 沿副法向量（約指向腹側 +Z）之偏移，用於橋腦腹側飽滿膨出
+
+      // 延腦漸粗 (u: 0.24 -> 0.42)
+      const medGrow = smoothstep(0.22, 0.42, u) * (1 - smoothstep(0.42, 0.52, u));
+      rx100 += 0.20 * medGrow;
+      ry100 += 0.18 * medGrow;
+
+      // 橋腦飽滿膨大 (中心 u=0.50)
+      const ponsBelly = Math.exp(-Math.pow((u - 0.50) / 0.078, 2));
+      rx100 += 0.50 * ponsBelly;
+      ry100 += 0.46 * ponsBelly;
+      oy100 += 0.24 * ponsBelly; // 橋腦向腹側 (+Z) 明顯膨出
+
+      // 中腦實質 (中心 u=0.675)：飽滿包覆大腦導水管
+      const midBelly = Math.exp(-Math.pow((u - 0.675) / 0.085, 2));
+      rx100 += 0.34 * midBelly;
+      ry100 += 0.32 * midBelly;
+
+      // 間腦 (u: 0.76 -> 1.0)：左右視丘與下視丘飽滿包覆第三腦室
+      const dienBelly = Math.exp(-Math.pow((u - 0.87) / 0.10, 2));
+      rx100 += 0.56 * dienBelly; // 左右寬達 ~0.84，嚴密夾住狹縫第三腦室
+      ry100 += 0.48 * dienBelly;
+      if (u > 0.95) {
+        const cap = Math.sqrt(clamp((1.0 - u) / 0.05, 0, 1));
+        rx100 *= cap;
+        ry100 *= cap;
+      }
+
+      // 分段平滑插值
+      let rx, ry, oy;
+      if (t <= 0.33) {
+        const a = smoothstep(0, 0.33, t);
+        rx = lerp(r0, r33, a);
+        ry = lerp(r0, r33, a);
+        oy = lerp(0, 0.06 * ponsBelly, a);
+      } else {
+        const a = smoothstep(0.33, 1.0, t);
+        rx = lerp(r33, rx100, a);
+        ry = lerp(r33, ry100, a);
+        oy = lerp(0.06 * ponsBelly, oy100, a);
+      }
+
+      return { rx: Math.max(0.005, rx), ry: Math.max(0.005, ry), oy };
+    }
+
+    /**
+     * 計算主神經軸內部管腔（脊髓中央管 -> 第四腦室 -> 大腦導水管 -> 第三腦室）截面
+     * 保證在任何時間 t 與位置 u，管腔半徑皆嚴格小於對應管壁半徑！
+     */
+    function evalAxisLumenProfile(u, t) {
+      // 0% 時：完全跟隨三腦泡膨大的光滑中央管腔（約為管壁半徑的 42%）
+      const r0 = threeVesicleWallRadius(u) * 0.42;
+
+      // 33% 時：第四腦室處略寬成菱形，中腦開始變細，間腦略夾扁
+      let rx33 = r0 * 0.85;
+      let ry33 = r0 * 0.85;
+      let oy33 = 0;
+      const v4Mask33 = Math.exp(-Math.pow((u - 0.45) / 0.08, 2));
+      rx33 += 0.08 * v4Mask33;
+      oy33 -= 0.06 * v4Mask33; // 略向背側移
+
+      // 100% 成人期：
+      // - 脊髓中央管：極細 (0.042)
+      // - 第四腦室 (u ~ 0.45)：菱形帳篷狀，位於橋腦/延腦背側與小腦腹側之間
+      // - 大腦導水管 (u ~ 0.675)：極細 (0.052)，嚴格穿行於中腦實質內
+      // - 第三腦室 (u ~ 0.87)：極薄垂直狹縫 (rx = 0.055, ry = 0.34)，完全被視丘夾在中央
+      const v4Mask = Math.exp(-Math.pow((u - 0.46) / 0.075, 2));
+      const v3Mask = Math.exp(-Math.pow((u - 0.87) / 0.085, 2));
+
+      let rx100 = 0.045 + 0.22 * v4Mask + 0.015 * v3Mask;
+      let ry100 = 0.045 + 0.20 * v4Mask + 0.30 * v3Mask;
+      let oy100 = -0.34 * v4Mask - 0.06 * Math.exp(-Math.pow((u - 0.675) / 0.08, 2)); // 第四腦室移向橋腦背側、小腦腹側正中央
+
+      if (u > 0.94) {
+        const cap = Math.sqrt(clamp((1.0 - u) / 0.06, 0, 1));
+        rx100 *= cap;
+        ry100 *= cap;
+      }
+
+      let rx, ry, oy;
+      if (t <= 0.33) {
+        const a = smoothstep(0, 0.33, t);
+        rx = lerp(r0, rx33, a);
+        ry = lerp(r0, ry33, a);
+        oy = lerp(0, oy33, a);
+      } else {
+        const a = smoothstep(0.33, 1.0, t);
+        rx = lerp(rx33, rx100, a);
+        ry = lerp(ry33, ry100, a);
+        oy = lerp(oy33, oy100, a);
+      }
+
+      return { rx: Math.max(0.003, rx), ry: Math.max(0.003, ry), oy };
+    }
+
+    // =========================================================================
+    // 5. 動態幾何建構輔助函式
+    // =========================================================================
+    function createDynamicTubeGeometry(uSegs, vSegs) {
+      const vertCount = (uSegs + 1) * (vSegs + 1);
+      const positions = new Float32Array(vertCount * 3);
+      const uvs = new Float32Array(vertCount * 2);
+      const indices = [];
+
+      let k = 0;
+      for (let iu = 0; iu <= uSegs; iu++) {
+        for (let iv = 0; iv <= vSegs; iv++) {
+          uvs[k++] = iu / uSegs;
+          uvs[k++] = iv / vSegs;
+        }
+      }
+      for (let iu = 0; iu < uSegs; iu++) {
+        for (let iv = 0; iv < vSegs; iv++) {
+          const a = iu * (vSegs + 1) + iv;
+          const b = (iu + 1) * (vSegs + 1) + iv;
+          const c = (iu + 1) * (vSegs + 1) + (iv + 1);
+          const d = iu * (vSegs + 1) + (iv + 1);
+          indices.push(a, b, d);
+          indices.push(b, c, d);
+        }
+      }
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+      geo.setIndex(indices);
+      geo.userData = { uSegs, vSegs };
+      return geo;
+    }
+
+    const _pt = new THREE.Vector3();
+    const _tan = new THREE.Vector3();
+    const _right = new THREE.Vector3();
+    const _ventral = new THREE.Vector3();
+    const _xAxis = new THREE.Vector3(1, 0, 0);
+
+    /**
+     * 沿著主曲線 [uStart, uEnd] 更新連續管狀段頂點
+     * 確保所有軸向段使用同一套穩定的 Frenet-like 框架（_right 永遠指向 +X，_ventral 永遠指向腹側 +Z）
+     */
+    function updateAxisSegmentTube(geo, curve, uStart, uEnd, profileFn, tentBackStrength = 0) {
+      const { uSegs, vSegs } = geo.userData;
+      const posAttr = geo.getAttribute('position');
+      const arr = posAttr.array;
+      let idx = 0;
+
+      for (let iu = 0; iu <= uSegs; iu++) {
+        const localU = iu / uSegs;
+        const u = lerp(uStart, uEnd, localU);
+
+        curve.getPoint(u, _pt);
+        curve.getTangent(u, _tan).normalize();
+
+        // 穩定框架：_ventral = cross(_right(+X), _tan) 指向腹側 (+Z)
+        _right.copy(_xAxis);
+        _ventral.crossVectors(_right, _tan).normalize();
+        _right.crossVectors(_tan, _ventral).normalize();
+
+        const prof = profileFn(u);
+
+        for (let iv = 0; iv <= vSegs; iv++) {
+          const angle = (iv / vSegs) * Math.PI * 2;
+          const ca = Math.cos(angle);
+          const sa = Math.sin(angle);
+
+          let lx = prof.rx * ca;
+          let ly = prof.ry * sa + (prof.oy || 0);
+
+          // 第四腦室背側帳篷尖頂 (sa < 0 為背側 -Z)
+          if (tentBackStrength > 0 && sa < 0) {
+            const bell = Math.sin(localU * Math.PI);
+            ly -= (-sa) * (-sa) * 0.22 * bell * tentBackStrength;
+          }
+
+          arr[idx++] = _pt.x + _right.x * lx + _ventral.x * ly;
+          arr[idx++] = _pt.y + _right.y * lx + _ventral.y * ly;
+          arr[idx++] = _pt.z + _right.z * lx + _ventral.z * ly;
+        }
+      }
+      posAttr.needsUpdate = true;
+      geo.computeVertexNormals();
+    }
+
+    /**
+     * 通用任意 3D 曲線管狀更新（用於側腦室 C 字、枕角、室間孔）
+     */
+    function updateFreeTube(geo, curve, radiusFn, capEnds = true) {
+      const { uSegs, vSegs } = geo.userData;
+      const posAttr = geo.getAttribute('position');
+      const arr = posAttr.array;
+      let idx = 0;
+      const upHint = new THREE.Vector3();
+
+      for (let iu = 0; iu <= uSegs; iu++) {
+        const u = iu / uSegs;
+        curve.getPoint(u, _pt);
+        curve.getTangent(u, _tan).normalize();
+
+        if (Math.abs(_tan.x) > 0.9) upHint.set(0, 1, 0);
+        else upHint.set(1, 0, 0);
+
+        _ventral.crossVectors(_tan, upHint).normalize();
+        _right.crossVectors(_ventral, _tan).normalize();
+
+        let cap = 1.0;
+        if (capEnds) {
+          if (iu === 0 || iu === uSegs) cap = 0.002;
+          else if (iu === 1 || iu === uSegs - 1) cap = 0.72;
+        }
+        const prof = radiusFn(u);
+
+        for (let iv = 0; iv <= vSegs; iv++) {
+          const angle = (iv / vSegs) * Math.PI * 2;
+          const lx = prof.rx * Math.cos(angle) * cap;
+          const ly = prof.ry * Math.sin(angle) * cap;
+          arr[idx++] = _pt.x + _right.x * lx + _ventral.x * ly;
+          arr[idx++] = _pt.y + _right.y * lx + _ventral.y * ly;
+          arr[idx++] = _pt.z + _right.z * lx + _ventral.z * ly;
+        }
+      }
+      posAttr.needsUpdate = true;
+      geo.computeVertexNormals();
+    }
+
+    function createDeformableSphere(wSegs, hSegs) {
+      const geo = new THREE.SphereGeometry(1, wSegs, hSegs);
+      geo.userData.basePos = new Float32Array(geo.attributes.position.array);
+      return geo;
+    }
+
+    // =========================================================================
+    // 6. 側腦室、枕角、室間孔四階段關鍵控制點（僅定義右側 +X，左側自動鏡像 -X）
+    //    全部嚴格計算座標使其 100% 位於大腦半球實質深處！
+    // =========================================================================
+    const LAT_VENT_KEYS = [
+      // 0%：收斂於前腦泡中心管腔內（不外露）
+      [
+        [0.06, 2.02, 0.78],
+        [0.08, 2.12, 0.85],
+        [0.08, 2.15, 0.88],
+        [0.07, 2.08, 0.82],
+        [0.06, 2.00, 0.76]
+      ],
+      // 33% 五腦泡：向外分叉出左右側腦室芽，完全包覆於端腦泡內
+      [
+        [0.42, 1.32, 1.98],
+        [0.54, 1.46, 1.84],
+        [0.56, 1.38, 1.62],
+        [0.48, 1.20, 1.56],
+        [0.40, 1.12, 1.68]
+      ],
+      // 66% 胎兒期：隨半球捲曲拉出弧形側腦室
+      [
+        [0.36, 1.32, 1.62],
+        [0.40, 1.68, 0.56],
+        [0.64, 1.24, -0.58],
+        [0.98, 0.58, -0.35],
+        [0.90, 0.25, 0.45]
+      ],
+      // 100% 成人腦：經典 3D 立體 C 字形側腦室（前角->體部->三角區->下角/顳角）
+      // 大腦半球範圍：|X|∈[0.07, 2.65], Y∈[-0.95, 3.05], Z∈[-2.95, 3.20] -> 充裕包覆！
+      [
+        [0.36, 1.34, 1.55],
+        [0.38, 1.72, 0.35],
+        [0.68, 1.32, -0.78],
+        [1.16, 0.58, -0.52],
+        [1.10, 0.16, 0.56]
+      ]
+    ];
+
+    const OCC_HORN_KEYS = [
+      [[0.08, 2.15, 0.88], [0.08, 2.15, 0.86]],
+      [[0.56, 1.38, 1.62], [0.56, 1.36, 1.56]],
+      [[0.64, 1.24, -0.58], [0.58, 1.05, -1.16]],
+      [[0.68, 1.32, -0.78], [0.58, 0.90, -1.78]] // 深入枕葉（枕葉達 Z=-2.95）
+    ];
+
+    const MONRO_KEYS = [
+      [[0.06, 2.02, 0.78], [0.01, 1.98, 0.76]],
+      [[0.44, 1.28, 1.76], [0.01, 1.18, 1.52]],
+      [[0.36, 1.25, 0.92], [0.01, 0.88, 0.52]],
+      [[0.36, 1.28, 0.78], [0.01, 0.86, 0.44]]
+    ];
+
+    // =========================================================================
+    // 7. Three.js 場景、燈光、剖面裁切平面與網格建置
+    // =========================================================================
+    const viewportEl = document.getElementById('viewport3d');
+    const labelsLayer = document.getElementById('labelsLayer');
+
+    let renderer, scene, camera, controls;
+    const interactiveMeshes = [];
+    const labelAnchors = {};
+    const wallMaterials = {};
+    const ventMaterials = {};
+
+    // 正中矢狀剖視裁切平面：保留 X <= 0.015（切掉右側，完整露出正中切面內的第三腦室、導水管與第四腦室）
+    const sagittalClipPlane = new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0.015);
+
+    // 網格與幾何參照
+    let geoHemiR, geoHemiL, meshHemiR, meshHemiL;
+    let geoSpinal, geoMedulla, geoPons, geoMidbrain, geoDiencephalon;
+    let geoCerebR, geoCerebL, geoVermis, meshCerebR, meshCerebL, meshVermis;
+    let geoLumenSpinal, geoLumenMedulla, geoLumenPons, geoLumenMidbrain, geoLumenDien;
+    let geoVentLatR, geoVentLatL, geoOccHornR, geoOccHornL, geoMonroR, geoMonroL;
+    let meshVentLatR, meshOccHornR, meshMonroR;
+    let meshVentLatL, meshOccHornL, meshMonroL;
+
+    // CSF 3D 粒子
+    let csfPoints, csfPositions, csfParticleData = [];
+    let csfCurveR, csfCurveL;
+    let camAnim = null;
+
+    function registerMesh(mesh, structureId, isVentricle, isRightOnly = false, isMidlineClipped = false) {
+      mesh.userData.structureId = structureId;
+      mesh.userData.isVentricle = isVentricle;
+      mesh.userData.isRightOnly = isRightOnly;
+      mesh.userData.isMidlineClipped = isMidlineClipped;
+      scene.add(mesh);
+      interactiveMeshes.push(mesh);
+    }
+
+    function initThree() {
+      scene = new THREE.Scene();
+
+      const w = viewportEl.clientWidth || window.innerWidth;
+      const h = viewportEl.clientHeight || window.innerHeight;
+
+      camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 100);
+      // 預設 3/4 斜角，清晰看見三腦泡與成人腦立體輪廓
+      camera.position.set(8.6, 2.1, 5.2);
+
+      renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: true,
+        powerPreference: 'high-performance'
+      });
+      renderer.setSize(w, h);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.localClippingEnabled = true; // 啟用正中矢狀剖視裁切
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.12;
+      viewportEl.appendChild(renderer.domElement);
+
+      controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.065;
+      controls.rotateSpeed = 0.8;
+      controls.zoomSpeed = 0.95;
+      controls.panSpeed = 0.8;
+      controls.minDistance = 3.6;
+      controls.maxDistance = 19.0;
+      controls.target.set(0, 0.2, 0.1);
+      controls.touches = {
+        ONE: THREE.TOUCH.ROTATE,
+        TWO: THREE.TOUCH.DOLLY_PAN
+      };
+
+      // 三點醫療照明
+      scene.add(new THREE.HemisphereLight(0xe0f2fe, 0x1e293b, 0.95));
+
+      const keyLight = new THREE.DirectionalLight(0xffffff, 1.45);
+      keyLight.position.set(8, 11, 9);
+      scene.add(keyLight);
+
+      const fillLight = new THREE.DirectionalLight(0x93c5fd, 0.65);
+      fillLight.position.set(-9, 3, -6);
+      scene.add(fillLight);
+
+      const rimLight = new THREE.DirectionalLight(0x38bdf8, 0.75);
+      rimLight.position.set(-2, -6, -9);
+      scene.add(rimLight);
+
+      const innerLight = new THREE.PointLight(0x22d3ee, 1.25, 9);
+      innerLight.position.set(0, 0.7, 0.2);
+      scene.add(innerLight);
+
+      // 底部科學圓形網格參考座
+      const polar = new THREE.PolarGridHelper(3.0, 8, 4, 64, 0x1e3a5f, 0x1e293b);
+      polar.position.y = -3.48;
+      polar.material.transparent = true;
+      polar.material.opacity = 0.26;
+      scene.add(polar);
+
+      buildMaterialsAndMeshes();
+      buildCsfParticles();
+      buildFloatingLabels();
+
+      updateBrainMorph(state.t);
+      applyVisualSettings();
+    }
+
+    function buildMaterialsAndMeshes() {
+      STRUCTURES.forEach(s => {
+        wallMaterials[s.id] = new THREE.MeshPhysicalMaterial({
+          color: s.colorHex,
+          emissive: s.colorHex,
+          emissiveIntensity: 0.08,
+          roughness: 0.42,
+          metalness: 0.04,
+          clearcoat: 0.20,
+          clearcoatRoughness: 0.35,
+          transparent: true,
+          opacity: state.tissueOpacity,
+          depthWrite: false,
+          side: THREE.FrontSide
+        });
+
+        ventMaterials[s.id] = new THREE.MeshPhysicalMaterial({
+          color: 0x22d3ee,
+          emissive: 0x06b6d4,
+          emissiveIntensity: 0.58,
+          roughness: 0.16,
+          metalness: 0.05,
+          transparent: true,
+          opacity: 0.90,
+          depthWrite: true
+        });
+
+        labelAnchors[s.id] = new THREE.Vector3();
+      });
+
+      // --- 1. 主神經軸連續五段（管壁）---
+      geoSpinal = createDynamicTubeGeometry(16, 20);
+      geoMedulla = createDynamicTubeGeometry(16, 22);
+      geoPons = createDynamicTubeGeometry(18, 24);
+      geoMidbrain = createDynamicTubeGeometry(18, 24);
+      geoDiencephalon = createDynamicTubeGeometry(22, 26);
+
+      const mSpinal = new THREE.Mesh(geoSpinal, wallMaterials.spinalcord);
+      const mMedulla = new THREE.Mesh(geoMedulla, wallMaterials.myelencephalon);
+      const mPons = new THREE.Mesh(geoPons, wallMaterials.metencephalon);
+      const mMid = new THREE.Mesh(geoMidbrain, wallMaterials.mesencephalon);
+      const mDien = new THREE.Mesh(geoDiencephalon, wallMaterials.diencephalon);
+
+      [mSpinal, mMedulla, mPons, mMid, mDien].forEach(m => { m.renderOrder = 2; });
+      registerMesh(mSpinal, 'spinalcord', false, false, true);
+      registerMesh(mMedulla, 'myelencephalon', false, false, true);
+      registerMesh(mPons, 'metencephalon', false, false, true);
+      registerMesh(mMid, 'mesencephalon', false, false, true);
+      registerMesh(mDien, 'diencephalon', false, false, true);
+
+      // --- 2. 左右大腦半球（端腦管壁）---
+      geoHemiR = createDeformableSphere(42, 32);
+      geoHemiL = createDeformableSphere(42, 32);
+      meshHemiR = new THREE.Mesh(geoHemiR, wallMaterials.telencephalon);
+      meshHemiL = new THREE.Mesh(geoHemiL, wallMaterials.telencephalon);
+      meshHemiR.renderOrder = 3;
+      meshHemiL.renderOrder = 3;
+      registerMesh(meshHemiR, 'telencephalon', false, true, false);
+      registerMesh(meshHemiL, 'telencephalon', false, false, false);
+
+      // --- 3. 小腦（左右半球 + 中央蚓部 Vermis，完全封合第四腦室背側）---
+      geoCerebR = createDeformableSphere(26, 20);
+      geoCerebL = createDeformableSphere(26, 20);
+      geoVermis = createDeformableSphere(18, 16);
+      meshCerebR = new THREE.Mesh(geoCerebR, wallMaterials.metencephalon);
+      meshCerebL = new THREE.Mesh(geoCerebL, wallMaterials.metencephalon);
+      meshVermis = new THREE.Mesh(geoVermis, wallMaterials.metencephalon);
+      meshCerebR.renderOrder = 2;
+      meshCerebL.renderOrder = 2;
+      meshVermis.renderOrder = 2;
+      registerMesh(meshCerebR, 'metencephalon', false, true, false);
+      registerMesh(meshCerebL, 'metencephalon', false, false, false);
+      registerMesh(meshVermis, 'metencephalon', false, false, true);
+
+      // --- 4. 內部連續管腔（中央管 -> 第四腦室 -> 大腦導水管 -> 第三腦室）---
+      geoLumenSpinal = createDynamicTubeGeometry(14, 12);
+      geoLumenMedulla = createDynamicTubeGeometry(14, 14);
+      geoLumenPons = createDynamicTubeGeometry(16, 16);
+      geoLumenMidbrain = createDynamicTubeGeometry(16, 12);
+      geoLumenDien = createDynamicTubeGeometry(20, 16);
+
+      const vSpinal = new THREE.Mesh(geoLumenSpinal, ventMaterials.spinalcord);
+      const vMed = new THREE.Mesh(geoLumenMedulla, ventMaterials.myelencephalon);
+      const vPons = new THREE.Mesh(geoLumenPons, ventMaterials.metencephalon);
+      const vMid = new THREE.Mesh(geoLumenMidbrain, ventMaterials.mesencephalon);
+      const vDien = new THREE.Mesh(geoLumenDien, ventMaterials.diencephalon);
+      [vSpinal, vMed, vPons, vMid, vDien].forEach(m => { m.renderOrder = 1; });
+
+      registerMesh(vSpinal, 'spinalcord', true, false, false);
+      registerMesh(vMed, 'myelencephalon', true, false, false);
+      registerMesh(vPons, 'metencephalon', true, false, false);
+      registerMesh(vMid, 'mesencephalon', true, false, false);
+      registerMesh(vDien, 'diencephalon', true, false, false);
+
+      // --- 5. 左右側腦室（C 字主體 + 枕角 + 室間孔）---
+      geoVentLatR = createDynamicTubeGeometry(34, 12);
+      geoVentLatL = createDynamicTubeGeometry(34, 12);
+      geoOccHornR = createDynamicTubeGeometry(10, 10);
+      geoOccHornL = createDynamicTubeGeometry(10, 10);
+      geoMonroR = createDynamicTubeGeometry(8, 8);
+      geoMonroL = createDynamicTubeGeometry(8, 8);
+
+      meshVentLatR = new THREE.Mesh(geoVentLatR, ventMaterials.telencephalon);
+      meshVentLatL = new THREE.Mesh(geoVentLatL, ventMaterials.telencephalon);
+      meshOccHornR = new THREE.Mesh(geoOccHornR, ventMaterials.telencephalon);
+      meshOccHornL = new THREE.Mesh(geoOccHornL, ventMaterials.telencephalon);
+      meshMonroR = new THREE.Mesh(geoMonroR, ventMaterials.telencephalon);
+      meshMonroL = new THREE.Mesh(geoMonroL, ventMaterials.telencephalon);
+
+      [meshVentLatR, meshOccHornR, meshMonroR].forEach(m => {
+        m.renderOrder = 1;
+        registerMesh(m, 'telencephalon', true, true, false);
+      });
+      [meshVentLatL, meshOccHornL, meshMonroL].forEach(m => {
+        m.renderOrder = 1;
+        registerMesh(m, 'telencephalon', true, false, false);
+      });
+    }
+
+    // =========================================================================
+    // 8. 0% -> 100% 3D 連續形變計算
+    // =========================================================================
+    function getInterpolatedMainAxis(t) {
+      const s = getSegment(t);
+      const ptsA = AXIS_CTRL_KEYFRAMES[s.i0];
+      const ptsB = AXIS_CTRL_KEYFRAMES[s.i1];
+      const vecs = [];
+      for (let i = 0; i < ptsA.length; i++) {
+        vecs.push(new THREE.Vector3(
+          lerp(ptsA[i][0], ptsB[i][0], s.a),
+          lerp(ptsA[i][1], ptsB[i][1], s.a),
+          lerp(ptsA[i][2], ptsB[i][2], s.a)
+        ));
+      }
+      return new THREE.CatmullRomCurve3(vecs);
+    }
+
+    /**
+     * 更新左右大腦半球（飽滿核桃卵球形 + 平坦內側面緊貼縱裂 |x|=0.07 + 額頂枕顳葉與腦迴）
+     * 在 t = 0 時平滑縮收隱藏於單一前腦泡內部，確保 0% 三腦泡完全無分裂！
+     */
+    function updateCerebralHemisphere(geo, mesh, sideSign, t) {
+      // 0% -> 8% 之間完全隱藏於前腦泡內，之後平滑萌出成為五腦泡的左右端腦泡
+      const emerge = smoothstep(0.05, 0.28, t);
+      if (emerge < 0.005) {
+        mesh.visible = false;
+        return;
+      }
+
+      const base = geo.userData.basePos;
+      const posAttr = geo.getAttribute('position');
+      const arr = posAttr.array;
+
+      // 內側面基準平面偏移（成人期 |X|min = 0.07，極窄縱裂！）
+      const medialPlaneX = evalKeyNum([0.10, 0.24, 0.16, 0.14], t);
+      const latExtent = evalKeyNum([0.28, 0.72, 1.85, 2.48], t) * emerge;
+      const medThick = evalKeyNum([0.08, 0.12, 0.08, 0.07], t) * emerge;
+
+      const cy = evalKeyNum([2.05, 1.38, 1.30, 1.18], t);
+      const cz = evalKeyNum([0.82, 1.88, 0.42, 0.18], t);
+      const sy = evalKeyNum([0.32, 0.64, 1.52, 1.92], t) * emerge;
+      const sz = evalKeyNum([0.35, 0.78, 2.42, 3.10], t) * emerge;
+
+      const fetalK = smoothstep(0.30, 0.92, t);
+      const adultK = smoothstep(0.58, 1.0, t);
+      const gyriAmp = smoothstep(0.65, 1.0, t) * 0.058;
+
+      for (let i = 0; i < base.length; i += 3) {
+        const bx = base[i];
+        const by = base[i + 1];
+        const bz = base[i + 2];
+
+        // 關鍵修正：mx ∈ [-1, +1] (-1為內側面, +1為外側面)
+        // 內側面極為平坦緊貼正中縱裂；外側面大幅向外飽滿擴張至 |x| ≈ 2.62！
+        const mx = bx * sideSign;
+        let xLocal = mx < 0
+          ? mx * medThick
+          : Math.pow(mx, 0.82) * latExtent;
+
+        let yLocal = by * sy;
+        let zLocal = bz * sz;
+
+        // 1. 額葉與枕葉輪廓修型（枕葉覆蓋小腦上方，底面微抬形成小腦幕切迹）
+        if (fetalK > 0.01) {
+          // 枕葉略微向後收圓並覆蓋小腦上方
+          if (bz < -0.15) {
+            const occW = clamp((-bz - 0.15) / 0.85, 0, 1);
+            xLocal *= (1 - 0.22 * occW * fetalK);
+            // 枕葉底面微抬以騰出小腦空間，但仍完整包覆側腦室後角 (y >= 0.75)
+            if (by < 0) {
+              yLocal += (-by) * occW * 0.58 * fetalK;
+            }
+          }
+          // 額葉前端略圓潤收窄
+          if (bz > 0.35) {
+            const frontW = clamp((bz - 0.35) / 0.65, 0, 1);
+            xLocal *= (1 - 0.18 * frontW * fetalK);
+          }
+          // 頂葉背側飽滿拱起
+          if (by > 0) {
+            yLocal += 0.16 * by * (1 - Math.abs(bz) * 0.35) * fetalK;
+          }
+        }
+
+        // 2. 顳葉（Temporal lobe）向外下前方飽滿垂出，完全包覆側腦室下角
+        if (adultK > 0.01) {
+          const latW = clamp(mx + 0.15, 0, 1);
+          const lowW = clamp(-by, 0, 1);
+          const midZW = Math.exp(-Math.pow((bz - 0.05) * 1.65, 2));
+          const tempBulge = latW * lowW * midZW * adultK;
+          yLocal -= tempBulge * 0.58;
+          xLocal += tempBulge * 0.22;
+          zLocal += tempBulge * 0.42;
+
+          // 外側溝（Sylvian fissure）微凹
+          const sylvian = latW * Math.exp(-Math.pow((by + 0.16 - bz * 0.22) * 7.0, 2)) * clamp(bz + 0.35, 0, 1);
+          xLocal -= sylvian * 0.12 * adultK;
+        }
+
+        // 3. 成人大腦皮質腦迴與腦溝凹凸質感（Gyri & Sulci）
+        if (gyriAmp > 0.001) {
+          const g1 = Math.sin(bz * 13.0 + by * 6.5);
+          const g2 = Math.sin(by * 12.5 - mx * 9.5);
+          const g3 = Math.cos((bz - by) * 17.0);
+          const disp = (g1 * 0.5 + g2 * 0.32 + g3 * 0.18) * gyriAmp * (mx < 0 ? 0.3 : 1.0);
+          xLocal += mx * disp;
+          yLocal += by * disp;
+          zLocal += bz * disp;
+        }
+
+        // 確保左右半球內側面絕不穿越正中矢狀面 (|x| >= 0.065)
+        let wx = sideSign * (medialPlaneX + xLocal);
+        if (sideSign > 0) wx = Math.max(0.065, wx);
+        else wx = Math.min(-0.065, wx);
+
+        arr[i] = wx;
+        arr[i + 1] = cy + yLocal;
+        arr[i + 2] = cz + zLocal;
+      }
+
+      posAttr.needsUpdate = true;
+      geo.computeVertexNormals();
+    }
+
+    /**
+     * 更新小腦（左右小腦半球 + 中央蚓部 Vermis）
+     * 0%–28% 完全隱藏，之後平滑自後腦背側膨出，位於枕葉正下方並嚴密包覆第四腦室背側
+     */
+    function updateCerebellum(t, axisCurve) {
+      const grow = smoothstep(0.28, 1.0, t);
+      if (grow < 0.01) {
+        meshCerebR.visible = false;
+        meshCerebL.visible = false;
+        meshVermis.visible = false;
+        return;
+      }
+
+      // 參考橋腦／延腦交界背側位置 (u = 0.46)
+      const basePt = axisCurve.getPoint(0.46);
+      const cy = basePt.y - 0.05 * grow;
+      const cz = basePt.z - lerp(0.18, 1.02, grow);
+      const foliaAmp = smoothstep(0.62, 1.0, t) * 0.035;
+
+      // 左右小腦半球
+      [
+        { geo: geoCerebR, sign: 1 },
+        { geo: geoCerebL, sign: -1 }
+      ].forEach(({ geo, sign }) => {
+        const base = geo.userData.basePos;
+        const pos = geo.getAttribute('position');
+        const arr = pos.array;
+        const cx = sign * lerp(0.18, 0.82, grow);
+        const sx = lerp(0.16, 0.92, grow);
+        const sy = lerp(0.14, 0.68, grow);
+        const sz = lerp(0.14, 0.78, grow);
+
+        for (let i = 0; i < base.length; i += 3) {
+          const bx = base[i], by = base[i + 1], bz = base[i + 2];
+          const folia = Math.sin(by * 28.0 + bz * 4.5) * foliaAmp;
+          arr[i] = cx + bx * (sx + folia);
+          arr[i + 1] = cy + by * (sy + folia * 0.35);
+          arr[i + 2] = cz + bz * (sz + folia);
+        }
+        pos.needsUpdate = true;
+        geo.computeVertexNormals();
+      });
+
+      // 中央蚓部（Vermis）：嚴密連接左右小腦半球，確保從背面看完全封合第四腦室！
+      const vBase = geoVermis.userData.basePos;
+      const vPos = geoVermis.getAttribute('position');
+      const vArr = vPos.array;
+      const vsx = lerp(0.14, 0.50, grow);
+      const vsy = lerp(0.14, 0.64, grow);
+      const vsz = lerp(0.14, 0.72, grow);
+      const vCz = cz + 0.10 * grow; // 略向前貼近第四腦室背頂
+
+      for (let i = 0; i < vBase.length; i += 3) {
+        const bx = vBase[i], by = vBase[i + 1], bz = vBase[i + 2];
+        const folia = Math.sin(by * 30.0) * foliaAmp * 0.8;
+        vArr[i] = bx * vsx;
+        vArr[i + 1] = cy + by * vsy;
+        vArr[i + 2] = vCz + bz * (vsz + folia);
+      }
+      vPos.needsUpdate = true;
+      geoVermis.computeVertexNormals();
+    }
+
+    /**
+     * 更新左右側腦室、枕角與室間孔
+     * 在 t < 0.08 時隱藏於前腦泡中央管腔內，之後平滑芽生並拉扯成標準 3D C 字形
+     */
+    function updateLateralVentricles(t, axisCurve) {
+      const bud = smoothstep(0.08, 0.30, t);
+      const s = getSegment(t);
+
+      const latPtsR = [], latPtsL = [];
+      for (let i = 0; i < 5; i++) {
+        const a = LAT_VENT_KEYS[s.i0][i];
+        const b = LAT_VENT_KEYS[s.i1][i];
+        const px = lerp(a[0], b[0], s.a);
+        const py = lerp(a[1], b[1], s.a);
+        const pz = lerp(a[2], b[2], s.a);
+        latPtsR.push(new THREE.Vector3(px, py, pz));
+        latPtsL.push(new THREE.Vector3(-px, py, pz));
+      }
+      const latCurveR = new THREE.CatmullRomCurve3(latPtsR);
+      const latCurveL = new THREE.CatmullRomCurve3(latPtsL);
+
+      const latBaseR = evalKeyNum([0.08, 0.16, 0.16, 0.155], t) * Math.max(0.01, bud);
+      const latProf = (u) => {
+        const taper = Math.sin(u * Math.PI);
+        const r = latBaseR * (0.42 + 0.72 * taper);
+        return { rx: r * 0.82, ry: r * 1.08 };
+      };
+      updateFreeTube(geoVentLatR, latCurveR, latProf, true);
+      updateFreeTube(geoVentLatL, latCurveL, latProf, true);
+
+      // 枕角（後角）
+      const occPtsR = [], occPtsL = [];
+      for (let i = 0; i < 2; i++) {
+        const a = OCC_HORN_KEYS[s.i0][i];
+        const b = OCC_HORN_KEYS[s.i1][i];
+        const px = lerp(a[0], b[0], s.a);
+        const py = lerp(a[1], b[1], s.a);
+        const pz = lerp(a[2], b[2], s.a);
+        occPtsR.push(new THREE.Vector3(px, py, pz));
+        occPtsL.push(new THREE.Vector3(-px, py, pz));
+      }
+      const occR = evalKeyNum([0.01, 0.04, 0.11, 0.13], t) * smoothstep(0.32, 0.65, t);
+      const occProf = (u) => {
+        const r = Math.max(0.002, occR * (1 - u * 0.78));
+        return { rx: r * 0.8, ry: r };
+      };
+      updateFreeTube(geoOccHornR, new THREE.CatmullRomCurve3(occPtsR), occProf, true);
+      updateFreeTube(geoOccHornL, new THREE.CatmullRomCurve3(occPtsL), occProf, true);
+
+      // 室間孔 (Foramen of Monro)
+      const monPtsR = [], monPtsL = [];
+      for (let i = 0; i < 2; i++) {
+        const a = MONRO_KEYS[s.i0][i];
+        const b = MONRO_KEYS[s.i1][i];
+        const px = lerp(a[0], b[0], s.a);
+        const py = lerp(a[1], b[1], s.a);
+        const pz = lerp(a[2], b[2], s.a);
+        monPtsR.push(new THREE.Vector3(px, py, pz));
+        monPtsL.push(new THREE.Vector3(-px, py, pz));
+      }
+      const monR = evalKeyNum([0.04, 0.09, 0.068, 0.056], t) * Math.max(0.01, bud);
+      updateFreeTube(geoMonroR, new THREE.CatmullRomCurve3(monPtsR), () => ({ rx: monR, ry: monR }), false);
+      updateFreeTube(geoMonroL, new THREE.CatmullRomCurve3(monPtsL), () => ({ rx: monR, ry: monR }), false);
+
+      // 建立 CSF 流動 3D 曲線（側腦室 -> 室間孔 -> 第三腦室 -> 導水管 -> 第四腦室 -> 中央管）
+      const axisTail = [
+        axisCurve.getPoint(0.86),
+        axisCurve.getPoint(0.68),
+        axisCurve.getPoint(0.46).add(new THREE.Vector3(0, 0, -0.32 * smoothstep(0.33, 1, t))),
+        axisCurve.getPoint(0.28),
+        axisCurve.getPoint(0.14),
+        axisCurve.getPoint(0.02)
+      ];
+
+      if (bud < 0.15) {
+        // 0% 三腦泡階段：CSF 沿著主神經管中央管腔由前腦向尾端流動
+        const simplePts = [
+          axisCurve.getPoint(0.92),
+          axisCurve.getPoint(0.80),
+          ...axisTail
+        ];
+        csfCurveR = new THREE.CatmullRomCurve3(simplePts);
+        csfCurveL = csfCurveR;
+      } else {
+        csfCurveR = new THREE.CatmullRomCurve3([
+          latPtsR[0], latPtsR[1], latPtsR[2], latPtsR[3],
+          monPtsR[0], monPtsR[1],
+          ...axisTail
+        ]);
+        csfCurveL = new THREE.CatmullRomCurve3([
+          latPtsL[0], latPtsL[1], latPtsL[2], latPtsL[3],
+          monPtsL[0], monPtsL[1],
+          ...axisTail
+        ]);
+      }
+    }
+
+    /**
+     * 主形變更新入口
+     */
+    function updateBrainMorph(t) {
+      const axisCurve = getInterpolatedMainAxis(t);
+
+      // 1. 主神經軸五段（管壁：0% 嚴格為連續無縫三腦泡！）
+      const wallFn = (u) => evalAxisWallProfile(u, t);
+      updateAxisSegmentTube(geoSpinal, axisCurve, 0.00, 0.24, wallFn);
+      updateAxisSegmentTube(geoMedulla, axisCurve, 0.24, 0.42, wallFn);
+      updateAxisSegmentTube(geoPons, axisCurve, 0.42, 0.59, wallFn);
+      updateAxisSegmentTube(geoMidbrain, axisCurve, 0.59, 0.76, wallFn);
+      updateAxisSegmentTube(geoDiencephalon, axisCurve, 0.76, 1.00, wallFn);
+
+      // 2. 主神經軸五段內部管腔（腦室系統核心）
+      const lumenFn = (u) => evalAxisLumenProfile(u, t);
+      const tentStrength = smoothstep(0.35, 1.0, t);
+      updateAxisSegmentTube(geoLumenSpinal, axisCurve, 0.00, 0.24, lumenFn);
+      updateAxisSegmentTube(geoLumenMedulla, axisCurve, 0.24, 0.42, lumenFn, tentStrength * 0.6);
+      updateAxisSegmentTube(geoLumenPons, axisCurve, 0.42, 0.59, lumenFn, tentStrength);
+      updateAxisSegmentTube(geoLumenMidbrain, axisCurve, 0.59, 0.76, lumenFn);
+      updateAxisSegmentTube(geoLumenDien, axisCurve, 0.76, 0.99, lumenFn);
+
+      // 3. 左右大腦半球（端腦）與小腦
+      updateCerebralHemisphere(geoHemiR, meshHemiR, 1, t);
+      updateCerebralHemisphere(geoHemiL, meshHemiL, -1, t);
+      updateCerebellum(t, axisCurve);
+
+      // 4. 左右側腦室、枕角、室間孔
+      updateLateralVentricles(t, axisCurve);
+
+      // 5. 更新 3D 浮動標籤錨點
+      labelAnchors.telencephalon.set(
+        evalKeyNum([0.1, 0.95, 1.75, 1.95], t),
+        evalKeyNum([2.45, 1.95, 2.55, 2.75], t),
+        evalKeyNum([1.05, 2.05, 0.75, 0.65], t)
+      );
+      labelAnchors.diencephalon.copy(axisCurve.getPoint(0.87)).add(new THREE.Vector3(0, 0.25, 0));
+      labelAnchors.mesencephalon.copy(axisCurve.getPoint(0.675)).add(new THREE.Vector3(0.55, 0.05, 0));
+      labelAnchors.metencephalon.copy(axisCurve.getPoint(0.49)).add(new THREE.Vector3(0.75, -0.05, -0.85 * smoothstep(0.3, 1, t)));
+      labelAnchors.myelencephalon.copy(axisCurve.getPoint(0.33)).add(new THREE.Vector3(0.52, 0, 0));
+      labelAnchors.spinalcord.copy(axisCurve.getPoint(0.11)).add(new THREE.Vector3(0.42, 0, 0));
+
+      // 同步可視性（包含半腦剖視與 0% 隱藏未萌出芽體）
+      applyVisualSettings();
+    }
+
+    // =========================================================================
+    // 9. CSF 3D 發光粒子流
+    // =========================================================================
+    function createGlowTexture() {
+      const c = document.createElement('canvas');
+      c.width = 64; c.height = 64;
+      const g = c.getContext('2d');
+      const grad = g.createRadialGradient(32, 32, 2, 32, 32, 30);
+      grad.addColorStop(0, 'rgba(236, 254, 255, 1)');
+      grad.addColorStop(0.35, 'rgba(34, 211, 238, 0.88)');
+      grad.addColorStop(1, 'rgba(6, 182, 212, 0)');
+      g.fillStyle = grad;
+      g.fillRect(0, 0, 64, 64);
+      return new THREE.CanvasTexture(c);
+    }
+
+    function buildCsfParticles() {
+      const count = 96;
+      csfPositions = new Float32Array(count * 3);
+      csfParticleData = [];
+      for (let i = 0; i < count; i++) {
+        csfParticleData.push({
+          u: Math.random(),
+          speed: 0.08 + Math.random() * 0.045,
+          side: i % 2 === 0 ? 1 : -1,
+          jx: (Math.random() - 0.5) * 0.045,
+          jy: (Math.random() - 0.5) * 0.045,
+          jz: (Math.random() - 0.5) * 0.045
+        });
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(csfPositions, 3));
+      const mat = new THREE.PointsMaterial({
+        size: 0.22,
+        map: createGlowTexture(),
+        transparent: true,
+        opacity: 0.95,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+      });
+      csfPoints = new THREE.Points(geo, mat);
+      csfPoints.renderOrder = 4;
+      scene.add(csfPoints);
+    }
+
+    const _pTmp = new THREE.Vector3();
+    function updateCsfParticles(dt) {
+      if (!csfPoints) return;
+      // 在實心 100% 模式下，為免 AdditiveBlending 粒子穿透實心牆面，可依透明度決定是否顯示
+      const hideInSolid = state.viewMode === 'solid' && state.tissueOpacity >= 0.95;
+      csfPoints.visible = state.showCsf && !hideInSolid;
+      if (!csfPoints.visible || !csfCurveR || !csfCurveL) return;
+
+      const attr = csfPoints.geometry.getAttribute('position');
+      const arr = attr.array;
+      const isSagittal = state.viewMode === 'sagittal';
+
+      for (let i = 0; i < csfParticleData.length; i++) {
+        const p = csfParticleData[i];
+        p.u = (p.u + p.speed * dt) % 1.0;
+        // 半腦矢狀剖視時，讓所有粒子走左側腦室與中線路徑，不懸浮在空的右半側
+        const curve = (isSagittal || p.side < 0) ? csfCurveL : csfCurveR;
+        curve.getPoint(p.u, _pTmp);
+
+        const sq = p.u > 0.52 ? 0.3 : 0.85;
+        arr[i * 3] = _pTmp.x + p.jx * sq;
+        arr[i * 3 + 1] = _pTmp.y + p.jy * sq;
+        arr[i * 3 + 2] = _pTmp.z + p.jz * sq;
+      }
+      attr.needsUpdate = true;
+    }
+
+    // =========================================================================
+    // 10. 3D 浮動標註管理
+    // =========================================================================
+    const labelEls = {};
+    const STAGE_LABELS = {
+      telencephalon: ['前腦泡', '端腦泡', '大腦半球（胎兒）', '大腦半球 / 側腦室'],
+      diencephalon: ['前腦泡 (Prosencephalon)', '間腦', '間腦（視丘）', '視丘 / 第三腦室'],
+      mesencephalon: ['中腦泡 (Mesencephalon)', '中腦（頭曲）', '中腦 / 導水管', '中腦 / 大腦導水管'],
+      metencephalon: ['菱腦泡 (Rhombencephalon)', '後腦（橋腦曲）', '橋腦・小腦', '橋腦・小腦 / 第四腦室'],
+      myelencephalon: ['菱腦泡（尾端）', '末腦（頸曲）', '延腦', '延腦 / 第四腦室下'],
+      spinalcord: ['脊髓神經管', '脊髓 / 中央管', '脊髓 / 中央管', '脊髓 / 中央管']
+    };
+
+    function buildFloatingLabels() {
+      labelsLayer.innerHTML = '';
+      STRUCTURES.forEach(s => {
+        const el = document.createElement('button');
+        el.type = 'button';
+        el.className = 'label-3d px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-900/80 backdrop-blur-sm border text-slate-100 shadow-lg flex items-center gap-1.5';
+        el.style.borderColor = `${s.cssColor}99`;
+        el.innerHTML = `<span class="w-2 h-2 rounded-full shrink-0" style="background:${s.cssColor}"></span><span class="lbl-text"></span>`;
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          selectStructure(state.selectedId === s.id ? null : s.id);
+        });
+        labelsLayer.appendChild(el);
+        labelEls[s.id] = el;
+      });
+    }
+
+    const _proj = new THREE.Vector3();
+    function updateFloatingLabels() {
+      labelsLayer.style.display = state.showLabels ? 'block' : 'none';
+      if (!state.showLabels) return;
+
+      const w = viewportEl.clientWidth;
+      const h = viewportEl.clientHeight;
+      const stageIdx = state.t < 0.22 ? 0 : state.t < 0.52 ? 1 : state.t < 0.84 ? 2 : 3;
+
+      STRUCTURES.forEach(s => {
+        const el = labelEls[s.id];
+        // 在 0% 三腦泡階段，端腦與間腦融合為單一前腦泡，隱藏重複的端腦與末腦標籤讓畫面更乾淨
+        if (stageIdx === 0 && (s.id === 'telencephalon' || s.id === 'myelencephalon')) {
+          el.style.opacity = '0';
+          el.style.pointerEvents = 'none';
+          return;
+        }
+
+        _proj.copy(labelAnchors[s.id]).project(camera);
+        if (_proj.z > 1) {
+          el.style.opacity = '0';
+          el.style.pointerEvents = 'none';
+          return;
+        }
+
+        el.style.left = `${(_proj.x * 0.5 + 0.5) * w}px`;
+        el.style.top = `${(-_proj.y * 0.5 + 0.5) * h}px`;
+        el.querySelector('.lbl-text').textContent = STAGE_LABELS[s.id][stageIdx];
+
+        const isSel = state.selectedId === s.id;
+        const hasSel = state.selectedId !== null;
+        el.style.opacity = hasSel && !isSel ? '0.25' : '0.96';
+        el.style.pointerEvents = 'auto';
+        el.style.borderColor = isSel ? '#ffffff' : `${s.cssColor}aa`;
+        el.style.backgroundColor = isSel ? 'rgba(15, 23, 42, 0.96)' : 'rgba(15, 23, 42, 0.80)';
+      });
+    }
+
+    // =========================================================================
+    // 11. 視覺與剖面控制（綜合透視 / 半腦矢狀剖視 / 純腦室系統 / 腦組織實心）
+    // =========================================================================
+    function applyVisualSettings() {
+      const hasSel = state.selectedId !== null;
+      const isSagittal = state.viewMode === 'sagittal';
+      const isVentricleOnly = state.viewMode === 'ventricle';
+      const isSolid = state.viewMode === 'solid';
+
+      const hemiVisibleByStage = state.t > 0.055;
+      const cerebVisibleByStage = state.t > 0.285;
+      const latVentVisibleByStage = state.t > 0.085;
+      const occVisibleByStage = state.t > 0.33;
+
+      // 控制左右與未萌出部位的顯示
+      if (meshHemiR) meshHemiR.visible = hemiVisibleByStage && !isSagittal && !isVentricleOnly;
+      if (meshHemiL) meshHemiL.visible = hemiVisibleByStage && !isVentricleOnly;
+
+      if (meshCerebR) meshCerebR.visible = cerebVisibleByStage && !isSagittal && !isVentricleOnly;
+      if (meshCerebL) meshCerebL.visible = cerebVisibleByStage && !isVentricleOnly;
+      if (meshVermis) meshVermis.visible = cerebVisibleByStage && !isVentricleOnly;
+
+      // 主神經軸管壁在純腦室模式下隱藏
+      interactiveMeshes.forEach(m => {
+        if (!m.userData.isVentricle && m.userData.isMidlineClipped && m !== meshVermis) {
+          m.visible = !isVentricleOnly;
+        }
+      });
+
+      // 側腦室：半腦矢狀剖視時隱藏右側側腦室（避免懸空），完整露出左側腦室與中線第三/第四腦室
+      if (meshVentLatR) meshVentLatR.visible = latVentVisibleByStage && !isSagittal;
+      if (meshMonroR) meshMonroR.visible = latVentVisibleByStage && !isSagittal;
+      if (meshOccHornR) meshOccHornR.visible = occVisibleByStage && !isSagittal;
+
+      if (meshVentLatL) meshVentLatL.visible = latVentVisibleByStage;
+      if (meshMonroL) meshMonroL.visible = latVentVisibleByStage;
+      if (meshOccHornL) meshOccHornL.visible = occVisibleByStage;
+
+      // 更新各構造材質：透明度、深度寫入與矢狀切面裁切
+      STRUCTURES.forEach(s => {
+        const isSel = state.selectedId === s.id;
+        const wMat = wallMaterials[s.id];
+        const vMat = ventMaterials[s.id];
+
+        // 在 0% 三腦泡階段，讓末腦色與後腦色視覺融合為統一的菱腦泡色感
+        if (s.id === 'myelencephalon') {
+          const blend = smoothstep(0.0, 0.26, state.t);
+          const c = new THREE.Color(0x38bdf8).lerp(new THREE.Color(s.colorHex), blend);
+          wMat.color.copy(c);
+          wMat.emissive.copy(c);
+        }
+
+        let op = isVentricleOnly ? 0.0 : state.tissueOpacity;
+        if (hasSel && !isSel) {
+          op *= 0.16;
+        } else if (isSel && !isVentricleOnly) {
+          op = Math.max(op, 0.65);
+        }
+
+        wMat.opacity = clamp(op, 0, 1);
+        wMat.transparent = wMat.opacity < 0.99;
+        // 實心模式（不透明度 >= 99%）啟用 depthWrite: true，可 100% 驗證無腦室穿模！
+        wMat.depthWrite = !wMat.transparent;
+        wMat.emissiveIntensity = isSel ? 0.36 : 0.08;
+
+        // 半腦矢狀剖視：將正中軸線的腦實質（間腦、中腦、橋腦、延腦、脊髓、小腦蚓部）於 X=0.015 處切開
+        if (isSagittal && s.id !== 'telencephalon') {
+          wMat.clippingPlanes = [sagittalClipPlane];
+          wMat.side = THREE.DoubleSide;
+        } else {
+          wMat.clippingPlanes = [];
+          wMat.side = THREE.FrontSide;
+        }
+
+        // 腦室材質
+        let vOp = isVentricleOnly ? 0.95 : 0.88;
+        if (hasSel && !isSel) vOp *= 0.15;
+        else if (isSel) vOp = 0.98;
+        vMat.opacity = vOp;
+        vMat.emissiveIntensity = isSel ? 0.95 : (isVentricleOnly ? 0.72 : 0.55);
+        vMat.color.setHex(isSel ? 0x67e8f9 : 0x22d3ee);
+      });
+    }
+
+    // =========================================================================
+    // 12. 3D Raycasting 點擊互動
+    // =========================================================================
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+    let downPos = { x: 0, y: 0 };
+
+    function onPointerDown(e) {
+      downPos.x = e.clientX;
+      downPos.y = e.clientY;
+    }
+
+    function onPointerUp(e) {
+      if (Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y) > 7) return;
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+      raycaster.setFromCamera(pointer, camera);
+      const candidates = interactiveMeshes.filter(m => m.visible);
+      const hits = raycaster.intersectObjects(candidates, false);
+
+      if (hits.length > 0) {
+        let picked = hits[0].object;
+        if (state.viewMode === 'ventricle') {
+          const vHit = hits.find(h => h.object.userData.isVentricle);
+          if (vHit) picked = vHit.object;
+        }
+        const id = picked.userData.structureId;
+        selectStructure(state.selectedId === id ? null : id);
+      } else {
+        selectStructure(null);
+      }
+    }
+
+    // =========================================================================
+    // 13. UI 綁定、鏡頭預設視角與對應表
+    // =========================================================================
+    const timelineSlider = document.getElementById('timelineSlider');
+    const btnPlayPause = document.getElementById('btnPlayPause');
+    const iconPlay = document.getElementById('iconPlay');
+    const iconPause = document.getElementById('iconPause');
+    const btnSpeed = document.getElementById('btnSpeed');
+    const stageJumpBtns = document.querySelectorAll('.stage-jump-btn');
+
+    const topStageBadge = document.getElementById('topStageBadge');
+    const hudWeek = document.getElementById('hudWeek');
+    const hudPercent = document.getElementById('hudPercent');
+    const hudTitle = document.getElementById('hudTitle');
+    const hudDesc = document.getElementById('hudDesc');
+
+    const opacitySlider = document.getElementById('opacitySlider');
+    const opacityValText = document.getElementById('opacityValText');
+    const toggleCsfBtn = document.getElementById('toggleCsfBtn');
+    const toggleLabelsBtn = document.getElementById('toggleLabelsBtn');
+
+    const viewmodeBtns = document.querySelectorAll('.viewmode-btn');
+    const viewmodeBtnsPanel = document.querySelectorAll('.viewmode-btn-panel');
+
+    const detailDot = document.getElementById('detailDot');
+    const detailTitle = document.getElementById('detailTitle');
+    const detailBody = document.getElementById('detailBody');
+    const btnClearSelect = document.getElementById('btnClearSelect');
+    const structureListEl = document.getElementById('structureList');
+
+    const sidePanel = document.getElementById('sidePanel');
+    const drawerBackdrop = document.getElementById('drawerBackdrop');
+    const toggleDrawerBtn = document.getElementById('toggleDrawerBtn');
+    const closeDrawerBtn = document.getElementById('closeDrawerBtn');
+
+    function updateStageHUD() {
+      const pct = Math.round(state.t * 100);
+      hudPercent.textContent = `${pct}%`;
+      timelineSlider.value = Math.round(state.t * 1000);
+
+      const info = STAGE_INFO.find(s => state.t >= s.min && state.t <= s.max) || STAGE_INFO[3];
+      hudWeek.textContent = info.week;
+      hudTitle.textContent = info.title;
+      hudDesc.textContent = info.desc;
+      topStageBadge.textContent = info.badge;
+
+      const activeIdx = STAGE_INFO.indexOf(info);
+      stageJumpBtns.forEach((btn, idx) => {
+        btn.className = idx === activeIdx
+          ? 'stage-jump-btn min-h-[38px] px-2 py-1.5 rounded-xl text-xs font-semibold bg-cyan-500/25 border border-cyan-400/60 text-cyan-200 transition active:scale-95 shadow-sm'
+          : 'stage-jump-btn min-h-[38px] px-2 py-1.5 rounded-xl text-xs font-semibold bg-slate-800/90 border border-slate-700 text-slate-300 hover:bg-slate-700 transition active:scale-95';
+      });
+    }
+
+    function setPlaying(playing) {
+      state.isPlaying = playing;
+      iconPlay.classList.toggle('hidden', playing);
+      iconPause.classList.toggle('hidden', !playing);
+    }
+
+    function flyCameraTo(pos, lookAt) {
+      camAnim = {
+        startPos: camera.position.clone(),
+        endPos: pos.clone(),
+        startTarget: controls.target.clone(),
+        endTarget: lookAt.clone(),
+        elapsed: 0,
+        duration: 0.55
+      };
+    }
+
+    function setViewMode(mode) {
+      state.viewMode = mode;
+      if (mode === 'hybrid') {
+        state.tissueOpacity = 0.40;
+      } else if (mode === 'sagittal') {
+        state.tissueOpacity = 0.72;
+        // 自動平順移至右側視角直視矢狀切面
+        flyCameraTo(new THREE.Vector3(9.6, 0.5, 0.4), new THREE.Vector3(0, 0.2, 0.1));
+      } else if (mode === 'ventricle') {
+        state.tissueOpacity = 0.0;
+      } else if (mode === 'solid') {
+        state.tissueOpacity = 1.0; // 嚴格 100% 不透明實心驗證
+      }
+
+      const opPct = Math.round(state.tissueOpacity * 100);
+      opacitySlider.value = opPct;
+      opacityValText.textContent = `${opPct}%`;
+
+      viewmodeBtns.forEach(b => {
+        const active = b.dataset.viewmode === mode;
+        b.className = active
+          ? 'viewmode-btn min-h-[36px] px-3 rounded-xl text-xs font-semibold bg-cyan-500/25 text-cyan-200 border border-cyan-400/50 transition'
+          : 'viewmode-btn min-h-[36px] px-3 rounded-xl text-xs font-semibold bg-slate-800/80 text-slate-300 border border-transparent hover:bg-slate-700 transition';
+      });
+
+      viewmodeBtnsPanel.forEach(b => {
+        const active = b.dataset.viewmode === mode;
+        b.className = active
+          ? 'viewmode-btn-panel min-h-[38px] px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-cyan-500/25 text-cyan-200 border border-cyan-400/50 transition'
+          : 'viewmode-btn-panel min-h-[38px] px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-900/70 text-slate-300 border border-slate-700 hover:bg-slate-700 transition';
+      });
+
+      applyVisualSettings();
+    }
+
+    function selectStructure(id) {
+      state.selectedId = id;
+      applyVisualSettings();
+      renderStructureList();
+
+      if (!id) {
+        detailDot.style.backgroundColor = '#22d3ee';
+        detailTitle.textContent = '點選 3D 構造檢視解說';
+        btnClearSelect.classList.add('hidden');
+        detailBody.innerHTML = `
+          <p>點擊 3D 畫面中的任一腦泡、成人腦區或內部發光腦室，或選擇下方對應表，即可同步高亮其「管壁」與「管腔」。</p>
+          <div class="p-2.5 rounded-xl bg-cyan-950/45 border border-cyan-500/30 text-cyan-200/95 text-[11px]">
+            <strong>解剖包覆驗證：</strong>拖曳至 100% 並切換<strong>「腦組織實心」</strong>，可旋轉各視角確認所有腦室皆完全包覆於腦實質中；再切換<strong>「半腦矢狀剖視」</strong>即可直擊正中切面內的第三腦室、導水管與第四腦室。
+          </div>`;
+        return;
+      }
+
+      const s = STRUCTURES.find(item => item.id === id);
+      if (!s) return;
+
+      detailDot.style.backgroundColor = s.cssColor;
+      detailTitle.textContent = `${s.secondary.split(' ')[0]} → ${s.adultWall.split('（')[0]}`;
+      btnClearSelect.classList.remove('hidden');
+
+      detailBody.innerHTML = `
+        <div class="space-y-1.5 text-[11px]">
+          <div class="flex items-center justify-between bg-slate-900/75 px-2.5 py-1.5 rounded-lg border border-slate-700/60">
+            <span class="text-slate-400">初級腦泡</span>
+            <span class="font-semibold text-slate-100">${s.primary}</span>
+          </div>
+          <div class="flex items-center justify-between bg-slate-900/75 px-2.5 py-1.5 rounded-lg border border-slate-700/60">
+            <span class="text-slate-400">次級腦泡</span>
+            <span class="font-semibold" style="color:${s.cssColor}">${s.secondary}</span>
+          </div>
+          <div class="flex items-center justify-between bg-slate-900/75 px-2.5 py-1.5 rounded-lg border border-slate-700/60">
+            <span class="text-slate-400">成人腦構造</span>
+            <span class="font-semibold text-slate-100 text-right">${s.adultWall}</span>
+          </div>
+          <div class="flex items-center justify-between bg-cyan-950/50 px-2.5 py-1.5 rounded-lg border border-cyan-500/35">
+            <span class="text-cyan-300">對應腦室</span>
+            <span class="font-bold text-cyan-200 text-right">${s.ventricle}</span>
+          </div>
+        </div>
+        <p class="text-slate-300 leading-relaxed pt-1">
+          <strong class="text-white">演變解析：</strong>${s.desc}
+        </p>`;
+    }
+
+    function renderStructureList() {
+      structureListEl.innerHTML = '';
+      STRUCTURES.forEach(s => {
+        const isSel = state.selectedId === s.id;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `w-full text-left p-2.5 rounded-2xl border transition flex items-start gap-2.5 active:scale-[0.99] ${
+          isSel
+            ? 'bg-slate-800 border-cyan-400/70 shadow-lg shadow-cyan-500/10'
+            : 'bg-slate-800/45 border-slate-700/60 hover:bg-slate-800/80'
+        }`;
+        btn.innerHTML = `
+          <span class="w-3.5 h-3.5 rounded-full mt-1 shrink-0" style="background:${s.cssColor}; box-shadow:0 0 8px ${s.cssColor}88;"></span>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-xs font-bold text-white truncate">${s.secondary.split(' ')[0]} → ${s.adultWall.split('（')[0]}</span>
+              <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-900/80 text-slate-400 shrink-0">${s.primary.split(' ')[0]}</span>
+            </div>
+            <div class="text-[11px] text-cyan-300/90 mt-0.5 truncate">腦室：${s.ventricle}</div>
+          </div>`;
+        btn.addEventListener('click', () => {
+          selectStructure(state.selectedId === s.id ? null : s.id);
+        });
+        structureListEl.appendChild(btn);
+      });
+    }
+
+    function zoomCameraBy(factor) {
+      camAnim = null;
+      const offset = camera.position.clone().sub(controls.target);
+      offset.setLength(clamp(offset.length() * factor, controls.minDistance, controls.maxDistance));
+      camera.position.copy(controls.target).add(offset);
+    }
+
+    function bindEvents() {
+      btnPlayPause.addEventListener('click', () => {
+        state.targetJumpT = null;
+        if (!state.isPlaying && state.t >= 0.995) {
+          state.t = 0;
+          state.needsMorphUpdate = true;
+        }
+        setPlaying(!state.isPlaying);
+      });
+
+      timelineSlider.addEventListener('input', (e) => {
+        state.targetJumpT = null;
+        setPlaying(false);
+        state.t = Number(e.target.value) / 1000;
+        state.needsMorphUpdate = true;
+        updateStageHUD();
+      });
+
+      const SPEEDS = [0.5, 1.0, 2.0];
+      btnSpeed.addEventListener('click', () => {
+        state.speed = SPEEDS[(SPEEDS.indexOf(state.speed) + 1) % SPEEDS.length];
+        btnSpeed.textContent = `${state.speed.toFixed(1)}x`;
+      });
+
+      stageJumpBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          setPlaying(false);
+          state.targetJumpT = parseFloat(btn.dataset.jump);
+        });
+      });
+
+      [...viewmodeBtns, ...viewmodeBtnsPanel].forEach(btn => {
+        btn.addEventListener('click', () => setViewMode(btn.dataset.viewmode));
+      });
+
+      opacitySlider.addEventListener('input', (e) => {
+        const val = Number(e.target.value);
+        state.tissueOpacity = val / 100;
+        opacityValText.textContent = `${val}%`;
+        if (state.viewMode === 'ventricle' && val > 0) {
+          state.viewMode = 'hybrid';
+        }
+        applyVisualSettings();
+      });
+
+      toggleCsfBtn.addEventListener('click', () => {
+        state.showCsf = !state.showCsf;
+        toggleCsfBtn.innerHTML = state.showCsf
+          ? '<span class="w-2 h-2 rounded-full bg-cyan-300 shadow-[0_0_8px_#22d3ee]"></span><span>CSF 粒子：開</span>'
+          : '<span class="w-2 h-2 rounded-full bg-slate-500"></span><span>CSF 粒子：關</span>';
+        toggleCsfBtn.className = state.showCsf
+          ? 'min-h-[40px] px-2.5 rounded-xl text-xs font-semibold bg-cyan-500/20 border border-cyan-400/50 text-cyan-200 flex items-center justify-center gap-1.5 transition active:scale-95'
+          : 'min-h-[40px] px-2.5 rounded-xl text-xs font-semibold bg-slate-900/70 border border-slate-700 text-slate-400 flex items-center justify-center gap-1.5 transition active:scale-95';
+      });
+
+      toggleLabelsBtn.addEventListener('click', () => {
+        state.showLabels = !state.showLabels;
+        toggleLabelsBtn.innerHTML = state.showLabels ? '<span>3D 標註：開</span>' : '<span>3D 標註：關</span>';
+        toggleLabelsBtn.className = state.showLabels
+          ? 'min-h-[40px] px-2.5 rounded-xl text-xs font-semibold bg-sky-500/20 border border-sky-400/50 text-sky-200 flex items-center justify-center gap-1.5 transition active:scale-95'
+          : 'min-h-[40px] px-2.5 rounded-xl text-xs font-semibold bg-slate-900/70 border border-slate-700 text-slate-400 flex items-center justify-center gap-1.5 transition active:scale-95';
+      });
+
+      document.getElementById('btnZoomIn').addEventListener('click', () => zoomCameraBy(0.8));
+      document.getElementById('btnZoomOut').addEventListener('click', () => zoomCameraBy(1.25));
+      document.getElementById('btnResetCam').addEventListener('click', () => {
+        flyCameraTo(new THREE.Vector3(8.6, 2.1, 5.2), new THREE.Vector3(0, 0.2, 0.1));
+      });
+
+      document.querySelectorAll('.cam-preset-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const p = btn.dataset.cam;
+          const target = new THREE.Vector3(0, 0.2, 0.1);
+          if (p === 'right') flyCameraTo(new THREE.Vector3(9.8, 0.4, 0.2), target);
+          else if (p === 'front') flyCameraTo(new THREE.Vector3(0.0, 0.8, 10.2), target);
+          else if (p === 'top') flyCameraTo(new THREE.Vector3(0.0, 10.8, 0.35), target);
+          else if (p === 'oblique') flyCameraTo(new THREE.Vector3(8.6, 2.1, 5.2), target);
+        });
+      });
+
+      btnClearSelect.addEventListener('click', () => selectStructure(null));
+
+      const openDrawer = () => {
+        sidePanel.classList.remove('translate-x-full');
+        drawerBackdrop.classList.remove('hidden');
+      };
+      const closeDrawer = () => {
+        sidePanel.classList.add('translate-x-full');
+        drawerBackdrop.classList.add('hidden');
+      };
+      toggleDrawerBtn.addEventListener('click', openDrawer);
+      closeDrawerBtn.addEventListener('click', closeDrawer);
+      drawerBackdrop.addEventListener('click', closeDrawer);
+
+      renderer.domElement.addEventListener('pointerdown', onPointerDown);
+      renderer.domElement.addEventListener('pointerup', onPointerUp);
+
+      window.addEventListener('resize', () => {
+        if (!renderer || !camera) return;
+        const w = viewportEl.clientWidth || window.innerWidth;
+        const h = viewportEl.clientHeight || window.innerHeight;
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h);
+      });
+    }
+
+    // =========================================================================
+    // 14. 主 60fps 動畫迴圈
+    // =========================================================================
+    let lastTime = performance.now();
+
+    function animate(now) {
+      requestAnimationFrame(animate);
+      const dt = Math.min(0.05, (now - lastTime) / 1000);
+      lastTime = now;
+
+      if (state.targetJumpT !== null) {
+        const diff = state.targetJumpT - state.t;
+        if (Math.abs(diff) < 0.003) {
+          state.t = state.targetJumpT;
+          state.targetJumpT = null;
+        } else {
+          state.t += diff * Math.min(1, dt * 8.0);
+        }
+        state.needsMorphUpdate = true;
+        updateStageHUD();
+      } else if (state.isPlaying) {
+        state.t += dt * 0.08 * state.speed;
+        if (state.t >= 1.0) {
+          state.t = 1.0;
+          setPlaying(false);
+        }
+        state.needsMorphUpdate = true;
+        updateStageHUD();
+      }
+
+      if (state.needsMorphUpdate) {
+        updateBrainMorph(state.t);
+        state.needsMorphUpdate = false;
+      }
+
+      if (camAnim) {
+        camAnim.elapsed += dt;
+        const u = smoothstep(0, 1, camAnim.elapsed / camAnim.duration);
+        camera.position.lerpVectors(camAnim.startPos, camAnim.endPos, u);
+        controls.target.lerpVectors(camAnim.startTarget, camAnim.endTarget, u);
+        if (camAnim.elapsed >= camAnim.duration) camAnim = null;
+      }
+
+      controls.update();
+      updateCsfParticles(dt);
+      renderer.render(scene, camera);
+      updateFloatingLabels();
+    }
+
+    function startApp() {
+      try {
+        initThree();
+        renderStructureList();
+        updateStageHUD();
+        bindEvents();
+        lastTime = performance.now();
+        requestAnimationFrame(animate);
+      } catch (err) {
+        console.error('Three.js 初始化失敗:', err);
+        const errBox = document.getElementById('webglErrorBox');
+        const errMsg = document.getElementById('webglErrorMsg');
+        if (errBox) errBox.classList.remove('hidden');
+        if (errMsg) errMsg.textContent = `3D 畫面啟動時發生錯誤：${err.message || err}`;
+      }
+    }
+
+    if (document.readyState === 'complete') {
+      startApp();
+    } else {
+      window.addEventListener('load', startApp);
+    }
+  </script>
+</body>
+</html>
